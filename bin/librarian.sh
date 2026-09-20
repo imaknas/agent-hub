@@ -92,6 +92,8 @@ $changed_memory
 - 只有在有『實質變化』時才編輯 STATE.md(精煉現況,不是流水帳);沒有實質變化就完全不要動 STATE.md。
 - 不要動其他檔案。"
 
+  pre_call_sha=$(git -C "$proj_dir" rev-parse HEAD)
+
   output_json=$(cd "$proj_dir" && claude -p "$prompt" \
       --model haiku \
       --permission-mode acceptEdits \
@@ -122,10 +124,20 @@ $changed_memory
   reported_updated=$(echo "$output_json" | jq -r '.structured_output.state_updated' 2>/dev/null)
   worth_digesting=$(echo "$output_json" | jq -r '.structured_output.worth_digesting' 2>/dev/null)
 
-  # 以實際檔案變化為準來決定要不要 commit,不直接信模型自報的 state_updated。
+  # 以實際 git 狀態為準來決定要不要 commit,不直接信模型自報的 state_updated。
+  # 陷阱:這個專案自己的 SessionEnd hook,在 claude -p 這個呼叫「進行中」就可能
+  # 已經自動 commit+push 過 STATE.md 了(headless 呼叫本身也是一個完整 session,
+  # 一樣會觸發它所在目錄的 hook)。所以不能只看 working tree 有沒有未 commit 的
+  # 差異——要先比對 HEAD 有沒有動過,那才是不會被 hook 蓋掉的真相來源。
+  post_call_sha=$(git -C "$proj_dir" rev-parse HEAD)
   actually_changed=false
   state_diff=""
-  if ! git -C "$proj_dir" diff --quiet -- STATE.md 2>/dev/null; then
+  new_sha="$post_call_sha"
+
+  if [ "$post_call_sha" != "$pre_call_sha" ]; then
+    actually_changed=true
+    state_diff=$(git -C "$proj_dir" diff "$pre_call_sha" "$post_call_sha" -- STATE.md)
+  elif ! git -C "$proj_dir" diff --quiet -- STATE.md 2>/dev/null; then
     actually_changed=true
     state_diff=$(git -C "$proj_dir" diff -- STATE.md)
   fi
@@ -135,8 +147,11 @@ $changed_memory
   fi
 
   if [ "$actually_changed" = "true" ]; then
-    ( cd "$proj_dir" && git add STATE.md && git commit -m "librarian: update STATE.md" -q && git push -q )
-    new_sha=$(git -C "$proj_dir" rev-parse HEAD)
+    if [ "$post_call_sha" = "$pre_call_sha" ]; then
+      # hook 沒接手(這個專案這次沒有走 hook,或 hook 沒設好),自己補 commit+push。
+      ( cd "$proj_dir" && git add STATE.md && git commit -m "librarian: update STATE.md" -q && git push -q )
+      new_sha=$(git -C "$proj_dir" rev-parse HEAD)
+    fi
     log "$proj: STATE.md updated & pushed ($new_sha)"
 
     {
@@ -156,7 +171,7 @@ $changed_memory
     log "$proj: 已寫入 review-log.md,供事後抽查"
   fi
 
-  echo "$head_sha" > "$ckpt_file"
+  echo "$new_sha" > "$ckpt_file"
 
   if [ "$worth_digesting" = "true" ] && [ -n "$summary" ]; then
     { echo "## $proj"; echo; echo "$summary"; echo; } >> "$digest_file"
