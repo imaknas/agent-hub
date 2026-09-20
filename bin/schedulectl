@@ -1,0 +1,140 @@
+#!/usr/bin/env python3
+"""管理 schedule.yaml + launchd 排程器的小工具，不用記 launchctl 語法或手改 yaml 格式。
+
+新增排程一律直接編輯 schedule.yaml,加一個 job 條目就好——不用碰這支工具、
+不用碰 launchd,下一次 scheduler.py 的 tick(最多 15 分鐘內)就會生效。
+這支工具只處理「暫停/恢復單一 job」跟「整個排程器開關/狀態」這種需要記
+指令或怕手改 yaml 弄壞格式的操作。
+
+用法:
+  schedulectl list                列出所有 job 及其狀態(啟用/暫停、時間、指令)
+  schedulectl pause <name>        暫停某個 job(保留設定,之後可以 resume)
+  schedulectl resume <name>       恢復某個 job
+  schedulectl status              排程器本身(launchd)有沒有在跑 + 最近幾筆執行紀錄
+  schedulectl logs [name] [n]     印最近 n 行 log(預設 scheduler.log;給 name 則印該 job 當天的 log)
+  schedulectl stop                完全停用排程器(launchctl bootout,不動 schedule.yaml)
+  schedulectl start               重新啟動排程器(launchctl bootstrap)
+"""
+import subprocess
+import sys
+from pathlib import Path
+
+import yaml
+
+HUB = Path.home() / "agent-hub"
+SCHEDULE = HUB / "schedule.yaml"
+LOG_DIR = HUB / ".logs"
+LABEL = "local.agent-hub-scheduler"
+PLIST = Path.home() / "Library/LaunchAgents" / f"{LABEL}.plist"
+
+
+def load_jobs():
+    return (yaml.safe_load(SCHEDULE.read_text()) or {}).get("jobs", [])
+
+
+def save_jobs(jobs):
+    SCHEDULE.write_text(yaml.dump({"jobs": jobs}, allow_unicode=True, sort_keys=False))
+
+
+def find_job(jobs, name):
+    for job in jobs:
+        if job["name"] == name:
+            return job
+    print(f"沒有叫 '{name}' 的 job。現有:{', '.join(j['name'] for j in jobs) or '(空)'}")
+    sys.exit(1)
+
+
+def cmd_list():
+    jobs = load_jobs()
+    if not jobs:
+        print("schedule.yaml 裡沒有任何 job。")
+        return
+    for job in jobs:
+        state = "啟用" if job.get("enabled", True) else "暫停"
+        print(f"[{state}] {job['name']:20s} 每天 {job['time']}  {job['command']}")
+
+
+def cmd_pause(name):
+    jobs = load_jobs()
+    job = find_job(jobs, name)
+    job["enabled"] = False
+    save_jobs(jobs)
+    print(f"已暫停 '{name}'(設定還在,之後用 resume 恢復)")
+
+
+def cmd_resume(name):
+    jobs = load_jobs()
+    job = find_job(jobs, name)
+    job["enabled"] = True
+    save_jobs(jobs)
+    print(f"已恢復 '{name}'")
+
+
+def cmd_status():
+    print("=== launchd 註冊狀態 ===")
+    subprocess.run(["launchctl", "print", f"gui/{subprocess.check_output(['id', '-u']).decode().strip()}/{LABEL}"])
+    print()
+    print("=== 最近排程器執行紀錄(scheduler.log 最後 10 行) ===")
+    log_file = LOG_DIR / "scheduler.log"
+    if log_file.exists():
+        print("\n".join(log_file.read_text().splitlines()[-10:]))
+    else:
+        print("(還沒有 log)")
+
+
+def cmd_logs(name=None, n=50):
+    if name:
+        today_logs = sorted(LOG_DIR.glob(f"{name}-*.log"))
+        if not today_logs:
+            print(f"找不到 '{name}' 的 log")
+            return
+        log_file = today_logs[-1]
+    else:
+        log_file = LOG_DIR / "scheduler.log"
+    if not log_file.exists():
+        print("(還沒有 log)")
+        return
+    print(f"--- {log_file.name} (最後 {n} 行) ---")
+    print("\n".join(log_file.read_text().splitlines()[-int(n):]))
+
+
+def cmd_stop():
+    uid = subprocess.check_output(["id", "-u"]).decode().strip()
+    subprocess.run(["launchctl", "bootout", f"gui/{uid}/{LABEL}"])
+    print("排程器已停用(schedule.yaml 沒有變動,之後用 start 重新啟動)")
+
+
+def cmd_start():
+    uid = subprocess.check_output(["id", "-u"]).decode().strip()
+    subprocess.run(["launchctl", "bootstrap", f"gui/{uid}", str(PLIST)])
+    print("排程器已啟動")
+
+
+def main():
+    args = sys.argv[1:]
+    if not args:
+        print(__doc__)
+        sys.exit(1)
+
+    cmd, rest = args[0], args[1:]
+    if cmd == "list":
+        cmd_list()
+    elif cmd == "pause" and rest:
+        cmd_pause(rest[0])
+    elif cmd == "resume" and rest:
+        cmd_resume(rest[0])
+    elif cmd == "status":
+        cmd_status()
+    elif cmd == "logs":
+        cmd_logs(*rest)
+    elif cmd == "stop":
+        cmd_stop()
+    elif cmd == "start":
+        cmd_start()
+    else:
+        print(__doc__)
+        sys.exit(1)
+
+
+if __name__ == "__main__":
+    main()

@@ -40,6 +40,9 @@ def main() -> None:
 
     for job in jobs:
         name = job["name"]
+        if not job.get("enabled", True):
+            continue
+
         hh, mm = map(int, job["time"].split(":"))
         due_time = now.replace(hour=hh, minute=mm, second=0, microsecond=0)
 
