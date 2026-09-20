@@ -18,19 +18,21 @@
 #   3. 複製 AGENT.md/STATE.md 骨架、建空的 memory/,在 agent-memory 分支上 commit
 #   4. 外層 .gitignore 加一行排除 .agent-memory/
 #   5. 合併(不是覆寫)外層 .claude/settings.json 的 hook 設定
-#   6. commit 這兩個外層檔案;如果有 origin 就 push(用 git-safe-push.sh,
+#   6. 合併(不是覆寫)外層 CLAUDE.md 的 agent-hub pointer 段落——沒有
+#      CLAUDE.md 就直接用模板建一份,已經有就只在缺 pointer 時 append
+#   7. commit 這三個外層檔案;如果有 origin 就 push(用 git-safe-push.sh,
 #      遇到分岔自動重試),沒有 origin 就只留在本地,不強行加一個
-#   7. mini 上建 bare repo,push agent-memory 分支過去(不動任何外部 remote)
-#   8. mini 上 clone 一份工作副本給 librarian
-#   9. 如果有外部 origin,登記進 mirror-backup 清單;沒有就跳過
-#   10. 登記進 agent-hub 自己的 onboarded-projects.tsv(不分 native/hosted,
+#   8. mini 上建 bare repo,push agent-memory 分支過去(不動任何外部 remote)
+#   9. mini 上 clone 一份工作副本給 librarian
+#   10. 如果有外部 origin,登記進 mirror-backup 清單;沒有就跳過
+#   11. 登記進 agent-hub 自己的 onboarded-projects.tsv(不分 native/hosted,
 #       一律登記)——這是換新機器或本機資料夾遺失時,唯一能找到「這裡曾經
 #       onboard 過哪些專案」的地方,不依賴任何單一專案自己的 repo 內容
 set -euo pipefail
 
 MINI_HOST="hub-host"
-TEMPLATES="$HOME/templates"
 AGENT_HUB="$HOME/agent-hub"
+TEMPLATES="$AGENT_HUB/templates"
 
 fail() { echo "onboard-project: $1" >&2; exit 1; }
 
@@ -56,14 +58,14 @@ if git show-ref --verify --quiet refs/heads/agent-memory; then
 fi
 
 if [ -n "$origin_url" ]; then
-  echo "[1/9] 前置條件檢查通過:$PROJ_NAME(有外部 remote:$origin_url)"
+  echo "[1/11] 前置條件檢查通過:$PROJ_NAME(有外部 remote:$origin_url)"
 else
-  echo "[1/9] 前置條件檢查通過:$PROJ_NAME(目前沒有外部 remote,純本機)"
+  echo "[1/11] 前置條件檢查通過:$PROJ_NAME(目前沒有外部 remote,純本機)"
 fi
 
 # --- 2. 建立 orphan worktree ---
 git worktree add --orphan -b agent-memory .agent-memory -q
-echo "[2/9] 已建立 .agent-memory worktree(agent-memory 分支,跟主分支完全隔離)"
+echo "[2/11] 已建立 .agent-memory worktree(agent-memory 分支,跟主分支完全隔離)"
 
 # --- 3. 複製骨架、commit ---
 cp "$TEMPLATES/AGENT.md" .agent-memory/AGENT.md
@@ -76,7 +78,7 @@ EOF
 mkdir -p .agent-memory/memory
 touch .agent-memory/memory/.gitkeep
 ( cd .agent-memory && git add -A && git commit -q -m "init: agent-hub memory skeleton (AGENT.md/STATE.md/memory)" )
-echo "[3/9] 骨架檔案就位並已在 agent-memory 分支上 commit"
+echo "[3/11] 骨架檔案就位並已在 agent-memory 分支上 commit"
 
 # --- 4. 外層 .gitignore ---
 touch .gitignore
@@ -89,22 +91,34 @@ fi
 if ! grep -qxF '!.claude/settings.json' .gitignore; then
   printf '!.claude/settings.json\n' >> .gitignore
 fi
-echo "[4/9] .gitignore 已更新"
+echo "[4/11] .gitignore 已更新"
 
 # --- 5. 合併外層 .claude/settings.json ---
 mkdir -p .claude
 python3 "$AGENT_HUB/bin/merge-hook-settings.py" .claude/settings.json
-echo "[5/9] .claude/settings.json 已合併 hook 設定"
+echo "[5/11] .claude/settings.json 已合併 hook 設定"
 
-# --- 6. commit,有 origin 才 push ---
-git add .gitignore .claude/settings.json
+# --- 6. 合併外層 CLAUDE.md 的 agent-hub pointer 段落 ---
+# 沒有 CLAUDE.md 就直接用模板;已經有(專案自己的 CLAUDE.md)就只在缺
+# pointer 時 append,不覆寫既有內容。這份 pointer 是唯一會讓「工作中的
+# session」發現有 memory 追蹤機制的地方——AGENT.md 本身不會被自動載入。
+if [ ! -f CLAUDE.md ]; then
+  cp "$TEMPLATES/CLAUDE.md" CLAUDE.md
+elif ! grep -q '.agent-memory/AGENT.md' CLAUDE.md; then
+  printf '\n' >> CLAUDE.md
+  tail -n +2 "$TEMPLATES/CLAUDE.md" >> CLAUDE.md
+fi
+echo "[6/11] CLAUDE.md 的 agent-hub pointer 段落已就位"
+
+# --- 7. commit,有 origin 才 push ---
+git add .gitignore .claude/settings.json CLAUDE.md
 git commit -q -m "chore: add agent-hub memory tracking (isolated worktree, no app code touched)"
 if [ -n "$origin_url" ]; then
   outer_branch=$(git branch --show-current)
   "$AGENT_HUB/bin/git-safe-push.sh" -u origin "$outer_branch"
-  echo "[6/9] 外層 commit 已推送到 origin"
+  echo "[7/11] 外層 commit 已推送到 origin"
 else
-  echo "[6/9] 外層 commit 已建立(沒有 origin,先留在本地,之後接上遠端會自然跟著推過去)"
+  echo "[7/11] 外層 commit 已建立(沒有 origin,先留在本地,之後接上遠端會自然跟著推過去)"
 fi
 
 # --- 7. mini 上建 bare repo,push agent-memory 分支 ---
@@ -118,24 +132,24 @@ ssh "$MINI_HOST" "mkdir -p ~/git-origin && git init --bare -q ~/git-origin/${PRO
 # refs/heads/main——但這裡只會推 agent-memory,main 永遠不會存在,HEAD 會
 # 懸空,導致下一步的 plain git clone 抓不到東西。明確把 HEAD 導向正確的分支。
 ssh "$MINI_HOST" "git --git-dir=\"\$HOME/git-origin/${PROJ_NAME}-memory.git\" symbolic-ref HEAD refs/heads/agent-memory"
-echo "[7/9] mini 上已建 bare repo,agent-memory 分支已推送"
+echo "[8/11] mini 上已建 bare repo,agent-memory 分支已推送"
 
-# --- 8. mini 上 clone 工作副本給 librarian ---
+# --- 9. mini 上 clone 工作副本給 librarian ---
 ssh "$MINI_HOST" "mkdir -p ~/projects && git clone -q ~/git-origin/${PROJ_NAME}-memory.git ~/projects/${PROJ_NAME}"
-echo "[8/9] mini 上已 clone 工作副本到 ~/projects/${PROJ_NAME}"
+echo "[9/11] mini 上已 clone 工作副本到 ~/projects/${PROJ_NAME}"
 
-# --- 9. 有外部 origin 才登記進 mirror-backup 清單 ---
+# --- 10. 有外部 origin 才登記進 mirror-backup 清單 ---
 if [ -n "$origin_url" ]; then
   touch "$AGENT_HUB/mirror-list.txt"
   if ! grep -qxF "$origin_url" "$AGENT_HUB/mirror-list.txt"; then
     echo "$origin_url" >> "$AGENT_HUB/mirror-list.txt"
   fi
-  echo "[9/10] 已登記進 mirror-backup 清單"
+  echo "[10/11] 已登記進 mirror-backup 清單"
 else
-  echo "[9/10] 沒有外部 remote,跳過 mirror-backup 登記"
+  echo "[10/11] 沒有外部 remote,跳過 mirror-backup 登記"
 fi
 
-# --- 10. 登記進 agent-hub 自己的 onboarded-projects.tsv(一律登記,無論有沒有 origin) ---
+# --- 11. 登記進 agent-hub 自己的 onboarded-projects.tsv(一律登記,無論有沒有 origin) ---
 MANIFEST="$AGENT_HUB/onboarded-projects.tsv"
 [ -f "$MANIFEST" ] || printf 'name\tlocal_path\torigin\tmemory_bare_repo\n' > "$MANIFEST"
 manifest_origin="${origin_url:-(native)}"
@@ -144,7 +158,7 @@ if ! awk -F'\t' -v n="$PROJ_NAME" '$1==n{found=1} END{exit !found}' "$MANIFEST";
     "$PROJ_NAME" "$PROJ_PATH" "$manifest_origin" \
     "${MINI_HOST}:~/git-origin/${PROJ_NAME}-memory.git" >> "$MANIFEST"
 fi
-echo "[10/10] 已登記進 agent-hub 的 onboarded-projects.tsv"
+echo "[11/11] 已登記進 agent-hub 的 onboarded-projects.tsv"
 
 echo
 echo "完成:$PROJ_NAME 已接上 agent-hub 管線。"

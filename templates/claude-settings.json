@@ -1,0 +1,7 @@
+{
+  "hooks": {
+    "SessionStart": [{ "hooks": [{ "type": "command", "command": "[ -d .agent-memory ] && cd .agent-memory && ~/agent-hub/bin/with-lock.sh git pull -q || true" }] }],
+    "SessionEnd":   [{ "hooks": [{ "type": "command", "command": "[ -d .agent-memory ] && cd .agent-memory && ~/agent-hub/bin/with-lock.sh ~/agent-hub/bin/git-sync-memory.sh || true" }] }],
+    "PreCompact":   [{ "hooks": [{ "type": "command", "command": "[ -d .agent-memory ] && cd .agent-memory && ~/agent-hub/bin/with-lock.sh ~/agent-hub/bin/git-sync-memory.sh || true" }] }]
+  }
+}
