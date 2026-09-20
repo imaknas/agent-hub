@@ -75,7 +75,7 @@ echo "[4/9] .gitignore 已更新"
 
 # --- 5. 合併外層 .claude/settings.json ---
 mkdir -p .claude
-python3 "$AGENT_HUB/bin/merge-hook-settings.py" .claude/settings.json
+python3 "$AGENT_HUB/bin/merge-hook-settings.py" .claude/settings.json hosted
 echo "[5/9] .claude/settings.json 已合併 hook 設定"
 
 # --- 6. commit + push 外層小改動(用 git-safe-push.sh,遇到 origin 領先時
