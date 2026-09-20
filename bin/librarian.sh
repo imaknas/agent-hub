@@ -5,6 +5,14 @@
 set -uo pipefail
 export PATH="/opt/homebrew/bin:/usr/local/bin:$PATH"
 
+# 無人值守環境拿不到 login keychain，用 `claude setup-token` 產生的長效 token
+# （存在 ~/.claude/headless-oauth-token，權限 600，不進任何 git repo）。
+TOKEN_FILE="$HOME/.claude/headless-oauth-token"
+if [ -r "$TOKEN_FILE" ]; then
+  export CLAUDE_CODE_OAUTH_TOKEN
+  CLAUDE_CODE_OAUTH_TOKEN="$(cat "$TOKEN_FILE")"
+fi
+
 HUB="$HOME/agent-hub"
 STATE_DIR="$HUB/.state"
 LOG_DIR="$HUB/.logs"
