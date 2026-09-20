@@ -63,7 +63,8 @@ cat > .agent-memory/STATE.md <<'EOF'
 EOF
 mkdir -p .agent-memory/memory
 touch .agent-memory/memory/.gitkeep
-echo "[3/9] 骨架檔案就位(AGENT.md/STATE.md/memory/)"
+( cd .agent-memory && git add -A && git commit -q -m "init: agent-hub memory skeleton (AGENT.md/STATE.md/memory)" )
+echo "[3/9] 骨架檔案就位並已在 agent-memory 分支上 commit"
 
 # --- 4. 外層 .gitignore ---
 touch .gitignore
@@ -77,10 +78,11 @@ mkdir -p .claude
 python3 "$AGENT_HUB/bin/merge-hook-settings.py" .claude/settings.json
 echo "[5/9] .claude/settings.json 已合併 hook 設定"
 
-# --- 6. commit + push 外層小改動 ---
+# --- 6. commit + push 外層小改動(用 git-safe-push.sh,遇到 origin 領先時
+#         自動 pull 合併重試,不用因為分岔就整支腳本失敗退出) ---
 git add .gitignore .claude/settings.json
 git commit -q -m "chore: add agent-hub memory tracking (isolated worktree, no app code touched)"
-git push -q
+"$AGENT_HUB/bin/git-safe-push.sh"
 echo "[6/9] 外層 commit 已推送到 origin"
 
 # --- 7. mini 上建 bare repo,push agent-memory 分支 ---
