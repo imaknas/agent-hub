@@ -79,10 +79,13 @@ python3 "$AGENT_HUB/bin/merge-hook-settings.py" .claude/settings.json
 echo "[5/9] .claude/settings.json 已合併 hook 設定"
 
 # --- 6. commit + push 外層小改動(用 git-safe-push.sh,遇到 origin 領先時
-#         自動 pull 合併重試,不用因為分岔就整支腳本失敗退出) ---
+#         自動 pull 合併重試,不用因為分岔就整支腳本失敗退出)。
+#         不能靠預設的 tracking branch——有些 repo(像 project-13)本地分支
+#         沒設 upstream,裸的 git push 會直接失敗,所以明確指定分支名稱。 ---
 git add .gitignore .claude/settings.json
 git commit -q -m "chore: add agent-hub memory tracking (isolated worktree, no app code touched)"
-"$AGENT_HUB/bin/git-safe-push.sh"
+outer_branch=$(git branch --show-current)
+"$AGENT_HUB/bin/git-safe-push.sh" -u origin "$outer_branch"
 echo "[6/9] 外層 commit 已推送到 origin"
 
 # --- 7. mini 上建 bare repo,push agent-memory 分支 ---
