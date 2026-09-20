@@ -1,6 +1,6 @@
 {
   "hooks": {
-    "SessionStart": [{ "hooks": [{ "type": "command", "command": "git pull" }] }],
-    "SessionEnd":   [{ "hooks": [{ "type": "command", "command": "~/agent-hub/bin/git-sync-push.sh" }] }]
+    "SessionStart": [{ "hooks": [{ "type": "command", "command": "~/agent-hub/bin/with-lock.sh git pull" }] }],
+    "SessionEnd":   [{ "hooks": [{ "type": "command", "command": "~/agent-hub/bin/with-lock.sh ~/agent-hub/bin/git-sync-push.sh" }] }]
   }
 }

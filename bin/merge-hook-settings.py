@@ -9,8 +9,8 @@ import json
 import sys
 from pathlib import Path
 
-START_CMD = "cd .agent-memory && git pull -q"
-END_CMD = "cd .agent-memory && ~/agent-hub/bin/git-sync-push.sh"
+START_CMD = "cd .agent-memory && ~/agent-hub/bin/with-lock.sh git pull -q"
+END_CMD = "cd .agent-memory && ~/agent-hub/bin/with-lock.sh ~/agent-hub/bin/git-sync-push.sh"
 
 
 def has_command(entries, command):
