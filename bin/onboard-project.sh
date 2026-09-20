@@ -23,6 +23,9 @@
 #   7. mini 上建 bare repo,push agent-memory 分支過去(不動任何外部 remote)
 #   8. mini 上 clone 一份工作副本給 librarian
 #   9. 如果有外部 origin,登記進 mirror-backup 清單;沒有就跳過
+#   10. 登記進 agent-hub 自己的 onboarded-projects.tsv(不分 native/hosted,
+#       一律登記)——這是換新機器或本機資料夾遺失時,唯一能找到「這裡曾經
+#       onboard 過哪些專案」的地方,不依賴任何單一專案自己的 repo 內容
 set -euo pipefail
 
 MINI_HOST="hub-host"
@@ -127,10 +130,21 @@ if [ -n "$origin_url" ]; then
   if ! grep -qxF "$origin_url" "$AGENT_HUB/mirror-list.txt"; then
     echo "$origin_url" >> "$AGENT_HUB/mirror-list.txt"
   fi
-  echo "[9/9] 已登記進 mirror-backup 清單"
+  echo "[9/10] 已登記進 mirror-backup 清單"
 else
-  echo "[9/9] 沒有外部 remote,跳過 mirror-backup 登記"
+  echo "[9/10] 沒有外部 remote,跳過 mirror-backup 登記"
 fi
+
+# --- 10. 登記進 agent-hub 自己的 onboarded-projects.tsv(一律登記,無論有沒有 origin) ---
+MANIFEST="$AGENT_HUB/onboarded-projects.tsv"
+[ -f "$MANIFEST" ] || printf 'name\tlocal_path\torigin\tmemory_bare_repo\n' > "$MANIFEST"
+manifest_origin="${origin_url:-(native)}"
+if ! awk -F'\t' -v n="$PROJ_NAME" '$1==n{found=1} END{exit !found}' "$MANIFEST"; then
+  printf '%s\t%s\t%s\t%s\n' \
+    "$PROJ_NAME" "$PROJ_PATH" "$manifest_origin" \
+    "${MINI_HOST}:~/git-origin/${PROJ_NAME}-memory.git" >> "$MANIFEST"
+fi
+echo "[10/10] 已登記進 agent-hub 的 onboarded-projects.tsv"
 
 echo
 echo "完成:$PROJ_NAME 已接上 agent-hub 管線。"
