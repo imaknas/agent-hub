@@ -20,6 +20,14 @@ attempt=1
 while [ $attempt -le $max_attempts ]; do
   push_err=$(git push -q "$@" 2>&1) && exit 0
 
+  if echo "$push_err" | grep -qE "rule violations|GH0[0-9]+|required_signatures|protected branch"; then
+    # branch protection 規則擋下(例如要求走 PR、要求簽名),不是分岔造成的,
+    # pull 重試沒有用,重試只會浪費時間。
+    echo "git-safe-push: 被 branch protection 規則擋下,不是分岔問題,重試沒用:" >&2
+    echo "$push_err" >&2
+    exit 1
+  fi
+
   if ! echo "$push_err" | grep -qE "rejected|fetch first|non-fast-forward"; then
     # 不是分岔造成的(例如網路斷線、認證失敗),重試沒有意義。
     echo "$push_err" >&2
