@@ -117,7 +117,7 @@ $changed_memory
   fi
 
   cost=$(echo "$output_json" | jq -r '.total_cost_usd // empty' 2>/dev/null)
-  [ -n "$cost" ] && { log "$proj: call cost \$$cost"; add_cost "$cost"; }
+  [ -n "$cost" ] && { log "$proj: call cost \$$cost (model: $STATE_MODEL)"; add_cost "$cost"; }
 
   # 注意:布林欄位不能用 `// empty`,因為 jq 的 `//` 把 false 當 falsy,會把
   # 正確的 false 也吃掉變成空字串,跟「欄位不存在」混在一起分不出來。
@@ -210,7 +210,7 @@ if [ -s "$digest_file" ]; then
 
   if [ $idx_rc -eq 0 ] && [ -n "$index_output_json" ]; then
     idx_cost=$(echo "$index_output_json" | jq -r '.total_cost_usd // empty' 2>/dev/null)
-    [ -n "$idx_cost" ] && { log "index.md: call cost \$$idx_cost"; add_cost "$idx_cost"; }
+    [ -n "$idx_cost" ] && { log "index.md: call cost \$$idx_cost (model: $INDEX_MODEL)"; add_cost "$idx_cost"; }
     idx_relations=$(echo "$index_output_json" | jq -r '.structured_output.relations_found // empty' 2>/dev/null)
     log "index.md: $idx_relations"
   else
