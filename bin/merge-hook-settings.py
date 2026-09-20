@@ -21,6 +21,11 @@ from pathlib import Path
 
 START_CMD = "[ -d .agent-memory ] && cd .agent-memory && ~/agent-hub/bin/with-lock.sh git pull -q || true"
 END_CMD = "[ -d .agent-memory ] && cd .agent-memory && ~/agent-hub/bin/with-lock.sh ~/agent-hub/bin/git-sync-memory.sh || true"
+# PreCompact 跟 SessionEnd 用同一支同步腳本(冪等,沒東西可 commit 就安靜結束)。
+# 多天不關閉的長 session 不會觸發 SessionEnd,但打滿 context 時會觸發 compact,
+# 藉這個時機點順便同步,避免長時間累積的 memory/ 筆記在 session 真的結束前
+# 都沒被 commit/push 出去。
+PRECOMPACT_CMD = END_CMD
 
 
 def has_command(entries, command):
@@ -44,6 +49,10 @@ def main():
     end_entries = hooks.setdefault("SessionEnd", [])
     if not has_command(end_entries, END_CMD):
         end_entries.append({"hooks": [{"type": "command", "command": END_CMD}]})
+
+    precompact_entries = hooks.setdefault("PreCompact", [])
+    if not has_command(precompact_entries, PRECOMPACT_CMD):
+        precompact_entries.append({"hooks": [{"type": "command", "command": PRECOMPACT_CMD}]})
 
     path.write_text(json.dumps(settings, indent=2) + "\n")
 

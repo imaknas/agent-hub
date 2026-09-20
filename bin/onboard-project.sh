@@ -80,6 +80,12 @@ touch .gitignore
 if ! grep -qxF '.agent-memory/' .gitignore; then
   printf '\n# agent-hub memory tracking(獨立 worktree,見 %s/bin/onboard-project.sh)\n.agent-memory/\n' "$AGENT_HUB" >> .gitignore
 fi
+# 有些專案的 .gitignore 有更廣的規則(例如給 data/ledger 檔案用的 `*.json`),
+# 會連帶把 hook 設定檔也忽略掉。不管目前有沒有撞到這個情況,一律加一條
+# negation 保證這個檔案一定會被追蹤到——沒撞到的話這行也不會有副作用。
+if ! grep -qxF '!.claude/settings.json' .gitignore; then
+  printf '!.claude/settings.json\n' >> .gitignore
+fi
 echo "[4/9] .gitignore 已更新"
 
 # --- 5. 合併外層 .claude/settings.json ---
