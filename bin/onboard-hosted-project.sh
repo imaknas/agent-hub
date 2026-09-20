@@ -87,7 +87,9 @@ echo "[6/9] 外層 commit 已推送到 origin"
 
 # --- 7. mini 上建 bare repo,push agent-memory 分支 ---
 ssh "$MINI_HOST" "mkdir -p ~/git-origin && git init --bare -q ~/git-origin/${PROJ_NAME}-memory.git"
-( cd .agent-memory && git remote add origin "$MINI_HOST:~/git-origin/${PROJ_NAME}-memory.git" && git push -u origin agent-memory:main -q )
+# 注意:worktree 共用同一份 repo 設定,outer repo 的 "origin"(GitHub)在這裡
+# 也看得到,所以不能叫 origin,不然會撞名——用 "mini" 這個名字。
+( cd .agent-memory && git remote add mini "$MINI_HOST:~/git-origin/${PROJ_NAME}-memory.git" && git push -u mini agent-memory:main -q )
 echo "[7/9] mini 上已建 bare repo,agent-memory 分支已推送"
 
 # --- 8. mini 上 clone 工作副本給 librarian ---
