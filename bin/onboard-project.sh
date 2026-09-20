@@ -100,7 +100,15 @@ fi
 
 # --- 7. mini 上建 bare repo,push agent-memory 分支 ---
 ssh "$MINI_HOST" "mkdir -p ~/git-origin && git init --bare -q ~/git-origin/${PROJ_NAME}-memory.git"
-( cd .agent-memory && git remote add mini "$MINI_HOST:~/git-origin/${PROJ_NAME}-memory.git" && git push -u mini agent-memory:main -q )
+# 注意:遠端分支名稱刻意跟本地一樣叫 agent-memory,不要用 main——名稱不一樣
+# 會讓 branch.agent-memory.merge 指向 refs/heads/main,雖然功能上沒問題
+# (那本來就是遠端唯一存在的 ref),但看起來像設定錯誤,容易讓人(或其他
+# agent)誤判成 bug 去查。
+( cd .agent-memory && git remote add mini "$MINI_HOST:~/git-origin/${PROJ_NAME}-memory.git" && git push -u mini agent-memory:agent-memory -q )
+# mini 的 git init.defaultBranch 是 main,新的 bare repo HEAD 預設指向
+# refs/heads/main——但這裡只會推 agent-memory,main 永遠不會存在,HEAD 會
+# 懸空,導致下一步的 plain git clone 抓不到東西。明確把 HEAD 導向正確的分支。
+ssh "$MINI_HOST" "git --git-dir=\"\$HOME/git-origin/${PROJ_NAME}-memory.git\" symbolic-ref HEAD refs/heads/agent-memory"
 echo "[7/9] mini 上已建 bare repo,agent-memory 分支已推送"
 
 # --- 8. mini 上 clone 工作副本給 librarian ---

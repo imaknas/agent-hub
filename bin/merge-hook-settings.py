@@ -6,14 +6,21 @@
 只有一種模式:memory 追蹤永遠在獨立的 .agent-memory worktree 裡,hook 一律
 先 cd 進去再操作,不管這個專案有沒有外部 remote。
 
+`.claude/settings.json` 會跟著這個 repo 到任何 clone 它的機器——如果專案是
+多機器共用(例如同一個 repo 在 Mac 跟 Windows 都有人開發),`.agent-memory`
+只存在於實際跑過 onboarding 的那台機器上(它被 gitignore 排除,不會隨
+git clone/pull 帶過去)。所以 hook 一律先檢查 `.agent-memory` 存不存在,
+不存在就整條安靜地不做事(用 `|| true` 保證結束碼永遠是 0,不會讓其他機器
+上的 session 因為這個 hook 而顯示錯誤)。
+
 用法:merge-hook-settings.py <settings.json 路徑>
 """
 import json
 import sys
 from pathlib import Path
 
-START_CMD = "cd .agent-memory && ~/agent-hub/bin/with-lock.sh git pull -q"
-END_CMD = "cd .agent-memory && ~/agent-hub/bin/with-lock.sh ~/agent-hub/bin/git-sync-memory.sh"
+START_CMD = "[ -d .agent-memory ] && cd .agent-memory && ~/agent-hub/bin/with-lock.sh git pull -q || true"
+END_CMD = "[ -d .agent-memory ] && cd .agent-memory && ~/agent-hub/bin/with-lock.sh ~/agent-hub/bin/git-sync-memory.sh || true"
 
 
 def has_command(entries, command):
