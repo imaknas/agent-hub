@@ -30,7 +30,7 @@ LOG="$LOG_DIR/librarian-$TODAY.log"
 
 log() { echo "[$(date '+%H:%M:%S')] $*" | tee -a "$LOG"; }
 
-STATE_SCHEMA='{"type":"object","properties":{"state_updated":{"type":"boolean","description":"這次是否編輯了 STATE.md"},"summary":{"type":"string","description":"給跨專案 digest 用的摘要，不超過三句話；沒有值得記錄的事就寫「(無實質更新)」"},"reason":{"type":"string","description":"為什麼做出這個判斷（更新或不更新 STATE.md），給人事後抽查用"}},"required":["state_updated","summary","reason"]}'
+STATE_SCHEMA='{"type":"object","properties":{"state_updated":{"type":"boolean","description":"這次是否編輯了 STATE.md"},"worth_digesting":{"type":"boolean","description":"這次的內容是否值得放進跨專案 digest；純粹確認流程正常、沒有實質更新的話填 false"},"summary":{"type":"string","description":"給跨專案 digest 用的摘要，不超過三句話（worth_digesting 為 false 時可以簡短說明沒有更新的原因，或留空）"},"reason":{"type":"string","description":"為什麼做出這個判斷（更新或不更新 STATE.md），給人事後抽查用"}},"required":["state_updated","worth_digesting","summary","reason"]}'
 
 INDEX_SCHEMA='{"type":"object","properties":{"index_updated":{"type":"boolean","description":"是否編輯了 index.md"},"relations_found":{"type":"string","description":"今天找到的跨專案關聯簡述；沒有明顯關聯就寫「(無明顯關聯)」，不要硬掰"}},"required":["index_updated","relations_found"]}'
 
@@ -108,16 +108,19 @@ $changed_memory
   cost=$(echo "$output_json" | jq -r '.total_cost_usd // empty' 2>/dev/null)
   [ -n "$cost" ] && { log "$proj: call cost \$$cost"; add_cost "$cost"; }
 
-  summary=$(echo "$output_json" | jq -r '.structured_output.summary // empty' 2>/dev/null)
-  reason=$(echo "$output_json" | jq -r '.structured_output.reason // empty' 2>/dev/null)
-  # 注意:不能用 `// empty`,因為 jq 的 `//` 把 false 當 falsy,會把正確的
-  # false 也吃掉變成空字串,跟「欄位不存在」混在一起分不出來。
-  reported_updated=$(echo "$output_json" | jq -r '.structured_output.state_updated' 2>/dev/null)
+  # 注意:布林欄位不能用 `// empty`,因為 jq 的 `//` 把 false 當 falsy,會把
+  # 正確的 false 也吃掉變成空字串,跟「欄位不存在」混在一起分不出來。
+  has_output=$(echo "$output_json" | jq -r 'if .structured_output == null then "no" else "yes" end' 2>/dev/null)
 
-  if [ -z "$summary" ]; then
+  if [ "$has_output" != "yes" ]; then
     log "$proj: 沒有拿到 structured_output,跳過(原始回應開頭: $(echo "$output_json" | head -c 200))"
     continue
   fi
+
+  summary=$(echo "$output_json" | jq -r '.structured_output.summary // empty' 2>/dev/null)
+  reason=$(echo "$output_json" | jq -r '.structured_output.reason // empty' 2>/dev/null)
+  reported_updated=$(echo "$output_json" | jq -r '.structured_output.state_updated' 2>/dev/null)
+  worth_digesting=$(echo "$output_json" | jq -r '.structured_output.worth_digesting' 2>/dev/null)
 
   # 以實際檔案變化為準來決定要不要 commit,不直接信模型自報的 state_updated。
   actually_changed=false
@@ -155,7 +158,7 @@ $changed_memory
 
   echo "$head_sha" > "$ckpt_file"
 
-  if [ -n "$summary" ] && ! echo "$summary" | grep -q '(無實質更新)'; then
+  if [ "$worth_digesting" = "true" ] && [ -n "$summary" ]; then
     { echo "## $proj"; echo; echo "$summary"; echo; } >> "$digest_file"
   fi
 done
