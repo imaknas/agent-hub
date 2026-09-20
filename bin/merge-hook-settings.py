@@ -3,7 +3,10 @@
 不覆寫既有內容、不重複加入同樣的 command、不需要任何判斷——純粹的
 「這個 command 存在嗎?不存在就 append」。
 
-兩種模式:
+兩種模式,差別只在要不要先 cd 進 .agent-memory,兩邊都只同步 memory/STATE.md,
+不會有任何模式去動使用者自己的程式碼(no special cases——安全性不該靠「這個
+目錄剛好只有 agent-hub 的檔案」這種隱性條件撐著,而是腳本本身就明確只加這
+兩個路徑):
 - native:專案本身就是 repo 根目錄,hook 直接對這個 repo 操作
 - hosted:專案有獨立的 .agent-memory worktree,hook 要先 cd 進去再操作
 
@@ -16,11 +19,11 @@ from pathlib import Path
 COMMANDS = {
     "native": {
         "start": "~/agent-hub/bin/with-lock.sh git pull",
-        "end": "~/agent-hub/bin/with-lock.sh ~/agent-hub/bin/git-sync-push.sh",
+        "end": "~/agent-hub/bin/with-lock.sh ~/agent-hub/bin/git-sync-memory.sh",
     },
     "hosted": {
         "start": "cd .agent-memory && ~/agent-hub/bin/with-lock.sh git pull -q",
-        "end": "cd .agent-memory && ~/agent-hub/bin/with-lock.sh ~/agent-hub/bin/git-sync-push.sh",
+        "end": "cd .agent-memory && ~/agent-hub/bin/with-lock.sh ~/agent-hub/bin/git-sync-memory.sh",
     },
 }
 
