@@ -3,14 +3,17 @@
 # 並在 agent-hub 寫一份跨專案 digest。設計見 project-29/ROADMAP.md
 # 「中心化整合 agent」一節。
 #
-# robust 化的三個決定：
+# robust 化的決定：
 # 1. 單一專案的 STATE.md 判斷用 haiku（量大、任務單純）；跨專案關聯用 sonnet
-#    （一天只跑一次，成本差異可忽略，但這一步需要的推理明顯更難）。
+#    （一天只跑一次，成本差異可忽略，但這一步需要的推理明顯更難）。模型名稱
+#    可以用 models.env 覆寫，不用改這支腳本。
 # 2. 用 --output-format json --json-schema 拿結構化輸出，不再用字串標記
 #    （---SUMMARY---）配 sed 解析；並且用「實際 git diff」而不是模型自報的
 #    state_updated 當作要不要 commit 的依據，兩者不一致時記警告。
 # 3. 每次真的動到 STATE.md，都額外寫一筆到 review-log.md（連 diff 一起），
 #    給人事後抽查用，不做阻斷式審批。
+# 4. 所有 push 都透過 git-safe-push.sh，遇到分岔自動 pull 合併重試，不用人工
+#    處理 rejected push（真的內容衝突還是會失敗、需要人來看）。
 set -uo pipefail
 export PATH="/opt/homebrew/bin:/usr/local/bin:$PATH"
 
@@ -24,9 +27,15 @@ HUB="$HOME/agent-hub"
 STATE_DIR="$HUB/.state"
 LOG_DIR="$HUB/.logs"
 REVIEW_LOG="$HUB/review-log.md"
+SAFE_PUSH="$HUB/bin/git-safe-push.sh"
 mkdir -p "$STATE_DIR" "$LOG_DIR"
 TODAY=$(date +%Y-%m-%d)
 LOG="$LOG_DIR/librarian-$TODAY.log"
+
+# 模型設定：預設值寫死在這裡當 fallback，models.env 存在的話覆寫。
+STATE_MODEL="haiku"
+INDEX_MODEL="sonnet"
+[ -f "$HUB/models.env" ] && source "$HUB/models.env"
 
 log() { echo "[$(date '+%H:%M:%S')] $*" | tee -a "$LOG"; }
 
@@ -95,7 +104,7 @@ $changed_memory
   pre_call_sha=$(git -C "$proj_dir" rev-parse HEAD)
 
   output_json=$(cd "$proj_dir" && claude -p "$prompt" \
-      --model haiku \
+      --model "$STATE_MODEL" \
       --permission-mode acceptEdits \
       --tools "Read,Write,Edit,Glob,Grep" \
       --output-format json \
@@ -149,7 +158,7 @@ $changed_memory
   if [ "$actually_changed" = "true" ]; then
     if [ "$post_call_sha" = "$pre_call_sha" ]; then
       # hook 沒接手(這個專案這次沒有走 hook,或 hook 沒設好),自己補 commit+push。
-      ( cd "$proj_dir" && git add STATE.md && git commit -m "librarian: update STATE.md" -q && git push -q )
+      ( cd "$proj_dir" && git add STATE.md && git commit -m "librarian: update STATE.md" -q && "$SAFE_PUSH" )
       new_sha=$(git -C "$proj_dir" rev-parse HEAD)
     fi
     log "$proj: STATE.md updated & pushed ($new_sha)"
@@ -192,7 +201,7 @@ if [ -s "$digest_file" ]; then
 直接編輯 index.md,不要重寫整份格式風格。如果沒有值得改的地方,可以不動這個檔案。"
 
   index_output_json=$(claude -p "$index_prompt" \
-      --model sonnet \
+      --model "$INDEX_MODEL" \
       --permission-mode acceptEdits \
       --tools "Read,Write,Edit,Glob,Grep" \
       --output-format json \
@@ -210,7 +219,7 @@ if [ -s "$digest_file" ]; then
 
   git add -A
   git commit -m "librarian: digest $TODAY" -q
-  git push -q
+  "$SAFE_PUSH"
   log "digest $TODAY written & pushed"
 else
   log "nothing to digest today"

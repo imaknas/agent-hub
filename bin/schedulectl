@@ -14,6 +14,9 @@
   schedulectl logs [name] [n]     印最近 n 行 log(預設 scheduler.log;給 name 則印該 job 當天的 log)
   schedulectl stop                完全停用排程器(launchctl bootout,不動 schedule.yaml)
   schedulectl start               重新啟動排程器(launchctl bootstrap)
+  schedulectl models               顯示 librarian.sh 目前用的模型設定
+  schedulectl set-model state|index <model>   改其中一個模型(state=單一專案
+                                   STATE.md 判斷,index=跨專案關聯 index.md)
 """
 import subprocess
 import sys
@@ -26,6 +29,8 @@ SCHEDULE = HUB / "schedule.yaml"
 LOG_DIR = HUB / ".logs"
 LABEL = "local.agent-hub-scheduler"
 PLIST = Path.home() / "Library/LaunchAgents" / f"{LABEL}.plist"
+MODELS_FILE = HUB / "models.env"
+DEFAULT_MODELS = {"STATE_MODEL": "haiku", "INDEX_MODEL": "sonnet"}
 
 
 def load_jobs():
@@ -110,6 +115,44 @@ def cmd_start():
     print("排程器已啟動")
 
 
+def load_models():
+    models = dict(DEFAULT_MODELS)
+    if MODELS_FILE.exists():
+        for line in MODELS_FILE.read_text().splitlines():
+            line = line.strip()
+            if not line or line.startswith("#") or "=" not in line:
+                continue
+            k, v = line.split("=", 1)
+            models[k.strip()] = v.strip()
+    return models
+
+
+def save_models(models):
+    lines = [
+        "# librarian.sh 用的模型設定。用 `schedulectl models` 看、",
+        "# `schedulectl set-model state|index <model>` 改。",
+    ]
+    lines += [f"{k}={v}" for k, v in models.items()]
+    MODELS_FILE.write_text("\n".join(lines) + "\n")
+
+
+def cmd_models():
+    models = load_models()
+    print(f"state(單一專案 STATE.md 判斷):{models['STATE_MODEL']}")
+    print(f"index(跨專案關聯 index.md)  :{models['INDEX_MODEL']}")
+
+
+def cmd_set_model(which, model):
+    key = {"state": "STATE_MODEL", "index": "INDEX_MODEL"}.get(which)
+    if not key:
+        print(f"'{which}' 不是有效選項,只能是 state 或 index")
+        sys.exit(1)
+    models = load_models()
+    models[key] = model
+    save_models(models)
+    print(f"已把 {which} 用的模型設成 '{model}'")
+
+
 def main():
     args = sys.argv[1:]
     if not args:
@@ -131,6 +174,10 @@ def main():
         cmd_stop()
     elif cmd == "start":
         cmd_start()
+    elif cmd == "models":
+        cmd_models()
+    elif cmd == "set-model" and len(rest) == 2:
+        cmd_set_model(rest[0], rest[1])
     else:
         print(__doc__)
         sys.exit(1)
