@@ -53,8 +53,17 @@ tail -n +2 "$PROJECTS" | while IFS=$'\t' read -r name local_path origin memory_b
   # local_path 記的是 onboard 當時那台機器(通常是 MBP)的路徑,在 mini 上
   # 不會存在——但 mini 上一定有 onboard-project.sh 步驟 9 建的 memory-only
   # clone(~/projects/<name>/STATE.md),兩個路徑都試,不用管在哪台機器跑。
-  state_file="$local_path/.agent-memory/STATE.md"
+  state_dir="$local_path/.agent-memory"
+  state_file="$state_dir/STATE.md"
   mini_clone_state_file="$HOME/projects/$name/STATE.md"
+  # .agent-memory 平常只在該專案自己開新 session 時(SessionStart hook)才
+  # 會 git pull——這支腳本是隨時可能在別的資料夾被叫用來看別的專案,不會
+  # 觸發那個 hook,直接讀本地檔案可能讀到 librarian 已經 push 但這台機器
+  # 還沒拉下來的舊內容。讀之前先自己 pull 一次,拉不到(離線、還沒連上
+  # mini)就當作沒這回事,不讓整支腳本失敗。
+  if [ -d "$state_dir" ]; then
+    git -C "$state_dir" pull -q 2>/dev/null || true
+  fi
   if [ -f "$state_file" ]; then
     cat "$state_file"
   elif [ -f "$mini_clone_state_file" ]; then
