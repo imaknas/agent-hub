@@ -21,10 +21,11 @@ LABEL="$1"
 row=$(awk -F'\t' -v n="$LABEL" '$1==n{print; found=1} END{exit !found}' "$MANIFEST") \
   || fail "在 $MANIFEST 裡找不到 '$LABEL'"
 
-plist_location=$(echo "$row" | cut -f2)
+project=$(echo "$row" | cut -f2)
 owner=$(echo "$row" | cut -f3)
-purpose=$(echo "$row" | cut -f4)
-recreate_notes=$(echo "$row" | cut -f5)
+plist_location=$(echo "$row" | cut -f4)
+purpose=$(echo "$row" | cut -f5)
+recreate_notes=$(echo "$row" | cut -f6)
 
 case "$plist_location" in
   agent-hub/launchd/*)
