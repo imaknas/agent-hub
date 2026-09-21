@@ -56,6 +56,26 @@ agent-hub 是跨專案的 memory 追蹤 + 排程 + 專案/服務註冊系統,設
 - `bin/transcript-backup.sh`——MBP → mini 的 Claude Code chat transcript
   每日備份(這支跑在 MBP,不是 mini)
 
+## mini 上的路徑慣例
+
+三個看起來像但用途完全不同、不要混用:
+
+- `~/git-origin/<name>-memory.git`——bare repo,只有 `agent-memory` 分支
+  (`onboard-project.sh` 建的)
+- `~/projects/<name>/`——**memory-only** 的工作副本,給 librarian 用
+  (只有 AGENT.md/STATE.md/memory/,不是專案的真實程式碼;`onboard-
+  project.sh` 步驟 9 clone 出來的)
+- `~/services/<name>/`——**真的程式碼**的完整 git clone,給需要在 mini 上
+  長駐執行 process 的專案用(例:project-15 的 webhook receiver)。
+  跟 `~/projects/` 的差別:這裡是真的會被 `node`/`python` 之類的指令
+  執行、需要 `.env`/`data/` 之類本機專屬狀態的東西,不是 librarian 讀
+  memory 用的。更新靠該專案自己的 `bin/deploy.sh`(git pull + rebuild +
+  `launchctl kickstart`),不是 rsync、不是 `onboard-project.sh`
+
+新專案如果需要在 mini 上跑一個長駐服務,才用 `~/services/`;純粹要有
+memory 追蹤但不需要在 mini 上執行任何東西的專案(目前大多數專案都是這種),
+不需要在 `~/services/` 底下有任何東西。
+
 ## 目錄
 
 - `bin/`——所有腳本
