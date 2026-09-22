@@ -16,6 +16,13 @@
 # 上跑(還沒遷移,故意排在最後),所以 session 檔案還在持續增加,不是純歷史
 # 資料;而且就算 OpenClaw 全部退役了,這些對話紀錄本身仍然有價值(不只是
 # 圖書館員摘要進 memory/log 的那些精煉版本)。
+#
+# 2026-09-22:原本掛了每天排程(launchd),使用者確認不需要——真正要的是把
+# session 內容沉澱進 agent-hub 能管理的專案 memory(見各專案 .agent-memory/
+# memory/ 底下 openclaw-raw-transcript-backfill 這類筆記),不是持續鏡像
+# 原始檔案本身。排程已經拔掉,這支腳本留著只給手動跑:已經有一份 2026-09-22
+# 的快照在 ~/openclaw-session-backups/,之後如果需要「最後一次快照」(例如
+# OpenClaw 真的要整個停用之前)手動執行即可,不用重新設計。
 set -uo pipefail
 
 SRC_HOST="hub-host"
