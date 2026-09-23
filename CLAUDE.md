@@ -13,6 +13,7 @@ agent-hub 是跨專案的 memory 追蹤 + 排程 + 專案/服務註冊系統,設
 - **有哪些專案被 onboard 過**:`onboarded-projects.tsv`
 - **mini 上有哪些背景服務在跑**:`services.tsv`
 - **有哪些 GitHub repo 被 mirror 備份**:`mirror-list.txt`
+- **OpenClaw 搬遷到哪了、還剩什麼沒處理**:`openclaw-migration-status.md`
 
 ## 建立/救援
 
