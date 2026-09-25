@@ -59,27 +59,30 @@ git fetch -q mini agent-memory
 git worktree add -b agent-memory .agent-memory mini/agent-memory -q
 echo "[3/5] .agent-memory 已接上 $memory_bare_repo 既有的 agent-memory 分支(完整歷史,不是新的)"
 
-# --- 4. 確保 CLAUDE.md pointer 跟 .claude/settings.local.json 的 hook 都在(有些公開 repo 故意不收這些,見
+# --- 4. 確保 CLAUDE.local.md pointer 跟 .claude/settings.local.json 的 hook 都在(有些公開 repo 故意不收這些,見
 #         adaptive-iteration 的先例——這裡用同一套模板/合併腳本補回本機需要的東西,
 #         不會動 outer repo 的 git 歷史) ---
-if [ ! -f CLAUDE.md ]; then
-  cp "$TEMPLATES/CLAUDE.md" CLAUDE.md
-elif ! grep -q '.agent-memory/AGENT.md' CLAUDE.md; then
-  printf '\n' >> CLAUDE.md
-  tail -n +2 "$TEMPLATES/CLAUDE.md" >> CLAUDE.md
+# pointer 寫進本機的 CLAUDE.local.md(Claude Code 會跟 CLAUDE.md 一起自動
+# 載入,gitignored)——不動專案自己的 CLAUDE.md:段落裡有 agent-hub 名稱,
+# 進了共享的 CLAUDE.md 就會跟著 repo 公開。舊專案若已經把 pointer 寫在
+# CLAUDE.md,就不再重複加。
+if ! grep -qs '.agent-memory/AGENT.md' CLAUDE.md CLAUDE.local.md; then
+  [ -s CLAUDE.local.md ] && printf '\n' >> CLAUDE.local.md
+  tail -n +3 "$TEMPLATES/CLAUDE.md" >> CLAUDE.local.md
 fi
 mkdir -p .claude
 python3 "$AGENT_HUB/bin/merge-hook-settings.py" .claude/settings.local.json
-echo "[4/5] CLAUDE.md pointer / .claude/settings.local.json hook 已補上(本機專用,不進 outer repo)"
+echo "[4/5] CLAUDE.local.md pointer / .claude/settings.local.json hook 已補上(本機專用,不進 outer repo)"
 
-# --- 5. 提醒:這兩個檔案可能被 outer repo 自己的 .gitignore 排除(故意公開
-#         的 repo 通常不收,像 adaptive-iteration 一樣) ---
-if ! git check-ignore -q .claude/settings.local.json 2>/dev/null; then
-  echo "[5/5] ⚠️ .claude/settings.local.json 沒被這個 repo 的 .gitignore 排除——在 .gitignore 加一行 .claude/settings.local.json,免得 hook(含 ~/agent-hub 路徑)被 commit 進去。"
-elif git check-ignore -q CLAUDE.md 2>/dev/null; then
-  echo "[5/5] CLAUDE.md 被這個 repo 的 .gitignore 排除(故意公開的 repo,像 adaptive-iteration 一樣);hook 在這台機器上照常運作。"
+# --- 5. 這兩個本機檔含 ~/agent-hub 路徑/名稱,確認 outer repo 不會 commit 到 ---
+unignored=""
+for f in .claude/settings.local.json CLAUDE.local.md; do
+  git check-ignore -q "$f" 2>/dev/null || unignored="$unignored $f"
+done
+if [ -n "$unignored" ]; then
+  echo "[5/5] ⚠️ 沒被這個 repo 的 .gitignore 排除:$unignored——在 .gitignore 加上它們,免得本機設定(含 ~/agent-hub 路徑)被 commit 進去。"
 else
-  echo "[5/5] 狀態正常。"
+  echo "[5/5] 狀態正常(本機檔都已 gitignored)。"
 fi
 
 echo

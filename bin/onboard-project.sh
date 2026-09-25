@@ -34,9 +34,9 @@
 #      寫進會 commit 的檔案就等於把個人工具的名字/路徑放進 repo 歷史
 #      (2026-09 在公開的 sycophancy-eval、the-crucible 發生過)。
 #      換機器時 recover-project.sh 會重新產生這份本機檔案。
-#   6. 合併(不是覆寫)外層 CLAUDE.md 的 agent-hub pointer 段落——沒有
-#      CLAUDE.md 就直接用模板建一份,已經有就只在缺 pointer 時 append
-#   7. commit .gitignore 跟 CLAUDE.md;如果有 origin 就 push(用 git-safe-push.sh,
+#   6. agent-hub pointer 段落寫進本機的 CLAUDE.local.md(gitignored,Claude
+#      Code 會跟 CLAUDE.md 一起載入)——不動專案共享的 CLAUDE.md
+#   7. commit .gitignore;如果有 origin 就 push(用 git-safe-push.sh,
 #      遇到分岔自動重試),沒有 origin 就只留在本地
 #   8. mini 上建 bare repo,push agent-memory 分支過去(不動任何外部 remote)
 #   9. mini 上 clone 一份工作副本給 librarian
@@ -158,9 +158,9 @@ EOF
   if ! grep -qxF '.agent-memory/' .gitignore; then
     printf '\n# local memory worktree (not part of this repo)\n.agent-memory/\n' >> .gitignore
   fi
-  if ! grep -qxF '.claude/settings.local.json' .gitignore; then
-    printf '.claude/settings.local.json\n' >> .gitignore
-  fi
+  for local_file in .claude/settings.local.json CLAUDE.local.md; do
+    grep -qxF "$local_file" .gitignore || printf '%s\n' "$local_file" >> .gitignore
+  done
   echo "[4/11] .gitignore 已更新"
 
   # --- 5. 合併外層 .claude/settings.local.json(本機檔,不進 repo)---
@@ -168,20 +168,19 @@ EOF
   python3 "$AGENT_HUB/bin/merge-hook-settings.py" .claude/settings.local.json
   echo "[5/11] .claude/settings.local.json 已合併 hook 設定(不進版控)"
 
-  # --- 6. 合併外層 CLAUDE.md 的 agent-hub pointer 段落 ---
-  # 沒有 CLAUDE.md 就直接用模板;已經有(專案自己的 CLAUDE.md)就只在缺
-  # pointer 時 append,不覆寫既有內容。這份 pointer 是唯一會讓「工作中的
-  # session」發現有 memory 追蹤機制的地方——AGENT.md 本身不會被自動載入。
-  if [ ! -f CLAUDE.md ]; then
-    cp "$TEMPLATES/CLAUDE.md" CLAUDE.md
-  elif ! grep -q '.agent-memory/AGENT.md' CLAUDE.md; then
-    printf '\n' >> CLAUDE.md
-    tail -n +2 "$TEMPLATES/CLAUDE.md" >> CLAUDE.md
+  # --- 6. agent-hub pointer → CLAUDE.local.md ---
+  # pointer 寫進本機的 CLAUDE.local.md(Claude Code 會跟 CLAUDE.md 一起自動
+  # 載入,gitignored)——不動專案自己的 CLAUDE.md:段落裡有 agent-hub 名稱,
+  # 進了共享的 CLAUDE.md 就會跟著 repo 公開。舊專案若已經把 pointer 寫在
+  # CLAUDE.md,就不再重複加。
+  if ! grep -qs '.agent-memory/AGENT.md' CLAUDE.md CLAUDE.local.md; then
+    [ -s CLAUDE.local.md ] && printf '\n' >> CLAUDE.local.md
+    tail -n +3 "$TEMPLATES/CLAUDE.md" >> CLAUDE.local.md
   fi
-  echo "[6/11] CLAUDE.md 的 agent-hub pointer 段落已就位"
+  echo "[6/11] CLAUDE.local.md 的 agent-hub pointer 段落已就位(不進版控)"
 
   # --- 7. commit,有 origin 才 push ---
-  git add .gitignore CLAUDE.md
+  git add .gitignore
   git commit -q -m "chore: add agent-hub memory tracking (isolated worktree, no app code touched)"
   if [ -n "$origin_url" ]; then
     outer_branch=$(git branch --show-current)
@@ -243,14 +242,9 @@ fi
 # /mirror-backup 要等有人剛好手動 commit 才看得到新專案(project-36 就是這樣
 # 卡在 MBP 本地)。只 commit 這三個檔案,不碰 agent-hub 裡其他未 commit 的東西。
 "$AGENT_HUB/bin/gen-index-roster.sh"
-REGISTRY_FILES=(onboarded-projects.tsv mirror-list.txt index.md)
-if [ -n "$(git -C "$AGENT_HUB" status --porcelain -- "${REGISTRY_FILES[@]}")" ]; then
-  ( cd "$AGENT_HUB" \
-    && git add -- "${REGISTRY_FILES[@]}" \
-    && git commit -q -m "register $PROJ_NAME (onboard-project.sh)" -- "${REGISTRY_FILES[@]}" \
-    && "$AGENT_HUB/bin/with-lock.sh" "$AGENT_HUB/bin/git-safe-push.sh" ) \
-    || echo "警告:agent-hub 登記檔 commit/push 失敗,請手動處理(登記內容本身已寫入)" >&2
-fi
+"$AGENT_HUB/bin/commit-hub-files.sh" "register $PROJ_NAME (onboard-project.sh)" \
+    onboarded-projects.tsv mirror-list.txt index.md \
+  || echo "警告:agent-hub 登記檔 commit/push 失敗,請手動處理(登記內容本身已寫入)" >&2
 echo "[11/11] 已登記進 agent-hub 的 onboarded-projects.tsv,並 commit+push agent-hub"
 
 echo
