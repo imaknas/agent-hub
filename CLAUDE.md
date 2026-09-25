@@ -93,8 +93,8 @@ memory 追蹤但不需要在 mini 上執行任何東西的專案(目前大多數
 - `bin/`——所有腳本
 - `launchd/`——版控過的 launchd plist,對照 `services.tsv` 裡 owner 是
   agent-hub 的項目
-- `templates/`——`onboard-project.sh` 用的骨架檔案(`AGENT.md`、
-  `CLAUDE.md`、`claude-settings.json`)
+- `templates/`——骨架檔案(`AGENT.md`、`CLAUDE.md`);hook 設定不在這裡,
+  寫在 `bin/merge-hook-settings.py`
 - `.claude/skills/`——`new-or-onboard-project`、`recover-projects`
 - `digest/`、`index.md`(名冊區塊由 `gen-index-roster.sh` 產生)、`review-log.md`——`librarian.sh` 的產出,不要
   手動改,改了下次跑會被蓋掉或造成混淆
