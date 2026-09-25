@@ -87,8 +87,9 @@ agent-hub 是跨專案的 memory 追蹤 + 排程 + 專案/服務註冊系統,設
   長駐執行 process 的專案用(例:project-15 的 webhook receiver)。
   跟 `~/projects/` 的差別:這裡是真的會被 `node`/`python` 之類的指令
   執行、需要 `.env`/`data/` 之類本機專屬狀態的東西,不是 librarian 讀
-  memory 用的。更新靠該專案自己的 `bin/deploy.sh`(git pull + rebuild +
-  `launchctl kickstart`),不是 rsync、不是 `onboard-project.sh`
+  memory 用的。更新靠該專案自己的部署方式(例:project-15 的 `bin/deploy.sh`
+  = git pull + rebuild + `launchctl kickstart`;project-36 是手動 git pull +
+  `uv sync --locked`),不是 rsync、不是 `onboard-project.sh`
 
 新專案如果需要在 mini 上跑一個長駐服務,才用 `~/services/`;純粹要有
 memory 追蹤但不需要在 mini 上執行任何東西的專案(目前大多數專案都是這種),
