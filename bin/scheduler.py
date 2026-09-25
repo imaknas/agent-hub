@@ -13,12 +13,18 @@
 """
 import datetime
 import json
+import os
 import pathlib
 import subprocess
 
 import yaml
 
 HUB = pathlib.Path.home() / "agent-hub"
+
+# 給各專案 job 用的環境變數,名稱刻意不帶工具名稱:專案 repo 的程式碼只讀
+# $SAFE_PUSH(沒有就退回 git push),不寫死這裡的路徑——repo 之後可能公開,
+# 被 commit 的內容不能出現這套機制的名稱或路徑。
+JOB_ENV = {**os.environ, "SAFE_PUSH": str(HUB / "bin" / "git-safe-push.sh")}
 SCHEDULE = HUB / "schedule.yaml"
 STATE_FILE = HUB / ".state" / "scheduler-last-run.json"
 LOG_DIR = HUB / ".logs"
@@ -96,6 +102,7 @@ def main() -> None:
                     check=True,
                     stdout=job_log,
                     stderr=subprocess.STDOUT,
+                    env=JOB_ENV,
                 )
             state[name] = today
             save_state(state)
