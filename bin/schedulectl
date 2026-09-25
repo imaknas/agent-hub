@@ -37,8 +37,16 @@ def load_jobs():
     return (yaml.safe_load(SCHEDULE.read_text()) or {}).get("jobs", [])
 
 
-def save_jobs(jobs):
+def commit_hub_file(path, msg):
+    """改了被版控的檔案就當場 commit+push(只 commit 這個檔案),不留給人手動補。"""
+    rc = subprocess.run([str(HUB / "bin/commit-hub-files.sh"), msg, path.name]).returncode
+    if rc != 0:
+        print(f"警告:{path.name} 已寫入,但 commit/push 失敗,需要手動處理")
+
+
+def save_jobs(jobs, msg):
     SCHEDULE.write_text(yaml.dump({"jobs": jobs}, allow_unicode=True, sort_keys=False))
+    commit_hub_file(SCHEDULE, msg)
 
 
 def find_job(jobs, name):
@@ -63,7 +71,7 @@ def cmd_pause(name):
     jobs = load_jobs()
     job = find_job(jobs, name)
     job["enabled"] = False
-    save_jobs(jobs)
+    save_jobs(jobs, f"schedulectl: pause {name}")
     print(f"已暫停 '{name}'(設定還在,之後用 resume 恢復)")
 
 
@@ -71,7 +79,7 @@ def cmd_resume(name):
     jobs = load_jobs()
     job = find_job(jobs, name)
     job["enabled"] = True
-    save_jobs(jobs)
+    save_jobs(jobs, f"schedulectl: resume {name}")
     print(f"已恢復 '{name}'")
 
 
@@ -134,6 +142,7 @@ def save_models(models):
     ]
     lines += [f"{k}={v}" for k, v in models.items()]
     MODELS_FILE.write_text("\n".join(lines) + "\n")
+    commit_hub_file(MODELS_FILE, "schedulectl: update models.env")
 
 
 def cmd_models():

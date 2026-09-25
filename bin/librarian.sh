@@ -221,22 +221,22 @@ if [ -s "$digest_file" ]; then
 
   # 名冊在 LLM 之後才重生,就算模型誤動了區塊也會被蓋回正確內容。
   "$HUB/bin/gen-index-roster.sh" >>"$LOG" 2>&1 || log "gen-index-roster failed"
-  git add -A
-  git commit -m "librarian: digest $TODAY" -q
-  "$SAFE_PUSH"
-  log "digest $TODAY written & pushed"
+  # 只 commit librarian 自己的產出,不用 git add -A——mini 的 ~/agent-hub 如果
+  # 有人留了手動編輯,不能被夜間 digest 一起掃進去。
+  "$HUB/bin/commit-hub-files.sh" "librarian: digest $TODAY" \
+      "digest/$TODAY.md" index.md review-log.md >>"$LOG" 2>&1 \
+    && log "digest $TODAY written & pushed" \
+    || log "digest $TODAY commit/push failed"
 else
   log "nothing to digest today"
-  # 沒有 digest 的日子也要同步名冊,不然新 onboard 的專案要等到某天有 digest
-  # 才會出現在 index.md。只 commit index.md,不掃其他檔案。
+  # 沒有 digest 的日子也要同步名冊(不然新 onboard 的專案要等到某天有 digest
+  # 才會出現在 index.md),以及迴圈裡可能寫進的 review-log.md。
   cd "$HUB"
   git pull -q || true
   "$HUB/bin/gen-index-roster.sh" >>"$LOG" 2>&1 || log "gen-index-roster failed"
-  if ! git diff --quiet -- index.md; then
-    git commit -q -m "librarian: regenerate index roster" -- index.md
-    "$SAFE_PUSH"
-    log "index.md roster regenerated & pushed"
-  fi
+  "$HUB/bin/commit-hub-files.sh" "librarian: index roster / review-log $TODAY" \
+      index.md review-log.md >>"$LOG" 2>&1 \
+    || log "index.md/review-log.md commit/push failed"
 fi
 
 log "=== librarian run end (total cost today: \$$total_cost) ==="

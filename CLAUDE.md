@@ -101,3 +101,14 @@ memory 追蹤但不需要在 mini 上執行任何東西的專案(目前大多數
 - mini 永遠不當任何專案主分支的 origin,只透過獨立的 `.agent-memory`
   worktree 處理 memory 追蹤——這個安全性質不該因為「這個專案剛好還沒有
   外部 remote」而放寬
+
+## 誰負責 commit/push agent-hub
+
+- **手動編輯(腳本、文件、services.tsv 等)**:只由工作目錄在 `~/agent-hub`
+  的專用 session 做,它負責 commit+push。其他專案的 session 發現 agent-hub
+  的問題,只通知(傳訊息給這個 session 或告訴使用者),不直接改——2026-09-25
+  兩個 session 同時改這份 working tree,commit 互相夾帶對方改到一半的檔案
+- **腳本寫的被版控檔案**(`onboarded-projects.tsv`、`mirror-list.txt`、
+  `index.md`、`schedule.yaml`、`models.env`、`digest/`、`review-log.md`):
+  寫檔的腳本自己用 `bin/commit-hub-files.sh` 只 commit 那幾個檔案,所以
+  `onboard-project.sh` 從哪個 session 跑都安全
