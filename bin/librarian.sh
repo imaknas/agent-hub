@@ -50,6 +50,8 @@ STATE_SCHEMA='{"type":"object","properties":{"state_updated":{"type":"boolean","
 
 INDEX_SCHEMA='{"type":"object","properties":{"index_updated":{"type":"boolean","description":"是否編輯了 index.md"},"relations_found":{"type":"string","description":"今天找到的跨專案關聯簡述；沒有明顯關聯就寫「(無明顯關聯)」，不要硬掰"}},"required":["index_updated","relations_found"]}'
 
+TODO_SCHEMA='{"type":"object","properties":{"items":{"type":"array","items":{"type":"object","properties":{"project":{"type":"string","description":"專案名稱;屬於 agent-hub / OpenClaw 搬遷的寫 agent-hub"},"item":{"type":"string","description":"待辦事項,一句話,具體到看得懂要做什麼"},"owner":{"type":"string","enum":["Knas","agent","待定"],"description":"Knas=只有本人能做(帳號/密碼/付款/決定);agent=agent 可以做;待定=還需要先做決定"},"source":{"type":"string","description":"出處檔案路徑,例如 project-10/STATE.md"}},"required":["project","item","owner","source"]}},"note":{"type":"string","description":"給人看的一句話備註,例如哪些看起來已經過時;沒有就空字串"}},"required":["items","note"]}'
+
 total_cost="0"
 add_cost() {
   local c="$1"
@@ -60,6 +62,7 @@ add_cost() {
 
 log "=== librarian run start ==="
 
+any_project_changed=false
 digest_file=$(mktemp)
 trap 'rm -f "$digest_file"' EXIT
 
@@ -81,6 +84,7 @@ for proj_dir in "$HOME"/projects/*/; do
     log "$proj: no new commits, skip"
     continue
   fi
+  any_project_changed=true
 
   if [ -n "$last_sha" ] && git -C "$proj_dir" cat-file -e "$last_sha" 2>/dev/null; then
     range="$last_sha..$head_sha"
@@ -233,6 +237,79 @@ memory/ 的結構:
   fi
 done
 
+# --- 跨專案待辦清單 todo.md ---
+# 有任何專案有新 commit、搬遷狀態檔比 todo.md 新、或 todo.md 還不存在時才重生
+# (一次 $INDEX_MODEL 呼叫)。模型只回結構化清單,todo.md 由腳本機械產生,
+# 每次整份重寫——它是「目前還沒做的事」的快照,不是流水帳。
+cd "$HUB" && git pull -q || true
+MIGRATION="$HUB/openclaw-migration-status.md"
+todo_needed=false
+if [ "$any_project_changed" = true ] || [ ! -f "$HUB/todo.md" ]; then
+  todo_needed=true
+else
+  mig_ts=$(git -C "$HUB" log -1 --format=%ct -- openclaw-migration-status.md 2>/dev/null)
+  todo_ts=$(git -C "$HUB" log -1 --format=%ct -- todo.md 2>/dev/null)
+  [ "${mig_ts:-0}" -gt "${todo_ts:-0}" ] && todo_needed=true
+fi
+
+if [ "$todo_needed" = true ]; then
+  all_state=$(for f in "$HOME"/projects/*/STATE.md; do echo "=== $(basename "$(dirname "$f")")/STATE.md"; cat "$f"; echo; done)
+  migration_open=$(sed -n '/^## 還沒解決/,$p' "$MIGRATION" 2>/dev/null)
+  todo_prompt="整理一份跨專案的『目前還沒做的事』清單。你在 ~/projects 目錄,每個子目錄是一個專案的 memory 副本。
+
+各專案 STATE.md(已附在下面):
+$all_state
+
+agent-hub 的 OpenClaw 搬遷還沒解決的項目(專案名稱寫 agent-hub,source 寫 agent-hub/openclaw-migration-status.md):
+$migration_open
+
+另外用 Glob/Grep/Read 看 */memory/reference/*.md 裡標成未決、待辦、open items、還沒做的內容
+(reference/ 是整理過的最新版本;日期檔是舊流水帳,跟 reference/ 或 STATE.md 衝突時不要採用)。
+
+規則:
+- 只列還沒完成、具體可行動的事;已經完成、已經被推翻、純背景資訊的不要列。
+- 同一件事在多處出現只列一次。不要自己編造檔案裡沒有的待辦。
+- 不要編輯任何檔案,結果只放在 structured output。"
+
+  todo_json=$(cd "$HOME/projects" && claude -p "$todo_prompt" \
+      --model "$INDEX_MODEL" \
+      --permission-mode acceptEdits \
+      --tools "Read,Glob,Grep" \
+      --output-format json \
+      --json-schema "$TODO_SCHEMA" 2>>"$LOG")
+  todo_rc=$?
+  todo_cost=$(echo "$todo_json" | jq -r '.total_cost_usd // empty' 2>/dev/null)
+  [ -n "$todo_cost" ] && { log "todo.md: call cost \$$todo_cost (model: $INDEX_MODEL)"; add_cost "$todo_cost"; }
+
+  if [ $todo_rc -eq 0 ] && echo "$todo_json" | jq -e '.structured_output.items' >/dev/null 2>&1; then
+    {
+      echo "# 跨專案待辦"
+      echo
+      echo "> librarian 產生($TODAY),每次整份重寫,不要手動改——要改內容,改來源檔"
+      echo "> (各專案 STATE.md / memory/reference/、openclaw-migration-status.md)。"
+      note=$(echo "$todo_json" | jq -r '.structured_output.note // empty')
+      [ -n "$note" ] && { echo ">"; echo "> 備註:$note"; }
+      echo
+      echo "## 只有 Knas 能做"
+      echo
+      echo "$todo_json" | jq -r '.structured_output.items[] | select(.owner=="Knas") | "- [ ] **\(.project)**:\(.item)(`\(.source)`)"'
+      echo
+      echo "## 待定(需要先做決定)"
+      echo
+      echo "$todo_json" | jq -r '.structured_output.items[] | select(.owner=="待定") | "- [ ] **\(.project)**:\(.item)(`\(.source)`)"'
+      echo
+      echo "## agent 可以做"
+      echo
+      echo "$todo_json" | jq -r '.structured_output.items | map(select(.owner=="agent")) | group_by(.project)[] | "### \(.[0].project)\n\n" + (map("- [ ] \(.item)(`\(.source)`)") | join("\n")) + "\n"'
+    } > "$HUB/todo.md"
+    log "todo.md: $(echo "$todo_json" | jq '.structured_output.items | length') 項"
+  else
+    log "todo.md 產生失敗 (exit $todo_rc),保留舊版"
+  fi
+else
+  log "todo.md: 沒有專案變動,不重生"
+fi
+
 if [ -s "$digest_file" ]; then
   cd "$HUB"
   git pull -q || true
@@ -270,7 +347,7 @@ if [ -s "$digest_file" ]; then
   # 只 commit librarian 自己的產出,不用 git add -A——mini 的 ~/agent-hub 如果
   # 有人留了手動編輯,不能被夜間 digest 一起掃進去。
   "$HUB/bin/commit-hub-files.sh" "librarian: digest $TODAY" \
-      "digest/$TODAY.md" index.md review-log.md >>"$LOG" 2>&1 \
+      "digest/$TODAY.md" index.md review-log.md todo.md >>"$LOG" 2>&1 \
     && log "digest $TODAY written & pushed" \
     || log "digest $TODAY commit/push failed"
 else
@@ -280,9 +357,9 @@ else
   cd "$HUB"
   git pull -q || true
   "$HUB/bin/gen-index-roster.sh" >>"$LOG" 2>&1 || log "gen-index-roster failed"
-  "$HUB/bin/commit-hub-files.sh" "librarian: index roster / review-log $TODAY" \
-      index.md review-log.md >>"$LOG" 2>&1 \
-    || log "index.md/review-log.md commit/push failed"
+  "$HUB/bin/commit-hub-files.sh" "librarian: index roster / review-log / todo $TODAY" \
+      index.md review-log.md todo.md >>"$LOG" 2>&1 \
+    || log "index.md/review-log.md/todo.md commit/push failed"
 fi
 
 log "=== librarian run end (total cost today: \$$total_cost) ==="

@@ -20,6 +20,17 @@ fi
 [ $# -ge 2 ] || { echo "用法: commit-hub-files.sh \"<message>\" <path>..." >&2; exit 1; }
 msg="$1"; shift
 
+# 不存在、也從來沒被追蹤過的路徑直接略過(例如某支腳本這次沒產生那個檔案),
+# 不然 git add 會因為 pathspec 對不到而讓整個 commit 失敗。
+paths=()
+for f in "$@"; do
+  if [ -e "$f" ] || git ls-files --error-unmatch -- "$f" >/dev/null 2>&1; then
+    paths+=("$f")
+  fi
+done
+[ ${#paths[@]} -gt 0 ] || { echo "commit-hub-files: $* 都不存在,不 commit"; exit 0; }
+set -- "${paths[@]}"
+
 if [ -z "$(git status --porcelain -- "$@")" ]; then
   echo "commit-hub-files: $* 沒有變化,不 commit"
   exit 0

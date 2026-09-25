@@ -13,6 +13,7 @@ agent-hub 是跨專案的 memory 追蹤 + 排程 + 專案/服務註冊系統,設
 - **有哪些專案被 onboard 過**:`onboarded-projects.tsv`
 - **mini 上有哪些背景服務在跑**:`services.tsv`
 - **有哪些 GitHub repo 被 mirror 備份**:`mirror-list.txt`
+- **跨專案還有哪些事沒做(誰能做)**:`todo.md`(librarian 每晚重生)
 - **OpenClaw 搬遷到哪了、還剩什麼沒處理**:`openclaw-migration-status.md`
 - **自動化/排程跑出奇怪錯誤(401、thinking block signature…)**:先查
   `known-issues.md`
@@ -63,7 +64,8 @@ agent-hub 是跨專案的 memory 追蹤 + 排程 + 專案/服務註冊系統,設
   `schedulectl models` 查目前用的模型)
 - `bin/librarian.sh`——「圖書館員」,讀各專案 `memory/` 的新增內容,判斷
   要不要更新 `STATE.md`,並產生跨專案 `digest/YYYY-MM-DD.md` + 更新
-  `index.md`。模型設定在 `models.env`
+  `index.md`,再從各專案 STATE.md / `memory/reference/` 跟搬遷狀態整理出跨專案
+  `todo.md`(有變動才重生)。模型設定在 `models.env`
 - `bin/mirror-backup.sh`——讀 `mirror-list.txt`,對每個 GitHub repo 維護
   一份唯讀 `--mirror` clone,純粹災難復原用,跟 librarian 的摘要流程完全
   獨立、零 LLM 成本
@@ -100,7 +102,7 @@ memory 追蹤但不需要在 mini 上執行任何東西的專案(目前大多數
 - `templates/`——骨架檔案(`AGENT.md`、`CLAUDE.md`);hook 設定不在這裡,
   寫在 `bin/merge-hook-settings.py`
 - `.claude/skills/`——`new-or-onboard-project`、`recover-projects`
-- `digest/`、`index.md`(名冊區塊由 `gen-index-roster.sh` 產生)、`review-log.md`——`librarian.sh` 的產出,不要
+- `digest/`、`index.md`(名冊區塊由 `gen-index-roster.sh` 產生)、`review-log.md`、`todo.md`——`librarian.sh` 的產出,不要
   手動改,改了下次跑會被蓋掉或造成混淆
 
 ## 安全性質(不要繞過)
@@ -119,6 +121,6 @@ memory 追蹤但不需要在 mini 上執行任何東西的專案(目前大多數
   的問題,只通知(傳訊息給這個 session 或告訴使用者),不直接改——2026-09-25
   兩個 session 同時改這份 working tree,commit 互相夾帶對方改到一半的檔案
 - **腳本寫的被版控檔案**(`onboarded-projects.tsv`、`mirror-list.txt`、
-  `index.md`、`schedule.yaml`、`models.env`、`digest/`、`review-log.md`):
+  `index.md`、`todo.md`、`schedule.yaml`、`models.env`、`digest/`、`review-log.md`):
   寫檔的腳本自己用 `bin/commit-hub-files.sh` 只 commit 那幾個檔案,所以
   `onboard-project.sh` 從哪個 session 跑都安全
