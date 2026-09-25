@@ -198,7 +198,9 @@ if [ -s "$digest_file" ]; then
 
   index_prompt="更新 index.md:今天($TODAY)各專案的摘要在 digest/$TODAY.md,讀進來後,
 標出專案之間看得出來的關聯——沒有明顯關聯就不要硬掰,保持精簡。
-直接編輯 index.md,不要重寫整份格式風格。如果沒有值得改的地方,可以不動這個檔案。"
+直接編輯 index.md,不要重寫整份格式風格。如果沒有值得改的地方,可以不動這個檔案。
+<!-- roster:begin --> 到 <!-- roster:end --> 之間的專案名冊是 gen-index-roster.sh 機械產生的,
+不要編輯那個區塊(改了也會被覆蓋);你的註記寫在區塊外。"
 
   index_output_json=$(claude -p "$index_prompt" \
       --model "$INDEX_MODEL" \
@@ -217,12 +219,24 @@ if [ -s "$digest_file" ]; then
     log "index.md update failed (exit $idx_rc)"
   fi
 
+  # 名冊在 LLM 之後才重生,就算模型誤動了區塊也會被蓋回正確內容。
+  "$HUB/bin/gen-index-roster.sh" >>"$LOG" 2>&1 || log "gen-index-roster failed"
   git add -A
   git commit -m "librarian: digest $TODAY" -q
   "$SAFE_PUSH"
   log "digest $TODAY written & pushed"
 else
   log "nothing to digest today"
+  # 沒有 digest 的日子也要同步名冊,不然新 onboard 的專案要等到某天有 digest
+  # 才會出現在 index.md。只 commit index.md,不掃其他檔案。
+  cd "$HUB"
+  git pull -q || true
+  "$HUB/bin/gen-index-roster.sh" >>"$LOG" 2>&1 || log "gen-index-roster failed"
+  if ! git diff --quiet -- index.md; then
+    git commit -q -m "librarian: regenerate index roster" -- index.md
+    "$SAFE_PUSH"
+    log "index.md roster regenerated & pushed"
+  fi
 fi
 
 log "=== librarian run end (total cost today: \$$total_cost) ==="
