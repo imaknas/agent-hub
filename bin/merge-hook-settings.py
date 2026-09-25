@@ -9,8 +9,8 @@
 寫進本機的 `.claude/settings.local.json`(被 gitignore、不進 repo),不是共享的
 `.claude/settings.json`:hook 指令含 ~/agent-hub 路徑,進了 repo 就等於把個人
 工具名稱/路徑公開(2026-09 在公開 repo 發生過)。換機器時由 recover-project.sh
-重新產生。舊專案的 hook 可能還在共享的 settings.json 裡:同一個 command 已經
-在那邊就不再加進 local,免得同一個 hook 跑兩次。
+重新產生。hook 一律寫進 local,不管共享的 settings.json 有沒有——舊專案 commit
+進 settings.json 的 hook 已在 2026-09-26 全部移除,不再遷就那種狀態。
 hook 仍一律先檢查 `.agent-memory` 存不存在,
 不存在就整條安靜地不做事(用 `|| true` 保證結束碼永遠是 0,不會讓其他機器
 上的 session 因為這個 hook 而顯示錯誤)。
@@ -52,13 +52,9 @@ def has_command(entries, command):
 def main():
     path = Path(sys.argv[1])
     settings = json.loads(path.read_text()) if path.exists() else {}
-    shared_path = path.with_name("settings.json")
-    shared = json.loads(shared_path.read_text()).get("hooks", {}) if shared_path != path and shared_path.exists() else {}
 
     hooks = settings.setdefault("hooks", {})
     for event, command in HOOKS:
-        if has_command(shared.get(event, []), command):
-            continue
         entries = hooks.setdefault(event, [])
         if not has_command(entries, command):
             entries.append({"hooks": [{"type": "command", "command": command}]})
