@@ -39,9 +39,14 @@ agent-hub 是跨專案的 memory 追蹤 + 排程 + 專案/服務註冊系統,設
   都不該改成 `git add -A`——agent-hub 自己的 hook 2026-09-22 才因為這個
   問題被修過,見 git log
 - `bin/with-lock.sh`——避免多個 session 同時操作同一個 git repo 互撞
+- `bin/gen-index-roster.sh`——從 `onboarded-projects.tsv` 機械重生
+  `index.md` 的專案名冊區塊(`roster:begin/end` 之間),librarian 每次跑、
+  `onboard-project.sh` 登記時都會呼叫。名冊不交給 LLM 判斷,LLM 只寫區塊外
+  的註記
 - `bin/merge-hook-settings.py`——合併(不覆寫)一個專案 `.claude/
-  settings.json` 的 hook 設定,`onboard-project.sh` 自己會呼叫,不需要
-  手動跑
+  settings.local.json` 的 hook 設定,`onboard-project.sh` / `recover-project.sh`
+  自己會呼叫,不需要手動跑。hook 刻意不寫進共享的 `settings.json`:指令含
+  `~/agent-hub` 路徑,會把個人工具名稱/路徑 commit 進 repo(公開 repo 就外洩)
 
 ## 排程 / 夜間自動化(跑在 mini 上,transcript-backup 除外)
 
@@ -85,7 +90,7 @@ memory 追蹤但不需要在 mini 上執行任何東西的專案(目前大多數
 - `templates/`——`onboard-project.sh` 用的骨架檔案(`AGENT.md`、
   `CLAUDE.md`、`claude-settings.json`)
 - `.claude/skills/`——`new-or-onboard-project`、`recover-projects`
-- `digest/`、`index.md`、`review-log.md`——`librarian.sh` 的產出,不要
+- `digest/`、`index.md`(名冊區塊由 `gen-index-roster.sh` 產生)、`review-log.md`——`librarian.sh` 的產出,不要
   手動改,改了下次跑會被蓋掉或造成混淆
 
 ## 安全性質(不要繞過)

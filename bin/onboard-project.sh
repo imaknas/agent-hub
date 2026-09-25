@@ -28,11 +28,15 @@
 #          private)、push 剛剛的內容過去
 #   2. git worktree add --orphan -b agent-memory .agent-memory
 #   3. 複製 AGENT.md/STATE.md 骨架、建空的 memory/,在 agent-memory 分支上 commit
-#   4. 外層 .gitignore 加一行排除 .agent-memory/
-#   5. 合併(不是覆寫)外層 .claude/settings.json 的 hook 設定
+#   4. 外層 .gitignore 排除 .agent-memory/ 跟 .claude/settings.local.json
+#   5. 合併(不是覆寫)外層 .claude/settings.local.json 的 hook 設定——
+#      刻意不用共享的 settings.json:hook 指令裡有 ~/agent-hub/... 路徑,
+#      寫進會 commit 的檔案就等於把個人工具的名字/路徑放進 repo 歷史
+#      (2026-09 在公開的 sycophancy-eval、the-crucible 發生過)。
+#      換機器時 recover-project.sh 會重新產生這份本機檔案。
 #   6. 合併(不是覆寫)外層 CLAUDE.md 的 agent-hub pointer 段落——沒有
 #      CLAUDE.md 就直接用模板建一份,已經有就只在缺 pointer 時 append
-#   7. commit 這三個外層檔案;如果有 origin 就 push(用 git-safe-push.sh,
+#   7. commit .gitignore 跟 CLAUDE.md;如果有 origin 就 push(用 git-safe-push.sh,
 #      遇到分岔自動重試),沒有 origin 就只留在本地
 #   8. mini 上建 bare repo,push agent-memory 分支過去(不動任何外部 remote)
 #   9. mini 上 clone 一份工作副本給 librarian
@@ -150,21 +154,19 @@ EOF
 
   # --- 4. 外層 .gitignore ---
   touch .gitignore
+  # 註解刻意不寫路徑或工具名稱:這份 .gitignore 會進 repo,公開 repo 也一樣。
   if ! grep -qxF '.agent-memory/' .gitignore; then
-    printf '\n# agent-hub memory tracking(獨立 worktree,見 %s/bin/onboard-project.sh)\n.agent-memory/\n' "$AGENT_HUB" >> .gitignore
+    printf '\n# local memory worktree (not part of this repo)\n.agent-memory/\n' >> .gitignore
   fi
-  # 有些專案的 .gitignore 有更廣的規則(例如給 data/ledger 檔案用的 `*.json`),
-  # 會連帶把 hook 設定檔也忽略掉。不管目前有沒有撞到這個情況,一律加一條
-  # negation 保證這個檔案一定會被追蹤到——沒撞到的話這行也不會有副作用。
-  if ! grep -qxF '!.claude/settings.json' .gitignore; then
-    printf '!.claude/settings.json\n' >> .gitignore
+  if ! grep -qxF '.claude/settings.local.json' .gitignore; then
+    printf '.claude/settings.local.json\n' >> .gitignore
   fi
   echo "[4/11] .gitignore 已更新"
 
-  # --- 5. 合併外層 .claude/settings.json ---
+  # --- 5. 合併外層 .claude/settings.local.json(本機檔,不進 repo)---
   mkdir -p .claude
-  python3 "$AGENT_HUB/bin/merge-hook-settings.py" .claude/settings.json
-  echo "[5/11] .claude/settings.json 已合併 hook 設定"
+  python3 "$AGENT_HUB/bin/merge-hook-settings.py" .claude/settings.local.json
+  echo "[5/11] .claude/settings.local.json 已合併 hook 設定(不進版控)"
 
   # --- 6. 合併外層 CLAUDE.md 的 agent-hub pointer 段落 ---
   # 沒有 CLAUDE.md 就直接用模板;已經有(專案自己的 CLAUDE.md)就只在缺
@@ -179,7 +181,7 @@ EOF
   echo "[6/11] CLAUDE.md 的 agent-hub pointer 段落已就位"
 
   # --- 7. commit,有 origin 才 push ---
-  git add .gitignore .claude/settings.json CLAUDE.md
+  git add .gitignore CLAUDE.md
   git commit -q -m "chore: add agent-hub memory tracking (isolated worktree, no app code touched)"
   if [ -n "$origin_url" ]; then
     outer_branch=$(git branch --show-current)
@@ -237,7 +239,19 @@ if ! awk -F'\t' -v n="$PROJ_NAME" '$1==n{found=1} END{exit !found}' "$MANIFEST";
     "$PROJ_NAME" "$PROJ_PATH" "$manifest_origin" \
     "${MINI_HOST}:~/git-origin/${PROJ_NAME}-memory.git" >> "$MANIFEST"
 fi
-echo "[11/11] 已登記進 agent-hub 的 onboarded-projects.tsv"
+# 登記完直接 commit+push agent-hub——以前只寫檔不 commit,mini 上的 librarian
+# /mirror-backup 要等有人剛好手動 commit 才看得到新專案(project-36 就是這樣
+# 卡在 MBP 本地)。只 commit 這三個檔案,不碰 agent-hub 裡其他未 commit 的東西。
+"$AGENT_HUB/bin/gen-index-roster.sh"
+REGISTRY_FILES=(onboarded-projects.tsv mirror-list.txt index.md)
+if [ -n "$(git -C "$AGENT_HUB" status --porcelain -- "${REGISTRY_FILES[@]}")" ]; then
+  ( cd "$AGENT_HUB" \
+    && git add -- "${REGISTRY_FILES[@]}" \
+    && git commit -q -m "register $PROJ_NAME (onboard-project.sh)" -- "${REGISTRY_FILES[@]}" \
+    && "$AGENT_HUB/bin/with-lock.sh" "$AGENT_HUB/bin/git-safe-push.sh" ) \
+    || echo "警告:agent-hub 登記檔 commit/push 失敗,請手動處理(登記內容本身已寫入)" >&2
+fi
+echo "[11/11] 已登記進 agent-hub 的 onboarded-projects.tsv,並 commit+push agent-hub"
 
 echo
 echo "完成:$PROJ_NAME 已接上 agent-hub 管線。"

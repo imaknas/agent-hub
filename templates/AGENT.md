@@ -6,7 +6,7 @@
 
 ## 同步紀律
 
-- 這個專案的 git remote 是 mac mini 上的 bare repo,同步靠 `.claude/settings.json` 裡的
+- 這個專案的 git remote 是 mac mini 上的 bare repo,同步靠 `.claude/settings.local.json`(本機、不進版控)裡的
   hook 自動處理:SessionStart 跑 `git pull`;SessionEnd,以及長 session 中途觸發
   compact 時(PreCompact),跑 `git-sync-memory.sh`——只 add `memory/` 跟
   `STATE.md`,不會 `git add -A`,commit 後 push。不需要手動操作。
