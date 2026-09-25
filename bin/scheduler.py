@@ -32,6 +32,12 @@ def log(msg: str) -> None:
         f.write(line + "\n")
 
 
+def save_state(state: dict) -> None:
+    tmp = STATE_FILE.with_suffix(".tmp")
+    tmp.write_text(json.dumps(state, indent=2))
+    tmp.replace(STATE_FILE)
+
+
 WEEKDAYS = ["mon", "tue", "wed", "thu", "fri", "sat", "sun"]
 
 
@@ -77,6 +83,9 @@ def main() -> None:
         if max_attempts is not None and tried_today >= max_attempts:
             continue
         state[attempts_key] = {"date": today, "count": tried_today + 1}
+        # 跑之前就先存:job 跑到一半 scheduler 被殺(重開機、OOM),嘗試次數也
+        # 已經記下,max_attempts_per_day 才擋得住。
+        save_state(state)
 
         log(f"running job '{name}': {job['command']}")
         job_log_path = LOG_DIR / f"{name}-{today}.log"
@@ -89,11 +98,12 @@ def main() -> None:
                     stderr=subprocess.STDOUT,
                 )
             state[name] = today
+            save_state(state)
             log(f"job '{name}' finished OK")
         except subprocess.CalledProcessError as e:
             log(f"job '{name}' FAILED (exit {e.returncode}), will retry next tick")
 
-    STATE_FILE.write_text(json.dumps(state, indent=2))
+    save_state(state)
 
 
 if __name__ == "__main__":
