@@ -134,7 +134,7 @@ $changed_memory
 $memory_diff
 $dangling_note
 
-背景請讀 AGENT.md/ROADMAP.md/現有 STATE.md。
+背景請讀 AGENT.md 跟現有 STATE.md。
 
 memory/ 的結構:
 - memory/YYYY-MM-DD.md、memory/YYYY-MM-DD-<主題>.md:原始流水紀錄,只會往後加。
