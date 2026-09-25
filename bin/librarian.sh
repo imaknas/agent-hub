@@ -98,14 +98,49 @@ for proj_dir in "$HOME"/projects/*/; do
 
   log "$proj: changed memory files: $(echo "$changed_memory" | tr '\n' ' ')"
 
+  # diff 由腳本直接給:模型的 --tools 沒有 Bash,自己跑不了 git log,也讀不到
+  # 已經被 git rm 的檔案。太大就截斷,模型再用 Read 讀現存檔案補。
+  MAX_DIFF_BYTES=60000
+  memory_diff=$(git -C "$proj_dir" log -p --reverse --format='=== commit %h %ad %s' --date=short "$range" -- memory/ 2>/dev/null)
+  diff_note=""
+  if [ "${#memory_diff}" -gt "$MAX_DIFF_BYTES" ]; then
+    memory_diff="${memory_diff:0:$MAX_DIFF_BYTES}"
+    diff_note="(diff 太長,只附前 ${MAX_DIFF_BYTES} 字元;其餘請用 Read 讀上面列出、目前還存在的檔案)"
+  fi
+
+  # 機械檢查:STATE.md 裡提到的 memory/ 路徑(可含 *)現在還存不存在。
+  dangling=""
+  while read -r ref; do
+    [ -n "$ref" ] || continue
+    ( cd "$proj_dir" && compgen -G "$ref" >/dev/null ) || dangling="$dangling $ref"
+  done < <(grep -oE 'memory/[A-Za-z0-9._*/-]+\.md' "$proj_dir/STATE.md" 2>/dev/null | sort -u)
+  dangling_note=""
+  if [ -n "$dangling" ]; then
+    log "$proj: STATE.md 引用了不存在的檔案:$dangling"
+    dangling_note="
+STATE.md 目前引用了這些已經不存在的檔案(被搬走或刪除),這次一定要修正引用,
+指向現在實際存放內容的地方(通常是 memory/reference/ 底下的主題文件):$dangling"
+  fi
+
   prompt="你是跨專案整合 agent(圖書館員),現在在專案 $proj 的目錄裡工作。
-這個專案自上次檢查後,以下 memory 檔案有新增內容(用 git log -p ${range} -- memory/ 自己確認實際新增了什麼):
+這個專案自上次檢查後,以下 memory 檔案有變動:
 $changed_memory
+
+實際變動內容(git log -p,由舊到新)$diff_note:
+$memory_diff
+$dangling_note
 
 背景請讀 AGENT.md/ROADMAP.md/現有 STATE.md。
 
+memory/ 的結構:
+- memory/YYYY-MM-DD.md、memory/YYYY-MM-DD-<主題>.md:原始流水紀錄,只會往後加。
+- memory/reference/<主題>.md(有 README.md 當索引):整理過的主題文件,會被改寫,
+  內容是目前最準的版本;跟舊的流水紀錄衝突時以 reference/ 為準。
+
 規則:
 - 只有在有『實質變化』時才編輯 STATE.md(精煉現況,不是流水帳);沒有實質變化就完全不要動 STATE.md。
+  STATE.md 還是 onboard 時的佔位內容、而 memory/ 已經有實質內容的話,這本身就算實質變化。
+- STATE.md 裡提到已被搬走的檔案、或已經被新內容回答/推翻的待決事項,要一併修正。
 - 不要動其他檔案。"
 
   pre_call_sha=$(git -C "$proj_dir" rev-parse HEAD)
