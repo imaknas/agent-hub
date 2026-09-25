@@ -15,8 +15,8 @@ agent-hub 是跨專案的 memory 追蹤 + 排程 + 專案/服務註冊系統,設
 - **有哪些 GitHub repo 被 mirror 備份**:`mirror-list.txt`
 - **跨專案還有哪些事沒做(誰能做)**:`todo.md`(librarian 每晚重生)
 - **OpenClaw 搬遷到哪了、還剩什麼沒處理**:`openclaw-migration-status.md`
-- **自動化/排程跑出奇怪錯誤(401、thinking block signature…)**:先查
-  `known-issues.md`
+- **自動化/排程/看門狗出怪錯,或要設計新的自動化**:先查 `known-issues.md`
+  (具體的坑 + 從 OpenClaw 時期學到的運作原則)
 
 ## 建立/救援
 

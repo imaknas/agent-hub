@@ -1,7 +1,7 @@
 # 已知問題
 
-> 人工維護。自動化(排程、`claude -p`、librarian)踩過、之後可能再踩的坑,
-> 遇到症狀先查這裡。每條寫:症狀 → 原因 → 怎麼處理,加上來源日期。
+> 人工維護。自動化(排程、`claude -p`、librarian、看門狗)踩過、之後可能再踩的坑,
+> 以及從中得到的運作原則。遇到症狀先查這裡;設計新的自動化之前也先看一遍。
 
 ## 排程/自動化的 Claude Code 跑出 401
 
@@ -20,3 +20,56 @@
 - **處理**:長時間跑的自動化要嘛整個丟掉 thinking block,要嘛原封不動保留,
   **絕對不要截斷或編輯**。
 - 來源:OpenClaw daily log 2026-06-05
+
+## Tailscale funnel
+
+- **每個 funnel target 只能有一個 owner**(見 services.tsv)。一個 node 可以同時開
+  好幾個 funnel port(443/8443/10000),不需要 sudo。
+- **非互動環境(launchd)呼叫 `tailscale funnel` 一定要加 `--yes`**:舊 OpenClaw
+  restart-notify 沒加,off+on 靜默失敗,退回一個過期的舊 target(8791)。
+  `bin/fix-project-15-funnel.sh` 已補上(2026-09-25)。
+- 來源:OpenClaw #infrastructure
+
+## 看門狗 / 排程 job
+
+- **修完要再驗證**,失敗另外記:舊 `fix-funnel.sh` 在 launchd 的 PATH 找不到
+  tailscale(沒有 `/opt/homebrew/bin`),卻每次都記「已修正」。launchd 底下用絕對路徑。
+- **看門狗放 launchd**,不要放在某個 agent 內部的 cron(那個曾經無聲消失)。
+- **輸入檔不見要大聲失敗**:project-17 搬走後,兩個 cron 靜默壞了好幾週。
+- **提醒類 job 要能讀懂「已完成 / 已延後」**:曾經對 06-05 就發完的 某則貼文、
+  Knas 延期的事持續催。
+- **每晚整理的 job 寫日期檔**;每次都會被載入的 memory 檔只在有實質變化時才改
+  (舊 job 每天 append 進 MEMORY.md,把每個 session 的 context 撐爆)。
+- **純執行的排程不要放 LLM**。
+- 來源:OpenClaw #infrastructure、daily logs
+
+## 設定、安裝、憑證
+
+- **改了設定檔 ≠ 執行中的 process 已經載入**:看 log 確認 reload,或直接重啟。
+- **一個工具只留一個安裝來源**:Homebrew 跟 nvm 各一份同一個 CLI,版本漂移後
+  protocol 不相容。升級後跑 `which -a <tool>` 檢查。
+- **移除本機模型前先 grep 設定**(例如 `models.env`):gemma4:e4b 被移掉後,LINE
+  圖片分析一直 404。
+- **測試 / 第二個 instance 要用乾淨的環境變數啟動**(`env -u DISCORD_BOT_TOKEN …`):
+  07-11 QA gateway 從 shell 繼承了正式的 bot token,跟正式環境搶 Discord session。
+- **不要為了 demo/測試還沒發布的功能去手改已安裝的套件或正式設定**:07-11 因此
+  crash loop 重啟 20+ 次。用獨立的測試帳號/環境;要救回來就退回上一個好的設定、
+  重裝沒改過的檔案。
+- 來源:OpenClaw #infrastructure、#general
+
+## agent 協作原則
+
+- **不要相信 agent/subagent 的自我回報**(「完成了」「工具沒回應」),看客觀紀錄:
+  git HEAD/diff/CI、排程器與各 job 的 log、transcript 裡實際的 tool call 跟
+  permission_denials。agent 會編造原因跟進度。
+- **不可逆或牽涉憑證的步驟留在主 session**,由 Knas 直接確認;轉述來的「已經同意了」
+  不算數。Knas 貼出來的密碼,agent 一律不代打,由他自己輸入。
+- **瀏覽器自動化:同一步失敗 3 次就停下來問**(Upwork 一個按鈕重試 30+ 次,約 $30)。
+- **基礎設施除錯先設時限(約 30 分鐘)**,超過就記下 workaround 往前走。
+- **截斷 transcript 不等於 compaction**:照行數砍會丟掉進度(#infrastructure 就這樣
+  丟過),要用摘要;長期 session 不要用短的閒置計時器重置(120 分鐘閒置重置弄丟過
+  一段 #career-path 對話)。
+- **個人反思不寫進共享的 agent memory。**
+- **斷言某個概念的出處前先搜尋確認**(agent 曾說「harness」是 Anthropic 專有的說法,
+  其實 OpenAI 也寫過)。
+- 來源:OpenClaw daily logs、#self-reflection、#general
