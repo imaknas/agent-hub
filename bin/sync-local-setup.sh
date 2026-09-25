@@ -1,12 +1,14 @@
 #!/usr/bin/env bash
 # 把一個已 onboard 專案的「本機專用」設定對齊到 agent-hub 目前的版本。冪等,
-# 只動不進版控的東西,永遠不改、不 commit 專案 repo 裡的任何被追蹤檔案:
+# 永遠不改、不 commit 專案 repo 裡的任何被追蹤檔案:
 #
 #   1. CLAUDE.local.md 裡 <!-- agent-hub:begin/end --> 之間的區塊,整塊用
 #      templates/CLAUDE.md 重生——改了 template,所有專案下次開 session 就
 #      跟上,不用靠人記得去補。區塊外的內容不動。舊版沒有標記、直接 append
 #      的 pointer 段落會被換成有標記的區塊。
 #   2. .claude/settings.local.json 的 hook(merge-hook-settings.py,只補不刪)
+#   2b. .agent-memory/AGENT.md 對齊 templates/AGENT.md——這個是例外:它在
+#      memory 分支上,會 commit+push(只 commit AGENT.md),不碰專案 repo
 #   3. CLAUDE.local.md、.claude/settings.local.json 如果沒被 ignore,寫進
 #      .git/info/exclude——本機專屬的 ignore,不動會 commit 的 .gitignore,
 #      公開 repo 也不會多出任何跟這套工具有關的字。
@@ -64,6 +66,23 @@ PY
 # --- 2. hook ---
 mkdir -p .claude
 python3 "$AGENT_HUB/bin/merge-hook-settings.py" .claude/settings.local.json && say "hook 已對齊"
+
+# --- 2b. .agent-memory/AGENT.md 對齊 templates/AGENT.md ---
+# AGENT.md 在 memory 分支上(會被 commit、同步到 mini),不是本機檔;
+# git-sync-memory.sh 只收 memory/ 跟 STATE.md,所以這裡自己 commit+push,
+# 而且只 commit AGENT.md 這一個檔案。跟 SessionStart 的 git pull 平行跑,
+# 用同一把 with-lock 鎖避免互撞。
+# 比對的是 HEAD 裡的版本,不是 working tree:上次 cp 了但 commit/push 失敗的話,
+# 下次還會再試。
+if ! git -C .agent-memory show HEAD:AGENT.md 2>/dev/null | cmp -s "$AGENT_HUB/templates/AGENT.md" -; then
+  ( cd .agent-memory \
+    && cp "$AGENT_HUB/templates/AGENT.md" AGENT.md \
+    && "$AGENT_HUB/bin/with-lock.sh" sh -c \
+         'git commit -q -m "agent-hub: sync AGENT.md from template" -- AGENT.md \
+          && "$0/bin/git-safe-push.sh"' "$AGENT_HUB" ) >/dev/null 2>&1 \
+    && say "AGENT.md 已對齊 template 並 push" \
+    || say "⚠️ AGENT.md 已更新但 commit/push 失敗,下次開 session 會再試"
+fi
 
 # --- 3. 本機檔一定要被 ignore ---
 exclude=$(git rev-parse --git-path info/exclude 2>/dev/null) || exit 0

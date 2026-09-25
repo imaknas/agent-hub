@@ -37,7 +37,14 @@ STATE_MODEL="haiku"
 INDEX_MODEL="sonnet"
 [ -f "$HUB/models.env" ] && source "$HUB/models.env"
 
-log() { echo "[$(date '+%H:%M:%S')] $*" | tee -a "$LOG"; }
+# 只寫進 $LOG;手動在終端機跑時才另外印到螢幕。排程器把 stdout 導進同一個
+# librarian-<日期>.log,用 tee 的話每行都會重複兩次。
+log() {
+  local line="[$(date '+%H:%M:%S')] $*"
+  echo "$line" >>"$LOG"
+  [ -t 1 ] && echo "$line"
+  return 0
+}
 
 STATE_SCHEMA='{"type":"object","properties":{"state_updated":{"type":"boolean","description":"這次是否編輯了 STATE.md"},"worth_digesting":{"type":"boolean","description":"這次的內容是否值得放進跨專案 digest；純粹確認流程正常、沒有實質更新的話填 false"},"summary":{"type":"string","description":"給跨專案 digest 用的摘要，不超過三句話（worth_digesting 為 false 時可以簡短說明沒有更新的原因，或留空）"},"reason":{"type":"string","description":"為什麼做出這個判斷（更新或不更新 STATE.md），給人事後抽查用"}},"required":["state_updated","worth_digesting","summary","reason"]}'
 
@@ -178,6 +185,10 @@ $changed_memory
       echo
     } >> "$REVIEW_LOG"
     log "$proj: 已寫入 review-log.md,供事後抽查"
+  else
+    # 不更新也要留理由:不然 STATE.md 一直是佔位內容時,分不出是模型判斷
+    # 太保守還是 prompt 有問題。
+    log "$proj: STATE.md 未更新,理由: ${reason:-(agent 未提供理由)}"
   fi
 
   echo "$new_sha" > "$ckpt_file"

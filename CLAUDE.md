@@ -46,7 +46,7 @@ agent-hub 是跨專案的 memory 追蹤 + 排程 + 專案/服務註冊系統,設
   `onboard-project.sh` 登記時都會呼叫。名冊不交給 LLM 判斷,LLM 只寫區塊外
   的註記
 - `bin/sync-local-setup.sh`——把專案的本機專用設定(`CLAUDE.local.md` 裡
-  `agent-hub:begin/end` 區塊、`.claude/settings.local.json` hook、兩者的
+  `agent-hub:begin/end` 區塊、`.agent-memory/AGENT.md`(會 commit+push 這一個檔)、`.claude/settings.local.json` hook、兩者的
   ignore)對齊目前的 `templates/`。每個專案的 SessionStart hook 自動跑,
   onboard/recover 也呼叫——**改了 `templates/CLAUDE.md` 不用手動去各專案
   補**,下次開 session 就生效。只動不進版控的檔案,ignore 補在
@@ -69,6 +69,8 @@ agent-hub 是跨專案的 memory 追蹤 + 排程 + 專案/服務註冊系統,設
   獨立、零 LLM 成本
 - `bin/transcript-backup.sh`——MBP → mini 的 Claude Code chat transcript
   每日備份(這支跑在 MBP,不是 mini)
+- `bin/sync-all-memory.sh`——MBP 每小時對所有專案的 `.agent-memory` 補跑
+  `git-sync-memory.sh` + 補 push(hook 的安全網;跑在 MBP)
 
 ## mini 上的路徑慣例
 
