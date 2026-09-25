@@ -28,6 +28,17 @@ END_CMD = "[ -d .agent-memory ] && cd .agent-memory && ~/agent-hub/bin/with-lock
 # 藉這個時機點順便同步,避免長時間累積的 memory/ 筆記在 session 真的結束前
 # 都沒被 commit/push 出去。
 PRECOMPACT_CMD = END_CMD
+# 每次開 session 順便把本機設定(CLAUDE.local.md 受管區塊、這份 hook、ignore)
+# 對齊 agent-hub 目前的版本——template 改了不用靠人記得去每個專案補。
+# --quiet:SessionStart hook 的 stdout 會進 session context。
+SYNC_CMD = "[ -d .agent-memory ] && [ -x ~/agent-hub/bin/sync-local-setup.sh ] && ~/agent-hub/bin/sync-local-setup.sh --quiet || true"
+
+HOOKS = (
+    ("SessionStart", START_CMD),
+    ("SessionStart", SYNC_CMD),
+    ("SessionEnd", END_CMD),
+    ("PreCompact", PRECOMPACT_CMD),
+)
 
 
 def has_command(entries, command):
@@ -45,14 +56,16 @@ def main():
     shared = json.loads(shared_path.read_text()).get("hooks", {}) if shared_path != path and shared_path.exists() else {}
 
     hooks = settings.setdefault("hooks", {})
-    for event, command in (("SessionStart", START_CMD), ("SessionEnd", END_CMD), ("PreCompact", PRECOMPACT_CMD)):
+    for event, command in HOOKS:
         if has_command(shared.get(event, []), command):
             continue
         entries = hooks.setdefault(event, [])
         if not has_command(entries, command):
             entries.append({"hooks": [{"type": "command", "command": command}]})
 
-    path.write_text(json.dumps(settings, indent=2) + "\n")
+    out = json.dumps(settings, indent=2) + "\n"
+    if not path.exists() or path.read_text() != out:
+        path.write_text(out)
 
 
 if __name__ == "__main__":

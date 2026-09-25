@@ -29,13 +29,15 @@
 #   2. git worktree add --orphan -b agent-memory .agent-memory
 #   3. 複製 AGENT.md/STATE.md 骨架、建空的 memory/,在 agent-memory 分支上 commit
 #   4. 外層 .gitignore 排除 .agent-memory/ 跟 .claude/settings.local.json
-#   5. 合併(不是覆寫)外層 .claude/settings.local.json 的 hook 設定——
+#   5. 合併(不是覆寫)外層 .claude/settings.local.json 的 hook 設定(步驟
+#      5-6 都交給 sync-local-setup.sh)——
 #      刻意不用共享的 settings.json:hook 指令裡有 ~/agent-hub/... 路徑,
 #      寫進會 commit 的檔案就等於把個人工具的名字/路徑放進 repo 歷史
 #      (2026-09 在公開的 sycophancy-eval、the-crucible 發生過)。
 #      換機器時 recover-project.sh 會重新產生這份本機檔案。
-#   6. agent-hub pointer 段落寫進本機的 CLAUDE.local.md(gitignored,Claude
-#      Code 會跟 CLAUDE.md 一起載入)——不動專案共享的 CLAUDE.md
+#   6. agent-hub 區塊寫進本機的 CLAUDE.local.md(gitignored,Claude Code 會
+#      跟 CLAUDE.md 一起載入)——不動專案共享的 CLAUDE.md。區塊有標記,之後
+#      每次 SessionStart 都會照 templates/CLAUDE.md 重生
 #   7. commit .gitignore;如果有 origin 就 push(用 git-safe-push.sh,
 #      遇到分岔自動重試),沒有 origin 就只留在本地
 #   8. mini 上建 bare repo,push agent-memory 分支過去(不動任何外部 remote)
@@ -163,21 +165,11 @@ EOF
   done
   echo "[4/11] .gitignore 已更新"
 
-  # --- 5. 合併外層 .claude/settings.local.json(本機檔,不進 repo)---
-  mkdir -p .claude
-  python3 "$AGENT_HUB/bin/merge-hook-settings.py" .claude/settings.local.json
-  echo "[5/11] .claude/settings.local.json 已合併 hook 設定(不進版控)"
-
-  # --- 6. agent-hub pointer → CLAUDE.local.md ---
-  # pointer 寫進本機的 CLAUDE.local.md(Claude Code 會跟 CLAUDE.md 一起自動
-  # 載入,gitignored)——不動專案自己的 CLAUDE.md:段落裡有 agent-hub 名稱,
-  # 進了共享的 CLAUDE.md 就會跟著 repo 公開。舊專案若已經把 pointer 寫在
-  # CLAUDE.md,就不再重複加。
-  if ! grep -qs '.agent-memory/AGENT.md' CLAUDE.md CLAUDE.local.md; then
-    [ -s CLAUDE.local.md ] && printf '\n' >> CLAUDE.local.md
-    tail -n +3 "$TEMPLATES/CLAUDE.md" >> CLAUDE.local.md
-  fi
-  echo "[6/11] CLAUDE.local.md 的 agent-hub pointer 段落已就位(不進版控)"
+  # --- 5-6. 本機專用設定:hook(.claude/settings.local.json)跟 CLAUDE.local.md
+  # 的 agent-hub 區塊——都不進 repo(含 ~/agent-hub 路徑/名稱,公開 repo 會外洩)。
+  # 交給 sync-local-setup.sh,跟 recover、每次 SessionStart 用同一份邏輯。
+  "$AGENT_HUB/bin/sync-local-setup.sh" .
+  echo "[5-6/11] .claude/settings.local.json hook 跟 CLAUDE.local.md 區塊已就位(不進版控)"
 
   # --- 7. commit,有 origin 才 push ---
   git add .gitignore

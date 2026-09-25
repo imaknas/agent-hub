@@ -43,6 +43,12 @@ agent-hub 是跨專案的 memory 追蹤 + 排程 + 專案/服務註冊系統,設
   `index.md` 的專案名冊區塊(`roster:begin/end` 之間),librarian 每次跑、
   `onboard-project.sh` 登記時都會呼叫。名冊不交給 LLM 判斷,LLM 只寫區塊外
   的註記
+- `bin/sync-local-setup.sh`——把專案的本機專用設定(`CLAUDE.local.md` 裡
+  `agent-hub:begin/end` 區塊、`.claude/settings.local.json` hook、兩者的
+  ignore)對齊目前的 `templates/`。每個專案的 SessionStart hook 自動跑,
+  onboard/recover 也呼叫——**改了 `templates/CLAUDE.md` 不用手動去各專案
+  補**,下次開 session 就生效。只動不進版控的檔案,ignore 補在
+  `.git/info/exclude`,不改 `.gitignore`
 - `bin/merge-hook-settings.py`——合併(不覆寫)一個專案 `.claude/
   settings.local.json` 的 hook 設定,`onboard-project.sh` / `recover-project.sh`
   自己會呼叫,不需要手動跑。hook 刻意不寫進共享的 `settings.json`:指令含
