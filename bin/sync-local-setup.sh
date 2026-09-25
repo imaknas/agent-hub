@@ -9,13 +9,15 @@
 #   2. .claude/settings.local.json 的 hook(merge-hook-settings.py,只補不刪)
 #   2b. .agent-memory/AGENT.md 對齊 templates/AGENT.md——這個是例外:它在
 #      memory 分支上,會 commit+push(只 commit AGENT.md),不碰專案 repo
-#   3. CLAUDE.local.md、.claude/settings.local.json 如果沒被 ignore,寫進
+#   3. .agent-memory/、CLAUDE.local.md、.claude/settings.local.json 如果沒被 ignore,寫進
 #      .git/info/exclude——本機專屬的 ignore,不動會 commit 的 .gitignore,
 #      公開 repo 也不會多出任何跟這套工具有關的字。
 #
+#   4. 已 commit 的檔案提到 agent-hub / .agent-memory 就印提醒(--quiet 也印)
+#
 # 由專案的 SessionStart hook 自動呼叫(--quiet),onboard-project.sh、
 # recover-project.sh 也呼叫。SessionStart hook 的 stdout 會進 session
-# context,所以 --quiet 時什麼都不印。
+# context,所以 --quiet 時只印第 4 項的提醒(有違規時),其他什麼都不印。
 #
 # 用法:sync-local-setup.sh [--quiet] [專案路徑,預設目前目錄]
 set -uo pipefail
@@ -86,14 +88,34 @@ fi
 
 # --- 3. 本機檔一定要被 ignore ---
 exclude=$(git rev-parse --git-path info/exclude 2>/dev/null) || exit 0
-for f in CLAUDE.local.md .claude/settings.local.json; do
+for f in .agent-memory CLAUDE.local.md .claude/settings.local.json; do
   if git ls-files --error-unmatch "$f" >/dev/null 2>&1; then
     # 已經被 commit 進 repo:ignore 救不了,要那個專案自己的 session 處理
     say "⚠️ $f 已經被這個 repo 追蹤(commit 過),ignore 無效——請該專案的 session 處理"
-  elif ! git check-ignore -q "$f" 2>/dev/null; then
-    mkdir -p "$(dirname "$exclude")"
-    printf '%s\n' "$f" >> "$exclude"
-    say "$f 原本沒被 ignore,已加進 $exclude"
+  else
+    # 一律寫進 exclude,不管 .gitignore 有沒有:.gitignore 裡的那行之後會被拿掉
+    # (它本身就洩漏名稱),不能依賴它。
+    [ "$f" = .agent-memory ] && pat=".agent-memory/" || pat="$f"
+    if ! grep -qxF "$pat" "$exclude" 2>/dev/null; then
+      mkdir -p "$(dirname "$exclude")"
+      printf '%s\n' "$pat" >> "$exclude"
+      say "$pat 已加進 $exclude"
+    fi
   fi
 done
+# --- 4. 被 commit 的檔案不能提到這套機制 ---
+# repo 之後會不會公開沒有定論,所以一律不准:agent-hub、.agent-memory 的名稱或路徑
+# 出現在已 commit 的內容裡就提醒。這段刻意在 --quiet 下也輸出——SessionStart hook
+# 的 stdout 會進 session context,等於每次開 session 都把待修清單交給這個專案
+# 自己的 session,不用靠人記得去巡。沒有違規就什麼都不印。
+leaks=$(git grep -l -I -E 'agent-hub|agent-memory' HEAD -- . 2>/dev/null | sed 's#^HEAD:##' | head -10)
+if [ -n "$leaks" ]; then
+  cat <<MSG
+⚠️ 這個 repo 已 commit 的檔案提到了 agent-hub / .agent-memory(repo 之後可能公開,這些名稱跟路徑不能進 commit):
+$(echo "$leaks" | sed 's/^/  - /')
+請在這個專案裡處理:維運需要的資訊搬到 CLAUDE.local.md(agent-hub:begin/end 區塊之外,不進版控),
+committed 檔案裡改成不提工具名稱的寫法或刪掉,然後 commit。(.gitignore 裡的 .agent-memory/ 可以直接刪,
+本機已經用 .git/info/exclude 排除。)細節可用:git grep -n -E 'agent-hub|agent-memory'
+MSG
+fi
 exit 0

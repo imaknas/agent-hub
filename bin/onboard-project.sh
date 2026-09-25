@@ -28,7 +28,7 @@
 #          private)、push 剛剛的內容過去
 #   2. git worktree add --orphan -b agent-memory .agent-memory
 #   3. 複製 AGENT.md/STATE.md 骨架、建空的 memory/,在 agent-memory 分支上 commit
-#   4. 外層 .gitignore 排除 .agent-memory/ 跟 .claude/settings.local.json
+#   4. .agent-memory/ 寫進本機的 .git/info/exclude(不動會 commit 的 .gitignore)
 #   5. 合併(不是覆寫)外層 .claude/settings.local.json 的 hook 設定(步驟
 #      5-6 都交給 sync-local-setup.sh)——
 #      刻意不用共享的 settings.json:hook 指令裡有 ~/agent-hub/... 路徑,
@@ -38,8 +38,7 @@
 #   6. agent-hub 區塊寫進本機的 CLAUDE.local.md(gitignored,Claude Code 會
 #      跟 CLAUDE.md 一起載入)——不動專案共享的 CLAUDE.md。區塊有標記,之後
 #      每次 SessionStart 都會照 templates/CLAUDE.md 重生
-#   7. commit .gitignore;如果有 origin 就 push(用 git-safe-push.sh,
-#      遇到分岔自動重試),沒有 origin 就只留在本地
+#   7. 外層 repo 不 commit 任何東西(舊版會 commit .gitignore)
 #   8. mini 上建 bare repo,push agent-memory 分支過去(不動任何外部 remote)
 #   9. mini 上 clone 一份工作副本給 librarian
 #   10. 如果有外部 origin,登記進 mirror-backup 清單;沒有就跳過
@@ -154,16 +153,13 @@ EOF
   ( cd .agent-memory && git add -A && git commit -q -m "init: agent-hub memory skeleton (AGENT.md/STATE.md/memory)" )
   echo "[3/11] 骨架檔案就位並已在 agent-memory 分支上 commit"
 
-  # --- 4. 外層 .gitignore ---
-  touch .gitignore
-  # 註解刻意不寫路徑或工具名稱:這份 .gitignore 會進 repo,公開 repo 也一樣。
-  if ! grep -qxF '.agent-memory/' .gitignore; then
-    printf '\n# local memory worktree (not part of this repo)\n.agent-memory/\n' >> .gitignore
-  fi
-  for local_file in .claude/settings.local.json CLAUDE.local.md; do
-    grep -qxF "$local_file" .gitignore || printf '%s\n' "$local_file" >> .gitignore
-  done
-  echo "[4/11] .gitignore 已更新"
+  # --- 4. ignore .agent-memory/ ---
+  # 寫進本機的 .git/info/exclude,不寫 .gitignore:.gitignore 會 commit,連
+  # `.agent-memory/` 這個名稱都不該進 repo(之後會不會公開沒有定論)。
+  # sync-local-setup.sh(步驟 5-6、每次 SessionStart、recover)也會確保這件事。
+  "$AGENT_HUB/bin/sync-local-setup.sh" --quiet . >/dev/null
+  git check-ignore -q .agent-memory || fail ".agent-memory 沒有被 ignore,停下來(不然 git add -A 會把它當 embedded repo 加進去)"
+  echo "[4/11] .agent-memory/ 已在 .git/info/exclude 排除(不動 .gitignore)"
 
   # --- 5-6. 本機專用設定:hook(.claude/settings.local.json)跟 CLAUDE.local.md
   # 的 agent-hub 區塊——都不進 repo(含 ~/agent-hub 路徑/名稱,公開 repo 會外洩)。
@@ -171,16 +167,10 @@ EOF
   "$AGENT_HUB/bin/sync-local-setup.sh" .
   echo "[5-6/11] .claude/settings.local.json hook 跟 CLAUDE.local.md 區塊已就位(不進版控)"
 
-  # --- 7. commit,有 origin 才 push ---
-  git add .gitignore
-  git commit -q -m "chore: add agent-hub memory tracking (isolated worktree, no app code touched)"
-  if [ -n "$origin_url" ]; then
-    outer_branch=$(git branch --show-current)
-    "$AGENT_HUB/bin/git-safe-push.sh" -u origin "$outer_branch"
-    echo "[7/11] 外層 commit 已推送到 origin"
-  else
-    echo "[7/11] 外層 commit 已建立(--no-remote,先留在本地)"
-  fi
+  # --- 7. 外層 repo 不 commit 任何東西 ---
+  # 以前這裡會 commit .gitignore(訊息還寫著工具名稱);現在本機設定全在
+  # ignore/exclude 的檔案裡,專案 repo 的歷史完全不會出現這套機制。
+  echo "[7/11] 外層 repo 沒有任何變更、不 commit"
 else
   echo "[2-7/11] resume 模式,已在前一次呼叫完成,跳過"
 fi

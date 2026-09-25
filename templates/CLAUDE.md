@@ -14,4 +14,4 @@
 
 這段說明放在 gitignored 的 CLAUDE.local.md,不在共享的 CLAUDE.md:不要把
 agent-hub、`.agent-memory` 的名稱或路徑寫進任何會 commit 的檔案(CLAUDE.md、
-`.claude/settings.json`、README 等),公開 repo 會跟著外洩。
+`.claude/settings.json`、`.gitignore`、README、程式註解、commit 訊息等),公開 repo 會跟著外洩。
