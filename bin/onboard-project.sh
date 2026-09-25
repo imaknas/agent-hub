@@ -242,9 +242,14 @@ fi
 # /mirror-backup 要等有人剛好手動 commit 才看得到新專案(project-36 就是這樣
 # 卡在 MBP 本地)。只 commit 這三個檔案,不碰 agent-hub 裡其他未 commit 的東西。
 "$AGENT_HUB/bin/gen-index-roster.sh"
-"$AGENT_HUB/bin/commit-hub-files.sh" "register $PROJ_NAME (onboard-project.sh)" \
-    onboarded-projects.tsv mirror-list.txt index.md \
-  || echo "警告:agent-hub 登記檔 commit/push 失敗,請手動處理(登記內容本身已寫入)" >&2
+REGISTRY_FILES=(onboarded-projects.tsv mirror-list.txt index.md)
+if [ -n "$(git -C "$AGENT_HUB" status --porcelain -- "${REGISTRY_FILES[@]}")" ]; then
+  ( cd "$AGENT_HUB" \
+    && git add -- "${REGISTRY_FILES[@]}" \
+    && git commit -q -m "register $PROJ_NAME (onboard-project.sh)" -- "${REGISTRY_FILES[@]}" \
+    && "$AGENT_HUB/bin/with-lock.sh" "$AGENT_HUB/bin/git-safe-push.sh" ) \
+    || echo "警告:agent-hub 登記檔 commit/push 失敗,請手動處理(登記內容本身已寫入)" >&2
+fi
 echo "[11/11] 已登記進 agent-hub 的 onboarded-projects.tsv,並 commit+push agent-hub"
 
 echo
