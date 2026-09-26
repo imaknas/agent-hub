@@ -134,7 +134,8 @@ $changed_memory
 $memory_diff
 $dangling_note
 
-背景請讀 AGENT.md 跟現有 STATE.md。
+背景請讀 ./AGENT.md 跟 ./STATE.md。**STATE.md 在專案根目錄(./STATE.md),不在 memory/ 底下**;
+memory/ 底下沒有、也不能有 STATE.md。
 
 memory/ 的結構:
 - memory/YYYY-MM-DD.md、memory/YYYY-MM-DD-<主題>.md:原始流水紀錄,只會往後加。
@@ -145,7 +146,7 @@ memory/ 的結構:
 - 只有在有『實質變化』時才編輯 STATE.md(精煉現況,不是流水帳);沒有實質變化就完全不要動 STATE.md。
   STATE.md 還是 onboard 時的佔位內容、而 memory/ 已經有實質內容的話,這本身就算實質變化。
 - STATE.md 裡提到已被搬走的檔案、或已經被新內容回答/推翻的待決事項,要一併修正。
-- 不要動其他檔案。"
+- 除了 ./STATE.md,不要建立、修改或刪除任何檔案。"
 
   pre_call_sha=$(git -C "$proj_dir" rev-parse HEAD)
 
@@ -170,7 +171,7 @@ memory/ 的結構:
   has_output=$(echo "$output_json" | jq -r 'if .structured_output == null then "no" else "yes" end' 2>/dev/null)
 
   if [ "$has_output" != "yes" ]; then
-    log "$proj: 沒有拿到 structured_output,跳過(原始回應開頭: $(echo "$output_json" | head -c 200))"
+    log "$proj: 沒有拿到 structured_output,跳過(subtype=$(echo "$output_json" | jq -r '.subtype // "?"' 2>/dev/null) turns=$(echo "$output_json" | jq -r '.num_turns // "?"' 2>/dev/null) 模型最後說:$(echo "$output_json" | jq -r '.result // ""' 2>/dev/null | tr '\n' ' ' | head -c 400))"
     continue
   fi
 
@@ -184,6 +185,27 @@ memory/ 的結構:
   # 已經自動 commit+push 過 STATE.md 了(headless 呼叫本身也是一個完整 session,
   # 一樣會觸發它所在目錄的 hook)。所以不能只看 working tree 有沒有未 commit 的
   # 差異——要先比對 HEAD 有沒有動過,那才是不會被 hook 蓋掉的真相來源。
+  # 機械檢查:模型只准動 ./STATE.md。多出來的檔案(2026-09-26 有 5 個專案把 STATE.md
+  # 寫成 memory/STATE.md,resume 還多生了 memory/MEMORY.md)搬到隔離區並記錄,
+  # 不讓它們留在 memory 副本裡、也不讓下一次呼叫把它們當成真的內容讀進去。
+  stray=$(git -C "$proj_dir" status --porcelain --untracked-files=all | awk '{print $2}' | grep -vx 'STATE.md' || true)
+  if [ -n "$stray" ]; then
+    qdir="$STATE_DIR/stray/$proj-$TODAY"; mkdir -p "$qdir"
+    for f in $stray; do
+      if git -C "$proj_dir" ls-files --error-unmatch -- "$f" >/dev/null 2>&1; then
+        # 被追蹤的檔案被改(或刪):留一份改過的版本當證據,再還原
+        [ -e "$proj_dir/$f" ] && cp "$proj_dir/$f" "$qdir/$(echo "$f" | tr / _)"
+        git -C "$proj_dir" checkout -q -- "$f"
+      else
+        mv "$proj_dir/$f" "$qdir/$(echo "$f" | tr / _)"
+      fi
+    done
+    log "$proj: 警告——模型動了 STATE.md 以外的檔案,已搬到 $qdir:$(echo $stray)"
+    stray_found=true
+  else
+    stray_found=false
+  fi
+
   post_call_sha=$(git -C "$proj_dir" rev-parse HEAD)
   actually_changed=false
   state_diff=""
@@ -230,6 +252,12 @@ memory/ 的結構:
     log "$proj: STATE.md 未更新,理由: ${reason:-(agent 未提供理由)}"
   fi
 
+  # 模型說有更新、實際沒改,或動了不該動的檔案:這次當作沒處理完,不推進 checkpoint,
+  # 下次再跑同一個範圍(不然這批 memory 變化就被永遠跳過)。
+  if { [ "$reported_updated" = "true" ] && [ "$actually_changed" != "true" ]; } || [ "$stray_found" = true ]; then
+    log "$proj: 這次結果不可信,checkpoint 不推進,下次重試"
+    continue
+  fi
   echo "$new_sha" > "$ckpt_file"
 
   if [ "$worth_digesting" = "true" ] && [ -n "$summary" ]; then
