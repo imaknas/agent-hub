@@ -57,6 +57,20 @@ def find_job(jobs, name):
     sys.exit(1)
 
 
+def describe_when(job):
+    """跟 scheduler.py 的 runs_today() 用同一組篩選欄位,不然 list 會把每月一次的 job 顯示成每天。"""
+    parts = []
+    if "months" in job:
+        parts.append("每年 " + ",".join(f"{m}月" for m in job["months"]))
+    if "days_of_month" in job:
+        parts.append(("" if parts else "每月 ") + ",".join(f"{d}號" for d in job["days_of_month"]))
+    if "days_of_week" in job:
+        parts.append("每週 " + ",".join(job["days_of_week"]))
+    when = " ".join(parts) or "每天"
+    extra = f"(每天最多試 {job['max_attempts_per_day']} 次)" if "max_attempts_per_day" in job else ""
+    return f"{when} {job['time']}{extra}"
+
+
 def cmd_list():
     jobs = load_jobs()
     if not jobs:
@@ -64,7 +78,7 @@ def cmd_list():
         return
     for job in jobs:
         state = "啟用" if job.get("enabled", True) else "暫停"
-        print(f"[{state}] {job['name']:20s} 每天 {job['time']}  {job['command']}")
+        print(f"[{state}] {job['name']:20s} {describe_when(job)}  {job['command']}")
 
 
 def cmd_pause(name):
