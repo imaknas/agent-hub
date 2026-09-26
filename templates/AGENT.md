@@ -27,4 +27,6 @@
   除了 `reference/`,`memory/` 底下不開其他子目錄,也不放 `.md` 以外的檔案。
 - 日期檔是流水紀錄,只往後加、不回頭改;內容整理進 `reference/` 之後,原本的
   日期檔可以 `git rm`(歷史還在)。
+- `RULES`(如果有):這個專案啟用的額外規則名稱,一行一個,內容在 agent-hub 的
+  `templates/rules/`,開 session 時會放進 CLAUDE.local.md。由 agent-hub 管理,不要手改。
 - 不要自己改 `STATE.md`——那是整合 agent 維護的精煉現況,只在有實質變化時才會被改寫。

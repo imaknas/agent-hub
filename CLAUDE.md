@@ -102,7 +102,9 @@ memory 追蹤但不需要在 mini 上執行任何東西的專案(目前大多數
 - `launchd/`——版控過的 launchd plist,對照 `services.tsv` 裡 owner 是
   agent-hub 的項目
 - `templates/`——骨架檔案(`AGENT.md`、`CLAUDE.md`);hook 設定不在這裡,
-  寫在 `bin/merge-hook-settings.py`
+  寫在 `bin/merge-hook-settings.py`。`templates/rules/<名稱>.md` 是可選的專案規則,
+  專案在 `.agent-memory/RULES` 登記名稱才會放進它的 CLAUDE.local.md;2026-09-27 起
+  新專案 onboard 時預設登記 `engineering`(軟體工程規則)
 - `.claude/skills/`——`new-or-onboard-project`、`recover-projects`
 - `digest/`、`index.md`(名冊區塊由 `gen-index-roster.sh` 產生)、`review-log.md`、`todo.md`——`librarian.sh` 的產出,不要
   手動改,改了下次跑會被蓋掉或造成混淆

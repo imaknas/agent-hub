@@ -3,7 +3,7 @@
 # 永遠不改、不 commit 專案 repo 裡的任何被追蹤檔案:
 #
 #   1. CLAUDE.local.md 裡 <!-- agent-hub:begin/end --> 之間的區塊,整塊用
-#      templates/CLAUDE.md 重生——改了 template,所有專案下次開 session 就
+#      templates/CLAUDE.md(加上 .agent-memory/RULES 登記的 templates/rules/*.md)重生——改了 template,所有專案下次開 session 就
 #      跟上,不用靠人記得去補。區塊外的內容不動。舊版沒有標記、直接 append
 #      的 pointer 段落會被換成有標記的區塊。
 #   2. .claude/settings.local.json 的 hook(merge-hook-settings.py,只補不刪)
@@ -31,7 +31,10 @@ cd "${1:-.}" || exit 1
 [ -d .agent-memory ] || { say "$(pwd) 沒有 .agent-memory,不是 onboard 過的專案,跳過"; exit 0; }
 
 # --- 1. CLAUDE.local.md 受管區塊 ---
-python3 - "$AGENT_HUB/templates/CLAUDE.md" CLAUDE.local.md <<'PY' && say "CLAUDE.local.md 已對齊"
+# 專案有在 memory 分支的 .agent-memory/RULES 登記額外規則(一行一個名稱,例如
+# engineering)的話,把 templates/rules/<名稱>.md 接在區塊後面。登記放在 memory
+# 分支上:換機器 recover 也還在;規則內容放 agent-hub:改一次,所有登記的專案都跟上。
+python3 - "$AGENT_HUB/templates/CLAUDE.md" CLAUDE.local.md .agent-memory/RULES "$AGENT_HUB/templates/rules" <<'PY' && say "CLAUDE.local.md 已對齊"
 import re, sys
 from pathlib import Path
 
@@ -39,7 +42,15 @@ BEGIN, END = "<!-- agent-hub:begin -->", "<!-- agent-hub:end -->"
 LEGACY_HEADING = "## agent-hub memory 追蹤"
 
 tpl, path = Path(sys.argv[1]), Path(sys.argv[2])
+rules_file, rules_dir = Path(sys.argv[3]), Path(sys.argv[4])
 body = "\n".join(tpl.read_text().splitlines()[2:]).strip("\n")  # 去掉 "# CLAUDE.md" 標題
+if rules_file.exists():
+    for name in rules_file.read_text().split():
+        rule = rules_dir / f"{name}.md"
+        if rule.exists():
+            body += "\n\n" + rule.read_text().strip("\n")
+        else:
+            print(f"sync-local-setup: RULES 登記了 {name},但找不到 {rule}", file=sys.stderr)
 block = f"{BEGIN}\n{body}\n{END}\n"
 old = path.read_text() if path.exists() else ""
 
