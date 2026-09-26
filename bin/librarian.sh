@@ -117,7 +117,7 @@ for proj_dir in "$HOME"/projects/*/; do
   while read -r ref; do
     [ -n "$ref" ] || continue
     ( cd "$proj_dir" && compgen -G "$ref" >/dev/null ) || dangling="$dangling $ref"
-  done < <(grep -oE 'memory/[A-Za-z0-9._*/-]+\.md' "$proj_dir/STATE.md" 2>/dev/null | sort -u)
+  done < <(grep -oE 'memory/[A-Za-z0-9._*/-]+\.md' "$proj_dir/STATE.md" 2>/dev/null | grep -v 'YYYY' | sort -u)
   dangling_note=""
   if [ -n "$dangling" ]; then
     log "$proj: STATE.md 引用了不存在的檔案:$dangling"
