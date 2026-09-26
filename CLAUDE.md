@@ -28,6 +28,9 @@ agent-hub 是跨專案的 memory 追蹤 + 排程 + 專案/服務註冊系統,設
   ——**絕對不要**對已經 onboard 過的專案重跑 `onboard-project.sh`,會建出
   一份全新、跟舊歷史斷開的 memory,不是救回來。細節看
   `.claude/skills/recover-projects/SKILL.md`
+- **專案改名**(GitHub repo 已經改好之後):`bin/rename-project.sh <old> <new> [--path <新路徑>]`
+  ——登記、mini 的 memory bare repo / ~/projects 副本 / checkpoint / mirror、本機資料夾
+  一次改完,memory 歷史保留。先 dry-run,再加 `--apply`
 - **某個背景服務(launchd)需要在新機器重建**:`bin/recover-service.sh <label>`
   ——只有 `services.tsv` 裡 owner 是 agent-hub 的項目能全自動重建,其他
   (OpenClaw、Homebrew、GitHub Actions 自己管的)只會印出重建步驟,不會
