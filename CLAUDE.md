@@ -73,7 +73,9 @@ agent-hub 是跨專案的 memory 追蹤 + 排程 + 專案/服務註冊系統,設
   一份唯讀 `--mirror` clone,純粹災難復原用,跟 librarian 的摘要流程完全
   獨立、零 LLM 成本
 - `bin/transcript-backup.sh`——MBP → mini 的 Claude Code chat transcript
-  每日備份(這支跑在 MBP,不是 mini)
+  每小時備份(這支跑在 MBP,不是 mini)
+- `bin/check-memory-gaps.py`——librarian 每晚呼叫:最近 72 小時有對話、memory 卻沒有新筆記
+  的專案,列進 `todo.md` 固定區塊跟 digest(零 LLM 成本)
 - `bin/sync-all-memory.sh`——MBP 每小時對所有專案的 `.agent-memory` 補跑
   `git-sync-memory.sh` + 補 push(hook 的安全網;跑在 MBP)
 

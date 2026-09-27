@@ -338,6 +338,27 @@ else
   log "todo.md: 沒有專案變動,不重生"
 fi
 
+# --- memory 缺口:有對話但沒記 memory 的專案(機械檢查,零 LLM 成本)---
+# 每晚都跑(不管 todo.md 這次有沒有重生),結果放進 todo.md 的固定區塊跟今天的 digest。
+gaps=$(python3 "$HUB/bin/check-memory-gaps.py" 2>>"$LOG")
+if [ -f "$HUB/todo.md" ]; then
+  python3 - "$HUB/todo.md" "$gaps" <<'PY'
+import re, sys
+from pathlib import Path
+p, gaps = Path(sys.argv[1]), sys.argv[2].strip()
+s = re.sub(r"\n*<!-- memory-gaps:begin -->.*?<!-- memory-gaps:end -->\n?", "\n", p.read_text(), flags=re.S).rstrip() + "\n"
+if gaps:
+    s += ("\n<!-- memory-gaps:begin -->\n## memory 沒在記的專案(機械檢查)\n\n"
+          "有對話、但 memory 沒有新筆記——librarian 沒東西可整理,STATE.md 會一直過時。\n\n"
+          + gaps + "\n<!-- memory-gaps:end -->\n")
+p.write_text(s)
+PY
+fi
+if [ -n "$gaps" ]; then
+  log "memory 缺口:$(echo "$gaps" | grep -o '\*\*[^*]*\*\*' | tr -d '*' | tr '\n' ' ')"
+  { echo "## memory 沒在記的專案"; echo; echo "$gaps"; echo; } >> "$digest_file"
+fi
+
 if [ -s "$digest_file" ]; then
   cd "$HUB"
   git pull -q || true

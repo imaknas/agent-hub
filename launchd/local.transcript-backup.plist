@@ -8,13 +8,13 @@
 	<array>
 		<string>/Users/you/agent-hub/bin/transcript-backup.sh</string>
 	</array>
-	<key>StartInterval</key>
-	<integer>86400</integer>
 	<key>RunAtLoad</key>
 	<true/>
-	<key>StandardOutPath</key>
-	<string>/Users/you/agent-hub/.logs/transcript-backup-stdout.log</string>
 	<key>StandardErrorPath</key>
 	<string>/Users/you/agent-hub/.logs/transcript-backup-stderr.log</string>
+	<key>StandardOutPath</key>
+	<string>/Users/you/agent-hub/.logs/transcript-backup-stdout.log</string>
+	<key>StartInterval</key>
+	<integer>3600</integer>
 </dict>
 </plist>
