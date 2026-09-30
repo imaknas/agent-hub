@@ -33,11 +33,17 @@ PRECOMPACT_CMD = END_CMD
 # --quiet:SessionStart hook 的 stdout 會進 session context。
 SYNC_CMD = "[ -d .agent-memory ] && [ -x ~/agent-hub/bin/sync-local-setup.sh ] && ~/agent-hub/bin/sync-local-setup.sh --quiet || true"
 
+# git commit/push 之後,如果 memory 筆記比最新 commit 舊,把提醒送進模型的 context
+# (PostToolUse 的 additionalContext)。筆記沒落後就什麼都不輸出。
+NUDGE_CMD = "[ -d .agent-memory ] && [ -x ~/agent-hub/bin/memory-nudge.py ] && ~/agent-hub/bin/memory-nudge.py --post-tool || true"
+
+# (event, matcher, command);matcher 為 None 表示不設(該事件全部觸發)
 HOOKS = (
-    ("SessionStart", START_CMD),
-    ("SessionStart", SYNC_CMD),
-    ("SessionEnd", END_CMD),
-    ("PreCompact", PRECOMPACT_CMD),
+    ("SessionStart", None, START_CMD),
+    ("SessionStart", None, SYNC_CMD),
+    ("SessionEnd", None, END_CMD),
+    ("PreCompact", None, PRECOMPACT_CMD),
+    ("PostToolUse", "Bash", NUDGE_CMD),
 )
 
 
@@ -54,10 +60,13 @@ def main():
     settings = json.loads(path.read_text()) if path.exists() else {}
 
     hooks = settings.setdefault("hooks", {})
-    for event, command in HOOKS:
+    for event, matcher, command in HOOKS:
         entries = hooks.setdefault(event, [])
         if not has_command(entries, command):
-            entries.append({"hooks": [{"type": "command", "command": command}]})
+            entry = {"hooks": [{"type": "command", "command": command}]}
+            if matcher:
+                entry = {"matcher": matcher, **entry}
+            entries.append(entry)
 
     out = json.dumps(settings, indent=2) + "\n"
     if not path.exists() or path.read_text() != out:

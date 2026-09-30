@@ -55,6 +55,9 @@ agent-hub 是跨專案的 memory 追蹤 + 排程 + 專案/服務註冊系統,設
   onboard/recover 也呼叫——**改了 `templates/CLAUDE.md` 不用手動去各專案
   補**,下次開 session 就生效。只動不進版控的檔案,ignore 補在
   `.git/info/exclude`,不改 `.gitignore`
+- `bin/memory-nudge.py`——memory 筆記比專案最新 commit 舊時提醒 agent 補寫:git commit/push
+  之後(PostToolUse hook)跟 session 開始、含對話壓縮後(sync-local-setup.sh 呼叫)。
+  筆記沒落後就完全不輸出
 - `bin/merge-hook-settings.py`——合併(不覆寫)一個專案 `.claude/
   settings.local.json` 的 hook 設定,`onboard-project.sh` / `recover-project.sh`
   自己會呼叫,不需要手動跑。hook 刻意不寫進共享的 `settings.json`:指令含

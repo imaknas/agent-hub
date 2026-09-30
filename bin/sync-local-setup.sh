@@ -114,6 +114,12 @@ for f in .agent-memory CLAUDE.local.md .claude/settings.local.json; do
     fi
   fi
 done
+# --- 3b. memory 筆記落後就提醒(--quiet 也印)---
+# 每次 SessionStart 都會跑到這裡,包括對話被壓縮之後(source=compact)。壓縮後的摘要
+# 常常沒帶上「做完事就記筆記」的習慣(project-25 2026-09-27 就是這樣斷掉的),
+# 所以在這個時間點把提醒放回 context。沒落後就什麼都不印。
+python3 "$AGENT_HUB/bin/memory-nudge.py" --session-start 2>/dev/null || true
+
 # --- 4. 被 commit 的檔案不能提到這套機制 ---
 # repo 之後會不會公開沒有定論,所以一律不准:agent-hub、.agent-memory 的名稱或路徑
 # 出現在已 commit 的內容裡就提醒。這段刻意在 --quiet 下也輸出——SessionStart hook
