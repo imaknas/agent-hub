@@ -21,7 +21,6 @@ openclaw-migration-status.md):
 用法:gen-todo.py <輸出 todo.md 路徑>
 結束碼:0 正常;格式問題不算失敗(已寫進檔案跟 stdout)。
 """
-import datetime
 import pathlib
 import re
 import sys
@@ -91,11 +90,11 @@ def main() -> None:
     if MIGRATION.exists():
         parse("agent-hub", MIGRATION.read_text(), items, problems)
 
-    today = datetime.date.today().isoformat()
     total = sum(len(v) for v in items.values())
     o = [
         "# 跨專案待辦", "",
-        f"> 由 `bin/gen-todo.py` 從各專案 STATE.md 的 `## 待辦` 段落機械產生({today},共 {total} 項),",
+        # 標題不放日期:內容沒變時檔案就不該變(要知道哪天產生的,看 git log)
+        f"> 由 `bin/gen-todo.py` 從各專案 STATE.md 的 `## 待辦` 段落機械產生(共 {total} 項),",
         "> 不要手動改——要改內容,改來源(各專案的 memory,librarian 會更新 STATE.md;",
         "> agent-hub 自己的待辦在 `openclaw-migration-status.md`)。", "",
     ]
