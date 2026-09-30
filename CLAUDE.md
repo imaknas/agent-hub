@@ -67,8 +67,10 @@ agent-hub 是跨專案的 memory 追蹤 + 排程 + 專案/服務註冊系統,設
   `schedulectl models` 查目前用的模型)
 - `bin/librarian.sh`——「圖書館員」,讀各專案 `memory/` 的新增內容,判斷
   要不要更新 `STATE.md`,並產生跨專案 `digest/YYYY-MM-DD.md` + 更新
-  `index.md`,再從各專案 STATE.md / `memory/reference/` 跟搬遷狀態整理出跨專案
-  `todo.md`(有變動才重生)。模型設定在 `models.env`
+  `index.md`。模型設定在 `models.env`
+- `bin/gen-todo.py`——librarian 每晚呼叫:收集各專案 STATE.md 的 `## 待辦` 段落(固定格式
+  `- [ ] 〔Knas|agent|待定〕…`,由 librarian 維護)跟 `openclaw-migration-status.md` 的待辦,
+  機械產生 `todo.md`,不用 LLM;格式不對的專案列在檔尾
 - `bin/mirror-backup.sh`——讀 `mirror-list.txt`,對每個 GitHub repo 維護
   一份唯讀 `--mirror` clone,純粹災難復原用,跟 librarian 的摘要流程完全
   獨立、零 LLM 成本

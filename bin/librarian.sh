@@ -50,8 +50,6 @@ STATE_SCHEMA='{"type":"object","properties":{"state_updated":{"type":"boolean","
 
 INDEX_SCHEMA='{"type":"object","properties":{"index_updated":{"type":"boolean","description":"是否編輯了 index.md"},"relations_found":{"type":"string","description":"今天找到的跨專案關聯簡述；沒有明顯關聯就寫「(無明顯關聯)」，不要硬掰"}},"required":["index_updated","relations_found"]}'
 
-TODO_SCHEMA='{"type":"object","properties":{"items":{"type":"array","items":{"type":"object","properties":{"project":{"type":"string","description":"專案名稱;屬於 agent-hub / OpenClaw 搬遷的寫 agent-hub"},"item":{"type":"string","description":"待辦事項,一句話,具體到看得懂要做什麼"},"owner":{"type":"string","enum":["Knas","agent","待定"],"description":"Knas=只有本人能做(帳號/密碼/付款/決定);agent=agent 可以做;待定=還需要先做決定"},"source":{"type":"string","description":"出處檔案路徑,例如 project-10/STATE.md"}},"required":["project","item","owner","source"]}},"note":{"type":"string","description":"給人看的一句話備註,例如哪些看起來已經過時;沒有就空字串"}},"required":["items","note"]}'
-
 total_cost="0"
 add_cost() {
   local c="$1"
@@ -148,6 +146,12 @@ memory/ 的結構:
 - 只有在有『實質變化』時才編輯 STATE.md(精煉現況,不是流水帳);沒有實質變化就完全不要動 STATE.md。
   STATE.md 還是 onboard 時的佔位內容、而 memory/ 已經有實質內容的話,這本身就算實質變化。
 - STATE.md 裡提到已被搬走的檔案、或已經被新內容回答/推翻的待決事項,要一併修正。
+- STATE.md 一定要有一個 `## 待辦` 段落,格式固定,一行一項:
+  `- [ ] 〔Knas〕…`(只有 Knas 本人能做:帳號、密碼、付款、要他拍板的決定)
+  `- [ ] 〔agent〕…`(agent 可以直接做的)
+  `- [ ] 〔待定〕…`(還要先做決定才能動的)
+  沒有待辦就寫 `- (無)`。只列還沒完成、具體可行動的事;完成、被推翻或過時的直接移除,
+  不要留著打勾。待辦只放在這個段落,不要在 STATE.md 別的地方另開「下一步」「未完成」之類的清單。
 - 除了 ./STATE.md,不要建立、修改或刪除任何檔案。"
 
   pre_call_sha=$(git -C "$proj_dir" rev-parse HEAD)
@@ -276,76 +280,15 @@ memory/ 的結構:
 done
 
 # --- 跨專案待辦清單 todo.md ---
-# 有任何專案有新 commit、搬遷狀態檔比 todo.md 新、或 todo.md 還不存在時才重生
-# (一次 $INDEX_MODEL 呼叫)。模型只回結構化清單,todo.md 由腳本機械產生,
-# 每次整份重寫——它是「目前還沒做的事」的快照,不是流水帳。
+# 機械產生:收集各專案 STATE.md 的 `## 待辦` 段落(固定格式,由上面每個專案的呼叫
+# 維護)跟 openclaw-migration-status.md 的待辦。不用 LLM,輸入一樣輸出就一樣——
+# 2026-09-30 前是每晚叫 sonnet 從頭推導一次,項目數 46→88→114→73 亂跳,又是每晚
+# 最大的一筆額度用量。
 cd "$HUB" && git pull -q || true
-MIGRATION="$HUB/openclaw-migration-status.md"
-todo_needed=false
-if [ "$any_project_changed" = true ] || [ ! -f "$HUB/todo.md" ]; then
-  todo_needed=true
+if todo_out=$(python3 "$HUB/bin/gen-todo.py" "$HUB/todo.md" 2>>"$LOG"); then
+  while IFS= read -r l; do log "$l"; done <<< "$todo_out"
 else
-  mig_ts=$(git -C "$HUB" log -1 --format=%ct -- openclaw-migration-status.md 2>/dev/null)
-  todo_ts=$(git -C "$HUB" log -1 --format=%ct -- todo.md 2>/dev/null)
-  [ "${mig_ts:-0}" -gt "${todo_ts:-0}" ] && todo_needed=true
-fi
-
-if [ "$todo_needed" = true ]; then
-  all_state=$(for f in "$HOME"/projects/*/STATE.md; do echo "=== $(basename "$(dirname "$f")")/STATE.md"; cat "$f"; echo; done)
-  migration_open=$(sed -n '/^## 還沒解決/,$p' "$MIGRATION" 2>/dev/null)
-  todo_prompt="整理一份跨專案的『目前還沒做的事』清單。你在 ~/projects 目錄,每個子目錄是一個專案的 memory 副本。
-
-各專案 STATE.md(已附在下面):
-$all_state
-
-agent-hub 的 OpenClaw 搬遷還沒解決的項目(專案名稱寫 agent-hub,source 寫 agent-hub/openclaw-migration-status.md):
-$migration_open
-
-另外用 Glob/Grep/Read 看 */memory/reference/*.md 裡標成未決、待辦、open items、還沒做的內容
-(reference/ 是整理過的最新版本;日期檔是舊流水帳,跟 reference/ 或 STATE.md 衝突時不要採用)。
-
-規則:
-- 只列還沒完成、具體可行動的事;已經完成、已經被推翻、純背景資訊的不要列。
-- 同一件事在多處出現只列一次。不要自己編造檔案裡沒有的待辦。
-- 不要編輯任何檔案,結果只放在 structured output。"
-
-  todo_json=$(cd "$HOME/projects" && claude -p "$todo_prompt" \
-      --model "$INDEX_MODEL" \
-      --permission-mode acceptEdits \
-      --tools "Read,Glob,Grep" \
-      --output-format json \
-      --json-schema "$TODO_SCHEMA" 2>>"$LOG")
-  todo_rc=$?
-  todo_cost=$(echo "$todo_json" | jq -r '.total_cost_usd // empty' 2>/dev/null)
-  [ -n "$todo_cost" ] && { log "todo.md: call cost \$$todo_cost (model: $INDEX_MODEL)"; add_cost "$todo_cost"; }
-
-  if [ $todo_rc -eq 0 ] && echo "$todo_json" | jq -e '.structured_output.items' >/dev/null 2>&1; then
-    {
-      echo "# 跨專案待辦"
-      echo
-      echo "> librarian 產生($TODAY),每次整份重寫,不要手動改——要改內容,改來源檔"
-      echo "> (各專案 STATE.md / memory/reference/、openclaw-migration-status.md)。"
-      note=$(echo "$todo_json" | jq -r '.structured_output.note // empty')
-      [ -n "$note" ] && { echo ">"; echo "> 備註:$note"; }
-      echo
-      echo "## 只有 Knas 能做"
-      echo
-      echo "$todo_json" | jq -r '.structured_output.items[] | select(.owner=="Knas") | "- [ ] **\(.project)**:\(.item)(`\(.source)`)"'
-      echo
-      echo "## 待定(需要先做決定)"
-      echo
-      echo "$todo_json" | jq -r '.structured_output.items[] | select(.owner=="待定") | "- [ ] **\(.project)**:\(.item)(`\(.source)`)"'
-      echo
-      echo "## agent 可以做"
-      echo
-      echo "$todo_json" | jq -r '.structured_output.items | map(select(.owner=="agent")) | group_by(.project)[] | "### \(.[0].project)\n\n" + (map("- [ ] \(.item)(`\(.source)`)") | join("\n")) + "\n"'
-    } > "$HUB/todo.md"
-    log "todo.md: $(echo "$todo_json" | jq '.structured_output.items | length') 項"
-  else
-    log "todo.md 產生失敗 (exit $todo_rc),保留舊版"
-  fi
-else
-  log "todo.md: 沒有專案變動,不重生"
+  log "gen-todo.py 失敗,todo.md 這次沒更新"
 fi
 
 # --- memory 缺口:有對話但沒記 memory 的專案(機械檢查,零 LLM 成本)---
