@@ -10,6 +10,9 @@ openclaw-migration-status.md):
     - [ ] 〔待定〕還要先做決定的事
     - (無)                       ← 沒有待辦時
 
+也接受 `### 〔Knas〕` 小標題底下放 `- [ ] …` 的分組寫法。段落裡的說明文字、參考連結略過;
+只有「看起來是待辦卻沒標負責人」或「已打勾還留著」的行算格式問題。
+
 輸入一樣、輸出就一樣:todo.md 只在某個專案的待辦真的變了才會變。格式不對的
 專案(有實質內容卻沒有 `## 待辦`、或行不合格式)列在檔尾「格式問題」,
 不會被默默漏掉。
@@ -31,6 +34,8 @@ PROJECTS = HOME / "projects"
 
 OWNERS = ("Knas", "待定", "agent")
 ITEM = re.compile(r"^- \[ \] 〔(Knas|agent|待定)〕\s*(.+)$")
+GROUP = re.compile(r"^#{3,4}\s*〔(Knas|agent|待定)〕\s*$")
+BARE = re.compile(r"^- \[ \] (?!〔)(.+)$")
 PLACEHOLDER_MAX_BYTES = 200  # onboard 時的佔位 STATE.md,本來就沒有待辦
 
 
@@ -48,16 +53,25 @@ def parse(source: str, text: str, items: dict, problems: list) -> None:
     if lines is None:
         problems.append(f"{source}:沒有 `## 待辦` 段落")
         return
+    group = None  # 另一種也接受的寫法:`### 〔Knas〕` 小標題底下放不帶負責人的 `- [ ] …`
     for line in lines:
         if line.strip() == "- (無)":
+            continue
+        h = GROUP.match(line)
+        if h:
+            group = h.group(1)
             continue
         m = ITEM.match(line)
         if m:
             items[m.group(1)].append((source, m.group(2).strip()))
-        elif line.startswith("  "):
-            continue  # 上一項的續行/補充說明
-        else:
-            problems.append(f"{source}:格式不對的行 `{line[:60]}`")
+            continue
+        bare = BARE.match(line)
+        if bare and group:
+            items[group].append((source, bare.group(1).strip()))
+        elif bare or line.startswith("- [x]") or line.startswith("- [X]"):
+            # 看起來是待辦,卻沒有負責人(或已打勾還留著):一定要讓人看到,不能默默漏掉
+            problems.append(f"{source}:待辦沒標負責人或已完成未移除 `{line[:60]}`")
+        # 其他行(說明文字、「詳見 reference」連結、續行)不是待辦,略過
 
 
 def main() -> None:
