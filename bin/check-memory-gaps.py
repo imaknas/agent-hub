@@ -9,8 +9,9 @@ memory 筆記靠 agent 自己寫。session 比 onboard 早開(沒讀到說明)�
 (從 MBP 備份到 mini 的 Claude Code transcript),再數同一段時間 memory/ 的 commit
 數。訊息數 >= THRESHOLD 而 memory commit 為 0,就列出來。
 
-跑在 mini(librarian 呼叫);transcript 由 MBP 的 transcript-backup 同步過來,
-會有最多一小時的落差,窗口開 72 小時足夠涵蓋。
+跑在 mini(librarian 呼叫);transcript 由 MBP 的 transcript-backup 每小時同步過來。
+MBP 連不到 mini 的那段時間(例如 2026-09-30 18:18–22:24)transcript 不會更新,
+這段期間的對話要等恢復連線後的下一次檢查才數得到。
 
 用法:check-memory-gaps.py [--window-hours 72] [--threshold 10]
 輸出:有缺口時每個專案一行 markdown(給 todo.md / digest 用),沒有就什麼都不印。

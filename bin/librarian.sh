@@ -61,6 +61,8 @@ add_cost() {
 }
 
 log "=== librarian run start ==="
+# 隔離區只是留證據,14 天後自動清掉,不讓它一直累積。
+find "$STATE_DIR/stray" -mindepth 1 -maxdepth 1 -mtime +14 -exec rm -rf {} + 2>/dev/null || true
 
 any_project_changed=false
 digest_file=$(mktemp)
@@ -159,7 +161,10 @@ memory/ 的結構:
   rc=$?
 
   if [ $rc -ne 0 ] || [ -z "$output_json" ]; then
-    log "$proj: claude invocation failed (exit $rc), leaving checkpoint untouched"
+    # 呼叫本身失敗:可能改到一半,不採用。把副本還原成乾淨狀態,不留給下一晚。
+    git -C "$proj_dir" checkout -q -- . 2>/dev/null
+    git -C "$proj_dir" clean -fdq 2>/dev/null
+    log "$proj: claude invocation failed (exit $rc), 已還原副本,checkpoint 不推進"
     continue
   fi
 
@@ -170,14 +175,19 @@ memory/ 的結構:
   # 正確的 false 也吃掉變成空字串,跟「欄位不存在」混在一起分不出來。
   has_output=$(echo "$output_json" | jq -r 'if .structured_output == null then "no" else "yes" end' 2>/dev/null)
 
+  # 拿不到 structured_output(模型說它呼叫過,但結果裡沒有;每幾晚會發生一次):
+  # 不再直接 continue——那樣模型已經改好的 STATE.md 會留在副本裡沒 commit,要到隔晚
+  # 才被下一次呼叫順手帶進去(2026-09-28 project-36、09-29 the-crucible)。照常用
+  # git 判斷實際有沒有改、有改就 commit;只是沒有摘要可放 digest,checkpoint 也不推進。
+  no_output=false
   if [ "$has_output" != "yes" ]; then
-    log "$proj: 沒有拿到 structured_output,跳過(subtype=$(echo "$output_json" | jq -r '.subtype // "?"' 2>/dev/null) turns=$(echo "$output_json" | jq -r '.num_turns // "?"' 2>/dev/null) 模型最後說:$(echo "$output_json" | jq -r '.result // ""' 2>/dev/null | tr '\n' ' ' | head -c 400))"
-    continue
+    no_output=true
+    log "$proj: 沒有拿到 structured_output(subtype=$(echo "$output_json" | jq -r '.subtype // "?"' 2>/dev/null) turns=$(echo "$output_json" | jq -r '.num_turns // "?"' 2>/dev/null) 模型最後說:$(echo "$output_json" | jq -r '.result // ""' 2>/dev/null | tr '\n' ' ' | head -c 300)),仍以實際檔案變化為準"
   fi
 
   summary=$(echo "$output_json" | jq -r '.structured_output.summary // empty' 2>/dev/null)
   reason=$(echo "$output_json" | jq -r '.structured_output.reason // empty' 2>/dev/null)
-  reported_updated=$(echo "$output_json" | jq -r '.structured_output.state_updated' 2>/dev/null)
+  reported_updated=$(echo "$output_json" | jq -r 'if .structured_output == null then "unknown" else .structured_output.state_updated end' 2>/dev/null)
   worth_digesting=$(echo "$output_json" | jq -r '.structured_output.worth_digesting' 2>/dev/null)
 
   # 以實際 git 狀態為準來決定要不要 commit,不直接信模型自報的 state_updated。
@@ -219,7 +229,7 @@ memory/ 的結構:
     state_diff=$(git -C "$proj_dir" diff -- STATE.md)
   fi
 
-  if [ "$reported_updated" != "$actually_changed" ]; then
+  if [ "$reported_updated" != "unknown" ] && [ "$reported_updated" != "$actually_changed" ]; then
     log "$proj: 警告——agent 回報 state_updated=$reported_updated,但實際檔案變化=$actually_changed(以實際檔案為準)"
   fi
 
@@ -254,7 +264,7 @@ memory/ 的結構:
 
   # 模型說有更新、實際沒改,或動了不該動的檔案:這次當作沒處理完,不推進 checkpoint,
   # 下次再跑同一個範圍(不然這批 memory 變化就被永遠跳過)。
-  if { [ "$reported_updated" = "true" ] && [ "$actually_changed" != "true" ]; } || [ "$stray_found" = true ]; then
+  if { [ "$reported_updated" = "true" ] && [ "$actually_changed" != "true" ]; } || [ "$stray_found" = true ] || [ "$no_output" = true ]; then
     log "$proj: 這次結果不可信,checkpoint 不推進,下次重試"
     continue
   fi
@@ -340,8 +350,14 @@ fi
 
 # --- memory 缺口:有對話但沒記 memory 的專案(機械檢查,零 LLM 成本)---
 # 每晚都跑(不管 todo.md 這次有沒有重生),結果放進 todo.md 的固定區塊跟今天的 digest。
-gaps=$(python3 "$HUB/bin/check-memory-gaps.py" 2>>"$LOG")
-if [ -f "$HUB/todo.md" ]; then
+# 不管結果都記一行:不然「0 個缺口」跟「根本沒跑」分不出來。
+if gaps=$(python3 "$HUB/bin/check-memory-gaps.py" 2>>"$LOG"); then
+  log "memory 缺口檢查:$(printf '%s' "$gaps" | grep -c '^- ' || true) 個專案有對話但沒記 memory"
+else
+  log "memory 缺口檢查失敗(exit $?),看上面的錯誤;todo.md 的缺口區塊這次不動"
+  gaps="__failed__"
+fi
+if [ -f "$HUB/todo.md" ] && [ "$gaps" != "__failed__" ]; then
   python3 - "$HUB/todo.md" "$gaps" <<'PY'
 import re, sys
 from pathlib import Path
@@ -354,7 +370,7 @@ if gaps:
 p.write_text(s)
 PY
 fi
-if [ -n "$gaps" ]; then
+if [ -n "$gaps" ] && [ "$gaps" != "__failed__" ]; then
   log "memory 缺口:$(echo "$gaps" | grep -o '\*\*[^*]*\*\*' | tr -d '*' | tr '\n' ' ')"
   { echo "## memory 沒在記的專案"; echo; echo "$gaps"; echo; } >> "$digest_file"
 fi
