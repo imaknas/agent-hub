@@ -18,6 +18,12 @@ LOG_DIR="$HUB/.logs"
 mkdir -p "$LOG_DIR"
 LOG="$LOG_DIR/sync-all-memory-$(date +%Y-%m-%d).log"
 
+# 補 push 也一樣:memory 的 commit/push 一律不跑專案自己的 git hook:.agent-memory 是同一個 repo 的
+# worktree,會共用 core.hooksPath(例:project-06 的 husky 跑 npx lint-staged)。
+# launchd 底下沒有 npx,hook 失敗讓筆記卡住沒 commit(2026-10-01);有 npx 時又會被
+# 專案的 prettier 改寫格式。memory 筆記不是專案程式碼,不該經過專案的 lint/格式化。
+export GIT_CONFIG_COUNT=1 GIT_CONFIG_KEY_0=core.hooksPath GIT_CONFIG_VALUE_0=/dev/null
+
 log() { echo "[$(date '+%H:%M:%S')] $*" >>"$LOG"; }
 
 tail -n +2 "$MANIFEST" | cut -f1,2 | while IFS=$'\t' read -r name path; do

@@ -8,6 +8,12 @@
 set -uo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
+# memory 的 commit/push 一律不跑專案自己的 git hook:.agent-memory 是同一個 repo 的
+# worktree,會共用 core.hooksPath(例:project-06 的 husky 跑 npx lint-staged)。
+# launchd 底下沒有 npx,hook 失敗讓筆記卡住沒 commit(2026-10-01);有 npx 時又會被
+# 專案的 prettier 改寫格式。memory 筆記不是專案程式碼,不該經過專案的 lint/格式化。
+export GIT_CONFIG_COUNT=1 GIT_CONFIG_KEY_0=core.hooksPath GIT_CONFIG_VALUE_0=/dev/null
+
 git add memory/ STATE.md 2>/dev/null
 
 if git diff --cached --quiet; then

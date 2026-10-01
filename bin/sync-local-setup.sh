@@ -88,7 +88,9 @@ python3 "$AGENT_HUB/bin/merge-hook-settings.py" .claude/settings.local.json && s
 # 比對的是 HEAD 裡的版本,不是 working tree:上次 cp 了但 commit/push 失敗的話,
 # 下次還會再試。
 if ! git -C .agent-memory show HEAD:AGENT.md 2>/dev/null | cmp -s "$AGENT_HUB/templates/AGENT.md" -; then
+  # 不跑專案自己的 git hook(見 git-sync-memory.sh 的說明)
   ( cd .agent-memory \
+    && export GIT_CONFIG_COUNT=1 GIT_CONFIG_KEY_0=core.hooksPath GIT_CONFIG_VALUE_0=/dev/null \
     && cp "$AGENT_HUB/templates/AGENT.md" AGENT.md \
     && "$AGENT_HUB/bin/with-lock.sh" sh -c \
          'git commit -q -m "agent-hub: sync AGENT.md from template" -- AGENT.md \

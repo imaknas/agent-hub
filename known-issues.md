@@ -57,6 +57,18 @@
   重裝沒改過的檔案。
 - 來源:OpenClaw #infrastructure、#general
 
+## memory worktree 會繼承專案的 git hook
+
+- **症狀**:某個專案的 memory 筆記一直卡著沒 commit,`sync-all-memory` log 有
+  `git-sync-memory 失敗`、`npx: command not found`、`husky - pre-commit script failed`。
+- **原因**:`.agent-memory` 是同一個 repo 的 worktree,共用 `core.hooksPath`。project-06
+  的 husky pre-commit 會跑 `npx lint-staged`;launchd 底下 PATH 沒有 npx 就失敗。互動
+  session 裡雖然會成功,但專案的 prettier 會順便改寫 memory 筆記的格式。
+- **處理**(2026-10-02 已修):`git-sync-memory.sh`、`sync-all-memory.sh`、
+  `sync-local-setup.sh` 的 AGENT.md commit 都用 `GIT_CONFIG_*` 環境變數把
+  `core.hooksPath` 設成 `/dev/null`,memory 的 commit/push 不跑專案 hook。以後寫新的
+  memory commit/push 也要照做。
+
 ## agent 協作原則
 
 - **不要相信 agent/subagent 的自我回報**(「完成了」「工具沒回應」),看客觀紀錄:
