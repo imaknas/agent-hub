@@ -14,6 +14,8 @@ agent-hub 是跨專案的 memory 追蹤 + 排程 + 專案/服務註冊系統,設
 - **mini 上有哪些背景服務在跑**:`services.tsv`
 - **有哪些 GitHub repo 被 mirror 備份**:`mirror-list.txt`
 - **跨專案還有哪些事沒做(誰能做)**:`todo.md`(librarian 每晚重生)
+- **這週在各專案做了什麼、作息、跟 AI 協作的方式**:`reflect/YYYY-Www.md`(每週一產生,
+  Claude Code 版的 Reflect)
 - **OpenClaw 搬遷到哪了、還剩什麼沒處理**:`openclaw-migration-status.md`
 - **自動化/排程/看門狗出怪錯,或要設計新的自動化**:先查 `known-issues.md`
   (具體的坑 + 從 OpenClaw 時期學到的運作原則)
@@ -74,6 +76,12 @@ agent-hub 是跨專案的 memory 追蹤 + 排程 + 專案/服務註冊系統,設
 - `bin/gen-todo.py`——librarian 每晚呼叫:收集各專案 STATE.md 的 `## 待辦` 段落(固定格式
   `- [ ] 〔Knas|agent|待定〕…`,由 librarian 維護)跟 `openclaw-migration-status.md` 的待辦,
   機械產生 `todo.md`,不用 LLM;格式不對的專案列在檔尾
+- `bin/weekly-reflect.sh`(→ `weekly-reflect.py` + `reflect_llm.py`)——每週一 07:00:上一週的跨專案
+  活動總覽。統計(各專案訊息/session/commit/筆記、時段、深夜比例、最長連續工作、交辦方式)零 LLM;
+  「主題與 AI 協作觀察(4D)」一週一次模型呼叫,送出前遮掉像憑證的字串,project-23/
+  project-24 的原始訊息不送
+- `bin/hublib.py`——共用判斷:真人訊息(`origin.kind == human`)、transcript ↔ 專案對應、哪些
+  commit 算專案工作。check-memory-gaps / memory-nudge / weekly-reflect 都用它
 - `bin/mirror-backup.sh`——讀 `mirror-list.txt`,對每個 GitHub repo 維護
   一份唯讀 `--mirror` clone,純粹災難復原用,跟 librarian 的摘要流程完全
   獨立、零 LLM 成本
@@ -135,6 +143,6 @@ memory 追蹤但不需要在 mini 上執行任何東西的專案(目前大多數
   的問題,只通知(傳訊息給這個 session 或告訴使用者),不直接改——2026-09-25
   兩個 session 同時改這份 working tree,commit 互相夾帶對方改到一半的檔案
 - **腳本寫的被版控檔案**(`onboarded-projects.tsv`、`mirror-list.txt`、
-  `index.md`、`todo.md`、`schedule.yaml`、`models.env`、`digest/`、`review-log.md`):
+  `index.md`、`todo.md`、`reflect/`、`schedule.yaml`、`models.env`、`digest/`、`review-log.md`):
   寫檔的腳本自己用 `bin/commit-hub-files.sh` 只 commit 那幾個檔案,所以
   `onboard-project.sh` 從哪個 session 跑都安全
