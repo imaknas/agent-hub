@@ -51,6 +51,29 @@ STATE_SCHEMA='{"type":"object","properties":{"state_updated":{"type":"boolean","
 INDEX_SCHEMA='{"type":"object","properties":{"index_updated":{"type":"boolean","description":"是否編輯了 index.md"},"relations_found":{"type":"string","description":"今天找到的跨專案關聯簡述；沒有明顯關聯就寫「(無明顯關聯)」，不要硬掰"}},"required":["index_updated","relations_found"]}'
 
 total_cost="0"
+
+repair_state_todo() {
+  local proj="$1" dir="$2" problems fix_prompt fix_json
+  problems=$(python3 "$HUB/bin/check-state-todo.py" "$dir/STATE.md") && return 0
+  log "$proj: STATE.md 待辦段落格式不對,請模型只修格式:$(echo "$problems" | head -3 | tr '\n' ' ')"
+  fix_prompt="只修 ./STATE.md 的 \`## 待辦\` 段落格式,其他地方、待辦的內容都不要改,也不要動任何其他檔案。
+
+正確格式(一行一項;沒有待辦就寫 \`- (無)\`;STATE.md 一定要有這個段落):
+  \`- [ ] 〔Knas〕…\`(只有 Knas 本人能做:帳號、密碼、付款、要他拍板的決定、他自己要買/做的事)
+  \`- [ ] 〔agent〕…\`(agent 可以直接做的)
+  \`- [ ] 〔待定〕…\`(還要先做決定才能動的)
+
+目前的問題:
+$problems"
+  fix_json=$(cd "$dir" && claude -p "$fix_prompt" --model "$STATE_MODEL" --permission-mode acceptEdits \
+      --tools "Read,Edit" --output-format json 2>>"$LOG")
+  add_cost "$(echo "$fix_json" | jq -r '.total_cost_usd // empty' 2>/dev/null)"
+  if problems=$(python3 "$HUB/bin/check-state-todo.py" "$dir/STATE.md"); then
+    log "$proj: 待辦段落格式已修正"
+  else
+    log "$proj: 待辦段落格式修正後仍有問題(todo.md 檔尾會列出):$(echo "$problems" | head -2 | tr '\n' ' ')"
+  fi
+}
 add_cost() {
   local c="$1"
   if [[ "$c" =~ ^[0-9.]+$ ]]; then
@@ -219,6 +242,11 @@ memory/ 的結構:
   else
     stray_found=false
   fi
+
+  # 待辦段落格式檢查:haiku 不一定每次照格式寫(2026-10-02 sycophancy-eval 整段被拿掉、
+  # 10-03 project-24 10 項沒標負責人),格式不對 gen-todo.py 就收不到。不對就請模型
+  # 只修格式、內容不動,修完再驗一次;還是不對就記下來,gen-todo 會在 todo.md 檔尾列出。
+  repair_state_todo "$proj" "$proj_dir"
 
   post_call_sha=$(git -C "$proj_dir" rev-parse HEAD)
   actually_changed=false
