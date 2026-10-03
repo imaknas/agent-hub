@@ -25,11 +25,8 @@ import re
 import subprocess
 import sys
 
-# 不代表「這個 session 做了工作」的 commit:排程自動產生的(文獻、資料快照),
-# 以及只動到 agent-hub 管的檔案(.gitignore/.claude/CLAUDE.md)的 commit(onboard、
-# 2026-09-26 的批次清理)。
-AUTOMATED_SUBJECT = re.compile(r"^(papers: |data: nightly snapshot|librarian: )")
-NON_WORK_PATHS = (":!.gitignore", ":!.claude", ":!CLAUDE.md")
+sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
+from hublib import NON_WORK_PATHS, is_work_subject  # noqa: E402  不算專案工作的 commit,定義在 hublib
 GIT_WRITE = re.compile(r"\bgit\b(?:\s+-C\s+\S+)?[^|;&]*\b(commit|push)\b")
 MIN_UNRECORDED = 2        # 落後 >= 2 個 commit 就提醒
 MAX_AGE_MINUTES = 30      # 或最早那個沒記的 commit 已經超過 30 分鐘
@@ -52,7 +49,7 @@ def unrecorded_commits(root: pathlib.Path):
     times = []
     for line in out.splitlines():
         ts, _, subject = line.partition("\t")
-        if ts.isdigit() and int(ts) > baseline and not AUTOMATED_SUBJECT.match(subject):
+        if ts.isdigit() and int(ts) > baseline and is_work_subject(subject):
             times.append(int(ts))
     return times
 

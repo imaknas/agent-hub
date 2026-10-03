@@ -18,37 +18,21 @@ MBP 連不到 mini 的那段時間(例如 2026-09-30 18:18–22:24)transcript �
 """
 import argparse
 import datetime
-import json
 import pathlib
 import subprocess
+import sys
 
-HOME = pathlib.Path.home()
-MANIFEST = HOME / "agent-hub" / "onboarded-projects.tsv"
-TRANSCRIPTS = HOME / "transcript-backups" / "claude-personal-projects"
-MEMORY_COPIES = HOME / "projects"
+sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
+import hublib  # noqa: E402
 
-
-def slug(path: str) -> str:
-    """Claude Code 用來存 transcript 的資料夾名:路徑裡的 / 跟 . 換成 -。"""
-    return path.replace("/", "-").replace(".", "-")
+TRANSCRIPTS = hublib.HOME / "transcript-backups" / "claude-personal-projects"
+MEMORY_COPIES = hublib.HOME / "projects"
 
 
-def user_messages_since(project_path: str, since: datetime.datetime) -> int:
-    d = TRANSCRIPTS / slug(project_path)
-    count = 0
-    for f in d.glob("*.jsonl"):
-        with f.open(errors="replace") as fh:
-            for line in fh:
-                try:
-                    o = json.loads(line)
-                except ValueError:
-                    continue
-                if o.get("type") != "user" or not isinstance(o.get("message", {}).get("content"), str):
-                    continue  # tool result 之類不算,只算使用者實際打的訊息
-                ts = o.get("timestamp")
-                if ts and datetime.datetime.fromisoformat(ts.replace("Z", "+00:00")) >= since:
-                    count += 1
-    return count
+def human_messages_since(paths: list[str], since: datetime.datetime) -> int:
+    """只算 Knas 實際送出的訊息(2026-10-03 前連其他 session 的訊息、背景通知也算進去)。"""
+    return sum(1 for e in hublib.iter_entries(TRANSCRIPTS, paths, since)
+               if hublib.is_human_prompt(e.entry))
 
 
 def memory_commits_since(name: str, since: datetime.datetime) -> int:
@@ -71,9 +55,11 @@ def main() -> None:
     args = ap.parse_args()
     since = datetime.datetime.now(datetime.timezone.utc) - datetime.timedelta(hours=args.window_hours)
 
-    for line in MANIFEST.read_text().splitlines()[1:]:
-        name, path = line.split("\t")[:2]
-        msgs = user_messages_since(path, since)
+    onboarded = {l.split("\t")[0] for l in hublib.MANIFEST.read_text().splitlines()[1:] if l.strip()}
+    for name, paths in hublib.project_paths().items():
+        if name not in onboarded:
+            continue  # agent-hub / project-29 沒有 memory 副本
+        msgs = human_messages_since(paths, since)
         if msgs < args.threshold:
             continue
         commits = memory_commits_since(name, since)
