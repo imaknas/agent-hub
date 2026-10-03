@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
-# 每週一由 scheduler 呼叫:產生上一週的跨專案活動總覽(reflect/YYYY-Www.md),
-# 含模型寫的主題與 AI 協作觀察,只 commit 那一個檔案。統計部分零 LLM,模型段落
-# 每週一次(訂閱額度)。細節見 bin/weekly-reflect.py、bin/reflect_llm.py。
+# 每週一由 scheduler 呼叫:產生上一週的跨專案活動分析(reflect/YYYY-Www.json,含模型
+# 寫的分析),重建所有週的報告頁 reflect/index.html,只 commit 這兩個檔案。統計部分
+# 零 LLM,分析每週一次(訂閱額度)。細節見 bin/weekly-reflect.py、bin/reflect_llm.py、
+# templates/reflect.html。
 set -uo pipefail
 export PATH="/opt/homebrew/bin:/usr/local/bin:$PATH"
 HUB="$HOME/agent-hub"
@@ -13,5 +14,6 @@ export INDEX_MODEL
 
 cd "$HUB" && git pull -q || true
 out=$(python3 "$HUB/bin/weekly-reflect.py" --llm "$@") || { echo "weekly-reflect.py 失敗" >&2; exit 1; }
+json=$(echo "$out" | head -1)
 echo "寫入 $out"
-"$HUB/bin/commit-hub-files.sh" "reflect: $(basename "$out" .md)" "reflect/$(basename "$out")"
+"$HUB/bin/commit-hub-files.sh" "reflect: $(basename "$json" .json)" "reflect/$(basename "$json")" reflect/index.html

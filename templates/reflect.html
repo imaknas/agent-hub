@@ -1,0 +1,284 @@
+<title>週報 Reflect</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Noto+Serif+TC:wght@600;800&family=Noto+Sans+TC:wght@400;500;700&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+/* Layout: one reading column; the analysis leads, numbers and charts sit beside it as evidence. */
+:root {
+  --paper: #f6f8f7;
+  --surface: #ffffff;
+  --ink: #17202b;
+  --muted: #5d6b78;
+  --rule: #d9e1e3;
+  --accent: #0f6b62;
+  --accent-soft: #d8ece8;
+  --night: #3d3b8e;
+  --night-soft: #e3e2f5;
+  --good: #1f7a3f;
+  --warn: #a5610c;
+  --bad: #b3372d;
+  --heat-0: #eef2f2;
+  --font-display: "Noto Serif TC", "Songti TC", serif;
+  --font-body: "Noto Sans TC", "PingFang TC", system-ui, sans-serif;
+  --font-data: "IBM Plex Mono", ui-monospace, Menlo, monospace;
+  color-scheme: light;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --paper: #11161b; --surface: #182027; --ink: #e7ecef; --muted: #98a6b2; --rule: #2a3540;
+    --accent: #5cc3b5; --accent-soft: #1d3a37; --night: #a7a3ff; --night-soft: #2a2950;
+    --good: #6cc98a; --warn: #e6a54f; --bad: #f08a80; --heat-0: #1c252d; color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --paper: #11161b; --surface: #182027; --ink: #e7ecef; --muted: #98a6b2; --rule: #2a3540;
+  --accent: #5cc3b5; --accent-soft: #1d3a37; --night: #a7a3ff; --night-soft: #2a2950;
+  --good: #6cc98a; --warn: #e6a54f; --bad: #f08a80; --heat-0: #1c252d; color-scheme: dark;
+}
+
+body { background: var(--paper); color: var(--ink); font-family: var(--font-body); font-size: 16px; line-height: 1.7; }
+.wrap { max-width: 860px; margin: 0 auto; padding-inline: 20px; padding-block: 28px 64px; display: grid; gap: 44px; }
+h1, h2, h3 { font-family: var(--font-display); text-wrap: balance; margin: 0; }
+p { margin: 0; }
+.eyebrow { font-family: var(--font-data); font-size: 12px; letter-spacing: .08em; text-transform: uppercase; color: var(--muted); }
+.num { font-family: var(--font-data); font-variant-numeric: tabular-nums; }
+.muted { color: var(--muted); }
+
+/* header */
+.top { display: flex; flex-wrap: wrap; gap: 12px 20px; align-items: center; justify-content: space-between; }
+.top select { font: inherit; font-family: var(--font-data); font-size: 14px; color: var(--ink); background: var(--surface);
+  border: 1px solid var(--rule); border-radius: 6px; padding: 6px 10px; }
+.top select:focus-visible, a:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.hero { display: grid; gap: 16px; }
+.hero h1 { font-size: clamp(26px, 5vw, 38px); line-height: 1.3; font-weight: 800; }
+.hero .summary { font-size: 17px; max-width: 65ch; }
+
+/* key figures: supporting, not the point */
+.figures { display: flex; flex-wrap: wrap; gap: 10px 28px; border-block: 1px solid var(--rule); padding-block: 14px; }
+.fig { display: grid; gap: 0; min-width: 0; }
+.fig b { font-family: var(--font-data); font-size: 22px; font-weight: 500; font-variant-numeric: tabular-nums; }
+.fig span { font-size: 13px; color: var(--muted); }
+.fig .delta { font-family: var(--font-data); font-size: 12px; }
+.up { color: var(--warn); } .down { color: var(--muted); }
+.fig.night b { color: var(--night); }
+
+section { display: grid; gap: 18px; }
+section > header { display: grid; gap: 4px; }
+section h2 { font-size: 22px; font-weight: 600; }
+
+/* insights */
+.insights { display: grid; gap: 14px; }
+.insight { background: var(--surface); border: 1px solid var(--rule); border-radius: 10px; padding: 18px 20px; display: grid; gap: 10px; }
+.insight h3 { font-size: 18px; font-weight: 600; }
+.evidence { font-family: var(--font-data); font-size: 13px; line-height: 1.6; color: var(--muted); border-left: 2px solid var(--accent-soft); padding-left: 10px; }
+.sowhat { font-weight: 500; color: var(--accent); }
+
+/* rhythm */
+.verdict { font-family: var(--font-display); font-size: 19px; font-weight: 600; }
+.heat-wrap { overflow-x: auto; padding-bottom: 4px; }
+.heat { display: grid; grid-template-columns: 26px repeat(24, minmax(16px, 1fr)); gap: 3px; min-width: 520px; font-family: var(--font-data); font-size: 11px; }
+.heat .lab { color: var(--muted); display: flex; align-items: center; }
+.heat .hr { color: var(--muted); text-align: center; }
+.cell { aspect-ratio: 1; border-radius: 3px; background: var(--heat-0); }
+.cell.n { box-shadow: inset 0 0 0 1px var(--night-soft); }
+.legend { display: flex; flex-wrap: wrap; gap: 6px 18px; font-size: 13px; color: var(--muted); align-items: center; }
+.sw { display: inline-block; width: 12px; height: 12px; border-radius: 3px; vertical-align: -1px; margin-right: 6px; }
+.stops { display: flex; flex-wrap: wrap; gap: 8px; }
+.stop { font-family: var(--font-data); font-size: 13px; border: 1px solid var(--rule); border-radius: 999px; padding: 2px 10px; background: var(--surface); }
+.stop.late { border-color: var(--night); color: var(--night); background: var(--night-soft); }
+
+/* projects */
+.projects { display: grid; gap: 0; border-top: 1px solid var(--rule); }
+.proj { display: grid; grid-template-columns: minmax(0, 1fr) 150px; gap: 6px 24px; padding-block: 16px; border-bottom: 1px solid var(--rule); }
+.proj .main { display: grid; gap: 6px; min-width: 0; }
+.proj .name { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.proj .name strong { font-family: var(--font-data); font-weight: 500; font-size: 15px; }
+.chip { font-size: 12px; font-weight: 700; border-radius: 4px; padding: 1px 8px; letter-spacing: .04em; }
+.s-推進 { background: var(--accent-soft); color: var(--accent); }
+.s-穩定 { background: var(--heat-0); color: var(--muted); }
+.s-收尾 { background: var(--heat-0); color: var(--muted); }
+.s-卡住 { background: color-mix(in srgb, var(--bad) 14%, transparent); color: var(--bad); }
+.s-發散 { background: color-mix(in srgb, var(--warn) 16%, transparent); color: var(--warn); }
+.proj .focus { font-size: 14px; color: var(--muted); }
+.proj .next { font-size: 14px; }
+.proj .next::before { content: "下一步 "; font-weight: 700; color: var(--accent); }
+.proj .side { display: grid; gap: 6px; align-content: start; font-family: var(--font-data); font-size: 12px; color: var(--muted); }
+.bars { display: grid; gap: 3px; }
+.bar { height: 6px; border-radius: 3px; background: var(--accent); }
+.bar.prev { background: var(--rule); }
+.mini { display: flex; justify-content: space-between; }
+.quiet-list { font-size: 14px; color: var(--muted); }
+
+/* fluency */
+.fluency { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; }
+.fl { background: var(--surface); border: 1px solid var(--rule); border-radius: 10px; padding: 16px 18px; display: grid; gap: 8px; align-content: start; }
+.fl header { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; }
+.fl h3 { font-size: 18px; font-weight: 600; }
+.fl .en { font-family: var(--font-data); font-size: 11px; color: var(--muted); letter-spacing: .06em; text-transform: uppercase; }
+.lv { font-size: 12px; font-weight: 700; padding: 1px 8px; border-radius: 4px; }
+.lv-強項 { background: color-mix(in srgb, var(--good) 15%, transparent); color: var(--good); }
+.lv-穩定 { background: var(--heat-0); color: var(--muted); }
+.lv-可改進 { background: color-mix(in srgb, var(--warn) 16%, transparent); color: var(--warn); }
+.quote { font-size: 14px; color: var(--muted); }
+.quote::before { content: "「"; } .quote::after { content: "」"; }
+.tip { font-size: 14px; border-top: 1px dashed var(--rule); padding-top: 8px; }
+
+/* next week */
+.actions { display: grid; gap: 14px; counter-reset: a; padding: 0; margin: 0; list-style: none; }
+.actions li { display: grid; grid-template-columns: 34px minmax(0, 1fr); gap: 4px 12px; counter-increment: a; }
+.actions li::before { content: counter(a); grid-row: span 2; font-family: var(--font-data); font-size: 15px; width: 28px; height: 28px; border-radius: 50%;
+  background: var(--accent); color: var(--surface); display: grid; place-items: center; }
+.actions .act { font-weight: 500; }
+.actions .why { font-size: 14px; color: var(--muted); }
+
+.notice { background: var(--surface); border: 1px dashed var(--rule); border-radius: 10px; padding: 16px 18px; color: var(--muted); }
+footer.method { font-size: 13px; color: var(--muted); border-top: 1px solid var(--rule); padding-top: 16px; display: grid; gap: 6px; }
+
+@media (max-width: 640px) {
+  .proj { grid-template-columns: minmax(0, 1fr); }
+  .fluency { grid-template-columns: minmax(0, 1fr); }
+}
+@media (prefers-reduced-motion: no-preference) {
+  .wrap > * { animation: rise .35s ease-out both; }
+  @keyframes rise { from { transform: translateY(6px); } to { transform: none; } }
+}
+</style>
+
+<div class="wrap" id="app"></div>
+
+<script>
+const WEEKS = /*__REFLECT_DATA__*/[];
+const DIMS = { "交辦": "Delegation", "描述": "Description", "判斷": "Discernment", "把關": "Diligence" };
+const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+const pct = x => Math.round(x * 100) + "%";
+
+function delta(now, prev) {
+  if (!prev && !now) return "";
+  const d = now - prev, r = prev ? Math.round(d / prev * 100) : null;
+  const cls = d > 0 ? "up" : "down";
+  return `<span class="delta ${cls}">${d > 0 ? "+" : ""}${d}${r !== null ? ` (${r > 0 ? "+" : ""}${r}%)` : ""}</span>`;
+}
+
+function heatColor(n, max) {
+  if (!n) return "var(--heat-0)";
+  const t = Math.max(.18, n / max);
+  return `color-mix(in srgb, var(--accent) ${Math.round(t * 100)}%, var(--heat-0))`;
+}
+
+function heatmap(matrix) {
+  const max = Math.max(1, ...matrix.flat());
+  const days = "一二三四五六日";
+  let h = `<div class="heat" role="img" aria-label="星期 × 小時的訊息分佈"><span></span>`;
+  for (let hr = 0; hr < 24; hr++) h += `<span class="hr">${hr % 3 === 0 ? hr : ""}</span>`;
+  matrix.forEach((row, d) => {
+    h += `<span class="lab">${days[d]}</span>`;
+    row.forEach((n, hr) => {
+      const night = hr < 6 ? " n" : "";
+      h += `<span class="cell${night}" style="background:${heatColor(n, max)}" title="週${days[d]} ${String(hr).padStart(2, "0")}:00 · ${n} 則"></span>`;
+    });
+  });
+  return h + `</div>`;
+}
+
+function projectRows(w) {
+  const a = w.analysis || {};
+  const byName = Object.fromEntries((a.projects || []).map(p => [p.name, p]));
+  const max = Math.max(1, ...w.projects.map(p => Math.max(p.prompts, p.prompts_prev)));
+  const active = w.projects.filter(p => p.prompts > 0);
+  const quiet = w.projects.filter(p => p.prompts === 0 && p.prompts_prev > 0);
+  let h = `<div class="projects">`;
+  for (const p of active) {
+    const an = byName[p.name] || {};
+    h += `<div class="proj">
+      <div class="main">
+        <div class="name"><strong>${esc(p.name)}</strong>${an.status ? `<span class="chip s-${esc(an.status)}">${esc(an.status)}</span>` : ""}</div>
+        ${an.focus ? `<p class="focus">${esc(an.focus)}</p>` : ""}
+        ${an.assessment ? `<p>${esc(an.assessment)}</p>` : ""}
+        ${an.next ? `<p class="next">${esc(an.next)}</p>` : ""}
+      </div>
+      <div class="side">
+        <div class="bars" title="訊息:這週 ${p.prompts} / 上週 ${p.prompts_prev}">
+          <div class="bar" style="width:${Math.max(2, p.prompts / max * 100)}%"></div>
+          <div class="bar prev" style="width:${Math.max(2, p.prompts_prev / max * 100)}%"></div>
+        </div>
+        <div class="mini"><span>訊息</span><span class="num">${p.prompts} ← ${p.prompts_prev}</span></div>
+        <div class="mini"><span>commit</span><span class="num">${p.commits ?? "—"}</span></div>
+        <div class="mini"><span>memory 筆記</span><span class="num">${p.notes ?? "—"}</span></div>
+        <div class="mini"><span>活躍天 / session</span><span class="num">${p.days} / ${p.sessions}</span></div>
+      </div>
+    </div>`;
+  }
+  h += `</div>`;
+  if (quiet.length) h += `<p class="quiet-list">這週沒動:${quiet.map(p => `${esc(p.name)}(上週 ${p.prompts_prev})`).join("、")}</p>`;
+  return h;
+}
+
+function render(w) {
+  const a = w.analysis && !w.analysis.error ? w.analysis : null;
+  const t = w.totals, r = w.rhythm, d = w.delegation;
+  const opts = WEEKS.map(x => `<option value="${esc(x.week)}"${x.week === w.week ? " selected" : ""}>${esc(x.week)} · ${esc(x.start.slice(5))}–${esc(x.end.slice(5))}</option>`).join("");
+  let h = `
+  <div class="top">
+    <span class="eyebrow">Claude Code 每週回顧 · ${esc(w.start)} – ${esc(w.end)}</span>
+    ${WEEKS.length > 1 ? `<label><span class="eyebrow" style="margin-right:8px">週次</span><select id="week">${opts}</select></label>` : ""}
+  </div>
+  <div class="hero">
+    <h1>${esc(a ? a.headline : `${w.week} 活動統計`)}</h1>
+    ${a ? `<p class="summary">${esc(a.summary)}</p>` : `<p class="notice">${esc(w.analysis?.error || "這一週只有統計,沒有產生分析。")}</p>`}
+  </div>
+  <div class="figures">
+    <div class="fig"><b>${t.prompts}</b><span>則訊息 ${delta(t.prompts, t.prompts_prev)}</span></div>
+    <div class="fig"><b>${t.projects}</b><span>個專案</span></div>
+    <div class="fig"><b>${t.sessions}</b><span>個 session</span></div>
+    <div class="fig"><b>${t.days}/7</b><span>天有工作</span></div>
+    <div class="fig night"><b>${pct(r.late_share)}</b><span>深夜訊息 ${delta(r.late, r.late_prev)}</span></div>
+    <div class="fig"><b>${r.longest_hours}h</b><span>最長連續</span></div>
+  </div>`;
+
+  if (a) {
+    h += `<section><header><span class="eyebrow">Insights</span><h2>這週看到的模式</h2></header><div class="insights">` +
+      a.insights.map(i => `<article class="insight"><h3>${esc(i.title)}</h3><p>${esc(i.analysis)}</p>
+        <p class="evidence">${esc(i.evidence)}</p><p class="sowhat">${esc(i.so_what)}</p></article>`).join("") + `</div></section>`;
+  }
+
+  h += `<section><header><span class="eyebrow">Rhythm</span><h2>作息</h2></header>
+    ${a ? `<p class="verdict">${esc(a.rhythm.verdict)}</p><p>${esc(a.rhythm.analysis)}</p><p class="muted">${esc(a.rhythm.pattern)}</p>` : ""}
+    <div class="heat-wrap">${heatmap(w.matrix)}</div>
+    <div class="legend"><span><i class="sw" style="background:var(--accent)"></i>訊息越多顏色越深</span>
+      <span><i class="sw" style="box-shadow:inset 0 0 0 1px var(--night);background:var(--heat-0)"></i>00:00–05:59 深夜時段</span></div>
+    <div><p class="eyebrow" style="margin-bottom:8px">每天收工(最後一則訊息,凌晨 6 點前算前一天)</p>
+      <div class="stops">${r.last_per_day.map(x => `<span class="stop${x.late ? " late" : ""}">${esc(x.day)} ${esc(x.time)}</span>`).join("")}</div></div>
+  </section>`;
+
+  h += `<section><header><span class="eyebrow">Projects</span><h2>各專案</h2>
+      <p class="muted" style="font-size:14px">右側長條:上面是這週訊息,下面灰色是上週。</p></header>${projectRows(w)}</section>`;
+
+  if (a) {
+    h += `<section><header><span class="eyebrow">AI fluency · 4D</span><h2>跟 AI 協作的方式</h2>
+      <p class="muted" style="font-size:14px">這週開了 ${d.agents} 次 subagent(上週 ${d.agents_prev})、session 之間傳了 ${d.peer} 次訊息(上週 ${d.peer_prev})。</p></header>
+      <div class="fluency">` + a.fluency.map(f => `<article class="fl"><header><div><h3>${esc(f.dimension)}</h3><span class="en">${DIMS[f.dimension] || ""}</span></div>
+        <span class="lv lv-${esc(f.level)}">${esc(f.level)}</span></header>
+        <p>${esc(f.observation)}</p><p class="quote">${esc(f.quote)}</p><p class="tip">${esc(f.suggestion)}</p></article>`).join("") + `</div></section>`;
+    h += `<section><header><span class="eyebrow">Next week</span><h2>下週先做這幾件</h2></header><ol class="actions">` +
+      a.next_week.map(n => `<li><span class="act">${esc(n.action)}</span><span class="why">${esc(n.why)}</span></li>`).join("") + `</ol></section>`;
+  }
+
+  const m = w.analysis?.meta;
+  h += `<footer class="method">
+    <p>資料:個人 profile 的 Claude Code session(工作 profile 不備份;claude.ai 的對話請看 claude.ai 的 Reflect)。訊息只算你實際送出的。時間為台北時間。</p>
+    ${m ? `<p>分析由 ${esc(m.model)} 根據 ${m.sampled} 則訊息抽樣與上面的統計撰寫,是模型的解讀;${esc((m.excluded || []).join("、"))} 只提供數字、不送原文;送出前已遮掉像金鑰的字串。</p>` : ""}
+    <p class="num">產生時間 ${esc(w.generated)}</p>
+  </footer>`;
+  return h;
+}
+
+function show(weekId) {
+  const w = WEEKS.find(x => x.week === weekId) || WEEKS[0];
+  const app = document.getElementById("app");
+  if (!w) { app.innerHTML = `<p class="notice">還沒有任何一週的報告。</p>`; return; }
+  app.innerHTML = render(w);
+  const sel = document.getElementById("week");
+  if (sel) sel.addEventListener("change", e => { show(e.target.value); try { history.replaceState(null, "", "#" + e.target.value); } catch (_) {} });
+}
+show(decodeURIComponent(location.hash.slice(1)));
+</script>

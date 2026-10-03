@@ -1,25 +1,26 @@
 #!/usr/bin/env python3
-"""每週跨專案活動總覽(類似 claude.ai 的 Reflect,但看的是 Claude Code 這邊)。
+"""每週跨專案活動分析(類似 claude.ai 的 Reflect,但看的是 Claude Code 這邊)。
 
 claude.ai 的 Reflect 只讀 claude.ai 的聊天紀錄跟 Memory,看不到 Claude Code 的
-session;這份報告補上那一塊。統計全部機械計算、零 LLM:
-  - 各專案:session 數、真人訊息數、活躍天數、專案 commit、memory 筆記,跟上週比
-  - 什麼時段在工作(台北時間的小時/星期分佈)
-  - 作息:深夜訊息比例、每天最後一則訊息時間、最長連續工作時段
-  - 交辦方式:開了多少 subagent、跨 session 傳訊、用了哪些 skill
-  - 變化:這週新冒出來的專案、上週活躍這週停下來的專案
---llm 時另外附一段模型寫的「主題與 AI 協作觀察」(見 reflect_llm 那段)。
+session;這份報告補上那一塊。產出:
+  reflect/YYYY-Www.json   這週的統計 + 分析(--llm 時)
+  reflect/index.html      所有週的報告頁(資料直接嵌在頁面裡,templates/reflect.html 套版)
+
+統計全部機械計算、零 LLM:各專案訊息/session/活躍天/commit/memory 筆記(對比上週)、
+星期 × 小時的工作分佈(台北時間)、深夜比例、最長連續工作、每天收工時間、交辦方式
+(subagent、跨 session 訊息、skill)、新開始/停下來的專案。分析段落見 reflect_llm.py。
 
 資料:mini 上的 transcript 備份(~/transcript-backups,MBP 每小時同步,只有
 ~/.claude-personal 這個 profile——工作 profile 刻意不備份)、~/git-origin/mirrors
 (每天 04:00 更新)、~/projects/<name> 的 memory 副本。
 
-用法:weekly-reflect.py [--week 2026-W40] [--out ~/agent-hub/reflect] [--llm]
-  --week 省略 = 上一個完整的週(週一到週日,台北時間)。
+用法:weekly-reflect.py [--week 2026-W40] [--llm]
+  --week 省略 = 上一個完整的週(週一到週日,台北時間)。印出寫入的 json 路徑。
 """
 import argparse
 import collections
 import datetime
+import json
 import pathlib
 import subprocess
 import sys
@@ -32,6 +33,8 @@ TZ = zoneinfo.ZoneInfo("Asia/Taipei")
 TRANSCRIPTS = hublib.HOME / "transcript-backups" / "claude-personal-projects"
 MIRRORS = hublib.HOME / "git-origin" / "mirrors"
 MEMORY_COPIES = hublib.HOME / "projects"
+OUT = hublib.HUB / "reflect"
+TEMPLATE = hublib.HUB / "templates" / "reflect.html"
 LATE_NIGHT = range(0, 6)       # 00:00–05:59 台北時間
 BREAK_MINUTES = 30             # 兩則訊息間隔超過這個就算休息過
 QUIET_THRESHOLD = 10           # 上週至少這麼多則、這週 0 則 → 停下來的專案
@@ -123,97 +126,79 @@ def longest_stretch(times: list[datetime.datetime]) -> tuple[float, datetime.dat
     return best, best_start
 
 
-def bar(n: int, top: int, width: int = 20) -> str:
-    return "█" * round(width * n / top) if top else ""
-
-
-def delta(a: int, b: int) -> str:
-    d = a - b
-    return f"{d:+d}" if d else "±0"
-
-
-def render(label: str, start: datetime.datetime, end: datetime.datetime, weeks: dict[str, Week]) -> str:
+def build_stats(label: str, start: datetime.datetime, end: datetime.datetime, weeks: dict[str, Week]) -> dict:
     this, prev = weeks["this"], weeks["prev"]
-    prev_start = start - datetime.timedelta(days=7)
-    o = [f"# 每週活動總覽 {label}", "",
-         f"> {start:%Y-%m-%d}(一)~ {(end - datetime.timedelta(days=1)):%Y-%m-%d}(日),台北時間。"
-         "`bin/weekly-reflect.py` 機械產生。",
-         "> 只涵蓋個人 profile(`~/.claude-personal`)的 Claude Code session;工作 profile 刻意不備份,"
-         "claude.ai 網頁/App 的對話在 Reflect 裡看。「訊息」只算你實際送出的,不含 session 之間的訊息跟系統通知。", ""]
-
-    total, total_prev = sum(this.prompts.values()), sum(prev.prompts.values())
-    all_days = {t.date() for t in this.times}
-    o += ["## 總覽", "",
-          f"- 訊息 **{total}** 則(上週 {total_prev},{delta(total, total_prev)})",
-          f"- session **{sum(len(s) for s in this.sessions.values())}** 個、"
-          f"活躍專案 **{len(this.prompts)}** 個、有工作的天數 **{len(all_days)}/7**", ""]
-
-    o += ["## 各專案", "", "| 專案 | 訊息(vs 上週) | session | 活躍天 | 專案 commit | memory 筆記 |",
-          "|---|---|---|---|---|---|"]
     names = sorted(set(this.prompts) | set(prev.prompts), key=lambda n: (-this.prompts[n], n))
+    projects = []
     for n in names:
-        commits = git_count(mirror_for(n), start, end, work_only=True)
-        notes = git_count(MEMORY_COPIES / n, start, end, "--invert-grep", "--grep=^init:", "--", "memory/")
-        o.append(f"| {n} | {this.prompts[n]}({delta(this.prompts[n], prev.prompts[n])}) | "
-                 f"{len(this.sessions[n])} | {len(this.days[n])} | "
-                 f"{'—' if commits is None else commits} | {'—' if notes is None else notes} |")
-    o.append("")
-    new = [n for n in this.prompts if not prev.prompts[n]]
-    quiet = [n for n in prev.prompts if prev.prompts[n] >= QUIET_THRESHOLD and not this.prompts[n]]
-    if new or quiet:
-        o += ["**變化**:" + ";".join(
-            ([f"這週開始動:{'、'.join(sorted(new))}"] if new else []) +
-            ([f"上週活躍、這週停下來:{'、'.join(sorted(quiet))}"] if quiet else [])), ""]
-
-    hours = collections.Counter(t.hour for t in this.times)
-    days = collections.Counter(t.weekday() for t in this.times)
-    top_h, top_d = max(hours.values(), default=0), max(days.values(), default=0)
-    o += ["## 什麼時候在工作", "", "```"]
-    o += [f"{h:02d}:00 {bar(hours[h], top_h)} {hours[h] or ''}" for h in range(24)]
-    o += ["", *[f"{'一二三四五六日'[d]}    {bar(days[d], top_d)} {days[d] or ''}" for d in range(7)], "```", ""]
-
-    late = sum(hours[h] for h in LATE_NIGHT)
-    late_prev = sum(1 for t in prev.times if t.hour in LATE_NIGHT)
+        projects.append({
+            "name": n, "prompts": this.prompts[n], "prompts_prev": prev.prompts[n],
+            "sessions": len(this.sessions[n]), "days": len(this.days[n]),
+            "commits": git_count(mirror_for(n), start, end, work_only=True),
+            "notes": git_count(MEMORY_COPIES / n, start, end, "--invert-grep", "--grep=^init:", "--", "memory/"),
+        })
+    matrix = [[0] * 24 for _ in range(7)]
+    for t in this.times:
+        matrix[t.weekday()][t.hour] += 1
+    total = sum(this.prompts.values())
+    late = sum(1 for t in this.times if t.hour in LATE_NIGHT)
     stretch, stretch_at = longest_stretch(this.times)
     last_per_day: dict[datetime.date, datetime.datetime] = {}
     for t in this.times:
-        # 凌晨 6 點前的訊息算前一天的「收工時間」
-        day = (t - datetime.timedelta(hours=6)).date()
+        day = (t - datetime.timedelta(hours=6)).date()  # 凌晨 6 點前算前一天的收工
         last_per_day[day] = max(last_per_day.get(day, t), t)
-    o += ["## 作息", "",
-          f"- 深夜(00:00–05:59)訊息 **{late}** 則,佔 {late / total:.0%}" if total else "- 這週沒有訊息",
-          f"  (上週 {late_prev} 則)" if total else "",
-          f"- 最長連續工作 **{stretch:.1f} 小時**(中間沒有超過 {BREAK_MINUTES} 分鐘的空檔)"
-          + (f",從 {stretch_at:%m-%d %H:%M} 開始" if stretch_at else ""),
-          "- 每天收工時間(最後一則訊息):" + "、".join(
-              f"{d:%m/%d} {t:%H:%M}" for d, t in sorted(last_per_day.items())), ""]
+    return {
+        "week": label,
+        "start": start.date().isoformat(), "end": (end - datetime.timedelta(days=1)).date().isoformat(),
+        "generated": datetime.datetime.now(TZ).isoformat(timespec="minutes"),
+        "totals": {"prompts": total, "prompts_prev": sum(prev.prompts.values()),
+                   "sessions": sum(len(s) for s in this.sessions.values()),
+                   "projects": len(this.prompts), "days": len({t.date() for t in this.times})},
+        "projects": projects,
+        "matrix": matrix,
+        "rhythm": {"late": late, "late_share": late / total if total else 0,
+                   "late_prev": sum(1 for t in prev.times if t.hour in LATE_NIGHT),
+                   "longest_hours": round(stretch, 1),
+                   "longest_start": stretch_at.isoformat(timespec="minutes") if stretch_at else None,
+                   "last_per_day": [{"day": f"{d:%m/%d}", "time": f"{t:%H:%M}",
+                                     "late": t.hour in LATE_NIGHT}
+                                    for d, t in sorted(last_per_day.items())]},
+        "delegation": {"agents": this.agents, "agents_prev": prev.agents, "workflows": this.workflows,
+                       "peer": this.peer_msgs, "peer_prev": prev.peer_msgs,
+                       "skills": dict(this.skills.most_common(8))},
+        "changes": {"new": sorted(n for n in this.prompts if not prev.prompts[n]),
+                    "quiet": sorted(n for n in prev.prompts
+                                    if prev.prompts[n] >= QUIET_THRESHOLD and not this.prompts[n])},
+    }
 
-    o += ["## 交辦方式", "",
-          f"- 開 subagent **{this.agents}** 次(上週 {prev.agents})、workflow {this.workflows} 次",
-          f"- session 之間傳訊息 **{this.peer_msgs}** 次(上週 {prev.peer_msgs})"]
-    if this.skills:
-        o.append("- 用到的 skill:" + "、".join(f"{k}×{v}" for k, v in this.skills.most_common(8)))
-    o.append("")
-    return "\n".join(l for l in o if l is not None) + "\n"
+
+def build_html() -> pathlib.Path:
+    """把 reflect/*.json 全部嵌進 templates/reflect.html,寫成 reflect/index.html。"""
+    weeks = [json.loads(p.read_text()) for p in sorted(OUT.glob("*-W*.json"), reverse=True)]
+    data = json.dumps(weeks, ensure_ascii=False).replace("</", "<\\/")
+    html = TEMPLATE.read_text().replace("/*__REFLECT_DATA__*/[]", data)
+    path = OUT / "index.html"
+    path.write_text(html)
+    return path
 
 
 def main() -> None:
     ap = argparse.ArgumentParser()
     ap.add_argument("--week")
-    ap.add_argument("--out", default=str(hublib.HUB / "reflect"))
-    ap.add_argument("--llm", action="store_true", help="附加模型寫的主題與 AI 協作觀察")
+    ap.add_argument("--llm", action="store_true", help="附加模型寫的分析")
+    ap.add_argument("--html-only", action="store_true", help="只用現有 json 重建 index.html")
     args = ap.parse_args()
-    start, end, label = week_bounds(args.week)
-    weeks = scan(start, end)
-    text = render(label, start, end, weeks)
-    if args.llm:
-        import reflect_llm
-        text += reflect_llm.section(start, end)
-    out = pathlib.Path(args.out).expanduser()
-    out.mkdir(parents=True, exist_ok=True)
-    path = out / f"{label}.md"
-    path.write_text(text)
-    print(path)
+    OUT.mkdir(parents=True, exist_ok=True)
+    if not args.html_only:
+        start, end, label = week_bounds(args.week)
+        stats = build_stats(label, start, end, scan(start, end))
+        if args.llm:
+            import reflect_llm
+            stats["analysis"] = reflect_llm.analyze(stats, start, end)
+        path = OUT / f"{label}.json"
+        path.write_text(json.dumps(stats, ensure_ascii=False, indent=1))
+        print(path)
+    print(build_html())
 
 
 if __name__ == "__main__":
