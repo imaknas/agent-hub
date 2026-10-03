@@ -63,6 +63,10 @@ repair_state_todo() {
   \`- [ ] 〔agent〕…\`(agent 可以直接做的)
   \`- [ ] 〔待定〕…\`(還要先做決定才能動的)
 
+如果 STATE.md 別的地方有待辦性質的清單(例如「待決事項」「需要 Knas 拍板」「可由 agent 執行」
+「下一步」「未完成」),把那些項目**搬進** \`## 待辦\`(標上負責人)並刪掉原本那段;
+只有整份 STATE.md 真的沒有任何待辦時才寫 \`- (無)\`。排程、已完成的事實不算待辦,留在原處。
+
 目前的問題:
 $problems"
   fix_json=$(cd "$dir" && claude -p "$fix_prompt" --model "$STATE_MODEL" --permission-mode acceptEdits \
