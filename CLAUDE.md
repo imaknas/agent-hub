@@ -16,6 +16,8 @@ agent-hub 是跨專案的 memory 追蹤 + 排程 + 專案/服務註冊系統,設
 - **跨專案還有哪些事沒做(誰能做)**:`todo.md`(librarian 每晚重生)
 - **這週在各專案做了什麼、作息、跟 AI 協作的方式**:`reflect/index.html`(所有週的分析報告頁,
   資料在 `reflect/YYYY-Www.json`;每週一產生,Claude Code 版的 Reflect)
+- **這幾個月(工作與職涯)怎麼走過來**:`reflect/trajectory/index.html`(`bin/trajectory.py`
+  產生,偶爾重跑;需要 OpenClaw 日誌目錄當參數)
 - **OpenClaw 搬遷到哪了、還剩什麼沒處理**:`openclaw-migration-status.md`
 - **自動化/排程/看門狗出怪錯,或要設計新的自動化**:先查 `known-issues.md`
   (具體的坑 + 從 OpenClaw 時期學到的運作原則)
