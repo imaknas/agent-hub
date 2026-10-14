@@ -21,4 +21,6 @@ if git diff --cached --quiet; then
 fi
 
 git commit -q -m "agent-hub: sync memory/STATE.md"
+# 連不到 mini 時(呼叫端已確認過)只 commit 在本機,之後有連線的那一輪會補 push
+[ -n "${AGENT_HUB_OFFLINE:-}" ] && exit 0
 "$SCRIPT_DIR/git-safe-push.sh"

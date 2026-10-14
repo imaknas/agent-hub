@@ -69,6 +69,15 @@
   `core.hooksPath` 設成 `/dev/null`,memory 的 commit/push 不跑專案 hook。以後寫新的
   memory commit/push 也要照做。
 
+## MBP 連不到 mini
+
+- **症狀**:`sync-all-memory` log 一整段 `ssh: connect to host ... port 22: Operation timed out`、
+  `補 push 失敗`,同時幾個專案的 memory 有 unpushed commit。2026-09-30、10-08–09、10-13–14 都發生過。
+- **原因**:MBP 不在 tailnet 上(不在家、睡眠、網路切換),mini 本身照常在跑(排程沒中斷)。
+- **處理**:不用管,恢復連線後的那一輪會自動補 push。2026-10-14 起 `sync-all-memory.sh` 每輪先
+  確認連得到 mini,連不到就只在本機 commit、整輪只記一行,不再每個專案各等一次逾時。
+  急著要同步就手動跑 `bin/sync-all-memory.sh`。
+
 ## agent 協作原則
 
 - **不要相信 agent/subagent 的自我回報**(「完成了」「工具沒回應」),看客觀紀錄:

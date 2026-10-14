@@ -26,6 +26,17 @@ export GIT_CONFIG_COUNT=1 GIT_CONFIG_KEY_0=core.hooksPath GIT_CONFIG_VALUE_0=/de
 
 log() { echo "[$(date '+%H:%M:%S')] $*" >>"$LOG"; }
 
+# 先確認連得到 mini。連不到(MBP 不在家、tailnet 斷線;2026-09-30、10-08、10-13 都發生過)
+# 就只在本機 commit、不 push,整輪只記一行——不然每個專案各等一次 SSH 逾時,
+# 一整天累積上百行失敗紀錄。恢復連線後的那一輪會把沒推出去的 commit 補 push。
+if ssh -o ConnectTimeout=10 -o BatchMode=yes hub-host true 2>/dev/null; then
+  OFFLINE=""
+else
+  OFFLINE=1
+  log "連不到 mini,這輪只在本機 commit、不 push"
+fi
+export AGENT_HUB_OFFLINE="$OFFLINE"
+
 tail -n +2 "$MANIFEST" | cut -f1,2 | while IFS=$'\t' read -r name path; do
   mem="$path/.agent-memory"
   [ -d "$mem" ] || continue
@@ -34,8 +45,8 @@ tail -n +2 "$MANIFEST" | cut -f1,2 | while IFS=$'\t' read -r name path; do
     before=$(git rev-parse HEAD)
     "$HUB/bin/with-lock.sh" "$HUB/bin/git-sync-memory.sh" >>"$LOG" 2>&1 \
       || log "$name: git-sync-memory 失敗"
-    [ "$(git rev-parse HEAD)" != "$before" ] && log "$name: 已 commit+push 新的 memory"
-    if [ -n "$(git rev-list '@{u}..HEAD' 2>/dev/null)" ]; then
+    [ "$(git rev-parse HEAD)" != "$before" ] && log "$name: 已 commit${OFFLINE:+(連不到 mini,先不 push)}${OFFLINE:-+push} 新的 memory"
+    if [ -z "$OFFLINE" ] && [ -n "$(git rev-list '@{u}..HEAD' 2>/dev/null)" ]; then
       "$HUB/bin/with-lock.sh" "$HUB/bin/git-safe-push.sh" >>"$LOG" 2>&1 \
         && log "$name: 補 push 了之前沒推出去的 commit" \
         || log "$name: 補 push 失敗"
