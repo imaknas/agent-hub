@@ -15,6 +15,7 @@ MBP 斷線/沒電/闔上不會中斷正在跑的工作(2026-10-14 project-16 試
   3. mini 上 recover-project.sh <name> ~/workspace/<name>(clone + 接上既有 agent-memory 分支)
   4. rsync 不進版控、又重建不出來的東西(.env、data/、CLAUDE.local.md、.claude/ 本機設定等);
      依賴、build 產物、cache 不複製
+  4b. Claude Code 的 auto memory(不在 repo 裡)也搬過去
   5. mini 上重跑 sync-local-setup.sh:對齊 managed 區塊跟 hook,保留複製過去的其他內容
   6. MBP 上有 .venv/venv/node_modules 的目錄,在 mini 依 lockfile 重建(失敗只報告,不中斷)
 
@@ -190,6 +191,24 @@ def missing_toolchains(path: str) -> list[str]:
     return [t for t in need if mini(f"command -v {t}", check=False).returncode != 0]
 
 
+def copy_auto_memory(name: str, path: str) -> None:
+    """Claude Code 每個專案的 auto memory(MBP:~/.claude-personal/projects/<slug>/memory/)不在 repo 裡,
+    搬到 mini 的 ~/.claude/projects/<mini 路徑的 slug>/memory/(mini 只有個人帳號,所以是 ~/.claude)。
+    改過名的專案,舊路徑的 memory 一起帶過去。mini 上已經有的檔案不覆蓋。"""
+    old_paths = [path] + [p for p, n in hublib.ALIASES.items() if n == name]
+    dest = f".claude/projects/{hublib.slug_for_path(f'{hublib.MINI_WORKSPACE}/{name}')}/memory/"
+    for old in old_paths:
+        src = hublib.HOME / ".claude-personal" / "projects" / hublib.slug_for_path(old) / "memory"
+        if not src.is_dir() or not any(src.iterdir()):
+            continue
+        mini(f"mkdir -p ~/{dest}")
+        r = subprocess.run(["rsync", "-a", "--ignore-existing", f"{src}/", f"{MINI}:{dest}"],
+                           capture_output=True, text=True)
+        if r.returncode != 0:
+            fail(f"auto memory rsync 失敗:{r.stderr}")
+        print(f"  auto memory:{src.parent.name} → mini ~/{dest}")
+
+
 def main() -> None:
     ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     ap.add_argument("name")
@@ -254,6 +273,8 @@ def main() -> None:
                            capture_output=True)
         if r.returncode != 0:
             fail(f"rsync 失敗:{r.stderr}")
+
+    copy_auto_memory(a.name, path)
 
     print("[5/6] mini:sync-local-setup.sh")
     out = mini(f"cd {target} && ~/agent-hub/bin/sync-local-setup.sh").stdout
