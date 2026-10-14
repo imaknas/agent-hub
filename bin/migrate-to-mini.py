@@ -19,7 +19,8 @@ MBP 斷線/沒電/闔上不會中斷正在跑的工作(2026-10-14 project-16 試
   5. mini 上重跑 sync-local-setup.sh:對齊 managed 區塊跟 hook,保留複製過去的其他內容
   6. MBP 上有 .venv/venv/node_modules 的目錄,在 mini 依 lockfile 重建(失敗只報告,不中斷)
 
-用法:migrate-to-mini.py <name> [--apply] [--allow-local-branches]
+用法:migrate-to-mini.py <name> [--apply] [--allow-local-branches] [--skip <相對路徑>]...
+  --skip:這次不搬的不進版控檔案(例:留在 MBP 備份就好的大型實驗資料庫),可以給多次
 """
 import argparse
 import datetime
@@ -228,6 +229,7 @@ def main() -> None:
     ap.add_argument("name")
     ap.add_argument("--apply", action="store_true")
     ap.add_argument("--allow-local-branches", action="store_true")
+    ap.add_argument("--skip", action="append", default=[], help="不搬的不進版控檔案(相對路徑)")
     a = ap.parse_args()
 
     row = manifest_row(a.name)
@@ -235,7 +237,10 @@ def main() -> None:
     warnings = preflight(a.name, path, row["origin"], a.allow_local_branches)
 
     entries = ignored_entries(path)
-    copy = [e for e in entries if not is_rebuildable(e) and e.rstrip("/") not in MANAGED]
+    skip = {x.rstrip("/") for x in a.skip}
+    copy = [e for e in entries if not is_rebuildable(e) and e.rstrip("/") not in MANAGED
+            and e.rstrip("/") not in skip]
+    left = [e for e in entries if e.rstrip("/") in skip]
     skipped = [e for e in entries if is_rebuildable(e)]
     deps = dep_dirs(path, entries)
     sizes = {e: du_kb(path, e) for e in copy}
@@ -248,6 +253,8 @@ def main() -> None:
         print(f"    {human(sizes[e]):>6}  {e}")
     if skipped:
         print("  不複製(依賴/build/cache):" + " ".join(skipped))
+    if left:
+        print(f"  不搬(--skip,留在 MBP 備份),共 {human(sum(du_kb(path, e) for e in left))}:" + " ".join(left))
     plans, seen = [], set()
     for p, k in deps:
         cmd = rebuild_cmd(path, p, k)

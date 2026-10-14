@@ -11,7 +11,7 @@
   compact 時(PreCompact),跑 `git-sync-memory.sh`——只 add `memory/` 跟
   `STATE.md`,不會 `git add -A`,commit 後 push。不需要手動操作。
 - 不要手動 commit/push——除非確定 hook 沒被觸發(例如不是在 Claude Code 環境下工作)。
-  另外 MBP 上每小時有一次 `sync-all-memory.sh` 補同步,session 沒正常結束也不會卡住。
+  另外 MBP 跟 mini 上每小時各有一次 `sync-all-memory.sh` 補同步,session 沒正常結束也不會卡住。
 - 這份 AGENT.md 由 agent-hub 的 template 自動覆寫(每次開 session 對齊),不要手改。
 
 ## 記憶紀律
