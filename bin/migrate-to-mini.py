@@ -68,10 +68,15 @@ def mini(script: str, check: bool = True) -> subprocess.CompletedProcess:
 
 
 def manifest_row(name: str) -> dict:
+    """path 是 MBP 上的位置:manifest 從 2026-10-15 起記的是 mini 的位置,MBP 的舊位置在
+    legacy-paths.tsv(第一筆)。"""
     for line in hublib.MANIFEST.read_text().splitlines()[1:]:
         f = line.split("\t")
         if f[0] == name:
-            return {"path": f[1], "origin": f[2]}
+            mbp = [p for p in hublib.legacy_paths(name) if p.startswith(hublib.MBP_HOME + "/")]
+            if not mbp:
+                fail(f"legacy-paths.tsv 裡沒有 '{name}' 在 MBP 上的位置")
+            return {"path": mbp[0], "origin": f[2]}
     fail(f"{hublib.MANIFEST} 裡沒有 '{name}'")
 
 
@@ -204,7 +209,7 @@ def copy_mcp_servers(name: str, path: str) -> None:
     if not cfg.exists():
         return
     projects = json.loads(cfg.read_text()).get("projects", {})
-    old_paths = [path] + [p for p, n in hublib.ALIASES.items() if n == name]
+    old_paths = [path] + [p for p in hublib.legacy_paths(name) if p != path]
     target = f"{hublib.MINI_WORKSPACE}/{name}"
     for old in old_paths:
         for server, conf in (projects.get(old, {}).get("mcpServers") or {}).items():
@@ -248,7 +253,7 @@ def copy_auto_memory(name: str, path: str) -> None:
     """Claude Code 每個專案的 auto memory(MBP:~/.claude-personal/projects/<slug>/memory/)不在 repo 裡,
     搬到 mini 的 ~/.claude/projects/<mini 路徑的 slug>/memory/(mini 只有個人帳號,所以是 ~/.claude)。
     改過名的專案,舊路徑的 memory 一起帶過去。mini 上已經有的檔案不覆蓋。"""
-    old_paths = [path] + [p for p, n in hublib.ALIASES.items() if n == name]
+    old_paths = [path] + [p for p in hublib.legacy_paths(name) if p != path]
     dest = f".claude/projects/{hublib.slug_for_path(f'{hublib.MINI_WORKSPACE}/{name}')}/memory/"
     for old in old_paths:
         src = hublib.HOME / ".claude-personal" / "projects" / hublib.slug_for_path(old) / "memory"

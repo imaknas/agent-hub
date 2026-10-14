@@ -50,9 +50,9 @@ tail -n +2 "$PROJECTS" | while IFS=$'\t' read -r name local_path origin memory_b
   echo
 
   echo "-- STATE.md --"
-  # local_path 記的是 onboard 當時那台機器(通常是 MBP)的路徑,在 mini 上
-  # 不會存在——但 mini 上一定有 onboard-project.sh 步驟 9 建的 memory-only
-  # clone(~/.memory-copies/<name>/STATE.md),兩個路徑都試,不用管在哪台機器跑。
+  # local_path 是 mini 上的 ~/workspace/<name>(2026-10-15 起);在 MBP 上跑時不存在,
+  # 這時讀 mini 上 onboard-project.sh 步驟 9 建的 memory-only clone
+  # (~/.memory-copies/<name>/STATE.md)——兩個路徑都試,不用管在哪台機器跑。
   state_dir="$local_path/.agent-memory"
   state_file="$state_dir/STATE.md"
   mini_clone_state_file="$HOME/.memory-copies/$name/STATE.md"

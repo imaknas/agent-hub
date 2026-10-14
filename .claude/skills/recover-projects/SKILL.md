@@ -26,7 +26,10 @@ ssh -T git@github.com
    先手動 clone:`git clone hub-host:~/git-origin/agent-hub.git ~/agent-hub`。
 
 2. 讀 `~/agent-hub/onboarded-projects.tsv`,對每一列檢查 `local_path` 在這台
-   機器上存不存在。已存在的跳過,不需要處理。
+   機器上存不存在。已存在的跳過,不需要處理。`local_path` 是 mini 上的
+   `/Users/you/workspace/<name>`(2026-10-15 起所有專案都在 mini);救到別的位置
+   (例:另一台機器的使用者名稱不同)就給 `recover-project.sh` 第二個參數。
+   以前在 MBP 上的位置記在 `legacy-paths.tsv`,只給統計舊對話用,不是還原目標。
 
 3. **對每個不存在的專案,先問使用者,不要自己假設全部都要救回來**:
    - 這台機器是要完全取代舊機器(通常全部都要救),還是額外的第二台

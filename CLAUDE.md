@@ -3,14 +3,19 @@
 ## 這是什麼
 
 agent-hub 是跨專案的 memory 追蹤 + 排程 + 專案/服務註冊系統,設計見
-`project-29/ROADMAP.md`。這份檔案是給任何在這裡工作的 session
+`project-29/ROADMAP.md`(只在 MBP)。這份檔案是給任何在這裡工作的 session
 一個起點索引——細節都寫在各腳本自己的檔頭註解裡,不在這裡重複。
+
+**2026-10-15 起所有專案、agent-hub 本身的 session 都在 mac mini 上**(專案在
+`~/workspace/<name>`,agent-hub 在 `~/agent-hub`)。MBP 只當遙控端:用 Claude Desktop 透過
+SSH 開 mini 上的資料夾,MBP 斷線/沒電 session 也繼續跑。MBP 上的舊資料夾只是備份。
 
 ## 先查這裡,不要自己猜
 
 - **想知道某個專案現在狀態、綁定哪些服務、STATE.md 寫什麼**:
   `bin/overview.sh [專案名稱]`(不帶參數列出全部)
-- **有哪些專案被 onboard 過**:`onboarded-projects.tsv`
+- **有哪些專案被 onboard 過**:`onboarded-projects.tsv`(`local_path` 是 mini 上的位置;以前在 MBP
+  的位置、改名前的路徑在 `legacy-paths.tsv`,只給統計舊對話用)
 - **mini 上有哪些背景服務在跑**:`services.tsv`
 - **有哪些 GitHub repo 被 mirror 備份**:`mirror-list.txt`
 - **跨專案還有哪些事沒做(誰能做)**:`todo.md`(librarian 每晚重生)
@@ -25,7 +30,7 @@ agent-hub 是跨專案的 memory 追蹤 + 排程 + 專案/服務註冊系統,設
 ## 建立/救援
 
 - **開一個新專案,或把既有資料夾接上這套系統**:
-  `bin/onboard-project.sh [--public] [--no-remote] <路徑>`——全自動(會自
+  `bin/onboard-project.sh [--public] [--no-remote] ~/workspace/<name>`(在 mini 上跑)——全自動(會自
   動 git init、補第一個 commit、建 GitHub repo),細節看檔頭註解跟
   `.claude/skills/new-or-onboard-project/SKILL.md`
 - **新機器,或某個專案本機資料夾不見了**:`bin/recover-project.sh <name>`
@@ -35,10 +40,12 @@ agent-hub 是跨專案的 memory 追蹤 + 排程 + 專案/服務註冊系統,設
 - **專案改名**(GitHub repo 已經改好之後):`bin/rename-project.sh <old> <new> [--path <新路徑>]`
   ——登記、mini 的 memory bare repo / ~/.memory-copies 副本 / checkpoint / mirror、本機資料夾
   一次改完,memory 歷史保留。先 dry-run,再加 `--apply`
-- **把專案的開發環境從 MBP 搬到 mini**(之後用 Claude Desktop 透過 SSH 在 mini 開 session,
-  MBP 斷線不中斷):`bin/migrate-to-mini.py <name>`——前置檢查(沒有未 commit/未 push、
-  沒有 session 開著)、recover 到 mini 的 `~/workspace/<name>`、複製不進版控的狀態檔、重建依賴。
-  先 dry-run,再加 `--apply`;MBP 的資料夾不動
+- **把專案的開發環境從 MBP 搬到 mini**(2026-10-15 全部搬完,之後只在還有東西留在 MBP 時用):
+  `bin/migrate-to-mini.py <name>`,在 MBP 上跑——前置檢查(沒有未 commit/未 push、沒有 session 開著)、
+  recover 到 mini 的 `~/workspace/<name>`、複製不進版控的狀態檔、auto memory、專案 MCP 設定、
+  `.git/info/exclude`、重建依賴。先 dry-run,再加 `--apply`;MBP 的資料夾不動
+- **onboard/rename 這類要動到 mini 的腳本**:在 mini 上跑時直接在本機做,在 MBP 上跑才走 ssh
+  (共用判斷在 `bin/minilib.sh`)
 - **某個背景服務(launchd)需要在新機器重建**:`bin/recover-service.sh <label>`
   ——只有 `services.tsv` 裡 owner 是 agent-hub 的項目能全自動重建,其他
   (OpenClaw、Homebrew、GitHub Actions 自己管的)只會印出重建步驟,不會
@@ -107,8 +114,8 @@ agent-hub 是跨專案的 memory 追蹤 + 排程 + 專案/服務註冊系統,設
 - `bin/check-memory-gaps.py`——librarian 每晚呼叫:最近 72 小時有對話、memory 卻沒有新筆記
   的專案,列進 `todo.md` 固定區塊跟 digest(零 LLM 成本)
 - `bin/sync-all-memory.sh`——每小時對所有專案的 `.agent-memory` 補跑
-  `git-sync-memory.sh` + 補 push(hook 的安全網;MBP 跟 mini 各跑一份,mini 那份涵蓋
-  `~/workspace/` 底下的專案)
+  `git-sync-memory.sh` + 補 push(hook 的安全網;跑在 mini,`local.sync-all-memory-mini`。MBP 上
+  那份 `local.sync-all-memory` 還在,但專案都不在 MBP 了,實際上不做事)
 
 ## mini 上的路徑慣例
 
@@ -124,16 +131,16 @@ agent-hub 是跨專案的 memory 追蹤 + 排程 + 專案/服務註冊系統,設
   長駐執行 process 的專案用(例:project-15 的 webhook receiver)。
   跟 `~/.memory-copies/` 的差別:這裡是真的會被 `node`/`python` 之類的指令
   執行、需要 `.env`/`data/` 之類本機專屬狀態的東西,不是 librarian 讀
-  memory 用的。**每個 `~/services/` 專案都要有自己的 `bin/deploy.sh`**,從 MBP
-  執行、一個指令完成部署(git pull + 裝依賴/rebuild + 需要的話 `launchctl
+  memory 用的。**每個 `~/services/` 專案都要有自己的 `bin/deploy.sh`**,在 mini 的
+  `~/workspace/<name>`(或 MBP)執行、一個指令完成部署(git pull + 裝依賴/rebuild + 需要的話 `launchctl
   kickstart` + 健康檢查),例:project-15、project-16。不是 rsync、
   不是 `onboard-project.sh`,也不是手動 ssh 進去 pull
-- `~/workspace/<name>/`——**開發用**的工作副本(含 `.agent-memory` worktree),給
-  Claude Desktop 透過 SSH 在 mini 上開 session 用(MBP 只當遙控端;2026-10-14 起
-  project-16 試行)。用 `recover-project.sh <name> ~/workspace/<name>` 在 mini 上建,
-  memory remote 直接指向本機 bare repo。不要在這裡跑服務(那是 `~/services/`),
-  也不要拿 `~/.memory-copies/` 當開發副本。同一個專案只在一台機器上開 session,不然兩邊
-  同時寫同一天的筆記會在 push 時衝突
+- `~/workspace/<name>/`——**所有專案的開發副本**(含 `.agent-memory` worktree;就是
+  `onboarded-projects.tsv` 的 `local_path`),給 Claude Desktop 透過 SSH 在 mini 上開 session 用
+  (MBP 只當遙控端;2026-10-14 project-16 試行,10-15 全部搬完)。新專案用 `onboard-project.sh`
+  建在這裡,救援用 `recover-project.sh`;memory remote 直接指向本機 bare repo。不要在這裡跑服務
+  (那是 `~/services/`),也不要拿 `~/.memory-copies/` 當開發副本。MBP 上的舊資料夾是備份,
+  `.git` 裡有標記,在那裡開 session 會被提醒改來 mini
 
 新專案如果需要在 mini 上跑一個長駐服務,才用 `~/services/`;純粹要有
 memory 追蹤但不需要在 mini 上執行任何東西的專案(目前大多數專案都是這種),
@@ -163,8 +170,8 @@ memory 追蹤但不需要在 mini 上執行任何東西的專案(目前大多數
 
 ## 誰負責 commit/push agent-hub
 
-- **手動編輯(腳本、文件、services.tsv 等)**:只由工作目錄在 `~/agent-hub`
-  的專用 session 做,它負責 commit+push。其他專案的 session 發現 agent-hub
+- **手動編輯(腳本、文件、services.tsv 等)**:只由工作目錄在 mini 的 `~/agent-hub`
+  的專用 session 做(2026-10-15 前在 MBP 的 `~/agent-hub`;MBP 那份現在只 pull,不在那裡改),它負責 commit+push。其他專案的 session 發現 agent-hub
   的問題,只通知(傳訊息給這個 session 或告訴使用者),不直接改——2026-09-25
   兩個 session 同時改這份 working tree,commit 互相夾帶對方改到一半的檔案
 - **腳本寫的被版控檔案**(`onboarded-projects.tsv`、`mirror-list.txt`、

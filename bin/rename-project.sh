@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 # 把一個已 onboard 的專案整套改名:agent-hub 登記、mini 上的 memory bare repo、
-# librarian 用的 ~/.memory-copies 副本、librarian checkpoint、mirror 備份,以及(可選)
-# MBP 本機資料夾的位置。memory 歷史完整保留,只是搬家,不重建。
+# librarian 用的 ~/.memory-copies 副本、librarian checkpoint、mirror 備份、本機資料夾
+# (預設跟著改成新名稱,~/workspace/<name> 的慣例)、legacy-paths.tsv。在 mini 上跑
+# (2026-10-15 起的常態),mini 端的步驟直接在本機做;在 MBP 上跑則走 ssh。memory 歷史完整保留,只是搬家,不重建。
 #
 # 不做的事:改 GitHub repo 名稱(先在 GitHub / 專案自己的 session 改好,
 # origin 已經指向新 URL 才跑這支);改專案程式碼裡的名稱(專案自己的事)。
@@ -18,13 +19,14 @@
 # 沒擋到,正在開著的 session 被搬走了工作目錄)。
 #
 # 用法:rename-project.sh <old> <new> [--path <新本機路徑>] [--origin <新 URL>] [--apply]
-#   沒有 --apply 只印出會做的事。--path 省略時本機資料夾不搬。
+#   沒有 --apply 只印出會做的事。--path 省略時,資料夾名稱等於舊名稱就跟著改成新名稱。
 set -euo pipefail
 
 HUB="$HOME/agent-hub"
 MANIFEST="$HUB/onboarded-projects.tsv"
 MIRRORS="$HUB/mirror-list.txt"
-MINI_HOST="hub-host"
+LEGACY="$HUB/legacy-paths.tsv"
+. "$HUB/bin/minilib.sh"
 
 fail() { echo "rename-project: $1" >&2; exit 1; }
 
@@ -45,7 +47,10 @@ row=$(awk -F'\t' -v n="$OLD" '$1==n' "$MANIFEST")
 [ -n "$row" ] || fail "$MANIFEST 裡沒有 '$OLD'"
 awk -F'\t' -v n="$NEW" '$1==n{f=1} END{exit !f}' "$MANIFEST" && fail "'$NEW' 已經登記過了"
 OLD_PATH=$(echo "$row" | cut -f2); OLD_ORIGIN=$(echo "$row" | cut -f3)
-NEW_PATH="${NEW_PATH:-$OLD_PATH}"
+if [ -z "$NEW_PATH" ]; then
+  # 資料夾名稱就是專案名稱(~/workspace/<name> 的慣例)時,跟著改名
+  [ "$(basename "$OLD_PATH")" = "$OLD" ] && NEW_PATH="$(dirname "$OLD_PATH")/$NEW" || NEW_PATH="$OLD_PATH"
+fi
 
 [ -d "$OLD_PATH/.agent-memory" ] || fail "$OLD_PATH/.agent-memory 不存在"
 [ -z "$(git -C "$OLD_PATH" status --porcelain --untracked-files=no)" ] || fail "$OLD_PATH 有未 commit 的追蹤檔變更,先處理"
@@ -61,7 +66,7 @@ if [ "$NEW_ORIGIN" != "(native)" ]; then
 fi
 OLD_MIRROR_NAME=$(basename "$OLD_ORIGIN" .git); NEW_MIRROR_NAME=$(basename "$NEW_ORIGIN" .git)
 
-ssh "$MINI_HOST" "[ -d ~/git-origin/$OLD-memory.git ] && [ ! -e ~/git-origin/$NEW-memory.git ] && [ ! -e ~/.memory-copies/$NEW ]" \
+mini_sh "[ -d ~/git-origin/$OLD-memory.git ] && [ ! -e ~/git-origin/$NEW-memory.git ] && [ ! -e ~/.memory-copies/$NEW ]" \
   || fail "mini 上舊的 bare repo 不在,或新名稱的路徑已經存在"
 
 cat <<PLAN
@@ -75,7 +80,7 @@ rename-project: $OLD → $NEW
                           mv ~/.memory-copies/$OLD → ~/.memory-copies/$NEW(origin 指向新 bare repo)
                           mv .state/$OLD.sha → $NEW.sha
                           mirrors/$OLD_MIRROR_NAME.git → $NEW_MIRROR_NAME.git(如果名稱有變)
-  MBP                     remote mini → $MINI_HOST:~/git-origin/$NEW-memory.git
+  本機                    remote mini → $(mini_memory_url "$NEW")
                           $( [ "$NEW_PATH" != "$OLD_PATH" ] && echo "mv $OLD_PATH → $NEW_PATH + git worktree repair" || echo "本機資料夾不搬" )
 PLAN
 $APPLY || { echo "(dry-run,加 --apply 才會執行)"; exit 0; }
@@ -86,7 +91,7 @@ if [ "$NEW_PATH" != "$OLD_PATH" ]; then
 fi
 
 # --- mini ---
-ssh "$MINI_HOST" "bash -s" <<EOF
+mini_bash_stdin <<EOF
 set -euo pipefail
 mv ~/git-origin/$OLD-memory.git ~/git-origin/$NEW-memory.git
 mv ~/.memory-copies/$OLD ~/.memory-copies/$NEW
@@ -100,8 +105,8 @@ fi
 EOF
 echo "[mini] bare repo / ~/.memory-copies / checkpoint / mirror 已改名"
 
-# --- MBP ---
-git -C "$OLD_PATH" remote set-url mini "$MINI_HOST:~/git-origin/$NEW-memory.git"
+# --- 本機 ---
+git -C "$OLD_PATH" remote set-url mini "$(mini_memory_url "$NEW")"
 if [ "$NEW_PATH" != "$OLD_PATH" ]; then
   mkdir -p "$(dirname "$NEW_PATH")"
   mv "$OLD_PATH" "$NEW_PATH"
@@ -111,16 +116,30 @@ git -C "$NEW_PATH/.agent-memory" fetch -q mini
 [ "$(git -C "$NEW_PATH/.agent-memory" rev-parse HEAD)" = "$(git -C "$NEW_PATH/.agent-memory" rev-parse @{u})" ] \
   || fail "搬完之後 .agent-memory 跟 mini 對不上,停下來人工檢查"
 "$HUB/bin/sync-local-setup.sh" --quiet "$NEW_PATH" >/dev/null || true
-echo "[MBP] remote / 資料夾 / worktree 已更新"
+# Claude Code 的 auto memory 跟著資料夾路徑(slug)走,資料夾搬了就把它帶到新路徑
+if [ "$NEW_PATH" != "$OLD_PATH" ]; then
+  slug() { echo "$1" | tr '/.' '--'; }
+  for cfg in "$HOME/.claude" "$HOME/.claude-personal"; do
+    old_mem="$cfg/projects/$(slug "$OLD_PATH")/memory"; new_mem="$cfg/projects/$(slug "$NEW_PATH")/memory"
+    if [ -d "$old_mem" ] && [ -n "$(ls -A "$old_mem")" ] && [ ! -e "$new_mem" ]; then
+      mkdir -p "$(dirname "$new_mem")" && cp -R "$old_mem" "$new_mem" && echo "[本機] auto memory 帶到新路徑($cfg)"
+    fi
+  done
+  echo "注意:這個專案如果有專案範圍的 MCP server(claude mcp list),設定是跟著舊路徑存的,要在新資料夾重新加"
+fi
+echo "[本機] remote / 資料夾 / worktree 已更新"
 
 # --- 登記 ---
 awk -F'\t' -v OFS='\t' -v o="$OLD" -v n="$NEW" -v p="$NEW_PATH" -v u="$NEW_ORIGIN" \
     -v m="$MINI_HOST:~/git-origin/$NEW-memory.git" \
     '$1==o{$1=n; $2=p; $3=u; $4=m} {print}' "$MANIFEST" > "$MANIFEST.tmp" && mv "$MANIFEST.tmp" "$MANIFEST"
+# 舊名稱的 transcript 要算到新名稱:legacy-paths.tsv 的名稱改掉,搬走的舊路徑也記進去
+awk -F'\t' -v OFS='\t' -v o="$OLD" -v n="$NEW" '$1==o{$1=n} {print}' "$LEGACY" > "$LEGACY.tmp" && mv "$LEGACY.tmp" "$LEGACY"
+[ "$NEW_PATH" != "$OLD_PATH" ] && printf '%s\t%s\t%s\n' "$NEW" "$OLD_PATH" "改名前($OLD)的位置" >> "$LEGACY"
 if [ "$OLD_ORIGIN" != "$NEW_ORIGIN" ] && grep -qxF "$OLD_ORIGIN" "$MIRRORS"; then
   grep -vxF "$OLD_ORIGIN" "$MIRRORS" > "$MIRRORS.tmp"; echo "$NEW_ORIGIN" >> "$MIRRORS.tmp"; mv "$MIRRORS.tmp" "$MIRRORS"
 fi
 "$HUB/bin/gen-index-roster.sh"
 "$HUB/bin/commit-hub-files.sh" "rename project $OLD → $NEW (rename-project.sh)" \
-    onboarded-projects.tsv mirror-list.txt index.md
+    onboarded-projects.tsv legacy-paths.tsv mirror-list.txt index.md
 echo "完成:${OLD} → ${NEW}。在 ${NEW_PATH} 開新的 Claude session(舊 session 的工作目錄已經不在了)。"

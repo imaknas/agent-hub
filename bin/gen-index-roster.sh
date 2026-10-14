@@ -29,7 +29,7 @@ trap 'rm -f "$block" "$out"' EXIT
 
 {
   echo "<!-- roster:begin — 由 bin/gen-index-roster.sh 從 onboarded-projects.tsv 產生,不要手動改 -->"
-  echo "| 專案 | 本機路徑 |"
+  echo "| 專案 | 路徑(mini) |"
   echo "|---|---|"
   tail -n +2 "$TSV" | awk -F'\t' 'NF && $1!="" {print $1 "\t" $2}' | sort \
     | while IFS=$'\t' read -r name path; do

@@ -12,6 +12,7 @@
 # ——這代表使用者有真實的、還沒準備好 commit 的工作,腳本不會用猜的清掉它。
 #
 # 用法:onboard-project.sh [--public] [--no-remote] <本機專案路徑>
+#   在 mini 上跑,新專案放 ~/workspace/<name>(2026-10-15 起所有專案都在 mini)
 #   --public     建立 GitHub repo 時設成 public(預設 private)
 #   --no-remote  不要自動建立 GitHub remote,維持純本機(native)——只有
 #                真的確定這個專案不需要備份到 GitHub 時才用這個
@@ -47,8 +48,9 @@
 #       onboard 過哪些專案」的地方,不依賴任何單一專案自己的 repo 內容
 set -euo pipefail
 
-MINI_HOST="hub-host"
 AGENT_HUB="$HOME/agent-hub"
+# 在 mini 上跑(2026-10-15 起的常態:新專案開在 mini 的 ~/workspace/<name>)就直接在本機做 mini 端的步驟
+. "$AGENT_HUB/bin/minilib.sh"
 TEMPLATES="$AGENT_HUB/templates"
 
 fail() { echo "onboard-project: $1" >&2; exit 1; }
@@ -69,7 +71,7 @@ done
 # --- 0. mini 連線檢查,最先做——在任何本機/GitHub 副作用發生之前。
 # 這支腳本後面一定要在 mini 上建 bare repo,連不上就不會有任何後續動作
 # 才是安全的:不會 git init、不會建 GitHub repo、不會留下半套的狀態。
-if ! ssh -o ConnectTimeout=8 -o BatchMode=yes "$MINI_HOST" true 2>/dev/null; then
+if ! on_mini && ! ssh -o ConnectTimeout=8 -o BatchMode=yes "$MINI_HOST" true 2>/dev/null; then
   fail "連不上 mini($MINI_HOST)。這支腳本會在 mini 上建 bare repo,連不上就不做任何事——等 mini 恢復連線再重跑,這次呼叫沒有任何副作用。"
 fi
 
@@ -85,7 +87,7 @@ fi
 
 origin_url=$(git remote get-url origin 2>/dev/null || true)
 case "$origin_url" in
-  *"$MINI_HOST"*) fail "origin 目前指向 mini,這不該發生在新設計裡——這個專案可能是舊版 onboarding 遺留的,需要先手動處理" ;;
+  *"$MINI_HOST"*|*/git-origin/*) fail "origin 目前指向 mini,這不該發生在新設計裡——這個專案可能是舊版 onboarding 遺留的,需要先手動處理" ;;
 esac
 
 if git rev-parse HEAD >/dev/null 2>&1; then
@@ -108,7 +110,7 @@ RESUME=false
 if [ -e .agent-memory ]; then
   # 光檢查 bare repo 的目錄存不存在不夠——`git init --bare` 自己就會建出
   # 目錄,不代表 agent-memory 分支真的推上去過。要檢查那個 ref 是否存在。
-  if ssh "$MINI_HOST" "cd ~/git-origin/${PROJ_NAME}-memory.git 2>/dev/null && git show-ref --verify --quiet refs/heads/agent-memory" 2>/dev/null; then
+  if mini_sh "cd ~/git-origin/${PROJ_NAME}-memory.git 2>/dev/null && git show-ref --verify --quiet refs/heads/agent-memory" 2>/dev/null; then
     fail ".agent-memory 已經存在,而且 mini 上也已經有對應的 bare repo(agent-memory 分支已推送)——這個專案應該已經 onboard 過了"
   fi
   # .agent-memory 在本機存在,但 mini 上沒有對應、有實際內容的 bare repo
@@ -179,7 +181,7 @@ else
 fi
 
 # --- 8. mini 上建 bare repo,push agent-memory 分支 ---
-ssh "$MINI_HOST" "mkdir -p ~/git-origin && git init --bare -q ~/git-origin/${PROJ_NAME}-memory.git"
+mini_sh "mkdir -p ~/git-origin && git init --bare -q ~/git-origin/${PROJ_NAME}-memory.git"
 # 注意:遠端分支名稱刻意跟本地一樣叫 agent-memory,不要用 main——名稱不一樣
 # 會讓 branch.agent-memory.merge 指向 refs/heads/main,雖然功能上沒問題
 # (那本來就是遠端唯一存在的 ref),但看起來像設定錯誤,容易讓人(或其他
@@ -188,19 +190,19 @@ ssh "$MINI_HOST" "mkdir -p ~/git-origin && git init --bare -q ~/git-origin/${PRO
 # (在 mini 端步驟失敗前)設定好了,存在就改 URL,不存在才新增。
 ( cd .agent-memory && \
   if git remote get-url mini >/dev/null 2>&1; then
-    git remote set-url mini "$MINI_HOST:~/git-origin/${PROJ_NAME}-memory.git"
+    git remote set-url mini "$(mini_memory_url "$PROJ_NAME")"
   else
-    git remote add mini "$MINI_HOST:~/git-origin/${PROJ_NAME}-memory.git"
+    git remote add mini "$(mini_memory_url "$PROJ_NAME")"
   fi && \
   git push -u mini agent-memory:agent-memory -q )
 # mini 的 git init.defaultBranch 是 main,新的 bare repo HEAD 預設指向
 # refs/heads/main——但這裡只會推 agent-memory,main 永遠不會存在,HEAD 會
 # 懸空,導致下一步的 plain git clone 抓不到東西。明確把 HEAD 導向正確的分支。
-ssh "$MINI_HOST" "git --git-dir=\"\$HOME/git-origin/${PROJ_NAME}-memory.git\" symbolic-ref HEAD refs/heads/agent-memory"
+mini_sh "git --git-dir=\"\$HOME/git-origin/${PROJ_NAME}-memory.git\" symbolic-ref HEAD refs/heads/agent-memory"
 echo "[8/11] mini 上已建 bare repo,agent-memory 分支已推送"
 
 # --- 9. mini 上 clone 工作副本給 librarian ---
-ssh "$MINI_HOST" "mkdir -p ~/.memory-copies && git clone -q ~/git-origin/${PROJ_NAME}-memory.git ~/.memory-copies/${PROJ_NAME}"
+mini_sh "mkdir -p ~/.memory-copies && git clone -q ~/git-origin/${PROJ_NAME}-memory.git ~/.memory-copies/${PROJ_NAME}"
 echo "[9/11] mini 上已 clone librarian 用的 memory 副本到 ~/.memory-copies/${PROJ_NAME}"
 
 # --- 10. 有外部 origin 才登記進 mirror-backup 清單 ---

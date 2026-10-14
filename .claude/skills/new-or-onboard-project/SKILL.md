@@ -23,16 +23,13 @@ repo 建立——一次呼叫做完全套。這份 skill 只負責它做不到�
 
 ## 判斷 2:專案要放在哪個路徑?
 
-沒有絕對規則,但看現有的 `onboarded-projects.tsv` 可以看出實際慣例:
+2026-10-15 起所有專案都在 **mini 的 `~/workspace/<name>`**(MBP 只當遙控端,用 Claude Desktop
+透過 SSH 在 mini 上開 session)。這支 skill 跟 `onboard-project.sh` 都在 mini 上跑:
 
-- **預設**:`~/<name>`(大多數專案,不分是不是程式碼專案——resume、
-  project-10、project-31、project-40、project-25 等等都在這裡)
-- **特定語言、而且該語言已經有 `~/projects/<lang>/` 慣例存在**:跟著放
-  進去(例:Rust 專案跟著 `project-12` 放 `~/projects/rust/`,Python
-  跟著 `adaptive-iteration` 放 `~/projects/python/`)。先用
-  `ls ~/projects/` 確認有沒有這個語言的資料夾,有才跟;沒有就當作是
-  這個語言的第一個專案,問使用者或直接用 `~/<name>` 都合理。
-- 使用者自己指定路徑的話,以使用者說的為準,不要覆蓋。
+- **預設**:`~/workspace/<name>`,不分語言、不分是不是程式碼專案。
+- 不要放 `~/.memory-copies/`(librarian 的 memory 副本)或 `~/services/`(正式服務的部署副本)。
+- 使用者自己指定路徑的話,以使用者說的為準,不要覆蓋——但要提醒:不在 `~/workspace/` 底下的話,
+  `sync-all-memory.sh` 的掃描跟一些慣例(資料夾名稱 = 專案名稱)會對不上。
 
 ## 判斷 3:全新專案需要語言鷹架嗎?
 

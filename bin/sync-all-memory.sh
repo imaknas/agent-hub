@@ -4,9 +4,9 @@
 # (當掉、一直開著沒關)的話,當天寫的 memory/ 筆記會一直留在 MBP 本機,
 # mini 上的 librarian 看不到。
 #
-# MBP 跟 mini 各跑一份,launchd 每小時一次:MBP 是 local.sync-all-memory(manifest 裡的路徑),
-# mini 是 local.sync-all-memory-mini(搬到 ~/workspace/<name> 的專案;manifest 路徑在 mini 上
-# 不存在,自動略過)。
+# 跑在 mini(local.sync-all-memory-mini),launchd 每小時一次:manifest 的路徑(~/workspace/<name>)。
+# MBP 上也還有一份(local.sync-all-memory),但 2026-10-15 所有專案搬到 mini 之後,manifest 的路徑
+# 在 MBP 上都不存在,那份實際上不做事;MBP 上留著的備份副本不再同步。
 # 零 LLM 成本;沒東西要 commit 就什麼都不做。
 #
 # 每個專案:with-lock 底下跑 git-sync-memory.sh(只 add memory/ 跟 STATE.md,
@@ -40,12 +40,14 @@ else
 fi
 export AGENT_HUB_OFFLINE="$OFFLINE"
 
+# manifest 的路徑從 2026-10-15 起就是 mini 的 ~/workspace/<name>;另外掃一次 ~/workspace,
+# 涵蓋還沒登記的資料夾。同一個路徑只做一次。
 {
   tail -n +2 "$MANIFEST" | cut -f1,2
   for d in "$HOME"/workspace/*/; do
     [ -d "$d.agent-memory" ] && printf '%s\t%s\n' "$(basename "$d")" "${d%/}"
   done
-} | while IFS=$'\t' read -r name path; do
+} | awk -F'\t' '!seen[$2]++' | while IFS=$'\t' read -r name path; do
   mem="$path/.agent-memory"
   [ -d "$mem" ] || continue
   (
