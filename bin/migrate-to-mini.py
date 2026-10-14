@@ -193,6 +193,25 @@ def missing_toolchains(path: str) -> list[str]:
     return [t for t in need if mini(f"command -v {t}", check=False).returncode != 0]
 
 
+def merge_info_exclude(name: str, path: str) -> None:
+    """MBP repo 的 .git/info/exclude 裡專案/工具自己加的忽略規則(例:impeccable 的 hook.cache.json)
+    不會跟著 clone 過去,缺的話那些檔案在 mini 上會變成未追蹤。把 mini 沒有的行補上。"""
+    src = pathlib.Path(run(["git", "rev-parse", "--path-format=absolute", "--git-common-dir"],
+                           cwd=path).strip(), "info", "exclude")
+    if not src.exists():
+        return
+    lines = [l for l in src.read_text().splitlines() if l.strip() and not l.startswith("#")]
+    if not lines:
+        return
+    target = f"~/workspace/{name}"
+    have = set(mini(f"cat {target}/.git/info/exclude 2>/dev/null || true").stdout.splitlines())
+    missing = [l for l in lines if l not in have]
+    if missing:
+        body = "\n".join(missing)
+        mini(f"mkdir -p {target}/.git/info && printf '%s\\n' {shlex.quote(body)} >> {target}/.git/info/exclude")
+        print(f"  info/exclude 補上 {len(missing)} 條忽略規則")
+
+
 def copy_auto_memory(name: str, path: str) -> None:
     """Claude Code 每個專案的 auto memory(MBP:~/.claude-personal/projects/<slug>/memory/)不在 repo 裡,
     搬到 mini 的 ~/.claude/projects/<mini 路徑的 slug>/memory/(mini 只有個人帳號,所以是 ~/.claude)。
@@ -299,6 +318,7 @@ def main() -> None:
             fail(f"rsync 失敗:{r.stderr}")
 
     copy_auto_memory(a.name, path)
+    merge_info_exclude(a.name, path)
 
     print("[5/6] mini:sync-local-setup.sh")
     out = mini(f"cd {target} && ~/agent-hub/bin/sync-local-setup.sh").stdout
