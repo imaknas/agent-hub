@@ -7,6 +7,7 @@
   days_of_week:  [mon, wed]       只在這幾天跑
   days_of_month: [1, 15]          只在每月這幾號跑
   months:        [1, 4, 7, 10]    只在這幾個月跑(搭配 days_of_month 做季度排程)
+  end_date:      2026-11-01       這天之後不再跑(含這天);一次性的 job 搭配 months+days_of_month
   max_attempts_per_day: 2         失敗後同一天最多重試幾次;沒寫就維持原本行為
                                   (每個 tick 都重試到成功為止)——貴的 LLM job
                                   一定要設,不然失敗一次就一整天每 15 分鐘燒一次
@@ -53,6 +54,8 @@ def runs_today(job: dict, now: datetime.datetime) -> bool:
     if "days_of_month" in job and now.day not in job["days_of_month"]:
         return False
     if "months" in job and now.month not in job["months"]:
+        return False
+    if "end_date" in job and now.date() > datetime.date.fromisoformat(str(job["end_date"])):
         return False
     return True
 

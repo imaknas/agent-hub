@@ -12,12 +12,16 @@
   schedulectl resume <name>       恢復某個 job
   schedulectl status              排程器本身(launchd)有沒有在跑 + 最近幾筆執行紀錄
   schedulectl logs [name] [n]     印最近 n 行 log(預設 scheduler.log;給 name 則印該 job 當天的 log)
+  schedulectl run <name>          現在就跑一次某個 job(像 Desktop 的「Run now」;不影響排程,
+                                   也不記成今天已跑)。透過 launchd 在使用者的桌面 session 跑——
+                                   SSH 底下讀不到 keychain,claude 會是未登入
   schedulectl stop                完全停用排程器(launchctl bootout,不動 schedule.yaml)
   schedulectl start               重新啟動排程器(launchctl bootstrap)
   schedulectl models               顯示 librarian.sh 目前用的模型設定
   schedulectl set-model state|index <model>   改其中一個模型(state=單一專案
                                    STATE.md 判斷,index=跨專案關聯 index.md)
 """
+import datetime
 import subprocess
 import sys
 from pathlib import Path
@@ -68,6 +72,8 @@ def describe_when(job):
         parts.append("每週 " + ",".join(job["days_of_week"]))
     when = " ".join(parts) or "每天"
     extra = f"(每天最多試 {job['max_attempts_per_day']} 次)" if "max_attempts_per_day" in job else ""
+    if "end_date" in job:
+        extra += f"(到 {job['end_date']} 為止)"
     return f"{when} {job['time']}{extra}"
 
 
@@ -137,6 +143,29 @@ def cmd_start():
     print("排程器已啟動")
 
 
+def cmd_run(name):
+    job = next((j for j in load_jobs() if j["name"] == name), None)
+    if job is None:
+        sys.exit(f"schedule.yaml 裡沒有 '{name}'")
+    uid = subprocess.check_output(["id", "-u"]).decode().strip()
+    label = f"local.agent-hub-run-now.{name}"
+    log = HUB / ".logs" / f"{name}-{datetime.date.today().isoformat()}.log"
+    plist = Path("/tmp") / f"{label}.plist"
+    import plistlib
+    plist.write_bytes(plistlib.dumps({
+        "Label": label,
+        "ProgramArguments": ["/bin/zsh", "-lc", job["command"]],
+        "EnvironmentVariables": {"SAFE_PUSH": str(HUB / "bin" / "git-safe-push.sh")},
+        "RunAtLoad": True,
+        "StandardOutPath": str(log),
+        "StandardErrorPath": str(log),
+    }))
+    # 上一次手動執行留下的同名 job 先清掉(跑完的 job 還會留在 launchd 裡)
+    subprocess.run(["launchctl", "bootout", f"gui/{uid}/{label}"], capture_output=True)
+    subprocess.run(["launchctl", "bootstrap", f"gui/{uid}", str(plist)], check=True)
+    print(f"已開始執行 {name},輸出寫進 {log}")
+
+
 def load_models():
     models = dict(DEFAULT_MODELS)
     if MODELS_FILE.exists():
@@ -193,6 +222,8 @@ def main():
         cmd_status()
     elif cmd == "logs":
         cmd_logs(*rest)
+    elif cmd == "run" and rest:
+        cmd_run(rest[0])
     elif cmd == "stop":
         cmd_stop()
     elif cmd == "start":

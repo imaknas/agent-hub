@@ -1,0 +1,104 @@
+#!/usr/bin/env bash
+# 跑一個「需要 Claude 判斷」的排程 job(例:Upwork 每日檢查、project-36 的分析)。
+# 取代 Claude Desktop 的「Scheduled」任務:那些只在 MBP 開著、醒著時才跑;這支跑在 mini,
+# 由 scheduler.py 依 schedule.yaml 觸發,所有排程只有 schedule.yaml 一個地方管。
+#
+# 用法(寫在 schedule.yaml 的 command):run-agent-job.sh <name> [工作目錄]
+#   prompt:agent-jobs/<name>.md(版控);工作目錄沒給就用這個 job 自己的狀態目錄
+#   產出:.state/agent-jobs/<name>/
+#     <YYYY-MM-DD-HHMM>.md   每次的報告(Claude 最後的回覆)
+#     status.json            最後一次的狀態(running/ok/failed、時間、session id、報告路徑)
+#     STOP                   job 自己判斷「之後不用再跑」時建立(例:停止條件成立),之後直接略過
+#   報告第一行以 🔔 開頭 = 需要 Knas 處理,狀態頁會標出來。
+#
+# 會在背景跑完就馬上 return:scheduler 是一個一個依序跑 job,LLM job 動輒半小時,
+# 不能卡住後面準時要跑的上傳 job。成功/失敗記在 status.json,不是 scheduler 的 log。
+#
+# 用 claude.ai 訂閱登入(mini 的 keychain;launchd 底下讀得到,SSH 底下讀不到),
+# 刻意不用 CLAUDE_CODE_OAUTH_TOKEN:有那個變數時 claude.ai connector(Upwork 等)不會載入。
+set -uo pipefail
+
+HUB="$HOME/agent-hub"
+NAME="${1:?用法: run-agent-job.sh <name> [工作目錄]}"
+PROMPT="$HUB/agent-jobs/$NAME.md"
+OUT="$HUB/.state/agent-jobs/$NAME"
+CWD="${2:-$OUT}"
+mkdir -p "$OUT"
+
+status() {  # status <state> [key=value...]
+  python3 - "$OUT/status.json" "$@" <<'PY'
+import json, sys, datetime, pathlib
+path, state, *kv = sys.argv[1:]
+p = pathlib.Path(path)
+d = json.loads(p.read_text()) if p.exists() else {}
+d["state"] = state
+d["updated_at"] = datetime.datetime.now().isoformat(timespec="seconds")
+for item in kv:
+    k, v = item.split("=", 1)
+    d[k] = v
+p.write_text(json.dumps(d, ensure_ascii=False, indent=2))
+PY
+}
+
+[ -f "$PROMPT" ] || { echo "run-agent-job: 找不到 $PROMPT" >&2; exit 1; }
+if [ -f "$OUT/STOP" ]; then
+  echo "run-agent-job: $NAME 已經自己停止($(head -1 "$OUT/STOP")),略過"
+  exit 0
+fi
+if [ ! -d "$CWD" ]; then
+  # 輸入不見要大聲失敗(known-issues.md):例如專案還沒搬到 mini 的 ~/workspace
+  status failed "error=工作目錄 $CWD 不存在" "started_at=$(date -Iseconds)"
+  echo "run-agent-job: 工作目錄 $CWD 不存在" >&2
+  exit 1
+fi
+
+if [ -z "${RUN_AGENT_JOB_FOREGROUND:-}" ]; then
+  RUN_AGENT_JOB_FOREGROUND=1 nohup "$0" "$@" >>"$OUT/runner.log" 2>&1 &
+  echo "run-agent-job: $NAME 已在背景開始(pid $!),結果見 $OUT/status.json"
+  exit 0
+fi
+
+# ---- 背景:實際執行 ----
+unset CLAUDE_CODE_OAUTH_TOKEN
+export PATH="/opt/homebrew/bin:$HOME/.local/bin:/usr/bin:/bin:/usr/sbin:/sbin"
+stamp=$(date +%Y-%m-%d-%H%M)
+report="$OUT/$stamp.md"
+raw="$OUT/.$stamp.json"
+status running "started_at=$(date -Iseconds)" "report=" "session_id=" "error=" "cwd=$CWD"
+
+cd "$CWD" || exit 1
+claude -p "$(cat "$PROMPT")" --permission-mode auto --output-format json >"$raw" 2>"$raw.err"
+rc=$?
+
+python3 - "$raw" "$report" "$NAME" "$CWD" <<'PY' >"$OUT/.parsed" 2>&1
+import json, sys
+raw, report, name, cwd = sys.argv[1:]
+try:
+    d = json.loads(open(raw).read())
+except ValueError:
+    print("error=claude 沒有輸出 JSON")
+    sys.exit(0)
+result = (d.get("result") or "").strip()
+with open(report, "w") as f:
+    f.write(result + "\n\n---\n")
+    f.write(f"job: {name} · 工作目錄: {cwd} · session: {d.get('session_id')} · "
+            f"{d.get('num_turns')} turns · {round((d.get('duration_ms') or 0) / 60000, 1)} 分鐘\n")
+    f.write(f"(接著討論:在 mini 上 cd {cwd} && claude --resume {d.get('session_id')})\n")
+print(f"session_id={d.get('session_id', '')}")
+print(f"notify={'yes' if result.startswith('🔔') else 'no'}")
+print(f"summary={result.splitlines()[0][:200] if result else ''}")
+if d.get("is_error"):
+    print(f"error={d.get('subtype', 'is_error')}")
+PY
+
+mapfile_args=()
+while IFS= read -r line; do mapfile_args+=("$line"); done <"$OUT/.parsed"
+if [ $rc -eq 0 ] && ! grep -q '^error=' "$OUT/.parsed"; then
+  status ok "finished_at=$(date -Iseconds)" "report=$report" "${mapfile_args[@]}"
+  rm -f "$raw" "$raw.err"
+else
+  status failed "finished_at=$(date -Iseconds)" "exit=$rc" "stderr=$(tail -c 500 "$raw.err" | tr '\n' ' ')" "${mapfile_args[@]}"
+fi
+rm -f "$OUT/.parsed"
+# 舊報告留 90 天
+find "$OUT" -name '20*.md' -mtime +90 -delete 2>/dev/null
