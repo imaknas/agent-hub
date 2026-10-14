@@ -16,6 +16,10 @@ hook 仍一律先檢查 `.agent-memory` 存不存在,
 上的 session 因為這個 hook 而顯示錯誤)。
 
 用法:merge-hook-settings.py <.claude/settings.local.json 路徑>
+      merge-hook-settings.py --worktree <使用者層級 settings.json>
+        (mini:~/.claude/settings.json;MBP:~/.claude-personal/settings.json——不是工作用的 ~/.claude)
+        裝 worktree-memory.sh 的 hook:git worktree 裡沒有專案的 local settings,只有使用者層級的
+        hook 會觸發。在主 checkout 裡那支腳本什麼都不做,不會跟專案的 hook 重複。
 """
 import json
 import sys
@@ -47,6 +51,15 @@ HOOKS = (
 )
 
 
+WT = "[ -x ~/agent-hub/bin/worktree-memory.sh ] && ~/agent-hub/bin/worktree-memory.sh"
+WORKTREE_HOOKS = (
+    ("SessionStart", None, f"{WT} start || true"),
+    ("SessionEnd", None, f"{WT} end || true"),
+    ("PreCompact", None, f"{WT} end || true"),
+    ("PostToolUse", "Bash", f"{WT} nudge || true"),
+)
+
+
 def has_command(entries, command):
     for e in entries:
         for h in e.get("hooks", []):
@@ -56,11 +69,15 @@ def has_command(entries, command):
 
 
 def main():
-    path = Path(sys.argv[1])
+    args = sys.argv[1:]
+    wanted = HOOKS
+    if args and args[0] == "--worktree":
+        wanted, args = WORKTREE_HOOKS, args[1:]
+    path = Path(args[0])
     settings = json.loads(path.read_text()) if path.exists() else {}
 
     hooks = settings.setdefault("hooks", {})
-    for event, matcher, command in HOOKS:
+    for event, matcher, command in wanted:
         entries = hooks.setdefault(event, [])
         if not has_command(entries, command):
             entry = {"hooks": [{"type": "command", "command": command}]}
