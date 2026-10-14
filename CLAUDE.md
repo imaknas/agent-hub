@@ -75,7 +75,13 @@ agent-hub 是跨專案的 memory 追蹤 + 排程 + 專案/服務註冊系統,設
 
 - `bin/scheduler.py` + `schedule.yaml` + `bin/schedulectl`——每 15 分鐘
   觸發的排程器;`schedulectl` 是查看/調整排程的 CLI(例如
-  `schedulectl models` 查目前用的模型)
+  `schedulectl models` 查目前用的模型、`schedulectl run <name>` 現在就跑一次)。
+  **所有排程只放這裡**,包括需要 Claude 判斷的(不用 Claude Desktop 的「Scheduled」:那只在
+  MBP 開著、醒著時跑):command 寫 `bin/run-agent-job.sh <name> [工作目錄]`,prompt 放
+  `agent-jobs/<name>.md`,在背景跑 `claude -p`,報告與狀態在 `.state/agent-jobs/<name>/`
+- **排程狀態頁**:https://hub-host.<tailnet>.ts.net/(只有 tailnet 打得開)——
+  `bin/gen-status-page.py` 每個 tick 重生:哪些 job 失敗、哪些報告要處理(🔔)、下次什麼時候跑、
+  Claude job 的報告全文
 - `bin/librarian.sh`——「圖書館員」,讀各專案 `memory/` 的新增內容,判斷
   要不要更新 `STATE.md`,並產生跨專案 `digest/YYYY-MM-DD.md` + 更新
   `index.md`。模型設定在 `models.env`
