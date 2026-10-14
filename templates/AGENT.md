@@ -1,8 +1,7 @@
 # Agent 行為規則
 
-> 這套 memory 追蹤機制的設計見跨專案的
-> [project-29/ROADMAP.md](/Users/you/project-29/ROADMAP.md)(基礎設施層級,
-> 目錄慣例、機器分工、排程/整合 agent 的設計都在那裡)。專案本身的設計文件看專案自己的
+> 這套 memory 追蹤機制的入口說明在 `~/agent-hub/CLAUDE.md`(MBP 跟 mini 都有;基礎設施層級:
+> 目錄慣例、機器分工、排程/整合 agent 都從那裡找)。專案本身的設計文件看專案自己的
 > README/docs,不在這裡。
 
 ## 同步紀律
