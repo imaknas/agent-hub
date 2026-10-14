@@ -160,7 +160,7 @@ def rebuild_cmd(path: str, parent: str, kind: str) -> str | None:
         pyarg = f" --python {py}" if py else ""
         cd = f"cd {shlex.quote(parent)} && " if parent != "." else ""
         if (d / "uv.lock").exists():
-            return f"{cd}uv sync --frozen{pyarg}" if kind == ".venv" else None
+            return f"{cd}uv sync --frozen --all-extras{pyarg}" if kind == ".venv" else None
         if (d / "requirements.txt").exists():
             return f"{cd}uv venv {kind}{pyarg} && VIRTUAL_ENV={kind} uv pip install -r requirements.txt"
         if (d / "pyproject.toml").exists():

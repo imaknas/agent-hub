@@ -35,6 +35,10 @@ agent-hub 是跨專案的 memory 追蹤 + 排程 + 專案/服務註冊系統,設
 - **專案改名**(GitHub repo 已經改好之後):`bin/rename-project.sh <old> <new> [--path <新路徑>]`
   ——登記、mini 的 memory bare repo / ~/projects 副本 / checkpoint / mirror、本機資料夾
   一次改完,memory 歷史保留。先 dry-run,再加 `--apply`
+- **把專案的開發環境從 MBP 搬到 mini**(之後用 Claude Desktop 透過 SSH 在 mini 開 session,
+  MBP 斷線不中斷):`bin/migrate-to-mini.py <name>`——前置檢查(沒有未 commit/未 push、
+  沒有 session 開著)、recover 到 mini 的 `~/workspace/<name>`、複製不進版控的狀態檔、重建依賴。
+  先 dry-run,再加 `--apply`;MBP 的資料夾不動
 - **某個背景服務(launchd)需要在新機器重建**:`bin/recover-service.sh <label>`
   ——只有 `services.tsv` 裡 owner 是 agent-hub 的項目能全自動重建,其他
   (OpenClaw、Homebrew、GitHub Actions 自己管的)只會印出重建步驟,不會
@@ -91,8 +95,9 @@ agent-hub 是跨專案的 memory 追蹤 + 排程 + 專案/服務註冊系統,設
   每小時備份(這支跑在 MBP,不是 mini)
 - `bin/check-memory-gaps.py`——librarian 每晚呼叫:最近 72 小時有對話、memory 卻沒有新筆記
   的專案,列進 `todo.md` 固定區塊跟 digest(零 LLM 成本)
-- `bin/sync-all-memory.sh`——MBP 每小時對所有專案的 `.agent-memory` 補跑
-  `git-sync-memory.sh` + 補 push(hook 的安全網;跑在 MBP)
+- `bin/sync-all-memory.sh`——每小時對所有專案的 `.agent-memory` 補跑
+  `git-sync-memory.sh` + 補 push(hook 的安全網;MBP 跟 mini 各跑一份,mini 那份涵蓋
+  `~/workspace/` 底下的專案)
 
 ## mini 上的路徑慣例
 

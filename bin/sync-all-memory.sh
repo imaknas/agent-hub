@@ -4,7 +4,9 @@
 # (當掉、一直開著沒關)的話,當天寫的 memory/ 筆記會一直留在 MBP 本機,
 # mini 上的 librarian 看不到。
 #
-# 跑在 MBP(專案資料夾在這裡),launchd 每小時一次(local.sync-all-memory)。
+# MBP 跟 mini 各跑一份,launchd 每小時一次:MBP 是 local.sync-all-memory(manifest 裡的路徑),
+# mini 是 local.sync-all-memory-mini(搬到 ~/workspace/<name> 的專案;manifest 路徑在 mini 上
+# 不存在,自動略過)。
 # 零 LLM 成本;沒東西要 commit 就什麼都不做。
 #
 # 每個專案:with-lock 底下跑 git-sync-memory.sh(只 add memory/ 跟 STATE.md,
@@ -29,7 +31,8 @@ log() { echo "[$(date '+%H:%M:%S')] $*" >>"$LOG"; }
 # 先確認連得到 mini。連不到(MBP 不在家、tailnet 斷線;2026-09-30、10-08、10-13 都發生過)
 # 就只在本機 commit、不 push,整輪只記一行——不然每個專案各等一次 SSH 逾時,
 # 一整天累積上百行失敗紀錄。恢復連線後的那一輪會把沒推出去的 commit 補 push。
-if ssh -o ConnectTimeout=10 -o BatchMode=yes hub-host true 2>/dev/null; then
+# 在 mini 上(~/git-origin 在本機)memory remote 是本機路徑,不用檢查。
+if [ -d "$HOME/git-origin" ] || ssh -o ConnectTimeout=10 -o BatchMode=yes hub-host true 2>/dev/null; then
   OFFLINE=""
 else
   OFFLINE=1
@@ -37,7 +40,12 @@ else
 fi
 export AGENT_HUB_OFFLINE="$OFFLINE"
 
-tail -n +2 "$MANIFEST" | cut -f1,2 | while IFS=$'\t' read -r name path; do
+{
+  tail -n +2 "$MANIFEST" | cut -f1,2
+  for d in "$HOME"/workspace/*/; do
+    [ -d "$d.agent-memory" ] && printf '%s\t%s\n' "$(basename "$d")" "${d%/}"
+  done
+} | while IFS=$'\t' read -r name path; do
   mem="$path/.agent-memory"
   [ -d "$mem" ] || continue
   (
