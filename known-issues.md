@@ -96,6 +96,8 @@
   只有該使用者讀得到)。vercel 本來就存檔案,`vercel login` 一次就好。`migrate-to-mini.py` 會檢查這兩個。
   (2026-10-15 重新登入的 gh token 沒有 `workflow` scope:要用 gh/HTTPS 改 `.github/workflows/`
   時跑 `gh auth refresh -s workflow`;git push 走 SSH key 不受影響。)
+- **origin 是 HTTPS 的 repo(例:project-25)**:git 預設從 keychain 拿 HTTPS 憑證,SSH 底下會
+  `could not read Username`。mini 已跑過 `gh auth setup-git`,github.com 的 HTTPS 改用 gh 存在檔案裡的 token。
 - **另一個坑**:launchd 的 job 結束時會殺掉同一個 process group 的程序,`nohup ... &` 擋不住;
   要在背景繼續跑得 double fork + setsid(`run-agent-job.sh` 的做法)。
 
