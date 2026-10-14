@@ -30,6 +30,18 @@ say() { $QUIET || echo "sync-local-setup: $*"; }
 cd "${1:-.}" || exit 1
 [ -d .agent-memory ] || { say "$(pwd) 沒有 .agent-memory,不是 onboard 過的專案,跳過"; exit 0; }
 
+# --- 0. 這份資料夾已經搬到 mini(migrate-to-mini.py 留的標記)---
+# --quiet 也印:SessionStart 的 stdout 會進 context,在 MBP 舊副本開 session 的那一刻就提醒,
+# 不靠人記得。兩邊同時開 session 的話,同一天的 memory 筆記 push 會衝突。
+moved=$(git rev-parse --git-common-dir 2>/dev/null)/agent-hub-migrated-to-mini
+if [ -f "$moved" ]; then
+  cat <<MSG
+⚠️ 這個專案已經搬到 mini($(cut -f1 "$moved"),$(cut -f2 "$moved") 搬的)。這裡是 MBP 上留著當備份的舊副本,
+不要在這裡做事:請告訴使用者關掉這個 session,改用 Claude Desktop 透過 SSH(hub-host)開 mini 上的那個資料夾。
+MSG
+  exit 0
+fi
+
 # --- 1. CLAUDE.local.md 受管區塊 ---
 # 專案有在 memory 分支的 .agent-memory/RULES 登記額外規則(一行一個名稱,例如
 # engineering)的話,把 templates/rules/<名稱>.md 接在區塊後面。登記放在 memory

@@ -41,6 +41,9 @@
 - **每晚整理的 job 寫日期檔**;每次都會被載入的 memory 檔只在有實質變化時才改
   (舊 job 每天 append 進 MEMORY.md,把每個 session 的 context 撐爆)。
 - **純執行的排程不要放 LLM**。
+- **同一個 checkout 被兩個排程碰 git 可能撞 `.git/index.lock`**:mini 的 `~/services/project-16`
+  同時有每天的文獻 job(commit+push)跟每小時的 Zotero 同步(`git pull`),兩邊都沒包 lock。
+  機率低、Zotero 那邊下個小時會自己重試,目前不處理;文獻 job 哪天 commit 失敗先查這個。
 - 來源:OpenClaw #infrastructure、daily logs
 
 ## 設定、安裝、憑證

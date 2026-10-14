@@ -21,6 +21,7 @@ MBP 斷線/沒電/闔上不會中斷正在跑的工作(2026-10-14 project-16 試
 用法:migrate-to-mini.py <name> [--apply] [--allow-local-branches]
 """
 import argparse
+import datetime
 import os
 import pathlib
 import re
@@ -256,9 +257,9 @@ def main() -> None:
 
     print("[5/6] mini:sync-local-setup.sh")
     out = mini(f"cd {target} && ~/agent-hub/bin/sync-local-setup.sh").stdout
-    leak = [l for l in out.splitlines() if "外洩" in l or "leak" in l.lower()]
-    for l in leak:
-        print(f"  ! {l}")
+    for l in out.splitlines():
+        if l.startswith("⚠️"):  # 已 commit 的檔案提到這套機制等,要那個專案的 session 處理
+            print(f"  ! {l}")
 
     print("[6/6] mini:重建依賴")
     problems = []
@@ -275,9 +276,14 @@ def main() -> None:
     if dirty:
         problems.append(f"mini 上的工作副本有非預期的改動(重建依賴改到 lockfile?):\n{dirty}")
 
+    # MBP 舊副本留標記(放在 .git 裡,不會被 commit、git status 也看不到):之後在這裡開
+    # session,sync-local-setup.sh 會在 SessionStart 提醒改去 mini 開
+    common = run(["git", "rev-parse", "--path-format=absolute", "--git-common-dir"], cwd=path).strip()
+    pathlib.Path(common, "agent-hub-migrated-to-mini").write_text(
+        f"mini:{target}\t{datetime.date.today().isoformat()}\n")
+
     print(f"\n完成:{a.name} 在 mini 的 {target}。在 Claude Desktop 用 SSH(hub-host)開這個資料夾。")
-    print(f"MBP 上的 {path} 沒動,當備份;之後不要在 MBP 開這個專案的 session"
-          "(兩邊同一天的筆記 push 會衝突)。")
+    print(f"MBP 上的 {path} 沒動,當備份(.git 裡留了標記:在那裡開 session 會被提醒改去 mini)。")
     for p in problems:
         print(f"  ! {p}")
     sys.exit(1 if problems else 0)
