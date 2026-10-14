@@ -96,7 +96,7 @@ agent-hub 是跨專案的 memory 追蹤 + 排程 + 專案/服務註冊系統,設
 
 ## mini 上的路徑慣例
 
-三個看起來像但用途完全不同、不要混用:
+四個看起來像但用途完全不同、不要混用:
 
 - `~/git-origin/<name>-memory.git`——bare repo,只有 `agent-memory` 分支
   (`onboard-project.sh` 建的)
@@ -111,6 +111,12 @@ agent-hub 是跨專案的 memory 追蹤 + 排程 + 專案/服務註冊系統,設
   執行、一個指令完成部署(git pull + 裝依賴/rebuild + 需要的話 `launchctl
   kickstart` + 健康檢查),例:project-15、project-16。不是 rsync、
   不是 `onboard-project.sh`,也不是手動 ssh 進去 pull
+- `~/workspace/<name>/`——**開發用**的工作副本(含 `.agent-memory` worktree),給
+  Claude Desktop 透過 SSH 在 mini 上開 session 用(MBP 只當遙控端;2026-10-14 起
+  project-16 試行)。用 `recover-project.sh <name> ~/workspace/<name>` 在 mini 上建,
+  memory remote 直接指向本機 bare repo。不要在這裡跑服務(那是 `~/services/`),
+  也不要拿 `~/projects/` 當開發副本。同一個專案只在一台機器上開 session,不然兩邊
+  同時寫同一天的筆記會在 push 時衝突
 
 新專案如果需要在 mini 上跑一個長駐服務,才用 `~/services/`;純粹要有
 memory 追蹤但不需要在 mini 上執行任何東西的專案(目前大多數專案都是這種),

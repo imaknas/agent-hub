@@ -54,6 +54,12 @@ cd "$TARGET_PATH"
 echo "[2/5] 已從 $origin_url clone 程式碼"
 
 # --- 3. 接上既有的 agent-memory 分支(不是建新的) ---
+# 在 mini 本機還原(工作副本放 ~/workspace/<name>)時,bare repo 就在這台:
+# mini 解析不到自己的 tailnet 名稱,直接用本機路徑,之後 memory 的 pull/push 也不經過 ssh
+bare_rel="${memory_bare_repo#*:~/}"
+if [ "$bare_rel" != "$memory_bare_repo" ] && git -C "$HOME/$bare_rel" rev-parse --is-bare-repository >/dev/null 2>&1; then
+  memory_bare_repo="$HOME/$bare_rel"
+fi
 git remote add mini "$memory_bare_repo"
 git fetch -q mini agent-memory
 git worktree add -b agent-memory .agent-memory mini/agent-memory -q
