@@ -81,6 +81,18 @@
   確認連得到 mini,連不到就只在本機 commit、整輪只記一行,不再每個專案各等一次逾時。
   急著要同步就手動跑 `bin/sync-all-memory.sh`。
 
+## mini 上的 claude 在 SSH 底下是「未登入」
+
+- **症狀**:SSH 進 mini 跑 `claude auth status` 顯示 `loggedIn: false`,`claude -p` 用不了 claude.ai
+  connector(Upwork 等);但 Knas 明明在 mini 登入過。
+- **原因**:登入憑證存在 mini 的 login keychain,SSH session 讀不到(`security` 回
+  `User interaction is not allowed`);launchd 的 gui domain(排程器、`schedulectl run`)讀得到。
+- **處理**:要測需要 Claude 登入的排程 job,一律用 `schedulectl run <name>`(走 launchd),不要
+  SSH 進去直接跑腳本。librarian 另外用 `~/.claude/headless-oauth-token`,不受影響,但那個 token
+  會讓 connector 不載入,所以 `run-agent-job.sh` 刻意 unset 它。
+- **另一個坑**:launchd 的 job 結束時會殺掉同一個 process group 的程序,`nohup ... &` 擋不住;
+  要在背景繼續跑得 double fork + setsid(`run-agent-job.sh` 的做法)。
+
 ## agent 協作原則
 
 - **不要相信 agent/subagent 的自我回報**(「完成了」「工具沒回應」),看客觀紀錄:

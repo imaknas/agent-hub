@@ -14,6 +14,10 @@
 # 會在背景跑完就馬上 return:scheduler 是一個一個依序跑 job,LLM job 動輒半小時,
 # 不能卡住後面準時要跑的上傳 job。成功/失敗記在 status.json,不是 scheduler 的 log。
 #
+# 工作目錄是 onboard 過的專案時,那個專案的 hook 也會在這次 claude -p 裡觸發(見 librarian.sh
+# 的同類註解):SessionEnd 會 commit+push .agent-memory 的筆記——這正是我們要的(job 寫的筆記
+# 自動進 memory),job 只准 append 筆記,不碰專案程式碼。
+#
 # 用 claude.ai 訂閱登入(mini 的 keychain;launchd 底下讀得到,SSH 底下讀不到),
 # 刻意不用 CLAUDE_CODE_OAUTH_TOKEN:有那個變數時 claude.ai connector(Upwork 等)不會載入。
 set -uo pipefail

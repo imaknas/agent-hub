@@ -12,8 +12,8 @@
   schedulectl resume <name>       恢復某個 job
   schedulectl status              排程器本身(launchd)有沒有在跑 + 最近幾筆執行紀錄
   schedulectl logs [name] [n]     印最近 n 行 log(預設 scheduler.log;給 name 則印該 job 當天的 log)
-  schedulectl run <name>          現在就跑一次某個 job(像 Desktop 的「Run now」;不影響排程,
-                                   也不記成今天已跑)。透過 launchd 在使用者的桌面 session 跑——
+  schedulectl run <name>          現在就跑一次某個 job(像 Desktop 的「Run now」),並記成今天已跑
+                                   (LLM job 同一天不會再被排程跑一次)。透過 launchd 在使用者的桌面 session 跑——
                                    SSH 底下讀不到 keychain,claude 會是未登入
   schedulectl stop                完全停用排程器(launchctl bootout,不動 schedule.yaml)
   schedulectl start               重新啟動排程器(launchctl bootstrap)
@@ -22,6 +22,7 @@
                                    STATE.md 判斷,index=跨專案關聯 index.md)
 """
 import datetime
+import json
 import subprocess
 import sys
 from pathlib import Path
@@ -163,7 +164,12 @@ def cmd_run(name):
     # 上一次手動執行留下的同名 job 先清掉(跑完的 job 還會留在 launchd 裡)
     subprocess.run(["launchctl", "bootout", f"gui/{uid}/{label}"], capture_output=True)
     subprocess.run(["launchctl", "bootstrap", f"gui/{uid}", str(plist)], check=True)
-    print(f"已開始執行 {name},輸出寫進 {log}")
+    # 記成今天已跑:不然排程時間已過的 job,下一個 tick 會再跑一次(LLM job 等於多花一次錢)
+    state_file = HUB / ".state" / "scheduler-last-run.json"
+    state = json.loads(state_file.read_text()) if state_file.exists() else {}
+    state[name] = datetime.date.today().isoformat()
+    state_file.write_text(json.dumps(state, indent=2))
+    print(f"已開始執行 {name},輸出寫進 {log}(今天的排程不會再跑它)")
 
 
 def load_models():
