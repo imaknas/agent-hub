@@ -93,7 +93,7 @@ any_project_changed=false
 digest_file=$(mktemp)
 trap 'rm -f "$digest_file"' EXIT
 
-for proj_dir in "$HOME"/projects/*/; do
+for proj_dir in "$HOME"/.memory-copies/*/; do
   [ -d "$proj_dir/.git" ] || continue
   proj=$(basename "$proj_dir")
   log "--- $proj ---"

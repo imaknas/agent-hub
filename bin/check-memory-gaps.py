@@ -26,7 +26,7 @@ sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
 import hublib  # noqa: E402
 
 TRANSCRIPTS = hublib.TRANSCRIPT_ROOTS
-MEMORY_COPIES = hublib.HOME / "projects"
+MEMORY_COPIES = hublib.MEMORY_COPIES
 
 
 def human_messages_since(paths: list[str], since: datetime.datetime) -> int:

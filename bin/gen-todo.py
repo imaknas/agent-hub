@@ -17,7 +17,7 @@ openclaw-migration-status.md):
 專案(有實質內容卻沒有 `## 待辦`、或行不合格式)列在檔尾「格式問題」,
 不會被默默漏掉。
 
-跑在 mini(librarian 呼叫,讀 ~/projects/*/STATE.md)。
+跑在 mini(librarian 呼叫,讀 ~/.memory-copies/*/STATE.md)。
 用法:gen-todo.py <輸出 todo.md 路徑>
 結束碼:0 正常;格式問題不算失敗(已寫進檔案跟 stdout)。
 """
@@ -29,7 +29,7 @@ HOME = pathlib.Path.home()
 HUB = HOME / "agent-hub"
 MANIFEST = HUB / "onboarded-projects.tsv"
 MIGRATION = HUB / "openclaw-migration-status.md"
-PROJECTS = HOME / "projects"
+PROJECTS = HOME / ".memory-copies"
 
 OWNERS = ("Knas", "待定", "agent")
 ITEM = re.compile(r"^- \[ \] 〔(Knas|agent|待定)〕\s*(.+)$")

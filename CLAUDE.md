@@ -33,7 +33,7 @@ agent-hub 是跨專案的 memory 追蹤 + 排程 + 專案/服務註冊系統,設
   一份全新、跟舊歷史斷開的 memory,不是救回來。細節看
   `.claude/skills/recover-projects/SKILL.md`
 - **專案改名**(GitHub repo 已經改好之後):`bin/rename-project.sh <old> <new> [--path <新路徑>]`
-  ——登記、mini 的 memory bare repo / ~/projects 副本 / checkpoint / mirror、本機資料夾
+  ——登記、mini 的 memory bare repo / ~/.memory-copies 副本 / checkpoint / mirror、本機資料夾
   一次改完,memory 歷史保留。先 dry-run,再加 `--apply`
 - **把專案的開發環境從 MBP 搬到 mini**(之後用 Claude Desktop 透過 SSH 在 mini 開 session,
   MBP 斷線不中斷):`bin/migrate-to-mini.py <name>`——前置檢查(沒有未 commit/未 push、
@@ -111,12 +111,13 @@ agent-hub 是跨專案的 memory 追蹤 + 排程 + 專案/服務註冊系統,設
 
 - `~/git-origin/<name>-memory.git`——bare repo,只有 `agent-memory` 分支
   (`onboard-project.sh` 建的)
-- `~/projects/<name>/`——**memory-only** 的工作副本,給 librarian 用
+- `~/.memory-copies/<name>/`——**memory-only** 的副本,給 librarian 用(隱藏目錄,不是給人
+  開 session 的;2026-10-15 前叫 `~/projects`,跟 `~/workspace` 太像而改名)
   (只有 AGENT.md/STATE.md/memory/,不是專案的真實程式碼;`onboard-
   project.sh` 步驟 9 clone 出來的)
 - `~/services/<name>/`——**真的程式碼**的完整 git clone,給需要在 mini 上
   長駐執行 process 的專案用(例:project-15 的 webhook receiver)。
-  跟 `~/projects/` 的差別:這裡是真的會被 `node`/`python` 之類的指令
+  跟 `~/.memory-copies/` 的差別:這裡是真的會被 `node`/`python` 之類的指令
   執行、需要 `.env`/`data/` 之類本機專屬狀態的東西,不是 librarian 讀
   memory 用的。**每個 `~/services/` 專案都要有自己的 `bin/deploy.sh`**,從 MBP
   執行、一個指令完成部署(git pull + 裝依賴/rebuild + 需要的話 `launchctl
@@ -126,7 +127,7 @@ agent-hub 是跨專案的 memory 追蹤 + 排程 + 專案/服務註冊系統,設
   Claude Desktop 透過 SSH 在 mini 上開 session 用(MBP 只當遙控端;2026-10-14 起
   project-16 試行)。用 `recover-project.sh <name> ~/workspace/<name>` 在 mini 上建,
   memory remote 直接指向本機 bare repo。不要在這裡跑服務(那是 `~/services/`),
-  也不要拿 `~/projects/` 當開發副本。同一個專案只在一台機器上開 session,不然兩邊
+  也不要拿 `~/.memory-copies/` 當開發副本。同一個專案只在一台機器上開 session,不然兩邊
   同時寫同一天的筆記會在 push 時衝突
 
 新專案如果需要在 mini 上跑一個長駐服務,才用 `~/services/`;純粹要有

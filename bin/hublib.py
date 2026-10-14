@@ -16,9 +16,12 @@ MANIFEST = HUB / "onboarded-projects.tsv"
 MBP_HOME = "/Users/you"
 # mini 上透過 Claude Desktop SSH 開的 session 的工作副本(~/workspace/<name>)。
 # 那些 session 的 transcript 直接寫在 mini 的 ~/.claude/projects(mini 只有個人帳號)。
-# 同一個資料夾也有 librarian `claude -p` 的 transcript(-Users-<user>-projects-*),
+# 同一個資料夾也有 librarian `claude -p` 的 transcript(-Users-<user>--memory-copies-*;10-15 前是 -Users-<user>-projects-*),
 # iter_entries 只用完整 slug 比對,不會算進去。
 MINI_WORKSPACE = "/Users/you/workspace"
+# mini 上 librarian 用的 memory-only 副本(只有 AGENT.md/STATE.md/memory/,不是專案程式碼)。
+# 2026-10-15 前叫 ~/projects,改成隱藏目錄:跟 ~/workspace(開 session 的地方)名字太像,會被當成專案資料夾
+MEMORY_COPIES = HOME / ".memory-copies"
 # 跑在 mini 上的分析讀這些地方:MBP 每小時備份過來的 transcript + mini 本機 session 的
 TRANSCRIPT_ROOTS = (
     HOME / "transcript-backups" / "claude-personal-projects",

@@ -200,8 +200,8 @@ ssh "$MINI_HOST" "git --git-dir=\"\$HOME/git-origin/${PROJ_NAME}-memory.git\" sy
 echo "[8/11] mini 上已建 bare repo,agent-memory 分支已推送"
 
 # --- 9. mini 上 clone 工作副本給 librarian ---
-ssh "$MINI_HOST" "mkdir -p ~/projects && git clone -q ~/git-origin/${PROJ_NAME}-memory.git ~/projects/${PROJ_NAME}"
-echo "[9/11] mini 上已 clone 工作副本到 ~/projects/${PROJ_NAME}"
+ssh "$MINI_HOST" "mkdir -p ~/.memory-copies && git clone -q ~/git-origin/${PROJ_NAME}-memory.git ~/.memory-copies/${PROJ_NAME}"
+echo "[9/11] mini 上已 clone librarian 用的 memory 副本到 ~/.memory-copies/${PROJ_NAME}"
 
 # --- 10. 有外部 origin 才登記進 mirror-backup 清單 ---
 if [ -n "$origin_url" ]; then

@@ -12,7 +12,7 @@ session;這份報告補上那一塊。產出:
 
 資料:mini 上的 transcript 備份(~/transcript-backups,MBP 每小時同步,只有
 ~/.claude-personal 這個 profile——工作 profile 刻意不備份)、~/git-origin/mirrors
-(每天 04:00 更新)、~/projects/<name> 的 memory 副本。
+(每天 04:00 更新)、~/.memory-copies/<name> 的 memory 副本。
 
 用法:weekly-reflect.py [--week 2026-W40] [--llm]
   --week 省略 = 上一個完整的週(週一到週日,台北時間)。印出寫入的 json 路徑。
@@ -32,7 +32,7 @@ import hublib  # noqa: E402
 TZ = zoneinfo.ZoneInfo("Asia/Taipei")
 TRANSCRIPTS = hublib.TRANSCRIPT_ROOTS
 MIRRORS = hublib.HOME / "git-origin" / "mirrors"
-MEMORY_COPIES = hublib.HOME / "projects"
+MEMORY_COPIES = hublib.MEMORY_COPIES
 OUT = hublib.HUB / "reflect"
 TEMPLATE = hublib.HUB / "templates" / "reflect.html"
 LATE_NIGHT = range(0, 6)       # 00:00–05:59 台北時間

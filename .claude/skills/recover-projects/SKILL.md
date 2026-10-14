@@ -51,5 +51,5 @@ ssh -T git@github.com
      分岔,通常沒事,但如果兩邊真的同時在同一個 session 工作,還是可能
      撞。
    - mini 上的 scheduler/librarian 完全不需要因為換機器而調整——那些只
-     認 mini 上的 bare repo 跟 `~/projects/`,不知道也不在乎 interactive
+     認 mini 上的 bare repo 跟 `~/.memory-copies/`,不知道也不在乎 interactive
      dev 是在哪台機器上做的。

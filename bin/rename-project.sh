@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # 把一個已 onboard 的專案整套改名:agent-hub 登記、mini 上的 memory bare repo、
-# librarian 用的 ~/projects 副本、librarian checkpoint、mirror 備份,以及(可選)
+# librarian 用的 ~/.memory-copies 副本、librarian checkpoint、mirror 備份,以及(可選)
 # MBP 本機資料夾的位置。memory 歷史完整保留,只是搬家,不重建。
 #
 # 不做的事:改 GitHub repo 名稱(先在 GitHub / 專案自己的 session 改好,
@@ -61,7 +61,7 @@ if [ "$NEW_ORIGIN" != "(native)" ]; then
 fi
 OLD_MIRROR_NAME=$(basename "$OLD_ORIGIN" .git); NEW_MIRROR_NAME=$(basename "$NEW_ORIGIN" .git)
 
-ssh "$MINI_HOST" "[ -d ~/git-origin/$OLD-memory.git ] && [ ! -e ~/git-origin/$NEW-memory.git ] && [ ! -e ~/projects/$NEW ]" \
+ssh "$MINI_HOST" "[ -d ~/git-origin/$OLD-memory.git ] && [ ! -e ~/git-origin/$NEW-memory.git ] && [ ! -e ~/.memory-copies/$NEW ]" \
   || fail "mini 上舊的 bare repo 不在,或新名稱的路徑已經存在"
 
 cat <<PLAN
@@ -72,7 +72,7 @@ rename-project: $OLD → $NEW
                           memory ~/git-origin/$OLD-memory.git → ~/git-origin/$NEW-memory.git
   mirror-list.txt         $OLD_ORIGIN → $NEW_ORIGIN
   mini                    mv ~/git-origin/$OLD-memory.git → $NEW-memory.git
-                          mv ~/projects/$OLD → ~/projects/$NEW(origin 指向新 bare repo)
+                          mv ~/.memory-copies/$OLD → ~/.memory-copies/$NEW(origin 指向新 bare repo)
                           mv .state/$OLD.sha → $NEW.sha
                           mirrors/$OLD_MIRROR_NAME.git → $NEW_MIRROR_NAME.git(如果名稱有變)
   MBP                     remote mini → $MINI_HOST:~/git-origin/$NEW-memory.git
@@ -89,16 +89,16 @@ fi
 ssh "$MINI_HOST" "bash -s" <<EOF
 set -euo pipefail
 mv ~/git-origin/$OLD-memory.git ~/git-origin/$NEW-memory.git
-mv ~/projects/$OLD ~/projects/$NEW
-git -C ~/projects/$NEW remote set-url origin ~/git-origin/$NEW-memory.git
-git -C ~/projects/$NEW fetch -q origin
+mv ~/.memory-copies/$OLD ~/.memory-copies/$NEW
+git -C ~/.memory-copies/$NEW remote set-url origin ~/git-origin/$NEW-memory.git
+git -C ~/.memory-copies/$NEW fetch -q origin
 [ -f ~/agent-hub/.state/$OLD.sha ] && mv ~/agent-hub/.state/$OLD.sha ~/agent-hub/.state/$NEW.sha || true
 if [ "$OLD_MIRROR_NAME" != "$NEW_MIRROR_NAME" ] && [ -d ~/git-origin/mirrors/$OLD_MIRROR_NAME.git ]; then
   mv ~/git-origin/mirrors/$OLD_MIRROR_NAME.git ~/git-origin/mirrors/$NEW_MIRROR_NAME.git
   git -C ~/git-origin/mirrors/$NEW_MIRROR_NAME.git remote set-url origin "$NEW_ORIGIN"
 fi
 EOF
-echo "[mini] bare repo / ~/projects / checkpoint / mirror 已改名"
+echo "[mini] bare repo / ~/.memory-copies / checkpoint / mirror 已改名"
 
 # --- MBP ---
 git -C "$OLD_PATH" remote set-url mini "$MINI_HOST:~/git-origin/$NEW-memory.git"
