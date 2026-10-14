@@ -80,6 +80,23 @@ PROJ_PATH="$(cd "$1" && pwd)"
 PROJ_NAME="$(basename "$PROJ_PATH")"
 cd "$PROJ_PATH"
 
+# --- 0b. 防呆:已經 onboard 過的專案不能再 onboard 一次(在任何副作用之前檢查)。
+# 再跑一次會建出全新、跟舊歷史斷開的 agent-memory 分支——不是救回來,是製造第二份記憶。
+# 最常見的情境是「從 GitHub 重新 clone 了一份(沒有 .agent-memory)再叫這支」,所以不能只看
+# 本機有沒有 .agent-memory。唯一的例外是 resume(本機步驟做完、mini 端還沒做完),見下面。
+MANIFEST="$AGENT_HUB/onboarded-projects.tsv"
+RECOVER_HINT="要把既有專案接回來(新機器、資料夾不見、重新 clone)請用 bin/recover-project.sh $PROJ_NAME [路徑]"
+if [ -f "$MANIFEST" ] && awk -F'\t' -v n="$PROJ_NAME" '$1==n{f=1} END{exit !f}' "$MANIFEST"; then
+  fail "'$PROJ_NAME' 已經登記在 onboarded-projects.tsv——不能再 onboard 一次。$RECOVER_HINT"
+fi
+if [ ! -e .agent-memory ] && mini_sh "git --git-dir=\"\$HOME/git-origin/${PROJ_NAME}-memory.git\" show-ref --verify --quiet refs/heads/agent-memory" 2>/dev/null; then
+  fail "mini 上已經有 ${PROJ_NAME}-memory.git(含 agent-memory 歷史)——這個名稱 onboard 過了。$RECOVER_HINT"
+fi
+if [ -d .git ] && existing_origin=$(git remote get-url origin 2>/dev/null) && [ -f "$MANIFEST" ]; then
+  same=$(awk -F'\t' -v o="$existing_origin" -v n="$PROJ_NAME" '$3==o && $1!=n{print $1}' "$MANIFEST")
+  [ -z "$same" ] || fail "這個 repo(origin $existing_origin)已經以 '$same' 的名稱 onboard 過(資料夾名稱不同)。用 bin/recover-project.sh $same [路徑] 接回來;要改名用 bin/rename-project.sh"
+fi
+
 # --- 1. 前置條件檢查跟自動補齊 ---
 if [ ! -d .git ]; then
   git init -q
