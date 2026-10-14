@@ -17,6 +17,7 @@ import json
 import os
 import pathlib
 import subprocess
+import sys
 
 import yaml
 
@@ -114,6 +115,8 @@ def main() -> None:
             log(f"job '{name}' FAILED (exit {e.returncode}), will retry next tick")
 
     save_state(state)
+    # 排程狀態頁(tailnet 內看得到),每個 tick 重生;失敗不影響排程本身
+    subprocess.run([sys.executable, str(HUB / "bin" / "gen-status-page.py")], capture_output=True)
 
 
 if __name__ == "__main__":

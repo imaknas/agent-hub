@@ -115,5 +115,7 @@ else
   status failed "finished_at=$(date -Iseconds)" "exit=$rc" "stderr=$(tail -c 500 "$raw.err" | tr '\n' ' ')" "${mapfile_args[@]}"
 fi
 rm -f "$OUT/.parsed"
+# 狀態頁馬上反映結果(不用等下一個 scheduler tick)
+/opt/homebrew/bin/python3 "$HUB/bin/gen-status-page.py" >/dev/null 2>&1 || true
 # 舊報告留 90 天
 find "$OUT" -name '20*.md' -mtime +90 -delete 2>/dev/null
