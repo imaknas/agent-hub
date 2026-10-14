@@ -7,13 +7,23 @@ import datetime
 import json
 import pathlib
 import re
-from typing import Iterator, NamedTuple
+from typing import Iterable, Iterator, NamedTuple
 
 HOME = pathlib.Path.home()
 HUB = HOME / "agent-hub"
 MANIFEST = HUB / "onboarded-projects.tsv"
 # MBP 的路徑(transcript 資料夾名稱是用 MBP 上的路徑算出來的,mini 上讀備份也一樣)
 MBP_HOME = "/Users/you"
+# mini 上透過 Claude Desktop SSH 開的 session 的工作副本(~/workspace/<name>)。
+# 那些 session 的 transcript 直接寫在 mini 的 ~/.claude/projects(mini 只有個人帳號)。
+# 同一個資料夾也有 librarian `claude -p` 的 transcript(-Users-<user>-projects-*),
+# iter_entries 只用完整 slug 比對,不會算進去。
+MINI_WORKSPACE = "/Users/you/workspace"
+# 跑在 mini 上的分析讀這些地方:MBP 每小時備份過來的 transcript + mini 本機 session 的
+TRANSCRIPT_ROOTS = (
+    HOME / "transcript-backups" / "claude-personal-projects",
+    pathlib.Path("/Users/you/.claude/projects"),
+)
 
 # 沒有 onboard、但 transcript 裡會出現、值得單獨算的工作目錄
 EXTRA_PROJECTS = {
@@ -37,12 +47,13 @@ def slug_for_path(path: str) -> str:
 
 
 def project_paths() -> dict[str, list[str]]:
-    """專案名稱 → 它的 MBP 路徑(含別名的舊路徑)。"""
+    """專案名稱 → 它的 MBP 路徑、mini 的 ~/workspace 路徑(含別名的舊路徑)。"""
     out: dict[str, list[str]] = {}
     for line in MANIFEST.read_text().splitlines()[1:]:
         if line.strip():
             name, path = line.split("\t")[:2]
             out.setdefault(name, []).append(path)
+            out[name].append(f"{MINI_WORKSPACE}/{name}")
     for name, path in EXTRA_PROJECTS.items():
         out.setdefault(name, []).append(path)
     for path, name in ALIASES.items():
@@ -71,11 +82,13 @@ class Entry(NamedTuple):
     entry: dict
 
 
-def iter_entries(transcripts: pathlib.Path, paths: list[str],
+def iter_entries(transcripts: pathlib.Path | Iterable[pathlib.Path], paths: list[str],
                  since: datetime.datetime, until: datetime.datetime | None = None) -> Iterator[Entry]:
-    """某個專案(可能有多個路徑)在時間範圍內的所有 transcript 紀錄。"""
-    for path in paths:
-        d = transcripts / slug_for_path(path)
+    """某個專案(可能有多個路徑)在時間範圍內的所有 transcript 紀錄。transcripts 可以是
+    一個或多個根目錄(TRANSCRIPT_ROOTS)。"""
+    roots = [transcripts] if isinstance(transcripts, pathlib.Path) else list(transcripts)
+    for root, path in ((r, p) for r in roots for p in paths):
+        d = root / slug_for_path(path)
         for f in d.glob("*.jsonl"):
             if datetime.datetime.fromtimestamp(f.stat().st_mtime, datetime.timezone.utc) < since:
                 continue  # 這個檔案在範圍開始前就沒再寫過

@@ -25,7 +25,7 @@ import sys
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
 import hublib  # noqa: E402
 
-TRANSCRIPTS = hublib.HOME / "transcript-backups" / "claude-personal-projects"
+TRANSCRIPTS = hublib.TRANSCRIPT_ROOTS
 MEMORY_COPIES = hublib.HOME / "projects"
 
 
