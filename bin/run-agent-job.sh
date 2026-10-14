@@ -53,8 +53,23 @@ if [ ! -d "$CWD" ]; then
 fi
 
 if [ -z "${RUN_AGENT_JOB_FOREGROUND:-}" ]; then
-  RUN_AGENT_JOB_FOREGROUND=1 nohup "$0" "$@" >>"$OUT/runner.log" 2>&1 &
-  echo "run-agent-job: $NAME 已在背景開始(pid $!),結果見 $OUT/status.json"
+  # 完全脫離(double fork + setsid):launchd 的 job 結束時會殺掉同一個 process group
+  # 裡剩下的程序,單純 nohup ... & 會跟著 scheduler 的 tick 一起被殺(2026-10-14 踩到)
+  python3 - "$OUT/runner.log" "$0" "$@" <<'PY'
+import os, sys
+log, *argv = sys.argv[1:]
+if os.fork():
+    sys.exit(0)
+os.setsid()
+if os.fork():
+    os._exit(0)
+fd = os.open(log, os.O_WRONLY | os.O_CREAT | os.O_APPEND, 0o644)
+os.dup2(fd, 1); os.dup2(fd, 2)
+os.dup2(os.open(os.devnull, os.O_RDONLY), 0)
+os.environ["RUN_AGENT_JOB_FOREGROUND"] = "1"
+os.execv("/bin/bash", ["bash", *argv])
+PY
+  echo "run-agent-job: $NAME 已在背景開始,結果見 $OUT/status.json"
   exit 0
 fi
 
