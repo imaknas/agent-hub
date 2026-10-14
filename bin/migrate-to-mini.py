@@ -74,8 +74,9 @@ def manifest_row(name: str) -> dict:
 
 
 def is_rebuildable(rel: str) -> bool:
-    base = rel.rstrip("/").rsplit("/", 1)[-1]
-    return base in REBUILDABLE or rel.endswith(REBUILDABLE_SUFFIX)
+    # 任何一層是 build 產物/依賴就算(例:build/web/ 的最後一層是 web)
+    parts = rel.rstrip("/").split("/")
+    return any(part in REBUILDABLE for part in parts) or rel.endswith(REBUILDABLE_SUFFIX)
 
 
 def ignored_entries(path: str) -> list[str]:
