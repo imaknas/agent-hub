@@ -136,8 +136,13 @@ def main() -> None:
     alerts, rows, report_blocks = [], [], []
     if not alive:
         alerts.append(("bad", "排程器(local.agent-hub-scheduler)沒有載入,所有排程都停了。在 mini 上跑 schedulectl start"))
-    elif last_tick and now - last_tick > datetime.timedelta(minutes=40):
-        alerts.append(("bad", f"排程器最後一次紀錄是 {last_tick:%m/%d %H:%M},超過 40 分鐘沒動靜"))
+    else:
+        # scheduler.py 只在有 job 要跑時才寫 log,但每個 tick 都會存狀態檔——用它的修改時間判斷
+        # 排程器還有沒有在跑(用 log 判斷,半夜沒 job 的時段會誤報)
+        tick = datetime.datetime.fromtimestamp(STATE.stat().st_mtime) if STATE.exists() else None
+        if tick is None or now - tick > datetime.timedelta(minutes=40):
+            alerts.append(("bad", f"排程器最後一次 tick 是 {tick:%m/%d %H:%M},超過 40 分鐘沒動靜" if tick
+                           else "找不到排程器的狀態檔"))
 
     for job in jobs:
         name = job["name"]
