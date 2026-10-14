@@ -66,6 +66,11 @@ agent-hub 是跨專案的 memory 追蹤 + 排程 + 專案/服務註冊系統,設
 - `bin/memory-nudge.py`——memory 筆記比專案最新 commit 舊時提醒 agent 補寫:git commit/push
   之後(PostToolUse hook)跟 session 開始、含對話壓縮後(sync-local-setup.sh 呼叫)。
   筆記沒落後就完全不輸出
+- `bin/worktree-memory.sh`——git worktree 裡的 session(例:agent 用 worktree 模式叫出來的
+  `<專案>/.claude/worktrees/…`)沒有 `.agent-memory`、`CLAUDE.local.md`、專案 hook,這支用 symlink
+  接上主 checkout 的那兩份並處理同步/提醒。掛在**使用者層級** settings(mini 的 `~/.claude/settings.json`、
+  MBP 的 `~/.claude-personal/settings.json`),用 `merge-hook-settings.py --worktree <檔案>` 安裝;
+  新機器也要裝一次。在主 checkout 裡什麼都不做
 - `bin/merge-hook-settings.py`——合併(不覆寫)一個專案 `.claude/
   settings.local.json` 的 hook 設定,`onboard-project.sh` / `recover-project.sh`
   自己會呼叫,不需要手動跑。hook 刻意不寫進共享的 `settings.json`:指令含
