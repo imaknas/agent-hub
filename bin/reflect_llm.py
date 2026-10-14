@@ -15,7 +15,7 @@ import zoneinfo
 import hublib
 
 TZ = zoneinfo.ZoneInfo("Asia/Taipei")
-TRANSCRIPTS = hublib.HOME / "transcript-backups" / "claude-personal-projects"
+TRANSCRIPTS = hublib.TRANSCRIPT_ROOTS
 EXCLUDED = {"project-23", "project-24"}
 PER_PROJECT = 40
 TOTAL = 240
