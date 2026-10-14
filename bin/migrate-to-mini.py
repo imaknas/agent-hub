@@ -34,7 +34,7 @@ sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
 import hublib  # noqa: E402
 
 MINI = "hub-host"
-MINI_PATH_PREFIX = "export PATH=/opt/homebrew/bin:$HOME/.local/bin:$HOME/.cargo/bin:$PATH; "
+MINI_PATH_PREFIX = "export PATH=/opt/homebrew/bin:/opt/homebrew/opt/rustup/bin:$HOME/.local/bin:$HOME/.cargo/bin:$PATH; "
 # 依賴、build 產物、cache:不複製,mini 上需要時重建
 REBUILDABLE = {
     "node_modules", ".venv", "venv", "__pycache__", ".pytest_cache", ".ruff_cache", ".mypy_cache",
