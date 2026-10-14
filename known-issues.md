@@ -90,6 +90,12 @@
 - **處理**:要測需要 Claude 登入的排程 job,一律用 `schedulectl run <name>`(走 launchd),不要
   SSH 進去直接跑腳本。librarian 另外用 `~/.claude/headless-oauth-token`,不受影響,但那個 token
   會讓 connector 不載入,所以 `run-agent-job.sh` 刻意 unset 它。
+- **其他 CLI 也一樣**:gh 預設把 token 存 keychain,SSH session(包括 Claude Desktop 透過 SSH 開的
+  session)讀不到,`gh auth status` 會說 token invalid。mini 上的 gh 要用
+  `gh auth login -h github.com --git-protocol ssh --web --insecure-storage`(存在 `~/.config/gh/hosts.yml`,
+  只有該使用者讀得到)。vercel 本來就存檔案,`vercel login` 一次就好。`migrate-to-mini.py` 會檢查這兩個。
+  (2026-10-15 重新登入的 gh token 沒有 `workflow` scope:要用 gh/HTTPS 改 `.github/workflows/`
+  時跑 `gh auth refresh -s workflow`;git push 走 SSH key 不受影響。)
 - **另一個坑**:launchd 的 job 結束時會殺掉同一個 process group 的程序,`nohup ... &` 擋不住;
   要在背景繼續跑得 double fork + setsid(`run-agent-job.sh` 的做法)。
 

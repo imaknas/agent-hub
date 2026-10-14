@@ -210,6 +210,19 @@ def copy_auto_memory(name: str, path: str) -> None:
         print(f"  auto memory:{src.parent.name} → mini ~/{dest}")
 
 
+def missing_logins(path: str) -> list[str]:
+    """mini 上專案會用到、但 SSH session 讀不到的 CLI 登入。憑證要存在檔案裡(SSH 底下讀不到
+    keychain),例如 gh 要用 --insecure-storage 登入。只檢查、不代登入。"""
+    out = []
+    if mini("gh auth status", check=False).returncode != 0:
+        out.append("mini 上 gh 沒登入或讀不到 token:在 mini 的終端機跑 "
+                   "`gh auth login -h github.com --git-protocol ssh --web --insecure-storage`")
+    if os.path.isdir(os.path.join(path, ".vercel")) and \
+            mini("vercel whoami", check=False).returncode != 0:
+        out.append("這個專案用 Vercel,但 mini 上 vercel 沒登入:在 mini 的終端機跑 `vercel login`")
+    return out
+
+
 def main() -> None:
     ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     ap.add_argument("name")
@@ -242,6 +255,9 @@ def main() -> None:
             continue  # 同一個 workspace root 只裝一次
         seen.add(cmd)
         plans.append((p, k, cmd))
+    for w in missing_logins(path):
+        warnings.append(w)
+        print(f"  ! {w}")
     for t in missing_toolchains(path):
         warnings.append(f"mini 上沒有 {t},這個專案需要它才能 build/執行——先在 mini 安裝")
         print(f"  ! mini 上沒有 {t}")
