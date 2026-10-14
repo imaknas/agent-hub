@@ -15,7 +15,7 @@ MBP 斷線/沒電/闔上不會中斷正在跑的工作(2026-10-14 project-16 試
   3. mini 上 recover-project.sh <name> ~/workspace/<name>(clone + 接上既有 agent-memory 分支)
   4. rsync 不進版控、又重建不出來的東西(.env、data/、CLAUDE.local.md、.claude/ 本機設定等);
      依賴、build 產物、cache 不複製
-  4b. Claude Code 的 auto memory(不在 repo 裡)也搬過去
+  4b. Claude Code 的 auto memory、專案範圍的 MCP server 設定、.git/info/exclude(都不在 repo 裡)也搬過去
   5. mini 上重跑 sync-local-setup.sh:對齊 managed 區塊跟 hook,保留複製過去的其他內容
   6. MBP 上有 .venv/venv/node_modules 的目錄,在 mini 依 lockfile 重建(失敗只報告,不中斷)
 
@@ -24,6 +24,7 @@ MBP 斷線/沒電/闔上不會中斷正在跑的工作(2026-10-14 project-16 試
 """
 import argparse
 import datetime
+import json
 import os
 import pathlib
 import re
@@ -193,6 +194,37 @@ def missing_toolchains(path: str) -> list[str]:
     return [t for t in need if mini(f"command -v {t}", check=False).returncode != 0]
 
 
+def copy_mcp_servers(name: str, path: str) -> None:
+    """專案範圍(local scope)的 MCP server 設定存在 MBP 的 ~/.claude-personal/.claude.json、以 MBP
+    路徑為 key,不在 repo 裡,clone 不會帶過去(例:project-06 的唯讀資料庫連線、project-13 自己的
+    MCP)。轉換路徑後用 `claude mcp add-json` 加到 mini 那個資料夾。設定裡可能有憑證:只經過
+    stdin 傳過去,不印出內容。stdio 的指令在 mini 上找不到時,用同名工具在 mini 的位置;
+    還是找不到(例:要先 build 的專案自己的執行檔)就提醒。"""
+    cfg = hublib.HOME / ".claude-personal" / ".claude.json"
+    if not cfg.exists():
+        return
+    projects = json.loads(cfg.read_text()).get("projects", {})
+    old_paths = [path] + [p for p, n in hublib.ALIASES.items() if n == name]
+    target = f"{hublib.MINI_WORKSPACE}/{name}"
+    for old in old_paths:
+        for server, conf in (projects.get(old, {}).get("mcpServers") or {}).items():
+            text = json.dumps(conf).replace(old, target).replace(f"{hublib.MBP_HOME}/", "/Users/you/")
+            conf2 = json.loads(text)
+            note = ""
+            cmd = conf2.get("command")
+            if cmd and mini(f"test -x {shlex.quote(cmd)}", check=False).returncode != 0:
+                found = mini(f"command -v {shlex.quote(os.path.basename(cmd))}", check=False).stdout.strip()
+                if found:
+                    conf2["command"] = found
+                else:
+                    note = f"(mini 上還沒有 {cmd},先 build/安裝)"
+            r = subprocess.run(["ssh", "-o", "BatchMode=yes", MINI, MINI_PATH_PREFIX +
+                                f"cd {target} && read -r J && claude mcp add-json {shlex.quote(server)} \"$J\""],
+                               input=json.dumps(conf2) + "\n", capture_output=True, text=True)
+            ok = r.returncode == 0 or "already exists" in (r.stdout + r.stderr)
+            print(f"  MCP {server}:{'已加到 mini' if ok else '失敗 ' + (r.stderr or r.stdout).strip()[:200]}{note}")
+
+
 def merge_info_exclude(name: str, path: str) -> None:
     """MBP repo 的 .git/info/exclude 裡專案/工具自己加的忽略規則(例:impeccable 的 hook.cache.json)
     不會跟著 clone 過去,缺的話那些檔案在 mini 上會變成未追蹤。把 mini 沒有的行補上。"""
@@ -319,6 +351,7 @@ def main() -> None:
 
     copy_auto_memory(a.name, path)
     merge_info_exclude(a.name, path)
+    copy_mcp_servers(a.name, path)
 
     print("[5/6] mini:sync-local-setup.sh")
     out = mini(f"cd {target} && ~/agent-hub/bin/sync-local-setup.sh").stdout
