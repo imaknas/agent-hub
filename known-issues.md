@@ -46,6 +46,15 @@
   機率低、Zotero 那邊下個小時會自己重試,目前不處理;文獻 job 哪天 commit 失敗先查這個。
 - 來源:OpenClaw #infrastructure、daily logs
 
+- **shell 腳本裡用雙引號包的 prompt,反引號會被當成指令執行**:librarian 主 prompt 裡
+  `` `- [ ] 〔Knas〕…` `` 這些格式範例從 2026-09-30 起每次都被 bash 吃掉(log 只看到
+  `-: command not found`、`syntax error near unexpected token '無'`),模型兩週都沒看到待辦格式。
+  prompt 裡的反引號要寫 `\``,或改用單引號 heredoc;改完用 `eval` 把 prompt 展開看一次。
+- **要 headless agent 只改某個檔案,用權限規則限制,不要只靠 prompt**:`--permission-mode
+  acceptEdits` 會放行目錄裡所有檔案(10-15 project-06 的 haiku 照樣去改 memory/reference/);
+  改用 `--permission-mode dontAsk --allowedTools "Edit(./STATE.md)"`(`Edit(...)` 涵蓋
+  Write/Edit)。
+
 ## 設定、安裝、憑證
 
 - **改了設定檔 ≠ 執行中的 process 已經載入**:看 log 確認 reload,或直接重啟。

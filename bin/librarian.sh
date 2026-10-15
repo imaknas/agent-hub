@@ -69,8 +69,8 @@ repair_state_todo() {
 
 目前的問題:
 $problems"
-  fix_json=$(cd "$dir" && claude -p "$fix_prompt" --model "$STATE_MODEL" --permission-mode acceptEdits \
-      --tools "Read,Edit" --output-format json 2>>"$LOG")
+  fix_json=$(cd "$dir" && claude -p "$fix_prompt" --model "$STATE_MODEL" --permission-mode dontAsk \
+      --tools "Read,Edit" --allowedTools "Edit(./STATE.md)" --output-format json 2>>"$LOG")
   add_cost "$(echo "$fix_json" | jq -r '.total_cost_usd // empty' 2>/dev/null)"
   if problems=$(python3 "$HUB/bin/check-state-todo.py" "$dir/STATE.md"); then
     log "$proj: 待辦段落格式已修正"
@@ -173,20 +173,25 @@ memory/ 的結構:
 - 只有在有『實質變化』時才編輯 STATE.md(精煉現況,不是流水帳);沒有實質變化就完全不要動 STATE.md。
   STATE.md 還是 onboard 時的佔位內容、而 memory/ 已經有實質內容的話,這本身就算實質變化。
 - STATE.md 裡提到已被搬走的檔案、或已經被新內容回答/推翻的待決事項,要一併修正。
-- STATE.md 一定要有一個 `## 待辦` 段落,格式固定,一行一項:
-  `- [ ] 〔Knas〕…`(只有 Knas 本人能做:帳號、密碼、付款、要他拍板的決定)
-  `- [ ] 〔agent〕…`(agent 可以直接做的)
-  `- [ ] 〔待定〕…`(還要先做決定才能動的)
-  沒有待辦就寫 `- (無)`。只列還沒完成、具體可行動的事;完成、被推翻或過時的直接移除,
+- STATE.md 一定要有一個 \`## 待辦\` 段落,格式固定,一行一項:
+  \`- [ ] 〔Knas〕…\`(只有 Knas 本人能做:帳號、密碼、付款、要他拍板的決定)
+  \`- [ ] 〔agent〕…\`(agent 可以直接做的)
+  \`- [ ] 〔待定〕…\`(還要先做決定才能動的)
+  沒有待辦就寫 \`- (無)\`。只列還沒完成、具體可行動的事;完成、被推翻或過時的直接移除,
   不要留著打勾。待辦只放在這個段落,不要在 STATE.md 別的地方另開「下一步」「未完成」之類的清單。
 - 除了 ./STATE.md,不要建立、修改或刪除任何檔案。"
 
   pre_call_sha=$(git -C "$proj_dir" rev-parse HEAD)
 
+  # 只准寫 ./STATE.md:prompt 講了也擋不住(2026-10-15 project-06 的 haiku 還是去改了
+  # memory/reference/ 五個檔),所以用權限規則機械限制。acceptEdits 會放行目錄裡所有檔案,
+  # dontAsk 只放行 allowedTools 列的;Edit(...) 規則涵蓋 Write/Edit 兩個工具。
+  # 下面的 stray 檢查留著當第二道防線。
   output_json=$(cd "$proj_dir" && claude -p "$prompt" \
       --model "$STATE_MODEL" \
-      --permission-mode acceptEdits \
+      --permission-mode dontAsk \
       --tools "Read,Write,Edit,Glob,Grep" \
+      --allowedTools "Edit(./STATE.md)" \
       --output-format json \
       --json-schema "$STATE_SCHEMA" 2>>"$LOG")
   rc=$?
