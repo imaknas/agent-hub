@@ -29,6 +29,11 @@
   restart-notify 沒加,off+on 靜默失敗,退回一個過期的舊 target(8791)。
   `bin/fix-project-15-funnel.sh` 已補上(2026-09-25)。
 - 來源:OpenClaw #infrastructure
+- **在 mini 自己身上 curl tailnet-only 的 serve port(443 狀態頁、8444 muninn)會 TLS 失敗**
+  (curl exit 35 / `SSL_ERROR_SYSCALL`):因為開了 funnel,mini 本機把 `hub-host.<tailnet>.ts.net`
+  解析成 funnel 的公網位址,不是 tailnet 的 100.x,tailnet-only 的 port 就拒絕。服務本身沒壞。
+  本機測試要改成 `curl --resolve hub-host.<tailnet>.ts.net:<port>:$(tailscale ip -4) https://…`;
+  手機/MBP 開著 Tailscale 時走 MagicDNS,不受影響(2026-10-20 架 muninn 時發現)
 
 ## 看門狗 / 排程 job
 
