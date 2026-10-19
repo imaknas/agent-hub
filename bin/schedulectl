@@ -75,7 +75,11 @@ def describe_when(job):
     extra = f"(每天最多試 {job['max_attempts_per_day']} 次)" if "max_attempts_per_day" in job else ""
     if "end_date" in job:
         extra += f"(到 {job['end_date']} 為止)"
-    return f"{when} {job['time']}{extra}"
+    if "every_minutes" in job:
+        at = f"每 {job['every_minutes']} 分鐘" + (f"({job['between']})" if "between" in job else "")
+    else:
+        at = job["time"]
+    return f"{when} {at}{extra}"
 
 
 def cmd_list():

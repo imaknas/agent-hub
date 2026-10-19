@@ -55,12 +55,20 @@ def describe_when(job: dict) -> str:
     when = " ".join(parts) or "每天"
     if "end_date" in job:
         when += f"(到 {job['end_date']})"
+    if "every_minutes" in job:
+        return f"{when} 每 {job['every_minutes']} 分鐘" + (f"({job['between']})" if "between" in job else "")
     return f"{when} {job['time']}"
 
 
 def next_run(job: dict, state: dict, now: datetime.datetime) -> str:
     if not job.get("enabled", True):
         return "暫停中"
+    if "every_minutes" in job:
+        last = state.get(f"{job['name']}.last_ok")
+        if not last:
+            return "下一個 tick"
+        nxt = datetime.datetime.fromisoformat(last) + datetime.timedelta(minutes=job["every_minutes"])
+        return fmt_dt(nxt) + (f"(只在 {job['between']})" if "between" in job else "")
     hh, mm = map(int, job["time"].split(":"))
     for i in range(0, 400):
         d = now.date() + datetime.timedelta(days=i)

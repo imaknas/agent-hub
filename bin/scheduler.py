@@ -11,6 +11,12 @@
   max_attempts_per_day: 2         失敗後同一天最多重試幾次;沒寫就維持原本行為
                                   (每個 tick 都重試到成功為止)——貴的 LLM job
                                   一定要設,不然失敗一次就一整天每 15 分鐘燒一次
+
+間隔型 job:不寫 time,改寫 every_minutes(上面的日期條件照樣可以加):
+  every_minutes: 60               距離上次成功超過這麼久就再跑一次(tick 是 15 分鐘,
+                                  實際間隔會落在 every_minutes 之後的第一個 tick)
+  between: "08:00-23:00"          只在這個時段內跑(選填,不跨午夜)
+  max_attempts_per_day 對間隔型 job 是「一天總共最多跑幾次」(成功也算)
 """
 import datetime
 import json
@@ -61,6 +67,25 @@ def runs_today(job: dict, now: datetime.datetime) -> bool:
     return True
 
 
+def hhmm(now: datetime.datetime, s: str) -> datetime.datetime:
+    hh, mm = map(int, s.split(":"))
+    return now.replace(hour=hh, minute=mm, second=0, microsecond=0)
+
+
+def is_due(job: dict, state: dict, now: datetime.datetime, today: str) -> bool:
+    name = job["name"]
+    if "every_minutes" in job:
+        if "between" in job:
+            start, end = job["between"].split("-")
+            if not hhmm(now, start) <= now <= hhmm(now, end):
+                return False
+        last = state.get(f"{name}.last_ok")
+        # 少 1 分鐘的寬限:launchd 的 tick 會有幾秒漂移,不然 every_minutes: 15 會變成 30
+        return last is None or now - datetime.datetime.fromisoformat(last) >= \
+            datetime.timedelta(minutes=job["every_minutes"] - 1)
+    return now >= hhmm(now, job["time"]) and state.get(name) != today
+
+
 def main() -> None:
     LOG_DIR.mkdir(parents=True, exist_ok=True)
     STATE_FILE.parent.mkdir(parents=True, exist_ok=True)
@@ -80,10 +105,7 @@ def main() -> None:
         if not job.get("enabled", True) or not runs_today(job, now):
             continue
 
-        hh, mm = map(int, job["time"].split(":"))
-        due_time = now.replace(hour=hh, minute=mm, second=0, microsecond=0)
-
-        if now < due_time or state.get(name) == today:
+        if not is_due(job, state, now, today):
             continue
 
         attempts_key = f"{name}.attempts"
@@ -109,6 +131,8 @@ def main() -> None:
                     env=JOB_ENV,
                 )
             state[name] = today
+            if "every_minutes" in job:
+                state[f"{name}.last_ok"] = now.isoformat(timespec="seconds")
             save_state(state)
             log(f"job '{name}' finished OK")
         except subprocess.CalledProcessError as e:
