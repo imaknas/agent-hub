@@ -120,7 +120,7 @@
 - 2026-10-19 起,muninn 的 MBP agent 把工作 profile 的 Claude Code transcript 同步到 mini 的
   `~/transcript-backups/claude-work-projects/`(Knas 決定公司內容「全部」觀測、只在本機處理)。
   之前 agent-hub 刻意不備份工作 profile,這是政策改變,不是意外。
-- **原文沒有遮蔽**(2026-10-21 查過:muninn 跟 MBP agent 都沒有人名/客戶遮蔽),目錄名本身就帶客戶/
+- **原文沒有遮蔽**(2026-10-21 查過;Knas 決定 Claude 對話「完整分析、只給本機模型看」,不遮蔽),目錄名本身就帶客戶/
   repo 名稱。遮蔽人名也不夠:客戶名、專案代號、程式碼、內部網址、商業條件照樣能辨識。
 - **規則**:這個目錄只給 mini 本機模型讀。任何會呼叫雲端模型的東西(`weekly-reflect` /
   `reflect_llm.py`、librarian、`run-agent-job.sh` 的 prompt)都不能讀它——`hublib.TRANSCRIPT_ROOTS`
