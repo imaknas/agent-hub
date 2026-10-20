@@ -115,6 +115,18 @@
 - **另一個坑**:launchd 的 job 結束時會殺掉同一個 process group 的程序,`nohup ... &` 擋不住;
   要在背景繼續跑得 double fork + setsid(`run-agent-job.sh` 的做法)。
 
+## 工作 profile 的 transcript 在 mini 上,但只能本機處理
+
+- 2026-10-19 起,muninn 的 MBP agent 把工作 profile 的 Claude Code transcript 同步到 mini 的
+  `~/transcript-backups/claude-work-projects/`(Knas 決定公司內容「全部」觀測、只在本機處理)。
+  之前 agent-hub 刻意不備份工作 profile,這是政策改變,不是意外。
+- **原文沒有遮蔽**(2026-10-21 查過:muninn 跟 MBP agent 都沒有人名/客戶遮蔽),目錄名本身就帶客戶/
+  repo 名稱。遮蔽人名也不夠:客戶名、專案代號、程式碼、內部網址、商業條件照樣能辨識。
+- **規則**:這個目錄只給 mini 本機模型讀。任何會呼叫雲端模型的東西(`weekly-reflect` /
+  `reflect_llm.py`、librarian、`run-agent-job.sh` 的 prompt)都不能讀它——`hublib.TRANSCRIPT_ROOTS`
+  刻意不含這個目錄。要讓雲端看工作內容,只能先由本機模型改寫成去識別化的抽象摘要,雲端只看摘要,
+  而且要先確認 公司 的保密條款允許。
+
 ## agent 協作原則
 
 - **不要相信 agent/subagent 的自我回報**(「完成了」「工具沒回應」),看客觀紀錄:

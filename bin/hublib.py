@@ -25,6 +25,8 @@ MEMORY_COPIES = HOME / ".memory-copies"
 # 跑在 mini 上的分析讀這些地方:MBP 每小時備份過來的 transcript + mini 本機 session 的。
 # mini 的 ~/.claude/projects 也有 librarian `claude -p` 的 transcript(-Users-<user>--memory-copies-*),
 # iter_entries 只用完整 slug 比對,不會算進去。
+# **不要**把 ~/transcript-backups/claude-work-projects(工作 profile,muninn 的 MBP agent 同步過來的)
+# 加進來:weekly-reflect 會把這裡讀到的訊息原文送雲端模型,工作對話只能在本機處理(見 known-issues)。
 TRANSCRIPT_ROOTS = (
     HOME / "transcript-backups" / "claude-personal-projects",
     pathlib.Path(f"{MINI_HOME}/.claude/projects"),
