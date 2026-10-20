@@ -98,6 +98,7 @@ def main() -> None:
         "> 不要手動改——要改內容,改來源(各專案的 memory,librarian 會更新 STATE.md;",
         "> agent-hub 自己的待辦在 `openclaw-migration-status.md`)。", "",
     ]
+    # muninn 用這三個標題判斷待辦是誰的(對照表在它的 data/config.yaml external_todo_owners);改標題要一起改那邊
     titles = {"Knas": "只有 Knas 能做", "待定": "待定(需要先做決定)", "agent": "agent 可以做"}
     for owner in OWNERS:
         o += [f"## {titles[owner]}", ""]
