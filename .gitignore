@@ -1,3 +1,4 @@
 .state/
 .logs/
 __pycache__/
+.secrets/

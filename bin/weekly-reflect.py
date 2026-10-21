@@ -194,7 +194,7 @@ def main() -> None:
         stats = build_stats(label, start, end, scan(start, end))
         if args.llm:
             import reflect_llm
-            stats["analysis"] = reflect_llm.analyze(stats, start, end)
+            stats["analysis"] = reflect_llm.analyze(stats)
         path = OUT / f"{label}.json"
         path.write_text(json.dumps(stats, ensure_ascii=False, indent=1))
         print(path)

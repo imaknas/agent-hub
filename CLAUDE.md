@@ -91,6 +91,12 @@ SSH 開 mini 上的資料夾,MBP 斷線/沒電 session 也繼續跑。MBP 上的
   **所有排程只放這裡**,包括需要 Claude 判斷的(不用 Claude Desktop 的「Scheduled」:那只在
   MBP 開著、醒著時跑):command 寫 `bin/run-agent-job.sh <name> [工作目錄]`,prompt 放
   `agent-jobs/<name>.md`,在背景跑 `claude -p`,報告與狀態在 `.state/agent-jobs/<name>/`
+- **長 job 在 `schedule.yaml` 加 `background: true`**:scheduler 一個一個依序跑 job,幾分鐘以上的
+  job(librarian、project-16、muninn-reflect、project-36 研究)不加就會讓 muninn-tick、上傳
+  全部等它。背景 job 跑完的結果下一個 tick 才併回狀態,細節在 `scheduler.py` 檔頭
+- **排程器看門狗** `bin/scheduler-watchdog.py`(`local.agent-hub-scheduler-watchdog`,每 5 分鐘)——
+  排程器超過 35 分鐘沒 tick 就發 Discord。刻意不靠排程器/Homebrew/muninn;Discord 設定在
+  `.secrets/`(不進版控),沒設定狀態頁會標紅
 - **排程狀態頁**:https://hub-host.<tailnet>.ts.net/(只有 tailnet 打得開)——
   `bin/gen-status-page.py` 每個 tick 重生:哪些 job 失敗、哪些報告要處理(🔔)、下次什麼時候跑、
   Claude job 的報告全文
@@ -106,8 +112,8 @@ SSH 開 mini 上的資料夾,MBP 斷線/沒電 session 也繼續跑。MBP 上的
   機械產生 `todo.md`,不用 LLM;格式不對的專案列在檔尾
 - `bin/weekly-reflect.sh`(→ `weekly-reflect.py` + `reflect_llm.py`,頁面樣板 `templates/reflect.html`)
   ——每週一 07:00:上一週的跨專案活動分析。統計(各專案訊息/session/commit/筆記、時段、深夜比例、最長連續工作、交辦方式)零 LLM;
-  「主題與 AI 協作觀察(4D)」一週一次模型呼叫,送出前遮掉像憑證的字串,project-23/
-  project-24 的原始訊息不送
+  「主題與 AI 協作觀察(4D)」一週一次模型呼叫,**只送統計數字,對話原文不送雲端**(2026-10-21 起,
+  跟 muninn 同一條規則;之後會加上 muninn 本機模型寫的 session 摘要)
 - `bin/hublib.py`——共用判斷:真人訊息(`origin.kind == human`)、transcript ↔ 專案對應、哪些
   commit 算專案工作。check-memory-gaps / memory-nudge / weekly-reflect 都用它
 - `bin/mirror-backup.sh`——讀 `mirror-list.txt`,對每個 GitHub repo 維護

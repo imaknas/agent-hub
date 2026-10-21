@@ -28,7 +28,7 @@ AGENT_JOBS = HUB / ".state" / "agent-jobs"
 OUT = HUB / ".state" / "status" / "index.html"
 WEEKDAYS = ["mon", "tue", "wed", "thu", "fri", "sat", "sun"]
 WEEKDAY_ZH = "一二三四五六日"
-LOG_LINE = re.compile(r"^\[(\S+ \S+)\] (?:running job '([^']+)'|job '([^']+)' (finished OK|FAILED \(exit (\d+)\)))")
+LOG_LINE = re.compile(r"^\[(\S+ \S+)\] (?:running job '([^']+)'|job '([^']+)' (finished OK|FAILED \(exit (-?\d+)\)))")
 
 
 def runs_on(job: dict, d: datetime.date) -> bool:
@@ -151,6 +151,16 @@ def main() -> None:
         if tick is None or now - tick > datetime.timedelta(minutes=40):
             alerts.append(("bad", f"排程器最後一次 tick 是 {tick:%m/%d %H:%M},超過 40 分鐘沒動靜" if tick
                            else "找不到排程器的狀態檔"))
+
+    # 排程器的看門狗(scheduler-watchdog.py,獨立的 launchd job):這頁是排程器自己產生的,
+    # 排程器停了這頁也不會更新——真正會叫的是看門狗,所以它沒在顧要在這裡講
+    if subprocess.run(["launchctl", "print", f"gui/{os.getuid()}/local.agent-hub-scheduler-watchdog"],
+                      capture_output=True).returncode != 0:
+        alerts.append(("bad", "排程器看門狗(local.agent-hub-scheduler-watchdog)沒有載入:排程器停了不會有人通知。"
+                              "在 mini 上跑 bin/recover-service.sh local.agent-hub-scheduler-watchdog"))
+    elif not all((HUB / ".secrets" / f).exists() for f in ("discord-token", "discord-alert-channel")):
+        alerts.append(("bad", "排程器看門狗沒設定 Discord(.secrets/discord-token、.secrets/discord-alert-channel),"
+                              "排程器停了發不出警報"))
 
     for job in jobs:
         name = job["name"]

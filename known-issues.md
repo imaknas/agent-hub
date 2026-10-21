@@ -50,6 +50,12 @@
   同時有每天的文獻 job(commit+push)跟每小時的 Zotero 同步(`git pull`),兩邊都沒包 lock。
   機率低、Zotero 那邊下個小時會自己重試,目前不處理;文獻 job 哪天 commit 失敗先查這個。
 - 來源:OpenClaw #infrastructure、daily logs
+- **排程器是依序跑 job 的,launchd 也不會在上一個 tick 還沒結束時開新的**:2026-10 之前
+  muninn-reflect(最多 90 分鐘)、project-16(~30 分鐘)跑的時候,muninn-tick 跟所有
+  準時的 job 都在等。2026-10-21 加了 `background: true`;新增會跑超過幾分鐘的 job 要記得加。
+  背景 job 可能跟同一個 checkout 的其他 job 同時碰 git(上面 index.lock 那條),排時間時錯開。
+- **排程器停了沒有人會知道**:它是所有 job 唯一的觸發點,狀態頁也是它產生的。2026-10-21 起
+  `scheduler-watchdog.py` 獨立在 launchd 上顧它(見 services.tsv);看門狗本身沒在顧時狀態頁會標紅。
 
 - **shell 腳本裡用雙引號包的 prompt,反引號會被當成指令執行**:librarian 主 prompt 裡
   `` `- [ ] 〔Knas〕…` `` 這些格式範例從 2026-09-30 起每次都被 bash 吃掉(log 只看到

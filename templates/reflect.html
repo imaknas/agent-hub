@@ -258,7 +258,7 @@ function render(w) {
       <p class="muted" style="font-size:14px">這週開了 ${d.agents} 次 subagent(上週 ${d.agents_prev})、session 之間傳了 ${d.peer} 次訊息(上週 ${d.peer_prev})。</p></header>
       <div class="fluency">` + a.fluency.map(f => `<article class="fl"><header><div><h3>${esc(f.dimension)}</h3><span class="en">${DIMS[f.dimension] || ""}</span></div>
         <span class="lv lv-${esc(f.level)}">${esc(f.level)}</span></header>
-        <p>${esc(f.observation)}</p><p class="quote">${esc(f.quote)}</p><p class="tip">${esc(f.suggestion)}</p></article>`).join("") + `</div></section>`;
+        <p>${esc(f.observation)}</p>${f.quote ? `<p class="quote">${esc(f.quote)}</p>` : `<p class="evidence">${esc(f.evidence)}</p>`}<p class="tip">${esc(f.suggestion)}</p></article>`).join("") + `</div></section>`;
     h += `<section><header><span class="eyebrow">Next week</span><h2>下週先做這幾件</h2></header><ol class="actions">` +
       a.next_week.map(n => `<li><span class="act">${esc(n.action)}</span><span class="why">${esc(n.why)}</span></li>`).join("") + `</ol></section>`;
   }
@@ -266,7 +266,9 @@ function render(w) {
   const m = w.analysis?.meta;
   h += `<footer class="method">
     <p>資料:個人 profile 的 Claude Code session(工作 profile 不備份;claude.ai 的對話請看 claude.ai 的 Reflect)。訊息只算你實際送出的。時間為台北時間。</p>
-    ${m ? `<p>分析由 ${esc(m.model)} 根據 ${m.sampled} 則訊息抽樣與上面的統計撰寫,是模型的解讀;${esc((m.excluded || []).join("、"))} 只提供數字、不送原文;送出前已遮掉像金鑰的字串。</p>` : ""}
+    ${m && m.source === "stats+digests" ? `<p>分析由 ${esc(m.model)} 根據上面的統計與 ${m.digests} 則 Muninn 本機模型寫的 session 摘要撰寫,是模型的解讀;對話原文不送雲端模型。工作相關的 ${m.withheld || 0} 個 session、${esc((m.excluded || []).join("、"))} 只算在統計裡${m.complete ? "" : `;還有 ${m.undigested || 0} 個 session 沒有摘要`}。</p>`
+      : m && m.source === "stats" ? `<p>分析由 ${esc(m.model)} 只根據上面的統計撰寫,是模型的解讀;對話原文不送雲端模型,所以它看不到你做了什麼內容。</p>`
+      : m ? `<p>分析由 ${esc(m.model)} 根據 ${m.sampled} 則訊息抽樣與上面的統計撰寫,是模型的解讀;${esc((m.excluded || []).join("、"))} 只提供數字、不送原文;送出前已遮掉像金鑰的字串。</p>` : ""}
     <p class="num">產生時間 ${esc(w.generated)}</p>
   </footer>`;
   return h;
