@@ -42,6 +42,14 @@ def load_jobs():
     return (yaml.safe_load(SCHEDULE.read_text()) or {}).get("jobs", [])
 
 
+def all_jobs():
+    """schedule.yaml + 專案登錄(跟 scheduler.py 同一份清單)。pause/resume 只管 schedule.yaml 的;
+    登錄裡的 job 要改就改 projects/<專案>.yaml。"""
+    sys.path.insert(0, str(HUB / "bin"))
+    import scheduler
+    return scheduler.all_jobs()[0]
+
+
 def commit_hub_file(path, msg):
     """改了被版控的檔案就當場 commit+push(只 commit 這個檔案),不留給人手動補。"""
     rc = subprocess.run([str(HUB / "bin/commit-hub-files.sh"), msg, path.name]).returncode
@@ -83,7 +91,7 @@ def describe_when(job):
 
 
 def cmd_list():
-    jobs = load_jobs()
+    jobs = all_jobs()
     if not jobs:
         print("schedule.yaml 裡沒有任何 job。")
         return
@@ -149,12 +157,12 @@ def cmd_start():
 
 
 def cmd_run(name):
-    job = next((j for j in load_jobs() if j["name"] == name), None)
+    job = next((j for j in all_jobs() if j["name"] == name), None)
     if job is None:
-        sys.exit(f"schedule.yaml 裡沒有 '{name}'")
+        sys.exit(f"schedule.yaml 跟專案登錄裡都沒有 '{name}'")
     uid = subprocess.check_output(["id", "-u"]).decode().strip()
-    label = f"local.agent-hub-run-now.{name}"
-    log = HUB / ".logs" / f"{name}-{datetime.date.today().isoformat()}.log"
+    label = f"local.agent-hub-run-now.{name.replace('/', '.')}"
+    log = HUB / ".logs" / f"{name.replace('/', '__')}-{datetime.date.today().isoformat()}.log"
     plist = Path("/tmp") / f"{label}.plist"
     import plistlib
     plist.write_bytes(plistlib.dumps({

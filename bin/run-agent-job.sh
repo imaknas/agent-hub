@@ -26,6 +26,7 @@ set -uo pipefail
 HUB="$HOME/agent-hub"
 NAME="${1:?用法: run-agent-job.sh <name> [工作目錄] [prompt 名稱]}"
 PROMPT="$HUB/agent-jobs/${3:-$NAME}.md"
+case "${3:-}" in /*) PROMPT="$3" ;; esac   # 專案登錄的 agent job:prompt 是 projects/<name>/jobs/*.md 的完整路徑
 OUT="$HUB/.state/agent-jobs/$NAME"
 CWD="${2:-$OUT}"
 mkdir -p "$OUT"

@@ -136,7 +136,8 @@ def esc(s: str) -> str:
 
 def main() -> None:
     now = datetime.datetime.now()
-    jobs = (yaml.safe_load(SCHEDULE.read_text()) or {}).get("jobs", [])
+    import scheduler  # schedule.yaml + 專案登錄,跟排程器用同一份清單
+    jobs, reg_info = scheduler.all_jobs()
     state = json.loads(STATE.read_text()) if STATE.exists() else {}
     runs, last_tick = scheduler_runs()
     alive = scheduler_alive()
@@ -162,13 +163,18 @@ def main() -> None:
         alerts.append(("bad", "排程器看門狗沒設定 Discord(.secrets/discord-token、.secrets/discord-alert-channel),"
                               "排程器停了發不出警報"))
 
+    for proj, errs in sorted(reg_info["errors"].items()):
+        alerts.append(("bad", f"專案登錄 {proj} 不合格(沿用上一份合格的,沒有就不排它的 job):" + ";".join(errs[:4])
+                              + (f"……共 {len(errs)} 項" if len(errs) > 4 else "") + "。`bin/registry.py check " + proj + "`"))
+
     for job in jobs:
         name = job["name"]
         is_agent = "run-agent-job.sh" in job["command"]
+        aname = job.get("agent_name", name)  # 登錄的 agent job 狀態目錄用舊名稱或 <專案>-<job>
         run = runs.get(name, {})
         result, detail = run.get("result", ""), ""
         last = run.get("started", "")[5:16]
-        if is_agent and (st := agent_status(name)):
+        if is_agent and (st := agent_status(aname)):
             result = st.get("state", result)
             last = (st.get("started_at") or "")[5:16].replace("T", " ")
             detail = st.get("summary") or st.get("error") or ""
@@ -178,11 +184,11 @@ def main() -> None:
             if st.get("notify") == "yes" and fin and \
                     now - datetime.datetime.fromisoformat(fin).replace(tzinfo=None) < datetime.timedelta(days=7):
                 alerts.append(("notify", f"{name}:{st.get('summary', '')}"))
-            if (AGENT_JOBS / name / "STOP").exists():
-                detail = "已自行停止:" + (AGENT_JOBS / name / "STOP").read_text().strip()[:120]
+            if (AGENT_JOBS / aname / "STOP").exists():
+                detail = "已自行停止:" + (AGENT_JOBS / aname / "STOP").read_text().strip()[:120]
         elif result.startswith("failed"):
             # 下一個 tick 成功就不算;只在最後一次是失敗時提醒
-            alerts.append(("bad", f"{name} 最後一次執行失敗({result}),log:.logs/{name}-<日期>.log"))
+            alerts.append(("bad", f"{name} 最後一次執行失敗({result}),log:.logs/{name.replace('/', '__')}-<日期>.log"))
         cls = {"ok": "ok", "running": "run"}.get(result, "bad" if result.startswith("failed") else "")
         label = {"ok": "成功", "running": "執行中", "failed": "失敗"}.get(result.split(" ")[0], result or "—")
         rows.append(
@@ -193,7 +199,7 @@ def main() -> None:
             f"<td><span class='st {cls}'>{esc(label)}</span> <span class=sub>{esc(last)}</span></td>"
             f"<td>{esc(next_run(job, state, now))}</td></tr>")
         if is_agent:
-            reps = agent_reports(name)
+            reps = agent_reports(aname)
             if reps:
                 items = "".join(
                     f"<details{' open' if i == 0 else ''}><summary>{esc(r.stem)}</summary>"

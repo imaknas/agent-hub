@@ -56,6 +56,40 @@ HEARTBEAT = HUB / ".state" / "scheduler-heartbeat"
 LOG_DIR = HUB / ".logs"
 
 
+ALIAS: dict[str, str] = {}  # 切換期間登錄 job 名稱 ↔ schedule.yaml 舊名稱(all_jobs 填)
+
+
+def fs(name: str) -> str:
+    """job 名稱 → 檔名(登錄的 job 叫 <專案>/<job>,斜線不能進檔名)。"""
+    return name.replace("/", "__")
+
+
+def all_jobs(log_errors: bool = False) -> tuple[list[dict], dict]:
+    """schedule.yaml 的 job + 專案登錄的 job。切換期間 schedule.yaml 優先:登錄 job 的 legacy_name
+    還在 schedule.yaml 裡就不採用(刪掉 schedule.yaml 那一項就切過來)。登錄壞掉不影響 schedule.yaml。
+    回傳 (jobs, info);info: alias(兩邊名稱對照,給 after: 用)、renames(新→舊,搬狀態用)、
+    skipped、errors。"""
+    legacy = (yaml.safe_load(SCHEDULE.read_text()) or {}).get("jobs", []) if SCHEDULE.exists() else []
+    info = {"alias": {}, "renames": {}, "skipped": [], "errors": {}}
+    try:
+        import registry
+        index = registry.refresh()
+        reg_jobs, skipped, renames = registry.scheduler_jobs(index, {j["name"] for j in legacy})
+        info.update(renames=renames, skipped=skipped, errors=index["errors"])
+        for d in index["projects"].values():
+            for j in d.get("jobs") or []:
+                if j.get("legacy_name"):
+                    full = f"{d['name']}/{j['name']}"
+                    info["alias"][full] = j["legacy_name"]
+                    info["alias"][j["legacy_name"]] = full
+    except Exception as e:  # 登錄整個讀不了:只跑 schedule.yaml 的
+        reg_jobs = []
+        info["errors"]["(registry)"] = [repr(e)]
+        if log_errors:
+            log(f"專案登錄讀不了,這個 tick 只跑 schedule.yaml:{e!r}")
+    return legacy + reg_jobs, info
+
+
 def log(msg: str) -> None:
     ts = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     line = f"[{ts}] {msg}"
@@ -103,7 +137,7 @@ def reconcile(state: dict, jobs: dict[str, dict]) -> set[str]:
     """把背景 job 的結果併回 state;回傳還在跑的 job 名稱。"""
     running = set()
     for f in RUNS_DIR.glob("*.json"):
-        name = f.stem
+        name = f.stem.replace("__", "/")
         try:
             rec = json.loads(f.read_text())
         except ValueError:
@@ -131,7 +165,7 @@ def spawn_background(name: str, command: str, job_log_path: pathlib.Path,
                      now: datetime.datetime, today: str) -> None:
     """double fork + setsid:launchd 在 tick 結束時會殺掉同一個 process group 剩下的程序
     (run-agent-job.sh 2026-10-14 踩過)。孫程序跑完自己寫 log 跟結果檔。"""
-    run_file = RUNS_DIR / f"{name}.json"
+    run_file = RUNS_DIR / f"{fs(name)}.json"
     rec = {"date": today, "started": now.isoformat(timespec="seconds"), "pid": None}
     write_json(run_file, rec)
     sys.stdout.flush()
@@ -185,6 +219,9 @@ def waiting_on(job: dict, by_name: dict[str, dict], state: dict, running: set[st
     """after: 列的 job 今天還沒結束的話,回傳在等誰;不用等回傳 None。"""
     for dep in job.get("after", []):
         d = by_name.get(dep)
+        if d is None and dep in ALIAS:  # 切換期間:after 寫新名稱、job 還在舊名稱(或反過來)
+            dep = ALIAS[dep]
+            d = by_name.get(dep)
         if d is None or not d.get("enabled", True) or not runs_today(d, now):
             continue
         if dep in running:
@@ -222,17 +259,23 @@ def main() -> None:
     RUNS_DIR.mkdir(parents=True, exist_ok=True)
     heartbeat()
 
-    if not SCHEDULE.exists():
-        log(f"no schedule.yaml at {SCHEDULE}, nothing to do")
-        return
-
-    jobs = (yaml.safe_load(SCHEDULE.read_text()) or {}).get("jobs", [])
+    jobs, info = all_jobs(log_errors=True)
+    ALIAS.clear()
+    ALIAS.update(info["alias"])
     state = json.loads(STATE_FILE.read_text()) if STATE_FILE.exists() else {}
 
     now = datetime.datetime.now()
     today = now.strftime("%Y-%m-%d")
     by_name = {j["name"]: j for j in jobs}
     running = reconcile(state, by_name)
+    # 剛從 schedule.yaml 切到登錄的 job:狀態從舊名稱搬過來,不然今天會重跑(在 reconcile 之後:
+    # 舊名稱的背景執行可能剛跑完、結果才併進來)
+    for new, old in info["renames"].items():
+        for suffix in ("", ".attempts", ".last_ok"):
+            if old + suffix in state and new + suffix not in state:
+                state[new + suffix] = state[old + suffix]
+        if old in running:
+            running.add(new)  # 舊名稱還在背景跑:新名稱也算在跑
 
     for job in jobs:
         name = job["name"]
@@ -256,7 +299,7 @@ def main() -> None:
         # 已經記下,max_attempts_per_day 才擋得住。
         save_state(state)
 
-        job_log_path = LOG_DIR / f"{name}-{today}.log"
+        job_log_path = LOG_DIR / f"{fs(name)}-{today}.log"
         if job.get("background"):
             log(f"running job '{name}' (background): {job['command']}")
             spawn_background(name, job["command"], job_log_path, now, today)
