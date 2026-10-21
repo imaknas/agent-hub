@@ -1,0 +1,16 @@
+#!/usr/bin/env python3
+"""清掉已經合併進 main、而且乾淨的 worktree(跟它的 branch)。由人執行,不自動跑:閒置但沒封存的
+session 的 cwd 可能還在裡面,刪了 resume 會壞——先確認沒有 session 開在那裡。
+
+  prune-worktrees [--project P]          只列出可以刪的
+  prune-worktrees [--project P] --yes    真的刪
+"""
+import pathlib
+import sys
+
+sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
+import worktrees  # noqa: E402
+
+args = sys.argv[1:]
+proj = args[args.index("--project") + 1] if "--project" in args else None
+sys.exit(worktrees.prune(proj, "--yes" in args))

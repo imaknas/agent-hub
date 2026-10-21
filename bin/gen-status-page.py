@@ -233,6 +233,38 @@ def main() -> None:
                      + (f"<table><tr><th>收件</th><th>沒結案</th><th>還沒送進 session</th><th>最舊</th></tr>{mail_rows}</table>"
                         if mail_rows else "<div class=sub>沒有沒結案的信</div>"))
 
+    # 平行 session 的 worktree / 合併閘門(bin/worktrees.py、bin/merge-branch)
+    wt_html = ""
+    try:
+        import worktrees
+        ov = worktrees.overview()
+        wt_rows = []
+        for proj, info in ov.items():
+            for w in info["worktrees"]:
+                state_txt = "已合併" + (",可以清(bin/prune-worktrees)" if w["clean"] else ",有沒 commit 的改動") if w["merged"] \
+                    else f"進行中,改了 {len(w['files'])} 個檔"
+                hot = any(f in info["overlaps"] for f in w["files"]) and not w["merged"]
+                wt_rows.append(f"<tr><td>{esc(proj)}</td><td>{esc(w['branch'])}</td><td>{w['age_days']} 天前</td>"
+                               f"<td{' class=\'st bad\'' if hot else ''}>{esc(state_txt)}{'(跟別的 branch 改同一個檔)' if hot else ''}</td></tr>")
+            for f, bs in info["overlaps"].items():
+                alerts.append(("bad", f"{proj}:{len(bs)} 個還沒合併的 branch 都改了 {f}({', '.join(bs)}),後合併的那個 rebase 會撞"))
+        ungated = {p: i["ungated_main_7d"] for p, i in ov.items() if i["ungated_main_7d"]}
+        wt_html = ("<h2 style=\"font-size:18px;margin-top:28px\">平行 session(worktree)</h2>"
+                   + (f"<table><tr><th>專案</th><th>branch</th><th>最後 commit</th><th>狀態</th></tr>{''.join(wt_rows)}</table>"
+                      if wt_rows else "<div class=sub>沒有進行中的 worktree</div>")
+                   + (f"<div class=sub style='margin-top:8px'>最近 7 天直接 commit 到 main(沒經過 merge-branch):"
+                      + "、".join(f"{esc(p)} {n}" for p, n in sorted(ungated.items())) + "</div>" if ungated else ""))
+        bus_db = HUB / ".state" / "bus.db"
+        if bus_db.exists():
+            import sqlite3
+            for (pl,) in sqlite3.connect(bus_db, timeout=10).execute(
+                    "SELECT payload FROM events WHERE type='merge.failed' AND ts > ? ORDER BY seq DESC LIMIT 5",
+                    ((now - datetime.timedelta(days=1)).isoformat(),)):
+                f = json.loads(pl)
+                alerts.append(("bad", f"merge-branch 失敗:{f.get('project')} {f.get('branch')}({f.get('stage')}):{(f.get('detail') or '')[:160]}"))
+    except Exception as e:  # 一覽壞掉不影響狀態頁其他部分
+        wt_html = f"<div class=sub>worktree 一覽失敗:{esc(repr(e))}</div>"
+
     alert_html = "".join(f"<div class='alert {c}'>{'🔔' if c == 'notify' else '⚠️'} {esc(t)}</div>"
                          for c, t in alerts) or "<div class='alert good'>✅ 沒有需要處理的事</div>"
     page = f"""<!doctype html><html lang="zh-Hant"><head><meta charset="utf-8">
@@ -259,6 +291,7 @@ summary{{cursor:pointer;color:var(--mut)}} pre{{white-space:pre-wrap;word-break:
 {alert_html}
 <table><tr><th>Job</th><th>時間</th><th>上次</th><th>下次</th></tr>{''.join(rows)}</table>
 {mail_html}
+{wt_html}
 <h2 style="font-size:18px;margin-top:28px">Claude job 報告</h2>
 {''.join(report_blocks) or '<div class=sub>還沒有報告</div>'}
 </main></body></html>"""

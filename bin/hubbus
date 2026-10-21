@@ -622,7 +622,7 @@ def main() -> None:
     sub.add_parser("bridge")
     sub.add_parser("open-handoffs")
     pb = sub.add_parser("publish")
-    pb.add_argument("type", choices=("job.failed",))  # 其他種類有專用指令
+    pb.add_argument("type", choices=("job.failed", "merge.done", "merge.failed", "session.report"))  # 信有專用指令
     pb.add_argument("--source", required=True)
     pb.add_argument("--to")
     pb.add_argument("--ref")

@@ -185,6 +185,11 @@ memory 追蹤但不需要在 mini 上執行任何東西的專案(目前大多數
 - `launchd/`——平台自己的 launchd plist(排程器、看門狗、狀態頁、memory 同步)。**專案的長駐服務不在這裡**:
   寫在 `projects/<專案>.yaml` 的 `services:`,`bin/render-services.py`(平台 job,每 15 分鐘)產生
   `~/Library/LaunchAgents/<label>.plist`,有變才重載
+- **平行 session 的合併閘門** `bin/merge-branch`(在 session 自己的 worktree 跑):rebase → 登錄的
+  `runtime.test` → fast-forward main(主 checkout)→ 只有登錄 `push_on_merge: true` 才 push;匯流排記
+  `merge.done`/`merge.failed`/`session.report`。狀態頁列各專案的 worktree、兩個 branch 改同一檔、
+  沒經過閘門直接 commit 到 main 的數量(只是資訊)。`bin/prune-worktrees [--yes]` 清已合併、乾淨的
+  worktree——**由人跑**,閒置但沒封存的 session 可能還開在裡面
 - `contracts/`——**版本契約**:agent-hub 定義的介面(hubbus、todo-md、state-todo、reflect-week、project)
   跟 vendor 的別人的契約(`contracts/vendor/<專案>/`)。登錄的 `provides`/`consumes` 宣告誰定義、誰讀;
   `tests/test_contracts.py`(`python3 -m unittest discover -s tests`)驗證範例,`bin/contracts-check.py`

@@ -11,6 +11,17 @@
 commit/push 之後跟每次 session 開始(含壓縮後)會自動提醒。不會影響這個專案
 本身的程式碼或 git 歷史。
 
+## 同一個專案的平行 session
+
+同一個專案同時有好幾個 session 在寫東西時,寫東西的 session 各自在自己的 git worktree/branch
+(Claude Desktop 的 worktree 模式);主 checkout 留給合併,外加 Knas 自己的一個互動 session。
+在 worktree 裡做完,用合併閘門合回 main,不要直接 commit 到 main:
+
+    ~/agent-hub/bin/merge-branch --note "做了什麼" [--question "要 Knas 決定的事"]
+
+它會 rebase 到 main、跑這個專案的測試、fast-forward main,記一份完成報告;**不會 push**(要 push 等 Knas 說)。
+衝突或測試失敗就停下來告訴你哪裡,解完再跑一次。合併完的 worktree 由 Knas 用 `prune-worktrees` 清。
+
 ## 跨專案改動、專案信箱
 
 這個 session 只 commit/push 這個專案。發現別的專案(包括 `~/agent-hub`)需要
