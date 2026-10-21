@@ -17,9 +17,9 @@
                                    SSH 底下讀不到 keychain,claude 會是未登入
   schedulectl stop                完全停用排程器(launchctl bootout,不動 schedule.yaml)
   schedulectl start               重新啟動排程器(launchctl bootstrap)
-  schedulectl models               顯示 librarian.sh 目前用的模型設定
-  schedulectl set-model state|index <model>   改其中一個模型(state=單一專案
-                                   STATE.md 判斷,index=跨專案關聯 index.md)
+  schedulectl models               顯示 librarian.sh / consolidate-memory.py 目前用的模型設定
+  schedulectl set-model state|index|consolidate <model>   改其中一個模型(state=單一專案
+                                   STATE.md 判斷,index=跨專案關聯 index.md,consolidate=回頭清理)
 """
 import datetime
 import json
@@ -35,7 +35,7 @@ LOG_DIR = HUB / ".logs"
 LABEL = "local.agent-hub-scheduler"
 PLIST = Path.home() / "Library/LaunchAgents" / f"{LABEL}.plist"
 MODELS_FILE = HUB / "models.env"
-DEFAULT_MODELS = {"STATE_MODEL": "haiku", "INDEX_MODEL": "sonnet"}
+DEFAULT_MODELS = {"STATE_MODEL": "haiku", "INDEX_MODEL": "sonnet", "CONSOLIDATE_MODEL": "opus"}
 
 
 def load_jobs():
@@ -190,8 +190,8 @@ def load_models():
 
 def save_models(models):
     lines = [
-        "# librarian.sh 用的模型設定。用 `schedulectl models` 看、",
-        "# `schedulectl set-model state|index <model>` 改。",
+        "# librarian.sh / consolidate-memory.py 用的模型設定。用 `schedulectl models` 看、",
+        "# `schedulectl set-model state|index|consolidate <model>` 改。",
     ]
     lines += [f"{k}={v}" for k, v in models.items()]
     MODELS_FILE.write_text("\n".join(lines) + "\n")
@@ -202,12 +202,13 @@ def cmd_models():
     models = load_models()
     print(f"state(單一專案 STATE.md 判斷):{models['STATE_MODEL']}")
     print(f"index(跨專案關聯 index.md)  :{models['INDEX_MODEL']}")
+    print(f"consolidate(回頭清理)        :{models['CONSOLIDATE_MODEL']}")
 
 
 def cmd_set_model(which, model):
-    key = {"state": "STATE_MODEL", "index": "INDEX_MODEL"}.get(which)
+    key = {"state": "STATE_MODEL", "index": "INDEX_MODEL", "consolidate": "CONSOLIDATE_MODEL"}.get(which)
     if not key:
-        print(f"'{which}' 不是有效選項,只能是 state 或 index")
+        print(f"'{which}' 不是有效選項,只能是 state、index 或 consolidate")
         sys.exit(1)
     models = load_models()
     models[key] = model

@@ -27,8 +27,12 @@
 - 整理過的主題文件(不是流水帳,會被改寫成最新、最準的版本)放
   `memory/reference/<主題>.md`,並維護 `memory/reference/README.md` 當索引。
   除了 `reference/`,`memory/` 底下不開其他子目錄,也不放 `.md` 以外的檔案。
-- 日期檔是流水紀錄,只往後加、不回頭改;內容整理進 `reference/` 之後,原本的
-  日期檔可以 `git rm`(歷史還在)。
+- 日期檔是流水紀錄,只往後加、不回頭改。**整理是自動的**:agent-hub 每晚的「回頭清理」
+  (`consolidate-memory`)會把超過 14 天的日期檔整理進 `reference/` 再 `git rm`(歷史還在),
+  順便修正 `reference/`、`STATE.md` 裡被較新紀錄推翻的敘述;每個改動都記在 agent-hub 的
+  `review-log.md`。所以 session 裡不用自己搬舊日期檔。
+- 不確定的事就照實寫「預計/可能/待確認」——整理時會原樣保留,不會被改成定論;等結果出來,
+  在當天的日期檔明確寫「已…/確認…」,下次整理才會據此更新 `reference/`。
 - `RULES`(如果有):這個專案啟用的額外規則名稱,一行一個,內容在 agent-hub 的
   `templates/rules/`,開 session 時會放進 CLAUDE.local.md。由 agent-hub 管理,不要手改。
 - 不要自己改 `STATE.md`——那是整合 agent 維護的精煉現況,只在有實質變化時才會被改寫。
