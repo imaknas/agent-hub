@@ -5,7 +5,7 @@
 
 ## 只有 我 能做
 
-> 另有 2 項已登記在 Muninn(STATE.md 行尾標「等 Knas:<key>」),以 Muninn 為準,這裡不列。
+> 另有 2 項已登記在 Muninn(STATE.md 行尾標「等 我:<key>」),以 Muninn 為準,這裡不列。
 
 ### example-project
 - [ ] 決定要不要開第二個帳號

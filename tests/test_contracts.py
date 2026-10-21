@@ -42,6 +42,8 @@ class Neutral(unittest.TestCase):
             text = p.read_text()
             for word in ("agent-hub", "librarian", "bin/"):
                 self.assertNotIn(word, text, f"{p.name} 提到 {word}")
+        for p in F.glob("*"):  # 範例檔也不放使用者的名字(owner 用中性的「我」)
+            self.assertNotIn("Knas", p.read_text(), f"{p.name} 提到使用者的名字")
 
     def test_same_ignores_prose(self):
         import tempfile
