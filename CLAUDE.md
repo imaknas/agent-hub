@@ -97,6 +97,10 @@ SSH 開 mini 上的資料夾,MBP 斷線/沒電 session 也繼續跑。MBP 上的
 - `bin/librarian.sh`——「圖書館員」,讀各專案 `memory/` 的新增內容,判斷
   要不要更新 `STATE.md`,並產生跨專案 `digest/YYYY-MM-DD.md` + 更新
   `index.md`。模型設定在 `models.env`
+- `bin/consolidate-memory.py`——「回頭清理」,每晚 02:00(librarian 之前):超過 14 天的 memory 日期檔
+  整理進 `reference/` 再 git rm、修正被推翻的敘述(保留「預計/可能」語氣,有機械檢查);一晚最多 3 個
+  專案、每個專案最多一週一次,模型 `CONSOLIDATE_MODEL`(opus)。`--list` 看狀態、`--dry-run --project <name>`
+  只產生提議的 diff。改動記在 `review-log.md`,細節看檔頭註解
 - `bin/gen-todo.py`——librarian 每晚呼叫:收集各專案 STATE.md 的 `## 待辦` 段落(固定格式
   `- [ ] 〔Knas|agent|待定〕…`,由 librarian 維護)跟 `openclaw-migration-status.md` 的待辦,
   機械產生 `todo.md`,不用 LLM;格式不對的專案列在檔尾
