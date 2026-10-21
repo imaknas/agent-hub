@@ -47,6 +47,9 @@ def p(key: str, default: str | None = None) -> pathlib.Path | None:
     return path(get(key, default))
 
 
+# launchd 底下的 PATH(plist 沒寫 PATH 的時候):指令解析要照這個,不是跑檢查的那個 shell 的 PATH
+LAUNCHD_PATH = "/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin"
+
 STATE = ROOT / ".state"
 LOGS = ROOT / ".logs"
 REGISTRY_INDEX = STATE / "registry" / "index.json"

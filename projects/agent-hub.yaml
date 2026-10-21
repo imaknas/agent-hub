@@ -37,3 +37,7 @@ jobs:
   every: 15m
   run: /usr/bin/python3 bin/hubbus bridge
   cwd: hub
+- name: render-services
+  every: 15m
+  cwd: hub
+  run: /opt/homebrew/bin/python3 bin/render-services.py

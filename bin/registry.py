@@ -50,7 +50,7 @@ TOP = {"v", "name", "paths", "memory", "privacy", "runtime", "push_on_merge", "m
        "provides", "services", "jobs"}
 JOB = {"name", "at", "every", "run", "kind", "prompt", "cwd", "days", "days_of_month", "months", "until",
        "between", "background", "after", "max_attempts_per_day", "legacy_name"}
-SERVICE = {"name", "run", "label", "keepalive", "throttle_s", "env", "cwd", "expose"}
+SERVICE = {"name", "run", "label", "keepalive", "interval_s", "throttle_s", "env", "cwd", "log", "expose"}
 DAYS = {"mon", "tue", "wed", "thu", "fri", "sat", "sun"}
 EVERY = re.compile(r"^(\d+)(m|h)$")
 
@@ -69,7 +69,7 @@ def default_cwd(doc: dict) -> str:
     return "runtime" if doc.get("runtime") is not None else "workspace"
 
 
-def resolves(cmd: str, cwd: pathlib.Path | None) -> str | None:
+def resolves(cmd: str, cwd: pathlib.Path | None, search: str | None = None) -> str | None:
     """第一個字找得到嗎;找不到回傳錯誤訊息。"""
     try:
         words = shlex.split(cmd)
@@ -88,7 +88,8 @@ def resolves(cmd: str, cwd: pathlib.Path | None) -> str | None:
         if cwd is None:
             return f"{first}:沒有 cwd 可以找"
         return None if (cwd / first).exists() else f"{cwd / first} 不存在"
-    return None if shutil.which(first) or first in ("cd", "test", "[", "true") else f"PATH 上找不到 {first}"
+    found = shutil.which(first, path=search or f"{hubconf.LAUNCHD_PATH}:{os.environ.get('PATH', '')}")
+    return None if found or first in ("cd", "test", "[", "true") else f"PATH 上找不到 {first}"
 
 
 def validate(doc, stem: str) -> list[str]:
@@ -124,7 +125,7 @@ def validate(doc, stem: str) -> list[str]:
             errs.append(f"service {n}:name、run 必填")
             continue
         cwd = d.get(svc.get("cwd") or default_cwd(doc))
-        if (e := resolves(svc["run"], cwd)):
+        if (e := resolves(svc["run"], cwd, (svc.get("env") or {}).get("PATH") or hubconf.LAUNCHD_PATH)):
             errs.append(f"service {n}:{e}")
     jobs = doc.get("jobs") or []
     for job in jobs:

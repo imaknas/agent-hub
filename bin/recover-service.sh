@@ -28,6 +28,13 @@ purpose=$(echo "$row" | cut -f5)
 recreate_notes=$(echo "$row" | cut -f6)
 
 case "$plist_location" in
+  projects/*)
+    # 專案登錄裡宣告的 service:照登錄重新產生 plist 並載入
+    /opt/homebrew/bin/python3 "$AGENT_HUB/bin/render-services.py" --only "$LABEL"
+    echo "已照 $plist_location 重建:$LABEL"
+    echo "用途:$purpose"
+    [ -n "$recreate_notes" ] && echo "注意:$recreate_notes"
+    ;;
   agent-hub/launchd/*)
     plist_path="$AGENT_HUB/${plist_location#agent-hub/}"
     [ -f "$plist_path" ] || fail "$plist_path 不存在——agent-hub 本身是不是還沒 pull 到最新?"

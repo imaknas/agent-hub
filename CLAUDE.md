@@ -182,8 +182,12 @@ memory 追蹤但不需要在 mini 上執行任何東西的專案(目前大多數
 ## 目錄
 
 - `bin/`——所有腳本
-- `launchd/`——版控過的 launchd plist,對照 `services.tsv` 裡 owner 是
-  agent-hub 的項目
+- `launchd/`——平台自己的 launchd plist(排程器、看門狗、狀態頁、memory 同步)。**專案的長駐服務不在這裡**:
+  寫在 `projects/<專案>.yaml` 的 `services:`,`bin/render-services.py`(平台 job,每 15 分鐘)產生
+  `~/Library/LaunchAgents/<label>.plist`,有變才重載
+- `projects/`——**專案登錄**(一個專案一個 `<name>.yaml`;目錄由 `hub.json` 的 `registry_dir` 指定):
+  路徑、job、service、隱私標籤、測試指令。驗證跟格式看 `bin/registry.py` 檔頭;`registry.py check` 驗證。
+  排程器跑的 = `schedule.yaml`(切換期間的舊項目)+ 登錄的 job(`<專案>/<job>`)
 - `templates/`——骨架檔案(`AGENT.md`、`CLAUDE.md`);hook 設定不在這裡,
   寫在 `bin/merge-hook-settings.py`。`templates/rules/<名稱>.md` 是可選的專案規則,
   專案在 `.agent-memory/RULES` 登記名稱才會放進它的 CLAUDE.local.md。目前所有專案
