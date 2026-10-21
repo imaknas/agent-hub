@@ -34,6 +34,8 @@ HUB = HOME / "agent-hub"
 COPIES = HOME / ".memory-copies"
 HUBBUS = ["/usr/bin/python3", str(HUB / "bin" / "hubbus")]
 MIGRATED = HUB / ".state" / "knas-tasks-migrated"
+VANISHED = HUB / ".state" / "knas-tasks-vanished.json"   # 已經警告過的 key,只警告一次
+BUS = HUB / ".state" / "bus.db"
 KEYED = ("done", "dropped", "already_done", "reopened")
 STRIKE = ("done", "dropped", "already_done")
 
@@ -132,11 +134,26 @@ def commit(project: str, path: pathlib.Path, how: str, msg: str) -> bool:
         r = subprocess.run([str(HUB / "bin" / "commit-hub-files.sh"), msg, path.name], cwd=HUB,
                            capture_output=True, text=True)
     else:
-        r = subprocess.run(f"git add STATE.md && git commit -qm {shlex.quote(msg)} && {HUB}/bin/git-safe-push.sh",
-                           shell=True, cwd=path.parent, capture_output=True, text=True)
+        # with-lock:consolidate-memory、sync 也會碰同一份副本
+        r = subprocess.run([str(HUB / "bin" / "with-lock.sh"), "bash", "-c",
+                            f"git add STATE.md && git commit -qm {shlex.quote(msg)} && {HUB}/bin/git-safe-push.sh"],
+                           cwd=path.parent, capture_output=True, text=True)
     if r.returncode != 0:
         log(f"{project}: commit/push 失敗,轉交留到隔晚:{(r.stderr or r.stdout).strip()[-200:]}")
     return r.returncode == 0
+
+
+def vanished_keys(project: str, lines: list[str], closed: set[str]) -> list[str]:
+    """寄過、Muninn 也沒結案,STATE.md 卻已經找不到的 key——多半是 librarian 的模型改寫時把行尾拿掉了
+    (同一件事換了文字會變成新 key,Muninn 的去重會合併)。只警告,不自動重寄也不自動結案。"""
+    if not BUS.exists():
+        return []
+    import sqlite3
+    c = sqlite3.connect(BUS, timeout=30)
+    posted = {r[0] for r in c.execute("SELECT id FROM events WHERE type='message' AND to_project='knas'"
+                                      " AND source=? AND id LIKE 'task-%'", (project,))}
+    present = {m.group(1) for l in lines if (m := KEY.search(l))}
+    return sorted(posted - present - closed)
 
 
 def main() -> int:
@@ -147,6 +164,19 @@ def main() -> int:
         log(f"讀不到 hubbus open-handoffs(exit {r.returncode}),這次只寄新任務")
         handoffs = []
     context = None if MIGRATED.exists() else "migration"
+    try:
+        warned = set(json.loads(VANISHED.read_text()))
+    except (OSError, ValueError):
+        warned = set()
+    # 曾經收過帶 key 的結案轉交(不管現在結案了沒)的 key:那些從 STATE.md 消失是正常的
+    closed = set()
+    if BUS.exists():
+        import sqlite3
+        for (pl,) in sqlite3.connect(BUS, timeout=30).execute(
+                "SELECT payload FROM events WHERE type='message' AND source='knas' AND payload LIKE '%\"reply_to\"%'"):
+            h = json.loads(pl).get("handoff") or {}
+            if h.get("effect") in STRIKE and h.get("reply_to"):
+                closed.add(h["reply_to"])
     posted = failed = 0
     for project, path, how in targets():
         lines = path.read_text().splitlines()
@@ -156,6 +186,10 @@ def main() -> int:
                 changed = True
                 log(f"{project}: {h['effect']} {h['reply_to']}")
             closing.append(h["id"])
+        for key in vanished_keys(project, lines, closed):
+            if key not in warned:
+                log(f"{project}: 警告——{key} 寄給 Muninn 了、還沒結案,STATE.md 卻找不到(模型改寫時拿掉了行尾?)")
+                warned.add(key)
         for i, text in unkeyed(lines):
             key = task_key(project, text)
             args = ["send", "--to", "knas", "--type", "task", "--from", project, "--id", key, "--text", text]
@@ -181,6 +215,8 @@ def main() -> int:
                 hubbus("done", *closing, "--note", "librarian 照 key 更新了 STATE.md 的待辦")
         else:
             failed += 1
+    if not DRY:
+        VANISHED.write_text(json.dumps(sorted(warned)))
     log(f"寄出 {posted} 件任務、{len(handoffs)} 筆帶 key 的轉交、{failed} 個失敗")
     if not DRY and failed == 0 and context:
         MIGRATED.write_text("first full pass ok\n")
