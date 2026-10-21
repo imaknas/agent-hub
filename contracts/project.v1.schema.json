@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "agent-hub-project.v1",
+  "$id": "records-project.v1",
   "title": "專案登錄 <registry_dir>/<name>.yaml",
   "description": "bin/registry.py 才是完整的驗證(檔案系統檢查:run 解析得到、目錄存在、after 指到存在的 job);這份是給其他程式讀的形狀。",
   "type": "object",

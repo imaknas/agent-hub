@@ -1,9 +1,9 @@
 <!-- contract: todo-md v1 -->
 # 跨專案待辦
 
-> 由 `bin/gen-todo.py` 從各專案 STATE.md 的 `## 待辦` 段落機械產生(共 3 項),
+> 機械產生的跨專案待辦(共 3 項)。
 
-## 只有 Knas 能做
+## 只有 我 能做
 
 > 另有 2 項已登記在 Muninn(STATE.md 行尾標「等 Knas:<key>」),以 Muninn 為準,這裡不列。
 

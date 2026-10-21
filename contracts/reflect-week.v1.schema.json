@@ -1,8 +1,8 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "agent-hub-reflect-week.v1",
-  "title": "reflect/<YYYY-Www>.json(bin/weekly-reflect.py,每週一 07:00)",
-  "description": "上一週的跨專案活動統計 + 模型分析。2026-W43 起帶 \"v\": 1(更早的沒有,讀成 1)。analysis 可能只有 {error, meta}。",
+  "$id": "records-reflect-week.v1",
+  "title": "每週活動分析 <YYYY-Www>.json",
+  "description": "一週的跨專案活動統計 + 模型分析。2026-W43 起帶 \"v\": 1(更早的沒有,讀成 1)。analysis 可能只有 {error, meta}。",
   "type": "object",
   "required": ["week", "start", "end", "generated", "totals", "projects", "rhythm", "delegation"],
   "properties": {

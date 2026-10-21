@@ -15,9 +15,15 @@ import minischema
 FENCE = re.compile(r"^```(regex|heading) (\S+)\n(.*?)\n```", re.M | re.S)
 
 
-def md_rules(path: pathlib.Path) -> dict[str, list[str]]:
-    """markdown 契約裡的 regex/heading 區塊:{名字: [每行一條]}。"""
-    return {f"{kind}:{name}": body.splitlines() for kind, name, body in FENCE.findall(path.read_text())}
+def md_rules(path: pathlib.Path, owner: str | None = None) -> dict[str, list[str]]:
+    """markdown 契約裡的 regex/heading 區塊:{名字: [每行一條]}。owner 有給就把 {owner} 換掉
+    (regex 區塊換成 re.escape 過的)。"""
+    out = {}
+    for kind, name, body in FENCE.findall(path.read_text()):
+        if owner is not None:
+            body = body.replace("{owner}", re.escape(owner) if kind == "regex" else owner)
+        out[f"{kind}:{name}"] = body.splitlines()
+    return out
 
 
 def md_version(text: str) -> tuple[str, int] | None:
@@ -25,8 +31,8 @@ def md_version(text: str) -> tuple[str, int] | None:
     return (m.group(1), int(m.group(2))) if m else None
 
 
-def check_todo_md(text: str, contract: pathlib.Path) -> list[str]:
-    rules = md_rules(contract)
+def check_todo_md(text: str, contract: pathlib.Path, owner: str) -> list[str]:
+    rules = md_rules(contract, owner)
     errs = []
     v = md_version(text)
     if v and v != ("todo-md", 1):
@@ -48,8 +54,8 @@ def check_todo_md(text: str, contract: pathlib.Path) -> list[str]:
     return errs
 
 
-def check_state_todo(text: str, contract: pathlib.Path) -> list[str]:
-    rules = md_rules(contract)
+def check_state_todo(text: str, contract: pathlib.Path, owner: str) -> list[str]:
+    rules = md_rules(contract, owner)
     item, group, bare = (re.compile(rules[f"regex:{k}"][0]) for k in ("item", "group", "bare"))
     lines = text.splitlines()
     try:
@@ -75,8 +81,22 @@ def check_json(schema_path: pathlib.Path, data) -> list[str]:
     return minischema.errors(json.loads(schema_path.read_text()), data)
 
 
+PROSE = {"$id", "$schema", "title", "description"}
+
+
+def _machine(o):
+    """JSON schema 去掉說明性的欄位,只留會影響驗證的部分。"""
+    if isinstance(o, dict):
+        return {k: _machine(v) for k, v in o.items() if k not in PROSE}
+    if isinstance(o, list):
+        return [_machine(v) for v in o]
+    return o
+
+
 def same(a: pathlib.Path, b: pathlib.Path) -> bool:
-    """兩份契約內容一樣(JSON 照解析後比,markdown 照文字比)。"""
+    """兩份契約的「機器讀的部分」一樣:JSON 比去掉 $id/title/description 的 schema,markdown 比 regex/heading
+    區塊跟版本標記——說明文字改了不算不一致。"""
     if a.suffix == ".json" and b.suffix == ".json":
-        return json.loads(a.read_text()) == json.loads(b.read_text())
-    return a.read_text() == b.read_text()
+        return _machine(json.loads(a.read_text())) == _machine(json.loads(b.read_text()))
+    ta, tb = a.read_text(), b.read_text()
+    return md_version(ta) == md_version(tb) and FENCE.findall(ta) == FENCE.findall(tb)

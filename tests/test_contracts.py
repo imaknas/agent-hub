@@ -13,25 +13,45 @@ import contracts  # noqa: E402
 
 C = ROOT / "contracts"
 F = C / "fixtures"
+OWNER = "我"  # 範例檔用中性的 owner 標籤;實際檔案用設定裡的(hub.json owner.tag)
 
 
 class Markdown(unittest.TestCase):
     def test_todo_md_fixture(self):
-        self.assertEqual(contracts.check_todo_md((F / "todo-md.v1.example.md").read_text(), C / "todo-md.v1.md"), [])
+        self.assertEqual(contracts.check_todo_md((F / "todo-md.v1.example.md").read_text(), C / "todo-md.v1.md", OWNER), [])
 
     def test_todo_md_rejects_renamed_heading(self):
-        bad = (F / "todo-md.v1.example.md").read_text().replace("## 只有 Knas 能做", "## Knas 的事")
-        self.assertTrue(contracts.check_todo_md(bad, C / "todo-md.v1.md"))
+        bad = (F / "todo-md.v1.example.md").read_text().replace("## 只有 我 能做", "## 我的事")
+        self.assertTrue(contracts.check_todo_md(bad, C / "todo-md.v1.md", OWNER))
 
     def test_state_todo_fixture(self):
         self.assertEqual(contracts.check_state_todo((F / "state-todo.v1.example.md").read_text(),
-                                                    C / "state-todo.v1.md"), [])
+                                                    C / "state-todo.v1.md", OWNER), [])
 
     def test_state_todo_key_regex(self):
         import re
-        key = re.compile(contracts.md_rules(C / "state-todo.v1.md")["regex:key"][0])
-        m = key.search("- [ ] 〔Knas〕x(等 Knas:task-p-0123456789)")
+        key = re.compile(contracts.md_rules(C / "state-todo.v1.md", OWNER)["regex:key"][0])
+        m = key.search("- [ ] 〔我〕x(等 我:task-p-0123456789)")
         self.assertEqual(m.group(1), "task-p-0123456789")
+
+
+class Neutral(unittest.TestCase):
+    def test_consumer_facing_contracts_dont_name_the_platform(self):
+        """給別的 repo vendor 的契約跟範例不能提這個平台(有開源的 repo)。"""
+        for p in [C / "todo-md.v1.md", C / "state-todo.v1.md", C / "reflect-week.v1.schema.json", *F.glob("*.md")]:
+            text = p.read_text()
+            for word in ("agent-hub", "librarian", "bin/"):
+                self.assertNotIn(word, text, f"{p.name} 提到 {word}")
+
+    def test_same_ignores_prose(self):
+        import tempfile
+        with tempfile.TemporaryDirectory() as d:
+            a, b = pathlib.Path(d, "a.md"), pathlib.Path(d, "b.md")
+            a.write_text((C / "todo-md.v1.md").read_text())
+            b.write_text((C / "todo-md.v1.md").read_text().replace("讀的人", "使用的人"))
+            self.assertTrue(contracts.same(a, b))
+            b.write_text((C / "todo-md.v1.md").read_text().replace("^- \\[ \\] (.+)$", "^\\* (.+)$"))
+            self.assertFalse(contracts.same(a, b))
 
 
 class Json(unittest.TestCase):

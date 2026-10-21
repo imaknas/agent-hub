@@ -60,7 +60,7 @@ def live(index: dict) -> list[str]:
     errs = []
     todo = HUB / "todo.md"
     if todo.exists():
-        errs += [f"todo.md:{e}" for e in contracts.check_todo_md(todo.read_text(), C / "todo-md.v1.md")]
+        errs += [f"todo.md:{e}" for e in contracts.check_todo_md(todo.read_text(), C / "todo-md.v1.md", hubconf.owner_tag())]
     schema = json.loads((C / "project.v1.schema.json").read_text())
     import minischema
     for f in sorted(hubconf.registry_dir().glob("*.yaml")):

@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "agent-hub-hubbus.v1",
+  "$id": "records-hubbus.v1",
   "title": "hubbus 事件(.state/bus.db 的一列;bin/hubbus)",
   "description": "只 append 的事件 log。payload 是 JSON 字串解開後的物件,一律帶 \"v\": 1(2026-10-22 之前的事件沒有,讀成 1)。加欄位不升版;改名/改意思升版並兩版並存。",
   "type": "object",
