@@ -10,6 +10,13 @@ agent-hub 是跨專案的 memory 追蹤 + 排程 + 專案/服務註冊系統,設
 `~/workspace/<name>`,agent-hub 在 `~/agent-hub`)。MBP 只當遙控端:用 Claude Desktop 透過
 SSH 開 mini 上的資料夾,MBP 斷線/沒電 session 也繼續跑。MBP 上的舊資料夾只是備份。
 
+## 寫新程式的規則(第一階段,2026-10-22 起)
+
+- **路徑、名稱、owner 一律從 `bin/hubconf.py` 拿**(設定在 `hub.json`;hub 根目錄由腳本位置推出,
+  `AGENT_HUB_ROOT` 可覆蓋)。不要再寫死 `~/agent-hub`、`~/services`、專案名稱、`knas`。
+- 協定裡的識別字用英文(hubbus 的 owner 地址是 `owner`,`knas` 是別名);使用者身分(〔Knas〕標籤)從設定讀。
+- 不要把新的個人資料放進程式碼或測試。
+
 ## 先查這裡,不要自己猜
 
 - **想知道某個專案現在狀態、綁定哪些服務、STATE.md 寫什麼**:

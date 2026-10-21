@@ -61,15 +61,20 @@ import time
 import urllib.error
 import urllib.request
 
-HUB = pathlib.Path.home() / "agent-hub"
-DB = HUB / ".state" / "bus.db"
-REGISTRY = HUB / "onboarded-projects.tsv"
-AGENT_JOBS = HUB / ".state" / "agent-jobs"
-MUNINN = pathlib.Path.home() / "services" / "muninn"
-MUNINN_API = "http://127.0.0.1:18795/api/messages"
-INGEST_TOKEN = MUNINN / "data" / "secrets" / "ingest_token"
-LOG = HUB / ".logs" / "hubbus.log"
-KNAS = "knas"
+sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
+import hubconf  # noqa: E402  路徑、owner 地址、專案登錄都從平台設定來
+
+HUB = hubconf.ROOT
+DB = hubconf.STATE / "bus.db"
+AGENT_JOBS = hubconf.STATE / "agent-jobs"
+MUNINN_CLI = hubconf.p("assistant.cli")
+MUNINN = MUNINN_CLI.parents[2] if MUNINN_CLI else None   # <runtime>/.venv/bin/muninn → <runtime>
+MUNINN_API = hubconf.get("assistant.api")
+INGEST_TOKEN = hubconf.p("assistant.ingest_token")
+LOG = hubconf.LOGS / "hubbus.log"
+# owner(= Knas)的地址:新的信用 owner,舊的 knas 一樣收(hub.json 的 owner.address/aliases)
+KNAS = hubconf.owner_address()
+OWNERS = hubconf.owner_addresses()
 TYPES = ("request", "question", "info", "progress", "done", "task", "drop")
 KNAS_ONLY = ("task", "drop")   # Muninn 的任務登錄:只有 Knas 能做的事,只寄給 knas
 # 寄給 knas 的 type → Muninn 收的 type。request = 要 Knas 去做一件事 = 任務;要他用文字回答的才是 question
@@ -143,13 +148,16 @@ def payload(r) -> dict:
 # ---------- 地址 ----------
 
 def projects() -> dict[str, pathlib.Path]:
-    out = {"agent-hub": HUB}
-    if REGISTRY.exists():
-        for line in REGISTRY.read_text().splitlines()[1:]:
-            cols = line.split("\t")
-            if len(cols) >= 2 and cols[0]:
-                out[cols[0]] = pathlib.Path(cols[1])
+    out = {hubconf.hub_project(): HUB}
+    for name in hubconf.projects():
+        ws = hubconf.workspace(name)
+        if ws:
+            out[name] = ws
     return out
+
+
+def canon(addr: str) -> str:
+    return KNAS if addr in OWNERS else addr
 
 
 def project_of(cwd: pathlib.Path) -> str | None:
@@ -172,7 +180,7 @@ def project_of(cwd: pathlib.Path) -> str | None:
 
 
 def valid_address(a: str) -> bool:
-    return a == KNAS or a in projects()
+    return a in OWNERS or a in projects()
 
 
 # ---------- 信(message 的投影) ----------
@@ -326,12 +334,12 @@ def handoff_text(h: dict) -> str:
 
 
 def muninn(*args) -> subprocess.CompletedProcess:
-    return subprocess.run([str(MUNINN / ".venv" / "bin" / "muninn"), "handoffs", *args], cwd=MUNINN,
+    return subprocess.run([str(MUNINN_CLI), "handoffs", *args], cwd=MUNINN,
                           capture_output=True, text=True, timeout=120)
 
 
 def import_handoffs(c) -> None:
-    if not (MUNINN / ".venv" / "bin" / "muninn").exists():
+    if not MUNINN_CLI or not MUNINN_CLI.exists():
         return
     r = muninn("--json")
     try:
@@ -374,7 +382,7 @@ def import_handoffs(c) -> None:
 def to_muninn(c, ev) -> dict | None:
     """這個事件要不要送 Muninn;要的話回傳要 POST 的那一則。"""
     p = payload(ev)
-    if ev["type"] == "message" and ev["to_project"] == KNAS:
+    if ev["type"] == "message" and ev["to_project"] in OWNERS:
         item = {"id": ev["id"], "project": ev["source"], "type": TO_MUNINN.get(p.get("type"), "progress"),
                 "text": p.get("text") or "(沒有內容)"}
         if p.get("handoff_id") is not None:
@@ -456,7 +464,7 @@ def escalate(c) -> None:
     cutoff = iso(now() - datetime.timedelta(hours=ESCALATE_HOURS))
     known, waiting = projects(), {}
     for proj in known:
-        if proj == "agent-hub":
+        if proj == hubconf.hub_project():
             continue
         for r in inbox(c, proj):
             if not r["delivered"] and r["ts"] < cutoff and payload(r).get("type") in ESCALATE_TYPES:
@@ -529,8 +537,10 @@ def cmd_open_handoffs() -> None:
     (id 是匯流排的信 id;librarian 套用可信後用 `hubbus done <id>` 結案,bridge 再回報 Muninn)。"""
     c = db()
     out = []
-    for r in c.execute("SELECT * FROM events m WHERE m.type='message' AND m.source=? AND NOT EXISTS("
-                       "SELECT 1 FROM events x WHERE x.type='message.done' AND x.ref=m.id) ORDER BY m.seq", (KNAS,)):
+    owners = sorted(OWNERS)
+    for r in c.execute(f"SELECT * FROM events m WHERE m.type='message' AND m.source IN ({','.join('?' * len(owners))})"
+                       " AND NOT EXISTS(SELECT 1 FROM events x WHERE x.type='message.done' AND x.ref=m.id) ORDER BY m.seq",
+                       owners):
         p = payload(r)
         if p.get("type") != "handoff":
             continue
@@ -641,10 +651,11 @@ def main() -> None:
                 json.loads(a.payload))
     elif a.cmd == "send":
         sender = a.sender or here
-        if not sender or not valid_address(sender) or sender == KNAS:
+        a.to = canon(a.to)
+        if not sender or not valid_address(sender) or sender in OWNERS:
             sys.exit("hubbus: 不知道寄件人是哪個專案(不在專案目錄裡就加 --from <專案>)")
         if not valid_address(a.to):
-            sys.exit(f"hubbus: 沒有 {a.to} 這個地址(專案名稱見 onboarded-projects.tsv、agent-hub,或 knas)")
+            sys.exit(f"hubbus: 沒有 {a.to} 這個地址(專案名稱見專案登錄、{hubconf.hub_project()},或 {'/'.join(sorted(OWNERS))})")
         p = {"type": a.type, "text": a.text, "from_session": session}
         if a.type in KNAS_ONLY and a.to != KNAS:
             sys.exit(f"hubbus: {a.type} 只能寄給 knas")
@@ -656,7 +667,7 @@ def main() -> None:
         if a.reply_to:
             orig = must_message(c, a.reply_to)
             p["reply_to"] = a.reply_to
-            if orig["source"] == a.to and payload(orig).get("from_session"):
+            if canon(orig["source"]) == a.to and payload(orig).get("from_session"):
                 p["to_session"] = payload(orig)["from_session"]
             if payload(orig).get("handoff_id") is not None:
                 p["handoff_id"] = payload(orig)["handoff_id"]

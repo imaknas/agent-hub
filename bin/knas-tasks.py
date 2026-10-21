@@ -29,20 +29,24 @@ import shlex
 import subprocess
 import sys
 
-HOME = pathlib.Path.home()
-HUB = HOME / "agent-hub"
-COPIES = HOME / ".memory-copies"
+sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
+import hubconf  # noqa: E402
+
+HUB = hubconf.ROOT
+COPIES = hubconf.p("memory_copies")
 HUBBUS = ["/usr/bin/python3", str(HUB / "bin" / "hubbus")]
-MIGRATED = HUB / ".state" / "knas-tasks-migrated"
-VANISHED = HUB / ".state" / "knas-tasks-vanished.json"   # 已經警告過的 key,只警告一次
-BUS = HUB / ".state" / "bus.db"
+MIGRATED = hubconf.STATE / "knas-tasks-migrated"
+VANISHED = hubconf.STATE / "knas-tasks-vanished.json"   # 已經警告過的 key,只警告一次
+BUS = hubconf.STATE / "bus.db"
+OWNER, OWNERS, TAG = hubconf.owner_address(), sorted(hubconf.owner_addresses()), hubconf.owner_tag()
+IN_OWNERS = f"({','.join(repr(o) for o in OWNERS)})"
 KEYED = ("done", "dropped", "already_done", "reopened")
 STRIKE = ("done", "dropped", "already_done")
 
-ITEM = re.compile(r"^- \[ \] 〔Knas〕\s*(.+)$")
-GROUP = re.compile(r"^#{3,4}\s*〔(Knas|agent|待定)〕\s*$")
+ITEM = re.compile(rf"^- \[ \] 〔{re.escape(TAG)}〕\s*(.+)$")
+GROUP = re.compile(r"^#{3,4}\s*〔([^〕]+)〕\s*$")
 BARE = re.compile(r"^- \[ \] (?!〔)(.+)$")
-KEY = re.compile(r"[((]等 Knas[::]\s*([^))\s]+)\s*[))]")
+KEY = re.compile(rf"[((]等 {re.escape(TAG)}[::]\s*([^))\s]+)\s*[))]")
 DRY = "--dry-run" in sys.argv
 
 
@@ -59,7 +63,7 @@ def task_key(project: str, text: str) -> str:
 
 
 def stamp(key: str) -> str:
-    return f"(等 Knas:{key})"
+    return f"(等 {TAG}:{key})"
 
 
 def todo_bounds(lines: list[str]) -> tuple[int, int] | None:
@@ -86,7 +90,7 @@ def unkeyed(lines: list[str]) -> list[tuple[int, str]]:
             continue
         if m := ITEM.match(l):
             out.append((i, m.group(1).strip()))
-        elif group == "Knas" and (m := BARE.match(l)):
+        elif group == TAG and (m := BARE.match(l)):
             out.append((i, m.group(1).strip()))
     return out
 
@@ -105,7 +109,7 @@ def apply_keyed(lines: list[str], h: dict) -> bool:
     if hits:  # reopened,而那一行本來就還在
         return False
     b = todo_bounds(lines)
-    new = f"- [ ] 〔Knas〕{norm(h.get('item') or '(Muninn 重開的任務)')}{stamp(key)}"
+    new = f"- [ ] 〔{TAG}〕{norm(h.get('item') or '(重開的任務)')}{stamp(key)}"
     if b is None:
         lines += ["", "## 待辦", "", new]
         return True
@@ -125,7 +129,7 @@ def targets() -> list[tuple[str, pathlib.Path, str]]:
     """(專案, 檔案, 怎麼 commit)"""
     out = [(d.name, d / "STATE.md", "copy") for d in sorted(COPIES.iterdir())
            if (d / ".git").exists() and (d / "STATE.md").exists()]
-    out.append(("agent-hub", HUB / "openclaw-migration-status.md", "hub"))
+    out.append((hubconf.hub_project(), HUB / "openclaw-migration-status.md", "hub"))
     return out
 
 
@@ -150,7 +154,7 @@ def vanished_keys(project: str, lines: list[str], closed: set[str]) -> list[str]
         return []
     import sqlite3
     c = sqlite3.connect(BUS, timeout=30)
-    posted = {r[0] for r in c.execute("SELECT id FROM events WHERE type='message' AND to_project='knas'"
+    posted = {r[0] for r in c.execute(f"SELECT id FROM events WHERE type='message' AND to_project IN {IN_OWNERS}"
                                       " AND source=? AND id LIKE 'task-%'", (project,))}
     present = {m.group(1) for l in lines if (m := KEY.search(l))}
     return sorted(posted - present - closed)
@@ -173,7 +177,7 @@ def main() -> int:
     if BUS.exists():
         import sqlite3
         for (pl,) in sqlite3.connect(BUS, timeout=30).execute(
-                "SELECT payload FROM events WHERE type='message' AND source='knas' AND payload LIKE '%\"reply_to\"%'"):
+                f"SELECT payload FROM events WHERE type='message' AND source IN {IN_OWNERS} AND payload LIKE '%\"reply_to\"%'"):
             h = json.loads(pl).get("handoff") or {}
             if h.get("effect") in STRIKE and h.get("reply_to"):
                 closed.add(h["reply_to"])
@@ -192,7 +196,7 @@ def main() -> int:
                 warned.add(key)
         for i, text in unkeyed(lines):
             key = task_key(project, text)
-            args = ["send", "--to", "knas", "--type", "task", "--from", project, "--id", key, "--text", text]
+            args = ["send", "--to", OWNER, "--type", "task", "--from", project, "--id", key, "--text", text]
             if context:
                 args += ["--context", context]
             if DRY:
