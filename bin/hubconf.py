@@ -87,6 +87,18 @@ def projects() -> dict[str, dict]:
     return out
 
 
+def reflection_private() -> set[str] | None:
+    """privacy.reflection 不是 include 的專案(stats_only / exclude):它們的對話內容(連摘要)不送雲端模型。
+    登錄還沒產生、讀不到時回傳 None——呼叫的人要當成「全部都不能送內容」,不是「沒有限制」。"""
+    if not REGISTRY_INDEX.exists():
+        return None
+    try:
+        projs = json.loads(REGISTRY_INDEX.read_text())["projects"]
+    except (ValueError, KeyError):
+        return None
+    return {n for n, d in projs.items() if (d.get("privacy") or {}).get("reflection", "include") != "include"}
+
+
 def workspace(name: str) -> pathlib.Path | None:
     if name == hub_project():
         return ROOT

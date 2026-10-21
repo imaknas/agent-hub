@@ -14,8 +14,14 @@ import pathlib
 import re
 import subprocess
 
-MUNINN = pathlib.Path.home() / "services" / "muninn"
-EXCLUDED = {"project-23", "project-24"}
+import sys
+sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
+import hubconf  # noqa: E402
+
+MUNINN_CLI = hubconf.p("assistant.cli")
+# 專案登錄的 privacy.reflection 不是 include 的(現在是 project-23、project-24):連摘要也不送。
+# 登錄讀不到 = None:那就完全不送摘要,只送統計
+EXCLUDED = hubconf.reflection_private()
 
 # trajectory.py 還在用(它自己決定送什麼);這裡已經不送任何原文。
 # 送給模型前遮掉像憑證的字串:第一次試跑時,模型把對話裡貼過的 Finnhub API key
@@ -91,11 +97,11 @@ NO_DIGEST_INTRO = "只有數字,沒有任何對話內容或摘要。你看不到
 
 def muninn_digests(week: str) -> dict | None:
     """muninn 本機模型寫的 session 摘要;拿不到就回 None(只送統計)。"""
-    exe = MUNINN / ".venv" / "bin" / "muninn"
-    if not exe.exists():
+    exe = MUNINN_CLI
+    if EXCLUDED is None or not exe or not exe.exists():
         return None
     try:
-        r = subprocess.run([str(exe), "digests", "--week", week, "--json"], cwd=MUNINN,
+        r = subprocess.run([str(exe), "digests", "--week", week, "--json"], cwd=exe.parents[2],
                            capture_output=True, text=True, timeout=120)
         d = json.loads(r.stdout) if r.returncode == 0 else None
     except (subprocess.TimeoutExpired, ValueError):
@@ -147,7 +153,7 @@ def stats_brief(stats: dict) -> str:
 
 
 def analyze(stats: dict) -> dict:
-    meta = {"model": os.environ.get("INDEX_MODEL", "sonnet"), "source": "stats", "excluded": sorted(EXCLUDED)}
+    meta = {"model": os.environ.get("INDEX_MODEL", "sonnet"), "source": "stats", "excluded": sorted(EXCLUDED or [])}
     if not stats["totals"]["prompts"]:
         return {"error": "這週沒有活動可分析", "meta": meta}
     d = muninn_digests(stats["week"])
