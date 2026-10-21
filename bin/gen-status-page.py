@@ -201,6 +201,32 @@ def main() -> None:
                     for i, r in enumerate(reps))
                 report_blocks.append(f"<section><h3>{esc(name)}</h3>{items}</section>")
 
+    # 專案信箱/事件匯流排(bin/hubbus):卡住的信、送不進 Muninn 的、壞掉被移開的 bus.db
+    mail_html = ""
+    r = subprocess.run(["/usr/bin/python3", str(HUB / "bin" / "hubbus"), "status", "--json"], capture_output=True, text=True)
+    try:
+        bus = json.loads(r.stdout)
+    except ValueError:
+        bus = None
+        alerts.append(("bad", f"讀不到專案信箱狀態(hubbus status exit {r.returncode}):{r.stderr.strip()[-160:]}"))
+    if bus:
+        for st in bus["stuck"]:
+            alerts.append(("bad", f"信 {st['id']} 寄給 {st['to']} 超過 12 小時沒有 session 收(會交給 headless agent mailbox-{st['to']})"))
+        tm = bus["to_muninn"]
+        if tm["n"] and now - datetime.datetime.fromisoformat(tm["oldest"]).replace(tzinfo=None) > datetime.timedelta(hours=1):
+            alerts.append(("bad", f"{tm['n']} 則要送進 Muninn 的(給 knas 的信、轉交結案)卡住了,最舊 {tm['oldest'][5:16]};"
+                                  "看 .logs/hubbus.log"))
+        for f in bus["job_failed_24h"]:
+            if f.get("job") == "hubbus-bridge":
+                alerts.append(("bad", f"hubbus:{f.get('detail', '')}"))
+        if bus["corrupt"]:
+            alerts.append(("bad", f"bus.db 壞過,舊檔移到 {', '.join(bus['corrupt'])}(裡面還沒收的信不見了)"))
+        mail_rows = "".join(f"<tr><td>{esc(p)}</td><td>{v['open']}</td><td>{v['undelivered']}</td>"
+                            f"<td>{esc(v['oldest'][5:16].replace('T', ' '))}</td></tr>" for p, v in bus["projects"].items())
+        mail_html = ("<h2 style=\"font-size:18px;margin-top:28px\">專案信箱</h2>"
+                     + (f"<table><tr><th>收件</th><th>沒結案</th><th>還沒送進 session</th><th>最舊</th></tr>{mail_rows}</table>"
+                        if mail_rows else "<div class=sub>沒有沒結案的信</div>"))
+
     alert_html = "".join(f"<div class='alert {c}'>{'🔔' if c == 'notify' else '⚠️'} {esc(t)}</div>"
                          for c, t in alerts) or "<div class='alert good'>✅ 沒有需要處理的事</div>"
     page = f"""<!doctype html><html lang="zh-Hant"><head><meta charset="utf-8">
@@ -226,6 +252,7 @@ summary{{cursor:pointer;color:var(--mut)}} pre{{white-space:pre-wrap;word-break:
 <h1>排程狀態</h1><div class=sub>mini · 產生於 {now:%Y-%m-%d %H:%M} · 每 5 分鐘自動重新整理 · 排程定義在 ~/agent-hub/schedule.yaml</div>
 {alert_html}
 <table><tr><th>Job</th><th>時間</th><th>上次</th><th>下次</th></tr>{''.join(rows)}</table>
+{mail_html}
 <h2 style="font-size:18px;margin-top:28px">Claude job 報告</h2>
 {''.join(report_blocks) or '<div class=sub>還沒有報告</div>'}
 </main></body></html>"""

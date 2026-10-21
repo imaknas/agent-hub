@@ -13,7 +13,8 @@
 #          第一次接上時把 CLAUDE.local.md 印進 context(session 開始時它還不存在),
 #          memory 落後就提醒
 #   end    (SessionEnd / PreCompact)同步 memory 筆記,跟主 checkout 的 hook 同一支腳本
-#   nudge  (PostToolUse)git commit/push 之後筆記落後就提醒
+#   nudge  (PostToolUse)git commit/push 之後筆記落後就提醒;專案信箱有新信就送進來(hubbus,限流)
+#   start 也會把專案信箱還沒結案的信送進 context
 # symlink 指向同一份 .agent-memory,with-lock 用的是同一個 git dir,不會跟主 checkout 互撞。
 # 刪掉 worktree 只會刪 symlink,不會動到主 checkout 的 memory。
 set -uo pipefail
@@ -28,6 +29,9 @@ main=$(dirname "$common")                      # <主 checkout>/.git → <主 ch
 [ -d "$main/.agent-memory" ] || exit 0         # 不是 onboard 過的專案
 top=$(git rev-parse --show-toplevel 2>/dev/null) || exit 0
 cd "$top" || exit 0
+# hook JSON(stdin)只能讀一次,memory-nudge 跟 hubbus 都要用
+hook_json=""
+[ -t 0 ] || IFS= read -r -t 1 hook_json || true
 
 case "$event" in
   start)
@@ -47,12 +51,14 @@ case "$event" in
       cat CLAUDE.local.md
     fi
     python3 "$HUB/bin/memory-nudge.py" --session-start 2>/dev/null
+    [ -n "$hook_json" ] && printf '%s' "$hook_json" | python3 "$HUB/bin/hubbus" hook session-start 2>/dev/null
     ;;
   end)
     [ -e .agent-memory ] && cd .agent-memory && "$HUB/bin/with-lock.sh" "$HUB/bin/git-sync-memory.sh"
     ;;
   nudge)
-    [ -e .agent-memory ] && python3 "$HUB/bin/memory-nudge.py" --post-tool
+    [ -e .agent-memory ] && printf '%s' "$hook_json" | python3 "$HUB/bin/memory-nudge.py" --post-tool
+    [ -n "$hook_json" ] && printf '%s' "$hook_json" | python3 "$HUB/bin/hubbus" hook post-tool 2>/dev/null
     ;;
 esac
 exit 0

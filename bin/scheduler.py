@@ -70,6 +70,13 @@ def save_state(state: dict) -> None:
     tmp.replace(STATE_FILE)
 
 
+def job_failed(name: str, code: int, detail: str = "") -> None:
+    """匯流排上的 job.failed(狀態頁、之後的 Muninn 讀);寫不進去不影響排程。"""
+    subprocess.run(["/usr/bin/python3", str(HUB / "bin" / "hubbus"), "publish", "job.failed", "--source", "scheduler",
+                    "--payload", json.dumps({"job": name, "exit": code, "detail": detail}, ensure_ascii=False)],
+                   capture_output=True, timeout=30)
+
+
 def heartbeat() -> None:
     HEARTBEAT.write_text(datetime.datetime.now().isoformat(timespec="seconds") + "\n")
 
@@ -111,6 +118,7 @@ def reconcile(state: dict, jobs: dict[str, dict]) -> set[str]:
                 continue
             # 沒寫結果就不見了(重開機、被殺):算失敗,嘗試次數在開始前就記過了
             log(f"job '{name}' FAILED (exit -1), background process gone without a result")
+            job_failed(name, -1, "背景執行到一半不見了(重開機、被殺)")
         elif rec["exit"] == 0:
             state[name] = rec["date"]
             if "every_minutes" in jobs.get(name, {}):
@@ -146,6 +154,8 @@ def spawn_background(name: str, command: str, job_log_path: pathlib.Path,
         write_json(run_file, rec)
         log(f"job '{name}' finished OK" if rc == 0 else
             f"job '{name}' FAILED (exit {rc}), will retry next tick")
+        if rc != 0:
+            job_failed(name, rc, f"log:.logs/{job_log_path.name}")
     finally:
         os._exit(0)
 
@@ -269,6 +279,7 @@ def main() -> None:
             log(f"job '{name}' finished OK")
         except subprocess.CalledProcessError as e:
             log(f"job '{name}' FAILED (exit {e.returncode}), will retry next tick")
+            job_failed(name, e.returncode, f"log:.logs/{job_log_path.name}")
         heartbeat()
 
     save_state(state)

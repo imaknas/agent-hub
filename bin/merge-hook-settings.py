@@ -41,6 +41,11 @@ SYNC_CMD = "[ -d .agent-memory ] && [ -x ~/agent-hub/bin/sync-local-setup.sh ] &
 # (PostToolUse 的 additionalContext)。筆記沒落後就什麼都不輸出。
 NUDGE_CMD = "[ -d .agent-memory ] && [ -x ~/agent-hub/bin/memory-nudge.py ] && ~/agent-hub/bin/memory-nudge.py --post-tool || true"
 
+# 專案信箱(hubbus):有新信就送進正在用的 session。SessionStart 那一份由 sync-local-setup.sh 呼叫
+# (不用另外一條 hook)。hubbus 自己判斷是哪個專案、沒信就不輸出;PostToolUse 每個 session 兩分鐘最多查一次。
+MAIL_PROMPT_CMD = "[ -x ~/agent-hub/bin/hubbus ] && ~/agent-hub/bin/hubbus hook prompt || true"
+MAIL_TOOL_CMD = "[ -x ~/agent-hub/bin/hubbus ] && ~/agent-hub/bin/hubbus hook post-tool || true"
+
 # (event, matcher, command);matcher 為 None 表示不設(該事件全部觸發)
 HOOKS = (
     ("SessionStart", None, START_CMD),
@@ -48,6 +53,8 @@ HOOKS = (
     ("SessionEnd", None, END_CMD),
     ("PreCompact", None, PRECOMPACT_CMD),
     ("PostToolUse", "Bash", NUDGE_CMD),
+    ("UserPromptSubmit", None, MAIL_PROMPT_CMD),
+    ("PostToolUse", "Bash", MAIL_TOOL_CMD),
 )
 
 

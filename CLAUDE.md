@@ -51,6 +51,17 @@ SSH 開 mini 上的資料夾,MBP 斷線/沒電 session 也繼續跑。MBP 上的
   (OpenClaw、Homebrew、GitHub Actions 自己管的)只會印出重建步驟,不會
   用猜的去動別人的東西
 
+## 專案信箱 / 事件匯流排
+
+- `bin/hubbus`——跨專案(跟 Knas)的信,收件人是**專案**(或 `knas` = 送進 Muninn),不是 session;
+  只 append 的事件 log(`.state/bus.db`,不進版控、沒有備份),信箱是它的投影。各專案的 session
+  用 `hubbus send/inbox/done`(寫在 `templates/CLAUDE.md`);信由 SessionStart(`sync-local-setup.sh`、
+  `worktree-memory.sh`)、UserPromptSubmit/PostToolUse hook 送進 session;`hubbus-bridge`(schedule.yaml,
+  每 15 分鐘)負責 Muninn 的轉交進信箱、給 knas 的信跟轉交的 done 送進 Muninn、12 小時沒人收就在那個專案
+  跑 headless agent(`agent-jobs/mailbox.md`,只寫筆記/回信/問 knas,不改程式碼)。Muninn 轉交只有這一個
+  消費者——librarian 不再直接把轉交改進 STATE.md(2026-10-21 從 9e9ac7f 改過來),改成 session 記 memory
+  筆記、librarian 照常整理。介面跟失敗模式看 `bin/hubbus` 檔頭
+
 ## 這些給 hook/其他腳本內部呼叫,不要手動直接跑
 
 - `bin/git-safe-push.sh`——push 遇到分岔自動 pull 重試;真的內容衝突才
@@ -182,7 +193,7 @@ memory 追蹤但不需要在 mini 上執行任何東西的專案(目前大多數
 
 - **手動編輯(腳本、文件、services.tsv 等)**:只由工作目錄在 mini 的 `~/agent-hub`
   的專用 session 做(2026-10-15 前在 MBP 的 `~/agent-hub`;MBP 那份現在只 pull,不在那裡改),它負責 commit+push。其他專案的 session 發現 agent-hub
-  的問題,只通知(傳訊息給這個 session 或告訴使用者),不直接改——2026-09-25
+  的問題,只通知(`hubbus send --to agent-hub`,或告訴使用者),不直接改——2026-09-25
   兩個 session 同時改這份 working tree,commit 互相夾帶對方改到一半的檔案
 - **腳本寫的被版控檔案**(`onboarded-projects.tsv`、`mirror-list.txt`、
   `index.md`、`todo.md`、`reflect/`、`schedule.yaml`、`models.env`、`digest/`、`review-log.md`):

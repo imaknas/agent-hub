@@ -134,6 +134,15 @@ done
 # 所以在這個時間點把提醒放回 context。沒落後就什麼都不印。
 python3 "$AGENT_HUB/bin/memory-nudge.py" --session-start 2>/dev/null || true
 
+# --- 3c. 專案信箱(hubbus):還沒結案的信送進 context(--quiet 也印)---
+# 只有真的 SessionStart hook 才有 stdin 的 hook JSON;onboard/rename 用 --quiet 跑的時候沒有,
+# hubbus 看不到 session_id 就什麼都不做。read -t:stdin 是開著但沒資料的 pipe 也不會卡住。
+if $QUIET && [ ! -t 0 ]; then
+  hook_json=""
+  IFS= read -r -t 1 hook_json || true
+  [ -n "$hook_json" ] && printf '%s' "$hook_json" | python3 "$AGENT_HUB/bin/hubbus" hook session-start 2>/dev/null || true
+fi
+
 # --- 4. 被 commit 的檔案不能提到這套機制 ---
 # repo 之後會不會公開沒有定論,所以一律不准:agent-hub、.agent-memory 的名稱或路徑
 # 出現在已 commit 的內容裡就提醒。這段刻意在 --quiet 下也輸出——SessionStart hook

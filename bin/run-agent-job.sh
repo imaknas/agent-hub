@@ -3,8 +3,9 @@
 # 取代 Claude Desktop 的「Scheduled」任務:那些只在 MBP 開著、醒著時才跑;這支跑在 mini,
 # 由 scheduler.py 依 schedule.yaml 觸發,所有排程只有 schedule.yaml 一個地方管。
 #
-# 用法(寫在 schedule.yaml 的 command):run-agent-job.sh <name> [工作目錄]
-#   prompt:agent-jobs/<name>.md(版控);工作目錄沒給就用這個 job 自己的狀態目錄
+# 用法(寫在 schedule.yaml 的 command):run-agent-job.sh <name> [工作目錄] [prompt 名稱]
+#   prompt:agent-jobs/<prompt 名稱,預設 name>.md(版控);工作目錄沒給就用這個 job 自己的狀態目錄
+#   (hubmail 的升級用同一份 agent-jobs/mailbox.md,name 是 mailbox-<專案>,各自一個狀態目錄)
 #   產出:.state/agent-jobs/<name>/
 #     <YYYY-MM-DD-HHMM>.md   每次的報告(Claude 最後的回覆)
 #     status.json            最後一次的狀態(running/ok/failed、時間、session id、報告路徑)
@@ -23,8 +24,8 @@
 set -uo pipefail
 
 HUB="$HOME/agent-hub"
-NAME="${1:?用法: run-agent-job.sh <name> [工作目錄]}"
-PROMPT="$HUB/agent-jobs/$NAME.md"
+NAME="${1:?用法: run-agent-job.sh <name> [工作目錄] [prompt 名稱]}"
+PROMPT="$HUB/agent-jobs/${3:-$NAME}.md"
 OUT="$HUB/.state/agent-jobs/$NAME"
 CWD="${2:-$OUT}"
 mkdir -p "$OUT"

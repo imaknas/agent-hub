@@ -1,5 +1,9 @@
 {
   "hooks": {
-    "SessionStart": [{ "hooks": [{ "type": "command", "command": "~/agent-hub/bin/with-lock.sh git pull -q" }] }]
+    "SessionStart": [
+      { "hooks": [{ "type": "command", "command": "~/agent-hub/bin/with-lock.sh git pull -q" }] },
+      { "hooks": [{ "type": "command", "command": "[ -x ~/agent-hub/bin/hubbus ] && ~/agent-hub/bin/hubbus hook session-start || true" }] }
+    ],
+    "UserPromptSubmit": [{ "hooks": [{ "type": "command", "command": "[ -x ~/agent-hub/bin/hubbus ] && ~/agent-hub/bin/hubbus hook prompt || true" }] }]
   }
 }
