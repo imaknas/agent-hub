@@ -32,6 +32,7 @@ done 要讓 Muninn 結案,job 失敗要給狀態頁),不用各自接一條檔案
   hubbus hook session-start|prompt|post-tool   把新信送進 session(stdin 是 hook JSON;失敗一律安靜)
   hubbus bridge                       排程每 15 分鐘:Muninn 轉交 → 信、給 knas 的信跟轉交的 done → Muninn、
                                       太久沒人收的信 → headless agent、清掉 60 天前結案的
+  hubbus open-handoffs                還沒結案的 Muninn 轉交(librarian 每晚套用進 STATE.md,可信才 done)
   hubbus publish <type> --source S [--to P] [--ref ID] [--payload JSON] [--id ID]
   hubbus status [--json]
 
@@ -71,7 +72,7 @@ TYPES = ("request", "question", "info", "progress", "done")
 TO_MUNINN = {"request": "question", "question": "question", "info": "progress", "progress": "progress", "done": "done"}
 BRIDGE = "muninn-bridge"
 ESCALATE_HOURS = 12      # 沒有 session 收超過這麼久 → headless agent 處理
-ESCALATE_TYPES = ("request", "question", "handoff")
+ESCALATE_TYPES = ("request", "question")  # 轉交不升級:librarian 每晚直接套用進 STATE.md
 REPLY_WAIT_MIN = 30      # 回覆先等發問的 session 這麼久,過了就給任何 session
 POST_TOOL_EVERY_S = 120  # PostToolUse 每個 session 最多這麼久查一次
 PRUNE_DAYS = 60
@@ -296,18 +297,16 @@ def handoff_text(h: dict) -> str:
     if h.get("effect") == "answers":
         return (f"Knas 回答了這個專案問的問題。\n問題:{h.get('item', '')}\n回答:{h.get('fact', '')}"
                 + (f"\nKnas 原話:{h['quote']}" if h.get("quote") else "")
-                + "\n照回答繼續;值得留下的決定記進 .agent-memory/memory/ 今天的筆記,然後 `hubbus done <id>`。")
+                + "\n照回答繼續,然後 `hubbus done <id>`(回報 Muninn 結案)。"
+                  "沒 done 的話,librarian 今晚會把回答套用進 STATE.md 再結案。")
     lines = [f"Knas 告訴 Muninn 一件跟這個專案有關的事({h.get('effect', 'relevant')}):", f"事實:{h.get('fact', '')}"]
     if h.get("quote"):
         lines.append(f"Knas 原話:{h['quote']}")
     lines.append(f"對應待辦:{h.get('item') or '(沒有指定)'}")
     if h.get("why"):
         lines.append(f"Muninn 的判斷理由:{h['why']}")
-    lines.append("處理:跟目前工作有關就照著調整;把事實記進 .agent-memory/memory/ 今天的筆記"
-                 "(保留不確定的語氣,有原話以原話為準),librarian 會整理進 STATE.md。"
-                 "resolves = 對應待辦已完成/有答案;changes = 待辦還在但前提變了;relevant = 參考。"
-                 "筆記裡寫清楚是哪一條待辦(照 STATE.md 的寫法);STATE.md 找不到對應的那條就不要硬套到別條,只記事實。"
-                 "記好就 `hubbus done <id>`,會回報 Muninn 結案。")
+    lines.append("處理:librarian 今晚會把它套用進 STATE.md(待辦、相關段落)並回報 Muninn 結案,"
+                 "不用另外記筆記、也不用 done。跟目前工作有關就照著調整。")
     return "\n".join(lines)
 
 
@@ -339,7 +338,8 @@ def import_handoffs(c) -> None:
         if proj not in known:
             unknown.append(f"#{hid}→{proj}")
             continue
-        p = {"type": "handoff", "text": handoff_text(h), "handoff_id": hid, "effect": h.get("effect")}
+        p = {"type": "handoff", "text": handoff_text(h), "handoff_id": hid, "effect": h.get("effect"),
+             "handoff": {k: h.get(k) for k in ("effect", "fact", "quote", "item", "why", "ts")}}
         if h.get("reply_to"):
             p["reply_to"] = h["reply_to"]
             if orig is not None and payload(orig).get("from_session"):
@@ -503,6 +503,32 @@ def cmd_bridge() -> None:
             log(f"bridge {step.__name__} 失敗:{e!r}")
 
 
+def cmd_open_handoffs() -> None:
+    """librarian 用:所有專案還沒結案的 Muninn 轉交,格式跟 `muninn handoffs --json` 差不多
+    (id 是匯流排的信 id;librarian 套用可信後用 `hubbus done <id>` 結案,bridge 再回報 Muninn)。"""
+    c = db()
+    out = []
+    for r in c.execute("SELECT * FROM events m WHERE m.type='message' AND m.source=? AND NOT EXISTS("
+                       "SELECT 1 FROM events x WHERE x.type='message.done' AND x.ref=m.id) ORDER BY m.seq", (KNAS,)):
+        p = payload(r)
+        if p.get("type") != "handoff":
+            continue
+        h = p.get("handoff")
+        if h is None:  # 2026-10-21 最早收進來的三筆沒有原始欄位,從給 session 看的文字拆回來
+            labels = {"事實:": "fact", "Knas 原話:": "quote", "對應待辦:": "item", "Muninn 的判斷理由:": "why"}
+            h = {}
+            for line in p.get("text", "").splitlines():
+                for label, key in labels.items():
+                    if line.startswith(label):
+                        h[key] = line[len(label):]
+            if h.get("item") == "(沒有指定)":
+                h["item"] = None
+        out.append({"id": r["id"], "project": r["to_project"], "ts": h.get("ts") or r["ts"],
+                    "handoff_id": p.get("handoff_id"), "effect": p.get("effect") or h.get("effect") or "relevant",
+                    "fact": h.get("fact") or "", "quote": h.get("quote"), "item": h.get("item"), "why": h.get("why") or ""})
+    print(json.dumps(out, ensure_ascii=False))
+
+
 def cmd_status(as_json: bool) -> None:
     c = db()
     per: dict[str, dict] = {}
@@ -556,6 +582,7 @@ def main() -> None:
     d.add_argument("--note")
     sub.add_parser("hook").add_argument("event", choices=("session-start", "prompt", "post-tool"))
     sub.add_parser("bridge")
+    sub.add_parser("open-handoffs")
     pb = sub.add_parser("publish")
     pb.add_argument("type", choices=("job.failed",))  # 其他種類有專用指令
     pb.add_argument("--source", required=True)
@@ -574,6 +601,8 @@ def main() -> None:
         return
     if a.cmd == "bridge":
         return cmd_bridge()
+    if a.cmd == "open-handoffs":
+        return cmd_open_handoffs()
     if a.cmd == "status":
         return cmd_status(a.json)
 

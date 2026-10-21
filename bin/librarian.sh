@@ -91,7 +91,27 @@ find "$STATE_DIR/stray" -mindepth 1 -maxdepth 1 -mtime +14 -exec rm -rf {} + 2>/
 
 any_project_changed=false
 digest_file=$(mktemp)
-trap 'rm -f "$digest_file"' EXIT
+handoffs_file=$(mktemp)
+trap 'rm -f "$digest_file" "$handoffs_file"' EXIT
+
+# --- Muninn 轉交(handoffs):Knas 告訴個人助理、跟某個專案有關的事實 ---
+# hubbus-bridge 每 15 分鐘把 Muninn 的轉交收進各專案信箱;這裡每晚把還沒結案的直接當成這次
+# STATE.md 呼叫的額外輸入(不寫成 memory 流水筆記,避免累積流水帳;改了什麼跟理由留在 review-log.md)。
+# 這個專案的結果可信(checkpoint 會推進)才 `hubbus done`,bridge 再回報 Muninn 結案;不可信就留到隔晚。
+# session 已經處理掉(done)的不會出現在這裡。工作(公司)的內容 Muninn 那端就不會轉交。
+HUBBUS="/usr/bin/python3 $HUB/bin/hubbus"
+echo '[]' >"$handoffs_file"
+if $HUBBUS open-handoffs >"$handoffs_file.tmp" 2>>"$LOG" \
+    && jq -e 'type == "array"' "$handoffs_file.tmp" >/dev/null 2>&1; then
+  mv "$handoffs_file.tmp" "$handoffs_file"
+  log "muninn 轉交:$(jq length "$handoffs_file") 筆待處理"
+  for p in $(jq -r '.[].project' "$handoffs_file" | sort -u); do
+    [ -d "$HOME/.memory-copies/$p/.git" ] || log "muninn 轉交:專案 $p 沒有 memory 副本,這次不處理(留在信箱)"
+  done
+else
+  rm -f "$handoffs_file.tmp"
+  log "hubbus open-handoffs 讀取失敗,這次不處理轉交"
+fi
 
 for proj_dir in "$HOME"/.memory-copies/*/; do
   [ -d "$proj_dir/.git" ] || continue
@@ -107,36 +127,72 @@ for proj_dir in "$HOME"/.memory-copies/*/; do
   ckpt_file="$STATE_DIR/$proj.sha"
   last_sha=$(cat "$ckpt_file" 2>/dev/null || true)
 
-  if [ "$head_sha" = "$last_sha" ]; then
+  handoff_ids=$(jq -r --arg p "$proj" '[.[] | select(.project == $p) | .id] | join(" ")' "$handoffs_file")
+  handoff_nums=$(jq -r --arg p "$proj" '[.[] | select(.project == $p) | "#\(.handoff_id)"] | join(" ")' "$handoffs_file")
+
+  if [ "$head_sha" = "$last_sha" ] && [ -z "$handoff_ids" ]; then
     log "$proj: no new commits, skip"
     continue
   fi
   any_project_changed=true
 
-  if [ -n "$last_sha" ] && git -C "$proj_dir" cat-file -e "$last_sha" 2>/dev/null; then
-    range="$last_sha..$head_sha"
-  else
-    range="$head_sha"
+  changed_memory=""
+  if [ "$head_sha" != "$last_sha" ]; then
+    if [ -n "$last_sha" ] && git -C "$proj_dir" cat-file -e "$last_sha" 2>/dev/null; then
+      range="$last_sha..$head_sha"
+    else
+      range="$head_sha"
+    fi
+    changed_memory=$(git -C "$proj_dir" log --name-only --pretty=format: "$range" -- memory/ 2>/dev/null | grep -v '^$' | sort -u || true)
   fi
 
-  changed_memory=$(git -C "$proj_dir" log --name-only --pretty=format: "$range" -- memory/ 2>/dev/null | grep -v '^$' | sort -u || true)
-
-  if [ -z "$changed_memory" ]; then
+  if [ -z "$changed_memory" ] && [ -z "$handoff_ids" ]; then
     log "$proj: no memory/ changes in range $range"
     echo "$head_sha" > "$ckpt_file"
     continue
   fi
 
-  log "$proj: changed memory files: $(echo "$changed_memory" | tr '\n' ' ')"
+  memory_section="這次 memory/ 沒有新變動,只有下面 Knas 的轉交要處理。"
+  if [ -n "$changed_memory" ]; then
+    log "$proj: changed memory files: $(echo "$changed_memory" | tr '\n' ' ')"
 
-  # diff 由腳本直接給:模型的 --tools 沒有 Bash,自己跑不了 git log,也讀不到
-  # 已經被 git rm 的檔案。太大就截斷,模型再用 Read 讀現存檔案補。
-  MAX_DIFF_BYTES=60000
-  memory_diff=$(git -C "$proj_dir" log -p --reverse --format='=== commit %h %ad %s' --date=short "$range" -- memory/ 2>/dev/null)
-  diff_note=""
-  if [ "${#memory_diff}" -gt "$MAX_DIFF_BYTES" ]; then
-    memory_diff="${memory_diff:0:$MAX_DIFF_BYTES}"
-    diff_note="(diff 太長,只附前 ${MAX_DIFF_BYTES} 字元;其餘請用 Read 讀上面列出、目前還存在的檔案)"
+    # diff 由腳本直接給:模型的 --tools 沒有 Bash,自己跑不了 git log,也讀不到
+    # 已經被 git rm 的檔案。太大就截斷,模型再用 Read 讀現存檔案補。
+    MAX_DIFF_BYTES=60000
+    memory_diff=$(git -C "$proj_dir" log -p --reverse --format='=== commit %h %ad %s' --date=short "$range" -- memory/ 2>/dev/null)
+    diff_note=""
+    if [ "${#memory_diff}" -gt "$MAX_DIFF_BYTES" ]; then
+      memory_diff="${memory_diff:0:$MAX_DIFF_BYTES}"
+      diff_note="(diff 太長,只附前 ${MAX_DIFF_BYTES} 字元;其餘請用 Read 讀上面列出、目前還存在的檔案)"
+    fi
+    memory_section="這個專案自上次檢查後,以下 memory 檔案有變動:
+$changed_memory
+
+實際變動內容(git log -p,由舊到新)$diff_note:
+$memory_diff"
+  fi
+
+  handoff_note=""
+  if [ -n "$handoff_ids" ]; then
+    log "$proj: muninn 轉交 $handoff_nums"
+    handoff_items=$(jq -r --arg p "$proj" '.[] | select(.project == $p) |
+      "- [\(.effect)] 事實:\(.fact)" +
+      (if .quote then "\n  Knas 原話:\(.quote)" else "" end) +
+      "\n  對應待辦:\(.item // "(沒有指定)")\n  助理的判斷理由:\(.why)\n  (\(.ts[0:16]))"' "$handoffs_file")
+    handoff_note="
+Knas 透過他的個人助理(Muninn)告訴我們這些跟這個專案有關的事(比舊的 memory 紀錄新,也比較可信):
+$handoff_items
+
+處理方式(這些轉交本身就算實質變化):
+- [resolves]:Knas 已經處理或回答了對應待辦。從 \`## 待辦\` 移除那一條(用意思比對,文字不一定一樣),
+  並把事實寫進 STATE.md 合適的段落。
+- [changes]:對應待辦還在,但前提或日期變了。依事實改寫那一條,必要時一併更新相關段落。
+- [relevant]:只供參考,影響到現況才更新 STATE.md。
+- [answers]:Knas 回答了這個專案問過他的問題(對應待辦 = 當初的問題,事實 = 回答)。把決定寫進相關段落;
+  有在等這個回答的待辦就依回答移除或改寫。
+- 對應待辦在 STATE.md 找不到時不要硬套到別條,只把事實記進相關段落(有關的話)。
+- 「事實」是助理轉述的,可能比 Knas 原話講得更肯定。有原話以原話為準;寫進 STATE.md 時保留
+  不確定的語氣(預計、預期、可能、打算),不要寫成已確定。"
   fi
 
   # 機械檢查:STATE.md 裡提到的 memory/ 路徑(可含 *)現在還存不存在。
@@ -154,11 +210,8 @@ STATE.md 目前引用了這些已經不存在的檔案(被搬走或刪除),這�
   fi
 
   prompt="你是跨專案整合 agent(圖書館員),現在在專案 $proj 的目錄裡工作。
-這個專案自上次檢查後,以下 memory 檔案有變動:
-$changed_memory
-
-實際變動內容(git log -p,由舊到新)$diff_note:
-$memory_diff
+$memory_section
+$handoff_note
 $dangling_note
 
 背景請讀 ./AGENT.md 跟 ./STATE.md。**STATE.md 在專案根目錄(./STATE.md),不在 memory/ 底下**;
@@ -289,6 +342,7 @@ memory/ 的結構:
       echo
       echo "**理由**: ${reason:-(agent 未提供理由)}"
       echo
+      [ -n "$handoff_ids" ] && { echo "**Muninn 轉交**: $handoff_nums"; echo; }
       echo '```diff'
       echo "$state_diff"
       echo '```'
@@ -310,6 +364,15 @@ memory/ 的結構:
     continue
   fi
   echo "$new_sha" > "$ckpt_file"
+
+  if [ -n "$handoff_ids" ]; then
+    # shellcheck disable=SC2086  # ids 是空白分隔的信 id,要拆成多個參數
+    if $HUBBUS done $handoff_ids --note "librarian 套用進 STATE.md($TODAY,見 review-log)" >>"$LOG" 2>&1; then
+      log "$proj: muninn 轉交 $handoff_nums 已結案(bridge 會回報 Muninn)"
+    else
+      log "$proj: muninn 轉交結案失敗,隔晚會再處理一次(STATE.md 已經改過,重複處理應該不會再改)"
+    fi
+  fi
 
   if [ "$worth_digesting" = "true" ] && [ -n "$summary" ]; then
     { echo "## $proj"; echo; echo "$summary"; echo; } >> "$digest_file"

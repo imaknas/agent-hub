@@ -58,9 +58,10 @@ SSH 開 mini 上的資料夾,MBP 斷線/沒電 session 也繼續跑。MBP 上的
   用 `hubbus send/inbox/done`(寫在 `templates/CLAUDE.md`);信由 SessionStart(`sync-local-setup.sh`、
   `worktree-memory.sh`)、UserPromptSubmit/PostToolUse hook 送進 session;`hubbus-bridge`(schedule.yaml,
   每 15 分鐘)負責 Muninn 的轉交進信箱、給 knas 的信跟轉交的 done 送進 Muninn、12 小時沒人收就在那個專案
-  跑 headless agent(`agent-jobs/mailbox.md`,只寫筆記/回信/問 knas,不改程式碼)。Muninn 轉交只有這一個
-  消費者——librarian 不再直接把轉交改進 STATE.md(2026-10-21 從 9e9ac7f 改過來),改成 session 記 memory
-  筆記、librarian 照常整理。介面跟失敗模式看 `bin/hubbus` 檔頭
+  跑 headless agent(`agent-jobs/mailbox.md`,只寫筆記/回信/問 knas,不改程式碼;轉交不升級)。
+  Muninn 的轉交由 librarian 每晚從信箱讀(`hubbus open-handoffs`)直接套用進 STATE.md,結果可信才
+  `hubbus done`(bridge 再回報 Muninn 結案);session 白天看到只當參考,Knas 的回答由發問的 session
+  處理、沒處理的也是晚上套用。介面跟失敗模式看 `bin/hubbus` 檔頭
 
 ## 這些給 hook/其他腳本內部呼叫,不要手動直接跑
 
