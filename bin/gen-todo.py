@@ -35,6 +35,10 @@ OWNERS = ("Knas", "待定", "agent")
 ITEM = re.compile(r"^- \[ \] 〔(Knas|agent|待定)〕\s*(.+)$")
 GROUP = re.compile(r"^#{3,4}\s*〔(Knas|agent|待定)〕\s*$")
 BARE = re.compile(r"^- \[ \] (?!〔)(.+)$")
+# librarian 的任務登記把〔Knas〕待辦送進 Muninn 之後,行尾會蓋上「(等 Knas:<key>)」。
+# 有 key 的〔Knas〕待辦以 Muninn 為準,todo.md 不再列(只算數量);沒 key 的照列,
+# 當晚登記完就有 key 了。半形/全形括號跟冒號都接受。
+KNAS_KEY = re.compile(r"[(（]等 ?Knas[:：]\s*([^()（）]+?)\s*[)）]\s*$")
 PLACEHOLDER_MAX_BYTES = 200  # onboard 時的佔位 STATE.md,本來就沒有待辦
 
 
@@ -90,6 +94,8 @@ def main() -> None:
     if MIGRATION.exists():
         parse("agent-hub", MIGRATION.read_text(), items, problems)
 
+    in_muninn = [r for r in items["Knas"] if KNAS_KEY.search(r[1])]
+    items["Knas"] = [r for r in items["Knas"] if not KNAS_KEY.search(r[1])]
     total = sum(len(v) for v in items.values())
     o = [
         "# 跨專案待辦", "",
@@ -102,6 +108,8 @@ def main() -> None:
     titles = {"Knas": "只有 Knas 能做", "待定": "待定(需要先做決定)", "agent": "agent 可以做"}
     for owner in OWNERS:
         o += [f"## {titles[owner]}", ""]
+        if owner == "Knas" and in_muninn:
+            o += [f"> 另有 {len(in_muninn)} 項已登記在 Muninn(STATE.md 行尾標「等 Knas:<key>」),以 Muninn 為準,這裡不列。", ""]
         rows = items[owner]
         if not rows:
             o += ["(無)", ""]
