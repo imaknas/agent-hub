@@ -24,6 +24,8 @@ done 要讓 Muninn 結案,job 失敗要給狀態頁),不用各自接一條檔案
 
 用法(在專案目錄裡;寄件人預設是目前目錄的專案):
   hubbus send --to <專案|knas> --type <request|question|info|progress|done> --text "…" [--reply-to <id>]
+  hubbus send --to knas --type task --text "…" [--due YYYY-MM-DD] [--context …] [--new-reason …] [--id …]
+  hubbus send --to knas --type done|drop --task <key> --text "…"   Knas 在這個專案做完了 / 不需要了
   hubbus inbox [--project P]          給這個專案、還沒 done 的信(順便記 delivered)
   hubbus show <id>
   hubbus ack <id>...                  記 delivered
@@ -68,14 +70,20 @@ MUNINN_API = "http://127.0.0.1:18795/api/messages"
 INGEST_TOKEN = MUNINN / "data" / "secrets" / "ingest_token"
 LOG = HUB / ".logs" / "hubbus.log"
 KNAS = "knas"
-TYPES = ("request", "question", "info", "progress", "done")
-TO_MUNINN = {"request": "question", "question": "question", "info": "progress", "progress": "progress", "done": "done"}
+TYPES = ("request", "question", "info", "progress", "done", "task", "drop")
+KNAS_ONLY = ("task", "drop")   # Muninn 的任務登錄:只有 Knas 能做的事,只寄給 knas
+# 寄給 knas 的 type → Muninn 收的 type。request = 要 Knas 去做一件事 = 任務;要他用文字回答的才是 question
+TO_MUNINN = {"request": "task", "task": "task", "question": "question", "info": "progress",
+             "progress": "progress", "done": "done", "drop": "drop"}
+TASK_FIELDS = ("task", "due", "context", "new_reason")   # 照原樣轉給 Muninn
+KEYED = ("done", "dropped", "already_done", "reopened")  # 帶任務 key 的轉交:librarian 照 key 機械套用
 BRIDGE = "muninn-bridge"
 ESCALATE_HOURS = 12      # 沒有 session 收超過這麼久 → headless agent 處理
 ESCALATE_TYPES = ("request", "question")  # 轉交不升級:librarian 每晚直接套用進 STATE.md
 REPLY_WAIT_MIN = 30      # 回覆先等發問的 session 這麼久,過了就給任何 session
 POST_TOOL_EVERY_S = 120  # PostToolUse 每個 session 最多這麼久查一次
 PRUNE_DAYS = 60
+POISON_HOURS = 24        # Muninn 回 400 的那則重試這麼久,還是不收才跳過(記 job.failed)
 HOOK_TIMEOUT_S = 2
 
 
@@ -294,7 +302,14 @@ def cmd_hook(event: str) -> None:
 # ---------- bridge:Muninn ↔ 匯流排、升級、清理 ----------
 
 def handoff_text(h: dict) -> str:
-    if h.get("effect") == "answers":
+    e = h.get("effect")
+    if e in KEYED:
+        what = {"done": "Knas 完成了", "dropped": "Knas 取消了", "already_done": "Knas 之前就做完了(這次又寄了一次)",
+                "reopened": "Knas 把已經結案的這件事重新打開了"}[e]
+        return (f"{what}這個專案在等他的事:{h.get('item', '')}"
+                + (f"\n{h['fact']}" if h.get("fact") else "")
+                + f"\n(任務 {h.get('reply_to')};librarian 今晚會照 key 更新 STATE.md 的待辦,不用另外處理)")
+    if e == "answers":
         return (f"Knas 回答了這個專案問的問題。\n問題:{h.get('item', '')}\n回答:{h.get('fact', '')}"
                 + (f"\nKnas 原話:{h['quote']}" if h.get("quote") else "")
                 + "\n照回答繼續,然後 `hubbus done <id>`(回報 Muninn 結案)。"
@@ -339,7 +354,7 @@ def import_handoffs(c) -> None:
             unknown.append(f"#{hid}→{proj}")
             continue
         p = {"type": "handoff", "text": handoff_text(h), "handoff_id": hid, "effect": h.get("effect"),
-             "handoff": {k: h.get(k) for k in ("effect", "fact", "quote", "item", "why", "ts")}}
+             "handoff": {k: h.get(k) for k in ("effect", "fact", "quote", "item", "why", "ts", "reply_to", "task")}}
         if h.get("reply_to"):
             p["reply_to"] = h["reply_to"]
             if orig is not None and payload(orig).get("from_session"):
@@ -364,6 +379,9 @@ def to_muninn(c, ev) -> dict | None:
                 "text": p.get("text") or "(沒有內容)"}
         if p.get("handoff_id") is not None:
             item["handoff_id"] = p["handoff_id"]
+        for k in TASK_FIELDS:
+            if p.get(k):
+                item[k] = p[k]
         return item
     if ev["type"] == "message.done":
         m = get_message(c, ev["ref"])
@@ -400,18 +418,21 @@ def forward(c) -> None:
     last = evs[-1]["seq"]
     if items:
         code, err = post_muninn([it for _, it in items])
-        if code == 400 and len(items) > 1:
-            # 整批被拒:一則一則送,找出不合格的那則
+        if code == 400:
+            # 整批被拒:一則一則送,找出不合格的那則。400 也可能是 Muninn 還沒部署支援這個 type
+            # (例:task 剛加的那晚),所以 POISON_HOURS 內先停在這則、下次重送,超過才跳過
             for ev, it in items:
-                code1, err1 = post_muninn([it])
-                if code1 == 400:
+                code1, err1 = post_muninn([it]) if len(items) > 1 else (code, err)
+                if err1 is None:
+                    continue
+                if code1 == 400 and now() - datetime.datetime.fromisoformat(ev["ts"]) > datetime.timedelta(hours=POISON_HOURS):
                     reject(c, ev, err1)
-                elif err1 is not None:  # 不是格式問題(muninn 掛了之類):停在這則之前,下次從這裡重送
-                    set_cursor(c, BRIDGE, ev["seq"] - 1)
-                    log(f"送進 Muninn 失敗,下次重送:{err1}")
-                    return
-        elif code == 400:
-            reject(c, items[0][0], err)
+                    continue
+                set_cursor(c, BRIDGE, ev["seq"] - 1)  # 停在這則之前,下次從這裡重送(前面送成功的 id 重送也安全)
+                age = (now() - datetime.datetime.fromisoformat(ev["ts"])).total_seconds() / 3600
+                if age < 0.3 or int(age * 4) % 16 == 0:  # 剛開始記一次,之後約每 4 小時
+                    log(f"送進 Muninn 失敗({err1}),{ev['id']} 跟後面的下次重送(已等 {age:.1f} 小時)")
+                return
         elif err is not None:
             age = (now() - datetime.datetime.fromisoformat(items[0][0]["ts"])).total_seconds() / 3600
             if age < 0.3 or int(age * 4) % 16 == 0:  # 不要每 15 分鐘洗一次 log:剛開始一次,之後約每 4 小時
@@ -525,7 +546,8 @@ def cmd_open_handoffs() -> None:
                 h["item"] = None
         out.append({"id": r["id"], "project": r["to_project"], "ts": h.get("ts") or r["ts"],
                     "handoff_id": p.get("handoff_id"), "effect": p.get("effect") or h.get("effect") or "relevant",
-                    "fact": h.get("fact") or "", "quote": h.get("quote"), "item": h.get("item"), "why": h.get("why") or ""})
+                    "fact": h.get("fact") or "", "quote": h.get("quote"), "item": h.get("item"), "why": h.get("why") or "",
+                    "reply_to": h.get("reply_to") or p.get("reply_to"), "task": h.get("task")})
     print(json.dumps(out, ensure_ascii=False))
 
 
@@ -574,6 +596,11 @@ def main() -> None:
     s.add_argument("--text", required=True)
     s.add_argument("--reply-to")
     s.add_argument("--from", dest="sender")
+    s.add_argument("--id", help="固定的信 id(重寄同一個 id 什麼都不做;librarian 寄任務用)")
+    s.add_argument("--task", help="任務 key(done/drop 時是哪一件)")
+    s.add_argument("--due", help="YYYY-MM-DD")
+    s.add_argument("--context")
+    s.add_argument("--new-reason", help="跟 14 天內結案的任務很像、但確實是新的一件時說明為什麼")
     sub.add_parser("inbox").add_argument("--project")
     sub.add_parser("show").add_argument("id")
     sub.add_parser("ack").add_argument("ids", nargs="+")
@@ -619,6 +646,13 @@ def main() -> None:
         if not valid_address(a.to):
             sys.exit(f"hubbus: 沒有 {a.to} 這個地址(專案名稱見 onboarded-projects.tsv、agent-hub,或 knas)")
         p = {"type": a.type, "text": a.text, "from_session": session}
+        if a.type in KNAS_ONLY and a.to != KNAS:
+            sys.exit(f"hubbus: {a.type} 只能寄給 knas")
+        if a.type == "drop" and not a.task:
+            sys.exit("hubbus: drop 要加 --task <key>(哪一件不需要了)")
+        for k in TASK_FIELDS:
+            if getattr(a, k):
+                p[k] = getattr(a, k)
         if a.reply_to:
             orig = must_message(c, a.reply_to)
             p["reply_to"] = a.reply_to
@@ -626,8 +660,8 @@ def main() -> None:
                 p["to_session"] = payload(orig)["from_session"]
             if payload(orig).get("handoff_id") is not None:
                 p["handoff_id"] = payload(orig)["handoff_id"]
-        mid = new_id()
-        publish(c, mid, "message", sender, a.to, a.reply_to, p)
+        mid = a.id or new_id()
+        publish(c, mid, "message", sender, a.to, a.reply_to, p)  # 同一個 id 已經寄過就什麼都不做
         print(mid)
     elif a.cmd == "inbox":
         project = a.project or here

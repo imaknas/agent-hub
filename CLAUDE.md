@@ -62,6 +62,10 @@ SSH 開 mini 上的資料夾,MBP 斷線/沒電 session 也繼續跑。MBP 上的
   Muninn 的轉交由 librarian 每晚從信箱讀(`hubbus open-handoffs`)直接套用進 STATE.md,結果可信才
   `hubbus done`(bridge 再回報 Muninn 結案);session 白天看到只當參考,Knas 的回答由發問的 session
   處理、沒處理的也是晚上套用。介面跟失敗模式看 `bin/hubbus` 檔頭
+- `bin/knas-tasks.py`——〔Knas〕待辦的 Muninn 任務登錄(librarian 每晚、gen-todo 之前呼叫,零 LLM):
+  還沒 key 的〔Knas〕行(各 STATE.md、openclaw-migration-status.md)寄成 `task`、蓋上「(等 Knas:<key>)」
+  (key 固定 = 專案 + 文字的 hash,重寄是 no-op);Muninn 回來的帶 key 轉交(done/dropped/already_done/
+  reopened)照 key 刪掉或加回那一行,push 成功才結案
 
 ## 這些給 hook/其他腳本內部呼叫,不要手動直接跑
 

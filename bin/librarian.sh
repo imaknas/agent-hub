@@ -127,8 +127,9 @@ for proj_dir in "$HOME"/.memory-copies/*/; do
   ckpt_file="$STATE_DIR/$proj.sha"
   last_sha=$(cat "$ckpt_file" 2>/dev/null || true)
 
-  handoff_ids=$(jq -r --arg p "$proj" '[.[] | select(.project == $p) | .id] | join(" ")' "$handoffs_file")
-  handoff_nums=$(jq -r --arg p "$proj" '[.[] | select(.project == $p) | "#\(.handoff_id)"] | join(" ")' "$handoffs_file")
+  # 帶任務 key 的轉交(done/dropped/already_done/reopened)不給模型,迴圈後面 knas-tasks.py 照 key 機械套用
+  handoff_ids=$(jq -r --arg p "$proj" '[.[] | select(.project == $p and (.effect | IN("done", "dropped", "already_done", "reopened") | not)) | .id] | join(" ")' "$handoffs_file")
+  handoff_nums=$(jq -r --arg p "$proj" '[.[] | select(.project == $p and (.effect | IN("done", "dropped", "already_done", "reopened") | not)) | "#\(.handoff_id)"] | join(" ")' "$handoffs_file")
 
   if [ "$head_sha" = "$last_sha" ] && [ -z "$handoff_ids" ]; then
     log "$proj: no new commits, skip"
@@ -175,7 +176,7 @@ $memory_diff"
   handoff_note=""
   if [ -n "$handoff_ids" ]; then
     log "$proj: muninn 轉交 $handoff_nums"
-    handoff_items=$(jq -r --arg p "$proj" '.[] | select(.project == $p) |
+    handoff_items=$(jq -r --arg p "$proj" '.[] | select(.project == $p and (.effect | IN("done", "dropped", "already_done", "reopened") | not)) |
       "- [\(.effect)] 事實:\(.fact)" +
       (if .quote then "\n  Knas 原話:\(.quote)" else "" end) +
       "\n  對應待辦:\(.item // "(沒有指定)")\n  助理的判斷理由:\(.why)\n  (\(.ts[0:16]))"' "$handoffs_file")
@@ -230,6 +231,8 @@ memory/ 的結構:
   \`- [ ] 〔Knas〕…\`(只有 Knas 本人能做:帳號、密碼、付款、要他拍板的決定)
   \`- [ ] 〔agent〕…\`(agent 可以直接做的)
   \`- [ ] 〔待定〕…\`(還要先做決定才能動的)
+  〔Knas〕行尾的「(等 Knas:task-…)」是 Muninn 任務登錄的 key,**原樣保留,不要改那一行的文字**
+  (Knas 在 Muninn 結案時會照 key 自動移掉;文字一改 key 就對不上)。
   沒有待辦就寫 \`- (無)\`。只列還沒完成、具體可行動的事;完成、被推翻或過時的直接移除,
   不要留著打勾。待辦只放在這個段落,不要在 STATE.md 別的地方另開「下一步」「未完成」之類的清單。
 - 除了 ./STATE.md,不要建立、修改或刪除任何檔案。"
@@ -378,6 +381,15 @@ memory/ 的結構:
     { echo "## $proj"; echo; echo "$summary"; echo; } >> "$digest_file"
   fi
 done
+
+# --- 〔Knas〕待辦 ↔ Muninn 任務登錄(機械、零 LLM)---
+# 還沒有 key 的〔Knas〕行寄成 Muninn 的任務、蓋上「(等 Knas:<key>)」;Muninn 送回的帶 key 轉交
+# (done/dropped/already_done/reopened)照 key 改那一行。放在 gen-todo 前面,todo.md 才會是改過的。
+if kt_out=$(/usr/bin/python3 "$HUB/bin/knas-tasks.py" 2>>"$LOG"); then
+  while IFS= read -r l; do log "$l"; done <<< "$kt_out"
+else
+  log "knas-tasks.py 失敗(exit $?),〔Knas〕待辦這次沒跟 Muninn 同步"
+fi
 
 # --- 跨專案待辦清單 todo.md ---
 # 機械產生:收集各專案 STATE.md 的 `## 待辦` 段落(固定格式,由上面每個專案的呼叫
