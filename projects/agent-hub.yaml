@@ -47,6 +47,10 @@ jobs:
   every: 15m
   cwd: hub
   run: /opt/homebrew/bin/python3 bin/render-services.py
+- name: registry-updates         # 專案寄來的 manifest.update 信:驗證後套用或退回(零 LLM)
+  every: 15m
+  cwd: hub
+  run: /opt/homebrew/bin/python3 bin/registry.py apply-updates
 - name: contracts-check          # 契約副本 == 原版(兩個方向)+ 實際資料照契約;不一致發 job.failed
   at: "01:30"
   cwd: hub

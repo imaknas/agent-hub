@@ -23,7 +23,7 @@
       "required": ["type", "text"],
       "properties": {
         "v": {"const": 1},
-        "type": {"enum": ["request", "question", "info", "progress", "done", "task", "drop", "handoff"]},
+        "type": {"enum": ["request", "question", "info", "progress", "done", "task", "drop", "handoff", "manifest.update"]},
         "text": {"type": "string"},
         "from_session": {"type": ["string", "null"]},
         "to_session": {"type": ["string", "null"]},

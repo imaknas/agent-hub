@@ -28,6 +28,10 @@ schema v1(contracts/project.v1.md 有完整說明):
 檔案、PATH 上的指令、或存在的絕對路徑)都算不合格。
 
 用法:registry.py [check [name...]]   驗證並更新快取,印出結果
+      registry.py add <name> <workspace> <origin> <memory_bare>        onboard 時新增(已存在就不動)
+      registry.py rename <old> <new> <workspace> <origin> <memory_bare> 改名(檔案、prompt 目錄一起搬)
+      registry.py tsv                     從登錄重新產生 onboarded-projects.tsv(舊腳本的相容檔)
+      registry.py apply-updates           套用專案寄來的 manifest.update 信(平台 job,每 15 分鐘)
 """
 from __future__ import annotations
 
@@ -38,6 +42,7 @@ import pathlib
 import re
 import shlex
 import shutil
+import subprocess
 import sys
 
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
@@ -139,7 +144,7 @@ def validate(doc, stem: str) -> list[str]:
         names.add(n)
         if ("at" in job) == ("every" in job):
             errs.append(f"job {n}:at 跟 every 要剛好一個")
-        if "at" in job and not re.fullmatch(r"\d{2}:\d{2}", str(job["at"])):
+        if "at" in job and not re.fullmatch(r"([01]\d|2[0-3]):[0-5]\d", str(job["at"])):
             errs.append(f"job {n}:at 要是 HH:MM(加引號)")
         if "every" in job and not EVERY.match(str(job["every"])):
             errs.append(f"job {n}:every 要像 15m / 1h")
@@ -247,8 +252,125 @@ def scheduler_jobs(index: dict, legacy_names: set[str]) -> tuple[list[dict], lis
     return out, skipped, renames
 
 
+def tilde(p: str) -> str:
+    home = str(pathlib.Path.home())
+    return "~" + p[len(home):] if p.startswith(home) else p
+
+
+def new_doc(name: str, workspace: str, origin: str, memory_bare: str) -> dict:
+    """onboard 時的預設登錄(跟 registry-migrate.py import 一樣的預設值)。"""
+    return {"v": 1, "name": name,
+            "paths": {"workspace": tilde(workspace), "memory_bare": tilde(memory_bare), "origin": origin},
+            "memory": True, "privacy": {"reflection": "include"}, "push_on_merge": False,
+            "mailbox": {"escalate": True},
+            "publishes": [{"kind": "state", "path": "STATE.md", "contract": "state-todo", "v": 1}]}
+
+
+HEADER = "# 專案登錄(schema v1,見 bin/registry.py)\n"
+
+
+def cmd_add(name: str, workspace: str, origin: str, memory_bare: str) -> int:
+    f = hubconf.registry_dir() / f"{name}.yaml"
+    if f.exists():
+        print(f"{name} 已經在登錄裡({f}),不覆蓋")
+        return 0
+    f.parent.mkdir(parents=True, exist_ok=True)
+    f.write_text(HEADER + yaml.safe_dump(new_doc(name, workspace, origin, memory_bare), allow_unicode=True,
+                                         sort_keys=False, width=200))
+    print(f"登錄:{f}")
+    return 0
+
+
+def cmd_rename(old: str, new: str, workspace: str, origin: str, memory_bare: str) -> int:
+    reg = hubconf.registry_dir()
+    src, dst = reg / f"{old}.yaml", reg / f"{new}.yaml"
+    if not src.exists() or dst.exists():
+        sys.exit(f"registry rename:{src} 要存在、{dst} 不能存在")
+    text = src.read_text()
+    doc = yaml.safe_load(text)
+    doc["name"] = new
+    doc.setdefault("paths", {}).update(workspace=tilde(workspace), origin=origin, memory_bare=tilde(memory_bare))
+    # 保留檔頭的註解
+    head = "".join(l for l in text.splitlines(keepends=True) if l.startswith("#")) if text.startswith("#") else HEADER
+    dst.write_text(head + yaml.safe_dump(doc, allow_unicode=True, sort_keys=False, width=200))
+    src.unlink()
+    if (reg / old).is_dir():
+        (reg / old).rename(reg / new)
+    print(f"登錄:{old} → {new}")
+    return 0
+
+
+def cmd_apply_updates() -> int:
+    """專案寄來的 manifest.update 信(text = 完整的登錄 YAML):驗證過就寫進登錄 + commit,不過就把錯誤
+    寄回那個專案的信箱;兩種都把信結案。只能改寄件專案自己的登錄。零 LLM。"""
+    import sqlite3
+    bus = hubconf.STATE / "bus.db"
+    if not bus.exists():
+        return 0
+    hub = hubconf.hub_project()
+    c = sqlite3.connect(bus, timeout=30)
+    rows = c.execute("SELECT id, source, payload FROM events m WHERE m.type='message' AND m.to_project=?"
+                     " AND NOT EXISTS(SELECT 1 FROM events x WHERE x.type='message.done' AND x.ref=m.id) ORDER BY seq",
+                     (hub,)).fetchall()
+    hubbus = ["/usr/bin/python3", str(hubconf.ROOT / "bin" / "hubbus")]
+
+    def reply(to, mid, text, note):
+        subprocess.run([*hubbus, "send", "--from", hub, "--to", to, "--reply-to", mid, "--type", "info", "--text", text],
+                       capture_output=True)
+        subprocess.run([*hubbus, "done", mid, "--note", note], capture_output=True, cwd=hubconf.ROOT)
+
+    for mid, sender, pl in rows:
+        p = json.loads(pl or "{}")
+        if p.get("type") != "manifest.update":
+            continue
+        try:
+            doc = yaml.safe_load(p.get("text") or "")
+            errs = validate(doc, sender)
+        except yaml.YAMLError as e:
+            doc, errs = None, [f"YAML 讀不了:{e}"]
+        if isinstance(doc, dict) and doc.get("name") != sender:
+            errs.append(f"只能改自己的登錄(寄件人是 {sender},YAML 的 name 是 {doc.get('name')})")
+        if errs:
+            reply(sender, mid, "manifest.update 沒有套用,登錄沒變:\n- " + "\n- ".join(errs), "退回:" + "; ".join(errs)[:200])
+            print(f"{sender}:manifest.update {mid} 退回({len(errs)} 個問題)")
+            continue
+        f = hubconf.registry_dir() / f"{sender}.yaml"
+        f.write_text(f"# 專案登錄(schema v1,見 bin/registry.py)。最後一次由 manifest.update {mid} 更新\n"
+                     + yaml.safe_dump(doc, allow_unicode=True, sort_keys=False, width=200))
+        r = subprocess.run([str(hubconf.ROOT / "bin" / "commit-hub-files.sh"), f"registry: {sender} manifest.update {mid}",
+                            f"projects/{sender}.yaml"], capture_output=True, text=True)
+        reply(sender, mid, "manifest.update 已套用" + ("" if r.returncode == 0 else "(commit 失敗,檔案已寫入)") +
+              ";下一個排程 tick 生效。", "已套用")
+        print(f"{sender}:manifest.update {mid} 已套用")
+    return 0
+
+
+def cmd_tsv() -> int:
+    """從登錄重新產生 onboarded-projects.tsv(還在讀它的舊腳本用的相容檔;登錄才是正本)。"""
+    index = refresh()
+    host = hubconf.get("memory_host")
+    rows = ["name\tlocal_path\torigin\tmemory_bare_repo"]
+    for name, doc in sorted(index["projects"].items()):
+        if name == hubconf.hub_project():
+            continue
+        p = doc.get("paths") or {}
+        bare = p.get("memory_bare") or f"~/git-origin/{name}-memory.git"
+        rows.append("\t".join([name, str(hubconf.path(p.get("workspace"))), p.get("origin") or "(native)",
+                               f"{host}:{bare}" if host else bare]))
+    (hubconf.ROOT / "onboarded-projects.tsv").write_text("\n".join(rows) + "\n")
+    return 0
+
+
 def main() -> int:
     args = sys.argv[1:]
+    if args[:1] == ["add"] and len(args) == 5:
+        return cmd_add(*args[1:])
+    if args[:1] == ["rename"] and len(args) == 6:
+        return cmd_rename(*args[1:])
+    if args[:1] == ["tsv"]:
+        return cmd_tsv()
+    if args[:1] == ["apply-updates"]:
+        return cmd_apply_updates()
     if args and args[0] == "check":
         args = args[1:]
     index = refresh()

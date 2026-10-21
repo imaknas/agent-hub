@@ -233,23 +233,21 @@ else
   echo "[10/11] 沒有外部 remote,跳過 mirror-backup 登記"
 fi
 
-# --- 11. 登記進 agent-hub 自己的 onboarded-projects.tsv(一律登記,無論有沒有 origin) ---
-MANIFEST="$AGENT_HUB/onboarded-projects.tsv"
-[ -f "$MANIFEST" ] || printf 'name\tlocal_path\torigin\tmemory_bare_repo\n' > "$MANIFEST"
+# --- 11. 登記進 agent-hub 的專案登錄 projects/<name>.yaml(一律登記,無論有沒有 origin) ---
+# 登錄是正本;onboarded-projects.tsv 是從登錄產生的相容檔(還在讀它的舊腳本用)。
 manifest_origin="${origin_url:-(native)}"
-if ! awk -F'\t' -v n="$PROJ_NAME" '$1==n{found=1} END{exit !found}' "$MANIFEST"; then
-  printf '%s\t%s\t%s\t%s\n' \
-    "$PROJ_NAME" "$PROJ_PATH" "$manifest_origin" \
-    "${MINI_HOST}:~/git-origin/${PROJ_NAME}-memory.git" >> "$MANIFEST"
-fi
+/opt/homebrew/bin/python3 "$AGENT_HUB/bin/registry.py" add "$PROJ_NAME" "$PROJ_PATH" "$manifest_origin" \
+    "~/git-origin/${PROJ_NAME}-memory.git" \
+  && /opt/homebrew/bin/python3 "$AGENT_HUB/bin/registry.py" tsv \
+  || fail "登記進專案登錄失敗(projects/$PROJ_NAME.yaml)"
 # 登記完直接 commit+push agent-hub——以前只寫檔不 commit,mini 上的 librarian
 # /mirror-backup 要等有人剛好手動 commit 才看得到新專案(project-36 就是這樣
 # 卡在 MBP 本地)。只 commit 這三個檔案,不碰 agent-hub 裡其他未 commit 的東西。
 "$AGENT_HUB/bin/gen-index-roster.sh"
 "$AGENT_HUB/bin/commit-hub-files.sh" "register $PROJ_NAME (onboard-project.sh)" \
-    onboarded-projects.tsv mirror-list.txt index.md \
+    "projects/$PROJ_NAME.yaml" onboarded-projects.tsv mirror-list.txt index.md \
   || echo "警告:agent-hub 登記檔 commit/push 失敗,請手動處理(登記內容本身已寫入)" >&2
-echo "[11/11] 已登記進 agent-hub 的 onboarded-projects.tsv,並 commit+push agent-hub"
+echo "[11/11] 已登記進 agent-hub 的專案登錄(projects/$PROJ_NAME.yaml),並 commit+push agent-hub"
 
 echo
 echo "完成:$PROJ_NAME 已接上 agent-hub 管線。"

@@ -75,7 +75,8 @@ LOG = hubconf.LOGS / "hubbus.log"
 # owner(= Knas)的地址:新的信用 owner,舊的 knas 一樣收(hub.json 的 owner.address/aliases)
 KNAS = hubconf.owner_address()
 OWNERS = hubconf.owner_addresses()
-TYPES = ("request", "question", "info", "progress", "done", "task", "drop")
+TYPES = ("request", "question", "info", "progress", "done", "task", "drop", "manifest.update")
+# manifest.update:專案寄完整的登錄 YAML 給平台(--to agent-hub),registry.py apply-updates 驗證後套用或退回
 KNAS_ONLY = ("task", "drop")   # Muninn 的任務登錄:只有 Knas 能做的事,只寄給 knas
 # 寄給 knas 的 type → Muninn 收的 type。request = 要 Knas 去做一件事 = 任務;要他用文字回答的才是 question
 TO_MUNINN = {"request": "task", "task": "task", "question": "question", "info": "progress",
