@@ -1,0 +1,29 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "muninn-handoffs.v1",
+  "title": "muninn handoffs --json",
+  "description": "Facts and task outcomes Muninn passes on to the projects that own the items, read by the delivery that hands them to each project. The delivery reads every pending handoff each time (no --since): a handoff with not_before in the future is left out until then. New fields may be added within v1; a renamed field or a changed meaning is v2.",
+  "type": "array",
+  "items": {
+    "type": "object",
+    "required": ["v", "id", "ts", "status", "project", "effect"],
+    "properties": {
+      "v": {"const": 1},
+      "id": {"type": "integer", "description": "Acknowledge with `muninn handoffs --delivered <id>`."},
+      "ts": {"type": "string", "description": "ISO 8601, when Muninn made it."},
+      "status": {"enum": ["pending", "delivered", "done", "cancelled"]},
+      "project": {"type": "string", "description": "The project it is for."},
+      "effect": {
+        "enum": ["resolves", "changes", "relevant", "answers", "done", "dropped", "reopened", "already_done"],
+        "description": "resolves/changes/relevant: a fact the user told Muninn and what it does to `item`. answers: the user's answer to the question `reply_to`. done/dropped/reopened: the task `reply_to` was finished, dropped, or reopened by the user. already_done: the task `reply_to` repeats one the user already settled (`task`); resend with new_reason only if it is really new."
+      },
+      "item": {"type": ["string", "null"], "description": "The project's to-do or question this is about, in the project's words."},
+      "fact": {"type": ["string", "null"], "description": "What to apply, in Muninn's words."},
+      "quote": {"type": ["string", "null"], "description": "The user's own words, when there are any. Never sound surer than these."},
+      "why": {"type": ["string", "null"]},
+      "reply_to": {"type": ["string", "null"], "description": "The project's message id (question or task key) this answers."},
+      "task": {"type": ["string", "null"], "description": "The settled task's key, for already_done."},
+      "not_before": {"type": ["string", "null"], "description": "ISO 8601; not handed out before then (a close Muninn inferred, left time to undo)."}
+    }
+  }
+}

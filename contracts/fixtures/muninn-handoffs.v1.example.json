@@ -1,0 +1,7 @@
+[
+ {"v": 1, "id": 1, "ts": "2026-10-22T09:00:00+08:00", "status": "pending", "project": "example-project",
+  "effect": "resolves", "item": "確認交付日期", "fact": "交付日期確定是下個月", "quote": null, "why": "回答了待辦", "reply_to": null, "task": null},
+ {"v": 1, "id": 2, "ts": "2026-10-22T09:05:00+08:00", "status": "pending", "project": "example-project",
+  "effect": "done", "item": "決定方案 A 還是 B", "fact": null, "quote": null, "why": null,
+  "reply_to": "task-example-project-0123456789", "task": "task-example-project-0123456789"}
+]

@@ -47,7 +47,7 @@ import yaml  # noqa: E402
 
 CACHE = hubconf.STATE / "registry"
 TOP = {"v", "name", "paths", "memory", "privacy", "runtime", "push_on_merge", "mailbox", "publishes",
-       "provides", "services", "jobs"}
+       "provides", "consumes", "services", "jobs"}
 JOB = {"name", "at", "every", "run", "kind", "prompt", "cwd", "days", "days_of_month", "months", "until",
        "between", "background", "after", "max_attempts_per_day", "legacy_name"}
 SERVICE = {"name", "run", "label", "keepalive", "interval_s", "throttle_s", "env", "cwd", "log", "expose"}

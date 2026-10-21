@@ -1,0 +1,35 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "muninn-messages.v1",
+  "title": "POST /api/messages request body",
+  "description": "What projects post to Muninn, with the ingest bearer token. Retrying is safe: a message id already seen is skipped. One malformed message rejects the whole post (400). Response: {\"ok\": true, \"new\": <count>}. `v` may be left out (read as 1); a version Muninn does not know is rejected. New fields may be added within v1.",
+  "type": "object",
+  "required": ["messages"],
+  "properties": {
+    "v": {"const": 1},
+    "messages": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["id", "project", "type", "text"],
+        "properties": {
+          "v": {"const": 1},
+          "id": {"type": "string", "minLength": 1, "maxLength": 200, "description": "The sender's message id: the idempotency key, and the key of a task it creates."},
+          "project": {"type": "string", "minLength": 1, "maxLength": 100, "pattern": "^[^/]+$"},
+          "type": {
+            "enum": ["question", "progress", "done", "task", "drop"],
+            "description": "question: for the user to answer (the answer comes back as a handoff with reply_to = id). progress, done: reports; done with handoff_id closes that handoff, done with task closes that task. task: something only the user can do. drop: the task is no longer needed (needs task)."
+          },
+          "text": {"type": "string", "minLength": 1, "maxLength": 4000},
+          "handoff_id": {"type": "integer"},
+          "task": {"type": "string", "minLength": 1, "maxLength": 200, "description": "A task key (the id of the message that created it)."},
+          "due": {"type": "string", "description": "YYYY-MM-DD, for task."},
+          "context": {"type": "string"},
+          "new_reason": {"type": "string", "description": "For task: why this is new although it looks like one already settled."}
+        },
+        "if": {"properties": {"type": {"const": "drop"}}},
+        "then": {"required": ["task"]}
+      }
+    }
+  }
+}

@@ -98,6 +98,7 @@ def main() -> None:
     items["Knas"] = [r for r in items["Knas"] if not KNAS_KEY.search(r[1])]
     total = sum(len(v) for v in items.values())
     o = [
+        "<!-- contract: todo-md v1 -->",  # 版面的契約在 contracts/todo-md.v1.md
         "# 跨專案待辦", "",
         # 標題不放日期:內容沒變時檔案就不該變(要知道哪天產生的,看 git log)
         f"> 由 `bin/gen-todo.py` 從各專案 STATE.md 的 `## 待辦` 段落機械產生(共 {total} 項),",

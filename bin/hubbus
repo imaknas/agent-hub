@@ -126,8 +126,9 @@ def db(timeout: float = 30) -> sqlite3.Connection:
 
 def publish(c, eid, etype, source, to_project=None, ref=None, payload=None) -> bool:
     """回傳是不是新的(同一個 id 已經有了就什麼都不做)。"""
+    body = {"v": 1, **(payload or {})}  # 契約 contracts/hubbus.v1.schema.json
     cur = c.execute("INSERT OR IGNORE INTO events(id, ts, type, source, to_project, ref, payload) VALUES(?,?,?,?,?,?,?)",
-                    (eid, iso(), etype, source, to_project, ref, json.dumps(payload or {}, ensure_ascii=False)))
+                    (eid, iso(), etype, source, to_project, ref, json.dumps(body, ensure_ascii=False)))
     return cur.rowcount == 1
 
 

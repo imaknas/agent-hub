@@ -1,0 +1,38 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "muninn-digests.v1",
+  "title": "muninn digests --week YYYY-Www --json",
+  "description": "One ISO week of local-model summaries of the user's conversations, for the user's own weekly reflection. Never raw message text. Work and unattributed sessions are withheld (counted, not listed). New fields may be added within v1; a renamed field or a changed meaning is v2.",
+  "type": "object",
+  "required": ["v", "week", "since", "until", "complete", "sessions", "withheld", "undigested_sessions"],
+  "properties": {
+    "v": {"const": 1},
+    "week": {"type": "string", "pattern": "^[0-9]{4}-W[0-9]{2}$"},
+    "since": {"type": "string"},
+    "until": {"type": "string"},
+    "complete": {"type": "boolean", "description": "False while sessions of that week are still waiting to be digested."},
+    "withheld": {"type": "integer", "minimum": 0},
+    "undigested_sessions": {"type": "integer", "minimum": 0},
+    "sessions": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["session", "project", "domain", "date", "last_turn"],
+        "properties": {
+          "session": {"type": "string"},
+          "project": {"type": ["string", "null"]},
+          "domain": {"type": ["string", "null"]},
+          "date": {"type": "string", "description": "Local date of the last digested turn."},
+          "last_turn": {"type": "string"},
+          "summary": {"type": "string"},
+          "themes": {"type": "array"},
+          "mood": {},
+          "commitments": {"type": "array"},
+          "decisions": {"type": "array"},
+          "friction": {"type": "array"},
+          "user_turns": {"type": "integer"}
+        }
+      }
+    }
+  }
+}

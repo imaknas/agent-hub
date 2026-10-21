@@ -1,0 +1,41 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "agent-hub-hubbus.v1",
+  "title": "hubbus 事件(.state/bus.db 的一列;bin/hubbus)",
+  "description": "只 append 的事件 log。payload 是 JSON 字串解開後的物件,一律帶 \"v\": 1(2026-10-22 之前的事件沒有,讀成 1)。加欄位不升版;改名/改意思升版並兩版並存。",
+  "type": "object",
+  "required": ["seq", "id", "ts", "type", "source", "payload"],
+  "properties": {
+    "seq": {"type": "integer", "minimum": 1},
+    "id": {"type": "string", "minLength": 1, "description": "寄件端給的唯一 id;重送同一個 id = 什麼都不做"},
+    "ts": {"type": "string"},
+    "type": {"enum": ["message", "message.delivered", "message.done", "job.failed", "merge.done", "merge.failed", "session.report"]},
+    "source": {"type": "string", "description": "寄件地址:專案名稱、平台,或 owner(別名 knas)"},
+    "to_project": {"type": ["string", "null"], "description": "message 的收件地址"},
+    "ref": {"type": ["string", "null"], "description": "這個事件講的是哪個事件(delivered/done → 信 id;回覆 → 原信)"},
+    "payload": {"type": "object", "properties": {"v": {"const": 1}}}
+  },
+  "if": {"properties": {"type": {"const": "message"}}},
+  "then": {"properties": {"payload": {"$ref": "#/$defs/message"}}},
+  "$defs": {
+    "message": {
+      "type": "object",
+      "required": ["type", "text"],
+      "properties": {
+        "v": {"const": 1},
+        "type": {"enum": ["request", "question", "info", "progress", "done", "task", "drop", "handoff"]},
+        "text": {"type": "string"},
+        "from_session": {"type": ["string", "null"]},
+        "to_session": {"type": ["string", "null"]},
+        "reply_to": {"type": ["string", "null"]},
+        "handoff_id": {"type": ["integer", "null"]},
+        "task": {"type": "string"},
+        "due": {"type": "string", "pattern": "^\\d{4}-\\d{2}-\\d{2}$"},
+        "context": {"type": "string"},
+        "new_reason": {"type": "string"},
+        "effect": {"type": ["string", "null"]},
+        "handoff": {"type": "object"}
+      }
+    }
+  }
+}

@@ -185,6 +185,10 @@ memory 追蹤但不需要在 mini 上執行任何東西的專案(目前大多數
 - `launchd/`——平台自己的 launchd plist(排程器、看門狗、狀態頁、memory 同步)。**專案的長駐服務不在這裡**:
   寫在 `projects/<專案>.yaml` 的 `services:`,`bin/render-services.py`(平台 job,每 15 分鐘)產生
   `~/Library/LaunchAgents/<label>.plist`,有變才重載
+- `contracts/`——**版本契約**:agent-hub 定義的介面(hubbus、todo-md、state-todo、reflect-week、project)
+  跟 vendor 的別人的契約(`contracts/vendor/<專案>/`)。登錄的 `provides`/`consumes` 宣告誰定義、誰讀;
+  `tests/test_contracts.py`(`python3 -m unittest discover -s tests`)驗證範例,`bin/contracts-check.py`
+  (每晚 01:30)比對副本跟原版、驗證實際資料。加欄位不升版;改名/改意思升版、兩版並存到讀的人換完
 - `projects/`——**專案登錄**(一個專案一個 `<name>.yaml`;目錄由 `hub.json` 的 `registry_dir` 指定):
   路徑、job、service、隱私標籤、測試指令。驗證跟格式看 `bin/registry.py` 檔頭;`registry.py check` 驗證。
   排程器跑的 = `schedule.yaml`(切換期間的舊項目)+ 登錄的 job(`<專案>/<job>`)

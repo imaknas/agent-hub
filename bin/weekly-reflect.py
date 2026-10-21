@@ -148,6 +148,7 @@ def build_stats(label: str, start: datetime.datetime, end: datetime.datetime, we
         day = (t - datetime.timedelta(hours=6)).date()  # 凌晨 6 點前算前一天的收工
         last_per_day[day] = max(last_per_day.get(day, t), t)
     return {
+        "v": 1,  # 契約 contracts/reflect-week.v1.schema.json
         "week": label,
         "start": start.date().isoformat(), "end": (end - datetime.timedelta(days=1)).date().isoformat(),
         "generated": datetime.datetime.now(TZ).isoformat(timespec="minutes"),

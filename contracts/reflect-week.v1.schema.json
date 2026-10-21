@@ -1,0 +1,22 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "agent-hub-reflect-week.v1",
+  "title": "reflect/<YYYY-Www>.json(bin/weekly-reflect.py,每週一 07:00)",
+  "description": "上一週的跨專案活動統計 + 模型分析。2026-W43 起帶 \"v\": 1(更早的沒有,讀成 1)。analysis 可能只有 {error, meta}。",
+  "type": "object",
+  "required": ["week", "start", "end", "generated", "totals", "projects", "rhythm", "delegation"],
+  "properties": {
+    "v": {"const": 1},
+    "week": {"type": "string", "pattern": "^\\d{4}-W\\d{2}$"},
+    "start": {"type": "string"},
+    "end": {"type": "string"},
+    "generated": {"type": "string"},
+    "totals": {"type": "object", "required": ["prompts", "prompts_prev", "sessions", "projects", "days"]},
+    "projects": {"type": "array", "items": {"type": "object", "required": ["name", "prompts"]}},
+    "matrix": {"type": "array"},
+    "rhythm": {"type": "object", "required": ["late", "late_share", "longest_hours", "last_per_day"]},
+    "delegation": {"type": "object", "required": ["agents", "peer"]},
+    "changes": {"type": "object"},
+    "analysis": {"type": "object", "properties": {"meta": {"type": "object"}, "error": {"type": "string"}}}
+  }
+}

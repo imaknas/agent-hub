@@ -41,3 +41,18 @@ jobs:
   every: 15m
   cwd: hub
   run: /opt/homebrew/bin/python3 bin/render-services.py
+- name: contracts-check          # 契約副本 == 原版(兩個方向)+ 實際資料照契約;不一致發 job.failed
+  at: "01:30"
+  cwd: hub
+  max_attempts_per_day: 1
+  run: /opt/homebrew/bin/python3 bin/contracts-check.py --quiet
+provides:
+- {contract: hubbus, v: 1, schema: contracts/hubbus.v1.schema.json}
+- {contract: todo-md, v: 1, schema: contracts/todo-md.v1.md}
+- {contract: state-todo, v: 1, schema: contracts/state-todo.v1.md}
+- {contract: reflect-week, v: 1, schema: contracts/reflect-week.v1.schema.json}
+- {contract: project, v: 1, schema: contracts/project.v1.schema.json}
+consumes:
+- {contract: muninn-handoffs, v: 1, copy: contracts/vendor/muninn/handoffs.v1.schema.json, from: muninn}
+- {contract: muninn-digests, v: 1, copy: contracts/vendor/muninn/digests.v1.schema.json, from: muninn}
+- {contract: muninn-messages, v: 1, copy: contracts/vendor/muninn/messages.v1.schema.json, from: muninn}
