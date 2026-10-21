@@ -1,0 +1,39 @@
+# 專案登錄(schema v1,見 bin/registry.py);由 registry-migrate.py import 產生,之後直接改這個檔
+v: 1
+name: agent-hub
+memory: false
+push_on_merge: false
+jobs:
+- name: consolidate-memory
+  legacy_name: consolidate-memory
+  at: 02:00
+  background: true
+  max_attempts_per_day: 1
+  run: bin/consolidate-memory.py
+  cwd: hub
+- name: librarian
+  legacy_name: librarian
+  at: 03:00
+  background: true
+  after:
+  - consolidate-memory
+  run: bin/librarian.sh
+  cwd: hub
+- name: mirror-backup
+  legacy_name: mirror-backup
+  at: 04:00
+  run: bin/mirror-backup.sh
+  cwd: hub
+- name: weekly-reflect
+  legacy_name: weekly-reflect
+  at: 07:00
+  days:
+  - mon
+  max_attempts_per_day: 2
+  run: bin/weekly-reflect.sh
+  cwd: hub
+- name: hubbus-bridge
+  legacy_name: hubbus-bridge
+  every: 15m
+  run: /usr/bin/python3 bin/hubbus bridge
+  cwd: hub
