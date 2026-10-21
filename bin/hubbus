@@ -306,6 +306,7 @@ def handoff_text(h: dict) -> str:
     lines.append("處理:跟目前工作有關就照著調整;把事實記進 .agent-memory/memory/ 今天的筆記"
                  "(保留不確定的語氣,有原話以原話為準),librarian 會整理進 STATE.md。"
                  "resolves = 對應待辦已完成/有答案;changes = 待辦還在但前提變了;relevant = 參考。"
+                 "筆記裡寫清楚是哪一條待辦(照 STATE.md 的寫法);STATE.md 找不到對應的那條就不要硬套到別條,只記事實。"
                  "記好就 `hubbus done <id>`,會回報 Muninn 結案。")
     return "\n".join(lines)
 
