@@ -93,7 +93,7 @@ SSH 開 mini 上的資料夾,MBP 斷線/沒電 session 也繼續跑。MBP 上的
   `agent-jobs/<name>.md`,在背景跑 `claude -p`,報告與狀態在 `.state/agent-jobs/<name>/`
 - **長 job 在 `schedule.yaml` 加 `background: true`**:scheduler 一個一個依序跑 job,幾分鐘以上的
   job(librarian、project-16、muninn-reflect、project-36 研究)不加就會讓 muninn-tick、上傳
-  全部等它。背景 job 跑完的結果下一個 tick 才併回狀態,細節在 `scheduler.py` 檔頭
+  全部等它。背景 job 跑完的結果下一個 tick 才併回狀態,細節在 `scheduler.py` 檔頭。背景 job 之間有先後(動同一份東西)就加 `after: [job]`,不要只靠時間錯開
 - **排程器看門狗** `bin/scheduler-watchdog.py`(`local.agent-hub-scheduler-watchdog`,每 5 分鐘)——
   排程器超過 35 分鐘沒 tick 就發 Discord。刻意不靠排程器/Homebrew/muninn;Discord 設定在
   `.secrets/`(不進版控),沒設定狀態頁會標紅

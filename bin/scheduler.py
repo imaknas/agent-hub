@@ -24,6 +24,13 @@
   跑完的結果寫在 .state/runs/<name>.json,下一個 tick 併回狀態(成功才記「今天跑過」);
   還在跑的時候不會再開第二份。log 一樣是 .logs/<name>-<日期>.log。
 
+順序:加 after: [job 名稱]
+  列出的 job 今天要跑、但還沒跑完(還沒到時間、還在跑、失敗了但還會重試)時,這個 job 先不開始,
+  下個 tick 再看。那個 job 今天成功了、用完 max_attempts_per_day、今天不排或停用了,就不再等。
+  背景 job 之間不能只靠時間錯開(例:consolidate-memory 02:00 → librarian 03:00,兩邊都動
+  ~/.memory-copies,tick 一漂移就可能重疊)。被等的 job 沒設 max_attempts_per_day 又一直失敗,
+  就會等一整天——要掛 after 的話,被等的那個最好設上限。
+
 每個 tick 開始、每個 job 跑完都會寫 .state/scheduler-heartbeat,給 scheduler-watchdog.py
 (獨立的 launchd job)判斷排程器是不是停了。
 """
@@ -163,6 +170,29 @@ def hhmm(now: datetime.datetime, s: str) -> datetime.datetime:
     return now.replace(hour=hh, minute=mm, second=0, microsecond=0)
 
 
+def waiting_on(job: dict, by_name: dict[str, dict], state: dict, running: set[str],
+               now: datetime.datetime, today: str) -> str | None:
+    """after: 列的 job 今天還沒結束的話,回傳在等誰;不用等回傳 None。"""
+    for dep in job.get("after", []):
+        d = by_name.get(dep)
+        if d is None or not d.get("enabled", True) or not runs_today(d, now):
+            continue
+        if dep in running:
+            return dep
+        if "every_minutes" in d:  # 間隔型的沒有「今天跑完」,只等它這次跑完
+            continue
+        if now < hhmm(now, d["time"]):
+            return dep
+        if state.get(dep) == today:
+            continue
+        att = state.get(f"{dep}.attempts", {})
+        tried = att.get("count", 0) if att.get("date") == today else 0
+        if d.get("max_attempts_per_day") is not None and tried >= d["max_attempts_per_day"]:
+            continue  # 今天放棄了,不再等
+        return dep
+    return None
+
+
 def is_due(job: dict, state: dict, now: datetime.datetime, today: str) -> bool:
     name = job["name"]
     if "every_minutes" in job:
@@ -191,7 +221,8 @@ def main() -> None:
 
     now = datetime.datetime.now()
     today = now.strftime("%Y-%m-%d")
-    running = reconcile(state, {j["name"]: j for j in jobs})
+    by_name = {j["name"]: j for j in jobs}
+    running = reconcile(state, by_name)
 
     for job in jobs:
         name = job["name"]
@@ -199,6 +230,9 @@ def main() -> None:
             continue
 
         if not is_due(job, state, now, today):
+            continue
+        if dep := waiting_on(job, by_name, state, running, now, today):
+            log(f"job '{name}' waiting for '{dep}' (after:)")
             continue
 
         attempts_key = f"{name}.attempts"
@@ -216,6 +250,7 @@ def main() -> None:
         if job.get("background"):
             log(f"running job '{name}' (background): {job['command']}")
             spawn_background(name, job["command"], job_log_path, now, today)
+            running.add(name)  # 同一個 tick 裡 after: 它的 job 也要等
             continue
         log(f"running job '{name}': {job['command']}")
         try:
