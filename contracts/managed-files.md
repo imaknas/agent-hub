@@ -12,3 +12,6 @@
 | `.agent-memory/STATE.md`(memory 分支) | librarian(模型)、`knas-tasks.py`(機械) | 精煉的現況、`## 待辦`(契約 state-todo) |
 | worktree 裡的 `.agent-memory`、`CLAUDE.local.md` symlink | `worktree-memory.sh` | 指向主 checkout |
 | `~/Library/LaunchAgents/<label>.plist`(不在 repo) | `render-services.py` | 專案登錄的 services |
+| `.agent-memory/memory/<日期>.md`(append 一段) | 通道租借的 runner(`bin/lease-runner.py`,上線後) | 租借對話的交接筆記(`## 租借對話 HH:MM(session <id>)`,附寄出的任務 key) |
+| `.claude/settings.local.json` 的 `sandbox` 跟平台加的 `permissions.deny/allow` 幾條 | `render-project-settings.py`(登錄 `enforce.sandbox`) | 第二階段的 sandbox 與跨專案 deny 規則;偏移會寫回 |
+| `.git/hooks/pre-commit`、`pre-merge-commit`(有平台標記的) | `render-project-settings.py`(登錄 `gate: strict`) | 合併閘門強制 |
