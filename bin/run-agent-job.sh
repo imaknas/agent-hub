@@ -89,7 +89,8 @@ status running "started_at=$(date -Iseconds)" "report=" "session_id=" "error=" "
 
 cd "$CWD" || exit 1
 # 判斷點 agent-job(權限模式等宣告在 contracts/llm-points.yaml)
-/opt/homebrew/bin/python3 "$HUB/bin/llm.py" run agent-job --prompt-file "$PROMPT" >"$raw" 2>"$raw.err"
+# AGENT_JOB_POINT:信箱升級用 mailbox-escalation(固定的 allow);AGENT_JOB_ALLOW:登錄 job 宣告的 allow
+/opt/homebrew/bin/python3 "$HUB/bin/llm.py" run "${AGENT_JOB_POINT:-agent-job}" --prompt-file "$PROMPT" >"$raw" 2>"$raw.err"
 rc=$?
 
 python3 - "$raw" "$report" "$NAME" "$CWD" <<'PY' >"$OUT/.parsed" 2>&1

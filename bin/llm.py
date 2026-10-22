@@ -58,12 +58,19 @@ def run(a) -> int:
     cmd = ["claude", "-p", prompt]
     if model:
         cmd += ["--model", model]
-    if spec.get("permission_mode"):
-        cmd += ["--permission-mode", spec["permission_mode"]]
+    mode, allowed, prompts = spec.get("permission_mode"), list(spec.get("allowed_tools") or []), spec.get("prompts")
+    if spec.get("allow_from_env") and os.environ.get(spec["allow_from_env"]):
+        # 登錄 job 宣告的 allow 清單:無人值守 = dontAsk,沒列的一律拒絕、不提示
+        allowed += json.loads(os.environ[spec["allow_from_env"]])
+        mode, prompts = "dontAsk", "none"
+    if mode:
+        cmd += ["--permission-mode", mode]
+    if prompts:
+        cmd += ["--permission-prompts", prompts]
     if "tools" in spec:
         cmd += ["--tools", spec["tools"]]
-    if spec.get("allowed_tools"):
-        cmd += ["--allowedTools", *spec["allowed_tools"]]
+    if allowed:
+        cmd += ["--allowedTools", *allowed]
     cmd += list(spec.get("extra_args") or []) + list(a.extra or [])
     cmd += ["--output-format", "json"]
     schema = None

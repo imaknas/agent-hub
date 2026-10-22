@@ -482,7 +482,7 @@ def escalate(c) -> None:
         except (OSError, ValueError):
             pass
         res = subprocess.run([str(HUB / "bin" / "run-agent-job.sh"), f"mailbox-{proj}", str(known[proj]), "mailbox"],
-                             capture_output=True, text=True)
+                             capture_output=True, text=True, env={**os.environ, "AGENT_JOB_POINT": "mailbox-escalation"})
         log(f"{proj}:{n} 封信超過 {ESCALATE_HOURS} 小時沒人收,交給 headless agent(mailbox-{proj})"
             if res.returncode == 0 else f"{proj}:升級失敗:{(res.stderr or res.stdout).strip()[-200:]}")
 

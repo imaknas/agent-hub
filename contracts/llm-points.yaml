@@ -63,9 +63,21 @@ points:
     on_failure: caller          # 呼叫端只放統計、標「模型呼叫失敗」
   agent-job:
     caller: bin/run-agent-job.sh
-    purpose: "排程的 Claude job(專案登錄的 kind: agent、信箱升級);prompt 是 job 自己的"
-    permission_mode: auto        # 第二階段第 3 步改成 dontAsk + 每個 job 宣告的 allow
+    purpose: "排程的 Claude job(專案登錄的 kind: agent);prompt 是 job 自己的"
+    # 無人值守:job 在登錄宣告了 allow: → dontAsk + --permission-prompts none + 只准那些規則(沒列的一律拒絕,
+    # 不會卡在提示);沒宣告的暫時維持 auto(不是 bypass),狀態頁列出來。永遠不用 bypassPermissions。
+    permission_mode: auto
+    allow_from_env: AGENT_JOB_ALLOW
     timeout_s: 3600
+    on_failure: caller
+  mailbox-escalation:
+    caller: bin/hubbus(escalate → run-agent-job.sh)
+    purpose: "專案信箱的信 12 小時沒人收:在那個專案開 headless session,只寫 memory 筆記、回信、問 owner"
+    permission_mode: dontAsk
+    prompts: none
+    tools: Read,Edit,Write,Glob,Grep,Bash
+    allowed_tools: ["Edit(./.agent-memory/memory/**)", "Bash(~/agent-hub/bin/hubbus *)"]
+    timeout_s: 1800
     on_failure: caller
 exempt:
   - file: bin/trajectory.py

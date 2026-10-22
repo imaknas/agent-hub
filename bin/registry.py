@@ -20,7 +20,8 @@ schema v1(contracts/project.v1.md 有完整說明):
   services:  [{name, run, label?, keepalive?, throttle_s?, env?, cwd?, expose?}]
   jobs:      [{name, at | every, run | (kind: agent + prompt), cwd?, days?, days_of_month?, months?,
                until?, between?, background?, after?, max_attempts_per_day?, legacy_name?}]
-    every: 15m / 1h;cwd: runtime(預設,有 runtime 時)| workspace | hub
+    every: 15m / 1h;cwd: runtime(預設,有 runtime 時)| workspace | hub | state(只有 agent job:在自己的
+      狀態目錄跑,不載入專案的設定/MCP)
     after: [job](同專案)或 [專案/job]
     legacy_name: schedule.yaml 裡的舊名稱——舊名稱還在 schedule.yaml 時這個 job 不採用(切換期間
                  舊的優先,刪掉 schedule.yaml 那一項就切過來;狀態也從舊名稱搬過來)
@@ -54,7 +55,7 @@ CACHE = hubconf.STATE / "registry"
 TOP = {"v", "name", "paths", "memory", "privacy", "runtime", "push_on_merge", "mailbox", "publishes",
        "provides", "consumes", "services", "jobs"}
 JOB = {"name", "at", "every", "run", "kind", "prompt", "cwd", "days", "days_of_month", "months", "until",
-       "between", "background", "after", "max_attempts_per_day", "legacy_name"}
+       "between", "background", "after", "max_attempts_per_day", "legacy_name", "allow"}
 SERVICE = {"name", "run", "label", "keepalive", "interval_s", "throttle_s", "env", "cwd", "log", "expose"}
 DAYS = {"mon", "tue", "wed", "thu", "fri", "sat", "sun"}
 EVERY = re.compile(r"^(\d+)(m|h)$")
@@ -151,9 +152,14 @@ def validate(doc, stem: str) -> list[str]:
         if set(job.get("days") or []) - DAYS:
             errs.append(f"job {n}:days 只能是 {sorted(DAYS)}")
         cwd_key = job.get("cwd") or default_cwd(doc)
-        if cwd_key not in ("runtime", "workspace", "hub"):
-            errs.append(f"job {n}:cwd 只能是 runtime / workspace / hub")
+        if cwd_key == "state" and job.get("kind") == "agent":
+            pass  # agent job 在自己的狀態目錄跑(不載入專案的設定/MCP;例:專案自己的同名 MCP 會蓋掉 claude.ai connector)
+        elif cwd_key not in ("runtime", "workspace", "hub"):
+            errs.append(f"job {n}:cwd 只能是 runtime / workspace / hub(agent job 另外可以是 state)")
             continue
+        if job.get("allow") is not None and (not isinstance(job["allow"], list)
+                                             or not all(isinstance(x, str) and x for x in job["allow"])):
+            errs.append(f"job {n}:allow 要是權限規則字串的 list")
         if job.get("kind", "command") == "agent":
             prompt = hubconf.registry_dir() / stem / (job.get("prompt") or f"jobs/{n}.md")
             if not prompt.exists():
@@ -227,11 +233,15 @@ def scheduler_jobs(index: dict, legacy_names: set[str]) -> tuple[list[dict], lis
             if job.get("legacy_name"):
                 renames[full] = job["legacy_name"]
             cwd = d.get(job.get("cwd") or default_cwd(doc))
+            if job.get("kind") == "agent" and job.get("cwd") == "state":
+                cwd = hubconf.STATE / "agent-jobs" / (job.get("legacy_name") or f"{name}-{job['name']}")
             if job.get("kind") == "agent":
                 prompt = hubconf.registry_dir() / name / (job.get("prompt") or f"jobs/{job['name']}.md")
                 agent_name = job.get("legacy_name") or f"{name}-{job['name']}"
                 cmd = (f"{shlex.quote(str(hubconf.ROOT / 'bin' / 'run-agent-job.sh'))} {shlex.quote(agent_name)} "
                        f"{shlex.quote(str(cwd))} {shlex.quote(str(prompt))}")
+                if job.get("allow"):  # 無人值守的權限:只准這些(llm.py 的 agent-job 判斷點會改用 dontAsk)
+                    cmd = f"AGENT_JOB_ALLOW={shlex.quote(json.dumps(job['allow'], ensure_ascii=False))} {cmd}"
             else:
                 cmd = f"cd {shlex.quote(str(cwd))} && {job['run']}"
             j = {"name": full, "command": cmd, "project": name}

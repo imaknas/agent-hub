@@ -163,6 +163,12 @@ def main() -> None:
         alerts.append(("bad", "排程器看門狗沒設定 Discord(.secrets/discord-token、.secrets/discord-alert-channel),"
                               "排程器停了發不出警報"))
 
+    # 第二階段:無人值守的 agent job 要在登錄宣告 allow:(dontAsk);還沒宣告的列出來(暫時是 auto)
+    legacy_auto = [j["name"] for j in jobs if "run-agent-job.sh" in j["command"] and "AGENT_JOB_ALLOW=" not in j["command"]
+                   and j.get("enabled", True)]
+    if legacy_auto:
+        alerts.append(("notify", f"這些 Claude job 還沒在登錄宣告 allow:(無人值守時用 auto,不是 dontAsk):{', '.join(legacy_auto)}"))
+
     for proj, errs in sorted(reg_info["errors"].items()):
         alerts.append(("bad", f"專案登錄 {proj} 不合格(沿用上一份合格的,沒有就不排它的 job):" + ";".join(errs[:4])
                               + (f"……共 {len(errs)} 項" if len(errs) > 4 else "") + "。`bin/registry.py check " + proj + "`"))
