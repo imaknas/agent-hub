@@ -1,0 +1,38 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "muninn-permission-requests.v1",
+  "title": "Permission requests a lent session's relay puts to the user",
+  "description": "POST /api/permission-requests (Bearer = the ingest token) with `request`; the id makes a retry harmless. Answer: 200 `decision` when decided, else 202 `pending`. Then GET /api/permission-requests/<id>?wait=<seconds, at most 25>, repeated, answers the same way; unanswered for five minutes means deny. New fields may be added within v1.",
+  "$defs": {
+    "request": {
+      "type": "object",
+      "required": ["id", "tool"],
+      "properties": {
+        "v": {"const": 1},
+        "id": {"type": "string", "minLength": 1, "description": "<lease>:<tool_use_id>"},
+        "lease": {"type": "string"},
+        "project": {"type": "string"},
+        "tool": {"type": "string", "description": "AskUserQuestion, WebFetch, …"},
+        "input_summary": {"type": ["string", "null"], "description": "For WebFetch the full URL."},
+        "risk": {"type": ["string", "null"], "description": "e.g. question, external_fetch"},
+        "question": {"description": "For AskUserQuestion: the tool's input ({questions: [{question, options: [{label}]}]})."}
+      }
+    },
+    "decision": {
+      "type": "object",
+      "required": ["v", "decision"],
+      "properties": {
+        "v": {"const": 1},
+        "decision": {"enum": ["allow", "deny", "allow_session"],
+                     "description": "allow_session: for WebFetch, this site for the rest of the lease; never for sites anyone can write to."},
+        "answers": {"type": "object", "additionalProperties": {"type": "string"},
+                    "description": "For AskUserQuestion: {question text: chosen label}."}
+      }
+    },
+    "pending": {
+      "type": "object",
+      "required": ["v", "id", "pending"],
+      "properties": {"v": {"const": 1}, "id": {"type": "string"}, "pending": {"const": true}}
+    }
+  }
+}

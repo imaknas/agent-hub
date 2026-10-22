@@ -272,8 +272,56 @@
             },
             "at": {
               "type": "string"
+            },
+            "five_hour_resets_at": {
+              "type": [
+                "integer",
+                "null"
+              ]
+            },
+            "seven_day_resets_at": {
+              "type": [
+                "integer",
+                "null"
+              ]
             }
           }
+        }
+      }
+    },
+    "rate_limit_event": {
+      "type": "object",
+      "description": "type=rate_limit 的事件內容;resets_at 是 epoch 秒",
+      "properties": {
+        "status": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "five_hour": {
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "seven_day": {
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "five_hour_resets_at": {
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "seven_day_resets_at": {
+          "type": [
+            "integer",
+            "null"
+          ]
         }
       }
     }

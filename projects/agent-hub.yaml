@@ -86,6 +86,7 @@ consumes:
 - {contract: muninn-handoffs, v: 1, copy: contracts/vendor/muninn/handoffs.v1.schema.json, from: muninn}
 - {contract: muninn-digests, v: 1, copy: contracts/vendor/muninn/digests.v1.schema.json, from: muninn}
 - {contract: muninn-messages, v: 1, copy: contracts/vendor/muninn/messages.v1.schema.json, from: muninn}
+- {contract: muninn-permission-requests, v: 1, copy: contracts/vendor/muninn/permission-requests.v1.schema.json, from: muninn}
 services:
 - name: lease-runner             # 通道租借(bin/lease-runner.py):127.0.0.1:18797,Bearer token 在 .secrets/runner-token
   label: local.agent-hub.lease-runner

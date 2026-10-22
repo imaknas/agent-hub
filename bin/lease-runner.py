@@ -273,11 +273,12 @@ def reader(lease: Lease, proc: subprocess.Popen) -> None:
         elif t == "rate_limit_event":
             info = d.get("rate_limit_info") or {}
             w = info.get("unifiedWindows") or {}
-            lease.emit("rate_limit", status=info.get("status"),
-                       five_hour=(w.get("five_hour") or {}).get("utilization"),
-                       seven_day=(w.get("seven_day") or {}).get("utilization"))
-            STATUS["rate_limit"] = {"five_hour": (w.get("five_hour") or {}).get("utilization"),
-                                    "seven_day": (w.get("seven_day") or {}).get("utilization"), "at": iso()}
+            rl = {"five_hour": (w.get("five_hour") or {}).get("utilization"),
+                  "seven_day": (w.get("seven_day") or {}).get("utilization"),
+                  "five_hour_resets_at": (w.get("five_hour") or {}).get("resetsAt"),   # epoch 秒
+                  "seven_day_resets_at": (w.get("seven_day") or {}).get("resetsAt")}
+            lease.emit("rate_limit", status=info.get("status"), **rl)
+            STATUS["rate_limit"] = {**rl, "at": iso()}
         elif t == "system" and d.get("subtype") == "post_turn_summary":
             lease.emit("turn_end", summary=d.get("status_detail", ""))
         elif t == "result":
