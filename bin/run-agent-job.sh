@@ -88,7 +88,8 @@ raw="$OUT/.$stamp.json"
 status running "started_at=$(date -Iseconds)" "report=" "session_id=" "error=" "cwd=$CWD"
 
 cd "$CWD" || exit 1
-claude -p "$(cat "$PROMPT")" --permission-mode auto --output-format json >"$raw" 2>"$raw.err"
+# 判斷點 agent-job(權限模式等宣告在 contracts/llm-points.yaml)
+/opt/homebrew/bin/python3 "$HUB/bin/llm.py" run agent-job --prompt-file "$PROMPT" >"$raw" 2>"$raw.err"
 rc=$?
 
 python3 - "$raw" "$report" "$NAME" "$CWD" <<'PY' >"$OUT/.parsed" 2>&1

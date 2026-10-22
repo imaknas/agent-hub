@@ -46,9 +46,8 @@ log() {
   return 0
 }
 
-STATE_SCHEMA='{"type":"object","properties":{"state_updated":{"type":"boolean","description":"這次是否編輯了 STATE.md"},"worth_digesting":{"type":"boolean","description":"這次的內容是否值得放進跨專案 digest；純粹確認流程正常、沒有實質更新的話填 false"},"summary":{"type":"string","description":"給跨專案 digest 用的摘要，不超過三句話（worth_digesting 為 false 時可以簡短說明沒有更新的原因，或留空）"},"reason":{"type":"string","description":"為什麼做出這個判斷（更新或不更新 STATE.md），給人事後抽查用"}},"required":["state_updated","worth_digesting","summary","reason"]}'
+# STATE.md / index.md 判斷的輸出 schema 在 contracts/llm/librarian-{state,index}.schema.json(bin/llm.py 套用)
 
-INDEX_SCHEMA='{"type":"object","properties":{"index_updated":{"type":"boolean","description":"是否編輯了 index.md"},"relations_found":{"type":"string","description":"今天找到的跨專案關聯簡述；沒有明顯關聯就寫「(無明顯關聯)」，不要硬掰"}},"required":["index_updated","relations_found"]}'
 
 total_cost="0"
 
@@ -69,8 +68,8 @@ repair_state_todo() {
 
 目前的問題:
 $problems"
-  fix_json=$(cd "$dir" && claude -p "$fix_prompt" --model "$STATE_MODEL" --permission-mode dontAsk \
-      --tools "Read,Edit" --allowedTools "Edit(./STATE.md)" --output-format json 2>>"$LOG")
+  # 判斷點 librarian-todo-format(contracts/llm-points.yaml 宣告模型、權限、工具)
+  fix_json=$(cd "$dir" && printf '%s' "$fix_prompt" | /opt/homebrew/bin/python3 "$HUB/bin/llm.py" run librarian-todo-format 2>>"$LOG")
   add_cost "$(echo "$fix_json" | jq -r '.total_cost_usd // empty' 2>/dev/null)"
   if problems=$(python3 "$HUB/bin/check-state-todo.py" "$dir/STATE.md"); then
     log "$proj: 待辦段落格式已修正"
@@ -243,13 +242,8 @@ memory/ 的結構:
   # memory/reference/ 五個檔),所以用權限規則機械限制。acceptEdits 會放行目錄裡所有檔案,
   # dontAsk 只放行 allowedTools 列的;Edit(...) 規則涵蓋 Write/Edit 兩個工具。
   # 下面的 stray 檢查留著當第二道防線。
-  output_json=$(cd "$proj_dir" && claude -p "$prompt" \
-      --model "$STATE_MODEL" \
-      --permission-mode dontAsk \
-      --tools "Read,Write,Edit,Glob,Grep" \
-      --allowedTools "Edit(./STATE.md)" \
-      --output-format json \
-      --json-schema "$STATE_SCHEMA" 2>>"$LOG")
+  # 判斷點 librarian-state(模型、dontAsk、只准 Edit(./STATE.md)、schema 都在 contracts/llm-points.yaml)
+  output_json=$(cd "$proj_dir" && printf '%s' "$prompt" | /opt/homebrew/bin/python3 "$HUB/bin/llm.py" run librarian-state 2>>"$LOG")
   rc=$?
 
   if [ $rc -ne 0 ] || [ -z "$output_json" ]; then
@@ -445,12 +439,8 @@ if [ -s "$digest_file" ]; then
 <!-- roster:begin --> 到 <!-- roster:end --> 之間的專案名冊是 gen-index-roster.sh 機械產生的,
 不要編輯那個區塊(改了也會被覆蓋);你的註記寫在區塊外。"
 
-  index_output_json=$(claude -p "$index_prompt" \
-      --model "$INDEX_MODEL" \
-      --permission-mode acceptEdits \
-      --tools "Read,Write,Edit,Glob,Grep" \
-      --output-format json \
-      --json-schema "$INDEX_SCHEMA" 2>>"$LOG")
+  # 判斷點 librarian-index
+  index_output_json=$(printf '%s' "$index_prompt" | /opt/homebrew/bin/python3 "$HUB/bin/llm.py" run librarian-index 2>>"$LOG")
   idx_rc=$?
 
   if [ $idx_rc -eq 0 ] && [ -n "$index_output_json" ]; then

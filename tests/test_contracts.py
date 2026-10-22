@@ -58,8 +58,16 @@ class Neutral(unittest.TestCase):
 
 class Json(unittest.TestCase):
     def test_schemas_parse(self):
-        for p in list(C.glob("*.schema.json")) + list((C / "vendor").rglob("*.schema.json")):
+        for p in list(C.glob("*.schema.json")) + list((C / "vendor").rglob("*.schema.json")) + list((C / "llm").glob("*.json")):
             json.loads(p.read_text())
+
+    def test_llm_points_declare_existing_schemas(self):
+        import re
+        text = (C / "llm-points.yaml").read_text()
+        for schema in re.findall(r"schema: (\S+)", text):
+            self.assertTrue((C / schema).exists(), schema)
+        for need in ("on_failure", "purpose", "caller"):
+            self.assertGreaterEqual(text.count(f"    {need}:"), 6, need)
 
     def test_hubbus_message(self):
         ev = {"seq": 1, "id": "m1", "ts": "2026-10-22T00:00:00+08:00", "type": "message", "source": "example",

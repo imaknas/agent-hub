@@ -1,0 +1,17 @@
+{
+ "type": "object",
+ "properties": {
+  "index_updated": {
+   "type": "boolean",
+   "description": "是否編輯了 index.md"
+  },
+  "relations_found": {
+   "type": "string",
+   "description": "今天找到的跨專案關聯簡述；沒有明顯關聯就寫「(無明顯關聯)」，不要硬掰"
+  }
+ },
+ "required": [
+  "index_updated",
+  "relations_found"
+ ]
+}

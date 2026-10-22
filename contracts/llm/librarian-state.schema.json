@@ -1,0 +1,27 @@
+{
+ "type": "object",
+ "properties": {
+  "state_updated": {
+   "type": "boolean",
+   "description": "這次是否編輯了 STATE.md"
+  },
+  "worth_digesting": {
+   "type": "boolean",
+   "description": "這次的內容是否值得放進跨專案 digest；純粹確認流程正常、沒有實質更新的話填 false"
+  },
+  "summary": {
+   "type": "string",
+   "description": "給跨專案 digest 用的摘要，不超過三句話（worth_digesting 為 false 時可以簡短說明沒有更新的原因，或留空）"
+  },
+  "reason": {
+   "type": "string",
+   "description": "為什麼做出這個判斷（更新或不更新 STATE.md），給人事後抽查用"
+  }
+ },
+ "required": [
+  "state_updated",
+  "worth_digesting",
+  "summary",
+  "reason"
+ ]
+}

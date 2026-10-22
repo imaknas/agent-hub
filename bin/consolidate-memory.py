@@ -198,41 +198,7 @@ def candidates(state: dict, only: str | None, ignore_interval: bool) -> list[dic
 
 # ---------- 模型呼叫 ----------
 
-SCHEMA = {
-    "type": "object",
-    "properties": {
-        "folded": {
-            "type": "array",
-            "description": "這次整理完、可以 git rm 的日期檔(只能是這次給的那幾個)",
-            "items": {"type": "object", "properties": {
-                "file": {"type": "string", "description": "例如 memory/2026-09-25.md"},
-                "destinations": {"type": "array", "items": {"type": "string"},
-                                 "description": "內容放在哪些檔案(memory/reference/<主題>.md 或 STATE.md);內容本來就已經在那裡也列"},
-                "dropped": {"type": "string",
-                            "description": "沒有保留的內容跟原因(純流程雜訊/重複/被較新紀錄推翻);全部保留就寫空字串"},
-            }, "required": ["file", "destinations", "dropped"]},
-        },
-        "kept": {
-            "type": "array",
-            "description": "這次給的日期檔裡,還不能刪的,跟原因",
-            "items": {"type": "object", "properties": {
-                "file": {"type": "string"}, "reason": {"type": "string"}}, "required": ["file", "reason"]},
-        },
-        "corrections": {
-            "type": "array",
-            "description": "reference/ 或 STATE.md 裡因為被較新紀錄推翻/取代而改掉的敘述",
-            "items": {"type": "object", "properties": {
-                "file": {"type": "string", "description": "改的是哪個檔案"},
-                "before": {"type": "string", "description": "原本的敘述(逐字)"},
-                "after": {"type": "string", "description": "改成的敘述(逐字)"},
-                "evidence_file": {"type": "string", "description": "根據哪個檔案(通常是較新的日期檔)"},
-                "evidence_quote": {"type": "string", "description": "從 evidence_file 逐字複製、能證明要這樣改的句子"},
-            }, "required": ["file", "before", "after", "evidence_file", "evidence_quote"]},
-        },
-        "summary": {"type": "string", "description": "這次做了什麼,三句話內,給人抽查用"},
-    },
-    "required": ["folded", "kept", "corrections", "summary"],
-}
+# 輸出 schema 在 contracts/llm/consolidate.schema.json(判斷點 consolidate,bin/llm.py 套用)
 
 
 def build_prompt(s: dict, repo: pathlib.Path) -> str:
@@ -295,19 +261,14 @@ memory/ 的結構:
 
 
 def run_model(prompt: str, repo: pathlib.Path, model: str) -> tuple[dict | None, str]:
-    cmd = ["claude", "-p", prompt, "--model", model,
-           "--permission-mode", "dontAsk",
-           "--tools", "Read,Write,Edit,Glob,Grep",
-           # Edit(...) 規則涵蓋 Write/Edit;dontAsk 底下沒列的路徑一律拒絕
-           "--allowedTools", "Edit(./memory/reference/**)", "Edit(./STATE.md)",
-           "--strict-mcp-config", "--no-session-persistence",
-           "--output-format", "json", "--json-schema", json.dumps(SCHEMA, ensure_ascii=False)]
+    # 判斷點 consolidate(權限 dontAsk、只准 Edit memory/reference/** 跟 STATE.md、schema:contracts/llm-points.yaml)
+    cmd = ["/opt/homebrew/bin/python3", str(HUB / "bin" / "llm.py"), "run", "consolidate", "--model", model]
     env = dict(GIT_ENV)
     token = HOME / ".claude" / "headless-oauth-token"
     if token.is_file():
         env["CLAUDE_CODE_OAUTH_TOKEN"] = token.read_text().strip()
     try:
-        r = subprocess.run(cmd, cwd=repo, env=env, capture_output=True, text=True, timeout=CALL_TIMEOUT)
+        r = subprocess.run(cmd, input=prompt, cwd=repo, env=env, capture_output=True, text=True, timeout=CALL_TIMEOUT + 60)
     except subprocess.TimeoutExpired:
         return None, f"超過 {CALL_TIMEOUT // 60} 分鐘"
     if r.returncode != 0 or not r.stdout.strip():

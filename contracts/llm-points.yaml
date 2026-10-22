@@ -1,0 +1,72 @@
+# LLM 判斷點登錄(第二階段):agent-hub 裡每一次 `claude -p` 都要經過 bin/llm.py,而且要是這裡宣告過的判斷點。
+# 每個點:誰呼叫、做什麼判斷、用哪個模型、權限、能用的工具、輸出 schema、模型不能用/輸出不合格時怎麼辦。
+# contracts-check 每晚 lint:bin/ 裡出現 claude -p 卻不在 bin/llm.py(也不在 exempt)就失敗。
+#
+# on_failure:
+#   caller   → llm.py 印 {"is_error": true, "structured_output": null, ...}、exit 1,呼叫端走它原本的失敗路徑
+#              (librarian:不推進 checkpoint、隔晚重試;consolidate:那個專案這次不整理)
+#   default  → llm.py 印 {"is_error": true, "structured_output": <default>, ...}、exit 0,呼叫端照用安全預設
+# 不管哪種都在匯流排記 job.failed(point、原因)。
+v: 1
+points:
+  librarian-state:
+    caller: bin/librarian.sh
+    purpose: 每晚依 memory 變動與 Muninn 轉交,決定要不要、怎麼更新一個專案的 STATE.md(只准改 ./STATE.md)
+    model_env: STATE_MODEL
+    model_default: haiku
+    permission_mode: dontAsk
+    tools: Read,Write,Edit,Glob,Grep
+    allowed_tools: ["Edit(./STATE.md)"]
+    schema: llm/librarian-state.schema.json
+    timeout_s: 1200
+    on_failure: caller
+  librarian-todo-format:
+    caller: bin/librarian.sh
+    purpose: STATE.md 的 `## 待辦` 格式不對時,只修格式、內容不動
+    model_env: STATE_MODEL
+    model_default: haiku
+    permission_mode: dontAsk
+    tools: Read,Edit
+    allowed_tools: ["Edit(./STATE.md)"]
+    timeout_s: 600
+    on_failure: caller          # 修不好就留著,check-state-todo 會再檢查、todo.md 檔尾列出
+  librarian-index:
+    caller: bin/librarian.sh
+    purpose: 更新跨專案 index.md 名冊區塊外的註記、找跨專案關聯
+    model_env: INDEX_MODEL
+    model_default: sonnet
+    permission_mode: acceptEdits
+    tools: Read,Write,Edit,Glob,Grep
+    schema: llm/librarian-index.schema.json
+    timeout_s: 1200
+    on_failure: caller
+  consolidate:
+    caller: bin/consolidate-memory.py
+    purpose: 把超過 14 天的 memory 日期檔整理進 reference/、修正被推翻的敘述(只准改 memory/reference/ 跟 STATE.md)
+    model_env: CONSOLIDATE_MODEL
+    model_default: opus
+    permission_mode: dontAsk
+    tools: Read,Write,Edit,Glob,Grep
+    allowed_tools: ["Edit(./memory/reference/**)", "Edit(./STATE.md)"]
+    extra_args: ["--strict-mcp-config", "--no-session-persistence"]
+    schema: llm/consolidate.schema.json
+    timeout_s: 1200
+    on_failure: caller
+  reflect-week:
+    caller: bin/reflect_llm.py
+    purpose: 每週活動分析(只拿統計 + muninn 的 session 摘要,不拿對話原文)
+    model_env: INDEX_MODEL
+    model_default: sonnet
+    tools: ""
+    schema: llm/reflect-week.schema.json
+    timeout_s: 1200
+    on_failure: caller          # 呼叫端只放統計、標「模型呼叫失敗」
+  agent-job:
+    caller: bin/run-agent-job.sh
+    purpose: "排程的 Claude job(專案登錄的 kind: agent、信箱升級);prompt 是 job 自己的"
+    permission_mode: auto        # 第二階段第 3 步改成 dontAsk + 每個 job 宣告的 allow
+    timeout_s: 3600
+    on_failure: caller
+exempt:
+  - file: bin/trajectory.py
+    reason: Knas 2026-10-22 決定 4B——手動跑的工具,先維持原樣

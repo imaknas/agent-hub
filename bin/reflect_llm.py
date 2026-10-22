@@ -36,48 +36,7 @@ def redact(text: str) -> str:
     return SECRET.sub("[已遮蔽]", text)
 
 
-_item = {"type": "object", "additionalProperties": False}
-SCHEMA = {
-    "type": "object", "additionalProperties": False,
-    "required": ["headline", "summary", "insights", "projects", "rhythm", "fluency", "next_week"],
-    "properties": {
-        "headline": {"type": "string", "description": "一句話講這週最重要的事,≤ 30 字"},
-        "summary": {"type": "string", "description": "3–4 句總評:這週的重心、做成了什麼、最大的問題"},
-        "insights": {"type": "array", "minItems": 3, "maxItems": 5, "items": {**_item,
-            "required": ["title", "analysis", "evidence", "so_what"],
-            "properties": {
-                "title": {"type": "string", "description": "洞察的結論句,≤ 22 字"},
-                "analysis": {"type": "string", "description": "2–3 句分析:看到什麼模式、為什麼會這樣"},
-                "evidence": {"type": "string", "description": "具體證據:統計數字或摘要內容"},
-                "so_what": {"type": "string", "description": "這代表什麼、該怎麼看待,1 句"}}}},
-        "projects": {"type": "array", "items": {**_item,
-            "required": ["name", "focus", "assessment", "status", "next"],
-            "properties": {
-                "name": {"type": "string"},
-                "focus": {"type": "string", "description": "這週在做什麼(有摘要就具體到功能/決定,沒有就講投入樣貌)"},
-                "assessment": {"type": "string", "description": "進展評估:推進得如何、投入跟產出是否相稱"},
-                "status": {"type": "string", "enum": ["推進", "穩定", "卡住", "發散", "收尾"]},
-                "next": {"type": "string", "description": "下一步最該做的一件事"}}}},
-        "rhythm": {**_item, "required": ["verdict", "analysis", "pattern"],
-            "properties": {
-                "verdict": {"type": "string", "description": "作息一句話結論"},
-                "analysis": {"type": "string", "description": "2–3 句:時段、深夜、連續工作代表什麼,對產出/判斷品質可能的影響"},
-                "pattern": {"type": "string", "description": "最明顯的一個節奏模式"}}},
-        "fluency": {"type": "array", "minItems": 4, "maxItems": 4, "items": {**_item,
-            "required": ["dimension", "level", "observation", "evidence", "suggestion"],
-            "properties": {
-                "dimension": {"type": "string", "enum": ["交辦", "描述", "判斷", "把關"]},
-                "level": {"type": "string", "enum": ["強項", "穩定", "可改進"]},
-                "observation": {"type": "string", "description": "2 句觀察"},
-                "evidence": {"type": "string", "description": "根據的統計數字或摘要內容;撐不起判斷就直說"},
-                "suggestion": {"type": "string", "description": "具體做法,1 句"}}}},
-        "next_week": {"type": "array", "minItems": 2, "maxItems": 3, "items": {**_item,
-            "required": ["action", "why"],
-            "properties": {
-                "action": {"type": "string", "description": "可以直接照做的一件事"},
-                "why": {"type": "string", "description": "對應哪個觀察、預期效果"}}}},
-    },
-}
+# 輸出 schema 在 contracts/llm/reflect-week.schema.json(判斷點 reflect-week,bin/llm.py 套用)
 
 PROMPT = """你是 Knas 的每週工作回顧分析師。以下是他這一週在 Claude Code 裡的活動統計,
 {digest_intro}
@@ -167,10 +126,10 @@ def analyze(stats: dict) -> dict:
                                digests="\n\n## 每個 session 的摘要\n" + digest_rows(d))
     else:
         prompt = PROMPT.format(digest_intro=NO_DIGEST_INTRO, stats=stats_brief(stats), digests="")
-    res = subprocess.run(["claude", "-p", prompt,
-                          "--model", meta["model"], "--tools", "", "--output-format", "json",
-                          "--json-schema", json.dumps(SCHEMA, ensure_ascii=False)],
-                         capture_output=True, text=True, timeout=1200)
+    # 判斷點 reflect-week(工具全關、schema:contracts/llm-points.yaml)
+    res = subprocess.run(["/opt/homebrew/bin/python3", str(pathlib.Path(__file__).resolve().parent / "llm.py"),
+                          "run", "reflect-week", "--model", meta["model"]],
+                         input=prompt, capture_output=True, text=True, timeout=1300)
     try:
         out = json.loads(res.stdout).get("structured_output")
     except ValueError:
