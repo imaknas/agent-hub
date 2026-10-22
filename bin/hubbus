@@ -6,7 +6,7 @@
 每個讀者記自己讀到哪(cursor),從那之後往下讀。有些事件有好幾個讀者(例:Muninn 轉交的
 done 要讓 Muninn 結案,job 失敗要給狀態頁),不用各自接一條檔案/CLI。
 
-存放:.state/bus.db(SQLite WAL、busy_timeout、寫入都包在 transaction,好幾個 process 一起寫也安全;
+存放:.state/bus/bus.db(SQLite WAL、busy_timeout、寫入都包在 transaction,好幾個 process 一起寫也安全;
 不進版控、沒有備份——壞掉的話還沒被收的信會不見,Knas 2026-10-21 接受)。
   events(seq 遞增, id 唯一=寄件端給的 id(重送 = 什麼都不做), ts, type, source, to_project, ref, payload JSON)
   cursors(consumer, seq)
@@ -65,13 +65,13 @@ sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
 import hubconf  # noqa: E402  路徑、owner 地址、專案登錄都從平台設定來
 
 HUB = hubconf.ROOT
-DB = hubconf.STATE / "bus.db"
+DB = hubconf.bus_db()
 AGENT_JOBS = hubconf.STATE / "agent-jobs"
 MUNINN_CLI = hubconf.p("assistant.cli")
 MUNINN = MUNINN_CLI.parents[2] if MUNINN_CLI else None   # <runtime>/.venv/bin/muninn → <runtime>
 MUNINN_API = hubconf.get("assistant.api")
 INGEST_TOKEN = hubconf.p("assistant.ingest_token")
-LOG = hubconf.LOGS / "hubbus.log"
+LOG = hubconf.BUS_LOG
 # owner(= Knas)的地址:新的信用 owner,舊的 knas 一樣收(hub.json 的 owner.address/aliases)
 KNAS = hubconf.owner_address()
 OWNERS = hubconf.owner_addresses()

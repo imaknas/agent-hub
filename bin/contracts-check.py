@@ -65,7 +65,7 @@ def live(index: dict) -> list[str]:
     import minischema
     for f in sorted(hubconf.registry_dir().glob("*.yaml")):
         errs += [f"projects/{f.name}:{e}" for e in minischema.errors(schema, yaml.safe_load(f.read_text()))]
-    bus = hubconf.STATE / "bus.db"
+    bus = hubconf.bus_db()
     if bus.exists():
         c = sqlite3.connect(bus, timeout=30)
         c.row_factory = sqlite3.Row

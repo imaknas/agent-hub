@@ -221,7 +221,7 @@ def main() -> None:
         tm = bus["to_muninn"]
         if tm["n"] and now - datetime.datetime.fromisoformat(tm["oldest"]).replace(tzinfo=None) > datetime.timedelta(hours=1):
             alerts.append(("bad", f"{tm['n']} 則要送進 Muninn 的(給 knas 的信、轉交結案)卡住了,最舊 {tm['oldest'][5:16]};"
-                                  "看 .logs/hubbus.log"))
+                                  "看 .state/bus/hubbus.log"))
         for f in bus["job_failed_24h"]:
             if f.get("job") == "hubbus-bridge":
                 alerts.append(("bad", f"hubbus:{f.get('detail', '')}"))
@@ -254,7 +254,8 @@ def main() -> None:
                       if wt_rows else "<div class=sub>沒有進行中的 worktree</div>")
                    + (f"<div class=sub style='margin-top:8px'>最近 7 天直接 commit 到 main(沒經過 merge-branch):"
                       + "、".join(f"{esc(p)} {n}" for p, n in sorted(ungated.items())) + "</div>" if ungated else ""))
-        bus_db = HUB / ".state" / "bus.db"
+        import hubconf
+        bus_db = hubconf.bus_db()
         if bus_db.exists():
             import sqlite3
             for (pl,) in sqlite3.connect(bus_db, timeout=10).execute(

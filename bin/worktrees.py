@@ -59,7 +59,7 @@ def ungated_main_commits(repo: pathlib.Path, project: str, days: int = 7) -> int
         return 0
     shas = git(repo, "log", f"--since={days} days ago", "--format=%H", base).split()
     gated = set()
-    bus = hubconf.STATE / "bus.db"
+    bus = hubconf.bus_db()
     if bus.exists():
         for (pl,) in sqlite3.connect(bus, timeout=10).execute(
                 "SELECT payload FROM events WHERE type='merge.done' AND source=?", (project,)):

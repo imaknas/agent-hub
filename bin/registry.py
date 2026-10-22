@@ -304,7 +304,7 @@ def cmd_apply_updates() -> int:
     """專案寄來的 manifest.update 信(text = 完整的登錄 YAML):驗證過就寫進登錄 + commit,不過就把錯誤
     寄回那個專案的信箱;兩種都把信結案。只能改寄件專案自己的登錄。零 LLM。"""
     import sqlite3
-    bus = hubconf.STATE / "bus.db"
+    bus = hubconf.bus_db()
     if not bus.exists():
         return 0
     hub = hubconf.hub_project()
