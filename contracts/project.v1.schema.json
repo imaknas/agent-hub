@@ -22,6 +22,7 @@
     "jobs": {"type": "array", "items": {"type": "object", "required": ["name"]}},
     "enforce": {"type": "object", "properties": {"sandbox": {"type": "boolean"}}, "additionalProperties": false},
     "network": {"type": "array", "items": {"type": "string"}},
-    "allow_write": {"type": "array", "items": {"type": "string"}}
+    "allow_write": {"type": "array", "items": {"type": "string"}},
+    "gate": {"enum": ["strict", "detect"]}
   }
 }

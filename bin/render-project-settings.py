@@ -138,6 +138,45 @@ def unapply(name: str, doc: dict) -> None:
     print(f"{name}:enforce 關了,已拿掉平台的 sandbox/規則")
 
 
+GATE_MARK = "# agent-hub:gate (managed; registry gate: strict)"
+GATE_HOOK = GATE_MARK + """
+# 主 checkout 的 main/master 不能直接 commit 或 merge commit;merge-branch 是 fast-forward,不會觸發這個 hook。
+b=$(git symbolic-ref --short -q HEAD)
+case "$b" in main|master) ;; *) exit 0 ;; esac
+[ -n "$MERGE_GATE" ] && exit 0
+echo "這個專案開了合併閘門(gate: strict):不能直接 commit 到 $b。在自己的 worktree/branch 做,完成用 ~/agent-hub/bin/merge-branch。" >&2
+exit 1
+"""
+
+
+def gate(name: str, doc: dict, report: bool) -> None:
+    """登錄 gate: strict → 裝 pre-commit / pre-merge-commit;關掉就拿掉(只動有平台標記的)。
+    專案有自己的 core.hooksPath(例:husky)就不裝,只偵測。"""
+    import subprocess
+    ws = registry.dirs(doc)["workspace"]
+    if not ws or not (ws / ".git").is_dir():
+        return
+    want = doc.get("gate") == "strict"
+    hp = subprocess.run(["git", "-C", str(ws), "config", "core.hooksPath"], capture_output=True, text=True).stdout.strip()
+    for hook in ("pre-commit", "pre-merge-commit"):
+        f = ws / ".git" / "hooks" / hook
+        mine = f.exists() and GATE_MARK in f.read_text(errors="replace")
+        if want and hp:
+            print(f"{name}:gate strict 沒裝(專案用自己的 core.hooksPath={hp}),只偵測")
+            return
+        if want and not mine:
+            if f.exists():
+                print(f"{name}:.git/hooks/{hook} 已經有專案自己的 hook,不覆蓋(gate 只偵測)")
+                continue
+            if not report:
+                f.write_text("#!/bin/sh\n" + GATE_HOOK)
+                f.chmod(0o755)
+                print(f"{name}:裝了 {hook}(gate strict)")
+        elif not want and mine and not report:
+            f.unlink()
+            print(f"{name}:gate 關了,拿掉 {hook}")
+
+
 def main() -> int:
     report = "--report" in sys.argv
     only = sys.argv[sys.argv.index("--only") + 1] if "--only" in sys.argv else None
@@ -146,6 +185,7 @@ def main() -> int:
     for name, doc in sorted(index["projects"].items()):
         if name == hubconf.hub_project() or (only and name != only):
             continue
+        gate(name, doc, report)
         on = bool((doc.get("enforce") or {}).get("sandbox"))
         if not on:
             if report:

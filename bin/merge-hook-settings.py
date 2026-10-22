@@ -46,6 +46,9 @@ NUDGE_CMD = "[ -d .agent-memory ] && [ -x ~/agent-hub/bin/memory-nudge.py ] && ~
 MAIL_PROMPT_CMD = "[ -x ~/agent-hub/bin/hubbus ] && ~/agent-hub/bin/hubbus hook prompt || true"
 MAIL_TOOL_CMD = "[ -x ~/agent-hub/bin/hubbus ] && ~/agent-hub/bin/hubbus hook post-tool || true"
 
+# 第二階段:專案的 session 不能開別的專案的 session(跨專案只能寄信);bin/guard.py 擋的時候回 deny + 理由
+GUARD_CMD = "[ -x ~/agent-hub/bin/guard.py ] && /usr/bin/python3 ~/agent-hub/bin/guard.py pre-tool || true"
+
 # (event, matcher, command);matcher 為 None 表示不設(該事件全部觸發)
 HOOKS = (
     ("SessionStart", None, START_CMD),
@@ -55,6 +58,7 @@ HOOKS = (
     ("PostToolUse", "Bash", NUDGE_CMD),
     ("UserPromptSubmit", None, MAIL_PROMPT_CMD),
     ("PostToolUse", "Bash", MAIL_TOOL_CMD),
+    ("PreToolUse", "mcp__ccd_session__start_session", GUARD_CMD),
 )
 
 

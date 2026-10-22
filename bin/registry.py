@@ -21,6 +21,7 @@ schema v1(contracts/project.v1.md 有完整說明):
   enforce: {sandbox: false}       第二階段:true = render-project-settings.py 寫 sandbox + 權限規則
   network: [網域]                 sandbox 平台預設之外還要連的
   allow_write: [路徑]             sandbox 平台預設之外還要寫的
+  gate: strict                    合併閘門強制:主 checkout 的 main 不能直接 commit(只能 merge-branch);預設只偵測
   jobs:      [{name, at | every, run | (kind: agent + prompt), cwd?, days?, days_of_month?, months?,
                until?, between?, background?, after?, max_attempts_per_day?, legacy_name?}]
     every: 15m / 1h;cwd: runtime(預設,有 runtime 時)| workspace | hub | state(只有 agent job:在自己的
@@ -56,7 +57,7 @@ import yaml  # noqa: E402
 
 CACHE = hubconf.STATE / "registry"
 TOP = {"v", "name", "paths", "memory", "privacy", "runtime", "push_on_merge", "mailbox", "publishes",
-       "provides", "consumes", "services", "jobs", "enforce", "network", "allow_write"}
+       "provides", "consumes", "services", "jobs", "enforce", "network", "allow_write", "gate"}
 JOB = {"name", "at", "every", "run", "kind", "prompt", "cwd", "days", "days_of_month", "months", "until",
        "between", "background", "after", "max_attempts_per_day", "legacy_name", "allow"}
 SERVICE = {"name", "run", "label", "keepalive", "interval_s", "throttle_s", "env", "cwd", "log", "expose"}
@@ -117,6 +118,8 @@ def validate(doc, stem: str) -> list[str]:
     enf = doc.get("enforce")
     if enf is not None and (not isinstance(enf, dict) or set(enf) - {"sandbox"} or not isinstance(enf.get("sandbox", False), bool)):
         errs.append("enforce 只能是 {sandbox: true|false}")
+    if doc.get("gate") not in (None, "strict", "detect"):
+        errs.append("gate 只能是 strict 或 detect(預設)")
     for key in ("network", "allow_write"):
         v = doc.get(key)
         if v is not None and (not isinstance(v, list) or not all(isinstance(x, str) and x for x in v)):
