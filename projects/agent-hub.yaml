@@ -55,6 +55,20 @@ jobs:
   every: 15m
   cwd: hub
   run: /opt/homebrew/bin/python3 bin/registry.py apply-updates
+- name: backup                   # 加密雲端備份(restic → B2,bin/backup.py;設定在 hub.json backup)
+  at: "05:45"
+  cwd: hub
+  background: true
+  max_attempts_per_day: 2
+  run: /opt/homebrew/bin/python3 bin/backup.py run
+- name: backup-verify            # 每月還原測試:還原到暫存目錄、檢查 SQLite/bundle/檔案、10% 資料抽查
+  at: "06:30"
+  days_of_month: [1]
+  after: [backup]
+  cwd: hub
+  background: true
+  max_attempts_per_day: 1
+  run: /opt/homebrew/bin/python3 bin/backup.py verify
 - name: contracts-check          # 契約副本 == 原版(兩個方向)+ 實際資料照契約;不一致發 job.failed
   at: "01:30"
   cwd: hub

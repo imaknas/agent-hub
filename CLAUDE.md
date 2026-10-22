@@ -139,6 +139,12 @@ SSH 開 mini 上的資料夾,MBP 斷線/沒電 session 也繼續跑。MBP 上的
   跟 muninn 同一條規則;之後會加上 muninn 本機模型寫的 session 摘要)
 - `bin/hublib.py`——共用判斷:真人訊息(`origin.kind == human`)、transcript ↔ 專案對應、哪些
   commit 算專案工作。check-memory-gaps / memory-nudge / weekly-reflect 都用它
+- `bin/backup.py`——**加密雲端備份**(restic → Backblaze B2 bucket `<backup-bucket>`;設定在 `hub.json` 的
+  `backup`)。平台 job `agent-hub/backup` 每晚 05:45:SQLite 用 backup API 複製、`~/git-origin` 的 bare repo 打 bundle、
+  各 workspace 沒 push/沒 commit 的東西跟 `.env`、加上 muninn data / `.state` / `.secrets` / 服務資料 / transcript;
+  週日套保留(14 天、8 週、12 月)。`agent-hub/backup-verify` 每月 1 號還原到暫存目錄驗證。密碼在
+  `.secrets/backup-password`(**另一份在 Knas 的密碼管理器**),B2 金鑰在 `.secrets/b2-env`。還原:
+  `bin/backup.py restore <目的地> [--include <路徑>]`。工作 profile 的 transcript 刻意不備份
 - `bin/mirror-backup.sh`——讀 `mirror-list.txt`,對每個 GitHub repo 維護
   一份唯讀 `--mirror` clone,純粹災難復原用,跟 librarian 的摘要流程完全
   獨立、零 LLM 成本

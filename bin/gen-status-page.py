@@ -213,6 +213,17 @@ def main() -> None:
                     for i, r in enumerate(reps))
                 report_blocks.append(f"<section><h3>{esc(name)}</h3>{items}</section>")
 
+    # 加密雲端備份(bin/backup.py):最後一次成功太久、還原測試太久都標紅
+    bdir = HUB / ".state" / "backup"
+    for fname, limit_h, what in (("last.json", 36, "備份"), ("last-verify.json", 40 * 24, "還原測試")):
+        f = bdir / fname
+        try:
+            at = datetime.datetime.fromisoformat(json.loads(f.read_text())["at"]).replace(tzinfo=None)
+            if now - at > datetime.timedelta(hours=limit_h):
+                alerts.append(("bad", f"最後一次成功的{what}是 {at:%m/%d %H:%M},太久了(看 .logs/agent-hub__backup*)"))
+        except (OSError, ValueError, KeyError):
+            alerts.append(("bad", f"還沒有成功的{what}紀錄(.state/backup/{fname})"))
+
     # 專案信箱/事件匯流排(bin/hubbus):卡住的信、送不進 Muninn 的、壞掉被移開的 bus.db
     mail_html = ""
     r = subprocess.run(["/usr/bin/python3", str(HUB / "bin" / "hubbus"), "status", "--json"], capture_output=True, text=True)
