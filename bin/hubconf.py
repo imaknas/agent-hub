@@ -55,22 +55,22 @@ LOGS = ROOT / ".logs"
 REGISTRY_INDEX = STATE / "registry" / "index.json"
 
 
-# 事件匯流排有自己的目錄:第二階段的 sandbox 只對這個目錄開寫入(session 寄信、hook 收信都要寫它)
-BUS_DIR = STATE / "bus"
+# 事件匯流排有自己的目錄(hub.json bus_dir):第二階段的 sandbox 只對這個目錄開寫入(session 寄信、hook 收信都要寫)。
+# 不放在 hub 目錄底下:專案的權限規則 deny 寫 ~/agent-hub/**,而 deny 會蓋過 sandbox 的 allowWrite。
+BUS_DIR = p("bus_dir", ".state/bus")
 BUS_LOG = BUS_DIR / "hubbus.log"
+_OLD_BUS = [STATE / "bus" / "bus.db", STATE / "bus.db"]  # 以前放過的位置(依序找)
 
 
 def bus_db() -> pathlib.Path:
-    """匯流排的 SQLite 檔。舊位置(.state/bus.db)還在、新的還沒有 → 搬過來:舊檔加 EXCLUSIVE 鎖
-    (擋住所有寫入)後用 backup API 複製,再把舊檔改名,搬的過程中寫入的信不會掉。"""
-    new, old = BUS_DIR / "bus.db", STATE / "bus.db"
-    if new.exists() or not old.exists():
-        BUS_DIR.mkdir(parents=True, exist_ok=True)
+    """匯流排的 SQLite 檔。新位置還沒有、舊位置有 → 搬過來:一個連線拿 RESERVED 鎖(BEGIN IMMEDIATE)
+    擋住其他寫入,另一個連線用 backup API 讀出來(同一個連線鎖著自己再 backup 會卡死),改名之後才放鎖。"""
+    new = BUS_DIR / "bus.db"
+    BUS_DIR.mkdir(parents=True, exist_ok=True)
+    old = next((o for o in _OLD_BUS if o.exists() and o != new), None)
+    if new.exists() or old is None:
         return new
     import sqlite3
-    BUS_DIR.mkdir(parents=True, exist_ok=True)
-    # 一個連線拿 RESERVED 鎖(BEGIN IMMEDIATE)擋住其他寫入;另一個連線讀出來 backup(同一個連線鎖著自己再
-    # backup 會卡死)。backup 完、改名之後才放鎖。
     lock = sqlite3.connect(old, timeout=60, isolation_level=None)
     try:
         lock.execute("BEGIN IMMEDIATE")
@@ -84,14 +84,17 @@ def bus_db() -> pathlib.Path:
             for suffix in ("", "-wal", "-shm"):
                 f = pathlib.Path(str(old) + suffix)
                 if f.exists():
-                    f.rename(pathlib.Path(str(STATE / "bus.db.moved-to-bus-dir") + suffix))
+                    f.rename(pathlib.Path(str(old.parent / "bus.db.moved") + suffix))
         lock.execute("ROLLBACK")
     finally:
         lock.close()
-    log = LOGS / "hubbus.log"
-    if log.exists() and not log.is_symlink() and not BUS_LOG.exists():
-        log.rename(BUS_LOG)
-        log.symlink_to(BUS_LOG)  # 還在讀 .logs/hubbus.log 的(狀態頁說明、其他 session 的監看)照樣讀得到
+    oldlog = old.parent / "hubbus.log" if old.parent.name == "bus" else LOGS / "hubbus.log"
+    if oldlog.exists() and not oldlog.is_symlink() and not BUS_LOG.exists():
+        oldlog.rename(BUS_LOG)
+    link = LOGS / "hubbus.log"  # 還在讀 .logs/hubbus.log 的(其他 session 的監看)照樣讀得到
+    if link.is_symlink() or not link.exists():
+        link.unlink(missing_ok=True)
+        link.symlink_to(BUS_LOG)
     return new
 
 
