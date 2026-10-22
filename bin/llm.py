@@ -53,12 +53,14 @@ def run(a) -> int:
     if spec is None:
         print(f"llm.py:{a.point} 不是宣告過的判斷點(contracts/llm-points.yaml)", file=sys.stderr)
         return 2
-    prompt = pathlib.Path(a.prompt_file).read_text() if a.prompt_file else sys.stdin.read()
+    prompt = "" if a.cmd == "exec" else (pathlib.Path(a.prompt_file).read_text() if a.prompt_file else sys.stdin.read())
     model = a.model or (os.environ.get(spec["model_env"]) if spec.get("model_env") else None) or spec.get("model_default")
     cmd = ["claude", "-p", prompt]
     if model:
         cmd += ["--model", model]
     mode, allowed, prompts = spec.get("permission_mode"), list(spec.get("allowed_tools") or []), spec.get("prompts")
+    if spec.get("extra_allow_env") and os.environ.get(spec["extra_allow_env"]):
+        allowed += json.loads(os.environ[spec["extra_allow_env"]])  # 只加規則,不改權限模式
     if spec.get("allow_from_env") and os.environ.get(spec["allow_from_env"]):
         # 登錄 job 宣告的 allow 清單:無人值守 = dontAsk,沒列的一律拒絕、不提示
         allowed += json.loads(os.environ[spec["allow_from_env"]])
@@ -72,6 +74,14 @@ def run(a) -> int:
     if allowed:
         cmd += ["--allowedTools", *allowed]
     cmd += list(spec.get("extra_args") or []) + list(a.extra or [])
+    if a.cmd == "exec":
+        # 長駐的串流 session(例:通道租借):旗標照宣告組好,直接換成 claude,stdin/stdout 交給呼叫的人
+        if not spec.get("stream"):
+            print(f"llm.py:{a.point} 沒有宣告 stream: true,不能 exec", file=sys.stderr)
+            return 2
+        cmd[1:3] = ["-p"]  # exec 模式沒有 prompt 參數,訊息從 stdin(stream-json)來
+        cmd += ["--input-format", "stream-json", "--output-format", "stream-json", "--include-partial-messages", "--verbose"]
+        os.execvp(cmd[0], cmd)
     cmd += ["--output-format", "json"]
     schema = None
     if spec.get("schema"):
@@ -131,9 +141,17 @@ def main() -> int:
     r.add_argument("--model")
     r.add_argument("--prompt-file")
     r.add_argument("extra", nargs="*", help="額外的 claude 參數(放在 -- 後面)")
+    e = sub.add_parser("exec", help="長駐串流 session:照宣告組旗標後 exec 成 claude(stdin/stdout 是 stream-json)")
+    e.add_argument("point")
+    e.add_argument("--cwd")
+    e.add_argument("--model")
+    e.add_argument("--prompt-file")
+    e.add_argument("extra", nargs="*")
     sub.add_parser("lint")
     a = ap.parse_args()
-    if a.cmd == "run":
+    if a.cmd == "exec" and a.cwd:
+        os.chdir(a.cwd)
+    if a.cmd in ("run", "exec"):
         return run(a)
     bad = lint()
     for b in bad:

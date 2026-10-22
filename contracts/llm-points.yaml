@@ -79,6 +79,26 @@ points:
     allowed_tools: ["Edit(./.agent-memory/memory/**)", "Bash(~/agent-hub/bin/hubbus *)"]
     timeout_s: 1800
     on_failure: caller
+  lease-session:
+    caller: bin/lease-runner.py(llm.py exec)
+    purpose: "通道租借的 discuss session:長駐的 stream-json 程序,Knas 透過 Muninn 跟專案深談;唯讀"
+    model_env: LEASE_MODEL
+    model_default: sonnet
+    # 只給讀的工具;讀類規則放行(不送到轉接),不在登錄網域的 WebFetch、AskUserQuestion 走權限轉接(送到手機)
+    tools: Read,Glob,Grep,WebSearch,WebFetch,AskUserQuestion
+    allowed_tools: ["Read", "Glob", "Grep", "WebSearch"]
+    extra_allow_env: LEASE_ALLOW        # runner 加:登錄 network 網域的 WebFetch(domain:…)
+    stream: true
+    on_failure: caller
+  lease-handover:
+    caller: bin/lease-runner.py
+    purpose: "收回租約時:接回同一個 session,寫結構化交接(摘要、決定、未決問題、Knas 要做的事、memory 筆記)"
+    model_env: LEASE_MODEL
+    model_default: sonnet
+    tools: ""
+    schema: llm/lease-handover.schema.json
+    timeout_s: 600
+    on_failure: caller          # runner 重試一次,再不行產生最小交接(fallback: true)
 exempt:
   - file: bin/trajectory.py
     reason: Knas 2026-10-22 決定 4B——手動跑的工具,先維持原樣

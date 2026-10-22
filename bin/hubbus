@@ -229,6 +229,10 @@ def inbox(c, project, session=None, only_new=False):
 
 
 def mark_delivered(c, rows, session, via) -> None:
+    # 通道租借的 session(runner 設 HUBBUS_LEASE=1):信照樣送進 context 讓深談看得到,但不標 delivered——
+    # 唯讀的深談處理不了 request,不能讓它擋掉 12 小時的升級
+    if os.environ.get("HUBBUS_LEASE") and via in ("session-start", "prompt", "post-tool"):
+        return
     for r in rows:
         publish(c, f"{r['id']}:delivered:{session or via}", "message.delivered", r["to_project"], r["to_project"],
                 r["id"], {"session": session, "via": via})

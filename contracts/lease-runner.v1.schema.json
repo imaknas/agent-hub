@@ -1,0 +1,281 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "records-lease-runner.v1",
+  "title": "通道租借 runner API v1",
+  "description": "本機 HTTP(127.0.0.1,Bearer token)。$defs 是各個請求、事件、錯誤的形狀。加欄位不升版。",
+  "$defs": {
+    "create": {
+      "type": "object",
+      "required": [
+        "project",
+        "session_id",
+        "thread"
+      ],
+      "properties": {
+        "v": {
+          "const": 1
+        },
+        "project": {
+          "type": "string"
+        },
+        "mode": {
+          "enum": [
+            "discuss"
+          ]
+        },
+        "session_id": {
+          "type": "string",
+          "minLength": 8
+        },
+        "thread": {
+          "type": "string"
+        },
+        "resume": {
+          "type": "boolean"
+        },
+        "max_turns": {
+          "type": "integer",
+          "minimum": 1
+        }
+      }
+    },
+    "message": {
+      "type": "object",
+      "required": [
+        "text",
+        "client_msg_id"
+      ],
+      "properties": {
+        "v": {
+          "const": 1
+        },
+        "text": {
+          "type": "string",
+          "minLength": 1
+        },
+        "client_msg_id": {
+          "type": "string"
+        }
+      }
+    },
+    "detach": {
+      "type": "object",
+      "properties": {
+        "v": {
+          "const": 1
+        },
+        "reason": {
+          "enum": [
+            "user",
+            "idle",
+            "done",
+            "budget"
+          ]
+        }
+      }
+    },
+    "lease": {
+      "type": "object",
+      "required": [
+        "lease_id",
+        "project",
+        "mode",
+        "state"
+      ],
+      "properties": {
+        "lease_id": {
+          "type": "string"
+        },
+        "project": {
+          "type": "string"
+        },
+        "mode": {
+          "type": "string"
+        },
+        "thread": {
+          "type": "string"
+        },
+        "state": {
+          "enum": [
+            "attaching",
+            "running",
+            "idle_stopped",
+            "resuming",
+            "terminal",
+            "detaching",
+            "detached",
+            "crashed"
+          ]
+        },
+        "last_activity": {
+          "type": "string"
+        },
+        "waiting": {
+          "type": "boolean"
+        }
+      }
+    },
+    "event": {
+      "type": "object",
+      "required": [
+        "v",
+        "seq",
+        "lease_id",
+        "ts",
+        "type"
+      ],
+      "properties": {
+        "v": {
+          "const": 1
+        },
+        "seq": {
+          "type": "integer"
+        },
+        "lease_id": {
+          "type": "string"
+        },
+        "ts": {
+          "type": "string"
+        },
+        "type": {
+          "enum": [
+            "state",
+            "text_delta",
+            "assistant",
+            "tool_use",
+            "tool_result",
+            "turn_end",
+            "rate_limit",
+            "idle_warning",
+            "question",
+            "permission",
+            "handover",
+            "error"
+          ]
+        }
+      }
+    },
+    "error": {
+      "type": "object",
+      "required": [
+        "v",
+        "error"
+      ],
+      "properties": {
+        "v": {
+          "const": 1
+        },
+        "detail": {
+          "type": "string"
+        },
+        "error": {
+          "enum": [
+            "not_registered",
+            "cap_reached",
+            "busy",
+            "not_found",
+            "bad_request",
+            "auth",
+            "rate_limit",
+            "process_crashed",
+            "resume_failed",
+            "handover_failed",
+            "unauthorized",
+            "internal"
+          ]
+        }
+      }
+    },
+    "policy": {
+      "type": "object",
+      "required": [
+        "v",
+        "no_session_domains",
+        "attachable"
+      ],
+      "properties": {
+        "v": {
+          "const": 1
+        },
+        "no_session_domains": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "WebFetch 不能「整個租約都允許」的網域(含子網域)"
+        },
+        "attachable": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "可以借用的專案名稱"
+        },
+        "modes": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "terminal": {
+      "type": "object",
+      "required": [
+        "v",
+        "command"
+      ],
+      "properties": {
+        "v": {
+          "const": 1
+        },
+        "command": {
+          "type": "string",
+          "description": "在終端機接續這個 session 的指令,照原樣顯示"
+        }
+      }
+    },
+    "status": {
+      "type": "object",
+      "required": [
+        "v",
+        "leased",
+        "cap"
+      ],
+      "properties": {
+        "v": {
+          "const": 1
+        },
+        "leased": {
+          "type": "integer"
+        },
+        "cap": {
+          "type": "integer"
+        },
+        "rate_limit": {
+          "type": [
+            "object",
+            "null"
+          ],
+          "properties": {
+            "five_hour": {
+              "type": [
+                "number",
+                "null"
+              ]
+            },
+            "seven_day": {
+              "type": [
+                "number",
+                "null"
+              ]
+            },
+            "at": {
+              "type": "string"
+            }
+          }
+        }
+      }
+    }
+  }
+}

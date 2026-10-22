@@ -1,0 +1,25 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "records-lease-handover.v1",
+  "title": "通道租借的交接",
+  "description": "一次租借對話收回時的結構化交接;是 session.report 的擴充。fallback=true 表示模型沒能產生合格的交接,這是平台補的最小版本。",
+  "type": "object",
+  "required": ["v", "project", "session_id", "mode", "summary", "decisions", "open_questions", "tasks_for_owner", "notes_written", "fallback"],
+  "properties": {
+    "v": {"const": 1},
+    "project": {"type": "string"},
+    "session_id": {"type": "string"},
+    "mode": {"enum": ["discuss", "work"]},
+    "reason": {"enum": ["user", "idle", "done", "budget", "crash"]},
+    "summary": {"type": "string"},
+    "decisions": {"type": "array", "items": {"type": "object", "required": ["what"], "properties": {"what": {"type": "string"}, "why": {"type": "string"}}}},
+    "open_questions": {"type": "array", "items": {"type": "string"}},
+    "tasks_for_owner": {"type": "array", "items": {"type": "object", "required": ["text"], "properties": {"text": {"type": "string"}, "due": {"type": "string"}, "key": {"type": "string"}}}},
+    "notes_markdown": {"type": "string"},
+    "notes_written": {"type": "boolean"},
+    "fallback": {"type": "boolean"},
+    "branch": {"type": ["string", "null"]},
+    "commits": {"type": "array"},
+    "tests": {"type": ["object", "null"]}
+  }
+}

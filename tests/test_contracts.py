@@ -42,6 +42,10 @@ class Neutral(unittest.TestCase):
             text = p.read_text()
             for word in ("agent-hub", "librarian", "bin/"):
                 self.assertNotIn(word, text, f"{p.name} 提到 {word}")
+        for p in [C / "lease-runner.v1.schema.json", C / "lease-handover.v1.schema.json"]:  # muninn 也會 vendor
+            text = p.read_text()
+            for word in ("agent-hub", "librarian", "bin/", "Knas", "muninn"):
+                self.assertNotIn(word, text, f"{p.name} 提到 {word}")
         for p in F.glob("*"):  # 範例檔也不放使用者的名字(owner 用中性的「我」)
             self.assertNotIn("Knas", p.read_text(), f"{p.name} 提到使用者的名字")
 

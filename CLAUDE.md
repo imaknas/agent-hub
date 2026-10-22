@@ -74,6 +74,18 @@ SSH 開 mini 上的資料夾,MBP 斷線/沒電 session 也繼續跑。MBP 上的
   (key 固定 = 專案 + 文字的 hash,重寄是 no-op);Muninn 回來的帶 key 轉交(done/dropped/already_done/
   reopened)照 key 刪掉或加回那一行,push 成功才結案
 
+## 通道租借(Muninn 借對話給專案 session)
+
+- `bin/lease-runner.py`(服務 `local.agent-hub.lease-runner`,127.0.0.1:18797,token `.secrets/runner-token`)——
+  Muninn 開租約、轉送訊息、SSE 收事件、收回;每個租約一個 `llm.py exec lease-session` 的長駐 `claude -p`
+  (唯讀工具、`--settings` 帶第二階段 deny 清單、`HUBBUS_LEASE=1`)。閒置 10 分鐘停程序、30 分鐘問一次
+  (Muninn 回報 warned 後 10 分鐘收回)。收回時 `lease-handover` 判斷點寫結構化交接 → 匯流排、專案信箱、給 owner 的
+  task/question/progress、memory 筆記。API 跟事件:`contracts/lease-runner.v1.schema.json`、交接:
+  `contracts/lease-handover.v1.schema.json`;設計在檔頭
+- `bin/lease-relay.py`——租約 session 的權限轉接(MCP):提問跟不在登錄網域的 WebFetch 送 Muninn(手機),其他拒絕;
+  `hub.json` 的 `lease.no_session_domains` 不准「整個租約都允許」
+- `bin/lease-resume <id>`——在終端機接續租約(帶 headless token;SSH 底下讀不到 keychain)
+
 ## 這些給 hook/其他腳本內部呼叫,不要手動直接跑
 
 - `bin/git-safe-push.sh`——push 遇到分岔自動 pull 重試;真的內容衝突才

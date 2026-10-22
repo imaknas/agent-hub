@@ -1,0 +1,19 @@
+#!/usr/bin/env bash
+# 通道租借 L3:在終端機接續一個租借中的 session(Muninn 按「在終端機接續」時給的指令)。
+#   lease-resume <session id>
+# runner 已經停掉它自己的程序;這裡 cd 到那個專案、帶 headless token(SSH 底下 claude 讀不到 keychain,
+# 會是「未登入」;代價:claude.ai 的 connector 不會載入),接回同一段對話。結束後回 Muninn 按「收回」做交接。
+set -euo pipefail
+id="${1:?用法: lease-resume <session id>}"
+HUB="$(cd "$(dirname "$0")/.." && pwd)"
+cwd=$(/opt/homebrew/bin/python3 -c "
+import json, sys
+d = json.load(open('$HUB/.state/lease-runner/leases.json'))
+l = d.get(sys.argv[1]) or sys.exit('找不到這個租約:' + sys.argv[1])
+print(l['cwd'])" "$id")
+cd "$cwd"
+token="$HOME/.claude/headless-oauth-token"
+if ! claude auth status 2>/dev/null | grep -q '"loggedIn": true' && [ -r "$token" ]; then
+  export CLAUDE_CODE_OAUTH_TOKEN="$(cat "$token")"
+fi
+exec claude --resume "$id"
