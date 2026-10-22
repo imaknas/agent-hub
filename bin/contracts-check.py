@@ -93,7 +93,7 @@ def live(index: dict) -> list[str]:
 
 
 def llm_lint() -> list[str]:
-    """第二階段:bin/ 裡每個 claude -p 都要經過 bin/llm.py(contracts/llm-points.yaml 宣告的判斷點)。"""
+    """第二階段:bin/ 裡每一次叫 Claude CLI 的非互動呼叫都要經過 bin/llm.py(contracts/llm-points.yaml 宣告的判斷點)。"""
     r = subprocess.run(["/opt/homebrew/bin/python3", str(HUB / "bin" / "llm.py"), "lint"], capture_output=True, text=True)
     return [f"LLM 呼叫:{l}" for l in r.stdout.splitlines() if l.strip()] + \
         ([f"llm.py lint 跑不起來:{r.stderr.strip()[-200:]}"] if r.returncode not in (0, 1) else [])
