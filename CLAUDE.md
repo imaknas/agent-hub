@@ -195,6 +195,11 @@ memory 追蹤但不需要在 mini 上執行任何東西的專案(目前大多數
   `.claude/settings.local.json`;被改就寫回、狀態頁紅;`enforce` 關掉就拿掉。`--report` 看每個專案會寫什麼。
   所有 `claude -p` 經過 `bin/llm.py`(判斷點宣告在 `contracts/llm-points.yaml`,每晚 lint);無人值守的
   agent job 在登錄宣告 `allow:` 就用 dontAsk
+- **mini 的使用者層級設定**(`~/.claude/settings.json`,2026-10-22 Knas 在 Schedule 強化 session 直接確認後套用,
+  備份 `.state/claude-settings.json.bak-20261022-u1u4`):U1 deny `Edit(~/workspace/**/.claude/settings.local.json)`
+  (session 改不了平台產生的設定)、U2 `sandbox.allowUnsandboxedCommands: false`、U3
+  `permissions.disableBypassPermissionsMode: "disable"`(要 bypass 會從 default 開始)、U4 worktree 的
+  UserPromptSubmit 信箱 hook。**使用者層級的設定只有 Knas 在那個 session 直接確認才改**,轉述的同意不算
 - `contracts/`——**版本契約**:agent-hub 定義的介面(hubbus、todo-md、state-todo、reflect-week、project)
   跟 vendor 的別人的契約(`contracts/vendor/<專案>/`)。登錄的 `provides`/`consumes` 宣告誰定義、誰讀;
   `tests/test_contracts.py`(`python3 -m unittest discover -s tests`)驗證範例,`bin/contracts-check.py`

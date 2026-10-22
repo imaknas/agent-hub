@@ -133,6 +133,21 @@
   刻意不含這個目錄。要讓雲端看工作內容,只能先由本機模型改寫成去識別化的抽象摘要,雲端只看摘要,
   而且要先確認 公司 的保密條款允許。
 
+## 第二階段 sandbox / 權限規則
+
+- **權限的 deny 會蓋過 sandbox 的 allowWrite**:專案 deny `Edit(~/agent-hub/**)`,sandbox 就算 allowWrite
+  `~/agent-hub/.state/bus` 也寫不進去(`Operation not permitted`,2026-10-22 pilot 實測)。所以匯流排搬到 hub 目錄外
+  (`hub.json` 的 `bus_dir`)。以後要讓沙箱裡的專案寫什麼,放在沒有被 deny 的路徑。
+- **allow 開不了 deny 的例外**(deny → ask → allow,先 deny 先贏):「只准讀別的專案的 STATE.md」做不到,改讀
+  `~/.memory-copies/<p>/STATE.md`。
+- **hook 在 sandbox 外跑**:memory 同步、信箱 hook 不受影響。
+- **專案自己的同名 MCP 會蓋掉 claude.ai 的 connector**:project-39 有自己叫 `upwork` 的 MCP(要 OAuth),
+  在那個資料夾跑的 headless job 拿不到 claude.ai 的 Upwork 工具。agent job 用 `cwd: state` 在自己的狀態目錄跑。
+- **dontAsk 底下工具名稱要完全對**:claude.ai connector 的工具叫 `mcp__claude_ai_Upwork__upwork__<tool>`(多一段)。
+  名字錯就是全部被拒,報告會寫「被權限擋掉」。
+- **使用者層級 U1 擋所有 session 用 Edit 改 `~/workspace/**/.claude/settings.local.json`**:要改專案設定請改登錄
+  (`projects/<p>.yaml`),由 render-project-settings 寫;平台腳本不是用 Edit 工具寫,不受影響。
+
 ## agent 協作原則
 
 - **不要相信 agent/subagent 的自我回報**(「完成了」「工具沒回應」),看客觀紀錄:
