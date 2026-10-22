@@ -42,6 +42,12 @@ case "$event" in
     if [ ! -e CLAUDE.local.md ] && [ -f "$main/CLAUDE.local.md" ]; then
       ln -s "$main/CLAUDE.local.md" CLAUDE.local.md
     fi
+    # 第二階段:sandbox/權限規則在主 checkout 的 .claude/settings.local.json(平台產生);worktree 沒有這個檔
+    # (gitignored),接上之後 Claude Code 會即時重新載入設定
+    if [ ! -e .claude/settings.local.json ] && [ -f "$main/.claude/settings.local.json" ]; then
+      mkdir -p .claude && ln -s "$main/.claude/settings.local.json" .claude/settings.local.json
+      grep -qxF ".claude/settings.local.json" "$common/info/exclude" 2>/dev/null || echo ".claude/settings.local.json" >>"$common/info/exclude"
+    fi
     # .agent-memory/ 這條規則只比對目錄,symlink 要另外排除(info/exclude 所有 worktree 共用)
     grep -qxF ".agent-memory" "$common/info/exclude" 2>/dev/null || echo ".agent-memory" >>"$common/info/exclude"
     (cd .agent-memory && "$HUB/bin/with-lock.sh" git pull -q) >/dev/null 2>&1

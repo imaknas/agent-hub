@@ -190,6 +190,11 @@ memory 追蹤但不需要在 mini 上執行任何東西的專案(目前大多數
   `merge.done`/`merge.failed`/`session.report`。狀態頁列各專案的 worktree、兩個 branch 改同一檔、
   沒經過閘門直接 commit 到 main 的數量(只是資訊)。`bin/prune-worktrees [--yes]` 清已合併、乾淨的
   worktree——**由人跑**,閒置但沒封存的 session 可能還開在裡面
+- **第二階段強制**:登錄 `enforce: {sandbox: true}` 的專案,`bin/render-project-settings.py`(平台 job,每 15
+  分鐘)把 sandbox(只准寫自己的專案/runtime/匯流排/cache、讀不到別的專案、網路白名單)跟 deny 規則寫進它的
+  `.claude/settings.local.json`;被改就寫回、狀態頁紅;`enforce` 關掉就拿掉。`--report` 看每個專案會寫什麼。
+  所有 `claude -p` 經過 `bin/llm.py`(判斷點宣告在 `contracts/llm-points.yaml`,每晚 lint);無人值守的
+  agent job 在登錄宣告 `allow:` 就用 dontAsk
 - `contracts/`——**版本契約**:agent-hub 定義的介面(hubbus、todo-md、state-todo、reflect-week、project)
   跟 vendor 的別人的契約(`contracts/vendor/<專案>/`)。登錄的 `provides`/`consumes` 宣告誰定義、誰讀;
   `tests/test_contracts.py`(`python3 -m unittest discover -s tests`)驗證範例,`bin/contracts-check.py`

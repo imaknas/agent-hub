@@ -47,6 +47,10 @@ jobs:
   every: 15m
   cwd: hub
   run: /opt/homebrew/bin/python3 bin/render-services.py
+- name: render-settings          # 第二階段:登錄 enforce.sandbox 的專案 → sandbox + 權限規則;偏移就寫回並失敗(狀態頁紅)
+  every: 15m
+  cwd: hub
+  run: /opt/homebrew/bin/python3 bin/render-project-settings.py
 - name: registry-updates         # 專案寄來的 manifest.update 信:驗證後套用或退回(零 LLM)
   every: 15m
   cwd: hub
