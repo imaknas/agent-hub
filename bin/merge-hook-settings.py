@@ -64,6 +64,7 @@ WORKTREE_HOOKS = (
     ("SessionEnd", None, f"{WT} end || true"),
     ("PreCompact", None, f"{WT} end || true"),
     ("PostToolUse", "Bash", f"{WT} nudge || true"),
+    ("UserPromptSubmit", None, f"{WT} prompt || true"),
 )
 
 

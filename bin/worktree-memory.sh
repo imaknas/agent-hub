@@ -15,6 +15,7 @@
 #   end    (SessionEnd / PreCompact)同步 memory 筆記,跟主 checkout 的 hook 同一支腳本
 #   nudge  (PostToolUse)git commit/push 之後筆記落後就提醒;專案信箱有新信就送進來(hubbus,限流)
 #   start 也會把專案信箱還沒結案的信送進 context
+#   prompt (UserPromptSubmit)專案信箱有新信就送進 context(使用者層級的 hook,Knas 核准才裝:U4)
 # symlink 指向同一份 .agent-memory,with-lock 用的是同一個 git dir,不會跟主 checkout 互撞。
 # 刪掉 worktree 只會刪 symlink,不會動到主 checkout 的 memory。
 set -uo pipefail
@@ -61,6 +62,10 @@ case "$event" in
     ;;
   end)
     [ -e .agent-memory ] && cd .agent-memory && "$HUB/bin/with-lock.sh" "$HUB/bin/git-sync-memory.sh"
+    ;;
+  prompt)
+    # UserPromptSubmit:對話中有新信就送進來(主 checkout 有專案自己的 hook,這裡只管 worktree)
+    [ -n "$hook_json" ] && printf '%s' "$hook_json" | python3 "$HUB/bin/hubbus" hook prompt 2>/dev/null
     ;;
   nudge)
     [ -e .agent-memory ] && printf '%s' "$hook_json" | python3 "$HUB/bin/memory-nudge.py" --post-tool
