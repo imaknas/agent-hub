@@ -14,8 +14,10 @@
   第二級(閒置 ≥ 14 天,而且沒有任何 process 的 cwd 在裡面):`git worktree remove`(不加 --force),**branch 留著**
     (只是一個 ref;萬一還有沒封存的 session 要接回,可以從它重建)。被 ignore 的檔案只要有一個不在
     REGENERABLE 清單(例:.env、建置產物),整個跳過、在結果裡列出原因——不猜哪些能丟。
-  閒置但沒封存的 session 會留著一個 process,cwd 就在 worktree 裡(10-24 實測:Desktop 推過來的 claude),
-  所以第二級看得到它、不會刪;第一級不看這個,因為不刪資料夾。
+  **只要有 process 的 cwd 在 worktree 裡,兩級都完全不碰**:閒置但沒封存的 session 會留著一個 process
+  (10-24 實測:Desktop 推過來的 claude),那可能只是 Knas 太忙還沒回來繼續。所以這支只清「沒有任何
+  session 開著」的孤兒 worktree(10-24:37 個裡 35 個是這種)。做完了卻沒封存的子 session 看起來跟
+  暫停中的 session 一樣,這裡分不出來——那要從 session 清單(startedBy)判斷,不是這支的事。
   由人跑的 `prune-worktrees --yes` 照舊:已合併、乾淨就連 branch 一起刪(人確認過沒有 session 開著)。
 """
 from __future__ import annotations
@@ -186,8 +188,10 @@ def auto_prune(dry_run: bool) -> dict:
             label = f"{name} {w['branch']}"
             if idle is None or idle < DEPS_IDLE_DAYS:
                 continue
-            busy = any(c == str(p) or c.startswith(str(p) + "/") for c in in_use)
-            if idle >= REMOVE_IDLE_DAYS and not busy:
+            # 有 session 開在裡面(就算閒置、只是 Knas 還沒回來繼續)就完全不碰,兩級都一樣
+            if any(c == str(p) or c.startswith(str(p) + "/") for c in in_use):
+                continue
+            if idle >= REMOVE_IDLE_DAYS:
                 unknown = _unknown_ignored(p)
                 if unknown:
                     res["skipped"].append(f"{label}:有 ignore 的檔案不在可重建清單({', '.join(unknown[:3])}…),留著")

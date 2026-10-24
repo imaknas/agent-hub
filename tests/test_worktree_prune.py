@@ -92,12 +92,14 @@ class AutoPrune(unittest.TestCase):
         self.assertIn("old", self.branches())
         self.assertEqual(len(r["removed"]), 1)
 
-    def test_tier2_busy_only_deps(self):
+    def test_session_open_inside_untouched(self):
+        """閒置但還開著的 session(可能只是還沒回來繼續):依賴也不刪。"""
         p = self.add("busy", idle=20)
-        self.busy = [str(p)]
-        worktrees.auto_prune(dry_run=False)
-        self.assertTrue(p.exists(), "有 process 的 cwd 在裡面就不移除")
-        self.assertFalse((p / ".venv").exists())
+        self.busy = [str(p / "src")]
+        r = worktrees.auto_prune(dry_run=False)
+        self.assertTrue(p.exists())
+        self.assertTrue((p / ".venv").exists())
+        self.assertEqual(r["deps"] + r["removed"], [])
 
     def test_tier2_unknown_ignored_skipped(self):
         p = self.add("secret", idle=20, extra_ignored=".env")
