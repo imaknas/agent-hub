@@ -274,6 +274,11 @@ memory 追蹤但不需要在 mini 上執行任何東西的專案(目前大多數
   worktree 處理 memory 追蹤——這個安全性質不該因為「這個專案剛好還沒有
   外部 remote」而放寬
 
+## 子 session
+
+agent-hub 的 session 開的子 session(start_session)做完、確認過結果之後就封存它(archive_session),
+不要留著閒置。各專案的同一條規則在 `templates/CLAUDE.md`(會放進每個專案的 CLAUDE.local.md)。
+
 ## 誰負責 commit/push agent-hub
 
 - **手動編輯(腳本、文件、services.tsv 等)**:只由工作目錄在 mini 的 `~/agent-hub`
