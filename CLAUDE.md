@@ -207,6 +207,9 @@ memory 追蹤但不需要在 mini 上執行任何東西的專案(目前大多數
   `~/Library/LaunchAgents/<label>.plist`,有變才重載;指令找不到就不動能跑的 plist、服務沒在跑就發 Discord。
   **node(跟 claude)只由 nvm 管**:服務跟排程用 nvm 預設版本(`hubconf.nvm_bin()`、env 的 `$PLATFORM_PATH`),
   不要用 Homebrew 裝 node——原因看 known-issues.md「設定、安裝、憑證」
+  claude 用 nvm 預設版本底下的 npm 全域那份,自己會在執行時更新;平台 job `agent-hub/update-claude`(每晚 01:15,
+  `bin/update-claude.py`)是保險:沒更新到就裝最新、裝不起來就裝回舊版並失敗。Desktop 的 SSH session 用它自己推過來的
+  `~/.claude/remote/ccd-cli/<版本>`,不用管
 - **平行 session 的合併閘門** `bin/merge-branch`(在 session 自己的 worktree 跑):rebase → 登錄的
   `runtime.test` → fast-forward main(主 checkout)→ 只有登錄 `push_on_merge: true` 才 push;匯流排記
   `merge.done`/`merge.failed`/`session.report`。狀態頁列各專案的 worktree、兩個 branch 改同一檔、
