@@ -20,8 +20,10 @@
         },
         "mode": {
           "enum": [
-            "discuss"
-          ]
+            "discuss",
+            "work"
+          ],
+          "description": "discuss = 唯讀深談;work = 可以改這個專案的檔案、跑指令,每次都先問使用者(只開給 policy 的 work_projects)"
         },
         "session_id": {
           "type": "string",
@@ -185,7 +187,8 @@
             "bad_name",
             "exists",
             "too_many",
-            "create_failed"
+            "create_failed",
+            "work_not_allowed"
           ]
         },
         "limit": {
@@ -228,6 +231,13 @@
           "items": {
             "type": "string"
           }
+        },
+        "work_projects": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "可以用 work 模式的專案(想法沙盒,而且 OS sandbox 已經寫進它的設定)"
         }
       }
     },
@@ -378,6 +388,25 @@
         },
         "created": {
           "type": "boolean"
+        }
+      }
+    },
+    "mode": {
+      "type": "object",
+      "required": [
+        "v",
+        "mode"
+      ],
+      "description": "POST /v1/leases/<id>/mode:深談中途切換 discuss / work(使用者在卡片上允許動手之後才送)。成功回 200 + lease;正在回答或等使用者回覆時 409 busy;不在 work_projects 回 400 work_not_allowed。切換會停掉程序、用同一個 session 接回,權限轉接也重新開始(先前「這個租約都允許」的網域、寫檔要重新允許)。",
+      "properties": {
+        "v": {
+          "const": 1
+        },
+        "mode": {
+          "enum": [
+            "discuss",
+            "work"
+          ]
         }
       }
     }

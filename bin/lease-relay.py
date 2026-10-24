@@ -5,6 +5,12 @@
   AskUserQuestion        → 送到 owner 的助理(Muninn)問 Knas;回 allow + updatedInput.answers = {問題: 選項}
   WebFetch(不在登錄網域) → 送到手機,顯示完整網址;allow / allow_session(這個租約都允許這個網域)/ deny
   其他任何工具           → deny(discuss 唯讀;工具清單本來就沒有,這是第二道防線)
+work 模式(第二階段,只限想法沙盒;runner 給 LEASE_MODE=work、LEASE_WS=專案資料夾):
+  Edit/Write/MultiEdit/NotebookEdit → 路徑解析成真實路徑後在專案資料夾裡才送手機(risk write_file);資料夾外、
+                         ../ 繞出去、symlink 指出去都直接 deny(不問)。allow_session = 之後這個資料夾裡的寫入不再問
+  Bash                   → 每個指令都送手機(risk run_command)。allow_session 降成 allow(試行期的保守做法):
+                         10-24 實測 OS sandbox 擋得住寫資料夾外、讀 ~/.ssh、讀 ~/.claude 的憑證(租約的 --settings
+                         讀取 deny 也套到 Bash),但其他放機密的位置(各服務的 .env 等)沒有逐一驗證過
 沒人回答 5 分鐘 → deny,告訴 session 不要重試。每次請求跟決定都回報給 runner(稽核、等待中不算閒置)。
 
 環境變數(runner 給):LEASE_ID、LEASE_PROJECT、LEASE_RUNNER(runner 的 base URL)。token 從檔案讀,不放環境變數。
@@ -33,6 +39,10 @@ RUNNER = os.environ.get("LEASE_RUNNER", "http://127.0.0.1:18797")
 TIMEOUT_S = float(os.environ.get("LEASE_RELAY_TIMEOUT_S", "300"))
 _out = threading.Lock()
 _allowed_domains: set[str] = set()
+MODE = os.environ.get("LEASE_MODE", "discuss")
+WS = os.path.realpath(os.environ.get("LEASE_WS") or os.getcwd())
+WRITE_TOOLS = {"Edit", "Write", "MultiEdit", "NotebookEdit"}
+_writes_ok = False   # work 模式:Knas 選了「這個租約都允許」寫檔
 
 
 def secret(path: pathlib.Path | None) -> str:
@@ -123,8 +133,57 @@ def decide(args: dict) -> dict:
         tell_runner("end", tool=tool, decision="deny" if d == "deny" else "timeout", summary=url)
         return {"behavior": "deny", "message": ("Knas 拒絕了這個網址。" if d == "deny" else "沒有人核准這個網址(5 分鐘內沒回)。")
                 + "不要重試同一個網址;需要的話用文字跟 Knas 說明為什麼要讀它。"}
+    if MODE == "work" and tool in WRITE_TOOLS:
+        return decide_write(rid, tool, inp)
+    if MODE == "work" and tool == "Bash":
+        return decide_bash(rid, inp)
     tell_runner("end", tool=tool, decision="deny_readonly")
     return {"behavior": "deny", "message": f"這是唯讀的深談(discuss)租約,不能用 {tool}。需要改東西就寫進交接,讓 Knas 決定。"}
+
+
+def inside_ws(path: str) -> bool:
+    """解析成真實路徑(../、symlink 都展開)之後還在專案資料夾裡。"""
+    if not path:
+        return False
+    p = os.path.realpath(path if os.path.isabs(path) else os.path.join(WS, path))
+    try:
+        return os.path.commonpath([WS, p]) == WS
+    except ValueError:
+        return False
+
+
+def decide_write(rid: str, tool: str, inp: dict) -> dict:
+    global _writes_ok
+    path = str(inp.get("file_path") or inp.get("notebook_path") or "")
+    if not inside_ws(path):
+        tell_runner("end", tool=tool, decision="deny_outside", summary=path)
+        return {"behavior": "deny", "message": f"只能改這個專案資料夾({WS})裡的檔案,{path or '(沒有路徑)'} 不在裡面。"}
+    if _writes_ok:
+        return {"behavior": "allow", "updatedInput": inp}
+    tell_runner("start", tool=tool, summary=path, kind="permission")
+    res = ask_owner(rid, tool, path, "write_file", None)
+    d = res.get("decision")
+    if d in ("allow", "allow_session"):
+        if d == "allow_session":
+            _writes_ok = True
+        tell_runner("end", tool=tool, decision=d, summary=path)
+        return {"behavior": "allow", "updatedInput": inp}
+    tell_runner("end", tool=tool, decision="deny" if d == "deny" else "timeout", summary=path)
+    return {"behavior": "deny", "message": ("Knas 拒絕了這次寫檔。" if d == "deny" else "沒有人核准這次寫檔(5 分鐘內沒回)。")
+            + "不要重試同一件事;用文字跟他說明。"}
+
+
+def decide_bash(rid: str, inp: dict) -> dict:
+    cmd = str(inp.get("command", ""))
+    tell_runner("start", tool="Bash", summary=cmd[:500], kind="permission")
+    res = ask_owner(rid, "Bash", cmd[:500], "run_command", None)
+    d = res.get("decision")
+    if d in ("allow", "allow_session"):  # allow_session 只算這一次(見檔頭)
+        tell_runner("end", tool="Bash", decision="allow", summary=cmd[:500])
+        return {"behavior": "allow", "updatedInput": inp}
+    tell_runner("end", tool="Bash", decision="deny" if d == "deny" else "timeout", summary=cmd[:500])
+    return {"behavior": "deny", "message": ("Knas 拒絕了這個指令。" if d == "deny" else "沒有人核准這個指令(5 分鐘內沒回)。")
+            + "不要重試同一個指令;用文字跟他說明。"}
 
 
 def send(obj: dict) -> None:

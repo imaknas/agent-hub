@@ -106,6 +106,9 @@ def create(name: str, purpose: str) -> int:
 
     subprocess.run(["/opt/homebrew/bin/python3", str(HUB / "bin" / "registry.py"), "check", name],
                    capture_output=True)  # 更新快取:attachable 馬上看得到
+    # sandbox 設定馬上寫進去,不等 15 分鐘的平台 job:work 模式(lease-runner 的 work_ready)要看到它才放行
+    subprocess.run(["/opt/homebrew/bin/python3", str(HUB / "bin" / "render-project-settings.py"), "--only", name],
+                   capture_output=True)
     return out("created", 0, name=name)
 
 

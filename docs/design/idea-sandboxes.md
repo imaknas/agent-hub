@@ -124,3 +124,40 @@ POST /v1/sandboxes   Authorization: Bearer <runner-token>
 - 失敗清理(onboard 中途失敗):`tests/test_create_idea_sandbox.py` 用假的 onboard 在暫存 hub 裡測——
   登錄檔還沒 commit 就全部清掉、已經 commit 就留著並在 detail 說要手動處理、清完可以重試;
   拿掉清理那段程式時三個測試都會失敗。
+
+## 第二階段:work 模式(設計,10-24 Knas 說開始)
+
+**範圍**:只有 `type: idea`、而且 `enforce.sandbox: true` 的專案能用(想法沙盒都是)。正式專案先不開放。
+
+**怎麼進入**
+- `POST /v1/leases` 帶 `mode: work`,或深談中途 `POST /v1/leases/<id>/mode {mode: work|discuss}`(Knas 在
+  Muninn 的卡片上點「允許動手」之後才送;runner 不判斷 Knas 有沒有同意,那是 Muninn 的卡片)。
+- 中途切換 = 停掉程序、用同一個 session `--resume` 接回,換成 work 的判斷點;事件 `state` 帶 `mode`。
+- 不是想法沙盒 → 400 `work_not_allowed`。`GET /v1/policy` 多一個 `work_projects`(可以開 work 的專案)。
+
+**權限(兩道)**
+1. **OS sandbox**(第二階段平台本來就有,`render-project-settings.py` 寫進專案的 settings):Bash 只能寫自己的
+   資料夾、讀不到別的專案、網路只有白名單。這是真的封鎖,不靠模型聽話。
+2. **每次寫入送手機確認**(`lease-relay.py`,work 模式才有):
+   - `Edit`/`Write`/`NotebookEdit`,路徑在這個專案資料夾裡 → 問 Knas(`risk: write_file`,摘要 = 路徑);
+     「這個租約都允許」= 之後這個資料夾裡的寫入不再問。資料夾外 → 直接拒絕(不問)。
+   - `Bash` → **每個指令都問** Knas(`risk: run_command`,摘要 = 指令);「這個租約都允許」只算這一次
+     (試行期的保守做法;Muninn 的卡片在 `run_command` 不用顯示這個選項)。
+   - 讀類(Read/Glob/Grep/WebSearch)照舊自動放行;WebFetch、提問照 discuss 的規則。
+   - 5 分鐘沒回 = 拒絕,跟 discuss 一樣。
+- 判斷點 `lease-work`(contracts/llm-points.yaml):工具多 Edit/Write/Bash,自動放行的還是只有讀;
+  寫入全部經過權限轉接。
+
+**10-24 實作與驗證**
+- 開放條件看「實際寫好的設定檔」(`work_ready`):登錄 `type: idea`、而且 `<workspace>/.claude/settings.local.json`
+  的 `sandbox.enabled` 是 true;建沙盒時就立刻渲染設定,不等 15 分鐘的排程。
+- 實測(測試沙盒 idea-999997,用跟租約一樣的 `--settings`、`--strict-mcp-config`):Bash 寫資料夾外被擋、
+  寫資料夾內成功、讀 `~/.ssh` 跟 `~/.claude` 的憑證都被擋(`operation not permitted`)。
+- 權限轉接的規則有單元測試(`tests/test_lease_relay_work.py`:資料夾外、`../`、symlink 不問就拒絕;
+  寫檔的「都允許」生效;指令每次都問;discuss 不變)。
+- 還沒有真的從手機走過一次(要 Muninn 的寫入確認卡)。
+
+**不做的**:正式專案的 work、git push(sandbox 的網路白名單本來就沒有 GitHub 的寫入;想法沙盒也沒有 remote)。
+
+**要 Muninn 配合**:寫入確認卡(`write_file`/`run_command`,同樣三個選項);卡片上點「允許動手」後
+送 `mode`;`lease-runner.v1.schema.json` 改了要同一天同步。

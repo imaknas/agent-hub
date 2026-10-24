@@ -111,6 +111,19 @@ points:
     stream: true
     output: {format: text}
     on_failure: say_so      # runner 發 process_crashed 事件,手機上看得到
+  lease-work:
+    caller: bin/lease-runner.py(llm.py exec)
+    purpose: "通道租借的 work session(第二階段,只限想法沙盒):Knas 允許動手後,可以改這個專案的檔案、跑指令,每次都先問他"
+    model_env: LEASE_MODEL
+    model_default: sonnet
+    # 沒有 permission_mode / prompts:寫入要走權限轉接(--permission-prompt-tool)送手機;dontAsk 會在那之前就拒絕。
+    # 自動放行的還是只有讀;Edit/Write/Bash 全部經過 lease-relay.py(資料夾外直接拒絕,其他問 Knas)。
+    tools: Read,Glob,Grep,WebSearch,WebFetch,AskUserQuestion,Edit,Write,NotebookEdit,Bash
+    allowed_tools: ["Read", "Glob", "Grep", "WebSearch"]
+    extra_allow_env: LEASE_ALLOW
+    stream: true
+    output: {format: text}
+    on_failure: say_so     # runner 發 process_crashed 事件,手機上看得到
   lease-handover:
     caller: bin/lease-runner.py
     purpose: "收回租約時:接回同一個 session,寫結構化交接(摘要、決定、未決問題、Knas 要做的事、memory 筆記)"

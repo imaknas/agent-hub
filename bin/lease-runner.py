@@ -11,6 +11,7 @@ API(契約 contracts/lease-runner.v1.schema.json):
   POST /v1/leases/<id>/terminal       L3:停掉程序,回 `~/agent-hub/bin/lease-resume <id>`
   POST /v1/leases/<id>/detach         {v, reason} → 202;交接在背景跑,結果走事件
   GET  /v1/leases、GET /v1/status、GET /v1/policy(不能 allow_session 的網域,hub.json lease.no_session_domains)
+  POST /v1/leases/<id>/mode           {v, mode: discuss|work} → 200;正在回答中 409 busy;work 只限想法沙盒(見 work_ready)
   POST /v1/sandboxes                  {v, name: idea-<n>, purpose} → 201 新建 / 200 同名同 purpose 已存在(重送)
                                       / 400 bad_name / 409 exists / 429 too_many(帶 limit、current)/ 500 create_failed
                                       想法沙盒:bin/create-idea-sandbox.py 建(docs/design/idea-sandboxes.md),建好就在 attachable
@@ -66,6 +67,13 @@ PREAMBLE = """這是「通道租借」的深談:Knas 正在手機上透過他的
 - 要 Knas 在幾個選項裡選時,用提問工具(AskUserQuestion),他會在手機上回答;沒回答就用文字問。
 - 要讀不在允許清單的網站時,系統會先問 Knas;被拒絕就不要重試同一個網址。
 - 回覆簡短、適合在手機上讀。收回時系統會要你寫一份結構化交接(摘要、決定、未決問題、Knas 要做的事、memory 筆記)。"""
+
+PREAMBLE_WORK = """這是「通道租借」的深談,而且 Knas 已經允許你在這個專案裡動手(work):Knas 正在手機上透過他的助理 Muninn 跟你對話。
+- 你可以讀檔、搜尋、查資料;也可以改這個專案資料夾裡的檔案、跑指令——但**每一次寫檔、每一個指令都會先送到他手機上確認**,
+  所以一次做一件清楚的事,先用一兩句說明你要做什麼、為什麼。被拒絕就不要重試同一件事,用文字問他。
+- 只能動這個專案的資料夾;資料夾外的寫入會直接被拒絕,指令也在 sandbox 裡(寫不到別處、網路只有白名單)。
+- 要 Knas 在幾個選項裡選時,用提問工具(AskUserQuestion)。回覆簡短、適合在手機上讀。
+- 收回時系統會要你寫一份結構化交接(摘要、決定、未決問題、Knas 要做的事、memory 筆記)。"""
 
 _lock = threading.RLock()
 LEASES: dict[str, "Lease"] = {}
@@ -197,6 +205,7 @@ def allow_rules(project: str) -> list[str]:
 def env_for(lease: Lease) -> dict:
     env = {k: v for k, v in os.environ.items() if k != "CLAUDE_CODE_OAUTH_TOKEN"}  # 憑證由 llm.py exec 決定(headless token)
     env.update(HUBBUS_LEASE="1", LEASE_ALLOW=json.dumps(allow_rules(lease.project)),
+               LEASE_MODE=lease.mode, LEASE_WS=lease.cwd,  # 權限轉接:work 模式才放行(問 Knas)寫入
                PATH=os.environ.get("LEASE_PATH_PREFIX", "") +  # 測試用:把假的 claude 放前面
                     f"{hubconf.LAUNCHD_PATH}:{pathlib.Path.home()}/.local/bin:/usr/sbin:/sbin")
     return env
@@ -204,22 +213,45 @@ def env_for(lease: Lease) -> dict:
 
 # ---------- 程序 ----------
 
-def preamble(project: str) -> str:
-    """租約說明;想法沙盒(登錄 type: idea)多一段:在探討哪個想法。"""
+def work_ready(project: str) -> tuple[bool, str]:
+    """work 模式(第二階段)只開給想法沙盒,而且 OS sandbox 要真的已經寫進那個專案的設定——登錄的
+    enforce.sandbox 只是意圖,render-project-settings 寫出來的 settings.local.json 才是事實(沙盒剛建好、
+    設定還沒渲染的那段時間,不能讓 work 在沒有 sandbox 的情況下跑)。"""
     doc = hubconf.projects().get(project) or {}
     if doc.get("type") != "idea":
-        return PREAMBLE
-    return PREAMBLE + f"""
+        return False, f"{project} 不是想法沙盒;work 模式目前只開給想法沙盒"
+    ws = hubconf.workspace(project)
+    try:
+        st = json.loads((ws / ".claude" / "settings.local.json").read_text())
+    except (OSError, ValueError, TypeError):
+        return False, "sandbox 還沒寫進這個專案的設定(settings.local.json 讀不到)"
+    if not (st.get("sandbox") or {}).get("enabled"):
+        return False, "sandbox 還沒寫進這個專案的設定(sandbox.enabled 不是 true)"
+    return True, ""
+
+
+def work_projects() -> list[str]:
+    return sorted(n for n in hubconf.projects() if work_ready(n)[0])
+
+
+def preamble(project: str, mode: str = "discuss") -> str:
+    """租約說明(discuss 唯讀 / work 可以動手,每次寫入都問);想法沙盒(登錄 type: idea)多一段:在探討哪個想法。"""
+    base = PREAMBLE_WORK if mode == "work" else PREAMBLE
+    doc = hubconf.projects().get(project) or {}
+    if doc.get("type") != "idea":
+        return base
+    return base + f"""
 - 這個專案是想法沙盒:Muninn 替 Knas 的一個想法開的探討用專案,想法是:「{doc.get('purpose', '')}」。
   目標是幫他把這個想法查清楚、想清楚(可行嗎、要什麼、風險、下一步),結論和決定會進交接筆記。"""
 
 
 def start_proc(lease: Lease, resume: bool) -> None:
     flag = ["--resume", lease.id] if resume or lease.started_once else ["--session-id", lease.id]
-    cmd = [PY, str(HUB / "bin" / "llm.py"), "exec", "lease-session", "--cwd", lease.cwd, "--",
+    point = "lease-work" if lease.mode == "work" else "lease-session"
+    cmd = [PY, str(HUB / "bin" / "llm.py"), "exec", point, "--cwd", lease.cwd, "--",
            *flag, "--strict-mcp-config", "--mcp-config", str(mcp_config(lease)),
            "--permission-prompt-tool", "mcp__lease_relay__approve",
-           "--settings", str(deny_settings(lease.project)), "--append-system-prompt", preamble(lease.project),
+           "--settings", str(deny_settings(lease.project)), "--append-system-prompt", preamble(lease.project, lease.mode),
            "--max-turns", str(lease.max_turns)]
     lease.dir.mkdir(parents=True, exist_ok=True)
     err = open(lease.dir / "stderr.log", "a")
@@ -528,7 +560,8 @@ class H(http.server.BaseHTTPRequestHandler):
             import registry
             idx = registry.refresh()
             return self.reply(200, {"v": 1, "no_session_domains": hubconf.get("lease.no_session_domains", []),
-                                    "attachable": sorted(idx["projects"]), "modes": ["discuss"]})
+                                    "attachable": sorted(idx["projects"]), "modes": ["discuss", "work"],
+                                    "work_projects": work_projects()})
         if path == "/v1/status":
             with _lock:
                 n = sum(1 for l in LEASES.values() if live(l))
@@ -623,6 +656,33 @@ class H(http.server.BaseHTTPRequestHandler):
                 l.warned_at = iso()
             l.emit("state", state=l.state, warned=True)
             return self.reply(200, {"v": 1})
+        if action == "mode":
+            mode = b.get("mode")
+            if mode not in ("discuss", "work"):
+                return self.err(400, "bad_request", "mode 只能是 discuss 或 work")
+            if mode == "work":
+                ok, why = work_ready(l.project)
+                if not ok:
+                    return self.err(400, "work_not_allowed", why)
+            with _lock:
+                if l.state in ("terminal", "detaching", "detached"):
+                    return self.err(409, "busy", l.state)
+                if l.in_turn or l.waiting:
+                    return self.err(409, "busy", "正在回答或等 Knas 回覆,等這一輪結束再切換")
+                if l.mode == mode:
+                    return self.reply(200, {"v": 1, **l.public()})
+                # 換判斷點 = 換程序:停掉、用同一個 session --resume 接回(權限轉接也跟著重開)
+                stop_proc(l, "attaching")
+                l.mode = mode
+                l.emit("state", state="attaching", mode=mode)
+                try:
+                    start_proc(l, resume=True)
+                except Exception as e:
+                    l.set_state("detached", reason="crash")
+                    return self.err(500, "internal", repr(e)[:300])
+                save()
+            log(f"lease {l.id[:8]} {l.project}: mode → {mode}")
+            return self.reply(200, {"v": 1, **l.public()})
         if action == "keepalive":
             with _lock:
                 l.touch()
@@ -668,8 +728,9 @@ class H(http.server.BaseHTTPRequestHandler):
 
     def create(self, b: dict) -> None:
         proj, sid = b.get("project"), str(b.get("session_id") or "")
-        if b.get("mode", "discuss") != "discuss":
-            return self.err(400, "bad_request", "目前只有 discuss(work 等第二階段 pilot 之後)")
+        mode = b.get("mode", "discuss")
+        if mode not in ("discuss", "work"):
+            return self.err(400, "bad_request", "mode 只能是 discuss 或 work")
         try:
             uuid.UUID(sid)
         except ValueError:
@@ -679,13 +740,17 @@ class H(http.server.BaseHTTPRequestHandler):
         ws = hubconf.workspace(proj) if proj in hubconf.projects() or proj == hubconf.hub_project() else None
         if not ws or not ws.is_dir():
             return self.err(404, "not_registered", str(proj))
+        if mode == "work":
+            ok, why = work_ready(proj)
+            if not ok:
+                return self.err(400, "work_not_allowed", why)
         with _lock:
             if sid in LEASES and live(LEASES[sid]):
                 return self.reply(200, {"v": 1, **LEASES[sid].public()})
             if sum(1 for l in LEASES.values() if live(l)) >= GLOBAL_CAP:
                 return self.reply(409, {"v": 1, "error": "cap_reached", "detail": f"同時最多 {GLOBAL_CAP} 個",
                                         "leases": [l.public() for l in LEASES.values() if live(l)]})
-            lease = Lease({"lease_id": sid, "project": proj, "mode": "discuss", "thread": b.get("thread", ""),
+            lease = Lease({"lease_id": sid, "project": proj, "mode": mode, "thread": b.get("thread", ""),
                            "cwd": str(ws), "started_once": bool(b.get("resume")), "state": "attaching",
                            "max_turns": int(b.get("max_turns") or DEFAULT_MAX_TURNS)})
             LEASES[sid] = lease
