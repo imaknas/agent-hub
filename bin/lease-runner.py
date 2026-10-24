@@ -246,7 +246,11 @@ def preamble(project: str, mode: str = "discuss") -> str:
 
 
 def start_proc(lease: Lease, resume: bool) -> None:
-    flag = ["--resume", lease.id] if resume or lease.started_once else ["--session-id", lease.id]
+    # 接續的前提是對話紀錄已經存在:Claude Code 要跑完第一輪才會寫出來。還沒說過話就切換模式、閒置停掉、
+    # runner 重啟時用 --resume 會 "No conversation found" 掛掉(10-25 Knas 遇到,lease 34c84c53)
+    import runtime_claude
+    can_resume = (resume or lease.started_once) and runtime_claude.transcript(lease.id) is not None
+    flag = ["--resume", lease.id] if can_resume else ["--session-id", lease.id]
     point = "lease-work" if lease.mode == "work" else "lease-session"
     cmd = [PY, str(HUB / "bin" / "llm.py"), "exec", point, "--cwd", lease.cwd, "--",
            *flag, "--strict-mcp-config", "--mcp-config", str(mcp_config(lease)),
@@ -257,8 +261,7 @@ def start_proc(lease: Lease, resume: bool) -> None:
     err = open(lease.dir / "stderr.log", "a")
     lease.proc = subprocess.Popen(cmd, cwd=lease.cwd, env=env_for(lease), stdin=subprocess.PIPE, stdout=subprocess.PIPE,
                                   stderr=err, text=True, bufsize=1)
-    lease.started_once = True
-    lease.intent_stop = False
+    lease.intent_stop = False  # started_once 等第一輪真的跑完才設(reader 收到 num_turns > 0 的 result)
     lease.set_state("running", pid=lease.proc.pid, resumed=bool(flag[0] == "--resume"))
     threading.Thread(target=reader, args=(lease, lease.proc), daemon=True).start()
 
@@ -329,7 +332,12 @@ def reader(lease: Lease, proc: subprocess.Popen) -> None:
         elif t == "result":
             with _lock:
                 lease.in_turn = False
-                lease.crashes = 0
+                # 啟動就失敗的程序也會先吐一個 is_error、num_turns=0 的 result 再退出:那不算成功,
+                # 不能把 crashes 歸零(不然永遠到不了 2、不會自動收回,每則訊息都重新掛一次)
+                if not (d.get("is_error") and not d.get("num_turns")):
+                    lease.crashes = 0
+                if d.get("num_turns"):
+                    lease.started_once = True  # 對話紀錄寫出來了,之後可以 --resume
                 lease.touch()
             text = str(d.get("result") or "")
             if d.get("is_error") and re.search(r"rate.?limit|usage limit|額度", text, re.I):
