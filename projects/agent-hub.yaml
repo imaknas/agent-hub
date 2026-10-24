@@ -83,6 +83,11 @@ jobs:
   background: true
   max_attempts_per_day: 1
   run: /opt/homebrew/bin/python3 bin/backup.py verify
+- name: prune-worktrees           # 已合併、乾淨的 worktree:閒置 ≥ 2 天刪重建得回來的依賴、≥ 14 天且沒人在用才移除(branch 留著)
+  at: "04:30"
+  cwd: hub
+  max_attempts_per_day: 1
+  run: /opt/homebrew/bin/python3 bin/prune-worktrees --auto
 - name: contracts-check          # 契約副本 == 原版(兩個方向)+ 實際資料照契約;不一致發 job.failed
   at: "01:30"
   cwd: hub

@@ -31,6 +31,24 @@ WEEKDAY_ZH = "一二三四五六日"
 LOG_LINE = re.compile(r"^\[(\S+ \S+)\] (?:running job '([^']+)'|job '([^']+)' (finished OK|FAILED \(exit (-?\d+)\)))")
 
 
+def prune_line() -> str:
+    """每晚 worktree 清理(prune-worktrees --auto)的結果,一行;沒跑過就不顯示。"""
+    import json, pathlib, sys
+    sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
+    import hubconf
+    f = hubconf.STATE / "worktree-prune.json"
+    try:
+        r = json.loads(f.read_text())
+    except (OSError, ValueError):
+        return ""
+    parts = [f"刪依賴 {len(r.get('deps', []))} 個", f"移除 worktree {len(r.get('removed', []))} 個",
+             f"釋放 {r.get('freed_mb', 0)} MB"]
+    if r.get("skipped"):
+        parts.append(f"跳過 {len(r['skipped'])} 個(有不能確定可重建的檔案)")
+    return (f"<div class=sub style='margin-top:8px'>worktree 自動清理({esc(str(r.get('at', ''))[:16])}):"
+            + "、".join(parts) + "</div>")
+
+
 def runs_on(job: dict, d: datetime.date) -> bool:
     """跟 scheduler.py 的 runs_today() 同一組篩選。"""
     if "days_of_week" in job and WEEKDAYS[d.weekday()] not in job["days_of_week"]:
@@ -279,7 +297,8 @@ def main() -> None:
                    + (f"<table><tr><th>專案</th><th>branch</th><th>最後 commit</th><th>狀態</th></tr>{''.join(wt_rows)}</table>"
                       if wt_rows else "<div class=sub>沒有進行中的 worktree</div>")
                    + (f"<div class=sub style='margin-top:8px'>最近 7 天直接 commit 到 main(沒經過 merge-branch):"
-                      + "、".join(f"{esc(p)} {n}" for p, n in sorted(ungated.items())) + "</div>" if ungated else ""))
+                      + "、".join(f"{esc(p)} {n}" for p, n in sorted(ungated.items())) + "</div>" if ungated else "")
+                   + prune_line())
         import hubconf
         bus_db = hubconf.bus_db()
         if bus_db.exists():

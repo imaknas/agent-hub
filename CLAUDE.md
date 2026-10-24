@@ -223,7 +223,9 @@ memory 追蹤但不需要在 mini 上執行任何東西的專案(目前大多數
   `runtime.test` → fast-forward main(主 checkout)→ 只有登錄 `push_on_merge: true` 才 push;匯流排記
   `merge.done`/`merge.failed`/`session.report`。狀態頁列各專案的 worktree、兩個 branch 改同一檔、
   沒經過閘門直接 commit 到 main 的數量(只是資訊)。`bin/prune-worktrees [--yes]` 清已合併、乾淨的
-  worktree——**由人跑**,閒置但沒封存的 session 可能還開在裡面
+  worktree(連 branch,**由人跑**)。另外平台 job `agent-hub/prune-worktrees`(每晚 04:30,`--auto`)自動清:閒置 ≥ 2 天
+  只刪重建得回來的依賴(資料夾留著,session 開始時會提醒重建)、≥ 14 天且沒有 process 在裡面才移除 worktree
+  (branch 留著);規則在 `bin/worktrees.py` 檔頭
 - **第二階段強制**:登錄 `enforce: {sandbox: true}` 的專案,`bin/render-project-settings.py`(平台 job,每 15
   分鐘)把 sandbox(只准寫自己的專案/runtime/匯流排/cache、讀不到別的專案、網路白名單)跟 deny 規則寫進它的
   `.claude/settings.local.json`;被改就寫回、狀態頁紅;`enforce` 關掉就拿掉。`--report` 看每個專案會寫什麼。

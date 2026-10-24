@@ -58,6 +58,12 @@ case "$event" in
       cat CLAUDE.local.md
     fi
     python3 "$HUB/bin/memory-nudge.py" --session-start 2>/dev/null
+    # 每晚的 worktree 清理(bin/worktrees.py auto_prune)刪過這裡的依賴:提醒怎麼重建,免得第一次跑測試時一頭霧水
+    if [ -f "$git_dir/agent-hub-deps-pruned" ]; then
+      echo "(這個 worktree 閒置期間,每晚的清理刪掉了重建得回來的依賴以節省空間;要跑程式或測試前先重建:)"
+      sed 's/^/  /' "$git_dir/agent-hub-deps-pruned"
+      echo "  重建好之後刪掉標記:rm \"$git_dir/agent-hub-deps-pruned\""
+    fi
     [ -n "$hook_json" ] && printf '%s' "$hook_json" | python3 "$HUB/bin/hubbus" hook session-start 2>/dev/null
     ;;
   end)

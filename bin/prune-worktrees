@@ -1,10 +1,14 @@
 #!/usr/bin/env python3
-"""清掉已經合併進 main、而且乾淨的 worktree(跟它的 branch)。由人執行,不自動跑:閒置但沒封存的
-session 的 cwd 可能還在裡面,刪了 resume 會壞——先確認沒有 session 開在那裡。
+"""清掉已經合併進 main、而且乾淨的 worktree。
 
-  prune-worktrees [--project P]          只列出可以刪的
-  prune-worktrees [--project P] --yes    真的刪
+  prune-worktrees [--project P]          只列出可以刪的(人用)
+  prune-worktrees [--project P] --yes    真的刪,連 branch 一起(人確認過沒有 session 開在裡面)
+  prune-worktrees --auto [--dry-run]     每晚的自動清理(平台 job agent-hub/prune-worktrees):
+                                         閒置 ≥ 2 天只刪重建得回來的依賴(.venv 等,資料夾留著);
+                                         閒置 ≥ 14 天、沒有 process 在裡面、ignore 的檔案都能重建,才移除
+                                         worktree(branch 留著)。規則跟理由在 bin/worktrees.py 檔頭
 """
+import json
 import pathlib
 import sys
 
@@ -12,5 +16,16 @@ sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
 import worktrees  # noqa: E402
 
 args = sys.argv[1:]
+if "--auto" in args:
+    res = worktrees.auto_prune(dry_run="--dry-run" in args)
+    verb = "會" if res["dry_run"] else "已"
+    for line in res["deps"]:
+        print(f"{verb}刪依賴:{line}")
+    for line in res["removed"]:
+        print(f"{verb}移除 worktree:{line}")
+    for line in res["skipped"]:
+        print(f"跳過:{line}")
+    print(f"共{verb}釋放 {res['freed_mb']} MB" + ("(dry-run,沒有動任何東西)" if res["dry_run"] else ""))
+    sys.exit(0)
 proj = args[args.index("--project") + 1] if "--project" in args else None
 sys.exit(worktrees.prune(proj, "--yes" in args))
