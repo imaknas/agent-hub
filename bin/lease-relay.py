@@ -6,8 +6,8 @@
   WebFetch(不在登錄網域) → 送到手機,顯示完整網址;allow / allow_session(這個租約都允許這個網域)/ deny
   其他任何工具           → deny(discuss 唯讀;工具清單本來就沒有,這是第二道防線)
 work 模式(第二階段,只限想法沙盒;runner 給 LEASE_MODE=work、LEASE_WS=專案資料夾):
-  Edit/Write/MultiEdit/NotebookEdit → 路徑解析成真實路徑後在專案資料夾裡才送手機(risk write_file);資料夾外、
-                         ../ 繞出去、symlink 指出去都直接 deny(不問)。allow_session = 之後這個資料夾裡的寫入不再問
+  Edit/Write/MultiEdit/NotebookEdit → 路徑解析成真實路徑後在專案資料夾裡就直接放行、不問(10-25 Knas 決定:
+                         「只有碰資料夾外才問」);資料夾外、../ 繞出去、symlink 指出去都直接 deny(比問更嚴)
   Bash                   → 每個指令都送手機(risk run_command)。allow_session 降成 allow(試行期的保守做法):
                          10-24 實測 OS sandbox 擋得住寫資料夾外、讀 ~/.ssh、讀 ~/.claude 的憑證(租約的 --settings
                          讀取 deny 也套到 Bash),但其他放機密的位置(各服務的 .env 等)沒有逐一驗證過
@@ -42,7 +42,6 @@ _allowed_domains: set[str] = set()
 MODE = os.environ.get("LEASE_MODE", "discuss")
 WS = os.path.realpath(os.environ.get("LEASE_WS") or os.getcwd())
 WRITE_TOOLS = {"Edit", "Write", "MultiEdit", "NotebookEdit"}
-_writes_ok = False   # work 模式:Knas 選了「這個租約都允許」寫檔
 
 
 def secret(path: pathlib.Path | None) -> str:
@@ -153,24 +152,13 @@ def inside_ws(path: str) -> bool:
 
 
 def decide_write(rid: str, tool: str, inp: dict) -> dict:
-    global _writes_ok
     path = str(inp.get("file_path") or inp.get("notebook_path") or "")
     if not inside_ws(path):
         tell_runner("end", tool=tool, decision="deny_outside", summary=path)
         return {"behavior": "deny", "message": f"只能改這個專案資料夾({WS})裡的檔案,{path or '(沒有路徑)'} 不在裡面。"}
-    if _writes_ok:
-        return {"behavior": "allow", "updatedInput": inp}
-    tell_runner("start", tool=tool, summary=path, kind="permission")
-    res = ask_owner(rid, tool, path, "write_file", None)
-    d = res.get("decision")
-    if d in ("allow", "allow_session"):
-        if d == "allow_session":
-            _writes_ok = True
-        tell_runner("end", tool=tool, decision=d, summary=path)
-        return {"behavior": "allow", "updatedInput": inp}
-    tell_runner("end", tool=tool, decision="deny" if d == "deny" else "timeout", summary=path)
-    return {"behavior": "deny", "message": ("Knas 拒絕了這次寫檔。" if d == "deny" else "沒有人核准這次寫檔(5 分鐘內沒回)。")
-            + "不要重試同一件事;用文字跟他說明。"}
+    # 資料夾內:直接放行(OS sandbox 本來就只准寫這裡);照樣回報 runner 留稽核紀錄
+    tell_runner("end", tool=tool, decision="auto_allow_inside", summary=path)
+    return {"behavior": "allow", "updatedInput": inp}
 
 
 def decide_bash(rid: str, inp: dict) -> dict:

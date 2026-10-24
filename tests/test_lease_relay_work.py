@@ -1,4 +1,4 @@
-"""lease-relay.py 的 work 模式(第二階段):資料夾外的寫入不問就拒絕、資料夾內問 Knas、指令每次都問。
+"""lease-relay.py 的 work 模式(第二階段):資料夾外的寫入不問就拒絕、資料夾內直接放行(10-25 Knas 決定)、指令每次都問。
 
 送手機(ask_owner)跟回報 runner(tell_runner)都換成假的,不發任何請求。
 
@@ -35,10 +35,10 @@ class WorkMode(unittest.TestCase):
     def call(self, tool, **inp):
         return self.m.decide({"tool_name": tool, "input": inp, "tool_use_id": "t1"})
 
-    def test_write_inside_asks_and_allows(self):
+    def test_write_inside_allowed_without_asking(self):
         r = self.call("Write", file_path=os.path.join(self.ws, "notes.md"), content="x")
         self.assertEqual(r["behavior"], "allow")
-        self.assertEqual(self.asked, [("Write", "write_file")])
+        self.assertEqual(self.asked, [], "資料夾內的寫檔不送去問")
 
     def test_relative_path_resolves_against_workspace(self):
         r = self.call("Edit", file_path="src/a.py", old_string="a", new_string="b")
@@ -58,11 +58,6 @@ class WorkMode(unittest.TestCase):
         self.assertEqual(r["behavior"], "deny")
         self.assertEqual(self.asked, [])
 
-    def test_allow_session_for_writes_stops_asking(self):
-        self.answer = {"decision": "allow_session"}
-        self.call("Write", file_path=os.path.join(self.ws, "a"), content="x")
-        self.call("Write", file_path=os.path.join(self.ws, "b"), content="x")
-        self.assertEqual(len(self.asked), 1)
 
     def test_bash_asks_every_time_even_after_allow_session(self):
         self.answer = {"decision": "allow_session"}
@@ -70,9 +65,9 @@ class WorkMode(unittest.TestCase):
         self.call("Bash", command="ls")
         self.assertEqual(self.asked, [("Bash", "run_command"), ("Bash", "run_command")])
 
-    def test_deny_and_timeout(self):
+    def test_bash_deny_and_timeout(self):
         self.answer = {"decision": "deny"}
-        self.assertEqual(self.call("Write", file_path=os.path.join(self.ws, "a"), content="x")["behavior"], "deny")
+        self.assertEqual(self.call("Bash", command="make")["behavior"], "deny")
         self.answer = {}
         self.assertEqual(self.call("Bash", command="rm -rf build")["behavior"], "deny")
 

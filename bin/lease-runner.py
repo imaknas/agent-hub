@@ -69,8 +69,8 @@ PREAMBLE = """這是「通道租借」的深談:Knas 正在手機上透過他的
 - 回覆簡短、適合在手機上讀。收回時系統會要你寫一份結構化交接(摘要、決定、未決問題、Knas 要做的事、memory 筆記)。"""
 
 PREAMBLE_WORK = """這是「通道租借」的深談,而且 Knas 已經允許你在這個專案裡動手(work):Knas 正在手機上透過他的助理 Muninn 跟你對話。
-- 你可以讀檔、搜尋、查資料;也可以改這個專案資料夾裡的檔案、跑指令——但**每一次寫檔、每一個指令都會先送到他手機上確認**,
-  所以一次做一件清楚的事,先用一兩句說明你要做什麼、為什麼。被拒絕就不要重試同一件事,用文字問他。
+- 你可以讀檔、搜尋、查資料,也可以直接改這個專案資料夾裡的檔案(不用問);**每一個指令(Bash)都會先送到他手機上確認**,
+  所以一次跑一件清楚的事,先用一兩句說明你要跑什麼、為什麼。被拒絕就不要重試同一件事,用文字問他。
 - 只能動這個專案的資料夾;資料夾外的寫入會直接被拒絕,指令也在 sandbox 裡(寫不到別處、網路只有白名單)。
 - 要 Knas 在幾個選項裡選時,用提問工具(AskUserQuestion)。回覆簡短、適合在手機上讀。
 - 收回時系統會要你寫一份結構化交接(摘要、決定、未決問題、Knas 要做的事、memory 筆記)。"""
@@ -182,6 +182,9 @@ def deny_settings(project: str) -> pathlib.Path:
     idx = registry.refresh()
     _, deny, _ = m.desired(project, idx["projects"][project], idx)
     deny += ["Read(~/.claude.json)", "Read(~/.claude/**)", "Read(~/.ssh/**)", "Read(~/.config/gh/**)", "Read(~/.aws/**)"]
+    # Keychain 不是檔案,OS sandbox 擋不住(10-25 實測:sandbox 裡的 Bash 查得到 Claude 的登入憑證)。
+    # 這幾條只是補強——換個寫法(sh -c、python)就繞得過,真正的把關是 work 模式的指令每次都問 Knas
+    deny += ["Bash(security:*)", "Bash(security *)", "Bash(/usr/bin/security *)"]
     p = DIR / project / "settings.json"
     p.parent.mkdir(parents=True, exist_ok=True)
     p.write_text(json.dumps({"permissions": {"deny": deny}}, ensure_ascii=False))

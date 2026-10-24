@@ -139,8 +139,8 @@ POST /v1/sandboxes   Authorization: Bearer <runner-token>
 1. **OS sandbox**(第二階段平台本來就有,`render-project-settings.py` 寫進專案的 settings):Bash 只能寫自己的
    資料夾、讀不到別的專案、網路只有白名單。這是真的封鎖,不靠模型聽話。
 2. **每次寫入送手機確認**(`lease-relay.py`,work 模式才有):
-   - `Edit`/`Write`/`NotebookEdit`,路徑在這個專案資料夾裡 → 問 Knas(`risk: write_file`,摘要 = 路徑);
-     「這個租約都允許」= 之後這個資料夾裡的寫入不再問。資料夾外 → 直接拒絕(不問)。
+   - `Edit`/`Write`/`NotebookEdit`,路徑在這個專案資料夾裡 → **直接放行,不問**(10-25 Knas 決定「只有碰資料夾外
+     才問」;原本是送 `write_file` 確認)。資料夾外 → 直接拒絕(不問,比問更嚴)。
    - `Bash` → **每個指令都問** Knas(`risk: run_command`,摘要 = 指令);「這個租約都允許」只算這一次
      (試行期的保守做法;Muninn 的卡片在 `run_command` 不用顯示這個選項)。
    - 讀類(Read/Glob/Grep/WebSearch)照舊自動放行;WebFetch、提問照 discuss 的規則。
@@ -156,6 +156,10 @@ POST /v1/sandboxes   Authorization: Bearer <runner-token>
 - 權限轉接的規則有單元測試(`tests/test_lease_relay_work.py`:資料夾外、`../`、symlink 不問就拒絕;
   寫檔的「都允許」生效;指令每次都問;discuss 不變)。
 - 還沒有真的從手機走過一次(要 Muninn 的寫入確認卡)。
+- **10-25 實測發現 OS sandbox 擋不住 Keychain**:sandbox 裡的 Bash 用 `security find-generic-password` 查得到
+  Claude 的登入憑證(只看了 exit code)。所以 Knas 決定放寬時,**只放寬資料夾內的寫檔**;指令維持每次都問,
+  另外在租約的 deny 加 `Bash(security …)`(只是補強,換個寫法就繞得過)。要放寬指令,得先找到在系統層擋住
+  Keychain 的方法。
 
 **不做的**:正式專案的 work、git push(sandbox 的網路白名單本來就沒有 GitHub 的寫入;想法沙盒也沒有 remote)。
 

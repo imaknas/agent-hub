@@ -132,6 +132,16 @@
   (手機用 Remote Control);或讓 MBP 不睡眠。還沒決定(10-24)。在那之前:手機上叫它寫東西沒反應,
   先確認 MBP 開著。
 
+## OS sandbox 擋不住 Keychain
+
+- **發現**:2026-10-25 在測試用的想法沙盒裡,sandbox 底下的 Bash 跑 `security find-generic-password -s 'Claude Code-credentials'`
+  回 0(找得到);加上 `-w` 就會印出 Claude 的登入憑證。檔案層的封鎖(denyRead、Read deny 規則)對它沒用,
+  Keychain 是透過系統服務存取的,不是讀檔案。同一個 sandbox 擋得住讀 `~/.ssh`、`~/.claude` 的憑證檔、`~/services/*/.env`。
+- **影響**:不能讓沒人看著的 agent 在 sandbox 裡自由跑指令,然後以為憑證安全。想法沙盒的 work 模式因此維持
+  「每個指令都問 Knas」;租約的 deny 加了 `Bash(security …)`,但那只是補強(`sh -c`、python 就繞得過)。
+- **要放寬指令之前**:先找到在系統層擋住 Keychain 的方法(例如 sandbox profile 擋 securityd 的 mach-lookup,
+  或讓那些 job 用不在 Keychain 裡的憑證),而且要實測。
+
 ## mini 上的 claude 在 SSH 底下是「未登入」
 
 - **症狀**:SSH 進 mini 跑 `claude auth status` 顯示 `loggedIn: false`,`claude -p` 用不了 claude.ai
