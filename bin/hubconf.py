@@ -9,6 +9,7 @@
 
 給 shell 腳本用(任何 python3 都能跑):
   hubconf.py ideas     想法沙盒(登錄 type: idea)的名稱,一行一個
+  hubconf.py get <key> hub.json 的單一值(點分隔,例:github.owner),給 shell 腳本用
   hubconf.py roster    每個專案一行 name<TAB>workspace<TAB>origin<TAB>memory_bare,沒有標題列;
                        workspace 展開 ~、沒有 origin 印 (native)、memory_bare 前面加 hub.json 的 memory_host:
 """
@@ -248,11 +249,18 @@ def main(argv: list[str]) -> int:
             print("\t".join([name, str(path(paths.get("workspace")) or ""), paths.get("origin") or "(native)",
                              f"{host}:{bare}" if host else bare]))
         return 0
+    if len(argv) == 2 and argv[0] == "get":
+        v = get(argv[1])
+        if v is None or isinstance(v, (dict, list)):
+            print(f"hubconf.py get:{argv[1]} 沒有設定或不是單一值", file=sys.stderr)
+            return 1
+        print(v)
+        return 0
     if argv == ["ideas"]:
         for name in ideas():
             print(name)
         return 0
-    print("用法:hubconf.py roster | ideas", file=sys.stderr)
+    print("用法:hubconf.py roster | ideas | get <key>", file=sys.stderr)
     return 2
 
 

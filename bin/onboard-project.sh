@@ -141,8 +141,10 @@ elif git show-ref --verify --quiet refs/heads/agent-memory; then
 fi
 
 if [ -z "$origin_url" ] && [ "$NO_REMOTE" != true ]; then
-  gh repo create "imaknas/$PROJ_NAME" $VISIBILITY --source=. --remote=origin
-  git remote set-url origin "git@github.com:imaknas/${PROJ_NAME}.git"
+  # 帳號從 hub.json 的 github.owner 讀,不寫死(CLAUDE.md「寫新程式的規則」)
+  GH_OWNER=$(python3 "$AGENT_HUB/bin/hubconf.py" get github.owner) || fail "hub.json 沒有 github.owner,建不了 GitHub repo"
+  gh repo create "$GH_OWNER/$PROJ_NAME" $VISIBILITY --source=. --remote=origin
+  git remote set-url origin "git@github.com:${GH_OWNER}/${PROJ_NAME}.git"
   outer_branch=$(git branch --show-current)
   git push -u origin "$outer_branch"
   origin_url=$(git remote get-url origin)

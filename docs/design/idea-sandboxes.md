@@ -121,4 +121,6 @@ POST /v1/sandboxes   Authorization: Bearer <runner-token>
   sandbox 設定、attachable、系統提示帶 purpose 都確認過。重送 200、撞名 409、名稱錯 400、上限 429 都測過。
   兩個測試沙盒(idea-999998、idea-999999)已刪掉。
 - 升級:只跑過 dry-run(`--apply` 會在 GitHub 建 repo,第一次真的升級時再看)。
-- 失敗清理(onboard 中途失敗)的路徑沒有實際觸發過。
+- 失敗清理(onboard 中途失敗):`tests/test_create_idea_sandbox.py` 用假的 onboard 在暫存 hub 裡測——
+  登錄檔還沒 commit 就全部清掉、已經 commit 就留著並在 detail 說要手動處理、清完可以重試;
+  拿掉清理那段程式時三個測試都會失敗。
