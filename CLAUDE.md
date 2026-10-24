@@ -8,7 +8,9 @@ agent-hub 是跨專案的 memory 追蹤 + 排程 + 專案/服務註冊系統,設
 
 **2026-10-15 起所有專案、agent-hub 本身的 session 都在 mac mini 上**(專案在
 `~/workspace/<name>`,agent-hub 在 `~/agent-hub`)。MBP 只當遙控端:用 Claude Desktop 透過
-SSH 開 mini 上的資料夾,MBP 斷線/沒電 session 也繼續跑。MBP 上的舊資料夾只是備份。
+SSH 開 mini 上的資料夾。MBP 斷線/沒電時 session 還在跑、手機(Remote Control)也還能對話,
+**但寫不進任何東西**:寫入前的權限檢查要 MBP 上的 app 回答(見 known-issues.md「MBP 關機時 SSH session
+寫不進去」)。MBP 上的舊資料夾只是備份。
 
 ## 寫新程式的規則(第一階段,2026-10-22 起)
 

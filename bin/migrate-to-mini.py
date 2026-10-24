@@ -213,7 +213,7 @@ def copy_mcp_servers(name: str, path: str) -> None:
     target = f"{hublib.MINI_WORKSPACE}/{name}"
     for old in old_paths:
         for server, conf in (projects.get(old, {}).get("mcpServers") or {}).items():
-            text = json.dumps(conf).replace(old, target).replace(f"{hublib.MBP_HOME}/", "/Users/you/")
+            text = json.dumps(conf).replace(old, target).replace(f"{hublib.MBP_HOME}/", f"{hublib.MINI_HOME}/")
             conf2 = json.loads(text)
             note = ""
             cmd = conf2.get("command")

@@ -120,6 +120,18 @@
   確認連得到 mini,連不到就只在本機 commit、整輪只記一行,不再每個專案各等一次逾時。
   急著要同步就手動跑 `bin/sync-all-memory.sh`。
 
+## MBP 關機時 SSH session 寫不進去
+
+- **症狀**:用手機(Remote Control)叫 session 改檔、改 doc、收尾,全部失敗,錯誤是
+  `PreToolUse hook did not respond before its timeout (host client may be unreachable)`;讀檔、查資料正常。
+  2026-10-15(改 Design day 文件)、10-24(這個 session 收尾)都發生過,把 MBP 打開就好了。
+- **原因**:session 的 claude 跑在 mini,但它是 MBP 上的 Desktop app 透過 SSH 開的。寫入前的權限檢查
+  (Desktop 掛的 PreToolUse hook)、`update_plan`/`wrap_up` 這類工具都由 MBP 上的 app 回答;MBP 關機或
+  睡眠,mini 上的程式還活著,所以讀得到、聊得了,寫入卻每次逾時。不是 mini 少裝什麼。
+- **處理**:要在 MBP 關著時也能寫,選項是在 mini 裝 Claude Desktop、直接在 mini 開本機 session
+  (手機用 Remote Control);或讓 MBP 不睡眠。還沒決定(10-24)。在那之前:手機上叫它寫東西沒反應,
+  先確認 MBP 開著。
+
 ## mini 上的 claude 在 SSH 底下是「未登入」
 
 - **症狀**:SSH 進 mini 跑 `claude auth status` 顯示 `loggedIn: false`,`claude -p` 用不了 claude.ai
