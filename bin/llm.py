@@ -6,7 +6,10 @@
   llm.py run <point> [--cwd D] [--model M] [--prompt-file F]   prompt 從 --prompt-file 或 stdin
   輸出:成功時跟 `claude -p --output-format json` 一樣;失敗時
         {"type": "result", "is_error": true, "structured_output": <default 或 null>, "llm_point": …, "llm_error": …}
-        on_failure: caller → exit 1;default → exit 0
+        登錄有寫 `default` 值 → structured_output 是那個值、exit 0;否則 null、exit 1(呼叫端走自己的失敗路徑)。
+        on_failure(skip / retry_later / ask_user / say_so / default)是宣告「失敗時實際發生什麼事」,
+        給人跟評估看的,不影響這支的行為——格式見 contracts/llm-points.v1.schema.json
+  llm.py run <point> --dry-run ...         只印出會執行的指令(JSON list),不呼叫模型
   llm.py lint     列出 bin/ 裡繞過這支的 `claude -p`(contracts-check 用)
 
 憑證(2026-10-24 Knas 決定統一):預設用 ~/.claude/headless-oauth-token(`claude setup-token`,一年,launchd/SSH 都一樣,
@@ -48,10 +51,18 @@ def job_failed(point: str, reason: str) -> None:
 
 def fail(point: str, spec: dict, reason: str) -> int:
     job_failed(point, reason)
-    default = spec.get("default") if spec.get("on_failure") == "default" else None
-    print(json.dumps({"type": "result", "is_error": True, "structured_output": default,
+    # 只有登錄真的寫了 default 值才回 exit 0:lease-handover 是 on_failure: default,但安全結果由 runner 提供
+    # (它看 exit != 0 才重試、做最小交接),不能因為標記就改成 exit 0
+    has_default = "default" in spec
+    print(json.dumps({"type": "result", "is_error": True, "structured_output": spec.get("default"),
                       "llm_point": point, "llm_error": reason}, ensure_ascii=False))
-    return 0 if spec.get("on_failure") == "default" else 1
+    return 0 if has_default else 1
+
+
+def output_schema(spec: dict) -> str | None:
+    """宣告的輸出 schema 路徑(相對 contracts/);format: text 的點沒有。"""
+    out = spec.get("output") or {}
+    return out.get("schema") if out.get("format") == "json" else None
 
 
 def auth_env(spec: dict) -> tuple[dict | None, str]:
@@ -104,9 +115,12 @@ def run(a) -> int:
         os.execvpe(cmd[0], cmd, env)
     cmd += ["--output-format", "json"]
     schema = None
-    if spec.get("schema"):
-        schema = json.loads((POINTS.parent / spec["schema"]).read_text())
+    if output_schema(spec):
+        schema = json.loads((POINTS.parent / output_schema(spec)).read_text())
         cmd += ["--json-schema", json.dumps(schema, ensure_ascii=False)]
+    if getattr(a, "dry_run", False):
+        print(json.dumps(cmd, ensure_ascii=False))
+        return 0
     try:
         r = subprocess.run(cmd, cwd=a.cwd or None, capture_output=True, text=True, timeout=spec.get("timeout_s", 1200),
                            env=env)
@@ -149,8 +163,8 @@ def lint() -> list[str]:
             if CALL.search(code):
                 bad.append(f"{rel}:{i}:沒有經過 bin/llm.py 的 claude -p")
     for name, spec in p["points"].items():
-        if spec.get("schema") and not (POINTS.parent / spec["schema"]).exists():
-            bad.append(f"判斷點 {name} 的 schema {spec['schema']} 不存在")
+        if output_schema(spec) and not (POINTS.parent / output_schema(spec)).exists():
+            bad.append(f"判斷點 {name} 的 output.schema {output_schema(spec)} 不存在")
     return bad
 
 
@@ -162,6 +176,7 @@ def main() -> int:
     r.add_argument("--cwd")
     r.add_argument("--model")
     r.add_argument("--prompt-file")
+    r.add_argument("--dry-run", action="store_true", help="只印出會執行的指令,不呼叫模型")
     r.add_argument("extra", nargs="*", help="額外的 claude 參數(放在 -- 後面)")
     e = sub.add_parser("exec", help="長駐串流 session:照宣告組旗標後 exec 成 claude(stdin/stdout 是 stream-json)")
     e.add_argument("point")

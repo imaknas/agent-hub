@@ -2,10 +2,15 @@
 # 每個點:誰呼叫、做什麼判斷、用哪個模型、權限、能用的工具、輸出 schema、模型不能用/輸出不合格時怎麼辦。
 # contracts-check 每晚 lint:bin/ 裡出現 claude -p 卻不在 bin/llm.py(也不在 exempt)就失敗。
 #
-# on_failure:
-#   caller   → llm.py 印 {"is_error": true, "structured_output": null, ...}、exit 1,呼叫端走它原本的失敗路徑
-#              (librarian:不推進 checkpoint、隔晚重試;consolidate:那個專案這次不整理)
-#   default  → llm.py 印 {"is_error": true, "structured_output": <default>, ...}、exit 0,呼叫端照用安全預設
+# 格式:contracts/llm-points.v1.schema.json(跟 muninn 共用格式,它 vendor 一份;內容不共用)。
+# output:{format: json, schema: <相對這個目錄>} 或 {format: text}。
+#
+# on_failure = 模型沒回或輸出不合格時「實際發生什麼事」(兩邊同一組值;每個點的標記是讀呼叫端的程式整理的):
+#   skip        這次不做、不留結果            retry_later  不推進進度,下一輪再試
+#   ask_user    改成問 Knas                   say_so       明白說模型沒回(狀態頁、警報、事件)
+#   default     用安全結果:登錄有寫 default 值就由 llm.py 回那個值,否則由呼叫端提供
+# llm.py 的機制:登錄有 `default` 值 → 印 {"is_error": true, "structured_output": <default>}、exit 0;
+#   其他一律 structured_output: null、exit 1,呼叫端走它自己的失敗路徑(上面標的就是那條路徑做的事)。
 # 不管哪種都在匯流排記 job.failed(point、原因)。
 #
 # auth:token(預設,~/.claude/headless-oauth-token)| subscription(訂閱登入;claude.ai connector 只有這樣才載入)。
@@ -20,9 +25,9 @@ points:
     permission_mode: dontAsk
     tools: Read,Write,Edit,Glob,Grep
     allowed_tools: ["Edit(./STATE.md)"]
-    schema: llm/librarian-state.schema.json
+    output: {format: json, schema: llm/librarian-state.schema.json}
     timeout_s: 1200
-    on_failure: caller
+    on_failure: retry_later # checkpoint 不推進,隔晚重試
   librarian-todo-format:
     caller: bin/librarian.sh
     purpose: STATE.md 的 `## 待辦` 格式不對時,只修格式、內容不動
@@ -32,7 +37,8 @@ points:
     tools: Read,Edit
     allowed_tools: ["Edit(./STATE.md)"]
     timeout_s: 600
-    on_failure: caller          # 修不好就留著,check-state-todo 會再檢查、todo.md 檔尾列出
+    output: {format: text}
+    on_failure: skip        # 修不好就留著,check-state-todo 會再檢查、todo.md 檔尾列出
   librarian-index:
     caller: bin/librarian.sh
     purpose: 更新跨專案 index.md 名冊區塊外的註記、找跨專案關聯
@@ -40,9 +46,9 @@ points:
     model_default: sonnet
     permission_mode: acceptEdits
     tools: Read,Write,Edit,Glob,Grep
-    schema: llm/librarian-index.schema.json
+    output: {format: json, schema: llm/librarian-index.schema.json}
     timeout_s: 1200
-    on_failure: caller
+    on_failure: skip        # index.md 的註記這晚不更新;名冊區塊照常由腳本重生
   consolidate:
     caller: bin/consolidate-memory.py
     purpose: 把超過 14 天的 memory 日期檔整理進 reference/、修正被推翻的敘述(只准改 memory/reference/ 跟 STATE.md)
@@ -52,18 +58,18 @@ points:
     tools: Read,Write,Edit,Glob,Grep
     allowed_tools: ["Edit(./memory/reference/**)", "Edit(./STATE.md)"]
     extra_args: ["--strict-mcp-config", "--no-session-persistence"]
-    schema: llm/consolidate.schema.json
+    output: {format: json, schema: llm/consolidate.schema.json}
     timeout_s: 1200
-    on_failure: caller
+    on_failure: retry_later # 那個專案這次不整理,2 天後再試
   reflect-week:
     caller: bin/reflect_llm.py
     purpose: 每週活動分析(只拿統計 + muninn 的 session 摘要,不拿對話原文)
     model_env: INDEX_MODEL
     model_default: sonnet
     tools: ""
-    schema: llm/reflect-week.schema.json
+    output: {format: json, schema: llm/reflect-week.schema.json}
     timeout_s: 1200
-    on_failure: caller          # 呼叫端只放統計、標「模型呼叫失敗」
+    on_failure: say_so      # 呼叫端只放統計、標「模型呼叫失敗」
   agent-job:
     caller: bin/run-agent-job.sh
     purpose: "排程的 Claude job(專案登錄的 kind: agent);prompt 是 job 自己的"
@@ -72,7 +78,8 @@ points:
     permission_mode: auto
     allow_from_env: AGENT_JOB_ALLOW
     timeout_s: 3600
-    on_failure: caller
+    output: {format: text}
+    on_failure: say_so      # job 失敗,狀態頁標紅
   login-check:
     caller: bin/check-claude-login.py
     purpose: "每小時確認 claude 的登入還能用(launchd 底下的訂閱登入、headless token 各打一次最小的請求);壞了發 Discord"
@@ -80,7 +87,8 @@ points:
     model_default: haiku
     tools: ""
     timeout_s: 120
-    on_failure: caller
+    output: {format: text}
+    on_failure: say_so      # 發 Discord 警報
   mailbox-escalation:
     caller: bin/hubbus(escalate → run-agent-job.sh)
     purpose: "專案信箱的信 12 小時沒人收:在那個專案開 headless session,只寫 memory 筆記、回信、問 owner"
@@ -89,7 +97,8 @@ points:
     tools: Read,Edit,Write,Glob,Grep,Bash
     allowed_tools: ["Edit(./.agent-memory/memory/**)", "Bash(~/agent-hub/bin/hubbus *)"]
     timeout_s: 1800
-    on_failure: caller
+    output: {format: text}
+    on_failure: say_so      # bridge 回報升級失敗
   lease-session:
     caller: bin/lease-runner.py(llm.py exec)
     purpose: "通道租借的 discuss session:長駐的 stream-json 程序,Knas 透過 Muninn 跟專案深談;唯讀"
@@ -100,16 +109,17 @@ points:
     allowed_tools: ["Read", "Glob", "Grep", "WebSearch"]
     extra_allow_env: LEASE_ALLOW        # runner 加:登錄 network 網域的 WebFetch(domain:…)
     stream: true
-    on_failure: caller
+    output: {format: text}
+    on_failure: say_so      # runner 發 process_crashed 事件,手機上看得到
   lease-handover:
     caller: bin/lease-runner.py
     purpose: "收回租約時:接回同一個 session,寫結構化交接(摘要、決定、未決問題、Knas 要做的事、memory 筆記)"
     model_env: LEASE_MODEL
     model_default: sonnet
     tools: ""
-    schema: llm/lease-handover.schema.json
+    output: {format: json, schema: llm/lease-handover.schema.json}
     timeout_s: 600
-    on_failure: caller          # runner 重試一次,再不行產生最小交接(fallback: true)
+    on_failure: default     # runner 重試一次,再不行產生最小交接(fallback: true)——安全結果由 runner 提供,不是登錄
 exempt:
   - file: bin/trajectory.py
     reason: Knas 2026-10-22 決定 4B——手動跑的工具,先維持原樣

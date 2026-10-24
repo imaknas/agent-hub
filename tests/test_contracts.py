@@ -35,6 +35,43 @@ class Markdown(unittest.TestCase):
         self.assertEqual(m.group(1), "task-p-0123456789")
 
 
+class LlmPoints(unittest.TestCase):
+    """判斷點登錄的共用格式(contracts/llm-points.v1.schema.json):自己的登錄要合格,另一邊的寫法也要合格。"""
+
+    def setUp(self):
+        import minischema
+        self.errors = minischema.errors
+        self.schema = json.loads((C / "llm-points.v1.schema.json").read_text())
+
+    def test_own_registry_valid(self):
+        try:
+            import yaml
+        except ImportError:
+            self.skipTest("需要 PyYAML")
+        self.assertEqual(self.errors(self.schema, yaml.safe_load((C / "llm-points.yaml").read_text())), [])
+
+    def test_other_side_example_valid(self):
+        """另一邊的設計文件裡的範例(只有共用欄位 + 它自己的選填欄位)。"""
+        doc = {"v": 1, "points": {"packet_fit": {
+            "caller": "core/prepare.py", "purpose": "判斷職缺對不對口", "model_group": "draft", "material": "personal",
+            "output": {"format": "json", "schema": "llm/packet_fit.schema.json"}, "on_failure": "retry_later",
+            "eval": {"scorer": "field:verdict", "truth": "使用者後來的回答"},
+            "kind": "decide", "labels": ["fit", "not_fit"]}}}
+        self.assertEqual(self.errors(self.schema, doc), [])
+
+    def test_rejects_unknown_field_and_old_values(self):
+        bad = {"v": 1, "points": {"x": {"caller": "a", "purpose": "b", "output": {"format": "text"},
+                                        "on_failure": "caller", "surprise": 1}}}
+        errs = " ".join(self.errors(self.schema, bad))
+        self.assertIn("on_failure", errs)
+        self.assertIn("surprise", errs)
+
+    def test_shared_fields_required(self):
+        errs = " ".join(self.errors(self.schema, {"v": 1, "points": {"x": {"caller": "a"}}}))
+        for f in ("purpose", "output", "on_failure"):
+            self.assertIn(f, errs)
+
+
 class Neutral(unittest.TestCase):
     def test_consumer_facing_contracts_dont_name_the_platform(self):
         """給別的 repo vendor 的契約跟範例不能提這個平台(有開源的 repo)。"""
@@ -42,7 +79,8 @@ class Neutral(unittest.TestCase):
             text = p.read_text()
             for word in ("agent-hub", "librarian", "bin/"):
                 self.assertNotIn(word, text, f"{p.name} 提到 {word}")
-        for p in [C / "lease-runner.v1.schema.json", C / "lease-handover.v1.schema.json"]:  # muninn 也會 vendor
+        for p in [C / "lease-runner.v1.schema.json", C / "lease-handover.v1.schema.json",
+                  C / "llm-points.v1.schema.json"]:  # muninn 也會 vendor
             text = p.read_text()
             for word in ("agent-hub", "librarian", "bin/", "Knas", "muninn"):
                 self.assertNotIn(word, text, f"{p.name} 提到 {word}")
@@ -66,12 +104,17 @@ class Json(unittest.TestCase):
             json.loads(p.read_text())
 
     def test_llm_points_declare_existing_schemas(self):
-        import re
-        text = (C / "llm-points.yaml").read_text()
-        for schema in re.findall(r"schema: (\S+)", text):
-            self.assertTrue((C / schema).exists(), schema)
-        for need in ("on_failure", "purpose", "caller"):
-            self.assertGreaterEqual(text.count(f"    {need}:"), 6, need)
+        """每個判斷點宣告的 output.schema 都存在(必填欄位交給 LlmPoints 用共用格式驗證)。"""
+        try:
+            import yaml
+        except ImportError:
+            self.skipTest("需要 PyYAML")
+        points = yaml.safe_load((C / "llm-points.yaml").read_text())["points"]
+        self.assertGreaterEqual(len(points), 6)
+        for name, spec in points.items():
+            schema = (spec.get("output") or {}).get("schema")
+            if schema:
+                self.assertTrue((C / schema).exists(), f"{name}:{schema}")
 
     def test_hubbus_message(self):
         ev = {"seq": 1, "id": "m1", "ts": "2026-10-22T00:00:00+08:00", "type": "message", "source": "example",

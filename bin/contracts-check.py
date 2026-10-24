@@ -61,8 +61,10 @@ def live(index: dict) -> list[str]:
     todo = HUB / "todo.md"
     if todo.exists():
         errs += [f"todo.md:{e}" for e in contracts.check_todo_md(todo.read_text(), C / "todo-md.v1.md", hubconf.owner_tag())]
-    schema = json.loads((C / "project.v1.schema.json").read_text())
     import minischema
+    pts_schema = json.loads((C / "llm-points.v1.schema.json").read_text())  # 判斷點登錄的共用格式(muninn 也照它檢查)
+    errs += [f"contracts/llm-points.yaml:{e}" for e in minischema.errors(pts_schema, yaml.safe_load((C / "llm-points.yaml").read_text()))]
+    schema = json.loads((C / "project.v1.schema.json").read_text())
     for f in sorted(hubconf.registry_dir().glob("*.yaml")):
         errs += [f"projects/{f.name}:{e}" for e in minischema.errors(schema, yaml.safe_load(f.read_text()))]
     bus = hubconf.bus_db()
