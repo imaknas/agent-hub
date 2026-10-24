@@ -96,6 +96,7 @@ provides:
 - {contract: state-todo, v: 1, schema: contracts/state-todo.v1.md}
 - {contract: reflect-week, v: 1, schema: contracts/reflect-week.v1.schema.json}
 - {contract: project, v: 1, schema: contracts/project.v1.schema.json}
+- {contract: llm-points, v: 1, schema: contracts/llm-points.v1.schema.json}
 consumes:
 - {contract: muninn-handoffs, v: 1, copy: contracts/vendor/muninn/handoffs.v1.schema.json, from: muninn}
 - {contract: muninn-digests, v: 1, copy: contracts/vendor/muninn/digests.v1.schema.json, from: muninn}
