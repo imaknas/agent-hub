@@ -2,9 +2,9 @@
 """claude 的登入還能不能用(平台 job agent-hub/claude-login,每小時)。壞了或快到期就發 Discord。
 
 mini 上 claude 的憑證有三份,各自會壞(2026-10-24 Knas:登入失效時 Muninn 默默改用本機模型是嚴重的 silent fail):
-  1. 訂閱登入,launchd 底下(排程、Muninn、通道租借):keychain。實際打一次最小的請求(llm.py 的 login-check)
-  2. headless token(~/.claude/headless-oauth-token,`claude setup-token`,一年):librarian、回頭清理、lease-resume。
-     帶 CLAUDE_CODE_OAUTH_TOKEN 打一次請求;檔案超過 335 天就提醒(一年到期前 30 天)
+  1. 訂閱登入,launchd 底下(要 claude.ai connector 的 job、Muninn):keychain。實際打一次最小的請求(llm.py 的 login-check)
+  2. headless token(~/.claude/headless-oauth-token,`claude setup-token`,一年):llm.py 預設的憑證(排程、租借、
+     lease-resume)。LLM_AUTH=token 打一次請求;檔案超過 335 天就提醒(一年到期前 30 天)
   3. ~/.claude/.credentials.json(SSH 底下讀不到 keychain 時 claude 用這份):只看 refreshTokenExpiresAt,
      剩不到 7 天就提醒——不讀、不印任何 token
 請求失敗而且是登入問題(Login expired、/login、401、OAuth…)才算登入壞了;逾時、額度之類的只記在輸出,不發警報
@@ -54,27 +54,27 @@ def main() -> int:
     now = datetime.datetime.now()
     hard: list[str] = []
     soft: dict[str, str] = {}
-    base = {k: v for k, v in os.environ.items() if k != "CLAUDE_CODE_OAUTH_TOKEN"}
+    base = {k: v for k, v in os.environ.items() if k not in ("CLAUDE_CODE_OAUTH_TOKEN", "LLM_AUTH")}
 
     if (err := ask(base)) is None:
         print("訂閱登入(launchd):ok")
     elif AUTH.search(err) or "找不到 claude" in err:
-        hard.append(f"claude 的訂閱登入(排程/Muninn/租借用的)不能用了:{err[:200]}——在 mini 上登入(`claude` → /login)")
+        hard.append(f"claude 的訂閱登入(Upwork job、Muninn 用的)不能用了:{err[:200]}——在 mini 上登入(`claude` → /login)")
     else:
         soft["subscription"] = err
 
     if TOKEN.exists():
-        if (err := ask({**base, "CLAUDE_CODE_OAUTH_TOKEN": TOKEN.read_text().strip()})) is None:
+        if (err := ask({**base, "LLM_AUTH": "token"})) is None:
             print("headless token:ok")
         elif AUTH.search(err):
-            hard.append(f"headless token(librarian/回頭清理用的)不能用了:{err[:200]}——重跑 `claude setup-token` 寫進 {TOKEN}")
+            hard.append(f"headless token(所有排程跟租借用的)不能用了:{err[:200]}——重跑 `claude setup-token` 寫進 {TOKEN}")
         else:
             soft["token"] = err
         age = now - datetime.datetime.fromtimestamp(TOKEN.stat().st_mtime)
         if age > TOKEN_WARN_AGE:
             hard.append(f"headless token 已經 {age.days} 天(一年到期),快要重跑 `claude setup-token` 寫進 {TOKEN}")
     else:
-        hard.append(f"沒有 {TOKEN}(librarian/回頭清理會失敗)")
+        hard.append(f"沒有 {TOKEN}(所有排程跟租借都會失敗)")
 
     if CREDS.exists():
         try:

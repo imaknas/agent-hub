@@ -263,10 +263,7 @@ memory/ 的結構:
 def run_model(prompt: str, repo: pathlib.Path, model: str) -> tuple[dict | None, str]:
     # 判斷點 consolidate(權限 dontAsk、只准 Edit memory/reference/** 跟 STATE.md、schema:contracts/llm-points.yaml)
     cmd = ["/opt/homebrew/bin/python3", str(HUB / "bin" / "llm.py"), "run", "consolidate", "--model", model]
-    env = dict(GIT_ENV)
-    token = HOME / ".claude" / "headless-oauth-token"
-    if token.is_file():
-        env["CLAUDE_CODE_OAUTH_TOKEN"] = token.read_text().strip()
+    env = dict(GIT_ENV)  # claude 的憑證由 llm.py 決定(預設 headless token)
     try:
         r = subprocess.run(cmd, input=prompt, cwd=repo, env=env, capture_output=True, text=True, timeout=CALL_TIMEOUT + 60)
     except subprocess.TimeoutExpired:

@@ -20,7 +20,8 @@
 # 自動進 memory),job 只准 append 筆記,不碰專案程式碼。
 #
 # 用 claude.ai 訂閱登入(mini 的 keychain;launchd 底下讀得到,SSH 底下讀不到),
-# 刻意不用 CLAUDE_CODE_OAUTH_TOKEN:有那個變數時 claude.ai connector(Upwork 等)不會載入。
+# 憑證由 llm.py 決定:預設 headless token;登錄 job 寫 connectors: true 的(Upwork 等 claude.ai connector)
+# 會帶 LLM_AUTH=subscription,用訂閱登入——有 CLAUDE_CODE_OAUTH_TOKEN 時 connector 不會載入。
 set -uo pipefail
 
 HUB="$HOME/agent-hub"

@@ -27,6 +27,8 @@ schema v1(contracts/project.v1.md 有完整說明):
     every: 15m / 1h;cwd: runtime(預設,有 runtime 時)| workspace | hub | state(只有 agent job:在自己的
       狀態目錄跑,不載入專案的設定/MCP)
     after: [job](同專案)或 [專案/job]
+    connectors: true(只有 agent job):要 claude.ai connector(Upwork 等)→ 用訂閱登入,不用預設的 headless token
+      (allow 有 mcp__claude_ai_ 的工具卻沒寫就不合格)
     legacy_name: schedule.yaml 裡的舊名稱——舊名稱還在 schedule.yaml 時這個 job 不採用(切換期間
                  舊的優先,刪掉 schedule.yaml 那一項就切過來;狀態也從舊名稱搬過來)
 驗證:未知的欄位、名稱重複、after 指到不存在的 job、run/deploy/test 的第一個字找不到(相對 cwd 的
@@ -58,7 +60,7 @@ CACHE = hubconf.STATE / "registry"
 TOP = {"v", "name", "paths", "memory", "privacy", "runtime", "push_on_merge", "mailbox", "publishes",
        "provides", "consumes", "services", "jobs", "enforce", "network", "allow_write", "gate"}
 JOB = {"name", "at", "every", "run", "kind", "prompt", "cwd", "days", "days_of_month", "months", "until",
-       "between", "background", "after", "max_attempts_per_day", "legacy_name", "allow"}
+       "between", "background", "after", "max_attempts_per_day", "legacy_name", "allow", "connectors"}
 SERVICE = {"name", "run", "label", "keepalive", "interval_s", "throttle_s", "env", "cwd", "log", "expose"}
 DAYS = {"mon", "tue", "wed", "thu", "fri", "sat", "sun"}
 EVERY = re.compile(r"^(\d+)(m|h)$")
@@ -172,6 +174,10 @@ def validate(doc, stem: str) -> list[str]:
         if job.get("allow") is not None and (not isinstance(job["allow"], list)
                                              or not all(isinstance(x, str) and x for x in job["allow"])):
             errs.append(f"job {n}:allow 要是權限規則字串的 list")
+        if "connectors" in job and not isinstance(job["connectors"], bool):
+            errs.append(f"job {n}:connectors 要是 true/false")
+        if any(str(x).startswith("mcp__claude_ai_") for x in job.get("allow") or []) and not job.get("connectors"):
+            errs.append(f"job {n}:allow 有 claude.ai connector 的工具,要加 connectors: true(預設的 headless token 不載入 connector)")
         if job.get("kind", "command") == "agent":
             prompt = hubconf.registry_dir() / stem / (job.get("prompt") or f"jobs/{n}.md")
             if not prompt.exists():
@@ -254,6 +260,8 @@ def scheduler_jobs(index: dict, legacy_names: set[str]) -> tuple[list[dict], lis
                        f"{shlex.quote(str(cwd))} {shlex.quote(str(prompt))}")
                 if job.get("allow"):  # 無人值守的權限:只准這些(llm.py 的 agent-job 判斷點會改用 dontAsk)
                     cmd = f"AGENT_JOB_ALLOW={shlex.quote(json.dumps(job['allow'], ensure_ascii=False))} {cmd}"
+                if job.get("connectors"):  # 要 claude.ai connector:用訂閱登入,不用預設的 headless token
+                    cmd = f"LLM_AUTH=subscription {cmd}"
             else:
                 cmd = f"cd {shlex.quote(str(cwd))} && {job['run']}"
             j = {"name": full, "command": cmd, "project": name}

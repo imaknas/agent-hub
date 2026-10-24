@@ -7,6 +7,9 @@
 #              (librarian:不推進 checkpoint、隔晚重試;consolidate:那個專案這次不整理)
 #   default  → llm.py 印 {"is_error": true, "structured_output": <default>, ...}、exit 0,呼叫端照用安全預設
 # 不管哪種都在匯流排記 job.failed(point、原因)。
+#
+# auth:token(預設,~/.claude/headless-oauth-token)| subscription(訂閱登入;claude.ai connector 只有這樣才載入)。
+#   呼叫端的 LLM_AUTH 環境變數優先(登錄 job 的 connectors: true 會設 LLM_AUTH=subscription)。
 v: 1
 points:
   librarian-state:
@@ -73,6 +76,7 @@ points:
   login-check:
     caller: bin/check-claude-login.py
     purpose: "每小時確認 claude 的登入還能用(launchd 底下的訂閱登入、headless token 各打一次最小的請求);壞了發 Discord"
+    auth: subscription            # 檢查 token 那次呼叫端設 LLM_AUTH=token
     model_default: haiku
     tools: ""
     timeout_s: 120

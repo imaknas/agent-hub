@@ -210,8 +210,10 @@ memory 追蹤但不需要在 mini 上執行任何東西的專案(目前大多數
   claude 用 nvm 預設版本底下的 npm 全域那份,自己會在執行時更新;平台 job `agent-hub/update-claude`(每晚 01:15,
   `bin/update-claude.py`)是保險:沒更新到就裝最新、裝不起來就裝回舊版並失敗。Desktop 的 SSH session 用它自己推過來的
   `~/.claude/remote/ccd-cli/<版本>`,不用管
-  **claude 的登入有三份**(launchd 的 keychain 訂閱登入、`~/.claude/headless-oauth-token`、SSH 用的 `~/.claude/.credentials.json`):
-  平台 job `agent-hub/claude-login`(每小時,`bin/check-claude-login.py`)實際打請求/看到期日,壞了或快到期發 Discord
+  **claude 的憑證**:平台所有 `claude -p`(`llm.py`)預設用 `~/.claude/headless-oauth-token`(`claude setup-token`,一年);
+  要 claude.ai connector 的 job 在登錄寫 `connectors: true`(例:project-39/daily-check)才用訂閱登入(keychain)。
+  SSH 底下的互動 claude 用 `~/.claude/.credentials.json`。平台 job `agent-hub/claude-login`(每小時,
+  `bin/check-claude-login.py`)實際打請求/看到期日,壞了或快到期發 Discord
 - **平行 session 的合併閘門** `bin/merge-branch`(在 session 自己的 worktree 跑):rebase → 登錄的
   `runtime.test` → fast-forward main(主 checkout)→ 只有登錄 `push_on_merge: true` 才 push;匯流排記
   `merge.done`/`merge.failed`/`session.report`。狀態頁列各專案的 worktree、兩個 branch 改同一檔、

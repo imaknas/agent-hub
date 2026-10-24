@@ -6,8 +6,6 @@
 set -uo pipefail
 export PATH="/opt/homebrew/bin:/usr/local/bin:$PATH"
 HUB="$HOME/agent-hub"
-TOKEN_FILE="$HOME/.claude/headless-oauth-token"
-[ -r "$TOKEN_FILE" ] && export CLAUDE_CODE_OAUTH_TOKEN="$(cat "$TOKEN_FILE")"
 INDEX_MODEL="sonnet"
 [ -f "$HUB/models.env" ] && source "$HUB/models.env"
 export INDEX_MODEL

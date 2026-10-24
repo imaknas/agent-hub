@@ -17,11 +17,7 @@
 set -uo pipefail
 export PATH="/opt/homebrew/bin:/usr/local/bin:$PATH"
 
-TOKEN_FILE="$HOME/.claude/headless-oauth-token"
-if [ -r "$TOKEN_FILE" ]; then
-  export CLAUDE_CODE_OAUTH_TOKEN
-  CLAUDE_CODE_OAUTH_TOKEN="$(cat "$TOKEN_FILE")"
-fi
+# claude 的憑證由 bin/llm.py 決定(預設 ~/.claude/headless-oauth-token)
 
 HUB="$HOME/agent-hub"
 STATE_DIR="$HUB/.state"

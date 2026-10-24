@@ -8,6 +8,11 @@
         {"type": "result", "is_error": true, "structured_output": <default 或 null>, "llm_point": …, "llm_error": …}
         on_failure: caller → exit 1;default → exit 0
   llm.py lint     列出 bin/ 裡繞過這支的 `claude -p`(contracts-check 用)
+
+憑證(2026-10-24 Knas 決定統一):預設用 ~/.claude/headless-oauth-token(`claude setup-token`,一年,launchd/SSH 都一樣,
+只有一份要換);判斷點宣告 `auth: subscription`、或呼叫端設 LLM_AUTH=subscription(登錄 job 的 `connectors: true`)
+才用訂閱登入(keychain / .credentials.json)——claude.ai connector(Upwork 等)只有訂閱登入才會載入。
+要用 token 卻沒有 token 檔就失敗(不默默改用訂閱登入;agent-hub/claude-login 也會發警報)。
 """
 from __future__ import annotations
 
@@ -26,6 +31,7 @@ import minischema  # noqa: E402
 import yaml  # noqa: E402
 
 POINTS = hubconf.ROOT / "contracts" / "llm-points.yaml"
+TOKEN_FILE = pathlib.Path.home() / ".claude" / "headless-oauth-token"
 CALL = re.compile(r"""(\bclaude\s+-p\b|["']claude["']\s*,\s*["']-p["'])""")
 
 
@@ -46,6 +52,17 @@ def fail(point: str, spec: dict, reason: str) -> int:
     print(json.dumps({"type": "result", "is_error": True, "structured_output": default,
                       "llm_point": point, "llm_error": reason}, ensure_ascii=False))
     return 0 if spec.get("on_failure") == "default" else 1
+
+
+def auth_env(spec: dict) -> tuple[dict | None, str]:
+    """(claude 的環境變數, 用哪種憑證)。用 token 卻沒有 token 檔 → (None, …)。"""
+    want = os.environ.get("LLM_AUTH") or spec.get("auth") or "token"
+    env = {k: v for k, v in os.environ.items() if k not in ("CLAUDE_CODE_OAUTH_TOKEN", "LLM_AUTH")}
+    if want == "token":
+        if not TOKEN_FILE.is_file():
+            return None, want
+        env["CLAUDE_CODE_OAUTH_TOKEN"] = TOKEN_FILE.read_text().strip()
+    return env, want
 
 
 def run(a) -> int:
@@ -74,6 +91,9 @@ def run(a) -> int:
     if allowed:
         cmd += ["--allowedTools", *allowed]
     cmd += list(spec.get("extra_args") or []) + list(a.extra or [])
+    env, auth = auth_env(spec)
+    if env is None:
+        return fail(a.point, spec, f"沒有 {TOKEN_FILE}(預設用 headless token;要用訂閱登入就宣告 auth: subscription)")
     if a.cmd == "exec":
         # 長駐的串流 session(例:通道租借):旗標照宣告組好,直接換成 claude,stdin/stdout 交給呼叫的人
         if not spec.get("stream"):
@@ -81,14 +101,15 @@ def run(a) -> int:
             return 2
         cmd[1:3] = ["-p"]  # exec 模式沒有 prompt 參數,訊息從 stdin(stream-json)來
         cmd += ["--input-format", "stream-json", "--output-format", "stream-json", "--include-partial-messages", "--verbose"]
-        os.execvp(cmd[0], cmd)
+        os.execvpe(cmd[0], cmd, env)
     cmd += ["--output-format", "json"]
     schema = None
     if spec.get("schema"):
         schema = json.loads((POINTS.parent / spec["schema"]).read_text())
         cmd += ["--json-schema", json.dumps(schema, ensure_ascii=False)]
     try:
-        r = subprocess.run(cmd, cwd=a.cwd or None, capture_output=True, text=True, timeout=spec.get("timeout_s", 1200))
+        r = subprocess.run(cmd, cwd=a.cwd or None, capture_output=True, text=True, timeout=spec.get("timeout_s", 1200),
+                           env=env)
     except subprocess.TimeoutExpired:
         return fail(a.point, spec, f"超過 {spec.get('timeout_s', 1200) // 60} 分鐘")
     except FileNotFoundError:
