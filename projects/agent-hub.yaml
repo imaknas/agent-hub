@@ -1,4 +1,4 @@
-# 專案登錄(schema v1,見 bin/registry.py);由 registry-migrate.py import 產生,之後直接改這個檔
+# 專案登錄(schema v1,見 bin/registry.py);直接改這個檔
 # consolidate-memory:把超過 14 天的 memory 日期檔整理進 reference/、修正被推翻的敘述(opus,一晚最多 3 個
 #   專案、每個專案最多一週一次,沒有夠舊的日期檔就零 LLM 跳過)。背景跑;librarian 用 after: 等它跑完,拿到的是
 #   整理過的副本。腳本 30 分鐘後不開新專案、單次呼叫上限 20 分鐘,正常約 02:50 前結束。失敗不重試(LLM job)。

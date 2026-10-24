@@ -21,8 +21,9 @@ SSH 開 mini 上的資料夾,MBP 斷線/沒電 session 也繼續跑。MBP 上的
 
 - **想知道某個專案現在狀態、綁定哪些服務、STATE.md 寫什麼**:
   `bin/overview.sh [專案名稱]`(不帶參數列出全部)
-- **有哪些專案被 onboard 過**:`onboarded-projects.tsv`(`local_path` 是 mini 上的位置;以前在 MBP
-  的位置、改名前的路徑在 `legacy-paths.tsv`,只給統計舊對話用)
+- **有哪些專案被 onboard 過**:專案登錄 `projects/<name>.yaml`(`paths.workspace` 是 mini 上的位置;
+  `bin/hubconf.py roster` 一個專案一行列出名稱/路徑/origin/memory bare repo,shell 腳本用這個讀);
+  以前在 MBP 的位置、改名前的路徑在 `legacy-paths.tsv`,只給統計舊對話用
 - **mini 上有哪些背景服務在跑**:`services.tsv`
 - **有哪些 GitHub repo 被 mirror 備份**:`mirror-list.txt`
 - **跨專案還有哪些事沒做(誰能做)**:`todo.md`(librarian 每晚重生)
@@ -95,7 +96,7 @@ SSH 開 mini 上的資料夾,MBP 斷線/沒電 session 也繼續跑。MBP 上的
   都不該改成 `git add -A`——agent-hub 自己的 hook 2026-09-22 才因為這個
   問題被修過,見 git log
 - `bin/with-lock.sh`——避免多個 session 同時操作同一個 git repo 互撞
-- `bin/gen-index-roster.sh`——從 `onboarded-projects.tsv` 機械重生
+- `bin/gen-index-roster.sh`——從專案登錄機械重生
   `index.md` 的專案名冊區塊(`roster:begin/end` 之間),librarian 每次跑、
   `onboard-project.sh` 登記時都會呼叫。名冊不交給 LLM 判斷,LLM 只寫區塊外
   的註記
@@ -187,7 +188,7 @@ SSH 開 mini 上的資料夾,MBP 斷線/沒電 session 也繼續跑。MBP 上的
   kickstart` + 健康檢查),例:project-15、project-16。不是 rsync、
   不是 `onboard-project.sh`,也不是手動 ssh 進去 pull
 - `~/workspace/<name>/`——**所有專案的開發副本**(含 `.agent-memory` worktree;就是
-  `onboarded-projects.tsv` 的 `local_path`),給 Claude Desktop 透過 SSH 在 mini 上開 session 用
+  登錄的 `paths.workspace`),給 Claude Desktop 透過 SSH 在 mini 上開 session 用
   (MBP 只當遙控端;2026-10-14 project-16 試行,10-15 全部搬完)。新專案用 `onboard-project.sh`
   建在這裡,救援用 `recover-project.sh`;memory remote 直接指向本機 bare repo。不要在這裡跑服務
   (那是 `~/services/`),也不要拿 `~/.memory-copies/` 當開發副本。MBP 上的舊資料夾是備份,
@@ -248,7 +249,7 @@ memory 追蹤但不需要在 mini 上執行任何東西的專案(目前大多數
   的專用 session 做(2026-10-15 前在 MBP 的 `~/agent-hub`;MBP 那份現在只 pull,不在那裡改),它負責 commit+push。其他專案的 session 發現 agent-hub
   的問題,只通知(`hubbus send --to agent-hub`,或告訴使用者),不直接改——2026-09-25
   兩個 session 同時改這份 working tree,commit 互相夾帶對方改到一半的檔案
-- **腳本寫的被版控檔案**(`onboarded-projects.tsv`、`mirror-list.txt`、
+- **腳本寫的被版控檔案**(`projects/<name>.yaml`(onboard/rename/manifest.update)、`mirror-list.txt`、
   `index.md`、`todo.md`、`reflect/`、`schedule.yaml`、`models.env`、`digest/`、`review-log.md`):
   寫檔的腳本自己用 `bin/commit-hub-files.sh` 只 commit 那幾個檔案,所以
   `onboard-project.sh` 從哪個 session 跑都安全

@@ -27,6 +27,7 @@ import sys
 import zoneinfo
 
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
+import hubconf  # noqa: E402
 import hublib  # noqa: E402
 
 TZ = zoneinfo.ZoneInfo("Asia/Taipei")
@@ -63,10 +64,9 @@ def git_count(repo: pathlib.Path, since: datetime.datetime, until: datetime.date
 
 
 def mirror_for(name: str) -> pathlib.Path:
-    for line in hublib.MANIFEST.read_text().splitlines()[1:]:
-        cols = line.split("\t")
-        if cols and cols[0] == name and len(cols) > 2 and cols[2].endswith(".git"):
-            return MIRRORS / pathlib.Path(cols[2]).name
+    origin = hubconf.roster().get(name, {}).get("origin") or ""
+    if origin.endswith(".git"):
+        return MIRRORS / pathlib.Path(origin).name
     if name == "agent-hub":
         return hublib.HOME / "git-origin" / "agent-hub.git"
     return MIRRORS / f"{name}.git"

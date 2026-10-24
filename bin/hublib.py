@@ -9,10 +9,11 @@ import pathlib
 import re
 from typing import Iterable, Iterator, NamedTuple
 
+import hubconf  # 同在 bin/;用 hublib 的腳本都已經把 bin/ 放進 sys.path
+
 HOME = pathlib.Path.home()
 HUB = HOME / "agent-hub"
-MANIFEST = HUB / "onboarded-projects.tsv"
-# 2026-10-15 起所有專案都在 mini 的 ~/workspace/<name>(manifest 的 local_path 就是這個)。
+# 2026-10-15 起所有專案都在 mini 的 ~/workspace/<name>(登錄的 paths.workspace 就是這個)。
 # 之前在 MBP 上的位置(以及改名前的路徑)記在 legacy-paths.tsv:transcript 資料夾名稱是用
 # 當時的路徑算的,統計舊對話要靠它。
 LEGACY_PATHS = HUB / "legacy-paths.tsv"
@@ -63,10 +64,10 @@ def slug_for_path(path: str) -> str:
 def project_paths() -> dict[str, list[str]]:
     """專案名稱 → 現在的路徑(mini 的 ~/workspace)+ 以前的路徑(legacy-paths.tsv)。"""
     out: dict[str, list[str]] = {}
-    for line in MANIFEST.read_text().splitlines()[1:]:
-        if line.strip():
-            name, path = line.split("\t")[:2]
-            out.setdefault(name, []).append(path)
+    for name, paths in hubconf.roster().items():
+        ws = paths.get("workspace")
+        if ws:  # ~ 是 mini 的家目錄(transcript 資料夾名稱照 mini 的路徑算),在 MBP 上跑也一樣
+            out.setdefault(name, []).append(MINI_HOME + ws[1:] if ws.startswith("~/") else ws)
     for name, path in EXTRA_PROJECTS.items():
         out.setdefault(name, []).append(path)
     for name, paths in legacy_paths().items():

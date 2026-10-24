@@ -10,7 +10,7 @@
 #   的記憶。
 #
 #   recover-project.sh 假設 mini 上的 agent-memory 分支歷史還在(從
-#   onboarded-projects.tsv 查 memory_bare_repo),只是把本機工作副本重新接
+#   專案登錄 projects/<name>.yaml 查 memory_bare),只是把本機工作副本重新接
 #   上那個既有分支,不建立任何新的 branch/bare repo。
 #
 # 前置條件不滿足就直接失敗退出,不會自己猜著做。
@@ -21,17 +21,17 @@ set -euo pipefail
 MINI_HOST="hub-host"
 AGENT_HUB="$HOME/agent-hub"
 TEMPLATES="$AGENT_HUB/templates"
-MANIFEST="$AGENT_HUB/onboarded-projects.tsv"
+REGISTRY="$AGENT_HUB/projects"
 
 fail() { echo "recover-project: $1" >&2; exit 1; }
 
 [ $# -ge 1 ] || fail "用法: recover-project.sh <name> [目標路徑]"
 NAME="$1"
 
-[ -f "$MANIFEST" ] || fail "找不到 $MANIFEST——先確認 agent-hub 本身已經 clone 好"
+[ -d "$REGISTRY" ] || fail "找不到 $REGISTRY——先確認 agent-hub 本身已經 clone 好"
 
-row=$(awk -F'\t' -v n="$NAME" '$1==n{print; found=1} END{exit !found}' "$MANIFEST") \
-  || fail "在 $MANIFEST 裡找不到 '$NAME'——確認名稱拼對了,或這個專案本來就沒登記過"
+row=$(python3 "$AGENT_HUB/bin/hubconf.py" roster | awk -F'\t' -v n="$NAME" '$1==n{print; found=1} END{exit !found}') \
+  || fail "專案登錄($REGISTRY)裡找不到 '$NAME'——確認名稱拼對了,或這個專案本來就沒登記過"
 
 origin_url=$(echo "$row" | cut -f3)
 memory_bare_repo=$(echo "$row" | cut -f4)

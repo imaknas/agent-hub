@@ -2,7 +2,7 @@
 # 給 agent 用的集中化總覽:每個專案的路徑/origin、跟它綁定的服務(有沒有
 # 在跑,如果這台機器上跑得到 launchctl 的話)、還有它目前的 STATE.md。
 #
-# 刻意不做成另一份要手動維護、會跟真相脫節的檔案——onboarded-projects.tsv、
+# 刻意不做成另一份要手動維護、會跟真相脫節的檔案——專案登錄(projects/*.yaml)、
 # services.tsv、每個專案自己的 .agent-memory/STATE.md 已經是三個獨立但
 # 各自準確的真相來源,這支腳本只是每次執行時即時把三個接起來顯示,不儲存
 # 任何自己的狀態。
@@ -11,14 +11,12 @@
 set -uo pipefail
 
 AGENT_HUB="$HOME/agent-hub"
-PROJECTS="$AGENT_HUB/onboarded-projects.tsv"
 SERVICES="$AGENT_HUB/services.tsv"
 
-[ -f "$PROJECTS" ] || { echo "overview: 找不到 $PROJECTS" >&2; exit 1; }
 
 FILTER="${1:-}"
 
-tail -n +2 "$PROJECTS" | while IFS=$'\t' read -r name local_path origin memory_bare_repo; do
+python3 "$AGENT_HUB/bin/hubconf.py" roster | while IFS=$'\t' read -r name local_path origin memory_bare_repo; do
   [ -z "$name" ] && continue
   [ -n "$FILTER" ] && [ "$name" != "$FILTER" ] && continue
 

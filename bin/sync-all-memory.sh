@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# 對 onboarded-projects.tsv 裡每個本機有 .agent-memory 的專案,補跑一次
+# 對專案登錄(projects/*.yaml)裡每個本機有 .agent-memory 的專案,補跑一次
 # memory 同步——SessionEnd/PreCompact hook 的安全網。session 沒正常結束
 # (當掉、一直開著沒關)的話,當天寫的 memory/ 筆記會一直留在 MBP 本機,
 # mini 上的 librarian 看不到。
@@ -15,7 +15,6 @@
 set -uo pipefail
 
 HUB="$HOME/agent-hub"
-MANIFEST="$HUB/onboarded-projects.tsv"
 LOG_DIR="$HUB/.logs"
 mkdir -p "$LOG_DIR"
 LOG="$LOG_DIR/sync-all-memory-$(date +%Y-%m-%d).log"
@@ -43,7 +42,7 @@ export AGENT_HUB_OFFLINE="$OFFLINE"
 # manifest 的路徑從 2026-10-15 起就是 mini 的 ~/workspace/<name>;另外掃一次 ~/workspace,
 # 涵蓋還沒登記的資料夾。同一個路徑只做一次。
 {
-  tail -n +2 "$MANIFEST" | cut -f1,2
+  python3 "$HUB/bin/hubconf.py" roster | cut -f1,2
   for d in "$HOME"/workspace/*/; do
     [ -d "$d.agent-memory" ] && printf '%s\t%s\n' "$(basename "$d")" "${d%/}"
   done

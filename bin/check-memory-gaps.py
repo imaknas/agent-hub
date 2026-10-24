@@ -23,6 +23,7 @@ import subprocess
 import sys
 
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
+import hubconf  # noqa: E402
 import hublib  # noqa: E402
 
 TRANSCRIPTS = hublib.TRANSCRIPT_ROOTS
@@ -55,7 +56,7 @@ def main() -> None:
     args = ap.parse_args()
     since = datetime.datetime.now(datetime.timezone.utc) - datetime.timedelta(hours=args.window_hours)
 
-    onboarded = {l.split("\t")[0] for l in hublib.MANIFEST.read_text().splitlines()[1:] if l.strip()}
+    onboarded = set(hubconf.roster())
     for name, paths in hublib.project_paths().items():
         if name not in onboarded:
             continue  # agent-hub / project-29 沒有 memory 副本

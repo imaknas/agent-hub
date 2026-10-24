@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# 從 onboarded-projects.tsv 機械產生 index.md 裡的「專案名冊」區塊。
+# 從專案登錄(projects/*.yaml,bin/hubconf.py roster)機械產生 index.md 裡的「專案名冊」區塊。
 #
 # 為什麼要有這支:index.md 原本整份交給 librarian 的 LLM 步驟維護,專案清單
 # 只會出現模型「自己決定要寫」的專案——2026-09-25 檢查時 19 個已 onboard 的
@@ -8,7 +8,7 @@
 #
 # 分工:
 # - 名冊區塊(<!-- roster:begin --> 到 <!-- roster:end -->)只由這支腳本寫,
-#   內容只取 onboarded-projects.tsv,不讀任何機器相依的狀態,所以在 MBP 或
+#   內容只取專案登錄,不讀任何機器相依的狀態,所以在 MBP 或
 #   mini 跑出來的結果一模一樣,不會互相覆蓋造成 diff 抖動。
 # - 區塊外的註記/跨專案關聯才是 librarian LLM 的工作範圍。
 #
@@ -18,20 +18,20 @@
 set -euo pipefail
 
 HUB="${AGENT_HUB:-$HOME/agent-hub}"
-TSV="$HUB/onboarded-projects.tsv"
 INDEX="$HUB/index.md"
 
-[ -f "$TSV" ] || { echo "gen-index-roster: 找不到 $TSV" >&2; exit 1; }
 [ -f "$INDEX" ] || printf '# agent-hub index\n' > "$INDEX"
 
-block=$(mktemp); out=$(mktemp)
-trap 'rm -f "$block" "$out"' EXIT
+block=$(mktemp); out=$(mktemp); rows=$(mktemp)
+trap 'rm -f "$block" "$out" "$rows"' EXIT
+AGENT_HUB_ROOT="$HUB" python3 "$HUB/bin/hubconf.py" roster > "$rows"
+[ -s "$rows" ] || { echo "gen-index-roster: 專案登錄是空的($HUB/projects)" >&2; exit 1; }
 
 {
-  echo "<!-- roster:begin — 由 bin/gen-index-roster.sh 從 onboarded-projects.tsv 產生,不要手動改 -->"
+  echo "<!-- roster:begin — 由 bin/gen-index-roster.sh 從專案登錄產生,不要手動改 -->"
   echo "| 專案 | 路徑(mini) |"
   echo "|---|---|"
-  tail -n +2 "$TSV" | awk -F'\t' 'NF && $1!="" {print $1 "\t" $2}' | sort \
+  cut -f1,2 "$rows" | sort \
     | while IFS=$'\t' read -r name path; do
         echo "| \`$name\` | \`$path\` |"
       done
@@ -57,5 +57,5 @@ if cmp -s "$out" "$INDEX"; then
   echo "gen-index-roster: 名冊沒有變化"
 else
   cat "$out" > "$INDEX"
-  echo "gen-index-roster: 名冊已更新($(tail -n +2 "$TSV" | grep -c .) 個專案)"
+  echo "gen-index-roster: 名冊已更新($(grep -c . "$rows") 個專案)"
 fi

@@ -8,7 +8,7 @@
 # origin 已經指向新 URL 才跑這支);改專案程式碼裡的名稱(專案自己的事)。
 #
 # 前置條件不滿足就直接失敗,不猜:
-#   - <old> 在 onboarded-projects.tsv 裡、<new> 不在
+#   - <old> 在專案登錄(projects/*.yaml)裡、<new> 不在
 #   - 本機資料夾存在,主 repo 沒有未 commit 的追蹤檔變更
 #   - .agent-memory 乾淨而且已經 push
 #   - 本機專案 origin 已經是新的 URL(或用 --origin 指定)
@@ -23,7 +23,6 @@
 set -euo pipefail
 
 HUB="$HOME/agent-hub"
-MANIFEST="$HUB/onboarded-projects.tsv"
 MIRRORS="$HUB/mirror-list.txt"
 LEGACY="$HUB/legacy-paths.tsv"
 . "$HUB/bin/minilib.sh"
@@ -43,9 +42,10 @@ while [ $# -gt 0 ]; do
 done
 [[ "$NEW" =~ ^[a-z0-9][a-z0-9-]*$ ]] || fail "新名稱只能用小寫英數跟 -:$NEW"
 
-row=$(awk -F'\t' -v n="$OLD" '$1==n' "$MANIFEST")
-[ -n "$row" ] || fail "$MANIFEST 裡沒有 '$OLD'"
-awk -F'\t' -v n="$NEW" '$1==n{f=1} END{exit !f}' "$MANIFEST" && fail "'$NEW' 已經登記過了"
+ROSTER=$(python3 "$HUB/bin/hubconf.py" roster)
+row=$(awk -F'\t' -v n="$OLD" '$1==n' <<<"$ROSTER")
+[ -n "$row" ] || fail "專案登錄裡沒有 '$OLD'"
+awk -F'\t' -v n="$NEW" '$1==n{f=1} END{exit !f}' <<<"$ROSTER" && fail "'$NEW' 已經登記過了"
 OLD_PATH=$(echo "$row" | cut -f2); OLD_ORIGIN=$(echo "$row" | cut -f3)
 if [ -z "$NEW_PATH" ]; then
   # 資料夾名稱就是專案名稱(~/workspace/<name> 的慣例)時,跟著改名
@@ -71,7 +71,7 @@ mini_sh "[ -d ~/git-origin/$OLD-memory.git ] && [ ! -e ~/git-origin/$NEW-memory.
 
 cat <<PLAN
 rename-project: $OLD → $NEW
-  onboarded-projects.tsv  name $OLD → $NEW
+  projects/<name>.yaml    name $OLD → $NEW
                           path $OLD_PATH → $NEW_PATH
                           origin $OLD_ORIGIN → $NEW_ORIGIN
                           memory ~/git-origin/$OLD-memory.git → ~/git-origin/$NEW-memory.git
@@ -130,9 +130,8 @@ fi
 echo "[本機] remote / 資料夾 / worktree 已更新"
 
 # --- 登記 ---
-# 專案登錄是正本(job、service、隱私標籤都在裡面,一起搬);onboarded-projects.tsv 從登錄重新產生
+# 專案登錄是正本(job、service、隱私標籤都在裡面,一起搬)
 /opt/homebrew/bin/python3 "$HUB/bin/registry.py" rename "$OLD" "$NEW" "$NEW_PATH" "$NEW_ORIGIN" "~/git-origin/$NEW-memory.git" \
-  && /opt/homebrew/bin/python3 "$HUB/bin/registry.py" tsv \
   || fail "專案登錄改名失敗(projects/$OLD.yaml → $NEW.yaml),其他步驟已經做完,手動補登錄"
 # 舊名稱的 transcript 要算到新名稱:legacy-paths.tsv 的名稱改掉,搬走的舊路徑也記進去
 awk -F'\t' -v OFS='\t' -v o="$OLD" -v n="$NEW" '$1==o{$1=n} {print}' "$LEGACY" > "$LEGACY.tmp" && mv "$LEGACY.tmp" "$LEGACY"
@@ -143,5 +142,5 @@ fi
 "$HUB/bin/gen-index-roster.sh"
 "$HUB/bin/commit-hub-files.sh" "rename project $OLD → $NEW (rename-project.sh)" \
     "projects/$OLD.yaml" "projects/$NEW.yaml" "projects/$OLD" "projects/$NEW" \
-    onboarded-projects.tsv legacy-paths.tsv mirror-list.txt index.md
+    legacy-paths.tsv mirror-list.txt index.md
 echo "完成:${OLD} → ${NEW}。在 ${NEW_PATH} 開新的 Claude session(舊 session 的工作目錄已經不在了)。"

@@ -5,13 +5,19 @@
   - 設定:<hub>/hub.json
   - 專案登錄:<registry_dir>/<name>.yaml(人改的 YAML),scheduler 每個 tick 用 registry.py
     驗證後寫成 <hub>/.state/registry/index.json——這裡讀的是那份 JSON(不需要 PyYAML);
-    還沒產生的話退回舊的 onboarded-projects.tsv(切換期間)
+    還沒產生的話(新機器、MBP)退回 roster():直接從 YAML 檔讀名稱跟 paths
+
+給 shell 腳本用(任何 python3 都能跑):
+  hubconf.py roster    每個專案一行 name<TAB>workspace<TAB>origin<TAB>memory_bare,沒有標題列;
+                       workspace 展開 ~、沒有 origin 印 (native)、memory_bare 前面加 hub.json 的 memory_host:
 """
 from __future__ import annotations
 
 import json
 import os
 import pathlib
+import re
+import sys
 
 ROOT = pathlib.Path(os.environ.get("AGENT_HUB_ROOT") or pathlib.Path(__file__).resolve().parents[1])
 _cfg: dict | None = None
@@ -115,22 +121,39 @@ def owner_tag() -> str:
     return get("owner.tag", "Owner")
 
 
+_PATHS_LINE = re.compile(r"^\s+(\w+):\s*(.*?)\s*(?:#.*)?$")
+
+
+def roster() -> dict[str, dict]:
+    """登錄裡有哪些專案(平台自己除外)→ 它的 paths(原始字串,~ 沒展開)。
+
+    直接讀 <registry_dir>/*.yaml 的檔名跟 `paths:` 區塊:不驗證、不需要 PyYAML、不靠 .state 的快取,
+    所以新機器(recover)、MBP、系統的 python3 都能用。要驗證過的完整登錄用 projects()。"""
+    out = {}
+    d = registry_dir()
+    for f in sorted(d.glob("*.yaml")) if d and d.is_dir() else []:
+        if f.stem == hub_project():
+            continue
+        paths, inside = {}, False
+        for line in f.read_text().splitlines():
+            if line.split("#")[0].rstrip() == "paths:":
+                inside = True
+            elif inside and (m := _PATHS_LINE.match(line)):
+                paths[m.group(1)] = m.group(2).strip("'\"") or None
+            elif inside and line.strip() and not line.lstrip().startswith("#"):
+                break
+        out[f.stem] = paths
+    return out
+
+
 def projects() -> dict[str, dict]:
-    """名稱 → 驗證過的登錄(dict)。登錄還沒產生就用 onboarded-projects.tsv 湊最小的欄位。"""
+    """名稱 → 驗證過的登錄(dict)。快取還沒產生(新機器、MBP)就用 roster() 湊最小的欄位。"""
     if REGISTRY_INDEX.exists():
         try:
             return json.loads(REGISTRY_INDEX.read_text())["projects"]
         except (ValueError, KeyError):
             pass
-    out = {}
-    tsv = ROOT / "onboarded-projects.tsv"
-    if tsv.exists():
-        for line in tsv.read_text().splitlines()[1:]:
-            cols = line.split("\t")
-            if len(cols) >= 2 and cols[0]:
-                out[cols[0]] = {"name": cols[0], "paths": {"workspace": cols[1],
-                                "origin": cols[2] if len(cols) > 2 else None}}
-    return out
+    return {name: {"name": name, "paths": paths} for name, paths in roster().items()}
 
 
 def reflection_private() -> set[str] | None:
@@ -156,3 +179,19 @@ def workspace(name: str) -> pathlib.Path | None:
 def hub_project() -> str:
     """平台自己在登錄裡的名稱。"""
     return "agent-hub"
+
+
+def main(argv: list[str]) -> int:
+    if argv == ["roster"]:
+        host = get("memory_host")
+        for name, paths in roster().items():
+            bare = paths.get("memory_bare") or f"~/git-origin/{name}-memory.git"
+            print("\t".join([name, str(path(paths.get("workspace")) or ""), paths.get("origin") or "(native)",
+                             f"{host}:{bare}" if host else bare]))
+        return 0
+    print("用法:hubconf.py roster", file=sys.stderr)
+    return 2
+
+
+if __name__ == "__main__":
+    sys.exit(main(sys.argv[1:]))

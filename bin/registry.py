@@ -35,7 +35,6 @@ schema v1(contracts/project.v1.md 有完整說明):
 用法:registry.py [check [name...]]   驗證並更新快取,印出結果
       registry.py add <name> <workspace> <origin> <memory_bare>        onboard 時新增(已存在就不動)
       registry.py rename <old> <new> <workspace> <origin> <memory_bare> 改名(檔案、prompt 目錄一起搬)
-      registry.py tsv                     從登錄重新產生 onboarded-projects.tsv(舊腳本的相容檔)
       registry.py apply-updates           套用專案寄來的 manifest.update 信(平台 job,每 15 分鐘)
 """
 from __future__ import annotations
@@ -281,7 +280,7 @@ def tilde(p: str) -> str:
 
 
 def new_doc(name: str, workspace: str, origin: str, memory_bare: str) -> dict:
-    """onboard 時的預設登錄(跟 registry-migrate.py import 一樣的預設值)。"""
+    """onboard 時的預設登錄。"""
     return {"v": 1, "name": name,
             "paths": {"workspace": tilde(workspace), "memory_bare": tilde(memory_bare), "origin": origin},
             "memory": True, "privacy": {"reflection": "include"}, "push_on_merge": False,
@@ -368,30 +367,12 @@ def cmd_apply_updates() -> int:
     return 0
 
 
-def cmd_tsv() -> int:
-    """從登錄重新產生 onboarded-projects.tsv(還在讀它的舊腳本用的相容檔;登錄才是正本)。"""
-    index = refresh()
-    host = hubconf.get("memory_host")
-    rows = ["name\tlocal_path\torigin\tmemory_bare_repo"]
-    for name, doc in sorted(index["projects"].items()):
-        if name == hubconf.hub_project():
-            continue
-        p = doc.get("paths") or {}
-        bare = p.get("memory_bare") or f"~/git-origin/{name}-memory.git"
-        rows.append("\t".join([name, str(hubconf.path(p.get("workspace"))), p.get("origin") or "(native)",
-                               f"{host}:{bare}" if host else bare]))
-    (hubconf.ROOT / "onboarded-projects.tsv").write_text("\n".join(rows) + "\n")
-    return 0
-
-
 def main() -> int:
     args = sys.argv[1:]
     if args[:1] == ["add"] and len(args) == 5:
         return cmd_add(*args[1:])
     if args[:1] == ["rename"] and len(args) == 6:
         return cmd_rename(*args[1:])
-    if args[:1] == ["tsv"]:
-        return cmd_tsv()
     if args[:1] == ["apply-updates"]:
         return cmd_apply_updates()
     if args and args[0] == "check":

@@ -43,7 +43,7 @@
 #   8. mini 上建 bare repo,push agent-memory 分支過去(不動任何外部 remote)
 #   9. mini 上 clone 一份工作副本給 librarian
 #   10. 如果有外部 origin,登記進 mirror-backup 清單;沒有就跳過
-#   11. 登記進 agent-hub 自己的 onboarded-projects.tsv(不分 native/hosted,
+#   11. 登記進 agent-hub 自己的專案登錄 projects/<name>.yaml(不分 native/hosted,
 #       一律登記)——這是換新機器或本機資料夾遺失時,唯一能找到「這裡曾經
 #       onboard 過哪些專案」的地方,不依賴任何單一專案自己的 repo 內容
 set -euo pipefail
@@ -84,16 +84,16 @@ cd "$PROJ_PATH"
 # 再跑一次會建出全新、跟舊歷史斷開的 agent-memory 分支——不是救回來,是製造第二份記憶。
 # 最常見的情境是「從 GitHub 重新 clone 了一份(沒有 .agent-memory)再叫這支」,所以不能只看
 # 本機有沒有 .agent-memory。唯一的例外是 resume(本機步驟做完、mini 端還沒做完),見下面。
-MANIFEST="$AGENT_HUB/onboarded-projects.tsv"
+ROSTER=$(python3 "$AGENT_HUB/bin/hubconf.py" roster) || fail "讀不到專案登錄($AGENT_HUB/projects)"
 RECOVER_HINT="要把既有專案接回來(新機器、資料夾不見、重新 clone)請用 bin/recover-project.sh $PROJ_NAME [路徑]"
-if [ -f "$MANIFEST" ] && awk -F'\t' -v n="$PROJ_NAME" '$1==n{f=1} END{exit !f}' "$MANIFEST"; then
-  fail "'$PROJ_NAME' 已經登記在 onboarded-projects.tsv——不能再 onboard 一次。$RECOVER_HINT"
+if awk -F'\t' -v n="$PROJ_NAME" '$1==n{f=1} END{exit !f}' <<<"$ROSTER"; then
+  fail "'$PROJ_NAME' 已經登記在專案登錄(projects/$PROJ_NAME.yaml)——不能再 onboard 一次。$RECOVER_HINT"
 fi
 if [ ! -e .agent-memory ] && mini_sh "git --git-dir=\"\$HOME/git-origin/${PROJ_NAME}-memory.git\" show-ref --verify --quiet refs/heads/agent-memory" 2>/dev/null; then
   fail "mini 上已經有 ${PROJ_NAME}-memory.git(含 agent-memory 歷史)——這個名稱 onboard 過了。$RECOVER_HINT"
 fi
-if [ -d .git ] && existing_origin=$(git remote get-url origin 2>/dev/null) && [ -f "$MANIFEST" ]; then
-  same=$(awk -F'\t' -v o="$existing_origin" -v n="$PROJ_NAME" '$3==o && $1!=n{print $1}' "$MANIFEST")
+if [ -d .git ] && existing_origin=$(git remote get-url origin 2>/dev/null); then
+  same=$(awk -F'\t' -v o="$existing_origin" -v n="$PROJ_NAME" '$3==o && $1!=n{print $1}' <<<"$ROSTER")
   [ -z "$same" ] || fail "這個 repo(origin $existing_origin)已經以 '$same' 的名稱 onboard 過(資料夾名稱不同)。用 bin/recover-project.sh $same [路徑] 接回來;要改名用 bin/rename-project.sh"
 fi
 
@@ -234,18 +234,16 @@ else
 fi
 
 # --- 11. 登記進 agent-hub 的專案登錄 projects/<name>.yaml(一律登記,無論有沒有 origin) ---
-# 登錄是正本;onboarded-projects.tsv 是從登錄產生的相容檔(還在讀它的舊腳本用)。
 manifest_origin="${origin_url:-(native)}"
 /opt/homebrew/bin/python3 "$AGENT_HUB/bin/registry.py" add "$PROJ_NAME" "$PROJ_PATH" "$manifest_origin" \
     "~/git-origin/${PROJ_NAME}-memory.git" \
-  && /opt/homebrew/bin/python3 "$AGENT_HUB/bin/registry.py" tsv \
   || fail "登記進專案登錄失敗(projects/$PROJ_NAME.yaml)"
 # 登記完直接 commit+push agent-hub——以前只寫檔不 commit,mini 上的 librarian
 # /mirror-backup 要等有人剛好手動 commit 才看得到新專案(project-36 就是這樣
 # 卡在 MBP 本地)。只 commit 這三個檔案,不碰 agent-hub 裡其他未 commit 的東西。
 "$AGENT_HUB/bin/gen-index-roster.sh"
 "$AGENT_HUB/bin/commit-hub-files.sh" "register $PROJ_NAME (onboard-project.sh)" \
-    "projects/$PROJ_NAME.yaml" onboarded-projects.tsv mirror-list.txt index.md \
+    "projects/$PROJ_NAME.yaml" mirror-list.txt index.md \
   || echo "警告:agent-hub 登記檔 commit/push 失敗,請手動處理(登記內容本身已寫入)" >&2
 echo "[11/11] 已登記進 agent-hub 的專案登錄(projects/$PROJ_NAME.yaml),並 commit+push agent-hub"
 

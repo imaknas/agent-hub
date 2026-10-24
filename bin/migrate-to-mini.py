@@ -8,7 +8,7 @@ MBP 斷線/沒電/闔上不會中斷正在跑的工作(2026-10-14 project-16 試
 加 --apply 才動手。MBP 上的資料夾原封不動當備份——要不要清掉由 Knas 決定,這支不刪任何東西。
 
 步驟:
-  1. 前置檢查(不過就停):manifest 有登記、不是 native、沒有未 commit 的改動、所有本機分支
+  1. 前置檢查(不過就停):專案登錄有登記、不是 native、沒有未 commit 的改動、所有本機分支
      都已 push、沒有程序的工作目錄在專案資料夾(先關掉那個專案的 session)、mini 上
      ~/workspace/<name> 還不存在
   2. 補一次 memory 同步 + push,確保 mini 的 bare repo 是最新的
@@ -33,6 +33,7 @@ import subprocess
 import sys
 
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
+import hubconf  # noqa: E402
 import hublib  # noqa: E402
 
 MINI = "hub-host"
@@ -68,16 +69,15 @@ def mini(script: str, check: bool = True) -> subprocess.CompletedProcess:
 
 
 def manifest_row(name: str) -> dict:
-    """path 是 MBP 上的位置:manifest 從 2026-10-15 起記的是 mini 的位置,MBP 的舊位置在
+    """path 是 MBP 上的位置:登錄從 2026-10-15 起記的是 mini 的位置,MBP 的舊位置在
     legacy-paths.tsv(第一筆)。"""
-    for line in hublib.MANIFEST.read_text().splitlines()[1:]:
-        f = line.split("\t")
-        if f[0] == name:
-            mbp = [p for p in hublib.legacy_paths(name) if p.startswith(hublib.MBP_HOME + "/")]
-            if not mbp:
-                fail(f"legacy-paths.tsv 裡沒有 '{name}' 在 MBP 上的位置")
-            return {"path": mbp[0], "origin": f[2]}
-    fail(f"{hublib.MANIFEST} 裡沒有 '{name}'")
+    paths = hubconf.roster().get(name)
+    if paths is None:
+        fail(f"專案登錄(projects/)裡沒有 '{name}'")
+    mbp = [p for p in hublib.legacy_paths(name) if p.startswith(hublib.MBP_HOME + "/")]
+    if not mbp:
+        fail(f"legacy-paths.tsv 裡沒有 '{name}' 在 MBP 上的位置")
+    return {"path": mbp[0], "origin": paths.get("origin") or "(native)"}
 
 
 def is_rebuildable(rel: str) -> bool:

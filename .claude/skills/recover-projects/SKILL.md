@@ -1,6 +1,6 @@
 ---
 name: recover-projects
-description: Restore agent-hub-onboarded projects on a new machine, or after a local project folder is lost/deleted. Use when setting up a fresh machine that needs some or all of these projects, or when a specific onboarded project's local directory is missing. Reads onboarded-projects.tsv and walks through what to restore.
+description: Restore agent-hub-onboarded projects on a new machine, or after a local project folder is lost/deleted. Use when setting up a fresh machine that needs some or all of these projects, or when a specific onboarded project's local directory is missing. Reads the project registry (projects/*.yaml) and walks through what to restore.
 ---
 
 # Recover Projects
@@ -25,8 +25,9 @@ ssh -T git@github.com
 1. 確認 `~/agent-hub` 本身存在且是最新的(`git pull`)。如果這是全新機器,
    先手動 clone:`git clone hub-host:~/git-origin/agent-hub.git ~/agent-hub`。
 
-2. 讀 `~/agent-hub/onboarded-projects.tsv`,對每一列檢查 `local_path` 在這台
-   機器上存不存在。已存在的跳過,不需要處理。`local_path` 是 mini 上的
+2. 跑 `python3 ~/agent-hub/bin/hubconf.py roster`(專案登錄 `projects/*.yaml`,每個專案一行:名稱、
+   路徑、origin、memory bare repo),對每一列檢查路徑(第二欄)在這台
+   機器上存不存在。已存在的跳過,不需要處理。登錄的路徑是 mini 上的
    `/Users/you/workspace/<name>`(2026-10-15 起所有專案都在 mini);救到別的位置
    (例:另一台機器的使用者名稱不同)就給 `recover-project.sh` 第二個參數。
    以前在 MBP 上的位置記在 `legacy-paths.tsv`,只給統計舊對話用,不是還原目標。

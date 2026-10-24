@@ -25,9 +25,11 @@ import pathlib
 import re
 import sys
 
+sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
+import hubconf  # noqa: E402
+
 HOME = pathlib.Path.home()
 HUB = HOME / "agent-hub"
-MANIFEST = HUB / "onboarded-projects.tsv"
 MIGRATION = HUB / "openclaw-migration-status.md"
 PROJECTS = HOME / ".memory-copies"
 
@@ -82,7 +84,7 @@ def main() -> None:
     items: dict[str, list] = {o: [] for o in OWNERS}
     problems: list[str] = []
 
-    names = [l.split("\t")[0] for l in MANIFEST.read_text().splitlines()[1:] if l.strip()]
+    names = list(hubconf.roster())
     for name in names:
         state = PROJECTS / name / "STATE.md"
         if not state.exists():

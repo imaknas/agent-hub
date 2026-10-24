@@ -20,7 +20,7 @@ done 要讓 Muninn 結案,job 失敗要給狀態頁),不用各自接一條檔案
   job.failed         排程 job 失敗(payload: job, exit, detail)
 信的狀態是投影,不會原地修改:收件匣 = 給 X、還沒有 done 事件指向它的 message。
 
-地址是專案(onboarded-projects.tsv 的名稱、agent-hub)跟 knas,永遠不是 session。
+地址是專案(專案登錄 projects/*.yaml 的名稱、agent-hub)跟 knas,永遠不是 session。
 
 用法(在專案目錄裡;寄件人預設是目前目錄的專案):
   hubbus send --to <專案|knas> --type <request|question|info|progress|done> --text "…" [--reply-to <id>]
