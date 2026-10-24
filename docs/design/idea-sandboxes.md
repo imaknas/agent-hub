@@ -87,7 +87,8 @@ POST /v1/sandboxes   Authorization: Bearer <runner-token>
 - Muninn 的 adapter:2xx → 回 name;其他 → 帶原因失敗(Muninn 會把 `Sandboxes` 介面改成能帶原因),
   照 error 碼講給 Knas:too_many →「已經有 N 個,先擱著或放棄一些舊想法」;exists →「名稱被用掉了」;
   bad_name / create_failed →「開不了」+ detail。
-- 建立時發 `sandbox.created` 事件到匯流排,狀態頁看得到。
+- 建立的紀錄:agent-hub 的登錄 commit(`register idea-<n>`)跟 lease-runner 的 log。不發匯流排事件
+  (hubbus 的事件類型是固定清單,也沒有人讀)。
 
 ## 第一階段要動的檔案
 

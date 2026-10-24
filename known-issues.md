@@ -66,6 +66,11 @@
   改用 `--permission-mode dontAsk --allowedTools "Edit(./STATE.md)"`(`Edit(...)` 涵蓋
   Write/Edit)。
 
+- **awk 用 `NR==FNR` 讀「排除清單」檔,清單是空檔時會把全部資料濾掉**:空檔一筆都沒讀,`NR==FNR` 就對
+  第二個輸入的每一行都成立、全被 `next` 吃掉。2026-10-24 `gen-index-roster.sh` 加想法沙盒分組時,還沒有任何
+  想法 → index.md 名冊被 commit 成空的(測試只在有一個想法時看過)。清單改在 `BEGIN` 用 `getline` 讀;
+  測試要包含「清單是空的」那一種(`tests/test_index_roster.py`)。
+
 ## 設定、安裝、憑證
 
 - **改了設定檔 ≠ 執行中的 process 已經載入**:看 log 確認 reload,或直接重啟。

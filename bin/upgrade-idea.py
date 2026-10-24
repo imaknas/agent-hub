@@ -9,11 +9,9 @@
   3. gh repo create <github.owner>/<名稱>(預設 private)+ push,origin 改成 ssh URL
   4. 登錄:type 改成 project、paths.origin 寫上;purpose、enforce、privacy 留著(要改另外改)
   5. mirror-list.txt 加上 origin;重生 index.md 名冊;commit-hub-files 只 commit 這幾個檔
-  6. 匯流排發 sandbox.upgraded
 """
 from __future__ import annotations
 
-import json
 import pathlib
 import subprocess
 import sys
@@ -102,10 +100,6 @@ def main(argv: list[str]) -> int:
     subprocess.run([str(HUB / "bin" / "gen-index-roster.sh")], check=False)
     subprocess.run([str(HUB / "bin" / "commit-hub-files.sh"), f"upgrade idea {name} → project {final} (upgrade-idea.py)",
                     f"projects/{final}.yaml", "mirror-list.txt", "index.md"], check=False)
-    subprocess.run(["/usr/bin/python3", str(HUB / "bin" / "hubbus"), "publish", "sandbox.upgraded",
-                    "--source", hubconf.hub_project(), "--to", final, "--id", f"sandbox-upgraded-{name}",
-                    "--payload", json.dumps({"from": name, "name": final, "origin": url}, ensure_ascii=False)],
-                   capture_output=True)
     print(f"完成:{name} 已升級成正式專案 {final}({url})")
     return 0
 

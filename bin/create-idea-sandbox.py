@@ -106,10 +106,6 @@ def create(name: str, purpose: str) -> int:
 
     subprocess.run(["/opt/homebrew/bin/python3", str(HUB / "bin" / "registry.py"), "check", name],
                    capture_output=True)  # 更新快取:attachable 馬上看得到
-    subprocess.run(["/usr/bin/python3", str(HUB / "bin" / "hubbus"), "publish",
-                    "sandbox.created", "--source", hubconf.hub_project(), "--to", name, "--id", f"sandbox-{name}",
-                    "--payload", json.dumps({"name": name, "purpose": purpose}, ensure_ascii=False)],
-                   capture_output=True)
     return out("created", 0, name=name)
 
 
