@@ -94,4 +94,4 @@ services:
   run: /opt/homebrew/bin/python3 bin/lease-runner.py
   keepalive: true
   throttle_s: 10
-  env: {PATH: "/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin"}
+  env: {PATH: "$PLATFORM_PATH"}   # nvm 預設版本(claude)+ Homebrew,見 hubconf.LAUNCHD_PATH

@@ -53,8 +53,46 @@ def p(key: str, default: str | None = None) -> pathlib.Path | None:
     return path(get(key, default))
 
 
-# launchd 底下的 PATH(plist 沒寫 PATH 的時候):指令解析要照這個,不是跑檢查的那個 shell 的 PATH
-LAUNCHD_PATH = "/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin"
+def nvm_bin() -> pathlib.Path | None:
+    """nvm 預設版本(~/.nvm/alias/default,例:24、lts/*、node、v24.19.0)對到的已安裝版本裡最新的 bin/。
+
+    node(跟裝在它底下的 claude)只由 nvm 管(2026-10-24 Knas 決定;Homebrew 的 node 被 autoremove 刪掉、
+    LINE bot 停了一天半之後)。背景服務跟排程沒有 shell 的 nvm 設定,靠這裡換算成完整路徑;nvm 升級後
+    下一個 render-services 會跟著換、重啟服務。"""
+    nvm = pathlib.Path(os.environ.get("NVM_DIR") or pathlib.Path.home() / ".nvm")
+    versions = nvm / "versions" / "node"
+    if not versions.is_dir():
+        return None
+    spec = "default"
+    for _ in range(5):  # alias 可以指到另一個 alias(lts/* → lts/jod → v22…)
+        f = nvm / "alias" / spec
+        if not f.is_file():
+            break
+        spec = f.read_text().strip()
+
+    def ver(p: pathlib.Path) -> tuple:
+        return tuple(int(x) for x in p.name.lstrip("v").split(".") if x.isdigit())
+    installed = sorted((p for p in versions.iterdir() if (p / "bin" / "node").exists()), key=ver)
+    if spec not in ("node", "stable"):
+        want = tuple(int(x) for x in spec.lstrip("v").split(".") if x.isdigit())
+        installed = [p for p in installed if want and ver(p)[:len(want)] == want]
+    return installed[-1] / "bin" if installed else None
+
+
+# launchd 底下的 PATH(plist 沒寫 PATH 的時候,render-services 也把這個寫進 plist):指令解析要照這個,
+# 不是跑檢查的那個 shell 的 PATH。nvm 預設版本的 bin 放最前面(node、claude)。
+LAUNCHD_PATH = ":".join([*([str(nvm_bin())] if nvm_bin() else []), "/opt/homebrew/bin", "/usr/local/bin", "/usr/bin", "/bin"])
+
+
+def expand_env(value: str) -> str:
+    """登錄 service 的 env 值裡的 $PLATFORM_PATH 換成 LAUNCHD_PATH(要 Homebrew 又要 nvm 的 node/claude 時用)。"""
+    return value.replace("$PLATFORM_PATH", LAUNCHD_PATH)
+
+
+def tool(name: str) -> str:
+    """無人值守的程式要跑的指令(claude 等)的完整路徑:先照目前的 PATH,再照 LAUNCHD_PATH;找不到就原樣回傳。"""
+    import shutil
+    return shutil.which(name, path=f"{os.environ.get('PATH', '')}:{LAUNCHD_PATH}") or name
 
 STATE = ROOT / ".state"
 LOGS = ROOT / ".logs"

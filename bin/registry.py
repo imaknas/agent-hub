@@ -143,7 +143,7 @@ def validate(doc, stem: str) -> list[str]:
             errs.append(f"service {n}:name、run 必填")
             continue
         cwd = d.get(svc.get("cwd") or default_cwd(doc))
-        if (e := resolves(svc["run"], cwd, (svc.get("env") or {}).get("PATH") or hubconf.LAUNCHD_PATH)):
+        if (e := resolves(svc["run"], cwd, hubconf.expand_env((svc.get("env") or {}).get("PATH") or hubconf.LAUNCHD_PATH))):
             errs.append(f"service {n}:{e}")
     jobs = doc.get("jobs") or []
     for job in jobs:

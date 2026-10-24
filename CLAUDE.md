@@ -204,7 +204,9 @@ memory 追蹤但不需要在 mini 上執行任何東西的專案(目前大多數
 - `bin/`——所有腳本
 - `launchd/`——平台自己的 launchd plist(排程器、看門狗、狀態頁、memory 同步)。**專案的長駐服務不在這裡**:
   寫在 `projects/<專案>.yaml` 的 `services:`,`bin/render-services.py`(平台 job,每 15 分鐘)產生
-  `~/Library/LaunchAgents/<label>.plist`,有變才重載
+  `~/Library/LaunchAgents/<label>.plist`,有變才重載;指令找不到就不動能跑的 plist、服務沒在跑就發 Discord。
+  **node(跟 claude)只由 nvm 管**:服務跟排程用 nvm 預設版本(`hubconf.nvm_bin()`、env 的 `$PLATFORM_PATH`),
+  不要用 Homebrew 裝 node——原因看 known-issues.md「設定、安裝、憑證」
 - **平行 session 的合併閘門** `bin/merge-branch`(在 session 自己的 worktree 跑):rebase → 登錄的
   `runtime.test` → fast-forward main(主 checkout)→ 只有登錄 `push_on_merge: true` 才 push;匯流排記
   `merge.done`/`merge.failed`/`session.report`。狀態頁列各專案的 worktree、兩個 branch 改同一檔、

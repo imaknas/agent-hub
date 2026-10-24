@@ -195,7 +195,7 @@ def env_for(lease: Lease) -> dict:
     env = {k: v for k, v in os.environ.items() if k != "CLAUDE_CODE_OAUTH_TOKEN"}  # 用 keychain 的訂閱登入
     env.update(HUBBUS_LEASE="1", LEASE_ALLOW=json.dumps(allow_rules(lease.project)),
                PATH=os.environ.get("LEASE_PATH_PREFIX", "") +  # 測試用:把假的 claude 放前面
-                    f"/opt/homebrew/bin:{pathlib.Path.home()}/.local/bin:/usr/bin:/bin:/usr/sbin:/sbin")
+                    f"{hubconf.LAUNCHD_PATH}:{pathlib.Path.home()}/.local/bin:/usr/sbin:/sbin")
     return env
 
 

@@ -55,7 +55,7 @@ def run(a) -> int:
         return 2
     prompt = "" if a.cmd == "exec" else (pathlib.Path(a.prompt_file).read_text() if a.prompt_file else sys.stdin.read())
     model = a.model or (os.environ.get(spec["model_env"]) if spec.get("model_env") else None) or spec.get("model_default")
-    cmd = ["claude", "-p", prompt]
+    cmd = [hubconf.tool("claude"), "-p", prompt]  # 排程底下的 PATH 沒有 nvm:先照 PATH,再照平台的(nvm 預設版本)
     if model:
         cmd += ["--model", model]
     mode, allowed, prompts = spec.get("permission_mode"), list(spec.get("allowed_tools") or []), spec.get("prompts")

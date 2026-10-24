@@ -78,7 +78,21 @@
 - **不要為了 demo/測試還沒發布的功能去手改已安裝的套件或正式設定**:07-11 因此
   crash loop 重啟 20+ 次。用獨立的測試帳號/環境;要救回來就退回上一個好的設定、
   重裝沒改過的檔案。
-- 來源:OpenClaw #infrastructure、#general
+- **node(跟裝在它底下的 claude)只由 nvm 管**(2026-10-24 Knas 決定):`brew install restic` 順手跑的清理
+  (autoremove)把「當初是別的套件順帶裝的、現在沒人依賴」的 Homebrew `node` 刪了,LINE bot 的 plist 指著
+  `/opt/homebrew/bin/node`,從 10-22 22:06 停到 10-24 才被發現。背景服務跟排程沒有 shell 的 nvm 設定,平台用
+  `hubconf.nvm_bin()` 換算 nvm 預設版本的完整路徑(`LAUNCHD_PATH` 最前面;service 的 env 寫 `$PLATFORM_PATH`、
+  `llm.py` 用 `hubconf.tool("claude")`),nvm 升級後 render-services 會跟著換。**不要再用 Homebrew 裝 node 或用
+  它的 npm 裝全域 CLI**(那份 claude 在 node 被刪後就停在舊版不會更新)。
+- **`brew install/uninstall` 的輸出要整份看**:它會順便 autoremove 依賴,`| tail -2` 會把「Uninstalling node…」
+  藏掉(10-22 restic、10-24 node@22 → icu4c@78 都是這樣)。之後跑 `brew missing` 確認沒弄壞別的;要保住某個
+  formula 就 `brew install` 它一次(標成 installed on request,autoremove 不會刪)。
+- **launchctl bootout 是非同步的**:馬上 bootstrap 會 `5: Input/output error`,服務停在沒載入(10-22 LINE bot、
+  10-24 muninn/lease-runner)。render-services 會等它從 launchd 消失再 bootstrap、失敗重試;手動重載也要等。
+- **render-services 的安全網**:指令解析不到就不動現在能跑的 plist;bootstrap 失敗、keepalive 的服務沒在跑、
+  該載入的沒載入都發 Discord(同一組只發一次,恢復再發一次)並讓 job 失敗(狀態頁紅)。以前只有狀態頁紅,
+  沒人看就一天半。
+- 來源:OpenClaw #infrastructure、#general;2026-10-24 LINE bot 停擺
 
 ## memory worktree 會繼承專案的 git hook
 
