@@ -42,6 +42,22 @@ librarian 每晚自動寄出、Knas 結案時自動移掉。Knas 在這個 sessi
 `hubbus send --to knas --type done --task <key> --text "…"`;不需要了:`--type drop --task <key>`。
 要 Knas 去做一件新的事:`hubbus send --to knas --type task --text "…" [--due YYYY-MM-DD]`。
 
+## 憑證(API key、token、密碼)
+
+- **值只放在不進版控的地方**:服務的 runtime 目錄(`~/services/<專案>/` 的 `.env`、`secrets/`、`data/secrets/`)或
+  workspace 的 `.env*`,`chmod 600`。commit 前看一下 `git diff --cached` 沒有夾帶;公開 repo 用 gitleaks 之類的工具掃。
+- **程式碼只讀環境變數或設定的路徑**:repo 裡只放 `.env.example` 這類範本跟說明,不寫預設值。缺了或失效就
+  明白地失敗、通知人,**不要默默降級**(改用別的憑證、別的模型或服務)——那是看不見的故障。
+- **這個專案用了哪些憑證,宣告在平台的專案登錄** `~/agent-hub/projects/<專案>.yaml` 的 `secrets:`(只寫名稱、
+  位置、到期,**不寫值**),平台每天檢查在不在、有沒有被備份、快不快到期,有問題發警報。新增、拿掉、換位置:
+  把改好的完整 YAML 寄出 `~/agent-hub/bin/hubbus send --to agent-hub --type manifest.update --text "$(cat <改好的檔>)"`
+  (驗證不過會退回)。
+- **機器層級的憑證是平台的**(claude 的登入/token、平台的 Discord、備份):不要在專案裡另存一份、不要自己去讀
+  `~/.claude` 底下的憑證檔;需要就寄信給 agent-hub。
+- **到外部服務發新的、撤銷、換掉只有 Knas 能做**:寫成〔Knas〕待辦,寫清楚是哪個服務、為什麼。
+- **開源**:進過 git 歷史的憑證一律當成已外洩,公開前先撤銷(改寫歷史不夠,別人可能已經 clone);指向這台機器的
+  部署設定放在不進 repo 的設定檔。
+
 這段說明放在 gitignored 的 CLAUDE.local.md,不在共享的 CLAUDE.md:不要把
 agent-hub、`.agent-memory` 的名稱或路徑寫進任何會 commit 的檔案(CLAUDE.md、
 `.claude/settings.json`、`.gitignore`、README、程式註解、commit 訊息等),公開 repo 會跟著外洩。

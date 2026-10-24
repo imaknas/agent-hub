@@ -90,6 +90,27 @@ def ensure_repo() -> None:
 
 # ---------- stage ----------
 
+def covers(path: pathlib.Path) -> bool:
+    """這個檔案會不會進備份(check-secrets.py 用;規則跟 cmd_run / stage 一樣):在 include 底下、沒被 exclude,
+    或是登錄的專案 workspace 最上層的 .env / .env.*(stage 會複製)。"""
+    import fnmatch
+    path = path.expanduser().resolve()
+    dbs = [hubconf.bus_db(), *(hubconf.path(d["path"]) for d in CFG.get("sqlite") or [])]
+    if any(db and path == db.resolve() for db in dbs):  # SQLite 用 backup API 另外複製
+        return True
+    for x in CFG.get("exclude") or []:
+        pat = str(hubconf.path(x)) if x.startswith(("~", "/")) else x
+        if fnmatch.fnmatch(str(path) if "/" in pat else path.name, pat):
+            return False
+    for x in CFG.get("include") or []:
+        inc = hubconf.path(x)
+        if inc and (path == inc.resolve() or inc.resolve() in path.parents):
+            return True
+    if path.name == ".env" or (path.name.startswith(".env.") and not path.name.endswith(".example")):
+        return any(hubconf.workspace(n) and path.parent == hubconf.workspace(n).resolve() for n in hubconf.projects())
+    return False
+
+
 def stage() -> dict:
     if STAGE.exists():
         shutil.rmtree(STAGE)

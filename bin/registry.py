@@ -21,6 +21,12 @@ schema v1(contracts/project.v1.md 有完整說明):
   enforce: {sandbox: false}       第二階段:true = render-project-settings.py 寫 sandbox + 權限規則
   network: [網域]                 sandbox 平台預設之外還要連的
   allow_write: [路徑]             sandbox 平台預設之外還要寫的
+  secrets:   [{name, path, env_key?, expires? | max_age_days?, warn_days?, backup?, why?, rotate?}]
+                                  這個專案要用的憑證:只寫名稱、位置、到期,**不寫值**(check-secrets.py 每天檢查
+                                  在不在、有沒有被備份、快不快到期)。path 相對 runtime(有 runtime 時)否則 workspace,
+                                  或 ~/、絕對路徑;env_key = 那個檔是 .env、憑證是其中一行(只檢查有沒有這個 key);
+                                  expires 是 "YYYY-MM-DD"(要加引號);max_age_days 照檔案修改時間算(換新就重算);
+                                  backup: false 要寫 why(例:重發就好)
   gate: strict                    合併閘門強制:主 checkout 的 main 不能直接 commit(只能 merge-branch);預設只偵測
   jobs:      [{name, at | every, run | (kind: agent + prompt), cwd?, days?, days_of_month?, months?,
                until?, between?, background?, after?, max_attempts_per_day?, legacy_name?}]
@@ -58,7 +64,8 @@ import yaml  # noqa: E402
 
 CACHE = hubconf.STATE / "registry"
 TOP = {"v", "name", "paths", "memory", "privacy", "runtime", "push_on_merge", "mailbox", "publishes",
-       "provides", "consumes", "services", "jobs", "enforce", "network", "allow_write", "gate"}
+       "provides", "consumes", "services", "jobs", "enforce", "network", "allow_write", "gate", "secrets"}
+SECRET = {"name", "path", "env_key", "expires", "max_age_days", "warn_days", "backup", "why", "rotate"}
 JOB = {"name", "at", "every", "run", "kind", "prompt", "cwd", "days", "days_of_month", "months", "until",
        "between", "background", "after", "max_attempts_per_day", "legacy_name", "allow", "connectors"}
 SERVICE = {"name", "run", "label", "keepalive", "interval_s", "throttle_s", "env", "cwd", "log", "expose"}
@@ -103,6 +110,38 @@ def resolves(cmd: str, cwd: pathlib.Path | None, search: str | None = None) -> s
     return None if found or first in ("cd", "test", "[", "true") else f"PATH 上找不到 {first}"
 
 
+def validate_secrets(secrets) -> list[str]:
+    if secrets is None:
+        return []
+    if not isinstance(secrets, list):
+        return ["secrets 要是 list"]
+    errs, seen = [], set()
+    for i, sec in enumerate(secrets):
+        where = f"secrets[{i}]"
+        if not isinstance(sec, dict):
+            errs.append(f"{where} 要是 mapping")
+            continue
+        errs += [f"{where}:未知的欄位 {k}" for k in sec if k not in SECRET]
+        for k in ("name", "path"):
+            if not isinstance(sec.get(k), str) or not sec.get(k):
+                errs.append(f"{where}:{k} 必填")
+        if sec.get("name") in seen:
+            errs.append(f"{where}:name {sec.get('name')} 重複")
+        seen.add(sec.get("name"))
+        if "expires" in sec and not (isinstance(sec["expires"], str) and re.fullmatch(r"\d{4}-\d{2}-\d{2}", sec["expires"])):
+            errs.append(f"{where}:expires 要是加引號的 \"YYYY-MM-DD\"")
+        if "expires" in sec and "max_age_days" in sec:
+            errs.append(f"{where}:expires 跟 max_age_days 只能寫一個")
+        for k in ("max_age_days", "warn_days"):
+            if k in sec and (not isinstance(sec[k], int) or isinstance(sec[k], bool) or sec[k] <= 0):
+                errs.append(f"{where}:{k} 要是正整數")
+        if "backup" in sec and not isinstance(sec["backup"], bool):
+            errs.append(f"{where}:backup 要是 true/false")
+        if sec.get("backup") is False and not sec.get("why"):
+            errs.append(f"{where}:backup: false 要寫 why(為什麼不用備份)")
+    return errs
+
+
 def validate(doc, stem: str) -> list[str]:
     errs: list[str] = []
     if not isinstance(doc, dict):
@@ -121,6 +160,7 @@ def validate(doc, stem: str) -> list[str]:
         errs.append("enforce 只能是 {sandbox: true|false}")
     if doc.get("gate") not in (None, "strict", "detect"):
         errs.append("gate 只能是 strict 或 detect(預設)")
+    errs += validate_secrets(doc.get("secrets"))
     for key in ("network", "allow_write"):
         v = doc.get(key)
         if v is not None and (not isinstance(v, list) or not all(isinstance(x, str) and x for x in v)):

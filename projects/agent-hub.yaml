@@ -55,6 +55,11 @@ jobs:
   every: 15m
   cwd: hub
   run: /opt/homebrew/bin/python3 bin/registry.py apply-updates
+- name: secrets                  # 登錄宣告的憑證(各專案的 secrets:)在不在、有沒有被備份、快不快到期;不讀值。有問題發 Discord
+  at: "08:00"
+  cwd: hub
+  max_attempts_per_day: 2
+  run: /opt/homebrew/bin/python3 bin/check-secrets.py
 - name: claude-login             # claude 的三份登入(launchd 訂閱登入、headless token、SSH 用的 .credentials.json)還能用嗎;壞了/快到期發 Discord
   every: 1h
   cwd: hub
@@ -104,3 +109,17 @@ services:
   keepalive: true
   throttle_s: 10
   env: {PATH: "$PLATFORM_PATH"}   # nvm 預設版本(claude)+ Homebrew,見 hubconf.LAUNCHD_PATH
+
+# 機器層級的憑證(平台管):只寫名稱、位置、到期,不寫值。check-secrets.py 每天檢查(在不在、備份、到期)
+secrets:
+- {name: discord-bot-token, path: .secrets/discord-token, why: "警報用的 Discord bot(看門狗、render-services、claude-login、secrets)"}
+- {name: b2-key, path: .secrets/b2-env, rotate: "Backblaze 後台重發 application key,寫進 .secrets/b2-env"}
+- {name: backup-password, path: .secrets/backup-password, why: "restic 密碼;還原要靠 Knas 密碼管理器裡那一份(備份裡這份解不開自己)"}
+- {name: lease-runner-token, path: .secrets/runner-token, why: "通道租借的 Bearer token;不見了 runner 會重產,Muninn 要跟著換"}
+- name: claude-headless-token
+  path: ~/.claude/headless-oauth-token
+  max_age_days: 365
+  warn_days: 30
+  backup: false
+  why: "claude setup-token 產生(llm.py 預設的憑證);丟了重跑就有新的,不用備份"
+  rotate: "在 mini 上跑 claude setup-token,把新的 token 寫進 ~/.claude/headless-oauth-token(chmod 600)"

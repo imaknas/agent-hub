@@ -244,6 +244,17 @@ memory 追蹤但不需要在 mini 上執行任何東西的專案(目前大多數
 - `digest/`、`index.md`(名冊區塊由 `gen-index-roster.sh` 產生)、`review-log.md`、`todo.md`——`librarian.sh` 的產出,不要
   手動改,改了下次跑會被蓋掉或造成混淆
 
+## 憑證歸誰管(2026-10-24)
+
+- **三層**:機器層級的(claude 登入/token、平台的 Discord、B2、備份密碼、gh)**平台管**,宣告在
+  `projects/agent-hub.yaml`;專案自己服務的金鑰(LINE、Google OAuth、IG…)**專案管**,宣告在自己的登錄
+  (專案用 manifest.update 改);到外部服務發新的、撤銷、換掉**只有 Knas 能做**(〔Knas〕待辦)
+- **登錄的 `secrets:` 只寫名稱、位置、到期,不寫值**(格式見 `bin/registry.py` 檔頭);平台 job `agent-hub/secrets`
+  (每天 08:00,`bin/check-secrets.py`)檢查在不在、有沒有被備份(`backup.covers()`,跟每晚備份同一套規則)、
+  快不快到期,有問題發 Discord。這支跟 `check-claude-login.py` 都不印值
+- 專案這邊的做法(值放哪、程式怎麼讀、不默默降級、開源前撤銷進過歷史的)寫在 `templates/CLAUDE.md`「憑證」段,
+  每個專案的 CLAUDE.local.md 都有
+
 ## 安全性質(不要繞過)
 
 - 任何專案的 SessionEnd/PreCompact hook 只 scope 到 `memory/`/
