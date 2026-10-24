@@ -11,6 +11,9 @@ API(契約 contracts/lease-runner.v1.schema.json):
   POST /v1/leases/<id>/terminal       L3:停掉程序,回 `~/agent-hub/bin/lease-resume <id>`
   POST /v1/leases/<id>/detach         {v, reason} → 202;交接在背景跑,結果走事件
   GET  /v1/leases、GET /v1/status、GET /v1/policy(不能 allow_session 的網域,hub.json lease.no_session_domains)
+  POST /v1/sandboxes                  {v, name: idea-<n>, purpose} → 201 新建 / 200 同名同 purpose 已存在(重送)
+                                      / 400 bad_name / 409 exists / 429 too_many(帶 limit、current)/ 500 create_failed
+                                      想法沙盒:bin/create-idea-sandbox.py 建(docs/design/idea-sandboxes.md),建好就在 attachable
   POST /v1/internal/<id>/relay        權限轉接回報(稽核 + 等待中不算閒置)
 每個租約一個長駐程序:`llm.py exec lease-session`(宣告在 contracts/llm-points.yaml)+ `--session-id`/`--resume`、
 只有權限轉接的 MCP(--strict-mcp-config)、`--settings`(第二階段的 deny 清單,不管專案有沒有開 enforce)、
@@ -201,12 +204,22 @@ def env_for(lease: Lease) -> dict:
 
 # ---------- 程序 ----------
 
+def preamble(project: str) -> str:
+    """租約說明;想法沙盒(登錄 type: idea)多一段:在探討哪個想法。"""
+    doc = hubconf.projects().get(project) or {}
+    if doc.get("type") != "idea":
+        return PREAMBLE
+    return PREAMBLE + f"""
+- 這個專案是想法沙盒:Muninn 替 Knas 的一個想法開的探討用專案,想法是:「{doc.get('purpose', '')}」。
+  目標是幫他把這個想法查清楚、想清楚(可行嗎、要什麼、風險、下一步),結論和決定會進交接筆記。"""
+
+
 def start_proc(lease: Lease, resume: bool) -> None:
     flag = ["--resume", lease.id] if resume or lease.started_once else ["--session-id", lease.id]
     cmd = [PY, str(HUB / "bin" / "llm.py"), "exec", "lease-session", "--cwd", lease.cwd, "--",
            *flag, "--strict-mcp-config", "--mcp-config", str(mcp_config(lease)),
            "--permission-prompt-tool", "mcp__lease_relay__approve",
-           "--settings", str(deny_settings(lease.project)), "--append-system-prompt", PREAMBLE,
+           "--settings", str(deny_settings(lease.project)), "--append-system-prompt", preamble(lease.project),
            "--max-turns", str(lease.max_turns)]
     lease.dir.mkdir(parents=True, exist_ok=True)
     err = open(lease.dir / "stderr.log", "a")
@@ -571,6 +584,8 @@ class H(http.server.BaseHTTPRequestHandler):
         parts = urllib.parse.urlparse(self.path).path.strip("/").split("/")
         if parts == ["v1", "leases"]:
             return self.create(b)
+        if parts == ["v1", "sandboxes"]:
+            return self.create_sandbox(b)
         if len(parts) == 4 and parts[:2] == ["v1", "internal"] and parts[3] == "relay":
             l = self.lease(parts[2])
             if l:
@@ -626,6 +641,30 @@ class H(http.server.BaseHTTPRequestHandler):
             threading.Thread(target=detach, args=(l, b.get("reason") or "user"), daemon=True).start()
             return self.reply(202, {"v": 1})
         self.err(404, "not_found", action)
+
+    def create_sandbox(self, b: dict) -> None:
+        """想法沙盒:交給 create-idea-sandbox.py(驗證、重送、上限、失敗清理都在那裡),把結果轉成 HTTP。"""
+        name, purpose = b.get("name"), b.get("purpose")
+        if not isinstance(name, str) or not isinstance(purpose, str):
+            return self.err(400, "bad_name", "name、purpose 要是字串")
+        env = {**os.environ, "PATH": f"{hubconf.LAUNCHD_PATH}:/usr/sbin:/sbin"}
+        try:
+            r = subprocess.run([PY, str(HUB / "bin" / "create-idea-sandbox.py"), name, purpose],
+                               capture_output=True, text=True, timeout=180, env=env)
+            res = json.loads((r.stdout.strip().splitlines() or ["{}"])[-1])
+        except (subprocess.TimeoutExpired, ValueError) as e:
+            log(f"sandbox {name}: {e!r}")
+            return self.err(500, "create_failed", repr(e)[:300])
+        log(f"sandbox {name}: {res.get('result')} {res.get('detail', '')}")
+        result = res.get("result")
+        if result in ("created", "exists_same"):
+            return self.reply(201 if result == "created" else 200,
+                              {"v": 1, "name": res["name"], "created": result == "created"})
+        code = {"bad_name": 400, "exists": 409, "too_many": 429}.get(result, 500)
+        body = {"v": 1, "error": result if code != 500 else "create_failed",
+                "detail": res.get("detail") or (r.stderr or "").strip()[-300:]}
+        body.update({k: res[k] for k in ("limit", "current") if k in res})
+        return self.reply(code, body)
 
     def create(self, b: dict) -> None:
         proj, sid = b.get("project"), str(b.get("session_id") or "")

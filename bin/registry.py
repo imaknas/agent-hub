@@ -9,6 +9,9 @@ index.json 是給只能用標準函式庫的程式(hubconf.py、hubbus)讀的。
 schema v1(contracts/project.v1.md 有完整說明):
   v: 1                      必填
   name                      必填,= 檔名
+  type: project | idea      預設 project。idea = Muninn 替想法開的探討用專案(bin/create-idea-sandbox.sh 建,
+                            名稱 idea-<n>,沒有 GitHub remote;bin/upgrade-idea.sh 升級成 project)
+  purpose                   想法本身(一兩句);type: idea 必填,lease 的系統提示會帶上
   paths: {workspace, memory_bare, origin}       workspace 必填(平台自己除外)
   memory: true              參加 memory 追蹤
   privacy: {reflection: include|stats_only|exclude}
@@ -41,7 +44,8 @@ schema v1(contracts/project.v1.md 有完整說明):
 檔案、PATH 上的指令、或存在的絕對路徑)都算不合格。
 
 用法:registry.py [check [name...]]   驗證並更新快取,印出結果
-      registry.py add <name> <workspace> <origin> <memory_bare>        onboard 時新增(已存在就不動)
+      registry.py add <name> <workspace> <origin> <memory_bare> [--extra <JSON>]
+                                          onboard 時新增(已存在就不動;extra 蓋過預設欄位,驗證不過不寫)
       registry.py rename <old> <new> <workspace> <origin> <memory_bare> 改名(檔案、prompt 目錄一起搬)
       registry.py apply-updates           套用專案寄來的 manifest.update 信(平台 job,每 15 分鐘)
 """
@@ -63,7 +67,7 @@ import hubconf  # noqa: E402
 import yaml  # noqa: E402
 
 CACHE = hubconf.STATE / "registry"
-TOP = {"v", "name", "paths", "memory", "privacy", "runtime", "push_on_merge", "mailbox", "publishes",
+TOP = {"v", "name", "type", "purpose", "paths", "memory", "privacy", "runtime", "push_on_merge", "mailbox", "publishes",
        "provides", "consumes", "services", "jobs", "enforce", "network", "allow_write", "gate", "secrets"}
 SECRET = {"name", "path", "env_key", "expires", "max_age_days", "warn_days", "backup", "why", "rotate"}
 JOB = {"name", "at", "every", "run", "kind", "prompt", "cwd", "days", "days_of_month", "months", "until",
@@ -151,6 +155,12 @@ def validate(doc, stem: str) -> list[str]:
     if doc.get("name") != stem:
         errs.append(f"name({doc.get('name')!r})要跟檔名 {stem} 一樣")
     errs += [f"未知的欄位 {k}" for k in doc if k not in TOP]
+    if doc.get("type", "project") not in ("project", "idea"):
+        errs.append("type 只能是 project 或 idea")
+    if doc.get("purpose") is not None and (not isinstance(doc["purpose"], str) or not doc["purpose"].strip()):
+        errs.append("purpose 要是非空字串")
+    if doc.get("type") == "idea" and not doc.get("purpose"):
+        errs.append("type: idea 要寫 purpose(想法本身)")
     is_hub = stem == hubconf.hub_project()
     paths = doc.get("paths") or {}
     if not is_hub and not paths.get("workspace"):
@@ -353,14 +363,21 @@ def new_doc(name: str, workspace: str, origin: str, memory_bare: str) -> dict:
 HEADER = "# 專案登錄(schema v1,見 bin/registry.py)\n"
 
 
-def cmd_add(name: str, workspace: str, origin: str, memory_bare: str) -> int:
+def cmd_add(name: str, workspace: str, origin: str, memory_bare: str, extra: str | None = None) -> int:
+    """extra:JSON 物件,蓋過預設登錄的欄位(例:想法沙盒的 type/purpose/enforce/privacy)。驗證不過就不寫。"""
     f = hubconf.registry_dir() / f"{name}.yaml"
     if f.exists():
         print(f"{name} 已經在登錄裡({f}),不覆蓋")
         return 0
+    doc = new_doc(name, workspace, origin, memory_bare)
+    if extra:
+        doc.update(json.loads(extra))
+        errs = validate(doc, name)
+        if errs:
+            print(f"登錄不合格,不寫入:{'; '.join(errs)}", file=sys.stderr)
+            return 1
     f.parent.mkdir(parents=True, exist_ok=True)
-    f.write_text(HEADER + yaml.safe_dump(new_doc(name, workspace, origin, memory_bare), allow_unicode=True,
-                                         sort_keys=False, width=200))
+    f.write_text(HEADER + yaml.safe_dump(doc, allow_unicode=True, sort_keys=False, width=200))
     print(f"登錄:{f}")
     return 0
 
@@ -431,6 +448,8 @@ def cmd_apply_updates() -> int:
 
 def main() -> int:
     args = sys.argv[1:]
+    if args[:1] == ["add"] and len(args) == 7 and args[5] == "--extra":
+        return cmd_add(*args[1:5], extra=args[6])
     if args[:1] == ["add"] and len(args) == 5:
         return cmd_add(*args[1:])
     if args[:1] == ["rename"] and len(args) == 6:

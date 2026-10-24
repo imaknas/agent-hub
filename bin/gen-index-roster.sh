@@ -22,19 +22,31 @@ INDEX="$HUB/index.md"
 
 [ -f "$INDEX" ] || printf '# agent-hub index\n' > "$INDEX"
 
-block=$(mktemp); out=$(mktemp); rows=$(mktemp)
-trap 'rm -f "$block" "$out" "$rows"' EXIT
+block=$(mktemp); out=$(mktemp); rows=$(mktemp); ideas=$(mktemp)
+trap 'rm -f "$block" "$out" "$rows" "$ideas"' EXIT
 AGENT_HUB_ROOT="$HUB" python3 "$HUB/bin/hubconf.py" roster > "$rows"
+AGENT_HUB_ROOT="$HUB" python3 "$HUB/bin/hubconf.py" ideas > "$ideas"   # 想法沙盒另外列一組
 [ -s "$rows" ] || { echo "gen-index-roster: 專案登錄是空的($HUB/projects)" >&2; exit 1; }
 
 {
   echo "<!-- roster:begin — 由 bin/gen-index-roster.sh 從專案登錄產生,不要手動改 -->"
   echo "| 專案 | 路徑(mini) |"
   echo "|---|---|"
-  cut -f1,2 "$rows" | sort \
+  cut -f1,2 "$rows" | sort | awk -F'\t' 'NR==FNR{idea[$1]=1; next} !($1 in idea)' "$ideas" - \
     | while IFS=$'\t' read -r name path; do
         echo "| \`$name\` | \`$path\` |"
       done
+  if [ -s "$ideas" ]; then
+    echo
+    echo "想法沙盒(Muninn 替想法開的探討用專案,登錄 \`type: idea\`):"
+    echo
+    echo "| 想法 | 路徑(mini) |"
+    echo "|---|---|"
+    cut -f1,2 "$rows" | sort | awk -F'\t' 'NR==FNR{idea[$1]=1; next} ($1 in idea)' "$ideas" - \
+      | while IFS=$'\t' read -r name path; do
+          echo "| \`$name\` | \`$path\` |"
+        done
+  fi
   echo "<!-- roster:end -->"
 } > "$block"
 

@@ -9,6 +9,8 @@
   "properties": {
     "v": {"const": 1},
     "name": {"type": "string", "pattern": "^[a-z0-9][a-z0-9-]*$"},
+    "type": {"enum": ["project", "idea"]},
+    "purpose": {"type": "string", "minLength": 1},
     "paths": {"type": "object", "properties": {"workspace": {"type": "string"}, "memory_bare": {"type": "string"}, "origin": {"type": ["string", "null"]}}},
     "memory": {"type": "boolean"},
     "privacy": {"type": "object", "properties": {"reflection": {"enum": ["include", "stats_only", "exclude"]}}},

@@ -235,8 +235,10 @@ fi
 
 # --- 11. 登記進 agent-hub 的專案登錄 projects/<name>.yaml(一律登記,無論有沒有 origin) ---
 manifest_origin="${origin_url:-(native)}"
+# ONBOARD_REGISTRY_EXTRA(JSON):呼叫端要一起登記的欄位(create-idea-sandbox.sh 的 type: idea 等),
+# 跟登記同一個 commit,不會有「已登錄但欄位還沒補」的空窗
 /opt/homebrew/bin/python3 "$AGENT_HUB/bin/registry.py" add "$PROJ_NAME" "$PROJ_PATH" "$manifest_origin" \
-    "~/git-origin/${PROJ_NAME}-memory.git" \
+    "~/git-origin/${PROJ_NAME}-memory.git" ${ONBOARD_REGISTRY_EXTRA:+--extra "$ONBOARD_REGISTRY_EXTRA"} \
   || fail "登記進專案登錄失敗(projects/$PROJ_NAME.yaml)"
 # 登記完直接 commit+push agent-hub——以前只寫檔不 commit,mini 上的 librarian
 # /mirror-backup 要等有人剛好手動 commit 才看得到新專案(project-36 就是這樣

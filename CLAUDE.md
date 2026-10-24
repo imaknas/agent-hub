@@ -45,6 +45,10 @@ SSH 開 mini 上的資料夾,MBP 斷線/沒電 session 也繼續跑。MBP 上的
   ——**絕對不要**對已經 onboard 過的專案重跑 `onboard-project.sh`,會建出
   一份全新、跟舊歷史斷開的 memory,不是救回來。細節看
   `.claude/skills/recover-projects/SKILL.md`
+- **想法沙盒**(Muninn 替想法開的探討用專案,登錄 `type: idea`,`~/workspace/idea-<n>`,沒有 GitHub remote):
+  Muninn 透過 lease-runner 的 `POST /v1/sandboxes` 開(→ `bin/create-idea-sandbox.py`);升級成正式專案用
+  `bin/upgrade-idea.py <idea-n> [--rename <新名稱>] [--public]`(先 dry-run,再加 `--apply`)。設計在
+  `docs/design/idea-sandboxes.md`
 - **專案改名**(GitHub repo 已經改好之後):`bin/rename-project.sh <old> <new> [--path <新路徑>]`
   ——登記、mini 的 memory bare repo / ~/.memory-copies 副本 / checkpoint / mirror、本機資料夾
   一次改完,memory 歷史保留。先 dry-run,再加 `--apply`

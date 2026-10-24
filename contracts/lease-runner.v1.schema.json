@@ -181,8 +181,20 @@
             "resume_failed",
             "handover_failed",
             "unauthorized",
-            "internal"
+            "internal",
+            "bad_name",
+            "exists",
+            "too_many",
+            "create_failed"
           ]
+        },
+        "limit": {
+          "type": "integer",
+          "description": "too_many:同時最多幾個想法沙盒"
+        },
+        "current": {
+          "type": "integer",
+          "description": "too_many:現在有幾個"
         }
       }
     },
@@ -322,6 +334,50 @@
             "integer",
             "null"
           ]
+        }
+      }
+    },
+    "sandbox_create": {
+      "type": "object",
+      "required": [
+        "v",
+        "name",
+        "purpose"
+      ],
+      "description": "POST /v1/sandboxes:替一個想法開探討用的專案(預設唯讀)。同名、同 purpose 再送一次回同一個專案(200),不另開新的。",
+      "properties": {
+        "v": {
+          "const": 1
+        },
+        "name": {
+          "type": "string",
+          "pattern": "^idea-[0-9]+$"
+        },
+        "purpose": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 500,
+          "description": "想法本身"
+        }
+      }
+    },
+    "sandbox": {
+      "type": "object",
+      "required": [
+        "v",
+        "name",
+        "created"
+      ],
+      "description": "201(新建)或 200(已存在,重送)。之後這個名稱出現在 policy 的 attachable,可以照一般專案借用。錯誤:400 bad_name、409 exists(同名但 purpose 不同,或名稱已被正式專案用掉)、429 too_many(帶 limit、current)、500 create_failed。",
+      "properties": {
+        "v": {
+          "const": 1
+        },
+        "name": {
+          "type": "string"
+        },
+        "created": {
+          "type": "boolean"
         }
       }
     }

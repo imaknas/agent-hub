@@ -8,6 +8,7 @@
     還沒產生的話(新機器、MBP)退回 roster():直接從 YAML 檔讀名稱跟 paths
 
 給 shell 腳本用(任何 python3 都能跑):
+  hubconf.py ideas     想法沙盒(登錄 type: idea)的名稱,一行一個
   hubconf.py roster    每個專案一行 name<TAB>workspace<TAB>origin<TAB>memory_bare,沒有標題列;
                        workspace 展開 ~、沒有 origin 印 (native)、memory_bare 前面加 hub.json 的 memory_host:
 """
@@ -188,6 +189,22 @@ def roster_paths(text: str) -> dict:
     return paths
 
 
+_TYPE_LINE = re.compile(r"^type:\s*['\"]?(\w+)['\"]?\s*(?:#.*)?$")
+
+
+def ideas() -> list[str]:
+    """登錄 `type: idea` 的專案(想法沙盒)。跟 roster() 一樣逐行讀頂層的 `type:`,不需要 PyYAML。"""
+    d = registry_dir()
+    out = []
+    for f in sorted(d.glob("*.yaml")) if d and d.is_dir() else []:
+        for line in f.read_text().splitlines():
+            if (m := _TYPE_LINE.match(line)):
+                if m.group(1) == "idea":
+                    out.append(f.stem)
+                break
+    return out
+
+
 def projects() -> dict[str, dict]:
     """名稱 → 驗證過的登錄(dict)。快取還沒產生(新機器、MBP)就用 roster() 湊最小的欄位。"""
     if REGISTRY_INDEX.exists():
@@ -231,7 +248,11 @@ def main(argv: list[str]) -> int:
             print("\t".join([name, str(path(paths.get("workspace")) or ""), paths.get("origin") or "(native)",
                              f"{host}:{bare}" if host else bare]))
         return 0
-    print("用法:hubconf.py roster", file=sys.stderr)
+    if argv == ["ideas"]:
+        for name in ideas():
+            print(name)
+        return 0
+    print("用法:hubconf.py roster | ideas", file=sys.stderr)
     return 2
 
 
