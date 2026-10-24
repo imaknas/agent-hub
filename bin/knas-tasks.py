@@ -11,6 +11,10 @@ Knas 在 Muninn 結案/取消/重開時,Muninn 送回帶 key 的轉交,這裡照
   2. 還沒有 key 的〔Knas〕行(`- [ ] 〔Knas〕…`,或 `### 〔Knas〕` 小標題底下的 `- [ ] …`):
      key = task-<專案>-<sha1(正規化的文字)[:10]>,固定、可重算:先寄(hubbus 跟 Muninn 都照 id 去重)
      再蓋章,蓋章或 commit 失敗,隔晚重寄也只是 no-op。第一次跑時 context=migration。
+  2b. 寄過、Muninn 沒結案,STATE.md 卻找不到的 key(多半是 librarian 判定做完了、整行刪掉):寄一封
+     `done`(task=key,id=done-<key>,重寄是 no-op)給 Muninn,文字標明是推斷的結案、附上 review-log 裡
+     刪掉那一行那次的理由——由 Muninn 讓 Knas 確認,不是直接當成 Knas 結案。現在的 STATE.md 裡有文字很像
+     的行(模型改寫時把行尾拿掉了,同一件換成新 key)就不寄,只警告。
   3. 有改就 commit + push(memory 副本走 git-safe-push;agent-hub 的檔走 commit-hub-files.sh),
      push 成功之後才把那些轉交 `hubbus done`(bridge 再回報 Muninn);失敗就留到隔晚。
 
@@ -36,7 +40,9 @@ HUB = hubconf.ROOT
 COPIES = hubconf.p("memory_copies")
 HUBBUS = ["/usr/bin/python3", str(HUB / "bin" / "hubbus")]
 MIGRATED = hubconf.STATE / "knas-tasks-migrated"
-VANISHED = hubconf.STATE / "knas-tasks-vanished.json"   # 已經警告過的 key,只警告一次
+VANISHED = hubconf.STATE / "knas-tasks-inferred.json"   # 已經處理過(寄了推斷結案或警告過)的 key
+REVIEW_LOG = HUB / "review-log.md"
+SIMILAR = 0.6   # 跟現在的某一行這麼像就當成改寫,不是做完
 BUS = hubconf.bus_db()
 OWNER, OWNERS, TAG = hubconf.owner_address(), sorted(hubconf.owner_addresses()), hubconf.owner_tag()
 IN_OWNERS = f"({','.join(repr(o) for o in OWNERS)})"
@@ -147,17 +153,40 @@ def commit(project: str, path: pathlib.Path, how: str, msg: str) -> bool:
     return r.returncode == 0
 
 
-def vanished_keys(project: str, lines: list[str], closed: set[str]) -> list[str]:
-    """寄過、Muninn 也沒結案,STATE.md 卻已經找不到的 key——多半是 librarian 的模型改寫時把行尾拿掉了
-    (同一件事換了文字會變成新 key,Muninn 的去重會合併)。只警告,不自動重寄也不自動結案。"""
+def vanished_keys(project: str, lines: list[str], closed: set[str]) -> dict[str, str]:
+    """寄過、Muninn 也沒結案,STATE.md 卻已經找不到的 key → 當初寄出去的文字。"""
     if not BUS.exists():
-        return []
+        return {}
     import sqlite3
     c = sqlite3.connect(BUS, timeout=30)
-    posted = {r[0] for r in c.execute(f"SELECT id FROM events WHERE type='message' AND to_project IN {IN_OWNERS}"
-                                      " AND source=? AND id LIKE 'task-%'", (project,))}
+    posted = {r[0]: json.loads(r[1]).get("text", "") for r in c.execute(
+        f"SELECT id, payload FROM events WHERE type='message' AND to_project IN {IN_OWNERS}"
+        " AND source=? AND id LIKE 'task-%'", (project,))}
     present = {m.group(1) for l in lines if (m := KEY.search(l))}
-    return sorted(posted - present - closed)
+    return {k: t for k, t in sorted(posted.items()) if k not in present and k not in closed}
+
+
+def rewritten(text: str, lines: list[str]) -> bool:
+    """現在的 STATE.md 有沒有文字很像的行(同一件事被改寫成新 key)。"""
+    import difflib
+    a = norm(KEY.sub("", text))
+    return any(difflib.SequenceMatcher(None, a, norm(KEY.sub("", l))).ratio() >= SIMILAR
+               for l in lines if l.lstrip().startswith("- "))
+
+
+def removal_reason(key: str) -> str | None:
+    """review-log 裡刪掉帶這個 key 那一行的那一次:「<標題>:<理由>」(最後一次)。"""
+    if not REVIEW_LOG.exists():
+        return None
+    head = why = found = None
+    for line in REVIEW_LOG.read_text().splitlines():
+        if line.startswith("## "):
+            head, why = line[3:].strip(), None
+        elif line.startswith("**理由**"):
+            why = re.sub(r"^\*\*理由\*\*\s*[::]\s*", "", line).strip()
+        elif line.startswith("-") and not line.startswith("---") and key in line:
+            found = f"{head}:{why}" if why else head
+    return found
 
 
 def main() -> int:
@@ -190,10 +219,27 @@ def main() -> int:
                 changed = True
                 log(f"{project}: {h['effect']} {h['reply_to']}")
             closing.append(h["id"])
-        for key in vanished_keys(project, lines, closed):
-            if key not in warned:
-                log(f"{project}: 警告——{key} 寄給 Muninn 了、還沒結案,STATE.md 卻找不到(模型改寫時拿掉了行尾?)")
+        for key, text in vanished_keys(project, lines, closed).items():
+            if key in warned:
+                continue
+            if rewritten(text, lines):
+                log(f"{project}: 警告——{key} 還沒結案,STATE.md 找不到 key 但有很像的行(模型改寫時拿掉了行尾?),不寄結案")
                 warned.add(key)
+                continue
+            why = removal_reason(key)
+            note = (f"librarian 推斷已完成(不是 {TAG} 在 Muninn 結案,請確認):STATE.md 的待辦裡已經沒有這一件。"
+                    + (f"刪掉的那次({why[:300]})" if why else "review-log 沒有記錄是哪一次刪掉的"))
+            if DRY:
+                log(f"{project}: (dry-run) 會寄推斷結案 {key}:{note[:120]}")
+                continue
+            res = hubbus("send", "--to", OWNER, "--type", "done", "--from", project, "--id", f"done-{key}",
+                         "--task", key, "--text", note)
+            if res.returncode != 0:
+                failed += 1
+                log(f"{project}: 推斷結案 {key} 寄不出去,隔晚再試:{res.stderr.strip()[-160:]}")
+                continue
+            log(f"{project}: 寄出推斷結案 {key}({why or '沒有 review-log 紀錄'})")
+            warned.add(key)
         for i, text in unkeyed(lines):
             key = task_key(project, text)
             args = ["send", "--to", OWNER, "--type", "task", "--from", project, "--id", key, "--text", text]

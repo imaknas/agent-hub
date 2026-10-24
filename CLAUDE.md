@@ -73,7 +73,8 @@ SSH 開 mini 上的資料夾,MBP 斷線/沒電 session 也繼續跑。MBP 上的
 - `bin/knas-tasks.py`——〔Knas〕待辦的 Muninn 任務登錄(librarian 每晚、gen-todo 之前呼叫,零 LLM):
   還沒 key 的〔Knas〕行(各 STATE.md、openclaw-migration-status.md)寄成 `task`、蓋上「(等 Knas:<key>)」
   (key 固定 = 專案 + 文字的 hash,重寄是 no-op);Muninn 回來的帶 key 轉交(done/dropped/already_done/
-  reopened)照 key 刪掉或加回那一行,push 成功才結案
+  reopened)照 key 刪掉或加回那一行,push 成功才結案;寄過的 key 從 STATE.md 消失(librarian 判定做完、整行刪掉)就寄
+  推斷的 `done`(附 review-log 的理由)給 Muninn 讓 Knas 確認,現在有很像的行(改寫)就只警告
 
 ## 通道租借(Muninn 借對話給專案 session)
 
