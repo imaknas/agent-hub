@@ -90,8 +90,8 @@ points:
     output: {format: text}
     on_failure: say_so      # 發 Discord 警報
   mailbox-escalation:
-    caller: bin/hubbus(escalate → run-agent-job.sh)
-    purpose: "專案信箱的信 12 小時沒人收:在那個專案開 headless session,只寫 memory 筆記、回信、問 owner"
+    caller: bin/hubbus(dispatch → run-agent-job.sh)
+    purpose: "專案信箱的交辦沒人收(專案沒人在用,或等了幾分鐘):在那個專案開 headless session,只寫 memory 筆記、回信、問 owner"
     permission_mode: dontAsk
     prompts: none
     tools: Read,Edit,Write,Glob,Grep,Bash
@@ -99,6 +99,19 @@ points:
     timeout_s: 1800
     output: {format: text}
     on_failure: say_so      # bridge 回報升級失敗
+  mailbox-conversation:
+    caller: bin/hubbus(dispatch → llm.py run,帶 runtime_claude.resume_args)
+    purpose: "對話的回信送到一個閒置的 session:用它的 context 在背景接續(分支副本,不動原本的 session),只寫筆記、回信、問 owner"
+    model_env: LEASE_MODEL
+    model_default: sonnet
+    # 權限跟 mailbox-escalation 一樣,不沿用原本 session 的權限模式(它可能是 acceptEdits/auto,沒人看著不能照用)
+    permission_mode: dontAsk
+    prompts: none
+    tools: Read,Edit,Write,Glob,Grep,Bash
+    allowed_tools: ["Edit(./.agent-memory/memory/**)", "Bash(~/agent-hub/bin/hubbus *)"]
+    timeout_s: 1800
+    output: {format: text}
+    on_failure: say_so     # 失敗記 job.failed,狀態頁看得到;信已被認領,不會再派(狀態頁列出沒結案的)
   lease-session:
     caller: bin/lease-runner.py(llm.py exec)
     purpose: "通道租借的 discuss session:長駐的 stream-json 程序,Knas 透過 Muninn 跟專案深談;唯讀"

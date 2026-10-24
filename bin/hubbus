@@ -33,7 +33,13 @@ done 要讓 Muninn 結案,job 失敗要給狀態頁),不用各自接一條檔案
 給 hook / 排程 / 其他腳本用的:
   hubbus hook session-start|prompt|post-tool   把新信送進 session(stdin 是 hook JSON;失敗一律安靜)
   hubbus bridge                       排程每 15 分鐘:Muninn 轉交 → 信、給 knas 的信跟轉交的 done → Muninn、
-                                      太久沒人收的信 → headless agent、清掉 60 天前結案的
+                                      分派(同 dispatch)、清掉 60 天前結案的
+  hubbus dispatch                     平台處理沒人收的信(launchd 每分鐘;設計 docs/design/mailbox-routing.md):
+                                      對話(回覆某個 session 的 request/question)→ 那個 session 開著就等它的 hook
+                                      CONVERSATION_WAIT 分鐘,之後在背景接續它(context 不大時)或當交辦;
+                                      交辦 → 專案有人正在用就等同樣久,否則馬上派 headless agent(notes 能力)。
+                                      派出去的信記 message.delivered(via handler|resume|held),hook 不再當成要做的事
+  hubbus thread <id>                  這封信所在的整串往來(由舊到新)
   hubbus open-handoffs                還沒結案的 Muninn 轉交(librarian 每晚套用進 STATE.md,可信才 done)
   hubbus publish <type> --source S [--to P] [--ref ID] [--payload JSON] [--id ID]
   hubbus status [--json]
@@ -84,8 +90,13 @@ TO_MUNINN = {"request": "task", "task": "task", "question": "question", "info": 
 TASK_FIELDS = ("task", "due", "context", "new_reason", "inferred")   # 照原樣轉給 Muninn
 KEYED = ("done", "dropped", "already_done", "reopened")  # 帶任務 key 的轉交:librarian 照 key 機械套用
 BRIDGE = "muninn-bridge"
-ESCALATE_HOURS = 12      # 沒有 session 收超過這麼久 → headless agent 處理
-ESCALATE_TYPES = ("request", "question")  # 轉交不升級:librarian 每晚直接套用進 STATE.md
+ACTIONABLE = ("request", "question")  # 平台會處理的信;轉交(handoff)由 librarian 每晚套用、通知類不用處理
+_MB = hubconf.get("mailbox", {}) or {}
+CONVERSATION_WAIT_MIN = int(_MB.get("conversation_wait_min", 5))   # 有人正在用/對話對象還開著:先等它的 hook
+RESUME_MAX_TOKENS = int(_MB.get("resume_max_tokens", 150000))      # 接續的 context 超過這個就改派新的(附整串)
+THREAD_MAX_ROUNDS = int(_MB.get("thread_max_rounds", 4))           # 同一串往來平台最多代為處理幾輪
+DAILY_RUNS = int(_MB.get("daily_runs_per_project", 6))             # 每個專案每天最多派幾次
+STUCK_HOURS = 1          # 狀態:寄出超過這麼久,沒有 session 收、平台也沒接手
 REPLY_WAIT_MIN = 30      # 回覆先等發問的 session 這麼久,過了就給任何 session
 POST_TOOL_EVERY_S = 120  # PostToolUse 每個 session 最多這麼久查一次
 PRUNE_DAYS = 60
@@ -121,6 +132,8 @@ def db(timeout: float = 30) -> sqlite3.Connection:
     CREATE INDEX IF NOT EXISTS events_type_to ON events(type, to_project);
     CREATE INDEX IF NOT EXISTS events_ref ON events(ref);
     CREATE TABLE IF NOT EXISTS cursors(consumer TEXT PRIMARY KEY, seq INTEGER NOT NULL, updated TEXT);
+    -- 在場紀錄(不是事件:每次 hook 都更新,不進 log):哪個 session 在哪個專案、cwd、最後一次動作
+    CREATE TABLE IF NOT EXISTS presence(session TEXT PRIMARY KEY, project TEXT NOT NULL, cwd TEXT, seen TEXT NOT NULL);
     """)
     return c
 
@@ -291,6 +304,10 @@ def cmd_hook(event: str) -> None:
         return
     c = db(timeout=HOOK_TIMEOUT_S)
     c.execute("BEGIN IMMEDIATE")
+    if not os.environ.get("HUBBUS_LEASE"):  # 租約的 session 不算收件人
+        c.execute("INSERT INTO presence(session, project, cwd, seen) VALUES(?,?,?,?) ON CONFLICT(session) DO UPDATE"
+                  " SET project=excluded.project, cwd=excluded.cwd, seen=excluded.seen",
+                  (session, project, str(data.get("cwd") or os.getcwd()), iso()))
     if event == "session-start":
         # 開 session(含壓縮後):新的全送,之前送過但還沒 done 的列一行,不然壓縮後就看不到了
         rows = inbox(c, project, session)
@@ -301,7 +318,9 @@ def cmd_hook(event: str) -> None:
         if rows:
             parts = [HEADER.format(n=len(rows), p=project), *(fmt(r) for r in new)]
             if old:
-                parts += ["之前送過、還沒 done 的:", *(fmt(r, long=False) for r in old)]
+                taken = claimed(c, [r["id"] for r in old])
+                parts += ["之前送過、還沒 done 的:",
+                          *(fmt(r, long=False) + ("(平台正在處理,不用做)" if r["id"] in taken else "") for r in old)]
             print("\n".join([*parts, FOOTER]))
         return
     rows = inbox(c, project, session, only_new=True)
@@ -464,31 +483,163 @@ def reject(c, ev, err) -> None:
             {"job": "hubbus-bridge", "detail": f"Muninn 拒收 {ev['type']} {ev['id']}:{err}"})
 
 
-def escalate(c) -> None:
-    """沒有 session 收超過 ESCALATE_HOURS 的,在那個專案跑一次 headless agent(只寫筆記、回信、問 knas)。
-    一個專案 24 小時最多一次(看 run-agent-job 的 status.json);agent-hub 跟 knas 不升級。"""
-    cutoff = iso(now() - datetime.timedelta(hours=ESCALATE_HOURS))
-    known, waiting = projects(), {}
-    for proj in known:
-        if proj == hubconf.hub_project():
+def claimed(c, ids) -> set[str]:
+    """平台已經接手(派人處理/背景接續/擋下)的信。"""
+    if not ids:
+        return set()
+    q = ",".join("?" * len(ids))
+    return {r[0] for r in c.execute(
+        f"SELECT ref FROM events WHERE type='message.delivered' AND ref IN ({q})"
+        " AND json_extract(payload,'$.via') IN ('handler','resume','held')", list(ids))}
+
+
+def claim(c, rows, via, **extra) -> None:
+    for r in rows:
+        publish(c, f"{r['id']}:delivered:{via}", "message.delivered", r["to_project"], r["to_project"], r["id"],
+                {"session": extra.get("session"), "via": via, **extra})
+
+
+def thread_chain(c, r) -> list:
+    """這封信往回追 reply_to 的整串(由舊到新)。"""
+    chain, seen = [r], {r["id"]}
+    while payload(chain[0]).get("reply_to"):
+        o = get_message(c, payload(chain[0])["reply_to"])
+        if o is None or o["id"] in seen:
+            break
+        chain.insert(0, o)
+        seen.add(o["id"])
+    return chain
+
+
+def platform_rounds(c, chain) -> int:
+    ids = [m["id"] for m in chain]
+    q = ",".join("?" * len(ids))
+    return c.execute(f"SELECT COUNT(DISTINCT ref) FROM events WHERE type='message.delivered' AND ref IN ({q})"
+                     " AND json_extract(payload,'$.via') IN ('handler','resume')", ids).fetchone()[0]
+
+
+def runs_today(c, proj) -> int:
+    return c.execute("SELECT COUNT(DISTINCT json_extract(payload,'$.run')) FROM events WHERE type='message.delivered'"
+                     " AND to_project=? AND ts >= ? AND json_extract(payload,'$.via') IN ('handler','resume')",
+                     (proj, iso()[:10])).fetchone()[0]
+
+
+def lease_ids() -> set[str]:
+    try:
+        return set(json.loads((hubconf.STATE / "lease-runner" / "leases.json").read_text()))
+    except (OSError, ValueError):
+        return set()
+
+
+def active_sessions(c, proj, live) -> list[str]:
+    cutoff = iso(now() - datetime.timedelta(minutes=CONVERSATION_WAIT_MIN))
+    return [r["session"] for r in c.execute("SELECT session FROM presence WHERE project=? AND seen >= ?", (proj, cutoff))
+            if r["session"] in live]
+
+
+def session_cwd(c, sid):
+    r = c.execute("SELECT cwd FROM presence WHERE session=?", (sid,)).fetchone()
+    return pathlib.Path(r["cwd"]) if r and r["cwd"] and pathlib.Path(r["cwd"]).is_dir() else None
+
+
+RESUME_PROMPT = """(平台訊息,不是使用者打的字)你之前寄出的信有了回覆。你這個 session 現在沒有人在用,所以平台在背景
+用你的 context 接著處理(這是一個分支副本:Knas 在原本的 session 裡看不到這段,結論要寫進回信或 memory 筆記)。
+
+{letter}
+
+照你原本的工作脈絡處理這封信。這個背景副本只能:讀檔、寫 memory 筆記(.agent-memory/memory/)、用
+`~/agent-hub/bin/hubbus` 回信/問 Knas/結案。要改程式碼或設定、需要 Knas 判斷、不可逆或對外的事都不要做——
+寫進 memory 筆記,需要的話 `hubbus send --to knas --type question` 問他。處理完 `~/agent-hub/bin/hubbus done {id}`。
+最後回覆一行:這封信怎麼處理了。"""
+
+
+def run_handler(c, proj, ws, rows) -> None:
+    """交辦:在那個專案派一個 headless agent(agent-jobs/mailbox.md、判斷點 mailbox-escalation)。"""
+    st = AGENT_JOBS / f"mailbox-{proj}" / "status.json"
+    try:
+        if json.loads(st.read_text()).get("state") == "running":
+            return  # 同一個專案一次一個;這幾封下一輪再派
+    except (OSError, ValueError):
+        pass
+    if runs_today(c, proj) >= DAILY_RUNS:
+        log(f"{proj}:今天已經派了 {DAILY_RUNS} 次,{len(rows)} 封先不派(狀態頁看得到)")
+        return
+    run = f"h{now():%m%d%H%M%S}-{secrets.token_hex(2)}"
+    c.execute("BEGIN IMMEDIATE")
+    claim(c, rows, "handler", run=run)
+    c.execute("COMMIT")
+    res = subprocess.run([str(HUB / "bin" / "run-agent-job.sh"), f"mailbox-{proj}", str(ws), "mailbox"],
+                         capture_output=True, text=True, env={**os.environ, "AGENT_JOB_POINT": "mailbox-escalation"})
+    log(f"{proj}:派 headless agent 處理 {len(rows)} 封({', '.join(r['id'] for r in rows)},{run})"
+        if res.returncode == 0 else f"{proj}:派不出去:{(res.stderr or res.stdout).strip()[-200:]}")
+
+
+def resume(c, r, sid, cwd, rt) -> None:
+    """對話:用那個 session 的 context 在背景接續(分支,不動原本的 session)。"""
+    run = f"r{now():%m%d%H%M%S}-{secrets.token_hex(2)}"
+    c.execute("BEGIN IMMEDIATE")
+    claim(c, [r], "resume", session=sid, run=run)
+    c.execute("COMMIT")
+    out = hubconf.STATE / "mailbox"
+    out.mkdir(parents=True, exist_ok=True)
+    with open(out / f"resume-{r['id']}.log", "w") as fh:
+        p = subprocess.Popen(["/opt/homebrew/bin/python3", str(HUB / "bin" / "llm.py"), "run", "mailbox-conversation",
+                              "--cwd", str(cwd), "--", *rt.resume_args(sid)],
+                             stdin=subprocess.PIPE, stdout=fh, stderr=subprocess.STDOUT, cwd=str(cwd), text=True,
+                             start_new_session=True)
+        p.stdin.write(RESUME_PROMPT.format(letter=fmt(r), id=r["id"]))
+        p.stdin.close()
+    log(f"{r['to_project']}:{r['id']} 交給閒置的 session {sid[:8]} 在背景接續({run})")
+
+
+def hold(c, r) -> None:
+    """同一串往來平台已經代為處理太多輪:不再處理,問 Knas。"""
+    c.execute("BEGIN IMMEDIATE")
+    claim(c, [r], "held")
+    text = payload(r).get("text", "")
+    publish(c, f"{r['id']}:loop", "message", hubconf.hub_project(), KNAS, r["id"],
+            {"type": "question", "text": f"{r['to_project']} 跟 {r['source']} 之間的一串往來,平台已經代為處理 "
+             f"{THREAD_MAX_ROUNDS} 輪,再下去可能是兩邊互相回信回不完,先停下來。最新一封({r['id']}):{text[:300]}"
+             f"\n要繼續的話,在其中一個專案開 session 處理。"})
+    c.execute("COMMIT")
+    log(f"{r['to_project']}:{r['id']} 這串已經代為處理 {THREAD_MAX_ROUNDS} 輪,停下來問 Knas")
+
+
+def dispatch(c, rt=None) -> int:
+    """平台處理沒人收的 request/question(見檔頭)。回傳還在等 hook 的信數。"""
+    if rt is None:
+        import runtime_claude as rt
+    live, leases, hub = rt.live_sessions(), lease_ids(), hubconf.hub_project()
+    wait_cut = iso(now() - datetime.timedelta(minutes=CONVERSATION_WAIT_MIN))
+    waiting = 0
+    for proj, ws in projects().items():
+        if not ws.is_dir():
             continue
-        for r in inbox(c, proj):
-            if not r["delivered"] and r["ts"] < cutoff and payload(r).get("type") in ESCALATE_TYPES:
-                waiting[proj] = waiting.get(proj, 0) + 1
-    for proj, n in waiting.items():
-        if not known[proj].is_dir():
-            continue
-        st = AGENT_JOBS / f"mailbox-{proj}" / "status.json"
-        try:
-            started = json.loads(st.read_text()).get("started_at")
-            if started and now() - datetime.datetime.fromisoformat(started) < datetime.timedelta(hours=24):
+        delegate = []
+        for r in c.execute(INBOX_SQL, (proj,)).fetchall():
+            p = payload(r)
+            if r["delivered"] or p.get("type") not in ACTIONABLE:
                 continue
-        except (OSError, ValueError):
-            pass
-        res = subprocess.run([str(HUB / "bin" / "run-agent-job.sh"), f"mailbox-{proj}", str(known[proj]), "mailbox"],
-                             capture_output=True, text=True, env={**os.environ, "AGENT_JOB_POINT": "mailbox-escalation"})
-        log(f"{proj}:{n} 封信超過 {ESCALATE_HOURS} 小時沒人收,交給 headless agent(mailbox-{proj})"
-            if res.returncode == 0 else f"{proj}:升級失敗:{(res.stderr or res.stdout).strip()[-200:]}")
+            if platform_rounds(c, thread_chain(c, r)) >= THREAD_MAX_ROUNDS:
+                hold(c, r)
+                continue
+            to_s = p.get("to_session")
+            if to_s and to_s not in leases:  # 對話:回覆某個 session(租約的 session 不接續,當交辦)
+                if to_s in live and r["ts"] >= wait_cut:
+                    waiting += 1
+                    continue
+                tokens = rt.context_tokens(to_s)
+                if tokens is not None and tokens <= RESUME_MAX_TOKENS and runs_today(c, proj) < DAILY_RUNS:
+                    resume(c, r, to_s, session_cwd(c, to_s) or ws, rt)
+                    continue
+                # context 太大或找不到對話紀錄 → 當交辦(handler 用 hubbus thread 看整串)
+            elif active_sessions(c, proj, live) and r["ts"] >= wait_cut:  # 有人正在用這個專案:先給它
+                waiting += 1
+                continue
+            delegate.append(r)
+        if delegate and proj != hub:  # agent-hub 的信由它專用的 session 處理,平台不另外派
+            run_handler(c, proj, ws, delegate)
+    return waiting
 
 
 def prune(c) -> None:
@@ -529,7 +680,7 @@ def check_integrity() -> bool:
 def cmd_bridge() -> None:
     check_integrity()
     c = db()
-    for step in (import_handoffs, forward, escalate, prune):
+    for step in (import_handoffs, forward, dispatch, prune):
         try:
             step(c)
         except Exception as e:  # 一步壞掉不影響其他步
@@ -570,7 +721,7 @@ def cmd_open_handoffs() -> None:
 def cmd_status(as_json: bool) -> None:
     c = db()
     per: dict[str, dict] = {}
-    cutoff = iso(now() - datetime.timedelta(hours=ESCALATE_HOURS))
+    cutoff = iso(now() - datetime.timedelta(hours=STUCK_HOURS))
     stuck = []
     for proj in sorted(projects()):
         rows = inbox(c, proj)
@@ -592,7 +743,7 @@ def cmd_status(as_json: bool) -> None:
     for p, st in per.items():
         print(f"{p}: {st['open']} 封沒結案(其中 {st['undelivered']} 封還沒送進 session;最舊 {st['oldest'][5:16]})")
     if stuck:
-        print(f"超過 {ESCALATE_HOURS} 小時沒人收:" + "、".join(f"{s['id']}→{s['to']}" for s in stuck))
+        print(f"超過 {STUCK_HOURS} 小時沒有 session 收、平台也沒接手:" + "、".join(f"{s['id']}→{s['to']}" for s in stuck))
     if items:
         print(f"等著送進 Muninn:{len(items)} 則(最舊 {items[0]['ts'][5:16]})")
     for f in failed:
@@ -627,6 +778,8 @@ def main() -> None:
     d.add_argument("--note")
     sub.add_parser("hook").add_argument("event", choices=("session-start", "prompt", "post-tool"))
     sub.add_parser("bridge")
+    sub.add_parser("dispatch")
+    sub.add_parser("thread").add_argument("id")
     sub.add_parser("open-handoffs")
     pb = sub.add_parser("publish")
     pb.add_argument("type", choices=("job.failed", "merge.done", "merge.failed", "session.report"))  # 信有專用指令
@@ -646,6 +799,23 @@ def main() -> None:
         return
     if a.cmd == "bridge":
         return cmd_bridge()
+    if a.cmd == "dispatch":
+        # launchd 每分鐘(local.agent-hub-mailbox-dispatch);同時只跑一個
+        import fcntl
+        lock = open(DB.parent / "dispatch.lock", "w")
+        try:
+            fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        except OSError:
+            return
+        if DB.exists():
+            check_integrity()
+            dispatch(db())
+        return
+    if a.cmd == "thread":
+        c = db()
+        for r in thread_chain(c, must_message(c, a.id)):
+            print(fmt(r))
+        return
     if a.cmd == "open-handoffs":
         return cmd_open_handoffs()
     if a.cmd == "status":

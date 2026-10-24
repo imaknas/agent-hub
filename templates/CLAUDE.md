@@ -34,9 +34,10 @@ commit/push 之後跟每次 session 開始(含壓縮後)會自動提醒。不會
 
     ~/agent-hub/bin/hubbus send --to <專案名稱|agent-hub|knas> --type <request|question|info|progress|done> --text "…"
 
-收件人是**專案**,不是 session:session 放久了就互相看不到,信會在那個專案下次有 session 時送到
-(太久沒人收會有 headless agent 處理)。`knas` = 送進 Knas 的 Muninn,他的回答之後會寄回這個專案。
-SendMessage 只能當「順便叫一下」,不能取代寄信。
+收件人是**專案**,不是 session。寄出後平台會處理,不用自己去叫醒對方的 session、也不用等它開著:
+回覆對方某個 session 的信,會先送給那個 session(閒置的話平台用它的 context 在背景接著回);其他的請求,
+對方專案沒人在用就會馬上有 agent 處理。跨專案的事一律用 `hubbus send`,不要改用 session 之間的直接訊息。
+`knas` = 送進 Knas 的 Muninn,他的回答之後會寄回這個專案。
 
 別的專案、Muninn 寄給這個專案的信,開 session 跟對話中會自動出現(📬)。處理完
 `hubbus done <id>`(可加 `--note`);要回覆:`hubbus send --to <寄件人> --reply-to <id> …`;

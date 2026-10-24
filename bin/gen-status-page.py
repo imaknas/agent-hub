@@ -261,7 +261,7 @@ def main() -> None:
         alerts.append(("bad", f"讀不到專案信箱狀態(hubbus status exit {r.returncode}):{r.stderr.strip()[-160:]}"))
     if bus:
         for st in bus["stuck"]:
-            alerts.append(("bad", f"信 {st['id']} 寄給 {st['to']} 超過 12 小時沒有 session 收(會交給 headless agent mailbox-{st['to']})"))
+            alerts.append(("bad", f"信 {st['id']} 寄給 {st['to']} 超過 1 小時沒有 session 收、平台也沒接手(看 hubbus dispatch 的 log、每日上限)"))
         tm = bus["to_muninn"]
         if tm["n"] and now - datetime.datetime.fromisoformat(tm["oldest"]).replace(tzinfo=None) > datetime.timedelta(hours=1):
             alerts.append(("bad", f"{tm['n']} 則要送進 Muninn 的(給 knas 的信、轉交結案)卡住了,最舊 {tm['oldest'][5:16]};"

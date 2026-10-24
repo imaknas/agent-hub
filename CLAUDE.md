@@ -71,8 +71,13 @@ SSH 開 mini 上的資料夾。MBP 斷線/沒電時 session 還在跑、手機(R
   只 append 的事件 log(`.state/bus.db`,不進版控、沒有備份),信箱是它的投影。各專案的 session
   用 `hubbus send/inbox/done`(寫在 `templates/CLAUDE.md`);信由 SessionStart(`sync-local-setup.sh`、
   `worktree-memory.sh`)、UserPromptSubmit/PostToolUse hook 送進 session;`hubbus-bridge`(schedule.yaml,
-  每 15 分鐘)負責 Muninn 的轉交進信箱、給 knas 的信跟轉交的 done 送進 Muninn、12 小時沒人收就在那個專案
-  跑 headless agent(`agent-jobs/mailbox.md`,只寫筆記/回信/問 knas,不改程式碼;轉交不升級)。
+  每 15 分鐘)負責 Muninn 的轉交進信箱、給 knas 的信跟轉交的 done 送進 Muninn。**沒人收的 request/question
+  由平台處理**(`hubbus dispatch`,launchd `local.agent-hub-mailbox-dispatch` 每分鐘;設計
+  `docs/design/mailbox-routing.md`):回覆某個 session 的對話,那個 session 開著就先等它的 hook 5 分鐘,閒置
+  就用它的 context 在背景接續(分支副本,`runtime_claude.py`;context 超過 15 萬 token 改派新的);交辦則專案
+  有人正在用就等 5 分鐘、否則馬上派 headless agent(`agent-jobs/mailbox.md`,只寫筆記/回信/問 knas,不改程式碼)。
+  派出去的信記成「平台正在處理」,開著的 session 不會重做;同一串最多代為處理 4 輪、每專案每天 6 次(hub.json
+  `mailbox`)。跟 Claude Code 有關的判斷只在 `bin/runtime_claude.py`。轉交不經過這裡。
   Muninn 的轉交由 librarian 每晚從信箱讀(`hubbus open-handoffs`)直接套用進 STATE.md,結果可信才
   `hubbus done`(bridge 再回報 Muninn 結案);session 白天看到只當參考,Knas 的回答由發問的 session
   處理、沒處理的也是晚上套用。介面跟失敗模式看 `bin/hubbus` 檔頭
