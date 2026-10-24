@@ -124,7 +124,13 @@ Muninn 的信是 bridge 從 Muninn 拉進來的,所以最慢 15 分鐘才進匯�
 - 測試:`tests/test_mailbox_dispatch.py`(14 個:交辦馬上派/等有人在用的 session/暫停的 session 不擋、
   通知不派、hook 送過的不派、不重派、agent-hub 的交辦留給它自己、對話等/接續/太長改派/租約不接續、防循環、
   hook 不把認領的信當成要做的事)。
-- 上線時沒有任何待處理的 request/question,所以第一次跑沒有派人;還沒有實際派過一次(下一封交辦就是第一次)。
+- 上線時沒有任何待處理的 request/question,所以第一次跑沒有派人。
+- **實測(測試沙盒 idea-999996,經過每分鐘的 launchd 服務)**:對話的回信寄出約 30 秒被背景接續,分支副本用原本
+  session 才知道的暗號回信並結案,原本 session 的對話紀錄完全沒被動到;交辦約 30 秒派出 headless agent,寫了
+  memory 筆記、回信、結案。從別的資料夾 `--resume` 也接得回來(用 session id 找,跟 cwd 無關)。
+- advisor 審查後補的:背景接續開不起來就馬上改派交辦,35 分鐘還沒結案也改派(信不會卡在「平台正在處理」);
+  bridge 跟每分鐘的服務用同一把鎖(不會兩邊同時派人);背景副本加 `--strict-mcp-config`(不載入專案的 MCP
+  伺服器);閒置時被背景處理掉的回信,那個 session 下次有動作時會看到一行說明。
 
 ## 還要確認的
 

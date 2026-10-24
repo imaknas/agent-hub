@@ -97,6 +97,7 @@ RESUME_MAX_TOKENS = int(_MB.get("resume_max_tokens", 150000))      # 接續的 c
 THREAD_MAX_ROUNDS = int(_MB.get("thread_max_rounds", 4))           # 同一串往來平台最多代為處理幾輪
 DAILY_RUNS = int(_MB.get("daily_runs_per_project", 6))             # 每個專案每天最多派幾次
 STUCK_HOURS = 1          # 狀態:寄出超過這麼久,沒有 session 收、平台也沒接手
+RESUME_TIMEOUT_MIN = 35  # 背景接續超過這麼久還沒結案(mailbox-conversation 的 timeout 是 30 分鐘)→ 改派交辦
 REPLY_WAIT_MIN = 30      # 回覆先等發問的 session 這麼久,過了就給任何 session
 POST_TOOL_EVERY_S = 120  # PostToolUse 每個 session 最多這麼久查一次
 PRUNE_DAYS = 60
@@ -325,9 +326,19 @@ def cmd_hook(event: str) -> None:
         return
     rows = inbox(c, project, session, only_new=True)
     mark_delivered(c, rows, session, event)
+    # 給這個 session 的對話回信,在它閒置時被平台在背景接續處理掉了:下次有動作時提一行,不然它不知道
+    handled = [r for r in c.execute("""SELECT m.* FROM events m JOIN events d ON d.ref=m.id AND d.type='message.delivered'
+        AND json_extract(d.payload,'$.via')='resume' AND json_extract(d.payload,'$.session')=?
+        WHERE m.type='message' AND NOT EXISTS(SELECT 1 FROM events s WHERE s.id = m.id || ':delivered:' || ?)""",
+        (session, session)).fetchall()]
+    mark_delivered(c, handled, session, event)
     c.execute("COMMIT")
+    if handled:
+        rows = rows + handled
     if rows:
-        text = "\n".join([HEADER.format(n=len(rows), p=project), *(fmt(r) for r in rows), FOOTER])
+        text = "\n".join([HEADER.format(n=len(rows), p=project),
+                           *(fmt(r) + ("\n  (你閒置時平台已經用你的 context 在背景處理了這封,結果看回信或 memory 筆記;不用再做)"
+                                       if r in handled else "") for r in rows), FOOTER])
         name = "UserPromptSubmit" if event == "prompt" else "PostToolUse"
         print(json.dumps({"hookSpecificOutput": {"hookEventName": name, "additionalContext": text}}, ensure_ascii=False))
 
@@ -574,21 +585,37 @@ def run_handler(c, proj, ws, rows) -> None:
         if res.returncode == 0 else f"{proj}:派不出去:{(res.stderr or res.stdout).strip()[-200:]}")
 
 
-def resume(c, r, sid, cwd, rt) -> None:
-    """對話:用那個 session 的 context 在背景接續(分支,不動原本的 session)。"""
+def stale_resumes(c, proj) -> list:
+    """背景接續過、超過 RESUME_TIMEOUT_MIN 還沒結案、也還沒改派的信(接續失敗不能讓信卡死)。"""
+    cutoff = iso(now() - datetime.timedelta(minutes=RESUME_TIMEOUT_MIN))
+    return c.execute("""SELECT m.* FROM events m JOIN events d ON d.ref=m.id AND d.type='message.delivered'
+        AND json_extract(d.payload,'$.via')='resume' AND d.ts < ?
+        WHERE m.type='message' AND m.to_project=?
+          AND NOT EXISTS(SELECT 1 FROM events x WHERE x.type='message.done' AND x.ref=m.id)
+          AND NOT EXISTS(SELECT 1 FROM events h WHERE h.type='message.delivered' AND h.ref=m.id
+                         AND json_extract(h.payload,'$.via') IN ('handler','held'))""", (cutoff, proj)).fetchall()
+
+
+def resume(c, r, sid, cwd, rt, ws=None) -> None:
+    """對話:用那個 session 的 context 在背景接續(分支,不動原本的 session)。開不起來就馬上改派交辦。"""
     run = f"r{now():%m%d%H%M%S}-{secrets.token_hex(2)}"
     c.execute("BEGIN IMMEDIATE")
     claim(c, [r], "resume", session=sid, run=run)
     c.execute("COMMIT")
     out = hubconf.STATE / "mailbox"
     out.mkdir(parents=True, exist_ok=True)
-    with open(out / f"resume-{r['id']}.log", "w") as fh:
-        p = subprocess.Popen(["/opt/homebrew/bin/python3", str(HUB / "bin" / "llm.py"), "run", "mailbox-conversation",
-                              "--cwd", str(cwd), "--", *rt.resume_args(sid)],
-                             stdin=subprocess.PIPE, stdout=fh, stderr=subprocess.STDOUT, cwd=str(cwd), text=True,
-                             start_new_session=True)
-        p.stdin.write(RESUME_PROMPT.format(letter=fmt(r), id=r["id"]))
-        p.stdin.close()
+    try:
+        with open(out / f"resume-{r['id']}.log", "w") as fh:
+            p = subprocess.Popen(["/opt/homebrew/bin/python3", str(HUB / "bin" / "llm.py"), "run", "mailbox-conversation",
+                                  "--cwd", str(cwd), "--", *rt.resume_args(sid)],
+                                 stdin=subprocess.PIPE, stdout=fh, stderr=subprocess.STDOUT, cwd=str(cwd), text=True,
+                                 start_new_session=True)
+            p.stdin.write(RESUME_PROMPT.format(letter=fmt(r), id=r["id"]))
+            p.stdin.close()
+    except OSError as e:
+        log(f"{r['to_project']}:{r['id']} 背景接續開不起來({e!r}),改派交辦")
+        run_handler(c, r["to_project"], ws or cwd, [r])
+        return
     log(f"{r['to_project']}:{r['id']} 交給閒置的 session {sid[:8]} 在背景接續({run})")
 
 
@@ -630,16 +657,28 @@ def dispatch(c, rt=None) -> int:
                     continue
                 tokens = rt.context_tokens(to_s)
                 if tokens is not None and tokens <= RESUME_MAX_TOKENS and runs_today(c, proj) < DAILY_RUNS:
-                    resume(c, r, to_s, session_cwd(c, to_s) or ws, rt)
+                    resume(c, r, to_s, session_cwd(c, to_s) or ws, rt, ws)
                     continue
                 # context 太大或找不到對話紀錄 → 當交辦(handler 用 hubbus thread 看整串)
             elif active_sessions(c, proj, live) and r["ts"] >= wait_cut:  # 有人正在用這個專案:先給它
                 waiting += 1
                 continue
             delegate.append(r)
+        delegate += stale_resumes(c, proj)  # 背景接續失敗或沒結案:改派(agent-hub 的也一樣留給它自己)
         if delegate and proj != hub:  # agent-hub 的信由它專用的 session 處理,平台不另外派
             run_handler(c, proj, ws, delegate)
     return waiting
+
+
+def dispatch_locked(c) -> None:
+    """bridge 也會分派:跟 launchd 每分鐘那個拿同一把鎖,拿不到就跳過(避免兩邊同時派人)。"""
+    import fcntl
+    with open(DB.parent / "dispatch.lock", "w") as lock:
+        try:
+            fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        except OSError:
+            return
+        dispatch(c)
 
 
 def prune(c) -> None:
@@ -680,7 +719,7 @@ def check_integrity() -> bool:
 def cmd_bridge() -> None:
     check_integrity()
     c = db()
-    for step in (import_handoffs, forward, dispatch, prune):
+    for step in (import_handoffs, forward, dispatch_locked, prune):
         try:
             step(c)
         except Exception as e:  # 一步壞掉不影響其他步
@@ -800,16 +839,10 @@ def main() -> None:
     if a.cmd == "bridge":
         return cmd_bridge()
     if a.cmd == "dispatch":
-        # launchd 每分鐘(local.agent-hub-mailbox-dispatch);同時只跑一個
-        import fcntl
-        lock = open(DB.parent / "dispatch.lock", "w")
-        try:
-            fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
-        except OSError:
-            return
+        # launchd 每分鐘(local.agent-hub-mailbox-dispatch);同時只跑一個(bridge 用同一把鎖)
         if DB.exists():
             check_integrity()
-            dispatch(db())
+            dispatch_locked(db())
         return
     if a.cmd == "thread":
         c = db()

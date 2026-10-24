@@ -109,9 +109,10 @@ points:
     prompts: none
     tools: Read,Edit,Write,Glob,Grep,Bash
     allowed_tools: ["Edit(./.agent-memory/memory/**)", "Bash(~/agent-hub/bin/hubbus *)"]
+    extra_args: ["--strict-mcp-config"]   # 不載入專案的 MCP 伺服器(例:project-06 的正式資料庫),背景副本用不到
     timeout_s: 1800
     output: {format: text}
-    on_failure: say_so     # 失敗記 job.failed,狀態頁看得到;信已被認領,不會再派(狀態頁列出沒結案的)
+    on_failure: retry_later  # 失敗記 job.failed;35 分鐘還沒結案,dispatch 改派交辦(stale_resumes)
   lease-session:
     caller: bin/lease-runner.py(llm.py exec)
     purpose: "通道租借的 discuss session:長駐的 stream-json 程序,Knas 透過 Muninn 跟專案深談;唯讀"

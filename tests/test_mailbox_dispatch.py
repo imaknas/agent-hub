@@ -59,7 +59,7 @@ class Dispatch(unittest.TestCase):
             c.execute("COMMIT")
             self.handled.append((proj, [r["id"] for r in rows]))
 
-        def resume(c, r, sid, cwd, rt):
+        def resume(c, r, sid, cwd, rt, ws=None):
             c.execute("BEGIN IMMEDIATE")
             m.claim(c, [r], "resume", session=sid, run=f"r{len(self.resumed)}")
             c.execute("COMMIT")
@@ -171,6 +171,33 @@ class Dispatch(unittest.TestCase):
         self.send("m1", hub, "question", to_session="H")
         self.dispatch()
         self.assertEqual(self.resumed, [("m1", "H")])
+
+    def test_failed_resume_is_redelegated(self):
+        self.rt.tokens["A"] = 1_000
+        self.send("m1", "proj", "question", to_session="A", minutes_ago=60)
+        self.dispatch()
+        self.assertEqual(self.resumed, [("m1", "A")])
+        old = (datetime.datetime.now().astimezone() - datetime.timedelta(minutes=40)).isoformat(timespec="seconds")
+        self.c.execute("UPDATE events SET ts=? WHERE id='m1:delivered:resume'", (old,))
+        self.dispatch()
+        self.assertEqual(self.handled, [("proj", ["m1"])], "接續 35 分鐘沒結案要改派")
+        self.dispatch()
+        self.assertEqual(len(self.handled), 1, "改派過就不再派")
+
+    def test_resumed_letter_shown_once_to_its_session(self):
+        self.rt.tokens["A"] = 1_000
+        self.send("m1", "proj", "question", to_session="A", minutes_ago=60)
+        self.dispatch()
+        seen = []
+        orig = self.m.mark_delivered
+        self.m.mark_delivered = lambda c, rows, sess, via: (seen.extend(r["id"] for r in rows), orig(c, rows, sess, via))
+        import json as _j, io, sys
+        for _ in range(2):
+            sys.stdin = io.StringIO(_j.dumps({"session_id": "A", "cwd": str(self.ws)}))
+            self.m.hook_input = lambda: {"session_id": "A", "cwd": str(self.ws)}
+            self.m.project_of = lambda cwd: "proj"
+            self.m.cmd_hook("prompt")
+        self.assertEqual(seen.count("m1"), 1)
 
     # --- 防循環 ---
     def test_loop_guard_holds_and_asks_owner(self):
