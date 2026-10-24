@@ -4,7 +4,9 @@
 只聽 127.0.0.1(預設 18797),每個請求要 `Authorization: Bearer <~/agent-hub/.secrets/runner-token>`。
 API(契約 contracts/lease-runner.v1.schema.json):
   POST /v1/leases                     {v, project, mode: discuss, session_id, thread, resume?, max_turns?} → 201
-  POST /v1/leases/<id>/messages       {v, text, client_msg_id} → 202(同一個 client_msg_id 只送一次;程序停了自動接回)
+  POST /v1/leases/<id>/messages       {v, text, client_msg_id, attachments?} → 202(同一個 client_msg_id 只送一次;程序停了自動接回)
+                                      attachments: [{name, media_type, data(base64)}],最多 8 個、每個 ≤ 10 MB;存進專案的
+                                      attachments/<時間>-<名稱>(不進 git),圖片也直接給模型看;有附件時 text 可以是空字串
   GET  /v1/leases/<id>/events         SSE;Last-Event-ID 之後的補送
   POST /v1/leases/<id>/warned         Muninn 確認「還要繼續嗎」的推播真的送出去了(之後 10 分鐘沒回應才收回)
   POST /v1/leases/<id>/keepalive      回答「繼續」
@@ -15,6 +17,9 @@ API(契約 contracts/lease-runner.v1.schema.json):
   POST /v1/sandboxes                  {v, name: idea-<n>, purpose} → 201 新建 / 200 同名同 purpose 已存在(重送)
                                       / 400 bad_name / 409 exists / 429 too_many(帶 limit、current)/ 500 create_failed
                                       想法沙盒:bin/create-idea-sandbox.py 建(docs/design/idea-sandboxes.md),建好就在 attachable
+  POST /v1/sandboxes/<name>/upgrade   {v, rename?} → 200 {name, origin, upgraded}(升級過的再送回 upgraded:false + 現在的名稱)
+                                      / 404 not_found / 409 not_idea|dirty|name_taken / 500 upgrade_failed
+                                      = bin/upgrade-idea.py --apply --json(GitHub repo 預設 private;Muninn 問過 Knas 才送)
   POST /v1/internal/<id>/relay        權限轉接回報(稽核 + 等待中不算閒置)
 每個租約一個長駐程序:`llm.py exec lease-session`(宣告在 contracts/llm-points.yaml)+ `--session-id`/`--resume`、
 只有權限轉接的 MCP(--strict-mcp-config)、`--settings`(第二階段的 deny 清單,不管專案有沒有開 enforce)、
@@ -365,14 +370,71 @@ def reader(lease: Lease, proc: subprocess.Popen) -> None:
             lease.set_state("idle_stopped")  # 下一則訊息自動 --resume 一次
 
 
-def send_message(lease: Lease, text: str) -> None:
+MAX_ATTACHMENTS, MAX_ATTACHMENT_BYTES, MAX_BODY_BYTES = 8, 10 * 1024 * 1024, 100 * 1024 * 1024
+IMAGE_TYPES = ("image/jpeg", "image/png", "image/gif", "image/webp")
+
+
+def check_attachments(atts) -> str | None:
+    """不合格就回原因(400 bad_request)。"""
+    import base64
+    if atts is None:
+        return None
+    if not isinstance(atts, list) or len(atts) > MAX_ATTACHMENTS:
+        return f"attachments 要是最多 {MAX_ATTACHMENTS} 個的 list"
+    for a in atts:
+        if not isinstance(a, dict) or not a.get("name") or not a.get("media_type") or not isinstance(a.get("data"), str):
+            return "每個附件要有 name、media_type、data(base64)"
+        try:
+            raw = base64.b64decode(a["data"], validate=True)
+        except ValueError:
+            return f"{a['name']}:data 不是合格的 base64"
+        if len(raw) > MAX_ATTACHMENT_BYTES:
+            return f"{a['name']}:超過 {MAX_ATTACHMENT_BYTES // 1024 // 1024} MB"
+    return None
+
+
+def save_attachments(lease: Lease, atts: list) -> list[str]:
+    """存進專案資料夾的 attachments/(檔名清乾淨、不覆蓋),回傳相對路徑。attachments/ 寫進 .git/info/exclude:
+    照片不進 repo 歷史(想法沙盒沒有 remote,但 memory 以外的東西也不該被 commit 進去)。"""
+    import base64
+    ws = pathlib.Path(lease.cwd)
+    d = ws / "attachments"
+    d.mkdir(exist_ok=True)
+    r = subprocess.run(["git", "-C", str(ws), "rev-parse", "--path-format=absolute", "--git-common-dir"],
+                       capture_output=True, text=True)
+    if r.returncode == 0:
+        ex = pathlib.Path(r.stdout.strip()) / "info" / "exclude"
+        ex.parent.mkdir(parents=True, exist_ok=True)
+        lines = ex.read_text().splitlines() if ex.exists() else []
+        if "attachments/" not in lines:
+            ex.write_text("\n".join(lines + ["attachments/"]) + "\n")
+    stamp, out = f"{now():%Y%m%d-%H%M%S}", []
+    for a in atts:
+        name = re.sub(r"[^A-Za-z0-9._-]+", "_", pathlib.Path(a["name"]).name).strip("._") or "file"
+        f, i = d / f"{stamp}-{name[:80]}", 1
+        while f.exists():
+            f, i = d / f"{stamp}-{i}-{name[:80]}", i + 1
+        f.write_bytes(base64.b64decode(a["data"]))
+        out.append(str(f.relative_to(ws)))
+    return out
+
+
+def send_message(lease: Lease, text: str, attachments: list | None = None) -> None:
+    content: str | list = text
+    if attachments:
+        paths = save_attachments(lease, attachments)
+        note = "附件已存到:" + "、".join(paths)
+        blocks = [{"type": "image", "source": {"type": "base64", "media_type": a["media_type"], "data": a["data"]}}
+                  for a in attachments if a["media_type"] in IMAGE_TYPES]
+        content = blocks + [{"type": "text", "text": (text + "\n\n" if text else "") + note}]
+        lease.emit("attachments", paths=paths)
     with _lock:
         if lease.proc is None or lease.proc.poll() is not None:
             lease.set_state("resuming")
             start_proc(lease, resume=True)
         lease.touch()
         lease.in_turn = True
-        msg = json.dumps({"type": "user", "message": {"role": "user", "content": text}}, ensure_ascii=False)
+        msg = json.dumps({"type": "user", "message": {"role": "user", "content": content}}, ensure_ascii=False)
         lease.proc.stdin.write(msg + "\n")
         lease.proc.stdin.flush()
 
@@ -540,6 +602,9 @@ class H(http.server.BaseHTTPRequestHandler):
 
     def body(self) -> dict:
         n = int(self.headers.get("Content-Length") or 0)
+        if n > MAX_BODY_BYTES:  # 附件是 base64 放在 JSON 裡;太大的請求不讀(不然整個吃進記憶體)
+            self.rfile.read(0)
+            return {"__bad__": True}
         try:
             return json.loads(self.rfile.read(n) or b"{}") if n else {}
         except ValueError:
@@ -630,6 +695,8 @@ class H(http.server.BaseHTTPRequestHandler):
             return self.create(b)
         if parts == ["v1", "sandboxes"]:
             return self.create_sandbox(b)
+        if len(parts) == 4 and parts[:2] == ["v1", "sandboxes"] and parts[3] == "upgrade":
+            return self.upgrade_sandbox(parts[2], b)
         if len(parts) == 4 and parts[:2] == ["v1", "internal"] and parts[3] == "relay":
             l = self.lease(parts[2])
             if l:
@@ -649,8 +716,12 @@ class H(http.server.BaseHTTPRequestHandler):
             return
         action = parts[3]
         if action == "messages":
-            if not b.get("text") or not b.get("client_msg_id"):
-                return self.err(400, "bad_request", "text、client_msg_id 必填")
+            atts = b.get("attachments")
+            bad = check_attachments(atts)
+            if bad:
+                return self.err(400, "bad_request", bad)
+            if not b.get("client_msg_id") or not (b.get("text") or atts) or not isinstance(b.get("text", ""), str):
+                return self.err(400, "bad_request", "client_msg_id 必填;text 跟 attachments 至少要有一個")
             with _lock:
                 if b["client_msg_id"] in l.seen_msgs:
                     return self.reply(202, {"v": 1, "duplicate": True})
@@ -658,7 +729,7 @@ class H(http.server.BaseHTTPRequestHandler):
                     return self.err(409, "busy", l.state)
                 l.seen_msgs.append(b["client_msg_id"])
             try:
-                send_message(l, b["text"])
+                send_message(l, b.get("text") or "", atts)
             except Exception as e:
                 return self.err(500, "resume_failed", repr(e)[:300])
             return self.reply(202, {"v": 1})
@@ -737,6 +808,27 @@ class H(http.server.BaseHTTPRequestHandler):
         body.update({k: res[k] for k in ("limit", "current") if k in res})
         return self.reply(code, body)
 
+    def upgrade_sandbox(self, name: str, b: dict) -> None:
+        """想法沙盒升級成正式專案:交給 upgrade-idea.py(檢查、改名、建 GitHub repo、登錄),把結果轉成 HTTP。"""
+        rename = b.get("rename")
+        if rename is not None and not isinstance(rename, str):
+            return self.err(400, "bad_request", "rename 要是字串")
+        cmd = [PY, str(HUB / "bin" / "upgrade-idea.py"), name, "--apply", "--json"] + (["--rename", rename] if rename else [])
+        env = {**os.environ, "PATH": f"{hubconf.LAUNCHD_PATH}:/usr/sbin:/sbin"}
+        try:
+            r = subprocess.run(cmd, capture_output=True, text=True, timeout=300, env=env)
+            res = json.loads((r.stdout.strip().splitlines() or ["{}"])[-1])
+        except (subprocess.TimeoutExpired, ValueError) as e:
+            log(f"upgrade {name}: {e!r}")
+            return self.err(500, "upgrade_failed", repr(e)[:300])
+        log(f"upgrade {name}: {res.get('result')} {res.get('name', '')} {res.get('detail', '')}")
+        result = res.get("result")
+        if result in ("upgraded", "already"):
+            return self.reply(200, {"v": 1, "name": res["name"], "origin": res["origin"], "upgraded": result == "upgraded"})
+        code = {"not_found": 404, "not_idea": 409, "dirty": 409, "name_taken": 409}.get(result, 500)
+        return self.reply(code, {"v": 1, "error": result if code != 500 else "upgrade_failed",
+                                 "detail": res.get("detail") or (r.stderr or "").strip()[-300:]})
+
     def create(self, b: dict) -> None:
         proj, sid = b.get("project"), str(b.get("session_id") or "")
         mode = b.get("mode", "discuss")
@@ -761,9 +853,12 @@ class H(http.server.BaseHTTPRequestHandler):
             if sum(1 for l in LEASES.values() if live(l)) >= GLOBAL_CAP:
                 return self.reply(409, {"v": 1, "error": "cap_reached", "detail": f"同時最多 {GLOBAL_CAP} 個",
                                         "leases": [l.public() for l in LEASES.values() if live(l)]})
+            prev = LEASES.get(sid)  # 已收回的租約用同一個 id 接回(Muninn 回到同一段對話):
+            # 事件序號、處理過的訊息要接著舊的,不然序號從 0 重來、跟 events.jsonl 裡的舊事件撞號,SSE 續接會亂
             lease = Lease({"lease_id": sid, "project": proj, "mode": mode, "thread": b.get("thread", ""),
                            "cwd": str(ws), "started_once": bool(b.get("resume")), "state": "attaching",
-                           "max_turns": int(b.get("max_turns") or DEFAULT_MAX_TURNS)})
+                           "max_turns": int(b.get("max_turns") or DEFAULT_MAX_TURNS),
+                           "seq": prev.seq if prev else 0, "seen_msgs": prev.seen_msgs if prev else []})
             LEASES[sid] = lease
             lease.emit("state", state="attaching", project=proj)
             try:

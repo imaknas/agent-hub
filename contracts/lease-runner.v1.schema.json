@@ -52,13 +52,41 @@
           "const": 1
         },
         "text": {
-          "type": "string",
-          "minLength": 1
+          "type": "string"
         },
         "client_msg_id": {
           "type": "string"
+        },
+        "attachments": {
+          "type": "array",
+          "maxItems": 8,
+          "description": "附件:存進那個專案資料夾的 attachments/<YYYYMMDD-HHMMSS>-<名稱>(檔名清乾淨、不覆蓋、不進 git);圖片(image/jpeg|png|gif|webp)同時直接給模型看;文字後面會附一行存放路徑。每個解碼後最多 10 MB;整個請求最多 100 MB。",
+          "items": {
+            "type": "object",
+            "required": [
+              "name",
+              "media_type",
+              "data"
+            ],
+            "additionalProperties": false,
+            "properties": {
+              "name": {
+                "type": "string",
+                "minLength": 1
+              },
+              "media_type": {
+                "type": "string",
+                "minLength": 1
+              },
+              "data": {
+                "type": "string",
+                "description": "base64"
+              }
+            }
+          }
         }
-      }
+      },
+      "description": "POST /v1/leases/<id>/messages。text 跟 attachments 至少要有一個(只傳附件時 text 可以是空字串)。"
     },
     "detach": {
       "type": "object",
@@ -188,7 +216,11 @@
             "exists",
             "too_many",
             "create_failed",
-            "work_not_allowed"
+            "work_not_allowed",
+            "not_idea",
+            "dirty",
+            "name_taken",
+            "upgrade_failed"
           ]
         },
         "limit": {
@@ -407,6 +439,47 @@
             "discuss",
             "work"
           ]
+        }
+      }
+    },
+    "sandbox_upgrade": {
+      "type": "object",
+      "required": [
+        "v"
+      ],
+      "description": "POST /v1/sandboxes/<name>/upgrade:想法沙盒升級成正式專案(歷史、檔案、memory 都留著;建 private GitHub repo)。使用者在對話裡同意之後才送。已經升級過的再送一次回 200 + upgraded:false 跟現在的名稱(重送安全,改過名也查得到)。",
+      "properties": {
+        "v": {
+          "const": 1
+        },
+        "rename": {
+          "type": "string",
+          "pattern": "^[a-z0-9][a-z0-9-]*$",
+          "description": "升級時順便改名"
+        }
+      }
+    },
+    "sandbox_upgraded": {
+      "type": "object",
+      "required": [
+        "v",
+        "name",
+        "origin",
+        "upgraded"
+      ],
+      "description": "200。錯誤:404 not_found(沒有這個沙盒)、409 not_idea(不是想法沙盒)、409 dirty(有未 commit 的變更)、409 name_taken(新名稱或 GitHub repo 已經存在)、500 upgrade_failed。",
+      "properties": {
+        "v": {
+          "const": 1
+        },
+        "name": {
+          "type": "string"
+        },
+        "origin": {
+          "type": "string"
+        },
+        "upgraded": {
+          "type": "boolean"
         }
       }
     }

@@ -124,3 +124,57 @@ class Reader(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class Attachments(unittest.TestCase):
+    """POST /v1/leases/<id>/messages 的附件(10-25 Muninn 要求:在深談裡傳照片)。"""
+
+    def setUp(self):
+        import base64
+        import subprocess
+        self.b64 = lambda raw: base64.b64encode(raw).decode()
+        self.m = m = load_runner()
+        m.DIR = pathlib.Path(tempfile.mkdtemp())
+        self.ws = pathlib.Path(tempfile.mkdtemp())
+        subprocess.run(["git", "init", "-q", str(self.ws)], check=True)
+        self.lease = m.Lease({"lease_id": "33333333-3333-4333-8333-333333333333", "project": "p", "cwd": str(self.ws)})
+        self.sent = []
+        proc = FakeProc()
+        proc.stdin = type("W", (), {"write": lambda _s, x: self.sent.append(x), "flush": lambda _s: None})()
+        proc.poll = lambda: None  # 程序還在跑:send_message 不要重新啟動
+        self.lease.proc = proc
+
+    def test_rejects_bad_attachments(self):
+        ok = {"name": "a.png", "media_type": "image/png", "data": self.b64(b"x")}
+        self.assertIsNone(self.m.check_attachments([ok]))
+        self.assertIsNotNone(self.m.check_attachments([ok] * 9))
+        self.assertIsNotNone(self.m.check_attachments([{"name": "a", "media_type": "image/png", "data": "!!!"}]))
+        self.assertIsNotNone(self.m.check_attachments([{"name": "a", "data": self.b64(b"x")}]))
+
+    def test_saved_cleaned_unique_and_excluded_from_git(self):
+        att = {"name": "../../房間 照片.jpg", "media_type": "image/jpeg", "data": self.b64(b"jpegbytes")}
+        p1 = self.m.save_attachments(self.lease, [att])
+        p2 = self.m.save_attachments(self.lease, [att])
+        self.assertTrue(all(p.startswith("attachments/") and ".." not in p for p in p1 + p2))
+        self.assertNotEqual(p1, p2, "同名不覆蓋")
+        self.assertEqual((self.ws / p1[0]).read_bytes(), b"jpegbytes")
+        self.assertIn("attachments/", (self.ws / ".git" / "info" / "exclude").read_text())
+
+    def test_images_become_content_blocks_and_paths_listed(self):
+        img = {"name": "room.png", "media_type": "image/png", "data": self.b64(b"png")}
+        pdf = {"name": "plan.pdf", "media_type": "application/pdf", "data": self.b64(b"pdf")}
+        self.m.send_message(self.lease, "看一下", [img, pdf])
+        content = json.loads(self.sent[-1])["message"]["content"]
+        self.assertEqual([b["type"] for b in content], ["image", "text"], "只有圖片變成 image block")
+        self.assertIn("看一下", content[-1]["text"])
+        self.assertIn("plan.pdf", content[-1]["text"])
+
+    def test_image_only_message(self):
+        img = {"name": "room.png", "media_type": "image/png", "data": self.b64(b"png")}
+        self.m.send_message(self.lease, "", [img])
+        content = json.loads(self.sent[-1])["message"]["content"]
+        self.assertTrue(content[-1]["text"].startswith("附件已存到"))
+
+    def test_plain_text_unchanged(self):
+        self.m.send_message(self.lease, "hi")
+        self.assertEqual(json.loads(self.sent[-1])["message"]["content"], "hi")

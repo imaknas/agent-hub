@@ -86,7 +86,9 @@ PLAN
 $APPLY || { echo "(dry-run,加 --apply 才會執行)"; exit 0; }
 
 if [ "$NEW_PATH" != "$OLD_PATH" ]; then
-  users=$(lsof +d "$OLD_PATH" 2>/dev/null | awk 'NR>1{print $1"("$2")"}' | sort -u | tr '\n' ' ')
+  # lsof 找不到任何程序時 exit 1;加上 pipefail + set -e,沒有 `|| true` 的話「沒人在用」這個正常情況會讓整支腳本
+  # 不出聲地結束(10-25 想法升級的實測抓到)
+  users=$(lsof +d "$OLD_PATH" 2>/dev/null | awk 'NR>1{print $1"("$2")"}' | sort -u | tr '\n' ' ' || true)
   [ -z "$users" ] || fail "還有程序的工作目錄在 $OLD_PATH:$users——先關掉那個專案的 Claude session / 終端機分頁再跑"
 fi
 
@@ -98,11 +100,19 @@ mv ~/.memory-copies/$OLD ~/.memory-copies/$NEW
 git -C ~/.memory-copies/$NEW remote set-url origin ~/git-origin/$NEW-memory.git
 git -C ~/.memory-copies/$NEW fetch -q origin
 [ -f ~/agent-hub/.state/$OLD.sha ] && mv ~/agent-hub/.state/$OLD.sha ~/agent-hub/.state/$NEW.sha || true
-if [ "$OLD_MIRROR_NAME" != "$NEW_MIRROR_NAME" ] && [ -d ~/git-origin/mirrors/$OLD_MIRROR_NAME.git ]; then
-  mv ~/git-origin/mirrors/$OLD_MIRROR_NAME.git ~/git-origin/mirrors/$NEW_MIRROR_NAME.git
-  git -C ~/git-origin/mirrors/$NEW_MIRROR_NAME.git remote set-url origin "$NEW_ORIGIN"
+EOF
+# mirror 改名只在 origin 真的是網址時才做。沒有 remote 的專案 origin 是 "(native)":以前直接展開進上面那段遠端
+# 腳本,變成 `[ -d …/(native).git ]` → bash 語法錯誤,而且前面的 mv 已經執行了,留下改到一半的狀態
+# (10-25 想法升級的實測抓到;想法沙盒都沒有 remote)
+if [ "$OLD_ORIGIN" != "(native)" ] && [ "$NEW_ORIGIN" != "(native)" ] && [ "$OLD_MIRROR_NAME" != "$NEW_MIRROR_NAME" ]; then
+  mini_bash_stdin <<EOF
+set -euo pipefail
+if [ -d ~/git-origin/mirrors/'$OLD_MIRROR_NAME'.git ]; then
+  mv ~/git-origin/mirrors/'$OLD_MIRROR_NAME'.git ~/git-origin/mirrors/'$NEW_MIRROR_NAME'.git
+  git -C ~/git-origin/mirrors/'$NEW_MIRROR_NAME'.git remote set-url origin '$NEW_ORIGIN'
 fi
 EOF
+fi
 echo "[mini] bare repo / ~/.memory-copies / checkpoint / mirror 已改名"
 
 # --- 本機 ---
