@@ -50,6 +50,8 @@ class Resume(unittest.TestCase):
         m.preamble = lambda project, mode="discuss": "p"
         m.reader = lambda lease, proc: None
         self.cmds = []
+        # m.subprocess 就是全域的 subprocess 模組:換掉之後一定要在 tearDown 還原,不然後面的測試全部拿到假物件
+        self._popen = m.subprocess.Popen
         m.subprocess.Popen = lambda cmd, **kw: (self.cmds.append(cmd), FakeProc())[1]
         import runtime_claude
         self.rt = runtime_claude
@@ -59,6 +61,7 @@ class Resume(unittest.TestCase):
 
     def tearDown(self):
         self.rt.transcript = self._orig
+        self.m.subprocess.Popen = self._popen
 
     def lease(self, **kw):
         d = {"lease_id": "11111111-1111-4111-8111-111111111111", "project": "p", "cwd": str(self.tmp)}
