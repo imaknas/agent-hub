@@ -55,6 +55,10 @@ jobs:
   every: 15m
   cwd: hub
   run: /opt/homebrew/bin/python3 bin/registry.py apply-updates
+- name: claude-login             # claude 的三份登入(launchd 訂閱登入、headless token、SSH 用的 .credentials.json)還能用嗎;壞了/快到期發 Discord
+  every: 1h
+  cwd: hub
+  run: /opt/homebrew/bin/python3 bin/check-claude-login.py
 - name: update-claude            # nvm 預設版本底下的 claude 更新到最新(排程/租借/Muninn 用這份;Desktop 的 session 用自己的);裝不起來就裝回舊版、失敗
   at: "01:15"
   cwd: hub

@@ -95,7 +95,8 @@ def run(a) -> int:
         return fail(a.point, spec, "找不到 claude")
     sys.stderr.write(r.stderr)
     if r.returncode != 0 or not r.stdout.strip():
-        return fail(a.point, spec, f"exit {r.returncode}:{r.stderr.strip()[-300:]}")
+        # claude -p 的錯誤(例:Login expired)常常只在 stdout 的 JSON 裡
+        return fail(a.point, spec, f"exit {r.returncode}:{(r.stderr.strip() or r.stdout.strip())[-300:]}")
     try:
         out = json.loads(r.stdout)
     except ValueError:

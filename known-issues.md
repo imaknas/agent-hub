@@ -132,6 +132,10 @@
   時跑 `gh auth refresh -s workflow`;git push 走 SSH key 不受影響。)
 - **origin 是 HTTPS 的 repo(例:project-25)**:git 預設從 keychain 拿 HTTPS 憑證,SSH 底下會
   `could not read Username`。mini 已跑過 `gh auth setup-git`,github.com 的 HTTPS 改用 gh 存在檔案裡的 token。
+- **三份憑證各自會壞**:keychain(launchd 底下的排程、Muninn、租借)、`~/.claude/.credentials.json`(SSH 底下讀不到
+  keychain 時用;refresh token 約 28 天,用到就往後延)、`~/.claude/headless-oauth-token`(`claude setup-token`,一年;
+  帶 `CLAUDE_CODE_OAUTH_TOKEN` 時 claude.ai connector 不載入)。Muninn 的 claude 失敗會默默改用本機模型(2026-10-24
+  已請 Muninn 改),所以平台每小時跑 `agent-hub/claude-login` 檢查三份,壞了發 Discord。
 - **另一個坑**:launchd 的 job 結束時會殺掉同一個 process group 的程序,`nohup ... &` 擋不住;
   要在背景繼續跑得 double fork + setsid(`run-agent-job.sh` 的做法)。
 

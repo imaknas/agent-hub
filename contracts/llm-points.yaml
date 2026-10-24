@@ -70,6 +70,13 @@ points:
     allow_from_env: AGENT_JOB_ALLOW
     timeout_s: 3600
     on_failure: caller
+  login-check:
+    caller: bin/check-claude-login.py
+    purpose: "每小時確認 claude 的登入還能用(launchd 底下的訂閱登入、headless token 各打一次最小的請求);壞了發 Discord"
+    model_default: haiku
+    tools: ""
+    timeout_s: 120
+    on_failure: caller
   mailbox-escalation:
     caller: bin/hubbus(escalate → run-agent-job.sh)
     purpose: "專案信箱的信 12 小時沒人收:在那個專案開 headless session,只寫 memory 筆記、回信、問 owner"
