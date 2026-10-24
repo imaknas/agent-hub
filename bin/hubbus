@@ -81,7 +81,7 @@ KNAS_ONLY = ("task", "drop")   # Muninn 的任務登錄:只有 Knas 能做的事
 # 寄給 knas 的 type → Muninn 收的 type。request = 要 Knas 去做一件事 = 任務;要他用文字回答的才是 question
 TO_MUNINN = {"request": "task", "task": "task", "question": "question", "info": "progress",
              "progress": "progress", "done": "done", "drop": "drop"}
-TASK_FIELDS = ("task", "due", "context", "new_reason")   # 照原樣轉給 Muninn
+TASK_FIELDS = ("task", "due", "context", "new_reason", "inferred")   # 照原樣轉給 Muninn
 KEYED = ("done", "dropped", "already_done", "reopened")  # 帶任務 key 的轉交:librarian 照 key 機械套用
 BRIDGE = "muninn-bridge"
 ESCALATE_HOURS = 12      # 沒有 session 收超過這麼久 → headless agent 處理
@@ -617,6 +617,8 @@ def main() -> None:
     s.add_argument("--due", help="YYYY-MM-DD")
     s.add_argument("--context")
     s.add_argument("--new-reason", help="跟 14 天內結案的任務很像、但確實是新的一件時說明為什麼")
+    s.add_argument("--inferred", action="store_true",
+                   help="done/drop 帶 --task 時:只是推斷的(沒人看到 Knas 做),Muninn 先問 Knas 再結案")
     sub.add_parser("inbox").add_argument("--project")
     sub.add_parser("show").add_argument("id")
     sub.add_parser("ack").add_argument("ids", nargs="+")
@@ -667,6 +669,8 @@ def main() -> None:
             sys.exit(f"hubbus: {a.type} 只能寄給 knas")
         if a.type == "drop" and not a.task:
             sys.exit("hubbus: drop 要加 --task <key>(哪一件不需要了)")
+        if a.inferred and not (a.type in ("done", "drop") and a.task):
+            sys.exit("hubbus: --inferred 只用在帶 --task 的 done/drop")
         for k in TASK_FIELDS:
             if getattr(a, k):
                 p[k] = getattr(a, k)

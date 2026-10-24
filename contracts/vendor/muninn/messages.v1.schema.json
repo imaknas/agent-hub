@@ -25,7 +25,8 @@
           "task": {"type": "string", "minLength": 1, "maxLength": 200, "description": "A task key (the id of the message that created it)."},
           "due": {"type": "string", "description": "YYYY-MM-DD, for task."},
           "context": {"type": "string"},
-          "new_reason": {"type": "string", "description": "For task: why this is new although it looks like one already settled."}
+          "new_reason": {"type": "string", "description": "For task: why this is new although it looks like one already settled."},
+          "inferred": {"type": "boolean", "default": false, "description": "For done and drop with task: true when the sender only inferred it (no one saw the user do it). Muninn then asks the user before closing the task, instead of closing it with an undo."}
         },
         "if": {"properties": {"type": {"const": "drop"}}},
         "then": {"required": ["task"]}

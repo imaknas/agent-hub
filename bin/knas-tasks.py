@@ -13,7 +13,7 @@ Knas 在 Muninn 結案/取消/重開時,Muninn 送回帶 key 的轉交,這裡照
      再蓋章,蓋章或 commit 失敗,隔晚重寄也只是 no-op。第一次跑時 context=migration。
   2b. 寄過、Muninn 沒結案,STATE.md 卻找不到的 key(多半是 librarian 判定做完了、整行刪掉):寄一封
      `done`(task=key,id=done-<key>,重寄是 no-op)給 Muninn,文字標明是推斷的結案、附上 review-log 裡
-     刪掉那一行那次的理由——由 Muninn 讓 Knas 確認,不是直接當成 Knas 結案。現在的 STATE.md 裡有文字很像
+     刪掉那一行那次的理由,帶 inferred: true——由 Muninn 讓 Knas 確認,不是直接當成 Knas 結案。現在的 STATE.md 裡有文字很像
      的行(模型改寫時把行尾拿掉了,同一件換成新 key)就不寄,只警告。
   3. 有改就 commit + push(memory 副本走 git-safe-push;agent-hub 的檔走 commit-hub-files.sh),
      push 成功之後才把那些轉交 `hubbus done`(bridge 再回報 Muninn);失敗就留到隔晚。
@@ -233,7 +233,7 @@ def main() -> int:
                 log(f"{project}: (dry-run) 會寄推斷結案 {key}:{note[:120]}")
                 continue
             res = hubbus("send", "--to", OWNER, "--type", "done", "--from", project, "--id", f"done-{key}",
-                         "--task", key, "--text", note)
+                         "--task", key, "--inferred", "--text", note)
             if res.returncode != 0:
                 failed += 1
                 log(f"{project}: 推斷結案 {key} 寄不出去,隔晚再試:{res.stderr.strip()[-160:]}")
