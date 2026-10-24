@@ -240,6 +240,19 @@ def validate(doc, stem: str) -> list[str]:
     return errs
 
 
+def roster_mismatch(doc, text: str) -> list[str]:
+    """hubconf.roster()(不用 PyYAML 的逐行解析:recover、sync-all-memory、名冊用它)讀到的 paths 要跟 YAML 一樣,
+    不然那些腳本會默默拿到空的或錯的路徑。"""
+    if not isinstance(doc, dict) or not isinstance(doc.get("paths") or {}, dict):
+        return []
+    want = {k: (None if v is None else str(v)) for k, v in (doc.get("paths") or {}).items()}
+    got = hubconf.roster_paths(text)
+    if got == want:
+        return []
+    return [f"paths 要寫成一行一個 key 的區塊格式(`paths:` 下一行縮排 `workspace: …`):"
+            f"不用 YAML 的讀法讀到 {got},YAML 是 {want}"]
+
+
 def refresh(only: list[str] | None = None) -> dict:
     """驗證全部登錄、更新快取跟 index.json,回傳 index。"""
     CACHE.mkdir(parents=True, exist_ok=True)
@@ -249,8 +262,9 @@ def refresh(only: list[str] | None = None) -> dict:
     for f in files:
         stem = f.stem
         try:
-            doc = yaml.safe_load(f.read_text())
-            errs = validate(doc, stem)
+            text = f.read_text()
+            doc = yaml.safe_load(text)
+            errs = validate(doc, stem) + roster_mismatch(doc, text)
         except yaml.YAMLError as e:
             doc, errs = None, [f"YAML 讀不了:{e}"]
         cache = CACHE / f"{stem}.json"

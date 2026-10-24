@@ -251,7 +251,10 @@ memory 追蹤但不需要在 mini 上執行任何東西的專案(目前大多數
   (專案用 manifest.update 改);到外部服務發新的、撤銷、換掉**只有 Knas 能做**(〔Knas〕待辦)
 - **登錄的 `secrets:` 只寫名稱、位置、到期,不寫值**(格式見 `bin/registry.py` 檔頭);平台 job `agent-hub/secrets`
   (每天 08:00,`bin/check-secrets.py`)檢查在不在、有沒有被備份(`backup.covers()`,跟每晚備份同一套規則)、
-  快不快到期,有問題發 Discord。這支跟 `check-claude-login.py` 都不印值
+  快不快到期,有問題發 Discord;也列出檔名像憑證、卻沒宣告的檔案(只提醒)。這支跟 `check-claude-login.py` 都不印值
+- **警報**(`bin/alert.py`,render-services、claude-login、secrets 共用):新問題馬上發、沒解決的每 24 小時再提醒、
+  解決時發恢復;**發不出去記在 `.state/alerts-failed.json`,狀態頁標紅**。secrets job 每天先確認 Discord bot token
+  還能用(不發訊息)。排程器看門狗刻意用自己的一份,不靠這支
 - 專案這邊的做法(值放哪、程式怎麼讀、不默默降級、開源前撤銷進過歷史的)寫在 `templates/CLAUDE.md`「憑證」段,
   每個專案的 CLAUDE.local.md 都有
 

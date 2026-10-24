@@ -90,8 +90,8 @@
 - **launchctl bootout 是非同步的**:馬上 bootstrap 會 `5: Input/output error`,服務停在沒載入(10-22 LINE bot、
   10-24 muninn/lease-runner)。render-services 會等它從 launchd 消失再 bootstrap、失敗重試;手動重載也要等。
 - **render-services 的安全網**:指令解析不到就不動現在能跑的 plist;bootstrap 失敗、keepalive 的服務沒在跑、
-  該載入的沒載入都發 Discord(同一組只發一次,恢復再發一次)並讓 job 失敗(狀態頁紅)。以前只有狀態頁紅,
-  沒人看就一天半。
+  該載入的沒載入都發 Discord(沒解決的每 24 小時再提醒,恢復再發一次)並讓 job 失敗(狀態頁紅)。以前只有狀態頁紅,
+  沒人看就一天半。警報本身發不出去(token 失效)也會在狀態頁標紅,不會默默算了。
 - 來源:OpenClaw #infrastructure、#general;2026-10-24 LINE bot 停擺
 
 ## memory worktree 會繼承專案的 git hook

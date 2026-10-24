@@ -10,7 +10,8 @@
 備份什麼(只有這台 mini 有、丟了救不回來的):
   - SQLite(匯流排 bus.db、muninn.db):用 backup API 複製一份再備份,不碰正在寫的 db/WAL
   - ~/git-origin 底下的 bare repo(memory 分支、agent-hub 本身、沒有 GitHub remote 的專案):git bundle --all
-  - 各專案 workspace 還沒 push 的東西:沒在任何 remote 上的 commit 打成 bundle、還沒 commit 的改動存成 diff、.env*
+  - 各專案 workspace 還沒 push 的東西:沒在任何 remote 上的 commit 打成 bundle、還沒 commit 的改動存成 diff、
+    .env*(三層內,例:backend/.env)
   - hub.json backup.include 列的目錄(muninn data、平台狀態、secrets、服務的資料、Claude Code transcript)
 不備份:工作 profile 的 transcript(公司內容)、GitHub mirror、完整 workspace、產生的影片、venv/cache。
 失敗就在匯流排發 job.failed,exit 1(排程器記失敗 → 狀態頁紅)。結果寫 .state/backup/last.json。
@@ -90,9 +91,26 @@ def ensure_repo() -> None:
 
 # ---------- stage ----------
 
+ENV_SKIP = {"node_modules", ".venv", "venv", ".git", "dist", "build", "__pycache__", ".next", ".agent-memory", ".claude"}
+
+
+def is_env_name(name: str) -> bool:
+    return name == ".env" or (name.startswith(".env.") and not name.endswith((".example", ".sample", ".template")))
+
+
+def workspace_env_files(ws: pathlib.Path) -> list[pathlib.Path]:
+    """workspace 裡(三層內,跳過 node_modules 之類)的 .env / .env.*:不進版控、丟了救不回來(例:backend/.env)。"""
+    out = []
+    for dirpath, dirnames, filenames in os.walk(ws):
+        depth = len(pathlib.Path(dirpath).relative_to(ws).parts)
+        dirnames[:] = [] if depth >= 3 else [d for d in dirnames if d not in ENV_SKIP]
+        out += [pathlib.Path(dirpath) / f for f in filenames if is_env_name(f)]
+    return sorted(p for p in out if p.is_file())
+
+
 def covers(path: pathlib.Path) -> bool:
     """這個檔案會不會進備份(check-secrets.py 用;規則跟 cmd_run / stage 一樣):在 include 底下、沒被 exclude,
-    或是登錄的專案 workspace 最上層的 .env / .env.*(stage 會複製)。"""
+    或是登錄的專案 workspace 裡的 .env / .env.*(stage 會複製,見 workspace_env_files)。"""
     import fnmatch
     path = path.expanduser().resolve()
     dbs = [hubconf.bus_db(), *(hubconf.path(d["path"]) for d in CFG.get("sqlite") or [])]
@@ -106,8 +124,11 @@ def covers(path: pathlib.Path) -> bool:
         inc = hubconf.path(x)
         if inc and (path == inc.resolve() or inc.resolve() in path.parents):
             return True
-    if path.name == ".env" or (path.name.startswith(".env.") and not path.name.endswith(".example")):
-        return any(hubconf.workspace(n) and path.parent == hubconf.workspace(n).resolve() for n in hubconf.projects())
+    if is_env_name(path.name):
+        for n in hubconf.projects():
+            ws = hubconf.workspace(n)
+            if ws and path in (p.resolve() for p in workspace_env_files(ws.resolve())):
+                return True
     return False
 
 
@@ -154,10 +175,11 @@ def stage() -> dict:
         if diff.stdout and len(diff.stdout) <= DIFF_LIMIT:
             (d / "uncommitted.diff").write_bytes(diff.stdout)
             got.append("uncommitted.diff")
-        for f in list(ws.glob(".env")) + list(ws.glob(".env.*")):
-            if f.is_file() and not f.name.endswith(".example"):
-                shutil.copy2(f, d / f.name)
-                got.append(f.name)
+        for f in workspace_env_files(ws):
+            rel = f.relative_to(ws)
+            (d / rel).parent.mkdir(parents=True, exist_ok=True)
+            shutil.copy2(f, d / rel)
+            got.append(str(rel))
         if got:
             manifest["workspace"].append({"project": name, "files": got})
         else:

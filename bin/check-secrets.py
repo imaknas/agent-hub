@@ -8,6 +8,8 @@
   - 備份:backup 沒寫 false 的,照 backup.covers()(跟每晚的備份同一套規則)
   - 到期:expires 日期,或檔案修改時間 + max_age_days;剩不到 warn_days(預設 14)天就報
   - 權限:群組/其他人讀得到只印出來,不算問題
+  - 沒宣告的:各專案的 runtime / workspace(跟平台的 .secrets/)裡檔名像憑證、卻沒宣告的檔案,只列出來提醒
+    (不算問題,也不讀內容)——要嘛宣告,要嘛確認它不是憑證
 有問題就發 Discord(同一組只發一次,解決後發一次恢復)、exit 1(排程器記失敗,狀態頁紅)。
 
 用法:check-secrets.py [專案...]
@@ -15,7 +17,9 @@
 from __future__ import annotations
 
 import datetime
+import os
 import pathlib
+import re
 import stat
 import sys
 
@@ -26,6 +30,10 @@ import hubconf  # noqa: E402
 import registry  # noqa: E402
 
 WARN_DAYS = 14
+LOOKS_SECRET = re.compile(r"(^\.env($|\.)|token|secret|credential|oauth|api[-_]?key|password|\.pem$|\.key$|\.p12$)", re.I)
+NOT_SECRET = re.compile(r"(\.(example|sample|template|py|pyc|ts|tsx|js|mjs|cjs|md|sh|html|css|map|lock)$)", re.I)
+SKIP_DIRS = {"node_modules", ".venv", "venv", ".git", "dist", "build", "__pycache__", ".next", ".agent-memory", ".claude",
+             "worktrees", "logs", ".logs"}
 
 
 def locate(doc: dict, raw: str) -> pathlib.Path | None:
@@ -77,19 +85,49 @@ def check(project: str, doc: dict, sec: dict, today: datetime.date) -> tuple[lis
     return probs, notes
 
 
+def undeclared(project: str, doc: dict, declared: set[pathlib.Path]) -> list[pathlib.Path]:
+    """runtime / workspace 底下(三層內)檔名像憑證、沒宣告的檔案。平台自己只看 .secrets/。"""
+    d = registry.dirs(doc)
+    roots = [hubconf.ROOT / ".secrets"] if project == hubconf.hub_project() else \
+        [r for r in (d["runtime"], d["workspace"]) if r]
+    found = []
+    for root in roots:
+        if not root.is_dir():
+            continue
+        for dirpath, dirnames, filenames in os.walk(root):
+            depth = len(pathlib.Path(dirpath).relative_to(root).parts)
+            dirnames[:] = [] if depth >= 3 else [x for x in dirnames if x not in SKIP_DIRS]
+            for fn in filenames:
+                path = pathlib.Path(dirpath) / fn
+                if LOOKS_SECRET.search(fn) and not NOT_SECRET.search(fn) and path.resolve() not in declared:
+                    found.append(path)
+    return sorted(set(found))
+
+
 def main(argv: list[str]) -> int:
     today = datetime.date.today()
-    projects = hubconf.projects()
+    projects = registry.refresh()["projects"]  # 剛改的登錄也算,不等排程器的 tick
     problems, count = [], 0
     for project in sorted(argv or projects):
         doc = projects.get(project) or {}
+        declared = set()
         for sec in doc.get("secrets") or []:
             count += 1
             probs, notes = check(project, doc, sec, today)
             problems += probs
             for n in notes:
                 print(n)
+            if (path := locate(doc, sec["path"])):
+                declared.add(path.resolve())
+        for path in undeclared(project, doc, declared):
+            print(f"{project}:沒宣告、檔名像憑證:{path}(宣告在登錄的 secrets:,或確認它不是憑證)")
     if not argv:
+        # 警報管道本身:token 失效的話,出事時所有警報都發不出去——每天先確認一次(不發訊息)
+        if alert.probe():
+            alert.clear_failure("discord-probe")
+        else:
+            alert.record_failure("discord-probe", "Discord bot token 不能用(GET /users/@me 失敗),所有平台警報都發不出去")
+            problems.append("Discord 警報管道不能用(bot token 失效或連不上)——狀態頁也會標紅")
         alert.once("secrets", problems, "登錄宣告的憑證都沒問題了")
     for p in problems:
         print(f"⚠️ {p}")

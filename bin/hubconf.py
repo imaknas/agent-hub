@@ -170,18 +170,22 @@ def roster() -> dict[str, dict]:
     out = {}
     d = registry_dir()
     for f in sorted(d.glob("*.yaml")) if d and d.is_dir() else []:
-        if f.stem == hub_project():
-            continue
-        paths, inside = {}, False
-        for line in f.read_text().splitlines():
-            if line.split("#")[0].rstrip() == "paths:":
-                inside = True
-            elif inside and (m := _PATHS_LINE.match(line)):
-                paths[m.group(1)] = m.group(2).strip("'\"") or None
-            elif inside and line.strip() and not line.lstrip().startswith("#"):
-                break
-        out[f.stem] = paths
+        if f.stem != hub_project():
+            out[f.stem] = roster_paths(f.read_text())
     return out
+
+
+def roster_paths(text: str) -> dict:
+    """一個登錄檔的 `paths:` 區塊(逐行解析,只認 block 格式;registry.py 驗證時會比對跟 YAML 讀到的一樣)。"""
+    paths, inside = {}, False
+    for line in text.splitlines():
+        if line.split("#")[0].rstrip() == "paths:":
+            inside = True
+        elif inside and (m := _PATHS_LINE.match(line)):
+            paths[m.group(1)] = m.group(2).strip("'\"") or None
+        elif inside and line.strip() and not line.lstrip().startswith("#"):
+            break
+    return paths
 
 
 def projects() -> dict[str, dict]:

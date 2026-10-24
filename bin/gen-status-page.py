@@ -163,6 +163,15 @@ def main() -> None:
         alerts.append(("bad", "排程器看門狗沒設定 Discord(.secrets/discord-token、.secrets/discord-alert-channel),"
                               "排程器停了發不出警報"))
 
+    # 警報發不出去(bin/alert.py 記的;Discord token 失效、網路斷了…):不能默默算了
+    try:
+        import alert
+        for key, f in sorted(alert.failures().items()):
+            alerts.append(("bad", f"Discord 警報發不出去({key},{f.get('at', '')[:16]}):{f.get('text', '')}"
+                                  "——確認 .secrets/discord-token 還能用;下次會再試"))
+    except Exception as e:  # 狀態頁不能因為這個掛掉
+        alerts.append(("bad", f"讀不到警報狀態:{e}"))
+
     # 第二階段:無人值守的 agent job 要在登錄宣告 allow:(dontAsk);還沒宣告的列出來(暫時是 auto)
     legacy_auto = [j["name"] for j in jobs if "run-agent-job.sh" in j["command"] and "AGENT_JOB_ALLOW=" not in j["command"]
                    and j.get("enabled", True)]
