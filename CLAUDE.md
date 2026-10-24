@@ -208,7 +208,8 @@ memory 追蹤但不需要在 mini 上執行任何東西的專案(目前大多數
   **node(跟 claude)只由 nvm 管**:服務跟排程用 nvm 預設版本(`hubconf.nvm_bin()`、env 的 `$PLATFORM_PATH`),
   不要用 Homebrew 裝 node——原因看 known-issues.md「設定、安裝、憑證」
   claude 用 nvm 預設版本底下的 npm 全域那份,自己會在執行時更新;平台 job `agent-hub/update-claude`(每晚 01:15,
-  `bin/update-claude.py`)是保險:沒更新到就裝最新、裝不起來就裝回舊版並失敗。Desktop 的 SSH session 用它自己推過來的
+  `bin/update-claude.py`)是保險:沒更新到就裝最新(前後各打一次真的請求)、裝不起來就裝回舊版;沒辦法到最新版就發
+  Discord(沒解決每天提醒)——自動更新照常,只是不能默默落後。Desktop 的 SSH session 用它自己推過來的
   `~/.claude/remote/ccd-cli/<版本>`,不用管
   **claude 的憑證**:平台所有 `claude -p`(`llm.py`)預設用 `~/.claude/headless-oauth-token`(`claude setup-token`,一年);
   要 claude.ai connector 的 job 在登錄寫 `connectors: true`(例:project-39/daily-check)才用訂閱登入(keychain)。

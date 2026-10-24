@@ -89,6 +89,7 @@ def once(key: str, problems: list[str], ok_text: str) -> None:
     last_problems = (last or {}).get("problems", [])
     if sorted(problems) == sorted(last_problems):
         if not problems:
+            clear_failure(key)  # 之前那則沒發出去、問題已經自己好了:沒有要補發的
             return
         at = (last or {}).get("at")
         if at and now - datetime.datetime.fromisoformat(at) < REMIND:

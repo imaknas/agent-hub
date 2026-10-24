@@ -11,11 +11,15 @@
   3. 新版 `claude --version` 跑不起來、或同一個請求失敗(例:-p 的旗標改了)→ 裝回舊版本,exit 1
      (排程器記 job.failed,狀態頁紅)
   沒有新版就什麼都不做(不打請求)。
+Claude Code 自己的自動更新照常(Knas 2026-10-24:不用統一更新流程,但不能默默落後):這支是每晚的保險,
+任何一種「沒辦法到最新版」(查不到最新版、裝不起來、裝回舊版、現在的版本就打不通)都發 Discord
+(alert.once:沒解決的每 24 小時再提醒,回到最新版時發一次恢復),不只是狀態頁紅。
 
 用法:update-claude.py [--dry-run]
 """
 from __future__ import annotations
 
+import json
 import os
 import re
 import subprocess
@@ -23,6 +27,7 @@ import sys
 import pathlib
 
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
+import alert  # noqa: E402
 import hubconf  # noqa: E402
 
 PKG = "@anthropic-ai/claude-code"
@@ -53,47 +58,51 @@ def smoke() -> str | None:
         return "超過 3 分鐘沒回應"
     if r.returncode == 0:
         return None
-    return (r.stdout.strip() or r.stderr.strip())[-300:] or f"exit {r.returncode}"
+    try:
+        return json.loads(r.stdout.strip().splitlines()[-1]).get("llm_error") or f"exit {r.returncode}"
+    except (ValueError, IndexError):
+        return (r.stderr.strip() or r.stdout.strip())[-300:] or f"exit {r.returncode}"
 
 
 def main() -> int:
     dry = "--dry-run" in sys.argv
+    ok, msg = update(dry)
+    print(msg, file=sys.stdout if ok else sys.stderr)
+    if not dry:
+        alert.once("claude-version", [] if ok else [f"claude 沒辦法更新到最新版:{msg}"], f"claude 回到最新版了({msg})")
+    return 0 if ok else 1
+
+
+def update(dry: bool) -> tuple[bool, str]:
+    """(有沒有在最新版, 說明)"""
     bin_dir = hubconf.nvm_bin()
     if not bin_dir:
-        print("update-claude:找不到 nvm 的預設版本(~/.nvm/alias/default)", file=sys.stderr)
-        return 1
+        return False, "找不到 nvm 的預設版本(~/.nvm/alias/default)"
     npm, claude = bin_dir / "npm", bin_dir / "claude"
     old = version(claude) if claude.exists() else None
     r = run(str(npm), "view", PKG, "version", timeout=120)
     latest = r.stdout.strip()
     if r.returncode != 0 or not re.fullmatch(r"\d+\.\d+\.\d+", latest):
-        print(f"update-claude:查不到最新版本:{(r.stderr or r.stdout).strip()[-200:]}", file=sys.stderr)
-        return 1
+        return False, f"查不到最新版本(現在是 {old}):{(r.stderr or r.stdout).strip()[-200:]}"
     if old == latest:
-        print(f"claude {old}(node {bin_dir.parent.name}):已經是最新版")
-        return 0
+        return True, f"claude {old}(node {bin_dir.parent.name}):已經是最新版"
     if dry:
-        print(f"(dry-run) claude {old or '沒有安裝'} → {latest}(node {bin_dir.parent.name})")
-        return 0
+        return True, f"(dry-run) claude {old or '沒有安裝'} → {latest}(node {bin_dir.parent.name})"
     if old and (err := smoke()):
-        print(f"update-claude:現在的 {old} 就打不通請求,先不更新(登入或網路的問題,看 agent-hub/claude-login):{err}",
-              file=sys.stderr)
-        return 1
+        return False, (f"還在 {old}(最新 {latest}):現在的版本就打不通請求,先不更新"
+                       f"(登入或網路的問題,看 agent-hub/claude-login):{err[-200:]}")
     r = run(str(npm), "install", "-g", f"{PKG}@{latest}", "--no-audit", "--no-fund")
     new = version(claude) if r.returncode == 0 else None
     err = smoke() if new == latest else None
     if new == latest and err is None:
-        print(f"claude {old or '沒有安裝'} → {new}(node {bin_dir.parent.name}),請求測試通過")
-        return 0
-    detail = err or (r.stderr or r.stdout).strip()[-300:]
+        return True, f"claude {old or '沒有安裝'} → {new}(node {bin_dir.parent.name}),請求測試通過"
+    detail = (err or (r.stderr or r.stdout).strip())[-200:]
     if old:
         back = run(str(npm), "install", "-g", f"{PKG}@{old}", "--no-audit", "--no-fund")
-        print(f"update-claude:{latest} 裝不起來({detail}),已裝回 {old}"
-              + ("" if back.returncode == 0 and version(claude) == old else "——裝回也失敗,claude 現在可能不能用"),
-              file=sys.stderr)
-    else:
-        print(f"update-claude:{latest} 裝不起來:{detail}", file=sys.stderr)
-    return 1
+        restored = back.returncode == 0 and version(claude) == old
+        return False, (f"{latest} 裝不起來({detail})," +
+                       (f"已裝回 {old}" if restored else "裝回也失敗,claude 現在可能不能用"))
+    return False, f"{latest} 裝不起來:{detail}"
 
 
 if __name__ == "__main__":
