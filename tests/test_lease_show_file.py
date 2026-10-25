@@ -109,6 +109,18 @@ class Take(unittest.TestCase):
         with mock.patch.object(lease_files, "MAX_TOTAL", len(PNG) + 1):
             self.refused("results/a.png")
 
+    def test_limits_count_only_the_recent_window(self):
+        # 長壽租約(同一段深談接回好幾天):舊的不算,不會被卡死(m10252240)
+        with mock.patch.object(lease_files, "MAX_COUNT", 2):
+            self.assertIsNotNone(self.take("results/a.png")[0])
+            self.assertIsNotNone(self.take("results/a.png")[0])
+            self.assertIn("最近 24 小時", self.refused("results/a.png"))
+            for m in self.store.glob("*.json"):  # 把前兩張變成兩天前給的
+                d = json.loads(m.read_text())
+                d["at"] -= 2 * 86400
+                m.write_text(json.dumps(d))
+            self.assertIsNotNone(self.take("results/a.png")[0])
+
     def test_secret_like_files(self):
         for name in ("api_token.json", "secrets.json", "credentials.json", "id_rsa.txt", "password.txt", "server.key.txt"):
             (self.ws / name).write_text("{}")
@@ -252,6 +264,31 @@ class Relay(unittest.TestCase):
             text, err = m.show_file({"path": "x.svg"})
         self.assertTrue(err)
         self.assertIn("類型不能送", text)
+
+    def test_http_keeps_the_refusal_reason(self):
+        # 以前 http() 遇到 4xx 丟掉 body,session 只看到「沒送出去:400」(m10252240);用真的 HTTP server 測,不 mock http()
+        import http.server
+        class H(http.server.BaseHTTPRequestHandler):
+            def do_POST(self):
+                body = json.dumps({"v": 2, "error": "file_refused", "detail": "最近 24 小時已經給了 100 個檔案,到上限了"}).encode()
+                self.send_response(400)
+                self.send_header("Content-Type", "application/json")
+                self.send_header("Content-Length", str(len(body)))
+                self.end_headers()
+                self.wfile.write(body)
+            def log_message(self, *a):
+                pass
+        srv = http.server.HTTPServer(("127.0.0.1", 0), H)
+        threading.Thread(target=srv.serve_forever, daemon=True).start()
+        self.addCleanup(srv.shutdown)
+        m = load("lease_relay_sf3", "lease-relay.py")
+        code, res = m.http("POST", f"http://127.0.0.1:{srv.server_port}/v1/internal/x/show", "t", {"path": "a.png"})
+        self.assertEqual((code, res.get("error")), (400, "file_refused"))
+        with mock.patch.object(m, "RUNNER", f"http://127.0.0.1:{srv.server_port}"), \
+                mock.patch.object(m, "secret", lambda p: "t"):
+            text, err = m.show_file({"path": "a.png"})
+        self.assertTrue(err)
+        self.assertIn("到上限了", text)
 
     def test_tool_is_listed(self):
         m = load("lease_relay_sf2", "lease-relay.py")

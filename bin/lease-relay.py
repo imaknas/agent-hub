@@ -67,8 +67,11 @@ def http(method: str, url: str, token: str, body: dict | None = None, timeout: f
     try:
         with urllib.request.urlopen(req, timeout=timeout) as r:
             return r.status, json.loads(r.read() or b"{}")
-    except urllib.error.HTTPError as e:
-        return e.code, {}
+    except urllib.error.HTTPError as e:  # runner 拒絕時 body 裡有原因(error、detail):要帶回去,session 才講得出為什麼
+        try:
+            return e.code, json.loads(e.read() or b"{}")
+        except ValueError:
+            return e.code, {}
     except (urllib.error.URLError, OSError, ValueError):
         return 0, {}
 

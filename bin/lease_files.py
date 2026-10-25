@@ -3,7 +3,8 @@
 lease-runner 收到「給他看這個」(`POST /v1/internal/<lease>/show`,session 那邊由各 runtime 的工具接上來)就呼叫 take():
   1. 在專案資料夾裡:相對專案資料夾解析,解析成真實路徑後要在資料夾裡(`../`、symlink 指出去都擋),而且是一般檔案
   2. 類型:副檔名在 TYPES 裡,**內容開頭也要對**(圖片/pdf/glb 看 magic bytes,文字要是 UTF-8);不收 svg、html
-  3. 大小:每個 ≤ MAX_FILE;每個租約最多 MAX_COUNT 個、合計 MAX_TOTAL
+  3. 大小:每個 ≤ MAX_FILE;每個租約**最近 WINDOW_S 內**最多 MAX_COUNT 個、合計 MAX_TOTAL(10-25 m10252240:同一段深談
+     會被接回好幾天,一直迭代算圖,一天幾十張很正常;算整個租約的話長壽租約會被卡死。總量由 prune()/KEEP_DAYS 管)
   4. 看起來像憑證的檔名、專案登錄 secrets: 宣告的路徑、內容像憑證的文字檔(私鑰、API key)一律不送
 以「打開的那個 fd」為準,不是以字串路徑為準(10-25 review):runner 不在 sandbox 裡,session 可以借它的手讀檔(confused deputy)——
   hard link(st_nlink > 1)拒絕;打開之後用 F_GETPATH 拿實際打開的檔的路徑,再檢查一次在資料夾裡、不是 secrets。
@@ -26,8 +27,9 @@ import stat
 import time
 
 MAX_FILE = 20 * 1024 * 1024
-MAX_COUNT = 50
-MAX_TOTAL = 200 * 1024 * 1024
+MAX_COUNT = 100                  # 最近 WINDOW_S 內
+MAX_TOTAL = 500 * 1024 * 1024    # 最近 WINDOW_S 內
+WINDOW_S = 24 * 3600
 KEEP_DAYS = 30
 TEXT = "text"
 # 副檔名 → (mime, 內容開頭要符合的檢查)
@@ -105,11 +107,14 @@ def take(ws, path: str, summary: str | None, store, secret_paths=()) -> tuple:
     elif not ok(data):
         return None, f"{rel} 的內容不是 {ext[1:]}(副檔名跟內容對不上)"
     # 上限是先讀再寫:同一個租約一次只跑一個回合、工具一次一個,不會兩個 show 同時算
-    kept = [json.loads(m.read_text()) for m in store.glob("*.json")] if store.is_dir() else []
+    since = time.time() - WINDOW_S
+    kept = [k for k in (json.loads(m.read_text()) for m in store.glob("*.json")) if k.get("at", 0) >= since] \
+        if store.is_dir() else []
+    hours = WINDOW_S // 3600
     if len(kept) >= MAX_COUNT:
-        return None, f"這個深談已經給了 {MAX_COUNT} 個檔案,到上限了"
+        return None, f"這個深談最近 {hours} 小時已經給了 {MAX_COUNT} 個檔案,到上限了;晚一點再給,或先用文字說檔案在哪"
     if sum(k.get("size", 0) for k in kept) + len(data) > MAX_TOTAL:
-        return None, f"這個深談給的檔案合計超過 {MAX_TOTAL // 1024 // 1024} MB 了"
+        return None, f"這個深談最近 {hours} 小時給的檔案合計超過 {MAX_TOTAL // 1024 // 1024} MB 了;晚一點再給,或先用文字說檔案在哪"
     store.mkdir(parents=True, exist_ok=True)
     fid = secrets.token_hex(8)
     (store / fid).write_bytes(data)
