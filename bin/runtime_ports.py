@@ -27,6 +27,13 @@
   sessions(第 1 層的一部分):
     alive(sid) -> bool、live_sessions() -> set[str]、context_size(sid) -> int | None(接續要載入多少 token)
     current_session(env) -> str | None                   目前這個程序屬於哪個 session(給 hubbus send 記寄件人)
+  auth(第 6 層,登入):平台只說「用哪種登入」(mode:token = 無人值守用的長期憑證、subscription = 互動登入,
+  要 connector 的 job 用;名稱沿用 contracts/llm-points.yaml 的 auth 欄位),憑證放哪、環境變數叫什麼是 runtime 的事
+    auth_env(mode, env) -> (env | None, reason)          這種登入要給 agent 的環境變數(從 env 出發,先清掉這個
+                                                         runtime 自己的憑證變數);憑證不在就 (None, 給人看的原因)
+    clean_env(env) -> dict                               拿掉這個 runtime 的憑證變數(交給別人之前、或要用預設登入時)
+    credentials() -> list[Credential]                   這台機器上有哪些登入、在不在、什麼時候到期(不讀值、不印值)
+    is_login_error(text) -> bool                         這個錯誤訊息是登入的問題嗎(要人去處理),還是別的(逾時、額度…)
   stream(長駐 session 的輸出翻譯;docs/design/lease-contract-neutral.md):
     action(tool, input) -> (kind, collab, target, summary)   工具 → KINDS/COLLABS;target 給判斷用,summary 給人看
     parse_stream(line) -> list[StreamEvent]             runtime 原生的一行輸出 → 中立的對話事件
@@ -54,6 +61,7 @@ PORTS = {
     "transcripts": ("turns", "last_activity"),
     "sessions": ("alive", "live_sessions", "context_size", "current_session"),
     "stream": ("action", "parse_stream", "classify_exit", "resumable", "resume_command"),
+    "auth": ("auth_env", "clean_env", "credentials", "is_login_error"),
 }
 
 # 中立的「動作種類」:對話紀錄裡 agent 做了什麼,不用任何 runtime 的工具名稱。
@@ -107,6 +115,23 @@ class Turn(NamedTuple):
     actions: tuple = ()      # role == assistant 時,這一則做了哪些 Action
 
 
+class Credential(NamedTuple):
+    """一份登入(第 6 層)。字句欄位是給人看的(警報、檢查輸出),平台照它們組句子;門檻是這份憑證自己的性質。"""
+    name: str                    # 短名稱(檢查輸出的「…:ok」)
+    label: str                   # 壞了時的主詞
+    mode: str | None             # 實際打請求檢查時用哪種登入;None = 不能打請求檢查(只看到期)
+    present: bool                # 在不在(看不到的登入,例:keychain,當作在,只能靠打請求確認)
+    renew: str                   # 怎麼重新登入(給人做的)
+    path: str | None = None      # 憑證檔在哪(只給人看)
+    since: datetime.datetime | None = None          # 什麼時候產生的(看年紀用)
+    max_age: datetime.timedelta | None = None       # 超過就提醒換
+    lifetime: str | None = None                     # 「一年」之類,給人看
+    expires: datetime.datetime | None = None        # 什麼時候到期
+    warn_before: datetime.timedelta | None = None   # 到期前多久提醒
+    used_by: str | None = None                      # 誰在用(給人看;平台知道的用途由平台自己說)
+    note: str | None = None                         # 檢查時要印的說明(例:看不出到期日)
+
+
 class Task(NamedTuple):
     point: str               # 判斷點名稱
     prompt: str
@@ -115,7 +140,7 @@ class Task(NamedTuple):
     model: str | None = None
     output_schema: dict | None = None
     timeout_s: int = 1200
-    env: dict | None = None  # 執行環境變數(登入由 llm.py 決定;第 6 層 AuthProvider 之後接手)
+    env: dict | None = None  # 執行環境變數(已經套好登入:llm.py 用 auth 介面的 auth_env 算出來)
     extra: tuple = ()        # 呼叫端多給的參數(例:租約交接要接續哪個 session)——之後由 resume 介面取代
 
 

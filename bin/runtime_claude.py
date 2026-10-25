@@ -582,3 +582,68 @@ def neutral_question(inp: dict) -> dict:
 def native_answers(answers: dict) -> dict:
     """通用的答案 {問題: label 或 [label…]} → AskUserQuestion 要的 {問題: "label"}(多選用逗號接起來)。"""
     return {q: (", ".join(a) if isinstance(a, list) else a) for q, a in (answers or {}).items()}
+
+
+# ---------- auth(第 6 層,登入)----------
+# 三份登入:訂閱登入(keychain,launchd 底下讀得到,SSH 底下讀不到)、headless token(`claude setup-token`,一年,
+# 無人值守用的預設)、~/.claude/.credentials.json(SSH 底下互動的 claude 用)。路徑在呼叫時才算(測試換 HOME 就換掉)。
+# 不讀、不印任何值,只有 auth_env 把 token 放進要交給 claude 的環境變數。
+
+from runtime_ports import Credential  # noqa: E402
+
+TOKEN_VAR = "CLAUDE_CODE_OAUTH_TOKEN"
+_LOGIN_ERROR = re.compile(r"login|401|unauthori[sz]ed|oauth|invalid api key|authentication|credential|expired", re.I)
+
+
+def _token_file() -> pathlib.Path:
+    return pathlib.Path.home() / ".claude" / "headless-oauth-token"
+
+
+def _creds_file() -> pathlib.Path:
+    return pathlib.Path.home() / ".claude" / ".credentials.json"
+
+
+def clean_env(env) -> dict:
+    return {k: v for k, v in env.items() if k != TOKEN_VAR}
+
+
+def auth_env(mode: str, env) -> tuple:
+    out = clean_env(env)
+    if mode != "token":  # subscription:不帶 token,claude 自己用 keychain 的登入
+        return out, ""
+    f = _token_file()
+    if not f.is_file():
+        return None, f"沒有 {f}(預設用 headless token;要用訂閱登入就宣告 auth: subscription)"
+    out[TOKEN_VAR] = f.read_text().strip()
+    return out, ""
+
+
+def credentials() -> list:
+    token, creds = _token_file(), _creds_file()
+    out = [Credential(name="訂閱登入(launchd)", label="claude 的訂閱登入", mode="subscription", present=True,
+                      renew="在 mini 上登入(`claude` → /login)"),
+           Credential(name="headless token", label="headless token", mode="token", present=token.exists(),
+                      renew=f"重跑 `claude setup-token` 寫進 {token}", path=str(token),
+                      since=datetime.datetime.fromtimestamp(token.stat().st_mtime) if token.exists() else None,
+                      max_age=datetime.timedelta(days=335), lifetime="一年")]
+    expires, note, present = None, None, creds.exists()
+    if present:
+        try:
+            oauth = json.loads(creds.read_text()).get("claudeAiOauth") or {}
+        except ValueError:
+            oauth = {}
+        exp = oauth.get("refreshTokenExpiresAt")
+        if exp:
+            expires = datetime.datetime.fromtimestamp(exp / 1000)
+        elif oauth:
+            note = ".credentials.json:沒有 refreshTokenExpiresAt,略過到期檢查"
+    out.append(Credential(name=".credentials.json(SSH 用)", label="~/.claude/.credentials.json", mode=None,
+                          present=present, renew="在 mini 的終端機跑一次 claude 讓它更新,或重新 /login",
+                          path=str(creds), expires=expires, warn_before=datetime.timedelta(days=7),
+                          used_by="SSH 底下的 claude 用的", note=note))
+    return out
+
+
+def is_login_error(text: str) -> bool:
+    """claude 的登入錯誤(Login expired、/login、401、OAuth…);找不到 claude 本身也要人處理,一起算。"""
+    return bool(_LOGIN_ERROR.search(text or "")) or "找不到 claude" in (text or "")

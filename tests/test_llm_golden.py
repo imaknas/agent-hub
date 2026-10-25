@@ -69,13 +69,17 @@ class Golden(unittest.TestCase):
         if "LLM_AUTH" in variant:
             env["LLM_AUTH"] = variant["LLM_AUTH"]
         with mock.patch.dict(os.environ, env, clear=True):
-            auth_env, auth = self.m.auth_env(spec)
+            # 登入的觀察點是 auth 介面:用哪種(auth)、有沒有多帶憑證變數(token_passed)——不認變數名稱
+            import runtime_ports
+            rt = runtime_ports.load(spec.get("runtime"), ports=("auth",))
+            auth = self.m.auth_mode(spec)
+            agent_env, _ = self.m.auth_env(spec, rt)
             a = argparse.Namespace(cmd="run", point=point, cwd=None, model=variant.get("model"),
                                    prompt_file=str(self.prompt), dry_run=True, extra=[])
             out = io.StringIO()
             with contextlib.redirect_stdout(out):
                 code = self.m.run(a)
-        return {"exit": code, "auth": auth, "token_passed": bool(auth_env and auth_env.get(TOKEN_ENV)),
+        return {"exit": code, "auth": auth, "token_passed": bool(agent_env) and agent_env != rt.clean_env(agent_env),
                 "cmd": self.norm(json.loads(out.getvalue())) if code == 0 else None}
 
     def current(self) -> dict:
@@ -101,8 +105,10 @@ class Golden(unittest.TestCase):
         self.token_file.unlink()
         spec = self.m.points()["points"]["login-check"]
         with mock.patch.dict(os.environ, {"LLM_AUTH": "token"}):
-            env, auth = self.m.auth_env(spec)
-        self.assertEqual((env, auth), (None, "token"))
+            import runtime_ports
+            env, why = self.m.auth_env(spec, runtime_ports.load("claude", ports=("auth",)))
+        self.assertIsNone(env)
+        self.assertIn(str(self.token_file), why)
 
 
 if __name__ == "__main__":

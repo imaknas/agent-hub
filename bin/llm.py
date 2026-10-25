@@ -34,7 +34,6 @@ import minischema  # noqa: E402
 import yaml  # noqa: E402
 
 POINTS = hubconf.ROOT / "contracts" / "llm-points.yaml"
-TOKEN_FILE = pathlib.Path.home() / ".claude" / "headless-oauth-token"
 CALL = re.compile(r"""(\bclaude\s+-p\b|["']claude["']\s*,\s*["']-p["'])""")
 
 
@@ -65,15 +64,16 @@ def output_schema(spec: dict) -> str | None:
     return out.get("schema") if out.get("format") == "json" else None
 
 
-def auth_env(spec: dict) -> tuple[dict | None, str]:
-    """(claude 的環境變數, 用哪種憑證)。用 token 卻沒有 token 檔 → (None, …)。"""
-    want = os.environ.get("LLM_AUTH") or spec.get("auth") or "token"
-    env = {k: v for k, v in os.environ.items() if k not in ("CLAUDE_CODE_OAUTH_TOKEN", "LLM_AUTH")}
-    if want == "token":
-        if not TOKEN_FILE.is_file():
-            return None, want
-        env["CLAUDE_CODE_OAUTH_TOKEN"] = TOKEN_FILE.read_text().strip()
-    return env, want
+def auth_mode(spec: dict) -> str:
+    """用哪種登入:LLM_AUTH(呼叫端這次指定,例:login-check 檢查 token)> 判斷點宣告的 auth > 預設 token。
+    憑證放哪、環境變數叫什麼是 runtime 的事(auth 介面,第 6 層)。"""
+    return os.environ.get("LLM_AUTH") or spec.get("auth") or "token"
+
+
+def auth_env(spec: dict, rt) -> tuple[dict | None, str]:
+    """(要交給 agent 的環境變數, 沒有時給人看的原因)。LLM_AUTH 是 llm.py 自己的變數,不往下傳。"""
+    base = {k: v for k, v in os.environ.items() if k != "LLM_AUTH"}
+    return rt.auth_env(auth_mode(spec), base)
 
 
 def run(a) -> int:
@@ -86,14 +86,14 @@ def run(a) -> int:
         return 2
     prompt = "" if a.cmd == "exec" else (pathlib.Path(a.prompt_file).read_text() if a.prompt_file else sys.stdin.read())
     model = a.model or (os.environ.get(spec["model_env"]) if spec.get("model_env") else None) or spec.get("model_default")
-    env, auth = auth_env(spec)
+    rt = runtime_ports.load(spec.get("runtime"), ports=("agent", "auth"))
+    env, why = auth_env(spec, rt)
     if env is None:
-        return fail(a.point, spec, f"沒有 {TOKEN_FILE}(預設用 headless token;要用訂閱登入就宣告 auth: subscription)")
+        return fail(a.point, spec, why)
     schema = json.loads((POINTS.parent / output_schema(spec)).read_text()) if output_schema(spec) else None
     task = runtime_ports.Task(point=a.point, prompt=prompt, spec=spec, cwd=a.cwd or None, model=model,
                               output_schema=schema, timeout_s=spec.get("timeout_s", 1200), env=env,
                               extra=tuple(a.extra or ()))
-    rt = runtime_ports.load(spec.get("runtime"), ports=("agent",))
     if a.cmd == "exec":
         # 長駐的串流 session(例:通道租借)。暫時的:之後由第 1 層的 open_session 取代
         if not spec.get("stream"):

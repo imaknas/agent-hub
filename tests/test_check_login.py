@@ -117,6 +117,14 @@ class Check(unittest.TestCase):
         self.assertEqual(len(hard), 1)
         self.assertIn("訂閱登入", hard[0])
 
+    def test_runtime_missing_is_hard_for_the_token_probe_too(self):
+        # 第 6 層刻意改的:以前只有訂閱登入那次把「找不到 claude」當要人處理,token 那次當成一般失敗
+        self.fresh_token()
+        self.answers[None] = self.answers["token"] = "找不到 claude"
+        _, _, hard = self.run_check()
+        self.assertEqual(len(hard), 2)
+        self.assertTrue(hard[1].startswith("headless token(所有排程跟租借用的)不能用了:找不到 claude"))
+
     def test_non_login_failure_alerts_only_on_third_in_a_row(self):
         self.fresh_token()
         self.answers["token"] = "timeout talking to api"

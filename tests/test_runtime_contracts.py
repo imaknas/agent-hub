@@ -118,10 +118,22 @@ class ClaudeFixture:
             d["tool_input"] = ti
         return json.dumps(d)
 
+    LOGIN_ERROR = "Invalid API key · Please run /login"
+
+    def configure_auth(self, tmp: pathlib.Path, token: bool) -> None:
+        """登入情境:HOME 換成暫存目錄,token 檔在或不在。"""
+        self._home = os.environ.get("HOME")
+        os.environ["HOME"] = str(tmp)
+        (tmp / ".claude").mkdir(exist_ok=True)
+        if token:
+            (tmp / ".claude" / "headless-oauth-token").write_text("contract-token\n")
+
     def teardown(self):
         self.m.transcript_roots, self.m.PROJECTS = self._roots, self._projects
         if getattr(self, "_path", None):
             os.environ["PATH"] = self._path
+        if getattr(self, "_home", None):
+            os.environ["HOME"] = self._home
 
 
 class FakeFixture:
@@ -154,6 +166,12 @@ class FakeFixture:
                           "incomplete": TaskResult(True, True, "stopped", turns=50, stop="error_max_turns"),
                           "fail": TaskResult(False, error="boom: login expired")}[mode])
         return {}
+
+    LOGIN_ERROR = "fake: not signed in"
+
+    def configure_auth(self, tmp: pathlib.Path, token: bool) -> None:
+        import runtime_fake
+        runtime_fake.set_credential("token", token)
 
     def teardown(self):
         import runtime_fake
@@ -341,6 +359,83 @@ class LifecycleContract(unittest.TestCase):
             m.install_lifecycle(ws)
             self.assertEqual(snap, {p: p.read_bytes() for p in ws.rglob("*") if p.is_file()}, "重跑結果一樣")
         self.each(check)
+
+
+class AuthContract(unittest.TestCase):
+    """第 6 層:平台只說用哪種登入(token / subscription);每個實作自己決定憑證放哪、變數叫什麼。"""
+
+    BASE = {"PATH": "/usr/bin", "LLM_AUTH": "x-not-the-runtimes"}
+
+    def each(self, token, check):
+        for name in runtime_ports.RUNTIMES:
+            with self.subTest(runtime=name, token=token):
+                fx = FIXTURES[name]()
+                with tempfile.TemporaryDirectory() as d:
+                    m, _ = fx.setup(pathlib.Path(d))
+                    try:
+                        fx.configure_auth(pathlib.Path(d), token)
+                        runtime_ports.load(name, ports=("auth",))
+                        check(m, fx)
+                    finally:
+                        fx.teardown()
+
+    def test_token_adds_a_credential_that_clean_env_removes(self):
+        def check(m, fx):
+            env, why = m.auth_env("token", dict(self.BASE))
+            self.assertEqual(why, "")
+            self.assertNotEqual(env, m.clean_env(env), "token 登入應該多帶憑證")
+            self.assertEqual(m.clean_env(env), m.clean_env(dict(self.BASE)))
+            # 已經帶著舊憑證的環境:換成這次的,不會疊兩份
+            again, _ = m.auth_env("token", env)
+            self.assertEqual(again, env)
+        self.each(True, check)
+
+    def test_missing_credential_says_why_instead_of_falling_back(self):
+        def check(m, fx):
+            env, why = m.auth_env("token", dict(self.BASE))
+            self.assertIsNone(env)
+            self.assertTrue(why)
+        self.each(False, check)
+
+    def test_subscription_never_carries_the_token(self):
+        def check(m, fx):
+            tok, _ = m.auth_env("token", dict(self.BASE))
+            env, why = m.auth_env("subscription", tok)
+            self.assertEqual((env, why), (m.clean_env(tok), ""))
+        self.each(True, check)
+
+    def test_platform_variables_pass_through(self):
+        def check(m, fx):
+            env, _ = m.auth_env("token", dict(self.BASE))
+            self.assertEqual((env["PATH"], env["LLM_AUTH"]), ("/usr/bin", "x-not-the-runtimes"))
+        self.each(True, check)
+
+    def test_credentials_describe_without_values(self):
+        def check(m, fx):
+            creds = m.credentials()
+            self.assertTrue(creds)
+            self.assertEqual(len({c.name for c in creds}), len(creds))
+            for c in creds:
+                self.assertIsInstance(c, runtime_ports.Credential)
+                self.assertIn(c.mode, (None, "token", "subscription"))
+                self.assertTrue(c.label and c.renew)
+            self.assertIn("token", {c.mode for c in creds})
+            token = next(c for c in creds if c.mode == "token")
+            self.assertTrue(token.present)
+            self.assertNotIn("contract-token", repr(creds))
+        self.each(True, check)
+
+    def test_missing_token_shows_as_not_present(self):
+        def check(m, fx):
+            self.assertFalse(next(c for c in m.credentials() if c.mode == "token").present)
+        self.each(False, check)
+
+    def test_login_errors_told_apart(self):
+        def check(m, fx):
+            self.assertTrue(m.is_login_error(fx.LOGIN_ERROR))
+            self.assertFalse(m.is_login_error("timed out after 120s"))
+            self.assertFalse(m.is_login_error(""))
+        self.each(True, check)
 
 
 class InstructionsContract(unittest.TestCase):

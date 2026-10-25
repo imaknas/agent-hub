@@ -1,8 +1,14 @@
 # 執行環境抽象:平台每一層都是介面,Claude Code 只是一個實作
 
 > **進度**(10-25):步驟 1(骨架)、2(第 5 層對話紀錄)、3(第 1 層「跑一次」)、5(第 3 層事件 `hub-event`、第 4 層規則檔
-> `hub-runtime`)完成,24 個專案都換成新的 hook。**還沒做**:第 1 層長駐 session(排在另一個 session 的租約中立化之後,
-> 見 `lease-contract-neutral.md`)、第 6 層登入、判斷點宣告的中立化(等第 2 層的 approvals)、`templates/CLAUDE.md` 改名。
+> `hub-runtime`)、6(第 6 層登入,介面 `auth`)完成,24 個專案都換成新的 hook。**還沒做**:第 1 層長駐 session(排在另一個
+> session 的租約中立化之後,見 `lease-contract-neutral.md`)、判斷點宣告的中立化(等第 2 層的 approvals;順便加
+> `platform_tools`)、`templates/CLAUDE.md` 改名、job 改名(`runtime-login`、`update-runtime`)。
+> **第 6 層還留著的 Claude 名稱**:`lease-resume`(直接讀 token 檔、叫 `claude --resume`;跟長駐 session 的 `resume_command`
+> 一起換)、`run-agent-job.sh` 跟 `lease-runner.py` 的 `unset/去掉 CLAUDE_CODE_OAUTH_TOKEN`(多一層保險,llm.py 已經經過
+> `auth_env`;可以刪)、`classify_exit` 自己一份登入錯誤的判斷(之後改用 `is_login_error`)。
+> **每一步的驗收**:`bin/test-gate`(commit 閘門)跟黃金檔——重構前先把外面看得到的行為固定成測試(第 6 層:
+> `tests/test_check_login.py` 連警報字句都比、`tests/fixtures/llm-golden.json` 沒重生)。
 > **還在用舊入口的兩處**(輸出跟以前一字不差,照樣能用):agent-hub 自己的 `.claude/settings.json`(它的 session 開始還要拉
 > agent-hub 的 repo,`hub-event` 沒有這一步),跟使用者層級的 worktree hook(U4,要 Knas 親自改)。
 
@@ -152,6 +158,12 @@ class AuthProvider(Protocol):
     def check(self, mode: str) -> AuthStatus: ...   # 能不能用、什麼時候到期;mode = 無人值守 / 訂閱
     def env(self, mode: str) -> dict: ...           # 交給 AgentRuntime 用的環境(不印值)
 ```
+
+**實作的形狀**(10-25,`runtime_ports` 的 `auth`):`auth_env(mode, env) -> (env | None, 原因)`、`clean_env(env)`、
+`credentials() -> [Credential]`、`is_login_error(text)`。跟上面草稿的差別:「能不能用」不是 runtime 回答——實際打一次請求
+(`llm.py run login-check`)是平台的檢查,runtime 只描述有哪些登入、到期、門檻、怎麼重新登入(`Credential`),跟分辨錯誤是不是
+登入問題。mode 沿用 llm-points 的 `token`/`subscription`(跟 Muninn 共用的宣告,改名等中立化)。`check-claude-login.py` 照
+`Credential` 組回原本的句子(警報照字句去重,一字不差);刻意改的一處:token 那次「找不到 claude」也算要人處理。
 
 - 現在在哪:`llm.py auth_env`(headless token / 訂閱登入)、`check-claude-login.py`、`update-claude.py`、`lease-resume`。
 - 平台的 job(`agent-hub/claude-login`、`update-claude`)改成「對設定裡用到的每個 runtime 檢查」,名稱改成 `runtime-login`、

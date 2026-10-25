@@ -18,22 +18,19 @@ import datetime
 import json
 import os
 import pathlib
-import re
 import subprocess
 import sys
 
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
 import alert  # noqa: E402
 import hubconf  # noqa: E402
+import runtime_ports  # noqa: E402  有哪些登入、放哪、錯誤長怎樣是 runtime 的事(auth 介面,第 6 層)
 
-HOME = pathlib.Path.home()
-TOKEN = HOME / ".claude" / "headless-oauth-token"
-CREDS = HOME / ".claude" / ".credentials.json"
 STREAK = hubconf.STATE / "claude-login-streak.json"
-AUTH = re.compile(r"login|401|unauthori[sz]ed|oauth|invalid api key|authentication|credential|expired", re.I)
-REFRESH_WARN = datetime.timedelta(days=7)
-TOKEN_WARN_AGE = datetime.timedelta(days=335)
 SOFT_LIMIT = 3
+# 平台知道的:每種登入是誰在用(壞了的時候,警報要說影響到誰)
+USED_BY = {"subscription": "Upwork job、Muninn 用的", "token": "所有排程跟租借用的"}
+MISSING_MEANS = {"token": "所有排程跟租借都會失敗"}
 
 
 def ask(env: dict) -> str | None:
@@ -54,42 +51,31 @@ def main() -> int:
     now = datetime.datetime.now()
     hard: list[str] = []
     soft: dict[str, str] = {}
-    base = {k: v for k, v in os.environ.items() if k not in ("CLAUDE_CODE_OAUTH_TOKEN", "LLM_AUTH")}
+    rt = runtime_ports.load(ports=("auth",))
+    base = rt.clean_env({k: v for k, v in os.environ.items() if k != "LLM_AUTH"})
 
-    if (err := ask(base)) is None:
-        print("訂閱登入(launchd):ok")
-    elif AUTH.search(err) or "找不到 claude" in err:
-        hard.append(f"claude 的訂閱登入(Upwork job、Muninn 用的)不能用了:{err[:200]}——在 mini 上登入(`claude` → /login)")
-    else:
-        soft["subscription"] = err
-
-    if TOKEN.exists():
-        if (err := ask({**base, "LLM_AUTH": "token"})) is None:
-            print("headless token:ok")
-        elif AUTH.search(err):
-            hard.append(f"headless token(所有排程跟租借用的)不能用了:{err[:200]}——重跑 `claude setup-token` 寫進 {TOKEN}")
-        else:
-            soft["token"] = err
-        age = now - datetime.datetime.fromtimestamp(TOKEN.stat().st_mtime)
-        if age > TOKEN_WARN_AGE:
-            hard.append(f"headless token 已經 {age.days} 天(一年到期),快要重跑 `claude setup-token` 寫進 {TOKEN}")
-    else:
-        hard.append(f"沒有 {TOKEN}(所有排程跟租借都會失敗)")
-
-    if CREDS.exists():
-        try:
-            oauth = json.loads(CREDS.read_text()).get("claudeAiOauth") or {}
-            exp = oauth.get("refreshTokenExpiresAt")
-        except ValueError:
-            oauth, exp = {}, None
-        if exp:
-            left = datetime.datetime.fromtimestamp(exp / 1000) - now
-            print(f".credentials.json(SSH 用):refresh 還有 {left.days} 天")
-            if left < REFRESH_WARN:
-                hard.append(f"~/.claude/.credentials.json(SSH 底下的 claude 用的)登入 {max(left.days, 0)} 天內到期——"
-                            "在 mini 的終端機跑一次 claude 讓它更新,或重新 /login")
-        elif oauth:
-            print(".credentials.json:沒有 refreshTokenExpiresAt,略過到期檢查")
+    for c in rt.credentials():
+        if c.mode:  # 能打請求檢查的登入:在就打一次,不在就是問題
+            if not c.present:
+                hard.append(f"沒有 {c.path}({MISSING_MEANS.get(c.mode, '這種登入的呼叫都會失敗')})")
+                continue
+            if (err := ask(base if c.mode == "subscription" else {**base, "LLM_AUTH": c.mode})) is None:
+                print(f"{c.name}:ok")
+            elif rt.is_login_error(err):
+                hard.append(f"{c.label}({USED_BY.get(c.mode, c.used_by or '')})不能用了:{err[:200]}——{c.renew}")
+            else:
+                soft[c.mode] = err
+        if c.present and c.since and c.max_age:
+            age = now - c.since
+            if age > c.max_age:
+                hard.append(f"{c.label} 已經 {age.days} 天({c.lifetime}到期),快要{c.renew}")
+        if c.present and c.expires:
+            left = c.expires - now
+            print(f"{c.name}:refresh 還有 {left.days} 天")
+            if c.warn_before and left < c.warn_before:
+                hard.append(f"{c.label}({c.used_by})登入 {max(left.days, 0)} 天內到期——{c.renew}")
+        elif c.present and c.note:
+            print(c.note)
 
     try:
         streak = json.loads(STREAK.read_text())

@@ -22,6 +22,8 @@ _env_key = "FAKE_RUNTIME_SESSION"
 
 
 def reset() -> None:
+    _creds.clear()
+    _creds.update({"subscription": True, "token": True})
     _resumable.clear()
     _replies.clear()
     _ran.clear()
@@ -186,3 +188,37 @@ def resumable(sid: str) -> bool:
 
 def resume_command(sid: str) -> tuple:
     return (f"fake-resume {sid}", "假的 runtime:接回同一段對話")
+
+
+# ---------- auth(用自己的變數名稱跟錯誤字句,不是 Claude 的)----------
+
+from runtime_ports import Credential  # noqa: E402
+
+_AUTH_VAR = "FAKE_RUNTIME_KEY"
+_creds: dict = {"subscription": True, "token": True}   # mode → 在不在
+
+
+def set_credential(mode: str, present: bool) -> None:
+    _creds[mode] = present
+
+
+def clean_env(env) -> dict:
+    return {k: v for k, v in env.items() if k != _AUTH_VAR}
+
+
+def auth_env(mode: str, env) -> tuple:
+    out = clean_env(env)
+    if not _creds.get(mode, False):
+        return None, f"fake runtime 沒有 {mode} 的登入"
+    if mode == "token":
+        out[_AUTH_VAR] = "fake-key"
+    return out, ""
+
+
+def credentials() -> list:
+    return [Credential(name=f"fake {m}", label=f"fake 的 {m} 登入", mode=m, present=p, renew="fake-login")
+            for m, p in sorted(_creds.items())]
+
+
+def is_login_error(text: str) -> bool:
+    return "not signed in" in (text or "")
