@@ -244,6 +244,7 @@
    "Glob",
    "Grep",
    "WebSearch",
+   "mcp__lease_relay__show_file",
    "--output-format",
    "json"
   ],
@@ -265,6 +266,7 @@
    "Glob",
    "Grep",
    "WebSearch",
+   "mcp__lease_relay__show_file",
    "--output-format",
    "json"
   ],
@@ -286,6 +288,7 @@
    "Glob",
    "Grep",
    "WebSearch",
+   "mcp__lease_relay__show_file",
    "--output-format",
    "json"
   ],
@@ -307,6 +310,7 @@
    "Glob",
    "Grep",
    "WebSearch",
+   "mcp__lease_relay__show_file",
    "--output-format",
    "json"
   ],
@@ -328,6 +332,7 @@
    "Glob",
    "Grep",
    "WebSearch",
+   "mcp__lease_relay__show_file",
    "--output-format",
    "json"
   ],
@@ -349,6 +354,7 @@
    "Glob",
    "Grep",
    "WebSearch",
+   "mcp__lease_relay__show_file",
    "--output-format",
    "json"
   ],
@@ -370,6 +376,7 @@
    "Glob",
    "Grep",
    "WebSearch",
+   "mcp__lease_relay__show_file",
    "--output-format",
    "json"
   ],
@@ -391,6 +398,7 @@
    "Glob",
    "Grep",
    "WebSearch",
+   "mcp__lease_relay__show_file",
    "--output-format",
    "json"
   ],

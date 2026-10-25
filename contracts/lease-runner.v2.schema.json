@@ -185,11 +185,12 @@
             "question",
             "permission",
             "handover",
-            "error"
+            "error",
+            "file"
           ]
         }
       },
-      "description": "每個事件都有這幾個欄位;各類型另外的欄位見 tool_use_event、question_event、permission_event、state_event、quota、turn_end_event、error。"
+      "description": "每個事件都有這幾個欄位;各類型另外的欄位見 tool_use_event、question_event、permission_event、state_event、quota、turn_end_event、error、file_event。"
     },
     "error": {
       "type": "object",
@@ -227,7 +228,8 @@
             "not_idea",
             "dirty",
             "name_taken",
-            "upgrade_failed"
+            "upgrade_failed",
+            "file_refused"
           ]
         },
         "limit": {
@@ -652,6 +654,41 @@
               }
             }
           }
+        }
+      }
+    },
+    "file_event": {
+      "type": "object",
+      "required": [
+        "id",
+        "path",
+        "name",
+        "mime",
+        "size"
+      ],
+      "description": "type=file:session 把專案裡的一個檔案給使用者看。內容用 GET /v1/leases/<lease id>/files/<id> 拿(同一個 token;回檔案本身,Content-Type = mime;送的是給看當下複製的那份,保留 30 天;沒有或過期 404 not_found)。類型限 png/jpg/webp/gif/pdf/glb/txt/md/json/csv(內容也要對得上)、每個 ≤ 20 MB;只會是那個租約專案資料夾裡的檔案,看起來像憑證的不送",
+      "properties": {
+        "id": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{16}$"
+        },
+        "path": {
+          "type": "string",
+          "description": "專案資料夾裡的相對路徑"
+        },
+        "name": {
+          "type": "string"
+        },
+        "mime": {
+          "type": "string"
+        },
+        "size": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "summary": {
+          "type": "string",
+          "description": "session 給的一句說明"
         }
       }
     }

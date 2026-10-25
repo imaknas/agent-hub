@@ -120,7 +120,7 @@ points:
     model_default: sonnet
     # 只給讀的工具;讀類規則放行(不送到轉接),不在登錄網域的 WebFetch、AskUserQuestion 走權限轉接(送到手機)
     tools: Read,Glob,Grep,WebSearch,WebFetch,AskUserQuestion
-    allowed_tools: ["Read", "Glob", "Grep", "WebSearch"]
+    allowed_tools: ["Read", "Glob", "Grep", "WebSearch", "mcp__lease_relay__show_file"]   # show_file:把專案裡的檔案給使用者看(docs/design/lease-show-file.md)
     extra_allow_env: LEASE_ALLOW        # runner 加:登錄 network 網域的 WebFetch(domain:…)
     stream: true
     output: {format: text}
@@ -133,7 +133,7 @@ points:
     # 沒有 permission_mode / prompts:寫入要走權限轉接(--permission-prompt-tool)送手機;dontAsk 會在那之前就拒絕。
     # 自動放行的還是只有讀;Edit/Write/Bash 全部經過 lease-relay.py(資料夾外直接拒絕,其他問 Knas)。
     tools: Read,Glob,Grep,WebSearch,WebFetch,AskUserQuestion,Edit,Write,NotebookEdit,Bash
-    allowed_tools: ["Read", "Glob", "Grep", "WebSearch"]
+    allowed_tools: ["Read", "Glob", "Grep", "WebSearch", "mcp__lease_relay__show_file"]
     extra_allow_env: LEASE_ALLOW
     stream: true
     output: {format: text}

@@ -12,6 +12,8 @@
                10-24 實測 OS sandbox 擋得住寫資料夾外、讀 ~/.ssh、讀 ~/.claude 的憑證,但其他放機密的位置
                (各服務的 .env 等)沒有逐一驗證過,而且擋不住 Keychain
   其他       → deny
+另外提供平台工具 show_file(path, summary):把專案裡的檔案給使用者看(轉給 runner 的 /v1/internal/<lease>/show,檢查在 runner;
+docs/design/lease-show-file.md)。在判斷點的自動放行清單裡,不經過上面的權限判斷。
 沒人回答 5 分鐘 → deny,告訴 session 不要重試。每次請求跟決定都回報給 runner(稽核、等待中不算閒置)。
 
 環境變數(runner 給):LEASE_ID、LEASE_PROJECT、LEASE_RUNNER(runner 的 base URL)。token 從檔案讀,不放環境變數。
@@ -224,6 +226,26 @@ def handle_call(mid, args: dict) -> None:
     send({"jsonrpc": "2.0", "id": mid, "result": {"content": [{"type": "text", "text": json.dumps(decision, ensure_ascii=False)}]}})
 
 
+def show_file(args: dict) -> tuple:
+    """平台的「給使用者看」服務(runner 的 /v1/internal/<lease>/show)接成 Claude Code 的工具:轉給 runner、回結果。
+    檢查(資料夾裡、類型、大小、不像憑證)全部在 runner(lease_files.py),這裡不判斷。"""
+    code, res = http("POST", f"{RUNNER}/v1/internal/{LEASE}/show", secret(hubconf.ROOT / ".secrets" / "runner-token"),
+                     {"path": args.get("path"), "summary": args.get("summary")}, timeout=30)
+    if code == 200 and res.get("id"):
+        return f"已經給 Knas 看了:{res.get('path')}({res.get('mime')},{res.get('size')} bytes)。", False
+    if code == 0:
+        return "沒送出去:連不到平台(runner),先用文字跟 Knas 說檔案在哪。", True
+    return f"沒送出去:{res.get('detail') or res.get('error') or code}", True
+
+
+def handle_show(mid, args: dict) -> None:
+    try:
+        text, is_error = show_file(args)
+    except Exception as e:
+        text, is_error = f"沒送出去:平台出錯({e!r})", True
+    send({"jsonrpc": "2.0", "id": mid, "result": {"content": [{"type": "text", "text": text}], "isError": is_error}})
+
+
 def main() -> None:
     for line in sys.stdin:
         try:
@@ -239,10 +261,17 @@ def main() -> None:
             send({"jsonrpc": "2.0", "id": mid, "result": {"tools": [{
                 "name": "approve", "description": "Relay a permission request or question to the lease owner",
                 "inputSchema": {"type": "object", "properties": {"tool_name": {"type": "string"}, "input": {"type": "object"},
-                                                                 "tool_use_id": {"type": "string"}}}}]}})
+                                                                 "tool_use_id": {"type": "string"}}}}, {
+                "name": "show_file",
+                "description": "把專案資料夾裡的一個檔案(圖片 png/jpg/webp/gif、pdf、glb 3D 模型、txt/md/json/csv)直接顯示給正在跟你對話的"
+                               "使用者看(他在手機上)。path 是專案資料夾裡的路徑,summary 是一句說明(這是什麼、要他看哪裡)。",
+                "inputSchema": {"type": "object", "required": ["path"], "properties": {
+                    "path": {"type": "string", "description": "專案資料夾裡的檔案路徑(相對或絕對)"},
+                    "summary": {"type": "string", "description": "一句說明"}}}}]}})
         elif method == "tools/call":
-            threading.Thread(target=handle_call, args=(mid, (msg.get("params") or {}).get("arguments") or {}),
-                             daemon=True).start()
+            params = msg.get("params") or {}
+            target = handle_show if params.get("name") == "show_file" else handle_call
+            threading.Thread(target=target, args=(mid, params.get("arguments") or {}), daemon=True).start()
         elif mid is not None:
             send({"jsonrpc": "2.0", "id": mid, "result": {}})
 

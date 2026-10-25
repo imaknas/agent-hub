@@ -24,6 +24,8 @@ API(下面寫的是 v1 的形狀):
                                       / 404 not_found / 409 not_idea|dirty|name_taken / 500 upgrade_failed
                                       = bin/upgrade-idea.py --apply --json(GitHub repo 預設 private;Muninn 問過 Knas 才送)
   POST /v1/internal/<id>/relay        權限轉接回報(稽核 + 等待中不算閒置)
+  POST /v1/internal/<id>/show         {path, summary?}:給使用者看專案裡的一個檔案(lease_files.py 檢查、複製)→ v2 的 file 事件
+  GET  /v1/leases/<id>/files/<file id> 取那個檔案(複製的那份,保留 30 天);設計 docs/design/lease-show-file.md
 每個租約一個長駐程序:`llm.py exec lease-session`(宣告在 contracts/llm-points.yaml)+ `--session-id`/`--resume`、
 只有權限轉接的 MCP(--strict-mcp-config)、`--settings`(第二階段的 deny 清單,不管專案有沒有開 enforce)、
 `--append-system-prompt`(租約說明)、`--max-turns`;cwd = 專案登錄的 workspace,環境有 HUBBUS_LEASE=1(信箱 hook
@@ -63,7 +65,7 @@ def rt():
 
 HUB = hubconf.ROOT
 HOST, PORT = "127.0.0.1", int(os.environ.get("LEASE_RUNNER_PORT", "18797"))
-DIR = hubconf.STATE / "lease-runner"
+DIR = pathlib.Path(os.environ.get("LEASE_RUNNER_DIR") or hubconf.STATE / "lease-runner")  # 測試用另一個目錄
 TOKEN_FILE = HUB / ".secrets" / "runner-token"
 PY = "/opt/homebrew/bin/python3"
 GLOBAL_CAP = 3
@@ -182,6 +184,8 @@ def render(ev: dict, ver: int) -> dict:
         return {k: v for k, v in ev.items() if k != "_v1"}
     head = {"v": 1, "seq": ev["seq"], "lease_id": ev["lease_id"], "ts": ev["ts"]}
     legacy = ev.get("_v1")
+    if legacy is not None and legacy.get("_omit"):
+        return None  # v2 才有的事件(例:file),v1 不送
     if legacy is None:
         return {**head, **{k: v for k, v in ev.items() if k not in head}}
     return {**head, "type": legacy.get("type", ev["type"]), **{k: v for k, v in legacy.items() if k != "type"}}
@@ -261,6 +265,9 @@ def work_projects() -> list[str]:
 def preamble(project: str, mode: str = "discuss") -> str:
     """租約說明(discuss 唯讀 / work 可以動手,每次寫入都問);想法沙盒(登錄 type: idea)多一段:在探討哪個想法。"""
     base = PREAMBLE_WORK if mode == "work" else PREAMBLE
+    base += """
+- 要讓 Knas 看專案裡的圖或檔案(png、jpg、pdf、glb、md、csv…),用 show_file 工具(專案資料夾裡的路徑 + 一句說明):
+  他在手機上會直接看到。不要叫他回電腦打開;一次給一個,太大(20 MB 以上)或像憑證的檔不會送。"""
     doc = hubconf.projects().get(project) or {}
     caps = (doc.get("enforce") or {}).get("capabilities") or []
     if mode == "work" and caps:  # 平台代跑(docs/design/capabilities.md):sandbox 擋住的東西(例:GPU)走這裡
@@ -571,6 +578,10 @@ def idle_loop() -> None:
                     threading.Thread(target=detach, args=(l, "idle"), daemon=True).start()
             except Exception as e:
                 log(f"idle_loop {l.id}:{e!r}")
+        try:
+            prune_files()
+        except Exception as e:
+            log(f"prune_files:{e!r}")
         restart_if_code_changed()
 
 
@@ -618,6 +629,45 @@ def relay_event(b: dict) -> tuple:
     legacy = {k: v for k, v in b.items() if k != "target"}
     legacy["kind"] = "question" if etype == "question" else "permission"
     return etype, data, legacy
+
+
+def secret_paths(project: str) -> list:
+    """專案登錄 secrets: 宣告的檔案(相對 runtime,沒有 runtime 就相對 workspace)——給使用者看檔案時一律不送。"""
+    doc = hubconf.projects().get(project) or {}
+    base = (hubconf.p("services_root") / project) if doc.get("runtime") is not None else hubconf.workspace(project)
+    out = []
+    for sec in doc.get("secrets") or []:
+        p = pathlib.Path(os.path.expanduser(str(sec.get("path", ""))))
+        if str(p) and base is not None:
+            out.append(p if p.is_absolute() else base / p)
+    return out
+
+
+def show_file(lease: "Lease", path: str, summary: str | None) -> tuple:
+    """給使用者看專案裡的一個檔案(docs/design/lease-show-file.md):檢查、複製到租約目錄、送 file 事件(只有 v2)。"""
+    import lease_files
+    meta, why = lease_files.take(lease.cwd, path, summary, lease.dir / "files", secret_paths(lease.project))
+    if meta is None:
+        log(f"{lease.id[:8]} show_file 拒絕:{path}:{why}")
+        return None, why
+    lease.emit("file", legacy_v1={"_omit": True}, **meta)
+    log(f"{lease.id[:8]} show_file {meta['path']}({meta['size']} bytes)→ {meta['id']}")
+    return meta, ""
+
+
+LAST_FILE_PRUNE = [0.0]
+
+
+def prune_files() -> None:
+    """給使用者看過的檔案保留 lease_files.KEEP_DAYS 天;一小時清一次。"""
+    import lease_files
+    if time.time() - LAST_FILE_PRUNE[0] < 3600:
+        return
+    LAST_FILE_PRUNE[0] = time.time()
+    with _lock:
+        dirs = [l.dir / "files" for l in LEASES.values()]
+    for d in dirs:
+        lease_files.prune(d, lease_files.KEEP_DAYS * 86400)
 
 
 def live(l: Lease) -> bool:
@@ -693,6 +743,8 @@ class H(http.server.BaseHTTPRequestHandler):
             if self.ver >= 2:
                 return self.reply(200, {"v": 2, "leased": n, "cap": GLOBAL_CAP, "quota": STATUS["quota"]})
             return self.reply(200, {"v": 1, "leased": n, "cap": GLOBAL_CAP, "rate_limit": STATUS["rate_limit"]})
+        if len(parts) == 5 and parts[:2] == ["v1", "leases"] and parts[3] == "files":
+            return self.send_file(parts[2], parts[4])
         if len(parts) == 4 and parts[:2] == ["v1", "leases"] and parts[3] == "events":
             l = self.lease(parts[2])
             if l:
@@ -700,8 +752,26 @@ class H(http.server.BaseHTTPRequestHandler):
             return
         self.err(404, "not_found", path)
 
+    def send_file(self, lid: str, fid: str) -> None:
+        """GET /v1/leases/<id>/files/<file id>:給使用者看過的檔案(送的是當時複製的那份)。"""
+        import lease_files
+        l = LEASES.get(lid)
+        got = lease_files.read(l.dir / "files", fid) if l else None
+        if not got:
+            return self.err(404, "not_found", "沒有這個檔案(或已經過了保留期限)")
+        meta, data = got
+        self.send_response(200)
+        self.send_header("Content-Type", meta["mime"])
+        self.send_header("Content-Length", str(len(data)))
+        self.send_header("Content-Disposition", "inline; filename*=UTF-8''" + urllib.parse.quote(meta["name"]))
+        self.send_header("X-Content-Type-Options", "nosniff")
+        self.end_headers()
+        self.wfile.write(data)
+
     def sse_line(self, ev: dict) -> bytes:
         out = render(ev, self.ver)
+        if out is None:
+            return b""
         return f"id: {out['seq']}\nevent: {out['type']}\ndata: {json.dumps(out, ensure_ascii=False)}\n\n".encode()
 
     def sse(self, l: Lease) -> None:
@@ -754,6 +824,16 @@ class H(http.server.BaseHTTPRequestHandler):
             return self.create_sandbox(b)
         if len(parts) == 4 and parts[:2] == ["v1", "sandboxes"] and parts[3] == "upgrade":
             return self.upgrade_sandbox(parts[2], b)
+        if len(parts) == 4 and parts[:2] == ["v1", "internal"] and parts[3] == "show":
+            l = self.lease(parts[2])
+            if l:
+                meta, why = show_file(l, b.get("path"), b.get("summary"))
+                if meta is None:
+                    return self.err(400, "file_refused", why)
+                with _lock:
+                    l.touch()
+                self.reply(200, {"v": 2, **meta})
+            return
         if len(parts) == 4 and parts[:2] == ["v1", "internal"] and parts[3] == "relay":
             l = self.lease(parts[2])
             if l:
