@@ -70,6 +70,19 @@ def record(idea: str, **fields) -> None:
     RECORD.write_text(json.dumps(rec, ensure_ascii=False, indent=1))
 
 
+def unfinished_rename(name: str) -> str | None:
+    """改名端點(project-rename.py)做到一半的改名:同一個專案(舊名稱或新名稱)還沒 done 就回說明。
+    兩邊各記各的進度,交錯會讓重試找不到登錄(例:升級改名停一半,中間又被改名),所以有一邊沒做完就不開始另一邊。"""
+    try:
+        recs = json.loads((hubconf.STATE / "project-renames.json").read_text())
+    except (OSError, ValueError):
+        return None
+    for old, r in recs.items():
+        if isinstance(r, dict) and r.get("stage") != "done" and name in (old, r.get("new")):
+            return f"{old} → {r.get('new')} 的改名做到一半(stage {r.get('stage')}),先把改名的重試做完"
+    return None
+
+
 def remote_url(owner: str, name: str) -> str:
     return (hubconf.get("github.remote") or "git@github.com:{owner}/{name}.git").format(owner=owner, name=name)
 
@@ -119,6 +132,8 @@ def main(argv: list[str]) -> int:
     if len(args) != 1:
         fail("用法:upgrade-idea.py <沙盒名稱> [--rename <新名稱>] [--public] [--apply]")
     name = args[0]
+    if (why := unfinished_rename(name)):
+        fail(why)
     prev = records().get(name)
     if prev and prev.get("stage", "done") == "done" and (hubconf.registry_dir() / f"{prev['name']}.yaml").exists():
         done("already", 0, name=prev["name"], origin=prev["origin"])  # 升級過了:重送安全

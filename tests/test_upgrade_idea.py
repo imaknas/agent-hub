@@ -169,6 +169,20 @@ class Upgrade(unittest.TestCase):
         self.assertEqual((code, res["result"]), (1, "name_taken"))
         self.assertEqual(self.reg()["type"], "idea")
 
+    def test_refuses_while_a_rename_of_the_same_project_is_unfinished(self):
+        state = self.hub / ".state"
+        state.mkdir(exist_ok=True)
+        for rec in ({"idea-7": {"new": "room-3d", "stage": "github"}}, {"old-name": {"new": "idea-7", "stage": "github"}}):
+            (state / "project-renames.json").write_text(json.dumps(rec))
+            res, code = self.upgrade()
+            self.assertEqual((code, res["result"]), (1, "failed"))
+            self.assertIn("先把改名的重試做完", res["detail"])
+            self.assertFalse(self.remote().exists())
+        (state / "project-renames.json").write_text(json.dumps({"idea-7": {"new": "room-3d", "stage": "done"},
+                                                                 "other": {"new": "x", "stage": "github"}}))
+        res, code = self.upgrade()
+        self.assertEqual((code, res["result"]), (0, "upgraded"), res)
+
     def test_rename_interrupted_then_resumed(self):
         res, code = self.upgrade("--rename", "project-33", FAKE_GH_FAIL_AFTER_CREATE="1")
         self.assertEqual(code, 1)
