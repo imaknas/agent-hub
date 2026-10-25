@@ -23,7 +23,7 @@ schema v1(contracts/project.v1.md 有完整說明):
   services:  [{name, run, label?, keepalive?, throttle_s?, env?, cwd?, expose?}]
   enforce: {sandbox: false, capabilities: []}
                                   第二階段:sandbox true = render-project-settings.py 寫 sandbox + 權限規則;
-                                  capabilities = 平台的能力(hub.json capabilities,例 gpu),要 sandbox: true、目前只收 type: idea;
+                                  capabilities = 平台的能力(hub.json capabilities,例 gpu),要 sandbox: true;
                                   沙盒裡用 hub-run --cap <能力> 透過平台代跑(docs/design/capabilities.md)
   network: [網域]                 sandbox 平台預設之外還要連的
   allow_write: [路徑]             sandbox 平台預設之外還要寫的
@@ -170,8 +170,9 @@ def validate_enforce(doc: dict) -> list[str]:
     errs += [f"enforce.capabilities:平台沒有 {c} 這個能力(有的:{', '.join(sorted(have)) or '無'})" for c in caps if c not in have]
     if caps and not enf.get("sandbox"):
         errs.append("enforce.capabilities 要搭配 enforce.sandbox: true")
-    if caps and doc.get("type") != "idea":
-        errs.append("enforce.capabilities 目前只開給想法沙盒(type: idea)")
+    # 不看 type:想法沙盒升級成正式專案後,Knas 同意過的能力跟著留(10-25 m10251626)。同意的紀錄就是 enforce 本身——
+    # 平台擁有的欄位,專案自己的 manifest.update 改不了(PLATFORM_OWNED);能力能做什麼由平台的 Seatbelt profile 決定,
+    # 跟專案是哪一種無關
     return errs
 
 

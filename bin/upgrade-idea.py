@@ -7,11 +7,16 @@
     {"result": "not_found"|"not_idea"|"dirty"|"name_taken"|"failed", "detail"}        exit 1
   已經升級過的(記在 .state/idea-upgrades.json)再叫一次回 already + 升級後的名稱,重送安全。
 做的事(照順序):
-  1. 檢查:登錄是 type: idea;主 repo 沒有未 commit 的追蹤檔變更
+  1. 檢查(全部在動任何東西之前):登錄是 type: idea;主 repo 沒有未 commit 的追蹤檔變更;新名稱沒被用;
+     **升級後的登錄先驗證一次**(以前驗證放在建好 GitHub repo 之後,不合格就停在一半,10-25 idea-1);
+     GitHub 上已經有同名 repo:內容是這個沙盒自己的歷史(遠端的 HEAD 在本機歷史裡,或是空的)= 上次做到一半,接著做;
+     不是 = name_taken
   2. --rename:呼叫 rename-project.sh <idea-n> <新名稱> --apply(資料夾、memory bare repo/副本、登錄一起改)
-  3. gh repo create <github.owner>/<名稱>(預設 private)+ push,origin 改成 ssh URL
-  4. 登錄:type 改成 project、paths.origin 寫上;purpose、enforce、privacy 留著(要改另外改)
+  3. gh repo create <github.owner>/<名稱>(預設 private)+ push(repo 已經是自己的就只 push),origin 改成 github.remote
+  4. 登錄:type 改成 project、paths.origin 寫上;purpose、enforce(含 Knas 同意過的能力)、privacy 留著
   5. mirror-list.txt 加上 origin;重生 index.md 名冊;commit-hub-files 只 commit 這幾個檔
+每做完一個會改外面的步驟(改名、repo)就記進 .state/idea-upgrades.json 的 stage;中途失敗再叫一次,從記錄的地方接著做
+(改名過的用新名稱)。不刪 GitHub repo 來「退回」:刪 repo 不能復原,接著做比較安全。
 """
 from __future__ import annotations
 
@@ -57,6 +62,45 @@ def records() -> dict:
         return {}
 
 
+def record(idea: str, **fields) -> None:
+    rec = records()
+    rec[idea] = {**rec.get(idea, {}), **fields,
+                 "at": datetime.datetime.now().astimezone().isoformat(timespec="seconds")}
+    RECORD.parent.mkdir(parents=True, exist_ok=True)
+    RECORD.write_text(json.dumps(rec, ensure_ascii=False, indent=1))
+
+
+def remote_url(owner: str, name: str) -> str:
+    return (hubconf.get("github.remote") or "git@github.com:{owner}/{name}.git").format(owner=owner, name=name)
+
+
+def remote_is_ours(ws: pathlib.Path, url: str) -> bool:
+    """遠端是這個沙盒自己推上去的(上次做到一半):空的,或遠端的 HEAD 在本機的歷史裡。"""
+    r = subprocess.run(["git", "-C", str(ws), "ls-remote", url, "HEAD"], text=True, capture_output=True)
+    if r.returncode != 0:
+        return False
+    sha = r.stdout.split()[0] if r.stdout.split() else ""
+    if not sha:
+        return True
+    return subprocess.run(["git", "-C", str(ws), "merge-base", "--is-ancestor", sha, "HEAD"],
+                          capture_output=True).returncode == 0
+
+
+def upgraded_doc(doc: dict, final: str, url: str) -> dict:
+    """升級後的登錄長什麼樣(改名的話名稱跟資料夾也換)——動手前先拿它驗證。"""
+    import copy
+    out = copy.deepcopy(doc)
+    out["type"] = "project"
+    paths = out.setdefault("paths", {})
+    if final != doc.get("name"):
+        out["name"] = final
+        for key, old in (("workspace", doc.get("name")), ("memory_bare", f"{doc.get('name')}-memory.git")):
+            if isinstance(paths.get(key), str) and paths[key].endswith("/" + old):
+                paths[key] = paths[key][: -len(old)] + (final if key == "workspace" else f"{final}-memory.git")
+    paths["origin"] = url
+    return out
+
+
 def main(argv: list[str]) -> int:
     global JSON
     args, apply, public, new = [], False, False, None
@@ -76,9 +120,15 @@ def main(argv: list[str]) -> int:
         fail("用法:upgrade-idea.py <idea-n> [--rename <新名稱>] [--public] [--apply]")
     name = args[0]
     prev = records().get(name)
-    if prev and (hubconf.registry_dir() / f"{prev['name']}.yaml").exists():
+    if prev and prev.get("stage", "done") == "done" and (hubconf.registry_dir() / f"{prev['name']}.yaml").exists():
         done("already", 0, name=prev["name"], origin=prev["origin"])  # 升級過了:重送安全
-    reg = hubconf.registry_dir() / f"{name}.yaml"
+    renamed = bool(prev and prev.get("stage") in ("renamed", "repo") and prev["name"] != name)
+    if renamed:  # 上次改名之後停了:登錄跟資料夾已經是新名稱
+        if new and new != prev["name"]:
+            fail(f"{name} 上次升級做到一半,已經改名成 {prev['name']};要用同一個名稱再叫一次", "name_taken")
+        new = None
+    final = prev["name"] if renamed else (new or name)
+    reg = hubconf.registry_dir() / f"{final if renamed else name}.yaml"
     if not reg.exists():
         fail(f"登錄裡沒有 {name}", "not_found")
     import yaml
@@ -88,9 +138,11 @@ def main(argv: list[str]) -> int:
     ws = registry.dirs(doc)["workspace"]
     if run(["git", "-C", str(ws), "status", "--porcelain", "--untracked-files=no"]).stdout.strip():
         fail(f"{ws} 有未 commit 的追蹤檔變更,先處理", "dirty")
-    final = new or name
     owner = hubconf.get("github.owner") or fail("hub.json 沒有 github.owner")
-    url = f"git@github.com:{owner}/{final}.git"
+    url = remote_url(owner, final)
+    errs = registry.validate(upgraded_doc(doc, final, url), final)
+    if errs:
+        fail(f"升級後的登錄不合格,什麼都沒動:{'; '.join(errs)}")
     if new:
         if not re.fullmatch(r"[a-z0-9][a-z0-9-]*", new):
             fail(f"新名稱只能用小寫英數跟 -:{new}", "name_taken")
@@ -99,11 +151,13 @@ def main(argv: list[str]) -> int:
                  if hit]
         if taken:
             fail(f"{new} 已經被用掉了:{', '.join(taken)}", "name_taken")
-    if subprocess.run(["gh", "repo", "view", f"{owner}/{final}"], capture_output=True).returncode == 0:
-        fail(f"GitHub 上已經有 {owner}/{final}", "name_taken")
+    repo_exists = subprocess.run(["gh", "repo", "view", f"{owner}/{final}"], capture_output=True).returncode == 0
+    if repo_exists and not remote_is_ours(ws, url):
+        fail(f"GitHub 上已經有 {owner}/{final}(不是這個沙盒的歷史)", "name_taken")
 
-    plan = [f"{'改名 ' + name + ' → ' + new + '(rename-project.sh)' if new else '不改名'}",
-            f"gh repo create {owner}/{final} --{'public' if public else 'private'} + push,origin = {url}",
+    plan = [f"{'改名 ' + name + ' → ' + new + '(rename-project.sh)' if new else ('已經改名成 ' + final if renamed else '不改名')}",
+            (f"GitHub 上的 {owner}/{final} 是上次建的:只 push" if repo_exists else
+             f"gh repo create {owner}/{final} --{'public' if public else 'private'} + push") + f",origin = {url}",
             f"登錄 projects/{final}.yaml:type: project、paths.origin: {url}(purpose/enforce/privacy 留著)",
             "mirror-list.txt 加上 origin、重生 index.md、commit agent-hub"]
     if not JSON:
@@ -117,21 +171,26 @@ def main(argv: list[str]) -> int:
                            capture_output=JSON)
         if r.returncode != 0:
             fail("rename-project.sh 失敗,停在這裡(還沒建 GitHub repo)")
+        record(name, name=final, origin=url, stage="renamed")
         reg = hubconf.registry_dir() / f"{final}.yaml"
         doc = yaml.safe_load(reg.read_text())
         ws = registry.dirs(doc)["workspace"]
 
-    run(["gh", "repo", "create", f"{owner}/{final}", "--public" if public else "--private",
-         f"--source={ws}", "--remote=origin", "--push"])
-    run(["git", "-C", str(ws), "remote", "set-url", "origin", url])
+    if not repo_exists:
+        run(["gh", "repo", "create", f"{owner}/{final}", "--public" if public else "--private",
+             f"--source={ws}", "--remote=origin", "--push"])
+    has_origin = subprocess.run(["git", "-C", str(ws), "remote", "get-url", "origin"], capture_output=True).returncode == 0
+    run(["git", "-C", str(ws), "remote", "set-url" if has_origin else "add", "origin", url])
+    if repo_exists:
+        run(["git", "-C", str(ws), "push", "-u", "origin", "HEAD"])
+    record(name, name=final, origin=url, stage="repo")
 
     text = reg.read_text()
     head = "".join(l for l in text.splitlines(keepends=True) if l.startswith("#"))
-    doc["type"] = "project"
-    doc.setdefault("paths", {})["origin"] = url
+    doc = upgraded_doc(doc, final, url)
     errs = registry.validate(doc, final)
-    if errs:
-        fail(f"登錄不合格:{'; '.join(errs)}(GitHub repo 已經建好,登錄要手動補)")
+    if errs:  # 動手前驗證過;到這裡還不合格是登錄在中途被改了。repo 留著,修好登錄再叫一次會接著做
+        fail(f"登錄不合格:{'; '.join(errs)}(GitHub repo 已經建好;修好登錄再叫一次會接著做)")
     reg.write_text(head + yaml.safe_dump(doc, allow_unicode=True, sort_keys=False, width=200))
 
     mirror = HUB / "mirror-list.txt"
@@ -141,10 +200,7 @@ def main(argv: list[str]) -> int:
     subprocess.run([str(HUB / "bin" / "gen-index-roster.sh")], check=False)
     subprocess.run([str(HUB / "bin" / "commit-hub-files.sh"), f"upgrade idea {name} → project {final} (upgrade-idea.py)",
                     f"projects/{final}.yaml", "mirror-list.txt", "index.md"], check=False)
-    rec = records()
-    rec[name] = {"name": final, "origin": url, "at": datetime.datetime.now().astimezone().isoformat(timespec="seconds")}
-    RECORD.parent.mkdir(parents=True, exist_ok=True)
-    RECORD.write_text(json.dumps(rec, ensure_ascii=False, indent=1))
+    record(name, name=final, origin=url, stage="done")
     if not JSON:
         print(f"完成:{name} 已升級成正式專案 {final}({url})")
     done("upgraded", 0, name=final, origin=url)

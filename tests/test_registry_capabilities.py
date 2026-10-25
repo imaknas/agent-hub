@@ -44,8 +44,10 @@ class Capabilities(unittest.TestCase):
         self.assertTrue(self.errs(doc(enforce={"sandbox": False, "capabilities": ["gpu"]})))
         self.assertTrue(self.errs(doc(enforce={"capabilities": ["gpu"]})))
 
-    def test_only_ideas(self):
-        self.assertTrue(self.errs(doc(type="project", enforce={"sandbox": True, "capabilities": ["gpu"]})))
+    def test_projects_keep_capabilities_too(self):
+        # 10-25 m10251626:升級成正式專案後,Knas 同意過的能力跟著留;同意的紀錄是平台擁有的 enforce,不看 type
+        self.assertEqual(self.errs(doc(type="project", enforce={"sandbox": True, "capabilities": ["gpu"]})), [])
+        self.assertTrue(self.errs(doc(type="project", enforce={"sandbox": False, "capabilities": ["gpu"]})))
 
     def test_shape(self):
         self.assertTrue(self.errs(doc(enforce={"sandbox": True, "capabilities": "gpu"})))
