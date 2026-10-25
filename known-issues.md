@@ -220,6 +220,7 @@
   (`&&`、`;`)時整串都留在 sandbox 裡。測的時候別在後面多接 `; echo rc=$?`,會誤以為它沒效。平台沒有用它。
 - **Seatbelt 的 `(deny signal (target others))` 擋不住**送信號給別的程序(2026-10-25 實測);要寫成
   `(deny signal)(allow signal (target same-sandbox))`,`process-info*` 同理。
-- **常駐服務載入的是啟動當時的程式碼**:改了它會 import 的模組(例:cap-runner 用到的 `hubconf.py`),服務要重啟
-  (`launchctl kickstart -k gui/$(id -u)/<label>`),不然新舊模組混用會在執行中途壞掉。2026-10-25 cap-runner 因此
-  卡住一個工作(現在任何啟動失敗都會回覆 rejected,不會讓客戶端一直等)。
+- **常駐服務載入的是啟動當時的程式碼**:改了它會 import 的模組,新舊模組混用會在執行中途壞掉。2026-10-25 cap-runner
+  卡住一個工作、lease-runner 一次交接失敗(租約 9af483fb)都是這樣。現在 lease-runner、cap-runner 啟動時記下
+  `hubconf.code_stamp()`(bin/ 最後修改時間),變了就在沒有租約/工作在跑的空檔自己結束,launchd(KeepAlive)用新的程式
+  重啟——改完程式不用手動 kickstart,但有租約在跑時會等到它閒下來。新的常駐服務也照這樣做。

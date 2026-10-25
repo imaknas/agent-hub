@@ -242,6 +242,13 @@ def capabilities() -> dict[str, dict]:
     return {k: v for k, v in cat.items() if (ROOT / "capabilities" / f"{k}.sb").is_file()}
 
 
+def code_stamp() -> float:
+    """bin/ 底下的程式最後一次被改的時間。常駐服務啟動時記下,之後變了就找空檔自己結束、讓 launchd 重啟——
+    不然它載入的舊模組會跟磁碟上的新模組混用(2026-10-25 lease-runner、cap-runner 都因此壞過一次)。"""
+    stamps = [f.stat().st_mtime for f in (ROOT / "bin").iterdir() if f.is_file()]
+    return max(stamps) if stamps else 0.0
+
+
 def hub_project() -> str:
     """平台自己在登錄裡的名稱。"""
     return "agent-hub"

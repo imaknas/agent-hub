@@ -28,7 +28,7 @@ import time
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
 import hubconf  # noqa: E402
 
-PICKUP_S = 10
+PICKUP_S = 30  # 服務改版時會自己重啟(launchd 等 10 秒),留餘裕
 
 
 def say(msg: str) -> None:
@@ -97,7 +97,7 @@ def follow(ws: pathlib.Path, job_id: str, pickup: bool) -> int:
                     req.unlink()  # 晚啟動的服務不會跑一個沒人在等的工作
                 except FileNotFoundError:
                     continue  # 剛好被接手了
-                say(f"平台的代跑服務沒在跑({PICKUP_S} 秒沒人接手),請求已撤回;請告訴使用者(agent-hub 的 cap-runner)")
+                say(f"平台的代跑服務沒在跑({PICKUP_S:g} 秒沒人接手),請求已撤回;請告訴使用者(agent-hub 的 cap-runner)")
                 return 125
             time.sleep(0.3)
             continue

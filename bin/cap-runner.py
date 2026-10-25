@@ -23,6 +23,7 @@ argv 直接 exec(`sandbox-exec -f <profile> <argv>`),中間沒有 shell 字串;�
 逾時整個 process group 一起殺;同時最多 cap_runner.concurrency 個、每個專案 1 個(其他排隊)。
 每個工作記一行在 .state/cap-runner/log.jsonl;做完超過 7 天的 jobs/ 跟 profile 會清掉。
 服務重啟時還標 running 的工作:殺掉那個 process group,標 lost(結果不明)。
+bin/ 的程式改過(hubconf.code_stamp())、而且沒有工作在跑或排隊:自己結束,讓 launchd 用新的程式重啟。
 
 用法:cap-runner.py            常駐(launchd)
       cap-runner.py --once     掃一次、跑完排到的工作就結束(測試/除錯)
@@ -370,11 +371,15 @@ def main() -> int:
             r.poll()
         return 0
     log(event="service_start", pid=os.getpid())
+    code_at_start = hubconf.code_stamp()
     while True:
         try:
             r.tick()
         except Exception as e:  # 一個專案的怪資料不能讓整個服務掛掉(launchd 會重啟,但正在跑的工作就變 lost)
             log(event="tick_error", detail=repr(e)[:300])
+        if not r.running and not r.queue and hubconf.code_stamp() > code_at_start:
+            log(event="code_changed_restart")  # 舊模組跟新模組混用會壞(10-25 卡住過一個工作):空檔時讓 launchd 重啟
+            return 0
         time.sleep(1)
 
 

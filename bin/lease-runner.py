@@ -443,19 +443,32 @@ def terminal_open(lease: Lease) -> bool:
     return bool(r and r.stdout.strip())
 
 
-def run_handover(lease: Lease) -> dict | None:
+EMPTY_HANDOVER = {"summary": "這次深談沒有開始對話(session 沒有啟動成功,或還沒說過話就收回),沒有內容要交接。",
+                  "decisions": [], "open_questions": [], "tasks_for_owner": [], "notes_markdown": ""}
+
+
+def run_handover(lease: Lease) -> tuple[dict | None, str]:
+    """(交接, 失敗的原因)。沒有對話紀錄 = 沒說過話:回固定的「沒有內容」,不算失敗(10-25 租約 34c84c53:
+    session 一開始就掛掉,交接拿 --resume 去接一段不存在的對話,被當成「模型沒寫出合格交接」)。"""
+    import runtime_claude
+    if runtime_claude.transcript(lease.id) is None:
+        return dict(EMPTY_HANDOVER), ""
     cmd = [PY, str(HUB / "bin" / "llm.py"), "run", "lease-handover", "--cwd", lease.cwd, "--",
            "--resume", lease.id, "--strict-mcp-config", "--settings", str(deny_settings(lease.project))]
-    for _ in range(2):  # 不合格重試一次
+    why = ""
+    for attempt in (1, 2):  # 不合格重試一次
         r = subprocess.run(cmd, input=HANDOVER_PROMPT, cwd=lease.cwd, env=env_for(lease), capture_output=True, text=True,
                            timeout=900)
         try:
-            so = json.loads(r.stdout).get("structured_output")
+            out = json.loads(r.stdout)
         except ValueError:
-            so = None
+            out = {}
+        so = out.get("structured_output")
         if r.returncode == 0 and isinstance(so, dict):
-            return so
-    return None
+            return so, ""
+        why = str(out.get("llm_error") or out.get("result") or r.stderr.strip()[-300:] or f"exit {r.returncode}")[:300]
+        log(f"{lease.id} 交接第 {attempt} 次不合格:{why}")
+    return None, why
 
 
 def hubbus(*args: str) -> subprocess.CompletedProcess:
@@ -509,14 +522,16 @@ def detach(lease: Lease, reason: str) -> None:
             lease.emit("error", error="busy", detail="terminal_open:終端機裡的 session 還開著,先結束它再收回")
             return
         stop_proc(lease, "detaching")
-    so = None
+    so, why = None, ""
     try:
-        so = run_handover(lease)
-    except Exception as e:
+        so, why = run_handover(lease)
+        failed = "模型沒能產生合格的交接"
+    except Exception as e:  # 平台自己的錯(不是模型的):原因照實說
         log(f"{lease.id} 交接失敗:{e!r}")
+        why, failed = repr(e)[:300], "平台出錯,不是模型的問題"
     fallback = so is None
     h = {"v": 1, "project": lease.project, "session_id": lease.id, "mode": lease.mode, "reason": reason,
-         "summary": "交接失敗(模型沒能產生合格的交接);對話紀錄還在,可以重新 attach 接續" if fallback else so.get("summary", ""),
+         "summary": f"交接失敗({failed});對話紀錄還在,可以重新 attach 接續" if fallback else so.get("summary", ""),
          "decisions": [] if fallback else so.get("decisions", []),
          "open_questions": [] if fallback else so.get("open_questions", []),
          "tasks_for_owner": [] if fallback else so.get("tasks_for_owner", []),
@@ -528,7 +543,7 @@ def detach(lease: Lease, reason: str) -> None:
         log(f"{lease.id} 交接送出失敗:{e!r}")
         lease.emit("error", error="handover_failed", detail=repr(e)[:300])
     if fallback:
-        lease.emit("error", error="handover_failed", detail="交接不合格,已送出最小交接")
+        lease.emit("error", error="handover_failed", detail=f"已送出最小交接。原因:{why}"[:300])
     lease.emit("handover", handover=h)
     lease.set_state("detached", reason=reason)
 
@@ -559,6 +574,24 @@ def idle_loop() -> None:
                     threading.Thread(target=detach, args=(l, "idle"), daemon=True).start()
             except Exception as e:
                 log(f"idle_loop {l.id}:{e!r}")
+        restart_if_code_changed()
+
+
+BUSY = ("attaching", "running", "resuming", "detaching")
+CODE_AT_START = 0.0
+
+
+def restart_if_code_changed() -> None:
+    """bin/ 的程式改過、而且沒有租約在跑或在交接:自己結束,讓 launchd(KeepAlive)用新的程式重啟。
+    不然舊的模組會跟磁碟上的新模組混用(10-25 租約 9af483fb 的交接因此失敗)。閒置的租約重啟後照常 --resume 接回。"""
+    if hubconf.code_stamp() <= CODE_AT_START:
+        return
+    with _lock:
+        busy = [l.id[:8] for l in LEASES.values() if l.state in BUSY or l.waiting or l.in_turn]
+        if busy:
+            return
+        log("bin/ 的程式改過了,沒有租約在跑:結束,讓 launchd 用新的程式重啟")
+        os._exit(0)
 
 
 # ---------- HTTP ----------
@@ -862,6 +895,8 @@ class H(http.server.BaseHTTPRequestHandler):
 
 
 def main() -> None:
+    global CODE_AT_START
+    CODE_AT_START = hubconf.code_stamp()
     DIR.mkdir(parents=True, exist_ok=True)
     token()
     load()
