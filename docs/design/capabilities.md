@@ -1,4 +1,6 @@
-# 想法沙盒的額外能力(capabilities)+ 跟執行環境無關的宣告:設計,待 Knas 確認
+# 想法沙盒的額外能力(capabilities)+ 跟執行環境無關的宣告
+
+> **狀態**:10-25 Knas 確認 A–F 照建議;同一天實作完成並驗證(見最後的「10-25 實作與驗證」)。
 
 來源:Muninn 的請求 `m10251437-1f92`(10-25 14:37)。Knas 同意的方向:平台維護一組固定的「能力」,專案宣告要用哪些,
 沙盒裡的 session 透過同一支平台指令在對應的限制下執行。第一個能力是 `gpu`。
@@ -119,15 +121,15 @@ muninn,沒碰到),不影響現有流程。
 - **profile 不放在專案資料夾**:每次執行時從登錄現算,寫在 `.state/cap-runner/<專案>/<id>/profile.sb`(session 寫不到)。
   原型草稿放在 `<workspace>/.hub-run/profiles/`——那是 session 自己能改的地方,改一行就等於沒有 sandbox。
 
-**服務**:新的 launchd 服務 `local.agent-hub-cap-runner`(`bin/cap-runner.py`,常駐、`KeepAlive`、每秒掃一次),plist 放
-`launchd/`、登記進 `services.tsv`(owner agent-hub,`recover-service.sh` 能重建)。不放進 lease-runner:runner 重啟不能殺掉
-正在跑的工作。
+**服務**:`local.agent-hub.cap-runner`(`bin/cap-runner.py`,常駐、`KeepAlive`、每秒掃一次),寫在登錄 agent-hub 的
+`services:`(跟 lease-runner 一樣由 `render-services.py` 產生 plist,沒在跑就發 Discord;`recover-service.sh` 能重建),
+`services.tsv` 也登記了。不放進 lease-runner:runner 重啟不能殺掉正在跑的工作。
 - 環境變數只給 `PATH`、`HOME`、`TMPDIR`、`LANG`,其他全部清掉(沒有 token、沒有 `HUBBUS_*`)。
-- 逾時預設 10 分鐘、上限 30 分鐘(`hub.json` 的 `capabilities_runner`),逾時整個 process group 一起殺掉;
+- 逾時預設 10 分鐘、上限 30 分鐘(`hub.json` 的 `cap_runner`),逾時整個 process group 一起殺掉;
   同時最多跑 2 個、每個專案 1 個。
 - `stdout`、`stderr`、`exit` 寫在請求旁邊;每個工作記一行在 `.state/cap-runner/log.jsonl`(專案、能力、argv、結束碼、時間)。
-- 服務沒在跑:`hub-run` 10 秒內沒看到服務接手就印「平台代跑服務沒在跑」並用 125 結束;服務每次掃描更新心跳檔,
-  平台 job `agent-hub/cap-runner-check`(每 15 分鐘)看心跳,停了經 `alert.py` 發 Discord,狀態頁也標紅。
+- 服務沒在跑:`hub-run` 10 秒內沒看到服務接手就撤回請求、印「平台代跑服務沒在跑」並用 125 結束。
+- 任何啟動失敗都回 `rejected` + 理由(不會讓客戶端一直等);服務重啟時沒跑完的工作標 `lost`。
 
 **`hub-run`(客戶端)**:標準函式庫的小腳本,`hub-run --cap gpu [--timeout 秒] -- <指令…>`。一開始就印出工作 id,一邊等一邊印輸出,
 最後用同一個結束碼結束。session 的 Bash 呼叫有自己的逾時(預設 2 分鐘、最多 10 分鐘),被殺的是 `hub-run`、不是工作本身,
@@ -195,3 +197,24 @@ Muninn 10-25 14:46 另外要求 `contracts/lease-runner.v1.schema.json` 不再�
 它跟這份是同一個原則,翻譯表也會放在同一個 `runtime_claude.py`(工具名稱 → kind、stream-json → 中立事件、AskUserQuestion ↔
 通用提問、rate limit → windows、接續指令、錯誤分類;`lease-relay.py` 的規則改成看 kind)。但它要跟 Muninn 約一個並行截止日、
 牽涉 Muninn 擁有的 `permission-requests` 契約,所以**另外寫一份設計**,不跟這份一起確認;這份做完之後再開始。
+
+## 10-25 實作與驗證
+
+commit:`cbdf9bb`(policy.py、Claude 設定翻譯搬進 runtime_claude)→ `8950a8a`(登錄能力、鎖安全欄位)→ `902cd32`(seatbelt.py)
+→ `29227f6`(cap-runner、hub-run)→ `5416817`(預設 gpu、idea-1、提示)→ `d650076`(啟動失敗要回覆、known-issues)。
+
+- **行為不變**:搬家前後,24 個專案算出的 Claude 設定跟租約的 `--settings` 逐位元組相同;`render-project-settings.py --report`
+  沒有偏移。
+- **跟設計不一樣的地方**:服務改成登錄的 service(上面「服務」那段),沒有手寫 plist、沒有另外的心跳 job;能力清單查詢放在
+  `hubconf.capabilities()`(標準函式庫,建立沙盒的腳本也用得到);`.hub-run/` 的 git exclude 由 cap-runner 第一次看到請求時寫。
+- **實測發現,已修**:`(deny signal (target others))` 擋不住送信號給別的程序,改成「先全擋、再放行 same-sandbox」;
+  常駐的 cap-runner 在 `hubconf.py` 改了之後沒重啟,新舊模組混用讓一個工作卡在 queued——現在任何啟動失敗都回 rejected,
+  known-issues.md 也記了「改了 import 的模組要重啟服務」。
+- **測試**:`test_cap_profile.py`(真的 sandbox-exec,在 workspace_root 底下;檔案、Keychain、網路含本機跟 unix socket、
+  開 app、Apple Events、launchctl、crontab、信號)、`test_cap_runner.py`(14 個:各種拒絕、symlink 的 .hub-run/jobs/請求、
+  逾時殺整個 process group、排隊、重啟、客戶端)、`test_registry_capabilities.py`、`test_runtime_boundary.py`。全部 114 個測試通過。
+- **真的跑一次**:10-25 15:26 在 idea-1、用它真的 sandbox 設定開的 Claude Code session(`claude -p`,只允許 hub-run)跑
+  `hub-run --cap gpu -- blender -b --factory-startup -P tools/blender_render.py -- results/scene-v2.json <輸出>`:
+  2.1 秒、exit 0,兩張 png、.blend、.glb(只有 Blender 寫 `~/.thumbnails` 的縮圖被擋,不影響)。
+- **還沒驗證**:lease-runner 重啟後還沒有真的租約跑過,work 模式多的那行提示只看過 `preamble()` 的輸出,沒從手機走過一次。
+- 回信 muninn `m10251527-a8e0`,`m10251437-1f92` 結案。

@@ -236,6 +236,11 @@ memory 追蹤但不需要在 mini 上執行任何東西的專案(目前大多數
 - **第二階段強制**:登錄 `enforce: {sandbox: true}` 的專案,`bin/render-project-settings.py`(平台 job,每 15
   分鐘)把 sandbox(只准寫自己的專案/runtime/匯流排/cache、讀不到別的專案、網路白名單)跟 deny 規則寫進它的
   `.claude/settings.local.json`;被改就寫回、狀態頁紅;`enforce` 關掉就拿掉。`--report` 看每個專案會寫什麼。
+  要寫什麼由 `bin/policy.py`(中立的政策,不准有執行環境的語法,`tests/test_runtime_boundary.py` 檢查)算、
+  `runtime_claude.settings()` 翻成 Claude 的格式。**能力**(`enforce.capabilities`,例:想法沙盒的 `gpu`;清單在
+  `hub.json` 的 `capabilities` + `capabilities/<名稱>.sb`):sandbox 擋住的程式用 `bin/hub-run --cap <能力> -- …`,由平台
+  代跑服務 `bin/cap-runner.py` 在平台自己的 Seatbelt profile(`bin/seatbelt.py`,擋得住 Keychain)底下執行。設計
+  `docs/design/capabilities.md`。`type`/`enforce`/`network`/`allow_write`/`privacy` 是安全欄位,`manifest.update` 改不了。
   所有 `claude -p` 經過 `bin/llm.py`(判斷點宣告在 `contracts/llm-points.yaml`,每晚 lint);無人值守的
   agent job 在登錄宣告 `allow:` 就用 dontAsk
 - **mini 的使用者層級設定**(`~/.claude/settings.json`,2026-10-22 Knas 在 Schedule 強化 session 直接確認後套用,
