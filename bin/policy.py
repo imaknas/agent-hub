@@ -25,7 +25,7 @@ import sys
 
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
 import hubconf  # noqa: E402
-import registry  # noqa: E402
+# registry 要 PyYAML:只在算路徑政策時才 import,approvals() 只用標準函式庫(lease-relay、系統的 python3 也 import 得到)
 
 HOME = pathlib.Path.home()
 WRITE_CACHES = ["~/.cache/uv", "~/.cache/pip", "~/.npm", "~/.cache/node", "~/Library/Caches/pip",
@@ -40,6 +40,7 @@ def tilde(p: pathlib.Path | str) -> str:
 
 
 def project_paths(index: dict) -> dict[str, list[pathlib.Path]]:
+    import registry
     out = {}
     for name, doc in index["projects"].items():
         if name == hubconf.hub_project():
@@ -50,6 +51,7 @@ def project_paths(index: dict) -> dict[str, list[pathlib.Path]]:
 
 
 def policy(name: str, doc: dict, index: dict) -> dict:
+    import registry
     d = registry.dirs(doc)
     others = [p for n, ps in project_paths(index).items() if n != name for p in ps]
     copies = hubconf.p("memory_copies")
@@ -69,6 +71,7 @@ def policy(name: str, doc: dict, index: dict) -> dict:
 
 
 def for_project(name: str) -> dict:
+    import registry
     index = registry.refresh()
     return policy(name, index["projects"][name], index)
 
