@@ -29,7 +29,7 @@ SCENARIO = [
     (WS, runtime_ports.Turn(T0, SID, "human", "幫我看一下測試")),
     (WS, runtime_ports.Turn(T0 + datetime.timedelta(minutes=1), SID, "other")),
     (WS, runtime_ports.Turn(T0 + datetime.timedelta(minutes=2), SID, "assistant", "",
-                            (runtime_ports.Action("subagent"), runtime_ports.Action("skill", "dataviz")))),
+                            (runtime_ports.Action("other", "", "subagent"), runtime_ports.Action("other", "dataviz", "skill")))),
     (WS, runtime_ports.Turn(T0 + datetime.timedelta(minutes=3), SID, "other")),
     ("/Users/someone/workspace/other", runtime_ports.Turn(T0, SID2, "human", "別的專案")),
 ]
@@ -60,7 +60,7 @@ class ClaudeFixture:
                      "message": {"role": "user", "content": t.text}}
             elif t.role == "assistant":
                 names = {"subagent": "Agent", "workflow": "Workflow", "peer_message": "SendMessage", "skill": "Skill"}
-                blocks = [{"type": "tool_use", "name": names[a.kind], "input": {"skill": a.detail} if a.kind == "skill" else {}}
+                blocks = [{"type": "tool_use", "name": names[a.collab], "input": {"skill": a.detail} if a.collab == "skill" else {}}
                           for a in t.actions]
                 o = {"type": "assistant", "timestamp": _iso(t.ts), "sessionId": t.session,
                      "message": {"role": "assistant", "content": blocks,
@@ -192,7 +192,8 @@ class Contract(unittest.TestCase):
             self.assertEqual([t.role for t in ts], ["human", "other", "assistant", "other"])
             self.assertEqual(ts[0].text, "幫我看一下測試")
             self.assertEqual(ts[0].session, SID)
-            self.assertEqual([(a.kind, a.detail) for a in ts[2].actions], [("subagent", ""), ("skill", "dataviz")])
+            self.assertEqual([(a.kind, a.collab, a.detail) for a in ts[2].actions],
+                             [("other", "subagent", ""), ("other", "skill", "dataviz")])
             self.assertTrue(all(t.ts.tzinfo is not None for t in ts), "時間要帶時區")
         self.each(check)
 

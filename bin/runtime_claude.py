@@ -177,17 +177,11 @@ def _is_human_prompt(entry: dict) -> bool:
 
 
 def _action(block: dict) -> Action:
-    """Claude 的工具名稱 → 平台中立的動作種類(runtime_ports.ACTIONS)。"""
-    name = block.get("name", "")
-    if name == "Agent":
-        return Action("subagent")
-    if name == "Workflow":
-        return Action("workflow")
-    if name == "SendMessage" or name.endswith("send_message"):
-        return Action("peer_message")
-    if name == "Skill":
-        return Action("skill", (block.get("input") or {}).get("skill", "?"))
-    return Action("tool", name)
+    """對話紀錄裡的一個工具呼叫 → 中立的 Action(kind 是 KINDS、collab 是協作方式)。翻譯表只有一份:action()。
+    detail 只放技能名稱——Claude 的工具名稱不外流到中立格式。"""
+    name, inp = block.get("name", ""), block.get("input") or {}
+    kind, collab, _target, _summary = action(name, inp)
+    return Action(kind, str(inp.get("skill", "?")) if collab == "skill" else "", collab)
 
 
 def _parse_ts(ts: str) -> datetime.datetime:

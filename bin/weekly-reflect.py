@@ -97,14 +97,14 @@ def scan(start: datetime.datetime, end: datetime.datetime) -> dict[str, Week]:
                 w.sessions[name].add(t.session)
                 w.days[name].add(local.date())
                 w.times.append(local)
-            for a in t.actions:  # 中立的動作種類(runtime_ports.ACTIONS),不認得任何 runtime 的工具名稱
-                if a.kind == "subagent":
+            for a in t.actions:  # 中立的協作方式(runtime_ports.COLLABS),不認得任何 runtime 的工具名稱
+                if a.collab == "subagent":
                     w.agents += 1
-                elif a.kind == "workflow":
+                elif a.collab == "workflow":
                     w.workflows += 1
-                elif a.kind == "peer_message":
+                elif a.collab == "peer_message":
                     w.peer_msgs += 1
-                elif a.kind == "skill":
+                elif a.collab == "skill":
                     w.skills[a.detail] += 1
     return weeks
 

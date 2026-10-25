@@ -56,7 +56,6 @@ PORTS = {
 }
 
 # 中立的「動作種類」:對話紀錄裡 agent 做了什麼,不用任何 runtime 的工具名稱。
-ACTIONS = ("subagent", "workflow", "peer_message", "skill", "tool")
 
 
 # 平台的事件(第 3 層)。runtime 沒有某個時機就不支援,平台照不支援處理,不假裝有。
@@ -80,8 +79,8 @@ COLLABS = ("subagent", "workflow", "peer_message", "skill")
 
 
 class Action(NamedTuple):
-    kind: str            # ACTIONS 之一(之後改成 KINDS,協作方式放 collab;見 lease-contract-neutral.md)
-    detail: str = ""     # skill 名稱、工具名稱之類(給統計用,不是給程式判斷 runtime 的)
+    kind: str            # KINDS 之一(效果:讀、搜尋、問人、開網頁、寫檔、跑指令、其他)
+    detail: str = ""     # 技能名稱(collab 是 skill 時);不放任何 runtime 的工具名稱
     collab: str | None = None   # COLLABS 之一或 None
 
 
