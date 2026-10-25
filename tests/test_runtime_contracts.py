@@ -318,6 +318,23 @@ class LifecycleContract(unittest.TestCase):
         self.each(check)
 
 
+class InstructionsContract(unittest.TestCase):
+    """第 4 層:規則檔在專案資料夾裡,而且它自己就在本機專用檔的清單上(不然會被 commit 進 repo)。"""
+
+    def test_instructions_file_is_local_and_ignored(self):
+        for name in runtime_ports.RUNTIMES:
+            with self.subTest(runtime=name):
+                m = runtime_ports.load(name, ports=("instructions",))
+                ws = pathlib.Path("/Users/someone/workspace/proj")
+                f = m.instructions_file(ws)
+                self.assertEqual(f.parent, ws, "規則檔要直接放在專案資料夾裡")
+                ignores = m.local_ignores()
+                self.assertIn(f.name, ignores, "規則檔要在本機專用檔清單上")
+                self.assertNotIn(".agent-memory", ignores, ".agent-memory 是平台的,不是 runtime 的")
+                self.assertTrue(all(not pathlib.PurePath(p).is_absolute() and ".." not in pathlib.PurePath(p).parts
+                                    for p in ignores), "清單裡都是專案資料夾裡的相對路徑")
+
+
 class ClaudeHooks(unittest.TestCase):
     """Claude 專屬:hook 設定的替換規則、輸出格式。"""
 

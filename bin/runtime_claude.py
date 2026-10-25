@@ -416,3 +416,15 @@ def install_lifecycle(workspace) -> None:
     if not path.exists() or path.read_text() != out:
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text(out)
+
+
+
+# ---------- 規則檔(runtime_ports 的 instructions 介面)----------
+
+def instructions_file(workspace) -> pathlib.Path:
+    """Claude Code 會跟 CLAUDE.md 一起載入的本機檔(不進版控);平台的受管區塊寫在這裡。"""
+    return pathlib.Path(workspace) / "CLAUDE.local.md"
+
+
+def local_ignores() -> list:
+    return ["CLAUDE.local.md", ".claude/settings.local.json"]

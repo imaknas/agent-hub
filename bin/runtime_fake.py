@@ -127,3 +127,14 @@ def deny(event: str, reason: str) -> str:
 
 def install_lifecycle(workspace) -> None:
     (pathlib.Path(workspace) / ".fake-hooks.json").write_text(json.dumps(list(EVENTS)))
+
+
+
+# ---------- instructions ----------
+
+def instructions_file(workspace) -> pathlib.Path:
+    return pathlib.Path(workspace) / ".fake-instructions.md"
+
+
+def local_ignores() -> list:
+    return [".fake-instructions.md", ".fake-hooks.json"]

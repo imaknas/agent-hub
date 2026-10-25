@@ -2,14 +2,15 @@
 # 把一個已 onboard 專案的「本機專用」設定對齊到 agent-hub 目前的版本。冪等,
 # 永遠不改、不 commit 專案 repo 裡的任何被追蹤檔案:
 #
-#   1. CLAUDE.local.md 裡 <!-- agent-hub:begin/end --> 之間的區塊,整塊用
+#   1. 執行環境的規則檔(`hub-runtime instructions-file`;Claude Code 是 CLAUDE.local.md)裡
+#      <!-- agent-hub:begin/end --> 之間的區塊,整塊用
 #      templates/CLAUDE.md(加上 .agent-memory/RULES 登記的 templates/rules/*.md)重生——改了 template,所有專案下次開 session 就
 #      跟上,不用靠人記得去補。區塊外的內容不動。舊版沒有標記、直接 append
 #      的 pointer 段落會被換成有標記的區塊。
-#   2. .claude/settings.local.json 的 hook(由執行環境裝:`hub-event install`;平台管的換新、使用者自己加的留著)
+#   2. hook(由執行環境裝:`hub-event install`;平台管的換新、使用者自己加的留著)
 #   2b. .agent-memory/AGENT.md 對齊 templates/AGENT.md——這個是例外:它在
 #      memory 分支上,會 commit+push(只 commit AGENT.md),不碰專案 repo
-#   3. .agent-memory/、CLAUDE.local.md、.claude/settings.local.json 如果沒被 ignore,寫進
+#   3. .agent-memory/ 跟執行環境的本機專用檔(`hub-runtime local-ignores`)如果沒被 ignore,寫進
 #      .git/info/exclude——本機專屬的 ignore,不動會 commit 的 .gitignore,
 #      公開 repo 也不會多出任何跟這套工具有關的字。
 #
@@ -42,11 +43,15 @@ MSG
   exit 0
 fi
 
-# --- 1. CLAUDE.local.md 受管區塊 ---
+# --- 1. 規則檔的受管區塊 ---
+# 寫到哪個檔由執行環境決定(runtime_ports 的 instructions;Claude Code 是 CLAUDE.local.md)。問不到就停,
+# 不猜一個預設檔名——那等於把 Claude 寫死回來。
+INSTR=$(/usr/bin/python3 "$AGENT_HUB/bin/hub-runtime" instructions-file "$PWD") && [ -n "$INSTR" ] \
+  || { echo "sync-local-setup: hub-runtime 問不到規則檔要寫到哪,受管區塊沒有更新" >&2; exit 1; }
 # 專案有在 memory 分支的 .agent-memory/RULES 登記額外規則(一行一個名稱,例如
 # engineering)的話,把 templates/rules/<名稱>.md 接在區塊後面。登記放在 memory
 # 分支上:換機器 recover 也還在;規則內容放 agent-hub:改一次,所有登記的專案都跟上。
-python3 - "$AGENT_HUB/templates/CLAUDE.md" CLAUDE.local.md .agent-memory/RULES "$AGENT_HUB/templates/rules" <<'PY' && say "CLAUDE.local.md 已對齊"
+python3 - "$AGENT_HUB/templates/CLAUDE.md" "$INSTR" .agent-memory/RULES "$AGENT_HUB/templates/rules" <<'PY' && say "$INSTR 已對齊"
 import re, sys
 from pathlib import Path
 
@@ -113,7 +118,8 @@ fi
 
 # --- 3. 本機檔一定要被 ignore ---
 exclude=$(git rev-parse --git-path info/exclude 2>/dev/null) || exit 0
-for f in .agent-memory CLAUDE.local.md .claude/settings.local.json; do
+# .agent-memory 是平台自己的;其他是執行環境的本機專用檔(規則檔、本機設定),由它回報
+for f in .agent-memory $(/usr/bin/python3 "$AGENT_HUB/bin/hub-runtime" local-ignores); do
   if git ls-files --error-unmatch "$f" >/dev/null 2>&1; then
     # 已經被 commit 進 repo:ignore 救不了,要那個專案自己的 session 處理
     say "⚠️ $f 已經被這個 repo 追蹤(commit 過),ignore 無效——請該專案的 session 處理"
@@ -141,7 +147,7 @@ if [ -n "$leaks" ]; then
   cat <<MSG
 ⚠️ 這個 repo 已 commit 的檔案提到了 agent-hub / .agent-memory(repo 之後可能公開,這些名稱跟路徑不能進 commit):
 $(echo "$leaks" | sed 's/^/  - /')
-請在這個專案裡處理:維運需要的資訊搬到 CLAUDE.local.md(agent-hub:begin/end 區塊之外,不進版控),
+請在這個專案裡處理:維運需要的資訊搬到 $INSTR(agent-hub:begin/end 區塊之外,不進版控),
 committed 檔案裡改成不提工具名稱的寫法或刪掉,然後 commit。(.gitignore 裡的 .agent-memory/ 可以直接刪,
 本機已經用 .git/info/exclude 排除。)細節可用:git grep -n -E 'agent-hub|agent-memory'
 MSG

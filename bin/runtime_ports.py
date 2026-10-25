@@ -19,6 +19,10 @@
     inject(event, text) -> str                           要放進 agent context 的文字 → 原生的輸出格式(這個事件不能放就 "")
     deny(event, reason) -> str                           擋下這個動作 → 原生的輸出格式
     install_lifecycle(workspace) -> None                 在這個專案裝好 hook(平台管的換成新的,使用者自己加的留著)
+  instructions(第 4 層,規則檔):規則跟 memory 說明寫到 runtime 會讀的哪個檔(內容是平台的,templates/)
+    instructions_file(workspace) -> Path                 平台受管區塊要寫進的檔(不進版控)
+    local_ignores() -> list[str]                         這個 runtime 的本機專用檔(相對專案資料夾),要加進 .git/info/exclude
+                                                         (.agent-memory 是平台自己的,不在這裡)
   sessions(第 1 層的一部分):
     alive(sid) -> bool、live_sessions() -> set[str]、context_size(sid) -> int | None(接續要載入多少 token)
     current_session(env) -> str | None                   目前這個程序屬於哪個 session(給 hubbus send 記寄件人)
@@ -39,6 +43,7 @@ DEFAULT = "claude"   # hub.json 沒寫 runtime.default 時的預設
 PORTS = {
     "agent": ("run", "describe"),
     "lifecycle": ("parse_event", "inject", "deny", "install_lifecycle"),
+    "instructions": ("instructions_file", "local_ignores"),
     "transcripts": ("turns", "last_activity"),
     "sessions": ("alive", "live_sessions", "context_size", "current_session"),
 }

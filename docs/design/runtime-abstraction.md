@@ -1,8 +1,10 @@
 # 執行環境抽象:平台每一層都是介面,Claude Code 只是一個實作
 
-> **進度**:10-25 Knas 確認並開始。步驟 1(骨架)、2(第 5 層對話紀錄)、3(第 1 層「跑一次」:`llm.py` 經過
-> `runtime_ports` 的 agent 介面,Claude 的旗標只在 `runtime_claude.py`)完成;其他照下面的步驟。判斷點宣告裡的
-> Claude 專用欄位要等第 2 層中立政策定案才換掉,在那之前只有 `runtime_claude` 讀它們。
+> **進度**(10-25):步驟 1(骨架)、2(第 5 層對話紀錄)、3(第 1 層「跑一次」)、5(第 3 層事件 `hub-event`、第 4 層規則檔
+> `hub-runtime`)完成,24 個專案都換成新的 hook。**還沒做**:第 1 層長駐 session(排在另一個 session 的租約中立化之後,
+> 見 `lease-contract-neutral.md`)、第 6 層登入、判斷點宣告的中立化(等第 2 層的 approvals)、`templates/CLAUDE.md` 改名。
+> **還在用舊入口的兩處**(輸出跟以前一字不差,照樣能用):agent-hub 自己的 `.claude/settings.json`(它的 session 開始還要拉
+> agent-hub 的 repo,`hub-event` 沒有這一步),跟使用者層級的 worktree hook(U4,要 Knas 親自改)。
 
 ## 目標
 

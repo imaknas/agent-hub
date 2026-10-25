@@ -1,0 +1,33 @@
+#!/usr/bin/python3
+"""給 shell 腳本問執行環境的小指令(執行環境抽象,docs/design/runtime-abstraction.md)。預設的 runtime 見 hub.json。
+
+  hub-runtime instructions-file <資料夾>   平台受管區塊要寫進的檔(相對這個資料夾)
+  hub-runtime local-ignores                這個 runtime 的本機專用檔,一行一個(要加進 .git/info/exclude)
+
+系統的 python3(3.9)就能跑。
+"""
+from __future__ import annotations
+
+import os
+import pathlib
+import sys
+
+sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
+import runtime_ports  # noqa: E402
+
+
+def main(argv) -> int:
+    rt = runtime_ports.load(ports=("instructions",))
+    if argv[:1] == ["instructions-file"] and len(argv) == 2:
+        ws = pathlib.Path(argv[1]).resolve()
+        print(os.path.relpath(rt.instructions_file(ws), ws))
+        return 0
+    if argv == ["local-ignores"]:
+        print("\n".join(rt.local_ignores()))
+        return 0
+    print(__doc__, file=sys.stderr)
+    return 2
+
+
+if __name__ == "__main__":
+    sys.exit(main(sys.argv[1:]))

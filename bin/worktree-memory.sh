@@ -3,14 +3,14 @@
 #
 # 問題:Claude Code 開在 worktree 的 session(例:agent 用 worktree 模式叫出來的
 # `<專案>/.claude/worktrees/<名稱>`)只有 git 追蹤的檔案——沒有 .agent-memory、沒有
-# CLAUDE.local.md、也沒有放 hook 的 .claude/settings.local.json(都不進版控)。
+# 執行環境的本機專用檔(規則檔、放 hook 的本機設定;都不進版控)。
 # 結果 hook 不跑、筆記不同步、session 也沒拿到 memory 跟跨專案規則。
 #
 # 做法:這支掛在**使用者層級**的 settings(不是專案層級,worktree 裡沒有專案的
 # local settings),由 merge-hook-settings.py --worktree 安裝。在主 checkout 裡
 # 什麼都不做(專案自己的 hook 會處理,避免重複);在 linked worktree 裡:
-#   start  把主 checkout 的 .agent-memory、CLAUDE.local.md 用 symlink 接進來,pull memory,
-#          第一次接上時把 CLAUDE.local.md 印進 context(session 開始時它還不存在),
+#   start  把主 checkout 的 .agent-memory、執行環境的本機專用檔(`hub-runtime local-ignores`)用 symlink 接進來,
+#          pull memory,第一次接上時把規則檔(`hub-runtime instructions-file`)印進 context(session 開始時它還不存在),
 #          memory 落後就提醒
 #   end    (SessionEnd / PreCompact)同步 memory 筆記,跟主 checkout 的 hook 同一支腳本
 #   nudge  (PostToolUse)git commit/push 之後筆記落後就提醒;專案信箱有新信就送進來(hubbus,限流)
@@ -40,22 +40,22 @@ case "$event" in
     if [ ! -e .agent-memory ]; then
       ln -s "$main/.agent-memory" .agent-memory && linked=1
     fi
-    if [ ! -e CLAUDE.local.md ] && [ -f "$main/CLAUDE.local.md" ]; then
-      ln -s "$main/CLAUDE.local.md" CLAUDE.local.md
-    fi
-    # 第二階段:sandbox/權限規則在主 checkout 的 .claude/settings.local.json(平台產生);worktree 沒有這個檔
-    # (gitignored),接上之後 Claude Code 會即時重新載入設定
-    if [ ! -e .claude/settings.local.json ] && [ -f "$main/.claude/settings.local.json" ]; then
-      mkdir -p .claude && ln -s "$main/.claude/settings.local.json" .claude/settings.local.json
-      grep -qxF ".claude/settings.local.json" "$common/info/exclude" 2>/dev/null || echo ".claude/settings.local.json" >>"$common/info/exclude"
-    fi
+    # 執行環境的本機專用檔(規則檔、本機設定;`hub-runtime local-ignores`)都在主 checkout,worktree 沒有
+    # (gitignored):接上 symlink、加進共用的 info/exclude。Claude Code 會即時重新載入設定(第二階段的 sandbox/權限規則)
+    for f in $(/usr/bin/python3 "$HUB/bin/hub-runtime" local-ignores 2>/dev/null); do
+      if [ ! -e "$f" ] && [ -f "$main/$f" ]; then
+        mkdir -p "$(dirname "$f")" && ln -s "$main/$f" "$f"
+        grep -qxF "$f" "$common/info/exclude" 2>/dev/null || echo "$f" >>"$common/info/exclude"
+      fi
+    done
     # .agent-memory/ 這條規則只比對目錄,symlink 要另外排除(info/exclude 所有 worktree 共用)
     grep -qxF ".agent-memory" "$common/info/exclude" 2>/dev/null || echo ".agent-memory" >>"$common/info/exclude"
     (cd .agent-memory && "$HUB/bin/with-lock.sh" git pull -q) >/dev/null 2>&1
-    if [ -n "$linked" ] && [ -f CLAUDE.local.md ]; then
+    instr=$(/usr/bin/python3 "$HUB/bin/hub-runtime" instructions-file "$PWD" 2>/dev/null)
+    if [ -n "$linked" ] && [ -n "$instr" ] && [ -f "$instr" ]; then
       echo "(這個 session 在 $main 的 git worktree 裡。memory 已經接上主 checkout 的 .agent-memory;"
-      echo " CLAUDE.local.md 在 session 開始時還不存在,內容如下,照它做:)"
-      cat CLAUDE.local.md
+      echo " $instr 在 session 開始時還不存在,內容如下,照它做:)"
+      cat "$instr"
     fi
     python3 "$HUB/bin/memory-nudge.py" --session-start 2>/dev/null
     # 每晚的 worktree 清理(bin/worktrees.py auto_prune)刪過這裡的依賴:提醒怎麼重建,免得第一次跑測試時一頭霧水
