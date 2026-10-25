@@ -236,6 +236,12 @@ def workspace(name: str) -> pathlib.Path | None:
     return path(ws) if ws else None
 
 
+def capabilities() -> dict[str, dict]:
+    """平台有的能力(docs/design/capabilities.md):hub.json 的 capabilities,而且 capabilities/<名稱>.sb 存在。"""
+    cat = {k: v for k, v in (get("capabilities") or {}).items() if not k.startswith("_") and isinstance(v, dict)}
+    return {k: v for k, v in cat.items() if (ROOT / "capabilities" / f"{k}.sb").is_file()}
+
+
 def hub_project() -> str:
     """平台自己在登錄裡的名稱。"""
     return "agent-hub"

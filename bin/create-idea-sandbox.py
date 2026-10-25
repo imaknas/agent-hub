@@ -3,7 +3,7 @@
 
 想法沙盒 = 正常 onboard(有 .agent-memory:深談收回的交接筆記寫在那裡)、沒有 GitHub remote、
 登錄標 `type: idea` 的專案,放在 <workspace_root>/idea-<n>。登錄一起寫 purpose、`enforce: {sandbox: true}`
-(真正的寫入封鎖)、`privacy: {reflection: stats_only}`,跟登記同一個 commit(onboard 的 ONBOARD_REGISTRY_EXTRA)。
+(真正的寫入封鎖)+ 預設的能力(hub.json capabilities 的 default_for,例 gpu;docs/design/capabilities.md)、`privacy: {reflection: stats_only}`,跟登記同一個 commit(onboard 的 ONBOARD_REGISTRY_EXTRA)。
 
 用法:create-idea-sandbox.py <idea-n> <purpose>
 輸出:最後一行是一個 JSON 物件(lease-runner 的 POST /v1/sandboxes 直接轉成回應):
@@ -32,6 +32,12 @@ sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
 import hubconf  # noqa: E402
 
 NAME = re.compile(r"^idea-[0-9]+$")
+
+
+def default_capabilities() -> list[str]:
+    """hub.json capabilities 裡 default_for 有 idea、risk 不是 high 的能力(明寫進登錄,不靠 type 隱含)。"""
+    return sorted(k for k, v in hubconf.capabilities().items()
+                  if "idea" in (v.get("default_for") or []) and v.get("risk") != "high")
 MAX_PURPOSE = 500
 HUB = hubconf.ROOT
 
@@ -87,7 +93,7 @@ def create(name: str, purpose: str) -> int:
         f"# {name}\n\n探討用的專案(想法沙盒),由 Muninn 替這個想法開的:\n\n> {purpose}\n\n"
         "深談的結論、決定、待辦記在 memory(`.agent-memory/`);要變成正式專案時用 agent-hub 的 "
         "`bin/upgrade-idea.sh`。\n")
-    extra = {"type": "idea", "purpose": purpose, "enforce": {"sandbox": True},
+    extra = {"type": "idea", "purpose": purpose, "enforce": {"sandbox": True, "capabilities": default_capabilities()},
              "privacy": {"reflection": "stats_only"}}
     env = {**os.environ, "ONBOARD_REGISTRY_EXTRA": json.dumps(extra, ensure_ascii=False)}
     r = subprocess.run([str(HUB / "bin" / "onboard-project.sh"), "--no-remote", str(ws)],

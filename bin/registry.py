@@ -152,9 +152,7 @@ def validate_secrets(secrets) -> list[str]:
 
 
 def capabilities() -> dict[str, dict]:
-    """平台有的能力:hub.json 的 capabilities,而且 capabilities/<名稱>.sb 存在。"""
-    cat = {k: v for k, v in (hubconf.get("capabilities") or {}).items() if not k.startswith("_") and isinstance(v, dict)}
-    return {k: v for k, v in cat.items() if (hubconf.ROOT / "capabilities" / f"{k}.sb").is_file()}
+    return hubconf.capabilities()
 
 
 def validate_enforce(doc: dict) -> list[str]:

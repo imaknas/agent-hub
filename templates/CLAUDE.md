@@ -65,6 +65,13 @@ librarian 每晚自動寄出、Knas 結案時自動移掉。Knas 在這個 sessi
 - **開源**:進過 git 歷史的憑證一律當成已外洩,公開前先撤銷(改寫歷史不夠,別人可能已經 clone);指向這台機器的
   部署設定放在不進 repo 的設定檔。
 
+## sandbox 擋住的程式(平台代跑)
+
+專案登錄 `enforce.capabilities` 有宣告能力(例:想法沙盒的 `gpu`)時,sandbox 擋住的程式(例:要 GPU 的 Blender)
+用 `~/agent-hub/bin/hub-run --cap <能力> -- <指令…>` 在專案資料夾裡跑:平台在自己的 profile 底下執行(只能寫專案
+資料夾、不能連網路),輸出跟結束碼照原樣回來;這次指令被中斷的話,工作照跑,用 `hub-run --wait <id>` 接回。
+沒宣告的能力會被拒絕;要新的能力寫信給 agent-hub。
+
 這段說明放在 gitignored 的 CLAUDE.local.md,不在共享的 CLAUDE.md:不要把
 agent-hub、`.agent-memory` 的名稱或路徑寫進任何會 commit 的檔案(CLAUDE.md、
 `.claude/settings.json`、`.gitignore`、README、程式註解、commit 訊息等),公開 repo 會跟著外洩。

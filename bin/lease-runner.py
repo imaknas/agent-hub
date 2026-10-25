@@ -231,6 +231,13 @@ def preamble(project: str, mode: str = "discuss") -> str:
     """租約說明(discuss 唯讀 / work 可以動手,每次寫入都問);想法沙盒(登錄 type: idea)多一段:在探討哪個想法。"""
     base = PREAMBLE_WORK if mode == "work" else PREAMBLE
     doc = hubconf.projects().get(project) or {}
+    caps = (doc.get("enforce") or {}).get("capabilities") or []
+    if mode == "work" and caps:  # 平台代跑(docs/design/capabilities.md):sandbox 擋住的東西(例:GPU)走這裡
+        hub_run = hubconf.ROOT / "bin" / "hub-run"
+        base += f"""
+- 這個專案可以用平台代跑的能力:{', '.join(caps)}。需要 GPU 的程式(例:Blender)在一般指令裡會被 sandbox 擋住,改用
+  `{hub_run} --cap gpu -- <指令…>` 跑(在專案資料夾裡;一樣是一個要 Knas 確認的指令)。代跑的程式只能寫專案資料夾、
+  不能連網路。輸出最後才一次出現;這次指令逾時中斷的話,工作照跑,用 `{hub_run} --wait <id>` 接回。"""
     if doc.get("type") != "idea":
         return base
     return base + f"""
