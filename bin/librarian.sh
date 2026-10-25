@@ -381,6 +381,15 @@ else
   log "knas-tasks.py 失敗(exit $?),〔Knas〕待辦這次沒跟 Muninn 同步"
 fi
 
+# --- 問 Knas 的問題對帳(機械、零 LLM)---
+# 開著超過幾天的問題(Knas 可能已經在專案的 session 裡回答了,Muninn 不知道,m10252237)寄一封 request 問發問的專案;
+# 平台的分派送進開著的 session 或派 headless agent,解決了的由專案送 done/drop --question 收掉
+if qc_out=$($HUBBUS reconcile-questions 2>>"$LOG"); then
+  log "$qc_out"
+else
+  log "hubbus reconcile-questions 失敗(exit $?),這次沒對帳問 Knas 的問題"
+fi
+
 # --- 跨專案待辦清單 todo.md ---
 # 機械產生:收集各專案 STATE.md 的 `## 待辦` 段落(固定格式,由上面每個專案的呼叫
 # 維護)跟 openclaw-migration-status.md 的待辦。不用 LLM,輸入一樣輸出就一樣——

@@ -83,6 +83,9 @@ SSH 開 mini 上的資料夾。MBP 斷線/沒電時 session 還在跑、手機(R
   有人正在用就等 5 分鐘、否則馬上派 headless agent(`agent-jobs/mailbox.md`,只寫筆記/回信/問 knas,不改程式碼)。
   派出去的信記成「平台正在處理」,開著的 session 不會重做;同一串最多代為處理 4 輪、每專案每天 6 次(hub.json
   `mailbox`)。跟 Claude Code 有關的判斷只在 `bin/runtime_claude.py`。轉交不經過這裡。
+  專案問 Knas 的問題在專案 session 裡解決了:`hubbus send --to knas --type done|drop --question <id>`,Muninn 收掉;開 session
+  時列出這個專案還開著的問題(❓),librarian 每晚 `hubbus reconcile-questions` 問開著超過 3 天的還要不要(深談交接的問題由
+  Muninn 自己管,不問)。
   Muninn 的轉交由 librarian 每晚從信箱讀(`hubbus open-handoffs`)直接套用進 STATE.md,結果可信才
   `hubbus done`(bridge 再回報 Muninn 結案);session 白天看到只當參考,Knas 的回答由發問的 session
   處理、沒處理的也是晚上套用。介面跟失敗模式看 `bin/hubbus` 檔頭

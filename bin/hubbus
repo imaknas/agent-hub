@@ -26,6 +26,11 @@ done 要讓 Muninn 結案,job 失敗要給狀態頁),不用各自接一條檔案
   hubbus send --to <專案|knas> --type <request|question|info|progress|done> --text "…" [--reply-to <id>]
   hubbus send --to knas --type task --text "…" [--due YYYY-MM-DD] [--context …] [--new-reason …] [--id …]
   hubbus send --to knas --type done|drop --task <key> --text "…"   Knas 在這個專案做完了 / 不需要了
+  hubbus send --to knas --type done|drop --question <id> --text "…"   這個專案問 Knas 的問題在這裡解決了 / 不需要了
+                                      (Knas 在 session 裡直接回答過):Muninn 把它從「等你」收掉,不會再送答案回來
+  hubbus open-questions [--project P] [--json]   問 Knas、還沒回答也還沒在專案收掉的問題
+  hubbus reconcile-questions          librarian 每晚:開著超過 QUESTION_CHECK_DAYS 天的問題,寄一封 request 問發問的
+                                      專案還要不要(之後每 7 天再問一次);深談交接的問題(lease-…)由 Muninn 自己管,不問
   hubbus inbox [--project P]          給這個專案、還沒 done 的信(順便記 delivered)
   hubbus show <id>
   hubbus ack <id>...                  記 delivered
@@ -87,7 +92,8 @@ KNAS_ONLY = ("task", "drop")   # Muninn 的任務登錄:只有 Knas 能做的事
 # 寄給 knas 的 type → Muninn 收的 type。request = 要 Knas 去做一件事 = 任務;要他用文字回答的才是 question
 TO_MUNINN = {"request": "task", "task": "task", "question": "question", "info": "progress",
              "progress": "progress", "done": "done", "drop": "drop"}
-TASK_FIELDS = ("task", "due", "context", "new_reason", "inferred")   # 照原樣轉給 Muninn
+TASK_FIELDS = ("task", "due", "context", "new_reason", "inferred", "question")   # 照原樣轉給 Muninn
+QUESTION_CHECK_DAYS = 3   # 問 Knas 的問題開著幾天後,問發問的專案還要不要(m10252237:在專案 session 裡解決了,Muninn 不知道)
 KEYED = ("done", "dropped", "already_done", "reopened")  # 帶任務 key 的轉交:librarian 照 key 機械套用
 BRIDGE = "muninn-bridge"
 ACTIONABLE = ("request", "question")  # 平台會處理的信;轉交(handoff)由 librarian 每晚套用、通知類不用處理
@@ -299,6 +305,57 @@ def cmd_hook(event: str) -> None:
             print(out)
 
 
+def open_questions(c, project=None) -> list:
+    """問 Knas、還開著的問題:沒有 Knas 的回答(回答是 knas 寄回來、ref = 問題 id 的信),也沒有發問的專案送
+    done/drop --question 收掉。深談交接的問題(id 是 lease-…)Muninn 自己管(最新一次交接為準),不算在這裡。"""
+    owners = tuple(OWNERS)
+    marks = ",".join("?" * len(owners))
+    answered = {r["ref"] for r in c.execute(
+        f"SELECT ref FROM events WHERE type='message' AND source IN ({marks}) AND ref IS NOT NULL", owners)}
+    closed = {payload(r).get("question") for r in c.execute(
+        f"SELECT payload FROM events WHERE type='message' AND to_project IN ({marks})", owners)}
+    out = []
+    for r in c.execute(f"SELECT * FROM events WHERE type='message' AND to_project IN ({marks}) ORDER BY seq", owners):
+        if payload(r).get("type") != "question" or r["id"].startswith("lease-") or r["id"] in answered or r["id"] in closed:
+            continue
+        if project is None or canon(r["source"]) == project:
+            out.append(r)
+    return out
+
+
+def questions_note(c, project) -> str | None:
+    """開 session 時:這個專案問 Knas、還開著的問題。在這裡解決了要送 --question 收掉,Muninn 才知道。"""
+    qs = open_questions(c, project)
+    if not qs:
+        return None
+    lines = [f"❓ 這個專案問 Knas、還沒收到回答的問題({len(qs)} 題)。Knas 已經在 session 裡直接回答、或不需要了,就收掉"
+             f"(Muninn 才不會一直掛著等他):`~/agent-hub/bin/hubbus send --to knas --type done --question <id> --text \"怎麼解決的\"`"
+             f"(不需要了用 `--type drop`)。還要問的不用動。"]
+    lines += [f"- [{r['id']}] {r['ts'][5:16].replace('T', ' ')} {payload(r).get('text', '')[:120]}" for r in qs[-5:]]
+    return "\n".join(lines)
+
+
+def reconcile_questions(c, now=None) -> list:
+    """開著超過 QUESTION_CHECK_DAYS 天的問題:寄一封 request 給發問的專案(平台的分派送進開著的 session,沒人就派
+    headless agent 看 memory 判斷),問還要不要。id 固定(問題 + 第幾週),重跑不重寄;回傳寄出的信 id。"""
+    now = now or datetime.datetime.now(datetime.timezone.utc)
+    sent = []
+    for r in open_questions(c):
+        age = now - datetime.datetime.fromisoformat(r["ts"].replace("Z", "+00:00"))
+        if age.days < QUESTION_CHECK_DAYS or not valid_address(canon(r["source"])):
+            continue
+        mid = f"qcheck-{r['id']}-{(age.days - QUESTION_CHECK_DAYS) // 7}"
+        text = (f"這個專案 {r['ts'][:10]} 問 Knas 的問題還開著(Muninn 那邊一直掛在「等你」):\n"
+                f"  [{r['id']}] {payload(r).get('text', '')[:300]}\n"
+                f"如果已經解決了(Knas 在這個專案的 session 裡回答過、或已經不需要),請送 "
+                f"`hubbus send --to knas --type done --question {r['id']} --text \"怎麼解決的\"`(不需要了用 --type drop),"
+                f"Muninn 就會收掉。還需要 Knas 回答的話不用送,把這封 done 掉就好。看不出來的話留著,也 done 這封。")
+        if publish(c, mid, "message", hubconf.hub_project(), canon(r["source"]), None,
+                   {"type": "request", "text": text, "question_check": r["id"]}):
+            sent.append(mid)
+    return sent
+
+
 def mail_text(event: str, session, cwd) -> str | None:
     """平台的邏輯:記在場紀錄、把這個 session 該收的信送進去,回傳要放進 context 的文字(沒有就 None)。
     event 是 session-start / prompt / post-tool。跟執行環境無關。"""
@@ -332,14 +389,15 @@ def mail_text(event: str, session, cwd) -> str | None:
         old = [r for r in rows if r["delivered"]]
         mark_delivered(c, new, session, "session-start")
         c.execute("COMMIT")
+        note = questions_note(c, project)
         if rows:
             parts = [HEADER.format(n=len(rows), p=project), *(fmt(r) for r in new)]
             if old:
                 taken = claimed(c, [r["id"] for r in old])
                 parts += ["之前送過、還沒 done 的:",
                           *(fmt(r, long=False) + ("(平台正在處理,不用做)" if r["id"] in taken else "") for r in old)]
-            return "\n".join([*parts, FOOTER])
-        return None
+            return "\n".join([*parts, FOOTER] + ([note] if note else []))
+        return note
     rows = inbox(c, project, session, only_new=True)
     mark_delivered(c, rows, session, event)
     # 給這個 session 的對話回信,在它閒置時被平台在背景接續處理掉了:下次有動作時提一行,不然它不知道
@@ -820,6 +878,7 @@ def main() -> None:
     s.add_argument("--from", dest="sender")
     s.add_argument("--id", help="固定的信 id(重寄同一個 id 什麼都不做;librarian 寄任務用)")
     s.add_argument("--task", help="任務 key(done/drop 時是哪一件)")
+    s.add_argument("--question", help="done/drop 時:這個專案問 Knas 的哪一題(信 id)在這裡解決了 / 不需要了")
     s.add_argument("--due", help="YYYY-MM-DD")
     s.add_argument("--context")
     s.add_argument("--new-reason", help="跟 14 天內結案的任務很像、但確實是新的一件時說明為什麼")
@@ -836,6 +895,10 @@ def main() -> None:
     sub.add_parser("dispatch")
     sub.add_parser("thread").add_argument("id")
     sub.add_parser("open-handoffs")
+    oq = sub.add_parser("open-questions")
+    oq.add_argument("--project")
+    oq.add_argument("--json", action="store_true")
+    sub.add_parser("reconcile-questions")
     pb = sub.add_parser("publish")
     pb.add_argument("type", choices=("job.failed", "merge.done", "merge.failed", "session.report"))  # 信有專用指令
     pb.add_argument("--source", required=True)
@@ -865,6 +928,23 @@ def main() -> None:
         for r in thread_chain(c, must_message(c, a.id)):
             print(fmt(r))
         return
+    if a.cmd == "open-questions":
+        c = db()
+        rows = open_questions(c, canon(a.project) if a.project else None)
+        if a.json:
+            print(json.dumps([{"id": r["id"], "project": canon(r["source"]), "ts": r["ts"], "text": payload(r).get("text")}
+                              for r in rows], ensure_ascii=False))
+        else:
+            for r in rows:
+                print(f"[{r['id']}] {canon(r['source'])} {r['ts'][:16]} {payload(r).get('text', '')[:100]}")
+        return
+    if a.cmd == "reconcile-questions":
+        c = db()
+        c.execute("BEGIN IMMEDIATE")
+        sent = reconcile_questions(c)
+        c.execute("COMMIT")
+        print(f"問了 {len(sent)} 題還要不要" + (":" + " ".join(sent) if sent else ""))
+        return
     if a.cmd == "open-handoffs":
         return cmd_open_handoffs()
     if a.cmd == "status":
@@ -887,8 +967,14 @@ def main() -> None:
         p = {"type": a.type, "text": a.text, "from_session": session}
         if a.type in KNAS_ONLY and a.to != KNAS:
             sys.exit(f"hubbus: {a.type} 只能寄給 knas")
-        if a.type == "drop" and not a.task:
-            sys.exit("hubbus: drop 要加 --task <key>(哪一件不需要了)")
+        if a.type == "drop" and not (a.task or a.question):
+            sys.exit("hubbus: drop 要加 --task <key> 或 --question <id>(哪一件/哪一題不需要了)")
+        if a.question:
+            if a.task or a.to != KNAS or a.type not in ("done", "drop"):
+                sys.exit("hubbus: --question 只用在寄給 knas 的 done/drop(不跟 --task 一起用)")
+            q = must_message(c, a.question)
+            if canon(q["to_project"]) != KNAS or payload(q).get("type") != "question" or canon(q["source"]) != sender:
+                sys.exit(f"hubbus: {a.question} 不是 {sender} 問 Knas 的問題")
         if a.inferred and not (a.type in ("done", "drop") and a.task):
             sys.exit("hubbus: --inferred 只用在帶 --task 的 done/drop")
         for k in TASK_FIELDS:

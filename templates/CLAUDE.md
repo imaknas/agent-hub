@@ -48,6 +48,10 @@ librarian 每晚自動寄出、Knas 結案時自動移掉。Knas 在這個 sessi
 `hubbus send --to knas --type done --task <key> --text "…"`;不需要了:`--type drop --task <key>`。
 要 Knas 去做一件新的事:`hubbus send --to knas --type task --text "…" [--due YYYY-MM-DD]`。
 
+這個專案用 `--type question` 問過 Knas 的問題,如果他直接在這個 session 回答了(或已經不需要了),要收掉,
+不然 Muninn 會一直掛著「等你」:`hubbus send --to knas --type done --question <當初那則的 id> --text "怎麼解決的"`
+(不需要了用 `--type drop`)。還開著的問題開 session 時會列出來(❓);`hubbus open-questions` 也查得到。
+
 ## 憑證(API key、token、密碼)
 
 - **值只放在不進版控的地方**:服務的 runtime 目錄(`~/services/<專案>/` 的 `.env`、`secrets/`、`data/secrets/`)或
