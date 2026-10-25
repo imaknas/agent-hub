@@ -13,7 +13,7 @@ import pathlib
 
 from runtime_ports import TaskResult, Turn
 
-_turns: list[tuple[str, Turn]] = []      # (工作目錄, Turn)
+_turns: list[tuple[str, Turn, bool]] = []   # (工作目錄, Turn, 是不是在它底下的 worktree 裡)
 _replies: dict[str, TaskResult] = {}     # 判斷點 → 要回的結果
 _ran: list = []                          # 跑過的 Task(測試看它收到什麼)
 _live: set[str] = set()
@@ -32,8 +32,9 @@ def reset() -> None:
 
 # ---------- 給測試放資料 ----------
 
-def add_turn(path: str, turn: Turn) -> None:
-    _turns.append((str(pathlib.Path(path)), turn))
+def add_turn(path: str, turn: Turn, worktree: bool = False) -> None:
+    """worktree=True:這則是在 path 底下 runtime 開的 worktree 裡的 session 說的。"""
+    _turns.append((str(pathlib.Path(path)), turn, worktree))
 
 
 def start(sid: str) -> None:
@@ -66,15 +67,15 @@ def describe(task) -> list:
 
 # ---------- transcripts ----------
 
-def turns(paths, since: datetime.datetime, until: datetime.datetime | None = None):
+def turns(paths, since: datetime.datetime, until: datetime.datetime | None = None, worktrees: bool = False):
     want = {str(pathlib.Path(p)) for p in paths}
-    for path, t in sorted(_turns, key=lambda x: x[1].ts):
-        if path in want and t.ts >= since and (until is None or t.ts < until):
+    for path, t, wt in sorted(_turns, key=lambda x: x[1].ts):
+        if path in want and (worktrees or not wt) and t.ts >= since and (until is None or t.ts < until):
             yield t
 
 
 def last_activity(path) -> datetime.datetime | None:
-    ts = [t.ts for p, t in _turns if p == str(pathlib.Path(path))]
+    ts = [t.ts for p, t, wt in _turns if p == str(pathlib.Path(path)) and not wt]
     return max(ts) if ts else None
 
 

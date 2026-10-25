@@ -6,7 +6,8 @@
 
 目前的介面(其他層照設計文件的步驟一層一層加):
   transcripts(第 5 層):讀對話紀錄,用中立的格式
-    turns(paths, since, until=None) -> Iterator[Turn]   某個專案(它的工作目錄,可能好幾個)在時間範圍內的每一則
+    turns(paths, since, until=None, worktrees=False) -> Iterator[Turn]   某個專案(它的工作目錄,可能好幾個)在時間範圍內的每一則;
+                                                        worktrees=True 連 runtime 在這些工作目錄底下開的 worktree 裡的 session 也算
     last_activity(path) -> datetime | None              這個工作目錄最後一次有對話是什麼時候
   agent(第 1 層,跑一次):
     run(task: Task) -> TaskResult                       跑一次判斷點(prompt、工作目錄、模型、輸出 schema、逾時)

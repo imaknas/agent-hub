@@ -33,6 +33,9 @@ SCENARIO = [
     (WS, runtime_ports.Turn(T0 + datetime.timedelta(minutes=3), SID, "other")),
     ("/Users/someone/workspace/other", runtime_ports.Turn(T0, SID2, "human", "別的專案")),
 ]
+# 同一個專案、runtime 在它底下開的 worktree 裡的 session 一則真人訊息:只有 turns(worktrees=True) 才算
+SID3 = "cccccccc-3333-4333-8333-333333333333"
+WORKTREE_SCENARIO = [(WS, runtime_ports.Turn(T0 + datetime.timedelta(seconds=30), SID3, "human", "worktree 裡的訊息"))]
 
 
 # 「跑一次」的三種情境:正常完成、有結果但沒正常完成(例:回合上限)、失敗
@@ -52,7 +55,7 @@ class ClaudeFixture:
         root = tmp / "projects"
         m.transcript_roots = lambda: (root,)
         m.PROJECTS = root
-        for path, t in SCENARIO:
+        for path, t in SCENARIO + [(p + "/.claude/worktrees/wt1", t) for p, t in WORKTREE_SCENARIO]:
             d = root / m.slug_for_path(path)
             d.mkdir(parents=True, exist_ok=True)
             if t.role == "human":
@@ -118,6 +121,8 @@ class FakeFixture:
         m.reset()
         for path, t in SCENARIO:
             m.add_turn(path, t)
+        for path, t in WORKTREE_SCENARIO:
+            m.add_turn(path, t, worktree=True)
         m.set_context(SID, 1010)
         return m, {"FAKE_RUNTIME_SESSION": SID}
 
@@ -209,6 +214,16 @@ class Contract(unittest.TestCase):
             humans = [t.text for t in m.turns(["/Users/someone/workspace/other"], T0 - datetime.timedelta(hours=1))]
             self.assertEqual(humans, ["別的專案"])
             self.assertEqual(list(m.turns(["/Users/someone/workspace/none"], T0 - datetime.timedelta(hours=1))), [])
+        self.each(check)
+
+    def test_worktree_sessions_only_when_asked(self):
+        def check(m, env):
+            def humans(**kw):
+                return {t.text for t in m.turns([WS], T0 - datetime.timedelta(hours=1), **kw) if t.role == "human"}
+            self.assertEqual(humans(), {"幫我看一下測試"})
+            self.assertEqual(humans(worktrees=True), {"幫我看一下測試", "worktree 裡的訊息"})
+            self.assertEqual({t.text for t in m.turns(["/Users/someone/workspace/other"], T0 - datetime.timedelta(hours=1),
+                                                      worktrees=True) if t.role == "human"}, {"別的專案"})
         self.each(check)
 
     def test_last_activity(self):

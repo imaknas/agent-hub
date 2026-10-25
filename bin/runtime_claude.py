@@ -205,9 +205,16 @@ def _turn(o: dict, fallback_sid: str) -> Turn | None:
     return Turn(_parse_ts(ts), sid, "other")
 
 
-def turns(paths, since: datetime.datetime, until: datetime.datetime | None = None):
+def _transcript_dirs(root: pathlib.Path, path: str, worktrees: bool) -> list:
+    """這個工作目錄的對話紀錄資料夾;worktrees=True 再加上 Claude Code 開在 <path>/.claude/worktrees/<名稱> 的
+    session(資料夾名 <slug>--claude-worktrees-<名稱>)。"""
+    slug = slug_for_path(str(path))
+    return [root / slug, *(sorted(root.glob(slug + "--claude-worktrees-*")) if worktrees else ())]
+
+
+def turns(paths, since: datetime.datetime, until: datetime.datetime | None = None, worktrees: bool = False):
     for root, path in ((r, p) for r in transcript_roots() for p in paths):
-        for f in (root / slug_for_path(str(path))).glob("*.jsonl"):
+        for f in (f for d in _transcript_dirs(root, path, worktrees) for f in d.glob("*.jsonl")):
             if datetime.datetime.fromtimestamp(f.stat().st_mtime, datetime.timezone.utc) < since:
                 continue  # 範圍開始前就沒再寫過
             parsed = recognised = 0
