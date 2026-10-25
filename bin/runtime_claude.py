@@ -249,6 +249,21 @@ import os  # noqa: E402
 from runtime_ports import TaskResult  # noqa: E402
 
 
+def _env(task) -> dict:
+    """claude 的環境變數:PATH 補上 nvm 預設版本的 bin。claude 本身用完整路徑叫得到,但 plugin 的 hook
+    (例:vercel 的 SessionEnd `node …`)照 PATH 找 node;排程底下的 PATH 沒有 nvm、Homebrew 的 node 也沒了
+    (2026-10-24),librarian 每次都印 node: command not found。"""
+    env = dict(os.environ if task.env is None else task.env)
+    try:
+        import hubconf
+        nvm = hubconf.nvm_bin()
+    except Exception:
+        nvm = None
+    if nvm and str(nvm) not in env.get("PATH", "").split(":"):
+        env["PATH"] = f"{nvm}:{env['PATH']}" if env.get("PATH") else str(nvm)
+    return env
+
+
 def _flags(task) -> list:
     spec = task.spec
     try:
@@ -289,7 +304,7 @@ def run(task) -> TaskResult:
     cmd = describe(task)
     try:
         r = subprocess.run(cmd, cwd=task.cwd or None, capture_output=True, text=True, timeout=task.timeout_s,
-                           env=task.env)
+                           env=_env(task))
     except subprocess.TimeoutExpired:
         return TaskResult(False, error=f"超過 {task.timeout_s // 60} 分鐘")
     except FileNotFoundError:
@@ -318,7 +333,7 @@ def exec_stream(task) -> None:
     cmd = _flags(task)
     cmd[1:3] = ["-p"]  # 沒有 prompt 參數,訊息從 stdin(stream-json)來
     cmd += ["--input-format", "stream-json", "--output-format", "stream-json", "--include-partial-messages", "--verbose"]
-    os.execvpe(cmd[0], cmd, task.env if task.env is not None else os.environ)
+    os.execvpe(cmd[0], cmd, _env(task))
 
 
 # ---------- 事件(runtime_ports 的 lifecycle 介面)----------
