@@ -1,7 +1,7 @@
 #!/bin/sh -c exec${IFS}"${0%/*}/py"${IFS}"$0"${IFS}"$@"
 """把想法沙盒(登錄 type: idea)升級成正式專案:歷史、檔案、memory 都留著(docs/design/idea-sandboxes.md)。
 
-用法:upgrade-idea.py <idea-n> [--rename <新名稱>] [--public] [--apply] [--json]
+用法:upgrade-idea.py <沙盒名稱> [--rename <新名稱>] [--public] [--apply] [--json]
   不加 --apply 只印出會做什麼。--json:最後一行印結果(lease-runner 的 POST /v1/sandboxes/<name>/upgrade 用):
     {"result": "upgraded"|"already", "name", "origin"}                                  exit 0
     {"result": "not_found"|"not_idea"|"dirty"|"name_taken"|"failed", "detail"}        exit 1
@@ -11,7 +11,7 @@
      **升級後的登錄先驗證一次**(以前驗證放在建好 GitHub repo 之後,不合格就停在一半,10-25 idea-1);
      GitHub 上已經有同名 repo:內容是這個沙盒自己的歷史(遠端的 HEAD 在本機歷史裡,或是空的)= 上次做到一半,接著做;
      不是 = name_taken
-  2. --rename:呼叫 rename-project.sh <idea-n> <新名稱> --apply(資料夾、memory bare repo/副本、登錄一起改)
+  2. --rename:呼叫 rename-project.sh <沙盒名稱> <新名稱> --apply(資料夾、memory bare repo/副本、登錄一起改)
   3. gh repo create <github.owner>/<名稱>(預設 private)+ push(repo 已經是自己的就只 push),origin 改成 github.remote
   4. 登錄:type 改成 project、paths.origin 寫上;purpose、enforce(含 Knas 同意過的能力)、privacy 留著
   5. mirror-list.txt 加上 origin;重生 index.md 名冊;commit-hub-files 只 commit 這幾個檔
@@ -117,7 +117,7 @@ def main(argv: list[str]) -> int:
         else:
             args.append(a)
     if len(args) != 1:
-        fail("用法:upgrade-idea.py <idea-n> [--rename <新名稱>] [--public] [--apply]")
+        fail("用法:upgrade-idea.py <沙盒名稱> [--rename <新名稱>] [--public] [--apply]")
     name = args[0]
     prev = records().get(name)
     if prev and prev.get("stage", "done") == "done" and (hubconf.registry_dir() / f"{prev['name']}.yaml").exists():

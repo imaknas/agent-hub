@@ -9,8 +9,9 @@ index.json 是給只能用標準函式庫的程式(hubconf.py、hubbus)讀的。
 schema v1(contracts/project.v1.md 有完整說明):
   v: 1                      必填
   name                      必填,= 檔名
-  type: project | idea      預設 project。idea = Muninn 替想法開的探討用專案(bin/create-idea-sandbox.sh 建,
-                            名稱 idea-<n>,沒有 GitHub remote;bin/upgrade-idea.sh 升級成 project)
+  type: project | idea      預設 project。idea = Muninn 替想法開的探討用專案(bin/create-idea-sandbox.py 建,
+                            名稱是想法的代號、一般專案名稱的規則(早期的叫 idea-<n>),沒有 GitHub remote;
+                            bin/upgrade-idea.py 升級成 project)。是不是想法沙盒只看這個欄位,不看名稱
   purpose                   想法本身(一兩句);type: idea 必填,lease 的系統提示會帶上
   paths: {workspace, memory_bare, origin}       workspace 必填(平台自己除外)
   memory: true              參加 memory 追蹤

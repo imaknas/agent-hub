@@ -47,7 +47,7 @@ class CleanupOnFailure(unittest.TestCase):
         self.ws, self.go, self.mc = self.tmp / "workspace", self.tmp / "git-origin", self.tmp / "memory-copies"
         (self.hub / "hub.json").write_text(json.dumps({
             "v": 1, "registry_dir": "projects", "workspace_root": str(self.ws), "git_origin": str(self.go),
-            "memory_copies": str(self.mc), "ideas": {"limit": 20}}))
+            "memory_copies": str(self.mc), "services_root": str(self.tmp / "services"), "ideas": {"limit": 20}}))
         subprocess.run(["git", "init", "-q", str(self.hub)], check=True)
         subprocess.run(["git", "-C", str(self.hub), "-c", "user.name=t", "-c", "user.email=t@t", "commit", "-q",
                         "--allow-empty", "-m", "init"], check=True)
@@ -55,11 +55,11 @@ class CleanupOnFailure(unittest.TestCase):
     def tearDown(self):
         shutil.rmtree(self.tmp, ignore_errors=True)
 
-    def create(self, **env):
+    def create(self, name="idea-5", **env):
         e = {**os.environ, "AGENT_HUB_ROOT": str(self.hub), "HUB": str(self.hub), "GO": str(self.go),
              "MC": str(self.mc), "GIT_AUTHOR_NAME": "t", "GIT_AUTHOR_EMAIL": "t@t", "GIT_COMMITTER_NAME": "t",
              "GIT_COMMITTER_EMAIL": "t@t", **env}
-        r = subprocess.run([sys.executable, str(self.hub / "bin" / "create-idea-sandbox.py"), "idea-5", "試試看"],
+        r = subprocess.run([sys.executable, str(self.hub / "bin" / "create-idea-sandbox.py"), name, "試試看"],
                            capture_output=True, text=True, env=e)
         return r.returncode, json.loads(r.stdout.strip().splitlines()[-1])
 
@@ -84,6 +84,30 @@ class CleanupOnFailure(unittest.TestCase):
         self.create()
         code, res = self.create()  # 清乾淨之後再送一次:應該再試一次 onboard,不是回 exists
         self.assertEqual(res["result"], "create_failed")
+
+
+class Names(CleanupOnFailure):
+    """名稱是想法的代號,不限 idea-<n>(10-25 Muninn m10251646);是不是想法沙盒只看登錄的 type。"""
+
+    def test_human_readable_name_passes_checks(self):
+        code, res = self.create("room-3d")  # 過了名稱檢查才會走到 onboard(假的會失敗)
+        self.assertEqual(res["result"], "create_failed")
+        self.assertFalse((self.ws / "room-3d").exists(), "失敗要清乾淨")
+
+    def test_old_style_still_ok(self):
+        self.assertEqual(self.create("idea-12")[1]["result"], "create_failed")
+
+    def test_bad_names(self):
+        for name in ("Room", "-x", "x-", "a--b", "a_b", "idea 1", "x" * 41, "", "../x"):
+            with self.subTest(name):
+                self.assertEqual(self.create(name)[1]["result"], "bad_name")
+
+    def test_taken_names(self):
+        (self.ws / "notes").mkdir(parents=True)  # 沒登錄、但資料夾在
+        (self.tmp / "services" / "svc").mkdir(parents=True)
+        for name in ("agent-hub", "notes", "svc"):
+            with self.subTest(name):
+                self.assertEqual(self.create(name)[1]["result"], "exists")
 
 
 if __name__ == "__main__":

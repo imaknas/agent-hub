@@ -17,7 +17,7 @@ API:
   POST /v1/leases/<id>/detach         {v, reason} → 202;交接在背景跑,結果走事件
   GET  /v1/leases、GET /v1/status、GET /v1/policy(不能 allow_session 的網域,hub.json lease.no_session_domains)
   POST /v1/leases/<id>/mode           {v, mode: discuss|work} → 200;正在回答中 409 busy;work 只限想法沙盒(見 work_ready)
-  POST /v1/sandboxes                  {v, name: idea-<n>, purpose} → 201 新建 / 200 同名同 purpose 已存在(重送)
+  POST /v1/sandboxes                  {v, name: <想法的代號>, purpose} → 201 新建 / 200 同名同 purpose 已存在(重送)
                                       / 400 bad_name / 409 exists / 429 too_many(帶 limit、current)/ 500 create_failed
                                       想法沙盒:bin/create-idea-sandbox.py 建(docs/design/idea-sandboxes.md),建好就在 attachable
   POST /v1/sandboxes/<name>/upgrade   {v, rename?} → 200 {name, origin, upgraded}(升級過的再送回 upgraded:false + 現在的名稱)

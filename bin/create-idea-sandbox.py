@@ -2,10 +2,12 @@
 """替 Muninn 的想法開一個探討用的專案(想法沙盒,docs/design/idea-sandboxes.md)。
 
 想法沙盒 = 正常 onboard(有 .agent-memory:深談收回的交接筆記寫在那裡)、沒有 GitHub remote、
-登錄標 `type: idea` 的專案,放在 <workspace_root>/idea-<n>。登錄一起寫 purpose、`enforce: {sandbox: true}`
+登錄標 `type: idea` 的專案,放在 <workspace_root>/<名稱>。名稱是想法一開始就有的、人看得懂的代號(例:room-3d;
+2026-10-25 Knas 決定,以前限定 idea-<n>,既有的照常能用):小寫英數跟 -,不能跟登錄、資料夾、memory repo 撞名。
+「是不是想法沙盒」只看登錄的 type: idea,不看名稱。登錄一起寫 purpose、`enforce: {sandbox: true}`
 (真正的寫入封鎖)+ 預設的能力(hub.json capabilities 的 default_for,例 gpu;docs/design/capabilities.md)、`privacy: {reflection: stats_only}`,跟登記同一個 commit(onboard 的 ONBOARD_REGISTRY_EXTRA)。
 
-用法:create-idea-sandbox.py <idea-n> <purpose>
+用法:create-idea-sandbox.py <名稱> <purpose>
 輸出:最後一行是一個 JSON 物件(lease-runner 的 POST /v1/sandboxes 直接轉成回應):
   {"result": "created"|"exists_same", "name"}                              exit 0
   {"result": "bad_name"|"exists"|"too_many"|"create_failed", "detail", ...}  exit 1
@@ -31,7 +33,7 @@ import sys
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
 import hubconf  # noqa: E402
 
-NAME = re.compile(r"^idea-[0-9]+$")
+NAME = re.compile(r"^[a-z0-9](?:[a-z0-9-]{0,38}[a-z0-9])?$")  # 跟一般專案名稱同一套(rename-project.sh),最多 40 字
 
 
 def default_capabilities() -> list[str]:
@@ -60,8 +62,10 @@ def registered() -> dict[str, dict]:
 
 
 def create(name: str, purpose: str) -> int:
-    if not NAME.match(name):
-        return out("bad_name", 1, detail=f"名稱要是 idea-<數字>,收到 {name!r}")
+    if not NAME.match(name) or "--" in name:
+        return out("bad_name", 1, detail=f"名稱只能用小寫英文、數字跟 -(開頭結尾不能是 -,最多 40 字),收到 {name!r}")
+    if name == hubconf.hub_project():
+        return out("exists", 1, detail=f"{name} 是平台自己的名稱")
     purpose = " ".join(purpose.split())
     if not purpose:
         return out("bad_name", 1, detail="purpose 不能是空的")
@@ -79,7 +83,8 @@ def create(name: str, purpose: str) -> int:
     ws = hubconf.p("workspace_root", "~/workspace") / name
     bare = hubconf.p("git_origin", "~/git-origin") / f"{name}-memory.git"
     copy = hubconf.p("memory_copies", "~/.memory-copies") / name
-    taken = [str(x) for x in (ws, bare, copy) if x.exists()]
+    svc = hubconf.p("services_root", "~/services") / name
+    taken = [str(x) for x in (ws, bare, copy, svc) if x.exists()]
     if taken:
         return out("exists", 1, detail=f"{name} 沒有登錄,但這些已經存在:{', '.join(taken)}")
 
