@@ -377,7 +377,8 @@ def main() -> int:
             r.tick()
         except Exception as e:  # 一個專案的怪資料不能讓整個服務掛掉(launchd 會重啟,但正在跑的工作就變 lost)
             log(event="tick_error", detail=repr(e)[:300])
-        if not r.running and not r.queue and hubconf.code_stamp() > code_at_start:
+        stamp = hubconf.code_stamp()
+        if not r.running and not r.queue and stamp > code_at_start and time.time() - stamp > 60:  # 改完穩定 60 秒才重啟
             log(event="code_changed_restart")  # 舊模組跟新模組混用會壞(10-25 卡住過一個工作):空檔時讓 launchd 重啟
             return 0
         time.sleep(1)

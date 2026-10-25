@@ -576,12 +576,14 @@ def idle_loop() -> None:
 
 BUSY = ("attaching", "running", "resuming", "detaching")
 CODE_AT_START = 0.0
+CODE_SETTLE_S = 60  # 每次重啟 launchd 要等 10 秒才拉起來(throttle),連續改檔時不要一直重啟
 
 
 def restart_if_code_changed() -> None:
     """bin/ 的程式改過、而且沒有租約在跑或在交接:自己結束,讓 launchd(KeepAlive)用新的程式重啟。
     不然舊的模組會跟磁碟上的新模組混用(10-25 租約 9af483fb 的交接因此失敗)。閒置的租約重啟後照常 --resume 接回。"""
-    if hubconf.code_stamp() <= CODE_AT_START:
+    stamp = hubconf.code_stamp()
+    if stamp <= CODE_AT_START or time.time() - stamp < CODE_SETTLE_S:  # 改到一半(連續存檔)先不重啟,穩定了才一次重啟
         return
     with _lock:
         busy = [l.id[:8] for l in LEASES.values() if l.state in BUSY or l.waiting or l.in_turn]

@@ -116,9 +116,17 @@ class RestartOnCodeChange(unittest.TestCase):
         l.state = state
         self.m.LEASES[l.id] = l
 
-    def check(self, stamp):
-        with mock.patch.object(self.m.hubconf, "code_stamp", return_value=stamp):
+    def check(self, stamp, now=10_000.0):
+        with mock.patch.object(self.m.hubconf, "code_stamp", return_value=stamp), \
+                mock.patch.object(self.m.time, "time", return_value=now):
             self.m.restart_if_code_changed()
+
+    def test_still_being_edited_waits(self):
+        self.add("idle_stopped")
+        self.check(200.0, now=200.0 + self.m.CODE_SETTLE_S - 1)
+        self.assertEqual(self.exited, [])
+        self.check(200.0, now=200.0 + self.m.CODE_SETTLE_S + 1)
+        self.assertEqual(self.exited, [0])
 
     def test_unchanged_code_keeps_running(self):
         self.check(100.0)
