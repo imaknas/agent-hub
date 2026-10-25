@@ -1,6 +1,8 @@
 #!/usr/bin/env python3
 """第二階段:每個專案的 sandbox + 權限規則從專案登錄產生,寫進 `.claude/settings.local.json`(managed file)。
 
+要寫什麼:policy.py 算中立的政策、runtime_claude.settings() 翻成 Claude Code 的格式;這支只管寫檔、記錄、偵測偏移。
+
 只對登錄 `enforce: {sandbox: true}` 的專案寫;其他專案只算出「會寫什麼」(--report)。平台自己(agent-hub)不套。
 寫的內容:
   sandbox(整個 key 由平台管):enabled、failIfUnavailable、allowUnsandboxedCommands: false、
@@ -26,60 +28,21 @@ import sys
 
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
 import hubconf  # noqa: E402
+import policy  # noqa: E402
 import registry  # noqa: E402
+import runtime_claude  # noqa: E402
 
 RENDERED = hubconf.STATE / "rendered-settings"
-HOME = str(pathlib.Path.home())
-WRITE_CACHES = ["~/.cache/uv", "~/.cache/pip", "~/.npm", "~/.cache/node", "~/Library/Caches/pip",
-                "~/Library/Caches/uv", "~/.local/share/uv"]
-DOMAINS = ["github.com", "api.github.com", "codeload.github.com", "objects.githubusercontent.com",
-           "raw.githubusercontent.com", "pypi.org", "files.pythonhosted.org", "registry.npmjs.org"]
-
-
-def tilde(p: pathlib.Path) -> str:
-    s = str(p)
-    return "~" + s[len(HOME):] if s.startswith(HOME) else s
-
-
-def project_paths(index: dict) -> dict[str, list[pathlib.Path]]:
-    out = {}
-    for name, doc in index["projects"].items():
-        if name == hubconf.hub_project():
-            continue
-        d = registry.dirs(doc)
-        out[name] = [p for p in (d["workspace"], d["runtime"]) if p]
-    return out
 
 
 def desired(name: str, doc: dict, index: dict) -> tuple[dict, list[str], list[str]]:
-    """(sandbox, deny 規則, allow 規則)"""
-    paths = project_paths(index)
-    others = [p for n, ps in paths.items() if n != name for p in ps]
-    d = registry.dirs(doc)
-    deny = []
-    for p in others:
-        deny += [f"Read(/{p}/**)", f"Edit(/{p}/**)"]  # //abs:絕對路徑
-    deny += ["Edit(~/agent-hub/**)", "Edit(~/git-origin/**)", "Edit(~/.memory-copies/**)",
-             "Edit(~/Library/LaunchAgents/**)", "Read(~/.memory-copies/*/memory/**)", "Read(~/agent-hub/.secrets/**)"]
-    allow = ["Bash(~/agent-hub/bin/hubbus *)", "Bash(~/agent-hub/bin/merge-branch *)"]
-    write = ([tilde(d["runtime"])] if d["runtime"] else []) + [tilde(hubconf.BUS_DIR)] + WRITE_CACHES \
-        + list(doc.get("allow_write") or [])
-    sandbox = {
-        "enabled": True,
-        "failIfUnavailable": True,
-        "allowUnsandboxedCommands": False,
-        "filesystem": {
-            "allowWrite": write,
-            "denyRead": [tilde(p) for p in others] + ["~/.memory-copies/*/memory", "~/agent-hub/.secrets"],
-        },
-        "network": {"allowedDomains": DOMAINS + list(doc.get("network") or [])},
-    }
-    return sandbox, deny, allow
+    """(sandbox, deny 規則, allow 規則):中立政策(policy.py)翻成 Claude Code 的設定(runtime_claude.py)。"""
+    return runtime_claude.settings(policy.policy(name, doc, index))
 
 
 def settings_path(doc: dict) -> pathlib.Path | None:
     ws = registry.dirs(doc)["workspace"]
-    return ws / ".claude" / "settings.local.json" if ws else None
+    return runtime_claude.settings_path(ws) if ws else None
 
 
 def apply(name: str, doc: dict, index: dict, report: bool) -> list[str]:

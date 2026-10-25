@@ -178,21 +178,12 @@ def load() -> None:
 # ---------- 設定:deny 清單、MCP、網域 ----------
 
 def deny_settings(project: str) -> pathlib.Path:
-    """跟 render-project-settings 算的同一份 deny(不管專案有沒有開 enforce)+ 使用者層級的敏感檔。"""
-    import importlib.util
-    import registry
-    spec = importlib.util.spec_from_file_location("rps", HUB / "bin" / "render-project-settings.py")
-    m = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(m)
-    idx = registry.refresh()
-    _, deny, _ = m.desired(project, idx["projects"][project], idx)
-    deny += ["Read(~/.claude.json)", "Read(~/.claude/**)", "Read(~/.ssh/**)", "Read(~/.config/gh/**)", "Read(~/.aws/**)"]
-    # Keychain 不是檔案,OS sandbox 擋不住(10-25 實測:sandbox 裡的 Bash 查得到 Claude 的登入憑證)。
-    # 這幾條只是補強——換個寫法(sh -c、python)就繞得過,真正的把關是 work 模式的指令每次都問 Knas
-    deny += ["Bash(security:*)", "Bash(security *)", "Bash(/usr/bin/security *)"]
+    """跟 render-project-settings 同一份政策的 deny(不管專案有沒有開 enforce)+ 使用者層級的憑證(runtime_claude.lease_settings)。"""
+    import policy
+    import runtime_claude
     p = DIR / project / "settings.json"
     p.parent.mkdir(parents=True, exist_ok=True)
-    p.write_text(json.dumps({"permissions": {"deny": deny}}, ensure_ascii=False))
+    p.write_text(json.dumps(runtime_claude.lease_settings(policy.for_project(project)), ensure_ascii=False))
     return p
 
 
@@ -228,14 +219,8 @@ def work_ready(project: str) -> tuple[bool, str]:
     doc = hubconf.projects().get(project) or {}
     if doc.get("type") != "idea":
         return False, f"{project} 不是想法沙盒;work 模式目前只開給想法沙盒"
-    ws = hubconf.workspace(project)
-    try:
-        st = json.loads((ws / ".claude" / "settings.local.json").read_text())
-    except (OSError, ValueError, TypeError):
-        return False, "sandbox 還沒寫進這個專案的設定(settings.local.json 讀不到)"
-    if not (st.get("sandbox") or {}).get("enabled"):
-        return False, "sandbox 還沒寫進這個專案的設定(sandbox.enabled 不是 true)"
-    return True, ""
+    import runtime_claude
+    return runtime_claude.sandbox_rendered(hubconf.workspace(project))
 
 
 def work_projects() -> list[str]:
