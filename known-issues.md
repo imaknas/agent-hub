@@ -76,6 +76,12 @@
 - **改了設定檔 ≠ 執行中的 process 已經載入**:看 log 確認 reload,或直接重啟。
 - **一個工具只留一個安裝來源**:Homebrew 跟 nvm 各一份同一個 CLI,版本漂移後
   protocol 不相容。升級後跑 `which -a <tool>` 檢查。
+- **mini 上 `python3` = uv 管的 3.13**(2026-10-25 Knas):`uv python install 3.13 --default` 裝 `~/.local/bin/python3`、`python`,
+  `~/.zshenv`(非登入 shell:ssh 指令、Claude session)跟 `~/.zprofile`(登入 shell,在 path_helper、brew shellenv 之後)都把
+  `~/.local/bin` 放 PATH 最前面。不手寫 symlink;`/usr/bin/python3` 是 Apple 的 3.9(SIP)不動,Homebrew 的 3.14 用
+  `python3.14` 叫(它的全域套件 requests/google-api… 只在那裡)。專案要套件用 uv 的 venv(`uv run`),不要裝進全域 python。
+  平台腳本不靠 PATH 找 python(`bin/py` → 平台自己的 venv);launchd 的 job 用平台的 PATH,不含 `~/.local/bin`。
+  `uv python uninstall 3.13` 會讓這個 `python3` 跟平台的 venv 一起斷。
 - **移除本機模型前先 grep 設定**(例如 `models.env`):gemma4:e4b 被移掉後,LINE
   圖片分析一直 404。
 - **測試 / 第二個 instance 要用乾淨的環境變數啟動**(`env -u DISCORD_BOT_TOKEN …`):
