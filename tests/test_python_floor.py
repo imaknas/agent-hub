@@ -18,7 +18,7 @@ EXEMPT = {"bin/scheduler-watchdog.py", "bin/migrate-to-mini.py", "launchd/local.
           "tests/test_cap_profile.py", "tests/test_python_floor.py"}
 # 暫時的例外(要有理由、要拿掉):lease-runner 的服務換成 bin/py 要重載 launchd,會切斷正在進行的深談;
 # render-services 還不會等服務閒置。沒有深談在跑時把登錄那行換成 `bin/py bin/lease-runner.py`,再刪掉這一項。
-TEMPORARY = {("projects/agent-hub.yaml", "bin/lease-runner.py")}
+TEMPORARY: set = set()  # 10-25 lease-runner 換成 bin/py 之後沒有例外了
 SCANNED = ["bin", "launchd", "tests", "githooks", "agent-jobs", "templates", "projects/agent-hub.yaml", "schedule.yaml"]
 
 

@@ -111,7 +111,7 @@ services:
 - name: lease-runner             # 通道租借(bin/lease-runner.py):127.0.0.1:18797,Bearer token 在 .secrets/runner-token
   label: local.agent-hub.lease-runner
   cwd: hub
-  run: /opt/homebrew/bin/python3 bin/lease-runner.py   # 暫時:換成 bin/py 要重載服務,等沒有深談在跑再換(10-25)
+  run: bin/py bin/lease-runner.py
   keepalive: true
   throttle_s: 10
   env: {PATH: "$PLATFORM_PATH"}   # nvm 預設版本(claude)+ Homebrew,見 hubconf.LAUNCHD_PATH
