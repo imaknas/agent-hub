@@ -633,3 +633,21 @@ def credentials() -> list:
 def is_login_error(text: str) -> bool:
     """claude 的登入錯誤(Login expired、/login、401、OAuth…);找不到 claude 本身也要人處理,一起算。"""
     return bool(_LOGIN_ERROR.search(text or "")) or "找不到 claude" in (text or "")
+
+
+def relocate(sid: str, old_cwd: str, new_cwd: str) -> bool:
+    """資料夾搬了(改名、升級):Claude Code 的對話紀錄照資料夾的 slug 放,`--resume` 只在目前資料夾的那格找——
+    把 <sid>.jsonl(跟子 agent 的 <sid>/)搬到新資料夾那格。已經在新的地方 = True;哪裡都找不到 = False。"""
+    import shutil
+    if not re.fullmatch(r"[0-9a-f-]{36}", sid or ""):
+        return False
+    old_dir, new_dir = PROJECTS / slug_for_path(str(old_cwd)), PROJECTS / slug_for_path(str(new_cwd))
+    if (new_dir / f"{sid}.jsonl").exists():
+        return True
+    if not (old_dir / f"{sid}.jsonl").exists():
+        return False
+    new_dir.mkdir(parents=True, exist_ok=True)
+    for name in (f"{sid}.jsonl", sid):
+        if (old_dir / name).exists() and not (new_dir / name).exists():
+            shutil.move(str(old_dir / name), str(new_dir / name))
+    return True

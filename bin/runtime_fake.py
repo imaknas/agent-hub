@@ -222,3 +222,7 @@ def credentials() -> list:
 
 def is_login_error(text: str) -> bool:
     return "not signed in" in (text or "")
+
+
+def relocate(sid: str, old_cwd, new_cwd) -> bool:
+    return sid in _resumable  # 假的 runtime 沒有照資料夾放的紀錄:接得回來的就接得回來

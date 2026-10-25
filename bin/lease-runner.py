@@ -645,6 +645,29 @@ def prune_files() -> None:
         lease_files.prune(d, lease_files.KEEP_DAYS * 86400)
 
 
+def follow_upgrade(old: str, new: str, old_ws: str) -> None:
+    """升級完:這個沙盒的租約跟上新的名稱、資料夾;work 改回 discuss(work 只開給想法沙盒)。"""
+    import registry
+    registry.refresh()
+    new_ws = str(hubconf.workspace(new) or old_ws)
+    with _lock:
+        mine = [l for l in LEASES.values() if l.project == old]
+        for l in mine:
+            moved = old_ws != new_ws and rt().relocate(l.id, old_ws, new_ws)
+            renamed = (l.project, l.cwd) != (new, new_ws)
+            l.project, l.cwd = new, new_ws
+            downgraded = l.mode == "work" and not work_ready(new)[0]
+            if downgraded:
+                l.mode = "discuss"
+            if live(l) and (renamed or downgraded):
+                extra = {"project": new} if renamed else {}
+                if downgraded:
+                    extra.update(mode="discuss", detail="升級成正式專案了:work 模式目前只開給想法沙盒,這段深談改回唯讀")
+                l.emit("state", state=l.state, **extra)
+            log(f"upgrade {old} → {new}:租約 {l.id[:8]} 跟上(對話紀錄{'搬了' if moved else '沒搬'})")
+        save()
+
+
 def live(l: Lease) -> bool:
     return l.state not in ("detached",)
 
@@ -910,10 +933,24 @@ class H(http.server.BaseHTTPRequestHandler):
         return self.reply(code, body)
 
     def upgrade_sandbox(self, name: str, b: dict) -> None:
-        """想法沙盒升級成正式專案:交給 upgrade-idea.py(檢查、改名、建 GitHub repo、登錄),把結果轉成 HTTP。"""
+        """想法沙盒升級成正式專案:交給 upgrade-idea.py(檢查、改名、建 GitHub repo、登錄),把結果轉成 HTTP。
+        那個沙盒有租約時(10-25 m10251626、m10251631):正在回答或等使用者回覆 → 409 busy;否則先停程序(租約還在,
+        之後的訊息自動接回)。改名的話資料夾會搬:對話紀錄跟著搬到新資料夾(rt().relocate)、租約的 project/cwd 改成新的,
+        還沒收回的租約送 state 事件帶新的 project——之後的訊息照常送,runner 在新資料夾接回同一段對話。
+        work 模式目前只開給想法沙盒:升級後,work 中的租約改回 discuss(state 事件帶 mode 跟 detail)。"""
         rename = b.get("rename")
         if rename is not None and not isinstance(rename, str):
             return self.err(400, "bad_request", "rename 要是字串")
+        with _lock:
+            mine = [l for l in LEASES.values() if l.project == name]
+            busy = [l for l in mine if live(l) and (l.in_turn or l.waiting or l.state in ("attaching", "resuming",
+                                                                                        "detaching", "terminal"))]
+            if busy:
+                return self.err(409, "busy", f"{name} 有深談正在回答、等回覆、在終端機或正在收回,等它停下來再升級")
+            for l in mine:
+                if l.proc is not None:
+                    stop_proc(l, "idle_stopped")
+        old_ws = str(hubconf.workspace(name) or "")
         cmd = [PY, str(HUB / "bin" / "upgrade-idea.py"), name, "--apply", "--json"] + (["--rename", rename] if rename else [])
         env = {**os.environ, "PATH": f"{hubconf.LAUNCHD_PATH}:/usr/sbin:/sbin"}
         try:
@@ -925,6 +962,7 @@ class H(http.server.BaseHTTPRequestHandler):
         log(f"upgrade {name}: {res.get('result')} {res.get('name', '')} {res.get('detail', '')}")
         result = res.get("result")
         if result in ("upgraded", "already"):
+            follow_upgrade(name, res["name"], old_ws)
             return self.reply(200, {"v": 1, "name": res["name"], "origin": res["origin"], "upgraded": result == "upgraded"})
         code = {"not_found": 404, "not_idea": 409, "dirty": 409, "name_taken": 409}.get(result, 500)
         return self.reply(code, {"v": 1, "error": result if code != 500 else "upgrade_failed",
@@ -955,6 +993,8 @@ class H(http.server.BaseHTTPRequestHandler):
                 return self.reply(409, {"v": 1, "error": "cap_reached", "detail": f"同時最多 {GLOBAL_CAP} 個",
                                         "leases": [l.public() for l in LEASES.values() if live(l)]})
             prev = LEASES.get(sid)  # 已收回的租約用同一個 id 接回(Muninn 回到同一段對話):
+            if prev and prev.cwd != str(ws):  # 資料夾搬過(改名、升級):對話紀錄跟過來,才接得回
+                rt().relocate(sid, prev.cwd, str(ws))
             # 事件序號、處理過的訊息要接著舊的,不然序號從 0 重來、跟 events.jsonl 裡的舊事件撞號,SSE 續接會亂
             lease = Lease({"lease_id": sid, "project": proj, "mode": mode, "thread": b.get("thread", ""),
                            "cwd": str(ws), "started_once": bool(b.get("resume")), "state": "attaching",

@@ -40,6 +40,7 @@
     classify_exit(code, stderr_tail) -> StreamEvent      程序結束了:沒登入(agent_login)還是掛了(process_crashed)
     resumable(sid) -> bool                               這段對話還接得回來嗎(紀錄還在)
     resume_command(sid) -> (command, hint)               在終端機接續的指令跟給人看的一句
+    relocate(sid, old_cwd, new_cwd) -> bool              專案資料夾搬了(改名、升級):讓這段對話在新資料夾也接得回來
 
 標準函式庫,系統的 python3(3.9)也能 import(hubbus 用的就是它)。
 """
@@ -60,7 +61,7 @@ PORTS = {
     "instructions": ("instructions_file", "local_ignores"),
     "transcripts": ("turns", "last_activity"),
     "sessions": ("alive", "live_sessions", "context_size", "current_session"),
-    "stream": ("action", "parse_stream", "classify_exit", "resumable", "resume_command"),
+    "stream": ("action", "parse_stream", "classify_exit", "resumable", "resume_command", "relocate"),
     "auth": ("auth_env", "clean_env", "credentials", "is_login_error"),
 }
 

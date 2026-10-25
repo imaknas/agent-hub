@@ -14,7 +14,7 @@ render-services 會在它沒在跑時發警報)。客戶端是 bin/hub-run。
 state.json:{state: queued|running|done|rejected|lost, reason?, exit?, timed_out?, at}
   exit 照 shell 的習慣:被信號殺掉 = 128 + 信號;逾時 = 124(timed_out: true)
 
-只服務登錄 type: idea、enforce.sandbox: true、enforce.capabilities 有宣告的專案。檢查(不過就 rejected + 理由):
+只服務登錄 enforce.sandbox: true、enforce.capabilities 有宣告的專案(想法沙盒預設有 gpu,升級成正式專案後照樣保留)。檢查(不過就 rejected + 理由):
   .hub-run/、requests/、jobs/ 都不能是 symlink(全部用 O_NOFOLLOW 的目錄 fd 操作,結果不會被導到別的專案)、
   請求是一般檔案、≤ 64 KB、10 分鐘內;id 是單純的檔名;cap 是這個專案宣告的;argv 是字串 list;
   cwd 解析成真實路徑後在專案資料夾裡;timeout_s ≤ hub.json cap_runner.max_timeout_s。
@@ -75,7 +75,7 @@ def eligible() -> dict[str, tuple[pathlib.Path, list[str]]]:
         enf = doc.get("enforce") or {}
         caps = list(enf.get("capabilities") or [])
         ws = hubconf.workspace(name)
-        if doc.get("type") == "idea" and enf.get("sandbox") is True and caps and ws and ws.is_dir():
+        if enf.get("sandbox") is True and caps and ws and ws.is_dir():
             out[name] = (ws.resolve(), caps)
     return out
 

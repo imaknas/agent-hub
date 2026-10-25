@@ -555,7 +555,8 @@
           "$ref": "#/$defs/lease/properties/state"
         },
         "mode": {
-          "type": "string"
+          "type": "string",
+          "description": "模式變了才帶(例:升級成正式專案後 work 改回 discuss,detail 說原因)"
         },
         "resumed": {
           "type": "boolean",
@@ -572,6 +573,10 @@
         },
         "warned": {
           "type": "boolean"
+        },
+        "project": {
+          "type": "string",
+          "description": "租約的專案;升級改名後的 state 事件會帶新的名稱(之後照常送話,runner 在新資料夾接回同一段對話)"
         }
       }
     },
