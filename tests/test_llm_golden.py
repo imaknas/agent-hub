@@ -43,10 +43,15 @@ class Golden(unittest.TestCase):
                 "token": {"LLM_AUTH": "token"}}
 
     def setUp(self):
+        # 憑證放在假的 HOME(不 patch 模組裡的變數:登入搬到哪一層,這個測試都不用改)
+        tmp = pathlib.Path(tempfile.mkdtemp()).resolve()
+        (tmp / ".claude").mkdir()
+        self.token_file = tmp / ".claude" / "headless-oauth-token"
+        self.token_file.write_text("not-a-real-token\n")
+        home = mock.patch.dict(os.environ, {"HOME": str(tmp)})
+        home.start()
+        self.addCleanup(home.stop)
         self.m = load_llm()
-        tmp = pathlib.Path(tempfile.mkdtemp())
-        self.m.TOKEN_FILE = tmp / "token"
-        self.m.TOKEN_FILE.write_text("not-a-real-token\n")
         self.prompt = tmp / "prompt.txt"
         self.prompt.write_text("golden prompt")
 
@@ -93,7 +98,7 @@ class Golden(unittest.TestCase):
         self.assertNotIn("not-a-real-token", GOLDEN.read_text())
 
     def test_missing_token_file_fails_instead_of_falling_back(self):
-        self.m.TOKEN_FILE = self.m.TOKEN_FILE.parent / "missing"
+        self.token_file.unlink()
         spec = self.m.points()["points"]["login-check"]
         with mock.patch.dict(os.environ, {"LLM_AUTH": "token"}):
             env, auth = self.m.auth_env(spec)
