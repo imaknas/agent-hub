@@ -93,3 +93,37 @@ def context_size(sid: str) -> int | None:
 
 def current_session(env) -> str | None:
     return env.get(_env_key) or None
+
+
+# ---------- lifecycle(用自己的格式,不是 Claude 的:證明介面沒有 Claude 的形狀)----------
+# 原生輸入:{"sid", "dir", "cmd"?, "where"?, "elsewhere"?};輸出:{"say": 文字} / {"block": 理由};
+# 安裝:在專案資料夾寫 .fake-hooks.json(事件清單)。
+
+import json  # noqa: E402
+
+from runtime_ports import EVENTS, HubEvent  # noqa: E402
+
+
+def parse_event(event: str, raw: str):
+    try:
+        d = json.loads(raw or "{}")
+    except ValueError:
+        return None
+    if not d.get("sid"):
+        return None
+    target = ({"cwd": d.get("where"), "elsewhere": {"kind": d["elsewhere"]} if d.get("elsewhere") else None}
+              if event == "open_session_attempt" else None)
+    return HubEvent(event, d["sid"], d.get("dir", ""), command=d.get("cmd") if event == "tool_used" else None,
+                    target=target)
+
+
+def inject(event: str, text: str) -> str:
+    return json.dumps({"say": text}, ensure_ascii=False) if text and event in ("session_start", "prompt", "tool_used") else ""
+
+
+def deny(event: str, reason: str) -> str:
+    return json.dumps({"block": reason}, ensure_ascii=False) if event == "open_session_attempt" else ""
+
+
+def install_lifecycle(workspace) -> None:
+    (pathlib.Path(workspace) / ".fake-hooks.json").write_text(json.dumps(list(EVENTS)))

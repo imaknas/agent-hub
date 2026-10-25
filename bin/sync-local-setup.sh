@@ -6,7 +6,7 @@
 #      templates/CLAUDE.md(加上 .agent-memory/RULES 登記的 templates/rules/*.md)重生——改了 template,所有專案下次開 session 就
 #      跟上,不用靠人記得去補。區塊外的內容不動。舊版沒有標記、直接 append
 #      的 pointer 段落會被換成有標記的區塊。
-#   2. .claude/settings.local.json 的 hook(merge-hook-settings.py,只補不刪)
+#   2. .claude/settings.local.json 的 hook(由執行環境裝:`hub-event install`;平台管的換新、使用者自己加的留著)
 #   2b. .agent-memory/AGENT.md 對齊 templates/AGENT.md——這個是例外:它在
 #      memory 分支上,會 commit+push(只 commit AGENT.md),不碰專案 repo
 #   3. .agent-memory/、CLAUDE.local.md、.claude/settings.local.json 如果沒被 ignore,寫進
@@ -89,8 +89,8 @@ if new != old:
 PY
 
 # --- 2. hook ---
-mkdir -p .claude
-python3 "$AGENT_HUB/bin/merge-hook-settings.py" .claude/settings.local.json && say "hook 已對齊"
+# 由執行環境裝(runtime_ports 的 lifecycle):平台管的 hook 全部換成 `hub-event <事件>`,使用者自己加的留著
+/usr/bin/python3 "$AGENT_HUB/bin/hub-event" install "$PWD" && say "hook 已對齊"
 
 # --- 2b. .agent-memory/AGENT.md 對齊 templates/AGENT.md ---
 # AGENT.md 在 memory 分支上(會被 commit、同步到 mini),不是本機檔;
@@ -128,20 +128,8 @@ for f in .agent-memory CLAUDE.local.md .claude/settings.local.json; do
     fi
   fi
 done
-# --- 3b. memory 筆記落後就提醒(--quiet 也印)---
-# 每次 SessionStart 都會跑到這裡,包括對話被壓縮之後(source=compact)。壓縮後的摘要
-# 常常沒帶上「做完事就記筆記」的習慣(project-25 2026-09-27 就是這樣斷掉的),
-# 所以在這個時間點把提醒放回 context。沒落後就什麼都不印。
-python3 "$AGENT_HUB/bin/memory-nudge.py" --session-start 2>/dev/null || true
-
-# --- 3c. 專案信箱(hubbus):還沒結案的信送進 context(--quiet 也印)---
-# 只有真的 SessionStart hook 才有 stdin 的 hook JSON;onboard/rename 用 --quiet 跑的時候沒有,
-# hubbus 看不到 session_id 就什麼都不做。read -t:stdin 是開著但沒資料的 pipe 也不會卡住。
-if $QUIET && [ ! -t 0 ]; then
-  hook_json=""
-  IFS= read -r -t 1 hook_json || true
-  [ -n "$hook_json" ] && printf '%s' "$hook_json" | python3 "$AGENT_HUB/bin/hubbus" hook session-start 2>/dev/null || true
-fi
+# --- 3b/3c. memory 落後提醒、專案信箱:不在這裡了 ---
+# SessionStart 時由 `hub-event session_start` 統一呼叫(這支被它當成「純設定」跑;兩邊都做會送兩次)。
 
 # --- 4. 被 commit 的檔案不能提到這套機制 ---
 # repo 之後會不會公開沒有定論,所以一律不准:agent-hub、.agent-memory 的名稱或路徑

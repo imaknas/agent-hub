@@ -22,6 +22,8 @@ MBP 斷線/沒電/闔上不會中斷正在跑的工作(2026-10-14 project-16 試
 用法:migrate-to-mini.py <name> [--apply] [--allow-local-branches] [--skip <相對路徑>]...
   --skip:這次不搬的不進版控檔案(例:留在 MBP 備份就好的大型實驗資料庫),可以給多次
 """
+from __future__ import annotations  # 系統的 python3(3.9)也要能 import
+
 import argparse
 import datetime
 import json

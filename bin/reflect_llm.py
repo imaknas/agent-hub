@@ -8,6 +8,8 @@ session muninn 自己就扣掉,只給數量)。EXCLUDED 的專案連摘要也不
 這個指令、失敗、或這週還沒有摘要時,只送統計。2026-W42 以前的報告是用訊息抽樣寫的,那些
 json 照舊保留。欄位定義在 muninn repo;改了要兩邊一起改。
 """
+from __future__ import annotations  # 系統的 python3(3.9)也要能 import
+
 import json
 import os
 import pathlib

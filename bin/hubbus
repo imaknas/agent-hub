@@ -284,31 +284,47 @@ def hook_input() -> dict:
     return {}
 
 
+HOOK_EVENTS = {"session-start": "session_start", "prompt": "prompt", "post-tool": "tool_used"}  # 舊名稱 → 平台事件
+
+
 def cmd_hook(event: str) -> None:
+    """舊的 `hubbus hook <事件>` 入口:worktree 的使用者層級 hook 跟還沒換新設定的專案還在叫它(Knas 改使用者層級
+    設定之前都要能用)。邏輯在 mail_text;輸出透過執行環境的 inject,跟以前一字不差。"""
+    import runtime_ports
     data = hook_input()
-    session = data.get("session_id")
-    # 沒有 hook JSON = 不是真的 session 在跑(onboard/rename 也會用 --quiet 跑 sync-local-setup.sh):
+    text = mail_text(event, data.get("session_id"), data.get("cwd"))
+    if text:
+        out = runtime_ports.load(ports=("lifecycle",)).inject(HOOK_EVENTS[event], text)
+        if out:
+            print(out)
+
+
+def mail_text(event: str, session, cwd) -> str | None:
+    """平台的邏輯:記在場紀錄、把這個 session 該收的信送進去,回傳要放進 context 的文字(沒有就 None)。
+    event 是 session-start / prompt / post-tool。跟執行環境無關。"""
+    # 沒有 session = 不是真的 session 在跑(onboard/rename 也會用 --quiet 跑 sync-local-setup.sh):
     # 什麼都不做,不然信會被記成 delivered,卻沒有任何 session 看到
     if not session or not DB.exists():
-        return
+        return None
     if event == "post-tool":
         # 限流:每個 session 最多 POST_TOOL_EVERY_S 查一次(戳記放 /tmp,不寫進匯流排;在查 git 之前就擋掉)
         stamp = pathlib.Path(os.environ.get("TMPDIR", "/tmp")) / f"hubbus-post-tool-{session}"
         try:
             if time.time() - stamp.stat().st_mtime < POST_TOOL_EVERY_S:
-                return
+                return None
         except OSError:
             pass
         stamp.touch()
-    project = project_of(pathlib.Path(data.get("cwd") or os.getcwd()))
+    cwd = cwd or os.getcwd()
+    project = project_of(pathlib.Path(cwd))
     if not project:
-        return
+        return None
     c = db(timeout=HOOK_TIMEOUT_S)
     c.execute("BEGIN IMMEDIATE")
     if not os.environ.get("HUBBUS_LEASE"):  # 租約的 session 不算收件人
         c.execute("INSERT INTO presence(session, project, cwd, seen) VALUES(?,?,?,?) ON CONFLICT(session) DO UPDATE"
                   " SET project=excluded.project, cwd=excluded.cwd, seen=excluded.seen",
-                  (session, project, str(data.get("cwd") or os.getcwd()), iso()))
+                  (session, project, str(cwd), iso()))
     if event == "session-start":
         # 開 session(含壓縮後):新的全送,之前送過但還沒 done 的列一行,不然壓縮後就看不到了
         rows = inbox(c, project, session)
@@ -322,8 +338,8 @@ def cmd_hook(event: str) -> None:
                 taken = claimed(c, [r["id"] for r in old])
                 parts += ["之前送過、還沒 done 的:",
                           *(fmt(r, long=False) + ("(平台正在處理,不用做)" if r["id"] in taken else "") for r in old)]
-            print("\n".join([*parts, FOOTER]))
-        return
+            return "\n".join([*parts, FOOTER])
+        return None
     rows = inbox(c, project, session, only_new=True)
     mark_delivered(c, rows, session, event)
     # 給這個 session 的對話回信,在它閒置時被平台在背景接續處理掉了:下次有動作時提一行,不然它不知道
@@ -336,11 +352,10 @@ def cmd_hook(event: str) -> None:
     if handled:
         rows = rows + handled
     if rows:
-        text = "\n".join([HEADER.format(n=len(rows), p=project),
+        return "\n".join([HEADER.format(n=len(rows), p=project),
                            *(fmt(r) + ("\n  (你閒置時平台已經用你的 context 在背景處理了這封,結果看回信或 memory 筆記;不用再做)"
                                        if r in handled else "") for r in rows), FOOTER])
-        name = "UserPromptSubmit" if event == "prompt" else "PostToolUse"
-        print(json.dumps({"hookSpecificOutput": {"hookEventName": name, "additionalContext": text}}, ensure_ascii=False))
+    return None
 
 
 # ---------- bridge:Muninn ↔ 匯流排、升級、清理 ----------

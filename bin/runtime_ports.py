@@ -14,6 +14,11 @@
     失敗政策(on_failure、job.failed、schema 驗證、成本累計)留在 llm.py,不在 runtime 裡(設計原則 10)。
     Task.spec 是判斷點的宣告(contracts/llm-points.yaml);裡面還有 Claude 專用的欄位(allowed_tools、permission_mode…),
     要等第 2 層的中立政策(另一個 session)定案才換掉——在那之前只有 runtime 自己讀這些欄位,llm.py 不讀。
+  lifecycle(第 3 層,事件):平台自己的事件名稱(EVENTS),各 runtime 把原生的 hook 接到 `bin/hub-event <事件>`
+    parse_event(event, raw) -> HubEvent | None          原生的 hook 輸入 → 中立的事件(不是真的 session 在跑就 None)
+    inject(event, text) -> str                           要放進 agent context 的文字 → 原生的輸出格式(這個事件不能放就 "")
+    deny(event, reason) -> str                           擋下這個動作 → 原生的輸出格式
+    install_lifecycle(workspace) -> None                 在這個專案裝好 hook(平台管的換成新的,使用者自己加的留著)
   sessions(第 1 層的一部分):
     alive(sid) -> bool、live_sessions() -> set[str]、context_size(sid) -> int | None(接續要載入多少 token)
     current_session(env) -> str | None                   目前這個程序屬於哪個 session(給 hubbus send 記寄件人)
@@ -33,12 +38,26 @@ DEFAULT = "claude"   # hub.json 沒寫 runtime.default 時的預設
 
 PORTS = {
     "agent": ("run", "describe"),
+    "lifecycle": ("parse_event", "inject", "deny", "install_lifecycle"),
     "transcripts": ("turns", "last_activity"),
     "sessions": ("alive", "live_sessions", "context_size", "current_session"),
 }
 
 # 中立的「動作種類」:對話紀錄裡 agent 做了什麼,不用任何 runtime 的工具名稱。
 ACTIONS = ("subagent", "workflow", "peer_message", "skill", "tool")
+
+
+# 平台的事件(第 3 層)。runtime 沒有某個時機就不支援,平台照不支援處理,不假裝有。
+EVENTS = ("session_start", "session_end", "pre_compact", "prompt", "tool_used", "open_session_attempt")
+
+
+class HubEvent(NamedTuple):
+    event: str               # EVENTS 之一
+    session: str             # 哪個 session
+    cwd: str                 # 這個 session 在哪個資料夾
+    command: str | None = None   # tool_used:跑了什麼指令(目前只接「跑指令」這種工具)
+    target: dict | None = None   # open_session_attempt:想在哪裡開 {"cwd": 路徑或 None, "elsewhere": 種類或 None}
+                                 # elsewhere = {"kind": "repository", "name"} | {"kind": "machine"} | {"kind": "unknown_place"}
 
 
 class Action(NamedTuple):

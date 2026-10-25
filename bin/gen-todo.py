@@ -21,6 +21,8 @@ openclaw-migration-status.md):
 用法:gen-todo.py <輸出 todo.md 路徑>
 結束碼:0 正常;格式問題不算失敗(已寫進檔案跟 stdout)。
 """
+from __future__ import annotations  # 系統的 python3(3.9)也要能 import
+
 import pathlib
 import re
 import sys

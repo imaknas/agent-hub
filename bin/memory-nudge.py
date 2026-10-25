@@ -18,6 +18,8 @@ memory 靠 agent 自己寫,容易在忙的時候斷掉:project-25 2026-09-27 對
 跟只動 agent-hub 管的檔案的 commit 不算。
 其他情況一律不輸出、結束碼 0,不擋任何事。
 """
+from __future__ import annotations  # 系統的 python3(3.9,hook 用的就是它)也要能 import
+
 import datetime
 import json
 import pathlib
@@ -69,27 +71,34 @@ def message(times) -> str:
             f"做了什麼決定、踩到什麼坑(原始紀錄就好,不用摘要),再繼續。")
 
 
+def nudge_text(root, command: str | None = None) -> str | None:
+    """平台的邏輯:memory 筆記比最新 commit 舊就回傳提醒文字(沒落後就 None)。跟執行環境無關。
+    command 給了 = 剛跑完一個指令(只有 git commit/push 之類才提醒);沒給 = session 剛開始。"""
+    root = pathlib.Path(root)
+    if command is not None and (not GIT_WRITE.search(command) or ".agent-memory" in command
+                                or ".agent-memory" in root.parts):
+        return None
+    times = unrecorded_commits(root)
+    return message(times) if times and should_nudge(times) else None
+
+
 def main() -> None:
-    root = pathlib.Path.cwd()
+    """舊的入口:worktree 的使用者層級 hook 跟還沒換新設定的專案還在叫它(Knas 改使用者層級設定之前都要能用)。
+    --post-tool 讀 hook 的輸入、輸出透過執行環境的 inject,跟以前一字不差;--session-start 直接印文字。"""
+    import runtime_ports
     mode = sys.argv[1] if len(sys.argv) > 1 else ""
     if mode == "--post-tool":
-        try:
-            data = json.load(sys.stdin)
-        except ValueError:
+        rt = runtime_ports.load(ports=("lifecycle",))
+        ev = rt.parse_event("tool_used", sys.stdin.read())
+        if ev is None:
             return
-        cmd = (data.get("tool_input") or {}).get("command", "")
-        root = pathlib.Path(data.get("cwd") or root)
-        if not GIT_WRITE.search(cmd) or ".agent-memory" in cmd or ".agent-memory" in root.parts:
-            return
-        times = unrecorded_commits(root)
-        if times and should_nudge(times):
-            print(json.dumps({"hookSpecificOutput": {"hookEventName": "PostToolUse",
-                                                     "additionalContext": message(times)}},
-                             ensure_ascii=False))
+        text = nudge_text(ev.cwd or pathlib.Path.cwd(), ev.command or "")
+        if text:
+            print(rt.inject("tool_used", text))
     elif mode == "--session-start":
-        times = unrecorded_commits(root)
-        if times and should_nudge(times):
-            print(message(times))
+        text = nudge_text(pathlib.Path.cwd())
+        if text:
+            print(text)
 
 
 if __name__ == "__main__":

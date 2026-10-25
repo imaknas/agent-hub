@@ -34,6 +34,8 @@
 每個 tick 開始、每個 job 跑完都會寫 .state/scheduler-heartbeat,給 scheduler-watchdog.py
 (獨立的 launchd job)判斷排程器是不是停了。
 """
+from __future__ import annotations  # 系統的 python3(3.9)也要能 import
+
 import datetime
 import json
 import os

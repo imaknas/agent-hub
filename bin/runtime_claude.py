@@ -319,3 +319,100 @@ def exec_stream(task) -> None:
     cmd[1:3] = ["-p"]  # 沒有 prompt 參數,訊息從 stdin(stream-json)來
     cmd += ["--input-format", "stream-json", "--output-format", "stream-json", "--include-partial-messages", "--verbose"]
     os.execvpe(cmd[0], cmd, task.env if task.env is not None else os.environ)
+
+
+# ---------- 事件(runtime_ports 的 lifecycle 介面)----------
+# Claude Code 的 hook:事件名稱、matcher、輸入的 JSON、輸出的 hookSpecificOutput 格式只在這裡。
+# 平台這邊只有一個入口 `bin/hub-event <平台事件>`,處理程式回傳中立的文字或拒絕理由。
+
+from runtime_ports import HubEvent  # noqa: E402
+
+# (Claude 的 hook 事件, matcher, 平台事件);matcher None = 這個事件全部都觸發
+HOOK_TABLE = (
+    ("SessionStart", None, "session_start"),
+    ("SessionEnd", None, "session_end"),
+    ("PreCompact", None, "pre_compact"),
+    ("UserPromptSubmit", None, "prompt"),
+    ("PostToolUse", "Bash", "tool_used"),                                    # 目前只接「跑指令」
+    ("PreToolUse", "mcp__ccd_session__start_session", "open_session_attempt"),  # Desktop 的開 session 工具
+)
+_HOOK_NAME = {ev: name for name, _, ev in HOOK_TABLE}
+MANAGED = "/agent-hub/bin/"   # 指令裡有這段 = 平台管的 hook(使用者自己加的不會有)
+
+
+def hook_command(event: str) -> str:
+    # 跟以前一樣:入口不在就安靜地不做事,結束碼永遠 0,不會讓 session 顯示錯誤
+    return f"[ -x ~/agent-hub/bin/hub-event ] && ~/agent-hub/bin/hub-event {event} || true"
+
+
+def parse_event(event: str, raw: str):
+    try:
+        data = json.loads(raw or "{}")
+    except ValueError:
+        return None
+    session = data.get("session_id")
+    if not session:  # 沒有 hook JSON = 不是真的 session 在跑(onboard/recover 也會跑設定)
+        return None
+    cwd = data.get("cwd") or os.getcwd()
+    ti = data.get("tool_input") or {}
+    if event == "tool_used":
+        return HubEvent(event, session, cwd, command=str(ti.get("command", "")))
+    if event == "open_session_attempt":
+        elsewhere = None  # 中立的種類(說明文字由平台寫):repository / machine / unknown_place
+        if ti.get("repository"):
+            elsewhere = {"kind": "repository", "name": str(ti["repository"])}
+        elif ti.get("host") or ti.get("target") == "ssh":
+            elsewhere = {"kind": "machine"}
+        elif ti.get("preset"):
+            elsewhere = {"kind": "unknown_place"}
+        target_cwd = os.path.expanduser(ti["cwd"]) if ti.get("cwd") else None
+        return HubEvent(event, session, cwd, target={"cwd": target_cwd, "elsewhere": elsewhere})
+    return HubEvent(event, session, cwd)
+
+
+def inject(event: str, text: str) -> str:
+    if not text:
+        return ""
+    if event == "session_start":
+        return text  # SessionStart 的 stdout 直接進 context
+    if event in ("prompt", "tool_used"):
+        return json.dumps({"hookSpecificOutput": {"hookEventName": _HOOK_NAME[event], "additionalContext": text}},
+                          ensure_ascii=False)
+    return ""
+
+
+def deny(event: str, reason: str) -> str:
+    if event != "open_session_attempt":
+        return ""
+    return json.dumps({"hookSpecificOutput": {"hookEventName": "PreToolUse", "permissionDecision": "deny",
+                                             "permissionDecisionReason": reason}}, ensure_ascii=False)
+
+
+def install_hooks(settings: dict) -> dict:
+    """平台管的 hook(指令裡有 MANAGED)整組換成 HOOK_TABLE 的 hub-event;使用者自己加的留著;重跑結果一樣。"""
+    hooks = settings.setdefault("hooks", {})
+    for name in list(hooks):
+        kept = []
+        for entry in hooks[name]:
+            inner = [h for h in entry.get("hooks", []) if MANAGED not in str(h.get("command", ""))]
+            if inner:
+                kept.append({**entry, "hooks": inner})
+        if kept:
+            hooks[name] = kept
+        else:
+            del hooks[name]
+    for name, matcher, event in HOOK_TABLE:
+        entry = {"hooks": [{"type": "command", "command": hook_command(event)}]}
+        if matcher:
+            entry = {"matcher": matcher, **entry}
+        hooks.setdefault(name, []).append(entry)
+    return settings
+
+
+def install_lifecycle(workspace) -> None:
+    path = settings_path(workspace)
+    settings = json.loads(path.read_text()) if path.exists() else {}
+    out = json.dumps(install_hooks(settings), indent=2) + "\n"
+    if not path.exists() or path.read_text() != out:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(out)

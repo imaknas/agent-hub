@@ -92,6 +92,20 @@ class ClaudeFixture:
         os.environ["PATH"] = f"{b}:{self._path}"
         return dict(os.environ)
 
+    def raw(self, sid, cwd, command=None, target_cwd=None, elsewhere=None):
+        """Claude Code 的 hook JSON。"""
+        d = {"session_id": sid, "cwd": cwd} if sid else {"cwd": cwd}
+        ti = {}
+        if command is not None:
+            ti["command"] = command
+        if target_cwd:
+            ti["cwd"] = target_cwd
+        if elsewhere == "machine":
+            ti["host"] = "box"
+        if ti:
+            d["tool_input"] = ti
+        return json.dumps(d)
+
     def teardown(self):
         self.m.transcript_roots, self.m.PROJECTS = self._roots, self._projects
         if getattr(self, "_path", None):
@@ -106,6 +120,17 @@ class FakeFixture:
             m.add_turn(path, t)
         m.set_context(SID, 1010)
         return m, {"FAKE_RUNTIME_SESSION": SID}
+
+    def raw(self, sid, cwd, command=None, target_cwd=None, elsewhere=None):
+        """Fake 自己的格式(故意跟 Claude 不一樣)。"""
+        d = {"sid": sid, "dir": cwd} if sid else {"dir": cwd}
+        if command is not None:
+            d["cmd"] = command
+        if target_cwd:
+            d["where"] = target_cwd
+        if elsewhere:
+            d["elsewhere"] = elsewhere
+        return json.dumps(d)
 
     def configure_run(self, tmp: pathlib.Path, mode: str) -> dict:
         import runtime_fake as m
@@ -240,6 +265,91 @@ class RunContract(unittest.TestCase):
             self.assertFalse(res.ok)
             self.assertIn("boom", res.error)
         self.each_run("fail", check)
+
+
+class LifecycleContract(unittest.TestCase):
+    """第 3 層:每一個實作把原生的 hook 輸入翻成同樣的中立事件,輸出只在該有的時候有。"""
+
+    def each(self, check):
+        for name in runtime_ports.RUNTIMES:
+            with self.subTest(runtime=name):
+                fx = FIXTURES[name]()
+                with tempfile.TemporaryDirectory() as d:
+                    m, _ = fx.setup(pathlib.Path(d))
+                    try:
+                        runtime_ports.load(name, ports=("lifecycle",))
+                        check(m, fx, pathlib.Path(d))
+                    finally:
+                        fx.teardown()
+
+    def test_parse(self):
+        def check(m, fx, tmp):
+            ev = m.parse_event("prompt", fx.raw(SID, WS))
+            self.assertEqual((ev.event, ev.session, ev.cwd), ("prompt", SID, WS))
+            self.assertEqual(m.parse_event("tool_used", fx.raw(SID, WS, command="git commit -m x")).command, "git commit -m x")
+            t = m.parse_event("open_session_attempt", fx.raw(SID, WS, target_cwd="/elsewhere")).target
+            self.assertEqual((t["cwd"], t["elsewhere"]), ("/elsewhere", None))
+            t = m.parse_event("open_session_attempt", fx.raw(SID, WS, elsewhere="machine")).target
+            self.assertEqual(t["elsewhere"], {"kind": "machine"})
+            self.assertIsNone(m.parse_event("prompt", fx.raw(None, WS)), "沒有 session = 不是真的 session 在跑")
+            self.assertIsNone(m.parse_event("prompt", "not json"))
+        self.each(check)
+
+    def test_inject_and_deny_only_where_meaningful(self):
+        def check(m, fx, tmp):
+            for ev in ("session_start", "prompt", "tool_used"):
+                self.assertIn("hello", m.inject(ev, "hello"), ev)
+                self.assertEqual(m.inject(ev, ""), "", f"{ev}:沒有文字就沒有輸出")
+            for ev in ("session_end", "pre_compact", "open_session_attempt"):
+                self.assertEqual(m.inject(ev, "hello"), "", f"{ev} 不能放進 context")
+            self.assertIn("no", m.deny("open_session_attempt", "no"))
+            self.assertEqual(m.deny("prompt", "no"), "")
+        self.each(check)
+
+    def test_install_idempotent(self):
+        def check(m, fx, tmp):
+            ws = tmp / "ws"
+            ws.mkdir()
+            m.install_lifecycle(ws)
+            snap = {p: p.read_bytes() for p in ws.rglob("*") if p.is_file()}
+            self.assertTrue(snap, "裝了要留下東西")
+            m.install_lifecycle(ws)
+            self.assertEqual(snap, {p: p.read_bytes() for p in ws.rglob("*") if p.is_file()}, "重跑結果一樣")
+        self.each(check)
+
+
+class ClaudeHooks(unittest.TestCase):
+    """Claude 專屬:hook 設定的替換規則、輸出格式。"""
+
+    def test_replace_managed_keep_user(self):
+        import runtime_claude as m
+        settings = {"model": "x", "hooks": {
+            "SessionStart": [{"hooks": [{"type": "command", "command": "[ -d .agent-memory ] && ~/agent-hub/bin/sync-local-setup.sh --quiet || true"}]},
+                             {"hooks": [{"type": "command", "command": "echo mine"}]}],
+            "PostToolUse": [{"matcher": "Bash", "hooks": [{"type": "command", "command": "~/agent-hub/bin/memory-nudge.py --post-tool"},
+                                                            {"type": "command", "command": "my-linter"}]}],
+            "Stop": [{"hooks": [{"type": "command", "command": "~/agent-hub/bin/old-thing"}]}]}}
+        out = m.install_hooks(json.loads(json.dumps(settings)))
+        cmds = [h["command"] for es in out["hooks"].values() for e in es for h in e["hooks"]]
+        self.assertIn("echo mine", cmds)
+        self.assertIn("my-linter", cmds)
+        self.assertFalse([c for c in cmds if "agent-hub/bin/" in c and "hub-event" not in c], "舊的平台 hook 要拿掉")
+        self.assertNotIn("Stop", out["hooks"], "只剩舊平台 hook 的事件整個拿掉")
+        self.assertEqual(out["model"], "x", "其他設定不動")
+        for name, matcher, ev in m.HOOK_TABLE:
+            entries = [e for e in out["hooks"][name] if any(f"hub-event {ev}" in h["command"] for h in e["hooks"])]
+            self.assertEqual(len(entries), 1, ev)
+            self.assertEqual(entries[0].get("matcher"), matcher)
+        again = m.install_hooks(json.loads(json.dumps(out)))
+        self.assertEqual(again, out, "重跑不變")
+
+    def test_output_shapes(self):
+        import runtime_claude as m
+        self.assertEqual(m.inject("session_start", "hi"), "hi")
+        self.assertEqual(json.loads(m.inject("prompt", "hi"))["hookSpecificOutput"]["hookEventName"], "UserPromptSubmit")
+        self.assertEqual(json.loads(m.inject("tool_used", "hi"))["hookSpecificOutput"]["hookEventName"], "PostToolUse")
+        d = json.loads(m.deny("open_session_attempt", "no"))["hookSpecificOutput"]
+        self.assertEqual((d["hookEventName"], d["permissionDecision"], d["permissionDecisionReason"]), ("PreToolUse", "deny", "no"))
 
 
 class ClaudeOnly(unittest.TestCase):

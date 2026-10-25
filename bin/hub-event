@@ -1,0 +1,157 @@
+#!/usr/bin/python3
+"""平台的事件入口(執行環境抽象第 3 層,docs/design/runtime-abstraction.md):各 runtime 把它原生的 hook 接到這裡。
+
+  hub-event <事件>          事件是平台自己的名稱(runtime_ports.EVENTS);stdin 是 runtime 原生的 hook 輸入
+  hub-event install <資料夾>  在這個專案裝好 hook(平台管的換成新的,使用者自己加的留著)——sync-local-setup 呼叫
+
+流程:binding.parse_event 把原生輸入翻成中立的 HubEvent → 依事件依序跑平台的處理程式(各自攔錯,一個壞了不影響其他)
+→ 收集要放進 context 的文字或「擋下」的理由 → binding.inject / deny 翻回原生的輸出。處理程式只回傳中立的東西,
+不知道任何 runtime 的格式。
+
+不變的性質(跟以前每條 hook 後面的 `|| true` 一樣):一律 exit 0;不是真的 session、不在 onboard 過的專案裡,
+什麼都不做。hook 的錯誤輸出會被丟掉,所以每次跑都在 .logs/hub-event.log 記一行(事件、專案、跑了哪些、哪些失敗)。
+
+系統的 /usr/bin/python3(3.9)跑,不 import yaml。
+"""
+from __future__ import annotations
+
+import datetime
+import importlib.machinery
+import importlib.util
+import os
+import pathlib
+import select
+import subprocess
+import sys
+
+BIN = pathlib.Path(__file__).resolve().parent
+sys.path.insert(0, str(BIN))
+import hubconf  # noqa: E402
+import runtime_ports  # noqa: E402
+
+LOG = hubconf.LOGS / "hub-event.log"
+
+
+def _load(name: str, path: pathlib.Path):
+    loader = importlib.machinery.SourceFileLoader(name, str(path))
+    spec = importlib.util.spec_from_loader(name, loader)
+    mod = importlib.util.module_from_spec(spec)
+    loader.exec_module(mod)
+    return mod
+
+
+def _workspace(cwd: str) -> pathlib.Path | None:
+    """這個 session 所在的專案資料夾(git 主 checkout 或 worktree 的根);有 .agent-memory 才算接上平台的專案。"""
+    r = subprocess.run(["git", "-C", cwd, "rev-parse", "--show-toplevel"], capture_output=True, text=True)
+    return pathlib.Path(r.stdout.strip()) if r.returncode == 0 and r.stdout.strip() else None
+
+
+# ---------- 處理程式:平台的邏輯,只回傳中立的結果(文字 / None / 擋下的理由) ----------
+
+def memory_pull(ev, ws):
+    if ws and (ws / ".agent-memory").is_dir():
+        subprocess.run([str(BIN / "with-lock.sh"), "git", "pull", "-q"], cwd=ws / ".agent-memory",
+                       capture_output=True, timeout=60)
+
+
+def memory_sync(ev, ws):
+    if ws and (ws / ".agent-memory").is_dir():
+        subprocess.run([str(BIN / "with-lock.sh"), str(BIN / "git-sync-memory.sh")], cwd=ws / ".agent-memory",
+                       capture_output=True, timeout=120)
+
+
+def local_setup(ev, ws):
+    """本機設定對齊範本(受管區塊、hook、ignore、AGENT.md)。它印的東西(例:搬家提醒)也放進 context。"""
+    if ws and (ws / ".agent-memory").is_dir():
+        r = subprocess.run([str(BIN / "sync-local-setup.sh"), "--quiet", str(ws)], capture_output=True, text=True,
+                           timeout=120, stdin=subprocess.DEVNULL)
+        return r.stdout.strip() or None
+
+
+def nudge(ev, ws):
+    if ws and (ws / ".agent-memory").is_dir():
+        mn = _load("memory_nudge", BIN / "memory-nudge.py")
+        return mn.nudge_text(ws, ev.command if ev.event == "tool_used" else None)
+
+
+def mail(ev, ws):
+    hubbus = _load("hubbus_mod", BIN / "hubbus")
+    kind = {"session_start": "session-start", "prompt": "prompt", "tool_used": "post-tool"}[ev.event]
+    return hubbus.mail_text(kind, ev.session, ev.cwd)
+
+
+def guard(ev, ws):
+    g = _load("guard_mod", BIN / "guard.py")
+    return g.decide(ev.target or {}, ev.cwd)
+
+
+# 每個事件依序跑哪些;"deny" 類的回傳值是擋下的理由
+HANDLERS = {
+    "session_start": [("memory_pull", memory_pull), ("local_setup", local_setup), ("nudge", nudge), ("mail", mail)],
+    "session_end": [("memory_sync", memory_sync)],
+    "pre_compact": [("memory_sync", memory_sync)],
+    "prompt": [("mail", mail)],
+    "tool_used": [("nudge", nudge), ("mail", mail)],
+    "open_session_attempt": [("guard", guard)],
+}
+DENY_HANDLERS = {"guard"}
+
+
+def _read_stdin() -> str:
+    try:
+        if not sys.stdin.isatty() and select.select([sys.stdin], [], [], 0.2)[0]:
+            return sys.stdin.read()
+    except (OSError, ValueError):
+        pass
+    return ""
+
+
+def _log(event, project, ran, failed) -> None:
+    try:
+        LOG.parent.mkdir(parents=True, exist_ok=True)
+        with open(LOG, "a") as fh:
+            fh.write(f"{datetime.datetime.now().isoformat(timespec='seconds')} {event} {project or '-'} "
+                     f"ran={','.join(ran) or '-'} failed={','.join(failed) or '-'}\n")
+    except OSError:
+        pass
+
+
+def handle(event: str, raw: str, rt=None) -> str:
+    """跑一個事件,回傳要印到 stdout 的原生輸出(沒有就 "")。給 main 跟測試用。"""
+    rt = rt or runtime_ports.load(ports=("lifecycle",))
+    ev = rt.parse_event(event, raw)
+    if ev is None or event not in HANDLERS:
+        return ""
+    ws = _workspace(ev.cwd)
+    texts, reasons, ran, failed = [], [], [], []
+    for name, fn in HANDLERS[event]:
+        try:
+            out = fn(ev, ws)
+            ran.append(name)
+        except Exception as e:  # 一個處理程式壞了,其他照跑
+            failed.append(f"{name}:{type(e).__name__}")
+            continue
+        if out:
+            (reasons if name in DENY_HANDLERS else texts).append(out)
+    _log(event, ws.name if ws else None, ran, failed)
+    if reasons:
+        return rt.deny(event, reasons[0])
+    return rt.inject(event, "\n\n".join(texts)) if texts else ""
+
+
+def main(argv) -> int:
+    try:
+        if argv[:1] == ["install"] and len(argv) == 2:
+            runtime_ports.load(ports=("lifecycle",)).install_lifecycle(pathlib.Path(argv[1]).resolve())
+            return 0
+        if len(argv) == 1:
+            out = handle(argv[0], _read_stdin())
+            if out:
+                print(out)
+    except Exception as e:  # hook 壞掉不能影響 session
+        _log(argv[0] if argv else "?", None, [], [f"hub-event:{type(e).__name__}"])
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main(sys.argv[1:]))

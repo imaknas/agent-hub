@@ -17,6 +17,8 @@ session;這份報告補上那一塊。產出:
 用法:weekly-reflect.py [--week 2026-W40] [--llm]
   --week 省略 = 上一個完整的週(週一到週日,台北時間)。印出寫入的 json 路徑。
 """
+from __future__ import annotations  # 系統的 python3(3.9)也要能 import
+
 import argparse
 import collections
 import datetime

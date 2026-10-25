@@ -1,6 +1,11 @@
 #!/usr/bin/env python3
-"""機械化合併 .claude/settings.local.json 的 SessionStart/SessionEnd hook 設定,
-不覆寫既有內容、不重複加入同樣的 command、不需要任何判斷——純粹的
+"""Claude Code 的 hook 設定。
+
+專案模式(`merge-hook-settings.py <.claude/settings.local.json>`):交給 runtime_claude.install_hooks——平台管的
+hook(指令裡有 ~/agent-hub/bin/)整組換成 `hub-event <事件>`,使用者自己加的留著(執行環境抽象第 3 層,
+docs/design/runtime-abstraction.md)。平常由 sync-local-setup.sh 的 `hub-event install` 做,不經過這裡。
+
+`--worktree` 模式(使用者層級設定)維持舊的做法:機械化合併,不覆寫既有內容、不重複加入同樣的 command——純粹的
 「這個 command 存在嗎?不存在就 append」。
 
 只有一種模式:memory 追蹤永遠在獨立的 .agent-memory worktree 裡,hook 一律
@@ -82,9 +87,20 @@ def has_command(entries, command):
 
 def main():
     args = sys.argv[1:]
-    wanted = HOOKS
-    if args and args[0] == "--worktree":
-        wanted, args = WORKTREE_HOOKS, args[1:]
+    if not (args and args[0] == "--worktree"):
+        # 專案模式:改由執行環境的 binding 裝(runtime_claude.install_hooks:平台管的整組換成 hub-event,使用者自己加的
+        # 留著)。上面的 HOOKS 只剩給舊設定對照用;sync-local-setup.sh 走 `hub-event install`,不經過這裡。
+        sys.path.insert(0, str(Path(__file__).resolve().parent))
+        import runtime_claude
+        path = Path(args[0])
+        settings = json.loads(path.read_text()) if path.exists() else {}
+        out = json.dumps(runtime_claude.install_hooks(settings), indent=2) + "\n"
+        if not path.exists() or path.read_text() != out:
+            path.write_text(out)
+        return
+    # --worktree:使用者層級的設定(mini 的 ~/.claude/settings.json),只有 Knas 在那個 session 直接確認才改,
+    # 所以還是舊的那組 worktree-memory.sh hook,不動
+    wanted, args = WORKTREE_HOOKS, args[1:]
     path = Path(args[0])
     settings = json.loads(path.read_text()) if path.exists() else {}
 
