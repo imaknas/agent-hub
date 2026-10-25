@@ -175,6 +175,13 @@ class CapRunner(unittest.TestCase):
         self.runner.running[0].proc.poll()
         self.assertIsNotNone(self.runner.running[0].proc.returncode, f"pid {pid} 還活著")
 
+    def test_start_failure_is_reported(self):
+        with mock.patch.object(cr, "make_profile", side_effect=AttributeError("boom")):
+            self.request(self.a)
+            st = self.run_until(self.a)
+        self.assertEqual(st["state"], "rejected")
+        self.assertIn("boom", st["reason"])
+
     def test_client_end_to_end(self):
         stop = threading.Event()
 

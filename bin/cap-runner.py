@@ -268,8 +268,8 @@ class Runner:
             finally:
                 os.close(out)
                 os.close(err)
-        except OSError as e:
-            write_state(job.fd, state="rejected", reason=f"啟動失敗:{e}")
+        except Exception as e:  # 任何失敗都要回覆,不然客戶端會一直等「排隊中」(10-25 實測:模組不一致時卡住)
+            write_state(job.fd, state="rejected", reason=f"啟動失敗:{e!r}"[:500])
             os.close(job.fd)
             log(project=job.project, id=job.id, event="start_failed", detail=str(e)[:300])
             return

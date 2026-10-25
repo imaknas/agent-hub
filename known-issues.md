@@ -141,6 +141,9 @@
   「每個指令都問 Knas」;租約的 deny 加了 `Bash(security …)`,但那只是補強(`sh -c`、python 就繞得過)。
 - **要放寬指令之前**:先找到在系統層擋住 Keychain 的方法(例如 sandbox profile 擋 securityd 的 mach-lookup,
   或讓那些 job 用不在 Keychain 裡的憑證),而且要實測。
+- **平台自己的 profile 擋得住**(2026-10-25):`bin/seatbelt.py` 擋 `com.apple.SecurityServer` 等的 mach-lookup,
+  直接叫 Security framework(不經過 `security` 這支程式)也查不到;`tests/test_cap_profile.py` 每次都測。目前只有平台代跑
+  (`hub-run`)用這份 profile,session 自己的 Bash 還是 Claude Code 的 sandbox。
 
 ## mini 上的 claude 在 SSH 底下是「未登入」
 
@@ -210,3 +213,13 @@
 - **斷言某個概念的出處前先搜尋確認**(agent 曾說「harness」是 Anthropic 專有的說法,
   其實 OpenAI 也寫過)。
 - 來源:OpenClaw daily logs、#self-reflection、#general
+- **sandbox 不能疊兩層**(2026-10-25):Claude Code 的 sandbox 裡跑 `sandbox-exec` 一律 `sandbox_apply: Operation not
+  permitted`。要在別的限制下跑東西(例:GPU 要 Metal,Claude Code 的 sandbox 擋住、也沒有設定能開),只能交給 sandbox
+  外的程序套——平台代跑 `bin/cap-runner.py` + `hub-run`(docs/design/capabilities.md)。
+- **`excludedCommands` 只對「單獨」的指令有效**(2026-10-25):單獨跑排除的指令會跳出 sandbox;跟別的指令串在一起
+  (`&&`、`;`)時整串都留在 sandbox 裡。測的時候別在後面多接 `; echo rc=$?`,會誤以為它沒效。平台沒有用它。
+- **Seatbelt 的 `(deny signal (target others))` 擋不住**送信號給別的程序(2026-10-25 實測);要寫成
+  `(deny signal)(allow signal (target same-sandbox))`,`process-info*` 同理。
+- **常駐服務載入的是啟動當時的程式碼**:改了它會 import 的模組(例:cap-runner 用到的 `hubconf.py`),服務要重啟
+  (`launchctl kickstart -k gui/$(id -u)/<label>`),不然新舊模組混用會在執行中途壞掉。2026-10-25 cap-runner 因此
+  卡住一個工作(現在任何啟動失敗都會回覆 rejected,不會讓客戶端一直等)。
