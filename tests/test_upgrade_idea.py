@@ -122,12 +122,19 @@ class Upgrade(unittest.TestCase):
         self.assertEqual((code, res["result"], res["name"]), (0, "upgraded", "idea-7"), res)
         doc = self.reg()
         self.assertEqual(doc["type"], "project")
-        self.assertEqual(doc["enforce"], {"sandbox": True, "capabilities": ["gpu"]})
+        # work 沒明寫的舊沙盒:升級時補上(想法沙盒預設能在深談裡動手,10-25 Knas)
+        self.assertEqual(doc["enforce"], {"sandbox": True, "capabilities": ["gpu"], "work": True})
         self.assertEqual(doc["paths"]["origin"], str(self.remote()))
         self.assertEqual(git(self.remote(), "rev-parse", "HEAD"), git(self.ws, "rev-parse", "HEAD"))
         self.assertEqual(self.record()["idea-7"]["stage"], "done")
         res, code = self.upgrade()
         self.assertEqual((code, res["result"]), (0, "already"))
+
+    def test_explicit_work_false_is_kept(self):
+        (self.hub / "projects" / "idea-7.yaml").write_text(IDEA.replace("  capabilities: [gpu]\n", "  capabilities: [gpu]\n  work: false\n"))
+        res, code = self.upgrade()
+        self.assertEqual(code, 0, res)
+        self.assertIs(self.reg()["enforce"]["work"], False)
 
     def test_invalid_registry_touches_nothing(self):
         before = IDEA + "bogus: 1\n"

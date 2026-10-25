@@ -13,7 +13,8 @@
      不是 = name_taken
   2. --rename:呼叫 rename-project.sh <沙盒名稱> <新名稱> --apply(資料夾、memory bare repo/副本、登錄一起改)
   3. gh repo create <github.owner>/<名稱>(預設 private)+ push(repo 已經是自己的就只 push),origin 改成 github.remote
-  4. 登錄:type 改成 project、paths.origin 寫上;purpose、enforce(含 Knas 同意過的能力)、privacy 留著
+  4. 登錄:type 改成 project、paths.origin 寫上;purpose、enforce(含 Knas 同意過的能力跟 work)、privacy 留著
+     (以前建的沙盒沒明寫 enforce.work 的,升級時補上 work: true——想法沙盒本來就能在深談裡動手)
   5. mirror-list.txt 加上 origin;重生 index.md 名冊;commit-hub-files 只 commit 這幾個檔
 每做完一個會改外面的步驟(改名、repo)就記進 .state/idea-upgrades.json 的 stage;中途失敗再叫一次,從記錄的地方接著做
 (改名過的用新名稱)。不刪 GitHub repo 來「退回」:刪 repo 不能復原,接著做比較安全。
@@ -103,6 +104,9 @@ def upgraded_doc(doc: dict, final: str, url: str) -> dict:
     """升級後的登錄長什麼樣(改名的話名稱跟資料夾也換)——動手前先拿它驗證。"""
     import copy
     out = copy.deepcopy(doc)
+    enf = out.get("enforce")
+    if doc.get("type") == "idea" and isinstance(enf, dict) and enf.get("sandbox") and "work" not in enf:
+        enf["work"] = True  # 想法沙盒預設可以在深談裡動手(10-25 Knas);以前建的沒明寫,升級時明寫帶過去
     out["type"] = "project"
     paths = out.setdefault("paths", {})
     if final != doc.get("name"):

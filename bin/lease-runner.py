@@ -236,12 +236,13 @@ def env_for(lease: Lease) -> dict:
 # ---------- 程序 ----------
 
 def work_ready(project: str) -> tuple[bool, str]:
-    """work 模式(第二階段)只開給想法沙盒,而且 OS sandbox 要真的已經寫進那個專案的設定——登錄的
+    """work 模式(第二階段)只開給登錄有 enforce.work: true 的專案(Knas 明確授權;想法沙盒建立時寫上、升級帶過去,
+    10-25),而且 OS sandbox 要真的已經寫進那個專案的設定——登錄的
     enforce.sandbox 只是意圖,render-project-settings 寫出來的 settings.local.json 才是事實(沙盒剛建好、
     設定還沒渲染的那段時間,不能讓 work 在沒有 sandbox 的情況下跑)。"""
     doc = hubconf.projects().get(project) or {}
-    if doc.get("type") != "idea":
-        return False, f"{project} 不是想法沙盒;work 模式目前只開給想法沙盒"
+    if not (doc.get("enforce") or {}).get("work"):
+        return False, f"{project} 沒有開 work 模式(登錄的 enforce.work;要 Knas 同意才加)"
     import runtime_claude
     return runtime_claude.sandbox_rendered(hubconf.workspace(project))
 
@@ -665,7 +666,7 @@ def quiesce(project: str) -> str:
 
 
 def follow_move(old: str, new: str, old_ws: str) -> None:
-    """改名、升級完:這個專案的租約跟上新的名稱、資料夾(對話紀錄跟著搬);work 改回 discuss(work 只開給想法沙盒)。"""
+    """改名、升級完:這個專案的租約跟上新的名稱、資料夾(對話紀錄跟著搬);新的登錄沒開 work 的話 work 改回 discuss。"""
     import registry
     registry.refresh()
     new_ws = str(hubconf.workspace(new) or old_ws)
@@ -681,7 +682,7 @@ def follow_move(old: str, new: str, old_ws: str) -> None:
             if live(l) and (renamed or downgraded):
                 extra = {"project": new} if renamed else {}
                 if downgraded:
-                    extra.update(mode="discuss", detail="升級成正式專案了:work 模式目前只開給想法沙盒,這段深談改回唯讀")
+                    extra.update(mode="discuss", detail="這個專案沒有開 work 模式(登錄的 enforce.work),這段深談改回唯讀")
                 l.emit("state", state=l.state, **extra)
             log(f"upgrade {old} → {new}:租約 {l.id[:8]} 跟上(對話紀錄{'搬了' if moved else '沒搬'})")
         save()
@@ -986,7 +987,7 @@ class H(http.server.BaseHTTPRequestHandler):
         那個沙盒有租約時(10-25 m10251626、m10251631):正在回答或等使用者回覆 → 409 busy;否則先停程序(租約還在,
         之後的訊息自動接回)。改名的話資料夾會搬:對話紀錄跟著搬到新資料夾(rt().relocate)、租約的 project/cwd 改成新的,
         還沒收回的租約送 state 事件帶新的 project——之後的訊息照常送,runner 在新資料夾接回同一段對話。
-        work 模式目前只開給想法沙盒:升級後,work 中的租約改回 discuss(state 事件帶 mode 跟 detail)。"""
+        升級會把 work(enforce.work)帶過去;新的登錄沒有 work 的話,work 中的租約改回 discuss(state 事件帶 mode 跟 detail)。"""
         rename = b.get("rename")
         if rename is not None and not isinstance(rename, str):
             return self.err(400, "bad_request", "rename 要是字串")

@@ -2,7 +2,7 @@
 
 - 正在回答/等回覆/在終端機 → 409 busy,不升級;閒著的先停程序。
 - 改名:對話紀錄搬到新資料夾(Claude Code 照資料夾的 slug 放,--resume 只找目前那格)、租約的 project/cwd 跟上、
-  還沒收回的送 state 事件帶新的 project;work 改回 discuss(work 只開給想法沙盒)。
+  還沒收回的送 state 事件帶新的 project;新的登錄沒開 work(enforce.work)的話 work 改回 discuss。
 - 接回時(POST /v1/leases 同一個 session_id)資料夾跟上次不同:先把對話紀錄搬過來。
 
 不會真的升級:upgrade-idea.py 的呼叫換成假的。
@@ -76,7 +76,7 @@ class Endpoint(unittest.TestCase):
                 (m.hubconf, "workspace", lambda name: self.ws.get(name)),
                 (m.hubconf, "projects", lambda: {"room3d": {}, "idea-1": {}}),
                 (rt, "relocate", lambda sid, a, b: (self.moves.append((sid, a, b)), True)[1]),
-                (m, "work_ready", lambda project: (False, "不是想法沙盒")),
+                (m, "work_ready", lambda project: (False, "沒有開 work 模式")),
                 (m.subprocess, "run", self.fake_run)]:
             p = mock.patch.object(target, attr, value)
             p.start()

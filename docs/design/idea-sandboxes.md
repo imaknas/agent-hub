@@ -136,7 +136,7 @@ POST /v1/sandboxes   Authorization: Bearer <runner-token>
 - `POST /v1/leases` 帶 `mode: work`,或深談中途 `POST /v1/leases/<id>/mode {mode: work|discuss}`(Knas 在
   Muninn 的卡片上點「允許動手」之後才送;runner 不判斷 Knas 有沒有同意,那是 Muninn 的卡片)。
 - 中途切換 = 停掉程序、用同一個 session `--resume` 接回,換成 work 的判斷點;事件 `state` 帶 `mode`。
-- 不是想法沙盒 → 400 `work_not_allowed`。`GET /v1/policy` 多一個 `work_projects`(可以開 work 的專案)。
+- 登錄沒有 `enforce.work: true` → 400 `work_not_allowed`(10-25 起看這個欄位,不看 type;想法沙盒建立時寫上、升級帶過去)。`GET /v1/policy` 多一個 `work_projects`(可以開 work 的專案)。
 
 **權限(兩道)**
 1. **OS sandbox**(第二階段平台本來就有,`render-project-settings.py` 寫進專案的 settings):Bash 只能寫自己的

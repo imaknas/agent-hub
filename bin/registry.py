@@ -22,10 +22,12 @@ schema v1(contracts/project.v1.md 有完整說明):
   publishes: [{kind, path, contract, v}]
   provides:  [{contract, v, schema}]           schema 相對 workspace
   services:  [{name, run, label?, keepalive?, throttle_s?, env?, cwd?, expose?}]
-  enforce: {sandbox: false, capabilities: []}
+  enforce: {sandbox: false, capabilities: [], work: false}
                                   第二階段:sandbox true = render-project-settings.py 寫 sandbox + 權限規則;
                                   capabilities = 平台的能力(hub.json capabilities,例 gpu),要 sandbox: true;
-                                  沙盒裡用 hub-run --cap <能力> 透過平台代跑(docs/design/capabilities.md)
+                                  沙盒裡用 hub-run --cap <能力> 透過平台代跑(docs/design/capabilities.md);
+                                  work = 深談(租約)可以用 work 模式動手(資料夾內寫檔、指令每次問),要 sandbox: true。
+                                  Knas 明確授權的紀錄(10-25):想法沙盒建立時寫上、升級帶過去,其他專案要他同意才加
   network: [網域]                 sandbox 平台預設之外還要連的
   allow_write: [路徑]             sandbox 平台預設之外還要寫的
     type、enforce、network、allow_write、privacy 是安全欄位:專案寄的 manifest.update 改到就整封退回
@@ -160,8 +162,13 @@ def validate_enforce(doc: dict) -> list[str]:
     enf = doc.get("enforce")
     if enf is None:
         return []
-    if not isinstance(enf, dict) or set(enf) - {"sandbox", "capabilities"} or not isinstance(enf.get("sandbox", False), bool):
-        return ["enforce 只能是 {sandbox: true|false, capabilities: [能力]}"]
+    if not isinstance(enf, dict) or set(enf) - {"sandbox", "capabilities", "work"} or not isinstance(enf.get("sandbox", False), bool):
+        return ["enforce 只能是 {sandbox: true|false, capabilities: [能力], work: true|false}"]
+    work = enf.get("work", False)
+    if not isinstance(work, bool):
+        return ["enforce.work 要是 true 或 false"]
+    if work and not enf.get("sandbox"):  # 深談能寫入,靠的就是 OS sandbox 擋資料夾外的寫入
+        return ["enforce.work 要搭配 enforce.sandbox: true"]
     caps = enf.get("capabilities")
     if caps is None:
         return []

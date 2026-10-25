@@ -34,6 +34,16 @@ class Capabilities(unittest.TestCase):
     def errs(self, d):
         return registry.validate_enforce(d)
 
+    def test_work_needs_sandbox_and_a_bool(self):
+        self.assertEqual(self.errs(doc(type="project", enforce={"sandbox": True, "work": True})), [])
+        self.assertEqual(self.errs(doc(enforce={"sandbox": False, "work": False})), [])
+        self.assertTrue(self.errs(doc(enforce={"sandbox": False, "work": True})))
+        self.assertTrue(self.errs(doc(enforce={"work": True})))
+        self.assertTrue(self.errs(doc(enforce={"sandbox": True, "work": "yes"})))
+
+    def test_work_is_platform_owned(self):
+        self.assertIn("enforce", registry.PLATFORM_OWNED)
+
     def test_declared_capability(self):
         self.assertEqual(self.errs(doc(enforce={"sandbox": True, "capabilities": ["gpu"]})), [])
 
