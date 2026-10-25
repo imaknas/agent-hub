@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+#!/bin/sh -c exec${IFS}"${0%/*}/py"${IFS}"$0"${IFS}"$@"
 """找出「有在對話、但 memory 沒在記」的專案——零 LLM 成本的機械檢查。
 
 memory 筆記靠 agent 自己寫。session 比 onboard 早開(沒讀到說明)、或 agent 忙到

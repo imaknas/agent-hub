@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+#!/bin/sh -c exec${IFS}"${0%/*}/py"${IFS}"$0"${IFS}"$@"
 """排程狀態頁:取代 Claude Desktop「Scheduled」的檢視,所有排程(schedule.yaml)一頁看完。
 
 跑在 mini。scheduler.py 每個 tick 結束、run-agent-job.sh 每次跑完都會重生,零 LLM。
@@ -10,6 +10,7 @@
   - 每個 job:什麼時候跑、上次結果、下次什麼時候
   - agent job(run-agent-job.sh)的最近幾份報告全文
 """
+import sys
 import datetime
 import html
 import json
@@ -253,7 +254,7 @@ def main() -> None:
 
     # 專案信箱/事件匯流排(bin/hubbus):卡住的信、送不進 Muninn 的、壞掉被移開的 bus.db
     mail_html = ""
-    r = subprocess.run(["/usr/bin/python3", str(HUB / "bin" / "hubbus"), "status", "--json"], capture_output=True, text=True)
+    r = subprocess.run([sys.executable, str(HUB / "bin" / "hubbus"), "status", "--json"], capture_output=True, text=True)
     try:
         bus = json.loads(r.stdout)
     except ValueError:

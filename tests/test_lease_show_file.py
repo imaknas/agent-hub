@@ -4,7 +4,7 @@
 - runner:/v1/internal/<lease>/show 送 v2 的 file 事件(合 schema);GET …/files/<id> 回檔案跟 header;拒絕回原因。
 - relay 的 show_file 工具:轉給 runner、把結果回給 session。
 
-    /opt/homebrew/bin/python3 -m unittest discover -s tests
+    bin/py -m unittest discover -s tests
 """
 import importlib.util
 import json

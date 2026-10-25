@@ -1,6 +1,6 @@
 """weekly-reflect 的統計:只透過 transcripts 介面讀(用假的 runtime),協作方式照 Action.collab 計數。
 
-    python3 -m unittest discover -s tests
+    bin/py -m unittest discover -s tests
 """
 import datetime
 import importlib.util

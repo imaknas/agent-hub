@@ -7,7 +7,7 @@
 
 不會真的開 claude、不會真的寄信:run_handover 裡的 subprocess、deliver 都換成假的。
 
-    /opt/homebrew/bin/python3 -m unittest discover -s tests
+    bin/py -m unittest discover -s tests
 """
 import importlib.util
 import json

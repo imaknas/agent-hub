@@ -2,7 +2,7 @@
 
 送手機(ask_owner)跟回報 runner(tell_runner)都換成假的,不發任何請求。
 
-    python3 -m unittest discover -s tests
+    bin/py -m unittest discover -s tests
 """
 import importlib.util
 import os

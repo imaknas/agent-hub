@@ -18,6 +18,11 @@ SSH 開 mini 上的資料夾。MBP 斷線/沒電時 session 還在跑、手機(R
   `AGENT_HUB_ROOT` 可覆蓋)。不要再寫死 `~/agent-hub`、`~/services`、專案名稱、`knas`。
 - 協定裡的識別字用英文(hubbus 的 owner 地址是 `owner`,`knas` 是別名);使用者身分(〔Knas〕標籤)從設定讀。
 - 不要把新的個人資料放進程式碼或測試。
+- **Python 最低 3.13,一律用平台的 Python `bin/py`**(2026-10-25):uv 管的 venv(3.13 + PyYAML,新機器跑
+  `bin/setup-python`,`--check` 只驗證)。腳本第一行用 `#!/bin/sh -c exec${IFS}"${0%/*}/py"${IFS}"$0"${IFS}"$@"`(macOS 專用),
+  shell/launchd/登錄的 `run:` 叫 `bin/py <腳本>`,Python 裡啟動別的腳本用 `sys.executable`;不寫死任何直譯器、不靠 PATH 上
+  的 `python3`。測試:`bin/py -m unittest discover -s tests`。`tests/test_python_floor.py` 機械檢查;刻意的例外只有
+  `scheduler-watchdog.py`(平台的 Python 壞了它還要能發警報,系統內建的 python3、只用標準函式庫)跟 MBP 上跑的 `migrate-to-mini.py`
 
 ## 先查這裡,不要自己猜
 
@@ -250,7 +255,7 @@ memory 追蹤但不需要在 mini 上執行任何東西的專案(目前大多數
   UserPromptSubmit 信箱 hook。**使用者層級的設定只有 Knas 在那個 session 直接確認才改**,轉述的同意不算
 - `contracts/`——**版本契約**:agent-hub 定義的介面(hubbus、todo-md、state-todo、reflect-week、project)
   跟 vendor 的別人的契約(`contracts/vendor/<專案>/`)。登錄的 `provides`/`consumes` 宣告誰定義、誰讀;
-  `tests/test_contracts.py`(`python3 -m unittest discover -s tests`)驗證範例,`bin/contracts-check.py`
+  `tests/test_contracts.py`(`bin/py -m unittest discover -s tests`)驗證範例,`bin/contracts-check.py`
   (每晚 01:30)比對副本跟原版、驗證實際資料。加欄位不升版;改名/改意思升版、兩版並存到讀的人換完
 - `projects/`——**專案登錄**(一個專案一個 `<name>.yaml`;目錄由 `hub.json` 的 `registry_dir` 指定):
   路徑、job、service、隱私標籤、測試指令。驗證跟格式看 `bin/registry.py` 檔頭;`registry.py check` 驗證。
@@ -294,8 +299,8 @@ agent-hub 的 session 開的子 session(start_session)做完、確認過結果�
 ## 誰負責 commit/push agent-hub
 
 - **commit 閘門**(`git config core.hooksPath githooks`,新機器 clone 後要設一次):改到程式碼(`bin/` `tests/`
-  `contracts/` `templates/`…)的 commit,`bin/test-gate` 拿**暫存區**(不是 working tree)在兩個 python(Homebrew、
-  系統 3.9)、假的 HOME 底下跑全部測試,都過、而且沒有測試寫進 HOME 才放行。只動資料檔的腳本 commit 不跑。
+  `contracts/` `templates/`…)的 commit,`bin/test-gate` 拿**暫存區**(不是 working tree)用平台的 Python、
+  假的 HOME 跑全部測試,都過、而且沒有測試寫進 HOME 才放行。只動資料檔的腳本 commit 不跑。
   `--no-verify` 跳過的會被 post-commit 記在 `.state/test-gate-bypassed.log`。重構前後外面看得到的行為用黃金檔固定
   (例:`tests/fixtures/llm-golden.json`),不要再靠手動比對
 

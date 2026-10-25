@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+#!/bin/sh -c exec${IFS}"${0%/*}/py"${IFS}"$0"${IFS}"$@"
 """平台代跑(cap-runner)用的 macOS Seatbelt profile:中立政策(policy.py)+ 能力(capabilities/<名稱>.sb)→ SBPL 文字。
 
 不經過任何 agent:執行環境的 sandbox 裡套不了第二層(10-25 實測 `sandbox_apply: Operation not permitted`),

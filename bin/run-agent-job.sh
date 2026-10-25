@@ -33,7 +33,7 @@ CWD="${2:-$OUT}"
 mkdir -p "$OUT"
 
 status() {  # status <state> [key=value...]
-  python3 - "$OUT/status.json" "$@" <<'PY'
+  "$HUB/bin/py" - "$OUT/status.json" "$@" <<'PY'
 import json, sys, datetime, pathlib
 path, state, *kv = sys.argv[1:]
 p = pathlib.Path(path)
@@ -62,7 +62,7 @@ fi
 if [ -z "${RUN_AGENT_JOB_FOREGROUND:-}" ]; then
   # 完全脫離(double fork + setsid):launchd 的 job 結束時會殺掉同一個 process group
   # 裡剩下的程序,單純 nohup ... & 會跟著 scheduler 的 tick 一起被殺(2026-10-14 踩到)
-  python3 - "$OUT/runner.log" "$0" "$@" <<'PY'
+  "$HUB/bin/py" - "$OUT/runner.log" "$0" "$@" <<'PY'
 import os, sys
 log, *argv = sys.argv[1:]
 if os.fork():
@@ -91,10 +91,10 @@ status running "started_at=$(date -Iseconds)" "report=" "session_id=" "error=" "
 cd "$CWD" || exit 1
 # 判斷點 agent-job(權限模式等宣告在 contracts/llm-points.yaml)
 # AGENT_JOB_POINT:信箱升級用 mailbox-escalation(固定的 allow);AGENT_JOB_ALLOW:登錄 job 宣告的 allow
-/opt/homebrew/bin/python3 "$HUB/bin/llm.py" run "${AGENT_JOB_POINT:-agent-job}" --prompt-file "$PROMPT" >"$raw" 2>"$raw.err"
+"$HUB/bin/py" "$HUB/bin/llm.py" run "${AGENT_JOB_POINT:-agent-job}" --prompt-file "$PROMPT" >"$raw" 2>"$raw.err"
 rc=$?
 
-python3 - "$raw" "$report" "$NAME" "$CWD" <<'PY' >"$OUT/.parsed" 2>&1
+"$HUB/bin/py" - "$raw" "$report" "$NAME" "$CWD" <<'PY' >"$OUT/.parsed" 2>&1
 import json, sys
 raw, report, name, cwd = sys.argv[1:]
 try:
@@ -125,6 +125,6 @@ else
 fi
 rm -f "$OUT/.parsed"
 # 狀態頁馬上反映結果(不用等下一個 scheduler tick)
-/opt/homebrew/bin/python3 "$HUB/bin/gen-status-page.py" >/dev/null 2>&1 || true
+"$HUB/bin/py" "$HUB/bin/gen-status-page.py" >/dev/null 2>&1 || true
 # 舊報告留 90 天
 find "$OUT" -name '20*.md' -mtime +90 -delete 2>/dev/null

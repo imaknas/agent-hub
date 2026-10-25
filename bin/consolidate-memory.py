@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+#!/bin/sh -c exec${IFS}"${0%/*}/py"${IFS}"$0"${IFS}"$@"
 """回頭清理(consolidation):把各專案放太久的 memory 日期檔整理進 reference/,順便修正
 reference/ 跟 STATE.md 裡被較新紀錄推翻的敘述。librarian 只往前看(新增的 memory → STATE.md),
 這支往回看,不讓 memory 變成流水帳、也不讓過時的敘述一直看起來像定論。
@@ -262,7 +262,7 @@ memory/ 的結構:
 
 def run_model(prompt: str, repo: pathlib.Path, model: str) -> tuple[dict | None, str]:
     # 判斷點 consolidate(權限 dontAsk、只准 Edit memory/reference/** 跟 STATE.md、schema:contracts/llm-points.yaml)
-    cmd = ["/opt/homebrew/bin/python3", str(HUB / "bin" / "llm.py"), "run", "consolidate", "--model", model]
+    cmd = [sys.executable, str(HUB / "bin" / "llm.py"), "run", "consolidate", "--model", model]
     env = dict(GIT_ENV)  # claude 的憑證由 llm.py 決定(預設 headless token)
     try:
         r = subprocess.run(cmd, input=prompt, cwd=repo, env=env, capture_output=True, text=True, timeout=CALL_TIMEOUT + 60)
@@ -374,7 +374,7 @@ def salient_missing(repo: pathlib.Path, base: str, deleted: list[str]) -> dict[s
 
 def state_todo_ok(path: pathlib.Path) -> bool:
     # 跟 librarian 一樣用 PATH 上的 python3(GIT_ENV 把 Homebrew 放前面):check-state-todo.py 要 3.10+,
-    # 排程器的 login shell 給這支的是 /usr/bin/python3(3.9)
+    # 以前排程器的 login shell 給這支的是系統的 python3(3.9);現在一律是平台的 Python(bin/py)
     return subprocess.run(["python3", str(BIN / "check-state-todo.py"), str(path)],
                           env=GIT_ENV, capture_output=True).returncode == 0
 

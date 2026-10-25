@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+#!/bin/sh -c exec${IFS}"${0%/*}/py"${IFS}"$0"${IFS}"$@"
 """合併閘門:平行的 session 在自己的 worktree/branch 寫東西,完成時用這支合併回 main——唯一的合併點。
 
 在 session 自己的 worktree 裡跑:
@@ -26,7 +26,7 @@ import sys
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
 import hubconf  # noqa: E402
 
-HUBBUS = ["/usr/bin/python3", str(hubconf.ROOT / "bin" / "hubbus")]
+HUBBUS = [sys.executable, str(hubconf.ROOT / "bin" / "hubbus")]
 
 
 def git(cwd, *args, check=False) -> subprocess.CompletedProcess:

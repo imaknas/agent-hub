@@ -23,9 +23,11 @@ ssh -T git@github.com
 ## 步驟
 
 1. 確認 `~/agent-hub` 本身存在且是最新的(`git pull`)。如果這是全新機器,
-   先手動 clone:`git clone hub-host:~/git-origin/agent-hub.git ~/agent-hub`。
+   先手動 clone:`git clone hub-host:~/git-origin/agent-hub.git ~/agent-hub`,再建平台的 Python
+   (`~/agent-hub/bin/setup-python`,要先有 uv)、裝 commit 閘門(`git -C ~/agent-hub config core.hooksPath githooks`)。
+   沒有平台的 Python,所有平台腳本(含每個專案的 hook)都會失敗。
 
-2. 跑 `python3 ~/agent-hub/bin/hubconf.py roster`(專案登錄 `projects/*.yaml`,每個專案一行:名稱、
+2. 跑 `~/agent-hub/bin/py ~/agent-hub/bin/hubconf.py roster`(專案登錄 `projects/*.yaml`,每個專案一行:名稱、
    路徑、origin、memory bare repo),對每一列檢查路徑(第二欄)在這台
    機器上存不存在。已存在的跳過,不需要處理。登錄的路徑是 mini 上的
    `/Users/you/workspace/<name>`(2026-10-15 起所有專案都在 mini);救到別的位置

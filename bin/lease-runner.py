@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+#!/bin/sh -c exec${IFS}"${0%/*}/py"${IFS}"$0"${IFS}"$@"
 """通道租借的 runner:Muninn 把一個對話串「借」給某個專案的 Claude Code session,這裡負責開、接續、轉送、收回。
 
 只聽 127.0.0.1(預設 18797),每個請求要 `Authorization: Bearer <~/agent-hub/.secrets/runner-token>`。
@@ -67,7 +67,7 @@ HUB = hubconf.ROOT
 HOST, PORT = "127.0.0.1", int(os.environ.get("LEASE_RUNNER_PORT", "18797"))
 DIR = pathlib.Path(os.environ.get("LEASE_RUNNER_DIR") or hubconf.STATE / "lease-runner")  # 測試用另一個目錄
 TOKEN_FILE = HUB / ".secrets" / "runner-token"
-PY = "/opt/homebrew/bin/python3"
+PY = sys.executable
 GLOBAL_CAP = 3
 PROC_IDLE_S = int(os.environ.get("LEASE_PROC_IDLE_S", 600))     # 程序閒置多久就停
 LEASE_IDLE_S = int(os.environ.get("LEASE_IDLE_S", 1800))        # 租約閒置多久送 idle_warning
@@ -458,7 +458,7 @@ def run_handover(lease: Lease) -> tuple[dict | None, str]:
 
 
 def hubbus(*args: str) -> subprocess.CompletedProcess:
-    return subprocess.run(["/usr/bin/python3", str(HUB / "bin" / "hubbus"), *args], capture_output=True, text=True)
+    return subprocess.run([sys.executable, str(HUB / "bin" / "hubbus"), *args], capture_output=True, text=True)
 
 
 def deliver(lease: Lease, h: dict) -> None:
@@ -495,7 +495,7 @@ def deliver(lease: Lease, h: dict) -> None:
         h["notes_written"] = True
     hubbus("publish", "session.report", "--source", proj, "--to", proj, "--id", f"lease-{sid}-handover",
            "--payload", json.dumps(h, ensure_ascii=False))
-    subprocess.Popen(["/usr/bin/python3", str(HUB / "bin" / "hubbus"), "bridge"], stdout=subprocess.DEVNULL,
+    subprocess.Popen([sys.executable, str(HUB / "bin" / "hubbus"), "bridge"], stdout=subprocess.DEVNULL,
                      stderr=subprocess.DEVNULL, start_new_session=True)  # 馬上送出,不等 15 分鐘
 
 

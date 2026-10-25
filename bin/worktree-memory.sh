@@ -42,7 +42,7 @@ case "$event" in
     fi
     # 執行環境的本機專用檔(規則檔、本機設定;`hub-runtime local-ignores`)都在主 checkout,worktree 沒有
     # (gitignored):接上 symlink、加進共用的 info/exclude。Claude Code 會即時重新載入設定(第二階段的 sandbox/權限規則)
-    for f in $(/usr/bin/python3 "$HUB/bin/hub-runtime" local-ignores 2>/dev/null); do
+    for f in $("$HUB/bin/py" "$HUB/bin/hub-runtime" local-ignores 2>/dev/null); do
       if [ ! -e "$f" ] && [ -f "$main/$f" ]; then
         mkdir -p "$(dirname "$f")" && ln -s "$main/$f" "$f"
         grep -qxF "$f" "$common/info/exclude" 2>/dev/null || echo "$f" >>"$common/info/exclude"
@@ -51,31 +51,31 @@ case "$event" in
     # .agent-memory/ 這條規則只比對目錄,symlink 要另外排除(info/exclude 所有 worktree 共用)
     grep -qxF ".agent-memory" "$common/info/exclude" 2>/dev/null || echo ".agent-memory" >>"$common/info/exclude"
     (cd .agent-memory && "$HUB/bin/with-lock.sh" git pull -q) >/dev/null 2>&1
-    instr=$(/usr/bin/python3 "$HUB/bin/hub-runtime" instructions-file "$PWD" 2>/dev/null)
+    instr=$("$HUB/bin/py" "$HUB/bin/hub-runtime" instructions-file "$PWD" 2>/dev/null)
     if [ -n "$linked" ] && [ -n "$instr" ] && [ -f "$instr" ]; then
       echo "(這個 session 在 $main 的 git worktree 裡。memory 已經接上主 checkout 的 .agent-memory;"
       echo " $instr 在 session 開始時還不存在,內容如下,照它做:)"
       cat "$instr"
     fi
-    python3 "$HUB/bin/memory-nudge.py" --session-start 2>/dev/null
+    "$HUB/bin/py" "$HUB/bin/memory-nudge.py" --session-start 2>/dev/null
     # 每晚的 worktree 清理(bin/worktrees.py auto_prune)刪過這裡的依賴:提醒怎麼重建,免得第一次跑測試時一頭霧水
     if [ -f "$git_dir/agent-hub-deps-pruned" ]; then
       echo "(這個 worktree 閒置期間,每晚的清理刪掉了重建得回來的依賴以節省空間;要跑程式或測試前先重建:)"
       sed 's/^/  /' "$git_dir/agent-hub-deps-pruned"
       echo "  重建好之後刪掉標記:rm \"$git_dir/agent-hub-deps-pruned\""
     fi
-    [ -n "$hook_json" ] && printf '%s' "$hook_json" | python3 "$HUB/bin/hubbus" hook session-start 2>/dev/null
+    [ -n "$hook_json" ] && printf '%s' "$hook_json" | "$HUB/bin/py" "$HUB/bin/hubbus" hook session-start 2>/dev/null
     ;;
   end)
     [ -e .agent-memory ] && cd .agent-memory && "$HUB/bin/with-lock.sh" "$HUB/bin/git-sync-memory.sh"
     ;;
   prompt)
     # UserPromptSubmit:對話中有新信就送進來(主 checkout 有專案自己的 hook,這裡只管 worktree)
-    [ -n "$hook_json" ] && printf '%s' "$hook_json" | python3 "$HUB/bin/hubbus" hook prompt 2>/dev/null
+    [ -n "$hook_json" ] && printf '%s' "$hook_json" | "$HUB/bin/py" "$HUB/bin/hubbus" hook prompt 2>/dev/null
     ;;
   nudge)
-    [ -e .agent-memory ] && printf '%s' "$hook_json" | python3 "$HUB/bin/memory-nudge.py" --post-tool
-    [ -n "$hook_json" ] && printf '%s' "$hook_json" | python3 "$HUB/bin/hubbus" hook post-tool 2>/dev/null
+    [ -e .agent-memory ] && printf '%s' "$hook_json" | "$HUB/bin/py" "$HUB/bin/memory-nudge.py" --post-tool
+    [ -n "$hook_json" ] && printf '%s' "$hook_json" | "$HUB/bin/py" "$HUB/bin/hubbus" hook post-tool 2>/dev/null
     ;;
 esac
 exit 0

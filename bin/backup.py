@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+#!/bin/sh -c exec${IFS}"${0%/*}/py"${IFS}"$0"${IFS}"$@"
 """加密的雲端備份(restic → Backblaze B2)。設定在 hub.json 的 backup。
 
   backup.py run       每晚(平台 job):stage 一致的副本 → restic backup → 週日套保留規則 → restic check
@@ -70,7 +70,7 @@ def restic(*args: str, check: bool = True, capture: bool = False) -> subprocess.
 
 def fail(stage: str, err: str) -> int:
     say(f"失敗({stage}):{err}")
-    subprocess.run(["/usr/bin/python3", str(HUB / "bin" / "hubbus"), "publish", "job.failed", "--source", "backup",
+    subprocess.run([sys.executable, str(HUB / "bin" / "hubbus"), "publish", "job.failed", "--source", "backup",
                     "--payload", json.dumps({"job": f"backup:{stage}", "detail": err[:500]}, ensure_ascii=False)],
                    capture_output=True)
     OUT.mkdir(parents=True, exist_ok=True)

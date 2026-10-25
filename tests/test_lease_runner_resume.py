@@ -5,7 +5,7 @@
 
 不會真的開 claude:Popen 換成記錄參數的假物件。
 
-    /opt/homebrew/bin/python3 -m unittest discover -s tests
+    bin/py -m unittest discover -s tests
 """
 import importlib.util
 import io

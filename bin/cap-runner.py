@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+#!/bin/sh -c exec${IFS}"${0%/*}/py"${IFS}"$0"${IFS}"$@"
 """平台代跑:專案在自己資料夾放請求,這裡(不在任何 sandbox 裡)檢查過才用平台的 Seatbelt profile 執行。
 
 設計:docs/design/capabilities.md。服務 `local.agent-hub.cap-runner`(登錄 agent-hub 的 services,KeepAlive;

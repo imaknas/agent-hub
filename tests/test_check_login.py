@@ -3,7 +3,7 @@
 
 不打真的請求(ask 換成假的)、不發 Discord(alert.once 換成記錄)、HOME 換成暫存目錄(不讀真的憑證)。
 
-    python3 -m unittest discover -s tests
+    bin/py -m unittest discover -s tests
 """
 import datetime
 import importlib.util

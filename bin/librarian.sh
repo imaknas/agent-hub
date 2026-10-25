@@ -49,7 +49,7 @@ total_cost="0"
 
 repair_state_todo() {
   local proj="$1" dir="$2" problems fix_prompt fix_json
-  problems=$(python3 "$HUB/bin/check-state-todo.py" "$dir/STATE.md") && return 0
+  problems=$("$HUB/bin/py" "$HUB/bin/check-state-todo.py" "$dir/STATE.md") && return 0
   log "$proj: STATE.md 待辦段落格式不對,請模型只修格式:$(echo "$problems" | head -3 | tr '\n' ' ')"
   fix_prompt="只修 ./STATE.md 的 \`## 待辦\` 段落格式,其他地方、待辦的內容都不要改,也不要動任何其他檔案。
 
@@ -65,9 +65,9 @@ repair_state_todo() {
 目前的問題:
 $problems"
   # 判斷點 librarian-todo-format(contracts/llm-points.yaml 宣告模型、權限、工具)
-  fix_json=$(cd "$dir" && printf '%s' "$fix_prompt" | /opt/homebrew/bin/python3 "$HUB/bin/llm.py" run librarian-todo-format 2>>"$LOG")
+  fix_json=$(cd "$dir" && printf '%s' "$fix_prompt" | "$HUB/bin/py" "$HUB/bin/llm.py" run librarian-todo-format 2>>"$LOG")
   add_cost "$(echo "$fix_json" | jq -r '.total_cost_usd // empty' 2>/dev/null)"
-  if problems=$(python3 "$HUB/bin/check-state-todo.py" "$dir/STATE.md"); then
+  if problems=$("$HUB/bin/py" "$HUB/bin/check-state-todo.py" "$dir/STATE.md"); then
     log "$proj: 待辦段落格式已修正"
   else
     log "$proj: 待辦段落格式修正後仍有問題(todo.md 檔尾會列出):$(echo "$problems" | head -2 | tr '\n' ' ')"
@@ -94,7 +94,7 @@ trap 'rm -f "$digest_file" "$handoffs_file"' EXIT
 # STATE.md 呼叫的額外輸入(不寫成 memory 流水筆記,避免累積流水帳;改了什麼跟理由留在 review-log.md)。
 # 這個專案的結果可信(checkpoint 會推進)才 `hubbus done`,bridge 再回報 Muninn 結案;不可信就留到隔晚。
 # session 已經處理掉(done)的不會出現在這裡。工作(公司)的內容 Muninn 那端就不會轉交。
-HUBBUS="/usr/bin/python3 $HUB/bin/hubbus"
+HUBBUS="$HUB/bin/py $HUB/bin/hubbus"
 echo '[]' >"$handoffs_file"
 if $HUBBUS open-handoffs >"$handoffs_file.tmp" 2>>"$LOG" \
     && jq -e 'type == "array"' "$handoffs_file.tmp" >/dev/null 2>&1; then
@@ -239,7 +239,7 @@ memory/ 的結構:
   # dontAsk 只放行 allowedTools 列的;Edit(...) 規則涵蓋 Write/Edit 兩個工具。
   # 下面的 stray 檢查留著當第二道防線。
   # 判斷點 librarian-state(模型、dontAsk、只准 Edit(./STATE.md)、schema 都在 contracts/llm-points.yaml)
-  output_json=$(cd "$proj_dir" && printf '%s' "$prompt" | /opt/homebrew/bin/python3 "$HUB/bin/llm.py" run librarian-state 2>>"$LOG")
+  output_json=$(cd "$proj_dir" && printf '%s' "$prompt" | "$HUB/bin/py" "$HUB/bin/llm.py" run librarian-state 2>>"$LOG")
   rc=$?
 
   if [ $rc -ne 0 ] || [ -z "$output_json" ]; then
@@ -375,7 +375,7 @@ done
 # --- 〔Knas〕待辦 ↔ Muninn 任務登錄(機械、零 LLM)---
 # 還沒有 key 的〔Knas〕行寄成 Muninn 的任務、蓋上「(等 Knas:<key>)」;Muninn 送回的帶 key 轉交
 # (done/dropped/already_done/reopened)照 key 改那一行。放在 gen-todo 前面,todo.md 才會是改過的。
-if kt_out=$(/usr/bin/python3 "$HUB/bin/knas-tasks.py" 2>>"$LOG"); then
+if kt_out=$("$HUB/bin/py" "$HUB/bin/knas-tasks.py" 2>>"$LOG"); then
   while IFS= read -r l; do log "$l"; done <<< "$kt_out"
 else
   log "knas-tasks.py 失敗(exit $?),〔Knas〕待辦這次沒跟 Muninn 同步"
@@ -387,7 +387,7 @@ fi
 # 2026-09-30 前是每晚叫 sonnet 從頭推導一次,項目數 46→88→114→73 亂跳,又是每晚
 # 最大的一筆額度用量。
 cd "$HUB" && git pull -q || true
-if todo_out=$(python3 "$HUB/bin/gen-todo.py" "$HUB/todo.md" 2>>"$LOG"); then
+if todo_out=$("$HUB/bin/py" "$HUB/bin/gen-todo.py" "$HUB/todo.md" 2>>"$LOG"); then
   while IFS= read -r l; do log "$l"; done <<< "$todo_out"
 else
   log "gen-todo.py 失敗,todo.md 這次沒更新"
@@ -396,14 +396,14 @@ fi
 # --- memory 缺口:有對話但沒記 memory 的專案(機械檢查,零 LLM 成本)---
 # 每晚都跑(不管 todo.md 這次有沒有重生),結果放進 todo.md 的固定區塊跟今天的 digest。
 # 不管結果都記一行:不然「0 個缺口」跟「根本沒跑」分不出來。
-if gaps=$(python3 "$HUB/bin/check-memory-gaps.py" 2>>"$LOG"); then
+if gaps=$("$HUB/bin/py" "$HUB/bin/check-memory-gaps.py" 2>>"$LOG"); then
   log "memory 缺口檢查:$(printf '%s' "$gaps" | grep -c '^- ' || true) 個專案有對話但沒記 memory"
 else
   log "memory 缺口檢查失敗(exit $?),看上面的錯誤;todo.md 的缺口區塊這次不動"
   gaps="__failed__"
 fi
 if [ -f "$HUB/todo.md" ] && [ "$gaps" != "__failed__" ]; then
-  python3 - "$HUB/todo.md" "$gaps" <<'PY'
+  "$HUB/bin/py" - "$HUB/todo.md" "$gaps" <<'PY'
 import re, sys
 from pathlib import Path
 p, gaps = Path(sys.argv[1]), sys.argv[2].strip()
@@ -436,7 +436,7 @@ if [ -s "$digest_file" ]; then
 不要編輯那個區塊(改了也會被覆蓋);你的註記寫在區塊外。"
 
   # 判斷點 librarian-index
-  index_output_json=$(printf '%s' "$index_prompt" | /opt/homebrew/bin/python3 "$HUB/bin/llm.py" run librarian-index 2>>"$LOG")
+  index_output_json=$(printf '%s' "$index_prompt" | "$HUB/bin/py" "$HUB/bin/llm.py" run librarian-index 2>>"$LOG")
   idx_rc=$?
 
   if [ $idx_rc -eq 0 ] && [ -n "$index_output_json" ]; then

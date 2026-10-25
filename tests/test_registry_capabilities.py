@@ -1,6 +1,6 @@
 """登錄的 enforce.capabilities 跟 manifest.update 不能改的安全欄位(docs/design/capabilities.md)。
 
-    /opt/homebrew/bin/python3 -m unittest discover -s tests
+    bin/py -m unittest discover -s tests
 """
 import pathlib
 import sys

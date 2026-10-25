@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+#!/bin/sh -c exec${IFS}"${0%/*}/py"${IFS}"$0"${IFS}"$@"
 """管理 schedule.yaml + launchd 排程器的小工具，不用記 launchctl 語法或手改 yaml 格式。
 
 新增排程一律直接編輯 schedule.yaml,加一個 job 條目就好——不用碰這支工具、

@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+#!/bin/sh -c exec${IFS}"${0%/*}/py"${IFS}"$0"${IFS}"$@"
 """提醒 agent 補寫 memory 筆記——只在「專案有新 commit、筆記卻比它舊」時出聲。
 
 memory 靠 agent 自己寫,容易在忙的時候斷掉:project-25 2026-09-27 對話被

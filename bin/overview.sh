@@ -16,7 +16,7 @@ SERVICES="$AGENT_HUB/services.tsv"
 
 FILTER="${1:-}"
 
-python3 "$AGENT_HUB/bin/hubconf.py" roster | while IFS=$'\t' read -r name local_path origin memory_bare_repo; do
+"$AGENT_HUB/bin/py" "$AGENT_HUB/bin/hubconf.py" roster | while IFS=$'\t' read -r name local_path origin memory_bare_repo; do
   [ -z "$name" ] && continue
   [ -n "$FILTER" ] && [ "$name" != "$FILTER" ] && continue
 

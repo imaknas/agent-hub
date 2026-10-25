@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+#!/bin/sh -c exec${IFS}"${0%/*}/py"${IFS}"$0"${IFS}"$@"
 """Claude Code 的 hook 設定。
 
 專案模式(`merge-hook-settings.py <.claude/settings.local.json>`):交給 runtime_claude.install_hooks——平台管的
@@ -52,7 +52,7 @@ MAIL_PROMPT_CMD = "[ -x ~/agent-hub/bin/hubbus ] && ~/agent-hub/bin/hubbus hook 
 MAIL_TOOL_CMD = "[ -x ~/agent-hub/bin/hubbus ] && ~/agent-hub/bin/hubbus hook post-tool || true"
 
 # 第二階段:專案的 session 不能開別的專案的 session(跨專案只能寄信);bin/guard.py 擋的時候回 deny + 理由
-GUARD_CMD = "[ -x ~/agent-hub/bin/guard.py ] && /usr/bin/python3 ~/agent-hub/bin/guard.py pre-tool || true"
+GUARD_CMD = "[ -x ~/agent-hub/bin/guard.py ] && ~/agent-hub/bin/guard.py pre-tool || true"
 
 # (event, matcher, command);matcher 為 None 表示不設(該事件全部觸發)
 HOOKS = (

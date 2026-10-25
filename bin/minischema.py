@@ -1,4 +1,4 @@
-"""JSON Schema 的一小部分(只用標準函式庫,系統的 python3 也能跑)——contracts/ 跟 muninn 的契約只用到這些:
+"""JSON Schema 的一小部分(只用標準函式庫)——contracts/ 跟 muninn 的契約只用到這些:
 type(含 ["string","null"])、required、properties、additionalProperties(true/false/schema)、items、
 enum、const、pattern、minimum、minLength、maxLength、minItems、if/then/else、$ref(#/$defs/…)。
 不認得的關鍵字直接忽略(跟 JSON Schema 規格一樣)。

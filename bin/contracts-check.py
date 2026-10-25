@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+#!/bin/sh -c exec${IFS}"${0%/*}/py"${IFS}"$0"${IFS}"$@"
 """每晚的契約檢查(平台 job;零 LLM)。各 repo 自己的測試只做 ②(範例照自己的副本驗證,不依賴別的 repo);
 這支做只有平台做得到的:
 
@@ -98,7 +98,7 @@ def live(index: dict) -> list[str]:
 
 def llm_lint() -> list[str]:
     """第二階段:bin/ 裡每一次叫 Claude CLI 的非互動呼叫都要經過 bin/llm.py(contracts/llm-points.yaml 宣告的判斷點)。"""
-    r = subprocess.run(["/opt/homebrew/bin/python3", str(HUB / "bin" / "llm.py"), "lint"], capture_output=True, text=True)
+    r = subprocess.run([sys.executable, str(HUB / "bin" / "llm.py"), "lint"], capture_output=True, text=True)
     return [f"LLM 呼叫:{l}" for l in r.stdout.splitlines() if l.strip()] + \
         ([f"llm.py lint 跑不起來:{r.stderr.strip()[-200:]}"] if r.returncode not in (0, 1) else [])
 
@@ -109,7 +109,7 @@ def main() -> int:
     for e in errs:
         print(f"✗ {e}")
     if errs:
-        subprocess.run(["/usr/bin/python3", str(HUB / "bin" / "hubbus"), "publish", "job.failed",
+        subprocess.run([sys.executable, str(HUB / "bin" / "hubbus"), "publish", "job.failed",
                         "--source", "contracts-check", "--payload",
                         json.dumps({"job": "contracts-check", "detail": f"{len(errs)} 項:" + ";".join(errs[:3])},
                                    ensure_ascii=False)], capture_output=True)

@@ -3,7 +3,7 @@
 重構 llm.py / runtime_claude / 登入(第 6 層 AuthProvider)時,外面看到的行為不能變——以前是手動比 20 種組合,
 現在固定在 tests/fixtures/llm-golden.json。判斷點的宣告(contracts/llm-points.yaml)真的改了才重生:
 
-    LLM_GOLDEN_UPDATE=1 python3 -m unittest tests.test_llm_golden
+    LLM_GOLDEN_UPDATE=1 bin/py -m unittest tests.test_llm_golden
 
 不印、不存任何 token 的值(假的 token 檔,只記「有沒有帶」)。機器相關的路徑換成 <HUB>、<HOME>、claude。
 """

@@ -1,4 +1,4 @@
-#!/usr/bin/python3
+#!/bin/sh -c exec${IFS}"${0%/*}/py"${IFS}"$0"${IFS}"$@"
 """平台的事件入口(執行環境抽象第 3 層,docs/design/runtime-abstraction.md):各 runtime 把它原生的 hook 接到這裡。
 
   hub-event <事件>          事件是平台自己的名稱(runtime_ports.EVENTS);stdin 是 runtime 原生的 hook 輸入
@@ -11,7 +11,7 @@
 不變的性質(跟以前每條 hook 後面的 `|| true` 一樣):一律 exit 0;不是真的 session、不在 onboard 過的專案裡,
 什麼都不做。hook 的錯誤輸出會被丟掉,所以每次跑都在 .logs/hub-event.log 記一行(事件、專案、跑了哪些、哪些失敗)。
 
-系統的 /usr/bin/python3(3.9)跑,不 import yaml。
+平台的 Python 跑(bin/py,最低 3.13)。
 """
 from __future__ import annotations
 

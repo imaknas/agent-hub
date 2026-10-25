@@ -3,18 +3,19 @@
 跑真的 upgrade-idea.py,但在暫存的 hub(AGENT_HUB_ROOT)跟暫存的 HOME 底下;「GitHub」是本機的 bare repo
 (hub.json 的 github.remote)加一個假的 gh;改名、重生名冊、commit 換成替身腳本。
 
-    python3 -m unittest discover -s tests
+    bin/py -m unittest discover -s tests
 """
 import json
 import os
 import pathlib
 import shutil
 import subprocess
+import sys
 import tempfile
 import unittest
 
 ROOT = pathlib.Path(__file__).resolve().parents[1]
-PY = "/opt/homebrew/bin/python3"
+PY = sys.executable   # 閘門底下就是平台的 Python(bin/py)
 
 try:
     import yaml
@@ -67,7 +68,7 @@ def git(cwd, *args):
                           capture_output=True, text=True, check=True).stdout.strip()
 
 
-@unittest.skipIf(yaml is None or not pathlib.Path(PY).exists(), "需要 PyYAML 跟 Homebrew python")
+@unittest.skipIf(yaml is None, "需要 PyYAML(平台的 Python 有,bin/setup-python)")
 class Upgrade(unittest.TestCase):
     def setUp(self):
         t = pathlib.Path(tempfile.mkdtemp()).resolve()

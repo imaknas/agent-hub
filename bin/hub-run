@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+#!/bin/sh -c exec${IFS}"${0%/*}/py"${IFS}"$0"${IFS}"$@"
 """在平台的 profile 底下跑一個需要「能力」的程式(例:用 GPU 的 Blender)——客戶端。
 
   hub-run --cap gpu [--timeout 秒] -- blender -b … -P tools/render.py …
@@ -13,7 +13,7 @@
 
 一開始會印出工作 id:這次呼叫被中斷(例:工具呼叫逾時),工作本身照跑,用 --wait <id> 接回。
 結束碼:工作自己的結束碼;逾時 124;代跑服務沒在跑或服務重啟弄丟了工作 125;請求被拒絕 126;用法錯 2。
-標準函式庫(系統的 python3 也能跑)。
+標準函式庫。
 """
 from __future__ import annotations
 

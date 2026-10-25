@@ -129,7 +129,7 @@ def analyze(stats: dict) -> dict:
     else:
         prompt = PROMPT.format(digest_intro=NO_DIGEST_INTRO, stats=stats_brief(stats), digests="")
     # 判斷點 reflect-week(工具全關、schema:contracts/llm-points.yaml)
-    res = subprocess.run(["/opt/homebrew/bin/python3", str(pathlib.Path(__file__).resolve().parent / "llm.py"),
+    res = subprocess.run([sys.executable, str(pathlib.Path(__file__).resolve().parent / "llm.py"),
                           "run", "reflect-week", "--model", meta["model"]],
                          input=prompt, capture_output=True, text=True, timeout=1300)
     try:

@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+#!/bin/sh -c exec${IFS}"${0%/*}/py"${IFS}"$0"${IFS}"$@"
 """每晚把 nvm 預設版本底下的 claude(npm 全域的 @anthropic-ai/claude-code)更新到最新版。
 
 排程、通道租借、Muninn 用的都是這一份(hubconf.tool("claude"));Claude Desktop 的 SSH session 用它自己推過來的
@@ -51,7 +51,7 @@ def version(claude: pathlib.Path) -> str | None:
 def smoke() -> str | None:
     """實際打一次最小的請求(跟排程同一條路:llm.py、headless token)。None = 成功,否則是原因。"""
     try:
-        r = subprocess.run(["/opt/homebrew/bin/python3", str(hubconf.ROOT / "bin" / "llm.py"), "run", "login-check"],
+        r = subprocess.run([sys.executable, str(hubconf.ROOT / "bin" / "llm.py"), "run", "login-check"],
                            input="只回覆 ok 兩個字母。", capture_output=True, text=True, timeout=180,
                            env={**os.environ, "LLM_AUTH": "token"})
     except subprocess.TimeoutExpired:

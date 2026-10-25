@@ -42,7 +42,7 @@ export AGENT_HUB_OFFLINE="$OFFLINE"
 # manifest 的路徑從 2026-10-15 起就是 mini 的 ~/workspace/<name>;另外掃一次 ~/workspace,
 # 涵蓋還沒登記的資料夾。同一個路徑只做一次。
 {
-  python3 "$HUB/bin/hubconf.py" roster | cut -f1,2
+  "$HUB/bin/py" "$HUB/bin/hubconf.py" roster | cut -f1,2
   for d in "$HOME"/workspace/*/; do
     [ -d "$d.agent-memory" ] && printf '%s\t%s\n' "$(basename "$d")" "${d%/}"
   done

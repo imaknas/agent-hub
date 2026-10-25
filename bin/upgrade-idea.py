@@ -1,4 +1,4 @@
-#!/opt/homebrew/bin/python3
+#!/bin/sh -c exec${IFS}"${0%/*}/py"${IFS}"$0"${IFS}"$@"
 """把想法沙盒(登錄 type: idea)升級成正式專案:歷史、檔案、memory 都留著(docs/design/idea-sandboxes.md)。
 
 用法:upgrade-idea.py <idea-n> [--rename <新名稱>] [--public] [--apply] [--json]

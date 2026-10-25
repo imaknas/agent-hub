@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+#!/bin/sh -c exec${IFS}"${0%/*}/py"${IFS}"$0"${IFS}"$@"
 """通道租借的權限轉接:Claude Code 的 `--permission-prompt-tool`(stdio MCP,一個工具 `approve`)。
 
 規則(--allowedTools、deny)決定得了的不會到這裡(2026-10-22 試驗 T3);到這裡的照中立政策 `policy.approvals(專案, 模式)`

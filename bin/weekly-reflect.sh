@@ -11,7 +11,7 @@ INDEX_MODEL="sonnet"
 export INDEX_MODEL
 
 cd "$HUB" && git pull -q || true
-out=$(python3 "$HUB/bin/weekly-reflect.py" --llm "$@") || { echo "weekly-reflect.py 失敗" >&2; exit 1; }
+out=$("$HUB/bin/py" "$HUB/bin/weekly-reflect.py" --llm "$@") || { echo "weekly-reflect.py 失敗" >&2; exit 1; }
 json=$(echo "$out" | head -1)
 echo "寫入 $out"
 "$HUB/bin/commit-hub-files.sh" "reflect: $(basename "$json" .json)" "reflect/$(basename "$json")" reflect/index.html

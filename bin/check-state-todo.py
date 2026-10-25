@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+#!/bin/sh -c exec${IFS}"${0%/*}/py"${IFS}"$0"${IFS}"$@"
 """檢查一份 STATE.md 的 `## 待辦` 段落格式,跟 gen-todo.py 用同一套解析規則。
 
 librarian 每次改完一個專案的 STATE.md 就呼叫:有問題就印出來(結束碼 1),讓

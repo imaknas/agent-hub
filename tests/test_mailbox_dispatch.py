@@ -3,7 +3,7 @@
 暫存的匯流排資料庫;執行環境(哪些 session 活著、context 多大)用假的模組;派人跟背景接續換成只記錄
 (認領照真的記,這樣「不重派」「輪數」才測得到),不會叫起任何 agent。
 
-    python3 -m unittest discover -s tests
+    bin/py -m unittest discover -s tests
 """
 import datetime
 import importlib.machinery

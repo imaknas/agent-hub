@@ -1,6 +1,6 @@
 """登錄的 type / purpose(想法沙盒,docs/design/idea-sandboxes.md)。
 
-    /opt/homebrew/bin/python3 -m unittest discover -s tests
+    bin/py -m unittest discover -s tests
 """
 import pathlib
 import sys

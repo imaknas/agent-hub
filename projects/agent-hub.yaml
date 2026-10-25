@@ -41,40 +41,40 @@ jobs:
 - name: hubbus-bridge
   legacy_name: hubbus-bridge
   every: 15m
-  run: /usr/bin/python3 bin/hubbus bridge
+  run: bin/py bin/hubbus bridge
   cwd: hub
 - name: render-services
   every: 15m
   cwd: hub
-  run: /opt/homebrew/bin/python3 bin/render-services.py
+  run: bin/py bin/render-services.py
 - name: render-settings          # 第二階段:登錄 enforce.sandbox 的專案 → sandbox + 權限規則;偏移就寫回並失敗(狀態頁紅)
   every: 15m
   cwd: hub
-  run: /opt/homebrew/bin/python3 bin/render-project-settings.py
+  run: bin/py bin/render-project-settings.py
 - name: registry-updates         # 專案寄來的 manifest.update 信:驗證後套用或退回(零 LLM)
   every: 15m
   cwd: hub
-  run: /opt/homebrew/bin/python3 bin/registry.py apply-updates
+  run: bin/py bin/registry.py apply-updates
 - name: secrets                  # 登錄宣告的憑證(各專案的 secrets:)在不在、有沒有被備份、快不快到期;不讀值。有問題發 Discord
   at: "08:00"
   cwd: hub
   max_attempts_per_day: 2
-  run: /opt/homebrew/bin/python3 bin/check-secrets.py
+  run: bin/py bin/check-secrets.py
 - name: claude-login             # claude 的三份登入(launchd 訂閱登入、headless token、SSH 用的 .credentials.json)還能用嗎;壞了/快到期發 Discord
   every: 1h
   cwd: hub
-  run: /opt/homebrew/bin/python3 bin/check-claude-login.py
+  run: bin/py bin/check-claude-login.py
 - name: update-claude            # nvm 預設版本底下的 claude 更新到最新(排程/租借/Muninn 用這份;Desktop 的 session 用自己的);裝不起來就裝回舊版、失敗
   at: "01:15"
   cwd: hub
   max_attempts_per_day: 2
-  run: /opt/homebrew/bin/python3 bin/update-claude.py
+  run: bin/py bin/update-claude.py
 - name: backup                   # 加密雲端備份(restic → B2,bin/backup.py;設定在 hub.json backup)
   at: "05:45"
   cwd: hub
   background: true
   max_attempts_per_day: 2
-  run: /opt/homebrew/bin/python3 bin/backup.py run
+  run: bin/py bin/backup.py run
 - name: backup-verify            # 每月還原測試:還原到暫存目錄、檢查 SQLite/bundle/檔案、10% 資料抽查
   at: "06:30"
   days_of_month: [1]
@@ -82,17 +82,17 @@ jobs:
   cwd: hub
   background: true
   max_attempts_per_day: 1
-  run: /opt/homebrew/bin/python3 bin/backup.py verify
+  run: bin/py bin/backup.py verify
 - name: prune-worktrees           # 已合併、乾淨的 worktree:閒置 ≥ 2 天刪重建得回來的依賴、≥ 14 天且沒人在用才移除(branch 留著)
   at: "04:30"
   cwd: hub
   max_attempts_per_day: 1
-  run: /opt/homebrew/bin/python3 bin/prune-worktrees --auto
+  run: bin/py bin/prune-worktrees --auto
 - name: contracts-check          # 契約副本 == 原版(兩個方向)+ 實際資料照契約;不一致發 job.failed
   at: "01:30"
   cwd: hub
   max_attempts_per_day: 1
-  run: /opt/homebrew/bin/python3 bin/contracts-check.py --quiet
+  run: bin/py bin/contracts-check.py --quiet
 provides:
 - {contract: lease-runner, v: 2, schema: contracts/lease-runner.v2.schema.json}   # 跟執行環境無關;v1 10-25 Muninn 換好後刪了(contracts/retired/)
 - {contract: lease-handover, v: 1, schema: contracts/lease-handover.v1.schema.json}
@@ -111,14 +111,14 @@ services:
 - name: lease-runner             # 通道租借(bin/lease-runner.py):127.0.0.1:18797,Bearer token 在 .secrets/runner-token
   label: local.agent-hub.lease-runner
   cwd: hub
-  run: /opt/homebrew/bin/python3 bin/lease-runner.py
+  run: /opt/homebrew/bin/python3 bin/lease-runner.py   # 暫時:換成 bin/py 要重載服務,等沒有深談在跑再換(10-25)
   keepalive: true
   throttle_s: 10
   env: {PATH: "$PLATFORM_PATH"}   # nvm 預設版本(claude)+ Homebrew,見 hubconf.LAUNCHD_PATH
 - name: cap-runner               # 平台代跑(bin/cap-runner.py):想法沙盒用 hub-run --cap <能力> 放的請求,用平台的 Seatbelt profile 執行
   label: local.agent-hub.cap-runner
   cwd: hub
-  run: /opt/homebrew/bin/python3 bin/cap-runner.py
+  run: bin/py bin/cap-runner.py
   keepalive: true
   throttle_s: 10
 

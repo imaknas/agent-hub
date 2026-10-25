@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+#!/bin/sh -c exec${IFS}"${0%/*}/py"${IFS}"$0"${IFS}"$@"
 """單一排程器：讀 schedule.yaml，到點就跑對應 command，一天只跑一次。
 由 launchd 每 15 分鐘呼叫一次；新增排程只要編輯 schedule.yaml，不用開新 plist。
 見 project-29/ROADMAP.md「排程（cron 替代方案）」一節的 DIY 備案。
@@ -108,7 +108,7 @@ def save_state(state: dict) -> None:
 
 def job_failed(name: str, code: int, detail: str = "") -> None:
     """匯流排上的 job.failed(狀態頁、之後的 Muninn 讀);寫不進去不影響排程。"""
-    subprocess.run(["/usr/bin/python3", str(HUB / "bin" / "hubbus"), "publish", "job.failed", "--source", "scheduler",
+    subprocess.run([sys.executable, str(HUB / "bin" / "hubbus"), "publish", "job.failed", "--source", "scheduler",
                     "--payload", json.dumps({"job": name, "exit": code, "detail": detail}, ensure_ascii=False)],
                    capture_output=True, timeout=30)
 

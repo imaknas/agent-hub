@@ -4,7 +4,7 @@
 - stream 介面的契約:runtime_ports 登記的每個實作,同一個情境翻成同樣的中立事件(Claude 用真的 stream-json,Fake 用它的格式)。
 - 權限轉接的回報、接不回來的對話。
 
-    /opt/homebrew/bin/python3 -m unittest discover -s tests
+    bin/py -m unittest discover -s tests
 """
 import importlib.util
 import io

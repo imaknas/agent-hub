@@ -6,7 +6,7 @@
 set -euo pipefail
 id="${1:?用法: lease-resume <session id>}"
 HUB="$(cd "$(dirname "$0")/.." && pwd)"
-cwd=$(/opt/homebrew/bin/python3 -c "
+cwd=$("$HUB/bin/py" -c "
 import json, sys
 d = json.load(open('$HUB/.state/lease-runner/leases.json'))
 l = d.get(sys.argv[1]) or sys.exit('找不到這個租約:' + sys.argv[1])

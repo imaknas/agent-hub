@@ -1,6 +1,6 @@
 """hubconf.nvm_bin():nvm 預設版本(alias,可以串接)對到已安裝版本裡最新的那個。
 
-    python3 -m unittest discover -s tests
+    bin/py -m unittest discover -s tests
 """
 import os
 import pathlib

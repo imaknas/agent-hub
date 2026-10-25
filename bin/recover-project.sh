@@ -30,7 +30,7 @@ NAME="$1"
 
 [ -d "$REGISTRY" ] || fail "找不到 $REGISTRY——先確認 agent-hub 本身已經 clone 好"
 
-row=$(python3 "$AGENT_HUB/bin/hubconf.py" roster | awk -F'\t' -v n="$NAME" '$1==n{print; found=1} END{exit !found}') \
+row=$("$AGENT_HUB/bin/py" "$AGENT_HUB/bin/hubconf.py" roster | awk -F'\t' -v n="$NAME" '$1==n{print; found=1} END{exit !found}') \
   || fail "專案登錄($REGISTRY)裡找不到 '$NAME'——確認名稱拼對了,或這個專案本來就沒登記過"
 
 origin_url=$(echo "$row" | cut -f3)

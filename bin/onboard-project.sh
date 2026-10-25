@@ -84,7 +84,7 @@ cd "$PROJ_PATH"
 # 再跑一次會建出全新、跟舊歷史斷開的 agent-memory 分支——不是救回來,是製造第二份記憶。
 # 最常見的情境是「從 GitHub 重新 clone 了一份(沒有 .agent-memory)再叫這支」,所以不能只看
 # 本機有沒有 .agent-memory。唯一的例外是 resume(本機步驟做完、mini 端還沒做完),見下面。
-ROSTER=$(python3 "$AGENT_HUB/bin/hubconf.py" roster) || fail "讀不到專案登錄($AGENT_HUB/projects)"
+ROSTER=$("$AGENT_HUB/bin/py" "$AGENT_HUB/bin/hubconf.py" roster) || fail "讀不到專案登錄($AGENT_HUB/projects)"
 RECOVER_HINT="要把既有專案接回來(新機器、資料夾不見、重新 clone)請用 bin/recover-project.sh $PROJ_NAME [路徑]"
 if awk -F'\t' -v n="$PROJ_NAME" '$1==n{f=1} END{exit !f}' <<<"$ROSTER"; then
   fail "'$PROJ_NAME' 已經登記在專案登錄(projects/$PROJ_NAME.yaml)——不能再 onboard 一次。$RECOVER_HINT"
@@ -142,7 +142,7 @@ fi
 
 if [ -z "$origin_url" ] && [ "$NO_REMOTE" != true ]; then
   # 帳號從 hub.json 的 github.owner 讀,不寫死(CLAUDE.md「寫新程式的規則」)
-  GH_OWNER=$(python3 "$AGENT_HUB/bin/hubconf.py" get github.owner) || fail "hub.json 沒有 github.owner,建不了 GitHub repo"
+  GH_OWNER=$("$AGENT_HUB/bin/py" "$AGENT_HUB/bin/hubconf.py" get github.owner) || fail "hub.json 沒有 github.owner,建不了 GitHub repo"
   gh repo create "$GH_OWNER/$PROJ_NAME" $VISIBILITY --source=. --remote=origin
   git remote set-url origin "git@github.com:${GH_OWNER}/${PROJ_NAME}.git"
   outer_branch=$(git branch --show-current)
@@ -239,7 +239,7 @@ fi
 manifest_origin="${origin_url:-(native)}"
 # ONBOARD_REGISTRY_EXTRA(JSON):呼叫端要一起登記的欄位(create-idea-sandbox.sh 的 type: idea 等),
 # 跟登記同一個 commit,不會有「已登錄但欄位還沒補」的空窗
-/opt/homebrew/bin/python3 "$AGENT_HUB/bin/registry.py" add "$PROJ_NAME" "$PROJ_PATH" "$manifest_origin" \
+"$AGENT_HUB/bin/py" "$AGENT_HUB/bin/registry.py" add "$PROJ_NAME" "$PROJ_PATH" "$manifest_origin" \
     "~/git-origin/${PROJ_NAME}-memory.git" ${ONBOARD_REGISTRY_EXTRA:+--extra "$ONBOARD_REGISTRY_EXTRA"} \
   || fail "登記進專案登錄失敗(projects/$PROJ_NAME.yaml)"
 # 登記完直接 commit+push agent-hub——以前只寫檔不 commit,mini 上的 librarian

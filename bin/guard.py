@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+#!/bin/sh -c exec${IFS}"${0%/*}/py"${IFS}"$0"${IFS}"$@"
 """第二階段的守門:專案的 session 不能開別的專案的 session(跨專案只能寄信)。
 
 平台事件 open_session_attempt(bin/hub-event 呼叫 decide)。輸入是中立的 target——執行環境的 binding 從原生的

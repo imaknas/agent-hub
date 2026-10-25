@@ -3,7 +3,7 @@
 work 模式的寫檔/指令在 test_lease_relay_work.py;這裡測開網頁、提問、送助理的請求格式(v1/v2)、政策本身。
 送手機(ask_owner 的 HTTP)跟回報 runner 都換成假的,不發任何請求。
 
-    /opt/homebrew/bin/python3 -m unittest discover -s tests
+    bin/py -m unittest discover -s tests
 """
 import importlib.util
 import json

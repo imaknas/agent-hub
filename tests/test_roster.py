@@ -1,6 +1,6 @@
 """hubconf.roster() 用簡單的逐行解析讀登錄的 paths(不需要 PyYAML);確認跟 PyYAML 讀到的一樣。
 
-    python3 -m unittest discover -s tests
+    bin/py -m unittest discover -s tests
 """
 import pathlib
 import sys

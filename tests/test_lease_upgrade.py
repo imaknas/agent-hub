@@ -7,7 +7,7 @@
 
 不會真的升級:upgrade-idea.py 的呼叫換成假的。
 
-    /opt/homebrew/bin/python3 -m unittest discover -s tests
+    bin/py -m unittest discover -s tests
 """
 import importlib.util
 import json

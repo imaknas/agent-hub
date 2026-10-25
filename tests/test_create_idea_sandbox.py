@@ -3,7 +3,7 @@
 整個 hub 搭在暫存目錄(AGENT_HUB_ROOT),onboard-project.sh 換成一支「建一半就失敗」的假腳本,
 不碰真的 ~/workspace、~/git-origin、~/.memory-copies、projects/。
 
-    /opt/homebrew/bin/python3 -m unittest discover -s tests
+    bin/py -m unittest discover -s tests
 """
 import json
 import os

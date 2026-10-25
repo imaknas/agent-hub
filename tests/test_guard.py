@@ -1,7 +1,7 @@
 """bin/guard.py 的 decide:專案的 session 不能開別的專案的 session。字句是給 agent 看的(叫它改寄信),
 第 3 層抽象化時曾經因為中立格式少了資訊而跑掉,所以這裡連字都比。
 
-    python3 -m unittest discover -s tests
+    bin/py -m unittest discover -s tests
 """
 import importlib.util
 import pathlib

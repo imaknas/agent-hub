@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+#!/bin/sh -c exec${IFS}"${0%/*}/py"${IFS}"$0"${IFS}"$@"
 """agent-hub 的事件匯流排:只 append 的事件 log + 讀取游標,專案信箱是它的投影。
 
 為什麼:跨專案(跟 Knas)的溝通不能靠 session 還活著——session 放久了就互相看不到。
@@ -51,7 +51,7 @@ Muninn 的介面(muninn 那邊定,改了要兩邊一起改):
       data/secrets/ingest_token。{"messages":[{id=事件 id, project, type=question|progress|done, text,
       handoff_id?}]};id 是 idempotency key,重送安全;400 = 整批裡有一則不合格、整批被拒。
 """
-from __future__ import annotations  # 系統的 python3 是 3.9,hook 可能用到它
+from __future__ import annotations
 
 import argparse
 import datetime
@@ -621,7 +621,7 @@ def resume(c, r, sid, cwd, rt, ws=None) -> None:
     out.mkdir(parents=True, exist_ok=True)
     try:
         with open(out / f"resume-{r['id']}.log", "w") as fh:
-            p = subprocess.Popen(["/opt/homebrew/bin/python3", str(HUB / "bin" / "llm.py"), "run", "mailbox-conversation",
+            p = subprocess.Popen([sys.executable, str(HUB / "bin" / "llm.py"), "run", "mailbox-conversation",
                                   "--cwd", str(cwd), "--", *rt.resume_args(sid)],
                                  stdin=subprocess.PIPE, stdout=fh, stderr=subprocess.STDOUT, cwd=str(cwd), text=True,
                                  start_new_session=True)

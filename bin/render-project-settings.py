@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+#!/bin/sh -c exec${IFS}"${0%/*}/py"${IFS}"$0"${IFS}"$@"
 """第二階段:每個專案的 sandbox + 權限規則從專案登錄產生,寫進 `.claude/settings.local.json`(managed file)。
 
 要寫什麼:policy.py 算中立的政策、runtime_claude.settings() 翻成 Claude Code 的格式;這支只管寫檔、記錄、偵測偏移。

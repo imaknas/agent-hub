@@ -18,14 +18,15 @@
 set -euo pipefail
 
 HUB="${AGENT_HUB:-$HOME/agent-hub}"
+PY="$(dirname "$0")/py"   # 平台的 Python 跟著這支腳本走(AGENT_HUB 可能指向別的資料目錄)
 INDEX="$HUB/index.md"
 
 [ -f "$INDEX" ] || printf '# agent-hub index\n' > "$INDEX"
 
 block=$(mktemp); out=$(mktemp); rows=$(mktemp); ideas=$(mktemp)
 trap 'rm -f "$block" "$out" "$rows" "$ideas"' EXIT
-AGENT_HUB_ROOT="$HUB" python3 "$HUB/bin/hubconf.py" roster > "$rows"
-AGENT_HUB_ROOT="$HUB" python3 "$HUB/bin/hubconf.py" ideas > "$ideas"   # 想法沙盒另外列一組
+AGENT_HUB_ROOT="$HUB" "$PY" "$HUB/bin/hubconf.py" roster > "$rows"
+AGENT_HUB_ROOT="$HUB" "$PY" "$HUB/bin/hubconf.py" ideas > "$ideas"   # 想法沙盒另外列一組
 # 注意:過濾時想法清單在 awk 的 BEGIN 讀,不要改回 `NR==FNR` 兩個檔案的寫法——清單是空檔(還沒有任何想法)
 # 時 NR==FNR 對每一行都成立,所有專案都會被濾掉(2026-10-24 名冊因此空了一次)
 [ -s "$rows" ] || { echo "gen-index-roster: 專案登錄是空的($HUB/projects)" >&2; exit 1; }

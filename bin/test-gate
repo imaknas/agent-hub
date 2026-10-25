@@ -1,12 +1,13 @@
 #!/usr/bin/env bash
-# commit 閘門:改到程式碼的 commit,兩個 python 的測試都過才放行(githooks/pre-commit 呼叫;也可以手動跑)。
+# commit 閘門:改到程式碼的 commit,平台的 Python 跑全部測試都過才放行(githooks/pre-commit 呼叫;也可以手動跑)。
 #
 #   test-gate            檢查「暫存區」(要 commit 的內容),不是 working tree——同一份 working tree 可能有
 #                        別的 session 改到一半的檔案,測它們沒有意義
 #   test-gate --all      不管暫存了什麼,一律跑
 #
-# 怎麼跑:把暫存區匯出到暫存目錄(git checkout-index),在那裡用 AGENT_HUB_ROOT 指過去、HOME 換成空的暫存目錄跑
-#   /opt/homebrew/bin/python3 跟 /usr/bin/python3(hook 跑在系統的 3.9),兩個一起跑。
+# 怎麼跑:把暫存區匯出到暫存目錄(git checkout-index),在那裡用 AGENT_HUB_ROOT 指過去、HOME 換成空的暫存目錄,
+#   用平台的 Python(bin/py,最低 3.13)跑。假 HOME 底下找不到平台的 Python,所以先問 bin/py 實際是哪一個,用
+#   AGENT_HUB_PYTHON 帶進去(位置還是只寫在 bin/py)。
 # 測試不准寫真的東西:HOME 是假的,所以碰不到真的 ~/workspace、匯流排、~/.claude;跑完假 HOME 裡多了任何檔案
 #   (空資料夾不算)= 有測試在寫使用者目錄,閘門失敗,列出是哪些檔案。
 # 只動資料檔的 commit(librarian、onboard 之類腳本寫的登錄、index、digest…)不跑:CODE 以外的路徑不觸發。
@@ -16,7 +17,8 @@ set -uo pipefail
 HUB="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$HUB" || exit 1
 CODE='^(bin|tests|contracts|templates|githooks|launchd|capabilities|agent-jobs)/|^hub\.json$'
-PYTHONS=(/opt/homebrew/bin/python3 /usr/bin/python3)
+PLATFORM_PY="$("$HUB/bin/py" -c 'import sys; print(sys.executable)')" || exit 1
+PYTHONS=("$PLATFORM_PY")
 
 if [ "${1:-}" != "--all" ] && ! git diff --cached --name-only | grep -Eq "$CODE"; then
   exit 0
@@ -33,7 +35,7 @@ i=0
 for py in "${PYTHONS[@]}"; do
   # 從 git hook 叫的時候環境裡有 GIT_DIR、GIT_INDEX_FILE…:不清掉,測試自己開的暫存 repo 會操作到這個 repo
   ( for v in $(env | sed -n 's/^\(GIT_[A-Z_]*\)=.*/\1/p'); do unset "$v"; done
-    cd "$work/tree" && HOME="$work/home" AGENT_HUB_ROOT="$work/tree" PYTHONDONTWRITEBYTECODE=1 \
+    cd "$work/tree" && HOME="$work/home" AGENT_HUB_ROOT="$work/tree" AGENT_HUB_PYTHON="$PLATFORM_PY" PYTHONDONTWRITEBYTECODE=1 \
       "$py" -m unittest discover -s tests >"$work/out$i" 2>&1 ) &
   i=$((i + 1))
 done

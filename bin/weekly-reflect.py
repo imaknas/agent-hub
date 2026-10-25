@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+#!/bin/sh -c exec${IFS}"${0%/*}/py"${IFS}"$0"${IFS}"$@"
 """每週跨專案活動分析(類似 claude.ai 的 Reflect,但看的是 Claude Code 這邊)。
 
 claude.ai 的 Reflect 只讀 claude.ai 的聊天紀錄跟 Memory,看不到 Claude Code 的

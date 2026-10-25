@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+#!/bin/sh -c exec${IFS}"${0%/*}/py"${IFS}"$0"${IFS}"$@"
 """專案登錄:<registry_dir>/<name>.yaml(一個專案一個檔,hub.json 指定目錄)→ 驗證 → JSON 快取。
 
 平台的程式碼裡不寫專案名稱:專案的 job、service、隱私標籤、路徑都在登錄裡。scheduler 每個 tick
@@ -450,7 +450,7 @@ def cmd_apply_updates() -> int:
     rows = c.execute("SELECT id, source, payload FROM events m WHERE m.type='message' AND m.to_project=?"
                      " AND NOT EXISTS(SELECT 1 FROM events x WHERE x.type='message.done' AND x.ref=m.id) ORDER BY seq",
                      (hub,)).fetchall()
-    hubbus = ["/usr/bin/python3", str(hubconf.ROOT / "bin" / "hubbus")]
+    hubbus = [sys.executable, str(hubconf.ROOT / "bin" / "hubbus")]
 
     def reply(to, mid, text, note):
         subprocess.run([*hubbus, "send", "--from", hub, "--to", to, "--reply-to", mid, "--type", "info", "--text", text],

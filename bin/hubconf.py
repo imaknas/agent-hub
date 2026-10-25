@@ -1,4 +1,4 @@
-"""平台設定與專案登錄的唯一入口(只用標準函式庫,系統的 python3 3.9 也能 import)。
+"""平台設定與專案登錄的唯一入口(只用標準函式庫;平台的 Python 是 bin/py,最低 3.13)。
 
 新程式一律從這裡拿路徑、名稱、owner,不要再寫死 ~/agent-hub、~/services、專案名稱。
   - hub 根目錄:這個檔案所在的 bin/ 的上一層;環境變數 AGENT_HUB_ROOT 可以覆蓋
@@ -7,7 +7,7 @@
     驗證後寫成 <hub>/.state/registry/index.json——這裡讀的是那份 JSON(不需要 PyYAML);
     還沒產生的話(新機器、MBP)退回 roster():直接從 YAML 檔讀名稱跟 paths
 
-給 shell 腳本用(任何 python3 都能跑):
+給 shell 腳本用("$HUB/bin/py" hubconf.py …):
   hubconf.py ideas     想法沙盒(登錄 type: idea)的名稱,一行一個
   hubconf.py get <key> hub.json 的單一值(點分隔,例:github.owner),給 shell 腳本用
   hubconf.py roster    每個專案一行 name<TAB>workspace<TAB>origin<TAB>memory_bare,沒有標題列;
@@ -168,7 +168,7 @@ def roster() -> dict[str, dict]:
     """登錄裡有哪些專案(平台自己除外)→ 它的 paths(原始字串,~ 沒展開)。
 
     直接讀 <registry_dir>/*.yaml 的檔名跟 `paths:` 區塊:不驗證、不需要 PyYAML、不靠 .state 的快取,
-    所以新機器(recover)、MBP、系統的 python3 都能用。要驗證過的完整登錄用 projects()。"""
+    所以新機器(recover)、MBP 都能用。要驗證過的完整登錄用 projects()。"""
     out = {}
     d = registry_dir()
     for f in sorted(d.glob("*.yaml")) if d and d.is_dir() else []:

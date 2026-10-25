@@ -1,7 +1,7 @@
 """check-memory-gaps.py 的筆記計數:只算 agent 寫進 memory/ 的 commit,平台自己的(consolidate、librarian、
 onboard 骨架、同步時的 merge)不算;讀 workspace 的 .agent-memory。
 
-    python3 -m unittest discover -s tests
+    bin/py -m unittest discover -s tests
 """
 import datetime
 import importlib.util

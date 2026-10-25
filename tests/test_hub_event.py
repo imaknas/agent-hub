@@ -1,6 +1,6 @@
 """bin/hub-event:平台的事件入口(執行環境抽象第 3 層)。用假的 runtime + 替身處理程式,不碰真的專案、匯流排。
 
-    python3 -m unittest discover -s tests
+    bin/py -m unittest discover -s tests
 """
 import importlib.machinery
 import importlib.util

@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+#!/bin/sh -c exec${IFS}"${0%/*}/py"${IFS}"$0"${IFS}"$@"
 """一個專案的權限政策,從專案登錄算出來,只用跟執行環境無關的詞(路徑、網域、能力名稱)。
 
 翻譯成各執行環境的設定是別的模組的事(設計:docs/design/capabilities.md):
@@ -25,7 +25,7 @@ import sys
 
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
 import hubconf  # noqa: E402
-# registry 要 PyYAML:只在算路徑政策時才 import,approvals() 只用標準函式庫(lease-relay、系統的 python3 也 import 得到)
+# registry 要 PyYAML:只在算路徑政策時才 import,approvals() 只用標準函式庫(lease-relay 不需要 yaml 也 import 得到)
 
 HOME = pathlib.Path.home()
 WRITE_CACHES = ["~/.cache/uv", "~/.cache/pip", "~/.npm", "~/.cache/node", "~/Library/Caches/pip",

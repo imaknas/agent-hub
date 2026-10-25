@@ -1,6 +1,6 @@
 """② 檢查:這個 repo 的範例資料照自己的契約(跟 vendor 的副本)驗證。不依賴別的 repo 在不在。
 
-    python3 -m unittest discover -s tests
+    bin/py -m unittest discover -s tests
 """
 import json
 import pathlib

@@ -6,7 +6,7 @@
 	<string>local.agent-hub-scheduler</string>
 	<key>ProgramArguments</key>
 	<array>
-		<string>/opt/homebrew/bin/python3</string>
+		<string>/Users/you/agent-hub/bin/py</string>
 		<string>/Users/you/agent-hub/bin/scheduler.py</string>
 	</array>
 	<key>StartInterval</key>

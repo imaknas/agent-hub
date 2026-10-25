@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+#!/bin/sh -c exec${IFS}"${0%/*}/py"${IFS}"$0"${IFS}"$@"
 """專案登錄的 services → launchd plist(~/Library/LaunchAgents/<label>.plist)。
 
 每個專案在 projects/<name>.yaml 宣告它的長駐程式,平台照這裡的規則產生 plist,內容變了才

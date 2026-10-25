@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+#!/bin/sh -c exec${IFS}"${0%/*}/py"${IFS}"$0"${IFS}"$@"
 """claude 的登入還能不能用(平台 job agent-hub/claude-login,每小時)。壞了或快到期就發 Discord。
 
 mini 上 claude 的憑證有三份,各自會壞(2026-10-24 Knas:登入失效時 Muninn 默默改用本機模型是嚴重的 silent fail):
@@ -36,7 +36,7 @@ MISSING_MEANS = {"token": "所有排程跟租借都會失敗"}
 def ask(env: dict) -> str | None:
     """None = 成功;否則是失敗原因。"""
     try:
-        r = subprocess.run(["/opt/homebrew/bin/python3", str(hubconf.ROOT / "bin" / "llm.py"), "run", "login-check"],
+        r = subprocess.run([sys.executable, str(hubconf.ROOT / "bin" / "llm.py"), "run", "login-check"],
                            input="只回覆 ok 兩個字母。", capture_output=True, text=True, timeout=180, env=env)
     except subprocess.TimeoutExpired:
         return "超過 3 分鐘沒回應"

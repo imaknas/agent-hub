@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+#!/bin/sh -c exec${IFS}"${0%/*}/py"${IFS}"$0"${IFS}"$@"
 """登錄宣告的憑證(projects/<p>.yaml 的 secrets:)在不在、有沒有被備份、快不快到期(平台 job agent-hub/secrets,每天)。
 
 憑證的分工(2026-10-24 Knas 決定):機器層級的(claude、Discord、B2、備份密碼…)平台管,宣告在 agent-hub 的登錄;

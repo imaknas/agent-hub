@@ -1,4 +1,4 @@
-#!/usr/bin/python3
+#!/bin/sh -c exec${IFS}"${0%/*}/py"${IFS}"$0"${IFS}"$@"
 """給 shell 腳本問執行環境的小指令(執行環境抽象,docs/design/runtime-abstraction.md)。預設的 runtime 見 hub.json。
 
   hub-runtime instructions-file <資料夾>   平台受管區塊要寫進的檔(相對這個資料夾)

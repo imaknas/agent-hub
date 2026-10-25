@@ -3,7 +3,7 @@
 同一個情境分別放進每個實作(Claude:寫成真的 jsonl 對話紀錄;Fake:直接放資料),再用同樣的斷言檢查——
 介面的語意是測出來的,不是靠約定。登記表裡有實作卻沒有對應的情境設定,測試直接失敗:新的實作不可能跳過契約測試。
 
-    python3 -m unittest discover -s tests
+    bin/py -m unittest discover -s tests
 """
 import datetime
 import json

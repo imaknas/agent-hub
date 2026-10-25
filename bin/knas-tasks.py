@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+#!/bin/sh -c exec${IFS}"${0%/*}/py"${IFS}"$0"${IFS}"$@"
 """〔Knas〕待辦 ↔ Muninn 的任務登錄(librarian 每晚呼叫,機械處理、零 LLM)。
 
 只有 Knas 能做的事只在 Muninn 登錄一次:各專案 STATE.md(跟 openclaw-migration-status.md,
@@ -38,7 +38,7 @@ import hubconf  # noqa: E402
 
 HUB = hubconf.ROOT
 COPIES = hubconf.p("memory_copies")
-HUBBUS = ["/usr/bin/python3", str(HUB / "bin" / "hubbus")]
+HUBBUS = [sys.executable, str(HUB / "bin" / "hubbus")]
 MIGRATED = hubconf.STATE / "knas-tasks-migrated"
 VANISHED = hubconf.STATE / "knas-tasks-inferred.json"   # 已經處理過(寄了推斷結案或警告過)的 key
 REVIEW_LOG = HUB / "review-log.md"

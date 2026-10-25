@@ -1,7 +1,7 @@
 """每晚的 worktree 自動清理(bin/worktrees.py auto_prune):在暫存的 git repo 裡實際建 worktree,
 確認該動的才動、不該動的不動。
 
-    python3 -m unittest discover -s tests
+    bin/py -m unittest discover -s tests
 """
 import pathlib
 import shutil

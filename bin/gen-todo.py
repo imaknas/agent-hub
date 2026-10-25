@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+#!/bin/sh -c exec${IFS}"${0%/*}/py"${IFS}"$0"${IFS}"$@"
 """從各專案 STATE.md 的 `## 待辦` 段落,機械產生跨專案 todo.md。不用 LLM。
 
 來源格式(librarian 維護 STATE.md 時照這個寫,agent-hub 自己的待辦寫在

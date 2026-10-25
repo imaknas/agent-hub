@@ -1,4 +1,4 @@
-#!/opt/homebrew/bin/python3
+#!/bin/sh -c exec${IFS}"${0%/*}/py"${IFS}"$0"${IFS}"$@"
 """替 Muninn 的想法開一個探討用的專案(想法沙盒,docs/design/idea-sandboxes.md)。
 
 想法沙盒 = 正常 onboard(有 .agent-memory:深談收回的交接筆記寫在那裡)、沒有 GitHub remote、
@@ -110,10 +110,10 @@ def create(name: str, purpose: str) -> int:
         note = "(登錄檔已經 commit,沒有刪,要手動處理)" if tracked else ""
         return out("create_failed", 1, detail=f"onboard 失敗:{tail}{note}")
 
-    subprocess.run(["/opt/homebrew/bin/python3", str(HUB / "bin" / "registry.py"), "check", name],
+    subprocess.run([sys.executable, str(HUB / "bin" / "registry.py"), "check", name],
                    capture_output=True)  # 更新快取:attachable 馬上看得到
     # sandbox 設定馬上寫進去,不等 15 分鐘的平台 job:work 模式(lease-runner 的 work_ready)要看到它才放行
-    subprocess.run(["/opt/homebrew/bin/python3", str(HUB / "bin" / "render-project-settings.py"), "--only", name],
+    subprocess.run([sys.executable, str(HUB / "bin" / "render-project-settings.py"), "--only", name],
                    capture_output=True)
     return out("created", 0, name=name)
 

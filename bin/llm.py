@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+#!/bin/sh -c exec${IFS}"${0%/*}/py"${IFS}"$0"${IFS}"$@"
 """agent-hub 唯一呼叫 `claude -p` 的地方。每次呼叫都要是 contracts/llm-points.yaml 宣告過的判斷點:
 旗標(模型、權限模式、工具、allowedTools)照宣告加,輸出照宣告的 schema 驗證,模型不能用或輸出不合格時
 照宣告回安全預設或交給呼叫端的失敗路徑,並在匯流排記 job.failed。
@@ -42,7 +42,7 @@ def points() -> dict:
 
 
 def job_failed(point: str, reason: str) -> None:
-    subprocess.run(["/usr/bin/python3", str(hubconf.ROOT / "bin" / "hubbus"), "publish", "job.failed",
+    subprocess.run([sys.executable, str(hubconf.ROOT / "bin" / "hubbus"), "publish", "job.failed",
                     "--source", "llm", "--payload",
                     json.dumps({"job": f"llm:{point}", "detail": reason[:500]}, ensure_ascii=False)],
                    capture_output=True)
