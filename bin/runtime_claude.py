@@ -551,3 +551,18 @@ def resumable(sid: str) -> bool:
 def resume_command(sid: str) -> tuple:
     return (f"~/agent-hub/bin/lease-resume {sid}",
             "在 mini 的終端機貼上:會接回同一段對話(Claude Code)。談完回 Muninn 按「收回」做交接。")
+
+
+def neutral_question(inp: dict) -> dict:
+    """AskUserQuestion 的 input → 通用的提問結構 {questions: [{question, options: [{label, description?}], multi}]}。"""
+    qs = []
+    for q in (inp or {}).get("questions") or []:
+        opts = [{"label": o.get("label", ""), **({"description": o["description"]} if o.get("description") else {})}
+                for o in q.get("options") or [] if isinstance(o, dict)]
+        qs.append({"question": q.get("question", ""), "options": opts, "multi": bool(q.get("multiSelect"))})
+    return {"questions": qs}
+
+
+def native_answers(answers: dict) -> dict:
+    """通用的答案 {問題: label 或 [label…]} → AskUserQuestion 要的 {問題: "label"}(多選用逗號接起來)。"""
+    return {q: (", ".join(a) if isinstance(a, list) else a) for q, a in (answers or {}).items()}

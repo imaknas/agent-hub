@@ -71,3 +71,27 @@ def policy(name: str, doc: dict, index: dict) -> dict:
 def for_project(name: str) -> dict:
     index = registry.refresh()
     return policy(name, index["projects"][name], index)
+
+
+# ---------- 哪些動作要問人(approvals;docs/design/lease-contract-neutral.md)----------
+# 規則的值:
+#   allow       直接放行            deny        直接拒絕(不問)
+#   ask         問 owner(手機),可以「這個租約都允許」
+#   ask_once    問 owner,每次都問(「這個租約都允許」只算這一次)
+#   inside      專案資料夾裡放行、外面拒絕(不問;路徑解析成真實路徑再判斷)
+#   listed      open_web 的網域在 web_allowed 裡放行,其他 ask;no_session_domains 不准「這個租約都允許」
+# 10-25 Knas 決定的 work 模式:資料夾內寫檔不問、指令每次都問。
+APPROVALS = {
+    "discuss": {"read": "allow", "search": "allow", "ask_user": "ask", "open_web": "listed",
+                "write_file": "deny", "run_command": "deny", "other": "deny"},
+    "work": {"read": "allow", "search": "allow", "ask_user": "ask", "open_web": "listed",
+             "write_file": "inside", "run_command": "ask_once", "other": "deny"},
+}
+
+
+def approvals(name: str, mode: str, doc: dict | None = None) -> dict:
+    """{mode, rules: {kind: 規則}, web_allowed: [網域], no_session_domains: [網域]}——各 runtime 接到自己的權限機制。"""
+    doc = doc if doc is not None else (hubconf.projects().get(name) or {})
+    return {"mode": mode, "rules": dict(APPROVALS["work" if mode == "work" else "discuss"]),
+            "web_allowed": list(doc.get("network") or []),
+            "no_session_domains": list(hubconf.get("lease.no_session_domains", []))}
