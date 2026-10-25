@@ -30,7 +30,7 @@ class FakeRuntime:
     def live_sessions(self):
         return set(self.live)
 
-    def context_tokens(self, sid):
+    def context_size(self, sid):
         return self.tokens.get(sid)
 
     def resume_args(self, sid):

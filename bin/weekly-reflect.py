@@ -29,9 +29,9 @@ import zoneinfo
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
 import hubconf  # noqa: E402
 import hublib  # noqa: E402
+import runtime_ports  # noqa: E402  對話紀錄只透過介面讀(Claude Code 只是一個實作)
 
 TZ = zoneinfo.ZoneInfo("Asia/Taipei")
-TRANSCRIPTS = hublib.TRANSCRIPT_ROOTS
 MIRRORS = hublib.HOME / "git-origin" / "mirrors"
 MEMORY_COPIES = hublib.MEMORY_COPIES
 OUT = hublib.HUB / "reflect"
@@ -85,30 +85,25 @@ class Week:
 def scan(start: datetime.datetime, end: datetime.datetime) -> dict[str, Week]:
     prev_start = start - datetime.timedelta(days=7)
     weeks = {"this": Week(), "prev": Week()}
+    rt = runtime_ports.load(ports=("transcripts",))
     for name, paths in hublib.project_paths().items():
-        for e in hublib.iter_entries(TRANSCRIPTS, paths, prev_start.astimezone(datetime.timezone.utc),
-                                     end.astimezone(datetime.timezone.utc)):
-            w = weeks["this" if e.ts >= start else "prev"]
-            o = e.entry
-            if hublib.is_human_prompt(o):
-                local = e.ts.astimezone(TZ)
+        for t in rt.turns(paths, prev_start.astimezone(datetime.timezone.utc), end.astimezone(datetime.timezone.utc)):
+            w = weeks["this" if t.ts >= start else "prev"]
+            if t.role == "human":
+                local = t.ts.astimezone(TZ)
                 w.prompts[name] += 1
-                w.sessions[name].add(e.session)
+                w.sessions[name].add(t.session)
                 w.days[name].add(local.date())
                 w.times.append(local)
-            elif o.get("type") == "assistant":
-                for c in o.get("message", {}).get("content", []) or []:
-                    if not isinstance(c, dict) or c.get("type") != "tool_use":
-                        continue
-                    tool = c.get("name", "")
-                    if tool == "Agent":
-                        w.agents += 1
-                    elif tool == "Workflow":
-                        w.workflows += 1
-                    elif tool == "SendMessage" or tool.endswith("send_message"):
-                        w.peer_msgs += 1
-                    elif tool == "Skill":
-                        w.skills[(c.get("input") or {}).get("skill", "?")] += 1
+            for a in t.actions:  # 中立的動作種類(runtime_ports.ACTIONS),不認得任何 runtime 的工具名稱
+                if a.kind == "subagent":
+                    w.agents += 1
+                elif a.kind == "workflow":
+                    w.workflows += 1
+                elif a.kind == "peer_message":
+                    w.peer_msgs += 1
+                elif a.kind == "skill":
+                    w.skills[a.detail] += 1
     return weeks
 
 

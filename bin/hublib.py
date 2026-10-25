@@ -1,6 +1,8 @@
 """agent-hub 幾支腳本共用的判斷:哪些 transcript 是真人打的訊息、transcript 資料夾
 對應到哪個專案、哪些 commit 算專案工作。放在一處,改一次所有腳本一起跟上。
 
+讀對話紀錄不在這裡:經過 runtime_ports(第 5 層 transcripts),Claude Code 的格式只在 runtime_claude.py。
+
 使用者:check-memory-gaps.py、memory-nudge.py、weekly-reflect.py。
 """
 from __future__ import annotations  # 系統的 python3(3.9,hook 裡用的就是它)也要能 import:memory-nudge.py 靠它
@@ -9,7 +11,6 @@ import datetime
 import json
 import pathlib
 import re
-from typing import Iterable, Iterator, NamedTuple
 
 import hubconf  # 同在 bin/;用 hublib 的腳本都已經把 bin/ 放進 sys.path
 
@@ -25,16 +26,6 @@ MINI_WORKSPACE = f"{MINI_HOME}/workspace"
 # mini 上 librarian 用的 memory-only 副本(只有 AGENT.md/STATE.md/memory/,不是專案程式碼)。
 # 2026-10-15 前叫 ~/projects,改成隱藏目錄:跟 ~/workspace(開 session 的地方)名字太像,會被當成專案資料夾
 MEMORY_COPIES = HOME / ".memory-copies"
-# 跑在 mini 上的分析讀這些地方:MBP 每小時備份過來的 transcript + mini 本機 session 的。
-# mini 的 ~/.claude/projects 也有 librarian `claude -p` 的 transcript(-Users-<user>--memory-copies-*),
-# iter_entries 只用完整 slug 比對,不會算進去。
-# **不要**把 ~/transcript-backups/claude-work-projects(工作 profile,muninn 的 MBP agent 同步過來的)
-# 加進來:weekly-reflect 會把這裡讀到的訊息原文送雲端模型,工作對話只能在本機處理(見 known-issues)。
-TRANSCRIPT_ROOTS = (
-    HOME / "transcript-backups" / "claude-personal-projects",
-    pathlib.Path(f"{MINI_HOME}/.claude/projects"),
-)
-
 # 沒有 onboard、但 transcript 裡會出現、值得單獨算的工作目錄(舊的 MBP 位置在 legacy-paths.tsv)
 EXTRA_PROJECTS = {
     "agent-hub": f"{MINI_HOME}/agent-hub",
@@ -58,11 +49,6 @@ AUTOMATED_SUBJECT = re.compile(r"^(papers: |data: nightly snapshot|librarian: )"
 NON_WORK_PATHS = (":!.gitignore", ":!.claude", ":!CLAUDE.md")
 
 
-def slug_for_path(path: str) -> str:
-    """Claude Code 存 transcript 的資料夾名:路徑裡的 / 跟 . 換成 -。"""
-    return path.replace("/", "-").replace(".", "-")
-
-
 def project_paths() -> dict[str, list[str]]:
     """專案名稱 → 現在的路徑(mini 的 ~/workspace)+ 以前的路徑(legacy-paths.tsv)。"""
     out: dict[str, list[str]] = {}
@@ -75,52 +61,6 @@ def project_paths() -> dict[str, list[str]]:
     for name, paths in legacy_paths().items():
         out.setdefault(name, []).extend(p for p in paths if p not in out[name])
     return out
-
-
-def is_human_prompt(entry: dict) -> bool:
-    """只算 Knas 實際送出的訊息。排除:其他 session 傳來的訊息、背景工作通知、
-    slash command 的輸出、壓縮摘要、hook 注入等(它們在 transcript 裡也是 type=user)。"""
-    if entry.get("type") != "user" or entry.get("isMeta") or entry.get("isCompactSummary"):
-        return False
-    if not isinstance(entry.get("message", {}).get("content"), str):
-        return False  # tool result
-    origin = entry.get("origin")
-    return isinstance(origin, dict) and origin.get("kind") == "human"
-
-
-def parse_ts(ts: str) -> datetime.datetime:
-    return datetime.datetime.fromisoformat(ts.replace("Z", "+00:00"))
-
-
-class Entry(NamedTuple):
-    ts: datetime.datetime      # aware, UTC
-    session: str
-    entry: dict
-
-
-def iter_entries(transcripts: pathlib.Path | Iterable[pathlib.Path], paths: list[str],
-                 since: datetime.datetime, until: datetime.datetime | None = None) -> Iterator[Entry]:
-    """某個專案(可能有多個路徑)在時間範圍內的所有 transcript 紀錄。transcripts 可以是
-    一個或多個根目錄(TRANSCRIPT_ROOTS)。"""
-    roots = [transcripts] if isinstance(transcripts, pathlib.Path) else list(transcripts)
-    for root, path in ((r, p) for r in roots for p in paths):
-        d = root / slug_for_path(path)
-        for f in d.glob("*.jsonl"):
-            if datetime.datetime.fromtimestamp(f.stat().st_mtime, datetime.timezone.utc) < since:
-                continue  # 這個檔案在範圍開始前就沒再寫過
-            with f.open(errors="replace") as fh:
-                for line in fh:
-                    try:
-                        o = json.loads(line)
-                    except ValueError:
-                        continue
-                    ts = o.get("timestamp")
-                    if not ts:
-                        continue
-                    t = parse_ts(ts)
-                    if t < since or (until and t >= until):
-                        continue
-                    yield Entry(t, o.get("sessionId") or f.stem, o)
 
 
 def is_work_subject(subject: str) -> bool:

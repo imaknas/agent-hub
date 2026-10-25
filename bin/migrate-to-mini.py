@@ -35,6 +35,7 @@ import sys
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
 import hubconf  # noqa: E402
 import hublib  # noqa: E402
+import runtime_claude  # noqa: E402  # 這支搬的是 Claude Code 的 auto memory,本來就是 Claude 專用
 
 MINI = "hub-host"
 MINI_PATH_PREFIX = "export PATH=/opt/homebrew/bin:/opt/homebrew/opt/rustup/bin:$HOME/.local/bin:$HOME/.cargo/bin:$PATH; "
@@ -254,9 +255,9 @@ def copy_auto_memory(name: str, path: str) -> None:
     搬到 mini 的 ~/.claude/projects/<mini 路徑的 slug>/memory/(mini 只有個人帳號,所以是 ~/.claude)。
     改過名的專案,舊路徑的 memory 一起帶過去。mini 上已經有的檔案不覆蓋。"""
     old_paths = [path] + [p for p in hublib.legacy_paths(name) if p != path]
-    dest = f".claude/projects/{hublib.slug_for_path(f'{hublib.MINI_WORKSPACE}/{name}')}/memory/"
+    dest = f".claude/projects/{runtime_claude.slug_for_path(f'{hublib.MINI_WORKSPACE}/{name}')}/memory/"
     for old in old_paths:
-        src = hublib.HOME / ".claude-personal" / "projects" / hublib.slug_for_path(old) / "memory"
+        src = hublib.HOME / ".claude-personal" / "projects" / runtime_claude.slug_for_path(old) / "memory"
         if not src.is_dir() or not any(src.iterdir()):
             continue
         mini(f"mkdir -p ~/{dest}")

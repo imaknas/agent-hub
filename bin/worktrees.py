@@ -141,10 +141,9 @@ def _cwds_in_use() -> list[str]:
 
 
 def _transcript_age_days(path: str) -> float | None:
-    import hublib
-    d = pathlib.Path.home() / ".claude" / "projects" / hublib.slug_for_path(path)
-    ts = [f.stat().st_mtime for f in d.glob("*.jsonl")] if d.is_dir() else []
-    return round((time.time() - max(ts)) / 86400, 1) if ts else None
+    import runtime_ports  # 對話紀錄只透過介面讀(Claude Code 只是一個實作)
+    last = runtime_ports.load(ports=("transcripts",)).last_activity(path)
+    return round((time.time() - last.timestamp()) / 86400, 1) if last else None
 
 
 def _idle_days(w: dict) -> float | None:

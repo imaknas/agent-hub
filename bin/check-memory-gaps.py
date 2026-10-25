@@ -25,15 +25,15 @@ import sys
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
 import hubconf  # noqa: E402
 import hublib  # noqa: E402
+import runtime_ports  # noqa: E402  對話紀錄只透過介面讀(Claude Code 只是一個實作)
 
-TRANSCRIPTS = hublib.TRANSCRIPT_ROOTS
 MEMORY_COPIES = hublib.MEMORY_COPIES
 
 
 def human_messages_since(paths: list[str], since: datetime.datetime) -> int:
     """只算 Knas 實際送出的訊息(2026-10-03 前連其他 session 的訊息、背景通知也算進去)。"""
-    return sum(1 for e in hublib.iter_entries(TRANSCRIPTS, paths, since)
-               if hublib.is_human_prompt(e.entry))
+    rt = runtime_ports.load(ports=("transcripts",))
+    return sum(1 for t in rt.turns(paths, since) if t.role == "human")
 
 
 def memory_commits_since(name: str, since: datetime.datetime) -> int:

@@ -635,7 +635,8 @@ def hold(c, r) -> None:
 def dispatch(c, rt=None) -> int:
     """平台處理沒人收的 request/question(見檔頭)。回傳還在等 hook 的信數。"""
     if rt is None:
-        import runtime_claude as rt
+        import runtime_ports  # 執行環境只透過介面拿(Claude Code 只是一個實作)
+        rt = runtime_ports.load()
     live, leases, hub = rt.live_sessions(), lease_ids(), hubconf.hub_project()
     wait_cut = iso(now() - datetime.timedelta(minutes=CONVERSATION_WAIT_MIN))
     waiting = 0
@@ -655,7 +656,7 @@ def dispatch(c, rt=None) -> int:
                 if to_s in live and r["ts"] >= wait_cut:
                     waiting += 1
                     continue
-                tokens = rt.context_tokens(to_s)
+                tokens = rt.context_size(to_s)
                 if tokens is not None and tokens <= RESUME_MAX_TOKENS and runs_today(c, proj) < DAILY_RUNS:
                     resume(c, r, to_s, session_cwd(c, to_s) or ws, rt, ws)
                     continue
@@ -855,7 +856,8 @@ def main() -> None:
         return cmd_status(a.json)
 
     c = db()
-    session = os.environ.get("CLAUDE_CODE_SESSION_ID")
+    import runtime_ports  # 寄件的 session:問執行環境(現在是 Claude Code 給的環境變數)
+    session = runtime_ports.current_session()
     here = project_of(pathlib.Path.cwd())
     if a.cmd == "publish":
         publish(c, a.id or f"e{now():%m%d%H%M%S}-{secrets.token_hex(3)}", a.type, a.source, a.to, a.ref,

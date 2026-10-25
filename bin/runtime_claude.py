@@ -117,3 +117,124 @@ def sandbox_rendered(ws) -> tuple[bool, str]:
     if not (st.get("sandbox") or {}).get("enabled"):
         return False, "sandbox 還沒寫進這個專案的設定(sandbox.enabled 不是 true)"
     return True, ""
+
+
+# ---------- sessions(runtime_ports 的 sessions 介面)----------
+
+def context_size(sid: str) -> int | None:
+    return context_tokens(sid)
+
+
+def current_session(env) -> str | None:
+    """Claude Code 在 session 裡跑的程序(Bash、hook)都帶著這個環境變數。"""
+    return env.get("CLAUDE_CODE_SESSION_ID") or None
+
+
+# ---------- 對話紀錄(runtime_ports 的 transcripts 介面)----------
+# Claude Code 的對話紀錄是沒有公開文件的內部格式(~/.claude/projects/<slug>/<session>.jsonl)。這裡是平台
+# 唯一讀它的地方:解析成中立的 Turn/Action,認不得的格式明確失敗(TranscriptFormatError),不讓統計默默算錯。
+
+import datetime  # noqa: E402
+
+from runtime_ports import Action, Turn  # noqa: E402
+
+
+class TranscriptFormatError(Exception):
+    pass
+
+
+def _mini_home() -> str:
+    try:
+        import hubconf
+        return hubconf.get("hosts.mini_home", str(pathlib.Path.home()))
+    except Exception:
+        return str(pathlib.Path.home())
+
+
+def transcript_roots() -> tuple:
+    """讀哪些地方:MBP 每小時備份過來的(個人 profile)+ mini 本機 session 的。
+    **不要**加工作 profile 的備份(~/transcript-backups/claude-work-projects):weekly-reflect 會把這裡讀到的
+    訊息原文送雲端模型,工作對話只能在本機處理(見 known-issues)。"""
+    return (pathlib.Path.home() / "transcript-backups" / "claude-personal-projects",
+            pathlib.Path(_mini_home()) / ".claude" / "projects",
+            pathlib.Path.home() / ".claude-personal" / "projects")   # MBP 上手動跑(trajectory)時的個人 profile
+
+
+def slug_for_path(path: str) -> str:
+    """Claude Code 存對話紀錄的資料夾名:路徑裡的 / 跟 . 換成 -。"""
+    return path.replace("/", "-").replace(".", "-")
+
+
+def _is_human_prompt(entry: dict) -> bool:
+    """只算使用者實際送出的訊息。排除:其他 session 傳來的、背景工作通知、slash command 的輸出、壓縮摘要、
+    hook 注入等(它們在對話紀錄裡也是 type=user)。"""
+    if entry.get("type") != "user" or entry.get("isMeta") or entry.get("isCompactSummary"):
+        return False
+    if not isinstance(entry.get("message", {}).get("content"), str):
+        return False  # 工具結果
+    origin = entry.get("origin")
+    return isinstance(origin, dict) and origin.get("kind") == "human"
+
+
+def _action(block: dict) -> Action:
+    """Claude 的工具名稱 → 平台中立的動作種類(runtime_ports.ACTIONS)。"""
+    name = block.get("name", "")
+    if name == "Agent":
+        return Action("subagent")
+    if name == "Workflow":
+        return Action("workflow")
+    if name == "SendMessage" or name.endswith("send_message"):
+        return Action("peer_message")
+    if name == "Skill":
+        return Action("skill", (block.get("input") or {}).get("skill", "?"))
+    return Action("tool", name)
+
+
+def _parse_ts(ts: str) -> datetime.datetime:
+    return datetime.datetime.fromisoformat(ts.replace("Z", "+00:00"))
+
+
+_KNOWN = {"user", "assistant", "system", "summary", "attachment", "progress", "queue-operation", "file-history-snapshot"}
+
+
+def _turn(o: dict, fallback_sid: str) -> Turn | None:
+    ts = o.get("timestamp")
+    if not ts:
+        return None
+    sid = o.get("sessionId") or fallback_sid
+    if _is_human_prompt(o):
+        return Turn(_parse_ts(ts), sid, "human", o["message"]["content"])
+    if o.get("type") == "assistant":
+        content = (o.get("message") or {}).get("content") or []
+        acts = tuple(_action(c) for c in content if isinstance(c, dict) and c.get("type") == "tool_use")
+        return Turn(_parse_ts(ts), sid, "assistant", "", acts)
+    return Turn(_parse_ts(ts), sid, "other")
+
+
+def turns(paths, since: datetime.datetime, until: datetime.datetime | None = None):
+    for root, path in ((r, p) for r in transcript_roots() for p in paths):
+        for f in (root / slug_for_path(str(path))).glob("*.jsonl"):
+            if datetime.datetime.fromtimestamp(f.stat().st_mtime, datetime.timezone.utc) < since:
+                continue  # 範圍開始前就沒再寫過
+            parsed = recognised = 0
+            with f.open(errors="replace") as fh:
+                for line in fh:
+                    try:
+                        o = json.loads(line)
+                    except ValueError:
+                        continue
+                    parsed += 1
+                    if not isinstance(o, dict) or o.get("type") not in _KNOWN:
+                        continue
+                    recognised += 1
+                    t = _turn(o, f.stem)
+                    if t and t.ts >= since and (until is None or t.ts < until):
+                        yield t
+            if parsed >= 5 and recognised == 0:
+                raise TranscriptFormatError(f"{f}:{parsed} 筆紀錄沒有一筆是認得的格式(Claude Code 改了對話紀錄格式?)")
+
+
+def last_activity(path) -> datetime.datetime | None:
+    ts = [f.stat().st_mtime for root in transcript_roots()
+          for f in (root / slug_for_path(str(path))).glob("*.jsonl")]
+    return datetime.datetime.fromtimestamp(max(ts), datetime.timezone.utc) if ts else None
