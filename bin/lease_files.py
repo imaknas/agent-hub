@@ -4,7 +4,9 @@ lease-runner 收到「給他看這個」(`POST /v1/internal/<lease>/show`,sessio
   1. 在專案資料夾裡:相對專案資料夾解析,解析成真實路徑後要在資料夾裡(`../`、symlink 指出去都擋),而且是一般檔案
   2. 類型:副檔名在 TYPES 裡,**內容開頭也要對**(圖片/pdf/glb 看 magic bytes,文字要是 UTF-8);不收 svg、html
   3. 大小:每個 ≤ MAX_FILE;每個租約最多 MAX_COUNT 個、合計 MAX_TOTAL
-  4. 看起來像憑證的檔名、專案登錄 secrets: 宣告的路徑一律不送
+  4. 看起來像憑證的檔名、專案登錄 secrets: 宣告的路徑、內容像憑證的文字檔(私鑰、API key)一律不送
+以「打開的那個 fd」為準,不是以字串路徑為準(10-25 review):runner 不在 sandbox 裡,session 可以借它的手讀檔(confused deputy)——
+  hard link(st_nlink > 1)拒絕;打開之後用 F_GETPATH 拿實際打開的檔的路徑,再檢查一次在資料夾裡、不是 secrets。
 檢查完把內容複製到租約自己的目錄(session 寫不到),之後只從這份送:檢查跟送出之間被換掉沒用,原檔改了刪了也還看得到。
 保留 KEEP_DAYS(prune())。標準函式庫。
 
@@ -14,6 +16,7 @@ lease-runner 收到「給他看這個」(`POST /v1/internal/<lease>/show`,sessio
 """
 from __future__ import annotations
 
+import fcntl
 import json
 import os
 import pathlib
@@ -42,6 +45,10 @@ TYPES = {
     ".csv": ("text/csv; charset=utf-8", TEXT),
 }
 SECRET_NAME = re.compile(r"(^\.env|\.pem$|\.key$|\.p12$|\.pfx$|^id_(rsa|ed25519|ecdsa)|secret|token|credential|password)", re.I)
+# 文字檔的內容像憑證就不送(檔名看不出來的,例:service-account.json 裡的私鑰)
+SECRET_TEXT = re.compile(r"-----BEGIN [A-Z ]*PRIVATE KEY-----|\"private_key\"\s*:|sk-ant-[A-Za-z0-9_-]{10}|"
+                         r"\bghp_[A-Za-z0-9]{20}|\bgithub_pat_[A-Za-z0-9_]{20}|\bAKIA[0-9A-Z]{16}\b|\bxox[bpas]-[A-Za-z0-9-]{10}")
+F_GETPATH = getattr(fcntl, "F_GETPATH", 50)  # macOS:fd 實際對應的路徑
 ID = re.compile(r"^[0-9a-f]{16}$")
 
 
@@ -71,6 +78,14 @@ def take(ws, path: str, summary: str | None, store, secret_paths=()) -> tuple:
         st = os.fstat(fd)
         if not stat.S_ISREG(st.st_mode):
             return None, f"{rel} 不是一般檔案"
+        if st.st_nlink > 1:  # hard link 可能指著資料夾外的檔(resolve、O_NOFOLLOW 都看不出來)
+            return None, f"{rel} 是 hard link(可能指到資料夾外),不送"
+        try:
+            opened = pathlib.Path(os.fsdecode(fcntl.fcntl(fd, F_GETPATH, bytes(1024)).split(b"\0", 1)[0])).resolve()
+        except OSError:
+            opened = None
+        if opened is None or not _inside(ws, opened) or any(opened == pathlib.Path(s).resolve() for s in secret_paths):
+            return None, f"{rel} 打開的不是資料夾裡的那個檔(路徑中途被換掉了?),不送"
         if st.st_size > MAX_FILE:
             return None, f"{rel} 太大({st.st_size // 1024 // 1024} MB;上限 {MAX_FILE // 1024 // 1024} MB)"
         with os.fdopen(fd, "rb", closefd=False) as f:
@@ -82,11 +97,14 @@ def take(ws, path: str, summary: str | None, store, secret_paths=()) -> tuple:
     mime, ok = TYPES[ext]
     if ok == TEXT:
         try:
-            data.decode("utf-8")
+            text = data.decode("utf-8")
         except UnicodeDecodeError:
             return None, f"{rel} 不是 UTF-8 文字"
+        if SECRET_TEXT.search(text):
+            return None, f"{rel} 的內容像憑證(私鑰或 API key),不送"
     elif not ok(data):
         return None, f"{rel} 的內容不是 {ext[1:]}(副檔名跟內容對不上)"
+    # 上限是先讀再寫:同一個租約一次只跑一個回合、工具一次一個,不會兩個 show 同時算
     kept = [json.loads(m.read_text()) for m in store.glob("*.json")] if store.is_dir() else []
     if len(kept) >= MAX_COUNT:
         return None, f"這個深談已經給了 {MAX_COUNT} 個檔案,到上限了"
@@ -126,4 +144,8 @@ def prune(store, older_than_s: float) -> int:
                 n += 1
         except (OSError, ValueError):
             continue
+    for f in store.iterdir():  # 寫到一半就掛掉、沒有 meta 的內容
+        if ID.match(f.name) and not (store / f"{f.name}.json").exists() and f.stat().st_mtime < cutoff:
+            f.unlink(missing_ok=True)
+            n += 1
     return n

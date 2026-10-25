@@ -456,7 +456,9 @@ _TOOL_KIND = {"Read": "read", "Glob": "search", "Grep": "search", "WebSearch": "
 _TARGET_KEYS = ("file_path", "notebook_path", "url", "command", "pattern", "query", "path")
 _VERB = {"read": "讀", "search": "搜尋", "open_web": "開網頁", "write_file": "寫", "run_command": "跑"}
 _QUOTA_STATUS = {"allowed": "ok", "allowed_warning": "warning", "rejected": "exhausted"}
-SHOW_FILE_TOOL = "mcp__lease_relay__show_file"   # 平台工具 show_file 在 Claude Code 裡的名字(lease-relay.py 的 MCP)
+RELAY_SERVER = "lease_relay"                      # 租約的平台 MCP server(lease-relay.py)在設定裡的名字
+APPROVE_TOOL = f"mcp__{RELAY_SERVER}__approve"     # 權限轉接(--permission-prompt-tool)
+SHOW_FILE_TOOL = f"mcp__{RELAY_SERVER}__show_file"  # 平台工具 show_file(llm-points 的允許清單也是這個名字)
 _WINDOWS = (("five_hour", "5 小時"), ("seven_day", "7 天"))
 
 

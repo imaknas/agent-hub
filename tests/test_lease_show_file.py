@@ -117,6 +117,44 @@ class Take(unittest.TestCase):
         (self.ws / "data.json").write_text("{}")
         self.refused("data.json", secret_paths=[self.ws / "data.json"])
 
+    def test_hard_link_refused(self):
+        """10-25 review:hard link 指到資料夾外的檔,resolve/O_NOFOLLOW 看不出來(runner 不在 sandbox,不能讓它代讀)。"""
+        (self.tmp / "out.txt").write_text("outside")
+        os.link(self.tmp / "out.txt", self.ws / "looks-fine.txt")
+        self.assertIn("hard link", self.refused("looks-fine.txt"))
+
+    def test_opened_file_must_be_inside(self):
+        """10-25 review:resolve 到 open 之間路徑被換掉——以實際打開的 fd 為準。"""
+        real_open = os.open
+
+        def swap(path, *a, **k):  # 打開前把資料夾換成指到外面的 symlink
+            if str(path).endswith("a.png") and not (self.ws / "results").is_symlink():
+                shutil.move(str(self.ws / "results"), str(self.tmp / "moved"))
+                (self.tmp / "evil").mkdir()
+                (self.tmp / "evil" / "a.png").write_bytes(PNG)
+                (self.ws / "results").symlink_to(self.tmp / "evil")
+            return real_open(path, *a, **k)
+        with mock.patch.object(lease_files.os, "open", swap):
+            self.assertIn("不是資料夾裡的那個檔", self.refused("results/a.png"))
+
+    def test_secret_content_refused(self):
+        for name, text in (("service-account.json", '{"type": "service_account", "private_key": "x"}'),
+                           ("notes.md", "-----BEGIN OPENSSH PRIVATE KEY-----\nabc"),
+                           ("env.txt", "ANTHROPIC=sk-ant-api03-abcdefghijklmnop"),
+                           ("gh.txt", "ghp_" + "a" * 36), ("aws.csv", "id,AKIAABCDEFGHIJKLMNOP")):
+            (self.ws / name).write_text(text)
+            self.assertIn("內容像憑證", self.refused(name), name)
+        (self.ws / "plain.md").write_text("# 房間尺寸\n寬 3.2m")
+        self.assertIsNotNone(self.take("plain.md")[0])
+
+    def test_prune_removes_orphans(self):
+        self.store.mkdir()
+        orphan = self.store / ("f" * 16)
+        orphan.write_bytes(b"x")
+        os.utime(orphan, (0, 0))
+        self.assertEqual(lease_files.prune(self.store, 3600), 1)
+        self.assertFalse(orphan.exists())
+
     def test_read_rejects_bad_ids_and_prune(self):
         meta, _ = self.take("results/a.png")
         self.assertIsNone(lease_files.read(self.store, "../x"))

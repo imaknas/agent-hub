@@ -207,9 +207,10 @@ def deny_settings(project: str) -> pathlib.Path:
 
 
 def mcp_config(lease: Lease) -> pathlib.Path:
+    import runtime_claude  # 租約的 MCP 設定還是 Claude Code 的格式(長駐 session 那層之後搬進 runtime)
     p = lease.dir / "mcp.json"
     p.parent.mkdir(parents=True, exist_ok=True)
-    p.write_text(json.dumps({"mcpServers": {"lease_relay": {
+    p.write_text(json.dumps({"mcpServers": {runtime_claude.RELAY_SERVER: {
         "command": PY, "args": [str(HUB / "bin" / "lease-relay.py")],
         "env": {"LEASE_ID": lease.id, "LEASE_PROJECT": lease.project, "LEASE_RUNNER": f"http://{HOST}:{PORT}"}}}}))
     return p
@@ -270,13 +271,14 @@ def preamble(project: str, mode: str = "discuss") -> str:
 def start_proc(lease: Lease, resume: bool) -> None:
     # 接續的前提是對話紀錄已經存在:Claude Code 要跑完第一輪才會寫出來。還沒說過話就切換模式、閒置停掉、
     # runner 重啟時用 --resume 會 "No conversation found" 掛掉(10-25 Knas 遇到,lease 34c84c53)
+    import runtime_claude  # 旗標還是 Claude Code 的(長駐 session 那層之後搬進 runtime)
     wanted = resume or lease.started_once
     can_resume = wanted and rt().resumable(lease.id)
     flag = ["--resume", lease.id] if can_resume else ["--session-id", lease.id]
     point = "lease-work" if lease.mode == "work" else "lease-session"
     cmd = [PY, str(HUB / "bin" / "llm.py"), "exec", point, "--cwd", lease.cwd, "--",
            *flag, "--strict-mcp-config", "--mcp-config", str(mcp_config(lease)),
-           "--permission-prompt-tool", "mcp__lease_relay__approve",
+           "--permission-prompt-tool", runtime_claude.APPROVE_TOOL,
            "--settings", str(deny_settings(lease.project)), "--append-system-prompt", preamble(lease.project, lease.mode),
            "--max-turns", str(lease.max_turns)]
     lease.dir.mkdir(parents=True, exist_ok=True)
