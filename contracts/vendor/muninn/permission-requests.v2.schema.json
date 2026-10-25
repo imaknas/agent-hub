@@ -1,0 +1,159 @@
+{
+ "$schema": "https://json-schema.org/draft/2020-12/schema",
+ "$id": "muninn-permission-requests.v2",
+ "title": "Permission requests a lent session's relay puts to the user (v2)",
+ "description": "POST /api/permission-requests (Bearer = the ingest token) with `request`; the id makes a retry harmless. Answer: 200 `decision` when decided, else 202 `pending`. Then GET /api/permission-requests/<id>?wait=<seconds, at most 25>, repeated, answers the same way; unanswered for five minutes means deny. Answered in the version asked in. v2 says what is asked by kind, never by the agent's own tool. New fields may be added within v2.",
+ "$defs": {
+  "request": {
+   "type": "object",
+   "required": [
+    "v",
+    "id",
+    "kind",
+    "summary"
+   ],
+   "properties": {
+    "v": {
+     "const": 2
+    },
+    "id": {
+     "type": "string",
+     "minLength": 1,
+     "description": "<lease>:<the agent's own id for the step>"
+    },
+    "lease": {
+     "type": "string"
+    },
+    "project": {
+     "type": "string"
+    },
+    "kind": {
+     "enum": [
+      "ask_user",
+      "read",
+      "search",
+      "write_file",
+      "run_command",
+      "open_web",
+      "other"
+     ],
+     "description": "What it is: a question for the user (ask_user), a web page to open (open_web), (work mode) a file to write or a command to run, or something else."
+    },
+    "summary": {
+     "type": "string",
+     "minLength": 1,
+     "description": "One line a person reads, saying what it wants to do."
+    },
+    "target": {
+     "type": "string",
+     "description": "What it is about: the full URL for open_web, the path for write_file, the command for run_command."
+    },
+    "question": {
+     "type": "object",
+     "description": "For ask_user.",
+     "required": [
+      "questions"
+     ],
+     "properties": {
+      "questions": {
+       "type": "array",
+       "items": {
+        "type": "object",
+        "required": [
+         "question",
+         "options"
+        ],
+        "properties": {
+         "question": {
+          "type": "string"
+         },
+         "multi": {
+          "type": "boolean",
+          "description": "several labels may be chosen"
+         },
+         "options": {
+          "type": "array",
+          "items": {
+           "type": "object",
+           "required": [
+            "label"
+           ],
+           "properties": {
+            "label": {
+             "type": "string"
+            },
+            "description": {
+             "type": "string"
+            }
+           }
+          }
+         }
+        }
+       }
+      }
+     }
+    },
+    "detail": {
+     "type": "object",
+     "description": "The relay's own, for debugging (e.g. the agent's tool name); Muninn never reads it."
+    }
+   }
+  },
+  "decision": {
+   "type": "object",
+   "required": [
+    "v",
+    "decision"
+   ],
+   "properties": {
+    "v": {
+     "const": 2
+    },
+    "decision": {
+     "enum": [
+      "allow",
+      "deny",
+      "allow_session"
+     ],
+     "description": "allow_session: for open_web, this site for the rest of the lease (never for sites anyone can write to); for write_file, the project's folder for the rest of the lease."
+    },
+    "answers": {
+     "type": "object",
+     "additionalProperties": {
+      "oneOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "array",
+        "items": {
+         "type": "string"
+        }
+       }
+      ]
+     },
+     "description": "For ask_user: {question: the label chosen}, or the labels chosen for a multi question."
+    }
+   }
+  },
+  "pending": {
+   "type": "object",
+   "required": [
+    "v",
+    "id",
+    "pending"
+   ],
+   "properties": {
+    "v": {
+     "const": 2
+    },
+    "id": {
+     "type": "string"
+    },
+    "pending": {
+     "const": true
+    }
+   }
+  }
+ }
+}

@@ -94,8 +94,7 @@ jobs:
   max_attempts_per_day: 1
   run: /opt/homebrew/bin/python3 bin/contracts-check.py --quiet
 provides:
-- {contract: lease-runner, v: 1, schema: contracts/lease-runner.v1.schema.json}
-- {contract: lease-runner, v: 2, schema: contracts/lease-runner.v2.schema.json}   # 跟執行環境無關;v1 並存到 Muninn 換好(最晚 2026-10-26)
+- {contract: lease-runner, v: 2, schema: contracts/lease-runner.v2.schema.json}   # 跟執行環境無關;v1 10-25 Muninn 換好後刪了(contracts/retired/)
 - {contract: lease-handover, v: 1, schema: contracts/lease-handover.v1.schema.json}
 - {contract: hubbus, v: 1, schema: contracts/hubbus.v1.schema.json}
 - {contract: todo-md, v: 1, schema: contracts/todo-md.v1.md}
@@ -107,7 +106,7 @@ consumes:
 - {contract: muninn-handoffs, v: 1, copy: contracts/vendor/muninn/handoffs.v1.schema.json, from: muninn}
 - {contract: muninn-digests, v: 1, copy: contracts/vendor/muninn/digests.v1.schema.json, from: muninn}
 - {contract: muninn-messages, v: 1, copy: contracts/vendor/muninn/messages.v1.schema.json, from: muninn}
-- {contract: muninn-permission-requests, v: 1, copy: contracts/vendor/muninn/permission-requests.v1.schema.json, from: muninn}
+- {contract: muninn-permission-requests, v: 2, copy: contracts/vendor/muninn/permission-requests.v2.schema.json, from: muninn}
 services:
 - name: lease-runner             # 通道租借(bin/lease-runner.py):127.0.0.1:18797,Bearer token 在 .secrets/runner-token
   label: local.agent-hub.lease-runner

@@ -1,7 +1,7 @@
 """深談裡把專案的檔案給使用者看(docs/design/lease-show-file.md,Muninn m10251606)。
 
 - lease_files:資料夾外/symlink/不是一般檔案/類型/內容對不上/太大/租約上限/像憑證/登錄的 secrets 都擋;送的是複製的那份。
-- runner:/v1/internal/<lease>/show 送 v2 的 file 事件(合 schema)、v1 不送;GET …/files/<id> 回檔案跟 header;拒絕回原因。
+- runner:/v1/internal/<lease>/show 送 v2 的 file 事件(合 schema);GET …/files/<id> 回檔案跟 header;拒絕回原因。
 - relay 的 show_file 工具:轉給 runner、把結果回給 session。
 
     /opt/homebrew/bin/python3 -m unittest discover -s tests
@@ -164,11 +164,10 @@ class Runner(unittest.TestCase):
         self.assertEqual(code, 200)
         fid = json.loads(body)["id"]
         ev = [e for e in self.events() if e["type"] == "file"][0]
-        out = self.m.render(ev, 2)
+        out = self.m.render(ev)
         self.assertEqual(minischema.errors(V2["$defs"]["event"], out, root=V2), [])
         self.assertEqual(minischema.errors(V2["$defs"]["file_event"], out, root=V2), [])
         self.assertEqual((out["id"], out["path"], out["summary"]), (fid, "r.png", "俯視圖"))
-        self.assertIsNone(self.m.render(ev, 1), "v1 不送 file")
         code, headers, data = self.call(f"/v1/leases/{self.lease.id}/files/{fid}")
         self.assertEqual((code, data, headers["Content-Type"], headers["X-Content-Type-Options"]),
                          (200, PNG, "image/png", "nosniff"))

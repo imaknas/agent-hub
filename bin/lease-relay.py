@@ -17,10 +17,9 @@ docs/design/lease-show-file.md)。在判斷點的自動放行清單裡,不經過
 沒人回答 5 分鐘 → deny,告訴 session 不要重試。每次請求跟決定都回報給 runner(稽核、等待中不算閒置)。
 
 環境變數(runner 給):LEASE_ID、LEASE_PROJECT、LEASE_RUNNER(runner 的 base URL)。token 從檔案讀,不放環境變數。
-助理的 API(Muninn 定義,contracts/vendor/muninn/permission-requests;版本看 hub.json lease.permission_requests_v):
-  POST <base>/api/permission-requests v1 {v, id, lease, project, tool, input_summary, risk, question?}
-                                      v2 {v: 2, id, lease, project, kind, summary, target?, question?(通用結構), detail: {tool}}
-       → 200 {decision: allow|deny|allow_session, answers?} 或 202 {id, pending: true}
+助理的 API(Muninn 定義,contracts/vendor/muninn/permission-requests.v2.schema.json):
+  POST <base>/api/permission-requests {v: 2, id, lease, project, kind, summary, target?, question?(通用結構), detail: {tool}}
+       → 200 {v: 2, decision: allow|deny|allow_session, answers?} 或 202 {v: 2, id, pending: true}
   GET  <base>/api/permission-requests/<id>?wait=25 → 同上(長輪詢)
 """
 from __future__ import annotations
@@ -80,20 +79,15 @@ def tell_runner(phase: str, **kw) -> None:
 
 
 def request_body(rid: str, tool: str, summary: str, risk: str, question: dict | None) -> dict:
-    """送助理的權限請求。助理的契約(permission-requests)版本看 hub.json lease.permission_requests_v:
-    v1 帶原生的工具名跟提問;v2 跟執行環境無關(kind、summary、target、通用的提問結構),原生名稱只在 detail。"""
-    if hubconf.get("lease.permission_requests_v", 1) >= 2:
-        kind = runtime_claude.action(tool, {})[0]
-        body = {"v": 2, "id": rid, "lease": LEASE, "project": PROJECT, "kind": kind, "summary": summary,
-                "detail": {"tool": tool}}
-        if kind in ("open_web", "run_command", "write_file"):
-            body["target"] = summary
-        if question is not None:
-            body["question"] = runtime_claude.neutral_question(question)
-        return body
-    body = {"v": 1, "id": rid, "lease": LEASE, "project": PROJECT, "tool": tool, "input_summary": summary, "risk": risk}
+    """送助理的權限請求(Muninn 的 permission-requests v2,contracts/vendor/muninn/):跟執行環境無關——kind、summary、target、
+    通用的提問結構;原生的工具名只放在 detail(助理不讀)。risk 是轉接自己的分類,只給稽核看,不送。"""
+    kind = runtime_claude.action(tool, {})[0]
+    body = {"v": 2, "id": rid, "lease": LEASE, "project": PROJECT, "kind": kind, "summary": summary or f"({kind})",
+            "detail": {"tool": tool}}
+    if kind in ("open_web", "run_command", "write_file") and summary:
+        body["target"] = summary
     if question is not None:
-        body["question"] = question
+        body["question"] = runtime_claude.neutral_question(question)
     return body
 
 

@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "records-lease-runner.v2",
   "title": "通道租借 runner API v2",
-  "description": "本機 HTTP(127.0.0.1,Bearer token)。$defs 是各個請求、事件、錯誤的形狀。加欄位不升版。 v2 跟執行 session 的 agent 實作無關:動作用通用的種類(kind),配額用通用的時間窗(quota.windows),錯誤碼不帶實作的名字。選 v2:請求的 body 帶 \"v\": 2,或 GET 加 ?v=2(事件串流 /v1/leases/<id>/events?v=2)。v1 只在換版期間並存,讀的那一方換好就刪。改版前存下的事件照原樣送(v: 1)。",
+  "description": "本機 HTTP(127.0.0.1,Bearer token)。$defs 是各個請求、事件、錯誤的形狀。加欄位不升版。 v2 跟執行 session 的 agent 實作無關:動作用通用的種類(kind),配額用通用的時間窗(quota.windows),錯誤碼不帶實作的名字。請求的 body 跟回應都帶 \"v\": 2。v1 已停用;改版前存下的事件照原樣送(v: 1)。",
   "$defs": {
     "create": {
       "type": "object",

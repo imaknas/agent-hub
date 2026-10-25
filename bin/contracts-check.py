@@ -41,7 +41,9 @@ def cross_copies(index: dict) -> list[str]:
         for cons in doc.get("consumes") or []:
             producer = cons.get("from") or hubconf.hub_project()
             pdoc = index["projects"].get(producer)
-            prov = next((p for p in (pdoc or {}).get("provides") or [] if p["contract"] == cons["contract"]), None)
+            provs = [p for p in (pdoc or {}).get("provides") or [] if p["contract"] == cons["contract"]]
+            # 兩版並存時同一個契約會有兩筆 provides:先找同一版,沒有才拿第一筆(底下會報版本不合)
+            prov = next((p for p in provs if p.get("v") == cons.get("v")), provs[0] if provs else None)
             if prov is None:
                 errs.append(f"{name} 讀 {cons['contract']},但 {producer} 的登錄沒有 provides 它")
                 continue

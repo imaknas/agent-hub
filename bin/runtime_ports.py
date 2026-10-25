@@ -100,11 +100,9 @@ QUOTA_STATUS = ("ok", "warning", "exhausted")
 
 class StreamEvent(NamedTuple):
     """type 是 STREAM_TYPES 之一;data 是中立的欄位(見 contracts/lease-runner.v2.schema.json),`_` 開頭的鍵是給 runner 的
-    內部訊號(例:`_detach`),不會送出去。legacy:這個事件在租約契約 v1 長什麼樣(跟 v2 一樣就 None)——
-    只在 v1/v2 並存期間用,v1 刪掉時一起拿掉。"""
+    內部訊號(例:`_detach`),不會送出去。"""
     type: str
     data: dict
-    legacy: dict | None = None
 
 
 class Turn(NamedTuple):

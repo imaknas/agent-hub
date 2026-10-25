@@ -79,7 +79,7 @@ class Neutral(unittest.TestCase):
             text = p.read_text()
             for word in ("agent-hub", "librarian", "bin/"):
                 self.assertNotIn(word, text, f"{p.name} 提到 {word}")
-        for p in [C / "lease-runner.v1.schema.json", C / "lease-runner.v2.schema.json", C / "lease-handover.v1.schema.json",
+        for p in [C / "lease-runner.v2.schema.json", C / "lease-handover.v1.schema.json",
                   C / "llm-points.v1.schema.json"]:  # muninn 也會 vendor
             text = p.read_text()
             for word in ("agent-hub", "librarian", "bin/", "Knas", "muninn"):

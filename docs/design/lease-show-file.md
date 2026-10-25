@@ -46,7 +46,7 @@ session 呼叫平台的 **「給使用者看」工具** `show_file(path, summary
   - Muninn 要的「重新打開也還在」:session 之後改了、刪了那個檔,深談裡看到的還是當時那張。
 - 租約收回後保留 30 天(runner 每天清一次),跟對話紀錄差不多久。
 
-## 契約(v2;v1 不加——v1 最晚 10-26 就刪)
+## 契約(v2)
 
 **事件** `file`(加進 `lease-runner.v2.schema.json` 的事件類型):
 ```
@@ -58,7 +58,6 @@ session 呼叫平台的 **「給使用者看」工具** `show_file(path, summary
 - 404 `not_found`(沒有這個租約/檔案,或已經過了保留期限)
 - 收回之後也拿得到(在保留期限內)。
 
-v1 的事件串流不送 `file`(render 到 v1 時跳過);v1 刪掉之後就沒有這個差別。
 
 ## 隱私
 
@@ -70,7 +69,6 @@ v1 的事件串流不送 `file`(render 到 v1 時跳過);v1 刪掉之後就沒�
 - 檢查:資料夾外(絕對路徑、`../`、symlink 指出去、資料夾裡的 symlink)、不是一般檔案、類型不對(副檔名對但內容不對、svg、html)、
   太大、超過租約上限、像憑證的檔名、登錄宣告的 secrets 路徑——都被擋、不送事件、session 拿到原因。
 - 正常:png → 事件格式合 v2 schema、取檔拿到一樣的 bytes 跟對的 header;原檔之後被改或刪,取檔還是當時那份。
-- v1 串流不出現 `file`;v1 相容的既有測試照過。
 - relay 的 `show_file` 工具:轉給 runner、把成功/拒絕的原因回給 session。
 - 實測:idea-1 的 session(用租約一樣的設定)show_file `results/render-v2/*.png`,事件跟取檔都通。
 

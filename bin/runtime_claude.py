@@ -454,7 +454,6 @@ _TOOL_KIND = {"Read": "read", "Glob": "search", "Grep": "search", "WebSearch": "
               "Edit": "write_file", "Write": "write_file", "MultiEdit": "write_file", "NotebookEdit": "write_file",
               "Bash": "run_command", "AskUserQuestion": "ask_user"}
 _TARGET_KEYS = ("file_path", "notebook_path", "url", "command", "pattern", "query", "path")
-_V1_KEYS = ("file_path", "path", "pattern", "url", "query", "command")   # 租約契約 v1 的 summary 照這個順序挑
 _VERB = {"read": "讀", "search": "搜尋", "open_web": "開網頁", "write_file": "寫", "run_command": "跑"}
 _QUOTA_STATUS = {"allowed": "ok", "allowed_warning": "warning", "rejected": "exhausted"}
 _WINDOWS = (("five_hour", "5 小時"), ("seven_day", "7 天"))
@@ -480,22 +479,13 @@ def action(tool: str, inp: dict | None) -> tuple:
     return kind, collab, target, summary
 
 
-def _v1_summary(tool: str, inp: dict) -> str:
-    for k in _V1_KEYS:
-        if inp.get(k):
-            return f"{tool} {str(inp[k])[:160]}"
-    if tool == "AskUserQuestion":
-        return "問 Knas:" + _questions(inp)
-    return tool
-
-
 def _iso(epoch) -> str | None:
     import datetime
     return datetime.datetime.fromtimestamp(epoch).astimezone().isoformat(timespec="seconds") if epoch else None
 
 
 def parse_stream(line: str) -> list:
-    """`claude -p --output-format stream-json` 的一行 → 中立的對話事件。認不得的行回 []。"""
+    """Claude Code 的 stream-json 輸出(`--output-format stream-json`)的一行 → 中立的對話事件。認不得的行回 []。"""
     try:
         d = json.loads(line)
     except ValueError:
@@ -515,8 +505,7 @@ def parse_stream(line: str) -> list:
             elif block.get("type") == "tool_use":
                 name, inp = block.get("name", ""), block.get("input") or {}
                 kind, _, _, summary = action(name, inp)
-                out.append(StreamEvent("tool_use", {"kind": kind, "summary": summary, "detail": {"tool": name}},
-                                       {"name": block.get("name"), "summary": _v1_summary(name, inp)}))
+                out.append(StreamEvent("tool_use", {"kind": kind, "summary": summary, "detail": {"tool": name}}))
     elif t == "user":
         content = (d.get("message") or {}).get("content")
         for block in content if isinstance(content, list) else []:
@@ -531,12 +520,7 @@ def parse_stream(line: str) -> list:
         windows = [{"id": wid, "label": label, "used": (w.get(wid) or {})["utilization"],
                     "resets_at": _iso((w.get(wid) or {}).get("resetsAt"))}
                    for wid, label in _WINDOWS if (w.get(wid) or {}).get("utilization") is not None]
-        legacy = {"type": "rate_limit", "status": info.get("status")}
-        for wid, _ in _WINDOWS:
-            legacy[wid] = (w.get(wid) or {}).get("utilization")
-        for wid, _ in _WINDOWS:
-            legacy[f"{wid}_resets_at"] = (w.get(wid) or {}).get("resetsAt")
-        out.append(StreamEvent("quota", {"status": _QUOTA_STATUS.get(info.get("status")), "windows": windows}, legacy))
+        out.append(StreamEvent("quota", {"status": _QUOTA_STATUS.get(info.get("status")), "windows": windows}))
     elif t == "system" and d.get("subtype") == "post_turn_summary":
         out.append(StreamEvent("turn_end", {"summary": d.get("status_detail", "")}))
     elif t == "result":
@@ -552,10 +536,9 @@ def parse_stream(line: str) -> list:
 
 def classify_exit(code, stderr_tail: str) -> StreamEvent:
     raw = f"exit {code}:{stderr_tail[-200:]}"
-    if re.search(r"log ?in|auth|credential", stderr_tail, re.I):
+    if is_login_error(stderr_tail):  # 跟 llm.py 的登入判斷同一份(第 6 層)
         return StreamEvent("error", {"error": "agent_login", "detail": "專案 session 用的 Claude Code 沒登入或憑證過期"
-                                     "(平台的 agent-hub/claude-login 會發警報)。" + raw},
-                           {"error": "auth", "detail": raw})
+                                     "(平台的 agent-hub/claude-login 會發警報)。" + raw})
     return StreamEvent("error", {"error": "process_crashed", "detail": raw})
 
 

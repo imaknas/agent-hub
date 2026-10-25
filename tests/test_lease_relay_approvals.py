@@ -6,6 +6,7 @@ work 模式的寫檔/指令在 test_lease_relay_work.py;這裡測開網頁、提
     /opt/homebrew/bin/python3 -m unittest discover -s tests
 """
 import importlib.util
+import json
 import pathlib
 import sys
 import unittest
@@ -13,6 +14,7 @@ from unittest import mock
 
 ROOT = pathlib.Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "bin"))
+import minischema  # noqa: E402
 import policy  # noqa: E402
 import runtime_ports  # noqa: E402
 
@@ -83,28 +85,31 @@ class Relay(unittest.TestCase):
 
 
 class RequestBody(unittest.TestCase):
+    """送助理的權限請求:Muninn 的 permission-requests v2(vendor 的副本),跟執行環境無關。"""
+    SCHEMA = json.loads((ROOT / "contracts" / "vendor" / "muninn" / "permission-requests.v2.schema.json").read_text())
+
     def setUp(self):
         self.m = load_relay()
         self.q = {"questions": [{"question": "測哪個?", "header": "h", "multiSelect": False,
                                  "options": [{"label": "臥室", "description": "小"}, {"label": "客廳"}]}]}
 
-    def body(self, v, *args):
-        with mock.patch.object(self.m.hubconf, "get", lambda k, d=None: v if k == "lease.permission_requests_v" else d):
-            return self.m.request_body("L:t1", *args)
-
-    def test_v1_unchanged(self):
-        b = self.body(1, "WebFetch", "https://a", "external_fetch", None)
-        self.assertEqual(set(b), {"v", "id", "lease", "project", "tool", "input_summary", "risk"})
-        self.assertEqual(self.body(1, "AskUserQuestion", "q", "question", self.q)["question"], self.q)
-
-    def test_v2_is_runtime_neutral(self):
-        b = self.body(2, "WebFetch", "https://a", "external_fetch", None)
-        self.assertEqual((b["v"], b["kind"], b["target"], b["detail"]), (2, "open_web", "https://a", {"tool": "WebFetch"}))
+    def check(self, b):
+        self.assertEqual(minischema.errors(self.SCHEMA["$defs"]["request"], b, root=self.SCHEMA), [])
         self.assertNotIn("tool", b)
-        q = self.body(2, "AskUserQuestion", "測哪個?", "question", self.q)
+        return b
+
+    def test_web(self):
+        b = self.check(self.m.request_body("L:t1", "WebFetch", "https://a", "external_fetch", None))
+        self.assertEqual((b["v"], b["kind"], b["target"], b["detail"]), (2, "open_web", "https://a", {"tool": "WebFetch"}))
+
+    def test_question_is_generic(self):
+        q = self.check(self.m.request_body("L:t1", "AskUserQuestion", "測哪個?", "question", self.q))
         self.assertEqual(q["question"], {"questions": [{"question": "測哪個?", "multi": False, "options": [
             {"label": "臥室", "description": "小"}, {"label": "客廳"}]}]})
-        self.assertEqual(self.body(2, "Bash", "ls", "run_command", None)["kind"], "run_command")
+
+    def test_command_and_empty_summary(self):
+        self.assertEqual(self.check(self.m.request_body("L:t1", "Bash", "ls", "run_command", None))["kind"], "run_command")
+        self.assertTrue(self.check(self.m.request_body("L:t1", "Bash", "", "run_command", None))["summary"])
 
 
 if __name__ == "__main__":
