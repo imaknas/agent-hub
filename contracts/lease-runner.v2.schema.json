@@ -229,7 +229,8 @@
             "dirty",
             "name_taken",
             "upgrade_failed",
-            "file_refused"
+            "file_refused",
+            "rename_failed"
           ]
         },
         "limit": {
@@ -695,6 +696,49 @@
         "summary": {
           "type": "string",
           "description": "session 給的一句說明"
+        }
+      }
+    },
+    "project_rename": {
+      "type": "object",
+      "required": [
+        "v",
+        "to"
+      ],
+      "description": "POST /v1/projects/<name>/rename:把一個專案(正式專案或想法沙盒)整套改名——資料夾、memory、登記、GitHub repo(有的話)、mirror 一起搬,深談的對話紀錄跟著搬。那個專案有深談正在回答、等回覆、在終端機或正在收回 → 409 busy(什麼都不動,等那一輪做完再送);閒著的先停程序,搬完後還沒收回的租約送 state 事件帶 project: <新名稱>,之後照常送話,在新資料夾接回同一段對話。錯誤:400 bad_name、404 not_found、409 busy / name_taken(新名稱、資料夾或 GitHub repo 已存在)、500 rename_failed。同一個改名做到一半再送一次會接著做完",
+      "properties": {
+        "v": {
+          "const": 2
+        },
+        "to": {
+          "type": "string",
+          "pattern": "^[a-z0-9](?:[a-z0-9-]{0,38}[a-z0-9])?$",
+          "description": "新名稱(小寫英數跟 -,最多 40 字)"
+        }
+      }
+    },
+    "project_renamed": {
+      "type": "object",
+      "required": [
+        "v",
+        "name",
+        "renamed"
+      ],
+      "description": "200:改好了(或已經改過)",
+      "properties": {
+        "v": {
+          "const": 2
+        },
+        "name": {
+          "type": "string"
+        },
+        "origin": {
+          "type": "string",
+          "description": "新的 remote 網址;沒有 remote 的是 (native)"
+        },
+        "renamed": {
+          "type": "boolean",
+          "description": "false = 之前已經改好了(重送)"
         }
       }
     }

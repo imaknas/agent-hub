@@ -20,6 +20,9 @@ API:
   POST /v1/sandboxes                  {v, name: <想法的代號>, purpose} → 201 新建 / 200 同名同 purpose 已存在(重送)
                                       / 400 bad_name / 409 exists / 429 too_many(帶 limit、current)/ 500 create_failed
                                       想法沙盒:bin/create-idea-sandbox.py 建(docs/design/idea-sandboxes.md),建好就在 attachable
+  POST /v1/projects/<name>/rename     {v, to} → 200 {name, origin, renamed}(改名到一半的重試回 renamed:false)/ 400 bad_name
+                                      / 404 not_found / 409 busy|name_taken / 500 rename_failed = bin/project-rename.py
+                                      (GitHub repo、登記、memory、資料夾);深談的處理跟升級一樣(quiesce、follow_move)
   POST /v1/sandboxes/<name>/upgrade   {v, rename?} → 200 {name, origin, upgraded}(升級過的再送回 upgraded:false + 現在的名稱)
                                       / 404 not_found / 409 not_idea|dirty|name_taken / 500 upgrade_failed
                                       = bin/upgrade-idea.py --apply --json(GitHub repo 預設 private;Muninn 問過 Knas 才送)
@@ -647,8 +650,22 @@ def prune_files() -> None:
         lease_files.prune(d, lease_files.KEEP_DAYS * 86400)
 
 
-def follow_upgrade(old: str, new: str, old_ws: str) -> None:
-    """升級完:這個沙盒的租約跟上新的名稱、資料夾;work 改回 discuss(work 只開給想法沙盒)。"""
+def quiesce(project: str) -> str:
+    """改名、升級之前:這個專案有深談正在回答、等回覆、在終端機或正在收回 → 回原因(不動任何東西);
+    其他的先停程序(租約還在,之後的訊息自動接回)。"""
+    with _lock:
+        mine = [l for l in LEASES.values() if l.project == project]
+        if any(live(l) and (l.in_turn or l.waiting or l.state in ("attaching", "resuming", "detaching", "terminal"))
+               for l in mine):
+            return f"{project} 有深談正在回答、等回覆、在終端機或正在收回"
+        for l in mine:
+            if l.proc is not None:
+                stop_proc(l, "idle_stopped")
+    return ""
+
+
+def follow_move(old: str, new: str, old_ws: str) -> None:
+    """改名、升級完:這個專案的租約跟上新的名稱、資料夾(對話紀錄跟著搬);work 改回 discuss(work 只開給想法沙盒)。"""
     import registry
     registry.refresh()
     new_ws = str(hubconf.workspace(new) or old_ws)
@@ -809,6 +826,8 @@ class H(http.server.BaseHTTPRequestHandler):
             return self.create(b)
         if parts == ["v1", "sandboxes"]:
             return self.create_sandbox(b)
+        if len(parts) == 4 and parts[:2] == ["v1", "projects"] and parts[3] == "rename":
+            return self.rename_project(parts[2], b)
         if len(parts) == 4 and parts[:2] == ["v1", "sandboxes"] and parts[3] == "upgrade":
             return self.upgrade_sandbox(parts[2], b)
         if len(parts) == 4 and parts[:2] == ["v1", "internal"] and parts[3] == "show":
@@ -934,6 +953,34 @@ class H(http.server.BaseHTTPRequestHandler):
         body.update({k: res[k] for k in ("limit", "current") if k in res})
         return self.reply(code, body)
 
+    def rename_project(self, name: str, b: dict) -> None:
+        """POST /v1/projects/<name>/rename {v, to}:正式專案或想法沙盒整套改名(10-25 Muninn m10251650)。
+        交給 project-rename.py(GitHub repo、登記、memory、資料夾;重試接得上);深談的處理跟升級一樣(quiesce、follow_move)。"""
+        to = b.get("to")
+        if not isinstance(to, str) or not to:
+            return self.err(400, "bad_name", "to 要是新名稱")
+        why = quiesce(name)
+        if why:
+            return self.err(409, "busy", why + ",等它停下來再改名")
+        old_ws = str(hubconf.workspace(name) or "")
+        cmd = [str(HUB / "bin" / "project-rename.py"), name, to, "--apply", "--json"]
+        try:
+            r = subprocess.run(cmd, capture_output=True, text=True, timeout=300,
+                               env={**os.environ, "PATH": f"{hubconf.LAUNCHD_PATH}:/usr/sbin:/sbin"})
+            res = json.loads((r.stdout.strip().splitlines() or ["{}"])[-1])
+        except (subprocess.TimeoutExpired, ValueError) as e:
+            log(f"rename {name} → {to}: {e!r}")
+            return self.err(500, "rename_failed", repr(e)[:300])
+        log(f"rename {name} → {to}: {res.get('result')} {res.get('detail', '')}")
+        result = res.get("result")
+        if result in ("renamed", "already"):
+            follow_move(name, res["name"], old_ws)
+            return self.reply(200, {"v": 2, "name": res["name"], "origin": res.get("origin", ""),
+                                    "renamed": result == "renamed"})
+        code = {"bad_name": 400, "not_found": 404, "name_taken": 409, "busy": 409}.get(result, 500)
+        return self.reply(code, {"v": 2, "error": result if code != 500 else "rename_failed",
+                                 "detail": res.get("detail") or (r.stderr or "").strip()[-300:]})
+
     def upgrade_sandbox(self, name: str, b: dict) -> None:
         """想法沙盒升級成正式專案:交給 upgrade-idea.py(檢查、改名、建 GitHub repo、登錄),把結果轉成 HTTP。
         那個沙盒有租約時(10-25 m10251626、m10251631):正在回答或等使用者回覆 → 409 busy;否則先停程序(租約還在,
@@ -943,15 +990,9 @@ class H(http.server.BaseHTTPRequestHandler):
         rename = b.get("rename")
         if rename is not None and not isinstance(rename, str):
             return self.err(400, "bad_request", "rename 要是字串")
-        with _lock:
-            mine = [l for l in LEASES.values() if l.project == name]
-            busy = [l for l in mine if live(l) and (l.in_turn or l.waiting or l.state in ("attaching", "resuming",
-                                                                                        "detaching", "terminal"))]
-            if busy:
-                return self.err(409, "busy", f"{name} 有深談正在回答、等回覆、在終端機或正在收回,等它停下來再升級")
-            for l in mine:
-                if l.proc is not None:
-                    stop_proc(l, "idle_stopped")
+        why = quiesce(name)
+        if why:
+            return self.err(409, "busy", why + ",等它停下來再升級")
         old_ws = str(hubconf.workspace(name) or "")
         cmd = [PY, str(HUB / "bin" / "upgrade-idea.py"), name, "--apply", "--json"] + (["--rename", rename] if rename else [])
         env = {**os.environ, "PATH": f"{hubconf.LAUNCHD_PATH}:/usr/sbin:/sbin"}
@@ -964,7 +1005,7 @@ class H(http.server.BaseHTTPRequestHandler):
         log(f"upgrade {name}: {res.get('result')} {res.get('name', '')} {res.get('detail', '')}")
         result = res.get("result")
         if result in ("upgraded", "already"):
-            follow_upgrade(name, res["name"], old_ws)
+            follow_move(name, res["name"], old_ws)
             return self.reply(200, {"v": 1, "name": res["name"], "origin": res["origin"], "upgraded": result == "upgraded"})
         code = {"not_found": 404, "not_idea": 409, "dirty": 409, "name_taken": 409}.get(result, 500)
         return self.reply(code, {"v": 1, "error": result if code != 500 else "upgrade_failed",
