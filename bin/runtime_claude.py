@@ -456,6 +456,7 @@ _TOOL_KIND = {"Read": "read", "Glob": "search", "Grep": "search", "WebSearch": "
 _TARGET_KEYS = ("file_path", "notebook_path", "url", "command", "pattern", "query", "path")
 _VERB = {"read": "讀", "search": "搜尋", "open_web": "開網頁", "write_file": "寫", "run_command": "跑"}
 _QUOTA_STATUS = {"allowed": "ok", "allowed_warning": "warning", "rejected": "exhausted"}
+SHOW_FILE_TOOL = "mcp__lease_relay__show_file"   # 平台工具 show_file 在 Claude Code 裡的名字(lease-relay.py 的 MCP)
 _WINDOWS = (("five_hour", "5 小時"), ("seven_day", "7 天"))
 
 
@@ -470,6 +471,8 @@ def action(tool: str, inp: dict | None) -> tuple:
     collab = {"Agent": "subagent", "Task": "subagent", "Workflow": "workflow", "Skill": "skill"}.get(tool) or (
         "peer_message" if tool == "SendMessage" or tool.endswith("send_message") else None)
     target = next((str(inp[k]) for k in _TARGET_KEYS if inp.get(k)), "")
+    if tool == SHOW_FILE_TOOL:  # 平台的「給使用者看」工具(租約的 MCP):讀一個檔給他看
+        return "read", None, str(inp.get("path", "")), f"給你看 {inp.get('path', '')}".strip()
     if kind == "ask_user":
         summary = "提問:" + _questions(inp)
     elif kind == "other":

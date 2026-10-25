@@ -103,6 +103,7 @@ class Handover(unittest.TestCase):
 class RestartOnCodeChange(unittest.TestCase):
     def setUp(self):
         self.m = load_runner()
+        self.m.DIR = pathlib.Path(tempfile.mkdtemp())  # log() 寫在 DIR:不能寫進正式的 runner.log
         self.m.CODE_AT_START = 100.0
         self.exited = []
         p = mock.patch.object(self.m.os, "_exit", lambda code: self.exited.append(code))

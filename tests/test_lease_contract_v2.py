@@ -111,6 +111,11 @@ class Events(unittest.TestCase):
     def test_max_turns_detaches_once(self):
         self.assertEqual([e["_detach"] for e in self.all if "_detach" in e], ["budget"])
 
+    def test_show_file_tool_is_translated(self):
+        import runtime_claude
+        kind, _, target, summary = runtime_claude.action("mcp__lease_relay__show_file", {"path": "r/a.png"})
+        self.assertEqual((kind, target, summary), ("read", "r/a.png", "給你看 r/a.png"))
+
     def test_old_stored_events_pass_through(self):
         old = {"v": 1, "seq": 3, "lease_id": "x", "ts": "T", "type": "tool_use", "name": "Read", "summary": "Read a"}
         self.assertEqual(self.m.render(old), old)
