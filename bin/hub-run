@@ -1,0 +1,148 @@
+#!/usr/bin/env python3
+"""在平台的 profile 底下跑一個需要「能力」的程式(例:用 GPU 的 Blender)——客戶端。
+
+  hub-run --cap gpu [--timeout 秒] -- blender -b … -P tools/render.py …
+  hub-run --wait <id>          接回一個還在跑(或跑完)的工作,印出輸出、用它的結束碼結束
+
+在專案資料夾(或底下)跑。這支只把請求寫進自己專案的 `.hub-run/requests/`,平台的代跑服務(cap-runner.py,
+不在 sandbox 裡)檢查過才執行,輸出跟結束碼寫回 `.hub-run/jobs/<id>/`,這支一邊等一邊照原樣印出來。
+所以它在執行環境的 sandbox 裡也能用,對執行環境只要求「能寫自己的資料夾」。設計:docs/design/capabilities.md。
+
+能用哪些能力看專案登錄的 enforce.capabilities。工作的限制:只能寫專案資料夾跟暫存區、讀不到別的專案跟憑證、
+不能連網路(含本機)、不能開 app 或叫別的程式替它啟動東西。
+
+一開始會印出工作 id:這次呼叫被中斷(例:工具呼叫逾時),工作本身照跑,用 --wait <id> 接回。
+結束碼:工作自己的結束碼;逾時 124;代跑服務沒在跑或服務重啟弄丟了工作 125;請求被拒絕 126;用法錯 2。
+標準函式庫(系統的 python3 也能跑)。
+"""
+from __future__ import annotations
+
+import argparse
+import json
+import os
+import pathlib
+import secrets
+import sys
+import time
+
+sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
+import hubconf  # noqa: E402
+
+PICKUP_S = 10
+
+
+def say(msg: str) -> None:
+    print(f"hub-run: {msg}", file=sys.stderr, flush=True)
+
+
+def find_workspace() -> pathlib.Path | None:
+    cwd = pathlib.Path.cwd().resolve()
+    best = None
+    for name in hubconf.projects():
+        ws = hubconf.workspace(name)
+        if not ws:
+            continue
+        ws = ws.resolve()
+        if (cwd == ws or ws in cwd.parents) and (best is None or len(str(ws)) > len(str(best))):
+            best = ws
+    return best
+
+
+def submit(ws: pathlib.Path, cap: str, argv: list[str], timeout: int | None) -> str:
+    job_id = f"{time.strftime('%Y%m%d-%H%M%S')}-{secrets.token_hex(3)}"
+    req = {"v": 1, "id": job_id, "cap": cap, "argv": argv, "cwd": os.path.relpath(pathlib.Path.cwd().resolve(), ws)}
+    if timeout:
+        req["timeout_s"] = timeout
+    d = ws / ".hub-run" / "requests"
+    d.mkdir(parents=True, exist_ok=True)
+    tmp = d / f".{job_id}.tmp"  # 先寫暫存檔再 rename:服務不會讀到寫一半的請求
+    tmp.write_text(json.dumps(req, ensure_ascii=False))
+    tmp.rename(d / f"{job_id}.json")
+    return job_id
+
+
+class Tail:
+    def __init__(self, path: pathlib.Path, out):
+        self.path, self.out, self.pos = path, out, 0
+
+    def pump(self) -> None:
+        try:
+            with self.path.open("rb") as f:
+                f.seek(self.pos)
+                data = f.read()
+        except FileNotFoundError:
+            return
+        if data:
+            self.pos += len(data)
+            self.out.write(data)
+            self.out.flush()
+
+
+def follow(ws: pathlib.Path, job_id: str, pickup: bool) -> int:
+    req = ws / ".hub-run" / "requests" / f"{job_id}.json"
+    job = ws / ".hub-run" / "jobs" / job_id
+    tails = [Tail(job / "stdout", sys.stdout.buffer), Tail(job / "stderr", sys.stderr.buffer)]
+    t0, said_queue = time.time(), False
+    while True:
+        try:
+            st = json.loads((job / "state.json").read_text())
+        except (OSError, ValueError):
+            st = None
+        if st is None:
+            if not req.exists():
+                say(f"找不到工作 {job_id}")
+                return 2
+            if pickup and time.time() - t0 > PICKUP_S:
+                try:
+                    req.unlink()  # 晚啟動的服務不會跑一個沒人在等的工作
+                except FileNotFoundError:
+                    continue  # 剛好被接手了
+                say(f"平台的代跑服務沒在跑({PICKUP_S} 秒沒人接手),請求已撤回;請告訴使用者(agent-hub 的 cap-runner)")
+                return 125
+            time.sleep(0.3)
+            continue
+        for t in tails:
+            t.pump()
+        state = st.get("state")
+        if state == "queued" and not said_queue:
+            say("排隊中(同一個專案一次只跑一個、全平台有上限)")
+            said_queue = True
+        if state == "done":
+            for t in tails:
+                t.pump()
+            if st.get("timed_out"):
+                say("逾時,工作被停掉了(要更久用 --timeout,上限看 hub.json cap_runner.max_timeout_s)")
+            return int(st.get("exit", 1))
+        if state == "rejected":
+            say(f"請求被拒絕:{st.get('reason', '')}")
+            return 126
+        if state == "lost":
+            say(st.get("reason", "工作弄丟了"))
+            return 125
+        time.sleep(0.3)
+
+
+def main() -> int:
+    ap = argparse.ArgumentParser(prog="hub-run", description="在平台的 profile 底下跑需要能力的程式")
+    ap.add_argument("--cap", help="能力名稱(專案登錄 enforce.capabilities 有的)")
+    ap.add_argument("--timeout", type=int, help="秒(預設跟上限看 hub.json cap_runner)")
+    ap.add_argument("--wait", metavar="ID", help="接回一個工作")
+    ap.add_argument("cmd", nargs=argparse.REMAINDER)
+    a = ap.parse_args()
+    cmd = a.cmd[1:] if a.cmd[:1] == ["--"] else a.cmd
+    ws = find_workspace()
+    if not ws:
+        say("要在登錄過的專案資料夾裡跑")
+        return 2
+    if a.wait:
+        return follow(ws, a.wait, pickup=False)
+    if not a.cap or not cmd:
+        say("用法:hub-run --cap <能力> [--timeout 秒] -- <指令…>,或 hub-run --wait <id>")
+        return 2
+    job_id = submit(ws, a.cap, cmd, a.timeout)
+    say(f"工作 {job_id}(能力 {a.cap});這次呼叫被中斷的話,工作照跑,用 `hub-run --wait {job_id}` 接回")
+    return follow(ws, job_id, pickup=True)
+
+
+if __name__ == "__main__":
+    sys.exit(main())

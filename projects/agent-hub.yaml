@@ -115,6 +115,12 @@ services:
   keepalive: true
   throttle_s: 10
   env: {PATH: "$PLATFORM_PATH"}   # nvm 預設版本(claude)+ Homebrew,見 hubconf.LAUNCHD_PATH
+- name: cap-runner               # 平台代跑(bin/cap-runner.py):想法沙盒用 hub-run --cap <能力> 放的請求,用平台的 Seatbelt profile 執行
+  label: local.agent-hub.cap-runner
+  cwd: hub
+  run: /opt/homebrew/bin/python3 bin/cap-runner.py
+  keepalive: true
+  throttle_s: 10
 
 # 機器層級的憑證(平台管):只寫名稱、位置、到期,不寫值。check-secrets.py 每天檢查(在不在、備份、到期)
 secrets:
