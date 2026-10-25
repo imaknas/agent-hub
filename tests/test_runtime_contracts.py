@@ -24,12 +24,14 @@ WS = "/Users/someone/workspace/proj"
 SID = "aaaaaaaa-1111-4111-8111-111111111111"
 SID2 = "bbbbbbbb-2222-4222-8222-222222222222"   # 另一個專案的 session(現實中一個 session 只在一個專案裡)
 
-# 情境:一則真人訊息、一則系統注入(不算真人)、一則助理叫了子 agent 跟一個技能、一則工具結果;另一個專案一則真人訊息
+# 情境:一則真人訊息、一則系統注入(不算真人)、一則助理叫了子 agent、一個技能、跑了一個指令(不是協作)、一則工具結果;
+# 另一個專案一則真人訊息
 SCENARIO = [
     (WS, runtime_ports.Turn(T0, SID, "human", "幫我看一下測試")),
     (WS, runtime_ports.Turn(T0 + datetime.timedelta(minutes=1), SID, "other")),
     (WS, runtime_ports.Turn(T0 + datetime.timedelta(minutes=2), SID, "assistant", "",
-                            (runtime_ports.Action("other", "", "subagent"), runtime_ports.Action("other", "dataviz", "skill")))),
+                            (runtime_ports.Action("other", "", "subagent"), runtime_ports.Action("other", "dataviz", "skill"),
+                             runtime_ports.Action("run_command")))),
     (WS, runtime_ports.Turn(T0 + datetime.timedelta(minutes=3), SID, "other")),
     ("/Users/someone/workspace/other", runtime_ports.Turn(T0, SID2, "human", "別的專案")),
 ]
@@ -62,9 +64,16 @@ class ClaudeFixture:
                 o = {"type": "user", "timestamp": _iso(t.ts), "sessionId": t.session, "origin": {"kind": "human"},
                      "message": {"role": "user", "content": t.text}}
             elif t.role == "assistant":
-                names = {"subagent": "Agent", "workflow": "Workflow", "peer_message": "SendMessage", "skill": "Skill"}
-                blocks = [{"type": "tool_use", "name": names[a.collab], "input": {"skill": a.detail} if a.collab == "skill" else {}}
-                          for a in t.actions]
+                names = {"subagent": "Agent", "workflow": "Workflow", "peer_message": "SendMessage", "skill": "Skill",
+                         "run_command": "Bash"}
+                inputs = {"skill": {"skill": None}, "run_command": {"command": "ls"}}
+                blocks = []
+                for a in t.actions:
+                    key = a.collab or a.kind
+                    inp = dict(inputs.get(key, {}))
+                    if "skill" in inp:
+                        inp["skill"] = a.detail
+                    blocks.append({"type": "tool_use", "name": names[key], "input": inp})
                 o = {"type": "assistant", "timestamp": _iso(t.ts), "sessionId": t.session,
                      "message": {"role": "assistant", "content": blocks,
                                  "usage": {"input_tokens": 10, "cache_read_input_tokens": 1000, "cache_creation_input_tokens": 0}}}
@@ -198,7 +207,7 @@ class Contract(unittest.TestCase):
             self.assertEqual(ts[0].text, "幫我看一下測試")
             self.assertEqual(ts[0].session, SID)
             self.assertEqual([(a.kind, a.collab, a.detail) for a in ts[2].actions],
-                             [("other", "subagent", ""), ("other", "skill", "dataviz")])
+                             [("other", "subagent", ""), ("other", "skill", "dataviz"), ("run_command", None, "")])
             self.assertTrue(all(t.ts.tzinfo is not None for t in ts), "時間要帶時區")
         self.each(check)
 

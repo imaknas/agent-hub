@@ -1,0 +1,966 @@
+{
+ "agent-job/default": {
+  "auth": "token",
+  "cmd": [
+   "claude",
+   "-p",
+   "golden prompt",
+   "--permission-mode",
+   "auto",
+   "--output-format",
+   "json"
+  ],
+  "exit": 0,
+  "token_passed": true
+ },
+ "agent-job/model": {
+  "auth": "token",
+  "cmd": [
+   "claude",
+   "-p",
+   "golden prompt",
+   "--model",
+   "golden-model",
+   "--permission-mode",
+   "auto",
+   "--output-format",
+   "json"
+  ],
+  "exit": 0,
+  "token_passed": true
+ },
+ "agent-job/subscription": {
+  "auth": "subscription",
+  "cmd": [
+   "claude",
+   "-p",
+   "golden prompt",
+   "--permission-mode",
+   "auto",
+   "--output-format",
+   "json"
+  ],
+  "exit": 0,
+  "token_passed": false
+ },
+ "agent-job/token": {
+  "auth": "token",
+  "cmd": [
+   "claude",
+   "-p",
+   "golden prompt",
+   "--permission-mode",
+   "auto",
+   "--output-format",
+   "json"
+  ],
+  "exit": 0,
+  "token_passed": true
+ },
+ "consolidate/default": {
+  "auth": "token",
+  "cmd": [
+   "claude",
+   "-p",
+   "golden prompt",
+   "--model",
+   "opus",
+   "--permission-mode",
+   "dontAsk",
+   "--tools",
+   "Read,Write,Edit,Glob,Grep",
+   "--allowedTools",
+   "Edit(./memory/reference/**)",
+   "Edit(./STATE.md)",
+   "--strict-mcp-config",
+   "--no-session-persistence",
+   "--output-format",
+   "json",
+   "--json-schema",
+   "{\"type\": \"object\", \"properties\": {\"folded\": {\"type\": \"array\", \"description\": \"這次整理完、可以 git rm 的日期檔(只能是這次給的那幾個)\", \"items\": {\"type\": \"object\", \"properties\": {\"file\": {\"type\": \"string\", \"description\": \"例如 memory/2026-09-25.md\"}, \"destinations\": {\"type\": \"array\", \"items\": {\"type\": \"string\"}, \"description\": \"內容放在哪些檔案(memory/reference/<主題>.md 或 STATE.md);內容本來就已經在那裡也列\"}, \"dropped\": {\"type\": \"string\", \"description\": \"沒有保留的內容跟原因(純流程雜訊/重複/被較新紀錄推翻);全部保留就寫空字串\"}}, \"required\": [\"file\", \"destinations\", \"dropped\"]}}, \"kept\": {\"type\": \"array\", \"description\": \"這次給的日期檔裡,還不能刪的,跟原因\", \"items\": {\"type\": \"object\", \"properties\": {\"file\": {\"type\": \"string\"}, \"reason\": {\"type\": \"string\"}}, \"required\": [\"file\", \"reason\"]}}, \"corrections\": {\"type\": \"array\", \"description\": \"reference/ 或 STATE.md 裡因為被較新紀錄推翻/取代而改掉的敘述\", \"items\": {\"type\": \"object\", \"properties\": {\"file\": {\"type\": \"string\", \"description\": \"改的是哪個檔案\"}, \"before\": {\"type\": \"string\", \"description\": \"原本的敘述(逐字)\"}, \"after\": {\"type\": \"string\", \"description\": \"改成的敘述(逐字)\"}, \"evidence_file\": {\"type\": \"string\", \"description\": \"根據哪個檔案(通常是較新的日期檔)\"}, \"evidence_quote\": {\"type\": \"string\", \"description\": \"從 evidence_file 逐字複製、能證明要這樣改的句子\"}}, \"required\": [\"file\", \"before\", \"after\", \"evidence_file\", \"evidence_quote\"]}}, \"summary\": {\"type\": \"string\", \"description\": \"這次做了什麼,三句話內,給人抽查用\"}}, \"required\": [\"folded\", \"kept\", \"corrections\", \"summary\"]}"
+  ],
+  "exit": 0,
+  "token_passed": true
+ },
+ "consolidate/model": {
+  "auth": "token",
+  "cmd": [
+   "claude",
+   "-p",
+   "golden prompt",
+   "--model",
+   "golden-model",
+   "--permission-mode",
+   "dontAsk",
+   "--tools",
+   "Read,Write,Edit,Glob,Grep",
+   "--allowedTools",
+   "Edit(./memory/reference/**)",
+   "Edit(./STATE.md)",
+   "--strict-mcp-config",
+   "--no-session-persistence",
+   "--output-format",
+   "json",
+   "--json-schema",
+   "{\"type\": \"object\", \"properties\": {\"folded\": {\"type\": \"array\", \"description\": \"這次整理完、可以 git rm 的日期檔(只能是這次給的那幾個)\", \"items\": {\"type\": \"object\", \"properties\": {\"file\": {\"type\": \"string\", \"description\": \"例如 memory/2026-09-25.md\"}, \"destinations\": {\"type\": \"array\", \"items\": {\"type\": \"string\"}, \"description\": \"內容放在哪些檔案(memory/reference/<主題>.md 或 STATE.md);內容本來就已經在那裡也列\"}, \"dropped\": {\"type\": \"string\", \"description\": \"沒有保留的內容跟原因(純流程雜訊/重複/被較新紀錄推翻);全部保留就寫空字串\"}}, \"required\": [\"file\", \"destinations\", \"dropped\"]}}, \"kept\": {\"type\": \"array\", \"description\": \"這次給的日期檔裡,還不能刪的,跟原因\", \"items\": {\"type\": \"object\", \"properties\": {\"file\": {\"type\": \"string\"}, \"reason\": {\"type\": \"string\"}}, \"required\": [\"file\", \"reason\"]}}, \"corrections\": {\"type\": \"array\", \"description\": \"reference/ 或 STATE.md 裡因為被較新紀錄推翻/取代而改掉的敘述\", \"items\": {\"type\": \"object\", \"properties\": {\"file\": {\"type\": \"string\", \"description\": \"改的是哪個檔案\"}, \"before\": {\"type\": \"string\", \"description\": \"原本的敘述(逐字)\"}, \"after\": {\"type\": \"string\", \"description\": \"改成的敘述(逐字)\"}, \"evidence_file\": {\"type\": \"string\", \"description\": \"根據哪個檔案(通常是較新的日期檔)\"}, \"evidence_quote\": {\"type\": \"string\", \"description\": \"從 evidence_file 逐字複製、能證明要這樣改的句子\"}}, \"required\": [\"file\", \"before\", \"after\", \"evidence_file\", \"evidence_quote\"]}}, \"summary\": {\"type\": \"string\", \"description\": \"這次做了什麼,三句話內,給人抽查用\"}}, \"required\": [\"folded\", \"kept\", \"corrections\", \"summary\"]}"
+  ],
+  "exit": 0,
+  "token_passed": true
+ },
+ "consolidate/subscription": {
+  "auth": "subscription",
+  "cmd": [
+   "claude",
+   "-p",
+   "golden prompt",
+   "--model",
+   "opus",
+   "--permission-mode",
+   "dontAsk",
+   "--tools",
+   "Read,Write,Edit,Glob,Grep",
+   "--allowedTools",
+   "Edit(./memory/reference/**)",
+   "Edit(./STATE.md)",
+   "--strict-mcp-config",
+   "--no-session-persistence",
+   "--output-format",
+   "json",
+   "--json-schema",
+   "{\"type\": \"object\", \"properties\": {\"folded\": {\"type\": \"array\", \"description\": \"這次整理完、可以 git rm 的日期檔(只能是這次給的那幾個)\", \"items\": {\"type\": \"object\", \"properties\": {\"file\": {\"type\": \"string\", \"description\": \"例如 memory/2026-09-25.md\"}, \"destinations\": {\"type\": \"array\", \"items\": {\"type\": \"string\"}, \"description\": \"內容放在哪些檔案(memory/reference/<主題>.md 或 STATE.md);內容本來就已經在那裡也列\"}, \"dropped\": {\"type\": \"string\", \"description\": \"沒有保留的內容跟原因(純流程雜訊/重複/被較新紀錄推翻);全部保留就寫空字串\"}}, \"required\": [\"file\", \"destinations\", \"dropped\"]}}, \"kept\": {\"type\": \"array\", \"description\": \"這次給的日期檔裡,還不能刪的,跟原因\", \"items\": {\"type\": \"object\", \"properties\": {\"file\": {\"type\": \"string\"}, \"reason\": {\"type\": \"string\"}}, \"required\": [\"file\", \"reason\"]}}, \"corrections\": {\"type\": \"array\", \"description\": \"reference/ 或 STATE.md 裡因為被較新紀錄推翻/取代而改掉的敘述\", \"items\": {\"type\": \"object\", \"properties\": {\"file\": {\"type\": \"string\", \"description\": \"改的是哪個檔案\"}, \"before\": {\"type\": \"string\", \"description\": \"原本的敘述(逐字)\"}, \"after\": {\"type\": \"string\", \"description\": \"改成的敘述(逐字)\"}, \"evidence_file\": {\"type\": \"string\", \"description\": \"根據哪個檔案(通常是較新的日期檔)\"}, \"evidence_quote\": {\"type\": \"string\", \"description\": \"從 evidence_file 逐字複製、能證明要這樣改的句子\"}}, \"required\": [\"file\", \"before\", \"after\", \"evidence_file\", \"evidence_quote\"]}}, \"summary\": {\"type\": \"string\", \"description\": \"這次做了什麼,三句話內,給人抽查用\"}}, \"required\": [\"folded\", \"kept\", \"corrections\", \"summary\"]}"
+  ],
+  "exit": 0,
+  "token_passed": false
+ },
+ "consolidate/token": {
+  "auth": "token",
+  "cmd": [
+   "claude",
+   "-p",
+   "golden prompt",
+   "--model",
+   "opus",
+   "--permission-mode",
+   "dontAsk",
+   "--tools",
+   "Read,Write,Edit,Glob,Grep",
+   "--allowedTools",
+   "Edit(./memory/reference/**)",
+   "Edit(./STATE.md)",
+   "--strict-mcp-config",
+   "--no-session-persistence",
+   "--output-format",
+   "json",
+   "--json-schema",
+   "{\"type\": \"object\", \"properties\": {\"folded\": {\"type\": \"array\", \"description\": \"這次整理完、可以 git rm 的日期檔(只能是這次給的那幾個)\", \"items\": {\"type\": \"object\", \"properties\": {\"file\": {\"type\": \"string\", \"description\": \"例如 memory/2026-09-25.md\"}, \"destinations\": {\"type\": \"array\", \"items\": {\"type\": \"string\"}, \"description\": \"內容放在哪些檔案(memory/reference/<主題>.md 或 STATE.md);內容本來就已經在那裡也列\"}, \"dropped\": {\"type\": \"string\", \"description\": \"沒有保留的內容跟原因(純流程雜訊/重複/被較新紀錄推翻);全部保留就寫空字串\"}}, \"required\": [\"file\", \"destinations\", \"dropped\"]}}, \"kept\": {\"type\": \"array\", \"description\": \"這次給的日期檔裡,還不能刪的,跟原因\", \"items\": {\"type\": \"object\", \"properties\": {\"file\": {\"type\": \"string\"}, \"reason\": {\"type\": \"string\"}}, \"required\": [\"file\", \"reason\"]}}, \"corrections\": {\"type\": \"array\", \"description\": \"reference/ 或 STATE.md 裡因為被較新紀錄推翻/取代而改掉的敘述\", \"items\": {\"type\": \"object\", \"properties\": {\"file\": {\"type\": \"string\", \"description\": \"改的是哪個檔案\"}, \"before\": {\"type\": \"string\", \"description\": \"原本的敘述(逐字)\"}, \"after\": {\"type\": \"string\", \"description\": \"改成的敘述(逐字)\"}, \"evidence_file\": {\"type\": \"string\", \"description\": \"根據哪個檔案(通常是較新的日期檔)\"}, \"evidence_quote\": {\"type\": \"string\", \"description\": \"從 evidence_file 逐字複製、能證明要這樣改的句子\"}}, \"required\": [\"file\", \"before\", \"after\", \"evidence_file\", \"evidence_quote\"]}}, \"summary\": {\"type\": \"string\", \"description\": \"這次做了什麼,三句話內,給人抽查用\"}}, \"required\": [\"folded\", \"kept\", \"corrections\", \"summary\"]}"
+  ],
+  "exit": 0,
+  "token_passed": true
+ },
+ "lease-handover/default": {
+  "auth": "token",
+  "cmd": [
+   "claude",
+   "-p",
+   "golden prompt",
+   "--model",
+   "sonnet",
+   "--tools",
+   "",
+   "--output-format",
+   "json",
+   "--json-schema",
+   "{\"type\": \"object\", \"additionalProperties\": false, \"required\": [\"summary\", \"decisions\", \"open_questions\", \"tasks_for_owner\", \"notes_markdown\"], \"properties\": {\"summary\": {\"type\": \"string\", \"description\": \"這段對話的重點,3–6 句,繁體中文\"}, \"decisions\": {\"type\": \"array\", \"items\": {\"type\": \"object\", \"additionalProperties\": false, \"required\": [\"what\", \"why\"], \"properties\": {\"what\": {\"type\": \"string\"}, \"why\": {\"type\": \"string\"}}}, \"description\": \"這次談定的決定與理由\"}, \"open_questions\": {\"type\": \"array\", \"items\": {\"type\": \"string\"}, \"description\": \"還沒有答案、要 Knas 回答的問題\"}, \"tasks_for_owner\": {\"type\": \"array\", \"items\": {\"type\": \"object\", \"additionalProperties\": false, \"required\": [\"text\"], \"properties\": {\"text\": {\"type\": \"string\"}, \"due\": {\"type\": \"string\", \"pattern\": \"^\\\\d{4}-\\\\d{2}-\\\\d{2}$\"}}}, \"description\": \"只有 Knas 本人能做的事\"}, \"notes_markdown\": {\"type\": \"string\", \"description\": \"要記進專案 memory 的原始筆記(markdown):討論了什麼、決定、踩到的問題;保留不確定的語氣\"}}}"
+  ],
+  "exit": 0,
+  "token_passed": true
+ },
+ "lease-handover/model": {
+  "auth": "token",
+  "cmd": [
+   "claude",
+   "-p",
+   "golden prompt",
+   "--model",
+   "golden-model",
+   "--tools",
+   "",
+   "--output-format",
+   "json",
+   "--json-schema",
+   "{\"type\": \"object\", \"additionalProperties\": false, \"required\": [\"summary\", \"decisions\", \"open_questions\", \"tasks_for_owner\", \"notes_markdown\"], \"properties\": {\"summary\": {\"type\": \"string\", \"description\": \"這段對話的重點,3–6 句,繁體中文\"}, \"decisions\": {\"type\": \"array\", \"items\": {\"type\": \"object\", \"additionalProperties\": false, \"required\": [\"what\", \"why\"], \"properties\": {\"what\": {\"type\": \"string\"}, \"why\": {\"type\": \"string\"}}}, \"description\": \"這次談定的決定與理由\"}, \"open_questions\": {\"type\": \"array\", \"items\": {\"type\": \"string\"}, \"description\": \"還沒有答案、要 Knas 回答的問題\"}, \"tasks_for_owner\": {\"type\": \"array\", \"items\": {\"type\": \"object\", \"additionalProperties\": false, \"required\": [\"text\"], \"properties\": {\"text\": {\"type\": \"string\"}, \"due\": {\"type\": \"string\", \"pattern\": \"^\\\\d{4}-\\\\d{2}-\\\\d{2}$\"}}}, \"description\": \"只有 Knas 本人能做的事\"}, \"notes_markdown\": {\"type\": \"string\", \"description\": \"要記進專案 memory 的原始筆記(markdown):討論了什麼、決定、踩到的問題;保留不確定的語氣\"}}}"
+  ],
+  "exit": 0,
+  "token_passed": true
+ },
+ "lease-handover/subscription": {
+  "auth": "subscription",
+  "cmd": [
+   "claude",
+   "-p",
+   "golden prompt",
+   "--model",
+   "sonnet",
+   "--tools",
+   "",
+   "--output-format",
+   "json",
+   "--json-schema",
+   "{\"type\": \"object\", \"additionalProperties\": false, \"required\": [\"summary\", \"decisions\", \"open_questions\", \"tasks_for_owner\", \"notes_markdown\"], \"properties\": {\"summary\": {\"type\": \"string\", \"description\": \"這段對話的重點,3–6 句,繁體中文\"}, \"decisions\": {\"type\": \"array\", \"items\": {\"type\": \"object\", \"additionalProperties\": false, \"required\": [\"what\", \"why\"], \"properties\": {\"what\": {\"type\": \"string\"}, \"why\": {\"type\": \"string\"}}}, \"description\": \"這次談定的決定與理由\"}, \"open_questions\": {\"type\": \"array\", \"items\": {\"type\": \"string\"}, \"description\": \"還沒有答案、要 Knas 回答的問題\"}, \"tasks_for_owner\": {\"type\": \"array\", \"items\": {\"type\": \"object\", \"additionalProperties\": false, \"required\": [\"text\"], \"properties\": {\"text\": {\"type\": \"string\"}, \"due\": {\"type\": \"string\", \"pattern\": \"^\\\\d{4}-\\\\d{2}-\\\\d{2}$\"}}}, \"description\": \"只有 Knas 本人能做的事\"}, \"notes_markdown\": {\"type\": \"string\", \"description\": \"要記進專案 memory 的原始筆記(markdown):討論了什麼、決定、踩到的問題;保留不確定的語氣\"}}}"
+  ],
+  "exit": 0,
+  "token_passed": false
+ },
+ "lease-handover/token": {
+  "auth": "token",
+  "cmd": [
+   "claude",
+   "-p",
+   "golden prompt",
+   "--model",
+   "sonnet",
+   "--tools",
+   "",
+   "--output-format",
+   "json",
+   "--json-schema",
+   "{\"type\": \"object\", \"additionalProperties\": false, \"required\": [\"summary\", \"decisions\", \"open_questions\", \"tasks_for_owner\", \"notes_markdown\"], \"properties\": {\"summary\": {\"type\": \"string\", \"description\": \"這段對話的重點,3–6 句,繁體中文\"}, \"decisions\": {\"type\": \"array\", \"items\": {\"type\": \"object\", \"additionalProperties\": false, \"required\": [\"what\", \"why\"], \"properties\": {\"what\": {\"type\": \"string\"}, \"why\": {\"type\": \"string\"}}}, \"description\": \"這次談定的決定與理由\"}, \"open_questions\": {\"type\": \"array\", \"items\": {\"type\": \"string\"}, \"description\": \"還沒有答案、要 Knas 回答的問題\"}, \"tasks_for_owner\": {\"type\": \"array\", \"items\": {\"type\": \"object\", \"additionalProperties\": false, \"required\": [\"text\"], \"properties\": {\"text\": {\"type\": \"string\"}, \"due\": {\"type\": \"string\", \"pattern\": \"^\\\\d{4}-\\\\d{2}-\\\\d{2}$\"}}}, \"description\": \"只有 Knas 本人能做的事\"}, \"notes_markdown\": {\"type\": \"string\", \"description\": \"要記進專案 memory 的原始筆記(markdown):討論了什麼、決定、踩到的問題;保留不確定的語氣\"}}}"
+  ],
+  "exit": 0,
+  "token_passed": true
+ },
+ "lease-session/default": {
+  "auth": "token",
+  "cmd": [
+   "claude",
+   "-p",
+   "golden prompt",
+   "--model",
+   "sonnet",
+   "--tools",
+   "Read,Glob,Grep,WebSearch,WebFetch,AskUserQuestion",
+   "--allowedTools",
+   "Read",
+   "Glob",
+   "Grep",
+   "WebSearch",
+   "--output-format",
+   "json"
+  ],
+  "exit": 0,
+  "token_passed": true
+ },
+ "lease-session/model": {
+  "auth": "token",
+  "cmd": [
+   "claude",
+   "-p",
+   "golden prompt",
+   "--model",
+   "golden-model",
+   "--tools",
+   "Read,Glob,Grep,WebSearch,WebFetch,AskUserQuestion",
+   "--allowedTools",
+   "Read",
+   "Glob",
+   "Grep",
+   "WebSearch",
+   "--output-format",
+   "json"
+  ],
+  "exit": 0,
+  "token_passed": true
+ },
+ "lease-session/subscription": {
+  "auth": "subscription",
+  "cmd": [
+   "claude",
+   "-p",
+   "golden prompt",
+   "--model",
+   "sonnet",
+   "--tools",
+   "Read,Glob,Grep,WebSearch,WebFetch,AskUserQuestion",
+   "--allowedTools",
+   "Read",
+   "Glob",
+   "Grep",
+   "WebSearch",
+   "--output-format",
+   "json"
+  ],
+  "exit": 0,
+  "token_passed": false
+ },
+ "lease-session/token": {
+  "auth": "token",
+  "cmd": [
+   "claude",
+   "-p",
+   "golden prompt",
+   "--model",
+   "sonnet",
+   "--tools",
+   "Read,Glob,Grep,WebSearch,WebFetch,AskUserQuestion",
+   "--allowedTools",
+   "Read",
+   "Glob",
+   "Grep",
+   "WebSearch",
+   "--output-format",
+   "json"
+  ],
+  "exit": 0,
+  "token_passed": true
+ },
+ "lease-work/default": {
+  "auth": "token",
+  "cmd": [
+   "claude",
+   "-p",
+   "golden prompt",
+   "--model",
+   "sonnet",
+   "--tools",
+   "Read,Glob,Grep,WebSearch,WebFetch,AskUserQuestion,Edit,Write,NotebookEdit,Bash",
+   "--allowedTools",
+   "Read",
+   "Glob",
+   "Grep",
+   "WebSearch",
+   "--output-format",
+   "json"
+  ],
+  "exit": 0,
+  "token_passed": true
+ },
+ "lease-work/model": {
+  "auth": "token",
+  "cmd": [
+   "claude",
+   "-p",
+   "golden prompt",
+   "--model",
+   "golden-model",
+   "--tools",
+   "Read,Glob,Grep,WebSearch,WebFetch,AskUserQuestion,Edit,Write,NotebookEdit,Bash",
+   "--allowedTools",
+   "Read",
+   "Glob",
+   "Grep",
+   "WebSearch",
+   "--output-format",
+   "json"
+  ],
+  "exit": 0,
+  "token_passed": true
+ },
+ "lease-work/subscription": {
+  "auth": "subscription",
+  "cmd": [
+   "claude",
+   "-p",
+   "golden prompt",
+   "--model",
+   "sonnet",
+   "--tools",
+   "Read,Glob,Grep,WebSearch,WebFetch,AskUserQuestion,Edit,Write,NotebookEdit,Bash",
+   "--allowedTools",
+   "Read",
+   "Glob",
+   "Grep",
+   "WebSearch",
+   "--output-format",
+   "json"
+  ],
+  "exit": 0,
+  "token_passed": false
+ },
+ "lease-work/token": {
+  "auth": "token",
+  "cmd": [
+   "claude",
+   "-p",
+   "golden prompt",
+   "--model",
+   "sonnet",
+   "--tools",
+   "Read,Glob,Grep,WebSearch,WebFetch,AskUserQuestion,Edit,Write,NotebookEdit,Bash",
+   "--allowedTools",
+   "Read",
+   "Glob",
+   "Grep",
+   "WebSearch",
+   "--output-format",
+   "json"
+  ],
+  "exit": 0,
+  "token_passed": true
+ },
+ "librarian-index/default": {
+  "auth": "token",
+  "cmd": [
+   "claude",
+   "-p",
+   "golden prompt",
+   "--model",
+   "sonnet",
+   "--permission-mode",
+   "acceptEdits",
+   "--tools",
+   "Read,Write,Edit,Glob,Grep",
+   "--output-format",
+   "json",
+   "--json-schema",
+   "{\"type\": \"object\", \"properties\": {\"index_updated\": {\"type\": \"boolean\", \"description\": \"是否編輯了 index.md\"}, \"relations_found\": {\"type\": \"string\", \"description\": \"今天找到的跨專案關聯簡述；沒有明顯關聯就寫「(無明顯關聯)」，不要硬掰\"}}, \"required\": [\"index_updated\", \"relations_found\"]}"
+  ],
+  "exit": 0,
+  "token_passed": true
+ },
+ "librarian-index/model": {
+  "auth": "token",
+  "cmd": [
+   "claude",
+   "-p",
+   "golden prompt",
+   "--model",
+   "golden-model",
+   "--permission-mode",
+   "acceptEdits",
+   "--tools",
+   "Read,Write,Edit,Glob,Grep",
+   "--output-format",
+   "json",
+   "--json-schema",
+   "{\"type\": \"object\", \"properties\": {\"index_updated\": {\"type\": \"boolean\", \"description\": \"是否編輯了 index.md\"}, \"relations_found\": {\"type\": \"string\", \"description\": \"今天找到的跨專案關聯簡述；沒有明顯關聯就寫「(無明顯關聯)」，不要硬掰\"}}, \"required\": [\"index_updated\", \"relations_found\"]}"
+  ],
+  "exit": 0,
+  "token_passed": true
+ },
+ "librarian-index/subscription": {
+  "auth": "subscription",
+  "cmd": [
+   "claude",
+   "-p",
+   "golden prompt",
+   "--model",
+   "sonnet",
+   "--permission-mode",
+   "acceptEdits",
+   "--tools",
+   "Read,Write,Edit,Glob,Grep",
+   "--output-format",
+   "json",
+   "--json-schema",
+   "{\"type\": \"object\", \"properties\": {\"index_updated\": {\"type\": \"boolean\", \"description\": \"是否編輯了 index.md\"}, \"relations_found\": {\"type\": \"string\", \"description\": \"今天找到的跨專案關聯簡述；沒有明顯關聯就寫「(無明顯關聯)」，不要硬掰\"}}, \"required\": [\"index_updated\", \"relations_found\"]}"
+  ],
+  "exit": 0,
+  "token_passed": false
+ },
+ "librarian-index/token": {
+  "auth": "token",
+  "cmd": [
+   "claude",
+   "-p",
+   "golden prompt",
+   "--model",
+   "sonnet",
+   "--permission-mode",
+   "acceptEdits",
+   "--tools",
+   "Read,Write,Edit,Glob,Grep",
+   "--output-format",
+   "json",
+   "--json-schema",
+   "{\"type\": \"object\", \"properties\": {\"index_updated\": {\"type\": \"boolean\", \"description\": \"是否編輯了 index.md\"}, \"relations_found\": {\"type\": \"string\", \"description\": \"今天找到的跨專案關聯簡述；沒有明顯關聯就寫「(無明顯關聯)」，不要硬掰\"}}, \"required\": [\"index_updated\", \"relations_found\"]}"
+  ],
+  "exit": 0,
+  "token_passed": true
+ },
+ "librarian-state/default": {
+  "auth": "token",
+  "cmd": [
+   "claude",
+   "-p",
+   "golden prompt",
+   "--model",
+   "haiku",
+   "--permission-mode",
+   "dontAsk",
+   "--tools",
+   "Read,Write,Edit,Glob,Grep",
+   "--allowedTools",
+   "Edit(./STATE.md)",
+   "--output-format",
+   "json",
+   "--json-schema",
+   "{\"type\": \"object\", \"properties\": {\"state_updated\": {\"type\": \"boolean\", \"description\": \"這次是否編輯了 STATE.md\"}, \"worth_digesting\": {\"type\": \"boolean\", \"description\": \"這次的內容是否值得放進跨專案 digest；純粹確認流程正常、沒有實質更新的話填 false\"}, \"summary\": {\"type\": \"string\", \"description\": \"給跨專案 digest 用的摘要，不超過三句話（worth_digesting 為 false 時可以簡短說明沒有更新的原因，或留空）\"}, \"reason\": {\"type\": \"string\", \"description\": \"為什麼做出這個判斷（更新或不更新 STATE.md），給人事後抽查用\"}}, \"required\": [\"state_updated\", \"worth_digesting\", \"summary\", \"reason\"]}"
+  ],
+  "exit": 0,
+  "token_passed": true
+ },
+ "librarian-state/model": {
+  "auth": "token",
+  "cmd": [
+   "claude",
+   "-p",
+   "golden prompt",
+   "--model",
+   "golden-model",
+   "--permission-mode",
+   "dontAsk",
+   "--tools",
+   "Read,Write,Edit,Glob,Grep",
+   "--allowedTools",
+   "Edit(./STATE.md)",
+   "--output-format",
+   "json",
+   "--json-schema",
+   "{\"type\": \"object\", \"properties\": {\"state_updated\": {\"type\": \"boolean\", \"description\": \"這次是否編輯了 STATE.md\"}, \"worth_digesting\": {\"type\": \"boolean\", \"description\": \"這次的內容是否值得放進跨專案 digest；純粹確認流程正常、沒有實質更新的話填 false\"}, \"summary\": {\"type\": \"string\", \"description\": \"給跨專案 digest 用的摘要，不超過三句話（worth_digesting 為 false 時可以簡短說明沒有更新的原因，或留空）\"}, \"reason\": {\"type\": \"string\", \"description\": \"為什麼做出這個判斷（更新或不更新 STATE.md），給人事後抽查用\"}}, \"required\": [\"state_updated\", \"worth_digesting\", \"summary\", \"reason\"]}"
+  ],
+  "exit": 0,
+  "token_passed": true
+ },
+ "librarian-state/subscription": {
+  "auth": "subscription",
+  "cmd": [
+   "claude",
+   "-p",
+   "golden prompt",
+   "--model",
+   "haiku",
+   "--permission-mode",
+   "dontAsk",
+   "--tools",
+   "Read,Write,Edit,Glob,Grep",
+   "--allowedTools",
+   "Edit(./STATE.md)",
+   "--output-format",
+   "json",
+   "--json-schema",
+   "{\"type\": \"object\", \"properties\": {\"state_updated\": {\"type\": \"boolean\", \"description\": \"這次是否編輯了 STATE.md\"}, \"worth_digesting\": {\"type\": \"boolean\", \"description\": \"這次的內容是否值得放進跨專案 digest；純粹確認流程正常、沒有實質更新的話填 false\"}, \"summary\": {\"type\": \"string\", \"description\": \"給跨專案 digest 用的摘要，不超過三句話（worth_digesting 為 false 時可以簡短說明沒有更新的原因，或留空）\"}, \"reason\": {\"type\": \"string\", \"description\": \"為什麼做出這個判斷（更新或不更新 STATE.md），給人事後抽查用\"}}, \"required\": [\"state_updated\", \"worth_digesting\", \"summary\", \"reason\"]}"
+  ],
+  "exit": 0,
+  "token_passed": false
+ },
+ "librarian-state/token": {
+  "auth": "token",
+  "cmd": [
+   "claude",
+   "-p",
+   "golden prompt",
+   "--model",
+   "haiku",
+   "--permission-mode",
+   "dontAsk",
+   "--tools",
+   "Read,Write,Edit,Glob,Grep",
+   "--allowedTools",
+   "Edit(./STATE.md)",
+   "--output-format",
+   "json",
+   "--json-schema",
+   "{\"type\": \"object\", \"properties\": {\"state_updated\": {\"type\": \"boolean\", \"description\": \"這次是否編輯了 STATE.md\"}, \"worth_digesting\": {\"type\": \"boolean\", \"description\": \"這次的內容是否值得放進跨專案 digest；純粹確認流程正常、沒有實質更新的話填 false\"}, \"summary\": {\"type\": \"string\", \"description\": \"給跨專案 digest 用的摘要，不超過三句話（worth_digesting 為 false 時可以簡短說明沒有更新的原因，或留空）\"}, \"reason\": {\"type\": \"string\", \"description\": \"為什麼做出這個判斷（更新或不更新 STATE.md），給人事後抽查用\"}}, \"required\": [\"state_updated\", \"worth_digesting\", \"summary\", \"reason\"]}"
+  ],
+  "exit": 0,
+  "token_passed": true
+ },
+ "librarian-todo-format/default": {
+  "auth": "token",
+  "cmd": [
+   "claude",
+   "-p",
+   "golden prompt",
+   "--model",
+   "haiku",
+   "--permission-mode",
+   "dontAsk",
+   "--tools",
+   "Read,Edit",
+   "--allowedTools",
+   "Edit(./STATE.md)",
+   "--output-format",
+   "json"
+  ],
+  "exit": 0,
+  "token_passed": true
+ },
+ "librarian-todo-format/model": {
+  "auth": "token",
+  "cmd": [
+   "claude",
+   "-p",
+   "golden prompt",
+   "--model",
+   "golden-model",
+   "--permission-mode",
+   "dontAsk",
+   "--tools",
+   "Read,Edit",
+   "--allowedTools",
+   "Edit(./STATE.md)",
+   "--output-format",
+   "json"
+  ],
+  "exit": 0,
+  "token_passed": true
+ },
+ "librarian-todo-format/subscription": {
+  "auth": "subscription",
+  "cmd": [
+   "claude",
+   "-p",
+   "golden prompt",
+   "--model",
+   "haiku",
+   "--permission-mode",
+   "dontAsk",
+   "--tools",
+   "Read,Edit",
+   "--allowedTools",
+   "Edit(./STATE.md)",
+   "--output-format",
+   "json"
+  ],
+  "exit": 0,
+  "token_passed": false
+ },
+ "librarian-todo-format/token": {
+  "auth": "token",
+  "cmd": [
+   "claude",
+   "-p",
+   "golden prompt",
+   "--model",
+   "haiku",
+   "--permission-mode",
+   "dontAsk",
+   "--tools",
+   "Read,Edit",
+   "--allowedTools",
+   "Edit(./STATE.md)",
+   "--output-format",
+   "json"
+  ],
+  "exit": 0,
+  "token_passed": true
+ },
+ "login-check/default": {
+  "auth": "subscription",
+  "cmd": [
+   "claude",
+   "-p",
+   "golden prompt",
+   "--model",
+   "haiku",
+   "--tools",
+   "",
+   "--output-format",
+   "json"
+  ],
+  "exit": 0,
+  "token_passed": false
+ },
+ "login-check/model": {
+  "auth": "subscription",
+  "cmd": [
+   "claude",
+   "-p",
+   "golden prompt",
+   "--model",
+   "golden-model",
+   "--tools",
+   "",
+   "--output-format",
+   "json"
+  ],
+  "exit": 0,
+  "token_passed": false
+ },
+ "login-check/subscription": {
+  "auth": "subscription",
+  "cmd": [
+   "claude",
+   "-p",
+   "golden prompt",
+   "--model",
+   "haiku",
+   "--tools",
+   "",
+   "--output-format",
+   "json"
+  ],
+  "exit": 0,
+  "token_passed": false
+ },
+ "login-check/token": {
+  "auth": "token",
+  "cmd": [
+   "claude",
+   "-p",
+   "golden prompt",
+   "--model",
+   "haiku",
+   "--tools",
+   "",
+   "--output-format",
+   "json"
+  ],
+  "exit": 0,
+  "token_passed": true
+ },
+ "mailbox-conversation/default": {
+  "auth": "token",
+  "cmd": [
+   "claude",
+   "-p",
+   "golden prompt",
+   "--model",
+   "sonnet",
+   "--permission-mode",
+   "dontAsk",
+   "--permission-prompts",
+   "none",
+   "--tools",
+   "Read,Edit,Write,Glob,Grep,Bash",
+   "--allowedTools",
+   "Edit(./.agent-memory/memory/**)",
+   "Bash(~/agent-hub/bin/hubbus *)",
+   "--strict-mcp-config",
+   "--output-format",
+   "json"
+  ],
+  "exit": 0,
+  "token_passed": true
+ },
+ "mailbox-conversation/model": {
+  "auth": "token",
+  "cmd": [
+   "claude",
+   "-p",
+   "golden prompt",
+   "--model",
+   "golden-model",
+   "--permission-mode",
+   "dontAsk",
+   "--permission-prompts",
+   "none",
+   "--tools",
+   "Read,Edit,Write,Glob,Grep,Bash",
+   "--allowedTools",
+   "Edit(./.agent-memory/memory/**)",
+   "Bash(~/agent-hub/bin/hubbus *)",
+   "--strict-mcp-config",
+   "--output-format",
+   "json"
+  ],
+  "exit": 0,
+  "token_passed": true
+ },
+ "mailbox-conversation/subscription": {
+  "auth": "subscription",
+  "cmd": [
+   "claude",
+   "-p",
+   "golden prompt",
+   "--model",
+   "sonnet",
+   "--permission-mode",
+   "dontAsk",
+   "--permission-prompts",
+   "none",
+   "--tools",
+   "Read,Edit,Write,Glob,Grep,Bash",
+   "--allowedTools",
+   "Edit(./.agent-memory/memory/**)",
+   "Bash(~/agent-hub/bin/hubbus *)",
+   "--strict-mcp-config",
+   "--output-format",
+   "json"
+  ],
+  "exit": 0,
+  "token_passed": false
+ },
+ "mailbox-conversation/token": {
+  "auth": "token",
+  "cmd": [
+   "claude",
+   "-p",
+   "golden prompt",
+   "--model",
+   "sonnet",
+   "--permission-mode",
+   "dontAsk",
+   "--permission-prompts",
+   "none",
+   "--tools",
+   "Read,Edit,Write,Glob,Grep,Bash",
+   "--allowedTools",
+   "Edit(./.agent-memory/memory/**)",
+   "Bash(~/agent-hub/bin/hubbus *)",
+   "--strict-mcp-config",
+   "--output-format",
+   "json"
+  ],
+  "exit": 0,
+  "token_passed": true
+ },
+ "mailbox-escalation/default": {
+  "auth": "token",
+  "cmd": [
+   "claude",
+   "-p",
+   "golden prompt",
+   "--permission-mode",
+   "dontAsk",
+   "--permission-prompts",
+   "none",
+   "--tools",
+   "Read,Edit,Write,Glob,Grep,Bash",
+   "--allowedTools",
+   "Edit(./.agent-memory/memory/**)",
+   "Bash(~/agent-hub/bin/hubbus *)",
+   "--output-format",
+   "json"
+  ],
+  "exit": 0,
+  "token_passed": true
+ },
+ "mailbox-escalation/model": {
+  "auth": "token",
+  "cmd": [
+   "claude",
+   "-p",
+   "golden prompt",
+   "--model",
+   "golden-model",
+   "--permission-mode",
+   "dontAsk",
+   "--permission-prompts",
+   "none",
+   "--tools",
+   "Read,Edit,Write,Glob,Grep,Bash",
+   "--allowedTools",
+   "Edit(./.agent-memory/memory/**)",
+   "Bash(~/agent-hub/bin/hubbus *)",
+   "--output-format",
+   "json"
+  ],
+  "exit": 0,
+  "token_passed": true
+ },
+ "mailbox-escalation/subscription": {
+  "auth": "subscription",
+  "cmd": [
+   "claude",
+   "-p",
+   "golden prompt",
+   "--permission-mode",
+   "dontAsk",
+   "--permission-prompts",
+   "none",
+   "--tools",
+   "Read,Edit,Write,Glob,Grep,Bash",
+   "--allowedTools",
+   "Edit(./.agent-memory/memory/**)",
+   "Bash(~/agent-hub/bin/hubbus *)",
+   "--output-format",
+   "json"
+  ],
+  "exit": 0,
+  "token_passed": false
+ },
+ "mailbox-escalation/token": {
+  "auth": "token",
+  "cmd": [
+   "claude",
+   "-p",
+   "golden prompt",
+   "--permission-mode",
+   "dontAsk",
+   "--permission-prompts",
+   "none",
+   "--tools",
+   "Read,Edit,Write,Glob,Grep,Bash",
+   "--allowedTools",
+   "Edit(./.agent-memory/memory/**)",
+   "Bash(~/agent-hub/bin/hubbus *)",
+   "--output-format",
+   "json"
+  ],
+  "exit": 0,
+  "token_passed": true
+ },
+ "reflect-week/default": {
+  "auth": "token",
+  "cmd": [
+   "claude",
+   "-p",
+   "golden prompt",
+   "--model",
+   "sonnet",
+   "--tools",
+   "",
+   "--output-format",
+   "json",
+   "--json-schema",
+   "{\"type\": \"object\", \"additionalProperties\": false, \"required\": [\"headline\", \"summary\", \"insights\", \"projects\", \"rhythm\", \"fluency\", \"next_week\"], \"properties\": {\"headline\": {\"type\": \"string\", \"description\": \"一句話講這週最重要的事,≤ 30 字\"}, \"summary\": {\"type\": \"string\", \"description\": \"3–4 句總評:這週的重心、做成了什麼、最大的問題\"}, \"insights\": {\"type\": \"array\", \"minItems\": 3, \"maxItems\": 5, \"items\": {\"type\": \"object\", \"additionalProperties\": false, \"required\": [\"title\", \"analysis\", \"evidence\", \"so_what\"], \"properties\": {\"title\": {\"type\": \"string\", \"description\": \"洞察的結論句,≤ 22 字\"}, \"analysis\": {\"type\": \"string\", \"description\": \"2–3 句分析:看到什麼模式、為什麼會這樣\"}, \"evidence\": {\"type\": \"string\", \"description\": \"具體證據:統計數字或摘要內容\"}, \"so_what\": {\"type\": \"string\", \"description\": \"這代表什麼、該怎麼看待,1 句\"}}}}, \"projects\": {\"type\": \"array\", \"items\": {\"type\": \"object\", \"additionalProperties\": false, \"required\": [\"name\", \"focus\", \"assessment\", \"status\", \"next\"], \"properties\": {\"name\": {\"type\": \"string\"}, \"focus\": {\"type\": \"string\", \"description\": \"這週在做什麼(有摘要就具體到功能/決定,沒有就講投入樣貌)\"}, \"assessment\": {\"type\": \"string\", \"description\": \"進展評估:推進得如何、投入跟產出是否相稱\"}, \"status\": {\"type\": \"string\", \"enum\": [\"推進\", \"穩定\", \"卡住\", \"發散\", \"收尾\"]}, \"next\": {\"type\": \"string\", \"description\": \"下一步最該做的一件事\"}}}}, \"rhythm\": {\"type\": \"object\", \"additionalProperties\": false, \"required\": [\"verdict\", \"analysis\", \"pattern\"], \"properties\": {\"verdict\": {\"type\": \"string\", \"description\": \"作息一句話結論\"}, \"analysis\": {\"type\": \"string\", \"description\": \"2–3 句:時段、深夜、連續工作代表什麼,對產出/判斷品質可能的影響\"}, \"pattern\": {\"type\": \"string\", \"description\": \"最明顯的一個節奏模式\"}}}, \"fluency\": {\"type\": \"array\", \"minItems\": 4, \"maxItems\": 4, \"items\": {\"type\": \"object\", \"additionalProperties\": false, \"required\": [\"dimension\", \"level\", \"observation\", \"evidence\", \"suggestion\"], \"properties\": {\"dimension\": {\"type\": \"string\", \"enum\": [\"交辦\", \"描述\", \"判斷\", \"把關\"]}, \"level\": {\"type\": \"string\", \"enum\": [\"強項\", \"穩定\", \"可改進\"]}, \"observation\": {\"type\": \"string\", \"description\": \"2 句觀察\"}, \"evidence\": {\"type\": \"string\", \"description\": \"根據的統計數字或摘要內容;撐不起判斷就直說\"}, \"suggestion\": {\"type\": \"string\", \"description\": \"具體做法,1 句\"}}}}, \"next_week\": {\"type\": \"array\", \"minItems\": 2, \"maxItems\": 3, \"items\": {\"type\": \"object\", \"additionalProperties\": false, \"required\": [\"action\", \"why\"], \"properties\": {\"action\": {\"type\": \"string\", \"description\": \"可以直接照做的一件事\"}, \"why\": {\"type\": \"string\", \"description\": \"對應哪個觀察、預期效果\"}}}}}}"
+  ],
+  "exit": 0,
+  "token_passed": true
+ },
+ "reflect-week/model": {
+  "auth": "token",
+  "cmd": [
+   "claude",
+   "-p",
+   "golden prompt",
+   "--model",
+   "golden-model",
+   "--tools",
+   "",
+   "--output-format",
+   "json",
+   "--json-schema",
+   "{\"type\": \"object\", \"additionalProperties\": false, \"required\": [\"headline\", \"summary\", \"insights\", \"projects\", \"rhythm\", \"fluency\", \"next_week\"], \"properties\": {\"headline\": {\"type\": \"string\", \"description\": \"一句話講這週最重要的事,≤ 30 字\"}, \"summary\": {\"type\": \"string\", \"description\": \"3–4 句總評:這週的重心、做成了什麼、最大的問題\"}, \"insights\": {\"type\": \"array\", \"minItems\": 3, \"maxItems\": 5, \"items\": {\"type\": \"object\", \"additionalProperties\": false, \"required\": [\"title\", \"analysis\", \"evidence\", \"so_what\"], \"properties\": {\"title\": {\"type\": \"string\", \"description\": \"洞察的結論句,≤ 22 字\"}, \"analysis\": {\"type\": \"string\", \"description\": \"2–3 句分析:看到什麼模式、為什麼會這樣\"}, \"evidence\": {\"type\": \"string\", \"description\": \"具體證據:統計數字或摘要內容\"}, \"so_what\": {\"type\": \"string\", \"description\": \"這代表什麼、該怎麼看待,1 句\"}}}}, \"projects\": {\"type\": \"array\", \"items\": {\"type\": \"object\", \"additionalProperties\": false, \"required\": [\"name\", \"focus\", \"assessment\", \"status\", \"next\"], \"properties\": {\"name\": {\"type\": \"string\"}, \"focus\": {\"type\": \"string\", \"description\": \"這週在做什麼(有摘要就具體到功能/決定,沒有就講投入樣貌)\"}, \"assessment\": {\"type\": \"string\", \"description\": \"進展評估:推進得如何、投入跟產出是否相稱\"}, \"status\": {\"type\": \"string\", \"enum\": [\"推進\", \"穩定\", \"卡住\", \"發散\", \"收尾\"]}, \"next\": {\"type\": \"string\", \"description\": \"下一步最該做的一件事\"}}}}, \"rhythm\": {\"type\": \"object\", \"additionalProperties\": false, \"required\": [\"verdict\", \"analysis\", \"pattern\"], \"properties\": {\"verdict\": {\"type\": \"string\", \"description\": \"作息一句話結論\"}, \"analysis\": {\"type\": \"string\", \"description\": \"2–3 句:時段、深夜、連續工作代表什麼,對產出/判斷品質可能的影響\"}, \"pattern\": {\"type\": \"string\", \"description\": \"最明顯的一個節奏模式\"}}}, \"fluency\": {\"type\": \"array\", \"minItems\": 4, \"maxItems\": 4, \"items\": {\"type\": \"object\", \"additionalProperties\": false, \"required\": [\"dimension\", \"level\", \"observation\", \"evidence\", \"suggestion\"], \"properties\": {\"dimension\": {\"type\": \"string\", \"enum\": [\"交辦\", \"描述\", \"判斷\", \"把關\"]}, \"level\": {\"type\": \"string\", \"enum\": [\"強項\", \"穩定\", \"可改進\"]}, \"observation\": {\"type\": \"string\", \"description\": \"2 句觀察\"}, \"evidence\": {\"type\": \"string\", \"description\": \"根據的統計數字或摘要內容;撐不起判斷就直說\"}, \"suggestion\": {\"type\": \"string\", \"description\": \"具體做法,1 句\"}}}}, \"next_week\": {\"type\": \"array\", \"minItems\": 2, \"maxItems\": 3, \"items\": {\"type\": \"object\", \"additionalProperties\": false, \"required\": [\"action\", \"why\"], \"properties\": {\"action\": {\"type\": \"string\", \"description\": \"可以直接照做的一件事\"}, \"why\": {\"type\": \"string\", \"description\": \"對應哪個觀察、預期效果\"}}}}}}"
+  ],
+  "exit": 0,
+  "token_passed": true
+ },
+ "reflect-week/subscription": {
+  "auth": "subscription",
+  "cmd": [
+   "claude",
+   "-p",
+   "golden prompt",
+   "--model",
+   "sonnet",
+   "--tools",
+   "",
+   "--output-format",
+   "json",
+   "--json-schema",
+   "{\"type\": \"object\", \"additionalProperties\": false, \"required\": [\"headline\", \"summary\", \"insights\", \"projects\", \"rhythm\", \"fluency\", \"next_week\"], \"properties\": {\"headline\": {\"type\": \"string\", \"description\": \"一句話講這週最重要的事,≤ 30 字\"}, \"summary\": {\"type\": \"string\", \"description\": \"3–4 句總評:這週的重心、做成了什麼、最大的問題\"}, \"insights\": {\"type\": \"array\", \"minItems\": 3, \"maxItems\": 5, \"items\": {\"type\": \"object\", \"additionalProperties\": false, \"required\": [\"title\", \"analysis\", \"evidence\", \"so_what\"], \"properties\": {\"title\": {\"type\": \"string\", \"description\": \"洞察的結論句,≤ 22 字\"}, \"analysis\": {\"type\": \"string\", \"description\": \"2–3 句分析:看到什麼模式、為什麼會這樣\"}, \"evidence\": {\"type\": \"string\", \"description\": \"具體證據:統計數字或摘要內容\"}, \"so_what\": {\"type\": \"string\", \"description\": \"這代表什麼、該怎麼看待,1 句\"}}}}, \"projects\": {\"type\": \"array\", \"items\": {\"type\": \"object\", \"additionalProperties\": false, \"required\": [\"name\", \"focus\", \"assessment\", \"status\", \"next\"], \"properties\": {\"name\": {\"type\": \"string\"}, \"focus\": {\"type\": \"string\", \"description\": \"這週在做什麼(有摘要就具體到功能/決定,沒有就講投入樣貌)\"}, \"assessment\": {\"type\": \"string\", \"description\": \"進展評估:推進得如何、投入跟產出是否相稱\"}, \"status\": {\"type\": \"string\", \"enum\": [\"推進\", \"穩定\", \"卡住\", \"發散\", \"收尾\"]}, \"next\": {\"type\": \"string\", \"description\": \"下一步最該做的一件事\"}}}}, \"rhythm\": {\"type\": \"object\", \"additionalProperties\": false, \"required\": [\"verdict\", \"analysis\", \"pattern\"], \"properties\": {\"verdict\": {\"type\": \"string\", \"description\": \"作息一句話結論\"}, \"analysis\": {\"type\": \"string\", \"description\": \"2–3 句:時段、深夜、連續工作代表什麼,對產出/判斷品質可能的影響\"}, \"pattern\": {\"type\": \"string\", \"description\": \"最明顯的一個節奏模式\"}}}, \"fluency\": {\"type\": \"array\", \"minItems\": 4, \"maxItems\": 4, \"items\": {\"type\": \"object\", \"additionalProperties\": false, \"required\": [\"dimension\", \"level\", \"observation\", \"evidence\", \"suggestion\"], \"properties\": {\"dimension\": {\"type\": \"string\", \"enum\": [\"交辦\", \"描述\", \"判斷\", \"把關\"]}, \"level\": {\"type\": \"string\", \"enum\": [\"強項\", \"穩定\", \"可改進\"]}, \"observation\": {\"type\": \"string\", \"description\": \"2 句觀察\"}, \"evidence\": {\"type\": \"string\", \"description\": \"根據的統計數字或摘要內容;撐不起判斷就直說\"}, \"suggestion\": {\"type\": \"string\", \"description\": \"具體做法,1 句\"}}}}, \"next_week\": {\"type\": \"array\", \"minItems\": 2, \"maxItems\": 3, \"items\": {\"type\": \"object\", \"additionalProperties\": false, \"required\": [\"action\", \"why\"], \"properties\": {\"action\": {\"type\": \"string\", \"description\": \"可以直接照做的一件事\"}, \"why\": {\"type\": \"string\", \"description\": \"對應哪個觀察、預期效果\"}}}}}}"
+  ],
+  "exit": 0,
+  "token_passed": false
+ },
+ "reflect-week/token": {
+  "auth": "token",
+  "cmd": [
+   "claude",
+   "-p",
+   "golden prompt",
+   "--model",
+   "sonnet",
+   "--tools",
+   "",
+   "--output-format",
+   "json",
+   "--json-schema",
+   "{\"type\": \"object\", \"additionalProperties\": false, \"required\": [\"headline\", \"summary\", \"insights\", \"projects\", \"rhythm\", \"fluency\", \"next_week\"], \"properties\": {\"headline\": {\"type\": \"string\", \"description\": \"一句話講這週最重要的事,≤ 30 字\"}, \"summary\": {\"type\": \"string\", \"description\": \"3–4 句總評:這週的重心、做成了什麼、最大的問題\"}, \"insights\": {\"type\": \"array\", \"minItems\": 3, \"maxItems\": 5, \"items\": {\"type\": \"object\", \"additionalProperties\": false, \"required\": [\"title\", \"analysis\", \"evidence\", \"so_what\"], \"properties\": {\"title\": {\"type\": \"string\", \"description\": \"洞察的結論句,≤ 22 字\"}, \"analysis\": {\"type\": \"string\", \"description\": \"2–3 句分析:看到什麼模式、為什麼會這樣\"}, \"evidence\": {\"type\": \"string\", \"description\": \"具體證據:統計數字或摘要內容\"}, \"so_what\": {\"type\": \"string\", \"description\": \"這代表什麼、該怎麼看待,1 句\"}}}}, \"projects\": {\"type\": \"array\", \"items\": {\"type\": \"object\", \"additionalProperties\": false, \"required\": [\"name\", \"focus\", \"assessment\", \"status\", \"next\"], \"properties\": {\"name\": {\"type\": \"string\"}, \"focus\": {\"type\": \"string\", \"description\": \"這週在做什麼(有摘要就具體到功能/決定,沒有就講投入樣貌)\"}, \"assessment\": {\"type\": \"string\", \"description\": \"進展評估:推進得如何、投入跟產出是否相稱\"}, \"status\": {\"type\": \"string\", \"enum\": [\"推進\", \"穩定\", \"卡住\", \"發散\", \"收尾\"]}, \"next\": {\"type\": \"string\", \"description\": \"下一步最該做的一件事\"}}}}, \"rhythm\": {\"type\": \"object\", \"additionalProperties\": false, \"required\": [\"verdict\", \"analysis\", \"pattern\"], \"properties\": {\"verdict\": {\"type\": \"string\", \"description\": \"作息一句話結論\"}, \"analysis\": {\"type\": \"string\", \"description\": \"2–3 句:時段、深夜、連續工作代表什麼,對產出/判斷品質可能的影響\"}, \"pattern\": {\"type\": \"string\", \"description\": \"最明顯的一個節奏模式\"}}}, \"fluency\": {\"type\": \"array\", \"minItems\": 4, \"maxItems\": 4, \"items\": {\"type\": \"object\", \"additionalProperties\": false, \"required\": [\"dimension\", \"level\", \"observation\", \"evidence\", \"suggestion\"], \"properties\": {\"dimension\": {\"type\": \"string\", \"enum\": [\"交辦\", \"描述\", \"判斷\", \"把關\"]}, \"level\": {\"type\": \"string\", \"enum\": [\"強項\", \"穩定\", \"可改進\"]}, \"observation\": {\"type\": \"string\", \"description\": \"2 句觀察\"}, \"evidence\": {\"type\": \"string\", \"description\": \"根據的統計數字或摘要內容;撐不起判斷就直說\"}, \"suggestion\": {\"type\": \"string\", \"description\": \"具體做法,1 句\"}}}}, \"next_week\": {\"type\": \"array\", \"minItems\": 2, \"maxItems\": 3, \"items\": {\"type\": \"object\", \"additionalProperties\": false, \"required\": [\"action\", \"why\"], \"properties\": {\"action\": {\"type\": \"string\", \"description\": \"可以直接照做的一件事\"}, \"why\": {\"type\": \"string\", \"description\": \"對應哪個觀察、預期效果\"}}}}}}"
+  ],
+  "exit": 0,
+  "token_passed": true
+ }
+}

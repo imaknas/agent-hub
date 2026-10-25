@@ -293,6 +293,12 @@ agent-hub 的 session 開的子 session(start_session)做完、確認過結果�
 
 ## 誰負責 commit/push agent-hub
 
+- **commit 閘門**(`git config core.hooksPath githooks`,新機器 clone 後要設一次):改到程式碼(`bin/` `tests/`
+  `contracts/` `templates/`…)的 commit,`bin/test-gate` 拿**暫存區**(不是 working tree)在兩個 python(Homebrew、
+  系統 3.9)、假的 HOME 底下跑全部測試,都過、而且沒有測試寫進 HOME 才放行。只動資料檔的腳本 commit 不跑。
+  `--no-verify` 跳過的會被 post-commit 記在 `.state/test-gate-bypassed.log`。重構前後外面看得到的行為用黃金檔固定
+  (例:`tests/fixtures/llm-golden.json`),不要再靠手動比對
+
 - **手動編輯(腳本、文件、services.tsv 等)**:只由工作目錄在 mini 的 `~/agent-hub`
   的專用 session 做(2026-10-15 前在 MBP 的 `~/agent-hub`;MBP 那份現在只 pull,不在那裡改),它負責 commit+push。其他專案的 session 發現 agent-hub
   的問題,只通知(`hubbus send --to agent-hub`,或告訴使用者),不直接改——2026-09-25

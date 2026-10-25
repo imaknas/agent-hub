@@ -1,0 +1,3 @@
+#!/usr/bin/env bash
+# agent-hub 的 commit 閘門(git config core.hooksPath githooks):改到程式碼就要兩個 python 的測試都過。細節在 bin/test-gate。
+exec "$(git rev-parse --show-toplevel)/bin/test-gate"
