@@ -33,7 +33,7 @@ exit 0
 # 假的 rename-project.sh:像真的一樣把登錄檔改名(其他步驟只記參數);RENAME_BUSY 時照真的訊息失敗
 FAKE_RENAME = r"""#!/bin/bash
 echo "rename-project.sh $*" >> "$LOG"
-[ -n "$RENAME_BUSY" ] && { echo "rename-project: 還有程序的工作目錄在 /x:claude(1)——先關掉" >&2; exit 1; }
+[ -n "$RENAME_BUSY" ] && { echo "rename-project: 還有程序的工作目錄在 /x:claude(1)——先關掉" >&2; exit 75; }
 sed "s/^name: $1$/name: $2/" "$HUB/projects/$1.yaml" > "$HUB/projects/$2.yaml" && rm "$HUB/projects/$1.yaml"
 """
 
@@ -110,6 +110,26 @@ class Script(unittest.TestCase):
             self.assertEqual(self.run_it("proj", bad)["result"], "bad_name", bad)
         self.assertEqual(self.run_it("nope", "x")["result"], "not_found")
         self.assertEqual(self.calls(), [l for l in self.calls() if l.startswith("gh repo view")], "都沒有動手")
+
+    def test_busy_before_github(self):
+        """10-25 review:資料夾有人在用(含 worktree 這種子資料夾)要在動 GitHub 之前就擋下來。"""
+        sub = self.ws / "proj" / ".claude" / "worktrees" / "wt"
+        sub.mkdir(parents=True)
+        sleeper = subprocess.Popen(["/bin/sleep", "30"], cwd=sub)
+        self.addCleanup(sleeper.kill)
+        res = self.run_it("proj", "project-33")
+        self.assertEqual(res["result"], "busy")
+        self.assertIn("sleep", res["detail"])
+        self.assertFalse(any(x.startswith("gh repo rename") for x in self.calls()))
+
+    def test_unfinished_upgrade_blocks(self):
+        """10-25 review:升級跟改名各記各的進度——對方做到一半就先別動,不然重試會找不到名稱。"""
+        (self.hub / ".state").mkdir(exist_ok=True)
+        (self.hub / ".state" / "idea-upgrades.json").write_text(json.dumps({"sandbox": {"name": "proj", "stage": "renamed"}}))
+        res = self.run_it("proj", "project-33")
+        self.assertEqual(res["result"], "failed")
+        self.assertIn("升級", res["detail"])
+        self.assertEqual(self.calls(), [l for l in self.calls() if l.startswith("gh repo view")])
 
     def test_github_failure_changes_nothing(self):
         self.assertEqual(self.run_it("proj", "project-33", GH_FAIL="1")["result"], "failed")

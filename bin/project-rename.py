@@ -11,7 +11,9 @@ rename-project.sh 管登記、memory bare repo/副本、mirror、本機資料夾
     {"result": "bad_name"|"not_found"|"name_taken"|"busy"|"failed", "detail"}                exit 1
 做的事(照順序;每做完一個改外面的步驟就記進 .state/project-renames.json):
   1. 檢查(動手前全部做完):新名稱的規則(小寫英數跟 -,最多 40 字;跟沙盒同一套)、不是平台自己、新名稱沒被登錄/資料夾/
-     memory repo 用掉;origin 是 GitHub 的話,GitHub 上新名稱的 repo 不存在(或是上次自己改過去的)
+     memory repo 用掉;origin 是 GitHub 的話,GitHub 上新名稱的 repo 不存在(或是上次自己改過去的);
+     **沒有程序的工作目錄在舊資料夾裡**(含子資料夾,例:worktree 裡的 session)→ 有就 busy,GitHub 也還沒動(10-25 review);
+     這個專案沒有做到一半的升級(upgrade-idea.py 的紀錄)→ 有就先把升級重試做完
   2. GitHub repo 改名(gh repo rename;GitHub 會把舊網址轉到新的)、本機 origin 改成新網址——沒有 remote 的(想法沙盒)跳過
   3. rename-project.sh <舊> <新> --origin <新網址> --apply(登記、memory、mirror、資料夾、legacy-paths 一起改)
      有程序的工作目錄還在舊資料夾(例:開著的 session)它會拒絕 → busy
@@ -31,6 +33,8 @@ sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
 import hubconf  # noqa: E402
 
 RECORD = hubconf.STATE / "project-renames.json"
+UPGRADES = hubconf.STATE / "idea-upgrades.json"   # upgrade-idea.py 的紀錄:做到一半的升級要先做完
+BUSY = 75  # rename-project.sh「有程序的工作目錄在舊資料夾」的 exit code
 NAME = re.compile(r"^[a-z0-9](?:[a-z0-9-]{0,38}[a-z0-9])?$")
 GITHUB = re.compile(r"^(?:git@github\.com:|https://github\.com/)([^/]+)/([^/]+?)(?:\.git)?$")
 JSON = False
@@ -68,6 +72,23 @@ def load(name: str) -> dict | None:
     return (yaml.safe_load(f.read_text()) or {}) if f.exists() else None
 
 
+def users_in(path) -> str:
+    """工作目錄在這個資料夾(含子資料夾)裡的程序。"""
+    r = subprocess.run(["lsof", "-a", "-d", "cwd", "+D", str(path)], capture_output=True, text=True)
+    return " ".join(sorted({f"{l.split()[0]}({l.split()[1]})" for l in r.stdout.splitlines()[1:] if l.split()}))
+
+
+def unfinished_upgrade(*names: str) -> str:
+    try:
+        ups = json.loads(UPGRADES.read_text())
+    except (OSError, ValueError):
+        return ""
+    for idea, rec in ups.items():
+        if rec.get("stage", "done") != "done" and ({idea, rec.get("name")} & set(names)):
+            return f"{idea} → {rec.get('name')}(stage {rec.get('stage')})"
+    return ""
+
+
 def gh_exists(repo: str) -> bool:
     return subprocess.run(["gh", "repo", "view", repo, "--json", "name"], capture_output=True).returncode == 0
 
@@ -103,6 +124,12 @@ def main(argv: list[str]) -> int:
     doc = load(old)
     origin = (doc.get("paths") or {}).get("origin") or "(native)"
     ws = hubconf.path((doc.get("paths") or {}).get("workspace"))
+    up = unfinished_upgrade(old, new)
+    if up:
+        fail(f"{old} 有做到一半的升級({up}),先把升級的重試做完再改名")
+    who = users_in(ws) if ws and ws.is_dir() else ""
+    if who:
+        fail(f"還有程序的工作目錄在 {ws}:{who}——先關掉那個專案的 session / 終端機分頁", "busy")
     m = GITHUB.match(origin)
     new_origin, gh_step = origin, None
     if m:
@@ -137,7 +164,7 @@ def main(argv: list[str]) -> int:
     r = subprocess.run(cmd, capture_output=True, text=True)
     if r.returncode != 0:
         out = (r.stderr or r.stdout).strip()
-        if "還有程序的工作目錄" in out:  # rename-project.sh 的 lsof 檢查
+        if r.returncode == BUSY:  # 檢查完到這裡之間又有人進去了
             fail(f"有程序還在 {old} 的資料夾裡(例:開著的 session),先關掉:{out[-300:]}", "busy")
         fail(f"rename-project.sh 失敗:{out[-400:]}")
     record(old, new=new, stage="done", origin=new_origin)

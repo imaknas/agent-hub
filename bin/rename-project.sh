@@ -88,8 +88,10 @@ $APPLY || { echo "(dry-run,加 --apply 才會執行)"; exit 0; }
 if [ "$NEW_PATH" != "$OLD_PATH" ]; then
   # lsof 找不到任何程序時 exit 1;加上 pipefail + set -e,沒有 `|| true` 的話「沒人在用」這個正常情況會讓整支腳本
   # 不出聲地結束(10-25 想法升級的實測抓到)
-  users=$(lsof +d "$OLD_PATH" 2>/dev/null | awk 'NR>1{print $1"("$2")"}' | sort -u | tr '\n' ' ' || true)
-  [ -z "$users" ] || fail "還有程序的工作目錄在 $OLD_PATH:$users——先關掉那個專案的 Claude session / 終端機分頁再跑"
+  # 只看「工作目錄」(-d cwd),而且要遞迴(+D):worktree 裡的 session 工作目錄在子資料夾,+d 只看最上層會漏(10-25 review)
+  users=$(lsof -a -d cwd +D "$OLD_PATH" 2>/dev/null | awk 'NR>1{print $1"("$2")"}' | sort -u | tr '\n' ' ' || true)
+  # 專屬的 exit code(75 = EX_TEMPFAIL,「現在有人在用」):呼叫的程式(project-rename.py)看 code,不比對字句
+  [ -z "$users" ] || { echo "rename-project: 還有程序的工作目錄在 $OLD_PATH:$users——先關掉那個專案的 Claude session / 終端機分頁再跑" >&2; exit 75; }
 fi
 
 # --- mini ---
