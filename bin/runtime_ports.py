@@ -8,6 +8,12 @@
   transcripts(第 5 層):讀對話紀錄,用中立的格式
     turns(paths, since, until=None) -> Iterator[Turn]   某個專案(它的工作目錄,可能好幾個)在時間範圍內的每一則
     last_activity(path) -> datetime | None              這個工作目錄最後一次有對話是什麼時候
+  agent(第 1 層,跑一次):
+    run(task: Task) -> TaskResult                       跑一次判斷點(prompt、工作目錄、模型、輸出 schema、逾時)
+    describe(task: Task) -> list[str]                   會怎麼跑(給 llm.py --dry-run 看;內容是 runtime 自己的)
+    失敗政策(on_failure、job.failed、schema 驗證、成本累計)留在 llm.py,不在 runtime 裡(設計原則 10)。
+    Task.spec 是判斷點的宣告(contracts/llm-points.yaml);裡面還有 Claude 專用的欄位(allowed_tools、permission_mode…),
+    要等第 2 層的中立政策(另一個 session)定案才換掉——在那之前只有 runtime 自己讀這些欄位,llm.py 不讀。
   sessions(第 1 層的一部分):
     alive(sid) -> bool、live_sessions() -> set[str]、context_size(sid) -> int | None(接續要載入多少 token)
     current_session(env) -> str | None                   目前這個程序屬於哪個 session(給 hubbus send 記寄件人)
@@ -26,6 +32,7 @@ RUNTIMES = {"claude": "runtime_claude", "fake": "runtime_fake"}
 DEFAULT = "claude"   # hub.json 沒寫 runtime.default 時的預設
 
 PORTS = {
+    "agent": ("run", "describe"),
     "transcripts": ("turns", "last_activity"),
     "sessions": ("alive", "live_sessions", "context_size", "current_session"),
 }
@@ -45,6 +52,31 @@ class Turn(NamedTuple):
     role: str                # "human"(使用者實際送出的)| "assistant" | "other"(工具結果、系統訊息、別的 session 傳來的…)
     text: str = ""           # role == human 時是他打的字
     actions: tuple = ()      # role == assistant 時,這一則做了哪些 Action
+
+
+class Task(NamedTuple):
+    point: str               # 判斷點名稱
+    prompt: str
+    spec: dict               # 判斷點的宣告(見上:暫時帶著 runtime 專用欄位)
+    cwd: str | None = None
+    model: str | None = None
+    output_schema: dict | None = None
+    timeout_s: int = 1200
+    env: dict | None = None  # 執行環境變數(登入由 llm.py 決定;第 6 層 AuthProvider 之後接手)
+    extra: tuple = ()        # 呼叫端多給的參數(例:租約交接要接續哪個 session)——之後由 resume 介面取代
+
+
+class TaskResult(NamedTuple):
+    ok: bool                         # runtime 有沒有跑完並給出結果(結構化輸出合不合 schema 是 llm.py 判斷)
+    incomplete: bool = False         # 有結果,但 agent 回報這次沒有正常完成(例:回合上限)——不算失敗,呼叫端自己判斷
+    text: str = ""                   # 最後的回覆文字
+    structured_output: object = None
+    cost_usd: float | None = None
+    session_id: str | None = None
+    turns: int | None = None
+    stop: str = ""                   # 結束的原因(runtime 自己的說法,只給 log 看)
+    denials: tuple = ()              # 被拒絕的動作
+    error: str = ""                  # ok 是 False 時的原因
 
 
 class MissingFunctions(Exception):

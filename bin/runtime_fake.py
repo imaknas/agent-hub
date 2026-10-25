@@ -11,15 +11,19 @@ from __future__ import annotations
 import datetime
 import pathlib
 
-from runtime_ports import Turn
+from runtime_ports import TaskResult, Turn
 
 _turns: list[tuple[str, Turn]] = []      # (工作目錄, Turn)
+_replies: dict[str, TaskResult] = {}     # 判斷點 → 要回的結果
+_ran: list = []                          # 跑過的 Task(測試看它收到什麼)
 _live: set[str] = set()
 _context: dict[str, int] = {}
 _env_key = "FAKE_RUNTIME_SESSION"
 
 
 def reset() -> None:
+    _replies.clear()
+    _ran.clear()
     _turns.clear()
     _live.clear()
     _context.clear()
@@ -41,6 +45,22 @@ def end(sid: str) -> None:
 
 def set_context(sid: str, tokens: int) -> None:
     _context[sid] = tokens
+
+
+def set_reply(point: str, result: TaskResult) -> None:
+    _replies[point] = result
+
+
+# ---------- agent ----------
+
+def run(task) -> TaskResult:
+    _ran.append(task)
+    return _replies.get(task.point, TaskResult(True, text=f"fake:{task.point}", session_id="fake-session", turns=1,
+                                               cost_usd=0.0))
+
+
+def describe(task) -> list:
+    return ["fake", task.point]
 
 
 # ---------- transcripts ----------

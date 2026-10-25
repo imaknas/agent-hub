@@ -238,3 +238,84 @@ def last_activity(path) -> datetime.datetime | None:
     ts = [f.stat().st_mtime for root in transcript_roots()
           for f in (root / slug_for_path(str(path))).glob("*.jsonl")]
     return datetime.datetime.fromtimestamp(max(ts), datetime.timezone.utc) if ts else None
+
+
+# ---------- 跑一次(runtime_ports 的 agent 介面)----------
+# Claude Code 的 `claude -p` 旗標只在這裡組。判斷點宣告(Task.spec)裡的 permission_mode / allowed_tools / tools /
+# prompts / extra_args / allow_from_env / extra_allow_env 是 Claude 專用的,第 2 層中立政策定案前暫時由這裡讀。
+
+import os  # noqa: E402
+
+from runtime_ports import TaskResult  # noqa: E402
+
+
+def _flags(task) -> list:
+    spec = task.spec
+    try:
+        import hubconf
+        exe = hubconf.tool("claude")  # 排程底下的 PATH 沒有 nvm:先照 PATH,再照平台的(nvm 預設版本)
+    except Exception:
+        exe = "claude"
+    cmd = [exe, "-p", task.prompt]
+    if task.model:
+        cmd += ["--model", task.model]
+    mode, allowed, prompts = spec.get("permission_mode"), list(spec.get("allowed_tools") or []), spec.get("prompts")
+    env = os.environ if task.env is None else task.env
+    if spec.get("extra_allow_env") and env.get(spec["extra_allow_env"]):
+        allowed += json.loads(env[spec["extra_allow_env"]])  # 只加規則,不改權限模式
+    if spec.get("allow_from_env") and env.get(spec["allow_from_env"]):
+        # 登錄 job 宣告的 allow 清單:無人值守 = dontAsk,沒列的一律拒絕、不提示
+        allowed += json.loads(env[spec["allow_from_env"]])
+        mode, prompts = "dontAsk", "none"
+    if mode:
+        cmd += ["--permission-mode", mode]
+    if prompts:
+        cmd += ["--permission-prompts", prompts]
+    if "tools" in spec:
+        cmd += ["--tools", spec["tools"]]
+    if allowed:
+        cmd += ["--allowedTools", *allowed]
+    return cmd + list(spec.get("extra_args") or []) + list(task.extra or [])
+
+
+def describe(task) -> list:
+    cmd = _flags(task) + ["--output-format", "json"]
+    if task.output_schema is not None:
+        cmd += ["--json-schema", json.dumps(task.output_schema, ensure_ascii=False)]
+    return cmd
+
+
+def run(task) -> TaskResult:
+    cmd = describe(task)
+    try:
+        r = subprocess.run(cmd, cwd=task.cwd or None, capture_output=True, text=True, timeout=task.timeout_s,
+                           env=task.env)
+    except subprocess.TimeoutExpired:
+        return TaskResult(False, error=f"超過 {task.timeout_s // 60} 分鐘")
+    except FileNotFoundError:
+        return TaskResult(False, error="找不到 claude")
+    import sys
+    sys.stderr.write(r.stderr)
+    if r.returncode != 0 or not r.stdout.strip():
+        # claude -p 的錯誤(例:Login expired)常常只在 stdout 的 JSON 裡
+        return TaskResult(False, error=f"exit {r.returncode}:{(r.stderr.strip() or r.stdout.strip())[-300:]}")
+    try:
+        out = json.loads(r.stdout)
+    except ValueError:
+        return TaskResult(False, error="輸出不是 JSON:" + r.stdout[:200])
+    # exit 0 而且 JSON 讀得到 = 跑完了(ok)。is_error 只標成 incomplete:以前 llm.py 就是照樣交給呼叫端,
+    # librarian 靠這個「仍以實際檔案變化為準」,不能改成失敗
+    return TaskResult(
+        ok=True, incomplete=bool(out.get("is_error")), text=str(out.get("result") or ""),
+        structured_output=out.get("structured_output"), cost_usd=out.get("total_cost_usd"),
+        session_id=out.get("session_id"), turns=out.get("num_turns"), stop=str(out.get("subtype") or ""),
+        denials=tuple(out.get("permission_denials") or ()))
+
+
+def exec_stream(task) -> None:
+    """長駐的串流 session(通道租借用):照宣告組好旗標,直接換成 claude,stdin/stdout 交給呼叫的人。
+    暫時的:之後由第 1 層的 open_session 取代(租約的契約中立化 m10251446 還沒定由誰做),所以不在介面裡。"""
+    cmd = _flags(task)
+    cmd[1:3] = ["-p"]  # 沒有 prompt 參數,訊息從 stdin(stream-json)來
+    cmd += ["--input-format", "stream-json", "--output-format", "stream-json", "--include-partial-messages", "--verbose"]
+    os.execvpe(cmd[0], cmd, task.env if task.env is not None else os.environ)

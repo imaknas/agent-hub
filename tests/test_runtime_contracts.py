@@ -7,6 +7,7 @@
 """
 import datetime
 import json
+import os
 import pathlib
 import sys
 import tempfile
@@ -32,6 +33,10 @@ SCENARIO = [
     (WS, runtime_ports.Turn(T0 + datetime.timedelta(minutes=3), SID, "other")),
     ("/Users/someone/workspace/other", runtime_ports.Turn(T0, SID2, "human", "別的專案")),
 ]
+
+
+# 「跑一次」的三種情境:正常完成、有結果但沒正常完成(例:回合上限)、失敗
+RUN_OK = {"text": "done", "structured_output": {"x": 1}, "cost": 0.5, "session": "s1", "turns": 2}
 
 
 def _iso(t):
@@ -70,8 +75,27 @@ class ClaudeFixture:
                 fh.write(json.dumps(o, ensure_ascii=False) + "\n")
         return m, {"CLAUDE_CODE_SESSION_ID": SID}
 
+    def configure_run(self, tmp: pathlib.Path, mode: str) -> dict:
+        """PATH 最前面放一支假的 claude:不呼叫模型,照 mode 吐出 claude -p 的 JSON 或失敗。"""
+        b = tmp / "bin"
+        b.mkdir(exist_ok=True)
+        out = {"ok": {"type": "result", "is_error": False, "result": RUN_OK["text"], "structured_output": RUN_OK["structured_output"],
+                      "total_cost_usd": RUN_OK["cost"], "session_id": RUN_OK["session"], "num_turns": RUN_OK["turns"], "subtype": "success"},
+               "incomplete": {"type": "result", "is_error": True, "result": "stopped", "num_turns": 50, "subtype": "error_max_turns"}}
+        script = b / "claude"
+        if mode == "fail":
+            script.write_text("#!/bin/sh\necho 'boom: login expired' >&2\nexit 1\n")
+        else:
+            script.write_text("#!/bin/sh\ncat <<'EOF'\n" + json.dumps(out[mode]) + "\nEOF\n")
+        script.chmod(0o755)
+        self._path = os.environ["PATH"]
+        os.environ["PATH"] = f"{b}:{self._path}"
+        return dict(os.environ)
+
     def teardown(self):
         self.m.transcript_roots, self.m.PROJECTS = self._roots, self._projects
+        if getattr(self, "_path", None):
+            os.environ["PATH"] = self._path
 
 
 class FakeFixture:
@@ -82,6 +106,15 @@ class FakeFixture:
             m.add_turn(path, t)
         m.set_context(SID, 1010)
         return m, {"FAKE_RUNTIME_SESSION": SID}
+
+    def configure_run(self, tmp: pathlib.Path, mode: str) -> dict:
+        import runtime_fake as m
+        from runtime_ports import TaskResult
+        m.set_reply("p", {"ok": TaskResult(True, False, RUN_OK["text"], RUN_OK["structured_output"], RUN_OK["cost"],
+                                           RUN_OK["session"], RUN_OK["turns"], "success"),
+                          "incomplete": TaskResult(True, True, "stopped", turns=50, stop="error_max_turns"),
+                          "fail": TaskResult(False, error="boom: login expired")}[mode])
+        return {}
 
     def teardown(self):
         import runtime_fake
@@ -167,6 +200,46 @@ class Contract(unittest.TestCase):
             self.assertEqual(m.current_session(env), SID)
             self.assertIsNone(m.current_session({}))
         self.each(check)
+
+
+class RunContract(unittest.TestCase):
+    """第 1 層「跑一次」:每一個實作都一樣——正常完成、有結果但沒正常完成(不算失敗)、失敗。"""
+
+    def each_run(self, mode, check):
+        for name in runtime_ports.RUNTIMES:
+            with self.subTest(runtime=name, mode=mode):
+                fx = FIXTURES[name]()
+                with tempfile.TemporaryDirectory() as d:
+                    m, _ = fx.setup(pathlib.Path(d))
+                    try:
+                        env = fx.configure_run(pathlib.Path(d), mode)
+                        rt = runtime_ports.load(name, ports=("agent",))
+                        task = runtime_ports.Task(point="p", prompt="hi", spec={}, env=env or None, timeout_s=30)
+                        check(rt.run(task), rt.describe(task))
+                    finally:
+                        fx.teardown()
+
+    def test_ok(self):
+        def check(res, desc):
+            self.assertTrue(res.ok)
+            self.assertFalse(res.incomplete)
+            self.assertEqual((res.text, res.structured_output, res.cost_usd, res.session_id, res.turns),
+                             (RUN_OK["text"], RUN_OK["structured_output"], RUN_OK["cost"], RUN_OK["session"], RUN_OK["turns"]))
+            self.assertTrue(desc and all(isinstance(x, str) for x in desc))
+        self.each_run("ok", check)
+
+    def test_incomplete_is_not_failure(self):
+        def check(res, desc):
+            self.assertTrue(res.ok, "有結果就是 ok;沒正常完成交給呼叫端判斷(librarian 依賴這點)")
+            self.assertTrue(res.incomplete)
+            self.assertEqual(res.turns, 50)
+        self.each_run("incomplete", check)
+
+    def test_failure(self):
+        def check(res, desc):
+            self.assertFalse(res.ok)
+            self.assertIn("boom", res.error)
+        self.each_run("fail", check)
 
 
 class ClaudeOnly(unittest.TestCase):

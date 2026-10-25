@@ -77,72 +77,48 @@ def auth_env(spec: dict) -> tuple[dict | None, str]:
 
 
 def run(a) -> int:
+    """判斷點這一層:讀宣告、組 Task、決定登入,交給執行環境(runtime_ports 的 agent 介面;Claude Code 只是一個實作)。
+    schema 驗證、失敗政策(fail → job.failed、default)、輸出格式留在這裡,不在 runtime 裡。"""
+    import runtime_ports
     spec = points()["points"].get(a.point)
     if spec is None:
         print(f"llm.py:{a.point} 不是宣告過的判斷點(contracts/llm-points.yaml)", file=sys.stderr)
         return 2
     prompt = "" if a.cmd == "exec" else (pathlib.Path(a.prompt_file).read_text() if a.prompt_file else sys.stdin.read())
     model = a.model or (os.environ.get(spec["model_env"]) if spec.get("model_env") else None) or spec.get("model_default")
-    cmd = [hubconf.tool("claude"), "-p", prompt]  # 排程底下的 PATH 沒有 nvm:先照 PATH,再照平台的(nvm 預設版本)
-    if model:
-        cmd += ["--model", model]
-    mode, allowed, prompts = spec.get("permission_mode"), list(spec.get("allowed_tools") or []), spec.get("prompts")
-    if spec.get("extra_allow_env") and os.environ.get(spec["extra_allow_env"]):
-        allowed += json.loads(os.environ[spec["extra_allow_env"]])  # 只加規則,不改權限模式
-    if spec.get("allow_from_env") and os.environ.get(spec["allow_from_env"]):
-        # 登錄 job 宣告的 allow 清單:無人值守 = dontAsk,沒列的一律拒絕、不提示
-        allowed += json.loads(os.environ[spec["allow_from_env"]])
-        mode, prompts = "dontAsk", "none"
-    if mode:
-        cmd += ["--permission-mode", mode]
-    if prompts:
-        cmd += ["--permission-prompts", prompts]
-    if "tools" in spec:
-        cmd += ["--tools", spec["tools"]]
-    if allowed:
-        cmd += ["--allowedTools", *allowed]
-    cmd += list(spec.get("extra_args") or []) + list(a.extra or [])
     env, auth = auth_env(spec)
     if env is None:
         return fail(a.point, spec, f"沒有 {TOKEN_FILE}(預設用 headless token;要用訂閱登入就宣告 auth: subscription)")
+    schema = json.loads((POINTS.parent / output_schema(spec)).read_text()) if output_schema(spec) else None
+    task = runtime_ports.Task(point=a.point, prompt=prompt, spec=spec, cwd=a.cwd or None, model=model,
+                              output_schema=schema, timeout_s=spec.get("timeout_s", 1200), env=env,
+                              extra=tuple(a.extra or ()))
+    rt = runtime_ports.load(spec.get("runtime"), ports=("agent",))
     if a.cmd == "exec":
-        # 長駐的串流 session(例:通道租借):旗標照宣告組好,直接換成 claude,stdin/stdout 交給呼叫的人
+        # 長駐的串流 session(例:通道租借)。暫時的:之後由第 1 層的 open_session 取代
         if not spec.get("stream"):
             print(f"llm.py:{a.point} 沒有宣告 stream: true,不能 exec", file=sys.stderr)
             return 2
-        cmd[1:3] = ["-p"]  # exec 模式沒有 prompt 參數,訊息從 stdin(stream-json)來
-        cmd += ["--input-format", "stream-json", "--output-format", "stream-json", "--include-partial-messages", "--verbose"]
-        os.execvpe(cmd[0], cmd, env)
-    cmd += ["--output-format", "json"]
-    schema = None
-    if output_schema(spec):
-        schema = json.loads((POINTS.parent / output_schema(spec)).read_text())
-        cmd += ["--json-schema", json.dumps(schema, ensure_ascii=False)]
-    if getattr(a, "dry_run", False):
-        print(json.dumps(cmd, ensure_ascii=False))
+        if not hasattr(rt, "exec_stream"):
+            print(f"llm.py:{a.point} 這個執行環境不支援長駐的串流 session", file=sys.stderr)
+            return 2
+        rt.exec_stream(task)
         return 0
-    try:
-        r = subprocess.run(cmd, cwd=a.cwd or None, capture_output=True, text=True, timeout=spec.get("timeout_s", 1200),
-                           env=env)
-    except subprocess.TimeoutExpired:
-        return fail(a.point, spec, f"超過 {spec.get('timeout_s', 1200) // 60} 分鐘")
-    except FileNotFoundError:
-        return fail(a.point, spec, "找不到 claude")
-    sys.stderr.write(r.stderr)
-    if r.returncode != 0 or not r.stdout.strip():
-        # claude -p 的錯誤(例:Login expired)常常只在 stdout 的 JSON 裡
-        return fail(a.point, spec, f"exit {r.returncode}:{(r.stderr.strip() or r.stdout.strip())[-300:]}")
-    try:
-        out = json.loads(r.stdout)
-    except ValueError:
-        return fail(a.point, spec, "輸出不是 JSON:" + r.stdout[:200])
+    if getattr(a, "dry_run", False):
+        print(json.dumps(rt.describe(task), ensure_ascii=False))
+        return 0
+    res = rt.run(task)
+    if not res.ok:
+        return fail(a.point, spec, res.error)
     # 沒有 structured_output 不算失敗:原樣交給呼叫端(librarian 刻意「仍以實際檔案變化為準」);有的話要合格
-    if schema is not None and out.get("structured_output") is not None:
-        so = out["structured_output"]
-        if (errs := minischema.errors(schema, so)):
+    if schema is not None and res.structured_output is not None:
+        if (errs := minischema.errors(schema, res.structured_output)):
             return fail(a.point, spec, "輸出不符合 schema:" + "; ".join(errs[:3]))
-    out["llm_point"] = a.point
-    print(json.dumps(out, ensure_ascii=False))
+    # 輸出的欄位名稱是 llm.py 對呼叫端的約定(librarian、consolidate、lease-runner…讀這些),不隨 runtime 改
+    print(json.dumps({"type": "result", "is_error": res.incomplete, "result": res.text,
+                      "structured_output": res.structured_output, "total_cost_usd": res.cost_usd,
+                      "session_id": res.session_id, "num_turns": res.turns, "subtype": res.stop,
+                      "permission_denials": list(res.denials), "llm_point": a.point}, ensure_ascii=False))
     return 0
 
 
