@@ -1,0 +1,4 @@
+; 能力 gpu:用 GPU(Metal)跑程式,例:Blender 出圖(docs/design/capabilities.md)。
+; 平台的 base profile(seatbelt.py)是「先全部放行、再擋危險的部分」,Metal/IOKit 本來就不在 deny 清單上,
+; 所以這個片段是空的:gpu 在這裡的作用是授權(誰能用平台代跑),不是多開一個洞。
+; 之後若 base 改成「預設全擋、逐項開」,Metal 需要的 iokit-open / mach-lookup 才寫在這裡。

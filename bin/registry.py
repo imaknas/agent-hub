@@ -21,9 +21,14 @@ schema v1(contracts/project.v1.md 有完整說明):
   publishes: [{kind, path, contract, v}]
   provides:  [{contract, v, schema}]           schema 相對 workspace
   services:  [{name, run, label?, keepalive?, throttle_s?, env?, cwd?, expose?}]
-  enforce: {sandbox: false}       第二階段:true = render-project-settings.py 寫 sandbox + 權限規則
+  enforce: {sandbox: false, capabilities: []}
+                                  第二階段:sandbox true = render-project-settings.py 寫 sandbox + 權限規則;
+                                  capabilities = 平台的能力(hub.json capabilities,例 gpu),要 sandbox: true、目前只收 type: idea;
+                                  沙盒裡用 hub-run --cap <能力> 透過平台代跑(docs/design/capabilities.md)
   network: [網域]                 sandbox 平台預設之外還要連的
   allow_write: [路徑]             sandbox 平台預設之外還要寫的
+    type、enforce、network、allow_write、privacy 是安全欄位:專案寄的 manifest.update 改到就整封退回
+    (專案不能替自己關 sandbox、開大範圍、加能力);要改請 agent-hub session(Knas 確認)
   secrets:   [{name, path, env_key?, expires? | max_age_days?, warn_days?, backup?, why?, rotate?}]
                                   這個專案要用的憑證:只寫名稱、位置、到期,**不寫值**(check-secrets.py 每天檢查
                                   在不在、有沒有被備份、快不快到期)。path 相對 runtime(有 runtime 時)否則 workspace,
@@ -146,6 +151,41 @@ def validate_secrets(secrets) -> list[str]:
     return errs
 
 
+def capabilities() -> dict[str, dict]:
+    """平台有的能力:hub.json 的 capabilities,而且 capabilities/<名稱>.sb 存在。"""
+    cat = {k: v for k, v in (hubconf.get("capabilities") or {}).items() if not k.startswith("_") and isinstance(v, dict)}
+    return {k: v for k, v in cat.items() if (hubconf.ROOT / "capabilities" / f"{k}.sb").is_file()}
+
+
+def validate_enforce(doc: dict) -> list[str]:
+    enf = doc.get("enforce")
+    if enf is None:
+        return []
+    if not isinstance(enf, dict) or set(enf) - {"sandbox", "capabilities"} or not isinstance(enf.get("sandbox", False), bool):
+        return ["enforce 只能是 {sandbox: true|false, capabilities: [能力]}"]
+    caps = enf.get("capabilities")
+    if caps is None:
+        return []
+    if not isinstance(caps, list) or not all(isinstance(c, str) for c in caps):
+        return ["enforce.capabilities 要是字串的 list"]
+    errs, have = [], capabilities()
+    errs += [f"enforce.capabilities:平台沒有 {c} 這個能力(有的:{', '.join(sorted(have)) or '無'})" for c in caps if c not in have]
+    if caps and not enf.get("sandbox"):
+        errs.append("enforce.capabilities 要搭配 enforce.sandbox: true")
+    if caps and doc.get("type") != "idea":
+        errs.append("enforce.capabilities 目前只開給想法沙盒(type: idea)")
+    return errs
+
+
+PLATFORM_OWNED = ("type", "enforce", "network", "allow_write", "privacy")
+
+
+def platform_owned_changes(new: dict, cur: dict) -> list[str]:
+    """manifest.update 不能改的安全欄位:跟現在的登錄不一樣就列出來。"""
+    return [f"{k} 是安全欄位,只能由 agent-hub 改(要 Knas 確認);這封改到了它" for k in PLATFORM_OWNED
+            if new.get(k) != cur.get(k)]
+
+
 def validate(doc, stem: str) -> list[str]:
     errs: list[str] = []
     if not isinstance(doc, dict):
@@ -165,9 +205,7 @@ def validate(doc, stem: str) -> list[str]:
     paths = doc.get("paths") or {}
     if not is_hub and not paths.get("workspace"):
         errs.append("paths.workspace 必填")
-    enf = doc.get("enforce")
-    if enf is not None and (not isinstance(enf, dict) or set(enf) - {"sandbox"} or not isinstance(enf.get("sandbox", False), bool)):
-        errs.append("enforce 只能是 {sandbox: true|false}")
+    errs += validate_enforce(doc)
     if doc.get("gate") not in (None, "strict", "detect"):
         errs.append("gate 只能是 strict 或 detect(預設)")
     errs += validate_secrets(doc.get("secrets"))
@@ -431,6 +469,10 @@ def cmd_apply_updates() -> int:
             doc, errs = None, [f"YAML 讀不了:{e}"]
         if isinstance(doc, dict) and doc.get("name") != sender:
             errs.append(f"只能改自己的登錄(寄件人是 {sender},YAML 的 name 是 {doc.get('name')})")
+        elif isinstance(doc, dict):
+            cur_f = hubconf.registry_dir() / f"{sender}.yaml"
+            cur = (yaml.safe_load(cur_f.read_text()) or {}) if cur_f.exists() else {}
+            errs += platform_owned_changes(doc, cur)
         if errs:
             reply(sender, mid, "manifest.update 沒有套用,登錄沒變:\n- " + "\n- ".join(errs), "退回:" + "; ".join(errs)[:200])
             print(f"{sender}:manifest.update {mid} 退回({len(errs)} 個問題)")

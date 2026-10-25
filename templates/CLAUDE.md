@@ -57,7 +57,8 @@ librarian 每晚自動寄出、Knas 結案時自動移掉。Knas 在這個 sessi
 - **這個專案用了哪些憑證,宣告在平台的專案登錄** `~/agent-hub/projects/<專案>.yaml` 的 `secrets:`(只寫名稱、
   位置、到期,**不寫值**),平台每天檢查在不在、有沒有被備份、快不快到期,有問題發警報。新增、拿掉、換位置:
   把改好的完整 YAML 寄出 `~/agent-hub/bin/hubbus send --to agent-hub --type manifest.update --text "$(cat <改好的檔>)"`
-  (驗證不過會退回)。
+  (驗證不過會退回;`type`、`enforce`、`network`、`allow_write`、`privacy` 是安全欄位,改到就整封退回——要改用
+  `--type request` 寫信給 agent-hub 說明為什麼,由 Knas 確認)。
 - **機器層級的憑證是平台的**(claude 的登入/token、平台的 Discord、備份):不要在專案裡另存一份、不要自己去讀
   `~/.claude` 底下的憑證檔;需要就寄信給 agent-hub。
 - **到外部服務發新的、撤銷、換掉只有 Knas 能做**:寫成〔Knas〕待辦,寫清楚是哪個服務、為什麼。
