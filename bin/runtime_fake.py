@@ -22,6 +22,7 @@ _env_key = "FAKE_RUNTIME_SESSION"
 
 
 def reset() -> None:
+    _resumable.clear()
     _replies.clear()
     _ran.clear()
     _turns.clear()
@@ -138,3 +139,49 @@ def instructions_file(workspace) -> pathlib.Path:
 
 def local_ignores() -> list:
     return [".fake-instructions.md", ".fake-hooks.json"]
+
+
+# ---------- stream(長駐 session 的輸出)----------
+# 假的原生格式:工具名稱就是 kind(認不得的是 other),輸出的每一行是 {"type": ..., "data": {...}}。
+
+from runtime_ports import KINDS, StreamEvent  # noqa: E402
+
+_resumable: set[str] = set()
+
+
+def set_resumable(sid: str, ok: bool = True) -> None:
+    (_resumable.add if ok else _resumable.discard)(sid)
+
+
+def action(tool: str, inp: dict | None) -> tuple:
+    inp = inp or {}
+    target = str(inp.get("target", ""))
+    return (tool if tool in KINDS else "other"), inp.get("collab"), target, f"{tool} {target}".strip()
+
+
+def parse_stream(line: str) -> list:
+    try:
+        d = json.loads(line)
+    except ValueError:
+        return []
+    if not isinstance(d, dict) or not isinstance(d.get("data"), dict):
+        return []
+    data = dict(d["data"])
+    if d.get("type") == "tool_use":  # 跟 Claude 一樣經過 action() 翻譯,不直接相信輸入
+        kind, _, _, summary = action(data.pop("tool", ""), data.pop("input", None))
+        data = {"kind": kind, "summary": summary, "detail": {}}
+    return [StreamEvent(d["type"], data)]
+
+
+def classify_exit(code, stderr_tail: str) -> StreamEvent:
+    if "login" in stderr_tail:
+        return StreamEvent("error", {"error": "agent_login", "detail": "fake runtime 沒登入"})
+    return StreamEvent("error", {"error": "process_crashed", "detail": f"exit {code}:{stderr_tail[-200:]}"})
+
+
+def resumable(sid: str) -> bool:
+    return sid in _resumable
+
+
+def resume_command(sid: str) -> tuple:
+    return (f"fake-resume {sid}", "假的 runtime:接回同一段對話")

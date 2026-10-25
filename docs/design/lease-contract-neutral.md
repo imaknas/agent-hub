@@ -1,6 +1,6 @@
 # 租約契約跟執行環境無關(m10251446):設計,待 Knas 確認
 
-> **狀態**:10-25 初版;同一天跟總設計的 session 對齊過分工(見「跟總設計的分工」),等 Knas 確認 A–E。確認前兩邊都不動程式。
+> **狀態**:10-25 Knas 確認 A–E,截止日改成最多一天(只有他在用,迭代要快);同一天開始實作。
 
 來源:Muninn 的請求 `m10251446-318e`(10-25 14:46,Knas 已同意方向):`contracts/lease-runner.v1.schema.json` 改成跟 agent
 實作無關的通用類別,Claude Code 的名稱在 runner 這一端翻譯。完成條件(Muninn 的):契約裡不再出現 Claude Code 的工具名跟
@@ -53,7 +53,8 @@ read | search | ask_user | open_web | write_file | run_command | other
 - 這是 CLAUDE.md 的規則「改名/改意思升版、兩版並存到讀的人換完」;不在 v1 裡加欄位並行,因為 `kind` 在 `question`/`permission`
   事件裡已經有別的意思(question|permission),加欄位會撞名。
 - runner 內部只產生 v2 的事件;v1 是一個轉回舊形狀的小函式(`v1_compat()`),截止日一到整個刪掉。
-- **截止日(建議 2026-11-08,兩週)**:之後 runner 只認 v2,v1 的 schema 檔移到 `contracts/retired/`。Muninn 提早換完就提早刪。
+- **截止日:Muninn 回報換好就刪,最晚 2026-10-26**(Knas 10-25:只有他在用,迭代要快,不需要等)。之後 runner 只認 v2,
+  v1 的 schema 檔移到 `contracts/retired/`。
 - 每晚的契約檢查不受影響:v1 檔沒變,Muninn 的副本照樣一致;v2 是新檔,Muninn 在自己的登錄加 `consumes` 那天才開始比對。
 
 **v2 跟 v1 的差別**(其他欄位、端點不變)
@@ -136,7 +137,7 @@ work:     同上,加 write_file → 專案資料夾裡 allow、外面 deny;run_c
 
 ## 要 Knas 確認的
 
-**A. v2 跟 v1 並存、Muninn 用 `v` 選,截止日 2026-11-08**(建議)。不在 v1 裡加欄位並行(`kind` 會撞名)。
+**A. v2 跟 v1 並存、Muninn 用 `v` 選,Muninn 換好就刪 v1、最晚 2026-10-26**(10-25 確認)。不在 v1 裡加欄位並行(`kind` 會撞名)。
 **B. 一套動作種類**(上面七個),契約、approvals、判斷點、對話紀錄統計都用它。
 **C. 「哪些動作要問人」移進中立政策**(`policy.approvals`),relay 只剩轉接;規則跟現在一樣。
 **D. 跟總設計的分工**(上一段,兩個 session 已對齊):這份做翻譯跟契約,那邊做程序生命週期跟 llm-points,這份先做。

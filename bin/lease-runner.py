@@ -2,7 +2,10 @@
 """通道租借的 runner:Muninn 把一個對話串「借」給某個專案的 Claude Code session,這裡負責開、接續、轉送、收回。
 
 只聽 127.0.0.1(預設 18797),每個請求要 `Authorization: Bearer <~/agent-hub/.secrets/runner-token>`。
-API(契約 contracts/lease-runner.v1.schema.json):
+契約兩版並存(docs/design/lease-contract-neutral.md):v2(contracts/lease-runner.v2.schema.json)跟執行環境無關——動作用
+kind、配額用 quota.windows、錯誤碼 agent_login;請求 body 帶 "v": 2 或 GET 加 ?v=2 就回 v2。不帶就是 v1(相容層 render(),
+Muninn 換好就刪,最晚 2026-10-26)。Claude Code 的輸出怎麼翻成中立事件在 runtime 的 parse_stream(rt())。
+API(下面寫的是 v1 的形狀):
   POST /v1/leases                     {v, project, mode: discuss, session_id, thread, resume?, max_turns?} → 201
   POST /v1/leases/<id>/messages       {v, text, client_msg_id, attachments?} → 202(同一個 client_msg_id 只送一次;程序停了自動接回)
                                       attachments: [{name, media_type, data(base64)}],最多 8 個、每個 ≤ 10 MB;存進專案的
@@ -51,6 +54,12 @@ import uuid
 
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
 import hubconf  # noqa: E402
+import runtime_ports  # noqa: E402
+
+
+def rt():
+    """這個 runner 用的執行環境(runtime_ports;現在全部是 hub.json 的 runtime.default)。Claude Code 的細節都在它裡面。"""
+    return runtime_ports.load()
 
 HUB = hubconf.ROOT
 HOST, PORT = "127.0.0.1", int(os.environ.get("LEASE_RUNNER_PORT", "18797"))
@@ -125,18 +134,26 @@ class Lease:
                 "last_activity": self.last_activity, "idle_warned_at": self.idle_warned_at, "warned_at": self.warned_at,
                 "seq": self.seq, "seen_msgs": self.seen_msgs[-200:]}
 
-    def public(self) -> dict:
-        return {"lease_id": self.id, "project": self.project, "mode": self.mode, "thread": self.thread,
-                "state": self.state, "last_activity": self.last_activity, "waiting": self.waiting > 0}
+    def public(self, ver: int = 1) -> dict:
+        d = {"lease_id": self.id, "project": self.project, "mode": self.mode, "thread": self.thread,
+             "state": self.state, "last_activity": self.last_activity, "waiting": self.waiting > 0}
+        if ver >= 2:
+            d["resumable"] = rt().resumable(self.id)
+        return d
 
     @property
     def dir(self) -> pathlib.Path:
         return DIR / self.id
 
-    def emit(self, etype: str, **data) -> dict:
+    def emit(self, etype: str, legacy_v1: dict | None = None, **data) -> dict:
+        """存的是契約 v2 的形狀;跟 v1 不一樣的事件另外帶 `_v1`(v1 的樣子),送出時照請求的版本挑(render)。
+        `_` 開頭的欄位是內部訊號,不存、不送。"""
         with _lock:
             self.seq += 1
-            ev = {"v": 1, "seq": self.seq, "lease_id": self.id, "ts": iso(), "type": etype, **data}
+            ev = {"v": 2, "seq": self.seq, "lease_id": self.id, "ts": iso(), "type": etype,
+                  **{k: v for k, v in data.items() if not k.startswith("_")}}
+            if legacy_v1 is not None:
+                ev["_v1"] = legacy_v1
             self.recent.append(ev)
             del self.recent[:-3000]
             if etype != "text_delta":  # 逐字的不存檔(量大;斷線補送從完整的 assistant 事件看得到)
@@ -147,13 +164,27 @@ class Lease:
             save()
         return ev
 
-    def set_state(self, st: str, **extra) -> None:
+    def set_state(self, st: str, legacy_v1: dict | None = None, **extra) -> None:
         self.state = st
-        self.emit("state", state=st, **extra)
+        self.emit("state", legacy_v1=legacy_v1, state=st, **extra)
 
     def touch(self) -> None:
         self.last_activity = iso()
         self.idle_warned_at = self.warned_at = None
+
+
+def render(ev: dict, ver: int) -> dict:
+    """存下來的事件 → 照請求的契約版本送出。v1 是並存期間的相容層(Muninn 換好 v2 就整段刪掉,最晚 2026-10-26)。
+    改版前存的事件(本來就是 v1)照原樣送。"""
+    if ev.get("v", 1) == 1:
+        return ev
+    if ver >= 2:
+        return {k: v for k, v in ev.items() if k != "_v1"}
+    head = {"v": 1, "seq": ev["seq"], "lease_id": ev["lease_id"], "ts": ev["ts"]}
+    legacy = ev.get("_v1")
+    if legacy is None:
+        return {**head, **{k: v for k, v in ev.items() if k not in head}}
+    return {**head, "type": legacy.get("type", ev["type"]), **{k: v for k, v in legacy.items() if k != "type"}}
 
 
 def save() -> None:
@@ -248,8 +279,8 @@ def preamble(project: str, mode: str = "discuss") -> str:
 def start_proc(lease: Lease, resume: bool) -> None:
     # 接續的前提是對話紀錄已經存在:Claude Code 要跑完第一輪才會寫出來。還沒說過話就切換模式、閒置停掉、
     # runner 重啟時用 --resume 會 "No conversation found" 掛掉(10-25 Knas 遇到,lease 34c84c53)
-    import runtime_claude
-    can_resume = (resume or lease.started_once) and runtime_claude.transcript(lease.id) is not None
+    wanted = resume or lease.started_once
+    can_resume = wanted and rt().resumable(lease.id)
     flag = ["--resume", lease.id] if can_resume else ["--session-id", lease.id]
     point = "lease-work" if lease.mode == "work" else "lease-session"
     cmd = [PY, str(HUB / "bin" / "llm.py"), "exec", point, "--cwd", lease.cwd, "--",
@@ -262,7 +293,12 @@ def start_proc(lease: Lease, resume: bool) -> None:
     lease.proc = subprocess.Popen(cmd, cwd=lease.cwd, env=env_for(lease), stdin=subprocess.PIPE, stdout=subprocess.PIPE,
                                   stderr=err, text=True, bufsize=1)
     lease.intent_stop = False  # started_once 等第一輪真的跑完才設(reader 收到 num_turns > 0 的 result)
-    lease.set_state("running", pid=lease.proc.pid, resumed=bool(flag[0] == "--resume"))
+    if wanted and not can_resume:  # 要接回卻接不回(紀錄不在):照實說,不默默開新的(v2 才有 detail)
+        lease.set_state("running", legacy_v1={"state": "running", "pid": lease.proc.pid, "resumed": False},
+                        pid=lease.proc.pid, resumed=False,
+                        detail="之前的對話紀錄已經不在(還沒說過話,或保留期限過了),從新的對話開始")
+    else:
+        lease.set_state("running", pid=lease.proc.pid, resumed=can_resume)
     threading.Thread(target=reader, args=(lease, lease.proc), daemon=True).start()
 
 
@@ -284,69 +320,31 @@ def stop_proc(lease: Lease, new_state: str) -> None:
     lease.set_state(new_state)
 
 
-def summarize_tool(name: str, inp: dict) -> str:
-    for k in ("file_path", "path", "pattern", "url", "query", "command"):
-        if inp.get(k):
-            return f"{name} {str(inp[k])[:160]}"
-    if name == "AskUserQuestion":
-        return "問 Knas:" + " / ".join(q.get("question", "") for q in inp.get("questions") or [])[:200]
-    return name
-
-
 def reader(lease: Lease, proc: subprocess.Popen) -> None:
+    """runtime 的原生輸出 → 中立的對話事件(rt().parse_stream)→ 送出;回合結束時更新租約的狀態。"""
+    runtime = rt()
     for line in proc.stdout:
-        try:
-            d = json.loads(line)
-        except ValueError:
-            continue
-        t = d.get("type")
-        if t == "stream_event":
-            ev = d.get("event") or {}
-            delta = ev.get("delta") or {}
-            if ev.get("type") == "content_block_delta" and delta.get("type") == "text_delta":
-                lease.emit("text_delta", text=delta.get("text", ""))
-        elif t == "assistant":
-            for block in (d.get("message") or {}).get("content") or []:
-                if block.get("type") == "text" and block.get("text"):
-                    lease.emit("assistant", text=block["text"])
-                elif block.get("type") == "tool_use":
-                    lease.emit("tool_use", name=block.get("name"), summary=summarize_tool(block.get("name", ""), block.get("input") or {}))
-        elif t == "user":
-            content = (d.get("message") or {}).get("content")
-            for block in content if isinstance(content, list) else []:
-                if block.get("type") == "tool_result":
-                    c = block.get("content")
-                    text = c if isinstance(c, str) else " ".join(x.get("text", "") for x in c or [] if isinstance(x, dict))
-                    lease.emit("tool_result", is_error=bool(block.get("is_error")), summary=text[:200], truncated=len(text) > 200)
-        elif t == "rate_limit_event":
-            info = d.get("rate_limit_info") or {}
-            w = info.get("unifiedWindows") or {}
-            rl = {"five_hour": (w.get("five_hour") or {}).get("utilization"),
-                  "seven_day": (w.get("seven_day") or {}).get("utilization"),
-                  "five_hour_resets_at": (w.get("five_hour") or {}).get("resetsAt"),   # epoch 秒
-                  "seven_day_resets_at": (w.get("seven_day") or {}).get("resetsAt")}
-            lease.emit("rate_limit", status=info.get("status"), **rl)
-            STATUS["rate_limit"] = {**rl, "at": iso()}
-        elif t == "system" and d.get("subtype") == "post_turn_summary":
-            lease.emit("turn_end", summary=d.get("status_detail", ""))
-        elif t == "result":
+        events = runtime.parse_stream(line)
+        done = [e for e in events if e.type == "turn_end" and "num_turns" in e.data]
+        if done:
             with _lock:
                 lease.in_turn = False
                 # 啟動就失敗的程序也會先吐一個 is_error、num_turns=0 的 result 再退出:那不算成功,
                 # 不能把 crashes 歸零(不然永遠到不了 2、不會自動收回,每則訊息都重新掛一次)
-                if not (d.get("is_error") and not d.get("num_turns")):
+                if not (done[0].data.get("is_error") and not done[0].data.get("num_turns")):
                     lease.crashes = 0
-                if d.get("num_turns"):
-                    lease.started_once = True  # 對話紀錄寫出來了,之後可以 --resume
+                if done[0].data.get("num_turns"):
+                    lease.started_once = True  # 對話紀錄寫出來了,之後可以接回
                 lease.touch()
-            text = str(d.get("result") or "")
-            if d.get("is_error") and re.search(r"rate.?limit|usage limit|額度", text, re.I):
-                lease.emit("error", error="rate_limit", detail=text[:300])
-            elif d.get("subtype") == "error_max_turns":
-                lease.emit("error", error="bad_request", detail="回合上限到了,收回")
-                threading.Thread(target=detach, args=(lease, "budget"), daemon=True).start()
-            lease.emit("turn_end", cost=d.get("total_cost_usd"), num_turns=d.get("num_turns"),
-                       duration_ms=d.get("duration_ms"), is_error=bool(d.get("is_error")))
+        for e in events:
+            if e.type == "quota":
+                STATUS["quota"] = {**e.data, "at": iso()}
+                if e.legacy:
+                    STATUS["rate_limit"] = {**{k: v for k, v in e.legacy.items() if k not in ("type", "status")},
+                                            "at": iso()}
+            lease.emit(e.type, legacy_v1=e.legacy, **e.data)
+            if e.data.get("_detach"):
+                threading.Thread(target=detach, args=(lease, e.data["_detach"]), daemon=True).start()
     proc.wait()
     with _lock:
         if lease.proc is not proc or lease.intent_stop:
@@ -354,8 +352,8 @@ def reader(lease: Lease, proc: subprocess.Popen) -> None:
         lease.proc, lease.in_turn = None, False
         lease.crashes += 1
         tail = (lease.dir / "stderr.log").read_text(errors="replace")[-400:] if (lease.dir / "stderr.log").exists() else ""
-        cat = "auth" if re.search(r"log ?in|auth|credential", tail, re.I) else "process_crashed"
-        lease.emit("error", error=cat, detail=f"exit {proc.returncode}:{tail[-200:]}")
+        e = rt().classify_exit(proc.returncode, tail)
+        lease.emit(e.type, legacy_v1=e.legacy, **e.data)
         if lease.crashes >= 2:
             threading.Thread(target=detach, args=(lease, "crash"), daemon=True).start()
         else:
@@ -450,8 +448,7 @@ EMPTY_HANDOVER = {"summary": "這次深談沒有開始對話(session 沒有啟�
 def run_handover(lease: Lease) -> tuple[dict | None, str]:
     """(交接, 失敗的原因)。沒有對話紀錄 = 沒說過話:回固定的「沒有內容」,不算失敗(10-25 租約 34c84c53:
     session 一開始就掛掉,交接拿 --resume 去接一段不存在的對話,被當成「模型沒寫出合格交接」)。"""
-    import runtime_claude
-    if runtime_claude.transcript(lease.id) is None:
+    if not rt().resumable(lease.id):
         return dict(EMPTY_HANDOVER), ""
     cmd = [PY, str(HUB / "bin" / "llm.py"), "run", "lease-handover", "--cwd", lease.cwd, "--",
            "--resume", lease.id, "--strict-mcp-config", "--settings", str(deny_settings(lease.project))]
@@ -550,7 +547,7 @@ def detach(lease: Lease, reason: str) -> None:
 
 # ---------- 閒置 ----------
 
-STATUS: dict = {"rate_limit": None}
+STATUS: dict = {"rate_limit": None, "quota": None}   # rate_limit 是 v1 的形狀(並存期間)
 
 
 def idle_loop() -> None:
@@ -604,6 +601,23 @@ def token() -> str:
     return TOKEN_FILE.read_text().strip()
 
 
+def relay_event(b: dict) -> tuple:
+    """權限轉接的回報 → (事件類型, v2 的欄位, v1 的樣子)。kind 是動作種類(runtime_ports.KINDS);
+    轉接還送舊格式(kind 是 question/permission、tool 是原生名稱)時由 runtime 翻譯。"""
+    tool = b.get("tool") or ""
+    kind = b.get("kind")
+    if kind not in runtime_ports.KINDS:
+        kind = rt().action(tool, {})[0]
+    etype = "question" if kind == "ask_user" else "permission"
+    data = {"phase": b.get("phase"), "kind": kind, "summary": b.get("summary", "")}
+    for k in ("target", "decision"):
+        if b.get(k) is not None:
+            data[k] = b[k]
+    legacy = {k: v for k, v in b.items() if k != "target"}
+    legacy["kind"] = "question" if etype == "question" else "permission"
+    return etype, data, legacy
+
+
 def live(l: Lease) -> bool:
     return l.state not in ("detached",)
 
@@ -614,7 +628,10 @@ class H(http.server.BaseHTTPRequestHandler):
     def log_message(self, *a):
         pass
 
+    ver = 1  # 這個請求要哪一版的契約:body 的 "v": 2 或 ?v=2(docs/design/lease-contract-neutral.md)
+
     def reply(self, code: int, body: dict) -> None:
+        body = {**body, "v": self.ver} if "v" in body else body
         data = json.dumps(body, ensure_ascii=False).encode()
         self.send_response(code)
         self.send_header("Content-Type", "application/json")
@@ -647,7 +664,12 @@ class H(http.server.BaseHTTPRequestHandler):
             self.err(404, "not_found", lid)
         return l
 
+    def want(self, body: dict | None = None) -> None:
+        q = urllib.parse.parse_qs(urllib.parse.urlparse(self.path).query)
+        self.ver = 2 if (q.get("v") == ["2"] or (body or {}).get("v") == 2) else 1
+
     def do_GET(self):
+        self.want()
         if not self.authed():
             return
         path = urllib.parse.urlparse(self.path).path
@@ -655,8 +677,8 @@ class H(http.server.BaseHTTPRequestHandler):
         if path == "/v1/leases":
             with _lock:
                 ls = sorted(LEASES.values(), key=lambda x: x.last_activity, reverse=True)
-                return self.reply(200, {"v": 1, "leases": [l.public() for l in ls if live(l)] +
-                                        [l.public() for l in ls if not live(l)][:20]})
+                return self.reply(200, {"v": 1, "leases": [l.public(self.ver) for l in ls if live(l)] +
+                                        [l.public(self.ver) for l in ls if not live(l)][:20]})
         if path == "/v1/policy":  # 給 Muninn 的權限卡片:不能「整個租約都允許」的網域(唯一的一份清單)
             import registry
             idx = registry.refresh()
@@ -666,6 +688,8 @@ class H(http.server.BaseHTTPRequestHandler):
         if path == "/v1/status":
             with _lock:
                 n = sum(1 for l in LEASES.values() if live(l))
+            if self.ver >= 2:
+                return self.reply(200, {"v": 2, "leased": n, "cap": GLOBAL_CAP, "quota": STATUS["quota"]})
             return self.reply(200, {"v": 1, "leased": n, "cap": GLOBAL_CAP, "rate_limit": STATUS["rate_limit"]})
         if len(parts) == 4 and parts[:2] == ["v1", "leases"] and parts[3] == "events":
             l = self.lease(parts[2])
@@ -673,6 +697,10 @@ class H(http.server.BaseHTTPRequestHandler):
                 self.sse(l)
             return
         self.err(404, "not_found", path)
+
+    def sse_line(self, ev: dict) -> bytes:
+        out = render(ev, self.ver)
+        return f"id: {out['seq']}\nevent: {out['type']}\ndata: {json.dumps(out, ensure_ascii=False)}\n\n".encode()
 
     def sse(self, l: Lease) -> None:
         last = int(self.headers.get("Last-Event-ID") or 0)
@@ -693,7 +721,7 @@ class H(http.server.BaseHTTPRequestHandler):
             backlog += [e for e in l.recent if e["seq"] > sent and e["type"] == "text_delta"]
         try:
             for ev in sorted(backlog, key=lambda e: e["seq"]):
-                self.wfile.write(f"id: {ev['seq']}\nevent: {ev['type']}\ndata: {json.dumps(ev, ensure_ascii=False)}\n\n".encode())
+                self.wfile.write(self.sse_line(ev))
                 sent = max(sent, ev["seq"])
             self.wfile.flush()
             while True:
@@ -703,16 +731,18 @@ class H(http.server.BaseHTTPRequestHandler):
                 if not new:
                     self.wfile.write(b": keepalive\n\n")
                 for ev in new:
-                    self.wfile.write(f"id: {ev['seq']}\nevent: {ev['type']}\ndata: {json.dumps(ev, ensure_ascii=False)}\n\n".encode())
+                    self.wfile.write(self.sse_line(ev))
                     sent = ev["seq"]
                 self.wfile.flush()
         except (BrokenPipeError, ConnectionResetError, OSError):
             return
 
     def do_POST(self):
+        self.want()
         if not self.authed():
             return
         b = self.body()
+        self.want(b)
         if b.get("__bad__"):
             return self.err(400, "bad_request", "body 不是 JSON")
         parts = urllib.parse.urlparse(self.path).path.strip("/").split("/")
@@ -731,7 +761,8 @@ class H(http.server.BaseHTTPRequestHandler):
                     elif l.waiting:
                         l.waiting -= 1
                     l.touch()
-                l.emit("question" if b.get("tool") == "AskUserQuestion" else "permission", **{k: v for k, v in b.items()})
+                etype, data, legacy = relay_event(b)
+                l.emit(etype, legacy_v1=legacy, **data)
                 self.reply(200, {"v": 1})
             return
         if len(parts) != 4 or parts[:2] != ["v1", "leases"]:
@@ -777,7 +808,7 @@ class H(http.server.BaseHTTPRequestHandler):
                 if l.in_turn or l.waiting:
                     return self.err(409, "busy", "正在回答或等 Knas 回覆,等這一輪結束再切換")
                 if l.mode == mode:
-                    return self.reply(200, {"v": 1, **l.public()})
+                    return self.reply(200, {"v": 1, **l.public(self.ver)})
                 # 換判斷點 = 換程序:停掉、用同一個 session --resume 接回(權限轉接也跟著重開)
                 stop_proc(l, "attaching")
                 l.mode = mode
@@ -789,7 +820,7 @@ class H(http.server.BaseHTTPRequestHandler):
                     return self.err(500, "internal", repr(e)[:300])
                 save()
             log(f"lease {l.id[:8]} {l.project}: mode → {mode}")
-            return self.reply(200, {"v": 1, **l.public()})
+            return self.reply(200, {"v": 1, **l.public(self.ver)})
         if action == "keepalive":
             with _lock:
                 l.touch()
@@ -799,6 +830,9 @@ class H(http.server.BaseHTTPRequestHandler):
                 if l.state in ("detaching", "detached"):
                     return self.err(409, "busy", l.state)
                 stop_proc(l, "terminal")
+            if self.ver >= 2:
+                command, hint = rt().resume_command(l.id)
+                return self.reply(200, {"v": 2, "command": command, "hint": hint})
             return self.reply(200, {"v": 1, "command": f"~/agent-hub/bin/lease-resume {l.id}"})
         if action == "detach":
             if l.state in ("detaching", "detached"):
@@ -874,10 +908,10 @@ class H(http.server.BaseHTTPRequestHandler):
                 return self.err(400, "work_not_allowed", why)
         with _lock:
             if sid in LEASES and live(LEASES[sid]):
-                return self.reply(200, {"v": 1, **LEASES[sid].public()})
+                return self.reply(200, {"v": 1, **LEASES[sid].public(self.ver)})
             if sum(1 for l in LEASES.values() if live(l)) >= GLOBAL_CAP:
                 return self.reply(409, {"v": 1, "error": "cap_reached", "detail": f"同時最多 {GLOBAL_CAP} 個",
-                                        "leases": [l.public() for l in LEASES.values() if live(l)]})
+                                        "leases": [l.public(self.ver) for l in LEASES.values() if live(l)]})
             prev = LEASES.get(sid)  # 已收回的租約用同一個 id 接回(Muninn 回到同一段對話):
             # 事件序號、處理過的訊息要接著舊的,不然序號從 0 重來、跟 events.jsonl 裡的舊事件撞號,SSE 續接會亂
             lease = Lease({"lease_id": sid, "project": proj, "mode": mode, "thread": b.get("thread", ""),
@@ -891,7 +925,7 @@ class H(http.server.BaseHTTPRequestHandler):
             except Exception as e:
                 lease.set_state("detached", reason="crash")
                 return self.err(500, "internal", repr(e)[:300])
-        self.reply(201, {"v": 1, **lease.public()})
+        self.reply(201, {"v": 1, **lease.public(self.ver)})
 
 
 def main() -> None:

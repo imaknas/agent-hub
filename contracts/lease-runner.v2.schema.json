@@ -1,0 +1,659 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "records-lease-runner.v2",
+  "title": "通道租借 runner API v2",
+  "description": "本機 HTTP(127.0.0.1,Bearer token)。$defs 是各個請求、事件、錯誤的形狀。加欄位不升版。 v2 跟執行 session 的 agent 實作無關:動作用通用的種類(kind),配額用通用的時間窗(quota.windows),錯誤碼不帶實作的名字。選 v2:請求的 body 帶 \"v\": 2,或 GET 加 ?v=2(事件串流 /v1/leases/<id>/events?v=2)。v1 只在換版期間並存,讀的那一方換好就刪。改版前存下的事件照原樣送(v: 1)。",
+  "$defs": {
+    "create": {
+      "type": "object",
+      "required": [
+        "project",
+        "session_id",
+        "thread"
+      ],
+      "properties": {
+        "v": {
+          "const": 2
+        },
+        "project": {
+          "type": "string"
+        },
+        "mode": {
+          "enum": [
+            "discuss",
+            "work"
+          ],
+          "description": "discuss = 唯讀深談;work = 可以改這個專案的檔案、跑指令,每次都先問使用者(只開給 policy 的 work_projects)"
+        },
+        "session_id": {
+          "type": "string",
+          "minLength": 8,
+          "description": "這個租約的 session id(UUID;實作要求的格式)"
+        },
+        "thread": {
+          "type": "string"
+        },
+        "resume": {
+          "type": "boolean"
+        },
+        "max_turns": {
+          "type": "integer",
+          "minimum": 1
+        }
+      }
+    },
+    "message": {
+      "type": "object",
+      "required": [
+        "text",
+        "client_msg_id"
+      ],
+      "properties": {
+        "v": {
+          "const": 2
+        },
+        "text": {
+          "type": "string"
+        },
+        "client_msg_id": {
+          "type": "string"
+        },
+        "attachments": {
+          "type": "array",
+          "maxItems": 8,
+          "description": "附件:存進那個專案資料夾的 attachments/<YYYYMMDD-HHMMSS>-<名稱>(檔名清乾淨、不覆蓋、不進 git);圖片(image/jpeg|png|gif|webp)同時直接給模型看;文字後面會附一行存放路徑。每個解碼後最多 10 MB;整個請求最多 100 MB。",
+          "items": {
+            "type": "object",
+            "required": [
+              "name",
+              "media_type",
+              "data"
+            ],
+            "additionalProperties": false,
+            "properties": {
+              "name": {
+                "type": "string",
+                "minLength": 1
+              },
+              "media_type": {
+                "type": "string",
+                "minLength": 1
+              },
+              "data": {
+                "type": "string",
+                "description": "base64"
+              }
+            }
+          }
+        }
+      },
+      "description": "POST /v1/leases/<id>/messages。text 跟 attachments 至少要有一個(只傳附件時 text 可以是空字串)。"
+    },
+    "detach": {
+      "type": "object",
+      "properties": {
+        "v": {
+          "const": 2
+        },
+        "reason": {
+          "enum": [
+            "user",
+            "idle",
+            "done",
+            "budget"
+          ]
+        }
+      }
+    },
+    "lease": {
+      "type": "object",
+      "required": [
+        "lease_id",
+        "project",
+        "mode",
+        "state"
+      ],
+      "properties": {
+        "lease_id": {
+          "type": "string"
+        },
+        "project": {
+          "type": "string"
+        },
+        "mode": {
+          "type": "string"
+        },
+        "thread": {
+          "type": "string"
+        },
+        "state": {
+          "enum": [
+            "attaching",
+            "running",
+            "idle_stopped",
+            "resuming",
+            "terminal",
+            "detaching",
+            "detached",
+            "crashed"
+          ]
+        },
+        "last_activity": {
+          "type": "string"
+        },
+        "waiting": {
+          "type": "boolean"
+        },
+        "resumable": {
+          "type": "boolean",
+          "description": "這段對話現在還接得回來嗎(紀錄還在)"
+        }
+      }
+    },
+    "event": {
+      "type": "object",
+      "required": [
+        "v",
+        "seq",
+        "lease_id",
+        "ts",
+        "type"
+      ],
+      "properties": {
+        "v": {
+          "const": 2
+        },
+        "seq": {
+          "type": "integer"
+        },
+        "lease_id": {
+          "type": "string"
+        },
+        "ts": {
+          "type": "string"
+        },
+        "type": {
+          "enum": [
+            "state",
+            "text_delta",
+            "assistant",
+            "tool_use",
+            "tool_result",
+            "turn_end",
+            "quota",
+            "idle_warning",
+            "question",
+            "permission",
+            "handover",
+            "error"
+          ]
+        }
+      },
+      "description": "每個事件都有這幾個欄位;各類型另外的欄位見 tool_use_event、question_event、permission_event、state_event、quota、turn_end_event、error。"
+    },
+    "error": {
+      "type": "object",
+      "required": [
+        "v",
+        "error"
+      ],
+      "properties": {
+        "v": {
+          "const": 2
+        },
+        "detail": {
+          "type": "string",
+          "description": "給人看的說明;agent_login = 執行 session 的 agent 沒登入或憑證過期(detail 說是哪個)"
+        },
+        "error": {
+          "enum": [
+            "not_registered",
+            "cap_reached",
+            "busy",
+            "not_found",
+            "bad_request",
+            "agent_login",
+            "rate_limit",
+            "process_crashed",
+            "resume_failed",
+            "handover_failed",
+            "unauthorized",
+            "internal",
+            "bad_name",
+            "exists",
+            "too_many",
+            "create_failed",
+            "work_not_allowed",
+            "not_idea",
+            "dirty",
+            "name_taken",
+            "upgrade_failed"
+          ]
+        },
+        "limit": {
+          "type": "integer",
+          "description": "too_many:同時最多幾個想法沙盒"
+        },
+        "current": {
+          "type": "integer",
+          "description": "too_many:現在有幾個"
+        }
+      }
+    },
+    "policy": {
+      "type": "object",
+      "required": [
+        "v",
+        "no_session_domains",
+        "attachable"
+      ],
+      "properties": {
+        "v": {
+          "const": 2
+        },
+        "no_session_domains": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "開網頁(open_web)不能「整個租約都允許」的網域(含子網域)"
+        },
+        "attachable": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "可以借用的專案名稱"
+        },
+        "modes": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "work_projects": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "可以用 work 模式的專案(想法沙盒,而且 OS sandbox 已經寫進它的設定)"
+        }
+      }
+    },
+    "terminal": {
+      "type": "object",
+      "required": [
+        "v",
+        "command",
+        "hint"
+      ],
+      "properties": {
+        "v": {
+          "const": 2
+        },
+        "command": {
+          "type": "string",
+          "description": "在終端機接續這個 session 的指令,照原樣顯示(由 runner 依實作組)"
+        },
+        "hint": {
+          "type": "string",
+          "description": "給人看的一句:在哪裡跑、跑完要做什麼"
+        }
+      }
+    },
+    "status": {
+      "type": "object",
+      "required": [
+        "v",
+        "leased",
+        "cap"
+      ],
+      "properties": {
+        "v": {
+          "const": 2
+        },
+        "leased": {
+          "type": "integer"
+        },
+        "cap": {
+          "type": "integer"
+        },
+        "quota": {
+          "oneOf": [
+            {
+              "$ref": "#/$defs/quota"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      }
+    },
+    "sandbox_create": {
+      "type": "object",
+      "required": [
+        "v",
+        "name",
+        "purpose"
+      ],
+      "description": "POST /v1/sandboxes:替一個想法開探討用的專案(預設唯讀)。同名、同 purpose 再送一次回同一個專案(200),不另開新的。",
+      "properties": {
+        "v": {
+          "const": 2
+        },
+        "name": {
+          "type": "string",
+          "pattern": "^idea-[0-9]+$"
+        },
+        "purpose": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 500,
+          "description": "想法本身"
+        }
+      }
+    },
+    "sandbox": {
+      "type": "object",
+      "required": [
+        "v",
+        "name",
+        "created"
+      ],
+      "description": "201(新建)或 200(已存在,重送)。之後這個名稱出現在 policy 的 attachable,可以照一般專案借用。錯誤:400 bad_name、409 exists(同名但 purpose 不同,或名稱已被正式專案用掉)、429 too_many(帶 limit、current)、500 create_failed。",
+      "properties": {
+        "v": {
+          "const": 2
+        },
+        "name": {
+          "type": "string"
+        },
+        "created": {
+          "type": "boolean"
+        }
+      }
+    },
+    "mode": {
+      "type": "object",
+      "required": [
+        "v",
+        "mode"
+      ],
+      "description": "POST /v1/leases/<id>/mode:深談中途切換 discuss / work(使用者在卡片上允許動手之後才送)。成功回 200 + lease;正在回答或等使用者回覆時 409 busy;不在 work_projects 回 400 work_not_allowed。切換會停掉程序、用同一個 session 接回,權限轉接也重新開始(先前「這個租約都允許」的網域、寫檔要重新允許)。",
+      "properties": {
+        "v": {
+          "const": 2
+        },
+        "mode": {
+          "enum": [
+            "discuss",
+            "work"
+          ]
+        }
+      }
+    },
+    "sandbox_upgrade": {
+      "type": "object",
+      "required": [
+        "v"
+      ],
+      "description": "POST /v1/sandboxes/<name>/upgrade:想法沙盒升級成正式專案(歷史、檔案、memory 都留著;建 private GitHub repo)。使用者在對話裡同意之後才送。已經升級過的再送一次回 200 + upgraded:false 跟現在的名稱(重送安全,改過名也查得到)。",
+      "properties": {
+        "v": {
+          "const": 2
+        },
+        "rename": {
+          "type": "string",
+          "pattern": "^[a-z0-9][a-z0-9-]*$",
+          "description": "升級時順便改名"
+        }
+      }
+    },
+    "sandbox_upgraded": {
+      "type": "object",
+      "required": [
+        "v",
+        "name",
+        "origin",
+        "upgraded"
+      ],
+      "description": "200。錯誤:404 not_found(沒有這個沙盒)、409 not_idea(不是想法沙盒)、409 dirty(有未 commit 的變更)、409 name_taken(新名稱或 GitHub repo 已經存在)、500 upgrade_failed。",
+      "properties": {
+        "v": {
+          "const": 2
+        },
+        "name": {
+          "type": "string"
+        },
+        "origin": {
+          "type": "string"
+        },
+        "upgraded": {
+          "type": "boolean"
+        }
+      }
+    },
+    "kind": {
+      "enum": [
+        "read",
+        "search",
+        "ask_user",
+        "open_web",
+        "write_file",
+        "run_command",
+        "other"
+      ],
+      "description": "動作的效果:read 讀、search 搜尋(檔案或網路)、ask_user 問使用者、open_web 開網頁、write_file 寫檔、run_command 跑指令、other 其他"
+    },
+    "tool_use_event": {
+      "type": "object",
+      "required": [
+        "kind",
+        "summary"
+      ],
+      "description": "type=tool_use:session 用了一個工具",
+      "properties": {
+        "kind": {
+          "$ref": "#/$defs/kind"
+        },
+        "summary": {
+          "type": "string",
+          "description": "給人看的一句(例:讀 README.md)"
+        },
+        "detail": {
+          "type": "object",
+          "description": "實作自己的除錯資訊(例:原本的工具名稱);讀的一方不要依賴它"
+        }
+      }
+    },
+    "tool_result_event": {
+      "type": "object",
+      "description": "type=tool_result",
+      "properties": {
+        "is_error": {
+          "type": "boolean"
+        },
+        "summary": {
+          "type": "string"
+        },
+        "truncated": {
+          "type": "boolean"
+        }
+      }
+    },
+    "question_event": {
+      "type": "object",
+      "required": [
+        "phase",
+        "kind"
+      ],
+      "description": "type=question:session 問使用者(要等回答);phase=start 開始等、end 有結果",
+      "properties": {
+        "phase": {
+          "enum": [
+            "start",
+            "end"
+          ]
+        },
+        "kind": {
+          "$ref": "#/$defs/kind"
+        },
+        "summary": {
+          "type": "string"
+        },
+        "target": {
+          "type": "string",
+          "description": "判斷用的對象(網址、路徑、指令)"
+        },
+        "decision": {
+          "type": "string",
+          "description": "end 才有:allow / deny / answered / timeout 等"
+        }
+      }
+    },
+    "permission_event": {
+      "type": "object",
+      "required": [
+        "phase",
+        "kind"
+      ],
+      "description": "type=permission:session 要做的事要使用者同意;phase=start 開始等、end 有結果",
+      "properties": {
+        "phase": {
+          "enum": [
+            "start",
+            "end"
+          ]
+        },
+        "kind": {
+          "$ref": "#/$defs/kind"
+        },
+        "summary": {
+          "type": "string"
+        },
+        "target": {
+          "type": "string",
+          "description": "判斷用的對象(網址、路徑、指令)"
+        },
+        "decision": {
+          "type": "string",
+          "description": "end 才有:allow / deny / answered / timeout 等"
+        }
+      }
+    },
+    "state_event": {
+      "type": "object",
+      "required": [
+        "state"
+      ],
+      "description": "type=state",
+      "properties": {
+        "state": {
+          "$ref": "#/$defs/lease/properties/state"
+        },
+        "mode": {
+          "type": "string"
+        },
+        "resumed": {
+          "type": "boolean",
+          "description": "這次開始是不是接回同一段對話;false 而且帶 detail = 要接回卻接不回(紀錄不在),從新的對話開始"
+        },
+        "detail": {
+          "type": "string"
+        },
+        "reason": {
+          "type": "string"
+        },
+        "pid": {
+          "type": "integer"
+        },
+        "warned": {
+          "type": "boolean"
+        }
+      }
+    },
+    "turn_end_event": {
+      "type": "object",
+      "description": "type=turn_end:一輪結束(只有 summary 的是中途的進度摘要)",
+      "properties": {
+        "summary": {
+          "type": "string"
+        },
+        "cost": {
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "num_turns": {
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "duration_ms": {
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "is_error": {
+          "type": "boolean"
+        }
+      }
+    },
+    "quota": {
+      "type": "object",
+      "required": [
+        "windows"
+      ],
+      "description": "type=quota 的事件內容,也是 /v1/status 的 quota:agent 的用量時間窗。讀的一方只照 label 顯示、照 used 判斷要不要提醒",
+      "properties": {
+        "status": {
+          "enum": [
+            "ok",
+            "warning",
+            "exhausted",
+            null
+          ]
+        },
+        "at": {
+          "type": "string"
+        },
+        "windows": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": [
+              "id",
+              "label",
+              "used"
+            ],
+            "properties": {
+              "id": {
+                "type": "string"
+              },
+              "label": {
+                "type": "string",
+                "description": "給人看的名稱(例:5 小時)"
+              },
+              "used": {
+                "type": "number",
+                "minimum": 0,
+                "maximum": 1
+              },
+              "resets_at": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "description": "ISO 8601"
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}

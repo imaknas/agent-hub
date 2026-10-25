@@ -26,6 +26,12 @@
   sessions(第 1 層的一部分):
     alive(sid) -> bool、live_sessions() -> set[str]、context_size(sid) -> int | None(接續要載入多少 token)
     current_session(env) -> str | None                   目前這個程序屬於哪個 session(給 hubbus send 記寄件人)
+  stream(長駐 session 的輸出翻譯;docs/design/lease-contract-neutral.md):
+    action(tool, input) -> (kind, collab, target, summary)   工具 → KINDS/COLLABS;target 給判斷用,summary 給人看
+    parse_stream(line) -> list[StreamEvent]             runtime 原生的一行輸出 → 中立的對話事件
+    classify_exit(code, stderr_tail) -> StreamEvent      程序結束了:沒登入(agent_login)還是掛了(process_crashed)
+    resumable(sid) -> bool                               這段對話還接得回來嗎(紀錄還在)
+    resume_command(sid) -> (command, hint)               在終端機接續的指令跟給人看的一句
 
 標準函式庫,系統的 python3(3.9)也能 import(hubbus 用的就是它)。
 """
@@ -46,6 +52,7 @@ PORTS = {
     "instructions": ("instructions_file", "local_ignores"),
     "transcripts": ("turns", "last_activity"),
     "sessions": ("alive", "live_sessions", "context_size", "current_session"),
+    "stream": ("action", "parse_stream", "classify_exit", "resumable", "resume_command"),
 }
 
 # 中立的「動作種類」:對話紀錄裡 agent 做了什麼,不用任何 runtime 的工具名稱。
@@ -65,9 +72,31 @@ class HubEvent(NamedTuple):
                                  # elsewhere = {"kind": "repository", "name"} | {"kind": "machine"} | {"kind": "unknown_place"}
 
 
+# 動作的效果(docs/design/lease-contract-neutral.md):全平台只有這一套——租約的事件、權限(approvals)、
+# 判斷點宣告、對話紀錄統計都用它,不各自取名。哪個工具算哪種由各 runtime 的 action() 翻譯。
+KINDS = ("read", "search", "ask_user", "open_web", "write_file", "run_command", "other")
+# 協作方式(跟效果是不同的維度):交給子 agent、跑 workflow、跨 session 傳訊息、用技能;其他動作是 None。
+COLLABS = ("subagent", "workflow", "peer_message", "skill")
+
+
 class Action(NamedTuple):
-    kind: str            # ACTIONS 之一
+    kind: str            # ACTIONS 之一(之後改成 KINDS,協作方式放 collab;見 lease-contract-neutral.md)
     detail: str = ""     # skill 名稱、工具名稱之類(給統計用,不是給程式判斷 runtime 的)
+    collab: str | None = None   # COLLABS 之一或 None
+
+
+# 對話事件(長駐 session 的輸出;租約契約 v2 的事件就是這個形狀)。跟 HubEvent(hook 事件)是兩回事。
+STREAM_TYPES = ("text_delta", "assistant", "tool_use", "tool_result", "turn_end", "quota", "error")
+QUOTA_STATUS = ("ok", "warning", "exhausted")
+
+
+class StreamEvent(NamedTuple):
+    """type 是 STREAM_TYPES 之一;data 是中立的欄位(見 contracts/lease-runner.v2.schema.json),`_` 開頭的鍵是給 runner 的
+    內部訊號(例:`_detach`),不會送出去。legacy:這個事件在租約契約 v1 長什麼樣(跟 v2 一樣就 None)——
+    只在 v1/v2 並存期間用,v1 刪掉時一起拿掉。"""
+    type: str
+    data: dict
+    legacy: dict | None = None
 
 
 class Turn(NamedTuple):

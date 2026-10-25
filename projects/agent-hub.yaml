@@ -95,6 +95,7 @@ jobs:
   run: /opt/homebrew/bin/python3 bin/contracts-check.py --quiet
 provides:
 - {contract: lease-runner, v: 1, schema: contracts/lease-runner.v1.schema.json}
+- {contract: lease-runner, v: 2, schema: contracts/lease-runner.v2.schema.json}   # 跟執行環境無關;v1 並存到 Muninn 換好(最晚 2026-10-26)
 - {contract: lease-handover, v: 1, schema: contracts/lease-handover.v1.schema.json}
 - {contract: hubbus, v: 1, schema: contracts/hubbus.v1.schema.json}
 - {contract: todo-md, v: 1, schema: contracts/todo-md.v1.md}
