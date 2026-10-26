@@ -322,7 +322,8 @@ check → commit → apply,不另外一套。
 > - ratchet 多一條 `instance-path`(bin/ 裡自己拼 config/data 檔的路徑)。
 > - 這台:42 個產出檔逐位元組相同、`hub config plan` 空、`hub doctor` 沒問題。
 > **還沒做**:別的 session 的檔(lease-relay、lease-runner、upgrade-idea 的 `.secrets`/mirror-list;policy.py 的 `.secrets` deny——搬家時
-> render-settings 會重寫 24 個專案的設定)已寄給它們;狀態頁的 digest/todo/reflect 三頁;實際搬家。
+> render-settings 會重寫 24 個專案的設定)已寄給它們;實際搬家。
+> 狀態頁的三頁(第 7 節第 7 題選 (a))10-26 完成:`digest.html`(最近 7 天)、`todo.html`、`reflect/`(連到 data 的 reflect/),從 data 目錄讀。
 
 | 步 | 內容 | 動到的檔案 | 估計 |
 |---|---|---|---|

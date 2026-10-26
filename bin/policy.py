@@ -61,7 +61,7 @@ def policy(name: str, doc: dict, index: dict) -> dict:
                  + list(doc.get("allow_write") or []),
         "other_projects": others,
         "deny_write": [hubconf.ROOT, hubconf.p("git_origin"), copies, HOME / "Library" / "LaunchAgents"],
-        "deny_read": [copies / "*" / "memory", hubconf.ROOT / ".secrets"],
+        "deny_read": [copies / "*" / "memory", hubconf.secrets_dir()],
         "credentials": [hubconf.path(x) for x in hubconf.get("credentials.dirs", [])],
         "credential_files": [hubconf.path(x) for x in hubconf.get("credentials.files", [])],
         "network": DOMAINS + list(doc.get("network") or []),

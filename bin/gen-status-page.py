@@ -355,7 +355,7 @@ details{{background:var(--card);border:1px solid var(--line);border-radius:8px;m
 summary{{cursor:pointer;color:var(--mut)}} pre{{white-space:pre-wrap;word-break:break-word;font:14px/1.55 -apple-system,"PingFang TC",sans-serif}}
 @media (max-width:640px){{td:nth-child(2),th:nth-child(2){{display:none}}}}
 </style></head><body><main>
-<h1>排程狀態</h1><div class=sub>mini · 產生於 {now:%Y-%m-%d %H:%M} · 每 5 分鐘自動重新整理 · 排程定義在專案登錄(projects/)跟 schedule.yaml{config_note}</div>
+<h1>排程狀態</h1><div class=sub><a href="digest.html">digest</a> · <a href="todo.html">待辦</a> · <a href="reflect/">每週回顧</a></div><div class=sub>mini · 產生於 {now:%Y-%m-%d %H:%M} · 每 5 分鐘自動重新整理 · 排程定義在專案登錄(projects/)跟 schedule.yaml{config_note}</div>
 {alert_html}
 <table><tr><th>Job</th><th>時間</th><th>上次</th><th>下次</th></tr>{''.join(rows)}</table>
 {mail_html}
@@ -367,6 +367,69 @@ summary{{cursor:pointer;color:var(--mut)}} pre{{white-space:pre-wrap;word-break:
     tmp = OUT.with_suffix(".tmp")
     tmp.write_text(page)
     tmp.replace(OUT)
+    write_reading_pages(now)
+
+
+# ---------- 給人看的三頁:digest、待辦、每週回顧(new-user.md 第 7 節第 7 題:data 不進 git 之後只能從這裡看)----------
+
+PAGE_CSS = """:root{--bg:#fafaf9;--fg:#1c1917;--mut:#78716c;--line:#e7e5e4;--card:#fff;--acc:#1d4ed8}
+@media (prefers-color-scheme:dark){:root{--bg:#1c1917;--fg:#f5f5f4;--mut:#a8a29e;--line:#44403c;--card:#292524;--acc:#93c5fd}}
+body{background:var(--bg);color:var(--fg);font:16px/1.6 -apple-system,"PingFang TC",sans-serif;margin:0}
+main{max-width:860px;margin:0 auto;padding:16px} a{color:var(--acc)} nav{margin:4px 0 16px;color:var(--mut)}
+section{background:var(--card);border:1px solid var(--line);border-radius:8px;padding:4px 16px;margin:12px 0}
+h1{font-size:22px;margin:8px 0} h2{font-size:18px} h3{font-size:16px} code{font-size:14px;background:var(--line);padding:0 3px;border-radius:3px}
+li{margin:2px 0} .sub{color:var(--mut);font-size:13px}"""
+NAV = '<nav><a href="index.html">排程狀態</a> · <a href="digest.html">digest</a> · <a href="todo.html">待辦</a> · <a href="reflect/">每週回顧</a></nav>'
+
+
+def md_html(text: str) -> str:
+    """很小的 markdown → HTML(標題、清單、段落、`code`、**粗體**、[文字](連結));先 escape,不吃任何原始 HTML。"""
+    def inline(t: str) -> str:
+        t = esc(t)
+        t = re.sub(r"`([^`]+)`", r"<code>\1</code>", t)
+        t = re.sub(r"\*\*([^*]+)\*\*", r"<strong>\1</strong>", t)
+        return re.sub(r"\[([^\]]+)\]\((https?://[^)\s]+)\)", r'<a href="\2">\1</a>', t)
+    out, in_list = [], False
+    for line in re.sub(r"<!--.*?-->", "", text, flags=re.S).splitlines():
+        m = re.match(r"^(#{1,4})\s+(.*)", line)
+        item = re.match(r"^\s*[-*]\s+(?:\[ \]\s*)?(.*)", line)
+        if in_list and not item:
+            out.append("</ul>")
+            in_list = False
+        if m:
+            n = min(len(m.group(1)) + 1, 4)
+            out.append(f"<h{n}>{inline(m.group(2))}</h{n}>")
+        elif item:
+            if not in_list:
+                out.append("<ul>")
+                in_list = True
+            out.append(f"<li>{inline(item.group(1))}</li>")
+        elif line.strip():
+            out.append(f"<p>{inline(line)}</p>")
+    if in_list:
+        out.append("</ul>")
+    return "\n".join(out)
+
+
+def reading_page(title: str, body: str, now) -> str:
+    return (f'<!doctype html><html lang="zh-Hant"><head><meta charset="utf-8"><meta name="viewport" '
+            f'content="width=device-width,initial-scale=1"><title>{esc(title)}</title><style>{PAGE_CSS}</style></head>'
+            f'<body><main><h1>{esc(title)}</h1>{NAV}<div class=sub>產生於 {now:%Y-%m-%d %H:%M}</div>{body}</main></body></html>')
+
+
+def write_reading_pages(now) -> None:
+    out = OUT.parent
+    days = sorted(hubconf.data_file("digest").glob("20*.md"), reverse=True)[:7]
+    body = "".join(f"<section>{md_html(f.read_text())}</section>" for f in days) or "<p class=sub>還沒有 digest</p>"
+    (out / "digest.html").write_text(reading_page("digest(最近 7 天)", body, now))
+    todo = hubconf.data_file("todo.md")
+    (out / "todo.html").write_text(reading_page("跨專案待辦", f"<section>{md_html(todo.read_text())}</section>"
+                                                if todo.exists() else "<p class=sub>還沒有 todo.md</p>", now))
+    link, target = out / "reflect", hubconf.data_file("reflect")   # 每週回顧本來就是一個網站:直接連過去
+    if target.is_dir() and not (link.is_symlink() and link.resolve() == target.resolve()):
+        if link.is_symlink() or link.exists():
+            link.unlink()
+        link.symlink_to(target)
 
 
 if __name__ == "__main__":
