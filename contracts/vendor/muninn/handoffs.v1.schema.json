@@ -14,8 +14,8 @@
       "status": {"enum": ["pending", "delivered", "done", "cancelled"]},
       "project": {"type": "string", "description": "The project it is for."},
       "effect": {
-        "enum": ["resolves", "changes", "relevant", "answers", "done", "dropped", "reopened", "already_done"],
-        "description": "resolves/changes/relevant: a fact the user told Muninn and what it does to `item`. answers: the user's answer to the question `reply_to`. done/dropped/reopened: the task `reply_to` was finished, dropped, or reopened by the user. already_done: the task `reply_to` repeats one the user already settled (`task`); resend with new_reason only if it is really new."
+        "enum": ["resolves", "changes", "relevant", "answers", "done", "dropped", "reopened", "already_done", "asks"],
+        "description": "resolves/changes/relevant: a fact the user told Muninn and what it does to `item`. answers: the user's answer to the question `reply_to`. done/dropped/reopened: the task `reply_to` was finished, dropped, or reopened by the user. already_done: the task `reply_to` repeats one the user already settled (`task`); resend with new_reason only if it is really new. asks: the user's question `fact` for the project, answered by the session in use there; any message back carrying this handoff id is the answer, said in the user's conversation."
       },
       "item": {"type": ["string", "null"], "description": "The project's to-do or question this is about, in the project's words."},
       "fact": {"type": ["string", "null"], "description": "What to apply, in Muninn's words."},

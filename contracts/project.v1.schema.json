@@ -26,7 +26,8 @@
       "name": {"type": "string"}, "path": {"type": "string"}, "env_key": {"type": "string"},
       "expires": {"type": "string", "pattern": "^\\d{4}-\\d{2}-\\d{2}$"}, "max_age_days": {"type": "integer", "minimum": 1},
       "warn_days": {"type": "integer", "minimum": 1}, "backup": {"type": "boolean"}, "why": {"type": "string"}, "rotate": {"type": "string"}}}},
-    "enforce": {"type": "object", "properties": {"sandbox": {"type": "boolean"}, "capabilities": {"type": "array", "items": {"type": "string"}, "description": "平台的能力(hub.json capabilities,例 gpu);沙盒裡用 hub-run --cap <能力> 透過平台代跑"}}, "additionalProperties": false},
+    "enforce": {"type": "object", "properties": {"sandbox": {"type": "boolean"}, "capabilities": {"type": "array", "items": {"type": "string"}, "description": "平台的能力(hub.json capabilities,例 gpu);沙盒裡用 hub-run --cap <能力> 透過平台代跑"},
+        "work": {"type": "boolean", "description": "深談(租約)能寫入專案;要搭配 sandbox: true(OS sandbox 擋資料夾外的寫入)。owner 直接確認才開"}}, "additionalProperties": false},
     "network": {"type": "array", "items": {"type": "string"}},
     "allow_write": {"type": "array", "items": {"type": "string"}},
     "gate": {"enum": ["strict", "detect"]}
