@@ -23,7 +23,8 @@ AGENT_HUB="${AGENT_HUB_ROOT:-$(cd "$(dirname "$0")/.." && pwd)}"
 source "$(dirname "${BASH_SOURCE[0]}")/hubpaths.sh"
 MINI_HOST="$(hub_server)"
 TEMPLATES="$AGENT_HUB/templates"
-REGISTRY="$AGENT_HUB/projects"
+_rd="$(hub_json_get registry_dir)"; _rd="${_rd:-projects}"; _rd="${_rd/#\~/$HOME}"
+REGISTRY="$([ "${_rd#/}" != "$_rd" ] && echo "$_rd" || echo "$HUB_CONFIG/$_rd")"   # hub.json registry_dir,相對 config 目錄
 
 fail() { echo "recover-project: $1" >&2; exit 1; }
 
