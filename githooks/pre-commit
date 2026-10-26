@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # agent-hub 的 commit 閘門(git config core.hooksPath githooks):
-#   改到程式碼 → 兩個 python 的測試都過(bin/test-gate,只管「程式碼過測試」)
+#   改到程式碼 → 平台的 Python 跑全部測試都過(bin/test-gate,只管「程式碼過測試」)
 #   改到 config(hub.json、登錄、models.env…)→ config 合格(bin/config-check --staged;沒改到 config 就直接過)
 # 兩支都驗暫存區,不是 working tree。
 root="$(git rev-parse --show-toplevel)"
