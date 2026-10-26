@@ -41,6 +41,8 @@ def files() -> list[pathlib.Path]:
                              capture_output=True, text=True, check=True).stdout
         paths = [ROOT / p for p in out.split("\0") if p]
     except (OSError, subprocess.CalledProcessError):
+        paths = []
+    if not paths:  # 不在 git 裡,或 git 往上找到別的 repo、拿到空清單(test-gate 的匯出副本曾經這樣,ratchet 什麼都沒掃就過了)
         paths = [p for d in SCOPE for p in (ROOT / d).rglob("*") if p.is_file()]
     return sorted(p for p in paths if p.is_file() and p.resolve() not in (SELF, BASELINE.resolve())
                   and "__pycache__" not in p.parts)
@@ -67,6 +69,9 @@ def load_baseline() -> dict[str, dict[str, int]]:
 
 
 class PersonalBoundary(unittest.TestCase):
+    def test_scans_something(self):
+        self.assertGreater(len(files()), 50, "一個檔都沒掃到 = 這個 ratchet 形同虛設")
+
     def test_counts_only_go_down(self):
         base, now = load_baseline(), counts()
         worse = [f"{rule} {f}:{n}(基準 {base.get(rule, {}).get(f, 0)})"
