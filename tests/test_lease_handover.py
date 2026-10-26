@@ -37,7 +37,7 @@ class Handover(unittest.TestCase):
         m.DIR = self.tmp
         self.delivered = []
         for name, value in [("deny_settings", lambda project: self.tmp / "deny.json"), ("env_for", lambda lease: {}),
-                            ("deliver", lambda lease, h: self.delivered.append(h))]:
+                            ("deliver", lambda lease, h, n: self.delivered.append((n, h)))]:
             p = mock.patch.object(m, name, value)
             p.start()
             self.addCleanup(p.stop)
@@ -98,6 +98,46 @@ class Handover(unittest.TestCase):
         self.assertTrue(h["fallback"])
         self.assertIn("平台出錯", h["summary"])
         self.assertNotIn("模型沒能", h["summary"])
+
+
+class HandoverIds(unittest.TestCase):
+    """10-26 m10262322:同一段深談接回再收回,lease id 沿用——交接轉成的訊息 id 要帶第幾次交接,不然撞號被當重送吞掉。"""
+
+    def setUp(self):
+        self.m = load_runner()
+        self.m.DIR = pathlib.Path(tempfile.mkdtemp())
+        self.sent = []
+        p = mock.patch.object(self.m, "hubbus", lambda *a: (self.sent.append(a), types.SimpleNamespace(returncode=0))[1])
+        p.start()
+        self.addCleanup(p.stop)
+        p = mock.patch.object(self.m.subprocess, "Popen", lambda *a, **k: None)
+        p.start()
+        self.addCleanup(p.stop)
+
+    def ids(self):
+        return [a[a.index("--id") + 1] for a in self.sent if "--id" in a]
+
+    def test_second_handover_does_not_collide(self):
+        lease = self.m.Lease({"lease_id": "44444444-4444-4444-8444-444444444444", "project": "p", "cwd": "/nonexistent"})
+        h = {"summary": "s", "tasks_for_owner": [{"text": "t"}], "open_questions": ["q"], "notes_markdown": ""}
+        self.m.deliver(lease, dict(h), 1)
+        first = self.ids()
+        self.sent.clear()
+        self.m.deliver(lease, dict(h), 2)
+        second = self.ids()
+        self.assertEqual(set(first) & set(second), set(), "兩次交接的 id 不能重複")
+        self.assertIn(f"lease-{lease.id}-2-task-0", second)
+        self.assertTrue(all(i.startswith(f"lease-{lease.id}-") for i in first + second))
+        self.sent.clear()
+        self.m.deliver(lease, dict(h), 2)
+        self.assertEqual(self.ids(), second, "同一次交接重送拿到同一組 id")
+
+    def test_count_survives_restart_and_reattach(self):
+        lease = self.m.Lease({"lease_id": "55555555-5555-4555-8555-555555555555", "project": "p", "cwd": "/tmp"})
+        lease.handovers = 3
+        again = self.m.Lease(lease.dump())
+        self.assertEqual(again.handovers, 3)
+        self.assertEqual(self.m.Lease({"lease_id": "x", "project": "p", "cwd": "/tmp"}).handovers, 0, "舊紀錄沒有這欄 = 0")
 
 
 class RestartOnCodeChange(unittest.TestCase):

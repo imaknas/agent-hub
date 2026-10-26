@@ -130,6 +130,7 @@ class Lease:
         self.intent_stop = False
         self.proc: subprocess.Popen | None = None
         self.seen_msgs: list[str] = d.get("seen_msgs", [])[-200:]
+        self.handovers = d.get("handovers", 0)  # 這段深談交接過幾次:交接轉成的訊息 id 帶著它(同一個 id 接回再收回不撞號)
         self.recent: list[dict] = []          # 最近的事件(含 text_delta),SSE 補送用
         self.cond = threading.Condition(_lock)
 
@@ -137,7 +138,7 @@ class Lease:
         return {"lease_id": self.id, "project": self.project, "mode": self.mode, "thread": self.thread, "cwd": self.cwd,
                 "state": self.state, "started_once": self.started_once, "max_turns": self.max_turns,
                 "last_activity": self.last_activity, "idle_warned_at": self.idle_warned_at, "warned_at": self.warned_at,
-                "seq": self.seq, "seen_msgs": self.seen_msgs[-200:]}
+                "seq": self.seq, "seen_msgs": self.seen_msgs[-200:], "handovers": self.handovers}
 
     def public(self) -> dict:
         return {"lease_id": self.id, "project": self.project, "mode": self.mode, "thread": self.thread,
@@ -465,11 +466,18 @@ def hubbus(*args: str) -> subprocess.CompletedProcess:
     return subprocess.run([sys.executable, str(HUB / "bin" / "hubbus"), *args], capture_output=True, text=True)
 
 
-def deliver(lease: Lease, h: dict) -> None:
+def handover_id(sid: str, n: int, part: str) -> str:
+    """交接轉成的訊息 id:lease-<租約>-<第幾次交接>-<部分>。10-26 m10262322:同一段深談接回再收回時 lease id 沿用,
+    以前每次都從 0 編號(lease-<id>-task-0…),第二次以後撞號的全被當成重送吞掉(匯流排跟助理都是)。
+    舊格式的 id 不改;新格式多一段次數,不會跟舊的撞。"""
+    return f"lease-{sid}-{n}-{part}"
+
+
+def deliver(lease: Lease, h: dict, n: int) -> None:
     sid, proj, owner = lease.id, lease.project, hubconf.owner_address()
     keys = []
     for i, t in enumerate(h.get("tasks_for_owner") or []):
-        key = f"lease-{sid}-task-{i}"
+        key = handover_id(sid, n, f"task-{i}")
         args = ["send", "--from", proj, "--to", owner, "--type", "task", "--id", key, "--text", t["text"],
                 "--context", f"lease:{sid}"]
         if t.get("due"):
@@ -478,14 +486,14 @@ def deliver(lease: Lease, h: dict) -> None:
         t["key"] = key
         keys.append(key)
     for i, q in enumerate(h.get("open_questions") or []):
-        hubbus("send", "--from", proj, "--to", owner, "--type", "question", "--id", f"lease-{sid}-q-{i}", "--text", q,
+        hubbus("send", "--from", proj, "--to", owner, "--type", "question", "--id", handover_id(sid, n, f"q-{i}"), "--text", q,
                "--context", f"lease:{sid}")
-    hubbus("send", "--from", proj, "--to", owner, "--type", "progress", "--id", f"lease-{sid}-progress",
+    hubbus("send", "--from", proj, "--to", owner, "--type", "progress", "--id", handover_id(sid, n, "progress"),
            "--text", f"[{proj} 深談收回] {h.get('summary', '')}", "--context", f"lease:{sid}")
     body = [f"深談(租借 {sid[:8]})收回的交接:", h.get("summary", "")]
     body += [f"- 決定:{d.get('what')}({d.get('why', '')})" for d in h.get("decisions") or []]
     body += [f"- 待回答:{q}" for q in h.get("open_questions") or []]
-    hubbus("send", "--from", hubconf.hub_project(), "--to", proj, "--type", "info", "--id", f"lease-{sid}-report",
+    hubbus("send", "--from", hubconf.hub_project(), "--to", proj, "--type", "info", "--id", handover_id(sid, n, "report"),
            "--text", "\n".join(body))
     # 筆記寫進專案 memory(managed-files 有登記);附上寄出的任務 key,免得 librarian 又把同一件事寄一次
     h["notes_written"] = False
@@ -497,7 +505,7 @@ def deliver(lease: Lease, h: dict) -> None:
         with open(f, "a") as fh:
             fh.write(f"\n## 租借對話 {now():%H:%M}(session {sid})\n\n{notes}{extra}\n")
         h["notes_written"] = True
-    hubbus("publish", "session.report", "--source", proj, "--to", proj, "--id", f"lease-{sid}-handover",
+    hubbus("publish", "session.report", "--source", proj, "--to", proj, "--id", handover_id(sid, n, "handover"),
            "--payload", json.dumps(h, ensure_ascii=False))
     subprocess.Popen([sys.executable, str(HUB / "bin" / "hubbus"), "bridge"], stdout=subprocess.DEVNULL,
                      stderr=subprocess.DEVNULL, start_new_session=True)  # 馬上送出,不等 15 分鐘
@@ -528,7 +536,10 @@ def detach(lease: Lease, reason: str) -> None:
          "notes_markdown": "" if fallback else so.get("notes_markdown", ""),
          "notes_written": False, "fallback": fallback, "branch": None, "commits": [], "tests": None}
     try:
-        deliver(lease, h)
+        with _lock:  # 第幾次交接:先記下來再送,同一次交接重送拿到同一組 id(匯流排、助理都靠 id 去重)
+            lease.handovers += 1
+            save()
+        deliver(lease, h, lease.handovers)
     except Exception as e:
         log(f"{lease.id} 交接送出失敗:{e!r}")
         lease.emit("error", error="handover_failed", detail=repr(e)[:300])
@@ -1043,7 +1054,8 @@ class H(http.server.BaseHTTPRequestHandler):
             lease = Lease({"lease_id": sid, "project": proj, "mode": mode, "thread": b.get("thread", ""),
                            "cwd": str(ws), "started_once": bool(b.get("resume")), "state": "attaching",
                            "max_turns": int(b.get("max_turns") or DEFAULT_MAX_TURNS),
-                           "seq": prev.seq if prev else 0, "seen_msgs": prev.seen_msgs if prev else []})
+                           "seq": prev.seq if prev else 0, "seen_msgs": prev.seen_msgs if prev else [],
+                           "handovers": prev.handovers if prev else 0})
             LEASES[sid] = lease
             lease.emit("state", state="attaching", project=proj)
             try:
