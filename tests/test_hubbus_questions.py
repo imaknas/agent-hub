@@ -70,7 +70,7 @@ class Questions(unittest.TestCase):
         mid = self.send("--to", "knas", "--type", "done", "--question", "q-1", "--text", "Knas 在 session 裡選了 A")
         self.assertEqual(self.open_ids(), [])
         ev = self.c.execute("SELECT * FROM events WHERE id=?", (mid,)).fetchone()
-        item = self.m.to_muninn(self.c, ev)
+        item = self.m.to_assistant(self.c, ev)
         self.assertEqual((item["type"], item["question"], item["project"]), ("done", "q-1", "proj"))
 
     def test_drop_with_question_is_allowed(self):

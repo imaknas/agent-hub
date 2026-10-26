@@ -81,9 +81,9 @@ import hubconf  # noqa: E402  路徑、owner 地址、專案登錄都從平台�
 HUB = hubconf.ROOT
 DB = hubconf.bus_db()
 AGENT_JOBS = hubconf.STATE / "agent-jobs"
-MUNINN_CLI = hubconf.p("assistant.cli")
-MUNINN = MUNINN_CLI.parents[2] if MUNINN_CLI else None   # <runtime>/.venv/bin/muninn → <runtime>
-MUNINN_API = hubconf.get("assistant.api")
+ASSISTANT_CLI = hubconf.p("assistant.cli")
+ASSISTANT_HOME = ASSISTANT_CLI.parents[2] if ASSISTANT_CLI else None   # <runtime>/.venv/bin/muninn → <runtime>
+ASSISTANT_API = hubconf.get("assistant.api")
 INGEST_TOKEN = hubconf.p("assistant.ingest_token")
 LOG = hubconf.BUS_LOG
 # owner(= owner)的地址:新的信用 owner,舊的 knas 一樣收(hub.json 的 owner.address/aliases)
@@ -94,6 +94,7 @@ TYPES = ("request", "question", "info", "progress", "done", "task", "drop", "man
 OWNER = hubconf.owner_tag()                         # 給人看的稱呼(待辦的〔標籤〕),這台是 hub.json owner.tag
 ASSISTANT = hubconf.assistant_name()                # 個人助理給人看的名字(hub.json assistant.name)
 OWNER_ALIAS = hubconf.fill_names("{{owner_alias}}")  # agent 寄信給 owner 用的地址(hub.json owner.aliases 的第一個)
+HANDOFF_ID_PREFIX = "muninn-handoff-"   # 轉交收進來的信 id 開頭(匯流排裡已經是這個格式:不能改,改了重送會收兩次)
 KNAS_ONLY = ("task", "drop")   # 助理 的任務登錄:只有 owner 能做的事,只寄給 knas
 # 寄給 knas 的 type → 助理 收的 type。request = 要 owner 去做一件事 = 任務;要他用文字回答的才是 question
 TO_MUNINN = {"request": "task", "task": "task", "question": "question", "info": "progress",
@@ -479,15 +480,25 @@ def handoff_text(h: dict) -> str:
     return "\n".join(lines)
 
 
-def muninn(*args) -> subprocess.CompletedProcess:
-    return subprocess.run([str(MUNINN_CLI), "handoffs", *args], cwd=MUNINN,
+def asks_text(h: dict) -> str:
+    """effect=asks:owner 透過助理問這個專案一件事(m10261731-817c)。寄成 question,照 dispatch 的規則處理
+    (有人在打字先等;沒有就用這個專案最近活著的 session 分支回答)。回覆一定要帶 --reply-to,handoff_id 才會跟著回去。"""
+    return (f"{OWNER} 透過 {ASSISTANT} 問這個專案(他在等答案):\n{h.get('fact', '')}"
+            + (f"\n{OWNER} 原話:{h['quote']}" if h.get("quote") else "")
+            + f"\n回覆:`~/agent-hub/bin/hubbus send --to {OWNER_ALIAS} --reply-to <這封的 id> --type info --text \"答案\"`。"
+              f"**第一則回覆就要是答案本身**——{ASSISTANT} 會把帶這個問題的第一則回覆直接當答案講給 {OWNER} 聽,之後的不再說。"
+              "回完再 `hubbus done <id>`。")
+
+
+def assistant_cli(*args) -> subprocess.CompletedProcess:
+    return subprocess.run([str(ASSISTANT_CLI), "handoffs", *args], cwd=ASSISTANT_HOME,
                           capture_output=True, text=True, timeout=120)
 
 
 def import_handoffs(c) -> None:
-    if not MUNINN_CLI or not MUNINN_CLI.exists():
+    if not ASSISTANT_CLI or not ASSISTANT_CLI.exists():
         return
-    r = muninn("--json")
+    r = assistant_cli("--json")
     try:
         items = json.loads(r.stdout) if r.returncode == 0 else None
     except ValueError:
@@ -507,25 +518,29 @@ def import_handoffs(c) -> None:
         if proj not in known:
             unknown.append(f"#{hid}→{proj}")
             continue
-        p = {"type": "handoff", "text": handoff_text(h), "handoff_id": hid, "effect": h.get("effect"),
-             "handoff": {k: h.get(k) for k in ("effect", "fact", "quote", "item", "why", "ts", "reply_to", "task")}}
+        if h.get("effect") == "asks":
+            # 不是要套用進 STATE.md 的轉交(open-handoffs 只收 type handoff),是要專案回答的問題
+            p = {"type": "question", "text": asks_text(h), "handoff_id": hid, "effect": "asks"}
+        else:
+            p = {"type": "handoff", "text": handoff_text(h), "handoff_id": hid, "effect": h.get("effect"),
+                 "handoff": {k: h.get(k) for k in ("effect", "fact", "quote", "item", "why", "ts", "reply_to", "task")}}
         if h.get("reply_to"):
             p["reply_to"] = h["reply_to"]
             if orig is not None and payload(orig).get("from_session"):
                 p["to_session"] = payload(orig)["from_session"]
-        if publish(c, f"muninn-handoff-{hid}", "message", KNAS, proj, h.get("reply_to"), p):
+        if publish(c, f"{HANDOFF_ID_PREFIX}{hid}", "message", KNAS, proj, h.get("reply_to"), p):
             log(f"Muninn 轉交 #{hid} → {proj}")
         ack.append(str(hid))
     c.execute("COMMIT")
     if unknown:
         log(f"Muninn 轉交的專案不在名冊裡,留在 Muninn:{', '.join(unknown)}")
     if ack:  # 匯流排 commit 之後才回報;回報失敗下次再報,匯流排的 id 去重不會收兩次
-        r = muninn("--delivered", *ack)
+        r = assistant_cli("--delivered", *ack)
         if r.returncode != 0:
             log(f"回報 Muninn 已收到失敗(下次再報):{r.stderr.strip()[-200:]}")
 
 
-def to_muninn(c, ev) -> dict | None:
+def to_assistant(c, ev) -> dict | None:
     """這個事件要不要送 Muninn;要的話回傳要 POST 的那一則。"""
     p = payload(ev)
     if ev["type"] == "message" and ev["to_project"] in OWNERS:
@@ -545,13 +560,13 @@ def to_muninn(c, ev) -> dict | None:
     return None
 
 
-def post_muninn(items) -> tuple[int | None, str | None]:
+def post_assistant(items) -> tuple[int | None, str | None]:
     try:
         token = INGEST_TOKEN.read_text().strip()
     except OSError as e:
         return None, f"讀不到 ingest token:{e}"
     body = json.dumps({"messages": items}, ensure_ascii=False).encode()
-    req = urllib.request.Request(MUNINN_API, data=body, method="POST",
+    req = urllib.request.Request(ASSISTANT_API, data=body, method="POST",
                                  headers={"Authorization": f"Bearer {token}", "Content-Type": "application/json"})
     try:
         with urllib.request.urlopen(req, timeout=20) as resp:
@@ -568,15 +583,15 @@ def forward(c) -> None:
     evs = c.execute("SELECT * FROM events WHERE seq > ? ORDER BY seq LIMIT 200", (start,)).fetchall()
     if not evs:
         return
-    items = [(ev, it) for ev in evs if (it := to_muninn(c, ev))]
+    items = [(ev, it) for ev in evs if (it := to_assistant(c, ev))]
     last = evs[-1]["seq"]
     if items:
-        code, err = post_muninn([it for _, it in items])
+        code, err = post_assistant([it for _, it in items])
         if code == 400:
             # 整批被拒:一則一則送,找出不合格的那則。400 也可能是 助理 還沒部署支援這個 type
             # (例:task 剛加的那晚),所以 POISON_HOURS 內先停在這則、下次重送,超過才跳過
             for ev, it in items:
-                code1, err1 = post_muninn([it]) if len(items) > 1 else (code, err)
+                code1, err1 = post_assistant([it]) if len(items) > 1 else (code, err)
                 if err1 is None:
                     continue
                 if code1 == 400 and now() - datetime.datetime.fromisoformat(ev["ts"]) > datetime.timedelta(hours=POISON_HOURS):
@@ -847,7 +862,7 @@ def dispatch(c, rt=None) -> int:
     return waiting
 
 
-def dispatch_locked(c) -> None:
+def dispatch_locked(c, pull=False) -> None:
     """bridge 也會分派:跟 launchd 每分鐘那個拿同一把鎖,拿不到就跳過(避免兩邊同時派人)。"""
     import fcntl
     with open(DB.parent / "dispatch.lock", "w") as lock:
@@ -855,6 +870,13 @@ def dispatch_locked(c) -> None:
             fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
         except OSError:
             return
+        if pull:  # 每分鐘也拉一次轉交(0.2 秒):助理替 owner 問的問題(asks)不用等 bridge 的 15 分鐘
+            try:
+                import_handoffs(c)
+            except Exception as e:
+                if c.in_transaction:
+                    c.execute("ROLLBACK")
+                log(f"dispatch 拉轉交失敗:{e!r}")
         dispatch(c)
 
 
@@ -948,7 +970,7 @@ def cmd_status(as_json: bool) -> None:
             stuck += [{"id": r["id"], "to": proj, "ts": r["ts"]} for r in new
                       if r["ts"] < cutoff and payload(r).get("type") in ACTIONABLE]
     items = [ev for ev in c.execute("SELECT * FROM events WHERE seq > ? ORDER BY seq", (cursor(c, BRIDGE),))
-             if to_muninn(c, ev)]
+             if to_assistant(c, ev)]
     failed = [dict(id=r["id"], ts=r["ts"], **payload(r)) for r in c.execute(
         "SELECT * FROM events WHERE type='job.failed' AND ts > ? ORDER BY seq DESC LIMIT 20",
         (iso(now() - datetime.timedelta(days=1)),))]
@@ -1027,7 +1049,7 @@ def main() -> None:
         # launchd 每分鐘(local.agent-hub-mailbox-dispatch);同時只跑一個(bridge 用同一把鎖)
         if DB.exists():
             check_integrity()
-            dispatch_locked(db())
+            dispatch_locked(db(), pull=True)
         return
     if a.cmd == "thread":
         c = db()

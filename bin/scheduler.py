@@ -109,8 +109,54 @@ def save_state(state: dict) -> None:
     tmp.replace(STATE_FILE)
 
 
+FAILING_FILE = HUB / ".state" / "scheduler-failing.json"
+ALERT_AFTER = datetime.timedelta(minutes=60)   # 失敗持續這麼久才發警報(下個 tick 重試就好的不吵)
+
+
+def mark_job(name: str, failed: bool, detail: str = "") -> None:
+    """記下哪些 job 現在是失敗的(最後一次跑失敗):成功就拿掉。給 alert_failing 用。寫不進去不影響排程。"""
+    try:
+        d = json.loads(FAILING_FILE.read_text()) if FAILING_FILE.exists() else {}
+        if failed:
+            prev = d.get(name) or {}
+            d[name] = {"since": prev.get("since") or datetime.datetime.now().isoformat(timespec="seconds"),
+                       "detail": detail}
+        elif name in d:
+            del d[name]
+        else:
+            return
+        FAILING_FILE.write_text(json.dumps(d, ensure_ascii=False, indent=1))
+    except (OSError, ValueError):
+        pass
+
+
+def failing_problems(failing: dict, now: datetime.datetime) -> list[str]:
+    """失敗超過 ALERT_AFTER 的 job → 警報的問題清單(alert.once 照字句去重:同一個 job 的字句要穩定)。"""
+    out = []
+    for name, rec in sorted(failing.items()):
+        try:
+            since = datetime.datetime.fromisoformat(rec["since"])
+        except (KeyError, ValueError):
+            continue
+        if now - since >= ALERT_AFTER:
+            out.append(f"排程 job {name} 從 {rec['since'][5:16].replace('T', ' ')} 起一直失敗({rec.get('detail') or '看 log'})")
+    return out
+
+
+def alert_failing() -> None:
+    """10-27:contracts-check 連兩晚失敗沒人知道——排程的 job 失敗以前只有狀態頁紅。現在持續失敗的發警報
+    (alert.py:新問題馬上發、沒解決的每 24 小時提醒、好了發恢復)。"""
+    try:
+        import alert
+        failing = json.loads(FAILING_FILE.read_text()) if FAILING_FILE.exists() else {}
+        alert.once("scheduler-jobs", failing_problems(failing, datetime.datetime.now()), "排程的 job 都恢復正常了")
+    except Exception as e:  # 警報壞掉不影響排程
+        log(f"排程 job 的警報沒發出去:{e!r}")
+
+
 def job_failed(name: str, code: int, detail: str = "") -> None:
     """匯流排上的 job.failed(狀態頁、之後的 Muninn 讀);寫不進去不影響排程。"""
+    mark_job(name, True, detail or f"exit {code}")
     subprocess.run([sys.executable, str(HUB / "bin" / "hubbus"), "publish", "job.failed", "--source", "scheduler",
                     "--payload", json.dumps({"job": name, "exit": code, "detail": detail}, ensure_ascii=False)],
                    capture_output=True, timeout=30)
@@ -160,6 +206,7 @@ def reconcile(state: dict, jobs: dict[str, dict]) -> set[str]:
             job_failed(name, -1, "背景執行到一半不見了(重開機、被殺)")
         elif rec["exit"] == 0:
             state[name] = rec["date"]
+            mark_job(name, False)
             if "every_minutes" in jobs.get(name, {}):
                 state[f"{name}.last_ok"] = rec["started"]
         f.unlink()
@@ -324,6 +371,7 @@ def main() -> None:
             if "every_minutes" in job:
                 state[f"{name}.last_ok"] = now.isoformat(timespec="seconds")
             save_state(state)
+            mark_job(name, False)
             log(f"job '{name}' finished OK")
         except subprocess.CalledProcessError as e:
             log(f"job '{name}' FAILED (exit {e.returncode}), will retry next tick")
@@ -331,6 +379,7 @@ def main() -> None:
         heartbeat()
 
     save_state(state)
+    alert_failing()
     # 排程狀態頁(tailnet 內看得到),每個 tick 重生;失敗不影響排程本身
     subprocess.run([sys.executable, str(HUB / "bin" / "gen-status-page.py")], capture_output=True)
 
