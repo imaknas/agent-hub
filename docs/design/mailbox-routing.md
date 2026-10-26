@@ -137,3 +137,15 @@ Muninn 的信是 bridge 從 Muninn 拉進來的,所以最慢 15 分鐘才進匯�
 - 背景接續改用 `llm.py run`(`claude -p --resume <id> --fork-session`,跑完就結束),沒有用 `--bg`;分支副本
   會不會出現在 Desktop 的 session 清單還沒確認(要等第一次真的接續)。
 - `CONVERSATION_WAIT` 5 分鐘、對話最多 4 輪、每日上限:先用建議值,看狀態頁再調。
+
+## 10-26 試行:交辦也用 session 的 context(m10261706,Knas「OK 先試行」)
+
+- **交辦**:專案有人在打字 → 照舊先等它的 hook 5 分鐘。之後如果這個專案 24 小時內(`hub.json mailbox.fork_recent_hours`)
+  有動作、還活著的 session,就用它的 context 在背景分支處理(跟對話的接續同一條:`--resume --fork-session`,同樣的
+  notes 能力、輪數跟每日上限),答得出那個 session 手上的事(例:Muninn 問 project-06 開著的 session 看 production
+  data 的狀況);沒有、context 超過上限、今天派滿 → headless agent(跟以前一樣)。
+- **agent-hub 的信**不再留給它專用的 session(沒人打字就沒人收):跟其他專案一樣分支或派 headless。
+- **合併回原本的 session**:分支是副本,說的話不會進原本 session 的 context。所以分支做完(有最後回覆、信結案、或逾時)後,
+  原本的 session 下次有動作時,那封信下面帶上分支的最後回覆(800 字內)跟它為這封寄出的信;分支還在跑的時候先不提。
+  沒有做「真的合併 context」:runtime 沒有這種操作,而且兩邊同時往前走會互相覆蓋;摘要放進下一則提示是一樣的效果。
+- **info 不算卡住**:`hubbus status` 的「卡住」只算 request/question;session 的說明寫明要對方做事就用 request/question。

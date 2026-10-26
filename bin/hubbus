@@ -42,7 +42,10 @@ done 要讓 Muninn 結案,job 失敗要給狀態頁),不用各自接一條檔案
   hubbus dispatch                     平台處理沒人收的信(launchd 每分鐘;設計 docs/design/mailbox-routing.md):
                                       對話(回覆某個 session 的 request/question)→ 那個 session 開著就等它的 hook
                                       CONVERSATION_WAIT 分鐘,之後在背景接續它(context 不大時)或當交辦;
-                                      交辦 → 專案有人正在用就等同樣久,否則馬上派 headless agent(notes 能力)。
+                                      交辦 → 專案有人正在用就等同樣久;之後這個專案 FORK_RECENT_H 內有動作、還活著
+                                      的 session 用它的 context 在背景分支處理(10-26 試行),沒有才派 headless agent
+                                      (notes 能力)。agent-hub 的信也一樣。分支做完,原本的 session 下次有動作時收到
+                                      分支的最後回覆跟它寄出的信(fork_result)。
                                       派出去的信記 message.delivered(via handler|resume|held),hook 不再當成要做的事
   hubbus thread <id>                  這封信所在的整串往來(由舊到新)
   hubbus open-handoffs                還沒結案的 Muninn 轉交(librarian 每晚套用進 STATE.md,可信才 done)
@@ -104,6 +107,7 @@ THREAD_MAX_ROUNDS = int(_MB.get("thread_max_rounds", 4))           # 同一串�
 DAILY_RUNS = int(_MB.get("daily_runs_per_project", 6))             # 每個專案每天最多派幾次
 STUCK_HOURS = 1          # 狀態:寄出超過這麼久,沒有 session 收、平台也沒接手
 RESUME_TIMEOUT_MIN = 35  # 背景接續超過這麼久還沒結案(mailbox-conversation 的 timeout 是 30 分鐘)→ 改派交辦
+FORK_RECENT_H = int(_MB.get("fork_recent_hours", 24))   # 交辦:這麼久內有動作、還活著的 session 用它的 context 分支處理
 REPLY_WAIT_MIN = 30      # 回覆先等發問的 session 這麼久,過了就給任何 session
 POST_TOOL_EVERY_S = 120  # PostToolUse 每個 session 最多這麼久查一次
 PRUNE_DAYS = 60
@@ -401,17 +405,24 @@ def mail_text(event: str, session, cwd) -> str | None:
     rows = inbox(c, project, session, only_new=True)
     mark_delivered(c, rows, session, event)
     # 給這個 session 的對話回信,在它閒置時被平台在背景接續處理掉了:下次有動作時提一行,不然它不知道
-    handled = [r for r in c.execute("""SELECT m.* FROM events m JOIN events d ON d.ref=m.id AND d.type='message.delivered'
+    # 分支還在跑的先不提(做完才把它說了什麼帶過來,不然原本的 session 只知道「處理了」,不知道結果)
+    handled, merged = [], {}
+    for r in c.execute("""SELECT m.* FROM events m JOIN events d ON d.ref=m.id AND d.type='message.delivered'
         AND json_extract(d.payload,'$.via')='resume' AND json_extract(d.payload,'$.session')=?
         WHERE m.type='message' AND NOT EXISTS(SELECT 1 FROM events s WHERE s.id = m.id || ':delivered:' || ?)""",
-        (session, session)).fetchall()]
+                         (session, session)).fetchall():
+        finished, summary = fork_result(c, r)
+        if finished:
+            handled.append(r)
+            merged[r["id"]] = summary
     mark_delivered(c, handled, session, event)
     c.execute("COMMIT")
     if handled:
         rows = rows + handled
     if rows:
         return "\n".join([HEADER.format(n=len(rows), p=project),
-                           *(fmt(r) + ("\n  (你閒置時平台已經用你的 context 在背景處理了這封,結果看回信或 memory 筆記;不用再做)"
+                           *(fmt(r) + (f"\n  (你閒置時平台用你的 context 在背景分支處理了這封,不用再做。"
+                                       f"{chr(10) + '  ' + merged[r['id']] if merged.get(r['id']) else '結果看回信或 memory 筆記。'})"
                                        if r in handled else "") for r in rows), FOOTER])
     return None
 
@@ -637,6 +648,52 @@ RESUME_PROMPT = """(平台訊息,不是使用者打的字)你之前寄出的信�
 最後回覆一行:這封信怎麼處理了。"""
 
 
+DELEGATE_PROMPT = """(平台訊息,不是使用者打的字)有一封給這個專案的信,你這個 session 是最近在用這個專案的,但現在沒有人在
+打字,所以平台在背景用你的 context 處理(這是一個分支副本:Knas 在原本的 session 裡看不到這段;分支的最後回覆會在原本的
+session 下次有動作時帶給它)。
+
+{letter}
+
+用你手上的脈絡回答或處理。這個背景副本只能:讀檔、寫 memory 筆記(.agent-memory/memory/)、用
+`~/agent-hub/bin/hubbus` 回信/問 Knas/結案。要改程式碼或設定、需要 Knas 判斷、不可逆或對外的事都不要做——
+寫進 memory 筆記,需要的話 `hubbus send --to knas --type question` 問他。回信寄給寄件人
+(`hubbus send --to <寄件人> --reply-to {id} …`),處理完 `~/agent-hub/bin/hubbus done {id}`。
+最後回覆:這封信怎麼處理了、回了什麼(兩三句)。"""
+
+
+def recent_session(c, proj, live) -> str | None:
+    """這個專案最近有動作、還活著的 session(FORK_RECENT_H 內;租約的 session 不記在場紀錄)。"""
+    cutoff = iso(now() - datetime.timedelta(hours=FORK_RECENT_H))
+    for r in c.execute("SELECT session FROM presence WHERE project=? AND seen >= ? ORDER BY seen DESC", (proj, cutoff)):
+        if r["session"] in live:
+            return r["session"]
+    return None
+
+
+def fork_result(c, r) -> tuple[bool, str]:
+    """背景分支處理這封信的結果:(做完了沒, 分支最後的回覆 + 它為這封寄出的信)。做完 = 有結果、信結案了、或逾時。"""
+    out = hubconf.STATE / "mailbox" / f"resume-{r['id']}.log"
+    text = ""
+    try:
+        for line in reversed(out.read_text(errors="replace").splitlines()):
+            if line.startswith("{"):
+                text = str(json.loads(line).get("result") or "").strip()
+                break
+    except (OSError, ValueError):
+        pass
+    replies = [m for m in c.execute("SELECT * FROM events WHERE type='message' AND ref=? ORDER BY seq", (r["id"],))
+               if payload(m).get("reply_to") == r["id"]]
+    done = c.execute("SELECT 1 FROM events WHERE type='message.done' AND ref=?", (r["id"],)).fetchone() is not None
+    claimed_at = c.execute("SELECT ts FROM events WHERE type='message.delivered' AND ref=? "
+                           "AND json_extract(payload,'$.via')='resume' ORDER BY seq DESC", (r["id"],)).fetchone()
+    stale = claimed_at is not None and claimed_at["ts"] < iso(now() - datetime.timedelta(minutes=RESUME_TIMEOUT_MIN))
+    parts = []
+    if text:
+        parts.append(f"分支的回覆:{text[:800]}")
+    parts += [f"分支寄出的信 [{m['id']}] → {m['to_project']}:{payload(m).get('text', '')[:300]}" for m in replies]
+    return bool(text or done or stale), "\n  ".join(parts)
+
+
 def run_handler(c, proj, ws, rows) -> None:
     """交辦:在那個專案派一個 headless agent(agent-jobs/mailbox.md、判斷點 mailbox-escalation)。"""
     st = AGENT_JOBS / f"mailbox-{proj}" / "status.json"
@@ -669,7 +726,7 @@ def stale_resumes(c, proj) -> list:
                          AND json_extract(h.payload,'$.via') IN ('handler','held'))""", (cutoff, proj)).fetchall()
 
 
-def resume(c, r, sid, cwd, rt, ws=None) -> None:
+def resume(c, r, sid, cwd, rt, ws=None, prompt=None) -> None:
     """對話:用那個 session 的 context 在背景接續(分支,不動原本的 session)。開不起來就馬上改派交辦。"""
     run = f"r{now():%m%d%H%M%S}-{secrets.token_hex(2)}"
     c.execute("BEGIN IMMEDIATE")
@@ -683,7 +740,7 @@ def resume(c, r, sid, cwd, rt, ws=None) -> None:
                                   "--cwd", str(cwd), "--", *rt.resume_args(sid)],
                                  stdin=subprocess.PIPE, stdout=fh, stderr=subprocess.STDOUT, cwd=str(cwd), text=True,
                                  start_new_session=True)
-            p.stdin.write(RESUME_PROMPT.format(letter=fmt(r), id=r["id"]))
+            p.stdin.write((prompt or RESUME_PROMPT).format(letter=fmt(r), id=r["id"]))
             p.stdin.close()
     except OSError as e:
         log(f"{r['to_project']}:{r['id']} 背景接續開不起來({e!r}),改派交辦")
@@ -737,9 +794,17 @@ def dispatch(c, rt=None) -> int:
             elif active_sessions(c, proj, live) and r["ts"] >= wait_cut:  # 有人正在用這個專案:先給它
                 waiting += 1
                 continue
+            else:
+                # 交辦:這個專案最近有動作、還活著的 session → 用它的 context 在背景分支處理(10-26 Knas 試行,
+                # m10261706),答得出那個 session 手上的事;沒有、context 太大或今天派滿 → headless agent
+                sid = recent_session(c, proj, live)
+                tokens = rt.context_size(sid) if sid else None
+                if tokens is not None and tokens <= RESUME_MAX_TOKENS and runs_today(c, proj) < DAILY_RUNS:
+                    resume(c, r, sid, session_cwd(c, sid) or ws, rt, ws, prompt=DELEGATE_PROMPT)
+                    continue
             delegate.append(r)
-        delegate += stale_resumes(c, proj)  # 背景接續失敗或沒結案:改派(agent-hub 的也一樣留給它自己)
-        if delegate and proj != hub:  # agent-hub 的信由它專用的 session 處理,平台不另外派
+        delegate += stale_resumes(c, proj)  # 背景接續失敗或沒結案:改派
+        if delegate:  # agent-hub 的信也一樣(以前留給它專用的 session,沒人打字就沒人收,m10261706)
             run_handler(c, proj, ws, delegate)
     return waiting
 
@@ -841,7 +906,9 @@ def cmd_status(as_json: bool) -> None:
         if rows:
             new = [r for r in rows if not r["delivered"]]
             per[proj] = {"open": len(rows), "undelivered": len(new), "oldest": rows[0]["ts"]}
-            stuck += [{"id": r["id"], "to": proj, "ts": r["ts"]} for r in new if r["ts"] < cutoff]
+            # 只有要處理的(request/question)才算卡住;info/progress/done 是通知,沒人收不是問題(m10261706)
+            stuck += [{"id": r["id"], "to": proj, "ts": r["ts"]} for r in new
+                      if r["ts"] < cutoff and payload(r).get("type") in ACTIONABLE]
     items = [ev for ev in c.execute("SELECT * FROM events WHERE seq > ? ORDER BY seq", (cursor(c, BRIDGE),))
              if to_muninn(c, ev)]
     failed = [dict(id=r["id"], ts=r["ts"], **payload(r)) for r in c.execute(

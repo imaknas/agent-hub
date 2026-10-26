@@ -38,6 +38,8 @@ commit/push 之後跟每次 session 開始(含壓縮後)會自動提醒。不會
 回覆對方某個 session 的信,會先送給那個 session(閒置的話平台用它的 context 在背景接著回);其他的請求,
 對方專案沒人在用就會馬上有 agent 處理。跨專案的事一律用 `hubbus send`,不要改用 session 之間的直接訊息。
 `knas` = 送進 Knas 的 Muninn,他的回答之後會寄回這個專案。
+**要對方做事(改檔、回答、決定)一律用 `request` 或 `question`**;`info`/`progress`/`done` 是通知,平台不會派人處理,
+對方沒開 session 就沒人看——寫成「請…」卻標 info,那件事永遠不會被做。
 
 別的專案、Muninn 寄給這個專案的信,開 session 跟對話中會自動出現(📬)。處理完
 `hubbus done <id>`(可加 `--note`);要回覆:`hubbus send --to <寄件人> --reply-to <id> …`;

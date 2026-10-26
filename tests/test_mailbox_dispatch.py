@@ -51,7 +51,7 @@ class Dispatch(unittest.TestCase):
         m.lease_ids = lambda: self.leases
         m.log = lambda msg: None
         self.leases: set = set()
-        self.handled, self.resumed = [], []
+        self.handled, self.resumed, self.prompts = [], [], []
 
         def run_handler(c, proj, ws, rows):
             c.execute("BEGIN IMMEDIATE")
@@ -59,11 +59,12 @@ class Dispatch(unittest.TestCase):
             c.execute("COMMIT")
             self.handled.append((proj, [r["id"] for r in rows]))
 
-        def resume(c, r, sid, cwd, rt, ws=None):
+        def resume(c, r, sid, cwd, rt, ws=None, prompt=None):
             c.execute("BEGIN IMMEDIATE")
             m.claim(c, [r], "resume", session=sid, run=f"r{len(self.resumed)}")
             c.execute("COMMIT")
             self.resumed.append((r["id"], sid))
+            self.prompts.append(prompt)
 
         m.run_handler, m.resume = run_handler, resume
         self.rt = FakeRuntime()
@@ -129,11 +130,63 @@ class Dispatch(unittest.TestCase):
         self.dispatch()
         self.assertEqual(len(self.handled), 1)
 
-    def test_hub_delegation_left_for_its_own_session(self):
+    def test_hub_letters_are_handled_too(self):
+        # 以前 agent-hub 的信留給它專用的 session,沒人打字就沒人收(m10261706)
         hub = self.m.hubconf.hub_project()
         self.send("m1", hub, "request")
         self.dispatch()
-        self.assertEqual(self.handled, [])
+        self.assertEqual(self.handled, [(hub, ["m1"])])
+
+    def test_hub_letter_forks_its_recent_session(self):
+        hub = self.m.hubconf.hub_project()
+        self.rt.live.add("H")
+        self.rt.tokens["H"] = 50_000
+        self.seen("H", proj=hub, minutes_ago=30)
+        self.send("m1", hub, "question")
+        self.dispatch()
+        self.assertEqual((self.resumed, self.handled), ([("m1", "H")], []))
+
+    # --- 交辦:用最近的 session 分支(10-26 試行)---
+    def test_delegation_forks_the_recent_live_session(self):
+        self.rt.live.add("S1")
+        self.rt.tokens["S1"] = 80_000
+        self.seen("S1", minutes_ago=40)
+        self.send("m1", "proj", "request")
+        self.dispatch()
+        self.assertEqual((self.resumed, self.handled), ([("m1", "S1")], []))
+        self.assertIs(self.prompts[0], self.m.DELEGATE_PROMPT)
+
+    def test_delegation_waits_for_typing_then_forks(self):
+        self.rt.live.add("S1")
+        self.rt.tokens["S1"] = 80_000
+        self.seen("S1")
+        self.send("m1", "proj", "request")
+        self.assertEqual(self.dispatch(), 1)   # 有人在打字:先等它的 hook
+        self.send("m2", "proj", "request", minutes_ago=10)
+        self.c.execute("DELETE FROM events WHERE id='m1'")
+        self.dispatch()
+        self.assertEqual(self.resumed, [("m2", "S1")])
+
+    def test_delegation_without_usable_session_gets_a_handler(self):
+        for sid, tokens, mins in (("dead", 1_000, 10), ("big", 900_000, 10), ("old", 1_000, 60 * 30)):
+            if sid != "dead":
+                self.rt.live.add(sid)
+            self.rt.tokens[sid] = tokens
+            self.seen(sid, minutes_ago=mins)
+        self.send("m1", "proj", "request")
+        self.dispatch()
+        self.assertEqual((self.resumed, self.handled), ([], [("proj", ["m1"])]))
+
+    def test_status_ignores_notifications(self):
+        self.send("i1", "proj", "info", minutes_ago=180)
+        self.send("q1", "proj", "question", minutes_ago=180)
+        import io
+        from contextlib import redirect_stdout
+        self.m.db = lambda *a, **k: self.c
+        with redirect_stdout(io.StringIO()) as out:
+            self.m.cmd_status(True)
+        import json as _j
+        self.assertEqual([s["id"] for s in _j.loads(out.getvalue())["stuck"]], ["q1"])
 
     # --- 對話 ---
     def test_conversation_live_session_waits(self):
@@ -188,6 +241,7 @@ class Dispatch(unittest.TestCase):
         self.rt.tokens["A"] = 1_000
         self.send("m1", "proj", "question", to_session="A", minutes_ago=60)
         self.dispatch()
+        self.m.publish(self.c, "m1:done", "message.done", "proj", "proj", "m1", {"note": "分支處理了"})  # 分支做完
         seen = []
         orig = self.m.mark_delivered
         self.m.mark_delivered = lambda c, rows, sess, via: (seen.extend(r["id"] for r in rows), orig(c, rows, sess, via))
@@ -219,6 +273,43 @@ class Dispatch(unittest.TestCase):
         self.dispatch()
         rows = self.m.inbox(self.c, "proj", "S9", only_new=True)
         self.assertEqual(rows, [])
+
+
+class ForkMerge(unittest.TestCase):
+    """分支做完,原本的 session 下次有動作時收到分支說了什麼(m10261706:不要只說「處理了」)。
+    借 Dispatch 的設定跟小工具,不繼承它的測試(不然那些測試會跑兩次)。"""
+    setUp, send, seen, dispatch = Dispatch.setUp, Dispatch.send, Dispatch.seen, Dispatch.dispatch
+
+    def hook(self, sid="S1"):
+        from unittest import mock
+        with mock.patch.object(self.m.hubconf, "STATE", self.tmp / "state"):   # 分支的紀錄在暫存目錄
+            self.m.project_of = lambda cwd: "proj"
+            self.m.db = lambda *a, **k: self.c
+            return self.m.mail_text("prompt", sid, str(self.ws)) or ""
+
+    def forked(self):
+        self.rt.live.add("S1")
+        self.rt.tokens["S1"] = 1_000
+        self.seen("S1", minutes_ago=40)
+        self.send("m1", "proj", "request")
+        self.dispatch()
+        self.assertEqual(self.resumed, [("m1", "S1")])
+
+    def test_unfinished_fork_not_mentioned_yet(self):
+        self.forked()
+        self.assertNotIn("m1", self.hook())
+
+    def test_finished_fork_reply_and_letters_are_carried_over(self):
+        self.forked()
+        log = self.tmp / "state" / "mailbox"
+        log.mkdir(parents=True)
+        (log / "resume-m1.log").write_text('stderr noise\n{"type": "result", "result": "查了 production,昨天的匯入失敗 3 筆"}\n')
+        self.m.publish(self.c, "r1", "message", "proj", "other", "m1",
+                       {"type": "info", "text": "回覆:失敗的是 3 筆", "reply_to": "m1"})
+        text = self.hook()
+        self.assertIn("分支的回覆:查了 production", text)
+        self.assertIn("[r1] → other:回覆:失敗的是 3 筆", text)
+        self.assertNotIn("m1", self.hook(), "只提一次")
 
 
 if __name__ == "__main__":

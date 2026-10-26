@@ -80,7 +80,9 @@ SSH 開 mini 上的資料夾。MBP 斷線/沒電時 session 還在跑、手機(R
   由平台處理**(`hubbus dispatch`,launchd `local.agent-hub-mailbox-dispatch` 每分鐘;設計
   `docs/design/mailbox-routing.md`):回覆某個 session 的對話,那個 session 開著就先等它的 hook 5 分鐘,閒置
   就用它的 context 在背景接續(分支副本,`runtime_claude.py`;context 超過 15 萬 token 改派新的);交辦則專案
-  有人正在用就等 5 分鐘、否則馬上派 headless agent(`agent-jobs/mailbox.md`,只寫筆記/回信/問 knas,不改程式碼)。
+  有人正在用就等 5 分鐘,之後用這個專案 24 小時內有動作、還活著的 session 在背景分支處理(答得出它手上的事;10-26 試行),
+  沒有這種 session 才派 headless agent(`agent-jobs/mailbox.md`,只寫筆記/回信/問 knas,不改程式碼)。agent-hub 的信也一樣。
+  分支做完,原本的 session 下次有動作時會收到分支的回覆跟它寄出的信。只有 request/question 會被處理,info 是通知。
   派出去的信記成「平台正在處理」,開著的 session 不會重做;同一串最多代為處理 4 輪、每專案每天 6 次(hub.json
   `mailbox`)。跟 Claude Code 有關的判斷只在 `bin/runtime_claude.py`。轉交不經過這裡。
   專案問 Knas 的問題在專案 session 裡解決了:`hubbus send --to knas --type done|drop --question <id>`,Muninn 收掉;開 session
