@@ -25,8 +25,9 @@ RULES = {
     "personal": re.compile(r"knas|muninn|project-30|imaknas|/Users/you\b|/Users/you", re.I),
     "secrets-path": re.compile(r"[\"'/]\.secrets\b"),   # bin/ 裡自己拼 .secrets 的路徑(要經過 hubconf.secrets_dir())
     # bin/ 裡自己拼 config/data 檔的路徑(要經過 hubconf.config_file()/data_file()、shell 用 hubpaths.sh 的 $HUB_CONFIG/$HUB_DATA)
-    "instance-path": re.compile(r"(?:/ |\$(?:HUB|AGENT_HUB)/)[\"']?(?:digest|reflect|todo\.md|index\.md|review-log\.md|models\.env"
-                                r"|mirror-list\.txt|services\.tsv|schedule\.yaml|legacy-paths\.tsv|openclaw-migration-status\.md|hub\.json)\b"),
+    "instance-path": re.compile(r"(?:/ |\$(?:HUB|AGENT_HUB)/)[\"']?(?:(?:digest|reflect)(?=[\"'/\s)])|todo\.md|index\.md|review-log\.md"
+                                r"|models\.env|mirror-list\.txt|services\.tsv|schedule\.yaml|legacy-paths\.tsv"
+                                r"|openclaw-migration-status\.md|hub\.json)\b"),   # digest.html 之類的輸出檔名不算
 }
 RULE_SCOPE = {"personal": SCOPE, "secrets-path": ("bin",), "instance-path": ("bin",)}
 # 路徑定義的地方:hubconf(Python)、hubpaths.sh(shell)、看門狗(刻意不 import 平台的模組,自己一份;test_instance_layout 檢查三份一致)

@@ -379,6 +379,7 @@ main{max-width:860px;margin:0 auto;padding:16px} a{color:var(--acc)} nav{margin:
 section{background:var(--card);border:1px solid var(--line);border-radius:8px;padding:4px 16px;margin:12px 0}
 h1{font-size:22px;margin:8px 0} h2{font-size:18px} h3{font-size:16px} code{font-size:14px;background:var(--line);padding:0 3px;border-radius:3px}
 li{margin:2px 0} .sub{color:var(--mut);font-size:13px}"""
+REFLECT_LINK = "reflect"   # 狀態頁資料夾裡連到 data 的 reflect/ 的連結名稱
 NAV = '<nav><a href="index.html">排程狀態</a> · <a href="digest.html">digest</a> · <a href="todo.html">待辦</a> · <a href="reflect/">每週回顧</a></nav>'
 
 
@@ -425,7 +426,7 @@ def write_reading_pages(now) -> None:
     todo = hubconf.data_file("todo.md")
     (out / "todo.html").write_text(reading_page("跨專案待辦", f"<section>{md_html(todo.read_text())}</section>"
                                                 if todo.exists() else "<p class=sub>還沒有 todo.md</p>", now))
-    link, target = out / "reflect", hubconf.data_file("reflect")   # 每週回顧本來就是一個網站:直接連過去
+    link, target = out / REFLECT_LINK, hubconf.data_file("reflect")   # 每週回顧本來就是一個網站:直接連過去
     if target.is_dir() and not (link.is_symlink() and link.resolve() == target.resolve()):
         if link.is_symlink() or link.exists():
             link.unlink()
