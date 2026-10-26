@@ -85,6 +85,36 @@ class Asks(unittest.TestCase):
         item = self.m.to_assistant(self.c, ev)
         self.assertEqual((item["handoff_id"], item["text"]), (41, "查到 9/11 那筆了"))
 
+    # --- 結案不能被當成答案(助理把帶 handoff_id 的第一則當答案講給 owner)---
+    def done(self, mid, note=None):
+        p = {"note": note} if note else {}
+        self.m.publish(self.c, f"{mid}:done", "message.done", "proj", "proj", mid, p)
+        return self.c.execute("SELECT * FROM events WHERE id=?", (f"{mid}:done",)).fetchone()
+
+    def test_done_after_a_reply_is_not_forwarded(self):
+        self.m.import_handoffs(self.c)
+        mid = f"{self.m.HANDOFF_ID_PREFIX}41"
+        self.m.publish(self.c, "r1", "message", "proj", self.m.hubconf.owner_address(), mid, {"type": "info", "text": "答案", "reply_to": mid,
+                                                                      "handoff_id": 41})
+        self.assertIsNone(self.m.to_assistant(self.c, self.done(mid, "已回")))
+
+    def test_done_with_a_note_and_no_reply_carries_the_note_as_the_answer(self):
+        self.m.import_handoffs(self.c)
+        item = self.m.to_assistant(self.c, self.done(f"{self.m.HANDOFF_ID_PREFIX}41", "查到 9/11 那筆"))
+        self.assertEqual((item["type"], item["text"], item["handoff_id"]), ("progress", "查到 9/11 那筆", 41))
+
+    def test_done_without_answer_says_so_explicitly(self):
+        self.m.import_handoffs(self.c)
+        item = self.m.to_assistant(self.c, self.done(f"{self.m.HANDOFF_ID_PREFIX}41"))
+        self.assertEqual(item["type"], "done")
+        self.assertIn("沒有回答", item["text"])
+        self.assertNotEqual(item["text"], "已處理")
+
+    def test_ordinary_handoff_done_unchanged(self):
+        self.m.import_handoffs(self.c)
+        item = self.m.to_assistant(self.c, self.done(f"{self.m.HANDOFF_ID_PREFIX}42"))
+        self.assertEqual((item["type"], item["text"], item["handoff_id"]), ("done", "已處理", 42))
+
     def test_minute_dispatch_pulls_handoffs_but_bridge_path_does_not_double(self):
         class RT:
             def live_sessions(self): return set()

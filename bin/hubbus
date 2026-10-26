@@ -586,8 +586,20 @@ def to_assistant(c, ev) -> dict | None:
     if ev["type"] == "message.done":
         m = get_message(c, ev["ref"])
         if m is not None and payload(m).get("handoff_id") is not None:
+            hid = payload(m)["handoff_id"]
+            if payload(m).get("effect") == "asks":
+                # 助理替 owner 問的:助理把帶這個 handoff_id 的第一則當答案講給 owner——結案的「已處理」不能變成答案
+                replied = c.execute("SELECT 1 FROM events WHERE type='message' AND ref=? AND source=?",
+                                    (m["id"], m["to_project"])).fetchone()
+                if replied:
+                    return None   # 回信已經帶著答案過去了
+                if p.get("note"):
+                    return {"id": ev["id"], "project": m["to_project"], "type": "progress", "text": p["note"],
+                            "handoff_id": hid}   # 沒回信、在 done 的 note 裡寫了答案
+                return {"id": ev["id"], "project": m["to_project"], "type": "done", "handoff_id": hid,
+                        "text": "(這個專案把問題結案了,但沒有回答)"}
             return {"id": ev["id"], "project": m["to_project"], "type": "done",
-                    "text": p.get("note") or "已處理", "handoff_id": payload(m)["handoff_id"]}
+                    "text": p.get("note") or "已處理", "handoff_id": hid}
     return None
 
 
