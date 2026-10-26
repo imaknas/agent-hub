@@ -36,7 +36,23 @@ agent-hub 跑 zh-hant 那份(`tests/test_hth_conformance.py`,c19e644):第一次�
 3. **Session Lease & Handover**:從另一個介面借用正在跑的專案 agent、結束時結構化交接(`contracts/lease-runner.v2`、`lease-handover.v1`)。
 4. **Agent Project Manifest**:專案登錄(job、服務、隱私、權限、憑證宣告)。
 
+## 跟既有協定比較(10-27,agent-ops-specs b657b33 `RELATED-WORK.md`)
+
+Knas 問「AI 圈沒有這種協定嗎」。讀原文比過 A2A 1.0、MCP 2026-07-28(Tasks 擴充、elicitation)、AG-UI 1.0、CHAP 0.3.3、
+iCalendar VTODO/iTIP、JSCalendar/JMAP Tasks、TASKS.md、各家 agent SDK 的 human-in-the-loop:
+- **都把要人的那一步放在一個還在跑的單位裡**(一次呼叫、一個 agent 伺服器的 task、一個 run),完成與否由建立它的系統決定。
+  HTH 管的是「只有 owner 能做、比任何 run 都活得久、由 owner 那邊決定結案」的事。三份獨立的研究結論一樣。
+- **但這塊很薄**:傳輸層大概八成 A2A 就有(伺服器端的長 task、ListTasks、至少一次的 webhook、URI 擴充)。HTH 真正自己的:
+  owner 那邊才算數(agent 的 done 只是宣稱)、同一個 key 重開、刪掉的行只是「推斷做完、要 owner 確認」、從內容算出的 key、
+  Markdown 綁定。所以定位是「搭在 A2A 上、借 JSCalendar 字彙的一層薄薄的 owner 權威語意 + Markdown 綁定」,不是又一個 agent 協定。
+  文章②用這個角度寫。
+- **最接近的 CHAP**(Brightbeam,2026-06 論文,Apache-2.0):組織用的多人工作區、要 coordinator 伺服器、任何成員都能完成任務;
+  沒有 repo 裡的文字形式、沒有推斷完成。重疊只在「指派給人的 task」。
+- 待 0.2 決定(SPEC §12):A2A 綁定要哪一種(每個專案一個長 task 帶 HTH 事件,或一個 HTH task 一個 A2A task——後者表達不了
+  reopened)、`dropped` 對 CANCELED 還是 REJECTED、狀態名對齊 JSCalendar、AAIF 審批閘門的「沉默不算結案」寫成規則。
+
 ## 互通的證明
 
-規範 v0.1 之後:寫一個不依賴 agent-hub 的小工具(或讓另一個 agent 工具,例:Codex、OpenClaw 類)讀寫同一份格式,
-跟 agent-hub 交換任務事件。兩個實作都跑過同一組一致性測試資料,才去社群(AAIF 等)提。
+規範 v0.1 之後:做第二個實作,兩個都跑過同一組一致性測試資料,才去社群(AAIF 等)提。比較之後,第二個實作最便宜也最有說服力的
+是 **owner 端的轉接**:A2A 的 owner 端(HTH 當 A2A 擴充),或把 CalDAV/JMAP 任務清單當 owner 端(owner 原本的待辦 app 就能收)。
+比「另一個 agent 工具讀寫同一份格式」更能證明它是搭在既有標準上。
