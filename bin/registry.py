@@ -409,9 +409,11 @@ def refresh(only: list[str] | None = None) -> dict:
     CACHE.mkdir(parents=True, exist_ok=True)
     reg = hubconf.registry_dir()
     files = sorted(reg.glob("*.yaml")) if reg.is_dir() else []
-    plat = hubconf.platform_registry()  # 平台自己的登錄不管 registry_dir 在哪都讀(新使用者的登錄裡沒有它)
-    if plat.exists() and plat.stem not in {f.stem for f in files}:
-        files = sorted([*files, plat])
+    # 平台自己的登錄不管 registry_dir 在哪都讀,而且一律用平台 repo 那份:使用者的登錄裡同名的檔(例:搬家時多複製的)
+    # 不採用,不然平台更新了自己的登錄也不會生效
+    plat = hubconf.platform_registry()
+    if plat.exists():
+        files = sorted([f for f in files if f.stem != plat.stem] + [plat])
     projects, errors = {}, {}
     for f in files:
         stem = f.stem

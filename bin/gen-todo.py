@@ -18,7 +18,7 @@ openclaw-migration-status.md):
 不會被默默漏掉。
 
 跑在 mini(平台 job agent-hub/todo,讀 memory 副本的 */STATE.md)。
-用法:gen-todo.py <輸出 todo.md 路徑>
+用法:gen-todo.py [輸出 todo.md 路徑](預設 data 目錄的 todo.md,hubconf.data_file)
 結束碼:0 正常;格式問題不算失敗(已寫進檔案跟 stdout)。
 """
 from __future__ import annotations  # 系統的 python3(3.9)也要能 import
@@ -83,7 +83,7 @@ def parse(source: str, text: str, items: dict, problems: list) -> None:
 
 
 def main() -> None:
-    out = pathlib.Path(sys.argv[1])
+    out = pathlib.Path(sys.argv[1]) if len(sys.argv) > 1 else hubconf.data_file("todo.md")   # 預設寫到 data 目錄
     items: dict[str, list] = {o: [] for o in OWNERS}
     problems: list[str] = []
 

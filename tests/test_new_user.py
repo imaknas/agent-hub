@@ -80,6 +80,28 @@ class NewUser(unittest.TestCase):
         self.assertNotEqual(r.returncode, 0, "config repo 的 pre-commit 要擋下不合格的 config")
         self.assertIn("modulez", r.stdout + r.stderr)
 
+    def test_move_instance_copies_validates_then_points(self):
+        """舊的擺法(hub.json 在 hub 根目錄)搬到實例目錄:只複製(來源不動)、config repo 有第一個 commit、最後才寫指標檔。"""
+        (self.hub / "hub.json").write_text((self.hub / "hub.example.json").read_text())
+        (self.hub / "todo.md").write_text("# todo\n")
+        (self.hub / ".secrets").mkdir()
+        (self.hub / ".secrets" / "x").write_text("s")
+        inst = self.tmp / "inst"
+        r = self.hub_cmd("move-instance", "--to", str(inst))
+        self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
+        self.assertFalse(inst.exists(), "沒加 --apply 只列出,不動手")
+        r = self.hub_cmd("move-instance", "--to", str(inst), "--apply")
+        self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
+        self.assertEqual((self.hub / ".hub-home").read_text().strip(), str(inst.resolve()))
+        for f in ("config/hub.json", "config/projects", "data/todo.md", "secrets/x"):
+            self.assertTrue((inst / f).exists(), f)
+        self.assertTrue((self.hub / "hub.json").exists() and (self.hub / "todo.md").exists(), "來源不刪")
+        log = subprocess.run(["git", "-C", str(inst / "config"), "log", "--oneline"], capture_output=True, text=True)
+        self.assertIn("config moved", log.stdout)
+        self.assertFalse((inst / "config" / "projects" / "agent-hub.yaml").exists(), "平台自己的登錄留在平台")
+        r = self.hub_cmd("move-instance", "--to", str(self.tmp / "again"), "--apply")
+        self.assertNotEqual(r.returncode, 0, "已經搬過就不再搬")
+
     def test_init_never_overwrites_hub_json(self):
         (self.hub / "hub.json").write_text('{"v": 1, "registry_dir": "projects", "owner": {"address": "owner", "tag": "Keep"}}\n')
         r = self.hub_cmd("init", "--yes", "--no-launchd", "--owner", "Other")

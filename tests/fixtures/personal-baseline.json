@@ -66,7 +66,6 @@
  "secrets-path": {},
  "instance-path": {
   "bin/config-check": 5,
-  "bin/hub": 3,
   "bin/librarian.sh": 1
  }
 }

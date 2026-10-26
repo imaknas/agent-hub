@@ -13,6 +13,8 @@ config:
                         驗證 config / 會改什麼 / 套用(check → 套用 → 再 plan 要是空的 → 記錄)
   hub modules [enable|disable <名稱>]
                         有哪些可以不開的功能、開了哪些;開關會改 hub.json 再套用(hub.json 記得 commit)
+  hub move-instance --to <實例目錄> [--apply]
+                        舊的擺法(全部在 hub 根目錄)搬到實例目錄:只複製、驗證新擺法、最後才寫 .hub-home(刪掉就退回)
 專案:
   hub onboard …         = bin/onboard-project.sh(開新專案 / 把資料夾接上來)
   hub recover <名稱>    = bin/recover-project.sh(新機器 / 資料夾不見了)
@@ -36,9 +38,10 @@ import subprocess
 import sys
 
 BIN = pathlib.Path(__file__).resolve().parent
-ROOT = BIN.parent
 sys.path.insert(0, str(BIN))
 import hubconf  # noqa: E402
+
+ROOT = hubconf.ROOT   # 跟 hubconf 同一個(AGENT_HUB_ROOT 可覆蓋),路徑比對才一致
 
 AGENTS = pathlib.Path.home() / "Library" / "LaunchAgents"
 # 排程器跟看門狗不經過 render-services(它是排程器跑的 job;排程器壞了正是看門狗要報的事),由 init 從樣板裝
@@ -209,10 +212,10 @@ def cmd_init(argv: list[str]) -> int:
     args = {k.lstrip("-"): argv[i + 1] for i, k in enumerate(argv[:-1])
             if k in ("--owner", "--timezone", "--workspace", "--modules", "--home")}
     dry, yes = "--dry-run" in flags, "--yes" in flags
-    legacy = (ROOT / "hub.json").exists() and hubconf.instance_home() is None
+    legacy = hubconf.instance_home() is None and hubconf.config_file("hub.json").exists()
     if legacy:
         # 舊的擺法(hub.json 在 hub 根目錄,搬家前的樣子):不動,搬家另外做(docs/design/new-user.md 第 6 步)
-        print(f"✓ 已經有 {ROOT / 'hub.json'}(舊的擺法),不動它")
+        print(f"✓ 已經有 {hubconf.config_file('hub.json')}(舊的擺法),不動它")
     elif hubconf.config_file("hub.json").exists():
         print(f"✓ 已經有 {hubconf.config_file('hub.json')},不動它(要改就直接編輯,再 hub config apply)")
     else:
@@ -263,6 +266,90 @@ def cmd_init(argv: list[str]) -> int:
         if rc != 0:
             return rc
     print("\n下一步:bin/hub doctor 看還缺什麼;bin/hub onboard ~/workspace/<專案> 接上第一個專案")
+    return 0
+
+
+# ---------- move-instance(舊的擺法 → 實例目錄,docs/design/new-user.md 第 6 步)----------
+
+CONFIG_FILES = ["hub.json", "models.env", "mirror-list.txt", "services.tsv", "schedule.yaml"]
+DATA_FILES = ["digest", "reflect", "todo.md", "index.md", "review-log.md", "openclaw-migration-status.md", "legacy-paths.tsv"]
+
+
+def move_plan(home: pathlib.Path) -> list[tuple[pathlib.Path, pathlib.Path]]:
+    """(來源, 目的)。只在舊的擺法跑,所以來源就是 hubconf 現在指的位置。平台自己的登錄(projects/agent-hub.yaml)
+    留在平台;.state、.logs 是這台機器的,不搬。"""
+    out = [(hubconf.config_file(f), home / "config" / f) for f in CONFIG_FILES if hubconf.config_file(f).exists()]
+    reg = hubconf.registry_dir()
+    out += [(f, home / "config" / "projects" / f.name) for f in sorted(reg.iterdir())
+            if f.name != hubconf.platform_registry().name and f.name != "__pycache__"]
+    out += [(hubconf.data_file(f), home / "data" / f) for f in DATA_FILES if hubconf.data_file(f).exists()]
+    sec = hubconf.secrets_dir()
+    out += [(f, home / "secrets" / f.name) for f in sorted(sec.iterdir())] if sec.is_dir() else []
+    return out
+
+
+def cmd_move_instance(argv: list[str]) -> int:
+    """hub move-instance --to <實例目錄> [--apply]:複製(不刪來源)、驗證新擺法、最後才寫 <hub>/.hub-home。"""
+    if "--to" not in argv:
+        print("用法:hub move-instance --to <實例目錄> [--apply](不加 --apply 只列出會做什麼)", file=sys.stderr)
+        return 2
+    home = pathlib.Path(os.path.expanduser(argv[argv.index("--to") + 1])).resolve()
+    apply = "--apply" in argv
+    if hubconf.POINTER.exists() or os.environ.get("AGENT_HUB_HOME"):
+        print(f"已經是實例目錄的擺法({hubconf.instance_home()}),不用搬", file=sys.stderr)
+        return 1
+    if not hubconf.config_file("hub.json").exists():
+        print("沒有 hub.json:沒東西可搬", file=sys.stderr)
+        return 1
+    if home.exists() and any(home.iterdir()):
+        print(f"{home} 已經有東西,不覆蓋", file=sys.stderr)
+        return 1
+    plan = move_plan(home)
+    for src, dst in plan:
+        print(f"{'複製' if apply else '(會複製)'} {src} → {dst}")
+    if not apply:
+        print(f"\n共 {len(plan)} 項;加 --apply 才動手(只複製,不刪 hub 裡的來源;最後才寫 {hubconf.POINTER})")
+        return 0
+    for src, dst in plan:
+        dst.parent.mkdir(parents=True, exist_ok=True)
+        (shutil.copytree if src.is_dir() else shutil.copy2)(src, dst)
+    for sub in ("config/projects", "data", "secrets"):
+        (home / sub).mkdir(parents=True, exist_ok=True)
+    (home / "secrets").chmod(0o700)
+    # 備份範圍:舊的 .secrets 換成新的 secrets,config/、data/ 加進去(它們離開 git 之後只剩備份這一份)
+    cfg_path = home / "config" / "hub.json"
+    cfg = json.loads(cfg_path.read_text())
+    b = cfg.get("backup")
+    if isinstance(b, dict):
+        inc = [x for x in b.get("include", []) if os.path.expanduser(x) != str(hubconf.secrets_dir())]
+        b["include"] = inc + [str(home / "config"), str(home / "data"), str(home / "secrets")]
+    cfg_path.write_text(json.dumps(cfg, ensure_ascii=False, indent=2) + "\n")
+    env = {**os.environ, "AGENT_HUB_HOME": str(home)}
+    # 驗證新擺法(還沒寫指標檔:用 AGENT_HUB_HOME 指過去)
+    r = subprocess.run([str(BIN / "config-check")], env=env, capture_output=True, text=True)
+    print(r.stdout.strip() or r.stderr.strip())
+    if r.returncode != 0:
+        print(f"新擺法的 config 不合格,不寫 {hubconf.POINTER}(複製的東西在 {home},可以刪掉重來)", file=sys.stderr)
+        return 1
+    # config as code:config 是自己的 repo,第一個 commit 就是現在的 config
+    cfgdir = home / "config"
+    subprocess.run(["git", "init", "-q", str(cfgdir)], check=True)
+    for k in ("user.name", "user.email"):
+        v = subprocess.run(["git", "-C", str(ROOT), "config", k], capture_output=True, text=True).stdout.strip()
+        if v:
+            subprocess.run(["git", "-C", str(cfgdir), "config", k, v])
+    subprocess.run(["git", "-C", str(cfgdir), "config", "core.hooksPath", str(ROOT / "githooks" / "config")])
+    subprocess.run(["git", "-C", str(cfgdir), "add", "-A"], check=True)
+    r = subprocess.run(["git", "-C", str(cfgdir), "commit", "-q", "-m", f"config moved from {ROOT}"], env=env,
+                       capture_output=True, text=True)
+    if r.returncode != 0:
+        print(f"config repo 的第一個 commit 失敗:{(r.stdout + r.stderr).strip()[:400]}", file=sys.stderr)
+        return 1
+    hubconf.POINTER.write_text(str(home) + "\n")   # 最後才寫:從這一刻起平台用新擺法;刪掉它就退回
+    print(f"\n✓ 寫了 {hubconf.POINTER}。hub 裡的舊檔還在(沒刪)。接下來(要人做):")
+    print("  1. bin/hub config plan 看會改什麼(專案的 sandbox 設定裡 secrets 的路徑會變),沒問題再 bin/hub config apply")
+    print("  2. 重啟讀路徑的常駐服務(lease-runner、cap-runner)")
+    print("  3. 確認夜間流程、備份(還原驗證)都正常之後,才從平台 repo git rm 那些檔案")
     return 0
 
 
@@ -344,6 +431,7 @@ def passthrough(script: str):
 
 COMMANDS = {
     "init": cmd_init, "doctor": cmd_doctor, "config": cmd_config, "modules": cmd_modules,
+    "move-instance": cmd_move_instance,
     "onboard": passthrough("onboard-project.sh"), "recover": passthrough("recover-project.sh"),
     "rename": passthrough("rename-project.sh"), "status": passthrough("overview.sh"),
     "jobs": lambda argv: subprocess.run([str(BIN / "schedulectl"), "list", *argv]).returncode,

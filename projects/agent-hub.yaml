@@ -21,7 +21,7 @@ jobs:
   after:
   - librarian
   max_attempts_per_day: 3
-  run: bin/py bin/gen-todo.py todo.md
+  run: bin/py bin/gen-todo.py   # 寫到 data 目錄的 todo.md(hubconf.data_file)
   cwd: hub
 - name: memory-gaps              # 有對話但沒記 memory 的專案 → todo.md 的固定區塊 + 今天的 digest;todo 會整份重生,所以排在它後面
   at: 03:00
