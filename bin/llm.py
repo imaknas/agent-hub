@@ -90,6 +90,7 @@ def run(a) -> int:
     env, why = auth_env(spec, rt)
     if env is None:
         return fail(a.point, spec, why)
+    env["HUB_LLM_POINT"] = a.point   # 叫起的程序(含它的 hook)知道自己是平台的 headless 呼叫:hubbus 不把信送給它
     schema = json.loads((POINTS.parent / output_schema(spec)).read_text()) if output_schema(spec) else None
     task = runtime_ports.Task(point=a.point, prompt=prompt, spec=spec, cwd=a.cwd or None, model=model,
                               output_schema=schema, timeout_s=spec.get("timeout_s", 1200), env=env,

@@ -370,6 +370,11 @@ def mail_text(event: str, session, cwd) -> str | None:
     # 什麼都不做,不然信會被記成 delivered,卻沒有任何 session 看到
     if not session or not DB.exists():
         return None
+    # 平台自己的 headless 模型呼叫(llm.py 設 HUB_LLM_POINT,例:每小時的 login-check)不是收件人:不送信、不記在場。
+    # 不擋的話,在 hub 根目錄跑的呼叫會繼承 agent-hub 的 SessionStart hook,把新信標成送進去了,dispatch 就不派
+    # (10-27 盲審查到;m10250040-50a0 等被 login-check 收走)。租約的 session 例外:深談要看得到信(下面照舊不標 delivered)
+    if os.environ.get("HUB_LLM_POINT") and not os.environ.get("HUBBUS_LEASE"):
+        return None
     if event == "post-tool":
         # 限流:每個 session 最多 POST_TOOL_EVERY_S 查一次(戳記放 /tmp,不寫進匯流排;在查 git 之前就擋掉)
         stamp = pathlib.Path(os.environ.get("TMPDIR", "/tmp")) / f"hubbus-post-tool-{session}"
