@@ -5,7 +5,7 @@
 #
 # 用法(寫在 schedule.yaml 的 command):run-agent-job.sh <name> [工作目錄] [prompt 名稱]
 #   prompt:agent-jobs/<prompt 名稱,預設 name>.md(版控);工作目錄沒給就用這個 job 自己的狀態目錄
-#   (hubmail 的升級用同一份 agent-jobs/mailbox.md,name 是 mailbox-<專案>,各自一個狀態目錄)
+#   (信箱的交辦用平台的 templates/prompts/mailbox.md,hubbus 填上名字後給完整路徑;name 是 mailbox-<專案>,各自一個狀態目錄)
 #   產出:.state/agent-jobs/<name>/
 #     <YYYY-MM-DD-HHMM>.md   每次的報告(Claude 最後的回覆)
 #     status.json            最後一次的狀態(running/ok/failed、時間、session id、報告路徑)
