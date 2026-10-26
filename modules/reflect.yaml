@@ -1,0 +1,12 @@
+# 每週回顧(bin/weekly-reflect.sh):上一週的跨專案活動統計 + 一次模型呼叫(只送統計數字)。
+v: 1
+name: reflect
+type: module
+description: 每週一產生上一週的跨專案回顧(reflect/)
+jobs:
+- name: weekly-reflect
+  legacy_name: agent-hub/weekly-reflect
+  at: "07:00"
+  days: [mon]
+  max_attempts_per_day: 2
+  run: bin/weekly-reflect.sh

@@ -233,6 +233,9 @@
           }
         }
       }
+    },
+    "modules": {
+      "type": "object"
     }
   }
 }

@@ -18,7 +18,7 @@ import sys
 import unittest
 
 ROOT = pathlib.Path(__file__).resolve().parents[1]
-SCOPE = ("bin", "templates", "launchd", "tests", "agent-jobs")
+SCOPE = ("bin", "templates", "launchd", "tests", "agent-jobs", "modules")
 BASELINE = ROOT / "tests" / "fixtures" / "personal-baseline.json"
 SELF = pathlib.Path(__file__).resolve()
 RULES = {

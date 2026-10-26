@@ -86,12 +86,12 @@ SSH 開 mini 上的資料夾。MBP 斷線/沒電時 session 還在跑、手機(R
   派出去的信記成「平台正在處理」,開著的 session 不會重做;同一串最多代為處理 4 輪、每專案每天 6 次(hub.json
   `mailbox`)。跟 Claude Code 有關的判斷只在 `bin/runtime_claude.py`。轉交不經過這裡。
   專案問 Knas 的問題在專案 session 裡解決了:`hubbus send --to knas --type done|drop --question <id>`,Muninn 收掉;開 session
-  時列出這個專案還開著的問題(❓),每晚 librarian 之後的 `agent-hub/reconcile-questions` job 問開著超過 3 天的還要不要(深談交接的問題由
+  時列出這個專案還開著的問題(❓),每晚 librarian 之後的 `assistant/reconcile-questions` job(`modules/assistant.yaml`) 問開著超過 3 天的還要不要(深談交接的問題由
   Muninn 自己管,不問)。
   Muninn 的轉交由 librarian 每晚從信箱讀(`hubbus open-handoffs`)直接套用進 STATE.md,結果可信才
   `hubbus done`(bridge 再回報 Muninn 結案);session 白天看到只當參考,Knas 的回答由發問的 session
   處理、沒處理的也是晚上套用。介面跟失敗模式看 `bin/hubbus` 檔頭
-- `bin/knas-tasks.py`——〔Knas〕待辦的 Muninn 任務登錄(平台 job `agent-hub/knas-tasks`,每晚 librarian 之後、todo 之前,零 LLM):
+- `bin/knas-tasks.py`——〔Knas〕待辦的 Muninn 任務登錄(`assistant/knas-tasks`,`modules/assistant.yaml`;每晚 librarian 之後、todo 之前,零 LLM):
   還沒 key 的〔Knas〕行(各 STATE.md、openclaw-migration-status.md)寄成 `task`、蓋上「(等 Knas:<key>)」
   (key 固定 = 專案 + 文字的 hash,重寄是 no-op);Muninn 回來的帶 key 轉交(done/dropped/already_done/
   reopened)照 key 刪掉或加回那一行,push 成功才結案;寄過的 key 從 STATE.md 消失(librarian 判定做完、整行刪掉)就寄
@@ -177,9 +177,9 @@ SSH 開 mini 上的資料夾。MBP 斷線/沒電時 session 還在跑、手機(R
 - `bin/hublib.py`——共用判斷:真人訊息(`origin.kind == human`)、transcript ↔ 專案對應、哪些
   commit 算專案工作。check-memory-gaps / memory-nudge / weekly-reflect 都用它
 - `bin/backup.py`——**加密雲端備份**(restic → Backblaze B2 bucket `<backup-bucket>`;設定在 `hub.json` 的
-  `backup`)。平台 job `agent-hub/backup` 每晚 05:45:SQLite 用 backup API 複製、`~/git-origin` 的 bare repo 打 bundle、
+  `backup`)。`backup/backup`(`modules/backup.yaml`)每晚 05:45:SQLite 用 backup API 複製、`~/git-origin` 的 bare repo 打 bundle、
   各 workspace 沒 push/沒 commit 的東西跟 `.env`、加上 muninn data / `.state` / `.secrets` / 服務資料 / transcript;
-  週日套保留(14 天、8 週、12 月)。`agent-hub/backup-verify` 每月 1 號還原到暫存目錄驗證。密碼在
+  週日套保留(14 天、8 週、12 月)。`backup/backup-verify` 每月 1 號還原到暫存目錄驗證。密碼在
   `.secrets/backup-password`(**另一份在 Knas 的密碼管理器**),B2 金鑰在 `.secrets/b2-env`。還原:
   `bin/backup.py restore <目的地> [--include <路徑>]`。工作 profile 的 transcript 刻意不備份
 - `bin/mirror-backup.sh`——讀 `mirror-list.txt`,對每個 GitHub repo 維護
@@ -270,6 +270,11 @@ memory 追蹤但不需要在 mini 上執行任何東西的專案(目前大多數
   跟 vendor 的別人的契約(`contracts/vendor/<專案>/`)。登錄的 `provides`/`consumes` 宣告誰定義、誰讀;
   `tests/test_contracts.py`(`bin/py -m unittest discover -s tests`)驗證範例,`bin/contracts-check.py`
   (每晚 01:30)比對副本跟原版、驗證實際資料。加欄位不升版;改名/改意思升版、兩版並存到讀的人換完
+- `modules/`——**可以不開的功能**(10-26 起;docs/design/new-user.md 3.2):`<名稱>.yaml` 跟登錄同一種 jobs/services 格式
+  (`type: module`、cwd 一律 hub),`hub.json` 的 `modules.<名稱>: true` 才採用,job 在排程裡叫 `<模組>/<job>`。現有:
+  assistant(knas-tasks、reconcile-questions、lease-runner)、backup、consolidate、mirror、reflect、sandbox(cap-runner)。
+  模組用 `before: [<專案>/<job>]` 把自己插進核心流程(核心不用知道它),沒開就跟沒有一樣(別人的 after: 指到它也不會等);
+  `after:`/`before:` 繞圈會被 registry 擋下。搬進模組的 job 用 `legacy_name: <舊全名>` 帶著排程狀態
 - `projects/`——**專案登錄**(一個專案一個 `<name>.yaml`;目錄由 `hub.json` 的 `registry_dir` 指定):
   路徑、job、service、隱私標籤、測試指令。驗證跟格式看 `bin/registry.py` 檔頭;`registry.py check` 驗證。
   排程器跑的 = `schedule.yaml`(切換期間的舊項目)+ 登錄的 job(`<專案>/<job>`)

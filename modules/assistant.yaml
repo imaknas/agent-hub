@@ -1,0 +1,30 @@
+# 個人助理(hub.json assistant;目前是一個專案的 web 服務):〔owner〕待辦跟助理的任務登錄、問 owner 的問題對帳、
+# 讓助理把對話借給專案 session 的通道租借。沒有助理的部署不開這個模組,這些 job/服務就不存在。
+# knas-tasks 要排在 todo、librarian-publish 前面(todo.md 才是改過的),所以用 before: 插進核心的夜間流程;
+# reconcile-questions 寄的信會被信箱 dispatch 馬上分派,只在晚上跑一次,不要改成間隔型。
+v: 1
+name: assistant
+type: module
+description: 個人助理:待辦任務登錄、問題對帳、通道租借
+requires_config: [assistant.api]
+jobs:
+- name: knas-tasks
+  legacy_name: agent-hub/knas-tasks
+  at: "03:00"
+  after: [agent-hub/librarian]
+  before: [agent-hub/todo, agent-hub/librarian-publish]
+  max_attempts_per_day: 3
+  run: bin/py bin/knas-tasks.py
+- name: reconcile-questions
+  legacy_name: agent-hub/reconcile-questions
+  at: "03:00"
+  after: [agent-hub/librarian]
+  max_attempts_per_day: 1
+  run: bin/py bin/hubbus reconcile-questions
+services:
+- name: lease-runner             # 通道租借(bin/lease-runner.py):127.0.0.1:18797,Bearer token 在 .secrets/runner-token
+  label: local.agent-hub.lease-runner
+  run: bin/py bin/lease-runner.py
+  keepalive: true
+  throttle_s: 10
+  env: {PATH: "$PLATFORM_PATH"}   # nvm 預設版本(claude)+ Homebrew,見 hubconf.LAUNCHD_PATH

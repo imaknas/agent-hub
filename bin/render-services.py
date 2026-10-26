@@ -133,7 +133,8 @@ def _desired(index: dict) -> tuple[dict[str, tuple[str, dict]], list[str], set[s
     problems: list[str] = []
     keep: set[str] = set()       # 指令解析不到:現在的 plist 不動
     keepalive: set[str] = set()  # 應該一直在跑的
-    for name, doc in sorted(index["projects"].items()):
+    docs = sorted(index["projects"].items()) + sorted((index.get("modules") or {}).items())  # 開著的模組的服務也是
+    for name, doc in docs:
         for svc in doc.get("services") or []:
             label = label_of(name, svc)
             plist, problem = render(name, doc, svc)

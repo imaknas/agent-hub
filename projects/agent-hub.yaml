@@ -1,7 +1,4 @@
 # 專案登錄(schema v1,見 bin/registry.py);直接改這個檔
-# consolidate-memory:把超過 14 天的 memory 日期檔整理進 reference/、修正被推翻的敘述(opus,一晚最多 3 個
-#   專案、每個專案最多一週一次,沒有夠舊的日期檔就零 LLM 跳過)。背景跑;librarian 用 after: 等它跑完,拿到的是
-#   整理過的副本。腳本 30 分鐘後不開新專案、單次呼叫上限 20 分鐘,正常約 02:50 前結束。失敗不重試(LLM job)。
 # background: true = 在背景跑,不擋後面的 job;超過幾分鐘的 job 都要加。
 # hubbus-bridge:Muninn 的轉交收進各專案信箱、給 owner 的信跟轉交的 done 送進 Muninn、太久沒人收的信交給
 #   headless agent、清掉 60 天前結案的。短、冪等、零 LLM(升級時才會開 claude -p)。
@@ -10,43 +7,19 @@ name: agent-hub
 memory: false
 push_on_merge: false
 jobs:
-- name: consolidate-memory
-  legacy_name: consolidate-memory
-  at: 02:00
-  background: true
-  max_attempts_per_day: 1
-  run: bin/consolidate-memory.py
-  cwd: hub
 - name: librarian
   legacy_name: librarian
   at: 03:00
   background: true
-  after:
-  - consolidate-memory
   run: bin/librarian.sh
   cwd: hub
 # librarian 之後的機械步驟(零 LLM),以前寫死在 librarian.sh 的最後,現在各自是一個 job(docs/design/new-user.md 第 0 步):
-# 各自重跑、各自在狀態頁顯示成敗。knas-tasks、reconcile-questions 是個人助理的,之後歸進 assistant 模組。
-# reconcile-questions 寄的信會被信箱 dispatch 馬上分派,所以跟 knas-tasks 一樣只在晚上跑一次,不要改成間隔型。
-- name: knas-tasks               # 〔Knas〕待辦 ↔ Muninn 任務登錄;要排在 todo 前面,todo.md 才是改過的
-  at: 03:00
-  after:
-  - librarian
-  max_attempts_per_day: 3
-  run: bin/py bin/knas-tasks.py
-  cwd: hub
-- name: reconcile-questions      # 開太久的「問 Knas 的問題」寄 request 問發問的專案
-  at: 03:00
-  after:
-  - librarian
-  max_attempts_per_day: 1
-  run: bin/py bin/hubbus reconcile-questions
-  cwd: hub
+# 各自重跑、各自在狀態頁顯示成敗。個人助理的(knas-tasks、reconcile-questions)在 modules/assistant.yaml,用 before:
+# 把自己插進這條流程;沒開那個模組時這裡照樣跑。consolidate-memory、mirror-backup、weekly-reflect、backup 也在 modules/。
 - name: todo                     # 跨專案待辦清單 todo.md(各專案 STATE.md 的 ## 待辦,機械產生)
   at: 03:00
   after:
   - librarian
-  - knas-tasks
   max_attempts_per_day: 3
   run: bin/py bin/gen-todo.py todo.md
   cwd: hub
@@ -61,24 +34,10 @@ jobs:
   at: 03:00
   after:
   - librarian
-  - knas-tasks
   - todo
   - memory-gaps
   max_attempts_per_day: 3
   run: bin/librarian-publish.sh
-  cwd: hub
-- name: mirror-backup
-  legacy_name: mirror-backup
-  at: 04:00
-  run: bin/mirror-backup.sh
-  cwd: hub
-- name: weekly-reflect
-  legacy_name: weekly-reflect
-  at: 07:00
-  days:
-  - mon
-  max_attempts_per_day: 2
-  run: bin/weekly-reflect.sh
   cwd: hub
 - name: hubbus-bridge
   legacy_name: hubbus-bridge
@@ -111,20 +70,6 @@ jobs:
   cwd: hub
   max_attempts_per_day: 2
   run: bin/py bin/update-claude.py
-- name: backup                   # 加密雲端備份(restic → B2,bin/backup.py;設定在 hub.json backup)
-  at: "05:45"
-  cwd: hub
-  background: true
-  max_attempts_per_day: 2
-  run: bin/py bin/backup.py run
-- name: backup-verify            # 每月還原測試:還原到暫存目錄、檢查 SQLite/bundle/檔案、10% 資料抽查
-  at: "06:30"
-  days_of_month: [1]
-  after: [backup]
-  cwd: hub
-  background: true
-  max_attempts_per_day: 1
-  run: bin/py bin/backup.py verify
 - name: prune-worktrees           # 已合併、乾淨的 worktree:閒置 ≥ 2 天刪重建得回來的依賴、≥ 14 天且沒人在用才移除(branch 留著)
   at: "04:30"
   cwd: hub
@@ -150,7 +95,7 @@ consumes:
 - {contract: muninn-messages, v: 1, copy: contracts/vendor/muninn/messages.v1.schema.json, from: muninn}
 - {contract: muninn-permission-requests, v: 2, copy: contracts/vendor/muninn/permission-requests.v2.schema.json, from: muninn}
 services:
-# 平台自己的三個常駐/定時程式:以前是 launchd/ 底下寫死 /Users/<you> 的 plist,10-26 起跟專案的服務一樣由 render-services 產生
+# 平台自己的三個常駐/定時程式(lease-runner 在 modules/assistant.yaml、cap-runner 在 modules/sandbox.yaml):以前是 launchd/ 底下寫死 /Users/<you> 的 plist,10-26 起跟專案的服務一樣由 render-services 產生
 # (路徑從 hubconf)。排程器跟看門狗刻意不在這裡:render-services 是排程器跑的 job,而排程器壞了正是看門狗要報的事
 # (那兩份由 bin/hub init 裝,docs/design/new-user.md 3.3)。
 - name: mailbox-dispatch          # 沒人收的 request/question 由平台處理(hubbus dispatch,每分鐘;docs/design/mailbox-routing.md)
@@ -170,19 +115,6 @@ services:
   cwd: hub
   run: bin/sync-all-memory.sh
   interval_s: 3600
-- name: lease-runner             # 通道租借(bin/lease-runner.py):127.0.0.1:18797,Bearer token 在 .secrets/runner-token
-  label: local.agent-hub.lease-runner
-  cwd: hub
-  run: bin/py bin/lease-runner.py
-  keepalive: true
-  throttle_s: 10
-  env: {PATH: "$PLATFORM_PATH"}   # nvm 預設版本(claude)+ Homebrew,見 hubconf.LAUNCHD_PATH
-- name: cap-runner               # 平台代跑(bin/cap-runner.py):想法沙盒用 hub-run --cap <能力> 放的請求,用平台的 Seatbelt profile 執行
-  label: local.agent-hub.cap-runner
-  cwd: hub
-  run: bin/py bin/cap-runner.py
-  keepalive: true
-  throttle_s: 10
 
 # 機器層級的憑證(平台管):只寫名稱、位置、到期,不寫值。check-secrets.py 每天檢查(在不在、備份、到期)
 secrets:

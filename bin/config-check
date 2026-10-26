@@ -54,7 +54,9 @@ def check(root: pathlib.Path) -> list[str]:
     import registry
     index = registry.refresh()
     for name, es in sorted(index["errors"].items()):
-        errs += [f"projects/{name}.yaml:{e}" for e in es]
+        where = (f"modules/{name.split(':', 1)[1]}.yaml" if name.startswith("module:")
+                 else "排程(after/before)" if name == "(jobs)" else f"projects/{name}.yaml")
+        errs += [f"{where}:{e}" for e in es]
 
     env = root / "models.env"
     if env.exists():

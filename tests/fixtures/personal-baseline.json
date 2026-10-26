@@ -46,6 +46,7 @@
   "launchd/local.agent-hub-scheduler.plist": 4,
   "launchd/local.sync-all-memory.plist": 3,
   "launchd/local.transcript-backup.plist": 3,
+  "modules/assistant.yaml": 4,
   "templates/CLAUDE.md": 25,
   "templates/reflect.html": 1,
   "templates/rules/engineering.md": 1,

@@ -263,7 +263,7 @@ def main() -> None:
         try:
             at = datetime.datetime.fromisoformat(json.loads(f.read_text())["at"]).replace(tzinfo=None)
             if now - at > datetime.timedelta(hours=limit_h):
-                alerts.append(("bad", f"最後一次成功的{what}是 {at:%m/%d %H:%M},太久了(看 .logs/agent-hub__backup*)"))
+                alerts.append(("bad", f"最後一次成功的{what}是 {at:%m/%d %H:%M},太久了(看 .logs/backup__backup*)"))
         except (OSError, ValueError, KeyError):
             alerts.append(("bad", f"還沒有成功的{what}紀錄(.state/backup/{fname})"))
 

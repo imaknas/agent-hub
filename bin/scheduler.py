@@ -78,7 +78,7 @@ def all_jobs(log_errors: bool = False) -> tuple[list[dict], dict]:
         index = registry.refresh()
         reg_jobs, skipped, renames = registry.scheduler_jobs(index, {j["name"] for j in legacy})
         info.update(renames=renames, skipped=skipped, errors=index["errors"])
-        for d in index["projects"].values():
+        for d in [*index["projects"].values(), *(index.get("modules") or {}).values()]:  # 模組的 job 一樣有舊名稱
             for j in d.get("jobs") or []:
                 if j.get("legacy_name"):
                     full = f"{d['name']}/{j['name']}"

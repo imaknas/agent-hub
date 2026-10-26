@@ -137,5 +137,14 @@
     "server": "",
     "mbp_home": "",
     "mini_home": ""
+  },
+  "modules": {
+    "_comment": "可以不開的功能(modules/<名稱>.yaml):true 才採用。assistant 要先設定 assistant 段、backup 要先設定 backup 段",
+    "consolidate": true,
+    "reflect": true,
+    "mirror": false,
+    "backup": false,
+    "assistant": false,
+    "sandbox": false
   }
 }

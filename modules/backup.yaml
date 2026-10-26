@@ -1,0 +1,21 @@
+# 加密雲端備份(restic,bin/backup.py;設定在 hub.json backup,密碼/金鑰在 .secrets/)。
+v: 1
+name: backup
+type: module
+description: 每晚加密雲端備份 + 每月還原測試
+requires_config: [backup.repo]
+jobs:
+- name: backup
+  legacy_name: agent-hub/backup
+  at: "05:45"
+  background: true
+  max_attempts_per_day: 2
+  run: bin/py bin/backup.py run
+- name: backup-verify            # 每月還原測試:還原到暫存目錄、檢查 SQLite/bundle/檔案、10% 資料抽查
+  legacy_name: agent-hub/backup-verify
+  at: "06:30"
+  days_of_month: [1]
+  after: [backup]
+  background: true
+  max_attempts_per_day: 1
+  run: bin/py bin/backup.py verify

@@ -79,7 +79,7 @@ TOP = {"v", "name", "type", "purpose", "paths", "memory", "privacy", "runtime", 
        "provides", "consumes", "services", "jobs", "enforce", "network", "allow_write", "gate", "secrets"}
 SECRET = {"name", "path", "env_key", "expires", "max_age_days", "warn_days", "backup", "why", "rotate"}
 JOB = {"name", "at", "every", "run", "kind", "prompt", "cwd", "days", "days_of_month", "months", "until",
-       "between", "background", "after", "max_attempts_per_day", "legacy_name", "allow", "connectors"}
+       "between", "background", "after", "before", "max_attempts_per_day", "legacy_name", "allow", "connectors"}
 SERVICE = {"name", "run", "label", "keepalive", "interval_s", "throttle_s", "env", "cwd", "log", "expose"}
 DAYS = {"mon", "tue", "wed", "thu", "fri", "sat", "sun"}
 EVERY = re.compile(r"^(\d+)(m|h)$")
@@ -88,7 +88,7 @@ EVERY = re.compile(r"^(\d+)(m|h)$")
 def dirs(doc: dict) -> dict[str, pathlib.Path | None]:
     """這個專案的 runtime / workspace / hub 目錄。"""
     name = doc.get("name", "")
-    if name == hubconf.hub_project():
+    if name == hubconf.hub_project() or doc.get("type") == "module":
         return {"runtime": hubconf.ROOT, "workspace": hubconf.ROOT, "hub": hubconf.ROOT}
     ws = hubconf.path((doc.get("paths") or {}).get("workspace"))
     rt = hubconf.p("services_root") / name if doc.get("runtime") is not None else None
@@ -96,6 +96,8 @@ def dirs(doc: dict) -> dict[str, pathlib.Path | None]:
 
 
 def default_cwd(doc: dict) -> str:
+    if doc.get("type") == "module":
+        return "hub"
     return "runtime" if doc.get("runtime") is not None else "workspace"
 
 
@@ -232,6 +234,18 @@ def validate(doc, stem: str) -> list[str]:
     for key in ("publishes", "provides", "services", "jobs"):
         if not isinstance(doc.get(key, []), list):
             errs.append(f"{key} 要是 list")
+    errs += validate_runs(doc, stem, d)
+    for key in ("deploy", "test"):
+        if isinstance(rt, dict) and rt.get(key):
+            base = d["workspace"] if key == "test" else d["workspace"]
+            if (e := resolves(rt[key], base)):
+                errs.append(f"runtime.{key}:{e}")
+    return errs
+
+
+def validate_runs(doc: dict, stem: str, d: dict) -> list[str]:
+    """services 跟 jobs(專案登錄跟模組共用)。"""
+    errs: list[str] = []
     names = set()
     for svc in doc.get("services") or []:
         n = svc.get("name")
@@ -284,15 +298,97 @@ def validate(doc, stem: str) -> list[str]:
         elif (e := resolves(job["run"], d.get(cwd_key))):
             errs.append(f"job {n}:{e}")
     for job in jobs:
-        for dep in job.get("after") or []:
-            if "/" not in dep and dep not in names:
-                errs.append(f"job {job.get('name')}:after 的 {dep} 不在這個專案")
-    for key in ("deploy", "test"):
-        if isinstance(rt, dict) and rt.get(key):
-            base = d["workspace"] if key == "test" else d["workspace"]
-            if (e := resolves(rt[key], base)):
-                errs.append(f"runtime.{key}:{e}")
+        for key in ("after", "before"):
+            v = job.get(key)
+            if v is not None and (not isinstance(v, list) or not all(isinstance(x, str) and x for x in v)):
+                errs.append(f"job {job.get('name')}:{key} 要是 job 名稱的 list")
+                continue
+            for dep in v or []:
+                if "/" not in dep and dep not in names:
+                    errs.append(f"job {job.get('name')}:{key} 的 {dep} 不在這個專案(別的專案/模組要寫 <名稱>/<job>)")
     return errs
+
+
+# ---------- 模組(docs/design/new-user.md 3.2)----------
+# 可以不開的功能(個人助理、備份、mirror、每週回顧…):平台 repo 的 modules/<名稱>.yaml,格式跟專案登錄的 jobs/services
+# 一樣(cwd 一律是 hub);hub.json 的 modules.<名稱>: true 才採用。job 在排程裡叫 <模組>/<job>。
+# 搬進模組的 job 用 legacy_name 寫舊的全名(例:agent-hub/backup),排程狀態照搬、別人的 after: 也照樣對得上。
+
+MODULES_DIR = hubconf.ROOT / "modules"
+MODULE_TOP = {"v", "name", "type", "description", "requires_config", "jobs", "services"}
+
+
+def validate_module(doc, stem: str) -> list[str]:
+    if not isinstance(doc, dict):
+        return ["不是一個 YAML mapping"]
+    errs = [f"未知的欄位 {k}" for k in doc if k not in MODULE_TOP]
+    if doc.get("v") != 1:
+        errs.append("v 要是 1")
+    if doc.get("name") != stem:
+        errs.append(f"name({doc.get('name')!r})要跟檔名 {stem} 一樣")
+    if doc.get("type") != "module":
+        errs.append("type 要是 module")
+    if not isinstance(doc.get("description"), str) or not doc["description"].strip():
+        errs.append("description 必填")
+    req = doc.get("requires_config") or []
+    if not isinstance(req, list):
+        errs.append("requires_config 要是 hub.json 鍵的 list")
+    else:
+        errs += [f"要先在 hub.json 設定 {k}" for k in req if hubconf.get(k) in (None, "", {}, [])]
+    for key in ("jobs", "services"):
+        for x in doc.get(key) or []:
+            if isinstance(x, dict) and x.get("cwd", "hub") != "hub":
+                errs.append(f"{key[:-1]} {x.get('name')}:模組的 cwd 只能是 hub")
+            if key == "jobs" and isinstance(x, dict) and x.get("kind", "command") != "command":
+                errs.append(f"job {x.get('name')}:模組只能有 command 的 job")
+    return errs + validate_runs(doc, stem, dirs(doc))
+
+
+def enabled_modules() -> list[str]:
+    m = hubconf.get("modules") or {}
+    return sorted(k for k, v in m.items() if not k.startswith("_") and v is True)
+
+
+def load_modules() -> tuple[dict, dict]:
+    """(開著的模組 → doc, 錯誤)。開了卻沒有檔案、或不合格:記錯誤、不採用(它的 job/service 就不存在)。"""
+    mods, errors = {}, {}
+    for name in enabled_modules():
+        f = MODULES_DIR / f"{name}.yaml"
+        if not f.exists():
+            errors[f"module:{name}"] = [f"hub.json 開了模組 {name},但沒有 modules/{name}.yaml"]
+            continue
+        try:
+            doc = yaml.safe_load(f.read_text())
+            errs = validate_module(doc, name)
+        except yaml.YAMLError as e:
+            doc, errs = None, [f"YAML 讀不了:{e}"]
+        if errs:
+            errors[f"module:{name}"] = errs
+        else:
+            mods[name] = doc
+    return mods, errors
+
+
+def job_cycles(index: dict) -> list[str]:
+    """after:/before: 串起來有沒有繞圈(有的話排程器會永遠等)。"""
+    jobs, _, _ = scheduler_jobs(index, set())
+    graph = {j["name"]: set(j.get("after") or []) for j in jobs}
+    out, state = [], {}
+
+    def visit(n, path):
+        state[n] = 1
+        for dep in graph.get(n, ()):
+            if dep not in graph:
+                continue
+            if state.get(dep) == 1:
+                out.append(" → ".join(path[path.index(dep):] + [dep]) if dep in path else f"{n} → {dep}")
+            elif not state.get(dep):
+                visit(dep, path + [dep])
+        state[n] = 2
+    for n in sorted(graph):
+        if not state.get(n):
+            visit(n, [n])
+    return out
 
 
 def roster_mismatch(doc, text: str) -> list[str]:
@@ -334,8 +430,12 @@ def refresh(only: list[str] | None = None) -> dict:
     for c in CACHE.glob("*.json"):
         if c.name != "index.json" and c.stem not in {f.stem for f in files}:
             c.unlink()
+    modules, mod_errors = load_modules()
+    errors.update(mod_errors)
     index = {"v": 1, "generated": datetime.datetime.now().isoformat(timespec="seconds"),
-             "projects": projects, "errors": errors}
+             "projects": projects, "modules": modules, "errors": errors}
+    if (cycles := job_cycles(index)):
+        errors["(jobs)"] = [f"after:/before: 繞了一圈,這幾個 job 會永遠互等:{c}" for c in cycles]
     tmp = CACHE / "index.json.tmp"
     tmp.write_text(json.dumps(index, ensure_ascii=False, indent=1, default=str))
     tmp.replace(CACHE / "index.json")
@@ -350,7 +450,9 @@ def every_minutes(s: str) -> int:
 def scheduler_jobs(index: dict, legacy_names: set[str]) -> tuple[list[dict], list[str], dict[str, str]]:
     """登錄 → scheduler.py 的 job dict。回傳 (jobs, 因為舊名稱還在 schedule.yaml 而沒採用的, 新名稱→舊名稱)。"""
     out, skipped, renames = [], [], {}
-    for name, doc in sorted(index["projects"].items()):
+    before: dict[str, list[str]] = {}
+    docs = sorted(index["projects"].items()) + sorted((index.get("modules") or {}).items())
+    for name, doc in docs:
         d = dirs(doc)
         for job in doc.get("jobs") or []:
             full = f"{name}/{job['name']}"
@@ -387,7 +489,14 @@ def scheduler_jobs(index: dict, legacy_names: set[str]) -> tuple[list[dict], lis
                     j[dst] = job[src]
             if job.get("after"):
                 j["after"] = [a if "/" in a else f"{name}/{a}" for a in job["after"]]
+            for t in job.get("before") or []:
+                before.setdefault(t if "/" in t else f"{name}/{t}", []).append(full)
             out.append(j)
+    # before: [X] = X 的 after 多一個我(模組把自己插進核心流程中間,核心不用知道它)。X 不存在(那個模組沒開)就不管
+    by_name = {j["name"]: j for j in out}
+    for target, deps in before.items():
+        if target in by_name:
+            by_name[target]["after"] = list(dict.fromkeys((by_name[target].get("after") or []) + deps))
     return out, skipped, renames
 
 

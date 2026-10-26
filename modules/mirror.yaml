@@ -1,0 +1,10 @@
+# GitHub repo 的唯讀 --mirror clone(mirror-list.txt),純粹災難復原用,零 LLM。
+v: 1
+name: mirror
+type: module
+description: 每晚更新 mirror-list.txt 裡每個 repo 的 --mirror clone
+jobs:
+- name: mirror-backup
+  legacy_name: agent-hub/mirror-backup
+  at: "04:00"
+  run: bin/mirror-backup.sh
