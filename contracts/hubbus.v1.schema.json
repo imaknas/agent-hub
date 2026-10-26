@@ -9,7 +9,7 @@
     "seq": {"type": "integer", "minimum": 1},
     "id": {"type": "string", "minLength": 1, "description": "寄件端給的唯一 id;重送同一個 id = 什麼都不做"},
     "ts": {"type": "string"},
-    "type": {"enum": ["message", "message.delivered", "message.done", "job.failed", "merge.done", "merge.failed", "session.report"]},
+    "type": {"enum": ["message", "message.delivered", "message.done", "job.failed", "merge.done", "merge.failed", "session.report", "config.applied"]},
     "source": {"type": "string", "description": "寄件地址:專案名稱、平台,或 owner(別名 knas)"},
     "to_project": {"type": ["string", "null"], "description": "message 的收件地址"},
     "ref": {"type": ["string", "null"], "description": "這個事件講的是哪個事件(delivered/done → 信 id;回覆 → 原信)"},
@@ -17,7 +17,22 @@
   },
   "if": {"properties": {"type": {"const": "message"}}},
   "then": {"properties": {"payload": {"$ref": "#/$defs/message"}}},
+  "else": {"if": {"properties": {"type": {"const": "config.applied"}}},
+           "then": {"properties": {"payload": {"$ref": "#/$defs/config_applied"}}}},
   "$defs": {
+    "config_applied": {
+      "type": "object",
+      "description": "bin/hub config apply 套用了一版 config(docs/design/new-user.md 3.7):commit = config 檔最後一次修改的 commit,changes = 各套用者實際做的變更",
+      "required": ["commit", "changes"],
+      "properties": {
+        "v": {"const": 1},
+        "commit": {"type": "string", "minLength": 1},
+        "source": {"type": "string"},
+        "changes": {"type": "array", "items": {"type": "object", "required": ["op", "target"],
+          "properties": {"op": {"enum": ["add", "update", "remove"]}, "target": {"type": "string", "minLength": 1},
+                         "detail": {"type": "string"}}}}
+      }
+    },
     "message": {
       "type": "object",
       "required": ["type", "text"],
