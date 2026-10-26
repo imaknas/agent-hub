@@ -19,6 +19,7 @@ v: 1
 points:
   librarian-state:
     caller: bin/librarian.sh
+    extra_args: ["--strict-mcp-config"]   # 不載入環境裡的 MCP(全域的含正式資料庫;關掉工具也擋不掉,10-27 實驗)
     purpose: 每晚依 memory 變動與 Muninn 轉交,決定要不要、怎麼更新一個專案的 STATE.md(只准改 ./STATE.md)
     model_env: STATE_MODEL
     model_default: haiku
@@ -30,6 +31,7 @@ points:
     on_failure: retry_later # checkpoint 不推進,隔晚重試
   librarian-todo-format:
     caller: bin/librarian.sh
+    extra_args: ["--strict-mcp-config"]   # 不載入環境裡的 MCP(全域的含正式資料庫;關掉工具也擋不掉,10-27 實驗)
     purpose: STATE.md 的 `## 待辦` 格式不對時,只修格式、內容不動
     model_env: STATE_MODEL
     model_default: haiku
@@ -41,6 +43,7 @@ points:
     on_failure: skip        # 修不好就留著,check-state-todo 會再檢查、todo.md 檔尾列出
   librarian-index:
     caller: bin/librarian.sh
+    extra_args: ["--strict-mcp-config"]   # 不載入環境裡的 MCP(全域的含正式資料庫;關掉工具也擋不掉,10-27 實驗)
     purpose: 更新跨專案 index.md 名冊區塊外的註記、找跨專案關聯
     model_env: INDEX_MODEL
     model_default: sonnet
@@ -63,6 +66,7 @@ points:
     on_failure: retry_later # 那個專案這次不整理,2 天後再試
   reflect-week:
     caller: bin/reflect_llm.py
+    extra_args: ["--strict-mcp-config"]   # 不載入環境裡的 MCP(全域的含正式資料庫;關掉工具也擋不掉,10-27 實驗)
     purpose: 每週活動分析(只拿統計 + muninn 的 session 摘要,不拿對話原文)
     model_env: INDEX_MODEL
     model_default: sonnet
@@ -82,6 +86,7 @@ points:
     on_failure: say_so      # job 失敗,狀態頁標紅
   login-check:
     caller: bin/check-claude-login.py
+    extra_args: ["--strict-mcp-config"]   # 不載入環境裡的 MCP(全域的含正式資料庫;關掉工具也擋不掉,10-27 實驗)
     purpose: "每小時確認 claude 的登入還能用(launchd 底下的訂閱登入、headless token 各打一次最小的請求);壞了發 Discord"
     auth: subscription            # 檢查 token 那次呼叫端設 LLM_AUTH=token
     model_default: haiku

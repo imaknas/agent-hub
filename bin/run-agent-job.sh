@@ -91,7 +91,11 @@ status running "started_at=$(date -Iseconds)" "report=" "session_id=" "error=" "
 cd "$CWD" || exit 1
 # 判斷點 agent-job(權限模式等宣告在 contracts/llm-points.yaml)
 # AGENT_JOB_POINT:信箱升級用 mailbox-escalation(固定的 allow);AGENT_JOB_ALLOW:登錄 job 宣告的 allow
-"$HUB/bin/py" "$HUB/bin/llm.py" run "${AGENT_JOB_POINT:-agent-job}" --prompt-file "$PROMPT" >"$raw" 2>"$raw.err"
+# 不載入環境裡的 MCP 伺服器(全域的含正式資料庫;關掉工具也擋不掉,10-27 封閉實驗):--strict-mcp-config。
+# 例外:登錄 job 寫 connectors: true 的(LLM_AUTH=subscription,例 Upwork)要 claude.ai connector,不能擋
+MCP_ARGS=()
+[ "${LLM_AUTH:-}" = "subscription" ] || MCP_ARGS=(-- --strict-mcp-config)
+"$HUB/bin/py" "$HUB/bin/llm.py" run "${AGENT_JOB_POINT:-agent-job}" --prompt-file "$PROMPT" "${MCP_ARGS[@]}" >"$raw" 2>"$raw.err"
 rc=$?
 
 "$HUB/bin/py" - "$raw" "$report" "$NAME" "$CWD" <<'PY' >"$OUT/.parsed" 2>&1
