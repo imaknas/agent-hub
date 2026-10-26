@@ -367,6 +367,7 @@ check → commit → apply,不另外一套。
 3. ~~實例資料怎麼放~~ **(r3)** 10-26 跟 Knas 定了:config as code,config 放 private config repo;data 不進 git、靠備份;
    「什麼時候做了什麼」看匯流排跟紀錄本身(3.0)。
 > **10-26 Knas 決定:6 同意;7 選 (a) 狀態頁多三頁;8 選 (a) 小心地重寫歷史(做法見第 4 步的第 7 步)。**
+> **10-26 Knas 決定(第 9 題):(a) config repo 只留本機 git、不設 remote(靠每晚備份);(b) 搬家時間跟 (c) Muninn 設定照建議:先確認 10-27 03:00 拆開後的第一次夜間流程(librarian + 模組的 job)正常,再挑避開 02:00–04:00、05:45 的時段短暫全停後搬;Muninn config.yaml 的三個路徑在搬家當天寄信請 muninn session 一起換。**
 
 6. **(r3) 1.5 步(config pipeline)排在模組(第 3 步)之前嗎?**(Agent Hub session 同意)
    第 2、3、6 步都在改 config 的**結構**:`hub.json` 加 `hosts`、`modules`,多出 `modules/*/module.yaml`,最後整批搬到
