@@ -27,7 +27,8 @@ SSH 開 mini 上的資料夾。MBP 斷線/沒電時 session 還在跑、手機(R
 ## 先查這裡,不要自己猜
 
 - **使用者的東西放哪**:`hubconf.config_dir()`(hub.json、登錄、models.env…)、`data_dir()`(digest、todo、review-log、reflect…)、
-  `secrets_dir()`;shell 用 `bin/hubpaths.sh`。現在沒有 `<hub>/.hub-home`,三塊都還在 hub 根目錄(舊擺法);新程式一律經過這些,
+  `secrets_dir()`;shell 用 `bin/hubpaths.sh`。10-26 起 `<hub>/.hub-home` 指到 `~/.agent-hub`(config 是本機 git repo、data、secrets);
+  hub 根目錄的 hub.json、todo.md、digest/… 是搬家前的舊副本,不再更新(確認後會 git rm)。新程式一律經過這些,
   不要自己拼路徑(ratchet 會擋)
 - **平台有哪些指令**:`bin/hub --help`(init、doctor、config、modules、onboard、recover、rename、status、jobs、run);
   哪裡壞了先跑 `bin/hub doctor`。新機器:`bin/setup` → `bin/hub init`

@@ -323,6 +323,12 @@ check → commit → apply,不另外一套。
 > - 這台:42 個產出檔逐位元組相同、`hub config plan` 空、`hub doctor` 沒問題。
 > **還沒做**:別的 session 的檔(lease-relay、lease-runner、upgrade-idea 的 `.secrets`/mirror-list;policy.py 的 `.secrets` deny——搬家時
 > render-settings 會重寫 24 個專案的設定)已寄給它們;實際搬家。
+> **10-26 23:40 搬家完成**(`hub move-instance --to ~/.agent-hub --apply`,先在隔離環境演練兩次、抓到兩個 bug 才做):
+> 快照 + 退回腳本(`~/.agent-hub/secrets/agent-hub-move-snapshot-*/rollback.sh`,在搬過的隔離副本上實測過)→ 停排程器 → 搬 →
+> `hub config plan` 發現舊的 `.secrets` 還在、deny 一換就沒人擋 → 沙盒設計 session 改 policy 兩個都擋(05ba0cb)→ apply(3 個 sandbox
+> 專案的設定只多了新路徑)→ 重啟 lease-runner、cap-runner → 開回排程器;寫入都到 ~/.agent-hub、舊檔沒被碰。
+> **還沒做(明天)**:確認 03:00 的夜間流程正常;Muninn 改 config(m10262338-f805);之後才 `git rm` 平台 repo 裡的舊檔、刪 `~/agent-hub/.secrets`
+> (policy 會自動拿掉那條 deny);平台 repo 的 pre-commit 在舊檔刪掉之後要改成只驗平台自己的登錄。
 > 狀態頁的三頁(第 7 節第 7 題選 (a))10-26 完成:`digest.html`(最近 7 天)、`todo.html`、`reflect/`(連到 data 的 reflect/),從 data 目錄讀。
 
 | 步 | 內容 | 動到的檔案 | 估計 |
