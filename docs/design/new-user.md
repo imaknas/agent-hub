@@ -304,6 +304,7 @@ check → commit → apply,不另外一套。
 > **跟 3.2 不同、留在核心的**:hubbus-bridge(除了 Muninn 的轉交,還清 60 天前結案的信——要拆成兩半是 hubbus 那邊的事)、
 > render-settings(enforce 關掉時的退回、合併閘門的 hook 也是它)、各模組的憑證宣告(還在 `projects/agent-hub.yaml` 的
 > `secrets:`)、vendor/muninn 契約的 `consumes:`(contracts-check 只讀專案登錄)。
+> 第 4 步 10-26 完成(平台這邊):`templates/CLAUDE.md` → `templates/agent-instructions.md`,人名寫成 `{{owner}}`/`{{owner_alias}}`/`{{assistant}}`,sync-local-setup 照 hub.json 填(`hubconf.fill_names`;24 個專案的輸出逐位元組相同);`hub.json` 加 `assistant.name`;gen-todo、librarian、consolidate、weekly reflect、trajectory 的標籤跟 prompt 改從設定讀(這台的 prompt 逐字相同)。個人名稱 479 → 407。**交給 Agent Hub session**:hubbus 裡的字串、`agent-jobs/mailbox.md` 搬到 `templates/prompts/`。**還沒做**:knas-tasks.py 的檔名/job 名(改名要跟 Muninn 的契約、STATE.md 裡已經蓋上的「等 Knas:」key 一起考慮,先留著)。
 
 | 步 | 內容 | 動到的檔案 | 估計 |
 |---|---|---|---|

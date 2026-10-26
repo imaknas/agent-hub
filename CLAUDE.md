@@ -74,7 +74,7 @@ SSH 開 mini 上的資料夾。MBP 斷線/沒電時 session 還在跑、手機(R
 
 - `bin/hubbus`——跨專案(跟 Knas)的信,收件人是**專案**(或 `knas` = 送進 Muninn),不是 session;
   只 append 的事件 log(`hub.json bus_dir` = `~/.local/state/agent-hub-bus/bus.db`,每台機器一份、不進版控;每晚的加密備份用 SQLite backup API 另外抓),信箱是它的投影。各專案的 session
-  用 `hubbus send/inbox/done`(寫在 `templates/CLAUDE.md`);信由 SessionStart(`sync-local-setup.sh`、
+  用 `hubbus send/inbox/done`(寫在 `templates/agent-instructions.md`);信由 SessionStart(`sync-local-setup.sh`、
   `worktree-memory.sh`)、UserPromptSubmit/PostToolUse hook 送進 session;`hubbus-bridge`(schedule.yaml,
   每 15 分鐘)負責 Muninn 的轉交進信箱、給 knas 的信跟轉交的 done 送進 Muninn。**沒人收的 request/question
   由平台處理**(`hubbus dispatch`,launchd `local.agent-hub-mailbox-dispatch` 每分鐘;設計
@@ -125,7 +125,7 @@ SSH 開 mini 上的資料夾。MBP 斷線/沒電時 session 還在跑、手機(R
 - `bin/sync-local-setup.sh`——把專案的本機專用設定(`CLAUDE.local.md` 裡
   `agent-hub:begin/end` 區塊、`.agent-memory/AGENT.md`(會 commit+push 這一個檔)、`.claude/settings.local.json` hook、兩者的
   ignore)對齊目前的 `templates/`。每個專案的 SessionStart hook 自動跑,
-  onboard/recover 也呼叫——**改了 `templates/CLAUDE.md` 不用手動去各專案
+  onboard/recover 也呼叫——**改了 `templates/agent-instructions.md` 不用手動去各專案
   補**,下次開 session 就生效。只動不進版控的檔案,ignore 補在
   `.git/info/exclude`,不改 `.gitignore`
 - `bin/memory-nudge.py`——memory 筆記比專案最新 commit 舊時提醒 agent 補寫:git commit/push
@@ -278,7 +278,7 @@ memory 追蹤但不需要在 mini 上執行任何東西的專案(目前大多數
 - `projects/`——**專案登錄**(一個專案一個 `<name>.yaml`;目錄由 `hub.json` 的 `registry_dir` 指定):
   路徑、job、service、隱私標籤、測試指令。驗證跟格式看 `bin/registry.py` 檔頭;`registry.py check` 驗證。
   排程器跑的 = `schedule.yaml`(切換期間的舊項目)+ 登錄的 job(`<專案>/<job>`)
-- `templates/`——骨架檔案(`AGENT.md`、`CLAUDE.md`);hook 設定不在這裡,
+- `templates/`——骨架檔案(`AGENT.md`、`agent-instructions.md`:給每個專案 agent 的說明,人名寫成 `{{owner}}`/`{{owner_alias}}`/`{{assistant}}`,sync-local-setup 照 hub.json 填(`hubconf.fill_names`));hook 設定不在這裡,
   寫在 `bin/merge-hook-settings.py`。`templates/rules/<名稱>.md` 是可選的專案規則,
   專案在 `.agent-memory/RULES` 登記名稱才會放進它的 CLAUDE.local.md。目前所有專案
   都登記了 `engineering`(軟體工程規則),onboard 新專案時也會自動登記
@@ -297,7 +297,7 @@ memory 追蹤但不需要在 mini 上執行任何東西的專案(目前大多數
 - **警報**(`bin/alert.py`,render-services、claude-login、secrets 共用):新問題馬上發、沒解決的每 24 小時再提醒、
   解決時發恢復;**發不出去記在 `.state/alerts-failed.json`,狀態頁標紅**。secrets job 每天先確認 Discord bot token
   還能用(不發訊息)。排程器看門狗刻意用自己的一份,不靠這支
-- 專案這邊的做法(值放哪、程式怎麼讀、不默默降級、開源前撤銷進過歷史的)寫在 `templates/CLAUDE.md`「憑證」段,
+- 專案這邊的做法(值放哪、程式怎麼讀、不默默降級、開源前撤銷進過歷史的)寫在 `templates/agent-instructions.md`「憑證」段,
   每個專案的 CLAUDE.local.md 都有
 
 ## 安全性質(不要繞過)
@@ -312,7 +312,7 @@ memory 追蹤但不需要在 mini 上執行任何東西的專案(目前大多數
 ## 子 session
 
 agent-hub 的 session 開的子 session(start_session)做完、確認過結果之後就封存它(archive_session),
-不要留著閒置。各專案的同一條規則在 `templates/CLAUDE.md`(會放進每個專案的 CLAUDE.local.md)。
+不要留著閒置。各專案的同一條規則在 `templates/agent-instructions.md`(會放進每個專案的 CLAUDE.local.md)。
 
 ## 誰負責 commit/push agent-hub
 

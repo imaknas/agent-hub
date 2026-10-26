@@ -78,6 +78,9 @@
         },
         "cli": {
           "type": "string"
+        },
+        "name": {
+          "type": "string"
         }
       }
     },

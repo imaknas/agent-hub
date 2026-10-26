@@ -27,6 +27,9 @@ REVIEW_LOG="$HUB/review-log.md"
 SAFE_PUSH="$HUB/bin/git-safe-push.sh"
 mkdir -p "$STATE_DIR" "$LOG_DIR"
 MEMORY_COPIES=$("$HUB/bin/py" "$HUB/bin/hubconf.py" path memory_copies) || exit 1
+# prompt 裡對人、對助理的稱呼(hub.json owner.tag、assistant.name)
+OWNER=$("$HUB/bin/py" "$HUB/bin/hubconf.py" get owner.tag 2>/dev/null) || OWNER="owner"
+ASSISTANT=$("$HUB/bin/py" "$HUB/bin/hubconf.py" get assistant.name 2>/dev/null) || ASSISTANT="個人助理"
 TODAY=$(date +%Y-%m-%d)
 LOG="$LOG_DIR/librarian-$TODAY.log"
 
@@ -56,11 +59,11 @@ repair_state_todo() {
   fix_prompt="只修 ./STATE.md 的 \`## 待辦\` 段落格式,其他地方、待辦的內容都不要改,也不要動任何其他檔案。
 
 正確格式(一行一項;沒有待辦就寫 \`- (無)\`;STATE.md 一定要有這個段落):
-  \`- [ ] 〔Knas〕…\`(只有 Knas 本人能做:帳號、密碼、付款、要他拍板的決定、他自己要買/做的事)
+  \`- [ ] 〔${OWNER}〕…\`(只有 ${OWNER} 本人能做:帳號、密碼、付款、要他拍板的決定、他自己要買/做的事)
   \`- [ ] 〔agent〕…\`(agent 可以直接做的)
   \`- [ ] 〔待定〕…\`(還要先做決定才能動的)
 
-如果 STATE.md 別的地方有待辦性質的清單(例如「待決事項」「需要 Knas 拍板」「可由 agent 執行」
+如果 STATE.md 別的地方有待辦性質的清單(例如「待決事項」「需要 ${OWNER} 拍板」「可由 agent 執行」
 「下一步」「未完成」),把那些項目**搬進** \`## 待辦\`(標上負責人)並刪掉原本那段;
 只有整份 STATE.md 真的沒有任何待辦時才寫 \`- (無)\`。排程、已完成的事實不算待辦,留在原處。
 
@@ -91,19 +94,19 @@ digest_file=$(mktemp)
 handoffs_file=$(mktemp)
 trap 'rm -f "$digest_file" "$handoffs_file"' EXIT
 
-# --- Muninn 轉交(handoffs):Knas 告訴個人助理、跟某個專案有關的事實 ---
-# hubbus-bridge 每 15 分鐘把 Muninn 的轉交收進各專案信箱;這裡每晚把還沒結案的直接當成這次
+# --- 助理的轉交(handoffs):owner 告訴個人助理、跟某個專案有關的事實 ---
+# hubbus-bridge 每 15 分鐘把助理的轉交收進各專案信箱;這裡每晚把還沒結案的直接當成這次
 # STATE.md 呼叫的額外輸入(不寫成 memory 流水筆記,避免累積流水帳;改了什麼跟理由留在 review-log.md)。
-# 這個專案的結果可信(checkpoint 會推進)才 `hubbus done`,bridge 再回報 Muninn 結案;不可信就留到隔晚。
-# session 已經處理掉(done)的不會出現在這裡。工作(公司)的內容 Muninn 那端就不會轉交。
+# 這個專案的結果可信(checkpoint 會推進)才 `hubbus done`,bridge 再回報助理結案;不可信就留到隔晚。
+# session 已經處理掉(done)的不會出現在這裡。工作(公司)的內容 助理那端就不會轉交。
 HUBBUS="$HUB/bin/py $HUB/bin/hubbus"
 echo '[]' >"$handoffs_file"
 if $HUBBUS open-handoffs >"$handoffs_file.tmp" 2>>"$LOG" \
     && jq -e 'type == "array"' "$handoffs_file.tmp" >/dev/null 2>&1; then
   mv "$handoffs_file.tmp" "$handoffs_file"
-  log "muninn 轉交:$(jq length "$handoffs_file") 筆待處理"
+  log "助理的轉交:$(jq length "$handoffs_file") 筆待處理"
   for p in $(jq -r '.[].project' "$handoffs_file" | sort -u); do
-    [ -d "$MEMORY_COPIES/$p/.git" ] || log "muninn 轉交:專案 $p 沒有 memory 副本,這次不處理(留在信箱)"
+    [ -d "$MEMORY_COPIES/$p/.git" ] || log "助理的轉交:專案 $p 沒有 memory 副本,這次不處理(留在信箱)"
   done
 else
   rm -f "$handoffs_file.tmp"
@@ -150,7 +153,7 @@ for proj_dir in "$MEMORY_COPIES"/*/; do
     continue
   fi
 
-  memory_section="這次 memory/ 沒有新變動,只有下面 Knas 的轉交要處理。"
+  memory_section="這次 memory/ 沒有新變動,只有下面 ${OWNER} 的轉交要處理。"
   if [ -n "$changed_memory" ]; then
     log "$proj: changed memory files: $(echo "$changed_memory" | tr '\n' ' ')"
 
@@ -172,24 +175,24 @@ $memory_diff"
 
   handoff_note=""
   if [ -n "$handoff_ids" ]; then
-    log "$proj: muninn 轉交 $handoff_nums"
-    handoff_items=$(jq -r --arg p "$proj" '.[] | select(.project == $p and (.effect | IN("done", "dropped", "already_done", "reopened") | not)) |
+    log "$proj: 助理的轉交 $handoff_nums"
+    handoff_items=$(jq -r --arg p "$proj" --arg owner "$OWNER" '.[] | select(.project == $p and (.effect | IN("done", "dropped", "already_done", "reopened") | not)) |
       "- [\(.effect)] 事實:\(.fact)" +
-      (if .quote then "\n  Knas 原話:\(.quote)" else "" end) +
+      (if .quote then "\n  \($owner) 原話:\(.quote)" else "" end) +
       "\n  對應待辦:\(.item // "(沒有指定)")\n  助理的判斷理由:\(.why)\n  (\(.ts[0:16]))"' "$handoffs_file")
     handoff_note="
-Knas 透過他的個人助理(Muninn)告訴我們這些跟這個專案有關的事(比舊的 memory 紀錄新,也比較可信):
+${OWNER} 透過他的個人助理(${ASSISTANT})告訴我們這些跟這個專案有關的事(比舊的 memory 紀錄新,也比較可信):
 $handoff_items
 
 處理方式(這些轉交本身就算實質變化):
-- [resolves]:Knas 已經處理或回答了對應待辦。從 \`## 待辦\` 移除那一條(用意思比對,文字不一定一樣),
+- [resolves]:${OWNER} 已經處理或回答了對應待辦。從 \`## 待辦\` 移除那一條(用意思比對,文字不一定一樣),
   並把事實寫進 STATE.md 合適的段落。
 - [changes]:對應待辦還在,但前提或日期變了。依事實改寫那一條,必要時一併更新相關段落。
 - [relevant]:只供參考,影響到現況才更新 STATE.md。
-- [answers]:Knas 回答了這個專案問過他的問題(對應待辦 = 當初的問題,事實 = 回答)。把決定寫進相關段落;
+- [answers]:${OWNER} 回答了這個專案問過他的問題(對應待辦 = 當初的問題,事實 = 回答)。把決定寫進相關段落;
   有在等這個回答的待辦就依回答移除或改寫。
 - 對應待辦在 STATE.md 找不到時不要硬套到別條,只把事實記進相關段落(有關的話)。
-- 「事實」是助理轉述的,可能比 Knas 原話講得更肯定。有原話以原話為準;寫進 STATE.md 時保留
+- 「事實」是助理轉述的,可能比 ${OWNER} 原話講得更肯定。有原話以原話為準;寫進 STATE.md 時保留
   不確定的語氣(預計、預期、可能、打算),不要寫成已確定。"
   fi
 
@@ -225,11 +228,11 @@ memory/ 的結構:
   STATE.md 還是 onboard 時的佔位內容、而 memory/ 已經有實質內容的話,這本身就算實質變化。
 - STATE.md 裡提到已被搬走的檔案、或已經被新內容回答/推翻的待決事項,要一併修正。
 - STATE.md 一定要有一個 \`## 待辦\` 段落,格式固定,一行一項:
-  \`- [ ] 〔Knas〕…\`(只有 Knas 本人能做:帳號、密碼、付款、要他拍板的決定)
+  \`- [ ] 〔${OWNER}〕…\`(只有 ${OWNER} 本人能做:帳號、密碼、付款、要他拍板的決定)
   \`- [ ] 〔agent〕…\`(agent 可以直接做的)
   \`- [ ] 〔待定〕…\`(還要先做決定才能動的)
-  〔Knas〕行尾的「(等 Knas:task-…)」是 Muninn 任務登錄的 key,**原樣保留,不要改那一行的文字**
-  (Knas 在 Muninn 結案時會照 key 自動移掉;文字一改 key 就對不上)。
+  〔${OWNER}〕行尾的「(等 ${OWNER}:task-…)」是 ${ASSISTANT} 任務登錄的 key,**原樣保留,不要改那一行的文字**
+  (${OWNER} 在 ${ASSISTANT} 結案時會照 key 自動移掉;文字一改 key 就對不上)。
   沒有待辦就寫 \`- (無)\`。只列還沒完成、具體可行動的事;完成、被推翻或過時的直接移除,
   不要留著打勾。待辦只放在這個段落,不要在 STATE.md 別的地方另開「下一步」「未完成」之類的清單。
 - 除了 ./STATE.md,不要建立、修改或刪除任何檔案。"
@@ -337,7 +340,7 @@ memory/ 的結構:
       echo
       echo "**理由**: ${reason:-(agent 未提供理由)}"
       echo
-      [ -n "$handoff_ids" ] && { echo "**Muninn 轉交**: $handoff_nums"; echo; }
+      [ -n "$handoff_ids" ] && { echo "**${ASSISTANT} 轉交**: $handoff_nums"; echo; }
       echo '```diff'
       echo "$state_diff"
       echo '```'
@@ -363,9 +366,9 @@ memory/ 的結構:
   if [ -n "$handoff_ids" ]; then
     # shellcheck disable=SC2086  # ids 是空白分隔的信 id,要拆成多個參數
     if $HUBBUS done $handoff_ids --note "librarian 套用進 STATE.md($TODAY,見 review-log)" >>"$LOG" 2>&1; then
-      log "$proj: muninn 轉交 $handoff_nums 已結案(bridge 會回報 Muninn)"
+      log "$proj: 助理的轉交 $handoff_nums 已結案(bridge 會回報助理)"
     else
-      log "$proj: muninn 轉交結案失敗,隔晚會再處理一次(STATE.md 已經改過,重複處理應該不會再改)"
+      log "$proj: 助理的轉交結案失敗,隔晚會再處理一次(STATE.md 已經改過,重複處理應該不會再改)"
     fi
   fi
 

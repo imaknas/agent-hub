@@ -38,7 +38,7 @@
 #      換機器時 recover-project.sh 會重新產生這份本機檔案。
 #   6. agent-hub 區塊寫進本機的 CLAUDE.local.md(gitignored,Claude Code 會
 #      跟 CLAUDE.md 一起載入)——不動專案共享的 CLAUDE.md。區塊有標記,之後
-#      每次 SessionStart 都會照 templates/CLAUDE.md 重生
+#      每次 SessionStart 都會照 templates/agent-instructions.md 重生
 #   7. 外層 repo 不 commit 任何東西(舊版會 commit .gitignore)
 #   8. mini 上建 bare repo,push agent-memory 分支過去(不動任何外部 remote)
 #   9. mini 上 clone 一份工作副本給 librarian

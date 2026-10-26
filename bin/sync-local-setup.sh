@@ -4,7 +4,7 @@
 #
 #   1. 執行環境的規則檔(`hub-runtime instructions-file`;Claude Code 是 CLAUDE.local.md)裡
 #      <!-- agent-hub:begin/end --> 之間的區塊,整塊用
-#      templates/CLAUDE.md(加上 .agent-memory/RULES 登記的 templates/rules/*.md)重生——改了 template,所有專案下次開 session 就
+#      templates/agent-instructions.md(名字照 hub.json 填,hubconf.fill_names;加上 .agent-memory/RULES 登記的 templates/rules/*.md)重生——改了 template,所有專案下次開 session 就
 #      跟上,不用靠人記得去補。區塊外的內容不動。舊版沒有標記、直接 append
 #      的 pointer 段落會被換成有標記的區塊。
 #   2. hook(由執行環境裝:`hub-event install`;平台管的換新、使用者自己加的留著)
@@ -38,7 +38,7 @@ moved=$(git rev-parse --git-common-dir 2>/dev/null)/agent-hub-migrated-to-mini
 if [ -f "$moved" ]; then
   cat <<MSG
 ⚠️ 這個專案已經搬到 mini($(cut -f1 "$moved"),$(cut -f2 "$moved") 搬的)。這裡是 MBP 上留著當備份的舊副本,
-不要在這裡做事:請告訴使用者關掉這個 session,改用 Claude Desktop 透過 SSH(hub-host)開 mini 上的那個資料夾。
+不要在這裡做事:請告訴使用者關掉這個 session,改用 Claude Desktop 透過 SSH($(plutil -extract hosts.server raw -o - "$AGENT_HUB/hub.json" 2>/dev/null))開 mini 上的那個資料夾。
 MSG
   exit 0
 fi
@@ -51,9 +51,11 @@ INSTR=$("$AGENT_HUB/bin/py" "$AGENT_HUB/bin/hub-runtime" instructions-file "$PWD
 # 專案有在 memory 分支的 .agent-memory/RULES 登記額外規則(一行一個名稱,例如
 # engineering)的話,把 templates/rules/<名稱>.md 接在區塊後面。登記放在 memory
 # 分支上:換機器 recover 也還在;規則內容放 agent-hub:改一次,所有登記的專案都跟上。
-"$AGENT_HUB/bin/py" - "$AGENT_HUB/templates/CLAUDE.md" "$INSTR" .agent-memory/RULES "$AGENT_HUB/templates/rules" <<'PY' && say "$INSTR 已對齊"
+"$AGENT_HUB/bin/py" - "$AGENT_HUB/templates/agent-instructions.md" "$INSTR" .agent-memory/RULES "$AGENT_HUB/templates/rules" <<'PY' && say "$INSTR 已對齊"
 import re, sys
 from pathlib import Path
+sys.path.insert(0, str(Path(sys.argv[1]).resolve().parents[1] / "bin"))
+import hubconf
 
 BEGIN, END = "<!-- agent-hub:begin -->", "<!-- agent-hub:end -->"
 LEGACY_HEADING = "## agent-hub memory 追蹤"
@@ -68,7 +70,7 @@ if rules_file.exists():
             body += "\n\n" + rule.read_text().strip("\n")
         else:
             print(f"sync-local-setup: RULES 登記了 {name},但找不到 {rule}", file=sys.stderr)
-block = f"{BEGIN}\n{body}\n{END}\n"
+block = f"{BEGIN}\n{hubconf.fill_names(body)}\n{END}\n"
 old = path.read_text() if path.exists() else ""
 
 if BEGIN in old and END in old:

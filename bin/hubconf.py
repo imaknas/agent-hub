@@ -170,6 +170,20 @@ def owner_tag() -> str:
     return get("owner.tag", "Owner")
 
 
+def assistant_name() -> str:
+    """個人助理給人看的名字(hub.json assistant.name);沒設定就是通稱。"""
+    return get("assistant.name") or "個人助理"
+
+
+def fill_names(text: str) -> str:
+    """樣板裡的 {{owner}}(待辦標籤、對人的稱呼)、{{owner_alias}}(hubbus send --to 的地址)、{{assistant}} 換成設定的值。
+    templates/ 底下給 agent 看的說明都經過這裡,樣板本身不寫人名。"""
+    aliases = get("owner.aliases") or []
+    return (text.replace("{{owner}}", owner_tag())
+                .replace("{{owner_alias}}", aliases[0] if aliases else owner_address())
+                .replace("{{assistant}}", assistant_name()))
+
+
 _PATHS_LINE = re.compile(r"^\s+(\w+):\s*(.*?)\s*(?:#.*)?$")
 
 

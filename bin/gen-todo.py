@@ -35,14 +35,15 @@ HUB = HOME / "agent-hub"
 MIGRATION = HUB / "openclaw-migration-status.md"
 PROJECTS = HOME / ".memory-copies"
 
-OWNERS = ("Knas", "待定", "agent")
-ITEM = re.compile(r"^- \[ \] 〔(Knas|agent|待定)〕\s*(.+)$")
-GROUP = re.compile(r"^#{3,4}\s*〔(Knas|agent|待定)〕\s*$")
+TAG, ASSISTANT = hubconf.owner_tag(), hubconf.assistant_name()   # 待辦標籤裡 owner 的名字(hub.json owner.tag)
+OWNERS = (TAG, "待定", "agent")
+ITEM = re.compile(rf"^- \[ \] 〔({re.escape(TAG)}|agent|待定)〕\s*(.+)$")
+GROUP = re.compile(rf"^#{{3,4}}\s*〔({re.escape(TAG)}|agent|待定)〕\s*$")
 BARE = re.compile(r"^- \[ \] (?!〔)(.+)$")
 # librarian 的任務登記把〔Knas〕待辦送進 Muninn 之後,行尾會蓋上「(等 Knas:<key>)」。
 # 有 key 的〔Knas〕待辦以 Muninn 為準,todo.md 不再列(只算數量);沒 key 的照列,
 # 當晚登記完就有 key 了。半形/全形括號跟冒號都接受。
-KNAS_KEY = re.compile(r"[(（]等 ?Knas[:：]\s*([^()（）]+?)\s*[)）]\s*$")
+KNAS_KEY = re.compile(rf"[(（]等 ?{re.escape(TAG)}[:：]\s*([^()（）]+?)\s*[)）]\s*$")
 PLACEHOLDER_MAX_BYTES = 200  # onboard 時的佔位 STATE.md,本來就沒有待辦
 
 
@@ -98,8 +99,8 @@ def main() -> None:
     if MIGRATION.exists():
         parse("agent-hub", MIGRATION.read_text(), items, problems)
 
-    in_muninn = [r for r in items["Knas"] if KNAS_KEY.search(r[1])]
-    items["Knas"] = [r for r in items["Knas"] if not KNAS_KEY.search(r[1])]
+    in_assistant = [r for r in items[TAG] if KNAS_KEY.search(r[1])]
+    items[TAG] = [r for r in items[TAG] if not KNAS_KEY.search(r[1])]
     total = sum(len(v) for v in items.values())
     o = [
         "<!-- contract: todo-md v1 -->",  # 版面的契約在 contracts/todo-md.v1.md
@@ -110,11 +111,11 @@ def main() -> None:
         "> agent-hub 自己的待辦在 `openclaw-migration-status.md`)。", "",
     ]
     # muninn 用這三個標題判斷待辦是誰的(對照表在它的 data/config.yaml external_todo_owners);改標題要一起改那邊
-    titles = {"Knas": "只有 Knas 能做", "待定": "待定(需要先做決定)", "agent": "agent 可以做"}
+    titles = {TAG: f"只有 {TAG} 能做", "待定": "待定(需要先做決定)", "agent": "agent 可以做"}
     for owner in OWNERS:
         o += [f"## {titles[owner]}", ""]
-        if owner == "Knas" and in_muninn:
-            o += [f"> 另有 {len(in_muninn)} 項已登記在 Muninn(STATE.md 行尾標「等 Knas:<key>」),以 Muninn 為準,這裡不列。", ""]
+        if owner == TAG and in_assistant:
+            o += [f"> 另有 {len(in_assistant)} 項已登記在 {ASSISTANT}(STATE.md 行尾標「等 {TAG}:<key>」),以 {ASSISTANT} 為準,這裡不列。", ""]
         rows = items[owner]
         if not rows:
             o += ["(無)", ""]

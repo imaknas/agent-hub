@@ -48,9 +48,12 @@ import sys
 import tempfile
 import time
 
+sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
+import hubconf  # noqa: E402
+
 HOME = pathlib.Path.home()
-HUB = pathlib.Path(os.environ.get("AGENT_HUB", HOME / "agent-hub"))
-COPIES = HOME / ".memory-copies"
+HUB = pathlib.Path(os.environ.get("AGENT_HUB") or hubconf.ROOT)
+COPIES = hubconf.p("memory_copies", "~/.memory-copies")
 STATE_DIR = HUB / ".state"
 WORK_STATE = STATE_DIR / "consolidate" / "state.json"
 LOG_DIR = HUB / ".logs"
@@ -255,7 +258,7 @@ memory/ 的結構:
 - 只能建立/修改 ./memory/reference/ 底下的 .md 跟 ./STATE.md。日期檔、AGENT.md、RULES 都不要動;
   memory/reference/ 底下不開子目錄。
 - STATE.md 是精煉現況:只修正被推翻/過時的敘述(包括 `## 待辦` 裡已經完成或被推翻的項目——直接移除),
-  不要把日期檔的內容搬進 STATE.md,也不要改 `## 待辦` 的格式(`- [ ] 〔Knas|agent|待定〕…`,沒有就 `- (無)`)。
+  不要把日期檔的內容搬進 STATE.md,也不要改 `## 待辦` 的格式(`- [ ] 〔{hubconf.owner_tag()}|agent|待定〕…`,沒有就 `- (無)`)。
 - 沒有被推翻的東西不要改寫、不要重新措辭——每一個改動都會出現在 diff 給人抽查。
 """
 

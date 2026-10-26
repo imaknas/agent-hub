@@ -40,7 +40,7 @@ def redact(text: str) -> str:
 
 # 輸出 schema 在 contracts/llm/reflect-week.schema.json(判斷點 reflect-week,bin/llm.py 套用)
 
-PROMPT = """你是 Knas 的每週工作回顧分析師。以下是他這一週在 Claude Code 裡的活動統計,
+PROMPT = """你是 {{owner}} 的每週工作回顧分析師。以下是他這一週在 Claude Code 裡的活動統計,
 {digest_intro}
 
 請寫一份**分析**,不是流水帳:找出模式、解釋原因、指出影響、給出判斷。用繁體中文,直接、
@@ -50,6 +50,7 @@ projects 只列這週有活動的專案。
 
 ## 本週統計
 {stats}{digests}"""
+PROMPT = hubconf.fill_names(PROMPT)  # {{owner}} 換成設定的名字(在 .format() 之前)
 
 DIGEST_INTRO = ("以及本機模型替每個 session 寫的摘要(不是原文;一個長 session 可能有好幾列,每列只涵蓋"
                 "新的那幾輪)。{withheld}")
