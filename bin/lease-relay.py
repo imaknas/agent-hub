@@ -77,7 +77,7 @@ def http(method: str, url: str, token: str, body: dict | None = None, timeout: f
 
 
 def tell_runner(phase: str, **kw) -> None:
-    http("POST", f"{RUNNER}/v1/internal/{LEASE}/relay", secret(hubconf.ROOT / ".secrets" / "runner-token"),
+    http("POST", f"{RUNNER}/v1/internal/{LEASE}/relay", secret(hubconf.secrets_dir() / "runner-token"),
          {"phase": phase, **kw}, timeout=5)
 
 
@@ -226,7 +226,7 @@ def handle_call(mid, args: dict) -> None:
 def show_file(args: dict) -> tuple:
     """平台的「給使用者看」服務(runner 的 /v1/internal/<lease>/show)接成 Claude Code 的工具:轉給 runner、回結果。
     檢查(資料夾裡、類型、大小、不像憑證)全部在 runner(lease_files.py),這裡不判斷。"""
-    code, res = http("POST", f"{RUNNER}/v1/internal/{LEASE}/show", secret(hubconf.ROOT / ".secrets" / "runner-token"),
+    code, res = http("POST", f"{RUNNER}/v1/internal/{LEASE}/show", secret(hubconf.secrets_dir() / "runner-token"),
                      {"path": args.get("path"), "summary": args.get("summary")}, timeout=30)
     if code == 200 and res.get("id"):
         return f"已經給 Knas 看了:{res.get('path')}({res.get('mime')},{res.get('size')} bytes)。", False

@@ -212,7 +212,7 @@ def main(argv: list[str]) -> int:
         fail(f"登錄不合格:{'; '.join(errs)}(GitHub repo 已經建好;修好登錄再叫一次會接著做)")
     reg.write_text(head + yaml.safe_dump(doc, allow_unicode=True, sort_keys=False, width=200))
 
-    mirror = HUB / "mirror-list.txt"
+    mirror = hubconf.config_file("mirror-list.txt")   # config(實例目錄;沒搬家時就是 hub 裡那份)
     lines = mirror.read_text().splitlines() if mirror.exists() else []
     if url not in lines:
         mirror.write_text("\n".join(lines + [url]) + "\n")

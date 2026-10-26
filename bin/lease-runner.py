@@ -1,7 +1,7 @@
 #!/bin/sh -c exec${IFS}"${0%/*}/py"${IFS}"$0"${IFS}"$@"
 """通道租借的 runner:Muninn 把一個對話串「借」給某個專案的 Claude Code session,這裡負責開、接續、轉送、收回。
 
-只聽 127.0.0.1(預設 18797),每個請求要 `Authorization: Bearer <~/agent-hub/.secrets/runner-token>`。
+只聽 127.0.0.1(預設 18797),每個請求要 `Authorization: Bearer <平台憑證目錄(hubconf.secrets_dir())的 runner-token>`。
 契約 v2(contracts/lease-runner.v2.schema.json;docs/design/lease-contract-neutral.md):跟執行環境無關——動作用 kind、
 配額用 quota.windows、錯誤碼 agent_login。v1 在 10-25 Muninn 換好之後刪了(schema 在 contracts/retired/);改版前存下的事件照原樣送。
 Claude Code 的輸出怎麼翻成中立事件在 runtime 的 parse_stream(rt())。
@@ -69,7 +69,7 @@ def rt():
 HUB = hubconf.ROOT
 HOST, PORT = "127.0.0.1", int(os.environ.get("LEASE_RUNNER_PORT", "18797"))
 DIR = pathlib.Path(os.environ.get("LEASE_RUNNER_DIR") or hubconf.STATE / "lease-runner")  # 測試用另一個目錄
-TOKEN_FILE = HUB / ".secrets" / "runner-token"
+TOKEN_FILE = hubconf.secrets_dir() / "runner-token"
 PY = sys.executable
 GLOBAL_CAP = 3
 PROC_IDLE_S = int(os.environ.get("LEASE_PROC_IDLE_S", 600))     # 程序閒置多久就停
