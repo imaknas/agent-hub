@@ -11,7 +11,7 @@ policy(name, doc, index) → {
   write:              平台預設之外還准寫的(自己的 runtime、匯流排目錄、工具 cache、登錄的 allow_write;字串,~ 開頭)
   other_projects:     別的專案的 workspace/runtime(讀寫都不准;Path)
   deny_write:         平台的地方(hub、bare repo、memory 副本、LaunchAgents;Path)
-  deny_read:          memory 副本的原始筆記(glob)、平台 secrets(Path)
+  deny_read:          memory 副本的原始筆記(glob)、平台 secrets(Path;搬家期間新舊兩個位置都擋)
   credentials:        使用者層級的憑證目錄(Path);credential_files:憑證檔(Path)——位置在 hub.json 的 credentials
   network:            准連的網域(平台預設 + 登錄的 network)
   platform_commands:  跨界的唯一通道(信箱 CLI、合併閘門;Path)
@@ -50,6 +50,14 @@ def project_paths(index: dict) -> dict[str, list[pathlib.Path]]:
     return out
 
 
+def secret_dirs() -> list[pathlib.Path]:
+    """平台憑證所在的資料夾,全部擋:現在的(hubconf.secrets_dir()),加上搬家前的舊位置還在、而且不是同一個的話也擋——
+    搬家只複製、舊的確認沒問題才刪(2026-10-26 實例目錄搬家),這段期間兩邊都有真的憑證。"""
+    cur = hubconf.secrets_dir()
+    old = hubconf.legacy_secrets_dir()
+    return [cur] + ([old] if old.exists() and old.resolve() != cur.resolve() else [])
+
+
 def policy(name: str, doc: dict, index: dict) -> dict:
     import registry
     d = registry.dirs(doc)
@@ -61,7 +69,7 @@ def policy(name: str, doc: dict, index: dict) -> dict:
                  + list(doc.get("allow_write") or []),
         "other_projects": others,
         "deny_write": [hubconf.ROOT, hubconf.p("git_origin"), copies, HOME / "Library" / "LaunchAgents"],
-        "deny_read": [copies / "*" / "memory", hubconf.secrets_dir()],
+        "deny_read": [copies / "*" / "memory", *secret_dirs()],
         "credentials": [hubconf.path(x) for x in hubconf.get("credentials.dirs", [])],
         "credential_files": [hubconf.path(x) for x in hubconf.get("credentials.files", [])],
         "network": DOMAINS + list(doc.get("network") or []),

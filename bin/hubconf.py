@@ -103,7 +103,13 @@ def p(key: str, default: str | None = None) -> pathlib.Path | None:
 
 def secrets_dir() -> pathlib.Path:
     """平台的憑證目錄(不進版控、每晚加密備份)。程式都從這裡拿,不自己拼路徑。"""
-    return _part("AGENT_HUB_SECRETS", "secrets", ROOT / ".secrets")
+    return _part("AGENT_HUB_SECRETS", "secrets", legacy_secrets_dir())
+
+
+def legacy_secrets_dir() -> pathlib.Path:
+    """搬家前的憑證位置(<hub>/.secrets)。搬家只複製、確認沒問題才刪,這段期間它還有真的憑證——
+    sandbox 的讀取封鎖要連它一起擋(policy.secret_dirs())。"""
+    return ROOT / ".secrets"
 
 
 def host(role: str) -> str:
