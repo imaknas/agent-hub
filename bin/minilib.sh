@@ -4,11 +4,17 @@
 # mini 解析不到自己的 tailnet 名稱(ssh hub-host 在 mini 上會失敗),所以「在 mini 上
 # 做某件事」在 mini 本機就直接執行,在別台(MBP)才走 ssh。
 #
-# 判斷「這台就是 mini」:~/git-origin(memory 的 bare repo 都在這裡)存在。
+# 判斷「這台就是 mini」:hub.json 的 hosts.server 沒寫(一台機器全包),或 git_origin(memory 的 bare repo 都在這裡)
+# 在這台。server 的 ssh 名稱從 hub.json 讀(hubconf.host("server"));用 plutil 讀 JSON,不靠平台的 Python——
+# 遙控用的那台(MBP)不一定有。
 
-MINI_HOST="hub-host"
+_MINILIB_HUB="${AGENT_HUB_ROOT:-$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)}"
+hub_json_get() { plutil -extract "$1" raw -o - "$_MINILIB_HUB/hub.json" 2>/dev/null; }
+MINI_HOST="$(hub_json_get hosts.server)"
+[ -n "$MINI_HOST" ] || MINI_HOST="$(hub_json_get memory_host)"
+_GIT_ORIGIN="$(hub_json_get git_origin)"; _GIT_ORIGIN="${_GIT_ORIGIN:-~/git-origin}"; _GIT_ORIGIN="${_GIT_ORIGIN/#\~/$HOME}"
 
-on_mini() { [ -d "$HOME/git-origin" ]; }
+on_mini() { [ -z "$MINI_HOST" ] || [ -d "$_GIT_ORIGIN" ]; }
 
 # mini_sh '<指令>':在 mini 上執行(字串裡的 ~、$HOME 由 mini 那邊展開)
 mini_sh() {
@@ -22,5 +28,5 @@ mini_bash_stdin() {
 
 # mini_memory_url <name>:專案 .agent-memory 的 mini remote 要設成什麼
 mini_memory_url() {
-  if on_mini; then echo "$HOME/git-origin/$1-memory.git"; else echo "$MINI_HOST:~/git-origin/$1-memory.git"; fi
+  if on_mini; then echo "$_GIT_ORIGIN/$1-memory.git"; else echo "$MINI_HOST:~/git-origin/$1-memory.git"; fi
 }

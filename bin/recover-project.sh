@@ -18,8 +18,9 @@
 # 用法:recover-project.sh <name> [目標路徑,預設用 manifest 記錄的 local_path]
 set -euo pipefail
 
-MINI_HOST="hub-host"
-AGENT_HUB="$HOME/agent-hub"
+AGENT_HUB="${AGENT_HUB_ROOT:-$(cd "$(dirname "$0")/.." && pwd)}"
+# 跑 hub 的那台(hub.json hosts.server;用 plutil 讀,這支也可能在沒有平台 Python 的機器上跑)
+MINI_HOST="$(plutil -extract hosts.server raw -o - "$AGENT_HUB/hub.json" 2>/dev/null || plutil -extract memory_host raw -o - "$AGENT_HUB/hub.json" 2>/dev/null)"
 TEMPLATES="$AGENT_HUB/templates"
 REGISTRY="$AGENT_HUB/projects"
 

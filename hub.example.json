@@ -25,8 +25,6 @@
     "discord_token_file": ".secrets/discord-token",
     "discord_channel_file": ".secrets/discord-alert-channel"
   },
-  "memory_host": "",
-  "_memory_host_comment": "memory bare repo 在另一台機器時填它的 ssh host 名稱;一台機器全包就留空",
   "bus_dir": "~/.local/state/agent-hub-bus",
   "_bus_dir_comment": "事件匯流排(bus.db、hubbus.log)。刻意放在 hub 目錄外:沙箱裡的專案 deny 寫 ~/agent-hub/**,而 deny 會蓋過 sandbox 的 allowWrite(2026-10-22 pilot 實測)",
   "backup": {
@@ -135,7 +133,8 @@
     ]
   },
   "hosts": {
-    "_comment": "只有「在一台機器跑、從另一台遙控」時才需要(讀舊對話紀錄的路徑換算);一台機器全包就留空",
+    "_comment": "server:跑 hub 的那台機器的 ssh 名稱——只有「在一台機器跑、從另一台遙控」時才需要;一台機器全包就留空。mbp_home/mini_home:讀舊對話紀錄的路徑換算,通常不用填",
+    "server": "",
     "mbp_home": "",
     "mini_home": ""
   }

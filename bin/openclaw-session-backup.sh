@@ -25,7 +25,7 @@
 # OpenClaw 真的要整個停用之前)手動執行即可,不用重新設計。
 set -uo pipefail
 
-SRC_HOST="hub-host"
+SRC_HOST="$(plutil -extract hosts.server raw -o - "$(cd "$(dirname "$0")/.." && pwd)/hub.json" 2>/dev/null || plutil -extract memory_host raw -o - "$(cd "$(dirname "$0")/.." && pwd)/hub.json" 2>/dev/null)"   # 跑 hub 的那台(hub.json hosts.server)
 SRC_PATH="~/.openclaw/agents/"
 DEST="$HOME/openclaw-session-backups/agents/"
 LOG_DIR="$HOME/agent-hub/.logs"

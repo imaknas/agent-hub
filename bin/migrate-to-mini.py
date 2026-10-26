@@ -39,7 +39,7 @@ import hubconf  # noqa: E402
 import hublib  # noqa: E402
 import runtime_claude  # noqa: E402  # 這支搬的是 Claude Code 的 auto memory,本來就是 Claude 專用
 
-MINI = "hub-host"
+MINI = hubconf.host("server")  # 跑 hub 的那台(hub.json hosts.server)
 MINI_PATH_PREFIX = "export PATH=/opt/homebrew/bin:/opt/homebrew/opt/rustup/bin:$HOME/.local/bin:$HOME/.cargo/bin:$PATH; "
 # 依賴、build 產物、cache:不複製,mini 上需要時重建
 REBUILDABLE = {
@@ -388,7 +388,7 @@ def main() -> None:
     pathlib.Path(common, "agent-hub-migrated-to-mini").write_text(
         f"mini:{target}\t{datetime.date.today().isoformat()}\n")
 
-    print(f"\n完成:{a.name} 在 mini 的 {target}。在 Claude Desktop 用 SSH(hub-host)開這個資料夾。")
+    print(f"\n完成:{a.name} 在 mini 的 {target}。在 Claude Desktop 用 SSH({MINI})開這個資料夾。")
     print(f"MBP 上的 {path} 沒動,當備份(.git 裡留了標記:在那裡開 session 會被提醒改去 mini)。")
     for p in problems:
         print(f"  ! {p}")

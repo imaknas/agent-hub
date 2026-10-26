@@ -55,6 +55,15 @@ def p(key: str, default: str | None = None) -> pathlib.Path | None:
     return path(get(key, default))
 
 
+def host(role: str) -> str:
+    """機器角色 → ssh 名稱;"" = 就是這台(一台機器全包)。目前只有一個角色 server:跑 hub 的那台(memory bare repo、
+    排程器、workspace 都在它上面)。另一台(遙控用的筆電)上的腳本要 ssh 過去,在 server 本機的就直接做。
+    hosts.server 沒寫時沿用舊的 memory_host。"""
+    if role != "server":
+        raise KeyError(role)
+    return get("hosts.server") or get("memory_host") or ""
+
+
 def nvm_bin() -> pathlib.Path | None:
     """nvm 預設版本(~/.nvm/alias/default,例:24、lts/*、node、v24.19.0)對到的已安裝版本裡最新的 bin/。
 
@@ -256,11 +265,11 @@ def hub_project() -> str:
 
 def main(argv: list[str]) -> int:
     if argv == ["roster"]:
-        host = get("memory_host")
+        server = host("server")
         for name, paths in roster().items():
             bare = paths.get("memory_bare") or f"~/git-origin/{name}-memory.git"
             print("\t".join([name, str(path(paths.get("workspace")) or ""), paths.get("origin") or "(native)",
-                             f"{host}:{bare}" if host else bare]))
+                             f"{server}:{bare}" if server else bare]))
         return 0
     if len(argv) == 2 and argv[0] == "get":
         v = get(argv[1])
@@ -268,6 +277,9 @@ def main(argv: list[str]) -> int:
             print(f"hubconf.py get:{argv[1]} 沒有設定或不是單一值", file=sys.stderr)
             return 1
         print(v)
+        return 0
+    if len(argv) == 2 and argv[0] == "host":  # 印 ssh 名稱;一台機器全包時印空行
+        print(host(argv[1]))
         return 0
     if len(argv) == 2 and argv[0] == "path":  # shell 腳本拿展開過的路徑(例:memory_copies),不要自己寫死
         v = p(argv[1])
@@ -280,7 +292,7 @@ def main(argv: list[str]) -> int:
         for name in ideas():
             print(name)
         return 0
-    print("用法:hubconf.py roster | ideas | get <key> | path <key>", file=sys.stderr)
+    print("用法:hubconf.py roster | ideas | get <key> | path <key> | host server", file=sys.stderr)
     return 2
 
 

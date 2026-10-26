@@ -17,7 +17,8 @@
 set -uo pipefail
 
 SRC="$HOME/.claude-personal/projects/"
-DEST_HOST="hub-host"
+DEST_HOST="$(plutil -extract hosts.server raw -o - "$(cd "$(dirname "$0")/.." && pwd)/hub.json" 2>/dev/null || plutil -extract memory_host raw -o - "$(cd "$(dirname "$0")/.." && pwd)/hub.json" 2>/dev/null)"   # 跑 hub 的那台(hub.json hosts.server)
+[ -n "$DEST_HOST" ] || { echo "transcript-backup:hub.json 沒有 hosts.server(一台機器全包就不需要這支)" >&2; exit 0; }
 DEST_PATH="transcript-backups/claude-personal-projects/"
 LOG_DIR="$HOME/agent-hub/.logs"
 mkdir -p "$LOG_DIR"

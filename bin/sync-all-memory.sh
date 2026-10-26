@@ -14,7 +14,8 @@
 # sync-local-setup.sh 的 AGENT.md commit)補 push。
 set -uo pipefail
 
-HUB="$HOME/agent-hub"
+HUB="${AGENT_HUB_ROOT:-$(cd "$(dirname "$0")/.." && pwd)}"
+SERVER="$(plutil -extract hosts.server raw -o - "$HUB/hub.json" 2>/dev/null || plutil -extract memory_host raw -o - "$HUB/hub.json" 2>/dev/null)"   # 跑 hub 的那台(hub.json hosts.server);空 = 就是這台
 LOG_DIR="$HUB/.logs"
 mkdir -p "$LOG_DIR"
 LOG="$LOG_DIR/sync-all-memory-$(date +%Y-%m-%d).log"
@@ -31,7 +32,7 @@ log() { echo "[$(date '+%H:%M:%S')] $*" >>"$LOG"; }
 # 就只在本機 commit、不 push,整輪只記一行——不然每個專案各等一次 SSH 逾時,
 # 一整天累積上百行失敗紀錄。恢復連線後的那一輪會把沒推出去的 commit 補 push。
 # 在 mini 上(~/git-origin 在本機)memory remote 是本機路徑,不用檢查。
-if [ -d "$HOME/git-origin" ] || ssh -o ConnectTimeout=10 -o BatchMode=yes hub-host true 2>/dev/null; then
+if [ -z "$SERVER" ] || [ -d "$HOME/git-origin" ] || ssh -o ConnectTimeout=10 -o BatchMode=yes "$SERVER" true 2>/dev/null; then
   OFFLINE=""
 else
   OFFLINE=1

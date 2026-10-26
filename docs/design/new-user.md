@@ -296,6 +296,7 @@ check → commit → apply,不另外一套。
 > 第 1 步 10-26 完成:`tests/test_personal_boundary.py` + `tests/fixtures/personal-baseline.json`(個人名稱 76 個檔 499 處、`.secrets` 字面值 7 個檔 11 處)。
 > 跟 3.5 不同:不分程式/註解,每個檔一個總數只准變少(分類要靠猜,總數 ratchet 一樣擋得住變多)。
 > 第 1.5 步 10-26 完成:`bin/config-check`(+ `contracts/hub.v1.schema.json`)、`bin/appliers.py` + `applier_scheduler.py`、render-services / render-project-settings 包成套用者(重構前後 42 個產出檔逐位元組相同)、`tests/test_appliers.py`、`bin/hub config check/plan/apply`、`config.applied`(Agent Hub session 255d204)、狀態頁顯示生效的 config commit、githooks pre-commit/post-commit 涵蓋 config。**還沒做**:sync-local-setup 的套用者(session 開始時跑的那支,AGENT.md 對齊要拆成 EXTERNAL 的套用者)——它本來就在每個 session 開始時對齊,沒有 plan 只是看不到預覽,留到第 4 步改樣板時一起做。
+> 第 2 步 10-26 完成:只用一個角色 `hosts.server`(跑 hub 的那台;空 = 一台機器全包;沒寫沿用 `memory_host`),`hubconf.host("server")` / `hubconf.py host server`,shell 用 `plutil` 讀(遙控那台不一定有平台的 Python)。7 處 `hub-host` 換掉。狀態頁、信箱 dispatch、memory 同步搬進 `projects/agent-hub.yaml` 的 `services:`(用 `hub config plan` 先看、再 apply)。`launchd/` 只剩排程器、看門狗(第 5 步由 `hub init` 裝)跟遙控那台的兩份。個人名稱 499 → 479。
 
 | 步 | 內容 | 動到的檔案 | 估計 |
 |---|---|---|---|

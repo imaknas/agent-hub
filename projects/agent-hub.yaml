@@ -150,6 +150,26 @@ consumes:
 - {contract: muninn-messages, v: 1, copy: contracts/vendor/muninn/messages.v1.schema.json, from: muninn}
 - {contract: muninn-permission-requests, v: 2, copy: contracts/vendor/muninn/permission-requests.v2.schema.json, from: muninn}
 services:
+# 平台自己的三個常駐/定時程式:以前是 launchd/ 底下寫死 /Users/<you> 的 plist,10-26 起跟專案的服務一樣由 render-services 產生
+# (路徑從 hubconf)。排程器跟看門狗刻意不在這裡:render-services 是排程器跑的 job,而排程器壞了正是看門狗要報的事
+# (那兩份由 bin/hub init 裝,docs/design/new-user.md 3.3)。
+- name: mailbox-dispatch          # 沒人收的 request/question 由平台處理(hubbus dispatch,每分鐘;docs/design/mailbox-routing.md)
+  label: local.agent-hub-mailbox-dispatch
+  cwd: hub
+  run: bin/py bin/hubbus dispatch
+  interval_s: 60
+  env: {PATH: "$PLATFORM_PATH:/usr/sbin:/sbin"}   # dispatch 會開 headless agent(claude、git);sbin 照舊 plist 留著
+- name: status-page               # 排程狀態頁(gen-status-page.py 產生的 .state/status,tailscale serve 對 tailnet 開)
+  label: local.status-page
+  cwd: hub
+  run: bin/py -m http.server 18790 --bind 127.0.0.1 --directory .state/status
+  keepalive: true
+  log: .logs/status-page.log
+- name: sync-all-memory           # 每小時對所有專案的 .agent-memory 補 commit + push(SessionEnd hook 的安全網)
+  label: local.sync-all-memory-mini
+  cwd: hub
+  run: bin/sync-all-memory.sh
+  interval_s: 3600
 - name: lease-runner             # 通道租借(bin/lease-runner.py):127.0.0.1:18797,Bearer token 在 .secrets/runner-token
   label: local.agent-hub.lease-runner
   cwd: hub
