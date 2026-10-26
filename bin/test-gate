@@ -35,6 +35,9 @@ i=0
 for py in "${PYTHONS[@]}"; do
   # 從 git hook 叫的時候環境裡有 GIT_DIR、GIT_INDEX_FILE…:不清掉,測試自己開的暫存 repo 會操作到這個 repo
   ( for v in $(env | sed -n 's/^\(GIT_[A-Z_]*\)=.*/\1/p'); do unset "$v"; done
+    # 匯出的副本在 agent-hub 的 .state/ 底下:不擋的話,測試在副本裡叫 git 會一路往上找到 agent-hub 本身,而 .state 被
+    # ignore → `git ls-files` 拿到空清單,靠它掃檔的測試什麼都沒查就通過(10-26 test_personal_boundary 因此漏掉)
+    export GIT_CEILING_DIRECTORIES="$work"
     cd "$work/tree" && HOME="$work/home" AGENT_HUB_ROOT="$work/tree" AGENT_HUB_PYTHON="$PLATFORM_PY" PYTHONDONTWRITEBYTECODE=1 \
       "$py" -m unittest discover -s tests >"$work/out$i" 2>&1 ) &
   i=$((i + 1))
