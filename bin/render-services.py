@@ -27,6 +27,7 @@ service 欄位(registry.py 驗證):
   問題發 Discord(同一組只發一次,恢復時再發一次),exit 1(排程器記 job.failed,狀態頁紅)。
 
 用法:render-services.py [--dry-run] [--only <label>]
+也是套用者(appliers.py):plan()/apply(),給 `bin/hub config plan/apply` 用。
 """
 from __future__ import annotations
 
@@ -121,11 +122,13 @@ def launchctl(*args: str) -> subprocess.CompletedProcess:
     return subprocess.run(["/bin/launchctl", *args], capture_output=True, text=True)
 
 
-def main() -> int:
-    dry = "--dry-run" in sys.argv
-    only = sys.argv[sys.argv.index("--only") + 1] if "--only" in sys.argv else None
-    index = registry.refresh()
-    uid = os.getuid()
+# ---------- 套用者(appliers.py):plan 只算、不動 launchd;apply 寫 plist + 重載;健康檢查跟警報留在 main ----------
+
+EXTERNAL = False
+
+
+def _desired(index: dict) -> tuple[dict[str, tuple[str, dict]], list[str], set[str], set[str]]:
+    """(label → (專案, plist), 問題, 指令解析不到所以不動的, keepalive 的)。"""
     want: dict[str, tuple[str, dict]] = {}
     problems: list[str] = []
     keep: set[str] = set()       # 指令解析不到:現在的 plist 不動
@@ -140,42 +143,90 @@ def main() -> int:
                 keep.add(label)
             if svc.get("keepalive"):
                 keepalive.add(label)
+    return want, problems, keep, keepalive
+
+
+def _mine() -> set[str]:
     try:
-        mine = set(json.loads(RENDERED.read_text()))
+        return set(json.loads(RENDERED.read_text()))
     except (OSError, ValueError):
-        mine = set()
-    changed = 0
+        return set()
+
+
+def _changes(want: dict, keep: set[str], only: str | None = None) -> list[tuple]:
+    """(Change, plist 現在的內容, 要寫的 plist);remove 的後兩個是 None。"""
+    from appliers import Change
+    out = []
     for label, (proj, plist) in sorted(want.items()):
-        if only and label != only:
-            continue
-        if label in keep:
+        if (only and label != only) or label in keep:
             continue
         path = AGENTS / f"{label}.plist"
         cur = plistlib.loads(path.read_bytes()) if path.exists() else None
         if cur == plist:
             continue
-        changed += 1
-        print(f"{'(dry-run) ' if dry else ''}{label}({proj}):{'新增' if cur is None else '更新'}")
-        if cur is not None:
-            for k in sorted(set(cur) | set(plist)):
-                if cur.get(k) != plist.get(k):
-                    print(f"    {k}: {cur.get(k)!r} → {plist.get(k)!r}")
-        if dry:
-            continue
+        keys = [] if cur is None else sorted(k for k in set(cur) | set(plist) if cur.get(k) != plist.get(k))
+        out.append((Change("add" if cur is None else "update", f"service:{label}",
+                           proj + (f":改了 {'、'.join(keys)}" if keys else "")), cur, plist))
+    for label in sorted(_mine() - set(want)):
+        if not only or label == only:
+            out.append((Change("remove", f"service:{label}", "登錄裡已經沒有"), None, None))
+    return out
+
+
+def _apply_one(uid: int, ch, plist: dict | None, problems: list[str]) -> None:
+    label = ch.target.removeprefix("service:")
+    if ch.op == "remove":
         launchctl("bootout", f"gui/{uid}/{label}")
-        path.write_bytes(plistlib.dumps(plist))
-        r = bootstrap(uid, label, path)
-        if r.returncode != 0:
-            print(f"    ⚠️ bootstrap 失敗:{r.stderr.strip()}")
-            problems.append(f"{label}({proj}):bootstrap 失敗:{r.stderr.strip()[:200]}")
-    for label in sorted(mine - set(want)):
-        if only and label != only:
-            continue
-        print(f"{'(dry-run) ' if dry else ''}{label}:登錄裡已經沒有,卸載")
+        (AGENTS / f"{label}.plist").unlink(missing_ok=True)
+        return
+    launchctl("bootout", f"gui/{uid}/{label}")
+    path = AGENTS / f"{label}.plist"
+    path.write_bytes(plistlib.dumps(plist))
+    r = bootstrap(uid, label, path)
+    if r.returncode != 0:
+        print(f"    ⚠️ bootstrap 失敗:{r.stderr.strip()}")
+        problems.append(f"{label}({ch.detail.split(':')[0]}):bootstrap 失敗:{r.stderr.strip()[:200]}")
+
+
+def plan(index: dict | None = None) -> list:
+    want, _, keep, _ = _desired(index or registry.refresh())
+    return [c for c, _, _ in _changes(want, keep)]
+
+
+def apply(index: dict | None = None) -> list:
+    want, problems, keep, _ = _desired(index or registry.refresh())
+    uid = os.getuid()
+    todo = _changes(want, keep)
+    for ch, _, plist in todo:
+        _apply_one(uid, ch, plist, problems)
+    RENDERED.parent.mkdir(parents=True, exist_ok=True)
+    RENDERED.write_text(json.dumps(sorted(want)))
+    return [c for c, _, _ in todo]
+
+
+def main() -> int:
+    dry = "--dry-run" in sys.argv
+    only = sys.argv[sys.argv.index("--only") + 1] if "--only" in sys.argv else None
+    index = registry.refresh()
+    uid = os.getuid()
+    want, problems, keep, keepalive = _desired(index)
+    todo = _changes(want, keep, only)
+    changed = 0
+    for ch, cur, plist in todo:
+        label = ch.target.removeprefix("service:")
+        if ch.op == "remove":
+            print(f"{'(dry-run) ' if dry else ''}{label}:登錄裡已經沒有,卸載")
+        else:
+            changed += 1
+            print(f"{'(dry-run) ' if dry else ''}{label}({want[label][0]}):{'新增' if cur is None else '更新'}")
+            if cur is not None:
+                for k in sorted(set(cur) | set(plist)):
+                    if cur.get(k) != plist.get(k):
+                        print(f"    {k}: {cur.get(k)!r} → {plist.get(k)!r}")
         if not dry:
-            launchctl("bootout", f"gui/{uid}/{label}")
-            (AGENTS / f"{label}.plist").unlink(missing_ok=True)
+            _apply_one(uid, ch, plist, problems)
     if not dry and not only:
+        RENDERED.parent.mkdir(parents=True, exist_ok=True)
         RENDERED.write_text(json.dumps(sorted(want)))
     if not changed:
         print("services:都跟登錄一致")

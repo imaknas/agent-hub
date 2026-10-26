@@ -1,12 +1,20 @@
 #!/usr/bin/env bash
-# 抓出跳過閘門的 commit(git commit --no-verify):改到程式碼、但 tree 不是 bin/test-gate 剛驗過的那個,
-# 就記一行到 .state/test-gate-bypassed.log 並提醒。不擋(commit 已經成立),只讓它看得見。
+# 抓出跳過閘門的 commit(git commit --no-verify):改到程式碼(或 config)、但 tree 不是 bin/test-gate
+# (或 bin/config-check)剛驗過的那個,就記一行到 .state/test-gate-bypassed.log 並提醒。不擋(commit 已經成立),只讓它看得見。
 root="$(git rev-parse --show-toplevel)" || exit 0
+tree="$(git rev-parse 'HEAD^{tree}')"
+files="$(git diff-tree --no-commit-id --name-only -r HEAD)"
 CODE='^(bin|tests|contracts|templates|githooks|launchd|capabilities|agent-jobs)/|^hub\.json$'
-git diff-tree --no-commit-id --name-only -r HEAD | grep -Eq "$CODE" || exit 0
-passed="$(cat "$(git rev-parse --git-path test-gate-passed)" 2>/dev/null)"
-[ "$passed" = "$(git rev-parse 'HEAD^{tree}')" ] && exit 0
+CONFIG='^(hub\.json|models\.env|mirror-list\.txt|services\.tsv|schedule\.yaml|projects/)'
+bypassed=()
+if echo "$files" | grep -Eq "$CODE" && [ "$(cat "$(git rev-parse --git-path test-gate-passed)" 2>/dev/null)" != "$tree" ]; then
+  bypassed+=("bin/test-gate --all")
+fi
+if echo "$files" | grep -Eq "$CONFIG" && [ "$(cat "$(git rev-parse --git-path config-check-passed)" 2>/dev/null)" != "$tree" ]; then
+  bypassed+=("bin/config-check")
+fi
+[ ${#bypassed[@]} -eq 0 ] && exit 0
 mkdir -p "$root/.state"
-echo "$(date '+%Y-%m-%dT%H:%M:%S') $(git rev-parse --short HEAD) $(git log -1 --format=%s)" >>"$root/.state/test-gate-bypassed.log"
-echo "post-commit:這個 commit 改了程式碼卻沒有通過 bin/test-gate(記在 .state/test-gate-bypassed.log)。請跑 bin/test-gate --all。" >&2
+echo "$(date '+%Y-%m-%dT%H:%M:%S') $(git rev-parse --short HEAD) $(git log -1 --format=%s)(沒跑:${bypassed[*]})" >>"$root/.state/test-gate-bypassed.log"
+echo "post-commit:這個 commit 沒有通過閘門(記在 .state/test-gate-bypassed.log)。請跑:${bypassed[*]}。" >&2
 exit 0

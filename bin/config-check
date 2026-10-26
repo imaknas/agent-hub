@@ -1,0 +1,144 @@
+#!/bin/sh -c exec${IFS}"${0%/*}/py"${IFS}"$0"${IFS}"$@"
+"""config pipeline 的 check(docs/design/new-user.md 3.7):一次驗證所有 config 檔。
+
+  config-check            驗 working tree 的 config
+  config-check --staged   驗**暫存區**(要 commit 的內容;githooks/pre-commit 呼叫)。暫存區沒有改到 config 檔就直接過。
+                          共用的 working tree 裡可能有別人改到一半的檔案,所以照 test-gate 的做法把暫存區匯出到暫存目錄,
+                          用 AGENT_HUB_ROOT 指過去再驗。
+
+驗什麼:
+  hub.json           contracts/hub.v1.schema.json(minischema)+ 不認得的頂層鍵(_ 開頭的說明鍵除外)——打錯字的鍵
+                     (例:"assitant")不會被默默忽略
+  projects/          registry.refresh() 的驗證(schema、名稱重複、after: 指到存在的 job、run 解析得到…)
+  models.env         每行 KEY=值
+  mirror-list.txt    每行一個 git remote
+  services.tsv       每列欄數跟表頭一樣、label 不重複
+  schedule.yaml      讀得進來、job 名稱不重複(切換期間的舊格式)
+
+通過時把這次驗過的 tree 記在 git 目錄的 config-check-passed(githooks/post-commit 用它抓出跳過閘門的 commit)。
+"""
+from __future__ import annotations
+
+import json
+import os
+import pathlib
+import re
+import subprocess
+import sys
+import tempfile
+
+BIN = pathlib.Path(__file__).resolve().parent
+CONFIG = re.compile(r"^(hub\.json|models\.env|mirror-list\.txt|services\.tsv|schedule\.yaml|projects/)")
+
+
+def check(root: pathlib.Path) -> list[str]:
+    """root 底下的 config 有哪些問題(空 = 合格)。registry 的驗證要 hubconf.ROOT 指到 root,所以 --staged 用子程序跑。"""
+    sys.path.insert(0, str(BIN))
+    import minischema
+    errs: list[str] = []
+
+    hub = root / "hub.json"
+    try:
+        cfg = json.loads(hub.read_text())
+    except (OSError, ValueError) as e:
+        return [f"hub.json:讀不了({e})"]
+    schema = json.loads((root / "contracts" / "hub.v1.schema.json").read_text())
+    errs += [f"hub.json:{e}" for e in minischema.errors(schema, cfg)]
+    known = set(schema["properties"])
+    for k in cfg:
+        if not k.startswith("_") and k not in known:
+            near = [x for x in sorted(known) if _close(k, x)]
+            errs.append(f"hub.json:不認得的鍵 `{k}`" + (f"(是不是 {', '.join(near)}?)" if near else "")
+                        + ";要新增就先加進 contracts/hub.v1.schema.json")
+
+    import registry
+    index = registry.refresh()
+    for name, es in sorted(index["errors"].items()):
+        errs += [f"projects/{name}.yaml:{e}" for e in es]
+
+    env = root / "models.env"
+    if env.exists():
+        for i, line in enumerate(env.read_text().splitlines(), 1):
+            if line.strip() and not line.lstrip().startswith("#") and not re.fullmatch(r"[A-Z_][A-Z0-9_]*=\S+", line.strip()):
+                errs.append(f"models.env:{i}:不是 KEY=值:{line.strip()}")
+
+    ml = root / "mirror-list.txt"
+    if ml.exists():
+        for i, line in enumerate(ml.read_text().splitlines(), 1):
+            s = line.strip()
+            if s and not s.startswith("#") and not re.fullmatch(r"(git@[\w.-]+:[\w./-]+|https://[\w.-]+/[\w./-]+)", s):
+                errs.append(f"mirror-list.txt:{i}:不像 git remote:{s}")
+
+    st = root / "services.tsv"
+    if st.exists():
+        rows = [r for r in st.read_text().splitlines() if r.strip()]
+        width = len(rows[0].split("\t")) if rows else 0
+        seen = set()
+        for i, r in enumerate(rows[1:], 2):
+            cols = r.split("\t")
+            if len(cols) != width:
+                errs.append(f"services.tsv:{i}:{len(cols)} 欄,表頭是 {width} 欄")
+            elif cols[0] in seen:
+                errs.append(f"services.tsv:{i}:label `{cols[0]}` 重複")
+            seen.add(cols[0])
+
+    sy = root / "schedule.yaml"
+    if sy.exists():
+        import yaml
+        try:
+            jobs = (yaml.safe_load(sy.read_text()) or {}).get("jobs") or []
+            names = [j.get("name") for j in jobs]
+            errs += [f"schedule.yaml:job `{n}` 重複" for n in sorted({n for n in names if names.count(n) > 1})]
+        except yaml.YAMLError as e:
+            errs.append(f"schedule.yaml:讀不了({e})")
+    return errs
+
+
+def _close(a: str, b: str) -> bool:
+    """差一兩個字(打錯字):編輯距離 ≤ 2。"""
+    if abs(len(a) - len(b)) > 2:
+        return False
+    prev = list(range(len(b) + 1))
+    for i, ca in enumerate(a, 1):
+        cur = [i]
+        for j, cb in enumerate(b, 1):
+            cur.append(min(prev[j] + 1, cur[j - 1] + 1, prev[j - 1] + (ca != cb)))
+        prev = cur
+    return prev[-1] <= 2
+
+
+def git(*args: str) -> str:
+    return subprocess.run(["git", *args], capture_output=True, text=True, check=True).stdout
+
+
+def main(argv: list[str]) -> int:
+    if argv == ["--child"]:  # --staged 的子程序:AGENT_HUB_ROOT 已經指到匯出的暫存區
+        errs = check(pathlib.Path(os.environ["AGENT_HUB_ROOT"]))
+    elif argv == ["--staged"]:
+        if not any(CONFIG.match(p) for p in git("diff", "--cached", "--name-only").splitlines()):
+            return 0
+        with tempfile.TemporaryDirectory() as d:
+            git("checkout-index", "-a", f"--prefix={d}/")
+            env = {k: v for k, v in os.environ.items() if not k.startswith("GIT_")}
+            r = subprocess.run([str(BIN / "py"), str(pathlib.Path(__file__).resolve()), "--child"],  # 這支驗匯出的 config
+                               env={**env, "AGENT_HUB_ROOT": d}, capture_output=True, text=True)
+        sys.stdout.write(r.stdout)
+        sys.stderr.write(r.stderr)
+        if r.returncode == 0:
+            pathlib.Path(git("rev-parse", "--git-path", "config-check-passed").strip()).write_text(
+                git("write-tree").strip() + "\n")
+        return r.returncode
+    elif not argv:
+        errs = check(pathlib.Path(os.environ.get("AGENT_HUB_ROOT") or BIN.parent))
+    else:
+        print(__doc__, file=sys.stderr)
+        return 2
+    for e in errs:
+        print(f"config-check:✗ {e}", file=sys.stderr)
+    if not errs:
+        print("config-check:config 都合格")
+    return 1 if errs else 0
+
+
+if __name__ == "__main__":
+    sys.exit(main(sys.argv[1:]))

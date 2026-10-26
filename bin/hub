@@ -1,0 +1,93 @@
+#!/bin/sh -c exec${IFS}"${0%/*}/py"${IFS}"$0"${IFS}"$@"
+"""agent-hub 的單一入口(docs/design/new-user.md 3.4)。薄薄一層分派,不重寫既有腳本。
+
+  hub config check      驗證所有 config(= bin/config-check)
+  hub config plan       每個套用者會改什麼(不動任何東西)
+  hub config apply      check → 套用 → 確認再 plan 是空的 → 記錄(.state/config-applied.json + 匯流排 config.applied)
+                        [--only <套用者>,...]
+
+規劃中(new-user.md 第 5 步):init、doctor、onboard、recover、rename、status、run、jobs、modules。
+"""
+from __future__ import annotations
+
+import datetime
+import hashlib
+import json
+import pathlib
+import subprocess
+import sys
+
+BIN = pathlib.Path(__file__).resolve().parent
+sys.path.insert(0, str(BIN))
+import hubconf  # noqa: E402
+
+
+
+def show(plans: dict) -> int:
+    n = 0
+    for name, changes in plans.items():
+        for c in changes:
+            print(f"{name:15} {c.line()}")
+            n += 1
+    if not n:
+        print("沒有要改的(機器上的狀態跟 config 一致)")
+    return n
+
+
+def cmd_config(argv: list[str]) -> int:
+    import appliers
+    sub = argv[0] if argv else ""
+    only = argv[argv.index("--only") + 1].split(",") if "--only" in argv else None
+    if sub == "check":
+        return subprocess.run([str(BIN / "config-check")]).returncode
+    if sub == "plan":
+        show(appliers.plan_all(only=only))
+        return 0
+    if sub == "apply":
+        if subprocess.run([str(BIN / "config-check")]).returncode != 0:
+            print("hub config apply:config 不合格,不套用", file=sys.stderr)
+            return 1
+        done = appliers.apply_all(only=only)
+        show(done)
+        left = {n: c for n, c in appliers.plan_all(only=only).items() if c}
+        if left:  # verify:套用完再 plan 應該是空的
+            print("hub config apply:⚠️ 套用完還有沒對齊的:", file=sys.stderr)
+            show(left)
+        record(done, ok=not left)
+        return 1 if left else 0
+    print(__doc__, file=sys.stderr)
+    return 2
+
+
+def record(done: dict, ok: bool) -> None:
+    """記下套用了哪個 config commit:.state/config-applied.json(狀態頁讀)+ 匯流排 config.applied(有改東西才發)。"""
+    import appliers
+    commit = appliers.config_commit()
+    APPLIED = appliers.applied_path()
+    changes = [{"op": c.op, "target": c.target, "detail": c.detail} for cs in done.values() for c in cs]
+    APPLIED.parent.mkdir(parents=True, exist_ok=True)
+    APPLIED.write_text(json.dumps({"commit": commit, "ok": ok, "changes": len(changes),
+                                   "at": datetime.datetime.now().astimezone().isoformat(timespec="seconds")},
+                                  ensure_ascii=False, indent=1) + "\n")
+    if not changes:
+        return
+    payload = {"commit": commit, "changes": changes, "source": "hub config apply"}
+    eid = "config-" + hashlib.sha1(json.dumps(payload, sort_keys=True).encode()).hexdigest()[:16]  # 同樣的套用重送不重記
+    r = subprocess.run([str(BIN / "py"), str(BIN / "hubbus"), "publish", "config.applied", "--source", hubconf.hub_project(),
+                        "--payload", json.dumps(payload, ensure_ascii=False), "--id", eid], capture_output=True, text=True)
+    if r.returncode != 0:
+        print(f"hub config apply:匯流排記錄失敗(.state/config-applied.json 有寫):{r.stderr.strip()[:200]}", file=sys.stderr)
+
+
+COMMANDS = {"config": cmd_config}
+
+
+def main(argv: list[str]) -> int:
+    if not argv or argv[0] in ("-h", "--help", "help") or argv[0] not in COMMANDS:
+        print(__doc__)
+        return 0 if not argv or argv[0] in ("-h", "--help", "help") else 2
+    return COMMANDS[argv[0]](argv[1:])
+
+
+if __name__ == "__main__":
+    sys.exit(main(sys.argv[1:]))

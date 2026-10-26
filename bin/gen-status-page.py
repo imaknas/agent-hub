@@ -197,6 +197,21 @@ def main() -> None:
     if legacy_auto:
         alerts.append(("notify", f"這些 Claude job 還沒在登錄宣告 allow:(無人值守時用 auto,不是 dontAsk):{', '.join(legacy_auto)}"))
 
+    config_note = ""
+    try:  # config pipeline(new-user.md 3.7):生效的是哪個 config commit,改了還沒套用就提醒
+        import appliers
+        cur = appliers.config_commit()
+        rec = json.loads(appliers.applied_path().read_text()) if appliers.applied_path().exists() else None
+        config_note = f" · config {rec['commit'][:7]}" if rec else ""
+        if rec and not rec.get("ok", True):
+            alerts.append(("bad", f"上一次 hub config apply 套用完還有沒對齊的({rec.get('at', '')[:16]}):bin/hub config plan 看是哪些"))
+        elif rec and rec["commit"] != cur:
+            alerts.append(("notify", f"config 改過還沒用 hub config apply 套用(生效 {rec['commit'][:7]},現在 {cur[:7]}"
+                                     f"{'+未 commit' if cur.endswith('+dirty') else ''});每 15 分鐘的 job 會補上服務跟專案設定,"
+                                     "跑一次 bin/hub config apply 才會記錄"))
+    except Exception as e:
+        alerts.append(("bad", f"讀不到 config 的套用紀錄:{e}"))
+
     for proj, errs in sorted(reg_info["errors"].items()):
         alerts.append(("bad", f"專案登錄 {proj} 不合格(沿用上一份合格的,沒有就不排它的 job):" + ";".join(errs[:4])
                               + (f"……共 {len(errs)} 項" if len(errs) > 4 else "") + "。`bin/registry.py check " + proj + "`"))
@@ -334,7 +349,7 @@ details{{background:var(--card);border:1px solid var(--line);border-radius:8px;m
 summary{{cursor:pointer;color:var(--mut)}} pre{{white-space:pre-wrap;word-break:break-word;font:14px/1.55 -apple-system,"PingFang TC",sans-serif}}
 @media (max-width:640px){{td:nth-child(2),th:nth-child(2){{display:none}}}}
 </style></head><body><main>
-<h1>排程狀態</h1><div class=sub>mini · 產生於 {now:%Y-%m-%d %H:%M} · 每 5 分鐘自動重新整理 · 排程定義在 ~/agent-hub/schedule.yaml</div>
+<h1>排程狀態</h1><div class=sub>mini · 產生於 {now:%Y-%m-%d %H:%M} · 每 5 分鐘自動重新整理 · 排程定義在專案登錄(projects/)跟 schedule.yaml{config_note}</div>
 {alert_html}
 <table><tr><th>Job</th><th>時間</th><th>上次</th><th>下次</th></tr>{''.join(rows)}</table>
 {mail_html}

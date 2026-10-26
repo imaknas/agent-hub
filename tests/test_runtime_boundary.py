@@ -8,7 +8,7 @@ import re
 import unittest
 
 BIN = pathlib.Path(__file__).resolve().parents[1] / "bin"
-NEUTRAL = ["policy.py", "seatbelt.py", "cap-runner.py", "hub-run"]
+NEUTRAL = ["policy.py", "seatbelt.py", "cap-runner.py", "hub-run", "appliers.py", "applier_scheduler.py", "config-check", "hub"]
 PATTERNS = [
     (re.compile(r"(?<![\w])\.claude\b"), "Claude 的設定/憑證目錄"),
     (re.compile(r"\b(Read|Edit|Write|MultiEdit|NotebookEdit|Bash|WebFetch|WebSearch|Glob|Grep)\("), "Claude 的權限規則語法"),

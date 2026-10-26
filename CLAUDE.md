@@ -245,6 +245,12 @@ memory 追蹤但不需要在 mini 上執行任何東西的專案(目前大多數
   worktree(連 branch,**由人跑**)。另外平台 job `agent-hub/prune-worktrees`(每晚 04:30,`--auto`)自動清**沒有任何 session 開著**的
   孤兒 worktree(有 session 開著就不碰,就算閒置):閒置 ≥ 2 天只刪重建得回來的依賴(資料夾留著,session 開始時會提醒
   重建)、≥ 14 天才移除 worktree(branch 留著);規則在 `bin/worktrees.py` 檔頭
+- **config pipeline**(`docs/design/new-user.md` 3.7):config = `hub.json`、登錄、`models.env`、`mirror-list.txt`、`services.tsv`、
+  `schedule.yaml`。`bin/hub config check`(= `bin/config-check`,githooks/pre-commit 對暫存區跑;`hub.json` 照
+  `contracts/hub.v1.schema.json`,不認得的鍵會被擋)、`plan`(會改什麼,不動任何東西)、`apply`(check → 套用 → 再 plan 要是空的 →
+  記 `.state/config-applied.json` + 匯流排 `config.applied`;狀態頁標題顯示生效的 config commit)。套用者登記在 `bin/appliers.py`
+  (排程 job 清單、render-services、render-project-settings),契約測試 `tests/test_appliers.py`;每 15 分鐘的兩個 job 照跑當安全網。
+  改了登錄要馬上生效就跑 `bin/hub config apply`
 - **第二階段強制**:登錄 `enforce: {sandbox: true}` 的專案,`bin/render-project-settings.py`(平台 job,每 15
   分鐘)把 sandbox(只准寫自己的專案/runtime/匯流排/cache、讀不到別的專案、網路白名單)跟 deny 規則寫進它的
   `.claude/settings.local.json`;被改就寫回、狀態頁紅;`enforce` 關掉就拿掉。`--report` 看每個專案會寫什麼。

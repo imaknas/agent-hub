@@ -1,0 +1,66 @@
+{
+  "$comment": "平台設定 hub.json(bin/hubconf.py 讀;範本 hub.example.json)。bin/config-check 用 minischema 驗證,另外擋「不認得的頂層鍵」(_ 開頭的說明鍵除外)——打錯字的鍵不會被默默忽略。加欄位不升版。",
+  "type": "object",
+  "required": ["v", "registry_dir", "owner"],
+  "properties": {
+    "v": {"const": 1},
+    "registry_dir": {"type": "string", "minLength": 1},
+    "services_root": {"type": "string"},
+    "workspace_root": {"type": "string"},
+    "memory_copies": {"type": "string"},
+    "git_origin": {"type": "string"},
+    "memory_host": {"type": "string"},
+    "bus_dir": {"type": "string"},
+    "owner": {
+      "type": "object",
+      "required": ["address", "tag"],
+      "properties": {
+        "address": {"type": "string", "minLength": 1},
+        "aliases": {"type": "array", "items": {"type": "string"}},
+        "tag": {"type": "string", "minLength": 1},
+        "timezone": {"type": "string"}
+      }
+    },
+    "assistant": {
+      "type": "object",
+      "required": ["project", "api"],
+      "properties": {
+        "project": {"type": "string", "minLength": 1},
+        "api": {"type": "string", "pattern": "^https?://"},
+        "ingest_token": {"type": "string"},
+        "cli": {"type": "string"}
+      }
+    },
+    "alerts": {
+      "type": "object",
+      "properties": {
+        "discord_token_file": {"type": "string"},
+        "discord_channel_file": {"type": "string"}
+      }
+    },
+    "backup": {
+      "type": "object",
+      "required": ["repo"],
+      "properties": {
+        "repo": {"type": "string", "minLength": 1},
+        "sqlite": {"type": "array", "items": {"type": "object", "required": ["name", "path"],
+                   "properties": {"name": {"type": "string"}, "path": {"type": "string"}}}},
+        "bare_repos": {"type": "string"},
+        "include": {"type": "array", "items": {"type": "string"}},
+        "exclude": {"type": "array", "items": {"type": "string"}},
+        "keep": {"type": "object", "properties": {"daily": {"type": "integer", "minimum": 0},
+                 "weekly": {"type": "integer", "minimum": 0}, "monthly": {"type": "integer", "minimum": 0}}}
+      }
+    },
+    "github": {"type": "object", "properties": {"owner": {"type": "string"}, "remote": {"type": "string"}}},
+    "ideas": {"type": "object", "properties": {"limit": {"type": "integer", "minimum": 0}}},
+    "hosts": {"type": "object", "properties": {"mbp_home": {"type": "string"}, "mini_home": {"type": "string"}}},
+    "mailbox": {"type": "object"},
+    "credentials": {"type": "object", "properties": {"dirs": {"type": "array", "items": {"type": "string"}},
+                    "files": {"type": "array", "items": {"type": "string"}}}},
+    "capabilities": {"type": "object"},
+    "cap_runner": {"type": "object"},
+    "runtime": {"type": "object", "properties": {"default": {"type": "string", "minLength": 1}}},
+    "lease": {"type": "object", "properties": {"no_session_domains": {"type": "array", "items": {"type": "string"}}}}
+  }
+}

@@ -45,6 +45,7 @@ bin/onboard-project.sh ~/workspace/my-app      # 把一個專案接上來(--no-r
 
 ```bash
 bin/overview.sh [專案]            # 專案現況、綁定的服務、STATE.md
+bin/hub config plan               # 改了 config(hub.json、登錄…)之後會改什麼;bin/hub config apply 套用
 bin/schedulectl list              # 所有 job
 bin/schedulectl run <job>         # 現在就跑一次
 bin/recover-project.sh <name>     # 新機器 / 專案資料夾不見了(不要對已經 onboard 的專案重跑 onboard)

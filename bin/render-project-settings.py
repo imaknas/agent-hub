@@ -19,6 +19,7 @@
 狀態頁),而且馬上寫回去。
 
 用法:render-project-settings.py [--report] [--only <專案>]
+也是套用者(appliers.py):plan()/apply(),給 `bin/hub config plan/apply` 用。
 """
 from __future__ import annotations
 
@@ -45,14 +46,31 @@ def settings_path(doc: dict) -> pathlib.Path | None:
     return runtime_claude.settings_path(ws) if ws else None
 
 
-def apply(name: str, doc: dict, index: dict, report: bool) -> list[str]:
-    """回傳偏移(實際跟應該的不一樣的地方)。report=True 只算、不寫。"""
+def compose(name: str, doc: dict, index: dict) -> tuple[pathlib.Path, dict, dict, dict, dict] | None:
+    """純計算、不寫:(設定檔, 現在的內容, 應該的內容, 上次平台寫的紀錄, 這次要記的紀錄)。沒有 workspace 回 None。"""
     path = settings_path(doc)
     if not path:
-        return []
+        return None
     sandbox, deny, allow = desired(name, doc, index)
     cur = json.loads(path.read_text()) if path.exists() else {}
     prev = json.loads((RENDERED / f"{name}.json").read_text()) if (RENDERED / f"{name}.json").exists() else {}
+    new = dict(cur)
+    new["sandbox"] = sandbox
+    p2 = dict(cur.get("permissions", {}))
+    for key, mine in (("deny", deny), ("allow", allow)):
+        keep = [r for r in p2.get(key, []) if r not in set(prev.get(key, []))]  # 拿掉上次平台加的,留別人的
+        p2[key] = keep + [r for r in mine if r not in keep]
+    new["permissions"] = p2
+    return path, cur, new, prev, {"sandbox": sandbox, "deny": deny, "allow": allow}
+
+
+def write_project(name: str, doc: dict, index: dict, report: bool) -> list[str]:
+    """回傳偏移(實際跟應該的不一樣的地方)。report=True 只算、不寫。"""
+    c = compose(name, doc, index)
+    if not c:
+        return []
+    path, cur, new, prev, record = c
+    sandbox, deny, allow = record["sandbox"], record["deny"], record["allow"]
     perms = cur.get("permissions", {})
     drift = []
     if prev:  # 寫過才談得上偏移
@@ -67,19 +85,11 @@ def apply(name: str, doc: dict, index: dict, report: bool) -> list[str]:
               f"{len(sandbox['filesystem']['denyRead'])}、網域 {len(sandbox['network']['allowedDomains'])})、"
               f"deny {len(deny)} 條、allow {len(allow)} 條 → {path}")
         return drift
-    new = dict(cur)
-    new["sandbox"] = sandbox
-    p2 = dict(perms)
-    for key, mine in (("deny", deny), ("allow", allow)):
-        keep = [r for r in p2.get(key, []) if r not in set(prev.get(key, []))]  # 拿掉上次平台加的,留別人的
-        p2[key] = keep + [r for r in mine if r not in keep]
-    new["permissions"] = p2
     if new != cur:
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text(json.dumps(new, indent=2, ensure_ascii=False) + "\n")
     RENDERED.mkdir(parents=True, exist_ok=True)
-    (RENDERED / f"{name}.json").write_text(json.dumps({"sandbox": sandbox, "deny": deny, "allow": allow},
-                                                      ensure_ascii=False, indent=1))
+    (RENDERED / f"{name}.json").write_text(json.dumps(record, ensure_ascii=False, indent=1))
     return drift
 
 
@@ -112,32 +122,87 @@ exit 1
 """
 
 
-def gate(name: str, doc: dict, report: bool) -> None:
+def gate(name: str, doc: dict, report: bool, quiet: bool = False) -> list[tuple[str, str]]:
     """登錄 gate: strict → 裝 pre-commit / pre-merge-commit;關掉就拿掉(只動有平台標記的)。
-    專案有自己的 core.hooksPath(例:husky)就不裝,只偵測。"""
+    專案有自己的 core.hooksPath(例:husky)就不裝,只偵測。回傳要做(report)/做了的 (add|remove, hook)。"""
     import subprocess
+    say = (lambda *_: None) if quiet else print
     ws = registry.dirs(doc)["workspace"]
     if not ws or not (ws / ".git").is_dir():
-        return
+        return []
     want = doc.get("gate") == "strict"
     hp = subprocess.run(["git", "-C", str(ws), "config", "core.hooksPath"], capture_output=True, text=True).stdout.strip()
+    acts = []
     for hook in ("pre-commit", "pre-merge-commit"):
         f = ws / ".git" / "hooks" / hook
         mine = f.exists() and GATE_MARK in f.read_text(errors="replace")
         if want and hp:
-            print(f"{name}:gate strict 沒裝(專案用自己的 core.hooksPath={hp}),只偵測")
-            return
+            say(f"{name}:gate strict 沒裝(專案用自己的 core.hooksPath={hp}),只偵測")
+            return acts
         if want and not mine:
             if f.exists():
-                print(f"{name}:.git/hooks/{hook} 已經有專案自己的 hook,不覆蓋(gate 只偵測)")
+                say(f"{name}:.git/hooks/{hook} 已經有專案自己的 hook,不覆蓋(gate 只偵測)")
                 continue
+            acts.append(("add", hook))
             if not report:
                 f.write_text("#!/bin/sh\n" + GATE_HOOK)
                 f.chmod(0o755)
-                print(f"{name}:裝了 {hook}(gate strict)")
-        elif not want and mine and not report:
-            f.unlink()
-            print(f"{name}:gate 關了,拿掉 {hook}")
+                say(f"{name}:裝了 {hook}(gate strict)")
+        elif not want and mine:
+            acts.append(("remove", hook))
+            if not report:
+                f.unlink()
+                say(f"{name}:gate 關了,拿掉 {hook}")
+    return acts
+
+
+# ---------- 套用者(appliers.py)----------
+# Change 只用中立的詞(agent-settings:<專案>、hook:<專案>/<名稱>);執行環境的設定格式留在 runtime_claude。
+
+EXTERNAL = False
+
+
+def _changes(index: dict) -> list:
+    from appliers import Change
+    out = []
+    for name, doc in sorted(index["projects"].items()):
+        if name == hubconf.hub_project():
+            continue
+        out += [Change(op, f"hook:{name}/{hook}", "gate strict") for op, hook in gate(name, doc, report=True, quiet=True)]
+        on = bool((doc.get("enforce") or {}).get("sandbox"))
+        rec = RENDERED / f"{name}.json"
+        if not on:
+            if rec.exists() and settings_path(doc) and settings_path(doc).exists():
+                out.append(Change("remove", f"agent-settings:{name}", "enforce 關了:拿掉平台的 sandbox/規則"))
+            continue
+        c = compose(name, doc, index)
+        if not c:
+            continue
+        path, cur, new, prev, record = c
+        if new != cur or prev != record:
+            what = [w for w, changed in (("sandbox", new.get("sandbox") != cur.get("sandbox")),
+                                         ("權限規則", new.get("permissions") != cur.get("permissions")),
+                                         ("紀錄", prev != record)) if changed]
+            out.append(Change("add" if not cur else "update", f"agent-settings:{name}", "、".join(what)))
+    return out
+
+
+def plan(index: dict | None = None) -> list:
+    return _changes(index or registry.refresh())
+
+
+def apply(index: dict | None = None) -> list:
+    index = index or registry.refresh()
+    todo = _changes(index)
+    for name, doc in sorted(index["projects"].items()):
+        if name == hubconf.hub_project():
+            continue
+        gate(name, doc, report=False, quiet=True)
+        if (doc.get("enforce") or {}).get("sandbox"):
+            write_project(name, doc, index, report=False)
+        else:
+            unapply(name, doc)
+    return todo
 
 
 def main() -> int:
@@ -152,11 +217,11 @@ def main() -> int:
         on = bool((doc.get("enforce") or {}).get("sandbox"))
         if not on:
             if report:
-                apply(name, doc, index, report=True)
+                write_project(name, doc, index, report=True)
             else:
                 unapply(name, doc)
             continue
-        drift = apply(name, doc, index, report=report)
+        drift = write_project(name, doc, index, report=report)
         if drift:
             bad += 1
             print(f"⚠️ {name} 的設定偏移(已{'(report 模式不)' if report else ''}寫回):{'; '.join(drift)}")
