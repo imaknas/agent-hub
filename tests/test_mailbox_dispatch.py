@@ -11,6 +11,7 @@ import importlib.util
 import pathlib
 import tempfile
 import unittest
+import unittest.mock
 
 ROOT = pathlib.Path(__file__).resolve().parents[1]
 
@@ -123,6 +124,49 @@ class Dispatch(unittest.TestCase):
         self.m.mark_delivered(self.c, [self.m.get_message(self.c, "m1")], "S1", "prompt")
         self.dispatch()
         self.assertEqual(self.handled, [])
+
+    # --- 送進 session 只算看過(10-27,m10270201-921a)---
+    def seen_by_session(self, mid, minutes_ago, via="prompt"):
+        self.m.mark_delivered(self.c, [self.m.get_message(self.c, mid)], "S9", via)
+        ts = (datetime.datetime.now().astimezone() - datetime.timedelta(minutes=minutes_ago)).isoformat(timespec="seconds")
+        self.c.execute("UPDATE events SET ts=? WHERE type='message.delivered' AND ref=?", (ts, mid))
+
+    def test_seen_but_untouched_is_redispatched_after_timeout(self):
+        self.send("m1", "proj", "request", minutes_ago=90)
+        self.seen_by_session("m1", minutes_ago=self.m.TAKE_TIMEOUT_MIN + 5)
+        self.dispatch()
+        self.assertEqual(self.handled, [("proj", ["m1"])])
+
+    def test_recently_seen_waits(self):
+        self.send("m1", "proj", "request", minutes_ago=20)
+        self.seen_by_session("m1", minutes_ago=10)
+        self.assertEqual(self.dispatch(), 1)
+        self.assertEqual(self.handled, [])
+
+    def test_acked_is_not_redispatched(self):
+        self.send("m1", "proj", "request", minutes_ago=300)
+        self.seen_by_session("m1", minutes_ago=200)
+        self.m.publish(self.c, "m1:ack:S9", "message.delivered", "proj", "proj", "m1", {"session": "S9", "via": "ack"})
+        self.dispatch()
+        self.assertEqual(self.handled, [])
+
+    def test_replied_is_not_redispatched(self):
+        self.send("m1", "proj", "question", minutes_ago=300)
+        self.seen_by_session("m1", minutes_ago=200)
+        self.m.publish(self.c, "r1", "message", "proj", "other", "m1", {"type": "info", "text": "回了", "reply_to": "m1"})
+        self.dispatch()
+        self.assertEqual(self.handled, [])
+
+    def test_ack_after_hook_delivery_is_recorded(self):
+        # 以前 ack 跟 hook 送進來用同一個事件 id:hook 送過之後 ack 什麼都沒記
+        import io, sys
+        from contextlib import redirect_stdout
+        self.send("m1", "proj", "request")
+        self.seen_by_session("m1", minutes_ago=0)
+        self.m.db = lambda *a, **k: self.c
+        with unittest.mock.patch.object(sys, "argv", ["hubbus", "ack", "m1"]), redirect_stdout(io.StringIO()):
+            self.m.main()
+        self.assertEqual(self.m.take_state(self.c, "m1", "proj"), "taken")
 
     def test_claimed_not_redispatched(self):
         self.send("m1", "proj", "request")
