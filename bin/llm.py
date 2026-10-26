@@ -64,6 +64,24 @@ def output_schema(spec: dict) -> str | None:
     return out.get("schema") if out.get("format") == "json" else None
 
 
+def config_models() -> dict:
+    """config 的 models.env(`KEY=value`,可以有 export、引號、註解)。判斷點的 model_env 在環境變數裡沒有時讀這裡——
+    以前只有呼叫端 source 了而且 export 才生效,librarian.sh 沒 export,改設定一直沒用(10-27 第四次盲審查到)。"""
+    out = {}
+    try:
+        text = hubconf.config_file("models.env").read_text()
+    except OSError:
+        return out
+    for line in text.splitlines():
+        line = line.split("#", 1)[0].strip()
+        if line.startswith("export "):
+            line = line[len("export "):].strip()
+        key, eq, val = line.partition("=")
+        if eq and key.strip():
+            out[key.strip()] = val.strip().strip("'\"")
+    return out
+
+
 def auth_mode(spec: dict) -> str:
     """用哪種登入:LLM_AUTH(呼叫端這次指定,例:login-check 檢查 token)> 判斷點宣告的 auth > 預設 token。
     憑證放哪、環境變數叫什麼是 runtime 的事(auth 介面,第 6 層)。"""
@@ -85,7 +103,9 @@ def run(a) -> int:
         print(f"llm.py:{a.point} 不是宣告過的判斷點(contracts/llm-points.yaml)", file=sys.stderr)
         return 2
     prompt = "" if a.cmd == "exec" else (pathlib.Path(a.prompt_file).read_text() if a.prompt_file else sys.stdin.read())
-    model = a.model or (os.environ.get(spec["model_env"]) if spec.get("model_env") else None) or spec.get("model_default")
+    # --model > 環境變數 > config 的 models.env > 宣告的預設
+    menv = spec.get("model_env")
+    model = a.model or (menv and (os.environ.get(menv) or config_models().get(menv))) or spec.get("model_default")
     rt = runtime_ports.load(spec.get("runtime"), ports=("agent", "auth"))
     env, why = auth_env(spec, rt)
     if env is None:
