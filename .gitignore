@@ -2,3 +2,6 @@
 .logs/
 __pycache__/
 .secrets/
+
+# 實例目錄的指標檔(docs/design/new-user.md 3.1):每台機器自己的,絕不進版控
+.hub-home
