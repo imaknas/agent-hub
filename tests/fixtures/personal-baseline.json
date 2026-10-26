@@ -66,9 +66,7 @@
  "secrets-path": {},
  "instance-path": {
   "bin/config-check": 5,
-  "bin/contracts-check.py": 1,
   "bin/hub": 3,
-  "bin/librarian.sh": 1,
-  "bin/weekly-reflect.py": 1
+  "bin/librarian.sh": 1
  }
 }
