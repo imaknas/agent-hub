@@ -12,9 +12,10 @@
 #      memory 分支上,會 commit+push(只 commit AGENT.md),不碰專案 repo
 #   3. .agent-memory/ 跟執行環境的本機專用檔(`hub-runtime local-ignores`)如果沒被 ignore,寫進
 #      .git/info/exclude——本機專屬的 ignore,不動會 commit 的 .gitignore,
-#      公開 repo 也不會多出任何跟這套工具有關的字。
+#      不改專案共享的 .gitignore。
 #
-#   4. 已 commit 的檔案提到 agent-hub / .agent-memory 就印提醒(--quiet 也印)
+#   4. 已 commit 的檔案寫了這台機器的路徑(~/agent-hub/…、/Users/<使用者>/…)就印提醒(--quiet 也印)。
+#      10-27 起 agent-hub、助理都會開源,只提名稱不算外洩;路徑跟個人資料才是
 #
 # 由專案的 SessionStart hook 自動呼叫(--quiet),onboard-project.sh、
 # recover-project.sh 也呼叫。SessionStart hook 的 stdout 會進 session
@@ -144,14 +145,14 @@ done
 # 出現在已 commit 的內容裡就提醒。這段刻意在 --quiet 下也輸出——SessionStart hook
 # 的 stdout 會進 session context,等於每次開 session 都把待修清單交給這個專案
 # 自己的 session,不用靠人記得去巡。沒有違規就什麼都不印。
-leaks=$(git grep -l -I -E 'agent-hub|agent-memory' HEAD -- . 2>/dev/null | sed 's#^HEAD:##' | head -10)
+leaks=$(git grep -l -I -E '~/agent-hub/|/Users/[A-Za-z0-9._-]+/(agent-hub|workspace|\.agent-hub|services|git-origin)' HEAD -- . 2>/dev/null | sed 's#^HEAD:##' | head -10)
 if [ -n "$leaks" ]; then
   cat <<MSG
-⚠️ 這個 repo 已 commit 的檔案提到了 agent-hub / .agent-memory(repo 之後可能公開,這些名稱跟路徑不能進 commit):
+⚠️ 這個 repo 已 commit 的檔案寫了這台機器的路徑(repo 之後可能公開,本機路徑不能進 commit;只提 agent-hub 的名稱沒關係):
 $(echo "$leaks" | sed 's/^/  - /')
 請在這個專案裡處理:維運需要的資訊搬到 $INSTR(agent-hub:begin/end 區塊之外,不進版控),
-committed 檔案裡改成不提工具名稱的寫法或刪掉,然後 commit。(.gitignore 裡的 .agent-memory/ 可以直接刪,
-本機已經用 .git/info/exclude 排除。)細節可用:git grep -n -E 'agent-hub|agent-memory'
+committed 檔案裡改成不寫本機路徑的寫法或刪掉,然後 commit。細節可用:
+git grep -n -E '~/agent-hub/|/Users/[A-Za-z0-9._-]+/(agent-hub|workspace|\.agent-hub|services|git-origin)'
 MSG
 fi
 exit 0

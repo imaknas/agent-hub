@@ -78,6 +78,7 @@ librarian 每晚自動寄出、{{owner}} 結案時自動移掉。{{owner}} 在�
 資料夾、不能連網路),輸出跟結束碼照原樣回來;這次指令被中斷的話,工作照跑,用 `hub-run --wait <id>` 接回。
 沒宣告的能力會被拒絕;要新的能力寫信給 agent-hub。
 
-這段說明放在 gitignored 的 CLAUDE.local.md,不在共享的 CLAUDE.md:不要把
-agent-hub、`.agent-memory` 的名稱或路徑寫進任何會 commit 的檔案(CLAUDE.md、
-`.claude/settings.json`、`.gitignore`、README、程式註解、commit 訊息等),公開 repo 會跟著外洩。
+這段說明放在 gitignored 的 CLAUDE.local.md,不在共享的 CLAUDE.md:裡面是這台機器專屬的路徑跟設定。
+agent-hub、{{assistant}} 都會開源,提到名稱沒關係;但**這台機器的路徑**(`~/agent-hub/…`、`/Users/<使用者>/…`)、
+帶本機路徑的 hook 指令、個人資料不要寫進任何會 commit 的檔案(CLAUDE.md、`.claude/settings.json`、README、
+程式註解、commit 訊息等),公開 repo 會跟著外洩。

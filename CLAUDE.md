@@ -146,7 +146,7 @@ SSH 開 mini 上的資料夾。MBP 斷線/沒電時 session 還在跑、手機(R
 - `bin/merge-hook-settings.py`——合併(不覆寫)一個專案 `.claude/
   settings.local.json` 的 hook 設定,`onboard-project.sh` / `recover-project.sh`
   自己會呼叫,不需要手動跑。hook 刻意不寫進共享的 `settings.json`:指令含
-  `~/agent-hub` 路徑,會把個人工具名稱/路徑 commit 進 repo(公開 repo 就外洩)
+  `~/agent-hub` 的本機路徑,commit 進 repo 就把這台機器的路徑公開了(10-27 起 agent-hub 會開源,只提名稱沒關係)
 
 ## 排程 / 夜間自動化(跑在 mini 上,transcript-backup 除外)
 
