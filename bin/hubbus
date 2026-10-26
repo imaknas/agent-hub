@@ -480,6 +480,36 @@ def handoff_text(h: dict) -> str:
     return "\n".join(lines)
 
 
+def current_name(proj: str) -> str:
+    """改名過的專案現在叫什麼(照 .state/project-renames.json 一路追;沒改過就原樣)。助理的轉交可能還用舊名稱
+    (例:idea-1 升級改名成 project-33 之後還有轉交寄給 idea-1)。"""
+    try:
+        renames = json.loads((hubconf.STATE / "project-renames.json").read_text())
+    except (OSError, ValueError):
+        return proj
+    seen = set()
+    while proj in renames and proj not in seen and (renames[proj] or {}).get("stage") == "done":
+        seen.add(proj)
+        proj = renames[proj]["new"]
+    return proj
+
+
+def log_once(key: str, msg: str) -> None:
+    """同一件事只在內容變的時候記一次(每分鐘跑的 dispatch 不要把同一行灌滿 log)。"""
+    f = hubconf.STATE / f"hubbus-logged-{key}.txt"
+    try:
+        if f.read_text() == msg:
+            return
+    except OSError:
+        pass
+    if msg:  # 空的 = 這件事已經沒了:只重設紀錄,不記空行
+        log(msg)
+    try:
+        f.write_text(msg)
+    except OSError:
+        pass
+
+
 def asks_text(h: dict) -> str:
     """effect=asks:owner 透過助理問這個專案一件事(m10261731-817c)。寄成 question,照 dispatch 的規則處理
     (有人在打字先等;沒有就用這個專案最近活著的 session 分支回答)。回覆一定要帶 --reply-to,handoff_id 才會跟著回去。"""
@@ -516,6 +546,8 @@ def import_handoffs(c) -> None:
         if orig is not None and orig["source"] in known:
             proj = orig["source"]  # owner 的回答送回發問的專案
         if proj not in known:
+            proj = current_name(proj)
+        if proj not in known:
             unknown.append(f"#{hid}→{proj}")
             continue
         if h.get("effect") == "asks":
@@ -532,8 +564,7 @@ def import_handoffs(c) -> None:
             log(f"Muninn 轉交 #{hid} → {proj}")
         ack.append(str(hid))
     c.execute("COMMIT")
-    if unknown:
-        log(f"Muninn 轉交的專案不在名冊裡,留在 Muninn:{', '.join(unknown)}")
+    log_once("handoffs-unknown", f"{ASSISTANT} 的轉交寄給不在名冊裡的專案,留在 {ASSISTANT}:{', '.join(unknown)}" if unknown else "")
     if ack:  # 匯流排 commit 之後才回報;回報失敗下次再報,匯流排的 id 去重不會收兩次
         r = assistant_cli("--delivered", *ack)
         if r.returncode != 0:
