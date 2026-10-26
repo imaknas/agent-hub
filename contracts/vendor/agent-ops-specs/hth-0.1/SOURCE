@@ -1,0 +1,2 @@
+Vendored from agent-ops-specs (specs/human-task-handoff/conformance/) at commit 1200eb8.
+agent-hub runs the zh-hant cases of parse/keys/apply against its deployed code in tests/test_hth_conformance.py.

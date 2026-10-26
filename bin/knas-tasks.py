@@ -52,7 +52,8 @@ STRIKE = ("done", "dropped", "already_done")
 ITEM = re.compile(rf"^- \[ \] 〔{re.escape(TAG)}〕\s*(.+)$")
 GROUP = re.compile(r"^#{3,4}\s*〔([^〕]+)〕\s*$")
 BARE = re.compile(r"^- \[ \] (?!〔)(.+)$")
-KEY = re.compile(rf"[((]等 {re.escape(TAG)}[::]\s*([^))\s]+)\s*[))]")
+# 跟 gen-todo 的 key 標記同一個(HTH zh-hant 的 marker_pattern):半形/全形括號跟冒號、「等」後面有沒有空格都認,要在行尾
+KEY = re.compile(rf"[(（]等 ?{re.escape(TAG)}[:：]\s*([^()（）]+?)\s*[)）]\s*$")
 DRY = "--dry-run" in sys.argv
 
 

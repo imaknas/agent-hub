@@ -1,0 +1,483 @@
+{
+  "hth": "0.1",
+  "description": "Apply vectors: document + one event -> document, changed.",
+  "cases": [
+    {
+      "id": "zh-done-strikes",
+      "profile": "zh-hant",
+      "document": [
+        "# demo",
+        "",
+        "## 待辦",
+        "",
+        "- [ ] 〔Owner〕續約網域(等 Owner:task-demo-aaaaaaaaaa)",
+        "- [ ] 〔agent〕上傳加重試",
+        "",
+        "## 參考"
+      ],
+      "event": {
+        "hth": "0.1",
+        "id": "done-task-demo-aaaaaaaaaa",
+        "type": "done",
+        "origin": "owner",
+        "key": "task-demo-aaaaaaaaaa",
+        "project": "demo",
+        "ts": "2026-10-27T09:00:00Z"
+      },
+      "expect": {
+        "changed": true,
+        "document": [
+          "# demo",
+          "",
+          "## 待辦",
+          "",
+          "- [ ] 〔agent〕上傳加重試",
+          "",
+          "## 參考"
+        ]
+      }
+    },
+    {
+      "id": "zh-dropped-last-writes-placeholder",
+      "profile": "zh-hant",
+      "event": {
+        "hth": "0.1",
+        "id": "dropped-task-demo-aaaaaaaaaa",
+        "type": "dropped",
+        "origin": "owner",
+        "key": "task-demo-aaaaaaaaaa",
+        "project": "demo",
+        "ts": "2026-10-27T09:00:00Z"
+      },
+      "document": [
+        "# demo",
+        "",
+        "## 待辦",
+        "",
+        "- [ ] 〔Owner〕續約網域(等 Owner:task-demo-aaaaaaaaaa)",
+        "",
+        "## 參考"
+      ],
+      "expect": {
+        "changed": true,
+        "document": [
+          "# demo",
+          "",
+          "## 待辦",
+          "- (無)",
+          "",
+          "## 參考"
+        ]
+      }
+    },
+    {
+      "id": "zh-already-done-strikes-duplicates",
+      "profile": "zh-hant",
+      "event": {
+        "hth": "0.1",
+        "id": "already_done-task-demo-aaaaaaaaaa",
+        "type": "already_done",
+        "origin": "owner",
+        "key": "task-demo-aaaaaaaaaa",
+        "project": "demo",
+        "ts": "2026-10-27T09:00:00Z"
+      },
+      "document": [
+        "## 待辦",
+        "- [ ] 〔Owner〕續約網域(等 Owner:task-demo-aaaaaaaaaa)",
+        "- [ ] 〔Owner〕另一件",
+        "- [ ] 〔Owner〕續約網域(等 Owner:task-demo-aaaaaaaaaa)"
+      ],
+      "expect": {
+        "changed": true,
+        "document": [
+          "## 待辦",
+          "- [ ] 〔Owner〕另一件"
+        ]
+      }
+    },
+    {
+      "id": "zh-done-full-width-marker",
+      "profile": "zh-hant",
+      "event": {
+        "hth": "0.1",
+        "id": "done-task-demo-aaaaaaaaaa",
+        "type": "done",
+        "origin": "owner",
+        "key": "task-demo-aaaaaaaaaa",
+        "project": "demo",
+        "ts": "2026-10-27T09:00:00Z"
+      },
+      "document": [
+        "## 待辦",
+        "- [ ] 〔Owner〕甲（等 Owner：task-demo-aaaaaaaaaa）",
+        "- [ ] 〔Owner〕乙"
+      ],
+      "expect": {
+        "changed": true,
+        "document": [
+          "## 待辦",
+          "- [ ] 〔Owner〕乙"
+        ]
+      }
+    },
+    {
+      "id": "zh-done-unknown-key",
+      "profile": "zh-hant",
+      "document": [
+        "# demo",
+        "",
+        "## 待辦",
+        "",
+        "- [ ] 〔Owner〕續約網域(等 Owner:task-demo-aaaaaaaaaa)",
+        "- [ ] 〔agent〕上傳加重試",
+        "",
+        "## 參考"
+      ],
+      "event": {
+        "hth": "0.1",
+        "id": "done-task-demo-bbbbbbbbbb",
+        "type": "done",
+        "origin": "owner",
+        "key": "task-demo-bbbbbbbbbb",
+        "project": "demo",
+        "ts": "2026-10-27T09:00:00Z"
+      },
+      "expect": {
+        "changed": false,
+        "document": [
+          "# demo",
+          "",
+          "## 待辦",
+          "",
+          "- [ ] 〔Owner〕續約網域(等 Owner:task-demo-aaaaaaaaaa)",
+          "- [ ] 〔agent〕上傳加重試",
+          "",
+          "## 參考"
+        ]
+      }
+    },
+    {
+      "id": "zh-agent-report-not-applied",
+      "profile": "zh-hant",
+      "document": [
+        "# demo",
+        "",
+        "## 待辦",
+        "",
+        "- [ ] 〔Owner〕續約網域(等 Owner:task-demo-aaaaaaaaaa)",
+        "- [ ] 〔agent〕上傳加重試",
+        "",
+        "## 參考"
+      ],
+      "event": {
+        "hth": "0.1",
+        "id": "done-task-demo-aaaaaaaaaa",
+        "type": "done",
+        "origin": "agent",
+        "key": "task-demo-aaaaaaaaaa",
+        "project": "demo",
+        "ts": "2026-10-27T09:00:00Z"
+      },
+      "expect": {
+        "changed": false,
+        "document": [
+          "# demo",
+          "",
+          "## 待辦",
+          "",
+          "- [ ] 〔Owner〕續約網域(等 Owner:task-demo-aaaaaaaaaa)",
+          "- [ ] 〔agent〕上傳加重試",
+          "",
+          "## 參考"
+        ]
+      }
+    },
+    {
+      "id": "zh-inferred-done-not-applied",
+      "profile": "zh-hant",
+      "document": [
+        "# demo",
+        "",
+        "## 待辦",
+        "",
+        "- [ ] 〔Owner〕續約網域(等 Owner:task-demo-aaaaaaaaaa)",
+        "- [ ] 〔agent〕上傳加重試",
+        "",
+        "## 參考"
+      ],
+      "event": {
+        "hth": "0.1",
+        "id": "done-task-demo-aaaaaaaaaa",
+        "type": "done",
+        "origin": "registrar",
+        "key": "task-demo-aaaaaaaaaa",
+        "project": "demo",
+        "ts": "2026-10-27T09:00:00Z",
+        "inferred": true,
+        "evidence": "line removed"
+      },
+      "expect": {
+        "changed": false,
+        "document": [
+          "# demo",
+          "",
+          "## 待辦",
+          "",
+          "- [ ] 〔Owner〕續約網域(等 Owner:task-demo-aaaaaaaaaa)",
+          "- [ ] 〔agent〕上傳加重試",
+          "",
+          "## 參考"
+        ]
+      }
+    },
+    {
+      "id": "zh-reopened-present",
+      "profile": "zh-hant",
+      "document": [
+        "# demo",
+        "",
+        "## 待辦",
+        "",
+        "- [ ] 〔Owner〕續約網域(等 Owner:task-demo-aaaaaaaaaa)",
+        "- [ ] 〔agent〕上傳加重試",
+        "",
+        "## 參考"
+      ],
+      "event": {
+        "hth": "0.1",
+        "id": "reopened-task-demo-aaaaaaaaaa",
+        "type": "reopened",
+        "origin": "owner",
+        "key": "task-demo-aaaaaaaaaa",
+        "project": "demo",
+        "ts": "2026-10-27T09:00:00Z",
+        "text": "續約網域"
+      },
+      "expect": {
+        "changed": false,
+        "document": [
+          "# demo",
+          "",
+          "## 待辦",
+          "",
+          "- [ ] 〔Owner〕續約網域(等 Owner:task-demo-aaaaaaaaaa)",
+          "- [ ] 〔agent〕上傳加重試",
+          "",
+          "## 參考"
+        ]
+      }
+    },
+    {
+      "id": "zh-reopened-replaces-placeholder",
+      "profile": "zh-hant",
+      "document": [
+        "# demo",
+        "",
+        "## 待辦",
+        "",
+        "- (無)",
+        "",
+        "## 參考"
+      ],
+      "event": {
+        "hth": "0.1",
+        "id": "reopened-task-demo-aaaaaaaaaa",
+        "type": "reopened",
+        "origin": "owner",
+        "key": "task-demo-aaaaaaaaaa",
+        "project": "demo",
+        "ts": "2026-10-27T09:00:00Z",
+        "text": "續約網域"
+      },
+      "expect": {
+        "changed": true,
+        "document": [
+          "# demo",
+          "",
+          "## 待辦",
+          "",
+          "- [ ] 〔Owner〕續約網域(等 Owner:task-demo-aaaaaaaaaa)",
+          "",
+          "## 參考"
+        ]
+      }
+    },
+    {
+      "id": "zh-reopened-appends",
+      "profile": "zh-hant",
+      "document": [
+        "## 待辦",
+        "",
+        "- [ ] 〔agent〕上傳加重試",
+        "",
+        "## 參考"
+      ],
+      "event": {
+        "hth": "0.1",
+        "id": "reopened-task-demo-bbbbbbbbbb",
+        "type": "reopened",
+        "origin": "owner",
+        "key": "task-demo-bbbbbbbbbb",
+        "project": "demo",
+        "ts": "2026-10-27T09:00:00Z",
+        "text": "  打給   銀行 "
+      },
+      "expect": {
+        "changed": true,
+        "document": [
+          "## 待辦",
+          "",
+          "- [ ] 〔agent〕上傳加重試",
+          "- [ ] 〔Owner〕打給 銀行(等 Owner:task-demo-bbbbbbbbbb)",
+          "",
+          "## 參考"
+        ]
+      }
+    },
+    {
+      "id": "zh-reopened-no-section",
+      "profile": "zh-hant",
+      "document": [
+        "# demo",
+        "",
+        "說明。"
+      ],
+      "event": {
+        "hth": "0.1",
+        "id": "reopened-task-demo-aaaaaaaaaa",
+        "type": "reopened",
+        "origin": "owner",
+        "key": "task-demo-aaaaaaaaaa",
+        "project": "demo",
+        "ts": "2026-10-27T09:00:00Z",
+        "text": "續約網域"
+      },
+      "expect": {
+        "changed": true,
+        "document": [
+          "# demo",
+          "",
+          "說明。",
+          "",
+          "## 待辦",
+          "",
+          "- [ ] 〔Owner〕續約網域(等 Owner:task-demo-aaaaaaaaaa)"
+        ]
+      }
+    },
+    {
+      "id": "en-done-in-group",
+      "profile": "en",
+      "event": {
+        "hth": "0.1",
+        "id": "done-task-demo-aaaaaaaaaa",
+        "type": "done",
+        "origin": "owner",
+        "key": "task-demo-aaaaaaaaaa",
+        "project": "demo",
+        "ts": "2026-10-27T09:00:00Z"
+      },
+      "document": [
+        "## Tasks",
+        "### [owner]",
+        "- [ ] Call the bank (waiting on owner: task-demo-aaaaaaaaaa)",
+        "- [ ] Renew the domain"
+      ],
+      "expect": {
+        "changed": true,
+        "document": [
+          "## Tasks",
+          "### [owner]",
+          "- [ ] Renew the domain"
+        ]
+      }
+    },
+    {
+      "id": "en-done-last-in-group-keeps-heading",
+      "profile": "en",
+      "event": {
+        "hth": "0.1",
+        "id": "done-task-demo-aaaaaaaaaa",
+        "type": "done",
+        "origin": "owner",
+        "key": "task-demo-aaaaaaaaaa",
+        "project": "demo",
+        "ts": "2026-10-27T09:00:00Z"
+      },
+      "document": [
+        "## Tasks",
+        "### [owner]",
+        "- [ ] Call the bank (waiting on owner: task-demo-aaaaaaaaaa)"
+      ],
+      "expect": {
+        "changed": true,
+        "document": [
+          "## Tasks",
+          "### [owner]"
+        ]
+      }
+    },
+    {
+      "id": "en-dropped-last-writes-placeholder",
+      "profile": "en",
+      "event": {
+        "hth": "0.1",
+        "id": "dropped-task-demo-aaaaaaaaaa",
+        "type": "dropped",
+        "origin": "owner",
+        "key": "task-demo-aaaaaaaaaa",
+        "project": "demo",
+        "ts": "2026-10-27T09:00:00Z"
+      },
+      "document": [
+        "## Tasks",
+        "",
+        "- [ ] [owner] Renew the domain (waiting on owner: task-demo-aaaaaaaaaa)",
+        "",
+        "## Notes"
+      ],
+      "expect": {
+        "changed": true,
+        "document": [
+          "## Tasks",
+          "- (none)",
+          "",
+          "## Notes"
+        ]
+      }
+    },
+    {
+      "id": "en-reopened-appends",
+      "profile": "en",
+      "event": {
+        "hth": "0.1",
+        "id": "reopened-task-demo-aaaaaaaaaa",
+        "type": "reopened",
+        "origin": "owner",
+        "key": "task-demo-aaaaaaaaaa",
+        "project": "demo",
+        "ts": "2026-10-27T09:00:00Z",
+        "text": "Renew the domain"
+      },
+      "document": [
+        "## Tasks",
+        "",
+        "- [ ] [agent] Add retry to the uploader",
+        "",
+        "## Notes"
+      ],
+      "expect": {
+        "changed": true,
+        "document": [
+          "## Tasks",
+          "",
+          "- [ ] [agent] Add retry to the uploader",
+          "- [ ] [owner] Renew the domain (waiting on owner: task-demo-aaaaaaaaaa)",
+          "",
+          "## Notes"
+        ]
+      }
+    }
+  ]
+}

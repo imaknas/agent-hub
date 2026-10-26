@@ -38,7 +38,7 @@ PROJECTS = hubconf.p("memory_copies", "~/.memory-copies")   # librarian 用的 m
 TAG, ASSISTANT = hubconf.owner_tag(), hubconf.assistant_name()   # 待辦標籤裡 owner 的名字(hub.json owner.tag)
 OWNERS = (TAG, "待定", "agent")
 ITEM = re.compile(rf"^- \[ \] 〔({re.escape(TAG)}|agent|待定)〕\s*(.+)$")
-GROUP = re.compile(rf"^#{{3,4}}\s*〔({re.escape(TAG)}|agent|待定)〕\s*$")
+GROUP = re.compile(r"^#{3,4}\s*〔([^〕]+)〕\s*$")  # 不認得的標籤也是小標題:底下的行不歸給上一個群組(HTH §5.3)
 BARE = re.compile(r"^- \[ \] (?!〔)(.+)$")
 # librarian 的任務登記把〔Knas〕待辦送進 Muninn 之後,行尾會蓋上「(等 Knas:<key>)」。
 # 有 key 的〔Knas〕待辦以 Muninn 為準,todo.md 不再列(只算數量);沒 key 的照列,
@@ -67,7 +67,7 @@ def parse(source: str, text: str, items: dict, problems: list) -> None:
             continue
         h = GROUP.match(line)
         if h:
-            group = h.group(1)
+            group = h.group(1) if h.group(1) in OWNERS else None
             continue
         m = ITEM.match(line)
         if m:
@@ -76,8 +76,8 @@ def parse(source: str, text: str, items: dict, problems: list) -> None:
         bare = BARE.match(line)
         if bare and group:
             items[group].append((source, bare.group(1).strip()))
-        elif bare or line.startswith("- [x]") or line.startswith("- [X]"):
-            # 看起來是待辦,卻沒有負責人(或已打勾還留著):一定要讓人看到,不能默默漏掉
+        elif bare or line.startswith(("- [ ] 〔", "- [x]", "- [X]")):
+            # 看起來是待辦,卻沒有(認得的)負責人,或已打勾還留著:一定要讓人看到,不能默默漏掉
             problems.append(f"{source}:待辦沒標負責人或已完成未移除 `{line[:60]}`")
         # 其他行(說明文字、「詳見 reference」連結、續行)不是待辦,略過
 

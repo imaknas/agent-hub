@@ -1,0 +1,374 @@
+{
+  "hth": "0.1",
+  "description": "Parse vectors: document -> tasks in the tasks section and malformed checkbox lines.",
+  "cases": [
+    {
+      "id": "en-flat",
+      "profile": "en",
+      "document": [
+        "# Demo",
+        "",
+        "Status text.",
+        "",
+        "## Tasks",
+        "",
+        "- [ ] [owner] Renew the domain",
+        "- [ ] [agent] Add retry to the uploader",
+        "- [ ] [undecided] Pick a database",
+        "- [ ] [owner] Sign the contract (waiting on owner: task-demo-0123456789)",
+        "- [ ] [owner]   Pay  the invoice   ",
+        "",
+        "## Notes",
+        "",
+        "- [ ] [owner] Outside the section, not a task"
+      ],
+      "expect": {
+        "section": true,
+        "problems": [],
+        "tasks": [
+          {
+            "line": 6,
+            "assignee": "owner",
+            "text": "Renew the domain",
+            "key": null
+          },
+          {
+            "line": 7,
+            "assignee": "agent",
+            "text": "Add retry to the uploader",
+            "key": null
+          },
+          {
+            "line": 8,
+            "assignee": "undecided",
+            "text": "Pick a database",
+            "key": null
+          },
+          {
+            "line": 9,
+            "assignee": "owner",
+            "text": "Sign the contract",
+            "key": "task-demo-0123456789"
+          },
+          {
+            "line": 10,
+            "assignee": "owner",
+            "text": "Pay  the invoice",
+            "key": null
+          }
+        ]
+      }
+    },
+    {
+      "id": "en-grouped",
+      "profile": "en",
+      "document": [
+        "## Tasks",
+        "",
+        "### [owner]",
+        "- [ ] Renew the domain",
+        "- [ ] Call the bank (waiting on owner:task-demo-aaaaaaaaaa)",
+        "- [ ] [agent] An explicit label wins inside a group",
+        "#### [agent]",
+        "- [ ] Add retry to the uploader"
+      ],
+      "expect": {
+        "section": true,
+        "problems": [],
+        "tasks": [
+          {
+            "line": 3,
+            "assignee": "owner",
+            "text": "Renew the domain",
+            "key": null
+          },
+          {
+            "line": 4,
+            "assignee": "owner",
+            "text": "Call the bank",
+            "key": "task-demo-aaaaaaaaaa"
+          },
+          {
+            "line": 5,
+            "assignee": "agent",
+            "text": "An explicit label wins inside a group",
+            "key": null
+          },
+          {
+            "line": 7,
+            "assignee": "agent",
+            "text": "Add retry to the uploader",
+            "key": null
+          }
+        ]
+      }
+    },
+    {
+      "id": "en-problems",
+      "profile": "en",
+      "document": [
+        "## Tasks",
+        "- [x] [owner] Finished but left behind",
+        "- [ ] A bare item outside any group",
+        "- [ ] [someone] Unknown label",
+        "- [ ] [owner]",
+        "> - [ ] [owner] Quoted, ignored",
+        "Free prose is ignored.",
+        "  - [ ] [owner] Indented, ignored",
+        "- (none)",
+        "### [later]",
+        "- [ ] A bare item under an unknown group"
+      ],
+      "expect": {
+        "section": true,
+        "tasks": [],
+        "problems": [
+          1,
+          2,
+          3,
+          4,
+          10
+        ]
+      }
+    },
+    {
+      "id": "en-no-section",
+      "profile": "en",
+      "document": [
+        "# Demo",
+        "",
+        "- [ ] [owner] No tasks section, so not a task"
+      ],
+      "expect": {
+        "section": false,
+        "tasks": [],
+        "problems": []
+      }
+    },
+    {
+      "id": "en-placeholder-only",
+      "profile": "en",
+      "document": [
+        "## Tasks",
+        "",
+        "- (none)",
+        "",
+        "## Next"
+      ],
+      "expect": {
+        "section": true,
+        "tasks": [],
+        "problems": []
+      }
+    },
+    {
+      "id": "en-marker-not-at-end",
+      "profile": "en",
+      "document": [
+        "## Tasks",
+        "- [ ] [owner] Ship it (waiting on owner: task-demo-aaaaaaaaaa) and more"
+      ],
+      "expect": {
+        "section": true,
+        "problems": [],
+        "tasks": [
+          {
+            "line": 1,
+            "assignee": "owner",
+            "text": "Ship it (waiting on owner: task-demo-aaaaaaaaaa) and more",
+            "key": null
+          }
+        ]
+      }
+    },
+    {
+      "id": "zh-flat",
+      "profile": "zh-hant",
+      "document": [
+        "# demo",
+        "",
+        "## 現況",
+        "",
+        "說明。",
+        "",
+        "## 待辦",
+        "",
+        "- [ ] 〔Owner〕續約網域",
+        "- [ ] 〔agent〕上傳加重試",
+        "- [ ] 〔待定〕選資料庫",
+        "- [ ] 〔Owner〕簽合約(等 Owner:task-demo-0123456789)",
+        "- [ ] 〔Owner〕 付款(等 Owner:task-demo-bbbbbbbbbb)",
+        "",
+        "## 參考"
+      ],
+      "expect": {
+        "section": true,
+        "problems": [],
+        "tasks": [
+          {
+            "line": 8,
+            "assignee": "owner",
+            "text": "續約網域",
+            "key": null
+          },
+          {
+            "line": 9,
+            "assignee": "agent",
+            "text": "上傳加重試",
+            "key": null
+          },
+          {
+            "line": 10,
+            "assignee": "undecided",
+            "text": "選資料庫",
+            "key": null
+          },
+          {
+            "line": 11,
+            "assignee": "owner",
+            "text": "簽合約",
+            "key": "task-demo-0123456789"
+          },
+          {
+            "line": 12,
+            "assignee": "owner",
+            "text": "付款",
+            "key": "task-demo-bbbbbbbbbb"
+          }
+        ]
+      }
+    },
+    {
+      "id": "zh-marker-variants",
+      "profile": "zh-hant",
+      "document": [
+        "## 待辦",
+        "- [ ] 〔Owner〕甲（等 Owner：task-demo-aaaaaaaaaa）",
+        "- [ ] 〔Owner〕乙(等Owner:task-demo-bbbbbbbbbb)",
+        "- [ ] 〔Owner〕丙(等 Owner: task-demo-cccccccccc )",
+        "- [ ] 〔Owner〕丁(等 Owner:task-demo-dddddddddd)   ",
+        "- [ ] 〔Owner〕戊(等 Owner:task-demo-eeeeeeeeee) 之後還有字"
+      ],
+      "expect": {
+        "section": true,
+        "problems": [],
+        "tasks": [
+          {
+            "line": 1,
+            "assignee": "owner",
+            "text": "甲",
+            "key": "task-demo-aaaaaaaaaa"
+          },
+          {
+            "line": 2,
+            "assignee": "owner",
+            "text": "乙",
+            "key": "task-demo-bbbbbbbbbb"
+          },
+          {
+            "line": 3,
+            "assignee": "owner",
+            "text": "丙",
+            "key": "task-demo-cccccccccc"
+          },
+          {
+            "line": 4,
+            "assignee": "owner",
+            "text": "丁",
+            "key": "task-demo-dddddddddd"
+          },
+          {
+            "line": 5,
+            "assignee": "owner",
+            "text": "戊(等 Owner:task-demo-eeeeeeeeee) 之後還有字",
+            "key": null
+          }
+        ]
+      }
+    },
+    {
+      "id": "zh-grouped",
+      "profile": "zh-hant",
+      "document": [
+        "## 待辦",
+        "",
+        "### 〔Owner〕",
+        "- [ ] 續約網域",
+        "- [ ] 打給銀行(等 Owner:task-demo-aaaaaaaaaa)",
+        "#### 〔agent〕",
+        "- [ ] 上傳加重試",
+        "- [ ] 〔Owner〕群組裡明確標籤優先",
+        "### 〔待定〕",
+        "- [ ] 選資料庫"
+      ],
+      "expect": {
+        "section": true,
+        "problems": [],
+        "tasks": [
+          {
+            "line": 3,
+            "assignee": "owner",
+            "text": "續約網域",
+            "key": null
+          },
+          {
+            "line": 4,
+            "assignee": "owner",
+            "text": "打給銀行",
+            "key": "task-demo-aaaaaaaaaa"
+          },
+          {
+            "line": 6,
+            "assignee": "agent",
+            "text": "上傳加重試",
+            "key": null
+          },
+          {
+            "line": 7,
+            "assignee": "owner",
+            "text": "群組裡明確標籤優先",
+            "key": null
+          },
+          {
+            "line": 9,
+            "assignee": "undecided",
+            "text": "選資料庫",
+            "key": null
+          }
+        ]
+      }
+    },
+    {
+      "id": "zh-problems",
+      "profile": "zh-hant",
+      "document": [
+        "## 待辦",
+        "- [x] 〔Owner〕做完沒刪",
+        "- [ ] 沒有負責人",
+        "- [ ] 〔別人〕不認得的標籤",
+        "- (無)",
+        "### 〔Owner〕",
+        "- [ ] 這是 owner 的",
+        "### 〔別人〕",
+        "- [ ] 不認得的群組底下"
+      ],
+      "expect": {
+        "section": true,
+        "problems": [
+          1,
+          2,
+          3,
+          8
+        ],
+        "tasks": [
+          {
+            "line": 6,
+            "assignee": "owner",
+            "text": "這是 owner 的",
+            "key": null
+          }
+        ]
+      }
+    }
+  ]
+}
