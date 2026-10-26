@@ -73,7 +73,7 @@ SSH 開 mini 上的資料夾。MBP 斷線/沒電時 session 還在跑、手機(R
 ## 專案信箱 / 事件匯流排
 
 - `bin/hubbus`——跨專案(跟 Knas)的信,收件人是**專案**(或 `knas` = 送進 Muninn),不是 session;
-  只 append 的事件 log(`.state/bus.db`,不進版控、沒有備份),信箱是它的投影。各專案的 session
+  只 append 的事件 log(`hub.json bus_dir` = `~/.local/state/agent-hub-bus/bus.db`,每台機器一份、不進版控;每晚的加密備份用 SQLite backup API 另外抓),信箱是它的投影。各專案的 session
   用 `hubbus send/inbox/done`(寫在 `templates/CLAUDE.md`);信由 SessionStart(`sync-local-setup.sh`、
   `worktree-memory.sh`)、UserPromptSubmit/PostToolUse hook 送進 session;`hubbus-bridge`(schedule.yaml,
   每 15 分鐘)負責 Muninn 的轉交進信箱、給 knas 的信跟轉交的 done 送進 Muninn。**沒人收的 request/question
