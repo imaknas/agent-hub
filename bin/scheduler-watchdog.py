@@ -28,7 +28,7 @@ import pathlib
 import subprocess
 import sys
 
-HUB = pathlib.Path.home() / "agent-hub"
+HUB = pathlib.Path(__file__).resolve().parents[1]  # 這支所在的 hub(刻意不 import hubconf:平台的 Python 壞了它也要能跑)
 HEARTBEAT = HUB / ".state" / "scheduler-heartbeat"
 STATE_FILE = HUB / ".state" / "scheduler-last-run.json"
 WATCH_STATE = HUB / ".state" / "scheduler-watchdog.json"
@@ -98,12 +98,27 @@ def send(text):
     return True
 
 
+def alerts_configured() -> bool:
+    import json
+    try:
+        return bool(json.loads((HUB / "hub.json").read_text()).get("alerts"))
+    except (OSError, ValueError):
+        return True  # 讀不到 hub.json 就照舊:要有 Discord 才算有在顧
+
+
 def main():
     if sys.argv[1:] == ["--test"]:
         ok = send("🧪 agent-hub 排程器看門狗測試訊息(設定正確)\n" + diagnose())
         print("已送出" if ok else f"送不出去,見 {LOG}")
         return 0 if ok else 1
 
+    if not alerts_configured():
+        # hub.json 沒有 alerts 段 = owner 選了不要警報(新使用者的預設):照樣檢查、記 log,不當成失敗
+        tick = last_tick()
+        stale = tick is None or (datetime.datetime.now() - tick).total_seconds() / 60 > STALE_MIN
+        if stale:
+            log(f"沒設定警報(hub.json 沒有 alerts),只記錄:排程器最後 tick {tick or '從來沒有'},停了")
+        return 0
     if not (TOKEN.exists() and CHANNEL.exists()):
         # 每 5 分鐘印到 launchd 的 stderr log、exit 1;狀態頁也會標出「看門狗沒設定」
         print(f"scheduler-watchdog: 沒有設定 {TOKEN} / {CHANNEL},排程器停了也發不出警報", file=sys.stderr)

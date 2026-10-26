@@ -49,6 +49,8 @@ def counts() -> dict[str, dict[str, int]]:
             continue
         rel = str(f.relative_to(ROOT))
         for rule, pat in RULES.items():
+            if rule == "secrets-path" and rel == "bin/hubconf.py":
+                continue  # 路徑只在這裡定義一次(hubconf.secrets_dir())
             if rel.split("/")[0] in RULE_SCOPE[rule] and (n := len(pat.findall(text))):
                 out[rule][rel] = n
     return out

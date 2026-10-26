@@ -7,15 +7,15 @@
 	<key>ProgramArguments</key>
 	<array>
 		<string>/usr/bin/python3</string>
-		<string>/Users/you/agent-hub/bin/scheduler-watchdog.py</string>
+		<string>{{hub}}/bin/scheduler-watchdog.py</string>
 	</array>
 	<key>StartInterval</key>
 	<integer>300</integer>
 	<key>RunAtLoad</key>
 	<true/>
 	<key>StandardOutPath</key>
-	<string>/Users/you/agent-hub/.logs/scheduler-watchdog-stdout.log</string>
+	<string>{{hub}}/.logs/scheduler-watchdog-stdout.log</string>
 	<key>StandardErrorPath</key>
-	<string>/Users/you/agent-hub/.logs/scheduler-watchdog-stderr.log</string>
+	<string>{{hub}}/.logs/scheduler-watchdog-stderr.log</string>
 </dict>
 </plist>

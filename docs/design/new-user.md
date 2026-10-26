@@ -305,6 +305,7 @@ check → commit → apply,不另外一套。
 > render-settings(enforce 關掉時的退回、合併閘門的 hook 也是它)、各模組的憑證宣告(還在 `projects/agent-hub.yaml` 的
 > `secrets:`)、vendor/muninn 契約的 `consumes:`(contracts-check 只讀專案登錄)。
 > 第 4 步 10-26 完成(平台這邊):`templates/CLAUDE.md` → `templates/agent-instructions.md`,人名寫成 `{{owner}}`/`{{owner_alias}}`/`{{assistant}}`,sync-local-setup 照 hub.json 填(`hubconf.fill_names`;24 個專案的輸出逐位元組相同);`hub.json` 加 `assistant.name`;gen-todo、librarian、consolidate、weekly reflect、trajectory 的標籤跟 prompt 改從設定讀(這台的 prompt 逐字相同)。個人名稱 479 → 407。**交給 Agent Hub session**:hubbus 裡的字串、`agent-jobs/mailbox.md` 搬到 `templates/prompts/`。**還沒做**:knas-tasks.py 的檔名/job 名(改名要跟 Muninn 的契約、STATE.md 裡已經蓋上的「等 Knas:」key 一起考慮,先留著)。
+> 第 5 步 10-26 完成:`bin/setup`(檢查指令 + setup-python,不自己裝)、`bin/hub` 的 init(沒有 hub.json 才寫、問名字/時區/專案位置/模組;沒開的功能連設定段一起拿掉;排程器跟看門狗從 `launchd/` 的樣板裝,內容一樣就不動)、doctor(用 runtime 的 `auth.credentials()`,排程器要是**這份** hub 的)、modules、onboard/recover/rename/status/jobs/run 包裝。`launchd/` 的 plist 改成 `{{hub}}` 樣板(recover-service 用 sed 填)。沒設定 alerts 的話,看門狗只記錄、狀態頁只提醒,不再永遠紅。`tests/test_new_user.py` = 3.6 的驗收(空實例 + 假 HOME:init → config-check → plan → doctor)。**第 6 步要處理**:平台自己的登錄 `projects/agent-hub.yaml` 還在使用者的登錄資料夾裡(新使用者也需要它),要跟 modules/ 一樣搬回平台。
 
 | 步 | 內容 | 動到的檔案 | 估計 |
 |---|---|---|---|

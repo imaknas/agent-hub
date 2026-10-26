@@ -8,7 +8,7 @@
 # 用法:recover-service.sh <label>
 set -euo pipefail
 
-AGENT_HUB="$HOME/agent-hub"
+AGENT_HUB="${AGENT_HUB_ROOT:-$(cd "$(dirname "$0")/.." && pwd)}"
 MANIFEST="$AGENT_HUB/services.tsv"
 
 fail() { echo "recover-service: $1" >&2; exit 1; }
@@ -38,7 +38,8 @@ case "$plist_location" in
   agent-hub/launchd/*)
     plist_path="$AGENT_HUB/${plist_location#agent-hub/}"
     [ -f "$plist_path" ] || fail "$plist_path 不存在——agent-hub 本身是不是還沒 pull 到最新?"
-    cp "$plist_path" "$HOME/Library/LaunchAgents/${LABEL}.plist"
+    # launchd/ 底下是樣板:{{hub}} 換成這台的 hub 位置(用 sed,遙控那台不一定有平台的 Python)
+    sed "s#{{hub}}#$AGENT_HUB#g" "$plist_path" >"$HOME/Library/LaunchAgents/${LABEL}.plist"
     launchctl bootstrap "gui/$(id -u)" "$HOME/Library/LaunchAgents/${LABEL}.plist"
     echo "已重建並啟動:$LABEL"
     echo "用途:$purpose"

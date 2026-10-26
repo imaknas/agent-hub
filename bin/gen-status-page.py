@@ -154,6 +154,7 @@ def esc(s: str) -> str:
 
 
 def main() -> None:
+    import hubconf  # 下面也有一處 import:放在最前面,整個函式都看得到
     now = datetime.datetime.now()
     import scheduler  # schedule.yaml + 專案登錄,跟排程器用同一份清單
     jobs, reg_info = scheduler.all_jobs()
@@ -178,6 +179,8 @@ def main() -> None:
                       capture_output=True).returncode != 0:
         alerts.append(("bad", "排程器看門狗(local.agent-hub-scheduler-watchdog)沒有載入:排程器停了不會有人通知。"
                               "在 mini 上跑 bin/recover-service.sh local.agent-hub-scheduler-watchdog"))
+    elif not hubconf.get("alerts"):
+        alerts.append(("notify", "沒設定警報(hub.json 沒有 alerts):排程器停了、服務掛了只會寫在這頁跟 log,不會通知你"))
     elif not all((HUB / ".secrets" / f).exists() for f in ("discord-token", "discord-alert-channel")):
         alerts.append(("bad", "排程器看門狗沒設定 Discord(.secrets/discord-token、.secrets/discord-alert-channel),"
                               "排程器停了發不出警報"))

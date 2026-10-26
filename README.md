@@ -6,7 +6,7 @@ agent 目前是 [Claude Code](https://claude.com/claude-code);平台只依賴自
 (`docs/design/runtime-abstraction.md`),Claude Code 是其中一個實作。
 
 > 這份 README 是給**人**看的入口。在這個 repo 裡工作的 agent 讀 `CLAUDE.md`。
-> 平台正在往「全新使用者也能直接用」的方向整理(`docs/design/new-user.md`),標「規劃中」的指令還沒有。
+> 平台正在往「全新使用者也能直接用」的方向整理(`docs/design/new-user.md`)。所有指令都從 `bin/hub --help` 開始找。
 
 ## 需要什麼
 
@@ -19,16 +19,13 @@ agent 目前是 [Claude Code](https://claude.com/claude-code);平台只依賴自
 
 ```bash
 git clone <這個 repo> ~/agent-hub && cd ~/agent-hub
-bin/setup-python                  # 平台的 Python(3.13 + PyYAML),每台機器一次
-cp hub.example.json hub.json      # 再改:owner.tag(待辦標籤裡你的名字)、時區、不需要的段落整段刪掉
-bin/onboard-project.sh ~/workspace/my-app      # 把一個專案接上來(--no-remote:不建 GitHub repo)
+bin/setup                         # 檢查需要的指令、建平台的 Python(3.13 + PyYAML),每台機器一次
+bin/hub init                      # 問你的名字、時區、專案放哪、開哪些模組 → 寫 hub.json、裝排程器跟看門狗
+bin/hub doctor                    # 一次看完還缺什麼(登入、排程器、服務…),每一項都說怎麼修
+bin/hub onboard ~/workspace/my-app             # 把一個專案接上來(--no-remote:不建 GitHub repo)
 ```
 
-接著裝排程器(`launchd/local.agent-hub-scheduler.plist`,裡面的路徑要換成你的;**規劃中**:`bin/hub init` 會代勞),
-隔天早上就有 `digest/<日期>.md` 跟 `todo.md`。
-
-規劃中:`bin/setup`(一次檢查所有依賴)、`bin/hub init`(問幾個問題、寫好 hub.json、裝排程器)、
-`bin/hub doctor`(一次看完 Python、登入、登錄、排程器、憑證哪裡壞了)。
+隔天早上就有 `digest/<日期>.md` 跟 `todo.md`。可以不開的功能(個人助理、雲端備份、mirror、每週回顧…)看 `bin/hub modules`。
 
 ## 概念
 
@@ -46,6 +43,7 @@ bin/onboard-project.sh ~/workspace/my-app      # 把一個專案接上來(--no-r
 ```bash
 bin/overview.sh [專案]            # 專案現況、綁定的服務、STATE.md
 bin/hub config plan               # 改了 config(hub.json、登錄…)之後會改什麼;bin/hub config apply 套用
+bin/hub modules                   # 可以不開的功能;bin/hub modules enable <名稱>
 bin/schedulectl list              # 所有 job
 bin/schedulectl run <job>         # 現在就跑一次
 bin/recover-project.sh <name>     # 新機器 / 專案資料夾不見了(不要對已經 onboard 的專案重跑 onboard)

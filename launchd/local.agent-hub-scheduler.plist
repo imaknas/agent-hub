@@ -6,16 +6,16 @@
 	<string>local.agent-hub-scheduler</string>
 	<key>ProgramArguments</key>
 	<array>
-		<string>/Users/you/agent-hub/bin/py</string>
-		<string>/Users/you/agent-hub/bin/scheduler.py</string>
+		<string>{{hub}}/bin/py</string>
+		<string>{{hub}}/bin/scheduler.py</string>
 	</array>
 	<key>StartInterval</key>
 	<integer>900</integer>
 	<key>RunAtLoad</key>
 	<true/>
 	<key>StandardOutPath</key>
-	<string>/Users/you/agent-hub/.logs/scheduler-stdout.log</string>
+	<string>{{hub}}/.logs/scheduler-stdout.log</string>
 	<key>StandardErrorPath</key>
-	<string>/Users/you/agent-hub/.logs/scheduler-stderr.log</string>
+	<string>{{hub}}/.logs/scheduler-stderr.log</string>
 </dict>
 </plist>

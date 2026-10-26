@@ -6,14 +6,14 @@
 	<string>local.transcript-backup</string>
 	<key>ProgramArguments</key>
 	<array>
-		<string>/Users/you/agent-hub/bin/transcript-backup.sh</string>
+		<string>{{hub}}/bin/transcript-backup.sh</string>
 	</array>
 	<key>RunAtLoad</key>
 	<true/>
 	<key>StandardErrorPath</key>
-	<string>/Users/you/agent-hub/.logs/transcript-backup-stderr.log</string>
+	<string>{{hub}}/.logs/transcript-backup-stderr.log</string>
 	<key>StandardOutPath</key>
-	<string>/Users/you/agent-hub/.logs/transcript-backup-stdout.log</string>
+	<string>{{hub}}/.logs/transcript-backup-stdout.log</string>
 	<key>StartInterval</key>
 	<integer>3600</integer>
 </dict>

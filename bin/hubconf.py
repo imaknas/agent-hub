@@ -55,6 +55,11 @@ def p(key: str, default: str | None = None) -> pathlib.Path | None:
     return path(get(key, default))
 
 
+def secrets_dir() -> pathlib.Path:
+    """平台的憑證目錄(不進版控、每晚加密備份)。程式都從這裡拿,不自己拼路徑——第 6 步搬家只改這裡。"""
+    return ROOT / ".secrets"
+
+
 def host(role: str) -> str:
     """機器角色 → ssh 名稱;"" = 就是這台(一台機器全包)。目前只有一個角色 server:跑 hub 的那台(memory bare repo、
     排程器、workspace 都在它上面)。另一台(遙控用的筆電)上的腳本要 ssh 過去,在 server 本機的就直接做。

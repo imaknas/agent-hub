@@ -26,6 +26,9 @@ SSH 開 mini 上的資料夾。MBP 斷線/沒電時 session 還在跑、手機(R
 
 ## 先查這裡,不要自己猜
 
+- **平台有哪些指令**:`bin/hub --help`(init、doctor、config、modules、onboard、recover、rename、status、jobs、run);
+  哪裡壞了先跑 `bin/hub doctor`。新機器:`bin/setup` → `bin/hub init`
+
 - **想知道某個專案現在狀態、綁定哪些服務、STATE.md 寫什麼**:
   `bin/overview.sh [專案名稱]`(不帶參數列出全部)
 - **有哪些專案被 onboard 過**:專案登錄 `projects/<name>.yaml`(`paths.workspace` 是 mini 上的位置;
@@ -81,7 +84,7 @@ SSH 開 mini 上的資料夾。MBP 斷線/沒電時 session 還在跑、手機(R
   `docs/design/mailbox-routing.md`):回覆某個 session 的對話,那個 session 開著就先等它的 hook 5 分鐘,閒置
   就用它的 context 在背景接續(分支副本,`runtime_claude.py`;context 超過 15 萬 token 改派新的);交辦則專案
   有人正在用就等 5 分鐘,之後用這個專案 24 小時內有動作、還活著的 session 在背景分支處理(答得出它手上的事;10-26 試行),
-  沒有這種 session 才派 headless agent(`agent-jobs/mailbox.md`,只寫筆記/回信/問 knas,不改程式碼)。agent-hub 的信也一樣。
+  沒有這種 session 才派 headless agent(`templates/prompts/mailbox.md`,只寫筆記/回信/問 owner,不改程式碼)。agent-hub 的信也一樣。
   分支做完,原本的 session 下次有動作時會收到分支的回覆跟它寄出的信。只有 request/question 會被處理,info 是通知。
   派出去的信記成「平台正在處理」,開著的 session 不會重做;同一串最多代為處理 4 輪、每專案每天 6 次(hub.json
   `mailbox`)。跟 Claude Code 有關的判斷只在 `bin/runtime_claude.py`。轉交不經過這裡。
