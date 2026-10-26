@@ -269,11 +269,18 @@ def main(argv: list[str]) -> int:
             return 1
         print(v)
         return 0
+    if len(argv) == 2 and argv[0] == "path":  # shell 腳本拿展開過的路徑(例:memory_copies),不要自己寫死
+        v = p(argv[1])
+        if v is None:
+            print(f"hubconf.py path:{argv[1]} 沒有設定", file=sys.stderr)
+            return 1
+        print(v)
+        return 0
     if argv == ["ideas"]:
         for name in ideas():
             print(name)
         return 0
-    print("用法:hubconf.py roster | ideas | get <key>", file=sys.stderr)
+    print("用法:hubconf.py roster | ideas | get <key> | path <key>", file=sys.stderr)
     return 2
 
 

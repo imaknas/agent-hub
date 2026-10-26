@@ -17,7 +17,7 @@
 # 端(librarian.sh / onboard-project.sh)負責。
 set -euo pipefail
 
-HUB="${AGENT_HUB:-$HOME/agent-hub}"
+HUB="${AGENT_HUB:-${AGENT_HUB_ROOT:-$(cd "$(dirname "$0")/.." && pwd)}}"   # 預設 = 這支腳本所在的 hub
 PY="$(dirname "$0")/py"   # 平台的 Python 跟著這支腳本走(AGENT_HUB 可能指向別的資料目錄)
 INDEX="$HUB/index.md"
 

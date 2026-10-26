@@ -19,12 +19,14 @@ export PATH="/opt/homebrew/bin:/usr/local/bin:$PATH"
 
 # claude 的憑證由 bin/llm.py 決定(預設 ~/.claude/headless-oauth-token)
 
-HUB="$HOME/agent-hub"
+# hub 根目錄由腳本位置推出(AGENT_HUB_ROOT 可覆蓋),memory 副本的位置從 hub.json(hubconf),不寫死
+HUB="${AGENT_HUB_ROOT:-$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)}"
 STATE_DIR="$HUB/.state"
 LOG_DIR="$HUB/.logs"
 REVIEW_LOG="$HUB/review-log.md"
 SAFE_PUSH="$HUB/bin/git-safe-push.sh"
 mkdir -p "$STATE_DIR" "$LOG_DIR"
+MEMORY_COPIES=$("$HUB/bin/py" "$HUB/bin/hubconf.py" path memory_copies) || exit 1
 TODAY=$(date +%Y-%m-%d)
 LOG="$LOG_DIR/librarian-$TODAY.log"
 
@@ -101,14 +103,14 @@ if $HUBBUS open-handoffs >"$handoffs_file.tmp" 2>>"$LOG" \
   mv "$handoffs_file.tmp" "$handoffs_file"
   log "muninn 轉交:$(jq length "$handoffs_file") 筆待處理"
   for p in $(jq -r '.[].project' "$handoffs_file" | sort -u); do
-    [ -d "$HOME/.memory-copies/$p/.git" ] || log "muninn 轉交:專案 $p 沒有 memory 副本,這次不處理(留在信箱)"
+    [ -d "$MEMORY_COPIES/$p/.git" ] || log "muninn 轉交:專案 $p 沒有 memory 副本,這次不處理(留在信箱)"
   done
 else
   rm -f "$handoffs_file.tmp"
   log "hubbus open-handoffs 讀取失敗,這次不處理轉交"
 fi
 
-for proj_dir in "$HOME"/.memory-copies/*/; do
+for proj_dir in "$MEMORY_COPIES"/*/; do
   [ -d "$proj_dir/.git" ] || continue
   proj=$(basename "$proj_dir")
   log "--- $proj ---"
@@ -122,7 +124,7 @@ for proj_dir in "$HOME"/.memory-copies/*/; do
   ckpt_file="$STATE_DIR/$proj.sha"
   last_sha=$(cat "$ckpt_file" 2>/dev/null || true)
 
-  # 帶任務 key 的轉交(done/dropped/already_done/reopened)不給模型,迴圈後面 knas-tasks.py 照 key 機械套用
+  # 帶任務 key 的轉交(done/dropped/already_done/reopened)不給模型,之後的 knas-tasks job 照 key 機械套用
   handoff_ids=$(jq -r --arg p "$proj" '[.[] | select(.project == $p and (.effect | IN("done", "dropped", "already_done", "reopened") | not)) | .id] | join(" ")' "$handoffs_file")
   handoff_nums=$(jq -r --arg p "$proj" '[.[] | select(.project == $p and (.effect | IN("done", "dropped", "already_done", "reopened") | not)) | "#\(.handoff_id)"] | join(" ")' "$handoffs_file")
 
@@ -372,71 +374,14 @@ memory/ 的結構:
   fi
 done
 
-# --- 〔Knas〕待辦 ↔ Muninn 任務登錄(機械、零 LLM)---
-# 還沒有 key 的〔Knas〕行寄成 Muninn 的任務、蓋上「(等 Knas:<key>)」;Muninn 送回的帶 key 轉交
-# (done/dropped/already_done/reopened)照 key 改那一行。放在 gen-todo 前面,todo.md 才會是改過的。
-if kt_out=$("$HUB/bin/py" "$HUB/bin/knas-tasks.py" 2>>"$LOG"); then
-  while IFS= read -r l; do log "$l"; done <<< "$kt_out"
-else
-  log "knas-tasks.py 失敗(exit $?),〔Knas〕待辦這次沒跟 Muninn 同步"
-fi
-
-# --- 問 Knas 的問題對帳(機械、零 LLM)---
-# 開著超過幾天的問題(Knas 可能已經在專案的 session 裡回答了,Muninn 不知道,m10252237)寄一封 request 問發問的專案;
-# 平台的分派送進開著的 session 或派 headless agent,解決了的由專案送 done/drop --question 收掉
-if qc_out=$($HUBBUS reconcile-questions 2>>"$LOG"); then
-  log "$qc_out"
-else
-  log "hubbus reconcile-questions 失敗(exit $?),這次沒對帳問 Knas 的問題"
-fi
-
-# --- 跨專案待辦清單 todo.md ---
-# 機械產生:收集各專案 STATE.md 的 `## 待辦` 段落(固定格式,由上面每個專案的呼叫
-# 維護)跟 openclaw-migration-status.md 的待辦。不用 LLM,輸入一樣輸出就一樣——
-# 2026-09-30 前是每晚叫 sonnet 從頭推導一次,項目數 46→88→114→73 亂跳,又是每晚
-# 最大的一筆額度用量。
-cd "$HUB" && git pull -q || true
-if todo_out=$("$HUB/bin/py" "$HUB/bin/gen-todo.py" "$HUB/todo.md" 2>>"$LOG"); then
-  while IFS= read -r l; do log "$l"; done <<< "$todo_out"
-else
-  log "gen-todo.py 失敗,todo.md 這次沒更新"
-fi
-
-# --- memory 缺口:有對話但沒記 memory 的專案(機械檢查,零 LLM 成本)---
-# 每晚都跑(不管 todo.md 這次有沒有重生),結果放進 todo.md 的固定區塊跟今天的 digest。
-# 不管結果都記一行:不然「0 個缺口」跟「根本沒跑」分不出來。
-if gaps=$("$HUB/bin/py" "$HUB/bin/check-memory-gaps.py" 2>>"$LOG"); then
-  log "memory 缺口檢查:$(printf '%s' "$gaps" | grep -c '^- ' || true) 個專案有對話但沒記 memory"
-else
-  log "memory 缺口檢查失敗(exit $?),看上面的錯誤;todo.md 的缺口區塊這次不動"
-  gaps="__failed__"
-fi
-if [ -f "$HUB/todo.md" ] && [ "$gaps" != "__failed__" ]; then
-  "$HUB/bin/py" - "$HUB/todo.md" "$gaps" <<'PY'
-import re, sys
-from pathlib import Path
-p, gaps = Path(sys.argv[1]), sys.argv[2].strip()
-s = re.sub(r"\n*<!-- memory-gaps:begin -->.*?<!-- memory-gaps:end -->\n?", "\n", p.read_text(), flags=re.S).rstrip() + "\n"
-if gaps:
-    s += ("\n<!-- memory-gaps:begin -->\n## memory 沒在記的專案(機械檢查)\n\n"
-          "有對話、但 memory 沒有新筆記——librarian 沒東西可整理,STATE.md 會一直過時。\n\n"
-          + gaps + "\n<!-- memory-gaps:end -->\n")
-p.write_text(s)
-PY
-fi
-if [ -n "$gaps" ] && [ "$gaps" != "__failed__" ]; then
-  log "memory 缺口:$(echo "$gaps" | grep -o '\*\*[^*]*\*\*' | tr -d '*' | tr '\n' ' ')"
-  { echo "## memory 沒在記的專案"; echo; echo "$gaps"; echo; } >> "$digest_file"
-fi
-
+# --- 今天的 digest:專案摘要這一段,再請模型標出專案之間的關聯(index.md)---
+# 後面幾件事是排在這之後的獨立 job(projects/agent-hub.yaml,after: librarian),不在這支裡:
+# knas-tasks、reconcile-questions、todo(gen-todo)、memory-gaps、librarian-publish(名冊 + commit)。
+# digest 是分段寫的(hublib.py digest-append):各 job 寫自己那段,重跑只換自己的,不會互相蓋掉。
+( cd "$HUB" && git pull -q ) >>"$LOG" 2>&1 || true
 if [ -s "$digest_file" ]; then
-  cd "$HUB"
-  git pull -q || true
-  {
-    echo "# Digest $TODAY"
-    echo
-    cat "$digest_file"
-  } > "digest/$TODAY.md"
+  "$HUB/bin/py" "$HUB/bin/hublib.py" digest-append projects <"$digest_file" >/dev/null \
+    || log "digest $TODAY 寫入失敗"
 
   index_prompt="更新 index.md:今天($TODAY)各專案的摘要在 digest/$TODAY.md,讀進來後,
 標出專案之間看得出來的關聯——沒有明顯關聯就不要硬掰,保持精簡。
@@ -445,7 +390,7 @@ if [ -s "$digest_file" ]; then
 不要編輯那個區塊(改了也會被覆蓋);你的註記寫在區塊外。"
 
   # 判斷點 librarian-index
-  index_output_json=$(printf '%s' "$index_prompt" | "$HUB/bin/py" "$HUB/bin/llm.py" run librarian-index 2>>"$LOG")
+  index_output_json=$(cd "$HUB" && printf '%s' "$index_prompt" | "$HUB/bin/py" "$HUB/bin/llm.py" run librarian-index 2>>"$LOG")
   idx_rc=$?
 
   if [ $idx_rc -eq 0 ] && [ -n "$index_output_json" ]; then
@@ -456,25 +401,10 @@ if [ -s "$digest_file" ]; then
   else
     log "index.md update failed (exit $idx_rc)"
   fi
-
-  # 名冊在 LLM 之後才重生,就算模型誤動了區塊也會被蓋回正確內容。
-  "$HUB/bin/gen-index-roster.sh" >>"$LOG" 2>&1 || log "gen-index-roster failed"
-  # 只 commit librarian 自己的產出,不用 git add -A——mini 的 ~/agent-hub 如果
-  # 有人留了手動編輯,不能被夜間 digest 一起掃進去。
-  "$HUB/bin/commit-hub-files.sh" "librarian: digest $TODAY" \
-      "digest/$TODAY.md" index.md review-log.md todo.md >>"$LOG" 2>&1 \
-    && log "digest $TODAY written & pushed" \
-    || log "digest $TODAY commit/push failed"
 else
+  # 今天沒有專案摘要:拿掉這一段(同一天重跑、上一次有寫過的話)
+  printf '' | "$HUB/bin/py" "$HUB/bin/hublib.py" digest-append projects >/dev/null || true
   log "nothing to digest today"
-  # 沒有 digest 的日子也要同步名冊(不然新 onboard 的專案要等到某天有 digest
-  # 才會出現在 index.md),以及迴圈裡可能寫進的 review-log.md。
-  cd "$HUB"
-  git pull -q || true
-  "$HUB/bin/gen-index-roster.sh" >>"$LOG" 2>&1 || log "gen-index-roster failed"
-  "$HUB/bin/commit-hub-files.sh" "librarian: index roster / review-log / todo $TODAY" \
-      index.md review-log.md todo.md >>"$LOG" 2>&1 \
-    || log "index.md/review-log.md/todo.md commit/push failed"
 fi
 
 log "=== librarian run end (total cost today: \$$total_cost) ==="

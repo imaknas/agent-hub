@@ -25,6 +25,48 @@ jobs:
   - consolidate-memory
   run: bin/librarian.sh
   cwd: hub
+# librarian 之後的機械步驟(零 LLM),以前寫死在 librarian.sh 的最後,現在各自是一個 job(docs/design/new-user.md 第 0 步):
+# 各自重跑、各自在狀態頁顯示成敗。knas-tasks、reconcile-questions 是個人助理的,之後歸進 assistant 模組。
+# reconcile-questions 寄的信會被信箱 dispatch 馬上分派,所以跟 knas-tasks 一樣只在晚上跑一次,不要改成間隔型。
+- name: knas-tasks               # 〔Knas〕待辦 ↔ Muninn 任務登錄;要排在 todo 前面,todo.md 才是改過的
+  at: 03:00
+  after:
+  - librarian
+  max_attempts_per_day: 3
+  run: bin/py bin/knas-tasks.py
+  cwd: hub
+- name: reconcile-questions      # 開太久的「問 Knas 的問題」寄 request 問發問的專案
+  at: 03:00
+  after:
+  - librarian
+  max_attempts_per_day: 1
+  run: bin/py bin/hubbus reconcile-questions
+  cwd: hub
+- name: todo                     # 跨專案待辦清單 todo.md(各專案 STATE.md 的 ## 待辦,機械產生)
+  at: 03:00
+  after:
+  - librarian
+  - knas-tasks
+  max_attempts_per_day: 3
+  run: bin/py bin/gen-todo.py todo.md
+  cwd: hub
+- name: memory-gaps              # 有對話但沒記 memory 的專案 → todo.md 的固定區塊 + 今天的 digest;todo 會整份重生,所以排在它後面
+  at: 03:00
+  after:
+  - todo
+  max_attempts_per_day: 3
+  run: bin/py bin/check-memory-gaps.py --apply
+  cwd: hub
+- name: librarian-publish        # 重生 index.md 的名冊,commit 今天的 digest、index.md、review-log.md、todo.md
+  at: 03:00
+  after:
+  - librarian
+  - knas-tasks
+  - todo
+  - memory-gaps
+  max_attempts_per_day: 3
+  run: bin/librarian-publish.sh
+  cwd: hub
 - name: mirror-backup
   legacy_name: mirror-backup
   at: 04:00

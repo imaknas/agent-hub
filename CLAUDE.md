@@ -33,7 +33,7 @@ SSH 開 mini 上的資料夾。MBP 斷線/沒電時 session 還在跑、手機(R
   以前在 MBP 的位置、改名前的路徑在 `legacy-paths.tsv`,只給統計舊對話用
 - **mini 上有哪些背景服務在跑**:`services.tsv`
 - **有哪些 GitHub repo 被 mirror 備份**:`mirror-list.txt`
-- **跨專案還有哪些事沒做(誰能做)**:`todo.md`(librarian 每晚重生)
+- **跨專案還有哪些事沒做(誰能做)**:`todo.md`(每晚 librarian 之後的 `agent-hub/todo` job 重生)
 - **這週在各專案做了什麼、作息、跟 AI 協作的方式**:`reflect/index.html`(所有週的分析報告頁,
   資料在 `reflect/YYYY-Www.json`;每週一產生,Claude Code 版的 Reflect)
 - **這幾個月(工作與職涯)怎麼走過來**:`reflect/trajectory/index.html`(`bin/trajectory.py`
@@ -86,12 +86,12 @@ SSH 開 mini 上的資料夾。MBP 斷線/沒電時 session 還在跑、手機(R
   派出去的信記成「平台正在處理」,開著的 session 不會重做;同一串最多代為處理 4 輪、每專案每天 6 次(hub.json
   `mailbox`)。跟 Claude Code 有關的判斷只在 `bin/runtime_claude.py`。轉交不經過這裡。
   專案問 Knas 的問題在專案 session 裡解決了:`hubbus send --to knas --type done|drop --question <id>`,Muninn 收掉;開 session
-  時列出這個專案還開著的問題(❓),librarian 每晚 `hubbus reconcile-questions` 問開著超過 3 天的還要不要(深談交接的問題由
+  時列出這個專案還開著的問題(❓),每晚 librarian 之後的 `agent-hub/reconcile-questions` job 問開著超過 3 天的還要不要(深談交接的問題由
   Muninn 自己管,不問)。
   Muninn 的轉交由 librarian 每晚從信箱讀(`hubbus open-handoffs`)直接套用進 STATE.md,結果可信才
   `hubbus done`(bridge 再回報 Muninn 結案);session 白天看到只當參考,Knas 的回答由發問的 session
   處理、沒處理的也是晚上套用。介面跟失敗模式看 `bin/hubbus` 檔頭
-- `bin/knas-tasks.py`——〔Knas〕待辦的 Muninn 任務登錄(librarian 每晚、gen-todo 之前呼叫,零 LLM):
+- `bin/knas-tasks.py`——〔Knas〕待辦的 Muninn 任務登錄(平台 job `agent-hub/knas-tasks`,每晚 librarian 之後、todo 之前,零 LLM):
   還沒 key 的〔Knas〕行(各 STATE.md、openclaw-migration-status.md)寄成 `task`、蓋上「(等 Knas:<key>)」
   (key 固定 = 專案 + 文字的 hash,重寄是 no-op);Muninn 回來的帶 key 轉交(done/dropped/already_done/
   reopened)照 key 刪掉或加回那一行,push 成功才結案;寄過的 key 從 STATE.md 消失(librarian 判定做完、整行刪掉)就寄
@@ -160,12 +160,14 @@ SSH 開 mini 上的資料夾。MBP 斷線/沒電時 session 還在跑、手機(R
   Claude job 的報告全文
 - `bin/librarian.sh`——「圖書館員」,讀各專案 `memory/` 的新增內容,判斷
   要不要更新 `STATE.md`,並產生跨專案 `digest/YYYY-MM-DD.md` + 更新
-  `index.md`。模型設定在 `models.env`
+  `index.md`。模型設定在 `models.env`。後面的機械步驟各自是 `after: librarian` 的平台 job(`projects/agent-hub.yaml`):
+  knas-tasks、reconcile-questions、todo、memory-gaps、`librarian-publish`(名冊 + 只 commit digest/index/review-log/todo);
+  digest 分段寫(`hublib.py digest-append <段落>`),每個 job 只換自己那段
 - `bin/consolidate-memory.py`——「回頭清理」,每晚 02:00(librarian 之前):超過 14 天的 memory 日期檔
   整理進 `reference/` 再 git rm、修正被推翻的敘述(保留「預計/可能」語氣,有機械檢查);一晚最多 3 個
   專案、每個專案最多一週一次,模型 `CONSOLIDATE_MODEL`(opus)。`--list` 看狀態、`--dry-run --project <name>`
   只產生提議的 diff。改動記在 `review-log.md`,細節看檔頭註解
-- `bin/gen-todo.py`——librarian 每晚呼叫:收集各專案 STATE.md 的 `## 待辦` 段落(固定格式
+- `bin/gen-todo.py`——平台 job `agent-hub/todo`(每晚 librarian、knas-tasks 之後):收集各專案 STATE.md 的 `## 待辦` 段落(固定格式
   `- [ ] 〔Knas|agent|待定〕…`,由 librarian 維護)跟 `openclaw-migration-status.md` 的待辦,
   機械產生 `todo.md`,不用 LLM;格式不對的專案列在檔尾
 - `bin/weekly-reflect.sh`(→ `weekly-reflect.py` + `reflect_llm.py`,頁面樣板 `templates/reflect.html`)
@@ -185,7 +187,7 @@ SSH 開 mini 上的資料夾。MBP 斷線/沒電時 session 還在跑、手機(R
   獨立、零 LLM 成本
 - `bin/transcript-backup.sh`——MBP → mini 的 Claude Code chat transcript
   每小時備份(這支跑在 MBP,不是 mini)
-- `bin/check-memory-gaps.py`——librarian 每晚呼叫:最近 72 小時有對話、memory 卻沒有新筆記
+- `bin/check-memory-gaps.py`——平台 job `agent-hub/memory-gaps`(`--apply`,每晚 todo 之後):最近 72 小時有對話、memory 卻沒有新筆記
   的專案,列進 `todo.md` 固定區塊跟 digest(零 LLM 成本)
 - `bin/sync-all-memory.sh`——每小時對所有專案的 `.agent-memory` 補跑
   `git-sync-memory.sh` + 補 push(hook 的安全網;跑在 mini,`local.sync-all-memory-mini`。MBP 上

@@ -10,7 +10,7 @@
 # 列出的檔案都沒變化就什麼都不做,exit 0。
 set -uo pipefail
 
-HUB="${AGENT_HUB:-$HOME/agent-hub}"
+HUB="${AGENT_HUB:-${AGENT_HUB_ROOT:-$(cd "$(dirname "$0")/.." && pwd)}}"   # 預設 = 這支腳本所在的 hub
 cd "$HUB" || exit 1
 
 if [ -z "${_COMMIT_HUB_LOCKED:-}" ]; then

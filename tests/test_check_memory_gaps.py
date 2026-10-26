@@ -64,5 +64,60 @@ class NoteCommits(unittest.TestCase):
         self.assertEqual(self.m.note_commits_since(str(self.ws / "nope"), self.since), -1)
 
 
+class TodoBlock(unittest.TestCase):
+    """--apply 寫進 todo.md 的固定區塊:有缺口就放在檔尾、重跑不重複,沒有缺口就拿掉。"""
+
+    def setUp(self):
+        self.m = load()
+        self.todo = pathlib.Path(tempfile.mkdtemp()) / "todo.md"
+        self.todo.write_text("# todo\n\n- [ ] 〔agent〕x\n")
+
+    def test_block_added_replaced_removed(self):
+        self.m.write_todo_block(self.todo, ["- [ ] **a**:…"])
+        self.m.write_todo_block(self.todo, ["- [ ] **b**:…"])
+        s = self.todo.read_text()
+        self.assertEqual(s.count("<!-- memory-gaps:begin -->"), 1)
+        self.assertIn("**b**", s)
+        self.assertNotIn("**a**", s)
+        self.assertTrue(s.startswith("# todo\n\n- [ ] 〔agent〕x\n"))
+        self.m.write_todo_block(self.todo, [])
+        self.assertEqual(self.todo.read_text(), "# todo\n\n- [ ] 〔agent〕x\n")
+
+    def test_missing_todo_is_left_alone(self):
+        missing = self.todo.parent / "nope.md"
+        self.m.write_todo_block(missing, ["- [ ] **a**:…"])
+        self.assertFalse(missing.exists())
+
+
+class DigestSections(unittest.TestCase):
+    """hublib.digest_append:每個 job 寫自己那段;重跑原地換掉、順序不變;空的拿掉那段;沒檔案又沒內容就不建檔。"""
+
+    def setUp(self):
+        import hublib
+        self.h = hublib
+        self._hub = hublib.HUB
+        hublib.HUB = pathlib.Path(tempfile.mkdtemp())
+
+    def tearDown(self):
+        self.h.HUB = self._hub
+
+    def test_sections(self):
+        h, day = self.h, "2026-10-26"
+        self.assertIsNone(h.digest_append("memory-gaps", "", day))
+        self.assertFalse(h.digest_path(day).exists())
+        h.digest_append("projects", "## a\n\nx", day)
+        h.digest_append("memory-gaps", "- gap", day)
+        h.digest_append("projects", "## a\n\ny", day)
+        s = h.digest_path(day).read_text()
+        self.assertTrue(s.startswith("# Digest 2026-10-26\n"))
+        self.assertLess(s.index("digest:projects"), s.index("digest:memory-gaps"), "重跑要原地換掉,不是移到最後")
+        self.assertIn("y", s)
+        self.assertNotIn("\nx\n", s)
+        h.digest_append("projects", "", day)
+        s = h.digest_path(day).read_text()
+        self.assertNotIn("digest:projects", s)
+        self.assertIn("- gap", s)
+
+
 if __name__ == "__main__":
     unittest.main()

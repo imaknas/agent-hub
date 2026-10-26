@@ -1,0 +1,142 @@
+{
+  "v": 1,
+  "_comment": "新使用者的範本:複製成 hub.json 再改(平台的 bin/hubconf.py 讀 hub.json)。路徑可用 ~ 開頭;相對路徑以 hub 根目錄為準。不需要的段落(assistant、alerts、backup、github…)可以整段刪掉:讀它的功能就是沒開。完整說明見 README.md 跟 docs/design/new-user.md。",
+  "registry_dir": "projects",
+  "services_root": "~/services",
+  "workspace_root": "~/workspace",
+  "memory_copies": "~/.memory-copies",
+  "git_origin": "~/git-origin",
+  "owner": {
+    "_comment": "你自己:address 是信箱裡寄給你的地址(協定的一部分,不用改);tag 是待辦標籤〔<tag>〕裡的名字",
+    "address": "owner",
+    "aliases": [],
+    "tag": "Me",
+    "timezone": "UTC"
+  },
+  "assistant": {
+    "_comment": "選配:個人助理(收 owner 地址的信、送轉交回來)。沒有就整段刪掉",
+    "project": "my-assistant",
+    "api": "http://127.0.0.1:18795/api/messages",
+    "ingest_token": "~/services/my-assistant/data/secrets/ingest_token",
+    "cli": "~/services/my-assistant/.venv/bin/my-assistant"
+  },
+  "alerts": {
+    "_comment": "選配:警報送 Discord(bot token、頻道 id 各放一個檔,不進版控)。沒有就整段刪掉",
+    "discord_token_file": ".secrets/discord-token",
+    "discord_channel_file": ".secrets/discord-alert-channel"
+  },
+  "memory_host": "",
+  "_memory_host_comment": "memory bare repo 在另一台機器時填它的 ssh host 名稱;一台機器全包就留空",
+  "bus_dir": "~/.local/state/agent-hub-bus",
+  "_bus_dir_comment": "事件匯流排(bus.db、hubbus.log)。刻意放在 hub 目錄外:沙箱裡的專案 deny 寫 ~/agent-hub/**,而 deny 會蓋過 sandbox 的 allowWrite(2026-10-22 pilot 實測)",
+  "backup": {
+    "_comment": "選配:每晚加密備份(restic)。密碼在 .secrets/backup-password(另存一份在你的密碼管理器),B2 金鑰在 .secrets/b2-env。沒有就整段刪掉",
+    "repo": "b2:<your-bucket>:agent-hub",
+    "sqlite": [],
+    "bare_repos": "~/git-origin",
+    "include": [
+      "~/agent-hub/.state",
+      "~/agent-hub/.secrets"
+    ],
+    "exclude": [
+      "*.db-wal",
+      "*.db-shm"
+    ],
+    "keep": {
+      "daily": 14,
+      "weekly": 8,
+      "monthly": 12
+    }
+  },
+  "github": {
+    "_comment": "選配:onboard 時建 GitHub repo 用的帳號(要先 gh auth login)",
+    "owner": "<your-github-user>"
+  },
+  "ideas": {
+    "limit": 20,
+    "_comment": "想法沙盒(type: idea)同時最多幾個,create-idea-sandbox.py / POST /v1/sandboxes"
+  },
+  "mailbox": {
+    "conversation_wait_min": 5,
+    "resume_max_tokens": 150000,
+    "thread_max_rounds": 4,
+    "daily_runs_per_project": 6,
+    "_comment": "專案信箱的分流(bin/hubbus dispatch,docs/design/mailbox-routing.md):有人在用/對話對象開著先等幾分鐘、接續的 context 上限(超過改派新的)、同一串最多代為處理幾輪、每個專案每天最多派幾次"
+  },
+  "credentials": {
+    "_comment": "使用者層級的憑證位置(policy.py → 各執行環境的 sandbox 讀不到;租約的 --settings、平台代跑的 profile 都擋)。dirs 連底下全部,files 單一檔案",
+    "dirs": [
+      "~/.claude",
+      "~/.ssh",
+      "~/.config/gh",
+      "~/.aws"
+    ],
+    "files": [
+      "~/.claude.json"
+    ]
+  },
+  "capabilities": {
+    "_comment": "平台的能力清單(docs/design/capabilities.md):專案登錄 enforce.capabilities 只收這裡有的名稱,每個能力一個 profile 片段 capabilities/<名稱>.sb。default_for:建立那種專案時自動寫進登錄(create-idea-sandbox.py);risk: high 的不會自動加,要 owner 同意後由 agent-hub 的 session 改登錄",
+    "gpu": {
+      "risk": "low",
+      "default_for": [
+        "idea"
+      ],
+      "description": "用 GPU(Metal)跑程式,例:Blender 出圖。檔案跟網路範圍不變大"
+    }
+  },
+  "cap_runner": {
+    "_comment": "平台代跑(bin/cap-runner.py、bin/hub-run):工作逾時預設/上限(秒)、同時最多跑幾個(每個專案固定 1 個)",
+    "timeout_s": 600,
+    "max_timeout_s": 1800,
+    "concurrency": 2
+  },
+  "runtime": {
+    "default": "claude",
+    "_comment": "平台用哪個執行環境(runtime_ports.RUNTIMES 的名稱;docs/design/runtime-abstraction.md)。Claude Code 只是一個實作"
+  },
+  "lease": {
+    "_comment": "通道租借:這些網域(含子網域)任何人都能架、看得到誰來請求或貼了什麼,WebFetch 只能一次一次核准,不能「這個租約都允許」(個人助理的權限卡片從 runner 的 GET /v1/policy 讀同一份)",
+    "no_session_domains": [
+      "webhook.site",
+      "requestbin.com",
+      "requestbin.net",
+      "pipedream.net",
+      "beeceptor.com",
+      "hookbin.com",
+      "ngrok.io",
+      "ngrok-free.app",
+      "ngrok.app",
+      "trycloudflare.com",
+      "loca.lt",
+      "serveo.net",
+      "interact.sh",
+      "oast.fun",
+      "oast.me",
+      "oastify.com",
+      "burpcollaborator.net",
+      "canarytokens.com",
+      "pastebin.com",
+      "paste.ee",
+      "hastebin.com",
+      "dpaste.org",
+      "dpaste.com",
+      "rentry.co",
+      "privatebin.net",
+      "controlc.com",
+      "termbin.com",
+      "ix.io",
+      "sprunge.us",
+      "0x0.st",
+      "transfer.sh",
+      "pastes.dev",
+      "gist.github.com",
+      "gist.githubusercontent.com"
+    ]
+  },
+  "hosts": {
+    "_comment": "只有「在一台機器跑、從另一台遙控」時才需要(讀舊對話紀錄的路徑換算);一台機器全包就留空",
+    "mbp_home": "",
+    "mini_home": ""
+  }
+}

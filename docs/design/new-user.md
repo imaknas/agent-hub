@@ -292,6 +292,8 @@ check → commit → apply,不另外一套。
 
 ## 4. 步驟(每一步單獨上線)
 
+> **進度**:第 0 步 10-26 完成(librarian 拆成核心 + 5 個 job、digest 分段、路徑從 hubconf、README、`hub.example.json`)。
+
 | 步 | 內容 | 動到的檔案 | 估計 |
 |---|---|---|---|
 | **0** | librarian 拆成核心 + job(`after:`;knas-tasks 跟 reconcile-questions 先當成獨立 job,第 3 步再歸進 assistant);路徑改從 hubconf;`hub.example.json` + 根目錄 README(新使用者路徑,還沒有的指令寫「規劃中」) | `librarian.sh`、`projects/agent-hub.yaml`、`hublib.py`(digest_append)、`check-memory-gaps.py`、新增 README、`hub.example.json` | 0.5 天 |
