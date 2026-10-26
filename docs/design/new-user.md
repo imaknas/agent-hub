@@ -303,6 +303,8 @@ check → commit → apply,不另外一套。
 | 5 | `bin/hub` + `init`(含裝排程器、看門狗的 plist)+ `doctor` | 新增 `bin/hub` | 1 |
 | 6 | 先把 `schedule.yaml` 清到 0 項;實例目錄 `config/` + `data/` + `secrets/`(3.1):`hubconf.config()`/`data()`、讀寫的腳本改用它;`commit-hub-files.sh` 只 commit config repo,寫 data 的腳本不再 commit;`index.md` 拆成名冊 + 附加式註記;`.state/` 的設計文件移到 `docs/design/`;secrets 經過 `hubconf.secret()`;**備份**:新路徑加進 include → **跑一次 `backup.py restore` 到暫存目錄,實際還原出 `config/`、`data/` 才算數**(不等每月的 backup-verify)→ exclude 換成新路徑(順便確認 `backup-staging` 不會被備份兩次)→ `check-secrets` 的 `covers()` 跟 `.secrets` 搬家同一個 commit;外部讀者(Muninn 的 config.yaml 三個路徑)同一步改或留 symlink;**在沒有 job 跑的時段搬**(避開 02:00–04:00 librarian、05:45 backup),或先停排程器、搬完 kickstart;Knas 的資料搬過去;加 3.6 的空實例驗收測試 | 幾乎所有寫產出的腳本、`backup.py`/`hub.json` 的 `backup`、讀 secrets 的 8 支 | 2.5–3 |
 
+| **7 (r3)** | **開源前小心地重寫平台 repo 的歷史**(Knas 10-26 選的,見第 7 節第 8 題),只在第 6 步完成、tree 裡已經沒有使用者資料之後做:① 先做一份完整的 `--mirror` 備份(不動,出事就從這裡還原)② 在新的 mirror clone 上跑 `git filter-repo`,路徑清單明列(`digest/`、`reflect/`、`index.md`、`todo.md`、`review-log.md`、`projects/`、`hub.json`、`schedule.yaml`、`mirror-list.txt`、`services.tsv`、`legacy-paths.tsv`、`openclaw-migration-status.md`、`agent-jobs/` 的使用者 prompt、`.state/` 誤進版控的)③ 再掃一次內容(個人名稱、帳號、token 的字樣;用 ratchet 同一份規則 + 一個 secret 掃描工具),有命中就逐筆決定改寫或刪 ④ 驗收:重寫後 HEAD 的 tree 跟重寫前 HEAD 減掉那些路徑完全一樣、測試全過 ⑤ 保留 filter-repo 的 commit 對照表(文件、memory 筆記裡引用的舊 commit 編號查得到新的)⑥ 換掉之前停排程器、通知所有 session;mini 的 `~/agent-hub`、MBP 的副本、mirror-backup、各 worktree 全部重新 clone;force push 由 Knas 親自確認 | 平台 repo 的歷史(不改程式) | 1 |
+
 順序的理由:0、1 不碰別人的檔、馬上有用;2–4 是新使用者真的會撞到的;6 範圍最大、要 Knas 決定資料怎麼放,放最後,
 而且前面每一步都已經把路徑收進 hubconf,6 就只是改 hubconf 的預設值加搬檔。
 
@@ -332,6 +334,8 @@ check → commit → apply,不另外一套。
 2. 步驟順序,以及第 0 步可以先做(它本身就是上一輪談的「librarian 拆開」)。
 3. ~~實例資料怎麼放~~ **(r3)** 10-26 跟 Knas 定了:config as code,config 放 private config repo;data 不進 git、靠備份;
    「什麼時候做了什麼」看匯流排跟紀錄本身(3.0)。
+> **10-26 Knas 決定:6 同意;7 選 (a) 狀態頁多三頁;8 選 (a) 小心地重寫歷史(做法見第 4 步的第 7 步)。**
+
 6. **(r3) 1.5 步(config pipeline)排在模組(第 3 步)之前嗎?**(Agent Hub session 同意)
    第 2、3、6 步都在改 config 的**結構**:`hub.json` 加 `hosts`、`modules`,多出 `modules/*/module.yaml`,最後整批搬到
    `config/`。沒有 pipeline 的話,改錯的代價是「要等出事才知道」:
@@ -350,9 +354,9 @@ check → commit → apply,不另外一套。
    反過來說,如果先做模組再做 pipeline,第 3 步改排程器、加 `before:` 的時候,就只能靠「等下一個 tick 看結果」來驗證。
 7. **(r3) digest、todo 不進 git 之後,Knas 在哪裡看?**
    - **現在怎麼看**:狀態頁(`https://hub-host.<tailnet>.ts.net/`)只有一頁 `index.html`——job 成敗、🔔 報告、下次
-     什麼時候跑;**沒有** digest、todo、每週回顧。這三樣現在是靠「它們在 git 裡」才看得到:在 GitHub(手機 app)開
-     `digest/2026-10-26.md`,或在 MBP 的 `~/agent-hub` pull 之後開 `reflect/index.html`。
-   - **搬出 git 之後**:這三樣只在 mini 的 `data/` 裡,GitHub 跟 MBP 都看不到了。
+     什麼時候跑;**沒有** digest、todo、每週回顧。這三樣現在只能在 repo 裡打開檔案看(session 裡,或 MBP pull 之後開
+     `reflect/index.html`;Knas 沒有用 GitHub 看)。
+   - **搬出 git 之後**:這三樣只在 mini 的 `data/` 裡,MBP pull 不到了。
    - **選項**:
      - (a) **狀態頁多三頁**:`/digest/`(最近幾天,markdown 轉成 HTML)、`/todo`、`/reflect/`(直接放現在的 `reflect/index.html`)。
        範例:早上在手機開狀態頁 → 上方的「今日 digest」分頁 → 看到昨晚 librarian 寫的「## project-06 …」;「待辦」分頁就是
