@@ -20,7 +20,7 @@
 # 刪掉 worktree 只會刪 symlink,不會動到主 checkout 的 memory。
 set -uo pipefail
 
-HUB="$HOME/agent-hub"
+HUB="${AGENT_HUB_ROOT:-$(cd "$(dirname "$0")/.." && pwd)}"
 event="${1:-}"
 
 git_dir=$(git rev-parse --path-format=absolute --git-dir 2>/dev/null) || exit 0

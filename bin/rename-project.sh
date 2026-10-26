@@ -22,7 +22,7 @@
 #   沒有 --apply 只印出會做的事。--path 省略時,資料夾名稱等於舊名稱就跟著改成新名稱。
 set -euo pipefail
 
-HUB="$HOME/agent-hub"
+HUB="${AGENT_HUB_ROOT:-$(cd "$(dirname "$0")/.." && pwd)}"
 source "$(dirname "$0")/hubpaths.sh"
 MIRRORS="$HUB_CONFIG/mirror-list.txt"
 LEGACY="$HUB_DATA/legacy-paths.tsv"

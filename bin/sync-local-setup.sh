@@ -23,7 +23,7 @@
 # 用法:sync-local-setup.sh [--quiet] [專案路徑,預設目前目錄]
 set -uo pipefail
 
-AGENT_HUB="$HOME/agent-hub"
+AGENT_HUB="${AGENT_HUB_ROOT:-$(cd "$(dirname "$0")/.." && pwd)}"
 QUIET=false
 [ "${1:-}" = "--quiet" ] && { QUIET=true; shift; }
 say() { $QUIET || echo "sync-local-setup: $*"; }

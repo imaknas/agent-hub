@@ -10,7 +10,7 @@
 # 用法:overview.sh [專案名稱]——不帶參數就列出全部專案的總覽。
 set -uo pipefail
 
-AGENT_HUB="$HOME/agent-hub"
+AGENT_HUB="${AGENT_HUB_ROOT:-$(cd "$(dirname "$0")/.." && pwd)}"
 source "$(dirname "$0")/hubpaths.sh"
 SERVICES="$HUB_CONFIG/services.tsv"
 
@@ -54,7 +54,8 @@ FILTER="${1:-}"
   # (~/.memory-copies/<name>/STATE.md)——兩個路徑都試,不用管在哪台機器跑。
   state_dir="$local_path/.agent-memory"
   state_file="$state_dir/STATE.md"
-  mini_clone_state_file="$HOME/.memory-copies/$name/STATE.md"
+  _mc="$(hub_json_get memory_copies)"; _mc="${_mc:-~/.memory-copies}"
+  mini_clone_state_file="${_mc/#\~/$HOME}/$name/STATE.md"
   # .agent-memory 平常只在該專案自己開新 session 時(SessionStart hook)才
   # 會 git pull——這支腳本是隨時可能在別的資料夾被叫用來看別的專案,不會
   # 觸發那個 hook,直接讀本地檔案可能讀到 librarian 已經 push 但這台機器

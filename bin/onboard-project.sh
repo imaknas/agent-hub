@@ -48,7 +48,7 @@
 #       onboard 過哪些專案」的地方,不依賴任何單一專案自己的 repo 內容
 set -euo pipefail
 
-AGENT_HUB="$HOME/agent-hub"
+AGENT_HUB="${AGENT_HUB_ROOT:-$(cd "$(dirname "$0")/.." && pwd)}"
 # 在 mini 上跑(2026-10-15 起的常態:新專案開在 mini 的 ~/workspace/<name>)就直接在本機做 mini 端的步驟
 . "$AGENT_HUB/bin/minilib.sh"
 TEMPLATES="$AGENT_HUB/templates"

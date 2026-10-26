@@ -17,7 +17,7 @@ openclaw-migration-status.md):
 專案(有實質內容卻沒有 `## 待辦`、或行不合格式)列在檔尾「格式問題」,
 不會被默默漏掉。
 
-跑在 mini(librarian 呼叫,讀 ~/.memory-copies/*/STATE.md)。
+跑在 mini(平台 job agent-hub/todo,讀 memory 副本的 */STATE.md)。
 用法:gen-todo.py <輸出 todo.md 路徑>
 結束碼:0 正常;格式問題不算失敗(已寫進檔案跟 stdout)。
 """
@@ -31,9 +31,9 @@ sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
 import hubconf  # noqa: E402
 
 HOME = pathlib.Path.home()
-HUB = HOME / "agent-hub"
+HUB = hubconf.ROOT
 MIGRATION = hubconf.data_file("openclaw-migration-status.md")
-PROJECTS = HOME / ".memory-copies"
+PROJECTS = hubconf.p("memory_copies", "~/.memory-copies")   # librarian 用的 memory 副本(hub.json memory_copies)
 
 TAG, ASSISTANT = hubconf.owner_tag(), hubconf.assistant_name()   # 待辦標籤裡 owner 的名字(hub.json owner.tag)
 OWNERS = (TAG, "待定", "agent")

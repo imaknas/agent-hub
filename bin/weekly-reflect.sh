@@ -5,7 +5,7 @@
 # templates/reflect.html。
 set -uo pipefail
 export PATH="/opt/homebrew/bin:/usr/local/bin:$PATH"
-HUB="$HOME/agent-hub"
+HUB="${AGENT_HUB_ROOT:-$(cd "$(dirname "$0")/.." && pwd)}"
 INDEX_MODEL="sonnet"
 source "$(dirname "$0")/hubpaths.sh"
 [ -f "$HUB_CONFIG/models.env" ] && source "$HUB_CONFIG/models.env"

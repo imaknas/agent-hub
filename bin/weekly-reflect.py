@@ -34,7 +34,7 @@ import hublib  # noqa: E402
 import runtime_ports  # noqa: E402  對話紀錄只透過介面讀(Claude Code 只是一個實作)
 
 TZ = zoneinfo.ZoneInfo("Asia/Taipei")
-MIRRORS = hublib.HOME / "git-origin" / "mirrors"
+MIRRORS = hubconf.p("git_origin", "~/git-origin") / "mirrors"
 MEMORY_COPIES = hublib.MEMORY_COPIES
 OUT = hubconf.data_file("reflect")
 TEMPLATE = hublib.HUB / "templates" / "reflect.html"
@@ -70,7 +70,7 @@ def mirror_for(name: str) -> pathlib.Path:
     if origin.endswith(".git"):
         return MIRRORS / pathlib.Path(origin).name
     if name == "agent-hub":
-        return hublib.HOME / "git-origin" / "agent-hub.git"
+        return hubconf.p("git_origin", "~/git-origin") / "agent-hub.git"
     return MIRRORS / f"{name}.git"
 
 
