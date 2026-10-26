@@ -5,6 +5,8 @@
 > 不重談那兩份定案的事(集中登錄、`registry_dir`、`push_on_merge` 預設 false、ports & adapters)。
 > **r2(10-26)**:照 Agent Hub session 的審查改過(方向同意;邊界、模組範圍、watchdog、驗收測試),改動處標 **(r2)**,
 > 討論紀錄在第 8 節。
+> **r3(10-26,初稿,待 Agent Hub session 複審)**:跟 Knas 定了 code / config / data / secret 的分類跟「git 只放 code 跟
+> config」(3.0);實例目錄因此拆成 config repo + data 目錄(3.1 改寫);新增 config 的 pipeline(3.7)跟對應的步驟。
 
 ## 目標
 
@@ -64,17 +66,71 @@ bin/onboard-project.sh ~/workspace/my-app
 
 ## 3. 架構方向
 
-### 3.1 實例目錄(程式碼 vs 資料)
+### 3.0 code / config / data / secret (r3)
 
-- `hubconf` 多一個概念:**實例目錄**(`AGENT_HUB_HOME`,預設 = hub 根目錄,也就是今天的樣子,所以切換前什麼都不變)。
-  `hub.json` 跟所有使用者資料都從實例目錄讀寫;`hubconf.data(<名稱>)` 取代各腳本自己拼 `$HUB/digest`。
-- 平台 repo 留:`bin/`、`templates/`、`contracts/`(不含 vendor 的別人契約?見「要確認的」)、`capabilities/`、`tests/`、
-  `docs/`、`hub.example.json`、`projects.example/`、README。
-- 實例目錄放:`hub.json`、`projects/`(含 job prompt)、`digest/`、`reflect/`、`index.md`、`todo.md`、`review-log.md`、
-  `mirror-list.txt`、`services.tsv`、`models.env`、`.state/`、`.secrets/`、`.logs/`。實例目錄自己可以是一個 git repo
-  (`commit-hub-files.sh` 改成 commit 到它),要不要 push 到哪是使用者的事。
-- `known-issues.md` 是平台的知識,留在平台 repo,但改寫成不靠「mini/MBP」的說法;`openclaw-migration-status.md`、
-  `legacy-paths.tsv` 是 Knas 的歷史,搬進實例。
+現在的 repo 裡 git 同時做三件事:**版本控制**(程式碼)、**紀錄「什麼時候做了什麼」**(librarian、consolidate、reflect
+每晚自動 commit digest/todo/review-log;最近 200 個 commit 有 57 個是這種)、**傳輸**(各專案 `.agent-memory` 經過 bare repo
+在 workspace 跟 librarian 副本之間同步)。第二種是用錯工具:「什麼時候做了什麼」該由紀錄本身的時間跟匯流排的事件回答。
+
+**規則:git 只放 code 跟 config;data 永遠不進 git。** 唯一的例外是 memory(見表)。
+
+| 類別 | 定義 | 存在哪 | 怎麼追蹤 | 備份 |
+|---|---|---|---|---|
+| **code** | 刻意寫的、每個使用者都一樣 | 平台 repo | git;每個 commit 是一次有意的修改,過 `test-gate` | GitHub(+ mirror) |
+| **config** | 使用者對「平台在我這裡怎麼運作」的宣告;期望的狀態 | 使用者的 config repo(private,要不要 push 由他決定) | git(config as code):每次修改是一個 commit,包括自動流程改的;過 3.7 的 pipeline;匯流排記「套用了哪個 commit」 | 每晚加密備份(remote 是選配) |
+| **data:紀錄** | 只增不改的歷史 | data 目錄 | 紀錄本身帶時間;事件在匯流排 | 每晚加密備份 |
+| **data:衍生物** | 隨時可以從別的東西重新產生 | data 目錄 | 不追蹤 | 不備份(重跑就有) |
+| **data:執行狀態** | checkpoint、排程狀態、鎖、log | data 目錄 | 不追蹤 | 重建不回來的才備份 |
+| **secret** | 金鑰、token | secrets 目錄 | 登錄只寫名稱、位置、到期(`check-secrets.py`) | 每晚加密備份 |
+
+**例外:各專案的 memory**(`.agent-memory` 的筆記、STATE.md)是 data:紀錄,但用 git 當**傳輸**:session 跟 librarian
+不在同一個時間、可能不在同一台機器,git 給了衝突處理跟離線 commit。它在每個專案自己的 memory repo(bare repo 的
+`agent-memory` 分支),不跟 code 或 config 混在一起。這份不改它;要換傳輸方式是另一件事。
+
+**現在的東西各是什麼**:
+
+| 現在的位置 | 類別 |
+|---|---|
+| `bin/`、`templates/`、`contracts/`(含 vendor 的別人契約)、`capabilities/`、`tests/`、`docs/`、`githooks/`、`launchd/` 的樣板、`agent-jobs/mailbox.md`、`known-issues.md`、`CLAUDE.md` | code |
+| `hub.json`、`models.env`、`projects/*.yaml` + 使用者 job 的 prompt、`mirror-list.txt`、`services.tsv`、`legacy-paths.tsv`、`schedule.yaml`(切換期間的舊格式,清到 0 項後刪掉) | config |
+| `digest/`、`review-log.md`、`reflect/*.json`、`openclaw-migration-status.md`、匯流排、`index.md` 裡 LLM 寫的註記 | data:紀錄 |
+| `todo.md`、`index.md` 的名冊區塊、`reflect/index.html`、狀態頁、`.state/registry/` 快取 | data:衍生物 |
+| `.state/` 其餘、`.logs/` | data:執行狀態 |
+| `.secrets/` | secret |
+
+`index.md` 是一個檔混了兩類(機械產生的名冊 + LLM 寫的註記),拆成兩個檔。
+
+**自動流程改 config**(onboard、rename、`manifest.update`、upgrade-idea):驗證過就直接 commit 到 config repo,不等人核可;
+安全欄位(`type`/`enforce`/`network`/`allow_write`/`privacy`)維持只有人能改(現在就是)。這是版本控制,不是活動紀錄:
+commit 的是「期望的狀態變了」。
+
+**「什麼時候做了什麼」**統一看匯流排事件跟紀錄本身(digest 的日期、review-log 的條目);git log 不再承擔這件事。
+
+### 3.1 實例目錄 (r3 改寫)
+
+- `hubconf` 多一個概念:**實例目錄**(`AGENT_HUB_HOME`,預設 = hub 根目錄,也就是今天的樣子,所以切換前什麼都不變),
+  底下三塊,各自可以用設定指到別處:
+
+  ```
+  <AGENT_HUB_HOME>/
+    config/     ← config repo(git;`hub init` 會 git init,沒有也能跑,平台只是不 commit)
+      hub.json  models.env  mirror-list.txt  services.tsv  legacy-paths.tsv
+      projects/<name>.yaml  projects/<name>/jobs/*.md
+    data/       ← 不進 git;每晚備份(衍生物除外)
+      digest/  reflect/  review-log.md  todo.md  index.md  index-notes.md  .state/  .logs/
+    secrets/    ← 不進 git;每晚加密備份
+  ```
+
+  `hubconf.config(<名稱>)`、`hubconf.data(<名稱>)` 取代各腳本自己拼 `$HUB/digest`、`$HUB/projects`。
+- 平台 repo 留:`bin/`、`templates/`(含 `templates/prompts/mailbox.md`)、`contracts/`、`capabilities/`、`tests/`、`docs/`、
+  `hub.example.json`、`projects.example/`、README。
+- `commit-hub-files.sh` 改成只 commit **config repo** 的檔;librarian、consolidate、reflect、gen-todo 這些寫 data 的不再
+  commit(它們現在 commit 的 digest/todo/index/review-log/reflect 全部是 data)。
+- **備份範圍要跟著改**:現在 `hub.json` 的 `backup.include` 只有 `.state`、`.secrets`,因為登錄跟 digest 在 git、push 到
+  GitHub 算有另一份。data 離開 git 之後,備份一定要包含整個 `data/`(衍生物除外)跟 `config/`,不然登錄跟紀錄就沒有任何
+  備份。
+- `known-issues.md` 是平台的知識,留在平台 repo,但改寫成不靠「mini/MBP」的說法;`openclaw-migration-status.md`
+  (data:紀錄)、`legacy-paths.tsv`(config)是 Knas 的,搬進實例。
 - **(r2)** `agent-jobs/` 不是整個進實例:`mailbox.md` 是平台的 prompt(信箱 dispatch 用),搬到 `templates/prompts/`;
   實例只放使用者自己 job 的 prompt(第一階段 G 已經說跟著登錄走:`projects/<name>/jobs/*.md`)。
 - **(r2)「每台機器一份」的東西不進實例**:平台的 Python(`~/.local/share/agent-hub/python`,刻意不寫在 hub.json——hubconf
@@ -158,17 +214,46 @@ ratchet 只看字;真正的驗收是「全新的實例跑得起來」。第 6 �
 而且沒有用到任何個人名稱或寫死的路徑(假 HOME 底下沒有 `~/workspace`、`~/git-origin`,用到就失敗)。在那之前,
 每一步各自用現有的測試驗收。
 
+### 3.7 config 的 pipeline (r3)
+
+config as code 要有一條 pipeline。現在零件大多有,但是散的:
+
+| 階段 | 現在有的 | 缺的 |
+|---|---|---|
+| 驗證 | `registry.py` 每次載入驗證(排程器每個 tick),不合格沿用上一份合格的、狀態頁紅;`manifest.update` 驗證過才寫 | commit 時不驗證(`test-gate` 刻意略過登錄這類檔案,手改要等下一個 tick 才知道錯);`hub.json`、`models.env`、`mirror-list.txt` 沒有驗證 |
+| 預覽 | `render-services.py --dry-run`、`render-project-settings.py --report` 各自能看 | 沒有一次看全部「這次修改會讓排程、服務、專案設定各變成怎樣」 |
+| 套用 | 排程器每個 tick 讀登錄;`render-services`、`render-project-settings` 每 15 分鐘;`sync-local-setup` 在 session 開始 | 分散在幾個各自計時的 job,改完最多等 15 分鐘;沒有「現在就套用」 |
+| 偏移偵測 | `render-project-settings` 被改就寫回、狀態頁紅;`render-services` 服務沒在跑發警報;`contracts-check` 每晚 | 不知道現在生效的是哪一版 config |
+| 退回 | 每個專案有「上一份合格的」快取 | 沒有明確的退回,只能手動 revert 再等下一輪 |
+
+**目標**(大多是把現有的串起來,`bin/hub config <子指令>`):
+
+1. **check**:一個入口驗證所有 config 檔——登錄(`registry.py check`)、`hub.json`(新的 `contracts/hub.v1.schema.json`)、
+   `models.env`、`mirror-list.txt`、`services.tsv`、模組宣告(循環、指到不存在的 job)。config repo 的 pre-commit 跑它;
+   載入時照樣再跑(不合格沿用上一份合格的,這個行為不變)。
+2. **plan**:叫每個套用者用 dry-run 回報會改什麼,合起來印出來。套用者 = 實作一個小介面的模組:
+   `plan(config) -> [變更]`、`apply(config) -> [變更]`(現在的 render-services、render-project-settings、排程器的 job 清單、
+   sync-local-setup 的受管區塊各是一個)。新的模組要產生東西,就是多一個套用者。
+3. **apply**:立刻跑一次所有套用者;每 15 分鐘那一輪留著當安全網(它本來就是冪等的)。
+4. **verify**:套用後檢查服務健康、受管的檔案沒有偏移(現有的檢查集中成一個)。
+5. **record**:匯流排記 `config.applied {commit, 變更清單}`;狀態頁顯示目前生效的 config commit、跟 config repo 的 HEAD
+   不一樣就標黃(改了還沒套用)。
+
+**退回** = 在 config repo `git revert` + `hub config apply`。**自動流程**(onboard、`manifest.update`…)寫 config 也走同一條:
+check → commit → apply,不另外一套。
+
 ## 4. 步驟(每一步單獨上線)
 
 | 步 | 內容 | 動到的檔案 | 估計 |
 |---|---|---|---|
 | **0** | librarian 拆成核心 + job(`after:`;knas-tasks 跟 reconcile-questions 先當成獨立 job,第 3 步再歸進 assistant);路徑改從 hubconf;`hub.example.json` + 根目錄 README(新使用者路徑,還沒有的指令寫「規劃中」) | `librarian.sh`、`projects/agent-hub.yaml`、`hublib.py`(digest_append)、`check-memory-gaps.py`、新增 README、`hub.example.json` | 0.5 天 |
 | 1 | 個人名稱 ratchet 測試 + 現況基準(含 tests/、agent-jobs/) | 新增 `tests/test_personal_boundary.py` | 0.25 |
+| **1.5 (r3)** | config pipeline:`config check`(含 `hub.v1.schema.json`)、套用者介面 + 把 render-services / render-project-settings 包成套用者、`plan`/`apply`/`verify`、`config.applied` 事件、狀態頁顯示生效的 commit。config 還在平台 repo 裡,pre-commit 先掛在現在的 `githooks/`(只在改到 config 檔時跑 check,不跑全部測試) | 新增 `bin/hubconfig.py`(或 `bin/hub` 的第一個子指令)、`render-services.py`、`render-project-settings.py`、`gen-status-page.py`、`githooks/pre-commit`(**先問 Agent Hub session**,test-gate 是它的) | 1–1.5 |
 | 2 | 機器角色:`hosts`、`hubconf.host()`;換掉 7 處 `hub-host`;平台 plist 改成產生(排程器、看門狗除外) | `hubconf.py`、`minilib.sh` 等 7 支、`render-services.py`(動之前先問沙盒設計 session)、`launchd/` | 1 |
 | 3 | 模組:`modules/<名稱>/module.yaml`、排程器讀模組、`before:`(循環偵測、沒開的模組當不存在);assistant(含 lease-runner、想法沙盒)、alerts、sandbox | `scheduler.py`、`registry.py`(不動 validate_enforce)、`gen-status-page.py`、新增 `modules/` | 1.5 |
 | 4 | owner 名稱從設定讀:待辦標籤、prompt 裡的名字;`templates/CLAUDE.md` → `agent-instructions.md` 改名(保留 10-26 加的兩段)跟裡面的名字;`mailbox.md` 搬到 `templates/prompts/`。hubbus 裡的字樣跟 Agent Hub session 約時間一起改 | `gen-todo.py`、`librarian.sh`、`consolidate-memory.py`、`reflect_llm.py`、`trajectory.py`、`templates/`、`sync-local-setup.sh`(讀樣板那行) | 0.5 |
 | 5 | `bin/hub` + `init`(含裝排程器、看門狗的 plist)+ `doctor` | 新增 `bin/hub` | 1 |
-| 6 | 先把 `schedule.yaml` 清到 0 項;實例目錄:`AGENT_HUB_HOME`、`hubconf.data()`、讀寫使用者資料的腳本改用它、`commit-hub-files.sh` 改 commit 到實例;Knas 的資料搬過去;加 3.6 的空實例驗收測試 | 幾乎所有寫產出的腳本 | 2 |
+| 6 | 先把 `schedule.yaml` 清到 0 項;實例目錄 `config/` + `data/` + `secrets/`(3.1):`hubconf.config()`/`data()`、讀寫的腳本改用它;`commit-hub-files.sh` 只 commit config repo,寫 data 的腳本不再 commit;`index.md` 拆成名冊 + 註記;**備份範圍改成包含 `config/`、`data/`**(先改備份、確認快照裡有,再搬檔);Knas 的資料搬過去;加 3.6 的空實例驗收測試 | 幾乎所有寫產出的腳本、`backup.py`/`hub.json` 的 `backup` | 2–2.5 |
 
 順序的理由:0、1 不碰別人的檔、馬上有用;2–4 是新使用者真的會撞到的;6 範圍最大、要 Knas 決定資料怎麼放,放最後,
 而且前面每一步都已經把路徑收進 hubconf,6 就只是改 hubconf 的預設值加搬檔。
@@ -197,8 +282,11 @@ ratchet 只看字;真正的驗收是「全新的實例跑得起來」。第 6 �
 
 1. 整體方向:實例目錄 + 模組(沿用登錄/`after:`,加 `before:`)+ 機器角色 + `bin/hub` + ratchet 測試。
 2. 步驟順序,以及第 0 步可以先做(它本身就是上一輪談的「librarian 拆開」)。
-3. 實例資料怎麼放:(a) 同一個 repo 的子目錄、(b) 另一個 git repo(例:`agent-hub-data`,private)、(c) 不進版控。我建議 (b):
-   平台 repo 才能真的公開,而 digest/todo 還是有歷史可查。
+3. ~~實例資料怎麼放~~ **(r3)** 10-26 跟 Knas 定了:config as code,config 放 private config repo;data 不進 git、靠備份;
+   「什麼時候做了什麼」看匯流排跟紀錄本身(3.0)。
+6. **(r3)** 1.5 步(config pipeline)排在模組之前:越早有 check/plan,後面幾步改 config 結構越安全。同意嗎?
+7. **(r3)** digest、todo、review-log 不再進 git 之後,Knas 從手機/MBP 看它們只剩狀態頁(或 Muninn)。要不要狀態頁多一頁
+   直接顯示 digest 跟 todo?
 4. 註解裡的決策紀錄(「Knas 決定」)要不要在開源前全部改寫,還是 ratchet 慢慢清就好。
 5. ~~`contracts/vendor/muninn/` 算平台還是 assistant 模組~~ **(r2)** 跟 Agent Hub session 談定:歸 assistant 模組(見 3.2)。
 
