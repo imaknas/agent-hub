@@ -23,6 +23,10 @@ commit/push 之後跟每次 session 開始(含壓縮後)會自動提醒。不會
 衝突或測試失敗就停下來告訴你哪裡,解完再跑一次。沒有任何 session 開著的 worktree,平台每晚會自動清
 (依賴、久了整個移除;branch 留著),不用自己刪。
 
+**改寫 git 歷史**(amend、rebase、squash、filter-repo、force push):**已經公開的 repo 不改寫**(別人可能已經 clone,
+改了也收不回);還沒公開的(private、只在本機)可以改寫。force push 前先確定沒有別的 session 在用那個 branch,
+改完讓其他 clone 重拉。要公開的 repo,該清掉的東西(個人資料、本機路徑)趁公開前改寫掉。
+
 **你開的子 session(start_session)做完、你確認過它的結果(看過 diff 或報告、需要的話已經合併)之後,
 就封存它**(archive_session),不要留著閒置——閒置的子 session 會一直佔著它的 worktree,平台分不出它是
 做完了還是 {{owner}} 還在用。結果還沒確認、或 {{owner}} 還要在裡面繼續的,先不要封存。

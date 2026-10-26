@@ -288,7 +288,7 @@ memory 追蹤但不需要在 mini 上執行任何東西的專案(目前大多數
 - `templates/`——骨架檔案(`AGENT.md`、`agent-instructions.md`:給每個專案 agent 的說明,人名寫成 `{{owner}}`/`{{owner_alias}}`/`{{assistant}}`,sync-local-setup 照 hub.json 填(`hubconf.fill_names`));hook 設定不在這裡,
   寫在 `bin/merge-hook-settings.py`。`templates/rules/<名稱>.md` 是可選的專案規則,
   專案在 `.agent-memory/RULES` 登記名稱才會放進它的 CLAUDE.local.md。目前所有專案
-  都登記了 `engineering`(軟體工程規則),onboard 新專案時也會自動登記
+  都登記了 `engineering`(軟體工程規則)跟 `multi-agent-review`(多 agent 互審:盲審還是辯論,the-crucible 10-27 整理),onboard 新專案時也會自動登記
 - `.claude/skills/`——`new-or-onboard-project`、`recover-projects`
 - `digest/`、`index.md`(名冊區塊由 `gen-index-roster.sh` 產生)、`review-log.md`、`todo.md`——`librarian.sh` 的產出,不要
   手動改,改了下次跑會被蓋掉或造成混淆

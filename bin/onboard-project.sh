@@ -172,8 +172,8 @@ EOF
   mkdir -p .agent-memory/memory
   touch .agent-memory/memory/.gitkeep
   # 所有專案一律啟用的規則(內容在 templates/rules/,由 sync-local-setup.sh 放進
-  # CLAUDE.local.md)。2026-09-27 起新專案預設登記,既有專案同日全部補上。
-  printf 'engineering\n' > .agent-memory/RULES
+  # CLAUDE.local.md)。engineering 2026-09-27 起、multi-agent-review 2026-10-27 起新專案預設登記,既有專案同日全部補上。
+  printf 'engineering\nmulti-agent-review\n' > .agent-memory/RULES
   ( cd .agent-memory && git add -A && git commit -q -m "init: agent-hub memory skeleton (AGENT.md/STATE.md/memory)" )
   echo "[3/11] 骨架檔案就位並已在 agent-memory 分支上 commit"
 
