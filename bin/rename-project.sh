@@ -23,8 +23,9 @@
 set -euo pipefail
 
 HUB="$HOME/agent-hub"
-MIRRORS="$HUB/mirror-list.txt"
-LEGACY="$HUB/legacy-paths.tsv"
+source "$(dirname "$0")/hubpaths.sh"
+MIRRORS="$HUB_CONFIG/mirror-list.txt"
+LEGACY="$HUB_DATA/legacy-paths.tsv"
 . "$HUB/bin/minilib.sh"
 
 fail() { echo "rename-project: $1" >&2; exit 1; }

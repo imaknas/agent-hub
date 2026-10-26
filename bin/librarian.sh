@@ -23,7 +23,8 @@ export PATH="/opt/homebrew/bin:/usr/local/bin:$PATH"
 HUB="${AGENT_HUB_ROOT:-$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)}"
 STATE_DIR="$HUB/.state"
 LOG_DIR="$HUB/.logs"
-REVIEW_LOG="$HUB/review-log.md"
+source "$(dirname "${BASH_SOURCE[0]}")/hubpaths.sh"
+REVIEW_LOG="$HUB_DATA/review-log.md"
 SAFE_PUSH="$HUB/bin/git-safe-push.sh"
 mkdir -p "$STATE_DIR" "$LOG_DIR"
 MEMORY_COPIES=$("$HUB/bin/py" "$HUB/bin/hubconf.py" path memory_copies) || exit 1
@@ -36,7 +37,7 @@ LOG="$LOG_DIR/librarian-$TODAY.log"
 # 模型設定：預設值寫死在這裡當 fallback，models.env 存在的話覆寫。
 STATE_MODEL="haiku"
 INDEX_MODEL="sonnet"
-[ -f "$HUB/models.env" ] && source "$HUB/models.env"
+[ -f "$HUB_CONFIG/models.env" ] && source "$HUB_CONFIG/models.env"
 
 # 只寫進 $LOG;手動在終端機跑時才另外印到螢幕。排程器把 stdout 導進同一個
 # librarian-<日期>.log,用 tee 的話每行都會重複兩次。
@@ -393,7 +394,7 @@ if [ -s "$digest_file" ]; then
 不要編輯那個區塊(改了也會被覆蓋);你的註記寫在區塊外。"
 
   # 判斷點 librarian-index
-  index_output_json=$(cd "$HUB" && printf '%s' "$index_prompt" | "$HUB/bin/py" "$HUB/bin/llm.py" run librarian-index 2>>"$LOG")
+  index_output_json=$(cd "$HUB_DATA" && printf '%s' "$index_prompt" | "$HUB/bin/py" "$HUB/bin/llm.py" run librarian-index 2>>"$LOG")
   idx_rc=$?
 
   if [ $idx_rc -eq 0 ] && [ -n "$index_output_json" ]; then

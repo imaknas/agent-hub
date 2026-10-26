@@ -7,7 +7,8 @@ set -uo pipefail
 export PATH="/opt/homebrew/bin:/usr/local/bin:$PATH"
 HUB="$HOME/agent-hub"
 INDEX_MODEL="sonnet"
-[ -f "$HUB/models.env" ] && source "$HUB/models.env"
+source "$(dirname "$0")/hubpaths.sh"
+[ -f "$HUB_CONFIG/models.env" ] && source "$HUB_CONFIG/models.env"
 export INDEX_MODEL
 
 cd "$HUB" && git pull -q || true

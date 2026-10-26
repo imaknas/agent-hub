@@ -306,6 +306,23 @@ check → commit → apply,不另外一套。
 > `secrets:`)、vendor/muninn 契約的 `consumes:`(contracts-check 只讀專案登錄)。
 > 第 4 步 10-26 完成(平台這邊):`templates/CLAUDE.md` → `templates/agent-instructions.md`,人名寫成 `{{owner}}`/`{{owner_alias}}`/`{{assistant}}`,sync-local-setup 照 hub.json 填(`hubconf.fill_names`;24 個專案的輸出逐位元組相同);`hub.json` 加 `assistant.name`;gen-todo、librarian、consolidate、weekly reflect、trajectory 的標籤跟 prompt 改從設定讀(這台的 prompt 逐字相同)。個人名稱 479 → 407。**交給 Agent Hub session**:hubbus 裡的字串、`agent-jobs/mailbox.md` 搬到 `templates/prompts/`。**還沒做**:knas-tasks.py 的檔名/job 名(改名要跟 Muninn 的契約、STATE.md 裡已經蓋上的「等 Knas:」key 一起考慮,先留著)。
 > 第 5 步 10-26 完成:`bin/setup`(檢查指令 + setup-python,不自己裝)、`bin/hub` 的 init(沒有 hub.json 才寫、問名字/時區/專案位置/模組;沒開的功能連設定段一起拿掉;排程器跟看門狗從 `launchd/` 的樣板裝,內容一樣就不動)、doctor(用 runtime 的 `auth.credentials()`,排程器要是**這份** hub 的)、modules、onboard/recover/rename/status/jobs/run 包裝。`launchd/` 的 plist 改成 `{{hub}}` 樣板(recover-service 用 sed 填)。沒設定 alerts 的話,看門狗只記錄、狀態頁只提醒,不再永遠紅。`tests/test_new_user.py` = 3.6 的驗收(空實例 + 假 HOME:init → config-check → plan → doctor)。**第 6 步要處理**:平台自己的登錄 `projects/agent-hub.yaml` 還在使用者的登錄資料夾裡(新使用者也需要它),要跟 modules/ 一樣搬回平台。
+> 第 6 步 10-26 **程式碼完成、搬家還沒做**(等 Knas,見第 7 節第 9 題)。定下來的(跟 3.1 不同的地方):
+> - **一個指標檔切換**:`<hub>/.hub-home` 寫著實例目錄 → `<實例>/{config,data,secrets}`;沒有這個檔 = 舊的擺法(今天的樣子)。
+>   搬家時最後才寫,刪掉就退回。覆蓋:`AGENT_HUB_HOME`、`AGENT_HUB_CONFIG`/`DATA`/`SECRETS`(config repo 的 pre-commit 只把
+>   `AGENT_HUB_CONFIG` 指到匯出的暫存區)。Python:`hubconf.config_dir()/data_dir()/secrets_dir()/config_file()/data_file()`;
+>   shell:`bin/hubpaths.sh`(`$HUB_CONFIG`/`$HUB_DATA`/`$HUB_SECRETS`/`hub_server`,只用 plutil);看門狗自己一份(不 import 平台)。
+>   三份一致由 `tests/test_instance_layout.py` 檢查。
+> - **`.state`、`.logs` 不搬**:每台機器一份的執行狀態(跟 bus_dir、平台 Python 一樣)。`.logs` 的路徑寫在每個服務的 plist 裡,
+>   搬它等於重啟所有服務;`.state` 裡有狀態頁、lease-runner、test-gate、registry 快取,都是這台機器的。
+> - hub.json 裡的相對路徑以 hub.json 所在的 config 目錄為準;`.secrets/<名稱>` 一律指 secrets 目錄。
+> - **平台自己的登錄**固定在平台 repo 的 `projects/agent-hub.yaml`,registry 不管 registry_dir 在哪都讀它。
+> - `commit-hub-files.sh`:新擺法只在 config repo 裡 commit config,data 直接略過(data 不進 git)。
+> - 新使用者一開始就是新擺法:`hub init` 建 `~/.agent-hub/{config(git repo,hooksPath = githooks/config),data,secrets}`,
+>   最後寫指標檔(`tests/test_new_user.py`,含 config repo 的閘門擋下不合格的 hub.json)。
+> - ratchet 多一條 `instance-path`(bin/ 裡自己拼 config/data 檔的路徑)。
+> - 這台:42 個產出檔逐位元組相同、`hub config plan` 空、`hub doctor` 沒問題。
+> **還沒做**:別的 session 的檔(lease-relay、lease-runner、upgrade-idea 的 `.secrets`/mirror-list;policy.py 的 `.secrets` deny——搬家時
+> render-settings 會重寫 24 個專案的設定)已寄給它們;狀態頁的 digest/todo/reflect 三頁;實際搬家。
 
 | 步 | 內容 | 動到的檔案 | 估計 |
 |---|---|---|---|
@@ -366,6 +383,10 @@ check → commit → apply,不另外一套。
    - **範例 C(今天就會發生的)**:手改 `projects/project-36.yaml`,`run:` 打錯路徑。現在要等下一個 tick 才被
      `registry.py` 發現,狀態頁變紅、沿用上一份;有 pre-commit 的 `config-check` 就進不了 commit。
    反過來說,如果先做模組再做 pipeline,第 3 步改排程器、加 `before:` 的時候,就只能靠「等下一個 tick 看結果」來驗證。
+9. **(第 6 步) 搬家前要 Knas 決定的**:(a) config repo 要不要 remote——新開一個 private GitHub repo(`gh repo create`,對外)
+   或只留本機 git;(b) 搬家的時間:要短暫全停(排程器、lease-runner、cap-runner、信箱 dispatch、狀態頁都拿著路徑),
+   不要在 librarian 02:00–04:00、backup 05:45 前後;(c) Muninn 的 config.yaml 三個路徑(todo、reflect、runner token)
+   由 muninn session 改(寄信),同一個時段換。
 7. **(r3) digest、todo 不進 git 之後,Knas 在哪裡看?**
    - **現在怎麼看**:狀態頁(`https://hub-host.<tailnet>.ts.net/`)只有一頁 `index.html`——job 成敗、🔔 報告、下次
      什麼時候跑;**沒有** digest、todo、每週回顧。這三樣現在只能在 repo 裡打開檔案看(session 裡,或 MBP pull 之後開

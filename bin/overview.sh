@@ -11,7 +11,8 @@
 set -uo pipefail
 
 AGENT_HUB="$HOME/agent-hub"
-SERVICES="$AGENT_HUB/services.tsv"
+source "$(dirname "$0")/hubpaths.sh"
+SERVICES="$HUB_CONFIG/services.tsv"
 
 
 FILTER="${1:-}"

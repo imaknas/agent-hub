@@ -15,9 +15,10 @@
 # mirror-backup 方向相反,因為 mini 沒辦法主動連進 MBP 讀檔案,只能等 MBP
 # 醒著的時候自己把資料推過去。
 set -uo pipefail
+source "$(dirname "$0")/hubpaths.sh"
 
 SRC="$HOME/.claude-personal/projects/"
-DEST_HOST="$(plutil -extract hosts.server raw -o - "$(cd "$(dirname "$0")/.." && pwd)/hub.json" 2>/dev/null || plutil -extract memory_host raw -o - "$(cd "$(dirname "$0")/.." && pwd)/hub.json" 2>/dev/null)"   # 跑 hub 的那台(hub.json hosts.server)
+DEST_HOST="$(hub_server)"   # 跑 hub 的那台(hub.json hosts.server)
 [ -n "$DEST_HOST" ] || { echo "transcript-backup:hub.json 沒有 hosts.server(一台機器全包就不需要這支)" >&2; exit 0; }
 DEST_PATH="transcript-backups/claude-personal-projects/"
 LOG_DIR="$HOME/agent-hub/.logs"

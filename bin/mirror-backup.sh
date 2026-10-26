@@ -7,8 +7,9 @@
 set -uo pipefail
 export PATH="/opt/homebrew/bin:/usr/local/bin:$PATH"
 
-HUB="$HOME/agent-hub"
-LIST="$HUB/mirror-list.txt"
+HUB="${AGENT_HUB_ROOT:-$(cd "$(dirname "$0")/.." && pwd)}"
+source "$(dirname "$0")/hubpaths.sh"
+LIST="$HUB_CONFIG/mirror-list.txt"
 MIRROR_DIR="$HOME/git-origin/mirrors"
 LOG_DIR="$HUB/.logs"
 mkdir -p "$MIRROR_DIR" "$LOG_DIR"

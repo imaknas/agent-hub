@@ -15,7 +15,8 @@
 set -uo pipefail
 
 HUB="${AGENT_HUB_ROOT:-$(cd "$(dirname "$0")/.." && pwd)}"
-SERVER="$(plutil -extract hosts.server raw -o - "$HUB/hub.json" 2>/dev/null || plutil -extract memory_host raw -o - "$HUB/hub.json" 2>/dev/null)"   # 跑 hub 的那台(hub.json hosts.server);空 = 就是這台
+source "$(dirname "${BASH_SOURCE[0]}")/hubpaths.sh"
+SERVER="$(hub_server)"   # 跑 hub 的那台(hub.json hosts.server);空 = 就是這台
 LOG_DIR="$HUB/.logs"
 mkdir -p "$LOG_DIR"
 LOG="$LOG_DIR/sync-all-memory-$(date +%Y-%m-%d).log"

@@ -83,7 +83,7 @@ def config_commit() -> str:
     import hubconf
 
     def git(*a):
-        return subprocess.run(["git", "-C", str(hubconf.ROOT), *a], capture_output=True, text=True).stdout.strip()
+        return subprocess.run(["git", "-C", str(hubconf.config_dir()), *a], capture_output=True, text=True).stdout.strip()
     sha = git("log", "-1", "--format=%H", "--", *CONFIG_PATHS) or "unknown"
     return sha + ("+dirty" if git("status", "--porcelain", "--", *CONFIG_PATHS) else "")
 

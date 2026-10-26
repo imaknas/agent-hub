@@ -9,7 +9,8 @@
 set -euo pipefail
 
 AGENT_HUB="${AGENT_HUB_ROOT:-$(cd "$(dirname "$0")/.." && pwd)}"
-MANIFEST="$AGENT_HUB/services.tsv"
+source "$(dirname "$0")/hubpaths.sh"
+MANIFEST="$HUB_CONFIG/services.tsv"
 
 fail() { echo "recover-service: $1" >&2; exit 1; }
 

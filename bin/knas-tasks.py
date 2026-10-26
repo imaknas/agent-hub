@@ -41,7 +41,7 @@ COPIES = hubconf.p("memory_copies")
 HUBBUS = [sys.executable, str(HUB / "bin" / "hubbus")]
 MIGRATED = hubconf.STATE / "knas-tasks-migrated"
 VANISHED = hubconf.STATE / "knas-tasks-inferred.json"   # 已經處理過(寄了推斷結案或警告過)的 key
-REVIEW_LOG = HUB / "review-log.md"
+REVIEW_LOG = hubconf.data_file("review-log.md")
 SIMILAR = 0.6   # 跟現在的某一行這麼像就當成改寫,不是做完
 BUS = hubconf.bus_db()
 OWNER, OWNERS, TAG = hubconf.owner_address(), sorted(hubconf.owner_addresses()), hubconf.owner_tag()
@@ -135,7 +135,7 @@ def targets() -> list[tuple[str, pathlib.Path, str]]:
     """(專案, 檔案, 怎麼 commit)"""
     out = [(d.name, d / "STATE.md", "copy") for d in sorted(COPIES.iterdir())
            if (d / ".git").exists() and (d / "STATE.md").exists()]
-    out.append((hubconf.hub_project(), HUB / "openclaw-migration-status.md", "hub"))
+    out.append((hubconf.hub_project(), hubconf.data_file("openclaw-migration-status.md"), "hub"))
     return out
 
 

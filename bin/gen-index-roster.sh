@@ -19,7 +19,9 @@ set -euo pipefail
 
 HUB="${AGENT_HUB:-${AGENT_HUB_ROOT:-$(cd "$(dirname "$0")/.." && pwd)}}"   # 預設 = 這支腳本所在的 hub
 PY="$(dirname "$0")/py"   # 平台的 Python 跟著這支腳本走(AGENT_HUB 可能指向別的資料目錄)
-INDEX="$HUB/index.md"
+source "$(dirname "${BASH_SOURCE[0]}")/hubpaths.sh"
+[ -n "${AGENT_HUB:-}" ] && HUB_DATA="$HUB"   # AGENT_HUB 指到別的資料目錄時(測試)用它
+INDEX="$HUB_DATA/index.md"
 
 [ -f "$INDEX" ] || printf '# agent-hub index\n' > "$INDEX"
 

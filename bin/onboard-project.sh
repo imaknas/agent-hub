@@ -226,9 +226,10 @@ echo "[9/11] mini 上已 clone librarian 用的 memory 副本到 ~/.memory-copie
 
 # --- 10. 有外部 origin 才登記進 mirror-backup 清單 ---
 if [ -n "$origin_url" ]; then
-  touch "$AGENT_HUB/mirror-list.txt"
-  if ! grep -qxF "$origin_url" "$AGENT_HUB/mirror-list.txt"; then
-    echo "$origin_url" >> "$AGENT_HUB/mirror-list.txt"
+  source "$AGENT_HUB/bin/hubpaths.sh"
+  touch "$HUB_CONFIG/mirror-list.txt"
+  if ! grep -qxF "$origin_url" "$HUB_CONFIG/mirror-list.txt"; then
+    echo "$origin_url" >> "$HUB_CONFIG/mirror-list.txt"
   fi
   echo "[10/11] 已登記進 mirror-backup 清單"
 else

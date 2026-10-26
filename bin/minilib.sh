@@ -8,10 +8,8 @@
 # 在這台。server 的 ssh 名稱從 hub.json 讀(hubconf.host("server"));用 plutil 讀 JSON,不靠平台的 Python——
 # 遙控用的那台(MBP)不一定有。
 
-_MINILIB_HUB="${AGENT_HUB_ROOT:-$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)}"
-hub_json_get() { plutil -extract "$1" raw -o - "$_MINILIB_HUB/hub.json" 2>/dev/null; }
-MINI_HOST="$(hub_json_get hosts.server)"
-[ -n "$MINI_HOST" ] || MINI_HOST="$(hub_json_get memory_host)"
+source "$(dirname "${BASH_SOURCE[0]}")/hubpaths.sh"
+MINI_HOST="$(hub_server)"
 _GIT_ORIGIN="$(hub_json_get git_origin)"; _GIT_ORIGIN="${_GIT_ORIGIN:-~/git-origin}"; _GIT_ORIGIN="${_GIT_ORIGIN/#\~/$HOME}"
 
 on_mini() { [ -z "$MINI_HOST" ] || [ -d "$_GIT_ORIGIN" ]; }

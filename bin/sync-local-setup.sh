@@ -38,7 +38,7 @@ moved=$(git rev-parse --git-common-dir 2>/dev/null)/agent-hub-migrated-to-mini
 if [ -f "$moved" ]; then
   cat <<MSG
 ⚠️ 這個專案已經搬到 mini($(cut -f1 "$moved"),$(cut -f2 "$moved") 搬的)。這裡是 MBP 上留著當備份的舊副本,
-不要在這裡做事:請告訴使用者關掉這個 session,改用 Claude Desktop 透過 SSH($(plutil -extract hosts.server raw -o - "$AGENT_HUB/hub.json" 2>/dev/null))開 mini 上的那個資料夾。
+不要在這裡做事:請告訴使用者關掉這個 session,改用 Claude Desktop 透過 SSH($(source "$AGENT_HUB/bin/hubpaths.sh"; hub_server))開 mini 上的那個資料夾。
 MSG
   exit 0
 fi

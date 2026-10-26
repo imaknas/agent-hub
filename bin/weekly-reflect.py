@@ -36,7 +36,7 @@ import runtime_ports  # noqa: E402  對話紀錄只透過介面讀(Claude Code �
 TZ = zoneinfo.ZoneInfo("Asia/Taipei")
 MIRRORS = hublib.HOME / "git-origin" / "mirrors"
 MEMORY_COPIES = hublib.MEMORY_COPIES
-OUT = hublib.HUB / "reflect"
+OUT = hubconf.data_file("reflect")
 TEMPLATE = hublib.HUB / "templates" / "reflect.html"
 LATE_NIGHT = range(0, 6)       # 00:00–05:59 台北時間
 BREAK_MINUTES = 30             # 兩則訊息間隔超過這個就算休息過

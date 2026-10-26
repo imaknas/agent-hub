@@ -20,7 +20,8 @@ set -euo pipefail
 
 AGENT_HUB="${AGENT_HUB_ROOT:-$(cd "$(dirname "$0")/.." && pwd)}"
 # 跑 hub 的那台(hub.json hosts.server;用 plutil 讀,這支也可能在沒有平台 Python 的機器上跑)
-MINI_HOST="$(plutil -extract hosts.server raw -o - "$AGENT_HUB/hub.json" 2>/dev/null || plutil -extract memory_host raw -o - "$AGENT_HUB/hub.json" 2>/dev/null)"
+source "$(dirname "${BASH_SOURCE[0]}")/hubpaths.sh"
+MINI_HOST="$(hub_server)"
 TEMPLATES="$AGENT_HUB/templates"
 REGISTRY="$AGENT_HUB/projects"
 

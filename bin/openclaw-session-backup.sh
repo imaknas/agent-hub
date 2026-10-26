@@ -24,8 +24,9 @@
 # 的快照在 ~/openclaw-session-backups/,之後如果需要「最後一次快照」(例如
 # OpenClaw 真的要整個停用之前)手動執行即可,不用重新設計。
 set -uo pipefail
+source "$(dirname "$0")/hubpaths.sh"
 
-SRC_HOST="$(plutil -extract hosts.server raw -o - "$(cd "$(dirname "$0")/.." && pwd)/hub.json" 2>/dev/null || plutil -extract memory_host raw -o - "$(cd "$(dirname "$0")/.." && pwd)/hub.json" 2>/dev/null)"   # 跑 hub 的那台(hub.json hosts.server)
+SRC_HOST="$(hub_server)"   # 跑 hub 的那台(hub.json hosts.server)
 SRC_PATH="~/.openclaw/agents/"
 DEST="$HOME/openclaw-session-backups/agents/"
 LOG_DIR="$HOME/agent-hub/.logs"

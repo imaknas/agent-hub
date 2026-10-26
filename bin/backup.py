@@ -36,8 +36,8 @@ HUB = hubconf.ROOT
 CFG = hubconf.get("backup", {})
 STAGE = hubconf.STATE / "backup-staging"
 OUT = hubconf.STATE / "backup"
-PASSWORD = HUB / ".secrets" / "backup-password"
-B2ENV = HUB / ".secrets" / "b2-env"
+PASSWORD = hubconf.secrets_dir() / "backup-password"
+B2ENV = hubconf.secrets_dir() / "b2-env"
 RESTIC = shutil.which("restic") or "/opt/homebrew/bin/restic"
 DIFF_LIMIT = 50 * 1024 * 1024
 

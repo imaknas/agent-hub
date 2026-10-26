@@ -21,8 +21,11 @@ import subprocess
 
 import yaml
 
-HUB = pathlib.Path.home() / "agent-hub"
-SCHEDULE = HUB / "schedule.yaml"
+sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
+import hubconf  # noqa: E402
+
+HUB = hubconf.ROOT
+SCHEDULE = hubconf.config_file("schedule.yaml")
 STATE = HUB / ".state" / "scheduler-last-run.json"
 SCHED_LOG = HUB / ".logs" / "scheduler.log"
 AGENT_JOBS = HUB / ".state" / "agent-jobs"
@@ -181,7 +184,7 @@ def main() -> None:
                               "在 mini 上跑 bin/recover-service.sh local.agent-hub-scheduler-watchdog"))
     elif not hubconf.get("alerts"):
         alerts.append(("notify", "沒設定警報(hub.json 沒有 alerts):排程器停了、服務掛了只會寫在這頁跟 log,不會通知你"))
-    elif not all((HUB / ".secrets" / f).exists() for f in ("discord-token", "discord-alert-channel")):
+    elif not all((hubconf.secrets_dir() / f).exists() for f in ("discord-token", "discord-alert-channel")):
         alerts.append(("bad", "排程器看門狗沒設定 Discord(.secrets/discord-token、.secrets/discord-alert-channel),"
                               "排程器停了發不出警報"))
 

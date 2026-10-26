@@ -2,7 +2,16 @@
 
 新程式一律從這裡拿路徑、名稱、owner,不要再寫死 ~/agent-hub、~/services、專案名稱。
   - hub 根目錄:這個檔案所在的 bin/ 的上一層;環境變數 AGENT_HUB_ROOT 可以覆蓋
-  - 設定:<hub>/hub.json
+  - 設定:<config>/hub.json(實例目錄,見下)
+  - 實例目錄(docs/design/new-user.md 3.1):使用者自己的東西分三塊——config(hub.json、登錄、models.env…;
+    config repo)、data(digest、todo、review-log、reflect…;不進 git、靠備份)、secrets。位置由**一個指標檔**決定:
+    <hub>/.hub-home 寫著實例目錄的路徑 → <實例>/config、<實例>/data、<實例>/secrets;沒有這個檔 = 舊的擺法
+    (三塊都是 hub 根目錄、secrets 是 <hub>/.secrets),也就是搬家之前的樣子。搬家時最後才寫指標檔,刪掉就退回。
+    個別覆蓋:AGENT_HUB_HOME(= 指標檔的內容)、AGENT_HUB_CONFIG、AGENT_HUB_DATA、AGENT_HUB_SECRETS(例:config repo
+    的 pre-commit 把暫存區匯出到暫存目錄,只有 config 指過去)。
+    .state、.logs 不在實例裡:跟匯流排(bus_dir)、平台的 Python 一樣是每台機器一份的執行狀態,留在 hub 根目錄
+    (.logs 的路徑寫在每個服務的 plist 裡,搬它等於重啟所有服務)。
+  - 平台自己的登錄(<hub>/projects/agent-hub.yaml)是平台的一部分:registry 不管 registry_dir 在哪都會讀它
   - 專案登錄:<registry_dir>/<name>.yaml(人改的 YAML),scheduler 每個 tick 用 registry.py
     驗證後寫成 <hub>/.state/registry/index.json——這裡讀的是那份 JSON(不需要 PyYAML);
     還沒產生的話(新機器、MBP)退回 roster():直接從 YAML 檔讀名稱跟 paths
@@ -22,23 +31,60 @@ import re
 import sys
 
 ROOT = pathlib.Path(os.environ.get("AGENT_HUB_ROOT") or pathlib.Path(__file__).resolve().parents[1])
+POINTER = ROOT / ".hub-home"
 _cfg: dict | None = None
+
+
+def instance_home() -> pathlib.Path | None:
+    """實例目錄;None = 舊的擺法(全部在 hub 根目錄)。"""
+    v = os.environ.get("AGENT_HUB_HOME")
+    if not v and POINTER.is_file():
+        v = POINTER.read_text().strip()
+    return pathlib.Path(os.path.expanduser(v)) if v else None
+
+
+def _part(env: str, sub: str, legacy: pathlib.Path) -> pathlib.Path:
+    if os.environ.get(env):
+        return pathlib.Path(os.path.expanduser(os.environ[env]))
+    home = instance_home()
+    return home / sub if home else legacy
+
+
+def config_dir() -> pathlib.Path:
+    """config(hub.json、登錄、models.env、mirror-list.txt、services.tsv、schedule.yaml)所在。"""
+    return _part("AGENT_HUB_CONFIG", "config", ROOT)
+
+
+def data_dir() -> pathlib.Path:
+    """data(digest/、reflect/、todo.md、index.md、review-log.md、openclaw-migration-status.md、legacy-paths.tsv)所在。"""
+    return _part("AGENT_HUB_DATA", "data", ROOT)
+
+
+def config_file(name: str) -> pathlib.Path:
+    return config_dir() / name
+
+
+def data_file(name: str) -> pathlib.Path:
+    return data_dir() / name
 
 
 def config() -> dict:
     global _cfg
     if _cfg is None:
-        p = ROOT / "hub.json"
+        p = config_file("hub.json")
         _cfg = json.loads(p.read_text()) if p.exists() else {}
     return _cfg
 
 
 def path(value: str | None, base: pathlib.Path | None = None) -> pathlib.Path | None:
-    """~ 展開;相對路徑以 base(預設 hub 根目錄)為準。"""
+    """~ 展開;相對路徑以 base(預設 hub.json 所在的 config 目錄;舊擺法就是 hub 根目錄)為準。
+    `.secrets/<名稱>` 一律指平台的憑證目錄(secrets_dir()),不管 hub.json 放在哪。"""
     if not value:
         return None
+    if base is None and value.startswith(".secrets/"):
+        return secrets_dir() / value[len(".secrets/"):]
     p = pathlib.Path(os.path.expanduser(value))
-    return p if p.is_absolute() else (base or ROOT) / p
+    return p if p.is_absolute() else (base or config_dir()) / p
 
 
 def get(key: str, default=None):
@@ -56,8 +102,8 @@ def p(key: str, default: str | None = None) -> pathlib.Path | None:
 
 
 def secrets_dir() -> pathlib.Path:
-    """平台的憑證目錄(不進版控、每晚加密備份)。程式都從這裡拿,不自己拼路徑——第 6 步搬家只改這裡。"""
-    return ROOT / ".secrets"
+    """平台的憑證目錄(不進版控、每晚加密備份)。程式都從這裡拿,不自己拼路徑。"""
+    return _part("AGENT_HUB_SECRETS", "secrets", ROOT / ".secrets")
 
 
 def host(role: str) -> str:
@@ -160,6 +206,11 @@ def bus_db() -> pathlib.Path:
 
 def registry_dir() -> pathlib.Path:
     return p("registry_dir", "projects")
+
+
+def platform_registry() -> pathlib.Path:
+    """平台自己的登錄(核心的 job、服務、憑證宣告、契約):是平台的一部分,在平台 repo 裡,不在使用者的 registry_dir。"""
+    return ROOT / "projects" / f"{hub_project()}.yaml"
 
 
 def owner_address() -> str:
@@ -297,6 +348,10 @@ def main(argv: list[str]) -> int:
             return 1
         print(v)
         return 0
+    if len(argv) == 2 and argv[0] == "dir" and argv[1] in ("config", "data", "secrets", "state", "logs"):
+        print({"config": config_dir, "data": data_dir, "secrets": secrets_dir}.get(argv[1], lambda: None)()
+              or (STATE if argv[1] == "state" else LOGS))
+        return 0
     if len(argv) == 2 and argv[0] == "host":  # 印 ssh 名稱;一台機器全包時印空行
         print(host(argv[1]))
         return 0
@@ -311,7 +366,7 @@ def main(argv: list[str]) -> int:
         for name in ideas():
             print(name)
         return 0
-    print("用法:hubconf.py roster | ideas | get <key> | path <key> | host server", file=sys.stderr)
+    print("用法:hubconf.py roster | ideas | get <key> | path <key> | host server | dir config|data|secrets|state|logs", file=sys.stderr)
     return 2
 
 

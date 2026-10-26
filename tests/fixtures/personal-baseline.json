@@ -57,18 +57,23 @@
   "tests/test_lease_upgrade.py": 1,
   "tests/test_lease_work_ready.py": 1,
   "tests/test_mailbox_dispatch.py": 1,
+  "tests/test_new_user.py": 5,
   "tests/test_project_rename.py": 1,
   "tests/test_python_floor.py": 1,
   "tests/test_registry_capabilities.py": 1,
   "tests/test_upgrade_idea.py": 1
  },
  "secrets-path": {
-  "bin/backup.py": 2,
-  "bin/check-secrets.py": 1,
-  "bin/gen-status-page.py": 1,
   "bin/lease-relay.py": 2,
   "bin/lease-runner.py": 2,
-  "bin/policy.py": 1,
-  "bin/scheduler-watchdog.py": 2
+  "bin/policy.py": 1
+ },
+ "instance-path": {
+  "bin/config-check": 5,
+  "bin/contracts-check.py": 1,
+  "bin/hub": 3,
+  "bin/librarian.sh": 1,
+  "bin/upgrade-idea.py": 1,
+  "bin/weekly-reflect.py": 1
  }
 }

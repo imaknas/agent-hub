@@ -19,7 +19,7 @@ HUB = hubconf.ROOT
 # 2026-10-15 起所有專案都在 mini 的 ~/workspace/<name>(登錄的 paths.workspace 就是這個)。
 # 之前在 MBP 上的位置(以及改名前的路徑)記在 legacy-paths.tsv:transcript 資料夾名稱是用
 # 當時的路徑算的,統計舊對話要靠它。
-LEGACY_PATHS = HUB / "legacy-paths.tsv"
+LEGACY_PATHS = hubconf.data_file("legacy-paths.tsv")
 MBP_HOME = hubconf.get("hosts.mbp_home", "/Users/you")   # 家目錄從 hub.json 讀,不寫死(CLAUDE.md 寫新程式的規則)
 MINI_HOME = hubconf.get("hosts.mini_home", "/Users/you")
 MINI_WORKSPACE = f"{MINI_HOME}/workspace"
@@ -72,7 +72,7 @@ def is_work_subject(subject: str) -> bool:
 # 每段用 <!-- digest:<名稱>:begin/end --> 包起來,同名的段落整段換掉,沒有就加在最後。
 
 def digest_path(day: str | None = None) -> pathlib.Path:
-    return HUB / "digest" / f"{day or datetime.date.today().isoformat()}.md"
+    return hubconf.data_file("digest") / f"{day or datetime.date.today().isoformat()}.md"
 
 
 def digest_append(section: str, text: str, day: str | None = None) -> pathlib.Path | None:

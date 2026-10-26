@@ -88,7 +88,7 @@ def check(project: str, doc: dict, sec: dict, today: datetime.date) -> tuple[lis
 def undeclared(project: str, doc: dict, declared: set[pathlib.Path]) -> list[pathlib.Path]:
     """runtime / workspace 底下(三層內)檔名像憑證、沒宣告的檔案。平台自己只看 .secrets/。"""
     d = registry.dirs(doc)
-    roots = [hubconf.ROOT / ".secrets"] if project == hubconf.hub_project() else \
+    roots = [hubconf.secrets_dir()] if project == hubconf.hub_project() else \
         [r for r in (d["runtime"], d["workspace"]) if r]
     found = []
     for root in roots:

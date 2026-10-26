@@ -2,7 +2,8 @@
 """config pipeline 的 check(docs/design/new-user.md 3.7):一次驗證所有 config 檔。
 
   config-check            驗 working tree 的 config
-  config-check --staged   驗**暫存區**(要 commit 的內容;githooks/pre-commit 呼叫)。暫存區沒有改到 config 檔就直接過。
+  config-check --staged   驗**暫存區**(要 commit 的內容;githooks/pre-commit、config repo 的 githooks/config/pre-commit
+                          呼叫)。暫存區沒有改到 config 檔就直接過。
                           共用的 working tree 裡可能有別人改到一半的檔案,所以照 test-gate 的做法把暫存區匯出到暫存目錄,
                           用 AGENT_HUB_ROOT 指過去再驗。
 
@@ -32,7 +33,8 @@ CONFIG = re.compile(r"^(hub\.json|models\.env|mirror-list\.txt|services\.tsv|sch
 
 
 def check(root: pathlib.Path) -> list[str]:
-    """root 底下的 config 有哪些問題(空 = 合格)。registry 的驗證要 hubconf.ROOT 指到 root,所以 --staged 用子程序跑。"""
+    """config 目錄 root 底下的 config 有哪些問題(空 = 合格)。schema 是平台的(這支所在的 hub);registry 的驗證要
+    hubconf 看到同一個 config 目錄,所以 --staged 用子程序跑(AGENT_HUB_CONFIG 指到匯出的暫存區)。"""
     sys.path.insert(0, str(BIN))
     import minischema
     errs: list[str] = []
@@ -42,7 +44,7 @@ def check(root: pathlib.Path) -> list[str]:
         cfg = json.loads(hub.read_text())
     except (OSError, ValueError) as e:
         return [f"hub.json:讀不了({e})"]
-    schema = json.loads((root / "contracts" / "hub.v1.schema.json").read_text())
+    schema = json.loads((BIN.parent / "contracts" / "hub.v1.schema.json").read_text())
     errs += [f"hub.json:{e}" for e in minischema.errors(schema, cfg)]
     known = set(schema["properties"])
     for k in cfg:
@@ -114,8 +116,8 @@ def git(*args: str) -> str:
 
 
 def main(argv: list[str]) -> int:
-    if argv == ["--child"]:  # --staged 的子程序:AGENT_HUB_ROOT 已經指到匯出的暫存區
-        errs = check(pathlib.Path(os.environ["AGENT_HUB_ROOT"]))
+    if argv == ["--child"]:  # --staged 的子程序:AGENT_HUB_CONFIG 已經指到匯出的暫存區
+        errs = check(pathlib.Path(os.environ["AGENT_HUB_CONFIG"]))
     elif argv == ["--staged"]:
         if not any(CONFIG.match(p) for p in git("diff", "--cached", "--name-only").splitlines()):
             return 0
@@ -123,7 +125,7 @@ def main(argv: list[str]) -> int:
             git("checkout-index", "-a", f"--prefix={d}/")
             env = {k: v for k, v in os.environ.items() if not k.startswith("GIT_")}
             r = subprocess.run([str(BIN / "py"), str(pathlib.Path(__file__).resolve()), "--child"],  # 這支驗匯出的 config
-                               env={**env, "AGENT_HUB_ROOT": d}, capture_output=True, text=True)
+                               env={**env, "AGENT_HUB_CONFIG": d}, capture_output=True, text=True)
         sys.stdout.write(r.stdout)
         sys.stderr.write(r.stderr)
         if r.returncode == 0:
@@ -131,7 +133,9 @@ def main(argv: list[str]) -> int:
                 git("write-tree").strip() + "\n")
         return r.returncode
     elif not argv:
-        errs = check(pathlib.Path(os.environ.get("AGENT_HUB_ROOT") or BIN.parent))
+        sys.path.insert(0, str(BIN))
+        import hubconf
+        errs = check(hubconf.config_dir())
     else:
         print(__doc__, file=sys.stderr)
         return 2

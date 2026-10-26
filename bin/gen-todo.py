@@ -32,7 +32,7 @@ import hubconf  # noqa: E402
 
 HOME = pathlib.Path.home()
 HUB = HOME / "agent-hub"
-MIGRATION = HUB / "openclaw-migration-status.md"
+MIGRATION = hubconf.data_file("openclaw-migration-status.md")
 PROJECTS = HOME / ".memory-copies"
 
 TAG, ASSISTANT = hubconf.owner_tag(), hubconf.assistant_name()   # 待辦標籤裡 owner 的名字(hub.json owner.tag)

@@ -23,9 +23,14 @@ BASELINE = ROOT / "tests" / "fixtures" / "personal-baseline.json"
 SELF = pathlib.Path(__file__).resolve()
 RULES = {
     "personal": re.compile(r"knas|muninn|project-30|imaknas|/Users/you\b|/Users/you", re.I),
-    "secrets-path": re.compile(r"[\"'/]\.secrets\b"),   # bin/ 裡自己拼 .secrets 的路徑(之後經過 hubconf.secret())
+    "secrets-path": re.compile(r"[\"'/]\.secrets\b"),   # bin/ 裡自己拼 .secrets 的路徑(要經過 hubconf.secrets_dir())
+    # bin/ 裡自己拼 config/data 檔的路徑(要經過 hubconf.config_file()/data_file()、shell 用 hubpaths.sh 的 $HUB_CONFIG/$HUB_DATA)
+    "instance-path": re.compile(r"(?:/ |\$(?:HUB|AGENT_HUB)/)[\"']?(?:digest|reflect|todo\.md|index\.md|review-log\.md|models\.env"
+                                r"|mirror-list\.txt|services\.tsv|schedule\.yaml|legacy-paths\.tsv|openclaw-migration-status\.md|hub\.json)\b"),
 }
-RULE_SCOPE = {"personal": SCOPE, "secrets-path": ("bin",)}
+RULE_SCOPE = {"personal": SCOPE, "secrets-path": ("bin",), "instance-path": ("bin",)}
+# 路徑定義的地方:hubconf(Python)、hubpaths.sh(shell)、看門狗(刻意不 import 平台的模組,自己一份;test_instance_layout 檢查三份一致)
+DEFINED_IN = {r: {"bin/hubconf.py", "bin/hubpaths.sh", "bin/scheduler-watchdog.py"} for r in ("secrets-path", "instance-path")}
 
 
 def files() -> list[pathlib.Path]:
@@ -49,8 +54,8 @@ def counts() -> dict[str, dict[str, int]]:
             continue
         rel = str(f.relative_to(ROOT))
         for rule, pat in RULES.items():
-            if rule == "secrets-path" and rel == "bin/hubconf.py":
-                continue  # 路徑只在這裡定義一次(hubconf.secrets_dir())
+            if rel in DEFINED_IN.get(rule, ()):
+                continue  # 路徑只在這裡定義一次
             if rel.split("/")[0] in RULE_SCOPE[rule] and (n := len(pat.findall(text))):
                 out[rule][rel] = n
     return out

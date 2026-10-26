@@ -57,7 +57,7 @@ COPIES = hubconf.p("memory_copies", "~/.memory-copies")
 STATE_DIR = HUB / ".state"
 WORK_STATE = STATE_DIR / "consolidate" / "state.json"
 LOG_DIR = HUB / ".logs"
-REVIEW_LOG = HUB / "review-log.md"
+REVIEW_LOG = hubconf.data_file("review-log.md")
 BIN = HUB / "bin"
 TODAY = datetime.date.today()
 
@@ -112,7 +112,7 @@ def git(*args, cwd=None, git_dir=None, check=True) -> str:
 
 def load_models() -> dict:
     models = {"CONSOLIDATE_MODEL": "opus"}
-    env = HUB / "models.env"
+    env = hubconf.config_file("models.env")
     if env.exists():
         for line in env.read_text().splitlines():
             line = line.strip()

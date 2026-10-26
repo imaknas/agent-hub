@@ -95,11 +95,14 @@ class DigestSections(unittest.TestCase):
     def setUp(self):
         import hublib
         self.h = hublib
-        self._hub = hublib.HUB
-        hublib.HUB = pathlib.Path(tempfile.mkdtemp())
+        self._data = os.environ.get("AGENT_HUB_DATA")
+        os.environ["AGENT_HUB_DATA"] = tempfile.mkdtemp()   # digest 寫在 data 目錄(hubconf.data_dir()),絕不碰真的
 
     def tearDown(self):
-        self.h.HUB = self._hub
+        if self._data is None:
+            os.environ.pop("AGENT_HUB_DATA", None)
+        else:
+            os.environ["AGENT_HUB_DATA"] = self._data
 
     def test_sections(self):
         h, day = self.h, "2026-10-26"

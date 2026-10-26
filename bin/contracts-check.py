@@ -60,7 +60,7 @@ def cross_copies(index: dict) -> list[str]:
 
 def live(index: dict) -> list[str]:
     errs = []
-    todo = HUB / "todo.md"
+    todo = hubconf.data_file("todo.md")
     if todo.exists():
         errs += [f"todo.md:{e}" for e in contracts.check_todo_md(todo.read_text(), C / "todo-md.v1.md", hubconf.owner_tag())]
     import minischema
@@ -79,7 +79,7 @@ def live(index: dict) -> list[str]:
             ev["payload"].setdefault("v", 1)  # 2026-10-22 之前的事件沒有 v,讀成 1
             if (e := contracts.check_json(C / "hubbus.v1.schema.json", ev)):
                 errs.append(f"匯流排事件 {ev['id']}:{e[0]}")
-    weeks = sorted((HUB / "reflect").glob("20*-W*.json"))
+    weeks = sorted(hubconf.data_file("reflect").glob("20*-W*.json"))
     if weeks:
         d = json.loads(weeks[-1].read_text())
         d.setdefault("v", 1)

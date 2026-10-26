@@ -409,6 +409,9 @@ def refresh(only: list[str] | None = None) -> dict:
     CACHE.mkdir(parents=True, exist_ok=True)
     reg = hubconf.registry_dir()
     files = sorted(reg.glob("*.yaml")) if reg.is_dir() else []
+    plat = hubconf.platform_registry()  # 平台自己的登錄不管 registry_dir 在哪都讀(新使用者的登錄裡沒有它)
+    if plat.exists() and plat.stem not in {f.stem for f in files}:
+        files = sorted([*files, plat])
     projects, errors = {}, {}
     for f in files:
         stem = f.stem

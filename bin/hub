@@ -2,8 +2,10 @@
 """agent-hub 的單一入口(docs/design/new-user.md 3.4)。薄薄一層分派,不重寫既有腳本。
 
 開始用:
-  hub init [--owner <名字>] [--timezone <時區>] [--workspace <資料夾>] [--modules a,b] [--yes] [--no-launchd] [--dry-run]
-                        沒有 hub.json 就照 hub.example.json 寫一份(問幾個問題,--yes 用預設值);建需要的資料夾;
+  hub init [--home <實例目錄>] [--owner <名字>] [--timezone <時區>] [--workspace <資料夾>] [--modules a,b] [--yes]
+           [--no-launchd] [--dry-run]
+                        沒有 hub.json 就建實例目錄(預設 ~/.agent-hub:config/ 是 git repo、data/、secrets/),照 hub.example.json
+                        寫 config/hub.json(問幾個問題,--yes 用預設值),最後寫 <hub>/.hub-home 指過去;建需要的資料夾;
                         裝排程器跟看門狗(launchd/ 的樣板;內容一樣就不動);套用 config。已經有 hub.json 就不動它
   hub doctor            一次看完哪裡壞了:平台的 Python、config、登入、排程器、看門狗、背景服務、commit 閘門
 config:
@@ -104,11 +106,11 @@ def record(done: dict, ok: bool) -> None:
 # ---------- modules ----------
 
 def read_hub_json() -> dict:
-    return json.loads((ROOT / "hub.json").read_text())
+    return json.loads(hubconf.config_file("hub.json").read_text())
 
 
 def write_hub_json(d: dict) -> None:
-    (ROOT / "hub.json").write_text(json.dumps(d, ensure_ascii=False, indent=2) + "\n")
+    hubconf.config_file("hub.json").write_text(json.dumps(d, ensure_ascii=False, indent=2) + "\n")
 
 
 def cmd_modules(argv: list[str]) -> int:
@@ -205,39 +207,50 @@ def new_hub_json(args: dict, yes: bool) -> dict:
 def cmd_init(argv: list[str]) -> int:
     flags = {a for a in argv if a in ("--yes", "--no-launchd", "--dry-run")}
     args = {k.lstrip("-"): argv[i + 1] for i, k in enumerate(argv[:-1])
-            if k in ("--owner", "--timezone", "--workspace", "--modules")}
+            if k in ("--owner", "--timezone", "--workspace", "--modules", "--home")}
     dry, yes = "--dry-run" in flags, "--yes" in flags
-    hub_json = ROOT / "hub.json"
-    if hub_json.exists():
-        print(f"✓ 已經有 {hub_json},不動它(要改就直接編輯,再 hub config apply)")
+    legacy = (ROOT / "hub.json").exists() and hubconf.instance_home() is None
+    if legacy:
+        # 舊的擺法(hub.json 在 hub 根目錄,搬家前的樣子):不動,搬家另外做(docs/design/new-user.md 第 6 步)
+        print(f"✓ 已經有 {ROOT / 'hub.json'}(舊的擺法),不動它")
+    elif hubconf.config_file("hub.json").exists():
+        print(f"✓ 已經有 {hubconf.config_file('hub.json')},不動它(要改就直接編輯,再 hub config apply)")
     else:
+        home = pathlib.Path(os.path.expanduser(args.get("home") or os.environ.get("AGENT_HUB_HOME")
+                                               or ask("實例目錄(你的 config、data、憑證放這裡)", "~/.agent-hub", yes)))
         d = new_hub_json(args, yes)
+        d["registry_dir"] = "projects"   # 相對 config/
         if dry:
-            print("(dry-run) 會寫 hub.json:\n" + json.dumps(d, ensure_ascii=False, indent=2))
-        else:
-            hub_json.write_text(json.dumps(d, ensure_ascii=False, indent=2) + "\n")
-            print(f"✓ 寫了 {hub_json}(owner {d['owner']['tag']}、模組 "
-                  f"{', '.join(k for k, v in d['modules'].items() if v is True)})")
-    if dry and not hub_json.exists():
+            print(f"(dry-run) 會建實例目錄 {home}/{{config,data,secrets}}、寫 config/hub.json、寫 {hubconf.POINTER}:\n"
+                  + json.dumps(d, ensure_ascii=False, indent=2))
+            return 0
+        for sub in ("config/projects", "data", "secrets"):
+            (home / sub).mkdir(parents=True, exist_ok=True)
+        (home / "secrets").chmod(0o700)
+        (home / "config" / "hub.json").write_text(json.dumps(d, ensure_ascii=False, indent=2) + "\n")
+        if shutil.which("git") and not (home / "config" / ".git").exists():  # config as code:config 是自己的 repo
+            subprocess.run(["git", "init", "-q", str(home / "config")])
+            subprocess.run(["git", "-C", str(home / "config"), "config", "core.hooksPath", str(ROOT / "githooks" / "config")])
+        hubconf.POINTER.write_text(str(home) + "\n")   # 最後才寫:有了它,平台才改用這個實例
+        hubconf._cfg = None
+        print(f"✓ 實例目錄 {home}(config 是 git repo;owner {d['owner']['tag']}、模組 "
+              f"{', '.join(k for k, v in d['modules'].items() if v is True)})")
+    if dry and not hubconf.config_file("hub.json").exists():
         return 0
-    cfg = json.loads(hub_json.read_text())
-
-    def p(key, default):
-        v = cfg.get(key, default)
-        return pathlib.Path(os.path.expanduser(v)) if v.startswith(("~", "/")) else ROOT / v
-    dirs = [p("registry_dir", "projects"), ROOT / ".state", ROOT / ".logs", hubconf.secrets_dir(),
-            p("workspace_root", "~/workspace"), p("git_origin", "~/git-origin"), p("memory_copies", "~/.memory-copies")]
+    dirs = [hubconf.registry_dir(), hubconf.STATE, hubconf.LOGS, hubconf.secrets_dir(), hubconf.data_dir(),
+            hubconf.p("workspace_root", "~/workspace"), hubconf.p("git_origin", "~/git-origin"),
+            hubconf.p("memory_copies", "~/.memory-copies")]
     for d in dirs:
-        if not d.exists():
+        if d and not d.exists():
             print(f"{'(dry-run) ' if dry else ''}建資料夾 {d}")
             if not dry:
                 d.mkdir(parents=True, exist_ok=True)
-    if not dry:
-        (hubconf.secrets_dir()).chmod(0o700)
+    if not dry and hubconf.secrets_dir().exists():
+        hubconf.secrets_dir().chmod(0o700)
     if (ROOT / ".git").exists():
         cur = subprocess.run(["git", "-C", str(ROOT), "config", "core.hooksPath"], capture_output=True, text=True).stdout.strip()
         if cur != "githooks":
-            print(f"{'(dry-run) ' if dry else ''}git config core.hooksPath githooks(commit 閘門)")
+            print(f"{'(dry-run) ' if dry else ''}git config core.hooksPath githooks(平台的 commit 閘門)")
             if not dry:
                 subprocess.run(["git", "-C", str(ROOT), "config", "core.hooksPath", "githooks"])
     if "--no-launchd" in flags:
@@ -264,7 +277,7 @@ def cmd_doctor(argv: list[str]) -> int:
     r = subprocess.run([str(BIN / "setup-python"), "--check"], capture_output=True, text=True)
     add("ok" if r.returncode == 0 else "bad", (r.stdout.strip() or r.stderr.strip())[:160] or "平台的 Python",
         "" if r.returncode == 0 else "bin/setup")
-    if not (ROOT / "hub.json").exists():
+    if not hubconf.config_file("hub.json").exists():
         add("bad", "沒有 hub.json", "bin/hub init")
         return report(results)
     r = subprocess.run([str(BIN / "config-check")], capture_output=True, text=True)

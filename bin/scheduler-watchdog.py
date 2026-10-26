@@ -28,14 +28,28 @@ import pathlib
 import subprocess
 import sys
 
-HUB = pathlib.Path(__file__).resolve().parents[1]  # 這支所在的 hub(刻意不 import hubconf:平台的 Python 壞了它也要能跑)
+HUB = pathlib.Path(os.environ.get("AGENT_HUB_ROOT") or pathlib.Path(__file__).resolve().parents[1])  # 跟 hubconf.ROOT 一樣
+
+
+def _instance(sub: str, legacy: pathlib.Path) -> pathlib.Path:
+    """實例目錄的擺法(跟 hubconf 同一套規則,docs/design/new-user.md 3.1)。刻意不 import 平台的任何模組:
+    平台壞了這支也要能跑(tests/test_python_floor.py 檢查)。"""
+    env = {"config": "AGENT_HUB_CONFIG", "secrets": "AGENT_HUB_SECRETS"}[sub]
+    if os.environ.get(env):
+        return pathlib.Path(os.path.expanduser(os.environ[env]))
+    home = os.environ.get("AGENT_HUB_HOME") or ((HUB / ".hub-home").read_text().strip()
+                                                if (HUB / ".hub-home").is_file() else "")
+    return pathlib.Path(os.path.expanduser(home)) / sub if home else legacy
+
+
+CONFIG_DIR, SECRETS_DIR = _instance("config", HUB), _instance("secrets", HUB / ".secrets")
 HEARTBEAT = HUB / ".state" / "scheduler-heartbeat"
 STATE_FILE = HUB / ".state" / "scheduler-last-run.json"
 WATCH_STATE = HUB / ".state" / "scheduler-watchdog.json"
 SCHED_LOG = HUB / ".logs" / "scheduler.log"
 LOG = HUB / ".logs" / "scheduler-watchdog.log"
-TOKEN = HUB / ".secrets" / "discord-token"
-CHANNEL = HUB / ".secrets" / "discord-alert-channel"
+TOKEN = SECRETS_DIR / "discord-token"
+CHANNEL = SECRETS_DIR / "discord-alert-channel"
 LABEL = "local.agent-hub-scheduler"
 STALE_MIN = 35  # tick 每 15 分鐘;兩個 tick 沒來再加幾分鐘漂移
 REMIND_H = 6
@@ -101,7 +115,7 @@ def send(text):
 def alerts_configured() -> bool:
     import json
     try:
-        return bool(json.loads((HUB / "hub.json").read_text()).get("alerts"))
+        return bool(json.loads((CONFIG_DIR / "hub.json").read_text()).get("alerts"))
     except (OSError, ValueError):
         return True  # 讀不到 hub.json 就照舊:要有 Discord 才算有在顧
 

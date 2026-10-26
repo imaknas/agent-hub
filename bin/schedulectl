@@ -29,12 +29,15 @@ from pathlib import Path
 
 import yaml
 
-HUB = Path.home() / "agent-hub"
-SCHEDULE = HUB / "schedule.yaml"
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+import hubconf  # noqa: E402
+
+HUB = hubconf.ROOT
+SCHEDULE = hubconf.config_file("schedule.yaml")
 LOG_DIR = HUB / ".logs"
 LABEL = "local.agent-hub-scheduler"
 PLIST = Path.home() / "Library/LaunchAgents" / f"{LABEL}.plist"
-MODELS_FILE = HUB / "models.env"
+MODELS_FILE = hubconf.config_file("models.env")
 DEFAULT_MODELS = {"STATE_MODEL": "haiku", "INDEX_MODEL": "sonnet", "CONSOLIDATE_MODEL": "opus"}
 
 
