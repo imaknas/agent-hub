@@ -112,6 +112,15 @@ def log(msg: str) -> None:
         f.write(f"[{now():%Y-%m-%d %H:%M:%S}] {msg}\n")
 
 
+def handovers_logged(lease_id: str) -> int:
+    """事件紀錄(events.jsonl)裡這個租約交接過幾次。"""
+    f = DIR / lease_id / "events.jsonl"
+    try:
+        return sum(1 for line in f.open() if '"type": "handover"' in line)
+    except OSError:
+        return 0
+
+
 class Lease:
     def __init__(self, d: dict):
         self.id = d["lease_id"]
@@ -130,7 +139,9 @@ class Lease:
         self.intent_stop = False
         self.proc: subprocess.Popen | None = None
         self.seen_msgs: list[str] = d.get("seen_msgs", [])[-200:]
-        self.handovers = d.get("handovers", 0)  # 這段深談交接過幾次:交接轉成的訊息 id 帶著它(同一個 id 接回再收回不撞號)
+        # 這段深談交接過幾次:交接轉成的訊息 id 帶著它(同一個 id 接回再收回不撞號)。不低於事件紀錄裡的交接次數:
+        # 改版前的紀錄沒有這欄,從 0 算的話,補送用的 id(lease-<id>-<n>-…)之後會被真的第 n 次交接撞到
+        self.handovers = max(int(d.get("handovers") or 0), handovers_logged(self.id))
         self.recent: list[dict] = []          # 最近的事件(含 text_delta),SSE 補送用
         self.cond = threading.Condition(_lock)
 

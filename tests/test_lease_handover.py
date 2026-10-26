@@ -139,6 +139,16 @@ class HandoverIds(unittest.TestCase):
         self.assertEqual(again.handovers, 3)
         self.assertEqual(self.m.Lease({"lease_id": "x", "project": "p", "cwd": "/tmp"}).handovers, 0, "舊紀錄沒有這欄 = 0")
 
+    def test_count_never_below_logged_handovers(self):
+        """改版前的租約:次數從事件紀錄算,補送用的 id 之後不會被真的交接撞到。"""
+        sid = "66666666-6666-4666-8666-666666666666"
+        d = self.m.DIR / sid
+        d.mkdir(parents=True)
+        (d / "events.jsonl").write_text("".join(json.dumps({"type": t}) + "\n"
+                                                for t in ("state", "handover", "assistant", "handover")))
+        self.assertEqual(self.m.Lease({"lease_id": sid, "project": "p", "cwd": "/tmp"}).handovers, 2)
+        self.assertEqual(self.m.Lease({"lease_id": sid, "project": "p", "cwd": "/tmp", "handovers": 5}).handovers, 5)
+
 
 class RestartOnCodeChange(unittest.TestCase):
     def setUp(self):
