@@ -99,4 +99,7 @@ sycophancy-eval / the-crucible 一樣。只推 main 跟 tag,agent-memory 分支�
 - 網站:https://imaknas.github.io/agent-ops-specs/(GitHub Pages,main 的根目錄;相對連結轉成 .html,schema 跟一致性
   資料用原始 JSON 給)
 - agent-hub 登錄的 origin 改成 GitHub、加進 mirror-list(config f943f7f)
+- Zenodo(照 sycophancy-eval 的做法:`.zenodo.json` 為主、CITATION.cff 給 GitHub 用;作者 Xiao, Knas + ORCID):
+  GitHub Release `release-2026-10-27` → DOI 10.5281/zenodo.23680065,concept(永遠指最新)10.5281/zenodo.23680064。
+  規範的版本 tag `principal-handoff-0.3` 不動;release 用日期 tag,因為 Zenodo 只收開關打開之後、快照裡有 `.zenodo.json` 的 release。
 
