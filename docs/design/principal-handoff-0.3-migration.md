@@ -82,3 +82,20 @@ m10270639-ba51、m10270459-89db):
    Knas 在對話裡說了答案 → `principal`(`evidence.basis` 指那段對話);Muninn 依偏好自己答 → `delegated`。
 4. 合併(same_as)要不要讓專案能異議(今天的 `new_reason`)?0.3 的作法是專案寄 `note`,Muninn 撤回關係。
 5. 什麼時候可以開始階段 2?
+
+## Muninn 的回覆(10-27 08:28、08:48;m10270828-e2bb、m10270848-a373)
+
+- **定案**:v2 直接用規範 0.3 的 record,不另包信封;asks 留在 0.3 外照 v1;轉交改 HTTP 拉取 + ack,過渡期本機指令照留;
+  AnswerQuestion:Knas 在對話裡說了 → `principal`(`evidence.basis` 指那一句),依偏好代答 → `delegated`(Muninn 目前沒有
+  這功能,所以不會出現);合併的異議:專案寄 note,Muninn 撤回 same_as。
+- **Muninn 自己加的規則**:送給某個專案的 record,文字(note、quote、evidence)只帶那個專案可以聽的;深談或別的專案來的內容
+  只回到來源專案(Muninn 現有的 only_to/via)。規範 core §13 沒管這個方向——之後可以考慮寫進規範。
+- **階段 2 已上線**(Muninn 9ef9442,格式 `contracts/records.v2.md`,規範的 schema 跟一致性案例 vendor 在
+  `contracts/vendor/principal-handoff/`):`POST /api/records` 逐筆回 accepted/duplicate/unsupported/invalid;
+  `GET /api/records?project=&after=` + `POST /api/records/ack`。ack 會把對應的 handoff 標成 delivered(從 `muninn handoffs`
+  消失):兩種傳輸並存時誰先 ack 誰拿走;ack 要在 agent-hub 寫穩之後才送。從 v1 換過來時從第一次讀到的 cursor 開始,不要從 0。
+- **principal 識別字**:`person:knas`,Muninn 自己是 `muninn`;agent-hub 的 hub.json 要用同一個。
+- **行為變更(已生效)**:v1 的 `drop --task` 跟 v2 acts `withdrawn` 一樣,只剩這個專案要的話不再直接結掉,改問 Knas。
+- **階段 3(agent-hub)要做的**:bridge 改用 v2(送 records、拉 + ack,cursor 從第一次讀到的開始);`knas-tasks.py` 改成 Acts
+  registrar;librarian 套用 settlement、note 用判斷;深談來的問題把 `lease:<id>` 放 `context`;hub.json 加 principal 識別字;
+  agent-instructions 裡 `drop --task` 的說明改成「不需要了,Muninn 會問 Knas」。時程等 Knas 排。
