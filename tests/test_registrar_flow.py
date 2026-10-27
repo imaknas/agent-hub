@@ -15,6 +15,7 @@
   pf  帶 key 的行被改了字               → amended(新的才有)
   pg  掉了 key 的行,文字跟原本一樣       → 補回原本的 key,不寄新的 raised(新的才有)
   ph  需求已 withdrawn、行也刪了          → 不寄 claim(新的才有)
+  pj  v1 已經寄過推斷結案(done-<key>)的一件 → 換成新的那晚不再寄 claim(新的才有)
   pi  改過字(amended)的一件掉了 key       → 照改過的文字補回原本的 key,不當新的一件(新的才有;文字沒改過時
                                           重新算出來的 key 本來就一樣,只有改過字才看得出有沒有補 key)
 
@@ -61,6 +62,7 @@ SCENES = {
     "pf": {"state": state(f"- [ ] 〔Alex〕訂機票,要靠走道{marker(KF)}"), "posted": {KF: "訂機票"}},
     "pg": {"state": state("- [ ] 〔Alex〕繳稅"), "posted": {KG: "繳稅"}},
     "ph": {"state": state("- [ ] 〔agent〕別的事"), "posted": {KH: "回信給房東"}, "withdrawn": [KH]},
+    "pj": {"state": state("- [ ] 〔agent〕別的事"), "posted": {key("pj", "寄掛號"): "寄掛號"}, "v1_claimed": [key("pj", "寄掛號")]},
     "pi": {"state": state("- [ ] 〔Alex〕訂飯店,含早餐"), "posted": {KI: "訂飯店"}, "amended": {KI: "訂飯店,含早餐"}},
 }
 
@@ -162,6 +164,13 @@ class Env:
         for k in s.get("withdrawn", []):
             recs.append(self.rec(p, f"w:{k}", "withdrawn", "requester", f"project:{p}", k, reason="not_needed",
                                  supersedes=[f"r:{k}"], ts="2026-10-21T10:00:00Z"))
+        if s.get("v1_claimed"):   # 舊的 registrar 在 v1 寄過的推斷結案
+            c = sqlite3.connect(self.db)
+            for k in s["v1_claimed"]:
+                c.execute("INSERT INTO events(id, ts, type, source, to_project, ref, payload) VALUES(?,?,?,?,?,?,?)",
+                          (f"done-{k}", "2026-10-22T10:00:00+08:00", "message", p, OWNER, None,
+                           json.dumps({"v": 1, "type": "done", "task": k, "inferred": True, "text": "推斷"})))
+            c.commit(); c.close()
         if recs:
             r = self.hubbus("record-publish", "--json", "-", stdin=json.dumps(recs, ensure_ascii=False))
             assert r.returncode == 0, r.stdout + r.stderr
@@ -237,6 +246,7 @@ class RegistrarFlow(unittest.TestCase):
                 self.assertEqual(env.outputs("ph"), [])
                 self.assertIn(marker(KI), env.state("pi"))
                 self.assertEqual(env.outputs("pi"), [])
+                self.assertEqual(env.outputs("pj"), [], "v1 寄過推斷結案的不再寄")
         self.each(check)
 
     def test_second_run_sends_nothing_new(self):

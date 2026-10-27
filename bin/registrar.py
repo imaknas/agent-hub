@@ -224,7 +224,7 @@ class Ledger:
                 self.settle.setdefault(rec["key"], []).append(rec)
                 if not e["done"]:
                     self.pending.append(e)
-        self.v1_posted, self.v1_closed, self.v1_pending = v1_compat(project)
+        self.v1_posted, self.v1_closed, self.v1_pending, self.v1_claimed = v1_compat(project)
 
     def terms(self, key: str) -> tuple[str | None, int, str | None]:
         """(最新的 terms 文字, 最新的 terms_rev, 現在的需求紀錄 id)。"""
@@ -254,11 +254,12 @@ class Ledger:
         return sorted(k for k in self.known() if not self.settled(k) and not self.withdrawn(k))
 
 
-def v1_compat(project: str) -> tuple[dict, set, list]:
-    """過渡期:v1 寄過的 task(key → 文字)、v1 收過結案轉交的 key、還沒套用的 v1 帶 key 轉交。v1 退役時刪掉。"""
+def v1_compat(project: str) -> tuple[dict, set, list, set]:
+    """過渡期:v1 寄過的 task(key → 文字)、v1 收過結案轉交的 key、還沒套用的 v1 帶 key 轉交、v1 已經寄過推斷結案
+    (id done-<key>)的 key——換成 v2 那晚不要用新的 id 再寄一次。v1 退役時刪掉。"""
     db = hubconf.bus_db()
     if not db.exists():
-        return {}, set(), []
+        return {}, set(), [], set()
     marks = ",".join("?" * len(OWNERS))
     c = sqlite3.connect(db, timeout=30)
     posted = {r[0]: json.loads(r[1]).get("text", "") for r in c.execute(
@@ -270,13 +271,16 @@ def v1_compat(project: str) -> tuple[dict, set, list]:
         h = json.loads(pl).get("handoff") or {}
         if h.get("effect") in ("done", "dropped", "already_done") and h.get("reply_to"):
             closed.add(h["reply_to"])
+    claimed = {r[0][len("done-"):] for r in c.execute(
+        f"SELECT id FROM events WHERE type='message' AND to_project IN ({marks}) AND source=? AND id LIKE 'done-task-%'",
+        (*OWNERS, project))}
     r = hubbus("open-handoffs")
     try:
         pending = [h for h in json.loads(r.stdout or "[]") if h.get("project") == project and h.get("reply_to")
                    and h.get("effect") in ("done", "dropped", "already_done", "reopened")]
     except ValueError:
         pending = []
-    return posted, closed, pending
+    return posted, closed, pending, claimed
 
 
 def publish(recs: list[dict]) -> dict[str, str]:
@@ -397,7 +401,7 @@ def run_project(project: str, path: pathlib.Path, how: str, warned: set[str]) ->
     ok &= all(res.get(r["id"]) in ("accepted", "duplicate", "dry-run") for r in amends)
     # 5. 對帳
     claims = []
-    for x in reconcile(lines, {k: led.terms(k)[0] or "" for k in led.open() if k not in warned}):
+    for x in reconcile(lines, {k: led.terms(k)[0] or "" for k in led.open() if k not in warned and k not in led.v1_claimed}):
         k = x["key"]
         if x["action"] == "warn":
             log(f"{project}: 警告——{k} 還沒結案,找不到 key 但有很像的行(改寫時拿掉了行尾?),不送 claim")
