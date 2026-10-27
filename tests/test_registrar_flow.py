@@ -15,6 +15,8 @@
   pf  帶 key 的行被改了字               → amended(新的才有)
   pg  掉了 key 的行,文字跟原本一樣       → 補回原本的 key,不寄新的 raised(新的才有)
   ph  需求已 withdrawn、行也刪了          → 不寄 claim(新的才有)
+  pi  改過字(amended)的一件掉了 key       → 照改過的文字補回原本的 key,不當新的一件(新的才有;文字沒改過時
+                                          重新算出來的 key 本來就一樣,只有改過字才看得出有沒有補 key)
 
     bin/py -m unittest discover -s tests
 """
@@ -47,7 +49,7 @@ def state(*todo: str) -> str:
 
 
 KB, KC, KD, KE = key("pb", "付網域"), key("pc", "簽合約"), key("pd", "買零件"), key("pe", "續約保險")
-KF, KG, KH = key("pf", "訂機票"), key("pg", "繳稅"), key("ph", "回信給房東")
+KF, KG, KH, KI = key("pf", "訂機票"), key("pg", "繳稅"), key("ph", "回信給房東"), key("pi", "訂飯店")
 SCENES = {
     "pa": {"state": state("- [ ] 〔Alex〕續約網域", "- [ ] 〔agent〕加重試")},
     "pb": {"state": state(f"- [ ] 〔Alex〕付網域{marker(KB)}"), "posted": {KB: "付網域"},
@@ -59,6 +61,7 @@ SCENES = {
     "pf": {"state": state(f"- [ ] 〔Alex〕訂機票,要靠走道{marker(KF)}"), "posted": {KF: "訂機票"}},
     "pg": {"state": state("- [ ] 〔Alex〕繳稅"), "posted": {KG: "繳稅"}},
     "ph": {"state": state("- [ ] 〔agent〕別的事"), "posted": {KH: "回信給房東"}, "withdrawn": [KH]},
+    "pi": {"state": state("- [ ] 〔Alex〕訂飯店,含早餐"), "posted": {KI: "訂飯店"}, "amended": {KI: "訂飯店,含早餐"}},
 }
 
 
@@ -153,6 +156,9 @@ class Env:
         for k, text in s.get("posted", {}).items():
             recs.append(self.rec(p, f"r:{k}", "raised", "requester", "agent-hub:registrar", k,
                                  terms={"text": text}, terms_rev=1))
+        for k, text in s.get("amended", {}).items():
+            recs.append(self.rec(p, f"a:{k}:2", "amended", "requester", "agent-hub:registrar", k, terms={"text": text},
+                                 terms_rev=2, supersedes=[f"r:{k}"], ts="2026-10-21T09:00:00Z"))
         for k in s.get("withdrawn", []):
             recs.append(self.rec(p, f"w:{k}", "withdrawn", "requester", f"project:{p}", k, reason="not_needed",
                                  supersedes=[f"r:{k}"], ts="2026-10-21T10:00:00Z"))
@@ -229,6 +235,8 @@ class RegistrarFlow(unittest.TestCase):
                 self.assertIn(marker(KG), env.state("pg"))
                 self.assertEqual(env.outputs("pg"), [])
                 self.assertEqual(env.outputs("ph"), [])
+                self.assertIn(marker(KI), env.state("pi"))
+                self.assertEqual(env.outputs("pi"), [])
         self.each(check)
 
     def test_second_run_sends_nothing_new(self):
