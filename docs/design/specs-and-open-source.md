@@ -89,3 +89,14 @@ principal 端:settled/reopened)、宣稱(claim)跟附註(note)不改任何登記
 **下一步:實作收斂。** agent-hub 現在跑的是 HTH 0.1(透過 adapter),Muninn 也還沒照 0.3。要讓規範跟實作一起收斂,
 agent-hub 的任務登記/匯流排跟 Muninn 的 contract(v2)要改成 0.3 的 records——跨專案,要跟 Muninn 協調。
 
+## 公開(10-27)
+
+Knas 10-27:「先把 agent-ops-specs 做成公開的 GitHub repo(加 Pages),先檢查過再開」。檢查:追蹤的檔案、main 的 8 個 commit
+每個版本跟 commit 訊息(名字、本機路徑、常見憑證格式都沒命中;gitleaks 沒裝,用 pattern 掃)、commit email 跟已公開的
+sycophancy-eval / the-crucible 一樣。只推 main 跟 tag,agent-memory 分支留在 mini。
+
+- repo:https://github.com/imaknas/agent-ops-specs(public),tag `principal-handoff-0.3`
+- 網站:https://imaknas.github.io/agent-ops-specs/(GitHub Pages,main 的根目錄;相對連結轉成 .html,schema 跟一致性
+  資料用原始 JSON 給)
+- agent-hub 登錄的 origin 改成 GitHub、加進 mirror-list(config f943f7f)
+
