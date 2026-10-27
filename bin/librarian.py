@@ -50,8 +50,8 @@ cost_added = False   # shell 版沒有任何成本時印 $0,有才印 %.6f
 
 
 def models() -> tuple[str, str]:
-    """(STATE_MODEL, INDEX_MODEL):預設 haiku / sonnet,config 的 models.env 有寫就照它(只用在 log;真正用哪個模型
-    由 llm.py 照判斷點宣告的 model_env 讀環境變數決定)。"""
+    """(STATE_MODEL, INDEX_MODEL):預設 haiku / sonnet,config 的 models.env 有寫就照它。llm.py 也照同一份 models.env
+    選模型(--model > 環境變數 > models.env > 預設),所以這裡寫進 log 的就是實際用的。"""
     vals = {"STATE_MODEL": "haiku", "INDEX_MODEL": "sonnet"}
     env = hubconf.config_file("models.env")
     if env.exists():

@@ -11,7 +11,7 @@ jobs:
   legacy_name: librarian
   at: 03:00
   background: true
-  run: bin/librarian.sh
+  run: bin/py bin/librarian.py   # 10-27 換掉 librarian.sh(行為測試 tests/test_librarian_flow.py 兩支都跑過)
   cwd: hub
 # librarian 之後的機械步驟(零 LLM),以前寫死在 librarian.sh 的最後,現在各自是一個 job(docs/design/new-user.md 第 0 步):
 # 各自重跑、各自在狀態頁顯示成敗。個人助理的(knas-tasks、reconcile-questions)在 modules/assistant.yaml,用 before:
