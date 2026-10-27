@@ -99,3 +99,36 @@ m10270639-ba51、m10270459-89db):
 - **階段 3(agent-hub)要做的**:bridge 改用 v2(送 records、拉 + ack,cursor 從第一次讀到的開始);`knas-tasks.py` 改成 Acts
   registrar;librarian 套用 settlement、note 用判斷;深談來的問題把 `lease:<id>` 放 `context`;hub.json 加 principal 識別字;
   agent-instructions 裡 `drop --task` 的說明改成「不需要了,Muninn 會問 Knas」。時程等 Knas 排。
+
+## 階段 3 的設計(10-27,Knas:「開始 phase 3」)
+
+**做法 B:0.3 records 從頭到尾。** 不是只讓 bridge 在邊界翻譯(那樣 agent-hub 內部還是舊字彙,決定者跟授權種類要塞回舊信件格式,
+等於打補丁),而是匯流排直接帶 0.3 record,agent-hub 這邊的任務登記照 Acts 的 registrar 實作,bridge 只負責搬。
+
+匯流排上的介面(agent-hub 內部,兩邊照這個寫):
+
+- 新的事件 type `record`:`payload = {"v": 1, "record": <0.3 record>}`。往 Muninn 的 `to_project` = owner 地址
+  (`knas`);從 Muninn 來的 `to_project` = record 的 `project`,`source` = owner 地址。事件 id = `rec:<ext>:<project>:<record id>`,
+  所以重送是 no-op(core §10 的去重範圍)。
+- 查詢:`hubbus records --project P [--ext acts/0.3] [--type settled,reopened] [--pending]` 輸出 JSON 陣列(取代
+  `open-handoffs` 給 registrar 的用途);`--pending` = 這個專案還沒 `hubbus done` 的。套用完一樣 `hubbus done <事件 id>`。
+- `hubbus send` 留給 session 用的便利指令照舊(`--type task/question/done/drop/progress`),由 hubbus 翻成 record
+  (對應表在上面「方向一」),session 不用學新語法;agent-instructions 只改語意說明。
+- bridge(v2):往外把 `to_project = owner` 的 `record` 事件批次 `POST /api/records`(逐筆看 status,invalid 的記下來、
+  不重試);往內 `GET /api/records?project=&after=` 每分鐘拉、寫成 `record` 事件,**寫進匯流排 commit 之後**才
+  `POST /api/records/ack`;cursor 從第一次讀到的開始(不從 0)。v1 的 messages/handoffs 轉送並存到切換。
+
+分工(提議):
+
+| 部分 | 誰 |
+|---|---|
+| `bin/hubbus`:`record` 事件、`records` 查詢、`send` 翻成 record、inbox 怎麼顯示 record、bridge v2 | Agent Hub session(hubbus 是它的) |
+| `hub.json` 加 `principal`(`person:knas`)、`contracts/hub.v1.schema.json` | 這個 session |
+| `knas-tasks.py` → Acts registrar(relink、raise、amend、reconcile→claim、withdrawn 不 claim、`r:`/`a:`/`c:` id、terms_rev) | 這個 session |
+| librarian:settlement 由 registrar 機械套用;note、decisions 的 settled 由模型判斷(prompt 改) | 這個 session(先換成 librarian.py) |
+| agent-instructions:`drop --task` = 不需要了、Muninn 會問 Knas;Decisions 的回覆說明 | 這個 session |
+| vendor 規範 0.3 的 Acts suite,registrar 直接跑(取代 HTH 0.1 adapter) | 這個 session |
+
+順序:先寫特性測試鎖住現在的 knas-tasks 行為(tests-before-rewrite),再改;bus 的 `record` 介面先定好,兩邊可以平行;
+整套在隔離環境(假的 Muninn API + 複製的 bus/STATE.md)跑過夜間流程才上線;v1 跟 v2 並存一週。
+
