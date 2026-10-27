@@ -14,7 +14,7 @@ jobs:
   after: [agent-hub/librarian]
   before: [agent-hub/todo, agent-hub/librarian-publish]
   max_attempts_per_day: 3
-  run: bin/py bin/knas-tasks.py
+  run: bin/py bin/registrar.py   # 10-27 Knas:Principal Handoff 0.3 的 registrar 取代舊的任務登記(跟 hub.json mailbox.records 一起開)
 - name: reconcile-questions
   legacy_name: agent-hub/reconcile-questions
   at: "03:00"
