@@ -132,3 +132,16 @@ m10270639-ba51、m10270459-89db):
 順序:先寫特性測試鎖住現在的 knas-tasks 行為(tests-before-rewrite),再改;bus 的 `record` 介面先定好,兩邊可以平行;
 整套在隔離環境(假的 Muninn API + 複製的 bus/STATE.md)跑過夜間流程才上線;v1 跟 v2 並存一週。
 
+## 切換(10-27 14:49)
+
+Knas:「隔離演練再跑一次沒問題的話,今晚 03:00 前切換(job 換 registrar.py + mailbox.records 開)」。Agent Hub session
+重跑隔離演練(真資料重新複製,含 f5f7823)是乾淨的:切換當晚 registrar 只送 1 筆(project-15 手蓋的
+`task-project-15-funnel-f588`,匯流排上沒紀錄,第一次給 Muninn),第二次跑 0 筆。
+
+- `modules/assistant.yaml`:`assistant/knas-tasks` 改跑 `bin/py bin/registrar.py`(8cb0929;job 名稱跟排程狀態沿用)
+- config `hub.json`:`mailbox.records: true`(c265a2b);bridge v2 14:49:26 第一次跑,設了 28 個起點(含舊名稱 idea-1)
+- 今晚 03:00 是 `librarian.py` 跟 `registrar.py` 第一次一起上線;明早要看:registrar 的 log(只該有 1 筆 raised)、
+  librarian 有沒有 v2 的 note/答案、bridge 往外往內有沒有錯。
+- 並存一週之後(約 11-03):拿掉 `knas-tasks.py`、registrar 的 `v1_compat`、`librarian.sh`(這個明天就可以)、
+  HTH 0.1 的 vendor 跟 `tests/test_hth_conformance.py`;Decisions(問題)還在 v1,Agent Hub session 下一步做。
+
