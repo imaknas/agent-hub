@@ -61,6 +61,7 @@
   "tests/test_new_user.py": 5,
   "tests/test_project_rename.py": 1,
   "tests/test_python_floor.py": 1,
+  "tests/test_registrar_flow.py": 1,
   "tests/test_registry_capabilities.py": 1,
   "tests/test_upgrade_idea.py": 1
  },
