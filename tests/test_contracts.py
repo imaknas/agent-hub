@@ -123,11 +123,12 @@ class Json(unittest.TestCase):
         ev["payload"]["type"] = "nope"
         self.assertTrue(contracts.check_json(C / "hubbus.v1.schema.json", ev))
 
-    def test_vendored_messages_drop_needs_task(self):
+    def test_vendored_messages_drop_needs_task_or_question(self):
         s = C / "vendor" / "muninn" / "messages.v1.schema.json"
-        self.assertTrue(contracts.check_json(s, {"messages": [{"id": "abcd", "project": "p", "type": "drop", "text": "t"}]}))
-        self.assertEqual(contracts.check_json(s, {"messages": [{"id": "abcd", "project": "p", "type": "drop",
-                                                                "text": "t", "task": "k"}]}), [])
+        drop = {"id": "abcd", "project": "p", "type": "drop", "text": "t"}
+        self.assertTrue(contracts.check_json(s, {"messages": [drop]}))
+        self.assertEqual(contracts.check_json(s, {"messages": [{**drop, "task": "k"}]}), [])
+        self.assertEqual(contracts.check_json(s, {"messages": [{**drop, "question": "m1"}]}), [])
 
     def test_vendored_handoffs_fixture(self):
         self.assertEqual(contracts.check_json(C / "vendor" / "muninn" / "handoffs.v1.schema.json",

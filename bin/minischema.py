@@ -1,6 +1,6 @@
 """JSON Schema 的一小部分(只用標準函式庫)——contracts/ 跟 muninn 的契約只用到這些:
 type(含 ["string","null"])、required、properties、additionalProperties(true/false/schema)、items、
-enum、const、pattern、minimum、minLength、maxLength、minItems、if/then/else、$ref(#/$defs/…)。
+enum、const、pattern、minimum、minLength、maxLength、minItems、if/then/else、anyOf、$ref(#/$defs/…)。
 不認得的關鍵字直接忽略(跟 JSON Schema 規格一樣)。
 
   errors(schema, instance) -> list[str]     空的 = 合格
@@ -77,4 +77,6 @@ def errors(schema: dict, x, path: str = "$", root: dict | None = None) -> list[s
         branch = "then" if not errors(schema["if"], x, path, root) else "else"
         if branch in schema:
             out += errors(schema[branch], x, path, root)
+    if "anyOf" in schema and all(errors(sub, x, path, root) for sub in schema["anyOf"]):
+        out.append(f"{path}:anyOf 的條件一個都不符合")
     return out
