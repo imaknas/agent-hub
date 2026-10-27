@@ -225,6 +225,86 @@ def get_message(c, mid):
     return c.execute("SELECT * FROM events WHERE id=? AND type='message'", (mid,)).fetchone()
 
 
+# ---------- Principal Handoff 0.3 records(docs/design/principal-handoff-0.3-migration.md 階段 3)----------
+# 匯流排的事件 type "record",payload {"v": 1, "record": <0.3 record 原樣>}。往助理的:source = 專案、to_project = owner;
+# 從助理來的:source = owner、to_project = 專案(改名過的追到現在的名字;record 本身不改)。
+# 事件 id = rec:<ext>:<project>:<record id>(core 的去重範圍是 (ext, project, id)),重送是 no-op。
+RECORD_REQUIRED = ("ph", "ext", "id", "type", "origin", "by", "key", "project", "ts")
+
+
+def record_event_id(rec: dict) -> str:
+    return f"rec:{rec['ext']}:{rec['project']}:{rec['id']}"
+
+
+def record_errors(rec) -> list[str]:
+    """只檢查 core 的必要欄位跟版本(完整的 schema 驗證由收的那一方做)。"""
+    if not isinstance(rec, dict):
+        return ["不是 JSON 物件"]
+    errs = [f"缺 {k}" for k in RECORD_REQUIRED if not rec.get(k)]
+    if rec.get("ph") and rec["ph"] != "0.3":
+        errs.append(f"ph 是 {rec['ph']!r},要 0.3")
+    return errs
+
+
+def publish_record(c, rec: dict, source: str, to_project: str) -> tuple[str, bool]:
+    eid = record_event_id(rec)
+    return eid, publish(c, eid, "record", source, to_project, None, {"record": rec})
+
+
+def records(c, project, ext=None, types=None, pending=False, direction=None) -> list[dict]:
+    """這個專案的 record,兩個方向、舊到新:{id: 事件 id, ts, direction: out(專案寄給助理)| in(助理寄來), done, record}。
+    registrar 從 out 的 raised/amended 算最新的 terms/terms_rev、知道哪些 key 已經 withdrawn——匯流排就是它的紀錄。"""
+    owners = tuple(OWNERS)
+    marks = ",".join("?" * len(owners))
+    out = []
+    for r in c.execute(f"""SELECT m.*, EXISTS(SELECT 1 FROM events x WHERE x.type='message.done' AND x.ref=m.id) AS done
+                           FROM events m WHERE m.type='record'
+                             AND ((m.to_project=? AND m.source IN ({marks})) OR (m.source=? AND m.to_project IN ({marks})))
+                           ORDER BY m.seq""", (project, *owners, project, *owners)):
+        rec = payload(r).get("record") or {}
+        d = "in" if r["to_project"] == project else "out"
+        if (ext and rec.get("ext") != ext) or (types and rec.get("type") not in types) or (pending and r["done"]) \
+                or (direction and d != direction):
+            continue
+        out.append({"id": r["id"], "ts": r["ts"], "direction": d, "done": bool(r["done"]), "record": rec})
+    return out
+
+
+def fmt_record(r, long=True) -> str:
+    """session 看得懂的 record:是哪一件、誰決定的、什麼授權。"""
+    rec = payload(r).get("record") or {}
+    family, kind = rec.get("ext", "?").split("/")[0], rec.get("type", "?")
+    what = {"acts": "任務", "decisions": "問題"}.get(family, family)
+    head = f"[{r['id']}] 來自 {r['source']}({family} {kind},{r['ts'][5:16].replace('T', ' ')})"
+    lines = []
+    if kind == "settled":
+        auth = rec.get("authority") or {}
+        lines.append(f"{what} {rec.get('key')}:{rec.get('outcome')}({auth.get('kind', '?')},決定者 {auth.get('decider', '?')})")
+        if (rec.get("answer") or {}).get("text"):
+            lines.append(f"答案:{rec['answer']['text']}")
+    elif kind == "reopened":
+        lines.append(f"{what} {rec.get('key')} 重新打開:{rec.get('restore_text', '')}")
+    elif kind == "note":
+        about = rec.get("about") or {}
+        lines.append(f"關於 {about.get('key') or '「' + str(about.get('quote', '')) + '」'}")
+    elif kind == "related":
+        lines.append(f"{what} {rec.get('key')}:{rec.get('relation')}")
+    elif (rec.get("terms") or {}).get("text"):
+        lines.append(f"{what} {rec.get('key')}:{rec['terms']['text']}")
+    if rec.get("note"):
+        lines.append(rec["note"])
+    if kind in ("settled", "reopened", "related"):
+        lines.append("(librarian 今晚會照它更新 STATE.md 的待辦;白天只當參考)")
+    if not long:
+        return f"- {head}:{lines[0][:100] if lines else ''}"
+    return f"- {head}\n" + "\n".join("  " + l for l in lines)
+
+
+def get_event(c, eid):
+    """信或 record(done、show 用)。"""
+    return c.execute("SELECT * FROM events WHERE id=? AND type IN ('message','record')", (eid,)).fetchone()
+
+
 def must_message(c, mid):
     r = get_message(c, mid)
     if r is None:
@@ -239,7 +319,7 @@ def is_done(c, mid) -> bool:
 INBOX_SQL = """
 SELECT m.*, EXISTS(SELECT 1 FROM events d WHERE d.type='message.delivered' AND d.ref=m.id) AS delivered
 FROM events m
-WHERE m.type='message' AND m.to_project=?
+WHERE m.type IN ('message','record') AND m.to_project=?
   AND NOT EXISTS(SELECT 1 FROM events x WHERE x.type='message.done' AND x.ref=m.id)
 ORDER BY m.seq"""
 
@@ -284,6 +364,8 @@ def take_state(c, mid, to_project=None):
 
 
 def fmt(r, long=True) -> str:
+    if r["type"] == "record":
+        return fmt_record(r, long)
     p = payload(r)
     tags = [p.get("type", "?")]
     if p.get("handoff_id") is not None:
@@ -1069,6 +1151,14 @@ def main() -> None:
     oq.add_argument("--project")
     oq.add_argument("--json", action="store_true")
     sub.add_parser("reconcile-questions")
+    rq = sub.add_parser("records")
+    rq.add_argument("--project", required=True)
+    rq.add_argument("--ext")
+    rq.add_argument("--type", help="逗號分隔,例 settled,reopened")
+    rq.add_argument("--pending", action="store_true", help="只列還沒 done 的")
+    rq.add_argument("--direction", choices=("in", "out"))
+    rp = sub.add_parser("record-publish", help="stdin:一個 0.3 record 或陣列;寄給 owner(往助理)。輸出每筆 {id, status}")
+    rp.add_argument("--json", default="-", help="只支援 - (stdin)")
     pb = sub.add_parser("publish")
     pb.add_argument("type", choices=("job.failed", "merge.done", "merge.failed", "session.report",
                                      "config.applied"))  # 信有專用指令;config.applied = bin/hub config apply 套用了哪版 config
@@ -1108,6 +1198,34 @@ def main() -> None:
         else:
             for r in rows:
                 print(f"[{r['id']}] {canon(r['source'])} {r['ts'][:16]} {payload(r).get('text', '')[:100]}")
+        return
+    if a.cmd == "records":
+        c = db()
+        types = set(a.type.split(",")) if a.type else None
+        print(json.dumps(records(c, canon(a.project), a.ext, types, a.pending, a.direction), ensure_ascii=False))
+        return
+    if a.cmd == "record-publish":
+        c = db()
+        data = json.loads(sys.stdin.read() or "null")
+        recs = data if isinstance(data, list) else [data]
+        out, bad = [], 0
+        c.execute("BEGIN IMMEDIATE")
+        for r in recs:   # 逐筆:一筆不合格不擋其他筆
+            errs = record_errors(r)
+            if not errs and not valid_address(r["project"]):
+                errs = [f"不認得的專案 {r['project']}"]
+            if not errs and r.get("origin") == "principal":
+                errs = ["origin principal 的 record 只能從助理那邊來(bridge 收),專案這邊不能寄"]
+            if errs:
+                bad += 1
+                out.append({"id": (r or {}).get("id") if isinstance(r, dict) else None, "status": "invalid", "errors": errs})
+                continue
+            eid, new = publish_record(c, r, r["project"], KNAS)
+            out.append({"id": eid, "status": "accepted" if new else "duplicate"})
+        c.execute("COMMIT")
+        print(json.dumps(out, ensure_ascii=False))
+        if bad:
+            sys.exit(1)
         return
     if a.cmd == "reconcile-questions":
         c = db()
@@ -1188,7 +1306,7 @@ def main() -> None:
         c.execute("COMMIT")
     elif a.cmd == "done":
         for i in a.ids:
-            r = must_message(c, i)
+            r = get_event(c, i) or must_message(c, i)   # 信或 record(registrar 套用完 record 也是 done)
             publish(c, f"{i}:done", "message.done", here or r["to_project"], r["to_project"], i,
                     {"note": a.note or "已處理", "session": session})
             print(f"{i} done")
