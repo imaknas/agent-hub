@@ -75,3 +75,17 @@ Knas 的出發點:Muninn 是 OpenClaw 一類的個人 AI agent(市面上很多�
 agent-hub**(lease runner 講 ACP,看 OpenClaw 能不能直接借 agent-hub 的 session)。實驗依序:① lease runner 變 ACP agent
 ② Muninn 的轉交加 HTTP 列出 + 確認 ③ Muninn 的 local-projects 對齊 Tasks 的 `en` 格式(現在是 TODO.md + 標題關鍵字,
 跟規範不一致)④ principal 端做成 MCP server / OpenClaw plugin。都過了才去社群(AAIF Workflows 工作組)提。
+
+## Principal Handoff 0.3(10-27,agent-ops-specs c8727ed + 2fe74dc)
+
+五輪盲審後從根本重做,不是打補丁:每個 item 兩個有主人的登記(需求歸發問方:raised/amended/withdrawn;結案歸
+principal 端:settled/reopened)、宣稱(claim)跟附註(note)不改任何登記、每個結案記決定者跟授權種類(本人決定/
+本人確認提議/在授權範圍內代決/依證據認定)、principal = 設定好的根(自然人或法人,不能是軟體 agent、也不能是參與者;
+中間的 agent 都是 delegate)。Acts(原 Tasks,保留 Markdown 綁定)跟 Decisions(原 Questions)在上面。範圍外寫明:
+授權書格式、群組內部決策程序、principal 問專案(asks,用 derived_from 連起來)、傳輸。最後一次查前例:沒有人做了整套;
+最接近的是 OpenID AuthZEN 的審批 profile、IETF WIMSE AIMS、singla 的 principal 定義,已寫進 RELATED-WORK 跟對齊方式。
+冷審查出 17 個缺陷已修(2fe74dc),參考實作 16 個測試過、跟到達順序無關。
+
+**下一步:實作收斂。** agent-hub 現在跑的是 HTH 0.1(透過 adapter),Muninn 也還沒照 0.3。要讓規範跟實作一起收斂,
+agent-hub 的任務登記/匯流排跟 Muninn 的 contract(v2)要改成 0.3 的 records——跨專案,要跟 Muninn 協調。
+
