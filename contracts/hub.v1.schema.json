@@ -55,6 +55,15 @@
         },
         "timezone": {
           "type": "string"
+        },
+        "principal_id": {
+          "description": "Principal Handoff: the principal identifier (core R6), the same on every system that exchanges records with this deployment",
+          "type": "string",
+          "pattern": "^\\S{1,256}$"
+        },
+        "legal_person": {
+          "description": "Principal Handoff: the principal is a legal person (settlements then name a representative)",
+          "type": "boolean"
         }
       }
     },
@@ -81,6 +90,11 @@
         },
         "name": {
           "type": "string"
+        },
+        "party_id": {
+          "description": "Principal Handoff: the principal side's party identifier",
+          "type": "string",
+          "pattern": "^\\S{1,256}$"
         }
       }
     },

@@ -232,6 +232,27 @@ def owner_tag() -> str:
     return get("owner.tag", "Owner")
 
 
+def party(role: str, project: str | None = None) -> str:
+    """Principal Handoff 的參與者識別字(規範 core §1、R6;記錄的 by、authority.decider 都用這個)。
+    principal / principal_side 從 hub.json 讀(owner.principal_id、assistant.party_id);requester 跟 agent 是
+    project:<專案>(要給 project);registrar 是 <平台>:registrar(一個 registrar 服務所有專案)。"""
+    if role == "principal":
+        return get("owner.principal_id") or f"person:{owner_address()}"
+    if role == "principal_side":
+        return get("assistant.party_id") or get("assistant.project") or "assistant"
+    if role in ("requester", "agent"):
+        if not project:
+            raise ValueError(f"party({role!r}) 要給 project")
+        return f"project:{project}"
+    if role == "registrar":
+        return f"{hub_project()}:registrar"
+    raise ValueError(f"不認得的角色 {role!r}")
+
+
+def principal_is_legal_person() -> bool:
+    return bool(get("owner.legal_person", False))
+
+
 def assistant_name() -> str:
     """個人助理給人看的名字(hub.json assistant.name);沒設定就是通稱。"""
     return get("assistant.name") or "個人助理"

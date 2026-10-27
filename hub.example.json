@@ -11,12 +11,15 @@
     "address": "owner",
     "aliases": [],
     "tag": "Me",
-    "timezone": "UTC"
+    "timezone": "UTC",
+    "principal_id": "person:me",
+    "legal_person": false
   },
   "assistant": {
     "_comment": "選配:個人助理(收 owner 地址的信、送轉交回來)。沒有就整段刪掉",
     "project": "my-assistant",
     "name": "我的助理",
+    "party_id": "my-assistant",
     "api": "http://127.0.0.1:18795/api/messages",
     "ingest_token": "~/services/my-assistant/data/secrets/ingest_token",
     "cli": "~/services/my-assistant/.venv/bin/my-assistant"
