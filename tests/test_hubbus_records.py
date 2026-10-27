@@ -77,10 +77,10 @@ class Records(unittest.TestCase):
 
     def test_record_publish_for_programs(self):
         out = json.loads(self.cli("record-publish", "--json", "-", stdin=json.dumps([raised()])))
-        self.assertEqual(out, [{"id": "rec:acts/0.3:proj:r:abc123", "status": "accepted"}])
+        self.assertEqual(out, [{"id": "r:abc123", "event": "rec:acts/0.3:proj:r:abc123", "status": "accepted"}])
         again = json.loads(self.cli("record-publish", "--json", "-", stdin=json.dumps([raised()])))
         self.assertEqual(again[0]["status"], "duplicate")
-        ev = self.c.execute("SELECT * FROM events WHERE id=?", (out[0]["id"],)).fetchone()
+        ev = self.c.execute("SELECT * FROM events WHERE id=?", (out[0]["event"],)).fetchone()
         self.assertEqual((ev["type"], ev["source"], ev["to_project"]), ("record", "proj", self.owner))
 
     def test_record_publish_checks_each_record_on_its_own(self):

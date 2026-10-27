@@ -58,14 +58,21 @@ done 要讓 個人助理 結案,job 失敗要給狀態頁),不用各自接一條
   出:POST http://127.0.0.1:18795/api/messages(本機,不走 tailnet 的 TLS),Bearer = muninn 的
       data/secrets/ingest_token。{"messages":[{id=事件 id, project, type=question|progress|done, text,
       handoff_id?}]};id 是 idempotency key,重送安全;400 = 整批裡有一則不合格、整批被拒。
+  v2(Principal Handoff 0.3 record,助理那邊的 contracts/records.v2.md;hub.json mailbox.records 開了才用,預設關):
+      send 寄給 owner 的 task/request → acts raised、done --task → claimed、drop --task → withdrawn(不需要了),
+      不再寄 v1 信;question/info/progress 照舊 v1。dispatch 每分鐘:寄給 owner 的 record 批次 POST /api/records
+      (invalid 記 job.failed 不重試);每個專案(含改名前的名稱)GET /api/records?project=&after=,寫進匯流排
+      commit 之後才 POST /api/records/ack。第一次讀只定起點(v1 已經送過的不再收)。
 """
 from __future__ import annotations
 
 import argparse
 import datetime
+import hashlib
 import json
 import os
 import pathlib
+import re
 import secrets
 import select
 import sqlite3
@@ -73,6 +80,7 @@ import subprocess
 import sys
 import time
 import urllib.error
+import urllib.parse
 import urllib.request
 
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
@@ -87,7 +95,8 @@ ASSISTANT_API = hubconf.get("assistant.api")
 INGEST_TOKEN = hubconf.p("assistant.ingest_token")
 LOG = hubconf.BUS_LOG
 # owner(= owner)的地址:新的信用 owner,舊的 knas 一樣收(hub.json 的 owner.address/aliases)
-KNAS = hubconf.owner_address()
+OWNER_ADDRESS = hubconf.owner_address()
+KNAS = OWNER_ADDRESS   # 舊名稱,新程式用 OWNER_ADDRESS
 OWNERS = hubconf.owner_addresses()
 TYPES = ("request", "question", "info", "progress", "done", "task", "drop", "manifest.update")
 # manifest.update:專案寄完整的登錄 YAML 給平台(--to agent-hub),registry.py apply-updates 驗證後套用或退回
@@ -107,6 +116,7 @@ ACTIONABLE = ("request", "question")  # 平台會處理的信;轉交(handoff)由
 _MB = hubconf.get("mailbox", {}) or {}
 CONVERSATION_WAIT_MIN = int(_MB.get("conversation_wait_min", 5))   # 有人正在用/對話對象還開著:先等它的 hook
 RESUME_MAX_TOKENS = int(_MB.get("resume_max_tokens", 150000))
+RECORDS = bool(_MB.get("records", False))   # 寄給 owner 的任務改寄 0.3 record(助理收 v2 之後才開;bridge v2 跟著同一個開關)
 TAKE_TIMEOUT_MIN = int(_MB.get("take_timeout_min", 60))   # 送進 session 只算「看過」;這麼久沒 ack/回信/done → 當沒人收,照常分派
 SEEN_VIA = ("session-start", "prompt", "post-tool", "inbox")   # 這些只代表信出現在某個 session 的畫面上,不代表有人接手      # 接續的 context 超過這個就改派新的(附整串)
 THREAD_MAX_ROUNDS = int(_MB.get("thread_max_rounds", 4))           # 同一串往來平台最多代為處理幾輪
@@ -229,6 +239,7 @@ def get_message(c, mid):
 # 匯流排的事件 type "record",payload {"v": 1, "record": <0.3 record 原樣>}。往助理的:source = 專案、to_project = owner;
 # 從助理來的:source = owner、to_project = 專案(改名過的追到現在的名字;record 本身不改)。
 # 事件 id = rec:<ext>:<project>:<record id>(core 的去重範圍是 (ext, project, id)),重送是 no-op。
+KEY_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$")   # core 0.3 的 key
 RECORD_REQUIRED = ("ph", "ext", "id", "type", "origin", "by", "key", "project", "ts")
 
 
@@ -244,6 +255,37 @@ def record_errors(rec) -> list[str]:
     if rec.get("ph") and rec["ph"] != "0.3":
         errs.append(f"ph 是 {rec['ph']!r},要 0.3")
     return errs
+
+
+def task_key(project: str, text: str) -> str:
+    """Acts 規範的範例 key 做法(acts §7.2;registrar 用同一個):文字一樣就是同一件。"""
+    return f"task-{project}-{hashlib.sha1(' '.join(text.split()).encode()).hexdigest()[:10]}"
+
+
+def send_record(c, a, sender: str, mid: str) -> str | None:
+    """send 寄給 owner 的任務翻成 Acts record(方向一的對應表);不歸 Acts 管的回 None(照寄 v1 信)。"""
+    kind = "raised" if a.type in ("task", "request") else \
+        "claimed" if a.type == "done" and a.task else "withdrawn" if a.type == "drop" and a.task else None
+    if kind is None:
+        return None
+    key = (a.id or task_key(sender, a.text)) if kind == "raised" else a.task
+    if not KEY_RE.match(key):
+        sys.exit(f"hubbus: {key!r} 不是合格的任務 key")
+    rec = {"ph": "0.3", "ext": "acts/0.3", "type": kind, "key": key, "project": sender, "ts": iso()}
+    if kind == "raised":
+        rec |= {"id": f"r:{key}", "origin": "requester", "by": hubconf.party("requester", sender),
+                "terms": {"text": " ".join(a.text.split()), **({"due": a.due} if a.due else {})}, "terms_rev": 1}
+        if a.new_reason:
+            rec["note"] = a.new_reason   # 跟最近結案的很像、但確實是新的一件:助理據此不合併
+    elif kind == "claimed":
+        rec |= {"id": f"c:{key}:{mid}", "origin": "agent", "by": hubconf.party("agent", sender), "outcome": "done",
+                "evidence": {"basis": a.text}}
+    else:   # drop --task = 這個專案不需要了:助理保留、問 owner(其他專案的需求不受影響)
+        rec |= {"id": f"w:{key}:{mid}", "origin": "requester", "by": hubconf.party("requester", sender),
+                "reason": "not_needed", "note": a.text}
+    if a.context:
+        rec["context"] = a.context
+    return publish_record(c, rec, sender, OWNER_ADDRESS)[0]
 
 
 def publish_record(c, rec: dict, source: str, to_project: str) -> tuple[str, bool]:
@@ -703,6 +745,119 @@ def post_assistant(items) -> tuple[int | None, str | None]:
         return None, str(e)[:200]
 
 
+RECORDS_OUT = "records-out"   # cursor:寄給 owner 的 record 送到哪了(bridge v2)
+
+
+def records_http(method: str, path: str, body=None, query=None) -> tuple[int | None, dict | None, str | None]:
+    """助理的 /api/records(records.v2):跟 /api/messages 同一台、同一個 token。回 (HTTP 狀態, JSON, 錯誤)。"""
+    try:
+        token = INGEST_TOKEN.read_text().strip()
+    except OSError as e:
+        return None, None, f"讀不到 ingest token:{e}"
+    u = urllib.parse.urlsplit(ASSISTANT_API)
+    url = f"{u.scheme}://{u.netloc}{path}" + (f"?{urllib.parse.urlencode(query)}" if query else "")
+    data = json.dumps(body, ensure_ascii=False).encode() if body is not None else None
+    req = urllib.request.Request(url, data=data, method=method,
+                                 headers={"Authorization": f"Bearer {token}", "Content-Type": "application/json"})
+    try:
+        with urllib.request.urlopen(req, timeout=20) as resp:
+            return resp.status, json.loads(resp.read() or b"{}"), None
+    except urllib.error.HTTPError as e:
+        return e.code, None, f"HTTP {e.code}"
+    except (urllib.error.URLError, OSError, ValueError) as e:
+        return None, None, str(e)[:200]
+
+
+def forward_records(c) -> None:
+    """往外:寄給 owner 的 record 批次送助理。逐筆看 status:invalid 記 job.failed、不重試(重送也一樣不合格);
+    送不出去就整批停在原地,下次重送(助理照 (ext, project, id) 去重)。"""
+    start = cursor(c, RECORDS_OUT)
+    evs = c.execute("SELECT * FROM events WHERE seq > ? ORDER BY seq LIMIT 500", (start,)).fetchall()
+    if not evs:
+        return
+    recs = [ev for ev in evs if ev["type"] == "record" and ev["to_project"] in OWNERS]
+    if recs:
+        code, data, err = records_http("POST", "/api/records", {"records": [payload(ev)["record"] for ev in recs]})
+        if code != 200 or not isinstance(data, dict):
+            log_once("records-out", f"record 送不進{ASSISTANT}({err or code}),{len(recs)} 筆下次重送")
+            return
+        log_once("records-out", "")
+        by_id = {ev_rec_id(ev): ev for ev in recs}
+        for res in data.get("results") or []:
+            ev = by_id.get(res.get("id"))
+            if ev is not None and res.get("status") == "invalid":
+                reject(c, ev, "; ".join(map(str, res.get("errors") or [])) or "invalid")
+            elif ev is not None and res.get("status") == "unsupported":
+                log(f"{ASSISTANT}不支援 {payload(ev)['record'].get('ext')}:{ev['id']} 收下但不處理")
+        log(f"送進{ASSISTANT} {len(recs)} 筆 record")
+    set_cursor(c, RECORDS_OUT, evs[-1]["seq"])
+
+
+def ev_rec_id(ev) -> str:
+    return (payload(ev).get("record") or {}).get("id")
+
+
+def pull_names() -> dict[str, str]:
+    """要拉的專案名稱 → 寫進匯流排用的名稱:每個專案,加上改名前的舊名稱(助理可能還用舊名稱寄)。"""
+    current = projects()
+    names = {p: p for p in current}
+    try:
+        renames = json.loads((hubconf.STATE / "project-renames.json").read_text())
+    except (OSError, ValueError):
+        renames = {}
+    for old in renames:
+        if old not in names and current_name(old) in current:
+            names[old] = current_name(old)
+    return names
+
+
+def incoming_errors(rec, asked: str) -> list[str]:
+    errs = record_errors(rec)
+    if not errs and rec.get("project") != asked:
+        errs = [f"project 是 {rec.get('project')},拉的是 {asked}"]
+    if not errs and rec.get("origin") != "principal":
+        errs = [f"origin 是 {rec.get('origin')}:助理寄來的只會是 principal"]
+    return errs
+
+
+def pull_records(c) -> None:
+    """往內:每個專案拉助理的 record,寫成 record 事件(寄件人 owner),commit 之後才 ack。
+    第一次讀(沒有 cursor)只定起點:v1 已經送過的不再收一次。ack 送不出去下次補。"""
+    for name, proj in pull_names().items():
+        got, acked = f"records-in:{name}", f"records-ack:{name}"
+        known = c.execute("SELECT seq FROM cursors WHERE consumer=?", (got,)).fetchone()
+        after = known["seq"] if known else 0
+        while True:
+            code, data, err = records_http("GET", "/api/records", query={"project": name, "after": str(after)})
+            if code != 200 or not isinstance(data, dict):
+                log_once(f"records-in-{name}", f"拉{ASSISTANT}給 {name} 的 record 失敗:{err or code}")
+                break
+            log_once(f"records-in-{name}", "")
+            page, nxt = data.get("records") or [], int(data.get("cursor") or after)
+            c.execute("BEGIN IMMEDIATE")
+            if known:
+                for rec in page:
+                    if (errs := incoming_errors(rec, name)):
+                        log(f"{ASSISTANT}給 {name} 的 record {(rec or {}).get('id') if isinstance(rec, dict) else rec!r}"
+                            f" 不收:{'; '.join(errs)}")
+                        continue
+                    publish_record(c, rec, OWNER_ADDRESS, proj)
+            set_cursor(c, got, nxt)
+            if not known:
+                set_cursor(c, acked, nxt)   # 起點:之前的由 v1 送,這邊不 ack
+            c.execute("COMMIT")
+            if not page or nxt <= after:
+                break
+            after = nxt
+        cur, done = cursor(c, got), cursor(c, acked)
+        if known and cur > done:
+            code, _, err = records_http("POST", "/api/records/ack", {"project": name, "through": cur})
+            if code == 200:
+                set_cursor(c, acked, cur)
+            else:
+                log_once(f"records-ack-{name}", f"跟{ASSISTANT} ack {name} 到 {cur} 失敗:{err or code},下次補")
+
+
 def forward(c) -> None:
     start = cursor(c, BRIDGE)
     evs = c.execute("SELECT * FROM events WHERE seq > ? ORDER BY seq LIMIT 200", (start,)).fetchall()
@@ -1002,6 +1157,14 @@ def dispatch_locked(c, pull=False) -> None:
                 if c.in_transaction:
                     c.execute("ROLLBACK")
                 log(f"dispatch 拉轉交失敗:{e!r}")
+            if RECORDS:   # bridge v2:每分鐘送、拉 0.3 record
+                for step in (forward_records, pull_records):
+                    try:
+                        step(c)
+                    except Exception as e:
+                        if c.in_transaction:
+                            c.execute("ROLLBACK")
+                        log(f"dispatch {step.__name__} 失敗:{e!r}")
         dispatch(c)
 
 
@@ -1157,7 +1320,7 @@ def main() -> None:
     rq.add_argument("--type", help="逗號分隔,例 settled,reopened")
     rq.add_argument("--pending", action="store_true", help="只列還沒 done 的")
     rq.add_argument("--direction", choices=("in", "out"))
-    rp = sub.add_parser("record-publish", help="stdin:一個 0.3 record 或陣列;寄給 owner(往助理)。輸出每筆 {id, status}")
+    rp = sub.add_parser("record-publish", help="stdin:一個 0.3 record 或陣列;寄給 owner(往助理)。輸出每筆 {id: record id, event: 事件 id 或 null, status}")
     rp.add_argument("--json", default="-", help="只支援 - (stdin)")
     pb = sub.add_parser("publish")
     pb.add_argument("type", choices=("job.failed", "merge.done", "merge.failed", "session.report",
@@ -1218,10 +1381,11 @@ def main() -> None:
                 errs = ["origin principal 的 record 只能從助理那邊來(bridge 收),專案這邊不能寄"]
             if errs:
                 bad += 1
-                out.append({"id": (r or {}).get("id") if isinstance(r, dict) else None, "status": "invalid", "errors": errs})
+                out.append({"id": r.get("id") if isinstance(r, dict) else None, "event": None, "status": "invalid",
+                            "errors": errs})
                 continue
             eid, new = publish_record(c, r, r["project"], KNAS)
-            out.append({"id": eid, "status": "accepted" if new else "duplicate"})
+            out.append({"id": r["id"], "event": eid, "status": "accepted" if new else "duplicate"})
         c.execute("COMMIT")
         print(json.dumps(out, ensure_ascii=False))
         if bad:
@@ -1277,6 +1441,12 @@ def main() -> None:
             if payload(orig).get("handoff_id") is not None:
                 p["handoff_id"] = payload(orig)["handoff_id"]
         mid = a.id or new_id()
+        if RECORDS and a.to == OWNER_ADDRESS:
+            if a.inferred:
+                sys.exit("hubbus: 推斷做完的 claim 由 registrar 自己寄(hubbus record-publish),send 不翻")
+            if (eid := send_record(c, a, sender, mid)):
+                print(eid)
+                return
         publish(c, mid, "message", sender, a.to, a.reply_to, p)  # 同一個 id 已經寄過就什麼都不做
         print(mid)
     elif a.cmd == "inbox":
