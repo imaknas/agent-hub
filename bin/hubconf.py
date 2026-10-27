@@ -249,6 +249,23 @@ def party(role: str, project: str | None = None) -> str:
     raise ValueError(f"不認得的角色 {role!r}")
 
 
+def former_names(project: str) -> list[str]:
+    """這個專案改名前用過的名稱(照 .state/project-renames.json,只算改完的 stage done)。匯流排上舊的信、助理寄來的
+    record 可能還用舊名稱(例:idea-1 升級改名成 project-33)。"""
+    try:
+        renames = json.loads((STATE / "project-renames.json").read_text())
+    except (OSError, ValueError):
+        return []
+
+    def now(name: str) -> str:
+        seen = set()
+        while name in renames and name not in seen and (renames[name] or {}).get("stage") == "done":
+            seen.add(name)
+            name = renames[name]["new"]
+        return name
+    return sorted(old for old in renames if old != project and now(old) == project)
+
+
 def principal_is_legal_person() -> bool:
     return bool(get("owner.legal_person", False))
 

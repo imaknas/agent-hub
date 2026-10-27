@@ -260,23 +260,24 @@ def v1_compat(project: str) -> tuple[dict, set, list, set]:
     db = hubconf.bus_db()
     if not db.exists():
         return {}, set(), [], set()
-    marks = ",".join("?" * len(OWNERS))
+    names = [project, *hubconf.former_names(project)]   # 改名前寄的 v1 信也算(例:idea-1 → project-33)
+    marks, pm = ",".join("?" * len(OWNERS)), ",".join("?" * len(names))
     c = sqlite3.connect(db, timeout=30)
     posted = {r[0]: json.loads(r[1]).get("text", "") for r in c.execute(
-        f"SELECT id, payload FROM events WHERE type='message' AND to_project IN ({marks}) AND source=? AND id LIKE 'task-%'",
-        (*OWNERS, project))}
+        f"SELECT id, payload FROM events WHERE type='message' AND to_project IN ({marks}) AND source IN ({pm})"
+        " AND id LIKE 'task-%'", (*OWNERS, *names))}
     closed = set()
-    for (pl,) in c.execute(f"SELECT payload FROM events WHERE type='message' AND source IN ({marks}) AND to_project=?"
-                           " AND payload LIKE '%reply_to%'", (*OWNERS, project)):
+    for (pl,) in c.execute(f"SELECT payload FROM events WHERE type='message' AND source IN ({marks})"
+                           f" AND to_project IN ({pm}) AND payload LIKE '%reply_to%'", (*OWNERS, *names)):
         h = json.loads(pl).get("handoff") or {}
         if h.get("effect") in ("done", "dropped", "already_done") and h.get("reply_to"):
             closed.add(h["reply_to"])
     claimed = {r[0][len("done-"):] for r in c.execute(
-        f"SELECT id FROM events WHERE type='message' AND to_project IN ({marks}) AND source=? AND id LIKE 'done-task-%'",
-        (*OWNERS, project))}
+        f"SELECT id FROM events WHERE type='message' AND to_project IN ({marks}) AND source IN ({pm})"
+        " AND id LIKE 'done-task-%'", (*OWNERS, *names))}
     r = hubbus("open-handoffs")
     try:
-        pending = [h for h in json.loads(r.stdout or "[]") if h.get("project") == project and h.get("reply_to")
+        pending = [h for h in json.loads(r.stdout or "[]") if h.get("project") in names and h.get("reply_to")
                    and h.get("effect") in ("done", "dropped", "already_done", "reopened")]
     except ValueError:
         pending = []

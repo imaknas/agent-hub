@@ -229,6 +229,7 @@ class LibrarianFlow(unittest.TestCase):
                          "Alex 本人決定的", "[dismissed]"):
                 self.assertIn(want, p1)
             self.assertNotIn("k2", p1, "Acts 的 settled 歸 registrar")
+            self.assertNotIn(":null", p1, "沒有理由的 note 不印 null")
             done = {r[0] for r in c.execute("SELECT ref FROM events WHERE type='message.done'")}
             self.assertLessEqual({"rec:acts/0.3:p1:n1", "rec:decisions/0.3:p1:s1"}, done)
             self.assertNotIn("rec:acts/0.3:p1:s2", done)

@@ -16,6 +16,7 @@
   pg  掉了 key 的行,文字跟原本一樣       → 補回原本的 key,不寄新的 raised(新的才有)
   ph  需求已 withdrawn、行也刪了          → 不寄 claim(新的才有)
   pj  v1 已經寄過推斷結案(done-<key>)的一件 → 換成新的那晚不再寄 claim(新的才有)
+  pk  改名前(pk-old)用 v1 寄過的一件,行還在 → 認得,不再 raised(新的才有)
   pi  改過字(amended)的一件掉了 key       → 照改過的文字補回原本的 key,不當新的一件(新的才有;文字沒改過時
                                           重新算出來的 key 本來就一樣,只有改過字才看得出有沒有補 key)
 
@@ -63,6 +64,7 @@ SCENES = {
     "pg": {"state": state("- [ ] 〔Alex〕繳稅"), "posted": {KG: "繳稅"}},
     "ph": {"state": state("- [ ] 〔agent〕別的事"), "posted": {KH: "回信給房東"}, "withdrawn": [KH]},
     "pj": {"state": state("- [ ] 〔agent〕別的事"), "posted": {key("pj", "寄掛號"): "寄掛號"}, "v1_claimed": [key("pj", "寄掛號")]},
+    "pk": {"state": state(f"- [ ] 〔Alex〕寄包裹{marker(key('pk-old', '寄包裹'))}"), "v1_posted_as": ("pk-old", "寄包裹")},
     "pi": {"state": state("- [ ] 〔Alex〕訂飯店,含早餐"), "posted": {KI: "訂飯店"}, "amended": {KI: "訂飯店,含早餐"}},
 }
 
@@ -83,6 +85,7 @@ class Env:
         for d in ("projects", ".state", ".logs", "data"):
             (self.hub / d).mkdir()
         (self.hub / "data" / "openclaw-migration-status.md").write_text("# status\n\n## 待辦\n\n- (無)\n")
+        (self.hub / ".state" / "project-renames.json").write_text(json.dumps({"pk-old": {"new": "pk", "stage": "done"}}))
         (self.hub / "hub.json").write_text(json.dumps({
             "v": 1, "registry_dir": "projects", "memory_copies": str(tmp / "copies"), "git_origin": str(tmp / "bare"),
             "bus_dir": str(tmp / "bus"),
@@ -164,6 +167,13 @@ class Env:
         for k in s.get("withdrawn", []):
             recs.append(self.rec(p, f"w:{k}", "withdrawn", "requester", f"project:{p}", k, reason="not_needed",
                                  supersedes=[f"r:{k}"], ts="2026-10-21T10:00:00Z"))
+        if s.get("v1_posted_as"):   # 改名前用舊名稱寄的 v1 task
+            old, text = s["v1_posted_as"]
+            c = sqlite3.connect(self.db)
+            c.execute("INSERT INTO events(id, ts, type, source, to_project, ref, payload) VALUES(?,?,?,?,?,?,?)",
+                      (key(old, text), "2026-10-20T10:00:00+08:00", "message", old, OWNER, None,
+                       json.dumps({"v": 1, "type": "task", "text": text}, ensure_ascii=False)))
+            c.commit(); c.close()
         if s.get("v1_claimed"):   # 舊的 registrar 在 v1 寄過的推斷結案
             c = sqlite3.connect(self.db)
             for k in s["v1_claimed"]:
@@ -247,6 +257,7 @@ class RegistrarFlow(unittest.TestCase):
                 self.assertIn(marker(KI), env.state("pi"))
                 self.assertEqual(env.outputs("pi"), [])
                 self.assertEqual(env.outputs("pj"), [], "v1 寄過推斷結案的不再寄")
+                self.assertEqual(env.outputs("pk"), [], "改名前寄過的認得")
         self.each(check)
 
     def test_second_run_sends_nothing_new(self):
