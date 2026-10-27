@@ -771,26 +771,27 @@ def records_http(method: str, path: str, body=None, query=None) -> tuple[int | N
 def forward_records(c) -> None:
     """往外:寄給 owner 的 record 批次送助理。逐筆看 status:invalid 記 job.failed、不重試(重送也一樣不合格);
     送不出去就整批停在原地,下次重送(助理照 (ext, project, id) 去重)。"""
-    start = cursor(c, RECORDS_OUT)
-    evs = c.execute("SELECT * FROM events WHERE seq > ? ORDER BY seq LIMIT 500", (start,)).fetchall()
-    if not evs:
-        return
-    recs = [ev for ev in evs if ev["type"] == "record" and ev["to_project"] in OWNERS]
-    if recs:
-        code, data, err = records_http("POST", "/api/records", {"records": [payload(ev)["record"] for ev in recs]})
-        if code != 200 or not isinstance(data, dict):
-            log_once("records-out", f"record 送不進{ASSISTANT}({err or code}),{len(recs)} 筆下次重送")
+    while True:   # 一次追到底(剛打開開關時匯流排上已經有上千筆別的事件)
+        start = cursor(c, RECORDS_OUT)
+        evs = c.execute("SELECT * FROM events WHERE seq > ? ORDER BY seq LIMIT 500", (start,)).fetchall()
+        if not evs:
             return
-        log_once("records-out", "")
-        by_id = {ev_rec_id(ev): ev for ev in recs}
-        for res in data.get("results") or []:
-            ev = by_id.get(res.get("id"))
-            if ev is not None and res.get("status") == "invalid":
-                reject(c, ev, "; ".join(map(str, res.get("errors") or [])) or "invalid")
-            elif ev is not None and res.get("status") == "unsupported":
-                log(f"{ASSISTANT}不支援 {payload(ev)['record'].get('ext')}:{ev['id']} 收下但不處理")
-        log(f"送進{ASSISTANT} {len(recs)} 筆 record")
-    set_cursor(c, RECORDS_OUT, evs[-1]["seq"])
+        recs = [ev for ev in evs if ev["type"] == "record" and ev["to_project"] in OWNERS]
+        if recs:
+            code, data, err = records_http("POST", "/api/records", {"records": [payload(ev)["record"] for ev in recs]})
+            if code != 200 or not isinstance(data, dict):
+                log_once("records-out", f"record 送不進{ASSISTANT}({err or code}),{len(recs)} 筆下次重送")
+                return
+            log_once("records-out", "")
+            by_id = {ev_rec_id(ev): ev for ev in recs}
+            for res in data.get("results") or []:
+                ev = by_id.get(res.get("id"))
+                if ev is not None and res.get("status") == "invalid":
+                    reject(c, ev, "; ".join(map(str, res.get("errors") or [])) or "invalid")
+                elif ev is not None and res.get("status") == "unsupported":
+                    log(f"{ASSISTANT}不支援 {payload(ev)['record'].get('ext')}:{ev['id']} 收下但不處理")
+            log(f"送進{ASSISTANT} {len(recs)} 筆 record")
+        set_cursor(c, RECORDS_OUT, evs[-1]["seq"])
 
 
 def ev_rec_id(ev) -> str:
@@ -822,11 +823,14 @@ def incoming_errors(rec, asked: str) -> list[str]:
 
 def pull_records(c) -> None:
     """往內:每個專案拉助理的 record,寫成 record 事件(寄件人 owner),commit 之後才 ack。
-    第一次讀(沒有 cursor)只定起點:v1 已經送過的不再收一次。ack 送不出去下次補。"""
+    開關剛打開的第一次(還沒有任何專案的 cursor)只定起點:v1 已經送過的不再收一次;之後才出現的名稱(新專案、改名)從頭讀,
+    不然它在助理那邊排著的會被跳過。ack 送不出去下次補。"""
+    switch_on = c.execute("SELECT 1 FROM cursors WHERE consumer LIKE 'records-in:%' LIMIT 1").fetchone() is None
     for name, proj in pull_names().items():
         got, acked = f"records-in:{name}", f"records-ack:{name}"
-        known = c.execute("SELECT seq FROM cursors WHERE consumer=?", (got,)).fetchone()
-        after = known["seq"] if known else 0
+        row = c.execute("SELECT seq FROM cursors WHERE consumer=?", (got,)).fetchone()
+        known = row is not None or not switch_on
+        after = row["seq"] if row else 0
         while True:
             code, data, err = records_http("GET", "/api/records", query={"project": name, "after": str(after)})
             if code != 200 or not isinstance(data, dict):

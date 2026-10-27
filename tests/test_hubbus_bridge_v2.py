@@ -120,6 +120,13 @@ class BridgeV2(unittest.TestCase):
         self.m.forward_records(self.c)
         self.assertEqual(len(self.fake.received), 2)   # 不重送、invalid 也不重試
 
+    def test_outbound_catches_up_a_long_bus_in_one_run(self):
+        for i in range(1200):   # 開關打開那一刻,匯流排上已經有一大堆別的事件
+            self.m.publish(self.c, f"n{i}", "message", "proj", "other", None, {"type": "info", "text": "x"})
+        self.m.publish_record(self.c, raised("late"), "proj", self.owner)
+        self.m.forward_records(self.c)
+        self.assertEqual([r["id"] for r in self.fake.received], ["r:late"])
+
     def test_outbound_down_resends_next_time(self):
         self.m.publish_record(self.c, raised("k1"), "proj", self.owner)
         self.fake.down = True
@@ -167,6 +174,13 @@ class BridgeV2(unittest.TestCase):
         self.assertEqual(self.incoming(), ["s:ok"])
         self.assertEqual(self.incoming("other"), [])
         self.assertTrue(any("forged" in l or "r:forged" in l for l in self.logs))
+
+    def test_starting_point_is_only_for_the_switch_on_not_for_later_names(self):
+        self.m.pull_records(self.c)   # 開關打開:起點
+        self.m.projects = lambda: {"proj": self.tmp, "other": self.tmp, "newbie": self.tmp}   # 之後才 onboard 的專案
+        self.fake.out["newbie"] = [settled("k1", project="newbie")]
+        self.m.pull_records(self.c)
+        self.assertEqual(self.incoming("newbie"), ["s:k1"])
 
     def test_renamed_projects_old_name_is_pulled_into_the_new_one(self):
         (self.state / "project-renames.json").write_text(json.dumps({"idea-9": {"new": "proj", "stage": "done"}}))
