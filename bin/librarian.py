@@ -162,6 +162,51 @@ def load_handoffs() -> list[dict]:
     return [h for h in items if isinstance(h, dict)]
 
 
+def load_records(proj: str) -> list[dict]:
+    """v2(Principal Handoff 0.3):principal 端送來、還沒 done 的 record 變成跟轉交一樣的輸入——note、Decisions 的
+    settled(答案或「不用回答」)、same_as。Acts 的 settled/reopened 由 registrar 機械套用,這裡不碰。"""
+    r = run([PY, str(HUB / "bin" / "hubbus"), "records", "--project", proj])
+    try:
+        events = json.loads(r.stdout) if r.returncode == 0 else []
+    except ValueError:
+        events = []
+    asked = {}
+    for e in events:   # 舊到新:同一個 key 最後的 terms 就是現在問的
+        rec = e.get("record") or {}
+        if e.get("direction") == "out" and rec.get("type") in ("raised", "amended"):
+            asked[rec.get("key")] = (rec.get("terms") or {}).get("text")
+    out = []
+    for e in events:
+        rec = e.get("record") or {}
+        if e.get("direction") != "in" or e.get("done"):
+            continue
+        kind, t = str(rec.get("ext", "")).split("/")[0], rec.get("type")
+        if t == "note":
+            effect, fact = "note", rec.get("note")
+        elif t == "settled" and kind == "decisions":
+            decided = rec.get("outcome") == "decided"
+            effect, fact = ("answers", (rec.get("answer") or {}).get("text")) if decided else ("dismissed", rec.get("note"))
+        elif t == "related" and (rec.get("relation") or {}).get("kind") == "same_as":
+            tg = (rec.get("relation") or {}).get("target") or {}
+            effect, fact = "same_as", f"跟 {tg.get('project') or tg.get('uri')} 的 {tg.get('key') or ''} 是同一件"
+        else:
+            continue
+        about = rec.get("about") or {}
+        out.append({"id": e.get("id"), "handoff_id": rec.get("id"), "project": proj, "effect": effect, "fact": fact,
+                    "quote": None, "item": about.get("quote") or asked.get(about.get("key") or rec.get("key")),
+                    "why": authority_text(rec), "ts": rec.get("ts"), "v2": True})
+    return out
+
+
+def authority_text(rec: dict) -> str | None:
+    """結案記的決定者跟授權種類(規範 core §5),用人話寫給模型看。"""
+    a = rec.get("authority") or {}
+    basis = (rec.get("evidence") or {}).get("basis")
+    return {"principal": f"{OWNER} 本人決定的", "confirmed": f"{OWNER} 確認了{ASSISTANT}的提議",
+            "attested": f"{ASSISTANT}依證據認定({basis})" if basis else f"{ASSISTANT}依證據認定",
+            "delegated": f"{ASSISTANT}依 {OWNER} 給的授權代為決定"}.get(a.get("kind"), rec.get("context"))
+
+
 def handoff_text(h: dict) -> str:
     s = f"- [{jstr(h.get('effect'))}] 事實:{jstr(h.get('fact'))}"
     if present(h.get("quote")):
@@ -216,7 +261,16 @@ def handoff_note(items: list[dict]) -> str:
   有在等這個回答的待辦就依回答移除或改寫。
 - 對應待辦在 STATE.md 找不到時不要硬套到別條,只把事實記進相關段落(有關的話)。
 - 「事實」是助理轉述的,可能比 {OWNER} 原話講得更肯定。有原話以原話為準;寫進 STATE.md 時保留
-  不確定的語氣(預計、預期、可能、打算),不要寫成已確定。"""
+  不確定的語氣(預計、預期、可能、打算),不要寫成已確定。"""+(V2_NOTE if any(h.get("v2") for h in items) else "")
+
+
+V2_NOTE = f"""
+- [note]:{ASSISTANT}帶來的資訊(前提或日期變了、跟哪件待辦有關)。對應待辦是專案原話,用意思比對;影響到那件待辦
+  就依事實改寫,否則記進相關段落。note 不代表做完了,不要因為 note 就刪掉待辦。
+- [dismissed]:{OWNER} 決定這個問題不用回答。移除在等這個回答的待辦;需要的話記一筆為什麼。
+- [same_as]:{ASSISTANT}把這一件跟別的專案的同一件合併了,只供參考,不用改待辦。
+- 「助理的判斷理由」寫的是誰決定的、根據什麼:{OWNER} 本人決定的就照著寫;{ASSISTANT}依證據認定的,寫進 STATE.md 時
+  標明是推斷,不要寫成 {OWNER} 說的。"""
 
 
 def todo_fix_prompt(problems: str) -> str:
@@ -302,7 +356,7 @@ def process(proj: str, d: pathlib.Path, handoffs: list[dict], state_model: str, 
     head = git(d, "rev-parse", "HEAD")
     ckpt = STATE_DIR / f"{proj}.sha"
     last = ckpt.read_text().strip() if ckpt.exists() else ""
-    mine = [h for h in handoffs if h.get("project") == proj and h.get("effect") not in KEYED_EFFECTS]
+    mine = [h for h in handoffs if h.get("project") == proj and h.get("effect") not in KEYED_EFFECTS] + load_records(proj)
     ids = [jstr(h.get("id")) for h in mine]
     nums = " ".join(f"#{jstr(h.get('handoff_id'))}" for h in mine)
     if head == last and not ids:

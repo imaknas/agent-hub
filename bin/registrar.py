@@ -241,11 +241,9 @@ def publish(recs: list[dict]) -> dict[str, str]:
         return {rec["id"]: "dry-run" for rec in recs}
     r = hubbus("record-publish", "--json", "-", stdin=json.dumps(recs, ensure_ascii=False))
     try:
-        got = {x["id"]: x["status"] for x in json.loads(r.stdout or "[]")}
+        res = {x["id"]: x["status"] for x in json.loads(r.stdout or "[]")}   # 每筆 {id: record id, event, status}
     except ValueError:
-        got = {}
-    # record-publish 回的 id 是匯流排的事件 id(rec:<ext>:<project>:<record id>),不合格的回 record id:兩種都對得上
-    res = {rec["id"]: got.get(f"rec:{rec['ext']}:{rec['project']}:{rec['id']}", got.get(rec["id"])) for rec in recs}
+        res = {}
     for rec in recs:
         st = res.get(rec["id"], "failed")
         if st not in ("accepted", "duplicate"):

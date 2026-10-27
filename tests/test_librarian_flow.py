@@ -200,6 +200,39 @@ class LibrarianFlow(unittest.TestCase):
             self.assertEqual(log.count("這次結果不可信"), 2)
         self.each(check)
 
+    @unittest.skipUnless("librarian.py" in IMPLS, "v2 只有 librarian.py 處理")
+    def test_v2_records_are_input_like_handoffs(self):
+        """Principal Handoff 0.3:principal 端來的 note 跟 Decisions 的 settled 進 prompt(帶決定者)、可信才 done;
+        Acts 的 settled 是 registrar 的,librarian 不碰。"""
+        with tempfile.TemporaryDirectory() as d:
+            env = Env(pathlib.Path(d))
+            c = sqlite3.connect(env.tmp / "bus" / "bus.db")
+            def put(eid, source, to, rec):
+                c.execute("INSERT INTO events(id, ts, type, source, to_project, ref, payload) VALUES(?,?,?,?,?,?,?)",
+                          (eid, "2026-10-26T10:00:00+08:00", "record", source, to, None,
+                           json.dumps({"v": 1, "record": rec}, ensure_ascii=False)))
+            base = {"ph": "0.3", "project": "p1", "ts": "2026-10-26T02:00:00Z"}
+            put("rec:decisions/0.3:p1:r:q1", "p1", "owner", {**base, "ext": "decisions/0.3", "id": "r:q1", "type": "raised",
+                "origin": "requester", "by": "project:p1", "key": "q1", "terms": {"text": "快取用哪個?"}, "terms_rev": 1})
+            put("rec:acts/0.3:p1:n1", "owner", "p1", {**base, "ext": "acts/0.3", "id": "n1", "type": "note",
+                "origin": "principal", "by": "helper", "key": "k1", "about": {"quote": "續約網域"}, "note": "註冊商說週五前要續約"})
+            put("rec:decisions/0.3:p1:s1", "owner", "p1", {**base, "ext": "decisions/0.3", "id": "s1", "type": "settled",
+                "origin": "principal", "by": "helper", "key": "q1", "outcome": "decided", "terms_rev": 1,
+                "answer": {"text": "用 SQLite"}, "authority": {"kind": "principal", "decider": "person:alex"}})
+            put("rec:acts/0.3:p1:s2", "owner", "p1", {**base, "ext": "acts/0.3", "id": "s2", "type": "settled",
+                "origin": "principal", "by": "helper", "key": "k2", "outcome": "done", "terms_rev": 1,
+                "authority": {"kind": "principal", "decider": "person:alex"}})
+            c.commit()
+            self.assertEqual(env.run("librarian.py").returncode, 0)
+            p1 = next(x["prompt"] for x in env.calls() if x["point"] == "librarian-state" and x["cwd"] == "p1")
+            for want in ("[note]", "註冊商說週五前要續約", "續約網域", "[answers]", "用 SQLite", "快取用哪個?",
+                         "Alex 本人決定的", "[dismissed]"):
+                self.assertIn(want, p1)
+            self.assertNotIn("k2", p1, "Acts 的 settled 歸 registrar")
+            done = {r[0] for r in c.execute("SELECT ref FROM events WHERE type='message.done'")}
+            self.assertLessEqual({"rec:acts/0.3:p1:n1", "rec:decisions/0.3:p1:s1"}, done)
+            self.assertNotIn("rec:acts/0.3:p1:s2", done)
+
     @unittest.skipUnless(len(IMPLS) == 2, "只剩一個實作")
     def test_implementations_send_the_same_prompts(self):
         got = {}
