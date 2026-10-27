@@ -1,0 +1,71 @@
+{
+  "suite": "acts/0.3",
+  "description": "Reconciliation vectors: document + open registered keys (key -> text) -> actions.",
+  "cases": [
+    {
+      "id": "zh-present",
+      "profile": "zh-hant",
+      "document": [
+        "## 待辦",
+        "- [ ] 〔Owner〕續約網域(等 Owner:task-demo-aaaaaaaaaa)",
+        "- [ ] 〔agent〕上傳加重試"
+      ],
+      "open": {
+        "task-demo-aaaaaaaaaa": "續約網域"
+      },
+      "expect": []
+    },
+    {
+      "id": "zh-vanished",
+      "profile": "zh-hant",
+      "document": [
+        "## 待辦",
+        "- [ ] 〔Owner〕續約網域(等 Owner:task-demo-aaaaaaaaaa)",
+        "- [ ] 〔agent〕上傳加重試"
+      ],
+      "open": {
+        "task-demo-aaaaaaaaaa": "續約網域",
+        "task-demo-bbbbbbbbbb": "簽合約"
+      },
+      "expect": [
+        {
+          "key": "task-demo-bbbbbbbbbb",
+          "action": "claim"
+        }
+      ]
+    },
+    {
+      "id": "zh-vanished-same-text-warns",
+      "profile": "zh-hant",
+      "open": {
+        "task-demo-bbbbbbbbbb": "打給銀行"
+      },
+      "document": [
+        "## 待辦",
+        "- [ ] 〔Owner〕打給銀行"
+      ],
+      "expect": [
+        {
+          "key": "task-demo-bbbbbbbbbb",
+          "action": "warn"
+        }
+      ]
+    },
+    {
+      "id": "en-vanished-no-section",
+      "profile": "en",
+      "document": [
+        "# Demo"
+      ],
+      "open": {
+        "task-demo-aaaaaaaaaa": "Renew the domain"
+      },
+      "expect": [
+        {
+          "key": "task-demo-aaaaaaaaaa",
+          "action": "claim"
+        }
+      ]
+    }
+  ]
+}

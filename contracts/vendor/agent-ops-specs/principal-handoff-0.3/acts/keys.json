@@ -1,0 +1,54 @@
+{
+  "suite": "acts/0.3",
+  "description": "Key vectors for the EXAMPLE key recipe of SPEC.md 7.2 (task-<project>-<first 10 hex of sha1>). Implementations that use another recipe skip this file.",
+  "cases": [
+    {
+      "id": "key-1",
+      "project": "demo",
+      "text": "Renew the domain",
+      "key": "task-demo-c3d8af57d4"
+    },
+    {
+      "id": "key-2",
+      "project": "demo",
+      "text": "  Renew   the\tdomain  ",
+      "key": "task-demo-c3d8af57d4"
+    },
+    {
+      "id": "key-3",
+      "project": "demo",
+      "text": "Renew the domain.",
+      "key": "task-demo-67ed67cd37"
+    },
+    {
+      "id": "key-4",
+      "project": "other-project",
+      "text": "Renew the domain",
+      "key": "task-other-project-c3d8af57d4"
+    },
+    {
+      "id": "key-5",
+      "project": "demo",
+      "text": "續約網域",
+      "key": "task-demo-544fefce49"
+    },
+    {
+      "id": "key-6",
+      "project": "demo",
+      "text": "續約 網域",
+      "key": "task-demo-93c88fec64"
+    },
+    {
+      "id": "key-7",
+      "project": "demo",
+      "text": "續約　網域",
+      "key": "task-demo-93c88fec64"
+    },
+    {
+      "id": "key-8",
+      "project": "demo",
+      "text": "打給\n銀行",
+      "key": "task-demo-35d67bcf74"
+    }
+  ]
+}

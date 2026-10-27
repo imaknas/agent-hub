@@ -1,0 +1,82 @@
+{
+  "suite": "acts/0.3",
+  "description": "Registrar step 2: an unkeyed principal line whose normalised text equals the latest terms of a vanished open key gets that key back.",
+  "cases": [
+    {
+      "id": "relinked",
+      "profile": "en",
+      "document": [
+        "## Tasks",
+        "- [ ] [owner] Renew the domain"
+      ],
+      "vanished": {
+        "task-demo-aaaaaaaaaa": "Renew  the domain"
+      },
+      "expect": {
+        "relinked": [
+          "task-demo-aaaaaaaaaa"
+        ],
+        "document": [
+          "## Tasks",
+          "- [ ] [owner] Renew the domain (waiting on owner: task-demo-aaaaaaaaaa)"
+        ]
+      }
+    },
+    {
+      "id": "different-text-not-relinked",
+      "profile": "en",
+      "document": [
+        "## Tasks",
+        "- [ ] [owner] Renew the domain for two years"
+      ],
+      "vanished": {
+        "task-demo-aaaaaaaaaa": "Renew the domain"
+      },
+      "expect": {
+        "relinked": [],
+        "document": [
+          "## Tasks",
+          "- [ ] [owner] Renew the domain for two years"
+        ]
+      }
+    },
+    {
+      "id": "agent-line-not-relinked",
+      "profile": "en",
+      "document": [
+        "## Tasks",
+        "- [ ] [agent] Renew the domain"
+      ],
+      "vanished": {
+        "task-demo-aaaaaaaaaa": "Renew the domain"
+      },
+      "expect": {
+        "relinked": [],
+        "document": [
+          "## Tasks",
+          "- [ ] [agent] Renew the domain"
+        ]
+      }
+    },
+    {
+      "id": "zh-relinked",
+      "profile": "zh-hant",
+      "document": [
+        "## 待辦",
+        "- [ ] 〔Owner〕續約網域"
+      ],
+      "vanished": {
+        "task-demo-aaaaaaaaaa": "續約網域"
+      },
+      "expect": {
+        "relinked": [
+          "task-demo-aaaaaaaaaa"
+        ],
+        "document": [
+          "## 待辦",
+          "- [ ] 〔Owner〕續約網域(等 Owner:task-demo-aaaaaaaaaa)"
+        ]
+      }
+    }
+  ]
+}

@@ -1,0 +1,64 @@
+{
+  "suite": "acts/0.3",
+  "description": "Registrar step 3: keyed lines whose normalised text differs from the latest terms -> amended items.",
+  "cases": [
+    {
+      "id": "edited-keyed-line",
+      "profile": "en",
+      "document": [
+        "## Tasks",
+        "- [ ] [owner] Renew the domain for two years (waiting on owner: task-demo-aaaaaaaaaa)"
+      ],
+      "latest": {
+        "task-demo-aaaaaaaaaa": "Renew the domain"
+      },
+      "expect": [
+        {
+          "key": "task-demo-aaaaaaaaaa",
+          "text": "Renew the domain for two years"
+        }
+      ]
+    },
+    {
+      "id": "whitespace-only-change",
+      "profile": "en",
+      "document": [
+        "## Tasks",
+        "- [ ] [owner] Renew  the   domain (waiting on owner: task-demo-aaaaaaaaaa)"
+      ],
+      "latest": {
+        "task-demo-aaaaaaaaaa": "Renew the domain"
+      },
+      "expect": []
+    },
+    {
+      "id": "unknown-key-ignored",
+      "profile": "en",
+      "document": [
+        "## Tasks",
+        "- [ ] [owner] Something else (waiting on owner: task-demo-bbbbbbbbbb)"
+      ],
+      "latest": {
+        "task-demo-aaaaaaaaaa": "Renew the domain"
+      },
+      "expect": []
+    },
+    {
+      "id": "zh-edited",
+      "profile": "zh-hant",
+      "document": [
+        "## 待辦",
+        "- [ ] 〔Owner〕續約網域兩年(等 Owner:task-demo-aaaaaaaaaa)"
+      ],
+      "latest": {
+        "task-demo-aaaaaaaaaa": "續約網域"
+      },
+      "expect": [
+        {
+          "key": "task-demo-aaaaaaaaaa",
+          "text": "續約網域兩年"
+        }
+      ]
+    }
+  ]
+}

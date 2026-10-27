@@ -143,6 +143,54 @@ def readd(lines: list[str], key: str, text: str) -> bool:
     return True
 
 
+def apply(lines: list[str], rec: dict) -> bool:
+    """第 1 步,一筆 record:只有 principal 端的 settled(刪掉)跟帶 restore_text 的 reopened(加回)會改文件。"""
+    if rec.get("origin") != "principal":
+        return False
+    if rec.get("type") == "settled":
+        return strike(lines, rec["key"])
+    if rec.get("type") == "reopened" and rec.get("restore_text"):
+        return readd(lines, rec["key"], rec["restore_text"])
+    return False
+
+
+def relink(lines: list[str], vanished: dict[str, str]) -> list[str]:
+    """第 2 步。vanished:送過、沒結案、沒撤回、文件裡找不到的 key → 最新的 terms 文字。文字一模一樣(正規化後)的
+    沒 key owner 行蓋回那個 key;回傳補回的 key。"""
+    by_text, done = {norm(t): k for k, t in sorted(vanished.items())}, []
+    for t in owner_lines(lines):
+        k = by_text.pop(norm(t["text"]), None) if t["key"] is None else None
+        if k:
+            lines[t["i"]] = lines[t["i"]].rstrip() + stamp(k)
+            done.append(k)
+    return done
+
+
+def candidates(lines: list[str], project: str) -> list[tuple[int, str, str]]:
+    """第 3 步:沒 key 的 owner 行 → (行號, key, 文字)。蓋章(stamp)要等 raised 送出去之後。"""
+    return [(t["i"], task_key(project, t["text"]), t["text"]) for t in owner_lines(lines) if t["key"] is None]
+
+
+def amendments(lines: list[str], latest: dict[str, str]) -> list[dict]:
+    """第 4 步。latest:還開著的 key → 最新的 terms 文字。文字不一樣的帶 key 行:[{key, text}]。"""
+    return [{"key": t["key"], "text": t["text"]} for t in owner_lines(lines)
+            if t["key"] in latest and norm(t["text"]) != norm(latest[t["key"]])]
+
+
+def reconcile(lines: list[str], open_keys: dict[str, str]) -> list[dict]:
+    """第 5 步。open_keys:送過、沒結案、沒撤回的 key → 最新的 terms 文字。文件裡找不到的:有很像的行 → warn,
+    否則 claim。"""
+    present = {t["key"] for t in owner_lines(lines) if t["key"]}
+    texts, out = line_texts(lines), []
+    for k, text in sorted(open_keys.items()):
+        if k in present:
+            continue
+        a = norm(text)
+        similar = any(a == t or difflib.SequenceMatcher(None, a, t).ratio() >= SIMILAR for t in texts)
+        out.append({"key": k, "action": "warn" if similar else "claim"})
+    return out
+
+
 # --- 匯流排上的紀錄 ---
 
 def _when(r: dict) -> tuple:
@@ -316,23 +364,17 @@ def run_project(project: str, path: pathlib.Path, how: str, warned: set[str]) ->
         applied.append(h["id"])
     # 2. 補 key
     present = {t["key"] for t in owner_lines(lines) if t["key"]}
-    vanished = [k for k in led.open() if k not in present]
-    by_text = {norm(led.terms(k)[0] or ""): k for k in vanished}
-    for t in owner_lines(lines):
-        k = by_text.pop(norm(t["text"]), None) if t["key"] is None else None
-        if k:
-            lines[t["i"]] = lines[t["i"]].rstrip() + stamp(k)
-            changed = True
-            log(f"{project}: 補回 key {k}(行尾的 key 被拿掉了)")
+    for k in relink(lines, {k: led.terms(k)[0] or "" for k in led.open() if k not in present}):
+        changed = True
+        log(f"{project}: 補回 key {k}(行尾的 key 被拿掉了)")
     # 3. 送出
     fresh = []
+    for i, k, text in candidates(lines, project):
+        if led.settled(k):
+            log(f"{project}: 警告——{k} 的文字跟已經結案的一件一樣,重新宣告會被當成重複(規範 acts §11)")
+        fresh.append((i, k, record(project, "raised", k, f"r:{k}", terms={"text": norm(text)}, terms_rev=1)))
     for t in owner_lines(lines):
-        if t["key"] is None:
-            k = task_key(project, t["text"])
-            if led.settled(k):
-                log(f"{project}: 警告——{k} 的文字跟已經結案的一件一樣,重新宣告會被當成重複(規範 acts §11)")
-            fresh.append((t["i"], k, record(project, "raised", k, f"r:{k}", terms={"text": norm(t["text"])}, terms_rev=1)))
-        elif t["key"] not in led.known():   # 過渡期:有 key 但匯流排上沒紀錄(很早以前寄的)
+        if t["key"] and t["key"] not in led.known():   # 過渡期:有 key 但匯流排上沒紀錄(很早以前寄的)
             fresh.append((None, t["key"], record(project, "raised", t["key"], f"r:{t['key']}",
                                                  terms={"text": norm(t["text"])}, terms_rev=1, context="migration-v1")))
     res = publish([r for _, _, r in fresh])
@@ -346,26 +388,18 @@ def run_project(project: str, path: pathlib.Path, how: str, warned: set[str]) ->
             ok = False
     # 4. 修改
     amends = []
-    for t in owner_lines(lines):
-        k = t["key"]
-        if not k or k not in led.need:
-            continue
-        text, rev, cur = led.terms(k)
-        if text is not None and norm(t["text"]) != norm(text) and not led.settled(k) and not led.withdrawn(k):
-            amends.append(record(project, "amended", k, f"a:{k}:{rev + 1}", terms={"text": norm(t["text"])},
-                                 terms_rev=rev + 1, **({"supersedes": [cur]} if cur else {})))
+    for a in amendments(lines, {k: led.terms(k)[0] for k in led.open() if k in led.need}):
+        k, (_, rev, cur) = a["key"], led.terms(a["key"])
+        amends.append(record(project, "amended", k, f"a:{k}:{rev + 1}", terms={"text": norm(a["text"])},
+                             terms_rev=rev + 1, **({"supersedes": [cur]} if cur else {})))
     res = publish(amends)
     sent += sum(1 for r in amends if res.get(r["id"]) == "accepted")
     ok &= all(res.get(r["id"]) in ("accepted", "duplicate", "dry-run") for r in amends)
     # 5. 對帳
-    present = {t["key"] for t in owner_lines(lines) if t["key"]}
-    texts = line_texts(lines)
     claims = []
-    for k in led.open():
-        if k in present or k in warned:
-            continue
-        a = norm(led.terms(k)[0] or "")
-        if any(a == t or difflib.SequenceMatcher(None, a, t).ratio() >= SIMILAR for t in texts):
+    for x in reconcile(lines, {k: led.terms(k)[0] or "" for k in led.open() if k not in warned}):
+        k = x["key"]
+        if x["action"] == "warn":
             log(f"{project}: 警告——{k} 還沒結案,找不到 key 但有很像的行(改寫時拿掉了行尾?),不送 claim")
             warned.add(k)
             continue

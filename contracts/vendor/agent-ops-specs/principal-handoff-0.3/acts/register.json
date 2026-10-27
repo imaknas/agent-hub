@@ -1,0 +1,92 @@
+{
+  "suite": "acts/0.3",
+  "description": "Registration vectors: document -> stamped document + registered events (key, text).",
+  "cases": [
+    {
+      "id": "en-register",
+      "profile": "en",
+      "project": "demo",
+      "document": [
+        "## Tasks",
+        "",
+        "- [ ] [owner] Renew the domain",
+        "- [ ] [owner] Sign the contract (waiting on owner: task-demo-0123456789)",
+        "- [ ] [agent] Add retry to the uploader",
+        "### [owner]",
+        "- [ ] Call the bank   "
+      ],
+      "expect": {
+        "document": [
+          "## Tasks",
+          "",
+          "- [ ] [owner] Renew the domain (waiting on owner: task-demo-c3d8af57d4)",
+          "- [ ] [owner] Sign the contract (waiting on owner: task-demo-0123456789)",
+          "- [ ] [agent] Add retry to the uploader",
+          "### [owner]",
+          "- [ ] Call the bank (waiting on owner: task-demo-d5264e8e5b)"
+        ],
+        "raised": [
+          {
+            "key": "task-demo-c3d8af57d4",
+            "text": "Renew the domain"
+          },
+          {
+            "key": "task-demo-d5264e8e5b",
+            "text": "Call the bank"
+          }
+        ]
+      }
+    },
+    {
+      "id": "zh-register",
+      "profile": "zh-hant",
+      "project": "demo",
+      "document": [
+        "## 待辦",
+        "",
+        "- [ ] 〔Owner〕續約網域",
+        "- [ ] 〔待定〕選資料庫",
+        "### 〔Owner〕",
+        "- [ ] 打給  銀行"
+      ],
+      "expect": {
+        "document": [
+          "## 待辦",
+          "",
+          "- [ ] 〔Owner〕續約網域(等 Owner:task-demo-544fefce49)",
+          "- [ ] 〔待定〕選資料庫",
+          "### 〔Owner〕",
+          "- [ ] 打給  銀行(等 Owner:task-demo-35d67bcf74)"
+        ],
+        "raised": [
+          {
+            "key": "task-demo-544fefce49",
+            "text": "續約網域"
+          },
+          {
+            "key": "task-demo-35d67bcf74",
+            "text": "打給  銀行"
+          }
+        ]
+      }
+    },
+    {
+      "id": "zh-register-nothing",
+      "profile": "zh-hant",
+      "project": "demo",
+      "document": [
+        "## 待辦",
+        "- [ ] 〔Owner〕簽合約(等 Owner:task-demo-0123456789)",
+        "- [ ] 〔agent〕上傳加重試"
+      ],
+      "expect": {
+        "document": [
+          "## 待辦",
+          "- [ ] 〔Owner〕簽合約(等 Owner:task-demo-0123456789)",
+          "- [ ] 〔agent〕上傳加重試"
+        ],
+        "raised": []
+      }
+    }
+  ]
+}

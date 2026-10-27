@@ -1,0 +1,2 @@
+Vendored from agent-ops-specs (https://github.com/imaknas/agent-ops-specs, specs/principal-handoff/acts/conformance/) at commit 70080e4 (tag principal-handoff-0.3, DOI 10.5281/zenodo.23680065).
+agent-hub runs the zh-hant cases against bin/registrar.py and bin/gen-todo.py in tests/test_acts_conformance.py.
