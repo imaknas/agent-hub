@@ -36,8 +36,9 @@ SKIP_DIRS = {"node_modules", ".venv", "venv", ".git", "dist", "build", "__pycach
              "worktrees", "logs", ".logs"}
 
 
-def locate(doc: dict, raw: str) -> pathlib.Path | None:
-    if raw.startswith(("~", "/")):
+def locate(project: str, doc: dict, raw: str) -> pathlib.Path | None:
+    """平台自己的路徑照 hubconf.path 解(憑證在 secrets_dir(),搬家後不在 hub 根目錄);專案的相對 runtime/workspace。"""
+    if raw.startswith(("~", "/")) or project == hubconf.hub_project():
         return hubconf.path(raw)
     d = registry.dirs(doc)
     base = d["runtime"] if doc.get("runtime") is not None else d["workspace"]
@@ -56,7 +57,7 @@ def has_key(path: pathlib.Path, key: str) -> bool:
 def check(project: str, doc: dict, sec: dict, today: datetime.date) -> tuple[list[str], list[str]]:
     """(問題, 備註)"""
     name = f"{project}:{sec['name']}"
-    path = locate(doc, sec["path"])
+    path = locate(project, doc, sec["path"])
     if not path or not path.exists():
         return [f"{name} 不在({path or sec['path']})" + (f"——{sec['rotate']}" if sec.get("rotate") else "")], []
     probs, notes = [], []
@@ -117,7 +118,7 @@ def main(argv: list[str]) -> int:
             problems += probs
             for n in notes:
                 print(n)
-            if (path := locate(doc, sec["path"])):
+            if (path := locate(project, doc, sec["path"])):
                 declared.add(path.resolve())
         for path in undeclared(project, doc, declared):
             print(f"{project}:沒宣告、檔名像憑證:{path}(宣告在登錄的 secrets:,或確認它不是憑證)")
