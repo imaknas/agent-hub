@@ -245,6 +245,9 @@ def main():
         sys.exit(1)
 
     cmd, rest = args[0], args[1:]
+    if cmd in ("status", "run", "stop", "start") and hubconf.service_manager() != "launchd":
+        print(f"schedulectl {cmd}:{hubconf.NO_SERVICE_MANAGER}")
+        sys.exit(2)
     if cmd == "list":
         cmd_list()
     elif cmd == "pause" and rest:

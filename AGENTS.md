@@ -37,8 +37,9 @@ agent-hub 要給任何 coding agent、任何 LLM、任何 key 的人用。
 - 不要把新的個人資料放進程式碼或測試。
 - **Python 最低 3.13,一律用平台的 Python `bin/py`**(2026-10-25):uv 管的 venv(3.13 + PyYAML,新機器跑
   `bin/setup-python`,`--check` 只驗證)。腳本第一行用 `#!/bin/sh -c exec${IFS}"${0%/*}/py"${IFS}"$0"${IFS}"$@"`(macOS 專用),
-  shell/launchd/登錄的 `run:` 叫 `bin/py <腳本>`,Python 裡啟動別的腳本用 `sys.executable`;不寫死任何直譯器、不靠 PATH 上
-  的 `python3`。測試:`bin/py -m unittest discover -s tests`。`tests/test_python_floor.py` 機械檢查;刻意的例外只有
+  shell/launchd/登錄的 `run:` 叫 `bin/py <腳本>`,Python 裡啟動別的腳本用 `hubconf.launch()`(= `sys.executable` + 腳本),hook 這類
+  shell 字串用 `hubconf.sh_py()`;不寫死任何直譯器、不靠 PATH 上的 `python3`,**也不靠第一行**(只在 macOS 有用;Linux 跑的是
+  `bin/linux-test`,docker 容器裡跑全部測試)。測試:`bin/py -m unittest discover -s tests`。`tests/test_python_floor.py` 機械檢查;刻意的例外只有
   `scheduler-watchdog.py`(平台的 Python 壞了它還要能發警報,系統內建的 python3、只用標準函式庫)跟 MBP 上跑的 `migrate-to-mini.py`
 
 ## 先查這裡,不要自己猜

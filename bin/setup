@@ -5,7 +5,7 @@
 #   bin/setup            檢查 + 建平台的 Python
 #   bin/setup --check    只檢查,不建任何東西(缺必要的就 exit 1)
 #
-# 下一步:bin/hub init
+# 下一步:agenthub init(setup 會用 install-cli 把 agenthub 放上 PATH)
 set -uo pipefail
 HUB="${AGENT_HUB_ROOT:-$(cd "$(dirname "$0")/.." && pwd)}"
 check_only=""; [ "${1:-}" = "--check" ] && check_only=1
@@ -22,11 +22,11 @@ need() {  # need <指令> <必要|選配> <用來做什麼> <怎麼裝>
 }
 
 echo "agent-hub:檢查需要的指令"
-[ "$(uname -s)" = Darwin ] || echo "  ⚠️ 不是 macOS:排程跟背景服務用 launchd,其他系統還不支援"
+[ "$(uname -s)" = Darwin ] || echo "  ⚠️ 不是 macOS:平台跑得起來,但排程跟背景服務還沒接上(launchd 以外的服務管理器之後做;doctor 會說)"
 need git     必要 "版本控制、memory 同步"            "macOS:xcode-select --install"
 need jq      必要 "librarian 讀 JSON"               "brew install jq"
 need uv      必要 "建平台的 Python(bin/setup-python)" "https://docs.astral.sh/uv/"
-need plutil  必要 "shell 腳本讀 hub.json"            "macOS 內建"
+[ "$(uname -s)" = Darwin ] && need plutil 必要 "shell 腳本讀 hub.json" "macOS 內建"   # 其他系統用 jq
 need claude  選配 "coding agent(Claude Code;沒有的話 hub.json runtime.default 設 none,agent 的功能關掉)" "https://claude.com/claude-code,裝好後 claude 登入一次"
 need gh      選配 "onboard 時建 GitHub repo"         "brew install gh && gh auth login"
 need restic  選配 "雲端備份(backup 模組)"           "brew install restic"
@@ -37,4 +37,5 @@ if [ -n "$check_only" ]; then
   exit $?
 fi
 "$HUB/bin/setup-python" || exit 1
-echo "下一步:bin/hub init"
+"$HUB/bin/py" "$HUB/bin/agenthub" install-cli || echo "  (agenthub 沒放上 PATH:之後用 bin/py bin/agenthub …)"
+echo "下一步:agenthub init"

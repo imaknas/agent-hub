@@ -7,7 +7,8 @@ lease-runner 收到「給他看這個」(`POST /v1/internal/<lease>/show`,sessio
      會被接回好幾天,一直迭代算圖,一天幾十張很正常;算整個租約的話長壽租約會被卡死。總量由 prune()/KEEP_DAYS 管)
   4. 看起來像憑證的檔名、專案登錄 secrets: 宣告的路徑、內容像憑證的文字檔(私鑰、API key)一律不送
 以「打開的那個 fd」為準,不是以字串路徑為準(10-25 review):runner 不在 sandbox 裡,session 可以借它的手讀檔(confused deputy)——
-  hard link(st_nlink > 1)拒絕;打開之後用 F_GETPATH 拿實際打開的檔的路徑,再檢查一次在資料夾裡、不是 secrets。
+  hard link(st_nlink > 1)拒絕;打開之後拿實際打開的檔的路徑(macOS F_GETPATH、Linux /proc/self/fd;都沒有就不送),
+  再檢查一次在資料夾裡、不是 secrets。
 檢查完把內容複製到租約自己的目錄(session 寫不到),之後只從這份送:檢查跟送出之間被換掉沒用,原檔改了刪了也還看得到。
 保留 KEEP_DAYS(prune())。標準函式庫。
 
@@ -54,6 +55,15 @@ F_GETPATH = getattr(fcntl, "F_GETPATH", 50)  # macOS:fd 實際對應的路徑
 ID = re.compile(r"^[0-9a-f]{16}$")
 
 
+def _fd_path(fd: int) -> pathlib.Path | None:
+    """fd 實際打開的檔在哪(不是當初給的字串路徑)。這個系統問不到就是 None(呼叫端拒絕送)。"""
+    if hasattr(fcntl, "F_GETPATH") or os.uname().sysname == "Darwin":
+        raw = fcntl.fcntl(fd, F_GETPATH, bytes(1024)).split(b"\0", 1)[0]
+        return pathlib.Path(os.fsdecode(raw)).resolve()
+    proc = pathlib.Path(f"/proc/self/fd/{fd}")
+    return pathlib.Path(os.readlink(proc)).resolve() if proc.exists() else None
+
+
 def _inside(ws: pathlib.Path, p: pathlib.Path) -> bool:
     return ws in p.parents
 
@@ -83,7 +93,7 @@ def take(ws, path: str, summary: str | None, store, secret_paths=()) -> tuple:
         if st.st_nlink > 1:  # hard link 可能指著資料夾外的檔(resolve、O_NOFOLLOW 都看不出來)
             return None, f"{rel} 是 hard link(可能指到資料夾外),不送"
         try:
-            opened = pathlib.Path(os.fsdecode(fcntl.fcntl(fd, F_GETPATH, bytes(1024)).split(b"\0", 1)[0])).resolve()
+            opened = _fd_path(fd)
         except OSError:
             opened = None
         if opened is None or not _inside(ws, opened) or any(opened == pathlib.Path(s).resolve() for s in secret_paths):

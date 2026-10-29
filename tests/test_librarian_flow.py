@@ -133,8 +133,8 @@ class Env:
         c.commit(); c.close()
 
     def run(self, impl):
-        return subprocess.run([str(self.hub / "bin" / impl)], cwd=self.hub, env=self.env, capture_output=True, text=True,
-                              timeout=300)
+        cmd = [str(self.hub / "bin" / impl)] if impl.endswith(".sh") else [sys.executable, str(self.hub / "bin" / impl)]
+        return subprocess.run(cmd, cwd=self.hub, env=self.env, capture_output=True, text=True, timeout=300)
 
     def calls(self):
         f = self.tmp / "llm-calls.jsonl"

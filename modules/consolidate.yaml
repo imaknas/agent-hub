@@ -12,4 +12,4 @@ jobs:
   background: true
   max_attempts_per_day: 1
   before: [agent-hub/librarian]
-  run: bin/consolidate-memory.py
+  run: bin/py bin/consolidate-memory.py

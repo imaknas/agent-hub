@@ -986,7 +986,7 @@ class H(http.server.BaseHTTPRequestHandler):
         if why:
             return self.err(409, "busy", why + ",等它停下來再改名")
         old_ws = str(hubconf.workspace(name) or "")
-        cmd = [str(HUB / "bin" / "project-rename.py"), name, to, "--apply", "--json"]
+        cmd = [PY, str(HUB / "bin" / "project-rename.py"), name, to, "--apply", "--json"]
         try:
             r = subprocess.run(cmd, capture_output=True, text=True, timeout=300,
                                env={**os.environ, "PATH": f"{hubconf.LAUNCHD_PATH}:/usr/sbin:/sbin"})

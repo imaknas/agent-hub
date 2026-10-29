@@ -369,7 +369,8 @@ MANAGED = "/agent-hub/bin/"   # 指令裡有這段 = 平台管的 hook(使用者
 
 def hook_command(event: str) -> str:
     # 跟以前一樣:入口不在就安靜地不做事,結束碼永遠 0,不會讓 session 顯示錯誤
-    return f"[ -x ~/agent-hub/bin/hub-event ] && ~/agent-hub/bin/hub-event {event} || true"
+    import hubconf
+    return f"[ -x ~/agent-hub/bin/hub-event ] && {hubconf.sh_py('~/agent-hub/bin/hub-event')} {event} || true"
 
 
 def parse_event(event: str, raw: str):

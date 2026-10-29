@@ -37,7 +37,8 @@ class SchedulerFixture:
 
 class ServicesFixture:
     def setup(self, m, tmp: pathlib.Path):
-        self._saved = (m.AGENTS, m.RENDERED, m.launchctl)
+        self._saved = (m.AGENTS, m.RENDERED, m.launchctl, m.hubconf.service_manager)
+        m.hubconf.service_manager = lambda: "launchd"   # 測的是 launchd 這一支(launchctl 是假的),跟跑在哪個系統無關
         m.AGENTS, m.RENDERED = tmp / "LaunchAgents", tmp / "state" / "rendered-services.json"
         m.AGENTS.mkdir(parents=True)
         self.calls = []
@@ -53,7 +54,7 @@ class ServicesFixture:
             "services": [{"name": "web", "run": "/bin/echo hi", "keepalive": True, "log": "web.log"}]}}}
 
     def teardown(self, m):
-        m.AGENTS, m.RENDERED, m.launchctl = self._saved
+        m.AGENTS, m.RENDERED, m.launchctl, m.hubconf.service_manager = self._saved
 
 
 class AgentSettingsFixture:

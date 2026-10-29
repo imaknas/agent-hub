@@ -49,6 +49,32 @@ class Floor(unittest.TestCase):
                if any(p in line for p in OTHER_PYTHONS) and not any(rel == f and t in line for f, t in TEMPORARY)]
         self.assertEqual(bad, [], "不要寫死別的直譯器:Python 程式用 sys.executable,shell 用 \"$HUB/bin/py\"")
 
+    def test_platform_never_relies_on_the_first_line(self):
+        """平台 Python 腳本的第一行只在 macOS 有用(Linux 的 kernel 把 #! 後面整串當一個參數):平台自己叫腳本時一律經過
+        直譯器——Python 裡用 hubconf.launch() / sys.executable,shell 裡用 "$HUB/bin/py",hook 字串用 hubconf.sh_py()。"""
+        import re
+        pys = sorted((f.name for f in (ROOT / "bin").iterdir()
+                      if f.is_file() and f.read_text(errors="ignore").startswith("#!/bin/sh -c exec")), key=len, reverse=True)
+        names = "|".join(re.escape(n) for n in pys)
+        argv0 = re.compile(r"\[\s*str\(\s*(?:BIN|HUB\s*/\s*\"bin\"|(?:hubconf\.)?ROOT\s*/\s*\"bin\")\s*/\s*\"(" + names + r")\"\s*\)")
+        sh_cmd = re.compile(r"(?:^|[;&|(]\s*|\bexec\s+|\bthen\s+|\bdo\s+)\"?\$\{?(?:HUB|root|hub|SCRIPT_DIR|DIR|BIN|0%/\*)\}?"
+                            r"(?:/bin)?/(" + names + r")\b")
+        hook = re.compile(r"&&\s*~/[\w./-]*/bin/(" + names + r")\b")
+        bad = []
+        for f in sorted([*(ROOT / "bin").iterdir(), *(ROOT / "githooks").rglob("*")]):
+            if not f.is_file():
+                continue
+            text = f.read_text(errors="ignore")
+            py = text.startswith("#!/bin/sh -c exec") or f.suffix == ".py"
+            for i, line in enumerate(text.splitlines(), 1):
+                code = line.split("#", 1)[0] if py or not line.lstrip().startswith("#!") else ""
+                for rx in ((argv0, hook) if py else (sh_cmd, hook)):
+                    m = rx.search(code)
+                    if m and not re.search(r"[\"']args[\"']\s*:\s*$", code[:m.start()]):   # MCP 設定:command 已經是直譯器
+                        bad.append(f"{f.relative_to(ROOT)}:{i}:{m.group(1)}")
+        self.assertEqual(bad, [], "直接執行平台的 Python 腳本(靠第一行,Linux 上跑不起來)")
+
+    @unittest.skipUnless(sys.platform == "darwin", "第一行只在 macOS 有用;其他系統由上面的靜態檢查保證平台不靠它")
     def test_shebang_really_runs_on_the_platform_python(self):
         # 不經過 python 直接執行腳本:走的是第一行 → bin/py → 平台的 Python
         out = subprocess.run([str(ROOT / "bin" / "hub-runtime"), "local-ignores"], capture_output=True, text=True,

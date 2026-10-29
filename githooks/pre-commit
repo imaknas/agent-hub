@@ -5,4 +5,4 @@
 # 兩支都驗暫存區,不是 working tree。
 root="$(git rev-parse --show-toplevel)"
 "$root/bin/test-gate" || exit 1
-exec "$root/bin/config-check" --staged
+exec "$root/bin/py" "$root/bin/config-check" --staged

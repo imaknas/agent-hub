@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
 # config repo(實例目錄的 config/,docs/design/new-user.md 3.1)的 commit 閘門:暫存區的 config 要合格(bin/config-check
 # --staged)。hub init 把 config repo 的 core.hooksPath 設成這個資料夾;平台在這個資料夾的上兩層。
-exec "$(cd "$(dirname "$0")/../.." && pwd)/bin/config-check" --staged
+hub="$(cd "$(dirname "$0")/../.." && pwd)"
+exec "$hub/bin/py" "$hub/bin/config-check" --staged

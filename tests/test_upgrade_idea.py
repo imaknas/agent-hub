@@ -30,7 +30,7 @@ case "$1 $2" in
   "repo create")
     dest="$FAKE_REMOTES/$3.git"; src=""
     for a in "$@"; do case "$a" in --source=*) src="${a#--source=}";; esac; done
-    mkdir -p "$(dirname "$dest")" && git init -q --bare "$dest" || exit 1
+    mkdir -p "$(dirname "$dest")" && git init -q --bare -b main "$dest" || exit 1
     git -C "$src" remote add origin "$dest" && git -C "$src" push -q -u origin HEAD || exit 1
     [ -n "${FAKE_GH_FAIL_AFTER_CREATE:-}" ] && { echo "network went away" >&2; exit 1; }
     exit 0;;

@@ -86,12 +86,12 @@ def cmd_config(argv: list[str]) -> int:
     sub = argv[0] if argv else ""
     only = argv[argv.index("--only") + 1].split(",") if "--only" in argv else None
     if sub == "check":
-        return subprocess.run([str(BIN / "config-check")]).returncode
+        return subprocess.run(hubconf.launch(BIN / "config-check")).returncode
     if sub == "plan":
         show(appliers.plan_all(only=only))
         return 0
     if sub == "apply":
-        if subprocess.run([str(BIN / "config-check")]).returncode != 0:
+        if subprocess.run(hubconf.launch(BIN / "config-check")).returncode != 0:
             print("hub config apply:config 不合格,不套用", file=sys.stderr)
             return 1
         done = appliers.apply_all(only=only)
@@ -158,7 +158,7 @@ def cmd_modules(argv: list[str]) -> int:
     d.setdefault("modules", {})[name] = argv[0] == "enable"
     write_hub_json(d)
     print(f"hub.json:modules.{name} = {str(argv[0] == 'enable').lower()}")
-    rc = subprocess.run([str(BIN / "agenthub"), "config", "apply"]).returncode
+    rc = subprocess.run([*hubconf.launch(BIN / "agenthub"), "config", "apply"]).returncode
     print("記得 commit hub.json(config as code)。")
     return rc
 
@@ -178,6 +178,8 @@ def render_plist(label: str) -> bytes:
 
 def install_core_plists(dry: bool) -> list[str]:
     """排程器 + 看門狗:樣板的內容跟已經裝的一樣就不動(不會無故重載排程器)。"""
+    if hubconf.service_manager() != "launchd":
+        return [f"⚠️ {hubconf.NO_SERVICE_MANAGER};要跑夜間流程就自己排程 `bin/py bin/scheduler.py`(每 15 分鐘)"]
     done = []
     for label in CORE_PLISTS:
         want = render_plist(label)
@@ -294,7 +296,7 @@ def cmd_init(argv: list[str]) -> int:
     for line in install_core_plists(dry) or ["✓ 排程器、看門狗已經裝好"]:
         print(line)
     if not dry:
-        rc = subprocess.run([str(BIN / "agenthub"), "config", "apply"]).returncode
+        rc = subprocess.run([*hubconf.launch(BIN / "agenthub"), "config", "apply"]).returncode
         if rc != 0:
             return rc
     print("\n下一步:bin/hub doctor 看還缺什麼;bin/hub onboard ~/workspace/<專案> 接上第一個專案")
@@ -358,7 +360,7 @@ def cmd_move_instance(argv: list[str]) -> int:
     cfg_path.write_text(json.dumps(cfg, ensure_ascii=False, indent=2) + "\n")
     env = {**os.environ, "AGENT_HUB_HOME": str(home)}
     # 驗證新擺法(還沒寫指標檔:用 AGENT_HUB_HOME 指過去)
-    r = subprocess.run([str(BIN / "config-check")], env=env, capture_output=True, text=True)
+    r = subprocess.run(hubconf.launch(BIN / "config-check"), env=env, capture_output=True, text=True)
     print(r.stdout.strip() or r.stderr.strip())
     if r.returncode != 0:
         print(f"新擺法的 config 不合格,不寫 {hubconf.POINTER}(複製的東西在 {home},可以刪掉重來)", file=sys.stderr)
@@ -399,7 +401,7 @@ def cmd_doctor(argv: list[str]) -> int:
     if not hubconf.config_file("hub.json").exists():
         add("bad", "沒有 hub.json", "bin/hub init")
         return report(results)
-    r = subprocess.run([str(BIN / "config-check")], capture_output=True, text=True)
+    r = subprocess.run(hubconf.launch(BIN / "config-check"), capture_output=True, text=True)
     add("ok" if r.returncode == 0 else "bad", "config:" + ("都合格" if r.returncode == 0 else r.stderr.strip()[:300]),
         "" if r.returncode == 0 else "照訊息改 hub.json / projects/,再 bin/hub config check")
 
@@ -445,7 +447,10 @@ def cmd_doctor(argv: list[str]) -> int:
                 "agenthub llm setup(選一家:API key 或本機 Ollama)")
 
     uid = os.getuid()
-    for label, what in (("local.agent-hub-scheduler", "排程器"), ("local.agent-hub-scheduler-watchdog", "看門狗")):
+    if hubconf.service_manager() != "launchd":
+        add("bad", f"排程器、看門狗:{hubconf.NO_SERVICE_MANAGER}", "自己排程 `bin/py bin/scheduler.py`(每 15 分鐘)")
+    for label, what in (() if hubconf.service_manager() != "launchd" else
+                        (("local.agent-hub-scheduler", "排程器"), ("local.agent-hub-scheduler-watchdog", "看門狗"))):
         r = subprocess.run(["/bin/launchctl", "print", f"gui/{uid}/{label}"], capture_output=True, text=True)
         if r.returncode != 0:
             add("bad", f"{what}({label}):沒有載入", "bin/hub init")
@@ -634,7 +639,7 @@ def cmd_llm(argv: list[str]) -> int:
 
 
 def passthrough(script: str):
-    return lambda argv: subprocess.run([str(BIN / script), *argv]).returncode
+    return lambda argv: subprocess.run([*hubconf.launch(BIN / script), *argv]).returncode
 
 
 # 專案的 session(任何 coding agent)用的子指令:跟 policy.platform_cli() 同一份清單(權限規則只放行這些)
@@ -644,7 +649,7 @@ SESSION_COMMANDS = {**{c: ("hubbus", c) for c in ("send", "inbox", "show", "ack"
 
 def session_command(name: str):
     script, sub = SESSION_COMMANDS[name]
-    return lambda argv: subprocess.run([str(BIN / script), *([sub] if sub else []), *argv]).returncode
+    return lambda argv: subprocess.run([*hubconf.launch(BIN / script), *([sub] if sub else []), *argv]).returncode
 
 
 def cmd_install_cli(argv: list[str]) -> int:
@@ -652,7 +657,8 @@ def cmd_install_cli(argv: list[str]) -> int:
     d = pathlib.Path(os.path.expanduser(argv[argv.index("--dir") + 1] if "--dir" in argv else "~/.local/bin"))
     d.mkdir(parents=True, exist_ok=True)
     f = d / "agenthub"
-    body = f'#!/bin/sh\n# agent-hub 的 CLI(agenthub install-cli 寫的;hub 搬家就重跑一次)\nexec "{BIN / "agenthub"}" "$@"\n'
+    body = (f'#!/bin/sh\n# agent-hub 的 CLI(agenthub install-cli 寫的;hub 搬家就重跑一次)\n'
+            f'exec "{BIN / "py"}" "{BIN / "agenthub"}" "$@"\n')
     if f.exists() and f.read_text() == body:
         print(f"✓ {f} 已經是最新的")
     else:
@@ -670,12 +676,12 @@ COMMANDS = {
     "move-instance": cmd_move_instance,
     "onboard": passthrough("onboard-project.sh"), "recover": passthrough("recover-project.sh"),
     "rename": passthrough("rename-project.sh"), "status": passthrough("overview.sh"),
-    "jobs": lambda argv: subprocess.run([str(BIN / "schedulectl"), "list", *argv]).returncode,
-    "run": lambda argv: subprocess.run([str(BIN / "schedulectl"), "run", *argv]).returncode,
+    "jobs": lambda argv: subprocess.run([*hubconf.launch(BIN / "schedulectl"), "list", *argv]).returncode,
+    "run": lambda argv: subprocess.run([*hubconf.launch(BIN / "schedulectl"), "run", *argv]).returncode,
     "install-cli": cmd_install_cli,
     # stdio 就是協定:直接換成伺服器的程序,不多一層
     "mcp": lambda argv: os.execv(sys.executable, [sys.executable, str(BIN / "mcp_server.py"), *argv]),
-    "owner": lambda argv: subprocess.run([str(BIN / "owner.py"), *argv]).returncode,
+    "owner": lambda argv: subprocess.run([*hubconf.launch(BIN / "owner.py"), *argv]).returncode,
     **{name: session_command(name) for name in SESSION_COMMANDS},
 }
 

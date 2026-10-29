@@ -30,6 +30,9 @@ import json
 import sys
 from pathlib import Path
 
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+import hubconf  # noqa: E402  平台 Python 腳本在 shell 字串裡怎麼叫(hubconf.sh_py)
+
 START_CMD = "[ -d .agent-memory ] && cd .agent-memory && ~/agent-hub/bin/with-lock.sh git pull -q || true"
 END_CMD = "[ -d .agent-memory ] && cd .agent-memory && ~/agent-hub/bin/with-lock.sh ~/agent-hub/bin/git-sync-memory.sh || true"
 # PreCompact 跟 SessionEnd 用同一支同步腳本(冪等,沒東西可 commit 就安靜結束)。
@@ -44,15 +47,15 @@ SYNC_CMD = "[ -d .agent-memory ] && [ -x ~/agent-hub/bin/sync-local-setup.sh ] &
 
 # git commit/push 之後,如果 memory 筆記比最新 commit 舊,把提醒送進模型的 context
 # (PostToolUse 的 additionalContext)。筆記沒落後就什麼都不輸出。
-NUDGE_CMD = "[ -d .agent-memory ] && [ -x ~/agent-hub/bin/memory-nudge.py ] && ~/agent-hub/bin/memory-nudge.py --post-tool || true"
+NUDGE_CMD = "[ -d .agent-memory ] && [ -x ~/agent-hub/bin/memory-nudge.py ] && " + hubconf.sh_py("~/agent-hub/bin/memory-nudge.py") + " --post-tool || true"
 
 # 專案信箱(hubbus):有新信就送進正在用的 session。SessionStart 那一份由 sync-local-setup.sh 呼叫
 # (不用另外一條 hook)。hubbus 自己判斷是哪個專案、沒信就不輸出;PostToolUse 每個 session 兩分鐘最多查一次。
-MAIL_PROMPT_CMD = "[ -x ~/agent-hub/bin/hubbus ] && ~/agent-hub/bin/hubbus hook prompt || true"
-MAIL_TOOL_CMD = "[ -x ~/agent-hub/bin/hubbus ] && ~/agent-hub/bin/hubbus hook post-tool || true"
+MAIL_PROMPT_CMD = "[ -x ~/agent-hub/bin/hubbus ] && " + hubconf.sh_py("~/agent-hub/bin/hubbus") + " hook prompt || true"
+MAIL_TOOL_CMD = "[ -x ~/agent-hub/bin/hubbus ] && " + hubconf.sh_py("~/agent-hub/bin/hubbus") + " hook post-tool || true"
 
 # 第二階段:專案的 session 不能開別的專案的 session(跨專案只能寄信);bin/guard.py 擋的時候回 deny + 理由
-GUARD_CMD = "[ -x ~/agent-hub/bin/guard.py ] && ~/agent-hub/bin/guard.py pre-tool || true"
+GUARD_CMD = "[ -x ~/agent-hub/bin/guard.py ] && " + hubconf.sh_py("~/agent-hub/bin/guard.py") + " pre-tool || true"
 
 # (event, matcher, command);matcher 為 None 表示不設(該事件全部觸發)
 HOOKS = (

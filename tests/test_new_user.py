@@ -31,7 +31,9 @@ class NewUser(unittest.TestCase):
         shutil.copy(ROOT / "hub.example.json", self.hub)
         env = {k: v for k, v in os.environ.items() if not k.startswith(("GIT_", "AGENT_HUB"))}
         self.env = {**env, "HOME": str(self.home), "AGENT_HUB_ROOT": str(self.hub),
-                    "AGENT_HUB_PYTHON": sys.executable, "PATH": "/usr/bin:/bin:/usr/sbin:/sbin"}
+                    "AGENT_HUB_PYTHON": sys.executable, "PATH": "/usr/bin:/bin:/usr/sbin:/sbin",
+                    # 假的 HOME 沒有 git 的身分:別讓 commit 靠 git 自己猜(macOS 猜得到、Linux 容器猜不到)
+                    "GIT_AUTHOR_NAME": "t", "GIT_AUTHOR_EMAIL": "t@t", "GIT_COMMITTER_NAME": "t", "GIT_COMMITTER_EMAIL": "t@t"}
 
     def tearDown(self):
         shutil.rmtree(self.tmp, ignore_errors=True)
@@ -68,7 +70,7 @@ class NewUser(unittest.TestCase):
 
         r = self.hub_cmd("doctor")
         self.assertNotIn("Traceback", r.stdout + r.stderr)
-        self.assertRegex(r.stdout, r"✗ 排程器.*(沒有載入|不是這份 hub)", "這份 hub 的排程器沒裝,doctor 要說出來")
+        self.assertRegex(r.stdout, r"✗ 排程器.*(沒有載入|不是這份 hub|還沒接上)", "這份 hub 的排程器沒裝,doctor 要說出來")
 
     def test_config_repo_gate_rejects_bad_config(self):
         self.hub_cmd("init", "--yes", "--no-launchd", "--owner", "Alex")

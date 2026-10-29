@@ -135,9 +135,9 @@ def prune(project: str | None, yes: bool) -> int:
 
 
 def _cwds_in_use() -> list[str]:
-    """所有 process 的 cwd(lsof)。閒置的 Desktop session 也有一個 process 待在它的 worktree。"""
-    r = subprocess.run(["lsof", "-d", "cwd", "-Fn"], capture_output=True, text=True)
-    return [l[1:] for l in r.stdout.splitlines() if l.startswith("n/")]
+    """所有 process 的 cwd(hubconf.process_cwds:lsof 或 /proc)。閒置的 Desktop session 也有一個 process 待在它的 worktree。"""
+    import hubconf
+    return [cwd for _, _, cwd in hubconf.process_cwds()]
 
 
 def _transcript_age_days(path: str) -> float | None:

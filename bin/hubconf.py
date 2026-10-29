@@ -160,6 +160,7 @@ def expand_env(value: str) -> str:
 def tool(name: str) -> str:
     """無人值守的程式要跑的指令(claude 等)的完整路徑:先照目前的 PATH,再照 LAUNCHD_PATH;找不到就原樣回傳。"""
     import shutil
+    import subprocess
     return shutil.which(name, path=f"{os.environ.get('PATH', '')}:{LAUNCHD_PATH}") or name
 
 STATE = pathlib.Path(os.environ["AGENT_HUB_STATE"]) if os.environ.get("AGENT_HUB_STATE") else ROOT / ".state"   # 測試用另一個
@@ -383,6 +384,75 @@ def code_stamp() -> float:
     return max(stamps) if stamps else 0.0
 
 
+PY_SHEBANG = "#!/bin/sh -c exec"   # 平台 Python 腳本的第一行(bin/py 檔頭):只有 macOS 的 kernel 照它切參數
+
+
+def is_platform_python(script: pathlib.Path) -> bool:
+    try:
+        with open(script, "rb") as f:
+            return f.read(len(PY_SHEBANG)) == PY_SHEBANG.encode()
+    except OSError:
+        return False
+
+
+def launch(script: pathlib.Path | str) -> list[str]:
+    """叫起平台的一支腳本的 argv。平台的 Python 腳本一律經過目前的直譯器(sys.executable = 平台的 Python),不靠第一行:
+    那一行只在 macOS 有用(Linux 的 kernel 把 #! 後面整串當一個參數)。shell 腳本照常直接叫。"""
+    script = pathlib.Path(script)
+    return [sys.executable, str(script)] if is_platform_python(script) else [str(script)]
+
+
+def sh_py(path_expr: str) -> str:
+    """寫進 shell 字串(hook 指令之類)的平台 Python 腳本:macOS 照舊直接叫(輸出跟以前一個字都不差),其他系統前面加
+    同一個資料夾的 py。path_expr 是 shell 裡的路徑寫法(例:~/agent-hub/bin/hubbus)。"""
+    if sys.platform == "darwin":
+        return path_expr
+    return f"{path_expr.rsplit('/', 1)[0]}/py {path_expr}"
+
+
+def service_manager() -> str | None:
+    """這台機器用哪個服務管理器跑排程器、看門狗、專案的長駐服務:macOS = launchd。其他系統還沒接上(None):
+    裝、查、重載都明確說「這個系統還沒接上」,不假裝跑起來了。"""
+    return "launchd" if sys.platform == "darwin" else None
+
+
+NO_SERVICE_MANAGER = "這個系統還沒接上服務管理器(現在只支援 macOS 的 launchd):排程器、看門狗、專案的長駐服務都不會自己跑"
+
+
+def process_cwds() -> list[tuple[int, str, str]]:
+    """(pid, 程式名稱, 工作目錄):每個程序的工作目錄。有 lsof 用 lsof(macOS 一定有);沒有就讀 /proc(Linux 常常沒裝 lsof);
+    兩個都沒有 = 空的(呼叫端說「查不到」)。"""
+    import shutil
+    import subprocess
+    if shutil.which("lsof"):
+        r = subprocess.run(["lsof", "-d", "cwd", "-Fpcn"], capture_output=True, text=True)
+        out, pid, name = [], 0, ""
+        for line in r.stdout.splitlines():
+            tag, val = line[:1], line[1:]
+            if tag == "p":
+                pid, name = int(val) if val.isdigit() else 0, ""
+            elif tag == "c":
+                name = val
+            elif tag == "n" and val.startswith("/"):
+                out.append((pid, name, val))
+        return out
+    proc = pathlib.Path("/proc")
+    out = []
+    for d in proc.glob("[0-9]*") if proc.is_dir() else []:
+        try:
+            out.append((int(d.name), (d / "comm").read_text().strip(), os.readlink(d / "cwd")))
+        except OSError:
+            continue
+    return out
+
+
+def cwd_users(path: str | pathlib.Path) -> list[str]:
+    """工作目錄在這個資料夾(含子資料夾)裡的程序:「程式名稱(pid)」。"""
+    root = os.path.realpath(path)
+    return sorted({f"{name}({pid})" for pid, name, cwd in process_cwds()
+                   if cwd == root or cwd.startswith(root.rstrip("/") + "/")})
+
+
 def hub_project() -> str:
     """平台自己在登錄裡的名稱。"""
     return "agent-hub"
@@ -406,6 +476,9 @@ def main(argv: list[str]) -> int:
     if len(argv) == 2 and argv[0] == "dir" and argv[1] in ("config", "data", "secrets", "state", "logs"):
         print({"config": config_dir, "data": data_dir, "secrets": secrets_dir}.get(argv[1], lambda: None)()
               or (STATE if argv[1] == "state" else LOGS))
+        return 0
+    if len(argv) == 2 and argv[0] == "cwd-users":  # 工作目錄在這個資料夾裡的程序(shell 腳本用;沒有 lsof 也能用)
+        print(" ".join(cwd_users(argv[1])))
         return 0
     if len(argv) == 2 and argv[0] == "host":  # 印 ssh 名稱;一台機器全包時印空行
         print(host(argv[1]))

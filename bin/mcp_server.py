@@ -199,9 +199,10 @@ def serve() -> int:
 
 def config() -> int:
     cli = pathlib.Path.home() / ".local" / "bin" / "agenthub"
-    exe = str(cli) if cli.exists() else str(BIN / "agenthub")
+    entry = ({"command": str(cli), "args": ["mcp"]} if cli.exists()
+             else {"command": str(BIN / "py"), "args": [str(BIN / "agenthub"), "mcp"]})
     print("把這個 stdio MCP 伺服器登記進你的 coding agent(在專案資料夾裡啟動;GUI 開的工具不一定有你的 PATH,所以用絕對路徑):\n")
-    print(json.dumps({"mcpServers": {"agenthub": {"command": exe, "args": ["mcp"]}}}, indent=2))
+    print(json.dumps({"mcpServers": {"agenthub": entry}}, indent=2))
     print("\n各工具怎麼加:docs/mcp.md。不在專案資料夾裡啟動的工具,在 env 加 AGENTHUB_PROJECT=<專案名稱>。")
     return 0
 

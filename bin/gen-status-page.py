@@ -138,6 +138,8 @@ def scheduler_runs() -> tuple[dict, datetime.datetime | None]:
 
 
 def scheduler_alive() -> bool:
+    if hubconf.service_manager() != "launchd":
+        return False   # 沒有服務管理器(下面的警報會說)
     r = subprocess.run(["launchctl", "print", f"gui/{os.getuid()}/local.agent-hub-scheduler"],
                        capture_output=True, text=True)
     return r.returncode == 0
@@ -178,8 +180,10 @@ def main() -> None:
 
     # 排程器的看門狗(scheduler-watchdog.py,獨立的 launchd job):這頁是排程器自己產生的,
     # 排程器停了這頁也不會更新——真正會叫的是看門狗,所以它沒在顧要在這裡講
-    if subprocess.run(["launchctl", "print", f"gui/{os.getuid()}/local.agent-hub-scheduler-watchdog"],
-                      capture_output=True).returncode != 0:
+    if hubconf.service_manager() != "launchd":
+        alerts.append(("bad", f"{hubconf.NO_SERVICE_MANAGER}。"))
+    elif subprocess.run(["launchctl", "print", f"gui/{os.getuid()}/local.agent-hub-scheduler-watchdog"],
+                        capture_output=True).returncode != 0:
         alerts.append(("bad", "排程器看門狗(local.agent-hub-scheduler-watchdog)沒有載入:排程器停了不會有人通知。"
                               "在 mini 上跑 bin/recover-service.sh local.agent-hub-scheduler-watchdog"))
     elif not hubconf.get("alerts"):

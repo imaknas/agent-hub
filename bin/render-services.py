@@ -190,11 +190,15 @@ def _apply_one(uid: int, ch, plist: dict | None, problems: list[str]) -> None:
 
 
 def plan(index: dict | None = None) -> list:
+    if hubconf.service_manager() != "launchd":
+        return []   # 沒有服務管理器:沒有東西能套用(doctor 跟 main 會說)
     want, _, keep, _ = _desired(index or registry.refresh())
     return [c for c, _, _ in _changes(want, keep)]
 
 
 def apply(index: dict | None = None) -> list:
+    if hubconf.service_manager() != "launchd":
+        return []
     want, problems, keep, _ = _desired(index or registry.refresh())
     uid = os.getuid()
     todo = _changes(want, keep)
@@ -206,6 +210,9 @@ def apply(index: dict | None = None) -> list:
 
 
 def main() -> int:
+    if hubconf.service_manager() != "launchd":
+        print(f"services:{hubconf.NO_SERVICE_MANAGER}")
+        return 0
     dry = "--dry-run" in sys.argv
     only = sys.argv[sys.argv.index("--only") + 1] if "--only" in sys.argv else None
     index = registry.refresh()

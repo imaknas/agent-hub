@@ -74,8 +74,7 @@ def load(name: str) -> dict | None:
 
 def users_in(path) -> str:
     """工作目錄在這個資料夾(含子資料夾)裡的程序。"""
-    r = subprocess.run(["lsof", "-a", "-d", "cwd", "+D", str(path)], capture_output=True, text=True)
-    return " ".join(sorted({f"{l.split()[0]}({l.split()[1]})" for l in r.stdout.splitlines()[1:] if l.split()}))
+    return " ".join(hubconf.cwd_users(path))
 
 
 def unfinished_upgrade(*names: str) -> str:
