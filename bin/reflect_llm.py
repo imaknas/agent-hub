@@ -24,7 +24,6 @@ MUNINN_CLI = hubconf.p("assistant.cli")
 # 登錄讀不到 = None:那就完全不送摘要,只送統計
 EXCLUDED = hubconf.reflection_private()
 
-# trajectory.py 還在用(它自己決定送什麼);這裡已經不送任何原文。
 # 送給模型前遮掉像憑證的字串:全平台一個遮蔽點(completion.py;llm.py 送任何 provider 前也過同一個)。
 from completion import SECRET, redact  # noqa: E402,F401
 

@@ -31,7 +31,6 @@
   "bin/runtime_claude.py": 2,
   "bin/scheduler-watchdog.py": 5,
   "bin/scheduler.py": 2,
-  "bin/trajectory.py": 2,
   "bin/update-claude.py": 3,
   "bin/upgrade-idea.py": 2,
   "bin/worktree-memory.sh": 1,

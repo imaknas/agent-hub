@@ -163,7 +163,7 @@ def transcript_roots() -> tuple:
     訊息原文送雲端模型,工作對話只能在本機處理(見 known-issues)。"""
     return (pathlib.Path.home() / "transcript-backups" / "claude-personal-projects",
             pathlib.Path(_mini_home()) / ".claude" / "projects",
-            pathlib.Path.home() / ".claude-personal" / "projects")   # MBP 上手動跑(trajectory)時的個人 profile
+            pathlib.Path.home() / ".claude-personal" / "projects")   # 在遙控那台手動跑時的個人 profile
 
 
 def slug_for_path(path: str) -> str:

@@ -145,7 +145,7 @@ bootstrap、次數預算、避開夜間、租約開著就延後;評分器在 `bi
 - lint(每個 runtime 宣告啟動方式、遞迴掃 `bin/`)**只警告**:靠字串一定有漏(例:runtime_claude 自己的 `[exe, "-p", …]`)。
 - **執行時的保證**:在 `hubconf.tool("claude")` 換成一個 shim——帶 `-p` 卻沒有 `HUB_LLM_POINT` 就拒絕並記一筆;另外 hub-event 的
   SessionStart 記下「headless、沒有 HUB_LLM_POINT」的 session(`.logs/hub-event.log`),覆蓋率報告列出來。
-- `trajectory.py`:llm-points 的豁免寫著「Knas 2026-10-22 決定維持原樣」——要改走 llm.py 得他明確同意(要確認的 #3);在那之前它已經帶 strict-mcp。
+- (10-30:`trajectory.py` 移出平台,成為實例自己的工具,下面這條跟要確認的第 3 點不再適用)`trajectory.py`:llm-points 的豁免寫著「Knas 2026-10-22 決定維持原樣」——要改走 llm.py 得他明確同意(要確認的 #3);在那之前它已經帶 strict-mcp。
 
 ## 開源的解耦
 

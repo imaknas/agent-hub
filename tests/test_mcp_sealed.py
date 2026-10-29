@@ -7,7 +7,6 @@ execute_sql。關工具不等於關 MCP;只有 `--strict-mcp-config` 擋得掉(�
     bin/py -m unittest discover -s tests
 """
 import pathlib
-import re
 import unittest
 
 import yaml
@@ -50,11 +49,6 @@ class McpSealed(unittest.TestCase):
         line = next(l for l in src.splitlines() if "llm.py" in l and " run " in l)
         self.assertIn("$MCP_ARGS", line.replace("${MCP_ARGS[@]}", "$MCP_ARGS"))
         self.assertRegex(src, r'LLM_AUTH:-\}" *(=|!=) *"?subscription')
-
-    def test_trajectory_is_sealed_too(self):
-        # trajectory.py 還沒經過 llm.py(直接叫 claude -p):先在那裡帶上
-        src = (ROOT / "bin" / "trajectory.py").read_text()
-        self.assertTrue(re.search(r'"-p".*' + re.escape(FLAG) + "|" + re.escape(FLAG), src))
 
 
 if __name__ == "__main__":

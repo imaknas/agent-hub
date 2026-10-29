@@ -191,6 +191,4 @@ points:
     output: {format: json, schema: llm/lease-handover.schema.json}
     timeout_s: 600
     on_failure: default     # runner 重試一次,再不行產生最小交接(fallback: true)——安全結果由 runner 提供,不是登錄
-exempt:
-  - file: bin/trajectory.py
-    reason: Knas 2026-10-22 決定 4B——手動跑的工具,先維持原樣
+exempt: []
