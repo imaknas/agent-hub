@@ -41,6 +41,8 @@ owner(你本人;不是專案 session 的指令):
   agenthub merge-branch …    = bin/merge-branch(平行 session 的合併閘門)
   agenthub cap-run --cap <能力> -- <指令…>   = bin/hub-run(平台代跑 sandbox 擋住的程式)
   agenthub install-cli [--dir <資料夾>]   在 <資料夾>(預設 ~/.local/bin)放 agenthub 的轉接腳本(要在 PATH 上)
+  agenthub mcp               平台的 MCP 伺服器(stdio):任何支援 MCP 的 coding agent 都能收發信箱、寫筆記(= bin/mcp_server.py)
+  agenthub mcp config        印出要登記進工具 MCP 設定的那一段(平台不替你改工具的設定;docs/mcp.md)
 """
 from __future__ import annotations
 
@@ -408,6 +410,8 @@ def cmd_doctor(argv: list[str]) -> int:
     cli = shutil.which("agenthub")
     add("ok" if cli else "warn", f"agenthub 在 PATH 上:{cli}" if cli else "agenthub 不在 PATH 上(專案的 session 打不到信箱指令)",
         "" if cli else "bin/agenthub install-cli")
+    add("ok", "MCP 伺服器:agenthub mcp(任何支援 MCP 的 agent 都能收發信箱、寫筆記;登記進工具的設定由你決定)",
+        "agenthub mcp config 印出要登記的那段;各工具怎麼加:docs/mcp.md")
     import runtime_ports
     rname = runtime_ports.default_name()
     for feat, ok, miss in runtime_ports.feature_table(rname):
@@ -669,6 +673,8 @@ COMMANDS = {
     "jobs": lambda argv: subprocess.run([str(BIN / "schedulectl"), "list", *argv]).returncode,
     "run": lambda argv: subprocess.run([str(BIN / "schedulectl"), "run", *argv]).returncode,
     "install-cli": cmd_install_cli,
+    # stdio 就是協定:直接換成伺服器的程序,不多一層
+    "mcp": lambda argv: os.execv(sys.executable, [sys.executable, str(BIN / "mcp_server.py"), *argv]),
     "owner": lambda argv: subprocess.run([str(BIN / "owner.py"), *argv]).returncode,
     **{name: session_command(name) for name in SESSION_COMMANDS},
 }
