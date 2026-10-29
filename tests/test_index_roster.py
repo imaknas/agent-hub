@@ -21,7 +21,7 @@ class IndexRoster(unittest.TestCase):
     def render(self, projects: dict[str, str]) -> list[str]:
         with tempfile.TemporaryDirectory() as d:
             hub = pathlib.Path(d)
-            shutil.copy(ROOT / "hub.json", hub / "hub.json")
+            shutil.copy(ROOT / "hub.example.json", hub / "hub.json")
             (hub / "bin").symlink_to(ROOT / "bin")
             (hub / "projects").mkdir()
             for name, text in projects.items():

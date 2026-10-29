@@ -46,7 +46,7 @@ agent-hub 要給任何 coding agent、任何 LLM、任何 key 的人用。
 
 - **使用者的東西放哪**:`hubconf.config_dir()`(hub.json、登錄、schedule.yaml…)、`data_dir()`(digest、todo、review-log、reflect…)、
   `secrets_dir()`;shell 用 `bin/hubpaths.sh`。10-26 起 `<hub>/.hub-home` 指到 `~/.agent-hub`(config 是本機 git repo、data、secrets);
-  hub 根目錄的 hub.json、todo.md、digest/… 是搬家前的舊副本,不再更新(確認後會 git rm)。新程式一律經過這些,
+  hub 根目錄只剩 `hub.json` 一份搬家前的舊副本(遙控那台 MBP 還沒有自己的實例目錄、還讀它;MBP 搬好就刪)。新程式一律經過這些,
   不要自己拼路徑(ratchet 會擋)
 - **平台的 CLI 叫 `agenthub`**(10-29 從 `hub` 改名:跟 GitHub 舊的 hub CLI 撞名;`bin/hub` 留著轉過去)。`agenthub install-cli` 放上 PATH;
   專案的 session 用 `agenthub send/inbox/done/…`、`agenthub merge-branch`、`agenthub cap-run`(規則檔裡只寫這些,不寫本機路徑);
@@ -303,7 +303,8 @@ memory 追蹤但不需要在 mini 上執行任何東西的專案(目前大多數
   assistant(knas-tasks、reconcile-questions、lease-runner)、backup、consolidate、mirror、reflect、sandbox(cap-runner)。
   模組用 `before: [<專案>/<job>]` 把自己插進核心流程(核心不用知道它),沒開就跟沒有一樣(別人的 after: 指到它也不會等);
   `after:`/`before:` 繞圈會被 registry 擋下。搬進模組的 job 用 `legacy_name: <舊全名>` 帶著排程狀態
-- `projects/`——**專案登錄**(一個專案一個 `<name>.yaml`;目錄由 `hub.json` 的 `registry_dir` 指定):
+- **專案登錄**(config 的 `projects/`,一個專案一個 `<name>.yaml`;目錄由 `hub.json` 的 `registry_dir` 指定;平台 repo 的 `projects/`
+  只放平台自己的 `agent-hub.yaml`):
   路徑、job、service、隱私標籤、測試指令。驗證跟格式看 `bin/registry.py` 檔頭;`registry.py check` 驗證。
   排程器跑的 = `schedule.yaml`(切換期間的舊項目)+ 登錄的 job(`<專案>/<job>`)
 - `templates/`——骨架檔案(`AGENT.md`、`agent-instructions.md`:給每個專案 agent 的說明,人名寫成 `{{owner}}`/`{{owner_alias}}`/`{{assistant}}`,sync-local-setup 照 hub.json 填(`hubconf.fill_names`));hook 設定不在這裡,
@@ -311,7 +312,7 @@ memory 追蹤但不需要在 mini 上執行任何東西的專案(目前大多數
   專案在 `.agent-memory/RULES` 登記名稱才會放進它的 CLAUDE.local.md。目前所有專案
   都登記了 `engineering`(軟體工程規則)跟 `multi-agent-review`(多 agent 互審:盲審還是辯論,the-crucible 10-27 整理),onboard 新專案時也會自動登記
 - `.claude/skills/`——`new-or-onboard-project`、`recover-projects`
-- `digest/`、`index.md`(名冊區塊由 `gen-index-roster.sh` 產生)、`review-log.md`、`todo.md`——`librarian.sh` 的產出,不要
+- data 目錄的 `digest/`、`index.md`(名冊區塊由 `gen-index-roster.sh` 產生)、`review-log.md`、`todo.md`——librarian 的產出,不要
   手動改,改了下次跑會被蓋掉或造成混淆
 
 ## 憑證歸誰管(2026-10-24)

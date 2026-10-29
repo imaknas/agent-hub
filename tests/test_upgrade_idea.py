@@ -78,7 +78,7 @@ class Upgrade(unittest.TestCase):
         (self.hub / "projects").mkdir()
         (self.hub / "capabilities").mkdir()
         shutil.copy(ROOT / "capabilities" / "gpu.sb", self.hub / "capabilities" / "gpu.sb")
-        conf = json.loads((ROOT / "hub.json").read_text())
+        conf = json.loads((ROOT / "hub.example.json").read_text())
         conf["github"] = {**conf.get("github", {}), "owner": "o", "remote": str(self.remotes) + "/{owner}/{name}.git"}
         conf["registry_dir"] = "projects"
         (self.hub / "hub.json").write_text(json.dumps(conf, ensure_ascii=False))
