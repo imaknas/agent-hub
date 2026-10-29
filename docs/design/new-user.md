@@ -35,7 +35,7 @@
 | 2 | 沒有範例設定:`hub.json` 就是 Knas 的設定(`owner.tag: Knas`、`assistant.project: muninn`、`backup.repo: b2:<bucket>:…`、`memory_host: <hub 那台的 ssh 名稱>`、`github.owner`) | `hub.json` |
 | 3 | 程式碼跟資料混在同一個 repo:clone 下來就拿到 Knas 的 `projects/*.yaml`、`digest/`、`reflect/`、`index.md`、`todo.md`、`review-log.md`、`schedule.yaml`、`mirror-list.txt`、`services.tsv`、`legacy-paths.tsv`、`openclaw-migration-status.md`、`agent-jobs/` | repo 根目錄 |
 | 4 | 平台的 launchd plist 寫死兩台機器的家目錄路徑 | `launchd/*.plist`(7 份) |
-| 5 | 寫死第二台機器 `hub-host` | `minilib.sh:9`、`recover-project.sh:21`、`sync-all-memory.sh:34`、`transcript-backup.sh:20`、`trajectory.py:36`、`migrate-to-mini.py:42`、`openclaw-session-backup.sh:28` |
+| 5 | 寫死第二台機器的 ssh 名稱 | `minilib.sh:9`、`recover-project.sh:21`、`sync-all-memory.sh:34`、`transcript-backup.sh:20`、`trajectory.py:36`、`migrate-to-mini.py:42`、`openclaw-session-backup.sh:28` |
 | 6 | 寫死 hub 位置、memory 副本位置 | `librarian.sh:22,104,111`、`commit-hub-files.sh:13`、`gen-index-roster.sh:20`、`hubbus:281`(給 agent 看的提示;**(r2)** hubbus 裡的 HEADER/FOOTER、questions_note、qcheck 的信、RESUME/DELEGATE_PROMPT 由 Agent Hub session 改) |
 | 7 | librarian 的後段固定照順序跑 5 步,其中 `knas-tasks.py`、`reconcile-questions`(:384–391)是個人助理專屬,沒有助理也照跑 | `librarian.sh:375–420` |
 | 8 | 待辦的 owner 標籤寫死 `Knas` | `gen-todo.py:38`、`librarian.sh:57` 的 prompt、`consolidate-memory.py:258` 的 prompt |
@@ -217,7 +217,7 @@ status_sections: [to_owner_backlog]      # 狀態頁要多顯示的區塊(gen-st
 ### 3.3 機器角色
 
 - `hub.json` 的 `hosts`:`{"memory": "local", "scheduler": "local", "remote_control": null}`;值是 `local` 或 ssh host 名稱。
-  `hubconf.host(role)` 取代所有 `hub-host`;`minilib.sh` 的「在 mini 上就本機做、否則 ssh」改成照角色判斷。
+  `hubconf.host(role)` 取代所有寫死的 ssh 名稱;`minilib.sh` 的「在 mini 上就本機做、否則 ssh」改成照角色判斷。
 - `memory_host`、`hosts.mbp_home`、`hosts.mini_home` 併進這裡;`hublib.MBP_HOME/MINI_HOME` 只剩讀舊對話紀錄
   (`legacy-paths.tsv`)用。
 - 平台自己的 launchd plist 跟專案服務一樣由 `render-services.py` 照樣板產生(路徑從 hubconf),`launchd/` 目錄只剩樣板。
@@ -296,7 +296,7 @@ check → commit → apply,不另外一套。
 > 第 1 步 10-26 完成:`tests/test_personal_boundary.py` + `tests/fixtures/personal-baseline.json`(個人名稱 76 個檔 499 處、`.secrets` 字面值 7 個檔 11 處)。
 > 跟 3.5 不同:不分程式/註解,每個檔一個總數只准變少(分類要靠猜,總數 ratchet 一樣擋得住變多)。
 > 第 1.5 步 10-26 完成:`bin/config-check`(+ `contracts/hub.v1.schema.json`)、`bin/appliers.py` + `applier_scheduler.py`、render-services / render-project-settings 包成套用者(重構前後 42 個產出檔逐位元組相同)、`tests/test_appliers.py`、`bin/hub config check/plan/apply`、`config.applied`(Agent Hub session 255d204)、狀態頁顯示生效的 config commit、githooks pre-commit/post-commit 涵蓋 config。**還沒做**:sync-local-setup 的套用者(session 開始時跑的那支,AGENT.md 對齊要拆成 EXTERNAL 的套用者)——它本來就在每個 session 開始時對齊,沒有 plan 只是看不到預覽,留到第 4 步改樣板時一起做。
-> 第 2 步 10-26 完成:只用一個角色 `hosts.server`(跑 hub 的那台;空 = 一台機器全包;沒寫沿用 `memory_host`),`hubconf.host("server")` / `hubconf.py host server`,shell 用 `plutil` 讀(遙控那台不一定有平台的 Python)。7 處 `hub-host` 換掉。狀態頁、信箱 dispatch、memory 同步搬進 `projects/agent-hub.yaml` 的 `services:`(用 `hub config plan` 先看、再 apply)。`launchd/` 只剩排程器、看門狗(第 5 步由 `hub init` 裝)跟遙控那台的兩份。個人名稱 499 → 479。
+> 第 2 步 10-26 完成:只用一個角色 `hosts.server`(跑 hub 的那台;空 = 一台機器全包;沒寫沿用 `memory_host`),`hubconf.host("server")` / `hubconf.py host server`,shell 用 `plutil` 讀(遙控那台不一定有平台的 Python)。7 處寫死的 ssh 名稱換掉。狀態頁、信箱 dispatch、memory 同步搬進 `projects/agent-hub.yaml` 的 `services:`(用 `hub config plan` 先看、再 apply)。`launchd/` 只剩排程器、看門狗(第 5 步由 `hub init` 裝)跟遙控那台的兩份。個人名稱 499 → 479。
 > 第 3 步 10-26 完成:模組 = `modules/<名稱>.yaml`(跟登錄同格式,`registry.load_modules()` 放進 `index["modules"]`),
 > 排程器跟 render-services 讀專案 + 模組;`before:`、繞圈檢查(`registry.job_cycles`)、沒開的模組的 job 不存在。
 > 搬進模組:assistant(knas-tasks、reconcile-questions、lease-runner)、backup、consolidate、mirror、reflect、sandbox(cap-runner),
@@ -336,7 +336,7 @@ check → commit → apply,不另外一套。
 | **0** | librarian 拆成核心 + job(`after:`;knas-tasks 跟 reconcile-questions 先當成獨立 job,第 3 步再歸進 assistant);路徑改從 hubconf;`hub.example.json` + 根目錄 README(新使用者路徑,還沒有的指令寫「規劃中」) | `librarian.sh`、`projects/agent-hub.yaml`、`hublib.py`(digest_append)、`check-memory-gaps.py`、新增 README、`hub.example.json` | 0.5 天 |
 | 1 | 個人名稱 ratchet 測試 + 現況基準(含 tests/、agent-jobs/) | 新增 `tests/test_personal_boundary.py` | 0.25 |
 | **1.5 (r3)** | config pipeline:`config check`(含 `hub.v1.schema.json`)、套用者介面 + 把 render-services / render-project-settings 包成套用者、`plan`/`apply`/`verify`、`config.applied` 事件、狀態頁顯示生效的 commit。config 還在平台 repo 裡,pre-commit 先掛在現在的 `githooks/`(只在改到 config 檔時跑 check,不跑全部測試) | 新增 `bin/config-check`、`bin/appliers.py`(登記表 + 介面)+ 契約測試、`render-services.py`、`render-project-settings.py`、`sync-local-setup.sh`(拆出 AGENT.md 對齊)、`gen-status-page.py`、`githooks/pre-commit` 加一行 + `post-commit` 涵蓋 config(Agent Hub session 同意) | 1.5 |
-| 2 | 機器角色:`hosts`、`hubconf.host()`;換掉 7 處 `hub-host`;平台 plist 改成產生(排程器、看門狗除外) | `hubconf.py`、`minilib.sh` 等 7 支、`render-services.py`(動之前先問沙盒設計 session)、`launchd/` | 1 |
+| 2 | 機器角色:`hosts`、`hubconf.host()`;換掉 7 處寫死的 ssh 名稱;平台 plist 改成產生(排程器、看門狗除外) | `hubconf.py`、`minilib.sh` 等 7 支、`render-services.py`(動之前先問沙盒設計 session)、`launchd/` | 1 |
 | 3 | 模組:`modules/<名稱>/module.yaml`、排程器讀模組、`before:`(循環偵測、沒開的模組當不存在);assistant(含 lease-runner、想法沙盒)、alerts、sandbox | `scheduler.py`、`registry.py`(不動 validate_enforce)、`gen-status-page.py`、新增 `modules/` | 1.5 |
 | 4 | owner 名稱從設定讀:待辦標籤、prompt 裡的名字;`templates/CLAUDE.md` → `agent-instructions.md` 改名(保留 10-26 加的兩段)跟裡面的名字;`mailbox.md` 搬到 `templates/prompts/`。hubbus 裡的字樣跟 Agent Hub session 約時間一起改 | `gen-todo.py`、`librarian.sh`、`consolidate-memory.py`、`reflect_llm.py`、`trajectory.py`、`templates/`、`sync-local-setup.sh`(讀樣板那行) | 0.5 |
 | 5 | `bin/hub` + `init`(含裝排程器、看門狗的 plist)+ `doctor` | 新增 `bin/hub` | 1 |

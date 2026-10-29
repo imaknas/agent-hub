@@ -1,7 +1,7 @@
 # 給「可能在 MBP、也可能在 mini 上跑」的腳本 source 用。
 #
 # 2026-10-15 起所有專案都在 mini 上(~/workspace/<name>),agent-hub 的 session 也跑在 mini。
-# mini 解析不到自己的 tailnet 名稱(ssh hub-host 在 mini 上會失敗),所以「在 mini 上
+# mini 解析不到自己的 tailnet 名稱(ssh 自己的名稱在 hub 那台上會失敗),所以「在 mini 上
 # 做某件事」在 mini 本機就直接執行,在別台(MBP)才走 ssh。
 #
 # 判斷「這台就是 mini」:hub.json 的 hosts.server 沒寫(一台機器全包),或 git_origin(memory 的 bare repo 都在這裡)

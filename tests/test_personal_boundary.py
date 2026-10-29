@@ -1,6 +1,6 @@
 """平台程式裡的個人名稱、機器名稱只准變少(docs/design/new-user.md 3.5)。
 
-平台要能給別人用:程式碼裡不該有人(Knas)、助理(Muninn)、機器(主機名、/Users/you)的名字,`bin/` 也不該自己拼
+平台要能給別人用:程式碼裡不該有人(Knas)、助理(Muninn)、帳號的名字(機器名、家目錄路徑在實例的私有清單),`bin/` 也不該自己拼
 `.secrets` 的路徑(要經過 hubconf)。現在還有很多(多數是註解裡的決策紀錄),一次清不完,所以是 ratchet:
 每個檔案的出現次數記在 tests/fixtures/personal-baseline.json,**只准變少**;新檔案一律是 0。
 
@@ -25,11 +25,11 @@ PUBLIC_DOCS = ("AGENTS.md", "README.md", "known-issues.md", "docs/mcp.md", "hub.
 BASELINE = ROOT / "tests" / "fixtures" / "personal-baseline.json"
 SELF = pathlib.Path(__file__).resolve()
 RULES = {
-    "personal": re.compile(r"knas|muninn|imaknas|/Users/you\b|/Users/you", re.I),
+    "personal": re.compile(r"knas|muninn|imaknas", re.I),
     "secrets-path": re.compile(r"[\"'/]\.secrets\b"),   # bin/ 裡自己拼 .secrets 的路徑(要經過 hubconf.secrets_dir())
     # bin/ 裡自己拼 config/data 檔的路徑(要經過 hubconf.config_file()/data_file()、shell 用 hubpaths.sh 的 $HUB_CONFIG/$HUB_DATA)
     # 真的機器名、tailnet 名稱、owner 的帳號、備份 bucket、遙控那台的代稱(knas-tasks.py 這種檔名不算)
-    "public-docs": re.compile(r"tail[0-9a-f]+\.ts\.net|/Users/|imaknas|owner|hub-host|<backup-bucket>"
+    "public-docs": re.compile(r"tail[0-9a-f]+\.ts\.net|/Users/|imaknas"
                               r"|(?<![\w-])knas(?![\w-])|\bMBP\b", re.I),
     "instance-path": re.compile(r"(?:/ |\$(?:HUB|AGENT_HUB)/)[\"']?(?:(?:digest|reflect)(?=[\"'/\s)])|todo\.md|index\.md|review-log\.md"
                                 r"|models\.env|mirror-list\.txt|services\.tsv|schedule\.yaml|legacy-paths\.tsv"
@@ -97,7 +97,7 @@ def private_name_patterns(text: str) -> list[tuple[str, re.Pattern]]:
         name, common = line.rstrip("~").strip(), line.endswith("~")
         n = re.escape(name)
         pat = (rf"(?:~/|(?:workspace|projects|services|memory-copies|git-origin)/){n}(?![\w-])|(?<![\w-]){n}\.yaml|(?<![\w-]){n}\s*(?:專案|project)"
-               rf"|(?:專案|project)\s+{n}(?![\w-])") if common else rf"(?<![\w-]){n}(?![\w-])"
+               rf"|(?:專案|project)\s+{n}(?![\w-])") if common else rf"(?<![\w]){n}(?![\w])"
         out.append((name, re.compile(pat, re.I)))
     return out
 
@@ -145,7 +145,8 @@ class PersonalBoundary(unittest.TestCase):
     def test_private_name_patterns(self):
         pats = dict(private_name_patterns("secret-app\nnotes ~\n"))
         self.assertTrue(pats["secret-app"].search("在 secret-app 裡"))
-        self.assertFalse(pats["secret-app"].search("my-secret-app-2"))
+        self.assertTrue(pats["secret-app"].search("task-secret-app-funnel"), "接在 - 旁邊也算")
+        self.assertFalse(pats["secret-app"].search("notsecret-apps"))
         for hit in ("~/workspace/notes", "projects/notes.yaml", "notes 專案"):
             self.assertTrue(pats["notes"].search(hit), hit)
         for miss in ("--notes", "notes_args", 'claim(c, rows, "notes")', "def notes(c, r):", "pause/notes"):
@@ -153,7 +154,7 @@ class PersonalBoundary(unittest.TestCase):
 
     def test_rules_match_what_they_should(self):
         p, s = RULES["personal"], RULES["secrets-path"]
-        for hit in ["〔Knas〕", "muninn digests", "imaknas@mbp", "/Users/you/agent-hub", "imaknas/x"]:
+        for hit in ["〔Knas〕", "muninn digests", "imaknas@mbp", "imaknas/x"]:
             self.assertTrue(p.search(hit), hit)
         for miss in ["owner.tag", "/Users/moeller", "assistant"]:
             self.assertFalse(p.search(miss), miss)
@@ -161,7 +162,7 @@ class PersonalBoundary(unittest.TestCase):
         self.assertTrue(s.search("~/agent-hub/.secrets/runner-token"))
         self.assertFalse(s.search("hubconf.secret('x')"))
         d = RULES["public-docs"]
-        for hit in ["https://box.<tailnet>.ts.net/", "〔Knas〕", "MBP 只當遙控端", "/Users/you/x", "bucket <backup-bucket>"]:
+        for hit in ["https://box.tail0a1b2c.ts.net/", "〔Knas〕", "MBP 只當遙控端", "/Users/someone/x"]:
             self.assertTrue(d.search(hit), hit)
         for miss in ["<host>.<tailnet>.ts.net", "bin/knas-tasks.py", "minischema", "〔owner〕"]:
             self.assertFalse(d.search(miss), miss)

@@ -12,25 +12,25 @@ description: Restore agent-hub-onboarded projects on a new machine, or after a l
 
 ## 前提
 
-新機器要先能連上 mini(SSH alias `hub-host`)跟 GitHub(SSH key),
+新機器要先能連上 hub 那台(hub.json 的 `hosts.server`,SSH alias)跟 GitHub(SSH key),
 這兩個不通,後面全部會失敗。先確認:
 
 ```bash
-ssh hub-host echo ok
+ssh <hub 那台的 ssh 名稱> echo ok
 ssh -T git@github.com
 ```
 
 ## 步驟
 
 1. 確認 `~/agent-hub` 本身存在且是最新的(`git pull`)。如果這是全新機器,
-   先手動 clone:`git clone hub-host:~/git-origin/agent-hub.git ~/agent-hub`,再建平台的 Python
+   先手動 clone:`git clone <hub 那台的 ssh 名稱>:~/git-origin/agent-hub.git ~/agent-hub`,再建平台的 Python
    (`~/agent-hub/bin/setup-python`,要先有 uv)、裝 commit 閘門(`git -C ~/agent-hub config core.hooksPath githooks`)。
    沒有平台的 Python,所有平台腳本(含每個專案的 hook)都會失敗。
 
 2. 跑 `~/agent-hub/bin/py ~/agent-hub/bin/hubconf.py roster`(專案登錄 `projects/*.yaml`,每個專案一行:名稱、
    路徑、origin、memory bare repo),對每一列檢查路徑(第二欄)在這台
    機器上存不存在。已存在的跳過,不需要處理。登錄的路徑是 mini 上的
-   `/Users/you/workspace/<name>`(2026-10-15 起所有專案都在 mini);救到別的位置
+   `~/workspace/<name>`(hub 那台上);救到別的位置
    (例:另一台機器的使用者名稱不同)就給 `recover-project.sh` 第二個參數。
    以前在 MBP 上的位置記在 `legacy-paths.tsv`,只給統計舊對話用,不是還原目標。
 

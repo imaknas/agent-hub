@@ -20,8 +20,8 @@ HUB = hubconf.ROOT
 # 之前在 MBP 上的位置(以及改名前的路徑)記在 legacy-paths.tsv:transcript 資料夾名稱是用
 # 當時的路徑算的,統計舊對話要靠它。
 LEGACY_PATHS = hubconf.data_file("legacy-paths.tsv")
-MBP_HOME = hubconf.get("hosts.mbp_home", "/Users/you")   # 家目錄從 hub.json 讀,不寫死(CLAUDE.md 寫新程式的規則)
-MINI_HOME = hubconf.get("hosts.mini_home", "/Users/you")
+MBP_HOME = hubconf.get("hosts.mbp_home", str(pathlib.Path.home()))   # 家目錄從 hub.json 讀,不寫死(CLAUDE.md 寫新程式的規則)
+MINI_HOME = hubconf.get("hosts.mini_home", str(pathlib.Path.home()))
 MINI_WORKSPACE = f"{MINI_HOME}/workspace"
 # mini 上 librarian 用的 memory-only 副本(只有 AGENT.md/STATE.md/memory/,不是專案程式碼)。
 # 2026-10-15 前叫 ~/projects,改成隱藏目錄:跟 ~/workspace(開 session 的地方)名字太像,會被當成專案資料夾

@@ -3,7 +3,7 @@
 
 跑在 mini。scheduler.py 每個 tick 結束、run-agent-job.sh 每次跑完都會重生,零 LLM。
 輸出 .state/status/index.html,用 `tailscale serve` 只對 tailnet 開放(MBP、手機打得開,
-外網打不開):https://hub-host.<tailnet>.ts.net/
+外網打不開):https://<hub 那台>.<tailnet>.ts.net/
 
 內容:
   - 需要處理:報告第一行 🔔 的 agent job(7 天內)、失敗的 job、排程器本身沒在跑

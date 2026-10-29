@@ -164,7 +164,7 @@ class ConfigErrors(unittest.TestCase):
         bad = json.loads(json.dumps(self.OK))
         bad["providers"]["l"]["base_url"] = "https://api.example.com"
         self.assertTrue(any("location local" in e for e in completion.config_errors(bad)))
-        for ok in ("http://localhost:1", "http://192.168.1.5:1", "http://box.<tailnet>.ts.net", "http://100.70.1.2"):
+        for ok in ("http://localhost:1", "http://192.168.1.5:1", "http://box.tail0a1b2c.ts.net", "http://100.70.1.2"):
             good = json.loads(json.dumps(self.OK))
             good["providers"]["l"]["base_url"] = ok
             self.assertEqual(completion.config_errors(good), [], ok)
