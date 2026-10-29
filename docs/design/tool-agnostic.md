@@ -126,8 +126,9 @@ doctor 跟狀態頁照實標出來。Knas 自己的主力是互動 session,這�
 
 ## 開源第一版的範圍(盲審建議,採用)
 
-1. **能力表 + `runtime_none`**:能力從介面推、doctor 的「工具 × 功能」表;Claude 專用 job 搬進模組;`bin/setup` 的 claude 改選配。
-2. **completion + providers**:librarian、待辦、index、週報用任何 API key。
+1. ✅(33b7b2c)**能力表 + `runtime_none`**:能力從介面推、doctor 的「工具 × 功能」表;Claude 專用 job 搬進模組;`bin/setup` 的 claude 改選配。
+2. ✅(b0e4e13)**completion + providers**:librarian、待辦、index、週報用任何 API key。介面、三家 provider、統一的處理、key、預算都好了;
+   reflect-week 已經是 completion(本機 Ollama 跑通)。librarian 的三個點改成 completion 是另一步(影子模式,`llm-providers.md` 步驟 4)。
 3. **owner 端可以換**:registrar 搬回核心、`owner_side: builtin | muninn`、內建最小 owner 端 + 通知轉接器;Muninn 寫成可選工具。
 4. **平台 CLI 改名上 PATH**、規則內容去掉本機路徑、MCP 伺服器(含 `instructions`)。
 5. **提議→平台套用**:丟棄式 worktree、路徑白名單套用、平台代寄信;信箱代辦用 Gemini CLI(`command` 或 `acp`)跑通。
