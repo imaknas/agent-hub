@@ -191,19 +191,19 @@ class Upgrade(unittest.TestCase):
         self.assertEqual((code, res["result"]), (0, "upgraded"), res)
 
     def test_rename_interrupted_then_resumed(self):
-        res, code = self.upgrade("--rename", "project-33", FAKE_GH_FAIL_AFTER_CREATE="1")
+        res, code = self.upgrade("--rename", "garden-app", FAKE_GH_FAIL_AFTER_CREATE="1")
         self.assertEqual(code, 1)
         self.assertEqual(self.record()["idea-7"]["stage"], "renamed")
         self.assertIsNone(self.reg("idea-7"))
         res, code = self.upgrade("--rename", "something-else")
         self.assertEqual((code, res["result"]), (1, "name_taken"))
-        res, code = self.upgrade("--rename", "project-33")
-        self.assertEqual((code, res["result"], res["name"]), (0, "upgraded", "project-33"), res)
-        doc = self.reg("project-33")
+        res, code = self.upgrade("--rename", "garden-app")
+        self.assertEqual((code, res["result"], res["name"]), (0, "upgraded", "garden-app"), res)
+        doc = self.reg("garden-app")
         self.assertEqual((doc["type"], doc["name"], doc["paths"]["workspace"]),
-                         ("project", "project-33", "~/workspace/project-33"))
+                         ("project", "garden-app", "~/workspace/garden-app"))
         res, code = self.upgrade()
-        self.assertEqual((code, res["result"], res["name"]), (0, "already", "project-33"))
+        self.assertEqual((code, res["result"], res["name"]), (0, "already", "garden-app"))
 
 
 if __name__ == "__main__":

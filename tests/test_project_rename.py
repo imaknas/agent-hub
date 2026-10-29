@@ -78,14 +78,14 @@ class Script(unittest.TestCase):
         return self.log.read_text().splitlines() if self.log.exists() else []
 
     def test_github_project(self):
-        res = self.run_it("proj", "project-33")
+        res = self.run_it("proj", "garden-app")
         self.assertEqual((res["result"], res["name"], res["origin"]),
-                         ("renamed", "project-33", "git@github.com:me/project-33.git"))
+                         ("renamed", "garden-app", "git@github.com:me/garden-app.git"))
         c = self.calls()
-        self.assertIn("gh repo rename project-33 -R me/proj --yes", c)
-        self.assertTrue(any(x.startswith("rename-project.sh proj project-33 --origin git@github.com:me/project-33.git")
+        self.assertIn("gh repo rename garden-app -R me/proj --yes", c)
+        self.assertTrue(any(x.startswith("rename-project.sh proj garden-app --origin git@github.com:me/garden-app.git")
                             for x in c))
-        self.assertEqual(self.run_it("proj", "project-33")["result"], "already", "重送安全")
+        self.assertEqual(self.run_it("proj", "garden-app")["result"], "already", "重送安全")
 
     def test_sandbox_without_remote(self):
         res = self.run_it("sandbox", "room-3d")
@@ -95,9 +95,9 @@ class Script(unittest.TestCase):
 
     def test_retry_after_github_step(self):
         """GitHub 改好了、後面失敗:再叫一次不再改 GitHub,接著做完。"""
-        res = self.run_it("proj", "project-33", RENAME_BUSY="1")
+        res = self.run_it("proj", "garden-app", RENAME_BUSY="1")
         self.assertEqual(res["result"], "busy")
-        res = self.run_it("proj", "project-33", GH_EXISTS="me/project-33")
+        res = self.run_it("proj", "garden-app", GH_EXISTS="me/garden-app")
         self.assertEqual(res["result"], "renamed")
         self.assertEqual(sum(x.startswith("gh repo rename") for x in self.calls()), 1)
 
@@ -117,7 +117,7 @@ class Script(unittest.TestCase):
         sub.mkdir(parents=True)
         sleeper = subprocess.Popen(["/bin/sleep", "30"], cwd=sub)
         self.addCleanup(sleeper.kill)
-        res = self.run_it("proj", "project-33")
+        res = self.run_it("proj", "garden-app")
         self.assertEqual(res["result"], "busy")
         self.assertIn("sleep", res["detail"])
         self.assertFalse(any(x.startswith("gh repo rename") for x in self.calls()))
@@ -126,13 +126,13 @@ class Script(unittest.TestCase):
         """10-25 review:升級跟改名各記各的進度——對方做到一半就先別動,不然重試會找不到名稱。"""
         (self.hub / ".state").mkdir(exist_ok=True)
         (self.hub / ".state" / "idea-upgrades.json").write_text(json.dumps({"sandbox": {"name": "proj", "stage": "renamed"}}))
-        res = self.run_it("proj", "project-33")
+        res = self.run_it("proj", "garden-app")
         self.assertEqual(res["result"], "failed")
         self.assertIn("升級", res["detail"])
         self.assertEqual(self.calls(), [l for l in self.calls() if l.startswith("gh repo view")])
 
     def test_github_failure_changes_nothing(self):
-        self.assertEqual(self.run_it("proj", "project-33", GH_FAIL="1")["result"], "failed")
+        self.assertEqual(self.run_it("proj", "garden-app", GH_FAIL="1")["result"], "failed")
         self.assertTrue((self.hub / "projects" / "proj.yaml").exists())
         self.assertFalse(any(x.startswith("rename-project.sh") for x in self.calls()))
 
@@ -147,8 +147,8 @@ class Endpoint(unittest.TestCase):
         self.addCleanup(shutil.rmtree, self.tmp, ignore_errors=True)
         m.DIR = self.tmp / "state"
         m.token = lambda: "t"
-        self.ws = {"proj": self.tmp / "proj", "project-33": self.tmp / "project-33"}
-        self.ran, self.moves, self.result = [], [], {"result": "renamed", "name": "project-33", "origin": "o"}
+        self.ws = {"proj": self.tmp / "proj", "garden-app": self.tmp / "garden-app"}
+        self.ran, self.moves, self.result = [], [], {"result": "renamed", "name": "garden-app", "origin": "o"}
         rt = m.rt()
         for target, attr, value in [
                 (m.hubconf, "workspace", lambda name: self.ws.get(name)),
@@ -189,21 +189,21 @@ class Endpoint(unittest.TestCase):
 
     def test_rename_follows_leases(self):
         l = self.lease("aaaaaaaa-0000-4000-8000-00000000000a")
-        code, body = self.post({"v": 2, "to": "project-33"})
-        self.assertEqual((code, body["name"], body["renamed"]), (200, "project-33", True))
-        self.assertEqual((l.project, l.cwd, l.mode), ("project-33", str(self.ws["project-33"]), "work"))
+        code, body = self.post({"v": 2, "to": "garden-app"})
+        self.assertEqual((code, body["name"], body["renamed"]), (200, "garden-app", True))
+        self.assertEqual((l.project, l.cwd, l.mode), ("garden-app", str(self.ws["garden-app"]), "work"))
         self.assertEqual(self.moves, [l.id])
 
     def test_busy_does_nothing(self):
         self.lease("aaaaaaaa-0000-4000-8000-00000000000b", waiting=1, state="running")
-        code, body = self.post({"v": 2, "to": "project-33"})
+        code, body = self.post({"v": 2, "to": "garden-app"})
         self.assertEqual((code, body["error"]), (409, "busy"))
         self.assertEqual(self.ran, [])
 
     def test_errors_map(self):
         for result, code in (("bad_name", 400), ("not_found", 404), ("name_taken", 409), ("busy", 409), ("failed", 500)):
             self.result = {"result": result, "detail": "x"}
-            got, body = self.post({"v": 2, "to": "project-33"})
+            got, body = self.post({"v": 2, "to": "garden-app"})
             self.assertEqual((got, body["error"]), (code, "rename_failed" if code == 500 else result))
         self.assertEqual(self.post({"v": 2})[0], 400)
 

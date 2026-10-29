@@ -641,7 +641,7 @@ def handoff_text(h: dict) -> str:
 
 def current_name(proj: str) -> str:
     """改名過的專案現在叫什麼(照 .state/project-renames.json 一路追;沒改過就原樣)。助理的轉交可能還用舊名稱
-    (例:idea-1 升級改名成 project-33 之後還有轉交寄給 idea-1)。"""
+    (例:idea-1 升級改名成 garden-app 之後還有轉交寄給 idea-1)。"""
     try:
         renames = json.loads((hubconf.STATE / "project-renames.json").read_text())
     except (OSError, ValueError):

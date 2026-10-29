@@ -16,7 +16,7 @@ import tempfile
 import unittest
 
 ROOT = pathlib.Path(__file__).resolve().parents[1]
-PERSONAL = re.compile(r"knas|muninn|project-30|imaknas|/Users/you\b", re.I)
+PERSONAL = re.compile(r"knas|muninn|imaknas|/Users/you\b", re.I)
 
 
 class NewUser(unittest.TestCase):

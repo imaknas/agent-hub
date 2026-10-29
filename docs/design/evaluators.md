@@ -7,7 +7,7 @@
 
 Knas 的要求:**所有邊界會碰到模型的地方都要有 evaluator**,用意是評估換模型(更便宜的、本機的、別家的)的可能。
 
-**Knas 的決定(10-27)**:agent job(Upwork、project-36、文獻搜尋…,登錄 job 經過判斷點 `agent-job`)第一階段**不做** evaluator——
+**Knas 的決定(10-27)**:agent job(Upwork、影片研究、文獻搜尋…,登錄 job 經過判斷點 `agent-job`)第一階段**不做** evaluator——
 這些專案的隱私風險比較小,換本機模型的壓力也小。記成已知、已接受的缺口;它們照樣要有 MCP 封閉(已做)跟宣告上的 `eval`(`scorer: none`
 + 理由「owner 10-27 決定暫不評估」)。
 

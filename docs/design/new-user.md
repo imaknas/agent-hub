@@ -388,7 +388,7 @@ check → commit → apply,不另外一套。
      services    + local.agent-hub.lease-runner   (127.0.0.1:18797)
      ```
      沒有 plan 的話,只能 commit 之後等 15 分鐘看狀態頁。
-   - **範例 C(今天就會發生的)**:手改 `projects/project-36.yaml`,`run:` 打錯路徑。現在要等下一個 tick 才被
+   - **範例 C(今天就會發生的)**:手改 `projects/<專案>.yaml`,`run:` 打錯路徑。現在要等下一個 tick 才被
      `registry.py` 發現,狀態頁變紅、沿用上一份;有 pre-commit 的 `config-check` 就進不了 commit。
    反過來說,如果先做模組再做 pipeline,第 3 步改排程器、加 `before:` 的時候,就只能靠「等下一個 tick 看結果」來驗證。
 9. **(第 6 步) 搬家前要 Knas 決定的**:(a) config repo 要不要 remote——新開一個 private GitHub repo(`gh repo create`,對外)
@@ -402,7 +402,7 @@ check → commit → apply,不另外一套。
    - **搬出 git 之後**:這三樣只在 mini 的 `data/` 裡,MBP pull 不到了。
    - **選項**:
      - (a) **狀態頁多三頁**:`/digest/`(最近幾天,markdown 轉成 HTML)、`/todo`、`/reflect/`(直接放現在的 `reflect/index.html`)。
-       範例:早上在手機開狀態頁 → 上方的「今日 digest」分頁 → 看到昨晚 librarian 寫的「## project-06 …」;「待辦」分頁就是
+       範例:早上在手機開狀態頁 → 上方的「今日 digest」分頁 → 看到昨晚 librarian 寫的「## <專案> …」;「待辦」分頁就是
        今天的 `todo.md`,〔Knas〕的項目排在最上面。gen-status-page 每個 tick 本來就在重生,多產生三頁的成本很小;
        只在 tailnet 打得開,跟現在一樣。
      - (b) **只看 Muninn**:Muninn 已經讀 `todo.md` 跟 `reflect/`(用路徑),可以在它的 PWA 裡顯示;digest 它現在不讀。

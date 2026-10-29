@@ -153,7 +153,7 @@ points:
     prompts: none
     tools: Read,Edit,Write,Glob,Grep,Bash
     allowed_tools: ["Edit(./.agent-memory/memory/**)", "{platform_mail}"]   # {platform_mail}:平台的收信、寄信、結案指令(runtime 翻成自己的規則)
-    extra_args: ["--strict-mcp-config"]   # 不載入專案的 MCP 伺服器(例:project-06 的正式資料庫),背景副本用不到
+    extra_args: ["--strict-mcp-config"]   # 不載入專案的 MCP 伺服器(例:專案的正式資料庫),背景副本用不到
     timeout_s: 1800
     output: {format: text}
     on_failure: retry_later  # 失敗記 job.failed;35 分鐘還沒結案,dispatch 改派交辦(stale_resumes)

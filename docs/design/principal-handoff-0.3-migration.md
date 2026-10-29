@@ -135,7 +135,7 @@ m10270639-ba51、m10270459-89db):
 ## 切換(10-27 14:49)
 
 Knas:「隔離演練再跑一次沒問題的話,今晚 03:00 前切換(job 換 registrar.py + mailbox.records 開)」。Agent Hub session
-重跑隔離演練(真資料重新複製,含 f5f7823)是乾淨的:切換當晚 registrar 只送 1 筆(project-15 手蓋的
+重跑隔離演練(真資料重新複製,含 f5f7823)是乾淨的:切換當晚 registrar 只送 1 筆(某個專案手蓋的
 `task-project-15-funnel-f588`,匯流排上沒紀錄,第一次給 Muninn),第二次跑 0 筆。
 
 - `modules/assistant.yaml`:`assistant/knas-tasks` 改跑 `bin/py bin/registrar.py`(8cb0929;job 名稱跟排程狀態沿用)

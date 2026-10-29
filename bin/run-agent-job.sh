@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# 跑一個「需要 Claude 判斷」的排程 job(例:Upwork 每日檢查、project-36 的分析)。
+# 跑一個「需要 Claude 判斷」的排程 job(例:每日檢查、影片分析)。
 # 取代 Claude Desktop 的「Scheduled」任務:那些只在 MBP 開著、醒著時才跑;這支跑在 mini,
 # 由 scheduler.py 依 schedule.yaml 觸發,所有排程只有 schedule.yaml 一個地方管。
 #

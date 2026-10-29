@@ -2,8 +2,8 @@
 """找出「有在對話、但 memory 沒在記」的專案——零 LLM 成本的機械檢查。
 
 memory 筆記靠 agent 自己寫。session 比 onboard 早開(沒讀到說明)、或 agent 忙到
-沒記,memory 就一直空著,librarian 沒東西可整理,也沒有人會發現。project-06
-就是這樣:2026-09-21 onboard 後 88 則對話、0 筆 memory。
+沒記,memory 就一直空著,librarian 沒東西可整理,也沒有人會發現。曾經有專案
+就是這樣:onboard 後 88 則對話、0 筆 memory。
 
 做法:對每個 onboarded 專案,數最近 WINDOW 小時內使用者在那個資料夾送出的訊息數
 (含開在它底下的 worktree 裡的 session),再數同一段時間 agent 寫進 memory/ 的 commit
@@ -80,7 +80,7 @@ def main() -> None:
     gaps = []
     for name, paths in hublib.project_paths().items():
         if name not in roster or not roster[name].get("workspace"):
-            continue  # agent-hub / project-29 沒有 memory
+            continue  # 平台自己、沒有 workspace 的沒有 memory
         msgs = human_messages_since(paths, since)
         if msgs < args.threshold:
             continue

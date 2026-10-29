@@ -263,7 +263,7 @@ def party(role: str, project: str | None = None) -> str:
 
 def former_names(project: str) -> list[str]:
     """這個專案改名前用過的名稱(照 .state/project-renames.json,只算改完的 stage done)。匯流排上舊的信、助理寄來的
-    record 可能還用舊名稱(例:idea-1 升級改名成 project-33)。"""
+    record 可能還用舊名稱(例:idea-1 升級改名成 garden-app)。"""
     try:
         renames = json.loads((STATE / "project-renames.json").read_text())
     except (OSError, ValueError):

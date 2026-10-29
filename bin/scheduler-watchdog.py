@@ -14,7 +14,7 @@ STALE_MIN 分鐘沒更新、連續兩次檢查都這樣(剛開機/剛恢復的�
 REMIND_H 小時提醒一次,恢復時發一則「恢復了」。
 
 設定(不進版控,.secrets/ 在 .gitignore):
-  .secrets/discord-token          bot token(跟 project-36 / project-16 同一個 bot)
+  .secrets/discord-token          bot token(可以跟其他專案共用同一個 bot)
   .secrets/discord-alert-channel  要發到哪個頻道的 channel id
 沒設定就在 log 裡大聲失敗(exit 1),不會假裝有在顧。
 

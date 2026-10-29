@@ -554,7 +554,7 @@ def process(proj: str, d: pathlib.Path, handoffs: list[dict], digest: list[str])
 
     pre = git(d, "rev-parse", "HEAD")
     before = (d / "STATE.md").read_text(errors="replace") if (d / "STATE.md").exists() else ""   # 影子模式的輸入
-    # 只准寫 ./STATE.md:prompt 講了也擋不住(2026-10-15 project-06 的 haiku 還是改了 memory/reference/),判斷點
+    # 只准寫 ./STATE.md:prompt 講了也擋不住(小模型照樣改了 memory/reference/),判斷點
     # librarian-state 用權限規則機械限制(dontAsk、只准 Edit(./STATE.md));下面的隔離檢查是第二道防線
     rc, obj, text = llm("librarian-state", state_prompt(proj, memory_section, h_note, d_note), d)
     if rc != 0 or not text:
@@ -568,7 +568,7 @@ def process(proj: str, d: pathlib.Path, handoffs: list[dict], digest: list[str])
 
     so = (obj or {}).get("structured_output")
     # 拿不到 structured_output(每幾晚會發生一次):照常用 git 判斷實際有沒有改、有改就 commit,只是沒有摘要可放
-    # digest、checkpoint 也不推進(2026-09-28 project-36、09-29 the-crucible 改好的 STATE.md 曾經被留到隔晚)
+    # digest、checkpoint 也不推進(改好的 STATE.md 曾經被留到隔晚)
     no_output = so is None
     if no_output:
         o = obj or {}

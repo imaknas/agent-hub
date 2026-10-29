@@ -4,7 +4,7 @@
 # 還沒 commit 的東西。整段在 with-lock.sh 底下跑,push 走 git-safe-push.sh。
 #
 # 規則:哪支腳本寫了被版控的檔案,就由那支腳本自己呼叫這支 commit+push,
-# 不要留給「之後剛好有人手動 commit」(project-36 的登記就這樣卡過)。
+# 不要留給「之後剛好有人手動 commit」(有個專案的登記就這樣卡過)。
 #
 # 用法:commit-hub-files.sh "<commit message>" <path>...(路徑相對於 agent-hub)
 # 列出的檔案都沒變化就什麼都不做,exit 0。

@@ -260,7 +260,7 @@ def v1_compat(project: str) -> tuple[dict, set, list, set]:
     db = hubconf.bus_db()
     if not db.exists():
         return {}, set(), [], set()
-    names = [project, *hubconf.former_names(project)]   # 改名前寄的 v1 信也算(例:idea-1 → project-33)
+    names = [project, *hubconf.former_names(project)]   # 改名前寄的 v1 信也算(例:idea-1 → garden-app)
     marks, pm = ",".join("?" * len(OWNERS)), ",".join("?" * len(names))
     c = sqlite3.connect(db, timeout=30)
     posted = {r[0]: json.loads(r[1]).get("text", "") for r in c.execute(

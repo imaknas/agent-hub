@@ -12,7 +12,7 @@
 # 用 rsync -a(不加 --delete):MBP 上的副本只會變多不會變少,就算 mini 上
 # 的 OpenClaw session 檔案之後被清掉,MBP 這邊還留著。
 #
-# 為什麼還要備份一個要退役的系統:project-36 的 cron job 目前還在 OpenClaw
+# 為什麼還要備份一個要退役的系統:有些專案的 cron job 還在 OpenClaw
 # 上跑(還沒遷移,故意排在最後),所以 session 檔案還在持續增加,不是純歷史
 # 資料;而且就算 OpenClaw 全部退役了,這些對話紀錄本身仍然有價值(不只是
 # 圖書館員摘要進 memory/log 的那些精煉版本)。

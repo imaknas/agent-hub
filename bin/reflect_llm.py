@@ -20,7 +20,7 @@ sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
 import hubconf  # noqa: E402
 
 MUNINN_CLI = hubconf.p("assistant.cli")
-# 專案登錄的 privacy.reflection 不是 include 的(現在是 project-23、project-24):連摘要也不送。
+# 專案登錄的 privacy.reflection 不是 include 的:連摘要也不送。
 # 登錄讀不到 = None:那就完全不送摘要,只送統計
 EXCLUDED = hubconf.reflection_private()
 

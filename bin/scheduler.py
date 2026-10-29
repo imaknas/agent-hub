@@ -1,7 +1,6 @@
 #!/bin/sh -c exec${IFS}"${0%/*}/py"${IFS}"$0"${IFS}"$@"
 """單一排程器：讀 schedule.yaml，到點就跑對應 command，一天只跑一次。
 由 launchd 每 15 分鐘呼叫一次；新增排程只要編輯 schedule.yaml，不用開新 plist。
-見 project-29/ROADMAP.md「排程（cron 替代方案）」一節的 DIY 備案。
 
 每個 job 除了 time 之外可以加(全部選填,沒寫就是每天):
   days_of_week:  [mon, wed]       只在這幾天跑

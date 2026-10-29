@@ -2,7 +2,7 @@
 """把一個已 onboard 專案的開發環境從 MBP 搬到 mini 的 ~/workspace/<name>。
 
 之後用 Claude Desktop 透過 SSH 在 mini 上開 session:session 跑在 mini,MBP 只是遙控端,
-MBP 斷線/沒電/闔上不會中斷正在跑的工作(2026-10-14 project-16 試行驗證過)。
+MBP 斷線/沒電/闔上不會中斷正在跑的工作(試行驗證過)。
 
 跑在 MBP。預設 dry-run:列出檢查結果、要複製的不進版控檔案(含大小)、要在 mini 重建的依賴;
 加 --apply 才動手。MBP 上的資料夾原封不動當備份——要不要清掉由 Knas 決定,這支不刪任何東西。
@@ -204,7 +204,7 @@ def missing_toolchains(path: str) -> list[str]:
 
 def copy_mcp_servers(name: str, path: str) -> None:
     """專案範圍(local scope)的 MCP server 設定存在 MBP 的 ~/.claude-personal/.claude.json、以 MBP
-    路徑為 key,不在 repo 裡,clone 不會帶過去(例:project-06 的唯讀資料庫連線、project-13 自己的
+    路徑為 key,不在 repo 裡,clone 不會帶過去(例:專案的唯讀資料庫連線、專案自己的
     MCP)。轉換路徑後用 `claude mcp add-json` 加到 mini 那個資料夾。設定裡可能有憑證:只經過
     stdin 傳過去,不印出內容。stdio 的指令在 mini 上找不到時,用同名工具在 mini 的位置;
     還是找不到(例:要先 build 的專案自己的執行檔)就提醒。"""

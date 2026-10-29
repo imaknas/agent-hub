@@ -1,6 +1,6 @@
 """平台的 headless 判斷點不載入環境裡的 MCP 伺服器(10-27 封閉實驗查到的洞)。
 
-實驗:`claude -p --tools ""`(工具全關)照樣拿到全域/plugin 的 MCP 工具——265 個,含 project-06 正式資料庫的
+實驗:`claude -p --tools ""`(工具全關)照樣拿到全域/plugin 的 MCP 工具——265 個,含 某個專案正式資料庫的
 execute_sql。關工具不等於關 MCP;只有 `--strict-mcp-config` 擋得掉(實驗確認它也擋 plugin 的 MCP,不影響 --mcp-config
 明確給的)。所以每個判斷點都要帶它,例外要寫在這裡、有理由。
 

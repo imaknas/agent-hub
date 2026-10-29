@@ -36,7 +36,8 @@ agent-hub 要給任何 coding agent、任何 LLM、任何 key 的人用。
   `AGENT_HUB_ROOT` 可覆蓋)。不要寫死 `~/agent-hub`、`~/services`、專案名稱、owner 的名字。
 - 協定裡的識別字用英文(hubbus 的 owner 地址是 `owner`,別名從 hub.json 讀);使用者身分(〔owner〕標籤)從設定讀。
 - 不要把個人資料放進程式碼、測試、公開的文件(`tests/test_personal_boundary.py` 機械檢查);這個部署特有的事寫進實例目錄的
-  `config/AGENTS.local.md`。
+  `config/AGENTS.local.md`。**私有專案的名字一個都不准出現在平台 repo**(範例用通用的名字);清單在實例的 `config/private-names.txt`,
+  commit 閘門會帶進去檢查(沒有清單的部署略過)。
 - **Python 最低 3.13,一律用平台的 Python `bin/py`**:uv 管的 venv(3.13 + PyYAML,新機器跑
   `bin/setup-python`,`--check` 只驗證)。腳本第一行用 `#!/bin/sh -c exec${IFS}"${0%/*}/py"${IFS}"$0"${IFS}"$@"`(macOS 專用),
   shell/服務/登錄的 `run:` 叫 `bin/py <腳本>`,Python 裡啟動別的腳本用 `hubconf.launch()`(= `sys.executable` + 腳本),hook 這類

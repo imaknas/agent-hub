@@ -30,6 +30,10 @@ work="$(mktemp -d "$HUB/.state/test-gate/run.XXXXXX")" || exit 1
 trap 'rm -rf "$work"' EXIT
 mkdir -p "$work/tree" "$work/home/workspace"
 git checkout-index -a --prefix="$work/tree/" || { echo "test-gate:匯出暫存區失敗" >&2; exit 1; }
+# 這個部署的私有專案名字清單(實例的 config,不在 repo 裡):假 HOME 底下找不到,先在這裡問到位置帶進去
+# (tests/test_personal_boundary.py 的 test_no_private_project_names;沒有清單的部署這項略過)
+private="$("$HUB/bin/py" "$HUB/bin/hubconf.py" dir config 2>/dev/null)/private-names.txt"
+[ -f "$private" ] && export AGENT_HUB_PRIVATE_NAMES="$private"
 
 i=0
 for py in "${PYTHONS[@]}"; do

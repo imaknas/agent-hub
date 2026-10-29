@@ -244,8 +244,8 @@ manifest_origin="${origin_url:-(native)}"
     "~/git-origin/${PROJ_NAME}-memory.git" ${ONBOARD_REGISTRY_EXTRA:+--extra "$ONBOARD_REGISTRY_EXTRA"} \
   || fail "登記進專案登錄失敗(projects/$PROJ_NAME.yaml)"
 # 登記完直接 commit+push agent-hub——以前只寫檔不 commit,mini 上的 librarian
-# /mirror-backup 要等有人剛好手動 commit 才看得到新專案(project-36 就是這樣
-# 卡在 MBP 本地)。只 commit 這三個檔案,不碰 agent-hub 裡其他未 commit 的東西。
+# /mirror-backup 要等有人剛好手動 commit 才看得到新專案(曾經有專案就這樣
+# 卡在本地)。只 commit 這三個檔案,不碰 agent-hub 裡其他未 commit 的東西。
 "$AGENT_HUB/bin/gen-index-roster.sh"
 "$AGENT_HUB/bin/commit-hub-files.sh" "register $PROJ_NAME (onboard-project.sh)" \
     "projects/$PROJ_NAME.yaml" mirror-list.txt index.md \

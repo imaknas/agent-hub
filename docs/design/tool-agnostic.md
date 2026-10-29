@@ -97,7 +97,7 @@ doctor 跟狀態頁照實標出來。Knas 自己的主力是互動 session,這�
 
 ### 6. 平台的輸入
 
-- memory-gaps 抓的是「有對話、沒 commit、沒筆記」(project-06 88 則對話、0 筆)——這需要對話紀錄,不能改成只看 git。
+- memory-gaps 抓的是「有對話、沒 commit、沒筆記」(某個專案 88 則對話、0 筆)——這需要對話紀錄,不能改成只看 git。
   跟 memory-nudge(有 commit 沒筆記,工具中立)合併成一支;「有對話」那一半是 `transcripts` 能力,沒有就明確只做 commit 那一半。
 - 週報的作息、深夜比例、真人訊息需要對話紀錄:沒有就明確關掉那幾段,commit、筆記、信件的統計照做。
 - 平台自己啟動的 ACP session,平台自己記中立的紀錄(不靠工具的格式)。

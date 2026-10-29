@@ -16,7 +16,7 @@ from contextlib import redirect_stdout
 from unittest import mock
 
 ROOT = pathlib.Path(__file__).resolve().parents[1]
-ASKS = {"id": 41, "status": "pending", "effect": "asks", "project": "proj", "fact": "project-06 的匯入查到哪了?",
+ASKS = {"id": 41, "status": "pending", "effect": "asks", "project": "proj", "fact": "shop-app 的匯入查到哪了?",
         "quote": "去問一下", "ts": "2026-10-27T10:00:00+08:00"}
 FACT = {"id": 42, "status": "pending", "effect": "relevant", "project": "proj", "fact": "下週出國", "item": None}
 
@@ -55,7 +55,7 @@ class Asks(unittest.TestCase):
         self.m.import_handoffs(self.c)
         p = self.m.payload(self.letter(41))
         self.assertEqual((p["type"], p["handoff_id"], p["effect"]), ("question", 41, "asks"))
-        self.assertIn("project-06 的匯入查到哪了?", p["text"])
+        self.assertIn("shop-app 的匯入查到哪了?", p["text"])
         self.assertIn("回覆一定要帶 --reply-to", p["text"])
         self.assertIn("每一則都會原樣講給", p["text"])   # 助理 10-27 起每則都講回原對話(m10291432)
         self.assertNotIn("第一則回覆就要是答案本身", p["text"])
@@ -136,7 +136,7 @@ class Asks(unittest.TestCase):
         self.assertNotIn(("--json",), self.calls)
 
 class RenamedProjects(unittest.TestCase):
-    """轉交寄給改名前的專案名稱(例:idea-1 → project-33):照改名紀錄送到新名稱;真的不認得的只在變化時記一次 log。"""
+    """轉交寄給改名前的專案名稱(例:idea-1 → garden-app):照改名紀錄送到新名稱;真的不認得的只在變化時記一次 log。"""
 
     def setUp(self):
         m = self.m = load()
@@ -144,13 +144,13 @@ class RenamedProjects(unittest.TestCase):
         m.DB = self.tmp / "bus.db"
         self.logs = []
         m.log = self.logs.append
-        m.projects = lambda: {"project-33": self.tmp, "other": self.tmp}
+        m.projects = lambda: {"garden-app": self.tmp, "other": self.tmp}
         m.ASSISTANT_CLI = ROOT / "bin" / "hubbus"
         m.RECORDS = False
         state = self.tmp / "state"
         state.mkdir()
         (state / "project-renames.json").write_text(json.dumps({"idea-1": {"new": "room-x", "stage": "done"},
-                                                                "room-x": {"new": "project-33", "stage": "done"}}))
+                                                                "room-x": {"new": "garden-app", "stage": "done"}}))
         st = mock.patch.object(m.hubconf, "STATE", state)   # hubconf 是共用的模組:一定要換回來
         st.start()
         self.addCleanup(st.stop)
@@ -162,7 +162,7 @@ class RenamedProjects(unittest.TestCase):
     def test_follows_renames_to_the_current_name(self):
         self.m.import_handoffs(self.c)
         r = self.c.execute("SELECT to_project FROM events WHERE id=?", (f"{self.m.HANDOFF_ID_PREFIX}35",)).fetchone()
-        self.assertEqual(r["to_project"], "project-33")
+        self.assertEqual(r["to_project"], "garden-app")
 
     def test_unknown_project_logged_only_when_it_changes(self):
         for _ in range(3):

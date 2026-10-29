@@ -38,7 +38,7 @@ repo 建立——一次呼叫做完全套。這份 skill 只負責它做不到�
 真的初始檔案,**再**呼叫 `onboard-project.sh`——這樣腳本自動 commit 的
 第一個 commit 就是真的鷹架,不是只有一份空白 README.md 佔位。
 
-如果使用者沒講語言、只是要一個地方記東西(像 project-31 那種筆記型
+如果使用者沒講語言、只是要一個地方記東西(像研究筆記那種筆記型
 專案),不用鷹架,讓腳本自己補的 README.md 佔位就好。
 
 ## 判斷 4:GitHub repo 要 public 還是 private?
