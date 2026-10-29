@@ -49,7 +49,7 @@ agent-hub 要給任何 coding agent、任何 LLM、任何 key 的人用。
   不要自己拼路徑(ratchet 會擋)
 - **平台的 CLI 叫 `agenthub`**(10-29 從 `hub` 改名:跟 GitHub 舊的 hub CLI 撞名;`bin/hub` 留著轉過去)。`agenthub install-cli` 放上 PATH;
   專案的 session 用 `agenthub send/inbox/done/…`、`agenthub merge-branch`、`agenthub cap-run`(規則檔裡只寫這些,不寫本機路徑)
-- **平台有哪些指令**:`bin/agenthub --help`(init、doctor、config、modules、onboard、recover、rename、status、jobs、run);
+- **平台有哪些指令**:`bin/agenthub --help`(init、doctor、config、llm、modules、onboard、recover、rename、status、jobs、run);平台的判斷交給哪家模型、key 放哪:`agenthub llm setup`(init 也會問);
   哪裡壞了先跑 `bin/agenthub doctor`。新機器:`bin/setup` → `bin/agenthub init`
 
 - **想知道某個專案現在狀態、綁定哪些服務、STATE.md 寫什麼**:

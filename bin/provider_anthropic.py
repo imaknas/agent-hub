@@ -47,3 +47,10 @@ def complete(req, conf) -> CompletionResult:
 def health(conf) -> tuple:
     status, _, _, err = call("GET", (conf.get("base_url") or DEFAULT_BASE).rstrip("/") + "/v1/models", None, _headers(conf), 20)
     return (status == 200), ("" if status == 200 else err or f"HTTP {status}")
+
+
+def list_models(conf) -> list[str]:
+    """這把 key 看得到的模型(新的在前;agenthub llm setup 讓使用者選,平台不猜模型名稱)。拿不到 → 空的。"""
+    status, data, _, _ = call("GET", (conf.get("base_url") or DEFAULT_BASE).rstrip("/") + "/v1/models?limit=100", None,
+                              _headers(conf), 20)
+    return [m.get("id") for m in (data or {}).get("data") or [] if m.get("id")] if status == 200 else []

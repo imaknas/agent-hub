@@ -47,3 +47,9 @@ def health(conf) -> tuple:
     want = {m if isinstance(m, str) else m.get("name") for m in (conf.get("models") or {}).values()}
     missing = sorted(w for w in want if w and w not in have and f"{w}:latest" not in have)
     return (not missing), (f"本機沒有模型:{', '.join(missing)}(ollama pull <名稱>)" if missing else "")
+
+
+def list_models(conf) -> list[str]:
+    """本機已經 pull 的模型。Ollama 沒開 → 空的。"""
+    status, data, _, _ = call("GET", (conf.get("base_url") or DEFAULT_BASE).rstrip("/") + "/api/tags", None, {}, 10)
+    return sorted(m.get("name") for m in (data or {}).get("models") or [] if m.get("name")) if status == 200 else []

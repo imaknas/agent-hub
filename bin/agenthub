@@ -6,14 +6,18 @@
 
 開始用:
   agenthub init [--home <實例目錄>] [--owner <名字>] [--timezone <時區>] [--workspace <資料夾>] [--modules a,b] [--yes]
-           [--no-launchd] [--dry-run]
+           [--llm runtime|anthropic|openai|ollama|none] [--llm-model <名稱>] [--llm-base-url <網址>] [--no-launchd] [--dry-run]
                         沒有 hub.json 就建實例目錄(預設 ~/.agent-hub:config/ 是 git repo、data/、secrets/),照 hub.example.json
                         寫 config/hub.json(問幾個問題,--yes 用預設值),最後寫 <hub>/.hub-home 指過去;建需要的資料夾;
-                        裝排程器跟看門狗(launchd/ 的樣板;內容一樣就不動);套用 config。已經有 hub.json 就不動它
+                        問平台的判斷要交給哪家模型(= agenthub llm setup);裝排程器跟看門狗(launchd/ 的樣板;內容一樣就不動);
+                        套用 config。已經有 hub.json 就不動它
   agenthub doctor            一次看完哪裡壞了:平台的 Python、config、登入、排程器、看門狗、背景服務、commit 閘門
 config:
   agenthub config check | plan | apply [--only <套用者>,...]
                         驗證 config / 會改什麼 / 套用(check → 套用 → 再 plan 要是空的 → 記錄)
+  agenthub llm setup [--llm …] [--llm-model …] [--llm-base-url …]
+                        平台的判斷(每晚整理、週報)交給誰:coding agent 自己的登入、Anthropic / OpenAI(或相容的)API key、
+                        本機 Ollama;key 不顯示、寫進 secrets 目錄;模型從那家實際有的清單選(平台不猜名稱)
   agenthub llm set-key <provider>   把 hub.json llm.providers.<provider> 的 API key 從 stdin 寫進平台的 secrets 目錄(chmod 600;
                         不從參數讀,不會留在 shell 歷史)
   agenthub llm health        每一家 provider 能不能用(= bin/llm.py health)
@@ -232,8 +236,9 @@ def new_hub_json(args: dict, yes: bool) -> dict:
 def cmd_init(argv: list[str]) -> int:
     flags = {a for a in argv if a in ("--yes", "--no-launchd", "--dry-run")}
     args = {k.lstrip("-"): argv[i + 1] for i, k in enumerate(argv[:-1])
-            if k in ("--owner", "--timezone", "--workspace", "--modules", "--home")}
+            if k in ("--owner", "--timezone", "--workspace", "--modules", "--home", "--llm", "--llm-model", "--llm-base-url")}
     dry, yes = "--dry-run" in flags, "--yes" in flags
+    created = False
     legacy = hubconf.instance_home() is None and hubconf.config_file("hub.json").exists()
     if legacy:
         # 舊的擺法(hub.json 在 hub 根目錄,搬家前的樣子):不動,搬家另外做(docs/design/new-user.md 第 6 步)
@@ -258,6 +263,7 @@ def cmd_init(argv: list[str]) -> int:
             subprocess.run(["git", "-C", str(home / "config"), "config", "core.hooksPath", str(ROOT / "githooks" / "config")])
         hubconf.POINTER.write_text(str(home) + "\n")   # 最後才寫:有了它,平台才改用這個實例
         hubconf._cfg = None
+        created = True
         print(f"✓ 實例目錄 {home}(config 是 git repo;owner {d['owner']['tag']}、模組 "
               f"{', '.join(k for k, v in d['modules'].items() if v is True)})")
     if dry and not hubconf.config_file("hub.json").exists():
@@ -278,6 +284,8 @@ def cmd_init(argv: list[str]) -> int:
             print(f"{'(dry-run) ' if dry else ''}git config core.hooksPath githooks(平台的 commit 閘門)")
             if not dry:
                 subprocess.run(["git", "-C", str(ROOT), "config", "core.hooksPath", "githooks"])
+    if created and not dry:
+        llm_setup(args, yes)   # 失敗不擋 init:doctor 會說判斷點沒地方跑,之後 agenthub llm setup
     if "--no-launchd" in flags:
         print("--no-launchd:不裝排程器、不套用服務")
         return 0
@@ -424,6 +432,13 @@ def cmd_doctor(argv: list[str]) -> int:
                 "" if ok else "看 hub.json llm.providers;key 用 bin/hub llm set-key <provider>")
         s = completion.settings()
         add("ok", "判斷點的模型分組:" + ",".join(f"{g}→{s['use'].get(g, '(沒設)')}" for g in completion.GROUPS))
+    else:
+        rt = runtime_ports.default_name()
+        if "completion" in runtime_ports.capabilities(rt):
+            add("ok", f"判斷點交給執行環境 {rt}(沒有 llm.providers;schedulectl models 看每個點的模型)")
+        else:
+            add("bad", f"判斷點沒地方跑:執行環境 {rt} 沒有 completion 介面、hub.json 也沒有 llm.providers",
+                "agenthub llm setup(選一家:API key 或本機 Ollama)")
 
     uid = os.getuid()
     for label, what in (("local.agent-hub-scheduler", "排程器"), ("local.agent-hub-scheduler-watchdog", "看門狗")):
@@ -467,12 +482,132 @@ def report(results) -> int:
 
 # ---------- 包裝 ----------
 
+LLM_CHOICES = ("runtime", "anthropic", "openai", "ollama", "none")
+
+
+def write_secret(name: str, value: str) -> pathlib.Path:
+    """值寫進平台的 secrets 目錄(600,先寫暫存檔再換名);不印值。"""
+    d = hubconf.secrets_dir()
+    d.mkdir(parents=True, exist_ok=True)
+    d.chmod(0o700)
+    f = d / name
+    tmp = f.with_name(f.name + ".tmp")
+    fd = os.open(tmp, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+    with os.fdopen(fd, "w") as fh:
+        fh.write(value.strip() + "\n")
+    tmp.replace(f)
+    return f
+
+
+def default_llm_choice() -> str:
+    """照這台有什麼:coding agent 有 completion 介面就用它自己的登入;不然本機有 Ollama 模型就用 Ollama;都沒有 = 先不設。"""
+    import provider_ollama
+    import runtime_ports
+    if "completion" in runtime_ports.capabilities(runtime_ports.default_name()):
+        return "runtime"
+    return "ollama" if provider_ollama.list_models({}) else "none"
+
+
+def llm_setup(args: dict, yes: bool) -> int:
+    """判斷點(每晚整理筆記、週報)交給誰:寫 hub.json 的 llm 段;key 不顯示、寫進 secrets 目錄;模型從那家實際有的清單選。"""
+    import completion
+    import runtime_ports
+    interactive = not yes and sys.stdin.isatty()
+    rt = runtime_ports.default_name()
+    choice = args.get("llm") or ask(
+        f"平台的判斷(每晚整理筆記、週報)要交給誰?runtime = coding agent({rt})自己的登入、anthropic、"
+        "openai(或相容的 API)、ollama(本機)、none = 先不設", default_llm_choice(), yes)
+    if choice not in LLM_CHOICES:
+        print(f"沒有 {choice} 這個選項(可選:{', '.join(LLM_CHOICES)})", file=sys.stderr)
+        return 2
+    if not interactive and not args.get("llm") and choice not in ("runtime", "none") and not args.get("llm-model"):
+        print(f"這台有 {choice} 可以用,但非互動模式沒辦法選模型:判斷點先不設,之後跑 agenthub llm setup")
+        return 0
+    d = read_hub_json()
+    if choice in ("runtime", "none"):
+        llm = d.get("llm") or {}
+        llm.pop("providers", None)
+        llm.pop("use", None)
+        if llm:
+            d["llm"] = llm
+        else:
+            d.pop("llm", None)
+        write_hub_json(d)
+        hubconf._cfg = None
+        if choice == "none":
+            print("判斷點先不設:要用到時會明確失敗、說原因。之後跑 agenthub llm setup")
+        elif "completion" not in runtime_ports.capabilities(rt):
+            print(f"⚠️ 執行環境 {rt} 沒有 completion 介面:判斷點會失敗。換一家 provider:agenthub llm setup")
+        else:
+            print(f"判斷點交給執行環境 {rt}(它自己的登入;模型照它的組別表,schedulectl models 看)")
+        return 0
+    mod = runtime_ports.load_completion(choice)
+    conf = {"impl": choice}
+    base = args.get("llm-base-url") or ask("位址" + ("(Ollama)" if choice == "ollama" else "(用相容的服務就改)"),
+                                           mod.DEFAULT_BASE, yes)
+    if choice == "ollama":
+        conf.update(base_url=base, location="local")
+    else:
+        if base != mod.DEFAULT_BASE:
+            conf["base_url"] = base
+        conf["key"] = {"secret": f"{choice}-api-key"}
+        if interactive:
+            value = getpass.getpass(f"{choice} 的 API key(不會顯示;直接 Enter = 之後再 agenthub llm set-key {choice}):")
+            if value.strip():
+                print(f"寫進 {write_secret(conf['key']['secret'], value)}(600)")
+    probe = dict(conf)
+    try:
+        probe["_key"] = completion.read_key(probe)
+    except completion.Refused:
+        probe["_key"] = None
+    names = mod.list_models(probe) if (probe.get("_key") or choice == "ollama") else []
+    if args.get("llm-model"):
+        picked = {g: args["llm-model"] for g in completion.GROUPS}
+    elif not interactive:
+        print("非互動模式要用 --llm-model <名稱> 指定模型(或之後互動跑 agenthub llm setup)", file=sys.stderr)
+        return 1
+    else:
+        if names:
+            print(f"{choice} 有這些模型:")
+            for i, n in enumerate(names[:60], 1):
+                print(f"  {i:2}. {n}")
+        else:
+            print("列不出模型(key 還沒設、或連不上),直接打名稱")
+
+        def pick(question: str, default: str) -> str:
+            a = ask(question, default, yes)
+            return names[int(a) - 1] if a.isdigit() and 1 <= int(a) <= len(names) else a
+        std = pick("standard(一般判斷:每晚整理、週報)用哪個(編號或名稱)", "")
+        if not std:
+            print("沒有選模型,hub.json 沒動", file=sys.stderr)
+            return 1
+        picked = {"standard": std, "fast": pick("fast(簡單、量大的判斷)", std), "strong": pick("strong(最難的:回頭清理)", std)}
+    conf["models"] = {g: picked[g] for g in completion.GROUPS}
+    llm = d.setdefault("llm", {})
+    llm.setdefault("providers", {})[choice] = conf
+    llm["use"] = {g: choice for g in completion.GROUPS}
+    errs = completion.config_errors(llm)
+    if errs:
+        print("設定不合格,hub.json 沒動:\n  " + "\n  ".join(errs), file=sys.stderr)
+        return 1
+    write_hub_json(d)
+    hubconf._cfg = None
+    ok, why = next(((o, w) for n, o, w in completion.health_all() if n == choice), (False, "沒有檢查到"))
+    print(f"hub.json llm:判斷點交給 {choice}({', '.join(f'{g}={conf['models'][g]}' for g in completion.GROUPS)});"
+          + ("連得上" if ok else f"⚠️ 還不能用:{why}"))
+    print("記得 commit hub.json(config as code)。agent 的工作(信箱代辦等)要 coding agent,看 agenthub doctor 的功能表")
+    return 0 if ok else 1
+
+
 def cmd_llm(argv: list[str]) -> int:
     import completion
     if argv[:1] == ["health"]:
         return subprocess.run([sys.executable, str(BIN / "llm.py"), "health"]).returncode
+    if argv[:1] == ["setup"]:
+        opts = {k.lstrip("-"): argv[i + 1] for i, k in enumerate(argv[:-1]) if k in ("--llm", "--llm-model", "--llm-base-url")}
+        return llm_setup(opts, "--yes" in argv)
     if argv[:1] != ["set-key"] or len(argv) != 2:
-        print("用法:hub llm set-key <provider>(key 從 stdin)| hub llm health", file=sys.stderr)
+        print("用法:agenthub llm setup | set-key <provider>(key 從 stdin)| health", file=sys.stderr)
         return 2
     conf = ((completion.settings() or {}).get("providers") or {}).get(argv[1])
     if not conf:
@@ -487,19 +622,10 @@ def cmd_llm(argv: list[str]) -> int:
         value = getpass.getpass(f"{argv[1]} 的 API key(不會顯示):")
     else:
         value = sys.stdin.read()
-    value = value.strip()
-    if not value:
+    if not value.strip():
         print("沒有讀到 key,什麼都沒寫", file=sys.stderr)
         return 1
-    d = hubconf.secrets_dir()
-    d.mkdir(parents=True, exist_ok=True)
-    f = d / k["secret"]
-    tmp = f.with_name(f.name + ".tmp")
-    fd = os.open(tmp, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
-    with os.fdopen(fd, "w") as fh:
-        fh.write(value + "\n")
-    tmp.replace(f)
-    print(f"寫進 {f}(600)。檢查:bin/hub llm health")
+    print(f"寫進 {write_secret(k['secret'], value)}(600)。檢查:agenthub llm health")
     return 0
 
 
