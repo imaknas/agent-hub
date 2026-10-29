@@ -32,9 +32,9 @@
 | # | 卡在哪 | 在哪裡 |
 |---|---|---|
 | 1 | 沒有 README,不知道從哪開始;75 支腳本,入口只寫在 `CLAUDE.md`(而那份是寫給 agent 看的、滿是 mini/MBP 的歷史) | repo 根目錄 |
-| 2 | 沒有範例設定:`hub.json` 就是 Knas 的設定(`owner.tag: Knas`、`assistant.project: muninn`、`backup.repo: b2:<backup-bucket>:…`、`memory_host: hub-host`、`github.owner`) | `hub.json` |
+| 2 | 沒有範例設定:`hub.json` 就是 Knas 的設定(`owner.tag: Knas`、`assistant.project: muninn`、`backup.repo: b2:<bucket>:…`、`memory_host: <hub 那台的 ssh 名稱>`、`github.owner`) | `hub.json` |
 | 3 | 程式碼跟資料混在同一個 repo:clone 下來就拿到 Knas 的 `projects/*.yaml`、`digest/`、`reflect/`、`index.md`、`todo.md`、`review-log.md`、`schedule.yaml`、`mirror-list.txt`、`services.tsv`、`legacy-paths.tsv`、`openclaw-migration-status.md`、`agent-jobs/` | repo 根目錄 |
-| 4 | 平台的 launchd plist 寫死 `/Users/you`、`/Users/you` | `launchd/*.plist`(7 份) |
+| 4 | 平台的 launchd plist 寫死兩台機器的家目錄路徑 | `launchd/*.plist`(7 份) |
 | 5 | 寫死第二台機器 `hub-host` | `minilib.sh:9`、`recover-project.sh:21`、`sync-all-memory.sh:34`、`transcript-backup.sh:20`、`trajectory.py:36`、`migrate-to-mini.py:42`、`openclaw-session-backup.sh:28` |
 | 6 | 寫死 hub 位置、memory 副本位置 | `librarian.sh:22,104,111`、`commit-hub-files.sh:13`、`gen-index-roster.sh:20`、`hubbus:281`(給 agent 看的提示;**(r2)** hubbus 裡的 HEADER/FOOTER、questions_note、qcheck 的信、RESUME/DELEGATE_PROMPT 由 Agent Hub session 改) |
 | 7 | librarian 的後段固定照順序跑 5 步,其中 `knas-tasks.py`、`reconcile-questions`(:384–391)是個人助理專屬,沒有助理也照跑 | `librarian.sh:375–420` |
@@ -155,7 +155,7 @@ commit 的是「期望的狀態變了」。
   `legacy-paths.tsv`(都是 data:紀錄)是 Knas 的,搬進實例的 `data/`。
 - **(r3) 外部讀者用路徑讀,搬檔要跟它們同一步**(或過渡期在舊位置留 symlink):
   - Muninn 的 `~/services/muninn/data/config.yaml`:`external_todos: ~/agent-hub/todo.md`、`weekly_stats: ~/agent-hub/reflect`、
-    `lease_runner_token_file: /Users/you/agent-hub/.secrets/runner-token`(`project_states` 讀 `~/.memory-copies`,不受影響)。
+    `lease_runner_token_file: <hub>/.secrets/runner-token`(`project_states` 讀 `~/.memory-copies`,不受影響)。
     契約(todo-md、reflect-week)不變,只有路徑。
   - `contracts-check` 讀 `todo.md`、最新的 reflect json:改成 `hubconf.data()`。
   - Knas 在 MBP 看報告:MBP 的 agent-hub 只 pull,離開 git 後就看不到 digest、reflect,改成看狀態頁(見第 7 節第 7 題)。
@@ -235,7 +235,7 @@ status_sections: [to_owner_backlog]      # 狀態頁要多顯示的區塊(gen-st
 
 ### 3.5 個人名稱的機械檢查(ratchet)
 
-`tests/test_personal_boundary.py`:掃 `bin/`、`templates/`、`launchd/`、**(r2)** `tests/`、`agent-jobs/`(測試資料裡也有,開源前一樣是外洩),規則 `Knas|knas|Muninn|muninn|project-30|/Users/you|/Users/you|imaknas`。
+`tests/test_personal_boundary.py`:掃 `bin/`、`templates/`、`launchd/`、**(r2)** `tests/`、`agent-jobs/`(測試資料裡也有,開源前一樣是外洩),規則是 owner 跟助理的名字、機器名稱、兩台機器的家目錄路徑、帳號名稱(實際的 pattern 在測試裡)。
 - 程式(字串、識別字)出現就失敗,例外寫在 allowlist(例:`hubbus` 認 `knas` 別名是協定的一部分——但值要從
   `owner.aliases` 讀,所以 allowlist 應該很快變空)。
 - 註解裡的決策紀錄(「10-24 Knas 決定」)先記一份現況基準:每個檔的出現次數**只准變少**。改寫成「owner 決定」
@@ -396,7 +396,7 @@ check → commit → apply,不另外一套。
    不要在 librarian 02:00–04:00、backup 05:45 前後;(c) Muninn 的 config.yaml 三個路徑(todo、reflect、runner token)
    由 muninn session 改(寄信),同一個時段換。
 7. **(r3) digest、todo 不進 git 之後,Knas 在哪裡看?**
-   - **現在怎麼看**:狀態頁(`https://hub-host.<tailnet>.ts.net/`)只有一頁 `index.html`——job 成敗、🔔 報告、下次
+   - **現在怎麼看**:狀態頁(tailnet 上的網址)只有一頁 `index.html`——job 成敗、🔔 報告、下次
      什麼時候跑;**沒有** digest、todo、每週回顧。這三樣現在只能在 repo 裡打開檔案看(session 裡,或 MBP pull 之後開
      `reflect/index.html`;Knas 沒有用 GitHub 看)。
    - **搬出 git 之後**:這三樣只在 mini 的 `data/` 裡,MBP pull 不到了。

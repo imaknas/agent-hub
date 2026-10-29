@@ -5,3 +5,6 @@ __pycache__/
 
 # 實例目錄的指標檔(docs/design/new-user.md 3.1):每台機器自己的,絕不進版控
 .hub-home
+
+# 這台的規則檔(Claude Code 讀;內容只是引用實例目錄的 config/AGENTS.local.md),不進版控
+CLAUDE.local.md

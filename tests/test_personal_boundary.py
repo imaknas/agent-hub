@@ -19,17 +19,23 @@ import unittest
 
 ROOT = pathlib.Path(__file__).resolve().parents[1]
 SCOPE = ("bin", "templates", "launchd", "tests", "agent-jobs", "modules")
+# 公開的說明文件:這個部署特有的事寫在實例目錄的 config/AGENTS.local.md、known-issues.local.md(10-29 開源前清掉;基準 0)。
+# docs/design/ 是有日期的決策紀錄,維護者的名字在那裡正常,不掃
+PUBLIC_DOCS = ("AGENTS.md", "README.md", "known-issues.md", "docs/mcp.md", "hub.example.json")
 BASELINE = ROOT / "tests" / "fixtures" / "personal-baseline.json"
 SELF = pathlib.Path(__file__).resolve()
 RULES = {
     "personal": re.compile(r"knas|muninn|project-30|imaknas|/Users/you\b|/Users/you", re.I),
     "secrets-path": re.compile(r"[\"'/]\.secrets\b"),   # bin/ 裡自己拼 .secrets 的路徑(要經過 hubconf.secrets_dir())
     # bin/ 裡自己拼 config/data 檔的路徑(要經過 hubconf.config_file()/data_file()、shell 用 hubpaths.sh 的 $HUB_CONFIG/$HUB_DATA)
+    # 真的機器名、tailnet 名稱、owner 的帳號、備份 bucket、遙控那台的代稱(knas-tasks.py 這種檔名不算)
+    "public-docs": re.compile(r"tail[0-9a-f]+\.ts\.net|/Users/|imaknas|owner|project-30|hub-host|<backup-bucket>"
+                              r"|(?<![\w-])knas(?![\w-])|\bMBP\b", re.I),
     "instance-path": re.compile(r"(?:/ |\$(?:HUB|AGENT_HUB)/)[\"']?(?:(?:digest|reflect)(?=[\"'/\s)])|todo\.md|index\.md|review-log\.md"
                                 r"|models\.env|mirror-list\.txt|services\.tsv|schedule\.yaml|legacy-paths\.tsv"
                                 r"|openclaw-migration-status\.md|hub\.json)\b"),   # digest.html 之類的輸出檔名不算
 }
-RULE_SCOPE = {"personal": SCOPE, "secrets-path": ("bin",), "instance-path": ("bin",)}
+RULE_SCOPE = {"personal": SCOPE, "secrets-path": ("bin",), "instance-path": ("bin",), "public-docs": PUBLIC_DOCS}
 # 路徑定義的地方:hubconf(Python)、hubpaths.sh(shell)、看門狗(刻意不 import 平台的模組,自己一份;test_instance_layout 檢查三份一致)、
 # bin/hub(init / move-instance 建實例目錄的那段)
 DEFINED_IN = {r: {"bin/hubconf.py", "bin/hubpaths.sh", "bin/scheduler-watchdog.py", "bin/agenthub"} for r in ("secrets-path", "instance-path")}
@@ -38,13 +44,13 @@ DEFINED_IN = {r: {"bin/hubconf.py", "bin/hubpaths.sh", "bin/scheduler-watchdog.p
 def files() -> list[pathlib.Path]:
     """版控裡的檔案(git ls-files;不在 git 裡跑時退回掃目錄)。"""
     try:
-        out = subprocess.run(["git", "-C", str(ROOT), "ls-files", "-z", "--", *SCOPE],
+        out = subprocess.run(["git", "-C", str(ROOT), "ls-files", "-z", "--", *SCOPE, *PUBLIC_DOCS],
                              capture_output=True, text=True, check=True).stdout
         paths = [ROOT / p for p in out.split("\0") if p]
     except (OSError, subprocess.CalledProcessError):
         paths = []
     if not paths:  # 不在 git 裡,或 git 往上找到別的 repo、拿到空清單(test-gate 的匯出副本曾經這樣,ratchet 什麼都沒掃就過了)
-        paths = [p for d in SCOPE for p in (ROOT / d).rglob("*") if p.is_file()]
+        paths = [p for d in SCOPE for p in (ROOT / d).rglob("*") if p.is_file()] + [ROOT / f for f in PUBLIC_DOCS]
     return sorted(p for p in paths if p.is_file() and p.resolve() not in (SELF, BASELINE.resolve())
                   and "__pycache__" not in p.parts)
 
@@ -60,7 +66,7 @@ def counts() -> dict[str, dict[str, int]]:
         for rule, pat in RULES.items():
             if rel in DEFINED_IN.get(rule, ()):
                 continue  # 路徑只在這裡定義一次
-            if rel.split("/")[0] in RULE_SCOPE[rule] and (n := len(pat.findall(text))):
+            if (rel.split("/")[0] in RULE_SCOPE[rule] or rel in RULE_SCOPE[rule]) and (n := len(pat.findall(text))):
                 out[rule][rel] = n
     return out
 
@@ -89,6 +95,11 @@ class PersonalBoundary(unittest.TestCase):
         self.assertTrue(s.search('ROOT / ".secrets" / "x"'))
         self.assertTrue(s.search("~/agent-hub/.secrets/runner-token"))
         self.assertFalse(s.search("hubconf.secret('x')"))
+        d = RULES["public-docs"]
+        for hit in ["https://box.<tailnet>.ts.net/", "〔Knas〕", "MBP 只當遙控端", "/Users/you/x", "bucket <backup-bucket>"]:
+            self.assertTrue(d.search(hit), hit)
+        for miss in ["<host>.<tailnet>.ts.net", "bin/knas-tasks.py", "minischema", "〔owner〕"]:
+            self.assertFalse(d.search(miss), miss)
 
 
 def update() -> int:
