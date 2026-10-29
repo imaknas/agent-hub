@@ -94,6 +94,8 @@ class ProposeApply(unittest.TestCase):
         self.assertIn("README.md", out["refused"])
         self.assertEqual((self.ws / "README.md").read_text(), "原本的 README\n", "不准的路徑不採用")
         self.assertIn("用 SQLite", (self.ws / notes[0]).read_text())
+        pushed = sh("git", "--git-dir", str(self.tmp / "bare.git"), "show", f"agent-memory:{notes[0].removeprefix('.agent-memory/')}")
+        self.assertIn("用 SQLite", pushed, "筆記 commit 並 push 到 memory repo")
         self.assertEqual(out["done"], [mid], "只結這次交辦的信")
         self.assertEqual(len(out["sent"]), 1, "只回這次交辦的信、回給原寄件人")
         self.assertEqual(sh("git", "worktree", "list", "--porcelain", cwd=self.ws).count("worktree "), 1, "丟棄式 worktree 清掉了")

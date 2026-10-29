@@ -166,8 +166,9 @@ def _mailbox(project: str, ids: list[str]) -> int:
                        {"note": d.get("note") or "平台派的 agent 處理了(propose)"})
             done.append(d["id"])
     c.execute("COMMIT")
-    if res["applied"]:
-        subprocess.run([str(BIN / "git-sync-memory.sh")], cwd=ws, capture_output=True)
+    if res["applied"] and (ws / ".agent-memory").is_dir():   # 筆記 commit + push 到 memory repo(跟 hook 同一條路)
+        subprocess.run([str(BIN / "with-lock.sh"), str(BIN / "git-sync-memory.sh")], cwd=ws / ".agent-memory",
+                       capture_output=True)
     print(json.dumps({"project": project, "ok": res["ok"], "applied": res["applied"], "refused": res["refused"],
                       "sent": sent, "done": done, "error": res["error"]}, ensure_ascii=False))
     return 0 if res["ok"] else 1

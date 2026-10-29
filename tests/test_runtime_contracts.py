@@ -589,5 +589,51 @@ class ClaudeOnly(unittest.TestCase):
                 m.transcript_roots = saved
 
 
+class CommandTemplate(unittest.TestCase):
+    """指令樣板的佔位:不讀 stdin 的工具(例 agy -p)要 prompt 全文當參數。"""
+
+    def test_prompt_as_argument_is_not_substituted_again(self):
+        import runtime_command as m
+        argv = m._argv(["tool", "--model", "{model}", "-p", "{prompt}"], None, "/p", "/o", "用 {model} 寫 {prompt_file}")
+        self.assertEqual(argv, ["tool", "-p", "用 {model} 寫 {prompt_file}"], "沒有模型拿掉整組旗標;prompt 原樣放進去")
+
+    def test_prompt_argument_means_no_stdin(self):
+        import runtime_command as m
+        import hubconf
+        tmp = pathlib.Path(tempfile.mkdtemp())
+        script = tmp / "agent.py"
+        script.write_text("import sys\nprint(repr(sys.stdin.read()), sys.argv[1])\n")
+        saved = hubconf.get
+        conf = {"run": [sys.executable, str(script), "{prompt}"]}
+        hubconf.get = lambda k, default=None: conf if k == "runtime.command" else saved(k, default)
+        try:
+            code, out, _ = m._run("嗨", None, str(tmp), None, 30)
+        finally:
+            hubconf.get = saved
+        self.assertEqual((code, out.strip()), (0, "'' 嗨"))
+
+    def test_cwd_placeholder_is_the_absolute_workdir(self):
+        import runtime_command as m
+        argv = m._argv(["tool", "--allow", "read_file({cwd})"], None, "/p", "/o", "x", "/w/demo")
+        self.assertEqual(argv, ["tool", "--allow", "read_file(/w/demo)"])
+
+    def test_silent_exit_zero_is_a_failure(self):
+        import runtime_command as m
+        import hubconf
+        tmp = pathlib.Path(tempfile.mkdtemp())
+        script = tmp / "agent.py"
+        script.write_text("import sys\nprint('a tool was auto-denied', file=sys.stderr)\n")
+        saved = hubconf.get
+        conf = {"run": [sys.executable, str(script)]}
+        hubconf.get = lambda k, default=None: conf if k == "runtime.command" else saved(k, default)
+        try:
+            res = m.run(runtime_ports.Task(point="p", prompt="嗨", spec={}, cwd=str(tmp), model=None,
+                                           output_schema=None, timeout_s=30, env=None))
+        finally:
+            hubconf.get = saved
+        self.assertFalse(res.ok, "權限被擋、什麼都沒說就結束的工具不能當成功的空答案")
+        self.assertIn("auto-denied", res.error)
+
+
 if __name__ == "__main__":
     unittest.main()
