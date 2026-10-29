@@ -218,8 +218,7 @@ agent-hub 要給任何 coding agent、任何 LLM、任何 key 的人用。
 - `bin/check-memory-gaps.py`——平台 job `agent-hub/memory-gaps`(`--apply`,每晚 todo 之後):最近 72 小時有對話、memory 卻沒有新筆記
   的專案,列進 `todo.md` 固定區塊跟 digest(零 LLM 成本)
 - `bin/sync-all-memory.sh`——每小時對所有專案的 `.agent-memory` 補跑
-  `git-sync-memory.sh` + 補 push(hook 的安全網;跑在 mini,`local.sync-all-memory-mini`。MBP 上
-  那份 `local.sync-all-memory` 還在,但專案都不在 MBP 了,實際上不做事)
+  `git-sync-memory.sh` + 補 push(hook 的安全網;跑在 mini,`local.sync-all-memory-mini`)
 
 ## mini 上的路徑慣例
 
@@ -253,7 +252,7 @@ memory 追蹤但不需要在 mini 上執行任何東西的專案(目前大多數
 ## 目錄
 
 - `bin/`——所有腳本
-- `launchd/`(Linux:同一份樣板由 `bin/systemd_units.py` 翻成 systemd user unit,`hubconf.service_manager()` 決定用哪個)——只剩排程器跟看門狗(刻意不經過 render-services:排程器壞了正是看門狗要報的事)、跟遙控那台(MBP)的兩份。狀態頁、信箱 dispatch、memory 同步 10-26 起寫在 `projects/agent-hub.yaml` 的 `services:`,由 render-services 產生。跑 hub 的那台機器的 ssh 名稱在 `hub.json` 的 `hosts.server`(`hubconf.host("server")`;shell 用 `plutil` 讀,遙控那台不一定有平台的 Python)。**專案的長駐服務不在這裡**:
+- `launchd/`(Linux:同一份樣板由 `bin/systemd_units.py` 翻成 systemd user unit,`hubconf.service_manager()` 決定用哪個)——只剩排程器跟看門狗(刻意不經過 render-services:排程器壞了正是看門狗要報的事)、跟遙控那台(MBP)的對話紀錄備份(`local.transcript-backup`)。狀態頁、信箱 dispatch、memory 同步 10-26 起寫在 `projects/agent-hub.yaml` 的 `services:`,由 render-services 產生。跑 hub 的那台機器的 ssh 名稱在 `hub.json` 的 `hosts.server`(`hubconf.host("server")`;shell 用 `plutil` 讀,遙控那台不一定有平台的 Python)。**專案的長駐服務不在這裡**:
   寫在 `projects/<專案>.yaml` 的 `services:`,`bin/render-services.py`(平台 job,每 15 分鐘)產生
   `~/Library/LaunchAgents/<label>.plist`,有變才重載;指令找不到就不動能跑的 plist、服務沒在跑就發 Discord。
   **node(跟 claude)只由 nvm 管**:服務跟排程用 nvm 預設版本(`hubconf.nvm_bin()`、env 的 `$PLATFORM_PATH`),

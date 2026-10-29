@@ -5,8 +5,7 @@
 # mini 上的 librarian 看不到。
 #
 # 跑在 mini(local.sync-all-memory-mini),launchd 每小時一次:manifest 的路徑(~/workspace/<name>)。
-# MBP 上也還有一份(local.sync-all-memory),但 2026-10-15 所有專案搬到 mini 之後,manifest 的路徑
-# 在 MBP 上都不存在,那份實際上不做事;MBP 上留著的備份副本不再同步。
+# (MBP 上以前的那份 local.sync-all-memory 10-29 拿掉了:10-15 所有專案搬到 mini 之後它就不做事。)
 # 零 LLM 成本;沒東西要 commit 就什麼都不做。
 #
 # 每個專案:with-lock 底下跑 git-sync-memory.sh(只 add memory/ 跟 STATE.md,
