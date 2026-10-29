@@ -230,7 +230,8 @@
             "name_taken",
             "upgrade_failed",
             "file_refused",
-            "rename_failed"
+            "rename_failed",
+            "runtime_unsupported"
           ]
         },
         "limit": {

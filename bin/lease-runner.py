@@ -1037,6 +1037,11 @@ class H(http.server.BaseHTTPRequestHandler):
     def create(self, b: dict) -> None:
         proj, sid = b.get("project"), str(b.get("session_id") or "")
         mode = b.get("mode", "discuss")
+        need = {"agent", "auth", "sessions", "stream"}   # 長駐串流 + 接續 + 登入:租借要的能力
+        if (miss := need - runtime_ports.capabilities()):
+            return self.err(409, "runtime_unsupported",
+                            f"執行環境 {runtime_ports.default_name()} 沒有"
+                            + "、".join(runtime_ports.PORT_LABELS[p] for p in sorted(miss)) + ",不能開租約")
         if mode not in ("discuss", "work"):
             return self.err(400, "bad_request", "mode 只能是 discuss 或 work")
         try:

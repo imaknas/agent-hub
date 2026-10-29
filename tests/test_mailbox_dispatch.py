@@ -358,3 +358,21 @@ class ForkMerge(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class DispatchWithoutAgent(Dispatch):
+    """沒有 coding agent(runtime.default: none):不派 agent、信留著,原因只記一次。"""
+
+    def test_letters_stay_and_the_reason_is_logged_once(self):
+        logged = []
+        self.m.log_once = lambda key, msg: logged.append((key, msg))
+        import runtime_ports
+        self.send("m1", "proj", "request", minutes_ago=30)
+        with unittest.mock.patch.object(runtime_ports, "default_name", lambda: "none"):
+            self.assertEqual(self.m.dispatch(self.c), 0)
+        self.assertEqual(self.handled, [])
+        self.assertEqual(self.resumed, [])
+        self.assertEqual(logged[0][0], "dispatch-unsupported")
+        self.assertIn("不派 agent", logged[0][1])
+        row = self.c.execute("SELECT id FROM events WHERE id='m1'").fetchone()
+        self.assertIsNotNone(row)
