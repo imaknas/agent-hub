@@ -19,3 +19,5 @@
 - 版本:加欄位/加說明不升版;改名、改意思升版,產生者兩版並存到讀的人換完。
 - 檢查:`tests/test_contracts.py`(範例照自己的契約與副本,②)、`bin/contracts-check.py`(每晚,副本 vs 原版
   只比機器讀的部分:markdown 的 regex/heading 區塊、JSON schema 去掉 `$id`/`title`/`description`,①;加上實際資料)。
+- 授權:契約跟整個 repo 一樣是 Apache-2.0(根目錄的 `LICENSE`)。檔頭不另外註明(JSON 沒有註解,改檔頭也會讓副本跟原版對不上),
+  也沒有 NOTICE 檔;vendor 過去的副本放在同樣是 Apache-2.0 的 repo 裡就夠,不用帶 NOTICE。vendor 進來的別人的契約照它原本的授權。

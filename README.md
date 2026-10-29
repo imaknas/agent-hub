@@ -56,3 +56,7 @@ bin/py -m unittest discover -s tests
 - `docs/design/`:各部分的設計(新使用者、執行環境抽象、信箱分派、能力、想法沙盒)
 - `contracts/`:平台定義的介面(JSON Schema + 範例),`tests/test_contracts.py` 驗證
 - `known-issues.md`:踩過的坑跟自動化的運作原則
+
+## 授權
+
+Apache-2.0(`LICENSE`)。`contracts/` 的契約也是,包括別的 repo vendor 過去的副本;沒有 NOTICE 檔。
