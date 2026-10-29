@@ -1,0 +1,38 @@
+$ <HUB>/bin/merge-branch
+[exit 1]
+--- stdout
+--- stderr
+merge-branch:現在在 main,要在自己的 branch/worktree 裡跑(主 checkout 是合併用的)
+
+$ <HUB>/bin/merge-branch
+[exit 1]
+--- stdout
+✗ empty:feature 跟 main 一樣,沒有東西要合併
+--- stderr
+
+$ <HUB>/bin/merge-branch
+[exit 1]
+--- stdout
+--- stderr
+merge-branch:worktree 有還沒 commit 的改動,先 commit(或丟掉)再合併
+
+$ <HUB>/bin/merge-branch
+[exit 1]
+--- stdout
+✗ commit-titles:這些 commit 的標題不是 Conventional Commits(登錄 commits: conventional):
+<SHA> Update stuff:不是 Conventional Commits 的格式。格式:<type>[(<scope>)][!]: <說明>,type 是 feat / fix / perf / refactor / test / docs / build / ci / chore / revert;例:`fix(hubbus): dispatch 遇到不支援的執行環境不再重試`
+——改好標題(例:`git rebase --exec` 或重新 commit)再跑一次
+--- stderr
+
+$ <HUB>/bin/merge-branch
+[exit 1]
+--- stdout
+✗ tests:`false` 失敗:
+
+--- stderr
+
+$ <HUB>/bin/merge-branch
+[exit 1]
+--- stdout
+--- stderr
+merge-branch:不知道這是哪個專案的 repo(加 --project)

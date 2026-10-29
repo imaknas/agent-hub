@@ -1,0 +1,24 @@
+$ <HUB>/bin/hubbus record-publish --json -
+[exit 0]
+--- stdout
+[{"id": "r:task-demo-0001", "event": "rec:acts/0.3:demo:r:task-demo-0001", "status": "accepted"}]
+--- stderr
+
+$ <HUB>/bin/owner.py list
+[exit 0]
+--- stdout
+☐ demo                     task-demo-0001  續約網域
+(1 件開著)
+--- stderr
+
+$ <HUB>/bin/owner.py done task-demo-0001 --note 續好了
+[exit 0]
+--- stdout
+demo:task-demo-0001 → done(rec:acts/0.3:demo:s:task-demo-0001:1);registrar 今晚照 key 更新 STATE.md
+--- stderr
+
+$ <HUB>/bin/owner.py done no-such-key
+[exit 1]
+--- stdout
+--- stderr
+沒有 no-such-key 這個待辦(owner.py list 看開著的)

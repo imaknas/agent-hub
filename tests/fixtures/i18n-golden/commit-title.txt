@@ -1,0 +1,27 @@
+$ <HUB>/bin/commit_title.py Add LICENSE
+[exit 1]
+--- stdout
+--- stderr
+commit 標題:不是 Conventional Commits 的格式。格式:<type>[(<scope>)][!]: <說明>,type 是 feat / fix / perf / refactor / test / docs / build / ci / chore / revert;例:`fix(hubbus): dispatch 遇到不支援的執行環境不再重試`
+  標題:'Add LICENSE'
+
+$ <HUB>/bin/commit_title.py feature: x
+[exit 1]
+--- stdout
+--- stderr
+commit 標題:type `feature` 不在清單裡。格式:<type>[(<scope>)][!]: <說明>,type 是 feat / fix / perf / refactor / test / docs / build / ci / chore / revert;例:`fix(hubbus): dispatch 遇到不支援的執行環境不再重試`
+  標題:'feature: x'
+
+$ <HUB>/bin/commit_title.py feat:x
+[exit 1]
+--- stdout
+--- stderr
+commit 標題:不是 Conventional Commits 的格式。格式:<type>[(<scope>)][!]: <說明>,type 是 feat / fix / perf / refactor / test / docs / build / ci / chore / revert;例:`fix(hubbus): dispatch 遇到不支援的執行環境不再重試`
+  標題:'feat:x'
+
+$ <HUB>/bin/commit_title.py 
+[exit 1]
+--- stdout
+--- stderr
+commit 標題:標題是空的
+  標題:''

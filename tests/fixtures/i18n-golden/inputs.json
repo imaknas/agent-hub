@@ -1,0 +1,10 @@
+{
+ "state_ok": "# STATE\n\n## 待辦\n\n- [ ] 〔Alex〕續約網域\n- [ ] 〔agent〕把 README 改成英文\n- [ ] 〔待定〕要不要開公開的 issue tracker\n\n## 現況\n\n這個專案在整理文件。\n這個專案在整理文件。\n這個專案在整理文件。\n這個專案在整理文件。\n這個專案在整理文件。\n這個專案在整理文件。\n這個專案在整理文件。\n這個專案在整理文件。\n這個專案在整理文件。\n這個專案在整理文件。\n這個專案在整理文件。\n這個專案在整理文件。\n這個專案在整理文件。\n這個專案在整理文件。\n這個專案在整理文件。\n這個專案在整理文件。\n這個專案在整理文件。\n這個專案在整理文件。\n這個專案在整理文件。\n這個專案在整理文件。\n這個專案在整理文件。\n這個專案在整理文件。\n這個專案在整理文件。\n這個專案在整理文件。\n這個專案在整理文件。\n這個專案在整理文件。\n這個專案在整理文件。\n這個專案在整理文件。\n這個專案在整理文件。\n這個專案在整理文件。\n",
+ "state_bad": "# STATE\n\n## 待辦\n\n- [ ] 沒有標籤的一行\n- [ ] 〔誰〕不認得的標籤\n* 不是 checkbox\nxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+ "request": "請幫忙看一下設定",
+ "info": "部署好了",
+ "task": "續約網域",
+ "note": "續好了",
+ "problem": "排程器 40 分鐘沒動",
+ "recovered": "排程器恢復了"
+}

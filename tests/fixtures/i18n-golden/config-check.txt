@@ -1,0 +1,8 @@
+$ <HUB>/bin/config-check
+[exit 1]
+--- stdout
+--- stderr
+config-check:✗ hub.json:$:缺 v
+config-check:✗ hub.json:$.owner:缺 address
+config-check:✗ hub.json:不認得的鍵 `unknown_key`;要新增就先加進 contracts/hub.v1.schema.json
+config-check:✗ modules/no-such-module.yaml:hub.json 開了模組 no-such-module,但沒有 modules/no-such-module.yaml

@@ -1,0 +1,18 @@
+$ <HUB>/bin/registry.py check
+[exit 1]
+--- stdout
+✓ agent-hub:12 個 job、3 個 service
+✗ bad-idea
+    type: idea 要寫 purpose(想法本身)
+    paths.workspace 必填
+✗ bad-one
+    v 要是 1(現在是 2)
+    name('other')要跟檔名 bad-one 一樣
+    未知的欄位 nope
+    type 只能是 project 或 idea
+    paths.workspace 必填
+    commits 只能是 conventional(沒寫 = 不檢查 commit 標題)
+    gate 只能是 strict 或 detect(預設)
+    privacy.reflection 只能是 include / stats_only / exclude
+✓ ok-proj:0 個 job、0 個 service
+--- stderr
