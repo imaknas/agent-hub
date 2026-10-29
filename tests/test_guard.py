@@ -12,7 +12,7 @@ import unittest
 ROOT = pathlib.Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "bin"))
 
-HOW = "跨專案的事請寄信:~/agent-hub/bin/hubbus send --to <專案> --type request --text \"…\";或請 Knas 自己到那個專案開 session。"
+HOW = "跨專案的事請寄信:agenthub send --to <專案> --type request --text \"…\";或請 Knas 自己到那個專案開 session。"
 
 
 def load_guard():

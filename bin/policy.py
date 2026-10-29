@@ -14,7 +14,8 @@ policy(name, doc, index) → {
   deny_read:          memory 副本的原始筆記(glob)、平台 secrets(Path;搬家期間新舊兩個位置都擋)
   credentials:        使用者層級的憑證目錄(Path);credential_files:憑證檔(Path)——位置在 hub.json 的 credentials
   network:            准連的網域(平台預設 + 登錄的 network)
-  platform_commands:  跨界的唯一通道(信箱 CLI、合併閘門;Path)
+  platform_commands:  跨界的唯一通道(信箱 CLI、合併閘門;Path——舊的寫法,規則檔改用 platform_cli 之後拿掉)
+  platform_cli:       同一組通道,用 PATH 上的 agenthub 子指令(字串,例 "agenthub send")
   capabilities:       登錄 enforce.capabilities
 }
 """
@@ -74,8 +75,20 @@ def policy(name: str, doc: dict, index: dict) -> dict:
         "credential_files": [hubconf.path(x) for x in hubconf.get("credentials.files", [])],
         "network": DOMAINS + list(doc.get("network") or []),
         "platform_commands": [hubconf.ROOT / "bin" / "hubbus", hubconf.ROOT / "bin" / "merge-branch"],
+        "platform_cli": platform_cli(),
         "capabilities": list((doc.get("enforce") or {}).get("capabilities") or []),
     }
+
+
+# 專案的 session 用的平台指令(在 PATH 上的 agenthub;bin/agenthub 的 SESSION_COMMANDS 同一份):權限只放行這些子指令,
+# 不放行 agenthub 的管理指令(config apply、onboard…)
+MAIL_SUBCOMMANDS = ("send", "inbox", "show", "ack", "done", "thread", "open-questions")
+SESSION_SUBCOMMANDS = (*MAIL_SUBCOMMANDS, "merge-branch", "cap-run")
+
+
+def platform_cli(mail_only: bool = False) -> list[str]:
+    """mail_only:平台派的信箱 agent 只能收信、寄信、結案(不能合併、不能叫代跑)。"""
+    return [f"agenthub {c}" for c in (MAIL_SUBCOMMANDS if mail_only else SESSION_SUBCOMMANDS)]
 
 
 def for_project(name: str) -> dict:

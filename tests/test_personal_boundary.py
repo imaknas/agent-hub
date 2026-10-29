@@ -32,7 +32,7 @@ RULES = {
 RULE_SCOPE = {"personal": SCOPE, "secrets-path": ("bin",), "instance-path": ("bin",)}
 # 路徑定義的地方:hubconf(Python)、hubpaths.sh(shell)、看門狗(刻意不 import 平台的模組,自己一份;test_instance_layout 檢查三份一致)、
 # bin/hub(init / move-instance 建實例目錄的那段)
-DEFINED_IN = {r: {"bin/hubconf.py", "bin/hubpaths.sh", "bin/scheduler-watchdog.py", "bin/hub"} for r in ("secrets-path", "instance-path")}
+DEFINED_IN = {r: {"bin/hubconf.py", "bin/hubpaths.sh", "bin/scheduler-watchdog.py", "bin/agenthub"} for r in ("secrets-path", "instance-path")}
 
 
 def files() -> list[pathlib.Path]:

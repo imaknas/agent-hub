@@ -1,6 +1,6 @@
 # Agent 行為規則
 
-> 這套 memory 追蹤機制的入口說明在 `~/agent-hub/CLAUDE.md`(MBP 跟 mini 都有;基礎設施層級:
+> 這套 memory 追蹤機制的入口說明在 agent-hub 的 `AGENTS.md`(`agenthub doctor` 會印出 hub 在哪;基礎設施層級:
 > 目錄慣例、機器分工、排程/整合 agent 都從那裡找)。專案本身的設計文件看專案自己的
 > README/docs,不在這裡。
 

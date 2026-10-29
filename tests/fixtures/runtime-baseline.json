@@ -27,6 +27,6 @@
  "bin/weekly-reflect.sh": 1,
  "bin/worktree-memory.sh": 1,
  "bin/worktrees.py": 1,
- "contracts/llm-points.yaml": 23,
+ "contracts/llm-points.yaml": 21,
  "modules/consolidate.yaml": 1
 }

@@ -75,13 +75,18 @@ def _tilde(p) -> str:
     return "~" + s[len(h):] if s == h or s.startswith(h + "/") else s
 
 
+def _cli_rules(commands) -> list[str]:
+    """平台的 session 指令(「agenthub send」)→ Claude 的規則:不帶參數跟帶參數各一條。"""
+    return [r for c in commands for r in (f"Bash({c})", f"Bash({c} *)")]
+
+
 def settings(pol: dict) -> tuple[dict, list[str], list[str]]:
     deny = []
     for p in pol["other_projects"]:
         deny += [f"Read(/{p}/**)", f"Edit(/{p}/**)"]  # //abs:絕對路徑
     deny += [f"Edit({_tilde(p)}/**)" for p in pol["deny_write"]]
     deny += [f"Read({_tilde(p)}/**)" for p in pol["deny_read"]]
-    allow = [f"Bash({_tilde(c)} *)" for c in pol["platform_commands"]]
+    allow = [f"Bash({_tilde(c)} *)" for c in pol["platform_commands"]] + _cli_rules(pol.get("platform_cli") or [])
     sandbox = {
         "enabled": True,
         "failIfUnavailable": True,
@@ -276,6 +281,11 @@ def _flags(task) -> list:
     if task.model:
         cmd += ["--model", task.model]
     mode, allowed, prompts = spec.get("permission_mode"), list(spec.get("allowed_tools") or []), spec.get("prompts")
+    if "{platform_mail}" in allowed:   # 判斷點宣告的「平台的信箱指令」:舊的 hubbus 路徑 + PATH 上的 agenthub 收寄信子指令
+        import policy
+        i = allowed.index("{platform_mail}")
+        hub_bin = pathlib.Path(__file__).resolve().parent
+        allowed[i:i + 1] = [f"Bash({_tilde(hub_bin / 'hubbus')} *)", *_cli_rules(policy.platform_cli(mail_only=True))]
     env = os.environ if task.env is None else task.env
     if spec.get("extra_allow_env") and env.get(spec["extra_allow_env"]):
         allowed += json.loads(env[spec["extra_allow_env"]])  # 只加規則,不改權限模式

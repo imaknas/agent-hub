@@ -37,7 +37,7 @@ class NewUser(unittest.TestCase):
         shutil.rmtree(self.tmp, ignore_errors=True)
 
     def hub_cmd(self, *args):
-        return subprocess.run([sys.executable, str(self.hub / "bin" / "hub"), *args], env=self.env,
+        return subprocess.run([sys.executable, str(self.hub / "bin" / "agenthub"), *args], env=self.env,
                               capture_output=True, text=True, timeout=120, cwd=self.hub)
 
     def test_empty_instance_comes_up(self):
