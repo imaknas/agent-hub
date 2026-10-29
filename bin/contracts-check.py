@@ -31,13 +31,16 @@ C = HUB / "contracts"
 
 
 def ws(index: dict, name: str) -> pathlib.Path | None:
+    if name in (index.get("modules") or {}):
+        return HUB   # 模組的檔案都在平台裡
     doc = index["projects"].get(name)
     return registry.dirs(doc)["workspace"] if doc else None
 
 
 def cross_copies(index: dict) -> list[str]:
     errs = []
-    for name, doc in index["projects"].items():
+    # 專案 + 開著的模組(沒開的模組讀的契約不比對:例:沒有助理就不用助理的格式)
+    for name, doc in [*index["projects"].items(), *(index.get("modules") or {}).items()]:
         for cons in doc.get("consumes") or []:
             producer = cons.get("from") or hubconf.hub_project()
             pdoc = index["projects"].get(producer)

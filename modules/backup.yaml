@@ -19,3 +19,6 @@ jobs:
   background: true
   max_attempts_per_day: 1
   run: bin/py bin/backup.py verify
+secrets:   # 開了這個模組才檢查(check-secrets.py)
+- {name: b2-key, path: .secrets/b2-env, rotate: "Backblaze 後台重發 application key,寫進 .secrets/b2-env"}
+- {name: backup-password, path: .secrets/backup-password, why: "restic 密碼;還原要靠 owner 自己另外存的那一份(例:密碼管理器;備份裡這份解不開自己)"}

@@ -21,3 +21,10 @@ services:
   keepalive: true
   throttle_s: 10
   env: {PATH: "$PLATFORM_PATH"}   # nvm 預設版本(claude)+ Homebrew,見 hubconf.LAUNCHD_PATH
+secrets:   # 開了這個模組才檢查(check-secrets.py)
+- {name: lease-runner-token, path: .secrets/runner-token, why: "通道租借的 Bearer token;不見了 runner 會重產,助理那邊要跟著換"}
+consumes:   # 助理定義的格式(副本在 contracts/vendor/ 底下);沒開這個模組就不比對(contracts-check.py)
+- {contract: muninn-handoffs, v: 1, copy: contracts/vendor/muninn/handoffs.v1.schema.json, from: muninn}
+- {contract: muninn-digests, v: 1, copy: contracts/vendor/muninn/digests.v1.schema.json, from: muninn}
+- {contract: muninn-messages, v: 1, copy: contracts/vendor/muninn/messages.v1.schema.json, from: muninn}
+- {contract: muninn-permission-requests, v: 2, copy: contracts/vendor/muninn/permission-requests.v2.schema.json, from: muninn}

@@ -315,7 +315,7 @@ def validate_runs(doc: dict, stem: str, d: dict) -> list[str]:
 # 搬進模組的 job 用 legacy_name 寫舊的全名(例:agent-hub/backup),排程狀態照搬、別人的 after: 也照樣對得上。
 
 MODULES_DIR = hubconf.ROOT / "modules"
-MODULE_TOP = {"v", "name", "type", "description", "requires_config", "jobs", "services", "secrets"}
+MODULE_TOP = {"v", "name", "type", "description", "requires_config", "jobs", "services", "secrets", "consumes"}
 
 
 def validate_module(doc, stem: str) -> list[str]:
@@ -342,6 +342,9 @@ def validate_module(doc, stem: str) -> list[str]:
             if key == "jobs" and isinstance(x, dict) and x.get("kind", "command") != "command":
                 errs.append(f"job {x.get('name')}:模組只能有 command 的 job")
     errs += validate_secrets(doc.get("secrets"))   # 模組自己的憑證(平台的;沒開的模組不檢查)
+    for c in doc.get("consumes") or []:   # 模組讀別人的契約(例:助理模組讀助理的轉交格式);沒開的模組不比對
+        if not isinstance(c, dict) or not all(c.get(k) for k in ("contract", "v", "copy")):
+            errs.append("consumes 的每一項要有 contract、v、copy")
     return errs + validate_runs(doc, stem, dirs(doc))
 
 

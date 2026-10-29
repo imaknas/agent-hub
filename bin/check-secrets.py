@@ -121,8 +121,13 @@ def main(argv: list[str]) -> int:
                      "why": f"hub.json llm.providers.{n} 的 API key"}
                     for n, p in (((completion.settings() or {}).get("providers")) or {}).items()
                     if isinstance(p, dict) and isinstance(p.get("key"), dict) and p["key"].get("secret")]
-        if llm_keys:
-            projects = {**projects, hub: {**projects[hub], "secrets": [*(projects[hub].get("secrets") or []), *llm_keys]}}
+        # 警報管道的憑證(hub.json alerts 設了 Discord 才有):一樣是平台的,不用另外寫進登錄
+        alert_keys = [{"name": "discord-bot-token", "path": tok,
+                       "why": "警報用的 Discord bot(看門狗、render-services、claude-login、secrets)"}
+                      for tok in [hubconf.get("alerts.discord_token_file")] if tok]
+        if llm_keys or alert_keys:
+            projects = {**projects, hub: {**projects[hub],
+                                          "secrets": [*(projects[hub].get("secrets") or []), *alert_keys, *llm_keys]}}
     for project in sorted(argv or [*projects, *modules]):
         doc = projects.get(project) or modules.get(project) or {}
         declared = set(module_paths) if project == hubconf.hub_project() else set()

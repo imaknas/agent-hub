@@ -316,8 +316,9 @@ memory 追蹤但不需要在 mini 上執行任何東西的專案(目前大多數
 
 ## 憑證歸誰管(2026-10-24)
 
-- **三層**:機器層級的(claude 登入/token、平台的 Discord、B2、備份密碼、gh)**平台管**,宣告在
-  `projects/agent-hub.yaml`;專案自己服務的金鑰(LINE、Google OAuth、IG…)**專案管**,宣告在自己的登錄
+- **三層**:機器層級的(claude 登入/token、平台的 Discord、B2、備份密碼、gh)**平台管**,宣告在用到它的模組
+  (`modules/<名稱>.yaml` 的 `secrets:`,沒開就不檢查;助理模組讀的別人的契約也寫在模組的 `consumes:`),警報跟 LLM provider 的 key
+  由 check-secrets 從 hub.json 推出來;專案自己服務的金鑰(LINE、Google OAuth、IG…)**專案管**,宣告在自己的登錄
   (專案用 manifest.update 改);到外部服務發新的、撤銷、換掉**只有 Knas 能做**(〔Knas〕待辦)
 - **登錄的 `secrets:` 只寫名稱、位置、到期,不寫值**(格式見 `bin/registry.py` 檔頭);平台 job `agent-hub/secrets`
   (每天 08:00,`bin/check-secrets.py`)檢查在不在、有沒有被備份(`backup.covers()`,跟每晚備份同一套規則)、

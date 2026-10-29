@@ -91,11 +91,7 @@ provides:
 - {contract: reflect-week, v: 1, schema: contracts/reflect-week.v1.schema.json}
 - {contract: project, v: 1, schema: contracts/project.v1.schema.json}
 - {contract: llm-points, v: 1, schema: contracts/llm-points.v1.schema.json}
-consumes:
-- {contract: muninn-handoffs, v: 1, copy: contracts/vendor/muninn/handoffs.v1.schema.json, from: muninn}
-- {contract: muninn-digests, v: 1, copy: contracts/vendor/muninn/digests.v1.schema.json, from: muninn}
-- {contract: muninn-messages, v: 1, copy: contracts/vendor/muninn/messages.v1.schema.json, from: muninn}
-- {contract: muninn-permission-requests, v: 2, copy: contracts/vendor/muninn/permission-requests.v2.schema.json, from: muninn}
+# 讀助理(Muninn)的契約寫在 modules/assistant.yaml 的 consumes(沒開助理模組就不比對)
 services:
 # 平台自己的三個常駐/定時程式(lease-runner 在 modules/assistant.yaml、cap-runner 在 modules/sandbox.yaml):以前是 launchd/ 底下寫死 /Users/<you> 的 plist,10-26 起跟專案的服務一樣由 render-services 產生
 # (路徑從 hubconf)。排程器跟看門狗刻意不在這裡:render-services 是排程器跑的 job,而排程器壞了正是看門狗要報的事
@@ -118,9 +114,6 @@ services:
   run: bin/sync-all-memory.sh
   interval_s: 3600
 
-# 機器層級的憑證(平台管):只寫名稱、位置、到期,不寫值。check-secrets.py 每天檢查(在不在、備份、到期)
-secrets:
-- {name: discord-bot-token, path: .secrets/discord-token, why: "警報用的 Discord bot(看門狗、render-services、claude-login、secrets)"}
-- {name: b2-key, path: .secrets/b2-env, rotate: "Backblaze 後台重發 application key,寫進 .secrets/b2-env"}
-- {name: backup-password, path: .secrets/backup-password, why: "restic 密碼;還原要靠 Knas 密碼管理器裡那一份(備份裡這份解不開自己)"}
-- {name: lease-runner-token, path: .secrets/runner-token, why: "通道租借的 Bearer token;不見了 runner 會重產,Muninn 要跟著換"}
+# 機器層級的憑證(平台管)不寫在這裡:用到的功能各自宣告——備份的在 modules/backup.yaml、通道租借的在 modules/assistant.yaml、
+# Claude Code 的在 modules/claude.yaml;警報(hub.json alerts)跟 LLM provider(hub.json llm)的 key 由 check-secrets.py 從設定推出來。
+# 沒開的功能不檢查(新使用者不會被要一堆他沒用的憑證)
