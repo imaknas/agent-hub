@@ -238,7 +238,11 @@ def platform_mails() -> str | None:
     for _ in range(40):
         if pid <= 1:
             return None
-        r = subprocess.run(["ps", "-o", "ppid=,command=", "-p", str(pid)], capture_output=True, text=True)
+        try:
+            r = subprocess.run(["ps", "-o", "ppid=,command=", "-p", str(pid)], capture_output=True, text=True)
+        except OSError:
+            # 工具的沙盒不准跑 ps(setuid),而且本來就只看得到同一個沙盒裡的程序:跟「看不到那個程序」一樣,只剩環境變數這道
+            return None
         ppid, _, cmd = r.stdout.strip().partition(" ")
         if r.returncode != 0 or not ppid.strip().isdigit():
             return None

@@ -150,6 +150,19 @@ class SendRecords(unittest.TestCase):
         self.send("--type", "done", "--text", "那件事好了")
         self.assertEqual([p["type"] for _, p in self.events("message")], ["done"])
 
+    def test_send_works_where_the_sandbox_forbids_ps(self):
+        # 專案的沙盒不准跑 ps:看不到上層程序 = 不是平台代寄的工作,照常寄(10-29 resume 的 send 因此整個掛掉)
+        real = self.m.subprocess.run
+        def no_ps(cmd, *a, **k):
+            if cmd and cmd[0] == "ps":
+                raise PermissionError(1, "Operation not permitted", "ps")
+            return real(cmd, *a, **k)
+        with mock.patch.dict(self.m.os.environ, {}, clear=False), mock.patch.object(self.m.subprocess, "run", no_ps):
+            self.m.os.environ.pop(self.m.PLATFORM_MAILS_ENV, None)
+            self.assertIsNone(self.m.platform_mails())
+            self.send("--type", "question", "--text", "要哪一家?")
+        self.assertEqual([p["type"] for _, p in self.events("message")], ["question"])
+
     def test_v1_forward_never_posts_records(self):
         self.send("--type", "task", "--text", "繳房屋稅")
         ev = self.c.execute("SELECT * FROM events WHERE type='record'").fetchone()
