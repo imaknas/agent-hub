@@ -6,6 +6,7 @@
 
   1. 鎖(同一個 repo 一次只合一個)。worktree 要乾淨(沒 commit 的改動先 commit 或丟掉)。
   2. `git rebase <main>`:衝突就 abort、列出衝突的檔、記 merge.failed,停。
+  2b. 登錄 `commits: conventional`:這個 branch 上每個 commit 的標題要合格(bin/commit_title.py),不合格就停。
   3. 跑專案登錄的 `runtime.test`(沒有就略過並註明):失敗附最後 40 行、記 merge.failed,停。
   4. 到主 checkout `git merge --ff-only <branch>`(主 checkout 有沒 commit 的改動擋到就停)。
   5. **只有登錄 `push_on_merge: true` 才 push**(預設不 push:有公開的 repo,合併 ≠ 發布)。
@@ -24,6 +25,7 @@ import subprocess
 import sys
 
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
+import commit_title  # noqa: E402
 import hubconf  # noqa: E402
 
 HUBBUS = [sys.executable, str(hubconf.ROOT / "bin" / "hubbus")]
@@ -109,6 +111,13 @@ def main() -> int:
         report.update(head=head, commits=commits, files=files)
         if not commits:
             return fail("empty", f"{branch} 跟 {base} 一樣,沒有東西要合併")
+        # 2b. commit 標題
+        if info.get("commits") == "conventional":
+            bad = [f"{c['sha']} {c['subject']}:{why}" for c in commits
+                   if (why := commit_title.problem(c["subject"], final=True))]
+            if bad:
+                return fail("commit-titles", "這些 commit 的標題不是 Conventional Commits(登錄 commits: conventional):\n"
+                            + "\n".join(bad) + "\n——改好標題(例:`git rebase --exec` 或重新 commit)再跑一次")
         # 3. tests
         test = (info.get("runtime") or {}).get("test")
         if test:

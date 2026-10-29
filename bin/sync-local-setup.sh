@@ -69,8 +69,15 @@ LEGACY_HEADING = "## agent-hub memory 追蹤"
 tpl, path = Path(sys.argv[1]), Path(sys.argv[2])
 rules_file, rules_dir = Path(sys.argv[3]), Path(sys.argv[4])
 body = "\n".join(tpl.read_text().splitlines()[2:]).strip("\n")  # 去掉 "# CLAUDE.md" 標題
-if rules_file.exists():
-    for name in rules_file.read_text().split():
+names = rules_file.read_text().split() if rules_file.exists() else []
+# 登錄決定的規則(不靠 RULES):commits: conventional → 合併閘門會檢查標題,規則檔一定要帶說明
+here = Path.cwd().resolve()
+proj = next((d for n, d in hubconf.projects().items()
+             if (ws := hubconf.workspace(n)) and ws.resolve() == here), {})
+if proj.get("commits") == "conventional" and "conventional-commits" not in names:
+    names.append("conventional-commits")
+if names:
+    for name in names:
         rule = rules_dir / f"{name}.md"
         if rule.exists():
             body += "\n\n" + rule.read_text().strip("\n")

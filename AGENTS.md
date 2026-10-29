@@ -328,6 +328,10 @@ agent-hub 的 session 開的子 session 做完、確認過結果之後就封存�
   假的 HOME 跑全部測試,都過、而且沒有測試寫進 HOME 才放行。只動資料檔的腳本 commit 不跑。
   `--no-verify` 跳過的會被 post-commit 記在 `.state/test-gate-bypassed.log`。重構前後外面看得到的行為用黃金檔固定
   (例:`tests/fixtures/llm-golden.json`),不要靠手動比對
+- **commit 標題用 Conventional Commits**(`<type>[(<scope>)][!]: <說明>`,type:feat / fix / perf / refactor / test / docs / build /
+  ci / chore / revert;scope 是區塊名,例 `fix(hubbus): …`;破壞相容的加 `!` 並在內文寫 `BREAKING CHANGE:`)。`githooks/commit-msg`
+  擋不合格的標題(`bin/commit_title.py`);release notes 用 `cliff.toml`(git-cliff,跟助理的 repo 同一份)從 commit 產生,不另外維護
+  CHANGELOG。其他專案:登錄寫 `commits: conventional` 就由 `merge-branch` 合併前檢查、規則檔自動帶說明
 - **手動編輯(腳本、文件)**:只由在 hub 那台的 hub checkout 開的專用 session 做,它負責 commit+push。其他專案的 session 發現
   agent-hub 的問題,只通知(`agenthub send --to agent-hub`,或告訴使用者),不直接改——兩個 session 同時改同一份 working tree,
   commit 會互相夾帶對方改到一半的檔案。共用 working tree 時一律 `git commit -- <路徑>`,不要 `git add -A`

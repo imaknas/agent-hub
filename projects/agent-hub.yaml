@@ -6,6 +6,7 @@ v: 1
 name: agent-hub
 memory: false
 push_on_merge: false
+commits: conventional          # commit 標題(bin/commit_title.py;這個 repo 另外有 githooks/commit-msg)
 jobs:
 - name: librarian
   legacy_name: librarian

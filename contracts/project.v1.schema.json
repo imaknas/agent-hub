@@ -16,6 +16,7 @@
     "privacy": {"type": "object", "properties": {"reflection": {"enum": ["include", "stats_only", "exclude"]}}},
     "runtime": {"type": "object", "properties": {"deploy": {"type": "string"}, "test": {"type": "string"}}},
     "push_on_merge": {"type": "boolean"},
+    "commits": {"enum": ["conventional"], "description": "commit 標題用 Conventional Commits,合併閘門檢查;沒寫 = 不檢查"},
     "mailbox": {"type": "object", "properties": {"escalate": {"type": "boolean"}}},
     "publishes": {"type": "array", "items": {"type": "object", "required": ["kind", "path"]}},
     "provides": {"type": "array", "items": {"type": "object", "required": ["contract", "v", "schema"]}},

@@ -18,6 +18,8 @@ schema v1(contracts/project.v1.md 有完整說明):
   privacy: {reflection: include|stats_only|exclude}
   runtime: {deploy, test}   有 runtime = 有 <services_root>/<name>
   push_on_merge: false
+  commits: conventional      commit 標題用 Conventional Commits:merge-branch 合併前檢查(bin/commit_title.py),
+                            規則檔自動帶 templates/rules/conventional-commits.md。沒寫 = 不檢查
   mailbox: {escalate: true}
   publishes: [{kind, path, contract, v}]
   provides:  [{contract, v, schema}]           schema 相對 workspace
@@ -75,8 +77,8 @@ import hubconf  # noqa: E402
 import yaml  # noqa: E402
 
 CACHE = hubconf.STATE / "registry"
-TOP = {"v", "name", "type", "purpose", "paths", "memory", "privacy", "runtime", "push_on_merge", "mailbox", "publishes",
-       "provides", "consumes", "services", "jobs", "enforce", "network", "allow_write", "gate", "secrets"}
+TOP = {"v", "name", "type", "purpose", "paths", "memory", "privacy", "runtime", "push_on_merge", "commits", "mailbox",
+       "publishes", "provides", "consumes", "services", "jobs", "enforce", "network", "allow_write", "gate", "secrets"}
 SECRET = {"name", "path", "env_key", "expires", "max_age_days", "warn_days", "backup", "why", "rotate"}
 JOB = {"name", "at", "every", "run", "kind", "prompt", "cwd", "days", "days_of_month", "months", "until",
        "between", "background", "after", "before", "max_attempts_per_day", "legacy_name", "allow", "connectors"}
@@ -215,6 +217,8 @@ def validate(doc, stem: str) -> list[str]:
     if not is_hub and not paths.get("workspace"):
         errs.append("paths.workspace 必填")
     errs += validate_enforce(doc)
+    if doc.get("commits") not in (None, "conventional"):
+        errs.append("commits 只能是 conventional(沒寫 = 不檢查 commit 標題)")
     if doc.get("gate") not in (None, "strict", "detect"):
         errs.append("gate 只能是 strict 或 detect(預設)")
     errs += validate_secrets(doc.get("secrets"))

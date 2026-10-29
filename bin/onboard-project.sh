@@ -120,7 +120,7 @@ else
     printf '# %s\n' "$PROJ_NAME" > README.md
   fi
   git add -A
-  git commit -q -m "initial commit"
+  git commit -q -m "chore: initial commit"
 fi
 
 RESUME=false
