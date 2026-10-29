@@ -37,6 +37,7 @@ class Asks(unittest.TestCase):
         m.log = lambda s: None
         m.projects = lambda: {"proj": self.tmp, "other": self.tmp}
         m.ASSISTANT_CLI = ROOT / "bin" / "hubbus"   # 存在就好;CLI 換成假的
+        m.RECORDS = False   # v1 的行為(v2 並存時的分工在 test_hubbus_bridge_v2.Coexistence)
         self.calls = []
 
         def fake_cli(*args):
@@ -55,7 +56,9 @@ class Asks(unittest.TestCase):
         p = self.m.payload(self.letter(41))
         self.assertEqual((p["type"], p["handoff_id"], p["effect"]), ("question", 41, "asks"))
         self.assertIn("project-06 的匯入查到哪了?", p["text"])
-        self.assertIn("第一則回覆就要是答案本身", p["text"])
+        self.assertIn("回覆一定要帶 --reply-to", p["text"])
+        self.assertIn("每一則都會原樣講給", p["text"])   # 助理 10-27 起每則都講回原對話(m10291432)
+        self.assertNotIn("第一則回覆就要是答案本身", p["text"])
         self.assertEqual(self.m.payload(self.letter(42))["type"], "handoff")   # 其他 effect 照舊
 
     def test_librarian_does_not_apply_asks(self):
@@ -140,6 +143,7 @@ class RenamedProjects(unittest.TestCase):
         m.log = self.logs.append
         m.projects = lambda: {"project-33": self.tmp, "other": self.tmp}
         m.ASSISTANT_CLI = ROOT / "bin" / "hubbus"
+        m.RECORDS = False
         state = self.tmp / "state"
         state.mkdir()
         (state / "project-renames.json").write_text(json.dumps({"idea-1": {"new": "room-x", "stage": "done"},

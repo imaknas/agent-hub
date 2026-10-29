@@ -206,5 +206,101 @@ class BridgeV2(unittest.TestCase):
         self.assertTrue(self.fake.gets())
 
 
+class Coexistence(unittest.TestCase):
+    """v1 跟 v2 並存:有 record 的轉交只走 v2(助理 ack 之後 v1 就不列;v1 先拿走的 v2 還是會再給一次),
+    v1 只拿沒有 record 的(asks、沒 key 的、不認得的)跟 answers(Decisions 這邊還沒換);v2 的 decisions 結案寫成
+    跟 v1 同一個 id 的回答信,誰先到都只有一封。"""
+
+    HANDOFFS = [
+        {"id": 70, "status": "pending", "effect": "done", "project": "proj", "reply_to": "task-proj-aaaaaaaaaa", "item": "x"},
+        {"id": 71, "status": "pending", "effect": "relevant", "project": "proj", "fact": "下週出國", "item": None},
+        {"id": 72, "status": "pending", "effect": "asks", "project": "proj", "fact": "查到哪了?"},
+        {"id": 73, "status": "pending", "effect": "answers", "project": "proj", "reply_to": "q1", "fact": "選 A", "item": "要哪家?"},
+        {"id": 74, "status": "pending", "effect": "done", "project": "proj", "fact": "沒有 key 的結案"},
+        {"id": 75, "status": "pending", "effect": "something-new", "project": "proj", "fact": "?"},
+    ]
+
+    def setUp(self):
+        m = self.m = load()
+        self.tmp = pathlib.Path(tempfile.mkdtemp())
+        m.DB = self.tmp / "bus.db"
+        m.log = lambda s: None
+        m.projects = lambda: {"proj": self.tmp, "other": self.tmp}
+        m.ASSISTANT_CLI = ROOT / "bin" / "hubbus"
+        state = self.tmp / "state"
+        state.mkdir()
+        st = mock.patch.object(m.hubconf, "STATE", state)
+        st.start()
+        self.addCleanup(st.stop)
+        self.delivered = []
+
+        def cli(*a):
+            if a == ("--json",):
+                return mock.Mock(returncode=0, stdout=json.dumps(self.HANDOFFS), stderr="")
+            self.delivered += a[1:]
+            return mock.Mock(returncode=0, stdout="", stderr="")
+        m.assistant_cli = cli
+        self.c = m.db()
+        self.owner = m.hubconf.owner_address()
+        # proj 問過 owner 的問題 q1
+        m.publish(self.c, "q1", "message", "proj", self.owner, None, {"type": "question", "text": "要哪家?",
+                                                                       "from_session": "sess-1"})
+
+    def letters(self):
+        return {r["id"]: self.m.payload(r) for r in self.c.execute("SELECT * FROM events WHERE type='message' AND id LIKE ?",
+                                                                    (f"{self.m.HANDOFF_ID_PREFIX}%",))}
+
+    def test_records_off_v1_takes_everything(self):
+        self.m.RECORDS = False
+        self.m.import_handoffs(self.c)
+        self.assertEqual(len(self.letters()), 6)
+        self.assertEqual(sorted(self.delivered), ["70", "71", "72", "73", "74", "75"])
+
+    def test_records_on_v1_takes_only_what_has_no_record(self):
+        self.m.RECORDS = True
+        self.m.import_handoffs(self.c)
+        p = self.m.HANDOFF_ID_PREFIX
+        self.assertEqual(sorted(self.letters()), [f"{p}72", f"{p}73", f"{p}74", f"{p}75"])
+        self.assertEqual(sorted(self.delivered), ["72", "73", "74", "75"])   # 70、71 留給 v2 的 ack
+
+    def answer_record(self, hid=73, **kw):
+        return {"ph": "0.3", "ext": "decisions/0.3", "id": f"s:q1:h{hid}", "type": "settled", "origin": "principal",
+                "by": "assistant", "key": "q1", "project": "proj", "ts": TS, "outcome": "decided", "terms_rev": 1,
+                "answer": {"text": "選 A"}, "authority": {"kind": "principal", "decider": "person:owner"}, **kw}
+
+    def test_v2_answer_becomes_the_same_letter_as_v1(self):
+        self.m.RECORDS = True
+        fake = self.m.records_http = FakeAssistant(self)
+        self.acked_seen = []
+        self.reader = lambda: self.c
+        self.m.pull_records(self.c)   # 起點
+        fake.out["proj"] = [self.answer_record()]
+        self.m.pull_records(self.c)
+        letters = self.letters()
+        mid = f"{self.m.HANDOFF_ID_PREFIX}73"
+        self.assertEqual(list(letters), [mid])
+        p = letters[mid]
+        self.assertEqual((p["type"], p["effect"], p["reply_to"], p["to_session"], p["handoff_id"]),
+                         ("handoff", "answers", "q1", "sess-1", 73))
+        self.assertIn("選 A", p["text"])
+        self.assertIn("要哪家?", p["text"])
+        self.assertEqual(self.c.execute("SELECT COUNT(*) FROM events WHERE type='record'").fetchone()[0], 0)
+        self.m.import_handoffs(self.c)      # v1 也拿到同一題:還是一封
+        self.assertEqual(sum(1 for i in self.letters() if i == mid), 1)
+
+    def test_v2_dismissal_says_no_answer_needed(self):
+        self.m.RECORDS = True
+        fake = self.m.records_http = FakeAssistant(self)
+        self.acked_seen = []
+        self.reader = lambda: self.c
+        self.m.pull_records(self.c)
+        rec = self.answer_record(hid=80, outcome="dismissed", note="他說不用回答")
+        rec.pop("answer")
+        fake.out["proj"] = [rec]
+        self.m.pull_records(self.c)
+        p = self.letters()[f"{self.m.HANDOFF_ID_PREFIX}80"]
+        self.assertIn("不用回答", p["text"])
+
+
 if __name__ == "__main__":
     unittest.main()

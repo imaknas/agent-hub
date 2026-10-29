@@ -644,8 +644,8 @@ def asks_text(h: dict) -> str:
     return (f"{OWNER} 透過 {ASSISTANT} 問這個專案(他在等答案):\n{h.get('fact', '')}"
             + (f"\n{OWNER} 原話:{h['quote']}" if h.get("quote") else "")
             + f"\n回覆:`agenthub send --to {OWNER_ALIAS} --reply-to <這封的 id> --type info --text \"答案\"`。"
-              f"**第一則回覆就要是答案本身**——{ASSISTANT} 會把帶這個問題的第一則回覆直接當答案講給 {OWNER} 聽,之後的不再說。"
-              "回完再 `hubbus done <id>`。")
+              f"回覆一定要帶 --reply-to:答案跟之後的補充,每一則都會原樣講給 {OWNER} 聽。"
+              f"回答完再 `hubbus done <id>`;只 done 不回信,{ASSISTANT} 會說成這個專案把問題結案了、沒有回答。")
 
 
 def assistant_cli(*args) -> subprocess.CompletedProcess:
@@ -669,34 +669,70 @@ def import_handoffs(c) -> None:
     for h in items:
         if h.get("status", "pending") != "pending":
             continue
-        hid, proj = h.get("id"), h.get("project")
-        orig = get_message(c, h["reply_to"]) if h.get("reply_to") else None
-        if orig is not None and orig["source"] in known:
-            proj = orig["source"]  # owner 的回答送回發問的專案
-        if proj not in known:
-            proj = current_name(proj)
-        if proj not in known:
-            unknown.append(f"#{hid}→{proj}")
+        if RECORDS and has_record(h):
+            continue   # v2 會送(助理 ack 之後 v1 就不再列);兩邊都拿,librarian/registrar 會看到兩次
+        proj = publish_handoff(c, h, known)
+        if proj is None:
+            unknown.append(f"#{h.get('id')}→{h.get('project')}")
             continue
-        if h.get("effect") == "asks":
-            # 不是要套用進 STATE.md 的轉交(open-handoffs 只收 type handoff),是要專案回答的問題
-            p = {"type": "question", "text": asks_text(h), "handoff_id": hid, "effect": "asks"}
-        else:
-            p = {"type": "handoff", "text": handoff_text(h), "handoff_id": hid, "effect": h.get("effect"),
-                 "handoff": {k: h.get(k) for k in ("effect", "fact", "quote", "item", "why", "ts", "reply_to", "task")}}
-        if h.get("reply_to"):
-            p["reply_to"] = h["reply_to"]
-            if orig is not None and payload(orig).get("from_session"):
-                p["to_session"] = payload(orig)["from_session"]
-        if publish(c, f"{HANDOFF_ID_PREFIX}{hid}", "message", KNAS, proj, h.get("reply_to"), p):
-            log(f"Muninn 轉交 #{hid} → {proj}")
-        ack.append(str(hid))
+        ack.append(str(h.get("id")))
     c.execute("COMMIT")
     log_once("handoffs-unknown", f"{ASSISTANT} 的轉交寄給不在名冊裡的專案,留在 {ASSISTANT}:{', '.join(unknown)}" if unknown else "")
     if ack:  # 匯流排 commit 之後才回報;回報失敗下次再報,匯流排的 id 去重不會收兩次
         r = assistant_cli("--delivered", *ack)
         if r.returncode != 0:
             log(f"回報 Muninn 已收到失敗(下次再報):{r.stderr.strip()[-200:]}")
+
+
+# 助理那邊有 0.3 record 的轉交(它的 handoff_records.Outbox.records 同一條規則);answers 也有(decisions settled),
+# 但這邊的 Decisions 還沒換,v1 照拿,v2 的寫成同一封信
+V2_KEYED = ("done", "dropped", "already_done", "reopened", "same_as", "premise")
+V2_NOTES = ("resolves", "changes", "relevant")
+
+
+def has_record(h: dict) -> bool:
+    e = h.get("effect")
+    return e in V2_NOTES or (e in V2_KEYED and bool(h.get("reply_to")))
+
+
+def publish_handoff(c, h: dict, known) -> str | None:
+    """一筆轉交寫成專案信箱的信(id 固定 = HANDOFF_ID_PREFIX + 轉交 id,重寫是 no-op)。回傳收件專案;不認得的回 None。"""
+    hid, proj = h.get("id"), h.get("project")
+    orig = get_message(c, h["reply_to"]) if h.get("reply_to") else None
+    if orig is not None and orig["source"] in known:
+        proj = orig["source"]  # owner 的回答送回發問的專案
+    if proj not in known:
+        proj = current_name(proj)
+    if proj not in known:
+        return None
+    if h.get("effect") == "asks":
+        # 不是要套用進 STATE.md 的轉交(open-handoffs 只收 type handoff),是要專案回答的問題
+        p = {"type": "question", "text": asks_text(h), "handoff_id": hid, "effect": "asks"}
+    else:
+        p = {"type": "handoff", "text": handoff_text(h), "handoff_id": hid, "effect": h.get("effect"),
+             "handoff": {k: h.get(k) for k in ("effect", "fact", "quote", "item", "why", "ts", "reply_to", "task")}}
+    if h.get("reply_to"):
+        p["reply_to"] = h["reply_to"]
+        if orig is not None and payload(orig).get("from_session"):
+            p["to_session"] = payload(orig)["from_session"]
+    if publish(c, f"{HANDOFF_ID_PREFIX}{hid}", "message", KNAS, proj, h.get("reply_to"), p):
+        log(f"{ASSISTANT} 轉交 #{hid} → {proj}")
+    return proj
+
+
+def answer_from_record(c, rec: dict) -> bool:
+    """v2 的 decisions settled(owner 回答了 / 說不用回答)→ 跟 v1 answers 同一封信(同一個 id,誰先到都只有一封)。"""
+    m = re.search(r":h(\d+)$", rec.get("id") or "")
+    if rec.get("type") != "settled" or not m:
+        return False
+    q = get_message(c, rec["key"])
+    if rec.get("outcome") == "dismissed":
+        fact = f"這題不用回答({rec.get('note') or '沒有說明'})"
+    else:
+        fact = str((rec.get("answer") or {}).get("text") or (rec.get("answer") or {}).get("option") or "")
+    h = {"id": int(m.group(1)), "effect": "answers", "project": rec["project"], "reply_to": rec["key"], "fact": fact,
+         "item": payload(q).get("text", "") if q is not None else "", "ts": rec.get("ts")}
+    return publish_handoff(c, h, projects()) is not None
 
 
 def to_assistant(c, ev) -> dict | None:
@@ -848,6 +884,10 @@ def pull_records(c) -> None:
                     if (errs := incoming_errors(rec, name)):
                         log(f"{ASSISTANT}給 {name} 的 record {(rec or {}).get('id') if isinstance(rec, dict) else rec!r}"
                             f" 不收:{'; '.join(errs)}")
+                        continue
+                    if str(rec.get("ext", "")).startswith("decisions/"):
+                        if not answer_from_record(c, rec):   # 其他 decisions record 等這邊的 Decisions 換上再收
+                            log(f"{ASSISTANT}給 {name} 的 {rec.get('id')} 先不收(Decisions 還走 v1)")
                         continue
                     publish_record(c, rec, OWNER_ADDRESS, proj)
             set_cursor(c, got, nxt)
