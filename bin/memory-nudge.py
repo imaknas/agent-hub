@@ -88,7 +88,10 @@ def main() -> None:
     import runtime_ports
     mode = sys.argv[1] if len(sys.argv) > 1 else ""
     if mode == "--post-tool":
-        rt = runtime_ports.load(ports=("lifecycle",))
+        try:
+            rt = runtime_ports.load(ports=("lifecycle",))
+        except runtime_ports.Unsupported:   # 沒有 hook 的執行環境不會叫到這裡;手動跑就安靜結束
+            return
         ev = rt.parse_event("tool_used", sys.stdin.read())
         if ev is None:
             return

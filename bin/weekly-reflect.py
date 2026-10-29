@@ -189,8 +189,16 @@ def main() -> None:
     OUT.mkdir(parents=True, exist_ok=True)
     if not args.html_only:
         start, end, label = week_bounds(args.week)
-        stats = build_stats(label, start, end, scan(start, end))
-        if args.llm:
+        try:
+            runtime_ports.load(ports=("transcripts",))
+            unsupported = None
+        except runtime_ports.Unsupported as e:   # 沒有對話紀錄:明確寫出來,不把空的統計當成「這週沒做事」送給模型
+            unsupported = str(e)
+        stats = build_stats(label, start, end, scan(start, end) if not unsupported else {"this": Week(), "prev": Week()})
+        if unsupported:
+            stats["unsupported"] = unsupported
+            print(f"週報:沒有對話的統計——{unsupported}")
+        elif args.llm:
             import reflect_llm
             stats["analysis"] = reflect_llm.analyze(stats)
         path = OUT / f"{label}.json"

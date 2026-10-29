@@ -66,6 +66,16 @@ def main() -> None:
     args = ap.parse_args()
     since = datetime.datetime.now(datetime.timezone.utc) - datetime.timedelta(hours=args.window_hours)
 
+    try:
+        runtime_ports.load(ports=("transcripts",))
+    except runtime_ports.Unsupported as e:
+        # 這個檢查要的是「有對話」:沒有對話紀錄就明確不檢查(不是「沒有缺口」)
+        msg = f"memory 缺口檢查:不檢查——{e}"
+        print(msg)
+        if args.apply:
+            write_todo_block(hubconf.data_file("todo.md"), [])
+            hublib.digest_append("memory-gaps", f"## memory 沒在記的專案\n\n{msg}")
+        return
     roster = hubconf.roster()
     gaps = []
     for name, paths in hublib.project_paths().items():

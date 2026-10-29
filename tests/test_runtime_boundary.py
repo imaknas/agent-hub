@@ -49,7 +49,8 @@ class TestRuntimeBoundary(unittest.TestCase):
 # 目標是「Claude 只出現在 runtime_claude.py」;現在還有很多,一次清不完,所以跟 test_personal_boundary 一樣記基準、只准變少。
 # 多一個 Claude 專用的模型名稱也算(判斷點要寫 tier,不是 haiku/sonnet/opus)。
 RATCHET_SCOPE = ("bin", "modules", "agent-jobs", "contracts/llm-points.yaml")
-RATCHET_EXEMPT = {"bin/runtime_claude.py"}   # 翻譯只在這裡
+RATCHET_EXEMPT = {"bin/runtime_claude.py",   # 翻譯只在這裡
+                  "modules/claude.yaml"}    # Claude Code 專用的維護(登入檢查、更新、token):沒用 Claude 的人不開這個模組
 RATCHET = PATTERNS + [(re.compile(r"\b(haiku|sonnet|opus)\b", re.I), "Claude 的模型名稱")]
 RUNTIME_BASELINE = ROOT / "tests" / "fixtures" / "runtime-baseline.json"
 

@@ -37,8 +37,8 @@ SKIP_DIRS = {"node_modules", ".venv", "venv", ".git", "dist", "build", "__pycach
 
 
 def locate(project: str, doc: dict, raw: str) -> pathlib.Path | None:
-    """平台自己的路徑照 hubconf.path 解(憑證在 secrets_dir(),搬家後不在 hub 根目錄);專案的相對 runtime/workspace。"""
-    if raw.startswith(("~", "/")) or project == hubconf.hub_project():
+    """平台自己(含模組)的路徑照 hubconf.path 解(憑證在 secrets_dir(),搬家後不在 hub 根目錄);專案的相對 runtime/workspace。"""
+    if raw.startswith(("~", "/")) or project == hubconf.hub_project() or doc.get("type") == "module":
         return hubconf.path(raw)
     d = registry.dirs(doc)
     base = d["runtime"] if doc.get("runtime") is not None else d["workspace"]
@@ -107,11 +107,15 @@ def undeclared(project: str, doc: dict, declared: set[pathlib.Path]) -> list[pat
 
 def main(argv: list[str]) -> int:
     today = datetime.date.today()
-    projects = registry.refresh()["projects"]  # 剛改的登錄也算,不等排程器的 tick
+    index = registry.refresh()  # 剛改的登錄也算,不等排程器的 tick
+    projects = index["projects"]
+    # 開著的模組的憑證是平台的(例:claude 模組的 headless token);沒開的模組不檢查——沒用 Claude 的人不會被要 Claude 的 token
+    modules = {n: d for n, d in (index.get("modules") or {}).items() if d.get("secrets")}
+    module_paths = {p.resolve() for d in modules.values() for s in d["secrets"] if (p := locate(d["name"], d, s["path"]))}
     problems, count = [], 0
-    for project in sorted(argv or projects):
-        doc = projects.get(project) or {}
-        declared = set()
+    for project in sorted(argv or [*projects, *modules]):
+        doc = projects.get(project) or modules.get(project) or {}
+        declared = set(module_paths) if project == hubconf.hub_project() else set()
         for sec in doc.get("secrets") or []:
             count += 1
             probs, notes = check(project, doc, sec, today)
@@ -120,7 +124,7 @@ def main(argv: list[str]) -> int:
                 print(n)
             if (path := locate(project, doc, sec["path"])):
                 declared.add(path.resolve())
-        for path in undeclared(project, doc, declared):
+        for path in ([] if doc.get("type") == "module" else undeclared(project, doc, declared)):
             print(f"{project}:沒宣告、檔名像憑證:{path}(宣告在登錄的 secrets:,或確認它不是憑證)")
     if not argv:
         # 警報管道本身:token 失效的話,出事時所有警報都發不出去——每天先確認一次(不發訊息)

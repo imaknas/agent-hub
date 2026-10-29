@@ -372,6 +372,10 @@ def cmd_doctor(argv: list[str]) -> int:
         "" if r.returncode == 0 else "照訊息改 hub.json / projects/,再 bin/hub config check")
 
     import runtime_ports
+    rname = runtime_ports.default_name()
+    for feat, ok, miss in runtime_ports.feature_table(rname):
+        add("ok" if ok else "warn", f"{feat}:" + ("可以用" if ok else f"關掉(執行環境 {rname} 沒有{miss})"),
+            "" if ok else "裝一個有這些能力的 coding agent,hub.json runtime.default 指到它")
     try:
         auth = runtime_ports.load(ports=("auth",))
         for c in auth.credentials():
@@ -380,6 +384,8 @@ def cmd_doctor(argv: list[str]) -> int:
                     "" if c.present else c.renew)
             elif not c.present:
                 add("warn", f"agent 登入({c.label}):沒有", c.renew)
+    except runtime_ports.Unsupported:
+        pass   # 沒有 agent 登入可查:上面的功能表已經說了哪些功能關掉
     except Exception as e:
         add("bad", f"讀不到 agent 的登入狀態:{e}", "bin/hub config check")
 

@@ -181,9 +181,15 @@ class FakeFixture:
 FIXTURES = {"claude": ClaudeFixture, "fake": FakeFixture}
 
 
+def having(port: str) -> list[str]:
+    """有這個介面的實作:契約測試只對它們跑(沒有的由 load() 丟 Unsupported,NoneRuntime 檢查)。"""
+    return [n for n in runtime_ports.RUNTIMES if port in runtime_ports.capabilities(n)]
+
+
 class Registry(unittest.TestCase):
     def test_every_registered_runtime_has_a_fixture(self):
-        self.assertEqual(set(runtime_ports.RUNTIMES), set(FIXTURES), "新的 runtime 要在這裡加情境設定,才算跑過契約測試")
+        withports = {n for n in runtime_ports.RUNTIMES if runtime_ports.capabilities(n)}
+        self.assertEqual(withports, set(FIXTURES), "新的 runtime 要在這裡加情境設定,才算跑過契約測試")
 
     def test_load_rejects_incomplete_module(self):
         bad = types.ModuleType("runtime_broken")
@@ -202,18 +208,52 @@ class Registry(unittest.TestCase):
             runtime_ports.load("nope")
 
 
+class NoneRuntime(unittest.TestCase):
+    """沒有 coding agent(runtime.default: none):每個介面都是「不支援」,不是錯誤、也不是空資料。"""
+
+    def test_has_no_ports(self):
+        self.assertEqual(runtime_ports.capabilities("none"), set())
+
+    def test_every_port_is_unsupported_with_a_reason(self):
+        for port in runtime_ports.PORTS:
+            with self.subTest(port=port):
+                with self.assertRaises(runtime_ports.Unsupported) as cm:
+                    runtime_ports.load("none", ports=(port,))
+                self.assertIn(runtime_ports.PORT_LABELS[port], str(cm.exception))
+
+    def test_unsupported_is_not_missing_functions(self):
+        self.assertFalse(issubclass(runtime_ports.Unsupported, runtime_ports.MissingFunctions))
+
+    def test_partial_port_is_still_a_bug(self):
+        bad = types.ModuleType("runtime_half")
+        bad.turns = lambda *a: iter(())   # transcripts 只有一半
+        sys.modules["runtime_half"] = bad
+        runtime_ports.RUNTIMES["half"] = "runtime_half"
+        try:
+            with self.assertRaises(runtime_ports.MissingFunctions):
+                runtime_ports.load("half", ports=("transcripts",))
+            with self.assertRaises(runtime_ports.Unsupported):
+                runtime_ports.load("half", ports=("agent",))
+        finally:
+            del runtime_ports.RUNTIMES["half"]
+            del sys.modules["runtime_half"]
+
+    def test_every_label(self):
+        self.assertEqual(set(runtime_ports.PORT_LABELS), set(runtime_ports.PORTS))
+
+
 class Contract(unittest.TestCase):
     """每一個實作都跑這些(subTest 標出是哪一個)。"""
 
     def each(self, check):
-        """對每一個登記的實作:放進情境 → 機械檢查介面 → 跑 check(m, env) → 清掉。失敗會標出是哪一個實作。"""
-        for name in runtime_ports.RUNTIMES:
+        """對每一個有對話紀錄的實作:放進情境 → 機械檢查介面 → 跑 check(m, env) → 清掉。失敗會標出是哪一個實作。"""
+        for name in having("transcripts"):
             with self.subTest(runtime=name):
                 fx = FIXTURES[name]()
                 with tempfile.TemporaryDirectory() as d:
                     m, env = fx.setup(pathlib.Path(d))
                     try:
-                        runtime_ports.load(name)
+                        runtime_ports.load(name, ports=("transcripts", "sessions"))
                         check(m, env)
                     finally:
                         fx.teardown()
@@ -274,7 +314,7 @@ class RunContract(unittest.TestCase):
     """第 1 層「跑一次」:每一個實作都一樣——正常完成、有結果但沒正常完成(不算失敗)、失敗。"""
 
     def each_run(self, mode, check):
-        for name in runtime_ports.RUNTIMES:
+        for name in having("agent"):
             with self.subTest(runtime=name, mode=mode):
                 fx = FIXTURES[name]()
                 with tempfile.TemporaryDirectory() as d:
@@ -314,7 +354,7 @@ class LifecycleContract(unittest.TestCase):
     """第 3 層:每一個實作把原生的 hook 輸入翻成同樣的中立事件,輸出只在該有的時候有。"""
 
     def each(self, check):
-        for name in runtime_ports.RUNTIMES:
+        for name in having("lifecycle"):
             with self.subTest(runtime=name):
                 fx = FIXTURES[name]()
                 with tempfile.TemporaryDirectory() as d:
@@ -367,7 +407,7 @@ class AuthContract(unittest.TestCase):
     BASE = {"PATH": "/usr/bin", "LLM_AUTH": "x-not-the-runtimes"}
 
     def each(self, token, check):
-        for name in runtime_ports.RUNTIMES:
+        for name in having("auth"):
             with self.subTest(runtime=name, token=token):
                 fx = FIXTURES[name]()
                 with tempfile.TemporaryDirectory() as d:
@@ -442,7 +482,7 @@ class InstructionsContract(unittest.TestCase):
     """第 4 層:規則檔在專案資料夾裡,而且它自己就在本機專用檔的清單上(不然會被 commit 進 repo)。"""
 
     def test_instructions_file_is_local_and_ignored(self):
-        for name in runtime_ports.RUNTIMES:
+        for name in having("instructions"):
             with self.subTest(runtime=name):
                 m = runtime_ports.load(name, ports=("instructions",))
                 ws = pathlib.Path("/Users/someone/workspace/proj")

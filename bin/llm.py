@@ -106,7 +106,10 @@ def run(a) -> int:
     # --model > 環境變數 > config 的 models.env > 宣告的預設
     menv = spec.get("model_env")
     model = a.model or (menv and (os.environ.get(menv) or config_models().get(menv))) or spec.get("model_default")
-    rt = runtime_ports.load(spec.get("runtime"), ports=("agent", "auth"))
+    try:
+        rt = runtime_ports.load(spec.get("runtime"), ports=("agent", "auth"))
+    except runtime_ports.Unsupported as e:   # 沒有 coding agent:照宣告的失敗路徑走,原因寫清楚
+        return fail(a.point, spec, str(e))
     env, why = auth_env(spec, rt)
     if env is None:
         return fail(a.point, spec, why)

@@ -64,7 +64,10 @@ def main() -> int:
         return 2
     try:
         import runtime_ports
-        rt = runtime_ports.load(ports=("lifecycle",))
+        try:
+            rt = runtime_ports.load(ports=("lifecycle",))
+        except runtime_ports.Unsupported:   # 沒有 hook 的執行環境不會叫到這裡
+            return 0
         ev = rt.parse_event("open_session_attempt", sys.stdin.read())
         if ev is not None:
             reason = decide(ev.target or {}, ev.cwd)

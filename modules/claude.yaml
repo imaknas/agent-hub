@@ -1,0 +1,25 @@
+# Claude Code 專用的維護(docs/design/tool-agnostic.md):登入檢查、更新 claude、headless token 的到期。
+# 用 Claude Code 當執行環境(runtime.default: claude)或判斷點交給它跑的才開;沒用 Claude 的人不開,這些 job 跟憑證檢查就不存在,
+# 也不會因為「沒有 Claude 的 token」收到警報。
+v: 1
+name: claude
+type: module
+description: Claude Code 的登入檢查、更新、headless token 到期提醒
+jobs:
+- name: claude-login             # claude 的三份登入(launchd 訂閱登入、headless token、SSH 用的 .credentials.json)還能用嗎;壞了/快到期發警報
+  legacy_name: agent-hub/claude-login
+  every: 1h
+  run: bin/py bin/check-claude-login.py
+- name: update-claude            # nvm 預設版本底下的 claude 更新到最新(排程/租借/助理用這份;Desktop 的 session 用自己的);裝不起來就裝回舊版、失敗
+  legacy_name: agent-hub/update-claude
+  at: "01:15"
+  max_attempts_per_day: 2
+  run: bin/py bin/update-claude.py
+secrets:
+- name: claude-headless-token
+  path: ~/.claude/headless-oauth-token
+  max_age_days: 365
+  warn_days: 30
+  backup: false
+  why: "claude setup-token 產生(llm.py 預設的憑證);丟了重跑就有新的,不用備份"
+  rotate: "跑 claude setup-token,把新的 token 寫進 ~/.claude/headless-oauth-token(chmod 600)"

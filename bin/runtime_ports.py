@@ -52,8 +52,30 @@ import os
 from typing import NamedTuple
 
 # 登記表:名稱 → 模組。多個 runtime 可以同時登記,每個 session 用它自己的(設計原則 9)。
-RUNTIMES = {"claude": "runtime_claude", "fake": "runtime_fake"}
+RUNTIMES = {"claude": "runtime_claude", "fake": "runtime_fake", "none": "runtime_none"}
 DEFAULT = "claude"   # hub.json 沒寫 runtime.default 時的預設
+
+# 介面給人看的名稱(Unsupported 的原因、doctor 的能力表)
+PORT_LABELS = {"agent": "跑 agent", "lifecycle": "session 事件(hook)", "instructions": "規則檔",
+               "transcripts": "對話紀錄", "sessions": "session 狀態", "stream": "長駐串流 session", "auth": "登入狀態"}
+
+# 平台的功能需要哪些介面(doctor 的「工具 × 功能」表;docs/design/tool-agnostic.md 原則 3)。缺任何一個 = 那個功能關掉。
+FEATURES = (
+    ("判斷點(librarian、index、consolidate、週報分析)", ("agent", "auth")),
+    ("信箱交辦(沒人收的信由平台派 agent)", ("agent", "auth")),
+    ("信箱接續(用閒置 session 的 context 回信)", ("agent", "sessions")),
+    ("通道租借(另外要助理模組)", ("stream", "sessions", "agent", "auth")),
+    ("session 裡即時看到信、提醒寫筆記", ("lifecycle",)),
+    ("平台規則寫進專案的規則檔", ("instructions",)),
+    ("memory 缺口、週報的對話統計", ("transcripts",)),
+)
+
+
+def feature_table(name: str | None = None) -> list[tuple[str, bool, str]]:
+    """(功能, 能不能用, 缺什麼)——缺的用 PORT_LABELS 的名稱。"""
+    have = capabilities(name)
+    return [(f, not (miss := [PORT_LABELS[p] for p in need if p not in have]), "、".join(miss)) for f, need in FEATURES]
+
 
 PORTS = {
     "agent": ("run", "describe"),
@@ -157,7 +179,24 @@ class TaskResult(NamedTuple):
 
 
 class MissingFunctions(Exception):
-    pass
+    """實作了一個介面的一部分函式:這是 bug,載入就拒絕。"""
+
+
+class Unsupported(Exception):
+    """這個 runtime 完全沒有這個介面(例:runtime_none、只會 completion 的轉接器):不是錯誤,是能力不足。
+    呼叫端照「不支援」處理——明確關掉那個功能、說出原因(str(e)),**不是拿空資料照跑**(docs/design/tool-agnostic.md 原則 3)。"""
+
+
+def _module(name: str):
+    if name not in RUNTIMES:
+        raise KeyError(f"沒有登記的 runtime:{name}(有:{', '.join(RUNTIMES)})")
+    return importlib.import_module(RUNTIMES[name])
+
+
+def capabilities(name: str | None = None) -> set[str]:
+    """這個 runtime 有哪些介面:從它實作了哪些函式推出來,不另外宣告(宣告會跟實作不同步)。"""
+    mod = _module(name or default_name())
+    return {p for p, fns in PORTS.items() if all(callable(getattr(mod, fn, None)) for fn in fns)}
 
 
 def default_name() -> str:
@@ -169,14 +208,21 @@ def default_name() -> str:
 
 
 def load(name: str | None = None, ports=tuple(PORTS)):
-    """拿到一個 runtime 的模組;缺了任何介面要求的函式就拒絕(不是等到呼叫時才壞)。"""
+    """拿到一個 runtime 的模組。要求的介面只實作了一部分 → MissingFunctions(bug,不是等到呼叫時才壞);
+    完全沒有 → Unsupported(能力不足,呼叫端說原因、關掉功能)。"""
     name = name or default_name()
-    if name not in RUNTIMES:
-        raise KeyError(f"沒有登記的 runtime:{name}(有:{', '.join(RUNTIMES)})")
-    mod = importlib.import_module(RUNTIMES[name])
-    missing = [f"{p}.{fn}" for p in ports for fn in PORTS[p] if not callable(getattr(mod, fn, None))]
-    if missing:
-        raise MissingFunctions(f"runtime {name}({RUNTIMES[name]})缺少:{', '.join(missing)}")
+    mod = _module(name)
+    absent = []
+    for p in ports:
+        have = [fn for fn in PORTS[p] if callable(getattr(mod, fn, None))]
+        if not have:
+            absent.append(p)
+        elif len(have) < len(PORTS[p]):
+            missing = [f"{p}.{fn}" for fn in PORTS[p] if fn not in have]
+            raise MissingFunctions(f"runtime {name}({RUNTIMES[name]})缺少:{', '.join(missing)}")
+    if absent:
+        raise Unsupported(f"執行環境 {name} 沒有{'、'.join(PORT_LABELS.get(p, p) for p in absent)}"
+                          f"(hub.json runtime.default;要這個功能就裝一個有的 coding agent)")
     return mod
 
 

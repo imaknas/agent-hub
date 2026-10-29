@@ -142,7 +142,12 @@ def handle(event: str, raw: str, rt=None) -> str:
 def main(argv) -> int:
     try:
         if argv[:1] == ["install"] and len(argv) == 2:
-            runtime_ports.load(ports=("lifecycle",)).install_lifecycle(pathlib.Path(argv[1]).resolve())
+            try:
+                rt = runtime_ports.load(ports=("lifecycle",))
+            except runtime_ports.Unsupported as e:   # 沒有 hook 可裝:說原因,結束碼 3 讓呼叫端照「不支援」處理
+                print(e, file=sys.stderr)
+                return 3
+            rt.install_lifecycle(pathlib.Path(argv[1]).resolve())
             return 0
         if len(argv) == 1:
             out = handle(argv[0], _read_stdin())

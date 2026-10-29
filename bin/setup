@@ -27,7 +27,7 @@ need git     必要 "版本控制、memory 同步"            "macOS:xcode-selec
 need jq      必要 "librarian 讀 JSON"               "brew install jq"
 need uv      必要 "建平台的 Python(bin/setup-python)" "https://docs.astral.sh/uv/"
 need plutil  必要 "shell 腳本讀 hub.json"            "macOS 內建"
-need claude  必要 "agent(Claude Code CLI)"          "https://claude.com/claude-code,裝好後 claude 登入一次"
+need claude  選配 "coding agent(Claude Code;沒有的話 hub.json runtime.default 設 none,agent 的功能關掉)" "https://claude.com/claude-code,裝好後 claude 登入一次"
 need gh      選配 "onboard 時建 GitHub repo"         "brew install gh && gh auth login"
 need restic  選配 "雲端備份(backup 模組)"           "brew install restic"
 

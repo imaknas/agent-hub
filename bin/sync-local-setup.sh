@@ -47,8 +47,13 @@ fi
 # --- 1. 規則檔的受管區塊 ---
 # 寫到哪個檔由執行環境決定(runtime_ports 的 instructions;Claude Code 是 CLAUDE.local.md)。問不到就停,
 # 不猜一個預設檔名——那等於把 Claude 寫死回來。
-INSTR=$("$AGENT_HUB/bin/py" "$AGENT_HUB/bin/hub-runtime" instructions-file "$PWD") && [ -n "$INSTR" ] \
-  || { echo "sync-local-setup: hub-runtime 問不到規則檔要寫到哪,受管區塊沒有更新" >&2; exit 1; }
+# 結束碼 3 = 這個執行環境沒有規則檔(例:runtime.default 是 none):明確跳過,其他步驟照做。
+INSTR=$("$AGENT_HUB/bin/py" "$AGENT_HUB/bin/hub-runtime" instructions-file "$PWD" 2>/dev/null); rc=$?
+if [ "$rc" = 3 ]; then
+  say "這個執行環境沒有規則檔(hub.json runtime.default),受管區塊不寫"
+elif [ "$rc" != 0 ] || [ -z "$INSTR" ]; then
+  echo "sync-local-setup: hub-runtime 問不到規則檔要寫到哪,受管區塊沒有更新" >&2; exit 1
+else
 # 專案有在 memory 分支的 .agent-memory/RULES 登記額外規則(一行一個名稱,例如
 # engineering)的話,把 templates/rules/<名稱>.md 接在區塊後面。登記放在 memory
 # 分支上:換機器 recover 也還在;規則內容放 agent-hub:改一次,所有登記的專案都跟上。
@@ -95,10 +100,13 @@ if new != old:
     tmp.write_text(new)
     tmp.replace(path)
 PY
+fi
 
 # --- 2. hook ---
 # 由執行環境裝(runtime_ports 的 lifecycle):平台管的 hook 全部換成 `hub-event <事件>`,使用者自己加的留著
-"$AGENT_HUB/bin/py" "$AGENT_HUB/bin/hub-event" install "$PWD" && say "hook 已對齊"
+"$AGENT_HUB/bin/py" "$AGENT_HUB/bin/hub-event" install "$PWD" 2>/dev/null; rc=$?
+[ "$rc" = 0 ] && say "hook 已對齊"
+[ "$rc" = 3 ] && say "這個執行環境沒有 session 事件(hook),不裝"
 
 # --- 2b. .agent-memory/AGENT.md 對齊 templates/AGENT.md ---
 # AGENT.md 在 memory 分支上(會被 commit、同步到 mini),不是本機檔;
@@ -122,7 +130,7 @@ fi
 # --- 3. 本機檔一定要被 ignore ---
 exclude=$(git rev-parse --git-path info/exclude 2>/dev/null) || exit 0
 # .agent-memory 是平台自己的;其他是執行環境的本機專用檔(規則檔、本機設定),由它回報
-for f in .agent-memory $("$AGENT_HUB/bin/py" "$AGENT_HUB/bin/hub-runtime" local-ignores); do
+for f in .agent-memory $("$AGENT_HUB/bin/py" "$AGENT_HUB/bin/hub-runtime" local-ignores 2>/dev/null); do
   if git ls-files --error-unmatch "$f" >/dev/null 2>&1; then
     # 已經被 commit 進 repo:ignore 救不了,要那個專案自己的 session 處理
     say "⚠️ $f 已經被這個 repo 追蹤(commit 過),ignore 無效——請該專案的 session 處理"

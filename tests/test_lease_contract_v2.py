@@ -179,8 +179,13 @@ class StreamContract(unittest.TestCase):
         ],
     }
 
+    @staticmethod
+    def streaming():
+        """有長駐串流介面的實作(runtime_none 這種沒有的,由 load() 丟 Unsupported,不在這裡跑)。"""
+        return [n for n in runtime_ports.RUNTIMES if "stream" in runtime_ports.capabilities(n)]
+
     def test_every_runtime_has_a_scenario(self):
-        self.assertEqual(set(runtime_ports.RUNTIMES), set(self.SCENARIOS))
+        self.assertEqual(set(self.streaming()), set(self.SCENARIOS))
 
     def shape(self, events):
         out = []
@@ -199,7 +204,7 @@ class StreamContract(unittest.TestCase):
 
     def test_same_neutral_events(self):
         shapes = {}
-        for name in runtime_ports.RUNTIMES:
+        for name in self.streaming():
             rt = runtime_ports.load(name)
             events = [e for line in self.SCENARIOS[name] for e in rt.parse_stream(json.dumps(line))]
             for e in events:
@@ -215,13 +220,13 @@ class StreamContract(unittest.TestCase):
             self.assertEqual(s, first, name)
 
     def test_exit_classification(self):
-        for name in runtime_ports.RUNTIMES:
+        for name in self.streaming():
             rt = runtime_ports.load(name)
             self.assertEqual(rt.classify_exit(1, "Login expired, please run /login").data["error"], "agent_login", name)
             self.assertEqual(rt.classify_exit(1, "segfault").data["error"], "process_crashed", name)
 
     def test_resume_command(self):
-        for name in runtime_ports.RUNTIMES:
+        for name in self.streaming():
             cmd, hint = runtime_ports.load(name).resume_command("s1")
             self.assertIn("s1", cmd)
             self.assertTrue(hint)

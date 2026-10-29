@@ -142,7 +142,10 @@ def _cwds_in_use() -> list[str]:
 
 def _transcript_age_days(path: str) -> float | None:
     import runtime_ports  # 對話紀錄只透過介面讀(Claude Code 只是一個實作)
-    last = runtime_ports.load(ports=("transcripts",)).last_activity(path)
+    try:
+        last = runtime_ports.load(ports=("transcripts",)).last_activity(path)
+    except runtime_ports.Unsupported:   # 沒有對話紀錄:只看資料夾本身的時間
+        return None
     return round((time.time() - last.timestamp()) / 86400, 1) if last else None
 
 

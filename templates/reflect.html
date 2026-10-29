@@ -224,7 +224,7 @@ function render(w) {
   </div>
   <div class="hero">
     <h1>${esc(a ? a.headline : `${w.week} 活動統計`)}</h1>
-    ${a ? `<p class="summary">${esc(a.summary)}</p>` : `<p class="notice">${esc(w.analysis?.error || "這一週只有統計,沒有產生分析。")}</p>`}
+    ${a ? `<p class="summary">${esc(a.summary)}</p>` : `<p class="notice">${esc(w.unsupported ? "沒有對話的統計:" + w.unsupported : (w.analysis?.error || "這一週只有統計,沒有產生分析。"))}</p>`}
   </div>
   <div class="figures">
     <div class="fig"><b>${t.prompts}</b><span>則訊息 ${delta(t.prompts, t.prompts_prev)}</span></div>

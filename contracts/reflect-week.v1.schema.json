@@ -17,6 +17,7 @@
     "rhythm": {"type": "object", "required": ["late", "late_share", "longest_hours", "last_per_day"]},
     "delegation": {"type": "object", "required": ["agents", "peer"]},
     "changes": {"type": "object"},
-    "analysis": {"type": "object", "properties": {"meta": {"type": "object"}, "error": {"type": "string"}}}
+    "analysis": {"type": "object", "properties": {"meta": {"type": "object"}, "error": {"type": "string"}}},
+    "unsupported": {"type": "string", "description": "這個執行環境沒有對話紀錄:對話的統計(訊息、作息、交辦方式)沒有算,也沒有送模型分析;值是原因"}
   }
 }
