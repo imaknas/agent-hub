@@ -143,6 +143,18 @@ points:
     timeout_s: 1800
     output: {format: text}
     on_failure: say_so      # bridge 回報升級失敗
+  mailbox-propose:
+    caller: "bin/propose_apply.py(hub.json mailbox.handler: propose 時,hubbus dispatch 叫)"
+    shape: agent
+    model_group: standard
+    purpose: "信箱交辦的 propose 版:在丟棄式 worktree 裡讀專案、只寫 memory 筆記;要寄的信、結案寫在輸出,平台代寄(任何 agent 都能跑)"
+    # 寫入的保證來自丟棄式 worktree + 平台只採用 .agent-memory/memory/**,不靠工具的權限;不給跑指令的工具:要寄信也不用自己跑
+    permission_mode: acceptEdits
+    tools: Read,Edit,Write,Glob,Grep
+    extra_args: ["--strict-mcp-config"]
+    output: {format: json, schema: llm/mailbox-propose.schema.json}
+    timeout_s: 1800
+    on_failure: say_so      # 信不結案,下一輪 dispatch 照規則再派;propose_apply 印出原因
   mailbox-conversation:
     caller: bin/hubbus(dispatch → llm.py run,帶 runtime_claude.resume_args)
     shape: agent

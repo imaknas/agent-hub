@@ -1038,6 +1038,16 @@ def run_handler(c, proj, ws, rows) -> None:
     c.execute("BEGIN IMMEDIATE")
     claim(c, rows, "handler", run=run)
     c.execute("COMMIT")
+    if (hubconf.get("mailbox") or {}).get("handler") == "propose":
+        # agent 提議、平台套用(bin/propose_apply.py;docs/design/tool-agnostic.md):任何 agent 都能跑,在丟棄式 worktree 裡,
+        # 平台只採用 memory 筆記、代寄信。背景跑;它自己寫 status.json(running → done),同一個專案一次一個
+        log_f = AGENT_JOBS / f"mailbox-{proj}" / "propose.log"
+        log_f.parent.mkdir(parents=True, exist_ok=True)
+        with log_f.open("a") as f:
+            subprocess.Popen([sys.executable, str(HUB / "bin" / "propose_apply.py"), "mailbox", proj, *[r["id"] for r in rows]],
+                             stdout=f, stderr=f, start_new_session=True)
+        log(f"{proj}:派 agent(propose)處理 {len(rows)} 封({', '.join(r['id'] for r in rows)},{run})")
+        return
     prompt = AGENT_JOBS / f"mailbox-{proj}" / "prompt.md"   # 平台的樣板(不寫人名)填上這台的名字
     prompt.parent.mkdir(parents=True, exist_ok=True)
     prompt.write_text(hubconf.fill_names((HUB / "templates" / "prompts" / "mailbox.md").read_text()))

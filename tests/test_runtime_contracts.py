@@ -178,7 +178,32 @@ class FakeFixture:
         runtime_fake.reset()
 
 
-FIXTURES = {"claude": ClaudeFixture, "fake": FakeFixture}
+class CommandFixture:
+    """設定裡的指令樣板(runtime_command):用一支假的 CLI agent。它只回文字/JSON,沒有成本、session、回合數、「沒正常完成」。"""
+    REPORTS = frozenset()   # 這個 runtime 回報得出來的(cost、session、turns、incomplete)
+
+    def setup(self, tmp: pathlib.Path):
+        import runtime_command as m
+        import hubconf
+        script = tmp / "agent.py"
+        script.write_text("import os, sys\nmode = os.environ['CMD_MODE']\nprompt = open(sys.argv[1]).read()\n"
+                          "if mode == 'fail':\n    print('boom: not signed in', file=sys.stderr); sys.exit(3)\n"
+                          "print('{\"x\": 1}')\n")
+        self._get = hubconf.get
+        conf = {"run": [sys.executable, str(script), "{prompt_file}"]}
+        hubconf.get = lambda k, default=None: conf if k == "runtime.command" else self._get(k, default)
+        return m, {}
+
+    def configure_run(self, tmp: pathlib.Path, mode: str) -> dict:
+        return {**os.environ, "CMD_MODE": mode}
+
+    def teardown(self):
+        import hubconf
+        hubconf.get = self._get
+
+
+FIXTURES = {"claude": ClaudeFixture, "fake": FakeFixture, "command": CommandFixture}
+ALL_REPORTS = frozenset({"cost", "session", "turns", "incomplete"})
 
 
 def having(port: str) -> list[str]:
@@ -325,9 +350,14 @@ class RunContract(unittest.TestCase):
                 with tempfile.TemporaryDirectory() as d:
                     m, _ = fx.setup(pathlib.Path(d))
                     try:
+                        reports = getattr(fx, "REPORTS", ALL_REPORTS)
+                        if mode == "incomplete" and "incomplete" not in reports:
+                            continue   # 這個 runtime 分不出「有結果但沒正常完成」
                         env = fx.configure_run(pathlib.Path(d), mode)
                         rt = runtime_ports.load(name, ports=("agent",))
-                        task = runtime_ports.Task(point="p", prompt="hi", spec={}, env=env or None, timeout_s=30)
+                        task = runtime_ports.Task(point="p", prompt="hi", spec={}, env=env or None, timeout_s=30,
+                                                  output_schema={"type": "object"} if name == "command" else None)
+                        self.reports = reports
                         check(rt.run(task), rt.describe(task))
                     finally:
                         fx.teardown()
@@ -336,8 +366,14 @@ class RunContract(unittest.TestCase):
         def check(res, desc):
             self.assertTrue(res.ok)
             self.assertFalse(res.incomplete)
-            self.assertEqual((res.text, res.structured_output, res.cost_usd, res.session_id, res.turns),
-                             (RUN_OK["text"], RUN_OK["structured_output"], RUN_OK["cost"], RUN_OK["session"], RUN_OK["turns"]))
+            self.assertEqual(res.structured_output, RUN_OK["structured_output"])
+            if self.reports == ALL_REPORTS:
+                self.assertEqual((res.text, res.cost_usd, res.session_id, res.turns),
+                                 (RUN_OK["text"], RUN_OK["cost"], RUN_OK["session"], RUN_OK["turns"]))
+            else:   # 回報不出來的就是 None(不能編一個)
+                for field, attr in (("cost", "cost_usd"), ("session", "session_id"), ("turns", "turns")):
+                    if field not in self.reports:
+                        self.assertIsNone(getattr(res, attr), field)
             self.assertTrue(desc and all(isinstance(x, str) for x in desc))
         self.each_run("ok", check)
 

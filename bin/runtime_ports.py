@@ -58,7 +58,7 @@ import os
 from typing import NamedTuple
 
 # 登記表:名稱 → 模組。多個 runtime 可以同時登記,每個 session 用它自己的(設計原則 9)。
-RUNTIMES = {"claude": "runtime_claude", "fake": "runtime_fake", "none": "runtime_none"}
+RUNTIMES = {"claude": "runtime_claude", "fake": "runtime_fake", "none": "runtime_none", "command": "runtime_command"}
 DEFAULT = "claude"   # hub.json 沒寫 runtime.default 時的預設
 # 只實作 completion 介面的(LLM API):hub.json llm.providers 的 impl 寫這些名稱,或任何有 completion 介面的 runtime 名稱
 PROVIDERS = {"anthropic": "provider_anthropic", "openai": "provider_openai", "ollama": "provider_ollama"}

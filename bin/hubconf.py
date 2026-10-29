@@ -162,7 +162,7 @@ def tool(name: str) -> str:
     import shutil
     return shutil.which(name, path=f"{os.environ.get('PATH', '')}:{LAUNCHD_PATH}") or name
 
-STATE = ROOT / ".state"
+STATE = pathlib.Path(os.environ["AGENT_HUB_STATE"]) if os.environ.get("AGENT_HUB_STATE") else ROOT / ".state"   # 測試用另一個
 LOGS = ROOT / ".logs"
 REGISTRY_INDEX = STATE / "registry" / "index.json"
 

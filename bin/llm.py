@@ -137,12 +137,17 @@ def run(a) -> int:
     if a.cmd == "run" and spec.get("shape") == "completion" and not getattr(a, "dry_run", False):
         return run_completion(a, spec, prompt, model)
     try:
-        rt = runtime_ports.load(spec.get("runtime"), ports=("agent", "auth"))
+        rt = runtime_ports.load(spec.get("runtime"), ports=("agent",))
     except runtime_ports.Unsupported as e:   # 沒有 coding agent:照宣告的失敗路徑走,原因寫清楚
         return fail(a.point, spec, str(e))
-    env, why = auth_env(spec, rt)
-    if env is None:
-        return fail(a.point, spec, why)
+    if "auth" in runtime_ports.capabilities(spec.get("runtime")):
+        env, why = auth_env(spec, rt)
+        if env is None:
+            return fail(a.point, spec, why)
+    else:   # 沒有登入介面的 runtime(例:指令樣板):工具自己登入;平台的 key 照樣不往下傳
+        import completion
+        drop = {"LLM_AUTH"} | completion.key_envs()
+        env = {k: v for k, v in os.environ.items() if k not in drop}
     env["HUB_LLM_POINT"] = a.point   # 叫起的程序(含它的 hook)知道自己是平台的 headless 呼叫:hubbus 不把信送給它
     # 平台叫起的 agent 打得到 `agenthub …`(規則檔、信箱 prompt 只寫指令名稱,不寫 hub 裝在哪)
     env["PATH"] = f"{hubconf.ROOT / 'bin'}:{env.get('PATH', '')}".rstrip(":")

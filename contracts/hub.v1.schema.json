@@ -213,7 +213,10 @@
       }
     },
     "mailbox": {
-      "type": "object"
+      "type": "object",
+      "properties": {
+        "handler": {"enum": ["agent", "propose"], "description": "沒人收的交辦怎麼派:agent = runtime 的 agent 直接處理(要工具的權限,現在只有 Claude Code);propose = 丟棄式 worktree 裡跑任何 agent、平台只採用 memory 筆記、代寄信(bin/propose_apply.py)。預設 agent"}
+      }
     },
     "credentials": {
       "type": "object",
