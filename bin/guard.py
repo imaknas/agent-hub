@@ -11,7 +11,6 @@
 """
 from __future__ import annotations
 
-import json
 import os
 import pathlib
 import subprocess
@@ -42,7 +41,7 @@ def decide(target: dict, cwd) -> str | None:
     proj, root = own_project(pathlib.Path(cwd or os.getcwd()))
     if not proj:
         return None
-    how = f"跨專案的事請寄信:agenthub send --to <專案> --type request --text \"…\";或請 Knas 自己到那個專案開 session。"
+    how = "跨專案的事請寄信:agenthub send --to <專案> --type request --text \"…\";或請 Knas 自己到那個專案開 session。"
     where = target.get("elsewhere") or {}
     if where.get("kind") == "repository":
         return f"{proj} 的 session 不能在別的 repository({where.get('name', '')})開 session。{how}"

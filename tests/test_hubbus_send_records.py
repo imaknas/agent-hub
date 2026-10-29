@@ -9,7 +9,6 @@ send 不翻、開了就擋。question / info / progress 這一步還是 v1(Decis
 import importlib.machinery
 import importlib.util
 import io
-import json
 import pathlib
 import re
 import sys

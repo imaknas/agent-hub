@@ -21,7 +21,6 @@ memory 靠 agent 自己寫,容易在忙的時候斷掉:曾經有專案對話被
 from __future__ import annotations  # 系統的 python3(3.9,hook 用的就是它)也要能 import
 
 import datetime
-import json
 import pathlib
 import re
 import subprocess

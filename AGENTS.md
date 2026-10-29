@@ -324,7 +324,8 @@ agent-hub 的 session 開的子 session 做完、確認過結果之後就封存�
 ## 誰負責 commit/push agent-hub
 
 - **commit 閘門**(`git config core.hooksPath githooks`,`agenthub init` 會設;新 clone 也要):改到程式碼(`bin/` `tests/`
-  `contracts/` `templates/`…)的 commit,`bin/test-gate` 拿**暫存區**(不是 working tree)用平台的 Python、
+  `contracts/` `templates/`…)的 commit,`bin/test-gate` 拿**暫存區**(不是 working tree)先跑 `bin/lint`(ruff,只開 F 規則:
+  沒定義的名字、沒用到的 import/變數;規則在 `ruff.toml`,ruff 由 `bin/setup-python` 裝進平台的 venv),再用平台的 Python、
   假的 HOME 跑全部測試,都過、而且沒有測試寫進 HOME 才放行。只動資料檔的腳本 commit 不跑。
   `--no-verify` 跳過的會被 post-commit 記在 `.state/test-gate-bypassed.log`。重構前後外面看得到的行為用黃金檔固定
   (例:`tests/fixtures/llm-golden.json`),不要靠手動比對

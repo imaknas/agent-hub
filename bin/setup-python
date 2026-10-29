@@ -5,7 +5,7 @@
 #   setup-python --check   只驗證(版本 ≥ 3.13、套件 import 得到),不動任何東西;不合格 exit 1
 set -eu
 MIN="3.13"
-PKGS="pyyaml==6.0.3"            # 平台腳本唯一的第三方套件(bin/ 全部 import 盤點過,10-25)
+PKGS="pyyaml==6.0.3 ruff==0.14.0"   # pyyaml:平台腳本唯一 import 的第三方套件;ruff:bin/lint(commit 閘門),不 import
 dir="${AGENT_HUB_PYTHON:+$(dirname "$(dirname "$AGENT_HUB_PYTHON")")}"
 dir="${dir:-$HOME/.local/share/agent-hub/python}"
 py="$dir/bin/python3"
@@ -16,7 +16,7 @@ import sys
 assert sys.version_info >= (3, 13), f'Python {sys.version.split()[0]} 太舊(最低 $MIN)'
 import yaml
 print(f'平台的 Python:{sys.version.split()[0]}({sys.executable}),PyYAML {yaml.__version__}')
-"
+" && { "$dir/bin/ruff" --version >/dev/null 2>&1 || { echo "venv 裡沒有 ruff(跑 bin/setup-python)" >&2; false; }; }
 }
 
 if [ "${1:-}" = "--check" ]; then

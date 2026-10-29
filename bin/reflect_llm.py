@@ -12,7 +12,6 @@ from __future__ import annotations  # 系統的 python3(3.9)也要能 import
 
 import json
 import pathlib
-import re
 import subprocess
 
 import sys

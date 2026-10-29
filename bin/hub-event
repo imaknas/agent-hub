@@ -18,7 +18,6 @@ from __future__ import annotations
 import datetime
 import importlib.machinery
 import importlib.util
-import os
 import pathlib
 import select
 import subprocess

@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
-# commit 閘門:改到程式碼的 commit,平台的 Python 跑全部測試都過才放行(githooks/pre-commit 呼叫;也可以手動跑)。
+# commit 閘門:改到程式碼的 commit,lint(bin/lint:ruff 的 F 規則)沒有問題、平台的 Python 跑全部測試都過才放行
+# (githooks/pre-commit 呼叫;也可以手動跑)。
 #
 #   test-gate            檢查「暫存區」(要 commit 的內容),不是 working tree——同一份 working tree 可能有
 #                        別的 session 改到一半的檔案,測它們沒有意義
@@ -16,7 +17,7 @@ set -uo pipefail
 
 HUB="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$HUB" || exit 1
-CODE='^(bin|tests|contracts|templates|githooks|launchd|capabilities|agent-jobs)/|^hub\.json$'
+CODE='^(bin|tests|contracts|templates|githooks|launchd|capabilities|agent-jobs)/|^(hub\.json|ruff\.toml)$'
 PLATFORM_PY="$("$HUB/bin/py" -c 'import sys; print(sys.executable)')" || exit 1
 PYTHONS=("$PLATFORM_PY")
 
@@ -35,6 +36,10 @@ git checkout-index -a --prefix="$work/tree/" || { echo "test-gate:匯出暫存�
 private="$("$HUB/bin/py" "$HUB/bin/hubconf.py" dir config 2>/dev/null)/private-names.txt"
 [ -f "$private" ] && export AGENT_HUB_PRIVATE_NAMES="$private"
 
+# lint 也是對匯出的暫存區跑(用那份的 bin/lint 跟 ruff.toml);沒有 ruff 一樣不放行,不默默略過
+lint_fail=0
+lint_out="$(AGENT_HUB_PYTHON="$PLATFORM_PY" "$work/tree/bin/lint" "$work/tree" 2>&1)" || lint_fail=1
+
 i=0
 for py in "${PYTHONS[@]}"; do
   # 從 git hook 叫的時候環境裡有 GIT_DIR、GIT_INDEX_FILE…:不清掉,測試自己開的暫存 repo 會操作到這個 repo
@@ -49,6 +54,13 @@ done
 wait
 
 fail=0
+if [ "$lint_fail" -ne 0 ]; then
+  fail=1
+  echo "test-gate:lint 沒過(bin/lint,ruff 的 F 規則):" >&2
+  echo "$lint_out" | sed "s|$work/tree/||g" >&2
+else
+  echo "test-gate:lint OK"
+fi
 i=0
 for py in "${PYTHONS[@]}"; do
   summary="$(grep -E '^(Ran|OK|FAILED)' "$work/out$i" | tr '\n' ' ')"

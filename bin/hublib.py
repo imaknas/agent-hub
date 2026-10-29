@@ -8,7 +8,6 @@
 from __future__ import annotations  # 系統的 python3(3.9,hook 裡用的就是它)也要能 import:memory-nudge.py 靠它
 
 import datetime
-import json
 import pathlib
 import re
 

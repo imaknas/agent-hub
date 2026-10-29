@@ -1,0 +1,6 @@
+# ruff(bin/lint、commit 閘門):只開抓錯的 pyflakes 規則,排版跟命名風格不管。
+target-version = "py313"
+line-length = 140
+
+[lint]
+select = ["F"]

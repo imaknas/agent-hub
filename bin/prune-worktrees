@@ -8,7 +8,6 @@
                                          閒置 ≥ 14 天、沒有 process 在裡面、ignore 的檔案都能重建,才移除
                                          worktree(branch 留著)。規則跟理由在 bin/worktrees.py 檔頭
 """
-import json
 import pathlib
 import sys
 

@@ -1,0 +1,23 @@
+#!/usr/bin/env bash
+# 平台的 Python 程式碼的 lint:ruff,只開抓錯的 F 規則(pyflakes:沒定義的名字、沒用到的 import/變數…),不管排版。
+# 規則在 repo 根目錄的 ruff.toml(編輯器也讀那份);ruff 裝在平台的 venv(bin/setup-python,固定版本)。
+# commit 閘門(bin/test-gate)對暫存區匯出的副本跑;也可以手動跑。
+#   lint [目錄]     預設 hub 根目錄;有問題 exit 1,沒有 ruff exit 2(說要跑 bin/setup-python)
+# 沒有副檔名的腳本(第一行是 bin/py 的 shebang 或 python)ruff 自己認不出來,這裡列出來一起交給它。
+set -uo pipefail
+
+HUB="$(cd "$(dirname "$0")/.." && pwd)"
+dir="${1:-$HUB}"
+py="${AGENT_HUB_PYTHON:-$("$HUB/bin/py" -c 'import sys; print(sys.executable)')}" || exit 2
+ruff="$(dirname "$py")/ruff"
+[ -x "$ruff" ] || { echo "lint:平台的 venv 裡沒有 ruff($ruff);跑 bin/setup-python" >&2; exit 2; }
+
+cd "$dir" || exit 2
+files=()
+while IFS= read -r f; do
+  case "$f" in
+    *.py) files+=("$f") ;;
+    bin/*|githooks/*) [ -f "$f" ] && head -1 "$f" | grep -qE '^#!.*(/py|python)' && files+=("$f") ;;
+  esac
+done < <(find bin githooks tests capabilities -type f 2>/dev/null | sort)
+exec "$ruff" check --config "$dir/ruff.toml" --no-cache --quiet --output-format concise "${files[@]}"

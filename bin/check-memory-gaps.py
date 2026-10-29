@@ -93,7 +93,7 @@ def main() -> None:
             print("\n".join(gaps))
         return
     write_todo_block(hubconf.data_file("todo.md"), gaps)
-    hublib.digest_append("memory-gaps", f"## memory 沒在記的專案\n\n" + "\n".join(gaps) if gaps else "")
+    hublib.digest_append("memory-gaps", "## memory 沒在記的專案\n\n" + "\n".join(gaps) if gaps else "")
     names = " ".join(re.findall(r"\*\*([^*]+)\*\*", "\n".join(gaps)))
     print(f"memory 缺口檢查:{len(gaps)} 個專案有對話但沒記 memory" + (f"({names})" if names else ""))
 

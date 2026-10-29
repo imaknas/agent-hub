@@ -1187,7 +1187,7 @@ def dispatch(c, rt=None) -> int:
             log_once("dispatch-unsupported", f"信箱交辦不派 agent:{e}")
             return 0
         log_once("dispatch-unsupported", "")
-    live, leases, hub = rt.live_sessions(), lease_ids(), hubconf.hub_project()
+    live, leases = rt.live_sessions(), lease_ids()
     wait_cut = iso(now() - datetime.timedelta(minutes=CONVERSATION_WAIT_MIN))
     take_cut = iso(now() - datetime.timedelta(minutes=TAKE_TIMEOUT_MIN))
     waiting = 0

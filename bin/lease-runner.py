@@ -46,10 +46,8 @@ import http.server
 import json
 import os
 import pathlib
-import queue
 import re
 import secrets as pysecrets
-import shlex
 import subprocess
 import sys
 import threading

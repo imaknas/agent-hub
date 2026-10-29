@@ -160,7 +160,6 @@ def expand_env(value: str) -> str:
 def tool(name: str) -> str:
     """無人值守的程式要跑的指令(claude 等)的完整路徑:先照目前的 PATH,再照 LAUNCHD_PATH;找不到就原樣回傳。"""
     import shutil
-    import subprocess
     return shutil.which(name, path=f"{os.environ.get('PATH', '')}:{LAUNCHD_PATH}") or name
 
 STATE = pathlib.Path(os.environ["AGENT_HUB_STATE"]) if os.environ.get("AGENT_HUB_STATE") else ROOT / ".state"   # 測試用另一個

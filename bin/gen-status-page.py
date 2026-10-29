@@ -19,7 +19,6 @@ import pathlib
 import re
 import subprocess
 
-import yaml
 
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
 import hubconf  # noqa: E402
@@ -329,7 +328,7 @@ def main() -> None:
         wt_html = ("<h2 style=\"font-size:18px;margin-top:28px\">平行 session(worktree)</h2>"
                    + (f"<table><tr><th>專案</th><th>branch</th><th>最後 commit</th><th>狀態</th></tr>{''.join(wt_rows)}</table>"
                       if wt_rows else "<div class=sub>沒有進行中的 worktree</div>")
-                   + (f"<div class=sub style='margin-top:8px'>最近 7 天直接 commit 到 main(沒經過 merge-branch):"
+                   + ("<div class=sub style='margin-top:8px'>最近 7 天直接 commit 到 main(沒經過 merge-branch):"
                       + "、".join(f"{esc(p)} {n}" for p, n in sorted(ungated.items())) + "</div>" if ungated else "")
                    + prune_line())
         import hubconf
