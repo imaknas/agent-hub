@@ -17,9 +17,10 @@
                                    SSH 底下讀不到 keychain,claude 會是未登入
   schedulectl stop                完全停用排程器(launchctl bootout,不動 schedule.yaml)
   schedulectl start               重新啟動排程器(launchctl bootstrap)
-  schedulectl models               顯示 librarian.sh / consolidate-memory.py 目前用的模型設定
-  schedulectl set-model state|index|consolidate <model>   改其中一個模型(state=單一專案
-                                   STATE.md 判斷,index=跨專案關聯 index.md,consolidate=回頭清理)
+  schedulectl models               每個判斷點實際用的模型、從哪裡來(llm.model_for 跟 hub.json 的 llm 段)
+  schedulectl set-model <判斷點|state|index|consolidate> <model|default>
+                                   寫進 hub.json llm.points(default = 拿掉指定,回到組別的預設);state = 單一專案
+                                   STATE.md 判斷那幾個點,index = 跨專案 index.md 跟週報,consolidate = 回頭清理
 """
 import datetime
 import json
@@ -37,8 +38,10 @@ SCHEDULE = hubconf.config_file("schedule.yaml")
 LOG_DIR = HUB / ".logs"
 LABEL = "local.agent-hub-scheduler"
 PLIST = Path.home() / "Library/LaunchAgents" / f"{LABEL}.plist"
-MODELS_FILE = hubconf.config_file("models.env")
-DEFAULT_MODELS = {"STATE_MODEL": "haiku", "INDEX_MODEL": "sonnet", "CONSOLIDATE_MODEL": "opus"}
+# set-model 的簡稱 → 判斷點(以前 models.env 的 STATE_MODEL / INDEX_MODEL / CONSOLIDATE_MODEL 管的那幾個)
+MODEL_ALIASES = {"state": ["librarian-state", "librarian-todo-format", "librarian-state-edits"],
+                 "index": ["librarian-index", "librarian-index-edits", "reflect-week"],
+                 "consolidate": ["consolidate"]}
 
 
 def load_jobs():
@@ -187,44 +190,52 @@ def cmd_run(name):
     print(f"已開始執行 {name},輸出寫進 {log}(今天的排程不會再跑它)")
 
 
-def load_models():
-    models = dict(DEFAULT_MODELS)
-    if MODELS_FILE.exists():
-        for line in MODELS_FILE.read_text().splitlines():
-            line = line.strip()
-            if not line or line.startswith("#") or "=" not in line:
-                continue
-            k, v = line.split("=", 1)
-            models[k.strip()] = v.strip()
-    return models
-
-
-def save_models(models):
-    lines = [
-        "# librarian.sh / consolidate-memory.py 用的模型設定。用 `schedulectl models` 看、",
-        "# `schedulectl set-model state|index|consolidate <model>` 改。",
-    ]
-    lines += [f"{k}={v}" for k, v in models.items()]
-    MODELS_FILE.write_text("\n".join(lines) + "\n")
-    commit_hub_file(MODELS_FILE, "schedulectl: update models.env")
-
-
 def cmd_models():
-    models = load_models()
-    print(f"state(單一專案 STATE.md 判斷):{models['STATE_MODEL']}")
-    print(f"index(跨專案關聯 index.md)  :{models['INDEX_MODEL']}")
-    print(f"consolidate(回頭清理)        :{models['CONSOLIDATE_MODEL']}")
+    sys.path.insert(0, str(HUB / "bin"))
+    import completion
+    import llm
+    pins = (hubconf.get("llm") or {}).get("points") or {}
+    providers = completion.settings() is not None
+    for name, spec in llm.points()["points"].items():
+        group = spec.get("model_group") or "standard"
+        if providers and spec.get("shape") == "completion":
+            try:
+                t = completion.resolve(name, spec)
+                where, model = f"llm.providers.{t['provider']}", t["model"]
+            except completion.Refused as e:
+                where, model = f"⚠️ {e}", "?"
+        else:
+            model = llm.model_for(name, spec)
+            where = "hub.json llm.points" if (pins.get(name) or {}).get("model") else f"組別 {group}"
+        print(f"{name:24} {model or '(工具預設)':16} {where}")
+    print("\n改:schedulectl set-model <判斷點|state|index|consolidate> <model|default>")
 
 
 def cmd_set_model(which, model):
-    key = {"state": "STATE_MODEL", "index": "INDEX_MODEL", "consolidate": "CONSOLIDATE_MODEL"}.get(which)
-    if not key:
-        print(f"'{which}' 不是有效選項,只能是 state、index 或 consolidate")
+    sys.path.insert(0, str(HUB / "bin"))
+    import llm
+    known = llm.points()["points"]
+    targets = MODEL_ALIASES.get(which) or ([which] if which in known else None)
+    if not targets:
+        print(f"'{which}' 不是判斷點,也不是 {'、'.join(MODEL_ALIASES)}(判斷點清單:schedulectl models)")
         sys.exit(1)
-    models = load_models()
-    models[key] = model
-    save_models(models)
-    print(f"已把 {which} 用的模型設成 '{model}'")
+    f = hubconf.config_file("hub.json")
+    d = json.loads(f.read_text())
+    pins = d.setdefault("llm", {}).setdefault("points", {})
+    for t in targets:
+        if model == "default":
+            (pins.get(t) or {}).pop("model", None)
+            if not pins.get(t):
+                pins.pop(t, None)
+        else:
+            pins.setdefault(t, {})["model"] = model
+    if not pins:
+        d["llm"].pop("points")
+    if not d["llm"]:
+        d.pop("llm")
+    f.write_text(json.dumps(d, ensure_ascii=False, indent=2) + "\n")
+    commit_hub_file(f, f"schedulectl: {which} → {model}")
+    print(f"hub.json llm.points:{'、'.join(targets)} → {model}")
 
 
 def main():

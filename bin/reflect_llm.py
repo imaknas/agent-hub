@@ -11,7 +11,6 @@ json 照舊保留。欄位定義在 muninn repo;改了要兩邊一起改。
 from __future__ import annotations  # 系統的 python3(3.9)也要能 import
 
 import json
-import os
 import pathlib
 import re
 import subprocess
@@ -107,7 +106,8 @@ def stats_brief(stats: dict) -> str:
 
 
 def analyze(stats: dict) -> dict:
-    meta = {"model": os.environ.get("INDEX_MODEL", "sonnet"), "source": "stats", "excluded": sorted(EXCLUDED or [])}
+    import llm
+    meta = {"model": llm.model_for("reflect-week") or "工具預設", "source": "stats", "excluded": sorted(EXCLUDED or [])}
     if not stats["totals"]["prompts"]:
         return {"error": "這週沒有活動可分析", "meta": meta}
     d = muninn_digests(stats["week"])
@@ -123,10 +123,12 @@ def analyze(stats: dict) -> dict:
         prompt = PROMPT.format(digest_intro=NO_DIGEST_INTRO, stats=stats_brief(stats), digests="")
     # 判斷點 reflect-week(工具全關、schema:contracts/llm-points.yaml)
     res = subprocess.run([sys.executable, str(pathlib.Path(__file__).resolve().parent / "llm.py"),
-                          "run", "reflect-week", "--model", meta["model"]],
+                          "run", "reflect-week"],
                          input=prompt, capture_output=True, text=True, timeout=1300)
     try:
-        out = json.loads(res.stdout).get("structured_output")
+        got = json.loads(res.stdout)
+        out = got.get("structured_output")
+        meta["model"] = got.get("llm_model") or meta["model"]   # 實際用的(hub.json llm 可能交給別家)
     except ValueError:
         out = None
     if not isinstance(out, dict):

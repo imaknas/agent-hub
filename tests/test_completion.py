@@ -178,6 +178,13 @@ class ConfigErrors(unittest.TestCase):
         for want in ("不認得", "沒有 strong", "不是宣告過的判斷點", "providers 裡的一家"):
             self.assertTrue(any(want in e for e in errs), (want, errs))
 
+    def test_points_alone_pin_the_runtime_model(self):
+        self.assertEqual(completion.config_errors({"points": {"consolidate": {"model": "m"}}}), [])
+        errs = completion.config_errors({"points": {"consolidate": {}}, "use": {"fast": "a"}})
+        for want in ("沒有 provider 就要寫 model", "沒有 providers"):
+            self.assertTrue(any(want in e for e in errs), (want, errs))
+        self.assertTrue(any("要寫 use" in e for e in completion.config_errors({"providers": self.OK["providers"]})))
+
 
 class FakeServer:
     """本機的假 API:記下收到的請求,照 handler 回應。"""

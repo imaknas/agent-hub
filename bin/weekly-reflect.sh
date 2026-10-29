@@ -6,10 +6,6 @@
 set -uo pipefail
 export PATH="/opt/homebrew/bin:/usr/local/bin:$PATH"
 HUB="${AGENT_HUB_ROOT:-$(cd "$(dirname "$0")/.." && pwd)}"
-INDEX_MODEL="sonnet"
-source "$(dirname "$0")/hubpaths.sh"
-[ -f "$HUB_CONFIG/models.env" ] && source "$HUB_CONFIG/models.env"
-export INDEX_MODEL
 
 cd "$HUB" && git pull -q || true
 out=$("$HUB/bin/py" "$HUB/bin/weekly-reflect.py" --llm "$@") || { echo "weekly-reflect.py 失敗" >&2; exit 1; }

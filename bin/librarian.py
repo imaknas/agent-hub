@@ -8,7 +8,7 @@ digest、checkpoint):路徑、名字都經過 hubconf,不用在 shell 裡各自�
 
 robust 化的決定(沿用):
 1. 單一專案的 STATE.md 判斷用 haiku(量大、任務單純);跨專案關聯用 sonnet。模型、權限、工具、輸出 schema 宣告在
-   contracts/llm-points.yaml(判斷點 librarian-state、librarian-todo-format、librarian-index),models.env 可覆寫。
+   contracts/llm-points.yaml(判斷點 librarian-state、librarian-todo-format、librarian-index),hub.json llm.points 可覆寫。
 2. 用「實際 git 狀態」而不是模型自報的 state_updated 決定要不要 commit,兩者不一致時記警告。
 3. 每次真的動到 STATE.md,都寫一筆到 review-log.md(連 diff 一起),給人事後抽查,不做阻斷式審批。
 4. push 都經過 git-safe-push.sh(遇到分岔自動 pull 重試;真的內容衝突才失敗讓人看)。
@@ -56,17 +56,10 @@ total_cost = 0.0
 cost_added = False   # shell 版沒有任何成本時印 $0,有才印 %.6f
 
 
-def models() -> tuple[str, str]:
-    """(STATE_MODEL, INDEX_MODEL):預設 haiku / sonnet,config 的 models.env 有寫就照它。llm.py 也照同一份 models.env
-    選模型(--model > 環境變數 > models.env > 預設),所以這裡寫進 log 的就是實際用的。"""
-    vals = {"STATE_MODEL": "haiku", "INDEX_MODEL": "sonnet"}
-    env = hubconf.config_file("models.env")
-    if env.exists():
-        for line in env.read_text().splitlines():
-            m = re.fullmatch(r"\s*([A-Z_][A-Z0-9_]*)=(\S+)\s*", line)
-            if m and m.group(1) in vals:
-                vals[m.group(1)] = m.group(2)
-    return vals["STATE_MODEL"], vals["INDEX_MODEL"]
+def used_model(obj) -> str:
+    """這次呼叫實際用的模型:llm.py 回報的 llm_model(模型只在 llm.model_for 算,這裡不另外猜)。"""
+    m = (obj or {}).get("llm_model")
+    return m if isinstance(m, str) and m else "工具預設"
 
 
 def log(msg: str) -> None:
@@ -511,7 +504,7 @@ def dangling_refs(d: pathlib.Path) -> str:
     return "".join(f" {r}" for r in refs if not glob.glob(r, root_dir=d))
 
 
-def process(proj: str, d: pathlib.Path, handoffs: list[dict], state_model: str, digest: list[str]) -> None:
+def process(proj: str, d: pathlib.Path, handoffs: list[dict], digest: list[str]) -> None:
     log(f"--- {proj} ---")
     if run(["git", "pull", "-q"], cwd=d, to_log=True).returncode != 0:
         log(f"{proj}: git pull failed, skip")
@@ -571,7 +564,7 @@ def process(proj: str, d: pathlib.Path, handoffs: list[dict], state_model: str, 
         log(f"{proj}: claude invocation failed (exit {rc}), 已還原副本,checkpoint 不推進")
         return
     if (cost := add_cost(obj)):
-        log(f"{proj}: call cost ${cost} (model: {state_model})")
+        log(f"{proj}: call cost ${cost} (model: {used_model(obj)})")
 
     so = (obj or {}).get("structured_output")
     # 拿不到 structured_output(每幾晚會發生一次):照常用 git 判斷實際有沒有改、有改就 commit,只是沒有摘要可放
@@ -644,7 +637,6 @@ def process(proj: str, d: pathlib.Path, handoffs: list[dict], state_model: str, 
 def main() -> int:
     STATE_DIR.mkdir(parents=True, exist_ok=True)
     LOG_DIR.mkdir(parents=True, exist_ok=True)
-    state_model, index_model = models()
     copies = hubconf.p("memory_copies", "~/.memory-copies")
     log("=== librarian run start ===")
     # 隔離區只是留證據,14 天後自動清掉
@@ -656,7 +648,7 @@ def main() -> int:
     handoffs = load_handoffs()
     digest: list[str] = []
     for d in sorted(p for p in copies.glob("*/") if (p / ".git").is_dir()):
-        process(d.name, d, handoffs, state_model, digest)
+        process(d.name, d, handoffs, digest)
 
     # 今天的 digest:專案摘要這一段,再請模型標出專案之間的關聯(index.md)。digest 是分段寫的(hublib.digest_append):
     # 各 job 寫自己那段,重跑只換自己的
@@ -671,7 +663,7 @@ def main() -> int:
         rc, obj, text = llm("librarian-index", index_prompt(), hubconf.data_dir())
         if rc == 0 and text:
             if (cost := add_cost(obj)):
-                log(f"index.md: call cost ${cost} (model: {index_model})")
+                log(f"index.md: call cost ${cost} (model: {used_model(obj)})")
             so = (obj or {}).get("structured_output")
             rel = so.get("relations_found") if isinstance(so, dict) else None
             log(f"index.md: {jstr(rel) if present(rel) else ''}")

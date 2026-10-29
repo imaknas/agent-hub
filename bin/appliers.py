@@ -69,7 +69,7 @@ def load(name: str):
 
 
 # config 檔(new-user.md 3.0):git 裡追蹤的是這些;第 6 步搬到 config repo 之後由 hubconf 指過去
-CONFIG_PATHS = ["hub.json", "models.env", "mirror-list.txt", "services.tsv", "schedule.yaml", "projects"]
+CONFIG_PATHS = ["hub.json", "mirror-list.txt", "services.tsv", "schedule.yaml", "projects"]
 
 
 def applied_path() -> pathlib.Path:

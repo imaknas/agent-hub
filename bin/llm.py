@@ -68,22 +68,20 @@ def output_schema(spec: dict) -> str | None:
     return out.get("schema") if out.get("format") == "json" else None
 
 
-def config_models() -> dict:
-    """config 的 models.env(`KEY=value`,可以有 export、引號、註解)。判斷點的 model_env 在環境變數裡沒有時讀這裡——
-    以前只有呼叫端 source 了而且 export 才生效,librarian.sh 沒 export,改設定一直沒用(10-27 第四次盲審查到)。"""
-    out = {}
-    try:
-        text = hubconf.config_file("models.env").read_text()
-    except OSError:
-        return out
-    for line in text.splitlines():
-        line = line.split("#", 1)[0].strip()
-        if line.startswith("export "):
-            line = line[len("export "):].strip()
-        key, eq, val = line.partition("=")
-        if eq and key.strip():
-            out[key.strip()] = val.strip().strip("'\"")
-    return out
+def model_for(point: str, spec: dict | None = None, cli: str | None = None, runtime: str | None = None) -> str | None:
+    """這個判斷點交給執行環境(runtime)時用哪個模型——全平台只在這裡算(librarian、consolidate、週報、schedulectl 都問這裡,
+    不各自留一份預設表):--model > hub.json `llm.points.<點>.model`(沒指定 provider、或 provider 就是這個 runtime)>
+    runtime 的組別表(`runtime_ports.models`)。None = 不指定,用工具自己的預設(model_group: default 的點)。
+    hub.json 有 llm.providers 時 completion 點由 completion.resolve 選,不經過這裡。"""
+    import runtime_ports
+    if cli:
+        return cli
+    spec = spec if spec is not None else points()["points"].get(point) or {}
+    name = runtime or spec.get("runtime") or runtime_ports.default_name()
+    pin = ((hubconf.get("llm") or {}).get("points") or {}).get(point) or {}
+    if pin.get("model") and pin.get("provider") in (None, name):
+        return pin["model"]
+    return runtime_ports.models(name).get(spec.get("model_group") or "standard")
 
 
 def auth_mode(spec: dict) -> str:
@@ -103,8 +101,8 @@ def auth_env(spec: dict, rt) -> tuple[dict | None, str]:
 
 def run_completion(a, spec: dict, prompt: str, model: str | None) -> int:
     """shape: completion 的判斷點:交給 completion.py(每家同一套處理)。
-    hub.json 有 llm 區塊 → 照它選 provider 跟模型(呼叫端的 --model 是舊的 models.env 路徑,這時不用);
-    沒有 → 交給 runtime.default 的 completion 介面,模型照舊的設定。"""
+    hub.json 有 llm.providers → completion.resolve 選 provider 跟模型(--model 不用);
+    沒有 → 交給 runtime.default 的 completion 介面,模型是 model_for 算的那個。"""
     import completion
     import runtime_ports
     schema = json.loads((POINTS.parent / output_schema(spec)).read_text()) if output_schema(spec) else None
@@ -131,9 +129,7 @@ def run(a) -> int:
         print(f"llm.py:{a.point} 不是宣告過的判斷點(contracts/llm-points.yaml)", file=sys.stderr)
         return 2
     prompt = "" if a.cmd == "exec" else (pathlib.Path(a.prompt_file).read_text() if a.prompt_file else sys.stdin.read())
-    # --model > 環境變數 > config 的 models.env > 宣告的預設
-    menv = spec.get("model_env")
-    model = a.model or (menv and (os.environ.get(menv) or config_models().get(menv))) or spec.get("model_default")
+    model = model_for(a.point, spec, a.model)
     if a.cmd == "run" and spec.get("shape") == "completion" and not getattr(a, "dry_run", False):
         return run_completion(a, spec, prompt, model)
     try:
@@ -179,7 +175,8 @@ def run(a) -> int:
     print(json.dumps({"type": "result", "is_error": res.incomplete, "result": res.text,
                       "structured_output": res.structured_output, "total_cost_usd": res.cost_usd,
                       "session_id": res.session_id, "num_turns": res.turns, "subtype": res.stop,
-                      "permission_denials": list(res.denials), "llm_point": a.point}, ensure_ascii=False))
+                      "permission_denials": list(res.denials), "llm_point": a.point, "llm_model": model},
+                     ensure_ascii=False))
     return 0
 
 

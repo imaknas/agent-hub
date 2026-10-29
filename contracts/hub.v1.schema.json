@@ -266,8 +266,7 @@
     },
     "llm": {
       "type": "object",
-      "description": "判斷點用哪一家 LLM、哪個模型、key 在哪(bin/completion.py 檔頭;docs/design/llm-providers.md)。沒有 = 判斷點照舊交給 runtime.default。語意檢查在 completion.config_errors()",
-      "required": ["providers", "use"],
+      "description": "判斷點用哪一家 LLM、哪個模型、key 在哪(bin/completion.py 檔頭;docs/design/llm-providers.md)。沒有 providers = 判斷點交給 runtime.default,模型照執行環境的組別表;points 可以單獨寫(個別判斷點的模型)。模型怎麼選只在 llm.model_for / completion.resolve;語意檢查在 completion.config_errors()",
       "properties": {
         "_comment": {"type": "string"},
         "providers": {"type": "object"},

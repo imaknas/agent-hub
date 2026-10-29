@@ -65,7 +65,7 @@ class Golden(unittest.TestCase):
 
     def observe(self, point: str, variant: dict) -> dict:
         spec = self.m.points()["points"][point]
-        env = {k: v for k, v in os.environ.items() if k not in ("LLM_AUTH", TOKEN_ENV, spec.get("model_env") or "")}
+        env = {k: v for k, v in os.environ.items() if k not in ("LLM_AUTH", TOKEN_ENV)}
         if "LLM_AUTH" in variant:
             env["LLM_AUTH"] = variant["LLM_AUTH"]
         with mock.patch.dict(os.environ, env, clear=True):

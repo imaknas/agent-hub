@@ -3,7 +3,7 @@
 新程式一律從這裡拿路徑、名稱、owner,不要再寫死 ~/agent-hub、~/services、專案名稱。
   - hub 根目錄:這個檔案所在的 bin/ 的上一層;環境變數 AGENT_HUB_ROOT 可以覆蓋
   - 設定:<config>/hub.json(實例目錄,見下)
-  - 實例目錄(docs/design/new-user.md 3.1):使用者自己的東西分三塊——config(hub.json、登錄、models.env…;
+  - 實例目錄(docs/design/new-user.md 3.1):使用者自己的東西分三塊——config(hub.json、登錄、schedule.yaml…;
     config repo)、data(digest、todo、review-log、reflect…;不進 git、靠備份)、secrets。位置由**一個指標檔**決定:
     <hub>/.hub-home 寫著實例目錄的路徑 → <實例>/config、<實例>/data、<實例>/secrets;沒有這個檔 = 舊的擺法
     (三塊都是 hub 根目錄、secrets 是 <hub>/.secrets),也就是搬家之前的樣子。搬家時最後才寫指標檔,刪掉就退回。
@@ -51,7 +51,7 @@ def _part(env: str, sub: str, legacy: pathlib.Path) -> pathlib.Path:
 
 
 def config_dir() -> pathlib.Path:
-    """config(hub.json、登錄、models.env、mirror-list.txt、services.tsv、schedule.yaml)所在。"""
+    """config(hub.json、登錄、mirror-list.txt、services.tsv、schedule.yaml)所在。"""
     return _part("AGENT_HUB_CONFIG", "config", ROOT)
 
 

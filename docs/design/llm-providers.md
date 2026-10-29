@@ -112,7 +112,7 @@ headless token)是其中一種設定,**每一步上線都不改變它**。
 - **模型名稱寫在 provider 裡**(每家的名字只出現在那家),`use` 只說哪一組交給哪家;agent runtime 用的模型也從它自己那個
   provider 的 `models` 拿(`claude` 那個),不另外一張表。
 - 模型可以是字串或 `{name, context}`(Ollama 的名字本身有冒號,不用 `provider:model` 字串)。
-- **沒有 `llm` 區塊 = 現在的行為**:全部交給 `runtime.default` 的 completion 介面,模型照 `models.env`。Knas 這台不用改設定。
+- **沒有 `llm.providers` = 交給 `runtime.default`**:模型照執行環境轉接器的組別表(`runtime_<名稱>.MODELS`),`llm.points.<點>.model` 可以單獨寫來蓋過。模型怎麼選全平台只在 `llm.model_for`(10-29 落地,`models.env` 拿掉)。
 - `schedulectl set-model` 改寫 `hub.json` 的 `points`。
 
 ### 3. API key
@@ -166,7 +166,7 @@ headless token)是其中一種設定,**每一步上線都不改變它**。
    平台寫出什麼」(現在的替身是直接寫檔模擬 agent,要跟著改);`librarian.py` 裡「沒有 structured_output 以實際檔案為準」那條
    路徑切換後拿掉。
 5. 隱私路由(`location` 檢查、`material`、`privacy.memory`、digest 過濾)。
-6. `models.env` → `hub.json`(`librarian.py` 自己讀 `models.env` 的那條路一起換掉);`hub init` / `doctor` 問 provider 跟 key。
+6. ✅ `models.env` → `hub.json`(10-29:`llm.model_for` 是唯一的算法,librarian / consolidate / 週報記 llm.py 回報的 `llm_model`;`model_group: default` = 不指定、用工具的預設;`schedulectl set-model` 寫 `llm.points`)。`hub init` / `doctor` 問 provider 跟 key。
 7. 用本機 Ollama 跑一次完整的夜間流程(隔離的 HOME,不送雲端):證明只有本機模型也能跑。
 
 ## 不在範圍(之後)

@@ -43,7 +43,7 @@ agent-hub 要給任何 coding agent、任何 LLM、任何 key 的人用。
 
 ## 先查這裡,不要自己猜
 
-- **使用者的東西放哪**:`hubconf.config_dir()`(hub.json、登錄、models.env…)、`data_dir()`(digest、todo、review-log、reflect…)、
+- **使用者的東西放哪**:`hubconf.config_dir()`(hub.json、登錄、schedule.yaml…)、`data_dir()`(digest、todo、review-log、reflect…)、
   `secrets_dir()`;shell 用 `bin/hubpaths.sh`。10-26 起 `<hub>/.hub-home` 指到 `~/.agent-hub`(config 是本機 git repo、data、secrets);
   hub 根目錄的 hub.json、todo.md、digest/… 是搬家前的舊副本,不再更新(確認後會 git rm)。新程式一律經過這些,
   不要自己拼路徑(ratchet 會擋)
@@ -186,7 +186,7 @@ agent-hub 要給任何 coding agent、任何 LLM、任何 key 的人用。
   Claude job 的報告全文
 - `bin/librarian.sh`——「圖書館員」,讀各專案 `memory/` 的新增內容,判斷
   要不要更新 `STATE.md`,並產生跨專案 `digest/YYYY-MM-DD.md` + 更新
-  `index.md`。模型設定在 `models.env`。後面的機械步驟各自是 `after: librarian` 的平台 job(`projects/agent-hub.yaml`):
+  `index.md`。模型:判斷點宣告要多強(`model_group`),實際模型只由 `llm.model_for` 算(執行環境的組別表 → hub.json `llm.points` 蓋過;`schedulectl models` 看、`set-model` 改)。後面的機械步驟各自是 `after: librarian` 的平台 job(`projects/agent-hub.yaml`):
   knas-tasks、reconcile-questions、todo、memory-gaps、`librarian-publish`(名冊 + 只 commit digest/index/review-log/todo);
   digest 分段寫(`hublib.py digest-append <段落>`),每個 job 只換自己那段
 - `bin/consolidate-memory.py`——「回頭清理」,每晚 02:00(librarian 之前):超過 14 天的 memory 日期檔
@@ -271,7 +271,7 @@ memory 追蹤但不需要在 mini 上執行任何東西的專案(目前大多數
   worktree(連 branch,**由人跑**)。另外平台 job `agent-hub/prune-worktrees`(每晚 04:30,`--auto`)自動清**沒有任何 session 開著**的
   孤兒 worktree(有 session 開著就不碰,就算閒置):閒置 ≥ 2 天只刪重建得回來的依賴(資料夾留著,session 開始時會提醒
   重建)、≥ 14 天才移除 worktree(branch 留著);規則在 `bin/worktrees.py` 檔頭
-- **config pipeline**(`docs/design/new-user.md` 3.7):config = `hub.json`、登錄、`models.env`、`mirror-list.txt`、`services.tsv`、
+- **config pipeline**(`docs/design/new-user.md` 3.7):config = `hub.json`、登錄、`mirror-list.txt`、`services.tsv`、
   `schedule.yaml`。`bin/agenthub config check`(= `bin/config-check`,githooks/pre-commit 對暫存區跑;`hub.json` 照
   `contracts/hub.v1.schema.json`,不認得的鍵會被擋)、`plan`(會改什麼,不動任何東西)、`apply`(check → 套用 → 再 plan 要是空的 →
   記 `.state/config-applied.json` + 匯流排 `config.applied`;狀態頁標題顯示生效的 config commit)。套用者登記在 `bin/appliers.py`
@@ -353,6 +353,6 @@ agent-hub 的 session 開的子 session(start_session)做完、確認過結果�
   的問題,只通知(`hubbus send --to agent-hub`,或告訴使用者),不直接改——2026-09-25
   兩個 session 同時改這份 working tree,commit 互相夾帶對方改到一半的檔案
 - **腳本寫的被版控檔案**(`projects/<name>.yaml`(onboard/rename/manifest.update)、`mirror-list.txt`、
-  `index.md`、`todo.md`、`reflect/`、`schedule.yaml`、`models.env`、`digest/`、`review-log.md`):
+  `index.md`、`todo.md`、`reflect/`、`schedule.yaml`、`hub.json`(schedulectl set-model)、`digest/`、`review-log.md`):
   寫檔的腳本自己用 `bin/commit-hub-files.sh` 只 commit 那幾個檔案,所以
   `onboard-project.sh` 從哪個 session 跑都安全

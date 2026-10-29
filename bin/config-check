@@ -11,7 +11,7 @@
   hub.json           contracts/hub.v1.schema.json(minischema)+ 不認得的頂層鍵(_ 開頭的說明鍵除外)——打錯字的鍵
                      (例:"assitant")不會被默默忽略
   projects/          registry.refresh() 的驗證(schema、名稱重複、after: 指到存在的 job、run 解析得到…)
-  models.env         每行 KEY=值
+  models.env         不准存在(10-29 起模型設定在 hub.json llm.points)
   mirror-list.txt    每行一個 git remote
   services.tsv       每列欄數跟表頭一樣、label 不重複
   schedule.yaml      讀得進來、job 名稱不重複(切換期間的舊格式)
@@ -64,11 +64,9 @@ def check(root: pathlib.Path) -> list[str]:
                  else "排程(after/before)" if name == "(jobs)" else f"projects/{name}.yaml")
         errs += [f"{where}:{e}" for e in es]
 
-    env = root / "models.env"
-    if env.exists():
-        for i, line in enumerate(env.read_text().splitlines(), 1):
-            if line.strip() and not line.lstrip().startswith("#") and not re.fullmatch(r"[A-Z_][A-Z0-9_]*=\S+", line.strip()):
-                errs.append(f"models.env:{i}:不是 KEY=值:{line.strip()}")
+    if (root / "models.env").exists():   # 10-29 起模型設定只在 hub.json(llm.model_for),這份不再有人讀
+        errs.append("models.env:不再使用——模型設定搬進 hub.json 的 llm.points(schedulectl set-model state|index|consolidate "
+                    "<model>,值跟組別預設一樣就不用寫),然後刪掉 models.env")
 
     ml = root / "mirror-list.txt"
     if ml.exists():

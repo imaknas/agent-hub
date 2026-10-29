@@ -8,7 +8,7 @@ reference/ 跟 STATE.md 裡被較新紀錄推翻的敘述。librarian 只往前�
    一次最多 MAX_FOLD_BYTES(由舊到新);沒有就跳過。同一個專案成功後 MIN_INTERVAL_DAYS 內不再跑。
 2. 在暫存目錄 clone 一份乾淨的 memory repo(從 bare repo),模型只在那裡工作——~/.memory-copies
    在 push 成功前完全不動,失敗就整個丟掉,不會留下改一半的東西。
-3. 模型(CONSOLIDATE_MODEL,預設 opus,models.env 可改)只准寫 ./memory/reference/** 跟
+3. 模型(判斷點 consolidate 的 model_group: strong;hub.json llm.points.consolidate.model 可改)只准寫 ./memory/reference/** 跟
    ./STATE.md(--permission-mode dontAsk + --allowedTools,prompt 擋不住 haiku 亂改別的檔案);
    沒有 Bash,不能刪檔。它用 structured output 回報每個日期檔放到哪裡、沒保留什麼、修正了哪些敘述
    (每一筆修正都要附較新檔案的逐字引文)。
@@ -108,18 +108,6 @@ def git(*args, cwd=None, git_dir=None, check=True) -> str:
     if check and r.returncode != 0:
         raise RuntimeError(f"git {' '.join(args)} 失敗:{r.stderr.strip()[:500]}")
     return r.stdout
-
-
-def load_models() -> dict:
-    models = {"CONSOLIDATE_MODEL": "opus"}
-    env = hubconf.config_file("models.env")
-    if env.exists():
-        for line in env.read_text().splitlines():
-            line = line.strip()
-            if line and not line.startswith("#") and "=" in line:
-                k, v = line.split("=", 1)
-                models[k.strip()] = v.strip()
-    return models
 
 
 def load_state() -> dict:
@@ -265,7 +253,7 @@ memory/ 的結構:
 
 def run_model(prompt: str, repo: pathlib.Path, model: str) -> tuple[dict | None, str]:
     # 判斷點 consolidate(權限 dontAsk、只准 Edit memory/reference/** 跟 STATE.md、schema:contracts/llm-points.yaml)
-    cmd = [sys.executable, str(HUB / "bin" / "llm.py"), "run", "consolidate", "--model", model]
+    cmd = [sys.executable, str(HUB / "bin" / "llm.py"), "run", "consolidate", *(["--model", model] if model else [])]
     env = dict(GIT_ENV)  # claude 的憑證由 llm.py 決定(預設 headless token)
     try:
         r = subprocess.run(cmd, input=prompt, cwd=repo, env=env, capture_output=True, text=True, timeout=CALL_TIMEOUT + 60)
@@ -612,7 +600,8 @@ def main() -> int:
                   f"上次成功 {s['last_ok'] or '-':10}  {s.get('skip') or '到期(這次 %d 個)' % len(s['batch'])}")
         return 0
 
-    model = load_models().get("CONSOLIDATE_MODEL", "opus")
+    import llm
+    model = llm.model_for("consolidate")   # 全平台只在那裡算(hub.json llm.points 可以蓋過)
     due = [s for s in cands if not s.get("skip")]
     for s in cands:
         if s.get("skip") and args.project:

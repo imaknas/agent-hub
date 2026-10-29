@@ -173,7 +173,7 @@ def parse_json(text: str):
 
 
 def runtime_target(name: str, model: str | None, auth: str) -> dict:
-    """沒有 llm 區塊時:交給執行環境(runtime.default)的 completion 介面,模型照舊的設定(models.env / 宣告的預設)。"""
+    """沒有 llm.providers 時:交給執行環境(runtime.default)的 completion 介面,模型由 llm.model_for 決定。"""
     return {"provider": name, "impl": name, "conf": {"auth": auth}, "group": None, "model": model,
             "context": None, "price": None, "location": "cloud"}
 
@@ -228,7 +228,7 @@ def run(point: str, spec: dict, prompt: str, schema: dict | None, sleep=time.sle
 def _out(point, target, text, obj, cost) -> dict:
     # 欄位名稱跟 llm.py 原本給呼叫端的一樣(librarian、consolidate…讀這些)
     return {"type": "result", "is_error": False, "result": text, "structured_output": obj, "total_cost_usd": cost or None,
-            "llm_point": point, "provider": target["provider"], "model": target["model"]}
+            "llm_point": point, "provider": target["provider"], "model": target["model"], "llm_model": target["model"]}
 
 
 def health_all() -> list[tuple[str, bool, str]]:
@@ -273,8 +273,12 @@ def config_errors(llm: dict) -> list[str]:
         if KEYLIKE.search(v):
             errs.append(f"{where} 看起來是 key 的值——值放 secrets 目錄({{\"secret\": 檔名}})或環境變數({{\"env\": 名稱}})")
     providers = llm.get("providers") or {}
-    if not isinstance(providers, dict) or not providers:
-        return errs + ["providers 至少要有一家"]
+    if not isinstance(providers, dict):
+        return errs + ["providers 要是物件"]
+    if not providers and llm.get("use"):
+        errs.append("寫了 use 但沒有 providers(只想指定個別判斷點的模型:只寫 points)")
+    if providers and not llm.get("use"):
+        errs.append("有 providers 就要寫 use(fast / standard / strong 各交給哪一家)")
     for name, p in providers.items():
         if not isinstance(p, dict):
             errs.append(f"providers.{name} 要是物件")
@@ -318,6 +322,10 @@ def config_errors(llm: dict) -> list[str]:
     for pt, pin in (llm.get("points") or {}).items():
         if known is not None and pt not in known:
             errs.append(f"points.{pt}:不是宣告過的判斷點")
-        if not isinstance(pin, dict) or pin.get("provider") not in providers:
+        if not isinstance(pin, dict):
+            errs.append(f"points.{pt} 要是物件({{model}} 或 {{provider, model?}})")
+        elif pin.get("provider") is not None and pin["provider"] not in providers:
             errs.append(f"points.{pt}.provider 要是 providers 裡的一家")
+        elif pin.get("provider") is None and not pin.get("model"):
+            errs.append(f"points.{pt}:沒有 provider 就要寫 model(交給執行環境時用的模型)")
     return errs

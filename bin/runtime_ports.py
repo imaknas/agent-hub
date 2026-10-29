@@ -236,6 +236,12 @@ def capabilities(name: str | None = None) -> set[str]:
     return {p for p, fns in PORTS.items() if all(callable(getattr(mod, fn, None)) for fn in fns)}
 
 
+def models(name: str | None = None) -> dict:
+    """這個 runtime 的組別 → 模型(`MODELS`;判斷點的 model_group 是 fast/standard/strong)。沒寫的組 = 不指定模型,
+    用工具自己的預設。模型名稱只寫在轉接器裡(AGENTS.md「工具中立」)。"""
+    return dict(getattr(_module(name or default_name()), "MODELS", None) or {})
+
+
 def default_name() -> str:
     try:
         import hubconf

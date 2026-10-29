@@ -1,6 +1,6 @@
 # 給 shell 腳本 source:實例目錄的位置(跟 hubconf.config_dir/data_dir/secrets_dir 同一套規則,docs/design/new-user.md 3.1),
 # 只用 shell + plutil——遙控那台(MBP)不一定有平台的 Python。
-#   HUB_ROOT     平台(這份 repo)    HUB_CONFIG  config(hub.json、登錄、models.env、mirror-list.txt、services.tsv)
+#   HUB_ROOT     平台(這份 repo)    HUB_CONFIG  config(hub.json、登錄、mirror-list.txt、services.tsv)
 #   HUB_DATA     data(digest/、reflect/、todo.md、index.md、review-log.md…)    HUB_SECRETS  憑證
 #   HUB_JSON     hub.json 的完整路徑;hub_json_get <點分隔的 key> 讀單一值(沒有就印空、回非 0)
 # <hub>/.hub-home 寫著實例目錄 → <實例>/{config,data,secrets};沒有這個檔 = 舊的擺法(全部在 hub 根目錄)。
