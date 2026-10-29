@@ -27,6 +27,16 @@ note = pathlib.Path(".agent-memory/memory") / f"{day}.md"
 note.parent.mkdir(parents=True, exist_ok=True)
 note.write_text("- 回答了 other 的問題:用 SQLite\n")
 pathlib.Path("README.md").write_text("agent 不該改這個\n")
+# 自己寄信、結案:一般寄、清掉環境變數再寄(兩種都要被 hubbus 擋;平台照輸出代寄)
+import os, subprocess
+tries = []
+for env in (dict(os.environ), {k: v for k, v in os.environ.items() if k != "HUB_MAIL_BY_PLATFORM"}):
+    r = subprocess.run([sys.executable, "@HUBBUS@", "send", "--from", "demo", "--to", "other", "--type", "info",
+                        "--text", "agent 自己寄的"], env=env, capture_output=True, text=True)
+    tries.append(r.returncode)
+r = subprocess.run([sys.executable, "@HUBBUS@", "done", mid], capture_output=True, text=True)
+tries.append(r.returncode)
+pathlib.Path(os.environ["PROPOSE_TEST_TRIES"]).write_text(json.dumps(tries))
 print(json.dumps({"replies": [{"reply_to": mid, "type": "done", "text": "用 SQLite"},
                               {"reply_to": "not-this-one", "type": "info", "text": "不該寄出"}],
                   "done": [{"id": mid, "note": "回答了"}, {"id": "not-this-one"}],
@@ -63,7 +73,7 @@ class ProposeApply(unittest.TestCase):
         sh("git", "push", "-q", str(bare), "agent-memory", cwd=seed)
         sh("git", "clone", "-q", "-b", "agent-memory", str(bare), str(ws / ".agent-memory"))
         script = t / "agent.py"
-        script.write_text(AGENT)
+        script.write_text(AGENT.replace("@HUBBUS@", str(BIN / "hubbus")))
         cfg = {"owner": {"name": "alex", "tag": "Alex"}, "owner_side": "builtin", "bus_dir": str(t / "bus"),
                "registry_dir": "projects", "workspace_root": str(t / "ws"),
                "runtime": {"default": "command", "command": {"run": [sys.executable, str(script), "{prompt_file}"]}},
@@ -75,7 +85,7 @@ class ProposeApply(unittest.TestCase):
         self.env = {**{k: v for k, v in os.environ.items() if not k.startswith("AGENT_HUB_") or k == "AGENT_HUB_PYTHON"},
                     "HOME": str(t / "home"), "AGENT_HUB_CONFIG": str(t / "config"),
                     "AGENT_HUB_DATA": str(t / "data"), "AGENT_HUB_SECRETS": str(t / "secrets"),
-                    "AGENT_HUB_STATE": str(t / "state"),
+                    "AGENT_HUB_STATE": str(t / "state"), "PROPOSE_TEST_TRIES": str(t / "tries.json"),
                     "GIT_AUTHOR_NAME": "t", "GIT_AUTHOR_EMAIL": "t@t", "GIT_COMMITTER_NAME": "t", "GIT_COMMITTER_EMAIL": "t@t"}
 
     def run_(self, script, *args, stdin=""):
@@ -98,6 +108,9 @@ class ProposeApply(unittest.TestCase):
         self.assertIn("用 SQLite", pushed, "筆記 commit 並 push 到 memory repo")
         self.assertEqual(out["done"], [mid], "只結這次交辦的信")
         self.assertEqual(len(out["sent"]), 1, "只回這次交辦的信、回給原寄件人")
+        tries = json.loads((self.tmp / "tries.json").read_text())
+        self.assertTrue(all(code != 0 for code in tries), f"agent 自己寄信、結案都被擋(清掉環境變數也一樣):{tries}")
+        self.assertNotIn("agent 自己寄的", self.run_("hubbus", "inbox", "--project", "other").stdout)
         self.assertEqual(sh("git", "worktree", "list", "--porcelain", cwd=self.ws).count("worktree "), 1, "丟棄式 worktree 清掉了")
         inbox = self.run_("hubbus", "inbox", "--project", "agent-hub").stdout
         self.assertIn("用 SQLite", inbox)

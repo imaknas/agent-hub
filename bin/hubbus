@@ -221,6 +221,33 @@ def project_of(cwd: pathlib.Path) -> str | None:
     return None
 
 
+# 會改匯流排的子指令:平台代寄的工作(propose)裡的 agent 一律不准跑(見 platform_mails())
+WRITES = {"send", "done", "ack", "publish", "record-publish", "bridge", "dispatch", "reconcile-questions"}
+PLATFORM_MAILS_ENV = "HUB_MAIL_BY_PLATFORM"   # bin/propose_apply.py 設給它叫起的 agent
+# 它真的被叫起來的樣子(這份 hub 的絕對路徑 + mailbox 子指令);只比對名稱會把引號裡提到它的指令(例:commit 訊息)也算進來
+PROPOSE_CMD = re.compile(rf"(?:^|\s){re.escape(str(HUB / 'bin' / 'propose_apply.py'))}\s+mailbox(?:\s|$)")
+
+
+def platform_mails() -> str | None:
+    """這個程序是不是在「agent 提議、平台套用」的工作裡(bin/propose_apply.py):那種工作要寄的信、要結案的事由平台照 agent 的
+    輸出代寄,agent 自己寄就繞過了只准回原寄件人、寄件人由平台給的保證。兩種認法(任一成立就是):
+    propose_apply 設的環境變數;祖先程序裡有 propose_apply.py(環境變數被清掉、換了工作目錄也躲不掉)。"""
+    if os.environ.get(PLATFORM_MAILS_ENV):
+        return "環境變數"
+    pid = os.getppid()
+    for _ in range(40):
+        if pid <= 1:
+            return None
+        r = subprocess.run(["ps", "-o", "ppid=,command=", "-p", str(pid)], capture_output=True, text=True)
+        ppid, _, cmd = r.stdout.strip().partition(" ")
+        if r.returncode != 0 or not ppid.strip().isdigit():
+            return None
+        if PROPOSE_CMD.search(cmd):
+            return "上層程序"
+        pid = int(ppid)
+    return None
+
+
 def valid_address(a: str) -> bool:
     return a in OWNERS or a in projects()
 
@@ -1399,6 +1426,9 @@ def main() -> None:
     sub.add_parser("status").add_argument("--json", action="store_true")
     a = ap.parse_args()
 
+    if a.cmd in WRITES and (how := platform_mails()):
+        sys.exit(f"hubbus:這是平台代寄的工作({how}認出來的):要寄的信、要結案的事寫在你的輸出裡,平台會代寄;"
+                 "自己寄、自己結案都不准")
     if a.cmd == "hook":
         try:
             cmd_hook(a.event)

@@ -3,7 +3,8 @@
 
 任何 agent(Claude Code、`runtime: command` 接的 Gemini CLI / Codex / opencode…)都一樣:它在 worktree 裡做什麼都碰不到
 真的 checkout;跑完平台看它改了哪些檔,**只把准許的路徑**複製回真的資料夾,其他的記成「不採用」、跟 worktree 一起丟掉。
-要寄的信、要結案的事 agent 寫在結構化輸出裡,平台代寄(寄件人是平台給的,不是 agent 自己說的)。
+要寄的信、要結案的事 agent 寫在結構化輸出裡,平台代寄(寄件人是平台給的,不是 agent 自己說的)。agent 自己跑會改匯流排的
+hubbus 子指令(send、done、ack…)一律被擋(hubbus.platform_mails:這裡設的環境變數,或祖先程序是這支)。
 這套保證不靠工具的權限設定,在沒有沙盒的系統(Linux)上一樣成立。
 
   propose_apply.py mailbox <專案> <信 id>…     信箱交辦(hub.json mailbox.handler: propose 時由 hubbus dispatch 叫)
@@ -19,6 +20,7 @@ import fnmatch
 import importlib.machinery
 import importlib.util
 import json
+import os
 import pathlib
 import shutil
 import subprocess
@@ -59,8 +61,9 @@ def run(project: str, ws: pathlib.Path, point: str, prompt: str, allow: list[str
         if (mem / ".git").exists():
             git(mem, "worktree", "add", "--detach", str(wt / ".agent-memory"), "HEAD")
             added.append((mem, wt / ".agent-memory"))
+        # agent 自己不准寄信、結案(hubbus 認這個變數跟上層程序;寄件人、收件人由平台照輸出決定)
         r = subprocess.run([PY, str(BIN / "llm.py"), "run", point, "--cwd", str(wt)], input=prompt, text=True,
-                           capture_output=True, timeout=timeout_s + 60)
+                           capture_output=True, timeout=timeout_s + 60, env={**os.environ, "HUB_MAIL_BY_PLATFORM": "1"})
         try:
             res = json.loads(r.stdout) if r.stdout.strip() else {}
         except ValueError:
