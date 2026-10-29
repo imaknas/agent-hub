@@ -123,6 +123,14 @@ class Json(unittest.TestCase):
         ev["payload"]["type"] = "nope"
         self.assertTrue(contracts.check_json(C / "hubbus.v1.schema.json", ev))
 
+    def test_hubbus_record(self):
+        ev = {"seq": 2, "id": "rec:acts/0.3:p:r:k", "ts": "2026-10-28T00:00:00+08:00", "type": "record", "source": "p",
+              "to_project": "owner", "ref": None, "payload": {"v": 1, "record": {
+                  "ph": "0.3", "ext": "acts/0.3", "id": "r:k", "type": "raised", "project": "p"}}}
+        self.assertEqual(contracts.check_json(C / "hubbus.v1.schema.json", ev), [])
+        del ev["payload"]["record"]["id"]
+        self.assertTrue(contracts.check_json(C / "hubbus.v1.schema.json", ev))
+
     def test_vendored_messages_drop_needs_task_or_question(self):
         s = C / "vendor" / "muninn" / "messages.v1.schema.json"
         drop = {"id": "abcd", "project": "p", "type": "drop", "text": "t"}
