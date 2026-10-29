@@ -203,7 +203,8 @@ agent-hub 要給任何 coding agent、任何 LLM、任何 key 的人用。
 - `bin/mirror-backup.sh`——讀 `mirror-list.txt`,對每個 GitHub repo 維護
   一份唯讀 `--mirror` clone,純粹災難復原用,跟 librarian 的摘要流程完全
   獨立、零 LLM 成本(mirror 模組)
-- `bin/transcript-backup.sh`——遙控那台 → hub 那台的對話紀錄每小時備份(這支跑在遙控那台)
+- `bin/transcript-backup.sh`——遙控那台 → hub 那台的對話紀錄每小時備份(這支跑在遙控那台;只有在遙控那台**本機**開 session 才需要,
+  經 SSH 開在 hub 那台的 session 對話本來就在 hub 那台)
 - `bin/check-memory-gaps.py`——平台 job `agent-hub/memory-gaps`(`--apply`,每晚 todo 之後):最近 72 小時有對話、memory 卻沒有新筆記
   的專案,列進 `todo.md` 固定區塊跟 digest(零 LLM 成本)
 - `bin/sync-all-memory.sh`——每小時對所有專案的 `.agent-memory` 補跑

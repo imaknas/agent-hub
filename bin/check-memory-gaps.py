@@ -13,9 +13,8 @@ memory 筆記靠 agent 自己寫。session 比 onboard 早開(沒讀到說明)�
 要等 librarian 拉),而且不算平台自己的 commit:consolidate 把舊日期檔整理進 reference/、librarian 寫的、
 onboard 的骨架(init:)、同步時的 merge——這些都會動到 memory/,算進去的話 agent 完全沒記也看不出來。
 
-跑在 mini(librarian 呼叫);transcript 由 MBP 的 transcript-backup 每小時同步過來。
-MBP 連不到 mini 的那段時間(例如 2026-09-30 18:18–22:24)transcript 不會更新,
-這段期間的對話要等恢復連線後的下一次檢查才數得到。
+跑在 hub 那台(librarian 之後);transcript 讀執行環境的 transcript_roots(hub 那台本機的,加上遙控那台用
+transcript-backup.sh 備份過來的)。遙控那台的備份連不上的那段時間,那邊的對話要等恢復後的下一次檢查才數得到。
 
 用法:check-memory-gaps.py [--window-hours 72] [--threshold 10] [--apply]
 輸出:有缺口時每個專案一行 markdown,沒有就什麼都不印。

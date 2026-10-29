@@ -10,8 +10,8 @@ session;這份報告補上那一塊。產出:
 星期 × 小時的工作分佈(台北時間)、深夜比例、最長連續工作、每天收工時間、交辦方式
 (subagent、跨 session 訊息、skill)、新開始/停下來的專案。分析段落見 reflect_llm.py。
 
-資料:mini 上的 transcript 備份(~/transcript-backups,MBP 每小時同步,只有
-~/.claude-personal 這個 profile——工作 profile 刻意不備份)、~/git-origin/mirrors
+資料:執行環境的 transcript_roots(hub 那台本機的 session,加上遙控那台用 transcript-backup.sh 備份過來的,
+只有個人 profile——工作 profile 刻意不讀)、~/git-origin/mirrors
 (每天 04:00 更新)、~/.memory-copies/<name> 的 memory 副本。
 
 用法:weekly-reflect.py [--week 2026-W40] [--llm]
