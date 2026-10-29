@@ -172,10 +172,17 @@ def parse_json(text: str):
         raise
 
 
-def run(point: str, spec: dict, prompt: str, schema: dict | None, sleep=time.sleep) -> dict:
-    """跑一次 completion。回傳跟 llm.py 給呼叫端的同一種形狀;失敗丟 Refused(原因)。"""
+def runtime_target(name: str, model: str | None, auth: str) -> dict:
+    """沒有 llm 區塊時:交給執行環境(runtime.default)的 completion 介面,模型照舊的設定(models.env / 宣告的預設)。"""
+    return {"provider": name, "impl": name, "conf": {"auth": auth}, "group": None, "model": model,
+            "context": None, "price": None, "location": "cloud"}
+
+
+def run(point: str, spec: dict, prompt: str, schema: dict | None, sleep=time.sleep, target: dict | None = None) -> dict:
+    """跑一次 completion。回傳跟 llm.py 給呼叫端的同一種形狀;失敗丟 Refused(原因)。
+    target 沒給 = 照 hub.json llm 決定;給了(runtime_target)= 交給那個執行環境。"""
     import runtime_ports
-    target = resolve(point, spec)
+    target = target or resolve(point, spec)
     conf = dict(target["conf"])
     conf["_key"] = read_key(conf)
     conf["_context"] = target["context"]

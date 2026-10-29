@@ -13,8 +13,8 @@
   llm.py lint     列出 bin/ 裡繞過這支的 `claude -p`(contracts-check 用)
   llm.py health   hub.json llm 的每一家 provider 能不能用
 
-判斷點宣告 `shape: completion`、而且 hub.json 有 `llm` 區塊 → 交給 completion.py(任何 provider、任何 key;docs/design/llm-providers.md);
-其他(agent 形狀的點,或沒有 llm 區塊)照舊交給 runtime.default 的 agent 介面。
+判斷點宣告 `shape: completion` → 交給 completion.py(每家同一套處理;docs/design/llm-providers.md):hub.json 有 `llm` 區塊就照它
+選 provider(任何 key),沒有就交給 runtime.default 的 completion 介面(Claude Code 關掉工具跑)。agent 形狀的點照舊交給 agent 介面。
 
 憑證(2026-10-24 Knas 決定統一):預設用 ~/.claude/headless-oauth-token(`claude setup-token`,一年,launchd/SSH 都一樣,
 只有一份要換);判斷點宣告 `auth: subscription`、或呼叫端設 LLM_AUTH=subscription(登錄 job 的 `connectors: true`)
@@ -101,13 +101,21 @@ def auth_env(spec: dict, rt) -> tuple[dict | None, str]:
     return rt.auth_env(auth_mode(spec), base)
 
 
-def run_completion(a, spec: dict, prompt: str) -> int:
-    """shape: completion 的判斷點、而且 hub.json 有 llm 區塊:交給 completion.py(任何 provider)。
-    呼叫端的 --model 是舊的 models.env 路徑(Claude 的名字),這裡不用——模型由 llm 區塊決定。"""
+def run_completion(a, spec: dict, prompt: str, model: str | None) -> int:
+    """shape: completion 的判斷點:交給 completion.py(每家同一套處理)。
+    hub.json 有 llm 區塊 → 照它選 provider 跟模型(呼叫端的 --model 是舊的 models.env 路徑,這時不用);
+    沒有 → 交給 runtime.default 的 completion 介面,模型照舊的設定。"""
     import completion
+    import runtime_ports
     schema = json.loads((POINTS.parent / output_schema(spec)).read_text()) if output_schema(spec) else None
+    target = None
+    if not completion.settings():
+        name = spec.get("runtime") or runtime_ports.default_name()
+        if "completion" not in runtime_ports.capabilities(name):
+            return fail(a.point, spec, f"執行環境 {name} 沒有 completion 介面,hub.json 也沒有 llm 區塊(設一家 LLM provider)")
+        target = completion.runtime_target(name, model, auth_mode(spec))
     try:
-        out = completion.run(a.point, spec, prompt, schema)
+        out = completion.run(a.point, spec, prompt, schema, target=target)
     except completion.Refused as e:
         return fail(a.point, spec, str(e))
     print(json.dumps(out, ensure_ascii=False))
@@ -123,13 +131,11 @@ def run(a) -> int:
         print(f"llm.py:{a.point} 不是宣告過的判斷點(contracts/llm-points.yaml)", file=sys.stderr)
         return 2
     prompt = "" if a.cmd == "exec" else (pathlib.Path(a.prompt_file).read_text() if a.prompt_file else sys.stdin.read())
-    if a.cmd == "run" and spec.get("shape") == "completion" and not getattr(a, "dry_run", False):
-        import completion
-        if completion.settings():   # 沒有 llm 區塊 = 現在的行為(下面的 agent 介面)
-            return run_completion(a, spec, prompt)
     # --model > 環境變數 > config 的 models.env > 宣告的預設
     menv = spec.get("model_env")
     model = a.model or (menv and (os.environ.get(menv) or config_models().get(menv))) or spec.get("model_default")
+    if a.cmd == "run" and spec.get("shape") == "completion" and not getattr(a, "dry_run", False):
+        return run_completion(a, spec, prompt, model)
     try:
         rt = runtime_ports.load(spec.get("runtime"), ports=("agent", "auth"))
     except runtime_ports.Unsupported as e:   # 沒有 coding agent:照宣告的失敗路徑走,原因寫清楚

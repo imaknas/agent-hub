@@ -1,0 +1,13 @@
+{
+ "type": "object",
+ "description": "librarian-index 的 completion 版(影子模式):回 index.md 名冊區塊外的編輯清單,平台套用(bin/edits.py)",
+ "properties": {
+  "index_updated": {"type": "boolean"},
+  "edits": {
+   "type": "array",
+   "items": {"type": "object", "properties": {"old": {"type": "string"}, "new": {"type": "string"}}, "required": ["old", "new"]}
+  },
+  "relations_found": {"type": "string", "description": "今天找到的跨專案關聯簡述;沒有明顯關聯就寫「(無明顯關聯)」"}
+ },
+ "required": ["index_updated", "edits", "relations_found"]
+}

@@ -405,6 +405,70 @@
   "exit": 0,
   "token_passed": true
  },
+ "librarian-index-edits/default": {
+  "auth": "token",
+  "cmd": [
+   "claude",
+   "-p",
+   "golden prompt",
+   "--model",
+   "sonnet",
+   "--output-format",
+   "json",
+   "--json-schema",
+   "{\"type\": \"object\", \"description\": \"librarian-index 的 completion 版(影子模式):回 index.md 名冊區塊外的編輯清單,平台套用(bin/edits.py)\", \"properties\": {\"index_updated\": {\"type\": \"boolean\"}, \"edits\": {\"type\": \"array\", \"items\": {\"type\": \"object\", \"properties\": {\"old\": {\"type\": \"string\"}, \"new\": {\"type\": \"string\"}}, \"required\": [\"old\", \"new\"]}}, \"relations_found\": {\"type\": \"string\", \"description\": \"今天找到的跨專案關聯簡述;沒有明顯關聯就寫「(無明顯關聯)」\"}}, \"required\": [\"index_updated\", \"edits\", \"relations_found\"]}"
+  ],
+  "exit": 0,
+  "token_passed": true
+ },
+ "librarian-index-edits/model": {
+  "auth": "token",
+  "cmd": [
+   "claude",
+   "-p",
+   "golden prompt",
+   "--model",
+   "golden-model",
+   "--output-format",
+   "json",
+   "--json-schema",
+   "{\"type\": \"object\", \"description\": \"librarian-index 的 completion 版(影子模式):回 index.md 名冊區塊外的編輯清單,平台套用(bin/edits.py)\", \"properties\": {\"index_updated\": {\"type\": \"boolean\"}, \"edits\": {\"type\": \"array\", \"items\": {\"type\": \"object\", \"properties\": {\"old\": {\"type\": \"string\"}, \"new\": {\"type\": \"string\"}}, \"required\": [\"old\", \"new\"]}}, \"relations_found\": {\"type\": \"string\", \"description\": \"今天找到的跨專案關聯簡述;沒有明顯關聯就寫「(無明顯關聯)」\"}}, \"required\": [\"index_updated\", \"edits\", \"relations_found\"]}"
+  ],
+  "exit": 0,
+  "token_passed": true
+ },
+ "librarian-index-edits/subscription": {
+  "auth": "subscription",
+  "cmd": [
+   "claude",
+   "-p",
+   "golden prompt",
+   "--model",
+   "sonnet",
+   "--output-format",
+   "json",
+   "--json-schema",
+   "{\"type\": \"object\", \"description\": \"librarian-index 的 completion 版(影子模式):回 index.md 名冊區塊外的編輯清單,平台套用(bin/edits.py)\", \"properties\": {\"index_updated\": {\"type\": \"boolean\"}, \"edits\": {\"type\": \"array\", \"items\": {\"type\": \"object\", \"properties\": {\"old\": {\"type\": \"string\"}, \"new\": {\"type\": \"string\"}}, \"required\": [\"old\", \"new\"]}}, \"relations_found\": {\"type\": \"string\", \"description\": \"今天找到的跨專案關聯簡述;沒有明顯關聯就寫「(無明顯關聯)」\"}}, \"required\": [\"index_updated\", \"edits\", \"relations_found\"]}"
+  ],
+  "exit": 0,
+  "token_passed": false
+ },
+ "librarian-index-edits/token": {
+  "auth": "token",
+  "cmd": [
+   "claude",
+   "-p",
+   "golden prompt",
+   "--model",
+   "sonnet",
+   "--output-format",
+   "json",
+   "--json-schema",
+   "{\"type\": \"object\", \"description\": \"librarian-index 的 completion 版(影子模式):回 index.md 名冊區塊外的編輯清單,平台套用(bin/edits.py)\", \"properties\": {\"index_updated\": {\"type\": \"boolean\"}, \"edits\": {\"type\": \"array\", \"items\": {\"type\": \"object\", \"properties\": {\"old\": {\"type\": \"string\"}, \"new\": {\"type\": \"string\"}}, \"required\": [\"old\", \"new\"]}}, \"relations_found\": {\"type\": \"string\", \"description\": \"今天找到的跨專案關聯簡述;沒有明顯關聯就寫「(無明顯關聯)」\"}}, \"required\": [\"index_updated\", \"edits\", \"relations_found\"]}"
+  ],
+  "exit": 0,
+  "token_passed": true
+ },
  "librarian-index/default": {
   "auth": "token",
   "cmd": [
@@ -485,6 +549,70 @@
    "json",
    "--json-schema",
    "{\"type\": \"object\", \"properties\": {\"index_updated\": {\"type\": \"boolean\", \"description\": \"是否編輯了 index.md\"}, \"relations_found\": {\"type\": \"string\", \"description\": \"今天找到的跨專案關聯簡述；沒有明顯關聯就寫「(無明顯關聯)」，不要硬掰\"}}, \"required\": [\"index_updated\", \"relations_found\"]}"
+  ],
+  "exit": 0,
+  "token_passed": true
+ },
+ "librarian-state-edits/default": {
+  "auth": "token",
+  "cmd": [
+   "claude",
+   "-p",
+   "golden prompt",
+   "--model",
+   "haiku",
+   "--output-format",
+   "json",
+   "--json-schema",
+   "{\"type\": \"object\", \"description\": \"librarian-state 的 completion 版(影子模式):模型沒有工具,回 STATE.md 的編輯清單,平台套用(bin/edits.py)\", \"properties\": {\"state_updated\": {\"type\": \"boolean\", \"description\": \"要不要改 STATE.md;false 時 edits 是空的\"}, \"edits\": {\"type\": \"array\", \"description\": \"照順序套用;每個 old 要是目前 STATE.md 裡剛好出現一次的一段原文(含換行),new 是換成的文字(空字串 = 刪掉)\", \"items\": {\"type\": \"object\", \"properties\": {\"old\": {\"type\": \"string\"}, \"new\": {\"type\": \"string\"}}, \"required\": [\"old\", \"new\"]}}, \"worth_digesting\": {\"type\": \"boolean\", \"description\": \"這次的內容是否值得放進跨專案 digest\"}, \"summary\": {\"type\": \"string\", \"description\": \"給跨專案 digest 用的摘要,不超過三句話\"}, \"reason\": {\"type\": \"string\", \"description\": \"為什麼這樣改(或不改),給人事後抽查用\"}}, \"required\": [\"state_updated\", \"edits\", \"worth_digesting\", \"summary\", \"reason\"]}"
+  ],
+  "exit": 0,
+  "token_passed": true
+ },
+ "librarian-state-edits/model": {
+  "auth": "token",
+  "cmd": [
+   "claude",
+   "-p",
+   "golden prompt",
+   "--model",
+   "golden-model",
+   "--output-format",
+   "json",
+   "--json-schema",
+   "{\"type\": \"object\", \"description\": \"librarian-state 的 completion 版(影子模式):模型沒有工具,回 STATE.md 的編輯清單,平台套用(bin/edits.py)\", \"properties\": {\"state_updated\": {\"type\": \"boolean\", \"description\": \"要不要改 STATE.md;false 時 edits 是空的\"}, \"edits\": {\"type\": \"array\", \"description\": \"照順序套用;每個 old 要是目前 STATE.md 裡剛好出現一次的一段原文(含換行),new 是換成的文字(空字串 = 刪掉)\", \"items\": {\"type\": \"object\", \"properties\": {\"old\": {\"type\": \"string\"}, \"new\": {\"type\": \"string\"}}, \"required\": [\"old\", \"new\"]}}, \"worth_digesting\": {\"type\": \"boolean\", \"description\": \"這次的內容是否值得放進跨專案 digest\"}, \"summary\": {\"type\": \"string\", \"description\": \"給跨專案 digest 用的摘要,不超過三句話\"}, \"reason\": {\"type\": \"string\", \"description\": \"為什麼這樣改(或不改),給人事後抽查用\"}}, \"required\": [\"state_updated\", \"edits\", \"worth_digesting\", \"summary\", \"reason\"]}"
+  ],
+  "exit": 0,
+  "token_passed": true
+ },
+ "librarian-state-edits/subscription": {
+  "auth": "subscription",
+  "cmd": [
+   "claude",
+   "-p",
+   "golden prompt",
+   "--model",
+   "haiku",
+   "--output-format",
+   "json",
+   "--json-schema",
+   "{\"type\": \"object\", \"description\": \"librarian-state 的 completion 版(影子模式):模型沒有工具,回 STATE.md 的編輯清單,平台套用(bin/edits.py)\", \"properties\": {\"state_updated\": {\"type\": \"boolean\", \"description\": \"要不要改 STATE.md;false 時 edits 是空的\"}, \"edits\": {\"type\": \"array\", \"description\": \"照順序套用;每個 old 要是目前 STATE.md 裡剛好出現一次的一段原文(含換行),new 是換成的文字(空字串 = 刪掉)\", \"items\": {\"type\": \"object\", \"properties\": {\"old\": {\"type\": \"string\"}, \"new\": {\"type\": \"string\"}}, \"required\": [\"old\", \"new\"]}}, \"worth_digesting\": {\"type\": \"boolean\", \"description\": \"這次的內容是否值得放進跨專案 digest\"}, \"summary\": {\"type\": \"string\", \"description\": \"給跨專案 digest 用的摘要,不超過三句話\"}, \"reason\": {\"type\": \"string\", \"description\": \"為什麼這樣改(或不改),給人事後抽查用\"}}, \"required\": [\"state_updated\", \"edits\", \"worth_digesting\", \"summary\", \"reason\"]}"
+  ],
+  "exit": 0,
+  "token_passed": false
+ },
+ "librarian-state-edits/token": {
+  "auth": "token",
+  "cmd": [
+   "claude",
+   "-p",
+   "golden prompt",
+   "--model",
+   "haiku",
+   "--output-format",
+   "json",
+   "--json-schema",
+   "{\"type\": \"object\", \"description\": \"librarian-state 的 completion 版(影子模式):模型沒有工具,回 STATE.md 的編輯清單,平台套用(bin/edits.py)\", \"properties\": {\"state_updated\": {\"type\": \"boolean\", \"description\": \"要不要改 STATE.md;false 時 edits 是空的\"}, \"edits\": {\"type\": \"array\", \"description\": \"照順序套用;每個 old 要是目前 STATE.md 裡剛好出現一次的一段原文(含換行),new 是換成的文字(空字串 = 刪掉)\", \"items\": {\"type\": \"object\", \"properties\": {\"old\": {\"type\": \"string\"}, \"new\": {\"type\": \"string\"}}, \"required\": [\"old\", \"new\"]}}, \"worth_digesting\": {\"type\": \"boolean\", \"description\": \"這次的內容是否值得放進跨專案 digest\"}, \"summary\": {\"type\": \"string\", \"description\": \"給跨專案 digest 用的摘要,不超過三句話\"}, \"reason\": {\"type\": \"string\", \"description\": \"為什麼這樣改(或不改),給人事後抽查用\"}}, \"required\": [\"state_updated\", \"edits\", \"worth_digesting\", \"summary\", \"reason\"]}"
   ],
   "exit": 0,
   "token_passed": true

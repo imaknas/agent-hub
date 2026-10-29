@@ -8,7 +8,6 @@
  "bin/lease-resume": 3,
  "bin/lease-runner.py": 19,
  "bin/librarian.py": 9,
- "bin/librarian.sh": 10,
  "bin/llm.py": 5,
  "bin/merge-hook-settings.py": 11,
  "bin/migrate-to-mini.py": 10,

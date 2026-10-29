@@ -10,7 +10,7 @@
   "bin/gen-status-page.py": 4,
   "bin/gen-todo.py": 13,
   "bin/guard.py": 1,
-  "bin/hubbus": 58,
+  "bin/hubbus": 57,
   "bin/hubconf.py": 2,
   "bin/hublib.py": 2,
   "bin/knas-tasks.py": 31,
@@ -18,7 +18,6 @@
   "bin/lease-resume": 2,
   "bin/lease-runner.py": 32,
   "bin/librarian-publish.sh": 2,
-  "bin/librarian.sh": 2,
   "bin/llm.py": 1,
   "bin/memory-nudge.py": 1,
   "bin/merge-branch": 1,
@@ -67,7 +66,6 @@
  },
  "secrets-path": {},
  "instance-path": {
-  "bin/config-check": 5,
-  "bin/librarian.sh": 1
+  "bin/config-check": 5
  }
 }

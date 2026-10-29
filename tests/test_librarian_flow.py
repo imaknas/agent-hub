@@ -51,6 +51,14 @@ elif point == "librarian-todo-format":
     st = cwd / "STATE.md"; st.write_text(st.read_text().replace("- [ ] 沒標負責人", "- [ ] 〔agent〕沒標負責人")); res(structured_output=None)
 elif point == "librarian-index":
     p = cwd / "index.md"; p.write_text(p.read_text() + "\n<!-- index edited -->\n"); res(structured_output={"relations_found": "none"})
+elif point == "librarian-state-edits":   # 影子:不碰檔案,只回編輯清單(p1 回一個對不上的 old)
+    import re
+    proj = re.search(r"負責專案 (\S+) 的 STATE.md", prompt).group(1)
+    old = "找不到的一段" if proj == "p1" else "## 待辦"
+    res(structured_output={"state_updated": True, "edits": [{"old": old, "new": f"<!-- shadow {proj} -->\n## 待辦"}],
+                           "worth_digesting": False, "summary": "", "reason": f"shadow {proj}"})
+elif point == "librarian-index-edits":
+    res(structured_output={"index_updated": False, "edits": [], "relations_found": "none"})
 '''
 
 # 要比佔位檔大(check-state-todo 不檢查佔位用的小檔案,gen-todo.PLACEHOLDER_MAX_BYTES)
@@ -233,6 +241,26 @@ class LibrarianFlow(unittest.TestCase):
             done = {r[0] for r in c.execute("SELECT ref FROM events WHERE type='message.done'")}
             self.assertLessEqual({"rec:acts/0.3:p1:n1", "rec:decisions/0.3:p1:s1"}, done)
             self.assertNotIn("rec:acts/0.3:p1:s2", done)
+
+    def test_shadow_compares_without_writing(self):
+        """影子模式(completion 版):每個叫了模型的專案都有一筆比對紀錄,提議只寫在 .state/librarian-shadow/,真的檔案不動。"""
+        with tempfile.TemporaryDirectory() as d:
+            env = Env(pathlib.Path(d))
+            self.assertEqual(env.run("librarian.py").returncode, 0)
+            recs = [json.loads(x) for x in (env.hub / ".state" / "librarian-shadow" / f"{TODAY}.jsonl").read_text().splitlines()]
+            state = {r["project"]: r for r in recs if r["point"] == "librarian-state-edits"}
+            self.assertEqual(set(state), set(MODES))
+            self.assertIn("edit_error", state["p1"], "對不上的 old 要記成不合規,不套一半")
+            self.assertFalse(state["p1"]["ok"])
+            self.assertTrue(state["p0"]["ok"])
+            self.assertIn("similarity", state["p0"])
+            self.assertTrue((env.hub / ".state" / "librarian-shadow" / TODAY / "p0.STATE.md").exists())
+            for p in MODES:
+                self.assertNotIn("<!-- shadow", (env.tmp / "copies" / p / "STATE.md").read_text(), p)
+            self.assertTrue(any(r["point"] == "librarian-index-edits" for r in recs))
+            prompt = next(c["prompt"] for c in env.calls() if c["point"] == "librarian-state-edits" and "p0" in c["prompt"])
+            self.assertIn("<<<STATE", prompt)
+            self.assertNotIn("請讀 ./AGENT.md", prompt, "completion 版沒有工具:內容直接給")
 
     @unittest.skipUnless(len(IMPLS) == 2, "只剩一個實作")
     def test_implementations_send_the_same_prompts(self):

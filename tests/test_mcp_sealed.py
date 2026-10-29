@@ -28,8 +28,11 @@ ADDED_BY_CALLER = {
 class McpSealed(unittest.TestCase):
     def test_every_point_is_sealed_from_ambient_mcp(self):
         missing = []
+        # completion 形狀的點:沒有 llm 區塊時交給 runtime_claude.complete,它每次都帶這個旗標(構造上封閉,不靠宣告)
+        complete_src = (ROOT / "bin" / "runtime_claude.py").read_text().split("def complete(", 1)[1].split("\ndef ", 1)[0]
+        self.assertIn(FLAG, complete_src)
         for name, spec in POINTS.items():
-            if FLAG in (spec.get("extra_args") or []):
+            if FLAG in (spec.get("extra_args") or []) or spec.get("shape") == "completion":
                 continue
             caller = ADDED_BY_CALLER.get(name)
             if caller and FLAG in (ROOT / caller).read_text():

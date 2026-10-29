@@ -19,6 +19,7 @@ robust 化的決定(沿用):
 from __future__ import annotations
 
 import datetime
+import difflib
 import glob
 import json
 import pathlib
@@ -29,6 +30,7 @@ import sys
 
 BIN = pathlib.Path(__file__).resolve().parent
 sys.path.insert(0, str(BIN))
+import edits  # noqa: E402
 import hubconf  # noqa: E402
 import hublib  # noqa: E402
 
@@ -45,6 +47,11 @@ TODAY = datetime.date.today().isoformat()
 LOG = LOG_DIR / f"librarian-{TODAY}.log"
 OWNER = hubconf.get("owner.tag") or "owner"            # prompt 裡對人、對助理的稱呼
 ASSISTANT = hubconf.get("assistant.name") or "個人助理"
+# 影子模式(docs/design/llm-providers.md 步驟 4):completion 版(librarian-state-edits、librarian-index-edits)每晚跟現在的
+# agent 版並跑,只把提議跟實際結果的比對記在 .state/librarian-shadow/,不寫任何真的檔案。比對夠好才切換,切換後拿掉這段。
+SHADOW = True
+SHADOW_DIR = STATE_DIR / "librarian-shadow"
+KEY_MARK = re.compile(rf"[(（]等 ?{re.escape(OWNER)}[:：]\s*[^()（）\n]+?\s*[)）]")   # registrar 的 key 標記(不帶行尾錨點)
 total_cost = 0.0
 cost_added = False   # shell 版沒有任何成本時印 $0,有才印 %.6f
 
@@ -297,6 +304,162 @@ def index_prompt() -> str:
 不要編輯那個區塊(改了也會被覆蓋);你的註記寫在區塊外。"""
 
 
+# ---------- 影子模式:completion 版 ----------
+
+def _state_rules(proj: str) -> str:
+    """agent 版 prompt 的「規則:」那段原文(同一份規則,不另寫一份);去掉只對有工具的 agent 才有意義的最後一條。"""
+    rules = state_prompt(proj, "", "", "").split("\n規則:\n", 1)[1]
+    return rules.rsplit("\n- 除了 ./STATE.md", 1)[0]
+
+
+def _reference(d: pathlib.Path, limit: int = 12000) -> str:
+    ref = d / "memory" / "reference"
+    if not ref.is_dir():
+        return "(沒有 memory/reference/)"
+    names = sorted(p.name for p in ref.glob("*.md"))
+    readme = (ref / "README.md").read_text(errors="replace")[:limit] if (ref / "README.md").exists() else "(沒有 README.md)"
+    return "檔案:" + "、".join(names) + "\n\nREADME.md:\n" + readme
+
+
+def state_edits_prompt(proj: str, d: pathlib.Path, before: str, memory_section: str, h_note: str, d_note: str) -> str:
+    agent_md = (d / "AGENT.md").read_text(errors="replace") if (d / "AGENT.md").exists() else "(沒有 AGENT.md)"
+    return f"""你是跨專案整合 agent(圖書館員),負責專案 {proj} 的 STATE.md。你沒有任何工具:需要的東西都在下面,
+回答只能是一個 JSON(格式由系統指定)。你不直接改檔案,而是回「編輯清單」,平台照順序套用到 STATE.md。
+{memory_section}
+{h_note}
+{d_note}
+
+## AGENT.md(這個專案的 agent 規則,背景)
+{agent_md}
+
+## memory/reference/(整理過的主題文件,跟舊的流水紀錄衝突時以這裡為準)
+{_reference(d)}
+
+## 現在的 STATE.md(完整內容)
+<<<STATE
+{before}
+STATE>>>
+
+規則:
+{_state_rules(proj)}
+
+編輯清單的格式:
+- edits 是照順序套用的 {{"old", "new"}}:old 一定要是**現在 STATE.md 裡剛好出現一次**的一段原文(逐字、含換行;
+  太短會出現好幾次,就多帶幾個字),new 是換成的文字(空字串 = 刪掉那一段)。不要回整份 STATE.md。
+- 不用改就 state_updated: false、edits: []。
+- 〔{OWNER}〕行尾的「(等 {OWNER}:…)」標記不能改;那一項做完了就把整行刪掉。"""
+
+
+def _shadow_write(rec: dict, name: str | None = None, text: str | None = None) -> None:
+    day = SHADOW_DIR / TODAY
+    day.mkdir(parents=True, exist_ok=True)
+    if name and text is not None:
+        (day / name).write_text(text)
+    with (SHADOW_DIR / f"{TODAY}.jsonl").open("a") as f:
+        f.write(json.dumps(rec, ensure_ascii=False) + "\n")
+
+
+def _shadow_call(point: str, prompt: str) -> tuple[dict | None, dict]:
+    rc, obj, _ = llm(point, prompt, None)
+    so = (obj or {}).get("structured_output") if rc == 0 else None
+    meta = {"cost_usd": (obj or {}).get("total_cost_usd"), "model": (obj or {}).get("model"),
+            "provider": (obj or {}).get("provider")}
+    if not isinstance(so, dict):
+        meta["error"] = (obj or {}).get("llm_error") or f"exit {rc}"
+        return None, meta
+    return so, meta
+
+
+def shadow_state(proj: str, d: pathlib.Path, before: str, after: str, agent_changed: bool,
+                 memory_section: str, h_note: str, d_note: str) -> None:
+    """completion 版對同一份輸入的提議,跟 agent 版實際寫出的 STATE.md 比。只記錄,不寫任何真的檔案。"""
+    if not SHADOW:
+        return
+    try:
+        so, meta = _shadow_call("librarian-state-edits", state_edits_prompt(proj, d, before, memory_section, h_note, d_note))
+        rec = {"ts": datetime.datetime.now().astimezone().isoformat(timespec="seconds"), "point": "librarian-state-edits",
+               "project": proj, "agent_changed": agent_changed, **meta}
+        if so is None:
+            rec["ok"] = False
+            _shadow_write(rec)
+            log(f"{proj}: 影子(completion 版)沒有結果:{meta.get('error')}")
+            return
+        proposed = None
+        try:
+            proposed = edits.apply(before, so.get("edits") or [])
+        except edits.EditError as e:
+            rec["edit_error"] = str(e)
+        shadow_changed = bool(so.get("state_updated")) and proposed is not None and proposed != before
+        rec.update(ok=proposed is not None, shadow_changed=shadow_changed, same_decision=shadow_changed == agent_changed,
+                   edits=len(so.get("edits") or []), reason=str(so.get("reason") or "")[:400])
+        if proposed is not None:
+            rec["marker_problems"] = edits.check_markers(before, proposed, KEY_MARK)
+            rec["identical_to_agent"] = proposed == after
+            rec["similarity"] = round(difflib.SequenceMatcher(None, proposed, after).ratio(), 3)
+            tmp = SHADOW_DIR / TODAY / f"{proj}.STATE.md"
+            _shadow_write(rec, tmp.name, proposed)
+            rec_todo = run([PY, str(HUB / "bin" / "check-state-todo.py"), str(tmp)])
+            if rec_todo.returncode != 0:
+                log(f"{proj}: 影子提議的待辦段落格式不對:{head_spaced(rec_todo.stdout.rstrip(chr(10)), 2)}")
+        else:
+            _shadow_write(rec)
+        log(f"{proj}: 影子(completion 版):要改={shadow_changed}(agent 版={agent_changed})"
+            + (f",相似度 {rec['similarity']}" if "similarity" in rec else "")
+            + (f",編輯清單不合規:{rec['edit_error']}" if "edit_error" in rec else "")
+            + (f",標記問題 {len(rec['marker_problems'])} 個" if rec.get("marker_problems") else ""))
+    except Exception as e:   # 影子壞了不影響真的流程
+        log(f"{proj}: 影子模式失敗:{type(e).__name__}: {e}")
+
+
+def index_edits_prompt(before: str, digest_text: str) -> str:
+    return f"""更新 index.md:下面是今天({TODAY})各專案的摘要(digest)跟現在的 index.md。標出專案之間看得出來的關聯——
+沒有明顯關聯就不要硬掰,保持精簡,不要重寫整份格式風格;沒有值得改的地方就 index_updated: false、edits: []。
+你沒有任何工具,回答只能是一個 JSON:edits 是照順序套用的 {{"old", "new"}},old 一定要是現在 index.md 裡剛好出現一次的原文。
+<!-- roster:begin --> 到 <!-- roster:end --> 之間的專案名冊是機械產生的,不要編輯那個區塊;你的註記寫在區塊外。
+
+## 今天的 digest
+{digest_text}
+
+## 現在的 index.md
+<<<INDEX
+{before}
+INDEX>>>"""
+
+
+ROSTER = re.compile(r"<!-- roster:begin -->.*?<!-- roster:end -->", re.S)
+
+
+def shadow_index(before: str, after: str, digest_text: str) -> None:
+    if not SHADOW:
+        return
+    try:
+        so, meta = _shadow_call("librarian-index-edits", index_edits_prompt(before, digest_text))
+        rec = {"ts": datetime.datetime.now().astimezone().isoformat(timespec="seconds"), "point": "librarian-index-edits",
+               "agent_changed": before != after, **meta}
+        if so is None:
+            rec["ok"] = False
+            _shadow_write(rec)
+            log(f"index.md: 影子(completion 版)沒有結果:{meta.get('error')}")
+            return
+        proposed = None
+        try:
+            proposed = edits.apply(before, so.get("edits") or [])
+        except edits.EditError as e:
+            rec["edit_error"] = str(e)
+        if proposed is not None:
+            rec["roster_untouched"] = ROSTER.findall(before) == ROSTER.findall(proposed)
+            rec["similarity"] = round(difflib.SequenceMatcher(None, proposed, after).ratio(), 3)
+        shadow_changed = proposed is not None and proposed != before
+        rec.update(ok=proposed is not None, shadow_changed=shadow_changed, same_decision=shadow_changed == (before != after),
+                   relations=str(so.get("relations_found") or "")[:300])
+        _shadow_write(rec, "index.md" if proposed is not None else None, proposed)
+        log(f"index.md: 影子(completion 版):要改={shadow_changed}(agent 版={before != after})"
+            + (f",相似度 {rec['similarity']}" if "similarity" in rec else "")
+            + (f",編輯清單不合規:{rec['edit_error']}" if "edit_error" in rec else ""))
+    except Exception as e:
+        log(f"index.md: 影子模式失敗:{type(e).__name__}: {e}")
+
+
 # ---------- 一個專案 ----------
 
 def repair_state_todo(proj: str, d: pathlib.Path) -> None:
@@ -397,6 +560,7 @@ def process(proj: str, d: pathlib.Path, handoffs: list[dict], state_model: str, 
                   f"指向現在實際存放內容的地方(通常是 memory/reference/ 底下的主題文件):{dangling}")
 
     pre = git(d, "rev-parse", "HEAD")
+    before = (d / "STATE.md").read_text(errors="replace") if (d / "STATE.md").exists() else ""   # 影子模式的輸入
     # 只准寫 ./STATE.md:prompt 講了也擋不住(2026-10-15 project-06 的 haiku 還是改了 memory/reference/),判斷點
     # librarian-state 用權限規則機械限制(dontAsk、只准 Edit(./STATE.md));下面的隔離檢查是第二道防線
     rc, obj, text = llm("librarian-state", state_prompt(proj, memory_section, h_note, d_note), d)
@@ -439,6 +603,8 @@ def process(proj: str, d: pathlib.Path, handoffs: list[dict], state_model: str, 
     actually = "true" if changed_state else "false"
     if reported != "unknown" and reported != actually:
         log(f"{proj}: 警告——agent 回報 state_updated={reported},但實際檔案變化={actually}(以實際檔案為準)")
+    after = (d / "STATE.md").read_text(errors="replace") if (d / "STATE.md").exists() else ""
+    shadow_state(proj, d, before, after, changed_state, memory_section, h_note, d_note)
 
     if changed_state:
         if post == pre:  # hook 沒接手(這個專案這次沒有走 hook,或 hook 沒設好),自己補 commit+push
@@ -500,6 +666,8 @@ def main() -> int:
             hublib.digest_append("projects", "".join(digest))
         except OSError:
             log(f"digest {TODAY} 寫入失敗")
+        index_file = hubconf.data_file("index.md")
+        index_before = index_file.read_text(errors="replace") if index_file.exists() else ""
         rc, obj, text = llm("librarian-index", index_prompt(), hubconf.data_dir())
         if rc == 0 and text:
             if (cost := add_cost(obj)):
@@ -509,6 +677,9 @@ def main() -> int:
             log(f"index.md: {jstr(rel) if present(rel) else ''}")
         else:
             log(f"index.md update failed (exit {rc})")
+        digest_file = hublib.digest_path()
+        shadow_index(index_before, index_file.read_text(errors="replace") if index_file.exists() else "",
+                     digest_file.read_text(errors="replace") if digest_file.exists() else "".join(digest))
     else:
         hublib.digest_append("projects", "")   # 今天沒有專案摘要:拿掉這一段(同一天重跑、上一次有寫過的話)
         log("nothing to digest today")

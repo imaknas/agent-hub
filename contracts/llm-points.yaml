@@ -21,7 +21,7 @@
 v: 1
 points:
   librarian-state:
-    caller: bin/librarian.sh
+    caller: bin/librarian.py
     shape: agent
     model_group: fast
     extra_args: ["--strict-mcp-config"]   # 不載入環境裡的 MCP(全域的含正式資料庫;關掉工具也擋不掉,10-27 實驗)
@@ -35,7 +35,7 @@ points:
     timeout_s: 1200
     on_failure: retry_later # checkpoint 不推進,隔晚重試
   librarian-todo-format:
-    caller: bin/librarian.sh
+    caller: bin/librarian.py
     shape: agent
     model_group: fast
     extra_args: ["--strict-mcp-config"]   # 不載入環境裡的 MCP(全域的含正式資料庫;關掉工具也擋不掉,10-27 實驗)
@@ -49,7 +49,7 @@ points:
     output: {format: text}
     on_failure: skip        # 修不好就留著,check-state-todo 會再檢查、todo.md 檔尾列出
   librarian-index:
-    caller: bin/librarian.sh
+    caller: bin/librarian.py
     shape: agent
     model_group: standard
     extra_args: ["--strict-mcp-config"]   # 不載入環境裡的 MCP(全域的含正式資料庫;關掉工具也擋不掉,10-27 實驗)
@@ -61,6 +61,26 @@ points:
     output: {format: json, schema: llm/librarian-index.schema.json}
     timeout_s: 1200
     on_failure: skip        # index.md 的註記這晚不更新;名冊區塊照常由腳本重生
+  librarian-state-edits:
+    caller: bin/librarian.py(影子模式,每晚跟 librarian-state 並跑、只比對不寫;比對沒問題才取代它)
+    shape: completion
+    model_group: fast
+    purpose: librarian-state 的 completion 版:平台把 STATE.md、AGENT.md、memory 變動、轉交放進 prompt,模型回編輯清單
+    model_env: STATE_MODEL
+    output: {format: json, schema: llm/librarian-state-edits.schema.json}
+    max_tokens: 8192
+    timeout_s: 600
+    on_failure: skip        # 影子:失敗只記在影子紀錄,真的 STATE.md 由 librarian-state 照常處理
+  librarian-index-edits:
+    caller: bin/librarian.py(影子模式,跟 librarian-index 並跑、只比對不寫)
+    shape: completion
+    model_group: standard
+    purpose: librarian-index 的 completion 版:平台把 index.md 跟今天的 digest 放進 prompt,模型回名冊區塊外的編輯清單
+    model_env: INDEX_MODEL
+    output: {format: json, schema: llm/librarian-index-edits.schema.json}
+    max_tokens: 8192
+    timeout_s: 600
+    on_failure: skip        # 影子:失敗只記在影子紀錄
   consolidate:
     caller: bin/consolidate-memory.py
     shape: agent
