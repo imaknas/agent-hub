@@ -14,6 +14,9 @@ hub.json:
     ["agy", "--add-dir", "{cwd}", "--mode", "accept-edits", "--settings",
      "{\"permissions\": {\"allow\": [\"read_file({cwd})\", \"write_file({cwd})\"], \"deny\": [\"command(*)\"]}}",
      "-p", "{prompt}"]
+  例(Codex CLI,prompt 從 stdin、答案寫進檔案;寫入由它自己的沙盒限在工作目錄,讀不限):
+    "run": ["codex", "exec", "--sandbox", "workspace-write", "--skip-git-repo-check", "--ephemeral",
+            "--color", "never", "-o", "{output_file}", "-"], "output_file": true
   跑完 exit 0 卻沒有任何輸出算失敗(有的工具權限被擋就這樣靜靜結束),原因用 stderr。
 
 只提供兩個介面:agent(跑一次)跟 completion。其他(接續、串流、hook、對話紀錄、登入狀態)都沒有——平台照

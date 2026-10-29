@@ -131,7 +131,7 @@ doctor 跟狀態頁照實標出來。Knas 自己的主力是互動 session,這�
    reflect-week 已經是 completion(本機 Ollama 跑通)。librarian 的三個點改成 completion 是另一步(影子模式,`llm-providers.md` 步驟 4)。
 3. ✅(5ca93ff)**owner 端可以換**:registrar 搬回核心、`owner_side: builtin | muninn`、內建最小 owner 端 + 通知轉接器;Muninn 寫成可選工具。
 4. ✅(18f3556;MCP 伺服器還沒做)**平台 CLI 改名上 PATH**、規則內容去掉本機路徑、MCP 伺服器(含 `instructions`)。
-5. ✅ **提議→平台套用**(f82773b):丟棄式 worktree、路徑白名單套用、平台代寄信。✅ 10-29 第一個非 Claude 的實跑:Gemini CLI 6 月起不服務個人帳號,改用它的後繼 **Antigravity CLI(`agy`)**,`runtime: command` 樣板接上(`{prompt}` 當參數、`{cwd}` 把 read_file/write_file 限在 worktree、`command(*)` 拒絕),Gemini 4 Argon 處理一封真的交辦:只採用筆記、平台代寄回信並結案、筆記 push 到 memory repo。Flash 會把長的暫存路徑抄錯 → 讀到 worktree 外被擋 → `agy` exit 0 但沒輸出;平台現在把「沒輸出」當失敗、帶 stderr 的原因。
+5. ✅ **提議→平台套用**(f82773b):丟棄式 worktree、路徑白名單套用、平台代寄信。✅ 10-29 第一個非 Claude 的實跑:Gemini CLI 6 月起不服務個人帳號,改用它的後繼 **Antigravity CLI(`agy`)**,`runtime: command` 樣板接上(`{prompt}` 當參數、`{cwd}` 把 read_file/write_file 限在 worktree、`command(*)` 拒絕),Gemini 4 Argon 處理一封真的交辦:只採用筆記、平台代寄回信並結案、筆記 push 到 memory repo。Flash 會把長的暫存路徑抄錯 → 讀到 worktree 外被擋 → `agy` exit 0 但沒輸出;平台現在把「沒輸出」當失敗、帶 stderr 的原因。同一天 **Codex CLI**(ChatGPT 帳號登入)也跑通,不用改程式:走的是 stdin + `-o {output_file}` 這兩條 `agy` 沒走到的路,它自己的 Seatbelt 沙盒(`workspace-write`)跟平台的丟棄式 worktree 疊在一起沒問題。注意:Codex 的沙盒只限寫、不限讀(讀得到 secrets 目錄),`agy` 的 `read_file({cwd})` 兩邊都限;讀的範圍要等平台自己的沙盒(Linux 那一步)才統一。
 6. **Linux 的排程跟服務**(可以跟 5 平行)。
 7. **匯流排改成平台服務 + socket**(資料完整性;可以在 4 之後)。
 
