@@ -251,10 +251,9 @@ memory/ 的結構:
 """
 
 
-def run_model(prompt: str, repo: pathlib.Path, model: str | None, project: str) -> tuple[dict | None, str]:
+def run_model(prompt: str, repo: pathlib.Path, model: str) -> tuple[dict | None, str]:
     # 判斷點 consolidate(權限 dontAsk、只准 Edit memory/reference/** 跟 STATE.md、schema:contracts/llm-points.yaml)
-    cmd = [sys.executable, str(HUB / "bin" / "llm.py"), "run", "consolidate", "--project", project,
-           *(["--model", model] if model else [])]   # --project:llm.py 照它的 privacy.memory 擋雲端
+    cmd = [sys.executable, str(HUB / "bin" / "llm.py"), "run", "consolidate", *(["--model", model] if model else [])]
     env = dict(GIT_ENV)  # claude 的憑證由 llm.py 決定(預設 headless token)
     try:
         r = subprocess.run(cmd, input=prompt, cwd=repo, env=env, capture_output=True, text=True, timeout=CALL_TIMEOUT + 60)
@@ -395,7 +394,7 @@ def consolidate(s: dict, model: str, dry_run: bool, keep: bool) -> dict:
         log(f"{name}: 整理 {len(s['batch'])} 個日期檔({s['batch_bytes']} bytes,{s['batch'][0]} … {s['batch'][-1]}),"
             f"還有 {len(s['old']) - len(s['batch'])} 個留到下次;模型 {model}")
 
-        out, err = run_model(build_prompt(s, repo), repo, model, s["name"])
+        out, err = run_model(build_prompt(s, repo), repo, model)
         if out is None:
             log(f"{name}: 模型呼叫失敗({err}),放棄,副本沒動")
             return result

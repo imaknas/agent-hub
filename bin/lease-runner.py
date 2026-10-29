@@ -292,7 +292,7 @@ def start_proc(lease: Lease, resume: bool) -> None:
     can_resume = wanted and rt().resumable(lease.id)
     flag = ["--resume", lease.id] if can_resume else ["--session-id", lease.id]
     point = "lease-work" if lease.mode == "work" else "lease-session"
-    cmd = [PY, str(HUB / "bin" / "llm.py"), "exec", point, "--cwd", lease.cwd, "--project", lease.project, "--",
+    cmd = [PY, str(HUB / "bin" / "llm.py"), "exec", point, "--cwd", lease.cwd, "--",
            *flag, "--strict-mcp-config", "--mcp-config", str(mcp_config(lease)),
            "--permission-prompt-tool", runtime_claude.APPROVE_TOOL,
            "--settings", str(deny_settings(lease.project)), "--append-system-prompt", preamble(lease.project, lease.mode),
@@ -455,7 +455,7 @@ def run_handover(lease: Lease) -> tuple[dict | None, str]:
     session 一開始就掛掉,交接拿 --resume 去接一段不存在的對話,被當成「模型沒寫出合格交接」)。"""
     if not rt().resumable(lease.id):
         return dict(EMPTY_HANDOVER), ""
-    cmd = [PY, str(HUB / "bin" / "llm.py"), "run", "lease-handover", "--cwd", lease.cwd, "--project", lease.project, "--",
+    cmd = [PY, str(HUB / "bin" / "llm.py"), "run", "lease-handover", "--cwd", lease.cwd, "--",
            "--resume", lease.id, "--strict-mcp-config", "--settings", str(deny_settings(lease.project))]
     why = ""
     for attempt in (1, 2):  # 不合格重試一次

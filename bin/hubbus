@@ -1092,8 +1092,7 @@ def run_handler(c, proj, ws, rows) -> None:
     prompt.parent.mkdir(parents=True, exist_ok=True)
     prompt.write_text(hubconf.fill_names((HUB / "templates" / "prompts" / "mailbox.md").read_text()))
     res = subprocess.run([str(HUB / "bin" / "run-agent-job.sh"), f"mailbox-{proj}", str(ws), str(prompt)],
-                         capture_output=True, text=True,
-                         env={**os.environ, "AGENT_JOB_POINT": "mailbox-escalation", "HUB_PROJECT": proj})
+                         capture_output=True, text=True, env={**os.environ, "AGENT_JOB_POINT": "mailbox-escalation"})
     log(f"{proj}:派 headless agent 處理 {len(rows)} 封({', '.join(r['id'] for r in rows)},{run})"
         if res.returncode == 0 else f"{proj}:派不出去:{(res.stderr or res.stdout).strip()[-200:]}")
 
@@ -1120,7 +1119,7 @@ def resume(c, r, sid, cwd, rt, ws=None, prompt=None) -> None:
     try:
         with open(out / f"resume-{r['id']}.log", "w") as fh:
             p = subprocess.Popen([sys.executable, str(HUB / "bin" / "llm.py"), "run", "mailbox-conversation",
-                                  "--cwd", str(cwd), "--project", canon(r["to_project"]), "--", *rt.resume_args(sid)],
+                                  "--cwd", str(cwd), "--", *rt.resume_args(sid)],
                                  stdin=subprocess.PIPE, stdout=fh, stderr=subprocess.STDOUT, cwd=str(cwd), text=True,
                                  start_new_session=True)
             p.stdin.write((prompt or RESUME_PROMPT).format(letter=fmt(r), id=r["id"]))
@@ -1161,18 +1160,8 @@ def dispatch(c, rt=None) -> int:
     wait_cut = iso(now() - datetime.timedelta(minutes=CONVERSATION_WAIT_MIN))
     take_cut = iso(now() - datetime.timedelta(minutes=TAKE_TIMEOUT_MIN))
     waiting = 0
-    import privacy
-    point = "mailbox-propose" if (hubconf.get("mailbox") or {}).get("handler") == "propose" else "mailbox-escalation"
-    spec = privacy.point_spec(point)
     for proj, ws in projects().items():
         if not ws.is_dir():
-            continue
-        # 隱私路由(privacy.py):只准本機模型、執行環境卻在雲端 → 不派 agent,信留著等人(llm.py 本來也會擋;這裡先擋,
-        # 才不會每分鐘派一個註定被拒的,原因只記一次)
-        why = privacy.refusal(point, spec, proj)
-        if why or (hubconf.STATE / f"hubbus-logged-dispatch-private-{proj}.txt").exists():
-            log_once(f"dispatch-private-{proj}", f"{proj}:信箱交辦不派 agent:{why}" if why else "")
-        if why:
             continue
         delegate = []
         for r in c.execute(INBOX_SQL, (proj,)).fetchall():

@@ -104,19 +104,6 @@ class ProposeApply(unittest.TestCase):
         status = json.loads((self.tmp / "state" / "agent-jobs" / "mailbox-demo" / "status.json").read_text())
         self.assertEqual(status["state"], "done", "dispatch 看 status 決定要不要重派")
 
-    def test_local_only_project_never_reaches_a_cloud_agent(self):
-        doc = yaml.safe_load((self.tmp / "config" / "projects" / "demo.yaml").read_text())
-        doc["privacy"]["memory"] = "local_only"   # 指令樣板的工具一律當雲端(平台確認不了)
-        (self.tmp / "config" / "projects" / "demo.yaml").write_text(yaml.safe_dump(doc, allow_unicode=True))
-        r = self.run_("hubbus", "send", "--from", "agent-hub", "--to", "demo", "--type", "question", "--text", "快取用哪個?")
-        mid = r.stdout.strip().split()[-1]
-        r = self.run_("propose_apply.py", "mailbox", "demo", mid)
-        self.assertEqual(r.returncode, 1)
-        out = json.loads(r.stdout.strip().splitlines()[-1])
-        self.assertIn("隱私", out["error"])
-        self.assertEqual((out["applied"], out["sent"], out["done"]), ([], [], []))
-        self.assertFalse(list((self.ws / ".agent-memory" / "memory").glob("2*.md")), "agent 沒有跑")
-
     def test_failed_agent_changes_nothing(self):
         (self.tmp / "agent.py").write_text("import sys\nopen('README.md','w').write('x')\nsys.exit(2)\n")
         r = self.run_("hubbus", "send", "--from", "agent-hub", "--to", "demo", "--type", "request", "--text", "做件事")

@@ -129,6 +129,8 @@ headless token)是其中一種設定,**每一步上線都不改變它**。
 
 ## 隱私:哪些內容能送哪個 provider
 
+> **⏸ 這一節是舊提案,等 evaluator 成熟再定**(見上面步驟 5)。專案層級的欄位以 `docs/design/evaluators.md` 的 `privacy.material` 為準,不另外加 `privacy.memory`。
+
 - provider 的 `location: cloud | local`(預設 cloud)。**`local` 只准 loopback、tailnet、私有網段的 `base_url`**(config check),
   不能自己宣告。
 - 判斷點的 `material` 決定最低要求:`local_only` 只能送 local。
@@ -165,7 +167,7 @@ headless token)是其中一種設定,**每一步上線都不改變它**。
    (STATE.md、待辦段落、index 註記),沒問題再切換。順序:todo-format → index → state。黃金檔改成固定「替身回的編輯清單 →
    平台寫出什麼」(現在的替身是直接寫檔模擬 agent,要跟著改);`librarian.py` 裡「沒有 structured_output 以實際檔案為準」那條
    路徑切換後拿掉。
-5. ✅ 隱私路由(10-29,`bin/privacy.py`,擋在 `llm.py`):`location` 檢查、`material`(每個點都宣告)、`privacy.memory`、要本機時自動改挑本機的 provider、librarian 的 digest 過濾(index.md 本身不過濾:名冊 + 關聯註記,local_only 之後不會再有新的註記)、信箱 dispatch 不派註定被拒的 agent。執行環境的 `LOCATION` 由轉接器宣告,沒宣告 = 雲端。
+5. ⏸ 隱私路由:**等 evaluator 成熟再定**(Knas 10-29:現在沒有強制的隱私政策)。10-29 做過一版(05741a4:`privacy.memory`、每個點標 `material`、llm.py 擋雲端、digest 過濾)後 revert——它搶先決定了 evaluators.md 要定的東西(專案層級用 `privacy.material`、`evals.trust`)。留下的只有 provider 的 `location` 欄位跟它的 config check(本機只准私有網段)。
 6. ✅ `models.env` → `hub.json`(10-29:`llm.model_for` 是唯一的算法,librarian / consolidate / 週報記 llm.py 回報的 `llm_model`;`model_group: default` = 不指定、用工具的預設;`schedulectl set-model` 寫 `llm.points`)。✅ `agenthub llm setup`(init 也叫):選 coding agent 自己的登入 / Anthropic / OpenAI(或相容)/ 本機 Ollama,key 用 getpass 寫進 secrets(600),模型從那家的 `list_models` 選(平台不猜名稱);doctor 說判斷點交給誰、沒地方跑就紅。
 7. 用本機 Ollama 跑一次完整的夜間流程(隔離的 HOME,不送雲端):證明只有本機模型也能跑。
 

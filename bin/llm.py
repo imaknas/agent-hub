@@ -99,7 +99,7 @@ def auth_env(spec: dict, rt) -> tuple[dict | None, str]:
     return rt.auth_env(auth_mode(spec), base)
 
 
-def run_completion(a, spec: dict, prompt: str, model: str | None, require_local: bool = False) -> int:
+def run_completion(a, spec: dict, prompt: str, model: str | None) -> int:
     """shape: completion 的判斷點:交給 completion.py(每家同一套處理)。
     hub.json 有 llm.providers → completion.resolve 選 provider 跟模型(--model 不用);
     沒有 → 交給 runtime.default 的 completion 介面,模型是 model_for 算的那個。"""
@@ -113,7 +113,7 @@ def run_completion(a, spec: dict, prompt: str, model: str | None, require_local:
             return fail(a.point, spec, f"執行環境 {name} 沒有 completion 介面,hub.json 也沒有 llm 區塊(設一家 LLM provider)")
         target = completion.runtime_target(name, model, auth_mode(spec))
     try:
-        out = completion.run(a.point, spec, prompt, schema, target=target, require_local=require_local)
+        out = completion.run(a.point, spec, prompt, schema, target=target)
     except completion.Refused as e:
         return fail(a.point, spec, str(e))
     print(json.dumps(out, ensure_ascii=False))
@@ -130,15 +130,8 @@ def run(a) -> int:
         return 2
     prompt = "" if a.cmd == "exec" else (pathlib.Path(a.prompt_file).read_text() if a.prompt_file else sys.stdin.read())
     model = model_for(a.point, spec, a.model)
-    # 隱私路由(privacy.py):只准本機卻只能送雲端 → 不跑、說原因,不退回雲端。這裡是平台所有模型呼叫的唯一出口
-    import privacy
-    project = (getattr(a, "project", None) or os.environ.get("HUB_PROJECT")
-               or privacy.project_for(getattr(a, "cwd", None) or os.getcwd()))
-    if (why := privacy.refusal(a.point, spec, project)):
-        return fail(a.point, spec, why)
-    require_local = privacy.needs_local(spec, project) is not None
     if a.cmd == "run" and spec.get("shape") == "completion" and not getattr(a, "dry_run", False):
-        return run_completion(a, spec, prompt, model, require_local)
+        return run_completion(a, spec, prompt, model)
     try:
         rt = runtime_ports.load(spec.get("runtime"), ports=("agent",))
     except runtime_ports.Unsupported as e:   # 沒有 coding agent:照宣告的失敗路徑走,原因寫清楚
@@ -215,7 +208,6 @@ def main() -> int:
     r = sub.add_parser("run")
     r.add_argument("point")
     r.add_argument("--cwd")
-    r.add_argument("--project", help="內容屬於哪個專案(隱私路由;沒給就從 --cwd / 工作目錄推)")
     r.add_argument("--model")
     r.add_argument("--prompt-file")
     r.add_argument("--dry-run", action="store_true", help="只印出會執行的指令,不呼叫模型")
@@ -223,7 +215,6 @@ def main() -> int:
     e = sub.add_parser("exec", help="長駐串流 session:照宣告組旗標後 exec 成 claude(stdin/stdout 是 stream-json)")
     e.add_argument("point")
     e.add_argument("--cwd")
-    e.add_argument("--project")
     e.add_argument("--model")
     e.add_argument("--prompt-file")
     e.add_argument("extra", nargs="*")

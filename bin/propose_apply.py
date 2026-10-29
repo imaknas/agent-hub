@@ -59,7 +59,7 @@ def run(project: str, ws: pathlib.Path, point: str, prompt: str, allow: list[str
         if (mem / ".git").exists():
             git(mem, "worktree", "add", "--detach", str(wt / ".agent-memory"), "HEAD")
             added.append((mem, wt / ".agent-memory"))
-        r = subprocess.run([PY, str(BIN / "llm.py"), "run", point, "--cwd", str(wt), "--project", project], input=prompt, text=True,
+        r = subprocess.run([PY, str(BIN / "llm.py"), "run", point, "--cwd", str(wt)], input=prompt, text=True,
                            capture_output=True, timeout=timeout_s + 60)
         try:
             res = json.loads(r.stdout) if r.stdout.strip() else {}

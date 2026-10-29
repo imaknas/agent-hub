@@ -32,7 +32,6 @@ BIN = pathlib.Path(__file__).resolve().parent
 sys.path.insert(0, str(BIN))
 import edits  # noqa: E402
 import hubconf  # noqa: E402
-import privacy  # noqa: E402
 import hublib  # noqa: E402
 
 HUB = hubconf.ROOT
@@ -89,12 +88,11 @@ def git(repo, *args) -> str:
     return out(["git", "-C", str(repo), *args])
 
 
-def llm(point: str, prompt: str, cwd, project: str | None = None) -> tuple[int, dict | None, str]:
-    """跑一個判斷點(bin/llm.py run <point>,prompt 從 stdin);stderr 附加到 LOG。回傳 (exit, 解析過的 JSON, 原文)。
-    project:內容屬於哪個專案(llm.py 照它的 privacy.memory 擋雲端;跨專案的點不給)。"""
+def llm(point: str, prompt: str, cwd) -> tuple[int, dict | None, str]:
+    """跑一個判斷點(bin/llm.py run <point>,prompt 從 stdin);stderr 附加到 LOG。回傳 (exit, 解析過的 JSON, 原文)。"""
     with LOG.open("a") as f:
-        r = subprocess.run([PY, str(HUB / "bin" / "llm.py"), "run", point, *(["--project", project] if project else [])],
-                           cwd=cwd, input=prompt, text=True, stdout=subprocess.PIPE, stderr=f)
+        r = subprocess.run([PY, str(HUB / "bin" / "llm.py"), "run", point], cwd=cwd, input=prompt, text=True,
+                           stdout=subprocess.PIPE, stderr=f)
     text = r.stdout.rstrip("\n")
     try:
         obj = json.loads(text) if text else None
@@ -291,29 +289,6 @@ def todo_fix_prompt(problems: str) -> str:
 {problems}"""
 
 
-def index_call(index_file: pathlib.Path) -> tuple[int, dict | None, str]:
-    """librarian-index(agent,讀 data 目錄的 digest)。有 local_only 的專案、模型又在雲端時,改在暫存目錄跑:
-    只給拿掉那些專案的 digest(privacy.cloud_view)跟 index.md,改過的 index.md 再寫回。
-    index.md 本身不過濾(名冊 + 跨專案的關聯註記):local_only 之後 digest 不再給它那個專案的內容,不會再有新的註記。"""
-    hidden = privacy.local_only_projects()
-    if not hidden or privacy.target_location("librarian-index", privacy.point_spec("librarian-index"))[0] == "local":
-        return llm("librarian-index", index_prompt(), hubconf.data_dir())
-    import tempfile
-    src, data = hublib.digest_path(), hubconf.data_dir()
-    with tempfile.TemporaryDirectory(prefix="librarian-index-") as td:
-        digest_copy, index_copy = pathlib.Path(td) / src.relative_to(data), pathlib.Path(td) / index_file.relative_to(data)
-        digest_copy.parent.mkdir(parents=True, exist_ok=True)
-        digest_copy.write_text(privacy.cloud_view(src.read_text(errors="replace") if src.exists() else "", hidden))
-        before = index_file.read_text(errors="replace") if index_file.exists() else ""
-        index_copy.write_text(before)
-        log(f"index.md:digest 拿掉 local_only 的專案({', '.join(sorted(hidden))})再交給雲端模型")
-        res = llm("librarian-index", index_prompt(), td)
-        after = index_copy.read_text(errors="replace") if index_copy.exists() else before
-        if after != before:
-            index_file.write_text(after)
-        return res
-
-
 def index_prompt() -> str:
     return f"""更新 index.md:今天({TODAY})各專案的摘要在 digest/{TODAY}.md,讀進來後,
 標出專案之間看得出來的關聯——沒有明顯關聯就不要硬掰,保持精簡。
@@ -377,8 +352,8 @@ def _shadow_write(rec: dict, name: str | None = None, text: str | None = None) -
         f.write(json.dumps(rec, ensure_ascii=False) + "\n")
 
 
-def _shadow_call(point: str, prompt: str, project: str | None = None) -> tuple[dict | None, dict]:
-    rc, obj, _ = llm(point, prompt, None, project)
+def _shadow_call(point: str, prompt: str) -> tuple[dict | None, dict]:
+    rc, obj, _ = llm(point, prompt, None)
     so = (obj or {}).get("structured_output") if rc == 0 else None
     meta = {"cost_usd": (obj or {}).get("total_cost_usd"), "model": (obj or {}).get("model"),
             "provider": (obj or {}).get("provider")}
@@ -394,8 +369,7 @@ def shadow_state(proj: str, d: pathlib.Path, before: str, after: str, agent_chan
     if not SHADOW:
         return
     try:
-        so, meta = _shadow_call("librarian-state-edits", state_edits_prompt(proj, d, before, memory_section, h_note, d_note),
-                                proj)
+        so, meta = _shadow_call("librarian-state-edits", state_edits_prompt(proj, d, before, memory_section, h_note, d_note))
         rec = {"ts": datetime.datetime.now().astimezone().isoformat(timespec="seconds"), "point": "librarian-state-edits",
                "project": proj, "agent_changed": agent_changed, **meta}
         if so is None:
@@ -490,7 +464,7 @@ def repair_state_todo(proj: str, d: pathlib.Path) -> None:
         return
     problems = r.stdout.rstrip("\n")
     log(f"{proj}: STATE.md 待辦段落格式不對,請模型只修格式:{head_spaced(problems, 3)}")
-    _, obj, _ = llm("librarian-todo-format", todo_fix_prompt(problems), d, d.name)
+    _, obj, _ = llm("librarian-todo-format", todo_fix_prompt(problems), d)
     add_cost(obj)
     r = run(check)
     if r.returncode == 0:
@@ -554,11 +528,6 @@ def process(proj: str, d: pathlib.Path, handoffs: list[dict], digest: list[str])
         log(f"{proj}: no memory/ changes in range {rng}")
         ckpt.write_text(head + "\n")
         return
-    # 隱私路由:llm.py 本身會擋;這裡先問,好在 log 跟 digest 寫清楚為什麼沒更新(checkpoint 不推進,有本機模型後補上)
-    if (why := privacy.refusal("librarian-state", privacy.point_spec("librarian-state"), proj)):
-        log(f"{proj}: 略過 STATE.md 更新——{why}")
-        digest.append(f"## {proj}\n\n(STATE.md 這次沒更新:這個專案只准本機模型,現在沒有可用的)\n\n")
-        return
 
     memory_section = f"這次 memory/ 沒有新變動,只有下面 {OWNER} 的轉交要處理。"
     if changed:
@@ -587,7 +556,7 @@ def process(proj: str, d: pathlib.Path, handoffs: list[dict], digest: list[str])
     before = (d / "STATE.md").read_text(errors="replace") if (d / "STATE.md").exists() else ""   # 影子模式的輸入
     # 只准寫 ./STATE.md:prompt 講了也擋不住(2026-10-15 project-06 的 haiku 還是改了 memory/reference/),判斷點
     # librarian-state 用權限規則機械限制(dontAsk、只准 Edit(./STATE.md));下面的隔離檢查是第二道防線
-    rc, obj, text = llm("librarian-state", state_prompt(proj, memory_section, h_note, d_note), d, proj)
+    rc, obj, text = llm("librarian-state", state_prompt(proj, memory_section, h_note, d_note), d)
     if rc != 0 or not text:
         # 呼叫本身失敗:可能改到一半,不採用。副本還原成乾淨狀態,不留給下一晚
         run(["git", "-C", str(d), "checkout", "-q", "--", "."])
@@ -691,7 +660,7 @@ def main() -> int:
             log(f"digest {TODAY} 寫入失敗")
         index_file = hubconf.data_file("index.md")
         index_before = index_file.read_text(errors="replace") if index_file.exists() else ""
-        rc, obj, text = index_call(index_file)
+        rc, obj, text = llm("librarian-index", index_prompt(), hubconf.data_dir())
         if rc == 0 and text:
             if (cost := add_cost(obj)):
                 log(f"index.md: call cost ${cost} (model: {used_model(obj)})")
@@ -701,10 +670,8 @@ def main() -> int:
         else:
             log(f"index.md update failed (exit {rc})")
         digest_file = hublib.digest_path()
-        digest_text = digest_file.read_text(errors="replace") if digest_file.exists() else "".join(digest)
-        if privacy.target_location("librarian-index-edits", privacy.point_spec("librarian-index-edits"))[0] != "local":
-            digest_text = privacy.cloud_view(digest_text, privacy.local_only_projects())
-        shadow_index(index_before, index_file.read_text(errors="replace") if index_file.exists() else "", digest_text)
+        shadow_index(index_before, index_file.read_text(errors="replace") if index_file.exists() else "",
+                     digest_file.read_text(errors="replace") if digest_file.exists() else "".join(digest))
     else:
         hublib.digest_append("projects", "")   # 今天沒有專案摘要:拿掉這一段(同一天重跑、上一次有寫過的話)
         log("nothing to digest today")

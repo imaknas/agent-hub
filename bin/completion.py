@@ -92,9 +92,8 @@ def read_key(conf: dict) -> str | None:
     raise Refused("key 要寫成 {\"secret\": 檔名} 或 {\"env\": 變數名}")
 
 
-def resolve(point: str, spec: dict, require_local: bool = False) -> dict:
-    """這個判斷點交給哪一家、哪個模型:llm.points 的指定 > llm.use[model_group] 的那一家的 models[model_group]。
-    require_local(privacy.py:這次的內容只准本機):選到的那家在雲端 → 改挑 location: local、有這一組模型的那家;沒有就 Refused。"""
+def resolve(point: str, spec: dict) -> dict:
+    """這個判斷點交給哪一家、哪個模型:llm.points 的指定 > llm.use[model_group] 的那一家的 models[model_group]。"""
     s = settings()
     if not s:
         raise Refused("hub.json 沒有 llm 區塊")
@@ -107,12 +106,6 @@ def resolve(point: str, spec: dict, require_local: bool = False) -> dict:
     conf = providers.get(name)
     if not isinstance(conf, dict):
         raise Refused(f"llm.providers 沒有 {name}")
-    if require_local and conf.get("location", "cloud") != "local":
-        local = [(n, c) for n, c in providers.items()
-                 if isinstance(c, dict) and c.get("location") == "local" and (c.get("models") or {}).get(group)]
-        if not local:
-            raise Refused(f"這次只准本機模型,但 {name} 在雲端、也沒有 location: local 的 provider 有 {group} 組的模型")
-        (name, conf), pin = local[0], {}
     entry = pin.get("model") or (conf.get("models") or {}).get(group)
     if not entry:
         raise Refused(f"llm.providers.{name}.models 沒有 {group}")
@@ -181,17 +174,15 @@ def parse_json(text: str):
 
 def runtime_target(name: str, model: str | None, auth: str) -> dict:
     """沒有 llm.providers 時:交給執行環境(runtime.default)的 completion 介面,模型由 llm.model_for 決定。"""
-    import runtime_ports
     return {"provider": name, "impl": name, "conf": {"auth": auth}, "group": None, "model": model,
-            "context": None, "price": None, "location": runtime_ports.location(name)}
+            "context": None, "price": None, "location": "cloud"}
 
 
-def run(point: str, spec: dict, prompt: str, schema: dict | None, sleep=time.sleep, target: dict | None = None,
-        require_local: bool = False) -> dict:
+def run(point: str, spec: dict, prompt: str, schema: dict | None, sleep=time.sleep, target: dict | None = None) -> dict:
     """跑一次 completion。回傳跟 llm.py 給呼叫端的同一種形狀;失敗丟 Refused(原因)。
     target 沒給 = 照 hub.json llm 決定;給了(runtime_target)= 交給那個執行環境。"""
     import runtime_ports
-    target = target or resolve(point, spec, require_local)
+    target = target or resolve(point, spec)
     conf = dict(target["conf"])
     conf["_key"] = read_key(conf)
     conf["_context"] = target["context"]

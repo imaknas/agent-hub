@@ -13,7 +13,7 @@
     "purpose": {"type": "string", "minLength": 1},
     "paths": {"type": "object", "properties": {"workspace": {"type": "string"}, "memory_bare": {"type": "string"}, "origin": {"type": ["string", "null"]}}},
     "memory": {"type": "boolean"},
-    "privacy": {"type": "object", "properties": {"reflection": {"enum": ["include", "stats_only", "exclude"]}, "memory": {"enum": ["cloud_ok", "local_only"]}}},
+    "privacy": {"type": "object", "properties": {"reflection": {"enum": ["include", "stats_only", "exclude"]}}},
     "runtime": {"type": "object", "properties": {"deploy": {"type": "string"}, "test": {"type": "string"}}},
     "push_on_merge": {"type": "boolean"},
     "mailbox": {"type": "object", "properties": {"escalate": {"type": "boolean"}}},
