@@ -165,7 +165,7 @@ headless token)是其中一種設定,**每一步上線都不改變它**。
    (STATE.md、待辦段落、index 註記),沒問題再切換。順序:todo-format → index → state。黃金檔改成固定「替身回的編輯清單 →
    平台寫出什麼」(現在的替身是直接寫檔模擬 agent,要跟著改);`librarian.py` 裡「沒有 structured_output 以實際檔案為準」那條
    路徑切換後拿掉。
-5. 隱私路由(`location` 檢查、`material`、`privacy.memory`、digest 過濾)。
+5. ✅ 隱私路由(10-29,`bin/privacy.py`,擋在 `llm.py`):`location` 檢查、`material`(每個點都宣告)、`privacy.memory`、要本機時自動改挑本機的 provider、librarian 的 digest 過濾(index.md 本身不過濾:名冊 + 關聯註記,local_only 之後不會再有新的註記)、信箱 dispatch 不派註定被拒的 agent。執行環境的 `LOCATION` 由轉接器宣告,沒宣告 = 雲端。
 6. ✅ `models.env` → `hub.json`(10-29:`llm.model_for` 是唯一的算法,librarian / consolidate / 週報記 llm.py 回報的 `llm_model`;`model_group: default` = 不指定、用工具的預設;`schedulectl set-model` 寫 `llm.points`)。✅ `agenthub llm setup`(init 也叫):選 coding agent 自己的登入 / Anthropic / OpenAI(或相容)/ 本機 Ollama,key 用 getpass 寫進 secrets(600),模型從那家的 `list_models` 選(平台不猜名稱);doctor 說判斷點交給誰、沒地方跑就紅。
 7. 用本機 Ollama 跑一次完整的夜間流程(隔離的 HOME,不送雲端):證明只有本機模型也能跑。
 

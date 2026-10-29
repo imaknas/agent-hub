@@ -96,6 +96,23 @@ class Dispatch(unittest.TestCase):
         self.dispatch()
         self.assertEqual(self.handled, [("proj", ["m1"])])
 
+    def test_local_only_project_letters_wait_for_people(self):
+        import privacy
+        logged = []
+        self.m.log_once = lambda key, msg: logged.append((key, msg))
+        saved = privacy.refusal
+        privacy.refusal = lambda point, spec, proj: "隱私:測試" if proj == "proj" else None
+        try:
+            self.send("m1", "proj", "request")
+            self.send("m2", "other", "request")
+            self.dispatch()
+            self.dispatch()
+        finally:
+            privacy.refusal = saved
+        self.assertEqual(self.handled, [("other", ["m2"])], "local_only 的專案不派 agent(信留著等人)")
+        private = [msg for k, msg in logged if k.startswith("dispatch-private-") and msg]
+        self.assertTrue(private and all("proj:" in msg for msg in private), "原因走 log_once(只記一次),只記被擋的專案")
+
     def test_delegation_waits_for_active_session_then_dispatches(self):
         self.rt.live.add("S1")
         self.seen("S1")

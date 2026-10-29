@@ -17,6 +17,8 @@
 # model_group:fast | standard | strong——要多強的模型,不寫哪一家的名字;default = 不指定,用工具自己的預設(只給 agent 點)。
 #   組別 → 模型:執行環境的轉接器(runtime_<名稱>.MODELS)或 hub.json llm.providers 的 models;
 #   個別判斷點蓋過寫在 hub.json llm.points.<點>.model(schedulectl set-model)。算法只在 llm.model_for。
+# material:cloud_safe(哪裡都能送)| personal(看專案的 privacy.memory)| local_only(只准本機)——規則在 bin/privacy.py,
+#   擋在 llm.py;呼叫端用 --project 說內容屬於哪個專案(沒給就從工作目錄推)。
 # auth:token(預設,~/.claude/headless-oauth-token)| subscription(訂閱登入;claude.ai connector 只有這樣才載入)。
 #   呼叫端的 LLM_AUTH 環境變數優先(登錄 job 的 connectors: true 會設 LLM_AUTH=subscription)。
 v: 1
@@ -25,6 +27,7 @@ points:
     caller: bin/librarian.py
     shape: agent
     model_group: fast
+    material: personal
     extra_args: ["--strict-mcp-config"]   # 不載入環境裡的 MCP(全域的含正式資料庫;關掉工具也擋不掉,10-27 實驗)
     purpose: 每晚依 memory 變動與 Muninn 轉交,決定要不要、怎麼更新一個專案的 STATE.md(只准改 ./STATE.md)
     permission_mode: dontAsk
@@ -37,6 +40,7 @@ points:
     caller: bin/librarian.py
     shape: agent
     model_group: fast
+    material: personal
     extra_args: ["--strict-mcp-config"]   # 不載入環境裡的 MCP(全域的含正式資料庫;關掉工具也擋不掉,10-27 實驗)
     purpose: STATE.md 的 `## 待辦` 格式不對時,只修格式、內容不動
     permission_mode: dontAsk
@@ -49,6 +53,7 @@ points:
     caller: bin/librarian.py
     shape: agent
     model_group: standard
+    material: personal
     extra_args: ["--strict-mcp-config"]   # 不載入環境裡的 MCP(全域的含正式資料庫;關掉工具也擋不掉,10-27 實驗)
     purpose: 更新跨專案 index.md 名冊區塊外的註記、找跨專案關聯
     permission_mode: acceptEdits
@@ -60,6 +65,7 @@ points:
     caller: bin/librarian.py(影子模式,每晚跟 librarian-state 並跑、只比對不寫;比對沒問題才取代它)
     shape: completion
     model_group: fast
+    material: personal
     purpose: librarian-state 的 completion 版:平台把 STATE.md、AGENT.md、memory 變動、轉交放進 prompt,模型回編輯清單
     output: {format: json, schema: llm/librarian-state-edits.schema.json}
     max_tokens: 8192
@@ -69,6 +75,7 @@ points:
     caller: bin/librarian.py(影子模式,跟 librarian-index 並跑、只比對不寫)
     shape: completion
     model_group: standard
+    material: personal
     purpose: librarian-index 的 completion 版:平台把 index.md 跟今天的 digest 放進 prompt,模型回名冊區塊外的編輯清單
     output: {format: json, schema: llm/librarian-index-edits.schema.json}
     max_tokens: 8192
@@ -78,6 +85,7 @@ points:
     caller: bin/consolidate-memory.py
     shape: agent
     model_group: strong
+    material: personal
     purpose: 把超過 14 天的 memory 日期檔整理進 reference/、修正被推翻的敘述(只准改 memory/reference/ 跟 STATE.md)
     permission_mode: dontAsk
     tools: Read,Write,Edit,Glob,Grep
@@ -90,6 +98,7 @@ points:
     caller: bin/reflect_llm.py
     shape: completion
     model_group: standard
+    material: personal
     extra_args: ["--strict-mcp-config"]   # 不載入環境裡的 MCP(全域的含正式資料庫;關掉工具也擋不掉,10-27 實驗)
     purpose: 每週活動分析(只拿統計 + muninn 的 session 摘要,不拿對話原文)
     tools: ""
@@ -100,6 +109,7 @@ points:
     caller: bin/run-agent-job.sh
     shape: agent
     model_group: default
+    material: personal
     purpose: "排程的 Claude job(專案登錄的 kind: agent);prompt 是 job 自己的"
     # 無人值守:job 在登錄宣告了 allow: → dontAsk + --permission-prompts none + 只准那些規則(沒列的一律拒絕,
     # 不會卡在提示);沒宣告的暫時維持 auto(不是 bypass),狀態頁列出來。永遠不用 bypassPermissions。
@@ -112,6 +122,7 @@ points:
     caller: bin/check-claude-login.py
     shape: agent
     model_group: fast
+    material: cloud_safe
     extra_args: ["--strict-mcp-config"]   # 不載入環境裡的 MCP(全域的含正式資料庫;關掉工具也擋不掉,10-27 實驗)
     purpose: "每小時確認 claude 的登入還能用(launchd 底下的訂閱登入、headless token 各打一次最小的請求);壞了發 Discord"
     auth: subscription            # 檢查 token 那次呼叫端設 LLM_AUTH=token
@@ -123,6 +134,7 @@ points:
     caller: bin/hubbus(dispatch → run-agent-job.sh)
     shape: agent
     model_group: default
+    material: personal
     purpose: "專案信箱的交辦沒人收(專案沒人在用,或等了幾分鐘):在那個專案開 headless session,只寫 memory 筆記、回信、問 owner"
     permission_mode: dontAsk
     prompts: none
@@ -135,6 +147,7 @@ points:
     caller: "bin/propose_apply.py(hub.json mailbox.handler: propose 時,hubbus dispatch 叫)"
     shape: agent
     model_group: default
+    material: personal
     purpose: "信箱交辦的 propose 版:在丟棄式 worktree 裡讀專案、只寫 memory 筆記;要寄的信、結案寫在輸出,平台代寄(任何 agent 都能跑)"
     # 寫入的保證來自丟棄式 worktree + 平台只採用 .agent-memory/memory/**,不靠工具的權限;不給跑指令的工具:要寄信也不用自己跑
     permission_mode: acceptEdits
@@ -147,6 +160,7 @@ points:
     caller: bin/hubbus(dispatch → llm.py run,帶 runtime_claude.resume_args)
     shape: agent
     model_group: standard
+    material: personal
     purpose: "對話的回信送到一個閒置的 session:用它的 context 在背景接續(分支副本,不動原本的 session),只寫筆記、回信、問 owner"
     # 權限跟 mailbox-escalation 一樣,不沿用原本 session 的權限模式(它可能是 acceptEdits/auto,沒人看著不能照用)
     permission_mode: dontAsk
@@ -161,6 +175,7 @@ points:
     caller: bin/lease-runner.py(llm.py exec)
     shape: agent
     model_group: standard
+    material: personal
     purpose: "通道租借的 discuss session:長駐的 stream-json 程序,Knas 透過 Muninn 跟專案深談;唯讀"
     # 只給讀的工具;讀類規則放行(不送到轉接),不在登錄網域的 WebFetch、AskUserQuestion 走權限轉接(送到手機)
     tools: Read,Glob,Grep,WebSearch,WebFetch,AskUserQuestion
@@ -173,6 +188,7 @@ points:
     caller: bin/lease-runner.py(llm.py exec)
     shape: agent
     model_group: standard
+    material: personal
     purpose: "通道租借的 work session(第二階段,只限想法沙盒):Knas 允許動手後,可以改這個專案的檔案、跑指令,每次都先問他"
     # 沒有 permission_mode / prompts:寫入要走權限轉接(--permission-prompt-tool)送手機;dontAsk 會在那之前就拒絕。
     # 自動放行的還是只有讀;Edit/Write/Bash 全部經過 lease-relay.py(資料夾外直接拒絕,其他問 Knas)。
@@ -186,6 +202,7 @@ points:
     caller: bin/lease-runner.py
     shape: agent
     model_group: standard
+    material: personal
     purpose: "收回租約時:接回同一個 session,寫結構化交接(摘要、決定、未決問題、Knas 要做的事、memory 筆記)"
     tools: ""
     output: {format: json, schema: llm/lease-handover.schema.json}

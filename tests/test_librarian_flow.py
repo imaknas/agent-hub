@@ -50,6 +50,7 @@ if point == "librarian-state":
 elif point == "librarian-todo-format":
     st = cwd / "STATE.md"; st.write_text(st.read_text().replace("- [ ] 沒標負責人", "- [ ] 〔agent〕沒標負責人")); res(structured_output=None)
 elif point == "librarian-index":
+    dg = sorted((cwd / "digest").glob("*.md")); (env / "index-saw.txt").write_text(dg[-1].read_text() if dg else "")
     p = cwd / "index.md"; p.write_text(p.read_text() + "\n<!-- index edited -->\n"); res(structured_output={"relations_found": "none"})
 elif point == "librarian-state-edits":   # 影子:不碰檔案,只回編輯清單(p1 回一個對不上的 old)
     import re
@@ -261,6 +262,27 @@ class LibrarianFlow(unittest.TestCase):
             prompt = next(c["prompt"] for c in env.calls() if c["point"] == "librarian-state-edits" and "p0" in c["prompt"])
             self.assertIn("<<<STATE", prompt)
             self.assertNotIn("請讀 ./AGENT.md", prompt, "completion 版沒有工具:內容直接給")
+
+    def test_local_only_project_stays_off_the_cloud(self):
+        """privacy.memory: local_only(bin/privacy.py):執行環境在雲端 → 這個專案不叫模型、checkpoint 不推進、log 說原因;
+        跨專案的 index 只看得到拿掉它的 digest,改過的 index.md 照樣寫回。"""
+        with tempfile.TemporaryDirectory() as d:
+            env = Env(pathlib.Path(d))
+            (env.hub / "projects" / "p0.yaml").write_text("v: 1\nname: p0\nprivacy:\n  memory: local_only\n")
+            r = env.run("librarian.py")
+            self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
+            log = (env.hub / ".logs" / f"librarian-{TODAY}.log").read_text()
+            self.assertIn("p0: 略過 STATE.md 更新", log)
+            calls = env.calls()
+            self.assertFalse([c for c in calls if c["cwd"] == "p0"], "p0 的內容沒有送給模型")
+            self.assertFalse([c for c in calls if "p0" in c["prompt"] and c["point"] == "librarian-state-edits"])
+            self.assertFalse(env.ckpt_at_head("p0"), "沒處理就不推進,有本機模型後補上")
+            saw = (env.tmp / "index-saw.txt").read_text()
+            self.assertIn("## phand", saw)
+            self.assertNotIn("p0", saw, "跨專案的 digest 拿掉 local_only 的專案")
+            self.assertIn("<!-- index edited -->", (env.hub / "index.md").read_text(), "暫存目錄裡改的 index.md 寫回")
+            idx = next(c["prompt"] for c in calls if c["point"] == "librarian-index-edits")
+            self.assertNotIn("## p0", idx)
 
     @unittest.skipUnless(len(IMPLS) == 2, "只剩一個實作")
     def test_implementations_send_the_same_prompts(self):

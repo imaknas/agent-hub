@@ -242,6 +242,11 @@ def models(name: str | None = None) -> dict:
     return dict(getattr(_module(name or default_name()), "MODELS", None) or {})
 
 
+def location(name: str | None = None) -> str:
+    """執行環境的模型在哪:local | cloud(轉接器的 `LOCATION`;沒宣告 = cloud——平台確認不了的一律當雲端)。privacy.py 用。"""
+    return "local" if getattr(_module(name or default_name()), "LOCATION", "cloud") == "local" else "cloud"
+
+
 def default_name() -> str:
     try:
         import hubconf

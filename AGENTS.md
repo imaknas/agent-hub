@@ -287,6 +287,11 @@ memory 追蹤但不需要在 mini 上執行任何東西的專案(目前大多數
   `docs/design/capabilities.md`。`type`/`enforce`/`network`/`allow_write`/`privacy` 是安全欄位,`manifest.update` 改不了。
   所有 `claude -p` 經過 `bin/llm.py`(判斷點宣告在 `contracts/llm-points.yaml`,每晚 lint);無人值守的
   agent job 在登錄宣告 `allow:` 就用 dontAsk
+- **隱私路由**(`bin/privacy.py`,擋在 `bin/llm.py`):登錄 `privacy.memory: local_only` 的專案,平台叫的模型只准本機
+  (`location: local` 的 provider;Claude Code、指令樣板的工具都算雲端)——有本機的就自動改用,沒有就不跑、說原因,**不退回雲端**。
+  判斷點宣告 `material`(cloud_safe / personal / local_only);呼叫端用 `--project` 說內容屬於哪個專案(推不出來的一定要給)。
+  跨專案的 digest 送雲端前拿掉那些專案。librarian 的 agent 點在雲端:local_only 的專案在換成 completion 點 + 本機 provider
+  之前,STATE.md 不會自動更新(log、digest 會寫)。跟 `privacy.reflection`(對話內容進不進週報)無關
 - **mini 的使用者層級設定**(`~/.claude/settings.json`,2026-10-22 Knas 在 Schedule 強化 session 直接確認後套用,
   備份 `.state/claude-settings.json.bak-20261022-u1u4`):U1 deny `Edit(~/workspace/**/.claude/settings.local.json)`
   (session 改不了平台產生的設定)、U2 `sandbox.allowUnsandboxedCommands: false`、U3

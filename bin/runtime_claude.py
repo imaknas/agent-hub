@@ -26,6 +26,7 @@ import subprocess
 
 PROJECTS = pathlib.Path.home() / ".claude" / "projects"
 MODELS = {"fast": "haiku", "standard": "sonnet", "strong": "opus"}   # 判斷點的 model_group → 模型(runtime_ports.models)
+LOCATION = "cloud"   # 模型在哪(privacy.py)
 _ID = re.compile(r"--(?:resume|session-id)[= ]([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})")
 
 

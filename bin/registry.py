@@ -15,7 +15,8 @@ schema v1(contracts/project.v1.md 有完整說明):
   purpose                   想法本身(一兩句);type: idea 必填,lease 的系統提示會帶上
   paths: {workspace, memory_bare, origin}       workspace 必填(平台自己除外)
   memory: true              參加 memory 追蹤
-  privacy: {reflection: include|stats_only|exclude}
+  privacy: {reflection: include|stats_only|exclude,   對話內容進不進週報
+            memory: cloud_ok|local_only}               平台叫的模型能不能把這個專案的 memory/程式送雲端(llm.py 擋;預設 cloud_ok)
   runtime: {deploy, test}   有 runtime = 有 <services_root>/<name>
   push_on_merge: false
   mailbox: {escalate: true}
@@ -224,6 +225,8 @@ def validate(doc, stem: str) -> list[str]:
             errs.append(f"{key} 要是字串的 list")
     if (doc.get("privacy") or {}).get("reflection", "include") not in ("include", "stats_only", "exclude"):
         errs.append("privacy.reflection 只能是 include / stats_only / exclude")
+    if (doc.get("privacy") or {}).get("memory", "cloud_ok") not in ("cloud_ok", "local_only"):
+        errs.append("privacy.memory 只能是 cloud_ok / local_only")
     d = dirs(doc)
     rt = doc.get("runtime")
     if rt is not None:
