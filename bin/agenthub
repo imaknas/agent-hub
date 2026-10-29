@@ -29,6 +29,9 @@ config:
 排程:
   agenthub jobs              = schedulectl list
   agenthub run <job>         = schedulectl run(現在就跑一次)
+owner(你本人;不是專案 session 的指令):
+  agenthub owner list | done/drop/already-done <key> | answer <問題 id> "回答"
+                        = bin/owner.py:內建的 owner 端(hub.json owner_side: builtin;有助理的話只能 list)
 專案的 session 用的(規則檔裡寫的就是這些;權限規則只放行這幾個,不放行上面的管理指令):
   agenthub send | inbox | show | ack | done | thread | open-questions …   = 專案信箱(bin/hubbus 同名的子指令)
   agenthub merge-branch …    = bin/merge-branch(平行 session 的合併閘門)
@@ -200,6 +203,14 @@ def new_hub_json(args: dict, yes: bool) -> dict:
     d["owner"]["timezone"] = args.get("timezone") or ask("時區", default_tz, yes)
     d["workspace_root"] = args.get("workspace") or ask("專案放在哪", d.get("workspace_root", "~/workspace"), yes)
     shipped = [k for k, v in d.get("modules", {}).items() if not k.startswith("_")]
+    import shutil
+    # 照這台有什麼決定預設(docs/design/tool-agnostic.md):有 Claude Code 才開它的維護模組;沒有助理就用內建的 owner 端
+    if "claude" in d["modules"]:
+        d["modules"]["claude"] = bool(shutil.which("claude"))
+    if "owner" in d["modules"]:
+        d["modules"]["owner"] = not (d.get("assistant") or {}).get("api")
+    if "runtime" not in d and not shutil.which("claude"):
+        d["runtime"] = {"default": "none"}   # 沒有 coding agent:agent 的功能明確關掉(doctor 的功能表會說)
     default_on = ",".join(k for k in shipped if d["modules"][k] is True)
     picked = args.get("modules") or ask(f"要開哪些模組(可選:{', '.join(shipped)})", default_on, yes)
     want = {m.strip() for m in picked.split(",") if m.strip()}
@@ -382,6 +393,9 @@ def cmd_doctor(argv: list[str]) -> int:
     add("ok" if r.returncode == 0 else "bad", "config:" + ("都合格" if r.returncode == 0 else r.stderr.strip()[:300]),
         "" if r.returncode == 0 else "照訊息改 hub.json / projects/,再 bin/hub config check")
 
+    side = hubconf.owner_side()
+    add("ok", "owner 端:" + (f"{hubconf.get('assistant.name') or '助理'}(owner_side: assistant)" if side == "assistant"
+                            else "內建的(owner_side: builtin;agenthub owner list / done / answer)"))
     import shutil
     cli = shutil.which("agenthub")
     add("ok" if cli else "warn", f"agenthub 在 PATH 上:{cli}" if cli else "agenthub 不在 PATH 上(專案的 session 打不到信箱指令)",
@@ -529,6 +543,7 @@ COMMANDS = {
     "jobs": lambda argv: subprocess.run([str(BIN / "schedulectl"), "list", *argv]).returncode,
     "run": lambda argv: subprocess.run([str(BIN / "schedulectl"), "run", *argv]).returncode,
     "install-cli": cmd_install_cli,
+    "owner": lambda argv: subprocess.run([str(BIN / "owner.py"), *argv]).returncode,
     **{name: session_command(name) for name in SESSION_COMMANDS},
 }
 

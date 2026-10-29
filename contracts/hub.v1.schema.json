@@ -106,8 +106,15 @@
         },
         "discord_channel_file": {
           "type": "string"
-        }
+        },
+        "ntfy": {"type": "object", "required": ["topic"], "properties": {"topic": {"type": "string"}, "base_url": {"type": "string"}, "token_file": {"type": "string"}}},
+        "email": {"type": "object", "required": ["host", "to"], "properties": {"host": {"type": "string"}, "port": {"type": "integer"}, "user": {"type": "string"}, "from": {"type": "string"}, "to": {"type": "string"}, "password_file": {"type": "string"}, "ssl": {"type": "boolean"}}},
+        "macos": {"type": "boolean"}
       }
+    },
+    "owner_side": {
+      "enum": ["assistant", "builtin"],
+      "description": "Principal Handoff 的 principal 端:assistant = hub.json assistant 的助理(例:Muninn,透過它的 API);builtin = 平台內建的最小 owner 端(bin/owner.py)。沒寫:有 assistant.api 就是 assistant,否則 builtin"
     },
     "backup": {
       "type": "object",

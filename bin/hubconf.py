@@ -232,6 +232,15 @@ def owner_tag() -> str:
     return get("owner.tag", "Owner")
 
 
+def owner_side() -> str:
+    """Principal Handoff 的 principal 端是誰(hub.json owner_side):assistant = hub.json assistant 設定的助理(bridge 跟它的 API 交換);
+    builtin = 平台內建的最小 owner 端(bin/owner.py)。沒寫:有 assistant.api 就是 assistant,否則 builtin。"""
+    v = get("owner_side")
+    if v in ("assistant", "builtin"):
+        return v
+    return "assistant" if get("assistant.api") else "builtin"
+
+
 def party(role: str, project: str | None = None) -> str:
     """Principal Handoff 的參與者識別字(規範 core §1、R6;記錄的 by、authority.decider 都用這個)。
     principal / principal_side 從 hub.json 讀(owner.principal_id、assistant.party_id);requester 跟 agent 是
@@ -239,6 +248,8 @@ def party(role: str, project: str | None = None) -> str:
     if role == "principal":
         return get("owner.principal_id") or f"person:{owner_address()}"
     if role == "principal_side":
+        if owner_side() == "builtin":
+            return f"{hub_project()}:owner-side"
         return get("assistant.party_id") or get("assistant.project") or "assistant"
     if role in ("requester", "agent"):
         if not project:

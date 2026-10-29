@@ -149,6 +149,8 @@
     "mirror": false,
     "backup": false,
     "assistant": false,
+    "owner": true,
+    "claude": false,
     "sandbox": false
   }
 }

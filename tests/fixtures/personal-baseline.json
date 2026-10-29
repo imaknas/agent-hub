@@ -38,7 +38,7 @@
   "bin/upgrade-idea.py": 2,
   "bin/worktree-memory.sh": 1,
   "bin/worktrees.py": 3,
-  "modules/assistant.yaml": 4,
+  "modules/assistant.yaml": 2,
   "templates/reflect.html": 1,
   "tests/fixtures/llm-golden.json": 8,
   "tests/test_check_login.py": 1,

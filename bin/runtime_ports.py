@@ -277,5 +277,9 @@ def load_completion(impl: str):
 
 
 def current_session(env=None) -> str | None:
-    """目前這個程序屬於哪個 session:問預設的 runtime(現在是讀 Claude Code 給的環境變數)。"""
-    return load(ports=("sessions",)).current_session(os.environ if env is None else env)
+    """目前這個程序屬於哪個 session:問預設的 runtime(現在是讀 Claude Code 給的環境變數)。
+    沒有 session 介面(runtime_none)= 不知道,不是錯誤:寄信、記在場照樣做,只是沒有寄件 session。"""
+    try:
+        return load(ports=("sessions",)).current_session(os.environ if env is None else env)
+    except Unsupported:
+        return None

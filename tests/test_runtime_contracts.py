@@ -238,6 +238,11 @@ class NoneRuntime(unittest.TestCase):
             del runtime_ports.RUNTIMES["half"]
             del sys.modules["runtime_half"]
 
+    def test_current_session_is_unknown_not_an_error(self):
+        from unittest import mock
+        with mock.patch.object(runtime_ports, "default_name", lambda: "none"):
+            self.assertIsNone(runtime_ports.current_session({}))
+
     def test_every_label(self):
         self.assertEqual(set(runtime_ports.PORT_LABELS), set(runtime_ports.PORTS))
 

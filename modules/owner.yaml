@@ -1,0 +1,11 @@
+# 內建的最小 owner 端(bin/owner.py;docs/design/tool-agnostic.md「owner 端可以換」):沒有個人助理的人用這個。
+# 給 owner 的待辦、問題有新的就照 hub.json alerts 的管道通知;結案、回答用 `agenthub owner …`。
+# 有助理(owner_side: assistant)的部署不開這個模組——兩個 principal 端會打架。
+v: 1
+name: owner
+type: module
+description: 內建的 owner 端:新的待辦、問題通知(結案、回答用 agenthub owner)
+jobs:
+- name: notify
+  every: 1h
+  run: bin/py bin/owner.py notify

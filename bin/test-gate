@@ -48,7 +48,8 @@ fail=0
 i=0
 for py in "${PYTHONS[@]}"; do
   summary="$(grep -E '^(Ran|OK|FAILED)' "$work/out$i" | tr '\n' ' ')"
-  if tail -3 "$work/out$i" | grep -q '^OK'; then
+  # unittest 的結果行(OK / FAILED)本身:測試印到 stdout 的東西在程序結束時才 flush,可能排在它後面,不能只看最後幾行
+  if grep -qE '^OK( \(|$)' "$work/out$i" && ! grep -qE '^FAILED( |$)' "$work/out$i"; then
     echo "test-gate:$py $summary"
   else
     fail=1

@@ -14,8 +14,19 @@ jobs:
   run: bin/py bin/librarian.py   # 10-27 換掉 librarian.sh(行為測試 tests/test_librarian_flow.py 兩支都跑過)
   cwd: hub
 # librarian 之後的機械步驟(零 LLM),以前寫死在 librarian.sh 的最後,現在各自是一個 job(docs/design/new-user.md 第 0 步):
-# 各自重跑、各自在狀態頁顯示成敗。個人助理的(knas-tasks、reconcile-questions)在 modules/assistant.yaml,用 before:
-# 把自己插進這條流程;沒開那個模組時這裡照樣跑。consolidate-memory、mirror-backup、weekly-reflect、backup 也在 modules/。
+# 各自重跑、各自在狀態頁顯示成敗。個人助理專屬的(reconcile-questions、通道租借)在 modules/assistant.yaml;
+# 沒開那個模組時這裡照樣跑。consolidate-memory、mirror-backup、weekly-reflect、backup 也在 modules/。
+- name: registrar                # Principal Handoff 0.3 的 requester 端:〔owner〕待辦 → raised record、收回 settled 照 key 套用。
+  legacy_name: assistant/knas-tasks   # 10-29 從 assistant 模組搬回核心:不管 owner 端是助理還是內建的都要跑(tool-agnostic.md)
+  at: 03:00
+  after:
+  - librarian
+  before:                        # todo.md 要是套用過的(todo、publish 排在它後面)
+  - todo
+  - librarian-publish
+  max_attempts_per_day: 3
+  run: bin/py bin/registrar.py
+  cwd: hub
 - name: todo                     # 跨專案待辦清單 todo.md(各專案 STATE.md 的 ## 待辦,機械產生)
   at: 03:00
   after:

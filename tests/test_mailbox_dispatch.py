@@ -70,6 +70,7 @@ class Dispatch(unittest.TestCase):
         m.run_handler, m.resume = run_handler, resume
         self.rt = FakeRuntime()
         self.c = m.db()
+        self.addCleanup(self.c.close)
 
     def send(self, mid, to, typ, *, src="other", to_session=None, reply_to=None, minutes_ago=0):
         p = {"type": typ, "text": f"text {mid}"}
@@ -294,6 +295,7 @@ class Dispatch(unittest.TestCase):
             sys.stdin = io.StringIO(_j.dumps({"session_id": "A", "cwd": str(self.ws)}))
             self.m.hook_input = lambda: {"session_id": "A", "cwd": str(self.ws)}
             self.m.project_of = lambda cwd: "proj"
+            self.m.db = lambda timeout=None: self.c   # 同一個連線(setUp 的 cleanup 會關),不要每次開一個沒關的
             self.m.cmd_hook("prompt")
         self.assertEqual(seen.count("m1"), 1)
 

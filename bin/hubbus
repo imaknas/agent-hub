@@ -1165,7 +1165,8 @@ def dispatch_locked(c, pull=False) -> None:
             fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
         except OSError:
             return
-        if pull:  # 每分鐘也拉一次轉交(0.2 秒):助理替 owner 問的問題(asks)不用等 bridge 的 15 分鐘
+        if pull and hubconf.owner_side() == "assistant":  # 每分鐘也拉一次轉交(0.2 秒):助理替 owner 問的問題(asks)不用等 bridge 的 15 分鐘
+            # owner 端是內建的(builtin)就沒有助理可以拉:給 owner 的 record 留在匯流排上,bin/owner.py 直接讀
             try:
                 import_handoffs(c)
             except Exception as e:

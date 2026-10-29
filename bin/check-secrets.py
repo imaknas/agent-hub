@@ -140,6 +140,9 @@ def main(argv: list[str]) -> int:
         # 警報管道本身:token 失效的話,出事時所有警報都發不出去——每天先確認一次(不發訊息)
         if alert.probe():
             alert.clear_failure("discord-probe")
+        elif not alert.configured():
+            alert.record_failure("discord-probe", "沒有設任何警報管道(hub.json alerts:discord / ntfy / email / macos),平台警報都發不出去")
+            problems.append("沒有警報管道——在 hub.json alerts 設一個(ntfy 最簡單:手機 app、不用帳號)")
         else:
             alert.record_failure("discord-probe", "Discord bot token 不能用(GET /users/@me 失敗),所有平台警報都發不出去")
             problems.append("Discord 警報管道不能用(bot token 失效或連不上)——狀態頁也會標紅")
