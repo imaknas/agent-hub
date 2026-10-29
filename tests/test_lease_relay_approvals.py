@@ -66,6 +66,11 @@ class Relay(unittest.TestCase):
         self.assertEqual(self.reported[0][1]["kind"], "open_web")
 
     def test_no_session_domain_only_this_once(self):
+        real_get = self.m.hubconf.get   # hub.json lease.no_session_domains:這個測試自己給,不靠跑測試那台的設定
+        g = mock.patch.object(self.m.hubconf, "get", lambda k, d=None: ["webhook.site"] if k == "lease.no_session_domains"
+                              else real_get(k, d))
+        g.start()
+        self.addCleanup(g.stop)
         self.answer = {"decision": "allow_session"}
         self.call("WebFetch", url="https://webhook.site/x")
         self.call("WebFetch", url="https://webhook.site/y")

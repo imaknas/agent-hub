@@ -67,7 +67,7 @@ class Questions(unittest.TestCase):
 
     def test_question_closed_with_done_and_forwarded_to_muninn(self):
         self.ask("q-1")
-        mid = self.send("--to", "knas", "--type", "done", "--question", "q-1", "--text", "Knas 在 session 裡選了 A")
+        mid = self.send("--to", "owner", "--type", "done", "--question", "q-1", "--text", "Knas 在 session 裡選了 A")
         self.assertEqual(self.open_ids(), [])
         ev = self.c.execute("SELECT * FROM events WHERE id=?", (mid,)).fetchone()
         item = self.m.to_assistant(self.c, ev)
@@ -75,16 +75,16 @@ class Questions(unittest.TestCase):
 
     def test_drop_with_question_is_allowed(self):
         self.ask("q-1")
-        self.send("--to", "knas", "--type", "drop", "--question", "q-1", "--text", "不需要了")
+        self.send("--to", "owner", "--type", "drop", "--question", "q-1", "--text", "不需要了")
         self.assertEqual(self.open_ids(), [])
 
     def test_question_must_be_this_projects_question_to_knas(self):
         self.ask("q-theirs", project="other")
         self.ask("p-1", kind="progress")
-        for argv in (("--to", "knas", "--type", "done", "--question", "q-theirs", "--text", "x"),
-                     ("--to", "knas", "--type", "done", "--question", "p-1", "--text", "x"),
-                     ("--to", "knas", "--type", "info", "--question", "q-theirs", "--text", "x"),
-                     ("--to", "knas", "--type", "done", "--question", "q-theirs", "--task", "k", "--text", "x")):
+        for argv in (("--to", "owner", "--type", "done", "--question", "q-theirs", "--text", "x"),
+                     ("--to", "owner", "--type", "done", "--question", "p-1", "--text", "x"),
+                     ("--to", "owner", "--type", "info", "--question", "q-theirs", "--text", "x"),
+                     ("--to", "owner", "--type", "done", "--question", "q-theirs", "--task", "k", "--text", "x")):
             with self.subTest(argv=argv), self.assertRaises(SystemExit):
                 self.send(*argv)
         self.assertEqual(sorted(self.open_ids()), ["q-theirs"])
@@ -113,7 +113,7 @@ class Questions(unittest.TestCase):
     def test_reconcile_skips_closed_and_unknown_projects(self):
         self.ask("q-gone", project="renamed-away")
         self.ask("q-closed")
-        self.send("--to", "knas", "--type", "done", "--question", "q-closed", "--text", "解決了")
+        self.send("--to", "owner", "--type", "done", "--question", "q-closed", "--text", "解決了")
         self.assertEqual(self.m.reconcile_questions(self.c, now=NOW), [])
 
 

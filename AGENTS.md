@@ -46,7 +46,7 @@ agent-hub 要給任何 coding agent、任何 LLM、任何 key 的人用。
 
 - **使用者的東西放哪**:`hubconf.config_dir()`(hub.json、登錄、schedule.yaml…)、`data_dir()`(digest、todo、review-log、reflect…)、
   `secrets_dir()`;shell 用 `bin/hubpaths.sh`。10-26 起 `<hub>/.hub-home` 指到 `~/.agent-hub`(config 是本機 git repo、data、secrets);
-  hub 根目錄只剩 `hub.json` 一份搬家前的舊副本(遙控那台 MBP 還沒有自己的實例目錄、還讀它;MBP 搬好就刪)。新程式一律經過這些,
+  hub 根目錄沒有任何使用者的東西(10-29 清掉搬家前的舊副本;遙控那台 MBP 也有自己的 `~/.agent-hub/config/hub.json`)。新程式一律經過這些,
   不要自己拼路徑(ratchet 會擋)
 - **平台的 CLI 叫 `agenthub`**(10-29 從 `hub` 改名:跟 GitHub 舊的 hub CLI 撞名;`bin/hub` 留著轉過去)。`agenthub install-cli` 放上 PATH;
   專案的 session 用 `agenthub send/inbox/done/…`、`agenthub merge-branch`、`agenthub cap-run`(規則檔裡只寫這些,不寫本機路徑);

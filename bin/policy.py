@@ -63,7 +63,7 @@ def policy(name: str, doc: dict, index: dict) -> dict:
     import registry
     d = registry.dirs(doc)
     others = [p for n, ps in project_paths(index).items() if n != name for p in ps]
-    copies = hubconf.p("memory_copies")
+    copies = hubconf.p("memory_copies", "~/.memory-copies")
     return {
         "workspace": d["workspace"],
         "write": ([tilde(d["runtime"])] if d["runtime"] else []) + [tilde(hubconf.BUS_DIR)] + WRITE_CACHES

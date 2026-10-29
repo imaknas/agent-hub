@@ -40,6 +40,9 @@ def check(root: pathlib.Path) -> list[str]:
     errs: list[str] = []
 
     hub = root / "hub.json"
+    if not hub.exists() and (root / "bin" / "agenthub").exists():
+        # 平台 repo 的暫存區:10-29 起平台 repo 裡沒有使用者的 config——驗範本,登錄的驗證照樣驗平台的登錄跟模組
+        hub = root / "hub.example.json"
     try:
         cfg = json.loads(hub.read_text())
     except (OSError, ValueError) as e:

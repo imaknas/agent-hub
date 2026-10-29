@@ -190,6 +190,9 @@ class BridgeV2(unittest.TestCase):
         self.assertEqual(self.incoming(), ["s:k1"])
 
     def test_off_does_not_touch_v2(self):
+        side = mock.patch.object(self.m.hubconf, "owner_side", lambda: "assistant")   # 有助理的部署才從助理拉
+        side.start()
+        self.addCleanup(side.stop)
         self.m.RECORDS = False
         self.m.run_handler = lambda *a: None
         self.m.import_handoffs = lambda c: None

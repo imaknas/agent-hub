@@ -123,6 +123,9 @@ class Asks(unittest.TestCase):
             def live_sessions(self): return set()
             def context_size(self, sid): return None
         self.m.run_handler = lambda *a: None
+        side = mock.patch.object(self.m.hubconf, "owner_side", lambda: "assistant")   # 有助理的部署才從助理拉
+        side.start()
+        self.addCleanup(side.stop)
         with mock.patch.dict(sys.modules, {"runtime_ports": mock.Mock(load=lambda *a, **k: RT())}):
             self.m.dispatch_locked(self.c, pull=True)
         self.assertIn(("--json",), self.calls)
