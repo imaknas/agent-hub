@@ -34,6 +34,12 @@
     clean_env(env) -> dict                               拿掉這個 runtime 的憑證變數(交給別人之前、或要用預設登入時)
     credentials() -> list[Credential]                   這台機器上有哪些登入、在不在、什麼時候到期(不讀值、不印值)
     is_login_error(text) -> bool                         這個錯誤訊息是登入的問題嗎(要人去處理),還是別的(逾時、額度…)
+  completion(判斷點的「只回答案」;docs/design/llm-providers.md):模型沒有工具、不碰檔案
+    complete(req: CompletionRequest, conf: dict) -> CompletionResult   conf = hub.json llm.providers 裡這一家的設定
+                                                        (key 由 completion.py 讀好放在 conf["_key"],實作不自己找憑證)
+    health(conf) -> (ok, reason)                         最小的檢查(不花 token 的優先,例:列模型)
+    除了 runtime(Claude Code 關掉工具跑),只會 completion 的 provider 也是這個介面的實作(PROVIDERS)。
+    JSON 的解析、驗證、重試、截斷、退避、記帳在 completion.py,不在實作裡。
   stream(長駐 session 的輸出翻譯;docs/design/lease-contract-neutral.md):
     action(tool, input) -> (kind, collab, target, summary)   工具 → KINDS/COLLABS;target 給判斷用,summary 給人看
     parse_stream(line) -> list[StreamEvent]             runtime 原生的一行輸出 → 中立的對話事件
@@ -54,10 +60,13 @@ from typing import NamedTuple
 # 登記表:名稱 → 模組。多個 runtime 可以同時登記,每個 session 用它自己的(設計原則 9)。
 RUNTIMES = {"claude": "runtime_claude", "fake": "runtime_fake", "none": "runtime_none"}
 DEFAULT = "claude"   # hub.json 沒寫 runtime.default 時的預設
+# 只實作 completion 介面的(LLM API):hub.json llm.providers 的 impl 寫這些名稱,或任何有 completion 介面的 runtime 名稱
+PROVIDERS = {"anthropic": "provider_anthropic", "openai": "provider_openai", "ollama": "provider_ollama"}
 
 # 介面給人看的名稱(Unsupported 的原因、doctor 的能力表)
 PORT_LABELS = {"agent": "跑 agent", "lifecycle": "session 事件(hook)", "instructions": "規則檔",
-               "transcripts": "對話紀錄", "sessions": "session 狀態", "stream": "長駐串流 session", "auth": "登入狀態"}
+               "transcripts": "對話紀錄", "sessions": "session 狀態", "stream": "長駐串流 session", "auth": "登入狀態",
+               "completion": "completion(只回答案)"}
 
 # 平台的功能需要哪些介面(doctor 的「工具 × 功能」表;docs/design/tool-agnostic.md 原則 3)。缺任何一個 = 那個功能關掉。
 FEATURES = (
@@ -85,6 +94,7 @@ PORTS = {
     "sessions": ("alive", "live_sessions", "context_size", "current_session"),
     "stream": ("action", "parse_stream", "classify_exit", "resumable", "resume_command", "relocate"),
     "auth": ("auth_env", "clean_env", "credentials", "is_login_error"),
+    "completion": ("complete", "health"),
 }
 
 # 中立的「動作種類」:對話紀錄裡 agent 做了什麼,不用任何 runtime 的工具名稱。
@@ -178,6 +188,33 @@ class TaskResult(NamedTuple):
     error: str = ""                  # ok 是 False 時的原因
 
 
+class CompletionRequest(NamedTuple):
+    """completion 介面的一次請求(docs/design/llm-providers.md):模型沒有工具、不碰檔案,只回文字或合 schema 的 JSON。"""
+    point: str                       # 哪個判斷點(log、記帳用)
+    prompt: str
+    model: str | None = None         # 這個實作自己的模型名稱(llm 設定的 provider.models 給的)
+    schema: dict | None = None       # 要的輸出 JSON schema;None = 文字
+    system: str | None = None
+    max_tokens: int = 8192
+    timeout_s: int = 600
+
+
+class CompletionResult(NamedTuple):
+    ok: bool
+    text: str = ""                   # 模型回的原文(JSON 也在這裡;解析、驗證、重試在 completion.py,不在實作裡)
+    stop: str = ""                   # COMPLETION_STOPS 之一
+    error: str = ""                  # ok 是 False 時的原因
+    input_tokens: int | None = None
+    output_tokens: int | None = None
+    cost_usd: float | None = None    # 實作自己知道成本才填(例:Claude Code 會回);API 只回 token,成本由 completion.py 照價目算
+    retry_after_s: float | None = None   # stop 是 rate_limited 時,服務端建議等多久
+
+
+# end = 正常結束;length = 被長度截斷(重試會原樣再截一次,不重試);refused = 模型拒絕;rate_limited = 429/529 之類,退避後重試;
+# error = 其他失敗
+COMPLETION_STOPS = ("end", "length", "refused", "rate_limited", "error")
+
+
 class MissingFunctions(Exception):
     """實作了一個介面的一部分函式:這是 bug,載入就拒絕。"""
 
@@ -224,6 +261,19 @@ def load(name: str | None = None, ports=tuple(PORTS)):
         raise Unsupported(f"執行環境 {name} 沒有{'、'.join(PORT_LABELS.get(p, p) for p in absent)}"
                           f"(hub.json runtime.default;要這個功能就裝一個有的 coding agent)")
     return mod
+
+
+def load_completion(impl: str):
+    """hub.json llm.providers 的 impl → 實作 completion 介面的模組(provider,或有 completion 的 runtime)。"""
+    if impl in PROVIDERS:
+        mod = importlib.import_module(PROVIDERS[impl])
+        missing = [fn for fn in PORTS["completion"] if not callable(getattr(mod, fn, None))]
+        if missing:
+            raise MissingFunctions(f"provider {impl} 缺少:{', '.join(missing)}")
+        return mod
+    if impl in RUNTIMES:
+        return load(impl, ports=("completion",))
+    raise KeyError(f"沒有這個 completion 實作:{impl}(有:{', '.join([*PROVIDERS, *RUNTIMES])})")
 
 
 def current_session(env=None) -> str | None:

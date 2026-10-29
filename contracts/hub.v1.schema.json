@@ -253,6 +253,18 @@
     },
     "modules": {
       "type": "object"
+    },
+    "llm": {
+      "type": "object",
+      "description": "判斷點用哪一家 LLM、哪個模型、key 在哪(bin/completion.py 檔頭;docs/design/llm-providers.md)。沒有 = 判斷點照舊交給 runtime.default。語意檢查在 completion.config_errors()",
+      "required": ["providers", "use"],
+      "properties": {
+        "_comment": {"type": "string"},
+        "providers": {"type": "object"},
+        "use": {"type": "object"},
+        "points": {"type": "object"},
+        "budget": {"type": "object", "properties": {"daily_usd": {"type": "number", "minimum": 0}}}
+      }
     }
   }
 }

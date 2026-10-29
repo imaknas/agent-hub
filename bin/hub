@@ -11,6 +11,9 @@
 config:
   hub config check | plan | apply [--only <套用者>,...]
                         驗證 config / 會改什麼 / 套用(check → 套用 → 再 plan 要是空的 → 記錄)
+  hub llm set-key <provider>   把 hub.json llm.providers.<provider> 的 API key 從 stdin 寫進平台的 secrets 目錄(chmod 600;
+                        不從參數讀,不會留在 shell 歷史)
+  hub llm health        每一家 provider 能不能用(= bin/llm.py health)
   hub modules [enable|disable <名稱>]
                         有哪些可以不開的功能、開了哪些;開關會改 hub.json 再套用(hub.json 記得 commit)
   hub move-instance --to <實例目錄> [--apply]
@@ -388,6 +391,13 @@ def cmd_doctor(argv: list[str]) -> int:
         pass   # 沒有 agent 登入可查:上面的功能表已經說了哪些功能關掉
     except Exception as e:
         add("bad", f"讀不到 agent 的登入狀態:{e}", "bin/hub config check")
+    import completion
+    if completion.settings():
+        for name, ok, why in completion.health_all():
+            add("ok" if ok else "bad", f"LLM provider {name}:" + ("可以用" if ok else why),
+                "" if ok else "看 hub.json llm.providers;key 用 bin/hub llm set-key <provider>")
+        s = completion.settings()
+        add("ok", "判斷點的模型分組:" + ",".join(f"{g}→{s['use'].get(g, '(沒設)')}" for g in completion.GROUPS))
 
     uid = os.getuid()
     for label, what in (("local.agent-hub-scheduler", "排程器"), ("local.agent-hub-scheduler-watchdog", "看門狗")):
@@ -431,12 +441,48 @@ def report(results) -> int:
 
 # ---------- 包裝 ----------
 
+def cmd_llm(argv: list[str]) -> int:
+    import completion
+    if argv[:1] == ["health"]:
+        return subprocess.run([sys.executable, str(BIN / "llm.py"), "health"]).returncode
+    if argv[:1] != ["set-key"] or len(argv) != 2:
+        print("用法:hub llm set-key <provider>(key 從 stdin)| hub llm health", file=sys.stderr)
+        return 2
+    conf = ((completion.settings() or {}).get("providers") or {}).get(argv[1])
+    if not conf:
+        print(f"hub.json llm.providers 沒有 {argv[1]}", file=sys.stderr)
+        return 2
+    k = conf.get("key") or {}
+    if not k.get("secret"):
+        print(f"llm.providers.{argv[1]}.key 不是 {{\"secret\": 檔名}}(用環境變數的不用這個指令)", file=sys.stderr)
+        return 2
+    if sys.stdin.isatty():
+        import getpass
+        value = getpass.getpass(f"{argv[1]} 的 API key(不會顯示):")
+    else:
+        value = sys.stdin.read()
+    value = value.strip()
+    if not value:
+        print("沒有讀到 key,什麼都沒寫", file=sys.stderr)
+        return 1
+    d = hubconf.secrets_dir()
+    d.mkdir(parents=True, exist_ok=True)
+    f = d / k["secret"]
+    tmp = f.with_name(f.name + ".tmp")
+    fd = os.open(tmp, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+    with os.fdopen(fd, "w") as fh:
+        fh.write(value + "\n")
+    tmp.replace(f)
+    print(f"寫進 {f}(600)。檢查:bin/hub llm health")
+    return 0
+
+
 def passthrough(script: str):
     return lambda argv: subprocess.run([str(BIN / script), *argv]).returncode
 
 
 COMMANDS = {
-    "init": cmd_init, "doctor": cmd_doctor, "config": cmd_config, "modules": cmd_modules,
+    "init": cmd_init, "doctor": cmd_doctor, "config": cmd_config, "modules": cmd_modules, "llm": cmd_llm,
     "move-instance": cmd_move_instance,
     "onboard": passthrough("onboard-project.sh"), "recover": passthrough("recover-project.sh"),
     "rename": passthrough("rename-project.sh"), "status": passthrough("overview.sh"),

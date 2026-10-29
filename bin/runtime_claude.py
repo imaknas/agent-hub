@@ -653,3 +653,64 @@ def relocate(sid: str, old_cwd: str, new_cwd: str) -> bool:
         if (old_dir / name).exists() and not (new_dir / name).exists():
             shutil.move(str(old_dir / name), str(new_dir / name))
     return True
+
+
+# ---------- completion(runtime_ports 的 completion 介面;docs/design/llm-providers.md)----------
+# 判斷點的「只回答案」交給 Claude Code 跑:關掉所有工具、不載入任何 MCP、不留 session;prompt 從 stdin 給(argv 有長度上限,
+# 「放得下就全放」的 prompt 會超過);在空的暫存目錄跑——在專案副本裡跑會觸發專案自己的 hook(librarian 記過這個坑)。
+
+from runtime_ports import CompletionResult  # noqa: E402
+
+
+def _exe() -> str:
+    try:
+        import hubconf
+        return hubconf.tool("claude")
+    except Exception:
+        return "claude"
+
+
+def complete(req, conf) -> CompletionResult:
+    import tempfile
+    cmd = [_exe(), "-p", "--tools", "", "--strict-mcp-config", "--no-session-persistence", "--output-format", "json"]
+    if req.model:
+        cmd += ["--model", req.model]
+    if req.system:
+        cmd += ["--append-system-prompt", req.system]
+    if req.schema is not None:
+        cmd += ["--json-schema", json.dumps(req.schema, ensure_ascii=False)]
+    env, why = auth_env(conf.get("auth") or "token", os.environ)
+    if env is None:
+        return CompletionResult(False, stop="error", error=why)
+    env["HUB_LLM_POINT"] = req.point   # 叫起的程序(含它的 hook)知道自己是平台的 headless 呼叫
+    env = _env(type("T", (), {"env": env})())
+    with tempfile.TemporaryDirectory(prefix="hub-completion-") as cwd:
+        try:
+            r = subprocess.run(cmd, input=req.prompt, cwd=cwd, capture_output=True, text=True, timeout=req.timeout_s, env=env)
+        except subprocess.TimeoutExpired:
+            return CompletionResult(False, stop="error", error=f"超過 {req.timeout_s} 秒")
+        except FileNotFoundError:
+            return CompletionResult(False, stop="error", error="找不到 claude")
+    try:
+        out = json.loads(r.stdout)
+    except ValueError:
+        return CompletionResult(False, stop="error", error=f"exit {r.returncode}:{(r.stderr.strip() or r.stdout.strip())[-300:]}")
+    usage = out.get("usage") or {}
+    tokens_in = sum(usage.get(k) or 0 for k in ("input_tokens", "cache_creation_input_tokens", "cache_read_input_tokens")) or None
+    if r.returncode != 0 or out.get("is_error"):
+        text = str(out.get("result") or r.stderr.strip())[-300:]
+        return CompletionResult(False, stop="error", error=f"exit {r.returncode}:{text}", input_tokens=tokens_in,
+                                output_tokens=usage.get("output_tokens"), cost_usd=out.get("total_cost_usd"))
+    so = out.get("structured_output")
+    return CompletionResult(True, text=json.dumps(so, ensure_ascii=False) if so is not None else str(out.get("result") or ""),
+                            stop="end", input_tokens=tokens_in, output_tokens=usage.get("output_tokens"),
+                            cost_usd=out.get("total_cost_usd"))
+
+
+def health(conf) -> tuple:
+    """不打請求(每小時的 claude-login 已經實際打過):claude 在不在、要用的登入在不在。"""
+    import shutil
+    if not shutil.which(_exe()) and not pathlib.Path(_exe()).is_file():
+        return False, "找不到 claude"
+    env, why = auth_env(conf.get("auth") or "token", {})
+    return (env is not None), why

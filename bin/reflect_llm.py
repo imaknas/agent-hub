@@ -26,16 +26,8 @@ MUNINN_CLI = hubconf.p("assistant.cli")
 EXCLUDED = hubconf.reflection_private()
 
 # trajectory.py 還在用(它自己決定送什麼);這裡已經不送任何原文。
-# 送給模型前遮掉像憑證的字串:第一次試跑時,模型把對話裡貼過的 Finnhub API key
-# 前幾碼引進了報告。已知前綴的 token,跟夠長、字母數字混雜的長字串一律換成 [已遮蔽]。
-SECRET = re.compile(
-    r"(?:sk-[A-Za-z0-9_\-]{10,}|sk-ant-[A-Za-z0-9_\-]{10,}|AIza[0-9A-Za-z_\-]{20,}|gh[pousr]_[A-Za-z0-9]{20,}"
-    r"|xox[abpr]-[A-Za-z0-9\-]{10,}|eyJ[A-Za-z0-9_\-]{20,}\.[A-Za-z0-9_\-.]+"
-    r"|(?=[A-Za-z0-9_\-]*\d)(?=[A-Za-z0-9_\-]*[A-Za-z])[A-Za-z0-9_\-]{20,})")
-
-
-def redact(text: str) -> str:
-    return SECRET.sub("[已遮蔽]", text)
+# 送給模型前遮掉像憑證的字串:全平台一個遮蔽點(completion.py;llm.py 送任何 provider 前也過同一個)。
+from completion import SECRET, redact  # noqa: E402,F401
 
 
 # 輸出 schema 在 contracts/llm/reflect-week.schema.json(判斷點 reflect-week,bin/llm.py 套用)

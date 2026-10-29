@@ -50,6 +50,8 @@
         "kind": {"enum": ["decide", "generate"], "description": "decide = 從固定的結論裡選一個(可以換成只回機率的判斷模型);generate = 產生內容"},
         "labels": {"type": "array", "items": {"type": "string"}, "minItems": 1, "description": "decide 的點能回的結論"},
         "model_group": {"type": "string", "description": "依分組選模型時的組名"},
+        "shape": {"enum": ["completion", "agent"], "description": "completion = 模型沒有工具、只回答案(任何 LLM provider 都能跑);agent = 要工具、工作目錄、權限的 coding agent(docs/design/llm-providers.md)"},
+        "max_tokens": {"type": "integer", "minimum": 1, "description": "completion 的輸出上限(預設 8192)"},
         "material": {"enum": ["cloud_safe", "personal", "sensitive", "local_only"], "description": "送給模型的內容屬於哪一類(決定能不能送雲端)"},
         "eval": {
           "type": "object",

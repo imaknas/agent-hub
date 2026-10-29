@@ -53,6 +53,10 @@ def check(root: pathlib.Path) -> list[str]:
             errs.append(f"hub.json:不認得的鍵 `{k}`" + (f"(是不是 {', '.join(near)}?)" if near else "")
                         + ";要新增就先加進 contracts/hub.v1.schema.json")
 
+    if "llm" in cfg:
+        import completion
+        errs += [f"hub.json:llm:{e}" for e in completion.config_errors(cfg["llm"])]
+
     import registry
     index = registry.refresh()
     for name, es in sorted(index["errors"].items()):

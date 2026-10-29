@@ -26,6 +26,8 @@ def reset() -> None:
     _creds.update({"subscription": True, "token": True})
     _resumable.clear()
     _replies.clear()
+    _completions.clear()
+    _asked.clear()
     _ran.clear()
     _turns.clear()
     _live.clear()
@@ -226,3 +228,26 @@ def is_login_error(text: str) -> bool:
 
 def relocate(sid: str, old_cwd, new_cwd) -> bool:
     return sid in _resumable  # 假的 runtime 沒有照資料夾放的紀錄:接得回來的就接得回來
+
+
+# ---------- completion ----------
+from runtime_ports import CompletionResult  # noqa: E402
+
+_completions: dict[str, list] = {}   # 判斷點 → 依序要回的 CompletionResult(用完了就一直回最後一個)
+_asked: list = []                    # 收到的 (CompletionRequest, conf)
+
+
+def set_completions(point: str, *results) -> None:
+    _completions[point] = list(results)
+
+
+def complete(req, conf) -> CompletionResult:
+    _asked.append((req, conf))
+    queue = _completions.get(req.point)
+    if not queue:
+        return CompletionResult(True, text=f"fake:{req.point}", stop="end", input_tokens=len(req.prompt), output_tokens=1)
+    return queue.pop(0) if len(queue) > 1 else queue[0]
+
+
+def health(conf) -> tuple:
+    return (not conf.get("fake_unhealthy"), "fake_unhealthy" if conf.get("fake_unhealthy") else "")

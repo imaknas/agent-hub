@@ -11,6 +11,10 @@
         給人跟評估看的,不影響這支的行為——格式見 contracts/llm-points.v1.schema.json
   llm.py run <point> --dry-run ...         只印出會執行的指令(JSON list),不呼叫模型
   llm.py lint     列出 bin/ 裡繞過這支的 `claude -p`(contracts-check 用)
+  llm.py health   hub.json llm 的每一家 provider 能不能用
+
+判斷點宣告 `shape: completion`、而且 hub.json 有 `llm` 區塊 → 交給 completion.py(任何 provider、任何 key;docs/design/llm-providers.md);
+其他(agent 形狀的點,或沒有 llm 區塊)照舊交給 runtime.default 的 agent 介面。
 
 憑證(2026-10-24 Knas 決定統一):預設用 ~/.claude/headless-oauth-token(`claude setup-token`,一年,launchd/SSH 都一樣,
 只有一份要換);判斷點宣告 `auth: subscription`、或呼叫端設 LLM_AUTH=subscription(登錄 job 的 `connectors: true`)
@@ -89,9 +93,25 @@ def auth_mode(spec: dict) -> str:
 
 
 def auth_env(spec: dict, rt) -> tuple[dict | None, str]:
-    """(要交給 agent 的環境變數, 沒有時給人看的原因)。LLM_AUTH 是 llm.py 自己的變數,不往下傳。"""
-    base = {k: v for k, v in os.environ.items() if k != "LLM_AUTH"}
+    """(要交給 agent 的環境變數, 沒有時給人看的原因)。LLM_AUTH 是 llm.py 自己的變數,不往下傳;
+    hub.json llm 用環境變數給的 API key 也不往下傳(有 Bash 的 agent 都讀得到)。"""
+    import completion
+    drop = {"LLM_AUTH"} | completion.key_envs()
+    base = {k: v for k, v in os.environ.items() if k not in drop}
     return rt.auth_env(auth_mode(spec), base)
+
+
+def run_completion(a, spec: dict, prompt: str) -> int:
+    """shape: completion 的判斷點、而且 hub.json 有 llm 區塊:交給 completion.py(任何 provider)。
+    呼叫端的 --model 是舊的 models.env 路徑(Claude 的名字),這裡不用——模型由 llm 區塊決定。"""
+    import completion
+    schema = json.loads((POINTS.parent / output_schema(spec)).read_text()) if output_schema(spec) else None
+    try:
+        out = completion.run(a.point, spec, prompt, schema)
+    except completion.Refused as e:
+        return fail(a.point, spec, str(e))
+    print(json.dumps(out, ensure_ascii=False))
+    return 0
 
 
 def run(a) -> int:
@@ -103,6 +123,10 @@ def run(a) -> int:
         print(f"llm.py:{a.point} 不是宣告過的判斷點(contracts/llm-points.yaml)", file=sys.stderr)
         return 2
     prompt = "" if a.cmd == "exec" else (pathlib.Path(a.prompt_file).read_text() if a.prompt_file else sys.stdin.read())
+    if a.cmd == "run" and spec.get("shape") == "completion" and not getattr(a, "dry_run", False):
+        import completion
+        if completion.settings():   # 沒有 llm 區塊 = 現在的行為(下面的 agent 介面)
+            return run_completion(a, spec, prompt)
     # --model > 環境變數 > config 的 models.env > 宣告的預設
     menv = spec.get("model_env")
     model = a.model or (menv and (os.environ.get(menv) or config_models().get(menv))) or spec.get("model_default")
@@ -185,11 +209,18 @@ def main() -> int:
     e.add_argument("--prompt-file")
     e.add_argument("extra", nargs="*")
     sub.add_parser("lint")
+    sub.add_parser("health", help="hub.json llm 的每一家 provider 能不能用(key、連線、模型在不在)")
     a = ap.parse_args()
     if a.cmd == "exec" and a.cwd:
         os.chdir(a.cwd)
     if a.cmd in ("run", "exec"):
         return run(a)
+    if a.cmd == "health":
+        import completion
+        rows = completion.health_all()
+        for name, ok, why in rows:
+            print(f"{'✓' if ok else '✗'} {name}" + (f":{why}" if why else ""))
+        return 0 if all(ok for _, ok, _ in rows) else 1
     bad = lint()
     for b in bad:
         print(b)

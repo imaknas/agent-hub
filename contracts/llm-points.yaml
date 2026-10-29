@@ -13,12 +13,17 @@
 #   其他一律 structured_output: null、exit 1,呼叫端走它自己的失敗路徑(上面標的就是那條路徑做的事)。
 # 不管哪種都在匯流排記 job.failed(point、原因)。
 #
+# shape:completion(模型沒有工具、只回答案;hub.json 有 llm 區塊時交給 completion.py,任何 provider)| agent(coding agent)。
+# model_group:fast | standard | strong——要多強的模型,不寫哪一家的名字;hub.json llm 決定交給誰、用哪個模型
+#   (舊的 model_env / model_default 是沒有 llm 區塊時給 runtime.default 用的,過渡期保留)。
 # auth:token(預設,~/.claude/headless-oauth-token)| subscription(訂閱登入;claude.ai connector 只有這樣才載入)。
 #   呼叫端的 LLM_AUTH 環境變數優先(登錄 job 的 connectors: true 會設 LLM_AUTH=subscription)。
 v: 1
 points:
   librarian-state:
     caller: bin/librarian.sh
+    shape: agent
+    model_group: fast
     extra_args: ["--strict-mcp-config"]   # 不載入環境裡的 MCP(全域的含正式資料庫;關掉工具也擋不掉,10-27 實驗)
     purpose: 每晚依 memory 變動與 Muninn 轉交,決定要不要、怎麼更新一個專案的 STATE.md(只准改 ./STATE.md)
     model_env: STATE_MODEL
@@ -31,6 +36,8 @@ points:
     on_failure: retry_later # checkpoint 不推進,隔晚重試
   librarian-todo-format:
     caller: bin/librarian.sh
+    shape: agent
+    model_group: fast
     extra_args: ["--strict-mcp-config"]   # 不載入環境裡的 MCP(全域的含正式資料庫;關掉工具也擋不掉,10-27 實驗)
     purpose: STATE.md 的 `## 待辦` 格式不對時,只修格式、內容不動
     model_env: STATE_MODEL
@@ -43,6 +50,8 @@ points:
     on_failure: skip        # 修不好就留著,check-state-todo 會再檢查、todo.md 檔尾列出
   librarian-index:
     caller: bin/librarian.sh
+    shape: agent
+    model_group: standard
     extra_args: ["--strict-mcp-config"]   # 不載入環境裡的 MCP(全域的含正式資料庫;關掉工具也擋不掉,10-27 實驗)
     purpose: 更新跨專案 index.md 名冊區塊外的註記、找跨專案關聯
     model_env: INDEX_MODEL
@@ -54,6 +63,8 @@ points:
     on_failure: skip        # index.md 的註記這晚不更新;名冊區塊照常由腳本重生
   consolidate:
     caller: bin/consolidate-memory.py
+    shape: agent
+    model_group: strong
     purpose: 把超過 14 天的 memory 日期檔整理進 reference/、修正被推翻的敘述(只准改 memory/reference/ 跟 STATE.md)
     model_env: CONSOLIDATE_MODEL
     model_default: opus
@@ -66,6 +77,8 @@ points:
     on_failure: retry_later # 那個專案這次不整理,2 天後再試
   reflect-week:
     caller: bin/reflect_llm.py
+    shape: completion
+    model_group: standard
     extra_args: ["--strict-mcp-config"]   # 不載入環境裡的 MCP(全域的含正式資料庫;關掉工具也擋不掉,10-27 實驗)
     purpose: 每週活動分析(只拿統計 + muninn 的 session 摘要,不拿對話原文)
     model_env: INDEX_MODEL
@@ -76,6 +89,8 @@ points:
     on_failure: say_so      # 呼叫端只放統計、標「模型呼叫失敗」
   agent-job:
     caller: bin/run-agent-job.sh
+    shape: agent
+    model_group: standard
     purpose: "排程的 Claude job(專案登錄的 kind: agent);prompt 是 job 自己的"
     # 無人值守:job 在登錄宣告了 allow: → dontAsk + --permission-prompts none + 只准那些規則(沒列的一律拒絕,
     # 不會卡在提示);沒宣告的暫時維持 auto(不是 bypass),狀態頁列出來。永遠不用 bypassPermissions。
@@ -86,6 +101,8 @@ points:
     on_failure: say_so      # job 失敗,狀態頁標紅
   login-check:
     caller: bin/check-claude-login.py
+    shape: agent
+    model_group: fast
     extra_args: ["--strict-mcp-config"]   # 不載入環境裡的 MCP(全域的含正式資料庫;關掉工具也擋不掉,10-27 實驗)
     purpose: "每小時確認 claude 的登入還能用(launchd 底下的訂閱登入、headless token 各打一次最小的請求);壞了發 Discord"
     auth: subscription            # 檢查 token 那次呼叫端設 LLM_AUTH=token
@@ -96,6 +113,8 @@ points:
     on_failure: say_so      # 發 Discord 警報
   mailbox-escalation:
     caller: bin/hubbus(dispatch → run-agent-job.sh)
+    shape: agent
+    model_group: standard
     purpose: "專案信箱的交辦沒人收(專案沒人在用,或等了幾分鐘):在那個專案開 headless session,只寫 memory 筆記、回信、問 owner"
     permission_mode: dontAsk
     prompts: none
@@ -106,6 +125,8 @@ points:
     on_failure: say_so      # bridge 回報升級失敗
   mailbox-conversation:
     caller: bin/hubbus(dispatch → llm.py run,帶 runtime_claude.resume_args)
+    shape: agent
+    model_group: standard
     purpose: "對話的回信送到一個閒置的 session:用它的 context 在背景接續(分支副本,不動原本的 session),只寫筆記、回信、問 owner"
     model_env: LEASE_MODEL
     model_default: sonnet
@@ -120,6 +141,8 @@ points:
     on_failure: retry_later  # 失敗記 job.failed;35 分鐘還沒結案,dispatch 改派交辦(stale_resumes)
   lease-session:
     caller: bin/lease-runner.py(llm.py exec)
+    shape: agent
+    model_group: standard
     purpose: "通道租借的 discuss session:長駐的 stream-json 程序,Knas 透過 Muninn 跟專案深談;唯讀"
     model_env: LEASE_MODEL
     model_default: sonnet
@@ -132,6 +155,8 @@ points:
     on_failure: say_so      # runner 發 process_crashed 事件,手機上看得到
   lease-work:
     caller: bin/lease-runner.py(llm.py exec)
+    shape: agent
+    model_group: standard
     purpose: "通道租借的 work session(第二階段,只限想法沙盒):Knas 允許動手後,可以改這個專案的檔案、跑指令,每次都先問他"
     model_env: LEASE_MODEL
     model_default: sonnet
@@ -145,6 +170,8 @@ points:
     on_failure: say_so     # runner 發 process_crashed 事件,手機上看得到
   lease-handover:
     caller: bin/lease-runner.py
+    shape: agent
+    model_group: standard
     purpose: "收回租約時:接回同一個 session,寫結構化交接(摘要、決定、未決問題、Knas 要做的事、memory 筆記)"
     model_env: LEASE_MODEL
     model_default: sonnet

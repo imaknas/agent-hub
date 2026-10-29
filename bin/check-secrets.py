@@ -113,6 +113,16 @@ def main(argv: list[str]) -> int:
     modules = {n: d for n, d in (index.get("modules") or {}).items() if d.get("secrets")}
     module_paths = {p.resolve() for d in modules.values() for s in d["secrets"] if (p := locate(d["name"], d, s["path"]))}
     problems, count = [], 0
+    hub = hubconf.hub_project()
+    if hub in projects:
+        # hub.json llm 的 API key(放在 secrets 目錄的那種)是平台的憑證:不用另外寫進登錄
+        import completion
+        llm_keys = [{"name": f"llm-{n}-key", "path": str(hubconf.secrets_dir() / p["key"]["secret"]),
+                     "why": f"hub.json llm.providers.{n} 的 API key"}
+                    for n, p in (((completion.settings() or {}).get("providers")) or {}).items()
+                    if isinstance(p, dict) and isinstance(p.get("key"), dict) and p["key"].get("secret")]
+        if llm_keys:
+            projects = {**projects, hub: {**projects[hub], "secrets": [*(projects[hub].get("secrets") or []), *llm_keys]}}
     for project in sorted(argv or [*projects, *modules]):
         doc = projects.get(project) or modules.get(project) or {}
         declared = set(module_paths) if project == hubconf.hub_project() else set()
