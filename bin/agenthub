@@ -178,8 +178,24 @@ def render_plist(label: str) -> bytes:
 
 def install_core_plists(dry: bool) -> list[str]:
     """排程器 + 看門狗:樣板的內容跟已經裝的一樣就不動(不會無故重載排程器)。"""
-    if hubconf.service_manager() != "launchd":
+    sm = hubconf.service_manager()
+    if sm is None:
         return [f"⚠️ {hubconf.NO_SERVICE_MANAGER};要跑夜間流程就自己排程 `bin/py bin/scheduler.py`(每 15 分鐘)"]
+    if sm == "systemd":   # 同一份 launchd/ 樣板翻成 user unit(bin/systemd_units.py)
+        import systemd_units
+        done = []
+        for label in CORE_PLISTS:
+            plist = plistlib.loads(render_plist(label))
+            if systemd_units.installed(label) == systemd_units.files(plist) and systemd_units.state(label) == "running":
+                continue
+            done.append(f"{'(dry-run) ' if dry else ''}{label}:{'更新' if systemd_units.installed(label) else '安裝'}(systemd)")
+            if not dry:
+                r = systemd_units.install(plist)
+                if r.returncode != 0:
+                    done.append(f"  ⚠️ systemctl enable 失敗:{r.stderr.strip()[:200]}")
+        if systemd_units.linger() is False:
+            done.append("  ⚠️ 登出之後 user unit 會停:`loginctl enable-linger $USER`(要 sudo)")
+        return done
     done = []
     for label in CORE_PLISTS:
         want = render_plist(label)
@@ -217,7 +233,7 @@ def new_hub_json(args: dict, yes: bool) -> dict:
         d["modules"]["claude"] = bool(shutil.which("claude"))
     if "owner" in d["modules"]:
         d["modules"]["owner"] = not (d.get("assistant") or {}).get("api")
-    if "runtime" not in d and not shutil.which("claude"):
+    if (d.get("runtime") or {}).get("default", "claude") == "claude" and not shutil.which("claude"):
         d["runtime"] = {"default": "none"}   # 沒有 coding agent:agent 的功能明確關掉(doctor 的功能表會說)
     default_on = ",".join(k for k in shipped if d["modules"][k] is True)
     picked = args.get("modules") or ask(f"要開哪些模組(可選:{', '.join(shipped)})", default_on, yes)
@@ -447,8 +463,16 @@ def cmd_doctor(argv: list[str]) -> int:
                 "agenthub llm setup(選一家:API key 或本機 Ollama)")
 
     uid = os.getuid()
-    if hubconf.service_manager() != "launchd":
+    if hubconf.service_manager() is None:
         add("bad", f"排程器、看門狗:{hubconf.NO_SERVICE_MANAGER}", "自己排程 `bin/py bin/scheduler.py`(每 15 分鐘)")
+    elif hubconf.service_manager() == "systemd":
+        import systemd_units
+        for label, what in (("local.agent-hub-scheduler", "排程器"), ("local.agent-hub-scheduler-watchdog", "看門狗")):
+            st = systemd_units.state(label)
+            add("ok" if st == "running" else "bad", f"{what}({label}.timer):" + ("已啟用" if st == "running" else
+                "沒有裝" if st is None else "裝了但沒在排"), "" if st == "running" else "agenthub init")
+        if systemd_units.linger() is False:
+            add("warn", "登出之後排程器、服務會停(systemd 的 linger 沒開)", "sudo loginctl enable-linger $USER")
     for label, what in (() if hubconf.service_manager() != "launchd" else
                         (("local.agent-hub-scheduler", "排程器"), ("local.agent-hub-scheduler-watchdog", "看門狗"))):
         r = subprocess.run(["/bin/launchctl", "print", f"gui/{uid}/{label}"], capture_output=True, text=True)

@@ -253,7 +253,7 @@ memory 追蹤但不需要在 mini 上執行任何東西的專案(目前大多數
 ## 目錄
 
 - `bin/`——所有腳本
-- `launchd/`——只剩排程器跟看門狗(刻意不經過 render-services:排程器壞了正是看門狗要報的事)、跟遙控那台(MBP)的兩份。狀態頁、信箱 dispatch、memory 同步 10-26 起寫在 `projects/agent-hub.yaml` 的 `services:`,由 render-services 產生。跑 hub 的那台機器的 ssh 名稱在 `hub.json` 的 `hosts.server`(`hubconf.host("server")`;shell 用 `plutil` 讀,遙控那台不一定有平台的 Python)。**專案的長駐服務不在這裡**:
+- `launchd/`(Linux:同一份樣板由 `bin/systemd_units.py` 翻成 systemd user unit,`hubconf.service_manager()` 決定用哪個)——只剩排程器跟看門狗(刻意不經過 render-services:排程器壞了正是看門狗要報的事)、跟遙控那台(MBP)的兩份。狀態頁、信箱 dispatch、memory 同步 10-26 起寫在 `projects/agent-hub.yaml` 的 `services:`,由 render-services 產生。跑 hub 的那台機器的 ssh 名稱在 `hub.json` 的 `hosts.server`(`hubconf.host("server")`;shell 用 `plutil` 讀,遙控那台不一定有平台的 Python)。**專案的長駐服務不在這裡**:
   寫在 `projects/<專案>.yaml` 的 `services:`,`bin/render-services.py`(平台 job,每 15 分鐘)產生
   `~/Library/LaunchAgents/<label>.plist`,有變才重載;指令找不到就不動能跑的 plist、服務沒在跑就發 Discord。
   **node(跟 claude)只由 nvm 管**:服務跟排程用 nvm 預設版本(`hubconf.nvm_bin()`、env 的 `$PLATFORM_PATH`),

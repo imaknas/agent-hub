@@ -113,7 +113,7 @@ def main() -> int:
         test = (info.get("runtime") or {}).get("test")
         if test:
             try:
-                t = subprocess.run(["/bin/zsh", "-lc", test], cwd=wt, capture_output=True, text=True, timeout=1800)
+                t = subprocess.run([hubconf.login_shell(), "-lc", test], cwd=wt, capture_output=True, text=True, timeout=1800)
                 tail = "\n".join((t.stdout + t.stderr).strip().splitlines()[-40:])
                 report["tests"] = {"cmd": test, "ok": t.returncode == 0, "tail": tail}
             except subprocess.TimeoutExpired:

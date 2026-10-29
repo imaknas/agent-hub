@@ -72,6 +72,14 @@ def last_tick():
 
 def diagnose():
     uid = os.getuid()
+    if sys.platform != "darwin":   # Linux:排程器是 systemd 的 user timer(bin/systemd_units.py;這支刻意不 import 平台的模組)
+        r = subprocess.run(["systemctl", "--user", "status", "--no-pager", f"{LABEL}.timer"], capture_output=True, text=True)
+        lines = [f"`systemctl --user status {LABEL}.timer`:\n```\n{(r.stdout or r.stderr).strip()[:600]}\n```",
+                 f"重啟:`systemctl --user restart {LABEL}.timer`"]
+        if SCHED_LOG.exists():
+            tail = SCHED_LOG.read_text(errors="replace").splitlines()[-3:]
+            lines.append("scheduler.log 最後幾行:\n```\n" + "\n".join(x[:180] for x in tail) + "\n```")
+        return "\n".join(lines)
     r = subprocess.run(["/bin/launchctl", "print", f"gui/{uid}/{LABEL}"], capture_output=True, text=True)
     if r.returncode != 0:
         lines = [f"launchd 裡沒有 {LABEL}(被 bootout 了?)→ `schedulectl start`"]

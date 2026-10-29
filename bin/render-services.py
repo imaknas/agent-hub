@@ -109,6 +109,9 @@ def bootstrap(uid: int, label: str, path: pathlib.Path) -> subprocess.CompletedP
 
 def running(uid: int, label: str) -> str | None:
     """launchctl print 的 state(running / not running / …);沒載入回傳 None。"""
+    if hubconf.service_manager() == "systemd":
+        import systemd_units
+        return systemd_units.state(label)
     r = launchctl("print", f"gui/{uid}/{label}")
     if r.returncode != 0:
         return None
@@ -158,8 +161,18 @@ def _changes(want: dict, keep: set[str], only: str | None = None) -> list[tuple]
     """(Change, plist 現在的內容, 要寫的 plist);remove 的後兩個是 None。"""
     from appliers import Change
     out = []
+    systemd = hubconf.service_manager() == "systemd"
+    if systemd:
+        import systemd_units
     for label, (proj, plist) in sorted(want.items()):
         if (only and label != only) or label in keep:
+            continue
+        if systemd:   # 比的是產生的 unit 檔內容(plist 是同一份來源)
+            cur_units, want_units = systemd_units.installed(label), systemd_units.files(plist)
+            if cur_units != want_units:
+                keys = sorted(n for n in set(cur_units) | set(want_units) if cur_units.get(n) != want_units.get(n))
+                out.append((Change("update" if cur_units else "add", f"service:{label}",
+                                   proj + (f":改了 {'、'.join(keys)}" if cur_units else "")), None, plist))
             continue
         path = AGENTS / f"{label}.plist"
         cur = plistlib.loads(path.read_bytes()) if path.exists() else None
@@ -176,6 +189,16 @@ def _changes(want: dict, keep: set[str], only: str | None = None) -> list[tuple]
 
 def _apply_one(uid: int, ch, plist: dict | None, problems: list[str]) -> None:
     label = ch.target.removeprefix("service:")
+    if hubconf.service_manager() == "systemd":
+        import systemd_units
+        if ch.op == "remove":
+            systemd_units.remove(label)
+            return
+        r = systemd_units.install(plist)
+        if r.returncode != 0:
+            print(f"    ⚠️ systemctl enable 失敗:{r.stderr.strip()}")
+            problems.append(f"{label}({ch.detail.split(':')[0]}):systemctl enable 失敗:{r.stderr.strip()[:200]}")
+        return
     if ch.op == "remove":
         launchctl("bootout", f"gui/{uid}/{label}")
         (AGENTS / f"{label}.plist").unlink(missing_ok=True)
@@ -190,14 +213,14 @@ def _apply_one(uid: int, ch, plist: dict | None, problems: list[str]) -> None:
 
 
 def plan(index: dict | None = None) -> list:
-    if hubconf.service_manager() != "launchd":
+    if hubconf.service_manager() is None:
         return []   # 沒有服務管理器:沒有東西能套用(doctor 跟 main 會說)
     want, _, keep, _ = _desired(index or registry.refresh())
     return [c for c, _, _ in _changes(want, keep)]
 
 
 def apply(index: dict | None = None) -> list:
-    if hubconf.service_manager() != "launchd":
+    if hubconf.service_manager() is None:
         return []
     want, problems, keep, _ = _desired(index or registry.refresh())
     uid = os.getuid()
@@ -210,7 +233,7 @@ def apply(index: dict | None = None) -> list:
 
 
 def main() -> int:
-    if hubconf.service_manager() != "launchd":
+    if hubconf.service_manager() is None:
         print(f"services:{hubconf.NO_SERVICE_MANAGER}")
         return 0
     dry = "--dry-run" in sys.argv
@@ -226,7 +249,7 @@ def main() -> int:
             print(f"{'(dry-run) ' if dry else ''}{label}:登錄裡已經沒有,卸載")
         else:
             changed += 1
-            print(f"{'(dry-run) ' if dry else ''}{label}({want[label][0]}):{'新增' if cur is None else '更新'}")
+            print(f"{'(dry-run) ' if dry else ''}{label}({want[label][0]}):{'新增' if ch.op == 'add' else '更新'}")
             if cur is not None:
                 for k in sorted(set(cur) | set(plist)):
                     if cur.get(k) != plist.get(k):

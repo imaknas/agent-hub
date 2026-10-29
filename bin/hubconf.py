@@ -410,13 +410,38 @@ def sh_py(path_expr: str) -> str:
     return f"{path_expr.rsplit('/', 1)[0]}/py {path_expr}"
 
 
+def login_shell() -> str:
+    """跑 job、測試指令的 login shell(`<shell> -lc <指令>`,讀使用者的 PATH、nvm 之類):macOS 一律 /bin/zsh(跟以前一樣);
+    其他系統沒有 zsh 就用 bash,再沒有就 sh。"""
+    for sh in ("/bin/zsh", "/bin/bash", "/usr/bin/bash"):
+        if os.access(sh, os.X_OK):
+            return sh
+    return "/bin/sh"
+
+
+_SERVICE_MANAGER: list = []
+
+
 def service_manager() -> str | None:
-    """這台機器用哪個服務管理器跑排程器、看門狗、專案的長駐服務:macOS = launchd。其他系統還沒接上(None):
-    裝、查、重載都明確說「這個系統還沒接上」,不假裝跑起來了。"""
-    return "launchd" if sys.platform == "darwin" else None
+    """這台機器用哪個服務管理器跑排程器、看門狗、專案的長駐服務:macOS = launchd;Linux 有 systemd 的 user 層級
+    (`systemctl --user` 叫得通)= systemd(bin/systemd_units.py)。都沒有(例:容器)= None:裝、查、重載都明確說
+    「這個系統沒有服務管理器」,不假裝跑起來了。"""
+    if not _SERVICE_MANAGER:
+        if sys.platform == "darwin":
+            _SERVICE_MANAGER.append("launchd")
+        else:
+            import subprocess
+            try:
+                ok = subprocess.run(["systemctl", "--user", "show-environment"], capture_output=True,
+                                    timeout=10).returncode == 0
+            except (OSError, subprocess.TimeoutExpired):
+                ok = False
+            _SERVICE_MANAGER.append("systemd" if ok else None)
+    return _SERVICE_MANAGER[0]
 
 
-NO_SERVICE_MANAGER = "這個系統還沒接上服務管理器(現在只支援 macOS 的 launchd):排程器、看門狗、專案的長駐服務都不會自己跑"
+NO_SERVICE_MANAGER = ("這個系統沒有支援的服務管理器(macOS 的 launchd、Linux 的 systemd user 層級都沒有):"
+                      "排程器、看門狗、專案的長駐服務都不會自己跑")
 
 
 def process_cwds() -> list[tuple[int, str, str]]:

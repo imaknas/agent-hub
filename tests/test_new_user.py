@@ -70,7 +70,7 @@ class NewUser(unittest.TestCase):
 
         r = self.hub_cmd("doctor")
         self.assertNotIn("Traceback", r.stdout + r.stderr)
-        self.assertRegex(r.stdout, r"✗ 排程器.*(沒有載入|不是這份 hub|還沒接上)", "這份 hub 的排程器沒裝,doctor 要說出來")
+        self.assertRegex(r.stdout, r"✗ 排程器.*(沒有載入|不是這份 hub|服務管理器|沒有裝)", "這份 hub 的排程器沒裝,doctor 要說出來")
 
     def test_config_repo_gate_rejects_bad_config(self):
         self.hub_cmd("init", "--yes", "--no-launchd", "--owner", "Alex")

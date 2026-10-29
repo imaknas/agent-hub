@@ -234,7 +234,7 @@ def spawn_background(name: str, command: str, job_log_path: pathlib.Path,
         devnull = os.open(os.devnull, os.O_RDONLY)
         os.dup2(devnull, 0)
         with open(job_log_path, "a") as job_log:
-            rc = subprocess.run(["/bin/zsh", "-lc", command], stdout=job_log,
+            rc = subprocess.run([hubconf.login_shell(), "-lc", command], stdout=job_log,
                                 stderr=subprocess.STDOUT, env=JOB_ENV).returncode
         rec.update(exit=rc, finished=datetime.datetime.now().isoformat(timespec="seconds"))
         write_json(run_file, rec)
@@ -361,7 +361,7 @@ def main() -> None:
         try:
             with open(job_log_path, "a") as job_log:
                 subprocess.run(
-                    ["/bin/zsh", "-lc", job["command"]],
+                    [hubconf.login_shell(), "-lc", job["command"]],
                     check=True,
                     stdout=job_log,
                     stderr=subprocess.STDOUT,

@@ -123,8 +123,12 @@ def cmd_resume(name):
 
 
 def cmd_status():
-    print("=== launchd 註冊狀態 ===")
-    subprocess.run(["launchctl", "print", f"gui/{subprocess.check_output(['id', '-u']).decode().strip()}/{LABEL}"])
+    if hubconf.service_manager() == "systemd":
+        print("=== systemd(user)狀態 ===")
+        subprocess.run(["systemctl", "--user", "status", "--no-pager", f"{LABEL}.timer", f"{LABEL}.service"])
+    else:
+        print("=== launchd 註冊狀態 ===")
+        subprocess.run(["launchctl", "print", f"gui/{subprocess.check_output(['id', '-u']).decode().strip()}/{LABEL}"])
     print()
     print("=== 最近排程器執行紀錄(scheduler.log 最後 10 行) ===")
     log_file = LOG_DIR / "scheduler.log"
@@ -151,12 +155,20 @@ def cmd_logs(name=None, n=50):
 
 
 def cmd_stop():
+    if hubconf.service_manager() == "systemd":
+        subprocess.run(["systemctl", "--user", "disable", "--now", f"{LABEL}.timer"])
+        print("排程器已停用(schedule.yaml 沒有變動,之後用 start 重新啟動)")
+        return
     uid = subprocess.check_output(["id", "-u"]).decode().strip()
     subprocess.run(["launchctl", "bootout", f"gui/{uid}/{LABEL}"])
     print("排程器已停用(schedule.yaml 沒有變動,之後用 start 重新啟動)")
 
 
 def cmd_start():
+    if hubconf.service_manager() == "systemd":
+        subprocess.run(["systemctl", "--user", "enable", "--now", f"{LABEL}.timer"])
+        print("排程器已啟動")
+        return
     uid = subprocess.check_output(["id", "-u"]).decode().strip()
     subprocess.run(["launchctl", "bootstrap", f"gui/{uid}", str(PLIST)])
     print("排程器已啟動")
@@ -169,11 +181,19 @@ def cmd_run(name):
     uid = subprocess.check_output(["id", "-u"]).decode().strip()
     label = f"local.agent-hub-run-now.{name.replace('/', '.')}"
     log = HUB / ".logs" / f"{name.replace('/', '__')}-{datetime.date.today().isoformat()}.log"
+    if hubconf.service_manager() == "systemd":   # 一次性的 user unit(跑完自己收掉)
+        subprocess.run(["systemctl", "--user", "reset-failed", f"{label}.service"], capture_output=True)
+        subprocess.run(["systemd-run", "--user", "--collect", f"--unit={label}",
+                        f"--property=StandardOutput=append:{log}", f"--property=StandardError=append:{log}",
+                        f"--setenv=SAFE_PUSH={HUB / 'bin' / 'git-safe-push.sh'}", "/bin/sh", "-lc", job["command"]], check=True)
+        _mark_ran_today(name)
+        print(f"已開始執行 {name},輸出寫進 {log}(今天的排程不會再跑它)")
+        return
     plist = Path("/tmp") / f"{label}.plist"
     import plistlib
     plist.write_bytes(plistlib.dumps({
         "Label": label,
-        "ProgramArguments": ["/bin/zsh", "-lc", job["command"]],
+        "ProgramArguments": [hubconf.login_shell(), "-lc", job["command"]],
         "EnvironmentVariables": {"SAFE_PUSH": str(HUB / "bin" / "git-safe-push.sh")},
         "RunAtLoad": True,
         "StandardOutPath": str(log),
@@ -182,12 +202,16 @@ def cmd_run(name):
     # 上一次手動執行留下的同名 job 先清掉(跑完的 job 還會留在 launchd 裡)
     subprocess.run(["launchctl", "bootout", f"gui/{uid}/{label}"], capture_output=True)
     subprocess.run(["launchctl", "bootstrap", f"gui/{uid}", str(plist)], check=True)
+    _mark_ran_today(name)
+    print(f"已開始執行 {name},輸出寫進 {log}(今天的排程不會再跑它)")
+
+
+def _mark_ran_today(name):
     # 記成今天已跑:不然排程時間已過的 job,下一個 tick 會再跑一次(LLM job 等於多花一次錢)
     state_file = HUB / ".state" / "scheduler-last-run.json"
     state = json.loads(state_file.read_text()) if state_file.exists() else {}
     state[name] = datetime.date.today().isoformat()
     state_file.write_text(json.dumps(state, indent=2))
-    print(f"已開始執行 {name},輸出寫進 {log}(今天的排程不會再跑它)")
 
 
 def cmd_models():
@@ -245,7 +269,7 @@ def main():
         sys.exit(1)
 
     cmd, rest = args[0], args[1:]
-    if cmd in ("status", "run", "stop", "start") and hubconf.service_manager() != "launchd":
+    if cmd in ("status", "run", "stop", "start") and hubconf.service_manager() is None:
         print(f"schedulectl {cmd}:{hubconf.NO_SERVICE_MANAGER}")
         sys.exit(2)
     if cmd == "list":
