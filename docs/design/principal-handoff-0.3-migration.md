@@ -135,10 +135,10 @@ m10270639-ba51、m10270459-89db):
 ## 切換(10-27 14:49)
 
 Knas:「隔離演練再跑一次沒問題的話,今晚 03:00 前切換(job 換 registrar.py + mailbox.records 開)」。Agent Hub session
-重跑隔離演練(真資料重新複製,含 f5f7823)是乾淨的:切換當晚 registrar 只送 1 筆(某個專案手蓋的
+重跑隔離演練(真資料重新複製,含 0fe4bda)是乾淨的:切換當晚 registrar 只送 1 筆(某個專案手蓋的
 `task-<專案>-funnel-f588`,匯流排上沒紀錄,第一次給 Muninn),第二次跑 0 筆。
 
-- `modules/assistant.yaml`:`assistant/knas-tasks` 改跑 `bin/py bin/registrar.py`(8cb0929;job 名稱跟排程狀態沿用)
+- `modules/assistant.yaml`:`assistant/knas-tasks` 改跑 `bin/py bin/registrar.py`(8fecd6a;job 名稱跟排程狀態沿用)
 - config `hub.json`:`mailbox.records: true`(c265a2b);bridge v2 14:49:26 第一次跑,設了 28 個起點(含舊名稱 idea-1)
 - 今晚 03:00 是 `librarian.py` 跟 `registrar.py` 第一次一起上線;明早要看:registrar 的 log(只該有 1 筆 raised)、
   librarian 有沒有 v2 的 note/答案、bridge 往外往內有沒有錯。

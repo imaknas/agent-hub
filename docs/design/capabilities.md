@@ -200,8 +200,8 @@ Muninn 10-25 14:46 另外要求 `contracts/lease-runner.v1.schema.json` 不再�
 
 ## 10-25 實作與驗證
 
-commit:`cbdf9bb`(policy.py、Claude 設定翻譯搬進 runtime_claude)→ `8950a8a`(登錄能力、鎖安全欄位)→ `902cd32`(seatbelt.py)
-→ `29227f6`(cap-runner、hub-run)→ `5416817`(預設 gpu、idea-1、提示)→ `d650076`(啟動失敗要回覆、known-issues)。
+commit:`2568776`(policy.py、Claude 設定翻譯搬進 runtime_claude)→ `c3583ea`(登錄能力、鎖安全欄位)→ `61ff364`(seatbelt.py)
+→ `92b2898`(cap-runner、hub-run)→ `5416817`(預設 gpu、idea-1、提示)→ `fa95f4a`(啟動失敗要回覆、known-issues)。
 
 - **行為不變**:搬家前後,24 個專案算出的 Claude 設定跟租約的 `--settings` 逐位元組相同;`render-project-settings.py --report`
   沒有偏移。

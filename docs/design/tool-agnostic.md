@@ -49,7 +49,7 @@ doctor 跟狀態頁照實標出來。Knas 自己的主力是互動 session,這�
 3. **能力從轉接器實作了哪些介面推出來**(`runtime_ports` 的 7 個介面,不另外列一份);每個平台功能宣告需要哪些介面;
    缺的 = 功能明確關掉,doctor 的「工具 × 功能」表寫原因。`load()` 已經只檢查要求的介面,轉接器可以只實作一部分。
 4. **不寫程式也能接新工具**——但誠實:零程式的轉接器只做得到 completion 跟「在丟棄式 worktree 裡跑一次」。
-5. 平台自己的設定只用中立詞彙(ratchet,847f32b)。
+5. 平台自己的設定只用中立詞彙(ratchet,1186f65)。
 6. 平台推得出來的,不靠 agent 回報。
 
 ## 平台跟工具接觸的面
@@ -126,12 +126,12 @@ doctor 跟狀態頁照實標出來。Knas 自己的主力是互動 session,這�
 
 ## 開源第一版的範圍(盲審建議,採用)
 
-1. ✅(33b7b2c)**能力表 + `runtime_none`**:能力從介面推、doctor 的「工具 × 功能」表;Claude 專用 job 搬進模組;`bin/setup` 的 claude 改選配。
-2. ✅(b0e4e13)**completion + providers**:librarian、待辦、index、週報用任何 API key。介面、三家 provider、統一的處理、key、預算都好了;
+1. ✅(63fb2f2)**能力表 + `runtime_none`**:能力從介面推、doctor 的「工具 × 功能」表;Claude 專用 job 搬進模組;`bin/setup` 的 claude 改選配。
+2. ✅(27359ce)**completion + providers**:librarian、待辦、index、週報用任何 API key。介面、三家 provider、統一的處理、key、預算都好了;
    reflect-week 已經是 completion(本機 Ollama 跑通)。librarian 的三個點改成 completion 是另一步(影子模式,`llm-providers.md` 步驟 4)。
-3. ✅(5ca93ff)**owner 端可以換**:registrar 搬回核心、`owner_side: builtin | muninn`、內建最小 owner 端 + 通知轉接器;Muninn 寫成可選工具。
-4. ✅ **平台 CLI 改名上 PATH**(18f3556)、規則內容去掉本機路徑、✅ MCP 伺服器(10-29,`agenthub mcp`,`bin/mcp_server.py`,docs/mcp.md:inbox/show/thread/send/ack/done + ask_owner、note;`instructions` 帶規則跟未結案信數;平台叫起的 agent 一律拒絕)。實跑:Codex(`-c mcp_servers.…` 臨時登記,沒改它的設定)在 read-only 沙盒裡收信、讀 README 回覆、結案、寫筆記,全部落在匯流排跟 memory。登記進各工具的設定由使用者自己做(平台只印出那一段)。propose 的 agent 自己跑 `agenthub send/done/ack`(或任何會改匯流排的 hubbus 子指令)一律被 hubbus 擋下:認 propose_apply 設的環境變數,也看祖先程序裡有沒有 propose_apply.py(清掉環境變數、換工作目錄也躲不掉;10-29)。刻意脫離程序樹(例:交給別的常駐程序代寄)要等平台自己的沙盒才擋得住。
-5. ✅ **提議→平台套用**(f82773b):丟棄式 worktree、路徑白名單套用、平台代寄信。✅ 10-29 第一個非 Claude 的實跑:Gemini CLI 6 月起不服務個人帳號,改用它的後繼 **Antigravity CLI(`agy`)**,`runtime: command` 樣板接上(`{prompt}` 當參數、`{cwd}` 把 read_file/write_file 限在 worktree、`command(*)` 拒絕),Gemini 4 Argon 處理一封真的交辦:只採用筆記、平台代寄回信並結案、筆記 push 到 memory repo。Flash 會把長的暫存路徑抄錯 → 讀到 worktree 外被擋 → `agy` exit 0 但沒輸出;平台現在把「沒輸出」當失敗、帶 stderr 的原因。同一天 **Codex CLI**(ChatGPT 帳號登入)也跑通,不用改程式:走的是 stdin + `-o {output_file}` 這兩條 `agy` 沒走到的路,它自己的 Seatbelt 沙盒(`workspace-write`)跟平台的丟棄式 worktree 疊在一起沒問題。注意:Codex 的沙盒只限寫、不限讀(讀得到 secrets 目錄),`agy` 的 `read_file({cwd})` 兩邊都限;讀的範圍要等平台自己的沙盒(Linux 那一步)才統一。
+3. ✅(e2a4bd3)**owner 端可以換**:registrar 搬回核心、`owner_side: builtin | muninn`、內建最小 owner 端 + 通知轉接器;Muninn 寫成可選工具。
+4. ✅ **平台 CLI 改名上 PATH**(2d77f1d)、規則內容去掉本機路徑、✅ MCP 伺服器(10-29,`agenthub mcp`,`bin/mcp_server.py`,docs/mcp.md:inbox/show/thread/send/ack/done + ask_owner、note;`instructions` 帶規則跟未結案信數;平台叫起的 agent 一律拒絕)。實跑:Codex(`-c mcp_servers.…` 臨時登記,沒改它的設定)在 read-only 沙盒裡收信、讀 README 回覆、結案、寫筆記,全部落在匯流排跟 memory。登記進各工具的設定由使用者自己做(平台只印出那一段)。propose 的 agent 自己跑 `agenthub send/done/ack`(或任何會改匯流排的 hubbus 子指令)一律被 hubbus 擋下:認 propose_apply 設的環境變數,也看祖先程序裡有沒有 propose_apply.py(清掉環境變數、換工作目錄也躲不掉;10-29)。刻意脫離程序樹(例:交給別的常駐程序代寄)要等平台自己的沙盒才擋得住。
+5. ✅ **提議→平台套用**(ba9649d):丟棄式 worktree、路徑白名單套用、平台代寄信。✅ 10-29 第一個非 Claude 的實跑:Gemini CLI 6 月起不服務個人帳號,改用它的後繼 **Antigravity CLI(`agy`)**,`runtime: command` 樣板接上(`{prompt}` 當參數、`{cwd}` 把 read_file/write_file 限在 worktree、`command(*)` 拒絕),Gemini 4 Argon 處理一封真的交辦:只採用筆記、平台代寄回信並結案、筆記 push 到 memory repo。Flash 會把長的暫存路徑抄錯 → 讀到 worktree 外被擋 → `agy` exit 0 但沒輸出;平台現在把「沒輸出」當失敗、帶 stderr 的原因。同一天 **Codex CLI**(ChatGPT 帳號登入)也跑通,不用改程式:走的是 stdin + `-o {output_file}` 這兩條 `agy` 沒走到的路,它自己的 Seatbelt 沙盒(`workspace-write`)跟平台的丟棄式 worktree 疊在一起沒問題。注意:Codex 的沙盒只限寫、不限讀(讀得到 secrets 目錄),`agy` 的 `read_file({cwd})` 兩邊都限;讀的範圍要等平台自己的沙盒(Linux 那一步)才統一。
 6. **Linux**。✅ 第一段(10-29):平台在 Linux 上跑得起來——平台自己叫腳本一律經過直譯器(`hubconf.launch()`、`bin/py`、hook 字串用 `hubconf.sh_py()`;第一行只是 macOS 的方便,`test_python_floor` 機械檢查沒有地方靠它)、程序的工作目錄改走 `hubconf.process_cwds()`(lsof 或 /proc)、show_file 的 fd 路徑在 Linux 用 /proc/self/fd、`hubconf.service_manager()` 沒有服務管理器時 init/doctor/schedulectl/狀態頁/render-services 明確說「還沒接上」(doctor 標紅)。`bin/linux-test`(docker)在 Linux 容器跑全部測試:515 個全過。macOS 上的輸出一個字都沒變(hook 字串、worktree 清單、各專案的 agent 設定)。✅ 第二段(10-29):**systemd user unit**——`hubconf.service_manager()` 在 Linux 認 `systemctl --user`;`bin/systemd_units.py` 把平台產生的同一份 plist(render-services 的 render()、launchd/ 的排程器跟看門狗樣板)翻成 .service(+ 有間隔的 .timer),init 裝排程器跟看門狗、render-services 套用專案服務、doctor / 狀態頁 / schedulectl(status、start、stop、run = systemd-run)/ 看門狗的診斷都認 systemd;job 用 `hubconf.login_shell()`(macOS 照舊 /bin/zsh,沒有 zsh 用 bash)。macOS 的 plist 跟以前逐字相同。**實機驗證**:lima 的 Ubuntu VM(真的 systemd)從零開始 `bin/setup` → `agenthub init --yes`:排程器、看門狗、信箱 dispatch 的 timer 都在排,排程器第一次 tick 跑完所有 job,狀態頁的服務 回 200,doctor 兩個 timer 都綠。沙盒(cap-runner 的 Seatbelt)在 Linux 不提供。
    發版前要清(新使用者在任何系統都會碰到,不是 Linux 才有):hub 根目錄的搬家前舊副本(hub.json、todo.md、digest/…,會被 init 當成舊的擺法);平台登錄 `projects/agent-hub.yaml` 宣告的 Discord / B2 / 備份密碼 / 租約 token 跟 Muninn 的契約要搬進各自的模組(現在新使用者的 secrets、contracts-check 兩個 job 一開始就是紅的)。
 7. **匯流排改成平台服務 + socket**(資料完整性;可以在 4 之後)。
@@ -144,7 +144,7 @@ doctor 跟狀態頁照實標出來。Knas 自己的主力是互動 session,這�
 
 ## 步驟(Knas 這台每一步都不變)
 
-0. ✅ ratchet(847f32b)。
+0. ✅ ratchet(1186f65)。
 1–7 照上面的範圍,每一步單獨上線。每步的驗證:Knas 這台的夜間流程照跑(影子模式、黃金檔);隔離的 HOME 用只有 API key /
 只有 Gemini CLI 的設定跑一次完整的夜間 + 一封信箱交辦。
 

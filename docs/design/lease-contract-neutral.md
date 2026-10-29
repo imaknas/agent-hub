@@ -1,6 +1,6 @@
 # 租約契約跟執行環境無關(m10251446):設計,待 Knas 確認
 
-> **狀態**:10-25 Knas 確認 A–E(截止日改成最多一天)並同一天做完:`a791655`(契約 v2 + v1 相容)、`3a7d108`(approvals + relay)。
+> **狀態**:10-25 Knas 確認 A–E(截止日改成最多一天)並同一天做完:`f6df0e9`(契約 v2 + v1 相容)、`2482a30`(approvals + relay)。
 > 同一天 Muninn 換到 v2(Muninn `dd3bd3b`)、也出了權限請求 v2,v1 相容層跟 v1 schema 隨即刪掉(schema 移到 `contracts/retired/`),
 > 權限請求只送 v2(不再需要 `lease.permission_requests_v` 設定)。
 

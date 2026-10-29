@@ -157,7 +157,7 @@ headless token)是其中一種設定,**每一步上線都不改變它**。
 
 ## 步驟(每一步單獨上線,Knas 這台不變)
 
-1. ✅ ratchet(847f32b):`runtime_claude.py` 以外的 Claude 語法跟模型名稱只准變少(基準 30 個檔、139 處)。
+1. ✅ ratchet(1186f65):`runtime_claude.py` 以外的 Claude 語法跟模型名稱只准變少(基準 30 個檔、139 處)。
 2. `completion` 介面 + `runtime_claude.complete`(stdin、中立目錄)+ `runtime_fake` + `runtime_none` + 契約測試;`llm.py` 認得
    `shape`/`model_group`、`hub.json llm`(沒有 = 現在的行為)。**同時**把 Claude 專用的 job 搬進 `modules/claude.yaml`、
    `bin/setup` 的 claude 改選配——只有 API key 的人從第一天就不會被警報洗版。
@@ -167,7 +167,7 @@ headless token)是其中一種設定,**每一步上線都不改變它**。
    (STATE.md、待辦段落、index 註記),沒問題再切換。順序:todo-format → index → state。黃金檔改成固定「替身回的編輯清單 →
    平台寫出什麼」(現在的替身是直接寫檔模擬 agent,要跟著改);`librarian.py` 裡「沒有 structured_output 以實際檔案為準」那條
    路徑切換後拿掉。
-5. ⏸ 隱私路由:**等 evaluator 成熟再定**(Knas 10-29:現在沒有強制的隱私政策)。10-29 做過一版(05741a4:`privacy.memory`、每個點標 `material`、llm.py 擋雲端、digest 過濾)後 revert——它搶先決定了 evaluators.md 要定的東西(專案層級用 `privacy.material`、`evals.trust`)。留下的只有 provider 的 `location` 欄位跟它的 config check(本機只准私有網段)。
+5. ⏸ 隱私路由:**等 evaluator 成熟再定**(Knas 10-29:現在沒有強制的隱私政策)。10-29 做過一版(b8f359d:`privacy.memory`、每個點標 `material`、llm.py 擋雲端、digest 過濾)後 revert——它搶先決定了 evaluators.md 要定的東西(專案層級用 `privacy.material`、`evals.trust`)。留下的只有 provider 的 `location` 欄位跟它的 config check(本機只准私有網段)。
 6. ✅ `models.env` → `hub.json`(10-29:`llm.model_for` 是唯一的算法,librarian / consolidate / 週報記 llm.py 回報的 `llm_model`;`model_group: default` = 不指定、用工具的預設;`schedulectl set-model` 寫 `llm.points`)。✅ `agenthub llm setup`(init 也叫):選 coding agent 自己的登入 / Anthropic / OpenAI(或相容)/ 本機 Ollama,key 用 getpass 寫進 secrets(600),模型從那家的 `list_models` 選(平台不猜名稱);doctor 說判斷點交給誰、沒地方跑就紅。
 7. 用本機 Ollama 跑一次完整的夜間流程(隔離的 HOME,不送雲端):證明只有本機模型也能跑。
 

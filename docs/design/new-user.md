@@ -295,7 +295,7 @@ check → commit → apply,不另外一套。
 > **進度**:第 0 步 10-26 完成(librarian 拆成核心 + 5 個 job、digest 分段、路徑從 hubconf、README、`hub.example.json`)。
 > 第 1 步 10-26 完成:`tests/test_personal_boundary.py` + `tests/fixtures/personal-baseline.json`(個人名稱 76 個檔 499 處、`.secrets` 字面值 7 個檔 11 處)。
 > 跟 3.5 不同:不分程式/註解,每個檔一個總數只准變少(分類要靠猜,總數 ratchet 一樣擋得住變多)。
-> 第 1.5 步 10-26 完成:`bin/config-check`(+ `contracts/hub.v1.schema.json`)、`bin/appliers.py` + `applier_scheduler.py`、render-services / render-project-settings 包成套用者(重構前後 42 個產出檔逐位元組相同)、`tests/test_appliers.py`、`bin/hub config check/plan/apply`、`config.applied`(Agent Hub session 255d204)、狀態頁顯示生效的 config commit、githooks pre-commit/post-commit 涵蓋 config。**還沒做**:sync-local-setup 的套用者(session 開始時跑的那支,AGENT.md 對齊要拆成 EXTERNAL 的套用者)——它本來就在每個 session 開始時對齊,沒有 plan 只是看不到預覽,留到第 4 步改樣板時一起做。
+> 第 1.5 步 10-26 完成:`bin/config-check`(+ `contracts/hub.v1.schema.json`)、`bin/appliers.py` + `applier_scheduler.py`、render-services / render-project-settings 包成套用者(重構前後 42 個產出檔逐位元組相同)、`tests/test_appliers.py`、`bin/hub config check/plan/apply`、`config.applied`(Agent Hub session 597883a)、狀態頁顯示生效的 config commit、githooks pre-commit/post-commit 涵蓋 config。**還沒做**:sync-local-setup 的套用者(session 開始時跑的那支,AGENT.md 對齊要拆成 EXTERNAL 的套用者)——它本來就在每個 session 開始時對齊,沒有 plan 只是看不到預覽,留到第 4 步改樣板時一起做。
 > 第 2 步 10-26 完成:只用一個角色 `hosts.server`(跑 hub 的那台;空 = 一台機器全包;沒寫沿用 `memory_host`),`hubconf.host("server")` / `hubconf.py host server`,shell 用 `plutil` 讀(遙控那台不一定有平台的 Python)。7 處寫死的 ssh 名稱換掉。狀態頁、信箱 dispatch、memory 同步搬進 `projects/agent-hub.yaml` 的 `services:`(用 `hub config plan` 先看、再 apply)。`launchd/` 只剩排程器、看門狗(第 5 步由 `hub init` 裝)跟遙控那台的兩份。個人名稱 499 → 479。
 > 第 3 步 10-26 完成:模組 = `modules/<名稱>.yaml`(跟登錄同格式,`registry.load_modules()` 放進 `index["modules"]`),
 > 排程器跟 render-services 讀專案 + 模組;`before:`、繞圈檢查(`registry.job_cycles`)、沒開的模組的 job 不存在。
@@ -325,7 +325,7 @@ check → commit → apply,不另外一套。
 > render-settings 會重寫 24 個專案的設定)已寄給它們;實際搬家。
 > **10-26 23:40 搬家完成**(`hub move-instance --to ~/.agent-hub --apply`,先在隔離環境演練兩次、抓到兩個 bug 才做):
 > 快照 + 退回腳本(`~/.agent-hub/secrets/agent-hub-move-snapshot-*/rollback.sh`,在搬過的隔離副本上實測過)→ 停排程器 → 搬 →
-> `hub config plan` 發現舊的 `.secrets` 還在、deny 一換就沒人擋 → 沙盒設計 session 改 policy 兩個都擋(05ba0cb)→ apply(3 個 sandbox
+> `hub config plan` 發現舊的 `.secrets` 還在、deny 一換就沒人擋 → 沙盒設計 session 改 policy 兩個都擋(20e6467)→ apply(3 個 sandbox
 > 專案的設定只多了新路徑)→ 重啟 lease-runner、cap-runner → 開回排程器;寫入都到 ~/.agent-hub、舊檔沒被碰。
 > **還沒做(明天)**:確認 03:00 的夜間流程正常;Muninn 改 config(m10262338-f805);之後才 `git rm` 平台 repo 裡的舊檔、刪 `~/agent-hub/.secrets`
 > (policy 會自動拿掉那條 deny);平台 repo 的 pre-commit 在舊檔刪掉之後要改成只驗平台自己的登錄。

@@ -183,7 +183,7 @@ class AuthProvider(Protocol):
    **等另一個 session 第 2 層的第一步(`policy.py`、把設定翻譯搬進 `runtime_claude.py`)commit 之後才動
    `runtime_claude.py`、`render-project-settings.py`、`lease-runner.py`**——它們會同時改這三支。
 2. **第 5 層 TranscriptSource**(最容易無聲壞掉、範圍最小;Claude 的實作寫進 `runtime_claude.py`——另一個 session 的第 1 步
-   已經 commit(cbdf9bb),可以動了;它之後還會改 `lease-runner.py` 的 preamble,動那支前先跟它說):`hublib` 的對話紀錄解析、`runtime_claude.context_tokens`、
+   已經 commit(2568776),可以動了;它之後還會改 `lease-runner.py` 的 preamble,動那支前先跟它說):`hublib` 的對話紀錄解析、`runtime_claude.context_tokens`、
    `worktrees` 的閒置天數改走介面;加格式檢查。
 3. **第 1 層 AgentRuntime 的「跑一次」**:`llm.py` 改成組 `Task` 交給介面;所有排程 job 不動就自動跟上。
    `llm-points` 的中立化跟第 2 層一起做(要等那個 session 的政策格式)。

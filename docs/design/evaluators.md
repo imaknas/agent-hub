@@ -30,11 +30,11 @@ Knas 的要求:**所有邊界會碰到模型的地方都要有 evaluator**,用�
 
 ## 已經做的
 
-- **f3e728b**:所有 headless 判斷點帶 `--strict-mcp-config`(實驗:`--tools ""` 擋不掉 MCP,工具全關的呼叫照樣拿到 265 個 MCP 工具、
+- **dcc61b6**:所有 headless 判斷點帶 `--strict-mcp-config`(實驗:`--tools ""` 擋不掉 MCP,工具全關的呼叫照樣拿到 265 個 MCP 工具、
   含正式資料庫的 `execute_sql`)。例外:`connectors: true` 的 job(Upwork 要 claude.ai connector)——**它們現在還是載得到正式資料庫的 MCP**,
   第 0 步用權限規則擋(見下)。
-- **60f59a8**:判斷點的模型設定(`models.env`)以前沒生效(`librarian.sh` 沒 export),`llm.py` 改成自己讀。
-- 6cd1fdb(headless 呼叫不收信)、8af0559(送進 session 只算看過)。
+- **c89c25c**:判斷點的模型設定(`models.env`)以前沒生效(`librarian.sh` 沒 export),`llm.py` 改成自己讀。
+- f2755ca(headless 呼叫不收信)、10c5fbb(送進 session 只算看過)。
 
 ## 封閉實驗的結論(第二輪,有紀錄)
 
@@ -177,10 +177,10 @@ reflect-week 回填(合成、少量)→ 契約測試依介面 → 純文字 runt
 ## 審查與實驗紀錄
 
 - **r1–r3 盲審**:見 git 歷史的這份文件;重點:重播隔離、案例位置、case id 方向、接續對話、循環、token、輸入重現、seal/persist 拆開、
-  `--settings` 互蓋、advisor、樣本量、權限來源、格式要改、lint。另外查到並修了:headless 收信(6cd1fdb)、送進 session 只算看過(8af0559)。
-- **第一輪實驗**:`--tools ""` 擋不掉 MCP → f3e728b;兩個 `--settings` 互蓋。
+  `--settings` 互蓋、advisor、樣本量、權限來源、格式要改、lint。另外查到並修了:headless 收信(f2755ca)、送進 session 只算看過(10c5fbb)。
+- **第一輪實驗**:`--tools ""` 擋不掉 MCP → dcc61b6;兩個 `--settings` 互蓋。
 - **r4 盲審**:實驗證據不足、沒存;對照組會重開 MCP 洩漏;漏 MCP 要當成失敗;dynamic sections 是搬不是拿掉;`--bare`/`--setting-sources`
   沒試;執行時守門保證不了;reflect-week 回填不忠實;租約的 settings 沒有路;C 類沒有評估;minimal_env 弄壞別的設定;
-  `policy.policy()` 擋的正是 librarian 要的;另外查到 `models.env` 沒生效(60f59a8)。
+  `policy.policy()` 擋的正是 librarian 要的;另外查到 `models.env` 沒生效(c89c25c)。
 - **第二輪實驗**(有紀錄):內建 plugin 的 hook module 不受 `disableAllHooks` 管、要用 `enabledPlugins` 關;`--bare` 不能用;
   `--setting-sources ""` 不比較好;auto-memory 會指到包住 cwd 的 git repo 的 memory。
