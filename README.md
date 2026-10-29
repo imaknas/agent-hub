@@ -1,62 +1,112 @@
 # agent-hub
 
-給一個人用的、跨專案的 AI agent 平台:每個專案有自己的 memory(agent 寫的筆記 + 一份精煉的 `STATE.md`),
-平台每晚整理它們、產生跨專案的 digest 跟待辦清單,並負責排程、背景服務、專案之間的信箱。
-agent 目前是 [Claude Code](https://claude.com/claude-code);平台只依賴自己定義的介面
-(`docs/design/runtime-abstraction.md`),Claude Code 是其中一個實作。
+A personal, cross-project platform for coding agents. Each project gets its own memory: notes the agent writes, plus a
+curated `STATE.md`. Every night the platform consolidates that memory, writes a cross-project digest and to-do list, and
+runs your scheduled jobs and background services. Projects (and you) talk to each other through a mailbox.
 
-> 這份 README 是給**人**看的入口。在這個 repo 裡工作的 agent 讀 `CLAUDE.md`。
-> 平台正在往「全新使用者也能直接用」的方向整理(`docs/design/new-user.md`)。所有指令都從 `bin/hub --help` 開始找。
+It is **tool-agnostic**: the platform defines its own interfaces, and Claude Code is one implementation of them, not a
+requirement. Any CLI agent with a headless mode can be plugged in through a command template (tested with Codex and
+Antigravity), and the platform's own judgment calls can go to Anthropic, any OpenAI-compatible API, a local Ollama, or the
+coding agent's own login. When a capability is missing, it is switched off explicitly and `agenthub doctor` says why.
 
-## 需要什麼
+> **Status.** Built for, and run every day by, one person on one always-on Mac mini. It is single-user by design. The code
+> comments and design docs are written in Traditional Chinese; this README and the CLI's commands are the English entry
+> points. Agents working in this repo read [`AGENTS.md`](AGENTS.md).
 
-- macOS(排程跟背景服務用 launchd)
-- `git`、`jq`、[`uv`](https://docs.astral.sh/uv/)(建平台的 Python)
-- Claude Code CLI(`claude`),登入過
-- 選配:`gh`(onboard 時自動建 GitHub repo)、`restic`(雲端備份)、Discord bot(警報)
+## What you get
 
-## 從零開始
+- **Project memory.** Each project has a `.agent-memory/` worktree on its own branch, backed by a local bare repo, so
+  memory sync never touches your real code. Session hooks commit only `memory/` and `STATE.md`.
+- **Nightly librarian.** It reads new notes, updates each `STATE.md` (including a fixed-format to-do section), and writes a
+  cross-project `digest/<date>.md` and `todo.md`. Older notes are folded into reference files (consolidate module).
+- **Scheduler and services.** A 15-minute scheduler for every job, a watchdog that alerts when the scheduler stops, and
+  per-project background services declared in the registry and rendered to launchd or systemd units.
+- **Mailbox.** Letters between projects and to the owner; the recipient is a project, not a session. Unclaimed requests are
+  dispatched by the platform: to an idle session's context, or to a headless agent in a throwaway worktree. The mailbox is
+  also an MCP server (`agenthub mcp`) for agents without hook support.
+- **Merge gate for parallel sessions.** `agenthub merge-branch` rebases a session's branch, runs the project's tests,
+  optionally checks Conventional Commits titles, and fast-forwards `main`.
+- **Status page.** Failed jobs, reports that need attention, and upcoming runs, served on `127.0.0.1:18790`.
+- **Optional modules:** encrypted cloud backup (restic), GitHub mirrors, weekly activity reflection, memory consolidation,
+  a sandbox capability runner, Claude Code upkeep (update and login checks), a built-in owner inbox, and an external
+  personal-assistant bridge.
+
+## Requirements
+
+- macOS (launchd) or Linux (systemd user units). The capability runner, which runs sandboxed helper programs, uses
+  Seatbelt, so it is macOS only.
+- `git`, `jq` and [`uv`](https://docs.astral.sh/uv/). `uv` builds the platform's own Python 3.13 venv, so platform scripts
+  don't depend on whichever `python3` is on PATH.
+- Optional:
+  - a coding agent, such as [Claude Code](https://claude.com/claude-code) or any headless CLI agent. Without one, set
+    `runtime.default: none`; agent features are then off, and everything else works.
+  - `gh`, to create GitHub repos on onboarding;
+  - `restic`, for the backup module;
+  - an alert channel: Discord, ntfy, email or macOS notifications.
+
+## Quick start
 
 ```bash
-git clone <這個 repo> ~/agent-hub && cd ~/agent-hub
-bin/setup                         # 檢查需要的指令、建平台的 Python(3.13 + PyYAML),每台機器一次
-bin/hub init                      # 問你的名字、時區、專案放哪、開哪些模組 → 寫 hub.json、裝排程器跟看門狗
-bin/hub doctor                    # 一次看完還缺什麼(登入、排程器、服務…),每一項都說怎麼修
-bin/hub onboard ~/workspace/my-app             # 把一個專案接上來(--no-remote:不建 GitHub repo)
+git clone <this repo URL> ~/agent-hub && cd ~/agent-hub
+bin/setup                            # check required tools, build the platform Python, put `agenthub` on PATH
+agenthub init                        # owner name, timezone, workspace, modules, which LLM makes judgment calls
+agenthub doctor                      # everything that is missing or broken, each with how to fix it
+agenthub onboard ~/workspace/my-app  # connect a project (--no-remote: don't create a GitHub repo)
 ```
 
-隔天早上就有 `digest/<日期>.md` 跟 `todo.md`。可以不開的功能(個人助理、雲端備份、mirror、每週回顧…)看 `bin/hub modules`。
+The next morning there is a digest and a `todo.md` in the instance's data directory.
 
-## 概念
+## Where things live
 
-| | 是什麼 | 在哪 |
+The repo holds no user data. `agenthub init` creates an **instance directory**, `~/.agent-hub` by default, and
+`<repo>/.hub-home` points to it:
+
+| | What | Notes |
 |---|---|---|
-| 專案登錄 | 一個專案一個 YAML:路徑、排程的 job、背景服務、隱私、測試指令 | `projects/<name>.yaml`(`bin/registry.py check` 驗證) |
-| memory | 每個專案的 `.agent-memory/`:`memory/` 底下的筆記(agent 寫)+ `STATE.md`(現況) | 各專案的 workspace;bare repo 在 `git_origin` |
-| 夜間整理 | consolidate-memory(舊筆記整理進 reference/)→ librarian(更新 STATE.md、寫 digest)→ todo、memory-gaps → librarian-publish | `projects/agent-hub.yaml` 的 `jobs:` |
-| 排程器 | 每 15 分鐘一個 tick,跑到期的 job;`after:` 排順序 | `bin/scheduler.py`、`bin/schedulectl list` |
-| 信箱 | 專案之間(跟你)的信,收件人是專案不是 session | `bin/hubbus` |
-| 狀態頁 | 哪些 job 失敗、哪些報告要看、下次什麼時候跑 | `bin/gen-status-page.py` |
+| `config/` | `hub.json`, the project registry (`projects/<name>.yaml`), `schedule.yaml` | A local git repo. `agenthub config check / plan / apply` |
+| `data/` | digests, `todo.md`, review log, weekly reflections | Generated; not in git |
+| `secrets/` | API keys, tokens, backup password | Never printed; the registry records names and locations only |
 
-## 常用
+Projects live wherever you choose, `~/workspace/<name>` by default. Their memory bare repos and the librarian's read-only
+copies sit beside them; the paths are set in `hub.json`.
+
+## Everyday commands
 
 ```bash
-bin/overview.sh [專案]            # 專案現況、綁定的服務、STATE.md
-bin/hub config plan               # 改了 config(hub.json、登錄…)之後會改什麼;bin/hub config apply 套用
-bin/hub modules                   # 可以不開的功能;bin/hub modules enable <名稱>
-bin/schedulectl list              # 所有 job
-bin/schedulectl run <job>         # 現在就跑一次
-bin/recover-project.sh <name>     # 新機器 / 專案資料夾不見了(不要對已經 onboard 的專案重跑 onboard)
-bin/rename-project.sh <old> <new> # 改名(先 dry-run,再加 --apply)
-bin/py -m unittest discover -s tests
+agenthub status [project]       # project state, services, STATE.md
+agenthub config plan            # what a config change would do; `agenthub config apply` applies it
+agenthub modules                # optional features; `agenthub modules enable <name>`
+agenthub llm setup              # which provider/model the platform's judgment calls use
+agenthub jobs                   # all scheduled jobs; `agenthub run <job>` runs one now
+agenthub recover <project>      # new machine or lost folder (never re-onboard an onboarded project)
+agenthub rename <old> <new>     # dry-run first, then --apply
 ```
 
-## 文件
+Inside a project session, agents use `agenthub send / inbox / done …` for the mailbox and `agenthub merge-branch` to land
+their branch. The rules they follow are written into each project's instructions file from `templates/`.
 
-- `docs/design/`:各部分的設計(新使用者、執行環境抽象、信箱分派、能力、想法沙盒)
-- `contracts/`:平台定義的介面(JSON Schema + 範例),`tests/test_contracts.py` 驗證
-- `known-issues.md`:踩過的坑跟自動化的運作原則
+## Docs
 
-## 授權
+- [`AGENTS.md`](AGENTS.md): the index for anyone, human or agent, working on the platform
+- [`docs/design/`](docs/design): design notes on tool-agnosticism, runtimes, LLM providers, mailbox routing, capabilities,
+  idea sandboxes and new-user setup
+- [`docs/mcp.md`](docs/mcp.md): registering the mailbox MCP server with an agent
+- [`contracts/`](contracts): versioned interfaces (JSON Schema plus examples) shared with other repos
+- [`known-issues.md`](known-issues.md): pitfalls hit so far, and the operating principles for automation
 
-Apache-2.0(`LICENSE`)。`contracts/` 的契約也是,包括別的 repo vendor 過去的副本;沒有 NOTICE 檔。
+## Development
+
+```bash
+bin/py -m unittest discover -s tests   # all tests, with the platform Python
+bin/lint                               # ruff, pyflakes rules only
+bin/linux-test                         # the test suite in a Linux container (Docker)
+```
+
+The commit gate (`git config core.hooksPath githooks`, which `agenthub init` sets) lints the staged tree, then runs every
+test with a throwaway `HOME`. Commit titles follow [Conventional Commits](https://www.conventionalcommits.org/), and release
+notes are generated from them with [git-cliff](https://git-cliff.org/) (`cliff.toml`).
+
+## License
+
+[Apache-2.0](LICENSE). This covers the contracts in `contracts/`, including copies vendored into other repos. There is no
+NOTICE file.
