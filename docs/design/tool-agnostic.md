@@ -6,7 +6,8 @@
 這份決定**平台跟工具的界線放在哪**。
 
 Knas 10-29 同意的五點(第一版的「要決定的」):原則 1 當硬規則、第一個非 Claude 證明用 Gemini CLI、租借改走 ACP、內建最小
-owner 端、Linux 進第一版。盲審之後第 1 點收窄範圍、第 3 點建議延後(見最後一節,要 Knas 重新確認)。
+owner 端、Linux 進第一版。盲審之後 Knas 再確認(10-29):原則 1 收窄、租借走 ACP 延後、CLI 改名 `agenthub`;並且**把 Muninn
+明確寫成可選的工具**(owner 端可以換,見「不是工具,但同樣是限制」)。
 
 ## 問題
 
@@ -103,9 +104,22 @@ doctor 跟狀態頁照實標出來。Knas 自己的主力是互動 session,這�
 
 ## 不是工具,但同樣是限制
 
-- **沒有 Muninn 的人**:內建最小 owner 端——`todo.md` + `agenthub owner done/drop <key>` + 一個通知轉接器(ntfy 或 email),
-  照 Principal Handoff 0.3,跟 Muninn 是同一個介面的兩個實作。**這比任何 agent 轉接器都重要**:沒有它,開源使用者的
-  〔owner〕待辦跟問題無處可去。
+- **owner 端(Principal Handoff 0.3 的 principal 端)可以換,Muninn 是可選的工具**——跟 coding agent、LLM provider 同一個層級:
+  - 平台是 **requester 端**:registrar 把〔owner〕待辦寫成 `raised` record、專案的問題寫成 decision、收回 `settled`/`decided`
+    套用。這一半**屬於核心**,不管接哪個 owner 端都在跑。**現在 registrar(`assistant/knas-tasks`)放在 assistant 模組裡,
+    沒有 Muninn 就跟著關掉——要搬回核心**;assistant 模組只留 Muninn 專屬的(bridge 的 HTTP 那段、reconcile-questions、通道租借)。
+  - **owner 端的實作**(`hub.json` 的 `owner_side`,預設 `builtin`):
+    | 實作 | 是什麼 | 能力 |
+    |---|---|---|
+    | `builtin`(內建,預設) | 平台自己的最小 principal 端:直接讀本機匯流排上給 owner 的 record | 擺出來(`todo.md` + `agenthub owner list`)、通知(通知轉接器)、結案(`agenthub owner done/drop <key>`、`answer <id> "…"` → `settled`/`decided` record,authority `principal`) |
+    | `muninn`(可選,另一個開源專案) | 個人助理:bridge v2 透過 HTTP 交換 record(`POST/GET /api/records`、ack) | 上面全部,加上手機對話、提醒時機、從對話推斷做完(`attested`)、深談、**通道租借** |
+    | 其他 | 任何照 Principal Handoff 0.3 實作 principal 端的系統 | 規範定義的介面就是接口 |
+  - 文件、`hub init`、doctor 都把 Muninn 寫成「可選:想要手機上的個人助理就裝它」,跟「想讓 agent 工作用 Codex 就裝 Codex」
+    同一種說法。通道租借、問題對帳寫明「需要 Muninn(或其他支援租借的 owner 端)」。
+  - **這也是 Principal Handoff 規範的第二個獨立實作**:`builtin` 完全照公開的規範寫、能跟 Muninn 互換,證明規範讓兩個不相干
+    的系統接得起來,不只是 agent-hub 跟 Muninn 之間的私有格式。
+  - Knas 這台:`owner_side: muninn`,行為不變。
+  - **沒有 owner 端,開源使用者的〔owner〕待辦跟問題就無處可去**——所以 `builtin` 在第一版、比任何 agent 轉接器都優先。
 - **通知**:`alert.py` 改成轉接器(Discord、ntfy、email、Slack)。
 - **Linux**:排程跟服務是 launchd → systemd user unit / cron 的那一層(排程器跟 render-services 已經是平台的程式,換的是產生的
   檔案跟載入指令);沙盒在 Linux 先標「不提供」(提議→套用不需要它)。
@@ -114,14 +128,15 @@ doctor 跟狀態頁照實標出來。Knas 自己的主力是互動 session,這�
 
 1. **能力表 + `runtime_none`**:能力從介面推、doctor 的「工具 × 功能」表;Claude 專用 job 搬進模組;`bin/setup` 的 claude 改選配。
 2. **completion + providers**:librarian、待辦、index、週報用任何 API key。
-3. **最小 owner 端 + 通知轉接器**。
+3. **owner 端可以換**:registrar 搬回核心、`owner_side: builtin | muninn`、內建最小 owner 端 + 通知轉接器;Muninn 寫成可選工具。
 4. **平台 CLI 改名上 PATH**、規則內容去掉本機路徑、MCP 伺服器(含 `instructions`)。
 5. **提議→平台套用**:丟棄式 worktree、路徑白名單套用、平台代寄信;信箱代辦用 Gemini CLI(`command` 或 `acp`)跑通。
 6. **Linux 的排程跟服務**(可以跟 5 平行)。
 7. **匯流排改成平台服務 + socket**(資料完整性;可以在 4 之後)。
 
-第一版能誠實說的:「判斷點用任何 LLM、任何 key;平台啟動的 agent 工作用任何 CLI agent;互動 session 的整合、對話統計、
-租借目前只有 Claude Code 是完整的轉接器。」
+第一版能誠實說的:「判斷點用任何 LLM、任何 key;平台啟動的 agent 工作用任何 CLI agent;owner 端內建一個,想要手機上的
+個人助理可以接 Muninn(或任何 Principal Handoff 的實作);互動 session 的整合、對話統計目前只有 Claude Code 是完整的轉接器,
+租借需要 Claude Code + Muninn。」
 
 延後:租借改走 ACP、平台沙盒包 agent、post-commit 推送、`agenthub agent` 啟動器、其他工具的對話紀錄解析。
 
@@ -131,12 +146,9 @@ doctor 跟狀態頁照實標出來。Knas 自己的主力是互動 session,這�
 1–7 照上面的範圍,每一步單獨上線。每步的驗證:Knas 這台的夜間流程照跑(影子模式、黃金檔);隔離的 HOME 用只有 API key /
 只有 Gemini CLI 的設定跑一次完整的夜間 + 一封信箱交辦。
 
-## 要 Knas 重新確認的
+## 已確認(10-29)
 
-1. **原則 1 收窄成「平台啟動的工作 + 平台的資料」**,使用者自己開的 session 只給建議(盲審:沙盒做不到更多,而且會讓你現在
-   的 session 壞掉)。
-2. **租借改走 ACP 延後**(你原本同意改)。盲審查了 ACP 規範:session id 由 agent 決定(租借現在自己指定、用來接續)、
-   接續是選配、「要不要允許」由 agent 決定要不要問(自動模式就不問,現在 work 租約每個指令都送你手機靠的是 Claude 的
-   `--permission-prompt-tool` 跟 deny 設定)、結構化交接跟額度事件沒有對應;Claude Code 跟 Codex 走 ACP 都是社群 adapter,
-   對你是倒退。而且租借只有接上 Muninn 才有意義,開源使用者用不到。建議第一版維持原生 Claude,之後再看 ACP 成熟度。
-3. 平台 CLI 改名(建議 `agenthub`)。
+1. 原則 1 收窄成「平台啟動的工作 + 平台的資料」;使用者自己開的 session 只給建議。
+2. 租借改走 ACP 延後;第一版維持原生 Claude(租借需要 Claude Code + Muninn)。
+3. 平台 CLI 改名 `agenthub`。
+4. Muninn 是可選的工具;owner 端預設內建,registrar 搬回核心。
