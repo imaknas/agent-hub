@@ -217,15 +217,22 @@ LANGUAGES = ("en", "zh-Hant")
 def lang_ui() -> str:
     """The language the platform shows the owner (CLI output, status page, alerts, headings): hub.json `language.ui`,
     or AGENT_HUB_LANG_UI. Default en (docs/design/i18n.md)."""
-    v = os.environ.get("AGENT_HUB_LANG_UI") or (get("language.ui") or "en")
-    return v if v in LANGUAGES else "en"
+    return _lang("AGENT_HUB_LANG_UI", "language.ui")
 
 
 def lang_content() -> str:
     """The language models and agents write in (STATE.md, notes, digests, letters): hub.json `language.content`, or
     AGENT_HUB_LANG_CONTENT. Default en."""
-    v = os.environ.get("AGENT_HUB_LANG_CONTENT") or (get("language.content") or "en")
-    return v if v in LANGUAGES else "en"
+    return _lang("AGENT_HUB_LANG_CONTENT", "language.content")
+
+
+def _lang(env: str, key: str) -> str:
+    """an unknown value is an error, not a quiet fallback to en (a test that sets zh-hant would otherwise pass in English);
+    hub.json is checked by config-check, so only the environment can get here with a wrong value"""
+    v = os.environ.get(env) or get(key) or "en"
+    if v not in LANGUAGES:
+        raise ValueError(f"{env or key}={v!r}: the languages are {', '.join(LANGUAGES)}")
+    return v
 
 
 def evals_dir() -> pathlib.Path | None:

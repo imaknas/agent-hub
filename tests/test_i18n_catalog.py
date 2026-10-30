@@ -22,8 +22,13 @@ CJK = re.compile("[\u3400-\u9fff\uf900-\ufaff\u3000-\u303f\uff00-\uffef]")
 LANGS = [d.name for d in sorted(i18n.LOCALES.iterdir()) if d.is_dir()] if i18n.LOCALES.is_dir() else []
 
 
+def fields(text: str) -> set[tuple[str, str, str | None]]:
+    """(name, format spec, conversion) of each placeholder: {cost:.6f} and {cost} are not the same placeholder"""
+    return {(f, spec or "", conv) for _lit, f, spec, conv in string.Formatter().parse(text) if f is not None}
+
+
 def placeholders(text: str) -> set[str]:
-    return {f for _, f, _, _ in string.Formatter().parse(text) if f is not None}
+    return {f for f, _spec, _conv in fields(text)}
 
 
 def sources():
@@ -65,6 +70,12 @@ class Catalogs(unittest.TestCase):
             names, calls = messages(ast.parse(text))
             if not names:
                 continue
+            # rebinding the name (`for _, x in …`, `_ = f()`) breaks every later _() in that scope
+            tree = ast.parse(text)
+            ok = {id(t) for a in ast.walk(tree) if isinstance(a, ast.Assign) and isinstance(a.value, ast.Call)
+                  and getattr(a.value.func, "attr", None) == "domain" for t in a.targets}
+            problems += [f"{rel}:{n.lineno}: `{n.id}` is rebound; it is the message function here" for n in ast.walk(tree)
+                         if isinstance(n, ast.Name) and n.id in names and isinstance(n.ctx, ast.Store) and id(n) not in ok]
             used = seen.setdefault(dom, set())
             for line, msgid, kws in calls:
                 where = f"{rel}:{line}"
@@ -80,7 +91,7 @@ class Catalogs(unittest.TestCase):
                     cat = i18n.catalog(dom, lang)
                     if msgid not in cat:
                         problems.append(f"{where}: no {lang} entry for {msgid[:60]!r}")
-                    elif placeholders(cat[msgid]) != placeholders(msgid):
+                    elif fields(cat[msgid]) != fields(msgid):
                         problems.append(f"{where}: {lang} placeholders differ for {msgid[:60]!r}")
         for lang in LANGS:
             for cat_file in sorted((i18n.LOCALES / lang).glob("*.json")):
