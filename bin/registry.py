@@ -197,7 +197,8 @@ PLATFORM_OWNED = ("type", "enforce", "network", "allow_write", "privacy")
 
 def platform_owned_changes(new: dict, cur: dict) -> list[str]:
     """manifest.update 不能改的安全欄位:跟現在的登錄不一樣就列出來。"""
-    return [_("{key} is a security field that only agent-hub can change (Knas confirms); this letter changes it", key=k)
+    return [_("{key} is a security field that only agent-hub can change ({owner} confirms); this letter changes it", key=k,
+              owner=hubconf.owner_tag())
             for k in PLATFORM_OWNED
             if new.get(k) != cur.get(k)]
 

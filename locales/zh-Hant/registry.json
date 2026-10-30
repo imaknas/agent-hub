@@ -23,7 +23,7 @@
  "enforce.capabilities: the platform has no capability {cap} (it has: {have})": "enforce.capabilities:平台沒有 {cap} 這個能力(有的:{have})",
  "none": "無",
  "enforce.capabilities needs enforce.sandbox: true": "enforce.capabilities 要搭配 enforce.sandbox: true",
- "{key} is a security field that only agent-hub can change (Knas confirms); this letter changes it": "{key} 是安全欄位,只能由 agent-hub 改(要 Knas 確認);這封改到了它",
+ "{key} is a security field that only agent-hub can change ({owner} confirms); this letter changes it": "{key} 是安全欄位,只能由 agent-hub 改(要 {owner} 確認);這封改到了它",
  "not a YAML mapping": "不是一個 YAML mapping",
  "v must be 1 (it is {v!r})": "v 要是 1(現在是 {v!r})",
  "name ({name!r}) must be the same as the file name {stem}": "name({name!r})要跟檔名 {stem} 一樣",
