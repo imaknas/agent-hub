@@ -43,6 +43,32 @@ def _instance(sub: str, legacy: pathlib.Path) -> pathlib.Path:
 
 
 CONFIG_DIR, SECRETS_DIR = _instance("config", HUB), _instance("secrets", HUB / ".secrets")
+
+
+class i18n:
+    """bin/i18n.py's lookup, small enough to keep here (this script imports nothing of the platform): English msgids,
+    locales/<hub.json language.ui>/scheduler-watchdog.json for the translation"""
+    @staticmethod
+    def domain(file):
+        lang = os.environ.get("AGENT_HUB_LANG_UI") or ""
+        if not lang:
+            try:
+                lang = (json.loads((CONFIG_DIR / "hub.json").read_text()).get("language") or {}).get("ui") or "en"
+            except (OSError, ValueError):
+                lang = "en"
+        try:
+            code = pathlib.Path(file).resolve().parents[1]   # the catalogs ship with the code, wherever the hub's state is
+            cat = json.loads((code / "locales" / lang / "scheduler-watchdog.json").read_text()) if lang != "en" else {}
+        except (OSError, ValueError):
+            cat = {}
+
+        def _(msgid, **kw):
+            text = cat.get(msgid, msgid)
+            return text.format(**kw) if kw else text
+        return _
+
+
+_ = i18n.domain(__file__)
 HEARTBEAT = HUB / ".state" / "scheduler-heartbeat"
 STATE_FILE = HUB / ".state" / "scheduler-last-run.json"
 WATCH_STATE = HUB / ".state" / "scheduler-watchdog.json"
@@ -74,15 +100,16 @@ def diagnose():
     uid = os.getuid()
     if sys.platform != "darwin":   # Linux:排程器是 systemd 的 user timer(bin/systemd_units.py;這支刻意不 import 平台的模組)
         r = subprocess.run(["systemctl", "--user", "status", "--no-pager", f"{LABEL}.timer"], capture_output=True, text=True)
-        lines = [f"`systemctl --user status {LABEL}.timer`:\n```\n{(r.stdout or r.stderr).strip()[:600]}\n```",
-                 f"重啟:`systemctl --user restart {LABEL}.timer`"]
+        lines = [_("`systemctl --user status {label}.timer`:\n```\n{out}\n```", label=LABEL,
+                   out=(r.stdout or r.stderr).strip()[:600]),
+                 _("restart: `systemctl --user restart {label}.timer`", label=LABEL)]
         if SCHED_LOG.exists():
             tail = SCHED_LOG.read_text(errors="replace").splitlines()[-3:]
-            lines.append("scheduler.log 最後幾行:\n```\n" + "\n".join(x[:180] for x in tail) + "\n```")
+            lines.append(_("last lines of scheduler.log:\n```\n{tail}\n```", tail="\n".join(x[:180] for x in tail)))
         return "\n".join(lines)
     r = subprocess.run(["/bin/launchctl", "print", f"gui/{uid}/{LABEL}"], capture_output=True, text=True)
     if r.returncode != 0:
-        lines = [f"launchd 裡沒有 {LABEL}(被 bootout 了?)→ `schedulectl start`"]
+        lines = [_("{label} is not in launchd (booted out?) → `schedulectl start`", label=LABEL)]
     else:
         info = {}
         for l in r.stdout.splitlines():  # 第一個出現的才是 job 本身的(後面還有 endpoint 之類的 state)
@@ -94,11 +121,11 @@ def diagnose():
         ps = subprocess.run(["/bin/ps", "-axo", "pid,etime,command"], capture_output=True, text=True).stdout
         stuck = [l.strip() for l in ps.splitlines() if "bin/scheduler.py" in l and "watchdog" not in l]
         if stuck:
-            lines.append(f"scheduler.py 還在跑(卡在某個 job?):{stuck[0][:120]}")
-        lines.append(f"重啟:`launchctl kickstart -k gui/{uid}/{LABEL}`")
+            lines.append(_("scheduler.py is still running (stuck in a job?): {proc}", proc=stuck[0][:120]))
+        lines.append(_("restart: `launchctl kickstart -k gui/{uid}/{label}`", uid=uid, label=LABEL))
     if SCHED_LOG.exists():
         tail = SCHED_LOG.read_text(errors="replace").splitlines()[-3:]
-        lines.append("scheduler.log 最後幾行:\n```\n" + "\n".join(t[:180] for t in tail) + "\n```")
+        lines.append(_("last lines of scheduler.log:\n```\n{tail}\n```", tail="\n".join(t[:180] for t in tail)))
     return "\n".join(lines)
 
 
@@ -107,7 +134,7 @@ def send(text):
     try:
         token, channel = TOKEN.read_text().strip(), CHANNEL.read_text().strip()
     except OSError:
-        log(f"失敗:沒有設定 {TOKEN} 或 {CHANNEL},警報發不出去")
+        log(_("failed: {token} or {channel} is not set up, alerts cannot be sent", token=TOKEN, channel=CHANNEL))
         return False
     r = subprocess.run(
         ["/usr/bin/curl", "-sS", "-m", "20", "-o", "/dev/null", "-w", "%{http_code}",
@@ -115,7 +142,7 @@ def send(text):
          "--data-binary", "@-", f"https://discord.com/api/v10/channels/{channel}/messages"],
         input=json.dumps({"content": text[:1990]}), capture_output=True, text=True)
     if r.stdout.strip() != "200":
-        log(f"Discord 送出失敗:HTTP {r.stdout.strip() or '-'} {r.stderr.strip()[:200]}")
+        log(_("Discord send failed: HTTP {code} {err}", code=r.stdout.strip() or "-", err=r.stderr.strip()[:200]))
         return False
     return True
 
@@ -130,8 +157,8 @@ def alerts_configured() -> bool:
 
 def main():
     if sys.argv[1:] == ["--test"]:
-        ok = send("🧪 agent-hub 排程器看門狗測試訊息(設定正確)\n" + diagnose())
-        print("已送出" if ok else f"送不出去,見 {LOG}")
+        ok = send(_("🧪 agent-hub scheduler watchdog test message (settings are correct)") + "\n" + diagnose())
+        print(_("sent") if ok else _("could not send, see {log}", log=LOG))
         return 0 if ok else 1
 
     if not alerts_configured():
@@ -139,11 +166,13 @@ def main():
         tick = last_tick()
         stale = tick is None or (datetime.datetime.now() - tick).total_seconds() / 60 > STALE_MIN
         if stale:
-            log(f"沒設定警報(hub.json 沒有 alerts),只記錄:排程器最後 tick {tick or '從來沒有'},停了")
+            log(_("no alerts set up (hub.json has no alerts), only logging: the scheduler's last tick was {tick}, it stopped",
+                  tick=tick or _("never")))
         return 0
     if not (TOKEN.exists() and CHANNEL.exists()):
         # 每 5 分鐘印到 launchd 的 stderr log、exit 1;狀態頁也會標出「看門狗沒設定」
-        print(f"scheduler-watchdog: 沒有設定 {TOKEN} / {CHANNEL},排程器停了也發不出警報", file=sys.stderr)
+        print(_("scheduler-watchdog: {token} / {channel} not set up, no alert can be sent if the scheduler stops",
+                token=TOKEN, channel=CHANNEL), file=sys.stderr)
         return 1
 
     now = datetime.datetime.now()
@@ -151,12 +180,13 @@ def main():
     tick = last_tick()
     age_min = (now - tick).total_seconds() / 60 if tick else None
     stale = age_min is None or age_min > STALE_MIN
-    when = f"{tick:%m-%d %H:%M}" if tick else "從來沒有"
+    when = f"{tick:%m-%d %H:%M}" if tick else _("never")
 
     if not stale:
         if st.get("alerting"):
-            if send(f"✅ agent-hub 排程器恢復了(最後 tick {when};停了大約從 {st.get('since', '?')} 開始)"):
-                log("恢復,已通知")
+            if send(_("✅ the agent-hub scheduler is back (last tick {when}; it had stopped since about {since})",
+                      when=when, since=st.get("since", "?"))):
+                log(_("recovered, notified"))
                 st = {}
         else:
             st = {}
@@ -167,13 +197,14 @@ def main():
         due = (st["stale_checks"] >= 2 and not st.get("alerting")) or (
             st.get("alerting") and now - datetime.datetime.fromisoformat(last) >= datetime.timedelta(hours=REMIND_H))
         if due:
-            age = f"{age_min:.0f} 分鐘" if age_min is not None else "很久"
-            prefix = "🚨" if not st.get("alerting") else "⏰ 還沒好:"
-            text = (f"{prefix} agent-hub 排程器已經 {age} 沒有 tick(最後 {when})。librarian、"
-                    f"muninn-tick/reflect、上傳 job 都停了。\n{diagnose()}")
+            age = _("{minutes:.0f} minutes", minutes=age_min) if age_min is not None else _("a long time")
+            prefix = "🚨" if not st.get("alerting") else _("⏰ still down:")
+            text = _("{prefix} the agent-hub scheduler has not ticked for {age} (last {when}). librarian, "
+                     "muninn-tick/reflect and the upload jobs have all stopped.", prefix=prefix, age=age, when=when) \
+                + "\n" + diagnose()
             if send(text):
                 st.update(alerting=True, last_alert=now.isoformat(timespec="seconds"))
-                log(f"排程器停了 {age},已通知")
+                log(_("the scheduler stopped {age} ago, notified", age=age))
             else:
                 return 1
     WATCH_STATE.parent.mkdir(parents=True, exist_ok=True)

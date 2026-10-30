@@ -1,0 +1,23 @@
+{
+ "`systemctl --user status {label}.timer`:\n```\n{out}\n```": "`systemctl --user status {label}.timer`:\n```\n{out}\n```",
+ "restart: `systemctl --user restart {label}.timer`": "重啟:`systemctl --user restart {label}.timer`",
+ "last lines of scheduler.log:\n```\n{tail}\n```": "scheduler.log 最後幾行:\n```\n{tail}\n```",
+ "{label} is not in launchd (booted out?) → `schedulectl start`": "launchd 裡沒有 {label}(被 bootout 了?)→ `schedulectl start`",
+ "scheduler.py is still running (stuck in a job?): {proc}": "scheduler.py 還在跑(卡在某個 job?):{proc}",
+ "restart: `launchctl kickstart -k gui/{uid}/{label}`": "重啟:`launchctl kickstart -k gui/{uid}/{label}`",
+ "failed: {token} or {channel} is not set up, alerts cannot be sent": "失敗:沒有設定 {token} 或 {channel},警報發不出去",
+ "Discord send failed: HTTP {code} {err}": "Discord 送出失敗:HTTP {code} {err}",
+ "🧪 agent-hub scheduler watchdog test message (settings are correct)": "🧪 agent-hub 排程器看門狗測試訊息(設定正確)",
+ "sent": "已送出",
+ "could not send, see {log}": "送不出去,見 {log}",
+ "no alerts set up (hub.json has no alerts), only logging: the scheduler's last tick was {tick}, it stopped": "沒設定警報(hub.json 沒有 alerts),只記錄:排程器最後 tick {tick},停了",
+ "never": "從來沒有",
+ "scheduler-watchdog: {token} / {channel} not set up, no alert can be sent if the scheduler stops": "scheduler-watchdog: 沒有設定 {token} / {channel},排程器停了也發不出警報",
+ "✅ the agent-hub scheduler is back (last tick {when}; it had stopped since about {since})": "✅ agent-hub 排程器恢復了(最後 tick {when};停了大約從 {since} 開始)",
+ "recovered, notified": "恢復,已通知",
+ "{minutes:.0f} minutes": "{minutes:.0f} 分鐘",
+ "a long time": "很久",
+ "⏰ still down:": "⏰ 還沒好:",
+ "{prefix} the agent-hub scheduler has not ticked for {age} (last {when}). librarian, muninn-tick/reflect and the upload jobs have all stopped.": "{prefix} agent-hub 排程器已經 {age} 沒有 tick(最後 {when})。librarian、muninn-tick/reflect、上傳 job 都停了。",
+ "the scheduler stopped {age} ago, notified": "排程器停了 {age},已通知"
+}
