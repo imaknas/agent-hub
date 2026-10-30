@@ -8,6 +8,7 @@
 import datetime
 import importlib.machinery
 import importlib.util
+import os
 import pathlib
 import tempfile
 import unittest
@@ -345,6 +346,7 @@ class ForkMerge(unittest.TestCase):
         self.forked()
         self.assertNotIn("m1", self.hook())
 
+    @unittest.mock.patch.dict(os.environ, {"AGENT_HUB_LANG_UI": "zh-Hant"})   # asserts the zh-Hant text
     def test_finished_fork_reply_and_letters_are_carried_over(self):
         self.forked()
         log = self.tmp / "state" / "mailbox"
@@ -365,6 +367,7 @@ if __name__ == "__main__":
 class DispatchWithoutAgent(Dispatch):
     """沒有 coding agent(runtime.default: none):不派 agent、信留著,原因只記一次。"""
 
+    @unittest.mock.patch.dict(os.environ, {"AGENT_HUB_LANG_UI": "zh-Hant"})   # asserts the zh-Hant text
     def test_letters_stay_and_the_reason_is_logged_once(self):
         logged = []
         self.m.log_once = lambda key, msg: logged.append((key, msg))

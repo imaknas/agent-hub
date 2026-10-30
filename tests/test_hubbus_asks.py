@@ -7,6 +7,7 @@ import importlib.machinery
 import importlib.util
 import io
 import json
+import os
 import pathlib
 import subprocess
 import sys
@@ -29,6 +30,7 @@ def load():
     return m
 
 
+@mock.patch.dict(os.environ, {"AGENT_HUB_LANG_UI": "zh-Hant"})   # the assertions are the zh-Hant texts
 class Asks(unittest.TestCase):
     def setUp(self):
         m = self.m = load()
