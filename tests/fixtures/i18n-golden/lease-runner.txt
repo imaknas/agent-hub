@@ -1,0 +1,98 @@
+=== work_ready
+demo 沒有開 work 模式(登錄的 enforce.work;要 Knas 同意才加)
+=== start_proc not resumable
+[["state", {"state": "running", "pid": 4242, "resumed": false, "detail": "之前的對話紀錄已經不在(還沒說過話,或保留期限過了),從新的對話開始"}]]
+=== check_attachments
+attachments 要是最多 8 個的 list
+=== check_attachments
+attachments 要是最多 8 個的 list
+=== check_attachments
+每個附件要有 name、media_type、data(base64)
+=== check_attachments
+a.png:data 不是合格的 base64
+=== check_attachments
+big.png:超過 0 MB
+=== send_message
+{"type": "user", "message": {"role": "user", "content": [{"type": "image", "source": {"type": "base64", "media_type": "image/png", "data": "QUJD"}}, {"type": "text", "text": "look\n\n附件已存到:attachments/<STAMP>-a.png"}]}}
+
+=== empty handover
+這次深談沒有開始對話(session 沒有啟動成功,或還沒說過話就收回),沒有內容要交接。
+=== detach model failed
+["error", {"error": "handover_failed", "detail": "已送出最小交接。原因:schema: no summary"}]
+["handover", {"handover": {"v": 1, "project": "demo", "session_id": "77777777-7777-4777-8777-777777777779", "mode": "discuss", "reason": "user", "summary": "交接失敗(模型沒能產生合格的交接);對話紀錄還在,可以重新 attach 接續", "decisions": [], "open_questions": [], "tasks_for_owner": [], "notes_markdown": "", "notes_written": false, "fallback": true, "branch": null, "commits": [], "tests": null}}]
+=== detach platform failed
+["error", {"error": "handover_failed", "detail": "已送出最小交接。原因:RuntimeError('old module')"}]
+["handover", {"handover": {"v": 1, "project": "demo", "session_id": "77777777-7777-4777-8777-777777777770", "mode": "discuss", "reason": "user", "summary": "交接失敗(平台出錯,不是模型的問題);對話紀錄還在,可以重新 attach 接續", "decisions": [], "open_questions": [], "tasks_for_owner": [], "notes_markdown": "", "notes_written": false, "fallback": true, "branch": null, "commits": [], "tests": null}}]
+=== detach deliver failed
+["error", {"error": "handover_failed", "detail": "OSError('bus')"}]
+["handover", {"handover": {"v": 1, "project": "demo", "session_id": "77777777-7777-4777-8777-777777777771", "mode": "discuss", "reason": "user", "summary": "s", "decisions": [], "open_questions": [], "tasks_for_owner": [], "notes_markdown": "", "notes_written": false, "fallback": false, "branch": null, "commits": [], "tests": null}}]
+=== detach terminal open
+[["error", {"error": "busy", "detail": "terminal_open:終端機裡的 session 還開著,先結束它再收回"}]]
+=== deliver letters
+renew key
+---
+which Z?
+---
+[demo 深談收回] talked about A
+---
+深談(租借 77777777)收回的交接:
+talked about A
+- 決定:use X(fast)
+- 決定:drop Y()
+- 待回答:which Z?
+=== deliver memory
+
+## 租借對話 <HM>(session 77777777-7777-4777-8777-777777777777)
+
+- note one
+
+已登錄給 Knas 的任務:lease-77777777-7777-4777-8777-777777777777-1-task-0
+
+=== show_file refused
+../x.png 不在這個專案資料夾裡(只能給專案資料夾裡的檔案)
+=== quiesce
+demo 有深談正在回答、等回覆、在終端機或正在收回
+=== follow_move
+[["state", {"state": "idle_stopped", "mode": "discuss", "detail": "這個專案沒有開 work 模式(登錄的 enforce.work),這段深談改回唯讀"}]]
+=== http not json
+400 {"v": 2, "error": "bad_request", "detail": "body 不是 JSON"}
+=== http bad attachments
+400 {"v": 2, "error": "bad_request", "detail": "attachments 要是最多 8 個的 list"}
+=== http no text
+400 {"v": 2, "error": "bad_request", "detail": "client_msg_id 必填;text 跟 attachments 至少要有一個"}
+=== http bad mode
+400 {"v": 2, "error": "bad_request", "detail": "mode 只能是 discuss 或 work"}
+=== http work not allowed
+400 {"v": 2, "error": "work_not_allowed", "detail": "demo 沒有開 work 模式(登錄的 enforce.work;要 Knas 同意才加)"}
+=== http file 404
+404 {"v": 2, "error": "not_found", "detail": "沒有這個檔案(或已經過了保留期限)"}
+=== http sandbox bad name
+400 {"v": 2, "error": "bad_name", "detail": "name、purpose 要是字串"}
+=== http rename bad name
+400 {"v": 2, "error": "bad_name", "detail": "to 要是新名稱"}
+=== http upgrade bad rename
+400 {"v": 2, "error": "bad_request", "detail": "rename 要是字串"}
+=== http mode busy
+409 {"v": 2, "error": "busy", "detail": "正在回答或等 Knas 回覆,等這一輪結束再切換"}
+=== http rename busy
+409 {"v": 2, "error": "busy", "detail": "demo 有深談正在回答、等回覆、在終端機或正在收回,等它停下來再改名"}
+=== http upgrade busy
+409 {"v": 2, "error": "busy", "detail": "demo 有深談正在回答、等回覆、在終端機或正在收回,等它停下來再升級"}
+=== http runtime unsupported
+409 {"v": 2, "error": "runtime_unsupported", "detail": "執行環境 fake 沒有跑 agent、登入狀態、session 狀態、長駐串流 session,不能開租約"}
+=== http create bad mode
+400 {"v": 2, "error": "bad_request", "detail": "mode 只能是 discuss 或 work"}
+=== http create bad sid
+400 {"v": 2, "error": "bad_request", "detail": "session_id 要是 UUID"}
+=== http cap reached
+409 同時最多 1 個
+=== runner.log
+[<TS>] 77777777-7777-4777-8777-777777777779 交接第 1 次不合格:schema: no summary
+[<TS>] 77777777-7777-4777-8777-777777777779 交接第 2 次不合格:schema: no summary
+[<TS>] 77777777-7777-4777-8777-777777777770 交接失敗:RuntimeError('old module')
+[<TS>] 77777777-7777-4777-8777-777777777771 交接送出失敗:OSError('bus')
+[<TS>] 77777777 show_file 拒絕:../x.png:../x.png 不在這個專案資料夾裡(只能給專案資料夾裡的檔案)
+[<TS>] bin/ 的程式改過了,沒有租約在跑:結束,讓 launchd 用新的程式重啟
+[<TS>] upgrade demo → demo:租約 77777777 跟上(對話紀錄搬了)
+[<TS>] lease-runner 開始,<HOST:PORT>,1 個租約紀錄
+

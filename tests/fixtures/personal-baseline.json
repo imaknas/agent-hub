@@ -37,6 +37,8 @@
   "bin/worktrees.py": 3,
   "modules/assistant.yaml": 12,
   "templates/reflect.html": 1,
+  "tests/fixtures/i18n-golden/lease-relay.txt": 10,
+  "tests/fixtures/i18n-golden/lease-runner.txt": 4,
   "tests/fixtures/i18n-golden/scheduler-watchdog.txt": 3,
   "tests/fixtures/i18n-golden/status-page-inputs.json": 2,
   "tests/fixtures/i18n-golden/status-page.txt": 2,

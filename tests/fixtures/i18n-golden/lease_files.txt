@@ -1,0 +1,32 @@
+=== (empty)
+要給專案資料夾裡的檔案路徑
+=== ../outside.png
+../outside.png 不在這個專案資料夾裡(只能給專案資料夾裡的檔案)
+=== x.svg
+x.svg 的類型不能送(可以:csv gif glb jpeg jpg json md pdf png txt webp)
+=== token.txt
+token.txt 看起來是憑證或機密,不送
+=== r/a.png@secret
+a.png 看起來是憑證或機密,不送
+=== gone.png
+gone.png 打不開:No such file or directory
+=== dir.png
+dir.png 不是一般檔案
+=== hard.png
+hard.png 是 hard link(可能指到資料夾外),不送
+=== bad.md
+bad.md 不是 UTF-8 文字
+=== key.md
+key.md 的內容像憑證(私鑰或 API key),不送
+=== fake.png
+fake.png 的內容不是 png(副檔名跟內容對不上)
+=== too big
+r/a.png 太大(0 MB;上限 0 MB)
+=== too big after read
+r/a.png 太大(上限 0 MB)
+=== count
+這個深談最近 24 小時已經給了 1 個檔案,到上限了;晚一點再給,或先用文字說檔案在哪
+=== total
+這個深談最近 24 小時給的檔案合計超過 0 MB 了;晚一點再給,或先用文字說檔案在哪
+=== swapped
+r/a.png 打開的不是資料夾裡的那個檔(路徑中途被換掉了?),不送
