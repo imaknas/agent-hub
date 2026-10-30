@@ -15,6 +15,7 @@ import re
 import subprocess
 import sys
 import tempfile
+import time
 import unittest
 from unittest import mock
 
@@ -192,6 +193,259 @@ class Golden(unittest.TestCase):
             alert.once("k", [IN["problem"]], IN["recovered"])
             alert.once("k", [], IN["recovered"])
         self.check("alerts", "\n---\n".join(sent) + "\n")
+
+    # --- agenthub: doctor, modules, config, llm, init, move-instance, install-cli --------------------------------
+    def valid_cfg(self, **extra):
+        self.cfg.update(v=1, **extra)
+        self.cfg["owner"]["address"] = "owner"
+        self.write_cfg()
+
+    def fake_hub(self) -> pathlib.Path:
+        """a hub root (AGENT_HUB_ROOT) whose platform files are the real ones, with no .hub-home, .state or .logs"""
+        hub = self.tmp / "fakehub"
+        if not hub.exists():
+            hub.mkdir()
+            (hub / ".git").mkdir()
+            for name in ("bin", "launchd", "hub.example.json", "projects", "modules", "contracts", "githooks", "capabilities",
+                         "templates"):
+                (hub / name).symlink_to(ROOT / name)
+        return hub
+
+    def agenthub(self, *argv, sc=None, stdin="", env=None, label=""):
+        """bin/agenthub in-process under DRIVER: machine state (launchd, systemd, setup-python, PATH, hooksPath, the
+        appliers, the bus) comes from the scenario `sc`, so the output depends only on the code"""
+        hub = self.fake_hub()
+        sc = {"bin": str(BIN), "fakehub": str(hub), **(sc or {})}
+        # the language also for the runs with no hub.json (doctor without one, init making one from the template)
+        e = {**self.env, "AGENT_HUB_ROOT": str(hub), "AGENT_HUB_PYTHON": sys.executable, "PATH": "/usr/bin:/bin:/usr/sbin:/sbin",
+             "AGENT_HUB_LANG_UI": LANGUAGE["ui"], **(env or {})}
+        e = {k: v for k, v in e.items() if v is not None}
+        r = subprocess.run([sys.executable, "-c", DRIVER, json.dumps(sc), *map(str, argv)], input=stdin, env=e,
+                           cwd=self.tmp, capture_output=True, text=True, timeout=120)
+        return f"$ agenthub {' '.join(map(str, argv))}{f'    # {label}' if label else ''}\n" \
+               f"[exit {r.returncode}]\n--- stdout\n{r.stdout}--- stderr\n{r.stderr}"
+
+    def heartbeat(self, minutes_ago: float | None):
+        hb = self.tmp / "state" / "scheduler-heartbeat"
+        if minutes_ago is None:
+            hb.unlink(missing_ok=True)
+            return
+        hb.write_text("")
+        t = time.time() - minutes_ago * 60
+        os.utime(hb, (t, t))
+
+    def test_agenthub_doctor(self):
+        out = []
+        hub_json = self.tmp / "config" / "hub.json"
+        hub_json.unlink()
+        out.append(self.agenthub("doctor", label="no hub.json", sc={"python": [1, "", "no venv\n"]}))
+        # launchd; an invalid config; nothing loaded right; claude without a token; an API provider without its key
+        self.valid_cfg(unknown_key=1)
+        self.cfg["llm"] = {"providers": {"anthropic": {"impl": "anthropic", "key": {"secret": "anthropic-api-key"},
+                                                       "models": {"fast": "m1", "standard": "m1", "strong": "m1"}}},
+                           "use": {"standard": "anthropic"}}
+        self.write_cfg()
+        out.append(self.agenthub("doctor", label="launchd, problems", sc={
+            "sm": "launchd", "launchd": {"local.agent-hub-scheduler-watchdog": "path = /elsewhere/bin/x"},
+            "plan": {"services": ["a", "b"], "scheduler": ["c"]}, "hooks": ""}))
+        # launchd; everything in order; an assistant; claude with its token
+        del self.cfg["llm"], self.cfg["unknown_key"]
+        self.valid_cfg(owner_side="assistant", assistant={"project": "helper", "api": "http://127.0.0.1:9", "name": "Robin"},
+                       alerts={"discord_token_file": "a", "discord_channel_file": "b"})
+        (self.tmp / "home" / ".claude").mkdir()
+        (self.tmp / "home" / ".claude" / "headless-oauth-token").write_text("t\n")
+        self.heartbeat(0)
+        out.append(self.agenthub("doctor", label="launchd, all fine", sc={
+            "sm": "launchd", "launchd": {"local.agent-hub-scheduler": "path = {bin}/scheduler.py",
+                                         "local.agent-hub-scheduler-watchdog": "path = {bin}/scheduler-watchdog.py"},
+            "plan": {}, "hooks": "githooks", "which": {"agenthub": "/usr/local/bin/agenthub"},
+            "python": [0, "python 3.13 ok\n", ""]}))
+        # systemd; no coding agent; an old heartbeat
+        self.cfg.pop("assistant")
+        self.cfg.pop("owner_side")
+        self.valid_cfg(runtime={"default": "none"})
+        self.heartbeat(120)
+        out.append(self.agenthub("doctor", label="systemd, runtime none", sc={
+            "sm": "systemd", "systemd": {"local.agent-hub-scheduler": "running", "local.agent-hub-scheduler-watchdog": None},
+            "linger": False, "plan": {"services": ["a"]}, "hooks": "githooks"}))
+        self.valid_cfg(owner_side="assistant", assistant={"project": "helper", "api": "http://127.0.0.1:9"})
+        out.append(self.agenthub("doctor", label="no service manager, unnamed assistant",
+                                 sc={"sm": None, "plan": {}, "hooks": "githooks"}))
+        self.check("agenthub-doctor", "\n".join(out))
+
+    def test_agenthub_modules(self):
+        self.valid_cfg(modules={"backup": True, "reflect": True, "mirror": False})
+        out = [self.agenthub("modules"),
+               self.agenthub("modules", "enable", "no-such-module"),
+               self.agenthub("modules", "enable", "mirror", sc={"apply_rc": 0}),
+               self.agenthub("modules", "disable", "backup", sc={"apply_rc": 1})]
+        out.append("=== hub.json modules\n" + json.dumps(json.loads((self.tmp / "config" / "hub.json").read_text())["modules"])
+                   + "\n")
+        self.check("agenthub-modules", "\n".join(out))
+
+    def test_agenthub_config(self):
+        out = [self.agenthub("config", "apply", label="config invalid")]
+        self.valid_cfg()
+        out.append(self.agenthub("config", "plan", sc={"plan": {}}))
+        out.append(self.agenthub("config", "plan", sc={"plan": {"services": ["install x", "reload y"]}}))
+        out.append(self.agenthub("config", "apply", label="applied, one left, bus down", sc={
+            "applied": {"services": ["install x"]}, "plan": {"services": ["reload y"]}}))
+        out.append(self.agenthub("config", "apply", label="applied, nothing left", sc={
+            "applied": {"services": ["install x"]}, "plan": {}, "bus_rc": 0}))
+        out.append(self.agenthub("config", "check"))
+        self.check("agenthub-config", "\n".join(out))
+
+    def test_agenthub_llm(self):
+        self.valid_cfg(runtime={"default": "none"})
+        out = [self.agenthub("llm"),
+               self.agenthub("llm", "set-key", "nosuch"),
+               self.agenthub("llm", "setup", "--llm", "bogus", "--yes"),
+               self.agenthub("llm", "setup", "--llm", "none", "--yes"),
+               self.agenthub("llm", "setup", "--llm", "runtime", "--yes", label="runtime none"),
+               self.agenthub("llm", "setup", "--llm", "openai", "--yes"),
+               self.agenthub("llm", "setup", "--llm", "anthropic", "--llm-model", "m1", "--yes"),
+               self.agenthub("llm", "set-key", "anthropic", stdin=""),
+               self.agenthub("llm", "set-key", "anthropic", stdin="k-123\n")]
+        self.cfg = json.loads((self.tmp / "config" / "hub.json").read_text())
+        self.cfg["llm"]["providers"]["anthropic"]["key"] = {"env": "ANTHROPIC_KEY"}
+        self.cfg["runtime"] = {"default": "claude"}
+        self.write_cfg()
+        out.append(self.agenthub("llm", "set-key", "anthropic", stdin="k\n", label="key from env"))
+        out.append(self.agenthub("llm", "setup", "--llm", "runtime", "--yes", label="runtime claude"))
+        self.check("agenthub-llm", "\n".join(out))
+
+    def test_agenthub_init(self):
+        self.valid_cfg()
+        out = [self.agenthub("init", "--dry-run", "--yes", "--no-launchd", label="old layout", sc={"hooks": ""}),
+               self.agenthub("init", "--dry-run", "--yes", label="instance, launchd",
+                             env={"AGENT_HUB_HOME": str(self.tmp / "inst0")}, sc={"sm": "launchd", "hooks": "githooks"}),
+               self.agenthub("init", "--dry-run", "--yes", label="instance, systemd",
+                             env={"AGENT_HUB_HOME": str(self.tmp / "inst0")},
+                             sc={"sm": "systemd", "systemd": {}, "linger": False, "hooks": "githooks"}),
+               self.agenthub("init", "--dry-run", "--yes", label="no service manager", sc={"sm": None, "hooks": "githooks"})]
+        fresh = {"AGENT_HUB_CONFIG": None, "AGENT_HUB_DATA": None, "AGENT_HUB_SECRETS": None}
+        args = ("--owner", "Sam", "--timezone", "UTC", "--workspace", self.tmp / "ws2", "--modules", "backup,reflect",
+                "--yes", "--llm", "none")
+        out.append(self.agenthub("init", "--home", self.tmp / "inst", *args, "--dry-run", label="new instance",
+                                 env=fresh, sc={"hooks": "githooks"}))
+        out.append(self.agenthub("init", "--home", self.tmp / "inst", *args, "--no-launchd", label="new instance",
+                                 env=fresh, sc={"hooks": ""}))
+        # the template's JSON is not a message: keep the line that announces it, not the template itself
+        text = re.sub(r"(?m)^\{\n(.*\n)*?\}\n", "<hub.json from hub.example.json>\n", "\n".join(out))
+        self.check("agenthub-init", text)
+
+    def test_agenthub_move_instance(self):
+        out = [self.agenthub("move-instance")]
+        (self.tmp / "data" / "todo.md").write_text("x\n")
+        (self.tmp / "secrets" / "k").write_text("x\n")
+        out.append(self.agenthub("move-instance", "--to", self.tmp / "x", env={"AGENT_HUB_HOME": str(self.tmp / "inst")}))
+        (self.tmp / "full").mkdir()
+        (self.tmp / "full" / "f").write_text("")
+        out.append(self.agenthub("move-instance", "--to", self.tmp / "full"))
+        out.append(self.agenthub("move-instance", "--to", self.tmp / "new"))
+        out.append(self.agenthub("move-instance", "--to", self.tmp / "new", "--apply", label="config invalid"))
+        self.valid_cfg()
+        out.append(self.agenthub("move-instance", "--to", self.tmp / "new2", "--apply"))
+        self.check("agenthub-move-instance", "\n".join(out))
+
+    def test_agenthub_install_cli(self):
+        d = self.tmp / "cli"
+        out = [self.agenthub("install-cli", "--dir", d), self.agenthub("install-cli", "--dir", d),
+               self.agenthub("install-cli", "--dir", d, env={"PATH": f"{d}:/usr/bin:/bin"})]
+        self.check("agenthub-install-cli", "\n".join(out))
+
+    # --- config-check: every file it validates ------------------------------------------------------------------
+    def test_config_check_files(self):
+        cc = BIN / "config-check"
+        out = [self.run_(cc, "--bogus")]
+        self.valid_cfg()
+        out.append(self.run_(cc))
+        cfg = self.tmp / "config"
+        self.cfg["assitant"] = {}
+        self.cfg["llm"] = {"providers": {"x": {"impl": "nope"}}}
+        self.write_cfg()
+        (cfg / "models.env").write_text("A=b\n")
+        (cfg / "mirror-list.txt").write_text("# c\ngit@github.com:a/b.git\nnot a remote\n")
+        (cfg / "services.tsv").write_text("label\towner\nx\ty\nx\ty\nz\n")
+        (cfg / "schedule.yaml").write_text("jobs:\n  - name: a\n  - name: a\n  - name: b\n")
+        out.append(self.run_(cc))
+        for f in ("models.env", "mirror-list.txt", "services.tsv"):
+            (cfg / f).unlink()
+        (cfg / "schedule.yaml").write_text("jobs: [\n")
+        out.append(self.run_(cc))
+        bad = self.tmp / "bad-config"      # what --staged hands its child: a config dir whose hub.json does not parse
+        bad.mkdir()
+        (bad / "hub.json").write_text("{")
+        self.env["AGENT_HUB_CONFIG"] = str(bad)
+        out.append(self.run_(cc, "--child"))
+        self.check("config-check-files", "\n".join(out))
+
+
+# Runs bin/agenthub in-process with the machine replaced by a scenario (argv[1], JSON). Nothing here reaches launchd,
+# systemd or the real bus: those calls are answered from the scenario.
+DRIVER = r'''
+import importlib.machinery, importlib.util, json, pathlib, shutil, subprocess, sys
+sc = json.loads(sys.argv[1])
+BIN = pathlib.Path(sc["bin"])
+sys.path.insert(0, str(BIN))
+import hubconf
+if "sm" in sc:
+    hubconf._SERVICE_MANAGER[:] = [sc["sm"]]
+real_run = subprocess.run
+
+def done(cmd, rc=0, out="", err=""):
+    return subprocess.CompletedProcess(cmd, rc, out, err)
+
+def run(cmd, *a, **k):
+    c = [str(x) for x in cmd]
+    if c[0].endswith("setup-python"):
+        return done(c, *sc.get("python", [0, "python ok\n", ""]))
+    if c[0] in ("/bin/launchctl", "launchctl", "systemctl"):
+        if c[1] == "print":
+            st = sc.get("launchd", {}).get(c[2].rsplit("/", 1)[1])
+            return done(c, 0 if st else 1, st.replace("{bin}", str(BIN)) if st else "")
+        return done(c, 0)
+    if c[:3] == ["git", "-C", sc["fakehub"]] and c[3:5] == ["config", "core.hooksPath"]:
+        if len(c) == 5:
+            return done(c, 0, sc.get("hooks", "") + "\n")
+        print("[git config core.hooksPath " + c[5] + "]")
+        return done(c, 0)
+    if c[0] == "gh":
+        return done(c, 1)
+    if len(c) >= 3 and c[-3].endswith("agenthub") and c[-2:] == ["config", "apply"]:
+        print("[agenthub config apply]")
+        return done(c, sc.get("apply_rc", 0))
+    if any(x.endswith("hubbus") for x in c) and "publish" in c:
+        return done(c, sc.get("bus_rc", 1), "", "bus is down\n")
+    return real_run(cmd, *a, **k)
+
+subprocess.run = run
+shutil.which = lambda name, *a, **k: sc.get("which", {}).get(name)
+if sc.get("sm") == "systemd":
+    import systemd_units
+    systemd_units.state = lambda label: sc.get("systemd", {}).get(label)
+    systemd_units.linger = lambda: sc.get("linger")
+    systemd_units.installed = lambda label: None
+    systemd_units.install = lambda plist: done([], 1, "", "no user bus\n")
+
+class Change:
+    def __init__(self, text):
+        self.op, self.target, self.detail, self.text = "change", text, "", text
+    def line(self):
+        return self.text
+
+import appliers
+if "plan" in sc:
+    appliers.plan_all = lambda only=None: {k: [Change(x) for x in v] for k, v in sc["plan"].items()}
+if "applied" in sc:
+    appliers.apply_all = lambda only=None: {k: [Change(x) for x in v] for k, v in sc["applied"].items()}
+    appliers.config_commit = lambda: "c0ffee1"
+    appliers.applied_path = lambda: hubconf.STATE / "config-applied.json"
+loader = importlib.machinery.SourceFileLoader("agenthub", str(BIN / "agenthub"))
+mod = importlib.util.module_from_spec(importlib.util.spec_from_loader("agenthub", loader))
+loader.exec_module(mod)
+sys.exit(mod.main(sys.argv[2:]))
+'''
 
 
 if __name__ == "__main__":

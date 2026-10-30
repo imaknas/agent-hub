@@ -1,0 +1,66 @@
+$ agenthub init --dry-run --yes --no-launchd    # old layout
+[exit 0]
+--- stdout
+✓ 已經有 <TMP>/config/hub.json(舊的擺法),不動它
+(dry-run) 建資料夾 <TMP>/fakehub/.logs
+(dry-run) 建資料夾 <TMP>/home/git-origin
+(dry-run) git config core.hooksPath githooks(平台的 commit 閘門)
+--no-launchd:不裝排程器、不套用服務
+--- stderr
+
+$ agenthub init --dry-run --yes    # instance, launchd
+[exit 0]
+--- stdout
+✓ 已經有 <TMP>/config/hub.json,不動它(要改就直接編輯,再 hub config apply)
+(dry-run) 建資料夾 <TMP>/fakehub/.logs
+(dry-run) 建資料夾 <TMP>/home/git-origin
+(dry-run) local.agent-hub-scheduler:安裝
+(dry-run) local.agent-hub-scheduler-watchdog:安裝
+
+下一步:bin/hub doctor 看還缺什麼;bin/hub onboard ~/workspace/<專案> 接上第一個專案
+--- stderr
+
+$ agenthub init --dry-run --yes    # instance, systemd
+[exit 0]
+--- stdout
+✓ 已經有 <TMP>/config/hub.json,不動它(要改就直接編輯,再 hub config apply)
+(dry-run) 建資料夾 <TMP>/fakehub/.logs
+(dry-run) 建資料夾 <TMP>/home/git-origin
+(dry-run) local.agent-hub-scheduler:安裝(systemd)
+(dry-run) local.agent-hub-scheduler-watchdog:安裝(systemd)
+  ⚠️ 登出之後 user unit 會停:`loginctl enable-linger $USER`(要 sudo)
+
+下一步:bin/hub doctor 看還缺什麼;bin/hub onboard ~/workspace/<專案> 接上第一個專案
+--- stderr
+
+$ agenthub init --dry-run --yes    # no service manager
+[exit 0]
+--- stdout
+✓ 已經有 <TMP>/config/hub.json(舊的擺法),不動它
+(dry-run) 建資料夾 <TMP>/fakehub/.logs
+(dry-run) 建資料夾 <TMP>/home/git-origin
+⚠️ 這個系統沒有支援的服務管理器(macOS 的 launchd、Linux 的 systemd user 層級都沒有):排程器、看門狗、專案的長駐服務都不會自己跑;要跑夜間流程就自己排程 `bin/py bin/scheduler.py`(每 15 分鐘)
+
+下一步:bin/hub doctor 看還缺什麼;bin/hub onboard ~/workspace/<專案> 接上第一個專案
+--- stderr
+
+$ agenthub init --home <TMP>/inst --owner Sam --timezone UTC --workspace <TMP>/ws2 --modules backup,reflect --yes --llm none --dry-run    # new instance
+[exit 0]
+--- stdout
+(dry-run) 會建實例目錄 <TMP>/inst/{config,data,secrets}、寫 config/hub.json、寫 <TMP>/fakehub/.hub-home:
+<hub.json from hub.example.json>
+--- stderr
+
+$ agenthub init --home <TMP>/inst --owner Sam --timezone UTC --workspace <TMP>/ws2 --modules backup,reflect --yes --llm none --no-launchd    # new instance
+[exit 0]
+--- stdout
+✓ 實例目錄 <TMP>/inst(config 是 git repo;owner Sam、模組 reflect, backup)
+建資料夾 <TMP>/fakehub/.logs
+建資料夾 <TMP>/ws2
+建資料夾 <TMP>/home/git-origin
+建資料夾 <TMP>/home/.memory-copies
+git config core.hooksPath githooks(平台的 commit 閘門)
+[git config core.hooksPath githooks]
+判斷點先不設:要用到時會明確失敗、說原因。之後跑 agenthub llm setup
+--no-launchd:不裝排程器、不套用服務
+--- stderr

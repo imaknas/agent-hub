@@ -1,0 +1,61 @@
+$ <HUB>/bin/config-check --bogus
+[exit 2]
+--- stdout
+--- stderr
+config pipeline 的 check(docs/design/new-user.md 3.7):一次驗證所有 config 檔。
+
+  config-check            驗 working tree 的 config
+  config-check --staged   驗**暫存區**(要 commit 的內容;githooks/pre-commit、config repo 的 githooks/config/pre-commit
+                          呼叫)。暫存區沒有改到 config 檔就直接過。
+                          共用的 working tree 裡可能有別人改到一半的檔案,所以照 test-gate 的做法把暫存區匯出到暫存目錄,
+                          用 AGENT_HUB_ROOT 指過去再驗。
+
+驗什麼:
+  hub.json           contracts/hub.v1.schema.json(minischema)+ 不認得的頂層鍵(_ 開頭的說明鍵除外)——打錯字的鍵
+                     (例:"assitant")不會被默默忽略
+  projects/          registry.refresh() 的驗證(schema、名稱重複、after: 指到存在的 job、run 解析得到…)
+  models.env         不准存在(10-29 起模型設定在 hub.json llm.points)
+  mirror-list.txt    每行一個 git remote
+  services.tsv       每列欄數跟表頭一樣、label 不重複
+  schedule.yaml      讀得進來、job 名稱不重複(切換期間的舊格式)
+
+通過時把這次驗過的 tree 記在 git 目錄的 config-check-passed(githooks/post-commit 用它抓出跳過閘門的 commit)。
+
+
+$ <HUB>/bin/config-check
+[exit 0]
+--- stdout
+config-check:config 都合格
+--- stderr
+
+$ <HUB>/bin/config-check
+[exit 1]
+--- stdout
+--- stderr
+config-check:✗ hub.json:不認得的鍵 `assitant`(是不是 assistant?);要新增就先加進 contracts/hub.v1.schema.json
+config-check:✗ hub.json:llm:有 providers 就要寫 use(fast / standard / strong 各交給哪一家)
+config-check:✗ hub.json:llm:providers.x.impl `nope` 不認得(有:anthropic, openai, ollama, claude, fake, none, command)
+config-check:✗ models.env:不再使用——模型設定搬進 hub.json 的 llm.points(schedulectl set-model state|index|consolidate <model>,值跟組別預設一樣就不用寫),然後刪掉 models.env
+config-check:✗ mirror-list.txt:3:不像 git remote:not a remote
+config-check:✗ services.tsv:3:label `x` 重複
+config-check:✗ services.tsv:4:1 欄,表頭是 2 欄
+config-check:✗ schedule.yaml:job `a` 重複
+
+$ <HUB>/bin/config-check
+[exit 1]
+--- stdout
+--- stderr
+config-check:✗ hub.json:不認得的鍵 `assitant`(是不是 assistant?);要新增就先加進 contracts/hub.v1.schema.json
+config-check:✗ hub.json:llm:有 providers 就要寫 use(fast / standard / strong 各交給哪一家)
+config-check:✗ hub.json:llm:providers.x.impl `nope` 不認得(有:anthropic, openai, ollama, claude, fake, none, command)
+config-check:✗ schedule.yaml:讀不了(while parsing a flow node
+expected the node content, but found '<stream end>'
+  in "<unicode string>", line 2, column 1:
+    
+    ^)
+
+$ <HUB>/bin/config-check --child
+[exit 1]
+--- stdout
+--- stderr
+config-check:✗ hub.json:讀不了(Expecting property name enclosed in double quotes: line 1 column 2 (char 1))

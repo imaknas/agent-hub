@@ -1,0 +1,43 @@
+$ agenthub config apply    # config invalid
+[exit 1]
+--- stdout
+--- stderr
+config-check:✗ hub.json:$:缺 v
+config-check:✗ hub.json:$.owner:缺 address
+hub config apply:config 不合格,不套用
+
+$ agenthub config plan
+[exit 0]
+--- stdout
+沒有要改的(機器上的狀態跟 config 一致)
+--- stderr
+
+$ agenthub config plan
+[exit 0]
+--- stdout
+services        install x
+services        reload y
+--- stderr
+
+$ agenthub config apply    # applied, one left, bus down
+[exit 1]
+--- stdout
+config-check:config 都合格
+services        install x
+services        reload y
+--- stderr
+hub config apply:⚠️ 套用完還有沒對齊的:
+hub config apply:匯流排記錄失敗(.state/config-applied.json 有寫):bus is down
+
+$ agenthub config apply    # applied, nothing left
+[exit 0]
+--- stdout
+config-check:config 都合格
+services        install x
+--- stderr
+
+$ agenthub config check
+[exit 0]
+--- stdout
+config-check:config 都合格
+--- stderr

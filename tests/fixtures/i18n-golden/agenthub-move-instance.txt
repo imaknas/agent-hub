@@ -1,0 +1,52 @@
+$ agenthub move-instance
+[exit 2]
+--- stdout
+--- stderr
+用法:hub move-instance --to <實例目錄> [--apply](不加 --apply 只列出會做什麼)
+
+$ agenthub move-instance --to <TMP>/x
+[exit 1]
+--- stdout
+--- stderr
+已經是實例目錄的擺法(<TMP>/inst),不用搬
+
+$ agenthub move-instance --to <TMP>/full
+[exit 1]
+--- stdout
+--- stderr
+<TMP>/full 已經有東西,不覆蓋
+
+$ agenthub move-instance --to <TMP>/new
+[exit 0]
+--- stdout
+(會複製) <TMP>/config/hub.json → <TMP>/new/config/hub.json
+(會複製) <TMP>/data/todo.md → <TMP>/new/data/todo.md
+(會複製) <TMP>/secrets/k → <TMP>/new/secrets/k
+
+共 3 項;加 --apply 才動手(只複製,不刪 hub 裡的來源;最後才寫 <TMP>/fakehub/.hub-home)
+--- stderr
+
+$ agenthub move-instance --to <TMP>/new --apply    # config invalid
+[exit 1]
+--- stdout
+複製 <TMP>/config/hub.json → <TMP>/new/config/hub.json
+複製 <TMP>/data/todo.md → <TMP>/new/data/todo.md
+複製 <TMP>/secrets/k → <TMP>/new/secrets/k
+config-check:✗ hub.json:$:缺 v
+config-check:✗ hub.json:$.owner:缺 address
+--- stderr
+新擺法的 config 不合格,不寫 <TMP>/fakehub/.hub-home(複製的東西在 <TMP>/new,可以刪掉重來)
+
+$ agenthub move-instance --to <TMP>/new2 --apply
+[exit 0]
+--- stdout
+複製 <TMP>/config/hub.json → <TMP>/new2/config/hub.json
+複製 <TMP>/data/todo.md → <TMP>/new2/data/todo.md
+複製 <TMP>/secrets/k → <TMP>/new2/secrets/k
+config-check:config 都合格
+
+✓ 寫了 <TMP>/fakehub/.hub-home。hub 裡的舊檔還在(沒刪)。接下來(要人做):
+  1. bin/hub config plan 看會改什麼(專案的 sandbox 設定裡 secrets 的路徑會變),沒問題再 bin/hub config apply
+  2. 重啟讀路徑的常駐服務(lease-runner、cap-runner)
+  3. 確認夜間流程、備份(還原驗證)都正常之後,才從平台 repo git rm 那些檔案
+--- stderr

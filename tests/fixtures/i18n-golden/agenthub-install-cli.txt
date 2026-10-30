@@ -1,0 +1,19 @@
+$ agenthub install-cli --dir <TMP>/cli
+[exit 1]
+--- stdout
+寫了 <TMP>/cli/agenthub
+⚠️ <TMP>/cli 不在 PATH 上:加進 shell 的設定(例:export PATH="<TMP>/cli:$PATH"),session 才打得到 agenthub
+--- stderr
+
+$ agenthub install-cli --dir <TMP>/cli
+[exit 1]
+--- stdout
+✓ <TMP>/cli/agenthub 已經是最新的
+⚠️ <TMP>/cli 不在 PATH 上:加進 shell 的設定(例:export PATH="<TMP>/cli:$PATH"),session 才打得到 agenthub
+--- stderr
+
+$ agenthub install-cli --dir <TMP>/cli
+[exit 0]
+--- stdout
+✓ <TMP>/cli/agenthub 已經是最新的
+--- stderr

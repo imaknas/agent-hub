@@ -1,0 +1,66 @@
+$ agenthub llm
+[exit 2]
+--- stdout
+--- stderr
+用法:agenthub llm setup | set-key <provider>(key 從 stdin)| health
+
+$ agenthub llm set-key nosuch
+[exit 2]
+--- stdout
+--- stderr
+hub.json llm.providers 沒有 nosuch
+
+$ agenthub llm setup --llm bogus --yes
+[exit 2]
+--- stdout
+--- stderr
+沒有 bogus 這個選項(可選:runtime, anthropic, openai, ollama, none)
+
+$ agenthub llm setup --llm none --yes
+[exit 0]
+--- stdout
+判斷點先不設:要用到時會明確失敗、說原因。之後跑 agenthub llm setup
+--- stderr
+
+$ agenthub llm setup --llm runtime --yes    # runtime none
+[exit 0]
+--- stdout
+⚠️ 執行環境 none 沒有 completion 介面:判斷點會失敗。換一家 provider:agenthub llm setup
+--- stderr
+
+$ agenthub llm setup --llm openai --yes
+[exit 1]
+--- stdout
+--- stderr
+非互動模式要用 --llm-model <名稱> 指定模型(或之後互動跑 agenthub llm setup)
+
+$ agenthub llm setup --llm anthropic --llm-model m1 --yes
+[exit 1]
+--- stdout
+hub.json llm:判斷點交給 anthropic(fast=m1, standard=m1, strong=m1);⚠️ 還不能用:沒有 key:<TMP>/secrets/anthropic-api-key 不在(bin/hub llm set-key 寫進去)
+記得 commit hub.json(config as code)。agent 的工作(信箱代辦等)要 coding agent,看 agenthub doctor 的功能表
+--- stderr
+
+$ agenthub llm set-key anthropic
+[exit 1]
+--- stdout
+--- stderr
+沒有讀到 key,什麼都沒寫
+
+$ agenthub llm set-key anthropic
+[exit 0]
+--- stdout
+寫進 <TMP>/secrets/anthropic-api-key(600)。檢查:agenthub llm health
+--- stderr
+
+$ agenthub llm set-key anthropic    # key from env
+[exit 2]
+--- stdout
+--- stderr
+llm.providers.anthropic.key 不是 {"secret": 檔名}(用環境變數的不用這個指令)
+
+$ agenthub llm setup --llm runtime --yes    # runtime claude
+[exit 0]
+--- stdout
+判斷點交給執行環境 claude(它自己的登入;模型照它的組別表,schedulectl models 看)
+--- stderr

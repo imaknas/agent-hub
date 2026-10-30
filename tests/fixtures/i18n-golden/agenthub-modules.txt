@@ -1,0 +1,39 @@
+$ agenthub modules
+[exit 0]
+--- stdout
+  assistant    個人助理:問題對帳、通道租借
+✓ backup       每晚加密雲端備份 + 每月還原測試
+  claude       Claude Code 的登入檢查、更新、headless token 到期提醒
+  consolidate  每晚把超過 14 天的 memory 日期檔整理進 reference/(在 librarian 之前)
+  mirror       每晚更新 mirror-list.txt 裡每個 repo 的 --mirror clone
+  owner        內建的 owner 端:新的待辦、問題通知(結案、回答用 agenthub owner)
+✓ reflect      每週一產生上一週的跨專案回顧(reflect/)
+  sandbox      平台代跑(cap-runner):sandbox 裡的專案用 hub-run --cap 借能力
+
+開關:hub modules enable|disable <名稱>(改 hub.json 的 modules,再套用)
+--- stderr
+
+$ agenthub modules enable no-such-module
+[exit 1]
+--- stdout
+--- stderr
+hub modules:沒有模組 no-such-module(modules/ 底下有:assistant, backup, claude, consolidate, mirror, owner, reflect, sandbox)
+
+$ agenthub modules enable mirror
+[exit 0]
+--- stdout
+hub.json:modules.mirror = true
+[agenthub config apply]
+記得 commit hub.json(config as code)。
+--- stderr
+
+$ agenthub modules disable backup
+[exit 1]
+--- stdout
+hub.json:modules.backup = false
+[agenthub config apply]
+記得 commit hub.json(config as code)。
+--- stderr
+
+=== hub.json modules
+{"backup": false, "reflect": true, "mirror": true}

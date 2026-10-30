@@ -1,0 +1,156 @@
+$ agenthub doctor    # no hub.json
+[exit 1]
+--- stdout
+✗ no venv
+    → bin/setup
+✗ 沒有 hub.json
+    → bin/hub init
+
+2 個問題
+--- stderr
+
+$ agenthub doctor    # launchd, problems
+[exit 1]
+--- stdout
+✓ python ok
+✗ config:config-check:✗ hub.json:不認得的鍵 `unknown_key`;要新增就先加進 contracts/hub.v1.schema.json
+    → 照訊息改 hub.json / projects/,再 bin/hub config check
+✓ owner 端:內建的(owner_side: builtin;agenthub owner list / done / answer)
+! agenthub 不在 PATH 上(專案的 session 打不到信箱指令)
+    → bin/agenthub install-cli
+✓ MCP 伺服器:agenthub mcp(任何支援 MCP 的 agent 都能收發信箱、寫筆記;登記進工具的設定由你決定)
+    → agenthub mcp config 印出要登記的那段;各工具怎麼加:docs/mcp.md
+✓ 判斷點(librarian、index、consolidate、週報分析):可以用
+✓ 信箱交辦(沒人收的信由平台派 agent):可以用
+✓ 信箱接續(用閒置 session 的 context 回信):可以用
+✓ 通道租借(另外要助理模組):可以用
+✓ session 裡即時看到信、提醒寫筆記:可以用
+✓ 平台規則寫進專案的規則檔:可以用
+✓ memory 缺口、週報的對話統計:可以用
+✗ agent 登入(headless token):沒有
+    → 重跑 `claude setup-token` 寫進 <TMP>/home/.claude/headless-oauth-token
+! agent 登入(~/.claude/.credentials.json):沒有
+    → 在 mini 的終端機跑一次 claude 讓它更新,或重新 /login
+✗ LLM provider anthropic:沒有 key:<TMP>/secrets/anthropic-api-key 不在(bin/hub llm set-key 寫進去)
+    → 看 hub.json llm.providers;key 用 bin/hub llm set-key <provider>
+✓ 判斷點的模型分組:fast→(沒設),standard→anthropic,strong→(沒設)
+✗ 排程器(local.agent-hub-scheduler):沒有載入
+    → bin/hub init
+✗ 看門狗(local.agent-hub-scheduler-watchdog):載入的不是這份 hub(<HUB>/bin)
+    → bin/hub init(會換成這份的)
+! 排程器還沒 tick 過
+    → 裝好之後最多 15 分鐘;還沒有就看 .logs/scheduler-stderr.log
+! 沒設定警報:排程器停了、服務掛了只寫在狀態頁跟 log
+    → 要通知就照 hub.example.json 加 alerts 段
+! 背景服務、專案設定:有 2 項還沒套用
+    → bin/hub config plan,再 bin/hub config apply
+! commit 閘門(core.hooksPath):沒設定
+    → bin/hub init(或 git config core.hooksPath githooks)
+
+5 個問題、6 個提醒
+--- stderr
+
+$ agenthub doctor    # launchd, all fine
+[exit 0]
+--- stdout
+✓ python 3.13 ok
+✓ config:都合格
+✓ owner 端:Robin(owner_side: assistant)
+✓ agenthub 在 PATH 上:/usr/local/bin/agenthub
+✓ MCP 伺服器:agenthub mcp(任何支援 MCP 的 agent 都能收發信箱、寫筆記;登記進工具的設定由你決定)
+    → agenthub mcp config 印出要登記的那段;各工具怎麼加:docs/mcp.md
+✓ 判斷點(librarian、index、consolidate、週報分析):可以用
+✓ 信箱交辦(沒人收的信由平台派 agent):可以用
+✓ 信箱接續(用閒置 session 的 context 回信):可以用
+✓ 通道租借(另外要助理模組):可以用
+✓ session 裡即時看到信、提醒寫筆記:可以用
+✓ 平台規則寫進專案的規則檔:可以用
+✓ memory 缺口、週報的對話統計:可以用
+✓ agent 登入(headless token):有
+! agent 登入(~/.claude/.credentials.json):沒有
+    → 在 mini 的終端機跑一次 claude 讓它更新,或重新 /login
+✓ 判斷點交給執行環境 claude(沒有 llm.providers;schedulectl models 看每個點的模型)
+✓ 排程器(local.agent-hub-scheduler):已載入
+✓ 看門狗(local.agent-hub-scheduler-watchdog):已載入
+✓ 排程器最後一次 tick:0 分鐘前
+✓ 背景服務、專案設定:跟 config 一致
+✓ commit 閘門(core.hooksPath):githooks
+
+沒有問題、1 個提醒
+--- stderr
+
+$ agenthub doctor    # systemd, runtime none
+[exit 1]
+--- stdout
+✓ python ok
+✓ config:都合格
+✓ owner 端:內建的(owner_side: builtin;agenthub owner list / done / answer)
+! agenthub 不在 PATH 上(專案的 session 打不到信箱指令)
+    → bin/agenthub install-cli
+✓ MCP 伺服器:agenthub mcp(任何支援 MCP 的 agent 都能收發信箱、寫筆記;登記進工具的設定由你決定)
+    → agenthub mcp config 印出要登記的那段;各工具怎麼加:docs/mcp.md
+! 判斷點(librarian、index、consolidate、週報分析):關掉(執行環境 none 沒有跑 agent、登入狀態)
+    → 裝一個有這些能力的 coding agent,hub.json runtime.default 指到它
+! 信箱交辦(沒人收的信由平台派 agent):關掉(執行環境 none 沒有跑 agent、登入狀態)
+    → 裝一個有這些能力的 coding agent,hub.json runtime.default 指到它
+! 信箱接續(用閒置 session 的 context 回信):關掉(執行環境 none 沒有跑 agent、session 狀態)
+    → 裝一個有這些能力的 coding agent,hub.json runtime.default 指到它
+! 通道租借(另外要助理模組):關掉(執行環境 none 沒有長駐串流 session、session 狀態、跑 agent、登入狀態)
+    → 裝一個有這些能力的 coding agent,hub.json runtime.default 指到它
+! session 裡即時看到信、提醒寫筆記:關掉(執行環境 none 沒有session 事件(hook))
+    → 裝一個有這些能力的 coding agent,hub.json runtime.default 指到它
+! 平台規則寫進專案的規則檔:關掉(執行環境 none 沒有規則檔)
+    → 裝一個有這些能力的 coding agent,hub.json runtime.default 指到它
+! memory 缺口、週報的對話統計:關掉(執行環境 none 沒有對話紀錄)
+    → 裝一個有這些能力的 coding agent,hub.json runtime.default 指到它
+✗ 判斷點沒地方跑:執行環境 none 沒有 completion 介面、hub.json 也沒有 llm.providers
+    → agenthub llm setup(選一家:API key 或本機 Ollama)
+✓ 排程器(local.agent-hub-scheduler.timer):已啟用
+✗ 看門狗(local.agent-hub-scheduler-watchdog.timer):沒有裝
+    → agenthub init
+! 登出之後排程器、服務會停(systemd 的 linger 沒開)
+    → sudo loginctl enable-linger $USER
+✗ 排程器最後一次 tick:120 分鐘前
+    → bin/schedulectl status;看 .logs/scheduler-stderr.log
+! 背景服務、專案設定:有 1 項還沒套用
+    → bin/hub config plan,再 bin/hub config apply
+✓ commit 閘門(core.hooksPath):githooks
+
+3 個問題、10 個提醒
+--- stderr
+
+$ agenthub doctor    # no service manager, unnamed assistant
+[exit 1]
+--- stdout
+✓ python ok
+✓ config:都合格
+✓ owner 端:助理(owner_side: assistant)
+! agenthub 不在 PATH 上(專案的 session 打不到信箱指令)
+    → bin/agenthub install-cli
+✓ MCP 伺服器:agenthub mcp(任何支援 MCP 的 agent 都能收發信箱、寫筆記;登記進工具的設定由你決定)
+    → agenthub mcp config 印出要登記的那段;各工具怎麼加:docs/mcp.md
+! 判斷點(librarian、index、consolidate、週報分析):關掉(執行環境 none 沒有跑 agent、登入狀態)
+    → 裝一個有這些能力的 coding agent,hub.json runtime.default 指到它
+! 信箱交辦(沒人收的信由平台派 agent):關掉(執行環境 none 沒有跑 agent、登入狀態)
+    → 裝一個有這些能力的 coding agent,hub.json runtime.default 指到它
+! 信箱接續(用閒置 session 的 context 回信):關掉(執行環境 none 沒有跑 agent、session 狀態)
+    → 裝一個有這些能力的 coding agent,hub.json runtime.default 指到它
+! 通道租借(另外要助理模組):關掉(執行環境 none 沒有長駐串流 session、session 狀態、跑 agent、登入狀態)
+    → 裝一個有這些能力的 coding agent,hub.json runtime.default 指到它
+! session 裡即時看到信、提醒寫筆記:關掉(執行環境 none 沒有session 事件(hook))
+    → 裝一個有這些能力的 coding agent,hub.json runtime.default 指到它
+! 平台規則寫進專案的規則檔:關掉(執行環境 none 沒有規則檔)
+    → 裝一個有這些能力的 coding agent,hub.json runtime.default 指到它
+! memory 缺口、週報的對話統計:關掉(執行環境 none 沒有對話紀錄)
+    → 裝一個有這些能力的 coding agent,hub.json runtime.default 指到它
+✗ 判斷點沒地方跑:執行環境 none 沒有 completion 介面、hub.json 也沒有 llm.providers
+    → agenthub llm setup(選一家:API key 或本機 Ollama)
+✗ 排程器、看門狗:這個系統沒有支援的服務管理器(macOS 的 launchd、Linux 的 systemd user 層級都沒有):排程器、看門狗、專案的長駐服務都不會自己跑
+    → 自己排程 `bin/py bin/scheduler.py`(每 15 分鐘)
+✗ 排程器最後一次 tick:120 分鐘前
+    → bin/schedulectl status;看 .logs/scheduler-stderr.log
+✓ 背景服務、專案設定:跟 config 一致
+✓ commit 閘門(core.hooksPath):githooks
+
+3 個問題、8 個提醒
+--- stderr
