@@ -22,6 +22,9 @@ import subprocess
 
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
 import hubconf  # noqa: E402
+import i18n  # noqa: E402
+
+_ = i18n.domain(__file__)
 
 HUB = hubconf.ROOT
 SCHEDULE = hubconf.config_file("schedule.yaml")
@@ -30,7 +33,6 @@ SCHED_LOG = HUB / ".logs" / "scheduler.log"
 AGENT_JOBS = HUB / ".state" / "agent-jobs"
 OUT = HUB / ".state" / "status" / "index.html"
 WEEKDAYS = ["mon", "tue", "wed", "thu", "fri", "sat", "sun"]
-WEEKDAY_ZH = "一二三四五六日"
 LOG_LINE = re.compile(r"^\[(\S+ \S+)\] (?:running job '([^']+)'|job '([^']+)' (finished OK|FAILED \(exit (-?\d+)\)))")
 
 
@@ -44,12 +46,13 @@ def prune_line() -> str:
         r = json.loads(f.read_text())
     except (OSError, ValueError):
         return ""
-    parts = [f"刪依賴 {len(r.get('deps', []))} 個", f"移除 worktree {len(r.get('removed', []))} 個",
-             f"釋放 {r.get('freed_mb', 0)} MB"]
+    parts = [_("{n} dependencies deleted", n=len(r.get('deps', []))), _("{n} worktrees removed", n=len(r.get('removed', []))),
+             _("{mb} MB freed", mb=r.get('freed_mb', 0))]
     if r.get("skipped"):
-        parts.append(f"跳過 {len(r['skipped'])} 個(有不能確定可重建的檔案)")
-    return (f"<div class=sub style='margin-top:8px'>worktree 自動清理({esc(str(r.get('at', ''))[:16])}):"
-            + "、".join(parts) + "</div>")
+        parts.append(_("{n} skipped (files that may not be rebuildable)", n=len(r['skipped'])))
+    return ("<div class=sub style='margin-top:8px'>"
+            + _("worktree auto-cleanup ({at}): {parts}", at=esc(str(r.get('at', ''))[:16]), parts=_(", ").join(parts))
+            + "</div>")
 
 
 def runs_on(job: dict, d: datetime.date) -> bool:
@@ -65,31 +68,37 @@ def runs_on(job: dict, d: datetime.date) -> bool:
     return True
 
 
+def weekday_name(i: int) -> str:
+    """Monday = 0, as date.weekday()"""
+    return (_("Mon"), _("Tue"), _("Wed"), _("Thu"), _("Fri"), _("Sat"), _("Sun"))[i]
+
+
 def describe_when(job: dict) -> str:
     parts = []
     if "months" in job:
-        parts.append(",".join(f"{m}月" for m in job["months"]))
+        parts.append(",".join(_("month {m}", m=m) for m in job["months"]))
     if "days_of_month" in job:
-        parts.append(("" if parts else "每月 ") + ",".join(f"{d}號" for d in job["days_of_month"]))
+        parts.append(("" if parts else _("every month") + " ") + ",".join(_("day {d}", d=d) for d in job["days_of_month"]))
     if "days_of_week" in job:
-        parts.append("每週" + "".join(WEEKDAY_ZH[WEEKDAYS.index(w)] for w in job["days_of_week"]))
-    when = " ".join(parts) or "每天"
+        parts.append(_("every week {days}", days=_("/").join(weekday_name(WEEKDAYS.index(w)) for w in job["days_of_week"])))
+    when = " ".join(parts) or _("every day")
     if "end_date" in job:
-        when += f"(到 {job['end_date']})"
+        when += _(" (until {date})", date=job['end_date'])
     if "every_minutes" in job:
-        return f"{when} 每 {job['every_minutes']} 分鐘" + (f"({job['between']})" if "between" in job else "")
+        return (_("{when} every {n} minutes", when=when, n=job['every_minutes'])
+                + (_(" ({between})", between=job['between']) if "between" in job else ""))
     return f"{when} {job['time']}"
 
 
 def next_run(job: dict, state: dict, now: datetime.datetime) -> str:
     if not job.get("enabled", True):
-        return "暫停中"
+        return _("paused")
     if "every_minutes" in job:
         last = state.get(f"{job['name']}.last_ok")
         if not last:
-            return "下一個 tick"
+            return _("next tick")
         nxt = datetime.datetime.fromisoformat(last) + datetime.timedelta(minutes=job["every_minutes"])
-        return fmt_dt(nxt) + (f"(只在 {job['between']})" if "between" in job else "")
+        return fmt_dt(nxt) + (_(" (only {between})", between=job['between']) if "between" in job else "")
     hh, mm = map(int, job["time"].split(":"))
     for i in range(0, 400):
         d = now.date() + datetime.timedelta(days=i)
@@ -99,14 +108,15 @@ def next_run(job: dict, state: dict, now: datetime.datetime) -> str:
         if i == 0 and state.get(job["name"]) == d.isoformat():
             continue  # 今天已經跑完
         if i == 0 and now >= due:
-            return "今天(等下一個 tick 或已達重試上限)"
+            return _("today (waiting for the next tick, or out of retries)")
         return fmt_dt(due)
-    return "不會再跑"
+    return _("never again")
 
 
 def fmt_dt(t: datetime.datetime) -> str:
     today = datetime.date.today()
-    day = {0: "今天", 1: "明天"}.get((t.date() - today).days, f"{t:%m/%d}(週{WEEKDAY_ZH[t.weekday()]})")
+    day = {0: _("today"), 1: _("tomorrow")}.get((t.date() - today).days,
+                                                _("{weekday} {date:%m/%d}", weekday=weekday_name(t.weekday()), date=t))
     return f"{day} {t:%H:%M}"
 
 
@@ -171,47 +181,52 @@ def main() -> None:
 
     alerts, rows, report_blocks = [], [], []
     if not alive:
-        alerts.append(("bad", "排程器(local.agent-hub-scheduler)沒有載入,所有排程都停了。在 mini 上跑 schedulectl start"))
+        alerts.append(("bad", _("The scheduler (local.agent-hub-scheduler) is not loaded: nothing scheduled runs. "
+                                "On the hub machine run schedulectl start")))
     else:
         # scheduler.py 只在有 job 要跑時才寫 log,但每個 tick 都會存狀態檔——用它的修改時間判斷
         # 排程器還有沒有在跑(用 log 判斷,半夜沒 job 的時段會誤報)
         tick = datetime.datetime.fromtimestamp(STATE.stat().st_mtime) if STATE.exists() else None
         if tick is None or now - tick > datetime.timedelta(minutes=40):
-            alerts.append(("bad", f"排程器最後一次 tick 是 {tick:%m/%d %H:%M},超過 40 分鐘沒動靜" if tick
-                           else "找不到排程器的狀態檔"))
+            alerts.append(("bad", _("The scheduler's last tick was {tick:%m/%d %H:%M}, over 40 minutes ago", tick=tick) if tick
+                           else _("The scheduler's state file is missing")))
 
     # 排程器的看門狗(scheduler-watchdog.py,獨立的 launchd job):這頁是排程器自己產生的,
     # 排程器停了這頁也不會更新——真正會叫的是看門狗,所以它沒在顧要在這裡講
     sm = hubconf.service_manager()
     if sm == "systemd" and __import__("systemd_units").state("local.agent-hub-scheduler-watchdog") != "running":
-        alerts.append(("bad", "排程器看門狗(local.agent-hub-scheduler-watchdog.timer)沒有在排:排程器停了不會有人通知。"
-                              "跑 agenthub init"))
+        alerts.append(("bad", _("The scheduler watchdog (local.agent-hub-scheduler-watchdog.timer) is not scheduled: "
+                                "nobody is told when the scheduler stops. Run agenthub init")))
     elif sm is None:
-        alerts.append(("bad", f"{hubconf.NO_SERVICE_MANAGER}。"))
+        alerts.append(("bad", _("{text}.", text=hubconf.NO_SERVICE_MANAGER)))
     elif sm == "launchd" and subprocess.run(["launchctl", "print", f"gui/{os.getuid()}/local.agent-hub-scheduler-watchdog"],
                                             capture_output=True).returncode != 0:
-        alerts.append(("bad", "排程器看門狗(local.agent-hub-scheduler-watchdog)沒有載入:排程器停了不會有人通知。"
-                              "在 mini 上跑 bin/recover-service.sh local.agent-hub-scheduler-watchdog"))
+        alerts.append(("bad", _("The scheduler watchdog (local.agent-hub-scheduler-watchdog) is not loaded: nobody is told "
+                                "when the scheduler stops. On the hub machine run "
+                                "bin/recover-service.sh local.agent-hub-scheduler-watchdog")))
     elif not hubconf.get("alerts"):
-        alerts.append(("notify", "沒設定警報(hub.json 沒有 alerts):排程器停了、服務掛了只會寫在這頁跟 log,不會通知你"))
+        alerts.append(("notify", _("No alerts set up (hub.json has no alerts): a stopped scheduler or a dead service only "
+                                   "shows on this page and in the log, nobody is notified")))
     elif not all((hubconf.secrets_dir() / f).exists() for f in ("discord-token", "discord-alert-channel")):
-        alerts.append(("bad", "排程器看門狗沒設定 Discord(.secrets/discord-token、.secrets/discord-alert-channel),"
-                              "排程器停了發不出警報"))
+        alerts.append(("bad", _("The scheduler watchdog has no Discord settings (.secrets/discord-token, .secrets/discord-alert-channel): "
+                                "it cannot alert when the scheduler stops")))
 
     # 警報發不出去(bin/alert.py 記的;Discord token 失效、網路斷了…):不能默默算了
     try:
         import alert
         for key, f in sorted(alert.failures().items()):
-            alerts.append(("bad", f"Discord 警報發不出去({key},{f.get('at', '')[:16]}):{f.get('text', '')}"
-                                  "——確認 .secrets/discord-token 還能用;下次會再試"))
+            alerts.append(("bad", _("A Discord alert could not be sent ({key}, {at}): {text}. Check that .secrets/discord-token "
+                                    "still works; it is tried again next time",
+                                    key=key, at=f.get('at', '')[:16], text=f.get('text', ''))))
     except Exception as e:  # 狀態頁不能因為這個掛掉
-        alerts.append(("bad", f"讀不到警報狀態:{e}"))
+        alerts.append(("bad", _("Cannot read the alert state: {e}", e=e)))
 
     # 第二階段:無人值守的 agent job 要在登錄宣告 allow:(dontAsk);還沒宣告的列出來(暫時是 auto)
     legacy_auto = [j["name"] for j in jobs if "run-agent-job.sh" in j["command"] and "AGENT_JOB_ALLOW=" not in j["command"]
                    and j.get("enabled", True)]
     if legacy_auto:
-        alerts.append(("notify", f"這些 Claude job 還沒在登錄宣告 allow:(無人值守時用 auto,不是 dontAsk):{', '.join(legacy_auto)}"))
+        alerts.append(("notify", _("These Claude jobs have not declared allow: in the registry (unattended they run in auto, "
+                                   "not dontAsk): {jobs}", jobs=', '.join(legacy_auto))))
 
     config_note = ""
     try:  # config pipeline(new-user.md 3.7):生效的是哪個 config commit,改了還沒套用就提醒
@@ -220,17 +235,21 @@ def main() -> None:
         rec = json.loads(appliers.applied_path().read_text()) if appliers.applied_path().exists() else None
         config_note = f" · config {rec['commit'][:7]}" if rec else ""
         if rec and not rec.get("ok", True):
-            alerts.append(("bad", f"上一次 hub config apply 套用完還有沒對齊的({rec.get('at', '')[:16]}):bin/hub config plan 看是哪些"))
+            alerts.append(("bad", _("The last hub config apply left things out of line ({at}): bin/hub config plan shows "
+                                    "which", at=rec.get('at', '')[:16])))
         elif rec and rec["commit"] != cur:
-            alerts.append(("notify", f"config 改過還沒用 hub config apply 套用(生效 {rec['commit'][:7]},現在 {cur[:7]}"
-                                     f"{'+未 commit' if cur.endswith('+dirty') else ''});每 15 分鐘的 job 會補上服務跟專案設定,"
-                                     "跑一次 bin/hub config apply 才會記錄"))
+            alerts.append(("notify", _("config changed and not applied with hub config apply (in effect {applied}, now "
+                                       "{current}{dirty}); the 15-minute jobs catch up services and project settings, but "
+                                       "only a run of bin/hub config apply records it", applied=rec['commit'][:7],
+                                       current=cur[:7], dirty=_("+uncommitted") if cur.endswith('+dirty') else '')))
     except Exception as e:
-        alerts.append(("bad", f"讀不到 config 的套用紀錄:{e}"))
+        alerts.append(("bad", _("Cannot read the config apply record: {e}", e=e)))
 
     for proj, errs in sorted(reg_info["errors"].items()):
-        alerts.append(("bad", f"專案登錄 {proj} 不合格(沿用上一份合格的,沒有就不排它的 job):" + ";".join(errs[:4])
-                              + (f"……共 {len(errs)} 項" if len(errs) > 4 else "") + "。`bin/registry.py check " + proj + "`"))
+        alerts.append(("bad", _("Registry entry {project} is invalid (the last valid one is used; with none, its jobs are "
+                                "not scheduled): {errors}{more}. `bin/registry.py check {project}`", project=proj,
+                                errors=_("; ").join(errs[:4]),
+                                more=_("... {n} in all", n=len(errs)) if len(errs) > 4 else "")))
 
     for job in jobs:
         name = job["name"]
@@ -244,18 +263,19 @@ def main() -> None:
             last = (st.get("started_at") or "")[5:16].replace("T", " ")
             detail = st.get("summary") or st.get("error") or ""
             if st.get("state") == "failed":
-                alerts.append(("bad", f"{name} 失敗:{st.get('error') or st.get('stderr') or ''}"))
+                alerts.append(("bad", _("{name} failed: {error}", name=name, error=st.get('error') or st.get('stderr') or '')))
             fin = st.get("finished_at") or ""
             if st.get("notify") == "yes" and fin and \
                     now - datetime.datetime.fromisoformat(fin).replace(tzinfo=None) < datetime.timedelta(days=7):
-                alerts.append(("notify", f"{name}:{st.get('summary', '')}"))
+                alerts.append(("notify", _("{name}: {summary}", name=name, summary=st.get('summary', ''))))
             if (AGENT_JOBS / aname / "STOP").exists():
-                detail = "已自行停止:" + (AGENT_JOBS / aname / "STOP").read_text().strip()[:120]
+                detail = _("Stopped itself: {reason}", reason=(AGENT_JOBS / aname / "STOP").read_text().strip()[:120])
         elif result.startswith("failed"):
             # 下一個 tick 成功就不算;只在最後一次是失敗時提醒
-            alerts.append(("bad", f"{name} 最後一次執行失敗({result}),log:.logs/{name.replace('/', '__')}-<日期>.log"))
+            alerts.append(("bad", _("{name} failed on its last run ({result}), log: .logs/{log}-<date>.log", name=name,
+                                    result=result, log=name.replace('/', '__'))))
         cls = {"ok": "ok", "running": "run"}.get(result, "bad" if result.startswith("failed") else "")
-        label = {"ok": "成功", "running": "執行中", "failed": "失敗"}.get(result.split(" ")[0], result or "—")
+        label = {"ok": _("succeeded"), "running": _("running"), "failed": _("failed")}.get(result.split(" ")[0], result or "—")
         rows.append(
             f"<tr class='{'off' if not job.get('enabled', True) else ''}'>"
             f"<td><b>{esc(name)}</b>{' <span class=tag>Claude</span>' if is_agent else ''}"
@@ -274,14 +294,15 @@ def main() -> None:
 
     # 加密雲端備份(bin/backup.py):最後一次成功太久、還原測試太久都標紅
     bdir = HUB / ".state" / "backup"
-    for fname, limit_h, what in (("last.json", 36, "備份"), ("last-verify.json", 40 * 24, "還原測試")):
+    for fname, limit_h, what in (("last.json", 36, _("backup")), ("last-verify.json", 40 * 24, _("restore test"))):
         f = bdir / fname
         try:
             at = datetime.datetime.fromisoformat(json.loads(f.read_text())["at"]).replace(tzinfo=None)
             if now - at > datetime.timedelta(hours=limit_h):
-                alerts.append(("bad", f"最後一次成功的{what}是 {at:%m/%d %H:%M},太久了(看 .logs/backup__backup*)"))
+                alerts.append(("bad", _("The last successful {what} was {at:%m/%d %H:%M}, too long ago "
+                                        "(see .logs/backup__backup*)", what=what, at=at)))
         except (OSError, ValueError, KeyError):
-            alerts.append(("bad", f"還沒有成功的{what}紀錄(.state/backup/{fname})"))
+            alerts.append(("bad", _("No successful {what} on record yet (.state/backup/{fname})", what=what, fname=fname)))
 
     # 專案信箱/事件匯流排(bin/hubbus):卡住的信、送不進 Muninn 的、壞掉被移開的 bus.db
     mail_html = ""
@@ -290,24 +311,28 @@ def main() -> None:
         bus = json.loads(r.stdout)
     except ValueError:
         bus = None
-        alerts.append(("bad", f"讀不到專案信箱狀態(hubbus status exit {r.returncode}):{r.stderr.strip()[-160:]}"))
+        alerts.append(("bad", _("Cannot read the project mailbox state (hubbus status exit {code}): {stderr}",
+                                code=r.returncode, stderr=r.stderr.strip()[-160:])))
     if bus:
         for st in bus["stuck"]:
-            alerts.append(("bad", f"信 {st['id']} 寄給 {st['to']} 超過 1 小時沒有 session 收、平台也沒接手(看 hubbus dispatch 的 log、每日上限)"))
+            alerts.append(("bad", _("Letter {id} to {to}: over an hour with no session taking it and the platform not "
+                                    "handling it (see the hubbus dispatch log, the daily limit)", id=st['id'], to=st['to'])))
         tm = bus["to_muninn"]
         if tm["n"] and now - datetime.datetime.fromisoformat(tm["oldest"]).replace(tzinfo=None) > datetime.timedelta(hours=1):
-            alerts.append(("bad", f"{tm['n']} 則要送進 Muninn 的(給 knas 的信、轉交結案)卡住了,最舊 {tm['oldest'][5:16]};"
-                                  "看 .state/bus/hubbus.log"))
+            alerts.append(("bad", _("{n} items for the assistant (letters to the owner, handoff closures) are stuck, the "
+                                    "oldest {oldest}; see .state/bus/hubbus.log", n=tm['n'], oldest=tm['oldest'][5:16])))
         for f in bus["job_failed_24h"]:
             if f.get("job") == "hubbus-bridge":
-                alerts.append(("bad", f"hubbus:{f.get('detail', '')}"))
+                alerts.append(("bad", _("hubbus: {detail}", detail=f.get('detail', ''))))
         if bus["corrupt"]:
-            alerts.append(("bad", f"bus.db 壞過,舊檔移到 {', '.join(bus['corrupt'])}(裡面還沒收的信不見了)"))
+            alerts.append(("bad", _("bus.db was corrupt; the old file moved to {files} (the letters in it not yet "
+                                    "received are lost)", files=', '.join(bus['corrupt']))))
         mail_rows = "".join(f"<tr><td>{esc(p)}</td><td>{v['open']}</td><td>{v['undelivered']}</td>"
                             f"<td>{esc(v['oldest'][5:16].replace('T', ' '))}</td></tr>" for p, v in bus["projects"].items())
-        mail_html = ("<h2 style=\"font-size:18px;margin-top:28px\">專案信箱</h2>"
-                     + (f"<table><tr><th>收件</th><th>沒結案</th><th>還沒送進 session</th><th>最舊</th></tr>{mail_rows}</table>"
-                        if mail_rows else "<div class=sub>沒有沒結案的信</div>"))
+        mail_html = (f"<h2 style=\"font-size:18px;margin-top:28px\">{_('Project mailboxes')}</h2>"
+                     + (f"<table><tr><th>{_('To')}</th><th>{_('Open')}</th><th>{_('Not yet in a session')}</th>"
+                        f"<th>{_('Oldest')}</th></tr>{mail_rows}</table>"
+                        if mail_rows else f"<div class=sub>{_('No open letters')}</div>"))
 
     # 平行 session 的 worktree / 合併閘門(bin/worktrees.py、bin/merge-branch)
     wt_html = ""
@@ -317,19 +342,24 @@ def main() -> None:
         wt_rows = []
         for proj, info in ov.items():
             for w in info["worktrees"]:
-                state_txt = "已合併" + (",可以清(bin/prune-worktrees)" if w["clean"] else ",有沒 commit 的改動") if w["merged"] \
-                    else f"進行中,改了 {len(w['files'])} 個檔"
+                state_txt = _("merged") + (_(", can be cleaned up (bin/prune-worktrees)") if w["clean"]
+                                           else _(", has uncommitted changes")) if w["merged"] \
+                    else _("in progress, {n} files changed", n=len(w['files']))
                 hot = any(f in info["overlaps"] for f in w["files"]) and not w["merged"]
-                wt_rows.append(f"<tr><td>{esc(proj)}</td><td>{esc(w['branch'])}</td><td>{w['age_days']} 天前</td>"
-                               f"<td{' class=\'st bad\'' if hot else ''}>{esc(state_txt)}{'(跟別的 branch 改同一個檔)' if hot else ''}</td></tr>")
+                wt_rows.append(f"<tr><td>{esc(proj)}</td><td>{esc(w['branch'])}</td><td>{_('{n} days ago', n=w['age_days'])}</td>"
+                               f"<td{' class=\'st bad\'' if hot else ''}>{esc(state_txt)}"
+                               f"{_(' (another branch changes the same file)') if hot else ''}</td></tr>")
             for f, bs in info["overlaps"].items():
-                alerts.append(("bad", f"{proj}:{len(bs)} 個還沒合併的 branch 都改了 {f}({', '.join(bs)}),後合併的那個 rebase 會撞"))
+                alerts.append(("bad", _("{project}: {n} unmerged branches all change {file} ({branches}); the one merged "
+                                        "later will collide on rebase", project=proj, n=len(bs), file=f, branches=', '.join(bs))))
         ungated = {p: i["ungated_main_7d"] for p, i in ov.items() if i["ungated_main_7d"]}
-        wt_html = ("<h2 style=\"font-size:18px;margin-top:28px\">平行 session(worktree)</h2>"
-                   + (f"<table><tr><th>專案</th><th>branch</th><th>最後 commit</th><th>狀態</th></tr>{''.join(wt_rows)}</table>"
-                      if wt_rows else "<div class=sub>沒有進行中的 worktree</div>")
-                   + ("<div class=sub style='margin-top:8px'>最近 7 天直接 commit 到 main(沒經過 merge-branch):"
-                      + "、".join(f"{esc(p)} {n}" for p, n in sorted(ungated.items())) + "</div>" if ungated else "")
+        wt_html = (f"<h2 style=\"font-size:18px;margin-top:28px\">{_('Parallel sessions (worktrees)')}</h2>"
+                   + (f"<table><tr><th>{_('Project')}</th><th>branch</th><th>{_('Last commit')}</th><th>{_('State')}</th></tr>"
+                      f"{''.join(wt_rows)}</table>"
+                      if wt_rows else f"<div class=sub>{_('No worktrees in progress')}</div>")
+                   + ("<div class=sub style='margin-top:8px'>"
+                      + _("Committed straight to main in the last 7 days (not through merge-branch): {list}",
+                          list=_(", ").join(f"{esc(p)} {n}" for p, n in sorted(ungated.items()))) + "</div>" if ungated else "")
                    + prune_line())
         import hubconf
         bus_db = hubconf.bus_db()
@@ -339,15 +369,18 @@ def main() -> None:
                     "SELECT payload FROM events WHERE type='merge.failed' AND ts > ? ORDER BY seq DESC LIMIT 5",
                     ((now - datetime.timedelta(days=1)).isoformat(),)):
                 f = json.loads(pl)
-                alerts.append(("bad", f"merge-branch 失敗:{f.get('project')} {f.get('branch')}({f.get('stage')}):{(f.get('detail') or '')[:160]}"))
+                alerts.append(("bad", _("merge-branch failed: {project} {branch} ({stage}): {detail}", project=f.get('project'),
+                                        branch=f.get('branch'), stage=f.get('stage'), detail=(f.get('detail') or '')[:160])))
     except Exception as e:  # 一覽壞掉不影響狀態頁其他部分
-        wt_html = f"<div class=sub>worktree 一覽失敗:{esc(repr(e))}</div>"
+        wt_html = f"<div class=sub>{_('Worktree overview failed: {e}', e=esc(repr(e)))}</div>"
 
     alert_html = "".join(f"<div class='alert {c}'>{'🔔' if c == 'notify' else '⚠️'} {esc(t)}</div>"
-                         for c, t in alerts) or "<div class='alert good'>✅ 沒有需要處理的事</div>"
+                         for c, t in alerts) or f"<div class='alert good'>✅ {_('Nothing needs attention')}</div>"
+    generated = _("the hub machine · generated {now:%Y-%m-%d %H:%M} · refreshes every 5 minutes · schedules are defined "
+                  "in the project registry (projects/) and schedule.yaml", now=now)
     page = f"""<!doctype html><html lang="zh-Hant"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1"><meta http-equiv="refresh" content="300">
-<title>排程狀態</title><style>
+<title>{_('Schedule status')}</title><style>
 :root{{--bg:#fafaf9;--fg:#1c1917;--mut:#78716c;--line:#e7e5e4;--card:#fff;--ok:#15803d;--bad:#b91c1c;--run:#1d4ed8;--warn:#fef3c7}}
 @media (prefers-color-scheme:dark){{:root{{--bg:#1c1917;--fg:#f5f5f4;--mut:#a8a29e;--line:#44403c;--card:#292524;--ok:#4ade80;--bad:#f87171;--run:#93c5fd;--warn:#422006}}}}
 body{{margin:0;background:var(--bg);color:var(--fg);font:15px/1.5 -apple-system,"PingFang TC",sans-serif}}
@@ -365,13 +398,13 @@ details{{background:var(--card);border:1px solid var(--line);border-radius:8px;m
 summary{{cursor:pointer;color:var(--mut)}} pre{{white-space:pre-wrap;word-break:break-word;font:14px/1.55 -apple-system,"PingFang TC",sans-serif}}
 @media (max-width:640px){{td:nth-child(2),th:nth-child(2){{display:none}}}}
 </style></head><body><main>
-<h1>排程狀態</h1><div class=sub><a href="digest.html">digest</a> · <a href="todo.html">待辦</a> · <a href="reflect/">每週回顧</a></div><div class=sub>mini · 產生於 {now:%Y-%m-%d %H:%M} · 每 5 分鐘自動重新整理 · 排程定義在專案登錄(projects/)跟 schedule.yaml{config_note}</div>
+<h1>{_('Schedule status')}</h1><div class=sub><a href="digest.html">digest</a> · <a href="todo.html">{_('To-do')}</a> · <a href="reflect/">{_('Weekly review')}</a></div><div class=sub>{generated}{config_note}</div>
 {alert_html}
-<table><tr><th>Job</th><th>時間</th><th>上次</th><th>下次</th></tr>{''.join(rows)}</table>
+<table><tr><th>Job</th><th>{_('When')}</th><th>{_('Last')}</th><th>{_('Next')}</th></tr>{''.join(rows)}</table>
 {mail_html}
 {wt_html}
-<h2 style="font-size:18px;margin-top:28px">Claude job 報告</h2>
-{''.join(report_blocks) or '<div class=sub>還沒有報告</div>'}
+<h2 style="font-size:18px;margin-top:28px">{_('Claude job reports')}</h2>
+{''.join(report_blocks) or f"<div class=sub>{_('No reports yet')}</div>"}
 </main></body></html>"""
     OUT.parent.mkdir(parents=True, exist_ok=True)
     tmp = OUT.with_suffix(".tmp")
@@ -390,7 +423,11 @@ section{background:var(--card);border:1px solid var(--line);border-radius:8px;pa
 h1{font-size:22px;margin:8px 0} h2{font-size:18px} h3{font-size:16px} code{font-size:14px;background:var(--line);padding:0 3px;border-radius:3px}
 li{margin:2px 0} .sub{color:var(--mut);font-size:13px}"""
 REFLECT_LINK = "reflect"   # 狀態頁資料夾裡連到 data 的 reflect/ 的連結名稱
-NAV = '<nav><a href="index.html">排程狀態</a> · <a href="digest.html">digest</a> · <a href="todo.html">待辦</a> · <a href="reflect/">每週回顧</a></nav>'
+
+
+def nav() -> str:
+    return (f'<nav><a href="index.html">{_("Schedule status")}</a> · <a href="digest.html">digest</a> · '
+            f'<a href="todo.html">{_("To-do")}</a> · <a href="reflect/">{_("Weekly review")}</a></nav>')
 
 
 def md_html(text: str) -> str:
@@ -425,17 +462,18 @@ def md_html(text: str) -> str:
 def reading_page(title: str, body: str, now) -> str:
     return (f'<!doctype html><html lang="zh-Hant"><head><meta charset="utf-8"><meta name="viewport" '
             f'content="width=device-width,initial-scale=1"><title>{esc(title)}</title><style>{PAGE_CSS}</style></head>'
-            f'<body><main><h1>{esc(title)}</h1>{NAV}<div class=sub>產生於 {now:%Y-%m-%d %H:%M}</div>{body}</main></body></html>')
+            f'<body><main><h1>{esc(title)}</h1>{nav()}<div class=sub>{_("generated {now:%Y-%m-%d %H:%M}", now=now)}</div>'
+            f'{body}</main></body></html>')
 
 
 def write_reading_pages(now) -> None:
     out = OUT.parent
     days = sorted(hubconf.data_file("digest").glob("20*.md"), reverse=True)[:7]
-    body = "".join(f"<section>{md_html(f.read_text())}</section>" for f in days) or "<p class=sub>還沒有 digest</p>"
-    (out / "digest.html").write_text(reading_page("digest(最近 7 天)", body, now))
+    body = "".join(f"<section>{md_html(f.read_text())}</section>" for f in days) or f"<p class=sub>{_('No digest yet')}</p>"
+    (out / "digest.html").write_text(reading_page(_("digest (last 7 days)"), body, now))
     todo = hubconf.data_file("todo.md")
-    (out / "todo.html").write_text(reading_page("跨專案待辦", f"<section>{md_html(todo.read_text())}</section>"
-                                                if todo.exists() else "<p class=sub>還沒有 todo.md</p>", now))
+    (out / "todo.html").write_text(reading_page(_("Cross-project to-do"), f"<section>{md_html(todo.read_text())}</section>"
+                                                if todo.exists() else f"<p class=sub>{_('No todo.md yet')}</p>", now))
     link, target = out / REFLECT_LINK, hubconf.data_file("reflect")   # 每週回顧本來就是一個網站:直接連過去
     if target.is_dir() and not (link.is_symlink() and link.resolve() == target.resolve()):
         if link.is_symlink() or link.exists():
