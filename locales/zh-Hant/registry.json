@@ -90,5 +90,7 @@
  "{sender}: manifest.update {mid} applied": "{sender}:manifest.update {mid} 已套用",
  " (keeping the last valid one)": "(沿用上一份合格的)",
  "✓ {name}: {jobs} jobs, {services} services": "✓ {name}:{jobs} 個 job、{services} 個 service",
- "? {name}: not in the registry": "? {name}:登錄裡沒有"
+ "? {name}: not in the registry": "? {name}:登錄裡沒有",
+ "the registry index was built from {old} and this process sees {dir}; not rebuilt (another config reaching this hub's state?). If the registry really moved: registry.py check --rebuild": "專案登錄的 index 是從 {old} 產生的,這個程序看到的卻是 {dir};不重建(別的 config 碰到了這個 hub 的 state?)。登錄真的搬家了就跑:registry.py check --rebuild",
+ "{dir} has no project files, but the registry index lists {n} projects; not rebuilt. If they really were all removed: registry.py check --rebuild": "{dir} 裡沒有任何專案的登錄檔,index 卻有 {n} 個專案;不重建。真的全部拿掉了就跑:registry.py check --rebuild"
 }

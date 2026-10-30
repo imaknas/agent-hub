@@ -72,7 +72,8 @@ def check(root: pathlib.Path) -> list[str]:
     index = registry.refresh()
     for name, es in sorted(index["errors"].items()):
         where = (f"modules/{name.split(':', 1)[1]}.yaml" if name.startswith("module:")
-                 else _("schedule (after/before)") if name == "(jobs)" else f"projects/{name}.yaml")
+                 else _("schedule (after/before)") if name == "(jobs)" else "registry" if name == "(registry)"
+                 else f"projects/{name}.yaml")
         errs += [_("{where}: {error}", where=where, error=e) for e in es]
 
     if (root / "models.env").exists():   # 10-29 起模型設定只在 hub.json(llm.model_for),這份不再有人讀
@@ -135,11 +136,13 @@ def main(argv: list[str]) -> int:
     elif argv == ["--staged"]:
         if not any(CONFIG.match(p) for p in git("diff", "--cached", "--name-only").splitlines()):
             return 0
-        with tempfile.TemporaryDirectory() as d:
+        # the child gets its own state too: registry.refresh() writes the index it builds into STATE, and the real one
+        # rebuilt from the export (in the platform repo: only agent-hub.yaml) dropped every project until the next tick
+        with tempfile.TemporaryDirectory() as d, tempfile.TemporaryDirectory() as state:
             git("checkout-index", "-a", f"--prefix={d}/")
             env = {k: v for k, v in os.environ.items() if not k.startswith("GIT_")}
             r = subprocess.run([str(BIN / "py"), str(pathlib.Path(__file__).resolve()), "--child"],  # 這支驗匯出的 config
-                               env={**env, "AGENT_HUB_CONFIG": d}, capture_output=True, text=True)
+                               env={**env, "AGENT_HUB_CONFIG": d, "AGENT_HUB_STATE": state}, capture_output=True, text=True)
         sys.stdout.write(r.stdout)
         sys.stderr.write(r.stderr)
         if r.returncode == 0:

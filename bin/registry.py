@@ -54,6 +54,7 @@ schema v1(contracts/project.v1.md 有完整說明):
 檔案、PATH 上的指令、或存在的絕對路徑)都算不合格。
 
 用法:registry.py [check [name...]]   驗證並更新快取,印出結果
+      registry.py check --rebuild         rebuild even from another or an empty registry dir (wrong_registry())
       registry.py add <name> <workspace> <origin> <memory_bare> [--extra <JSON>]
                                           onboard 時新增(已存在就不動;extra 蓋過預設欄位,驗證不過不寫)
       registry.py rename <old> <new> <workspace> <origin> <memory_bare> 改名(檔案、prompt 目錄一起搬)
@@ -420,11 +421,36 @@ def roster_mismatch(doc, text: str) -> list[str]:
               "next line): the reader that does not use YAML got {got}, YAML has {want}", got=got, want=want)]
 
 
-def refresh(only: list[str] | None = None) -> dict:
+def wrong_registry(old: dict, reg: pathlib.Path, files: list[pathlib.Path]) -> str | None:
+    """Why this process must not rebuild the index (None = it may). The index lives in STATE, which follows the hub root,
+    not the config: a process with another config (a test's, an empty HOME's) that reaches the real STATE would
+    otherwise rebuild it from its own registry and drop every project (10-30, between 11:49 and 11:53, nobody could
+    send). So an index that has projects is only rebuilt from the registry dir it was built from, and never from an
+    empty one; `registry.py check --rebuild` is for when that really changed."""
+    if not any(n != hubconf.hub_project() for n in old.get("projects") or {}):
+        return None
+    if old.get("registry_dir") not in (None, str(reg.resolve())):
+        return _("the registry index was built from {old} and this process sees {dir}; not rebuilt (another config "
+                 "reaching this hub's state?). If the registry really moved: registry.py check --rebuild",
+                 old=old["registry_dir"], dir=reg)
+    if not [f for f in files if f.stem != hubconf.hub_project()]:
+        return _("{dir} has no project files, but the registry index lists {n} projects; not rebuilt. If they really "
+                 "were all removed: registry.py check --rebuild", dir=reg, n=len(old["projects"]))
+    return None
+
+
+def refresh(only: list[str] | None = None, rebuild: bool = False) -> dict:
     """驗證全部登錄、更新快取跟 index.json,回傳 index。"""
     CACHE.mkdir(parents=True, exist_ok=True)
     reg = hubconf.registry_dir()
     files = sorted(reg.glob("*.yaml")) if reg.is_dir() else []
+    try:
+        old = json.loads((CACHE / "index.json").read_text())
+    except (OSError, ValueError):
+        old = {}
+    if not rebuild and (why := wrong_registry(old, reg, files)):
+        print(f"registry: {why}", file=sys.stderr)
+        return {**old, "errors": {**(old.get("errors") or {}), "(registry)": [why]}}
     # 平台自己的登錄不管 registry_dir 在哪都讀,而且一律用平台 repo 那份:使用者的登錄裡同名的檔(例:搬家時多複製的)
     # 不採用,不然平台更新了自己的登錄也不會生效
     plat = hubconf.platform_registry()
@@ -453,7 +479,7 @@ def refresh(only: list[str] | None = None) -> dict:
             c.unlink()
     modules, mod_errors = load_modules()
     errors.update(mod_errors)
-    index = {"v": 1, "generated": datetime.datetime.now().isoformat(timespec="seconds"),
+    index = {"v": 1, "generated": datetime.datetime.now().isoformat(timespec="seconds"), "registry_dir": str(reg.resolve()),
              "projects": projects, "modules": modules, "errors": errors}
     if (cycles := job_cycles(index)):
         errors["(jobs)"] = [_("after:/before: form a cycle, these jobs would wait for each other forever: {cycle}", cycle=c)
@@ -641,7 +667,9 @@ def main() -> int:
         return cmd_apply_updates()
     if args and args[0] == "check":
         args = args[1:]
-    index = refresh()
+    rebuild = "--rebuild" in args
+    args = [x for x in args if x != "--rebuild"]
+    index = refresh(rebuild=rebuild)
     names = args or sorted(set(index["projects"]) | set(index["errors"]))
     bad = 0
     for n in names:

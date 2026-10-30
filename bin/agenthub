@@ -66,6 +66,7 @@ import plistlib
 import shutil
 import subprocess
 import sys
+import tempfile
 
 BIN = pathlib.Path(__file__).resolve().parent
 sys.path.insert(0, str(BIN))
@@ -397,7 +398,11 @@ def cmd_move_instance(argv: list[str]) -> int:
     cfg_path.write_text(json.dumps(cfg, ensure_ascii=False, indent=2) + "\n")
     env = {**os.environ, "AGENT_HUB_HOME": str(home)}
     # 驗證新擺法(還沒寫指標檔:用 AGENT_HUB_HOME 指過去)
-    r = subprocess.run(hubconf.launch(BIN / "config-check"), env=env, capture_output=True, text=True)
+    # in a state of its own: the real registry index is rebuilt from the new place once the pointer is written
+    check_state = tempfile.mkdtemp()
+    r = subprocess.run(hubconf.launch(BIN / "config-check"), env={**env, "AGENT_HUB_STATE": check_state},
+                       capture_output=True, text=True)
+    shutil.rmtree(check_state, ignore_errors=True)
     print(r.stdout.strip() or r.stderr.strip())
     if r.returncode != 0:
         print(_("the config in the new layout is invalid; not writing {pointer} (the copies are in {home}; delete them and "
@@ -418,6 +423,8 @@ def cmd_move_instance(argv: list[str]) -> int:
         print(_("the config repo's first commit failed: {error}", error=(r.stdout + r.stderr).strip()[:400]), file=sys.stderr)
         return 1
     hubconf.POINTER.write_text(str(home) + "\n")   # 最後才寫:從這一刻起平台用新擺法;刪掉它就退回
+    # the registry dir moved with the config: rebuild the index from it on purpose (refresh() refuses another dir)
+    subprocess.run([*hubconf.launch(BIN / "registry.py"), "check", "--rebuild"], capture_output=True, text=True)
     print(_("\n✓ wrote {pointer}. The old files in the hub are still there (not deleted). Next (for a person):",
             pointer=hubconf.POINTER))
     print(_("  1. bin/hub config plan shows what would change (the secrets path in projects' sandbox settings changes); "
