@@ -29,6 +29,9 @@ import sys
 BIN = pathlib.Path(__file__).resolve().parent
 sys.path.insert(0, str(BIN))
 import hubconf  # noqa: E402
+import i18n  # noqa: E402
+
+_ = i18n.domain(__file__)
 
 PROTOCOL = "2025-06-18"
 TYPES = ["request", "question", "info", "progress", "done"]
@@ -53,11 +56,12 @@ def resolve_project() -> tuple[str | None, str]:
     try:
         name = _hubbus().project_of(pathlib.Path.cwd())
     except Exception as e:   # 平台設定壞了也要回得出 initialize
-        return None, f"讀不到專案登錄:{e}"
+        return None, _("cannot read the project registry: {e}", e=e)
     if name:
         return name, ""
-    return None, (f"工作目錄 {pathlib.Path.cwd()} 不在任何登錄過的專案裡:在專案資料夾裡啟動這個伺服器,"
-                  "或在工具的 MCP 設定給環境變數 AGENTHUB_PROJECT=<專案名稱>")
+    return None, _("the working directory {cwd} is in no registered project: start this server in the project folder, "
+                   "or set the environment variable AGENTHUB_PROJECT=<project name> in the tool's MCP settings",
+                   cwd=pathlib.Path.cwd())
 
 
 def unread(project: str) -> int:
@@ -72,14 +76,14 @@ def unread(project: str) -> int:
 def instructions(project: str | None, why: str) -> str:
     text = hubconf.fill_names((BIN.parent / "templates" / "mcp-instructions.md").read_text())
     if not project:
-        return text.replace("{{project}}", "(認不出來)").replace("{{unread}}", f"⚠️ {why}").replace(
+        return text.replace("{{project}}", _("(unrecognized)")).replace("{{unread}}", f"⚠️ {why}").replace(
             "{{take_timeout}}", "60")
     hb = _hubbus()
     try:
         n = unread(project)
-        line = f"📬 現在有 {n} 封還沒結案的信,先用 inbox 看。" if n else "📭 現在沒有還沒結案的信。"
+        line = _("📬 {n} letters are still open; look with inbox first.", n=n) if n else _("📭 No open letters now.")
     except Exception as e:
-        line = f"(讀不到信箱:{e})"
+        line = _("(cannot read the mailbox: {e})", e=e)
     return (text.replace("{{project}}", project).replace("{{unread}}", line)
             .replace("{{take_timeout}}", str(hb.TAKE_TIMEOUT_MIN)))
 
@@ -118,30 +122,31 @@ def hubbus_cli(project: str, *args: str) -> tuple[bool, str]:
     r = subprocess.run([sys.executable, str(BIN / "hubbus"), *args], capture_output=True, text=True, timeout=60,
                        cwd=os.getcwd())
     out = (r.stdout + ("\n" + r.stderr if r.stderr.strip() else "")).strip()
-    return r.returncode == 0, out or ("好了" if r.returncode == 0 else f"exit {r.returncode}")
+    return r.returncode == 0, out or (_("done") if r.returncode == 0 else f"exit {r.returncode}")
 
 
 def write_note(project: str, text: str) -> tuple[bool, str]:
     ws = hubconf.workspace(project)
     mem = ws / ".agent-memory" / "memory" if ws else None
     if not mem or not mem.parent.is_dir():
-        return False, f"{project} 沒有 memory 資料夾(.agent-memory);這個專案沒有接上 memory 追蹤"
+        return False, _("{project} has no memory folder (.agent-memory); this project is not set up for memory tracking",
+                         project=project)
     mem.mkdir(exist_ok=True)
     f = mem / f"{datetime.date.today().isoformat()}.md"
     line = " ".join(text.split())
     with f.open("a") as fh:
         fh.write(f"- {line}\n")
-    return True, f"寫進 {project} 的 memory/{f.name}(平台會同步)"
+    return True, _("written to memory/{file} of {project} (the platform syncs it)", project=project, file=f.name)
 
 
 def call(project: str | None, why: str, name: str, args: dict) -> tuple[bool, str]:
     if os.environ.get("HUB_LLM_POINT"):
-        return False, ("這是平台叫起的工作(" + os.environ["HUB_LLM_POINT"] + "):要寄的信、要結案的事寫在你的輸出裡,"
-                       "平台會代寄;不要用這個伺服器")
+        return False, _("This is work the platform started ({point}): write the letters to send and what to close in your "
+                       "output, the platform sends them for you; do not use this server", point=os.environ["HUB_LLM_POINT"])
     if not project:
         return False, why
     if name == "inbox":
-        hdr = _hubbus().HEADER.format(n="以下", p=project)
+        hdr = _hubbus().header(_("the following"), project)
         ok, out = hubbus_cli(project, "inbox", "--project", project)
         return ok, f"{hdr}\n\n{out}"
     if name in ("show", "thread"):
@@ -159,7 +164,7 @@ def call(project: str | None, why: str, name: str, args: dict) -> tuple[bool, st
                           "--text", str(args["text"]))
     if name == "note":
         return write_note(project, str(args["text"]))
-    return False, f"沒有這個工具:{name}"
+    return False, _("no such tool: {name}", name=name)
 
 
 def send(msg: dict) -> None:
@@ -169,7 +174,7 @@ def send(msg: dict) -> None:
 
 def serve() -> int:
     project, why = resolve_project()
-    log(f"專案:{project or '(認不出來)'}")
+    log(_("project: {project}", project=project or _("(unrecognized)")))
     for line in sys.stdin:
         try:
             msg = json.loads(line)
@@ -188,9 +193,9 @@ def serve() -> int:
             try:
                 ok, text = call(project, why, params.get("name", ""), params.get("arguments") or {})
             except (KeyError, TypeError) as e:
-                ok, text = False, f"參數不對:{e}"
+                ok, text = False, _("wrong arguments: {e}", e=e)
             except Exception as e:
-                ok, text = False, f"平台出錯:{e!r}"
+                ok, text = False, _("platform error: {e!r}", e=e)
             send({"jsonrpc": "2.0", "id": mid, "result": {"content": [{"type": "text", "text": text}], "isError": not ok}})
         elif mid is not None:   # ping 之類:空結果;notifications(沒有 id)不回
             send({"jsonrpc": "2.0", "id": mid, "result": {}})
@@ -201,9 +206,11 @@ def config() -> int:
     cli = pathlib.Path.home() / ".local" / "bin" / "agenthub"
     entry = ({"command": str(cli), "args": ["mcp"]} if cli.exists()
              else {"command": str(BIN / "py"), "args": [str(BIN / "agenthub"), "mcp"]})
-    print("把這個 stdio MCP 伺服器登記進你的 coding agent(在專案資料夾裡啟動;GUI 開的工具不一定有你的 PATH,所以用絕對路徑):\n")
+    print(_("Register this stdio MCP server in your coding agent (start it in the project folder; a tool opened from the "
+            "GUI may not have your PATH, hence the absolute paths):\n"))
     print(json.dumps({"mcpServers": {"agenthub": entry}}, indent=2))
-    print("\n各工具怎麼加:docs/mcp.md。不在專案資料夾裡啟動的工具,在 env 加 AGENTHUB_PROJECT=<專案名稱>。")
+    print(_("\nHow to add it in each tool: docs/mcp.md. For a tool not started in the project folder, add "
+            "AGENTHUB_PROJECT=<project name> to its env."))
     return 0
 
 
