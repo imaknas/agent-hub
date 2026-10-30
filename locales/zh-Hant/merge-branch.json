@@ -19,5 +19,6 @@
  "pushed": "已 push",
  "not pushed": "沒有 push",
  " (push_on_merge is false)": "(push_on_merge 是 false)",
- "✓ {n} commits of {branch} merged into {base} (tests: {tests}; {push})": "✓ {branch} 的 {n} 個 commit 已合併進 {base}(測試:{tests};{push})"
+ "✓ {n} commits of {branch} merged into {base} (tests: {tests}; {push})": "✓ {branch} 的 {n} 個 commit 已合併進 {base}(測試:{tests};{push})",
+ "merge-branch: {project} is not in the validated project registry, so its test command and commit rules are unknown; nothing was merged. `agenthub config check` rebuilds the registry and says what is wrong": "merge-branch:驗證過的專案登錄裡沒有 {project},不知道它的測試指令跟 commit 規則,所以沒有合併。`agenthub config check` 會重建登錄、說哪裡有問題"
 }

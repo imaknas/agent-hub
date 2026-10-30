@@ -116,6 +116,28 @@ class MergeGate(unittest.TestCase):
         r = self.merge()
         self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
 
+    def test_a_project_missing_from_the_registry_is_not_merged(self):
+        """10-30: a project was briefly missing from the index; merge-branch --project skipped its tests and merged"""
+        self.register(commits="conventional")
+        (self.tmp / "config" / "projects" / "demo.yaml").unlink()
+        subprocess.run([sys.executable, str(BIN / "registry.py"), "check", "--rebuild"], env=self.env, capture_output=True,
+                       timeout=60)
+        self.commit(self.wt, "b", "Update stuff")
+        r = subprocess.run([sys.executable, str(BIN / "merge-branch"), "--project", "demo"], cwd=self.wt, env=self.env,
+                           capture_output=True, text=True, timeout=120)
+        self.assertEqual(r.returncode, 1, r.stdout + r.stderr)
+        self.assertIn("not in the validated project registry", r.stderr)
+        self.assertEqual(self.git(self.ws, "log", "--format=%s", "-1").strip(), "chore: initial commit", "main untouched")
+
+    def test_roster_paths_alone_are_not_enough(self):
+        """no index yet: hubconf.projects() falls back to roster(), which knows the folder but not the tests"""
+        (self.tmp / "config" / "projects" / "demo.yaml").write_text(
+            f"v: 1\nname: demo\npaths:\n  workspace: {self.ws}\nruntime:\n  test: 'false'\n")
+        self.commit(self.wt, "b", "feat: b")
+        r = self.merge()
+        self.assertEqual(r.returncode, 1, r.stdout + r.stderr)
+        self.assertIn("not in the validated project registry", r.stderr)
+
 
 if __name__ == "__main__":
     unittest.main()
