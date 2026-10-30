@@ -7,6 +7,7 @@ import datetime
 import pathlib
 import sys
 import unittest
+from unittest import mock
 
 ROOT = pathlib.Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "bin"))
@@ -77,6 +78,7 @@ class Validate(unittest.TestCase):
         m = module("w", [{"name": "a", "at": "03:00", "cwd": "workspace", "run": "/bin/echo"}])
         self.assertTrue(any("cwd" in e for e in registry.validate_module(m, "w")))
 
+    @mock.patch.dict("os.environ", {"AGENT_HUB_LANG_UI": "zh-Hant"})
     def test_shipped_modules_are_valid(self):
         import yaml
         for f in sorted((ROOT / "modules").glob("*.yaml")):

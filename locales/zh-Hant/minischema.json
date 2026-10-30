@@ -1,0 +1,15 @@
+{
+ "{path}: not allowed": "{path}:不允許",
+ "{path}: unsupported $ref {ref}": "{path}:不支援的 $ref {ref}",
+ "{path}: the type must be {type}, got {actual}": "{path}:型別要是 {type},實際是 {actual}",
+ "{path}: must be {const!r}": "{path}:要是 {const!r}",
+ "{path}: {value!r} is not in {enum}": "{path}:{value!r} 不在 {enum}",
+ "{path}: {value!r} does not match {pattern}": "{path}:{value!r} 不符合 {pattern}",
+ "{path}: too short": "{path}:太短",
+ "{path}: too long": "{path}:太長",
+ "{path}: must be >= {minimum}": "{path}:要 >= {minimum}",
+ "{path}: missing {key}": "{path}:缺 {key}",
+ "{path}: unexpected {key}": "{path}:多了 {key}",
+ "{path}: needs at least {n} items": "{path}:至少 {n} 項",
+ "{path}: matches none of the anyOf conditions": "{path}:anyOf 的條件一個都不符合"
+}

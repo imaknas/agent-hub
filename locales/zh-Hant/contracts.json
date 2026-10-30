@@ -1,0 +1,8 @@
+{
+ "the version marker is {v}, not todo-md v1": "版本標記是 {v},不是 todo-md v1",
+ "the owner headings must be, in order, {headings}; found {owners}": "負責人標題要依序是 {headings},實際 {owners}",
+ "line {i} is in an owner section but is not `- [ ] …`: {line}": "第 {i} 行在負責人段落裡,但不是 `- [ ] …`:{line}",
+ "line {i}: the project subheading is malformed: {line}": "第 {i} 行的專案小標題格式不對:{line}",
+ "no `{heading}` section": "沒有 `{heading}` 段落",
+ "not in the to-do format: {line}": "不是待辦格式:{line}"
+}

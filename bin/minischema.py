@@ -9,6 +9,10 @@ from __future__ import annotations
 
 import re
 
+import i18n
+
+_ = i18n.domain(__file__)
+
 TYPES = {"object": dict, "array": list, "string": str, "boolean": bool, "null": type(None)}
 
 
@@ -25,11 +29,11 @@ def errors(schema: dict, x, path: str = "$", root: dict | None = None) -> list[s
     if schema is True or schema == {}:
         return []
     if schema is False:
-        return [f"{path}:不允許"]
+        return [_("{path}: not allowed", path=path)]
     if "$ref" in schema:
         ref = schema["$ref"]
         if not ref.startswith("#/"):
-            return [f"{path}:不支援的 $ref {ref}"]
+            return [_("{path}: unsupported $ref {ref}", path=path, ref=ref)]
         target = root
         for part in ref[2:].split("/"):
             target = target[part]
@@ -39,24 +43,24 @@ def errors(schema: dict, x, path: str = "$", root: dict | None = None) -> list[s
     if t is not None:
         ts = t if isinstance(t, list) else [t]
         if not any(_type_ok(tt, x) for tt in ts):
-            return [f"{path}:型別要是 {t},實際是 {type(x).__name__}"]
+            return [_("{path}: the type must be {type}, got {actual}", path=path, type=t, actual=type(x).__name__)]
     if "const" in schema and x != schema["const"]:
-        out.append(f"{path}:要是 {schema['const']!r}")
+        out.append(_("{path}: must be {const!r}", path=path, const=schema["const"]))
     if "enum" in schema and x not in schema["enum"]:
-        out.append(f"{path}:{x!r} 不在 {schema['enum']}")
+        out.append(_("{path}: {value!r} is not in {enum}", path=path, value=x, enum=schema["enum"]))
     if isinstance(x, str):
         if "pattern" in schema and not re.search(schema["pattern"], x):
-            out.append(f"{path}:{x!r} 不符合 {schema['pattern']}")
+            out.append(_("{path}: {value!r} does not match {pattern}", path=path, value=x, pattern=schema["pattern"]))
         if "minLength" in schema and len(x) < schema["minLength"]:
-            out.append(f"{path}:太短")
+            out.append(_("{path}: too short", path=path))
         if "maxLength" in schema and len(x) > schema["maxLength"]:
-            out.append(f"{path}:太長")
+            out.append(_("{path}: too long", path=path))
     if isinstance(x, (int, float)) and not isinstance(x, bool) and "minimum" in schema and x < schema["minimum"]:
-        out.append(f"{path}:要 >= {schema['minimum']}")
+        out.append(_("{path}: must be >= {minimum}", path=path, minimum=schema["minimum"]))
     if isinstance(x, dict):
         for k in schema.get("required", []):
             if k not in x:
-                out.append(f"{path}:缺 {k}")
+                out.append(_("{path}: missing {key}", path=path, key=k))
         props = schema.get("properties", {})
         for k, v in x.items():
             if k in props:
@@ -64,12 +68,12 @@ def errors(schema: dict, x, path: str = "$", root: dict | None = None) -> list[s
             else:
                 ap = schema.get("additionalProperties", True)
                 if ap is False:
-                    out.append(f"{path}:多了 {k}")
+                    out.append(_("{path}: unexpected {key}", path=path, key=k))
                 elif isinstance(ap, dict):
                     out += errors(ap, v, f"{path}.{k}", root)
     if isinstance(x, list):
         if "minItems" in schema and len(x) < schema["minItems"]:
-            out.append(f"{path}:至少 {schema['minItems']} 項")
+            out.append(_("{path}: needs at least {n} items", path=path, n=schema["minItems"]))
         if "items" in schema:
             for i, v in enumerate(x):
                 out += errors(schema["items"], v, f"{path}[{i}]", root)
@@ -78,5 +82,5 @@ def errors(schema: dict, x, path: str = "$", root: dict | None = None) -> list[s
         if branch in schema:
             out += errors(schema[branch], x, path, root)
     if "anyOf" in schema and all(errors(sub, x, path, root) for sub in schema["anyOf"]):
-        out.append(f"{path}:anyOf 的條件一個都不符合")
+        out.append(_("{path}: matches none of the anyOf conditions", path=path))
     return out

@@ -105,8 +105,8 @@ class MergeGate(unittest.TestCase):
     def test_registry_only_knows_conventional(self):
         (self.tmp / "config" / "projects" / "demo.yaml").write_text(
             f"v: 1\nname: demo\npaths:\n  workspace: {self.ws}\ncommits: angular\n")
-        r = subprocess.run([sys.executable, str(BIN / "registry.py"), "check", "demo"], env=self.env,
-                           capture_output=True, text=True, timeout=60)
+        r = subprocess.run([sys.executable, str(BIN / "registry.py"), "check", "demo"],
+                           env={**self.env, "AGENT_HUB_LANG_UI": "zh-Hant"}, capture_output=True, text=True, timeout=60)
         self.assertEqual(r.returncode, 1)
         self.assertIn("commits 只能是 conventional", r.stdout)
 

@@ -10,7 +10,10 @@ import json
 import pathlib
 import re
 
+import i18n
 import minischema
+
+_ = i18n.domain(__file__)
 
 FENCE = re.compile(r"^```(regex|heading) (\S+)\n(.*?)\n```", re.M | re.S)
 
@@ -36,21 +39,21 @@ def check_todo_md(text: str, contract: pathlib.Path, owner: str) -> list[str]:
     errs = []
     v = md_version(text)
     if v and v != ("todo-md", 1):
-        errs.append(f"版本標記是 {v},不是 todo-md v1")
+        errs.append(_("the version marker is {v}, not todo-md v1", v=v))
     headings = rules["heading:owner"]
     found = [l for l in text.splitlines() if l.startswith("## ")]
     owners = [h for h in found if h in headings]
     if owners != headings:
-        errs.append(f"負責人標題要依序是 {headings},實際 {owners}")
+        errs.append(_("the owner headings must be, in order, {headings}; found {owners}", headings=headings, owners=owners))
     item, project = re.compile(rules["regex:item"][0]), re.compile(rules["regex:project"][0])
     section = None
     for i, l in enumerate(text.splitlines(), 1):
         if l.startswith("## "):
             section = l
         elif section in headings and l.startswith("- ") and not item.match(l):
-            errs.append(f"第 {i} 行在負責人段落裡,但不是 `- [ ] …`:{l[:60]}")
+            errs.append(_("line {i} is in an owner section but is not `- [ ] …`: {line}", i=i, line=l[:60]))
         elif section in headings and l.startswith("###") and not project.match(l):
-            errs.append(f"第 {i} 行的專案小標題格式不對:{l[:60]}")
+            errs.append(_("line {i}: the project subheading is malformed: {line}", i=i, line=l[:60]))
     return errs
 
 
@@ -61,7 +64,7 @@ def check_state_todo(text: str, contract: pathlib.Path, owner: str) -> list[str]
     try:
         start = lines.index("## 待辦") + 1
     except ValueError:
-        return ["沒有 `## 待辦` 段落"]
+        return [_("no `{heading}` section", heading="## 待辦")]
     errs, in_group = [], False
     for l in lines[start:]:
         if l.startswith("## "):
@@ -73,7 +76,7 @@ def check_state_todo(text: str, contract: pathlib.Path, owner: str) -> list[str]
             continue
         if item.match(l) or (in_group and bare.match(l)):
             continue
-        errs.append(f"不是待辦格式:{l[:60]}")
+        errs.append(_("not in the to-do format: {line}", line=l[:60]))
     return errs
 
 

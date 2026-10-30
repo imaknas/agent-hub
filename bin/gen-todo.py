@@ -29,6 +29,9 @@ import sys
 
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
 import hubconf  # noqa: E402
+import i18n  # noqa: E402
+
+_ = i18n.domain(__file__)
 
 HOME = pathlib.Path.home()
 HUB = hubconf.ROOT
@@ -59,7 +62,7 @@ def todo_section(text: str) -> list[str] | None:
 def parse(source: str, text: str, items: dict, problems: list) -> None:
     lines = todo_section(text)
     if lines is None:
-        problems.append(f"{source}:沒有 `## 待辦` 段落")
+        problems.append(_("{source}: no `{heading}` section", source=source, heading="## 待辦"))
         return
     group = None  # 另一種也接受的寫法:`### 〔Knas〕` 小標題底下放不帶負責人的 `- [ ] …`
     for line in lines:
@@ -78,7 +81,7 @@ def parse(source: str, text: str, items: dict, problems: list) -> None:
             items[group].append((source, bare.group(1).strip()))
         elif bare or line.startswith(("- [ ] 〔", "- [x]", "- [X]")):
             # 看起來是待辦,卻沒有(認得的)負責人,或已打勾還留著:一定要讓人看到,不能默默漏掉
-            problems.append(f"{source}:待辦沒標負責人或已完成未移除 `{line[:60]}`")
+            problems.append(_("{source}: a to-do with no owner, or done and not removed `{line}`", source=source, line=line[:60]))
         # 其他行(說明文字、「詳見 reference」連結、續行)不是待辦,略過
 
 
@@ -91,7 +94,7 @@ def main() -> None:
     for name in names:
         state = PROJECTS / name / "STATE.md"
         if not state.exists():
-            problems.append(f"{name}:mini 上沒有 STATE.md")
+            problems.append(_("{name}: no STATE.md on the mini", name=name))
             continue
         if state.stat().st_size <= PLACEHOLDER_MAX_BYTES:
             continue
@@ -104,18 +107,22 @@ def main() -> None:
     total = sum(len(v) for v in items.values())
     o = [
         "<!-- contract: todo-md v1 -->",  # 版面的契約在 contracts/todo-md.v1.md
-        "# 跨專案待辦", "",
+        "# " + _("Cross-project to-do"), "",
         # 標題不放日期:內容沒變時檔案就不該變(要知道哪天產生的,看 git log)
-        f"> 由 `bin/gen-todo.py` 從各專案 STATE.md 的 `## 待辦` 段落機械產生(共 {total} 項),",
-        "> 不要手動改——要改內容,改來源(各專案的 memory,librarian 會更新 STATE.md;",
-        "> agent-hub 自己的待辦在 `openclaw-migration-status.md`)。", "",
+        "> " + _("Generated mechanically by `bin/gen-todo.py` from the `{heading}` section of each project's STATE.md "
+                 "({total} items);", heading="## 待辦", total=total),
+        "> " + _("do not edit by hand: to change the content, change the source (each project's memory, from which "
+                 "librarian updates STATE.md;"),
+        "> " + _("agent-hub's own to-do items are in `openclaw-migration-status.md`)."), "",
     ]
     # muninn 用這三個標題判斷待辦是誰的(對照表在它的 data/config.yaml external_todo_owners);改標題要一起改那邊
     titles = {TAG: f"只有 {TAG} 能做", "待定": "待定(需要先做決定)", "agent": "agent 可以做"}
     for owner in OWNERS:
         o += [f"## {titles[owner]}", ""]
         if owner == TAG and in_assistant:
-            o += [f"> 另有 {len(in_assistant)} 項已登記在 {ASSISTANT}(STATE.md 行尾標「等 {TAG}:<key>」),以 {ASSISTANT} 為準,這裡不列。", ""]
+            o += ["> " + _("{n} more are registered in {assistant} (marked \"{marker}\" at the end of the line in STATE.md); "
+                           "{assistant} is the authority for them, they are not listed here.",
+                           n=len(in_assistant), assistant=ASSISTANT, marker=f"等 {TAG}:<key>"), ""]
         rows = items[owner]
         if not rows:
             o += ["(無)", ""]
@@ -128,13 +135,13 @@ def main() -> None:
             o += [f"- [ ] {t}" for t in by_proj[proj]]
             o.append("")
     if problems:
-        o += ["## 格式問題(這些專案的待辦沒被收進來)", ""]
+        o += ["## " + _("Format problems (these projects' to-do items were not collected)"), ""]
         o += [f"- {p}" for p in problems]
         o.append("")
     out.write_text("\n".join(o).rstrip() + "\n")
-    print(f"todo.md: {total} 項" + (f",{len(problems)} 個格式問題" if problems else ""))
+    print(_("todo.md: {total} items", total=total) + (_(", {n} format problems", n=len(problems)) if problems else ""))
     for p in problems:
-        print(f"  格式問題:{p}")
+        print(_("  format problem: {problem}", problem=p))
 
 
 if __name__ == "__main__":

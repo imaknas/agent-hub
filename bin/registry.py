@@ -73,8 +73,11 @@ import sys
 
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
 import hubconf  # noqa: E402
+import i18n  # noqa: E402
 
 import yaml  # noqa: E402
+
+_ = i18n.domain(__file__)
 
 CACHE = hubconf.STATE / "registry"
 TOP = {"v", "name", "type", "purpose", "paths", "memory", "privacy", "runtime", "push_on_merge", "commits", "mailbox",
@@ -108,53 +111,53 @@ def resolves(cmd: str, cwd: pathlib.Path | None, search: str | None = None) -> s
     try:
         words = shlex.split(cmd)
     except ValueError as e:
-        return f"指令解析不了:{e}"
+        return _("the command cannot be parsed: {error}", error=e)
     if not words:
-        return "指令是空的"
+        return _("the command is empty")
     first = words[0]
     if "=" in first and not first.startswith(("/", ".")):  # VAR=x cmd
         return None
     if first.startswith("/"):
         if first.startswith(str(pathlib.Path.home())):
-            return f"不准用家目錄底下的絕對路徑({first});改成相對 cwd"
-        return None if pathlib.Path(first).exists() else f"{first} 不存在"
+            return _("no absolute paths under the home directory ({first}); make it relative to cwd", first=first)
+        return None if pathlib.Path(first).exists() else _("{path} does not exist", path=first)
     if "/" in first:
         if cwd is None:
-            return f"{first}:沒有 cwd 可以找"
-        return None if (cwd / first).exists() else f"{cwd / first} 不存在"
+            return _("{first}: there is no cwd to look in", first=first)
+        return None if (cwd / first).exists() else _("{path} does not exist", path=cwd / first)
     found = shutil.which(first, path=search or f"{hubconf.LAUNCHD_PATH}:{os.environ.get('PATH', '')}")
-    return None if found or first in ("cd", "test", "[", "true") else f"PATH 上找不到 {first}"
+    return None if found or first in ("cd", "test", "[", "true") else _("{first} is not on PATH", first=first)
 
 
 def validate_secrets(secrets) -> list[str]:
     if secrets is None:
         return []
     if not isinstance(secrets, list):
-        return ["secrets 要是 list"]
+        return [_("secrets must be a list")]
     errs, seen = [], set()
     for i, sec in enumerate(secrets):
         where = f"secrets[{i}]"
         if not isinstance(sec, dict):
-            errs.append(f"{where} 要是 mapping")
+            errs.append(_("{where} must be a mapping", where=where))
             continue
-        errs += [f"{where}:未知的欄位 {k}" for k in sec if k not in SECRET]
+        errs += [_("{where}: unknown field {key}", where=where, key=k) for k in sec if k not in SECRET]
         for k in ("name", "path"):
             if not isinstance(sec.get(k), str) or not sec.get(k):
-                errs.append(f"{where}:{k} 必填")
+                errs.append(_("{where}: {key} is required", where=where, key=k))
         if sec.get("name") in seen:
-            errs.append(f"{where}:name {sec.get('name')} 重複")
+            errs.append(_("{where}: name {name} is a duplicate", where=where, name=sec.get("name")))
         seen.add(sec.get("name"))
         if "expires" in sec and not (isinstance(sec["expires"], str) and re.fullmatch(r"\d{4}-\d{2}-\d{2}", sec["expires"])):
-            errs.append(f"{where}:expires 要是加引號的 \"YYYY-MM-DD\"")
+            errs.append(_("{where}: expires must be a quoted \"YYYY-MM-DD\"", where=where))
         if "expires" in sec and "max_age_days" in sec:
-            errs.append(f"{where}:expires 跟 max_age_days 只能寫一個")
+            errs.append(_("{where}: only one of expires and max_age_days", where=where))
         for k in ("max_age_days", "warn_days"):
             if k in sec and (not isinstance(sec[k], int) or isinstance(sec[k], bool) or sec[k] <= 0):
-                errs.append(f"{where}:{k} 要是正整數")
+                errs.append(_("{where}: {key} must be a positive integer", where=where, key=k))
         if "backup" in sec and not isinstance(sec["backup"], bool):
-            errs.append(f"{where}:backup 要是 true/false")
+            errs.append(_("{where}: backup must be true/false", where=where))
         if sec.get("backup") is False and not sec.get("why"):
-            errs.append(f"{where}:backup: false 要寫 why(為什麼不用備份)")
+            errs.append(_("{where}: backup: false needs a why (why it needs no backup)", where=where))
     return errs
 
 
@@ -167,21 +170,22 @@ def validate_enforce(doc: dict) -> list[str]:
     if enf is None:
         return []
     if not isinstance(enf, dict) or set(enf) - {"sandbox", "capabilities", "work"} or not isinstance(enf.get("sandbox", False), bool):
-        return ["enforce 只能是 {sandbox: true|false, capabilities: [能力], work: true|false}"]
+        return [_("enforce can only be {{sandbox: true|false, capabilities: [{cap}], work: true|false}}", cap=_("capability"))]
     work = enf.get("work", False)
     if not isinstance(work, bool):
-        return ["enforce.work 要是 true 或 false"]
+        return [_("enforce.work must be true or false")]
     if work and not enf.get("sandbox"):  # 深談能寫入,靠的就是 OS sandbox 擋資料夾外的寫入
-        return ["enforce.work 要搭配 enforce.sandbox: true"]
+        return [_("enforce.work needs enforce.sandbox: true")]
     caps = enf.get("capabilities")
     if caps is None:
         return []
     if not isinstance(caps, list) or not all(isinstance(c, str) for c in caps):
-        return ["enforce.capabilities 要是字串的 list"]
+        return [_("enforce.capabilities must be a list of strings")]
     errs, have = [], capabilities()
-    errs += [f"enforce.capabilities:平台沒有 {c} 這個能力(有的:{', '.join(sorted(have)) or '無'})" for c in caps if c not in have]
+    errs += [_("enforce.capabilities: the platform has no capability {cap} (it has: {have})",
+               cap=c, have=", ".join(sorted(have)) or _("none")) for c in caps if c not in have]
     if caps and not enf.get("sandbox"):
-        errs.append("enforce.capabilities 要搭配 enforce.sandbox: true")
+        errs.append(_("enforce.capabilities needs enforce.sandbox: true"))
     # 不看 type:想法沙盒升級成正式專案後,Knas 同意過的能力跟著留(10-25 m10251626)。同意的紀錄就是 enforce 本身——
     # 平台擁有的欄位,專案自己的 manifest.update 改不了(PLATFORM_OWNED);能力能做什麼由平台的 Seatbelt profile 決定,
     # 跟專案是哪一種無關
@@ -193,57 +197,58 @@ PLATFORM_OWNED = ("type", "enforce", "network", "allow_write", "privacy")
 
 def platform_owned_changes(new: dict, cur: dict) -> list[str]:
     """manifest.update 不能改的安全欄位:跟現在的登錄不一樣就列出來。"""
-    return [f"{k} 是安全欄位,只能由 agent-hub 改(要 Knas 確認);這封改到了它" for k in PLATFORM_OWNED
+    return [_("{key} is a security field that only agent-hub can change (Knas confirms); this letter changes it", key=k)
+            for k in PLATFORM_OWNED
             if new.get(k) != cur.get(k)]
 
 
 def validate(doc, stem: str) -> list[str]:
     errs: list[str] = []
     if not isinstance(doc, dict):
-        return ["不是一個 YAML mapping"]
+        return [_("not a YAML mapping")]
     if doc.get("v") != 1:
-        errs.append(f"v 要是 1(現在是 {doc.get('v')!r})")
+        errs.append(_("v must be 1 (it is {v!r})", v=doc.get("v")))
     if doc.get("name") != stem:
-        errs.append(f"name({doc.get('name')!r})要跟檔名 {stem} 一樣")
-    errs += [f"未知的欄位 {k}" for k in doc if k not in TOP]
+        errs.append(_("name ({name!r}) must be the same as the file name {stem}", name=doc.get("name"), stem=stem))
+    errs += [_("unknown field {key}", key=k) for k in doc if k not in TOP]
     if doc.get("type", "project") not in ("project", "idea"):
-        errs.append("type 只能是 project 或 idea")
+        errs.append(_("type can only be project or idea"))
     if doc.get("purpose") is not None and (not isinstance(doc["purpose"], str) or not doc["purpose"].strip()):
-        errs.append("purpose 要是非空字串")
+        errs.append(_("purpose must be a non-empty string"))
     if doc.get("type") == "idea" and not doc.get("purpose"):
-        errs.append("type: idea 要寫 purpose(想法本身)")
+        errs.append(_("type: idea needs a purpose (the idea itself)"))
     is_hub = stem == hubconf.hub_project()
     paths = doc.get("paths") or {}
     if not is_hub and not paths.get("workspace"):
-        errs.append("paths.workspace 必填")
+        errs.append(_("paths.workspace is required"))
     errs += validate_enforce(doc)
     if doc.get("commits") not in (None, "conventional"):
-        errs.append("commits 只能是 conventional(沒寫 = 不檢查 commit 標題)")
+        errs.append(_("commits can only be conventional (absent = commit titles are not checked)"))
     if doc.get("gate") not in (None, "strict", "detect"):
-        errs.append("gate 只能是 strict 或 detect(預設)")
+        errs.append(_("gate can only be strict or detect (the default)"))
     errs += validate_secrets(doc.get("secrets"))
     for key in ("network", "allow_write"):
         v = doc.get(key)
         if v is not None and (not isinstance(v, list) or not all(isinstance(x, str) and x for x in v)):
-            errs.append(f"{key} 要是字串的 list")
+            errs.append(_("{key} must be a list of strings", key=key))
     if (doc.get("privacy") or {}).get("reflection", "include") not in ("include", "stats_only", "exclude"):
-        errs.append("privacy.reflection 只能是 include / stats_only / exclude")
+        errs.append(_("privacy.reflection can only be include / stats_only / exclude"))
     d = dirs(doc)
     rt = doc.get("runtime")
     if rt is not None:
         if not isinstance(rt, dict):
-            errs.append("runtime 要是 mapping")
+            errs.append(_("runtime must be a mapping"))
         elif d["runtime"] and not d["runtime"].is_dir():
-            errs.append(f"runtime 目錄 {d['runtime']} 不存在")
+            errs.append(_("the runtime directory {path} does not exist", path=d["runtime"]))
     for key in ("publishes", "provides", "services", "jobs"):
         if not isinstance(doc.get(key, []), list):
-            errs.append(f"{key} 要是 list")
+            errs.append(_("{key} must be a list", key=key))
     errs += validate_runs(doc, stem, d)
     for key in ("deploy", "test"):
         if isinstance(rt, dict) and rt.get(key):
             base = d["workspace"] if key == "test" else d["workspace"]
             if (e := resolves(rt[key], base)):
-                errs.append(f"runtime.{key}:{e}")
+                errs.append(_("runtime.{key}: {error}", key=key, error=e))
     return errs
 
 
@@ -253,63 +258,65 @@ def validate_runs(doc: dict, stem: str, d: dict) -> list[str]:
     names = set()
     for svc in doc.get("services") or []:
         n = svc.get("name")
-        errs += [f"service {n}:未知的欄位 {k}" for k in svc if k not in SERVICE]
+        errs += [_("service {name}: unknown field {key}", name=n, key=k) for k in svc if k not in SERVICE]
         if not n or not svc.get("run"):
-            errs.append(f"service {n}:name、run 必填")
+            errs.append(_("service {name}: name and run are required", name=n))
             continue
         cwd = d.get(svc.get("cwd") or default_cwd(doc))
         if (e := resolves(svc["run"], cwd, hubconf.expand_env((svc.get("env") or {}).get("PATH") or hubconf.LAUNCHD_PATH))):
-            errs.append(f"service {n}:{e}")
+            errs.append(_("service {name}: {error}", name=n, error=e))
     jobs = doc.get("jobs") or []
     for job in jobs:
         n = job.get("name")
-        errs += [f"job {n}:未知的欄位 {k}" for k in job if k not in JOB]
+        errs += [_("job {name}: unknown field {key}", name=n, key=k) for k in job if k not in JOB]
         if not n or not re.fullmatch(r"[a-z0-9][a-z0-9-]*", str(n)):
-            errs.append(f"job {n!r}:name 要是小寫英數字跟 -")
+            errs.append(_("job {name!r}: name must be lowercase letters, digits and -", name=n))
             continue
         if n in names:
-            errs.append(f"job {n}:名稱重複")
+            errs.append(_("job {name}: duplicate name", name=n))
         names.add(n)
         if ("at" in job) == ("every" in job):
-            errs.append(f"job {n}:at 跟 every 要剛好一個")
+            errs.append(_("job {name}: exactly one of at and every", name=n))
         if "at" in job and not re.fullmatch(r"([01]\d|2[0-3]):[0-5]\d", str(job["at"])):
-            errs.append(f"job {n}:at 要是 HH:MM(加引號)")
+            errs.append(_("job {name}: at must be HH:MM (quoted)", name=n))
         if "every" in job and not EVERY.match(str(job["every"])):
-            errs.append(f"job {n}:every 要像 15m / 1h")
+            errs.append(_("job {name}: every must look like 15m / 1h", name=n))
         if set(job.get("days") or []) - DAYS:
-            errs.append(f"job {n}:days 只能是 {sorted(DAYS)}")
+            errs.append(_("job {name}: days can only be {days}", name=n, days=sorted(DAYS)))
         cwd_key = job.get("cwd") or default_cwd(doc)
         if cwd_key == "state" and job.get("kind") == "agent":
             pass  # agent job 在自己的狀態目錄跑(不載入專案的設定/MCP;例:專案自己的同名 MCP 會蓋掉 claude.ai connector)
         elif cwd_key not in ("runtime", "workspace", "hub"):
-            errs.append(f"job {n}:cwd 只能是 runtime / workspace / hub(agent job 另外可以是 state)")
+            errs.append(_("job {name}: cwd can only be runtime / workspace / hub (an agent job may also use state)", name=n))
             continue
         if job.get("allow") is not None and (not isinstance(job["allow"], list)
                                              or not all(isinstance(x, str) and x for x in job["allow"])):
-            errs.append(f"job {n}:allow 要是權限規則字串的 list")
+            errs.append(_("job {name}: allow must be a list of permission rule strings", name=n))
         if "connectors" in job and not isinstance(job["connectors"], bool):
-            errs.append(f"job {n}:connectors 要是 true/false")
+            errs.append(_("job {name}: connectors must be true/false", name=n))
         if any(str(x).startswith("mcp__claude_ai_") for x in job.get("allow") or []) and not job.get("connectors"):
-            errs.append(f"job {n}:allow 有 claude.ai connector 的工具,要加 connectors: true(預設的 headless token 不載入 connector)")
+            errs.append(_("job {name}: allow has claude.ai connector tools, add connectors: true (the default headless token "
+                           "loads no connectors)", name=n))
         if job.get("kind", "command") == "agent":
             prompt = hubconf.registry_dir() / stem / (job.get("prompt") or f"jobs/{n}.md")
             if not prompt.exists():
-                errs.append(f"job {n}:prompt {prompt} 不存在")
+                errs.append(_("job {name}: prompt {prompt} does not exist", name=n, prompt=prompt))
         elif job.get("kind", "command") != "command":
-            errs.append(f"job {n}:kind 只能是 command / agent")
+            errs.append(_("job {name}: kind can only be command / agent", name=n))
         elif not job.get("run"):
-            errs.append(f"job {n}:run 必填")
+            errs.append(_("job {name}: run is required", name=n))
         elif (e := resolves(job["run"], d.get(cwd_key))):
-            errs.append(f"job {n}:{e}")
+            errs.append(_("job {name}: {error}", name=n, error=e))
     for job in jobs:
         for key in ("after", "before"):
             v = job.get(key)
             if v is not None and (not isinstance(v, list) or not all(isinstance(x, str) and x for x in v)):
-                errs.append(f"job {job.get('name')}:{key} 要是 job 名稱的 list")
+                errs.append(_("job {name}: {key} must be a list of job names", name=job.get("name"), key=key))
                 continue
             for dep in v or []:
                 if "/" not in dep and dep not in names:
-                    errs.append(f"job {job.get('name')}:{key} 的 {dep} 不在這個專案(別的專案/模組要寫 <名稱>/<job>)")
+                    errs.append(_("job {name}: {dep} in {key} is not in this project (another project or module is written "
+                                   "<name>/<job>)", name=job.get("name"), key=key, dep=dep))
     return errs
 
 
@@ -324,31 +331,31 @@ MODULE_TOP = {"v", "name", "type", "description", "requires_config", "jobs", "se
 
 def validate_module(doc, stem: str) -> list[str]:
     if not isinstance(doc, dict):
-        return ["不是一個 YAML mapping"]
-    errs = [f"未知的欄位 {k}" for k in doc if k not in MODULE_TOP]
+        return [_("not a YAML mapping")]
+    errs = [_("unknown field {key}", key=k) for k in doc if k not in MODULE_TOP]
     if doc.get("v") != 1:
-        errs.append("v 要是 1")
+        errs.append(_("v must be 1"))
     if doc.get("name") != stem:
-        errs.append(f"name({doc.get('name')!r})要跟檔名 {stem} 一樣")
+        errs.append(_("name ({name!r}) must be the same as the file name {stem}", name=doc.get("name"), stem=stem))
     if doc.get("type") != "module":
-        errs.append("type 要是 module")
+        errs.append(_("type must be module"))
     if not isinstance(doc.get("description"), str) or not doc["description"].strip():
-        errs.append("description 必填")
+        errs.append(_("description is required"))
     req = doc.get("requires_config") or []
     if not isinstance(req, list):
-        errs.append("requires_config 要是 hub.json 鍵的 list")
+        errs.append(_("requires_config must be a list of hub.json keys"))
     else:
-        errs += [f"要先在 hub.json 設定 {k}" for k in req if hubconf.get(k) in (None, "", {}, [])]
+        errs += [_("{key} must be set in hub.json first", key=k) for k in req if hubconf.get(k) in (None, "", {}, [])]
     for key in ("jobs", "services"):
         for x in doc.get(key) or []:
             if isinstance(x, dict) and x.get("cwd", "hub") != "hub":
-                errs.append(f"{key[:-1]} {x.get('name')}:模組的 cwd 只能是 hub")
+                errs.append(_("{kind} {name}: a module's cwd can only be hub", kind=key[:-1], name=x.get("name")))
             if key == "jobs" and isinstance(x, dict) and x.get("kind", "command") != "command":
-                errs.append(f"job {x.get('name')}:模組只能有 command 的 job")
+                errs.append(_("job {name}: a module can only have command jobs", name=x.get("name")))
     errs += validate_secrets(doc.get("secrets"))   # 模組自己的憑證(平台的;沒開的模組不檢查)
     for c in doc.get("consumes") or []:   # 模組讀別人的契約(例:助理模組讀助理的轉交格式);沒開的模組不比對
         if not isinstance(c, dict) or not all(c.get(k) for k in ("contract", "v", "copy")):
-            errs.append("consumes 的每一項要有 contract、v、copy")
+            errs.append(_("each consumes item needs contract, v and copy"))
     return errs + validate_runs(doc, stem, dirs(doc))
 
 
@@ -363,13 +370,13 @@ def load_modules() -> tuple[dict, dict]:
     for name in enabled_modules():
         f = MODULES_DIR / f"{name}.yaml"
         if not f.exists():
-            errors[f"module:{name}"] = [f"hub.json 開了模組 {name},但沒有 modules/{name}.yaml"]
+            errors[f"module:{name}"] = [_("hub.json enables module {name}, but there is no modules/{name}.yaml", name=name)]
             continue
         try:
             doc = yaml.safe_load(f.read_text())
             errs = validate_module(doc, name)
         except yaml.YAMLError as e:
-            doc, errs = None, [f"YAML 讀不了:{e}"]
+            doc, errs = None, [_("cannot read the YAML: {error}", error=e)]
         if errs:
             errors[f"module:{name}"] = errs
         else:
@@ -379,7 +386,7 @@ def load_modules() -> tuple[dict, dict]:
 
 def job_cycles(index: dict) -> list[str]:
     """after:/before: 串起來有沒有繞圈(有的話排程器會永遠等)。"""
-    jobs, _, _ = scheduler_jobs(index, set())
+    jobs, _skipped, _renames = scheduler_jobs(index, set())
     graph = {j["name"]: set(j.get("after") or []) for j in jobs}
     out, state = [], {}
 
@@ -408,8 +415,8 @@ def roster_mismatch(doc, text: str) -> list[str]:
     got = hubconf.roster_paths(text)
     if got == want:
         return []
-    return [f"paths 要寫成一行一個 key 的區塊格式(`paths:` 下一行縮排 `workspace: …`):"
-            f"不用 YAML 的讀法讀到 {got},YAML 是 {want}"]
+    return [_("paths must be written in block format, one key per line (`paths:`, then `workspace: …` indented on the "
+              "next line): the reader that does not use YAML got {got}, YAML has {want}", got=got, want=want)]
 
 
 def refresh(only: list[str] | None = None) -> dict:
@@ -430,7 +437,7 @@ def refresh(only: list[str] | None = None) -> dict:
             doc = yaml.safe_load(text)
             errs = validate(doc, stem) + roster_mismatch(doc, text)
         except yaml.YAMLError as e:
-            doc, errs = None, [f"YAML 讀不了:{e}"]
+            doc, errs = None, [_("cannot read the YAML: {error}", error=e)]
         cache = CACHE / f"{stem}.json"
         if not errs:
             cache.write_text(json.dumps(doc, ensure_ascii=False, indent=1, default=str))
@@ -448,7 +455,8 @@ def refresh(only: list[str] | None = None) -> dict:
     index = {"v": 1, "generated": datetime.datetime.now().isoformat(timespec="seconds"),
              "projects": projects, "modules": modules, "errors": errors}
     if (cycles := job_cycles(index)):
-        errors["(jobs)"] = [f"after:/before: 繞了一圈,這幾個 job 會永遠互等:{c}" for c in cycles]
+        errors["(jobs)"] = [_("after:/before: form a cycle, these jobs would wait for each other forever: {cycle}", cycle=c)
+                            for c in cycles]
     tmp = CACHE / "index.json.tmp"
     tmp.write_text(json.dumps(index, ensure_ascii=False, indent=1, default=str))
     tmp.replace(CACHE / "index.json")
@@ -527,25 +535,26 @@ def new_doc(name: str, workspace: str, origin: str, memory_bare: str) -> dict:
             "publishes": [{"kind": "state", "path": "STATE.md", "contract": "state-todo", "v": 1}]}
 
 
-HEADER = "# 專案登錄(schema v1,見 bin/registry.py)\n"
+def header() -> str:
+    return "# " + _("Project registry (schema v1, see bin/registry.py)") + "\n"
 
 
 def cmd_add(name: str, workspace: str, origin: str, memory_bare: str, extra: str | None = None) -> int:
     """extra:JSON 物件,蓋過預設登錄的欄位(例:想法沙盒的 type/purpose/enforce/privacy)。驗證不過就不寫。"""
     f = hubconf.registry_dir() / f"{name}.yaml"
     if f.exists():
-        print(f"{name} 已經在登錄裡({f}),不覆蓋")
+        print(_("{name} is already in the registry ({file}), not overwriting", name=name, file=f))
         return 0
     doc = new_doc(name, workspace, origin, memory_bare)
     if extra:
         doc.update(json.loads(extra))
         errs = validate(doc, name)
         if errs:
-            print(f"登錄不合格,不寫入:{'; '.join(errs)}", file=sys.stderr)
+            print(_("the registry entry is invalid, not written: {errors}", errors="; ".join(errs)), file=sys.stderr)
             return 1
     f.parent.mkdir(parents=True, exist_ok=True)
-    f.write_text(HEADER + yaml.safe_dump(doc, allow_unicode=True, sort_keys=False, width=200))
-    print(f"登錄:{f}")
+    f.write_text(header() + yaml.safe_dump(doc, allow_unicode=True, sort_keys=False, width=200))
+    print(_("registry: {file}", file=f))
     return 0
 
 
@@ -553,18 +562,18 @@ def cmd_rename(old: str, new: str, workspace: str, origin: str, memory_bare: str
     reg = hubconf.registry_dir()
     src, dst = reg / f"{old}.yaml", reg / f"{new}.yaml"
     if not src.exists() or dst.exists():
-        sys.exit(f"registry rename:{src} 要存在、{dst} 不能存在")
+        sys.exit(_("registry rename: {src} must exist and {dst} must not", src=src, dst=dst))
     text = src.read_text()
     doc = yaml.safe_load(text)
     doc["name"] = new
     doc.setdefault("paths", {}).update(workspace=tilde(workspace), origin=origin, memory_bare=tilde(memory_bare))
     # 保留檔頭的註解
-    head = "".join(l for l in text.splitlines(keepends=True) if l.startswith("#")) if text.startswith("#") else HEADER
+    head = "".join(l for l in text.splitlines(keepends=True) if l.startswith("#")) if text.startswith("#") else header()
     dst.write_text(head + yaml.safe_dump(doc, allow_unicode=True, sort_keys=False, width=200))
     src.unlink()
     if (reg / old).is_dir():
         (reg / old).rename(reg / new)
-    print(f"登錄:{old} → {new}")
+    print(_("registry: {old} → {new}", old=old, new=new))
     return 0
 
 
@@ -595,25 +604,27 @@ def cmd_apply_updates() -> int:
             doc = yaml.safe_load(p.get("text") or "")
             errs = validate(doc, sender)
         except yaml.YAMLError as e:
-            doc, errs = None, [f"YAML 讀不了:{e}"]
+            doc, errs = None, [_("cannot read the YAML: {error}", error=e)]
         if isinstance(doc, dict) and doc.get("name") != sender:
-            errs.append(f"只能改自己的登錄(寄件人是 {sender},YAML 的 name 是 {doc.get('name')})")
+            errs.append(_("a project can only change its own registry entry (the sender is {sender}, the YAML's name is {name})",
+                           sender=sender, name=doc.get("name")))
         elif isinstance(doc, dict):
             cur_f = hubconf.registry_dir() / f"{sender}.yaml"
             cur = (yaml.safe_load(cur_f.read_text()) or {}) if cur_f.exists() else {}
             errs += platform_owned_changes(doc, cur)
         if errs:
-            reply(sender, mid, "manifest.update 沒有套用,登錄沒變:\n- " + "\n- ".join(errs), "退回:" + "; ".join(errs)[:200])
-            print(f"{sender}:manifest.update {mid} 退回({len(errs)} 個問題)")
+            reply(sender, mid, _("manifest.update was not applied, the registry is unchanged:\n- {errors}", errors="\n- ".join(errs)),
+                  _("returned: {errors}", errors="; ".join(errs)[:200]))
+            print(_("{sender}: manifest.update {mid} returned ({n} problems)", sender=sender, mid=mid, n=len(errs)))
             continue
         f = hubconf.registry_dir() / f"{sender}.yaml"
-        f.write_text(f"# 專案登錄(schema v1,見 bin/registry.py)。最後一次由 manifest.update {mid} 更新\n"
+        f.write_text("# " + _("Project registry (schema v1, see bin/registry.py). Last updated by manifest.update {mid}", mid=mid) + "\n"
                      + yaml.safe_dump(doc, allow_unicode=True, sort_keys=False, width=200))
         r = subprocess.run([str(hubconf.ROOT / "bin" / "commit-hub-files.sh"), f"registry: {sender} manifest.update {mid}",
                             f"projects/{sender}.yaml"], capture_output=True, text=True)
-        reply(sender, mid, "manifest.update 已套用" + ("" if r.returncode == 0 else "(commit 失敗,檔案已寫入)") +
-              ";下一個排程 tick 生效。", "已套用")
-        print(f"{sender}:manifest.update {mid} 已套用")
+        reply(sender, mid, _("manifest.update applied") + ("" if r.returncode == 0 else _(" (the commit failed, the file is written)"))
+              + _("; it takes effect at the next scheduler tick."), _("applied"))
+        print(_("{sender}: manifest.update {mid} applied", sender=sender, mid=mid))
     return 0
 
 
@@ -635,15 +646,16 @@ def main() -> int:
     for n in names:
         if n in index["errors"]:
             bad += 1
-            print(f"✗ {n}" + ("(沿用上一份合格的)" if n in index["projects"] else ""))
+            print(f"✗ {n}" + (_(" (keeping the last valid one)") if n in index["projects"] else ""))
             for e in index["errors"][n]:
                 print(f"    {e}")
         elif n in index["projects"]:
             doc = index["projects"][n]
-            print(f"✓ {n}:{len(doc.get('jobs') or [])} 個 job、{len(doc.get('services') or [])} 個 service")
+            print(_("✓ {name}: {jobs} jobs, {services} services", name=n, jobs=len(doc.get("jobs") or []),
+                     services=len(doc.get("services") or [])))
         else:
             bad += 1
-            print(f"? {n}:登錄裡沒有")
+            print(_("? {name}: not in the registry", name=n))
     return 1 if bad else 0
 
 
