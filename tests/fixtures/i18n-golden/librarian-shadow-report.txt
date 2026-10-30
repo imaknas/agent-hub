@@ -1,0 +1,26 @@
+=== no records
+exit 1
+最近 3 天沒有影子紀錄(<DIR>)
+
+=== report
+exit 0
+== librarian-index-edits:1 次,1 晚,成本 $0.030
+  有結果、編輯清單合規  1/1(100%);不合規 0、沒結果 0
+  要不要改跟 agent 版一致 1/1(100%)
+  跟 agent 版的相似度  平均 0.70,最低 0.70;逐字一樣 0
+  名冊區塊沒被動 1/1(100%)
+== librarian-state-edits:4 次,1 晚,成本 $0.040
+  有結果、編輯清單合規  2/4(50%);不合規 1、沒結果 1
+  要不要改跟 agent 版一致 1/2(50%)
+  跟 agent 版的相似度  平均 0.70,最低 0.50;逐字一樣 1
+  ⚠️ key 標記有問題 1 次:p1 <TODAY>
+  - 不一致 <TODAY> p1:completion 版要改=True,agent 版=False。理由:the shadow wanted a change
+  - 不合規 <TODAY> p2:old not found
+
+=== --help
+exit SystemExit(0)
+usage: x [-h] [--days DAYS]
+
+options:
+  -h, --help   show this help message and exit
+  --days DAYS

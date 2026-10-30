@@ -1,0 +1,68 @@
+=== unsupported
+exit None
+memory 缺口檢查:不檢查——the runtime keeps no transcripts
+
+=== unsupported --apply
+exit None
+memory 缺口檢查:不檢查——the runtime keeps no transcripts
+
+=== digest
+# Digest <TODAY>
+
+<!-- digest:memory-gaps:begin -->
+## memory 沒在記的專案
+
+memory 缺口檢查:不檢查——the runtime keeps no transcripts
+<!-- digest:memory-gaps:end -->
+
+=== gaps
+exit None
+- [ ] **a**:最近 72 小時有 12 則對話,memory 卻沒有任何新筆記——請 a 的 session 把重要決定/進度整理進 `.agent-memory/memory/`
+- [ ] **b**:最近 72 小時有 40 則對話,memory 卻沒有任何新筆記——請 b 的 session 把重要決定/進度整理進 `.agent-memory/memory/`
+
+=== gaps --apply
+exit None
+memory 缺口檢查:2 個專案有對話但沒記 memory(a b)
+
+=== todo.md
+# todo
+
+- [ ] x
+
+<!-- memory-gaps:begin -->
+## memory 沒在記的專案(機械檢查)
+
+有對話、但 memory 沒有新筆記——librarian 沒東西可整理,STATE.md 會一直過時。
+
+- [ ] **a**:最近 48 小時有 12 則對話,memory 卻沒有任何新筆記——請 a 的 session 把重要決定/進度整理進 `.agent-memory/memory/`
+- [ ] **b**:最近 48 小時有 40 則對話,memory 卻沒有任何新筆記——請 b 的 session 把重要決定/進度整理進 `.agent-memory/memory/`
+<!-- memory-gaps:end -->
+
+=== digest
+# Digest <TODAY>
+
+<!-- digest:memory-gaps:begin -->
+## memory 沒在記的專案
+
+- [ ] **a**:最近 48 小時有 12 則對話,memory 卻沒有任何新筆記——請 a 的 session 把重要決定/進度整理進 `.agent-memory/memory/`
+- [ ] **b**:最近 48 小時有 40 則對話,memory 卻沒有任何新筆記——請 b 的 session 把重要決定/進度整理進 `.agent-memory/memory/`
+<!-- digest:memory-gaps:end -->
+
+=== no gaps --apply
+exit None
+memory 缺口檢查:0 個專案有對話但沒記 memory
+
+=== todo.md
+# todo
+
+- [ ] x
+
+=== --help
+exit SystemExit(0)
+usage: x [-h] [--window-hours WINDOW_HOURS] [--threshold THRESHOLD] [--apply]
+
+options:
+  -h, --help            show this help message and exit
+  --window-hours WINDOW_HOURS
+  --threshold THRESHOLD
+  --apply
