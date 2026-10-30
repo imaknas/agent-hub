@@ -1,22 +1,24 @@
 #!/bin/sh -c exec${IFS}"${0%/*}/py"${IFS}"$0"${IFS}"$@"
-"""config pipeline 的 check(docs/design/new-user.md 3.7):一次驗證所有 config 檔。
+"""The config pipeline's check (docs/design/new-user.md 3.7): validates every config file at once.
 
-  config-check            驗 working tree 的 config
-  config-check --staged   驗**暫存區**(要 commit 的內容;githooks/pre-commit、config repo 的 githooks/config/pre-commit
-                          呼叫)。暫存區沒有改到 config 檔就直接過。
-                          共用的 working tree 裡可能有別人改到一半的檔案,所以照 test-gate 的做法把暫存區匯出到暫存目錄,
-                          用 AGENT_HUB_ROOT 指過去再驗。
+  config-check            validate the config in the working tree
+  config-check --staged   validate the **index** (what is about to be committed; called by githooks/pre-commit and the config
+                          repo's githooks/config/pre-commit). Passes at once when the index changes no config file.
+                          A shared working tree may hold someone else's half-edited files, so, as test-gate does, the index
+                          is exported to a temp directory and validated there with AGENT_HUB_ROOT pointing at it.
 
-驗什麼:
-  hub.json           contracts/hub.v1.schema.json(minischema)+ 不認得的頂層鍵(_ 開頭的說明鍵除外)——打錯字的鍵
-                     (例:"assitant")不會被默默忽略
-  projects/          registry.refresh() 的驗證(schema、名稱重複、after: 指到存在的 job、run 解析得到…)
-  models.env         不准存在(10-29 起模型設定在 hub.json llm.points)
-  mirror-list.txt    每行一個 git remote
-  services.tsv       每列欄數跟表頭一樣、label 不重複
-  schedule.yaml      讀得進來、job 名稱不重複(切換期間的舊格式)
+What it validates:
+  hub.json           contracts/hub.v1.schema.json (minischema) + unknown top-level keys (except explanation keys starting
+                     with _): a mistyped key (e.g. "assitant") is not silently ignored
+  projects/          registry.refresh()'s validation (schema, duplicate names, after: pointing at jobs that exist, run
+                     resolvable…)
+  models.env         must not exist (since 10-29 model settings live in hub.json llm.points)
+  mirror-list.txt    one git remote per line
+  services.tsv       every row has as many columns as the header, labels are unique
+  schedule.yaml      readable, job names unique (the old format, during the switch)
 
-通過時把這次驗過的 tree 記在 git 目錄的 config-check-passed(githooks/post-commit 用它抓出跳過閘門的 commit)。
+When it passes, the tree it validated is recorded in the git directory's config-check-passed (githooks/post-commit uses it to
+catch commits that skipped the gate).
 """
 from __future__ import annotations
 
@@ -29,7 +31,24 @@ import sys
 import tempfile
 
 BIN = pathlib.Path(__file__).resolve().parent
+sys.path.insert(0, str(BIN))
+import i18n  # noqa: E402
+
+_ = i18n.domain(__file__)
 CONFIG = re.compile(r"^(hub\.json|models\.env|mirror-list\.txt|services\.tsv|schedule\.yaml|projects/)")
+UNREADABLE = "hub.json: cannot read it ({error})"
+FAILED = "config-check: ✗ {error}"
+
+
+def fallback_language() -> str | None:
+    """None = the instance's own language. A message lookup asks hubconf for the language, and hubconf parses hub.json when
+    it is imported: with a hub.json that does not parse (what --staged's child can be handed), the language comes from
+    AGENT_HUB_LANG_UI, or is English."""
+    try:
+        import hubconf  # noqa: F401
+    except (OSError, ValueError):
+        return os.environ.get("AGENT_HUB_LANG_UI") or "en"
+    return None
 
 
 def check(root: pathlib.Path) -> list[str]:
@@ -46,37 +65,39 @@ def check(root: pathlib.Path) -> list[str]:
     try:
         cfg = json.loads(hub.read_text())
     except (OSError, ValueError) as e:
-        return [f"hub.json:讀不了({e})"]
+        lang = fallback_language()
+        return [_(UNREADABLE, error=e) if lang is None else i18n.translate(_.domain, UNREADABLE, {"error": e}, lang)]
     schema = json.loads((BIN.parent / "contracts" / "hub.v1.schema.json").read_text())
-    errs += [f"hub.json:{e}" for e in minischema.errors(schema, cfg)]
+    errs += [_("hub.json: {error}", error=e) for e in minischema.errors(schema, cfg)]
     known = set(schema["properties"])
     for k in cfg:
         if not k.startswith("_") and k not in known:
             near = [x for x in sorted(known) if _close(k, x)]
-            errs.append(f"hub.json:不認得的鍵 `{k}`" + (f"(是不是 {', '.join(near)}?)" if near else "")
-                        + ";要新增就先加進 contracts/hub.v1.schema.json")
+            errs.append(_("hub.json: unknown key `{key}`{hint}; to add one, put it in contracts/hub.v1.schema.json first",
+                          key=k, hint=_(" (did you mean {keys}?)", keys=', '.join(near)) if near else ""))
 
     if "llm" in cfg:
         import completion
-        errs += [f"hub.json:llm:{e}" for e in completion.config_errors(cfg["llm"])]
+        errs += [_("hub.json: llm: {error}", error=e) for e in completion.config_errors(cfg["llm"])]
 
     import registry
     index = registry.refresh()
     for name, es in sorted(index["errors"].items()):
         where = (f"modules/{name.split(':', 1)[1]}.yaml" if name.startswith("module:")
-                 else "排程(after/before)" if name == "(jobs)" else f"projects/{name}.yaml")
-        errs += [f"{where}:{e}" for e in es]
+                 else _("schedule (after/before)") if name == "(jobs)" else f"projects/{name}.yaml")
+        errs += [_("{where}: {error}", where=where, error=e) for e in es]
 
     if (root / "models.env").exists():   # 10-29 起模型設定只在 hub.json(llm.model_for),這份不再有人讀
-        errs.append("models.env:不再使用——模型設定搬進 hub.json 的 llm.points(schedulectl set-model state|index|consolidate "
-                    "<model>,值跟組別預設一樣就不用寫),然後刪掉 models.env")
+        errs.append(_("models.env: no longer used; model settings moved into hub.json llm.points (schedulectl set-model "
+                      "state|index|consolidate <model>; a value equal to the group default need not be written), then delete "
+                      "models.env"))
 
     ml = root / "mirror-list.txt"
     if ml.exists():
         for i, line in enumerate(ml.read_text().splitlines(), 1):
             s = line.strip()
             if s and not s.startswith("#") and not re.fullmatch(r"(git@[\w.-]+:[\w./-]+|https://[\w.-]+/[\w./-]+)", s):
-                errs.append(f"mirror-list.txt:{i}:不像 git remote:{s}")
+                errs.append(_("mirror-list.txt:{line}: not a git remote: {text}", line=i, text=s))
 
     st = root / "services.tsv"
     if st.exists():
@@ -86,9 +107,9 @@ def check(root: pathlib.Path) -> list[str]:
         for i, r in enumerate(rows[1:], 2):
             cols = r.split("\t")
             if len(cols) != width:
-                errs.append(f"services.tsv:{i}:{len(cols)} 欄,表頭是 {width} 欄")
+                errs.append(_("services.tsv:{line}: {count} columns, the header has {width}", line=i, count=len(cols), width=width))
             elif cols[0] in seen:
-                errs.append(f"services.tsv:{i}:label `{cols[0]}` 重複")
+                errs.append(_("services.tsv:{line}: label `{label}` repeated", line=i, label=cols[0]))
             seen.add(cols[0])
 
     sy = root / "schedule.yaml"
@@ -97,9 +118,9 @@ def check(root: pathlib.Path) -> list[str]:
         try:
             jobs = (yaml.safe_load(sy.read_text()) or {}).get("jobs") or []
             names = [j.get("name") for j in jobs]
-            errs += [f"schedule.yaml:job `{n}` 重複" for n in sorted({n for n in names if names.count(n) > 1})]
+            errs += [_("schedule.yaml: job `{name}` repeated", name=n) for n in sorted({n for n in names if names.count(n) > 1})]
         except yaml.YAMLError as e:
-            errs.append(f"schedule.yaml:讀不了({e})")
+            errs.append(_("schedule.yaml: cannot read it ({error})", error=e))
     return errs
 
 
@@ -142,12 +163,13 @@ def main(argv: list[str]) -> int:
         import hubconf
         errs = check(hubconf.config_dir())
     else:
-        print(__doc__, file=sys.stderr)
+        print(_(__doc__), file=sys.stderr)
         return 2
+    lang = fallback_language() if errs else None
     for e in errs:
-        print(f"config-check:✗ {e}", file=sys.stderr)
+        print(_(FAILED, error=e) if lang is None else i18n.translate(_.domain, FAILED, {"error": e}, lang), file=sys.stderr)
     if not errs:
-        print("config-check:config 都合格")
+        print(_("config-check: the config is all valid"))
     return 1 if errs else 0
 
 

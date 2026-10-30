@@ -24,14 +24,14 @@ class NewUser(unittest.TestCase):
         self.tmp = pathlib.Path(tempfile.mkdtemp())
         self.hub, self.home = self.tmp / "hub", self.tmp / "home"
         self.home.mkdir()
-        for d in ("bin", "contracts", "templates", "modules", "launchd", "capabilities", "githooks"):
+        for d in ("bin", "contracts", "templates", "modules", "launchd", "capabilities", "githooks", "locales"):
             shutil.copytree(ROOT / d, self.hub / d, ignore=shutil.ignore_patterns("__pycache__"))
         (self.hub / "projects").mkdir()
         shutil.copy(ROOT / "projects" / "agent-hub.yaml", self.hub / "projects")
         shutil.copy(ROOT / "hub.example.json", self.hub)
         env = {k: v for k, v in os.environ.items() if not k.startswith(("GIT_", "AGENT_HUB"))}
         self.env = {**env, "HOME": str(self.home), "AGENT_HUB_ROOT": str(self.hub),
-                    "AGENT_HUB_PYTHON": sys.executable, "PATH": "/usr/bin:/bin:/usr/sbin:/sbin",
+                    "AGENT_HUB_PYTHON": sys.executable, "PATH": "/usr/bin:/bin:/usr/sbin:/sbin", "AGENT_HUB_LANG_UI": "zh-Hant",
                     # 假的 HOME 沒有 git 的身分:別讓 commit 靠 git 自己猜(macOS 猜得到、Linux 容器猜不到)
                     "GIT_AUTHOR_NAME": "t", "GIT_AUTHOR_EMAIL": "t@t", "GIT_COMMITTER_NAME": "t", "GIT_COMMITTER_EMAIL": "t@t"}
 

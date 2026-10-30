@@ -377,6 +377,7 @@ class Golden(unittest.TestCase):
         bad.mkdir()
         (bad / "hub.json").write_text("{")
         self.env["AGENT_HUB_CONFIG"] = str(bad)
+        self.env["AGENT_HUB_LANG_UI"] = LANGUAGE["ui"]   # that hub.json cannot say which language it is
         out.append(self.run_(cc, "--child"))
         self.check("config-check-files", "\n".join(out))
 
