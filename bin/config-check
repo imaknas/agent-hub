@@ -40,17 +40,6 @@ UNREADABLE = "hub.json: cannot read it ({error})"
 FAILED = "config-check: ✗ {error}"
 
 
-def fallback_language() -> str | None:
-    """None = the instance's own language. A message lookup asks hubconf for the language, and hubconf parses hub.json when
-    it is imported: with a hub.json that does not parse (what --staged's child can be handed), the language comes from
-    AGENT_HUB_LANG_UI, or is English."""
-    try:
-        import hubconf  # noqa: F401
-    except (OSError, ValueError):
-        return os.environ.get("AGENT_HUB_LANG_UI") or "en"
-    return None
-
-
 def check(root: pathlib.Path) -> list[str]:
     """config 目錄 root 底下的 config 有哪些問題(空 = 合格)。schema 是平台的(這支所在的 hub);registry 的驗證要
     hubconf 看到同一個 config 目錄,所以 --staged 用子程序跑(AGENT_HUB_CONFIG 指到匯出的暫存區)。"""
@@ -65,8 +54,7 @@ def check(root: pathlib.Path) -> list[str]:
     try:
         cfg = json.loads(hub.read_text())
     except (OSError, ValueError) as e:
-        lang = fallback_language()
-        return [_(UNREADABLE, error=e) if lang is None else i18n.translate(_.domain, UNREADABLE, {"error": e}, lang)]
+        return [_(UNREADABLE, error=e)]
     schema = json.loads((BIN.parent / "contracts" / "hub.v1.schema.json").read_text())
     errs += [_("hub.json: {error}", error=e) for e in minischema.errors(schema, cfg)]
     known = set(schema["properties"])
@@ -165,9 +153,8 @@ def main(argv: list[str]) -> int:
     else:
         print(_(__doc__), file=sys.stderr)
         return 2
-    lang = fallback_language() if errs else None
     for e in errs:
-        print(_(FAILED, error=e) if lang is None else i18n.translate(_.domain, FAILED, {"error": e}, lang), file=sys.stderr)
+        print(_(FAILED, error=e), file=sys.stderr)
     if not errs:
         print(_("config-check: the config is all valid"))
     return 1 if errs else 0

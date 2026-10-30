@@ -20,6 +20,7 @@ keeps an instance on zh-Hant byte-identical (tests/test_i18n_golden.py).
 from __future__ import annotations
 
 import json
+import os
 import pathlib
 import sys
 
@@ -29,9 +30,14 @@ _catalogs: dict[tuple[str, str], dict[str, str]] = {}
 
 
 def lang() -> str:
+    """The UI language. If hub.json itself cannot be read (config-check reporting exactly that), the environment's
+    AGENT_HUB_LANG_UI or en: an error message must not fail because the config it is about is broken."""
     if str(ROOT / "bin") not in sys.path:
         sys.path.insert(0, str(ROOT / "bin"))
-    import hubconf
+    try:
+        import hubconf
+    except (OSError, ValueError):
+        return os.environ.get("AGENT_HUB_LANG_UI") or "en"
     return hubconf.lang_ui()
 
 
