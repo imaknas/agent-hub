@@ -43,7 +43,10 @@ import sys
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
 import alert  # noqa: E402
 import hubconf  # noqa: E402
+import i18n  # noqa: E402
 import registry  # noqa: E402
+
+_ = i18n.domain(__file__)
 
 AGENTS = pathlib.Path.home() / "Library" / "LaunchAgents"
 # launchd 底下的 PATH:指令照這個(或 service 自己 env 的 PATH)解析,不看跑這支的 shell 的 PATH
@@ -66,7 +69,7 @@ def render(project: str, doc: dict, svc: dict) -> tuple[dict, str | None]:
     if not first.startswith("/"):
         first = str(cwd / first) if "/" in first else (shutil.which(first, path=search) or first)
     problem = None if pathlib.Path(first).is_absolute() and os.access(first, os.X_OK) else \
-        f"找不到 `{words[0]}`(PATH={search})"
+        _("`{command}` not found (PATH={path})", command=words[0], path=search)
     args = [first] + [str(cwd / w) if not w.startswith(("/", "-")) and (cwd / w).exists() else w for w in words[1:]]
     label = label_of(project, svc)
     p: dict = {"Label": label, "ProgramArguments": args, "WorkingDirectory": str(cwd)}
@@ -95,7 +98,7 @@ def bootstrap(uid: int, label: str, path: pathlib.Path) -> subprocess.CompletedP
     """bootout 是非同步的:舊程序還沒結束就 bootstrap 會 `5: Input/output error`(服務就停在沒載入)。
     等它從 launchd 消失(最多 20 秒),失敗再試幾次。"""
     import time
-    for _ in range(40):
+    for _wait in range(40):
         if launchctl("print", f"gui/{uid}/{label}").returncode != 0:
             break
         time.sleep(0.5)
@@ -143,7 +146,8 @@ def _desired(index: dict) -> tuple[dict[str, tuple[str, dict]], list[str], set[s
             plist, problem = render(name, doc, svc)
             want[label] = (name, plist)
             if problem:
-                problems.append(f"{label}({name}):{problem}——plist 不動,沒有就不建")
+                problems.append(_("{label} ({project}): {problem}; the plist is left alone, and not created if missing",
+                                  label=label, project=name, problem=problem))
                 keep.add(label)
             if svc.get("keepalive"):
                 keepalive.add(label)
@@ -172,7 +176,8 @@ def _changes(want: dict, keep: set[str], only: str | None = None) -> list[tuple]
             if cur_units != want_units:
                 keys = sorted(n for n in set(cur_units) | set(want_units) if cur_units.get(n) != want_units.get(n))
                 out.append((Change("update" if cur_units else "add", f"service:{label}",
-                                   proj + (f":改了 {'、'.join(keys)}" if cur_units else "")), None, plist))
+                                   proj + (":" + _("changed {keys}", keys=_(", ").join(keys)) if cur_units else "")),
+                        None, plist))
             continue
         path = AGENTS / f"{label}.plist"
         cur = plistlib.loads(path.read_bytes()) if path.exists() else None
@@ -180,10 +185,10 @@ def _changes(want: dict, keep: set[str], only: str | None = None) -> list[tuple]
             continue
         keys = [] if cur is None else sorted(k for k in set(cur) | set(plist) if cur.get(k) != plist.get(k))
         out.append((Change("add" if cur is None else "update", f"service:{label}",
-                           proj + (f":改了 {'、'.join(keys)}" if keys else "")), cur, plist))
+                           proj + (":" + _("changed {keys}", keys=_(", ").join(keys)) if keys else "")), cur, plist))
     for label in sorted(_mine() - set(want)):
         if not only or label == only:
-            out.append((Change("remove", f"service:{label}", "登錄裡已經沒有"), None, None))
+            out.append((Change("remove", f"service:{label}", _("no longer in the registry")), None, None))
     return out
 
 
@@ -196,8 +201,9 @@ def _apply_one(uid: int, ch, plist: dict | None, problems: list[str]) -> None:
             return
         r = systemd_units.install(plist)
         if r.returncode != 0:
-            print(f"    ⚠️ systemctl enable 失敗:{r.stderr.strip()}")
-            problems.append(f"{label}({ch.detail.split(':')[0]}):systemctl enable 失敗:{r.stderr.strip()[:200]}")
+            print("    " + _("⚠️ systemctl enable failed: {error}", error=r.stderr.strip()))
+            problems.append(_("{label} ({project}): systemctl enable failed: {error}", label=label,
+                              project=ch.detail.split(":")[0], error=r.stderr.strip()[:200]))
         return
     if ch.op == "remove":
         launchctl("bootout", f"gui/{uid}/{label}")
@@ -208,33 +214,34 @@ def _apply_one(uid: int, ch, plist: dict | None, problems: list[str]) -> None:
     path.write_bytes(plistlib.dumps(plist))
     r = bootstrap(uid, label, path)
     if r.returncode != 0:
-        print(f"    ⚠️ bootstrap 失敗:{r.stderr.strip()}")
-        problems.append(f"{label}({ch.detail.split(':')[0]}):bootstrap 失敗:{r.stderr.strip()[:200]}")
+        print("    " + _("⚠️ bootstrap failed: {error}", error=r.stderr.strip()))
+        problems.append(_("{label} ({project}): bootstrap failed: {error}", label=label, project=ch.detail.split(":")[0],
+                          error=r.stderr.strip()[:200]))
 
 
 def plan(index: dict | None = None) -> list:
     if hubconf.service_manager() is None:
         return []   # 沒有服務管理器:沒有東西能套用(doctor 跟 main 會說)
-    want, _, keep, _ = _desired(index or registry.refresh())
-    return [c for c, _, _ in _changes(want, keep)]
+    want, _problems, keep, _keepalive = _desired(index or registry.refresh())
+    return [c for c, _cur, _plist in _changes(want, keep)]
 
 
 def apply(index: dict | None = None) -> list:
     if hubconf.service_manager() is None:
         return []
-    want, problems, keep, _ = _desired(index or registry.refresh())
+    want, problems, keep, _keepalive = _desired(index or registry.refresh())
     uid = os.getuid()
     todo = _changes(want, keep)
-    for ch, _, plist in todo:
+    for ch, _cur, plist in todo:
         _apply_one(uid, ch, plist, problems)
     RENDERED.parent.mkdir(parents=True, exist_ok=True)
     RENDERED.write_text(json.dumps(sorted(want)))
-    return [c for c, _, _ in todo]
+    return [c for c, _cur, _plist in todo]
 
 
 def main() -> int:
     if hubconf.service_manager() is None:
-        print(f"services:{hubconf.NO_SERVICE_MANAGER}")
+        print(_("services: {reason}", reason=hubconf.NO_SERVICE_MANAGER))
         return 0
     dry = "--dry-run" in sys.argv
     only = sys.argv[sys.argv.index("--only") + 1] if "--only" in sys.argv else None
@@ -246,10 +253,11 @@ def main() -> int:
     for ch, cur, plist in todo:
         label = ch.target.removeprefix("service:")
         if ch.op == "remove":
-            print(f"{'(dry-run) ' if dry else ''}{label}:登錄裡已經沒有,卸載")
+            print(("(dry-run) " if dry else "") + _("{label}: no longer in the registry, unloading", label=label))
         else:
             changed += 1
-            print(f"{'(dry-run) ' if dry else ''}{label}({want[label][0]}):{'新增' if ch.op == 'add' else '更新'}")
+            print(("(dry-run) " if dry else "") + _("{label} ({project}): {op}", label=label, project=want[label][0],
+                                                    op=_("add") if ch.op == "add" else _("update")))
             if cur is not None:
                 for k in sorted(set(cur) | set(plist)):
                     if cur.get(k) != plist.get(k):
@@ -260,17 +268,18 @@ def main() -> int:
         RENDERED.parent.mkdir(parents=True, exist_ok=True)
         RENDERED.write_text(json.dumps(sorted(want)))
     if not changed:
-        print("services:都跟登錄一致")
+        print(_("services: everything matches the registry"))
     if not dry and not only:
         for label in sorted(want):
             if any(label in x for x in problems):
                 continue
             state = running(uid, label)
             if state is None:
-                problems.append(f"{label}({want[label][0]}):launchd 沒有載入")
+                problems.append(_("{label} ({project}): not loaded in launchd", label=label, project=want[label][0]))
             elif label in keepalive and state != "running":
-                problems.append(f"{label}({want[label][0]}):keepalive 的服務沒在跑(state = {state})")
-        alert.once("render-services", problems, "背景服務都恢復正常了(render-services)")
+                problems.append(_("{label} ({project}): the keepalive service is not running (state = {state})", label=label,
+                                  project=want[label][0], state=state))
+        alert.once("render-services", problems, _("The background services are all back to normal (render-services)"))
     for x in problems:
         print(f"⚠️ {x}")
     return 1 if problems else 0

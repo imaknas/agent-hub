@@ -1,0 +1,20 @@
+{
+ "`{command}` not found (PATH={path})": "找不到 `{command}`(PATH={path})",
+ "{label} ({project}): {problem}; the plist is left alone, and not created if missing": "{label}({project}):{problem}——plist 不動,沒有就不建",
+ "changed {keys}": "改了 {keys}",
+ ", ": "、",
+ "no longer in the registry": "登錄裡已經沒有",
+ "⚠️ systemctl enable failed: {error}": "⚠️ systemctl enable 失敗:{error}",
+ "{label} ({project}): systemctl enable failed: {error}": "{label}({project}):systemctl enable 失敗:{error}",
+ "⚠️ bootstrap failed: {error}": "⚠️ bootstrap 失敗:{error}",
+ "{label} ({project}): bootstrap failed: {error}": "{label}({project}):bootstrap 失敗:{error}",
+ "services: {reason}": "services:{reason}",
+ "{label}: no longer in the registry, unloading": "{label}:登錄裡已經沒有,卸載",
+ "{label} ({project}): {op}": "{label}({project}):{op}",
+ "add": "新增",
+ "update": "更新",
+ "services: everything matches the registry": "services:都跟登錄一致",
+ "{label} ({project}): not loaded in launchd": "{label}({project}):launchd 沒有載入",
+ "{label} ({project}): the keepalive service is not running (state = {state})": "{label}({project}):keepalive 的服務沒在跑(state = {state})",
+ "The background services are all back to normal (render-services)": "背景服務都恢復正常了(render-services)"
+}
