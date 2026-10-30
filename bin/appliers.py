@@ -22,6 +22,9 @@ from typing import NamedTuple
 BIN = pathlib.Path(__file__).resolve().parent
 if str(BIN) not in sys.path:
     sys.path.insert(0, str(BIN))
+import i18n  # noqa: E402
+
+_ = i18n.domain(__file__)
 
 
 class Change(NamedTuple):
@@ -63,7 +66,7 @@ def load(name: str):
     if not isinstance(getattr(m, "EXTERNAL", None), bool):
         missing.append("EXTERNAL")
     if missing:
-        raise MissingFunctions(f"{path.name} 不是套用者:缺 {', '.join(missing)}")
+        raise MissingFunctions(_("{file} is not an applier: missing {names}", file=path.name, names=", ".join(missing)))
     _loaded[name] = m
     return m
 
