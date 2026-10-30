@@ -46,6 +46,9 @@ import yaml
 
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
 import hubconf  # noqa: E402
+import i18n  # noqa: E402
+
+_ = i18n.domain(__file__)
 
 HUB = hubconf.ROOT
 
@@ -90,7 +93,7 @@ def all_jobs(log_errors: bool = False) -> tuple[list[dict], dict]:
         reg_jobs = []
         info["errors"]["(registry)"] = [repr(e)]
         if log_errors:
-            log(f"專案登錄讀不了,這個 tick 只跑 schedule.yaml:{e!r}")
+            log(_("The project registry can't be read, this tick runs only schedule.yaml: {error!r}", error=e))
     return legacy + reg_jobs, info
 
 
@@ -138,7 +141,8 @@ def failing_problems(failing: dict, now: datetime.datetime) -> list[str]:
         except (KeyError, ValueError):
             continue
         if now - since >= ALERT_AFTER:
-            out.append(f"排程 job {name} 從 {rec['since'][5:16].replace('T', ' ')} 起一直失敗({rec.get('detail') or '看 log'})")
+            out.append(_("Scheduled job {name} has been failing since {since} ({detail})", name=name,
+                         since=rec["since"][5:16].replace("T", " "), detail=rec.get("detail") or _("see the log")))
     return out
 
 
@@ -148,9 +152,10 @@ def alert_failing() -> None:
     try:
         import alert
         failing = json.loads(FAILING_FILE.read_text()) if FAILING_FILE.exists() else {}
-        alert.once("scheduler-jobs", failing_problems(failing, datetime.datetime.now()), "排程的 job 都恢復正常了")
+        alert.once("scheduler-jobs", failing_problems(failing, datetime.datetime.now()),
+                   _("The scheduled jobs are all back to normal"))
     except Exception as e:  # 警報壞掉不影響排程
-        log(f"排程 job 的警報沒發出去:{e!r}")
+        log(_("The scheduled-job alert was not sent: {error!r}", error=e))
 
 
 def job_failed(name: str, code: int, detail: str = "") -> None:
@@ -202,7 +207,7 @@ def reconcile(state: dict, jobs: dict[str, dict]) -> set[str]:
                 continue
             # 沒寫結果就不見了(重開機、被殺):算失敗,嘗試次數在開始前就記過了
             log(f"job '{name}' FAILED (exit -1), background process gone without a result")
-            job_failed(name, -1, "背景執行到一半不見了(重開機、被殺)")
+            job_failed(name, -1, _("the background run vanished midway (reboot, killed)"))
         elif rec["exit"] == 0:
             state[name] = rec["date"]
             mark_job(name, False)

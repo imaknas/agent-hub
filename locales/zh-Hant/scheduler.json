@@ -1,0 +1,8 @@
+{
+ "The project registry can't be read, this tick runs only schedule.yaml: {error!r}": "專案登錄讀不了,這個 tick 只跑 schedule.yaml:{error!r}",
+ "Scheduled job {name} has been failing since {since} ({detail})": "排程 job {name} 從 {since} 起一直失敗({detail})",
+ "see the log": "看 log",
+ "The scheduled jobs are all back to normal": "排程的 job 都恢復正常了",
+ "The scheduled-job alert was not sent: {error!r}": "排程 job 的警報沒發出去:{error!r}",
+ "the background run vanished midway (reboot, killed)": "背景執行到一半不見了(重開機、被殺)"
+}
