@@ -176,7 +176,7 @@ def _changes(want: dict, keep: set[str], only: str | None = None) -> list[tuple]
             if cur_units != want_units:
                 keys = sorted(n for n in set(cur_units) | set(want_units) if cur_units.get(n) != want_units.get(n))
                 out.append((Change("update" if cur_units else "add", f"service:{label}",
-                                   proj + (":" + _("changed {keys}", keys=_(", ").join(keys)) if cur_units else "")),
+                                   proj + (":" + _(" changed {keys}", keys=_(", ").join(keys)) if cur_units else "")),
                         None, plist))
             continue
         path = AGENTS / f"{label}.plist"
@@ -185,7 +185,7 @@ def _changes(want: dict, keep: set[str], only: str | None = None) -> list[tuple]
             continue
         keys = [] if cur is None else sorted(k for k in set(cur) | set(plist) if cur.get(k) != plist.get(k))
         out.append((Change("add" if cur is None else "update", f"service:{label}",
-                           proj + (":" + _("changed {keys}", keys=_(", ").join(keys)) if keys else "")), cur, plist))
+                           proj + (":" + _(" changed {keys}", keys=_(", ").join(keys)) if keys else "")), cur, plist))
     for label in sorted(_mine() - set(want)):
         if not only or label == only:
             out.append((Change("remove", f"service:{label}", _("no longer in the registry")), None, None))

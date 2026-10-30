@@ -1,7 +1,7 @@
 {
  "`{command}` not found (PATH={path})": "找不到 `{command}`(PATH={path})",
  "{label} ({project}): {problem}; the plist is left alone, and not created if missing": "{label}({project}):{problem}——plist 不動,沒有就不建",
- "changed {keys}": "改了 {keys}",
+ " changed {keys}": "改了 {keys}",
  ", ": "、",
  "no longer in the registry": "登錄裡已經沒有",
  "⚠️ systemctl enable failed: {error}": "⚠️ systemctl enable 失敗:{error}",
