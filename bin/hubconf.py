@@ -206,6 +206,7 @@ def bus_db() -> pathlib.Path:
     link = LOGS / "hubbus.log"  # 還在讀 .logs/hubbus.log 的(其他 session 的監看)照樣讀得到
     if link.is_symlink() or not link.exists():
         link.unlink(missing_ok=True)
+        LOGS.mkdir(parents=True, exist_ok=True)   # a fresh checkout (or the commit gate's copy) has no .logs yet
         link.symlink_to(BUS_LOG)
     return new
 

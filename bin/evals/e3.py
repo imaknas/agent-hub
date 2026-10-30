@@ -95,6 +95,14 @@ def snapshot(proj: pathlib.Path) -> dict[str, str]:
     return out
 
 
+def llm_cmd(prompt_file: pathlib.Path, *extra: str) -> list[str]:
+    """the agent-job point the way bin/run-agent-job.sh calls it: sealed from the environment's MCP servers
+    (`--strict-mcp-config`; without it the agent gets every MCP configured on this machine, production databases
+    included; evaluators.md principle 4)"""
+    return [str(BIN / "py"), str(BIN / "llm.py"), "run", "agent-job", "--prompt-file", str(prompt_file), *extra,
+            "--", "--strict-mcp-config"]
+
+
 def register(cfg: pathlib.Path, name: str, ws: pathlib.Path, extra: str = "") -> None:
     reg = cfg / (json.loads((cfg / e2.HUB_JSON).read_text()).get("registry_dir") or "projects")
     (reg / f"{name}.yaml").write_text(f"v: 1\nname: {name}\npaths:\n  workspace: {ws}\n{extra}")
@@ -132,8 +140,7 @@ def one(scenario: str, arm: str, i: int, run_dir: pathlib.Path, env: dict) -> di
             letter = re.search(r"\bm\d{8}-[0-9a-f]{4}\b", r.stdout + r.stderr).group(0)
         (out / "prompt.txt").write_text(d["scenarios"][scenario]["prompt"])
         t0 = datetime.datetime.now()
-        r = subprocess.run([str(BIN / "py"), str(BIN / "llm.py"), "run", "agent-job", "--prompt-file", str(out / "prompt.txt")],
-                           cwd=proj, env=renv, capture_output=True, text=True, timeout=3600)
+        r = subprocess.run(llm_cmd(out / "prompt.txt"), cwd=proj, env=renv, capture_output=True, text=True, timeout=3600)
         secs = (datetime.datetime.now() - t0).total_seconds()
         after = snapshot(proj)
         log = subprocess.run(["git", "-C", str(proj), "log", "--format=%s"], capture_output=True, text=True).stdout

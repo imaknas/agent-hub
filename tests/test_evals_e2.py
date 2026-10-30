@@ -132,6 +132,18 @@ class E3(unittest.TestCase):
     def test_old_arm_is_the_pinned_templates(self):
         self.assertIn("agent-hub:begin", e3.managed_block("old"))
 
+    def test_agent_is_sealed_from_mcp(self):
+        """the command E3 runs must carry the flag that keeps the environment's MCP servers out (same as run-agent-job.sh)"""
+        cmd = e3.llm_cmd(pathlib.Path("p"), "--dry-run")
+        self.assertIn("--strict-mcp-config", cmd[cmd.index("--"):], "passed through to the agent, after --")
+        with tempfile.TemporaryDirectory() as d:
+            p = pathlib.Path(d) / "prompt.txt"
+            p.write_text("x")
+            r = subprocess.run(e3.llm_cmd(p, "--dry-run"), capture_output=True, text=True, timeout=60)
+        if r.returncode != 0 and not r.stdout.startswith("["):
+            self.skipTest("no coding agent installed here (the commit gate's empty HOME)")
+        self.assertIn("--strict-mcp-config", json.loads(r.stdout))
+
     def test_letter_check_reads_the_run_bus(self):
         with tempfile.TemporaryDirectory() as d:
             out = pathlib.Path(d)
