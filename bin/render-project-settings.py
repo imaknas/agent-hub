@@ -29,9 +29,12 @@ import sys
 
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
 import hubconf  # noqa: E402
+import i18n  # noqa: E402
 import policy  # noqa: E402
 import registry  # noqa: E402
 import runtime_claude  # noqa: E402
+
+_ = i18n.domain(__file__)
 
 RENDERED = hubconf.STATE / "rendered-settings"
 
@@ -75,15 +78,17 @@ def write_project(name: str, doc: dict, index: dict, report: bool) -> list[str]:
     drift = []
     if prev:  # 寫過才談得上偏移
         if cur.get("sandbox") != prev.get("sandbox"):
-            drift.append("sandbox 被改過")
+            drift.append(_("sandbox was changed"))
         for key in ("deny", "allow"):
             missing = set(prev.get(key, [])) - set(perms.get(key, []))
             if missing:
-                drift.append(f"permissions.{key} 少了 {len(missing)} 條(例:{sorted(missing)[0]})")
+                drift.append(_("permissions.{key} is missing {n} rules (e.g. {example})", key=key, n=len(missing),
+                               example=sorted(missing)[0]))
     if report:
-        print(f"{name}:會寫 sandbox(allowWrite {len(sandbox['filesystem']['allowWrite'])}、denyRead "
-              f"{len(sandbox['filesystem']['denyRead'])}、網域 {len(sandbox['network']['allowedDomains'])})、"
-              f"deny {len(deny)} 條、allow {len(allow)} 條 → {path}")
+        print(_("{project}: would write sandbox (allowWrite {write}, denyRead {read}, {domains} domains), "
+                "{deny} deny rules, {allow} allow rules → {path}", project=name,
+                write=len(sandbox["filesystem"]["allowWrite"]), read=len(sandbox["filesystem"]["denyRead"]),
+                domains=len(sandbox["network"]["allowedDomains"]), deny=len(deny), allow=len(allow), path=path))
         return drift
     if new != cur:
         path.parent.mkdir(parents=True, exist_ok=True)
@@ -108,25 +113,30 @@ def unapply(name: str, doc: dict) -> None:
             perms[key] = [r for r in perms[key] if r not in set(prev.get(key, []))]
     path.write_text(json.dumps(cur, indent=2, ensure_ascii=False) + "\n")
     rec.unlink()
-    print(f"{name}:enforce 關了,已拿掉平台的 sandbox/規則")
+    print(_("{project}: enforce is off, removed the platform's sandbox/rules", project=name))
 
 
 GATE_MARK = "# agent-hub:gate (managed; registry gate: strict)"
-GATE_HOOK = GATE_MARK + """
+GATE_HOOK_HEAD = GATE_MARK + """
 # 主 checkout 的 main/master 不能直接 commit 或 merge commit;merge-branch 是 fast-forward,不會觸發這個 hook。
 b=$(git symbolic-ref --short -q HEAD)
 case "$b" in main|master) ;; *) exit 0 ;; esac
 [ -n "$MERGE_GATE" ] && exit 0
-echo "這個專案開了合併閘門(gate: strict):不能直接 commit 到 $b。在自己的 worktree/branch 做,完成用 ~/agent-hub/bin/merge-branch。" >&2
-exit 1
 """
+
+
+def gate_hook() -> str:
+    """the hook's text; the line it prints when it refuses a commit is a message ($b = the branch, filled in by the shell)"""
+    return GATE_HOOK_HEAD + 'echo "' + _(
+        "This project has the merge gate on (gate: strict): no direct commits to $b. Work in your own worktree/branch "
+        "and finish with ~/agent-hub/bin/merge-branch.") + '" >&2\nexit 1\n'
 
 
 def gate(name: str, doc: dict, report: bool, quiet: bool = False) -> list[tuple[str, str]]:
     """登錄 gate: strict → 裝 pre-commit / pre-merge-commit;關掉就拿掉(只動有平台標記的)。
     專案有自己的 core.hooksPath(例:husky)就不裝,只偵測。回傳要做(report)/做了的 (add|remove, hook)。"""
     import subprocess
-    say = (lambda *_: None) if quiet else print
+    say = (lambda *_args: None) if quiet else print
     ws = registry.dirs(doc)["workspace"]
     if not ws or not (ws / ".git").is_dir():
         return []
@@ -137,22 +147,24 @@ def gate(name: str, doc: dict, report: bool, quiet: bool = False) -> list[tuple[
         f = ws / ".git" / "hooks" / hook
         mine = f.exists() and GATE_MARK in f.read_text(errors="replace")
         if want and hp:
-            say(f"{name}:gate strict 沒裝(專案用自己的 core.hooksPath={hp}),只偵測")
+            say(_("{project}: gate strict not installed (the project uses its own core.hooksPath={path}), detecting only",
+                  project=name, path=hp))
             return acts
         if want and not mine:
             if f.exists():
-                say(f"{name}:.git/hooks/{hook} 已經有專案自己的 hook,不覆蓋(gate 只偵測)")
+                say(_("{project}: .git/hooks/{hook} is already the project's own hook, not overwriting it (gate detects only)",
+                      project=name, hook=hook))
                 continue
             acts.append(("add", hook))
             if not report:
-                f.write_text("#!/bin/sh\n" + GATE_HOOK)
+                f.write_text("#!/bin/sh\n" + gate_hook())
                 f.chmod(0o755)
-                say(f"{name}:裝了 {hook}(gate strict)")
+                say(_("{project}: installed {hook} (gate strict)", project=name, hook=hook))
         elif not want and mine:
             acts.append(("remove", hook))
             if not report:
                 f.unlink()
-                say(f"{name}:gate 關了,拿掉 {hook}")
+                say(_("{project}: gate is off, removed {hook}", project=name, hook=hook))
     return acts
 
 
@@ -173,7 +185,7 @@ def _changes(index: dict) -> list:
         rec = RENDERED / f"{name}.json"
         if not on:
             if rec.exists() and settings_path(doc) and settings_path(doc).exists():
-                out.append(Change("remove", f"agent-settings:{name}", "enforce 關了:拿掉平台的 sandbox/規則"))
+                out.append(Change("remove", f"agent-settings:{name}", _("enforce is off: remove the platform's sandbox/rules")))
             continue
         c = compose(name, doc, index)
         if not c:
@@ -181,9 +193,9 @@ def _changes(index: dict) -> list:
         path, cur, new, prev, record = c
         if new != cur or prev != record:
             what = [w for w, changed in (("sandbox", new.get("sandbox") != cur.get("sandbox")),
-                                         ("權限規則", new.get("permissions") != cur.get("permissions")),
-                                         ("紀錄", prev != record)) if changed]
-            out.append(Change("add" if not cur else "update", f"agent-settings:{name}", "、".join(what)))
+                                         (_("permission rules"), new.get("permissions") != cur.get("permissions")),
+                                         (_("record"), prev != record)) if changed]
+            out.append(Change("add" if not cur else "update", f"agent-settings:{name}", _(", ").join(what)))
     return out
 
 
@@ -224,7 +236,9 @@ def main() -> int:
         drift = write_project(name, doc, index, report=report)
         if drift:
             bad += 1
-            print(f"⚠️ {name} 的設定偏移(已{'(report 模式不)' if report else ''}寫回):{'; '.join(drift)}")
+            print(_("⚠️ {project}'s settings drifted (report mode: not written back): {drift}", project=name,
+                    drift="; ".join(drift)) if report else
+                  _("⚠️ {project}'s settings drifted (written back): {drift}", project=name, drift="; ".join(drift)))
     return 1 if bad else 0
 
 
