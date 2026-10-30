@@ -1,0 +1,2 @@
+=== not an applier
+bad.py 不是套用者:缺 apply, EXTERNAL

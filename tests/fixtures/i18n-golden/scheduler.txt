@@ -1,0 +1,53 @@
+=== tick
+[exit None]
+[<TS>] job 'gone/job' FAILED (exit -1), background process gone without a result
+[<TS>] running job 'ok': echo fine
+[<TS>] job 'ok' finished OK
+[<TS>] running job 'bad': exit 3
+[<TS>] job 'bad' FAILED (exit 3), will retry next tick
+[<TS>] job 'waits' waiting for 'late' (after:)
+[<TS>] running job 'often': echo often
+[<TS>] job 'often' finished OK
+[<TS>] running job 'bg' (background): echo bg
+=== failing
+{
+ "gone/job": {
+  "since": "<TS>",
+  "detail": "背景執行到一半不見了(重開機、被殺)"
+ },
+ "bad": {
+  "since": "<TS>",
+  "detail": "log:.logs/bad-<DATE>.log"
+ }
+}
+=== bus and status page
+["hubbus", "publish", "job.failed", "--source", "scheduler", "--payload", "{\"job\": \"gone/job\", \"exit\": -1, \"detail\": \"背景執行到一半不見了(重開機、被殺)\"}"]
+["hubbus", "publish", "job.failed", "--source", "scheduler", "--payload", "{\"job\": \"bad\", \"exit\": 3, \"detail\": \"log:.logs/bad-<DATE>.log\"}"]
+["gen-status-page.py"]
+=== spawned
+[('bg', 'echo bg')]
+=== alert.once
+('scheduler-jobs', [], '排程的 job 都恢復正常了')
+=== job log
+fine
+=== failing_problems
+排程 job a/old 從 <TS> 起一直失敗(exit 1)
+排程 job b/nodetail 從 <TS> 起一直失敗(看 log)
+=== alert broken
+[exit None]
+[<TS>] 排程 job 的警報沒發出去:RuntimeError('discord down')
+=== registry unreadable
+[exit ([], {'alias': {}, 'renames': {}, 'skipped': [], 'errors': {'(registry)': ["RuntimeError('boom')"]}})]
+[<TS>] 專案登錄讀不了,這個 tick 只跑 schedule.yaml:RuntimeError('boom')
+=== scheduler.log
+[<TS>] job 'gone/job' FAILED (exit -1), background process gone without a result
+[<TS>] running job 'ok': echo fine
+[<TS>] job 'ok' finished OK
+[<TS>] running job 'bad': exit 3
+[<TS>] job 'bad' FAILED (exit 3), will retry next tick
+[<TS>] job 'waits' waiting for 'late' (after:)
+[<TS>] running job 'often': echo often
+[<TS>] job 'often' finished OK
+[<TS>] running job 'bg' (background): echo bg
+[<TS>] 排程 job 的警報沒發出去:RuntimeError('discord down')
+[<TS>] 專案登錄讀不了,這個 tick 只跑 schedule.yaml:RuntimeError('boom')

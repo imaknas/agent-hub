@@ -1,0 +1,98 @@
+=== plan, first
++ hook:alpha/pre-commit  gate strict
++ hook:alpha/pre-merge-commit  gate strict
++ agent-settings:alpha  sandbox、權限規則、紀錄
++ hook:beta/pre-merge-commit  gate strict
+=== report
+[exit 0]
+alpha:會寫 sandbox(allowWrite 2、denyRead 1、網域 3)、deny 2 條、allow 1 條 → <TMP>/ws/alpha/.claude/settings.local.json
+beta:.git/hooks/pre-commit 已經有專案自己的 hook,不覆蓋(gate 只偵測)
+beta:會寫 sandbox(allowWrite 2、denyRead 1、網域 3)、deny 2 條、allow 1 條 → <TMP>/ws/beta/.claude/settings.local.json
+gamma:gate strict 沒裝(專案用自己的 core.hooksPath=.husky),只偵測
+gamma:會寫 sandbox(allowWrite 2、denyRead 1、網域 3)、deny 2 條、allow 1 條 → <TMP>/ws/gamma/.claude/settings.local.json
+=== write
+[exit 0]
+alpha:裝了 pre-commit(gate strict)
+alpha:裝了 pre-merge-commit(gate strict)
+beta:.git/hooks/pre-commit 已經有專案自己的 hook,不覆蓋(gate 只偵測)
+beta:裝了 pre-merge-commit(gate strict)
+gamma:gate strict 沒裝(專案用自己的 core.hooksPath=.husky),只偵測
+=== alpha pre-commit
+#!/bin/sh
+# agent-hub:gate (managed; registry gate: strict)
+# 主 checkout 的 main/master 不能直接 commit 或 merge commit;merge-branch 是 fast-forward,不會觸發這個 hook。
+b=$(git symbolic-ref --short -q HEAD)
+case "$b" in main|master) ;; *) exit 0 ;; esac
+[ -n "$MERGE_GATE" ] && exit 0
+echo "這個專案開了合併閘門(gate: strict):不能直接 commit 到 $b。在自己的 worktree/branch 做,完成用 ~/agent-hub/bin/merge-branch。" >&2
+exit 1
+=== alpha settings
+{
+  "sandbox": {
+    "enabled": true,
+    "filesystem": {
+      "allowWrite": [
+        "/rt",
+        "/bus"
+      ],
+      "denyRead": [
+        "/other"
+      ]
+    },
+    "network": {
+      "allowedDomains": [
+        "a.example",
+        "b.example",
+        "c.example"
+      ]
+    }
+  },
+  "permissions": {
+    "deny": [
+      "Read(/other/**)",
+      "Edit(/hub/**)"
+    ],
+    "allow": [
+      "Bash(agenthub send:*)"
+    ]
+  }
+}
+=== plan, after write
+(none)
+=== plan, after drift
+~ agent-settings:alpha  sandbox、權限規則
+=== report, drift
+[exit 1]
+alpha:會寫 sandbox(allowWrite 2、denyRead 1、網域 3)、deny 2 條、allow 1 條 → <TMP>/ws/alpha/.claude/settings.local.json
+⚠️ alpha 的設定偏移(已(report 模式不)寫回):sandbox 被改過; permissions.deny 少了 1 條(例:Read(/other/**))
+beta:.git/hooks/pre-commit 已經有專案自己的 hook,不覆蓋(gate 只偵測)
+beta:會寫 sandbox(allowWrite 2、denyRead 1、網域 3)、deny 2 條、allow 1 條 → <TMP>/ws/beta/.claude/settings.local.json
+gamma:gate strict 沒裝(專案用自己的 core.hooksPath=.husky),只偵測
+gamma:會寫 sandbox(allowWrite 2、denyRead 1、網域 3)、deny 2 條、allow 1 條 → <TMP>/ws/gamma/.claude/settings.local.json
+=== write, drift
+[exit 1]
+⚠️ alpha 的設定偏移(已寫回):sandbox 被改過; permissions.deny 少了 1 條(例:Read(/other/**))
+beta:.git/hooks/pre-commit 已經有專案自己的 hook,不覆蓋(gate 只偵測)
+gamma:gate strict 沒裝(專案用自己的 core.hooksPath=.husky),只偵測
+=== plan, policy changed
+~ agent-settings:alpha  權限規則、紀錄
+=== only alpha
+[exit 0]
+=== plan, enforce and gate off
+- hook:alpha/pre-commit  gate strict
+- hook:alpha/pre-merge-commit  gate strict
+- agent-settings:alpha  enforce 關了:拿掉平台的 sandbox/規則
+=== enforce and gate off
+[exit 0]
+alpha:gate 關了,拿掉 pre-commit
+alpha:gate 關了,拿掉 pre-merge-commit
+alpha:enforce 關了,已拿掉平台的 sandbox/規則
+beta:.git/hooks/pre-commit 已經有專案自己的 hook,不覆蓋(gate 只偵測)
+gamma:gate strict 沒裝(專案用自己的 core.hooksPath=.husky),只偵測
+=== alpha settings
+{
+  "permissions": {
+    "deny": [],
+    "allow": []
+  }
+}
