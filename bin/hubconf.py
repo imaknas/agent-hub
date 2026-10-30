@@ -210,6 +210,17 @@ def bus_db() -> pathlib.Path:
     return new
 
 
+def evals_dir() -> pathlib.Path | None:
+    """Where eval cases and runs live (docs/design/evaluators.md, i18n.md): hub.json `evals_dir`, or AGENT_HUB_EVALS.
+    None = not set up, nothing is recorded. Created 0700; keep it out of git and out of the backup."""
+    d = pathlib.Path(os.environ["AGENT_HUB_EVALS"]) if os.environ.get("AGENT_HUB_EVALS") else p("evals_dir")
+    if d is None:
+        return None
+    d.mkdir(parents=True, exist_ok=True, mode=0o700)
+    d.chmod(0o700)
+    return d
+
+
 def registry_dir() -> pathlib.Path:
     return p("registry_dir", "projects")
 

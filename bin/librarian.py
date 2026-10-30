@@ -453,6 +453,82 @@ def shadow_index(before: str, after: str, digest_text: str) -> None:
         log(f"index.md: 影子模式失敗:{type(e).__name__}: {e}")
 
 
+# ---------- eval cases (docs/design/i18n.md E2) ----------
+# Each night's real inputs to the librarian's judgment points, saved so prompt changes can be compared on the same
+# inputs: the raw builder arguments (to re-render with new code), the prompts as rendered tonight (the "old" arm), a copy
+# of what the model could read, and tonight's outcome. Platform eval dir only (0700, not in git, not backed up).
+# Recording must never change or break the run.
+CASE_KEEP_DAYS = 60
+
+
+def _case_dir(point: str, name: str) -> pathlib.Path | None:
+    base = hubconf.evals_dir()
+    if base is None:
+        return None
+    root = base / "cases" / point
+    d = root / TODAY / name
+    if d.exists():
+        shutil.rmtree(d)
+    d.mkdir(parents=True)
+    cutoff = datetime.date.today() - datetime.timedelta(days=CASE_KEEP_DAYS)
+    for old in root.iterdir():
+        if old.is_dir() and old.name < cutoff.isoformat():
+            shutil.rmtree(old, ignore_errors=True)
+    return d
+
+
+def _case_meta() -> dict:
+    return {"v": 1, "date": TODAY, "owner": OWNER, "assistant": ASSISTANT,
+            "code": out(["git", "-C", str(HUB), "rev-parse", "HEAD"]).strip()}
+
+
+def record_state_case(proj: str, d: pathlib.Path, sha: str, before: str, raw: dict, rendered: dict) -> pathlib.Path | None:
+    try:
+        c = _case_dir("librarian-state", proj)
+        if c is None:
+            return None
+        snap = c / "snapshot"
+        snap.mkdir()
+        tar = subprocess.run(["git", "-C", str(d), "archive", "--format=tar", sha], capture_output=True)
+        subprocess.run(["tar", "-x", "-C", str(snap)], input=tar.stdout, check=True)
+        (c / "args.json").write_text(json.dumps({**_case_meta(), "project": proj, "sha": sha, **raw, **rendered},
+                                                ensure_ascii=False, indent=1))
+        (c / "prompt.librarian-state.txt").write_text(
+            state_prompt(proj, rendered["memory_section"], rendered["h_note"], rendered["d_note"]))
+        (c / "prompt.librarian-state-edits.txt").write_text(state_edits_prompt(
+            proj, snap, before, rendered["memory_section"], rendered["h_note"], rendered["d_note"]))
+        return c
+    except Exception as e:
+        log(f"{proj}: eval case not recorded: {type(e).__name__}: {e}")
+        return None
+
+
+def record_index_case(before: str, digest_text: str) -> pathlib.Path | None:
+    try:
+        c = _case_dir("librarian-index", "index")
+        if c is None:
+            return None
+        (c / "args.json").write_text(json.dumps({**_case_meta(), "index_before": before, "digest": digest_text},
+                                                ensure_ascii=False, indent=1))
+        (c / "prompt.librarian-index.txt").write_text(index_prompt())
+        (c / "prompt.librarian-index-edits.txt").write_text(index_edits_prompt(before, digest_text))
+        return c
+    except Exception as e:
+        log(f"index.md: eval case not recorded: {type(e).__name__}: {e}")
+        return None
+
+
+def record_outcome(case: pathlib.Path | None, outcome: dict, files: dict[str, str]) -> None:
+    if case is None:
+        return
+    try:
+        (case / "outcome.json").write_text(json.dumps(outcome, ensure_ascii=False, indent=1))
+        for name, text in files.items():
+            (case / f"after.{name}").write_text(text)
+    except Exception as e:
+        log(f"eval outcome not recorded ({case.name}): {type(e).__name__}: {e}")
+
+
 # ---------- 一個專案 ----------
 
 def repair_state_todo(proj: str, d: pathlib.Path) -> None:
@@ -530,11 +606,11 @@ def process(proj: str, d: pathlib.Path, handoffs: list[dict], digest: list[str])
         return
 
     memory_section = f"這次 memory/ 沒有新變動,只有下面 {OWNER} 的轉交要處理。"
+    diff, note = "", ""
     if changed:
         log(f"{proj}: changed memory files: {changed.replace(chr(10), ' ')} ")
         # diff 由腳本直接給:模型沒有 Bash,自己跑不了 git log,也讀不到已經被 git rm 的檔案。太大就截斷,模型再用 Read 補
         diff = git(d, "log", "-p", "--reverse", "--format==== commit %h %ad %s", "--date=short", rng, "--", "memory/")
-        note = ""
         if len(diff) > MAX_DIFF_CHARS:
             diff = diff[:MAX_DIFF_CHARS]
             note = f"(diff 太長,只附前 {MAX_DIFF_CHARS} 字元;其餘請用 Read 讀上面列出、目前還存在的檔案)"
@@ -556,6 +632,9 @@ def process(proj: str, d: pathlib.Path, handoffs: list[dict], digest: list[str])
     before = (d / "STATE.md").read_text(errors="replace") if (d / "STATE.md").exists() else ""   # 影子模式的輸入
     # 只准寫 ./STATE.md:prompt 講了也擋不住(小模型照樣改了 memory/reference/),判斷點
     # librarian-state 用權限規則機械限制(dontAsk、只准 Edit(./STATE.md));下面的隔離檢查是第二道防線
+    case = record_state_case(proj, d, pre, before, {"changed": changed, "diff": diff, "truncated": bool(note),
+                                                     "handoffs": mine, "dangling": dangling},
+                             {"memory_section": memory_section, "h_note": h_note, "d_note": d_note})
     rc, obj, text = llm("librarian-state", state_prompt(proj, memory_section, h_note, d_note), d)
     if rc != 0 or not text:
         # 呼叫本身失敗:可能改到一半,不採用。副本還原成乾淨狀態,不留給下一晚
@@ -598,6 +677,8 @@ def process(proj: str, d: pathlib.Path, handoffs: list[dict], digest: list[str])
         log(f"{proj}: 警告——agent 回報 state_updated={reported},但實際檔案變化={actually}(以實際檔案為準)")
     after = (d / "STATE.md").read_text(errors="replace") if (d / "STATE.md").exists() else ""
     shadow_state(proj, d, before, after, changed_state, memory_section, h_note, d_note)
+    record_outcome(case, {"rc": rc, "structured_output": so or None, "changed": changed_state, "stray": bool(stray),
+                          "model": used_model(obj)}, {"STATE.md": after})
 
     if changed_state:
         if post == pre:  # hook 沒接手(這個專案這次沒有走 hook,或 hook 沒設好),自己補 commit+push
@@ -660,6 +741,8 @@ def main() -> int:
             log(f"digest {TODAY} 寫入失敗")
         index_file = hubconf.data_file("index.md")
         index_before = index_file.read_text(errors="replace") if index_file.exists() else ""
+        digest_now = hublib.digest_path()
+        icase = record_index_case(index_before, digest_now.read_text(errors="replace") if digest_now.exists() else "")
         rc, obj, text = llm("librarian-index", index_prompt(), hubconf.data_dir())
         if rc == 0 and text:
             if (cost := add_cost(obj)):
@@ -670,6 +753,9 @@ def main() -> int:
         else:
             log(f"index.md update failed (exit {rc})")
         digest_file = hublib.digest_path()
+        so = (obj or {}).get("structured_output") if rc == 0 else None
+        record_outcome(icase, {"rc": rc, "structured_output": so if isinstance(so, dict) else None, "model": used_model(obj)},
+                       {"index.md": index_file.read_text(errors="replace") if index_file.exists() else ""})
         shadow_index(index_before, index_file.read_text(errors="replace") if index_file.exists() else "",
                      digest_file.read_text(errors="replace") if digest_file.exists() else "".join(digest))
     else:

@@ -84,7 +84,7 @@ class Env:
         (self.hub / "index.md").write_text("# index\n")
         (self.hub / "hub.json").write_text(json.dumps({
             "v": 1, "registry_dir": "projects", "memory_copies": str(tmp / "copies"), "git_origin": str(tmp / "bare"),
-            "bus_dir": str(tmp / "bus"), "owner": {"address": "owner", "aliases": ["alex"], "tag": "Alex"},
+            "bus_dir": str(tmp / "bus"), "evals_dir": str(tmp / "evals"), "owner": {"address": "owner", "aliases": ["alex"], "tag": "Alex"},
             "assistant": {"project": "helper", "api": "http://127.0.0.1:9/x", "name": "Hugin"}}))
         e = {k: v for k, v in os.environ.items() if not k.startswith(("GIT_", "AGENT_HUB_HOME", "AGENT_HUB_CONFIG",
                                                                      "AGENT_HUB_DATA", "AGENT_HUB_SECRETS"))}
@@ -156,6 +156,30 @@ class LibrarianFlow(unittest.TestCase):
                 r = env.run(impl)
                 self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
                 check(env, (env.hub / ".logs" / f"librarian-{TODAY}.log").read_text())
+
+    def test_eval_cases_recorded(self):
+        """docs/design/i18n.md E2: each model call's inputs, rendered prompts, snapshot and outcome are kept"""
+        def check(env, log):
+            root = env.tmp / "evals" / "cases"
+            self.assertEqual(oct((env.tmp / "evals").stat().st_mode & 0o777), "0o700")
+            cases = {p.name for p in (root / "librarian-state" / TODAY).iterdir()}
+            self.assertEqual(cases, set(MODES))
+            p0 = root / "librarian-state" / TODAY / "p0"
+            args = json.loads((p0 / "args.json").read_text())
+            self.assertEqual((args["project"], args["owner"], args["assistant"]), ("p0", "Alex", "Hugin"))
+            self.assertIn("2026-10-27.md", args["changed"])
+            self.assertEqual([h.get("handoff_id") for h in args["handoffs"]], [101])
+            sent = {c["cwd"]: c["prompt"] for c in env.calls() if c["point"] == "librarian-state"}
+            self.assertEqual((p0 / "prompt.librarian-state.txt").read_text(), sent["p0"], "the old arm is tonight's prompt")
+            self.assertTrue((p0 / "snapshot" / "memory" / "2026-10-27.md").exists())
+            self.assertFalse((p0 / "snapshot" / ".git").exists())
+            out = json.loads((p0 / "outcome.json").read_text())
+            self.assertTrue(out["changed"])
+            self.assertIn("<!-- edited p0 -->", (p0 / "after.STATE.md").read_text())
+            idx = root / "librarian-index" / TODAY / "index"
+            self.assertTrue((idx / "prompt.librarian-index-edits.txt").exists())
+            self.assertIn("<!-- index edited -->", (idx / "after.index.md").read_text())
+        self.each(check)
 
     def test_each_branch(self):
         def check(env, log):

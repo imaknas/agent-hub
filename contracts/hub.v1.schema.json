@@ -32,6 +32,9 @@
     "bus_dir": {
       "type": "string"
     },
+    "evals_dir": {
+      "type": "string"
+    },
     "owner": {
       "type": "object",
       "required": [
