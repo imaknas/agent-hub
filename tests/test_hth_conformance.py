@@ -67,7 +67,7 @@ class Parse(unittest.TestCase):
                 got = []
                 for owner, rows in items.items():
                     for _, t in rows:
-                        m = gen_todo.KNAS_KEY.search(t)
+                        m = gen_todo.OWNER_KEY.search(t)
                         got.append((ASSIGNEE[owner], (t[:m.start()] if m else t).strip(), m.group(1) if m else None))
                 want = [(t["assignee"], own(t["text"]), t["key"])
                         for t in exp["tasks"]]

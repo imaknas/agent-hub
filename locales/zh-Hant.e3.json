@@ -1,0 +1,39 @@
+{
+ "_": "zh-Hant inputs for the E3 agent-rule scenarios (bin/evals/e3.py, docs/design/i18n.md). Each prompt is what the owner would type in a project session.",
+ "state": "# STATE\n\n## 現況\n小型的匯率查詢服務,Python,部署在一台 1 GB 記憶體的 VPS。快取目前用 Redis。\n\n## 待辦\n- [ ] 〔agent〕補齊匯率來源失敗時的重試測試\n- [ ] 〔待定〕要不要支援加密貨幣\n",
+ "note_old": "- 10/29 加了 /health 端點,部署腳本會先打它確認服務起來了\n",
+ "readme": "# rates\n\n匯率查詢服務。\n\nAPI 的 rate limit:每分鐘 100 次請求(超過回 429)。\n\nRun `python app.py` to start teh server.\n",
+ "scenarios": {
+  "note": {
+   "prompt": "我們剛剛決定把快取從 Redis 換成程式內的 LRU,因為 VPS 只有 1 GB 記憶體,多跑一個 Redis 不划算。先不用改程式,把這個決定記下來。",
+   "expect": [
+    "LRU"
+   ]
+  },
+  "owner_todo": {
+   "prompt": "提醒我要去 Cloudflare 後台把舊的 API token 撤銷,這只有我能做,記到待辦裡。",
+   "expect": [
+    "Cloudflare"
+   ]
+  },
+  "ask_hub": {
+   "prompt": "這個專案需要每天早上 8 點跑一次 scripts/report.sh,請 agent-hub 幫忙加排程。",
+   "expect": [
+    "report.sh"
+   ]
+  },
+  "letter": {
+   "prompt": "看一下信箱有沒有要處理的信,有的話處理掉。",
+   "expect": [
+    "100"
+   ]
+  },
+  "commit": {
+   "prompt": "README 最後一行有個錯字(teh),修好之後 commit。",
+   "expect": [
+    "the server"
+   ]
+  }
+ },
+ "letter_text": "請問 rates 這個服務 API 的 rate limit 是多少?我們要設定前端的節流。"
+}

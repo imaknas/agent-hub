@@ -43,7 +43,7 @@ BARE = re.compile(r"^- \[ \] (?!〔)(.+)$")
 # librarian 的任務登記把〔Knas〕待辦送進 Muninn 之後,行尾會蓋上「(等 Knas:<key>)」。
 # 有 key 的〔Knas〕待辦以 Muninn 為準,todo.md 不再列(只算數量);沒 key 的照列,
 # 當晚登記完就有 key 了。半形/全形括號跟冒號都接受。
-KNAS_KEY = re.compile(rf"[(（]等 ?{re.escape(TAG)}[:：]\s*([^()（）]+?)\s*[)）]\s*$")
+OWNER_KEY = re.compile(rf"[(（]等 ?{re.escape(TAG)}[:：]\s*([^()（）]+?)\s*[)）]\s*$")
 PLACEHOLDER_MAX_BYTES = 200  # onboard 時的佔位 STATE.md,本來就沒有待辦
 
 
@@ -99,8 +99,8 @@ def main() -> None:
     if MIGRATION.exists():
         parse("agent-hub", MIGRATION.read_text(), items, problems)
 
-    in_assistant = [r for r in items[TAG] if KNAS_KEY.search(r[1])]
-    items[TAG] = [r for r in items[TAG] if not KNAS_KEY.search(r[1])]
+    in_assistant = [r for r in items[TAG] if OWNER_KEY.search(r[1])]
+    items[TAG] = [r for r in items[TAG] if not OWNER_KEY.search(r[1])]
     total = sum(len(v) for v in items.values())
     o = [
         "<!-- contract: todo-md v1 -->",  # 版面的契約在 contracts/todo-md.v1.md

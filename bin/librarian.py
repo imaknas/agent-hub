@@ -482,9 +482,10 @@ def _case_meta() -> dict:
             "code": out(["git", "-C", str(HUB), "rev-parse", "HEAD"]).strip()}
 
 
-def record_state_case(proj: str, d: pathlib.Path, sha: str, before: str, raw: dict, rendered: dict) -> pathlib.Path | None:
+def record_state_case(proj: str, d: pathlib.Path, sha: str, before: str, raw: dict, rendered: dict,
+                      name: str | None = None) -> pathlib.Path | None:
     try:
-        c = _case_dir("librarian-state", proj)
+        c = _case_dir("librarian-state", name or proj)
         if c is None:
             return None
         snap = c / "snapshot"
@@ -580,6 +581,28 @@ def dangling_refs(d: pathlib.Path) -> str:
     return "".join(f" {r}" for r in refs if not glob.glob(r, root_dir=d))
 
 
+def memory_input(d: pathlib.Path, rng: str, changed: str) -> tuple[str, str, bool]:
+    """The prompt's memory section for commits `rng` (changed = the memory files they touch): (section, diff, truncated)."""
+    if not changed:
+        return memory_text("", "", False), "", False
+    # diff 由腳本直接給:模型沒有 Bash,自己跑不了 git log,也讀不到已經被 git rm 的檔案。太大就截斷,模型再用 Read 補
+    diff = git(d, "log", "-p", "--reverse", "--format==== commit %h %ad %s", "--date=short", rng, "--", "memory/")
+    truncated = len(diff) > MAX_DIFF_CHARS
+    return memory_text(changed, diff[:MAX_DIFF_CHARS], truncated), diff[:MAX_DIFF_CHARS], truncated
+
+
+def memory_text(changed: str, diff: str, truncated: bool) -> str:
+    if not changed:
+        return f"這次 memory/ 沒有新變動,只有下面 {OWNER} 的轉交要處理。"
+    note = f"(diff 太長,只附前 {MAX_DIFF_CHARS} 字元;其餘請用 Read 讀上面列出、目前還存在的檔案)" if truncated else ""
+    return f"這個專案自上次檢查後,以下 memory 檔案有變動:\n{changed}\n\n實際變動內容(git log -p,由舊到新){note}:\n{diff}"
+
+
+def dangling_note(dangling: str) -> str:
+    return ("\nSTATE.md 目前引用了這些已經不存在的檔案(被搬走或刪除),這次一定要修正引用,\n"
+            f"指向現在實際存放內容的地方(通常是 memory/reference/ 底下的主題文件):{dangling}") if dangling else ""
+
+
 def process(proj: str, d: pathlib.Path, handoffs: list[dict], digest: list[str]) -> None:
     log(f"--- {proj} ---")
     if run(["git", "pull", "-q"], cwd=d, to_log=True).returncode != 0:
@@ -605,16 +628,9 @@ def process(proj: str, d: pathlib.Path, handoffs: list[dict], digest: list[str])
         ckpt.write_text(head + "\n")
         return
 
-    memory_section = f"這次 memory/ 沒有新變動,只有下面 {OWNER} 的轉交要處理。"
-    diff, note = "", ""
     if changed:
         log(f"{proj}: changed memory files: {changed.replace(chr(10), ' ')} ")
-        # diff 由腳本直接給:模型沒有 Bash,自己跑不了 git log,也讀不到已經被 git rm 的檔案。太大就截斷,模型再用 Read 補
-        diff = git(d, "log", "-p", "--reverse", "--format==== commit %h %ad %s", "--date=short", rng, "--", "memory/")
-        if len(diff) > MAX_DIFF_CHARS:
-            diff = diff[:MAX_DIFF_CHARS]
-            note = f"(diff 太長,只附前 {MAX_DIFF_CHARS} 字元;其餘請用 Read 讀上面列出、目前還存在的檔案)"
-        memory_section = f"這個專案自上次檢查後,以下 memory 檔案有變動:\n{changed}\n\n實際變動內容(git log -p,由舊到新){note}:\n{diff}"
+    memory_section, diff, truncated = memory_input(d, rng, changed)
 
     h_note = ""
     if ids:
@@ -622,17 +638,15 @@ def process(proj: str, d: pathlib.Path, handoffs: list[dict], digest: list[str])
         h_note = handoff_note(mine)
 
     dangling = dangling_refs(d)
-    d_note = ""
     if dangling:
         log(f"{proj}: STATE.md 引用了不存在的檔案:{dangling}")
-        d_note = ("\nSTATE.md 目前引用了這些已經不存在的檔案(被搬走或刪除),這次一定要修正引用,\n"
-                  f"指向現在實際存放內容的地方(通常是 memory/reference/ 底下的主題文件):{dangling}")
+    d_note = dangling_note(dangling)
 
     pre = git(d, "rev-parse", "HEAD")
     before = (d / "STATE.md").read_text(errors="replace") if (d / "STATE.md").exists() else ""   # 影子模式的輸入
     # 只准寫 ./STATE.md:prompt 講了也擋不住(小模型照樣改了 memory/reference/),判斷點
     # librarian-state 用權限規則機械限制(dontAsk、只准 Edit(./STATE.md));下面的隔離檢查是第二道防線
-    case = record_state_case(proj, d, pre, before, {"changed": changed, "diff": diff, "truncated": bool(note),
+    case = record_state_case(proj, d, pre, before, {"changed": changed, "diff": diff, "truncated": truncated,
                                                      "handoffs": mine, "dangling": dangling},
                              {"memory_section": memory_section, "h_note": h_note, "d_note": d_note})
     rc, obj, text = llm("librarian-state", state_prompt(proj, memory_section, h_note, d_note), d)

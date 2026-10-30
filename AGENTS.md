@@ -192,6 +192,9 @@ agent-hub 要給任何 coding agent、任何 LLM、任何 key 的人用。
 - `bin/weekly-reflect.sh`(→ `weekly-reflect.py` + `reflect_llm.py`,頁面樣板 `templates/reflect.html`;reflect 模組)
   ——每週一 07:00:上一週的跨專案活動分析。統計(各專案訊息/session/commit/筆記、時段、深夜比例、最長連續工作、交辦方式)零 LLM;
   「主題與 AI 協作觀察」一週一次模型呼叫,**只送統計數字,對話原文不送雲端**;專案登錄 `privacy.reflection` 不是 include 的連摘要也不送
+- `bin/evals/`: evals for prompt and rule changes (docs/design/i18n.md). `e2.py` freezes judgment-point inputs (the
+  librarian records each night's into `hubconf.evals_dir()`), runs prompt versions through `llm.py` and scores them;
+  `e3.py` runs the project rules in a throwaway project. Runs use their own config copy and bus
 - `bin/hublib.py`——共用判斷:真人訊息、transcript ↔ 專案對應、哪些
   commit 算專案工作。check-memory-gaps / memory-nudge / weekly-reflect 都用它
 - `bin/backup.py`——**加密雲端備份**(backup 模組;restic,目的地跟保留規則在 `hub.json` 的 `backup`)。

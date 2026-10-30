@@ -1,0 +1,5 @@
+{
+ "_": "zh-Hant script checks for the E2 scorers (docs/design/i18n.md). simplified_only: characters whose Traditional form differs (shared forms such as 台 里 后 面 着 范 are left out); full_punct: the full-width punctuation zh-Hant text uses.",
+ "simplified_only": "这说对时为国会们个来过还发经么样见长门问间开关头买卖东车马书话语让论设试请读谁调转达运进远选连边办动务势区医华单卫历压参双变号吗团园围图场坏块坚报尔应广库废张强归当录忆态总战户扩扫护担择换据损敌数断无旧显术机杀条极构档桥检楼标权欢气汇汉没洁浅济测涨渐温满灭灯灵热爱独环现电画疗盖盘矿码础确离种积称稳穷笔简类红约级纪纯纳纸线练组细织终绍结绕给络统继续维综绿缓编缘缩网罗职联肤胜脑脚脸节苏荐药获营虑虽补装观规视览觉触计订认讨训议讯记讲许访证评识诉词译诗诚询该详误课谈谋谓谢贝负贡财责败货质贩购贯费贴贵贸资赏赛赞赶轨轮软轻载较辆辑输辞迈违迟适递逻遗邮释针钟钢钱铁银链锁错键闭闲阅队阳阴阵阶际陆陈险随隐难须顾顺领频题颜额风飞饭馆验鱼鸡齐龙",
+ "full_punct": "，。：；！？「」（）、"
+}
