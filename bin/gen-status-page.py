@@ -378,7 +378,7 @@ def main() -> None:
                          for c, t in alerts) or f"<div class='alert good'>✅ {_('Nothing needs attention')}</div>"
     generated = _("the hub machine · generated {now:%Y-%m-%d %H:%M} · refreshes every 5 minutes · schedules are defined "
                   "in the project registry (projects/) and schedule.yaml", now=now)
-    page = f"""<!doctype html><html lang="zh-Hant"><head><meta charset="utf-8">
+    page = f"""<!doctype html><html lang="{hubconf.lang_ui()}"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1"><meta http-equiv="refresh" content="300">
 <title>{_('Schedule status')}</title><style>
 :root{{--bg:#fafaf9;--fg:#1c1917;--mut:#78716c;--line:#e7e5e4;--card:#fff;--ok:#15803d;--bad:#b91c1c;--run:#1d4ed8;--warn:#fef3c7}}
@@ -460,7 +460,7 @@ def md_html(text: str) -> str:
 
 
 def reading_page(title: str, body: str, now) -> str:
-    return (f'<!doctype html><html lang="zh-Hant"><head><meta charset="utf-8"><meta name="viewport" '
+    return (f'<!doctype html><html lang="{hubconf.lang_ui()}"><head><meta charset="utf-8"><meta name="viewport" '
             f'content="width=device-width,initial-scale=1"><title>{esc(title)}</title><style>{PAGE_CSS}</style></head>'
             f'<body><main><h1>{esc(title)}</h1>{nav()}<div class=sub>{_("generated {now:%Y-%m-%d %H:%M}", now=now)}</div>'
             f'{body}</main></body></html>')
