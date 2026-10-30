@@ -1,16 +1,24 @@
 <!-- contract: state-todo v1 -->
-# 契約:專案現況檔(STATE.md)的 `## 待辦` 段落 v1
+# Contract: the `## 待辦` (to-do) section of a project's STATE.md, v1
 
-每個專案一份現況檔,裡面固定有一個待辦段落。下面的 `{owner}` 是設定裡 owner 的標籤(讀的人從自己的設定填)。
-這個檔是模型改寫的,**檔案裡不放版本標記**(模型會拿掉不認得的行);版本由這份契約決定。
+Every project has one status file with one fixed to-do section. Below, `{owner}` is the owner's tag from the settings
+(each reader fills it in from its own settings).
+This file is rewritten by a model, so **it carries no version marker** (a model drops lines it does not recognize); the
+version is set by this contract.
 
-## 格式
+The tokens are Chinese because the data is: they are what the file contains, not translated prose.
 
-- 段落標題固定是一行 `## 待辦`,到下一個 `## ` 為止。
-- 一行一項,負責人標籤三選一;沒有待辦就是一行 `- (無)`。
-- 也接受分組寫法:`### 〔負責人〕` 小標題,底下 `- [ ] <文字>`(沒有標籤)。標籤不是三個之一的小標題底下、標籤不認得的行,都算格式問題(列在 todo.md 檔尾),不會歸給上一個群組。
-- owner 的項目登錄成任務之後,行尾加 `(等 {owner}:<key>)`(全形括號,冒號半形全形都可以)。
-  key 是不透明的字串(目前是 `task-<專案>-<10 位 hex>`);那件任務結案時,這一行會被照 key 刪掉。
+## Format
+
+- The section heading is exactly the line `## 待辦` ("to-do"), and the section runs to the next `## `.
+- One item per line, with one of three owner tags: `〔{owner}〕` (only the owner can do it), `〔agent〕`, `〔待定〕` ("to be
+  decided"). With no items the section is the single line `- (無)` ("none").
+- Grouped form is also accepted: a `### 〔owner〕` subheading with `- [ ] <text>` lines (no tag) under it. A subheading
+  whose tag is not one of the three, and a line whose tag is not recognized, are format problems (listed at the end of
+  todo.md); they are never assigned to the previous group.
+- Once an owner item is registered as a task, `(等 {owner}:<key>)` ("waiting on owner: key") is appended to the line
+  (full-width parentheses; the colon may be half- or full-width). The key is an opaque string (today
+  `task-<project>-<10 hex digits>`); when that task is closed, the line is removed by its key.
 
 ```regex item
 ^- \[ \] 〔({owner}|agent|待定)〕\s*(.+)$
@@ -28,6 +36,7 @@
 [((]等 ?{owner}[::]\s*([^()()]+?)\s*[))]\s*$
 ```
 
-## 版本
+## Versions
 
-加說明不升版;改標籤、改 key 格式、改段落標題要升版(讀的人兩種都收,直到產生者換完)。
+Adding explanation does not bump the version; changing the tags, the key format or the section heading does (readers
+accept both until the producers have all switched).

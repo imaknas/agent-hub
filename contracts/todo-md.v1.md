@@ -1,14 +1,15 @@
 <!-- contract: todo-md v1 -->
-# 契約:跨專案待辦清單(todo.md)v1
+# Contract: the cross-project to-do list (todo.md), v1
 
-一份機械產生的 markdown,列出各專案還沒完成的待辦,依負責人分段。下面的 `{owner}` 是設定裡 owner 的標籤
-(使用者自己;讀的人從自己的設定填,例:「我」)。
+A mechanically generated markdown file listing every project's open to-do items, grouped by owner. Below, `{owner}` is
+the owner's tag from the settings (the user; each reader fills it in from its own settings, e.g. 「我」).
 
-## 版面
+## Layout
 
-1. 第一行固定是版本標記 `<!-- contract: todo-md v1 -->`(沒有的舊檔讀成 v1)。
-2. 一個 `# ` 標題,接著 `>` 開頭的說明行(不是待辦)。
-3. 三個負責人段落,標題文字固定、順序固定:
+1. The first line is always the version marker `<!-- contract: todo-md v1 -->` (an old file without it reads as v1).
+2. One `# ` title, followed by lines starting with `>` (notes, not items).
+3. Three owner sections, with fixed heading text in a fixed order: only the owner can do it; to be decided (a decision
+   comes first); an agent can do it:
 
 ```heading owner
 ## 只有 {owner} 能做
@@ -16,12 +17,14 @@
 ## agent 可以做
 ```
 
-4. 每個段落底下:`### <專案名稱>` 小標題,底下一行一項 `- [ ] <文字>`;沒有項目就是一行 `(無)`。
-   第一個段落開頭可能有一行 `> 另有 N 項已登記…`(已經登錄成任務、這裡不列的數量)——是說明,不是待辦。
-5. 可能還有其他 `## ` 段落(例:格式問題、沒在記錄的專案),裡面的行不是待辦。
-6. 可能有 `<!-- …:begin -->` … `<!-- …:end -->` 包起來的區塊,不是待辦。
+4. Under each section: `### <project name>` subheadings, each followed by one item per line, `- [ ] <text>`; with no
+   items, the single line `(無)` ("none").
+   The first section may start with a line `> 另有 N 項已登記…` ("N more are registered…": items already registered as
+   tasks and not listed here). It is a note, not an item.
+5. There may be other `## ` sections (e.g. format problems, projects that are not recording); their lines are not items.
+6. There may be blocks wrapped in `<!-- …:begin -->` … `<!-- …:end -->`; they are not items.
 
-## 規則(讀的人照這些 regex 解析)
+## Rules (readers parse with these regexes)
 
 ```regex project
 ^### (\S+)\s*$
@@ -31,9 +34,11 @@
 ^- \[ \] (.+)$
 ```
 
-讀的人只取「負責人段落裡、`### 專案` 底下」的 item;其他行一律略過。
+Readers take only items that are inside an owner section and under a `### project` subheading; every other line is
+skipped.
 
-## 版本
+## Versions
 
-加段落或說明行不升版(讀的人本來就略過不認得的行);改三個負責人標題、改 item/project 的格式要升版,
-產生者同時輸出兩個版本直到讀的人換完。
+Adding sections or notes does not bump the version (readers already skip lines they do not recognize); changing the
+three owner headings or the item/project format does, and the producer writes both versions until the readers have
+switched.

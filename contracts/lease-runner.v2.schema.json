@@ -1,8 +1,8 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "records-lease-runner.v2",
-  "title": "通道租借 runner API v2",
-  "description": "本機 HTTP(127.0.0.1,Bearer token)。$defs 是各個請求、事件、錯誤的形狀。加欄位不升版。 v2 跟執行 session 的 agent 實作無關:動作用通用的種類(kind),配額用通用的時間窗(quota.windows),錯誤碼不帶實作的名字。請求的 body 跟回應都帶 \"v\": 2。v1 已停用;改版前存下的事件照原樣送(v: 1)。",
+  "title": "Lease runner API v2",
+  "description": "Local HTTP (127.0.0.1, Bearer token). $defs holds the shape of each request, event and error. Adding a field does not bump the version. v2 does not depend on which agent runs the session: actions use generic kinds, quotas use generic time windows (quota.windows), and error codes do not name the implementation. Request bodies and responses carry \"v\": 2. v1 is retired; events stored before the change are sent as they are (v: 1).",
   "$defs": {
     "create": {
       "type": "object",
@@ -23,12 +23,12 @@
             "discuss",
             "work"
           ],
-          "description": "discuss = 唯讀深談;work = 可以改這個專案的檔案、跑指令,每次都先問使用者(只開給 policy 的 work_projects)"
+          "description": "discuss = read-only discussion; work = may change this project's files and run commands, asking the user first every time (only for policy's work_projects)"
         },
         "session_id": {
           "type": "string",
           "minLength": 8,
-          "description": "這個租約的 session id(UUID;實作要求的格式)"
+          "description": "This lease's session id (a UUID; the format the implementation requires)"
         },
         "thread": {
           "type": "string"
@@ -61,7 +61,7 @@
         "attachments": {
           "type": "array",
           "maxItems": 8,
-          "description": "附件:存進那個專案資料夾的 attachments/<YYYYMMDD-HHMMSS>-<名稱>(檔名清乾淨、不覆蓋、不進 git);圖片(image/jpeg|png|gif|webp)同時直接給模型看;文字後面會附一行存放路徑。每個解碼後最多 10 MB;整個請求最多 100 MB。",
+          "description": "Attachments: saved in that project's folder as attachments/<YYYYMMDD-HHMMSS>-<name> (file name cleaned, never overwritten, not in git); images (image/jpeg|png|gif|webp) are also shown to the model directly; a line with the saved path is appended to the text. Each at most 10 MB decoded; the whole request at most 100 MB.",
           "items": {
             "type": "object",
             "required": [
@@ -87,7 +87,7 @@
           }
         }
       },
-      "description": "POST /v1/leases/<id>/messages。text 跟 attachments 至少要有一個(只傳附件時 text 可以是空字串)。"
+      "description": "POST /v1/leases/<id>/messages. At least one of text and attachments (with attachments only, text may be an empty string)."
     },
     "detach": {
       "type": "object",
@@ -146,7 +146,7 @@
         },
         "resumable": {
           "type": "boolean",
-          "description": "這段對話現在還接得回來嗎(紀錄還在)"
+          "description": "Whether this conversation can still be resumed (its transcript still exists)"
         }
       }
     },
@@ -190,7 +190,7 @@
           ]
         }
       },
-      "description": "每個事件都有這幾個欄位;各類型另外的欄位見 tool_use_event、question_event、permission_event、state_event、quota、turn_end_event、error、file_event。"
+      "description": "Every event has these fields; the extra fields of each type are in tool_use_event, question_event, permission_event, state_event, quota, turn_end_event, error and file_event."
     },
     "error": {
       "type": "object",
@@ -204,7 +204,7 @@
         },
         "detail": {
           "type": "string",
-          "description": "給人看的說明;agent_login = 執行 session 的 agent 沒登入或憑證過期(detail 說是哪個)"
+          "description": "A message for people; agent_login = the agent that runs the session is not logged in or its credentials expired (detail says which)"
         },
         "error": {
           "enum": [
@@ -236,11 +236,11 @@
         },
         "limit": {
           "type": "integer",
-          "description": "too_many:同時最多幾個想法沙盒"
+          "description": "too_many: at most this many idea sandboxes at once"
         },
         "current": {
           "type": "integer",
-          "description": "too_many:現在有幾個"
+          "description": "too_many: how many there are now"
         }
       }
     },
@@ -260,14 +260,14 @@
           "items": {
             "type": "string"
           },
-          "description": "開網頁(open_web)不能「整個租約都允許」的網域(含子網域)"
+          "description": "Domains (including subdomains) that open_web may not allow for the whole lease"
         },
         "attachable": {
           "type": "array",
           "items": {
             "type": "string"
           },
-          "description": "可以借用的專案名稱"
+          "description": "Projects that can be leased"
         },
         "modes": {
           "type": "array",
@@ -280,7 +280,7 @@
           "items": {
             "type": "string"
           },
-          "description": "可以用 work 模式的專案(想法沙盒,而且 OS sandbox 已經寫進它的設定)"
+          "description": "Projects that may use work mode (idea sandboxes whose settings already have the OS sandbox)"
         }
       }
     },
@@ -297,11 +297,11 @@
         },
         "command": {
           "type": "string",
-          "description": "在終端機接續這個 session 的指令,照原樣顯示(由 runner 依實作組)"
+          "description": "The command to resume this session in a terminal, shown as is (built by the runner for the implementation)"
         },
         "hint": {
           "type": "string",
-          "description": "給人看的一句:在哪裡跑、跑完要做什麼"
+          "description": "One sentence for people: where to run it and what to do after"
         }
       }
     },
@@ -341,7 +341,7 @@
         "name",
         "purpose"
       ],
-      "description": "POST /v1/sandboxes:替一個想法開探討用的專案(預設唯讀)。同名、同 purpose 再送一次回同一個專案(200),不另開新的。",
+      "description": "POST /v1/sandboxes: open a project to explore an idea (read-only by default). Sending the same name and purpose again returns the same project (200) instead of opening a new one.",
       "properties": {
         "v": {
           "const": 2
@@ -349,13 +349,13 @@
         "name": {
           "type": "string",
           "pattern": "^[a-z0-9](?:[a-z0-9-]{0,38}[a-z0-9])?$",
-          "description": "想法的代號(人看得懂的,例:room-3d):小寫英數跟 -,開頭結尾不是 -、不能有 --,最多 40 字;不能跟現有的專案或資料夾撞名(409 exists)。是不是想法沙盒由平台的登錄決定,不看名稱"
+          "description": "The idea's short name (readable, e.g. room-3d): lowercase letters, digits and -, not starting or ending with -, no --, at most 40 characters; must not collide with an existing project or folder (409 exists). Whether it is an idea sandbox is decided by the platform's registry, not by the name"
         },
         "purpose": {
           "type": "string",
           "minLength": 1,
           "maxLength": 500,
-          "description": "想法本身"
+          "description": "The idea itself"
         }
       }
     },
@@ -366,7 +366,7 @@
         "name",
         "created"
       ],
-      "description": "201(新建)或 200(已存在,重送)。之後這個名稱出現在 policy 的 attachable,可以照一般專案借用。錯誤:400 bad_name、409 exists(同名但 purpose 不同,或名稱已被正式專案用掉)、429 too_many(帶 limit、current)、500 create_failed。",
+      "description": "201 (created) or 200 (already exists, resent). After that the name appears in policy's attachable and can be leased like any project. Errors: 400 bad_name, 409 exists (same name with a different purpose, or the name is taken by a real project), 429 too_many (with limit, current), 500 create_failed.",
       "properties": {
         "v": {
           "const": 2
@@ -385,7 +385,7 @@
         "v",
         "mode"
       ],
-      "description": "POST /v1/leases/<id>/mode:深談中途切換 discuss / work(使用者在卡片上允許動手之後才送)。成功回 200 + lease;正在回答或等使用者回覆時 409 busy;不在 work_projects 回 400 work_not_allowed。切換會停掉程序、用同一個 session 接回,權限轉接也重新開始(先前「這個租約都允許」的網域、寫檔要重新允許)。",
+      "description": "POST /v1/leases/<id>/mode: switch a discussion between discuss and work midway (sent only after the user allowed hands-on work on the card). Success returns 200 + lease; 409 busy while answering or waiting for the user; 400 work_not_allowed if not in work_projects. Switching stops the process and resumes the same session; the permission relay starts over (domains allowed for the whole lease and file writes must be allowed again).",
       "properties": {
         "v": {
           "const": 2
@@ -403,7 +403,7 @@
       "required": [
         "v"
       ],
-      "description": "POST /v1/sandboxes/<name>/upgrade:想法沙盒升級成正式專案(歷史、檔案、memory 都留著;建 private GitHub repo)。使用者在對話裡同意之後才送。已經升級過的再送一次回 200 + upgraded:false 跟現在的名稱(重送安全,改過名也查得到)。",
+      "description": "POST /v1/sandboxes/<name>/upgrade: upgrade an idea sandbox to a real project (history, files and memory are kept; a private GitHub repo is created). Sent only after the user agreed in the conversation. Sending again after an upgrade returns 200 + upgraded:false and the current name (safe to resend; found even after a rename).",
       "properties": {
         "v": {
           "const": 2
@@ -411,7 +411,7 @@
         "rename": {
           "type": "string",
           "pattern": "^[a-z0-9][a-z0-9-]*$",
-          "description": "升級時順便改名"
+          "description": "Rename while upgrading"
         }
       }
     },
@@ -423,7 +423,7 @@
         "origin",
         "upgraded"
       ],
-      "description": "200。錯誤:404 not_found(沒有這個沙盒)、409 not_idea(不是想法沙盒)、409 dirty(有未 commit 的變更)、409 name_taken(新名稱或 GitHub repo 已經存在)、500 upgrade_failed。",
+      "description": "200. Errors: 404 not_found (no such sandbox), 409 not_idea (not an idea sandbox), 409 dirty (uncommitted changes), 409 name_taken (the new name or GitHub repo already exists), 500 upgrade_failed.",
       "properties": {
         "v": {
           "const": 2
@@ -449,7 +449,7 @@
         "run_command",
         "other"
       ],
-      "description": "動作的效果:read 讀、search 搜尋(檔案或網路)、ask_user 問使用者、open_web 開網頁、write_file 寫檔、run_command 跑指令、other 其他"
+      "description": "What the action does: read, search (files or the web), ask_user (ask the user), open_web (open a web page), write_file (write a file), run_command (run a command), other"
     },
     "tool_use_event": {
       "type": "object",
@@ -457,18 +457,18 @@
         "kind",
         "summary"
       ],
-      "description": "type=tool_use:session 用了一個工具",
+      "description": "type=tool_use: the session used a tool",
       "properties": {
         "kind": {
           "$ref": "#/$defs/kind"
         },
         "summary": {
           "type": "string",
-          "description": "給人看的一句(例:讀 README.md)"
+          "description": "One sentence for people (e.g. read README.md)"
         },
         "detail": {
           "type": "object",
-          "description": "實作自己的除錯資訊(例:原本的工具名稱);讀的一方不要依賴它"
+          "description": "The implementation's own debugging information (e.g. the original tool name); readers must not depend on it"
         }
       }
     },
@@ -493,7 +493,7 @@
         "phase",
         "kind"
       ],
-      "description": "type=question:session 問使用者(要等回答);phase=start 開始等、end 有結果",
+      "description": "type=question: the session asks the user (and waits for the answer); phase=start when waiting begins, end with the result",
       "properties": {
         "phase": {
           "enum": [
@@ -509,11 +509,11 @@
         },
         "target": {
           "type": "string",
-          "description": "判斷用的對象(網址、路徑、指令)"
+          "description": "The object being judged (URL, path, command)"
         },
         "decision": {
           "type": "string",
-          "description": "end 才有:allow / deny / answered / timeout 等"
+          "description": "Only on end: allow / deny / answered / timeout and so on"
         }
       }
     },
@@ -523,7 +523,7 @@
         "phase",
         "kind"
       ],
-      "description": "type=permission:session 要做的事要使用者同意;phase=start 開始等、end 有結果",
+      "description": "type=permission: what the session wants to do needs the user's consent; phase=start when waiting begins, end with the result",
       "properties": {
         "phase": {
           "enum": [
@@ -539,11 +539,11 @@
         },
         "target": {
           "type": "string",
-          "description": "判斷用的對象(網址、路徑、指令)"
+          "description": "The object being judged (URL, path, command)"
         },
         "decision": {
           "type": "string",
-          "description": "end 才有:allow / deny / answered / timeout 等"
+          "description": "Only on end: allow / deny / answered / timeout and so on"
         }
       }
     },
@@ -559,11 +559,11 @@
         },
         "mode": {
           "type": "string",
-          "description": "模式變了才帶(例:升級成正式專案後 work 改回 discuss,detail 說原因)"
+          "description": "Only when the mode changed (e.g. work back to discuss after the upgrade to a real project; detail says why)"
         },
         "resumed": {
           "type": "boolean",
-          "description": "這次開始是不是接回同一段對話;false 而且帶 detail = 要接回卻接不回(紀錄不在),從新的對話開始"
+          "description": "Whether this start resumed the same conversation; false with a detail = it should have resumed but could not (the transcript is gone), so a new conversation started"
         },
         "detail": {
           "type": "string"
@@ -579,13 +579,13 @@
         },
         "project": {
           "type": "string",
-          "description": "租約的專案;升級改名後的 state 事件會帶新的名稱(之後照常送話,runner 在新資料夾接回同一段對話)"
+          "description": "The lease's project; after an upgrade with a rename, state events carry the new name (keep sending messages as usual; the runner resumes the same conversation in the new folder)"
         }
       }
     },
     "turn_end_event": {
       "type": "object",
-      "description": "type=turn_end:一輪結束(只有 summary 的是中途的進度摘要)",
+      "description": "type=turn_end: a turn ended (one with only summary is a progress summary midway)",
       "properties": {
         "summary": {
           "type": "string"
@@ -618,7 +618,7 @@
       "required": [
         "windows"
       ],
-      "description": "type=quota 的事件內容,也是 /v1/status 的 quota:agent 的用量時間窗。讀的一方只照 label 顯示、照 used 判斷要不要提醒",
+      "description": "The content of a type=quota event, and the quota in /v1/status: the agent's usage windows. Readers display only by label and decide whether to warn only by used",
       "properties": {
         "status": {
           "enum": [
@@ -646,7 +646,7 @@
               },
               "label": {
                 "type": "string",
-                "description": "給人看的名稱(例:5 小時)"
+                "description": "A name for people (e.g. 5 hours)"
               },
               "used": {
                 "type": "number",
@@ -674,7 +674,7 @@
         "mime",
         "size"
       ],
-      "description": "type=file:session 把專案裡的一個檔案給使用者看。內容用 GET /v1/leases/<lease id>/files/<id> 拿(同一個 token;回檔案本身,Content-Type = mime;送的是給看當下複製的那份,保留 30 天;沒有或過期 404 not_found)。類型限 png/jpg/webp/gif/pdf/glb/txt/md/json/csv(內容也要對得上)、每個 ≤ 20 MB;只會是那個租約專案資料夾裡的檔案,看起來像憑證的不送",
+      "description": "type=file: the session shows the user a file from the project. Get the content with GET /v1/leases/<lease id>/files/<id> (same token; returns the file itself, Content-Type = mime; it is the copy made when it was shown, kept 30 days; 404 not_found if missing or expired). Types limited to png/jpg/webp/gif/pdf/glb/txt/md/json/csv (the content must match too), each ≤ 20 MB; only files in that lease's project folder, and nothing that looks like a credential",
       "properties": {
         "id": {
           "type": "string",
@@ -682,7 +682,7 @@
         },
         "path": {
           "type": "string",
-          "description": "專案資料夾裡的相對路徑"
+          "description": "Path relative to the project folder"
         },
         "name": {
           "type": "string"
@@ -696,7 +696,7 @@
         },
         "summary": {
           "type": "string",
-          "description": "session 給的一句說明"
+          "description": "One sentence from the session"
         }
       }
     },
@@ -706,7 +706,7 @@
         "v",
         "to"
       ],
-      "description": "POST /v1/projects/<name>/rename:把一個專案(正式專案或想法沙盒)整套改名——資料夾、memory、登記、GitHub repo(有的話)、mirror 一起搬,深談的對話紀錄跟著搬。那個專案有深談正在回答、等回覆、在終端機或正在收回 → 409 busy(什麼都不動,等那一輪做完再送);閒著的先停程序,搬完後還沒收回的租約送 state 事件帶 project: <新名稱>,之後照常送話,在新資料夾接回同一段對話。錯誤:400 bad_name、404 not_found、409 busy / name_taken(新名稱、資料夾或 GitHub repo 已存在)、500 rename_failed。同一個改名做到一半再送一次會接著做完",
+      "description": "POST /v1/projects/<name>/rename: rename a whole project (a real project or an idea sandbox): folder, memory, registration, GitHub repo (if any) and mirror move together, and the discussion's transcript moves with them. If that project has a discussion answering, waiting for a reply, open in a terminal or being reclaimed → 409 busy (nothing is touched; send again after that turn). An idle one is stopped first; after the move, leases not yet reclaimed get a state event with project: <new name>, and messages are sent as usual and resume the same conversation in the new folder. Errors: 400 bad_name, 404 not_found, 409 busy / name_taken (the new name, folder or GitHub repo already exists), 500 rename_failed. Sending the same rename again when it stopped halfway finishes it",
       "properties": {
         "v": {
           "const": 2
@@ -714,7 +714,7 @@
         "to": {
           "type": "string",
           "pattern": "^[a-z0-9](?:[a-z0-9-]{0,38}[a-z0-9])?$",
-          "description": "新名稱(小寫英數跟 -,最多 40 字)"
+          "description": "The new name (lowercase letters, digits and -, at most 40 characters)"
         }
       }
     },
@@ -725,7 +725,7 @@
         "name",
         "renamed"
       ],
-      "description": "200:改好了(或已經改過)",
+      "description": "200: renamed (or already renamed)",
       "properties": {
         "v": {
           "const": 2
@@ -735,11 +735,11 @@
         },
         "origin": {
           "type": "string",
-          "description": "新的 remote 網址;沒有 remote 的是 (native)"
+          "description": "The new remote URL; (native) when there is no remote"
         },
         "renamed": {
           "type": "boolean",
-          "description": "false = 之前已經改好了(重送)"
+          "description": "false = already renamed before (resent)"
         }
       }
     }

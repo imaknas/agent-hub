@@ -1,8 +1,8 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "records-reflect-week.v1",
-  "title": "每週活動分析 <YYYY-Www>.json",
-  "description": "一週的跨專案活動統計 + 模型分析。2026-W43 起帶 \"v\": 1(更早的沒有,讀成 1)。analysis 可能只有 {error, meta}。",
+  "title": "Weekly activity analysis <YYYY-Www>.json",
+  "description": "A week's cross-project activity statistics plus the model's analysis. Carries \"v\": 1 from 2026-W43 (earlier files have none; read them as 1). analysis may be only {error, meta}.",
   "type": "object",
   "required": ["week", "start", "end", "generated", "totals", "projects", "rhythm", "delegation"],
   "properties": {
@@ -18,6 +18,6 @@
     "delegation": {"type": "object", "required": ["agents", "peer"]},
     "changes": {"type": "object"},
     "analysis": {"type": "object", "properties": {"meta": {"type": "object"}, "error": {"type": "string"}}},
-    "unsupported": {"type": "string", "description": "這個執行環境沒有對話紀錄:對話的統計(訊息、作息、交辦方式)沒有算,也沒有送模型分析;值是原因"}
+    "unsupported": {"type": "string", "description": "This runtime has no transcripts: conversation statistics (messages, daily rhythm, how work was handed off) were not computed or sent for analysis; the value is the reason"}
   }
 }
