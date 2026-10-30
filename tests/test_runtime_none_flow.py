@@ -27,8 +27,8 @@ class RuntimeNone(unittest.TestCase):
                     "HOME": str(self.tmp / "home"), "AGENT_HUB_CONFIG": str(self.tmp / "config"),
                     "AGENT_HUB_DATA": str(self.tmp / "data"), "AGENT_HUB_SECRETS": str(self.tmp / "secrets")}
 
-    def run_(self, *args, stdin=""):
-        return subprocess.run([sys.executable, *map(str, args)], input=stdin, env=self.env, cwd=self.tmp,
+    def run_(self, *args, stdin="", env=None):
+        return subprocess.run([sys.executable, *map(str, args)], input=stdin, env={**self.env, **(env or {})}, cwd=self.tmp,
                               capture_output=True, text=True, timeout=120)
 
     def test_instructions_file_is_unsupported(self):
@@ -50,7 +50,7 @@ class RuntimeNone(unittest.TestCase):
         self.assertIn("沒有", out["llm_error"])
 
     def test_memory_gaps_says_it_did_not_check(self):
-        r = self.run_(BIN / "check-memory-gaps.py")
+        r = self.run_(BIN / "check-memory-gaps.py", env={"AGENT_HUB_LANG_UI": "zh-Hant"})   # the message asserted is the zh-Hant one
         self.assertEqual(r.returncode, 0, r.stderr)
         self.assertIn("不檢查", r.stdout)
 

@@ -32,7 +32,10 @@ import sys
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
 import hubconf  # noqa: E402
 import hublib  # noqa: E402
+import i18n  # noqa: E402
 import runtime_ports  # noqa: E402  對話紀錄只透過介面讀(Claude Code 只是一個實作)
+
+_ = i18n.domain(__file__)
 
 # 平台自己寫進 memory/ 的 commit(不是 agent 的筆記);merge 另外用 --no-merges 排除
 PLATFORM_SUBJECTS = ("^init:", "^consolidate", "^librarian")
@@ -69,11 +72,11 @@ def main() -> None:
         runtime_ports.load(ports=("transcripts",))
     except runtime_ports.Unsupported as e:
         # 這個檢查要的是「有對話」:沒有對話紀錄就明確不檢查(不是「沒有缺口」)
-        msg = f"memory 缺口檢查:不檢查——{e}"
+        msg = _("memory gap check: not checked: {reason}", reason=e)
         print(msg)
         if args.apply:
             write_todo_block(hubconf.data_file("todo.md"), [])
-            hublib.digest_append("memory-gaps", f"## memory 沒在記的專案\n\n{msg}")
+            hublib.digest_append("memory-gaps", f"## {heading()}\n\n{msg}")
         return
     roster = hubconf.roster()
     gaps = []
@@ -85,16 +88,24 @@ def main() -> None:
             continue
         commits = note_commits_since(roster[name]["workspace"], since)
         if commits == 0:
-            gaps.append(f"- [ ] **{name}**:最近 {args.window_hours} 小時有 {msgs} 則對話,memory 卻沒有任何新筆記"
-                        f"——請 {name} 的 session 把重要決定/進度整理進 `.agent-memory/memory/`")
+            # `**{project}**` is read back below (the names in the summary line): translations keep it
+            gaps.append("- [ ] " + _("**{project}**: {n} messages in the last {hours} hours, but no new memory notes; "
+                                     "ask {project}'s session to write the important decisions and progress into "
+                                     "`.agent-memory/memory/`", project=name, hours=args.window_hours, n=msgs))
     if not args.apply:
         if gaps:
             print("\n".join(gaps))
         return
     write_todo_block(hubconf.data_file("todo.md"), gaps)
-    hublib.digest_append("memory-gaps", "## memory 沒在記的專案\n\n" + "\n".join(gaps) if gaps else "")
+    hublib.digest_append("memory-gaps", f"## {heading()}\n\n" + "\n".join(gaps) if gaps else "")
     names = " ".join(re.findall(r"\*\*([^*]+)\*\*", "\n".join(gaps)))
-    print(f"memory 缺口檢查:{len(gaps)} 個專案有對話但沒記 memory" + (f"({names})" if names else ""))
+    print(_("memory gap check: {n} projects with conversations but no memory notes", n=len(gaps))
+          + (_(" ({names})", names=names) if names else ""))
+
+
+def heading() -> str:
+    """the heading of the digest section and the todo.md block (looked up per call: the language is read at run time)"""
+    return _("Projects whose memory is not being kept")
 
 
 def write_todo_block(todo: pathlib.Path, gaps: list[str]) -> None:
@@ -103,8 +114,9 @@ def write_todo_block(todo: pathlib.Path, gaps: list[str]) -> None:
         return
     s = re.sub(r"\n*<!-- memory-gaps:begin -->.*?<!-- memory-gaps:end -->\n?", "\n", todo.read_text(), flags=re.S).rstrip() + "\n"
     if gaps:
-        s += ("\n<!-- memory-gaps:begin -->\n## memory 沒在記的專案(機械檢查)\n\n"
-              "有對話、但 memory 沒有新筆記——librarian 沒東西可整理,STATE.md 會一直過時。\n\n"
+        s += ("\n<!-- memory-gaps:begin -->\n## " + heading() + _(" (mechanical check)") + "\n\n"
+              + _("Conversations, but no new memory notes: the librarian has nothing to consolidate, and STATE.md keeps "
+                  "getting staler.") + "\n\n"
               + "\n".join(gaps) + "\n<!-- memory-gaps:end -->\n")
     todo.write_text(s)
 

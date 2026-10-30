@@ -1,0 +1,9 @@
+{
+  "memory gap check: not checked: {reason}": "memory 缺口檢查:不檢查——{reason}",
+  "**{project}**: {n} messages in the last {hours} hours, but no new memory notes; ask {project}'s session to write the important decisions and progress into `.agent-memory/memory/`": "**{project}**:最近 {hours} 小時有 {n} 則對話,memory 卻沒有任何新筆記——請 {project} 的 session 把重要決定/進度整理進 `.agent-memory/memory/`",
+  "memory gap check: {n} projects with conversations but no memory notes": "memory 缺口檢查:{n} 個專案有對話但沒記 memory",
+  " ({names})": "({names})",
+  "Projects whose memory is not being kept": "memory 沒在記的專案",
+  " (mechanical check)": "(機械檢查)",
+  "Conversations, but no new memory notes: the librarian has nothing to consolidate, and STATE.md keeps getting staler.": "有對話、但 memory 沒有新筆記——librarian 沒東西可整理,STATE.md 會一直過時。"
+}
