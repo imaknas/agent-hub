@@ -1,0 +1,14 @@
+{
+ "cannot read hubbus records (exit {code}): {stderr}": "讀不到 hubbus records(exit {code}):{stderr}",
+ "(dry-run) would send {type} {key}": "(dry-run) 會送 {type} {key}",
+ "{project}: {type} {key} could not be sent ({status}): {stderr}": "{project}: {type} {key} 送不出去({status}):{stderr}",
+ "{project}: commit/push failed, left for tomorrow night: {output}": "{project}: commit/push 失敗,留到隔晚:{output}",
+ "{project}: applied {type} {key}": "{project}: 套用 {type} {key}",
+ "{project}: restored key {key} (the key at the end of the line had been removed)": "{project}: 補回 key {key}(行尾的 key 被拿掉了)",
+ "{project}: warning — {key} has the same text as one already settled; raising it again counts as a duplicate (acts spec §11)": "{project}: 警告——{key} 的文字跟已經結案的一件一樣,重新宣告會被當成重複(規範 acts §11)",
+ "{project}: warning — {key} is not settled and its key is gone, but a very similar line exists (the line end dropped in a rewrite?); no claim sent": "{project}: 警告——{key} 還沒結案,找不到 key 但有很像的行(改寫時拿掉了行尾?),不送 claim",
+ "registrar: owner to-dos in step with {assistant}": "registrar: owner 的待辦對齊 {assistant}",
+ "registrar updated the STATE.md to-dos by key": "registrar 照 key 更新了 STATE.md 的待辦",
+ "registrar: STATE.md was already in this state": "registrar:STATE.md 已經是這個狀態",
+ "sent {sent} records, {failed} projects had failures": "送出 {sent} 筆 record、{failed} 個專案有失敗"
+}

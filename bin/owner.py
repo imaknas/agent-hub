@@ -27,6 +27,9 @@ import sys
 BIN = pathlib.Path(__file__).resolve().parent
 sys.path.insert(0, str(BIN))
 import hubconf  # noqa: E402
+import i18n  # noqa: E402
+
+_ = i18n.domain(__file__)
 
 EXT_ACTS = "acts/0.3"
 OUTCOMES = {"done": "done", "drop": "dropped", "already-done": "already_done"}
@@ -61,7 +64,7 @@ def open_items(only: str | None = None) -> list[dict]:
             continue
         led = reg.Ledger(p)
         for k in led.open():
-            text, _, _ = led.terms(k)
+            text = led.terms(k)[0]
             out.append({"kind": "task", "project": p, "key": k, "text": text or ""})
     hb = _hubbus()
     c = hb.db()
@@ -82,9 +85,9 @@ def settle(key: str, outcome: str, note: str | None) -> int:
         if key not in led.known():
             continue
         if led.withdrawn(key):
-            print(f"{key} 已經被 {p} 收回(withdrawn),不用結案", file=sys.stderr)
+            print(_("{key} was withdrawn by {project}; nothing to settle", key=key, project=p), file=sys.stderr)
             return 1
-        _, rev, _ = led.terms(key)
+        rev = led.terms(key)[1]
         heads = [r["id"] for r in led.settle.get(key, [])
                  if r["id"] == (reg.current(led.settle.get(key, [])) or {}).get("id")]
         n = len(led.settle.get(key, [])) + 1
@@ -98,15 +101,16 @@ def settle(key: str, outcome: str, note: str | None) -> int:
         hb = _hubbus()
         errs = hb.record_errors(rec)
         if errs:
-            print("record 不合格:" + "; ".join(errs), file=sys.stderr)
+            print(_("record invalid: {errors}", errors="; ".join(errs)), file=sys.stderr)
             return 1
         c = hb.db()
         c.execute("BEGIN IMMEDIATE")
         eid, new = hb.publish_record(c, rec, hb.OWNER_ADDRESS, p)
         c.execute("COMMIT")
-        print(f"{p}:{key} → {outcome}({eid}{'' if new else ',之前已經寄過'});registrar 今晚照 key 更新 STATE.md")
+        print(_("{project}:{key} → {outcome} ({event}{again}); registrar updates STATE.md by key tonight",
+                project=p, key=key, outcome=outcome, event=eid, again="" if new else _(", sent before")))
         return 0
-    print(f"沒有 {key} 這個待辦(owner.py list 看開著的)", file=sys.stderr)
+    print(_("no to-do {key} (owner.py list shows the open ones)", key=key), file=sys.stderr)
     return 1
 
 
@@ -115,7 +119,7 @@ def answer(qid: str, text: str) -> int:
     c = hb.db()
     q = c.execute("SELECT * FROM events WHERE id=? AND type='message'", (qid,)).fetchone()
     if q is None or hb.payload(q).get("type") != "question":
-        print(f"沒有 {qid} 這個問題(owner.py list 看開著的)", file=sys.stderr)
+        print(_("no question {id} (owner.py list shows the open ones)", id=qid), file=sys.stderr)
         return 1
     proj = hb.canon(q["source"])
     owner = hubconf.owner_tag()
@@ -126,7 +130,8 @@ def answer(qid: str, text: str) -> int:
     c.execute("BEGIN IMMEDIATE")
     hb.publish(c, mid, "message", hb.OWNER_ADDRESS, proj, qid, p)
     c.execute("COMMIT")
-    print(f"回答寄給 {proj}({mid});發問的 session 或今晚的 librarian 會套用")
+    print(_("answer sent to {project} ({id}); the session that asked, or tonight's librarian, applies it",
+            project=proj, id=mid))
     return 0
 
 
@@ -141,17 +146,20 @@ def notify() -> int:
         seen = set()
     new = [it for it in items if (it.get("key") or it.get("id")) not in seen]
     if new:
-        lines = [f"{hubconf.owner_tag()},有 {len(new)} 件新的事在等你(全部 {len(items)} 件;`agenthub owner list`):"]
-        lines += [f"- {'❓' if it['kind'] == 'question' else '☐'} {it['project']}:{it['text'][:120]}" for it in new[:20]]
+        lines = [_("{owner}, {new} new things are waiting for you ({total} in all; `agenthub owner list`):",
+                   owner=hubconf.owner_tag(), new=len(new), total=len(items))]
+        lines += [_("- {mark} {project}: {text}", mark="❓" if it["kind"] == "question" else "☐", project=it["project"],
+                    text=it["text"][:120]) for it in new[:20]]
         if alert.send("\n".join(lines)):
             alert.clear_failure("owner-notify")
         else:
-            alert.record_failure("owner-notify", "owner 的待辦通知發不出去(hub.json alerts 沒有可用的管道?)")
-            print("通知發不出去", file=sys.stderr)
+            alert.record_failure("owner-notify", _("the owner's to-do notification could not be sent "
+                                                   "(no working channel in hub.json alerts?)"))
+            print(_("the notification could not be sent"), file=sys.stderr)
             return 1
     SEEN.parent.mkdir(parents=True, exist_ok=True)
     SEEN.write_text(json.dumps(sorted(x for x in ids if x)))   # 結案的拿掉,重開的會再通知一次
-    print(f"owner 端:{len(items)} 件開著,{len(new)} 件新的")
+    print(_("owner side: {open} open, {new} new", open=len(items), new=len(new)))
     return 0
 
 
@@ -173,11 +181,12 @@ def main(argv: list[str]) -> int:
         for it in items:
             ref = it.get("key") or it.get("id")
             print(f"{'❓' if it['kind'] == 'question' else '☐'} {it['project']:<24} {ref}  {it['text'][:100]}")
-        print(f"({len(items)} 件開著)")
+        print(_("({n} open)", n=len(items)))
         return 0
     if hubconf.owner_side() != "builtin":
-        print(f"owner 端是 {hubconf.get('assistant.name') or '助理'}(hub.json owner_side: assistant):在那邊結案、回答,"
-              "這裡只能 list(兩個 principal 端會打架)", file=sys.stderr)
+        print(_("the owner side is {assistant} (hub.json owner_side: assistant): settle and answer there; "
+                "here you can only list (two principal sides would conflict)",
+                assistant=hubconf.get("assistant.name") or _("the assistant")), file=sys.stderr)
         return 2
     if a.cmd in OUTCOMES:
         return settle(a.key, OUTCOMES[a.cmd], a.note)

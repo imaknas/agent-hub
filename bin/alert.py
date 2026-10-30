@@ -20,6 +20,9 @@ import json
 import subprocess
 
 import hubconf
+import i18n
+
+_ = i18n.domain(__file__)
 
 SENT = hubconf.STATE / "alerts-sent.json"      # key → {"problems": [...], "at": 上次發的時間}
 FAILED = hubconf.STATE / "alerts-failed.json"  # key → {"at": …, "text": 發不出去的那則的第一行}
@@ -101,7 +104,7 @@ CHANNELS = {"discord": (_discord, lambda: _creds() is not None), "ntfy": (_ntfy,
 
 
 def configured() -> list[str]:
-    return [n for n, (_, on) in CHANNELS.items() if on()]
+    return [n for n, (_send, on) in CHANNELS.items() if on()]
 
 
 def send(text: str) -> bool:
@@ -163,7 +166,8 @@ def once(key: str, problems: list[str], ok_text: str) -> None:
         at = (last or {}).get("at")
         if at and now - datetime.datetime.fromisoformat(at) < REMIND:
             return
-        text = f"⏰ 還沒解決(上次提醒:{at[:16] if at else '之前'}):\n" + "\n".join(problems)
+        text = _("⏰ Still not resolved (last reminder: {at}):", at=at[:16] if at else _("earlier")) + "\n" \
+            + "\n".join(problems)
     elif problems:
         text = "⚠️ " + "\n".join(problems)
     else:

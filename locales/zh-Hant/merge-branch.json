@@ -1,0 +1,23 @@
+{
+ "git {args}: {output}": "git {args}:{output}",
+ "merge-branch: cannot tell which project's repo this is (add --project)": "merge-branch:不知道這是哪個專案的 repo(加 --project)",
+ "merge-branch: no main / master branch": "merge-branch:找不到 main / master",
+ "merge-branch: you are on {branch}; run this in your own branch/worktree (the main checkout is for merging)": "merge-branch:現在在 {branch},要在自己的 branch/worktree 裡跑(主 checkout 是合併用的)",
+ "merge-branch: this is the main checkout; run it in that branch's worktree": "merge-branch:這是主 checkout;請在那個 branch 的 worktree 裡跑",
+ "merge-branch: the worktree has uncommitted changes; commit (or discard) them before merging": "merge-branch:worktree 有還沒 commit 的改動,先 commit(或丟掉)再合併",
+ "✗ {stage}: {detail}": "✗ {stage}:{detail}",
+ "conflicts with {base}: {conflicts} — resolve them in this worktree with `git rebase {base}` and run again": "跟 {base} 衝突:{conflicts}——在這個 worktree 裡 `git rebase {base}` 解完衝突再跑一次",
+ "{branch} is the same as {base}; nothing to merge": "{branch} 跟 {base} 一樣,沒有東西要合併",
+ "{sha} {subject}: {why}": "{sha} {subject}:{why}",
+ "these commit titles are not Conventional Commits (registry: commits: conventional):\n{titles}\n— fix the titles (e.g. `git rebase --exec` or commit again) and run again": "這些 commit 的標題不是 Conventional Commits(登錄 commits: conventional):\n{titles}\n——改好標題(例:`git rebase --exec` 或重新 commit)再跑一次",
+ "over 30 minutes": "超過 30 分鐘",
+ "`{cmd}` failed:\n{tail}": "`{cmd}` 失敗:\n{tail}",
+ "the project registry has no runtime.test; no tests were run": "專案登錄沒有 runtime.test,沒有跑測試",
+ "(dry-run) would fast-forward {n} commits of {branch} into {base}; tests: {tests}": "(dry-run)會把 {branch} 的 {n} 個 commit fast-forward 進 {base};測試:{tests}",
+ "the main checkout ({path}) is not on {base}": "主 checkout({path})現在不在 {base}",
+ "the main checkout cannot fast-forward: {output}": "主 checkout 不能 fast-forward:{output}",
+ "pushed": "已 push",
+ "not pushed": "沒有 push",
+ " (push_on_merge is false)": "(push_on_merge 是 false)",
+ "✓ {n} commits of {branch} merged into {base} (tests: {tests}; {push})": "✓ {branch} 的 {n} 個 commit 已合併進 {base}(測試:{tests};{push})"
+}

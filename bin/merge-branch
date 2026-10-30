@@ -27,6 +27,9 @@ import sys
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
 import commit_title  # noqa: E402
 import hubconf  # noqa: E402
+import i18n  # noqa: E402
+
+_ = i18n.domain(__file__)
 
 HUBBUS = [sys.executable, str(hubconf.ROOT / "bin" / "hubbus")]
 
@@ -34,7 +37,7 @@ HUBBUS = [sys.executable, str(hubconf.ROOT / "bin" / "hubbus")]
 def git(cwd, *args, check=False) -> subprocess.CompletedProcess:
     r = subprocess.run(["git", "-C", str(cwd), *args], capture_output=True, text=True)
     if check and r.returncode != 0:
-        raise RuntimeError(f"git {' '.join(args)}:{(r.stderr or r.stdout).strip()}")
+        raise RuntimeError(_("git {args}: {output}", args=" ".join(args), output=(r.stderr or r.stdout).strip()))
     return r
 
 
@@ -68,18 +71,19 @@ def main() -> int:
     proj, main_dir = project_of(wt)
     proj = a.project or proj
     if not proj or not main_dir:
-        sys.exit("merge-branch:不知道這是哪個專案的 repo(加 --project)")
+        sys.exit(_("merge-branch: cannot tell which project's repo this is (add --project)"))
     info = hubconf.projects().get(proj, {})
     branch = a.branch or git(wt, "rev-parse", "--abbrev-ref", "HEAD").stdout.strip()
     base = next((b for b in ("main", "master") if git(main_dir, "rev-parse", "--verify", "-q", b).returncode == 0), None)
     if not base:
-        sys.exit("merge-branch:找不到 main / master")
+        sys.exit(_("merge-branch: no main / master branch"))
     if branch in (base, "HEAD"):
-        sys.exit(f"merge-branch:現在在 {branch},要在自己的 branch/worktree 裡跑(主 checkout 是合併用的)")
+        sys.exit(_("merge-branch: you are on {branch}; run this in your own branch/worktree "
+                   "(the main checkout is for merging)", branch=branch))
     if wt.resolve() == main_dir:
-        sys.exit("merge-branch:這是主 checkout;請在那個 branch 的 worktree 裡跑")
+        sys.exit(_("merge-branch: this is the main checkout; run it in that branch's worktree"))
     if git(wt, "status", "--porcelain").stdout.strip():
-        sys.exit("merge-branch:worktree 有還沒 commit 的改動,先 commit(或丟掉)再合併")
+        sys.exit(_("merge-branch: the worktree has uncommitted changes; commit (or discard) them before merging"))
 
     head0 = git(wt, "rev-parse", "HEAD").stdout.strip()
     eid = f"merge-{proj}-{branch.replace('/', '_')}-{head0[:10]}"
@@ -90,7 +94,7 @@ def main() -> int:
         report.update(stage=stage, detail=detail[-2000:])
         if not a.dry_run:
             publish("merge.failed", proj, f"{eid}:failed", report)
-        print(f"✗ {stage}:{detail[-1500:]}")
+        print(_("✗ {stage}: {detail}", stage=stage, detail=detail[-1500:]))
         return 1
 
     lock_path = pathlib.Path(git(wt, "rev-parse", "--path-format=absolute", "--git-common-dir").stdout.strip()) / "merge-branch.lock"
@@ -101,8 +105,9 @@ def main() -> int:
         if r.returncode != 0:
             conflicts = git(wt, "diff", "--name-only", "--diff-filter=U").stdout.split()
             git(wt, "rebase", "--abort")
-            return fail("rebase", f"跟 {base} 衝突:{', '.join(conflicts) or (r.stderr or r.stdout).strip()}"
-                                  "——在這個 worktree 裡 `git rebase " + base + "` 解完衝突再跑一次")
+            return fail("rebase", _("conflicts with {base}: {conflicts} — resolve them in this worktree with "
+                                    "`git rebase {base}` and run again", base=base,
+                                    conflicts=", ".join(conflicts) or (r.stderr or r.stdout).strip()))
         head = git(wt, "rev-parse", "HEAD").stdout.strip()
         commits = [dict(zip(("sha", "subject"), l.split("\t", 1)))
                    for l in git(wt, "log", "--format=%h\t%s", f"{base}..{head}").stdout.splitlines()]
@@ -110,14 +115,15 @@ def main() -> int:
         files = git(wt, "diff", "--name-only", f"{base}...{head}").stdout.split()
         report.update(head=head, commits=commits, files=files)
         if not commits:
-            return fail("empty", f"{branch} 跟 {base} 一樣,沒有東西要合併")
+            return fail("empty", _("{branch} is the same as {base}; nothing to merge", branch=branch, base=base))
         # 2b. commit 標題
         if info.get("commits") == "conventional":
-            bad = [f"{c['sha']} {c['subject']}:{why}" for c in commits
+            bad = [_("{sha} {subject}: {why}", sha=c["sha"], subject=c["subject"], why=why) for c in commits
                    if (why := commit_title.problem(c["subject"], final=True))]
             if bad:
-                return fail("commit-titles", "這些 commit 的標題不是 Conventional Commits(登錄 commits: conventional):\n"
-                            + "\n".join(bad) + "\n——改好標題(例:`git rebase --exec` 或重新 commit)再跑一次")
+                return fail("commit-titles", _("these commit titles are not Conventional Commits (registry: commits: "
+                                               "conventional):\n{titles}\n— fix the titles (e.g. `git rebase --exec` "
+                                               "or commit again) and run again", titles="\n".join(bad)))
         # 3. tests
         test = (info.get("runtime") or {}).get("test")
         if test:
@@ -126,20 +132,21 @@ def main() -> int:
                 tail = "\n".join((t.stdout + t.stderr).strip().splitlines()[-40:])
                 report["tests"] = {"cmd": test, "ok": t.returncode == 0, "tail": tail}
             except subprocess.TimeoutExpired:
-                report["tests"] = {"cmd": test, "ok": False, "tail": "超過 30 分鐘"}
+                report["tests"] = {"cmd": test, "ok": False, "tail": _("over 30 minutes")}
             if not report["tests"]["ok"]:
-                return fail("tests", f"`{test}` 失敗:\n{report['tests']['tail']}")
+                return fail("tests", _("`{cmd}` failed:\n{tail}", cmd=test, tail=report["tests"]["tail"]))
         else:
-            report["tests"] = {"cmd": None, "ok": None, "tail": "專案登錄沒有 runtime.test,沒有跑測試"}
+            report["tests"] = {"cmd": None, "ok": None, "tail": _("the project registry has no runtime.test; no tests were run")}
         if a.dry_run:
-            print(f"(dry-run)會把 {branch} 的 {len(commits)} 個 commit fast-forward 進 {base};測試:{report['tests']['ok']}")
+            print(_("(dry-run) would fast-forward {n} commits of {branch} into {base}; tests: {tests}",
+                    n=len(commits), branch=branch, base=base, tests=report["tests"]["ok"]))
             return 0
         # 4. fast-forward main
         if git(main_dir, "rev-parse", "--abbrev-ref", "HEAD").stdout.strip() != base:
-            return fail("main", f"主 checkout({main_dir})現在不在 {base}")
+            return fail("main", _("the main checkout ({path}) is not on {base}", path=main_dir, base=base))
         r = git(main_dir, "merge", "--ff-only", branch)
         if r.returncode != 0:
-            return fail("main", f"主 checkout 不能 fast-forward:{(r.stderr or r.stdout).strip()}")
+            return fail("main", _("the main checkout cannot fast-forward: {output}", output=(r.stderr or r.stdout).strip()))
         report["merged"] = True
         # 5. push(只有登錄說要)
         if info.get("push_on_merge"):
@@ -153,8 +160,10 @@ def main() -> int:
     for q in a.question:
         subprocess.run([*HUBBUS, "send", "--from", proj, "--to", hubconf.owner_address(), "--type", "question",
                         "--text", f"[{proj} · {branch}] {q}"], capture_output=True)
-    print(f"✓ {branch} 的 {len(commits)} 個 commit 已合併進 {base}(測試:{report['tests']['ok']};"
-          f"{'已 push' if report['pushed'] else '沒有 push' + ('(push_on_merge 是 false)' if not info.get('push_on_merge') else '')})")
+    push = _("pushed") if report["pushed"] else \
+        _("not pushed") + (_(" (push_on_merge is false)") if not info.get("push_on_merge") else "")
+    print(_("✓ {n} commits of {branch} merged into {base} (tests: {tests}; {push})",
+            n=len(commits), branch=branch, base=base, tests=report["tests"]["ok"], push=push))
     return 0
 
 

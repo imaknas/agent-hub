@@ -36,6 +36,9 @@ import sys
 
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
 import hubconf  # noqa: E402
+import i18n  # noqa: E402
+
+_ = i18n.domain(__file__)
 
 HUB = hubconf.ROOT
 COPIES = hubconf.p("memory_copies")
@@ -214,7 +217,8 @@ class Ledger:
         try:
             events = json.loads(r.stdout or "[]")
         except ValueError:
-            raise SystemExit(f"讀不到 hubbus records(exit {r.returncode}):{r.stderr.strip()[-200:]}")
+            raise SystemExit(_("cannot read hubbus records (exit {code}): {stderr}", code=r.returncode,
+                               stderr=r.stderr.strip()[-200:]))
         self.need, self.settle, self.pending = {}, {}, []
         for e in events:
             rec = e["record"]
@@ -290,7 +294,7 @@ def publish(recs: list[dict]) -> dict[str, str]:
         return {}
     if DRY:
         for rec in recs:
-            log(f"(dry-run) 會送 {rec['type']} {rec['key']}")
+            log(_("(dry-run) would send {type} {key}", type=rec["type"], key=rec["key"]))
         return {rec["id"]: "dry-run" for rec in recs}
     r = hubbus("record-publish", "--json", "-", stdin=json.dumps(recs, ensure_ascii=False))
     try:
@@ -300,7 +304,8 @@ def publish(recs: list[dict]) -> dict[str, str]:
     for rec in recs:
         st = res.get(rec["id"], "failed")
         if st not in ("accepted", "duplicate"):
-            log(f"{rec['project']}: {rec['type']} {rec['key']} 送不出去({st}):{r.stderr.strip()[-160:]}")
+            log(_("{project}: {type} {key} could not be sent ({status}): {stderr}", project=rec["project"],
+                  type=rec["type"], key=rec["key"], status=st, stderr=r.stderr.strip()[-160:]))
     return res
 
 
@@ -343,7 +348,8 @@ def commit(project: str, path: pathlib.Path, how: str, msg: str) -> bool:
                             f"git add STATE.md && git commit -qm {shlex.quote(msg)} && {HUB}/bin/git-safe-push.sh"],
                            cwd=path.parent, capture_output=True, text=True)
     if r.returncode != 0:
-        log(f"{project}: commit/push 失敗,留到隔晚:{(r.stderr or r.stdout).strip()[-200:]}")
+        log(_("{project}: commit/push failed, left for tomorrow night: {output}", project=project,
+              output=(r.stderr or r.stdout).strip()[-200:]))
     return r.returncode == 0
 
 
@@ -361,7 +367,7 @@ def run_project(project: str, path: pathlib.Path, how: str, warned: set[str]) ->
             changed |= strike(lines, key)
         elif cur.get("restore_text"):
             changed |= readd(lines, key, cur["restore_text"])
-        log(f"{project}: 套用 {cur['type']} {key}")
+        log(_("{project}: applied {type} {key}", project=project, type=cur["type"], key=key))
     applied += [e["id"] for e in led.pending]
     for h in led.v1_pending:
         changed |= strike(lines, h["reply_to"]) if h["effect"] != "reopened" else \
@@ -371,18 +377,19 @@ def run_project(project: str, path: pathlib.Path, how: str, warned: set[str]) ->
     present = {t["key"] for t in owner_lines(lines) if t["key"]}
     for k in relink(lines, {k: led.terms(k)[0] or "" for k in led.open() if k not in present}):
         changed = True
-        log(f"{project}: 補回 key {k}(行尾的 key 被拿掉了)")
+        log(_("{project}: restored key {key} (the key at the end of the line had been removed)", project=project, key=k))
     # 3. 送出
     fresh = []
     for i, k, text in candidates(lines, project):
         if led.settled(k):
-            log(f"{project}: 警告——{k} 的文字跟已經結案的一件一樣,重新宣告會被當成重複(規範 acts §11)")
+            log(_("{project}: warning — {key} has the same text as one already settled; raising it again counts as "
+                  "a duplicate (acts spec §11)", project=project, key=k))
         fresh.append((i, k, record(project, "raised", k, f"r:{k}", terms={"text": norm(text)}, terms_rev=1)))
     for t in owner_lines(lines):
         if t["key"] and t["key"] not in led.known():   # 過渡期:有 key 但匯流排上沒紀錄(很早以前寄的)
             fresh.append((None, t["key"], record(project, "raised", t["key"], f"r:{t['key']}",
                                                  terms={"text": norm(t["text"])}, terms_rev=1, context="migration-v1")))
-    res = publish([r for _, _, r in fresh])
+    res = publish([r for _i, _k, r in fresh])
     for i, k, r in fresh:
         if res.get(r["id"]) in ("accepted", "duplicate", "dry-run"):
             sent += res.get(r["id"]) == "accepted"
@@ -394,7 +401,7 @@ def run_project(project: str, path: pathlib.Path, how: str, warned: set[str]) ->
     # 4. 修改
     amends = []
     for a in amendments(lines, {k: led.terms(k)[0] for k in led.open() if k in led.need}):
-        k, (_, rev, cur) = a["key"], led.terms(a["key"])
+        k, (_text, rev, cur) = a["key"], led.terms(a["key"])
         amends.append(record(project, "amended", k, f"a:{k}:{rev + 1}", terms={"text": norm(a["text"])},
                              terms_rev=rev + 1, **({"supersedes": [cur]} if cur else {})))
     res = publish(amends)
@@ -405,7 +412,8 @@ def run_project(project: str, path: pathlib.Path, how: str, warned: set[str]) ->
     for x in reconcile(lines, {k: led.terms(k)[0] or "" for k in led.open() if k not in warned and k not in led.v1_claimed}):
         k = x["key"]
         if x["action"] == "warn":
-            log(f"{project}: 警告——{k} 還沒結案,找不到 key 但有很像的行(改寫時拿掉了行尾?),不送 claim")
+            log(_("{project}: warning — {key} is not settled and its key is gone, but a very similar line exists "
+                  "(the line end dropped in a rewrite?); no claim sent", project=project, key=k))
             warned.add(k)
             continue
         why = removal_reason(k)
@@ -421,11 +429,12 @@ def run_project(project: str, path: pathlib.Path, how: str, warned: set[str]) ->
         return ok, sent
     if changed:
         path.write_text("\n".join(lines) + "\n")
-        if not commit(project, path, how, f"registrar: owner 的待辦對齊 {hubconf.assistant_name()}"):
+        if not commit(project, path, how, _("registrar: owner to-dos in step with {assistant}",
+                                            assistant=hubconf.assistant_name())):
             return False, sent
     if applied:
-        hubbus("done", *applied, "--note", "registrar 照 key 更新了 STATE.md 的待辦" if changed else
-               "registrar:STATE.md 已經是這個狀態")
+        hubbus("done", *applied, "--note", _("registrar updated the STATE.md to-dos by key") if changed else
+               _("registrar: STATE.md was already in this state"))
     return ok, sent
 
 
@@ -441,7 +450,7 @@ def main() -> int:
         total += sent
     if not DRY:
         WARNED.write_text(json.dumps(sorted(warned)))
-    log(f"送出 {total} 筆 record、{failed} 個專案有失敗")
+    log(_("sent {sent} records, {failed} projects had failures", sent=total, failed=failed))
     return 0
 
 

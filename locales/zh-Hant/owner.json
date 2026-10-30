@@ -1,0 +1,17 @@
+{
+ "{key} was withdrawn by {project}; nothing to settle": "{key} 已經被 {project} 收回(withdrawn),不用結案",
+ "record invalid: {errors}": "record 不合格:{errors}",
+ "{project}:{key} → {outcome} ({event}{again}); registrar updates STATE.md by key tonight": "{project}:{key} → {outcome}({event}{again});registrar 今晚照 key 更新 STATE.md",
+ ", sent before": ",之前已經寄過",
+ "no to-do {key} (owner.py list shows the open ones)": "沒有 {key} 這個待辦(owner.py list 看開著的)",
+ "no question {id} (owner.py list shows the open ones)": "沒有 {id} 這個問題(owner.py list 看開著的)",
+ "answer sent to {project} ({id}); the session that asked, or tonight's librarian, applies it": "回答寄給 {project}({id});發問的 session 或今晚的 librarian 會套用",
+ "{owner}, {new} new things are waiting for you ({total} in all; `agenthub owner list`):": "{owner},有 {new} 件新的事在等你(全部 {total} 件;`agenthub owner list`):",
+ "- {mark} {project}: {text}": "- {mark} {project}:{text}",
+ "the owner's to-do notification could not be sent (no working channel in hub.json alerts?)": "owner 的待辦通知發不出去(hub.json alerts 沒有可用的管道?)",
+ "the notification could not be sent": "通知發不出去",
+ "owner side: {open} open, {new} new": "owner 端:{open} 件開著,{new} 件新的",
+ "({n} open)": "({n} 件開著)",
+ "the owner side is {assistant} (hub.json owner_side: assistant): settle and answer there; here you can only list (two principal sides would conflict)": "owner 端是 {assistant}(hub.json owner_side: assistant):在那邊結案、回答,這裡只能 list(兩個 principal 端會打架)",
+ "the assistant": "助理"
+}
