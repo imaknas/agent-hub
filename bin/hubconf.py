@@ -227,12 +227,16 @@ def lang_content() -> str:
 
 
 def _lang(env: str, key: str) -> str:
-    """an unknown value is an error, not a quiet fallback to en (a test that sets zh-hant would otherwise pass in English);
-    hub.json is checked by config-check, so only the environment can get here with a wrong value"""
-    v = os.environ.get(env) or get(key) or "en"
-    if v not in LANGUAGES:
-        raise ValueError(f"{env or key}={v!r}: the languages are {', '.join(LANGUAGES)}")
-    return v
+    """A wrong value in the environment is an error, not a quiet fallback to en (a test that sets zh-hant would otherwise
+    pass in English). A wrong value in hub.json gives en: config-check reports it, and must not crash on it while it
+    formats its own messages."""
+    v = os.environ.get(env)
+    if v:
+        if v not in LANGUAGES:
+            raise ValueError(f"{env}={v!r}: the languages are {', '.join(LANGUAGES)}")
+        return v
+    v = get(key)
+    return v if v in LANGUAGES else "en"
 
 
 def evals_dir() -> pathlib.Path | None:

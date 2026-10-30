@@ -29,7 +29,8 @@ _catalogs: dict[tuple[str, str], dict[str, str]] = {}
 
 
 def lang() -> str:
-    sys.path.insert(0, str(ROOT / "bin"))
+    if str(ROOT / "bin") not in sys.path:
+        sys.path.insert(0, str(ROOT / "bin"))
     import hubconf
     return hubconf.lang_ui()
 
