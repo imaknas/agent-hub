@@ -10,10 +10,12 @@
 import importlib.util
 import io
 import json
+import os
 import pathlib
 import sys
 import tempfile
 import unittest
+from unittest import mock
 
 ROOT = pathlib.Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "bin"))
@@ -126,6 +128,7 @@ if __name__ == "__main__":
     unittest.main()
 
 
+@mock.patch.dict(os.environ, {"AGENT_HUB_LANG_UI": "zh-Hant"})   # the assertions are the zh-Hant texts
 class Attachments(unittest.TestCase):
     """POST /v1/leases/<id>/messages 的附件(10-25 Muninn 要求:在深談裡傳照片)。"""
 

@@ -25,7 +25,13 @@ import pathlib
 import re
 import secrets
 import stat
+import sys
 import time
+
+sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
+import i18n  # noqa: E402
+
+_ = i18n.domain(__file__)
 
 MAX_FILE = 20 * 1024 * 1024
 MAX_COUNT = 100                  # 最近 WINDOW_S 內
@@ -71,60 +77,64 @@ def _inside(ws: pathlib.Path, p: pathlib.Path) -> bool:
 def take(ws, path: str, summary: str | None, store, secret_paths=()) -> tuple:
     ws, store = pathlib.Path(ws).resolve(), pathlib.Path(store)
     if not isinstance(path, str) or not path.strip():
-        return None, "要給專案資料夾裡的檔案路徑"
+        return None, _("give the path of a file in the project folder")
     p = pathlib.Path(path)
     real = (p if p.is_absolute() else ws / p).resolve()
     if not _inside(ws, real):
-        return None, f"{path} 不在這個專案資料夾裡(只能給專案資料夾裡的檔案)"
+        return None, _("{path} is not in this project folder (only files in the project folder can be shown)", path=path)
     rel = str(real.relative_to(ws))
     ext = real.suffix.lower()
     if ext not in TYPES:
-        return None, f"{real.name} 的類型不能送(可以:{' '.join(sorted(e[1:] for e in TYPES))})"
+        return None, _("{name}: this type cannot be sent (allowed: {types})", name=real.name,
+                       types=" ".join(sorted(e[1:] for e in TYPES)))
     if SECRET_NAME.search(real.name) or any(real == pathlib.Path(s).resolve() for s in secret_paths):
-        return None, f"{real.name} 看起來是憑證或機密,不送"
+        return None, _("{name} looks like a credential or a secret; not sent", name=real.name)
     try:
         fd = os.open(real, os.O_RDONLY | os.O_NOFOLLOW)
     except OSError as e:
-        return None, f"{rel} 打不開:{e.strerror}"
+        return None, _("{path} cannot be opened: {err}", path=rel, err=e.strerror)
     try:
         st = os.fstat(fd)
         if not stat.S_ISREG(st.st_mode):
-            return None, f"{rel} 不是一般檔案"
+            return None, _("{path} is not a regular file", path=rel)
         if st.st_nlink > 1:  # hard link 可能指著資料夾外的檔(resolve、O_NOFOLLOW 都看不出來)
-            return None, f"{rel} 是 hard link(可能指到資料夾外),不送"
+            return None, _("{path} is a hard link (it may point outside the folder); not sent", path=rel)
         try:
             opened = _fd_path(fd)
         except OSError:
             opened = None
         if opened is None or not _inside(ws, opened) or any(opened == pathlib.Path(s).resolve() for s in secret_paths):
-            return None, f"{rel} 打開的不是資料夾裡的那個檔(路徑中途被換掉了?),不送"
+            return None, _("{path}: what was opened is not that file in the folder (was the path swapped?); not sent", path=rel)
         if st.st_size > MAX_FILE:
-            return None, f"{rel} 太大({st.st_size // 1024 // 1024} MB;上限 {MAX_FILE // 1024 // 1024} MB)"
+            return None, _("{path} is too big ({mb} MB; the limit is {limit} MB)", path=rel, mb=st.st_size // 1024 // 1024,
+                               limit=MAX_FILE // 1024 // 1024)
         with os.fdopen(fd, "rb", closefd=False) as f:
             data = f.read(MAX_FILE + 1)
     finally:
         os.close(fd)
     if len(data) > MAX_FILE:
-        return None, f"{rel} 太大(上限 {MAX_FILE // 1024 // 1024} MB)"
+        return None, _("{path} is too big (the limit is {limit} MB)", path=rel, limit=MAX_FILE // 1024 // 1024)
     mime, ok = TYPES[ext]
     if ok == TEXT:
         try:
             text = data.decode("utf-8")
         except UnicodeDecodeError:
-            return None, f"{rel} 不是 UTF-8 文字"
+            return None, _("{path} is not UTF-8 text", path=rel)
         if SECRET_TEXT.search(text):
-            return None, f"{rel} 的內容像憑證(私鑰或 API key),不送"
+            return None, _("{path}: the content looks like a credential (a private key or an API key); not sent", path=rel)
     elif not ok(data):
-        return None, f"{rel} 的內容不是 {ext[1:]}(副檔名跟內容對不上)"
+        return None, _("{path}: the content is not {type} (the extension does not match the content)", path=rel, type=ext[1:])
     # 上限是先讀再寫:同一個租約一次只跑一個回合、工具一次一個,不會兩個 show 同時算
     since = time.time() - WINDOW_S
     kept = [k for k in (json.loads(m.read_text()) for m in store.glob("*.json")) if k.get("at", 0) >= since] \
         if store.is_dir() else []
     hours = WINDOW_S // 3600
     if len(kept) >= MAX_COUNT:
-        return None, f"這個深談最近 {hours} 小時已經給了 {MAX_COUNT} 個檔案,到上限了;晚一點再給,或先用文字說檔案在哪"
+        return None, _("This lease already showed {n} files in the last {hours} hours, the limit; show it later, or say in "
+                        "text where the file is for now", hours=hours, n=MAX_COUNT)
     if sum(k.get("size", 0) for k in kept) + len(data) > MAX_TOTAL:
-        return None, f"這個深談最近 {hours} 小時給的檔案合計超過 {MAX_TOTAL // 1024 // 1024} MB 了;晚一點再給,或先用文字說檔案在哪"
+        return None, _("The files this lease showed in the last {hours} hours are over {mb} MB in total; show it later, or "
+                        "say in text where the file is for now", hours=hours, mb=MAX_TOTAL // 1024 // 1024)
     store.mkdir(parents=True, exist_ok=True)
     fid = secrets.token_hex(8)
     (store / fid).write_bytes(data)

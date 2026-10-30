@@ -163,7 +163,7 @@ class Runner(Golden):
         m.send_message(l, "look", [{"name": "a.png", "media_type": "image/png", "data": "QUJD"}])
         out.append(("send_message", l.proc.stdin.getvalue()))
         # handover
-        out.append(("empty handover", m.EMPTY_HANDOVER["summary"]))
+        out.append(("empty handover", m.run_handover(self.lease())[0]["summary"]))  # no transcript: nothing to hand over
         self.rt.can_resume = True
         bad = types.SimpleNamespace(returncode=1, stdout=json.dumps({"llm_error": "schema: no summary"}), stderr="")
         for name, run_handover, deliver in [

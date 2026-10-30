@@ -58,6 +58,9 @@ import uuid
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
 import hubconf  # noqa: E402
 import runtime_ports  # noqa: E402
+import i18n  # noqa: E402
+
+_ = i18n.domain(__file__)
 
 
 def rt():
@@ -252,7 +255,8 @@ def work_ready(project: str) -> tuple[bool, str]:
     設定還沒渲染的那段時間,不能讓 work 在沒有 sandbox 的情況下跑)。"""
     doc = hubconf.projects().get(project) or {}
     if not (doc.get("enforce") or {}).get("work"):
-        return False, f"{project} 沒有開 work 模式(登錄的 enforce.work;要 Knas 同意才加)"
+        return False, _("{project} has no work mode (enforce.work in the registry; added only with Knas's consent)",
+                         project=project)
     import runtime_claude
     return runtime_claude.sandbox_rendered(hubconf.workspace(project))
 
@@ -302,7 +306,8 @@ def start_proc(lease: Lease, resume: bool) -> None:
     lease.intent_stop = False  # started_once 等第一輪真的跑完才設(reader 收到 num_turns > 0 的 result)
     if wanted and not can_resume:  # 要接回卻接不回(紀錄不在):照實說,不默默開新的
         lease.set_state("running", pid=lease.proc.pid, resumed=False,
-                        detail="之前的對話紀錄已經不在(還沒說過話,或保留期限過了),從新的對話開始")
+                        detail=_("The earlier conversation is gone (nothing was said yet, or it is past retention); "
+                                  "starting a new conversation"))
     else:
         lease.set_state("running", pid=lease.proc.pid, resumed=can_resume)
     threading.Thread(target=reader, args=(lease, lease.proc), daemon=True).start()
@@ -373,16 +378,16 @@ def check_attachments(atts) -> str | None:
     if atts is None:
         return None
     if not isinstance(atts, list) or len(atts) > MAX_ATTACHMENTS:
-        return f"attachments 要是最多 {MAX_ATTACHMENTS} 個的 list"
+        return _("attachments must be a list of at most {n}", n=MAX_ATTACHMENTS)
     for a in atts:
         if not isinstance(a, dict) or not a.get("name") or not a.get("media_type") or not isinstance(a.get("data"), str):
-            return "每個附件要有 name、media_type、data(base64)"
+            return _("each attachment needs name, media_type, data (base64)")
         try:
             raw = base64.b64decode(a["data"], validate=True)
         except ValueError:
-            return f"{a['name']}:data 不是合格的 base64"
+            return _("{name}: data is not valid base64", name=a["name"])
         if len(raw) > MAX_ATTACHMENT_BYTES:
-            return f"{a['name']}:超過 {MAX_ATTACHMENT_BYTES // 1024 // 1024} MB"
+            return _("{name}: over {mb} MB", name=a["name"], mb=MAX_ATTACHMENT_BYTES // 1024 // 1024)
     return None
 
 
@@ -416,7 +421,7 @@ def send_message(lease: Lease, text: str, attachments: list | None = None) -> No
     content: str | list = text
     if attachments:
         paths = save_attachments(lease, attachments)
-        note = "附件已存到:" + "、".join(paths)
+        note = _("Attachments saved to: {paths}", paths=_(", ").join(paths))
         blocks = [{"type": "image", "source": {"type": "base64", "media_type": a["media_type"], "data": a["data"]}}
                   for a in attachments if a["media_type"] in IMAGE_TYPES]
         content = blocks + [{"type": "text", "text": (text + "\n\n" if text else "") + note}]
@@ -444,15 +449,17 @@ def terminal_open(lease: Lease) -> bool:
     return bool(r and r.stdout.strip())
 
 
-EMPTY_HANDOVER = {"summary": "這次深談沒有開始對話(session 沒有啟動成功,或還沒說過話就收回),沒有內容要交接。",
-                  "decisions": [], "open_questions": [], "tasks_for_owner": [], "notes_markdown": ""}
+def empty_handover() -> dict:
+    return {"summary": _("This lease never started a conversation (the session did not start, or it was detached before "
+                         "anything was said); there is nothing to hand over."),
+            "decisions": [], "open_questions": [], "tasks_for_owner": [], "notes_markdown": ""}
 
 
 def run_handover(lease: Lease) -> tuple[dict | None, str]:
     """(交接, 失敗的原因)。沒有對話紀錄 = 沒說過話:回固定的「沒有內容」,不算失敗(10-25 租約 34c84c53:
     session 一開始就掛掉,交接拿 --resume 去接一段不存在的對話,被當成「模型沒寫出合格交接」)。"""
     if not rt().resumable(lease.id):
-        return dict(EMPTY_HANDOVER), ""
+        return empty_handover(), ""
     cmd = [PY, str(HUB / "bin" / "llm.py"), "run", "lease-handover", "--cwd", lease.cwd, "--",
            "--resume", lease.id, "--strict-mcp-config", "--settings", str(deny_settings(lease.project))]
     why = ""
@@ -467,7 +474,7 @@ def run_handover(lease: Lease) -> tuple[dict | None, str]:
         if r.returncode == 0 and isinstance(so, dict):
             return so, ""
         why = str(out.get("llm_error") or out.get("result") or r.stderr.strip()[-300:] or f"exit {r.returncode}")[:300]
-        log(f"{lease.id} 交接第 {attempt} 次不合格:{why}")
+        log(_("{id} handover attempt {n} not valid: {why}", id=lease.id, n=attempt, why=why))
     return None, why
 
 
@@ -498,10 +505,11 @@ def deliver(lease: Lease, h: dict, n: int) -> None:
         hubbus("send", "--from", proj, "--to", owner, "--type", "question", "--id", handover_id(sid, n, f"q-{i}"), "--text", q,
                "--context", f"lease:{sid}")
     hubbus("send", "--from", proj, "--to", owner, "--type", "progress", "--id", handover_id(sid, n, "progress"),
-           "--text", f"[{proj} 深談收回] {h.get('summary', '')}", "--context", f"lease:{sid}")
-    body = [f"深談(租借 {sid[:8]})收回的交接:", h.get("summary", "")]
-    body += [f"- 決定:{d.get('what')}({d.get('why', '')})" for d in h.get("decisions") or []]
-    body += [f"- 待回答:{q}" for q in h.get("open_questions") or []]
+           "--text", _("[{project} lease detached] {summary}", project=proj, summary=h.get("summary", "")),
+           "--context", f"lease:{sid}")
+    body = [_("Handover from the detached lease ({id}):", id=sid[:8]), h.get("summary", "")]
+    body += [_("- Decision: {what} ({why})", what=d.get("what"), why=d.get("why", "")) for d in h.get("decisions") or []]
+    body += [_("- Open question: {q}", q=q) for q in h.get("open_questions") or []]
     hubbus("send", "--from", hubconf.hub_project(), "--to", proj, "--type", "info", "--id", handover_id(sid, n, "report"),
            "--text", "\n".join(body))
     # 筆記寫進專案 memory(managed-files 有登記);附上寄出的任務 key,免得 librarian 又把同一件事寄一次
@@ -526,19 +534,20 @@ def detach(lease: Lease, reason: str) -> None:
             return
         prev = lease.state
         if prev == "terminal" and terminal_open(lease):
-            lease.emit("error", error="busy", detail="terminal_open:終端機裡的 session 還開著,先結束它再收回")
+            lease.emit("error", error="busy", detail=_("terminal_open: the session in the terminal is still open; end it before detaching"))
             return
         stop_proc(lease, "detaching")
     so, why = None, ""
     try:
         so, why = run_handover(lease)
-        failed = "模型沒能產生合格的交接"
+        failed = _("the model did not produce a valid handover")
     except Exception as e:  # 平台自己的錯(不是模型的):原因照實說
-        log(f"{lease.id} 交接失敗:{e!r}")
-        why, failed = repr(e)[:300], "平台出錯,不是模型的問題"
+        log(_("{id} handover failed: {e!r}", id=lease.id, e=e))
+        why, failed = repr(e)[:300], _("a platform error, not the model's")
     fallback = so is None
     h = {"v": 1, "project": lease.project, "session_id": lease.id, "mode": lease.mode, "reason": reason,
-         "summary": f"交接失敗({failed});對話紀錄還在,可以重新 attach 接續" if fallback else so.get("summary", ""),
+         "summary": _("Handover failed ({failed}); the conversation is still there and can be attached again",
+                      failed=failed) if fallback else so.get("summary", ""),
          "decisions": [] if fallback else so.get("decisions", []),
          "open_questions": [] if fallback else so.get("open_questions", []),
          "tasks_for_owner": [] if fallback else so.get("tasks_for_owner", []),
@@ -550,10 +559,10 @@ def detach(lease: Lease, reason: str) -> None:
             save()
         deliver(lease, h, lease.handovers)
     except Exception as e:
-        log(f"{lease.id} 交接送出失敗:{e!r}")
+        log(_("{id} sending the handover failed: {e!r}", id=lease.id, e=e))
         lease.emit("error", error="handover_failed", detail=repr(e)[:300])
     if fallback:
-        lease.emit("error", error="handover_failed", detail=f"已送出最小交接。原因:{why}"[:300])
+        lease.emit("error", error="handover_failed", detail=_("Sent a minimal handover. Reason: {why}", why=why)[:300])
     lease.emit("handover", handover=h)
     lease.set_state("detached", reason=reason)
 
@@ -583,11 +592,11 @@ def idle_loop() -> None:
                 if l.warned_at and (now() - datetime.datetime.fromisoformat(l.warned_at)).total_seconds() >= WARN_GRACE_S:
                     threading.Thread(target=detach, args=(l, "idle"), daemon=True).start()
             except Exception as e:
-                log(f"idle_loop {l.id}:{e!r}")
+                log(_("idle_loop {id}: {e!r}", id=l.id, e=e))
         try:
             prune_files()
         except Exception as e:
-            log(f"prune_files:{e!r}")
+            log(_("prune_files: {e!r}", e=e))
         restart_if_code_changed()
 
 
@@ -606,7 +615,7 @@ def restart_if_code_changed() -> None:
         busy = [l.id[:8] for l in LEASES.values() if l.state in BUSY or l.waiting or l.in_turn]
         if busy:
             return
-        log("bin/ 的程式改過了,沒有租約在跑:結束,讓 launchd 用新的程式重啟")
+        log(_("bin/ changed and no lease is running: exiting so launchd restarts with the new code"))
         os._exit(0)
 
 
@@ -649,7 +658,7 @@ def show_file(lease: "Lease", path: str, summary: str | None) -> tuple:
     import lease_files
     meta, why = lease_files.take(lease.cwd, path, summary, lease.dir / "files", secret_paths(lease.project))
     if meta is None:
-        log(f"{lease.id[:8]} show_file 拒絕:{path}:{why}")
+        log(_("{id} show_file refused: {path}: {why}", id=lease.id[:8], path=path, why=why))
         return None, why
     lease.emit("file", **meta)
     log(f"{lease.id[:8]} show_file {meta['path']}({meta['size']} bytes)→ {meta['id']}")
@@ -678,7 +687,7 @@ def quiesce(project: str) -> str:
         mine = [l for l in LEASES.values() if l.project == project]
         if any(live(l) and (l.in_turn or l.waiting or l.state in ("attaching", "resuming", "detaching", "terminal"))
                for l in mine):
-            return f"{project} 有深談正在回答、等回覆、在終端機或正在收回"
+            return _("{project} has a lease answering, waiting for a reply, in the terminal or being detached", project=project)
         for l in mine:
             if l.proc is not None:
                 stop_proc(l, "idle_stopped")
@@ -702,9 +711,11 @@ def follow_move(old: str, new: str, old_ws: str) -> None:
             if live(l) and (renamed or downgraded):
                 extra = {"project": new} if renamed else {}
                 if downgraded:
-                    extra.update(mode="discuss", detail="這個專案沒有開 work 模式(登錄的 enforce.work),這段深談改回唯讀")
+                    extra.update(mode="discuss", detail=_("This project has no work mode (enforce.work in the registry); "
+                                                          "this lease is read-only again"))
                 l.emit("state", state=l.state, **extra)
-            log(f"upgrade {old} → {new}:租約 {l.id[:8]} 跟上(對話紀錄{'搬了' if moved else '沒搬'})")
+            log(_("upgrade {old} → {new}: lease {id} follows ({moved})", old=old, new=new, id=l.id[:8],
+                  moved=_("conversation moved") if moved else _("conversation not moved")))
         save()
 
 
@@ -787,7 +798,7 @@ class H(http.server.BaseHTTPRequestHandler):
         l = LEASES.get(lid)
         got = lease_files.read(l.dir / "files", fid) if l else None
         if not got:
-            return self.err(404, "not_found", "沒有這個檔案(或已經過了保留期限)")
+            return self.err(404, "not_found", _("no such file (or past retention)"))
         meta, data = got
         self.send_response(200)
         self.send_header("Content-Type", meta["mime"])
@@ -841,7 +852,7 @@ class H(http.server.BaseHTTPRequestHandler):
             return
         b = self.body()
         if b.get("__bad__"):
-            return self.err(400, "bad_request", "body 不是 JSON")
+            return self.err(400, "bad_request", _("body is not JSON"))
         parts = urllib.parse.urlparse(self.path).path.strip("/").split("/")
         if parts == ["v1", "leases"]:
             return self.create(b)
@@ -886,7 +897,7 @@ class H(http.server.BaseHTTPRequestHandler):
             if bad:
                 return self.err(400, "bad_request", bad)
             if not b.get("client_msg_id") or not (b.get("text") or atts) or not isinstance(b.get("text", ""), str):
-                return self.err(400, "bad_request", "client_msg_id 必填;text 跟 attachments 至少要有一個")
+                return self.err(400, "bad_request", _("client_msg_id is required; text or attachments, at least one"))
             with _lock:
                 if b["client_msg_id"] in l.seen_msgs:
                     return self.reply(202, {"v": 1, "duplicate": True})
@@ -906,7 +917,7 @@ class H(http.server.BaseHTTPRequestHandler):
         if action == "mode":
             mode = b.get("mode")
             if mode not in ("discuss", "work"):
-                return self.err(400, "bad_request", "mode 只能是 discuss 或 work")
+                return self.err(400, "bad_request", _("mode is discuss or work"))
             if mode == "work":
                 ok, why = work_ready(l.project)
                 if not ok:
@@ -915,7 +926,7 @@ class H(http.server.BaseHTTPRequestHandler):
                 if l.state in ("terminal", "detaching", "detached"):
                     return self.err(409, "busy", l.state)
                 if l.in_turn or l.waiting:
-                    return self.err(409, "busy", "正在回答或等 Knas 回覆,等這一輪結束再切換")
+                    return self.err(409, "busy", _("answering or waiting for Knas's reply; switch after this turn"))
                 if l.mode == mode:
                     return self.reply(200, {"v": 1, **l.public()})
                 # 換判斷點 = 換程序:停掉、用同一個 session --resume 接回(權限轉接也跟著重開)
@@ -954,7 +965,7 @@ class H(http.server.BaseHTTPRequestHandler):
         """想法沙盒:交給 create-idea-sandbox.py(驗證、重送、上限、失敗清理都在那裡),把結果轉成 HTTP。"""
         name, purpose = b.get("name"), b.get("purpose")
         if not isinstance(name, str) or not isinstance(purpose, str):
-            return self.err(400, "bad_name", "name、purpose 要是字串")
+            return self.err(400, "bad_name", _("name and purpose must be strings"))
         env = {**os.environ, "PATH": f"{hubconf.LAUNCHD_PATH}:/usr/sbin:/sbin"}
         try:
             r = subprocess.run([PY, str(HUB / "bin" / "create-idea-sandbox.py"), name, purpose],
@@ -979,10 +990,10 @@ class H(http.server.BaseHTTPRequestHandler):
         交給 project-rename.py(GitHub repo、登記、memory、資料夾;重試接得上);深談的處理跟升級一樣(quiesce、follow_move)。"""
         to = b.get("to")
         if not isinstance(to, str) or not to:
-            return self.err(400, "bad_name", "to 要是新名稱")
+            return self.err(400, "bad_name", _("to must be the new name"))
         why = quiesce(name)
         if why:
-            return self.err(409, "busy", why + ",等它停下來再改名")
+            return self.err(409, "busy", _("{why}; rename once it stops", why=why))
         old_ws = str(hubconf.workspace(name) or "")
         cmd = [PY, str(HUB / "bin" / "project-rename.py"), name, to, "--apply", "--json"]
         try:
@@ -1010,10 +1021,10 @@ class H(http.server.BaseHTTPRequestHandler):
         升級會把 work(enforce.work)帶過去;新的登錄沒有 work 的話,work 中的租約改回 discuss(state 事件帶 mode 跟 detail)。"""
         rename = b.get("rename")
         if rename is not None and not isinstance(rename, str):
-            return self.err(400, "bad_request", "rename 要是字串")
+            return self.err(400, "bad_request", _("rename must be a string"))
         why = quiesce(name)
         if why:
-            return self.err(409, "busy", why + ",等它停下來再升級")
+            return self.err(409, "busy", _("{why}; upgrade once it stops", why=why))
         old_ws = str(hubconf.workspace(name) or "")
         cmd = [PY, str(HUB / "bin" / "upgrade-idea.py"), name, "--apply", "--json"] + (["--rename", rename] if rename else [])
         env = {**os.environ, "PATH": f"{hubconf.LAUNCHD_PATH}:/usr/sbin:/sbin"}
@@ -1038,14 +1049,14 @@ class H(http.server.BaseHTTPRequestHandler):
         need = {"agent", "auth", "sessions", "stream"}   # 長駐串流 + 接續 + 登入:租借要的能力
         if (miss := need - runtime_ports.capabilities()):
             return self.err(409, "runtime_unsupported",
-                            f"執行環境 {runtime_ports.default_name()} 沒有"
-                            + "、".join(runtime_ports.PORT_LABELS[p] for p in sorted(miss)) + ",不能開租約")
+                            _("runtime {name} lacks {missing}; cannot open a lease", name=runtime_ports.default_name(),
+                              missing=_(", ").join(runtime_ports.PORT_LABELS[p] for p in sorted(miss))))
         if mode not in ("discuss", "work"):
-            return self.err(400, "bad_request", "mode 只能是 discuss 或 work")
+            return self.err(400, "bad_request", _("mode is discuss or work"))
         try:
             uuid.UUID(sid)
         except ValueError:
-            return self.err(400, "bad_request", "session_id 要是 UUID")
+            return self.err(400, "bad_request", _("session_id must be a UUID"))
         import registry
         registry.refresh()  # 剛加進登錄的專案也認得
         ws = hubconf.workspace(proj) if proj in hubconf.projects() or proj == hubconf.hub_project() else None
@@ -1059,7 +1070,7 @@ class H(http.server.BaseHTTPRequestHandler):
             if sid in LEASES and live(LEASES[sid]):
                 return self.reply(200, {"v": 1, **LEASES[sid].public()})
             if sum(1 for l in LEASES.values() if live(l)) >= GLOBAL_CAP:
-                return self.reply(409, {"v": 1, "error": "cap_reached", "detail": f"同時最多 {GLOBAL_CAP} 個",
+                return self.reply(409, {"v": 1, "error": "cap_reached", "detail": _("at most {n} at a time", n=GLOBAL_CAP),
                                         "leases": [l.public() for l in LEASES.values() if live(l)]})
             prev = LEASES.get(sid)  # 已收回的租約用同一個 id 接回(Muninn 回到同一段對話):
             if prev and prev.cwd != str(ws):  # 資料夾搬過(改名、升級):對話紀錄跟過來,才接得回
@@ -1089,7 +1100,7 @@ def main() -> None:
     threading.Thread(target=idle_loop, daemon=True).start()
     srv = http.server.ThreadingHTTPServer((HOST, PORT), H)
     srv.daemon_threads = True
-    log(f"lease-runner 開始,{HOST}:{PORT},{len(LEASES)} 個租約紀錄")
+    log(_("lease-runner started, {host}:{port}, {n} lease records", host=HOST, port=PORT, n=len(LEASES)))
     srv.serve_forever()
 
 

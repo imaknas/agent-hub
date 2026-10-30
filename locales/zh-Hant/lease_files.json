@@ -1,0 +1,17 @@
+{
+ "give the path of a file in the project folder": "要給專案資料夾裡的檔案路徑",
+ "{path} is not in this project folder (only files in the project folder can be shown)": "{path} 不在這個專案資料夾裡(只能給專案資料夾裡的檔案)",
+ "{name}: this type cannot be sent (allowed: {types})": "{name} 的類型不能送(可以:{types})",
+ "{name} looks like a credential or a secret; not sent": "{name} 看起來是憑證或機密,不送",
+ "{path} cannot be opened: {err}": "{path} 打不開:{err}",
+ "{path} is not a regular file": "{path} 不是一般檔案",
+ "{path} is a hard link (it may point outside the folder); not sent": "{path} 是 hard link(可能指到資料夾外),不送",
+ "{path}: what was opened is not that file in the folder (was the path swapped?); not sent": "{path} 打開的不是資料夾裡的那個檔(路徑中途被換掉了?),不送",
+ "{path} is too big ({mb} MB; the limit is {limit} MB)": "{path} 太大({mb} MB;上限 {limit} MB)",
+ "{path} is too big (the limit is {limit} MB)": "{path} 太大(上限 {limit} MB)",
+ "{path} is not UTF-8 text": "{path} 不是 UTF-8 文字",
+ "{path}: the content looks like a credential (a private key or an API key); not sent": "{path} 的內容像憑證(私鑰或 API key),不送",
+ "{path}: the content is not {type} (the extension does not match the content)": "{path} 的內容不是 {type}(副檔名跟內容對不上)",
+ "This lease already showed {n} files in the last {hours} hours, the limit; show it later, or say in text where the file is for now": "這個深談最近 {hours} 小時已經給了 {n} 個檔案,到上限了;晚一點再給,或先用文字說檔案在哪",
+ "The files this lease showed in the last {hours} hours are over {mb} MB in total; show it later, or say in text where the file is for now": "這個深談最近 {hours} 小時給的檔案合計超過 {mb} MB 了;晚一點再給,或先用文字說檔案在哪"
+}

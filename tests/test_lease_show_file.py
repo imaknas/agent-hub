@@ -35,6 +35,7 @@ def load(name, file):
     return m
 
 
+@mock.patch.dict(os.environ, {"AGENT_HUB_LANG_UI": "zh-Hant"})   # the assertions are the zh-Hant texts
 class Take(unittest.TestCase):
     def setUp(self):
         self.tmp = pathlib.Path(tempfile.mkdtemp()).resolve()
@@ -176,6 +177,7 @@ class Take(unittest.TestCase):
         self.assertIsNone(lease_files.read(self.store, meta["id"]))
 
 
+@mock.patch.dict(os.environ, {"AGENT_HUB_LANG_UI": "zh-Hant"})   # the assertions are the zh-Hant texts
 class Runner(unittest.TestCase):
     def setUp(self):
         import http.server

@@ -9,6 +9,7 @@
 import importlib.util
 import io
 import json
+import os
 import pathlib
 import sys
 import tempfile
@@ -135,6 +136,7 @@ class RelayEvents(unittest.TestCase):
         self.assertEqual((etype, data["kind"], data["decision"]), ("question", "ask_user", "answered"))
 
 
+@mock.patch.dict(os.environ, {"AGENT_HUB_LANG_UI": "zh-Hant"})   # the assertions are the zh-Hant texts
 class ResumeTruthfully(unittest.TestCase):
     def test_cannot_resume_says_so(self):
         m = load_runner()

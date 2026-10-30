@@ -11,6 +11,7 @@
 """
 import importlib.util
 import json
+import os
 import pathlib
 import subprocess
 import sys
@@ -30,6 +31,7 @@ def load_runner():
     return m
 
 
+@mock.patch.dict(os.environ, {"AGENT_HUB_LANG_UI": "zh-Hant"})   # the assertions are the zh-Hant texts
 class Handover(unittest.TestCase):
     def setUp(self):
         self.m = m = load_runner()

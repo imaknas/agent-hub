@@ -36,8 +36,11 @@ import urllib.request
 
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
 import hubconf  # noqa: E402
+import i18n  # noqa: E402
 import policy  # noqa: E402
 import runtime_claude  # noqa: E402  這支本身就是 Claude Code 的權限轉接(--permission-prompt-tool):工具 → kind 的翻譯在那裡
+
+_ = i18n.domain(__file__)
 
 LEASE, PROJECT = os.environ.get("LEASE_ID", ""), os.environ.get("LEASE_PROJECT", "")
 RUNNER = os.environ.get("LEASE_RUNNER", "http://127.0.0.1:18797")
@@ -123,7 +126,7 @@ def decide(args: dict) -> dict:
     """要不要放行,照中立政策(policy.approvals)的規則;工具是哪一種動作由 runtime_claude.action() 翻譯。"""
     tool, inp = args.get("tool_name", ""), args.get("input") or {}
     rid = f"{LEASE}:{args.get('tool_use_id') or int(time.time() * 1000)}"
-    kind, _, target, _ = runtime_claude.action(tool, inp)
+    kind, _collab, target, _summary = runtime_claude.action(tool, inp)
     ap = policy.approvals(PROJECT, MODE)
     rule = ap["rules"].get(kind, "deny")
     if rule == "allow":
@@ -138,8 +141,10 @@ def decide(args: dict) -> dict:
         return decide_ask(rid, tool, kind, target, inp)
     tell_runner("end", tool=tool, kind=kind, decision="deny_readonly" if MODE != "work" else "deny_policy")
     if MODE != "work":
-        return {"behavior": "deny", "message": f"這是唯讀的深談(discuss)租約,不能用 {tool}。需要改東西就寫進交接,讓 Knas 決定。"}
-    return {"behavior": "deny", "message": f"這個租約不能用 {tool}(可以讀、改這個資料夾裡的檔案、問過 Knas 才能跑指令)。"}
+        return {"behavior": "deny", "message": _("This is a read-only (discuss) lease; {tool} cannot be used. Write what needs "
+                                                  "changing into the handover and let Knas decide.", tool=tool)}
+    return {"behavior": "deny", "message": _("This lease cannot use {tool} (it can read and edit files in this folder, and run "
+                                              "commands after asking Knas).", tool=tool)}
 
 
 def decide_question(rid: str, tool: str, inp: dict) -> dict:
@@ -151,7 +156,8 @@ def decide_question(rid: str, tool: str, inp: dict) -> dict:
         tell_runner("end", tool=tool, kind="ask_user", decision="answered")
         return {"behavior": "allow", "updatedInput": {**inp, "answers": runtime_claude.native_answers(res["answers"])}}
     tell_runner("end", tool=tool, kind="ask_user", decision="no_answer")
-    return {"behavior": "deny", "message": "Knas 現在沒有回答這個問題。用一般文字問他,不要再用提問工具重試。"}
+    return {"behavior": "deny", "message": _("Knas is not answering this question now. Ask him in plain text; do not retry "
+                                              "with the question tool.")}
 
 
 def decide_web(rid: str, tool: str, inp: dict, ap: dict) -> dict:
@@ -170,8 +176,9 @@ def decide_web(rid: str, tool: str, inp: dict, ap: dict) -> dict:
         tell_runner("end", tool=tool, kind="open_web", decision=d, summary=url, target=url)
         return {"behavior": "allow", "updatedInput": inp}
     tell_runner("end", tool=tool, kind="open_web", decision="deny" if d == "deny" else "timeout", summary=url, target=url)
-    return {"behavior": "deny", "message": ("Knas 拒絕了這個網址。" if d == "deny" else "沒有人核准這個網址(5 分鐘內沒回)。")
-            + "不要重試同一個網址;需要的話用文字跟 Knas 說明為什麼要讀它。"}
+    why = _("Knas refused this URL.") if d == "deny" else _("Nobody approved this URL (no answer within 5 minutes).")
+    return {"behavior": "deny", "message": _("{why} {advice}", why=why, advice=_(
+        "Do not retry the same URL; if you need it, tell Knas in plain text why you want to read it."))}
 
 
 def inside_ws(path: str) -> bool:
@@ -188,7 +195,8 @@ def inside_ws(path: str) -> bool:
 def decide_write(rid: str, tool: str, kind: str, path: str, inp: dict) -> dict:
     if not inside_ws(path):
         tell_runner("end", tool=tool, kind=kind, decision="deny_outside", summary=path, target=path)
-        return {"behavior": "deny", "message": f"只能改這個專案資料夾({WS})裡的檔案,{path or '(沒有路徑)'} 不在裡面。"}
+        return {"behavior": "deny", "message": _("Only files in this project folder ({ws}) can be changed; {path} is not in it.",
+                                                  ws=WS, path=path or _("(no path)"))}
     # 資料夾內:直接放行(OS sandbox 本來就只准寫這裡);照樣回報 runner 留稽核紀錄
     tell_runner("end", tool=tool, kind=kind, decision="auto_allow_inside", summary=path, target=path)
     return {"behavior": "allow", "updatedInput": inp}
@@ -204,9 +212,11 @@ def decide_ask(rid: str, tool: str, kind: str, target: str, inp: dict) -> dict:
         tell_runner("end", tool=tool, kind=kind, decision="allow", summary=summary, target=summary)
         return {"behavior": "allow", "updatedInput": inp}
     tell_runner("end", tool=tool, kind=kind, decision="deny" if d == "deny" else "timeout", summary=summary, target=summary)
-    noun = "指令" if kind == "run_command" else "動作"
-    return {"behavior": "deny", "message": (f"Knas 拒絕了這個{noun}。" if d == "deny" else f"沒有人核准這個{noun}(5 分鐘內沒回)。")
-            + f"不要重試同一個{noun};用文字跟他說明。"}
+    noun = _("command") if kind == "run_command" else _("action")
+    why = (_("Knas refused this {noun}.", noun=noun) if d == "deny"
+           else _("Nobody approved this {noun} (no answer within 5 minutes).", noun=noun))
+    return {"behavior": "deny", "message": _("{why} {advice}", why=why, advice=_(
+        "Do not retry the same {noun}; explain it to him in plain text.", noun=noun))}
 
 
 def send(obj: dict) -> None:
@@ -219,7 +229,7 @@ def handle_call(mid, args: dict) -> None:
     try:
         decision = decide(args)
     except Exception as e:  # 轉接壞掉:拒絕(安全的那邊),不要讓 session 卡住
-        decision = {"behavior": "deny", "message": f"權限轉接出錯({e!r}),先不要用這個工具。"}
+        decision = {"behavior": "deny", "message": _("The permission relay failed ({e!r}); do not use this tool for now.", e=e)}
     send({"jsonrpc": "2.0", "id": mid, "result": {"content": [{"type": "text", "text": json.dumps(decision, ensure_ascii=False)}]}})
 
 
@@ -229,17 +239,18 @@ def show_file(args: dict) -> tuple:
     code, res = http("POST", f"{RUNNER}/v1/internal/{LEASE}/show", secret(hubconf.secrets_dir() / "runner-token"),
                      {"path": args.get("path"), "summary": args.get("summary")}, timeout=30)
     if code == 200 and res.get("id"):
-        return f"已經給 Knas 看了:{res.get('path')}({res.get('mime')},{res.get('size')} bytes)。", False
+        return _("Shown to Knas: {path} ({mime}, {size} bytes).", path=res.get("path"), mime=res.get("mime"),
+                 size=res.get("size")), False
     if code == 0:
-        return "沒送出去:連不到平台(runner),先用文字跟 Knas 說檔案在哪。", True
-    return f"沒送出去:{res.get('detail') or res.get('error') or code}", True
+        return _("Not sent: the platform (runner) is unreachable; tell Knas in plain text where the file is."), True
+    return _("Not sent: {why}", why=res.get("detail") or res.get("error") or code), True
 
 
 def handle_show(mid, args: dict) -> None:
     try:
         text, is_error = show_file(args)
     except Exception as e:
-        text, is_error = f"沒送出去:平台出錯({e!r})", True
+        text, is_error = _("Not sent: platform error ({e!r})", e=e), True
     send({"jsonrpc": "2.0", "id": mid, "result": {"content": [{"type": "text", "text": text}], "isError": is_error}})
 
 
