@@ -17,7 +17,9 @@ import sys
 
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
 import hubconf  # noqa: E402
+import i18n  # noqa: E402
 
+_ = i18n.domain(__file__)
 DIR = hubconf.STATE / "librarian-shadow"
 
 
@@ -31,7 +33,7 @@ def main() -> int:
         if f.stem >= since:
             recs += [{**json.loads(x), "_day": f.stem} for x in f.read_text().splitlines() if x.strip()]
     if not recs:
-        print(f"最近 {a.days} 天沒有影子紀錄({DIR})")
+        print(_("no shadow records in the last {days} days ({dir})", days=a.days, dir=DIR))
         return 1
     for point in sorted({r["point"] for r in recs}):
         rs = [r for r in recs if r["point"] == point]
@@ -39,24 +41,31 @@ def main() -> int:
         sims = [r["similarity"] for r in ok if "similarity" in r]
         cost = sum(r.get("cost_usd") or 0 for r in rs)
         pct = lambda n, d: f"{n}/{d}" + (f"({n * 100 // d}%)" if d else "")
-        print(f"== {point}:{len(rs)} 次,{len({r['_day'] for r in rs})} 晚,成本 ${cost:.3f}")
-        print(f"  有結果、編輯清單合規  {pct(len(ok), len(rs))};不合規 {sum(1 for r in rs if 'edit_error' in r)}、"
-              f"沒結果 {sum(1 for r in rs if 'edit_error' not in r and not r.get('ok'))}")
-        print(f"  要不要改跟 agent 版一致 {pct(sum(1 for r in ok if r.get('same_decision')), len(ok))}")
+        print(_("== {point}: {n} runs, {nights} nights, cost ${cost:.3f}", point=point, n=len(rs),
+                nights=len({r["_day"] for r in rs}), cost=cost))
+        print("  " + _("got a result, valid edit list  {valid}; invalid {invalid}, no result {none}",
+                       valid=pct(len(ok), len(rs)), invalid=sum(1 for r in rs if "edit_error" in r),
+                       none=sum(1 for r in rs if "edit_error" not in r and not r.get("ok"))))
+        print("  " + _("same change-or-not as the agent version {same}",
+                       same=pct(sum(1 for r in ok if r.get("same_decision")), len(ok))))
         if sims:
-            print(f"  跟 agent 版的相似度  平均 {sum(sims) / len(sims):.2f},最低 {min(sims):.2f};"
-                  f"逐字一樣 {sum(1 for r in ok if r.get('identical_to_agent'))}")
+            print("  " + _("similarity to the agent version  mean {mean:.2f}, lowest {low:.2f}; identical {n}",
+                           mean=sum(sims) / len(sims), low=min(sims), n=sum(1 for r in ok if r.get("identical_to_agent"))))
         marks = [r for r in ok if r.get("marker_problems")]
         if marks:
-            print(f"  ⚠️ key 標記有問題 {len(marks)} 次:" + ";".join(f"{r.get('project')} {r['_day']}" for r in marks))
+            print("  ⚠️ " + _("key marker problems {n} times: ", n=len(marks))
+                  + ";".join(f"{r.get('project')} {r['_day']}" for r in marks))
         if point.endswith("index-edits"):
-            print(f"  名冊區塊沒被動 {pct(sum(1 for r in ok if r.get('roster_untouched')), len(ok))}")
+            print("  " + _("roster block untouched {n}", n=pct(sum(1 for r in ok if r.get("roster_untouched")), len(ok))))
         for r in rs:
             if r.get("ok") and not r.get("same_decision"):
-                print(f"  - 不一致 {r['_day']} {r.get('project', '')}:completion 版要改={r.get('shadow_changed')},"
-                      f"agent 版={r.get('agent_changed')}。理由:{r.get('reason', '')[:160]}")
+                print("  - " + _("disagrees {day} {project}: completion version change={shadow}, agent version={agent}. "
+                                 "Reason: {reason}", day=r["_day"], project=r.get("project", ""),
+                                 shadow=r.get("shadow_changed"), agent=r.get("agent_changed"),
+                                 reason=r.get("reason", "")[:160]))
             elif "edit_error" in r:
-                print(f"  - 不合規 {r['_day']} {r.get('project', '')}:{r['edit_error'][:160]}")
+                print("  - " + _("invalid {day} {project}: {error}", day=r["_day"], project=r.get("project", ""),
+                                 error=r["edit_error"][:160]))
     return 0
 
 
