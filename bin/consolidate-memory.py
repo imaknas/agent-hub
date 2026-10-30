@@ -50,7 +50,9 @@ import time
 
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
 import hubconf  # noqa: E402
+import i18n  # noqa: E402
 
+_ = i18n.domain(__file__)
 HOME = pathlib.Path.home()
 HUB = pathlib.Path(os.environ.get("AGENT_HUB") or hubconf.ROOT)
 COPIES = hubconf.p("memory_copies", "~/.memory-copies")
@@ -106,7 +108,7 @@ def git(*args, cwd=None, git_dir=None, check=True) -> str:
     cmd = ["git"] + ([f"--git-dir={git_dir}"] if git_dir else []) + list(args)
     r = subprocess.run(cmd, cwd=cwd, env=GIT_ENV, capture_output=True, text=True)
     if check and r.returncode != 0:
-        raise RuntimeError(f"git {' '.join(args)} 失敗:{r.stderr.strip()[:500]}")
+        raise RuntimeError(_("git {args} failed: {stderr}", args=" ".join(args), stderr=r.stderr.strip()[:500]))
     return r.stdout
 
 
@@ -166,21 +168,21 @@ def candidates(state: dict, only: str | None, ignore_interval: bool) -> list[dic
             continue
         origin = project_origin(copy)
         if not origin or not pathlib.Path(origin).is_dir():
-            log(f"{copy.name}: origin 不是本機的 bare repo({origin}),跳過")
+            log(_("{project}: origin is not a local bare repo ({origin}), skipped", project=copy.name, origin=origin))
             continue
         try:
             s = survey(copy.name, origin)
         except (RuntimeError, ValueError) as e:
-            log(f"{copy.name}: 讀不到 agent-memory 分支,跳過:{e}")
+            log(_("{project}: cannot read the agent-memory branch, skipped: {error}", project=copy.name, error=e))
             continue
         st = state.get(copy.name, {})
         s["last_ok"], s["last_try"] = st.get("last_ok"), st.get("last_try")
         if not s["batch"]:
-            s["skip"] = f"沒有超過 {OLDER_THAN_DAYS} 天的日期檔"
+            s["skip"] = _("no date files older than {days} days", days=OLDER_THAN_DAYS)
         elif not ignore_interval and days_since(s["last_ok"]) < MIN_INTERVAL_DAYS:
-            s["skip"] = f"{s['last_ok']} 才整理過"
+            s["skip"] = _("consolidated only on {date}", date=s["last_ok"])
         elif not ignore_interval and s["last_try"] != s["last_ok"] and days_since(s["last_try"]) < RETRY_AFTER_DAYS:
-            s["skip"] = f"{s['last_try']} 失敗過,{RETRY_AFTER_DAYS} 天後再試"
+            s["skip"] = _("failed on {date}, retrying after {days} days", date=s["last_try"], days=RETRY_AFTER_DAYS)
         out.append(s)
     # 最需要的先:從沒整理過的、最舊的日期檔越舊越前面
     out.sort(key=lambda s: (s["last_ok"] is not None, s["oldest"] or "9999"))
@@ -258,13 +260,13 @@ def run_model(prompt: str, repo: pathlib.Path, model: str) -> tuple[dict | None,
     try:
         r = subprocess.run(cmd, input=prompt, cwd=repo, env=env, capture_output=True, text=True, timeout=CALL_TIMEOUT + 60)
     except subprocess.TimeoutExpired:
-        return None, f"超過 {CALL_TIMEOUT // 60} 分鐘"
+        return None, _("over {minutes} minutes", minutes=CALL_TIMEOUT // 60)
     if r.returncode != 0 or not r.stdout.strip():
-        return None, f"exit {r.returncode}:{r.stderr.strip()[-500:]}"
+        return None, _("exit {rc}: {stderr}", rc=r.returncode, stderr=r.stderr.strip()[-500:])
     try:
         return json.loads(r.stdout), ""
     except ValueError:
-        return None, "輸出不是 JSON:" + r.stdout[:300]
+        return None, _("the output is not JSON: ") + r.stdout[:300]
 
 
 # ---------- 機械檢查 ----------
@@ -391,23 +393,26 @@ def consolidate(s: dict, model: str, dry_run: bool, keep: bool) -> dict:
     try:
         git("clone", "-q", "--branch", "agent-memory", s["origin"], str(repo))
         base = git("rev-parse", "HEAD", cwd=repo).strip()
-        log(f"{name}: 整理 {len(s['batch'])} 個日期檔({s['batch_bytes']} bytes,{s['batch'][0]} … {s['batch'][-1]}),"
-            f"還有 {len(s['old']) - len(s['batch'])} 個留到下次;模型 {model}")
+        log(_("{project}: consolidating {n} date files ({bytes} bytes, {first} … {last}), {left} left for next time; "
+              "model {model}", project=name, n=len(s["batch"]), bytes=s["batch_bytes"], first=s["batch"][0],
+              last=s["batch"][-1], left=len(s["old"]) - len(s["batch"]), model=model))
 
         out, err = run_model(build_prompt(s, repo), repo, model)
         if out is None:
-            log(f"{name}: 模型呼叫失敗({err}),放棄,副本沒動")
+            log(_("{project}: the model call failed ({error}), giving up, the copy is untouched", project=name, error=err))
             return result
         cost = out.get("total_cost_usd")
         denials = out.get("permission_denials") or []
-        log(f"{name}: 模型完成(turns={out.get('num_turns')} cost=${cost}),被權限擋下 {len(denials)} 次")
+        log(_("{project}: model done (turns={turns} cost=${cost}), blocked by permissions {n} times", project=name,
+              turns=out.get("num_turns"), cost=cost, n=len(denials)))
         so = out.get("structured_output")
         if not so:
-            log(f"{name}: 沒有 structured_output(模型最後說:{str(out.get('result', ''))[:300]}),放棄")
+            log(_("{project}: no structured_output (the model last said: {said}), giving up", project=name,
+                  said=str(out.get("result", ""))[:300]))
             return result
 
         if git("rev-parse", "HEAD", cwd=repo).strip() != base:
-            log(f"{name}: HEAD 被動過(模型不該能 commit),放棄")
+            log(_("{project}: HEAD was moved (the model should not be able to commit), giving up", project=name))
             return result
         changed, stray = [], []
         for line in git("status", "--porcelain", "--untracked-files=all", cwd=repo).splitlines():
@@ -419,7 +424,8 @@ def consolidate(s: dict, model: str, dry_run: bool, keep: bool) -> dict:
             for p in stray:
                 if (repo / p).is_file():
                     shutil.copy(repo / p, qdir / p.replace("/", "_"))
-            log(f"{name}: 警告——模型動了不准動的檔案,證據在 {qdir}:{' '.join(stray)};整個放棄")
+            log(_("{project}: warning: the model touched files it may not touch, evidence in {dir}: {files}; giving up "
+                  "entirely", project=name, dir=qdir, files=" ".join(stray)))
             return result
 
         warnings: list[str] = []
@@ -431,8 +437,9 @@ def consolidate(s: dict, model: str, dry_run: bool, keep: bool) -> dict:
             if f in changed and f not in reverted:
                 revert(repo, base, f)
                 reverted.add(f)
-            warnings.append(f"還原 `{f}`:修正「{c.get('before', '')[:80]}」→「{c.get('after', '')[:80]}」"
-                            f"附的引文在 `{c.get('evidence_file')}` 找不到")
+            warnings.append(_("reverted `{file}`: the quote for the correction “{before}” → “{after}” is not in "
+                              "`{evidence_file}`", file=f, before=c.get("before", "")[:80], after=c.get("after", "")[:80],
+                              evidence_file=c.get("evidence_file")))
         good = [c for c in good if c.get("file", "").lstrip("./") not in reverted]
 
         for f, pairs in hedge_upgrades(repo, base, [c for c in changed if c not in reverted],
@@ -440,12 +447,13 @@ def consolidate(s: dict, model: str, dry_run: bool, keep: bool) -> dict:
             revert(repo, base, f)
             reverted.add(f)
             for orig, new in pairs[:3]:
-                warnings.append(f"還原 `{f}`:疑似把保留語氣拿掉,沒有逐字證據——「{orig[:100]}」→「{new[:100]}」")
+                warnings.append(_("reverted `{file}`: hedging seems to have been removed, with no verbatim evidence: "
+                                  "“{before}” → “{after}”", file=f, before=orig[:100], after=new[:100]))
 
         if "STATE.md" in changed and "STATE.md" not in reverted and state_todo_broken(repo, base):
             revert(repo, base, "STATE.md")
             reverted.add("STATE.md")
-            warnings.append("還原 `STATE.md`:`## 待辦` 段落格式被改壞")
+            warnings.append(_("reverted `STATE.md`: the `{heading}` section's format was broken", heading="## 待辦"))
         good = [c for c in good if c.get("file", "").lstrip("./") not in reverted]
 
         # 要 git rm 哪些:模型宣告整理完 ∩ 這次給的批次 ∩ 目的地都合法、存在、沒被還原
@@ -455,18 +463,18 @@ def consolidate(s: dict, model: str, dry_run: bool, keep: bool) -> dict:
             f = item.get("file", "").lstrip("./")
             dests = [d.lstrip("./") for d in item.get("destinations", [])]
             if f not in s["batch"]:
-                warnings.append(f"模型說整理了 `{f}`,但它不在這次的批次,忽略")
+                warnings.append(_("the model says it consolidated `{file}`, but it is not in this batch; ignored", file=f))
                 continue
             bad_dest = [d for d in dests if not (d == "STATE.md" or REF_RE.match(d)) or not (repo / d).exists()]
             why = None
             if reverted & set(dests):
-                why = f"目的地 {', '.join(sorted(reverted & set(dests)))} 被還原了"
+                why = _("destination {files} was reverted", files=", ".join(sorted(reverted & set(dests))))
             elif bad_dest:
-                why = f"目的地不合法或不存在:{', '.join(bad_dest)}"
+                why = _("destination not allowed or missing: {files}", files=", ".join(bad_dest))
             elif not dests and not item.get("dropped", "").strip():
-                why = "沒有目的地也沒說明為什麼不保留"
+                why = _("no destination and no reason for not keeping it")
             if why:
-                kept.append({"file": f, "reason": f"(腳本擋下){why}"})
+                kept.append({"file": f, "reason": _("(blocked by the script) {why}", why=why)})
             else:
                 to_delete.append(f)
                 folded.append({**item, "file": f, "destinations": dests})
@@ -475,24 +483,26 @@ def consolidate(s: dict, model: str, dry_run: bool, keep: bool) -> dict:
 
         missing = salient_missing(repo, base, to_delete)
         for f, toks in missing.items():
-            warnings.append(f"`{f}` 裡有、整理後找不到的字串(可能被改寫或丟了,抽查用):"
-                            + "、".join(f"`{t}`" for t in toks))
+            warnings.append(_("strings in `{file}` not found after consolidating (maybe rewritten or lost, for spot "
+                              "checks): ", file=f) + _(", ").join(f"`{t}`" for t in toks))
         curated = {"STATE.md": (repo / "STATE.md").read_text() if (repo / "STATE.md").exists() else ""}
         for p in (repo / "memory" / "reference").glob("*.md"):
             curated[str(p.relative_to(repo))] = p.read_text()
         for f in to_delete:
             where = [k for k, text in curated.items() if pathlib.PurePath(f).name in text]
             if where:
-                warnings.append(f"`{', '.join(where)}` 還引用被刪掉的 `{f}`(librarian 的斷連結檢查會接手)")
+                warnings.append(_("`{files}` still refer to the deleted `{file}` (the librarian's broken-link check "
+                                  "takes over)", files=", ".join(where), file=f))
         refs = sorted(p.name for p in (repo / "memory" / "reference").glob("*.md") if p.name != "README.md")
         readme = repo / "memory" / "reference" / "README.md"
         unindexed = [r for r in refs if r not in (readme.read_text() if readme.exists() else "")]
         if unindexed:
-            warnings.append("memory/reference/README.md 沒列到:" + "、".join(unindexed))
+            warnings.append(_("memory/reference/README.md does not list: ") + _(", ").join(unindexed))
 
         git("add", "-A", "--", "STATE.md", "memory/reference", cwd=repo)
         if not git("status", "--porcelain", cwd=repo).strip():
-            log(f"{name}: 檢查後沒有任何變化要提交" + (f"(警告 {len(warnings)} 則)" if warnings else ""))
+            log(_("{project}: nothing to commit after the checks", project=name)
+                + (_(" ({n} warnings)", n=len(warnings)) if warnings else ""))
             for w in warnings:
                 log(f"{name}:   {w}")
             result["status"] = "noop"
@@ -511,7 +521,8 @@ def consolidate(s: dict, model: str, dry_run: bool, keep: bool) -> dict:
             log(f"{name}: ⚠️ {w}")
 
         if dry_run:
-            log(f"{name}: dry-run,不 push;rm {len(to_delete)} 個日期檔,改 {len(changed) - len(reverted)} 個檔案")
+            log(_("{project}: dry-run, no push; rm {n} date files, {changed} files changed", project=name, n=len(to_delete),
+                  changed=len(changed) - len(reverted)))
             result["status"] = "ok"
             return result
 
@@ -521,57 +532,64 @@ def consolidate(s: dict, model: str, dry_run: bool, keep: bool) -> dict:
             fdir = STATE_DIR / "consolidate" / "failed"
             fdir.mkdir(parents=True, exist_ok=True)
             (fdir / f"{name}-{TODAY}.patch").write_text(patch)
-            log(f"{name}: push 失敗(多半是 project session 同時改了同一段),patch 留在 {fdir};"
-                f"副本沒動:{push.stderr.strip()[:300]}")
+            log(_("{project}: push failed (most likely a project session changed the same part at the same time), patch "
+                  "left in {dir}; the copy is untouched: {stderr}", project=name, dir=fdir, stderr=push.stderr.strip()[:300]))
             return result
         pushed = git("rev-parse", "HEAD", cwd=repo).strip()
-        log(f"{name}: 已 push {pushed}")
+        log(_("{project}: pushed {sha}", project=name, sha=pushed))
 
         copy = COPIES / name
         upd = subprocess.run([str(BIN / "with-lock.sh"), "git", "pull", "-q"], cwd=copy, env=GIT_ENV,
                              capture_output=True, text=True)
         if upd.returncode != 0:
-            log(f"{name}: 副本 git pull 失敗(librarian 下次會再 pull):{upd.stderr.strip()[:200]}")
+            log(_("{project}: git pull of the copy failed (the librarian pulls again next time): {stderr}", project=name,
+                  stderr=upd.stderr.strip()[:200]))
 
         # librarian 的 checkpoint 剛好停在起點、這次是 fast-forward(沒有 merge 別人的 commit),就往前推,
         # 不然 librarian 會把整理的 diff(含被刪的日期檔全文)當成新內容再讀一次
         ckpt = STATE_DIR / f"{name}.sha"
         if pushed == new_sha and ckpt.exists() and ckpt.read_text().strip() == base:
             ckpt.write_text(new_sha + "\n")
-            log(f"{name}: librarian checkpoint 推進到 {new_sha[:8]}")
+            log(_("{project}: librarian checkpoint advanced to {sha}", project=name, sha=new_sha[:8]))
         result["status"] = "ok"
         return result
     except Exception as e:  # noqa: BLE001 — 任何意外都只影響這個專案,副本沒動
-        log(f"{name}: 意外錯誤,放棄(副本沒動):{type(e).__name__}: {e}")
+        log(_("{project}: unexpected error, giving up (the copy is untouched): {error_type}: {error}", project=name,
+              error_type=type(e).__name__, error=e))
         return result
     finally:
         if keep:
-            log(f"{name}: 暫存 clone 留在 {repo}")
+            log(_("{project}: the temp clone is kept in {dir}", project=name, dir=repo))
         else:
             shutil.rmtree(tmp, ignore_errors=True)
 
 
 def review_entry(name, sha, model, summary, folded, kept, corrections, warnings, diff, stat, dry_run) -> str:
-    lines = [f"## {TODAY} · {name} · 回頭清理" + ("(dry-run,未 push)" if dry_run else ""), "",
-             f"**commit**: `{sha}`(模型 {model})", "", f"**摘要**: {summary or '(模型未提供)'}", ""]
+    lines = ["## " + _("{date} · {project} · consolidation", date=TODAY, project=name)
+             + (_(" (dry-run, not pushed)") if dry_run else ""), "",
+             _("**commit**: `{sha}` (model {model})", sha=sha, model=model), "",
+             _("**Summary**: {summary}", summary=summary or _("(not given by the model)")), ""]
     if folded:
-        lines += [f"**整理掉的日期檔**(git rm;原文用 `git show {sha[:8]}^:<路徑>` 看):", ""]
+        lines += [_("**Date files folded** (git rm; see the original with `git show {sha}^:<path>`):", sha=sha[:8]), ""]
         for f in folded:
-            lines.append(f"- `{f['file']}` → {', '.join(f'`{d}`' for d in f['destinations']) or '(無)'}"
-                         + (f";沒保留:{f['dropped']}" if f.get("dropped", "").strip() else ""))
+            lines.append(f"- `{f['file']}` → {', '.join(f'`{d}`' for d in f['destinations']) or _('(none)')}"
+                         + (_("; not kept: {dropped}", dropped=f["dropped"]) if f.get("dropped", "").strip() else ""))
         lines.append("")
     if kept:
-        lines += ["**這次沒刪**:", ""] + [f"- `{k.get('file')}`:{k.get('reason')}" for k in kept] + [""]
+        lines += [_("**Not deleted this time**:"), ""] + ["- " + _("`{file}`: {reason}", file=k.get("file"),
+                                                                     reason=k.get("reason")) for k in kept] + [""]
     if corrections:
-        lines += ["**修正的敘述**(被較新紀錄推翻):", ""]
+        lines += [_("**Statements corrected** (overturned by newer notes):"), ""]
         for c in corrections:
-            lines.append(f"- `{c['file']}`:「{c['before']}」→「{c['after']}」"
-                         f"(根據 `{c['evidence_file']}`:「{c['evidence_quote']}」)")
+            lines.append("- " + _("`{file}`: “{before}” → “{after}” (per `{evidence_file}`: “{evidence_quote}”)",
+                                  file=c["file"], before=c["before"], after=c["after"], evidence_file=c["evidence_file"],
+                                  evidence_quote=c["evidence_quote"]))
         lines.append("")
     if warnings:
-        lines += ["**機械檢查**:", ""] + [f"- ⚠️ {w}" for w in warnings] + [""]
+        lines += [_("**Mechanical checks**:"), ""] + [f"- ⚠️ {w}" for w in warnings] + [""]
     if len(diff) > MAX_LOG_DIFF:
-        diff = diff[:MAX_LOG_DIFF] + (f"\n… (截斷;完整 diff:`git -C ~/.memory-copies/{name} show {sha[:8]}`)")
+        diff = diff[:MAX_LOG_DIFF] + "\n" + _("… (truncated; the full diff: `git -C ~/.memory-copies/{project} show {sha}`)",
+                                              project=name, sha=sha[:8])
     lines += ["```", stat.rstrip(), "```", "", "```diff", diff.rstrip(), "```", "", "---", ""]
     return "\n".join(lines) + "\n"
 
@@ -580,11 +598,13 @@ def review_entry(name, sha, model, summary, folded, kept, corrections, warnings,
 
 def main() -> int:
     global _log_file
-    ap = argparse.ArgumentParser(description=__doc__.split("\n")[0])
+    # the description is the docstring's first line (its own msgid: the docstring is translated in step 4)
+    ap = argparse.ArgumentParser(description=_("Consolidation: fold each project's long-kept memory date files into "
+                                               "reference/, and fix statements that newer notes overturned"))
     ap.add_argument("--dry-run", action="store_true")
     ap.add_argument("--project")
     ap.add_argument("--list", action="store_true")
-    ap.add_argument("--keep", action="store_true", help="保留暫存 clone 方便檢查")
+    ap.add_argument("--keep", action="store_true", help=_("keep the temp clone for inspection"))
     ap.add_argument("--max", type=int, default=MAX_PROJECTS)
     args = ap.parse_args()
 
@@ -596,8 +616,9 @@ def main() -> int:
 
     if args.list:
         for s in cands:
-            print(f"{s['name']:28} 日期檔 {len(s['raw']):3}  超過{OLDER_THAN_DAYS}天 {len(s['old']):3}  "
-                  f"上次成功 {s['last_ok'] or '-':10}  {s.get('skip') or '到期(這次 %d 個)' % len(s['batch'])}")
+            print(_("{name:28} date files {raw:3}  over {days} days {old:3}  last ok {last_ok:10}  {status}",
+                    name=s["name"], raw=len(s["raw"]), days=OLDER_THAN_DAYS, old=len(s["old"]), last_ok=s["last_ok"] or "-",
+                    status=s.get("skip") or _("due ({n} this time)", n=len(s["batch"]))))
         return 0
 
     import llm
@@ -605,15 +626,16 @@ def main() -> int:
     due = [s for s in cands if not s.get("skip")]
     for s in cands:
         if s.get("skip") and args.project:
-            log(f"{s['name']}: 跳過——{s['skip']}")
+            log(_("{project}: skipped: {reason}", project=s["name"], reason=s["skip"]))
     if args.dry_run and not args.project:
         due = due[:1]
-    log(f"=== consolidate start({'dry-run, ' if args.dry_run else ''}到期 {len(due)} 個,這次最多 {args.max} 個)===")
+    log(_("=== consolidate start ({dry_run}{n} due, at most {max} this time) ===", dry_run="dry-run, " if args.dry_run else "",
+          n=len(due), max=args.max))
 
     start, failed, entries = time.monotonic(), 0, []
     for s in due[: args.max]:
         if time.monotonic() - start > BUDGET_MINUTES * 60:
-            log(f"超過 {BUDGET_MINUTES} 分鐘,剩下的明天再做")
+            log(_("over {minutes} minutes, the rest is done tomorrow", minutes=BUDGET_MINUTES))
             break
         r = consolidate(s, model, args.dry_run, args.keep)
         if args.dry_run:
@@ -623,7 +645,7 @@ def main() -> int:
                 out = ddir / f"{s['name']}-{TODAY}.md"
                 out.write_text(r["entry"])
                 print(r["entry"])
-                log(f"{s['name']}: 提議的 review-log 條目在 {out}")
+                log(_("{project}: the proposed review-log entry is in {file}", project=s["name"], file=out))
             continue
         st = state.setdefault(s["name"], {})
         st["last_try"] = str(TODAY)
@@ -641,8 +663,9 @@ def main() -> int:
             f.writelines(entries)
         c = subprocess.run([str(BIN / "commit-hub-files.sh"), f"consolidate: review-log {TODAY}", "review-log.md"],
                            env=GIT_ENV, capture_output=True, text=True)
-        log("review-log.md " + ("已 commit+push" if c.returncode == 0 else f"commit/push 失敗:{c.stdout}{c.stderr}"))
-    log(f"=== consolidate end(失敗 {failed} 個)===")
+        log("review-log.md " + (_("committed and pushed") if c.returncode == 0 else
+                                _("commit/push failed: {output}", output=f"{c.stdout}{c.stderr}")))
+    log(_("=== consolidate end ({n} failed) ===", n=failed))
     return 1 if failed else 0
 
 
