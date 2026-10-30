@@ -33,7 +33,9 @@ sys.path.insert(0, str(BIN))
 import edits  # noqa: E402
 import hubconf  # noqa: E402
 import hublib  # noqa: E402
+import i18n  # noqa: E402
 
+_ = i18n.domain(__file__)
 HUB = hubconf.ROOT
 STATE_DIR, LOG_DIR = hubconf.STATE, hubconf.LOGS
 REVIEW_LOG = hubconf.data_file("review-log.md")
@@ -59,7 +61,7 @@ cost_added = False   # shell 版沒有任何成本時印 $0,有才印 %.6f
 def used_model(obj) -> str:
     """這次呼叫實際用的模型:llm.py 回報的 llm_model(模型只在 llm.model_for 算,這裡不另外猜)。"""
     m = (obj or {}).get("llm_model")
-    return m if isinstance(m, str) and m else "工具預設"
+    return m if isinstance(m, str) and m else _("tool default")
 
 
 def log(msg: str) -> None:
@@ -153,12 +155,13 @@ def load_handoffs() -> list[dict]:
     except ValueError:
         items = None
     if not isinstance(items, list):
-        log("hubbus open-handoffs 讀取失敗,這次不處理轉交")
+        log(_("hubbus open-handoffs could not be read; handoffs are not processed this time"))
         return []
-    log(f"助理的轉交:{len(items)} 筆待處理")
+    log(_("Assistant handoffs: {n} to process", n=len(items)))
     for p in sorted({str(h.get("project")) for h in items if isinstance(h, dict)}):
         if not (hubconf.p("memory_copies", "~/.memory-copies") / p / ".git").is_dir():
-            log(f"助理的轉交:專案 {p} 沒有 memory 副本,這次不處理(留在信箱)")
+            log(_("Assistant handoffs: project {project} has no memory copy, not processed this time (left in the mailbox)",
+                  project=p))
     return [h for h in items if isinstance(h, dict)]
 
 
@@ -353,7 +356,7 @@ def _shadow_write(rec: dict, name: str | None = None, text: str | None = None) -
 
 
 def _shadow_call(point: str, prompt: str) -> tuple[dict | None, dict]:
-    rc, obj, _ = llm(point, prompt, None)
+    rc, obj, _text = llm(point, prompt, None)
     so = (obj or {}).get("structured_output") if rc == 0 else None
     meta = {"cost_usd": (obj or {}).get("total_cost_usd"), "model": (obj or {}).get("model"),
             "provider": (obj or {}).get("provider")}
@@ -375,7 +378,7 @@ def shadow_state(proj: str, d: pathlib.Path, before: str, after: str, agent_chan
         if so is None:
             rec["ok"] = False
             _shadow_write(rec)
-            log(f"{proj}: 影子(completion 版)沒有結果:{meta.get('error')}")
+            log(_("{project}: shadow (completion version) has no result: {error}", project=proj, error=meta.get("error")))
             return
         proposed = None
         try:
@@ -393,15 +396,22 @@ def shadow_state(proj: str, d: pathlib.Path, before: str, after: str, agent_chan
             _shadow_write(rec, tmp.name, proposed)
             rec_todo = run([PY, str(HUB / "bin" / "check-state-todo.py"), str(tmp)])
             if rec_todo.returncode != 0:
-                log(f"{proj}: 影子提議的待辦段落格式不對:{head_spaced(rec_todo.stdout.rstrip(chr(10)), 2)}")
+                log(_("{project}: the shadow's proposed to-do section is malformed: {problems}", project=proj,
+                      problems=head_spaced(rec_todo.stdout.rstrip(chr(10)), 2)))
         else:
             _shadow_write(rec)
-        log(f"{proj}: 影子(completion 版):要改={shadow_changed}(agent 版={agent_changed})"
-            + (f",相似度 {rec['similarity']}" if "similarity" in rec else "")
-            + (f",編輯清單不合規:{rec['edit_error']}" if "edit_error" in rec else "")
-            + (f",標記問題 {len(rec['marker_problems'])} 個" if rec.get("marker_problems") else ""))
+        log(shadow_line(proj, shadow_changed, agent_changed, rec)
+            + (_(", marker problems: {n}", n=len(rec["marker_problems"])) if rec.get("marker_problems") else ""))
     except Exception as e:   # 影子壞了不影響真的流程
-        log(f"{proj}: 影子模式失敗:{type(e).__name__}: {e}")
+        log(_("{project}: shadow mode failed: {error_type}: {error}", project=proj, error_type=type(e).__name__, error=e))
+
+
+def shadow_line(what: str, shadow_changed: bool, agent_changed: bool, rec: dict) -> str:
+    """the log line comparing the shadow's decision with the agent's (a project, or index.md)"""
+    return (_("{project}: shadow (completion version): change={shadow} (agent version={agent})", project=what,
+              shadow=shadow_changed, agent=agent_changed)
+            + (_(", similarity {similarity}", similarity=rec["similarity"]) if "similarity" in rec else "")
+            + (_(", edit list invalid: {error}", error=rec["edit_error"]) if "edit_error" in rec else ""))
 
 
 def index_edits_prompt(before: str, digest_text: str) -> str:
@@ -432,7 +442,8 @@ def shadow_index(before: str, after: str, digest_text: str) -> None:
         if so is None:
             rec["ok"] = False
             _shadow_write(rec)
-            log(f"index.md: 影子(completion 版)沒有結果:{meta.get('error')}")
+            log(_("{project}: shadow (completion version) has no result: {error}", project="index.md",
+                  error=meta.get("error")))
             return
         proposed = None
         try:
@@ -446,11 +457,10 @@ def shadow_index(before: str, after: str, digest_text: str) -> None:
         rec.update(ok=proposed is not None, shadow_changed=shadow_changed, same_decision=shadow_changed == (before != after),
                    relations=str(so.get("relations_found") or "")[:300])
         _shadow_write(rec, "index.md" if proposed is not None else None, proposed)
-        log(f"index.md: 影子(completion 版):要改={shadow_changed}(agent 版={before != after})"
-            + (f",相似度 {rec['similarity']}" if "similarity" in rec else "")
-            + (f",編輯清單不合規:{rec['edit_error']}" if "edit_error" in rec else ""))
+        log(shadow_line("index.md", shadow_changed, before != after, rec))
     except Exception as e:
-        log(f"index.md: 影子模式失敗:{type(e).__name__}: {e}")
+        log(_("{project}: shadow mode failed: {error_type}: {error}", project="index.md", error_type=type(e).__name__,
+              error=e))
 
 
 # ---------- eval cases (docs/design/i18n.md E2) ----------
@@ -540,14 +550,16 @@ def repair_state_todo(proj: str, d: pathlib.Path) -> None:
     if r.returncode == 0:
         return
     problems = r.stdout.rstrip("\n")
-    log(f"{proj}: STATE.md 待辦段落格式不對,請模型只修格式:{head_spaced(problems, 3)}")
-    _, obj, _ = llm("librarian-todo-format", todo_fix_prompt(problems), d)
+    log(_("{project}: the STATE.md to-do section is malformed, asking the model to fix only the format: {problems}",
+          project=proj, problems=head_spaced(problems, 3)))
+    _rc, obj, _text = llm("librarian-todo-format", todo_fix_prompt(problems), d)
     add_cost(obj)
     r = run(check)
     if r.returncode == 0:
-        log(f"{proj}: 待辦段落格式已修正")
+        log(_("{project}: to-do section format fixed", project=proj))
     else:
-        log(f"{proj}: 待辦段落格式修正後仍有問題(todo.md 檔尾會列出):{head_spaced(r.stdout.rstrip(chr(10)), 2)}")
+        log(_("{project}: the to-do section still has problems after the fix (listed at the end of todo.md): {problems}",
+              project=proj, problems=head_spaced(r.stdout.rstrip(chr(10)), 2)))
 
 
 def quarantine_stray(proj: str, d: pathlib.Path) -> bool:
@@ -569,7 +581,8 @@ def quarantine_stray(proj: str, d: pathlib.Path) -> bool:
             run(["git", "-C", str(d), "checkout", "-q", "--", f])
         else:
             shutil.move(str(d / f), str(qdir / f.replace("/", "_")))
-    log(f"{proj}: 警告——模型動了 STATE.md 以外的檔案,已搬到 {qdir}:{' '.join(stray)}")
+    log(_("{project}: warning: the model touched files other than STATE.md, moved to {dir}: {files}", project=proj,
+          dir=qdir, files=" ".join(stray)))
     return True
 
 
@@ -634,12 +647,12 @@ def process(proj: str, d: pathlib.Path, handoffs: list[dict], digest: list[str])
 
     h_note = ""
     if ids:
-        log(f"{proj}: 助理的轉交 {nums}")
+        log(_("{project}: assistant handoffs {nums}", project=proj, nums=nums))
         h_note = handoff_note(mine)
 
     dangling = dangling_refs(d)
     if dangling:
-        log(f"{proj}: STATE.md 引用了不存在的檔案:{dangling}")
+        log(_("{project}: STATE.md refers to files that do not exist:{files}", project=proj, files=dangling))
     d_note = dangling_note(dangling)
 
     pre = git(d, "rev-parse", "HEAD")
@@ -654,7 +667,7 @@ def process(proj: str, d: pathlib.Path, handoffs: list[dict], digest: list[str])
         # 呼叫本身失敗:可能改到一半,不採用。副本還原成乾淨狀態,不留給下一晚
         run(["git", "-C", str(d), "checkout", "-q", "--", "."])
         run(["git", "-C", str(d), "clean", "-fdq"])
-        log(f"{proj}: claude invocation failed (exit {rc}), 已還原副本,checkpoint 不推進")
+        log(_("{project}: claude invocation failed (exit {rc}), copy restored, checkpoint not advanced", project=proj, rc=rc))
         return
     if (cost := add_cost(obj)):
         log(f"{proj}: call cost ${cost} (model: {used_model(obj)})")
@@ -666,9 +679,11 @@ def process(proj: str, d: pathlib.Path, handoffs: list[dict], digest: list[str])
     if no_output:
         o = obj or {}
         said = (jstr(o.get("result")) if present(o.get("result")) else "") + "\n"   # shell:jq 的換行經 tr 變成結尾的空白
-        log(f"{proj}: 沒有拿到 structured_output(subtype={jstr(o.get('subtype')) if present(o.get('subtype')) else '?'} "
-            f"turns={jstr(o.get('num_turns')) if present(o.get('num_turns')) else '?'} "
-            f"模型最後說:{said.replace(chr(10), ' ')[:300]}),仍以實際檔案變化為準")
+        log(_("{project}: no structured_output (subtype={subtype} turns={turns} the model last said: {said}); "
+              "going by the actual file changes", project=proj,
+              subtype=jstr(o.get("subtype")) if present(o.get("subtype")) else "?",
+              turns=jstr(o.get("num_turns")) if present(o.get("num_turns")) else "?",
+              said=said.replace(chr(10), " ")[:300]))
     so = so if isinstance(so, dict) else {}
     summary = jstr(so["summary"]) if present(so.get("summary")) else ""
     reason = jstr(so["reason"]) if present(so.get("reason")) else ""
@@ -688,7 +703,8 @@ def process(proj: str, d: pathlib.Path, handoffs: list[dict], digest: list[str])
         changed_state, state_diff = True, git(d, "diff", "--", "STATE.md")
     actually = "true" if changed_state else "false"
     if reported != "unknown" and reported != actually:
-        log(f"{proj}: 警告——agent 回報 state_updated={reported},但實際檔案變化={actually}(以實際檔案為準)")
+        log(_("{project}: warning: the agent reported state_updated={reported}, but the actual file change={actually} "
+              "(going by the actual files)", project=proj, reported=reported, actually=actually))
     after = (d / "STATE.md").read_text(errors="replace") if (d / "STATE.md").exists() else ""
     shadow_state(proj, d, before, after, changed_state, memory_section, h_note, d_note)
     record_outcome(case, {"rc": rc, "structured_output": so or None, "changed": changed_state, "stray": bool(stray),
@@ -701,29 +717,32 @@ def process(proj: str, d: pathlib.Path, handoffs: list[dict], digest: list[str])
                 run([str(SAFE_PUSH)], cwd=d)
             new_sha = git(d, "rev-parse", "HEAD")
         log(f"{proj}: STATE.md updated & pushed ({new_sha})")
-        block = (f"## {TODAY} · {proj}\n\n**commit**: `{new_sha}`\n\n**理由**: {reason or '(agent 未提供理由)'}\n\n"
-                 + (f"**{ASSISTANT} 轉交**: {nums}\n\n" if ids else "")
+        # `**理由**` is a label registrar.py reads back (removal_reason): a token, not a message
+        block = (f"## {TODAY} · {proj}\n\n**commit**: `{new_sha}`\n\n**理由**: {reason or _('(the agent gave no reason)')}\n\n"
+                 + (_("**{assistant} handoffs**: {nums}", assistant=ASSISTANT, nums=nums) + "\n\n" if ids else "")
                  + f"```diff\n{state_diff}\n```\n\n---\n\n")
         with REVIEW_LOG.open("a") as f:
             f.write(block)
-        log(f"{proj}: 已寫入 review-log.md,供事後抽查")
+        log(_("{project}: written to review-log.md for later spot checks", project=proj))
     else:
         # 不更新也留理由:STATE.md 一直是佔位內容時,才分得出是模型太保守還是 prompt 有問題
-        log(f"{proj}: STATE.md 未更新,理由: {reason or '(agent 未提供理由)'}")
+        log(_("{project}: STATE.md not updated, reason: {reason}", project=proj,
+              reason=reason or _("(the agent gave no reason)")))
 
     # 模型說有更新、實際沒改,或動了不該動的檔案:這次當作沒處理完,不推進 checkpoint,下次再跑同一個範圍
     if (reported == "true" and actually != "true") or stray or no_output:
-        log(f"{proj}: 這次結果不可信,checkpoint 不推進,下次重試")
+        log(_("{project}: this result is not trustworthy, checkpoint not advanced, retrying next time", project=proj))
         return
     ckpt.write_text(new_sha + "\n")
 
     if ids:
-        r = run([PY, str(HUB / "bin" / "hubbus"), "done", *ids, "--note", f"librarian 套用進 STATE.md({TODAY},見 review-log)"],
-                to_log=True)
+        r = run([PY, str(HUB / "bin" / "hubbus"), "done", *ids, "--note",
+                 _("librarian applied this to STATE.md ({date}, see review-log)", date=TODAY)], to_log=True)
         if r.returncode == 0:
-            log(f"{proj}: 助理的轉交 {nums} 已結案(bridge 會回報助理)")
+            log(_("{project}: assistant handoffs {nums} closed (bridge will report to the assistant)", project=proj, nums=nums))
         else:
-            log(f"{proj}: 助理的轉交結案失敗,隔晚會再處理一次(STATE.md 已經改過,重複處理應該不會再改)")
+            log(_("{project}: closing the assistant handoffs failed, they are processed again tomorrow night (STATE.md "
+                  "was already changed; processing them again should change nothing)", project=proj))
 
     if worth == "true" and summary:
         digest.append(f"## {proj}\n\n{summary}\n\n")
@@ -752,7 +771,7 @@ def main() -> int:
         try:
             hublib.digest_append("projects", "".join(digest))
         except OSError:
-            log(f"digest {TODAY} 寫入失敗")
+            log(_("digest {date}: write failed", date=TODAY))
         index_file = hubconf.data_file("index.md")
         index_before = index_file.read_text(errors="replace") if index_file.exists() else ""
         digest_now = hublib.digest_path()

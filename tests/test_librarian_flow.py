@@ -88,7 +88,9 @@ class Env:
             "assistant": {"project": "helper", "api": "http://127.0.0.1:9/x", "name": "Hugin"}}))
         e = {k: v for k, v in os.environ.items() if not k.startswith(("GIT_", "AGENT_HUB_HOME", "AGENT_HUB_CONFIG",
                                                                      "AGENT_HUB_DATA", "AGENT_HUB_SECRETS"))}
-        self.env = {**e, "AGENT_HUB_ROOT": str(self.hub), "LIB_TEST_ENV": str(tmp), "LIB_TEST_MODES": json.dumps(MODES),
+        # the log and review-log lines asserted below are the zh-Hant catalog's (docs/design/i18n.md)
+        self.env = {**e, "AGENT_HUB_ROOT": str(self.hub), "AGENT_HUB_LANG_UI": "zh-Hant",
+                    "LIB_TEST_ENV": str(tmp), "LIB_TEST_MODES": json.dumps(MODES),
                     "GIT_AUTHOR_NAME": "t", "GIT_AUTHOR_EMAIL": "t@t", "GIT_COMMITTER_NAME": "t", "GIT_COMMITTER_EMAIL": "t@t",
                     "GIT_CONFIG_GLOBAL": "/dev/null", "GIT_CONFIG_NOSYSTEM": "1"}
         for p in (*MODES, "pidle"):
