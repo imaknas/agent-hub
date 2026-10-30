@@ -1,0 +1,17 @@
+{
+ "bus_busy": {
+  "stuck": [{"id": "m20261030-ab12", "to": "alpha"}],
+  "to_muninn": {"n": 2, "oldest": "2026-10-30T07:00:00"},
+  "job_failed_24h": [{"job": "hubbus-bridge", "detail": "bridge timed out"}, {"job": "other", "detail": "ignored"}],
+  "corrupt": ["bus.db.corrupt-20261029"],
+  "projects": {"alpha": {"open": 2, "undelivered": 1, "oldest": "2026-10-29T08:15:00"},
+               "owner": {"open": 1, "undelivered": 0, "oldest": "2026-10-30T09:00:00"}}
+ },
+ "bus_quiet": {
+  "stuck": [],
+  "to_muninn": {"n": 0, "oldest": ""},
+  "job_failed_24h": [],
+  "corrupt": [],
+  "projects": {}
+ }
+}

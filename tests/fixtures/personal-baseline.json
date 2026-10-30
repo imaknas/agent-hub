@@ -38,6 +38,8 @@
   "modules/assistant.yaml": 12,
   "templates/reflect.html": 1,
   "tests/fixtures/i18n-golden/scheduler-watchdog.txt": 3,
+  "tests/fixtures/i18n-golden/status-page-inputs.json": 2,
+  "tests/fixtures/i18n-golden/status-page.txt": 2,
   "tests/fixtures/llm-golden.json": 8,
   "tests/test_check_login.py": 1,
   "tests/test_check_memory_gaps.py": 2,
