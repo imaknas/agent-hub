@@ -2,7 +2,8 @@
 
 The baseline (tests/fixtures/cjk-baseline.json) is lines containing CJK characters per file, taken before translation
 started. A file may drop below its baseline, never rise above it; a file not in the baseline may have none. Allowed to
-keep Chinese: `locales/` (the catalogs) and `tests/fixtures/` (goldens and deliberately Chinese test data).
+keep Chinese: `locales/` (catalogs, per-language eval inputs), `tests/fixtures/` and `contracts/fixtures/` (goldens and
+deliberately Chinese data), and SPEC (files that define the zh-Hant token set of a machine format).
 
     bin/py -m unittest tests.test_i18n_static
     bin/py tests/test_i18n_static.py --update     # lower the baseline after translating (never raises it)
@@ -13,11 +14,14 @@ import re
 import subprocess
 import sys
 import unittest
+from unittest import mock
 
 ROOT = pathlib.Path(__file__).resolve().parents[1]
 BASELINE = ROOT / "tests" / "fixtures" / "cjk-baseline.json"
 CJK = re.compile("[\u3400-\u9fff\uf900-\ufaff\u3000-\u303f\uff00-\uffef]")
-ALLOWED = ("locales/", "tests/fixtures/")
+ALLOWED = ("locales/", "tests/fixtures/", "contracts/fixtures/")
+# Files that define or document the zh-Hant token set of a machine format: Chinese there is the spec, not untranslated text
+SPEC = {"docs/design/i18n.md", "contracts/state-todo.v1.md", "contracts/todo-md.v1.md"}
 
 
 def tracked() -> list[str]:
@@ -25,14 +29,15 @@ def tracked() -> list[str]:
         out = subprocess.run(["git", "-C", str(ROOT), "ls-files", "-z"], capture_output=True, text=True, check=True).stdout
         return [p for p in out.split("\0") if p]
     except (OSError, subprocess.CalledProcessError):   # exported tree without git (the commit gate's copy)
-        return [str(p.relative_to(ROOT)) for p in ROOT.rglob("*") if p.is_file() and ".git" not in p.parts
-                and ".state" not in p.parts]
+        # relative parts: the commit gate's copy itself sits under <hub>/.state/, so absolute parts would skip everything
+        rels = (p.relative_to(ROOT) for p in ROOT.rglob("*") if p.is_file())
+        return [str(r) for r in rels if not {".git", ".state", ".logs", "__pycache__"} & set(r.parts)]
 
 
 def counts() -> dict[str, int]:
     out = {}
     for rel in tracked():
-        if rel.startswith(ALLOWED):
+        if rel.startswith(ALLOWED) or rel in SPEC:
             continue
         try:
             text = (ROOT / rel).read_text(encoding="utf-8")
@@ -54,6 +59,13 @@ class CJKRatchet(unittest.TestCase):
         worse = [f"{f}: {n} lines with Chinese (baseline {base.get(f, 0)})" for f, n in sorted(now.items()) if n > base.get(f, 0)]
         self.assertEqual(worse, [], "Chinese text went up. New text is English; owner-facing Chinese goes in locales/ "
                                     "(docs/design/i18n.md). Lower the baseline with --update after translating.")
+
+    def test_sees_files_without_git(self):
+        """the fallback (no git, as in the commit gate) must still find the tracked files"""
+        with mock.patch.object(subprocess, "run", side_effect=OSError):
+            files = tracked()
+        self.assertIn("bin/librarian.py", files)
+        self.assertNotIn(".git/HEAD", files)
 
     def test_pattern(self):
         self.assertTrue(CJK.search("\u5f85\u8fa6"))
