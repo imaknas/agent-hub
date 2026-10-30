@@ -1,49 +1,60 @@
 #!/bin/sh -c exec${IFS}"${0%/*}/py"${IFS}"$0"${IFS}"$@"
-"""commit 標題的格式:Conventional Commits(https://www.conventionalcommits.org/)。
+"""Commit title format: Conventional Commits (https://www.conventionalcommits.org/).
 
-  <type>[(<scope>)][!]: <說明>
+  <type>[(<scope>)][!]: <description>
 
-type 跟助理的 repo 同一組(兩邊共用同一份 cliff.toml 產生 release notes:feat 升 minor、fix/perf 升 patch、! 升 major);
-scope 是這個 repo 裡的區塊名(自由字串)。破壞相容的加 `!`,內文寫 `BREAKING CHANGE: …`。
-git 自己產生的標題(Merge …、Revert "…")照收;`fixup!`/`squash!` 只在自己的 branch 上可以,合併閘門會擋。
+The types are the same set as the assistant's repo (both generate release notes from the same cliff.toml: feat bumps
+minor, fix/perf bump patch, ! bumps major); scope is a part of this repo (free text). A breaking change adds `!` and
+says `BREAKING CHANGE: …` in the body. Titles git makes itself (Merge …, Revert "…") pass; `fixup!`/`squash!` only on
+your own branch, the merge gate refuses them.
 
-用的地方:agent-hub 自己的 githooks/commit-msg、登錄 `commits: conventional` 的專案在 bin/merge-branch 合併前。
+Used by: agent-hub's own githooks/commit-msg, and bin/merge-branch before merging a project with `commits: conventional`
+in its registry entry.
 
-  commit_title.py --file <COMMIT_EDITMSG>    commit-msg hook:不合格印原因、結束碼 1
-  commit_title.py <標題>                     檢查一行
+  commit_title.py --file <COMMIT_EDITMSG>    commit-msg hook: prints the reason and exits 1 when the title is wrong
+  commit_title.py <title>                    check one line
 """
 from __future__ import annotations
 
+import pathlib
 import re
 import sys
+
+sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
+import i18n  # noqa: E402
+
+_ = i18n.domain(__file__)
 
 TYPES = ("feat", "fix", "perf", "refactor", "test", "docs", "build", "ci", "chore", "revert")
 PATTERN = re.compile(r"^(?P<type>[a-z]+)(?:\((?P<scope>[^()\s][^()]*)\))?(?P<bang>!)?: (?P<desc>\S.*)$")
 GIT_MADE = re.compile(r"""^(Merge (branch|remote-tracking branch|tag|commit|pull request) |Revert ")""")
 AUTOSQUASH = re.compile(r"^(fixup|squash|amend)! ")
-HELP = ("格式:<type>[(<scope>)][!]: <說明>,type 是 " + " / ".join(TYPES)
-        + ";例:`fix(hubbus): dispatch 遇到不支援的執行環境不再重試`")
+
+
+def help_text() -> str:
+    return _("format: <type>[(<scope>)][!]: <description>, where type is {types}; "
+             "e.g. `fix(hubbus): dispatch no longer retries on an unsupported runtime`", types=" / ".join(TYPES))
 
 
 def problem(title: str, final: bool = False) -> str | None:
-    """None = 合格;否則是給人看的原因。final = 要進 main 了(fixup!/squash! 不收)。"""
+    """None = fine; otherwise the reason, for people. final = about to land on main (no fixup!/squash!)."""
     title = title.strip()
     if not title:
-        return "標題是空的"
+        return _("the title is empty")
     if GIT_MADE.match(title):
         return None
     if AUTOSQUASH.match(title):
-        return "fixup!/squash! 要先 `git rebase --autosquash` 合進去" if final else None
+        return _("fixup!/squash! must be folded in first with `git rebase --autosquash`") if final else None
     m = PATTERN.match(title)
     if not m:
-        return f"不是 Conventional Commits 的格式。{HELP}"
+        return _("not in the Conventional Commits format. {help}", help=help_text())
     if m["type"] not in TYPES:
-        return f"type `{m['type']}` 不在清單裡。{HELP}"
+        return _("type `{type}` is not in the list. {help}", type=m["type"], help=help_text())
     return None
 
 
 def title_of(message: str) -> str:
-    """commit 訊息的第一個非註解、非空行(commit-msg hook 拿到的檔案含 # 註解)。"""
+    """the commit message's first line that is neither empty nor a comment (the commit-msg hook's file has # comments)"""
     for line in message.splitlines():
         if line.strip() and not line.startswith("#"):
             return line
@@ -57,11 +68,11 @@ def main(argv: list[str]) -> int:
     elif len(argv) == 1:
         title = argv[0]
     else:
-        print(__doc__, file=sys.stderr)
+        print(_(__doc__), file=sys.stderr)
         return 2
     why = problem(title)
     if why:
-        print(f"commit 標題:{why}\n  標題:{title.strip()!r}", file=sys.stderr)
+        print(_("commit title: {why}\n  title: {title}", why=why, title=repr(title.strip())), file=sys.stderr)
         return 1
     return 0
 

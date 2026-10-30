@@ -35,6 +35,15 @@
     "evals_dir": {
       "type": "string"
     },
+    "language": {
+      "type": "object",
+      "description": "ui: what the platform shows the owner; content: what models and agents write (docs/design/i18n.md). Default en.",
+      "additionalProperties": false,
+      "properties": {
+        "ui": {"enum": ["en", "zh-Hant"]},
+        "content": {"enum": ["en", "zh-Hant"]}
+      }
+    },
     "owner": {
       "type": "object",
       "required": [

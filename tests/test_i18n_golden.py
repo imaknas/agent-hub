@@ -22,7 +22,7 @@ ROOT = pathlib.Path(__file__).resolve().parents[1]
 BIN = ROOT / "bin"
 GOLDEN = ROOT / "tests" / "fixtures" / "i18n-golden"
 UPDATE = os.environ.get("I18N_GOLDEN_UPDATE") == "1"
-# The instance language the goldens are for (read once the language setting exists; harmless before)
+# The instance language the goldens are for: zh-Hant must stay byte-identical to the output before translation
 LANGUAGE = {"ui": "zh-Hant", "content": "zh-Hant"}
 
 # Chinese inputs live in the fixture (tests/fixtures may hold Chinese; this file may not)
@@ -38,7 +38,7 @@ class Golden(unittest.TestCase):
             (self.tmp / d).mkdir(parents=True)
         self.cfg = {"owner": {"name": "alex", "tag": "Alex", "principal_id": "person:alex"}, "owner_side": "builtin",
                     "bus_dir": str(self.tmp / "bus"), "registry_dir": "projects", "memory_copies": str(self.tmp / "copies"),
-                    "workspace_root": str(self.tmp / "ws"), "services_root": str(self.tmp / "svc")}
+                    "workspace_root": str(self.tmp / "ws"), "services_root": str(self.tmp / "svc"), "language": LANGUAGE}
         self.write_cfg()
         self.env = {**{k: v for k, v in os.environ.items() if not k.startswith(("AGENT_HUB_", "GIT_")) or k == "AGENT_HUB_PYTHON"},
                     "HOME": str(self.tmp / "home"), "AGENT_HUB_CONFIG": str(self.tmp / "config"),

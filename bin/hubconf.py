@@ -211,6 +211,23 @@ def bus_db() -> pathlib.Path:
     return new
 
 
+LANGUAGES = ("en", "zh-Hant")
+
+
+def lang_ui() -> str:
+    """The language the platform shows the owner (CLI output, status page, alerts, headings): hub.json `language.ui`,
+    or AGENT_HUB_LANG_UI. Default en (docs/design/i18n.md)."""
+    v = os.environ.get("AGENT_HUB_LANG_UI") or (get("language.ui") or "en")
+    return v if v in LANGUAGES else "en"
+
+
+def lang_content() -> str:
+    """The language models and agents write in (STATE.md, notes, digests, letters): hub.json `language.content`, or
+    AGENT_HUB_LANG_CONTENT. Default en."""
+    v = os.environ.get("AGENT_HUB_LANG_CONTENT") or (get("language.content") or "en")
+    return v if v in LANGUAGES else "en"
+
+
 def evals_dir() -> pathlib.Path | None:
     """Where eval cases and runs live (docs/design/evaluators.md, i18n.md): hub.json `evals_dir`, or AGENT_HUB_EVALS.
     None = not set up, nothing is recorded. Created 0700; keep it out of git and out of the backup."""
