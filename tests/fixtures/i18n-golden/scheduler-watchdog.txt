@@ -1,0 +1,61 @@
+=== diagnose launchd up
+launchd:state=running pid=123 last exit=0
+scheduler.py 還在跑(卡在某個 job?):99 01:00 python3 bin/scheduler.py
+重啟:`launchctl kickstart -k gui/501/local.agent-hub-scheduler`
+scheduler.log 最後幾行:
+```
+a
+b
+last line
+```
+=== diagnose launchd missing
+launchd 裡沒有 local.agent-hub-scheduler(被 bootout 了?)→ `schedulectl start`
+scheduler.log 最後幾行:
+```
+a
+b
+last line
+```
+=== diagnose linux
+`systemctl --user status local.agent-hub-scheduler.timer`:
+```
+active
+```
+重啟:`systemctl --user restart local.agent-hub-scheduler.timer`
+scheduler.log 最後幾行:
+```
+a
+b
+last line
+```
+=== --test printed
+已送出
+=== sent
+🚨 agent-hub 排程器已經 120 分鐘 沒有 tick(最後 10-30 08:00)。librarian、muninn-tick/reflect、上傳 job 都停了。
+<diag>
+---
+⏰ 還沒好: agent-hub 排程器已經 540 分鐘 沒有 tick(最後 10-30 08:00)。librarian、muninn-tick/reflect、上傳 job 都停了。
+<diag>
+---
+✅ agent-hub 排程器恢復了(最後 tick 10-30 17:00;停了大約從 10-30 08:00 開始)
+---
+🚨 agent-hub 排程器已經 很久 沒有 tick(最後 從來沒有)。librarian、muninn-tick/reflect、上傳 job 都停了。
+<diag>
+---
+🧪 agent-hub 排程器看門狗測試訊息(設定正確)
+<diag>
+=== no alerts
+exit 0; printed: 
+=== no alerts log
+[2026-10-30 17:00:00] 沒設定警報(hub.json 沒有 alerts),只記錄:排程器最後 tick 從來沒有,停了
+
+=== no secrets
+exit 1; printed: scheduler-watchdog: 沒有設定 <TMP>/no-secrets/secrets/discord-token / <TMP>/no-secrets/secrets/discord-alert-channel,排程器停了也發不出警報
+=== log
+[2026-10-30 10:00:00] 排程器停了 120 分鐘,已通知
+[2026-10-30 17:00:00] 排程器停了 540 分鐘,已通知
+[2026-10-30 17:00:00] 恢復,已通知
+[2026-10-30 17:00:00] 排程器停了 很久,已通知
+[2026-10-30 17:00:00] Discord 送出失敗:HTTP 500 boom
+[2026-10-30 17:00:00] 失敗:沒有設定 <TMP>/secrets/discord-token 或 <TMP>/secrets/discord-alert-channel,警報發不出去
+
