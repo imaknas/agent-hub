@@ -268,6 +268,28 @@ class RegistrarFlow(unittest.TestCase):
             self.assertEqual({p: env.outputs(p) for p in env.scenes}, first)
         self.each(check)
 
+    @unittest.skipUnless(NEW in IMPLS, "no registrar.py")
+    def test_messages_zh_hant(self):
+        """what registrar.py writes for people (log, the memory commit title, the note on done letters) stays
+        byte-identical on a zh-Hant instance; expected text in tests/fixtures/registrar-messages.zh-Hant.json"""
+        want = json.loads((ROOT / "tests" / "fixtures" / "registrar-messages.zh-Hant.json").read_text())
+        keys = {"ka": key("pa", want["pa_text"]), "kb": KB, "kc": KC, "ke": KE, "kg": KG, "ki": KI}
+        with tempfile.TemporaryDirectory() as d:
+            env = Env(pathlib.Path(d), NEW)
+            env.env["AGENT_HUB_LANG_UI"] = "zh-Hant"
+            dry = subprocess.run([str(env.hub / "bin" / "py"), str(env.hub / "bin" / NEW), "--dry-run"], cwd=env.hub,
+                                 env=env.env, capture_output=True, text=True, timeout=300)
+            self.assertIn(want["dry_run"].format(**keys), dry.stdout)
+            r = env.run()
+            self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
+            self.assertEqual(r.stdout, "".join(f"[registrar] {line.format(**keys)}\n" for line in want["log"]))
+            self.assertEqual(env.git(env.tmp / "copies" / "pa", "log", "-1", "--format=%s"), want["commit"])
+            c = sqlite3.connect(env.db)
+            notes = {json.loads(pl).get("note") for (pl,) in c.execute(
+                "SELECT payload FROM events WHERE type='message.done' AND id LIKE 'rec:acts:%'")}
+            c.close()
+            self.assertEqual(notes, {want["note"]})
+
 
 if __name__ == "__main__":
     unittest.main()
