@@ -171,12 +171,9 @@ if [ "$RESUME" != true ]; then
 
   # --- 3. copy the skeleton, commit ---
   cp "$TEMPLATES/AGENT.md" .agent-memory/AGENT.md
-  cat > .agent-memory/STATE.md <<'EOF'
-# STATE
-
-> 由跨專案整合 agent(「圖書館員」)維護,只在有實質變化時改寫。整合 agent 尚未開始跑,
-> 這份檔案目前只是佔位。
-EOF
+  # the placeholder is content (the content language); the librarian rewrites it
+  { printf '# STATE\n\n'; hub_content "> Maintained by the cross-project agent (the librarian), rewritten only when something substantive changes. It
+> has not started running yet, so for now this file is only a placeholder."; echo; } > .agent-memory/STATE.md
   mkdir -p .agent-memory/memory
   touch .agent-memory/memory/.gitkeep
   # Rules enabled for every project (content in templates/rules/, put into CLAUDE.local.md by sync-local-setup.sh).

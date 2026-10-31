@@ -35,10 +35,11 @@ hub_server() { hub_json_get hosts.server || hub_json_get memory_host; }
 # locales/<lang>/<that file's name>.json, looked up by bin/i18n.py. Without the platform's Python (the remote machine,
 # before bin/setup-python) the English msgid comes out, its {name} placeholders filled. The msgid is a plain "…" literal
 # (no $, no backquote): tests/test_i18n_catalog.py reads it from the source.
+# hub_content is the same for content (what goes into a project's or the data dir's files): the content language.
 _hp_bin="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 _hub_msg() {
-  local dom="${1##*/}" id="$2" out kv; shift 2
-  if out="$("$_hp_bin/py" "$_hp_bin/i18n.py" msg "$dom" "$id" "$@" 2>/dev/null)"; then
+  local mode="$1" dom="${2##*/}" id="$3" out kv; shift 3
+  if out="$("$_hp_bin/py" "$_hp_bin/i18n.py" "$mode" "$dom" "$id" "$@" 2>/dev/null)"; then
     printf '%s' "$out"; return 0
   fi
   for kv in "$@"; do id="$(_hp_replace "$id" "{${kv%%=*}}" "${kv#*=}")"; done
@@ -50,5 +51,6 @@ _hp_replace() {
   while [[ "$s" == *"$2"* ]]; do out+="${s%%"$2"*}$3"; s="${s#*"$2"}"; done
   printf '%s' "$out$s"
 }
-hub_msg() { _hub_msg "${BASH_SOURCE[1]}" "$@"; }
-hub_say() { _hub_msg "${BASH_SOURCE[1]}" "$@"; echo; }
+hub_msg() { _hub_msg msg "${BASH_SOURCE[1]}" "$@"; }
+hub_say() { _hub_msg msg "${BASH_SOURCE[1]}" "$@"; echo; }
+hub_content() { _hub_msg content "${BASH_SOURCE[1]}" "$@"; }

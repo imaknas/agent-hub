@@ -24,6 +24,7 @@ The zh-Hant catalogs were built from the Chinese text the code had before (msgst
 keeps an instance on zh-Hant byte-identical (tests/test_i18n_golden.py).
 
     i18n.py msg <domain> <msgid> [name=value ...]    for shell scripts: print the message (no newline added)
+    i18n.py content <domain> <msgid> [name=value ...]    the same in the content language
 """
 from __future__ import annotations
 
@@ -114,12 +115,12 @@ def domain(file: str, content: bool = False):
 
 
 def main(argv: list[str]) -> int:
-    if len(argv) >= 3 and argv[0] == "msg":
+    if len(argv) >= 3 and argv[0] in ("msg", "content"):
         kw = dict(a.split("=", 1) for a in argv[3:])
-        sys.stdout.write(translate(argv[1], argv[2], kw))
+        sys.stdout.write(translate(argv[1], argv[2], kw, content_lang() if argv[0] == "content" else None))
         return 0
     print(__doc__.split("\n\n")[0], file=sys.stderr)
-    print("usage: i18n.py msg <domain> <msgid> [name=value ...]", file=sys.stderr)
+    print("usage: i18n.py msg|content <domain> <msgid> [name=value ...]", file=sys.stderr)
     return 2
 
 

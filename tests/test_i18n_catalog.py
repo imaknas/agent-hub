@@ -3,7 +3,7 @@
 For every script that does `_ = i18n.domain(__file__)`: each `_("…")` msgid is English, has an entry in each
 non-English catalog (`locales/<lang>/<domain>.json`), the entry keeps exactly the msgid's placeholders, the call passes
 exactly those placeholders, and the catalog has no entries the code no longer uses. Shell scripts likewise for each
-`hub_msg "…"` / `hub_say "…"` (bin/hubpaths.sh): the domain is the file's own name.
+`hub_msg "…"` / `hub_say "…"` / `hub_content "…"` (bin/hubpaths.sh): the domain is the file's own name.
 
     bin/py -m unittest tests.test_i18n_catalog
 """
@@ -73,7 +73,7 @@ def messages(tree: ast.AST) -> tuple[set[str], list[tuple[int, str, set[str] | N
     return names, calls
 
 
-SHELL_CALL = re.compile(r'\bhub_(?:msg|say)[ \t]+')
+SHELL_CALL = re.compile(r'\bhub_(?:msg|say|content)[ \t]+')
 
 
 def shell_messages(text: str) -> list[tuple[int, str | None, set[str]]]:
@@ -220,9 +220,10 @@ class Catalogs(unittest.TestCase):
         src = ('x="$(hub_msg "Hello {name}, \\"q\\"" name="$n")"; echo\n'
                'hub_say "a {x} and {y}" x="$(f)" \\\n  y=\'1;2\' >&2\n'
                'hub_say "bad $v"\n'
-               '_hub_msg "$dom" "$id"\n')
+               '_hub_msg "$dom" "$id"\n'
+               'echo "<!-- $(hub_content "two\nlines") -->"\n')
         self.assertEqual(shell_messages(src), [(1, 'Hello {name}, "q"', {"name"}), (2, "a {x} and {y}", {"x", "y"}),
-                                               (4, None, set())])
+                                               (4, None, set()), (6, "two\nlines", set())])
 
 
 if __name__ == "__main__":

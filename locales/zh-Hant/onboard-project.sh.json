@@ -30,5 +30,6 @@
  "Warning: committing/pushing agent-hub's registry files failed; do it by hand (the registration itself is written)": "警告:agent-hub 登記檔 commit/push 失敗,請手動處理(登記內容本身已寫入)",
  "[11/11] Registered in agent-hub's project registry (projects/{name}.yaml); agent-hub committed and pushed": "[11/11] 已登記進 agent-hub 的專案登錄(projects/{name}.yaml),並 commit+push agent-hub",
  "[11/11] Registered in agent-hub's project registry (projects/{name}.yaml); committing/pushing agent-hub failed (see the warning)": "[11/11] 已登記進 agent-hub 的專案登錄(projects/{name}.yaml),但 agent-hub 的 commit/push 失敗(見上面的警告)",
- "Done: {name} is connected to the agent-hub pipeline.": "完成:{name} 已接上 agent-hub 管線。"
+ "Done: {name} is connected to the agent-hub pipeline.": "完成:{name} 已接上 agent-hub 管線。",
+ "> Maintained by the cross-project agent (the librarian), rewritten only when something substantive changes. It\n> has not started running yet, so for now this file is only a placeholder.": "> 由跨專案整合 agent(「圖書館員」)維護,只在有實質變化時改寫。整合 agent 尚未開始跑,\n> 這份檔案目前只是佔位。"
 }
