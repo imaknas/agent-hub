@@ -56,7 +56,9 @@ export AGENT_HUB_OFFLINE="$OFFLINE"
     before=$(git rev-parse HEAD)
     "$HUB/bin/with-lock.sh" "$HUB/bin/git-sync-memory.sh" >>"$LOG" 2>&1 \
       || log "$name: git-sync-memory 失敗"
-    [ "$(git rev-parse HEAD)" != "$before" ] && log "$name: 已 commit${OFFLINE:+(連不到 mini,先不 push)}${OFFLINE:-+push} 新的 memory"
+    if [ "$(git rev-parse HEAD)" != "$before" ]; then
+      if [ -n "$OFFLINE" ]; then log "$name: 已 commit(連不到 mini,先不 push) 新的 memory"; else log "$name: 已 commit+push 新的 memory"; fi
+    fi
     if [ -z "$OFFLINE" ] && [ -n "$(git rev-list '@{u}..HEAD' 2>/dev/null)" ]; then
       "$HUB/bin/with-lock.sh" "$HUB/bin/git-safe-push.sh" >>"$LOG" 2>&1 \
         && log "$name: 補 push 了之前沒推出去的 commit" \
