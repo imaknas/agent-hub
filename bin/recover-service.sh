@@ -34,7 +34,7 @@ case "$plist_location" in
     "$AGENT_HUB/bin/py" "$AGENT_HUB/bin/render-services.py" --only "$LABEL"
     hub_say "Rebuilt from {source}: {label}" source="$plist_location" label="$LABEL"
     hub_say "Purpose: {purpose}" purpose="$purpose"
-    [ -n "$recreate_notes" ] && hub_say "Note: {notes}" notes="$recreate_notes"
+    if [ -n "$recreate_notes" ]; then hub_say "Note: {notes}" notes="$recreate_notes"; fi
     ;;
   agent-hub/launchd/*)
     plist_path="$AGENT_HUB/${plist_location#agent-hub/}"
@@ -44,7 +44,7 @@ case "$plist_location" in
     launchctl bootstrap "gui/$(id -u)" "$HOME/Library/LaunchAgents/${LABEL}.plist"
     hub_say "Rebuilt and started: {label}" label="$LABEL"
     hub_say "Purpose: {purpose}" purpose="$purpose"
-    [ -n "$recreate_notes" ] && hub_say "Note: {notes}" notes="$recreate_notes"
+    if [ -n "$recreate_notes" ]; then hub_say "Note: {notes}" notes="$recreate_notes"; fi
     ;;
   *)
     hub_say "'{label}' is not a service agent-hub manages (owner: {owner}); it cannot be rebuilt automatically." label="$LABEL" owner="$owner"
