@@ -27,7 +27,10 @@ sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
 import alert  # noqa: E402
 import backup  # noqa: E402
 import hubconf  # noqa: E402
+import i18n  # noqa: E402
 import registry  # noqa: E402
+
+_ = i18n.domain(__file__)
 
 WARN_DAYS = 14
 LOOKS_SECRET = re.compile(r"(^\.env($|\.)|token|secret|credential|oauth|api[-_]?key|password|\.pem$|\.key$|\.p12$)", re.I)
@@ -58,15 +61,17 @@ def check(project: str, doc: dict, sec: dict, today: datetime.date) -> tuple[lis
     """(問題, 備註)"""
     name = f"{project}:{sec['name']}"
     path = locate(project, doc, sec["path"])
+    how = _(" — {rotate}", rotate=sec["rotate"]) if sec.get("rotate") else ""
     if not path or not path.exists():
-        return [f"{name} 不在({path or sec['path']})" + (f"——{sec['rotate']}" if sec.get("rotate") else "")], []
+        return [_("{name} is missing ({path})", name=name, path=path or sec["path"]) + how], []
     probs, notes = [], []
     if path.is_file() and path.stat().st_size == 0:
-        probs.append(f"{name} 是空檔({path})")
+        probs.append(_("{name} is an empty file ({path})", name=name, path=path))
     if sec.get("env_key") and path.is_file() and not has_key(path, sec["env_key"]):
-        probs.append(f"{name}:{path} 裡沒有 {sec['env_key']}(或是空的)")
+        probs.append(_("{name}: {path} has no {key} (or it is empty)", name=name, path=path, key=sec["env_key"]))
     if sec.get("backup", True) and not backup.covers(path):
-        probs.append(f"{name} 沒有被備份({path})——加進 hub.json backup.include,或在登錄寫 backup: false + why")
+        probs.append(_("{name} is not backed up ({path}) — add it to hub.json backup.include, or write backup: false + why "
+                       "in the registry", name=name, path=path))
     exp = None
     if sec.get("expires"):
         exp = datetime.date.fromisoformat(sec["expires"])
@@ -74,15 +79,14 @@ def check(project: str, doc: dict, sec: dict, today: datetime.date) -> tuple[lis
         exp = datetime.date.fromtimestamp(path.stat().st_mtime) + datetime.timedelta(days=sec["max_age_days"])
     if exp:
         left = (exp - today).days
-        how = f"——{sec['rotate']}" if sec.get("rotate") else ""
         if left < 0:
-            probs.append(f"{name} 已經過期({exp}){how}")
+            probs.append(_("{name} has expired ({date})", name=name, date=exp) + how)
         elif left <= sec.get("warn_days", WARN_DAYS):
-            probs.append(f"{name} {left} 天後到期({exp}){how}")
-        notes.append(f"{name}:{exp} 到期(還有 {left} 天)")
+            probs.append(_("{name} expires in {days} days ({date})", name=name, days=left, date=exp) + how)
+        notes.append(_("{name}: expires {date} ({days} days left)", name=name, date=exp, days=left))
     mode = path.stat().st_mode
     if mode & (stat.S_IRGRP | stat.S_IROTH):
-        notes.append(f"{name}:群組/其他人讀得到({oct(mode & 0o777)},建議 chmod 600)")
+        notes.append(_("{name}: readable by group/others ({mode}, chmod 600 recommended)", name=name, mode=oct(mode & 0o777)))
     return probs, notes
 
 
@@ -118,12 +122,12 @@ def main(argv: list[str]) -> int:
         # hub.json llm 的 API key(放在 secrets 目錄的那種)是平台的憑證:不用另外寫進登錄
         import completion
         llm_keys = [{"name": f"llm-{n}-key", "path": str(hubconf.secrets_dir() / p["key"]["secret"]),
-                     "why": f"hub.json llm.providers.{n} 的 API key"}
+                     "why": _("API key of hub.json llm.providers.{name}", name=n)}
                     for n, p in (((completion.settings() or {}).get("providers")) or {}).items()
                     if isinstance(p, dict) and isinstance(p.get("key"), dict) and p["key"].get("secret")]
         # 警報管道的憑證(hub.json alerts 設了 Discord 才有):一樣是平台的,不用另外寫進登錄
         alert_keys = [{"name": "discord-bot-token", "path": tok,
-                       "why": "警報用的 Discord bot(看門狗、render-services、claude-login、secrets)"}
+                       "why": _("the Discord bot for alerts (watchdog, render-services, claude-login, secrets)")}
                       for tok in [hubconf.get("alerts.discord_token_file")] if tok]
         if llm_keys or alert_keys:
             projects = {**projects, hub: {**projects[hub],
@@ -140,21 +144,25 @@ def main(argv: list[str]) -> int:
             if (path := locate(project, doc, sec["path"])):
                 declared.add(path.resolve())
         for path in ([] if doc.get("type") == "module" else undeclared(project, doc, declared)):
-            print(f"{project}:沒宣告、檔名像憑證:{path}(宣告在登錄的 secrets:,或確認它不是憑證)")
+            print(_("{project}: not declared, file name looks like a credential: {path} (declare it under secrets: in "
+                    "the registry, or confirm it is not one)", project=project, path=path))
     if not argv:
         # 警報管道本身:token 失效的話,出事時所有警報都發不出去——每天先確認一次(不發訊息)
         if alert.probe():
             alert.clear_failure("discord-probe")
         elif not alert.configured():
-            alert.record_failure("discord-probe", "沒有設任何警報管道(hub.json alerts:discord / ntfy / email / macos),平台警報都發不出去")
-            problems.append("沒有警報管道——在 hub.json alerts 設一個(ntfy 最簡單:手機 app、不用帳號)")
+            alert.record_failure("discord-probe", _("No alert channel is set (hub.json alerts: discord / ntfy / email / "
+                                                    "macos); no platform alert can be sent"))
+            problems.append(_("No alert channel — set one in hub.json alerts (ntfy is the simplest: a phone app, no account)"))
         else:
-            alert.record_failure("discord-probe", "Discord bot token 不能用(GET /users/@me 失敗),所有平台警報都發不出去")
-            problems.append("Discord 警報管道不能用(bot token 失效或連不上)——狀態頁也會標紅")
-        alert.once("secrets", problems, "登錄宣告的憑證都沒問題了")
+            alert.record_failure("discord-probe", _("The Discord bot token does not work (GET /users/@me failed); no "
+                                                    "platform alert can be sent"))
+            problems.append(_("The Discord alert channel does not work (bot token invalid or unreachable) — the status page "
+                              "shows it in red too"))
+        alert.once("secrets", problems, _("The credentials declared in the registry are all fine again"))
     for p in problems:
         print(f"⚠️ {p}")
-    print(f"檢查了 {count} 個憑證,{len(problems)} 個問題")
+    print(_("Checked {count} credentials, {problems} problems", count=count, problems=len(problems)))
     return 1 if problems else 0
 
 
