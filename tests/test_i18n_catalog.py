@@ -57,6 +57,13 @@ def messages(tree: ast.AST) -> tuple[set[str], list[tuple[int, str, set[str] | N
     consts["__doc__"] = ast.get_docstring(tree, clean=False)
     calls = []
     for n in ast.walk(tree):
+        # `_.variants("…")`: the msgid in every language, never formatted (so it passes no placeholders)
+        if isinstance(n, ast.Call) and isinstance(n.func, ast.Attribute) and n.func.attr == "variants" \
+                and isinstance(n.func.value, ast.Name) and n.func.value.id in names:
+            arg = n.args[0] if n.args else None
+            msgid = arg.value if isinstance(arg, ast.Constant) and isinstance(arg.value, str) else \
+                consts.get(arg.id) if isinstance(arg, ast.Name) else None
+            calls.append((n.lineno, msgid, set()))
         if isinstance(n, ast.Call) and isinstance(n.func, ast.Name) and n.func.id in names:
             arg = n.args[0] if n.args else None
             msgid = arg.value if isinstance(arg, ast.Constant) and isinstance(arg.value, str) else \
@@ -193,6 +200,13 @@ class Catalogs(unittest.TestCase):
         self.assertEqual(_.domain, "demo-tool")
         self.assertEqual(i18n.translate("no-such-domain", "Hello {name}", {"name": "a"}, "zh-Hant"), "Hello a")
         self.assertEqual(i18n.translate("no-such-domain", "{literal}", {}, "zh-Hant"), "{literal}", "no kw, no format")
+
+    def test_variants(self):
+        """the msgid plus every catalog's text, whatever the UI language"""
+        _ = i18n.domain(str(ROOT / "bin" / "runtime_claude.py"))
+        want = ["claude not found", *(i18n.catalog("runtime_claude", lang)["claude not found"] for lang in LANGS)]
+        self.assertEqual(_.variants("claude not found"), want)
+        self.assertEqual(i18n.domain("/x/bin/no-such-domain").variants("Hi"), ["Hi"])
 
     def test_plural_choice(self):
         msg = "{n} {n:letter is|letters are} open"

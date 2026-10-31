@@ -624,7 +624,9 @@ def parse_stream(line: str) -> list:
         out.append(StreamEvent("turn_end", {"summary": d.get("status_detail", "")}))
     elif t == "result":
         text = str(d.get("result") or "")
-        if d.get("is_error") and re.search(r"rate.?limit|usage limit|額度", text, re.I):
+        # the usage-limit wording in any language claude may write it in (the catalog's variants)
+        if d.get("is_error") and re.search("|".join([r"rate.?limit", *map(re.escape, _.variants("usage limit"))]),
+                                           text, re.I):
             out.append(StreamEvent("error", {"error": "rate_limit", "detail": text[:300]}))
         elif d.get("subtype") == "error_max_turns":
             out.append(StreamEvent("error", {"error": "bad_request", "detail": _("turn limit reached; detaching the lease"),
@@ -739,9 +741,9 @@ def is_login_error(text: str) -> bool:
     """claude's login errors (Login expired, /login, 401, OAuth…); claude itself not being found also needs a person,
     so it counts too."""
     text = text or ""
-    # the not-found message comes from another process (llm.py's JSON), maybe in another language: the English msgid,
-    # this UI language's text, or the zh-Hant text from before the catalog
-    return bool(_LOGIN_ERROR.search(text)) or any(s in text for s in (NOT_FOUND, _(NOT_FOUND), "找不到 claude"))
+    # the not-found message comes from another process (llm.py's JSON), maybe in another language: the msgid or any
+    # catalog's text
+    return bool(_LOGIN_ERROR.search(text)) or any(s in text for s in _.variants(NOT_FOUND))
 
 
 def relocate(sid: str, old_cwd: str, new_cwd: str) -> bool:

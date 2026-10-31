@@ -28,5 +28,6 @@
  "run claude once in a terminal on the hub machine so it refreshes, or /login again": "在 mini 的終端機跑一次 claude 讓它更新,或重新 /login",
  "used by claude under SSH": "SSH 底下的 claude 用的",
  "over {seconds} {seconds:second|seconds}": "超過 {seconds} 秒",
- "exit {code}: {detail}": "exit {code}:{detail}"
+ "exit {code}: {detail}": "exit {code}:{detail}",
+ "usage limit": "額度"
 }

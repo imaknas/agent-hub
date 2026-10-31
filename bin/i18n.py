@@ -8,6 +8,8 @@ Code holds the English text (the msgid). Each script is its own domain with its 
     _ = i18n.domain(__file__)                        # domain = the script's file name without .py
     print(_("{n} open letters for {project}", n=3, project=p))
     _c = i18n.domain(__file__, content=True)         # content (notes, record texts): in language.content instead
+    _.variants("claude not found")                   # the msgid and every catalog's text: to recognise what another
+                                                     # process printed in whatever language it ran in
 
 Lookup: the catalog of `hubconf.lang_ui()`; a missing entry (or language en) gives the msgid itself. With keyword
 arguments the result is `str.format`ted, so placeholders are `{name}` (literal braces then `{{ }}`); without them the
@@ -81,6 +83,11 @@ def translate(name: str, msgid: str, kw: dict, language: str | None = None) -> s
     return _format(text, **kw) if kw else text
 
 
+def languages() -> list[str]:
+    """the languages that have catalogs (en has none: its text is the msgid)"""
+    return sorted(d.name for d in LOCALES.iterdir() if d.is_dir()) if LOCALES.is_dir() else []
+
+
 def content_lang() -> str:
     """The content language (hub.json language.content): what models and agents read and write."""
     if str(ROOT / "bin") not in sys.path:
@@ -96,7 +103,13 @@ def domain(file: str, content: bool = False):
 
     def _(msgid: str, **kw) -> str:
         return translate(name, msgid, kw, content_lang() if content else None)
+
+    def variants(msgid: str) -> list[str]:
+        """the msgid and its text in every catalog, whatever this process's language: for matching text another
+        process wrote (a message without placeholders)"""
+        return list(dict.fromkeys([msgid, *(translate(name, msgid, {}, lang) for lang in languages())]))
     _.domain = name
+    _.variants = variants
     return _
 
 
