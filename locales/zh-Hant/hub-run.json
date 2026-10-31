@@ -1,0 +1,15 @@
+{
+ "No such job: {job_id}": "找不到工作 {job_id}",
+ "The platform's run service is not running (nobody picked the request up in {secs:g} s); the request was withdrawn. Tell the user (agent-hub's cap-runner)": "平台的代跑服務沒在跑({secs:g} 秒沒人接手),請求已撤回;請告訴使用者(agent-hub 的 cap-runner)",
+ "Queued (one job at a time per project, with a platform-wide limit)": "排隊中(同一個專案一次只跑一個、全平台有上限)",
+ "Timed out; the job was stopped (use --timeout for longer; the limit is hub.json cap_runner.max_timeout_s)": "逾時,工作被停掉了(要更久用 --timeout,上限看 hub.json cap_runner.max_timeout_s)",
+ "Request rejected: {reason}": "請求被拒絕:{reason}",
+ "The job was lost": "工作弄丟了",
+ "Run a program that needs a capability under the platform's profile": "在平台的 profile 底下跑需要能力的程式",
+ "capability name (one in the project registry's enforce.capabilities)": "能力名稱(專案登錄 enforce.capabilities 有的)",
+ "seconds (default and limit: hub.json cap_runner)": "秒(預設跟上限看 hub.json cap_runner)",
+ "reattach to a job": "接回一個工作",
+ "Run this inside a registered project folder": "要在登錄過的專案資料夾裡跑",
+ "usage: hub-run --cap <capability> [--timeout seconds] -- <command…>, or hub-run --wait <id>": "用法:hub-run --cap <能力> [--timeout 秒] -- <指令…>,或 hub-run --wait <id>",
+ "Job {job_id} (capability {cap}); if this call is interrupted the job keeps running: reattach with `hub-run --wait {job_id}`": "工作 {job_id}(能力 {cap});這次呼叫被中斷的話,工作照跑,用 `hub-run --wait {job_id}` 接回"
+}
