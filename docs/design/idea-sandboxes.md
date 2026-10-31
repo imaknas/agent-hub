@@ -1,170 +1,204 @@
-# 想法沙盒:替 Muninn 的想法開「探討用的專案」
+# Idea sandboxes: "projects for exploring" the assistant's ideas
 
-> **10-25 更新**:名稱不再限定 `idea-<n>`——想法一開始就用人看得懂的代號(例:room-3d),規則跟一般專案名稱一樣;
-> 是不是想法沙盒只看登錄的 `type: idea`(Knas 決定,Muninn m10251646)。下面寫 `idea-<n>` 的地方是當時的設計。
+> **10-25 update**: names are no longer limited to `idea-<n>`: an idea uses a human-readable code from the start (e.g.
+> room-3d), with the same rules as ordinary project names; whether something is an idea sandbox depends only on
+> `type: idea` in the registry (decided by the owner, the assistant's m10251646). Where `idea-<n>` appears below, it is
+> the design at the time.
 
-> **狀態**:10-24 Knas 確認 A–F 照建議;第一階段(唯讀)已實作。第二階段(work 模式)還沒做,等 Knas 說要。
+> **Status**: on 10-24 the owner confirmed A–F as proposed; phase one (read-only) is implemented. Phase two (work mode)
+> is not done yet; it waits for the owner to ask for it.
 
-> 10-24 19:54 Muninn 看過並回覆(`m10241954-b179`):方向一致,沒有落差。它那邊的配合已寫進下面各段,
-> 標「Muninn 已確認」的就是。
+> 10-24 19:54 the assistant read this and replied (`m10241954-b179`): same direction, no gaps. What it does on its side
+> has been written into the sections below, marked "confirmed by the assistant".
 
-來源:Muninn 的請求 `m10241851-a45a`(10-24 18:51);Muninn 那邊的設計是 muninn repo
-`docs/design/new-domains-and-projects.md` 的 C、D,介面是 `src/muninn/core/ports.py` 的
-`Sandboxes.create(name, purpose) -> str | None`(已在 main、已部署,目前接的是 `NoSandboxes`/本機版)。
+Source: the assistant's request `m10241851-a45a` (10-24 18:51); the design on the assistant's side is sections C and D
+of the muninn repo's `docs/design/new-domains-and-projects.md`, and the interface is
+`Sandboxes.create(name, purpose) -> str | None` in `src/muninn/core/ports.py` (already on main and deployed, currently
+wired to `NoSandboxes`/the local version).
 
-## 一句話
+## In one sentence
 
-想法沙盒 = **一個正常 onboard、但沒有 GitHub remote、登錄裡標 `type: idea` 的專案**。
-建立走 lease-runner 新增的 `POST /v1/sandboxes`;建好之後它自動出現在 lease 的 attachable 清單,
-照現在的流程 /attach 深談。升級成正式專案 = 改 `type`、補 GitHub remote(要改名就順便 rename)。
+An idea sandbox = **a normally onboarded project, but with no GitHub remote, marked `type: idea` in the registry**.
+It is created through lease-runner's new `POST /v1/sandboxes`; once created it automatically appears in the lease's
+attachable list, and deep talks /attach to it through the existing flow. Upgrading to a real project = changing `type`
+and adding a GitHub remote (renaming along the way if wanted).
 
-## 對照 Muninn 的五點需求
+## Against the assistant's five requirements
 
-| # | 需求 | 怎麼做 | 現有/新做 |
+| # | Requirement | How | Existing / new |
 |---|---|---|---|
-| 1 | 輕量、已登錄的專案,帶 purpose | `onboard-project.sh --no-remote` + 登錄加 `type: idea`、`purpose` | 新:包一層腳本;登錄加兩個欄位 |
-| 2 | 預設唯讀,寫檔/跑工具要 Knas 允許 | 第一階段:只有現在的 discuss(唯讀)。第二階段:lease 加 `work` 模式 | 第二階段新做(見決定 D) |
-| 3 | 出現在 attachable、能 /attach | attachable 本來就是「所有登錄過的專案」,登錄好就有 | 不用改 |
-| 4 | 升級只改類型,歷史和檔案留著 | `bin/upgrade-idea.py`:改 type、建 GitHub repo + push、登記 mirror,要改名就呼叫 `rename-project.sh` | 新:一支腳本(rename 已確認能處理沒有 origin 的專案) |
-| 5 | 給 Muninn 一個接點 | lease-runner `POST /v1/sandboxes`,同一個 token、同一份契約 | 新:一個端點 |
+| 1 | Lightweight, registered project with a purpose | `onboard-project.sh --no-remote` + registry gets `type: idea`, `purpose` | new: a wrapper script; two registry fields |
+| 2 | Read-only by default; writing files/running tools needs the owner's permission | phase one: only today's discuss (read-only). Phase two: leases get a `work` mode | phase two is new (see decision D) |
+| 3 | Appears in attachable, can /attach | attachable is already "every registered project", so registering is enough | no change |
+| 4 | Upgrading only changes the type; history and files stay | `bin/upgrade-idea.py`: change type, create the GitHub repo + push, register the mirror, call `rename-project.sh` if renaming | new: one script (rename confirmed to handle projects with no origin) |
+| 5 | An entry point for the assistant | lease-runner `POST /v1/sandboxes`, same token, same contract | new: one endpoint |
 
-## 要你拍板的決定
+## Decisions for you to make
 
-**A. 放在哪:`~/workspace/idea-<n>`(扁平),不放 `~/workspace/ideas/<n>`**(建議)
-- 扁平的話,現有的跨專案 deny 規則(`render-project-settings.desired()`)、transcript↔專案對應
-  (`hublib.py`)都不用處理巢狀路徑。「是想法」由登錄的 `type: idea` 表示,不靠資料夾。
-- 名稱由 Muninn 給(`idea-<編號>`),平台只驗證格式。
+**A. Where: `~/workspace/idea-<n>` (flat), not `~/workspace/ideas/<n>`** (proposed)
+- Flat means the existing cross-project deny rules (`render-project-settings.desired()`) and the transcript↔project
+  mapping (`hublib.py`) need not handle nested paths. "Being an idea" is expressed by `type: idea` in the registry, not
+  by the folder.
+- The name is given by the assistant (`idea-<number>`); the platform only validates the format.
 
-**B. 一定要有 memory(`.agent-memory`)**(建議)
-- 深談收回時,交接筆記只會寫進 `<專案>/.agent-memory/memory/`(`lease-runner.deliver()`);對想法來說
-  筆記就是成果。所以不做「只開一個資料夾」的超輕量版,而是 onboard 少掉 GitHub 那一步。
-- 代價:每個想法多一個 `~/git-origin/idea-<n>-memory.git` 跟 `~/.memory-copies/idea-<n>`,librarian
-  每晚會看它(沒新筆記就跳過,幾乎不花錢)。
-- 沒有 remote,所以每晚的加密備份(「workspace 沒 push 的東西」)會把整個資料夾帶走,不會只活在 mini 上。
+**B. Memory (`.agent-memory`) is required** (proposed)
+- When a deep talk is detached, the handover notes are written only into `<project>/.agent-memory/memory/`
+  (`lease-runner.deliver()`); for an idea, the notes are the result. So no ultra-light "just a folder" version, but
+  onboarding minus the GitHub step.
+- Cost: each idea adds a `~/git-origin/idea-<n>-memory.git` and `~/.memory-copies/idea-<n>`, which the librarian looks
+  at every night (skipped when there are no new notes; costs almost nothing).
+- There is no remote, so the nightly encrypted backup ("what the workspace has not pushed") takes the whole folder; it
+  does not live only on the hub machine.
 
-**C. `type: idea` 實際改變什麼**(建議以下四項)
-1. 預設 `enforce: {sandbox: true}`:真正的寫入封鎖(只准寫自己的資料夾、讀不到別的專案、網路白名單),
-   不只靠 prompt。升級成正式專案時保留,要關再關。
-2. 預設 `privacy: {reflection: stats_only}`:想法可能很私人,週報只算數字、不送內容。
-3. `index.md` 名冊把想法分一組列(`hubconf.py ideas`)。`todo.md` **不分組**:它的 `### <專案>` 小標是給
-   Muninn 讀的契約(`^### (\S+)\s*$`),加字就讀不到;`idea-` 前綴本身就分得出來。狀態頁沒有逐專案的列表,不用改。
-4. lease 的系統提示加上 purpose(「這是想法沙盒,在探討:…」),深談一開始就知道要談什麼。
-   其他(librarian、memory-nudge、信箱、備份)照一般專案。
+**C. What `type: idea` actually changes** (the four items below proposed)
+1. Default `enforce: {sandbox: true}`: a real write block (may write only its own folder, cannot read other projects,
+   network allow list), not just the prompt. Kept when upgraded to a real project; turn it off if needed.
+2. Default `privacy: {reflection: stats_only}`: ideas may be very personal; the weekly report only counts, sends no
+   content.
+3. The `index.md` roster lists ideas as a separate group (`hubconf.py ideas`). `todo.md` is **not grouped**: its
+   `### <project>` subheadings are a contract the assistant reads (`^### (\S+)\s*$`), and adding words would break the
+   reading; the `idea-` prefix already sets them apart. The status page has no per-project list, so no change.
+4. The lease's system prompt gets the purpose ("this is an idea sandbox, exploring: …"), so a deep talk knows from the
+   start what it is about.
+   Everything else (librarian, memory-nudge, mailbox, backup) as for ordinary projects.
 
-**D. 「寫檔、跑工具」的第二級要不要這次一起做**(建議:分兩階段,第二階段等你點頭)
-- 這其實是 lease 的通用功能,不只沙盒用得到。要做的是:新的 llm 判斷點 `lease-session-work`
-  (工具多 Edit/Write/Bash,但自動放行的還是只有讀;寫入都經過權限轉接)、`lease-relay.py` 對
-  「工作資料夾內的 Edit/Write/Bash」送手機問(允許/拒絕/這個租約都允許)、`POST /v1/leases` 收 `mode`,
-  Muninn 那邊加一張確認卡。先只開放 `type: idea` 的專案用。
-- 第一階段做完,Muninn 就能「開沙盒 → 唯讀深談 → 交接筆記」;要動手做的事會進交接的待辦。
-- **Muninn 已確認**形狀一樣(讀寫兩級、每次寫入送手機:允許/拒絕/這個租約都允許,跟現在的權限卡同一種),
-  它那邊要加一種寫入確認卡。
+**D. Whether to do the second level, "writing files, running tools", this time too** (proposed: two phases; phase two
+waits for your nod)
+- This is really a general lease feature, useful beyond sandboxes. What it needs: a new llm judgment point
+  `lease-session-work` (tools add Edit/Write/Bash, but only reads are auto-allowed; all writes go through the
+  permission relay), `lease-relay.py` sending "Edit/Write/Bash inside the working folder" to the phone to ask (allow /
+  deny / allow for this lease), `POST /v1/leases` accepting `mode`, and a confirmation card on the assistant's side.
+  At first only `type: idea` projects can use it.
+- Once phase one is done, the assistant can "open a sandbox → read-only deep talk → handover notes"; things that need
+  doing go into the handover's to-dos.
+- **Confirmed by the assistant**: same shape (two levels, read and write; each write sent to the phone: allow / deny /
+  allow for this lease, the same kind as today's permission card); it adds a write-confirmation card on its side.
 
-**E. 重複呼叫回傳同一個專案,不另開新的**(建議)
-- Muninn 呼叫逾時重送時,同名已經登錄過就回 200 + 那個名稱(purpose 不同就回 409),不會變成
-  `idea-3-2`。
-- **Muninn 已確認**:它的本機版也改成同樣的語意(同名同 purpose 回同一個、名稱被占用回 None,不加後綴;
-  `813a9ae` 已部署),兩種專案端有共同的契約測試,接 HttpSandboxes 時一起加。`idea-<n>` 全域唯一、
-  永不重用(撤回最新想法會重用的問題也修了),所以不需要 request id;名稱只會是 `^idea-[0-9]+$`。
+**E. A repeated call returns the same project, it does not open a new one** (proposed)
+- When the assistant resends after a timeout and the same name is already registered, it gets 200 + that name (409 if
+  the purpose differs), not `idea-3-2`.
+- **Confirmed by the assistant**: its local version takes the same semantics (same name and purpose returns the same
+  one, a taken name returns None, no suffix; `813a9ae` deployed); both project sides share contract tests, added when
+  HttpSandboxes is connected. `idea-<n>` is globally unique and never reused (the problem of withdrawing the newest idea
+  reusing its number is fixed too), so no request id is needed; names can only be `^idea-[0-9]+$`.
 
-**F. 上限:同時最多 20 個沒升級的想法沙盒**(`hub.json` 的 `ideas.limit`)
-- 超過回 `429 too_many`,帶 `limit`、`current` 兩個數字(Muninn 要講得出「已經有 N 個」)。
-- 封存(**Muninn 已確認**,第一階段不做):只有**放棄**(dropped)的想法要封存——從 attachable 拿掉、
-  保留歷史;**擱著**(shelved)的不封存,可能會拿回來。之後給 `POST /v1/sandboxes/<name>/archive`。
+**F. Limit: at most 20 un-upgraded idea sandboxes at a time** (`hub.json` `ideas.limit`)
+- Over it, `429 too_many` with two numbers, `limit` and `current` (the assistant needs to be able to say "there are
+  already N").
+- Archiving (**confirmed by the assistant**, not in phase one): only **dropped** ideas get archived (removed from
+  attachable, history kept); **shelved** ones are not archived, they may come back. Later via
+  `POST /v1/sandboxes/<name>/archive`.
 
-## 介面:`POST /v1/sandboxes`
+## Interface: `POST /v1/sandboxes`
 
 ```
 POST /v1/sandboxes   Authorization: Bearer <runner-token>
-{"v": 1, "name": "idea-12", "purpose": "<想法本身,一兩句>"}
+{"v": 1, "name": "idea-12", "purpose": "<the idea itself, a sentence or two>"}
 
 201 {"v": 1, "name": "idea-12", "created": true}
-200 {"v": 1, "name": "idea-12", "created": false}        同名、同 purpose 已存在(重送)
-400 {"error": "bad_name", "detail": …}                    名稱不是 idea-<數字>
-409 {"error": "exists", "detail": …}                      同名但 purpose 不同,或跟正式專案撞名
+200 {"v": 1, "name": "idea-12", "created": false}        same name and purpose already exist (resend)
+400 {"error": "bad_name", "detail": …}                    the name is not idea-<number>
+409 {"error": "exists", "detail": …}                      same name, different purpose, or a real project's name
 429 {"error": "too_many", "detail": …, "limit": 20, "current": 20}
-500 {"error": "create_failed", "detail": …}               onboard 失敗(已清掉做到一半的東西)
+500 {"error": "create_failed", "detail": …}               onboard failed (whatever was half done has been cleaned up)
 ```
 
-- 同步回應(onboard 本機版大約幾秒;runner 是多執行緒的,不會卡住其他租約的串流)。
-- Muninn 的 adapter:2xx → 回 name;其他 → 帶原因失敗(Muninn 會把 `Sandboxes` 介面改成能帶原因),
-  照 error 碼講給 Knas:too_many →「已經有 N 個,先擱著或放棄一些舊想法」;exists →「名稱被用掉了」;
-  bad_name / create_failed →「開不了」+ detail。
-- 建立的紀錄:agent-hub 的登錄 commit(`register idea-<n>`)跟 lease-runner 的 log。不發匯流排事件
-  (hubbus 的事件類型是固定清單,也沒有人讀)。
+- Synchronous response (the local onboard takes a few seconds; the runner is multi-threaded, so other leases' streams
+  are not blocked).
+- The assistant's adapter: 2xx → return the name; anything else → fail with the reason (the assistant will change the
+  `Sandboxes` interface to carry a reason), and tell the owner by error code: too_many → "there are already N; shelve
+  or drop some old ideas first"; exists → "the name is taken"; bad_name / create_failed → "could not open it" + detail.
+- What records the creation: agent-hub's registry commit (`register idea-<n>`) and lease-runner's log. No bus event
+  (hubbus event types are a fixed list, and nobody would read it).
 
-## 第一階段要動的檔案
+## Files phase one touches
 
-| 檔案 | 改什麼 |
+| File | Change |
 |---|---|
-| `bin/create-idea-sandbox.py`(新) | 驗證名稱 → 建資料夾、README.md 寫 purpose → `onboard-project.sh --no-remote`(`ONBOARD_REGISTRY_EXTRA` 讓 `type`/`purpose`/`enforce`/`privacy` 跟登記同一個 commit)→ 失敗就清掉;一次只跑一個(檔案鎖) |
-| `bin/lease-runner.py` | `POST /v1/sandboxes`(呼叫上面那支);PREAMBLE 加 purpose |
-| `bin/registry.py`、`contracts/project.v1.schema.json` | 加 `type: project\|idea`(預設 project)、`purpose`;`registry.py add --extra <JSON>` |
-| `contracts/lease-runner.v1.schema.json` | 加 `/v1/sandboxes` 的請求/回應 |
-| `bin/hubconf.py`、`bin/gen-index-roster.sh` | `hubconf.py ideas`;名冊想法分一組 |
-| `bin/upgrade-idea.py`(新) | 需要時 `rename-project.sh` → `gh repo create`(帳號從 `hub.json` 的 `github.owner`)+ push → 改 type、origin → mirror-list;預設 dry-run,`--apply` 才做 |
-| `tests/` | 契約範例、建立/重送/撞名/失敗清理、升級 |
+| `bin/create-idea-sandbox.py` (new) | validate the name → create the folder, README.md with the purpose → `onboard-project.sh --no-remote` (`ONBOARD_REGISTRY_EXTRA` puts `type`/`purpose`/`enforce`/`privacy` in the same commit as the registration) → clean up on failure; one at a time (file lock) |
+| `bin/lease-runner.py` | `POST /v1/sandboxes` (calls the script above); PREAMBLE gets the purpose |
+| `bin/registry.py`, `contracts/project.v1.schema.json` | add `type: project\|idea` (default project), `purpose`; `registry.py add --extra <JSON>` |
+| `contracts/lease-runner.v1.schema.json` | add the `/v1/sandboxes` request/response |
+| `bin/hubconf.py`, `bin/gen-index-roster.sh` | `hubconf.py ideas`; ideas as a separate group in the roster |
+| `bin/upgrade-idea.py` (new) | `rename-project.sh` if needed → `gh repo create` (account from `hub.json` `github.owner`) + push → change type, origin → mirror-list; dry-run by default, only `--apply` does it |
+| `tests/` | contract examples, create/resend/clash/cleanup on failure, upgrade |
 
-## 順序(避免契約檢查又失敗)
+## Order (so the contract check doesn't fail again)
 
-改 `lease-runner.v1.schema.json` 會讓 Muninn 的副本(`contracts/vendor/records/lease-runner.v1.schema.json`)
-跟原版不一致,當晚 01:30 的 contracts-check 就會失敗,跟 10-24 的 `secrets` 一樣。所以:
+Changing `lease-runner.v1.schema.json` makes the assistant's copy
+(`contracts/vendor/records/lease-runner.v1.schema.json`) differ from the original, and that night's 01:30
+contracts-check fails, just like `secrets` on 10-24. So:
 
-1. agent-hub:登錄欄位 + 建立腳本 + 升級腳本 + 測試(不碰契約)。
-2. agent-hub:端點 + 契約一起 commit,**同時**寄信給 muninn「契約更新了,請同步副本」。
-3. Muninn:同一天同步 `contracts/vendor/records/` 的副本、寫 `HttpSandboxes` adapter、組裝改用它
-   (**Muninn 已確認**;我寄的信要寫出要更新的檔名)。
-4. 我回 `m10241851-a45a` 並結案。
+1. agent-hub: registry fields + create script + upgrade script + tests (contract untouched).
+2. agent-hub: endpoint + contract in one commit, **and at the same time** a letter to `muninn`: "the contract was
+   updated, please sync your copy".
+3. The assistant: the same day, sync the copy in `contracts/vendor/records/`, write the `HttpSandboxes` adapter, and
+   switch its wiring to it (**confirmed by the assistant**; my letter must name the files to update).
+4. I reply to `m10241851-a45a` and close it.
 
-第二階段(如果 D 你說要)排在之後,另外給一份細的。
+Phase two (if you say yes to D) comes after, with a separate detailed design.
 
-## 驗證紀錄(10-24)
+## Verification record (10-24)
 
-- 建立:直接跑、跟經過 lease-runner 服務(launchd 環境)各一次,約 1 秒;登錄、memory、沒有 remote、
-  sandbox 設定、attachable、系統提示帶 purpose 都確認過。重送 200、撞名 409、名稱錯 400、上限 429 都測過。
-  兩個測試沙盒(idea-999998、idea-999999)已刪掉。
-- 升級:只跑過 dry-run(`--apply` 會在 GitHub 建 repo,第一次真的升級時再看)。
-- 失敗清理(onboard 中途失敗):`tests/test_create_idea_sandbox.py` 用假的 onboard 在暫存 hub 裡測——
-  登錄檔還沒 commit 就全部清掉、已經 commit 就留著並在 detail 說要手動處理、清完可以重試;
-  拿掉清理那段程式時三個測試都會失敗。
+- Creation: run directly and through the lease-runner service (launchd environment) once each, about 1 second;
+  registry, memory, no remote, sandbox settings, attachable, purpose in the system prompt all confirmed. Resend 200,
+  clash 409, bad name 400, limit 429 all tested. The two test sandboxes (idea-999998, idea-999999) have been deleted.
+- Upgrade: only dry-run so far (`--apply` creates a repo on GitHub; to be watched on the first real upgrade).
+- Cleanup on failure (onboard failing midway): `tests/test_create_idea_sandbox.py` tests it with a fake onboard in a
+  temporary hub: if the registry file is not committed yet, everything is cleaned up; if already committed, it is kept
+  and the detail says to handle it by hand; a retry works after cleanup. With the cleanup code removed, all three tests
+  fail.
 
-## 第二階段:work 模式(設計,10-24 Knas 說開始)
+## Phase two: work mode (design; on 10-24 the owner said to start)
 
-**範圍**:只有 `type: idea`、而且 `enforce.sandbox: true` 的專案能用(想法沙盒都是)。正式專案先不開放。
+**Scope**: only projects with `type: idea` and `enforce.sandbox: true` (every idea sandbox). Not open to real projects
+yet.
 
-**怎麼進入**
-- `POST /v1/leases` 帶 `mode: work`,或深談中途 `POST /v1/leases/<id>/mode {mode: work|discuss}`(Knas 在
-  Muninn 的卡片上點「允許動手」之後才送;runner 不判斷 Knas 有沒有同意,那是 Muninn 的卡片)。
-- 中途切換 = 停掉程序、用同一個 session `--resume` 接回,換成 work 的判斷點;事件 `state` 帶 `mode`。
-- 登錄沒有 `enforce.work: true` → 400 `work_not_allowed`(10-25 起看這個欄位,不看 type;想法沙盒建立時寫上、升級帶過去)。`GET /v1/policy` 多一個 `work_projects`(可以開 work 的專案)。
+**How to enter it**
+- `POST /v1/leases` with `mode: work`, or midway through a deep talk `POST /v1/leases/<id>/mode {mode: work|discuss}`
+  (sent only after the owner taps `允許動手` ("allow hands-on work") on the assistant's card; the runner does not judge
+  whether the owner agreed, that is the assistant's card).
+- Switching midway = stop the process and resume the same session with `--resume`, under the work judgment point; the
+  `state` event carries `mode`.
+- A registry without `enforce.work: true` → 400 `work_not_allowed` (from 10-25 this field is what counts, not type;
+  written when an idea sandbox is created and carried over on upgrade). `GET /v1/policy` gains `work_projects`
+  (projects that can open work).
 
-**權限(兩道)**
-1. **OS sandbox**(第二階段平台本來就有,`render-project-settings.py` 寫進專案的 settings):Bash 只能寫自己的
-   資料夾、讀不到別的專案、網路只有白名單。這是真的封鎖,不靠模型聽話。
-2. **每次寫入送手機確認**(`lease-relay.py`,work 模式才有):
-   - `Edit`/`Write`/`NotebookEdit`,路徑在這個專案資料夾裡 → **直接放行,不問**(10-25 Knas 決定「只有碰資料夾外
-     才問」;原本是送 `write_file` 確認)。資料夾外 → 直接拒絕(不問,比問更嚴)。
-   - `Bash` → **每個指令都問** Knas(`risk: run_command`,摘要 = 指令);「這個租約都允許」只算這一次
-     (試行期的保守做法;Muninn 的卡片在 `run_command` 不用顯示這個選項)。
-   - 讀類(Read/Glob/Grep/WebSearch)照舊自動放行;WebFetch、提問照 discuss 的規則。
-   - 5 分鐘沒回 = 拒絕,跟 discuss 一樣。
-- 判斷點 `lease-work`(contracts/llm-points.yaml):工具多 Edit/Write/Bash,自動放行的還是只有讀;
-  寫入全部經過權限轉接。
+**Permissions (two gates)**
+1. **OS sandbox** (the platform already has it from phase two; `render-project-settings.py` writes it into the
+   project's settings): Bash can only write its own folder, cannot read other projects, network only on the allow
+   list. This is a real block, not relying on the model obeying.
+2. **Every write confirmed on the phone** (`lease-relay.py`, only in work mode):
+   - `Edit`/`Write`/`NotebookEdit` with a path inside this project folder → **allowed directly, no question** (decided
+     by the owner on 10-25: "only ask when it touches outside the folder"; originally a `write_file` confirmation was
+     sent). Outside the folder → refused directly (no question, stricter than asking).
+   - `Bash` → **every command is asked** of the owner (`risk: run_command`, summary = the command); "allow for this
+     lease" counts for this one only (the conservative choice for the trial; the assistant's card need not show that
+     option for `run_command`).
+   - Reads (Read/Glob/Grep/WebSearch) auto-allowed as before; WebFetch and questions follow the discuss rules.
+   - No answer in 5 minutes = refused, as in discuss.
+- Judgment point `lease-work` (contracts/llm-points.yaml): tools add Edit/Write/Bash, auto-allow is still reads only;
+  every write goes through the permission relay.
 
-**10-24 實作與驗證**
-- 開放條件看「實際寫好的設定檔」(`work_ready`):登錄 `type: idea`、而且 `<workspace>/.claude/settings.local.json`
-  的 `sandbox.enabled` 是 true;建沙盒時就立刻渲染設定,不等 15 分鐘的排程。
-- 實測(測試沙盒 idea-999997,用跟租約一樣的 `--settings`、`--strict-mcp-config`):Bash 寫資料夾外被擋、
-  寫資料夾內成功、讀 `~/.ssh` 跟 `~/.claude` 的憑證都被擋(`operation not permitted`)。
-- 權限轉接的規則有單元測試(`tests/test_lease_relay_work.py`:資料夾外、`../`、symlink 不問就拒絕;
-  寫檔的「都允許」生效;指令每次都問;discuss 不變)。
-- 還沒有真的從手機走過一次(要 Muninn 的寫入確認卡)。
-- **10-25 實測發現 OS sandbox 擋不住 Keychain**:sandbox 裡的 Bash 用 `security find-generic-password` 查得到
-  Claude 的登入憑證(只看了 exit code)。所以 Knas 決定放寬時,**只放寬資料夾內的寫檔**;指令維持每次都問,
-  另外在租約的 deny 加 `Bash(security …)`(只是補強,換個寫法就繞得過)。要放寬指令,得先找到在系統層擋住
-  Keychain 的方法。
+**10-24 implementation and verification**
+- Opening depends on "the settings file actually written" (`work_ready`): registry `type: idea`, and `sandbox.enabled`
+  true in `<workspace>/.claude/settings.local.json`; the settings are rendered immediately when the sandbox is created,
+  without waiting for the 15-minute schedule.
+- Live test (test sandbox idea-999997, with the same `--settings` and `--strict-mcp-config` as a lease): Bash writing
+  outside the folder blocked, writing inside succeeded, reading the credentials in `~/.ssh` and `~/.claude` blocked
+  (`operation not permitted`).
+- The relay's rules have unit tests (`tests/test_lease_relay_work.py`: outside the folder, `../`, symlinks refused
+  without asking; "allow all" for file writes takes effect; commands asked every time; discuss unchanged).
+- Not yet walked through once from the phone (needs the assistant's write-confirmation card).
+- **10-25 live test found the OS sandbox does not block the Keychain**: Bash inside the sandbox could look up Claude's
+  login credentials with `security find-generic-password` (only the exit code was looked at). So when the owner
+  decided to loosen things, **only file writes inside the folder were loosened**; commands are still asked every time,
+  and `Bash(security …)` was added to the lease's deny list (only a reinforcement; a different spelling gets around
+  it). Loosening commands needs a way to block the Keychain at the system level first.
 
-**不做的**:正式專案的 work、git push(sandbox 的網路白名單本來就沒有 GitHub 的寫入;想法沙盒也沒有 remote)。
+**Not done**: work for real projects, git push (the sandbox's network allow list has no GitHub write access anyway; idea
+sandboxes have no remote either).
 
-**要 Muninn 配合**:寫入確認卡(`write_file`/`run_command`,同樣三個選項);卡片上點「允許動手」後
-送 `mode`;`lease-runner.v1.schema.json` 改了要同一天同步。
+**Needed from the assistant**: the write-confirmation card (`write_file`/`run_command`, the same three options);
+sending `mode` after "allow hands-on work" is tapped on the card; when `lease-runner.v1.schema.json` changes, sync it
+the same day.
