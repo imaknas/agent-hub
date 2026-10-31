@@ -1,6 +1,6 @@
 {
  "cannot read the project registry: {e}": "讀不到專案登錄:{e}",
- "the working directory {cwd} is in no registered project: start this server in the project folder, or set the environment variable AGENTHUB_PROJECT=<project name> in the tool's MCP settings": "工作目錄 {cwd} 不在任何登錄過的專案裡:在專案資料夾裡啟動這個伺服器,或在工具的 MCP 設定給環境變數 AGENTHUB_PROJECT=<專案名稱>",
+ "the working directory {cwd} is not inside any registered project: start this server in the project folder, or set the environment variable AGENTHUB_PROJECT=<project name> in the tool's MCP settings": "工作目錄 {cwd} 不在任何登錄過的專案裡:在專案資料夾裡啟動這個伺服器,或在工具的 MCP 設定給環境變數 AGENTHUB_PROJECT=<專案名稱>",
  "(unrecognized)": "(認不出來)",
  "📬 {n} letters are still open; look with inbox first.": "📬 現在有 {n} 封還沒結案的信,先用 inbox 看。",
  "📭 No open letters now.": "📭 現在沒有還沒結案的信。",
@@ -8,8 +8,7 @@
  "done": "好了",
  "{project} has no memory folder (.agent-memory); this project is not set up for memory tracking": "{project} 沒有 memory 資料夾(.agent-memory);這個專案沒有接上 memory 追蹤",
  "written to memory/{file} of {project} (the platform syncs it)": "寫進 {project} 的 memory/{file}(平台會同步)",
- "This is work the platform started ({point}): write the letters to send and what to close in your output, the platform sends them for you; do not use this server": "這是平台叫起的工作({point}):要寄的信、要結案的事寫在你的輸出裡,平台會代寄;不要用這個伺服器",
- "the following": "以下",
+ "This is work the platform started ({point}): write the letters to send and what to close in your output; the platform sends them for you. Do not use this server": "這是平台叫起的工作({point}):要寄的信、要結案的事寫在你的輸出裡,平台會代寄;不要用這個伺服器",
  "no such tool: {name}": "沒有這個工具:{name}",
  "project: {project}": "專案:{project}",
  "wrong arguments: {e}": "參數不對:{e}",

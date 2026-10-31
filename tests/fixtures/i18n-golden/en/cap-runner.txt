@@ -5,7 +5,7 @@ Malformed request (must be a JSON object with v: 1)
 === check: id mismatch
 id does not match the file name
 === check: undeclared cap
-This project has not declared the capability 'net' (registry enforce.capabilities: gpu)
+This project has not declared the capability 'net' (its registry entry's enforce.capabilities: gpu)
 === check: argv empty
 argv must be a non-empty list of strings
 === check: cwd absolute
@@ -27,7 +27,7 @@ Malformed request (must be a JSON object with v: 1)
 === start fails
 Failed to start: RuntimeError('boom')
 === recover
-The platform runner restarted; this job did not finish (result unknown), run it again
+The platform runner restarted and this job did not finish (result unknown); run it again
 === log
 {"project": "demo", "id": "bad name", "event": "dropped", "detail": "Wrong file name, file type or size"}
 {"project": "demo", "id": "dup", "event": "dropped", "detail": "This id has already run"}

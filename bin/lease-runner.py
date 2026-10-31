@@ -255,7 +255,7 @@ def work_ready(project: str) -> tuple[bool, str]:
     設定還沒渲染的那段時間,不能讓 work 在沒有 sandbox 的情況下跑)。"""
     doc = hubconf.projects().get(project) or {}
     if not (doc.get("enforce") or {}).get("work"):
-        return False, _("{project} has no work mode (enforce.work in the registry; added only with the owner's consent)",
+        return False, _("{project} has no work mode (enforce.work in its registry entry; added only with the owner's consent)",
                          project=project)
     import runtime_claude
     return runtime_claude.sandbox_rendered(hubconf.workspace(project))
@@ -474,7 +474,7 @@ def run_handover(lease: Lease) -> tuple[dict | None, str]:
         if r.returncode == 0 and isinstance(so, dict):
             return so, ""
         why = str(out.get("llm_error") or out.get("result") or r.stderr.strip()[-300:] or f"exit {r.returncode}")[:300]
-        log(_("{id} handover attempt {n} not valid: {why}", id=lease.id, n=attempt, why=why))
+        log(_("{id} handover attempt {n} is not valid: {why}", id=lease.id, n=attempt, why=why))
     return None, why
 
 
@@ -687,7 +687,8 @@ def quiesce(project: str) -> str:
         mine = [l for l in LEASES.values() if l.project == project]
         if any(live(l) and (l.in_turn or l.waiting or l.state in ("attaching", "resuming", "detaching", "terminal"))
                for l in mine):
-            return _("{project} has a lease answering, waiting for a reply, in the terminal or being detached", project=project)
+            return _("{project} has a lease that is answering, waiting for a reply, open in a terminal, or being "
+                     "detached", project=project)
         for l in mine:
             if l.proc is not None:
                 stop_proc(l, "idle_stopped")
@@ -711,8 +712,8 @@ def follow_move(old: str, new: str, old_ws: str) -> None:
             if live(l) and (renamed or downgraded):
                 extra = {"project": new} if renamed else {}
                 if downgraded:
-                    extra.update(mode="discuss", detail=_("This project has no work mode (enforce.work in the registry); "
-                                                          "this lease is read-only again"))
+                    extra.update(mode="discuss", detail=_("This project has no work mode (enforce.work in its registry "
+                                                          "entry); this lease is read-only again"))
                 l.emit("state", state=l.state, **extra)
             log(_("upgrade {old} → {new}: lease {id} follows ({moved})", old=old, new=new, id=l.id[:8],
                   moved=_("conversation moved") if moved else _("conversation not moved")))
@@ -897,7 +898,7 @@ class H(http.server.BaseHTTPRequestHandler):
             if bad:
                 return self.err(400, "bad_request", bad)
             if not b.get("client_msg_id") or not (b.get("text") or atts) or not isinstance(b.get("text", ""), str):
-                return self.err(400, "bad_request", _("client_msg_id is required; text or attachments, at least one"))
+                return self.err(400, "bad_request", _("client_msg_id is required, and at least one of text or attachments"))
             with _lock:
                 if b["client_msg_id"] in l.seen_msgs:
                     return self.reply(202, {"v": 1, "duplicate": True})
@@ -917,7 +918,7 @@ class H(http.server.BaseHTTPRequestHandler):
         if action == "mode":
             mode = b.get("mode")
             if mode not in ("discuss", "work"):
-                return self.err(400, "bad_request", _("mode is discuss or work"))
+                return self.err(400, "bad_request", _("mode must be discuss or work"))
             if mode == "work":
                 ok, why = work_ready(l.project)
                 if not ok:
@@ -1049,10 +1050,10 @@ class H(http.server.BaseHTTPRequestHandler):
         need = {"agent", "auth", "sessions", "stream"}   # 長駐串流 + 接續 + 登入:租借要的能力
         if (miss := need - runtime_ports.capabilities()):
             return self.err(409, "runtime_unsupported",
-                            _("runtime {name} lacks {missing}; cannot open a lease", name=runtime_ports.default_name(),
-                              missing=_(", ").join(runtime_ports.PORT_LABELS[p] for p in sorted(miss))))
+                            _("runtime {name} has no {missing}; cannot open a lease", name=runtime_ports.default_name(),
+                              missing=runtime_ports.or_list(runtime_ports.PORT_LABELS[p] for p in sorted(miss))))
         if mode not in ("discuss", "work"):
-            return self.err(400, "bad_request", _("mode is discuss or work"))
+            return self.err(400, "bad_request", _("mode must be discuss or work"))
         try:
             uuid.UUID(sid)
         except ValueError:

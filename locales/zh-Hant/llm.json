@@ -1,7 +1,7 @@
 {
  "runtime {name} has no completion interface, and hub.json has no llm section (set up an LLM provider)": "執行環境 {name} 沒有 completion 介面,hub.json 也沒有 llm 區塊(設一家 LLM provider)",
  "llm.py: {point} is not a declared judgment point (contracts/llm-points.yaml)": "llm.py:{point} 不是宣告過的判斷點(contracts/llm-points.yaml)",
- "llm.py: {point} does not declare stream: true, so it cannot exec": "llm.py:{point} 沒有宣告 stream: true,不能 exec",
+ "llm.py: {point} does not declare stream: true, so it cannot run under exec": "llm.py:{point} 沒有宣告 stream: true,不能 exec",
  "llm.py: {point}: this runtime does not support long-running streaming sessions": "llm.py:{point} 這個執行環境不支援長駐的串流 session",
  "output does not match the schema: {errors}": "輸出不符合 schema:{errors}",
  "{file}:{line}: a claude -p that does not go through bin/llm.py": "{file}:{line}:沒有經過 bin/llm.py 的 claude -p",
@@ -9,5 +9,6 @@
  "only print the command that would run; no model call": "只印出會執行的指令,不呼叫模型",
  "extra claude arguments (after --)": "額外的 claude 參數(放在 -- 後面)",
  "long-running streaming session: build the flags from the declaration, then exec claude (stdin/stdout are stream-json)": "長駐串流 session:照宣告組旗標後 exec 成 claude(stdin/stdout 是 stream-json)",
- "whether each provider in hub.json llm works (key, connection, model there)": "hub.json llm 的每一家 provider 能不能用(key、連線、模型在不在)"
+ "whether each provider in hub.json llm works (key, connection, model there)": "hub.json llm 的每一家 provider 能不能用(key、連線、模型在不在)",
+ "{mark} {name}: {why}": "{mark} {name}:{why}"
 }

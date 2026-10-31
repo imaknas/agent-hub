@@ -387,12 +387,19 @@ class Mcp(Golden):
         out += [("stderr unknown project", err), ("unknown project", res[0])]
         err, res = session([("send", {"to": "x", "type": "info", "text": "x"})], extra={"HUB_LLM_POINT": "mailbox-propose"})
         out += [("platform-launched", res[0])]
+        subprocess.run([sys.executable, str(BIN / "hubbus"), "send", "--from", "bare", "--to", "demo", "--type", "info",
+                        "--text", "hello"], env=env, cwd=t, capture_output=True, text=True, timeout=60, check=True)
+        err, res = session([("inbox", {})])
+        one = re.sub(r"\bm\d{8}-[0-9a-f]{4}\b", "<ID>", res[0])
+        out += [("inbox (one letter)", re.sub(r"\b\d{2}-\d{2} \d{2}:\d{2}\b", "<TS>", one))]
         # in-process: the unread line of the instructions, the registry error, config
         m = load("mcp_server_golden", "mcp_server.py")
         with mock.patch.object(m.hubconf, "fill_names", lambda text: "P={{project}} U={{unread}} T={{take_timeout}}"):
             out.append(("instructions unknown", m.instructions(None, "why")))
             for name, hb in [("2 unread", types.SimpleNamespace(TAKE_TIMEOUT_MIN=60, db=lambda: types.SimpleNamespace(
                                  close=lambda: None), inbox=lambda c, p: [1, 2])),
+                             ("1 unread", types.SimpleNamespace(TAKE_TIMEOUT_MIN=60, db=lambda: types.SimpleNamespace(
+                                 close=lambda: None), inbox=lambda c, p: [1])),
                              ("0 unread", types.SimpleNamespace(TAKE_TIMEOUT_MIN=60, db=lambda: types.SimpleNamespace(
                                  close=lambda: None), inbox=lambda c, p: [])),
                              ("mailbox error", types.SimpleNamespace(TAKE_TIMEOUT_MIN=60, db=mock.Mock(

@@ -184,7 +184,8 @@ def parse_stream(line: str) -> list:
 def classify_exit(code, stderr_tail: str) -> StreamEvent:
     if "login" in stderr_tail:
         return StreamEvent("error", {"error": "agent_login", "detail": _("the fake runtime is not logged in")})
-    return StreamEvent("error", {"error": "process_crashed", "detail": f"exit {code}:{stderr_tail[-200:]}"})
+    return StreamEvent("error", {"error": "process_crashed", "detail": _("exit {code}: {detail}", code=code,
+                                                                         detail=stderr_tail[-200:])})
 
 
 def resumable(sid: str) -> bool:

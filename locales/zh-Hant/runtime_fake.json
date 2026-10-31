@@ -2,5 +2,6 @@
  "the fake runtime is not logged in": "fake runtime 沒登入",
  "fake runtime: resume the same conversation": "假的 runtime:接回同一段對話",
  "the fake runtime has no {mode} login": "fake runtime 沒有 {mode} 的登入",
- "fake {mode} login": "fake 的 {mode} 登入"
+ "fake {mode} login": "fake 的 {mode} 登入",
+ "exit {code}: {detail}": "exit {code}:{detail}"
 }

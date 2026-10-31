@@ -59,8 +59,8 @@ def resolve_project() -> tuple[str | None, str]:
         return None, _("cannot read the project registry: {e}", e=e)
     if name:
         return name, ""
-    return None, _("the working directory {cwd} is in no registered project: start this server in the project folder, "
-                   "or set the environment variable AGENTHUB_PROJECT=<project name> in the tool's MCP settings",
+    return None, _("the working directory {cwd} is not inside any registered project: start this server in the project "
+                   "folder, or set the environment variable AGENTHUB_PROJECT=<project name> in the tool's MCP settings",
                    cwd=pathlib.Path.cwd())
 
 
@@ -141,14 +141,17 @@ def write_note(project: str, text: str) -> tuple[bool, str]:
 
 def call(project: str | None, why: str, name: str, args: dict) -> tuple[bool, str]:
     if os.environ.get("HUB_LLM_POINT"):
-        return False, _("This is work the platform started ({point}): write the letters to send and what to close in your "
-                       "output, the platform sends them for you; do not use this server", point=os.environ["HUB_LLM_POINT"])
+        return False, _("This is work the platform started ({point}): write the letters to send and what to close in "
+                        "your output; the platform sends them for you. Do not use this server", point=os.environ["HUB_LLM_POINT"])
     if not project:
         return False, why
     if name == "inbox":
-        hdr = _hubbus().header(_("the following"), project)
+        try:
+            n = unread(project)
+        except Exception:   # the inbox call below reports what is wrong
+            n = 0
         ok, out = hubbus_cli(project, "inbox", "--project", project)
-        return ok, f"{hdr}\n\n{out}"
+        return ok, f"{_hubbus().header(n, project)}\n\n{out}" if n else out
     if name in ("show", "thread"):
         return hubbus_cli(project, name, str(args["id"]))
     if name == "send":

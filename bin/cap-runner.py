@@ -117,7 +117,8 @@ def check(req, stem: str, ws: pathlib.Path, caps: list[str]) -> tuple[str, dict]
         return _("id does not match the file name"), {}
     cap = req.get("cap")
     if cap not in caps:
-        return _("This project has not declared the capability {cap!r} (registry enforce.capabilities: {caps})", cap=cap,
+        return _("This project has not declared the capability {cap!r} (its registry entry's enforce.capabilities: "
+                 "{caps})", cap=cap,
                  caps=", ".join(caps)), {}
     argv = req.get("argv")
     if not (isinstance(argv, list) and argv and all(isinstance(a, str) and "\0" not in a and len(a) <= 4096 for a in argv)):
@@ -336,8 +337,8 @@ class Runner:
                 self.kill(int(st["pid"]), signal.SIGKILL)
             fd = os.open(d, DIRFLAGS)
             try:
-                write_state(fd, state="lost", reason=_("The platform runner restarted; this job did not finish (result "
-                                                       "unknown), run it again"))
+                write_state(fd, state="lost", reason=_("The platform runner restarted and this job did not finish "
+                                                       "(result unknown); run it again"))
             finally:
                 os.close(fd)
             log(project=project, id=job_id, event="lost")

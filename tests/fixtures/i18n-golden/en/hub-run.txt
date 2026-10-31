@@ -10,7 +10,7 @@ positional arguments:
 
 options:
   -h, --help         show this help message and exit
-  --cap CAP          capability name (one in the project registry's enforce.capabilities)
+  --cap CAP          capability name (one of the registry entry's enforce.capabilities)
   --timeout TIMEOUT  seconds (default and limit: hub.json cap_runner)
   --wait ID          reattach to a job
 --- stderr
@@ -18,7 +18,7 @@ options:
 exit 2
 --- stdout
 --- stderr
-hub-run: Run this inside a registered project folder
+hub-run: run this inside a registered project folder
 === usage: no --cap
 exit 2
 --- stdout
@@ -33,30 +33,30 @@ hub-run: usage: hub-run --cap <capability> [--timeout seconds] -- <command…>, 
 exit 2
 --- stdout
 --- stderr
-hub-run: No such job: nope
+hub-run: no such job: nope
 === nobody picks it up
 exit 125
 --- stdout
 --- stderr
-hub-run: Job 20261031-120000-abcdef (capability gpu); if this call is interrupted the job keeps running: reattach with `hub-run --wait 20261031-120000-abcdef`
-hub-run: The platform's run service is not running (nobody picked the request up in 30 s); the request was withdrawn. Tell the user (agent-hub's cap-runner)
+hub-run: job 20261031-120000-abcdef (capability gpu); if this call is interrupted, the job keeps running: reattach with `hub-run --wait 20261031-120000-abcdef`
+hub-run: the platform's run service is not running (nobody picked the request up in 30 s), so the request was withdrawn. Tell the user that agent-hub's cap-runner service is not running
 === queued, then done
 exit 3
 --- stdout
 --- stderr
-hub-run: Queued (one job at a time per project, with a platform-wide limit)
+hub-run: queued (one job at a time per project, with a platform-wide limit)
 === timed out
 exit 124
 --- stdout
 partial out
 --- stderr
 partial err
-hub-run: Timed out; the job was stopped (use --timeout for longer; the limit is hub.json cap_runner.max_timeout_s)
+hub-run: timed out; the job was stopped (use --timeout for longer; the limit is hub.json cap_runner.max_timeout_s)
 === rejected
 exit 126
 --- stdout
 --- stderr
-hub-run: Request rejected: cwd ../x
+hub-run: request rejected: cwd ../x
 === lost with a reason
 exit 125
 --- stdout
@@ -66,4 +66,4 @@ hub-run: restart
 exit 125
 --- stdout
 --- stderr
-hub-run: The job was lost
+hub-run: the job was lost

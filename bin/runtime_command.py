@@ -109,7 +109,7 @@ def run(task) -> TaskResult:
     if code is None:
         return TaskResult(False, error=err)
     if code != 0:
-        return TaskResult(False, error=f"exit {code}:{(err.strip() or out.strip())[-300:]}")
+        return TaskResult(False, error=_("exit {code}: {detail}", code=code, detail=(err.strip() or out.strip())[-300:]))
     if not out.strip():
         return TaskResult(False, error=_("no output: {detail}", detail=err.strip()[-300:] or _("(stderr is empty too)")))
     so = None

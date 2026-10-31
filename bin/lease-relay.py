@@ -216,7 +216,7 @@ def decide_ask(rid: str, tool: str, kind: str, target: str, inp: dict) -> dict:
     why = (_("The owner refused this {noun}.", noun=noun) if d == "deny"
            else _("Nobody approved this {noun} (no answer within 5 minutes).", noun=noun))
     return {"behavior": "deny", "message": _("{why} {advice}", why=why, advice=_(
-        "Do not retry the same {noun}; explain it to him in plain text.", noun=noun))}
+        "Do not retry the same {noun}; explain it to the owner in plain text.", noun=noun))}
 
 
 def send(obj: dict) -> None:

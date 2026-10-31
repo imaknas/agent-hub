@@ -242,8 +242,8 @@ def turns(paths, since: datetime.datetime, until: datetime.datetime | None = Non
                     if t and t.ts >= since and (until is None or t.ts < until):
                         yield t
             if parsed >= 5 and recognised == 0:
-                raise TranscriptFormatError(_("{file}: none of {n} records is in a known format (did Claude Code change its "
-                                              "transcript format?)", file=f, n=parsed))
+                raise TranscriptFormatError(_("{file}: {n} {n:record|records}, none in a known format (did Claude Code "
+                                              "change its transcript format?)", file=f, n=parsed))
 
 
 def last_activity(path) -> datetime.datetime | None:
@@ -330,7 +330,8 @@ def run(task) -> TaskResult:
     sys.stderr.write(r.stderr)
     if r.returncode != 0 or not r.stdout.strip():
         # claude -p 的錯誤(例:Login expired)常常只在 stdout 的 JSON 裡
-        return TaskResult(False, error=f"exit {r.returncode}:{(r.stderr.strip() or r.stdout.strip())[-300:]}")
+        return TaskResult(False, error=_("exit {code}: {detail}", code=r.returncode,
+                                                 detail=(r.stderr.strip() or r.stdout.strip())[-300:]))
     try:
         out = json.loads(r.stdout)
     except ValueError:
@@ -557,7 +558,7 @@ def parse_stream(line: str) -> list:
         if d.get("is_error") and re.search(r"rate.?limit|usage limit|額度", text, re.I):
             out.append(StreamEvent("error", {"error": "rate_limit", "detail": text[:300]}))
         elif d.get("subtype") == "error_max_turns":
-            out.append(StreamEvent("error", {"error": "bad_request", "detail": _("turn limit reached, taking it back"),
+            out.append(StreamEvent("error", {"error": "bad_request", "detail": _("turn limit reached; detaching the lease"),
                                              "_detach": "budget"}))
         out.append(StreamEvent("turn_end", {"cost": d.get("total_cost_usd"), "num_turns": d.get("num_turns"),
                                             "duration_ms": d.get("duration_ms"), "is_error": bool(d.get("is_error"))}))
@@ -565,11 +566,11 @@ def parse_stream(line: str) -> list:
 
 
 def classify_exit(code, stderr_tail: str) -> StreamEvent:
-    raw = f"exit {code}:{stderr_tail[-200:]}"
+    raw = _("exit {code}: {detail}", code=code, detail=stderr_tail[-200:])
     if is_login_error(stderr_tail):  # 跟 llm.py 的登入判斷同一份(第 6 層)
         return StreamEvent("error", {"error": "agent_login", "detail": _(
-            "the Claude Code of project sessions is not logged in or its credentials expired "
-            "(the platform's agent-hub/claude-login sends an alert). {raw}", raw=raw)})
+            "Claude Code (used by project sessions) is not logged in, or its credentials have expired (the platform's "
+            "agent-hub/claude-login sends an alert). {raw}", raw=raw)})
     return StreamEvent("error", {"error": "process_crashed", "detail": raw})
 
 
@@ -580,8 +581,8 @@ def resumable(sid: str) -> bool:
 
 def resume_command(sid: str) -> tuple:
     return (f"~/agent-hub/bin/lease-resume {sid}",
-            _("Paste it in a terminal on the hub machine: it resumes the same conversation (Claude Code). When done, go "
-              "back to the assistant and press \"take back\" for the handover."))
+            _("Paste it in a terminal on the hub machine: it resumes the same conversation (Claude Code). When you are "
+              'done, go back to the assistant and press "detach" for the handover.'))
 
 
 def neutral_question(inp: dict) -> dict:
@@ -628,8 +629,8 @@ def auth_env(mode: str, env) -> tuple:
         return out, ""
     f = _token_file()
     if not f.is_file():
-        return None, _("no {file} (the default is the headless token; to use the subscription login declare "
-                       "auth: subscription)", file=f)
+        return None, _("{file} does not exist (the default is the headless token; to use the subscription login, "
+                       "declare auth: subscription)", file=f)
     out[TOKEN_VAR] = f.read_text().strip()
     return out, ""
 
@@ -726,12 +727,14 @@ def complete(req, conf) -> CompletionResult:
     try:
         out = json.loads(r.stdout)
     except ValueError:
-        return CompletionResult(False, stop="error", error=f"exit {r.returncode}:{(r.stderr.strip() or r.stdout.strip())[-300:]}")
+        return CompletionResult(False, stop="error", error=_("exit {code}: {detail}", code=r.returncode,
+                                                                    detail=(r.stderr.strip() or r.stdout.strip())[-300:]))
     usage = out.get("usage") or {}
     tokens_in = sum(usage.get(k) or 0 for k in ("input_tokens", "cache_creation_input_tokens", "cache_read_input_tokens")) or None
     if r.returncode != 0 or out.get("is_error"):
         text = str(out.get("result") or r.stderr.strip())[-300:]
-        return CompletionResult(False, stop="error", error=f"exit {r.returncode}:{text}", input_tokens=tokens_in,
+        return CompletionResult(False, stop="error", error=_("exit {code}: {detail}", code=r.returncode, detail=text),
+                                input_tokens=tokens_in,
                                 output_tokens=usage.get("output_tokens"), cost_usd=out.get("total_cost_usd"))
     so = out.get("structured_output")
     return CompletionResult(True, text=json.dumps(so, ensure_ascii=False) if so is not None else str(out.get("result") or ""),

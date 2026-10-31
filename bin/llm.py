@@ -158,7 +158,7 @@ def run(a) -> int:
     if a.cmd == "exec":
         # 長駐的串流 session(例:通道租借)。暫時的:之後由第 1 層的 open_session 取代
         if not spec.get("stream"):
-            print(_("llm.py: {point} does not declare stream: true, so it cannot exec", point=a.point), file=sys.stderr)
+            print(_("llm.py: {point} does not declare stream: true, so it cannot run under exec", point=a.point), file=sys.stderr)
             return 2
         if not hasattr(rt, "exec_stream"):
             print(_("llm.py: {point}: this runtime does not support long-running streaming sessions", point=a.point),
@@ -236,7 +236,8 @@ def main() -> int:
         import completion
         rows = completion.health_all()
         for name, ok, why in rows:
-            print(f"{'✓' if ok else '✗'} {name}" + (f":{why}" if why else ""))
+            mark = "✓" if ok else "✗"
+            print(_("{mark} {name}: {why}", mark=mark, name=name, why=why) if why else f"{mark} {name}")
         return 0 if all(ok for _name, ok, _why in rows) else 1
     bad = lint()
     for b in bad:

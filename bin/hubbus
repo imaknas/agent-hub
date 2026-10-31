@@ -526,9 +526,9 @@ def questions_note(c, project) -> str | None:
     if not qs:
         return None
     lines = [_("❓ Questions this project asked {owner} that have no answer yet ({n}). If {owner} already answered them "
-               "in a session, or they are no longer needed, close them (so {assistant} stops waiting for him): "
-               "`agenthub send --to {alias} --type done --question <id> --text \"how it was resolved\"` "
-               "(`--type drop` when no longer needed). Leave the ones still to ask.",
+               "in a session, or they are no longer needed, close them (so {assistant} stops waiting for an answer): "
+               '`agenthub send --to {alias} --type done --question <id> --text "how it was resolved"` (`--type drop` '
+               "when no longer needed). Leave the ones still to ask.",
                owner=OWNER, n=len(qs), assistant=ASSISTANT, alias=OWNER_ALIAS)]
     lines += [f"- [{r['id']}] {r['ts'][5:16].replace('T', ' ')} {payload(r).get('text', '')[:120]}" for r in qs[-5:]]
     return "\n".join(lines)
@@ -641,15 +641,15 @@ def handoff_text(h: dict) -> str:
         what = {"done": _("{owner} did", owner=OWNER), "dropped": _("{owner} cancelled", owner=OWNER),
                 "already_done": _("{owner} had already done (and sent it once more now)", owner=OWNER),
                 "reopened": _("{owner} reopened, after it was closed,", owner=OWNER)}[e]
-        return (_("{what} the thing this project was waiting on him for: {item}", what=what, item=h.get("item", ""))
+        return (_("{what} the thing this project was waiting on them for: {item}", what=what, item=h.get("item", ""))
                 + (f"\n{h['fact']}" if h.get("fact") else "")
-                + "\n" + _("(task {task}; librarian updates the to-dos in STATE.md by key tonight, nothing else to do)",
+                + "\n" + _("(task {task}; librarian updates the to-dos in STATE.md by key tonight; nothing else to do)",
                            task=h.get("reply_to")))
     if e == "answers":
         return (_("{owner} answered the question this project asked.\nQuestion: {item}\nAnswer: {fact}",
                   owner=OWNER, item=h.get("item", ""), fact=h.get("fact", ""))
                 + ("\n" + _("{owner}'s words: {quote}", owner=OWNER, quote=h["quote"]) if h.get("quote") else "")
-                + "\n" + _("Carry on with the answer, then `hubbus done <id>` (reports to {assistant} that it is closed). "
+                + "\n" + _("Carry on with the answer, then `agenthub done <id>` (tells {assistant} that it is closed). "
                            "Without a done, librarian applies the answer to STATE.md tonight and closes it.",
                            assistant=ASSISTANT))
     lines = [_("{owner} told {assistant} something about this project ({effect}):", owner=OWNER, assistant=ASSISTANT,
@@ -699,13 +699,13 @@ def log_once(key: str, msg: str) -> None:
 def asks_text(h: dict) -> str:
     """effect=asks:owner 透過助理問這個專案一件事(m10261731-817c)。寄成 question,照 dispatch 的規則處理
     (有人在打字先等;沒有就用這個專案最近活著的 session 分支回答)。回覆一定要帶 --reply-to,handoff_id 才會跟著回去。"""
-    return (_("{owner} asks this project through {assistant} (he is waiting for the answer):\n{fact}",
+    return (_("{owner} asks this project through {assistant} and is waiting for the answer:\n{fact}",
               owner=OWNER, assistant=ASSISTANT, fact=h.get("fact", ""))
             + ("\n" + _("{owner}'s words: {quote}", owner=OWNER, quote=h["quote"]) if h.get("quote") else "")
-            + "\n" + _("Reply: `agenthub send --to {alias} --reply-to <this letter's id> --type info --text \"the answer\"`. "
-                       "Always add --reply-to: the answer and every later addition are each told to {owner} as they are. "
-                       "After answering, `hubbus done <id>`; with only a done and no reply, {assistant} reports that this "
-                       "project closed the question without an answer.",
+            + "\n" + _("Reply: `agenthub send --to {alias} --reply-to <this letter's id> --type info --text \"the "
+                       'answer"`. Always add --reply-to: the answer and every later addition are each passed on to '
+                       "{owner} as written. After answering, `agenthub done <id>`; with only a done and no reply, "
+                       "{assistant} reports that this project closed the question without an answer.",
                        alias=OWNER_ALIAS, owner=OWNER, assistant=ASSISTANT))
 
 
@@ -743,7 +743,7 @@ def import_handoffs(c) -> None:
     if ack:  # 匯流排 commit 之後才回報;回報失敗下次再報,匯流排的 id 去重不會收兩次
         r = assistant_cli("--delivered", *ack)
         if r.returncode != 0:
-            log(_("telling the assistant they were received failed (retrying next time): {err}", err=r.stderr.strip()[-200:]))
+            log(_("could not tell the assistant they were received (retrying next time): {err}", err=r.stderr.strip()[-200:]))
 
 
 # 助理那邊有 0.3 record 的轉交(它的 handoff_records.Outbox.records 同一條規則);answers 也有(decisions settled),
@@ -882,7 +882,7 @@ def forward_records(c) -> None:
         if recs:
             code, data, err = records_http("POST", "/api/records", {"records": [payload(ev)["record"] for ev in recs]})
             if code != 200 or not isinstance(data, dict):
-                log_once("records-out", _("records could not be sent to {assistant} ({err}), {n} to resend next time",
+                log_once("records-out", _("records could not be sent to {assistant} ({err}); {n} to resend next time",
                                           assistant=ASSISTANT, err=err or code, n=len(recs)))
                 return
             log_once("records-out", "")
@@ -970,8 +970,8 @@ def pull_records(c) -> None:
             if code == 200:
                 set_cursor(c, acked, cur)
             else:
-                log_once(f"records-ack-{name}", _("ack to {assistant} for {project} through {cur} failed: {err}, retrying "
-                                                  "next time", assistant=ASSISTANT, project=name, cur=cur, err=err or code))
+                log_once(f"records-ack-{name}", _("ack to {assistant} for {project} through {cur} failed: {err}; "
+                                                  "retrying next time", assistant=ASSISTANT, project=name, cur=cur, err=err or code))
 
 
 def forward(c) -> None:
@@ -1011,7 +1011,7 @@ def forward(c) -> None:
 
 def reject(c, ev, err) -> None:
     """Muninn 說格式不對的那則:記成 job.failed(狀態頁看得到)、跳過,不擋後面的。"""
-    log(_("the assistant refused {id} ({err}), skipped", id=ev["id"], err=err))
+    log(_("the assistant refused {id} ({err}); skipped", id=ev["id"], err=err))
     publish(c, f"{ev['id']}:rejected", "job.failed", "hubbus-bridge", None, ev["id"],
             {"job": "hubbus-bridge", "detail": _("the assistant refused {type} {id}: {err}", type=ev["type"], id=ev["id"], err=err)})
 
@@ -1142,7 +1142,8 @@ def run_handler(c, proj, ws, rows) -> None:
     except (OSError, ValueError):
         pass
     if runs_today(c, proj) >= DAILY_RUNS:
-        log(_("{project}: already dispatched {max} times today, {n} letters wait (visible on the status page)",
+        log(_("{project}: already dispatched {max} {max:time|times} today; {n} {n:letter waits|letters wait} (visible "
+              "on the status page)",
               project=proj, max=DAILY_RUNS, n=len(rows)))
         return
     run = f"h{now():%m%d%H%M%S}-{secrets.token_hex(2)}"
@@ -1199,7 +1200,7 @@ def resume(c, r, sid, cwd, rt, ws=None, prompt=None) -> None:
             p.stdin.write((prompt or RESUME_PROMPT).format(letter=fmt(r), id=r["id"]))
             p.stdin.close()
     except OSError as e:
-        log(_("{project}: {id} the background resume could not start ({e!r}), delegating instead",
+        log(_("{project}: {id}: the background resume could not start ({e!r}); delegating instead",
               project=r["to_project"], id=r["id"], e=e))
         run_handler(c, r["to_project"], ws or cwd, [r])
         return
@@ -1219,7 +1220,7 @@ def hold(c, r) -> None:
                 "To go on, open a session in one of the projects.",
                 a=r["to_project"], b=r["source"], rounds=THREAD_MAX_ROUNDS, id=r["id"], text=text[:300])})
     c.execute("COMMIT")
-    log(_("{project}: {id} this thread has had {rounds} rounds handled already, stopping to ask {owner}",
+    log(_("{project}: {id}: this thread has already had {rounds} rounds handled; stopping to ask {owner}",
           project=r["to_project"], id=r["id"], rounds=THREAD_MAX_ROUNDS, owner=OWNER))
 
 
@@ -1254,8 +1255,8 @@ def dispatch(c, rt=None) -> int:
                 if st and st >= take_cut:   # 剛送進某個 session:給它時間 ack、回信或 done
                     waiting += 1
                     continue
-                log(_("{project}: {id} sat in a session over {minutes} minutes with no ack/reply/done; treated as not "
-                      "taken, dispatching again", project=proj, id=r["id"], minutes=TAKE_TIMEOUT_MIN))
+                log(_("{project}: {id} sat in a session for over {minutes} {minutes:minute|minutes} with no ack, reply "
+                      "or done; treating it as not taken and dispatching again", project=proj, id=r["id"], minutes=TAKE_TIMEOUT_MIN))
             if platform_rounds(c, thread_chain(c, r)) >= THREAD_MAX_ROUNDS:
                 hold(c, r)
                 continue
@@ -1345,7 +1346,7 @@ def check_integrity() -> bool:
         src = pathlib.Path(str(DB) + suffix)
         if src.exists():
             src.rename(pathlib.Path(str(dest) + suffix))
-    log(_("bus.db is broken ({why}), moved to {name}, starting a new one", why=why, name=dest.name))
+    log(_("bus.db is broken ({why}); moved it to {name} and started a new one", why=why, name=dest.name))
     return False
 
 
@@ -1418,7 +1419,7 @@ def cmd_status(as_json: bool) -> None:
         print(_("{project}: {open} open letters ({undelivered} of them not yet in a session; oldest {oldest})",
                 project=p, open=st["open"], undelivered=st["undelivered"], oldest=st["oldest"][5:16]))
     if stuck:
-        print(_("Over {hours} h with no session taking them and the platform not taking over: {items}", hours=STUCK_HOURS,
+        print(_("Unclaimed for over {hours} h (no session took them and the platform did not handle them): {items}", hours=STUCK_HOURS,
                 items=_(", ").join(f"{s['id']}→{s['to']}" for s in stuck)))
     if items:
         print(_("Waiting to go to the assistant: {n} (oldest {oldest})", n=len(items), oldest=items[0]["ts"][5:16]))
@@ -1487,9 +1488,9 @@ def main() -> None:
     a = ap.parse_args()
 
     if a.cmd in WRITES and (how := platform_mails()):
-        sys.exit(_("hubbus: this is work the platform mails for (recognized by the {how}): write the letters to send and "
-                   "the things to close in your output, the platform sends them; sending or closing them yourself is not "
-                   "allowed", how=how))
+        sys.exit(_("hubbus: this is work the platform sends letters for (recognized by the {how}): write the letters "
+                   "to send and the things to close in your output; the platform sends them. Sending or closing them "
+                   "yourself is not allowed", how=how))
     if a.cmd == "hook":
         try:
             cmd_hook(a.event)

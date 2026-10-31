@@ -25,8 +25,8 @@ r/a.png is too big (0 MB; the limit is 0 MB)
 === too big after read
 r/a.png is too big (the limit is 0 MB)
 === count
-This lease already showed 1 files in the last 24 hours, the limit; show it later, or say in text where the file is for now
+This lease has already shown 1 file in the last 24 hours, which is the limit; show it later, or say in text where the file is for now
 === total
-The files this lease showed in the last 24 hours are over 0 MB in total; show it later, or say in text where the file is for now
+The files this lease has shown in the last 24 hours are over 0 MB in total; show it later, or say in text where the file is for now
 === swapped
 r/a.png: what was opened is not that file in the folder (was the path swapped?); not sent

@@ -73,7 +73,7 @@ def port_labels() -> dict[str, str]:
     return {"agent": _("agent runs"), "lifecycle": _("session events (hooks)"), "instructions": _("rules file"),
             "transcripts": _("transcripts"), "sessions": _("session state"),
             "stream": _("long-running streaming sessions"), "auth": _("login state"),
-            "completion": _("completion (answer only)")}
+            "completion": _("completion interface")}
 
 
 # Which ports each platform feature needs (doctor's "tool x feature" table; docs/design/tool-agnostic.md principle 3).
@@ -86,7 +86,7 @@ def features() -> tuple:
         (_("channel leasing (also needs the assistant module)"), ("stream", "sessions", "agent", "auth")),
         (_("letters seen live in the session, reminders to write notes"), ("lifecycle",)),
         (_("platform rules written into the project's rules file"), ("instructions",)),
-        (_("memory gaps, transcript statistics of the weekly report"), ("transcripts",)),
+        (_("memory gaps, the weekly report's transcript statistics"), ("transcripts",)),
     )
 
 
@@ -98,10 +98,21 @@ def __getattr__(name: str):
     raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
 
 
+def or_list(items) -> str:
+    """Owner-facing "a", "a or b", "a, b, or c" (what is missing; zh-Hant joins every item with the
+    ideographic comma, as before)."""
+    items = list(items)
+    if len(items) < 2:
+        return "".join(items)
+    if len(items) == 2:
+        return _("{a} or {b}", a=items[0], b=items[1])
+    return _("{items}, or {last}", items=_(", ").join(items[:-1]), last=items[-1])
+
+
 def feature_table(name: str | None = None) -> list[tuple[str, bool, str]]:
     """(功能, 能不能用, 缺什麼)——缺的用 PORT_LABELS 的名稱。"""
     have, labels = capabilities(name), port_labels()
-    return [(f, not (miss := [labels[p] for p in need if p not in have]), _(", ").join(miss)) for f, need in features()]
+    return [(f, not (miss := [labels[p] for p in need if p not in have]), or_list(miss)) for f, need in features()]
 
 
 PORTS = {
@@ -284,8 +295,8 @@ def load(name: str | None = None, ports=tuple(PORTS)):
                                      missing=", ".join(missing)))
     if absent:
         labels = port_labels()
-        raise Unsupported(_("runtime {name} has no {missing} (hub.json runtime.default; for this feature install a coding "
-                            "agent that has it)", name=name, missing=_(", ").join(labels.get(p, p) for p in absent)))
+        raise Unsupported(_("runtime {name} has no {missing} (hub.json runtime.default; to use this feature, install a "
+                            "coding agent that supports it)", name=name, missing=or_list(labels.get(p, p) for p in absent)))
     return mod
 
 

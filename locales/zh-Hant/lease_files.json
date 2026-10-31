@@ -12,6 +12,6 @@
  "{path} is not UTF-8 text": "{path} 不是 UTF-8 文字",
  "{path}: the content looks like a credential (a private key or an API key); not sent": "{path} 的內容像憑證(私鑰或 API key),不送",
  "{path}: the content is not {type} (the extension does not match the content)": "{path} 的內容不是 {type}(副檔名跟內容對不上)",
- "This lease already showed {n} files in the last {hours} hours, the limit; show it later, or say in text where the file is for now": "這個深談最近 {hours} 小時已經給了 {n} 個檔案,到上限了;晚一點再給,或先用文字說檔案在哪",
- "The files this lease showed in the last {hours} hours are over {mb} MB in total; show it later, or say in text where the file is for now": "這個深談最近 {hours} 小時給的檔案合計超過 {mb} MB 了;晚一點再給,或先用文字說檔案在哪"
+ "This lease has already shown {n} {n:file|files} in the last {hours} {hours:hour|hours}, which is the limit; show it later, or say in text where the file is for now": "這個深談最近 {hours} 小時已經給了 {n} 個檔案,到上限了;晚一點再給,或先用文字說檔案在哪",
+ "The files this lease has shown in the last {hours} {hours:hour|hours} are over {mb} MB in total; show it later, or say in text where the file is for now": "這個深談最近 {hours} 小時給的檔案合計超過 {mb} MB 了;晚一點再給,或先用文字說檔案在哪"
 }

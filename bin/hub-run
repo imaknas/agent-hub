@@ -93,15 +93,15 @@ def follow(ws: pathlib.Path, job_id: str, pickup: bool) -> int:
             st = None
         if st is None:
             if not req.exists():
-                say(_("No such job: {job_id}", job_id=job_id))
+                say(_("no such job: {job_id}", job_id=job_id))
                 return 2
             if pickup and time.time() - t0 > PICKUP_S:
                 try:
                     req.unlink()  # 晚啟動的服務不會跑一個沒人在等的工作
                 except FileNotFoundError:
                     continue  # 剛好被接手了
-                say(_("The platform's run service is not running (nobody picked the request up in {secs:g} s); the request "
-                      "was withdrawn. Tell the user (agent-hub's cap-runner)", secs=PICKUP_S))
+                say(_("the platform's run service is not running (nobody picked the request up in {secs:g} s), so the "
+                      "request was withdrawn. Tell the user that agent-hub's cap-runner service is not running", secs=PICKUP_S))
                 return 125
             time.sleep(0.3)
             continue
@@ -109,20 +109,20 @@ def follow(ws: pathlib.Path, job_id: str, pickup: bool) -> int:
             t.pump()
         state = st.get("state")
         if state == "queued" and not said_queue:
-            say(_("Queued (one job at a time per project, with a platform-wide limit)"))
+            say(_("queued (one job at a time per project, with a platform-wide limit)"))
             said_queue = True
         if state == "done":
             for t in tails:
                 t.pump()
             if st.get("timed_out"):
-                say(_("Timed out; the job was stopped (use --timeout for longer; the limit is hub.json "
+                say(_("timed out; the job was stopped (use --timeout for longer; the limit is hub.json "
                       "cap_runner.max_timeout_s)"))
             return int(st.get("exit", 1))
         if state == "rejected":
-            say(_("Request rejected: {reason}", reason=st.get('reason', '')))
+            say(_("request rejected: {reason}", reason=st.get('reason', '')))
             return 126
         if state == "lost":
-            say(st.get("reason", _("The job was lost")))
+            say(st.get("reason", _("the job was lost")))
             return 125
         time.sleep(0.3)
 
@@ -130,7 +130,7 @@ def follow(ws: pathlib.Path, job_id: str, pickup: bool) -> int:
 def main() -> int:
     ap = argparse.ArgumentParser(prog="hub-run",
                                  description=_("Run a program that needs a capability under the platform's profile"))
-    ap.add_argument("--cap", help=_("capability name (one in the project registry's enforce.capabilities)"))
+    ap.add_argument("--cap", help=_("capability name (one of the registry entry's enforce.capabilities)"))
     ap.add_argument("--timeout", type=int, help=_("seconds (default and limit: hub.json cap_runner)"))
     ap.add_argument("--wait", metavar="ID", help=_("reattach to a job"))
     ap.add_argument("cmd", nargs=argparse.REMAINDER)
@@ -138,7 +138,7 @@ def main() -> int:
     cmd = a.cmd[1:] if a.cmd[:1] == ["--"] else a.cmd
     ws = find_workspace()
     if not ws:
-        say(_("Run this inside a registered project folder"))
+        say(_("run this inside a registered project folder"))
         return 2
     if a.wait:
         return follow(ws, a.wait, pickup=False)
@@ -146,8 +146,8 @@ def main() -> int:
         say(_("usage: hub-run --cap <capability> [--timeout seconds] -- <command…>, or hub-run --wait <id>"))
         return 2
     job_id = submit(ws, a.cap, cmd, a.timeout)
-    say(_("Job {job_id} (capability {cap}); if this call is interrupted the job keeps running: reattach with "
-          "`hub-run --wait {job_id}`", job_id=job_id, cap=a.cap))
+    say(_("job {job_id} (capability {cap}); if this call is interrupted, the job keeps running: reattach with `hub-run "
+          "--wait {job_id}`", job_id=job_id, cap=a.cap))
     return follow(ws, job_id, pickup=True)
 
 

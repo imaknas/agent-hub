@@ -130,11 +130,11 @@ def take(ws, path: str, summary: str | None, store, secret_paths=()) -> tuple:
         if store.is_dir() else []
     hours = WINDOW_S // 3600
     if len(kept) >= MAX_COUNT:
-        return None, _("This lease already showed {n} files in the last {hours} hours, the limit; show it later, or say in "
-                        "text where the file is for now", hours=hours, n=MAX_COUNT)
+        return None, _("This lease has already shown {n} {n:file|files} in the last {hours} {hours:hour|hours}, which "
+                       "is the limit; show it later, or say in text where the file is for now", hours=hours, n=MAX_COUNT)
     if sum(k.get("size", 0) for k in kept) + len(data) > MAX_TOTAL:
-        return None, _("The files this lease showed in the last {hours} hours are over {mb} MB in total; show it later, or "
-                        "say in text where the file is for now", hours=hours, mb=MAX_TOTAL // 1024 // 1024)
+        return None, _("The files this lease has shown in the last {hours} {hours:hour|hours} are over {mb} MB in "
+                       "total; show it later, or say in text where the file is for now", hours=hours, mb=MAX_TOTAL // 1024 // 1024)
     store.mkdir(parents=True, exist_ok=True)
     fid = secrets.token_hex(8)
     (store / fid).write_bytes(data)

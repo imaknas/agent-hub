@@ -57,7 +57,7 @@ $ llm.py exec reflect-week    # exec without stream
 [exit 2]
 --- stdout
 --- stderr
-llm.py: reflect-week does not declare stream: true, so it cannot exec
+llm.py: reflect-week does not declare stream: true, so it cannot run under exec
 
 $ llm.py exec lease-session    # runtime without stream
 [exit 2]
@@ -74,13 +74,13 @@ $ llm.py run reflect-week    # no completion
 $ llm.py run agent-job    # no agent
 [exit 1]
 --- stdout
-{"type": "result", "is_error": true, "structured_output": null, "llm_point": "agent-job", "llm_error": "runtime none has no agent runs (hub.json runtime.default; for this feature install a coding agent that has it)"}
+{"type": "result", "is_error": true, "structured_output": null, "llm_point": "agent-job", "llm_error": "runtime none has no agent runs (hub.json runtime.default; to use this feature, install a coding agent that supports it)"}
 --- stderr
 
 $ llm.py run agent-job    # token missing
 [exit 1]
 --- stdout
-{"type": "result", "is_error": true, "structured_output": null, "llm_point": "agent-job", "llm_error": "no <TMP>/home/.claude/headless-oauth-token (the default is the headless token; to use the subscription login declare auth: subscription)"}
+{"type": "result", "is_error": true, "structured_output": null, "llm_point": "agent-job", "llm_error": "<TMP>/home/.claude/headless-oauth-token does not exist (the default is the headless token; to use the subscription login, declare auth: subscription)"}
 --- stderr
 
 $ llm.py run consolidate    # schema
@@ -98,7 +98,7 @@ $ llm.py run agent-job    # run failed
 $ llm.py health    # health
 [exit 1]
 --- stdout
-✗ k:no key: <TMP>/secrets/nokey does not exist (bin/hub llm set-key writes it)
+✗ k: no key: <TMP>/secrets/nokey does not exist (`agenthub llm set-key` writes it)
 ✓ f
 --- stderr
 

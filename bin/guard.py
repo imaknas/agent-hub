@@ -5,9 +5,9 @@ Platform event open_session_attempt (bin/hub-event calls decide). The input is a
 binding translates from the native arguments (Claude Code: the Desktop start_session tool; see runtime_claude.parse_event):
   cwd        → not under this session's own project (the main checkout or one of its worktrees): denied
   elsewhere  → another repository, another machine, a preset that does not say where: denied
-Neither given = the same project, allowed. A denial returns the reason (telling it to send a letter), which the binding
-turns into the native "deny". Projects never onboarded (e.g. the platform itself) are not guarded; when this script itself
-fails it allows (a broken guard must not block normal work).
+If neither is given, it is the same project and is allowed. A denial returns the reason (telling it to send a letter),
+which the binding turns into the native "deny". Projects never onboarded (e.g. the platform itself) are not guarded;
+when this script itself fails it allows (a broken guard must not block normal work).
 `guard.py pre-tool` is the old entry point; projects that have not switched to the new settings still call it.
 """
 from __future__ import annotations
@@ -54,8 +54,8 @@ def decide(target: dict, cwd) -> str | None:
     if where.get("kind") == "machine":
         return _("A {project} session cannot open a session on another machine. {how}", project=proj, how=how)
     if where.get("kind"):  # unknown_place:例如存好的地點,看不出是不是同一個專案
-        return _("A {project} session opening a session with a preset: cannot tell whether it is the same project; "
-                 "for the same project give no preset/cwd. {how}", project=proj, how=how)
+        return _("When a {project} session opens a session with a preset, there is no way to tell whether it is the "
+                 "same project; for the same project, give no preset or cwd. {how}", project=proj, how=how)
     if target.get("cwd"):
         t = pathlib.Path(target["cwd"]).resolve()
         if t != root and root not in t.parents:

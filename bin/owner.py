@@ -110,7 +110,7 @@ def settle(key: str, outcome: str, note: str | None) -> int:
         print(_("{project}:{key} → {outcome} ({event}{again}); registrar updates STATE.md by key tonight",
                 project=p, key=key, outcome=outcome, event=eid, again="" if new else _(", sent before")))
         return 0
-    print(_("no to-do {key} (owner.py list shows the open ones)", key=key), file=sys.stderr)
+    print(_("no to-do with key {key} (`agenthub owner list` shows the open ones)", key=key), file=sys.stderr)
     return 1
 
 
@@ -119,7 +119,7 @@ def answer(qid: str, text: str) -> int:
     c = hb.db()
     q = c.execute("SELECT * FROM events WHERE id=? AND type='message'", (qid,)).fetchone()
     if q is None or hb.payload(q).get("type") != "question":
-        print(_("no question {id} (owner.py list shows the open ones)", id=qid), file=sys.stderr)
+        print(_("no question with id {id} (`agenthub owner list` shows the open ones)", id=qid), file=sys.stderr)
         return 1
     proj = hb.canon(q["source"])
     owner = hubconf.owner_tag()
@@ -146,7 +146,7 @@ def notify() -> int:
         seen = set()
     new = [it for it in items if (it.get("key") or it.get("id")) not in seen]
     if new:
-        lines = [_("{owner}, {new} new things are waiting for you ({total} in all; `agenthub owner list`):",
+        lines = [_("{owner}, {new} new {new:item is|items are} waiting for you ({total} in all; `agenthub owner list`):",
                    owner=hubconf.owner_tag(), new=len(new), total=len(items))]
         lines += [_("- {mark} {project}: {text}", mark="❓" if it["kind"] == "question" else "☐", project=it["project"],
                     text=it["text"][:120]) for it in new[:20]]

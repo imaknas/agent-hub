@@ -6,9 +6,9 @@ Platform event open_session_attempt (bin/hub-event calls decide). The input is a
 binding translates from the native arguments (Claude Code: the Desktop start_session tool; see runtime_claude.parse_event):
   cwd        → not under this session's own project (the main checkout or one of its worktrees): denied
   elsewhere  → another repository, another machine, a preset that does not say where: denied
-Neither given = the same project, allowed. A denial returns the reason (telling it to send a letter), which the binding
-turns into the native "deny". Projects never onboarded (e.g. the platform itself) are not guarded; when this script itself
-fails it allows (a broken guard must not block normal work).
+If neither is given, it is the same project and is allowed. A denial returns the reason (telling it to send a letter),
+which the binding turns into the native "deny". Projects never onboarded (e.g. the platform itself) are not guarded;
+when this script itself fails it allows (a broken guard must not block normal work).
 `guard.py pre-tool` is the old entry point; projects that have not switched to the new settings still call it.
 
 
@@ -19,6 +19,6 @@ A proj session cannot open a session in another repository (o/r). To ask another
 === machine
 A proj session cannot open a session on another machine. To ask another project for something, send a letter: agenthub send --to <project> --type request --text "…"; or ask the owner to open a session in that project themselves.
 === unknown place
-A proj session opening a session with a preset: cannot tell whether it is the same project; for the same project give no preset/cwd. To ask another project for something, send a letter: agenthub send --to <project> --type request --text "…"; or ask the owner to open a session in that project themselves.
+When a proj session opens a session with a preset, there is no way to tell whether it is the same project; for the same project, give no preset or cwd. To ask another project for something, send a letter: agenthub send --to <project> --type request --text "…"; or ask the owner to open a session in that project themselves.
 === same project
 None

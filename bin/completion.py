@@ -83,7 +83,7 @@ def read_key(conf: dict) -> str | None:
         try:
             v = f.read_text().strip()
         except OSError:
-            raise Refused(_("no key: {file} does not exist (bin/hub llm set-key writes it)", file=f))
+            raise Refused(_("no key: {file} does not exist (`agenthub llm set-key` writes it)", file=f))
         if not v:
             raise Refused(_("no key: {file} is empty", file=f))
         return v
@@ -107,7 +107,7 @@ def resolve(point: str, spec: dict) -> dict:
     pin = (s.get("points") or {}).get(point) or {}
     name = pin.get("provider") or (s.get("use") or {}).get(group)
     if not name:
-        raise Refused(_("llm.use does not say which provider takes {group}", group=group))
+        raise Refused(_("llm.use does not say which provider serves the {group} group", group=group))
     conf = providers.get(name)
     if not isinstance(conf, dict):
         raise Refused(_("llm.providers has no {name}", name=name))
@@ -198,8 +198,8 @@ def run(point: str, spec: dict, prompt: str, schema: dict | None, sleep=time.sle
     prompt = redact(prompt)
     max_tokens = int(spec.get("max_tokens") or 8192)
     if target["context"] and estimate_tokens(prompt) + max_tokens > int(target["context"]):
-        raise Refused(_("prompt too long: an estimated {tokens} tokens + {max_tokens} of output exceed the context "
-                        "{context} of {provider}/{model}", tokens=estimate_tokens(prompt), max_tokens=max_tokens,
+        raise Refused(_("prompt too long: about {tokens} tokens plus {max_tokens} of output exceed "
+                        "{provider}/{model}'s {context}-token context", tokens=estimate_tokens(prompt), max_tokens=max_tokens,
                         provider=target["provider"], model=target["model"], context=target["context"]))
     impl = runtime_ports.load_completion(target["impl"])
     req = runtime_ports.CompletionRequest(point=point, prompt=prompt, model=target["model"], schema=schema,
@@ -287,7 +287,7 @@ def config_errors(llm: dict) -> list[str]:
     if not providers and llm.get("use"):
         errs.append(_("use is set but providers is not (to pin only some judgment points' models, write only points)"))
     if providers and not llm.get("use"):
-        errs.append(_("with providers, use is required (which provider takes fast / standard / strong)"))
+        errs.append(_("with providers, use is required (which provider serves fast / standard / strong)"))
     for name, p in providers.items():
         if not isinstance(p, dict):
             errs.append(_("providers.{name} must be an object", name=name))
@@ -340,7 +340,7 @@ def config_errors(llm: dict) -> list[str]:
         if not isinstance(pin, dict):
             errs.append(_("points.{point} must be an object ({{model}} or {{provider, model?}})", point=pt))
         elif pin.get("provider") is not None and pin["provider"] not in providers:
-            errs.append(_("points.{point}.provider must be one of providers", point=pt))
+            errs.append(_("points.{point}.provider must name one of the providers", point=pt))
         elif pin.get("provider") is None and not pin.get("model"):
             errs.append(_("points.{point}: without a provider, model is required (the model the runtime uses)", point=pt))
     return errs

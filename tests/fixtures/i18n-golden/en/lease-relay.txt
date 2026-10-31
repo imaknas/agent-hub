@@ -7,15 +7,15 @@ The owner is not answering this question now. Ask in plain text; do not retry wi
 === web deny
 The owner refused this URL. Do not retry the same URL; if you need it, tell the owner in plain text why you want to read it.
 === command deny
-The owner refused this command. Do not retry the same command; explain it to him in plain text.
+The owner refused this command. Do not retry the same command; explain it to the owner in plain text.
 === action deny
-The owner refused this action. Do not retry the same action; explain it to him in plain text.
+The owner refused this action. Do not retry the same action; explain it to the owner in plain text.
 === web None
 Nobody approved this URL (no answer within 5 minutes). Do not retry the same URL; if you need it, tell the owner in plain text why you want to read it.
 === command None
-Nobody approved this command (no answer within 5 minutes). Do not retry the same command; explain it to him in plain text.
+Nobody approved this command (no answer within 5 minutes). Do not retry the same command; explain it to the owner in plain text.
 === action None
-Nobody approved this action (no answer within 5 minutes). Do not retry the same action; explain it to him in plain text.
+Nobody approved this action (no answer within 5 minutes). Do not retry the same action; explain it to the owner in plain text.
 === write outside
 Only files in this project folder (<TMP>/ws) can be changed; /etc/hosts is not in it.
 === write no path

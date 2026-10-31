@@ -1,5 +1,5 @@
 === read_key: missing secret
-no key: <TMP>/secrets/k does not exist (bin/hub llm set-key writes it)
+no key: <TMP>/secrets/k does not exist (`agenthub llm set-key` writes it)
 === read_key: missing env
 no key: environment variable GOLDEN_NO_KEY is not set (the scheduler runs under launchd and does not see the shell's settings; a secret is more reliable)
 === read_key: bad shape
@@ -9,13 +9,13 @@ no key: <TMP>/secrets/empty is empty
 === resolve: no llm
 hub.json has no llm section
 === resolve: no use
-llm.use does not say which provider takes strong
+llm.use does not say which provider serves the strong group
 === resolve: no provider
 llm.providers has no zz
 === resolve: no model
 llm.providers.k.models has no fast
 === run: too long
-prompt too long: an estimated 1334 tokens + 100 of output exceed the context 1000 of f/m1
+prompt too long: about 1334 tokens plus 100 of output exceed f/m1's 1000-token context
 === run: truncated
 output cut off at the length limit (f/m1, max_tokens 100); not retried
 === run: error
@@ -32,7 +32,7 @@ hi
 === run: budget
 today's model spending has reached the budget (llm.budget.daily_usd $5); not sending this one
 === health_all
-[('f', True, ''), ('k', False, 'no key: <TMP>/secrets/nokey does not exist (bin/hub llm set-key writes it)'), ('x', False, "'no such completion implementation: nosuch (have: anthropic, openai, ollama, claude, fake, none, command)'")]
+[('f', True, ''), ('k', False, 'no key: <TMP>/secrets/nokey does not exist (`agenthub llm set-key` writes it)'), ('x', False, "'no such completion implementation: nosuch (have: anthropic, openai, ollama, claude, fake, none, command)'")]
 === config_errors
 providers.a.key.secret looks like a key value: the value goes in the secrets directory ({"secret": file name}) or an environment variable ({"env": name})
 providers.a.models.huge: the group can only be fast / standard / strong
@@ -49,7 +49,7 @@ use.strong → a, but providers.a.models has no strong
 use.standard: no provider zz
 use.huge: the group can only be fast / standard / strong
 points.not-a-point: not a declared judgment point
-points.not-a-point.provider must be one of providers
+points.not-a-point.provider must name one of the providers
 points.consolidate: without a provider, model is required (the model the runtime uses)
 points.reflect-week must be an object ({model} or {provider, model?})
 === config_errors: providers not a dict

@@ -348,7 +348,7 @@ def commit(project: str, path: pathlib.Path, how: str, msg: str) -> bool:
                             f"git add STATE.md && git commit -qm {shlex.quote(msg)} && {HUB}/bin/git-safe-push.sh"],
                            cwd=path.parent, capture_output=True, text=True)
     if r.returncode != 0:
-        log(_("{project}: commit/push failed, left for tomorrow night: {output}", project=project,
+        log(_("{project}: commit/push failed (left for tomorrow night): {output}", project=project,
               output=(r.stderr or r.stdout).strip()[-200:]))
     return r.returncode == 0
 
@@ -450,7 +450,7 @@ def main() -> int:
         total += sent
     if not DRY:
         WARNED.write_text(json.dumps(sorted(warned)))
-    log(_("sent {sent} records, {failed} projects had failures", sent=total, failed=failed))
+    log(_("sent {sent} {sent:record|records}; {failed} {failed:project|projects} had failures", sent=total, failed=failed))
     return 0
 
 

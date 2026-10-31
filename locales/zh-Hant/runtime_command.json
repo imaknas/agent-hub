@@ -3,5 +3,6 @@
  "{exe} not found": "找不到 {exe}",
  "took longer than {secs} s": "超過 {secs} 秒",
  "no output: {detail}": "沒有輸出:{detail}",
- "(stderr is empty too)": "(stderr 也是空的)"
+ "(stderr is empty too)": "(stderr 也是空的)",
+ "exit {code}: {detail}": "exit {code}:{detail}"
 }

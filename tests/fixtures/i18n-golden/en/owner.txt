@@ -21,4 +21,4 @@ $ <HUB>/bin/owner.py done no-such-key
 [exit 1]
 --- stdout
 --- stderr
-no to-do no-such-key (owner.py list shows the open ones)
+no to-do with key no-such-key (`agenthub owner list` shows the open ones)
