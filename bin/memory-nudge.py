@@ -1,24 +1,25 @@
 #!/bin/sh -c exec${IFS}"${0%/*}/py"${IFS}"$0"${IFS}"$@"
-"""提醒 agent 補寫 memory 筆記——只在「專案有新 commit、筆記卻比它舊」時出聲。
+"""Remind the agent to write its memory notes: speaks up only when "the project has new commits but the notes are
+older".
 
-memory 靠 agent 自己寫,容易在忙的時候斷掉:曾經有專案對話被
-壓縮後,寫筆記的習慣沒被帶進摘要,之後 2.5 天、約 45 個 commit 都沒再記。
-指令本身還在,缺的是在對的時間點被提醒。
+Memory depends on the agent writing it, which easily lapses when busy: once a project's conversation was compacted,
+the note-writing habit didn't make it into the summary, and for the next 2.5 days, about 45 commits, nothing more was
+recorded. The instruction itself was still there; what was missing was a reminder at the right moment.
 
-兩種用法(都在專案根目錄執行):
-  --post-tool     PostToolUse(Bash) hook:stdin 是 hook JSON。指令是 git commit/push
-                  (不是在 .agent-memory 裡)、而且筆記過時,就輸出 additionalContext
-                  讓模型看到。
-  --session-start sync-local-setup.sh 在 SessionStart 呼叫(含壓縮後 source=compact):
-                  筆記過時就印一行純文字,SessionStart 的 stdout 會進 context。
+Two modes (both run in the project root):
+  --post-tool     PostToolUse(Bash) hook: stdin is the hook JSON. If the command is git commit/push
+                  (not inside .agent-memory) and the notes are stale, output additionalContext
+                  for the model to see.
+  --session-start called by sync-local-setup.sh at SessionStart (including after compaction, source=compact):
+                  if the notes are stale, print one line of plain text; SessionStart's stdout goes into context.
 
-「落後」= 最新筆記(.agent-memory/memory/ 底下檔案的 mtime;memory 每小時才同步,
-所以不看 commit)或 onboard 那一刻之後,有代表專案工作的 commit 還沒記:累積 2 個以上,
-或最早那個已經超過 30 分鐘。每次 commit 都有記的話不會被打擾。排程自動產生的 commit
-跟只動 agent-hub 管的檔案的 commit 不算。
-其他情況一律不輸出、結束碼 0,不擋任何事。
+"Behind" = since the latest note (the mtime of the files under .agent-memory/memory/; memory syncs only hourly, so
+commits aren't used) or since the moment of onboarding, commits that represent project work haven't been recorded:
+2 or more have piled up, or the earliest is over 30 minutes old. If every commit gets recorded you're never bothered.
+Commits produced automatically by schedules and commits touching only files agent-hub manages don't count.
+In every other case, no output and exit code 0; nothing is ever blocked.
 """
-from __future__ import annotations  # 系統的 python3(3.9,hook 用的就是它)也要能 import
+from __future__ import annotations  # the system python3 (3.9, the one hooks use) must be able to import this too
 
 import datetime
 import pathlib
@@ -27,22 +28,24 @@ import subprocess
 import sys
 
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
-from hublib import NON_WORK_PATHS, is_work_subject  # noqa: E402  不算專案工作的 commit,定義在 hublib
+from hublib import NON_WORK_PATHS, is_work_subject  # noqa: E402  commits that aren't project work, defined in hublib
 import i18n  # noqa: E402  no I/O until a message is shown: the silent path stays as cheap as before
 
 _ = i18n.domain(__file__)
 GIT_WRITE = re.compile(r"\bgit\b(?:\s+-C\s+\S+)?[^|;&]*\b(commit|push)\b")
-MIN_UNRECORDED = 2        # 落後 >= 2 個 commit 就提醒
-MAX_AGE_MINUTES = 30      # 或最早那個沒記的 commit 已經超過 30 分鐘
+MIN_UNRECORDED = 2        # remind when >= 2 commits behind
+MAX_AGE_MINUTES = 30      # or the earliest unrecorded commit is over 30 minutes old
 
 
 def unrecorded_commits(root: pathlib.Path):
-    """回傳最新筆記(或 onboard 那一刻)之後、代表專案工作的 commit 時間列表;不適用回傳 None。"""
+    """Return the times of commits representing project work since the latest note (or the moment of onboarding);
+    None when not applicable."""
     mem = root / ".agent-memory" / "memory"
     if not mem.is_dir():
         return None
     notes = [p.stat().st_mtime for p in mem.rglob("*.md")]
-    # 基準至少是 onboard 那一刻(memory 分支第一個 commit):onboard 之前的工作不算欠筆記
+    # the baseline is at least the moment of onboarding (the memory branch's first commit): work before onboarding
+    # owes no notes
     onboarded = subprocess.run(["git", "-C", str(root / ".agent-memory"), "log", "--reverse",
                                 "--format=%ct", "agent-memory"],
                                capture_output=True, text=True).stdout.split()
@@ -75,8 +78,10 @@ def message(times) -> str:
 
 
 def nudge_text(root, command: str | None = None) -> str | None:
-    """平台的邏輯:memory 筆記比最新 commit 舊就回傳提醒文字(沒落後就 None)。跟執行環境無關。
-    command 給了 = 剛跑完一個指令(只有 git commit/push 之類才提醒);沒給 = session 剛開始。"""
+    """The platform's logic: return the reminder text if the memory notes are older than the latest commit (None if
+    not behind). Independent of the runtime.
+    command given = a command just finished (only git commit/push and the like trigger a reminder); not given = the
+    session just started."""
     root = pathlib.Path(root)
     if command is not None and (not GIT_WRITE.search(command) or ".agent-memory" in command
                                 or ".agent-memory" in root.parts):
@@ -86,14 +91,16 @@ def nudge_text(root, command: str | None = None) -> str | None:
 
 
 def main() -> None:
-    """舊的入口:worktree 的使用者層級 hook 跟還沒換新設定的專案還在叫它(Knas 改使用者層級設定之前都要能用)。
-    --post-tool 讀 hook 的輸入、輸出透過執行環境的 inject,跟以前一字不差;--session-start 直接印文字。"""
+    """The old entry point: worktrees' user-level hooks and projects not yet on the new settings still call it (it must
+    keep working until the owner changes the user-level settings).
+    --post-tool reads the hook input and outputs through the runtime's inject, word for word as before; --session-start
+    prints text directly."""
     import runtime_ports
     mode = sys.argv[1] if len(sys.argv) > 1 else ""
     if mode == "--post-tool":
         try:
             rt = runtime_ports.load(ports=("lifecycle",))
-        except runtime_ports.Unsupported:   # 沒有 hook 的執行環境不會叫到這裡;手動跑就安靜結束
+        except runtime_ports.Unsupported:   # runtimes without hooks never get here; run by hand, it exits quietly
             return
         ev = rt.parse_event("tool_used", sys.stdin.read())
         if ev is None:
@@ -110,5 +117,5 @@ def main() -> None:
 if __name__ == "__main__":
     try:
         main()
-    except Exception:  # 提醒失敗不該影響 session
+    except Exception:  # a failed reminder must not affect the session
         pass

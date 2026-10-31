@@ -1,23 +1,24 @@
 #!/bin/sh -c exec${IFS}"${0%/*}/py"${IFS}"$0"${IFS}"$@"
-"""每週跨專案活動分析(類似 claude.ai 的 Reflect,但看的是 Claude Code 這邊)。
+"""Weekly cross-project activity analysis (like claude.ai's Reflect, but looking at the Claude Code side).
 
-claude.ai 的 Reflect 只讀 claude.ai 的聊天紀錄跟 Memory,看不到 Claude Code 的
-session;這份報告補上那一塊。產出:
-  reflect/YYYY-Www.json   這週的統計 + 分析(--llm 時)
-  reflect/index.html      所有週的報告頁(資料直接嵌在頁面裡,templates/reflect.html 套版)
+claude.ai's Reflect reads only claude.ai's chat history and Memory and can't see Claude Code
+sessions; this report fills that gap. Output:
+  reflect/YYYY-Www.json   this week's statistics + analysis (with --llm)
+  reflect/index.html      the report page for all weeks (data embedded in the page, templates/reflect.html as layout)
 
-統計全部機械計算、零 LLM:各專案訊息/session/活躍天/commit/memory 筆記(對比上週)、
-星期 × 小時的工作分佈(台北時間)、深夜比例、最長連續工作、每天收工時間、交辦方式
-(subagent、跨 session 訊息、skill)、新開始/停下來的專案。分析段落見 reflect_llm.py。
+Statistics are all computed mechanically, zero LLM: per-project messages/sessions/active days/commits/memory notes
+(compared with last week), the work distribution by weekday × hour (Taipei time), the late-night share, the longest
+continuous stretch, the daily stopping time, how work was delegated (subagents, cross-session messages, skills),
+projects started/stopped. The analysis section: see reflect_llm.py.
 
-資料:執行環境的 transcript_roots(hub 那台本機的 session,加上遙控那台用 transcript-backup.sh 備份過來的,
-只有個人 profile——工作 profile 刻意不讀)、~/git-origin/mirrors
-(每天 04:00 更新)、~/.memory-copies/<name> 的 memory 副本。
+Data: the runtime's transcript_roots (sessions local to the hub machine, plus those from the remote machine backed up
+by transcript-backup.sh, personal profile only: the work profile is deliberately not read), ~/git-origin/mirrors
+(updated daily at 04:00), the memory copies in ~/.memory-copies/<name>.
 
-用法:weekly-reflect.py [--week 2026-W40] [--llm]
-  --week 省略 = 上一個完整的週(週一到週日,台北時間)。印出寫入的 json 路徑。
+Usage: weekly-reflect.py [--week 2026-W40] [--llm]
+  --week omitted = the last full week (Monday to Sunday, Taipei time). Prints the path of the json written.
 """
-from __future__ import annotations  # 系統的 python3(3.9)也要能 import
+from __future__ import annotations  # the system python3 (3.9) must be able to import this too
 
 import argparse
 import collections
@@ -32,7 +33,7 @@ sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
 import hubconf  # noqa: E402
 import hublib  # noqa: E402
 import i18n  # noqa: E402
-import runtime_ports  # noqa: E402  對話紀錄只透過介面讀(Claude Code 只是一個實作)
+import runtime_ports  # noqa: E402  conversation records only through the interface (Claude Code is one implementation)
 
 _ = i18n.domain(__file__)
 TZ = zoneinfo.ZoneInfo("Asia/Taipei")
@@ -40,9 +41,9 @@ MIRRORS = hubconf.p("git_origin", "~/git-origin") / "mirrors"
 MEMORY_COPIES = hublib.MEMORY_COPIES
 OUT = hubconf.data_file("reflect")
 TEMPLATE = hublib.HUB / "templates" / "reflect.html"
-LATE_NIGHT = range(0, 6)       # 00:00–05:59 台北時間
-BREAK_MINUTES = 30             # 兩則訊息間隔超過這個就算休息過
-QUIET_THRESHOLD = 10           # 上週至少這麼多則、這週 0 則 → 停下來的專案
+LATE_NIGHT = range(0, 6)       # 00:00–05:59 Taipei time
+BREAK_MINUTES = 30             # a gap between two messages longer than this counts as a break
+QUIET_THRESHOLD = 10           # at least this many last week and 0 this week → a stopped project
 
 
 def week_bounds(week: str | None) -> tuple[datetime.datetime, datetime.datetime, str]:
@@ -99,7 +100,7 @@ def scan(start: datetime.datetime, end: datetime.datetime) -> dict[str, Week]:
                 w.sessions[name].add(t.session)
                 w.days[name].add(local.date())
                 w.times.append(local)
-            for a in t.actions:  # 中立的協作方式(runtime_ports.COLLABS),不認得任何 runtime 的工具名稱
+            for a in t.actions:  # neutral collaboration kinds (runtime_ports.COLLABS); knows no runtime's tool names
                 if a.collab == "subagent":
                     w.agents += 1
                 elif a.collab == "workflow":
@@ -144,10 +145,10 @@ def build_stats(label: str, start: datetime.datetime, end: datetime.datetime, we
     stretch, stretch_at = longest_stretch(this.times)
     last_per_day: dict[datetime.date, datetime.datetime] = {}
     for t in this.times:
-        day = (t - datetime.timedelta(hours=6)).date()  # 凌晨 6 點前算前一天的收工
+        day = (t - datetime.timedelta(hours=6)).date()  # before 6 a.m. counts as the previous day's stopping time
         last_per_day[day] = max(last_per_day.get(day, t), t)
     return {
-        "v": 1,  # 契約 contracts/reflect-week.v1.schema.json
+        "v": 1,  # contract contracts/reflect-week.v1.schema.json
         "week": label,
         "start": start.date().isoformat(), "end": (end - datetime.timedelta(days=1)).date().isoformat(),
         "generated": datetime.datetime.now(TZ).isoformat(timespec="minutes"),
@@ -173,7 +174,7 @@ def build_stats(label: str, start: datetime.datetime, end: datetime.datetime, we
 
 
 def build_html() -> pathlib.Path:
-    """把 reflect/*.json 全部嵌進 templates/reflect.html,寫成 reflect/index.html。"""
+    """Embed all of reflect/*.json into templates/reflect.html and write reflect/index.html."""
     weeks = [json.loads(p.read_text()) for p in sorted(OUT.glob("*-W*.json"), reverse=True)]
     data = json.dumps(weeks, ensure_ascii=False).replace("</", "<\\/")
     html = TEMPLATE.read_text().replace("/*__REFLECT_DATA__*/[]", data)
@@ -194,7 +195,8 @@ def main() -> None:
         try:
             runtime_ports.load(ports=("transcripts",))
             unsupported = None
-        except runtime_ports.Unsupported as e:   # 沒有對話紀錄:明確寫出來,不把空的統計當成「這週沒做事」送給模型
+        # no conversation records: say so explicitly rather than send the model empty statistics as "nothing done this week"
+        except runtime_ports.Unsupported as e:
             unsupported = str(e)
         stats = build_stats(label, start, end, scan(start, end) if not unsupported else {"this": Week(), "prev": Week()})
         if unsupported:

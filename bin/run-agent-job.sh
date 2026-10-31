@@ -1,34 +1,39 @@
 #!/usr/bin/env bash
-# 跑一個「需要 Claude 判斷」的排程 job(例:每日檢查、影片分析)。
-# 取代 Claude Desktop 的「Scheduled」任務:那些只在 MBP 開著、醒著時才跑;這支跑在 mini,
-# 由 scheduler.py 依 schedule.yaml 觸發,所有排程只有 schedule.yaml 一個地方管。
+# Run a scheduled job that "needs Claude's judgment" (e.g. a daily check, video analysis).
+# Replaces Claude Desktop's "Scheduled" tasks: those only run while the laptop is open and awake; this runs on the hub
+# machine, triggered by scheduler.py from schedule.yaml, so all schedules are managed in one place, schedule.yaml.
 #
-# 用法(寫在 schedule.yaml 的 command):run-agent-job.sh <name> [工作目錄] [prompt 名稱]
-#   prompt:agent-jobs/<prompt 名稱,預設 name>.md(版控);工作目錄沒給就用這個 job 自己的狀態目錄
-#   (信箱的交辦用平台的 templates/prompts/mailbox.md,hubbus 填上名字後給完整路徑;name 是 mailbox-<專案>,各自一個狀態目錄)
-#   產出:.state/agent-jobs/<name>/
-#     <YYYY-MM-DD-HHMM>.md   每次的報告(Claude 最後的回覆)
-#     status.json            最後一次的狀態(running/ok/failed、時間、session id、報告路徑)
-#     STOP                   job 自己判斷「之後不用再跑」時建立(例:停止條件成立),之後直接略過
-#   報告第一行以 🔔 開頭 = 需要 Knas 處理,狀態頁會標出來。
+# Usage (as the command in schedule.yaml): run-agent-job.sh <name> [workdir] [prompt name]
+#   prompt: agent-jobs/<prompt name, default name>.md (version-controlled); without a workdir, the job's own state
+#   directory is used
+#   (mailbox requests use the platform's templates/prompts/mailbox.md, which hubbus passes as a full path after filling
+#   in the names; name is mailbox-<project>, each with its own state directory)
+#   Output: .state/agent-jobs/<name>/
+#     <YYYY-MM-DD-HHMM>.md   each run's report (Claude's last reply)
+#     status.json            the last run's status (running/ok/failed, times, session id, report path)
+#     STOP                   created when the job itself decides "no need to run any more" (e.g. its stop condition
+#                            holds); skipped from then on
+#   A report whose first line starts with 🔔 = needs the owner's attention; the status page flags it.
 #
-# 會在背景跑完就馬上 return:scheduler 是一個一個依序跑 job,LLM job 動輒半小時,
-# 不能卡住後面準時要跑的上傳 job。成功/失敗記在 status.json,不是 scheduler 的 log。
+# Returns as soon as it's running in the background: scheduler runs jobs one at a time, an LLM job easily takes half
+# an hour, and it mustn't hold up the upload jobs behind it that have to run on time. Success/failure is recorded in
+# status.json, not the scheduler's log.
 #
-# 工作目錄是 onboard 過的專案時,那個專案的 hook 也會在這次 claude -p 裡觸發(見 librarian.sh
-# 的同類註解):SessionEnd 會 commit+push .agent-memory 的筆記——這正是我們要的(job 寫的筆記
-# 自動進 memory),job 只准 append 筆記,不碰專案程式碼。
+# When the workdir is an onboarded project, that project's hooks also fire in this claude -p run (see the similar
+# comment in librarian.sh): SessionEnd commits+pushes the .agent-memory notes, which is exactly what we want (notes the
+# job writes go into memory automatically); the job may only append notes, never touch the project's code.
 #
-# 用 claude.ai 訂閱登入(mini 的 keychain;launchd 底下讀得到,SSH 底下讀不到),
-# 憑證由 llm.py 決定:預設 headless token;登錄 job 寫 connectors: true 的(Upwork 等 claude.ai connector)
-# 會帶 LLM_AUTH=subscription,用訂閱登入——有 CLAUDE_CODE_OAUTH_TOKEN 時 connector 不會載入。
+# Uses the claude.ai subscription login (the hub machine's keychain; readable under launchd, not under SSH);
+# llm.py decides the credentials: the headless token by default; registry jobs that set connectors: true (claude.ai
+# connectors like Upwork) get LLM_AUTH=subscription and use the subscription login: with CLAUDE_CODE_OAUTH_TOKEN set,
+# connectors don't load.
 set -uo pipefail
 
 HUB="${AGENT_HUB_ROOT:-$(cd "$(dirname "$0")/.." && pwd)}"
 source "$(dirname "${BASH_SOURCE[0]}")/hubpaths.sh"
 NAME="${1:?$(hub_msg "usage: run-agent-job.sh <name> [workdir] [prompt name]")}"
 PROMPT="$HUB/agent-jobs/${3:-$NAME}.md"
-case "${3:-}" in /*) PROMPT="$3" ;; esac   # 專案登錄的 agent job:prompt 是 projects/<name>/jobs/*.md 的完整路徑
+case "${3:-}" in /*) PROMPT="$3" ;; esac  # registry agent job: the prompt is the full path of projects/<name>/jobs/*.md
 OUT="$HUB/.state/agent-jobs/$NAME"
 CWD="${2:-$OUT}"
 mkdir -p "$OUT"
@@ -54,7 +59,7 @@ if [ -f "$OUT/STOP" ]; then
   exit 0
 fi
 if [ ! -d "$CWD" ]; then
-  # 輸入不見要大聲失敗(known-issues.md):例如專案還沒搬到 mini 的 ~/workspace
+  # missing input must fail loudly (known-issues.md): e.g. the project hasn't moved to the hub machine's ~/workspace yet
   err="$(hub_msg "workdir {dir} does not exist" dir="$CWD")"
   status failed "error=$err" "started_at=$(date -Iseconds)"
   echo "run-agent-job: $err" >&2
@@ -62,8 +67,8 @@ if [ ! -d "$CWD" ]; then
 fi
 
 if [ -z "${RUN_AGENT_JOB_FOREGROUND:-}" ]; then
-  # 完全脫離(double fork + setsid):launchd 的 job 結束時會殺掉同一個 process group
-  # 裡剩下的程序,單純 nohup ... & 會跟著 scheduler 的 tick 一起被殺(2026-10-14 踩到)
+  # detach completely (double fork + setsid): when a launchd job ends, launchd kills what's left in the same process
+  # group, and a plain nohup ... & gets killed along with the scheduler's tick (hit on 2026-10-14)
   "$HUB/bin/py" - "$OUT/runner.log" "$0" "$@" <<'PY'
 import os, sys
 log, *argv = sys.argv[1:]
@@ -82,7 +87,7 @@ PY
   exit 0
 fi
 
-# ---- 背景:實際執行 ----
+# ---- background: the actual run ----
 unset CLAUDE_CODE_OAUTH_TOKEN
 export PATH="/opt/homebrew/bin:$HOME/.local/bin:/usr/bin:/bin:/usr/sbin:/sbin"
 stamp=$(date +%Y-%m-%d-%H%M)
@@ -91,10 +96,13 @@ raw="$OUT/.$stamp.json"
 status running "started_at=$(date -Iseconds)" "report=" "session_id=" "error=" "cwd=$CWD"
 
 cd "$CWD" || exit 1
-# 判斷點 agent-job(權限模式等宣告在 contracts/llm-points.yaml)
-# AGENT_JOB_POINT:信箱升級用 mailbox-escalation(固定的 allow);AGENT_JOB_ALLOW:登錄 job 宣告的 allow
-# 不載入環境裡的 MCP 伺服器(全域的含正式資料庫;關掉工具也擋不掉,10-27 封閉實驗):--strict-mcp-config。
-# 例外:登錄 job 寫 connectors: true 的(LLM_AUTH=subscription,例 Upwork)要 claude.ai connector,不能擋
+# judgment point agent-job (permission mode etc. declared in contracts/llm-points.yaml)
+# AGENT_JOB_POINT: mailbox escalation uses mailbox-escalation (a fixed allow); AGENT_JOB_ALLOW: the allow a registry
+# job declares
+# MCP servers from the environment aren't loaded (the global ones include production databases; turning tools off
+# doesn't block them, 10-27 sealed experiment): --strict-mcp-config.
+# Exception: registry jobs with connectors: true (LLM_AUTH=subscription, e.g. Upwork) need claude.ai connectors,
+# so they can't be blocked
 MCP_ARGS=()
 [ "${LLM_AUTH:-}" = "subscription" ] || MCP_ARGS=(-- --strict-mcp-config)
 "$HUB/bin/py" "$HUB/bin/llm.py" run "${AGENT_JOB_POINT:-agent-job}" --prompt-file "$PROMPT" "${MCP_ARGS[@]}" >"$raw" 2>"$raw.err"
@@ -139,7 +147,7 @@ else
   status failed "finished_at=$(date -Iseconds)" "exit=$rc" "stderr=$(tail -c 500 "$raw.err" | tr '\n' ' ')" "${mapfile_args[@]}"
 fi
 rm -f "$OUT/.parsed"
-# 狀態頁馬上反映結果(不用等下一個 scheduler tick)
+# the status page reflects the result right away (no waiting for the next scheduler tick)
 "$HUB/bin/py" "$HUB/bin/gen-status-page.py" >/dev/null 2>&1 || true
-# 舊報告留 90 天
+# keep old reports for 90 days
 find "$OUT" -name '20*.md' -mtime +90 -delete 2>/dev/null

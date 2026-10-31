@@ -1,24 +1,34 @@
-"""各專案的 git worktree 一覽(狀態頁用)跟清理(bin/prune-worktrees 用)。標準函式庫。
+"""Overview of every project's git worktrees (for the status page) and their cleanup (for bin/prune-worktrees).
+Standard library only.
 
-一個 worktree = 一個平行 session 的 branch。這裡算:branch、最後一個 commit 多久前、合併進 main 了沒、
-乾不乾淨、改了哪些檔(跟 main 比),以及兩個以上 branch 改同一個檔(提早知道會撞,不用事先宣告路徑)。
-也算最近直接 commit 到 main、沒經過合併閘門(merge-branch)的 commit 數——只是資訊,不擋。
+One worktree = one parallel session's branch. Computed here: the branch, how long ago the last commit was, whether it's
+merged into main, whether it's clean, which files it changed (compared with main), and two or more branches changing
+the same file (to know early about a collision, without declaring paths up front).
+Also the number of recent commits made directly on main without the merge gate (merge-branch): information only, never
+blocking.
 
-自動清理(auto_prune,平台 job agent-hub/prune-worktrees 每晚跑;2026-10-24 起):只碰「已合併、乾淨」的 worktree。
-  閒置天數 = 分支最後一個 commit 跟那個 worktree 的 session 對話紀錄(~/.claude/projects/<slug>/*.jsonl)
-  兩者中比較近的那個——只看 commit 會把「昨天還在聊、三天沒 commit」算成閒置三天。
-  第一級(閒置 ≥ 2 天):只刪重建得回來的依賴——`.venv`(旁邊有 uv.lock 或 pyproject.toml)、`node_modules`
-    (旁邊有 lock 檔;沒有 lock 檔的不刪,重裝不保證一樣)。資料夾、branch、檔案都留著,session 照樣接得回來;
-    標記寫在那個 worktree 的 git 目錄(.git/worktrees/<名稱>/agent-hub-deps-pruned,不會讓 worktree 變髒),
-    session 開始時 worktree-memory.sh 會提醒怎麼重建。muninn 的 worktree 一個約 190 MB,9 成是 .venv。
-  第二級(閒置 ≥ 14 天,而且沒有任何 process 的 cwd 在裡面):`git worktree remove`(不加 --force),**branch 留著**
-    (只是一個 ref;萬一還有沒封存的 session 要接回,可以從它重建)。被 ignore 的檔案只要有一個不在
-    REGENERABLE 清單(例:.env、建置產物),整個跳過、在結果裡列出原因——不猜哪些能丟。
-  **只要有 process 的 cwd 在 worktree 裡,兩級都完全不碰**:閒置但沒封存的 session 會留著一個 process
-  (10-24 實測:Desktop 推過來的 claude),那可能只是 Knas 太忙還沒回來繼續。所以這支只清「沒有任何
-  session 開著」的孤兒 worktree(10-24:37 個裡 35 個是這種)。做完了卻沒封存的子 session 看起來跟
-  暫停中的 session 一樣,這裡分不出來——那要從 session 清單(startedBy)判斷,不是這支的事。
-  由人跑的 `prune-worktrees --yes` 照舊:已合併、乾淨就連 branch 一起刪(人確認過沒有 session 開著)。
+Automatic cleanup (auto_prune, run nightly by the platform job agent-hub/prune-worktrees; since 2026-10-24): only
+touches "merged and clean" worktrees.
+  Idle days = whichever is more recent of the branch's last commit and that worktree's session transcript
+  (~/.claude/projects/<slug>/*.jsonl): looking only at commits would count "chatting yesterday, no commit for three
+  days" as idle for three days.
+  Level 1 (idle ≥ 2 days): only deletes dependencies that can be rebuilt: `.venv` (with uv.lock or pyproject.toml
+    next to it), `node_modules` (with a lock file next to it; without a lock file it's not deleted, since a reinstall
+    isn't guaranteed identical). Folder, branch and files all stay, and the session can still be resumed;
+    the marker is written in that worktree's git directory (.git/worktrees/<name>/agent-hub-deps-pruned, which
+    doesn't make the worktree dirty), and worktree-memory.sh reminds how to rebuild when a session starts. One muninn
+    worktree is about 190 MB, 90% of it .venv.
+  Level 2 (idle ≥ 14 days, and no process has its cwd inside): `git worktree remove` (without --force), **the branch
+    stays** (it's only a ref; if a session that was never archived needs resuming, it can be rebuilt from it). If even
+    one ignored file isn't on the REGENERABLE list (e.g. .env, build output), the whole worktree is skipped with the
+    reason listed in the result: no guessing what can be thrown away.
+  **If any process has its cwd in the worktree, neither level touches it at all**: an idle session that wasn't
+  archived keeps a process around (tested 10-24: the claude that Desktop pushed over), and it may just be that the
+  owner is busy and hasn't come back to it yet. So this only cleans orphan worktrees with "no session open at all"
+  (10-24: 35 of 37 were like that). A child session that is done but not archived looks the same as a paused session,
+  and this can't tell them apart: that has to be decided from the session list (startedBy), not here.
+  The `prune-worktrees --yes` a person runs works as before: merged and clean → deleted along with the branch (the
+  person has confirmed no session is open).
 """
 from __future__ import annotations
 
@@ -37,10 +47,10 @@ _ = i18n.domain(__file__)
 
 DEPS_IDLE_DAYS = 2
 REMOVE_IDLE_DAYS = 14
-# 依賴資料夾 → 旁邊要有其中一個「重建配方」才刪
+# dependency folder → it's deleted only with one of these "rebuild recipes" next to it
 DEPS = {".venv": ("uv.lock", "pyproject.toml"), "node_modules": ("package-lock.json", "pnpm-lock.yaml", "yarn.lock")}
 REBUILD = {".venv": "uv sync", "node_modules": "npm ci"}
-# 第二級:被 ignore 的東西只有這些(名稱)時才整個移除
+# level 2: remove the whole worktree only when the ignored things are just these (names)
 REGENERABLE = {".venv", "node_modules", "__pycache__", ".pytest_cache", ".ruff_cache", ".mypy_cache", ".DS_Store"}
 MARKER = "agent-hub-deps-pruned"
 
@@ -81,7 +91,8 @@ def project_worktrees(repo: pathlib.Path) -> list[dict]:
 
 
 def ungated_main_commits(repo: pathlib.Path, project: str, days: int = 7) -> int:
-    """最近 days 天 main 上不是 merge-branch 合進來的 commit 數(只算,不擋)。"""
+    """The number of commits on main in the last days days that didn't come in through merge-branch (counted only,
+    never blocked)."""
     base = base_branch(repo)
     if not base:
         return 0
@@ -139,16 +150,17 @@ def prune(project: str | None, yes: bool) -> int:
 
 
 def _cwds_in_use() -> list[str]:
-    """所有 process 的 cwd(hubconf.process_cwds:lsof 或 /proc)。閒置的 Desktop session 也有一個 process 待在它的 worktree。"""
+    """Every process's cwd (hubconf.process_cwds: lsof or /proc). An idle Desktop session also has a process sitting
+    in its worktree."""
     import hubconf
     return [cwd for _pid, _name, cwd in hubconf.process_cwds()]
 
 
 def _transcript_age_days(path: str) -> float | None:
-    import runtime_ports  # 對話紀錄只透過介面讀(Claude Code 只是一個實作)
+    import runtime_ports  # conversation records only through the interface (Claude Code is one implementation)
     try:
         last = runtime_ports.load(ports=("transcripts",)).last_activity(path)
-    except runtime_ports.Unsupported:   # 沒有對話紀錄:只看資料夾本身的時間
+    except runtime_ports.Unsupported:   # no conversation records: look only at the folder's own time
         return None
     return round((time.time() - last.timestamp()) / 86400, 1) if last else None
 
@@ -159,7 +171,7 @@ def _idle_days(w: dict) -> float | None:
 
 
 def _unknown_ignored(p: pathlib.Path) -> list[str]:
-    """被 ignore、而且不在 REGENERABLE 的東西(第二級遇到就跳過)。"""
+    """Things that are ignored and not in REGENERABLE (level 2 skips when it meets one)."""
     out = []
     for line in git(p, "status", "--porcelain", "--ignored").splitlines():
         if line.startswith("!! "):
@@ -180,7 +192,8 @@ def _size_mb(p: pathlib.Path) -> float:
 
 
 def auto_prune(dry_run: bool) -> dict:
-    """每晚的自動清理(見檔頭)。回傳結果(也寫進 .state/worktree-prune.json 給狀態頁)。"""
+    """The nightly automatic cleanup (see the file header). Returns the result (also written to
+    .state/worktree-prune.json for the status page)."""
     in_use = _cwds_in_use()
     res = {"at": datetime.datetime.now().astimezone().isoformat(timespec="seconds"), "dry_run": dry_run,
            "deps": [], "removed": [], "skipped": [], "freed_mb": 0.0}
@@ -194,7 +207,7 @@ def auto_prune(dry_run: bool) -> dict:
             label = f"{name} {w['branch']}"
             if idle is None or idle < DEPS_IDLE_DAYS:
                 continue
-            # 有 session 開在裡面(就算閒置、只是 Knas 還沒回來繼續)就完全不碰,兩級都一樣
+            # a session open inside (even idle, the owner just not back yet) → don't touch it at all, either level
             if any(c == str(p) or c.startswith(str(p) + "/") for c in in_use):
                 continue
             if idle >= REMOVE_IDLE_DAYS:
