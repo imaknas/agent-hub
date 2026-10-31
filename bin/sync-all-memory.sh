@@ -37,7 +37,7 @@ if [ -z "$SERVER" ] || [ -d "$GIT_ORIGIN" ] || ssh -o ConnectTimeout=10 -o Batch
   OFFLINE=""
 else
   OFFLINE=1
-  log "連不到 mini,這輪只在本機 commit、不 push"
+  log "$(hub_msg "cannot reach the hub machine; this round commits locally and does not push")"
 fi
 export AGENT_HUB_OFFLINE="$OFFLINE"
 
@@ -55,14 +55,18 @@ export AGENT_HUB_OFFLINE="$OFFLINE"
     cd "$mem" || exit 1
     before=$(git rev-parse HEAD)
     "$HUB/bin/with-lock.sh" "$HUB/bin/git-sync-memory.sh" >>"$LOG" 2>&1 \
-      || log "$name: git-sync-memory 失敗"
+      || log "$(hub_msg "{name}: git-sync-memory failed" name="$name")"
     if [ "$(git rev-parse HEAD)" != "$before" ]; then
-      if [ -n "$OFFLINE" ]; then log "$name: 已 commit(連不到 mini,先不 push) 新的 memory"; else log "$name: 已 commit+push 新的 memory"; fi
+      if [ -n "$OFFLINE" ]; then
+        log "$(hub_msg "{name}: committed new memory (the hub machine cannot be reached, not pushed yet)" name="$name")"
+      else
+        log "$(hub_msg "{name}: committed and pushed new memory" name="$name")"
+      fi
     fi
     if [ -z "$OFFLINE" ] && [ -n "$(git rev-list '@{u}..HEAD' 2>/dev/null)" ]; then
       "$HUB/bin/with-lock.sh" "$HUB/bin/git-safe-push.sh" >>"$LOG" 2>&1 \
-        && log "$name: 補 push 了之前沒推出去的 commit" \
-        || log "$name: 補 push 失敗"
+        && log "$(hub_msg "{name}: pushed the commits that had not gone out" name="$name")" \
+        || log "$(hub_msg "{name}: the catch-up push failed" name="$name")"
     fi
   )
 done

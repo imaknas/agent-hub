@@ -17,23 +17,24 @@ if [ -z "${_COMMIT_HUB_LOCKED:-}" ]; then
   _COMMIT_HUB_LOCKED=1 exec "$HUB/bin/with-lock.sh" "$0" "$@"
 fi
 
-[ $# -ge 2 ] || { echo "用法: commit-hub-files.sh \"<message>\" <path>..." >&2; exit 1; }
+source "$HUB/bin/hubpaths.sh"
+[ $# -ge 2 ] || { hub_say "usage: commit-hub-files.sh \"<message>\" <path>..." >&2; exit 1; }
 msg="$1"; shift
 
 # 實例目錄(docs/design/new-user.md 3.0/3.1):git 只放 code 跟 config。舊的擺法(沒有 .hub-home)一切照舊、在 hub 裡 commit;
 # 新的擺法在 config repo 裡 commit 那裡有的檔案,data(digest、todo、review-log、reflect…)不進 git,直接略過。
-source "$HUB/bin/hubpaths.sh"
 if [ "$HUB_CONFIG" != "$HUB" ]; then
   keep=()
   for f in "$@"; do
     if [ -e "$HUB_CONFIG/$f" ] || git -C "$HUB_CONFIG" ls-files --error-unmatch -- "$f" >/dev/null 2>&1; then
       keep+=("$f")
     else
-      echo "commit-hub-files: $f 不是 config(data 不進 git),略過"
+      hub_say "commit-hub-files: {file} is not config (data does not go into git), skipped" file="$f"
     fi
   done
   [ ${#keep[@]} -gt 0 ] || exit 0
-  git -C "$HUB_CONFIG" rev-parse --git-dir >/dev/null 2>&1 || { echo "commit-hub-files: $HUB_CONFIG 不是 git repo,不 commit"; exit 0; }
+  git -C "$HUB_CONFIG" rev-parse --git-dir >/dev/null 2>&1 \
+    || { hub_say "commit-hub-files: {dir} is not a git repo, nothing committed" dir="$HUB_CONFIG"; exit 0; }
   cd "$HUB_CONFIG" || exit 1
   set -- "${keep[@]}"
 fi
@@ -46,15 +47,15 @@ for f in "$@"; do
     paths+=("$f")
   fi
 done
-[ ${#paths[@]} -gt 0 ] || { echo "commit-hub-files: $* 都不存在,不 commit"; exit 0; }
+[ ${#paths[@]} -gt 0 ] || { hub_say "commit-hub-files: none of {paths} exists, nothing committed" paths="$*"; exit 0; }
 set -- "${paths[@]}"
 
 if [ -z "$(git status --porcelain -- "$@")" ]; then
-  echo "commit-hub-files: $* 沒有變化,不 commit"
+  hub_say "commit-hub-files: {paths} unchanged, nothing committed" paths="$*"
   exit 0
 fi
 
 git add -- "$@" \
   && git commit -q -m "$msg" -- "$@" \
   && { [ -z "$(git remote)" ] || "$HUB/bin/git-safe-push.sh"; } \
-  && echo "commit-hub-files: 已 commit+push:$*"
+  && hub_say "commit-hub-files: committed and pushed: {paths}" paths="$*"

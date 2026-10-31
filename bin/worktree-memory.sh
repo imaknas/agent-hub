@@ -21,6 +21,7 @@
 set -uo pipefail
 
 HUB="${AGENT_HUB_ROOT:-$(cd "$(dirname "$0")/.." && pwd)}"
+source "$(dirname "${BASH_SOURCE[0]}")/hubpaths.sh"
 event="${1:-}"
 
 git_dir=$(git rev-parse --path-format=absolute --git-dir 2>/dev/null) || exit 0
@@ -53,16 +54,16 @@ case "$event" in
     (cd .agent-memory && "$HUB/bin/with-lock.sh" git pull -q) >/dev/null 2>&1
     instr=$("$HUB/bin/py" "$HUB/bin/hub-runtime" instructions-file "$PWD" 2>/dev/null)
     if [ -n "$linked" ] && [ -n "$instr" ] && [ -f "$instr" ]; then
-      echo "(這個 session 在 $main 的 git worktree 裡。memory 已經接上主 checkout 的 .agent-memory;"
-      echo " $instr 在 session 開始時還不存在,內容如下,照它做:)"
+      hub_say "(this session is in a git worktree of {main}. Memory is linked to the main checkout's .agent-memory;
+ {file} did not exist yet when the session started, so here it is; follow it:)" main="$main" file="$instr"
       cat "$instr"
     fi
     "$HUB/bin/py" "$HUB/bin/memory-nudge.py" --session-start 2>/dev/null
     # 每晚的 worktree 清理(bin/worktrees.py auto_prune)刪過這裡的依賴:提醒怎麼重建,免得第一次跑測試時一頭霧水
     if [ -f "$git_dir/agent-hub-deps-pruned" ]; then
-      echo "(這個 worktree 閒置期間,每晚的清理刪掉了重建得回來的依賴以節省空間;要跑程式或測試前先重建:)"
+      hub_say "(while this worktree sat idle, the nightly cleanup removed dependencies that can be rebuilt, to save space; rebuild them before running code or tests:)"
       sed 's/^/  /' "$git_dir/agent-hub-deps-pruned"
-      echo "  重建好之後刪掉標記:rm \"$git_dir/agent-hub-deps-pruned\""
+      hub_say "  once rebuilt, remove the marker: rm \"{marker}\"" marker="$git_dir/agent-hub-deps-pruned"
     fi
     [ -n "$hook_json" ] && printf '%s' "$hook_json" | "$HUB/bin/py" "$HUB/bin/hubbus" hook session-start 2>/dev/null
     ;;

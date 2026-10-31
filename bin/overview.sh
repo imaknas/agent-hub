@@ -16,31 +16,35 @@ SERVICES="$HUB_CONFIG/services.tsv"
 
 
 FILTER="${1:-}"
+# the same for every project: asked once, not once per project
+SERVICES_HEADING="$(hub_msg "-- bound services --")"
+NO_SERVICES="$(hub_msg "(no services registered)")"
 
 "$AGENT_HUB/bin/py" "$AGENT_HUB/bin/hubconf.py" roster | while IFS=$'\t' read -r name local_path origin memory_bare_repo; do
   [ -z "$name" ] && continue
   [ -n "$FILTER" ] && [ "$name" != "$FILTER" ] && continue
 
   echo "=========================================="
-  echo "專案:$name"
-  echo "路徑:$local_path"
-  echo "origin:$origin"
+  hub_say "Project: {name}
+Path: {path}
+origin: {origin}" name="$name" path="$local_path" origin="$origin"
   echo
 
-  echo "-- 綁定的服務 --"
+  echo "$SERVICES_HEADING"
   if [ -f "$SERVICES" ]; then
     matched=$(awk -F'\t' -v p="$name" '$2==p{print}' "$SERVICES")
     if [ -z "$matched" ]; then
-      echo "(沒有登記任何服務)"
+      echo "$NO_SERVICES"
     else
       echo "$matched" | while IFS=$'\t' read -r label _project owner _plist purpose _notes; do
-        running="(這台機器上無法查 launchctl 狀態,或不是用 launchd 管理)"
         if command -v launchctl >/dev/null 2>&1; then
           if launchctl list 2>/dev/null | awk '{print $3}' | grep -qxF "$label"; then
             running="running"
           else
             running="NOT running"
           fi
+        else
+          running="$(hub_msg "(launchctl status cannot be checked on this machine, or it is not managed by launchd)")"
         fi
         echo "  - $label [$running] ($owner) — $purpose"
       done
@@ -67,10 +71,11 @@ FILTER="${1:-}"
   if [ -f "$state_file" ]; then
     cat "$state_file"
   elif [ -f "$mini_clone_state_file" ]; then
-    echo "(讀自 mini 的 memory-only clone:$mini_clone_state_file)"
+    hub_say "(read from the hub machine's memory-only clone: {file})" file="$mini_clone_state_file"
     cat "$mini_clone_state_file"
   else
-    echo "(這台機器上讀不到 STATE.md——試過 $state_file 跟 $mini_clone_state_file,都不存在)"
+    hub_say "(no STATE.md readable on this machine: tried {state} and {copy}, neither exists)" \
+      state="$state_file" copy="$mini_clone_state_file"
   fi
   echo
 done
