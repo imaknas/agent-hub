@@ -28,6 +28,9 @@ import sys
 
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
 from hublib import NON_WORK_PATHS, is_work_subject  # noqa: E402  不算專案工作的 commit,定義在 hublib
+import i18n  # noqa: E402  no I/O until a message is shown: the silent path stays as cheap as before
+
+_ = i18n.domain(__file__)
 GIT_WRITE = re.compile(r"\bgit\b(?:\s+-C\s+\S+)?[^|;&]*\b(commit|push)\b")
 MIN_UNRECORDED = 2        # 落後 >= 2 個 commit 就提醒
 MAX_AGE_MINUTES = 30      # 或最早那個沒記的 commit 已經超過 30 分鐘
@@ -49,7 +52,7 @@ def unrecorded_commits(root: pathlib.Path):
                          capture_output=True, text=True).stdout
     times = []
     for line in out.splitlines():
-        ts, _, subject = line.partition("\t")
+        ts, _sep, subject = line.partition("\t")
         if ts.isdigit() and int(ts) > baseline and is_work_subject(subject):
             times.append(int(ts))
     return times
@@ -65,9 +68,10 @@ def should_nudge(times) -> bool:
 def message(times) -> str:
     today = datetime.date.today().isoformat()
     since = datetime.datetime.fromtimestamp(min(times)).strftime("%m-%d %H:%M")
-    return (f"memory 筆記落後了:從 {since} 起這個專案有 {len(times)} 個 commit 還沒記進 "
-            f".agent-memory/memory/。在 .agent-memory/memory/{today}.md 補一段做了什麼、"
-            f"做了什麼決定、踩到什麼坑(原始紀錄就好,不用摘要),再繼續。")
+    return _("memory notes are behind: since {since} this project has {n} commits not yet recorded in "
+             ".agent-memory/memory/. Add a section to .agent-memory/memory/{today}.md on what was done, "
+             "what was decided and what went wrong (raw notes are fine, no summary needed), then carry on.",
+             since=since, n=len(times), today=today)
 
 
 def nudge_text(root, command: str | None = None) -> str | None:

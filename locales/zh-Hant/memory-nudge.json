@@ -1,0 +1,3 @@
+{
+ "memory notes are behind: since {since} this project has {n} commits not yet recorded in .agent-memory/memory/. Add a section to .agent-memory/memory/{today}.md on what was done, what was decided and what went wrong (raw notes are fine, no summary needed), then carry on.": "memory 筆記落後了:從 {since} 起這個專案有 {n} 個 commit 還沒記進 .agent-memory/memory/。在 .agent-memory/memory/{today}.md 補一段做了什麼、做了什麼決定、踩到什麼坑(原始紀錄就好,不用摘要),再繼續。"
+}
