@@ -186,6 +186,9 @@ def auto_prune(dry_run: bool) -> dict:
            "deps": [], "removed": [], "skipped": [], "freed_mb": 0.0}
     for name, info in overview().items():
         repo = hubconf.ROOT if name == hubconf.hub_project() else hubconf.workspace(name)
+        if info.get("unavailable"):
+            res["skipped"].append(_("{project}: its worktrees could not be read ({why}); none touched", project=name,
+                                    why=info["unavailable"][:200]))
         for w in info["worktrees"]:
             if not (w["exists"] and w["merged"] and w["clean"]):
                 continue

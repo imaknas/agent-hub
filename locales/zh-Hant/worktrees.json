@@ -9,5 +9,6 @@
  "{date} {dep} → rebuild: {cmd}": "{date} {dep} → 重建:{cmd}",
  "{label} {dep} (idle {days} {days:day|days}, {mb} MB)": "{label} {dep}(閒置 {days} 天,{mb} MB)",
  "{label}: its ignored files could not be listed; kept": "{label}:列不出它被忽略的檔案;保留",
- "{label}: removing {dep} failed: {err}": "{label}:刪除 {dep} 失敗:{err}"
+ "{label}: removing {dep} failed: {err}": "{label}:刪除 {dep} 失敗:{err}",
+ "{project}: its worktrees could not be read ({why}); none touched": "{project}:讀不到它的 worktree({why});一個都沒動"
 }

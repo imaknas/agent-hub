@@ -129,6 +129,14 @@ class StatusPage(Base):
         self.assertEqual(ov["proj"]["worktrees"], [])
         self.assertIn("refused", ov["proj"]["unavailable"])
 
+    def test_nightly_cleanup_says_which_project_it_could_not_read(self):
+        import worktrees
+        self.repo("proj")
+        with mock.patch.object(hubconf, "STATE", self.tmp / "state"), \
+                mock.patch.object(worktrees, "_cwds_in_use", lambda: []):
+            r = worktrees.auto_prune(dry_run=True)
+        self.assertTrue(any(s.startswith("proj") and "refused" in s for s in r["skipped"]), r["skipped"])
+
     def test_unsandboxed_projects_still_get_facts(self):
         import worktrees
         r = self.repo("open", sandbox=False)
