@@ -36,14 +36,17 @@ import sys
 import tempfile
 
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
+import i18n  # noqa: E402
 from runtime_ports import CompletionResult, TaskResult  # noqa: E402
+
+_ = i18n.domain(__file__)
 
 
 def _conf() -> dict:
     import hubconf
     c = hubconf.get("runtime.command") or {}
     if not c.get("run"):
-        raise RuntimeError("hub.json runtime.command.run 沒有設(指令樣板)")
+        raise RuntimeError(_("hub.json runtime.command.run is not set (the command template)"))
     return c
 
 
@@ -82,13 +85,13 @@ def _run(prompt: str, model: str | None, cwd: str | None, env: dict | None, time
             p = subprocess.Popen(argv, cwd=cwd or None, env=e, stdin=subprocess.PIPE if use_stdin else subprocess.DEVNULL,
                                  stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, start_new_session=True)
         except FileNotFoundError:
-            return None, "", f"找不到 {argv[0]}"
+            return None, "", _("{exe} not found", exe=argv[0])
         try:
             out, err = p.communicate(prompt if use_stdin else None, timeout=timeout_s)
         except subprocess.TimeoutExpired:
             os.killpg(p.pid, signal.SIGKILL)   # 整個程序群組:工具自己叫起的子程序也一起停
             p.communicate()
-            return None, "", f"超過 {timeout_s} 秒"
+            return None, "", _("took longer than {secs} s", secs=timeout_s)
         if conf.get("output_file") and of.exists():
             out = of.read_text()
         return p.returncode, out, err
@@ -108,7 +111,7 @@ def run(task) -> TaskResult:
     if code != 0:
         return TaskResult(False, error=f"exit {code}:{(err.strip() or out.strip())[-300:]}")
     if not out.strip():
-        return TaskResult(False, error=f"沒有輸出:{err.strip()[-300:] or '(stderr 也是空的)'}")
+        return TaskResult(False, error=_("no output: {detail}", detail=err.strip()[-300:] or _("(stderr is empty too)")))
     so = None
     if task.output_schema is not None:
         import completion
@@ -126,7 +129,7 @@ def complete(req, conf) -> CompletionResult:
     if code is None or code != 0:
         return CompletionResult(False, stop="error", error=err or f"exit {code}")
     if not out.strip():
-        return CompletionResult(False, stop="error", error=f"沒有輸出:{err.strip()[-300:]}")
+        return CompletionResult(False, stop="error", error=_("no output: {detail}", detail=err.strip()[-300:]))
     return CompletionResult(True, text=out, stop="end")
 
 
@@ -136,4 +139,4 @@ def health(conf) -> tuple:
     except RuntimeError as e:
         return False, str(e)
     exe = c["run"][0]
-    return (bool(shutil.which(exe)), "" if shutil.which(exe) else f"找不到 {exe}")
+    return (bool(shutil.which(exe)), "" if shutil.which(exe) else _("{exe} not found", exe=exe))

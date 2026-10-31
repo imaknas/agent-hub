@@ -1,0 +1,7 @@
+{
+ "hub.json runtime.command.run is not set (the command template)": "hub.json runtime.command.run 沒有設(指令樣板)",
+ "{exe} not found": "找不到 {exe}",
+ "took longer than {secs} s": "超過 {secs} 秒",
+ "no output: {detail}": "沒有輸出:{detail}",
+ "(stderr is empty too)": "(stderr 也是空的)"
+}
