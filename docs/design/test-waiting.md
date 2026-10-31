@@ -11,8 +11,9 @@
 > contrarian), findings taken as a union and each checked against the source before use. Only Claude models were
 > available on this machine (no other provider configured), so the reviewers differ by model size, not model family;
 > their errors may be correlated. What changed: the measurement now deduplicates branched transcripts, counts deploy
-> scripts and subagents (1, 2.1); several facts about the code were wrong (A1, B1, B2); the order of work is reopened
-> (7), because three of four reviewers independently argued against waiting for the scopes refactor.
+> scripts and subagents (1, 2.1); several facts about the code were wrong (A1, B1, B2). Three of four reviewers argued
+> for building the cache on whole trees before the scopes refactor; the owner decided the other way — final
+> architecture first, no workarounds (7).
 
 ## Summary
 
@@ -26,8 +27,9 @@
   13 s at one moment and 45–86 s at another).
 - What the review changed in the plan: a test cache helps most if it also covers deploy scripts; the registry today
   cannot even hold a test command for a project without a service (the-crucible hit this); agent-hub's worktree switch
-  needs `hubconf` to find the instance from a worktree, or the private-names check is silently skipped; and the cheap,
-  measured savings should not wait for the projects-and-repos refactor (7, a decision for the owner).
+  needs `hubconf` to find the instance from a worktree, or the private-names check is silently skipped. Everything is
+  built toward the final architecture with no workarounds (owner, 10-31), so the cache and tiers come after the
+  projects-and-repos resolver (7).
 
 ## 1. How this was measured
 
@@ -240,8 +242,9 @@ may skip its tests for a tree that passed.
 
 ### B2. Test commands in the registry: fix the gap first, then tiers
 
-- **The gap (needed now):** a project without a service runtime cannot declare a test command (2.4). Fix: a test
-  command that does not imply a runtime directory (and does not change jobs' default `cwd`).
+- **The gap:** a project without a service runtime cannot declare a test command (2.4). Fixed by the final test
+  declaration (section 7, step 3), which does not imply a runtime directory or change jobs' default `cwd` — not by a
+  stopgap field.
 - **Tiers:** `runtime.test` is a string in `contracts/project.v1.schema.json` and in the validator; a mapping
   (`fast`/`full`/`e2e`) would crash today's readers (`registry.py` passes it to `shlex.split`; `merge-branch` to the
   shell). So either new keys beside it (e.g. `test_fast`, `test_e2e: {cmd, paths}`) — additive, no version bump — or a
@@ -327,34 +330,36 @@ must wait on unless a background gate (B7) hides it. Top-level, deduplicated, pe
   hit can make it zero; a failure makes it more); for agent-hub, one gate run per code commit.
 - Not counted: contention, which inflates the "now" row.
 
-## 7. Order of work — reopened by the review
+## 7. Order of work
 
-**Do now, in this order (none depends on how projects map to repos):**
+**Decided 10-31 (owner): build toward the final architecture; no workarounds.** Nothing is built in a form that a later
+step replaces. The final architecture is the one in `projects-and-repos.md` (projects, repos and scopes) with the test
+pieces here built on it. So B1 and B2 are built on the resolver; the reviewers' alternative (whole trees now, scopes
+later) and the middle option (a project-local path list) are not taken, since both would be rebuilt. The registry gap
+that blocks the-crucible is fixed by the final test declaration, not by a stopgap field.
 
-1. **B2's gap:** a test command for projects without a service runtime (the-crucible is waiting on it).
-2. **A1 prerequisite 3:** `hubconf` resolving the instance and `.state` from a worktree, and `test-gate` failing instead
-   of skipping when the private-names list is missing.
-3. **B6** (the baseline, at today's gate speed), **B4** (container cleanup, Spotlight, load-aware workers), **B5** (the
-   rules that exist), **A4** (complete failure output).
-4. **A3** (`@en` by path, split the two slow flow tests).
-5. **A1** (lint-only worktree commits, `runtime.test`, then agent-hub on worktrees).
-6. **B3** (nightly full run, after B4's cleanup).
+1. **Foundations every later step stands on** (final as built):
+   - `hubconf` resolves the instance pointer and `.state` through the git common dir, so worktrees see the same
+     instance; `test-gate` fails instead of skipping when a deployment's private-names list is missing (A1, prerequisite
+     3; `projects-and-repos.md` step 0).
+   - B6, the waiting report, so every later step has a before and after.
+   - B4: the container cleanup job, the Spotlight check, load-aware worker counts.
+   - A4 (complete failure output) and the B5 rules that already hold (targeted tests while working; memory note and
+     report before `merge-branch`).
+   - A3's test splits: profile and split `test_registrar_flow` and `test_librarian_flow` (suite work, independent of
+     how tests are selected).
+2. **A1:** agent-hub on worktrees and `merge-branch` (lint-only commits in worktrees; `runtime.test` = `bin/test-gate
+   --all`, a plain string, which stays valid as the full tier in the final declaration).
+3. **`projects-and-repos.md` steps 1–3, in a worktree:** characterization tests; the resolver and registry fields
+   **including the final test declaration** (B2: tiers as additive keys, paths, an allowlist of what counts as code,
+   no runtime directory implied — the-crucible resends its test command then); callers moved onto the resolver.
+4. **On the resolver:** B1 (cache keyed by residual scope hashes and the resolved command, consulted by `merge-branch`,
+   `agenthub test` and the deploy path), B2's tiers in `merge-branch` (e2e at merge only if the transcript
+   classification in B2 shows most agent e2e runs were safety runs), B3 (nightly full run), A3's `@en` pass by B2's path
+   rule.
+5. **`projects-and-repos.md` steps 5–8:** memory backups and the clone migration, runtime capabilities, onboarding and
+   recovery for subfolder and folder-only projects, the end-to-end monorepo.
+6. **After a week of B6:** decide B7 (merge queue) and A2 (commit-time selection) on the numbers.
 
-**Then — the reopened decision.** On 10-31 the owner chose to build B1 (cache) and B2's tiers on scopes, after the
-projects-and-repos refactor's first three steps. Three of the four reviewers, independently, argued for building them
-now on whole trees and repo-relative paths instead:
-
-- *For waiting (the reviewers):* `projects-and-repos.md` itself says a scope at `/` gives exactly today's key, so moving
-  to scopes later adds a path argument to one helper, not a rebuild. None of the 26 registered projects is nested in
-  another or shares a repo; none of the three measured projects would get anything from scopes. Meanwhile the measured
-  savings (deploy re-runs, no-op-rebase merges, agent-hub's gate) wait behind a refactor of ~50 files, which itself
-  should only start from a worktree after A1 (the architecture reviewer: otherwise a half-edited `hubconf.py` is live
-  for every hook on the machine).
-- *For building on scopes (the r2 decision):* one design, built once, in the general shape the owner wants; the cache
-  and tier code would be written against the resolver from the start, and nothing has to be revisited when the first
-  shared repo appears.
-- *Middle option (the architecture reviewer):* B1/B2 take a list of paths within one project (what decides tests and
-  keys), a strict subset of what full scopes need; identity (mailbox, memory, privacy per subfolder) waits until a
-  shared repo exists.
-
-Decided later: B7 and A2, on B6's numbers.
+Cost of this order, stated so it is a known choice: the measured savings that B1/B2 bring (deploy re-runs, merges whose
+rebase was a no-op, agent-hub's gate) arrive after steps 1–3, and the-crucible's merges stay untested until step 3.

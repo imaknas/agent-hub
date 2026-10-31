@@ -310,7 +310,8 @@ Following "tests before rewrite": pin today's behaviour first, then change it.
    merged main.
 1. Characterization tests for today's single-repo behaviour: onboarding, `merge-branch`, `project_of` in hubbus,
    sync-local-setup, worktree-memory, the sandbox policy's write paths.
-2. Resolver + registry fields (`scopes`, `depends_on`, `repos/`) and the contract work in section 3, with every existing
+2. Resolver + registry fields (`scopes`, `depends_on`, `repos/`, and the final test declaration from `test-waiting.md`
+   B2) and the contract work in section 3, with every existing
    registry file producing the same answers as today (test). Ratchet test: no new direct reads of `paths.workspace`,
    `registry.dirs()["workspace"]` or `hubbus`'s own project table. Code that uses `workspace` both as the repo root and
    as the working folder (`propose_apply.py`, `lease-runner.py`) names the two.
@@ -331,10 +332,10 @@ Following "tests before rewrite": pin today's behaviour first, then change it.
 - Memory as a clone for every project, including 1:1 ones (one mechanism, the proposal), or keep worktrees there and
   use clones only in shared repos?
 - Should idea sandboxes become folder-only projects?
-- **Reopened by the review:** on 10-31 the owner decided to build test-waiting's B1/B2 on scopes, after steps 1–3. Three
-  of four reviewers independently argued for building B1/B2 now on whole trees and repo-relative paths and starting
-  this refactor when the first shared repo exists; one proposed a middle way (a project-local list of paths that only
-  decides tests and cache keys, a subset of scopes). The arguments are in `test-waiting.md` section 7.
+- **Decided 10-31 (owner): final architecture first, no workarounds.** test-waiting's B1/B2 are built on this model
+  (step 4), and the final test declaration (tiers, paths, no runtime directory implied) is part of step 2's registry
+  fields. The reviewers' alternatives (whole trees now; a project-local path list) are not taken. Order of all steps:
+  `test-waiting.md` section 7.
 - Mount memory clones inside the scope folder, or outside the repo with a symlink in (section 4)?
 
 ## 9. Blind review (r2): findings and what each changed
