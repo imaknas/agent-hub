@@ -1,220 +1,303 @@
-# 想法沙盒的額外能力(capabilities)+ 跟執行環境無關的宣告
+# Extra capabilities for idea sandboxes + declarations independent of the runtime
 
-> **狀態**:10-25 Knas 確認 A–F 照建議;同一天實作完成並驗證(見最後的「10-25 實作與驗證」)。
+> **Status**: on 10-25 the owner confirmed A–F as proposed; implemented and verified the same day (see "10-25
+> implementation and verification" at the end).
 
-來源:Muninn 的請求 `m10251437-1f92`(10-25 14:37)。Knas 同意的方向:平台維護一組固定的「能力」,專案宣告要用哪些,
-沙盒裡的 session 透過同一支平台指令在對應的限制下執行。第一個能力是 `gpu`。
-10-25 Knas 另外指定:**登錄裡的能力用跟執行環境無關的詞彙宣告,Claude 專用的翻譯集中在一處**。
+Source: the assistant's request `m10251437-1f92` (10-25 14:37). The direction the owner agreed: the platform maintains
+a fixed set of "capabilities", projects declare which they use, and sessions in a sandbox run things under the
+corresponding limits through one platform command. The first capability is `gpu`.
+The owner also specified on 10-25: **capabilities in the registry are declared in runtime-independent vocabulary, with
+the Claude-specific translation gathered in one place**.
 
-草稿跟實測是另一個 agent-hub session(「測試」)做的,10-25 交接給這份設計的 session,之後由這邊負責設計、實作跟 commit。
-profile 原型跟兩支逃脫測試複製在 `.state/cap-prototype/`(不進版控)。
+The draft and live tests were done by another agent-hub session ("testing"), handed over on 10-25 to the session of
+this design, which from then on owns the design, implementation and commits. The profile prototype and the two escape
+tests are copied in `.state/cap-prototype/` (not in version control).
 
-## 起因
+## Why
 
-`idea-1`(用照片重建房間 3D)要用 Blender 出圖。Blender 在 Mac 上只支援 Metal,Claude Code 的 sandbox 擋住它
-偵測 GPU,一啟動就崩潰;現在只能請 Knas 自己去終端機跑。Claude Code 的 sandbox 沒有開 GPU/IOKit/Metal 的設定,
-也不能自訂 Seatbelt profile。
+`idea-1` (rebuilding a room in 3D from photos) needs Blender to render. On the Mac, Blender only supports Metal, and
+Claude Code's sandbox blocks it from detecting the GPU, so it crashes at start; today the owner has to run it himself
+in a terminal. Claude Code's sandbox has no setting to open GPU/IOKit/Metal, and no custom Seatbelt profile.
 
-「不用 Knas 動手」的意思(10-25 Knas 在「測試」session 確認):**他不用自己操作 Blender**。手機上的確認照舊:
-work 模式下 `hub-run …` 是一個 Bash 指令,每次都會送到手機讓他按允許。這道人工把關不變。
+What "no hands-on work from the owner" means (confirmed by the owner in the "testing" session on 10-25): **he does not
+have to operate Blender himself**. Confirmation on the phone stays as it is: in work mode `hub-run …` is a Bash
+command, sent to the phone every time for him to allow. That human check does not change.
 
-## 10-25 實測(「測試」session;都在暫存目錄或測試沙盒,做完已刪)
+## 10-25 live tests (the "testing" session; all in temporary directories or test sandboxes, deleted afterwards)
 
-1. **平台自己的 macOS sandbox 規則(Seatbelt)可以讓 Blender 用 GPU**:同一個出圖腳本,不加限制跟套上 `gpu` 規則
-   都在約 1 秒內產出兩張預覽圖、`.blend`、`.glb`。
-2. **同一份規則擋得住 16 項逃脫**:寫資料夾外、讀 `~/.ssh`、讀 claude 憑證、讀別的專案、讀服務的 `.env`、
-   讀平台機密、**Keychain**、連網路(含 127.0.0.1)、`open` 開 app、`osascript` 送 Apple Events、`launchctl`、`crontab`;
-   寫/讀自己的資料夾跟暫存區正常。Keychain 是 Claude Code 的 sandbox 擋不住的(known-issues.md),平台的規則擋得住
-   (直接擋 `securityd` 的 mach-lookup)。`open` 跟 `osascript` 一開始是放行的(Calculator 真的在 sandbox 外被開起來),
-   補上 `(deny lsopen)`、`(deny appleevent-send)` 跟 process-exec 的 deny 才擋住。
-3. **sandbox 不能疊兩層**:在 Claude Code 的 sandbox 裡跑 `sandbox-exec` 一律 `sandbox_apply: Operation not permitted`。
-   所以套平台規則的那一步,不能發生在 session 的 sandbox 裡面。
-4. **在真實位置驗證**:測試資料夾放在 `~/workspace/<探測用>`(規則先擋整個 `~/workspace`、再放行自己的資料夾,
-   兩條真的重疊到)。放在暫存目錄測不出這個重疊。
-5. **Claude Code 的 `excludedCommands` 可以用,但只對「單獨」的指令**:單獨跑排除的包裝指令會跳出 Claude Code 的
-   sandbox;跟別的指令串在一起(`… && …`、`…; …`)時整串都留在 sandbox 裡,串在後面的逃脫都被擋下。有沒有租約的
-   `--settings` 結果都一樣。
+1. **The platform's own macOS sandbox rules (Seatbelt) let Blender use the GPU**: the same render script, unrestricted
+   and under the `gpu` rules, produced two preview images, a `.blend` and a `.glb` in about 1 second both times.
+2. **The same rules block 16 escapes**: writing outside the folder, reading `~/.ssh`, reading claude credentials,
+   reading another project, reading a service's `.env`, reading platform secrets, **the Keychain**, network
+   connections (including 127.0.0.1), `open` launching an app, `osascript` sending Apple Events, `launchctl`,
+   `crontab`; writing/reading its own folder and the temporary area work. The Keychain is something Claude Code's
+   sandbox cannot block (known-issues.md); the platform's rules can (blocking `securityd`'s mach-lookup directly).
+   `open` and `osascript` were allowed at first (Calculator really was launched outside the sandbox); only adding
+   `(deny lsopen)`, `(deny appleevent-send)` and a process-exec deny blocked them.
+3. **Sandboxes cannot be nested**: running `sandbox-exec` inside Claude Code's sandbox always gives
+   `sandbox_apply: Operation not permitted`. So the step that applies the platform's rules cannot happen inside the
+   session's sandbox.
+4. **Verified in the real location**: the test folder was put in `~/workspace/<probe>` (the rules first block all of
+   `~/workspace`, then allow its own folder, and the two really overlap there). In a temporary directory this overlap
+   cannot be tested.
+5. **Claude Code's `excludedCommands` works, but only for "standalone" commands**: running the excluded wrapper
+   command alone leaves Claude Code's sandbox; chained with other commands (`… && …`, `…; …`), the whole chain stays in
+   the sandbox, and escapes chained after it are blocked. The result is the same with or without the lease's
+   `--settings`.
 
-## 三層:宣告、翻譯、強制
+## Three layers: declaration, translation, enforcement
 
 ```
-專案登錄(中立詞彙)── bin/policy.py ──┬─ bin/runtime_claude.py → .claude/settings.local.json、租約的 --settings
-  enforce.sandbox                     │   (Claude Code 怎麼做到;全平台唯一知道 Claude 設定格式的地方)
-  enforce.capabilities                │
-  network、allow_write                └─ bin/seatbelt.py → 平台的 Seatbelt profile,給 cap-runner 用
-                                          (macOS 怎麼擋;不經過任何 agent)
+project registry      ── bin/policy.py ──┬─ bin/runtime_claude.py → .claude/settings.local.json, lease --settings
+(neutral vocabulary)                     │   (how Claude Code does it; the only place in the platform
+  enforce.sandbox                        │    that knows Claude's settings format)
+  enforce.capabilities                   │
+  network, allow_write                   └─ bin/seatbelt.py → the platform's Seatbelt profile, for cap-runner
+                                             (how macOS blocks it; goes through no agent)
 ```
 
-- **`bin/policy.py`(新)**:從登錄算出一個專案的政策,只用中立的詞:
-  `{workspace, write: [路徑], deny_write: [路徑], deny_read: [路徑], credentials: [路徑], network: [網域],
-  platform_commands: [路徑], capabilities: [名稱]}`。內容就是現在 `render-project-settings.desired()` 算的東西,
-  拿掉 Claude 的語法(`Read(...)`、`Edit(...)`、`Bash(... *)`)。`credentials`(`~/.ssh`、`~/.claude*`、`~/.aws`、
-  `~/.config/gh`)現在只寫在 `lease-runner.deny_settings()`,搬過來成為同一份,位置放 `hub.json` 的 `credentials`
-  (程式碼裡不寫執行環境的路徑)。Keychain 不是檔案,由 `seatbelt.py` 自己處理。路徑都從 `hubconf` 拿
-  (現在 `desired()` 裡寫死的 `~/agent-hub` 一併改掉)。
-- **`bin/runtime_claude.py`(擴充)**:檔頭本來就寫「換工具只改這個檔」,但目前只有信箱分流遵守。這次把下面兩件搬進來:
-  - `settings(policy)` → `sandbox` 區塊 + 平台的 deny/allow 規則(現在的 `desired()` 的 Claude 那一半)、
-    `settings_path(workspace)`、`sandbox_rendered(workspace)`(`lease-runner.work_ready` 現在自己讀 `settings.local.json`)
-  - `lease_settings(policy)` → 租約的 `--settings` 檔(現在的 `lease-runner.deny_settings()`,含擋 `security` 的那幾條)
-  `render-project-settings.py` 只剩「寫檔、記錄上次寫了什麼、偵測偏移」的機制,要寫什麼問 `runtime_claude`。
-- **`bin/seatbelt.py`(新)**:`profile(policy, cap)` → SBPL 文字。**讀取**清單(`deny_read`、`credentials`)跟 Claude 那份
-  用同一個 `policy`,不另外手寫(原型裡的讀取清單是手寫的,這次改掉)。**寫入**刻意不照 `policy.write`:只准專案資料夾 +
-  暫存區。代跑的工作沒理由直接寫匯流排(會繞過 `hubbus` 的檢查)或共用的套件 cache。
+- **`bin/policy.py` (new)**: computes a project's policy from the registry, in neutral words only:
+  `{workspace, write: [paths], deny_write: [paths], deny_read: [paths], credentials: [paths], network: [domains],
+  platform_commands: [paths], capabilities: [names]}`. The content is what `render-project-settings.desired()` computes
+  today, with Claude's syntax (`Read(...)`, `Edit(...)`, `Bash(... *)`) removed. `credentials` (`~/.ssh`,
+  `~/.claude*`, `~/.aws`, `~/.config/gh`) is today written only in `lease-runner.deny_settings()`; it moves here into
+  the same policy, with the locations in `hub.json`'s `credentials` (no runtime paths in the code). The Keychain is not
+  a file; `seatbelt.py` handles it itself. Paths all come from `hubconf` (the `~/agent-hub` hard-coded in `desired()`
+  today is fixed along the way).
+- **`bin/runtime_claude.py` (extended)**: its header already says "switching tools changes only this file", but so far
+  only mailbox routing follows that. These two move in:
+  - `settings(policy)` → the `sandbox` block + the platform's deny/allow rules (the Claude half of today's
+    `desired()`), `settings_path(workspace)`, `sandbox_rendered(workspace)` (`lease-runner.work_ready` reads
+    `settings.local.json` itself today)
+  - `lease_settings(policy)` → the lease's `--settings` file (today's `lease-runner.deny_settings()`, including the
+    rules blocking `security`)
+  `render-project-settings.py` keeps only the mechanism "write the file, record what was written last, detect drift";
+  what to write it asks `runtime_claude`.
+- **`bin/seatbelt.py` (new)**: `profile(policy, cap)` → SBPL text. The **read** lists (`deny_read`, `credentials`) use
+  the same `policy` as Claude's, not written by hand separately (the prototype's read list was hand-written; that
+  changes now). **Writes** deliberately do not follow `policy.write`: only the project folder + the temporary area. Work
+  run on a project's behalf has no reason to write the bus directly (that would bypass `hubbus`'s checks) or the shared
+  package caches.
 
-**這次不搬、留給 m10251446(見最後一段)**:租約的 `claude` 旗標、stream-json 解析、工具名稱、rate limit、`--resume`、
-`lease-relay.py` 的 Claude 工具規則、`contracts/llm-points.yaml` 的工具清單。做完那份之後,Claude Code 的知識只在
-`runtime_claude.py`(翻譯)、`llm.py`(唯一執行 `claude -p` 的地方),加上 `lease-relay.py` 的傳輸那一層——它本身就是
-Claude 的 `--permission-prompt-tool`(MCP、回 `behavior`/`updatedInput`),規則會改成看 kind,但程序跟回傳格式還是 Claude 專用。
+**Not moved this time, left to m10251446 (see the last section)**: the lease's `claude` flags, stream-json parsing,
+tool names, rate limit, `--resume`, the Claude tool rules in `lease-relay.py`, the tool lists in
+`contracts/llm-points.yaml`. Once that is done, knowledge of Claude Code is only in `runtime_claude.py` (translation),
+`llm.py` (the only place that runs `claude -p`), plus the transport layer of `lease-relay.py`: it is itself Claude's
+`--permission-prompt-tool` (MCP, answering `behavior`/`updatedInput`); its rules will decide by kind, but the process
+and the return format stay Claude-specific.
 
-**邊界測試**(`tests/test_runtime_boundary.py`,新):這次動到的中立檔案(`policy.py`、`seatbelt.py`、`cap-runner.py`、
-`hub-run`、`registry.py` 的能力段)裡不准出現 Claude 的詞(`.claude`、`Read(`/`Edit(`/`Bash(`、`claude`)。m10251446
-做完再把 `lease-runner.py` 加進來。
+**Boundary test** (`tests/test_runtime_boundary.py`, new): the neutral files touched this time (`policy.py`,
+`seatbelt.py`, `cap-runner.py`, `hub-run`, the capability section of `registry.py`) may not contain Claude's words
+(`.claude`, `Read(`/`Edit(`/`Bash(`, `claude`). `lease-runner.py` is added once m10251446 is done.
 
-## 登錄
+## Registry
 
 ```yaml
 type: idea
 enforce:
   sandbox: true
-  capabilities: [gpu]     # 新;平台有的能力名稱才收
-network: [...]            # 既有,本來就是中立的
-allow_write: [...]        # 既有
+  capabilities: [gpu]     # new; only capability names the platform has are accepted
+network: [...]            # existing, already neutral
+allow_write: [...]        # existing
 ```
 
-- `registry.py` 驗證:`capabilities` 每個名稱都要在平台的能力清單裡;要有 `enforce.sandbox: true`;這次只收 `type: idea`。
-- **能力清單**:`hub.json` 的 `capabilities: {gpu: {risk: low, default_for: [idea], description}}` + `capabilities/<名稱>.sb`
-  (那個能力的 profile 片段)。之後要新能力 = 多一筆清單 + 一個片段檔,入口跟專案都不用改。
-- **`gpu` 預設給想法沙盒**:`create-idea-sandbox.py` 建立時照 `default_for` **明寫**進登錄(看登錄就知道有什麼,
-  不靠 `type` 隱含);`idea-1` 補一行。`risk: high` 的能力不會自動加,由 Knas 同意後在 agent-hub session 改登錄。
+- `registry.py` validates: every name in `capabilities` must be in the platform's capability list;
+  `enforce.sandbox: true` is required; only `type: idea` is accepted this time.
+- **Capability list**: `hub.json`'s `capabilities: {gpu: {risk: low, default_for: [idea], description}}` +
+  `capabilities/<name>.sb` (that capability's profile fragment). A new capability later = one more list entry + one
+  fragment file, with no change to the entry point or the projects.
+- **`gpu` is given to idea sandboxes by default**: `create-idea-sandbox.py` **writes it explicitly** into the registry
+  at creation per `default_for` (the registry shows what a project has, rather than it being implied by `type`);
+  `idea-1` gets one line added. Capabilities with `risk: high` are never added automatically; the owner agrees and the
+  registry is changed in the agent-hub session.
 
-**登錄的安全欄位只能由平台改**(修一個既有的洞):`registry.py apply-updates` 現在只檢查「寄件專案改的是自己的登錄」。
-所以沙盒裡的 session 寄一封 `manifest.update` 就能把 `enforce.sandbox` 關掉、或把 `allow_write`/`network` 開大;
-加了 `capabilities` 之後還能自己加能力;把 `type` 改成 `idea` 就拿得到 work 模式跟能力;把 `privacy` 的 `stats_only`
-拿掉,想法的內容就會進週報的雲端呼叫。改成:`type`、`enforce`、`allow_write`、`network`、`privacy` 跟現在的登錄不一樣
-就整封退回,說明要請 agent-hub session(Knas 確認)改。目前沒有專案用 manifest.update 改過這些欄位(git log 只有一次,
-muninn,沒碰到),不影響現有流程。
+**The registry's security fields can only be changed by the platform** (fixing an existing hole): today
+`registry.py apply-updates` only checks that "the sending project changes its own registry". So a session in a
+sandbox could send a `manifest.update` that turns `enforce.sandbox` off, or widens `allow_write`/`network`; with
+`capabilities` added it could grant itself capabilities; changing `type` to `idea` would get it work mode and
+capabilities; removing `stats_only` from `privacy` would put an idea's content into the weekly report's cloud call.
+Changed to: if `type`, `enforce`, `allow_write`, `network` or `privacy` differ from the current registry, the whole
+update is rejected, with an explanation that the agent-hub session must make the change (the owner confirming). No
+project has ever changed these fields through manifest.update (git log shows only one update, from the assistant, not
+touching them), so existing flows are unaffected.
 
-## 執行入口:`hub-run`(平台代跑)
+## The entry point: `hub-run` (the platform runs it on the project's behalf)
 
-**兩種做法**
+**Two approaches**
 
-- **A. 排除 + 包裝(Muninn 原本提的)**:把 `hub-run` 寫進專案的 `excludedCommands`,它跳出 Claude Code 的 sandbox 後
-  自己用 `sandbox-exec` 套平台規則。實測可行(上面第 5 點)。缺點:
-  安全性靠 Claude Code 正確判斷串接指令,哪天它的判斷有破綻,串在後面的指令就整串跳出 sandbox;要寫進 Claude 的設定,
-  換工具就要找對應的機制;跳出來的 `hub-run` 也沒辦法可靠地知道自己是哪個專案(`cd` 到別的專案再跑就冒充得了)。
-- **B. 平台代跑(建議)**:`hub-run` 留在 session 的 sandbox 裡,只把請求寫進**自己專案資料夾**的 `.hub-run/requests/`;
-  平台一個不在 sandbox 裡的常駐服務收到請求,檢查過才用平台規則執行,把輸出跟結束碼寫回去。
-  對執行環境的唯一要求是「能寫自己的資料夾」,任何 agent 都做得到;Claude 的設定一行都不用加。A 留作備案。
+- **A. Exclude + wrap (what the assistant originally proposed)**: put `hub-run` into the project's
+  `excludedCommands`; once outside Claude Code's sandbox it applies the platform's rules itself with `sandbox-exec`.
+  Tested and works (point 5 above). Drawbacks: security relies on Claude Code judging chained commands correctly, and
+  if its judgment ever has a gap, the commands chained after it leave the sandbox wholesale; it has to be written into
+  Claude's settings, so switching tools means finding the equivalent mechanism; and the escaped `hub-run` cannot
+  reliably know which project it belongs to (`cd` into another project and run it, and it can impersonate).
+- **B. The platform runs it (proposed)**: `hub-run` stays in the session's sandbox and only writes the request into
+  **its own project folder**'s `.hub-run/requests/`; a resident platform service outside the sandbox picks the request
+  up, checks it, runs it under the platform's rules only then, and writes the output and exit code back.
+  The only requirement on the runtime is "can write its own folder", which any agent can do; not one line has to be
+  added to Claude's settings. A is kept as a fallback.
 
-**請求怎麼證明是哪個專案寄的**:sandbox 只准每個專案寫自己的資料夾,別的專案寫不進來。服務只掃登錄裡宣告了能力的專案的
-`<workspace>/.hub-run/requests/`,**請求在哪個資料夾被找到,就是哪個專案**;執行用的專案資料夾從登錄來,不看請求裡寫什麼。
-(不放共用的匯流排目錄:每個專案都寫得到那裡,A 專案就能冒充 B。)`.hub-run/` 寫進 `.git/info/exclude`。
+**How a request proves which project sent it**: the sandbox only lets each project write its own folder; other
+projects cannot write into it. The service only scans `<workspace>/.hub-run/requests/` of projects that declare
+capabilities in the registry, and **the folder a request is found in is the project it belongs to**; the project
+folder used for running comes from the registry, not from anything in the request.
+(Not in the shared bus directory: every project can write there, so project A could impersonate B.) `.hub-run/` is
+written into `.git/info/exclude`.
 
-**請求格式**:`{"v": 1, "id", "cap": "gpu", "argv": [...], "cwd": "<相對專案資料夾>", "timeout_s"}`。`argv` 是 JSON list,
-服務直接 exec `sandbox-exec -f <profile> -D WS=… -D HOME=… <argv>`,中間沒有 shell 字串。
+**Request format**: `{"v": 1, "id", "cap": "gpu", "argv": [...], "cwd": "<relative to the project folder>",
+"timeout_s"}`. `argv` is a JSON list; the service directly execs `sandbox-exec -f <profile> -D WS=… -D HOME=… <argv>`,
+with no shell string in between.
 
-**服務收請求時的檢查**(全部不過就寫回 `rejected` 跟理由,不執行):
-- `.hub-run/`、`requests/` 跟請求檔本身,解析真實路徑後都要在專案資料夾裡,而且是一般檔案/目錄——`.hub-run` 被換成
-  symlink 指到別的專案時,結果檔會寫到別人那裡,所以這層也要擋(原型草稿只檢查了 `cwd`)。寫回結果用不跟隨 symlink 的方式開檔。
-- `id` 只能是單純的檔名;`cwd` 解析成真實路徑後要在專案資料夾裡(資料夾裡的 symlink 指出去也擋)。
-- `cap` 要在這個專案登錄的 `enforce.capabilities` 裡;請求檔不超過 64 KB;太舊或已經回覆過的不理。
-- **profile 不放在專案資料夾**:每次執行時從登錄現算,寫在 `.state/cap-runner/<專案>/<id>/profile.sb`(session 寫不到)。
-  原型草稿放在 `<workspace>/.hub-run/profiles/`——那是 session 自己能改的地方,改一行就等於沒有 sandbox。
+**Checks when the service receives a request** (any failure writes back `rejected` with the reason, nothing runs):
+- `.hub-run/`, `requests/` and the request file itself must all be inside the project folder after resolving to real
+  paths, and be regular files/directories: if `.hub-run` is replaced by a symlink to another project, the result files
+  would be written there, so this level must be blocked too (the prototype draft only checked `cwd`). Results are
+  written back opening files without following symlinks.
+- `id` may only be a plain file name; `cwd`, resolved to a real path, must be inside the project folder (a symlink
+  inside the folder pointing out is blocked too).
+- `cap` must be in this project's `enforce.capabilities` in the registry; the request file is at most 64 KB; requests
+  that are too old or already answered are ignored.
+- **The profile is not kept in the project folder**: computed from the registry on every run and written to
+  `.state/cap-runner/<project>/<id>/profile.sb` (the session cannot write there). The prototype draft put it in
+  `<workspace>/.hub-run/profiles/`: a place the session itself can change, where changing one line amounts to no
+  sandbox.
 
-**服務**:`local.agent-hub.cap-runner`(`bin/cap-runner.py`,常駐、`KeepAlive`、每秒掃一次),寫在登錄 agent-hub 的
-`services:`(跟 lease-runner 一樣由 `render-services.py` 產生 plist,沒在跑就發 Discord;`recover-service.sh` 能重建),
-`services.tsv` 也登記了。不放進 lease-runner:runner 重啟不能殺掉正在跑的工作。
-- 環境變數只給 `PATH`、`HOME`、`TMPDIR`、`LANG`,其他全部清掉(沒有 token、沒有 `HUBBUS_*`)。
-- 逾時預設 10 分鐘、上限 30 分鐘(`hub.json` 的 `cap_runner`),逾時整個 process group 一起殺掉;
-  同時最多跑 2 個、每個專案 1 個。
-- `stdout`、`stderr`、`exit` 寫在請求旁邊;每個工作記一行在 `.state/cap-runner/log.jsonl`(專案、能力、argv、結束碼、時間)。
-- 服務沒在跑:`hub-run` 30 秒內沒看到服務接手就撤回請求(服務改版時會自己重啟,launchd 等 10 秒)、印「平台代跑服務沒在跑」並用 125 結束。
-- 任何啟動失敗都回 `rejected` + 理由(不會讓客戶端一直等);服務重啟時沒跑完的工作標 `lost`。
+**Service**: `local.agent-hub.cap-runner` (`bin/cap-runner.py`, resident, `KeepAlive`, scanning once a second), written
+in agent-hub's registry `services:` (like lease-runner, its plist is generated by `render-services.py`, a Discord alert
+is sent when it is not running, and `recover-service.sh` can rebuild it), also registered in `services.tsv`. Not put
+into lease-runner: restarting the runner must not kill running work.
+- Only `PATH`, `HOME`, `TMPDIR`, `LANG` are passed as environment variables, everything else is cleared (no tokens, no
+  `HUBBUS_*`).
+- Timeout 10 minutes by default, 30 minutes at most (`hub.json`'s `cap_runner`); on timeout the whole process group is
+  killed; at most 2 running at once, 1 per project.
+- `stdout`, `stderr`, `exit` are written next to the request; each job writes one line to
+  `.state/cap-runner/log.jsonl` (project, capability, argv, exit code, time).
+- The service not running: if `hub-run` sees no service pick the request up within 30 seconds, it withdraws the request
+  (the service restarts itself when updated, and launchd waits 10 seconds), prints that the platform's run service is
+  not running, and exits with 125.
+- Any start failure answers `rejected` + the reason (a client is never left waiting); unfinished jobs are marked `lost`
+  when the service restarts.
 
-**`hub-run`(客戶端)**:標準函式庫的小腳本,`hub-run --cap gpu [--timeout 秒] -- <指令…>`。一開始就印出工作 id,一邊等一邊印輸出,
-最後用同一個結束碼結束。session 的 Bash 呼叫有自己的逾時(預設 2 分鐘、最多 10 分鐘),被殺的是 `hub-run`、不是工作本身,
-所以 `hub-run --wait <id>` 可以重新接上。不帶 `--cap` 不收(能力就是授權,一定要明講用哪個)。請求檔先寫暫存檔再
-rename(服務不會讀到寫一半的 JSON);30 秒沒人接手就把請求刪掉再結束,晚啟動的服務不會跑沒人等的工作。
+**`hub-run` (the client)**: a small standard-library script, `hub-run --cap gpu [--timeout seconds] -- <command…>`. It
+prints the job id first, prints output while waiting, and exits with the same exit code. A session's Bash call has its
+own timeout (2 minutes by default, 10 at most); what gets killed is `hub-run`, not the job, so `hub-run --wait <id>` can
+reattach. Without `--cap` nothing is accepted (a capability is an authorisation; which one must be stated). The request
+file is written to a temporary file first and then renamed (the service never reads half-written JSON); if nobody
+picks it up in 30 seconds the request is deleted before exiting, so a late-starting service never runs a job nobody is
+waiting for.
 
-## `gpu` 的 profile 到底是什麼(說清楚)
+## What the `gpu` profile really is (stated clearly)
 
-- 規則是**先全部放行,再擋掉危險的部分**(deny-list):只准寫自己的資料夾跟暫存區;讀不到 `~/workspace`、`~/services`
-  (自己的資料夾除外)、memory 副本、平台機密、憑證、Keychain;完全不能連網路(**含 127.0.0.1**,所以工作叫不到 lease-runner
-  或 Muninn);擋 Keychain 的系統服務;擋「請別的系統服務替它啟動程式」(開 app、Apple Events、`launchctl`、`crontab`、`at`)。
-  **其他沒列到的都放行,其中包括 Metal**。
-- 所以這次 `gpu` 的片段是空的:Metal 本來就不在 deny 清單上。能力在這裡的作用是**授權**(誰能用平台代跑),不是多開一個洞。
-  之後若改成「預設全擋、逐項開」(要一項項找出 Blender 需要什麼,這次不做),`gpu` 片段才會變成 Metal/IOKit 的那幾條。
-- 跟 Claude Code 的 sandbox 比:讀取範圍比它嚴(整個 `~/workspace`、`~/services` 都擋)、網路比它嚴(完全不通)、
-  多擋 Keychain 跟啟動程式;寫入少了匯流排目錄跟套件 cache,但多了**整個系統暫存區**(`/private/tmp`、`/private/var/folders`,
-  其他程式的暫存檔也在裡面)。試行期先接受;哪個能力需要收緊,就給每個工作一個 `.hub-run/tmp` 當 `TMPDIR`、拿掉共用暫存區。
-- 另外會加擋「看別的程序的資訊、對別的程序送信號」,做之前先實測。
-- **真正的把關還是手機確認**:規則是補強,實測擋得住上面列的;沒列到的不保證。
+- The rules **allow everything first, then block the dangerous parts** (a deny list): writes only to its own folder and
+  the temporary area; no reading `~/workspace` or `~/services` (except its own folder), memory copies, platform
+  secrets, credentials, the Keychain; no network at all (**including 127.0.0.1**, so a job cannot reach lease-runner
+  or the assistant); the Keychain's system service blocked; "asking another system service to start a program for it"
+  blocked (opening apps, Apple Events, `launchctl`, `crontab`, `at`). **Everything not listed is allowed, Metal
+  included**.
+- So this time the `gpu` fragment is empty: Metal was never on the deny list. Here the capability's role is
+  **authorisation** (who may use the platform runner), not opening another hole. If this later becomes "block
+  everything by default, open item by item" (finding out one by one what Blender needs; not done this time), the `gpu`
+  fragment becomes the Metal/IOKit rules.
+- Compared with Claude Code's sandbox: reads are stricter (all of `~/workspace` and `~/services` blocked), network is
+  stricter (fully closed), and it additionally blocks the Keychain and launching programs; writes lose the bus
+  directory and package caches, but gain **the whole system temporary area** (`/private/tmp`, `/private/var/folders`,
+  where other programs' temporary files are too). Accepted for the trial; if a capability needs tightening, each job
+  gets its own `.hub-run/tmp` as `TMPDIR` and the shared temporary area is removed.
+- Blocking "looking at other processes' information, sending signals to other processes" will be added too, tested
+  live first.
+- **The real check is still the phone confirmation**: the rules are a reinforcement; tested to block what is listed
+  above; nothing beyond that is guaranteed.
 
-## 租約跟 Muninn
+## Leases and the assistant
 
-- **租約契約不用改**:指令形狀照 Muninn 提的(`hub-run --cap gpu -- <指令>`),在 work 模式就是一個要確認的 Bash 指令。
-- work 模式的系統提示,專案有宣告能力時加一行:「需要 GPU 的程式用 `<hub>/bin/hub-run --cap gpu -- …` 跑(長的工作用
-  `--wait <id>` 接回)」,路徑從 `hubconf` 組(租約的 PATH 沒有 agent-hub 的 bin)。
-- SSH 開的互動 session 一樣能用(它的 sandbox 也准寫自己的資料夾)。
-- 手機確認不放寬。平台 profile 擋得住 Keychain,所以「`hub-run` 免確認」之後可以重新討論,但要 Knas 決定,不在這次。
+- **The lease contract does not change**: the command shape is the one the assistant proposed
+  (`hub-run --cap gpu -- <command>`), and in work mode it is just a Bash command that needs confirming.
+- When the project declares capabilities, work mode's system prompt gets one line: "run programs that need the GPU
+  with `<hub>/bin/hub-run --cap gpu -- …` (reattach long jobs with `--wait <id>`)", with the path built from `hubconf`
+  (the lease's PATH does not include agent-hub's bin).
+- Interactive sessions opened over SSH can use it too (their sandbox also lets them write their own folder).
+- The phone confirmation is not loosened. The platform profile does block the Keychain, so "`hub-run` without
+  confirmation" can be discussed again later, but it is the owner's decision, not part of this.
 
-## 要你拍板的決定
+## Decisions for you to make
 
-**A. 用平台代跑(B),不用 excludedCommands(A)**(建議)——理由見上;A 實測可行,留作備案。
+**A. Have the platform run it (B), not excludedCommands (A)** (proposed): reasons above; A tested and works, kept as a
+fallback.
 
-**B. `gpu` 建立時明寫進登錄**(建議)——不靠 `type: idea` 隱含;`idea-1` 補一行 `capabilities: [gpu]`。
+**B. `gpu` written explicitly into the registry at creation** (proposed): not implied by `type: idea`; `idea-1` gets
+one line `capabilities: [gpu]`.
 
-**C. `type`、`enforce`、`allow_write`、`network`、`privacy` 只能由平台改**(建議)——`manifest.update` 改到就退回。這是現在就有的洞,
-不只能力會用到。
+**C. `type`, `enforce`, `allow_write`, `network`, `privacy` can only be changed by the platform** (proposed): a
+`manifest.update` touching them is rejected. This hole exists today, not only for capabilities.
 
-**D. 翻譯層的位置跟範圍**(建議)——中立的 `policy.py`;Claude 的翻譯收進 `runtime_claude.py`;平台 profile 在 `seatbelt.py`。
-這次只搬「設定怎麼寫」,租約的旗標、事件、工具名稱留給 m10251446。
+**D. Where the translation layer sits and its scope** (proposed): the neutral `policy.py`; Claude's translation in
+`runtime_claude.py`; the platform profile in `seatbelt.py`. This time only "how the settings are written" moves; the
+lease's flags, events and tool names are left to m10251446.
 
-**E. `gpu` profile 試行期用「先放行再擋」**(建議)——含共用暫存區這個已知的寬鬆處,上面列清楚了。
+**E. The `gpu` profile uses "allow first, then block" during the trial** (proposed): including the known looseness of
+the shared temporary area, listed clearly above.
 
-**F. m10251446 另外處理**(建議)——見下一段。
+**F. m10251446 handled separately** (proposed): see the next section.
 
-## 順序(每步一個 commit,只 add 自己的檔案)
+## Order (one commit per step, adding only its own files)
 
-1. `policy.py` + `runtime_claude.settings()`/`lease_settings()`,`render-project-settings.py`、`lease-runner.py` 改用它們。
-   **行為不變**:改之前、之後對每個專案算出的設定跟 `.state/rendered-settings/` 逐位元組相同,租約的 `--settings` 也相同。加邊界測試。
-2. 登錄:`enforce.capabilities`、能力清單、`apply-updates` 擋安全欄位;`contracts/project.v1.schema.json` 加欄位(加欄位不升版)。
-3. `seatbelt.py` + `capabilities/gpu.sb` + `tests/test_cap_profile.py`(用原型的 16 項;測試資料夾建在 `workspace_root` 底下
-   才測得到重疊,不在 mini 就 skip;`open` 那項沒擋住會真的開 Calculator,teardown 要關掉)。
-4. `cap-runner.py` + `hub-run` + plist + `services.tsv` + 心跳檢查 job + 測試(別的專案資料夾的請求、`.hub-run` 是 symlink、
-   `cwd` 跑出去、沒宣告能力、逾時,都要被拒絕或殺掉)。
-5. `create-idea-sandbox.py` 照 `default_for` 寫能力;`idea-1` 登錄補一行;work 模式系統提示加一行。
-6. 實際跑一次:在 `idea-1`、用它真的設定開的 session 裡跑 `hub-run --cap gpu -- blender -b … -P tools/blender_render.py …`,
-   出得了圖。`known-issues.md` 補「sandbox 不能疊兩層」「excludedCommands 只對單獨指令有效」。
-7. 回信 muninn(`m10251437-1f92`):做了什麼、指令怎麼用、跟它提的差在哪(代跑而不是排除),然後 `hubbus done`。
+1. `policy.py` + `runtime_claude.settings()`/`lease_settings()`; `render-project-settings.py` and `lease-runner.py`
+   switch to them. **Behaviour unchanged**: before and after, the settings computed for every project are byte for
+   byte the same as `.state/rendered-settings/`, and the lease's `--settings` too. Add the boundary test.
+2. Registry: `enforce.capabilities`, the capability list, `apply-updates` blocking security fields;
+   `contracts/project.v1.schema.json` gains the fields (adding fields needs no version bump).
+3. `seatbelt.py` + `capabilities/gpu.sb` + `tests/test_cap_profile.py` (the prototype's 16 items; the test folder is
+   created under `workspace_root` so the overlap is tested, skipped when not on the hub machine; if the `open` item is
+   not blocked it really launches Calculator, so teardown must close it).
+4. `cap-runner.py` + `hub-run` + plist + `services.tsv` + a heartbeat-check job + tests (requests in another project's
+   folder, `.hub-run` as a symlink, `cwd` escaping, undeclared capability, timeout: all rejected or killed).
+5. `create-idea-sandbox.py` writes capabilities per `default_for`; one line added to `idea-1`'s registry; one line added
+   to work mode's system prompt.
+6. A real run: in `idea-1`, in a session opened with its real settings, run
+   `hub-run --cap gpu -- blender -b … -P tools/blender_render.py …` and get images. Add "sandboxes cannot be nested"
+   and "excludedCommands only works for standalone commands" to `known-issues.md`.
+7. Reply to `muninn` (`m10251437-1f92`): what was done, how to use the command, how it differs from the proposal (the
+   platform runs it instead of excluding it), then `hubbus done`.
 
-## 另外一封:m10251446(契約跟執行環境無關)
+## A separate letter: m10251446 (contract independent of the runtime)
 
-Muninn 10-25 14:46 另外要求 `contracts/lease-runner.v1.schema.json` 不再用 Claude Code 的字彙:事件的工具名稱改成通用類別
-(`kind: ask_user|read|search|write_file|run_command|open_web|other` + `summary`)、提問用通用結構、rate limit 改成
-`windows: [{id, label, used, resets_at}]`、`/terminal` 回 `{command, hint}`、錯誤碼 `auth` 改 `agent_login`。
+On 10-25 at 14:46 the assistant separately asked that `contracts/lease-runner.v1.schema.json` stop using Claude Code's
+vocabulary: tool names in events become generic categories
+(`kind: ask_user|read|search|write_file|run_command|open_web|other` + `summary`), questions use a generic structure,
+rate limit becomes `windows: [{id, label, used, resets_at}]`, `/terminal` returns `{command, hint}`, error code `auth`
+becomes `agent_login`.
 
-它跟這份是同一個原則,翻譯表也會放在同一個 `runtime_claude.py`(工具名稱 → kind、stream-json → 中立事件、AskUserQuestion ↔
-通用提問、rate limit → windows、接續指令、錯誤分類;`lease-relay.py` 的規則改成看 kind)。但它要跟 Muninn 約一個並行截止日、
-牽涉 Muninn 擁有的 `permission-requests` 契約,所以**另外寫一份設計**,不跟這份一起確認;這份做完之後再開始。
+It is the same principle as this document, and its translation table goes into the same `runtime_claude.py` (tool
+names → kind, stream-json → neutral events, AskUserQuestion ↔ generic questions, rate limit → windows, the resume
+command, error classification; `lease-relay.py`'s rules decide by kind). But it needs a parallel-running deadline agreed
+with the assistant and involves the `permission-requests` contract the assistant owns, so **it gets a separate
+design**, not confirmed together with this one; it starts after this one is done.
 
-## 10-25 實作與驗證
+## 10-25 implementation and verification
 
-commit:`2568776`(policy.py、Claude 設定翻譯搬進 runtime_claude)→ `c3583ea`(登錄能力、鎖安全欄位)→ `61ff364`(seatbelt.py)
-→ `92b2898`(cap-runner、hub-run)→ `5416817`(預設 gpu、idea-1、提示)→ `fa95f4a`(啟動失敗要回覆、known-issues)。
+Commits: `2568776` (policy.py, Claude settings translation moved into runtime_claude) → `c3583ea` (registry
+capabilities, locking security fields) → `61ff364` (seatbelt.py) → `92b2898` (cap-runner, hub-run) → `5416817`
+(default gpu, idea-1, prompt) → `fa95f4a` (start failures must answer, known-issues).
 
-- **行為不變**:搬家前後,24 個專案算出的 Claude 設定跟租約的 `--settings` 逐位元組相同;`render-project-settings.py --report`
-  沒有偏移。
-- **跟設計不一樣的地方**:服務改成登錄的 service(上面「服務」那段),沒有手寫 plist、沒有另外的心跳 job;能力清單查詢放在
-  `hubconf.capabilities()`(標準函式庫,建立沙盒的腳本也用得到);`.hub-run/` 的 git exclude 由 cap-runner 第一次看到請求時寫。
-- **實測發現,已修**:`(deny signal (target others))` 擋不住送信號給別的程序,改成「先全擋、再放行 same-sandbox」;
-  常駐的 cap-runner 在 `hubconf.py` 改了之後沒重啟,新舊模組混用讓一個工作卡在 queued——現在任何啟動失敗都回 rejected,
-  known-issues.md 也記了「改了 import 的模組要重啟服務」。
-- **測試**:`test_cap_profile.py`(真的 sandbox-exec,在 workspace_root 底下;檔案、Keychain、網路含本機跟 unix socket、
-  開 app、Apple Events、launchctl、crontab、信號)、`test_cap_runner.py`(14 個:各種拒絕、symlink 的 .hub-run/jobs/請求、
-  逾時殺整個 process group、排隊、重啟、客戶端)、`test_registry_capabilities.py`、`test_runtime_boundary.py`。全部 114 個測試通過。
-- **真的跑一次**:10-25 15:26 在 idea-1、用它真的 sandbox 設定開的 Claude Code session(`claude -p`,只允許 hub-run)跑
-  `hub-run --cap gpu -- blender -b --factory-startup -P tools/blender_render.py -- results/scene-v2.json <輸出>`:
-  2.1 秒、exit 0,兩張 png、.blend、.glb(只有 Blender 寫 `~/.thumbnails` 的縮圖被擋,不影響)。
-- **還沒驗證**:lease-runner 重啟後還沒有真的租約跑過,work 模式多的那行提示只看過 `preamble()` 的輸出,沒從手機走過一次。
-- 回信 muninn `m10251527-a8e0`,`m10251437-1f92` 結案。
+- **Behaviour unchanged**: before and after the move, the Claude settings computed for 24 projects and the lease's
+  `--settings` are byte for byte the same; `render-project-settings.py --report` shows no drift.
+- **Where it differs from the design**: the service became a registry service (the "Service" section above), with no
+  hand-written plist and no separate heartbeat job; the capability-list lookup is in `hubconf.capabilities()`
+  (standard library, so the sandbox-creation script can use it too); the git exclude for `.hub-run/` is written by
+  cap-runner the first time it sees a request.
+- **Found in live tests, fixed**: `(deny signal (target others))` did not block sending signals to other processes;
+  changed to "block everything, then allow same-sandbox"; the resident cap-runner was not restarted after
+  `hubconf.py` changed, and mixing old and new modules left one job stuck in queued: now every start failure answers
+  rejected, and known-issues.md records "restart the service after changing a module it imports".
+- **Tests**: `test_cap_profile.py` (real sandbox-exec, under workspace_root; files, Keychain, network including local
+  and unix sockets, opening apps, Apple Events, launchctl, crontab, signals), `test_cap_runner.py` (14: the various
+  rejections, symlinked .hub-run/jobs/requests, timeout killing the whole process group, queueing, restart, the
+  client), `test_registry_capabilities.py`, `test_runtime_boundary.py`. All 114 tests pass.
+- **A real run**: 10-25 15:26 in idea-1, in a Claude Code session opened with its real sandbox settings (`claude -p`,
+  only hub-run allowed), ran
+  `hub-run --cap gpu -- blender -b --factory-startup -P tools/blender_render.py -- results/scene-v2.json <output>`:
+  2.1 seconds, exit 0, two pngs, .blend, .glb (only Blender writing thumbnails to `~/.thumbnails` was blocked, no
+  effect).
+- **Not verified yet**: no real lease has run since lease-runner restarted; the extra line work mode adds to the prompt
+  has only been seen in `preamble()`'s output, never walked through from the phone.
+- Reply to `muninn` `m10251527-a8e0`, `m10251437-1f92` closed.
