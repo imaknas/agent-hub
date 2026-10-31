@@ -349,9 +349,25 @@ def task_key(project: str, text: str) -> str:
     return f"task-{project}-{hashlib.sha1(' '.join(text.split()).encode()).hexdigest()[:10]}"
 
 
+def need_state(c, project: str, key: str, ext: str = "acts/0.3") -> dict | None:
+    """The need register of one item this project raised (core §6): {terms: the latest terms, rev: their terms_rev,
+    current: the current need record}; None when it was never raised."""
+    recs = [r["record"] for r in records(c, project, ext, ("raised", "amended", "withdrawn"), direction="out")
+            if r["record"].get("key") == key]
+    with_terms = [r for r in recs if r.get("terms")]
+    if not with_terms:
+        return None
+    when = lambda r: (r.get("ts", ""), r.get("id", ""))   # noqa: E731
+    latest = max(with_terms, key=lambda r: (r.get("terms_rev", 1), *when(r)))
+    replaced = {s for r in recs for s in r.get("supersedes", [])}
+    current = max([r for r in recs if r["id"] not in replaced] or recs, key=when)
+    return {"terms": latest["terms"], "rev": latest.get("terms_rev", 1), "current": current}
+
+
 def send_record(c, a, sender: str, mid: str, p: dict) -> str | None:
     """Translate what send mails to the owner into an Acts or Decisions record (direction one's mapping table); for
-    what neither covers, return None (sent as a v1 letter as usual)."""
+    what neither covers, return None (sent as a v1 letter as usual). A task sent again under the key of one this
+    project raised before is that item: changed terms → amended (terms_rev + 1), the same terms → nothing new."""
     if a.type == "question" or a.question:
         return send_decision(c, a, sender, mid, p)
     kind = "raised" if a.type in ("task", "request") else \
@@ -362,7 +378,15 @@ def send_record(c, a, sender: str, mid: str, p: dict) -> str | None:
     if not KEY_RE.match(key):
         sys.exit(_("hubbus: {key!r} is not a valid task key", key=key))
     rec = {"ph": "0.3", "ext": "acts/0.3", "type": kind, "key": key, "project": sender, "ts": iso()}
-    if kind == "raised":
+    need = need_state(c, sender, key)
+    if kind == "raised" and need:
+        terms = {"text": " ".join(a.text.split()), **({"due": a.due} if a.due else {})}
+        if terms == {k: v for k, v in need["terms"].items() if k in ("text", "due")}:
+            return record_event_id(need["current"])
+        rec |= {"type": "amended", "id": f"a:{key}:{need['rev'] + 1}", "origin": "requester",
+                "by": hubconf.party("requester", sender), "terms": terms, "terms_rev": need["rev"] + 1,
+                "supersedes": [need["current"]["id"]]}
+    elif kind == "raised":
         rec |= {"id": f"r:{key}", "origin": "requester", "by": hubconf.party("requester", sender),
                 "terms": {"text": " ".join(a.text.split()), **({"due": a.due} if a.due else {})}, "terms_rev": 1}
         if a.new_reason:
@@ -375,7 +399,7 @@ def send_record(c, a, sender: str, mid: str, p: dict) -> str | None:
         # drop --task = this project doesn't need it: the assistant keeps it and asks the owner (other projects' needs
         # aren't affected)
         rec |= {"id": f"w:{key}:{mid}", "origin": "requester", "by": hubconf.party("requester", sender),
-                "reason": "not_needed", "note": a.text}
+                "reason": "not_needed", "note": a.text, **({"supersedes": [need["current"]["id"]]} if need else {})}
     if a.context:
         rec["context"] = a.context
     return publish_record(c, rec, sender, OWNER_ADDRESS)[0]
@@ -409,9 +433,12 @@ def send_decision(c, a, sender: str, mid: str, p: dict) -> str | None:
     else:
         recs = [base | asker | {"id": f"w:{a.question}:{mid}", "type": "withdrawn", "key": a.question,
                                 "reason": "not_needed", "note": a.text}]
-    if a.context:
-        for r in recs:
+    need = need_state(c, sender, a.question, EXT_DECISIONS) if a.type != "question" else None
+    for r in recs:
+        if a.context:
             r["context"] = a.context
+        if need and r["type"] == "withdrawn":
+            r["supersedes"] = [need["current"]["id"]]   # core §6: a withdrawal names the need it replaces
     extra = {"from_session": p["from_session"]} if p.get("from_session") else None
     eids = [publish_record(c, r, sender, OWNER_ADDRESS, extra)[0] for r in recs]
     return mid if a.type == "question" else eids[0]   # a question: the id --question takes later

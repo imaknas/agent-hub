@@ -101,6 +101,28 @@ class SendRecords(unittest.TestCase):
         self.send("--type", "task", "--id", "task-proj-0000000001", "--text", "繳房屋稅")
         self.rec()
 
+    def test_resend_with_other_terms_amends(self):
+        """the same item (its key) asked differently now: amended, the terms_rev after the latest, superseding the
+        current need record (core §6); the same terms again: nothing new"""
+        k = "lease-x-1-task-0"
+        self.send("--type", "task", "--id", k, "--text", "measure the desk")
+        self.send("--type", "task", "--id", k, "--text", "measure the desk and the chair")
+        self.send("--type", "task", "--id", k, "--text", "measure  the desk and the chair")
+        self.send("--type", "task", "--id", k, "--text", "measure the desk and the chair", "--due", "2026-11-30")
+        recs = [p["record"] for _i, p in self.events("record")]
+        self.assertEqual([(r["type"], r["id"], r.get("terms_rev"), r.get("supersedes")) for r in recs],
+                         [("raised", f"r:{k}", 1, None), ("amended", f"a:{k}:2", 2, [f"r:{k}"]),
+                          ("amended", f"a:{k}:3", 3, [f"a:{k}:2"])])
+        self.assertEqual(recs[2]["terms"], {"text": "measure the desk and the chair", "due": "2026-11-30"})
+        for r in recs:
+            self.assertEqual(self.m.record_errors(r), [])
+
+    def test_drop_names_the_need_it_replaces(self):
+        self.send("--type", "task", "--id", "task-proj-0000000001", "--text", "buy parts")
+        self.send("--type", "drop", "--task", "task-proj-0000000001", "--text", "not needed")
+        w = self.events("record")[-1][1]["record"]
+        self.assertEqual((w["type"], w["supersedes"]), ("withdrawn", ["r:task-proj-0000000001"]))
+
     def test_task_without_key_uses_the_registrar_recipe(self):
         for project, text, key in KEY_VECTORS:
             self.assertEqual(self.m.task_key(project, text), key)
@@ -210,6 +232,7 @@ class SendDecisions(unittest.TestCase):
         self.assertEqual((claimed["type"], claimed["origin"], claimed["outcome"], claimed["answer"]),
                          ("claimed", "agent", "decided", {"text": "Pick A"}))
         self.assertEqual((withdrawn["type"], withdrawn["origin"], withdrawn["reason"]), ("withdrawn", "requester", "settled"))
+        self.assertEqual(withdrawn["supersedes"], ["r:m1031-q1"])
         self.assertEqual(self.m.open_questions(self.c), [])
 
     def test_drop_question_is_withdrawn_not_needed(self):
