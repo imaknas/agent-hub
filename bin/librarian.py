@@ -686,6 +686,8 @@ def process(proj: str, d: pathlib.Path, handoffs: list[dict], digest: list[str])
 
     stray = quarantine_stray(proj, d)
     repair_state_todo(proj, d)
+    # what the model wrote, before admission (the eval case records this: evals score the model, not the platform)
+    written = (d / "STATE.md").read_text(errors="replace") if (d / "STATE.md").exists() else ""
     if (unanchored := admit_anchors(proj, d, before)):
         log(_("{project}: anchors that do not resolve on the project's main were turned back into plain code: "
               "{anchors}", project=proj, anchors=" ".join(unanchored)))
@@ -702,17 +704,22 @@ def process(proj: str, d: pathlib.Path, handoffs: list[dict], digest: list[str])
     post = git(d, "rev-parse", "HEAD")
     changed_state, state_diff, new_sha = False, "", post
     if post != pre:
-        changed_state, state_diff = True, git(d, "diff", pre, post, "--", "STATE.md")
+        state_diff = git(d, "diff", pre, post, "--", "STATE.md")
+        changed_state = bool(state_diff) or not unanchored   # admission may have undone the model's only edit
     elif run(["git", "-C", str(d), "diff", "--quiet", "--", "STATE.md"]).returncode != 0:
         changed_state, state_diff = True, git(d, "diff", "--", "STATE.md")
     actually = "true" if changed_state else "false"
+    if unanchored and not changed_state and written != before:
+        # the model's only edit was anchors that do not resolve: it did change the file, and the run is done
+        log(_("{project}: admission undid the model's only edit (anchors that do not resolve)", project=proj))
+        actually = "true"
     if reported != "unknown" and reported != actually:
         log(_("{project}: warning: the agent reported state_updated={reported}, but the actual file change={actually} "
               "(going by the actual files)", project=proj, reported=reported, actually=actually))
     after = (d / "STATE.md").read_text(errors="replace") if (d / "STATE.md").exists() else ""
     shadow_state(proj, d, before, after, changed_state, memory_section, h_note, d_note)
     record_outcome(case, {"rc": rc, "structured_output": so or None, "changed": changed_state, "stray": bool(stray),
-                          "model": used_model(obj)}, {"STATE.md": after})
+                          "model": used_model(obj), "unanchored": unanchored}, {"STATE.md": written})
 
     if changed_state:
         # the hook did not take over (the project did not go through its hook this time, or the hook is not set

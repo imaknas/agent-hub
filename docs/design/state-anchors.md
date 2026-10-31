@@ -169,7 +169,9 @@ relative to a package folder rather than the repository (the eval found `core/ap
 So after the call (and after the to-do format repair), `admit_anchors` resolves every anchor the model added: one that
 is `ok` or `pending` stays; any other loses the sign and stays as a plain code span, and the log says which. A project
 whose workspace cannot be checked admits no new anchor. When the project's own hook already committed the model's edit,
-this change is committed on top. The rule in the prompt keeps such anchors rare; admission makes sure an anchor that
+this change is committed on top. When the model's only edit was such anchors, admission gives back the file as it
+was: the run still counts as done (the checkpoint advances, no "misreported" warning, no empty review-log entry). The
+eval case records what the model wrote, before admission, since evals score the model. The rule in the prompt keeps such anchors rare; admission makes sure an anchor that
 was wrong from the start never reaches todo.md, so `missing` at night means a path that resolved once.
 
 **Being told what is stale.** When `process()` runs for a project, it resolves that project's anchors with the same
@@ -216,6 +218,38 @@ re-pointing the anchor counts as kept, and a statement that is little more than 
 deleting its statement is the wrong move).
 The before arm runs on them too: if it already keeps anchors, the "keep" rule is cheap insurance; if it drops them, the
 rule is required.
+
+### Result (11-01)
+
+Both arms are `new` (content zh-Hant) on the same cases: `before` from b6a7720 (the prompt before this change),
+`after` from d119599 (rule and note; the rule text is the same in later commits). 20 cases: the 17 recorded from
+production by then and the 3 seeded copies. librarian-state at k = 3; librarian-state-edits at k = 6, because at k = 3
+its full-width rate looked lower with a 90% interval that just excluded zero, and at k = 6 it did not. Runs
+`anchors-state` and `anchors-edits` in the eval dir.
+
+| | librarian-state (production) | librarian-state-edits (shadow) |
+|---|---|---|
+| valid, before → after | 1.0 → 1.0 | 0.85 → 0.833 (18 vs 20 of 120; binomial noise ±0.05) |
+| contract | 0.95 → 0.95 | 0.941 → 0.940 |
+| CJK share; Simplified | 0.421 → 0.438; 0 | 0.448 → 0.458; 0 |
+| full-width punctuation | 0.528 → 0.514 (per case −0.016, 90% CI −0.076–0.034) | 0.526 → 0.512 (−0.024, −0.069–0.018) |
+| decision, after~before (floor before~before) | 1.0 (1.0) | 0.989 (0.979) |
+| to-do items | 0.634 (0.627, 0.576–0.672) | 0.739 (0.729, 0.708–0.752) |
+| owner | 0.981 (0.983, 0.972–0.992) | 0.987 (0.982, 0.975–0.990) |
+| anchors added per run; grounded; resolve | 0.30; 1.0; 0.818 | 0.08; 1.0; 1.0 |
+| anchors in the to-do section | 0 | 1 of 120 runs (an `agent` line without a key; ignored by every reader) |
+| growth (after / before length), before → after | 1.361 → 1.326 | 1.243 → 1.230 |
+| seeded: retention; stale_fixed; stale_kept | 0.889; 0 → 1.0; 0.833 | 1.0; 0 → 1.0; 0.818 |
+
+Every gated score is within the before arm's own noise, the language does not move, and STATE.md does not grow. The
+before prompt already kept every anchor. With the note, both points remove the flagged anchor every time.
+
+- **Retention 0.889.** One of 9 runs dropped the seeded anchors on `memory/reference/` file names. The seeding put them
+  there by mistake, and the rule forbids anchors on memory files.
+- **stale_kept.** The misses kept the statement but dropped its "see …" pointer to the flagged file. That is a matching
+  artifact, not a deleted statement.
+- **Resolve 0.818 on the agent point.** The unresolved anchors were muninn paths the notes wrote relative to the
+  package folder. That is what admission (above) is for: they lose the sign at write time.
 
 ## Out of scope
 
