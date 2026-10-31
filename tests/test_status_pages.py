@@ -1,4 +1,5 @@
-"""狀態頁給人看的三頁(digest、待辦、每週回顧)的 markdown 轉換:先 escape、只認幾種寫法,內容裡的 HTML 不會變成真的 HTML。
+"""The markdown conversion of the status page's three human-facing pages (digest, to-dos, weekly review): escape
+first, recognise only a few forms, so HTML in the content never becomes real HTML.
 
     bin/py -m unittest discover -s tests
 """

@@ -1,4 +1,5 @@
-"""編輯清單的套用規則(bin/edits.py):每個 old 剛好出現一次、照順序、不套一半;受保護的標記不能被改寫。
+"""The rules for applying an edit list (bin/edits.py): each old occurs exactly once, in order, never half applied;
+protected markers cannot be rewritten.
 
     bin/py -m unittest discover -s tests
 """
@@ -20,13 +21,13 @@ class Apply(unittest.TestCase):
     def test_in_order(self):
         out = edits.apply(DOC, [{"old": "現況:A。", "new": "現況:B。"}, {"old": "現況:B。", "new": "現況:C。"}])
         self.assertIn("現況:C。", out)
-        self.assertEqual(out.replace("現況:C。", "現況:A。"), DOC, "其他地方逐字不動")
+        self.assertEqual(out.replace("現況:C。", "現況:A。"), DOC, "everything else untouched, word for word")
 
     def test_old_must_occur_exactly_once(self):
         with self.assertRaises(edits.EditError):
             edits.apply(DOC, [{"old": "沒有這段", "new": "x"}])
         with self.assertRaises(edits.EditError):
-            edits.apply(DOC, [{"old": "- [ ] ", "new": "x"}])   # 出現兩次
+            edits.apply(DOC, [{"old": "- [ ] ", "new": "x"}])   # occurs twice
         with self.assertRaises(edits.EditError):
             edits.apply(DOC, [{"old": "", "new": "x"}])
 

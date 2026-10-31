@@ -1,5 +1,7 @@
-"""librarian.py 的小工具:從 librarian.sh 改寫時最容易悄悄走樣的地方——jq 的真假跟字串插值、shell 的 `head | tr`、
-STATE.md 裡失效的 memory/ 引用、轉交怎麼寫進 prompt。整支的行為另外在隔離環境用替身 llm.py 跟 shell 版逐位元組比對過。
+"""librarian.py's helpers: the places most likely to drift silently in the rewrite from librarian.sh: jq's
+truthiness and string interpolation, shell's `head | tr`, dead memory/ references in STATE.md, how handoffs are written
+into the prompt. The whole script's behaviour was separately compared byte for byte with the shell version in an
+isolated environment with a stand-in llm.py.
 
     bin/py -m unittest discover -s tests
 """
@@ -65,7 +67,7 @@ class Prompts(unittest.TestCase):
         self.assertIn("現在在專案 demo 的目錄裡工作。\nM\n\n\n\n背景請讀", p)
         self.assertIn(f"〔{lib.OWNER}〕", p)
         self.assertIn(lib.ASSISTANT, p)
-        self.assertNotIn("{", p.replace("{owner}", ""), "f-string 沒有漏掉沒填的大括號")
+        self.assertNotIn("{", p.replace("{owner}", ""), "the f-string leaves no unfilled braces")
 
 
 if __name__ == "__main__":

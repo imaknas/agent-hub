@@ -1,5 +1,6 @@
-"""樣板裡的人名記號(hubconf.fill_names):templates/ 底下給 agent 看的說明不寫人名,{{owner}} / {{owner_alias}} /
-{{assistant}} 由 sync-local-setup 照 hub.json 填;填完不能留下任何沒認得的 {{…}}(打錯的記號會原樣出現在每個專案)。
+"""Name placeholders in templates (hubconf.fill_names): the agent instructions under templates/ name no people;
+{{owner}} / {{owner_alias}} / {{assistant}} are filled by sync-local-setup from hub.json; after filling no
+unrecognised {{…}} may remain (a mistyped placeholder would show up as is in every project).
 
     bin/py -m unittest discover -s tests
 """

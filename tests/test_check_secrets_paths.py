@@ -1,5 +1,5 @@
-"""check-secrets 找憑證的位置:平台自己的 `.secrets/<名稱>` 是平台的憑證目錄(10-26 搬家後不在 hub 根目錄),
-專案的相對路徑照舊以 runtime/workspace 為準。
+"""Where check-secrets looks for credentials: the platform's own `.secrets/<name>` is the platform's secrets directory
+(no longer in the hub root since the 10-26 move); a project's relative paths are still relative to runtime/workspace.
 
     bin/py -m unittest discover -s tests
 """
@@ -42,7 +42,8 @@ class Locate(unittest.TestCase):
 
 
 class WhatIsChecked(unittest.TestCase):
-    """功能沒開就不要那個功能的憑證:警報的 Discord token 看 hub.json alerts;模組的看模組開了沒(登錄的 index 只有開著的)。"""
+    """A feature that is off needs no credentials: the alerts' Discord token depends on hub.json alerts; a module's on
+        whether the module is on (the registry index holds only enabled ones)."""
 
     def run_main(self, alerts: dict | None, modules: dict) -> str:
         import contextlib
@@ -56,7 +57,7 @@ class WhatIsChecked(unittest.TestCase):
                                if k.startswith("alerts.") else real_get(k, d)), \
              mock.patch.object(check_secrets, "undeclared", lambda *a: []), contextlib.redirect_stdout(out), \
              mock.patch.dict("os.environ", {"AGENT_HUB_LANG_UI": "zh-Hant"}):
-            check_secrets.main([hub, *modules])   # 給名稱 = 不碰警報管道
+            check_secrets.main([hub, *modules])   # names given = the alert channels are not touched
         return out.getvalue()
 
     def test_discord_token_only_when_alerts_use_discord(self):

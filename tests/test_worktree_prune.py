@@ -1,5 +1,5 @@
-"""每晚的 worktree 自動清理(bin/worktrees.py auto_prune):在暫存的 git repo 裡實際建 worktree,
-確認該動的才動、不該動的不動。
+"""The nightly automatic worktree cleanup (bin/worktrees.py auto_prune): builds real worktrees in a temporary git repo
+and confirms that only what should be touched is touched.
 
     bin/py -m unittest discover -s tests
 """
@@ -51,7 +51,8 @@ class AutoPrune(unittest.TestCase):
         git(self.repo, "worktree", "add", "-q", str(p), "-b", name)
         if not recipe:
             (p / "uv.lock").unlink()
-            git(p, "commit", "-qam", "no lock")  # 分支多一個 commit → 未合併;merged 由下面的 dict 決定
+            # one more commit on the branch → unmerged; merged is set by the dict below
+            git(p, "commit", "-qam", "no lock")
         if venv:
             (p / ".venv").mkdir()
             (p / ".venv" / "x").write_text("x")
@@ -75,7 +76,7 @@ class AutoPrune(unittest.TestCase):
         r = worktrees.auto_prune(dry_run=False)
         self.assertFalse((p / ".venv").exists())
         self.assertTrue(p.exists())
-        self.assertEqual(git(p, "status", "--porcelain"), "", "標記不能讓 worktree 變髒")
+        self.assertEqual(git(p, "status", "--porcelain"), "", "the marker must not make the worktree dirty")
         gd = pathlib.Path(git(p, "rev-parse", "--absolute-git-dir").strip())
         self.assertIn("uv sync", (gd / worktrees.MARKER).read_text())
         self.assertEqual(len(r["deps"]), 1)
@@ -83,7 +84,7 @@ class AutoPrune(unittest.TestCase):
     def test_tier1_needs_recipe(self):
         p = self.add("norecipe", idle=3, recipe=False)
         worktrees.auto_prune(dry_run=False)
-        self.assertTrue((p / ".venv").exists(), "沒有 uv.lock/pyproject.toml 就不刪 .venv")
+        self.assertTrue((p / ".venv").exists(), "without uv.lock/pyproject.toml .venv is not deleted")
 
     def test_tier2_removes_worktree_keeps_branch(self):
         p = self.add("old", idle=20)
@@ -93,7 +94,7 @@ class AutoPrune(unittest.TestCase):
         self.assertEqual(len(r["removed"]), 1)
 
     def test_session_open_inside_untouched(self):
-        """閒置但還開著的 session(可能只是還沒回來繼續):依賴也不刪。"""
+        """A session idle but still open (perhaps just not back yet): its dependencies are not deleted either."""
         p = self.add("busy", idle=20)
         self.busy = [str(p / "src")]
         r = worktrees.auto_prune(dry_run=False)

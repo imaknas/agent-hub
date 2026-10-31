@@ -1,6 +1,8 @@
-"""專案整套改名(bin/project-rename.py、lease-runner 的 POST /v1/projects/<name>/rename;10-25 Muninn m10251650)。
+"""Renaming a project end to end (bin/project-rename.py, lease-runner's POST /v1/projects/<name>/rename; 10-25,
+the assistant's m10251650).
 
-整個 hub 搭在暫存目錄(AGENT_HUB_ROOT);gh 跟 rename-project.sh 換成記錄參數的假腳本,不碰 GitHub、不搬真的資料夾。
+The whole hub is set up in a temp directory (AGENT_HUB_ROOT); gh and rename-project.sh are fake scripts that record
+their arguments; GitHub is never touched and no real folder is moved.
 
     bin/py -m unittest discover -s tests
 """
@@ -30,7 +32,8 @@ fi
 [ "$1 $2" = "repo rename" ] && { [ -n "$GH_FAIL" ] && { echo "gh: boom" >&2; exit 1; }; exit 0; }
 exit 0
 """
-# 假的 rename-project.sh:像真的一樣把登錄檔改名(其他步驟只記參數);RENAME_BUSY 時照真的訊息失敗
+# fake rename-project.sh: renames the registry file like the real one (the other steps only record arguments);
+# with RENAME_BUSY it fails with the real message
 FAKE_RENAME = r"""#!/bin/bash
 echo "rename-project.sh $*" >> "$LOG"
 [ -n "$RENAME_BUSY" ] && { echo "rename-project: 還有程序的工作目錄在 /x:claude(1)——先關掉" >&2; exit 75; }
@@ -87,7 +90,7 @@ class Script(unittest.TestCase):
         self.assertIn("gh repo rename garden-app -R me/proj --yes", c)
         self.assertTrue(any(x.startswith("rename-project.sh proj garden-app --origin git@github.com:me/garden-app.git")
                             for x in c))
-        self.assertEqual(self.run_it("proj", "garden-app")["result"], "already", "重送安全")
+        self.assertEqual(self.run_it("proj", "garden-app")["result"], "already", "a resend is safe")
 
     def test_sandbox_without_remote(self):
         res = self.run_it("sandbox", "room-3d")
@@ -96,7 +99,7 @@ class Script(unittest.TestCase):
         self.assertNotIn("--origin", next(x for x in self.calls() if x.startswith("rename-project.sh")))
 
     def test_retry_after_github_step(self):
-        """GitHub 改好了、後面失敗:再叫一次不再改 GitHub,接著做完。"""
+        """GitHub renamed, then a later step failed: calling again does not touch GitHub again and finishes the rest."""
         res = self.run_it("proj", "garden-app", RENAME_BUSY="1")
         self.assertEqual(res["result"], "busy")
         res = self.run_it("proj", "garden-app", GH_EXISTS="me/garden-app")
@@ -111,10 +114,11 @@ class Script(unittest.TestCase):
         for bad in ("Bad", "a--b", "-a", "proj", "agent-hub"):
             self.assertEqual(self.run_it("proj", bad)["result"], "bad_name", bad)
         self.assertEqual(self.run_it("nope", "x")["result"], "not_found")
-        self.assertEqual(self.calls(), [l for l in self.calls() if l.startswith("gh repo view")], "都沒有動手")
+        self.assertEqual(self.calls(), [l for l in self.calls() if l.startswith("gh repo view")], "nothing was done")
 
     def test_busy_before_github(self):
-        """10-25 review:資料夾有人在用(含 worktree 這種子資料夾)要在動 GitHub 之前就擋下來。"""
+        """10-25 review: a folder in use (including subfolders such as a worktree) is stopped before GitHub is
+        touched."""
         sub = self.ws / "proj" / ".claude" / "worktrees" / "wt"
         sub.mkdir(parents=True)
         sleeper = subprocess.Popen(["/bin/sleep", "30"], cwd=sub)
@@ -125,7 +129,8 @@ class Script(unittest.TestCase):
         self.assertFalse(any(x.startswith("gh repo rename") for x in self.calls()))
 
     def test_unfinished_upgrade_blocks(self):
-        """10-25 review:升級跟改名各記各的進度——對方做到一半就先別動,不然重試會找不到名稱。"""
+        """10-25 review: upgrade and rename record their own progress: while the other is halfway, hold off, or the
+        retry will not find the name."""
         (self.hub / ".state").mkdir(exist_ok=True)
         (self.hub / ".state" / "idea-upgrades.json").write_text(json.dumps({"sandbox": {"name": "proj", "stage": "renamed"}}))
         res = self.run_it("proj", "garden-app")

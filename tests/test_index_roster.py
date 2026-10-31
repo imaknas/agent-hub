@@ -1,4 +1,5 @@
-"""gen-index-roster.sh 產生的名冊:沒有想法沙盒時也要列出所有專案(2026-10-24 曾經整個變空)。
+"""The roster gen-index-roster.sh generates: it lists every project even with no idea sandboxes (on 2026-10-24 it
+once went entirely empty).
 
     bin/py -m unittest discover -s tests
 """

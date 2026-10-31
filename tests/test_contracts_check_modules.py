@@ -1,5 +1,6 @@
-"""contracts-check 的副本比對也看開著的模組的 consumes(例:助理模組讀助理定義的格式);沒開的模組不比對——沒有助理的部署
-不會一開始就紅。
+"""contracts-check's copy comparison also covers the consumes of enabled modules (e.g. the assistant module reads a
+format the assistant defines); modules that are off are not compared, so a deployment without the assistant is not red
+from the start.
 
     bin/py -m unittest discover -s tests
 """

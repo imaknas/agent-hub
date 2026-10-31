@@ -1,4 +1,5 @@
-"""hubconf.roster() 用簡單的逐行解析讀登錄的 paths(不需要 PyYAML);確認跟 PyYAML 讀到的一樣。
+"""hubconf.roster() reads the registry's paths with a simple line-by-line parse (no PyYAML needed); confirms it
+matches what PyYAML reads.
 
     bin/py -m unittest discover -s tests
 """
@@ -12,11 +13,11 @@ import hubconf  # noqa: E402
 
 try:
     import yaml
-except ImportError:  # 系統的 python3 沒有 PyYAML
+except ImportError:  # the system python3 has no PyYAML
     yaml = None
 
 
-@unittest.skipIf(yaml is None, "需要 PyYAML")
+@unittest.skipIf(yaml is None, "needs PyYAML")
 class Roster(unittest.TestCase):
     def test_roster_matches_yaml(self):
         roster = hubconf.roster()

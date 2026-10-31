@@ -1,5 +1,5 @@
-"""check-memory-gaps.py 的筆記計數:只算 agent 寫進 memory/ 的 commit,平台自己的(consolidate、librarian、
-onboard 骨架、同步時的 merge)不算;讀 workspace 的 .agent-memory。
+"""check-memory-gaps.py's note count: only commits an agent wrote into memory/ count, the platform's own
+(consolidate, librarian, the onboard skeleton, merges during sync) do not; reads the workspace's .agent-memory.
 
     bin/py -m unittest discover -s tests
 """
@@ -65,7 +65,8 @@ class NoteCommits(unittest.TestCase):
 
 
 class TodoBlock(unittest.TestCase):
-    """--apply 寫進 todo.md 的固定區塊:有缺口就放在檔尾、重跑不重複,沒有缺口就拿掉。"""
+    """The fixed block --apply writes into todo.md: with gaps it goes at the end of the file, a rerun does not repeat
+        it, with no gaps it is removed."""
 
     def setUp(self):
         self.m = load()
@@ -90,13 +91,15 @@ class TodoBlock(unittest.TestCase):
 
 
 class DigestSections(unittest.TestCase):
-    """hublib.digest_append:每個 job 寫自己那段;重跑原地換掉、順序不變;空的拿掉那段;沒檔案又沒內容就不建檔。"""
+    """hublib.digest_append: each job writes its own section; a rerun replaces it in place, order unchanged; an empty
+        one removes the section; no file and no content means no file is created."""
 
     def setUp(self):
         import hublib
         self.h = hublib
         self._data = os.environ.get("AGENT_HUB_DATA")
-        os.environ["AGENT_HUB_DATA"] = tempfile.mkdtemp()   # digest 寫在 data 目錄(hubconf.data_dir()),絕不碰真的
+        # the digest is written in the data directory (hubconf.data_dir()); never the real one
+        os.environ["AGENT_HUB_DATA"] = tempfile.mkdtemp()
 
     def tearDown(self):
         if self._data is None:
@@ -113,7 +116,8 @@ class DigestSections(unittest.TestCase):
         h.digest_append("projects", "## a\n\ny", day)
         s = h.digest_path(day).read_text()
         self.assertTrue(s.startswith("# Digest 2026-10-26\n"))
-        self.assertLess(s.index("digest:projects"), s.index("digest:memory-gaps"), "重跑要原地換掉,不是移到最後")
+        self.assertLess(s.index("digest:projects"), s.index("digest:memory-gaps"),
+                        "a rerun replaces in place, not moved to the end")
         self.assertIn("y", s)
         self.assertNotIn("\nx\n", s)
         h.digest_append("projects", "", day)

@@ -1,5 +1,4 @@
-"""Mechanical checks for the tool-agnostic hard rules (AGENTS.md, the tool-agnostic section;
-docs/design/tool-agnostic.md).
+"""Mechanical checks for the tool-agnostic hard rules (AGENTS.md, Tool neutrality; docs/design/tool-agnostic.md).
 
 1. The platform's nightly core judgment points must run with any LLM provider (shape: completion). Those not yet
    converted are listed in PENDING, which **may only shrink**: once one is converted (declared completion), remove it

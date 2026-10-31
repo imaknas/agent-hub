@@ -1,4 +1,5 @@
-"""② 檢查:這個 repo 的範例資料照自己的契約(跟 vendor 的副本)驗證。不依賴別的 repo 在不在。
+"""Check ②: this repo's example data validated against its own contracts (and the vendored copies). Does not
+depend on whether other repos are present.
 
     bin/py -m unittest discover -s tests
 """
@@ -13,7 +14,7 @@ import contracts  # noqa: E402
 
 C = ROOT / "contracts"
 F = C / "fixtures"
-OWNER = "我"  # 範例檔用中性的 owner 標籤;實際檔案用設定裡的(hub.json owner.tag)
+OWNER = "我"  # example files use a neutral owner tag; real files use the configured one (hub.json owner.tag)
 
 
 class Markdown(unittest.TestCase):
@@ -36,7 +37,8 @@ class Markdown(unittest.TestCase):
 
 
 class LlmPoints(unittest.TestCase):
-    """判斷點登錄的共用格式(contracts/llm-points.v1.schema.json):自己的登錄要合格,另一邊的寫法也要合格。"""
+    """The shared format of the judgment point registry (contracts/llm-points.v1.schema.json): our own registry must
+    be valid, and so must the other side's way of writing it."""
 
     def setUp(self):
         import minischema
@@ -47,11 +49,11 @@ class LlmPoints(unittest.TestCase):
         try:
             import yaml
         except ImportError:
-            self.skipTest("需要 PyYAML")
+            self.skipTest("needs PyYAML")
         self.assertEqual(self.errors(self.schema, yaml.safe_load((C / "llm-points.yaml").read_text())), [])
 
     def test_other_side_example_valid(self):
-        """另一邊的設計文件裡的範例(只有共用欄位 + 它自己的選填欄位)。"""
+        """The example from the other side's design doc (only the shared fields + its own optional fields)."""
         doc = {"v": 1, "points": {"packet_fit": {
             "caller": "core/prepare.py", "purpose": "判斷職缺對不對口", "model_group": "draft", "material": "personal",
             "output": {"format": "json", "schema": "llm/packet_fit.schema.json"}, "on_failure": "retry_later",
@@ -74,18 +76,19 @@ class LlmPoints(unittest.TestCase):
 
 class Neutral(unittest.TestCase):
     def test_consumer_facing_contracts_dont_name_the_platform(self):
-        """給別的 repo vendor 的契約跟範例不能提這個平台(有開源的 repo)。"""
+        """Contracts and examples that other repos vendor must not mention this platform (some of those repos are open
+        source)."""
         for p in [C / "todo-md.v1.md", C / "state-todo.v1.md", C / "reflect-week.v1.schema.json", *F.glob("*.md")]:
             text = p.read_text()
             for word in ("agent-hub", "librarian", "bin/"):
-                self.assertNotIn(word, text, f"{p.name} 提到 {word}")
+                self.assertNotIn(word, text, f"{p.name} mentions {word}")
         for p in [C / "lease-runner.v2.schema.json", C / "lease-handover.v1.schema.json",
-                  C / "llm-points.v1.schema.json"]:  # muninn 也會 vendor
+                  C / "llm-points.v1.schema.json"]:  # Muninn vendors these too
             text = p.read_text()
             for word in ("agent-hub", "librarian", "bin/", "Knas", "muninn"):
-                self.assertNotIn(word, text, f"{p.name} 提到 {word}")
-        for p in F.glob("*"):  # 範例檔也不放使用者的名字(owner 用中性的「我」)
-            self.assertNotIn("Knas", p.read_text(), f"{p.name} 提到使用者的名字")
+                self.assertNotIn(word, text, f"{p.name} mentions {word}")
+        for p in F.glob("*"):  # example files hold no user name either (the owner is the neutral "我")
+            self.assertNotIn("Knas", p.read_text(), f"{p.name} mentions the user's name")
 
     def test_same_ignores_prose(self):
         import tempfile
@@ -104,11 +107,12 @@ class Json(unittest.TestCase):
             json.loads(p.read_text())
 
     def test_llm_points_declare_existing_schemas(self):
-        """每個判斷點宣告的 output.schema 都存在(必填欄位交給 LlmPoints 用共用格式驗證)。"""
+        """Every output.schema a judgment point declares exists (required fields are validated by LlmPoints with the
+        shared format)."""
         try:
             import yaml
         except ImportError:
-            self.skipTest("需要 PyYAML")
+            self.skipTest("needs PyYAML")
         points = yaml.safe_load((C / "llm-points.yaml").read_text())["points"]
         self.assertGreaterEqual(len(points), 6)
         for name, spec in points.items():

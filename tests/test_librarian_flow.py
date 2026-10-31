@@ -1,15 +1,19 @@
-"""librarian 的行為測試(整支跑一次):自己帶的小 memory repo、匯流排、替身 llm.py,每個專案走一條分支,斷言結果。
-同一組測試對 bin/ 底下有的每個實作都跑(librarian.sh、librarian.py),最後再比兩個實作送給模型的 prompt 一模一樣——
-所以 librarian.sh 拿掉之前,這就是新舊行為一樣的證明;拿掉之後是 librarian.py 的回歸測試。不碰任何真的資料。
+"""Behaviour tests for the librarian (the whole script run once): its own small memory repos, bus and a stand-in
+llm.py, one branch per project, asserting the results.
+The same tests run against every implementation present under bin/ (librarian.sh, librarian.py), then check that the
+prompts both send to the model are identical, so before librarian.sh is removed this proves the old and new behave
+the same; after it is removed, it is librarian.py's regression test. No real data is touched.
 
-  p0     有新 memory、模型改了 STATE.md、值得進 digest,另外帶一筆轉交 → commit、review-log、digest、checkpoint 推進、轉交結案
-  p1     有新 memory、模型沒改 → 留理由、checkpoint 推進
-  p2     模型多寫了一個不准寫的檔 → 搬到隔離區、checkpoint 不推進
-  p3     模型沒回結構化輸出,但改了 STATE.md → 照常 commit、checkpoint 不推進
-  pdang  STATE.md 引用不存在的檔 + 待辦格式錯 → prompt 帶修正提示、叫一次修格式的判斷點
-  phand  沒有新 memory、只有轉交 → prompt 說只有轉交要處理
-  pidle  什麼都沒變 → 不叫模型
-  另有一筆帶 key 的轉交(effect done)→ 不進 prompt、不結案(留給助理的任務登錄)
+  p0     new memory, the model changed STATE.md, worth a digest entry, plus one handoff → commit, review-log, digest,
+         checkpoint advanced, handoff closed
+  p1     new memory, the model changed nothing → reason kept, checkpoint advanced
+  p2     the model wrote an extra file it may not write → moved to quarantine, checkpoint not advanced
+  p3     the model returned no structured output but changed STATE.md → committed as usual, checkpoint not advanced
+  pdang  STATE.md cites a file that does not exist + a malformed to-do section → the prompt carries a fix hint, the
+         format-fixing judgment point is called once
+  phand  no new memory, only a handoff → the prompt says only the handoff needs handling
+  pidle  nothing changed → the model is not called
+  Plus one handoff with a key (effect done) → not in the prompt, not closed (left to the assistant's task registry)
 
     bin/py -m unittest discover -s tests
 """
@@ -51,7 +55,8 @@ elif point == "librarian-todo-format":
     st = cwd / "STATE.md"; st.write_text(st.read_text().replace("- [ ] 沒標負責人", "- [ ] 〔agent〕沒標負責人")); res(structured_output=None)
 elif point == "librarian-index":
     p = cwd / "index.md"; p.write_text(p.read_text() + "\n<!-- index edited -->\n"); res(structured_output={"relations_found": "none"})
-elif point == "librarian-state-edits":   # 影子:不碰檔案,只回編輯清單(p1 回一個對不上的 old)
+elif point == "librarian-state-edits":   # shadow: touches no file, only returns an edit list
+    # (p1 returns an old that does not match)
     import re
     proj = re.search(r"負責專案 (\S+) 的 STATE.md", prompt).group(1)
     old = "找不到的一段" if proj == "p1" else "## 待辦"
@@ -61,7 +66,7 @@ elif point == "librarian-index-edits":
     res(structured_output={"index_updated": False, "edits": [], "relations_found": "none"})
 '''
 
-# 要比佔位檔大(check-state-todo 不檢查佔位用的小檔案,gen-todo.PLACEHOLDER_MAX_BYTES)
+# must be bigger than a placeholder (check-state-todo skips small placeholder files, gen-todo.PLACEHOLDER_MAX_BYTES)
 STATE_OK = "# STATE\n\n現況。\n\n" + "這個專案的背景說明。" * 40 + "\n\n## 待辦\n- [ ] 〔agent〕做一件事\n"
 
 
@@ -70,7 +75,8 @@ def sh(*cmd, cwd=None, env=None):
 
 
 class Env:
-    """一個暫存 hub(bin/ 都連到真的,只有 llm.py 是替身)+ 每個專案一組 bare repo / memory 副本 + 匯流排。"""
+    """A temporary hub (bin/ all linked to the real one, only llm.py a stand-in) + a bare repo / memory copy per project
+    + a bus."""
 
     def __init__(self, tmp: pathlib.Path):
         self.tmp, self.hub = tmp, tmp / "hub"
@@ -113,7 +119,7 @@ class Env:
         (self.hub / ".state" / f"{p}.sha").write_text(self.git(copy, "rev-parse", "HEAD") + "\n")
         if p in ("phand", "pidle"):
             return
-        # 新的 memory 推到 bare,副本退回去:librarian 的 git pull 才拿得到「新的 commit」
+        # new memory pushed to the bare repo and the copy reset back, so the librarian's git pull gets "new commits"
         (copy / "memory" / "2026-10-27.md").write_text(f"- {p} 的新筆記\n")
         if p == "pdang":
             (copy / "STATE.md").write_text(STATE_OK.replace("現況。", "現況,見 memory/reference/gone.md。")
@@ -123,7 +129,7 @@ class Env:
 
     def handoffs(self):
         subprocess.run([str(self.hub / "bin" / "py"), str(self.hub / "bin" / "hubbus"), "open-handoffs"], env=self.env,
-                       capture_output=True, check=True)   # 建匯流排的表
+                       capture_output=True, check=True)   # creates the bus tables
         c = sqlite3.connect(self.tmp / "bus" / "bus.db")
         for eid, proj, eff, fact in (("h1", "p0", "relevant", "轉交事實一"), ("h2", "phand", "changes", "只有轉交的事實"),
                                      ("h3", "p0", "done", "帶 key 的轉交")):
@@ -149,7 +155,7 @@ class Env:
         return self.git(self.tmp / "copies" / p, "log", "--format=%s").splitlines()
 
 
-@unittest.skipUnless(IMPLS, "沒有 librarian 實作")
+@unittest.skipUnless(IMPLS, "no librarian implementation")
 class LibrarianFlow(unittest.TestCase):
     def each(self, check):
         for impl in IMPLS:
@@ -188,8 +194,9 @@ class LibrarianFlow(unittest.TestCase):
             by = {}
             for c in env.calls():
                 by.setdefault((c["point"], c["cwd"]), c["prompt"])
-            # 誰叫了模型、叫了什麼
-            self.assertEqual({c for p, c in by if p == "librarian-state"}, set(MODES), "pidle 沒變就不該叫模型")
+            # who called the model, and with what
+            self.assertEqual({c for p, c in by if p == "librarian-state"}, set(MODES),
+                             "pidle, unchanged, must not call the model")
             self.assertIn(("librarian-todo-format", "pdang"), by)
             self.assertIn(("librarian-index", "hub"), by)
             p0 = by[("librarian-state", "p0")]
@@ -197,21 +204,21 @@ class LibrarianFlow(unittest.TestCase):
             self.assertIn("Hugin", p0)
             self.assertIn("轉交事實一", p0)
             self.assertIn("Alex 原話:原話", p0)
-            self.assertNotIn("帶 key 的轉交", p0, "帶 key 的轉交不給模型")
-            self.assertIn("p0 的新筆記", p0, "diff 要放進 prompt")
+            self.assertNotIn("帶 key 的轉交", p0, "a handoff with a key is not given to the model")
+            self.assertIn("p0 的新筆記", p0, "the diff goes into the prompt")
             self.assertIn("STATE.md 目前引用了這些已經不存在的檔案", by[("librarian-state", "pdang")])
             self.assertIn("memory/reference/gone.md", by[("librarian-state", "pdang")])
             self.assertIn("這次 memory/ 沒有新變動,只有下面 Alex 的轉交要處理", by[("librarian-state", "phand")])
-            # STATE.md 有改的就 commit;checkpoint 只在結果可信時推進
+            # a changed STATE.md is committed; the checkpoint advances only when the result is trustworthy
             for p in ("p0", "p2", "p3", "phand"):
                 self.assertEqual(env.subjects(p)[0], "librarian: update STATE.md", p)
             self.assertNotEqual(env.subjects("p1")[0], "librarian: update STATE.md")
             for p, at_head in (("p0", True), ("p1", True), ("pdang", True), ("phand", True), ("p2", False), ("p3", False)):
                 self.assertEqual(env.ckpt_at_head(p), at_head, p)
-            # 隔離區
+            # quarantine
             self.assertTrue((env.hub / ".state" / "stray" / f"p2-{TODAY}" / "memory_STRAY.md").exists())
             self.assertEqual(env.git(env.tmp / "copies" / "p2", "status", "--porcelain"), "")
-            # review-log、digest、index
+            # review-log, digest, index
             rl = (env.hub / "review-log.md").read_text()
             self.assertIn(f"## {TODAY} · p0", rl)
             self.assertIn("**Hugin 轉交**: #101", rl)
@@ -221,23 +228,23 @@ class LibrarianFlow(unittest.TestCase):
             self.assertIn("summary p0", dg)
             self.assertNotIn("summary p1", dg)
             self.assertIn("<!-- index edited -->", (env.hub / "index.md").read_text())
-            # 推到 bare;轉交只有可信的那幾個結案
+            # pushed to the bare repo; only the trustworthy handoffs are closed
             self.assertEqual(env.git(env.tmp / "bare" / "p0-memory.git", "rev-parse", "agent-memory"),
                              env.git(env.tmp / "copies" / "p0", "rev-parse", "HEAD"))
             c = sqlite3.connect(env.tmp / "bus" / "bus.db")
             done = {r[0] for r in c.execute("SELECT ref FROM events WHERE type='message.done'")}
             self.assertEqual(done, {"h1", "h2"})
-            # log 裡看得到的判斷
+            # the judgments visible in the log
             self.assertIn("pidle: no new commits, skip", log)
             self.assertIn("p1: STATE.md 未更新,理由: reason p1", log)
             self.assertIn("pdang: 待辦段落格式已修正", log)
             self.assertEqual(log.count("這次結果不可信"), 2)
         self.each(check)
 
-    @unittest.skipUnless("librarian.py" in IMPLS, "v2 只有 librarian.py 處理")
+    @unittest.skipUnless("librarian.py" in IMPLS, "only librarian.py handles v2")
     def test_v2_records_are_input_like_handoffs(self):
-        """Principal Handoff 0.3:principal 端來的 note 跟 Decisions 的 settled 進 prompt(帶決定者)、可信才 done;
-        Acts 的 settled 是 registrar 的,librarian 不碰。"""
+        """Principal Handoff 0.3: notes from the principal side and Decisions' settled go into the prompt (with the
+        decider), done only when trustworthy; Acts' settled belongs to the registrar, the librarian leaves it."""
         with tempfile.TemporaryDirectory() as d:
             env = Env(pathlib.Path(d))
             c = sqlite3.connect(env.tmp / "bus" / "bus.db")
@@ -262,21 +269,23 @@ class LibrarianFlow(unittest.TestCase):
             for want in ("[note]", "註冊商說週五前要續約", "續約網域", "[answers]", "用 SQLite", "快取用哪個?",
                          "Alex 本人決定的", "[dismissed]"):
                 self.assertIn(want, p1)
-            self.assertNotIn("k2", p1, "Acts 的 settled 歸 registrar")
-            self.assertNotIn(":null", p1, "沒有理由的 note 不印 null")
+            self.assertNotIn("k2", p1, "Acts' settled belongs to the registrar")
+            self.assertNotIn(":null", p1, "a note without a reason does not print null")
             done = {r[0] for r in c.execute("SELECT ref FROM events WHERE type='message.done'")}
             self.assertLessEqual({"rec:acts/0.3:p1:n1", "rec:decisions/0.3:p1:s1"}, done)
             self.assertNotIn("rec:acts/0.3:p1:s2", done)
 
     def test_shadow_compares_without_writing(self):
-        """影子模式(completion 版):每個叫了模型的專案都有一筆比對紀錄,提議只寫在 .state/librarian-shadow/,真的檔案不動。"""
+        """Shadow mode (the completion version): every project that called the model has a comparison record; proposals
+        are written only in .state/librarian-shadow/, the real files stay untouched."""
         with tempfile.TemporaryDirectory() as d:
             env = Env(pathlib.Path(d))
             self.assertEqual(env.run("librarian.py").returncode, 0)
             recs = [json.loads(x) for x in (env.hub / ".state" / "librarian-shadow" / f"{TODAY}.jsonl").read_text().splitlines()]
             state = {r["project"]: r for r in recs if r["point"] == "librarian-state-edits"}
             self.assertEqual(set(state), set(MODES))
-            self.assertIn("edit_error", state["p1"], "對不上的 old 要記成不合規,不套一半")
+            self.assertIn("edit_error", state["p1"],
+                          "an old that does not match is recorded as non-compliant, never half applied")
             self.assertFalse(state["p1"]["ok"])
             self.assertTrue(state["p0"]["ok"])
             self.assertIn("similarity", state["p0"])
@@ -286,16 +295,17 @@ class LibrarianFlow(unittest.TestCase):
             self.assertTrue(any(r["point"] == "librarian-index-edits" for r in recs))
             prompt = next(c["prompt"] for c in env.calls() if c["point"] == "librarian-state-edits" and "p0" in c["prompt"])
             self.assertIn("<<<STATE", prompt)
-            self.assertNotIn("請讀 ./AGENT.md", prompt, "completion 版沒有工具:內容直接給")
+            self.assertNotIn("請讀 ./AGENT.md", prompt,
+                             "the completion version has no tools: the content is given directly")
 
-    @unittest.skipUnless(len(IMPLS) == 2, "只剩一個實作")
+    @unittest.skipUnless(len(IMPLS) == 2, "only one implementation left")
     def test_implementations_send_the_same_prompts(self):
         got = {}
         for impl in IMPLS:
             with tempfile.TemporaryDirectory() as d:
                 env = Env(pathlib.Path(d))
                 self.assertEqual(env.run(impl).returncode, 0)
-                # commit 的 hash 每次不同(時間);其他一個字都不能差
+                # commit hashes differ every time (timestamps); not a single other character may differ
                 import re
                 got[impl] = [{**c, "prompt": re.sub(r"\b[0-9a-f]{7,40}\b", "<sha>", c["prompt"])} for c in env.calls()]
         self.assertEqual(got["librarian.sh"], got["librarian.py"])

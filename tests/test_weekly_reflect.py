@@ -1,4 +1,5 @@
-"""weekly-reflect 的統計:只透過 transcripts 介面讀(用假的 runtime),協作方式照 Action.collab 計數。
+"""weekly-reflect's statistics: read only through the transcripts interface (with a fake runtime); collaboration
+styles are counted by Action.collab.
 
     bin/py -m unittest discover -s tests
 """
@@ -14,7 +15,7 @@ import runtime_fake  # noqa: E402
 from runtime_ports import Action, Turn  # noqa: E402
 
 UTC = datetime.timezone.utc
-START = datetime.datetime(2026, 10, 19, tzinfo=UTC)   # 這週一
+START = datetime.datetime(2026, 10, 19, tzinfo=UTC)   # this week's Monday
 END = START + datetime.timedelta(days=7)
 
 
@@ -30,7 +31,8 @@ class Scan(unittest.TestCase):
         runtime_fake.reset()
         self.addCleanup(runtime_fake.reset)
         self.m = load()
-        # runtime_ports、hublib 是共用的模組:換掉的函式一定要換回來,不然會漏到別的測試
+        # runtime_ports and hublib are shared modules: swapped functions must be swapped back, or they leak into
+        # other tests
         for mod, name, fake in ((self.m.runtime_ports, "load", lambda *a, **k: runtime_fake),
                                 (self.m.hublib, "project_paths", lambda: {"proj": ["/w/proj"], "other": ["/w/other"]})):
             self.addCleanup(setattr, mod, name, getattr(mod, name))

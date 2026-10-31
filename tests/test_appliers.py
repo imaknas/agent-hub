@@ -1,8 +1,11 @@
-"""套用者的契約測試(bin/appliers.py、docs/design/new-user.md 3.7):APPLIERS 登記的每一個都跑同一組檢查——
-① plan 沒有副作用(它管的檔案前後一樣)② apply 回傳的 == 剛才 plan 的 ③ apply 完再 plan 是空的(冪等)。
-登記表裡有套用者卻沒有對應的情境設定,測試直接失敗:新的套用者不可能跳過契約測試。
+"""Contract tests for appliers (bin/appliers.py, docs/design/new-user.md 3.7): every one registered in APPLIERS runs
+the same checks: ① plan has no side effects (the files it manages are the same before and after) ② what apply returns
+== what plan just returned ③ plan after apply is empty (idempotent).
+An applier in the registry without a matching scenario setup fails the test outright: a new applier cannot skip the
+contract tests.
 
-每個情境都是假的登錄 + 暫存目錄;launchd 換成只記錄的假 launchctl,不碰真的服務。
+Each scenario is a fake registry + a temp directory; launchd is replaced with a fake launchctl that only records, and
+real services are never touched.
 
     bin/py -m unittest discover -s tests
 """
@@ -37,14 +40,15 @@ class SchedulerFixture:
 class ServicesFixture:
     def setup(self, m, tmp: pathlib.Path):
         self._saved = (m.AGENTS, m.RENDERED, m.launchctl, m.hubconf.service_manager)
-        m.hubconf.service_manager = lambda: "launchd"   # 測的是 launchd 這一支(launchctl 是假的),跟跑在哪個系統無關
+        # tests the launchd path (launchctl is fake), whatever system it runs on
+        m.hubconf.service_manager = lambda: "launchd"
         m.AGENTS, m.RENDERED = tmp / "LaunchAgents", tmp / "state" / "rendered-services.json"
         m.AGENTS.mkdir(parents=True)
         self.calls = []
 
         def fake(*args):
             self.calls.append(args)
-            # print = 沒載入(bootstrap 前的等待馬上結束);其他(bootout、bootstrap)成功
+            # print = not loaded (the wait before bootstrap ends at once); the others (bootout, bootstrap) succeed
             return subprocess.CompletedProcess(args, 1 if args[0] == "print" else 0, "", "")
         m.launchctl = fake
         (tmp / "ws").mkdir()
@@ -73,7 +77,8 @@ FIXTURES = {"scheduler": SchedulerFixture, "services": ServicesFixture, "agent-s
 
 class Registry(unittest.TestCase):
     def test_every_applier_has_a_fixture(self):
-        self.assertEqual(set(appliers.APPLIERS), set(FIXTURES), "新的套用者要在這裡加情境設定,才算跑過契約測試")
+        self.assertEqual(set(appliers.APPLIERS), set(FIXTURES),
+                         "a new applier needs its scenario setup here to count as having run the contract tests")
 
     def test_load_rejects_incomplete_module(self):
         with tempfile.TemporaryDirectory() as d:
@@ -105,19 +110,19 @@ class Contract(unittest.TestCase):
         def check(m, index, tmp, fx):
             before = snapshot(tmp)
             first = m.plan(index)
-            self.assertEqual(snapshot(tmp), before, "plan 改了檔案")
-            self.assertTrue(first, "情境應該有東西要套用(不然契約測不到)")
-            self.assertEqual(m.plan(index), first, "plan 兩次結果不一樣")
+            self.assertEqual(snapshot(tmp), before, "plan changed files")
+            self.assertTrue(first, "the scenario should have something to apply (or the contract is not tested)")
+            self.assertEqual(m.plan(index), first, "two plans gave different results")
             if hasattr(fx, "calls"):
-                self.assertFalse([c for c in fx.calls if c[0] in ("bootstrap", "bootout")], "plan 動了 launchd")
+                self.assertFalse([c for c in fx.calls if c[0] in ("bootstrap", "bootout")], "plan touched launchd")
         self.each(check)
 
     def test_apply_matches_plan_and_is_idempotent(self):
         def check(m, index, tmp, fx):
             planned = m.plan(index)
-            self.assertEqual(m.apply(index), planned, "apply 做的跟 plan 說的不一樣")
-            self.assertEqual(m.plan(index), [], "apply 完再 plan 應該是空的")
-            self.assertEqual(m.apply(index), [], "第二次 apply 不該再改東西")
+            self.assertEqual(m.apply(index), planned, "apply did something other than what plan said")
+            self.assertEqual(m.plan(index), [], "plan after apply should be empty")
+            self.assertEqual(m.apply(index), [], "a second apply must change nothing more")
         self.each(check)
 
     def test_changes_are_neutral(self):
@@ -126,7 +131,8 @@ class Contract(unittest.TestCase):
                 self.assertIsInstance(c, appliers.Change)
                 self.assertIn(c.op, appliers.OPS)
                 self.assertRegex(c.target, r"^(service|agent-settings|hook|job):")
-                self.assertNotIn(".claude", c.target + c.detail, "Change 不寫執行環境的設定位置")
+                self.assertNotIn(".claude", c.target + c.detail,
+                                 "a Change does not name the runtime's settings location")
             self.assertIsInstance(m.EXTERNAL, bool)
         self.each(check)
 

@@ -1,6 +1,7 @@
-"""commit 標題的格式(bin/commit_title.py)跟合併閘門的檢查(bin/merge-branch,登錄 commits: conventional)。
+"""The commit title format (bin/commit_title.py) and the merge gate's check (bin/merge-branch, registry
+commits: conventional).
 
-merge-branch 的部分用隔離的 config + 真的 git repo / worktree 跑。
+The merge-branch part runs with an isolated config + a real git repo / worktree.
 
     bin/py -m unittest discover -s tests
 """
@@ -92,8 +93,9 @@ class MergeGate(unittest.TestCase):
         self.assertEqual(r.returncode, 1, r.stdout + r.stderr)
         self.assertIn("commit-titles", r.stdout)
         self.assertIn("Update stuff", r.stdout)
-        self.assertNotIn("好的", r.stdout.split("Conventional Commits")[-1], "只列不合格的")
-        self.assertEqual(self.git(self.ws, "log", "--format=%s", "-1").strip(), "chore: initial commit", "main 沒動")
+        self.assertNotIn("好的", r.stdout.split("Conventional Commits")[-1], "lists only the invalid ones")
+        self.assertEqual(self.git(self.ws, "log", "--format=%s", "-1").strip(), "chore: initial commit",
+                         "main untouched")
 
     def test_good_titles_merge(self):
         self.register(commits="conventional")

@@ -1,7 +1,9 @@
-"""排程 job 持續失敗要發警報(10-27:contracts-check 連兩晚失敗,只有狀態頁紅,沒人知道)。
+"""A scheduled job that keeps failing raises an alert (10-27: contracts-check failed two nights running, only the
+status page was red, nobody knew).
 
-失敗 → 記進 scheduler-failing.json(起始時間保留);成功 → 拿掉;失敗超過 ALERT_AFTER 才進警報清單(下個 tick 重試就好的不吵);
-警報字句同一個 job 要穩定(alert.once 照字句去重)。
+Failure → recorded in scheduler-failing.json (the start time kept); success → removed; only a failure lasting longer
+than ALERT_AFTER goes on the alert list (one that the next tick's retry fixes makes no noise); the alert wording for
+the same job must stay stable (alert.once deduplicates by wording).
 
     bin/py -m unittest discover -s tests
 """
@@ -35,7 +37,7 @@ class FailingJobs(unittest.TestCase):
     def test_failure_is_recorded_and_success_clears_it(self):
         self.m.mark_job("agent-hub/contracts-check", True, "exit 1")
         first = self.failing()["agent-hub/contracts-check"]["since"]
-        self.m.mark_job("agent-hub/contracts-check", True, "exit 1")   # 再失敗一次:起始時間不變
+        self.m.mark_job("agent-hub/contracts-check", True, "exit 1")   # fails once more: start time unchanged
         self.assertEqual(self.failing()["agent-hub/contracts-check"]["since"], first)
         self.m.mark_job("agent-hub/contracts-check", False)
         self.assertEqual(self.failing(), {})
@@ -61,7 +63,7 @@ class FailingJobs(unittest.TestCase):
         self.assertEqual(len(sent[0][1]), 1)
         alert.once = lambda *a: (_ for _ in ()).throw(RuntimeError("discord down"))
         self.m.log = lambda s: None
-        self.m.alert_failing()   # 不能讓排程掛掉
+        self.m.alert_failing()   # must not bring the scheduler down
 
 
 if __name__ == "__main__":

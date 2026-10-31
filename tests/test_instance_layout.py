@@ -1,6 +1,8 @@
-"""實例目錄的擺法(hubconf,docs/design/new-user.md 3.1):沒有 .hub-home = 舊的擺法(全部在 hub 根目錄)——這保護搬家前的機器;
-有指標檔(或 AGENT_HUB_HOME)= <實例>/config、data、secrets;個別的 AGENT_HUB_CONFIG/DATA/SECRETS 可以再覆蓋。
-.state、.logs 永遠在 hub 根目錄(每台機器一份)。shell 的 bin/hubpaths.sh 要算出一樣的位置。
+"""The instance directory layout (hubconf, docs/design/new-user.md 3.1): no .hub-home = the old layout (everything in
+the hub root), which protects machines not yet moved; a pointer file (or AGENT_HUB_HOME) = <instance>/config, data,
+secrets; the individual AGENT_HUB_CONFIG/DATA/SECRETS can override further.
+.state and .logs are always in the hub root (one per machine). The shell's bin/hubpaths.sh must compute the same
+locations.
 
     bin/py -m unittest discover -s tests
 """
@@ -62,7 +64,8 @@ class Layout(unittest.TestCase):
         self.assertEqual(self.sh(), {k: want[k] for k in ("config", "data", "secrets", "hub_json")})
 
     def test_watchdog_agrees_with_hubconf(self):
-        """看門狗刻意不 import hubconf,自己算一份;兩邊要一樣(舊擺法跟有指標檔都是)。"""
+        """The watchdog deliberately does not import hubconf and computes its own; both must agree (in the old layout
+        and with a pointer file)."""
         probe = ("import importlib.util as u; s = u.spec_from_file_location('w', 'scheduler-watchdog.py'); "
                  "m = u.module_from_spec(s); s.loader.exec_module(m); print(m.CONFIG_DIR, m.SECRETS_DIR)")
         for pointer in (None, self.hub / "inst"):

@@ -1,5 +1,6 @@
-"""模組(docs/design/new-user.md 3.2):before: 轉成對方的 after:、沒開的模組的 job 當成不存在、繞圈要擋、
-requires_config 沒設定就不採用;平台自己的 modules/*.yaml 都要合格。
+"""Modules (docs/design/new-user.md 3.2): before: becomes the other side's after:, jobs of a module that is off are
+treated as nonexistent, cycles are blocked, a module whose requires_config is not set is not adopted; the platform's
+own modules/*.yaml must all be valid.
 
     bin/py -m unittest discover -s tests
 """
@@ -43,14 +44,15 @@ class Before(unittest.TestCase):
     def test_module_off_means_its_jobs_do_not_exist(self):
         js = self.jobs(index())
         self.assertNotIn("assistant/tasks", js)
-        self.assertEqual(js["core/todo"]["after"], ["core/librarian"], "核心不知道模組,沒開就跟沒有一樣")
+        self.assertEqual(js["core/todo"]["after"], ["core/librarian"],
+                         "the core does not know about modules: one that is off is as if it did not exist")
 
     def test_before_to_a_missing_job_is_ignored(self):
         m = module("x", [{"name": "a", "at": "03:00", "before": ["nope/job"], "run": "/bin/echo"}])
         self.assertIn("x/a", self.jobs(index({"x": m})))
 
     def test_scheduler_does_not_wait_for_a_job_that_is_not_there(self):
-        """after: 指到不存在的 job(那個模組沒開):排程器不等。"""
+        """after: pointing at a job that does not exist (its module is off): the scheduler does not wait."""
         now = datetime.datetime(2026, 10, 27, 3, 5)
         todo = {"name": "core/todo", "time": "03:00", "after": ["assistant/tasks"]}
         self.assertIsNone(scheduler.waiting_on(todo, {"core/todo": todo}, {}, set(), now, "2026-10-27"))
