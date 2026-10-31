@@ -1350,10 +1350,13 @@ def confined_refusal(a, here) -> str | None:
         return None
     if getattr(a, "sender", None) and a.sender != here:
         return _("hubbus: a confined run sends only as its own project (no --from)")
+    if getattr(a, "id", None) and a.cmd == "send":
+        # ids are idempotency keys: a chosen one could take an id another writer will use (<id>:done)
+        return _("hubbus: a confined run can't choose a letter id (--id)")
     if a.cmd == "send" and (a.type in CONFINED_TYPES or getattr(a, "task", None)):
         return _("hubbus: a confined run can't send {type} (registry changes and the owner's to-dos need a person)",
                  type=a.type)
-    if a.cmd == "inbox" and getattr(a, "project", None) and a.project != here:
+    if a.cmd in ("inbox", "open-questions") and getattr(a, "project", None) and a.project != here:
         return _("hubbus: a confined run reads only its own project's mailbox")
     if a.cmd in ("publish", "record-publish", "bridge", "dispatch", "reconcile-questions"):
         return _("hubbus: a confined run can't use {cmd}", cmd=a.cmd)
@@ -1794,7 +1797,10 @@ def main() -> None:
         return
     if a.cmd == "open-questions":
         c = db()
-        rows = open_questions(c, canon(a.project) if a.project else None)
+        project = canon(a.project) if a.project else None
+        if os.environ.get("AGENT_HUB_CONFINED"):   # only its own project's questions
+            project = project_of(pathlib.Path.cwd())
+        rows = open_questions(c, project)
         if a.json:
             print(json.dumps([{k: q[k] for k in ("id", "project", "ts", "text")} for q in rows], ensure_ascii=False))
         else:
@@ -1878,6 +1884,7 @@ def main() -> None:
                 p[k] = getattr(a, k)
         if a.reply_to:
             orig = must_message(c, a.reply_to)
+            confined_letter(orig, here)   # a reply carries the original's handoff and session
             p["reply_to"] = a.reply_to
             if canon(orig["source"]) == a.to and payload(orig).get("from_session"):
                 p["to_session"] = payload(orig)["from_session"]

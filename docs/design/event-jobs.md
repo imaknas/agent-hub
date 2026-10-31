@@ -1,6 +1,6 @@
 # Event-triggered jobs
 
-> agent-hub session · 2026-11-01 · r8. Item 1 of "Build" in `competitive-gaps.md`: a registry job can start when
+> agent-hub session · 2026-11-01 · r9. Item 1 of "Build" in `competitive-gaps.md`: a registry job can start when
 > matching bus events appear, not only on a clock or `after:` another job. External sources (CI finished, a webhook)
 > are out of scope: they will arrive later as bus events from one receiver, so jobs only ever react to bus events.
 >
@@ -40,6 +40,14 @@
 > r8 after a seventh review (a hunt for CLI defaults; none found, tested live): the mail commands themselves could
 > widen the boundary (`send --from` is unchecked, `manifest.update` rewrites a registry entry's `run` without the
 > owner), so a confined run uses them only as and for its own project (3.2).
+>
+> r9 after an eighth review: a confined run can still send its own project a request letter, which the mailbox then
+> hands to a handler that loads the project's accumulated permissions. That is the mailbox handler's exposure,
+> reachable by any bus writer with one letter and without event jobs; it is recorded in section 11 with its own
+> follow-up, and 3.2 now says so instead of calling the handler narrow. Also: a confined run can't choose a letter id,
+> reply to another project's letter or list other projects' open questions. Reading `bus.db` directly is refused
+> because `--restricted` confines the file tools to the workspace (tested live in round 7). **No blocking finding
+> against this design remains.**
 
 ## 1. What exists
 
@@ -139,21 +147,25 @@ The trust model (1: the bus is a peer log) decides what an event job may do with
 
 - **An ordinary project's job only sees events addressed to its project**, and runs with that project's authority
   (sandboxed when the project is).
-- **Event jobs do add reach, and it is gated.** A request letter only ever starts a mailbox handler, whose
-  permissions are fixed and narrow (`mailbox-escalation`: memory notes and the mail commands). An event agent job runs
-  with its own `allow:`, and anyone who can write the bus can start it with a forged event addressed to the project.
+- **Event jobs could add reach, so they are gated.** An event agent job runs with its own `allow:`, and anyone who
+  can write the bus can start it with a forged event addressed to the project.
   So a project's agent event job **must declare `allow:`** (no unattended `auto` mode), and it runs under the
   judgment point `agent-job-event`, declared `settings: platform`: the run loads none of the user's, the project's or
   local tool settings, only a settings file the platform writes from the policy: the project's sandbox when the
   registry enforces it (`enforce.sandbox`, as for its sessions; hub.json's `service_sandbox_exempt` is for services
   and command jobs and doesn't apply here), with sandboxed commands **not** approved automatically (Claude Code's
   `autoAllowBashIfSandboxed` defaults to true, which would let any sandboxed Bash command past `allow:`), the deny list, and the mail commands (`agenthub send/inbox/done…`; not raw
-  `hubbus`, merging or `cap-run`). So the boundary is exactly `allow:` plus those; permissions a person accumulated in
+  `hubbus`, merging or `cap-run`). So the boundary of the job's own run is exactly `allow:` plus those; permissions a person accumulated in
   the project's settings, and the project's hooks, don't apply (memory notes the job writes are committed by the
   hourly memory sync). The mail commands are narrowed too: `llm.py` marks a confined run (`AGENT_HUB_CONFINED`),
   and `hubbus` then sends only as the run's own project (no `--from`), never `manifest.update` (a registry rewrite,
   whose `run` fields the platform applies without the owner) or the owner's to-dos (`task`, `drop`, `--task`), reads
-  and closes only its own project's letters, and refuses `publish`, `record-publish` and the relays. An `allow:` that
+  and closes only its own project's letters (no `--id`, no reply to another project's letter, only its own open
+  questions), and refuses `publish`, `record-publish` and the relays. **Through a letter** the run can cause only what
+  any bus writer can cause with one letter: a request to its own project is handed by the mailbox to a handler
+  (`mailbox-escalation`, or a fork of a recent session), and today that handler loads the project's accumulated
+  permissions (and, in a sandboxed project, auto-approved sandboxed Bash): the same gap this section closes for event
+  jobs, still open for the handlers (section 11). Event jobs add nothing to it, since the letter needs no event job. An `allow:` that
   names an interpreter (`Bash(python3:*)`) grants arbitrary code within the sandbox, by definition, including
   reading the run's environment. Still loaded: managed (admin) settings, which are the machine owner's, and the project's
   rules file (`CLAUDE.md`), which is instructions, not permissions. MCP servers stay off (`run-agent-job.sh` passes
@@ -348,6 +360,10 @@ The page reads the bus through `event_jobs`, the same functions the scheduler us
 - Authenticated bus writes (3.2). Until then, any process that can write the bus can also send a `manifest.update`
   in another project's name, and `registry.py apply-updates` applies changed `run` fields (jobs, services) without the
   owner; event jobs are kept out of that path (3.2), but sessions and other agents are not. Both belong to that task.
+- Confining the mailbox handlers and clock agent jobs the way event jobs are (`settings: platform` for
+  `mailbox-escalation`, `mailbox-conversation` and `agent-job` with `allow:`; `autoAllowBashIfSandboxed: false` in the
+  settings `render-project-settings` writes). Until then a request letter, from anyone who can write the bus, reaches a
+  handler with the project's accumulated permissions (3.2).
 - Waking the scheduler on publish.
 
 ## 12. Files

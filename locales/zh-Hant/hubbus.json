@@ -125,5 +125,6 @@
  "hubbus: a confined run can't use {cmd}": "hubbus:受限的執行不能用 {cmd}",
  "hubbus: a confined run reads only its own project's letters": "hubbus:受限的執行只能看自己專案的信",
  "hubbus: a confined run reads only its own project's mailbox": "hubbus:受限的執行只能看自己專案的信箱",
- "hubbus: a confined run sends only as its own project (no --from)": "hubbus:受限的執行只能用自己專案的名義寄(不能 --from)"
+ "hubbus: a confined run sends only as its own project (no --from)": "hubbus:受限的執行只能用自己專案的名義寄(不能 --from)",
+ "hubbus: a confined run can't choose a letter id (--id)": "hubbus:受限的執行不能自己指定信的 id(--id)"
 }

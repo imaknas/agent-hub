@@ -452,6 +452,8 @@ class ConfinedMail(unittest.TestCase):
                   {"cmd": "send", "type": "task"},
                   {"cmd": "send", "type": "done", "task": "k1"},
                   {"cmd": "inbox", "project": "q"},
+                  {"cmd": "open-questions", "project": "q"},
+                  {"cmd": "send", "type": "info", "id": "x:done"},
                   {"cmd": "publish"}, {"cmd": "record-publish"}, {"cmd": "dispatch"}):
             self.assertTrue(self.refused(**a), a)
         with self.assertRaises(SystemExit):
@@ -459,6 +461,11 @@ class ConfinedMail(unittest.TestCase):
         self.hb.confined_letter({"to_project": "p", "source": "r"}, "p")
         with mock.patch.dict(os.environ, {"AGENT_HUB_CONFINED": ""}):
             self.assertIsNone(self.refused(cmd="send", type="manifest.update", sender="q"))
+
+    def test_reply_and_open_questions_stay_in_the_project(self):
+        src = (ROOT / "bin" / "hubbus").read_text()
+        self.assertIn("orig = must_message(c, a.reply_to)\n            confined_letter(orig, here)", src)
+        self.assertIn('if os.environ.get("AGENT_HUB_CONFINED"):   # only its own project\'s questions', src)
 
     def test_llm_marks_confined_runs(self):
         src = (ROOT / "bin" / "llm.py").read_text()
