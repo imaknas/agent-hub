@@ -1,9 +1,12 @@
-"""平台的 headless 模型呼叫(llm.py run/exec)不是信的收件人(10-27 盲審查到的 bug)。
+"""The platform's headless model calls (llm.py run/exec) are not letter recipients (a bug found by the 10-27 blind
+review).
 
-每小時的 login-check、每週的 reflect-week 在 hub 根目錄跑 `claude -p`,繼承了 agent-hub 的 SessionStart hook,
-`hubbus hook session-start` 就把 agent-hub 的新信標成「送進這個 session 了」——dispatch 以為有人收了,不再派;
-真的 session 也不會再收到(實例:m10250040-50a0、m10242244-e739 都被 login-check 的 session 收走)。
-修法:llm.py 給它叫起的程序環境變數 HUB_LLM_POINT=<判斷點>;hubbus 看到就不送信、不記在場(租約例外,照舊)。
+The hourly login-check and the weekly reflect-week run `claude -p` in the hub root and inherited agent-hub's
+SessionStart hook, so `hubbus hook session-start` marked agent-hub's new letters "delivered into this session":
+dispatch thought someone had taken them and stopped dispatching, and the real session never got them either (cases:
+m10250040-50a0 and m10242244-e739 were both taken by the login-check session).
+Fix: llm.py gives the processes it starts the env var HUB_LLM_POINT=<judgment point>; when hubbus sees it, it delivers
+no letters and records no presence (leases are the exception, as before).
 
     bin/py -m unittest discover -s tests
 """

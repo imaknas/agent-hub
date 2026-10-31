@@ -1,10 +1,13 @@
-"""agent-hub 跑 Human Task Handoff(HTH 0.1,agent-ops-specs)的一致性測試資料:證明已經在跑的實作(gen-todo 的解析、
-任務登記的 key 跟套用)符合規範。測試資料 vendor 在 contracts/vendor/agent-ops-specs/hth-0.1/(來源 commit 見 SOURCE)。
+"""agent-hub runs the Human Task Handoff (HTH 0.1, agent-ops-specs) conformance test data: proves that the
+implementations already running (gen-todo's parsing, the task registry's keys and applying) meet the spec. The test
+data is vendored in contracts/vendor/agent-ops-specs/hth-0.1/ (source commit in SOURCE).
 
-只跑 zh-hant profile(agent-hub 用的那個);en profile 是規範的預設,agent-hub 沒有實作它。
-資料裡 owner 的標籤是 `Owner`,照 conformance/README 的規則換成這台設定的 owner.tag 再比。
-套用的路由:agent-hub 只套用 owner 那邊送回來的事件(hubbus open-handoffs 只收 owner 地址寄的轉交);agent 在
-session 裡回報的、registrar 自己推斷的 done 不會走到 apply_keyed——所以那兩種案例在這裡就是「沒有改」。
+Runs only the zh-hant profile (the one agent-hub uses); the en profile is the spec's default, which agent-hub does not
+implement. The owner tag in the data is `Owner`; per the conformance/README rules it is replaced with this machine's
+configured owner.tag before comparing.
+Applying routes: agent-hub applies only events sent back from the owner side (hubbus open-handoffs takes only
+handoffs sent from the owner address); a done that an agent reports in a session, or that the registrar infers itself,
+never reaches apply_keyed, so here those two kinds of case are "unchanged".
 
     bin/py -m unittest discover -s tests
 """
@@ -25,7 +28,7 @@ def load(name: str, file: str):
 
 
 gen_todo = load("gen_todo", "gen-todo.py")
-tasks = load("hth_tasks", "knas-tasks.py")  # 任務登記;改名在 new-user 設計的待辦
+tasks = load("hth_tasks", "knas-tasks.py")  # the task registry; renaming it is a to-do in the new-user design
 TAG = gen_todo.TAG
 
 
@@ -34,7 +37,8 @@ def cases(file: str):
 
 
 def own(x):
-    """測試資料的 owner 標籤 `Owner` 換成這台的 owner.tag(標籤跟 key 標記裡的,含「等Owner」不帶空格的寫法)。"""
+    """Replace the test data's owner tag `Owner` with this machine's owner.tag (in tags and key markers, including the
+    "等Owner" form without a space)."""
     if isinstance(x, str):
         return x.replace("〔Owner〕", f"〔{TAG}〕").replace("等 Owner", f"等 {TAG}").replace("等Owner", f"等{TAG}")
     if isinstance(x, list):
@@ -45,7 +49,7 @@ def own(x):
 
 
 def lines_cmp(lines):
-    """SPEC §8.2:比非空行、去掉行尾空白。"""
+    """SPEC §8.2: compare non-empty lines, trailing whitespace stripped."""
     return [line.rstrip() for line in lines if line.strip()]
 
 

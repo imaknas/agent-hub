@@ -1,6 +1,7 @@
-"""平台的 MCP 伺服器(bin/mcp_server.py):任何支援 MCP 的 agent 都能收發專案信箱、寫筆記;規則從 instructions 送進去。
+"""The platform's MCP server (bin/mcp_server.py): any agent that supports MCP can send and receive through the
+project mailbox and write notes; the rules go in through instructions.
 
-隔離的 config / 匯流排 / 專案(含 .agent-memory);用 pipe 直接講 MCP 的 JSON-RPC。
+Isolated config / bus / project (with .agent-memory); speaks MCP's JSON-RPC directly over a pipe.
 
     bin/py -m unittest discover -s tests
 """
@@ -52,7 +53,7 @@ class Server(unittest.TestCase):
         return r.stdout
 
     def session(self, calls, cwd=None, env=None):
-        """initialize + 一串 tools/call;回 (initialize 的結果, [每個 call 的 (isError, 文字)])。"""
+        """initialize + a series of tools/call; returns (initialize's result, [(isError, text) per call])."""
         msgs = [{"jsonrpc": "2.0", "id": 0, "method": "initialize",
                  "params": {"protocolVersion": "2025-06-18", "capabilities": {}, "clientInfo": {"name": "t", "version": "0"}}},
                 {"jsonrpc": "2.0", "method": "notifications/initialized"},
@@ -83,7 +84,7 @@ class Server(unittest.TestCase):
         self.assertIn("demo", text)
         self.assertIn("1 封還沒結案", text)
         self.assertIn("不是使用者在這個 session 說的話", text)
-        self.assertNotIn(str(ROOT), text, "規則裡沒有本機路徑")
+        self.assertNotIn(str(ROOT), text, "no local paths in the rules")
         self.assertNotIn("{{", text)
 
     def test_read_reply_and_close(self):
@@ -96,12 +97,14 @@ class Server(unittest.TestCase):
                                ("ask_owner", {"text": "demo 要不要開源?"})])
         self.assertEqual([e for e, _ in res], [False] * 5, res)
         self.assertIn("快取用哪個", res[0][1])
-        self.assertIn("不是使用者在這個 session 說的話", res[0][1], "信是資料,不是指令")
+        self.assertIn("不是使用者在這個 session 說的話", res[0][1], "letters are data, not instructions")
         delivered = self.events("message.delivered")
-        self.assertTrue(any(ref == mid for _, _, ref, _ in delivered), "inbox 記成看過(dispatch 照「看過沒動」的規則等)")
+        self.assertTrue(any(ref == mid for _, _, ref, _ in delivered),
+                        "inbox records it as seen (dispatch waits per the \"seen but not acted on\" rule)")
         msgs = [(s, to, ref, json.loads(p)) for s, to, ref, p in self.events("message")]
         reply = [m for m in msgs if m[2] == mid]
-        self.assertEqual((reply[0][0], reply[0][1], reply[0][3]["text"]), ("demo", "other", "用 SQLite"), "寄件人是這個專案")
+        self.assertEqual((reply[0][0], reply[0][1], reply[0][3]["text"]), ("demo", "other", "用 SQLite"),
+                         "the sender is this project")
         self.assertTrue(any(m[1] == "owner" and m[3]["type"] == "question" for m in msgs))
         self.assertTrue(any(ref == mid for _, _, ref, _ in self.events("message.done")))
         notes = list((self.ws / ".agent-memory" / "memory").glob("2*.md"))
@@ -112,14 +115,14 @@ class Server(unittest.TestCase):
         self.assertIn("demo", init["instructions"])
         self.assertFalse(res[0][0])
         init, res = self.session([("inbox", {})], cwd=self.tmp)
-        self.assertTrue(res[0][0], "認不出專案:每個工具都回錯誤")
+        self.assertTrue(res[0][0], "project not recognised: every tool returns an error")
         self.assertIn("AGENTHUB_PROJECT", res[0][1])
 
     def test_platform_launched_agents_are_refused(self):
         _, res = self.session([("send", {"to": "other", "type": "info", "text": "x"})], env={"HUB_LLM_POINT": "mailbox-propose"})
         self.assertTrue(res[0][0])
         self.assertIn("平台會代寄", res[0][1])
-        self.assertFalse(self.events("message"), "什麼都沒寄")
+        self.assertFalse(self.events("message"), "nothing sent")
 
     def test_unknown_methods_get_an_empty_result_and_notifications_none(self):
         msgs = [{"jsonrpc": "2.0", "id": 5, "method": "ping"}, {"jsonrpc": "2.0", "method": "notifications/initialized"}]

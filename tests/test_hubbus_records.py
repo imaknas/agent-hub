@@ -1,7 +1,8 @@
-"""匯流排上的 Principal Handoff 0.3 record(階段 3,docs/design/principal-handoff-0.3-migration.md)。
+"""Principal Handoff 0.3 records on the bus (stage 3, docs/design/principal-handoff-0.3-migration.md).
 
-事件 type record、id rec:<ext>:<project>:<record id>(重送 no-op);`hubbus records` 給 registrar 查;`record-publish` 給程式寄;
-done 對 record 也有效;收件匣看得到從助理來的 record(誰決定、什麼授權);dispatch 不把 record 當成要派人處理的信。
+Event type record, id rec:<ext>:<project>:<record id> (a resend is a no-op); `hubbus records` is for the registrar to
+query; `record-publish` is for programs to send; done works on records too; the inbox shows records from the assistant
+(who decided, under what authority); dispatch does not treat a record as a letter to dispatch someone for.
 
     bin/py -m unittest discover -s tests
 """

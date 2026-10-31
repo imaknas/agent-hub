@@ -1,4 +1,5 @@
-"""bin/hub-event:平台的事件入口(執行環境抽象第 3 層)。用假的 runtime + 替身處理程式,不碰真的專案、匯流排。
+"""bin/hub-event: the platform's event entry point (layer 3 of the runtime abstraction). A fake runtime + stand-in
+handlers; real projects and the bus are never touched.
 
     bin/py -m unittest discover -s tests
 """

@@ -1,5 +1,6 @@
-"""專案問 Knas 的問題:在專案 session 裡解決了要能收掉(--question),開著的要提醒、要定期對帳(m10252237)。
-暫存的匯流排資料庫;專案名單換成假的;不送任何東西給 Muninn。
+"""Questions a project asks the owner: once resolved in the project's session they can be closed (--question); open
+ones get reminders and periodic reconciliation (m10252237).
+A temporary bus database; the project list is faked; nothing is sent to the assistant.
 
     bin/py -m unittest discover -s tests
 """
@@ -35,7 +36,8 @@ class Questions(unittest.TestCase):
         m.DB = self.tmp / "bus.db"
         m.log = lambda msg: None
         m.projects = lambda: {"proj": self.tmp / "proj", "other": self.tmp / "other", "agent-hub": self.tmp}
-        hp = mock.patch.object(m.hubconf, "hub_project", lambda: "agent-hub")   # hubconf 是共用的模組:一定要換回來
+        # hubconf is a shared module: always swap it back
+        hp = mock.patch.object(m.hubconf, "hub_project", lambda: "agent-hub")
         hp.start()
         self.addCleanup(hp.stop)
         self.c = m.db()
@@ -59,8 +61,8 @@ class Questions(unittest.TestCase):
         self.ask("q-open")
         self.ask("q-answered")
         self.m.publish(self.c, "ans-1", "message", self.knas, "proj", "q-answered", {"type": "info", "text": "用 A"})
-        self.ask("lease-abc-q-0")          # 深談交接的問題:Muninn 自己管
-        self.ask("p-1", kind="progress")   # 不是問題
+        self.ask("lease-abc-q-0")          # a question from a discussion handover: the assistant handles it
+        self.ask("p-1", kind="progress")   # not a question
         self.ask("q-other", project="other")
         self.assertEqual(self.open_ids(), ["q-open", "q-other"])
         self.assertEqual(self.open_ids("proj"), ["q-open"])
@@ -106,7 +108,7 @@ class Questions(unittest.TestCase):
         self.assertEqual((letter["source"], letter["to_project"], self.m.payload(letter)["type"]),
                          ("agent-hub", "proj", "request"))
         self.assertIn("--question q-old", self.m.payload(letter)["text"])
-        self.assertEqual(self.m.reconcile_questions(self.c, now=NOW), [], "同一週重跑不重寄")
+        self.assertEqual(self.m.reconcile_questions(self.c, now=NOW), [], "a rerun in the same week does not resend")
         later = NOW + datetime.timedelta(days=7)
         self.assertEqual(self.m.reconcile_questions(self.c, now=later), ["qcheck-q-new-0", "qcheck-q-old-1"])
 

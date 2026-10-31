@@ -1,24 +1,34 @@
-"""任務登記(Principal Handoff Acts 的 registrar)的行為測試:整支跑一次,自己帶 memory repo、匯流排、hub.json,不碰真的資料。
+"""Behaviour tests for the task registry (the registrar of Principal Handoff Acts): runs the whole script once, with
+its own memory repo, bus and hub.json; never touches real data.
 
-同一張情境表對每個在 bin/ 底下的實作都跑:
-  舊的實作       匯流排上用 v1 的 task / done --inferred 信件跟個人助理的 handoff
-  registrar.py   (新)匯流排上用 0.3 的 record 事件(hubbus record-publish / records)
-舊的只跑它做得到的情境(V1);新的全跑。這是舊的換成 registrar.py 之前鎖住的行為,換完是回歸測試。
-舊的在 pe、pg 有已知的錯,所以不算進 V1:改寫的比對拿整行(含「- [ ] 〔Alex〕」)去比,幾乎不會判定成改寫;而且先檢查
-消失的 key 才寄新行,同文字掉了 key 的行會先寄一個錯的「推斷做完」再蓋回同一個 key。規範的順序(relink 在 reconcile 前)修掉這兩個。
+The same scenario table runs against every implementation under bin/:
+  the old one    v1 task / done --inferred letters and the personal assistant's handoffs on the bus
+  registrar.py   (new) 0.3 record events on the bus (hubbus record-publish / records)
+The old one runs only the scenarios it can do (V1); the new one runs all. This is the behaviour locked in before the
+old one was replaced with registrar.py; after the switch it is a regression test.
+The old one has known bugs in pe and pg, so they are not in V1: the rewrite match compares the whole line (including
+"- [ ] 〔Alex〕"), so it almost never judges a line rewritten; and it checks vanished keys before sending new lines, so
+a line with the same text that lost its key first gets a wrong "inferred done" sent, then is stamped back with the
+same key. The spec's order (relink before reconcile) fixes both.
 
-  pa  沒有 key 的〔Alex〕行             → 寄出 raised / task、行尾蓋章
-  pb  帶 key 的行 + 結案(done)         → 刪掉那一行,段落空了補「- (無)」,結案標成 done
-  pc  被刪掉的 key + 重開(reopened)    → 加回那一行
-  pd  寄過、沒結案、STATE.md 找不到      → 寄一次推斷做完的 claim(第二次跑不再寄)
-  pe  同上,但有很像的行(沒 key)        → 舊的 key 不寄 claim、只警告;那一行照新的一件 raised
-  pf  帶 key 的行被改了字               → amended(新的才有)
-  pg  掉了 key 的行,文字跟原本一樣       → 補回原本的 key,不寄新的 raised(新的才有)
-  ph  需求已 withdrawn、行也刪了          → 不寄 claim(新的才有)
-  pj  v1 已經寄過推斷結案(done-<key>)的一件 → 換成新的那晚不再寄 claim(新的才有)
-  pk  改名前(pk-old)用 v1 寄過的一件,行還在 → 認得,不再 raised(新的才有)
-  pi  改過字(amended)的一件掉了 key       → 照改過的文字補回原本的 key,不當新的一件(新的才有;文字沒改過時
-                                          重新算出來的 key 本來就一樣,只有改過字才看得出有沒有補 key)
+  pa  〔Alex〕 line without a key                  → raised / task sent, line end stamped
+  pb  line with a key + closed (done)             → that line deleted, an empty section gets "- (無)", closure
+                                                    marked done
+  pc  deleted key + reopened                      → the line added back
+  pd  sent, not closed, not found in STATE.md     → one inferred-done claim sent (not sent again on a second run)
+  pe  as above, but with a very similar line      → no claim for the old key, only a warning; that line raised as
+      (no key)                                      a new item
+  pf  line with a key whose text changed          → amended (new one only)
+  pg  line that lost its key, same text as before → the original key restored, no new raised (new one only)
+  ph  need already withdrawn, line deleted too    → no claim (new one only)
+  pj  an item v1 already sent an inferred         → no claim on the night of the switch (new one only)
+      closure for (done-<key>)
+  pk  an item sent through v1 before a rename     → recognised, not raised again (new one only)
+      (pk-old), line still there
+  pi  an amended item that lost its key           → the original key restored per the amended text, not a new item
+                                                    (new one only; when the text was never changed the recomputed
+                                                    key is the same anyway, so only an amended text shows whether
+                                                    the key gets restored)
 
     bin/py -m unittest discover -s tests
 """
@@ -32,10 +42,10 @@ import tempfile
 import unittest
 
 ROOT = pathlib.Path(__file__).resolve().parents[1]
-OLD, NEW = "knas-tasks.py", "registrar.py"   # 舊的檔名在 registrar.py 換上去之後跟著刪掉
+OLD, NEW = "knas-tasks.py", "registrar.py"   # the old file name goes once registrar.py has replaced it
 IMPLS = [p for p in (OLD, NEW) if (ROOT / "bin" / p).exists()]
 TAG, OWNER, PRINCIPAL, SIDE = "Alex", "owner", "person:alex", "helper"
-V1 = {"pa", "pb", "pc", "pd"}   # 舊的做得到的情境(pe、pg 是舊的已知錯,見上)
+V1 = {"pa", "pb", "pc", "pd"}   # scenarios the old one can do (pe, pg are its known bugs, see above)
 
 
 def key(project: str, text: str) -> str:
@@ -74,7 +84,7 @@ def sh(*cmd, cwd=None, env=None):
 
 
 class Env:
-    """暫存 hub(bin/ 連到真的)+ 每個專案一組 bare repo 跟 memory 副本 + 匯流排。"""
+    """A temporary hub (bin/ linked to the real one) + a bare repo and memory copy per project + a bus."""
 
     def __init__(self, tmp: pathlib.Path, impl: str):
         self.tmp, self.hub, self.impl = tmp, tmp / "hub", impl
@@ -96,7 +106,7 @@ class Env:
         self.env = {**e, "AGENT_HUB_ROOT": str(self.hub), "AGENT_HUB_DATA": str(self.hub / "data"),
                     "GIT_AUTHOR_NAME": "t", "GIT_AUTHOR_EMAIL": "t@t", "GIT_COMMITTER_NAME": "t",
                     "GIT_COMMITTER_EMAIL": "t@t", "GIT_CONFIG_GLOBAL": "/dev/null", "GIT_CONFIG_NOSYSTEM": "1"}
-        self.hubbus("inbox", "--project", "pa")   # 建匯流排的表
+        self.hubbus("inbox", "--project", "pa")   # creates the bus tables
         self.db = tmp / "bus" / "bus.db"
         self.scenes = {p: s for p, s in SCENES.items() if impl == NEW or p in V1}
         for p, s in self.scenes.items():
@@ -122,7 +132,7 @@ class Env:
         else:
             self.v2_inputs(p, s)
 
-    # --- 舊:v1 信件 ---
+    # --- old: v1 letters ---
     def v1_inputs(self, p, s):
         c = sqlite3.connect(self.db)
         for k, text in s.get("posted", {}).items():
@@ -138,7 +148,7 @@ class Env:
         c.commit(); c.close()
 
     def v1_outputs(self, p):
-        """這次跑寄給 owner 的信:[(種類, key)],種類 raised 或 claim。"""
+        """Letters this run sent to the owner: [(kind, key)], kind raised or claim."""
         c = sqlite3.connect(self.db)
         rows = c.execute("SELECT id, payload FROM events WHERE type='message' AND source=? AND to_project=?"
                          " AND ts > '2026-10-27'", (p, OWNER)).fetchall()
@@ -151,7 +161,7 @@ class Env:
                 out.append(("claim", d.get("task")))
         return sorted(out)
 
-    # --- 新:0.3 records ---
+    # --- new: 0.3 records ---
     def rec(self, p, rid, type_, origin, by, k, **kw):
         return {"ph": "0.3", "ext": "acts/0.3", "id": rid, "type": type_, "origin": origin, "by": by, "key": k,
                 "project": p, "ts": "2026-10-20T10:00:00Z", **kw}
@@ -167,14 +177,14 @@ class Env:
         for k in s.get("withdrawn", []):
             recs.append(self.rec(p, f"w:{k}", "withdrawn", "requester", f"project:{p}", k, reason="not_needed",
                                  supersedes=[f"r:{k}"], ts="2026-10-21T10:00:00Z"))
-        if s.get("v1_posted_as"):   # 改名前用舊名稱寄的 v1 task
+        if s.get("v1_posted_as"):   # a v1 task sent under the old name before the rename
             old, text = s["v1_posted_as"]
             c = sqlite3.connect(self.db)
             c.execute("INSERT INTO events(id, ts, type, source, to_project, ref, payload) VALUES(?,?,?,?,?,?,?)",
                       (key(old, text), "2026-10-20T10:00:00+08:00", "message", old, OWNER, None,
                        json.dumps({"v": 1, "type": "task", "text": text}, ensure_ascii=False)))
             c.commit(); c.close()
-        if s.get("v1_claimed"):   # 舊的 registrar 在 v1 寄過的推斷結案
+        if s.get("v1_claimed"):   # an inferred closure the old registrar sent in v1
             c = sqlite3.connect(self.db)
             for k in s["v1_claimed"]:
                 c.execute("INSERT INTO events(id, ts, type, source, to_project, ref, payload) VALUES(?,?,?,?,?,?,?)",
@@ -192,7 +202,7 @@ class Env:
             else:
                 settles.append(self.rec(p, hid, "settled", "principal", SIDE, k, outcome=effect, terms_rev=1,
                                         authority={"kind": "principal", "decider": PRINCIPAL}, ts="2026-10-26T10:00:00Z"))
-        if settles:   # 從 principal 端來的:直接寫成匯流排的 record 事件(bridge 往內做的事)
+        if settles:   # from the principal side: written directly as record events on the bus (what bridge does inbound)
             c = sqlite3.connect(self.db)
             for r in settles:
                 c.execute("INSERT INTO events(id, ts, type, source, to_project, ref, payload) VALUES(?,?,?,?,?,?,?)",
@@ -212,7 +222,7 @@ class Env:
                 out.append((kind, rec["key"]))
         return sorted(out)
 
-    # --- 共用 ---
+    # --- shared ---
     def run(self):
         return subprocess.run([str(self.hub / "bin" / "py"), str(self.hub / "bin" / self.impl)], cwd=self.hub,
                               env=self.env, capture_output=True, text=True, timeout=300)
@@ -227,7 +237,7 @@ class Env:
         return self.git(self.tmp / "bare" / f"{p}-memory.git", "show", "agent-memory:STATE.md")
 
 
-@unittest.skipUnless(IMPLS, "沒有任務登記的實作")
+@unittest.skipUnless(IMPLS, "no task registry implementation")
 class RegistrarFlow(unittest.TestCase):
     def each(self, check):
         for impl in IMPLS:
@@ -241,7 +251,7 @@ class RegistrarFlow(unittest.TestCase):
         def check(env, log):
             ka = key("pa", "續約網域")
             self.assertIn(marker(ka), env.state("pa"))
-            self.assertIn(marker(ka), env.remote_state("pa"), "蓋章要 commit 而且 push")
+            self.assertIn(marker(ka), env.remote_state("pa"), "the stamp is committed and pushed")
             self.assertEqual(env.outputs("pa"), [("raised", ka)])
             self.assertNotIn("付網域", env.state("pb"))
             self.assertIn("- (無)", env.state("pb"))
@@ -256,8 +266,8 @@ class RegistrarFlow(unittest.TestCase):
                 self.assertEqual(env.outputs("ph"), [])
                 self.assertIn(marker(KI), env.state("pi"))
                 self.assertEqual(env.outputs("pi"), [])
-                self.assertEqual(env.outputs("pj"), [], "v1 寄過推斷結案的不再寄")
-                self.assertEqual(env.outputs("pk"), [], "改名前寄過的認得")
+                self.assertEqual(env.outputs("pj"), [], "an inferred closure v1 already sent is not sent again")
+                self.assertEqual(env.outputs("pk"), [], "one sent before the rename is recognised")
         self.each(check)
 
     def test_second_run_sends_nothing_new(self):

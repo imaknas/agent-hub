@@ -1,6 +1,7 @@
-"""內建的最小 owner 端(bin/owner.py):照 Principal Handoff 0.3 結案、回答、通知,跟助理是同一個介面的另一個實作。
+"""The built-in minimal owner side (bin/owner.py): closes, answers and notifies per Principal Handoff 0.3; another
+implementation of the same interface as the assistant.
 
-隔離的 config + 匯流排(真的指令、真的 record 驗證);通知用替身管道。
+Isolated config + bus (real commands, real record validation); notifications use a stand-in channel.
 
     bin/py -m unittest discover -s tests
 """
@@ -59,11 +60,12 @@ class Builtin(unittest.TestCase):
         settled = [e for e in self.records() if e["record"]["type"] == "settled"]
         self.assertEqual(len(settled), 1)
         rec = settled[0]["record"]
-        self.assertEqual(settled[0]["direction"], "in", "從 owner 端來,跟助理寄來的同一個方向")
+        self.assertEqual(settled[0]["direction"], "in",
+                         "from the owner side: the same direction as what the assistant sends")
         self.assertEqual((rec["origin"], rec["outcome"], rec["authority"]),
                          ("principal", "done", {"kind": "principal", "decider": "person:alex"}))
         self.assertEqual(rec["by"], "agent-hub:owner-side")
-        self.assertNotIn("task-agent-hub-0001", self.run_("owner.py", "list").stdout, "結案了就不再列")
+        self.assertNotIn("task-agent-hub-0001", self.run_("owner.py", "list").stdout, "once closed, no longer listed")
 
     def test_resettle_supersedes_the_earlier_one(self):
         self.raise_task()
@@ -114,7 +116,7 @@ class Notify(unittest.TestCase):
              mock.patch.object(alert, "record_failure", lambda k, t: failed.append(k)):
             self.assertEqual(owner.notify(), 0)
             self.assertEqual(owner.notify(), 0)
-            self.assertEqual(len(sent), 1, "同一件不重複通知")
+            self.assertEqual(len(sent), 1, "the same item is not notified twice")
             items.append({"kind": "question", "project": "p", "id": "q1", "text": "選哪個?"})
             owner.notify()
             self.assertEqual(len(sent), 2)

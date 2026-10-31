@@ -1,5 +1,6 @@
-"""助理替 owner 問專案(轉交 effect="asks",m10261731-817c):寄成 question、照 dispatch 處理、回覆帶 handoff_id 回去、
-每分鐘就拉得到。暫存的匯流排;助理的 CLI 換成假的,不碰真的助理。
+"""The assistant asks a project on the owner's behalf (handoff effect="asks", m10261731-817c): sent as a question,
+handled by dispatch, the reply goes back with the handoff_id, and is pulled within a minute. A temporary bus; the
+assistant's CLI is faked, the real assistant is never touched.
 
     bin/py -m unittest discover -s tests
 """
@@ -38,8 +39,8 @@ class Asks(unittest.TestCase):
         m.DB = self.tmp / "bus.db"
         m.log = lambda s: None
         m.projects = lambda: {"proj": self.tmp, "other": self.tmp}
-        m.ASSISTANT_CLI = ROOT / "bin" / "hubbus"   # 存在就好;CLI 換成假的
-        m.RECORDS = False   # v1 的行為(v2 並存時的分工在 test_hubbus_bridge_v2.Coexistence)
+        m.ASSISTANT_CLI = ROOT / "bin" / "hubbus"   # it only has to exist; the CLI is faked
+        m.RECORDS = False   # v1 behaviour (how work is split when v2 runs alongside: test_hubbus_bridge_v2.Coexistence)
         self.calls = []
 
         def fake_cli(*args):
@@ -59,9 +60,10 @@ class Asks(unittest.TestCase):
         self.assertEqual((p["type"], p["handoff_id"], p["effect"]), ("question", 41, "asks"))
         self.assertIn("shop-app 的匯入查到哪了?", p["text"])
         self.assertIn("回覆一定要帶 --reply-to", p["text"])
-        self.assertIn("每一則都會原樣講給", p["text"])   # 助理 10-27 起每則都講回原對話(m10291432)
+        # since 10-27 the assistant relays every one back to the original conversation (m10291432)
+        self.assertIn("每一則都會原樣講給", p["text"])
         self.assertNotIn("第一則回覆就要是答案本身", p["text"])
-        self.assertEqual(self.m.payload(self.letter(42))["type"], "handoff")   # 其他 effect 照舊
+        self.assertEqual(self.m.payload(self.letter(42))["type"], "handoff")   # other effects as before
 
     def test_librarian_does_not_apply_asks(self):
         self.m.import_handoffs(self.c)
@@ -90,7 +92,8 @@ class Asks(unittest.TestCase):
         item = self.m.to_assistant(self.c, ev)
         self.assertEqual((item["handoff_id"], item["text"]), (41, "查到 9/11 那筆了"))
 
-    # --- 結案不能被當成答案(助理把帶 handoff_id 的第一則當答案講給 owner)---
+    # --- a closure must not be taken as the answer (the assistant tells the owner the first one carrying the handoff_id
+    # as the answer) ---
     def done(self, mid, note=None):
         p = {"note": note} if note else {}
         self.m.publish(self.c, f"{mid}:done", "message.done", "proj", "proj", mid, p)
@@ -125,7 +128,8 @@ class Asks(unittest.TestCase):
             def live_sessions(self): return set()
             def context_size(self, sid): return None
         self.m.run_handler = lambda *a: None
-        side = mock.patch.object(self.m.hubconf, "owner_side", lambda: "assistant")   # 有助理的部署才從助理拉
+        # only a deployment with the assistant pulls from the assistant
+        side = mock.patch.object(self.m.hubconf, "owner_side", lambda: "assistant")
         side.start()
         self.addCleanup(side.stop)
         with mock.patch.dict(sys.modules, {"runtime_ports": mock.Mock(load=lambda *a, **k: RT())}):
@@ -134,11 +138,12 @@ class Asks(unittest.TestCase):
         self.assertIsNotNone(self.letter(41))
         self.calls.clear()
         with mock.patch.dict(sys.modules, {"runtime_ports": mock.Mock(load=lambda *a, **k: RT())}):
-            self.m.dispatch_locked(self.c)          # bridge 呼叫的那條:它自己已經拉過
+            self.m.dispatch_locked(self.c)          # the path bridge calls: it has already pulled itself
         self.assertNotIn(("--json",), self.calls)
 
 class RenamedProjects(unittest.TestCase):
-    """轉交寄給改名前的專案名稱(例:idea-1 → garden-app):照改名紀錄送到新名稱;真的不認得的只在變化時記一次 log。"""
+    """A handoff addressed to a project's pre-rename name (e.g. idea-1 → garden-app): delivered to the new name per the
+    rename record; a truly unknown one is logged once, only when it changes."""
 
     def setUp(self):
         m = self.m = load()
@@ -153,7 +158,7 @@ class RenamedProjects(unittest.TestCase):
         state.mkdir()
         (state / "project-renames.json").write_text(json.dumps({"idea-1": {"new": "room-x", "stage": "done"},
                                                                 "room-x": {"new": "garden-app", "stage": "done"}}))
-        st = mock.patch.object(m.hubconf, "STATE", state)   # hubconf 是共用的模組:一定要換回來
+        st = mock.patch.object(m.hubconf, "STATE", state)   # hubconf is a shared module: always swap it back
         st.start()
         self.addCleanup(st.stop)
         self.items = [{"id": 35, "status": "pending", "effect": "relevant", "project": "idea-1", "fact": "f"},

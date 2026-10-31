@@ -1,7 +1,9 @@
-"""專案信箱的分流(hubbus dispatch,docs/design/mailbox-routing.md):對話 / 交辦 / 等 hook / 認領 / 防循環。
+"""Routing of the project mailbox (hubbus dispatch, docs/design/mailbox-routing.md): conversation / request / waiting
+for the hook / claiming / loop prevention.
 
-暫存的匯流排資料庫;執行環境(哪些 session 活著、context 多大)用假的模組;派人跟背景接續換成只記錄
-(認領照真的記,這樣「不重派」「輪數」才測得到),不會叫起任何 agent。
+A temporary bus database; the runtime (which sessions are alive, how big their context is) is a fake module;
+dispatching and background resumption only record (claims are recorded for real, so "no re-dispatch" and "rounds"
+can be tested); no agent is ever started.
 
     bin/py -m unittest discover -s tests
 """
@@ -91,7 +93,7 @@ class Dispatch(unittest.TestCase):
     def dispatch(self):
         return self.m.dispatch(self.c, self.rt)
 
-    # --- 交辦 ---
+    # --- requests ---
     def test_delegation_nobody_using_dispatches_now(self):
         self.send("m1", "proj", "request")
         self.dispatch()
@@ -110,7 +112,7 @@ class Dispatch(unittest.TestCase):
 
     def test_paused_session_does_not_block(self):
         self.rt.live.add("S1")
-        self.seen("S1", minutes_ago=120)  # 開著但兩小時沒動作 = 沒人在用
+        self.seen("S1", minutes_ago=120)  # open but idle for two hours = nobody using it
         self.send("m1", "proj", "question")
         self.dispatch()
         self.assertEqual(len(self.handled), 1)
@@ -127,7 +129,7 @@ class Dispatch(unittest.TestCase):
         self.dispatch()
         self.assertEqual(self.handled, [])
 
-    # --- 送進 session 只算看過(10-27,m10270201-921a)---
+    # --- delivered into a session only counts as seen (10-27, m10270201-921a) ---
     def seen_by_session(self, mid, minutes_ago, via="prompt"):
         self.m.mark_delivered(self.c, [self.m.get_message(self.c, mid)], "S9", via)
         ts = (datetime.datetime.now().astimezone() - datetime.timedelta(minutes=minutes_ago)).isoformat(timespec="seconds")
@@ -160,7 +162,7 @@ class Dispatch(unittest.TestCase):
         self.assertEqual(self.handled, [])
 
     def test_ack_after_hook_delivery_is_recorded(self):
-        # 以前 ack 跟 hook 送進來用同一個事件 id:hook 送過之後 ack 什麼都沒記
+        # ack and hook delivery used to share one event id: after the hook delivered, ack recorded nothing
         import io, sys
         from contextlib import redirect_stdout
         self.send("m1", "proj", "request")
@@ -177,7 +179,8 @@ class Dispatch(unittest.TestCase):
         self.assertEqual(len(self.handled), 1)
 
     def test_hub_letters_are_handled_too(self):
-        # 以前 agent-hub 的信留給它專用的 session,沒人打字就沒人收(m10261706)
+        # agent-hub's letters used to be left for its dedicated session: with nobody typing, nobody took them
+        # (m10261706)
         hub = self.m.hubconf.hub_project()
         self.send("m1", hub, "request")
         self.dispatch()
@@ -192,7 +195,7 @@ class Dispatch(unittest.TestCase):
         self.dispatch()
         self.assertEqual((self.resumed, self.handled), ([("m1", "H")], []))
 
-    # --- 交辦:用最近的 session 分支(10-26 試行)---
+    # --- requests: branch from the most recent session (trial since 10-26) ---
     def test_delegation_forks_the_recent_live_session(self):
         self.rt.live.add("S1")
         self.rt.tokens["S1"] = 80_000
@@ -207,7 +210,7 @@ class Dispatch(unittest.TestCase):
         self.rt.tokens["S1"] = 80_000
         self.seen("S1")
         self.send("m1", "proj", "request")
-        self.assertEqual(self.dispatch(), 1)   # 有人在打字:先等它的 hook
+        self.assertEqual(self.dispatch(), 1)   # someone is typing: wait for its hook first
         self.send("m2", "proj", "request", minutes_ago=10)
         self.c.execute("DELETE FROM events WHERE id='m1'")
         self.dispatch()
@@ -234,7 +237,7 @@ class Dispatch(unittest.TestCase):
         import json as _j
         self.assertEqual([s["id"] for s in _j.loads(out.getvalue())["stuck"]], ["q1"])
 
-    # --- 對話 ---
+    # --- conversation ---
     def test_conversation_live_session_waits(self):
         self.rt.live.add("A")
         self.send("m1", "proj", "question", to_session="A")
@@ -279,15 +282,16 @@ class Dispatch(unittest.TestCase):
         old = (datetime.datetime.now().astimezone() - datetime.timedelta(minutes=40)).isoformat(timespec="seconds")
         self.c.execute("UPDATE events SET ts=? WHERE id='m1:delivered:resume'", (old,))
         self.dispatch()
-        self.assertEqual(self.handled, [("proj", ["m1"])], "接續 35 分鐘沒結案要改派")
+        self.assertEqual(self.handled, [("proj", ["m1"])], "a resumption not closed after 35 minutes is re-dispatched")
         self.dispatch()
-        self.assertEqual(len(self.handled), 1, "改派過就不再派")
+        self.assertEqual(len(self.handled), 1, "once re-dispatched, never dispatched again")
 
     def test_resumed_letter_shown_once_to_its_session(self):
         self.rt.tokens["A"] = 1_000
         self.send("m1", "proj", "question", to_session="A", minutes_ago=60)
         self.dispatch()
-        self.m.publish(self.c, "m1:done", "message.done", "proj", "proj", "m1", {"note": "分支處理了"})  # 分支做完
+        # the branch is done
+        self.m.publish(self.c, "m1:done", "message.done", "proj", "proj", "m1", {"note": "分支處理了"})
         seen = []
         orig = self.m.mark_delivered
         self.m.mark_delivered = lambda c, rows, sess, via: (seen.extend(r["id"] for r in rows), orig(c, rows, sess, via))
@@ -296,11 +300,12 @@ class Dispatch(unittest.TestCase):
             sys.stdin = io.StringIO(_j.dumps({"session_id": "A", "cwd": str(self.ws)}))
             self.m.hook_input = lambda: {"session_id": "A", "cwd": str(self.ws)}
             self.m.project_of = lambda cwd: "proj"
-            self.m.db = lambda timeout=None: self.c   # 同一個連線(setUp 的 cleanup 會關),不要每次開一個沒關的
+            # the same connection (setUp's cleanup closes it), not a new unclosed one each time
+            self.m.db = lambda timeout=None: self.c
             self.m.cmd_hook("prompt")
         self.assertEqual(seen.count("m1"), 1)
 
-    # --- 防循環 ---
+    # --- loop prevention ---
     def test_loop_guard_holds_and_asks_owner(self):
         prev = None
         for i in range(self.m.THREAD_MAX_ROUNDS):
@@ -323,13 +328,14 @@ class Dispatch(unittest.TestCase):
 
 
 class ForkMerge(unittest.TestCase):
-    """分支做完,原本的 session 下次有動作時收到分支說了什麼(m10261706:不要只說「處理了」)。
-    借 Dispatch 的設定跟小工具,不繼承它的測試(不然那些測試會跑兩次)。"""
+    """When a branch is done, the original session gets what the branch said on its next action (m10261706: not just
+    "handled"). Borrows Dispatch's setup and helpers without inheriting its tests (otherwise they would run twice)."""
     setUp, send, seen, dispatch = Dispatch.setUp, Dispatch.send, Dispatch.seen, Dispatch.dispatch
 
     def hook(self, sid="S1"):
         from unittest import mock
-        with mock.patch.object(self.m.hubconf, "STATE", self.tmp / "state"):   # 分支的紀錄在暫存目錄
+        # the branch's record is in the temp directory
+        with mock.patch.object(self.m.hubconf, "STATE", self.tmp / "state"):
             self.m.project_of = lambda cwd: "proj"
             self.m.db = lambda *a, **k: self.c
             return self.m.mail_text("prompt", sid, str(self.ws)) or ""
@@ -357,7 +363,7 @@ class ForkMerge(unittest.TestCase):
         text = self.hook()
         self.assertIn("分支的回覆:查了 production", text)
         self.assertIn("[r1] → other:回覆:失敗的是 3 筆", text)
-        self.assertNotIn("m1", self.hook(), "只提一次")
+        self.assertNotIn("m1", self.hook(), "mentioned only once")
 
 
 if __name__ == "__main__":
@@ -365,7 +371,7 @@ if __name__ == "__main__":
 
 
 class DispatchWithoutAgent(Dispatch):
-    """沒有 coding agent(runtime.default: none):不派 agent、信留著,原因只記一次。"""
+    """No coding agent (runtime.default: none): no agent dispatched, the letter stays, the reason logged once."""
 
     @unittest.mock.patch.dict(os.environ, {"AGENT_HUB_LANG_UI": "zh-Hant"})   # asserts the zh-Hant text
     def test_letters_stay_and_the_reason_is_logged_once(self):

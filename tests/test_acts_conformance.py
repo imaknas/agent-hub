@@ -1,8 +1,10 @@
-"""agent-hub 跑 Principal Handoff Acts 0.3 的一致性測試資料(agent-ops-specs,來源見 contracts/vendor/.../SOURCE):
-證明 bin/registrar.py(登記的各步)跟 bin/gen-todo.py(待辦段落的分類)符合規範。
+"""agent-hub runs the Principal Handoff Acts 0.3 conformance test data (agent-ops-specs, source in
+contracts/vendor/.../SOURCE): proves that bin/registrar.py (the registry's steps) and bin/gen-todo.py (classifying the
+to-do section) meet the spec.
 
-只跑 zh-hant profile(agent-hub 用的那個)。資料裡 owner 的標籤是 `Owner`,照 conformance/README 的規則換成這台
-設定的 owner.tag 再比。parse 的完整分類(agent、待定、格式問題)看 gen-todo;registrar 只處理 owner 的行。
+Runs only the zh-hant profile (the one agent-hub uses). The owner tag in the data is `Owner`; per the
+conformance/README rules it is replaced with this machine's configured owner.tag before comparing. parse's full
+classification (agent, 待定, format problems) is in gen-todo; the registrar handles only the owner's lines.
 
     bin/py -m unittest discover -s tests
 """
@@ -32,7 +34,8 @@ def cases(file: str):
 
 
 def own(x):
-    """測試資料的 owner 標籤 `Owner` 換成這台的 owner.tag(標籤跟 key 標記裡的,含「等Owner」不帶空格的寫法)。"""
+    """Replace the test data's owner tag `Owner` with this machine's owner.tag (in tags and key markers, including the
+    "等Owner" form without a space)."""
     if isinstance(x, str):
         return x.replace("〔Owner〕", f"〔{TAG}〕").replace("等 Owner", f"等 {TAG}").replace("等Owner", f"等{TAG}")
     if isinstance(x, list):
@@ -43,7 +46,7 @@ def own(x):
 
 
 def nonblank(lines):
-    """acts §9.2:比非空行、去掉行尾空白。"""
+    """acts §9.2: compare non-empty lines, trailing whitespace stripped."""
     return [l.rstrip() for l in lines if l.strip()]
 
 
@@ -70,7 +73,7 @@ class Acts(unittest.TestCase):
                 want = [(t["assignee"], own(t["text"]), t["key"]) for t in exp["tasks"]]
                 self.assertEqual(sorted(got), sorted(want))
                 self.assertEqual(len([p for p in problems if "沒有 `## 待辦`" not in p]), len(exp["problems"]))
-                # registrar 看到的 owner 行跟規範一樣
+                # the owner lines the registrar sees match the spec
                 mine = [(t["text"], t["key"]) for t in registrar.owner_lines(own(c["document"]))]
                 self.assertEqual(sorted(mine), sorted((own(t["text"]), t["key"]) for t in exp["tasks"]
                                                       if t["assignee"] == "principal"))
@@ -92,7 +95,7 @@ class Acts(unittest.TestCase):
                     lines[i] = lines[i].rstrip() + registrar.stamp(k)
                 self.assertEqual(raised, own(c["expect"]["raised"]))
                 self.assertEqual(nonblank(lines), nonblank(own(c["expect"]["document"])))
-                self.assertEqual(registrar.candidates(lines, c["project"]), [], "第二次不再送")
+                self.assertEqual(registrar.candidates(lines, c["project"]), [], "not sent a second time")
 
     def test_relink(self):
         cs = cases("relink.json")

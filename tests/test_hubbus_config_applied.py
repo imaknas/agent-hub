@@ -1,4 +1,5 @@
-"""匯流排的 config.applied 事件(new-user.md 3.7 的 record):hubbus publish 收得下,契約驗得過、驗得出錯的。
+"""The bus's config.applied event (the record from new-user.md 3.7): hubbus publish accepts it, the contract
+validates good ones and catches bad ones.
 
     bin/py -m unittest discover -s tests
 """
@@ -27,9 +28,9 @@ class ConfigApplied(unittest.TestCase):
         self.assertEqual(minischema.errors(SCHEMA, event({"v": 1, "commit": "abc", "changes": []})), [])
 
     def test_bad_payloads_are_caught(self):
-        for bad in ({"v": 1, "changes": []},                                          # 沒有 commit
-                    {"v": 1, "commit": "abc", "changes": [{"op": "rename", "target": "x"}]},   # op 不在列表
-                    {"v": 1, "commit": "abc", "changes": [{"op": "add"}]}):            # 沒有 target
+        for bad in ({"v": 1, "changes": []},                                          # no commit
+                    {"v": 1, "commit": "abc", "changes": [{"op": "rename", "target": "x"}]},   # op not in the list
+                    {"v": 1, "commit": "abc", "changes": [{"op": "add"}]}):            # no target
             with self.subTest(bad=bad):
                 self.assertTrue(minischema.errors(SCHEMA, event(bad)))
 

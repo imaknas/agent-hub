@@ -1,10 +1,14 @@
-"""bridge v2:匯流排的 0.3 record ↔ 助理的 /api/records(助理那邊的契約:records.v2.md)。
+"""bridge v2: the bus's 0.3 records ↔ the assistant's /api/records (the assistant side's contract: records.v2.md).
 
-開關 mailbox.records(跟 send 翻 record 同一個);關著就完全不碰 v2。每分鐘的 dispatch:
-- 往外:寄給 owner 的 record 批次 POST {"records": […]},逐筆看 status;invalid 記 job.failed、不重試;送不出去整批下次重送。
-- 往內:每個專案 GET ?project=&after=,寫成 record 事件、commit 之後才 ack;第一次讀只定起點(v1 已經送過的不再收一次);
-  ack 失敗下次補;不合格的(不是助理寄的、專案不對)跳過不寫;改名前的名稱也拉,寫到現在的名稱。
-HTTP 換成假的,不碰真的助理。
+Switched by mailbox.records (the same switch as send turning letters into records); when off, v2 is not touched at all.
+The per-minute dispatch:
+- Outbound: records addressed to the owner are POSTed in batches {"records": […]}, status checked per record; invalid
+  is logged as job.failed and not retried; if the batch cannot be sent, all of it is resent next time.
+- Inbound: per project GET ?project=&after=, written as record events, acked only after the commit; the first read
+  only sets the starting point (what v1 already delivered is not taken again); a failed ack is made up next time;
+  invalid ones (not sent by the assistant, wrong project) are skipped, not written; the pre-rename name is pulled too,
+  written under the current name.
+HTTP is faked; the real assistant is never touched.
 
     bin/py -m unittest discover -s tests
 """
@@ -40,7 +44,8 @@ def settled(key, project="proj", **kw):
 
 
 class FakeAssistant:
-    """/api/records 的假的:out[project] 是助理要給的 record(cursor = 第幾筆,從 1 開始)。"""
+    """Fake /api/records: out[project] holds the records the assistant has to give (cursor = the record's position,
+    from 1)."""
 
     def __init__(self, test):
         self.t, self.calls, self.out, self.down, self.ack_down = test, [], {}, False, False
@@ -63,7 +68,7 @@ class FakeAssistant:
         if method == "POST" and path == "/api/records/ack":
             if self.ack_down:
                 return None, None, "timeout"
-            # ack 一定在 record 寫進匯流排(commit)之後
+            # the ack always comes after the record is written to the bus (commit)
             n = self.t.m.records(self.t.reader(), body["project"] if body["project"] in ("proj", "other") else "proj")
             self.t.acked_seen.append((body["project"], body["through"], len(n)))
             return 200, {"ok": True, "through": body["through"]}, None
@@ -98,19 +103,19 @@ class BridgeV2(unittest.TestCase):
 
     def reader(self):
         import sqlite3
-        c = sqlite3.connect(self.m.DB)   # 另一條連線:只看得到已經 commit 的
+        c = sqlite3.connect(self.m.DB)   # another connection: sees only what is committed
         c.row_factory = sqlite3.Row
         return c
 
     def incoming(self, project="proj"):
         return [r["record"]["id"] for r in self.m.records(self.c, project, direction="in")]
 
-    # --- 往外 ---
+    # --- outbound ---
     def test_outbound_posts_owner_records_once_and_marks_invalid(self):
         self.m.publish_record(self.c, raised("k1"), "proj", self.owner)
         self.m.publish_record(self.c, raised("k2"), "proj", self.owner)
         self.m.publish(self.c, "x1", "message", "proj", self.owner, None, {"type": "info", "text": "v1 的不走這裡"})
-        self.m.publish_record(self.c, settled("k9"), self.owner, "proj")   # 往內的不送回去
+        self.m.publish_record(self.c, settled("k9"), self.owner, "proj")   # inbound ones are not sent back
         self.fake.invalid = {"r:k2"}
         self.m.forward_records(self.c)
         self.assertEqual([r["id"] for r in self.fake.received], ["r:k1", "r:k2"])
@@ -118,10 +123,10 @@ class BridgeV2(unittest.TestCase):
         self.assertEqual(len(failed), 1)
         self.assertIn("r:k2", self.m.payload(failed[0])["detail"])
         self.m.forward_records(self.c)
-        self.assertEqual(len(self.fake.received), 2)   # 不重送、invalid 也不重試
+        self.assertEqual(len(self.fake.received), 2)   # no resend, and invalid is not retried either
 
     def test_outbound_catches_up_a_long_bus_in_one_run(self):
-        for i in range(1200):   # 開關打開那一刻,匯流排上已經有一大堆別的事件
+        for i in range(1200):   # when the switch is turned on, the bus already holds lots of other events
             self.m.publish(self.c, f"n{i}", "message", "proj", "other", None, {"type": "info", "text": "x"})
         self.m.publish_record(self.c, raised("late"), "proj", self.owner)
         self.m.forward_records(self.c)
@@ -135,19 +140,20 @@ class BridgeV2(unittest.TestCase):
         self.m.forward_records(self.c)
         self.assertEqual([r["id"] for r in self.fake.received], ["r:k1"])
 
-    # --- 往內 ---
+    # --- inbound ---
     def test_first_read_only_sets_the_starting_point(self):
-        self.fake.out["proj"] = [settled(f"old{i}") for i in range(250)]   # v1 已經送過的
+        self.fake.out["proj"] = [settled(f"old{i}") for i in range(250)]   # already delivered by v1
         self.m.pull_records(self.c)
         self.assertEqual(self.incoming(), [])
         self.assertEqual(self.fake.acks(), [])
         self.fake.out["proj"].append(settled("new"))
         self.m.pull_records(self.c)
         self.assertEqual(self.incoming(), ["s:new"])
-        self.assertIn("250", [q["after"] for q in self.fake.gets() if q["project"] == "proj"])   # 從起點接著拉
+        # pulls on from the starting point
+        self.assertIn("250", [q["after"] for q in self.fake.gets() if q["project"] == "proj"])
 
     def test_records_are_committed_before_ack_and_resend_is_noop(self):
-        self.m.pull_records(self.c)   # 起點
+        self.m.pull_records(self.c)   # starting point
         self.fake.out["proj"] = [settled("k1"), settled("k2")]
         self.m.pull_records(self.c)
         self.assertEqual(self.incoming(), ["s:k1", "s:k2"])
@@ -176,8 +182,9 @@ class BridgeV2(unittest.TestCase):
         self.assertTrue(any("forged" in l or "r:forged" in l for l in self.logs))
 
     def test_starting_point_is_only_for_the_switch_on_not_for_later_names(self):
-        self.m.pull_records(self.c)   # 開關打開:起點
-        self.m.projects = lambda: {"proj": self.tmp, "other": self.tmp, "newbie": self.tmp}   # 之後才 onboard 的專案
+        self.m.pull_records(self.c)   # switch on: starting point
+        # newbie: a project onboarded later
+        self.m.projects = lambda: {"proj": self.tmp, "other": self.tmp, "newbie": self.tmp}
         self.fake.out["newbie"] = [settled("k1", project="newbie")]
         self.m.pull_records(self.c)
         self.assertEqual(self.incoming("newbie"), ["s:k1"])
@@ -190,7 +197,8 @@ class BridgeV2(unittest.TestCase):
         self.assertEqual(self.incoming(), ["s:k1"])
 
     def test_off_does_not_touch_v2(self):
-        side = mock.patch.object(self.m.hubconf, "owner_side", lambda: "assistant")   # 有助理的部署才從助理拉
+        # only a deployment with the assistant pulls from the assistant
+        side = mock.patch.object(self.m.hubconf, "owner_side", lambda: "assistant")
         side.start()
         self.addCleanup(side.stop)
         self.m.RECORDS = False
@@ -210,9 +218,10 @@ class BridgeV2(unittest.TestCase):
 
 
 class Coexistence(unittest.TestCase):
-    """v1 跟 v2 並存:有 record 的轉交只走 v2(助理 ack 之後 v1 就不列;v1 先拿走的 v2 還是會再給一次),
-    v1 只拿沒有 record 的(asks、沒 key 的、不認得的)跟 answers(Decisions 這邊還沒換);v2 的 decisions 結案寫成
-    跟 v1 同一個 id 的回答信,誰先到都只有一封。"""
+    """v1 and v2 side by side: a handoff with a record goes only through v2 (once the assistant acks, v1 no longer
+    lists it; v2 still gives again what v1 took first); v1 takes only those without a record (asks, no key,
+    unrecognised) and answers (the Decisions side is not switched yet); v2's decisions closures are written as an
+    answer letter with the same id as v1's, so whichever arrives first, there is only one letter."""
 
     HANDOFFS = [
         {"id": 70, "status": "pending", "effect": "done", "project": "proj", "reply_to": "task-proj-aaaaaaaaaa", "item": "x"},
@@ -245,7 +254,7 @@ class Coexistence(unittest.TestCase):
         m.assistant_cli = cli
         self.c = m.db()
         self.owner = m.hubconf.owner_address()
-        # proj 問過 owner 的問題 q1
+        # question q1 that proj asked the owner
         m.publish(self.c, "q1", "message", "proj", self.owner, None, {"type": "question", "text": "要哪家?",
                                                                        "from_session": "sess-1"})
 
@@ -264,7 +273,7 @@ class Coexistence(unittest.TestCase):
         self.m.import_handoffs(self.c)
         p = self.m.HANDOFF_ID_PREFIX
         self.assertEqual(sorted(self.letters()), [f"{p}72", f"{p}73", f"{p}74", f"{p}75"])
-        self.assertEqual(sorted(self.delivered), ["72", "73", "74", "75"])   # 70、71 留給 v2 的 ack
+        self.assertEqual(sorted(self.delivered), ["72", "73", "74", "75"])   # 70, 71 left to v2's ack
 
     def answer_record(self, hid=73, **kw):
         return {"ph": "0.3", "ext": "decisions/0.3", "id": f"s:q1:h{hid}", "type": "settled", "origin": "principal",
@@ -276,7 +285,7 @@ class Coexistence(unittest.TestCase):
         fake = self.m.records_http = FakeAssistant(self)
         self.acked_seen = []
         self.reader = lambda: self.c
-        self.m.pull_records(self.c)   # 起點
+        self.m.pull_records(self.c)   # starting point
         fake.out["proj"] = [self.answer_record()]
         self.m.pull_records(self.c)
         letters = self.letters()
@@ -288,7 +297,7 @@ class Coexistence(unittest.TestCase):
         self.assertIn("選 A", p["text"])
         self.assertIn("要哪家?", p["text"])
         self.assertEqual(self.c.execute("SELECT COUNT(*) FROM events WHERE type='record'").fetchone()[0], 0)
-        self.m.import_handoffs(self.c)      # v1 也拿到同一題:還是一封
+        self.m.import_handoffs(self.c)      # v1 gets the same question too: still one letter
         self.assertEqual(sum(1 for i in self.letters() if i == mid), 1)
 
     def test_v2_dismissal_says_no_answer_needed(self):

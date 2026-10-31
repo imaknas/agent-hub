@@ -1,8 +1,11 @@
-"""hubbus send 翻成 Principal Handoff 0.3 的 Acts record(階段 3,docs/design/principal-handoff-0.3-migration.md「方向一」)。
+"""hubbus send turned into Principal Handoff 0.3 Acts records (stage 3, docs/design/principal-handoff-0.3-migration.md,
+"direction one").
 
-開關 hub.json mailbox.records(預設關):關的時候跟以前一模一樣(v1 信);開了以後寄給 owner 的 task/request → raised、
-done --task → claimed、drop --task → withdrawn(不需要了),不再寄 v1 信。--inferred 由 registrar 自己寄(要算 reopened 次數),
-send 不翻、開了就擋。question / info / progress 這一步還是 v1(Decisions 跟讀問題的那幾支一起換)。
+Switched by hub.json mailbox.records (off by default): when off, exactly as before (v1 letters); when on, a task/request
+to the owner → raised, done --task → claimed, drop --task → withdrawn (no longer needed), and no v1 letter is sent.
+--inferred is sent by the registrar itself (it has to count reopened), so send does not convert it and blocks it when
+on. question / info / progress stay v1 in this step (switched together with Decisions and the scripts that read
+questions).
 
     bin/py -m unittest discover -s tests
 """
@@ -19,12 +22,12 @@ from unittest import mock
 
 ROOT = pathlib.Path(__file__).resolve().parents[1]
 TS = re.compile(r"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d+)?(Z|[+-]\d{2}:\d{2})$")
-# acts/0.3 conformance/keys.json 的向量(規範的範例 key 做法;registrar 用同一個)
+# vectors from acts/0.3 conformance/keys.json (the spec's example key method; the registrar uses the same one)
 KEY_VECTORS = [("demo", "Renew the domain", "task-demo-c3d8af57d4"),
                ("demo", "  Renew   the\tdomain  ", "task-demo-c3d8af57d4"),
                ("demo", "Renew the domain.", "task-demo-67ed67cd37"),
                ("demo", "續約網域", "task-demo-544fefce49")]
-# 每種 record 一定要有的(core + acts schema 的 required)
+# what every kind of record must have (core + the acts schema's required)
 REQUIRED = {"raised": ("terms", "terms_rev"), "claimed": ("outcome", "evidence"), "withdrawn": ("reason",)}
 
 
@@ -69,7 +72,7 @@ class SendRecords(unittest.TestCase):
         self.assertEqual((r["ph"], r["ext"], r["project"]), ("0.3", "acts/0.3", "proj"))
         return recs[0][0], r
 
-    # --- 開關關著:跟以前一樣 ---
+    # --- switch off: same as before ---
     def test_off_is_v1_unchanged(self):
         mid = self.send("--type", "task", "--id", "task-proj-0000000001", "--text", "繳房屋稅", "--due", "2026-11-30",
                         records=False)
@@ -79,7 +82,7 @@ class SendRecords(unittest.TestCase):
                          [("task-proj-0000000001", "task", "繳房屋稅", "2026-11-30")])
         self.assertEqual(self.events("record"), [])
 
-    # --- 開了 ---
+    # --- switched on ---
     def test_task_with_key_becomes_raised(self):
         out = self.send("--type", "task", "--id", "task-proj-0000000001", "--text", "繳房屋稅", "--due", "2026-11-30",
                         "--context", "migration", "--new-reason", "去年那筆是另一棟")
@@ -90,7 +93,7 @@ class SendRecords(unittest.TestCase):
                          ("raised", "r:task-proj-0000000001", "task-proj-0000000001", "requester", "project:proj", 1))
         self.assertEqual(r["terms"], {"text": "繳房屋稅", "due": "2026-11-30"})
         self.assertEqual((r["context"], r["note"]), ("migration", "去年那筆是另一棟"))
-        self.assertEqual(self.events("message"), [])   # 不再寄 v1 信
+        self.assertEqual(self.events("message"), [])   # no more v1 letter
 
     def test_resend_same_key_is_noop(self):
         self.send("--type", "task", "--id", "task-proj-0000000001", "--text", "繳房屋稅")
@@ -118,7 +121,7 @@ class SendRecords(unittest.TestCase):
                          ("claimed", "task-proj-0000000001", "agent", "project:proj", "done"))
         self.assertEqual(r["evidence"], {"basis": "已經繳了,收據在 docs/"})
         self.assertTrue(r["id"].startswith("c:task-proj-0000000001:"))
-        self.assertNotRegex(r["id"], r":r\d+$")   # 跟 registrar 的 c:<key>:r<n> 分開
+        self.assertNotRegex(r["id"], r":r\d+$")   # kept apart from the registrar's c:<key>:r<n>
         self.assertEqual(self.events("message"), [])
 
     def test_two_claims_get_distinct_ids(self):
@@ -150,7 +153,8 @@ class SendRecords(unittest.TestCase):
         self.assertEqual([p["type"] for _, p in self.events("message")], ["done"])
 
     def test_send_works_where_the_sandbox_forbids_ps(self):
-        # 專案的沙盒不准跑 ps:看不到上層程序 = 不是平台代寄的工作,照常寄(10-29 resume 的 send 因此整個掛掉)
+        # the project's sandbox forbids ps: no view of the parent process = not work the platform sends on someone's
+        # behalf, so send as usual (on 10-29 resume's send failed entirely because of this)
         real = self.m.subprocess.run
         def no_ps(cmd, *a, **k):
             if cmd and cmd[0] == "ps":
