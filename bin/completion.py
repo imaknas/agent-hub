@@ -35,7 +35,10 @@ import time
 
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
 import hubconf  # noqa: E402
+import i18n  # noqa: E402
 import minischema  # noqa: E402
+
+_ = i18n.domain(__file__)
 
 USAGE = hubconf.STATE / "llm-usage.jsonl"
 GROUPS = ("fast", "standard", "strong")
@@ -80,35 +83,37 @@ def read_key(conf: dict) -> str | None:
         try:
             v = f.read_text().strip()
         except OSError:
-            raise Refused(f"沒有 key:{f} 不在(bin/hub llm set-key 寫進去)")
+            raise Refused(_("no key: {file} does not exist (bin/hub llm set-key writes it)", file=f))
         if not v:
-            raise Refused(f"沒有 key:{f} 是空的")
+            raise Refused(_("no key: {file} is empty", file=f))
         return v
     if k.get("env"):
         v = os.environ.get(k["env"])
         if not v:
-            raise Refused(f"沒有 key:環境變數 {k['env']} 沒有設(排程跑在 launchd 底下,讀不到 shell 的設定——用 secret 比較可靠)")
+            raise Refused(_("no key: environment variable {var} is not set (the scheduler runs under launchd and does not "
+                            "see the shell's settings; a secret is more reliable)", var=k["env"]))
         return v
-    raise Refused("key 要寫成 {\"secret\": 檔名} 或 {\"env\": 變數名}")
+    raise Refused(_("key must be {{\"secret\": {file}}} or {{\"env\": {var}}}", file=_("file name"),
+                    var=_("variable name")))
 
 
 def resolve(point: str, spec: dict) -> dict:
     """這個判斷點交給哪一家、哪個模型:llm.points 的指定 > llm.use[model_group] 的那一家的 models[model_group]。"""
     s = settings()
     if not s:
-        raise Refused("hub.json 沒有 llm 區塊")
+        raise Refused(_("hub.json has no llm section"))
     providers = s["providers"]
     group = spec.get("model_group") or DEFAULT_GROUP
     pin = (s.get("points") or {}).get(point) or {}
     name = pin.get("provider") or (s.get("use") or {}).get(group)
     if not name:
-        raise Refused(f"llm.use 沒有寫 {group} 要交給哪一家")
+        raise Refused(_("llm.use does not say which provider takes {group}", group=group))
     conf = providers.get(name)
     if not isinstance(conf, dict):
-        raise Refused(f"llm.providers 沒有 {name}")
+        raise Refused(_("llm.providers has no {name}", name=name))
     entry = pin.get("model") or (conf.get("models") or {}).get(group)
     if not entry:
-        raise Refused(f"llm.providers.{name}.models 沒有 {group}")
+        raise Refused(_("llm.providers.{name}.models has no {group}", name=name, group=group))
     m = entry if isinstance(entry, dict) else {"name": entry}
     return {"provider": name, "impl": conf.get("impl"), "conf": conf, "group": group, "model": m.get("name"),
             "context": m.get("context"), "price": m.get("price"), "location": conf.get("location", "cloud")}
@@ -188,12 +193,14 @@ def run(point: str, spec: dict, prompt: str, schema: dict | None, sleep=time.sle
     conf["_context"] = target["context"]
     budget = ((settings() or {}).get("budget") or {}).get("daily_usd")
     if budget is not None and today_cost() >= float(budget):
-        raise Refused(f"今天的模型花費已經到預算(llm.budget.daily_usd ${budget}),這次不送")
+        raise Refused(_("today's model spending has reached the budget (llm.budget.daily_usd ${budget}); not sending this "
+                        "one", budget=budget))
     prompt = redact(prompt)
     max_tokens = int(spec.get("max_tokens") or 8192)
     if target["context"] and estimate_tokens(prompt) + max_tokens > int(target["context"]):
-        raise Refused(f"prompt 太長:估計 {estimate_tokens(prompt)} token + 輸出 {max_tokens} 超過 "
-                      f"{target['provider']}/{target['model']} 的 context {target['context']}")
+        raise Refused(_("prompt too long: an estimated {tokens} tokens + {max_tokens} of output exceed the context "
+                        "{context} of {provider}/{model}", tokens=estimate_tokens(prompt), max_tokens=max_tokens,
+                        provider=target["provider"], model=target["model"], context=target["context"]))
     impl = runtime_ports.load_completion(target["impl"])
     req = runtime_ports.CompletionRequest(point=point, prompt=prompt, model=target["model"], schema=schema,
                                           max_tokens=max_tokens, timeout_s=int(spec.get("timeout_s") or 600))
@@ -209,7 +216,8 @@ def run(point: str, spec: dict, prompt: str, schema: dict | None, sleep=time.sle
             sleep(min(res.retry_after_s or 5 * 2 ** rate_tries, 60))
         if not res.ok:
             if res.stop == "length":
-                raise Refused(f"輸出被長度截斷({target['provider']}/{target['model']},max_tokens {max_tokens});不重試")
+                raise Refused(_("output cut off at the length limit ({provider}/{model}, max_tokens {max_tokens}); not "
+                                "retried", provider=target["provider"], model=target["model"], max_tokens=max_tokens))
             raise Refused(f"{target['provider']}/{target['model']}:{res.stop}:{res.error}")
         if schema is None:
             return _out(point, target, res.text, None, cost_total)
@@ -217,12 +225,12 @@ def run(point: str, spec: dict, prompt: str, schema: dict | None, sleep=time.sle
             obj = parse_json(res.text)
             last_errs = minischema.errors(schema, obj)
         except ValueError:
-            obj, last_errs = None, ["不是 JSON"]
+            obj, last_errs = None, [_("not JSON")]
         if not last_errs:
             return _out(point, target, res.text, obj, cost_total)
         req = req._replace(prompt=prompt + "\n\n---\n上一次的回答不合格(" + "; ".join(last_errs[:5])
                            + ")。這次只回一個合格的 JSON,不要其他文字。")
-    raise Refused("輸出不符合 schema(重試一次後):" + "; ".join(last_errs[:3]))
+    raise Refused(_("output does not match the schema (after one retry): {errors}", errors="; ".join(last_errs[:3])))
 
 
 def _out(point, target, text, obj, cost) -> dict:
@@ -271,49 +279,56 @@ def config_errors(llm: dict) -> list[str]:
     errs = []
     for where, v in _strings(llm):
         if KEYLIKE.search(v):
-            errs.append(f"{where} 看起來是 key 的值——值放 secrets 目錄({{\"secret\": 檔名}})或環境變數({{\"env\": 名稱}})")
+            errs.append(_("{where} looks like a key value: the value goes in the secrets directory ({{\"secret\": file "
+                          "name}}) or an environment variable ({{\"env\": name}})", where=where))
     providers = llm.get("providers") or {}
     if not isinstance(providers, dict):
-        return errs + ["providers 要是物件"]
+        return errs + [_("providers must be an object")]
     if not providers and llm.get("use"):
-        errs.append("寫了 use 但沒有 providers(只想指定個別判斷點的模型:只寫 points)")
+        errs.append(_("use is set but providers is not (to pin only some judgment points' models, write only points)"))
     if providers and not llm.get("use"):
-        errs.append("有 providers 就要寫 use(fast / standard / strong 各交給哪一家)")
+        errs.append(_("with providers, use is required (which provider takes fast / standard / strong)"))
     for name, p in providers.items():
         if not isinstance(p, dict):
-            errs.append(f"providers.{name} 要是物件")
+            errs.append(_("providers.{name} must be an object", name=name))
             continue
         impl = p.get("impl")
         if impl in runtime_ports.PROVIDERS:
             pass
         elif impl in runtime_ports.RUNTIMES:
             if "completion" not in runtime_ports.capabilities(impl):
-                errs.append(f"providers.{name}:執行環境 {impl} 沒有 completion 介面")
+                errs.append(_("providers.{name}: runtime {impl} has no completion interface", name=name, impl=impl))
         else:
-            errs.append(f"providers.{name}.impl `{impl}` 不認得(有:{', '.join([*runtime_ports.PROVIDERS, *runtime_ports.RUNTIMES])})")
+            errs.append(_("providers.{name}.impl `{impl}` is not known (have: {have})", name=name, impl=impl,
+                          have=", ".join([*runtime_ports.PROVIDERS, *runtime_ports.RUNTIMES])))
         k = p.get("key")
         if k is not None and (not isinstance(k, dict) or len([x for x in ("secret", "env") if k.get(x)]) != 1):
-            errs.append(f"providers.{name}.key 要寫成 {{\"secret\": 檔名}} 或 {{\"env\": 變數名}}(只能一種)")
+            errs.append(_("providers.{name}.key must be {{\"secret\": file name}} or {{\"env\": variable name}} (only "
+                          "one of them)", name=name))
         elif k and k.get("secret") and ("/" in k["secret"] or k["secret"].startswith(".")):
-            errs.append(f"providers.{name}.key.secret 只寫檔名(放在平台的 secrets 目錄裡)")
+            errs.append(_("providers.{name}.key.secret is a file name only (it lives in the platform's secrets directory)",
+                          name=name))
         if p.get("location", "cloud") not in ("cloud", "local"):
-            errs.append(f"providers.{name}.location 只能是 cloud / local")
+            errs.append(_("providers.{name}.location can only be cloud / local", name=name))
         if p.get("location") == "local":
             host = urllib.parse.urlparse(p.get("base_url") or "").hostname or ""
             if not (p.get("base_url") and PRIVATE.match(host)):
-                errs.append(f"providers.{name}:location local 只准本機、私有網段、tailnet 的 base_url(現在是 {p.get('base_url')!r})")
+                errs.append(_("providers.{name}: location local only allows a base_url on this machine, a private "
+                              "network or the tailnet (now {base_url!r})", name=name, base_url=p.get("base_url")))
         for g, m in (p.get("models") or {}).items():
             if g not in GROUPS:
-                errs.append(f"providers.{name}.models.{g}:組名只能是 {' / '.join(GROUPS)}")
+                errs.append(_("providers.{name}.models.{group}: the group can only be {groups}", name=name, group=g,
+                              groups=" / ".join(GROUPS)))
             if not (isinstance(m, str) and m) and not (isinstance(m, dict) and m.get("name")):
-                errs.append(f"providers.{name}.models.{g} 要是模型名稱,或 {{name, context?, price?}}")
+                errs.append(_("providers.{name}.models.{group} must be a model name, or {{name, context?, price?}}",
+                              name=name, group=g))
     for g, name in (llm.get("use") or {}).items():
         if g not in GROUPS:
-            errs.append(f"use.{g}:組名只能是 {' / '.join(GROUPS)}")
+            errs.append(_("use.{group}: the group can only be {groups}", group=g, groups=" / ".join(GROUPS)))
         elif name not in providers:
-            errs.append(f"use.{g}:沒有 provider {name}")
+            errs.append(_("use.{group}: no provider {name}", group=g, name=name))
         elif g not in ((providers[name] or {}).get("models") or {}):
-            errs.append(f"use.{g} → {name},但 providers.{name}.models 沒有 {g}")
+            errs.append(_("use.{group} → {name}, but providers.{name}.models has no {group}", group=g, name=name))
     try:
         import yaml
         known = set(yaml.safe_load((hubconf.ROOT / "contracts" / "llm-points.yaml").read_text())["points"])
@@ -321,11 +336,11 @@ def config_errors(llm: dict) -> list[str]:
         known = None
     for pt, pin in (llm.get("points") or {}).items():
         if known is not None and pt not in known:
-            errs.append(f"points.{pt}:不是宣告過的判斷點")
+            errs.append(_("points.{point}: not a declared judgment point", point=pt))
         if not isinstance(pin, dict):
-            errs.append(f"points.{pt} 要是物件({{model}} 或 {{provider, model?}})")
+            errs.append(_("points.{point} must be an object ({{model}} or {{provider, model?}})", point=pt))
         elif pin.get("provider") is not None and pin["provider"] not in providers:
-            errs.append(f"points.{pt}.provider 要是 providers 裡的一家")
+            errs.append(_("points.{point}.provider must be one of providers", point=pt))
         elif pin.get("provider") is None and not pin.get("model"):
-            errs.append(f"points.{pt}:沒有 provider 就要寫 model(交給執行環境時用的模型)")
+            errs.append(_("points.{point}: without a provider, model is required (the model the runtime uses)", point=pt))
     return errs

@@ -25,6 +25,12 @@ SCHEMA = {"type": "object", "required": ["answer"], "properties": {"answer": {"t
 SPEC = {"model_group": "fast", "max_tokens": 100}
 
 
+def setUpModule():
+    p = mock.patch.dict(os.environ, {"AGENT_HUB_LANG_UI": "zh-Hant"})   # the Refused / config texts asserted are zh-Hant
+    p.start()
+    unittest.addModuleCleanup(p.stop)
+
+
 class Base(unittest.TestCase):
     def setUp(self):
         self.tmp = pathlib.Path(tempfile.mkdtemp())
