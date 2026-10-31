@@ -22,5 +22,9 @@
  "(dry-run; add --apply to run it)": "(dry-run,加 --apply 執行)",
  "rename-project.sh failed; stopping here (the GitHub repo is not created yet)": "rename-project.sh 失敗,停在這裡(還沒建 GitHub repo)",
  "the registry entry is not valid: {errors} (the GitHub repo is already created; fix the registry entry and run this again to continue)": "登錄不合格:{errors}(GitHub repo 已經建好;修好登錄再叫一次會接著做)",
- "Done: {name} is now the project {new} ({url})": "完成:{name} 已升級成正式專案 {new}({url})"
+ "Done: {name} is now the project {new} ({url})": "完成:{name} 已升級成正式專案 {new}({url})",
+ "{path}: its git could not be asked ({why})": "{path}:問不到它的 git({why})",
+ "{path} has no branch checked out (detached HEAD); check one out first": "{path} 沒有 checkout 任何 branch(detached HEAD);先 checkout 一個",
+ "{path}: its history could not be bundled ({why})": "{path}:它的歷史打不成 bundle({why})",
+ "{path}: origin could not be set ({why})": "{path}:設不了 origin({why})"
 }

@@ -15,12 +15,17 @@ for a write outside the project's own job.
                                                             git failed, malformed output)
   fetch_bundle(bare, bundle, branch) → None | why not       fast-forward <bare>'s branch to the bundle's HEAD
   memory_project(dir) → (name, doc) | None                  whose .agent-memory this is
+  project_at(dir) → (name, doc) | None                      whose workspace holds this folder (by path, no git)
+  run(project, cwd, argv, …) → Result                       any argv as the project, bounded like job
   sync_memory(name, doc, memdir) → None | why not           a sandboxed project's memory sync (commit + merge + bundle
                                                             as the project; the platform fetches the bundle)
 
 CLI (git-sync-memory.sh, sync-all-memory.sh):
   project_git.py sandboxed <dir>      exit 0 when <dir> is the .agent-memory of a sandboxed project, 3 when not (any
                                       other exit: it couldn't tell)
+  project_git.py run-as <dir> -- <argv…>
+                                      a shell hook's work as the project <dir> belongs to (HUB_AS_PROJECT=1 set, stdin
+                                      and output passed through); exit 3 when it isn't sandboxed
   project_git.py sync-memory [--lock] <dir>
                                       sync_memory for that project (exit 1 with the reason on stderr); --lock: the job
                                       takes with-lock.sh's lock (a caller under with-lock.sh holds it already)
@@ -65,16 +70,22 @@ class Result(NamedTuple):
     stderr: str
 
 
-def job(project: str | None, cwd, op: str, *args, input: str | None = None, out=None, timeout: float = TIMEOUT_S,
-        cap: int | None = None) -> Result:
-    """Run one op as the project. Over `timeout` seconds or `cap` bytes of stdout (default MAX_JSON), the whole process
+def job(project: str | None, cwd, op: str, *args, **kw) -> Result:
+    """One op of project-git-job.py as the project (run's keywords)."""
+    return run(project, cwd, [*hubconf.launch(JOB), op, *map(str, args)], **kw)
+
+
+def run(project: str | None, cwd, argv: list[str], input: str | bytes | None = None, out=None, timeout: float = TIMEOUT_S,
+        cap: int | None = None, env: dict | None = None) -> Result:
+    """Run argv as the project. Over `timeout` seconds or `cap` bytes of stdout (default MAX_JSON), the whole process
     group is killed (returncode TIMED_OUT / TOO_BIG); stdout goes into the binary file `out` when given."""
     cap = MAX_JSON if cap is None else cap
-    argv = isolation.as_project(project, cwd, [*hubconf.launch(JOB), op, *map(str, args)])
+    argv = isolation.as_project(project, cwd, argv)
     p = subprocess.Popen(argv, cwd=cwd, stdin=subprocess.PIPE if input is not None else subprocess.DEVNULL,
-                         stdout=subprocess.PIPE, stderr=subprocess.PIPE, start_new_session=True)
+                         stdout=subprocess.PIPE, stderr=subprocess.PIPE, start_new_session=True,
+                         env={**os.environ, **env} if env else None)
     if input is not None:
-        p.stdin.write(input.encode())
+        p.stdin.write(input if isinstance(input, bytes) else input.encode())
         p.stdin.close()
     sel = selectors.DefaultSelector()
     sel.register(p.stdout, selectors.EVENT_READ, "out")
@@ -166,6 +177,18 @@ def memory_project(d) -> tuple[str, dict] | None:
     return None
 
 
+def project_at(d) -> tuple[str, dict] | None:
+    """The registered project whose workspace holds this folder (its worktrees under it included); by path only, no
+    git (a repo's config can hang even rev-parse)."""
+    real = pathlib.Path(d).resolve()
+    best = None
+    for name, doc in hubconf.projects().items():
+        ws = hubconf.path((doc.get("paths") or {}).get("workspace"))
+        if ws and real.is_relative_to(ws.resolve()) and (best is None or len(ws.parts) > len(best[2].parts)):
+            best = (name, {**doc, "name": name}, ws)
+    return best[:2] if best else None
+
+
 def sync_memory(name: str, doc: dict, memdir, branch: str = "agent-memory", lock: bool = False) -> str | None:
     """lock: the job takes with-lock's lock itself (the hourly sync; a hook's call already holds it)."""
     bare = policy.memory_bare(name, doc)
@@ -187,7 +210,22 @@ def sync_memory(name: str, doc: dict, memdir, branch: str = "agent-memory", lock
         return f"{name}: {why}" if why else None
 
 
+def run_as_cli(d: str, argv: list[str]) -> int:
+    """A shell hook's work as the project of the folder d: stdin passed in, its stdout and stderr passed out. Exit 3
+    when d isn't a sandboxed project's (the caller goes on itself)."""
+    found = project_at(d)
+    if not (found and isolation.sandboxed(found[1])):
+        return NOT_SANDBOXED
+    stdin = "" if sys.stdin.isatty() else sys.stdin.read()
+    r = run(found[0], d, argv, input=stdin, env={"HUB_AS_PROJECT": "1"})
+    sys.stdout.buffer.write(r.stdout)
+    sys.stderr.write(r.stderr)
+    return r.returncode
+
+
 def main(argv: list[str]) -> int:
+    if argv[:1] == ["run-as"] and len(argv) >= 4 and argv[2] == "--":
+        return run_as_cli(argv[1], argv[3:])
     lock = "--lock" in argv
     argv = [a for a in argv if a != "--lock"]
     if len(argv) != 2 or argv[0] not in ("sandboxed", "sync-memory"):

@@ -32,6 +32,12 @@ readable. Nothing here decides anything for the platform; the caller treats the 
   hook-remove <repo> <hook>
   bundle-unpushed <ws>                    stdout: a bundle of the branches not on any remote (exit 3: nothing)
   diff-head <ws>                          stdout: git diff HEAD --binary
+  exclude <repo> <pattern>                the pattern into the repo's .git/info/exclude
+  save <ws> <folder> <name>               stdin → a new file <ws>/<folder>/<name> (never overwriting, never through a
+                                          link); prints its path relative to ws
+  head <ws>                               JSON {branch, dirty}
+  bundle-head <ws>                        stdout: a bundle of the checked-out branch
+  set-origin <ws> <url> <branch>          origin = url, the branch tracking it
   memory-sync <memdir> <bare> <branch> [--lock]
                                           commit memory/ and STATE.md, merge what <bare>'s <branch> has, then stdout: a
                                           bundle of HEAD that <bare> lacks (empty: nothing to push); --lock takes
@@ -258,11 +264,72 @@ def memory_sync(memdir: str, bare: str, branch: str) -> int:
                stdout=sys.stdout.buffer).returncode
 
 
+def op_exclude(repo: str, pattern: str) -> int:
+    """pattern into the repo's .git/info/exclude (shared by its worktrees) when it isn't there yet."""
+    common = out(repo, "rev-parse", "--path-format=absolute", "--git-common-dir").strip()
+    if not common:
+        return 1
+    ex = pathlib.Path(common) / "info" / "exclude"
+    lines = ex.read_text().splitlines() if ex.exists() else []
+    if pattern not in lines:
+        ex.parent.mkdir(parents=True, exist_ok=True)
+        ex.write_text("\n".join(lines + [pattern]) + "\n")
+    return 0
+
+
+def op_save(ws: str, folder: str, name: str) -> int:
+    """stdin's bytes into <ws>/<folder>/<name>, a new file (a number added when the name is taken); prints its path
+    relative to ws."""
+    if "/" in folder or "/" in name or folder.startswith(".") or not name:
+        return 2
+    d = pathlib.Path(ws) / folder
+    d.mkdir(exist_ok=True)
+    data, stem = sys.stdin.buffer.read(), name
+    for i in range(1, 1000):
+        try:
+            fd = os.open(d / name, os.O_WRONLY | os.O_CREAT | os.O_EXCL | getattr(os, "O_NOFOLLOW", 0), 0o644)
+        except FileExistsError:
+            name = f"{i}-{stem}"
+            continue
+        with os.fdopen(fd, "wb") as fh:
+            fh.write(data)
+        print(f"{folder}/{name}")
+        return 0
+    return 1
+
+
+def op_head(ws: str) -> int:
+    """JSON {branch, dirty}: the checked-out branch (null when detached) and whether tracked files have changes."""
+    b = git(ws, "symbolic-ref", "--short", "-q", "HEAD")
+    return emit({"branch": b.stdout.strip() if b.returncode == 0 else None,
+                 "dirty": bool(out(ws, "status", "--porcelain", "--untracked-files=no").strip())})
+
+
+def op_bundle_head(ws: str) -> int:
+    """stdout: a bundle of the checked-out branch (its whole history)."""
+    b = out(ws, "symbolic-ref", "--short", "-q", "HEAD").strip()
+    if not b:
+        return 1
+    return git(ws, "bundle", "create", "-q", "-", f"refs/heads/{b}", text=False, stdout=sys.stdout.buffer).returncode
+
+
+def op_set_origin(ws: str, url: str, branch: str) -> int:
+    """origin = url, and the branch tracks origin's branch of the same name (the platform pushed it)."""
+    has = git(ws, "remote", "get-url", "origin").returncode == 0
+    for args in (["remote", "set-url" if has else "add", "origin", url],
+                 ["config", f"branch.{branch}.remote", "origin"],
+                 ["config", f"branch.{branch}.merge", f"refs/heads/{branch}"]):
+        if git(ws, *args).returncode != 0:
+            return 1
+    return 0
+
+
 OPS = {"worktrees": op_worktrees, "ignored": op_ignored, "worktree-add": op_worktree_add,
        "worktree-remove": op_worktree_remove, "branch-delete": op_branch_delete, "remove-dep": op_remove_dep,
        "changed": op_changed, "copy-back": op_copy_back, "hooks": op_hooks, "hook-write": op_hook_write,
        "hook-remove": op_hook_remove, "bundle-unpushed": op_bundle_unpushed, "diff-head": op_diff_head,
-       "memory-sync": op_memory_sync}
+       "memory-sync": op_memory_sync, "exclude": op_exclude, "save": op_save, "head": op_head,
+       "bundle-head": op_bundle_head, "set-origin": op_set_origin}
 
 
 if __name__ == "__main__":

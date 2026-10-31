@@ -302,6 +302,24 @@ class MemorySync(Base):
         if sys.platform == "darwin":   # Landlock grants the whole temp area this fixture lives in; Seatbelt only writes
             self.assertFalse(leaked, p.stderr)
 
+    def test_worktree_session_start_reads_planted_files_as_the_project(self):
+        """Round 6: worktree-memory.sh (a user-level hook, outside the agent's sandbox) printed the deps-pruned marker
+        from the worktree's git dir into the session; a project links it to a file it can't read."""
+        r, _bare = self.project_with_memory("proj")
+        other = self.repo("other", sandbox=False)
+        (other / "secret").write_text("the other project's secret\n")
+        wt = r / ".claude" / "worktrees" / "w"
+        git(r, "worktree", "add", "-q", str(wt), "-b", "w")
+        (r / ".git" / "worktrees" / "w" / "agent-hub-deps-pruned").symlink_to(other / "secret")
+        state = self.tmp / "state"
+        (state / "registry").mkdir(parents=True)
+        (state / "registry" / "index.json").write_text(json.dumps({"projects": self.docs}))
+        env = {**ENV, "AGENT_HUB_STATE": str(state), "AGENT_HUB_OFFLINE": "1"}
+        p = subprocess.run(["bash", str(BIN / "worktree-memory.sh"), "start"], cwd=wt, env=env, capture_output=True,
+                           text=True, timeout=120, stdin=subprocess.DEVNULL)
+        if sys.platform == "darwin" or isolation.can_sandbox() is not None:   # Landlock opens the temp area
+            self.assertNotIn("secret", p.stdout, p.stderr)
+
     def test_platform_half_fast_forwards_and_refuses_the_rest(self):
         import project_git
         _r, bare = self.project_with_memory("open", sandbox=False)
@@ -342,6 +360,61 @@ class MemorySync(Base):
             project_git.sync_memory("proj", self.docs["proj"], mem)
         self.assertNotEqual(subprocess.run(["git", "-C", str(bare), "cat-file", "-e", blob], env=ENV).returncode, 0,
                             "the other project's object reached this project's memory bare repo")
+
+
+class WritesThroughLinks(Base):
+    """Round 6: cap-runner and lease-runner wrote .git/info/exclude (and lease attachments) through paths a sandboxed
+    project can turn into links to files of the user's."""
+
+    def test_cap_runner_exclude_is_written_as_the_project(self):
+        cr = load("cap_runner_holes", BIN / "cap-runner.py")
+        r = self.repo("proj")
+        target = self.tmp / "users-file"
+        target.write_text("keep\n")
+        (r / ".git" / "info").mkdir(exist_ok=True)
+        (r / ".git" / "info" / "exclude").unlink(missing_ok=True)
+        (r / ".git" / "info" / "exclude").symlink_to(target)
+        cr.exclude_hub_run("proj", r)
+        self.assertEqual(target.read_text(), "keep\n")
+        self.assertTrue(self.wrapped)
+
+    def test_lease_attachments_are_saved_as_the_project(self):
+        lr = load("lease_runner_holes", BIN / "lease-runner.py")
+        r = self.repo("proj")
+        elsewhere = self.tmp / "elsewhere"
+        elsewhere.mkdir()
+        (r / "attachments").symlink_to(elsewhere)
+        lease = type("L", (), {"project": "proj", "cwd": str(r)})()
+        with self.assertRaises(OSError):
+            lr.save_attachments(lease, [{"name": "a.png", "data": "eA=="}])
+        self.assertEqual(list(elsewhere.iterdir()), [])
+
+
+class Hooks(Base):
+    """Round 6: session hooks run outside the agent's sandbox. After every commit a sandboxed session makes, the
+    nudge's `git log` ran the repo's gpg.program with the user's authority."""
+
+    def test_the_nudge_after_a_commit_runs_as_the_project(self):
+        he = load("hub_event_holes", BIN / "hub-event")
+        he.LOG = self.tmp / "hub-event.log"
+        he.HANDLERS["tool_used"] = [("nudge", he.nudge)]   # not the mail: no real bus in a test
+        r = self.repo("proj")
+        mem = r / ".agent-memory"
+        old = {**ENV, "GIT_COMMITTER_DATE": "2026-01-01T00:00:00", "GIT_AUTHOR_DATE": "2026-01-01T00:00:00"}
+        subprocess.run(["git", "-C", str(r), "worktree", "add", "-q", "--orphan", "-b", "agent-memory", str(mem)],
+                       env=old, check=True, capture_output=True)
+        (mem / "memory").mkdir()
+        (mem / "memory" / "n.md").write_text("n\n")
+        subprocess.run(["git", "-C", str(mem), "add", "."], env=old, check=True)
+        subprocess.run(["git", "-C", str(mem), "commit", "-q", "-m", "init"], env=old, check=True)
+        os.utime(mem / "memory" / "n.md", (1767225600, 1767225600))
+        commit(r, "work.py", "x = 1\n", "feat: work")
+        forge_signed(r)
+        hostile(r, self.marker)
+        import runtime_fake
+        he.handle("tool_used", json.dumps({"sid": "S", "dir": str(r), "cmd": "git commit -m x"}), runtime_fake)
+        self.assertNotRun()
+        self.assertIn(("proj", str(r)), [(p, c) for p, c, _a in self.wrapped])
 
 
 class GateHooks(Base):

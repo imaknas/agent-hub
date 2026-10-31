@@ -20,7 +20,8 @@ What it does (in order):
   2. --rename: call rename-project.sh <sandbox name> <new name> --apply (folder, memory bare repo/copy and registry
      changed together)
   3. gh repo create <github.owner>/<name> (private by default) + push (if the repo is already ours, only push), origin
-     changed to github.remote
+     changed to github.remote. The push is from a bare repo the platform owns, filled from a bundle the project's job
+     made: the user's GitHub credentials never run git in the sandbox's own repo (project_git.py)
   4. Registry: type changed to project, paths.origin filled in; purpose, enforce (with the capabilities and work the
      owner agreed to) and privacy are kept
      (sandboxes created earlier without an explicit enforce.work get work: true on upgrade: idea sandboxes could
@@ -32,16 +33,20 @@ renamed). It doesn't delete the GitHub repo to "roll back": deleting a repo can'
 """
 from __future__ import annotations
 
+import atexit
 import datetime
 import json
 import pathlib
 import re
+import shutil
 import subprocess
 import sys
+import tempfile
 
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
 import hubconf  # noqa: E402
 import i18n  # noqa: E402
+import project_git  # noqa: E402
 import registry  # noqa: E402
 
 _ = i18n.domain(__file__)
@@ -106,15 +111,47 @@ def remote_url(owner: str, name: str) -> str:
     return (hubconf.get("github.remote") or "git@github.com:{owner}/{name}.git").format(owner=owner, name=name)
 
 
-def remote_is_ours(ws: pathlib.Path, url: str) -> bool:
+def checked_out(project: str, ws: pathlib.Path) -> tuple[str, bool]:
+    """(checked-out branch, tracked files changed), asked of the project's own job: the platform runs no git in a
+    sandboxed project's repo (project_git.py)."""
+    try:
+        h = project_git.data(project, ws, "head", ws)
+    except project_git.Unavailable as e:
+        fail(_("{path}: its git could not be asked ({why})", path=ws, why=e))
+    branch = h.get("branch") if isinstance(h, dict) else None
+    if not isinstance(branch, str) or subprocess.run(["git", "check-ref-format", "--branch", branch],
+                                                     capture_output=True).returncode != 0:
+        fail(_("{path} has no branch checked out (detached HEAD); check one out first", path=ws), "dirty")
+    return branch, h.get("dirty") is not False
+
+
+def own_copy(project: str, ws: pathlib.Path, branch: str, tmp: pathlib.Path) -> pathlib.Path:
+    """A bare repo the platform owns holding the project's branch, from a bundle its job made: what is checked against
+    GitHub and pushed there, with the user's credentials, is never the project's repo itself (its hooks, its config,
+    objects it borrows through alternates)."""
+    own = tmp / "own.git"
+    if not own.exists():
+        run(["git", "init", "-q", "--bare", str(own)])
+    bundle = tmp / "head.bundle"
+    with bundle.open("wb") as fh:
+        r = project_git.job(project, ws, "bundle-head", ws, out=fh, timeout=project_git.BUNDLE_TIMEOUT_S,
+                            cap=project_git.MAX_BUNDLE)
+    if r.returncode != 0:
+        fail(_("{path}: its history could not be bundled ({why})", path=ws, why=r.stderr.strip()[-200:]))
+    run(["git", "-C", str(own), "-c", "transfer.fsckObjects=true", "-c", "fetch.fsckObjects=true", "fetch", "-q",
+         "--no-tags", str(bundle), f"+refs/heads/{branch}:refs/heads/{branch}"])
+    return own
+
+
+def remote_is_ours(own: pathlib.Path, branch: str, url: str) -> bool:
     """The remote was pushed by this sandbox itself (the last run stopped halfway): no branches, or every branch tip is
     in the local history. Every branch, not just HEAD: a repo whose HEAD names a branch nobody pushed (the default
     branch name differs between git setups) would otherwise look empty while it holds someone else's history."""
-    r = subprocess.run(["git", "-C", str(ws), "ls-remote", "--heads", url], text=True, capture_output=True)
+    r = subprocess.run(["git", "-C", str(own), "ls-remote", "--heads", url], text=True, capture_output=True)
     if r.returncode != 0:
         return False
     tips = [line.split()[0] for line in r.stdout.splitlines() if line.strip()]
-    return all(subprocess.run(["git", "-C", str(ws), "merge-base", "--is-ancestor", sha, "HEAD"],
+    return all(subprocess.run(["git", "-C", str(own), "merge-base", "--is-ancestor", sha, f"refs/heads/{branch}"],
                               capture_output=True).returncode == 0 for sha in tips)
 
 
@@ -178,7 +215,9 @@ def main(argv: list[str]) -> int:
     if doc.get("type") != "idea":
         fail(_("{name} is not an idea sandbox (type: {type})", name=name, type=doc.get('type', 'project')), "not_idea")
     ws = registry.dirs(doc)["workspace"]
-    if run(["git", "-C", str(ws), "status", "--porcelain", "--untracked-files=no"]).stdout.strip():
+    proj = final if renamed else name
+    branch, dirty = checked_out(proj, ws)
+    if dirty:
         fail(_("{path} has uncommitted changes to tracked files; deal with them first", path=ws), "dirty")
     owner = hubconf.get("github.owner") or fail(_("hub.json has no github.owner"))
     url = remote_url(owner, final)
@@ -193,8 +232,10 @@ def main(argv: list[str]) -> int:
                  if hit]
         if taken:
             fail(_("{name} is already taken: {paths}", name=new, paths=', '.join(taken)), "name_taken")
+    tmp = pathlib.Path(tempfile.mkdtemp(prefix="hub-upgrade-"))
+    atexit.register(shutil.rmtree, tmp, True)
     repo_exists = subprocess.run(["gh", "repo", "view", f"{owner}/{final}"], capture_output=True).returncode == 0
-    if repo_exists and not remote_is_ours(ws, url):
+    if repo_exists and not remote_is_ours(own_copy(proj, ws, branch, tmp), branch, url):
         fail(_("GitHub already has {owner}/{name} (not this sandbox's history)", owner=owner, name=final), "name_taken")
 
     plan = [_("rename {old} → {new} (rename-project.sh)", old=name, new=new) if new
@@ -220,14 +261,17 @@ def main(argv: list[str]) -> int:
         reg = hubconf.registry_dir() / f"{final}.yaml"
         doc = yaml.safe_load(reg.read_text())
         ws = registry.dirs(doc)["workspace"]
+        registry.refresh()   # the project's jobs below go by its new name
+        proj = final
 
+    # the branch as it is now (new commits since a failed run included), pushed from the platform's own copy
+    own = own_copy(proj, ws, branch, tmp)
     if not repo_exists:
-        run(["gh", "repo", "create", f"{owner}/{final}", "--public" if public else "--private",
-             f"--source={ws}", "--remote=origin", "--push"])
-    has_origin = subprocess.run(["git", "-C", str(ws), "remote", "get-url", "origin"], capture_output=True).returncode == 0
-    run(["git", "-C", str(ws), "remote", "set-url" if has_origin else "add", "origin", url])
-    if repo_exists:
-        run(["git", "-C", str(ws), "push", "-u", "origin", "HEAD"])
+        run(["gh", "repo", "create", f"{owner}/{final}", "--public" if public else "--private"])
+    run(["git", "-C", str(own), "push", "-q", url, f"refs/heads/{branch}:refs/heads/{branch}"])
+    r = project_git.job(proj, ws, "set-origin", ws, url, branch)
+    if r.returncode != 0:
+        fail(_("{path}: origin could not be set ({why})", path=ws, why=r.stderr.strip()[-200:]))
     record(name, name=final, origin=url, stage="repo")
 
     text = reg.read_text()

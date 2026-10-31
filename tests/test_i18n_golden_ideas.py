@@ -45,10 +45,9 @@ case "$1 $2" in
   "repo view") [ -d "$FAKE_REMOTES/$3.git" ];;
   "repo create")
     [ -n "${GH_CREATE_FAIL:-}" ] && { echo "HTTP 502: bad gateway" >&2; exit 1; }
-    dest="$FAKE_REMOTES/$3.git"; src=""
-    for a in "$@"; do case "$a" in --source=*) src="${a#--source=}";; esac; done
+    dest="$FAKE_REMOTES/$3.git"
+    case " $* " in *" --source="*|*" --push "*) echo "fake gh: never push from the sandbox's repo" >&2; exit 2;; esac
     mkdir -p "$(dirname "$dest")" && git init -q --bare -b main "$dest" || exit 1
-    git -C "$src" remote add origin "$dest" && git -C "$src" push -q -u origin HEAD || exit 1
     exit 0;;
   *) echo "fake gh: $*" >&2; exit 2;;
 esac
@@ -195,6 +194,12 @@ class Golden(unittest.TestCase):
         else:
             conf["github"].pop("owner", None)
         conf["registry_dir"] = "projects"
+        # the sandbox's git runs through bin/sandboxed-run (project_git.py); exempt where this machine can't sandbox
+        (hub / "bin" / "sandboxed-run").symlink_to(ROOT / "bin" / "sandboxed-run")
+        sys.path.insert(0, str(ROOT / "bin"))
+        import isolation
+        if isolation.can_sandbox():
+            conf["service_sandbox_exempt"] = ["idea-7", "garden"]
         (hub / "hub.json").write_text(json.dumps(conf, ensure_ascii=False))
         tool(hub / "bin" / "rename-project.sh", UP_RENAME)
         tool(hub / "bin" / "gen-index-roster.sh", "#!/bin/bash\n")

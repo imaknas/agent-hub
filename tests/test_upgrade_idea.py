@@ -25,15 +25,14 @@ except ImportError:
     yaml = None
 
 FAKE_GH = r"""#!/bin/bash
-# fake gh: repo view <owner/name> / repo create <owner/name> ... --source=<dir> --push
+# fake gh: repo view <owner/name> / repo create <owner/name> --private|--public (an empty repo; the platform pushes)
 set -u
 case "$1 $2" in
   "repo view") [ -d "$FAKE_REMOTES/$3.git" ];;
   "repo create")
-    dest="$FAKE_REMOTES/$3.git"; src=""
-    for a in "$@"; do case "$a" in --source=*) src="${a#--source=}";; esac; done
+    dest="$FAKE_REMOTES/$3.git"
+    case " $* " in *" --source="*|*" --push "*) echo "fake gh: never push from the sandbox's repo" >&2; exit 2;; esac
     mkdir -p "$(dirname "$dest")" && git init -q --bare -b main "$dest" || exit 1
-    git -C "$src" remote add origin "$dest" && git -C "$src" push -q -u origin HEAD || exit 1
     [ -n "${FAKE_GH_FAIL_AFTER_CREATE:-}" ] && { echo "network went away" >&2; exit 1; }
     exit 0;;
   *) echo "fake gh: $*" >&2; exit 2;;
@@ -84,6 +83,13 @@ class Upgrade(unittest.TestCase):
         conf = json.loads((ROOT / "hub.example.json").read_text())
         conf["github"] = {**conf.get("github", {}), "owner": "o", "remote": str(self.remotes) + "/{owner}/{name}.git"}
         conf["registry_dir"] = "projects"
+        # the sandbox's jobs (its git: project_git.py) go through bin/sandboxed-run; where this machine can't sandbox,
+        # the idea is exempt (hub.json service_sandbox_exempt), so the upgrade's own logic is still tested
+        (self.hub / "bin" / "sandboxed-run").symlink_to(ROOT / "bin" / "sandboxed-run")
+        sys.path.insert(0, str(ROOT / "bin"))
+        import isolation
+        if isolation.can_sandbox():
+            conf["service_sandbox_exempt"] = ["idea-7", "garden-app"]
         (self.hub / "hub.json").write_text(json.dumps(conf, ensure_ascii=False))
         for name, body in (("rename-project.sh", FAKE_RENAME), ("gen-index-roster.sh", "#!/bin/bash\n"),
                            ("commit-hub-files.sh", "#!/bin/bash\necho \"$@\" >> \"$AGENT_HUB_ROOT/commits.log\"\n")):
@@ -133,6 +139,31 @@ class Upgrade(unittest.TestCase):
         self.assertEqual(self.record()["idea-7"]["stage"], "done")
         res, code = self.upgrade()
         self.assertEqual((code, res["result"]), (0, "already"))
+
+    def test_the_sandboxs_hooks_and_config_never_run_with_the_users_authority(self):
+        """Round 6: the upgrade ran `git status` and `git push` (with the user's GitHub credentials) in the sandbox's
+        own repo: its pre-push hook and fsmonitor ran as the user."""
+        sys.path.insert(0, str(ROOT / "bin"))
+        import isolation
+        if isolation.can_sandbox():
+            self.skipTest("this machine can't sandbox: the idea is exempt here, so its git runs unsandboxed by design")
+        other = self.home / "workspace" / "other"
+        other.mkdir(parents=True)
+        (other / "secret").write_text("another project's secret\n")
+        marker = self.home / "workspace" / "idea-7" / "leak"
+        evil = self.home / "evil.sh"
+        evil.write_text(f"#!/bin/sh\ncat '{other / 'secret'}' >> '{marker}' 2>/dev/null\nexit 0\n")
+        evil.chmod(0o755)
+        (self.ws / ".gitignore").write_text("leak\n")
+        git(self.ws, "add", ".gitignore")
+        git(self.ws, "commit", "-q", "-m", "ignore")
+        git(self.ws, "config", "core.fsmonitor", str(evil))   # planted last: this test's own git must not run it
+        (self.ws / ".git" / "hooks" / "pre-push").write_text(f"#!/bin/sh\n'{evil}'\nexit 0\n")
+        (self.ws / ".git" / "hooks" / "pre-push").chmod(0o755)
+        res, code = self.upgrade()
+        self.assertEqual(code, 0, res)
+        self.assertFalse(marker.exists() and "secret" in marker.read_text())
+        self.assertEqual(git(self.remote(), "rev-parse", "main"), git(self.ws, "rev-parse", "--verify", "main"))
 
     def test_explicit_work_false_is_kept(self):
         (self.hub / "projects" / "idea-7.yaml").write_text(IDEA.replace("  capabilities: [gpu]\n", "  capabilities: [gpu]\n  work: false\n"))

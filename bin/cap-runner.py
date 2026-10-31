@@ -189,17 +189,11 @@ def make_profile(project: str, cap: str, job_id: str) -> pathlib.Path:
     return p
 
 
-def exclude_hub_run(ws: pathlib.Path) -> None:
-    """Keep .hub-run/ out of the project's git (written into .git/info/exclude, like attachments/)."""
-    r = subprocess.run(["git", "-C", str(ws), "rev-parse", "--path-format=absolute", "--git-common-dir"],
-                       capture_output=True, text=True)
-    if r.returncode != 0:
-        return
-    ex = pathlib.Path(r.stdout.strip()) / "info" / "exclude"
-    lines = ex.read_text().splitlines() if ex.exists() else []
-    if ".hub-run/" not in lines:
-        ex.parent.mkdir(parents=True, exist_ok=True)
-        ex.write_text("\n".join(lines + [".hub-run/"]) + "\n")
+def exclude_hub_run(project: str, ws: pathlib.Path) -> None:
+    """Keep .hub-run/ out of the project's git (written into .git/info/exclude, like attachments/), as the project:
+    its .git is its own to write, a link planted there must not point this at another file (project_git.py)."""
+    import project_git
+    project_git.job(project, ws, "exclude", ws, ".hub-run/")
 
 
 class Job:
@@ -244,7 +238,7 @@ class Runner:
                 try:
                     names = sorted(n for n in os.listdir(req_fd) if n.endswith(".json") and not n.startswith("."))
                     if names and str(ws) not in self.excluded:
-                        exclude_hub_run(ws)
+                        exclude_hub_run(project, ws)
                         self.excluded.add(str(ws))
                     for n in names:
                         self.take(project, ws, caps, hr_fd, req_fd, n, models)

@@ -51,7 +51,7 @@ class CapRunner(unittest.TestCase):
                          "p-b": {"dirs": [self.b], "caps": ["gpu"], "models": {}}}
         for target, value in [("eligible", lambda: self.projects), ("make_profile", lambda *a: allow),
                               ("DIR", self.tmp / "state"), ("LOG", self.tmp / "state" / "log.jsonl"),
-                              ("exclude_hub_run", lambda ws: None)]:
+                              ("exclude_hub_run", lambda project, ws: None)]:
             p = mock.patch.object(cr, target, value)
             p.start()
             self.addCleanup(p.stop)

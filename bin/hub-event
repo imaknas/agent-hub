@@ -6,6 +6,9 @@ wires its native hooks to this.
                              native hook input
   hub-event install <folder>  install the hooks in this project (the platform's replaced with new ones, the user's own
                               kept): called by sync-local-setup
+  hub-event as-project <event> <workspace> <command>
+                              inside a sandboxed project's sandbox: its handlers that touch its repo (AS_PROJECT),
+                              JSON out (called by hub-event itself)
 
 Flow: binding.parse_event turns the native input into a neutral HubEvent → the platform's handlers for that event run
 in order (each catching its own errors, so one broken handler doesn't affect the others) → collect the text to put into
@@ -23,6 +26,8 @@ from __future__ import annotations
 import datetime
 import importlib.machinery
 import importlib.util
+import json
+import os
 import pathlib
 import select
 import subprocess
@@ -31,6 +36,8 @@ import sys
 BIN = pathlib.Path(__file__).resolve().parent
 sys.path.insert(0, str(BIN))
 import hubconf  # noqa: E402
+import isolation  # noqa: E402
+import project_git  # noqa: E402
 import runtime_ports  # noqa: E402
 
 LOG = hubconf.LOGS / "hub-event.log"
@@ -45,10 +52,14 @@ def _load(name: str, path: pathlib.Path):
 
 
 def _workspace(cwd: str) -> pathlib.Path | None:
-    """The project folder this session is in (the root of the main git checkout or of a worktree); it counts as a
-    project connected to the platform only if it has .agent-memory."""
-    r = subprocess.run(["git", "-C", cwd, "rev-parse", "--show-toplevel"], capture_output=True, text=True)
-    return pathlib.Path(r.stdout.strip()) if r.returncode == 0 and r.stdout.strip() else None
+    """The project folder this session is in (the root of the main git checkout or of a worktree: the nearest folder
+    with a .git); it counts as a project connected to the platform only if it has .agent-memory. Found by path, not by
+    git: the repo's config is the project's, and can make even rev-parse hang."""
+    try:
+        here = pathlib.Path(cwd).resolve()
+    except (OSError, RuntimeError):
+        return None
+    return next((d for d in (here, *here.parents) if os.path.lexists(d / ".git")), None)
 
 
 def _memory(ws) -> bool:
@@ -107,6 +118,11 @@ HANDLERS = {
     "open_session_attempt": [("guard", guard)],
 }
 DENY_HANDLERS = {"guard"}
+# Hooks run outside the agent's sandbox, with the user's authority. For a sandboxed project, the handlers that run git
+# in its repo or read files it can plant run as the project (`hub-event as-project`, through sandboxed-run) and hand
+# back their text as JSON; its memory sync is the platform's bundle path (project_git.sync_memory). Design:
+# docs/design/projects-and-repos.md section 4.
+AS_PROJECT = {"memory_pull", "local_setup", "nudge"}
 
 
 def _read_stdin() -> str:
@@ -135,10 +151,20 @@ def handle(event: str, raw: str, rt=None) -> str:
     if ev is None or event not in HANDLERS:
         return ""
     ws = _workspace(ev.cwd)
+    proj = project_git.project_at(ws) if ws else None
+    caged = bool(proj) and isolation.sandboxed(proj[1]) and not os.environ.get("HUB_AS_PROJECT")
+    inner = _as_project(proj[0], ws, ev) if caged and any(n in AS_PROJECT for n, _fn in HANDLERS[event]) else {}
     texts, reasons, ran, failed = [], [], [], []
     for name, fn in HANDLERS[event]:
         try:
-            out = fn(ev, ws)
+            if caged and name in AS_PROJECT:
+                if not isinstance(inner.get(name), dict) or not inner[name].get("ok"):
+                    raise RuntimeError(f"as the project: {(inner.get('') or {}).get('error', 'failed')}")
+                out = inner[name].get("text") if isinstance(inner[name].get("text"), str) else None
+            elif caged and name == "memory_sync":
+                out = _memory_sync_as_project(proj, ws)
+            else:
+                out = fn(ev, ws)
             ran.append(name)
         except Exception as e:  # one handler broke; the others still run
             failed.append(f"{name}:{type(e).__name__}")
@@ -151,7 +177,43 @@ def handle(event: str, raw: str, rt=None) -> str:
     return rt.inject(event, "\n\n".join(texts)) if texts else ""
 
 
+def _as_project(project: str, ws: pathlib.Path, ev) -> dict:
+    """This event's AS_PROJECT handlers, run by `hub-event as-project` as the project: {name: {ok, text}}, or
+    {"": {error}} when it didn't run (e.g. the sandbox refused)."""
+    argv = [*hubconf.launch(BIN / "hub-event"), "as-project", ev.event, str(ws), ev.command or ""]
+    # its AGENT.md commit is pushed by the memory sync's bundle, not from inside (the sandbox can't write the bare repo)
+    r = project_git.run(project, ws, argv, timeout=110, env={"HUB_AS_PROJECT": "1", "AGENT_HUB_OFFLINE": "1"})
+    try:
+        out = json.loads(r.stdout) if r.returncode == 0 else None
+    except ValueError:
+        out = None
+    return out if isinstance(out, dict) else {"": {"error": f"exit {r.returncode}: {r.stderr.strip()[-200:]}"}}
+
+
+def _memory_sync_as_project(proj, ws):
+    if _memory(ws):
+        why = project_git.sync_memory(proj[0], proj[1], ws / ".agent-memory", lock=True)
+        if why:
+            raise RuntimeError(why)
+
+
+def as_project(event: str, ws: str, command: str) -> int:
+    """Inside the project's sandbox: run this event's AS_PROJECT handlers, print {name: {ok, text}}."""
+    ev = runtime_ports.HubEvent(event, "", ws, command or None)
+    res = {}
+    for name, fn in HANDLERS.get(event, []):
+        if name in AS_PROJECT:
+            try:
+                res[name] = {"ok": True, "text": fn(ev, pathlib.Path(ws))}
+            except Exception as e:
+                res[name] = {"ok": False, "error": type(e).__name__}
+    print(json.dumps(res))
+    return 0
+
+
 def main(argv) -> int:
+    if argv[:1] == ["as-project"] and len(argv) == 4:
+        return as_project(*argv[1:])
     try:
         if argv[:1] == ["install"] and len(argv) == 2:
             try:

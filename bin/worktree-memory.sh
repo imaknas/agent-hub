@@ -38,6 +38,22 @@ cd "$top" || exit 0
 hook_json=""
 [ -t 0 ] || IFS= read -r -t 1 hook_json || true
 
+# Hooks run outside the agent's sandbox, with the user's authority. For a sandboxed project, everything below (git in
+# its repo, files it can plant, such as the marker or the rules file that get printed into the session) runs as the
+# project instead (project_git.py run-as → sandboxed-run); its memory sync is the platform's bundle path. Only the
+# rev-parse calls above run here: at worst a FIFO in its config hangs its own session's hook.
+if [ -z "${HUB_AS_PROJECT:-}" ]; then
+  "$HUB/bin/py" "$HUB/bin/project_git.py" sandboxed "$main/.agent-memory"
+  case $? in
+    0) [ "$event" = end ] && exec "$HUB/bin/py" "$HUB/bin/project_git.py" sync-memory --lock "$main/.agent-memory"
+       printf '%s' "$hook_json" | AGENT_HUB_OFFLINE=1 "$HUB/bin/py" "$HUB/bin/project_git.py" run-as "$top" -- \
+         bash "$HUB/bin/worktree-memory.sh" "$event"
+       exit 0 ;;
+    3) ;;
+    *) exit 0 ;;
+  esac
+fi
+
 case "$event" in
   start)
     linked=""

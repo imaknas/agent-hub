@@ -133,7 +133,8 @@ fi
 # picks up memory/ and STATE.md, so this commits+pushes by itself, and commits only the one file AGENT.md. It runs in
 # parallel with SessionStart's git pull, using the same with-lock lock so they don't collide.
 # It compares against the version in HEAD, not the working tree: if last time it copied but the commit/push failed,
-# the next run tries again.
+# the next run tries again. With AGENT_HUB_OFFLINE (a sandboxed project's hooks run this as the project, and its sandbox
+# can't write the bare repo) it only commits; the memory sync's bundle carries it.
 if ! git -C .agent-memory show HEAD:AGENT.md 2>/dev/null | cmp -s "$AGENT_HUB/templates/AGENT.md" -; then
   # don't run the project's own git hooks (see the explanation in git-sync-memory.sh)
   ( cd .agent-memory \
@@ -141,7 +142,7 @@ if ! git -C .agent-memory show HEAD:AGENT.md 2>/dev/null | cmp -s "$AGENT_HUB/te
     && cp "$AGENT_HUB/templates/AGENT.md" AGENT.md \
     && "$AGENT_HUB/bin/with-lock.sh" sh -c \
          'git commit -q -m "agent-hub: sync AGENT.md from template" -- AGENT.md \
-          && "$0/bin/git-safe-push.sh"' "$AGENT_HUB" ) >/dev/null 2>&1 \
+          && { [ -n "${AGENT_HUB_OFFLINE:-}" ] || "$0/bin/git-safe-push.sh"; }' "$AGENT_HUB" ) >/dev/null 2>&1 \
     && { $QUIET || hub_say "sync-local-setup: AGENT.md aligned with the template and pushed"; } \
     || { $QUIET || hub_say "sync-local-setup: ⚠️ AGENT.md updated, but the commit/push failed; the next session start tries again"; }
 fi

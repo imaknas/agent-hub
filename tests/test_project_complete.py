@@ -152,7 +152,7 @@ class Runner(unittest.TestCase):
             self.started.append((argv, kw))
             return FakeProc()
         for target, value in (("eligible", lambda: elig), ("DIR", self.state), ("LOG", self.state / "log.jsonl"),
-                              ("exclude_hub_run", lambda ws: None)):
+                              ("exclude_hub_run", lambda project, ws: None)):
             p = mock.patch.object(cr, target, value)
             p.start()
             self.addCleanup(p.stop)

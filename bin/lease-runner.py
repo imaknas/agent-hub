@@ -458,27 +458,20 @@ def check_attachments(atts) -> str | None:
 def save_attachments(lease: Lease, atts: list) -> list[str]:
     """Store into the project folder's attachments/ (cleaned file name, never overwriting) and return the relative path.
     attachments/ is written into .git/info/exclude: photos stay out of the repo history (idea sandboxes have no remote,
-    but things other than memory shouldn't be committed either)."""
+    but things other than memory shouldn't be committed either). Both are written as the project (project_git.py): the
+    folder and its .git are its own, so a link planted in either reaches only what it can write itself."""
     import base64
+    import project_git
     ws = pathlib.Path(lease.cwd)
-    d = ws / "attachments"
-    d.mkdir(exist_ok=True)
-    r = subprocess.run(["git", "-C", str(ws), "rev-parse", "--path-format=absolute", "--git-common-dir"],
-                       capture_output=True, text=True)
-    if r.returncode == 0:
-        ex = pathlib.Path(r.stdout.strip()) / "info" / "exclude"
-        ex.parent.mkdir(parents=True, exist_ok=True)
-        lines = ex.read_text().splitlines() if ex.exists() else []
-        if "attachments/" not in lines:
-            ex.write_text("\n".join(lines + ["attachments/"]) + "\n")
+    project_git.job(lease.project, ws, "exclude", ws, "attachments/")
     stamp, out = f"{now():%Y%m%d-%H%M%S}", []
     for a in atts:
         name = re.sub(r"[^A-Za-z0-9._-]+", "_", pathlib.Path(a["name"]).name).strip("._") or "file"
-        f, i = d / f"{stamp}-{name[:80]}", 1
-        while f.exists():
-            f, i = d / f"{stamp}-{i}-{name[:80]}", i + 1
-        f.write_bytes(base64.b64decode(a["data"]))
-        out.append(str(f.relative_to(ws)))
+        r = project_git.job(lease.project, ws, "save", ws, "attachments", f"{stamp}-{name[:80]}",
+                            input=base64.b64decode(a["data"]))
+        if r.returncode != 0:
+            raise OSError(f"saving {name} as {lease.project} failed: {r.stderr.strip()[-200:]}")
+        out.append(r.stdout.decode().strip())
     return out
 
 
