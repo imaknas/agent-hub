@@ -1,0 +1,60 @@
+=== usage
+exit 1
+--- stdout
+--- stderr
+recover-service: 用法: recover-service.sh <label>
+
+=== no services.tsv
+exit 1
+--- stdout
+--- stderr
+recover-service: 找不到 <TMP>/hub/services.tsv
+
+=== unknown label
+exit 1
+--- stdout
+--- stderr
+recover-service: 在 <TMP>/hub/services.tsv 裡找不到 'local.nope'
+
+=== registry service
+exit 0
+--- stdout
+render-services (stand-in): --only local.web
+已照 projects/web.yaml 重建:local.web
+用途:serves the web app
+注意:restart after deploy
+--- stderr
+
+=== registry service without notes
+exit 1
+--- stdout
+render-services (stand-in): --only local.quiet
+已照 projects/web.yaml 重建:local.quiet
+用途:a quiet one
+--- stderr
+
+=== platform plist
+exit 0
+--- stdout
+launchctl (stand-in): bootstrap
+已重建並啟動:local.watch
+用途:watches
+注意:check logs
+--- stderr
+
+=== plist
+<plist><TMP>/hub</plist>
+
+=== platform plist missing
+exit 1
+--- stdout
+--- stderr
+recover-service: <TMP>/hub/launchd/local.gone.plist 不存在——agent-hub 本身是不是還沒 pull 到最新?
+
+=== someone else's service
+exit 0
+--- stdout
+'homebrew.mxcl.x' 不是 agent-hub 管轄的服務(owner: Homebrew),無法自動重建。
+用途:a db
+怎麼重建:brew services start x
+--- stderr

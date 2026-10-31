@@ -1,0 +1,153 @@
+=== usage
+exit 1
+--- stdout
+--- stderr
+rename-project: 用法: rename-project.sh <old> <new> [--path <新本機路徑>] [--origin <新 URL>] [--apply]
+
+=== unknown argument
+exit 1
+--- stdout
+--- stderr
+rename-project: 不認得的參數:--bogus
+
+=== bad new name
+exit 1
+--- stdout
+--- stderr
+rename-project: 新名稱只能用小寫英數跟 -:Beta
+
+=== not in the registry
+exit 1
+--- stdout
+--- stderr
+rename-project: 專案登錄裡沒有 'nosuch'
+
+=== new name taken
+exit 1
+--- stdout
+--- stderr
+rename-project: 'zeta' 已經登記過了
+
+=== no .agent-memory
+exit 1
+--- stdout
+--- stderr
+rename-project: <TMP>/home/workspace/mu/.agent-memory 不存在
+
+=== tracked changes
+exit 1
+--- stdout
+--- stderr
+rename-project: <TMP>/home/workspace/alpha 有未 commit 的追蹤檔變更,先處理
+
+=== .agent-memory not committed
+exit 1
+--- stdout
+--- stderr
+rename-project: .agent-memory 有未 commit 的東西,先同步
+
+=== .agent-memory not pushed
+exit 1
+--- stdout
+--- stderr
+rename-project: .agent-memory 有還沒 push 的 commit
+
+=== new path exists
+exit 1
+--- stdout
+--- stderr
+rename-project: <TMP>/home/workspace/beta 已經存在
+
+=== new origin unreachable
+exit 1
+--- stdout
+--- stderr
+rename-project: 連不到 <TMP>/remotes/nope.git
+
+=== taken on the hub machine
+exit 1
+--- stdout
+--- stderr
+rename-project: mini 上舊的 bare repo 不在,或新名稱的路徑已經存在
+
+=== dry-run
+exit 0
+--- stdout
+rename-project: alpha → beta
+  projects/<name>.yaml    name alpha → beta
+                          path <TMP>/home/workspace/alpha → <TMP>/home/workspace/beta
+                          origin (native) → (native)
+                          memory ~/git-origin/alpha-memory.git → ~/git-origin/beta-memory.git
+  mirror-list.txt         (native) → (native)
+  mini                    mv ~/git-origin/alpha-memory.git → beta-memory.git
+                          mv ~/.memory-copies/alpha → ~/.memory-copies/beta(origin 指向新 bare repo)
+                          mv .state/alpha.sha → beta.sha
+                          mirrors/(native).git → (native).git(如果名稱有變)
+  本機                    remote mini → <TMP>/home/git-origin/beta-memory.git
+                          mv <TMP>/home/workspace/alpha → <TMP>/home/workspace/beta + git worktree repair
+(dry-run,加 --apply 才會執行)
+--- stderr
+
+=== dry-run, new origin, same folder
+exit 0
+--- stdout
+rename-project: zeta → zeta2
+  projects/<name>.yaml    name zeta → zeta2
+                          path <TMP>/home/workspace/zeta → <TMP>/home/workspace/zeta
+                          origin git@github.com:o/zeta.git → <TMP>/remotes/o/zeta2.git
+                          memory ~/git-origin/zeta-memory.git → ~/git-origin/zeta2-memory.git
+  mirror-list.txt         git@github.com:o/zeta.git → <TMP>/remotes/o/zeta2.git
+  mini                    mv ~/git-origin/zeta-memory.git → zeta2-memory.git
+                          mv ~/.memory-copies/zeta → ~/.memory-copies/zeta2(origin 指向新 bare repo)
+                          mv .state/zeta.sha → zeta2.sha
+                          mirrors/zeta.git → zeta2.git(如果名稱有變)
+  本機                    remote mini → <TMP>/home/git-origin/zeta2-memory.git
+                          本機資料夾不搬
+(dry-run,加 --apply 才會執行)
+--- stderr
+
+=== folder busy
+exit 75
+--- stdout
+rename-project: alpha → beta
+  projects/<name>.yaml    name alpha → beta
+                          path <TMP>/home/workspace/alpha → <TMP>/home/workspace/beta
+                          origin (native) → (native)
+                          memory ~/git-origin/alpha-memory.git → ~/git-origin/beta-memory.git
+  mirror-list.txt         (native) → (native)
+  mini                    mv ~/git-origin/alpha-memory.git → beta-memory.git
+                          mv ~/.memory-copies/alpha → ~/.memory-copies/beta(origin 指向新 bare repo)
+                          mv .state/alpha.sha → beta.sha
+                          mirrors/(native).git → (native).git(如果名稱有變)
+  本機                    remote mini → <TMP>/home/git-origin/beta-memory.git
+                          mv <TMP>/home/workspace/alpha → <TMP>/home/workspace/beta + git worktree repair
+--- stderr
+rename-project: 還有程序的工作目錄在 <TMP>/home/workspace/alpha:claude(4242) ——先關掉那個專案的 Claude session / 終端機分頁再跑
+
+=== renamed
+exit 0
+--- stdout
+rename-project: alpha → beta
+  projects/<name>.yaml    name alpha → beta
+                          path <TMP>/home/workspace/alpha → <TMP>/home/workspace/beta
+                          origin (native) → (native)
+                          memory ~/git-origin/alpha-memory.git → ~/git-origin/beta-memory.git
+  mirror-list.txt         (native) → (native)
+  mini                    mv ~/git-origin/alpha-memory.git → beta-memory.git
+                          mv ~/.memory-copies/alpha → ~/.memory-copies/beta(origin 指向新 bare repo)
+                          mv .state/alpha.sha → beta.sha
+                          mirrors/(native).git → (native).git(如果名稱有變)
+  本機                    remote mini → <TMP>/home/git-origin/beta-memory.git
+                          mv <TMP>/home/workspace/alpha → <TMP>/home/workspace/beta + git worktree repair
+[mini] bare repo / ~/.memory-copies / checkpoint / mirror 已改名
+[本機] auto memory 帶到新路徑(<TMP>/home/.claude)
+注意:這個專案如果有專案範圍的 MCP server(claude mcp list),設定是跟著舊路徑存的,要在新資料夾重新加
+[本機] remote / 資料夾 / worktree 已更新
+登錄:alpha → beta
+commit-hub-files (stand-in): rename project alpha → beta (rename-project.sh)
+完成:alpha → beta。在 <TMP>/home/workspace/beta 開新的 Claude session(舊 session 的工作目錄已經不在了)。
+--- stderr
+
+=== legacy-paths.tsv
+name	path	note
+beta	<TMP>/home/workspace/alpha	改名前(alpha)的位置

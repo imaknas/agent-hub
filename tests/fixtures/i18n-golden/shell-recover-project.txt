@@ -1,0 +1,45 @@
+=== usage
+exit 1
+--- stdout
+--- stderr
+recover-project: 用法: recover-project.sh <name> [目標路徑]
+
+=== no registry
+exit 1
+--- stdout
+--- stderr
+recover-project: 找不到 <TMP>/hub/nowhere——先確認 agent-hub 本身已經 clone 好
+
+=== not in the registry
+exit 1
+--- stdout
+--- stderr
+recover-project: 專案登錄(<TMP>/hub/projects)裡找不到 'nosuch'——確認名稱拼對了,或這個專案本來就沒登記過
+
+=== native project
+exit 1
+--- stdout
+--- stderr
+recover-project: 'alpha' 當初是 native 專案(沒有外部 GitHub remote)。
+這代表真實程式碼從來沒有備份在這台機器以外的地方——manifest 裡只有
+memory_bare_repo(hubbox:~/git-origin/alpha-memory.git),那只是 memory 追蹤的歷史,不是程式碼。
+如果原本那台機器的磁碟還在,先從那裡把程式碼救出來,再手動決定怎麼接上
+hubbox:~/git-origin/alpha-memory.git;這支腳本不會用猜的方式生成程式碼。
+
+=== target exists
+exit 1
+--- stdout
+--- stderr
+recover-project: <TMP>/home/workspace/kappa 已經存在,不覆蓋——確認清楚後手動處理再重跑
+
+=== recovered
+exit 0
+--- stdout
+[1/5] 前置條件檢查通過:kappa(origin=<TMP>/remotes/o/kappa.git,還原到 <TMP>/home/restore/kappa)
+[2/5] 已從 <TMP>/remotes/o/kappa.git clone 程式碼
+[3/5] .agent-memory 已接上 <TMP>/home/git-origin/kappa-memory.git 既有的 agent-memory 分支(完整歷史,不是新的)
+sync-local-setup (stand-in): kappa
+[4-5/5] 本機設定已對齊(CLAUDE.local.md 區塊 / hook / ignore)
+
+完成:kappa 已還原到 <TMP>/home/restore/kappa,agent-memory 完整歷史接回來了。
+--- stderr

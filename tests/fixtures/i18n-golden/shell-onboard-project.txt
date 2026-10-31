@@ -1,0 +1,153 @@
+=== usage
+exit 1
+--- stdout
+--- stderr
+onboard-project: 用法: onboard-project.sh [--public] [--no-remote] <本機專案路徑>
+
+=== unknown flag
+exit 1
+--- stdout
+--- stderr
+onboard-project: 未知參數:--bogus
+
+=== hub machine unreachable
+exit 1
+--- stdout
+--- stderr
+onboard-project: 連不上 mini(hubbox)。這支腳本會在 mini 上建 bare repo,連不上就不做任何事——等 mini 恢復連線再重跑,這次呼叫沒有任何副作用。
+
+=== new folder, --no-remote
+exit 0
+--- stdout
+[1/11] 前置條件檢查通過:alpha(--no-remote,維持純本機)
+[2/11] 已建立 .agent-memory worktree(agent-memory 分支,跟主分支完全隔離)
+[3/11] 骨架檔案就位並已在 agent-memory 分支上 commit
+[4/11] .agent-memory/ 已在 .git/info/exclude 排除(不動 .gitignore)
+sync-local-setup (stand-in): alpha
+[5-6/11] .claude/settings.local.json hook 跟 CLAUDE.local.md 區塊已就位(不進版控)
+[7/11] 外層 repo 沒有任何變更、不 commit
+[8/11] mini 上已建 bare repo,agent-memory 分支已推送
+[9/11] mini 上已 clone librarian 用的 memory 副本到 ~/.memory-copies/alpha
+[10/11] 沒有外部 remote,跳過 mirror-backup 登記
+登錄:<TMP>/hub/projects/alpha.yaml
+commit-hub-files (stand-in): register alpha (onboard-project.sh)
+[11/11] 已登記進 agent-hub 的專案登錄(projects/alpha.yaml),並 commit+push agent-hub
+
+完成:alpha 已接上 agent-hub 管線。
+--- stderr
+
+=== already in the registry
+exit 1
+--- stdout
+--- stderr
+onboard-project: 'alpha' 已經登記在專案登錄(projects/alpha.yaml)——不能再 onboard 一次。要把既有專案接回來(新機器、資料夾不見、重新 clone)請用 bin/recover-project.sh alpha [路徑]
+
+=== memory bare repo exists on the hub machine
+exit 1
+--- stdout
+--- stderr
+onboard-project: mini 上已經有 gamma-memory.git(含 agent-memory 歷史)——這個名稱 onboard 過了。要把既有專案接回來(新機器、資料夾不見、重新 clone)請用 bin/recover-project.sh gamma [路徑]
+
+=== origin onboarded under another name
+exit 1
+--- stdout
+--- stderr
+onboard-project: 這個 repo(origin <TMP>/remotes/o/proj.git)已經以 'proj' 的名稱 onboard 過(資料夾名稱不同)。用 bin/recover-project.sh proj [路徑] 接回來;要改名用 bin/rename-project.sh
+
+=== origin points at the hub machine
+exit 1
+--- stdout
+--- stderr
+onboard-project: origin 目前指向 mini,這不該發生在新設計裡——這個專案可能是舊版 onboarding 遺留的,需要先手動處理
+
+=== dirty working tree
+exit 1
+--- stdout
+--- stderr
+onboard-project: working tree 不乾淨(有未 commit 的變動或未追蹤檔案),先自己處理乾淨再跑
+
+=== agent-memory branch without a worktree
+exit 1
+--- stdout
+--- stderr
+onboard-project: agent-memory 分支已經存在(但 .agent-memory worktree 不存在),可能上次跑到一半失敗——請先手動清理(git branch -D agent-memory)再重跑
+
+=== .agent-memory and the bare repo both exist
+exit 1
+--- stdout
+--- stderr
+onboard-project: .agent-memory 已經存在,而且 mini 上也已經有對應的 bare repo(agent-memory 分支已推送)——這個專案應該已經 onboard 過了
+
+=== resume after an interrupted run
+exit 0
+--- stdout
+(偵測到本機已完成前面的步驟,但 mini 上沒有對應、有實際內容的 bare repo——像是上次被中途打斷,接著從 mini 端繼續,不重做已完成的部分)
+[1/11] 前置條件檢查通過:alpha(--no-remote,維持純本機)
+[2-7/11] resume 模式,已在前一次呼叫完成,跳過
+[8/11] mini 上已建 bare repo,agent-memory 分支已推送
+[9/11] mini 上已 clone librarian 用的 memory 副本到 ~/.memory-copies/alpha
+[10/11] 沒有外部 remote,跳過 mirror-backup 登記
+登錄:<TMP>/hub/projects/alpha.yaml
+commit-hub-files (stand-in): register alpha (onboard-project.sh)
+[11/11] 已登記進 agent-hub 的專案登錄(projects/alpha.yaml),並 commit+push agent-hub
+
+完成:alpha 已接上 agent-hub 管線。
+--- stderr
+
+=== no github.owner
+exit 1
+--- stdout
+--- stderr
+hubconf.py get:github.owner 沒有設定或不是單一值
+onboard-project: hub.json 沒有 github.owner,建不了 GitHub repo
+
+=== GitHub repo created, commit fails
+exit 0
+--- stdout
+gh (stand-in): repo create o/zeta --public
+[1/11] 前置條件檢查通過:zeta(有外部 remote:git@github.com:o/zeta.git)
+[2/11] 已建立 .agent-memory worktree(agent-memory 分支,跟主分支完全隔離)
+[3/11] 骨架檔案就位並已在 agent-memory 分支上 commit
+[4/11] .agent-memory/ 已在 .git/info/exclude 排除(不動 .gitignore)
+sync-local-setup (stand-in): zeta
+[5-6/11] .claude/settings.local.json hook 跟 CLAUDE.local.md 區塊已就位(不進版控)
+[7/11] 外層 repo 沒有任何變更、不 commit
+[8/11] mini 上已建 bare repo,agent-memory 分支已推送
+[9/11] mini 上已 clone librarian 用的 memory 副本到 ~/.memory-copies/zeta
+[10/11] 已登記進 mirror-backup 清單
+登錄:<TMP>/hub/projects/zeta.yaml
+[11/11] 已登記進 agent-hub 的專案登錄(projects/zeta.yaml),並 commit+push agent-hub
+
+完成:zeta 已接上 agent-hub 管線。
+--- stderr
+commit-hub-files (stand-in): push failed
+警告:agent-hub 登記檔 commit/push 失敗,請手動處理(登記內容本身已寫入)
+
+=== mirror-list.txt
+git@github.com:o/zeta.git
+
+=== not ignored
+exit 1
+--- stdout
+[1/11] 前置條件檢查通過:iota(--no-remote,維持純本機)
+[2/11] 已建立 .agent-memory worktree(agent-memory 分支,跟主分支完全隔離)
+[3/11] 骨架檔案就位並已在 agent-memory 分支上 commit
+--- stderr
+onboard-project: .agent-memory 沒有被 ignore,停下來(不然 git add -A 會把它當 embedded repo 加進去)
+
+=== registry add fails
+exit 1
+--- stdout
+[1/11] 前置條件檢查通過:theta(--no-remote,維持純本機)
+[2/11] 已建立 .agent-memory worktree(agent-memory 分支,跟主分支完全隔離)
+[3/11] 骨架檔案就位並已在 agent-memory 分支上 commit
+[4/11] .agent-memory/ 已在 .git/info/exclude 排除(不動 .gitignore)
+sync-local-setup (stand-in): theta
+[5-6/11] .claude/settings.local.json hook 跟 CLAUDE.local.md 區塊已就位(不進版控)
+[7/11] 外層 repo 沒有任何變更、不 commit
+[8/11] mini 上已建 bare repo,agent-memory 分支已推送
+[9/11] mini 上已 clone librarian 用的 memory 副本到 ~/.memory-copies/theta
+[10/11] 沒有外部 remote,跳過 mirror-backup 登記
+--- stderr
+登錄不合格,不寫入:type 只能是 project 或 idea
+onboard-project: 登記進專案登錄失敗(projects/theta.yaml)
