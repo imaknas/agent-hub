@@ -164,6 +164,14 @@ line in the digest section: never a silent "0 stale" (tool neutrality: a missing
 - not in the to-do section;
 - keep every existing anchor exactly as written unless the statement goes, or the note below says it is stale.
 
+**Admission (the platform, not the model).** The librarian never sees the code, and the notes sometimes name a path
+relative to a package folder rather than the repository (the eval found `core/apply.py` for a file that lives deeper).
+So after the call (and after the to-do format repair), `admit_anchors` resolves every anchor the model added: one that
+is `ok` or `pending` stays; any other loses the sign and stays as a plain code span, and the log says which. A project
+whose workspace cannot be checked admits no new anchor. When the project's own hook already committed the model's edit,
+this change is committed on top. The rule in the prompt keeps such anchors rare; admission makes sure an anchor that
+was wrong from the start never reaches todo.md, so `missing` at night means a path that resolved once.
+
 **Being told what is stale.** When `process()` runs for a project, it resolves that project's anchors with the same
 module (before the call, like `dangling_refs`) and appends a note to the prompt listing the stale ones (`renamed`,
 `deleted`, `missing`, `symbol`, `malformed`; not `pending` or `untracked`), each with what to do. The librarian never

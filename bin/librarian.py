@@ -532,6 +532,30 @@ def dangling_refs(d: pathlib.Path) -> str:
     return "".join(f" {r}" for r in refs if not glob.glob(r, root_dir=d))
 
 
+def workspace(proj: str) -> pathlib.Path | None:
+    return hubconf.path((hubconf.roster().get(proj) or {}).get("workspace"))
+
+
+def admit_anchors(proj: str, d: pathlib.Path, before: str) -> list[str]:
+    """Anchors the model added are kept only if they resolve now (ok, or pending on an unmerged branch): the model never
+    sees the code, and a path it took from the notes may be relative to the wrong folder. The others lose the sign and
+    stay as plain code spans, so the nightly check never reports an anchor that was wrong from the start. Returns the
+    ones it unanchored."""
+    st = d / "STATE.md"
+    if not st.exists():
+        return []
+    text = st.read_text(errors="replace")
+    old = {a.raw for a in state_anchors.find(before, OWNER)}
+    new = [a for a in state_anchors.find(text, OWNER) if a.raw not in old]
+    if not new:
+        return []
+    repo, _why = state_anchors.Repo.open(workspace(proj))   # cannot be checked: nothing new is admitted
+    bad = sorted({a.raw for a in new if repo is None or repo.resolve(a).outcome not in ("ok", "pending")})
+    if bad:
+        st.write_text(state_anchors.unanchor(text, OWNER, set(bad)))
+    return bad
+
+
 def stale_anchors(proj: str, d: pathlib.Path) -> list[dict]:
     """STATE.md's anchors that no longer resolve on the project's base branch (docs/design/state-anchors.md), as
     records; pending and untracked are not stale, and a workspace that cannot be checked gives none (the nightly
@@ -539,8 +563,7 @@ def stale_anchors(proj: str, d: pathlib.Path) -> list[dict]:
     st = d / "STATE.md"
     if not st.exists():
         return []
-    ws = hubconf.path((hubconf.roster().get(proj) or {}).get("workspace"))
-    results, _why = state_anchors.check(st.read_text(errors="replace"), OWNER, ws)
+    results, _why = state_anchors.check(st.read_text(errors="replace"), OWNER, workspace(proj))
     return [state_anchors.record(r) for r in state_anchors.stale(results)]
 
 
@@ -663,6 +686,15 @@ def process(proj: str, d: pathlib.Path, handoffs: list[dict], digest: list[str])
 
     stray = quarantine_stray(proj, d)
     repair_state_todo(proj, d)
+    if (unanchored := admit_anchors(proj, d, before)):
+        log(_("{project}: anchors that do not resolve on the project's main were turned back into plain code: "
+              "{anchors}", project=proj, anchors=" ".join(unanchored)))
+        if git(d, "rev-parse", "HEAD") != pre:
+            # the project's hook already committed the model's edit: commit this one on top (below only commits when
+            # HEAD did not move)
+            if run(["git", "add", "STATE.md"], cwd=d).returncode == 0 and \
+                    run(["git", "commit", "-m", "librarian: admit STATE.md anchors", "-q"], cwd=d).returncode == 0:
+                run([str(SAFE_PUSH)], cwd=d)
 
     # Go by the actual git state. Trap: the project's own SessionEnd hook may already have committed and pushed
     # STATE.md while the call was still running (a headless call is a full session too) -- so first compare whether

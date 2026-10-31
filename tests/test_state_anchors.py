@@ -269,6 +269,24 @@ class Librarian(RepoCase):
             self.assertEqual(lib.stale_anchors("demo", d), [])
 
 
+    def test_admit_only_what_resolves(self):
+        lib = load("librarian_admit_t", "librarian.py")
+        d = pathlib.Path(tempfile.mkdtemp())
+        before = "- Old ⚓`nowhere/old.py` stays (it is the stale note's business).\n"
+        (d / "STATE.md").write_text(before + "- Job ⚓`src/job.py#run_job`, parser ⚓`src/feature.py`,\n"
+                                    "  core ⚓`core/job.py`, cache ⚓`data/`, bad ⚓`src/job.py:3`.\n\n"
+                                    "## Tasks\n\n- [ ] [agent] Write ⚓`src/later.py`\n")
+        with mock.patch.object(lib.hubconf, "roster", return_value={"demo": {"workspace": str(self.repo)}}):
+            self.assertEqual(lib.admit_anchors("demo", d, before), ["core/job.py", "data/", "src/job.py:3"])
+        self.assertEqual((d / "STATE.md").read_text(), before + "- Job ⚓`src/job.py#run_job`, parser ⚓`src/feature.py`,\n"
+                         "  core `core/job.py`, cache `data/`, bad `src/job.py:3`.\n\n"
+                         "## Tasks\n\n- [ ] [agent] Write ⚓`src/later.py`\n")
+        with mock.patch.object(lib.hubconf, "roster", return_value={}):   # cannot be checked: nothing new admitted
+            (d / "STATE.md").write_text(before + "- Job ⚓`src/job.py`.\n")
+            self.assertEqual(lib.admit_anchors("demo", d, before), ["src/job.py"])
+            self.assertEqual(lib.admit_anchors("demo", d, before), [])
+
+
 class EvalScores(unittest.TestCase):
     def test_anchor_scores(self):
         sys.path.insert(0, str(ROOT / "bin" / "evals"))

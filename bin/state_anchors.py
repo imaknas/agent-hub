@@ -81,9 +81,8 @@ def statement(line: str) -> str:
     return re.sub(r"^\s*(?:[-*+]\s+(?:\[[ xX]\]\s+)?|\d+[.)]\s+|#+\s+)", "", line).strip()
 
 
-def find(text: str, owner: str) -> list[Anchor]:
-    """every anchor in the text, outside the to-do section(s) and fenced code blocks"""
-    lines = text.splitlines()
+def _read(lines: list[str], owner: str) -> list[int]:
+    """the indexes of the lines whose anchors count: not in the to-do section(s), not in fenced code blocks"""
     skip = set()
     for first, end in todo_tokens.patterns(owner).section(lines):
         skip.update(range(first - 1, end))   # the heading line too
@@ -91,13 +90,28 @@ def find(text: str, owner: str) -> list[Anchor]:
     for i, line in enumerate(lines):
         if FENCE.match(line):
             fenced = not fenced
-            continue
-        if fenced or i in skip:
-            continue
-        for m in ANCHOR.finditer(line):
-            path, symbol, problem = parse(m.group(1))
-            out.append(Anchor(m.group(1), path, symbol, problem, i + 1, statement(line)))
+        elif not fenced and i not in skip:
+            out.append(i)
     return out
+
+
+def find(text: str, owner: str) -> list[Anchor]:
+    """every anchor in the text, outside the to-do section(s) and fenced code blocks"""
+    lines = text.split("\n")
+    out = []
+    for i in _read(lines, owner):
+        for m in ANCHOR.finditer(lines[i]):
+            path, symbol, problem = parse(m.group(1))
+            out.append(Anchor(m.group(1), path, symbol, problem, i + 1, statement(lines[i])))
+    return out
+
+
+def unanchor(text: str, owner: str, raws: set[str]) -> str:
+    """the text with the anchor sign removed from the anchors whose content is in raws (the code span stays)"""
+    lines = text.split("\n")
+    for i in _read(lines, owner):
+        lines[i] = ANCHOR.sub(lambda m: f"`{m.group(1)}`" if m.group(1) in raws else m.group(0), lines[i])
+    return "\n".join(lines)
 
 
 def count(text: str, owner: str) -> int:
