@@ -26,6 +26,19 @@ if [ "${1:-}" != "--all" ] && ! git diff --cached --name-only | grep -Eq "$CODE"
   exit 0
 fi
 
+# A tree that already passed is not run again (a rebase verified, then committed or merged with the same tree; a commit
+# retried after its message was refused). The key adds what the result depends on outside the tree: the platform
+# Python's version and the private-names list. Shared by every worktree of this repo. TEST_GATE_FORCE=1 runs anyway.
+private="$("$HUB/bin/py" "$HUB/bin/hubconf.py" dir config 2>/dev/null)/private-names.txt"
+tree="$(git write-tree)" || exit 1
+key="$tree $("$PLATFORM_PY" -c 'import sys; print(sys.version.split()[0])') $([ -f "$private" ] && shasum <"$private" | cut -c1-12)"
+passed_trees="$(git rev-parse --git-common-dir)/test-gate-passed-trees"
+if [ -z "${TEST_GATE_FORCE:-}" ] && grep -qxF "$key" "$passed_trees" 2>/dev/null; then
+  hub_say "test-gate: this exact tree already passed ({tree}); not run again" tree="${tree:0:12}"
+  echo "$tree" >"$(git rev-parse --git-path test-gate-passed)"
+  exit 0
+fi
+
 # 不放在 /tmp、/var/folders:能力的 Seatbelt profile 准寫暫存目錄,假 HOME 放那裡,「寫資料夾外」的測試就擋不到
 mkdir -p "$HUB/.state/test-gate"
 work="$(mktemp -d "$HUB/.state/test-gate/run.XXXXXX")" || exit 1
@@ -34,7 +47,6 @@ mkdir -p "$work/tree" "$work/home/workspace"
 git checkout-index -a --prefix="$work/tree/" || { hub_say "test-gate: exporting the index failed" >&2; exit 1; }
 # 這個部署的私有專案名字清單(實例的 config,不在 repo 裡):假 HOME 底下找不到,先在這裡問到位置帶進去
 # (tests/test_personal_boundary.py 的 test_no_private_project_names;沒有清單的部署這項略過)
-private="$("$HUB/bin/py" "$HUB/bin/hubconf.py" dir config 2>/dev/null)/private-names.txt"
 [ -f "$private" ] && export AGENT_HUB_PRIVATE_NAMES="$private"
 
 # lint 也是對匯出的暫存區跑(用那份的 bin/lint 跟 ruff.toml);沒有 ruff 一樣不放行,不默默略過
@@ -89,5 +101,6 @@ if [ "$fail" -ne 0 ]; then
   hub_say "test-gate: not letting this through. Fix it, then commit; if you only changed data files, do not stage code with them." >&2
   exit 1
 fi
-git write-tree >"$(git rev-parse --git-path test-gate-passed)"
+echo "$tree" >"$(git rev-parse --git-path test-gate-passed)"
+{ tail -n 199 "$passed_trees" 2>/dev/null; echo "$key"; } >"$passed_trees.new" && mv "$passed_trees.new" "$passed_trees"
 exit 0

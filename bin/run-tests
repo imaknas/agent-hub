@@ -5,7 +5,9 @@
 
 What `unittest discover -s tests` does, but each tests/test*.py module runs as its own `python -m unittest <module>` with
 the tests directory on PYTHONPATH and the current directory unchanged, so a module also passes alone (no test may lean
-on another module having run first in the same process). The E1 goldens' second pass on English
+on another module having run first in the same process). A module that took longer than TEST_SPLIT_S (default 4) seconds
+last time is split: each of its tests runs as its own item, so one slow module no longer holds the run up for the sum of
+its tests (the floor becomes the slowest single test). The E1 goldens' second pass on English
 (tests/test_i18n_golden_en.py) becomes one more item per golden module (I18N_GOLDEN_LANG=en), so it is spread over the
 pool too instead of being one long item.
 
@@ -13,9 +15,10 @@ The output ends like unittest's own (bin/test-gate reads it): `Ran <n> tests in 
 `FAILED (failures=…, errors=…, skipped=…)`; before it, the full output of every module that failed (its `FAIL:` /
 `ERROR:` blocks at the start of a line). Exit 1 when any module failed.
 
-    TEST_JOBS=<n>          workers (default: half the CPUs, 2 to 8)
-    TEST_DURATIONS=<file>  per-module seconds from the last run (read to order the work, written after it); without it,
-                           larger files go first
+    TEST_JOBS=<n>          workers (default: the number of cores, 2 to 16)
+    TEST_DURATIONS=<file>  seconds per item from the last run (read to order and split the work, written after it);
+                           without it, larger files go first and nothing is split
+    TEST_SPLIT_S=<s>       split modules slower than this (default 4)
 """
 from __future__ import annotations
 
@@ -47,16 +50,55 @@ def key(item: tuple[str, str | None]) -> str:
     return item[0] + (f"@{item[1]}" if item[1] else "")
 
 
-def run_one(item: tuple[str, str | None], tests: pathlib.Path) -> tuple[int, str, float]:
-    mod, lang = item
+def env_for(tests: pathlib.Path, lang: str | None) -> dict[str, str]:
     env = {**os.environ, "PYTHONPATH": os.pathsep.join(filter(None, [str(tests), os.environ.get("PYTHONPATH")])),
            "AGENT_HUB_TEST_RUNNER": "1"}
     if lang:
         env["I18N_GOLDEN_LANG"] = lang
+    return env
+
+
+def test_ids(item: tuple[str, str | None], tests: pathlib.Path) -> list[str]:
+    """The ids of a module's tests (module.Class.method), loaded the way unittest loads them; [] if it cannot be
+    loaded (then the module runs whole and reports its own import error)."""
+    code = ("import sys, unittest\n"
+            "def walk(s):\n"
+            "    for t in s:\n"
+            "        yield from walk(t) if isinstance(t, unittest.TestSuite) else [t.id()]\n"
+            "print('\\n'.join(walk(unittest.defaultTestLoader.loadTestsFromName(sys.argv[1]))))\n")
+    r = subprocess.run([sys.executable, "-c", code, item[0]], env=env_for(tests, item[1]), stdin=subprocess.DEVNULL,
+                       capture_output=True, text=True)
+    ids = r.stdout.split() if r.returncode == 0 else []
+    return ids if all(i.startswith(item[0] + ".") for i in ids) else []
+
+
+def run_one(item: tuple[str, str | None], tests: pathlib.Path) -> tuple[int, str, float]:
     t0 = time.monotonic()
-    r = subprocess.run([sys.executable, "-m", "unittest", mod], env=env, stdin=subprocess.DEVNULL,
-                       stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
+    r = subprocess.run([sys.executable, "-m", "unittest", item[0]], env=env_for(tests, item[1]),
+                       stdin=subprocess.DEVNULL, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
     return r.returncode, r.stdout, time.monotonic() - t0
+
+
+def threading_map(fn, xs: list, n: int) -> list:
+    """fn over xs on n threads, results in order (the test listings run side by side)."""
+    out: list = [None] * len(xs)
+    q: queue.Queue = queue.Queue()
+    for i in range(len(xs)):
+        q.put(i)
+
+    def work():
+        while True:
+            try:
+                i = q.get_nowait()
+            except queue.Empty:
+                return
+            out[i] = fn(xs[i])
+    ts = [threading.Thread(target=work, daemon=True) for _ in range(max(1, min(n, len(xs))))]
+    for t in ts:
+        t.start()
+    for t in ts:
+        t.join()
+    return out
 
 
 def counts(out: str) -> dict[str, int]:
@@ -76,14 +118,30 @@ def main(argv: list[str]) -> int:
         print(__doc__)
         return 0
     tests = pathlib.Path(argv[0] if argv else pathlib.Path(__file__).resolve().parents[1] / "tests").resolve()
-    jobs = int(os.environ.get("TEST_JOBS") or max(2, min(8, (os.cpu_count() or 4) // 2)))
+    # one worker per core: the tests mostly wait on child processes and files, so more workers than that only stretch
+    # the slowest tests (measured 10-31 on 14 cores: 7 → 47 s, 14 → 32 s, 20 → 30 s, 28 → 31 s)
+    jobs = int(os.environ.get("TEST_JOBS") or max(2, min(16, os.cpu_count() or 4)))
     cache = pathlib.Path(os.environ["TEST_DURATIONS"]) if os.environ.get("TEST_DURATIONS") else None
     try:
         last = json.loads(cache.read_text()) if cache else {}
     except (OSError, ValueError):
         last = {}
-    work = items(tests)
-    work.sort(key=lambda it: (-last.get(key(it), 0.0), -(tests / f"{it[0]}.py").stat().st_size))
+    split_s = float(os.environ.get("TEST_SPLIT_S") or 4)
+    modules = items(tests)
+    slow = [it for it in modules if last.get(key(it), 0.0) > split_s]
+    ids = dict(zip(map(key, slow), threading_map(lambda it: test_ids(it, tests), slow, jobs)))
+    work, parent = [], {}   # parent: an item split out of a module → that module's key
+    for it in modules:
+        parts = ids.get(key(it)) or []
+        if len(parts) > 1:
+            for t in parts:
+                work.append((t, it[1]))
+                parent[key((t, it[1]))] = key(it)
+        else:
+            work.append(it)
+    guess = {k: last.get(m, 0.0) / sum(1 for v in parent.values() if v == m) for k, m in parent.items()}
+    work.sort(key=lambda it: (-last.get(key(it), guess.get(key(it), 0.0)),
+                              -(tests / f"{it[0].split('.')[0]}.py").stat().st_size))
     todo: queue.Queue = queue.Queue()
     for it in work:
         todo.put(it)
@@ -125,12 +183,15 @@ def main(argv: list[str]) -> int:
             body = "\n".join(lines)
             print(f"======== {k} (exit {code})\n{body}\n", flush=True)
     if cache:
+        secs = {k: v[2] for k, v in results.items()}
+        for k, m in parent.items():   # a split module's own total: decides next time whether to split it again
+            secs[m] = secs.get(m, 0.0) + secs.get(k, 0.0)
         try:
             cache.parent.mkdir(parents=True, exist_ok=True)
-            cache.write_text(json.dumps({k: round(v[2], 2) for k, v in results.items()}, indent=1, sort_keys=True))
+            cache.write_text(json.dumps({k: round(v, 2) for k, v in secs.items()}, indent=1, sort_keys=True))
         except OSError:
             pass
-    print(f"({len(results)} modules, {len(threads)} workers)")
+    print(f"({len(modules)} modules, {len(results)} items, {len(threads)} workers)")
     print("-" * 70)
     print(f"Ran {total['tests']} test{'' if total['tests'] == 1 else 's'} in {wall:.3f}s")   # as unittest writes it
     print()

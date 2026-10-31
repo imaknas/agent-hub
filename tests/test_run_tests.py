@@ -33,7 +33,7 @@ class RunTests(unittest.TestCase):
         r = self.run_()
         self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
         self.assertRegex(r.stdout, r"(?m)^Ran 3 tests in [\d.]+s$")
-        self.assertIn("(2 modules, 2 workers)", r.stdout)
+        self.assertIn("(2 modules, 2 items, 2 workers)", r.stdout)
         self.assertRegex(r.stdout, r"(?m)^OK \(skipped=1\)$")
 
     def test_failures_and_crashes_fail_the_run(self):
@@ -50,6 +50,21 @@ class RunTests(unittest.TestCase):
         self.assertEqual(len([l for l in r.stdout.splitlines() if l.startswith(("OK", "FAILED"))]), 1,
                          "only the overall result line starts with OK/FAILED (bin/test-gate greps for them)")
 
+    def test_a_slow_module_runs_test_by_test(self):
+        """a module slower than TEST_SPLIT_S last time: each of its tests is its own item; its total is still recorded"""
+        self.module("test_slow", "class S(unittest.TestCase):\n    def test_1(self): pass\n    def test_2(self): pass\n"
+                                 "    def test_3(self): self.fail('boom')\n")
+        durations = self.tmp / "d.json"
+        durations.write_text('{"test_slow": 9.0}')
+        r = self.run_(TEST_DURATIONS=str(durations), TEST_SPLIT_S="4")
+        self.assertEqual(r.returncode, 1, r.stdout)
+        self.assertIn("(1 modules, 3 items,", r.stdout)
+        self.assertRegex(r.stdout, r"(?m)^Ran 3 tests in")
+        self.assertIn("failed modules: test_slow.S.test_3", r.stdout)
+        recorded = __import__("json").loads(durations.read_text())
+        self.assertIn("test_slow.S.test_1", recorded)
+        self.assertIn("test_slow", recorded, "the module's own total, to split it again next time")
+
     def test_golden_modules_also_run_on_english(self):
         body = "class G(unittest.TestCase):\n    def test_lang(self): print(os.environ.get('I18N_GOLDEN_LANG'))\n"
         self.module("test_i18n_golden_x", body)
@@ -57,5 +72,5 @@ class RunTests(unittest.TestCase):
         durations = self.tmp / "d.json"
         r = self.run_(TEST_DURATIONS=str(durations))
         self.assertEqual(r.returncode, 0, r.stdout)
-        self.assertIn("(3 modules,", r.stdout)
+        self.assertIn("(3 modules, 3 items,", r.stdout)
         self.assertIn("test_i18n_golden_x@en", durations.read_text())
