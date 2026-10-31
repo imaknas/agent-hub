@@ -1,18 +1,22 @@
 #!/usr/bin/env bash
-# commit 閘門:改到程式碼的 commit,lint(bin/lint:ruff 的 F 規則)沒有問題、平台的 Python 跑全部測試都過才放行
-# (githooks/pre-commit 呼叫;也可以手動跑)。
+# The commit gate: a commit that touches code passes only if lint (bin/lint: ruff's F rules) is clean and the platform's
+# Python passes every test (called by githooks/pre-commit; can also be run by hand).
 #
-#   test-gate            檢查「暫存區」(要 commit 的內容),不是 working tree——同一份 working tree 可能有
-#                        別的 session 改到一半的檔案,測它們沒有意義
-#   test-gate --all      不管暫存了什麼,一律跑
+#   test-gate            checks the "index" (what is being committed), not the working tree: the same working tree may
+#                        hold files another session is halfway through changing, and testing those means nothing
+#   test-gate --all      runs regardless of what is staged
 #
-# 怎麼跑:把暫存區匯出到暫存目錄(git checkout-index),在那裡用 AGENT_HUB_ROOT 指過去、HOME 換成空的暫存目錄,
-#   用平台的 Python(bin/py,最低 3.13)跑。假 HOME 底下找不到平台的 Python,所以先問 bin/py 實際是哪一個,用
-#   AGENT_HUB_PYTHON 帶進去(位置還是只寫在 bin/py)。
-# 測試不准寫真的東西:HOME 是假的,所以碰不到真的 ~/workspace、匯流排、~/.claude;跑完假 HOME 裡多了任何檔案
-#   (空資料夾不算)= 有測試在寫使用者目錄,閘門失敗,列出是哪些檔案。
-# 只動資料檔的 commit(librarian、onboard 之類腳本寫的登錄、index、digest…)不跑:CODE 以外的路徑不觸發。
-# 通過時把這次的 tree 記在 git 目錄的 test-gate-passed;githooks/post-commit 用它抓出跳過閘門(--no-verify)的 commit。
+# How it runs: export the index to a temp directory (git checkout-index), point AGENT_HUB_ROOT there, swap HOME for an
+#   empty temp directory, and run with the platform's Python (bin/py, 3.13 minimum). Under the fake HOME the platform's
+#   Python can't be found, so first ask bin/py which one it actually is and pass it in as AGENT_HUB_PYTHON (the
+#   location is still written only in bin/py).
+# Tests may not write real things: HOME is fake, so they can't reach the real ~/workspace, the bus, ~/.claude; any file
+#   added in the fake HOME after the run (empty folders don't count) = a test writes the user's directories, and the
+#   gate fails, listing the files.
+# A commit that only touches data files (registry, index, digest… written by scripts like the librarian or onboard)
+#   doesn't run it: paths outside CODE don't trigger it.
+# On a pass, the tree is recorded in test-gate-passed in the git directory; githooks/post-commit uses it to catch
+#   commits that skipped the gate (--no-verify).
 set -uo pipefail
 
 HUB="$(cd "$(dirname "$0")/.." && pwd)"
@@ -39,26 +43,31 @@ if [ -z "${TEST_GATE_FORCE:-}" ] && grep -qxF "$key" "$passed_trees" 2>/dev/null
   exit 0
 fi
 
-# 不放在 /tmp、/var/folders:能力的 Seatbelt profile 准寫暫存目錄,假 HOME 放那裡,「寫資料夾外」的測試就擋不到
+# Not in /tmp or /var/folders: the capabilities' Seatbelt profile allows writing the temp directories, so with the fake
+# HOME there, the "writes outside the folder" tests couldn't catch anything
 mkdir -p "$HUB/.state/test-gate"
 work="$(mktemp -d "$HUB/.state/test-gate/run.XXXXXX")" || exit 1
 trap 'rm -rf "$work"' EXIT
 mkdir -p "$work/tree" "$work/home/workspace"
 git checkout-index -a --prefix="$work/tree/" || { hub_say "test-gate: exporting the index failed" >&2; exit 1; }
-# 這個部署的私有專案名字清單(實例的 config,不在 repo 裡):假 HOME 底下找不到,先在這裡問到位置帶進去
-# (tests/test_personal_boundary.py 的 test_no_private_project_names;沒有清單的部署這項略過)
+# This deployment's list of private project names (the instance's config, not in the repo): it can't be found under
+# the fake HOME, so look up its location here and pass it in
+# (tests/test_personal_boundary.py's test_no_private_project_names; skipped for deployments without a list)
 [ -f "$private" ] && export AGENT_HUB_PRIVATE_NAMES="$private"
 
-# lint 也是對匯出的暫存區跑(用那份的 bin/lint 跟 ruff.toml);沒有 ruff 一樣不放行,不默默略過
+# lint also runs on the exported index (with that copy's bin/lint and ruff.toml); without ruff it doesn't pass either,
+# never silently skipped
 lint_fail=0
 lint_out="$(AGENT_HUB_PYTHON="$PLATFORM_PY" "$work/tree/bin/lint" "$work/tree" 2>&1)" || lint_fail=1
 
 i=0
 for py in "${PYTHONS[@]}"; do
-  # 從 git hook 叫的時候環境裡有 GIT_DIR、GIT_INDEX_FILE…:不清掉,測試自己開的暫存 repo 會操作到這個 repo
+  # called from a git hook, the environment has GIT_DIR, GIT_INDEX_FILE…: unless cleared, the temp repos the tests
+  # open would operate on this repo
   ( for v in $(env | sed -n 's/^\(GIT_[A-Z_]*\)=.*/\1/p'); do unset "$v"; done
-    # 匯出的副本在 agent-hub 的 .state/ 底下:不擋的話,測試在副本裡叫 git 會一路往上找到 agent-hub 本身,而 .state 被
-    # ignore → `git ls-files` 拿到空清單,靠它掃檔的測試什麼都沒查就通過(10-26 test_personal_boundary 因此漏掉)
+    # the exported copy is under agent-hub's .state/: unless blocked, git called by a test in the copy walks up to
+    # agent-hub itself, and since .state is ignored → `git ls-files` returns an empty list and tests that scan files
+    # through it pass without checking anything (how test_personal_boundary missed things on 10-26)
     export GIT_CEILING_DIRECTORIES="$work"
     cd "$work/tree" && HOME="$work/home" AGENT_HUB_ROOT="$work/tree" AGENT_HUB_PYTHON="$PLATFORM_PY" PYTHONDONTWRITEBYTECODE=1 \
       TEST_DURATIONS="$HUB/.state/test-gate/durations.json" "$py" "$work/tree/bin/run-tests" "$work/tree/tests" \
@@ -78,7 +87,8 @@ fi
 i=0
 for py in "${PYTHONS[@]}"; do
   summary="$(grep -E '^(Ran|OK|FAILED)' "$work/out$i" | tr '\n' ' ')"
-  # unittest 的結果行(OK / FAILED)本身:測試印到 stdout 的東西在程序結束時才 flush,可能排在它後面,不能只看最後幾行
+  # the unittest result line (OK / FAILED) itself: what tests print to stdout is flushed only when the process exits
+  # and may come after it, so looking only at the last few lines isn't enough
   if grep -qE '^OK( \(|$)' "$work/out$i" && ! grep -qE '^FAILED( |$)' "$work/out$i"; then
     hub_say "test-gate: tests passed ({python}): {summary}" python="$py" summary="$summary"
   else
