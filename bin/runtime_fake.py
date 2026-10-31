@@ -11,7 +11,10 @@ from __future__ import annotations
 import datetime
 import pathlib
 
+import i18n
 from runtime_ports import TaskResult, Turn
+
+_ = i18n.domain(__file__)
 
 _turns: list[tuple[str, Turn, bool]] = []   # (工作目錄, Turn, 是不是在它底下的 worktree 裡)
 _replies: dict[str, TaskResult] = {}     # 判斷點 → 要回的結果
@@ -173,14 +176,14 @@ def parse_stream(line: str) -> list:
         return []
     data = dict(d["data"])
     if d.get("type") == "tool_use":  # 跟 Claude 一樣經過 action() 翻譯,不直接相信輸入
-        kind, _, _, summary = action(data.pop("tool", ""), data.pop("input", None))
+        kind, _collab, _target, summary = action(data.pop("tool", ""), data.pop("input", None))
         data = {"kind": kind, "summary": summary, "detail": {}}
     return [StreamEvent(d["type"], data)]
 
 
 def classify_exit(code, stderr_tail: str) -> StreamEvent:
     if "login" in stderr_tail:
-        return StreamEvent("error", {"error": "agent_login", "detail": "fake runtime 沒登入"})
+        return StreamEvent("error", {"error": "agent_login", "detail": _("the fake runtime is not logged in")})
     return StreamEvent("error", {"error": "process_crashed", "detail": f"exit {code}:{stderr_tail[-200:]}"})
 
 
@@ -189,7 +192,7 @@ def resumable(sid: str) -> bool:
 
 
 def resume_command(sid: str) -> tuple:
-    return (f"fake-resume {sid}", "假的 runtime:接回同一段對話")
+    return (f"fake-resume {sid}", _("fake runtime: resume the same conversation"))
 
 
 # ---------- auth(用自己的變數名稱跟錯誤字句,不是 Claude 的)----------
@@ -211,14 +214,14 @@ def clean_env(env) -> dict:
 def auth_env(mode: str, env) -> tuple:
     out = clean_env(env)
     if not _creds.get(mode, False):
-        return None, f"fake runtime 沒有 {mode} 的登入"
+        return None, _("the fake runtime has no {mode} login", mode=mode)
     if mode == "token":
         out[_AUTH_VAR] = "fake-key"
     return out, ""
 
 
 def credentials() -> list:
-    return [Credential(name=f"fake {m}", label=f"fake 的 {m} 登入", mode=m, present=p, renew="fake-login")
+    return [Credential(name=f"fake {m}", label=_("fake {mode} login", mode=m), mode=m, present=p, renew="fake-login")
             for m, p in sorted(_creds.items())]
 
 
