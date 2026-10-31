@@ -1,0 +1,32 @@
+=== (empty)
+give the path of a file in the project folder
+=== ../outside.png
+../outside.png is not in this project folder (only files in the project folder can be shown)
+=== x.svg
+x.svg: this type cannot be sent (allowed: csv gif glb jpeg jpg json md pdf png txt webp)
+=== token.txt
+token.txt looks like a credential or a secret; not sent
+=== r/a.png@secret
+a.png looks like a credential or a secret; not sent
+=== gone.png
+gone.png cannot be opened: No such file or directory
+=== dir.png
+dir.png is not a regular file
+=== hard.png
+hard.png is a hard link (it may point outside the folder); not sent
+=== bad.md
+bad.md is not UTF-8 text
+=== key.md
+key.md: the content looks like a credential (a private key or an API key); not sent
+=== fake.png
+fake.png: the content is not png (the extension does not match the content)
+=== too big
+r/a.png is too big (0 MB; the limit is 0 MB)
+=== too big after read
+r/a.png is too big (the limit is 0 MB)
+=== count
+This lease already showed 1 files in the last 24 hours, the limit; show it later, or say in text where the file is for now
+=== total
+The files this lease showed in the last 24 hours are over 0 MB in total; show it later, or say in text where the file is for now
+=== swapped
+r/a.png: what was opened is not that file in the folder (was the path swapped?); not sent

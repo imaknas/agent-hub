@@ -1,0 +1,15 @@
+$ worktree-memory.sh start (main checkout)
+[exit 0]
+--- stdout
+--- stderr
+
+$ worktree-memory.sh start (linked worktree)
+[exit 0]
+--- stdout
+(this session is in a git worktree of <TMP>/ws/wt-main. Memory is linked to the main checkout's .agent-memory;
+ CLAUDE.local.md did not exist yet when the session started, so here it is; follow it:)
+project rules
+(while this worktree sat idle, the nightly cleanup removed dependencies that can be rebuilt, to save space; rebuild them before running code or tests:)
+  npm install
+  once rebuilt, remove the marker: rm "<TMP>/ws/wt-main/.git/worktrees/wt-linked/agent-hub-deps-pruned"
+--- stderr

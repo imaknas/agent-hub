@@ -1,0 +1,14 @@
+=== --help
+exit 0
+usage: weekly-reflect.py [-h] [--week WEEK] [--llm] [--html-only]
+
+options:
+  -h, --help   show this help message and exit
+  --week WEEK
+  --llm        add the analysis the model writes
+  --html-only  only rebuild index.html from the existing json
+
+=== no transcripts
+weekly report: no conversation statistics: no transcripts here
+<TMP>/2026-W40.json
+<TMP>/index.html

@@ -1,0 +1,60 @@
+=== usage
+exit 1
+--- stdout
+--- stderr
+recover-service: usage: recover-service.sh <label>
+
+=== no services.tsv
+exit 1
+--- stdout
+--- stderr
+recover-service: <TMP>/hub/services.tsv not found
+
+=== unknown label
+exit 1
+--- stdout
+--- stderr
+recover-service: 'local.nope' is not in <TMP>/hub/services.tsv
+
+=== registry service
+exit 0
+--- stdout
+render-services (stand-in): --only local.web
+Rebuilt from projects/web.yaml: local.web
+Purpose: serves the web app
+Note: restart after deploy
+--- stderr
+
+=== registry service without notes
+exit 0
+--- stdout
+render-services (stand-in): --only local.quiet
+Rebuilt from projects/web.yaml: local.quiet
+Purpose: a quiet one
+--- stderr
+
+=== platform plist
+exit 0
+--- stdout
+launchctl (stand-in): bootstrap
+Rebuilt and started: local.watch
+Purpose: watches
+Note: check logs
+--- stderr
+
+=== plist
+<plist><TMP>/hub</plist>
+
+=== platform plist missing
+exit 1
+--- stdout
+--- stderr
+recover-service: <TMP>/hub/launchd/local.gone.plist does not exist: is agent-hub itself behind (not pulled)?
+
+=== someone else's service
+exit 0
+--- stdout
+'homebrew.mxcl.x' is not a service agent-hub manages (owner: Homebrew); it cannot be rebuilt automatically.
+Purpose: a db
+How to rebuild: brew services start x
+--- stderr

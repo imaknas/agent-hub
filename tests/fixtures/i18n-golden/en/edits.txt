@@ -1,0 +1,16 @@
+=== not a dict
+edit 1 is not {old, new}
+=== no new
+edit 1 is not {old, new}
+=== empty old
+edit 1 has an empty old
+=== old missing
+edit 2: old occurs 0 times (it must occur exactly once): 'nowhere'
+=== old twice
+edit 1: old occurs 2 times (it must occur exactly once): '- [ ] '
+=== marker added
+extra marker: (wait: task-p-9)
+=== marker gone, not removable
+missing marker: (wait: task-p-1)
+=== marker stripped, line kept
+marker removed but its line is still there (the key was rewritten): - [ ] renew the domain (wait: task-p-1)

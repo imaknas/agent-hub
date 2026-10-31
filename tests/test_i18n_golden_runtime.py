@@ -33,9 +33,12 @@ import runtime_fake  # noqa: E402
 import runtime_ports  # noqa: E402
 from runtime_ports import CompletionResult, Task, TaskResult  # noqa: E402
 
-GOLDEN = ROOT / "tests" / "fixtures" / "i18n-golden"
+sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
+import golden_lang  # noqa: E402
+
+GOLDEN = golden_lang.GOLDEN
 UPDATE = os.environ.get("I18N_GOLDEN_UPDATE") == "1"
-ZH = {"AGENT_HUB_LANG_UI": "zh-Hant", "COLUMNS": "100"}
+ZH = {"AGENT_HUB_LANG_UI": golden_lang.LANG, "COLUMNS": "100"}
 
 
 class RuntimeGolden(unittest.TestCase):

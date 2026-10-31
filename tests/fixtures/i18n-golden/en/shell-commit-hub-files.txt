@@ -1,0 +1,31 @@
+$ commit-hub-files.sh only-message
+[exit 1]
+--- stdout
+--- stderr
+usage: commit-hub-files.sh "<message>" <path>...
+
+$ commit-hub-files.sh m hub.json todo.md
+[exit 0]
+--- stdout
+commit-hub-files: todo.md is not config (data does not go into git), skipped
+commit-hub-files: <TMP>/config is not a git repo, nothing committed
+--- stderr
+
+$ commit-hub-files.sh m hub.json todo.md
+[exit 0]
+--- stdout
+commit-hub-files: todo.md is not config (data does not go into git), skipped
+commit-hub-files: committed and pushed: hub.json
+--- stderr
+
+$ commit-hub-files.sh m hub.json
+[exit 0]
+--- stdout
+commit-hub-files: hub.json unchanged, nothing committed
+--- stderr
+
+$ commit-hub-files.sh m nope.txt nope2.txt
+[exit 0]
+--- stdout
+commit-hub-files: none of nope.txt nope2.txt exists, nothing committed
+--- stderr

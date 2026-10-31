@@ -23,7 +23,10 @@ import tempfile
 import unittest
 
 ROOT = pathlib.Path(__file__).resolve().parents[1]
-GOLDEN = ROOT / "tests" / "fixtures" / "i18n-golden"
+sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
+import golden_lang  # noqa: E402
+
+GOLDEN = golden_lang.GOLDEN
 UPDATE = os.environ.get("I18N_GOLDEN_UPDATE") == "1"
 SCRIPT = ROOT / "bin" / "migrate-to-mini.py"
 
@@ -117,10 +120,10 @@ class Golden(unittest.TestCase):
         (self.hub / "hub.json").write_text(json.dumps({
             "v": 1, "registry_dir": "projects", "workspace_root": "~/workspace", "git_origin": "~/git-origin",
             "memory_copies": "~/.memory-copies", "services_root": "~/services", "hosts": {"server": "hubbox"},
-            "github": {"owner": "o"}, "language": {"ui": "zh-Hant", "content": "zh-Hant"}}))
+            "github": {"owner": "o"}, "language": {"ui": golden_lang.LANG, "content": golden_lang.LANG}}))
         (self.hub / "legacy-paths.tsv").write_text("name\tpath\tnote\n")
         env = {k: v for k, v in os.environ.items() if not k.startswith(("AGENT_HUB_", "GIT_"))}
-        self.env = {**env, "HOME": str(self.home), "AGENT_HUB_ROOT": str(self.hub), "AGENT_HUB_LANG_UI": "zh-Hant",
+        self.env = {**env, "HOME": str(self.home), "AGENT_HUB_ROOT": str(self.hub), "AGENT_HUB_LANG_UI": golden_lang.LANG,
                     "PATH": f"{t / 'fakebin'}:{os.environ['PATH']}", "REMOTE_BIN": str(t / "remotebin"),
                     "FAKE_REMOTES": str(self.remotes), "GIT_CONFIG_NOSYSTEM": "1", "GIT_CEILING_DIRECTORIES": str(t),
                     "PYTHONIOENCODING": "utf-8", "COLUMNS": "200"}

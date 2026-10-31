@@ -1,0 +1,2 @@
+exit 2
+usage: hublib.py digest-append <section> < content | digest-section <section>

@@ -1,0 +1,153 @@
+=== usage
+exit 1
+--- stdout
+--- stderr
+rename-project: usage: rename-project.sh <old> <new> [--path <new local path>] [--origin <new URL>] [--apply]
+
+=== unknown argument
+exit 1
+--- stdout
+--- stderr
+rename-project: Unknown argument: --bogus
+
+=== bad new name
+exit 1
+--- stdout
+--- stderr
+rename-project: The new name may only use lowercase letters, digits and -: Beta
+
+=== not in the registry
+exit 1
+--- stdout
+--- stderr
+rename-project: 'nosuch' is not in the project registry
+
+=== new name taken
+exit 1
+--- stdout
+--- stderr
+rename-project: 'zeta' is already registered
+
+=== no .agent-memory
+exit 1
+--- stdout
+--- stderr
+rename-project: <TMP>/home/workspace/mu/.agent-memory does not exist
+
+=== tracked changes
+exit 1
+--- stdout
+--- stderr
+rename-project: <TMP>/home/workspace/alpha has uncommitted changes to tracked files; deal with them first
+
+=== .agent-memory not committed
+exit 1
+--- stdout
+--- stderr
+rename-project: .agent-memory has uncommitted changes; sync it first
+
+=== .agent-memory not pushed
+exit 1
+--- stdout
+--- stderr
+rename-project: .agent-memory has commits that are not pushed
+
+=== new path exists
+exit 1
+--- stdout
+--- stderr
+rename-project: <TMP>/home/workspace/beta already exists
+
+=== new origin unreachable
+exit 1
+--- stdout
+--- stderr
+rename-project: Cannot reach <TMP>/remotes/nope.git
+
+=== taken on the hub machine
+exit 1
+--- stdout
+--- stderr
+rename-project: On the hub machine the old bare repo is missing, or a path with the new name already exists
+
+=== dry-run
+exit 0
+--- stdout
+rename-project: alpha → beta
+  projects/<name>.yaml    name alpha → beta
+                          path <TMP>/home/workspace/alpha → <TMP>/home/workspace/beta
+                          origin (native) → (native)
+                          memory ~/git-origin/alpha-memory.git → ~/git-origin/beta-memory.git
+  mirror-list.txt         (native) → (native)
+  hub machine             mv ~/git-origin/alpha-memory.git → beta-memory.git
+                          mv ~/.memory-copies/alpha → ~/.memory-copies/beta (origin points at the new bare repo)
+                          mv .state/alpha.sha → beta.sha
+                          mirrors/(native).git → (native).git (if the name changes)
+  this machine            remote mini → <TMP>/home/git-origin/beta-memory.git
+                          mv <TMP>/home/workspace/alpha → <TMP>/home/workspace/beta + git worktree repair
+(dry-run; add --apply to carry it out)
+--- stderr
+
+=== dry-run, new origin, same folder
+exit 0
+--- stdout
+rename-project: zeta → zeta2
+  projects/<name>.yaml    name zeta → zeta2
+                          path <TMP>/home/workspace/zeta → <TMP>/home/workspace/zeta
+                          origin git@github.com:o/zeta.git → <TMP>/remotes/o/zeta2.git
+                          memory ~/git-origin/zeta-memory.git → ~/git-origin/zeta2-memory.git
+  mirror-list.txt         git@github.com:o/zeta.git → <TMP>/remotes/o/zeta2.git
+  hub machine             mv ~/git-origin/zeta-memory.git → zeta2-memory.git
+                          mv ~/.memory-copies/zeta → ~/.memory-copies/zeta2 (origin points at the new bare repo)
+                          mv .state/zeta.sha → zeta2.sha
+                          mirrors/zeta.git → zeta2.git (if the name changes)
+  this machine            remote mini → <TMP>/home/git-origin/zeta2-memory.git
+                          the local folder stays where it is
+(dry-run; add --apply to carry it out)
+--- stderr
+
+=== folder busy
+exit 75
+--- stdout
+rename-project: alpha → beta
+  projects/<name>.yaml    name alpha → beta
+                          path <TMP>/home/workspace/alpha → <TMP>/home/workspace/beta
+                          origin (native) → (native)
+                          memory ~/git-origin/alpha-memory.git → ~/git-origin/beta-memory.git
+  mirror-list.txt         (native) → (native)
+  hub machine             mv ~/git-origin/alpha-memory.git → beta-memory.git
+                          mv ~/.memory-copies/alpha → ~/.memory-copies/beta (origin points at the new bare repo)
+                          mv .state/alpha.sha → beta.sha
+                          mirrors/(native).git → (native).git (if the name changes)
+  this machine            remote mini → <TMP>/home/git-origin/beta-memory.git
+                          mv <TMP>/home/workspace/alpha → <TMP>/home/workspace/beta + git worktree repair
+--- stderr
+rename-project: processes still have their working directory in <TMP>/home/workspace/alpha: claude(4242) (close that project's agent sessions / terminal tabs first, then run again)
+
+=== renamed
+exit 0
+--- stdout
+rename-project: alpha → beta
+  projects/<name>.yaml    name alpha → beta
+                          path <TMP>/home/workspace/alpha → <TMP>/home/workspace/beta
+                          origin (native) → (native)
+                          memory ~/git-origin/alpha-memory.git → ~/git-origin/beta-memory.git
+  mirror-list.txt         (native) → (native)
+  hub machine             mv ~/git-origin/alpha-memory.git → beta-memory.git
+                          mv ~/.memory-copies/alpha → ~/.memory-copies/beta (origin points at the new bare repo)
+                          mv .state/alpha.sha → beta.sha
+                          mirrors/(native).git → (native).git (if the name changes)
+  this machine            remote mini → <TMP>/home/git-origin/beta-memory.git
+                          mv <TMP>/home/workspace/alpha → <TMP>/home/workspace/beta + git worktree repair
+[hub machine] bare repo / ~/.memory-copies / checkpoint / mirror renamed
+[local] auto memory carried to the new path (<TMP>/home/.claude)
+Note: if this project has project-scoped MCP servers (claude mcp list), their settings are stored under the old path; add them again in the new folder
+[local] remote / folder / worktree updated
+registry: alpha → beta
+commit-hub-files (stand-in): rename project alpha → beta (rename-project.sh)
+Done: alpha → beta. Open a new agent session in <TMP>/home/workspace/beta (the old session's working directory is gone).
+--- stderr
+
+=== legacy-paths.tsv
+name	path	note
+beta	<TMP>/home/workspace/alpha	where it was before the rename (alpha)

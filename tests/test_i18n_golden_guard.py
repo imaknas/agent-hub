@@ -13,7 +13,10 @@ import unittest
 from unittest import mock
 
 ROOT = pathlib.Path(__file__).resolve().parents[1]
-GOLDEN = ROOT / "tests" / "fixtures" / "i18n-golden"
+sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
+import golden_lang  # noqa: E402
+
+GOLDEN = golden_lang.GOLDEN
 UPDATE = os.environ.get("I18N_GOLDEN_UPDATE") == "1"
 
 
@@ -22,7 +25,7 @@ class Golden(unittest.TestCase):
 
     def scenario(self, tmp: pathlib.Path) -> str:
         out = []
-        env = {**os.environ, "AGENT_HUB_LANG_UI": "zh-Hant"}
+        env = {**os.environ, "AGENT_HUB_LANG_UI": golden_lang.LANG}
         r = subprocess.run([sys.executable, str(ROOT / "bin" / "guard.py")], capture_output=True, text=True, env=env)
         out.append(("usage", f"exit {r.returncode}\n{r.stdout}{r.stderr}"))
         spec = importlib.util.spec_from_file_location("guard_golden", ROOT / "bin" / "guard.py")
@@ -31,7 +34,7 @@ class Golden(unittest.TestCase):
         root = tmp / "proj"
         root.mkdir()
         m.own_project = lambda cwd: ("proj", root)
-        with mock.patch.dict(os.environ, {"AGENT_HUB_LANG_UI": "zh-Hant"}):
+        with mock.patch.dict(os.environ, {"AGENT_HUB_LANG_UI": golden_lang.LANG}):
             for label, target in (("other cwd", {"cwd": str(tmp / "other")}),
                                   ("repository", {"elsewhere": {"kind": "repository", "name": "o/r"}}),
                                   ("machine", {"elsewhere": {"kind": "machine"}}),

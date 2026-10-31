@@ -518,7 +518,7 @@ def deliver(lease: Lease, h: dict, n: int) -> None:
     mem = pathlib.Path(lease.cwd) / ".agent-memory" / "memory"
     if notes and mem.is_dir():
         f = mem / f"{now():%Y-%m-%d}.md"
-        extra = ("\n\n已登錄給 Knas 的任務:" + "、".join(keys)) if keys else ""
+        extra = (f"\n\n已登錄給 {hubconf.owner_tag()} 的任務:" + "、".join(keys)) if keys else ""   # content (step 6)
         with open(f, "a") as fh:
             fh.write(f"\n## 租借對話 {now():%H:%M}(session {sid})\n\n{notes}{extra}\n")
         h["notes_written"] = True

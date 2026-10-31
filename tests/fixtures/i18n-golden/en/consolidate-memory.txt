@@ -1,0 +1,477 @@
+=== --list
+exit 0
+[<T>] epsilon: origin is not a local bare repo (https://example.com/e.git), skipped
+[<T>] zeta: cannot read the agent-memory branch, skipped: git ls-tree -r --name-only agent-memory memory/ failed: fatal: <git error>
+alpha                        date files   6  over 14 days   5  last ok -           due (5 this time)
+beta                         date files   1  over 14 days   0  last ok -           no date files older than 14 days
+delta                        date files   6  over 14 days   5  last ok 2026-10-01  failed on 2026-10-14, retrying after 2 days
+gamma                        date files   6  over 14 days   5  last ok 2026-10-12  consolidated only on 2026-10-12
+
+=== --help
+exit SystemExit(0)
+usage: consolidate-memory.py [-h] [--dry-run] [--project PROJECT] [--list] [--keep] [--max MAX]
+
+Consolidation: fold each project's long-kept memory date files into reference/, and fix statements
+that newer notes overturned
+
+options:
+  -h, --help         show this help message and exit
+  --dry-run
+  --project PROJECT
+  --list
+  --keep             keep the temp clone for inspection
+  --max MAX
+
+=== model failed
+status failed
+[<T>] alpha: consolidating 5 date files (163 bytes, memory/2026-09-01.md … memory/2026-09-05.md), 0 left for next time; model test-model
+[<T>] alpha: the model call failed (exit 1:boom), giving up, the copy is untouched
+
+=== no structured output
+status failed
+[<T>] alpha: consolidating 5 date files (163 bytes, memory/2026-09-01.md … memory/2026-09-05.md), 0 left for next time; model test-model
+[<T>] alpha: model done (turns=2 cost=$None), blocked by permissions 0 times
+[<T>] alpha: no structured_output (the model last said: gave up), giving up
+
+=== HEAD moved
+status failed
+[<T>] alpha: consolidating 5 date files (163 bytes, memory/2026-09-01.md … memory/2026-09-05.md), 0 left for next time; model test-model
+[<T>] alpha: model done (turns=None cost=$None), blocked by permissions 0 times
+[<T>] alpha: HEAD was moved (the model should not be able to commit), giving up
+
+=== stray files
+status failed
+[<T>] alpha: consolidating 5 date files (163 bytes, memory/2026-09-01.md … memory/2026-09-05.md), 0 left for next time; model test-model
+[<T>] alpha: model done (turns=None cost=$None), blocked by permissions 0 times
+[<T>] alpha: warning: the model touched files it may not touch, evidence in <TMP>/hub/.state/stray/consolidate-alpha-2026-10-15: AGENT.md memory/2026-10-29.md; giving up entirely
+
+=== nothing to commit
+status noop
+[<T>] alpha: consolidating 5 date files (163 bytes, memory/2026-09-01.md … memory/2026-09-05.md), 0 left for next time; model test-model
+[<T>] alpha: model done (turns=None cost=$None), blocked by permissions 0 times
+[<T>] alpha: nothing to commit after the checks (1 warnings)
+[<T>] alpha:   the model says it consolidated `memory/2099-01-01.md`, but it is not in this batch; ignored
+
+=== unexpected error
+status failed
+[<T>] alpha: consolidating 5 date files (163 bytes, memory/2026-09-01.md … memory/2026-09-05.md), 0 left for next time; model test-model
+[<T>] alpha: unexpected error, giving up (the copy is untouched): ValueError: model exploded
+
+=== dry run, every warning
+status ok
+[<T>] alpha: consolidating 5 date files (163 bytes, memory/2026-09-01.md … memory/2026-09-05.md), 0 left for next time; model test-model
+[<T>] alpha: model done (turns=3 cost=$0.5), blocked by permissions 1 times
+[<T>] alpha: ⚠️ reverted `STATE.md`: the quote for the correction “nothing” → “Now done.” is not in `memory/2026-10-29.md`
+[<T>] alpha: ⚠️ reverted `memory/reference/infra.md`: hedging seems to have been removed, with no verbatim evidence: “- The database migration is probably done by Friday night” → “- The database migration is done by Friday night”
+[<T>] alpha: ⚠️ the model says it consolidated `memory/2099-01-01.md`, but it is not in this batch; ignored
+[<T>] alpha: ⚠️ strings in `memory/2026-09-01.md` not found after consolidating (maybe rewritten or lost, for spot checks): `https://example.com/doc`, `make deploy`
+[<T>] alpha: ⚠️ `memory/reference/notes.md` still refer to the deleted `memory/2026-09-01.md` (the librarian's broken-link check takes over)
+[<T>] alpha: ⚠️ memory/reference/README.md does not list: notes.md
+[<T>] alpha: dry-run, no push; rm 1 date files, 1 files changed
+[<T>] alpha: the temp clone is kept in <CLONE-alpha>
+--- entry
+## 2026-10-15 · alpha · consolidation (dry-run, not pushed)
+
+**commit**: `<sha>` (model test-model)
+
+**Summary**: folded the September notes
+
+**Date files folded** (git rm; see the original with `git show <sha>^:<path>`):
+
+- `memory/2026-09-01.md` → `memory/reference/notes.md`; not kept: hashes
+
+**Not deleted this time**:
+
+- `memory/2026-09-05.md`: not sure yet
+- `memory/2026-09-02-topic.md`: (blocked by the script) destination memory/reference/infra.md was reverted
+- `memory/2026-09-03.md`: (blocked by the script) destination not allowed or missing: memory/reference/missing.md
+- `memory/2026-09-04.md`: (blocked by the script) no destination and no reason for not keeping it
+
+**Statements corrected** (overturned by newer notes):
+
+- `memory/reference/notes.md`: “probably redis” → “redis” (per `memory/2026-10-29.md`: “The cache is redis, confirmed”)
+
+**Mechanical checks**:
+
+- ⚠️ reverted `STATE.md`: the quote for the correction “nothing” → “Now done.” is not in `memory/2026-10-29.md`
+- ⚠️ reverted `memory/reference/infra.md`: hedging seems to have been removed, with no verbatim evidence: “- The database migration is probably done by Friday night” → “- The database migration is done by Friday night”
+- ⚠️ the model says it consolidated `memory/2099-01-01.md`, but it is not in this batch; ignored
+- ⚠️ strings in `memory/2026-09-01.md` not found after consolidating (maybe rewritten or lost, for spot checks): `https://example.com/doc`, `make deploy`
+- ⚠️ `memory/reference/notes.md` still refer to the deleted `memory/2026-09-01.md` (the librarian's broken-link check takes over)
+- ⚠️ memory/reference/README.md does not list: notes.md
+
+```
+ memory/2026-09-01.md      | 2 --
+ memory/reference/notes.md | 3 +++
+ 2 files changed, 3 insertions(+), 2 deletions(-)
+```
+
+```diff
+diff --git a/memory/reference/notes.md b/memory/reference/notes.md
+new file mode 100644
+index <sha>..<sha>
+--- /dev/null
++++ b/memory/reference/notes.md
+@@ -0,0 +1,3 @@
++# notes
++- Deploy is documented (see memory/2026-09-01.md)
++- The cache is redis
+```
+
+---
+
+
+=== prompt
+你是 agent-hub 的「回頭清理」agent,現在在專案 alpha 的 memory repo 裡工作。
+背景先讀 ./AGENT.md(memory 的結構跟規則)。
+
+memory/ 的結構:
+- memory/YYYY-MM-DD.md、memory/YYYY-MM-DD-<主題>.md:原始流水紀錄(日期檔),只往後加。
+- memory/reference/<主題>.md:整理過的主題文件,README.md 是索引。
+- ./STATE.md(專案根目錄):精煉的現況,由每晚的 librarian 維護。
+
+## 任務一:把下面這幾個超過 14 天的日期檔整理進 memory/reference/
+
+===== memory/2026-09-01.md =====
+- Deploy notes: https://example.com/doc and `make deploy`
+- The cache is probably redis
+
+
+===== memory/2026-09-02-topic.md =====
+- Topic notes, nothing hedged here
+
+
+===== memory/2026-09-03.md =====
+- Third note
+
+
+===== memory/2026-09-04.md =====
+- Fourth note
+
+
+===== memory/2026-09-05.md =====
+- Fifth note
+
+
+做法:
+- 先讀 memory/reference/README.md 跟相關的主題文件,把日期檔裡有長期價值的內容整理進對的主題文件:
+  決定跟理由、被否決的選項跟原因、踩到的坑跟解法、數字/設定/帳號以外的事實、還沒解決的問題。
+  寫成主題文件的樣子(按主題、不按日期);需要時間脈絡就寫「(2026-09-26)」這種標註。
+  沿用主題文件原本的語言跟風格。
+- 沒有合適的主題文件就開新的 memory/reference/<主題>.md(小寫英文加連字號),並更新 README.md 索引。
+  **沒有地方放的事實不能丟**——開新文件或擴充既有文件。
+- 可以不保留的只有:(a) 已經在 reference/ 或 STATE.md 寫過的;(b) 被較新紀錄推翻/取代的
+  (如果那是個決定,在主題文件裡留一句「原本…,(日期)改成…,因為…」);(c) 沒有長期價值的流程雜訊
+  (單純的 commit hash、「已 push」、時間戳記本身)。每個不保留的都要寫進 folded[].dropped。
+- 一個日期檔只有在它的內容都放好(或確定可以不保留)之後,才列進 folded;還有疑慮就列進 kept 並說明。
+  你不能刪檔案——列進 folded 的,腳本會在檢查過後幫你 git rm。
+- ./STATE.md 或 memory/reference/ 裡指向這批日期檔的引用(例如「見 memory/2026-09-25.md」),改成指向接手內容的
+  主題文件——檔案刪掉後那些引用就斷了。這是機械性的修正,不用列進 corrections。
+
+## 任務二:修正被推翻的敘述
+
+讀所有現存的日期檔(包括比較新的:memory/2026-10-29.md),找出 memory/reference/ 跟 ./STATE.md
+裡已經被較新紀錄推翻或取代的敘述,改成現況。主題文件最後修改日期:
+- memory/reference/README.md(最後修改 <REAL-TODAY>)
+- memory/reference/infra.md(最後修改 <REAL-TODAY>)
+- ./STATE.md(最後修改 <REAL-TODAY>)
+判斷新舊看日期:日期檔的日期比主題文件最後修改日期新、而且內容衝突,才算推翻;比較舊的日期檔跟主題文件衝突時,
+以主題文件為準。每一筆修正都列進 corrections,evidence_quote 要從 evidence_file **逐字複製**(腳本會比對,
+對不上的修正會被整個檔案還原)。
+
+## 不能違反的規則
+
+- **保留不確定的語氣**:原文寫「預計/預期/可能/應該/打算/暫定/待確認/?」的,整理後照樣保留那個語氣,
+  不能改成確定的說法。只有較新的紀錄明確寫出結果(例如「已上線」「確認是…」)時才能改,而且要列進 corrections
+  附逐字引文。腳本會機械比對:保留語氣被拿掉、又沒有對應引文的檔案會被還原。
+- 只能建立/修改 ./memory/reference/ 底下的 .md 跟 ./STATE.md。日期檔、AGENT.md、RULES 都不要動;
+  memory/reference/ 底下不開子目錄。
+- STATE.md 是精煉現況:只修正被推翻/過時的敘述(包括 `## 待辦` 裡已經完成或被推翻的項目——直接移除),
+  不要把日期檔的內容搬進 STATE.md,也不要改 `## 待辦` 的格式(`- [ ] 〔Alex|agent|待定〕…`,沒有就 `- (無)`)。
+- 沒有被推翻的東西不要改寫、不要重新措辭——每一個改動都會出現在 diff 給人抽查。
+
+=== push, checkpoint
+status ok
+[<T>] alpha: consolidating 5 date files (163 bytes, memory/2026-09-01.md … memory/2026-09-05.md), 0 left for next time; model test-model
+[<T>] alpha: model done (turns=1 cost=$0.1), blocked by permissions 0 times
+[<T>] alpha: ⚠️ reverted `STATE.md`: the `## 待辦` section's format was broken
+[<T>] alpha: pushed <sha>
+[<T>] alpha: librarian checkpoint advanced to <sha>
+--- entry
+## 2026-10-15 · alpha · consolidation
+
+**commit**: `<sha>` (model test-model)
+
+**Summary**: (not given by the model)
+
+**Date files folded** (git rm; see the original with `git show <sha>^:<path>`):
+
+- `memory/2026-09-01.md` → `memory/reference/notes.md`
+
+**Mechanical checks**:
+
+- ⚠️ reverted `STATE.md`: the `## 待辦` section's format was broken
+
+```
+ memory/2026-09-01.md       | 2 --
+ memory/reference/README.md | 1 +
+ memory/reference/notes.md  | 2 ++
+ 3 files changed, 3 insertions(+), 2 deletions(-)
+```
+
+```diff
+diff --git a/memory/reference/README.md b/memory/reference/README.md
+index <sha>..<sha> 100644
+--- a/memory/reference/README.md
++++ b/memory/reference/README.md
+@@ -1,2 +1,3 @@
+ # reference
+ - infra.md
++- notes.md
+diff --git a/memory/reference/notes.md b/memory/reference/notes.md
+new file mode 100644
+index <sha>..<sha>
+--- /dev/null
++++ b/memory/reference/notes.md
+@@ -0,0 +1,2 @@
++# notes
++- Deploy: https://example.com/doc `make deploy`
+```
+
+---
+
+
+=== push failed
+status failed
+[<T>] alpha: consolidating 4 date files (75 bytes, memory/2026-09-02-topic.md … memory/2026-09-05.md), 0 left for next time; model test-model
+[<T>] alpha: model done (turns=1 cost=$0.1), blocked by permissions 0 times
+[<T>] alpha: ⚠️ the model says it consolidated `memory/2026-09-01.md`, but it is not in this batch; ignored
+[<T>] alpha: push failed (most likely a project session changed the same part at the same time), patch left in <TMP>/hub/.state/consolidate/failed; the copy is untouched: git-safe-push: rejected
+--- entry
+## 2026-10-15 · alpha · consolidation
+
+**commit**: `<sha>` (model test-model)
+
+**Summary**: (not given by the model)
+
+**Mechanical checks**:
+
+- ⚠️ the model says it consolidated `memory/2026-09-01.md`, but it is not in this batch; ignored
+
+```
+ STATE.md | 3 +--
+ 1 file changed, 1 insertion(+), 2 deletions(-)
+```
+
+```diff
+diff --git a/STATE.md b/STATE.md
+index <sha>..<sha> 100644
+--- a/STATE.md
++++ b/STATE.md
+@@ -1,4 +1,3 @@
+ # STATE
+ 
+-## To-do
+-- (none)
++broken to-do
+```
+
+---
+
+
+=== run_model timeout
+(None, 'over 20 minutes')
+=== run_model exit
+(None, 'exit 2: bad things')
+=== run_model not json
+(None, 'the output is not JSON: plain text')
+=== --dry-run --project alpha
+exit 0
+## 2026-10-15 · alpha · consolidation (dry-run, not pushed)
+
+**commit**: `<sha>` (model test-model)
+
+**Summary**: (not given by the model)
+
+**Mechanical checks**:
+
+- ⚠️ the model says it consolidated `memory/2026-09-01.md`, but it is not in this batch; ignored
+
+```
+ STATE.md | 3 +--
+ 1 file changed, 1 insertion(+), 2 deletions(-)
+```
+
+```diff
+diff --git a/STATE.md b/STATE.md
+index <sha>..<sha> 100644
+--- a/STATE.md
++++ b/STATE.md
+@@ -1,4 +1,3 @@
+ # STATE
+ 
+-## To-do
+-- (none)
++broken to-do
+```
+
+---
+
+
+
+=== --project beta
+exit 0
+
+=== scheduled run
+exit 0
+
+=== commit failed
+exit 0
+
+=== log file
+[<T>] === consolidate start (dry-run, 1 due, at most 3 this time) ===
+[<T>] alpha: consolidating 4 date files (75 bytes, memory/2026-09-02-topic.md … memory/2026-09-05.md), 0 left for next time; model test-model
+[<T>] alpha: model done (turns=1 cost=$0.1), blocked by permissions 0 times
+[<T>] alpha: ⚠️ the model says it consolidated `memory/2026-09-01.md`, but it is not in this batch; ignored
+[<T>] alpha: dry-run, no push; rm 0 date files, 1 files changed
+[<T>] alpha: the proposed review-log entry is in <TMP>/hub/.state/consolidate/dry-run/alpha-2026-10-15.md
+[<T>] === consolidate end (0 failed) ===
+[<T>] beta: skipped: no date files older than 14 days
+[<T>] === consolidate start (0 due, at most 3 this time) ===
+[<T>] === consolidate end (0 failed) ===
+[<T>] epsilon: origin is not a local bare repo (https://example.com/e.git), skipped
+[<T>] zeta: cannot read the agent-memory branch, skipped: git ls-tree -r --name-only agent-memory memory/ failed: fatal: <git error>
+[<T>] === consolidate start (2 due, at most 3 this time) ===
+[<T>] eta: consolidating 5 date files (163 bytes, memory/2026-09-01.md … memory/2026-09-05.md), 0 left for next time; model test-model
+[<T>] eta: model done (turns=1 cost=$0.1), blocked by permissions 0 times
+[<T>] eta: pushed <sha>
+[<T>] over 30 minutes, the rest is done tomorrow
+[<T>] review-log.md committed and pushed
+[<T>] === consolidate end (0 failed) ===
+[<T>] === consolidate start (1 due, at most 3 this time) ===
+[<T>] theta: consolidating 5 date files (163 bytes, memory/2026-09-01.md … memory/2026-09-05.md), 0 left for next time; model test-model
+[<T>] theta: model done (turns=1 cost=$0.1), blocked by permissions 0 times
+[<T>] theta: pushed <sha>
+[<T>] review-log.md commit/push failed: nothing to push
+
+[<T>] === consolidate end (0 failed) ===
+
+=== review-log.md
+## 2026-10-15 · eta · consolidation
+
+**commit**: `<sha>` (model test-model)
+
+**Summary**: (not given by the model)
+
+**Date files folded** (git rm; see the original with `git show <sha>^:<path>`):
+
+- `memory/2026-09-01.md` → `memory/reference/notes.md`
+
+```
+ STATE.md                   | 3 +--
+ memory/2026-09-01.md       | 2 --
+ memory/reference/README.md | 1 +
+ memory/reference/notes.md  | 2 ++
+ 4 files changed, 4 insertions(+), 4 deletions(-)
+```
+
+```diff
+diff --git a/STATE.md b/STATE.md
+index <sha>..<sha> 100644
+--- a/STATE.md
++++ b/STATE.md
+@@ -1,4 +1,3 @@
+ # STATE
+ 
+-## To-do
+-- (none)
++broken to-do
+diff --git a/memory/reference/README.md b/memory/reference/README.md
+index <sha>..<sha> 100644
+--- a/memory/reference/README.md
++++ b/memory/reference/README.md
+@@ -1,2 +1,3 @@
+ # reference
+ - infra.md
++- notes.md
+diff --git a/memory/reference/notes.md b/memory/reference/notes.md
+new file mode 100644
+index <sha>..<sha>
+--- /dev/null
++++ b/memory/reference/notes.md
+@@ -0,0 +1,2 @@
++# notes
++- Deploy: https://example.com/doc `make deploy`
+```
+
+---
+
+## 2026-10-15 · theta · consolidation
+
+**commit**: `<sha>` (model test-model)
+
+**Summary**: (not given by the model)
+
+**Date files folded** (git rm; see the original with `git show <sha>^:<path>`):
+
+- `memory/2026-09-01.md` → `memory/reference/notes.md`
+
+```
+ STATE.md                   | 3 +--
+ memory/2026-09-01.md       | 2 --
+ memory/reference/README.md | 1 +
+ memory/reference/notes.md  | 2 ++
+ 4 files changed, 4 insertions(+), 4 deletions(-)
+```
+
+```diff
+diff --git a/STATE.md b/STATE.md
+index <sha>..<sha> 100644
+--- a/STATE.md
++++ b/STATE.md
+@@ -1,4 +1,3 @@
+ # STATE
+ 
+-## To-do
+-- (none)
++broken to-do
+diff --git a/memory/reference/README.md b/memory/reference/README.md
+index <sha>..<sha> 100644
+--- a/memory/reference/README.md
++++ b/memory/reference/README.md
+@@ -1,2 +1,3 @@
+ # reference
+ - infra.md
++- notes.md
+diff --git a/memory/reference/notes.md b/memory/reference/notes.md
+new file mode 100644
+index <sha>..<sha>
+--- /dev/null
++++ b/memory/reference/notes.md
+@@ -0,0 +1,2 @@
++# notes
++- Deploy: https://example.com/doc `make deploy`
+```
+
+---
+
+
+=== state.json
+{
+ "delta": {
+  "last_ok": "2026-10-01",
+  "last_try": "2026-10-14"
+ },
+ "eta": {
+  "last_ok": "2026-10-15",
+  "last_try": "2026-10-15"
+ },
+ "gamma": {
+  "last_ok": "2026-10-12",
+  "last_try": "2026-10-12"
+ },
+ "theta": {
+  "last_ok": "2026-10-15",
+  "last_try": "2026-10-15"
+ }
+}

@@ -1,0 +1,68 @@
+=== unsupported
+exit None
+memory gap check: not checked: the runtime keeps no transcripts
+
+=== unsupported --apply
+exit None
+memory gap check: not checked: the runtime keeps no transcripts
+
+=== digest
+# Digest <TODAY>
+
+<!-- digest:memory-gaps:begin -->
+## Projects whose memory is not being kept
+
+memory gap check: not checked: the runtime keeps no transcripts
+<!-- digest:memory-gaps:end -->
+
+=== gaps
+exit None
+- [ ] **a**: 12 messages in the last 72 hours, but no new memory notes; ask a's session to write the important decisions and progress into `.agent-memory/memory/`
+- [ ] **b**: 40 messages in the last 72 hours, but no new memory notes; ask b's session to write the important decisions and progress into `.agent-memory/memory/`
+
+=== gaps --apply
+exit None
+memory gap check: 2 projects with conversations but no memory notes (a b)
+
+=== todo.md
+# todo
+
+- [ ] x
+
+<!-- memory-gaps:begin -->
+## Projects whose memory is not being kept (mechanical check)
+
+Conversations, but no new memory notes: the librarian has nothing to consolidate, and STATE.md keeps getting staler.
+
+- [ ] **a**: 12 messages in the last 48 hours, but no new memory notes; ask a's session to write the important decisions and progress into `.agent-memory/memory/`
+- [ ] **b**: 40 messages in the last 48 hours, but no new memory notes; ask b's session to write the important decisions and progress into `.agent-memory/memory/`
+<!-- memory-gaps:end -->
+
+=== digest
+# Digest <TODAY>
+
+<!-- digest:memory-gaps:begin -->
+## Projects whose memory is not being kept
+
+- [ ] **a**: 12 messages in the last 48 hours, but no new memory notes; ask a's session to write the important decisions and progress into `.agent-memory/memory/`
+- [ ] **b**: 40 messages in the last 48 hours, but no new memory notes; ask b's session to write the important decisions and progress into `.agent-memory/memory/`
+<!-- digest:memory-gaps:end -->
+
+=== no gaps --apply
+exit None
+memory gap check: 0 projects with conversations but no memory notes
+
+=== todo.md
+# todo
+
+- [ ] x
+
+=== --help
+exit SystemExit(0)
+usage: x [-h] [--window-hours WINDOW_HOURS] [--threshold THRESHOLD] [--apply]
+
+options:
+  -h, --help            show this help message and exit
+  --window-hours WINDOW_HOURS
+  --threshold THRESHOLD
+  --apply

@@ -11,7 +11,10 @@ from unittest import mock
 
 ROOT = pathlib.Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "bin"))
-GOLDEN = ROOT / "tests" / "fixtures" / "i18n-golden"
+sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
+import golden_lang  # noqa: E402
+
+GOLDEN = golden_lang.GOLDEN
 UPDATE = os.environ.get("I18N_GOLDEN_UPDATE") == "1"
 
 
@@ -30,7 +33,7 @@ class Golden(unittest.TestCase):
                "p/after": {"every_minutes": 60, "after": ["p/at", "p/every"]},
                "p/time-after": {"time": "07:00", "after": ["p/at"]},
                "p/plain": {"command": "x"}}
-        with mock.patch.dict(os.environ, {"AGENT_HUB_LANG_UI": "zh-Hant"}):
+        with mock.patch.dict(os.environ, {"AGENT_HUB_LANG_UI": golden_lang.LANG}):
             return "\n".join(c.line() for c in m._diff(cur, old)) + "\n"
 
     def test_texts(self):

@@ -1,0 +1,10 @@
+=== classify_exit login
+{'error': 'agent_login', 'detail': 'the fake runtime is not logged in'}
+=== classify_exit crash
+{'error': 'process_crashed', 'detail': 'exit 2:boom'}
+=== resume_command
+('fake-resume s1', 'fake runtime: resume the same conversation')
+=== auth_env missing
+(None, 'the fake runtime has no token login')
+=== credentials
+[('fake subscription', 'fake subscription login'), ('fake token', 'fake token login')]

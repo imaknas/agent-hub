@@ -1,0 +1,54 @@
+$ overview.sh
+[exit 0]
+--- stdout
+==========================================
+Project: alpha
+Path: <TMP>/ws/alpha
+origin: (native)
+
+-- bound services --
+  - local.alpha-web [NOT running] (agent-hub) — web
+
+-- STATE.md --
+# alpha state
+
+==========================================
+Project: beta
+Path: <TMP>/ws/beta
+origin: (native)
+
+-- bound services --
+(no services registered)
+
+-- STATE.md --
+(no STATE.md readable on this machine: tried <TMP>/ws/beta/.agent-memory/STATE.md and <TMP>/copies/beta/STATE.md, neither exists)
+
+==========================================
+Project: gamma
+Path: <TMP>/ws/gamma
+origin: (native)
+
+-- bound services --
+(no services registered)
+
+-- STATE.md --
+(read from the hub machine's memory-only clone: <TMP>/copies/gamma/STATE.md)
+# gamma copy
+
+--- stderr
+
+$ overview.sh beta
+[exit 0]
+--- stdout
+==========================================
+Project: beta
+Path: <TMP>/ws/beta
+origin: (native)
+
+-- bound services --
+(no services registered)
+
+-- STATE.md --
+(no STATE.md readable on this machine: tried <TMP>/ws/beta/.agent-memory/STATE.md and <TMP>/copies/beta/STATE.md, neither exists)
+
+--- stderr

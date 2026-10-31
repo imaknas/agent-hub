@@ -1,0 +1,23 @@
+=== cross_copies
+assistant's copy of helper-x differs from helper's original: <HUB>/contracts/hubbus.v1.schema.json vs <TMP>/c.json
+assistant reads helper-x v2, helper is now at v1 (the producer keeps both versions until the consumer has switched)
+assistant's copy of helper-x differs from helper's original: <HUB>/contracts/hubbus.v1.schema.json vs <TMP>/c.json
+helper-gone: the original is missing (<TMP>/gone.json)
+helper-x: the copy is missing (<HUB>/contracts/no-such-copy.json)
+assistant reads helper-none, but helper's registry entry does not provide it
+assistant reads helper-x, but helper's registry entry does not provide it
+=== live
+bus event ev-1: $.payload: missing type
+handoffs --json is not JSON (exit 3)
+=== llm_lint
+LLM call: bin/x.py:3 calls the CLI directly
+llm.py lint does not run: Traceback ...
+boom
+=== main, problems
+exit 1
+stdout: '✗ a: one\n✗ b: two\n✗ c: three\n✗ d: four\n'
+payload: [{'job': 'contracts-check', 'detail': '4 problems: a: one; b: two; c: three'}]
+=== main, none
+exit 0
+stdout: 'contracts: all consistent\n'
+payload: []

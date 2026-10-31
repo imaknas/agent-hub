@@ -18,7 +18,10 @@ import tempfile
 import unittest
 
 ROOT = pathlib.Path(__file__).resolve().parents[1]
-GOLDEN = ROOT / "tests" / "fixtures" / "i18n-golden"
+sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
+import golden_lang  # noqa: E402
+
+GOLDEN = golden_lang.GOLDEN
 UPDATE = os.environ.get("I18N_GOLDEN_UPDATE") == "1"
 PY = sys.executable
 
@@ -97,7 +100,7 @@ def git(cwd, *args):
 
 def base_env() -> dict:
     env = {k: v for k, v in os.environ.items() if not k.startswith(("GIT_", "AGENT_HUB_"))}
-    env["AGENT_HUB_LANG_UI"] = "zh-Hant"
+    env["AGENT_HUB_LANG_UI"] = golden_lang.LANG
     return env
 
 

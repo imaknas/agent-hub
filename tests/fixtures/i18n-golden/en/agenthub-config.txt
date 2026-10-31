@@ -1,0 +1,43 @@
+$ agenthub config apply    # config invalid
+[exit 1]
+--- stdout
+--- stderr
+config-check: ✗ hub.json: $: missing v
+config-check: ✗ hub.json: $.owner: missing address
+hub config apply: the config is invalid, nothing applied
+
+$ agenthub config plan
+[exit 0]
+--- stdout
+nothing to change (the machine matches the config)
+--- stderr
+
+$ agenthub config plan
+[exit 0]
+--- stdout
+services        install x
+services        reload y
+--- stderr
+
+$ agenthub config apply    # applied, one left, bus down
+[exit 1]
+--- stdout
+config-check: the config is all valid
+services        install x
+services        reload y
+--- stderr
+hub config apply: ⚠️ still out of line after applying:
+hub config apply: recording on the bus failed (.state/config-applied.json was written): bus is down
+
+$ agenthub config apply    # applied, nothing left
+[exit 0]
+--- stdout
+config-check: the config is all valid
+services        install x
+--- stderr
+
+$ agenthub config check
+[exit 0]
+--- stdout
+config-check: the config is all valid
+--- stderr

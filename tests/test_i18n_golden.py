@@ -21,13 +21,16 @@ from unittest import mock
 
 ROOT = pathlib.Path(__file__).resolve().parents[1]
 BIN = ROOT / "bin"
-GOLDEN = ROOT / "tests" / "fixtures" / "i18n-golden"
+sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
+import golden_lang  # noqa: E402
+
+GOLDEN = golden_lang.GOLDEN
 UPDATE = os.environ.get("I18N_GOLDEN_UPDATE") == "1"
 # The instance language the goldens are for: zh-Hant must stay byte-identical to the output before translation
-LANGUAGE = {"ui": "zh-Hant", "content": "zh-Hant"}
+LANGUAGE = {"ui": golden_lang.LANG, "content": golden_lang.LANG}
 
 # Chinese inputs live in the fixture (tests/fixtures may hold Chinese; this file may not)
-IN = json.loads((GOLDEN / "inputs.json").read_text())
+IN = json.loads((golden_lang.INPUTS / "inputs.json").read_text())
 
 
 class Golden(unittest.TestCase):

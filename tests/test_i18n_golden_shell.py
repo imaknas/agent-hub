@@ -21,7 +21,10 @@ import unittest
 
 ROOT = pathlib.Path(__file__).resolve().parents[1]
 BIN = ROOT / "bin"
-GOLDEN = ROOT / "tests" / "fixtures" / "i18n-golden"
+sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
+import golden_lang  # noqa: E402
+
+GOLDEN = golden_lang.GOLDEN
 UPDATE = os.environ.get("I18N_GOLDEN_UPDATE") == "1"
 PY = os.environ.get("AGENT_HUB_PYTHON") or sys.executable
 
@@ -36,12 +39,12 @@ class ShellGolden(unittest.TestCase):
             (self.tmp / d).mkdir(parents=True)
         self.cfg = {"owner": {"name": "alex", "tag": "Alex"}, "registry_dir": "projects",
                     "memory_copies": str(self.tmp / "copies"), "workspace_root": str(self.tmp / "ws"),
-                    "git_origin": str(self.tmp / "origin"), "language": {"ui": "zh-Hant", "content": "zh-Hant"}}
+                    "git_origin": str(self.tmp / "origin"), "language": {"ui": golden_lang.LANG, "content": golden_lang.LANG}}
         self.write_cfg()
         self.env = {**{k: v for k, v in os.environ.items() if not k.startswith(("AGENT_HUB_", "GIT_"))},
                     "AGENT_HUB_PYTHON": PY, "HOME": str(self.tmp / "home"), "AGENT_HUB_CONFIG": str(self.tmp / "config"),
                     "AGENT_HUB_DATA": str(self.tmp / "data"), "AGENT_HUB_SECRETS": str(self.tmp / "secrets"),
-                    "AGENT_HUB_STATE": str(self.tmp / "state"), "AGENT_HUB_LANG_UI": "zh-Hant",
+                    "AGENT_HUB_STATE": str(self.tmp / "state"), "AGENT_HUB_LANG_UI": golden_lang.LANG,
                     "GIT_CONFIG_GLOBAL": "/dev/null", "GIT_CONFIG_NOSYSTEM": "1",
                     "GIT_AUTHOR_NAME": "t", "GIT_AUTHOR_EMAIL": "t@t", "GIT_COMMITTER_NAME": "t",
                     "GIT_COMMITTER_EMAIL": "t@t", "LANG": "en_US.UTF-8", "LC_ALL": "en_US.UTF-8", "TZ": "Asia/Taipei",

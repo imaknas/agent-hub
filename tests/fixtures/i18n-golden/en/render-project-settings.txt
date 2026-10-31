@@ -1,0 +1,98 @@
+=== plan, first
++ hook:alpha/pre-commit  gate strict
++ hook:alpha/pre-merge-commit  gate strict
++ agent-settings:alpha  sandbox, permission rules, record
++ hook:beta/pre-merge-commit  gate strict
+=== report
+[exit 0]
+alpha: would write sandbox (allowWrite 2, denyRead 1, 3 domains), 2 deny rules, 1 allow rules → <TMP>/ws/alpha/.claude/settings.local.json
+beta: .git/hooks/pre-commit is already the project's own hook, not overwriting it (gate detects only)
+beta: would write sandbox (allowWrite 2, denyRead 1, 3 domains), 2 deny rules, 1 allow rules → <TMP>/ws/beta/.claude/settings.local.json
+gamma: gate strict not installed (the project uses its own core.hooksPath=.husky), detecting only
+gamma: would write sandbox (allowWrite 2, denyRead 1, 3 domains), 2 deny rules, 1 allow rules → <TMP>/ws/gamma/.claude/settings.local.json
+=== write
+[exit 0]
+alpha: installed pre-commit (gate strict)
+alpha: installed pre-merge-commit (gate strict)
+beta: .git/hooks/pre-commit is already the project's own hook, not overwriting it (gate detects only)
+beta: installed pre-merge-commit (gate strict)
+gamma: gate strict not installed (the project uses its own core.hooksPath=.husky), detecting only
+=== alpha pre-commit
+#!/bin/sh
+# agent-hub:gate (managed; registry gate: strict)
+# 主 checkout 的 main/master 不能直接 commit 或 merge commit;merge-branch 是 fast-forward,不會觸發這個 hook。
+b=$(git symbolic-ref --short -q HEAD)
+case "$b" in main|master) ;; *) exit 0 ;; esac
+[ -n "$MERGE_GATE" ] && exit 0
+echo "This project has the merge gate on (gate: strict): no direct commits to $b. Work in your own worktree/branch and finish with ~/agent-hub/bin/merge-branch." >&2
+exit 1
+=== alpha settings
+{
+  "sandbox": {
+    "enabled": true,
+    "filesystem": {
+      "allowWrite": [
+        "/rt",
+        "/bus"
+      ],
+      "denyRead": [
+        "/other"
+      ]
+    },
+    "network": {
+      "allowedDomains": [
+        "a.example",
+        "b.example",
+        "c.example"
+      ]
+    }
+  },
+  "permissions": {
+    "deny": [
+      "Read(/other/**)",
+      "Edit(/hub/**)"
+    ],
+    "allow": [
+      "Bash(agenthub send:*)"
+    ]
+  }
+}
+=== plan, after write
+(none)
+=== plan, after drift
+~ agent-settings:alpha  sandbox, permission rules
+=== report, drift
+[exit 1]
+alpha: would write sandbox (allowWrite 2, denyRead 1, 3 domains), 2 deny rules, 1 allow rules → <TMP>/ws/alpha/.claude/settings.local.json
+⚠️ alpha's settings drifted (report mode: not written back): sandbox was changed; permissions.deny is missing 1 rules (e.g. Read(/other/**))
+beta: .git/hooks/pre-commit is already the project's own hook, not overwriting it (gate detects only)
+beta: would write sandbox (allowWrite 2, denyRead 1, 3 domains), 2 deny rules, 1 allow rules → <TMP>/ws/beta/.claude/settings.local.json
+gamma: gate strict not installed (the project uses its own core.hooksPath=.husky), detecting only
+gamma: would write sandbox (allowWrite 2, denyRead 1, 3 domains), 2 deny rules, 1 allow rules → <TMP>/ws/gamma/.claude/settings.local.json
+=== write, drift
+[exit 1]
+⚠️ alpha's settings drifted (written back): sandbox was changed; permissions.deny is missing 1 rules (e.g. Read(/other/**))
+beta: .git/hooks/pre-commit is already the project's own hook, not overwriting it (gate detects only)
+gamma: gate strict not installed (the project uses its own core.hooksPath=.husky), detecting only
+=== plan, policy changed
+~ agent-settings:alpha  permission rules, record
+=== only alpha
+[exit 0]
+=== plan, enforce and gate off
+- hook:alpha/pre-commit  gate strict
+- hook:alpha/pre-merge-commit  gate strict
+- agent-settings:alpha  enforce is off: remove the platform's sandbox/rules
+=== enforce and gate off
+[exit 0]
+alpha: gate is off, removed pre-commit
+alpha: gate is off, removed pre-merge-commit
+alpha: enforce is off, removed the platform's sandbox/rules
+beta: .git/hooks/pre-commit is already the project's own hook, not overwriting it (gate detects only)
+gamma: gate strict not installed (the project uses its own core.hooksPath=.husky), detecting only
+=== alpha settings
+{
+  "permissions": {
+    "deny": [],
+    "allow": []
+  }
+}

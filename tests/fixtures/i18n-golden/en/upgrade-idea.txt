@@ -1,0 +1,174 @@
+=== usage
+exit 1
+--- stdout
+--- stderr
+upgrade-idea: usage: upgrade-idea.py <sandbox name> [--rename <new name>] [--public] [--apply]
+
+=== --rename without a name
+exit 1
+--- stdout
+--- stderr
+upgrade-idea: --rename needs a new name
+
+=== not in the registry
+exit 1
+--- stdout
+--- stderr
+upgrade-idea: idea-9 is not in the registry
+
+=== dry-run
+exit 0
+--- stdout
+  1. no rename
+  2. gh repo create o/idea-7 --private + push, origin = <TMP>/a/remotes/o/idea-7.git
+  3. registry projects/idea-7.yaml: type: project, paths.origin: <TMP>/a/remotes/o/idea-7.git (purpose/enforce/privacy kept)
+  4. add origin to mirror-list.txt, regenerate index.md, commit agent-hub
+(dry-run; add --apply to run it)
+--- stderr
+
+=== dry-run --json
+exit 0
+--- stdout
+(dry-run; add --apply to run it)
+--- stderr
+
+=== dry-run rename public
+exit 0
+--- stdout
+  1. rename idea-7 → garden (rename-project.sh)
+  2. gh repo create o/garden --public + push, origin = <TMP>/a/remotes/o/garden.git
+  3. registry projects/garden.yaml: type: project, paths.origin: <TMP>/a/remotes/o/garden.git (purpose/enforce/privacy kept)
+  4. add origin to mirror-list.txt, regenerate index.md, commit agent-hub
+(dry-run; add --apply to run it)
+--- stderr
+
+=== bad new name
+exit 1
+--- stdout
+--- stderr
+upgrade-idea: The new name may only use lowercase letters, digits and -: Garden!
+
+=== new name taken
+exit 1
+--- stdout
+--- stderr
+upgrade-idea: taken is already taken: projects/taken.yaml, ~/workspace/taken
+
+=== dry-run, repo from last time
+exit 0
+--- stdout
+  1. no rename
+  2. o/idea-7 on GitHub was made last time: push only, origin = <TMP>/a/remotes/o/idea-7.git
+  3. registry projects/idea-7.yaml: type: project, paths.origin: <TMP>/a/remotes/o/idea-7.git (purpose/enforce/privacy kept)
+  4. add origin to mirror-list.txt, regenerate index.md, commit agent-hub
+(dry-run; add --apply to run it)
+--- stderr
+
+=== repo is someone else's
+exit 1
+--- stdout
+--- stderr
+upgrade-idea: GitHub already has o/idea-7 (not this sandbox's history)
+
+=== dirty
+exit 1
+--- stdout
+--- stderr
+upgrade-idea: <TMP>/a/home/workspace/idea-7 has uncommitted changes to tracked files; deal with them first
+
+=== gh create fails
+exit 1
+--- stdout
+  1. no rename
+  2. gh repo create o/idea-7 --private + push, origin = <TMP>/a/remotes/o/idea-7.git
+  3. registry projects/idea-7.yaml: type: project, paths.origin: <TMP>/a/remotes/o/idea-7.git (purpose/enforce/privacy kept)
+  4. add origin to mirror-list.txt, regenerate index.md, commit agent-hub
+--- stderr
+upgrade-idea: gh repo create failed: HTTP 502: bad gateway
+
+=== rename fails
+exit 1
+--- stdout
+  1. rename idea-7 → garden (rename-project.sh)
+  2. gh repo create o/garden --private + push, origin = <TMP>/a/remotes/o/garden.git
+  3. registry projects/garden.yaml: type: project, paths.origin: <TMP>/a/remotes/o/garden.git (purpose/enforce/privacy kept)
+  4. add origin to mirror-list.txt, regenerate index.md, commit agent-hub
+--- stderr
+rename-project: folder is busy
+upgrade-idea: rename-project.sh failed; stopping here (the GitHub repo is not created yet)
+
+=== upgraded
+exit 0
+--- stdout
+  1. no rename
+  2. gh repo create o/idea-7 --private + push, origin = <TMP>/a/remotes/o/idea-7.git
+  3. registry projects/idea-7.yaml: type: project, paths.origin: <TMP>/a/remotes/o/idea-7.git (purpose/enforce/privacy kept)
+  4. add origin to mirror-list.txt, regenerate index.md, commit agent-hub
+Done: idea-7 is now a project, idea-7 (<TMP>/a/remotes/o/idea-7.git)
+--- stderr
+
+=== already
+exit 0
+--- stdout
+{"result": "already", "name": "idea-7", "origin": "<TMP>/a/remotes/o/idea-7.git"}
+--- stderr
+
+=== not an idea
+exit 1
+--- stdout
+--- stderr
+upgrade-idea: idea-7 is not an idea sandbox (type: project)
+
+=== invalid registry
+exit 1
+--- stdout
+--- stderr
+upgrade-idea: The upgraded registry entry would not be valid; nothing was changed: unknown field bogus
+
+=== unfinished rename
+exit 1
+--- stdout
+--- stderr
+upgrade-idea: The rename idea-7 → garden stopped halfway (stage github): finish retrying the rename first
+
+=== rename then stop
+exit 1
+--- stdout
+  1. rename idea-7 → garden (rename-project.sh)
+  2. gh repo create o/garden --private + push, origin = <TMP>/b/remotes/o/garden.git
+  3. registry projects/garden.yaml: type: project, paths.origin: <TMP>/b/remotes/o/garden.git (purpose/enforce/privacy kept)
+  4. add origin to mirror-list.txt, regenerate index.md, commit agent-hub
+--- stderr
+upgrade-idea: gh repo create failed: HTTP 502: bad gateway
+
+=== other name after a rename
+exit 1
+--- stdout
+--- stderr
+upgrade-idea: The last upgrade of idea-7 stopped halfway, already renamed to garden; call again with that same name
+
+=== dry-run after a rename
+exit 0
+--- stdout
+  1. already renamed to garden
+  2. gh repo create o/garden --private + push, origin = <TMP>/b/remotes/o/garden.git
+  3. registry projects/garden.yaml: type: project, paths.origin: <TMP>/b/remotes/o/garden.git (purpose/enforce/privacy kept)
+  4. add origin to mirror-list.txt, regenerate index.md, commit agent-hub
+(dry-run; add --apply to run it)
+--- stderr
+
+=== no github.owner
+exit 1
+--- stdout
+--- stderr
+upgrade-idea: hub.json has no github.owner
+
+=== registry broken by the rename
+exit 1
+--- stdout
+  1. rename idea-7 → garden (rename-project.sh)
+  2. gh repo create o/garden --private + push, origin = <TMP>/d/remotes/o/garden.git
+  3. registry projects/garden.yaml: type: project, paths.origin: <TMP>/d/remotes/o/garden.git (purpose/enforce/privacy kept)
+  4. add origin to mirror-list.txt, regenerate index.md, commit agent-hub
+--- stderr
+upgrade-idea: The registry entry is not valid: unknown field bogus (the GitHub repo is already created; fix the registry entry and call again to continue)

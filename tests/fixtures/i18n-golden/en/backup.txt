@@ -1,0 +1,110 @@
+=== run ok (new password, new repo)
+exit 0
+[03:04:05] Generated the backup password: <TMP>/secrets/pw (keep a copy of its content in a password manager: if the hub machine is lost, only that copy can decrypt the backups)
+[03:04:05] Creating repository b2:bucket:hub
+[03:04:05] stage: SQLite 2, bare repos 1, workspaces with unpushed work 1
+[03:04:05] Done: snapshot abcdef01, 12 files, 1.5 MB added
+
+=== manifest
+{
+ "at": "<TS>",
+ "sqlite": [
+  "bus",
+  "app"
+ ],
+ "bundles": [
+  "demo-memory.git"
+ ],
+ "workspace": [
+  {
+   "project": "demo",
+   "files": [
+    "unpushed.bundle",
+    "uncommitted.diff",
+    "backend/.env"
+   ]
+  }
+ ]
+}
+=== run: restic backup fails
+exit 1
+[03:04:05] Creating repository b2:bucket:hub
+[03:04:05] stage: SQLite 2, bare repos 1, workspaces with unpushed work 1
+[03:04:05] Failed (run): RuntimeError('restic backup failed (exit 1)Fatal: canned restic error\n')
+
+=== run failure file
+RuntimeError('restic backup failed (exit 1)Fatal: canned restic error\n')
+=== run: git bundle fails
+exit 1
+[03:04:05] Creating repository b2:bucket:hub
+[03:04:05] Failed (run): RuntimeError('git bundle demo-memory.git: fatal: canned bundle error')
+
+=== run failure file
+RuntimeError('git bundle demo-memory.git: fatal: canned bundle error')
+=== run: sqlite integrity
+exit 1
+[03:04:05] Creating repository b2:bucket:hub
+[03:04:05] Failed (run): RuntimeError('integrity_check of the copy of bus is not ok')
+
+=== run failure file
+RuntimeError('integrity_check of the copy of bus is not ok')
+=== verify: nothing restored
+exit 1
+[03:04:05] Failed (verify): RuntimeError('The restored snapshot has no backup-staging')
+
+=== verify: sqlite integrity
+exit 1
+[03:04:05] Failed (verify): RuntimeError('integrity_check of the restored bus.db is not ok')
+
+=== verify: bundle
+exit 1
+[03:04:05] Failed (verify): RuntimeError('The restored demo-memory.git.bundle failed verification: error: canned verify error')
+
+=== verify: missing include
+exit 1
+[03:04:05] Failed (verify): RuntimeError('The restored snapshot is missing: <TMP>/inc')
+
+=== verify ok
+exit 0
+[03:04:05] Restore test passed: 1 SQLite, 1 bundles, all 1 directories present, 10% data sample OK
+
+=== verify failure file
+RuntimeError('The restored snapshot is missing: <TMP>/inc')
+=== bus job.failed
+{"job": "backup:run", "detail": "RuntimeError('restic backup failed (exit 1)Fatal: canned restic error\\n')"}
+{"job": "backup:run", "detail": "RuntimeError('git bundle demo-memory.git: fatal: canned bundle error')"}
+{"job": "backup:run", "detail": "RuntimeError('integrity_check of the copy of bus is not ok')"}
+{"job": "backup:verify", "detail": "RuntimeError('The restored snapshot has no backup-staging')"}
+{"job": "backup:verify", "detail": "RuntimeError('integrity_check of the restored bus.db is not ok')"}
+{"job": "backup:verify", "detail": "RuntimeError('The restored demo-memory.git.bundle failed verification: error: canned verify error')"}
+{"job": "backup:verify", "detail": "RuntimeError('The restored snapshot is missing: <TMP>/inc')"}
+=== snapshots fails
+raised RuntimeError('restic snapshots failed (exit 1)')
+
+=== usage
+exit 2
+Encrypted cloud backup (restic → Backblaze B2). Settings in hub.json's backup.
+
+  backup.py run       nightly (platform job): stage consistent copies → restic backup → apply the retention rules on
+                      Sundays → restic check
+  backup.py verify    monthly (platform job): restore the latest snapshot into a temp dir, check SQLite, git bundles and
+                      required files, then restic check --read-data-subset=10%; the temp dir is deleted afterwards
+  backup.py restore <destination> [--include <path>]   restore (new machine: first put backup-password and b2-env back
+                                                       into the secrets directory)
+  backup.py snapshots                            list the snapshots
+
+What is backed up (what only the hub machine has, and cannot be recovered once lost):
+  - SQLite (the bus's bus.db, the databases in backup.sqlite): copied with the backup API first, so the db/WAL being
+    written is never touched
+  - the bare repos under ~/git-origin (memory branches, agent-hub itself, projects without a GitHub remote):
+    git bundle --all
+  - what each project workspace has not pushed: commits on no remote as a bundle, uncommitted changes as a diff,
+    .env* (up to three levels deep, e.g. backend/.env)
+  - the directories listed in hub.json backup.include (the assistant's data, platform state, secrets, service data,
+    Claude Code transcripts)
+Not backed up: transcripts of the work profile (company content), GitHub mirrors, whole workspaces, generated videos,
+venv/cache.
+On failure: job.failed on the bus and exit 1 (the scheduler records the failure → the status page goes red). The result
+is written to .state/backup/last.json.
+
+

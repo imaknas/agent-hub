@@ -1,0 +1,99 @@
+=== usage
+exit 2
+--- stdout
+--- stderr
+Usage: create-idea-sandbox.py <name> <purpose>
+Output: the last line is one JSON object (lease-runner's POST /v1/sandboxes turns it straight into the response):
+  {"result": "created"|"exists_same", "name"}                              exit 0
+  {"result": "bad_name"|"exists"|"too_many"|"create_failed", "detail", ...}  exit 1
+  too_many also carries limit, current.
+- Resend: same name and same purpose already registered → exists_same (the assistant resending after a timeout does
+  not open a second one).
+- Clash: same name but a different purpose, the name of a project, or the folder/bare repo/memory copy already exists
+  → exists.
+- Limit: hub.json's ideas.limit (default 20) projects of type: idea.
+- onboard fails: removes the folder, bare repo, memory copy and the uncommitted registry file made this time (all
+  checked beforehand not to exist), then returns create_failed.
+Only one runs at a time (lock in <state>/idea-sandbox.lock): onboard commits agent-hub.
+
+
+=== bad name
+exit 1
+--- stdout
+{"result": "bad_name", "detail": "The name may only use lowercase letters, digits and - (not at the start or end, at most 40 characters); got 'Bad_Name'"}
+--- stderr
+
+=== platform name
+exit 1
+--- stdout
+{"result": "exists", "detail": "agent-hub is the platform's own name"}
+--- stderr
+
+=== empty purpose
+exit 1
+--- stdout
+{"result": "bad_name", "detail": "purpose cannot be empty"}
+--- stderr
+
+=== purpose too long
+exit 1
+--- stdout
+{"result": "bad_name", "detail": "purpose is too long (501 characters, the limit is 500)"}
+--- stderr
+
+=== same idea again
+exit 0
+--- stdout
+{"result": "exists_same", "name": "idea-1"}
+--- stderr
+
+=== another idea
+exit 1
+--- stdout
+{"result": "exists", "detail": "idea-1 is already the name of another idea"}
+--- stderr
+
+=== a project
+exit 1
+--- stdout
+{"result": "exists", "detail": "proj is already the name of a project"}
+--- stderr
+
+=== folders exist
+exit 1
+--- stdout
+{"result": "exists", "detail": "notes is not registered, but these already exist: <TMP>/a/workspace/notes, <TMP>/a/go/notes-memory.git"}
+--- stderr
+
+=== onboard fails
+exit 1
+--- stdout
+{"result": "create_failed", "detail": "onboard failed: step 1 ok / step 2 ok / boom: could not create the bare repo"}
+--- stderr
+
+=== onboard fails after commit
+exit 1
+--- stdout
+{"result": "create_failed", "detail": "onboard failed: step 1 ok / step 2 ok / boom: could not create the bare repo (the registry file was already committed, so it was not deleted: handle it by hand)"}
+--- stderr
+
+=== created
+exit 0
+--- stdout
+{"result": "created", "name": "room-3d"}
+--- stderr
+
+=== README
+# room-3d
+
+A project for exploring an idea (an idea sandbox), opened by the assistant for this idea:
+
+> a 3D model of the room
+
+Conclusions, decisions and to-dos from the deep talks go in memory (`.agent-memory/`); to turn it into a real project, use agent-hub's `bin/upgrade-idea.sh`.
+
+=== too many
+exit 1
+--- stdout
+{"result": "too_many", "detail": "There are already 1 idea sandboxes (limit 1)", "limit": 1, "current": 1}
+--- stderr

@@ -16,7 +16,10 @@ import tempfile
 import unittest
 
 ROOT = pathlib.Path(__file__).resolve().parents[1]
-GOLDEN = ROOT / "tests" / "fixtures" / "i18n-golden"
+sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
+import golden_lang  # noqa: E402
+
+GOLDEN = golden_lang.GOLDEN
 UPDATE = os.environ.get("I18N_GOLDEN_UPDATE") == "1"
 sys.path.insert(0, str(ROOT / "tests"))
 import test_librarian_flow as flow  # noqa: E402
@@ -55,7 +58,7 @@ class Librarian(unittest.TestCase):
 
     def scenario(self, tmp: pathlib.Path) -> str:
         env = flow.Env(tmp)
-        env.env["AGENT_HUB_LANG_UI"] = "zh-Hant"
+        env.env["AGENT_HUB_LANG_UI"] = golden_lang.LANG
         records(env)
         r = env.run("librarian.py")
         self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
@@ -77,7 +80,7 @@ class Librarian(unittest.TestCase):
     def failing(self, tmp: pathlib.Path) -> str:
         """every model call fails, and a handoff names a project with no memory copy"""
         env = flow.Env(tmp)
-        env.env["AGENT_HUB_LANG_UI"] = "zh-Hant"
+        env.env["AGENT_HUB_LANG_UI"] = golden_lang.LANG
         (env.hub / "bin" / "llm.py").write_text("import sys\nsys.stdin.read()\nsys.exit(1)\n")
         c = sqlite3.connect(env.tmp / "bus" / "bus.db")
         payload = {"v": 1, "type": "handoff", "handoff_id": 109, "effect": "relevant",

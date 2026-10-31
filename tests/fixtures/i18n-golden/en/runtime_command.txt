@@ -1,0 +1,20 @@
+=== health: no template
+(False, 'hub.json runtime.command.run is not set (the command template)')
+=== run: no template
+hub.json runtime.command.run is not set (the command template)
+=== health: not found
+(False, '/nonexistent/agent-cli not found')
+=== run: not found
+/nonexistent/agent-cli not found
+=== complete: not found
+/nonexistent/agent-cli not found
+=== run: timeout
+took longer than 1 s
+=== run: no output, empty stderr
+no output: (stderr is empty too)
+=== complete: no output
+no output: 
+=== run: no output, stderr
+no output: oops
+=== complete: no output, stderr
+no output: oops

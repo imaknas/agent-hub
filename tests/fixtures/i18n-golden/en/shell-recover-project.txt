@@ -1,0 +1,45 @@
+=== usage
+exit 1
+--- stdout
+--- stderr
+recover-project: usage: recover-project.sh <name> [target path]
+
+=== no registry
+exit 1
+--- stdout
+--- stderr
+recover-project: <TMP>/hub/nowhere not found: first make sure agent-hub itself is cloned
+
+=== not in the registry
+exit 1
+--- stdout
+--- stderr
+recover-project: 'nosuch' is not in the project registry (<TMP>/hub/projects): check the spelling, or the project was never registered
+
+=== native project
+exit 1
+--- stdout
+--- stderr
+recover-project: 'alpha' was a native project (no external GitHub remote).
+So its code was never backed up anywhere but the original machine: the manifest only has
+memory_bare_repo (hubbox:~/git-origin/alpha-memory.git), which is the history of memory tracking, not code.
+If the original machine's disk is still there, rescue the code from it first, then decide by hand how to attach
+hubbox:~/git-origin/alpha-memory.git; this script does not make code up by guessing.
+
+=== target exists
+exit 1
+--- stdout
+--- stderr
+recover-project: <TMP>/home/workspace/kappa already exists, not overwriting: sort it out by hand, then run again
+
+=== recovered
+exit 0
+--- stdout
+[1/5] Preconditions OK: kappa (origin=<TMP>/remotes/o/kappa.git, restoring to <TMP>/home/restore/kappa)
+[2/5] Cloned the code from <TMP>/remotes/o/kappa.git
+[3/5] .agent-memory is on the existing agent-memory branch of <TMP>/home/git-origin/kappa-memory.git (full history, not a new branch)
+sync-local-setup (stand-in): kappa
+[4-5/5] Local setup is aligned (rules-file block / hooks / ignores)
+
+Done: kappa is restored to <TMP>/home/restore/kappa, with the full agent-memory history.
+--- stderr

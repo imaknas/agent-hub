@@ -1,0 +1,38 @@
+$ <HUB>/bin/merge-branch
+[exit 1]
+--- stdout
+--- stderr
+merge-branch: you are on main; run this in your own branch/worktree (the main checkout is for merging)
+
+$ <HUB>/bin/merge-branch
+[exit 1]
+--- stdout
+✗ empty: feature is the same as main; nothing to merge
+--- stderr
+
+$ <HUB>/bin/merge-branch
+[exit 1]
+--- stdout
+--- stderr
+merge-branch: the worktree has uncommitted changes; commit (or discard) them before merging
+
+$ <HUB>/bin/merge-branch
+[exit 1]
+--- stdout
+✗ commit-titles: these commit titles are not Conventional Commits (registry: commits: conventional):
+<SHA> Update stuff: not in the Conventional Commits format. format: <type>[(<scope>)][!]: <description>, where type is feat / fix / perf / refactor / test / docs / build / ci / chore / revert; e.g. `fix(hubbus): dispatch no longer retries on an unsupported runtime`
+— fix the titles (e.g. `git rebase --exec` or commit again) and run again
+--- stderr
+
+$ <HUB>/bin/merge-branch
+[exit 1]
+--- stdout
+✗ tests: `false` failed:
+
+--- stderr
+
+$ <HUB>/bin/merge-branch
+[exit 1]
+--- stdout
+--- stderr
+merge-branch: cannot tell which project's repo this is (add --project)

@@ -1,0 +1,111 @@
+$ llm.py --help    # help
+[exit 0]
+--- stdout
+usage: llm.py [-h] {run,exec,lint,health} ...
+
+positional arguments:
+  {run,exec,lint,health}
+    exec                long-running streaming session: build the flags from the declaration, then
+                        exec claude (stdin/stdout are stream-json)
+    health              whether each provider in hub.json llm works (key, connection, model there)
+
+options:
+  -h, --help            show this help message and exit
+--- stderr
+
+$ llm.py run --help    # help
+[exit 0]
+--- stdout
+usage: llm.py run [-h] [--cwd CWD] [--model MODEL] [--prompt-file PROMPT_FILE] [--dry-run]
+                  point [extra ...]
+
+positional arguments:
+  point
+  extra                 extra claude arguments (after --)
+
+options:
+  -h, --help            show this help message and exit
+  --cwd CWD
+  --model MODEL
+  --prompt-file PROMPT_FILE
+  --dry-run             only print the command that would run; no model call
+--- stderr
+
+$ llm.py exec --help    # help
+[exit 0]
+--- stdout
+usage: llm.py exec [-h] [--cwd CWD] [--model MODEL] [--prompt-file PROMPT_FILE] point [extra ...]
+
+positional arguments:
+  point
+  extra
+
+options:
+  -h, --help            show this help message and exit
+  --cwd CWD
+  --model MODEL
+  --prompt-file PROMPT_FILE
+--- stderr
+
+$ llm.py run nosuch    # unknown point
+[exit 2]
+--- stdout
+--- stderr
+llm.py: nosuch is not a declared judgment point (contracts/llm-points.yaml)
+
+$ llm.py exec reflect-week    # exec without stream
+[exit 2]
+--- stdout
+--- stderr
+llm.py: reflect-week does not declare stream: true, so it cannot exec
+
+$ llm.py exec lease-session    # runtime without stream
+[exit 2]
+--- stdout
+--- stderr
+llm.py: lease-session: this runtime does not support long-running streaming sessions
+
+$ llm.py run reflect-week    # no completion
+[exit 1]
+--- stdout
+{"type": "result", "is_error": true, "structured_output": null, "llm_point": "reflect-week", "llm_error": "runtime none has no completion interface, and hub.json has no llm section (set up an LLM provider)"}
+--- stderr
+
+$ llm.py run agent-job    # no agent
+[exit 1]
+--- stdout
+{"type": "result", "is_error": true, "structured_output": null, "llm_point": "agent-job", "llm_error": "runtime none has no agent runs (hub.json runtime.default; for this feature install a coding agent that has it)"}
+--- stderr
+
+$ llm.py run agent-job    # token missing
+[exit 1]
+--- stdout
+{"type": "result", "is_error": true, "structured_output": null, "llm_point": "agent-job", "llm_error": "no <TMP>/home/.claude/headless-oauth-token (the default is the headless token; to use the subscription login declare auth: subscription)"}
+--- stderr
+
+$ llm.py run consolidate    # schema
+[exit 1]
+--- stdout
+{"type": "result", "is_error": true, "structured_output": null, "llm_point": "consolidate", "llm_error": "output does not match the schema: $: missing folded; $: missing kept; $: missing corrections"}
+--- stderr
+
+$ llm.py run agent-job    # run failed
+[exit 1]
+--- stdout
+{"type": "result", "is_error": true, "structured_output": null, "llm_point": "agent-job", "llm_error": "it broke"}
+--- stderr
+
+$ llm.py health    # health
+[exit 1]
+--- stdout
+✗ k:no key: <TMP>/secrets/nokey does not exist (bin/hub llm set-key writes it)
+✓ f
+--- stderr
+
+$ llm.py lint    # lint
+[exit 1]
+--- stdout
+bin/x.sh:2: a claude -p that does not go through bin/llm.py
+judgment point pt: output.schema llm/nope.schema.json does not exist
+--- stderr
+

@@ -1,0 +1,31 @@
+=== usage
+exit 2
+stdout: ''
+stderr:
+Agent proposes, platform applies (docs/design/tool-agnostic.md "Core"): agent work that the platform starts and that
+changes files runs in a throwaway worktree.
+
+Every agent (Claude Code, Gemini CLI / Codex / opencode through `runtime: command`…) is treated the same: nothing it
+does in the worktree reaches the real checkout; when it is done the platform looks at which files it changed, copies
+**only the allowed paths** back into the real folder, records the rest as "refused" and throws them away with the
+worktree.
+Letters to send and things to close go into the agent's structured output, and the platform sends them (the sender is
+the one the platform gives, not the one the agent claims). hubbus subcommands that change the bus (send, done, ack…) are
+refused when the agent runs them itself (hubbus.platform_mails: the environment variable set here, or this script being
+an ancestor process). The guarantee does not rely on the tool's permission settings and holds on systems without a
+sandbox (Linux) too.
+
+  propose_apply.py mailbox <project> <letter id>…  a mailbox assignment (called by hubbus dispatch when hub.json has
+                                                   mailbox.handler: propose)
+
+  run(project, ws, point, prompt, allow)        for other code: returns {ok, output, applied, refused, error}
+
+worktree: the project's HEAD (detached) + the HEAD of its .agent-memory; the agent works in the project's copy.
+
+
+=== no letters
+exit 1
+stderr: 'demo: no letters to handle\n'
+=== done without a note
+exit 0
+published: [["message.done", {"note": "handled by an agent the platform sent (propose)"}]]

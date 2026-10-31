@@ -1,0 +1,1 @@
+memory notes are behind: since <SINCE> this project has 3 commits not yet recorded in .agent-memory/memory/. Add a section to .agent-memory/memory/<TODAY>.md on what was done, what was decided and what went wrong (raw notes are fine, no summary needed), then carry on.

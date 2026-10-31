@@ -29,9 +29,12 @@ from unittest import mock
 ROOT = pathlib.Path(__file__).resolve().parents[1]
 BIN = ROOT / "bin"
 sys.path.insert(0, str(BIN))
-GOLDEN = ROOT / "tests" / "fixtures" / "i18n-golden"
+sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
+import golden_lang  # noqa: E402
+
+GOLDEN = golden_lang.GOLDEN
 UPDATE = os.environ.get("I18N_GOLDEN_UPDATE") == "1"
-ZH = {"AGENT_HUB_LANG_UI": "zh-Hant"}
+ZH = {"AGENT_HUB_LANG_UI": golden_lang.LANG}
 SID = "77777777-7777-4777-8777-777777777777"
 PNG = b"\x89PNG\r\n\x1a\n" + b"\0" * 64
 
@@ -111,7 +114,8 @@ class Runner(Golden):
                 (m, "rt", lambda: self.rt), (m, "deny_settings", lambda project: self.tmp / "deny.json"),
                 (m, "mcp_config", lambda lease: self.tmp / "mcp.json"), (m, "env_for", lambda lease: {}),
                 (m, "token", lambda: "t"), (m.hubconf, "projects", lambda: self.projects),
-                (m.hubconf, "workspace", lambda name: self.ws if name in self.projects else None)]:
+                (m.hubconf, "workspace", lambda name: self.ws if name in self.projects else None),
+                (m.hubconf, "owner_tag", lambda: "Alex")]:   # not the real instance's (hubconf caches hub.json)
             p = mock.patch.object(target, name, value)
             p.start()
             self.addCleanup(p.stop)

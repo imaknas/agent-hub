@@ -23,9 +23,12 @@ import unittest
 from unittest import mock
 
 ROOT = pathlib.Path(__file__).resolve().parents[1]
-GOLDEN = ROOT / "tests" / "fixtures" / "i18n-golden"
+sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
+import golden_lang  # noqa: E402
+
+GOLDEN = golden_lang.GOLDEN
 UPDATE = os.environ.get("I18N_GOLDEN_UPDATE") == "1"
-INPUTS = json.loads((GOLDEN / "status-page-inputs.json").read_text())
+INPUTS = json.loads((golden_lang.INPUTS / "status-page-inputs.json").read_text())
 NOW = datetime.datetime(2026, 10, 30, 10, 0)   # a Friday
 
 
@@ -108,7 +111,7 @@ class StatusPage(unittest.TestCase):
         hub, cfg_dir, data, secrets, state, bus = (tmp / d for d in ("hub", "config", "data", "secrets", "state", "bus"))
         for d in (hub / ".state", hub / ".logs", cfg_dir, data, secrets, state, bus):
             d.mkdir(parents=True, exist_ok=True)
-        cfg = {"language": {"ui": "zh-Hant", "content": "zh-Hant"}, "bus_dir": str(bus)}
+        cfg = {"language": {"ui": golden_lang.LANG, "content": golden_lang.LANG}, "bus_dir": str(bus)}
         if o["alerts"]:
             cfg["alerts"] = {"discord": {}}
         (cfg_dir / "hub.json").write_text(json.dumps(cfg))
@@ -190,7 +193,7 @@ class StatusPage(unittest.TestCase):
 
         env = {"AGENT_HUB_ROOT": str(hub), "AGENT_HUB_CONFIG": str(cfg_dir), "AGENT_HUB_DATA": str(data),
                "AGENT_HUB_SECRETS": str(secrets), "AGENT_HUB_STATE": str(state), "AGENT_HUB_HOME": "",
-               "AGENT_HUB_LANG_UI": "zh-Hant", "HOME": str(tmp)}
+               "AGENT_HUB_LANG_UI": golden_lang.LANG, "HOME": str(tmp)}
         with mock.patch.dict(os.environ, env), mock.patch.dict(sys.modules):
             for m in ("hubconf", "i18n"):
                 sys.modules.pop(m, None)

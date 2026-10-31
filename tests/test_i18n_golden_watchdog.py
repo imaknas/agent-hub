@@ -17,14 +17,17 @@ import unittest
 from unittest import mock
 
 ROOT = pathlib.Path(__file__).resolve().parents[1]
-GOLDEN = ROOT / "tests" / "fixtures" / "i18n-golden"
+sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
+import golden_lang  # noqa: E402
+
+GOLDEN = golden_lang.GOLDEN
 UPDATE = os.environ.get("I18N_GOLDEN_UPDATE") == "1"
 
 
 class Watchdog(unittest.TestCase):
     maxDiff = None
 
-    def load(self, tmp: pathlib.Path, alerts: bool = True, secrets: bool = True, lang: str = "zh-Hant"):
+    def load(self, tmp: pathlib.Path, alerts: bool = True, secrets: bool = True, lang: str = golden_lang.LANG):
         for d in ("hub/.state", "hub/.logs", "config", "secrets"):
             (tmp / d).mkdir(parents=True, exist_ok=True)
         cfg = {"language": {"ui": lang, "content": lang}}

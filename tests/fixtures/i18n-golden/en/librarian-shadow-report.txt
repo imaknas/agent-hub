@@ -1,0 +1,26 @@
+=== no records
+exit 1
+no shadow records in the last 3 days (<DIR>)
+
+=== report
+exit 0
+== librarian-index-edits: 1 runs, 1 nights, cost $0.030
+  got a result, valid edit list  1/1(100%); invalid 0, no result 0
+  same change-or-not as the agent version 1/1(100%)
+  similarity to the agent version  mean 0.70, lowest 0.70; identical 0
+  roster block untouched 1/1(100%)
+== librarian-state-edits: 4 runs, 1 nights, cost $0.040
+  got a result, valid edit list  2/4(50%); invalid 1, no result 1
+  same change-or-not as the agent version 1/2(50%)
+  similarity to the agent version  mean 0.70, lowest 0.50; identical 1
+  ⚠️ key marker problems 1 times: p1 <TODAY>
+  - disagrees <TODAY> p1: completion version change=True, agent version=False. Reason: the shadow wanted a change
+  - invalid <TODAY> p2: old not found
+
+=== --help
+exit SystemExit(0)
+usage: x [-h] [--days DAYS]
+
+options:
+  -h, --help   show this help message and exit
+  --days DAYS

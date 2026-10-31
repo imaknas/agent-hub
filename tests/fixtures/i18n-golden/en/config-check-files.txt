@@ -1,0 +1,63 @@
+$ <HUB>/bin/config-check --bogus
+[exit 2]
+--- stdout
+--- stderr
+The config pipeline's check (docs/design/new-user.md 3.7): validates every config file at once.
+
+  config-check            validate the config in the working tree
+  config-check --staged   validate the **index** (what is about to be committed; called by githooks/pre-commit and the config
+                          repo's githooks/config/pre-commit). Passes at once when the index changes no config file.
+                          A shared working tree may hold someone else's half-edited files, so, as test-gate does, the index
+                          is exported to a temp directory and validated there with AGENT_HUB_ROOT pointing at it.
+
+What it validates:
+  hub.json           contracts/hub.v1.schema.json (minischema) + unknown top-level keys (except explanation keys starting
+                     with _): a mistyped key (e.g. "assitant") is not silently ignored
+  projects/          registry.refresh()'s validation (schema, duplicate names, after: pointing at jobs that exist, run
+                     resolvable…)
+  models.env         must not exist (since 10-29 model settings live in hub.json llm.points)
+  mirror-list.txt    one git remote per line
+  services.tsv       every row has as many columns as the header, labels are unique
+  schedule.yaml      readable, job names unique (the old format, during the switch)
+
+When it passes, the tree it validated is recorded in the git directory's config-check-passed (githooks/post-commit uses it to
+catch commits that skipped the gate).
+
+
+$ <HUB>/bin/config-check
+[exit 0]
+--- stdout
+config-check: the config is all valid
+--- stderr
+
+$ <HUB>/bin/config-check
+[exit 1]
+--- stdout
+--- stderr
+config-check: ✗ hub.json: unknown key `assitant` (did you mean assistant?); to add one, put it in contracts/hub.v1.schema.json first
+config-check: ✗ hub.json: llm: with providers, use is required (which provider takes fast / standard / strong)
+config-check: ✗ hub.json: llm: providers.x.impl `nope` is not known (have: anthropic, openai, ollama, claude, fake, none, command)
+config-check: ✗ models.env: no longer used; model settings moved into hub.json llm.points (schedulectl set-model state|index|consolidate <model>; a value equal to the group default need not be written), then delete models.env
+config-check: ✗ mirror-list.txt:3: not a git remote: not a remote
+config-check: ✗ services.tsv:3: label `x` repeated
+config-check: ✗ services.tsv:4: 1 columns, the header has 2
+config-check: ✗ schedule.yaml: job `a` repeated
+
+$ <HUB>/bin/config-check
+[exit 1]
+--- stdout
+--- stderr
+config-check: ✗ hub.json: unknown key `assitant` (did you mean assistant?); to add one, put it in contracts/hub.v1.schema.json first
+config-check: ✗ hub.json: llm: with providers, use is required (which provider takes fast / standard / strong)
+config-check: ✗ hub.json: llm: providers.x.impl `nope` is not known (have: anthropic, openai, ollama, claude, fake, none, command)
+config-check: ✗ schedule.yaml: cannot read it (while parsing a flow node
+expected the node content, but found '<stream end>'
+  in "<unicode string>", line 2, column 1:
+    
+    ^)
+
+$ <HUB>/bin/config-check --child
+[exit 1]
+--- stdout
+--- stderr
+config-check: ✗ hub.json: cannot read it (Expecting property name enclosed in double quotes: line 1 column 2 (char 1))

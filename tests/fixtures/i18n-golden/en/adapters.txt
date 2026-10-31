@@ -1,0 +1,16 @@
+=== ollama health: missing models
+(False, 'models not on this machine: qwen3:8b, x:1b (ollama pull <name>)')
+=== openai: no choices
+no choices in the response (HTTP 200)
+=== systemd timer
+[Unit]
+Description=agent-hub local.x.tick (every 900 s)
+
+[Timer]
+OnActiveSec=1
+OnUnitActiveSec=900
+AccuracySec=1
+
+[Install]
+WantedBy=timers.target
+

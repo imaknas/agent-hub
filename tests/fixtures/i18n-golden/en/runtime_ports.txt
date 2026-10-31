@@ -1,0 +1,28 @@
+=== port labels
+[('agent', 'agent runs'), ('auth', 'login state'), ('completion', 'completion (answer only)'), ('instructions', 'rules file'), ('lifecycle', 'session events (hooks)'), ('sessions', 'session state'), ('stream', 'long-running streaming sessions'), ('transcripts', 'transcripts')]
+=== feature (none)
+judgment points (librarian, index, consolidate, weekly report analysis) | False | agent runs, login state
+=== feature (none)
+mailbox tasks (the platform sends an agent for letters nobody picked up) | False | agent runs, login state
+=== feature (none)
+mailbox follow-up (replying with an idle session's context) | False | agent runs, session state
+=== feature (none)
+channel leasing (also needs the assistant module) | False | long-running streaming sessions, session state, agent runs, login state
+=== feature (none)
+letters seen live in the session, reminders to write notes | False | session events (hooks)
+=== feature (none)
+platform rules written into the project's rules file | False | rules file
+=== feature (none)
+memory gaps, transcript statistics of the weekly report | False | transcripts
+=== unknown runtime
+no registered runtime: nosuch (have: claude, fake, none, command)
+=== unsupported ('agent', 'lifecycle', 'instructions', 'transcripts', 'sessions', 'stream', 'auth', 'completion')
+runtime none has no agent runs, session events (hooks), rules file, transcripts, session state, long-running streaming sessions, login state, completion (answer only) (hub.json runtime.default; for this feature install a coding agent that has it)
+=== unsupported ('completion',)
+runtime none has no completion (answer only) (hub.json runtime.default; for this feature install a coding agent that has it)
+=== missing functions (runtime)
+runtime half (golden_half_runtime) is missing: agent.describe
+=== missing functions (provider)
+provider halfp is missing: health
+=== unknown completion impl
+no such completion implementation: nosuch (have: anthropic, openai, ollama, claude, fake, none, command)

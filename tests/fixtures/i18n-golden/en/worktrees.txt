@@ -1,0 +1,33 @@
+=== prune yes=False
+Can delete: proj feat-a (<TMP>/a, untouched for 1.5 days)
+Kept (not merged yet): proj feat-b
+(only listed; once you are sure no session is still open in them, add --yes to delete them)
+=== prune yes=True
+Deleting: proj feat-a (<TMP>/a, untouched for 1.5 days)
+Kept (not merged yet): proj feat-b
+=== auto dry_run=True: deps
+proj idle .venv (idle 3.0 days, 12.5 MB)
+=== auto dry_run=True: removed
+proj old-ok (idle 20.0 days, 12.5 MB; branch kept)
+proj old-fail (idle 20.0 days, 12.5 MB; branch kept)
+=== auto dry_run=True: skipped
+proj old-env: ignored files not on the rebuildable list (.env, build, dist…); kept
+=== auto dry_run=False: deps
+proj idle .venv (idle 3.0 days, 12.5 MB)
+=== auto dry_run=False: removed
+proj old-ok (idle 20.0 days, 12.5 MB; branch kept)
+=== auto dry_run=False: skipped
+proj old-env: ignored files not on the rebuildable list (.env, build, dist…); kept
+proj old-fail: git worktree remove failed: fatal: cannot remove
+=== marker
+.venv → rebuild: uv sync
+=== prune-worktrees --auto (dry_run=True)
+Would delete deps: d1 .venv
+Would remove worktree: r1
+Skipped: s1
+Would free 7.5 MB in total (dry-run, nothing was touched)
+=== prune-worktrees --auto (dry_run=False)
+Deleted deps: d1 .venv
+Removed worktree: r1
+Skipped: s1
+Freed 7.5 MB in total

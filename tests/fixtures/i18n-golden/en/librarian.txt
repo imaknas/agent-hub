@@ -1,0 +1,966 @@
+=== stdout
+
+=== stderr
+
+=== log
+[<T>] === librarian run start ===
+[<T>] Assistant handoffs: 3 to process
+[<T>] --- p0 ---
+[<T>] p0: changed memory files: memory/2026-10-27.md 
+[<T>] p0: assistant handoffs #101
+[<T>] p0: call cost $0.01 (model: tool default)
+[<T>] p0: shadow (completion version): change=True (agent version=True), similarity 0.958
+[<T>] p0: STATE.md updated & pushed (<sha>)
+[<T>] p0: written to review-log.md for later spot checks
+h1 done
+[<T>] p0: assistant handoffs #101 closed (bridge will report to the assistant)
+[<T>] --- p1 ---
+[<T>] p1: changed memory files: memory/2026-10-27.md 
+[<T>] p1: assistant handoffs #n1 #s1 #s3 #r1
+[<T>] p1: call cost $0.01 (model: tool default)
+[<T>] p1: shadow (completion version): change=False (agent version=False), edit list invalid: edit 1: old occurs 0 times (it must occur exactly once): '找不到的一段'
+[<T>] p1: STATE.md not updated, reason: reason p1
+rec:n1 done
+rec:s1 done
+rec:s3 done
+rec:r1 done
+[<T>] p1: assistant handoffs #n1 #s1 #s3 #r1 closed (bridge will report to the assistant)
+[<T>] --- p2 ---
+[<T>] p2: changed memory files: memory/2026-10-27.md 
+[<T>] p2: call cost $0.01 (model: tool default)
+[<T>] p2: warning: the model touched files other than STATE.md, moved to <TMP>/hub/.state/stray/p2-<TODAY>: memory/STRAY.md
+[<T>] p2: shadow (completion version): change=True (agent version=True), similarity 0.958
+[<T>] p2: STATE.md updated & pushed (<sha>)
+[<T>] p2: written to review-log.md for later spot checks
+[<T>] p2: this result is not trustworthy, checkpoint not advanced, retrying next time
+[<T>] --- p3 ---
+[<T>] p3: changed memory files: memory/2026-10-27.md 
+[<T>] p3: call cost $0.01 (model: tool default)
+[<T>] p3: no structured_output (subtype=success turns=1 the model last said: no structured output ); going by the actual file changes
+[<T>] p3: shadow (completion version): change=True (agent version=True), similarity 0.958
+[<T>] p3: STATE.md updated & pushed (<sha>)
+[<T>] p3: written to review-log.md for later spot checks
+[<T>] p3: this result is not trustworthy, checkpoint not advanced, retrying next time
+[<T>] --- pdang ---
+[<T>] pdang: changed memory files: memory/2026-10-27.md 
+[<T>] pdang: STATE.md refers to files that do not exist: memory/reference/gone.md
+[<T>] pdang: call cost $0.01 (model: tool default)
+[<T>] pdang: the STATE.md to-do section is malformed, asking the model to fix only the format: STATE.md: a to-do with no owner, or done and not removed `- [ ] 沒標負責人的一件事` 
+[<T>] pdang: to-do section format fixed
+[<T>] pdang: warning: the agent reported state_updated=false, but the actual file change=true (going by the actual files)
+[<T>] pdang: the shadow's proposed to-do section is malformed: STATE.md: a to-do with no owner, or done and not removed `- [ ] 沒標負責人的一件事` 
+[<T>] pdang: shadow (completion version): change=True (agent version=True), similarity 0.971
+[<T>] pdang: STATE.md updated & pushed (<sha>)
+[<T>] pdang: written to review-log.md for later spot checks
+[<T>] --- phand ---
+[<T>] phand: assistant handoffs #102
+[<T>] phand: call cost $0.01 (model: tool default)
+[<T>] phand: shadow (completion version): change=True (agent version=True), similarity 0.951
+[<T>] phand: STATE.md updated & pushed (<sha>)
+[<T>] phand: written to review-log.md for later spot checks
+h2 done
+[<T>] phand: assistant handoffs #102 closed (bridge will report to the assistant)
+[<T>] --- pidle ---
+[<T>] pidle: no new commits, skip
+fatal: not a git repository (or any of the parent directories): .git
+[<T>] index.md: call cost $0.01 (model: tool default)
+[<T>] index.md: none
+[<T>] index.md: shadow (completion version): change=False (agent version=True), similarity 0.41
+[<T>] === librarian run end (total cost today: $0.080000) ===
+
+=== review-log.md
+## <TODAY> · p0
+
+**commit**: `<sha>`
+
+**理由**: reason p0
+
+**Hugin handoffs**: #101
+
+```diff
+diff --git a/STATE.md b/STATE.md
+index <sha>..<sha> 100644
+--- a/STATE.md
++++ b/STATE.md
+@@ -6,3 +6,5 @@
+ 
+ ## 待辦
+ - [ ] 〔agent〕做一件事
++
++<!-- edited p0 -->
+```
+
+---
+
+## <TODAY> · p2
+
+**commit**: `<sha>`
+
+**理由**: reason p2
+
+```diff
+diff --git a/STATE.md b/STATE.md
+index <sha>..<sha> 100644
+--- a/STATE.md
++++ b/STATE.md
+@@ -6,3 +6,5 @@
+ 
+ ## 待辦
+ - [ ] 〔agent〕做一件事
++
++<!-- edited p2 -->
+```
+
+---
+
+## <TODAY> · p3
+
+**commit**: `<sha>`
+
+**理由**: (the agent gave no reason)
+
+```diff
+diff --git a/STATE.md b/STATE.md
+index <sha>..<sha> 100644
+--- a/STATE.md
++++ b/STATE.md
+@@ -6,3 +6,5 @@
+ 
+ ## 待辦
+ - [ ] 〔agent〕做一件事
++
++<!-- edited p3 -->
+```
+
+---
+
+## <TODAY> · pdang
+
+**commit**: `<sha>`
+
+**理由**: reason pdang
+
+```diff
+diff --git a/STATE.md b/STATE.md
+index <sha>..<sha> 100644
+--- a/STATE.md
++++ b/STATE.md
+@@ -6,4 +6,4 @@
+ 
+ ## 待辦
+ - [ ] 〔agent〕做一件事
+-- [ ] 沒標負責人的一件事
++- [ ] 〔agent〕沒標負責人的一件事
+```
+
+---
+
+## <TODAY> · phand
+
+**commit**: `<sha>`
+
+**理由**: reason phand
+
+**Hugin handoffs**: #102
+
+```diff
+diff --git a/STATE.md b/STATE.md
+index <sha>..<sha> 100644
+--- a/STATE.md
++++ b/STATE.md
+@@ -6,3 +6,5 @@
+ 
+ ## 待辦
+ - [ ] 〔agent〕做一件事
++
++<!-- edited phand -->
+```
+
+---
+
+
+=== digest
+# Digest <TODAY>
+
+<!-- digest:projects:begin -->
+## p0
+
+summary p0
+
+## phand
+
+summary phand
+<!-- digest:projects:end -->
+
+=== done notes
+h1: librarian applied this to STATE.md (<TODAY>, see review-log)
+h2: librarian applied this to STATE.md (<TODAY>, see review-log)
+rec:n1: librarian applied this to STATE.md (<TODAY>, see review-log)
+rec:r1: librarian applied this to STATE.md (<TODAY>, see review-log)
+rec:s1: librarian applied this to STATE.md (<TODAY>, see review-log)
+rec:s3: librarian applied this to STATE.md (<TODAY>, see review-log)
+=== prompt librarian-state @ p0
+你是跨專案整合 agent(圖書館員),現在在專案 p0 的目錄裡工作。
+這個專案自上次檢查後,以下 memory 檔案有變動:
+memory/2026-10-27.md
+
+實際變動內容(git log -p,由舊到新):
+=== commit <sha> <TODAY> new note
+
+diff --git a/memory/2026-10-27.md b/memory/2026-10-27.md
+new file mode 100644
+index <sha>..<sha>
+--- /dev/null
++++ b/memory/2026-10-27.md
+@@ -0,0 +1 @@
++- p0 的新筆記
+
+Alex 透過他的個人助理(Hugin)告訴我們這些跟這個專案有關的事(比舊的 memory 紀錄新,也比較可信):
+- [relevant] 事實:轉交事實一
+  Alex 原話:原話
+  對應待辦:(沒有指定)
+  助理的判斷理由:理由
+  (2026-10-26T10:00)
+
+處理方式(這些轉交本身就算實質變化):
+- [resolves]:Alex 已經處理或回答了對應待辦。從 `## 待辦` 移除那一條(用意思比對,文字不一定一樣),
+  並把事實寫進 STATE.md 合適的段落。
+- [changes]:對應待辦還在,但前提或日期變了。依事實改寫那一條,必要時一併更新相關段落。
+- [relevant]:只供參考,影響到現況才更新 STATE.md。
+- [answers]:Alex 回答了這個專案問過他的問題(對應待辦 = 當初的問題,事實 = 回答)。把決定寫進相關段落;
+  有在等這個回答的待辦就依回答移除或改寫。
+- 對應待辦在 STATE.md 找不到時不要硬套到別條,只把事實記進相關段落(有關的話)。
+- 「事實」是助理轉述的,可能比 Alex 原話講得更肯定。有原話以原話為準;寫進 STATE.md 時保留
+  不確定的語氣(預計、預期、可能、打算),不要寫成已確定。
+
+
+背景請讀 ./AGENT.md 跟 ./STATE.md。**STATE.md 在專案根目錄(./STATE.md),不在 memory/ 底下**;
+memory/ 底下沒有、也不能有 STATE.md。
+
+memory/ 的結構:
+- memory/YYYY-MM-DD.md、memory/YYYY-MM-DD-<主題>.md:原始流水紀錄,只會往後加。
+- memory/reference/<主題>.md(有 README.md 當索引):整理過的主題文件,會被改寫,
+  內容是目前最準的版本;跟舊的流水紀錄衝突時以 reference/ 為準。
+
+規則:
+- 只有在有『實質變化』時才編輯 STATE.md(精煉現況,不是流水帳);沒有實質變化就完全不要動 STATE.md。
+  STATE.md 還是 onboard 時的佔位內容、而 memory/ 已經有實質內容的話,這本身就算實質變化。
+- STATE.md 裡提到已被搬走的檔案、或已經被新內容回答/推翻的待決事項,要一併修正。
+- STATE.md 一定要有一個 `## 待辦` 段落,格式固定,一行一項:
+  `- [ ] 〔Alex〕…`(只有 Alex 本人能做:帳號、密碼、付款、要他拍板的決定)
+  `- [ ] 〔agent〕…`(agent 可以直接做的)
+  `- [ ] 〔待定〕…`(還要先做決定才能動的)
+  〔Alex〕行尾的「(等 Alex:task-…)」是 Hugin 任務登錄的 key,**原樣保留,不要改那一行的文字**
+  (Alex 在 Hugin 結案時會照 key 自動移掉;文字一改 key 就對不上)。
+  沒有待辦就寫 `- (無)`。只列還沒完成、具體可行動的事;完成、被推翻或過時的直接移除,
+  不要留著打勾。待辦只放在這個段落,不要在 STATE.md 別的地方另開「下一步」「未完成」之類的清單。
+- 除了 ./STATE.md,不要建立、修改或刪除任何檔案。
+=== prompt librarian-state-edits @ hub
+你是跨專案整合 agent(圖書館員),負責專案 p0 的 STATE.md。你沒有任何工具:需要的東西都在下面,
+回答只能是一個 JSON(格式由系統指定)。你不直接改檔案,而是回「編輯清單」,平台照順序套用到 STATE.md。
+這個專案自上次檢查後,以下 memory 檔案有變動:
+memory/2026-10-27.md
+
+實際變動內容(git log -p,由舊到新):
+=== commit <sha> <TODAY> new note
+
+diff --git a/memory/2026-10-27.md b/memory/2026-10-27.md
+new file mode 100644
+index <sha>..<sha>
+--- /dev/null
++++ b/memory/2026-10-27.md
+@@ -0,0 +1 @@
++- p0 的新筆記
+
+Alex 透過他的個人助理(Hugin)告訴我們這些跟這個專案有關的事(比舊的 memory 紀錄新,也比較可信):
+- [relevant] 事實:轉交事實一
+  Alex 原話:原話
+  對應待辦:(沒有指定)
+  助理的判斷理由:理由
+  (2026-10-26T10:00)
+
+處理方式(這些轉交本身就算實質變化):
+- [resolves]:Alex 已經處理或回答了對應待辦。從 `## 待辦` 移除那一條(用意思比對,文字不一定一樣),
+  並把事實寫進 STATE.md 合適的段落。
+- [changes]:對應待辦還在,但前提或日期變了。依事實改寫那一條,必要時一併更新相關段落。
+- [relevant]:只供參考,影響到現況才更新 STATE.md。
+- [answers]:Alex 回答了這個專案問過他的問題(對應待辦 = 當初的問題,事實 = 回答)。把決定寫進相關段落;
+  有在等這個回答的待辦就依回答移除或改寫。
+- 對應待辦在 STATE.md 找不到時不要硬套到別條,只把事實記進相關段落(有關的話)。
+- 「事實」是助理轉述的,可能比 Alex 原話講得更肯定。有原話以原話為準;寫進 STATE.md 時保留
+  不確定的語氣(預計、預期、可能、打算),不要寫成已確定。
+
+
+## AGENT.md(這個專案的 agent 規則,背景)
+agent
+
+
+## memory/reference/(整理過的主題文件,跟舊的流水紀錄衝突時以這裡為準)
+(沒有 memory/reference/)
+
+## 現在的 STATE.md(完整內容)
+<<<STATE
+# STATE
+
+現況。
+
+這個專案的背景說明。這個專案的背景說明。這個專案的背景說明。這個專案的背景說明。這個專案的背景說明。這個專案的背景說明。這個專案的背景說明。這個專案的背景說明。這個專案的背景說明。這個專案的背景說明。這個專案的背景說明。這個專案的背景說明。這個專案的背景說明。這個專案的背景說明。這個專案的背景說明。這個專案的背景說明。這個專案的背景說明。這個專案的背景說明。這個專案的背景說明。這個專案的背景說明。這個專案的背景說明。這個專案的背景說明。這個專案的背景說明。這個專案的背景說明。這個專案的背景說明。這個專案的背景說明。這個專案的背景說明。這個專案的背景說明。這個專案的背景說明。這個專案的背景說明。這個專案的背景說明。這個專案的背景說明。這個專案的背景說明。這個專案的背景說明。這個專案的背景說明。這個專案的背景說明。這個專案的背景說明。這個專案的背景說明。這個專案的背景說明。這個專案的背景說明。
+
+## 待辦
+- [ ] 〔agent〕做一件事
+
+STATE>>>
+
+規則:
+- 只有在有『實質變化』時才編輯 STATE.md(精煉現況,不是流水帳);沒有實質變化就完全不要動 STATE.md。
+  STATE.md 還是 onboard 時的佔位內容、而 memory/ 已經有實質內容的話,這本身就算實質變化。
+- STATE.md 裡提到已被搬走的檔案、或已經被新內容回答/推翻的待決事項,要一併修正。
+- STATE.md 一定要有一個 `## 待辦` 段落,格式固定,一行一項:
+  `- [ ] 〔Alex〕…`(只有 Alex 本人能做:帳號、密碼、付款、要他拍板的決定)
+  `- [ ] 〔agent〕…`(agent 可以直接做的)
+  `- [ ] 〔待定〕…`(還要先做決定才能動的)
+  〔Alex〕行尾的「(等 Alex:task-…)」是 Hugin 任務登錄的 key,**原樣保留,不要改那一行的文字**
+  (Alex 在 Hugin 結案時會照 key 自動移掉;文字一改 key 就對不上)。
+  沒有待辦就寫 `- (無)`。只列還沒完成、具體可行動的事;完成、被推翻或過時的直接移除,
+  不要留著打勾。待辦只放在這個段落,不要在 STATE.md 別的地方另開「下一步」「未完成」之類的清單。
+
+編輯清單的格式:
+- edits 是照順序套用的 {"old", "new"}:old 一定要是**現在 STATE.md 裡剛好出現一次**的一段原文(逐字、含換行;
+  太短會出現好幾次,就多帶幾個字),new 是換成的文字(空字串 = 刪掉那一段)。不要回整份 STATE.md。
+- 不用改就 state_updated: false、edits: []。
+- 〔Alex〕行尾的「(等 Alex:…)」標記不能改;那一項做完了就把整行刪掉。
+=== prompt librarian-state @ p1
+你是跨專案整合 agent(圖書館員),現在在專案 p1 的目錄裡工作。
+這個專案自上次檢查後,以下 memory 檔案有變動:
+memory/2026-10-27.md
+
+實際變動內容(git log -p,由舊到新):
+=== commit <sha> <TODAY> new note
+
+diff --git a/memory/2026-10-27.md b/memory/2026-10-27.md
+new file mode 100644
+index <sha>..<sha>
+--- /dev/null
++++ b/memory/2026-10-27.md
+@@ -0,0 +1 @@
++- p1 的新筆記
+
+Alex 透過他的個人助理(Hugin)告訴我們這些跟這個專案有關的事(比舊的 memory 紀錄新,也比較可信):
+- [note] 事實:registrar says renew by Friday
+  對應待辦:renew the domain
+  助理的判斷理由:(沒有說明)
+  (2026-10-26T02:00)
+- [answers] 事實:SQLite
+  對應待辦:which cache?
+  助理的判斷理由:Hugin依證據認定(a receipt)
+  (2026-10-26T02:00)
+- [dismissed] 事實:not needed
+  對應待辦:(沒有指定)
+  助理的判斷理由:Hugin依 Alex 給的授權代為決定
+  (2026-10-26T02:00)
+- [same_as] 事實:跟 p0 的 k9 是同一件
+  對應待辦:(沒有指定)
+  助理的判斷理由:(沒有說明)
+  (2026-10-26T02:00)
+
+處理方式(這些轉交本身就算實質變化):
+- [resolves]:Alex 已經處理或回答了對應待辦。從 `## 待辦` 移除那一條(用意思比對,文字不一定一樣),
+  並把事實寫進 STATE.md 合適的段落。
+- [changes]:對應待辦還在,但前提或日期變了。依事實改寫那一條,必要時一併更新相關段落。
+- [relevant]:只供參考,影響到現況才更新 STATE.md。
+- [answers]:Alex 回答了這個專案問過他的問題(對應待辦 = 當初的問題,事實 = 回答)。把決定寫進相關段落;
+  有在等這個回答的待辦就依回答移除或改寫。
+- 對應待辦在 STATE.md 找不到時不要硬套到別條,只把事實記進相關段落(有關的話)。
+- 「事實」是助理轉述的,可能比 Alex 原話講得更肯定。有原話以原話為準;寫進 STATE.md 時保留
+  不確定的語氣(預計、預期、可能、打算),不要寫成已確定。
+- [note]:Hugin帶來的資訊(前提或日期變了、跟哪件待辦有關)。對應待辦是專案原話,用意思比對;影響到那件待辦
+  就依事實改寫,否則記進相關段落。note 不代表做完了,不要因為 note 就刪掉待辦。
+- [dismissed]:Alex 決定這個問題不用回答。移除在等這個回答的待辦;需要的話記一筆為什麼。
+- [same_as]:Hugin把這一件跟別的專案的同一件合併了,只供參考,不用改待辦。
+- 「助理的判斷理由」寫的是誰決定的、根據什麼:Alex 本人決定的就照著寫;Hugin依證據認定的,寫進 STATE.md 時
+  標明是推斷,不要寫成 Alex 說的。
+
+
+背景請讀 ./AGENT.md 跟 ./STATE.md。**STATE.md 在專案根目錄(./STATE.md),不在 memory/ 底下**;
+memory/ 底下沒有、也不能有 STATE.md。
+
+memory/ 的結構:
+- memory/YYYY-MM-DD.md、memory/YYYY-MM-DD-<主題>.md:原始流水紀錄,只會往後加。
+- memory/reference/<主題>.md(有 README.md 當索引):整理過的主題文件,會被改寫,
+  內容是目前最準的版本;跟舊的流水紀錄衝突時以 reference/ 為準。
+
+規則:
+- 只有在有『實質變化』時才編輯 STATE.md(精煉現況,不是流水帳);沒有實質變化就完全不要動 STATE.md。
+  STATE.md 還是 onboard 時的佔位內容、而 memory/ 已經有實質內容的話,這本身就算實質變化。
+- STATE.md 裡提到已被搬走的檔案、或已經被新內容回答/推翻的待決事項,要一併修正。
+- STATE.md 一定要有一個 `## 待辦` 段落,格式固定,一行一項:
+  `- [ ] 〔Alex〕…`(只有 Alex 本人能做:帳號、密碼、付款、要他拍板的決定)
+  `- [ ] 〔agent〕…`(agent 可以直接做的)
+  `- [ ] 〔待定〕…`(還要先做決定才能動的)
+  〔Alex〕行尾的「(等 Alex:task-…)」是 Hugin 任務登錄的 key,**原樣保留,不要改那一行的文字**
+  (Alex 在 Hugin 結案時會照 key 自動移掉;文字一改 key 就對不上)。
+  沒有待辦就寫 `- (無)`。只列還沒完成、具體可行動的事;完成、被推翻或過時的直接移除,
+  不要留著打勾。待辦只放在這個段落,不要在 STATE.md 別的地方另開「下一步」「未完成」之類的清單。
+- 除了 ./STATE.md,不要建立、修改或刪除任何檔案。
+=== prompt librarian-state-edits @ hub
+你是跨專案整合 agent(圖書館員),負責專案 p1 的 STATE.md。你沒有任何工具:需要的東西都在下面,
+回答只能是一個 JSON(格式由系統指定)。你不直接改檔案,而是回「編輯清單」,平台照順序套用到 STATE.md。
+這個專案自上次檢查後,以下 memory 檔案有變動:
+memory/2026-10-27.md
+
+實際變動內容(git log -p,由舊到新):
+=== commit <sha> <TODAY> new note
+
+diff --git a/memory/2026-10-27.md b/memory/2026-10-27.md
+new file mode 100644
+index <sha>..<sha>
+--- /dev/null
++++ b/memory/2026-10-27.md
+@@ -0,0 +1 @@
++- p1 的新筆記
+
+Alex 透過他的個人助理(Hugin)告訴我們這些跟這個專案有關的事(比舊的 memory 紀錄新,也比較可信):
+- [note] 事實:registrar says renew by Friday
+  對應待辦:renew the domain
+  助理的判斷理由:(沒有說明)
+  (2026-10-26T02:00)
+- [answers] 事實:SQLite
+  對應待辦:which cache?
+  助理的判斷理由:Hugin依證據認定(a receipt)
+  (2026-10-26T02:00)
+- [dismissed] 事實:not needed
+  對應待辦:(沒有指定)
+  助理的判斷理由:Hugin依 Alex 給的授權代為決定
+  (2026-10-26T02:00)
+- [same_as] 事實:跟 p0 的 k9 是同一件
+  對應待辦:(沒有指定)
+  助理的判斷理由:(沒有說明)
+  (2026-10-26T02:00)
+
+處理方式(這些轉交本身就算實質變化):
+- [resolves]:Alex 已經處理或回答了對應待辦。從 `## 待辦` 移除那一條(用意思比對,文字不一定一樣),
+  並把事實寫進 STATE.md 合適的段落。
+- [changes]:對應待辦還在,但前提或日期變了。依事實改寫那一條,必要時一併更新相關段落。
+- [relevant]:只供參考,影響到現況才更新 STATE.md。
+- [answers]:Alex 回答了這個專案問過他的問題(對應待辦 = 當初的問題,事實 = 回答)。把決定寫進相關段落;
+  有在等這個回答的待辦就依回答移除或改寫。
+- 對應待辦在 STATE.md 找不到時不要硬套到別條,只把事實記進相關段落(有關的話)。
+- 「事實」是助理轉述的,可能比 Alex 原話講得更肯定。有原話以原話為準;寫進 STATE.md 時保留
+  不確定的語氣(預計、預期、可能、打算),不要寫成已確定。
+- [note]:Hugin帶來的資訊(前提或日期變了、跟哪件待辦有關)。對應待辦是專案原話,用意思比對;影響到那件待辦
+  就依事實改寫,否則記進相關段落。note 不代表做完了,不要因為 note 就刪掉待辦。
+- [dismissed]:Alex 決定這個問題不用回答。移除在等這個回答的待辦;需要的話記一筆為什麼。
+- [same_as]:Hugin把這一件跟別的專案的同一件合併了,只供參考,不用改待辦。
+- 「助理的判斷理由」寫的是誰決定的、根據什麼:Alex 本人決定的就照著寫;Hugin依證據認定的,寫進 STATE.md 時
+  標明是推斷,不要寫成 Alex 說的。
+
+
+## AGENT.md(這個專案的 agent 規則,背景)
+agent
+
+
+## memory/reference/(整理過的主題文件,跟舊的流水紀錄衝突時以這裡為準)
+(沒有 memory/reference/)
+
+## 現在的 STATE.md(完整內容)
+<<<STATE
+# STATE
+
+現況。
+
+這個專案的背景說明。這個專案的背景說明。這個專案的背景說明。這個專案的背景說明。這個專案的背景說明。這個專案的背景說明。這個專案的背景說明。這個專案的背景說明。這個專案的背景說明。這個專案的背景說明。這個專案的背景說明。這個專案的背景說明。這個專案的背景說明。這個專案的背景說明。這個專案的背景說明。這個專案的背景說明。這個專案的背景說明。這個專案的背景說明。這個專案的背景說明。這個專案的背景說明。這個專案的背景說明。這個專案的背景說明。這個專案的背景說明。這個專案的背景說明。這個專案的背景說明。這個專案的背景說明。這個專案的背景說明。這個專案的背景說明。這個專案的背景說明。這個專案的背景說明。這個專案的背景說明。這個專案的背景說明。這個專案的背景說明。這個專案的背景說明。這個專案的背景說明。這個專案的背景說明。這個專案的背景說明。這個專案的背景說明。這個專案的背景說明。這個專案的背景說明。
+
+## 待辦
+- [ ] 〔agent〕做一件事
+
+STATE>>>
+
+規則:
+- 只有在有『實質變化』時才編輯 STATE.md(精煉現況,不是流水帳);沒有實質變化就完全不要動 STATE.md。
+  STATE.md 還是 onboard 時的佔位內容、而 memory/ 已經有實質內容的話,這本身就算實質變化。
+- STATE.md 裡提到已被搬走的檔案、或已經被新內容回答/推翻的待決事項,要一併修正。
+- STATE.md 一定要有一個 `## 待辦` 段落,格式固定,一行一項:
+  `- [ ] 〔Alex〕…`(只有 Alex 本人能做:帳號、密碼、付款、要他拍板的決定)
+  `- [ ] 〔agent〕…`(agent 可以直接做的)
+  `- [ ] 〔待定〕…`(還要先做決定才能動的)
+  〔Alex〕行尾的「(等 Alex:task-…)」是 Hugin 任務登錄的 key,**原樣保留,不要改那一行的文字**
+  (Alex 在 Hugin 結案時會照 key 自動移掉;文字一改 key 就對不上)。
+  沒有待辦就寫 `- (無)`。只列還沒完成、具體可行動的事;完成、被推翻或過時的直接移除,
+  不要留著打勾。待辦只放在這個段落,不要在 STATE.md 別的地方另開「下一步」「未完成」之類的清單。
+
+編輯清單的格式:
+- edits 是照順序套用的 {"old", "new"}:old 一定要是**現在 STATE.md 裡剛好出現一次**的一段原文(逐字、含換行;
+  太短會出現好幾次,就多帶幾個字),new 是換成的文字(空字串 = 刪掉那一段)。不要回整份 STATE.md。
+- 不用改就 state_updated: false、edits: []。
+- 〔Alex〕行尾的「(等 Alex:…)」標記不能改;那一項做完了就把整行刪掉。
+=== prompt librarian-state @ p2
+你是跨專案整合 agent(圖書館員),現在在專案 p2 的目錄裡工作。
+這個專案自上次檢查後,以下 memory 檔案有變動:
+memory/2026-10-27.md
+
+實際變動內容(git log -p,由舊到新):
+=== commit <sha> <TODAY> new note
+
+diff --git a/memory/2026-10-27.md b/memory/2026-10-27.md
+new file mode 100644
+index <sha>..<sha>
+--- /dev/null
++++ b/memory/2026-10-27.md
+@@ -0,0 +1 @@
++- p2 的新筆記
+
+
+
+背景請讀 ./AGENT.md 跟 ./STATE.md。**STATE.md 在專案根目錄(./STATE.md),不在 memory/ 底下**;
+memory/ 底下沒有、也不能有 STATE.md。
+
+memory/ 的結構:
+- memory/YYYY-MM-DD.md、memory/YYYY-MM-DD-<主題>.md:原始流水紀錄,只會往後加。
+- memory/reference/<主題>.md(有 README.md 當索引):整理過的主題文件,會被改寫,
+  內容是目前最準的版本;跟舊的流水紀錄衝突時以 reference/ 為準。
+
+規則:
+- 只有在有『實質變化』時才編輯 STATE.md(精煉現況,不是流水帳);沒有實質變化就完全不要動 STATE.md。
+  STATE.md 還是 onboard 時的佔位內容、而 memory/ 已經有實質內容的話,這本身就算實質變化。
+- STATE.md 裡提到已被搬走的檔案、或已經被新內容回答/推翻的待決事項,要一併修正。
+- STATE.md 一定要有一個 `## 待辦` 段落,格式固定,一行一項:
+  `- [ ] 〔Alex〕…`(只有 Alex 本人能做:帳號、密碼、付款、要他拍板的決定)
+  `- [ ] 〔agent〕…`(agent 可以直接做的)
+  `- [ ] 〔待定〕…`(還要先做決定才能動的)
+  〔Alex〕行尾的「(等 Alex:task-…)」是 Hugin 任務登錄的 key,**原樣保留,不要改那一行的文字**
+  (Alex 在 Hugin 結案時會照 key 自動移掉;文字一改 key 就對不上)。
+  沒有待辦就寫 `- (無)`。只列還沒完成、具體可行動的事;完成、被推翻或過時的直接移除,
+  不要留著打勾。待辦只放在這個段落,不要在 STATE.md 別的地方另開「下一步」「未完成」之類的清單。
+- 除了 ./STATE.md,不要建立、修改或刪除任何檔案。
+=== prompt librarian-state-edits @ hub
+你是跨專案整合 agent(圖書館員),負責專案 p2 的 STATE.md。你沒有任何工具:需要的東西都在下面,
+回答只能是一個 JSON(格式由系統指定)。你不直接改檔案,而是回「編輯清單」,平台照順序套用到 STATE.md。
+這個專案自上次檢查後,以下 memory 檔案有變動:
+memory/2026-10-27.md
+
+實際變動內容(git log -p,由舊到新):
+=== commit <sha> <TODAY> new note
+
+diff --git a/memory/2026-10-27.md b/memory/2026-10-27.md
+new file mode 100644
+index <sha>..<sha>
+--- /dev/null
++++ b/memory/2026-10-27.md
+@@ -0,0 +1 @@
++- p2 的新筆記
+
+
+
+## AGENT.md(這個專案的 agent 規則,背景)
+agent
+
+
+## memory/reference/(整理過的主題文件,跟舊的流水紀錄衝突時以這裡為準)
+(沒有 memory/reference/)
+
+## 現在的 STATE.md(完整內容)
+<<<STATE
+# STATE
+
+現況。
+
+這個專案的背景說明。這個專案的背景說明。這個專案的背景說明。這個專案的背景說明。這個專案的背景說明。這個專案的背景說明。這個專案的背景說明。這個專案的背景說明。這個專案的背景說明。這個專案的背景說明。這個專案的背景說明。這個專案的背景說明。這個專案的背景說明。這個專案的背景說明。這個專案的背景說明。這個專案的背景說明。這個專案的背景說明。這個專案的背景說明。這個專案的背景說明。這個專案的背景說明。這個專案的背景說明。這個專案的背景說明。這個專案的背景說明。這個專案的背景說明。這個專案的背景說明。這個專案的背景說明。這個專案的背景說明。這個專案的背景說明。這個專案的背景說明。這個專案的背景說明。這個專案的背景說明。這個專案的背景說明。這個專案的背景說明。這個專案的背景說明。這個專案的背景說明。這個專案的背景說明。這個專案的背景說明。這個專案的背景說明。這個專案的背景說明。這個專案的背景說明。
+
+## 待辦
+- [ ] 〔agent〕做一件事
+
+STATE>>>
+
+規則:
+- 只有在有『實質變化』時才編輯 STATE.md(精煉現況,不是流水帳);沒有實質變化就完全不要動 STATE.md。
+  STATE.md 還是 onboard 時的佔位內容、而 memory/ 已經有實質內容的話,這本身就算實質變化。
+- STATE.md 裡提到已被搬走的檔案、或已經被新內容回答/推翻的待決事項,要一併修正。
+- STATE.md 一定要有一個 `## 待辦` 段落,格式固定,一行一項:
+  `- [ ] 〔Alex〕…`(只有 Alex 本人能做:帳號、密碼、付款、要他拍板的決定)
+  `- [ ] 〔agent〕…`(agent 可以直接做的)
+  `- [ ] 〔待定〕…`(還要先做決定才能動的)
+  〔Alex〕行尾的「(等 Alex:task-…)」是 Hugin 任務登錄的 key,**原樣保留,不要改那一行的文字**
+  (Alex 在 Hugin 結案時會照 key 自動移掉;文字一改 key 就對不上)。
+  沒有待辦就寫 `- (無)`。只列還沒完成、具體可行動的事;完成、被推翻或過時的直接移除,
+  不要留著打勾。待辦只放在這個段落,不要在 STATE.md 別的地方另開「下一步」「未完成」之類的清單。
+
+編輯清單的格式:
+- edits 是照順序套用的 {"old", "new"}:old 一定要是**現在 STATE.md 裡剛好出現一次**的一段原文(逐字、含換行;
+  太短會出現好幾次,就多帶幾個字),new 是換成的文字(空字串 = 刪掉那一段)。不要回整份 STATE.md。
+- 不用改就 state_updated: false、edits: []。
+- 〔Alex〕行尾的「(等 Alex:…)」標記不能改;那一項做完了就把整行刪掉。
+=== prompt librarian-state @ p3
+你是跨專案整合 agent(圖書館員),現在在專案 p3 的目錄裡工作。
+這個專案自上次檢查後,以下 memory 檔案有變動:
+memory/2026-10-27.md
+
+實際變動內容(git log -p,由舊到新):
+=== commit <sha> <TODAY> new note
+
+diff --git a/memory/2026-10-27.md b/memory/2026-10-27.md
+new file mode 100644
+index <sha>..<sha>
+--- /dev/null
++++ b/memory/2026-10-27.md
+@@ -0,0 +1 @@
++- p3 的新筆記
+
+
+
+背景請讀 ./AGENT.md 跟 ./STATE.md。**STATE.md 在專案根目錄(./STATE.md),不在 memory/ 底下**;
+memory/ 底下沒有、也不能有 STATE.md。
+
+memory/ 的結構:
+- memory/YYYY-MM-DD.md、memory/YYYY-MM-DD-<主題>.md:原始流水紀錄,只會往後加。
+- memory/reference/<主題>.md(有 README.md 當索引):整理過的主題文件,會被改寫,
+  內容是目前最準的版本;跟舊的流水紀錄衝突時以 reference/ 為準。
+
+規則:
+- 只有在有『實質變化』時才編輯 STATE.md(精煉現況,不是流水帳);沒有實質變化就完全不要動 STATE.md。
+  STATE.md 還是 onboard 時的佔位內容、而 memory/ 已經有實質內容的話,這本身就算實質變化。
+- STATE.md 裡提到已被搬走的檔案、或已經被新內容回答/推翻的待決事項,要一併修正。
+- STATE.md 一定要有一個 `## 待辦` 段落,格式固定,一行一項:
+  `- [ ] 〔Alex〕…`(只有 Alex 本人能做:帳號、密碼、付款、要他拍板的決定)
+  `- [ ] 〔agent〕…`(agent 可以直接做的)
+  `- [ ] 〔待定〕…`(還要先做決定才能動的)
+  〔Alex〕行尾的「(等 Alex:task-…)」是 Hugin 任務登錄的 key,**原樣保留,不要改那一行的文字**
+  (Alex 在 Hugin 結案時會照 key 自動移掉;文字一改 key 就對不上)。
+  沒有待辦就寫 `- (無)`。只列還沒完成、具體可行動的事;完成、被推翻或過時的直接移除,
+  不要留著打勾。待辦只放在這個段落,不要在 STATE.md 別的地方另開「下一步」「未完成」之類的清單。
+- 除了 ./STATE.md,不要建立、修改或刪除任何檔案。
+=== prompt librarian-state-edits @ hub
+你是跨專案整合 agent(圖書館員),負責專案 p3 的 STATE.md。你沒有任何工具:需要的東西都在下面,
+回答只能是一個 JSON(格式由系統指定)。你不直接改檔案,而是回「編輯清單」,平台照順序套用到 STATE.md。
+這個專案自上次檢查後,以下 memory 檔案有變動:
+memory/2026-10-27.md
+
+實際變動內容(git log -p,由舊到新):
+=== commit <sha> <TODAY> new note
+
+diff --git a/memory/2026-10-27.md b/memory/2026-10-27.md
+new file mode 100644
+index <sha>..<sha>
+--- /dev/null
++++ b/memory/2026-10-27.md
+@@ -0,0 +1 @@
++- p3 的新筆記
+
+
+
+## AGENT.md(這個專案的 agent 規則,背景)
+agent
+
+
+## memory/reference/(整理過的主題文件,跟舊的流水紀錄衝突時以這裡為準)
+(沒有 memory/reference/)
+
+## 現在的 STATE.md(完整內容)
+<<<STATE
+# STATE
+
+現況。
+
+這個專案的背景說明。這個專案的背景說明。這個專案的背景說明。這個專案的背景說明。這個專案的背景說明。這個專案的背景說明。這個專案的背景說明。這個專案的背景說明。這個專案的背景說明。這個專案的背景說明。這個專案的背景說明。這個專案的背景說明。這個專案的背景說明。這個專案的背景說明。這個專案的背景說明。這個專案的背景說明。這個專案的背景說明。這個專案的背景說明。這個專案的背景說明。這個專案的背景說明。這個專案的背景說明。這個專案的背景說明。這個專案的背景說明。這個專案的背景說明。這個專案的背景說明。這個專案的背景說明。這個專案的背景說明。這個專案的背景說明。這個專案的背景說明。這個專案的背景說明。這個專案的背景說明。這個專案的背景說明。這個專案的背景說明。這個專案的背景說明。這個專案的背景說明。這個專案的背景說明。這個專案的背景說明。這個專案的背景說明。這個專案的背景說明。這個專案的背景說明。
+
+## 待辦
+- [ ] 〔agent〕做一件事
+
+STATE>>>
+
+規則:
+- 只有在有『實質變化』時才編輯 STATE.md(精煉現況,不是流水帳);沒有實質變化就完全不要動 STATE.md。
+  STATE.md 還是 onboard 時的佔位內容、而 memory/ 已經有實質內容的話,這本身就算實質變化。
+- STATE.md 裡提到已被搬走的檔案、或已經被新內容回答/推翻的待決事項,要一併修正。
+- STATE.md 一定要有一個 `## 待辦` 段落,格式固定,一行一項:
+  `- [ ] 〔Alex〕…`(只有 Alex 本人能做:帳號、密碼、付款、要他拍板的決定)
+  `- [ ] 〔agent〕…`(agent 可以直接做的)
+  `- [ ] 〔待定〕…`(還要先做決定才能動的)
+  〔Alex〕行尾的「(等 Alex:task-…)」是 Hugin 任務登錄的 key,**原樣保留,不要改那一行的文字**
+  (Alex 在 Hugin 結案時會照 key 自動移掉;文字一改 key 就對不上)。
+  沒有待辦就寫 `- (無)`。只列還沒完成、具體可行動的事;完成、被推翻或過時的直接移除,
+  不要留著打勾。待辦只放在這個段落,不要在 STATE.md 別的地方另開「下一步」「未完成」之類的清單。
+
+編輯清單的格式:
+- edits 是照順序套用的 {"old", "new"}:old 一定要是**現在 STATE.md 裡剛好出現一次**的一段原文(逐字、含換行;
+  太短會出現好幾次,就多帶幾個字),new 是換成的文字(空字串 = 刪掉那一段)。不要回整份 STATE.md。
+- 不用改就 state_updated: false、edits: []。
+- 〔Alex〕行尾的「(等 Alex:…)」標記不能改;那一項做完了就把整行刪掉。
+=== prompt librarian-state @ pdang
+你是跨專案整合 agent(圖書館員),現在在專案 pdang 的目錄裡工作。
+這個專案自上次檢查後,以下 memory 檔案有變動:
+memory/2026-10-27.md
+
+實際變動內容(git log -p,由舊到新):
+=== commit <sha> <TODAY> new note
+
+diff --git a/memory/2026-10-27.md b/memory/2026-10-27.md
+new file mode 100644
+index <sha>..<sha>
+--- /dev/null
++++ b/memory/2026-10-27.md
+@@ -0,0 +1 @@
++- pdang 的新筆記
+
+
+STATE.md 目前引用了這些已經不存在的檔案(被搬走或刪除),這次一定要修正引用,
+指向現在實際存放內容的地方(通常是 memory/reference/ 底下的主題文件): memory/reference/gone.md
+
+背景請讀 ./AGENT.md 跟 ./STATE.md。**STATE.md 在專案根目錄(./STATE.md),不在 memory/ 底下**;
+memory/ 底下沒有、也不能有 STATE.md。
+
+memory/ 的結構:
+- memory/YYYY-MM-DD.md、memory/YYYY-MM-DD-<主題>.md:原始流水紀錄,只會往後加。
+- memory/reference/<主題>.md(有 README.md 當索引):整理過的主題文件,會被改寫,
+  內容是目前最準的版本;跟舊的流水紀錄衝突時以 reference/ 為準。
+
+規則:
+- 只有在有『實質變化』時才編輯 STATE.md(精煉現況,不是流水帳);沒有實質變化就完全不要動 STATE.md。
+  STATE.md 還是 onboard 時的佔位內容、而 memory/ 已經有實質內容的話,這本身就算實質變化。
+- STATE.md 裡提到已被搬走的檔案、或已經被新內容回答/推翻的待決事項,要一併修正。
+- STATE.md 一定要有一個 `## 待辦` 段落,格式固定,一行一項:
+  `- [ ] 〔Alex〕…`(只有 Alex 本人能做:帳號、密碼、付款、要他拍板的決定)
+  `- [ ] 〔agent〕…`(agent 可以直接做的)
+  `- [ ] 〔待定〕…`(還要先做決定才能動的)
+  〔Alex〕行尾的「(等 Alex:task-…)」是 Hugin 任務登錄的 key,**原樣保留,不要改那一行的文字**
+  (Alex 在 Hugin 結案時會照 key 自動移掉;文字一改 key 就對不上)。
+  沒有待辦就寫 `- (無)`。只列還沒完成、具體可行動的事;完成、被推翻或過時的直接移除,
+  不要留著打勾。待辦只放在這個段落,不要在 STATE.md 別的地方另開「下一步」「未完成」之類的清單。
+- 除了 ./STATE.md,不要建立、修改或刪除任何檔案。
+=== prompt librarian-todo-format @ pdang
+只修 ./STATE.md 的 `## 待辦` 段落格式,其他地方、待辦的內容都不要改,也不要動任何其他檔案。
+
+正確格式(一行一項;沒有待辦就寫 `- (無)`;STATE.md 一定要有這個段落):
+  `- [ ] 〔Alex〕…`(只有 Alex 本人能做:帳號、密碼、付款、要他拍板的決定、他自己要買/做的事)
+  `- [ ] 〔agent〕…`(agent 可以直接做的)
+  `- [ ] 〔待定〕…`(還要先做決定才能動的)
+
+如果 STATE.md 別的地方有待辦性質的清單(例如「待決事項」「需要 Alex 拍板」「可由 agent 執行」
+「下一步」「未完成」),把那些項目**搬進** `## 待辦`(標上負責人)並刪掉原本那段;
+只有整份 STATE.md 真的沒有任何待辦時才寫 `- (無)`。排程、已完成的事實不算待辦,留在原處。
+
+目前的問題:
+STATE.md: a to-do with no owner, or done and not removed `- [ ] 沒標負責人的一件事`
+=== prompt librarian-state-edits @ hub
+你是跨專案整合 agent(圖書館員),負責專案 pdang 的 STATE.md。你沒有任何工具:需要的東西都在下面,
+回答只能是一個 JSON(格式由系統指定)。你不直接改檔案,而是回「編輯清單」,平台照順序套用到 STATE.md。
+這個專案自上次檢查後,以下 memory 檔案有變動:
+memory/2026-10-27.md
+
+實際變動內容(git log -p,由舊到新):
+=== commit <sha> <TODAY> new note
+
+diff --git a/memory/2026-10-27.md b/memory/2026-10-27.md
+new file mode 100644
+index <sha>..<sha>
+--- /dev/null
++++ b/memory/2026-10-27.md
+@@ -0,0 +1 @@
++- pdang 的新筆記
+
+
+STATE.md 目前引用了這些已經不存在的檔案(被搬走或刪除),這次一定要修正引用,
+指向現在實際存放內容的地方(通常是 memory/reference/ 底下的主題文件): memory/reference/gone.md
+
+## AGENT.md(這個專案的 agent 規則,背景)
+agent
+
+
+## memory/reference/(整理過的主題文件,跟舊的流水紀錄衝突時以這裡為準)
+(沒有 memory/reference/)
+
+## 現在的 STATE.md(完整內容)
+<<<STATE
+# STATE
+
+現況,見 memory/reference/gone.md。
+
+這個專案的背景說明。這個專案的背景說明。這個專案的背景說明。這個專案的背景說明。這個專案的背景說明。這個專案的背景說明。這個專案的背景說明。這個專案的背景說明。這個專案的背景說明。這個專案的背景說明。這個專案的背景說明。這個專案的背景說明。這個專案的背景說明。這個專案的背景說明。這個專案的背景說明。這個專案的背景說明。這個專案的背景說明。這個專案的背景說明。這個專案的背景說明。這個專案的背景說明。這個專案的背景說明。這個專案的背景說明。這個專案的背景說明。這個專案的背景說明。這個專案的背景說明。這個專案的背景說明。這個專案的背景說明。這個專案的背景說明。這個專案的背景說明。這個專案的背景說明。這個專案的背景說明。這個專案的背景說明。這個專案的背景說明。這個專案的背景說明。這個專案的背景說明。這個專案的背景說明。這個專案的背景說明。這個專案的背景說明。這個專案的背景說明。這個專案的背景說明。
+
+## 待辦
+- [ ] 〔agent〕做一件事
+- [ ] 沒標負責人的一件事
+
+STATE>>>
+
+規則:
+- 只有在有『實質變化』時才編輯 STATE.md(精煉現況,不是流水帳);沒有實質變化就完全不要動 STATE.md。
+  STATE.md 還是 onboard 時的佔位內容、而 memory/ 已經有實質內容的話,這本身就算實質變化。
+- STATE.md 裡提到已被搬走的檔案、或已經被新內容回答/推翻的待決事項,要一併修正。
+- STATE.md 一定要有一個 `## 待辦` 段落,格式固定,一行一項:
+  `- [ ] 〔Alex〕…`(只有 Alex 本人能做:帳號、密碼、付款、要他拍板的決定)
+  `- [ ] 〔agent〕…`(agent 可以直接做的)
+  `- [ ] 〔待定〕…`(還要先做決定才能動的)
+  〔Alex〕行尾的「(等 Alex:task-…)」是 Hugin 任務登錄的 key,**原樣保留,不要改那一行的文字**
+  (Alex 在 Hugin 結案時會照 key 自動移掉;文字一改 key 就對不上)。
+  沒有待辦就寫 `- (無)`。只列還沒完成、具體可行動的事;完成、被推翻或過時的直接移除,
+  不要留著打勾。待辦只放在這個段落,不要在 STATE.md 別的地方另開「下一步」「未完成」之類的清單。
+
+編輯清單的格式:
+- edits 是照順序套用的 {"old", "new"}:old 一定要是**現在 STATE.md 裡剛好出現一次**的一段原文(逐字、含換行;
+  太短會出現好幾次,就多帶幾個字),new 是換成的文字(空字串 = 刪掉那一段)。不要回整份 STATE.md。
+- 不用改就 state_updated: false、edits: []。
+- 〔Alex〕行尾的「(等 Alex:…)」標記不能改;那一項做完了就把整行刪掉。
+=== prompt librarian-state @ phand
+你是跨專案整合 agent(圖書館員),現在在專案 phand 的目錄裡工作。
+這次 memory/ 沒有新變動,只有下面 Alex 的轉交要處理。
+
+Alex 透過他的個人助理(Hugin)告訴我們這些跟這個專案有關的事(比舊的 memory 紀錄新,也比較可信):
+- [changes] 事實:只有轉交的事實
+  對應待辦:(沒有指定)
+  助理的判斷理由:理由
+  (2026-10-26T10:00)
+
+處理方式(這些轉交本身就算實質變化):
+- [resolves]:Alex 已經處理或回答了對應待辦。從 `## 待辦` 移除那一條(用意思比對,文字不一定一樣),
+  並把事實寫進 STATE.md 合適的段落。
+- [changes]:對應待辦還在,但前提或日期變了。依事實改寫那一條,必要時一併更新相關段落。
+- [relevant]:只供參考,影響到現況才更新 STATE.md。
+- [answers]:Alex 回答了這個專案問過他的問題(對應待辦 = 當初的問題,事實 = 回答)。把決定寫進相關段落;
+  有在等這個回答的待辦就依回答移除或改寫。
+- 對應待辦在 STATE.md 找不到時不要硬套到別條,只把事實記進相關段落(有關的話)。
+- 「事實」是助理轉述的,可能比 Alex 原話講得更肯定。有原話以原話為準;寫進 STATE.md 時保留
+  不確定的語氣(預計、預期、可能、打算),不要寫成已確定。
+
+
+背景請讀 ./AGENT.md 跟 ./STATE.md。**STATE.md 在專案根目錄(./STATE.md),不在 memory/ 底下**;
+memory/ 底下沒有、也不能有 STATE.md。
+
+memory/ 的結構:
+- memory/YYYY-MM-DD.md、memory/YYYY-MM-DD-<主題>.md:原始流水紀錄,只會往後加。
+- memory/reference/<主題>.md(有 README.md 當索引):整理過的主題文件,會被改寫,
+  內容是目前最準的版本;跟舊的流水紀錄衝突時以 reference/ 為準。
+
+規則:
+- 只有在有『實質變化』時才編輯 STATE.md(精煉現況,不是流水帳);沒有實質變化就完全不要動 STATE.md。
+  STATE.md 還是 onboard 時的佔位內容、而 memory/ 已經有實質內容的話,這本身就算實質變化。
+- STATE.md 裡提到已被搬走的檔案、或已經被新內容回答/推翻的待決事項,要一併修正。
+- STATE.md 一定要有一個 `## 待辦` 段落,格式固定,一行一項:
+  `- [ ] 〔Alex〕…`(只有 Alex 本人能做:帳號、密碼、付款、要他拍板的決定)
+  `- [ ] 〔agent〕…`(agent 可以直接做的)
+  `- [ ] 〔待定〕…`(還要先做決定才能動的)
+  〔Alex〕行尾的「(等 Alex:task-…)」是 Hugin 任務登錄的 key,**原樣保留,不要改那一行的文字**
+  (Alex 在 Hugin 結案時會照 key 自動移掉;文字一改 key 就對不上)。
+  沒有待辦就寫 `- (無)`。只列還沒完成、具體可行動的事;完成、被推翻或過時的直接移除,
+  不要留著打勾。待辦只放在這個段落,不要在 STATE.md 別的地方另開「下一步」「未完成」之類的清單。
+- 除了 ./STATE.md,不要建立、修改或刪除任何檔案。
+=== prompt librarian-state-edits @ hub
+你是跨專案整合 agent(圖書館員),負責專案 phand 的 STATE.md。你沒有任何工具:需要的東西都在下面,
+回答只能是一個 JSON(格式由系統指定)。你不直接改檔案,而是回「編輯清單」,平台照順序套用到 STATE.md。
+這次 memory/ 沒有新變動,只有下面 Alex 的轉交要處理。
+
+Alex 透過他的個人助理(Hugin)告訴我們這些跟這個專案有關的事(比舊的 memory 紀錄新,也比較可信):
+- [changes] 事實:只有轉交的事實
+  對應待辦:(沒有指定)
+  助理的判斷理由:理由
+  (2026-10-26T10:00)
+
+處理方式(這些轉交本身就算實質變化):
+- [resolves]:Alex 已經處理或回答了對應待辦。從 `## 待辦` 移除那一條(用意思比對,文字不一定一樣),
+  並把事實寫進 STATE.md 合適的段落。
+- [changes]:對應待辦還在,但前提或日期變了。依事實改寫那一條,必要時一併更新相關段落。
+- [relevant]:只供參考,影響到現況才更新 STATE.md。
+- [answers]:Alex 回答了這個專案問過他的問題(對應待辦 = 當初的問題,事實 = 回答)。把決定寫進相關段落;
+  有在等這個回答的待辦就依回答移除或改寫。
+- 對應待辦在 STATE.md 找不到時不要硬套到別條,只把事實記進相關段落(有關的話)。
+- 「事實」是助理轉述的,可能比 Alex 原話講得更肯定。有原話以原話為準;寫進 STATE.md 時保留
+  不確定的語氣(預計、預期、可能、打算),不要寫成已確定。
+
+
+## AGENT.md(這個專案的 agent 規則,背景)
+agent
+
+
+## memory/reference/(整理過的主題文件,跟舊的流水紀錄衝突時以這裡為準)
+(沒有 memory/reference/)
+
+## 現在的 STATE.md(完整內容)
+<<<STATE
+# STATE
+
+現況。
+
+這個專案的背景說明。這個專案的背景說明。這個專案的背景說明。這個專案的背景說明。這個專案的背景說明。這個專案的背景說明。這個專案的背景說明。這個專案的背景說明。這個專案的背景說明。這個專案的背景說明。這個專案的背景說明。這個專案的背景說明。這個專案的背景說明。這個專案的背景說明。這個專案的背景說明。這個專案的背景說明。這個專案的背景說明。這個專案的背景說明。這個專案的背景說明。這個專案的背景說明。這個專案的背景說明。這個專案的背景說明。這個專案的背景說明。這個專案的背景說明。這個專案的背景說明。這個專案的背景說明。這個專案的背景說明。這個專案的背景說明。這個專案的背景說明。這個專案的背景說明。這個專案的背景說明。這個專案的背景說明。這個專案的背景說明。這個專案的背景說明。這個專案的背景說明。這個專案的背景說明。這個專案的背景說明。這個專案的背景說明。這個專案的背景說明。這個專案的背景說明。
+
+## 待辦
+- [ ] 〔agent〕做一件事
+
+STATE>>>
+
+規則:
+- 只有在有『實質變化』時才編輯 STATE.md(精煉現況,不是流水帳);沒有實質變化就完全不要動 STATE.md。
+  STATE.md 還是 onboard 時的佔位內容、而 memory/ 已經有實質內容的話,這本身就算實質變化。
+- STATE.md 裡提到已被搬走的檔案、或已經被新內容回答/推翻的待決事項,要一併修正。
+- STATE.md 一定要有一個 `## 待辦` 段落,格式固定,一行一項:
+  `- [ ] 〔Alex〕…`(只有 Alex 本人能做:帳號、密碼、付款、要他拍板的決定)
+  `- [ ] 〔agent〕…`(agent 可以直接做的)
+  `- [ ] 〔待定〕…`(還要先做決定才能動的)
+  〔Alex〕行尾的「(等 Alex:task-…)」是 Hugin 任務登錄的 key,**原樣保留,不要改那一行的文字**
+  (Alex 在 Hugin 結案時會照 key 自動移掉;文字一改 key 就對不上)。
+  沒有待辦就寫 `- (無)`。只列還沒完成、具體可行動的事;完成、被推翻或過時的直接移除,
+  不要留著打勾。待辦只放在這個段落,不要在 STATE.md 別的地方另開「下一步」「未完成」之類的清單。
+
+編輯清單的格式:
+- edits 是照順序套用的 {"old", "new"}:old 一定要是**現在 STATE.md 裡剛好出現一次**的一段原文(逐字、含換行;
+  太短會出現好幾次,就多帶幾個字),new 是換成的文字(空字串 = 刪掉那一段)。不要回整份 STATE.md。
+- 不用改就 state_updated: false、edits: []。
+- 〔Alex〕行尾的「(等 Alex:…)」標記不能改;那一項做完了就把整行刪掉。
+=== prompt librarian-index @ hub
+更新 index.md:今天(<TODAY>)各專案的摘要在 digest/<TODAY>.md,讀進來後,
+標出專案之間看得出來的關聯——沒有明顯關聯就不要硬掰,保持精簡。
+直接編輯 index.md,不要重寫整份格式風格。如果沒有值得改的地方,可以不動這個檔案。
+<!-- roster:begin --> 到 <!-- roster:end --> 之間的專案名冊是 gen-index-roster.sh 機械產生的,
+不要編輯那個區塊(改了也會被覆蓋);你的註記寫在區塊外。
+=== prompt librarian-index-edits @ hub
+更新 index.md:下面是今天(<TODAY>)各專案的摘要(digest)跟現在的 index.md。標出專案之間看得出來的關聯——
+沒有明顯關聯就不要硬掰,保持精簡,不要重寫整份格式風格;沒有值得改的地方就 index_updated: false、edits: []。
+你沒有任何工具,回答只能是一個 JSON:edits 是照順序套用的 {"old", "new"},old 一定要是現在 index.md 裡剛好出現一次的原文。
+<!-- roster:begin --> 到 <!-- roster:end --> 之間的專案名冊是機械產生的,不要編輯那個區塊;你的註記寫在區塊外。
+
+## 今天的 digest
+# Digest <TODAY>
+
+<!-- digest:projects:begin -->
+## p0
+
+summary p0
+
+## phand
+
+summary phand
+<!-- digest:projects:end -->
+
+
+## 現在的 index.md
+<<<INDEX
+# index
+
+INDEX>>>
+=== failing log
+[<T>] === librarian run start ===
+[<T>] Assistant handoffs: 4 to process
+[<T>] Assistant handoffs: project pnone has no memory copy, not processed this time (left in the mailbox)
+[<T>] --- p0 ---
+[<T>] p0: changed memory files: memory/2026-10-27.md 
+[<T>] p0: assistant handoffs #101
+[<T>] p0: claude invocation failed (exit 1), copy restored, checkpoint not advanced
+[<T>] --- p1 ---
+[<T>] p1: changed memory files: memory/2026-10-27.md 
+[<T>] p1: claude invocation failed (exit 1), copy restored, checkpoint not advanced
+[<T>] --- p2 ---
+[<T>] p2: changed memory files: memory/2026-10-27.md 
+[<T>] p2: claude invocation failed (exit 1), copy restored, checkpoint not advanced
+[<T>] --- p3 ---
+[<T>] p3: changed memory files: memory/2026-10-27.md 
+[<T>] p3: claude invocation failed (exit 1), copy restored, checkpoint not advanced
+[<T>] --- pdang ---
+[<T>] pdang: changed memory files: memory/2026-10-27.md 
+[<T>] pdang: STATE.md refers to files that do not exist: memory/reference/gone.md
+[<T>] pdang: claude invocation failed (exit 1), copy restored, checkpoint not advanced
+[<T>] --- phand ---
+[<T>] phand: assistant handoffs #102
+[<T>] phand: claude invocation failed (exit 1), copy restored, checkpoint not advanced
+[<T>] --- pidle ---
+[<T>] pidle: no new commits, skip
+fatal: not a git repository (or any of the parent directories): .git
+[<T>] nothing to digest today
+[<T>] === librarian run end (total cost today: $0) ===

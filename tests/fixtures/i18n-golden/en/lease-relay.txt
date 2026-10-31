@@ -1,0 +1,36 @@
+=== deny discuss
+This is a read-only (discuss) lease; NotebookEdit cannot be used. Write what needs changing into the handover and let the owner decide.
+=== deny work
+This lease cannot use NotebookEdit (it can read and edit files in this folder, and run commands after asking the owner).
+=== question no answer
+The owner is not answering this question now. Ask in plain text; do not retry with the question tool.
+=== web deny
+The owner refused this URL. Do not retry the same URL; if you need it, tell the owner in plain text why you want to read it.
+=== command deny
+The owner refused this command. Do not retry the same command; explain it to him in plain text.
+=== action deny
+The owner refused this action. Do not retry the same action; explain it to him in plain text.
+=== web None
+Nobody approved this URL (no answer within 5 minutes). Do not retry the same URL; if you need it, tell the owner in plain text why you want to read it.
+=== command None
+Nobody approved this command (no answer within 5 minutes). Do not retry the same command; explain it to him in plain text.
+=== action None
+Nobody approved this action (no answer within 5 minutes). Do not retry the same action; explain it to him in plain text.
+=== write outside
+Only files in this project folder (<TMP>/ws) can be changed; /etc/hosts is not in it.
+=== write no path
+Only files in this project folder (<TMP>/ws) can be changed; (no path) is not in it.
+=== handle_call crash
+{"behavior": "deny", "message": "The permission relay failed (RuntimeError('boom')); do not use this tool for now."}
+=== show_file shown
+Shown to the owner: r.png (image/png, 9 bytes). False
+=== show_file no runner
+Not sent: the platform (runner) is unreachable; tell the owner in plain text where the file is. True
+=== show_file refused
+Not sent: why True
+=== show_file error only
+Not sent: internal True
+=== show_file code only
+Not sent: 502 True
+=== handle_show crash
+Not sent: platform error (RuntimeError('boom'))

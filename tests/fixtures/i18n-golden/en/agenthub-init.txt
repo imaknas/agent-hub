@@ -1,0 +1,66 @@
+$ agenthub init --dry-run --yes --no-launchd    # old layout
+[exit 0]
+--- stdout
+✓ <TMP>/config/hub.json already exists (the old layout); leaving it alone
+(dry-run) create folder <TMP>/fakehub/.logs
+(dry-run) create folder <TMP>/home/git-origin
+(dry-run) git config core.hooksPath githooks (the platform's commit gate)
+--no-launchd: not installing the scheduler, not applying services
+--- stderr
+
+$ agenthub init --dry-run --yes    # instance, launchd
+[exit 0]
+--- stdout
+✓ <TMP>/config/hub.json already exists; leaving it alone (to change it, edit it, then hub config apply)
+(dry-run) create folder <TMP>/fakehub/.logs
+(dry-run) create folder <TMP>/home/git-origin
+(dry-run) local.agent-hub-scheduler: install
+(dry-run) local.agent-hub-scheduler-watchdog: install
+
+next: bin/hub doctor shows what is missing; bin/hub onboard ~/workspace/<project> connects the first project
+--- stderr
+
+$ agenthub init --dry-run --yes    # instance, systemd
+[exit 0]
+--- stdout
+✓ <TMP>/config/hub.json already exists; leaving it alone (to change it, edit it, then hub config apply)
+(dry-run) create folder <TMP>/fakehub/.logs
+(dry-run) create folder <TMP>/home/git-origin
+(dry-run) local.agent-hub-scheduler: install (systemd)
+(dry-run) local.agent-hub-scheduler-watchdog: install (systemd)
+  ⚠️ user units stop after logout: `loginctl enable-linger $USER` (needs sudo)
+
+next: bin/hub doctor shows what is missing; bin/hub onboard ~/workspace/<project> connects the first project
+--- stderr
+
+$ agenthub init --dry-run --yes    # no service manager
+[exit 0]
+--- stdout
+✓ <TMP>/config/hub.json already exists (the old layout); leaving it alone
+(dry-run) create folder <TMP>/fakehub/.logs
+(dry-run) create folder <TMP>/home/git-origin
+⚠️ this system has no supported service manager (neither macOS launchd nor the Linux systemd user level): the scheduler, the watchdog and projects' long-running services will not run by themselves; to run the nightly flow, schedule `bin/py bin/scheduler.py` yourself (every 15 minutes)
+
+next: bin/hub doctor shows what is missing; bin/hub onboard ~/workspace/<project> connects the first project
+--- stderr
+
+$ agenthub init --home <TMP>/inst --owner Sam --timezone UTC --workspace <TMP>/ws2 --modules backup,reflect --yes --llm none --dry-run    # new instance
+[exit 0]
+--- stdout
+(dry-run) would create the instance directory <TMP>/inst/{config,data,secrets}, write config/hub.json, write <TMP>/fakehub/.hub-home:
+<hub.json from hub.example.json>
+--- stderr
+
+$ agenthub init --home <TMP>/inst --owner Sam --timezone UTC --workspace <TMP>/ws2 --modules backup,reflect --yes --llm none --no-launchd    # new instance
+[exit 0]
+--- stdout
+✓ instance directory <TMP>/inst (config is a git repo; owner Sam, modules reflect, backup)
+create folder <TMP>/fakehub/.logs
+create folder <TMP>/ws2
+create folder <TMP>/home/git-origin
+create folder <TMP>/home/.memory-copies
+git config core.hooksPath githooks (the platform's commit gate)
+[git config core.hooksPath githooks]
+decision points stay unset: when needed they fail plainly and say why. Run agenthub llm setup later
+--no-launchd: not installing the scheduler, not applying services
+--- stderr

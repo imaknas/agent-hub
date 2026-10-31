@@ -1,0 +1,153 @@
+=== usage
+exit 1
+--- stdout
+--- stderr
+onboard-project: usage: onboard-project.sh [--public] [--no-remote] <local project path>
+
+=== unknown flag
+exit 1
+--- stdout
+--- stderr
+onboard-project: Unknown argument: --bogus
+
+=== hub machine unreachable
+exit 1
+--- stdout
+--- stderr
+onboard-project: Cannot reach the hub machine (hubbox). This script creates a bare repo there, so while it cannot reach it, it does nothing: run it again once the hub machine is reachable; this run had no side effects.
+
+=== new folder, --no-remote
+exit 0
+--- stdout
+[1/11] Preconditions OK: alpha (--no-remote, stays local only)
+[2/11] Created the .agent-memory worktree (agent-memory branch, fully separate from the main branch)
+[3/11] Skeleton files in place and committed on the agent-memory branch
+[4/11] .agent-memory/ is excluded in .git/info/exclude (.gitignore untouched)
+sync-local-setup (stand-in): alpha
+[5-6/11] Hooks and the rules-file block are in place (not version-controlled)
+[7/11] No changes to the outer repo, nothing committed
+[8/11] Bare repo created on the hub machine, agent-memory branch pushed
+[9/11] Cloned the librarian's memory copy on the hub machine to ~/.memory-copies/alpha
+[10/11] No external remote, not added to the mirror-backup list
+registry: <TMP>/hub/projects/alpha.yaml
+commit-hub-files (stand-in): register alpha (onboard-project.sh)
+[11/11] Registered in agent-hub's project registry (projects/alpha.yaml); agent-hub committed and pushed
+
+Done: alpha is connected to the agent-hub pipeline.
+--- stderr
+
+=== already in the registry
+exit 1
+--- stdout
+--- stderr
+onboard-project: 'alpha' is already in the project registry (projects/alpha.yaml): it cannot be onboarded again. To reconnect an existing project (new machine, folder gone, fresh clone) use bin/recover-project.sh alpha [path]
+
+=== memory bare repo exists on the hub machine
+exit 1
+--- stdout
+--- stderr
+onboard-project: The hub machine already has gamma-memory.git (with agent-memory history): this name was onboarded before. To reconnect an existing project (new machine, folder gone, fresh clone) use bin/recover-project.sh gamma [path]
+
+=== origin onboarded under another name
+exit 1
+--- stdout
+--- stderr
+onboard-project: This repo (origin <TMP>/remotes/o/proj.git) was onboarded as 'proj' (under another folder name). Reconnect it with bin/recover-project.sh proj [path]; to rename it, use bin/rename-project.sh
+
+=== origin points at the hub machine
+exit 1
+--- stdout
+--- stderr
+onboard-project: origin points at the hub machine, which the current design never does: this project is probably left over from the old onboarding; deal with it by hand first
+
+=== dirty working tree
+exit 1
+--- stdout
+--- stderr
+onboard-project: The working tree is not clean (uncommitted changes or untracked files): clean it up yourself, then run again
+
+=== agent-memory branch without a worktree
+exit 1
+--- stdout
+--- stderr
+onboard-project: The agent-memory branch exists (but the .agent-memory worktree does not): probably a run that failed halfway; clean up by hand first (git branch -D agent-memory), then run again
+
+=== .agent-memory and the bare repo both exist
+exit 1
+--- stdout
+--- stderr
+onboard-project: .agent-memory already exists and the hub machine already has its bare repo (agent-memory branch pushed): this project should already be onboarded
+
+=== resume after an interrupted run
+exit 0
+--- stdout
+(The local steps are done, but the hub machine has no bare repo with content for this project: it looks like the last run was interrupted; continuing with the hub machine's steps, without redoing what is done)
+[1/11] Preconditions OK: alpha (--no-remote, stays local only)
+[2-7/11] Resume mode: done by the previous run, skipped
+[8/11] Bare repo created on the hub machine, agent-memory branch pushed
+[9/11] Cloned the librarian's memory copy on the hub machine to ~/.memory-copies/alpha
+[10/11] No external remote, not added to the mirror-backup list
+registry: <TMP>/hub/projects/alpha.yaml
+commit-hub-files (stand-in): register alpha (onboard-project.sh)
+[11/11] Registered in agent-hub's project registry (projects/alpha.yaml); agent-hub committed and pushed
+
+Done: alpha is connected to the agent-hub pipeline.
+--- stderr
+
+=== no github.owner
+exit 1
+--- stdout
+--- stderr
+hubconf.py get: github.owner is not set or not a single value
+onboard-project: hub.json has no github.owner: cannot create the GitHub repo
+
+=== GitHub repo created, commit fails
+exit 0
+--- stdout
+gh (stand-in): repo create o/zeta --public
+[1/11] Preconditions OK: zeta (external remote: git@github.com:o/zeta.git)
+[2/11] Created the .agent-memory worktree (agent-memory branch, fully separate from the main branch)
+[3/11] Skeleton files in place and committed on the agent-memory branch
+[4/11] .agent-memory/ is excluded in .git/info/exclude (.gitignore untouched)
+sync-local-setup (stand-in): zeta
+[5-6/11] Hooks and the rules-file block are in place (not version-controlled)
+[7/11] No changes to the outer repo, nothing committed
+[8/11] Bare repo created on the hub machine, agent-memory branch pushed
+[9/11] Cloned the librarian's memory copy on the hub machine to ~/.memory-copies/zeta
+[10/11] Added to the mirror-backup list
+registry: <TMP>/hub/projects/zeta.yaml
+[11/11] Registered in agent-hub's project registry (projects/zeta.yaml); agent-hub committed and pushed
+
+Done: zeta is connected to the agent-hub pipeline.
+--- stderr
+commit-hub-files (stand-in): push failed
+Warning: committing/pushing agent-hub's registry files failed; do it by hand (the registration itself is written)
+
+=== mirror-list.txt
+git@github.com:o/zeta.git
+
+=== not ignored
+exit 1
+--- stdout
+[1/11] Preconditions OK: iota (--no-remote, stays local only)
+[2/11] Created the .agent-memory worktree (agent-memory branch, fully separate from the main branch)
+[3/11] Skeleton files in place and committed on the agent-memory branch
+--- stderr
+onboard-project: .agent-memory is not ignored, stopping (otherwise git add -A would add it as an embedded repo)
+
+=== registry add fails
+exit 1
+--- stdout
+[1/11] Preconditions OK: theta (--no-remote, stays local only)
+[2/11] Created the .agent-memory worktree (agent-memory branch, fully separate from the main branch)
+[3/11] Skeleton files in place and committed on the agent-memory branch
+[4/11] .agent-memory/ is excluded in .git/info/exclude (.gitignore untouched)
+sync-local-setup (stand-in): theta
+[5-6/11] Hooks and the rules-file block are in place (not version-controlled)
+[7/11] No changes to the outer repo, nothing committed
+[8/11] Bare repo created on the hub machine, agent-memory branch pushed
+[9/11] Cloned the librarian's memory copy on the hub machine to ~/.memory-copies/theta
+[10/11] No external remote, not added to the mirror-backup list
+--- stderr
+the registry entry is invalid, not written: type can only be project or idea
+onboard-project: Adding to the project registry failed (projects/theta.yaml)

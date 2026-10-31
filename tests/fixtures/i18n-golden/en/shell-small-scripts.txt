@@ -1,0 +1,92 @@
+$ librarian-publish.sh (pub-ok)
+[exit 0]
+--- stdout
+committed (if anything changed) and pushed: index.md review-log.md todo.md
+--- stderr
+
+$ librarian-publish.sh (pub-bad)
+[exit 1]
+--- stdout
+gen-index-roster failed
+commit/push failed: index.md review-log.md todo.md
+--- stderr
+
+$ openclaw-session-backup.sh (rsync exit 0)
+[exit 0]
+--- stdout
+[<T>] === openclaw-session-backup run start ===
+[<T>] openclaw session backup done
+[<T>] === openclaw-session-backup run end ===
+--- stderr
+
+$ openclaw-session-backup.sh (rsync exit 1)
+[exit 0]
+--- stdout
+[<T>] === openclaw-session-backup run start ===
+[<T>] openclaw session backup failed; the log says why
+[<T>] === openclaw-session-backup run end ===
+--- stderr
+
+$ git-safe-push.sh (protected)
+[exit 1]
+--- stdout
+--- stderr
+git-safe-push: blocked by a branch protection rule, not by diverged history; retrying will not help:
+remote: error: GH006: Protected branch update failed
+
+$ git-safe-push.sh (conflict)
+[exit 1]
+--- stdout
+--- stderr
+git-safe-push: the pull could not merge, possibly a real content conflict; a person has to look:
+CONFLICT (content): Merge conflict in a.txt
+
+$ git-safe-push.sh (diverged)
+[exit 1]
+--- stdout
+--- stderr
+git-safe-push: the push still fails after 5 attempts
+
+$ with-lock.sh
+[exit 1]
+--- stdout
+--- stderr
+usage: with-lock.sh <command...>
+
+$ with-lock.sh true
+[exit 1]
+--- stdout
+--- stderr
+with-lock: not in a git repo
+
+$ with-lock.sh echo inside
+[exit 0]
+--- stdout
+inside
+--- stderr
+
+$ weekly-reflect.sh
+[exit 0]
+--- stdout
+wrote reflect/2026-W44.json
+reflect/index.html
+commit reflect: 2026-W44 reflect/2026-W44.json reflect/index.html
+--- stderr
+
+$ weekly-reflect.sh (fails)
+[exit 1]
+--- stdout
+--- stderr
+weekly-reflect.py failed
+
+$ lease-resume
+[exit 1]
+--- stdout
+--- stderr
+<HUB>/bin/lease-resume: line <N>: 1: usage: lease-resume <session id>
+
+$ lint
+[exit 2]
+--- stdout
+--- stderr
+lint: no ruff in the platform's venv (<TMP>/nopy/bin/ruff); run bin/setup-python

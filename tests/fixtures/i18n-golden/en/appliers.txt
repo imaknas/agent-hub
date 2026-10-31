@@ -1,0 +1,2 @@
+=== not an applier
+bad.py is not an applier: missing apply, EXTERNAL

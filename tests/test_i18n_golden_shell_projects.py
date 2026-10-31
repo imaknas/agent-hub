@@ -23,7 +23,10 @@ import tempfile
 import unittest
 
 ROOT = pathlib.Path(__file__).resolve().parents[1]
-GOLDEN = ROOT / "tests" / "fixtures" / "i18n-golden"
+sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
+import golden_lang  # noqa: E402
+
+GOLDEN = golden_lang.GOLDEN
 UPDATE = os.environ.get("I18N_GOLDEN_UPDATE") == "1"
 
 STUBS = {
@@ -104,7 +107,7 @@ class Golden(unittest.TestCase):
         self.hub_json()
         env = {k: v for k, v in os.environ.items() if not k.startswith(("AGENT_HUB_", "GIT_"))}
         self.env = {**env, "HOME": str(self.home), "AGENT_HUB_ROOT": str(self.hub), "AGENT_HUB_PYTHON": sys.executable,
-                    "AGENT_HUB_LANG_UI": "zh-Hant", "PATH": f"{fakebin}:{os.environ['PATH']}", "LC_ALL": "C",
+                    "AGENT_HUB_LANG_UI": golden_lang.LANG, "PATH": f"{fakebin}:{os.environ['PATH']}", "LC_ALL": "C",
                     "GIT_CONFIG_NOSYSTEM": "1", "FAKE_REMOTES": str(self.remotes)}
         Golden.git_env = self.env
         self.out: list[str] = []
@@ -112,7 +115,7 @@ class Golden(unittest.TestCase):
     def hub_json(self, **over) -> None:
         conf = {"v": 1, "registry_dir": "projects", "workspace_root": "~/workspace", "git_origin": "~/git-origin",
                 "memory_copies": "~/.memory-copies", "services_root": "~/services", "hosts": {"server": "hubbox"},
-                "github": {"owner": "o"}, "language": {"ui": "zh-Hant", "content": "zh-Hant"}}
+                "github": {"owner": "o"}, "language": {"ui": golden_lang.LANG, "content": golden_lang.LANG}}
         conf.update(over)
         (self.hub / "hub.json").write_text(json.dumps({k: v for k, v in conf.items() if v is not None}))
 

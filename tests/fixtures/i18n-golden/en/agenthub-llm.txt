@@ -1,0 +1,66 @@
+$ agenthub llm
+[exit 2]
+--- stdout
+--- stderr
+usage: agenthub llm setup | set-key <provider> (key from stdin) | health
+
+$ agenthub llm set-key nosuch
+[exit 2]
+--- stdout
+--- stderr
+hub.json llm.providers has no nosuch
+
+$ agenthub llm setup --llm bogus --yes
+[exit 2]
+--- stdout
+--- stderr
+no option bogus (choices: runtime, anthropic, openai, ollama, none)
+
+$ agenthub llm setup --llm none --yes
+[exit 0]
+--- stdout
+decision points stay unset: when needed they fail plainly and say why. Run agenthub llm setup later
+--- stderr
+
+$ agenthub llm setup --llm runtime --yes    # runtime none
+[exit 0]
+--- stdout
+⚠️ the runtime none has no completion port: decision points will fail. Pick another provider: agenthub llm setup
+--- stderr
+
+$ agenthub llm setup --llm openai --yes
+[exit 1]
+--- stdout
+--- stderr
+non-interactively, name the model with --llm-model <name> (or run agenthub llm setup interactively later)
+
+$ agenthub llm setup --llm anthropic --llm-model m1 --yes
+[exit 1]
+--- stdout
+hub.json llm: decision points go to anthropic (fast=m1, standard=m1, strong=m1); ⚠️ not usable yet: no key: <TMP>/secrets/anthropic-api-key does not exist (bin/hub llm set-key writes it)
+remember to commit hub.json (config as code). Agent work (mailbox handling and the like) needs a coding agent; see the feature table in agenthub doctor
+--- stderr
+
+$ agenthub llm set-key anthropic
+[exit 1]
+--- stdout
+--- stderr
+no key read; nothing written
+
+$ agenthub llm set-key anthropic
+[exit 0]
+--- stdout
+written to <TMP>/secrets/anthropic-api-key (600). Check: agenthub llm health
+--- stderr
+
+$ agenthub llm set-key anthropic    # key from env
+[exit 2]
+--- stdout
+--- stderr
+llm.providers.anthropic.key is not {"secret": file name} (a key from an environment variable does not need this command)
+
+$ agenthub llm setup --llm runtime --yes    # runtime claude
+[exit 0]
+--- stdout
+decision points go to the runtime claude (its own login; models follow its group table, see schedulectl models)
+--- stderr

@@ -1,0 +1,98 @@
+=== work_ready
+demo has no work mode (enforce.work in the registry; added only with the owner's consent)
+=== start_proc not resumable
+[["state", {"state": "running", "pid": 4242, "resumed": false, "detail": "The earlier conversation is gone (nothing was said yet, or it is past retention); starting a new conversation"}]]
+=== check_attachments
+attachments must be a list of at most 8
+=== check_attachments
+attachments must be a list of at most 8
+=== check_attachments
+each attachment needs name, media_type, data (base64)
+=== check_attachments
+a.png: data is not valid base64
+=== check_attachments
+big.png: over 0 MB
+=== send_message
+{"type": "user", "message": {"role": "user", "content": [{"type": "image", "source": {"type": "base64", "media_type": "image/png", "data": "QUJD"}}, {"type": "text", "text": "look\n\nAttachments saved to: attachments/<STAMP>-a.png"}]}}
+
+=== empty handover
+This lease never started a conversation (the session did not start, or it was detached before anything was said); there is nothing to hand over.
+=== detach model failed
+["error", {"error": "handover_failed", "detail": "Sent a minimal handover. Reason: schema: no summary"}]
+["handover", {"handover": {"v": 1, "project": "demo", "session_id": "77777777-7777-4777-8777-777777777779", "mode": "discuss", "reason": "user", "summary": "Handover failed (the model did not produce a valid handover); the conversation is still there and can be attached again", "decisions": [], "open_questions": [], "tasks_for_owner": [], "notes_markdown": "", "notes_written": false, "fallback": true, "branch": null, "commits": [], "tests": null}}]
+=== detach platform failed
+["error", {"error": "handover_failed", "detail": "Sent a minimal handover. Reason: RuntimeError('old module')"}]
+["handover", {"handover": {"v": 1, "project": "demo", "session_id": "77777777-7777-4777-8777-777777777770", "mode": "discuss", "reason": "user", "summary": "Handover failed (a platform error, not the model's); the conversation is still there and can be attached again", "decisions": [], "open_questions": [], "tasks_for_owner": [], "notes_markdown": "", "notes_written": false, "fallback": true, "branch": null, "commits": [], "tests": null}}]
+=== detach deliver failed
+["error", {"error": "handover_failed", "detail": "OSError('bus')"}]
+["handover", {"handover": {"v": 1, "project": "demo", "session_id": "77777777-7777-4777-8777-777777777771", "mode": "discuss", "reason": "user", "summary": "s", "decisions": [], "open_questions": [], "tasks_for_owner": [], "notes_markdown": "", "notes_written": false, "fallback": false, "branch": null, "commits": [], "tests": null}}]
+=== detach terminal open
+[["error", {"error": "busy", "detail": "terminal_open: the session in the terminal is still open; end it before detaching"}]]
+=== deliver letters
+renew key
+---
+which Z?
+---
+[demo lease detached] talked about A
+---
+Handover from the detached lease (77777777):
+talked about A
+- Decision: use X (fast)
+- Decision: drop Y ()
+- Open question: which Z?
+=== deliver memory
+
+## 租借對話 <HM>(session 77777777-7777-4777-8777-777777777777)
+
+- note one
+
+已登錄給 Alex 的任務:lease-77777777-7777-4777-8777-777777777777-1-task-0
+
+=== show_file refused
+../x.png is not in this project folder (only files in the project folder can be shown)
+=== quiesce
+demo has a lease answering, waiting for a reply, in the terminal or being detached
+=== follow_move
+[["state", {"state": "idle_stopped", "mode": "discuss", "detail": "This project has no work mode (enforce.work in the registry); this lease is read-only again"}]]
+=== http not json
+400 {"v": 2, "error": "bad_request", "detail": "body is not JSON"}
+=== http bad attachments
+400 {"v": 2, "error": "bad_request", "detail": "attachments must be a list of at most 8"}
+=== http no text
+400 {"v": 2, "error": "bad_request", "detail": "client_msg_id is required; text or attachments, at least one"}
+=== http bad mode
+400 {"v": 2, "error": "bad_request", "detail": "mode is discuss or work"}
+=== http work not allowed
+400 {"v": 2, "error": "work_not_allowed", "detail": "demo has no work mode (enforce.work in the registry; added only with the owner's consent)"}
+=== http file 404
+404 {"v": 2, "error": "not_found", "detail": "no such file (or past retention)"}
+=== http sandbox bad name
+400 {"v": 2, "error": "bad_name", "detail": "name and purpose must be strings"}
+=== http rename bad name
+400 {"v": 2, "error": "bad_name", "detail": "to must be the new name"}
+=== http upgrade bad rename
+400 {"v": 2, "error": "bad_request", "detail": "rename must be a string"}
+=== http mode busy
+409 {"v": 2, "error": "busy", "detail": "answering or waiting for the owner's reply; switch after this turn"}
+=== http rename busy
+409 {"v": 2, "error": "busy", "detail": "demo has a lease answering, waiting for a reply, in the terminal or being detached; rename once it stops"}
+=== http upgrade busy
+409 {"v": 2, "error": "busy", "detail": "demo has a lease answering, waiting for a reply, in the terminal or being detached; upgrade once it stops"}
+=== http runtime unsupported
+409 {"v": 2, "error": "runtime_unsupported", "detail": "runtime fake lacks agent runs, login state, session state, long-running streaming sessions; cannot open a lease"}
+=== http create bad mode
+400 {"v": 2, "error": "bad_request", "detail": "mode is discuss or work"}
+=== http create bad sid
+400 {"v": 2, "error": "bad_request", "detail": "session_id must be a UUID"}
+=== http cap reached
+409 at most 1 at a time
+=== runner.log
+[<TS>] 77777777-7777-4777-8777-777777777779 handover attempt 1 not valid: schema: no summary
+[<TS>] 77777777-7777-4777-8777-777777777779 handover attempt 2 not valid: schema: no summary
+[<TS>] 77777777-7777-4777-8777-777777777770 handover failed: RuntimeError('old module')
+[<TS>] 77777777-7777-4777-8777-777777777771 sending the handover failed: OSError('bus')
+[<TS>] 77777777 show_file refused: ../x.png: ../x.png is not in this project folder (only files in the project folder can be shown)
+[<TS>] bin/ changed and no lease is running: exiting so launchd restarts with the new code
+[<TS>] upgrade demo → demo: lease 77777777 follows (conversation moved)
+[<TS>] lease-runner started, <HOST:PORT>, 1 lease records
+

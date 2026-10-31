@@ -1,0 +1,53 @@
+=== tick
+[exit None]
+[<TS>] job 'gone/job' FAILED (exit -1), background process gone without a result
+[<TS>] running job 'ok': echo fine
+[<TS>] job 'ok' finished OK
+[<TS>] running job 'bad': exit 3
+[<TS>] job 'bad' FAILED (exit 3), will retry next tick
+[<TS>] job 'waits' waiting for 'late' (after:)
+[<TS>] running job 'often': echo often
+[<TS>] job 'often' finished OK
+[<TS>] running job 'bg' (background): echo bg
+=== failing
+{
+ "gone/job": {
+  "since": "<TS>",
+  "detail": "the background run vanished midway (reboot, killed)"
+ },
+ "bad": {
+  "since": "<TS>",
+  "detail": "log:.logs/bad-<DATE>.log"
+ }
+}
+=== bus and status page
+["hubbus", "publish", "job.failed", "--source", "scheduler", "--payload", "{\"job\": \"gone/job\", \"exit\": -1, \"detail\": \"the background run vanished midway (reboot, killed)\"}"]
+["hubbus", "publish", "job.failed", "--source", "scheduler", "--payload", "{\"job\": \"bad\", \"exit\": 3, \"detail\": \"log:.logs/bad-<DATE>.log\"}"]
+["gen-status-page.py"]
+=== spawned
+[('bg', 'echo bg')]
+=== alert.once
+('scheduler-jobs', [], 'The scheduled jobs are all back to normal')
+=== job log
+fine
+=== failing_problems
+Scheduled job a/old has been failing since <TS> (exit 1)
+Scheduled job b/nodetail has been failing since <TS> (see the log)
+=== alert broken
+[exit None]
+[<TS>] The scheduled-job alert was not sent: RuntimeError('discord down')
+=== registry unreadable
+[exit ([], {'alias': {}, 'renames': {}, 'skipped': [], 'errors': {'(registry)': ["RuntimeError('boom')"]}})]
+[<TS>] The project registry can't be read, this tick runs only schedule.yaml: RuntimeError('boom')
+=== scheduler.log
+[<TS>] job 'gone/job' FAILED (exit -1), background process gone without a result
+[<TS>] running job 'ok': echo fine
+[<TS>] job 'ok' finished OK
+[<TS>] running job 'bad': exit 3
+[<TS>] job 'bad' FAILED (exit 3), will retry next tick
+[<TS>] job 'waits' waiting for 'late' (after:)
+[<TS>] running job 'often': echo often
+[<TS>] job 'often' finished OK
+[<TS>] running job 'bg' (background): echo bg
+[<TS>] The scheduled-job alert was not sent: RuntimeError('discord down')
+[<TS>] The project registry can't be read, this tick runs only schedule.yaml: RuntimeError('boom')

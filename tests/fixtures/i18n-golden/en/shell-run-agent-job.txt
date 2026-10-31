@@ -1,0 +1,56 @@
+$ run-agent-job.sh
+[exit 1]
+--- stdout
+--- stderr
+<HUB>/bin/run-agent-job.sh: line <N>: 1: usage: run-agent-job.sh <name> [workdir] [prompt name]
+
+$ run-agent-job.sh no-prompt
+[exit 1]
+--- stdout
+--- stderr
+run-agent-job: <TMP>/hub/agent-jobs/no-prompt.md not found
+
+$ run-agent-job.sh job-a
+[exit 0]
+--- stdout
+run-agent-job: job-a has stopped itself (condition met), skipping
+--- stderr
+
+$ run-agent-job.sh job-a <TMP>/nowhere
+[exit 1]
+--- stdout
+--- stderr
+run-agent-job: workdir <TMP>/nowhere does not exist
+
+error=workdir <TMP>/nowhere does not exist
+$ run-agent-job.sh job-a <TMP>/ws/job
+[exit 0]
+--- stdout
+--- stderr
+
+state=ok
+notify=yes
+summary=🔔 needs a look
+error=
+--- file <DATE>.md
+🔔 needs a look
+second line
+
+---
+job: job-a · workdir: <TMP>/ws/job · session: s-1 · 3 turns · 1.5 min
+(to continue the discussion: on the hub machine, cd <TMP>/ws/job && claude --resume s-1)
+
+$ run-agent-job.sh job-a <TMP>/ws/job
+[exit 0]
+--- stdout
+--- stderr
+
+state=failed
+error=claude printed no JSON
+$ run-agent-job.sh job-a <TMP>/ws/job
+[exit 0]
+--- stdout
+run-agent-job: job-a started in the background, the result goes to <TMP>/hub/.state/agent-jobs/job-a/status.json
+--- stderr
+
+state=ok

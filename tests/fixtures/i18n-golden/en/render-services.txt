@@ -1,0 +1,67 @@
+=== no service manager
+[exit 0]
+services: this system has no supported service manager (neither macOS launchd nor the Linux systemd user level): the scheduler, the watchdog and projects' long-running services will not run by themselves
+=== plan
++ service:local.demo.failboot  demo
++ service:local.demo.ghost  demo
+~ service:local.demo.once  demo: changed ProgramArguments, StandardErrorPath, StandardOutPath, StartInterval, WorkingDirectory
++ service:local.demo.web  demo
++ service:local.demo.worker  demo
+- service:local.demo.old  no longer in the registry
+=== dry-run
+[exit 1]
+(dry-run) local.demo.failboot (demo): add
+(dry-run) local.demo.ghost (demo): add
+(dry-run) local.demo.once (demo): update
+    ProgramArguments: ['/bin/echo', 'old'] → ['/bin/echo', 'o']
+    StandardErrorPath: None → '<HUB>/.logs/demo.once-stderr.log'
+    StandardOutPath: None → '<HUB>/.logs/demo.once-stdout.log'
+    StartInterval: None → 600
+    WorkingDirectory: None → '<TMP>/ws'
+(dry-run) local.demo.web (demo): add
+(dry-run) local.demo.worker (demo): add
+(dry-run) local.demo.old: no longer in the registry, unloading
+⚠️ local.demo.broken (demo): `no-such-cmd-golden` not found (PATH=/usr/bin:/bin); the plist is left alone, and not created if missing
+=== apply
+[exit 1]
+local.demo.failboot (demo): add
+    ⚠️ bootstrap failed: Bootstrap failed: 5: Input/output error
+local.demo.ghost (demo): add
+local.demo.once (demo): update
+    ProgramArguments: ['/bin/echo', 'old'] → ['/bin/echo', 'o']
+    StandardErrorPath: None → '<HUB>/.logs/demo.once-stderr.log'
+    StandardOutPath: None → '<HUB>/.logs/demo.once-stdout.log'
+    StartInterval: None → 600
+    WorkingDirectory: None → '<TMP>/ws'
+local.demo.web (demo): add
+local.demo.worker (demo): add
+local.demo.old: no longer in the registry, unloading
+⚠️ local.demo.broken (demo): `no-such-cmd-golden` not found (PATH=/usr/bin:/bin); the plist is left alone, and not created if missing
+⚠️ local.demo.failboot (demo): bootstrap failed: Bootstrap failed: 5: Input/output error
+⚠️ local.demo.ghost (demo): not loaded in launchd
+⚠️ local.demo.worker (demo): the keepalive service is not running (state = not running)
+=== again
+[exit 1]
+services: everything matches the registry
+⚠️ local.demo.broken (demo): `no-such-cmd-golden` not found (PATH=/usr/bin:/bin); the plist is left alone, and not created if missing
+⚠️ local.demo.failboot (demo): not loaded in launchd
+⚠️ local.demo.ghost (demo): not loaded in launchd
+⚠️ local.demo.worker (demo): the keepalive service is not running (state = not running)
+=== only one label, dry-run
+[exit 1]
+services: everything matches the registry
+⚠️ local.demo.broken (demo): `no-such-cmd-golden` not found (PATH=/usr/bin:/bin); the plist is left alone, and not created if missing
+=== alert.once
+('render-services', ['local.demo.broken (demo): `no-such-cmd-golden` not found (PATH=/usr/bin:/bin); the plist is left alone, and not created if missing', 'local.demo.failboot (demo): bootstrap failed: Bootstrap failed: 5: Input/output error', 'local.demo.ghost (demo): not loaded in launchd', 'local.demo.worker (demo): the keepalive service is not running (state = not running)'], 'The background services are all back to normal (render-services)')
+('render-services', ['local.demo.broken (demo): `no-such-cmd-golden` not found (PATH=/usr/bin:/bin); the plist is left alone, and not created if missing', 'local.demo.failboot (demo): not loaded in launchd', 'local.demo.ghost (demo): not loaded in launchd', 'local.demo.worker (demo): the keepalive service is not running (state = not running)'], 'The background services are all back to normal (render-services)')
+=== rendered
+["local.demo.broken", "local.demo.failboot", "local.demo.ghost", "local.demo.once", "local.demo.web", "local.demo.worker"]
+=== systemd plan
+~ service:local.demo.once  demo: changed local.demo.once.service, local.demo.once.timer
++ service:local.demo.web  demo
+=== systemd apply
+[exit 1]
+local.demo.once (demo): update
+local.demo.web (demo): add
+    ⚠️ systemctl enable failed: Failed to enable unit: Unit file local.demo.web.service is masked.
+⚠️ local.demo.web (demo): systemctl enable failed: Failed to enable unit: Unit file local.demo.web.service is masked.

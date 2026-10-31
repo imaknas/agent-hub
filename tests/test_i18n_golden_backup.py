@@ -25,9 +25,12 @@ from unittest import mock
 
 ROOT = pathlib.Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "bin"))
-GOLDEN = ROOT / "tests" / "fixtures" / "i18n-golden"
+sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
+import golden_lang  # noqa: E402
+
+GOLDEN = golden_lang.GOLDEN
 UPDATE = os.environ.get("I18N_GOLDEN_UPDATE") == "1"
-ZH = {"AGENT_HUB_LANG_UI": "zh-Hant"}
+ZH = {"AGENT_HUB_LANG_UI": golden_lang.LANG}
 REAL_RUN = subprocess.run
 SUMMARY = {"message_type": "summary", "snapshot_id": "abcdef0123456789", "total_files_processed": 12,
            "total_bytes_processed": 3456, "data_added": 1500000}

@@ -1,0 +1,62 @@
+=== sandbox: no settings
+(False, "the sandbox is not in this project's settings yet (settings.local.json cannot be read)")
+=== sandbox: not enabled
+(False, "the sandbox is not in this project's settings yet (sandbox.enabled is not true)")
+=== transcript format
+<TMP>/transcripts/<TMP-SLUG>-ws/s1.jsonl: none of 5 records is in a known format (did Claude Code change its transcript format?)
+=== run: timeout
+(False, 'over 20 minutes')
+=== run: not found
+(False, 'claude not found')
+=== run: exit
+(False, 'exit 2:bad things')
+=== run: not json
+(False, 'output is not JSON: plain text')
+=== is_login_error(run: not found)
+True
+=== is_login_error(timeout)
+False
+=== action Read
+('read', None, 'a.py', 'read a.py')
+=== action Grep
+('search', None, 'x', 'search x')
+=== action WebFetch
+('open_web', None, 'https://e.x', 'open web page https://e.x')
+=== action Edit
+('write_file', None, 'b.py', 'write b.py')
+=== action Bash
+('run_command', None, 'ls', 'run ls')
+=== action Mystery
+('other', None, 'p', 'Mystery p')
+=== action AskUserQuestion
+('ask_user', None, '', 'question: Q1? / Q2?')
+=== action mcp__lease_relay__show_file
+('read', None, 'r/a.png', 'showing you r/a.png')
+=== stream rate_limit_event
+[('quota', {'status': 'warning', 'windows': [{'id': 'five_hour', 'label': '5 hours', 'used': 0.8, 'resets_at': None}, {'id': 'seven_day', 'label': '7 days', 'used': 0.5, 'resets_at': None}]})]
+=== stream result
+[('error', {'error': 'bad_request', 'detail': 'turn limit reached, taking it back', '_detach': 'budget'}), ('turn_end', {'cost': None, 'num_turns': None, 'duration_ms': None, 'is_error': False})]
+=== stream result
+[('error', {'error': 'rate_limit', 'detail': 'usage limit reached'}), ('turn_end', {'cost': None, 'num_turns': None, 'duration_ms': None, 'is_error': True})]
+=== classify_exit login
+StreamEvent(type='error', data={'error': 'agent_login', 'detail': "the Claude Code of project sessions is not logged in or its credentials expired (the platform's agent-hub/claude-login sends an alert). exit 1:Login expired"})
+=== classify_exit crash
+StreamEvent(type='error', data={'error': 'process_crashed', 'detail': 'exit 1:segfault'})
+=== resume_command
+('~/agent-hub/bin/lease-resume 0000', 'Paste it in a terminal on the hub machine: it resumes the same conversation (Claude Code). When done, go back to the assistant and press "take back" for the handover.')
+=== auth_env token missing
+(None, 'no <TMP>/home/.claude/headless-oauth-token (the default is the headless token; to use the subscription login declare auth: subscription)')
+=== credential subscription
+('subscription login (launchd)', "claude's subscription login", 'log in on the hub machine (`claude` → /login)', None, None, None)
+=== credential token
+('headless token', 'headless token', 'rerun `claude setup-token` and write it to <TMP>/home/.claude/headless-oauth-token', 'one year', None, None)
+=== credential None
+('.credentials.json (for SSH)', '~/.claude/.credentials.json', 'run claude once in a terminal on the hub machine so it refreshes, or /login again', None, 'used by claude under SSH', '.credentials.json: no refreshTokenExpiresAt, expiry check skipped')
+=== complete: timeout
+(False, 'error', 'over 30 seconds')
+=== complete: not found
+(False, 'error', 'claude not found')
+=== health: not found
+(False, 'claude not found')
+=== health: token missing
+(False, 'no <TMP>/home/.claude/headless-oauth-token (the default is the headless token; to use the subscription login declare auth: subscription)')

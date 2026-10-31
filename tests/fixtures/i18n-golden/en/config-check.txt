@@ -1,0 +1,8 @@
+$ <HUB>/bin/config-check
+[exit 1]
+--- stdout
+--- stderr
+config-check: ✗ hub.json: $: missing v
+config-check: ✗ hub.json: $.owner: missing address
+config-check: ✗ hub.json: unknown key `unknown_key`; to add one, put it in contracts/hub.v1.schema.json first
+config-check: ✗ modules/no-such-module.yaml: hub.json enables module no-such-module, but there is no modules/no-such-module.yaml

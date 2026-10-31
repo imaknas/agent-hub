@@ -1,0 +1,210 @@
+=== --help (description and --skip)
+exit 0
+--- stdout
+--- stderr
+
+=== not in the registry
+exit 1
+--- stdout
+--- stderr
+migrate-to-mini: 'nosuch' is not in the project registry (projects/)
+
+=== no laptop path in legacy-paths.tsv
+exit 1
+--- stdout
+--- stderr
+migrate-to-mini: legacy-paths.tsv has no location on the laptop for 'nolegacy'
+
+=== native project
+exit 1
+--- stdout
+--- stderr
+migrate-to-mini: 'nat' is a native project (no GitHub remote): recover-project.sh cannot clone it on the hub machine
+
+=== folder missing
+exit 1
+--- stdout
+--- stderr
+migrate-to-mini: <TMP>/home/dev/gone does not exist
+
+=== folder is not a git repo (a command fails)
+exit 1
+--- stdout
+--- stderr
+migrate-to-mini: git status --porcelain failed:
+fatal: not a git repository (or any of the parent directories): .git
+
+=== uncommitted changes
+exit 1
+--- stdout
+--- stderr
+migrate-to-mini: <TMP>/home/dev/dirty has uncommitted changes: ask that project's session to commit+push first:
+?? b.txt
+
+=== unpushed branches
+exit 1
+--- stdout
+--- stderr
+migrate-to-mini: Local branches not pushed, the hub machine cannot clone them: feature (no upstream), main ([ahead 1])
+Push them first (or confirm they are not needed), or add --allow-local-branches to leave them on the laptop
+
+=== unpushed branches allowed, a stash: dry-run
+exit 0
+--- stdout
+== br: <TMP>/home/dev/br → the hub machine ~/workspace/br
+  ! Local branches not pushed, the hub machine cannot clone them: feature (no upstream), main ([ahead 1]) (--allow-local-branches: they stay on the laptop)
+  ! There is a git stash: it does not move (it stays on the laptop)
+  Copy (untracked, cannot be rebuilt), 0K in all:
+  ! gh on the hub machine is not logged in or cannot read its token: in a terminal on the hub machine run `gh auth login -h github.com --git-protocol ssh --web --insecure-storage`
+
+(dry-run; add --apply once you have checked)
+--- stderr
+
+=== folder busy
+exit 1
+--- stdout
+--- stderr
+migrate-to-mini: Processes still have their working directory in <TMP>/home/dev/alpha: node(4242) zsh(777). Close that project's agent session / terminal tab first
+
+=== target exists on the hub machine
+exit 1
+--- stdout
+--- stderr
+migrate-to-mini: ~/workspace/alpha already exists on the hub machine: moved already? Check, then handle it by hand
+
+=== dry-run listing
+exit 0
+--- stdout
+== alpha: <TMP>/home/dev/alpha → the hub machine ~/workspace/alpha
+  Copy (untracked, cannot be rebuilt), 20M in all:
+        8K  .env
+        8K  .vercel/
+       20M  data/
+  Not copied (dependencies/build/cache): .venv/ app/node_modules/ build/ lib/.venv/ node_modules/ svc/venv/ tools/venv/ web/node_modules/ x.pyc
+  Not moved (--skip, kept on the laptop as a backup), 3M in all: big.db
+  ! gh on the hub machine is not logged in or cannot read its token: in a terminal on the hub machine run `gh auth login -h github.com --git-protocol ssh --web --insecure-storage`
+  ! This project uses Vercel, but vercel is not logged in on the hub machine: in a terminal on the hub machine run `vercel login`
+  ! The hub machine has no cargo
+  Rebuild on the hub machine ./.venv: uv sync --frozen --all-extras --python 3.12
+  Rebuild on the hub machine app/node_modules: cd app && pnpm install --frozen-lockfile
+  Rebuild on the hub machine lib/.venv: cd lib && uv venv .venv && VIRTUAL_ENV=.venv uv pip install -e .
+  Rebuild on the hub machine ./node_modules: npm ci
+  Rebuild on the hub machine svc/venv: cd svc && uv venv venv --python 3.11 && VIRTUAL_ENV=venv uv pip install -r requirements.txt
+  Rebuild on the hub machine tools/venv: (no lockfile found, handle it by hand)
+
+(dry-run; add --apply once you have checked)
+--- stderr
+
+=== apply: memory push fails
+exit 1
+--- stdout
+== beta: <TMP>/home/dev/beta → the hub machine ~/workspace/beta
+  Copy (untracked, cannot be rebuilt), 8K in all:
+        8K  .env
+[2/6] Catch up the memory sync + push
+--- stderr
+migrate-to-mini: git-safe-push.sh failed: push (stand-in): rejected
+non-fast-forward
+
+
+=== apply: recover-project.sh fails on the hub machine
+exit 1
+--- stdout
+== beta: <TMP>/home/dev/beta → the hub machine ~/workspace/beta
+  Copy (untracked, cannot be rebuilt), 8K in all:
+        8K  .env
+[2/6] Catch up the memory sync + push
+[3/6] Hub machine: recover-project.sh
+--- stderr
+migrate-to-mini: Failed on the hub machine: git -C ~/agent-hub pull -q && mkdir -p ~/workspace && ~/agent-hub/bin/recover-project.sh beta ~/workspace/beta
+recover-project (stand-in): no memory repo for beta
+
+
+=== apply: rsync fails
+exit 1
+--- stdout
+== beta: <TMP>/home/dev/beta → the hub machine ~/workspace/beta
+  Copy (untracked, cannot be rebuilt), 8K in all:
+        8K  .env
+[2/6] Catch up the memory sync + push
+[3/6] Hub machine: recover-project.sh
+[4/6] rsync 1 entries (8K)
+--- stderr
+migrate-to-mini: rsync failed: rsync (stand-in): connection closed
+
+
+=== apply: auto memory rsync fails
+exit 1
+--- stdout
+== beta: <TMP>/home/dev/beta → the hub machine ~/workspace/beta
+  Copy (untracked, cannot be rebuilt), 8K in all:
+        8K  .env
+[2/6] Catch up the memory sync + push
+[3/6] Hub machine: recover-project.sh
+[4/6] rsync 1 entries (8K)
+--- stderr
+migrate-to-mini: auto memory rsync failed: rsync (stand-in): connection closed
+
+
+=== apply: clean
+exit 0
+--- stdout
+== beta: <TMP>/home/dev/beta → the hub machine ~/workspace/beta
+  Copy (untracked, cannot be rebuilt), 8K in all:
+        8K  .env
+[2/6] Catch up the memory sync + push
+[3/6] Hub machine: recover-project.sh
+[4/6] rsync 1 entries (8K)
+  auto memory: <TMP-SLUG>-home-dev-beta → the hub machine ~/.claude/projects/<TMP-SLUG>-home-workspace-beta/memory/
+[5/6] Hub machine: sync-local-setup.sh
+  ! ⚠️ README.md mentions the platform's hooks: let that project's session handle it
+[6/6] Hub machine: rebuild dependencies
+
+Done: beta is at ~/workspace/beta on the hub machine. Open this folder over SSH (hubbox) from your coding agent.
+<TMP>/home/dev/beta on the laptop is untouched, kept as a backup (a marker in .git: a session opened there is told to go to the hub machine).
+--- stderr
+
+=== apply with problems
+exit 1
+--- stdout
+== alpha: <TMP>/home/dev/alpha → the hub machine ~/workspace/alpha
+  Copy (untracked, cannot be rebuilt), 20M in all:
+        8K  .env
+        8K  .vercel/
+       20M  data/
+  Not copied (dependencies/build/cache): .venv/ app/node_modules/ build/ lib/.venv/ node_modules/ svc/venv/ tools/venv/ web/node_modules/ x.pyc
+  Not moved (--skip, kept on the laptop as a backup), 3M in all: big.db
+  ! gh on the hub machine is not logged in or cannot read its token: in a terminal on the hub machine run `gh auth login -h github.com --git-protocol ssh --web --insecure-storage`
+  ! This project uses Vercel, but vercel is not logged in on the hub machine: in a terminal on the hub machine run `vercel login`
+  ! The hub machine has no cargo
+  Rebuild on the hub machine ./.venv: uv sync --frozen --all-extras --python 3.12
+  Rebuild on the hub machine app/node_modules: cd app && pnpm install --frozen-lockfile
+  Rebuild on the hub machine lib/.venv: cd lib && uv venv .venv && VIRTUAL_ENV=.venv uv pip install -e .
+  Rebuild on the hub machine ./node_modules: npm ci
+  Rebuild on the hub machine svc/venv: cd svc && uv venv venv --python 3.11 && VIRTUAL_ENV=venv uv pip install -r requirements.txt
+  Rebuild on the hub machine tools/venv: (no lockfile found, handle it by hand)
+[2/6] Catch up the memory sync + push
+[3/6] Hub machine: recover-project.sh
+[4/6] rsync 3 entries (20M)
+  info/exclude: added 1 ignore rules
+  MCP db: added on the hub machine
+  MCP own: added on the hub machine (the hub machine has no <TMP>/home/workspace/alpha/target/release/own yet: build/install it first)
+  MCP web: failed Invalid configuration: url is not reachable
+[5/6] Hub machine: sync-local-setup.sh
+  ! ⚠️ README.md mentions the platform's hooks: let that project's session handle it
+[6/6] Hub machine: rebuild dependencies
+  . (uv sync --frozen --all-extras --python 3.12): ok
+  app (cd app && pnpm install --frozen-lockfile): ok
+  lib (cd lib && uv venv .venv && VIRTUAL_ENV=.venv uv pip install -e .): ok
+  . (npm ci): failed
+  svc (cd svc && uv venv venv --python 3.11 && VIRTUAL_ENV=venv uv pip install -r requirements.txt): ok
+
+Done: alpha is at ~/workspace/alpha on the hub machine. Open this folder over SSH (hubbox) from your coding agent.
+<TMP>/home/dev/alpha on the laptop is untouched, kept as a backup (a marker in .git: a session opened there is told to go to the hub machine).
+  ! .: npm ci failed
+npm (stand-in): ci failed: lockfile out of date
+
+  ! tools: venv has no lockfile, not rebuilt
+  ! The working copy on the hub machine has unexpected changes (a rebuild changed a lockfile?):
+M app/pnpm-lock.yaml
+--- stderr

@@ -1,0 +1,69 @@
+=== --help
+exit 0
+--- stdout
+usage: hub-run [-h] [--cap CAP] [--timeout TIMEOUT] [--wait ID] ...
+
+Run a program that needs a capability under the platform's profile
+
+positional arguments:
+  cmd
+
+options:
+  -h, --help         show this help message and exit
+  --cap CAP          capability name (one in the project registry's enforce.capabilities)
+  --timeout TIMEOUT  seconds (default and limit: hub.json cap_runner)
+  --wait ID          reattach to a job
+--- stderr
+=== not in a project
+exit 2
+--- stdout
+--- stderr
+hub-run: Run this inside a registered project folder
+=== usage: no --cap
+exit 2
+--- stdout
+--- stderr
+hub-run: usage: hub-run --cap <capability> [--timeout seconds] -- <command…>, or hub-run --wait <id>
+=== usage: no command
+exit 2
+--- stdout
+--- stderr
+hub-run: usage: hub-run --cap <capability> [--timeout seconds] -- <command…>, or hub-run --wait <id>
+=== wait: unknown id
+exit 2
+--- stdout
+--- stderr
+hub-run: No such job: nope
+=== nobody picks it up
+exit 125
+--- stdout
+--- stderr
+hub-run: Job 20261031-120000-abcdef (capability gpu); if this call is interrupted the job keeps running: reattach with `hub-run --wait 20261031-120000-abcdef`
+hub-run: The platform's run service is not running (nobody picked the request up in 30 s); the request was withdrawn. Tell the user (agent-hub's cap-runner)
+=== queued, then done
+exit 3
+--- stdout
+--- stderr
+hub-run: Queued (one job at a time per project, with a platform-wide limit)
+=== timed out
+exit 124
+--- stdout
+partial out
+--- stderr
+partial err
+hub-run: Timed out; the job was stopped (use --timeout for longer; the limit is hub.json cap_runner.max_timeout_s)
+=== rejected
+exit 126
+--- stdout
+--- stderr
+hub-run: Request rejected: cwd ../x
+=== lost with a reason
+exit 125
+--- stdout
+--- stderr
+hub-run: restart
+=== lost without a reason
+exit 125
+--- stdout
+--- stderr
+hub-run: The job was lost

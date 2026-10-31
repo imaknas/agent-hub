@@ -1,0 +1,27 @@
+$ sync-all-memory.sh
+[exit 0]
+--- stdout
+--- stderr
+
+--- log
+[<T>] alpha: committed and pushed new memory
+[<T>] beta: pushed the commits that had not gone out
+[<T>] gamma: git-sync-memory failed
+
+$ sync-all-memory.sh
+[exit 0]
+--- stdout
+--- stderr
+
+--- log
+[<T>] beta: the catch-up push failed
+[<T>] gamma: git-sync-memory failed
+
+$ sync-all-memory.sh
+[exit 0]
+--- stdout
+--- stderr
+
+--- log
+[<T>] cannot reach the hub machine; this round commits locally and does not push
+[<T>] alpha: committed new memory (the hub machine cannot be reached, not pushed yet)

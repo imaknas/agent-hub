@@ -1,0 +1,44 @@
+$ <HUB>/bin/gen-todo.py <TMP>/data/todo.md
+[exit 0]
+--- stdout
+todo.md: 3 items, 3 format problems
+  format problem: beta: a to-do with no owner, or done and not removed `- [ ] 沒有標籤的一行`
+  format problem: beta: a to-do with no owner, or done and not removed `- [ ] 〔誰〕不認得的標籤`
+  format problem: gamma: no STATE.md on the hub machine
+--- stderr
+
+=== todo.md
+<!-- contract: todo-md v1 -->
+# Cross-project to-do
+
+> Generated mechanically by `bin/gen-todo.py` from the `## 待辦` section of each project's STATE.md (3 items);
+> do not edit by hand: to change the content, change the source (each project's memory, from which librarian updates STATE.md;
+> agent-hub's own to-do items are in `openclaw-migration-status.md`).
+
+## 只有 Alex 能做
+
+### alpha
+- [ ] 續約網域
+
+## 待定(需要先做決定)
+
+### alpha
+- [ ] 要不要開公開的 issue tracker
+
+## agent 可以做
+
+### alpha
+- [ ] 把 README 改成英文
+
+## Format problems (these projects' to-do items were not collected)
+
+- beta: a to-do with no owner, or done and not removed `- [ ] 沒有標籤的一行`
+- beta: a to-do with no owner, or done and not removed `- [ ] 〔誰〕不認得的標籤`
+- gamma: no STATE.md on the hub machine
+
+$ <HUB>/bin/check-state-todo.py <TMP>/copies/beta/STATE.md
+[exit 1]
+--- stdout
+STATE.md: a to-do with no owner, or done and not removed `- [ ] 沒有標籤的一行`
+STATE.md: a to-do with no owner, or done and not removed `- [ ] 〔誰〕不認得的標籤`
+--- stderr

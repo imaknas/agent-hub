@@ -1,0 +1,34 @@
+=== no nvm
+(False, 'no nvm default version (~/.nvm/alias/default)')
+=== npm view fails
+(False, 'could not look up the latest version (now 2.1.4): npm ERR! 404')
+=== already latest
+(True, 'claude 2.1.5 (node v22.1.0): already the latest')
+=== dry-run
+(True, '(dry-run) claude 2.1.4 → 2.1.5 (node v22.1.0)')
+=== dry-run, not installed
+(True, '(dry-run) claude not installed → 2.1.5 (node v22.1.0)')
+=== current version fails
+(False, 'still on 2.1.4 (latest 2.1.5): the current version already fails a request, not updating (a login or network problem, see agent-hub/claude-login): Login expired')
+=== installed
+(True, 'claude 2.1.4 → 2.1.5 (node v22.1.0), the request test passed')
+=== installed, none before
+(True, 'claude not installed → 2.1.5 (node v22.1.0), the request test passed')
+=== install fails, put back
+(False, '2.1.5 would not install (npm ERR! boom), put 2.1.4 back')
+=== new fails probe, put back fails
+(False, '2.1.5 would not install (unknown flag -p), putting it back failed too, claude may not work now')
+=== install fails, none before
+(False, '2.1.5 would not install: EACCES')
+=== probe timeout
+'no answer for 3 minutes'
+=== main ok=False
+exit 1
+stdout: ''
+stderr: 'MSG\n'
+alert: [('claude-version', ['claude cannot get to the latest version: MSG'], 'claude is on the latest version again (MSG)')]
+=== main ok=True
+exit 0
+stdout: 'MSG\n'
+stderr: ''
+alert: [('claude-version', [], 'claude is on the latest version again (MSG)')]
