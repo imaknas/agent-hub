@@ -381,10 +381,8 @@ def salient_missing(repo: pathlib.Path, base: str, deleted: list[str]) -> dict[s
 
 
 def state_todo_ok(path: pathlib.Path) -> bool:
-    # Like the librarian, python3 from PATH (GIT_ENV puts Homebrew first): check-state-todo.py needs 3.10+, and the
-    # scheduler's login shell used to give this script the system python3 (3.9); now it is always the platform's
-    # Python (bin/py)
-    return subprocess.run(["python3", str(BIN / "check-state-todo.py"), str(path)],
+    # the platform's Python (hubconf.launch), never python3 from PATH (AGENTS.md): check-state-todo.py needs 3.10+
+    return subprocess.run([*hubconf.launch(BIN / "check-state-todo.py"), str(path)],
                           env=GIT_ENV, capture_output=True).returncode == 0
 
 

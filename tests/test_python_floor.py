@@ -53,6 +53,14 @@ class Floor(unittest.TestCase):
         self.assertEqual(bad, [], "do not hard-code another interpreter: Python code uses sys.executable, "
                                   "shell uses \"$HUB/bin/py\"")
 
+    def test_no_python3_from_path(self):
+        """`"python3"` as a program name runs whatever is first on PATH (10-31: consolidate-memory ran its to-do check
+        that way while its comment said bin/py). Platform scripts start each other with hubconf.launch()."""
+        import re
+        bad = [f"{rel}:{i}" for rel, text in files() if rel.startswith("bin/")
+               for i, line in enumerate(text.splitlines(), 1) if re.search(r"""["']python3["']""", line)]
+        self.assertEqual(bad, [], "start a platform script with hubconf.launch(), not python3 from PATH")
+
     def test_platform_never_relies_on_the_first_line(self):
         """A platform Python script's first line only works on macOS (Linux's kernel takes everything after #! as one
         argument): when the platform calls a script itself it always goes through the interpreter: hubconf.launch() /
