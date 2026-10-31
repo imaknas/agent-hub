@@ -29,6 +29,8 @@ same key. The spec's order (relink before reconcile) fixes both.
                                                     (new one only; when the text was never changed the recomputed
                                                     key is the same anyway, so only an amended text shows whether
                                                     the key gets restored)
+  pl  an item the project raised itself (send, a  → nothing sent, no claim: it never had a line here, so finding
+      lease handover), no line in STATE.md          none is no sign it was done (new one only)
 
     bin/py -m unittest discover -s tests
 """
@@ -80,6 +82,7 @@ SCENES = {
     "pj": {"state": state("- [ ] 〔agent〕別的事"), "posted": {key("pj", "寄掛號"): "寄掛號"}, "v1_claimed": [key("pj", "寄掛號")]},
     "pk": {"state": state(f"- [ ] 〔Alex〕寄包裹{marker(key('pk-old', '寄包裹'))}"), "v1_posted_as": ("pk-old", "寄包裹")},
     "pi": {"state": state("- [ ] 〔Alex〕訂飯店,含早餐"), "posted": {KI: "訂飯店"}, "amended": {KI: "訂飯店,含早餐"}},
+    "pl": {"state": state(), "raised_by_project": {"lease-x-1-task-0": "measure the desk"}},
 }
 
 
@@ -177,6 +180,9 @@ class Env:
         for k, text in s.get("posted", {}).items():
             recs.append(self.rec(p, f"r:{k}", "raised", "requester", "agent-hub:registrar", k,
                                  terms={"text": text}, terms_rev=1))
+        for k, text in s.get("raised_by_project", {}).items():   # outside the document (send, a lease handover)
+            recs.append(self.rec(p, f"r:{k}", "raised", "requester", f"project:{p}", k, terms={"text": text},
+                                 terms_rev=1))
         for k, text in s.get("amended", {}).items():
             recs.append(self.rec(p, f"a:{k}:2", "amended", "requester", "agent-hub:registrar", k, terms={"text": text},
                                  terms_rev=2, supersedes=[f"r:{k}"], ts="2026-10-21T09:00:00Z"))
@@ -274,6 +280,7 @@ class RegistrarFlow(unittest.TestCase):
                 self.assertEqual(env.outputs("pi"), [])
                 self.assertEqual(env.outputs("pj"), [], "an inferred closure v1 already sent is not sent again")
                 self.assertEqual(env.outputs("pk"), [], "one sent before the rename is recognised")
+                self.assertEqual(env.outputs("pl"), [], "an item raised outside the document is never claimed done")
         self.each(check)
 
     def test_second_run_sends_nothing_new(self):

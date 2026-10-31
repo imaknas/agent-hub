@@ -13,18 +13,21 @@ spec's order:
      The item's closure is settled -> delete the line carrying this key (an emptied section gets the empty marker); reopened
      -> if the line is not there, add it back with restore_text. note and related do not belong here; they are left
      to the librarian's judgment.
-  2. Restore keys: for an item sent, not closed, not withdrawn and whose key is not in the file, if a keyless owner
-     line's text is identical to its latest terms (after normalisation) -> stamp the original key back (an agent
-     dropped the end of the line while rewriting it) rather than treat it as a new item.
+  2. Restore keys: for an item this registrar raised from a line, not closed, not withdrawn and whose key is not in
+     the file, if a keyless owner line's text is identical to its latest terms (after normalisation) -> stamp the
+     original key back (an agent dropped the end of the line while rewriting it) rather than treat it as a new item.
   3. Send: remaining keyless owner lines -> key = task-<project>-<sha1(normalised text)[:10]>; first send raised
      (id r:<key>), and stamp only after accepted/duplicate comes back; if it cannot be sent, no stamp, retry the next
      night (same id; resending is a no-op).
   4. Amend: a keyed line whose text differs from the latest terms -> amended (id a:<key>:<rev>, terms_rev +1,
      supersedes the current requirement record).
-  5. Reconcile: items sent, not closed, not withdrawn and whose key still cannot be found: a very similar line exists
+  5. Reconcile: items this registrar raised from a line, not closed, not withdrawn and whose key still cannot be
+     found: a very similar line exists
      -> send nothing, warn once; otherwise send a claimed (outcome done, evidence.basis is the reason from the
      review-log entry that deleted the line; id c:<key>:r<times reopened>). A withdrawn item whose line was deleted is
      not claimed.
+  Steps 2 and 5 leave out items a project raised itself (agenthub send --type task, a lease handover): they never had
+  a line in the file, so not finding one says nothing about them.
   6. If anything changed, commit + push (memory copies through git-safe-push; the platform's file through
      commit-hub-files.sh), and only after that succeeds `hubbus done` the applied records; on failure, wait for the
      next night.
@@ -245,11 +248,13 @@ class Ledger:
         except ValueError:
             raise SystemExit(_("cannot read hubbus records (exit {code}): {stderr}", code=r.returncode,
                                stderr=r.stderr.strip()[-200:]))
-        self.need, self.settle, self.pending = {}, {}, []
+        self.need, self.settle, self.pending, self.raised_by = {}, {}, [], {}
         for e in events:
             rec = e["record"]
             if e["direction"] == "out" and rec["type"] in ("raised", "amended", "withdrawn"):
                 self.need.setdefault(rec["key"], []).append(rec)
+                if rec["type"] == "raised":
+                    self.raised_by.setdefault(rec["key"], rec.get("by"))
             elif e["direction"] == "in" and rec["type"] in ("settled", "reopened"):
                 self.settle.setdefault(rec["key"], []).append(rec)
                 if not e["done"]:
@@ -282,6 +287,10 @@ class Ledger:
 
     def open(self) -> list[str]:
         return sorted(k for k in self.known() if not self.settled(k) and not self.withdrawn(k))
+
+    def bound(self, key: str) -> bool:
+        """Raised from a line of the file: by this registrar, or a v1 task letter (no record of who)."""
+        return self.raised_by.get(key, REGISTRAR) == REGISTRAR
 
 
 def v1_compat(project: str) -> tuple[dict, set, list, set]:
@@ -403,7 +412,7 @@ def run_project(project: str, path: pathlib.Path, how: str, warned: set[str]) ->
         applied.append(h["id"])
     # 2. restore keys
     present = present_keys(lines)
-    for k in relink(lines, {k: led.terms(k)[0] or "" for k in led.open() if k not in present}):
+    for k in relink(lines, {k: led.terms(k)[0] or "" for k in led.open() if k not in present and led.bound(k)}):
         changed = True
         log(_("{project}: restored key {key} (the key at the end of the line had been removed)", project=project, key=k))
     # 3. send
@@ -437,7 +446,8 @@ def run_project(project: str, path: pathlib.Path, how: str, warned: set[str]) ->
     ok &= all(res.get(r["id"]) in ("accepted", "duplicate", "dry-run") for r in amends)
     # 5. reconcile
     claims = []
-    for x in reconcile(lines, {k: led.terms(k)[0] or "" for k in led.open() if k not in warned and k not in led.v1_claimed}):
+    for x in reconcile(lines, {k: led.terms(k)[0] or "" for k in led.open()
+                               if k not in warned and k not in led.v1_claimed and led.bound(k)}):
         k = x["key"]
         if x["action"] == "warn":
             log(_("{project}: warning — {key} is not settled and its key is gone, but a very similar line exists "
