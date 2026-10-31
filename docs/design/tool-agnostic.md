@@ -150,7 +150,7 @@ hide the user's rules); Gemini's `contextFileName` is in `.gemini/settings.json`
     | Implementation | What it is | Capabilities |
     |---|---|---|
     | `builtin` (built in, default) | the platform's own minimal principal side: reads the records for the owner directly from the local bus | shows them (`todo.md` + `agenthub owner list`), notifies (notification adapters), closes (`agenthub owner done/drop <key>`, `answer <id> "…"` → a `settled`/`decided` record, authority `principal`) |
-    | `muninn` (optional, another open-source project) | a personal assistant: bridge v2 exchanges records over HTTP (`POST/GET /api/records`, ack) | all of the above, plus phone conversations, reminder timing, inferring completion from conversation (`attested`), deep talks, **channel leasing** |
+    | `muninn` (optional, another open-source project) | a personal assistant: bridge v2 exchanges records over HTTP (`POST/GET /api/records`, ack) | all of the above, plus phone conversations, reminder timing, inferring completion from conversation (`attested`), **channel leasing** |
     | others | any system implementing the principal side of Principal Handoff 0.3 | the interface the spec defines is the connector |
   - The docs, `hub init` and doctor all describe Muninn as "optional: install it if you want a personal assistant on
     your phone", the same way as "install Codex if you want agent work done with Codex". Channel leasing and question

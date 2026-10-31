@@ -50,8 +50,8 @@ SYNC_CMD = "[ -d .agent-memory ] && [ -x ~/agent-hub/bin/sync-local-setup.sh ] &
 # context (PostToolUse's additionalContext). Notes not behind: no output at all.
 NUDGE_CMD = "[ -d .agent-memory ] && [ -x ~/agent-hub/bin/memory-nudge.py ] && " + hubconf.sh_py("~/agent-hub/bin/memory-nudge.py") + " --post-tool || true"
 
-# Project mailbox (hubbus): deliver new letters into the session in use. The SessionStart one is called by
-# sync-local-setup.sh (no separate hook needed). hubbus works out which project it is itself, and prints nothing
+# Project mailbox (hubbus): deliver new letters into the session in use. At SessionStart it is the "mail" step of
+# `hub-event session_start` (no separate hook needed). hubbus works out which project it is itself, and prints nothing
 # without mail; PostToolUse checks at most once every two minutes per session.
 MAIL_PROMPT_CMD = "[ -x ~/agent-hub/bin/hubbus ] && " + hubconf.sh_py("~/agent-hub/bin/hubbus") + " hook prompt || true"
 MAIL_TOOL_CMD = "[ -x ~/agent-hub/bin/hubbus ] && " + hubconf.sh_py("~/agent-hub/bin/hubbus") + " hook post-tool || true"

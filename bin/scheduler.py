@@ -396,7 +396,7 @@ def main() -> None:
 
     save_state(state)
     alert_failing()
-    # the schedule status page (visible inside the tailnet), regenerated every tick; a failure doesn't affect scheduling
+    # the schedule status page (served by local.status-page, on 127.0.0.1 by default), regenerated every tick; a failure doesn't affect scheduling
     subprocess.run([sys.executable, str(HUB / "bin" / "gen-status-page.py")], capture_output=True)
 
 

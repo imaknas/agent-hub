@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 # For every project in the project registry (projects/*.yaml) that has a local .agent-memory, run the memory sync
 # once more: the safety net for the SessionEnd/PreCompact hooks. If a session didn't end normally (crashed, or left
-# open), the memory/ notes written that day stay local on the laptop, where the librarian on the hub machine can't
-# see them.
+# open), the memory/ notes written that day stay in the project's local .agent-memory, where the librarian (which reads
+# the bare repos) can't see them.
 #
 # Runs on the hub machine (local.sync-all-memory-mini), hourly via launchd: the manifest's paths
 # (~/workspace/<name>).

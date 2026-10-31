@@ -1,7 +1,8 @@
 # Project mailbox: routed and handled mechanically by the platform
 
 > **Status**: confirmed by the owner and implemented on 10-24 (first step: the notes capability).
-> `mailbox.handle: work` is not done yet.
+> `mailbox.handle: work` is not done yet. (10-31: the setting is now `mailbox.handler: agent | propose`, in hub.json;
+> neither lets the handler change code, so a work mode is still not done.)
 
 ## The problem
 
@@ -104,7 +105,7 @@ latest; for faster, ask the assistant to run `hubbus bridge` once right after qu
 - Stopping two agents from replying to each other forever: the platform handles one thread (reply_to chain) for at most
   N rounds (4 proposed); beyond that it is turned into a question for the owner.
 - A per-project daily cap on handling count/cost; over it, it stops and the status page turns red.
-- Channel-lease sessions (read-only deep talks) still do not count as recipients.
+- Channel-lease sessions (read-only (discuss) leases) still do not count as recipients.
 
 ## What changes for agents and the owner
 

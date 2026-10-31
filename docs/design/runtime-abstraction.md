@@ -84,7 +84,7 @@ same names in a module.
 ### 1. AgentRuntime: having an agent do work
 
 What the platform needs: run a judgment point once (give a prompt, working directory, policy and output format, get
-the result), open a long-running conversation (a deep talk), continue an existing conversation, fork a continuation
+the result), open a long-running conversation (a lease), continue an existing conversation, fork a continuation
 without touching the original conversation, whether this conversation is still alive, how much context a
 continuation would load, and the conversation's event stream.
 
@@ -111,7 +111,7 @@ class AgentRuntime(Protocol):
   implementation connects it to its own permission mechanism (for Claude Code, `--permission-prompt-tool`).
 - The event stream uses neutral event types; lease-runner already turns Claude's format into its own events
   (`assistant`, `tool_use`, `text_delta`), and that conversion moves into `runtime_claude.events`.
-- **For the long-running session (deep talk) this document only defines the interface, no implementation**: the
+- **For the long-running session (lease) this document only defines the interface, no implementation**: the
   lease contract's neutralisation (the assistant's m10251446: a tool → kind translation table, events, quota, error
   codes, the permission relay deciding by kind) spans this layer and layer 2, and which session does it is not decided
   yet; until it is, neither side touches lease-runner's flags, stream-json or lease-relay.

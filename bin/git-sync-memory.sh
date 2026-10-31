@@ -1,8 +1,7 @@
 #!/usr/bin/env bash
 # For the SessionEnd hook of "native" projects (working directly in the project root, not a separate .agent-memory
-# worktree). The difference from git-sync-push.sh, and the reason this exists: it adds/commits only memory/ and
-# STATE.md, agent-hub's own two files, and never does `git add -A`, which would bundle in the user's other code changes
-# that are not ready to commit.
+# worktree). Why this exists: it adds/commits only memory/ and STATE.md, agent-hub's own two files, and never does
+# `git add -A`, which would bundle in the user's other code changes that are not ready to commit.
 #
 # Nothing to commit: exit right away, no empty commit, no needless push.
 set -uo pipefail

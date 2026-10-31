@@ -1,26 +1,26 @@
-# Showing the user a project's files during a deep talk (m10251606)
+# Showing the user a project's files during a lease (m10251606)
 
 > **Status**: the owner confirmed A–E on 10-25 and it was implemented the same day; when done, ask the overall-design
 > session to review it.
 
-Source: the assistant's request `m10251606-7801` (10-25 16:06). At 10-25 16:03 the owner asked in idea-1's deep talk
+Source: the assistant's request `m10251606-7801` (10-25 16:06). At 10-25 16:03 the owner asked in idea-1's lease
 "can you show me the image?"; the session had no tool to give it to him and could only tell him to go back to the
 computer and open `results/render-v2/*.png`. Today a file can only travel from him to the session (attachments), there
 is no way back. Done when (the assistant's criteria): idea-1's session can make the render-v2 png appear directly in the
-deep talk; files outside the folder, of the wrong type or too large are blocked, with tests.
+lease; files outside the folder, of the wrong type or too large are blocked, with tests.
 
 ## In one sentence
 
 The session calls the platform's **"show the user" tool** `show_file(path, summary?)` → the runner checks it and
 **copies the file** into the lease's own directory → sends a v2 event `file` → the assistant fetches the file with
-`GET /v1/leases/<id>/files/<file id>` and shows it inline in the deep talk.
+`GET /v1/leases/<id>/files/<file id>` and shows it inline in the lease.
 
 ## How the session says "show him this" (proposed: a platform tool, not a command, not guessing from the reply)
 
 | Approach | Problem |
 |---|---|
 | Detect file names mentioned in the session's reply | Depends on the model's wording; mentioning is not wanting to show, and it misses some |
-| Platform command `hub-show <path>` (Bash) | **discuss mode has no Bash** (a read-only deep talk can't use it); in work mode the owner has to press allow for every command, once per image |
+| Platform command `hub-show <path>` (Bash) | **discuss mode has no Bash** (a read-only (discuss) lease can't use it); in work mode the owner has to press allow for every command, once per image |
 | **Platform tool `show_file` (proposed)** | One explicit call; works in both discuss and work; no allow to press |
 
 - **The neutral part**: "show the user a file" is a platform service, not something belonging to one agent. The runner
@@ -57,7 +57,7 @@ The session calls the platform's **"show the user" tool** `show_file(path, summa
   write there), and only that copy is ever sent:
   - If the file is swapped between the check and the sending (replaced by a symlink, content changed), it does not
     matter: what is sent is the copy taken at check time.
-  - The assistant wants "still there when reopened": if the session later changes or deletes the file, the deep talk
+  - The assistant wants "still there when reopened": if the session later changes or deletes the file, the lease
     still shows the image as it was then.
 - After the lease is detached the files are kept 30 days (the runner cleans up once a day), about as long as the
   conversation log.

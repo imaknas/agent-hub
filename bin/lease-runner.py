@@ -35,7 +35,7 @@ API:
   POST /v1/projects/<name>/rename     {v, to} → 200 {name, origin, renamed} (a retry of a half-done rename returns
                                       renamed:false) / 400 bad_name
                                       / 404 not_found / 409 busy|name_taken / 500 rename_failed = bin/project-rename.py
-                                      (GitHub repo, registration, memory, folder); deep talks are handled the same way
+                                      (GitHub repo, registration, memory, folder); leases are handled the same way
                                       as for an upgrade (quiesce, follow_move)
   POST /v1/sandboxes/<name>/upgrade   {v, rename?} → 200 {name, origin, upgraded} (an already-upgraded one returns
                                       upgraded:false + the current name)
@@ -161,7 +161,7 @@ class Lease:
         self.intent_stop = False
         self.proc: subprocess.Popen | None = None
         self.seen_msgs: list[str] = d.get("seen_msgs", [])[-200:]
-        # how many times this deep talk has been handed over: the message ids the handover turns into carry it (the
+        # how many times this lease has been handed over: the message ids the handover turns into carry it (the
         # same id resumed and reclaimed again doesn't collide). Never lower than the handover count in the event log:
         # records from before the change lack this field, and counting from 0, the ids used for replays
         # (lease-<id>-<n>-…) would later collide with the real n-th handover
@@ -523,7 +523,7 @@ def hubbus(*args: str) -> subprocess.CompletedProcess:
 
 def handover_id(sid: str, n: int, part: str) -> str:
     """The message ids a handover turns into: lease-<lease>-<handover number>-<part>. 10-26 m10262322: resuming and
-    reclaiming the same deep talk keeps the lease id, and numbering used to start from 0 each time
+    reclaiming the same lease keeps the lease id, and numbering used to start from 0 each time
     (lease-<id>-task-0…), so from the second handover on the colliding ones were all swallowed as resends (by both the
     bus and the assistant).
     Old-format ids are unchanged; the new format has an extra count segment, so it can't collide with the old."""
@@ -731,7 +731,7 @@ def prune_files() -> None:
 
 
 def quiesce(project: str) -> str:
-    """Before a rename or upgrade: if this project has a deep talk answering, waiting for a reply, in a terminal or
+    """Before a rename or upgrade: if this project has a lease answering, waiting for a reply, in a terminal or
     being reclaimed → return the reason (touching nothing); otherwise stop the processes first (the leases remain, and
     later messages resume them automatically)."""
     with _lock:

@@ -8,7 +8,7 @@ repos are open source, and the vendored copy gets committed there).
 | Contract | Who produces it (implementation on this side) | Who reads it |
 |---|---|---|
 | `todo-md.v1.md` | `bin/gen-todo.py` (the librarian, nightly, zero LLM); the librarian then adds the memory-gaps block | the owner, the owner's personal assistant |
-| `state-todo.v1.md` | the librarian (model rewrite) + `bin/check-state-todo.py` (format check) + `bin/knas-tasks.py` (stamps keys mechanically, deletes/re-adds by key) | `bin/gen-todo.py`, the personal assistant |
+| `state-todo.v1.md` | the librarian (model rewrite) + `bin/check-state-todo.py` (format check) + `bin/registrar.py` (stamps keys mechanically, deletes/re-adds by key) | `bin/gen-todo.py`, the personal assistant |
 | `reflect-week.v1.schema.json` | `bin/weekly-reflect.py` (every Monday 07:00) | the personal assistant's weekly reflection |
 | `hubbus.v1.schema.json` | `bin/hubbus` | the platform itself (sessions, bridge, librarian, status page) |
 | `llm-points.v1.schema.json` | `contracts/llm-points.yaml` (edited by people; `bin/llm.py` builds the flags from it, contracts-check validates it nightly) | the personal assistant (its own judgment-point registry follows this format; the contents are not shared) |

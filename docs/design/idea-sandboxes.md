@@ -20,7 +20,7 @@ wired to `NoSandboxes`/the local version).
 
 An idea sandbox = **a normally onboarded project, but with no GitHub remote, marked `type: idea` in the registry**.
 It is created through lease-runner's new `POST /v1/sandboxes`; once created it automatically appears in the lease's
-attachable list, and deep talks /attach to it through the existing flow. Upgrading to a real project = changing `type`
+attachable list, and leases /attach to it through the existing flow. Upgrading to a real project = changing `type`
 and adding a GitHub remote (renaming along the way if wanted).
 
 ## Against the assistant's five requirements
@@ -42,7 +42,7 @@ and adding a GitHub remote (renaming along the way if wanted).
 - The name is given by the assistant (`idea-<number>`); the platform only validates the format.
 
 **B. Memory (`.agent-memory`) is required** (proposed)
-- When a deep talk is detached, the handover notes are written only into `<project>/.agent-memory/memory/`
+- When a lease is detached, the handover notes are written only into `<project>/.agent-memory/memory/`
   (`lease-runner.deliver()`); for an idea, the notes are the result. So no ultra-light "just a folder" version, but
   onboarding minus the GitHub step.
 - Cost: each idea adds a `~/git-origin/idea-<n>-memory.git` and `~/.memory-copies/idea-<n>`, which the librarian looks
@@ -58,7 +58,7 @@ and adding a GitHub remote (renaming along the way if wanted).
 3. The `index.md` roster lists ideas as a separate group (`hubconf.py ideas`). `todo.md` is **not grouped**: its
    `### <project>` subheadings are a contract the assistant reads (`^### (\S+)\s*$`), and adding words would break the
    reading; the `idea-` prefix already sets them apart. The status page has no per-project list, so no change.
-4. The lease's system prompt gets the purpose ("this is an idea sandbox, exploring: …"), so a deep talk knows from the
+4. The lease's system prompt gets the purpose ("this is an idea sandbox, exploring: …"), so a lease knows from the
    start what it is about.
    Everything else (librarian, memory-nudge, mailbox, backup) as for ordinary projects.
 
@@ -69,8 +69,8 @@ waits for your nod)
   permission relay), `lease-relay.py` sending "Edit/Write/Bash inside the working folder" to the phone to ask (allow /
   deny / allow for this lease), `POST /v1/leases` accepting `mode`, and a confirmation card on the assistant's side.
   At first only `type: idea` projects can use it.
-- Once phase one is done, the assistant can "open a sandbox → read-only deep talk → handover notes"; things that need
-  doing go into the handover's to-dos.
+- Once phase one is done, the assistant can "open a sandbox → read-only (discuss) lease → handover notes"; things that
+  need doing go into the handover's to-dos.
 - **Confirmed by the assistant**: same shape (two levels, read and write; each write sent to the phone: allow / deny /
   allow for this lease, the same kind as today's permission card); it adds a write-confirmation card on its side.
 
@@ -155,7 +155,7 @@ Phase two (if you say yes to D) comes after, with a separate detailed design.
 yet.
 
 **How to enter it**
-- `POST /v1/leases` with `mode: work`, or midway through a deep talk `POST /v1/leases/<id>/mode {mode: work|discuss}`
+- `POST /v1/leases` with `mode: work`, or midway through a lease `POST /v1/leases/<id>/mode {mode: work|discuss}`
   (sent only after the owner taps `允許動手` ("allow hands-on work") on the assistant's card; the runner does not judge
   whether the owner agreed, that is the assistant's card).
 - Switching midway = stop the process and resume the same session with `--resume`, under the work judgment point; the

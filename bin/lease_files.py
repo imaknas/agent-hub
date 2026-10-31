@@ -1,4 +1,4 @@
-"""Showing the user a project file during a deep conversation (docs/design/lease-show-file.md): check it, copy it,
+"""Showing the user a project file during a lease conversation (docs/design/lease-show-file.md): check it, copy it,
 read it back. Independent of the runtime.
 
 When lease-runner receives "show them this" (`POST /v1/internal/<lease>/show`; on the session side each runtime's
@@ -8,7 +8,7 @@ tool is wired to it), it calls take():
   2. Type: the extension is in TYPES, **and the start of the content must match** (images/pdf/glb by magic bytes,
      text must be UTF-8); no svg or html
   3. Size: each ≤ MAX_FILE; per lease at most MAX_COUNT files totalling MAX_TOTAL **within the last WINDOW_S**
-     (10-25 m10252240: the same deep conversation gets resumed for several days with images rendered over and over;
+     (10-25 m10252240: the same lease conversation gets resumed for several days with images rendered over and over;
      dozens a day is normal; counting over the whole lease would block long-lived leases. The overall volume is
      managed by prune()/KEEP_DAYS)
   4. Credential-like file names, paths declared under the registry's secrets:, and text files whose content looks

@@ -105,7 +105,7 @@ can only be replaced by a new record.
   → `principal` (`evidence.basis` points to that sentence), answering from preferences → `delegated` (Muninn has no such
   feature today, so it will not occur); objecting to a merge: the project sends a note, Muninn withdraws same_as.
 - **A rule Muninn added itself**: in a record sent to a project, the text (note, quote, evidence) only carries what that
-  project may hear; content from a deep talk or another project only goes back to the project it came from (Muninn's
+  project may hear; content from a lease or another project only goes back to the project it came from (Muninn's
   existing only_to/via). Spec core §13 does not cover this direction; it could be written into the spec later.
 - **Phase 2 is live** (Muninn 9ef9442, format `contracts/records.v2.md`, the spec's schema and conformance cases
   vendored in `contracts/vendor/principal-handoff/`): `POST /api/records` answers
@@ -118,7 +118,7 @@ can only be replaced by a new record.
   only this project wanted it; the owner is asked instead.
 - **What phase 3 (agent-hub) has to do**: the bridge switches to v2 (sending records, pull + ack, cursor from the first
   read); `knas-tasks.py` becomes the Acts registrar; the librarian applies settlements and judges notes; questions from
-  a deep talk put `lease:<id>` in `context`; hub.json gets the principal identifier; in agent-instructions the
+  a lease put `lease:<id>` in `context`; hub.json gets the principal identifier; in agent-instructions the
   explanation of `drop --task` becomes "no longer needed, Muninn will ask the owner". Timing waits for the owner to
   schedule.
 

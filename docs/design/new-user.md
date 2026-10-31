@@ -276,7 +276,8 @@ status_sections: [to_owner_backlog]      # extra sections on the status page (ge
   job the scheduler runs, and the scheduler breaking is exactly what the watchdog has to report. The watchdog keeps
   using the system's built-in python3, not the platform's Python (`test_python_floor`'s EXEMPT and its 3.9 check stay).
 - launchd is the boundary: scheduling and services both go through `render-services.py` and `scheduler.py`, so if
-  systemd is ever wanted, those two get one more implementation. **No Linux for now.**
+  systemd is ever wanted, those two get one more implementation. **No Linux for now.** (10-29: Linux is supported
+  through systemd user units, `bin/systemd_units.py`; see tool-agnostic.md.)
 
 ### 3.4 A single entry point
 

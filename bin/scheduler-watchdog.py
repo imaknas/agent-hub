@@ -6,8 +6,8 @@ stops nothing gets called: the assistant's web server is a separate launchd job,
 stops updating. So this script deliberately depends neither on the scheduler nor on the assistant:
 
 - its own launchd job (local.agent-hub-scheduler-watchdog, every 5 minutes)
-- the system's /usr/bin/python3, standard library only: if Homebrew's python breaks and stops the scheduler, this
-  one keeps going
+- the system's /usr/bin/python3, standard library only: if the platform's Python (bin/py) breaks and stops the
+  scheduler, this one keeps going
 - notifications go through Discord REST (bot token, curl), not through the assistant
 
 The check: scheduler.py writes .state/scheduler-heartbeat at the start of every tick and after every job; it alerts
@@ -15,9 +15,9 @@ only when that hasn't been updated for more than STALE_MIN minutes, two checks i
 round right after boot/recovery). After that it reminds every REMIND_H hours, and posts a "recovered" message when it
 recovers.
 
-Settings (not version-controlled, .secrets/ is in .gitignore):
-  .secrets/discord-token          bot token (can share the same bot with other projects)
-  .secrets/discord-alert-channel  the channel id to post to
+Settings, in the platform's secrets directory (outside the repo; `bin/hubconf.py dir secrets`):
+  discord-token          bot token (can share the same bot with other projects)
+  discord-alert-channel  the channel id to post to
 Without them it fails loudly in the log (exit 1), rather than pretend to be watching.
 
 Usage: scheduler-watchdog.py          check once (for launchd)

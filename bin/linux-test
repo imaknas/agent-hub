@@ -2,8 +2,8 @@
 # Run the platform's full test suite in a Linux container (run before a release; too slow for the commit gate).
 # Needs docker.
 #   bin/linux-test [unittest arguments…]     e.g. bin/linux-test tests.test_new_user
-# Copies the current working tree (tracked files + uncommitted changes, not untracked files) into a fresh git repo in
-# the container and runs it there, leaving this checkout alone.
+# Copies the current working tree (tracked files with their uncommitted changes, plus untracked files that are not
+# ignored) into a fresh git repo in the container and runs it there, leaving this checkout alone.
 # Expected: 0 failures; tests that only make sense on macOS are skipped.
 set -euo pipefail
 hub="$(cd "$(dirname "$0")/.." && pwd)"

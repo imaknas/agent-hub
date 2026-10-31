@@ -174,9 +174,9 @@ done
 # At SessionStart, `hub-event session_start` calls them in one place (it runs this script as "setup only"; doing it
 # in both would deliver twice).
 
-# --- 4. committed files must not mention this machinery ---
-# Whether a repo goes public later is undecided, so it's never allowed: remind whenever the name or path of agent-hub
-# or .agent-memory appears in committed content. This part deliberately prints with --quiet too: the SessionStart
+# --- 4. committed files must not contain this machine's paths ---
+# Whether a repo goes public later is undecided, so it's never allowed: remind whenever a local path of agent-hub, the
+# instance or the workspace appears in committed content (naming agent-hub is fine since 10-27). This part deliberately prints with --quiet too: the SessionStart
 # hook's stdout goes into the session context, so every session start hands the list of things to fix to the
 # project's own session, without relying on anyone remembering to check. No violation, nothing printed.
 leak_re='~/agent-hub/|/Users/[A-Za-z0-9._-]+/(agent-hub|workspace|\.agent-hub|services|git-origin)'
