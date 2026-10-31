@@ -30,7 +30,10 @@ import sys
 
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
 import hubconf  # noqa: E402
+import i18n  # noqa: E402
 import registry  # noqa: E402
+
+_ = i18n.domain(__file__)
 
 HUB = hubconf.ROOT
 RECORD = hubconf.STATE / "idea-upgrades.json"
@@ -52,7 +55,7 @@ def fail(msg: str, result: str = "failed") -> None:
 def run(cmd: list[str], **kw) -> subprocess.CompletedProcess:
     r = subprocess.run(cmd, text=True, capture_output=True, **kw)
     if r.returncode != 0:
-        fail(f"{' '.join(cmd[:3])} 失敗:{(r.stderr or r.stdout).strip()[-400:]}")
+        fail(_("{cmd} failed: {err}", cmd=' '.join(cmd[:3]), err=(r.stderr or r.stdout).strip()[-400:]))
     return r
 
 
@@ -80,7 +83,8 @@ def unfinished_rename(name: str) -> str | None:
         return None
     for old, r in recs.items():
         if isinstance(r, dict) and r.get("stage") != "done" and name in (old, r.get("new")):
-            return f"{old} → {r.get('new')} 的改名做到一半(stage {r.get('stage')}),先把改名的重試做完"
+            return _("The rename {old} → {new} stopped halfway (stage {stage}): finish retrying the rename first",
+                     old=old, new=r.get('new'), stage=r.get('stage'))
     return None
 
 
@@ -130,11 +134,11 @@ def main(argv: list[str]) -> int:
         elif a == "--public":
             public = True
         elif a == "--rename":
-            new = next(it, None) or fail("--rename 要給新名稱")
+            new = next(it, None) or fail(_("--rename needs a new name"))
         else:
             args.append(a)
     if len(args) != 1:
-        fail("用法:upgrade-idea.py <沙盒名稱> [--rename <新名稱>] [--public] [--apply]")
+        fail(_("usage: upgrade-idea.py <sandbox name> [--rename <new name>] [--public] [--apply]"))
     name = args[0]
     if (why := unfinished_rename(name)):
         fail(why)
@@ -144,52 +148,55 @@ def main(argv: list[str]) -> int:
     renamed = bool(prev and prev.get("stage") in ("renamed", "repo") and prev["name"] != name)
     if renamed:  # 上次改名之後停了:登錄跟資料夾已經是新名稱
         if new and new != prev["name"]:
-            fail(f"{name} 上次升級做到一半,已經改名成 {prev['name']};要用同一個名稱再叫一次", "name_taken")
+            fail(_("The last upgrade of {name} stopped halfway, already renamed to {new}; call again with that same "
+                   "name", name=name, new=prev['name']), "name_taken")
         new = None
     final = prev["name"] if renamed else (new or name)
     reg = hubconf.registry_dir() / f"{final if renamed else name}.yaml"
     if not reg.exists():
-        fail(f"登錄裡沒有 {name}", "not_found")
+        fail(_("{name} is not in the registry", name=name), "not_found")
     import yaml
     doc = yaml.safe_load(reg.read_text())
     if doc.get("type") != "idea":
-        fail(f"{name} 不是想法沙盒(type: {doc.get('type', 'project')})", "not_idea")
+        fail(_("{name} is not an idea sandbox (type: {type})", name=name, type=doc.get('type', 'project')), "not_idea")
     ws = registry.dirs(doc)["workspace"]
     if run(["git", "-C", str(ws), "status", "--porcelain", "--untracked-files=no"]).stdout.strip():
-        fail(f"{ws} 有未 commit 的追蹤檔變更,先處理", "dirty")
-    owner = hubconf.get("github.owner") or fail("hub.json 沒有 github.owner")
+        fail(_("{path} has uncommitted changes to tracked files; deal with them first", path=ws), "dirty")
+    owner = hubconf.get("github.owner") or fail(_("hub.json has no github.owner"))
     url = remote_url(owner, final)
     errs = registry.validate(upgraded_doc(doc, final, url), final)
     if errs:
-        fail(f"升級後的登錄不合格,什麼都沒動:{'; '.join(errs)}")
+        fail(_("The upgraded registry entry would not be valid; nothing was changed: {errors}", errors='; '.join(errs)))
     if new:
         if not re.fullmatch(r"[a-z0-9][a-z0-9-]*", new):
-            fail(f"新名稱只能用小寫英數跟 -:{new}", "name_taken")
+            fail(_("The new name may only use lowercase letters, digits and -: {name}", name=new), "name_taken")
         taken = [w for w, hit in ((f"projects/{new}.yaml", (hubconf.registry_dir() / f"{new}.yaml").exists()),
                                   (f"~/workspace/{new}", (hubconf.p("workspace_root", "~/workspace") / new).exists()))
                  if hit]
         if taken:
-            fail(f"{new} 已經被用掉了:{', '.join(taken)}", "name_taken")
+            fail(_("{name} is already taken: {paths}", name=new, paths=', '.join(taken)), "name_taken")
     repo_exists = subprocess.run(["gh", "repo", "view", f"{owner}/{final}"], capture_output=True).returncode == 0
     if repo_exists and not remote_is_ours(ws, url):
-        fail(f"GitHub 上已經有 {owner}/{final}(不是這個沙盒的歷史)", "name_taken")
+        fail(_("GitHub already has {owner}/{name} (not this sandbox's history)", owner=owner, name=final), "name_taken")
 
-    plan = [f"{'改名 ' + name + ' → ' + new + '(rename-project.sh)' if new else ('已經改名成 ' + final if renamed else '不改名')}",
-            (f"GitHub 上的 {owner}/{final} 是上次建的:只 push" if repo_exists else
-             f"gh repo create {owner}/{final} --{'public' if public else 'private'} + push") + f",origin = {url}",
-            f"登錄 projects/{final}.yaml:type: project、paths.origin: {url}(purpose/enforce/privacy 留著)",
-            "mirror-list.txt 加上 origin、重生 index.md、commit agent-hub"]
+    plan = [_("rename {old} → {new} (rename-project.sh)", old=name, new=new) if new
+            else (_("already renamed to {name}", name=final) if renamed else _("no rename")),
+            (_("{owner}/{name} on GitHub was made last time: push only", owner=owner, name=final) if repo_exists else
+             f"gh repo create {owner}/{final} --{'public' if public else 'private'} + push") + _(", origin = {url}", url=url),
+            _("registry projects/{name}.yaml: type: project, paths.origin: {url} (purpose/enforce/privacy kept)",
+              name=final, url=url),
+            _("add origin to mirror-list.txt, regenerate index.md, commit agent-hub")]
     if not JSON:
         print("\n".join(f"  {i}. {p}" for i, p in enumerate(plan, 1)))
     if not apply:
-        print("(dry-run,加 --apply 執行)")
+        print(_("(dry-run; add --apply to run it)"))
         return 0
 
     if new:
         r = subprocess.run([str(HUB / "bin" / "rename-project.sh"), name, new, "--apply"], text=True,
                            capture_output=JSON)
         if r.returncode != 0:
-            fail("rename-project.sh 失敗,停在這裡(還沒建 GitHub repo)")
+            fail(_("rename-project.sh failed; stopping here (the GitHub repo is not created yet)"))
         record(name, name=final, origin=url, stage="renamed")
         reg = hubconf.registry_dir() / f"{final}.yaml"
         doc = yaml.safe_load(reg.read_text())
@@ -209,7 +216,8 @@ def main(argv: list[str]) -> int:
     doc = upgraded_doc(doc, final, url)
     errs = registry.validate(doc, final)
     if errs:  # 動手前驗證過;到這裡還不合格是登錄在中途被改了。repo 留著,修好登錄再叫一次會接著做
-        fail(f"登錄不合格:{'; '.join(errs)}(GitHub repo 已經建好;修好登錄再叫一次會接著做)")
+        fail(_("The registry entry is not valid: {errors} (the GitHub repo is already created; fix the registry entry "
+               "and call again to continue)", errors='; '.join(errs)))
     reg.write_text(head + yaml.safe_dump(doc, allow_unicode=True, sort_keys=False, width=200))
 
     mirror = hubconf.config_file("mirror-list.txt")   # config(實例目錄;沒搬家時就是 hub 裡那份)
@@ -221,7 +229,7 @@ def main(argv: list[str]) -> int:
                     f"projects/{final}.yaml", "mirror-list.txt", "index.md"], check=False)
     record(name, name=final, origin=url, stage="done")
     if not JSON:
-        print(f"完成:{name} 已升級成正式專案 {final}({url})")
+        print(_("Done: {name} is now a project, {new} ({url})", name=name, new=final, url=url))
     done("upgraded", 0, name=final, origin=url)
 
 
