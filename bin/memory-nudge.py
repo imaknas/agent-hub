@@ -68,7 +68,7 @@ def should_nudge(times) -> bool:
 def message(times) -> str:
     today = datetime.date.today().isoformat()
     since = datetime.datetime.fromtimestamp(min(times)).strftime("%m-%d %H:%M")
-    return _("memory notes are behind: since {since} this project has {n} commits not yet recorded in "
+    return _("memory notes are behind: since {since} this project has {n} {n:commit|commits} not yet recorded in "
              ".agent-memory/memory/. Add a section to .agent-memory/memory/{today}.md on what was done, "
              "what was decided and what went wrong (raw notes are fine, no summary needed), then carry on.",
              since=since, n=len(times), today=today)

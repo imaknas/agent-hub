@@ -78,13 +78,13 @@ def main() -> int:
         if c.present and c.since and c.max_age:
             age = now - c.since
             if age > c.max_age:
-                hard.append(_("{label} is {days} days old (expires after {lifetime}); soon: {renew}", label=c.label,
+                hard.append(_("{label} is {days} {days:day|days} old (expires after {lifetime}); soon: {renew}", label=c.label,
                               days=age.days, lifetime=c.lifetime, renew=c.renew))
         if c.present and c.expires:
             left = c.expires - now
-            print(_("{name}: refresh valid for {days} more days", name=c.name, days=left.days))
+            print(_("{name}: refresh valid for {days} more {days:day|days}", name=c.name, days=left.days))
             if c.warn_before and left < c.warn_before:
-                hard.append(_("{label} ({used_by}): the login expires within {days} days — {renew}", label=c.label,
+                hard.append(_("{label} ({used_by}): the login expires within {days} {days:day|days} — {renew}", label=c.label,
                               used_by=c.used_by, days=max(left.days, 0), renew=c.renew))
         elif c.present and c.note:
             print(c.note)
@@ -96,7 +96,7 @@ def main() -> int:
     streak = {k: streak.get(k, 0) + 1 for k in soft}
     STREAK.write_text(json.dumps(streak))
     for k, err in soft.items():
-        print(_("{mode}: request failed (does not look like a login problem; {n} in a row): {err}", mode=k, n=streak[k],
+        print(_("{mode}: request failed (does not look like a login problem; {n} {n:time|times} in a row): {err}", mode=k, n=streak[k],
                 err=err[:200]))
         if streak[k] >= SOFT_LIMIT:
             hard.append(_("claude requests failed {n} times in a row ({mode}): {err}", n=streak[k], mode=k, err=err[:200]))

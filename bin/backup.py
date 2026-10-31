@@ -14,7 +14,7 @@ What is backed up (what only the hub machine has, and cannot be recovered once l
     written is never touched
   - the bare repos under ~/git-origin (memory branches, agent-hub itself, projects without a GitHub remote):
     git bundle --all
-  - what each project workspace has not pushed: commits on no remote as a bundle, uncommitted changes as a diff,
+  - what each project workspace has not pushed: commits not on any remote as a bundle, uncommitted changes as a diff,
     .env* (up to three levels deep, e.g. backend/.env)
   - the directories listed in hub.json backup.include (the assistant's data, platform state, secrets, service data,
     Claude Code transcripts)
@@ -74,8 +74,9 @@ def env() -> dict:
 def restic(*args: str, check: bool = True, capture: bool = False) -> subprocess.CompletedProcess:
     r = subprocess.run([RESTIC, *args], env=env(), capture_output=capture, text=True)
     if check and r.returncode != 0:
-        raise RuntimeError(_("restic {cmd} failed (exit {code}){detail}", cmd=args[0], code=r.returncode,
-                             detail=(r.stderr or '')[-400:] if capture else ''))
+        detail = (r.stderr or '')[-400:] if capture else ''
+        raise RuntimeError(_("restic {cmd} failed (exit {code}): {detail}", cmd=args[0], code=r.returncode, detail=detail)
+                           if detail else _("restic {cmd} failed (exit {code})", cmd=args[0], code=r.returncode))
     return r
 
 
@@ -227,7 +228,7 @@ def cmd_run() -> int:
             "ok": True, "at": now().isoformat(), "snapshot": summary.get("snapshot_id"),
             "files": summary.get("total_files_processed"), "bytes": summary.get("total_bytes_processed"),
             "added_bytes": summary.get("data_added"), "manifest": m}, ensure_ascii=False, indent=1))
-        say(_("Done: snapshot {snapshot}, {files} files, {mb} MB added", snapshot=str(summary.get("snapshot_id"))[:8],
+        say(_("Done: snapshot {snapshot}, {files} {files:file|files}, {mb} MB added", snapshot=str(summary.get("snapshot_id"))[:8],
               files=summary.get("total_files_processed"), mb=round((summary.get("data_added") or 0) / 1e6, 1)))
         return 0
     except Exception as e:
@@ -260,8 +261,8 @@ def cmd_verify() -> int:
         OUT.mkdir(parents=True, exist_ok=True)
         (OUT / "last-verify.json").write_text(json.dumps({"ok": True, "at": now().isoformat(), "sqlite": m["sqlite"],
                                                           "bundles": len(m["bundles"])}, ensure_ascii=False))
-        say(_("Restore test passed: {sqlite} SQLite, {bundles} bundles, all {dirs} directories present, 10% data "
-              "sample OK", sqlite=len(m["sqlite"]), bundles=len(m["bundles"]), dirs=len(need)))
+        say(_("Restore test passed: {sqlite} SQLite, {bundles} {bundles:bundle|bundles}, the required directories all "
+              "present ({dirs}), 10% data sample OK", sqlite=len(m["sqlite"]), bundles=len(m["bundles"]), dirs=len(need)))
         return 0
     except Exception as e:
         return fail("verify", repr(e))

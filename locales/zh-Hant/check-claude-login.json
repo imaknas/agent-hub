@@ -8,10 +8,10 @@
  "{path} is missing ({means})": "沒有 {path}({means})",
  "{name}: ok": "{name}:ok",
  "{label} ({used_by}) does not work: {err} — {renew}": "{label}({used_by})不能用了:{err}——{renew}",
- "{label} is {days} days old (expires after {lifetime}); soon: {renew}": "{label} 已經 {days} 天({lifetime}到期),快要{renew}",
- "{name}: refresh valid for {days} more days": "{name}:refresh 還有 {days} 天",
- "{label} ({used_by}): the login expires within {days} days — {renew}": "{label}({used_by})登入 {days} 天內到期——{renew}",
- "{mode}: request failed (does not look like a login problem; {n} in a row): {err}": "{mode}:請求失敗(不像登入問題,連續第 {n} 次):{err}",
+ "{label} is {days} {days:day|days} old (expires after {lifetime}); soon: {renew}": "{label} 已經 {days} 天({lifetime}到期),快要{renew}",
+ "{name}: refresh valid for {days} more {days:day|days}": "{name}:refresh 還有 {days} 天",
+ "{label} ({used_by}): the login expires within {days} {days:day|days} — {renew}": "{label}({used_by})登入 {days} 天內到期——{renew}",
+ "{mode}: request failed (does not look like a login problem; {n} {n:time|times} in a row): {err}": "{mode}:請求失敗(不像登入問題,連續第 {n} 次):{err}",
  "claude requests failed {n} times in a row ({mode}): {err}": "claude 請求連續 {n} 次失敗({mode}):{err}",
  "The claude login check is back to normal": "claude 登入檢查恢復正常"
 }

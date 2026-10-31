@@ -1,11 +1,11 @@
 {
- "Deleting: {project} {branch} ({path}, untouched for {days} days)": "刪:{project} {branch}({path},{days} 天沒動)",
- "Can delete: {project} {branch} ({path}, untouched for {days} days)": "可以刪:{project} {branch}({path},{days} 天沒動)",
+ "Deleting: {project} {branch} ({path}, untouched for {days} {days:day|days})": "刪:{project} {branch}({path},{days} 天沒動)",
+ "Can delete: {project} {branch} ({path}, untouched for {days} {days:day|days})": "可以刪:{project} {branch}({path},{days} 天沒動)",
  "Kept (not merged yet): {project} {branch}": "留著(還沒合併):{project} {branch}",
  "(only listed; once you are sure no session is still open in them, add --yes to delete them)": "(只列出來;確定沒有 session 還開在裡面,再加 --yes 真的刪)",
  "{label}: ignored files not on the rebuildable list ({files}…); kept": "{label}:有 ignore 的檔案不在可重建清單({files}…),留著",
  "{label}: git worktree remove failed: {err}": "{label}:git worktree remove 失敗:{err}",
- "{label} (idle {days} days, {mb} MB; branch kept)": "{label}(閒置 {days} 天,{mb} MB;branch 留著)",
+ "{label} (idle {days} {days:day|days}, {mb} MB; branch kept)": "{label}(閒置 {days} 天,{mb} MB;branch 留著)",
  "{date} {dep} → rebuild: {cmd}": "{date} {dep} → 重建:{cmd}",
- "{label} {dep} (idle {days} days, {mb} MB)": "{label} {dep}(閒置 {days} 天,{mb} MB)"
+ "{label} {dep} (idle {days} {days:day|days}, {mb} MB)": "{label} {dep}(閒置 {days} 天,{mb} MB)"
 }

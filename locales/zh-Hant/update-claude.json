@@ -9,8 +9,8 @@
  "not installed": "沒有安裝",
  "still on {old} (latest {latest}): the current version already fails a request, not updating (a login or network problem, see agent-hub/claude-login): {error}": "還在 {old}(最新 {latest}):現在的版本就打不通請求,先不更新(登入或網路的問題,看 agent-hub/claude-login):{error}",
  "claude {old} → {new} (node {node}), the request test passed": "claude {old} → {new}(node {node}),請求測試通過",
- "{latest} would not install ({detail}), ": "{latest} 裝不起來({detail}),",
- "put {old} back": "已裝回 {old}",
- "putting it back failed too, claude may not work now": "裝回也失敗,claude 現在可能不能用",
+ "{latest} would not install ({detail}); ": "{latest} 裝不起來({detail}),",
+ "{old} is back in place": "已裝回 {old}",
+ "putting the old version back failed too, so claude may not work now": "裝回也失敗,claude 現在可能不能用",
  "{latest} would not install: {detail}": "{latest} 裝不起來:{detail}"
 }

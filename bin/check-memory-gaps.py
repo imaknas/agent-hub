@@ -72,7 +72,7 @@ def main() -> None:
         runtime_ports.load(ports=("transcripts",))
     except runtime_ports.Unsupported as e:
         # 這個檢查要的是「有對話」:沒有對話紀錄就明確不檢查(不是「沒有缺口」)
-        msg = _("memory gap check: not checked: {reason}", reason=e)
+        msg = _("memory gap check skipped: {reason}", reason=e)
         print(msg)
         if args.apply:
             write_todo_block(hubconf.data_file("todo.md"), [])
@@ -99,7 +99,7 @@ def main() -> None:
     write_todo_block(hubconf.data_file("todo.md"), gaps)
     hublib.digest_append("memory-gaps", f"## {heading()}\n\n" + "\n".join(gaps) if gaps else "")
     names = " ".join(re.findall(r"\*\*([^*]+)\*\*", "\n".join(gaps)))
-    print(_("memory gap check: {n} projects with conversations but no memory notes", n=len(gaps))
+    print(_("memory gap check: {n} {n:project|projects} with conversations but no memory notes", n=len(gaps))
           + (_(" ({names})", names=names) if names else ""))
 
 

@@ -125,7 +125,7 @@ def main() -> int:
         subprocess.run([sys.executable, str(HUB / "bin" / "hubbus"), "publish", "job.failed",
                         "--source", "contracts-check", "--payload",
                         json.dumps({"job": "contracts-check",
-                                    "detail": _("{n} problems: ", n=len(errs)) + _("; ").join(errs[:3])},
+                                    "detail": _("{n} {n:problem|problems}: ", n=len(errs)) + _("; ").join(errs[:3])},
                                    ensure_ascii=False)], capture_output=True)
         return 1
     if "--quiet" not in sys.argv:

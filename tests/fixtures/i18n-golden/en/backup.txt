@@ -30,10 +30,10 @@ exit 0
 exit 1
 [03:04:05] Creating repository b2:bucket:hub
 [03:04:05] stage: SQLite 2, bare repos 1, workspaces with unpushed work 1
-[03:04:05] Failed (run): RuntimeError('restic backup failed (exit 1)Fatal: canned restic error\n')
+[03:04:05] Failed (run): RuntimeError('restic backup failed (exit 1): Fatal: canned restic error\n')
 
 === run failure file
-RuntimeError('restic backup failed (exit 1)Fatal: canned restic error\n')
+RuntimeError('restic backup failed (exit 1): Fatal: canned restic error\n')
 === run: git bundle fails
 exit 1
 [03:04:05] Creating repository b2:bucket:hub
@@ -66,12 +66,12 @@ exit 1
 
 === verify ok
 exit 0
-[03:04:05] Restore test passed: 1 SQLite, 1 bundles, all 1 directories present, 10% data sample OK
+[03:04:05] Restore test passed: 1 SQLite, 1 bundle, the required directories all present (1), 10% data sample OK
 
 === verify failure file
 RuntimeError('The restored snapshot is missing: <TMP>/inc')
 === bus job.failed
-{"job": "backup:run", "detail": "RuntimeError('restic backup failed (exit 1)Fatal: canned restic error\\n')"}
+{"job": "backup:run", "detail": "RuntimeError('restic backup failed (exit 1): Fatal: canned restic error\\n')"}
 {"job": "backup:run", "detail": "RuntimeError('git bundle demo-memory.git: fatal: canned bundle error')"}
 {"job": "backup:run", "detail": "RuntimeError('integrity_check of the copy of bus is not ok')"}
 {"job": "backup:verify", "detail": "RuntimeError('The restored snapshot has no backup-staging')"}
@@ -98,7 +98,7 @@ What is backed up (what only the hub machine has, and cannot be recovered once l
     written is never touched
   - the bare repos under ~/git-origin (memory branches, agent-hub itself, projects without a GitHub remote):
     git bundle --all
-  - what each project workspace has not pushed: commits on no remote as a bundle, uncommitted changes as a diff,
+  - what each project workspace has not pushed: commits not on any remote as a bundle, uncommitted changes as a diff,
     .env* (up to three levels deep, e.g. backend/.env)
   - the directories listed in hub.json backup.include (the assistant's data, platform state, secrets, service data,
     Claude Code transcripts)

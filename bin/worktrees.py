@@ -126,8 +126,8 @@ def prune(project: str | None, yes: bool) -> int:
             if w["merged"] and w["clean"]:
                 n += 1
                 kw = dict(project=name, branch=w['branch'], path=w['path'], days=w['age_days'])
-                print(_("Deleting: {project} {branch} ({path}, untouched for {days} days)", **kw) if yes
-                      else _("Can delete: {project} {branch} ({path}, untouched for {days} days)", **kw))
+                print(_("Deleting: {project} {branch} ({path}, untouched for {days} {days:day|days})", **kw) if yes
+                      else _("Can delete: {project} {branch} ({path}, untouched for {days} {days:day|days})", **kw))
                 if yes:
                     subprocess.run(["git", "-C", str(repo), "worktree", "remove", w["path"]])
                     subprocess.run(["git", "-C", str(repo), "branch", "-d", w["branch"]], capture_output=True)
@@ -210,7 +210,7 @@ def auto_prune(dry_run: bool) -> dict:
                             res["skipped"].append(_("{label}: git worktree remove failed: {err}", label=label,
                                                     err=r.stderr.strip()[:200]))
                             continue
-                    res["removed"].append(_("{label} (idle {days} days, {mb} MB; branch kept)", label=label, days=idle,
+                    res["removed"].append(_("{label} (idle {days} {days:day|days}, {mb} MB; branch kept)", label=label, days=idle,
                                             mb=mb))
                     res["freed_mb"] += mb
                     continue
@@ -228,7 +228,7 @@ def auto_prune(dry_run: bool) -> dict:
                         with open(gd / MARKER, "a") as fh:
                             fh.write(_("{date} {dep} → rebuild: {cmd}", date=res['at'][:10], dep=dep, cmd=REBUILD[dep])
                                      + "\n")
-                res["deps"].append(_("{label} {dep} (idle {days} days, {mb} MB)", label=label, dep=dep, days=idle, mb=mb))
+                res["deps"].append(_("{label} {dep} (idle {days} {days:day|days}, {mb} MB)", label=label, dep=dep, days=idle, mb=mb))
                 res["freed_mb"] += mb
     res["freed_mb"] = round(res["freed_mb"], 1)
     if not dry_run:

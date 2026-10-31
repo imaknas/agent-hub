@@ -199,7 +199,7 @@ def main() -> None:
         stats = build_stats(label, start, end, scan(start, end) if not unsupported else {"this": Week(), "prev": Week()})
         if unsupported:
             stats["unsupported"] = unsupported
-            print(_("weekly report: no conversation statistics: {reason}", reason=unsupported))
+            print(_("no conversation statistics in the weekly report: {reason}", reason=unsupported))
         elif args.llm:
             import reflect_llm
             stats["analysis"] = reflect_llm.analyze(stats)

@@ -9,7 +9,7 @@
  "handoffs --json is not JSON (exit {code})": "handoffs --json 不是 JSON(exit {code})",
  "LLM call: {problem}": "LLM 呼叫:{problem}",
  "llm.py lint does not run: {error}": "llm.py lint 跑不起來:{error}",
- "{n} problems: ": "{n} 項:",
+ "{n} {n:problem|problems}: ": "{n} 項:",
  "; ": ";",
  "contracts: all consistent": "契約:全部一致"
 }

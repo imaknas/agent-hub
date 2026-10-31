@@ -15,9 +15,9 @@
 === installed, none before
 (True, 'claude not installed → 2.1.5 (node v22.1.0), the request test passed')
 === install fails, put back
-(False, '2.1.5 would not install (npm ERR! boom), put 2.1.4 back')
+(False, '2.1.5 would not install (npm ERR! boom); 2.1.4 is back in place')
 === new fails probe, put back fails
-(False, '2.1.5 would not install (unknown flag -p), putting it back failed too, claude may not work now')
+(False, '2.1.5 would not install (unknown flag -p); putting the old version back failed too, so claude may not work now')
 === install fails, none before
 (False, '2.1.5 would not install: EACCES')
 === probe timeout

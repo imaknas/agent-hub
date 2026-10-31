@@ -108,9 +108,9 @@ def update(dry: bool) -> tuple[bool, str]:
     if old:
         back = run(str(npm), "install", "-g", f"{PKG}@{old}", "--no-audit", "--no-fund")
         restored = back.returncode == 0 and version(claude) == old
-        return False, (_("{latest} would not install ({detail}), ", latest=latest, detail=detail) +
-                       (_("put {old} back", old=old) if restored
-                        else _("putting it back failed too, claude may not work now")))
+        return False, (_("{latest} would not install ({detail}); ", latest=latest, detail=detail) +
+                       (_("{old} is back in place", old=old) if restored
+                        else _("putting the old version back failed too, so claude may not work now")))
     return False, _("{latest} would not install: {detail}", latest=latest, detail=detail)
 
 

@@ -1,10 +1,10 @@
 === unsupported
 exit None
-memory gap check: not checked: the runtime keeps no transcripts
+memory gap check skipped: the runtime keeps no transcripts
 
 === unsupported --apply
 exit None
-memory gap check: not checked: the runtime keeps no transcripts
+memory gap check skipped: the runtime keeps no transcripts
 
 === digest
 # Digest <TODAY>
@@ -12,7 +12,7 @@ memory gap check: not checked: the runtime keeps no transcripts
 <!-- digest:memory-gaps:begin -->
 ## Projects whose memory is not being kept
 
-memory gap check: not checked: the runtime keeps no transcripts
+memory gap check skipped: the runtime keeps no transcripts
 <!-- digest:memory-gaps:end -->
 
 === gaps
