@@ -91,8 +91,8 @@ no longer needed), close it, or {{assistant}} keeps showing it as "waiting for y
   platform checks every day that each one exists, is backed up and is not about to expire, and alerts on problems. To
   add, remove or move one: send the full edited YAML with
   `agenthub send --to agent-hub --type manifest.update --text "$(cat <edited file>)"`
-  (it is returned if it doesn't validate; `type`, `enforce`, `network`, `allow_write`, `privacy`, `metered_models` are
-  security fields, and a letter that changes them is returned whole: instead write to agent-hub with `--type request`
+  (it is returned if it doesn't validate; `type`, `enforce`, `network`, `allow_write`, `privacy`, `metered_models`, `paths`
+  are security fields, and a letter that changes them is returned whole: instead write to agent-hub with `--type request`
   and explain why, and {{owner}} confirms).
 - **Machine-level credentials belong to the platform** (claude's login/token, the platform's Discord, backups): don't
   keep a copy of them in the project, and don't read the credential files under `~/.claude` yourself; if you need one,

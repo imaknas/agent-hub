@@ -353,7 +353,8 @@ memory tracking and runs nothing long-lived (most projects) needs nothing under 
   `capabilities/<name>.sb`): a program the sandbox blocks runs with `bin/hub-run --cap <capability> -- …`, executed by
   the platform's runner service `bin/cap-runner.py` under the platform's own Seatbelt profile (`bin/seatbelt.py`, which
   can block the Keychain; macOS only). Design in `docs/design/capabilities.md`.
-  `type`/`enforce`/`network`/`allow_write`/`privacy`/`metered_models` are security fields that `manifest.update` cannot change.
+  `type`/`enforce`/`network`/`allow_write`/`privacy`/`metered_models`/`paths` are security fields that `manifest.update` cannot
+  change.
   **The platform runs git only in repos it owns** (memory bare repos, memory copies, its own checkout): in a
   project's repo every git command (status page facts, worktree cleanup, backup, propose, memory sync, gate hooks) goes
   through `bin/project_git.py` → `bin/project-git-job.py` as the project (`isolation.run_as`, sandboxed when it is), and

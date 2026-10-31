@@ -84,7 +84,7 @@ class PlatformOwned(unittest.TestCase):
     def test_each_field_is_locked(self):
         for k, v in [("enforce", {"sandbox": False}), ("enforce", {"sandbox": True, "capabilities": ["gpu", "x"]}),
                      ("type", "project"), ("network", ["evil.example"]), ("allow_write", ["~/"]),
-                     ("privacy", {"reflection": "include"})]:
+                     ("privacy", {"reflection": "include"}), ("paths", {"workspace": "~"})]:
             self.assertTrue(registry.platform_owned_changes(dict(self.cur, **{k: v}), self.cur), k)
 
     def test_removing_counts_as_change(self):

@@ -46,8 +46,9 @@ schema v1 (contracts/project.v1.md has the full description):
                                   that would go to one is refused (llm.py project)
   network: [domains]              what the sandbox needs to reach beyond the platform defaults
   allow_write: [paths]            what the sandbox needs to write beyond the platform defaults
-    type, enforce, network, allow_write, privacy and metered_models are security fields: a manifest.update a project sends that
-    changes them is rejected whole (a project can't switch off its own sandbox, widen its scope or add capabilities);
+    type, enforce, network, allow_write, privacy, metered_models and paths are security fields: a manifest.update a project
+    sends that changes them is rejected whole (a project can't switch off its own sandbox, widen its scope or add
+    capabilities);
     to change them, ask the agent-hub session (the owner confirms)
   secrets:   [{name, path, env_key?, expires? | max_age_days?, warn_days?, backup?, why?, rotate?}]
                                   the credentials this project uses: only name, location and expiry, **never the
@@ -240,7 +241,9 @@ def validate_models(doc: dict) -> list[str]:
     return errs
 
 
-PLATFORM_OWNED = ("type", "enforce", "network", "allow_write", "privacy", "metered_models")
+# paths too: a manifest.update setting paths.workspace to ~ would make the whole home folder its sandbox's to write
+# (round 6, 11-01); onboarding, renaming and recovery write paths through their own scripts, not through a letter
+PLATFORM_OWNED = ("type", "enforce", "network", "allow_write", "privacy", "metered_models", "paths")
 
 
 def platform_owned_changes(new: dict, cur: dict) -> list[str]:
