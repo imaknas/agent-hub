@@ -375,7 +375,8 @@ Standard library only (ctypes), unprivileged; the same for services and command 
   `systemd-run --user …` outside the sandbox: Landlock on 6.8 doesn't cover connecting to a pathname socket. Checked
   in the systemd container: from inside, `systemd-run --user` fails ("Failed to connect to user scope bus … Operation
   not permitted") and `~/.ssh` is unreadable. Landlock itself refuses ptrace and `/proc/<pid>/environ` of processes
-  outside the sandbox. With ABI ≥ 6 (kernel 6.12) signals and abstract unix sockets are scoped as well.
+  outside the sandbox (measured: a child started before restricting, `cat /proc/<pid>/environ` → Permission denied;
+  `/proc/self/environ` readable). With ABI ≥ 6 (kernel 6.12) signals and abstract unix sockets are scoped as well.
 - **Refuses** (`can_sandbox()`): not Linux, an architecture without a seccomp entry (only x86_64 and aarch64), Landlock
   ABI < 4 (kernel < 6.7, or `landlock` not in the `lsm=` list).
 

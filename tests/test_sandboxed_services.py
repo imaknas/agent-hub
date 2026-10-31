@@ -1,6 +1,6 @@
-"""A sandboxed project's own services and command jobs run isolated (bin/sandboxed-run → isolation.py → the OS's adapter:
-seatbelt.service_profile on macOS, landlock.py on Linux), never unsandboxed: a manifest.update adds them without the
-owner's approval, so they must not get more than the project's sessions (10-31, Linux the same day).
+"""A sandboxed project's own services and command jobs run isolated (bin/sandboxed-run → isolation.py → the OS's
+adapter: seatbelt.service_profile on macOS, landlock.py on Linux), never unsandboxed: a manifest.update adds them
+without the owner's approval, so they must not get more than the project's sessions (10-31, Linux the same day).
 
     bin/py -m unittest tests.test_sandboxed_services
 """
@@ -212,7 +212,8 @@ RUNNER = """
 import importlib.machinery, importlib.util, pathlib, sys, json
 args = json.loads(sys.argv[1])
 sys.path.insert(0, args["bin"])
-import hubconf, landlock
+import hubconf, landlock, policy
+policy.WRITE_CACHES = []   # exec_service would create ~/.npm and the like: no writing into HOME from a test
 landlock.TMP = []   # the fixture lives in /tmp: a writable /tmp would make every path in it readable too
 hubconf.projects = lambda: args["projects"]
 real_get = hubconf.get
@@ -224,7 +225,8 @@ sys.exit(m.main(["--project", "proj", "--cwd", args["ws"], "--port", str(args["p
 """
 
 
-@unittest.skipUnless(sys.platform.startswith("linux") and landlock.can_sandbox() is None, "needs Linux with Landlock ABI 4")
+@unittest.skipUnless(sys.platform.startswith("linux") and landlock.can_sandbox() is None,
+                     "needs Linux with Landlock ABI 4")
 class LandlockRun(Fixture):
     def test_under_the_rules(self):
         other, bus = self.tmp / "other", pathlib.Path(os.path.realpath(hubconf_bus()))

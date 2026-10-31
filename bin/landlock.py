@@ -1,7 +1,8 @@
 """The Linux backend for a sandboxed project's own services and command jobs (bin/sandboxed-run, through
-isolation.py): neutral policy (policy.py) → Landlock rules + a small seccomp filter, applied to the sandboxed-run process
-itself right before it execs the command (inherited by every child, can't be undone). Unprivileged, standard library
-only (ctypes); no bubblewrap, no user namespaces. Design and what was measured: docs/design/capabilities.md, "10-31 (Linux)".
+isolation.py): neutral policy (policy.py) → Landlock rules + a small seccomp filter, applied to the sandboxed-run
+process itself right before it execs the command (inherited by every child, can't be undone). Unprivileged, standard
+library only (ctypes); no bubblewrap, no user namespaces. Design and what was measured: docs/design/capabilities.md,
+"10-31 (Linux)".
 
 Why Landlock and not the unit's own sandboxing or bubblewrap (measured 10-31, Ubuntu kernel 6.8 with
 kernel.apparmor_restrict_unprivileged_userns=1, the Ubuntu 24.04 default): unprivileged user namespaces are refused,
@@ -24,8 +25,8 @@ What it enforces:
            keeps it off the user's D-Bus and systemd's private socket (otherwise `systemd-run --user` would start an
            unsandboxed program; Landlock on 6.8 doesn't cover connecting to a pathname socket); io_uring is refused (it
            can create sockets without socket()); no_new_privs (setuid/setgid programs such as crontab gain nothing);
-           ptrace and /proc/<pid>/environ of processes outside the sandbox are refused by Landlock itself; signals to
-           other processes and abstract unix sockets are scoped only with ABI ≥ 6 (kernel 6.12)
+           ptrace and /proc/<pid>/environ of processes outside the sandbox are refused by Landlock itself (measured);
+           signals to other processes and abstract unix sockets are scoped only with ABI ≥ 6 (kernel 6.12)
 Can't enforce (the adapter's limits): the listening address (a service may bind 0.0.0.0:<its port>; macOS accepts
 only localhost), UDP binds, the network allowlist (policy.network), signals to the owner's other processes below ABI 6.
 
@@ -252,7 +253,8 @@ def restrict(p: dict) -> None:
 
 
 def exec_service(pol: dict, dirs: list, port: int | None, argv: list[str]):
-    """Restrict this process and exec argv (looked up on PATH). Only returns by raising OSError (nothing was run)."""
+    """Restrict this process and exec argv (looked up on PATH). Raises OSError when the sandbox can't be applied
+    (nothing was run); a command that can't start under it exits 127."""
     # a rule needs the path to exist (an fd is opened): create a missing writable folder whose parent exists (the bus,
     # ~/.npm), not whole trees that belong to another OS (~/Library/Caches/… on Linux); the bus always
     try:
@@ -267,7 +269,11 @@ def exec_service(pol: dict, dirs: list, port: int | None, argv: list[str]):
             except OSError:
                 pass
     restrict(plan(pol, dirs, port))
-    os.execvp(argv[0], argv)
+    try:
+        os.execvp(argv[0], argv)
+    except OSError as e:   # sandboxed fine, the command itself can't start: say that, like a shell would
+        print(f"sandboxed-run: {argv[0]}: {e.strerror}", file=sys.stderr)
+        os._exit(127)
 
 
 if __name__ == "__main__":  # landlock.py <project> [port]: print the plan (for debugging)
