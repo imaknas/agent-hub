@@ -1,9 +1,14 @@
 # Projects and repos: one general model, many combinations
 
-> agent-hub session · 2026-10-31 · r1. Owner's ask: a general architecture in which "one project = one git repo" is only
+> agent-hub session · 2026-10-31 · r2. Owner's ask: a general architecture in which "one project = one git repo" is only
 > one case, so that a monorepo holding many projects, a project spread over several repos, and a project with no repo
 > at all all follow from the same logic, not from special cases. **Design only; nothing is implemented.**
-> Related: `test-waiting.md` (its result cache and test tiers should be built on this model from the start, section 7).
+> Related: `test-waiting.md`.
+>
+> r2: a blind review (four independent reviewers, Claude models of different sizes; findings checked against the
+> source) found the r1 model sound in shape but wrong or silent on sandboxing nested scopes, the cache key, memory
+> backups and migration, worktree sessions, recovery and contract work. Corrections are made in place; section 9 lists
+> every finding and what it changed. Whether to start this refactor before the test-waiting work is reopened (8).
 
 ## 1. The problem
 
@@ -80,17 +85,19 @@ what this model needs.
 In `hubconf`, the only code that reads scopes:
 
 - `scopes(project)` → list of `(repo, path)` / folder
-- `project_at(path)` → the project owning that path (rule 1), or None
+- `project_at(path)` → the project owning that path (rule 1), or None; resolved through git (repo + path relative to
+  its root), so it works in worktrees (section 4)
 - `projects_in(repo)` → projects with a scope in that repo
-- `projects_touched(repo, changed_paths)` → owners of the changed paths, plus projects that declared `depends_on` one
-  of them
+- `projects_touched(repo, changed_paths)` → owners of the changed paths, plus every project whose `depends_on` closure
+  reaches one of them (transitively), plus every project in the repo when a root-owned file changed (rule 5)
 - `repo_of(project)` → its repo **only when it has exactly one**; otherwise an error, so callers that assumed one find
   out
 
 `roster()` must keep working without PyYAML (new machine, the laptop). It reads only the `paths:` block, line by line,
 so `paths.workspace` stays **required for every project** and means "the folder where its memory is mounted" (its
-first scope's folder, or its folder). `scopes` refines it and is read only by the validated registry; recovery on a
-new machine needs no more than `paths.workspace` and the memory repo.
+first scope's folder, or its folder). `scopes` refines it and is read only by the validated registry. For a project inside a
+shared repo, recovery also needs the repo's origin: its `paths:` block carries `repo: <name>`, and `roster()` reads
+`repos/` the same line-by-line way (section 4).
 
 ## 3. Registry format
 
@@ -145,9 +152,14 @@ scopes:
 - folder: ~/workspace/field-notes
 ```
 
-Contracts: `scopes` and `depends_on` are new fields of project v1 (adding fields keeps the version; `paths.workspace`
-keeps its meaning as the shorthand). `repos/` is a new contract, `repo.v1`. `scopes` is a security-relevant field (it
-sets the sandbox's write paths), so `manifest.update` cannot change it, like `allow_write`.
+Contracts (corrected r2; more work than r1 said): `scopes` and `depends_on` are new fields, so they must be added to
+the registry's known top-level fields (`registry.py` rejects unknown ones) and to `contracts/project.v1.schema.json`
+(`additionalProperties: false`); additive, so project stays v1. `repos/` is a new contract `repo.v1` (listed in
+`contracts/README.md`); `repos_dir` goes into `contracts/hub.v1.schema.json` first (config-check rejects unknown hub.json
+keys), and `repos/` joins the config pipeline beside `registry_dir` (config-check, `commit-hub-files.sh`,
+`bin/appliers.py`, backup). `scopes` sets the sandbox's paths, so it joins the security fields `manifest.update` cannot
+change (`PLATFORM_OWNED` in `registry.py` and its header) — and so must `paths.workspace`, which already decides the
+sandbox's folder today but is not protected (a gap that exists now, independent of this design).
 
 ## 4. How each part of the platform works under the model
 
@@ -158,12 +170,25 @@ number of projects fit in one repo and a project needs no code repo at all. The 
 `~/.memory-copies/<name>/`, already per project). `git-sync-memory.sh` and `sync-all-memory.sh` commit and push in a git
 repo either way; today they switch off the project's git hooks for memory commits because the worktree shares the code
 repo's `core.hooksPath` — a separate clone has no such sharing, so that workaround becomes unnecessary (kept, harmless).
-In `memory-nudge.py` the comparison becomes the memory's age against the latest commit **touching
-the project's scopes**, not the repo's latest commit. `worktree-memory.sh` links a worktree's scope folders to the main
+`memory-nudge.py` compares the latest note with the project-work commits since it (`git log -- .` from the project's
+root); under the model the pathspec becomes the project's scopes. `worktree-memory.sh` links a worktree's scope folders to the main
 checkout's mounts.
 
-Existing projects move from worktree to clone with a migration script (dry-run, then `--apply`): sync and push the
-memory branch, remove the worktree, clone from the bare repo into the same place. Content and history are identical.
+**Backups (r2).** Today the nightly backup bundles each workspace's unpushed branches, which includes the
+`agent-memory` branch, so notes committed but not yet pushed are backed up. A separate clone would not be: the backup
+looks only at the workspace's `.git` and skips `.agent-memory`. Before any project moves to a clone, the backup bundles
+every memory mount's unpushed commits too.
+
+**Migration** from worktree to clone (dry-run, then `--apply`), refusing unless: no session is open in the project
+(`hubconf.cwd_users()`, as renaming does); the mount has no untracked files (never `--force`); the memory branch is
+pushed. Then: remove the worktree, clone from the bare repo into the same place **with the remote named `mini`** (every
+memory script addresses it by that name), delete the leftover `agent-memory` ref in the code repo (onboarding and the
+worktree cleanup special-case it), and record the project as migrated. Recovery, renaming and onboarding must handle
+both forms until every project is migrated. Content and history are identical.
+
+**Alternative mount (r2, open):** keep each project's clone outside the code repo (a per-project directory beside the
+memory copies) and symlink it into the scope folder. A refactor that moves or deletes the scope folder then cannot take
+unpushed notes with it, and the backup covers one place.
 
 **Rules files and hooks.** Written in each scope's folder. Whether the coding agent reads a rules file in a subfolder
 of where the session started, and where it reads hook settings from, differs by tool: new capabilities in
@@ -171,9 +196,13 @@ of where the session started, and where it reads hook settings from, differs by 
 so (doctor's feature table) and writes at the repo root, one marked section per project. Hooks that deliver mail ask
 `project_at(cwd)`, so they need no per-project copy.
 
-**Which project a session belongs to.** `project_at(the session's folder)`. A session opened at the root of a shared
-repo is the root owner's (`root:` in the repo file); in a repo without one it counts for the repo and shows the mail of
-all its projects, each labelled.
+**Which project a session belongs to.** Resolved through git, not the disk path: the repo from `--git-common-dir`,
+then the session folder's path relative to `--show-toplevel` matched against the repo's scopes (a worktree lives at
+`<repo>/.claude/worktrees/<n>/…`, so a disk-prefix match would give every worktree session to the root owner). A plain
+disk-path match is only for folder-only projects. A session opened at the root of a shared repo is the root owner's.
+Session hooks pull and sync every memory mount in the repo (idempotent, locked per mount), not only the one under the
+session's folder. Privacy cannot rely on this attribution: a root session can work in an inner project's files all
+afternoon (see the sandbox paragraph for the rule that makes this harmless).
 
 **Mailbox, STATE.md, to-dos, registrar, librarian.** Per project, unchanged.
 
@@ -181,19 +210,40 @@ all its projects, each labelled.
 by the branch's changed files (`projects_touched`, which includes every project in the repo when a root-owned file
 changed, rule 5) → each one's test tiers, run in the worktree with that project's
 scope folder as the working directory, each with its own cache key (below) → fast-forward → one `merge.done` /
-`session.report` per touched project, plus one for the repo. Files nobody owns: the repo file may declare a test of its
-own; otherwise nothing runs for them, and the report says so. A change across two repos is two merges, as today; there
-is no atomic cross-repo merge.
+`session.report` per touched project, plus one for the repo. A shared repo always has a root owner, so every file has
+an owner. When one touched project fails, the others' passes are still recorded under their keys. A change across two
+repos is two merges, as today; there is no atomic cross-repo merge, and a test in one repo that depends on another repo
+is caught only by the nightly run. `merge-branch --project` no longer chooses whose tests run (the changed paths do); it
+only names the repo when that is ambiguous.
 
-**Commit gate.** Per repo; the fast tier of the touched projects (`test-waiting.md` A2/B2).
+**Commit gate.** Only in repos that opt in (today: agent-hub). The platform does not install git hooks into project
+repos — many have their own (husky, lint-staged), the very conflict the memory scripts work around. Elsewhere,
+`merge-branch` is the gate.
 
-**Test cache key.** The hash of each of the project's scopes in the tested commit — git gives every folder one
-(`git rev-parse <commit>:<path>`) — plus its `depends_on` projects' scope hashes, plus the declared outside inputs. For a
-scope at `/` that is the whole tree: exactly today's key. A change in `pkg/b` no longer invalidates `pkg/a`'s pass.
+**Test cache key** (corrected r2). For each scope, the hash of **its folder minus the scopes nested in it** (the
+root owner's is the whole tree minus every other scope; computed from `git ls-tree`, since `git rev-parse <commit>:/`
+alone would include everything) — over the project's own scopes, the **closure** of its `depends_on`, and the root
+owner's residual (rule 5) — plus the resolved test command and the declared outside inputs. For a single scope at `/`
+with no nested scopes that is exactly today's key. With residual hashes, a change in `pkg/b` does not invalidate
+`pkg/a`'s pass; r1's version (the root owner's whole-tree hash in every key) would have. Not in any hash: symlink
+targets outside the repo, untracked environments (`.venv`, `node_modules`) — run tests in an export or rebuild the
+environment from in-tree lockfiles — and imports across scopes that no `depends_on` declares (the nightly run is the
+only net for those).
 
-**Sandbox.** Write paths = the project's scope folders (instead of the workspace) + what it writes today (runtime, bus,
-caches, `allow_write`). Files at a shared repo's root belong to the root owner; another project that has to change
-them (a lockfile) lists them in `allow_write`, which only the owner can grant (security field).
+**Sandbox** (corrected r2). Today each project's policy denies reading and writing every other project's folder.
+Under nesting that breaks both ways: an inner project would deny itself its own repo root, and the root owner would be
+unable to read the inner folders. So:
+
+- **All projects in one repo share the same `enforce`, `network` and `privacy`**; validation rejects a repo where they
+  differ. Then a session's attribution inside the repo cannot weaken anyone's enforcement or leak an `exclude`
+  project's content, and `scopes` cannot be used to get around the security fields.
+- Ancestor and descendant scopes in the same repo are left out of each other's "other projects" deny lists.
+- Write paths = the project's scope folders + what it writes today. For the root owner, the inner scopes are denied for
+  writing — which today's Claude sandbox cannot express (it has write allows and read denies; a write deny exists only
+  as a permission rule). Each runtime adapter answers a capability for it; where it is missing, the platform says so
+  (doctor's feature table) and the root owner writes the whole repo.
+- Files at the root (a lockfile) belong to the root owner; another project that has to change them lists them in
+  `allow_write`, which only the owner can grant.
 
 **Services and runtime.** `<services_root>/<repo>` becomes one deployment clone per repo; each project's services run
 with their `cwd` in its scope, and `deploy.sh` lives in the scope (or the repo's root for the root owner). Projects that
@@ -206,7 +256,17 @@ are their own repo see no difference.
   - a folder inside a registered repo → a new project with that scope: no `git init`, no new GitHub repo, a new memory
     repo mounted in the folder;
   - a folder outside any repo with `--no-repo` → a folder-only project.
-- `recover-project.sh` restores the repo (if missing) and every project's memory mount.
+- `recover-project.sh` restores the repo (if missing) and every project's memory mount — after the code checkout, since
+  the scope folder comes from it. For an inner project, the repo's origin is in the repo file, which today's PyYAML-free
+  `roster()` does not read: the project's `paths:` block carries `repo: <name>`, and `roster()` also reads `repos/`
+  line by line.
+- Onboarding a second project into a repo registered in shorthand promotes it: the script writes the repo file, moves
+  the repo-level fields out of the first project's file, sets `root:` to that project, and commits both with
+  `commit-hub-files.sh` (refusing if the first file has uncommitted changes). Validation rejects a repo registered both in
+  shorthand and as a repo file.
+- Scopes whose folder is moved: a `scopes` change keeps `former_paths`, like renames do for statistics. A scope folder
+  missing in a tested commit makes its tests "not applicable", not failed. Two scopes resolving to the same real path
+  (symlinks) are rejected.
 - Renaming a project no longer renames a repo unless the two are 1:1; renaming a repo is its own command.
 
 **Idea sandboxes** could become folder-only projects, with a repo only when the idea is upgraded — an option, not part
@@ -233,8 +293,9 @@ of this change.
   migration.
 - **Memory migration** touches every project's `.agent-memory`. A mistake loses notes, so: sync and push before,
   dry-run first, the bare repo stays the source of truth, nightly backup.
-- **Ambiguity has to be decided once:** sessions opened at a shared root, files nobody owns, root files several
-  projects need. The rules above decide them; the registry validation rejects a shared repo without a root owner.
+- **Ambiguity has to be decided once:** sessions opened at a shared root, root files several projects need, nested
+  sandboxes. The rules above decide them; validation rejects a shared repo without a root owner, or with different
+  security settings.
 - **Tool-dependent parts** (rules files in subfolders, hook settings location) can only be as good as the coding
   agent allows; where it cannot, the platform falls back and says so.
 - **The laptop and new machines** read the registry without PyYAML, so `paths.workspace` stays required (2.4) even when `scopes` says more.
@@ -243,14 +304,21 @@ of this change.
 
 Following "tests before rewrite": pin today's behaviour first, then change it.
 
+0. **Prerequisite (r2):** agent-hub works in worktrees (`test-waiting.md` A1). This refactor changes `hubconf.py` and
+   ~50 files of the running platform; from the shared checkout every half-saved edit would be live for every hook on
+   the machine. Steps 2–3 are done in a worktree and merged only with the step 1 tests green; step 5 runs only from
+   merged main.
 1. Characterization tests for today's single-repo behaviour: onboarding, `merge-branch`, `project_of` in hubbus,
    sync-local-setup, worktree-memory, the sandbox policy's write paths.
-2. Resolver + registry fields (`scopes`, `depends_on`, `repos/`), with every existing registry file producing the same
-   answers as today (test). Ratchet test: no new direct reads of `paths.workspace`.
+2. Resolver + registry fields (`scopes`, `depends_on`, `repos/`) and the contract work in section 3, with every existing
+   registry file producing the same answers as today (test). Ratchet test: no new direct reads of `paths.workspace`,
+   `registry.dirs()["workspace"]` or `hubbus`'s own project table. Code that uses `workspace` both as the repo root and
+   as the working folder (`propose_apply.py`, `lease-runner.py`) names the two.
 3. Move the inventory in section 1 onto the resolver, file by file, the tests from 1 staying green.
 4. `merge-branch` and the commit gate per touched project, with the scope-hash cache. **The test-waiting work (B1 cache,
    B2 tiers) is built here, directly on scopes**, instead of on whole trees and then again.
-5. Memory as a clone; the migration script; migrate every project.
+5. The backup bundles memory mounts; then memory as a clone, the migration script with its refusals, migrate every
+   project.
 6. Runtime capabilities for rules files in subfolders and hook settings.
 7. Onboarding, recovery and renaming for subfolder and folder-only projects.
 8. End to end: a throwaway monorepo with a root owner and two projects, one depending on the other, through onboarding,
@@ -263,4 +331,36 @@ Following "tests before rewrite": pin today's behaviour first, then change it.
 - Memory as a clone for every project, including 1:1 ones (one mechanism, the proposal), or keep worktrees there and
   use clones only in shared repos?
 - Should idea sandboxes become folder-only projects?
-- ~~Order against test-waiting.md~~ — **decided 10-31: B1/B2 are built on scopes** (step 4 here), after steps 1–3.
+- **Reopened by the review:** on 10-31 the owner decided to build test-waiting's B1/B2 on scopes, after steps 1–3. Three
+  of four reviewers independently argued for building B1/B2 now on whole trees and repo-relative paths and starting
+  this refactor when the first shared repo exists; one proposed a middle way (a project-local list of paths that only
+  decides tests and cache keys, a subset of scopes). The arguments are in `test-waiting.md` section 7.
+- Mount memory clones inside the scope folder, or outside the repo with a symlink in (section 4)?
+
+## 9. Blind review (r2): findings and what each changed
+
+Four reviewers, each with one angle and without seeing the others: facts against the code (A), measurements (B),
+architecture (C), a contrarian (D). Union of findings; each was checked against the source before it changed the
+design. Severity is the reviewer's.
+
+| # | finding | by | severity | change |
+|---|---|---|---|---|
+| 1 | Nested scopes break the sandbox both ways; projects in one repo with different `enforce`/`privacy` let the weakest win; privacy by session folder leaks | C | blocking | Section 4 "Sandbox": same security settings across a repo, ancestor/descendant scopes out of the deny lists, write-deny as a runtime capability |
+| 2 | r1's cache key put the root owner's whole-tree hash into every key, contradicting "a change in `pkg/b` does not invalidate `pkg/a`"; also missing the test command, the `depends_on` closure, untracked environments, symlinks | C | blocking | Section 4 "Test cache key": residual folder hashes, closure, command, stated limits |
+| 3 | Memory as a clone drops unpushed notes from the nightly backup; migration lacked preconditions (open sessions, untracked files, remote name, leftover ref, half-migrated fleet) | C | blocking | Section 4 "Backups" and "Migration"; step 5 |
+| 4 | Contract and config work much larger than "adding fields": registry known fields, schema `additionalProperties: false`, `PLATFORM_OWNED`, `repo.v1`, `repos_dir` in the hub schema, config pipeline; `paths.workspace` already unprotected | A | should fix | Section 3 "Contracts" |
+| 5 | Session attribution by disk path sends every worktree session to the root owner; session hooks sync only one mount | C | should fix | Section 4 "Which project a session belongs to" |
+| 6 | Onboarding a second project into a shorthand repo means rewriting another project's registry file | C | should fix | Section 4 onboarding: the script promotes the repo |
+| 7 | Multi-repo projects and cross-repo `depends_on` undefined for tests | C | should fix | Section 4 merge-branch: nightly run only |
+| 8 | A per-repo commit gate would install git hooks into projects that have their own | C | should fix | Section 4 "Commit gate": opt-in |
+| 9 | Recovery without PyYAML cannot restore an inner project; mount before checkout | C | should fix | Section 4 recovery |
+| 10 | The refactor would run from the live platform checkout | C | should fix | Step 0 |
+| 11 | Scope folder moves, deletions, symlinked duplicates undecided; the mount inside the scope can be deleted by a refactor | C | should fix | Section 4 onboarding list; the outside-mount alternative (section 8) |
+| 12 | "Files nobody owns" contradicts "a shared repo must have a root owner"; `--project` would choose tests; `workspace` used with two meanings; ratchet too narrow; `memory-nudge` misdescribed | A, C | minor | Fixed in place |
+| 13 | The refactor buys nothing for the three measured projects (all one repo each; no registered project nested or shared) and delays measured savings | B, C, D | blocking (D) | Reopened as a decision (section 8; `test-waiting.md` 7) |
+| 14 | Simpler model: a project-local path list driving tests and keys only, a subset of scopes | C | minor | Offered as the middle option (section 8) |
+
+Checked and found sound by the reviewers: keeping `paths.workspace` required; the clone removing the shared-hooks
+problem; per-git-dir locks for several mounts; the existing `.agent-memory/` exclude pattern matching nested mounts;
+the hub never becoming origin of a project's main; the librarian's per-project memory copies; tool-dependent parts as
+runtime capabilities; "tests before rewrite" ordering and the end-to-end step.

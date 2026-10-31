@@ -1,365 +1,356 @@
 # Waiting on tests: where agent sessions wait, the floor, and what to change
 
-> agent-hub session · 2026-10-31 · r2. Owner's observation: in the projects being worked on now, the bottleneck is not the
+> agent-hub session · 2026-10-31 · r3. Owner's observation: in the projects being worked on now, the bottleneck is not the
 > agents' output but waiting for tests; the owner wants everything besides model input/output at its theoretical minimum.
 > This doc measures first, then proposes changes. **Nothing here is implemented yet.**
 >
-> r2 (same day, after talking it through with the owner): the changes are split into **A. agent-hub itself**, **B. the
-> platform** (how, when and whether every project's tests run) and **C. each project's own suite** (requests sent to it).
-> Direction agreed: **agent-hub moves to worktree + `merge-branch` like every other project** (A1). The leaked test
-> containers found in r1 were removed by the project that left them, and suites were re-timed (2.1).
+> r2: changes split into **A. agent-hub itself**, **B. the platform** (how, when and whether every project's tests run)
+> and **C. each project's own suite**; agent-hub moves to worktree + `merge-branch` (A1, agreed with the owner).
+>
+> r3: **blind review** by four independent reviewers (facts against the code, measurements, architecture, a
+> contrarian), findings taken as a union and each checked against the source before use. Only Claude models were
+> available on this machine (no other provider configured), so the reviewers differ by model size, not model family;
+> their errors may be correlated. What changed: the measurement now deduplicates branched transcripts, counts deploy
+> scripts and subagents (1, 2.1); several facts about the code were wrong (A1, B1, B2); the order of work is reopened
+> (7), because three of four reviewers independently argued against waiting for the scopes refactor.
 
 ## Summary
 
-- One week (10-24 → 10-31) of the three active projects' sessions: **about 58% of agent time is the model, 26–28% is
-  waiting on tests**, the rest other tools. Test waits were 18.8 hours that week across the three.
-- The waiting is not mostly "a slow suite". It is, per change, **the same suites run two or three times** (the agent runs
-  the full suite, then the commit or merge gate runs it again), **browser end-to-end suites** (62% of muninn's waits, 65%
-  of the-crucible's), **gates that block the agent although it has other work** (memory note, report), and **a shared
-  machine under load** (leaked test containers, since removed, plus other sessions' suites: the same suite took 13 s at
-  one moment and 45–95 s at another).
-- **A. agent-hub itself:** move to worktree + `merge-branch` (A1) with a tiered commit gate (A2: lint + the tests the change
-  reaches, ~31 s → ~14 s for the median commit, estimated); cheaper critical-path tests (A3); no full-suite run before
-  the gate (A4).
-- **B. the platform:** a result cache every gate consults and `agenthub test` (B1); test tiers and ignored paths in the
-  registry (B2); a nightly full run on every project's main as the safety net (B3); machine hygiene (B4); test rules for
-  every project's agents (B5); a weekly waiting report (B6). Later, after measuring: an asynchronous merge queue (B7).
-- **C. each project:** muninn runs its suites in parallel by default (~110 min/week); the-crucible registers a
-  `runtime.test` (today its merges test nothing) and parallelizes its backend tests.
+- One week (10-24 → 10-31 18:00) of the three active projects' top-level sessions: **26–31% of agent time is waiting
+  on tests** (18.2 hours across the three), about 58% is the model. Subagents waited another 6.1 hours on tests in the
+  background.
+- The waiting is mostly **the same suites run several times per change**: in muninn the unit suite ~2.6 times and the
+  e2e suite ~2.4 times per merge — the agent, then `merge-branch`, then `bin/deploy.sh`, which re-tests the exact commit
+  `merge-branch` just tested (128 min a week). Then **browser e2e suites**, **gates that block the agent**, and **a
+  shared machine under load** (leaked test containers, since removed, plus other sessions' suites: the same suite took
+  13 s at one moment and 45–86 s at another).
+- What the review changed in the plan: a test cache helps most if it also covers deploy scripts; the registry today
+  cannot even hold a test command for a project without a service (the-crucible hit this); agent-hub's worktree switch
+  needs `hubconf` to find the instance from a worktree, or the private-names check is silently skipped; and the cheap,
+  measured savings should not wait for the projects-and-repos refactor (7, a decision for the owner).
 
 ## 1. How this was measured
 
-Everything below is measured on the hub machine (Apple M4 Pro, 10 performance + 4 efficiency cores) unless marked
-**assumed**. The scripts were throwaway and are not in the repo (they parse one runtime's transcript format, which
-belongs in a runtime adapter); the method is described here in enough detail to rebuild them (B6).
+Everything below is measured on the hub machine (Apple M4 Pro, 14 cores) unless marked **assumed**. The scripts were
+throwaway and are not in the repo (they parse one runtime's transcript format, which belongs in a runtime adapter); the
+method is described here in enough detail to rebuild them (B6).
 
 **Which projects.** The three with the most `merge.done` / `session.report` bus events since 10-24 and sessions seen
-today: muninn (226 merges), the-crucible (22 merges, plus commits made without the merge gate) and agent-hub itself
-(commits straight to main). Others had a handful of merges that week.
+on 10-31: muninn, the-crucible and agent-hub itself.
 
-**Session transcripts** (the runtime's transcript directory, one folder per project; top-level sessions only, because a
-subagent's tool calls already show up as the parent's wait). Window: 2026-10-24 00:00 to 2026-10-31 ~18:00 (+08:00).
-Each gap between consecutive entries of a session is attributed to what ended it: an assistant entry → model; a tool
-result → that tool call; a person's message → not counted (the owner reading or away). Gaps are capped at 20 minutes.
-Bash commands are sorted into: *gate* (`merge-branch`; in agent-hub also `git commit`, which runs the commit gate),
-*e2e* (Playwright, `pytest -m e2e`, `npm run test:e2e`), *full* (the whole unit suite: `pytest -q`, `unittest discover`,
-`bin/run-tests`, `npm test`, `tsc --noEmit`), *targeted* (any other test command: one file, `-k`, one module). One command
-can be several kinds (`pytest && pytest -m e2e && git commit && merge-branch`); its wait is listed under the combination.
-Commands sent to the background are not waits.
+**Session transcripts** (the runtime's transcript directory, one folder per project). Window: 10-24 00:00 to 10-31
+18:00, local time. Each gap between consecutive entries of a session is attributed to what ended it: an assistant
+entry → model; a tool result → that tool call; a person's message → not counted. Gaps are capped at 20 minutes.
 
-**Suites**, timed with each project's HEAD exported to a scratch directory (not the project's checkout), with
-`-p no:cacheprovider`. The machine was never quiet (2.1); where a number moved a lot between runs, all runs are given.
+- **Deduplicated (r3):** a branched or resumed session copies its history into a new file. r1 counted those copies
+  again: 8% of muninn's and 24% of the-crucible's entries in the window were copies. Entries are now counted once by
+  their id, tool calls once by theirs.
+- **Subagents counted separately (r3):** r1 left them out on the premise that the parent waits on them. It does not:
+  subagents run in the background (the parent's wait on them was 0–1 minute a project). Their own test waits are real
+  machine time and real delay for the work they do, but not time the parent or the owner sat waiting; they are reported
+  beside the top-level numbers, not added to them.
+- **Commands** are sorted into: *deploy* (a project's `bin/deploy.sh`; added in r3: muninn's runs the unit and the e2e
+  suite), *gate* (`merge-branch`; in agent-hub also `git commit`, which runs the commit gate), *e2e* (Playwright,
+  `pytest -m e2e`, `npm run test:e2e`), *full* (the whole unit suite), *targeted* (any other test command). A combined
+  command (`pytest && git commit && merge-branch`) counts once, under the first matching kind in that order; so the
+  gate row of agent-hub includes the agent's own test runs chained before a commit.
+- **Known inflators, not corrected:** in sessions in default permission mode, time waiting for a permission prompt is
+  counted as tool time; polling loops on background tests (`until grep …; sleep`) count as other tools, not tests;
+  an interactive login in a terminal tab counted as tool time (agent-hub, 92 min, not in the test numbers).
 
-**Coverage map** (agent-hub only): every test module run once under coverage with subprocess measurement on, so scripts
-the tests start are included; then last week's commits replayed against it (A2).
+**Suites** were timed with each project's HEAD exported to a scratch directory, with `-p no:cacheprovider`. The machine
+was never quiet (2.1); where a number moved a lot between runs, all runs are given, and single measurements are said
+to be single.
+
+**Coverage map** (agent-hub only): every test module run once under coverage with subprocess measurement on; then the
+window's commits replayed against it (A2).
 
 ## 2. Findings
 
 ### 2.1 Across the platform
 
+Top-level sessions, deduplicated (r3):
+
 | one week | muninn | the-crucible | agent-hub |
 |---|---|---|---|
-| agent time (sum over sessions) | 28.3 h | 8.5 h | 31.8 h |
-| model | 59% | 58% | 57% |
-| waiting on tests | 447 min (26%) | 139 min (27%) | 541 min (28%) |
-| …of which e2e | 278 min | 90 min | 3 min |
-| …gate (`merge-branch` / commit gate) | 82 min (+ combos) | 3 min | 364 min |
-| …full suite run by the agent | 58 min | 16 min | 117 min |
-| …targeted runs | 29 min | 29 min | 57 min |
-| changes | 227 merges | 74 commits | 257 code commits |
+| agent time | 26.6 h | 6.7 h | 27.8 h |
+| waiting on tests | **502 min (31%)** | **103 min (26%)** | **485 min (29%)** |
+| …e2e (incl. combined with a gate) | 254 min, 386 runs | 66 min, 45 runs | 3 min |
+| …deploy script (unit + e2e again) | 128 min, 158 runs | — | — |
+| …gate (`merge-branch` / commit) | 38 min, 157 runs | 2 min, 27 runs | 332 min, 497 commands |
+| …full suite run by the agent | 55 min, 233 runs | 11 min, 41 runs | 99 min, 125 runs |
+| …targeted | 27 min, 282 runs | 25 min, 78 runs | 51 min, 373 runs |
+| subagents' test waits (not added above) | 26 min | 63 min | 278 min (206 of it commit gates) |
+| changes in the window (git) | 227 merges, 450 commits | 79 commits | 266 code commits |
 
-(e2e and gate rows include the combined commands; muninn's e2e row is e2e alone 189, e2e + full 52, gate + e2e + full 22,
-gate + e2e 15.)
+The model's share (~57–59%) is from r1, before deduplication; the reviewer who rebuilt the method found it barely moves.
 
-**Suites run per change.** muninn: 640 unit-suite runs (374 by agents, 266 by `merge-branch`) and 425 e2e runs for 227
-merges — **2.8 unit and 1.9 e2e runs per merge**. agent-hub: about 2.1 commit-gate runs per code commit plus 148
-full-suite runs the agents started themselves — **about 2.7 full runs per commit** (most of the week before today's gate
-speedups). the-crucible: 56 e2e and 66 backend-suite runs for 74 commits.
+**Suites run per change.** muninn: ~584 unit-suite runs (233 by agents, 193 in `merge-branch`, 158 in `deploy.sh`) and
+~544 e2e runs (350 by agents, 36 combined with a merge, 158 in `deploy.sh`) for 227 merges — **about 2.6 unit and 2.4 e2e
+runs per merge**. agent-hub: 497 commit/gate commands and 125 agent full runs for 266 code commits; not every commit
+command ran the gate (data-only commits skip it), so a per-commit figure is not derived. the-crucible: 45 e2e and 41
+backend-suite runs for 79 commits.
 
-**Reruns with nothing edited in between** (a suite run whose previous run of the same suite, in the same session, passed,
-with no Edit/Write/`sed -i`/git rebase between): muninn 13% of suite time (52 min), the-crucible 35% (35 min), agent-hub
-23% (108 min). This is an **upper bound** on reruns of an identical tree: another session's merge can move main in
-between, and some reruns are deliberate flake checks. agent-hub's commit gate has skipped identical trees since today
-(`e1d6540`), so part of its 23% is already gone for gate→gate reruns — but not for an agent's own run followed by the gate,
-which the cache does not see.
+**Reruns with nothing edited in between** (r1, before deduplication, so too high): muninn 13% of suite time, the-crucible
+35%, agent-hub 23%. An **upper bound** on reruns of an identical tree; in agent-hub's shared checkout even looser, since
+another session's edit changes the tree between one session's two runs. Not counted there: muninn's deploy runs, which
+re-test the commit just merged — the clearest identical-tree rerun of all.
 
-**After the gate.** For each gate that took over 10 s, the time the agent then spent on non-test work (model and other
-tools) before its next test command or the owner's next message: **muninn had at least the gate's length after 189 of 213
-gates (89%), median 5.3× the gate; agent-hub 129 of 229 (56%), median 1.2×.** This bounds what running a gate in the
-background can hide (B7).
+**After the gate.** How much non-test work the agent did after a gate before it needed tests again bounds what a
+background gate could hide (B7). r1 measured 89% of muninn's gates (median 5.3× the gate) and 56% of agent-hub's
+(1.2×). A reviewer rebuilding it found **68–74% and 28–32%**, depending on whether messages from other sessions and task
+notifications end the window; and in 40 of 201 muninn cases the work after the gate was a deploy or a push, which needs
+the merge to have succeeded and cannot overlap it. Take the lower numbers.
 
-**Contention.** 41% of all test-wait time (every project, not only these three) ran while another session's test run was
-also running; 24% of the wall-clock time with any test running had two or more.
+**Contention.** r1 reported that 41% of test-wait time ran while another session's test run was also running. That
+counted branched copies overlapping themselves; deduplicated, the reviewer found **28%**.
 
-- **Leaked test containers** (found in r1, fixed the same day): 65 `postgres:16-alpine` containers labelled
-  `org.testcontainers`, 39 of them running (created 10-07 to 10-29), left by one project's end-to-end tests. Its test
-  server was killed with SIGKILL at the end of every run, so its shutdown never removed the container, and the project had
-  turned off testcontainers' own reaper (Ryuk does not start under Colima). Together ~1.4 cores and 1.1 GB inside the
-  containers; Docker's VM sat at 3.7 cores. The project fixed its shutdown and now removes its own containers older than
-  two hours before each run; after that, 0 containers and the VM idle.
-- The same the-crucible backend suite (513 tests, 19–22 CPU-s every time). **With the leak:** twelve runs within about an
-  hour, six at 14.4–16.7 s, one at 21.5 s, five at 44.7–85.6 s, a different test stalling each time (a test that takes
-  1.3 s within its module took 28.5 s in one full run); denying network made no difference (68.8 s). **After the leak was
-  removed:** 12.7, 12.8, 25.2, 26.9, 29.8 s at load averages 19–29, while other sessions ran browser tests (headless
-  Chromium and a `next dev` server ~1.9 cores) and Spotlight indexing used ~1.2 cores (`mds_stores` + `mds`; what it was
-  indexing was not checked). muninn's unit suite in the same minutes: 17.3, 21.9, 29.3 s (19.7 s earlier).
-
-So the leak caused the worst stretch (up to 6×), but a ~2× spread remains from sessions running heavy suites at the same
-time and from the machine's own background work.
+- **Leaked test containers** (found in r1, fixed the same day by the project that left them): 65 `postgres:16-alpine`
+  containers labelled `org.testcontainers`, 39 running (created 10-07 to 10-29). Its test server was killed with SIGKILL
+  at the end of every run, so its shutdown never removed the container, and testcontainers' own reaper was off (it does
+  not start under Colima). ~1.4 cores and 1.1 GB inside the containers; Docker's VM sat at 3.7 cores. After the fix: 0
+  containers, the VM idle.
+- The same the-crucible backend suite (513 tests, 19–22 CPU-s every time). **With the leak:** six runs at 14.4–16.7 s,
+  one at 21.5 s, five at 44.7–85.6 s, a different test stalling each time; denying network made no difference.
+  **After:** 12.7, 12.8, 25.2, 26.9, 29.8 s at load averages 19–29, while other sessions ran browser tests (~1.9 cores)
+  and Spotlight indexing used ~1.2 cores (what it indexed was not checked). muninn's unit suite in the same minutes:
+  17.3, 21.9, 29.3 s.
+- `bin/run-tests` always starts `min(16, cores)` workers, whatever else runs: two agent-hub gates at once are 28 workers
+  on 14 cores, and the librarian golden test takes 16.6 s at 7–14 workers but 31 s at 28.
 
 ### 2.2 agent-hub
 
-- Gate: lint + whole suite under a fake HOME on every code commit (`bin/test-gate`). Today `855fb30` and `e1d6540` took a
-  full gate from about 170 s to about 31 s (14 workers; 210 CPU-s per run, user 118, sys 91 — measured by the session that
-  made them) and skip an identical tree in 0.3 s. Most of the week's 364 gate minutes predate that.
-- Last week's gate runs were slower than today's: 87 plain `git commit` calls that ran the gate averaged 75 s; 271
-  commands combining a test run and a commit averaged 53 s. At today's 31 s, one gate run per code commit would be
-  257 × 31 s ≈ **130 min a week instead of 364**, before anything in this doc.
-- The 30 s plateau is set by the slowest single tests under load (librarian golden `test_run` 12 s alone, 16.6 s at 7–14
-  workers, 31 s at 28; consolidate golden 11 s; `test_registrar_flow` second run ~9 s), not by cores. sys time is 43% of
-  CPU: these tests start many subprocesses and touch many files.
-- Agents also run the full suite themselves just before committing (148 runs, avg 47 s, 117 min) — the gate then runs it
-  again.
-- Most agent-hub sessions commit straight to main in the shared checkout, so the commit gate is the only gate; `merge-branch`
-  was used 50 times. The registry entry has no `runtime.test`.
-- The shared checkout is also **the running platform**: the scheduler, services and hooks execute its scripts. While this
-  was written it held 14 files other sessions had modified and not committed (among them `bin/lease-runner.py`), live
-  without having passed any gate.
+- Gate: lint + whole suite under a fake HOME on every code commit (`bin/test-gate`). `855fb30` and `e1d6540` (10-31) took
+  a full gate from ~170 s to ~31 s (one measurement by the session that made them, 14 workers) and skip a tree that
+  already passed (the last 200 keys). Most of the week's gate minutes predate that.
+- The ~30 s plateau is the slowest single tests stretched by load, not cores: the i18n goldens are 59% of the suite's
+  module-seconds and their second, English pass (`@en`) alone 29%; then `test_registrar_flow` and `test_librarian_flow`.
+- Agents run the full suite before committing (125 runs, 99 min, plus runs chained into commit commands). One reason
+  the review found: on a failure the gate prints only a tail of the output, so an agent re-runs to see the whole failure.
+- Subagents' commit gates: 206 min in the week, in the background.
+- Most sessions commit straight to main in the shared checkout, which **is the running platform**: the scheduler,
+  services and hooks execute its scripts, so an uncommitted half-edit is live (14 such files on 10-31).
+- **Incident on 10-31:** commit `757b959`, titled as a memory sync, carried 17 code files and reached `origin/main`
+  without the commit gate: `bin/git-sync-memory.sh` disables git hooks for memory commits and committed without a path
+  limit, so another session's staged work went with it. Fixed the same evening by another session (`1e4d8e9`: the sync
+  commits only `memory/` and `STATE.md`, and only in its own checkout). The next commit passed the gate, so the content
+  was tested afterwards.
+- The registry entry has no `runtime.test`.
 
 ### 2.3 muninn
 
-- `runtime.test` is `uv run pytest -q` (unit + API, 1142 tests); `merge-branch` runs it after the rebase. CONTRIBUTING says
-  all three suites (unit, e2e, deploy) pass before a merge; agents run e2e themselves (no gate runs it).
-- Unit suite: **serial 18.5–20.5 s wall, ~15 CPU-s**; `-n 4` 9.4 s; `-n 8` 8.6 s; `-n auto` (14) 9.4 s with 72 CPU-s.
-  Collection 1.9 s; sum of per-test durations 13.1 s; slowest test 0.51 s (flat). `pytest-xdist` is a dependency but
-  `addopts` does not use it, so every agent run and every merge gate runs serially. The ~6 s left at `-n 8` is per-worker
-  start-up and import; not isolated further.
-- e2e (69 browser tests): **serial 81.7 s, `-n 4` 34.2 s, `-n 8` 28.7 s**; slowest test 4.8 s. CONTRIBUTING says `-n 4`;
-  the transcripts show both serial and `-n 4` runs.
-- Merges: 227 last week. By changed files: 94 touch web assets, 94 other code, **31 only docs, 8 only tests**. Of all 413
-  commits, 202 touched only docs (CHANGELOG, `docs/`, `*.md`).
-- `merge-branch` holds the repo's merge lock **while the tests run**: 59 of 266 `merge-branch` calls overlapped another
-  session's, so one waited for the other's test run.
+- `runtime.test` is `uv run pytest -q` (1142 tests); `merge-branch` runs it after the rebase. `bin/deploy.sh` runs it
+  again, then `pytest -m e2e -n 4`, before deploying the commit that was just merged.
+- Unit suite: **serial 18.5–20.5 s, ~15 CPU-s**; `-n 4` 9.4 s; `-n 8` 8.6 s; `-n auto` 9.4 s with 72 CPU-s (each a single
+  run). Collection 1.9 s; per-test sum 13.1 s; slowest test 0.51 s. `pytest-xdist` is installed but not used by default.
+- e2e (69 browser tests): **serial 81.7 s, `-n 4` 34.2 s, `-n 8` 28.7 s**; slowest test 4.8 s.
+- 227 merges: 94 touch web assets, 94 other code, 31 only docs, 8 only tests.
+- `merge-branch` holds the repo's merge lock while tests run; 59 of 266 `merge-branch` calls overlapped another
+  session's call (how many minutes were spent waiting on the lock was not computed).
+- In 209 of 227 merges the rebase was a no-op (the head commit was not rewritten; reviewer's count from the bus and git):
+  the tree `merge-branch` tests is almost always the one the agent just tested.
 
 ### 2.4 the-crucible
 
-- **No `runtime.test` in its registry**, so `merge-branch` merges without running anything (its merges take 1–2 s). All
-  testing is up to the agent; nothing guarantees main passes.
-- Backend: 513 tests, 13–16 s at best (2.1), ~20 CPU-s. `pytest-xdist` is not installed; a parallel floor is **assumed**,
-  not measured.
-- e2e: Playwright with `workers: 1`, `fullyParallel: false` by design (one shared backend and one fixture database), a
-  `next dev` frontend that compiles routes on first visit. Not timed here (a scratch copy's `next dev` failed on the
-  linked `node_modules`). From transcripts: 53 runs, avg 93 s, up to 5 minutes; 65% of the project's test waiting.
-- Commits by area: 36 of 74 touched only the backend (or backend and docs), 18 only the frontend and/or e2e tests.
+- **No test runs before a merge, and today it cannot have one.** It has no `runtime.test`, so `merge-branch` tests
+  nothing. When it sent one (10-31), validation rejected it: in the registry, any `runtime:` key means "has a service
+  runtime directory" (`registry.py` `dirs()`/`validate()`), and the project has none. It is waiting for the platform fix
+  (B2).
+- Backend: 513 tests, 13–16 s at best, ~20 CPU-s; `pytest-xdist` not installed.
+- e2e: Playwright, `workers: 1` by design (one backend, one fixture database), against `next dev`. Not timed here; from
+  transcripts 45 runs, avg 88 s.
+- Its subagents spent 63 min on tests, more than half of its top-level figure.
 
 ## 3. A. agent-hub itself
 
-Changes only agent-hub benefits from directly: its own workflow, its own gate, its own tests.
-
 ### A1. Work in worktrees and merge through `merge-branch` (direction agreed)
 
-agent-hub is the one project whose parallel sessions share one working tree and commit straight to main. Moving it to the
-same rule as every other project:
+**Why, beyond tests:** the shared checkout is the running platform (2.2); with worktrees the main checkout only holds
+merged, tested commits. It also removes the class of incidents where one session's commit carries another's files
+(09-25, 10-26, and 10-31 above).
 
-- **Why, beyond tests.** The shared checkout is the running platform (2.2): today a half-finished edit is live the moment
-  it is saved. With worktrees, the main checkout only ever holds merged, tested commits, and that is what the scheduler
-  and services run. The same change removes a class of incidents that the current rules only work around: sessions'
-  commits sweeping each other's half-done files (09-25, 10-26), the "always `git commit -- <paths>`" rule, and the commit
-  gate having to export the index because the working tree mixes several sessions' work.
-- **For waiting on tests.** Commits in a worktree no longer need the full suite (A2); the full suite runs once at merge,
-  and the result cache (B1) lets a merge reuse a pass for the same tree. Later the merge itself can run in the background
-  (B7), though agent-hub sessions had enough other work after only 56% of gates.
-- **Prerequisites, in this order:**
-  1. A2's tiered commit gate. Without it, a worktree commit still runs the full suite (the hooks are shared), and the
-     merge runs it again: twice the waiting, not less.
-  2. A `runtime.test` in agent-hub's registry entry (`bin/test-gate --all`, which already uses the tree cache), or
-     `merge-branch` will test nothing — the-crucible's situation.
-  3. A worktree has no `.hub-home` (it is not tracked), so `hubconf` falls back to the default instance directory. Right on
-     this machine, wrong on any deployment whose instance lives elsewhere: `hubconf` should read the main checkout's
-     `.hub-home` (via the git common dir).
-  4. Switch-over: the main checkout must be clean for `merge-branch` to fast-forward. The sessions with uncommitted work
-     in it finish first; then the rules (AGENTS.md, the instance notes) say worktrees.
-- **Costs.** A fix is not live until it is merged; trying a change against the real instance from a worktree still works
-  (running its scripts reads the same instance), but the scheduler and services pick it up only after the merge — with a
-  cached pass that is seconds. Rebase conflicts appear at merge instead of being silently interleaved. The owner's own
-  interactive session may stay in the main checkout (the rules already allow one); what it changes should be committed
-  promptly, or it blocks fast-forwards.
+**Prerequisites (corrected in r3):**
 
-### A2. Tiered commit gate with test-impact selection
+1. **Commits in a worktree run lint only; the full suite runs at merge.** `bin/test-gate` can tell a linked worktree
+   (`git rev-parse --git-dir` differs from `--git-common-dir`). A few lines; no test selection needed (A2 is not a
+   prerequisite, as r2 said). Commits in the main checkout keep the full gate.
+2. **A `runtime.test` for agent-hub:** `bin/test-gate --all` (it uses the tree cache). agent-hub is exempt from the
+   runtime-directory rule (2.4), so this already validates.
+3. **`hubconf` must find the instance from a worktree.** r2 said a worktree falls back to the default instance
+   directory; wrong: without `.hub-home` (untracked) `hubconf` uses the old layout, everything in the hub root, which in a
+   worktree is the worktree itself. Its `.state/` (registry cache) is the worktree's, and `bin/test-gate` run there finds
+   no `private-names.txt`, so **the private-project-names check is silently skipped** and the cache key loses that input.
+   Fix: resolve the pointer and `.state` through the git common dir (the main checkout), and make `test-gate` fail, not
+   skip, when the list is missing on a deployment that has one.
+4. **The main checkout:** a fast-forward is blocked only by uncommitted files the merge changes, not by any dirty file;
+   still, the sessions with uncommitted work there should finish before the switch.
 
-In a worktree, a commit runs lint + the test modules the change reaches; the full suite runs at merge. A commit made
-directly on main in the main checkout (the owner's session) keeps the full gate.
+**Costs:** a fix is live only after it is merged (with a cached pass, seconds); rebase conflicts show up at merge. The
+owner's interactive session may stay in the main checkout.
 
-Measured with the coverage map (each module's executed Python files, subprocesses included), replaying the week's code
-commits:
+### A2. Commit-time test selection with a coverage map — deferred
 
-- 266 code commits (10-24 → 10-31). 71 of 78 Python files in `bin/` were executed by at least one module,
-  `bin/librarian.py` and `bin/hubbus` through the subprocesses the flow tests start, so the hook did reach children.
-- **17% of commits (45) must run everything**: they change a file no coverage edge reaches and no test names —
-  `contracts/*.json` (30 files), `templates/*.md` (19), `githooks/` (12), shell scripts (5), others (5).
-- Selected share of the suite's test-seconds per commit: **median 0.26, mean 0.41, p75 0.97**.
-- Wall time is not proportional: the slowest tests are often still selected, because `bin/hubconf.py` and `bin/i18n.py` are
-  executed by 86–87 of the 99 modules, so touching either selects everything. Estimated with max(slowest selected item,
-  selected seconds / 14 workers): **median 0.44 of a full run, mean 0.47, p75 0.96** — about 31 s → 14 s for the median
-  commit. The estimate is a model (**assumed**), the selection is measured.
-- Not measured: how often a selected-only run would have passed where the full run failed (a missed dependency).
-- Risk: coverage does not see data files, shell scripts, templates or dynamic imports; those fall back to everything. A
-  dependency the map misses is caught at merge, by the full suite — it costs time, not correctness.
-- Cost: the map has to be rebuilt (nightly, and when tests change: a few minutes of CPU), and the fallback rules kept.
+Measured with a coverage map (subprocesses included), replaying the window's 266 code commits: 17% must run everything
+(they change contracts, templates, git hooks or shell scripts that coverage cannot see); for the rest the median commit
+selects 26% of the suite's test-seconds, an **assumed** ~44% of its wall time (~31 s → ~14 s, a model with a single 31 s
+baseline that leaves out fixed overhead, so probably low).
 
-### A3. Cheaper critical-path tests
+The review showed it is close to break-even once A1 makes commits lint-only: the full run moves to merge either way, and
+selection then only shortens what the agent runs itself. It costs a nightly map, fallback rules and an unmeasured miss
+rate, and adds a third way to decide which tests a change needs. **Deferred** until B6 shows commit-time waits matter
+after A1, A3 and B1.
 
-The ~30 s plateau is the slowest single tests stretched by load (2.2). Moving the librarian/consolidate goldens and
-`test_registrar_flow` from subprocess runs to in-process calls (or splitting each into independent cases) lowers the floor
-toward the next slowest item; how far is **not measured** — measure each test's in-process cost first. Cost: the goldens
-exist to pin behaviour through the real entry points, so an in-process version must still go through them.
+### A3. Cheaper slow tests — moved up
 
-### A4. No full-suite run before the gate
+- Run the English pass of the i18n goldens (`@en`, 29% of the suite's module-seconds) only when i18n code, prompts,
+  templates or golden fixtures change — a path rule, no coverage map — and always in the nightly run (B3). First check
+  whether `@en` ever failed alone on a commit that touched none of those paths.
+- Profile and split `test_registrar_flow` and `test_librarian_flow`, the next slowest items.
+- Lowers every full run: at commit today, at merge after A1, at night, and the load other sessions feel.
 
-agent-hub's own rules: run targeted tests while working; the gate (or `agenthub test`, B1) runs the full suite. Removes the
-148 pre-commit full runs a week (117 min last week, at older speeds). Cost: none.
+### A4. No full-suite run before the gate — with complete failure output
+
+Rules for agent-hub's sessions: run targeted tests while working; the gate runs the full suite. Paired with a change
+that removes the reason agents re-run: on failure the gate writes the failing modules' full output to a file and prints
+its path.
 
 ## 4. B. The platform: how, when and whether every project's tests run
 
-The platform does not make any project's suite faster — that is C. It decides **whether a run is needed** (B1, B2), **which
-tests run where** (B2), **that nothing slips through** (B3), **the machine they run on** (B4), **what agents are told** (B5),
-and later **whether the agent waits** (B7). These are written once in agent-hub and apply to every project that uses
-`merge-branch` — agent-hub itself included, after A1.
+The platform does not make any project's suite faster (that is C). It decides **whether a run is needed** (B1, B2),
+**which tests run where** (B2), **that nothing slips through** (B3), **the machine they run on** (B4), **what agents are
+told** (B5), **how we know** (B6), and later **whether the agent waits** (B7).
 
-### B1. Result cache every gate consults, and `agenthub test`
+### B1. Result cache every gate consults — including deploy scripts
 
-A pass is recorded under a key = the tree (`git write-tree` of what was tested) + what the result depends on outside it
-(interpreter version, browser build, the private-names list for agent-hub; the lockfile is already in the tree). Every gate
-consults it: the commit gate (done for agent-hub), `merge-branch` (not yet), and a new `agenthub test` that runs the
-registry's tests on the committed tree and records the key, so **the agent's own last run counts** and the gate does not
-repeat it. A merge whose rebase was a no-op then costs nothing. `agenthub test` tests what is committed (or staged), not
-unsaved working-tree edits, so the key is exact.
+A pass is recorded under a key: the tested tree + the **resolved test command** + the declared outside inputs
+(interpreter version, browser build, the private-names list for agent-hub). Consulted by the commit gate (done for
+agent-hub), `merge-branch`, and **the deploy path** — muninn's `deploy.sh` re-tests the commit `merge-branch` just
+tested, 128 min a week; either deploy asks the cache, or the platform tells projects that a deploy right after a merge
+may skip its tests for a tree that passed.
 
-- Saving: the identical-tree reruns, at most 52 / 35 / 108 min a week (2.1, upper bounds); the agent's pre-gate full run
-  whenever it went through `agenthub test`.
-- Risk: a key that misses an input (an env var, a tool version outside the tree) reuses a pass that would now fail; a
-  flaky test that passed once stays passed for that tree. B3 is the net for both.
-- Cost: small. The key logic exists in `bin/test-gate`; move it to a shared helper.
+- `agenthub test` can start as `merge-branch --dry-run` plus the cache (it already runs the tests without
+  fast-forwarding).
+- `merge-branch` runs tests in the session's worktree, not in a clean export like the commit gate: untracked state
+  (`.venv`, `node_modules`, `.env`, build output) is in no tree hash. Either export like `test-gate`, or the key is
+  trusted only when the lockfiles are in the tree and the environment is rebuilt from them.
+- Saving: deploy re-runs (≤128 min/week in muninn), the no-op-rebase merges (209 of 227 in muninn: the agent's own
+  `agenthub test` pass carries over), and identical-tree reruns (upper bounds in 2.1).
+- Risk: a missing input in the key reuses a stale pass; a flaky pass stays cached for that tree. B3 is the net.
+- Keys keep 200 entries today; shared across projects it needs a per-repo file or more room.
 
-### B2. Test tiers and ignored paths in the registry
+### B2. Test commands in the registry: fix the gap first, then tiers
 
-Today the registry has one `runtime.test`, run by `merge-branch`. Proposed (adding fields, so no contract version bump):
-
-```yaml
-runtime:
-  test:
-    fast: <cmd>                 # what the agent runs while working / at commit
-    full: <cmd>                 # what merge-branch runs
-    e2e: {cmd: <cmd>, paths: [<glob>…]}   # merge-branch also runs this when a changed file matches
-    ignore: [docs/**, "*.md"]   # a change touching only these needs no tests
-```
-
-A plain string keeps meaning `full`. This turns e2e from "the agent decides whether to run it" into "the platform runs it
-when it can matter", which is what can bring muninn's 425 e2e runs a week down: the agent no longer needs to run e2e
-before merging to be safe. `ignore` passes muninn's 31 docs-only merges a week (14%) without tests.
-
-- Risk: a wrong `paths` or `ignore` declaration skips a run that was needed, silently. B3 is the net.
-- Cost: each project maintains its declaration; out-of-date globs do not fail loudly.
+- **The gap (needed now):** a project without a service runtime cannot declare a test command (2.4). Fix: a test
+  command that does not imply a runtime directory (and does not change jobs' default `cwd`).
+- **Tiers:** `runtime.test` is a string in `contracts/project.v1.schema.json` and in the validator; a mapping
+  (`fast`/`full`/`e2e`) would crash today's readers (`registry.py` passes it to `shlex.split`; `merge-branch` to the
+  shell). So either new keys beside it (e.g. `test_fast`, `test_e2e: {cmd, paths}`) — additive, no version bump — or a
+  project v2. Readers: only `registry.py` and `merge-branch`.
+- **Which paths need tests:** one rule, an allowlist of what counts as code, like `test-gate`'s `CODE` pattern — not an
+  `ignore` list: `ignore: ["*.md"]` would skip agent-hub's tests although its prompt templates are `.md` files pinned
+  by goldens.
+- **e2e at merge — settle first:** whether moving e2e into `merge-branch` lowers muninn's e2e runs depends on how many
+  of the agents' 350 runs were pre-merge safety runs (followed by `merge-branch`) and how many were inner-loop UI work
+  (followed by an edit). Classify them from the transcripts before building it; if most are inner-loop, e2e-at-merge
+  adds ~30 s to ~94 merges a week, under the merge lock.
 
 ### B3. Nightly full run on every project's main
 
-Every project with a registered test: all tiers (full and e2e) on main, no cache, no path rules; failure raises an alert
-and a task for the project. The safety net for B1 (key misses, flaky passes), B2 (wrong paths) and A2 (missed
-dependencies). Cost: machine time at night; a slip is found the next morning at the latest.
+All tests, no cache, no path rules, in a throwaway worktree or export (not the main checkout, where someone may be
+working); agent-hub's with `TEST_GATE_FORCE=1`. Scheduled `after:` the container cleanup (B4); a flake policy (rerun a
+failing test once, report both) so the alert stays meaningful. The net for B1 and B2.
 
 ### B4. Machine hygiene and contention
 
-- A nightly platform job, like `prune-worktrees`, that removes containers labelled `org.testcontainers` older than a day,
-  reports what it removed and shows a count on the status page. The project that leaked has fixed its own side; this keeps
-  the next project from doing it again.
-- Check what Spotlight is indexing on the hub machine (~1.2 cores during the re-timing) and exclude workspaces, worktrees,
-  test scratch directories and `.state/` if it is them.
-- If the ~2× spread remains after that: a machine-wide limit on concurrent heavy suites (e.g. at most two e2e runs,
-  queued). Overlapping runs are on different trees, so there is nothing to share between them except through B1.
-- Cost: small for the first two; the limit adds queueing when it is too strict, so only with a measured reason.
-- Another machine: not now. Test CPU is small (agent-hub 210 CPU-s per full run, muninn unit ~15 CPU-s, e2e ~37 CPU-s
-  serial); contention comes from leaks and siblings, not from the suites outgrowing 14 cores. The remote client is a
-  laptop that is sometimes off; cloud CI adds minutes of queue and setup. Possibly for B7's background runs later.
+- Nightly cleanup of `org.testcontainers` containers older than a day; count on the status page.
+- Check what Spotlight indexes on the hub machine; exclude workspaces, worktrees and test scratch directories if it is
+  them.
+- **Load-aware worker counts (moved up, r3):** `run-tests` (and suites the platform starts) size their pools by the
+  machine's free cores or take tokens from a small machine-wide pool, instead of always 14. The measured 16.6 s → 31 s
+  at 28 workers is the case this prevents.
+- Another machine: not now (test CPU is small: agent-hub ~210 CPU-s per full run, muninn unit ~15 CPU-s).
 
-### B5. Test rules for every project's agents
+### B5. Test rules for every project's agents — only what exists
 
-In `templates/agent-instructions.md` (reaches every project's rules file): run targeted tests while working; run the
-`fast` tier before committing; leave `full` and e2e to `merge-branch` or run them through `agenthub test` so the result
-is reused; do not run the full suite right before the gate.
+In `templates/agent-instructions.md`, now: run targeted tests while working; **write the memory note and the report
+before calling `merge-branch`** (the work agents already do after a gate, moved in front of it, so the gate's wait
+overlaps nothing it could have overlapped anyway); a failing gate's full output is in the file it names. Rules that
+depend on B1/B2 (`agenthub test`, tiers, leaving e2e to the merge) are added when those exist — telling agents to skip
+e2e before a merge that does not run it would remove the only check.
 
-### B6. Weekly waiting report
+### B6. Weekly waiting report — first, not last
 
-The measurement in section 1 as a platform report, through the runtime adapter that already reads transcripts for memory
-gaps and the weekly reflection: model vs test waiting per project, suites per change, reruns, work after gates. This is
-how to know whether A and B1–B5 worked, and whether B7 is worth building.
+The measurement in section 1 (deduplicated, deploy and subagents included) as a platform report through the runtime
+adapter that already reads transcripts. **Built first**, so every later change has a before and after; the agent-hub
+baseline in 2.1 is already stale (the gate got 5× faster on 10-31). It also reports the time the owner actually waited
+on a session that was waiting on tests, beside the summed agent time: a session waiting matters most when someone waits
+for it.
 
-### B7. Asynchronous merge gate (merge queue) — decide after measuring
+### B7. Asynchronous merge gate (merge queue) — later, on the numbers
 
-`merge-branch --queue` does the quick checks (clean tree, rebase, commit titles), then returns. A platform worker runs the
-tests on the rebased tree, fast-forwards main when green, re-tests if main moved meanwhile, and reports `merge.done` /
-`merge.failed` on the bus — which reaches the session (its hook on the next action where the runtime has hooks, the
-mailbox otherwise; the dispatcher resumes an idle one). The lock is held only for rebase and fast-forward, not during
-tests.
+`merge-branch` returns after the quick checks; a platform worker tests, fast-forwards on green, reports on the bus. Its
+bound is the lower "after the gate" numbers (2.1): 68–74% of muninn's gates, 28–32% of agent-hub's, minus deploys and
+pushes that need the merge. B5's "note and report before the merge" captures part of it for free. A new service and
+more merge states; decided after B6 has run for a week.
 
-- Saving: bounded by work after gates (2.1): most of muninn's gate waits (89% of gates), about half of agent-hub's; the
-  22% of muninn merges that overlapped no longer wait for each other's tests.
-- Risk: main stays green (the worker only fast-forwards on a pass). What changes is that the agent learns about a failure
-  later, maybe after it ended its turn, and work stacked on an unmerged branch must be rebased when it fails. Two queued
-  merges that each pass alone can fail together — the worker tests the combined tree before the second fast-forward.
-- Cost: the largest item here: a new long-running service (the scheduler's 15-minute tick is too slow), more merge states
-  ("queued", "testing", "re-testing"), a queue view on the status page; "done" in a session's report becomes "queued" vs
-  "merged". Agents that no longer wait may also run more suites at once (B4).
-- Why later: B1 + B2 remove part of the same waiting at a fraction of the cost. Measure a week after them (B6), then decide.
+## 5. C. Each project's own suite (requests sent 10-31)
 
-## 5. C. Each project's own suite (requests to the projects)
-
-The platform does not edit other projects; these go to their mailboxes once the owner says so.
-
-- **muninn:** `-n 4` in `addopts` for the unit suite: −10 s per run (19.7 → 9.4 s measured) × ~640 runs a week ≈
-  **110 min/week**; the suite already passes at `-n auto`. e2e at `-n 8` instead of `-n 4`: −5 s per run. When B2 exists,
-  declare its tiers (`fast`/`full`/e2e with its web paths, `ignore` for docs and CHANGELOG).
-- **the-crucible:** register a `runtime.test` (backend pytest + jest + `tsc --noEmit`; e2e when frontend files change,
-  once B2 exists) — today `merge-branch` tests nothing. Add `pytest-xdist` to the backend (saving **assumed** ~2/3 of
-  13–16 s, by analogy with muninn). The biggest item there is e2e (93 s avg, one worker by design): a backend and fixture
-  database per worker, and a built frontend instead of `next dev` — a project change, not a flag.
-- **The project that leaked test containers:** done 10-31 (its commit `befb20e`); nothing left.
+- **muninn:** `-n 4` for the full unit suite, put in `runtime.test`, `deploy.sh` and the documented full-suite command
+  — **not in `addopts`**, which would also slow every targeted run with worker start-up (corrected request sent
+  10-31). Expected ~10 s per full run, from a single measurement. e2e already runs at `-n 4`.
+- **the-crucible:** asked to register a `runtime.test`; its answer hit the registry gap (2.4), and it is waiting for
+  B2's fix. Then: `pytest-xdist` for the backend (saving **assumed** about half, by analogy with muninn's measured 52%);
+  e2e per-worker backends and a built frontend are its own larger choice. Registering tests adds gate time it does not
+  pay today (merges take 1–2 s); that is the price of main being tested.
+- **The project that leaked test containers:** fixed 10-31.
 
 ## 6. The floor
 
-What cannot be removed: the tests the agent needs to see to keep working (its targeted runs, and e2e while it builds UI),
-each at the fastest the machine runs them. Everything else (gates, pre-gate full runs, identical reruns) can be skipped
-(B1, B2), shrunk (A2) or taken off the critical path (B7).
+What cannot be removed: the tests the agent needs to see while working, and **one test run per merge** that something
+must wait on unless a background gate (B7) hides it. Top-level, deduplicated, per week:
 
-| one week | muninn | the-crucible | agent-hub |
+| | muninn | the-crucible | agent-hub |
 |---|---|---|---|
-| waiting now | 447 min | 139 min | 541 min |
-| targeted runs (kept) | 303 runs, 29 min | 88 runs, 29 min | 433 runs, 57 min |
-| e2e runs at the measured parallel floor (kept, if UI work needs them) | 425 × 28.7 s = 203 min | **assumed** half of 90 min | — |
-| floor | **~30–230 min** | **~30–75 min** | **~57 min** |
+| waiting now | 502 min | 103 min | 485 min |
+| targeted runs (kept) | 27 min | 25 min (+16 in subagents) | 51 min |
+| one full run per merge/commit, at today's measured speed | 227 × ~9 s (`-n 4`) ≈ 34 min | **assumed** ~79 × 15 s ≈ 20 min once it has a `runtime.test` | 266 × ~31 s ≈ 137 min, less after A3 |
+| e2e the agent needs while building UI (unknown share of 350 runs, at 28.7 s) | 0–170 min | **assumed** 0–35 min | — |
+| floor without B7 | **~60–230 min** | **~45–80 min** | **~190 min** |
+| floor with every gate hidden (B7) | ~27–200 min | ~25–60 min | ~51 min |
 
-- Measured: run counts and durations of targeted runs (transcripts); muninn e2e at `-n 8` (28.7 s); work after gates.
-- Assumed: that every gate and every pre-gate full run can be skipped by the cache (B1, B2) or hidden in the background
-  (B7). The agent had at least the gate's length of other work after 89% of muninn's gates and 56% of agent-hub's, so
-  agent-hub's floor needs A2 and B1, not asynchrony alone. Also assumed: that targeted runs do not get faster (they could,
-  under less load); for the-crucible, that a parallel e2e halves it.
-- The muninn range is how many of its 425 e2e runs the agent really needs while it works: the low end keeps none (the
-  gate runs e2e, B2), the high end keeps all at parallel speed. The transcripts cannot tell which runs were inner-loop.
-- Not counted: contention (2.1), which inflates every number in the "now" row; B4 lowers both rows.
+- Measured: run counts and durations (transcripts, deduplicated); muninn's suite timings (single runs).
+- Assumed: the-crucible's backend time per merge and its e2e share; that each merge needs exactly one full run (a cache
+  hit can make it zero; a failure makes it more); for agent-hub, one gate run per code commit.
+- Not counted: contention, which inflates the "now" row.
 
-## 7. Order and what is left to decide
+## 7. Order of work — reopened by the review
 
-Decided 10-31 (owner): **B1 and B2 are built on scopes** (`projects-and-repos.md`), not on whole trees first. So the
-order is:
+**Do now, in this order (none depends on how projects map to repos):**
 
-1. **Now, independent of scopes:** B3 (nightly full run on every project's main), B4's container cleanup job and
-   Spotlight check, B5 (test rules for every project's agents), A4 (agent-hub sessions do not pre-run the full suite).
-   The C requests were sent 10-31 to muninn and the-crucible; the-crucible answered with a `runtime.test` in a
-   manifest.update.
-2. **`projects-and-repos.md` steps 1–3:** characterization tests, the resolver and registry fields, the callers moved
-   onto it.
-3. **On the resolver (its step 4):** B1 (cache keyed by scope hashes, `agenthub test`), B2 (test tiers per project, the
-   scope as the default paths), A2 (agent-hub's tiered commit gate with test-impact selection).
-4. **A1:** agent-hub's `runtime.test`, `.hub-home` for worktrees, the main checkout cleared, then agent-hub on worktrees.
-5. **B6** for a week, then decide **B7** (merge queue) and **A3** (cheaper critical-path tests) on the numbers.
+1. **B2's gap:** a test command for projects without a service runtime (the-crucible is waiting on it).
+2. **A1 prerequisite 3:** `hubconf` resolving the instance and `.state` from a worktree, and `test-gate` failing instead
+   of skipping when the private-names list is missing.
+3. **B6** (the baseline, at today's gate speed), **B4** (container cleanup, Spotlight, load-aware workers), **B5** (the
+   rules that exist), **A4** (complete failure output).
+4. **A3** (`@en` by path, split the two slow flow tests).
+5. **A1** (lint-only worktree commits, `runtime.test`, then agent-hub on worktrees).
+6. **B3** (nightly full run, after B4's cleanup).
 
-Still open: B7 after the measured week, including whether an agent may end its turn before its merge is green.
+**Then — the reopened decision.** On 10-31 the owner chose to build B1 (cache) and B2's tiers on scopes, after the
+projects-and-repos refactor's first three steps. Three of the four reviewers, independently, argued for building them
+now on whole trees and repo-relative paths instead:
+
+- *For waiting (the reviewers):* `projects-and-repos.md` itself says a scope at `/` gives exactly today's key, so moving
+  to scopes later adds a path argument to one helper, not a rebuild. None of the 26 registered projects is nested in
+  another or shares a repo; none of the three measured projects would get anything from scopes. Meanwhile the measured
+  savings (deploy re-runs, no-op-rebase merges, agent-hub's gate) wait behind a refactor of ~50 files, which itself
+  should only start from a worktree after A1 (the architecture reviewer: otherwise a half-edited `hubconf.py` is live
+  for every hook on the machine).
+- *For building on scopes (the r2 decision):* one design, built once, in the general shape the owner wants; the cache
+  and tier code would be written against the resolver from the start, and nothing has to be revisited when the first
+  shared repo appears.
+- *Middle option (the architecture reviewer):* B1/B2 take a list of paths within one project (what decides tests and
+  keys), a strict subset of what full scopes need; identity (mailbox, memory, privacy per subfolder) waits until a
+  shared repo exists.
+
+Decided later: B7 and A2, on B6's numbers.
