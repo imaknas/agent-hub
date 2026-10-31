@@ -391,6 +391,52 @@ class WritesThroughLinks(Base):
         self.assertEqual(list(elsewhere.iterdir()), [])
 
 
+class SettingsFile(Base):
+    """Round 9: render-project-settings read and wrote a sandboxed project's settings file with the user's authority,
+    following links: a job of the project swaps it for a link to the user-level settings, and every 15 minutes the
+    platform merged the project's sandbox block and cache variables into them. A FIFO there hung the job."""
+
+    def setUp(self):
+        super().setUp()
+        self.rps = load("render_project_settings_r9", BIN / "render-project-settings.py")
+        self.rps.RENDERED = self.tmp / "rendered"
+        self.r = self.repo("proj")
+        (self.r / ".claude").mkdir()
+        self.f = self.r / ".claude" / "settings.local.json"
+        self.index = {"projects": self.docs}
+
+    def test_a_link_is_replaced_not_written_through(self):
+        user = self.tmp / "user-settings.json"
+        user.write_text('{"mine": true}\n')
+        self.f.symlink_to(user)
+        drift = self.rps.write_project("proj", self.docs["proj"], self.index, report=False)
+        self.assertEqual(user.read_text(), '{"mine": true}\n', "the link's target was written")
+        self.assertFalse(self.f.is_symlink())
+        self.assertTrue(json.loads(self.f.read_text())["sandbox"]["enabled"])
+        self.assertTrue(drift)
+
+    def test_a_fifo_does_not_hang_the_job(self):
+        import threading
+        os.mkfifo(self.f)
+        done = []
+        t = threading.Thread(target=lambda: done.append(
+            self.rps.write_project("proj", self.docs["proj"], self.index, report=False)), daemon=True)
+        t.start()
+        t.join(20)
+        if not done:   # unblock the hung reader so the test process can end
+            fd = os.open(self.f, os.O_WRONLY | os.O_NONBLOCK)
+            os.close(fd)
+        self.assertTrue(done, "write_project hung on a FIFO")
+        self.assertTrue(self.f.is_file() and not self.f.is_symlink())
+
+    def test_lease_runner_does_not_take_a_linked_file_for_the_sandbox(self):
+        import runtime_claude
+        fake = self.tmp / "elsewhere.json"
+        fake.write_text('{"sandbox": {"enabled": true}}')
+        self.f.symlink_to(fake)
+        self.assertFalse(runtime_claude.sandbox_rendered(self.r)[0])
+
+
 class Hooks(Base):
     """Round 6: session hooks run outside the agent's sandbox. After every commit a sandboxed session makes, the
     nudge's `git log` ran the repo's gpg.program with the user's authority."""

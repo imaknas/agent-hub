@@ -16,5 +16,7 @@
  "⚠️ {project}'s settings drifted (report mode: not written back): {drift}": "⚠️ {project} 的設定偏移(已(report 模式不)寫回):{drift}",
  "⚠️ {project}'s settings drifted (written back): {drift}": "⚠️ {project} 的設定偏移(已寫回):{drift}",
  "{project}: the gate hooks could not be checked ({why})": "{project}:檢查不了 gate 的 hook({why})",
- "env was changed": "env 被改了"
+ "env was changed": "env 被改了",
+ "the settings file is not a plain file ({why}); it is replaced": "設定檔不是一般檔案({why});會被換掉",
+ "the settings file could not be written ({why})": "設定檔寫不進去({why})"
 }

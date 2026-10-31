@@ -36,6 +36,7 @@ import sys
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
 import hubconf  # noqa: E402
 import i18n  # noqa: E402
+import nofollow  # noqa: E402
 import policy  # noqa: E402
 import registry  # noqa: E402
 import runtime_claude  # noqa: E402
@@ -61,14 +62,34 @@ def settings_path(doc: dict) -> pathlib.Path | None:
     return runtime_claude.settings_path(ws) if ws else None
 
 
-def compose(name: str, doc: dict, index: dict) -> tuple[pathlib.Path, dict, dict, dict, dict] | None:
+def read_settings(doc: dict) -> tuple[dict, str | None]:
+    """(content, why it couldn't be read). The file is in the project's folder, where a sandboxed project's job can put
+    a link (e.g. to the user-level settings) or a FIFO: it is read without following the one or waiting on the other
+    (nofollow.py); what isn't a plain file counts as empty and is replaced by the next write."""
+    ws = registry.dirs(doc)["workspace"]
+    try:
+        raw = nofollow.read(ws, settings_path(doc).relative_to(ws))
+        return (json.loads(raw) if raw else {}), None
+    except (OSError, ValueError) as e:
+        return {}, str(e)
+
+
+def write_settings(doc: dict, content: dict) -> None:
+    """Replaces the file (a link or a FIFO there is replaced, never written through)."""
+    ws = registry.dirs(doc)["workspace"]
+    nofollow.replace(ws, settings_path(doc).relative_to(ws),
+                     (json.dumps(content, indent=2, ensure_ascii=False) + "\n").encode())
+
+
+def compose(name: str, doc: dict, index: dict) -> tuple[pathlib.Path, dict, dict, dict, dict, str | None] | None:
     """Pure computation, no writes: (settings file, current content, intended content, the record of what the platform
-    wrote last time, the record to keep this time). None when there is no workspace."""
+    wrote last time, the record to keep this time, why the file isn't a plain file or None). None when there is no
+    workspace."""
     path = settings_path(doc)
     if not path:
         return None
     sandbox, deny, allow = desired(name, doc, index)
-    cur = json.loads(path.read_text()) if path.exists() else {}
+    cur, unreadable = read_settings(doc)
     prev = json.loads((RENDERED / f"{name}.json").read_text()) if (RENDERED / f"{name}.json").exists() else {}
     new = dict(cur)
     new["sandbox"] = sandbox
@@ -83,7 +104,7 @@ def compose(name: str, doc: dict, index: dict) -> tuple[pathlib.Path, dict, dict
     e2.update(env)
     if e2:
         new["env"] = e2
-    return path, cur, new, prev, {"sandbox": sandbox, "deny": deny, "allow": allow, "env": env}
+    return path, cur, new, prev, {"sandbox": sandbox, "deny": deny, "allow": allow, "env": env}, unreadable
 
 
 def write_project(name: str, doc: dict, index: dict, report: bool) -> list[str]:
@@ -92,10 +113,10 @@ def write_project(name: str, doc: dict, index: dict, report: bool) -> list[str]:
     c = compose(name, doc, index)
     if not c:
         return []
-    path, cur, new, prev, record = c
+    path, cur, new, prev, record, unreadable = c
     sandbox, deny, allow = record["sandbox"], record["deny"], record["allow"]
     perms = cur.get("permissions", {})
-    drift = []
+    drift = [_("the settings file is not a plain file ({why}); it is replaced", why=unreadable)] if unreadable else []
     if prev:  # drift only makes sense once it has been written
         if cur.get("sandbox") != prev.get("sandbox"):
             drift.append(_("sandbox was changed"))
@@ -112,9 +133,11 @@ def write_project(name: str, doc: dict, index: dict, report: bool) -> list[str]:
                 write=len(sandbox["filesystem"]["allowWrite"]), read=len(sandbox["filesystem"]["denyRead"]),
                 domains=len(sandbox["network"]["allowedDomains"]), deny=len(deny), allow=len(allow), path=path))
         return drift
-    if new != cur:
-        path.parent.mkdir(parents=True, exist_ok=True)
-        path.write_text(json.dumps(new, indent=2, ensure_ascii=False) + "\n")
+    if new != cur or drift:
+        try:
+            write_settings(doc, new)
+        except OSError as e:   # e.g. the folder it is in is itself a link: nothing written through it
+            return drift + [_("the settings file could not be written ({why})", why=e)]
     RENDERED.mkdir(parents=True, exist_ok=True)
     (RENDERED / f"{name}.json").write_text(json.dumps(record, ensure_ascii=False, indent=1))
     return drift
@@ -124,10 +147,12 @@ def unapply(name: str, doc: dict) -> None:
     """enforce turned off in the registry: remove the sandbox and the rules the platform wrote (roll back)."""
     rec = RENDERED / f"{name}.json"
     path = settings_path(doc)
-    if not rec.exists() or not path or not path.exists():
+    if not rec.exists() or not path:
         return
     prev = json.loads(rec.read_text())
-    cur = json.loads(path.read_text())
+    cur, unreadable = read_settings(doc)
+    if unreadable is None and not cur:
+        return
     cur.pop("sandbox", None)
     perms = cur.get("permissions", {})
     for key in ("deny", "allow"):
@@ -138,7 +163,7 @@ def unapply(name: str, doc: dict) -> None:
         cur["env"] = env
     else:
         cur.pop("env", None)
-    path.write_text(json.dumps(cur, indent=2, ensure_ascii=False) + "\n")
+    write_settings(doc, cur)
     rec.unlink()
     print(_("{project}: enforce is off, removed the platform's sandbox/rules", project=name))
 
@@ -234,8 +259,8 @@ def _changes(index: dict) -> list:
         c = compose(name, doc, index)
         if not c:
             continue
-        path, cur, new, prev, record = c
-        if new != cur or prev != record:
+        path, cur, new, prev, record, unreadable = c
+        if new != cur or prev != record or unreadable:
             what = [w for w, changed in (("sandbox", new.get("sandbox") != cur.get("sandbox")),
                                          (_("permission rules"), new.get("permissions") != cur.get("permissions")),
                                          (_("record"), prev != record)) if changed]

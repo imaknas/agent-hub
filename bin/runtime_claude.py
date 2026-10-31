@@ -162,8 +162,9 @@ def settings_path(ws: pathlib.Path) -> pathlib.Path:
 
 def sandbox_rendered(ws) -> tuple[bool, str]:
     """The registry's enforce.sandbox is only an intention; the settings file written is the fact."""
+    import nofollow   # the project's folder: no link followed, no FIFO waited on
     try:
-        st = json.loads(settings_path(ws).read_text())
+        st = json.loads(nofollow.read(ws, settings_path(ws).relative_to(ws)) or b"")
     except (OSError, ValueError, TypeError):
         return False, _("the sandbox is not in this project's settings yet (settings.local.json cannot be read)")
     if not (st.get("sandbox") or {}).get("enabled"):
