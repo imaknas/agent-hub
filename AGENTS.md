@@ -42,7 +42,7 @@ agent-hub 要給任何 coding agent、任何 LLM、任何 key 的人用。
   `bin/setup-python`,`--check` 只驗證)。腳本第一行用 `#!/bin/sh -c exec${IFS}"${0%/*}/py"${IFS}"$0"${IFS}"$@"`(macOS 專用),
   shell/服務/登錄的 `run:` 叫 `bin/py <腳本>`,Python 裡啟動別的腳本用 `hubconf.launch()`(= `sys.executable` + 腳本),hook 這類
   shell 字串用 `hubconf.sh_py()`;不寫死任何直譯器、不靠 PATH 上的 `python3`,**也不靠第一行**(只在 macOS 有用;Linux 跑的是
-  `bin/linux-test`,docker 容器裡跑全部測試)。測試:`bin/py -m unittest discover -s tests`。`tests/test_python_floor.py` 機械檢查;刻意的例外只有
+  `bin/linux-test`,docker 容器裡跑全部測試)。測試:`bin/py -m unittest discover -s tests`,或平行跑的 `bin/run-tests`(閘門用這個,約 1 分鐘)。`tests/test_python_floor.py` 機械檢查;刻意的例外只有
   `scheduler-watchdog.py`(平台的 Python 壞了它還要能發警報,系統內建的 python3、只用標準函式庫)跟在遙控那台跑的 `migrate-to-mini.py`
 
 ## 先查這裡,不要自己猜
@@ -330,7 +330,7 @@ agent-hub 的 session 開的子 session 做完、確認過結果之後就封存�
 - **commit 閘門**(`git config core.hooksPath githooks`,`agenthub init` 會設;新 clone 也要):改到程式碼(`bin/` `tests/`
   `contracts/` `templates/`…)的 commit,`bin/test-gate` 拿**暫存區**(不是 working tree)先跑 `bin/lint`(ruff,只開 F 規則:
   沒定義的名字、沒用到的 import/變數;規則在 `ruff.toml`,ruff 由 `bin/setup-python` 裝進平台的 venv),再用平台的 Python、
-  假的 HOME 跑全部測試,都過、而且沒有測試寫進 HOME 才放行。只動資料檔的腳本 commit 不跑。
+  假的 HOME 跑全部測試(`bin/run-tests`:一個模組一個程序、平行跑,英文 golden 也是),都過、而且沒有測試寫進 HOME 才放行。只動資料檔的腳本 commit 不跑。
   `--no-verify` 跳過的會被 post-commit 記在 `.state/test-gate-bypassed.log`。重構前後外面看得到的行為用黃金檔固定
   (例:`tests/fixtures/llm-golden.json`),不要靠手動比對
 - **commit 標題用 Conventional Commits**(`<type>[(<scope>)][!]: <說明>`,type:feat / fix / perf / refactor / test / docs / build /

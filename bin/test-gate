@@ -49,7 +49,8 @@ for py in "${PYTHONS[@]}"; do
     # ignore → `git ls-files` 拿到空清單,靠它掃檔的測試什麼都沒查就通過(10-26 test_personal_boundary 因此漏掉)
     export GIT_CEILING_DIRECTORIES="$work"
     cd "$work/tree" && HOME="$work/home" AGENT_HUB_ROOT="$work/tree" AGENT_HUB_PYTHON="$PLATFORM_PY" PYTHONDONTWRITEBYTECODE=1 \
-      "$py" -m unittest discover -s tests >"$work/out$i" 2>&1 ) &
+      TEST_DURATIONS="$HUB/.state/test-gate/durations.json" "$py" "$work/tree/bin/run-tests" "$work/tree/tests" \
+      >"$work/out$i" 2>&1 ) &   # in parallel, one process per module (bin/run-tests)
   i=$((i + 1))
 done
 wait

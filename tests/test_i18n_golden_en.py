@@ -3,7 +3,8 @@
 The zh-Hant pass (the test_i18n_golden* modules themselves) keeps this instance byte-identical; this pass pins the
 English an en instance sees, reviewed once and then changed only on purpose. It runs the same modules in a subprocess
 with I18N_GOLDEN_LANG=en (tests/golden_lang.py). The subprocess starts when this module is imported, so under
-`unittest discover` it runs while the rest of the suite does instead of after it; the test waits for it.
+`unittest discover` it runs while the rest of the suite does instead of after it; the test waits for it. Under
+bin/run-tests (the commit gate) this test stands aside: the runner schedules each golden module on en as its own item.
 
     bin/py -m unittest tests.test_i18n_golden_en
     I18N_GOLDEN_LANG=en I18N_GOLDEN_UPDATE=1 bin/py -m unittest tests.test_i18n_golden_hub_run   # rewrite one (review it)
@@ -18,7 +19,8 @@ import unittest
 TESTS = pathlib.Path(__file__).resolve().parent
 MODULES = sorted(p.stem for p in TESTS.glob("test_i18n_golden*.py") if p.stem != pathlib.Path(__file__).stem)
 _proc = None
-if not os.environ.get("I18N_GOLDEN_LANG"):   # not inside the en pass itself
+BY_RUNNER = bool(os.environ.get("AGENT_HUB_TEST_RUNNER"))   # bin/run-tests runs the en pass itself
+if not os.environ.get("I18N_GOLDEN_LANG") and not BY_RUNNER:   # nor inside the en pass itself
     _out = tempfile.TemporaryFile(mode="w+")
     _proc = subprocess.Popen([sys.executable, "-m", "unittest", *MODULES], cwd=TESTS, stdout=_out,
                              stderr=subprocess.STDOUT, text=True,
@@ -26,7 +28,7 @@ if not os.environ.get("I18N_GOLDEN_LANG"):   # not inside the en pass itself
 
 
 class English(unittest.TestCase):
-    @unittest.skipIf(_proc is None, "this is the en pass itself")
+    @unittest.skipIf(_proc is None, "bin/run-tests runs the en pass, or this is the en pass itself")
     def test_goldens_on_en(self):
         code = _proc.wait(timeout=900)
         _out.seek(0)

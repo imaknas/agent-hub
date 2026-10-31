@@ -1,0 +1,148 @@
+#!/bin/sh -c exec${IFS}"${0%/*}/py"${IFS}"$0"${IFS}"$@"
+"""Run the test suite in parallel: one process per test module, a pool of workers, the slowest modules first.
+
+    run-tests [<tests dir>]       default: the tests/ next to this bin/
+
+What `unittest discover -s tests` does, but each tests/test*.py module runs as its own `python -m unittest <module>` with
+the tests directory on PYTHONPATH and the current directory unchanged, so a module also passes alone (no test may lean
+on another module having run first in the same process). The E1 goldens' second pass on English
+(tests/test_i18n_golden_en.py) becomes one more item per golden module (I18N_GOLDEN_LANG=en), so it is spread over the
+pool too instead of being one long item.
+
+The output ends like unittest's own (bin/test-gate reads it): `Ran <n> tests in <s>s`, then `OK` / `OK (skipped=k)` or
+`FAILED (failures=…, errors=…, skipped=…)`; before it, the full output of every module that failed (its `FAIL:` /
+`ERROR:` blocks at the start of a line). Exit 1 when any module failed.
+
+    TEST_JOBS=<n>          workers (default: half the CPUs, 2 to 8)
+    TEST_DURATIONS=<file>  per-module seconds from the last run (read to order the work, written after it); without it,
+                           larger files go first
+"""
+from __future__ import annotations
+
+import json
+import os
+import pathlib
+import queue
+import re
+import subprocess
+import sys
+import threading
+import time
+
+RAN = re.compile(r"^Ran (\d+) tests? in ([\d.]+)s$", re.M)
+RESULT = re.compile(r"^(OK|FAILED)(?: \((.*)\))?$", re.M)
+GOLDEN_EN = "test_i18n_golden_en"
+
+
+def items(tests: pathlib.Path) -> list[tuple[str, str | None]]:
+    """(module, language) pairs: every test module, plus the golden modules again on en."""
+    mods = sorted(p.stem for p in tests.glob("test*.py"))
+    out: list[tuple[str, str | None]] = [(m, None) for m in mods]
+    if GOLDEN_EN in mods:
+        out += [(m, "en") for m in mods if m.startswith("test_i18n_golden") and m != GOLDEN_EN]
+    return out
+
+
+def key(item: tuple[str, str | None]) -> str:
+    return item[0] + (f"@{item[1]}" if item[1] else "")
+
+
+def run_one(item: tuple[str, str | None], tests: pathlib.Path) -> tuple[int, str, float]:
+    mod, lang = item
+    env = {**os.environ, "PYTHONPATH": os.pathsep.join(filter(None, [str(tests), os.environ.get("PYTHONPATH")])),
+           "AGENT_HUB_TEST_RUNNER": "1"}
+    if lang:
+        env["I18N_GOLDEN_LANG"] = lang
+    t0 = time.monotonic()
+    r = subprocess.run([sys.executable, "-m", "unittest", mod], env=env, stdin=subprocess.DEVNULL,
+                       stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
+    return r.returncode, r.stdout, time.monotonic() - t0
+
+
+def counts(out: str) -> dict[str, int]:
+    c = {"tests": 0, "failures": 0, "errors": 0, "skipped": 0, "expected failures": 0, "unexpected successes": 0}
+    if m := RAN.search(out):
+        c["tests"] = int(m.group(1))
+    if m := RESULT.search(out):
+        for part in (m.group(2) or "").split(","):
+            name, _eq, n = part.strip().rpartition("=")
+            if name in c and n.isdigit():
+                c[name] += int(n)
+    return c
+
+
+def main(argv: list[str]) -> int:
+    if argv and argv[0] in ("-h", "--help"):
+        print(__doc__)
+        return 0
+    tests = pathlib.Path(argv[0] if argv else pathlib.Path(__file__).resolve().parents[1] / "tests").resolve()
+    jobs = int(os.environ.get("TEST_JOBS") or max(2, min(8, (os.cpu_count() or 4) // 2)))
+    cache = pathlib.Path(os.environ["TEST_DURATIONS"]) if os.environ.get("TEST_DURATIONS") else None
+    try:
+        last = json.loads(cache.read_text()) if cache else {}
+    except (OSError, ValueError):
+        last = {}
+    work = items(tests)
+    work.sort(key=lambda it: (-last.get(key(it), 0.0), -(tests / f"{it[0]}.py").stat().st_size))
+    todo: queue.Queue = queue.Queue()
+    for it in work:
+        todo.put(it)
+    results: dict[str, tuple[int, str, float]] = {}
+    lock = threading.Lock()
+
+    def worker():
+        while True:
+            try:
+                it = todo.get_nowait()
+            except queue.Empty:
+                return
+            res = run_one(it, tests)
+            with lock:
+                results[key(it)] = res
+
+    t0 = time.monotonic()
+    threads = [threading.Thread(target=worker, daemon=True) for _ in range(min(jobs, len(work)))]
+    for t in threads:
+        t.start()
+    for t in threads:
+        t.join()
+    wall = time.monotonic() - t0
+
+    total = {"tests": 0, "failures": 0, "errors": 0, "skipped": 0, "expected failures": 0, "unexpected successes": 0}
+    failed = []
+    for k in sorted(results):
+        code, out, _secs = results[k]
+        c = counts(out)
+        for name in total:
+            total[name] += c[name]
+        if code != 0:
+            failed.append(k)
+            if not (c["failures"] or c["errors"]):
+                total["errors"] += 1   # crashed before unittest's own summary (import error, killed…)
+            lines = [line for line in out.splitlines() if not RAN.match(line) and not RESULT.match(line)]
+            while lines and (not lines[-1].strip() or set(lines[-1]) == {"-"}):   # its own separator before "Ran"
+                lines.pop()
+            body = "\n".join(lines)
+            print(f"======== {k} (exit {code})\n{body}\n", flush=True)
+    if cache:
+        try:
+            cache.parent.mkdir(parents=True, exist_ok=True)
+            cache.write_text(json.dumps({k: round(v[2], 2) for k, v in results.items()}, indent=1, sort_keys=True))
+        except OSError:
+            pass
+    print(f"({len(results)} modules, {len(threads)} workers)")
+    print("-" * 70)
+    print(f"Ran {total['tests']} test{'' if total['tests'] == 1 else 's'} in {wall:.3f}s")   # as unittest writes it
+    print()
+    extra = [f"{n}={total[n]}" for n in ("failures", "errors", "skipped", "expected failures", "unexpected successes")
+             if total[n]]
+    if failed:
+        print(f"FAILED ({', '.join(extra)})")
+        print("failed modules: " + ", ".join(failed))
+        return 1
+    print("OK" + (f" ({', '.join(extra)})" if extra else ""))
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main(sys.argv[1:]))

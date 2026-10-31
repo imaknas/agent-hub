@@ -328,7 +328,7 @@ class ShellGolden(unittest.TestCase):
         out = []
         h = self.repo(self.tmp / "gate", {"README": "x\n"})
         (h / "bin").mkdir()
-        for f in ("test-gate", "lint", "py", "hubpaths.sh", "i18n.py", "hubconf.py"):
+        for f in ("test-gate", "run-tests", "lint", "py", "hubpaths.sh", "i18n.py", "hubconf.py"):
             (h / "bin" / f).symlink_to(BIN / f)
         (h / "ruff.toml").write_text((ROOT / "ruff.toml").read_text())
         (h / "tests").mkdir()
