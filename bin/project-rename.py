@@ -31,6 +31,9 @@ import sys
 
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
 import hubconf  # noqa: E402
+import i18n  # noqa: E402
+
+_ = i18n.domain(__file__)
 
 RECORD = hubconf.STATE / "project-renames.json"
 UPGRADES = hubconf.STATE / "idea-upgrades.json"   # upgrade-idea.py 的紀錄:做到一半的升級要先做完
@@ -84,7 +87,7 @@ def unfinished_upgrade(*names: str) -> str:
         return ""
     for idea, rec in ups.items():
         if rec.get("stage", "done") != "done" and ({idea, rec.get("name")} & set(names)):
-            return f"{idea} → {rec.get('name')}(stage {rec.get('stage')})"
+            return _("{idea} → {name} (stage {stage})", idea=idea, name=rec.get('name'), stage=rec.get('stage'))
     return ""
 
 
@@ -97,7 +100,7 @@ def main(argv: list[str]) -> int:
     args = [a for a in argv if not a.startswith("--")]
     apply, JSON = "--apply" in argv, "--json" in argv
     if len(args) != 2:
-        fail("用法:project-rename.py <舊名稱> <新名稱> [--apply] [--json]", "bad_name")
+        fail(_("usage: project-rename.py <old name> <new name> [--apply] [--json]"), "bad_name")
     old, new = args
     rec = records().get(old) or {}
 
@@ -106,29 +109,32 @@ def main(argv: list[str]) -> int:
         doc = load(new)
         if rec.get("new") == new and rec.get("stage") == "done" and doc is not None:
             done("already", 0, name=new, origin=(doc.get("paths") or {}).get("origin", ""))
-        fail(f"登錄裡沒有 {old}", "not_found")
+        fail(_("{name} is not in the registry", name=old), "not_found")
     if not NAME.match(new) or "--" in new:
-        fail(f"新名稱只能用小寫英文、數字跟 -(開頭結尾不能是 -,最多 40 字):{new!r}", "bad_name")
+        fail(_("The new name may only use lowercase letters, digits and - (not at the start or end, at most 40 "
+               "characters): {name!r}", name=new), "bad_name")
     if new == old:
-        fail("新名稱跟舊的一樣", "bad_name")
+        fail(_("The new name is the same as the old one"), "bad_name")
     if old == hubconf.hub_project() or new == hubconf.hub_project():
-        fail("平台自己不能改名", "bad_name")
+        fail(_("The platform itself cannot be renamed"), "bad_name")
     taken = [str(p) for p in (hubconf.registry_dir() / f"{new}.yaml", hubconf.p("workspace_root", "~/workspace") / new,
                               hubconf.p("services_root", "~/services") / new,
                               hubconf.p("git_origin", "~/git-origin") / f"{new}-memory.git",
                               hubconf.p("memory_copies", "~/.memory-copies") / new) if p.exists()]
     if taken:
-        fail(f"{new} 已經被用掉了:{', '.join(taken)}", "name_taken")
+        fail(_("{name} is already taken: {paths}", name=new, paths=', '.join(taken)), "name_taken")
 
     doc = load(old)
     origin = (doc.get("paths") or {}).get("origin") or "(native)"
     ws = hubconf.path((doc.get("paths") or {}).get("workspace"))
     up = unfinished_upgrade(old, new)
     if up:
-        fail(f"{old} 有做到一半的升級({up}),先把升級的重試做完再改名")
+        fail(_("{name} has an upgrade stopped halfway ({upgrade}): finish retrying the upgrade before renaming",
+               name=old, upgrade=up))
     who = users_in(ws) if ws and ws.is_dir() else ""
     if who:
-        fail(f"還有程序的工作目錄在 {ws}:{who}——先關掉那個專案的 session / 終端機分頁", "busy")
+        fail(_("Processes still have their working directory in {path}: {who}. Close that project's sessions / "
+               "terminal tabs first", path=ws, who=who), "busy")
     m = GITHUB.match(origin)
     new_origin, gh_step = origin, None
     if m:
@@ -137,23 +143,26 @@ def main(argv: list[str]) -> int:
         if repo != new:
             already = rec.get("new") == new and rec.get("stage") in ("github", "done")
             if gh_exists(f"{owner}/{new}") and not already:
-                fail(f"GitHub 上已經有 {owner}/{new}", "name_taken")
+                fail(_("GitHub already has {owner}/{name}", owner=owner, name=new), "name_taken")
             gh_step = None if already else (f"{owner}/{repo}", new)
 
-    plan = [f"GitHub:{gh_step[0]} → {owner}/{new}" if gh_step else "GitHub:不用改(沒有 remote 或已經改好)",
-            f"本機 origin:{origin} → {new_origin}" if new_origin != origin else "本機 origin:不變",
-            f"rename-project.sh {old} {new} --origin {new_origin}(登記、memory、mirror、資料夾)"]
+    plan = [_("GitHub: {old} → {owner}/{name}", old=gh_step[0], owner=owner, name=new) if gh_step
+            else _("GitHub: nothing to change (no remote, or already renamed)"),
+            _("local origin: {old} → {new}", old=origin, new=new_origin) if new_origin != origin
+            else _("local origin: unchanged"),
+            _("rename-project.sh {old} {new} --origin {origin} (registration, memory, mirror, folders)",
+              old=old, new=new, origin=new_origin)]
     if not JSON:
         print("\n".join(f"  {i}. {p}" for i, p in enumerate(plan, 1)))
     if not apply:
         if not JSON:
-            print("(dry-run,加 --apply 執行)")
+            print(_("(dry-run; add --apply to run it)"))
         return 0
 
     if gh_step:
         r = subprocess.run(["gh", "repo", "rename", gh_step[1], "-R", gh_step[0], "--yes"], capture_output=True, text=True)
         if r.returncode != 0:
-            fail(f"GitHub repo 改名失敗:{(r.stderr or r.stdout).strip()[-300:]}")
+            fail(_("Renaming the GitHub repo failed: {err}", err=(r.stderr or r.stdout).strip()[-300:]))
         record(old, new=new, stage="github")
     if new_origin != origin and ws:
         subprocess.run(["git", "-C", str(ws), "remote", "set-url", "origin", new_origin], capture_output=True)
@@ -164,8 +173,9 @@ def main(argv: list[str]) -> int:
     if r.returncode != 0:
         out = (r.stderr or r.stdout).strip()
         if r.returncode == BUSY:  # 檢查完到這裡之間又有人進去了
-            fail(f"有程序還在 {old} 的資料夾裡(例:開著的 session),先關掉:{out[-300:]}", "busy")
-        fail(f"rename-project.sh 失敗:{out[-400:]}")
+            fail(_("Processes are still in the {name} folder (e.g. an open session); close them first: {out}",
+                   name=old, out=out[-300:]), "busy")
+        fail(_("rename-project.sh failed: {out}", out=out[-400:]))
     record(old, new=new, stage="done", origin=new_origin)
     done("renamed", 0, name=new, origin=new_origin)
 

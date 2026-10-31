@@ -1,0 +1,21 @@
+{
+ "{idea} → {name} (stage {stage})": "{idea} → {name}(stage {stage})",
+ "usage: project-rename.py <old name> <new name> [--apply] [--json]": "用法:project-rename.py <舊名稱> <新名稱> [--apply] [--json]",
+ "{name} is not in the registry": "登錄裡沒有 {name}",
+ "The new name may only use lowercase letters, digits and - (not at the start or end, at most 40 characters): {name!r}": "新名稱只能用小寫英文、數字跟 -(開頭結尾不能是 -,最多 40 字):{name!r}",
+ "The new name is the same as the old one": "新名稱跟舊的一樣",
+ "The platform itself cannot be renamed": "平台自己不能改名",
+ "{name} is already taken: {paths}": "{name} 已經被用掉了:{paths}",
+ "{name} has an upgrade stopped halfway ({upgrade}): finish retrying the upgrade before renaming": "{name} 有做到一半的升級({upgrade}),先把升級的重試做完再改名",
+ "Processes still have their working directory in {path}: {who}. Close that project's sessions / terminal tabs first": "還有程序的工作目錄在 {path}:{who}——先關掉那個專案的 session / 終端機分頁",
+ "GitHub already has {owner}/{name}": "GitHub 上已經有 {owner}/{name}",
+ "GitHub: {old} → {owner}/{name}": "GitHub:{old} → {owner}/{name}",
+ "GitHub: nothing to change (no remote, or already renamed)": "GitHub:不用改(沒有 remote 或已經改好)",
+ "local origin: {old} → {new}": "本機 origin:{old} → {new}",
+ "local origin: unchanged": "本機 origin:不變",
+ "rename-project.sh {old} {new} --origin {origin} (registration, memory, mirror, folders)": "rename-project.sh {old} {new} --origin {origin}(登記、memory、mirror、資料夾)",
+ "(dry-run; add --apply to run it)": "(dry-run,加 --apply 執行)",
+ "Renaming the GitHub repo failed: {err}": "GitHub repo 改名失敗:{err}",
+ "Processes are still in the {name} folder (e.g. an open session); close them first: {out}": "有程序還在 {name} 的資料夾裡(例:開著的 session),先關掉:{out}",
+ "rename-project.sh failed: {out}": "rename-project.sh 失敗:{out}"
+}

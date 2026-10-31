@@ -47,6 +47,8 @@ class Script(unittest.TestCase):
         (self.hub / "projects").mkdir()
         for f in ("project-rename.py", "hubconf.py", "i18n.py"):
             shutil.copy(ROOT / "bin" / f, self.hub / "bin" / f)
+        (self.hub / "locales" / "zh-Hant").mkdir(parents=True)
+        shutil.copy(ROOT / "locales" / "zh-Hant" / "project-rename.json", self.hub / "locales" / "zh-Hant")
         for name, text in (("rename-project.sh", FAKE_RENAME),):
             (self.hub / "bin" / name).write_text(text)
             (self.hub / "bin" / name).chmod(0o755)
