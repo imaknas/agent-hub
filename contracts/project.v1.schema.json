@@ -22,7 +22,13 @@
     "provides": {"type": "array", "items": {"type": "object", "required": ["contract", "v", "schema"]}},
     "consumes": {"type": "array", "items": {"type": "object", "required": ["contract", "v", "copy"]}},
     "services": {"type": "array", "items": {"type": "object", "required": ["name", "run"]}},
-    "jobs": {"type": "array", "items": {"type": "object", "required": ["name"]}},
+    "jobs": {"type": "array", "items": {"type": "object", "required": ["name"], "properties": {
+      "trigger": {"type": "object", "description": "event-triggered job (docs/design/event-jobs.md): exactly one of at, every, trigger", "additionalProperties": false, "required": ["events"], "properties": {
+        "events": {"type": "array", "minItems": 1, "items": {"type": "string"}, "description": "bus event types (the hubbus contract's type enum)"},
+        "projects": {"type": "array", "minItems": 1, "items": {"type": "string"}, "description": "self (default), a project name or *; other projects only for the platform project and modules"},
+        "sources": {"type": "array", "minItems": 1, "items": {"type": "string"}, "description": "globs the event source must match"},
+        "where": {"type": "object", "description": "payload key (dots for nesting) -> value or list of values; strings with * ? [ are globs"},
+        "debounce": {"type": "string", "pattern": "^\\d+(m|h)$"}}}}}},
     "secrets": {"type": "array", "description": "the credentials this project uses: only names, locations, expiry, no values", "items": {"type": "object", "required": ["name", "path"], "additionalProperties": false, "properties": {
       "name": {"type": "string"}, "path": {"type": "string"}, "env_key": {"type": "string"},
       "expires": {"type": "string", "pattern": "^\\d{4}-\\d{2}-\\d{2}$"}, "max_age_days": {"type": "integer", "minimum": 1},

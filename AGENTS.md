@@ -215,6 +215,16 @@ agent-hub is meant for anyone, with any coding agent, any LLM, any key.
   judgment (don't use a desktop app's own scheduling: it only runs while the computer is awake and the app is open):
   registry jobs (`<project>/<job>`) or a command `bin/run-agent-job.sh <name> [working directory]`, with reports and
   state in `.state/agent-jobs/<name>/`
+- **Event-triggered jobs**: a registry job with `trigger:` (instead of `at`/`every`) runs when matching bus events
+  wait: `trigger: {events: [merge.done], projects?, sources?, where?, debounce?}` (the key is `trigger`, never `on`:
+  YAML reads a bare `on` as true). Event types come from the hubbus contract's enum; a project's job sees only events
+  addressed to it. Each job keeps a cursor in the scheduler's state (tied to the bus file's generation); a run gets
+  the oldest waiting events in `AGENT_HUB_EVENTS` (agent jobs: appended to the prompt as data), and only a success
+  moves the cursor. Every scheduled run gets `AGENT_HUB_JOB` and the causal chain (`AGENT_HUB_JOB_CHAIN` /
+  `_DEPTH`), which hubbus stamps on what it publishes, so a job never triggers itself. Bus events are their writers'
+  claims (any project can write the bus): the platform's event jobs are never agents, and a project's agent event job
+  must declare `allow:`. `schedulectl events <job>` shows what waits and why, `schedulectl skip <job>` drops a batch
+  that keeps failing. Logic in `bin/event_jobs.py`, design in `docs/design/event-jobs.md`
 - **Long jobs get `background: true`**: the scheduler runs jobs one at a time in order, so a job that takes minutes or
   more (e.g. the librarian) without it makes everything after it wait. A background job's result is merged back into
   the state on the next tick; details in the `scheduler.py` header. When background jobs have an order between them

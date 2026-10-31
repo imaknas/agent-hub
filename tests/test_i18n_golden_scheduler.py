@@ -181,6 +181,7 @@ class Golden(unittest.TestCase):
         st = self.tmp / "state"
         m.STATE_FILE, m.RUNS_DIR, m.HEARTBEAT = st / "scheduler-last-run.json", st / "runs", st / "scheduler-heartbeat"
         m.LOG_DIR, m.FAILING_FILE, m.SCHEDULE = self.tmp / "logs", st / "scheduler-failing.json", self.tmp / "none.yaml"
+        m.LOCK_FILE = st / "scheduler.lock"
         st.mkdir()
         m.RUNS_DIR.mkdir()
         recorded, alerts, spawned = [], [], []

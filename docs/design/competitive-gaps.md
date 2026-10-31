@@ -25,7 +25,7 @@ is that the platform guarantees the result: what has to hold does not depend on 
 
 ## Build (each is a task of its own, with its own design and review)
 
-1. **Event-triggered jobs.** The model is Cursor Automations: cloud agents started by CI results, reviews, Sentry,
+1. **Event-triggered jobs** (built 11-01; design in `event-jobs.md`). The model is Cursor Automations: cloud agents started by CI results, reviews, Sentry,
    PagerDuty, Linear or a webhook. agent-hub's jobs run on a clock or `after:` another job. The bus already records
    `merge.done`, `merge.failed`, `config.applied` and letters, so the first step is a registry `jobs:` field that
    starts a job on bus events. External sources (CI finished, a webhook) come in as bus events from one receiver

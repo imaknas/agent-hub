@@ -105,8 +105,21 @@ cd "$CWD" || exit 1
 # so they can't be blocked
 MCP_ARGS=()
 [ "${LLM_AUTH:-}" = "subscription" ] || MCP_ARGS=(-- --strict-mcp-config)
-"$HUB/bin/py" "$HUB/bin/llm.py" run "${AGENT_JOB_POINT:-agent-job}" --prompt-file "$PROMPT" "${MCP_ARGS[@]}" >"$raw" 2>"$raw.err"
+# an event-triggered run (AGENT_HUB_EVENTS, docs/design/event-jobs.md): the job's prompt plus the events, as data
+RUN_PROMPT="$PROMPT"
+if [ -n "${AGENT_HUB_EVENTS:-}" ]; then
+  RUN_PROMPT="$OUT/.$stamp.prompt.md"
+  if ! "$HUB/bin/py" "$HUB/bin/event_jobs.py" prompt "$PROMPT" "$RUN_PROMPT" 2>"$OUT/.$stamp.prompt.err"; then
+    # never run without the events it was started for: that would consume them unseen
+    status failed "error=$(tail -c 300 "$OUT/.$stamp.prompt.err" | tr '\n' ' ')" "finished_at=$(date -Iseconds)"
+    rm -f "$RUN_PROMPT" "$OUT/.$stamp.prompt.err"
+    exit 1
+  fi
+  rm -f "$OUT/.$stamp.prompt.err"
+fi
+"$HUB/bin/py" "$HUB/bin/llm.py" run "${AGENT_JOB_POINT:-agent-job}" --prompt-file "$RUN_PROMPT" "${MCP_ARGS[@]}" >"$raw" 2>"$raw.err"
 rc=$?
+[ "$RUN_PROMPT" = "$PROMPT" ] || rm -f "$RUN_PROMPT"
 
 # the report's footer is written below (owner-facing text, in the UI language); this step leaves its values in .footer
 rm -f "$OUT/.footer"
@@ -140,10 +153,12 @@ fi
 
 mapfile_args=()
 while IFS= read -r line; do mapfile_args+=("$line"); done <"$OUT/.parsed"
+ok=1
 if [ $rc -eq 0 ] && ! grep -q '^error=' "$OUT/.parsed"; then
   status ok "finished_at=$(date -Iseconds)" "report=$report" "${mapfile_args[@]}"
   rm -f "$raw" "$raw.err"
 else
+  ok=0
   status failed "finished_at=$(date -Iseconds)" "exit=$rc" "stderr=$(tail -c 500 "$raw.err" | tr '\n' ' ')" "${mapfile_args[@]}"
 fi
 rm -f "$OUT/.parsed"
@@ -151,3 +166,6 @@ rm -f "$OUT/.parsed"
 "$HUB/bin/py" "$HUB/bin/gen-status-page.py" >/dev/null 2>&1 || true
 # keep old reports for 90 days
 find "$OUT" -name '20*.md' -mtime +90 -delete 2>/dev/null
+# run in place (the scheduler runs agent event jobs this way, as its own background job): the exit code is the run's
+# outcome, so a failed run doesn't count as having taken its events
+[ $ok -eq 1 ] || exit 1

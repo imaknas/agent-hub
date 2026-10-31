@@ -44,6 +44,7 @@ class Tick:
         m.STATE_FILE, m.RUNS_DIR, m.HEARTBEAT = st / "last-run.json", st / "runs", st / "heartbeat"
         m.LOG_DIR, m.FAILING_FILE, m.SCHEDULE = self.tmp / "logs", st / "failing.json", self.tmp / "none.yaml"
         m.RUNS_DIR.mkdir()
+        m.LOCK_FILE = st / "scheduler.lock"
         self.ran, self.bus, self.spawned = [], [], []
 
     def run(self, cmd, **kw):

@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "records-hubbus.v1",
   "title": "hubbus event (one row of .state/bus.db; bin/hubbus)",
-  "description": "Append-only event log. payload is the object decoded from the JSON string and always carries \"v\": 1 (events before 2026-10-22 have none; read as 1). Adding a field keeps the version; renaming/changing a meaning bumps it, with both versions side by side.",
+  "description": "Append-only event log. payload is the object decoded from the JSON string and always carries \"v\": 1 (events before 2026-10-22 have none; read as 1). Any payload may carry chain (the scheduled jobs whose runs caused the event, oldest first) and depth (how many scheduled runs deep it is): docs/design/event-jobs.md section 7. Adding a field keeps the version; renaming/changing a meaning bumps it, with both versions side by side.",
   "type": "object",
   "required": ["seq", "id", "ts", "type", "source", "payload"],
   "properties": {
@@ -13,7 +13,7 @@
     "source": {"type": "string", "description": "sender address: a project name, the platform, or owner (or the owner's configured alias)"},
     "to_project": {"type": ["string", "null"], "description": "the recipient address of a message"},
     "ref": {"type": ["string", "null"], "description": "which event this event is about (delivered/done → the letter id; reply → the original letter)"},
-    "payload": {"type": "object", "properties": {"v": {"const": 1}}}
+    "payload": {"type": "object", "properties": {"v": {"const": 1}, "chain": {"type": "array", "items": {"type": "string"}}, "depth": {"type": "integer", "minimum": 0}}}
   },
   "if": {"properties": {"type": {"const": "message"}}},
   "then": {"properties": {"payload": {"$ref": "#/$defs/message"}}},

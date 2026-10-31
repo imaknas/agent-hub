@@ -41,7 +41,7 @@ job: job-a · workdir: <TMP>/ws/job · session: s-1 · 3 turns · 1.5 min
 (to continue the discussion: on the hub machine, cd <TMP>/ws/job && claude --resume s-1)
 
 $ run-agent-job.sh job-a <TMP>/ws/job
-[exit 0]
+[exit 1]
 --- stdout
 --- stderr
 

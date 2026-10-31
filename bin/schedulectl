@@ -14,7 +14,12 @@ Usage:
   schedulectl logs [name] [n]     print the last n lines of a log (default scheduler.log; with name, that job's log for today)
   schedulectl run <name>          run a job once now (like Claude Desktop's "Run now") and record it as run today, so the
                                   schedule does not run it again that day (which matters for LLM jobs). Runs through launchd
-                                  in the user's desktop session: under SSH the keychain can't be read and claude is logged out
+                                  in the user's desktop session: under SSH the keychain can't be read and claude is logged out.
+                                  An event job runs with no events and its cursor stays: a manual run is a test
+  schedulectl events <name>       an event job's cursor and the events waiting for it (and the ones the loop chain holds
+                                  back): why it didn't run, what its next run gets
+  schedulectl skip <name>         move an event job's cursor to the bus head: the events waiting are dropped for good (a
+                                  batch that keeps failing)
   schedulectl stop                stop the scheduler completely (launchctl bootout; schedule.yaml untouched)
   schedulectl start               start the scheduler again (launchctl bootstrap)
   schedulectl models              the model each judgment point actually uses, and where that comes from (llm.model_for
@@ -26,6 +31,7 @@ Usage:
 """
 import datetime
 import json
+import os
 import subprocess
 import sys
 from pathlib import Path
@@ -33,6 +39,7 @@ from pathlib import Path
 import yaml
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
+import event_jobs  # noqa: E402
 import hubconf  # noqa: E402
 import i18n  # noqa: E402
 
@@ -103,6 +110,15 @@ def day_list(days: list) -> str:
 
 
 def describe_when(job):
+    if "trigger" in job:
+        extra = _(" (at most {n} {n:try|tries} a day)", n=job["max_attempts_per_day"]) if "max_attempts_per_day" in job else ""
+        if "end_date" in job:
+            extra += _(" (until {date})", date=job["end_date"])
+        return event_jobs.describe(job) + extra
+    return describe_clock(job)
+
+
+def describe_clock(job):
     """Uses the same filter fields as scheduler.py's runs_today(), or list would show a monthly job as daily.
     One whole phrase per shape: "daily at 06:00", "every 15 minutes, 08:00-20:00", "weekly on Mon, Thu at 10:00",
     "monthly on days 1 and 15 at 10:00", "in Jan, Apr on day 1 at 06:00 (until 2027-12-31)"."""
@@ -213,10 +229,22 @@ def cmd_start():
     print(_("Scheduler started"))
 
 
+def run_env(job):
+    """What the scheduler gives every run (event_jobs.run_env); a run started from inside another run keeps its
+    chain. An event job gets no events."""
+    chain = [*[j for j in event_jobs.chain_from_env(os.environ) if j != job["name"]], job["name"]]
+    depth = event_jobs.depth_from_env(os.environ) + 1
+    return {"SAFE_PUSH": str(HUB / "bin" / "git-safe-push.sh"),
+            **event_jobs.run_env(job["name"], chain, depth, [] if "trigger" in job else None)}
+
+
 def cmd_run(name):
     job = next((j for j in all_jobs() if j["name"] == name), None)
     if job is None:
         sys.exit(_("Neither schedule.yaml nor the project registry has '{name}'", name=name))
+    env = run_env(job)
+    # recorded before it starts: if the state can't be written (a tick holds it), nothing runs twice
+    _mark_ran_today(name)
     uid = subprocess.check_output(["id", "-u"]).decode().strip()
     label = f"local.agent-hub-run-now.{name.replace('/', '.')}"
     log = HUB / ".logs" / f"{name.replace('/', '__')}-{datetime.date.today().isoformat()}.log"
@@ -224,8 +252,7 @@ def cmd_run(name):
         subprocess.run(["systemctl", "--user", "reset-failed", f"{label}.service"], capture_output=True)
         subprocess.run(["systemd-run", "--user", "--collect", f"--unit={label}",
                         f"--property=StandardOutput=append:{log}", f"--property=StandardError=append:{log}",
-                        f"--setenv=SAFE_PUSH={HUB / 'bin' / 'git-safe-push.sh'}", "/bin/sh", "-lc", job["command"]], check=True)
-        _mark_ran_today(name)
+                        *[f"--setenv={k}={v}" for k, v in env.items()], "/bin/sh", "-lc", job["command"]], check=True)
         print(_("Started {name}; its output goes to {log} (today's schedule won't run it again)", name=name, log=log))
         return
     plist = Path("/tmp") / f"{label}.plist"
@@ -233,7 +260,7 @@ def cmd_run(name):
     plist.write_bytes(plistlib.dumps({
         "Label": label,
         "ProgramArguments": [hubconf.login_shell(), "-lc", job["command"]],
-        "EnvironmentVariables": {"SAFE_PUSH": str(HUB / "bin" / "git-safe-push.sh")},
+        "EnvironmentVariables": env,
         "RunAtLoad": True,
         "StandardOutPath": str(log),
         "StandardErrorPath": str(log),
@@ -241,17 +268,75 @@ def cmd_run(name):
     # first clear a same-named job left by the previous manual run (finished jobs stay in launchd)
     subprocess.run(["launchctl", "bootout", f"gui/{uid}/{label}"], capture_output=True)
     subprocess.run(["launchctl", "bootstrap", f"gui/{uid}", str(plist)], check=True)
-    _mark_ran_today(name)
     print(_("Started {name}; its output goes to {log} (today's schedule won't run it again)", name=name, log=log))
+
+
+def scheduler_module():
+    sys.path.insert(0, str(HUB / "bin"))
+    import scheduler
+    return scheduler
+
+
+def edit_state(fn):
+    """Change the scheduler's state under its lock (a tick in progress is waited for), so neither side writes back a
+    stale copy."""
+    state_file = HUB / ".state" / "scheduler-last-run.json"
+    with scheduler_module().state_lock(timeout=30, path=HUB / ".state" / "scheduler.lock") as mine:
+        if not mine:
+            sys.exit(_("The scheduler's state is held by a tick in progress (a job running in the foreground, or this "
+                       "command was started by one); nothing was changed. Try again after the tick"))
+        state = json.loads(state_file.read_text()) if state_file.exists() else {}
+        out = fn(state)
+        tmp = state_file.with_suffix(".tmp")
+        tmp.write_text(json.dumps(state, indent=2))
+        tmp.replace(state_file)
+    return out
 
 
 def _mark_ran_today(name):
     # mark as run today: otherwise a job whose scheduled time has passed runs again on the next tick (for an LLM job,
     # paying twice)
+    edit_state(lambda state: state.__setitem__(name, datetime.date.today().isoformat()))
+
+
+def event_job(name):
+    job = next((j for j in all_jobs() if j["name"] == name), None)
+    if job is None or "trigger" not in job:
+        sys.exit(_("'{name}' is not an event job (a registry job with trigger:)", name=name))
+    return job
+
+
+def cmd_events(name):
+    job = event_job(name)
     state_file = HUB / ".state" / "scheduler-last-run.json"
     state = json.loads(state_file.read_text()) if state_file.exists() else {}
-    state[name] = datetime.date.today().isoformat()
-    state_file.write_text(json.dumps(state, indent=2))
+    print(_("{name}: {when}", name=name, when=describe_when(job)))
+    if f"{name}.event_seq" not in state:
+        print(_("No cursor yet: the next tick starts it at the bus head"))
+        return
+    cursor = state[f"{name}.event_seq"]
+    got = event_jobs.pending(job, cursor)
+    print(_("cursor {cursor}, bus head {head}; next: {next}", cursor=cursor, head=got["head"],
+            next=event_jobs.waiting(job, state, datetime.datetime.now())))
+    for title, evs in ((_("waiting:"), got["events"]), (_("held back by the loop chain:"), got["held"])):
+        if evs:
+            print(title)
+        for ev in evs:
+            chain = " > ".join(event_jobs.chain_of(ev))
+            print(f"  {ev['seq']:>7}  {event_jobs.local(ev['ts']):%m/%d %H:%M}  {ev['type']:16} "
+                  f"{event_jobs.belongs(ev) or '-':16} {chain}")
+
+
+def cmd_skip(name):
+    job = event_job(name)
+    head = event_jobs.read(0, [])[0]
+
+    def skip(state):
+        old = state.get(f"{name}.event_seq")
+        state[f"{name}.event_seq"] = max(old or 0, head)
+        return old
+    old = edit_state(skip)
+    print(_("{name}: cursor {old} → {head}; the events in between won't be run", name=job["name"], old=old, head=head))
 
 
 def cmd_models():
@@ -325,6 +410,10 @@ def main():
         cmd_logs(*rest)
     elif cmd == "run" and rest:
         cmd_run(rest[0])
+    elif cmd == "events" and rest:
+        cmd_events(rest[0])
+    elif cmd == "skip" and rest:
+        cmd_skip(rest[0])
     elif cmd == "stop":
         cmd_stop()
     elif cmd == "start":

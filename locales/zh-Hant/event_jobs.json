@@ -1,0 +1,13 @@
+{
+ "from any project": "任何專案的",
+ "from {projects}": "來自 {projects}",
+ "on the next event": "下一個事件來時",
+ "on the next event (starts counting at the next tick)": "下一個事件來時(下個 tick 開始計)",
+ "on {events}": "收到 {events} 時",
+ "quiet {n} min": "靜置 {n} 分鐘",
+ "the bus can't be read: {error}": "讀不了 bus:{error}",
+ "{n} {n:event|events} waiting since {since:%m/%d %H:%M}": "{since:%m/%d %H:%M} 起有 {n} 個事件在等",
+ "{text} ({extras})": "{text}({extras})",
+ "{text}; today's {cap} {cap:run is|runs are} used up": "{text};今天的 {cap} 次已經用完",
+ "the event batch can't go into the prompt: {error!r}": "事件放不進 prompt:{error!r}"
+}

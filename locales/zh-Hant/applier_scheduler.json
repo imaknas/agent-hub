@@ -3,5 +3,6 @@
  ", ": "、",
  "at {time}": "{time}",
  "every {n} {n:minute|minutes}": "每 {n} 分鐘",
- ", after {jobs}": ",after {jobs}"
+ ", after {jobs}": ",after {jobs}",
+ "on {events}": "收到 {events} 時"
 }

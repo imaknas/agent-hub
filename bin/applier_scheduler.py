@@ -16,7 +16,7 @@ _ = i18n.domain(__file__)
 
 EXTERNAL = False
 SNAPSHOT = hubconf.STATE / "config-applied" / "jobs.json"
-KEYS = ("time", "every_minutes", "days_of_week", "days_of_month", "months", "end_date", "between", "after", "command",
+KEYS = ("time", "every_minutes", "trigger", "days_of_week", "days_of_month", "months", "end_date", "between", "after", "command",
         "background", "max_attempts_per_day", "enabled")
 
 
@@ -49,7 +49,8 @@ def _diff(cur: dict[str, dict], old: dict[str, dict]) -> list[Change]:
 
 def _when(j: dict) -> str:
     w = _("at {time}", time=j["time"]) if j.get("time") else \
-        _("every {n} {n:minute|minutes}", n=j['every_minutes']) if j.get("every_minutes") else ""
+        _("every {n} {n:minute|minutes}", n=j['every_minutes']) if j.get("every_minutes") else \
+        _("on {events}", events=", ".join(j["trigger"]["events"])) if j.get("trigger") else ""
     return w + (_(", after {jobs}", jobs=', '.join(j['after'])) if j.get("after") else "")
 
 

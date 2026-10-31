@@ -130,5 +130,8 @@
   "Tokens": "token",
   "Cost": "花費",
   "≈${amount} (subscription, not billed)": "≈${amount}(訂閱,不計費)",
-  "{project}: its worktrees could not be read ({why})": "{project}:讀不到它的 worktree({why})"
+  "{project}: its worktrees could not be read ({why})": "{project}:讀不到它的 worktree({why})",
+  "Event job {name} has had events waiting since {since:%m/%d %H:%M} (schedulectl events {name})": "事件 job {name} 從 {since:%m/%d %H:%M} 起有事件一直在等(schedulectl events {name})",
+  "last run: {n} {n:event|events}, {at}": "上次:{n} 個事件,{at}",
+  "{n} {n:event|events} held back today by the loop chain (schedulectl events {name})": "今天有 {n} 個事件被迴圈鏈擋下(schedulectl events {name})"
 }

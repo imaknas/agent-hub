@@ -81,6 +81,13 @@ def month_name(m: int) -> str:
 
 
 def describe_when(job: dict) -> str:
+    if "trigger" in job:   # event jobs (docs/design/event-jobs.md)
+        import event_jobs
+        return event_jobs.describe(job) + (_(" (until {date})", date=job['end_date']) if "end_date" in job else "")
+    return describe_clock(job)
+
+
+def describe_clock(job: dict) -> str:
     """One whole phrase per shape (the same English as schedulectl list): "daily at 06:00", "every 15 minutes, 08:00-20:00",
     "weekly on Mon, Thu at 10:00", "monthly on days 1 and 15 at 10:00", "in Jan, Apr on day 1 at 06:00 (until …)"."""
     parts = []
@@ -117,6 +124,9 @@ def describe_when(job: dict) -> str:
 def next_run(job: dict, state: dict, now: datetime.datetime) -> str:
     if not job.get("enabled", True):
         return _("paused")
+    if "trigger" in job:
+        import event_jobs
+        return event_jobs.waiting(job, state, now)
     if "every_minutes" in job:
         last = state.get(f"{job['name']}.last_ok")
         if not last:
@@ -135,6 +145,25 @@ def next_run(job: dict, state: dict, now: datetime.datetime) -> str:
             return _("today (waiting for the next tick, or out of retries)")
         return fmt_dt(due)
     return _("never again")
+
+
+def event_detail(job: dict, state: dict, now: datetime.datetime, alerts: list) -> list[str]:
+    """An event job's last batch and the events the loop chain held back today; an alert when an event has waited
+    over a day (docs/design/event-jobs.md section 9)."""
+    import event_jobs
+    name, out = job["name"], []
+    last = state.get(f"{name}.event_last")
+    if last:
+        out.append(_("last run: {n} {n:event|events}, {at}", n=last.get("count", 0),
+                     at=str(last.get("at", ""))[5:16].replace("T", " ")))
+    held = state.get(f"{name}.event_held") or {}
+    if held.get("date") == now.strftime("%Y-%m-%d") and held.get("count"):
+        out.append(_("{n} {n:event|events} held back today by the loop chain (schedulectl events {name})",
+                     n=held["count"], name=name))
+    if (since := event_jobs.stuck(job, state, now)):
+        alerts.append(("notify", _("Event job {name} has had events waiting since {since:%m/%d %H:%M} (schedulectl events "
+                                   "{name})", name=name, since=since)))
+    return out
 
 
 def fmt_dt(t: datetime.datetime) -> str:
@@ -352,6 +381,8 @@ def main() -> None:
             # a success on the next tick cancels it; remind only when the last run failed
             alerts.append(("bad", _("{name} failed on its last run (exit {code}); log: .logs/{log}-<date>.log", name=name,
                                     code=run.get("code", "?"), log=name.replace('/', '__'))))
+        if "trigger" in job:
+            detail = "; ".join(x for x in [detail, *event_detail(job, state, now, alerts)] if x)
         cls = {"ok": "ok", "running": "run"}.get(result, "bad" if result.startswith("failed") else "")
         label = {"ok": _("succeeded"), "running": _("running"), "failed": _("failed")}.get(result.split(" ")[0], result or "—")
         rows.append(

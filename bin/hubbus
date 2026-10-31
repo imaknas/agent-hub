@@ -22,7 +22,14 @@ Event types (to add one, have a reader first):
                               reply_to, handoff_id
   message.delivered  ref = the letter's id; it was delivered into some session's context (payload: session, via)
   message.done       ref = the letter's id; the receiving project has handled it (payload: note)
-  job.failed         a scheduled job failed (payload: job, exit, detail)
+  job.failed         a scheduled job failed (payload: job, exit, detail; to_project = the job's project for registry
+                     jobs)
+  merge.done / merge.failed / session.report (merge-branch, lease runner), config.applied (agenthub config apply),
+  record (Principal Handoff records): the full list is the type enum of contracts/hubbus.v1.schema.json
+Any payload may carry chain and depth (docs/design/event-jobs.md section 7): publish() adds AGENT_HUB_JOB_CHAIN /
+AGENT_HUB_JOB_DEPTH, the causal chain of the scheduled run writing it, so event-triggered jobs don't trigger themselves; bridge/dispatch/reconcile-questions
+carry others' events and drop it, and dispatch hands each letter's chain to the handler it starts.
+meta(generation): a random id fixed when the file is created; a reader's cursor (event jobs) is only valid within it.
 A letter's state is a projection, never modified in place: inbox = messages to X that no done event points at yet.
 
 Addresses are projects (names in the project registry projects/*.yaml, agent-hub) and owner, never sessions.
@@ -110,6 +117,7 @@ import urllib.parse
 import urllib.request
 
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
+import event_jobs  # noqa: E402  the causal chain of scheduled runs (docs/design/event-jobs.md section 7)
 import hubconf  # noqa: E402  paths, the owner address, the project registry all come from the platform settings
 import i18n  # noqa: E402
 import prompts  # noqa: E402  the platform's templates and prompt texts, filled with the configured names
@@ -210,13 +218,23 @@ def db(timeout: float = 30) -> sqlite3.Connection:
     -- presence (not events: updated on every hook, not in the log): which session is in which project, cwd, last
     -- activity
     CREATE TABLE IF NOT EXISTS presence(session TEXT PRIMARY KEY, project TEXT NOT NULL, cwd TEXT, seen TEXT NOT NULL);
+    -- meta.generation: a random id fixed when this file is created; a reader's cursor (event jobs) is only valid for
+    -- the generation it was taken in (a corrupt file moved aside starts a new one, seq from 1 again)
+    CREATE TABLE IF NOT EXISTS meta(key TEXT PRIMARY KEY, value TEXT NOT NULL);
     """)
+    c.execute("INSERT OR IGNORE INTO meta(key, value) VALUES('generation', ?)", (secrets.token_hex(8),))
     return c
 
 
 def publish(c, eid, etype, source, to_project=None, ref=None, payload=None) -> bool:
-    """Return whether it's new (if the same id already exists, nothing happens)."""
+    """Return whether it's new (if the same id already exists, nothing happens). Written from inside a scheduled run
+    (AGENT_HUB_JOB_CHAIN set), the event carries that run's chain: event jobs never trigger themselves through it."""
     body = {"v": 1, **(payload or {})}  # contract: contracts/hubbus.v1.schema.json
+    if chain := event_jobs.chain_from_env(os.environ):
+        given = body.get("chain") if isinstance(body.get("chain"), list) else []
+        body["chain"] = list(dict.fromkeys([*given, *chain]))
+        body["depth"] = max(event_jobs.depth_of({"payload": body}) if given else 0,
+                            event_jobs.depth_from_env(os.environ) or len(chain))
     cur = c.execute("INSERT OR IGNORE INTO events(id, ts, type, source, to_project, ref, payload) VALUES(?,?,?,?,?,?,?)",
                     (eid, iso(), etype, source, to_project, ref, json.dumps(body, ensure_ascii=False)))
     return cur.rowcount == 1
@@ -273,6 +291,7 @@ def project_of(cwd: pathlib.Path) -> str | None:
 
 # subcommands that change the bus: an agent in a platform-sends-for-it job (propose) may never run them (see
 # platform_mails())
+RELAYS = {"bridge", "dispatch", "reconcile-questions"}
 WRITES = {"send", "done", "ack", "publish", "record-publish", "bridge", "dispatch", "reconcile-questions"}
 PLATFORM_MAILS_ENV = "HUB_MAIL_BY_PLATFORM"   # set by bin/propose_apply.py for the agent it starts
 # what it looks like when it's really started (this hub's absolute path + the mailbox subcommand); matching only the
@@ -1319,6 +1338,18 @@ def fork_result(c, r) -> tuple[bool, str]:
     return bool(text or done or stale), "\n  ".join(parts)
 
 
+def chain_env(rows) -> dict:
+    """The environment for a handler of these letters: the chain of the runs that sent them, so what the handler
+    publishes stays in that chain although it isn't the run's child process (event-jobs.md section 7)."""
+    evs = [{"payload": payload(r)} for r in rows]
+    chain = event_jobs.run_chain("", evs)[:-1]
+    env = {k: v for k, v in os.environ.items() if k not in (event_jobs.CHAIN_ENV, event_jobs.DEPTH_ENV)}
+    if chain:
+        env[event_jobs.CHAIN_ENV] = json.dumps(chain, ensure_ascii=False)
+        env[event_jobs.DEPTH_ENV] = str(max(event_jobs.depth_of(e) for e in evs))
+    return env
+
+
 def run_handler(c, proj, ws, rows) -> None:
     """Delegation: dispatch a headless agent in that project (templates/prompts/mailbox.md, filled by prompts.render;
     judgment point mailbox-escalation)."""
@@ -1345,7 +1376,7 @@ def run_handler(c, proj, ws, rows) -> None:
         log_f.parent.mkdir(parents=True, exist_ok=True)
         with log_f.open("a") as f:
             subprocess.Popen([sys.executable, str(HUB / "bin" / "propose_apply.py"), "mailbox", proj, *[r["id"] for r in rows]],
-                             stdout=f, stderr=f, start_new_session=True)
+                             stdout=f, stderr=f, start_new_session=True, env=chain_env(rows))
         log(_("{project}: dispatched an agent (propose) for {n} {n:letter|letters} ({ids}, {run})", project=proj, n=len(rows),
               ids=", ".join(r["id"] for r in rows), run=run))
         return
@@ -1354,7 +1385,7 @@ def run_handler(c, proj, ws, rows) -> None:
     prompt.parent.mkdir(parents=True, exist_ok=True)
     prompt.write_text(prompts.render("mailbox") + "\n")
     res = subprocess.run([str(HUB / "bin" / "run-agent-job.sh"), f"mailbox-{proj}", str(ws), str(prompt)],
-                         capture_output=True, text=True, env={**os.environ, "AGENT_JOB_POINT": "mailbox-escalation"})
+                         capture_output=True, text=True, env={**chain_env(rows), "AGENT_JOB_POINT": "mailbox-escalation"})
     log(_("{project}: dispatched a headless agent for {n} {n:letter|letters} ({ids}, {run})", project=proj, n=len(rows),
           ids=", ".join(r["id"] for r in rows), run=run)
         if res.returncode == 0 else
@@ -1388,7 +1419,7 @@ def resume(c, r, sid, cwd, rt, ws=None, prompt=None) -> None:
             p = subprocess.Popen([sys.executable, str(HUB / "bin" / "llm.py"), "run", "mailbox-conversation",
                                   "--cwd", str(cwd), "--", *rt.resume_args(sid)],
                                  stdin=subprocess.PIPE, stdout=fh, stderr=subprocess.STDOUT, cwd=str(cwd), text=True,
-                                 start_new_session=True)
+                                 start_new_session=True, env=chain_env([r]))
             p.stdin.write(text)
             p.stdin.close()
     except OSError as e:
@@ -1687,7 +1718,9 @@ def main() -> None:
                                                  ph="0.3"))
     rp.add_argument("--json", default="-", help=_("only - (stdin) is supported"))
     pb = sub.add_parser("publish")
-    # letters have their own command; config.applied = which config version bin/hub config apply applied
+    # letters have their own command (and records record-publish); config.applied = which config version bin/hub
+    # config apply applied. Must be the contract's type enum without those (tests/test_scheduler_events.py checks it):
+    # the contract is the list event jobs validate against
     pb.add_argument("type", choices=("job.failed", "merge.done", "merge.failed", "session.report",
                                      "config.applied"))
     pb.add_argument("--source", required=True)
@@ -1697,6 +1730,11 @@ def main() -> None:
     pb.add_argument("--id")
     sub.add_parser("status").add_argument("--json", action="store_true")
     a = ap.parse_args()
+    if a.cmd in RELAYS:
+        # these carry other parties' events (owner answers, dispatch claims, the assistant's records): they are not the
+        # scheduled run's own doing, so they don't take the run's chain; dispatch passes each letter's chain on itself
+        os.environ.pop(event_jobs.CHAIN_ENV, None)
+        os.environ.pop(event_jobs.DEPTH_ENV, None)
 
     if a.cmd in WRITES and (how := platform_mails()):
         sys.exit(_("hubbus: this is work the platform sends letters for (recognized by the {how}): write the letters "

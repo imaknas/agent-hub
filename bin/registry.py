@@ -60,10 +60,19 @@ schema v1 (contracts/project.v1.md has the full description):
                                   count); backup: false needs a why (e.g. just reissue it)
   gate: strict                    the merge gate enforced: main in the main checkout can't be committed to directly
                                   (only via merge-branch); by default it only detects
-  jobs:      [{name, at | every, run | (kind: agent + prompt), cwd?, days?, days_of_month?, months?,
+  jobs:      [{name, at | every | trigger, run | (kind: agent + prompt), cwd?, days?, days_of_month?, months?,
                until?, between?, background?, after?, max_attempts_per_day?, legacy_name?}]
     every: 15m / 1h; cwd: runtime (default, when there's a runtime) | workspace | hub | state (agent jobs only: runs
       in its own state directory, without loading the project's settings/MCP)
+    trigger: {events: [bus event type], projects?: [self|<project>|*], sources?: [glob], where?: {payload.key: value |
+      [values]}, debounce?: 0m/10m/1h} = an event-triggered job (docs/design/event-jobs.md): runs when matching bus
+      events wait (the scheduler's tick). Not `on:` (YAML reads it as true). events come from the hubbus contract's
+      type enum; message only with where.type limited to info/progress/done (the rest is mailbox work).
+      An ordinary project sees only events addressed to it (self, including names from before a rename); the platform
+      project and modules may name others or *. Bus events are their writers' claims: the platform's event jobs are
+      never agent jobs, and a project's agent event job must declare allow: (its boundary). message.delivered and
+      message.done are refused like record. max_attempts_per_day defaults to 12; an agent event job always runs as the scheduler's background job, in place,
+      so the scheduler sees its outcome. legacy_name is refused
     after: [job] (same project) or [project/job]
     connectors: true (agent jobs only): needs claude.ai connectors (Upwork etc.) → uses the subscription login, not
       the default headless token (tools in allow with mcp__claude_ai_ but this not set: invalid)
@@ -97,6 +106,7 @@ import subprocess
 import sys
 
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
+import event_jobs  # noqa: E402
 import hubconf  # noqa: E402
 import i18n  # noqa: E402
 import isolation  # noqa: E402
@@ -110,8 +120,13 @@ TOP = {"v", "name", "type", "purpose", "paths", "memory", "privacy", "runtime", 
        "publishes", "provides", "consumes", "services", "jobs", "enforce", "network", "allow_write", "gate", "secrets",
        "models", "metered_models"}
 SECRET = {"name", "path", "env_key", "expires", "max_age_days", "warn_days", "backup", "why", "rotate"}
-JOB = {"name", "at", "every", "run", "kind", "prompt", "cwd", "days", "days_of_month", "months", "until",
+JOB = {"name", "at", "every", "trigger", "run", "kind", "prompt", "cwd", "days", "days_of_month", "months", "until",
        "between", "background", "after", "before", "max_attempts_per_day", "legacy_name", "allow", "connectors"}
+TRIGGER = {"events", "projects", "sources", "where", "debounce"}
+# the mailbox's own work and bookkeeping (inbox records, delivery and closing written by dispatch, which relays others'
+# letters without a chain): no event job reacts to them (event-jobs.md 3.5)
+MAILBOX_WORK = ("record", "message.delivered", "message.done")
+NOTICES = ("info", "progress", "done")   # the only letter types an event job may react to (event-jobs.md 3.5)
 SERVICE = {"name", "run", "label", "keepalive", "interval_s", "throttle_s", "env", "cwd", "log", "expose"}
 DAYS = {"mon", "tue", "wed", "thu", "fri", "sat", "sun"}
 EVERY = re.compile(r"^(\d+)(m|h)$")
@@ -305,6 +320,71 @@ def validate(doc, stem: str) -> list[str]:
     return errs
 
 
+def bus_event_types() -> list[str]:
+    """The event types a job can react to: the type enum of the hubbus contract (one source of truth)."""
+    schema = json.loads((hubconf.ROOT / "contracts" / "hubbus.v1.schema.json").read_text())
+    return schema["properties"]["type"]["enum"]
+
+
+def platform_doc(doc: dict, stem: str) -> bool:
+    """The platform project and modules may react to other projects' events; an ordinary project only to its own."""
+    return stem == hubconf.hub_project() or doc.get("type") == "module"
+
+
+def validate_trigger(job: dict, doc: dict, stem: str) -> list[str]:
+    """A job's trigger: (docs/design/event-jobs.md section 2)."""
+    on = job["trigger"]
+    if not isinstance(on, dict):
+        return [_("trigger must be a mapping")]
+    errs = [_("trigger: unknown field {key}", key=k) for k in on if k not in TRIGGER]
+    if "legacy_name" in job:
+        errs.append(_("an event job (trigger:) cannot have legacy_name"))
+    events = on.get("events")
+    if not isinstance(events, list) or not events or not all(isinstance(x, str) and x for x in events):
+        errs.append(_("trigger.events must be a non-empty list of bus event types"))
+        events = []
+    else:
+        known = bus_event_types()
+        errs += [_("trigger.events: {type} is not a bus event type (contracts/hubbus.v1.schema.json: {known})", type=t,
+                   known=", ".join(known)) for t in events if t not in known]
+        errs += [_("trigger.events: {type} is mailbox work (the mailbox delivers it); an event job can't react to it",
+                   type=t) for t in events if t in MAILBOX_WORK]
+    projects = on.get("projects", ["self"])
+    if not isinstance(projects, list) or not projects or not all(isinstance(x, str) and x for x in projects):
+        errs.append(_("trigger.projects must be a non-empty list (self, a project name or *)"))
+    elif any(x not in ("self", stem) for x in projects) and not platform_doc(doc, stem):
+        errs.append(_("trigger.projects: a project's job only sees its own project's events (self)"))
+    # bus events are their writers' claims (any project can write the bus; event-jobs.md section 3.2)
+    if job.get("kind") == "agent" and platform_doc(doc, stem):
+        errs.append(_("the platform's event jobs can't be agent jobs: an event is what its writer claims, and an agent "
+                      "with the platform's authority must not take instructions from it"))
+    elif job.get("kind") == "agent" and not job.get("allow"):
+        errs.append(_("an agent event job must declare allow: (anyone who can write the bus can start it with their "
+                      "text; allow: is its boundary)"))
+    sources = on.get("sources")
+    if sources is not None and (not isinstance(sources, list) or not sources
+                                or not all(isinstance(x, str) and x for x in sources)):
+        errs.append(_("trigger.sources must be a non-empty list of senders (globs allowed)"))
+    where = on.get("where", {})
+    if not isinstance(where, dict) or not all(isinstance(k, str) and k for k in where):
+        errs.append(_("trigger.where must be a mapping from payload keys to values"))
+        where = {}
+    for k, v in where.items():
+        vals = v if isinstance(v, list) else [v]
+        if not vals or not all(isinstance(x, (str, int, float, bool)) for x in vals):
+            errs.append(_("trigger.where.{key} must be a value or a non-empty list of values", key=k))
+    if "message" in events:
+        types = where.get("type")
+        types = types if isinstance(types, list) else [types]
+        if not types or not all(t in NOTICES for t in types):
+            errs.append(_("trigger.events has message: limit it to notices with where.type ({types}); requests and questions "
+                          "belong to the mailbox", types=", ".join(NOTICES)))
+    deb = on.get("debounce", "0m")
+    if str(deb) != "0m" and not EVERY.match(str(deb)):
+        errs.append(_("trigger.debounce must look like 0m / 10m / 1h"))
+    return errs
+
+
 def validate_runs(doc: dict, stem: str, d: dict) -> list[str]:
     """services and jobs (shared by the project registry and modules)."""
     errs: list[str] = []
@@ -328,8 +408,10 @@ def validate_runs(doc: dict, stem: str, d: dict) -> list[str]:
         if n in names:
             errs.append(_("job {name}: duplicate name", name=n))
         names.add(n)
-        if ("at" in job) == ("every" in job):
-            errs.append(_("job {name}: give exactly one of at and every", name=n))
+        if sum(k in job for k in ("at", "every", "trigger")) != 1:
+            errs.append(_("job {name}: give exactly one of at, every and trigger", name=n))
+        if "trigger" in job:
+            errs += [_("job {name}: {error}", name=n, error=e) for e in validate_trigger(job, doc, stem)]
         if "at" in job and not re.fullmatch(r"([01]\d|2[0-3]):[0-5]\d", str(job["at"])):
             errs.append(_("job {name}: at must be HH:MM (quoted)", name=n))
         if "every" in job and not EVERY.match(str(job["every"])):
@@ -620,13 +702,29 @@ def scheduler_jobs(index: dict, legacy_names: set[str]) -> tuple[list[dict], lis
                 j["agent_name"] = agent_name
             if "at" in job:
                 j["time"] = str(job["at"])
-            else:
+            elif "every" in job:
                 j["every_minutes"] = every_minutes(str(job["every"]))
             for src, dst in (("days", "days_of_week"), ("days_of_month", "days_of_month"), ("months", "months"),
                              ("until", "end_date"), ("between", "between"), ("background", "background"),
                              ("max_attempts_per_day", "max_attempts_per_day")):
                 if src in job:
                     j[dst] = job[src]
+            if "trigger" in job:
+                on = job["trigger"]
+                deb = str(on.get("debounce", "0m"))
+                # self = this project under its name and the names it had before a rename (old events keep those)
+                own = [name, *[o for o in hubconf.former_names(name) if o not in index["projects"]]]
+                projects = [x for p in on.get("projects", ["self"]) for x in (own if p in ("self", name) else [p])]
+                j["trigger"] = {"events": list(on["events"]), "sources": list(on.get("sources") or []),
+                           "projects": list(dict.fromkeys(projects)),
+                           "where": dict(on.get("where") or {}),
+                           "debounce_minutes": 0 if deb == "0m" else every_minutes(deb)}
+                j.setdefault("max_attempts_per_day", event_jobs.DEFAULT_CAP)
+                j["platform"] = platform_doc(doc, name)
+                if job.get("kind") == "agent":
+                    # the scheduler owns the detachment so it sees the run's real outcome (event-jobs.md section 2)
+                    j["command"] = f"RUN_AGENT_JOB_FOREGROUND=1 {j['command']}"
+                    j["background"] = True
             if job.get("after"):
                 j["after"] = [a if "/" in a else f"{name}/{a}" for a in job["after"]]
             for t in job.get("before") or []:
