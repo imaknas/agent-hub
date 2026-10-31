@@ -35,6 +35,7 @@ class Questions(unittest.TestCase):
         self.tmp = pathlib.Path(tempfile.mkdtemp())
         m.DB = self.tmp / "bus.db"
         m.log = lambda msg: None
+        m.RECORDS = False   # v1 letters (an install without mailbox.records); the records side is QuestionRecords
         m.projects = lambda: {"proj": self.tmp / "proj", "other": self.tmp / "other", "agent-hub": self.tmp}
         # hubconf is a shared module: always swap it back
         hp = mock.patch.object(m.hubconf, "hub_project", lambda: "agent-hub")
@@ -67,9 +68,9 @@ class Questions(unittest.TestCase):
         self.assertEqual(self.open_ids(), ["q-open", "q-other"])
         self.assertEqual(self.open_ids("proj"), ["q-open"])
 
-    def test_question_closed_with_done_and_forwarded_to_muninn(self):
+    def test_question_closed_with_done_and_forwarded(self):
         self.ask("q-1")
-        mid = self.send("--to", "owner", "--type", "done", "--question", "q-1", "--text", "Knas 在 session 裡選了 A")
+        mid = self.send("--to", "owner", "--type", "done", "--question", "q-1", "--text", "picked A in a session")
         self.assertEqual(self.open_ids(), [])
         ev = self.c.execute("SELECT * FROM events WHERE id=?", (mid,)).fetchone()
         item = self.m.to_assistant(self.c, ev)
@@ -117,6 +118,54 @@ class Questions(unittest.TestCase):
         self.ask("q-closed")
         self.send("--to", "owner", "--type", "done", "--question", "q-closed", "--text", "解決了")
         self.assertEqual(self.m.reconcile_questions(self.c, now=NOW), [])
+
+
+class QuestionRecords(Questions):
+    """The same readers over Decisions records (mailbox.records on): asked as raised, closed by the asking project's
+    claimed/withdrawn or the owner's settled, opened again by reopened."""
+
+    def setUp(self):
+        super().setUp()
+        self.m.RECORDS = True
+
+    def ask(self, qid, project="proj", days_ago=5, text="Which plan?", kind="question"):
+        if kind != "question":
+            return super().ask(qid, project, days_ago, text, kind)
+        ts = (NOW - datetime.timedelta(days=days_ago)).isoformat().replace("+00:00", "Z")
+        rec = {"ph": "0.3", "ext": "decisions/0.3", "id": f"r:{qid}", "type": "raised", "origin": "requester",
+               "by": f"project:{project}", "key": qid, "project": project, "ts": ts, "terms": {"text": text}, "terms_rev": 1}
+        self.m.publish_record(self.c, rec, project, self.knas)
+        self.c.execute("UPDATE events SET ts=? WHERE id=?", (ts, self.m.record_event_id(rec)))
+
+    def settle(self, qid, kind="settled", n=1):
+        rec = {"ph": "0.3", "ext": "decisions/0.3", "id": f"{kind[0]}:{qid}:{n}", "type": kind, "origin": "principal",
+               "by": "assistant", "key": qid, "project": "proj", "ts": "2026-10-25T12:00:00Z", "outcome": "decided",
+               "answer": {"text": "use A"}, "terms_rev": 1, "authority": {"kind": "principal", "decider": "person:owner"}}
+        self.m.publish_record(self.c, rec, self.knas, "proj")
+
+    def test_open_means_not_answered_not_closed_not_a_handover(self):
+        self.ask("q-open")
+        self.ask("q-answered")
+        self.settle("q-answered")
+        self.ask("lease-abc-q-0")
+        self.ask("q-other", project="other")
+        self.assertEqual(self.open_ids(), ["q-open", "q-other"])
+        self.assertEqual(self.open_ids("proj"), ["q-open"])
+
+    def test_reopened_is_open_again(self):
+        self.ask("q-1")
+        self.settle("q-1")
+        self.assertEqual(self.open_ids(), [])
+        self.settle("q-1", "reopened", 2)
+        self.assertEqual(self.open_ids(), ["q-1"])
+
+    def test_question_closed_with_done_and_forwarded(self):
+        self.ask("q-1")
+        self.send("--to", "owner", "--type", "done", "--question", "q-1", "--text", "picked A in a session")
+        self.assertEqual(self.open_ids(), [])
+        kinds = [self.m.payload(r)["record"]["type"] for r in self.c.execute(
+            "SELECT * FROM events WHERE type='record' ORDER BY seq")]
+        self.assertEqual(kinds, ["raised", "claimed", "withdrawn"])
 
 
 if __name__ == "__main__":

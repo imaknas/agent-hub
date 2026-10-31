@@ -87,15 +87,23 @@ class Builtin(unittest.TestCase):
         self.assertEqual(self.run_("owner.py", "list").returncode, 0)
 
     def test_answer_closes_the_question(self):
-        r = self.run_("hubbus", "send", "--from", "agent-hub", "--to", "owner", "--type", "question", "--text", "快取用哪個?")
+        r = self.run_("hubbus", "send", "--from", "agent-hub", "--to", "owner", "--type", "question", "--text", "Which cache?")
         self.assertEqual(r.returncode, 0, r.stderr)
         qid = r.stdout.strip().split()[-1]
-        self.assertIn("快取用哪個", self.run_("owner.py", "list").stdout)
-        r = self.run_("owner.py", "answer", qid, "用 SQLite")
+        self.assertIn("Which cache", self.run_("owner.py", "list").stdout)
+        r = self.run_("owner.py", "answer", qid, "Use SQLite")
         self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
-        self.assertNotIn("快取用哪個", self.run_("owner.py", "list").stdout)
+        self.assertNotIn("Which cache", self.run_("owner.py", "list").stdout)
         inbox = self.run_("hubbus", "inbox", "--project", "agent-hub").stdout
-        self.assertIn("用 SQLite", inbox)
+        self.assertIn("Use SQLite", inbox)
+
+    def test_answer_with_records_on(self):
+        self.cfg["mailbox"] = {"records": True}
+        self.write_cfg()
+        self.test_answer_closes_the_question()
+        [ans] = [e for e in self.records() if e["record"]["type"] == "settled"]
+        self.assertEqual((ans["record"]["ext"], ans["record"]["answer"], ans["question"]),
+                         ("decisions/0.3", {"text": "Use SQLite"}, "Which cache?"))
 
 
 class Notify(unittest.TestCase):

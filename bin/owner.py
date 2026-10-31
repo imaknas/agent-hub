@@ -75,9 +75,8 @@ def open_items(only: str | None = None) -> list[dict]:
             out.append({"kind": "task", "project": p, "key": k, "text": text or ""})
     hb = _hubbus()
     c = hb.db()
-    for r in hb.open_questions(c, only):
-        out.append({"kind": "question", "project": hb.canon(r["source"]), "id": r["id"],
-                    "text": hb.payload(r).get("text") or ""})
+    for q in hb.open_questions(c, only):
+        out.append({"kind": "question", "project": q["project"], "id": q["id"], "text": q["text"]})
     return out
 
 
@@ -122,23 +121,27 @@ def settle(key: str, outcome: str, note: str | None) -> int:
 
 
 def answer(qid: str, text: str) -> int:
+    """The owner's answer as Decisions settled (authority principal), the record the assistant would send: it goes to
+    the session that asked, and tonight's librarian applies it if that session doesn't."""
     hb = _hubbus()
     c = hb.db()
-    q = c.execute("SELECT * FROM events WHERE id=? AND type='message'", (qid,)).fetchone()
-    if q is None or hb.payload(q).get("type") != "question":
+    q = hb.question_asked(c, qid)
+    if q is None:
         print(_("no question with id {id} (`agenthub owner list` shows the open ones)", id=qid), file=sys.stderr)
         return 1
-    proj = hb.canon(q["source"])
-    owner = hubconf.owner_tag()
-    p = {"v": 1, "type": "handoff", "text": f"{owner} 回答:{text}", "effect": "answers",
-         "handoff": {"effect": "answers", "fact": text, "quote": text, "reply_to": qid, "item": hb.payload(q).get("text"),
-                     "why": f"{owner} 在內建的 owner 端直接回答"}}
-    mid = f"owner-answer-{qid}"
+    proj = q["project"]
+    before = [r["record"]["id"] for r in hb.records(c, proj, hb.EXT_DECISIONS, {"settled"}, direction="in")
+              if r["record"].get("key") == qid]
+    rec = {"ph": "0.3", "ext": hb.EXT_DECISIONS, "id": f"s:{qid}:{len(before) + 1}", "type": "settled", "origin": "principal",
+           "by": hubconf.party("principal_side"), "key": qid, "project": proj, "ts": _now(), "outcome": "decided",
+           "answer": {"text": text}, "terms_rev": 1, "authority": {"kind": "principal", "decider": hubconf.party("principal")}}
+    if before:
+        rec["supersedes"] = before[-1:]   # answered again: the new answer replaces the last one
     c.execute("BEGIN IMMEDIATE")
-    hb.publish(c, mid, "message", hb.OWNER_ADDRESS, proj, qid, p)
+    eid, _new = hb.publish_record(c, rec, hb.OWNER_ADDRESS, proj, *hb.answer_routing(c, rec))
     c.execute("COMMIT")
     print(_("answer sent to {project} ({id}); the session that asked, or tonight's librarian, applies it",
-            project=proj, id=mid))
+            project=proj, id=eid))
     return 0
 
 

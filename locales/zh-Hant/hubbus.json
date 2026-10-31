@@ -61,7 +61,6 @@
  "origin is {origin}: what the assistant sends is always principal": "origin 是 {origin}:助理寄來的只會是 principal",
  "pulling {assistant}'s records for {project} failed: {err}": "拉{assistant}給 {project} 的 record 失敗:{err}",
  "record {id!r} from {assistant} for {project} refused: {errors}": "{assistant}給 {project} 的 record {id!r} 不收:{errors}",
- "{id} from {assistant} for {project} not taken in yet (Decisions still go through v1)": "{assistant}給 {project} 的 {id} 先不收(Decisions 還走 v1)",
  "ack to {assistant} for {project} through {cur} failed: {err}; retrying next time": "跟{assistant} ack {project} 到 {cur} 失敗:{err},下次補",
  "sending to the assistant failed ({err}); {id} and the ones after it are resent next time (waited {age:.1f} h)": "送進 Muninn 失敗({err}),{id} 跟後面的下次重送(已等 {age:.1f} 小時)",
  "sending to the assistant failed ({n} waiting, oldest {age:.1f} h): {err}": "送進 Muninn 失敗({n} 則等著,最舊 {age:.1f} 小時):{err}",
@@ -117,5 +116,9 @@
  "hubbus: an inferred claim is sent by registrar itself (hubbus record-publish); send does not translate it": "hubbus: 推斷做完的 claim 由 registrar 自己寄(hubbus record-publish),send 不翻",
  "hubbus: not in a project folder, add --project <name>": "hubbus: 不在專案目錄裡,加 --project <名稱>",
  "({project}: {n} open {n:letter|letters})": "({project}:{n} 封沒結案)",
- "{project}'s mailbox is empty": "{project} 的信箱是空的"
+ "{project}'s mailbox is empty": "{project} 的信箱是空的",
+ "hubbus: {key!r} is not a valid question id": "hubbus: {key!r} 不是合格的問題 id",
+ "answered in a session of {project}": "在 {project} 的 session 裡回答了",
+ "Question: {text}": "問題:{text}",
+ "Carry on with it, then `agenthub done {id}`; without a done, librarian applies it to STATE.md tonight.": "照這個繼續,然後 `agenthub done {id}`;沒 done 的話,librarian 今晚會套用進 STATE.md。"
 }

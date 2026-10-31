@@ -81,8 +81,11 @@ The personal assistant's interface (defined on the Muninn side; a change there m
        the whole batch is rejected.
   v2 (Principal Handoff 0.3 records, the assistant's contracts/records.v2.md; used only with hub.json
       mailbox.records on, off by default):
-      send's task/request to the owner → acts raised, done --task → claimed, drop --task → withdrawn (not needed),
-      no more v1 letters for these; question/info/progress stay v1. dispatch, every minute: records to the owner are
+      send's task/request to the owner → acts raised, done --task → claimed, drop --task → withdrawn (not needed);
+      question → decisions raised (key = the letter id), done --question → claimed with the answer + withdrawn
+      (settled), drop --question → withdrawn (not needed); no more v1 letters for these. info/progress stay v1, and so
+      does a reply in an asks thread (asks is outside 0.3). The assistant's decisions settled come back as records
+      with the asking session and the question on the event. dispatch, every minute: records to the owner are
       POSTed in batches to /api/records (invalid ones record job.failed, no retry); for each project (including names
       before a rename) GET /api/records?project=&after=, and POST /api/records/ack only after they're committed
       into the bus. The first read only sets the starting point (what v1 already delivered isn't taken again).
@@ -346,9 +349,11 @@ def task_key(project: str, text: str) -> str:
     return f"task-{project}-{hashlib.sha1(' '.join(text.split()).encode()).hexdigest()[:10]}"
 
 
-def send_record(c, a, sender: str, mid: str) -> str | None:
-    """Translate a task send mails to the owner into an Acts record (direction one's mapping table); for what Acts
-    doesn't cover, return None (sent as a v1 letter as usual)."""
+def send_record(c, a, sender: str, mid: str, p: dict) -> str | None:
+    """Translate what send mails to the owner into an Acts or Decisions record (direction one's mapping table); for
+    what neither covers, return None (sent as a v1 letter as usual)."""
+    if a.type == "question" or a.question:
+        return send_decision(c, a, sender, mid, p)
     kind = "raised" if a.type in ("task", "request") else \
         "claimed" if a.type == "done" and a.task else "withdrawn" if a.type == "drop" and a.task else None
     if kind is None:
@@ -376,9 +381,68 @@ def send_record(c, a, sender: str, mid: str) -> str | None:
     return publish_record(c, rec, sender, OWNER_ADDRESS)[0]
 
 
-def publish_record(c, rec: dict, source: str, to_project: str) -> tuple[str, bool]:
+EXT_DECISIONS = "decisions/0.3"
+
+
+def send_decision(c, a, sender: str, mid: str, p: dict) -> str | None:
+    """A question to the owner and how it ends, as Decisions records: question → raised (key = the letter id, the one
+    --question names later; the assistant keeps it under that id), done --question → claimed with the answer, then
+    withdrawn (settled), drop --question → withdrawn (not needed). A reply in an asks thread stays a v1 letter: asks
+    is outside 0.3 and the assistant ties it back by handoff_id."""
+    if p.get("handoff_id") is not None:
+        return None
+    base = {"ph": "0.3", "ext": EXT_DECISIONS, "project": sender, "ts": iso()}
+    asker = {"origin": "requester", "by": hubconf.party("requester", sender)}
+    if a.type == "question":
+        if not KEY_RE.match(mid):
+            sys.exit(_("hubbus: {key!r} is not a valid question id", key=mid))
+        rec = base | asker | {"id": f"r:{mid}", "type": "raised", "key": mid,
+                              "terms": {"text": a.text, **({"due": a.due} if a.due else {})}, "terms_rev": 1}
+        recs = [rec]
+    elif a.type == "done":
+        recs = [base | {"id": f"c:{a.question}:{mid}", "type": "claimed", "key": a.question, "origin": "agent",
+                        "by": hubconf.party("agent", sender), "outcome": "decided",
+                        "evidence": {"basis": _("answered in a session of {project}", project=sender)},
+                        "answer": {"text": a.text}},
+                base | asker | {"id": f"w:{a.question}:{mid}", "type": "withdrawn", "key": a.question,
+                                "reason": "settled"}]
+    else:
+        recs = [base | asker | {"id": f"w:{a.question}:{mid}", "type": "withdrawn", "key": a.question,
+                                "reason": "not_needed", "note": a.text}]
+    if a.context:
+        for r in recs:
+            r["context"] = a.context
+    extra = {"from_session": p["from_session"]} if p.get("from_session") else None
+    eids = [publish_record(c, r, sender, OWNER_ADDRESS, extra)[0] for r in recs]
+    return mid if a.type == "question" else eids[0]   # a question: the id --question takes later
+
+
+def question_asked(c, key: str) -> dict | None:
+    """The question to the owner with this key: the v1 letter (key = its id) or the Decisions raised record.
+    {id: key, event, project, ts, text, from_session}; None when there is none."""
+    r = c.execute("SELECT * FROM events WHERE type='message' AND id=?", (key,)).fetchone()
+    if r is not None and r["to_project"] in OWNERS and payload(r).get("type") == "question":
+        return _question(r, key, payload(r).get("text"))
+    suffix = f":r:{key}"
+    for r in c.execute("SELECT * FROM events WHERE type='record' AND id LIKE 'rec:decisions/%' "
+                       "AND substr(id, -length(?)) = ? ORDER BY seq", (suffix, suffix)):
+        rec = payload(r).get("record") or {}
+        if r["to_project"] in OWNERS and rec.get("type") == "raised" and rec.get("key") == key:
+            return _question(r, key, (rec.get("terms") or {}).get("text"))
+    return None
+
+
+def _question(r, key: str, text) -> dict:
+    return {"id": key, "event": r["id"], "project": canon(r["source"]), "ts": r["ts"], "text": text or "",
+            "from_session": payload(r).get("from_session")}
+
+
+def publish_record(c, rec: dict, source: str, to_project: str, extra: dict | None = None,
+                   ref: str | None = None) -> tuple[str, bool]:
+    """extra goes on the event beside the record, never into it: routing (from_session, to_session) and, for an
+    answer, the question it answers."""
     eid = record_event_id(rec)
-    return eid, publish(c, eid, "record", source, to_project, None, {"record": rec})
+    return eid, publish(c, eid, "record", source, to_project, ref, {"record": rec, **(extra or {})})
 
 
 def records(c, project, ext=None, types=None, pending=False, direction=None) -> list[dict]:
@@ -397,7 +461,10 @@ def records(c, project, ext=None, types=None, pending=False, direction=None) -> 
         if (ext and rec.get("ext") != ext) or (types and rec.get("type") not in types) or (pending and r["done"]) \
                 or (direction and d != direction):
             continue
-        out.append({"id": r["id"], "ts": r["ts"], "direction": d, "done": bool(r["done"]), "record": rec})
+        item = {"id": r["id"], "ts": r["ts"], "direction": d, "done": bool(r["done"]), "record": rec}
+        if payload(r).get("question"):
+            item["question"] = payload(r)["question"]   # an answer: what was asked
+        out.append(item)
     return out
 
 
@@ -409,6 +476,8 @@ def fmt_record(r, long=True) -> str:
     head = _("[{id}] from {source} ({tags}, {ts})", id=r["id"], source=r["source"], tags=f"{family} {kind}",
              ts=r["ts"][5:16].replace("T", " "))
     lines = []
+    if family == "decisions" and payload(r).get("question"):
+        lines.append(_("Question: {text}", text=payload(r)["question"]))
     if kind == "settled":
         auth = rec.get("authority") or {}
         lines.append(_("{what} {key}: {outcome} ({kind}, decided by {decider})", what=what, key=rec.get("key"),
@@ -426,7 +495,10 @@ def fmt_record(r, long=True) -> str:
         lines.append(_("{what} {key}: {text}", what=what, key=rec.get("key"), text=rec["terms"]["text"]))
     if rec.get("note"):
         lines.append(rec["note"])
-    if kind in ("settled", "reopened", "related"):
+    if family == "decisions" and kind == "settled":
+        lines.append(_("Carry on with it, then `agenthub done {id}`; without a done, librarian applies it to STATE.md "
+                       "tonight.", id=r["id"]))
+    elif kind in ("settled", "reopened", "related"):
         lines.append(_("(librarian updates the to-dos in STATE.md from it tonight; during the day it is for reference only)"))
     if not long:
         return _("- {head}: {text}", head=head, text=lines[0][:100] if lines else "")
@@ -563,23 +635,38 @@ def cmd_hook(event: str) -> None:
             print(out)
 
 
-def open_questions(c, project=None) -> list:
-    """Questions to the owner still open: no answer from the owner (an answer is a letter from the owner with ref =
-    the question id), and not closed by the asking project with done/drop --question. Questions from discuss-lease
-    handovers (id lease-…) are managed by the assistant itself (the latest handover wins), not counted here."""
+def open_questions(c, project=None) -> list[dict]:
+    """Questions to the owner still open, oldest first: {id (the key --question takes), event, project, ts, text,
+    from_session}. A question is a v1 letter or a Decisions raised record; it is closed by an answer from the owner
+    (a v1 letter with ref = the question, or decisions settled), or by the asking project (v1 done/drop --question,
+    decisions claimed/withdrawn); reopened opens it again. Questions from discuss-lease handovers (lease-…) are
+    managed by the assistant itself (the latest handover wins), not counted here."""
     owners = tuple(OWNERS)
     marks = ",".join("?" * len(owners))
-    answered = {r["ref"] for r in c.execute(
-        f"SELECT ref FROM events WHERE type='message' AND source IN ({marks}) AND ref IS NOT NULL", owners)}
-    closed = {payload(r).get("question") for r in c.execute(
-        f"SELECT payload FROM events WHERE type='message' AND to_project IN ({marks})", owners)}
-    out = []
-    for r in c.execute(f"SELECT * FROM events WHERE type='message' AND to_project IN ({marks}) ORDER BY seq", owners):
-        if payload(r).get("type") != "question" or r["id"].startswith("lease-") or r["id"] in answered or r["id"] in closed:
+    asked, closed = {}, set()
+    for r in c.execute(f"""SELECT * FROM events WHERE type IN ('message','record')
+                             AND (to_project IN ({marks}) OR source IN ({marks})) ORDER BY seq""", owners + owners):
+        p, to_owner = payload(r), r["to_project"] in OWNERS
+        if r["type"] == "message":
+            if not to_owner and r["ref"]:
+                closed.add(r["ref"])                 # the owner's answer (v1)
+            elif to_owner and p.get("question"):
+                closed.add(p["question"])            # done/drop --question (v1)
+            elif to_owner and p.get("type") == "question":
+                asked.setdefault(r["id"], _question(r, r["id"], p.get("text")))
             continue
-        if project is None or canon(r["source"]) == project:
-            out.append(r)
-    return out
+        rec = p.get("record") or {}
+        if not str(rec.get("ext", "")).startswith("decisions/"):
+            continue
+        key, kind = rec.get("key"), rec.get("type")
+        if to_owner and kind == "raised":
+            asked.setdefault(key, _question(r, key, (rec.get("terms") or {}).get("text")))
+        elif (to_owner and kind in ("claimed", "withdrawn")) or (not to_owner and kind == "settled"):
+            closed.add(key)
+        elif not to_owner and kind == "reopened":
+            closed.discard(key)
+    return [q for q in asked.values() if not q["id"].startswith("lease-") and q["id"] not in closed
+            and (project is None or q["project"] == project)]
 
 
 def questions_note(c, project) -> str | None:
@@ -593,7 +680,7 @@ def questions_note(c, project) -> str | None:
                '`agenthub send --to {alias} --type done --question <id> --text "how it was resolved"` (`--type drop` '
                "when no longer needed). Leave the ones still to ask.",
                owner=OWNER, n=len(qs), assistant=ASSISTANT, alias=OWNER_ALIAS)]
-    lines += [f"- [{r['id']}] {r['ts'][5:16].replace('T', ' ')} {payload(r).get('text', '')[:120]}" for r in qs[-5:]]
+    lines += [f"- [{q['id']}] {q['ts'][5:16].replace('T', ' ')} {q['text'][:120]}" for q in qs[-5:]]
     return "\n".join(lines)
 
 
@@ -606,7 +693,7 @@ def reconcile_questions(c, now=None) -> list:
     sent = []
     for r in open_questions(c):
         age = now - datetime.datetime.fromisoformat(r["ts"].replace("Z", "+00:00"))
-        if age.days < QUESTION_CHECK_DAYS or not valid_address(canon(r["source"])):
+        if age.days < QUESTION_CHECK_DAYS or not valid_address(r["project"]):
             continue
         mid = f"qcheck-{r['id']}-{(age.days - QUESTION_CHECK_DAYS) // 7}"
         text = _("The question this project asked {owner} on {date} is still open ({assistant} keeps it under "
@@ -615,9 +702,9 @@ def reconcile_questions(c, now=None) -> list:
                  "`agenthub send --to {alias} --type done --question {id} --text \"how it was resolved\"` (--type drop "
                  "when no longer needed) and {assistant} closes it. If {owner} still has to answer, send nothing and just "
                  "mark this letter done. If you cannot tell, leave it and mark this letter done too.",
-                 date=r["ts"][:10], owner=OWNER, assistant=ASSISTANT, id=r["id"], text=payload(r).get("text", "")[:300],
+                 date=r["ts"][:10], owner=OWNER, assistant=ASSISTANT, id=r["id"], text=r["text"][:300],
                  alias=OWNER_ALIAS)
-        if publish(c, mid, "message", hubconf.hub_project(), canon(r["source"]), None,
+        if publish(c, mid, "message", hubconf.hub_project(), r["project"], None,
                    {"type": "request", "text": text, "question_check": r["id"]}):
             sent.append(mid)
     return sent
@@ -823,10 +910,9 @@ def import_handoffs(c) -> None:
             log(_("could not tell the assistant they were received (retrying next time): {err}", err=r.stderr.strip()[-200:]))
 
 
-# Handoffs the assistant also has as 0.3 records (the same rule as its handoff_records.Outbox.records); answers have
-# them too (decisions settled), but Decisions hasn't been switched over on this side, so v1 is still taken and v2's
-# are written as the same letter
-V2_KEYED = ("done", "dropped", "already_done", "reopened", "same_as", "premise")
+# Handoffs the assistant also has as 0.3 records (the same rule as its handoff_records.Outbox.records); answers are
+# decisions settled
+V2_KEYED = ("done", "dropped", "already_done", "reopened", "same_as", "premise", "answers")
 V2_NOTES = ("resolves", "changes", "relevant")
 
 
@@ -860,22 +946,6 @@ def publish_handoff(c, h: dict, known) -> str | None:
     if publish(c, f"{HANDOFF_ID_PREFIX}{hid}", "message", KNAS, proj, h.get("reply_to"), p):
         log(_("handoff #{id} from {assistant} → {project}", assistant=ASSISTANT, id=hid, project=proj))
     return proj
-
-
-def answer_from_record(c, rec: dict) -> bool:
-    """v2's decisions settled (the owner answered / said no answer is needed) → the same letter as v1 answers (same
-    id, so whichever arrives first, there's only one letter)."""
-    m = re.search(r":h(\d+)$", rec.get("id") or "")
-    if rec.get("type") != "settled" or not m:
-        return False
-    q = get_message(c, rec["key"])
-    if rec.get("outcome") == "dismissed":
-        fact = f"這題不用回答({rec.get('note') or '沒有說明'})"
-    else:
-        fact = str((rec.get("answer") or {}).get("text") or (rec.get("answer") or {}).get("option") or "")
-    h = {"id": int(m.group(1)), "effect": "answers", "project": rec["project"], "reply_to": rec["key"], "fact": fact,
-         "item": payload(q).get("text", "") if q is not None else "", "ts": rec.get("ts")}
-    return publish_handoff(c, h, projects()) is not None
 
 
 def to_assistant(c, ev) -> dict | None:
@@ -1012,6 +1082,18 @@ def incoming_errors(rec, asked: str) -> list[str]:
     return errs
 
 
+def answer_routing(c, rec: dict) -> tuple[dict | None, str | None]:
+    """For a Decisions record from the owner: back to the session that asked (as v1 answers did), with the question
+    beside it; ref = the question's event, so the thread holds together."""
+    if not str(rec.get("ext", "")).startswith("decisions/"):
+        return None, None
+    q = question_asked(c, rec.get("key") or "")
+    if q is None:
+        return None, None
+    extra = {"question": q["text"]} | ({"to_session": q["from_session"]} if q["from_session"] else {})
+    return extra, q["event"]
+
+
 def pull_records(c) -> None:
     """Inbound: pull the assistant's records for each project, write them as record events (sender owner), ack only
     after the commit. The first time after the switch is turned on (no project has a cursor yet) only sets the
@@ -1040,13 +1122,7 @@ def pull_records(c) -> None:
                               id=(rec or {}).get("id") if isinstance(rec, dict) else rec, project=name,
                               errors="; ".join(errs)))
                         continue
-                    if str(rec.get("ext", "")).startswith("decisions/"):
-                        # other decisions records are taken once Decisions is switched over on this side
-                        if not answer_from_record(c, rec):
-                            log(_("{id} from {assistant} for {project} not taken in yet (Decisions still go through v1)",
-                                  assistant=ASSISTANT, id=rec.get("id"), project=name))
-                        continue
-                    publish_record(c, rec, OWNER_ADDRESS, proj)
+                    publish_record(c, rec, OWNER_ADDRESS, proj, *answer_routing(c, rec))
             set_cursor(c, got, nxt)
             if not known:
                 set_cursor(c, acked, nxt)   # starting point: earlier ones came via v1, not acked here
@@ -1636,11 +1712,10 @@ def main() -> None:
         c = db()
         rows = open_questions(c, canon(a.project) if a.project else None)
         if a.json:
-            print(json.dumps([{"id": r["id"], "project": canon(r["source"]), "ts": r["ts"], "text": payload(r).get("text")}
-                              for r in rows], ensure_ascii=False))
+            print(json.dumps([{k: q[k] for k in ("id", "project", "ts", "text")} for q in rows], ensure_ascii=False))
         else:
-            for r in rows:
-                print(f"[{r['id']}] {canon(r['source'])} {r['ts'][:16]} {payload(r).get('text', '')[:100]}")
+            for q in rows:
+                print(f"[{q['id']}] {q['project']} {q['ts'][:16]} {q['text'][:100]}")
         return
     if a.cmd == "records":
         c = db()
@@ -1708,8 +1783,8 @@ def main() -> None:
             if a.task or a.to != KNAS or a.type not in ("done", "drop"):
                 sys.exit(_("hubbus: --question is only for a done/drop sent to {alias} (not together with --task)",
                            alias=OWNER_ALIAS))
-            q = must_message(c, a.question)
-            if canon(q["to_project"]) != KNAS or payload(q).get("type") != "question" or canon(q["source"]) != sender:
+            q = question_asked(c, a.question)
+            if q is None or q["project"] != sender:
                 sys.exit(_("hubbus: {question} is not a question {sender} asked {owner}", question=a.question,
                            sender=sender, owner=OWNER))
         if a.inferred and not (a.type in ("done", "drop") and a.task):
@@ -1729,7 +1804,7 @@ def main() -> None:
             if a.inferred:
                 sys.exit(_("hubbus: an inferred claim is sent by registrar itself (hubbus record-publish); send does "
                            "not translate it"))
-            if (eid := send_record(c, a, sender, mid)):
+            if (eid := send_record(c, a, sender, mid, p)):
                 print(eid)
                 return
         publish(c, mid, "message", sender, a.to, a.reply_to, p)  # already sent with the same id: nothing happens

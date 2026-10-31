@@ -216,7 +216,8 @@ def load_records(proj: str) -> list[dict]:
             continue
         about = rec.get("about") or {}
         out.append({"id": e.get("id"), "handoff_id": rec.get("id"), "project": proj, "effect": effect, "fact": fact,
-                    "quote": None, "item": about.get("quote") or asked.get(about.get("key") or rec.get("key")),
+                    "quote": None,
+                    "item": about.get("quote") or asked.get(about.get("key") or rec.get("key")) or e.get("question"),
                     "why": authority_text(rec) or "(no explanation)", "ts": rec.get("ts"), "v2": True})
     return out
 

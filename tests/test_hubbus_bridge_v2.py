@@ -220,14 +220,14 @@ class BridgeV2(unittest.TestCase):
 class Coexistence(unittest.TestCase):
     """v1 and v2 side by side: a handoff with a record goes only through v2 (once the assistant acks, v1 no longer
     lists it; v2 still gives again what v1 took first); v1 takes only those without a record (asks, no key,
-    unrecognised) and answers (the Decisions side is not switched yet); v2's decisions closures are written as an
-    answer letter with the same id as v1's, so whichever arrives first, there is only one letter."""
+    unrecognised). An answer (decisions settled) comes only as a record, back to the session that asked, with the
+    question beside it."""
 
     HANDOFFS = [
         {"id": 70, "status": "pending", "effect": "done", "project": "proj", "reply_to": "task-proj-aaaaaaaaaa", "item": "x"},
         {"id": 71, "status": "pending", "effect": "relevant", "project": "proj", "fact": "下週出國", "item": None},
         {"id": 72, "status": "pending", "effect": "asks", "project": "proj", "fact": "查到哪了?"},
-        {"id": 73, "status": "pending", "effect": "answers", "project": "proj", "reply_to": "q1", "fact": "選 A", "item": "要哪家?"},
+        {"id": 73, "status": "pending", "effect": "answers", "project": "proj", "reply_to": "q1", "fact": "Pick A", "item": "Which one?"},
         {"id": 74, "status": "pending", "effect": "done", "project": "proj", "fact": "沒有 key 的結案"},
         {"id": 75, "status": "pending", "effect": "something-new", "project": "proj", "fact": "?"},
     ]
@@ -255,7 +255,7 @@ class Coexistence(unittest.TestCase):
         self.c = m.db()
         self.owner = m.hubconf.owner_address()
         # question q1 that proj asked the owner
-        m.publish(self.c, "q1", "message", "proj", self.owner, None, {"type": "question", "text": "要哪家?",
+        m.publish(self.c, "q1", "message", "proj", self.owner, None, {"type": "question", "text": "Which one?",
                                                                        "from_session": "sess-1"})
 
     def letters(self):
@@ -272,46 +272,43 @@ class Coexistence(unittest.TestCase):
         self.m.RECORDS = True
         self.m.import_handoffs(self.c)
         p = self.m.HANDOFF_ID_PREFIX
-        self.assertEqual(sorted(self.letters()), [f"{p}72", f"{p}73", f"{p}74", f"{p}75"])
-        self.assertEqual(sorted(self.delivered), ["72", "73", "74", "75"])   # 70, 71 left to v2's ack
+        self.assertEqual(sorted(self.letters()), [f"{p}72", f"{p}74", f"{p}75"])
+        self.assertEqual(sorted(self.delivered), ["72", "74", "75"])   # 70, 71, 73 left to v2's ack
 
     def answer_record(self, hid=73, **kw):
         return {"ph": "0.3", "ext": "decisions/0.3", "id": f"s:q1:h{hid}", "type": "settled", "origin": "principal",
                 "by": "assistant", "key": "q1", "project": "proj", "ts": TS, "outcome": "decided", "terms_rev": 1,
-                "answer": {"text": "選 A"}, "authority": {"kind": "principal", "decider": "person:owner"}, **kw}
+                "answer": {"text": "Pick A"}, "authority": {"kind": "principal", "decider": "person:owner"}, **kw}
 
-    def test_v2_answer_becomes_the_same_letter_as_v1(self):
+    def pull(self, *recs):
         self.m.RECORDS = True
         fake = self.m.records_http = FakeAssistant(self)
         self.acked_seen = []
         self.reader = lambda: self.c
         self.m.pull_records(self.c)   # starting point
-        fake.out["proj"] = [self.answer_record()]
+        fake.out["proj"] = list(recs)
         self.m.pull_records(self.c)
-        letters = self.letters()
-        mid = f"{self.m.HANDOFF_ID_PREFIX}73"
-        self.assertEqual(list(letters), [mid])
-        p = letters[mid]
-        self.assertEqual((p["type"], p["effect"], p["reply_to"], p["to_session"], p["handoff_id"]),
-                         ("handoff", "answers", "q1", "sess-1", 73))
-        self.assertIn("選 A", p["text"])
-        self.assertIn("要哪家?", p["text"])
-        self.assertEqual(self.c.execute("SELECT COUNT(*) FROM events WHERE type='record'").fetchone()[0], 0)
-        self.m.import_handoffs(self.c)      # v1 gets the same question too: still one letter
-        self.assertEqual(sum(1 for i in self.letters() if i == mid), 1)
+        return self.c.execute("SELECT * FROM events WHERE type='record'").fetchall()
 
-    def test_v2_dismissal_says_no_answer_needed(self):
-        self.m.RECORDS = True
-        fake = self.m.records_http = FakeAssistant(self)
-        self.acked_seen = []
-        self.reader = lambda: self.c
-        self.m.pull_records(self.c)
-        rec = self.answer_record(hid=80, outcome="dismissed", note="他說不用回答")
+    def test_v2_answer_is_a_record_for_the_session_that_asked(self):
+        [ev] = self.pull(self.answer_record())
+        p = self.m.payload(ev)
+        self.assertEqual((ev["to_project"], ev["ref"], p["to_session"], p["question"]), ("proj", "q1", "sess-1", "Which one?"))
+        self.assertEqual(p["record"]["answer"]["text"], "Pick A")
+        self.assertEqual(self.letters(), {})
+        text = self.m.fmt(ev)
+        self.assertIn("Which one?", text)
+        self.assertIn(f"agenthub done {ev['id']}", text)
+        self.assertEqual(self.m.open_questions(self.c), [])
+        self.m.import_handoffs(self.c)      # v1 lists the same answer: not taken
+        self.assertNotIn(f"{self.m.HANDOFF_ID_PREFIX}73", self.letters())
+
+    def test_v2_dismissal_closes_the_question_too(self):
+        rec = self.answer_record(hid=80, outcome="dismissed", note="no answer needed")
         rec.pop("answer")
-        fake.out["proj"] = [rec]
-        self.m.pull_records(self.c)
-        p = self.letters()[f"{self.m.HANDOFF_ID_PREFIX}80"]
-        self.assertIn("不用回答", p["text"])
+        [ev] = self.pull(rec)
+        self.assertIn("no answer needed", self.m.fmt(ev))
+        self.assertEqual(self.m.open_questions(self.c), [])
 
 
 if __name__ == "__main__":

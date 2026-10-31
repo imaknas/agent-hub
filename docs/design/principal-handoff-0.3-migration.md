@@ -178,3 +178,20 @@ including 0fe4bda) and it was clean: on the cutover night the registrar sends on
 - After a week side by side (around 11-03): remove `knas-tasks.py`, the registrar's `v1_compat`, `librarian.sh` (this
   one can go tomorrow), the HTH 0.1 vendor copy and `tests/test_hth_conformance.py`; Decisions (questions) are still on
   v1, the Agent Hub session does that next.
+
+## Decisions switched over (10-31)
+
+Questions now go the same way as tasks once `mailbox.records` is on (it is on here):
+
+- `send --type question` to the owner → decisions `raised`, `key` = the letter id (the id `--question` takes later,
+  and the id the assistant keeps the question under); `done --question` → `claimed` with the answer, then `withdrawn`
+  (`settled`); `drop --question` → `withdrawn` (`not_needed`). A question asked before the switch is closed the same
+  way under its letter id. A question replying in an asks thread stays a v1 letter (asks is outside 0.3; the assistant
+  ties it back by `handoff_id`). info / progress stay v1.
+- The assistant's decisions `settled` come in as records (no longer rewritten into a v1 answer letter), with the asking
+  session (`to_session`) and the question beside the record on the event; v1 `answers` handoffs are no longer imported.
+  The session carries on with the answer and marks it done; otherwise tonight's librarian applies it (`load_records`).
+- `open_questions` (session start ❓, `open-questions`, `reconcile-questions`, `owner.py list`) reads both v1 letters and
+  records: closed by an answer (v1 letter or `settled`) or by the asking project (v1 done/drop or `claimed`/`withdrawn`),
+  opened again by `reopened`.
+- The built-in owner side's `owner.py answer` writes decisions `settled` (authority `principal`) like the assistant.

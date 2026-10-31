@@ -4,8 +4,9 @@
 Switched by hub.json mailbox.records (off by default): when off, exactly as before (v1 letters); when on, a task/request
 to the owner → raised, done --task → claimed, drop --task → withdrawn (no longer needed), and no v1 letter is sent.
 --inferred is sent by the registrar itself (it has to count reopened), so send does not convert it and blocks it when
-on. question / info / progress stay v1 in this step (switched together with Decisions and the scripts that read
-questions).
+on. A question to the owner → Decisions raised (key = the letter id), done --question → claimed with the answer +
+withdrawn (settled), drop --question → withdrawn (not needed); a question replying in an asks thread stays v1 (asks
+is outside 0.3). info / progress stay v1.
 
     bin/py -m unittest discover -s tests
 """
@@ -142,10 +143,10 @@ class SendRecords(unittest.TestCase):
         self.assertIn("record-publish", str(e.exception.code))
         self.assertEqual(self.events("record") + self.events("message"), [])
 
-    def test_questions_and_progress_stay_v1_for_now(self):
-        self.send("--type", "question", "--text", "要哪一家?")
+    def test_info_and_progress_stay_v1(self):
         self.send("--type", "info", "--text", "部署好了")
-        self.assertEqual([p["type"] for _, p in self.events("message")], ["question", "info"])
+        self.send("--type", "progress", "--text", "halfway")
+        self.assertEqual([p["type"] for _, p in self.events("message")], ["info", "progress"])
         self.assertEqual(self.events("record"), [])
 
     def test_done_without_task_to_owner_stays_v1(self):
@@ -163,13 +164,81 @@ class SendRecords(unittest.TestCase):
         with mock.patch.dict(self.m.os.environ, {}, clear=False), mock.patch.object(self.m.subprocess, "run", no_ps):
             self.m.os.environ.pop(self.m.PLATFORM_MAILS_ENV, None)
             self.assertIsNone(self.m.platform_mails())
-            self.send("--type", "question", "--text", "要哪一家?")
-        self.assertEqual([p["type"] for _, p in self.events("message")], ["question"])
+            self.send("--type", "info", "--text", "deployed")
+        self.assertEqual([p["type"] for _, p in self.events("message")], ["info"])
 
     def test_v1_forward_never_posts_records(self):
         self.send("--type", "task", "--text", "繳房屋稅")
         ev = self.c.execute("SELECT * FROM events WHERE type='record'").fetchone()
         self.assertIsNone(self.m.to_assistant(self.c, ev))
+
+
+# what every Decisions record must have (core + the decisions schema's required, decisions/schemas/*.schema.json)
+DEC_REQUIRED = {"raised": ("terms", "terms_rev"), "claimed": ("outcome", "evidence", "answer"), "withdrawn": ("reason",)}
+
+
+class SendDecisions(unittest.TestCase):
+    setUp, send, events = SendRecords.setUp, SendRecords.send, SendRecords.events
+
+    def recs(self):
+        out = []
+        for _eid, p in self.events("record"):
+            r = p["record"]
+            self.assertEqual(self.m.record_errors(r), [])
+            self.assertEqual((r["ph"], r["ext"], r["project"]), ("0.3", "decisions/0.3", "proj"))
+            for k in DEC_REQUIRED[r["type"]]:
+                self.assertIn(k, r)
+            out.append(r)
+        return out
+
+    def ask(self, *extra):
+        return self.send("--type", "question", "--id", "m1031-q1", "--text", "Which one?\n- A\n- B", *extra)
+
+    def test_question_is_raised_keyed_by_the_letter_id(self):
+        self.ask("--context", "lease:abc")
+        self.assertEqual(self.events("message"), [])
+        [r] = self.recs()
+        self.assertEqual((r["type"], r["id"], r["key"], r["origin"], r["terms"], r["terms_rev"], r["context"]),
+                         ("raised", "r:m1031-q1", "m1031-q1", "requester", {"text": "Which one?\n- A\n- B"}, 1, "lease:abc"))
+        [q] = self.m.open_questions(self.c, "proj")
+        self.assertEqual((q["id"], q["text"]), ("m1031-q1", "Which one?\n- A\n- B"))
+
+    def test_done_question_claims_the_answer_then_withdraws(self):
+        self.ask()
+        self.send("--type", "done", "--question", "m1031-q1", "--text", "Pick A")
+        _raised, claimed, withdrawn = self.recs()
+        self.assertEqual((claimed["type"], claimed["origin"], claimed["outcome"], claimed["answer"]),
+                         ("claimed", "agent", "decided", {"text": "Pick A"}))
+        self.assertEqual((withdrawn["type"], withdrawn["origin"], withdrawn["reason"]), ("withdrawn", "requester", "settled"))
+        self.assertEqual(self.m.open_questions(self.c), [])
+
+    def test_drop_question_is_withdrawn_not_needed(self):
+        self.ask()
+        self.send("--type", "drop", "--question", "m1031-q1", "--text", "another way now")
+        r = self.recs()[-1]
+        self.assertEqual((r["type"], r["reason"], r["note"]), ("withdrawn", "not_needed", "another way now"))
+        self.assertEqual(self.m.open_questions(self.c), [])
+
+    def test_a_v1_question_is_closed_with_records_under_its_letter_id(self):
+        self.m.publish(self.c, "m1029-old", "message", "proj", self.owner, None, {"type": "question", "text": "old one?"})
+        self.send("--type", "drop", "--question", "m1029-old", "--text", "not needed")
+        self.assertEqual(self.recs()[0]["key"], "m1029-old")
+        self.assertEqual(self.m.open_questions(self.c), [])
+
+    def test_only_this_projects_own_question(self):
+        self.m.publish(self.c, "m-theirs", "message", "other", self.owner, None, {"type": "question", "text": "?"})
+        with self.assertRaises(SystemExit):
+            self.send("--type", "done", "--question", "m-theirs", "--text", "x")
+        with self.assertRaises(SystemExit):
+            self.send("--type", "done", "--question", "m-none", "--text", "x")
+
+    def test_a_question_in_an_asks_thread_stays_v1(self):
+        self.m.publish(self.c, "h-asks", "message", self.owner, "proj", None,
+                       {"type": "question", "text": "how far along?", "handoff_id": 72, "effect": "asks"})
+        self.send("--type", "question", "--reply-to", "h-asks", "--text", "which one do you mean?")
+        self.assertEqual(self.events("record"), [])
+        [(_mid, p)] = [e for e in self.events("message") if e[0] != "h-asks"]
+        self.assertEqual((p["type"], p["handoff_id"]), ("question", 72))
 
 
 if __name__ == "__main__":
