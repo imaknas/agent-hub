@@ -30,7 +30,8 @@ import pathlib
 import subprocess
 import sys
 
-HUB = pathlib.Path(os.environ.get("AGENT_HUB_ROOT") or pathlib.Path(__file__).resolve().parents[1])  # same as hubconf.ROOT
+# same as hubconf.ROOT
+HUB = pathlib.Path(os.environ.get("AGENT_HUB_ROOT") or pathlib.Path(__file__).resolve().parents[1])
 
 
 def _instance(sub: str, legacy: pathlib.Path) -> pathlib.Path:
