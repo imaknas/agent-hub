@@ -31,6 +31,9 @@ import subprocess
 import time
 
 import hubconf
+import i18n
+
+_ = i18n.domain(__file__)
 
 DEPS_IDLE_DAYS = 2
 REMOVE_IDLE_DAYS = 14
@@ -122,21 +125,23 @@ def prune(project: str | None, yes: bool) -> int:
         for w in info["worktrees"]:
             if w["merged"] and w["clean"]:
                 n += 1
-                print(f"{'刪' if yes else '可以刪'}:{name} {w['branch']}({w['path']},{w['age_days']} 天沒動)")
+                kw = dict(project=name, branch=w['branch'], path=w['path'], days=w['age_days'])
+                print(_("Deleting: {project} {branch} ({path}, untouched for {days} days)", **kw) if yes
+                      else _("Can delete: {project} {branch} ({path}, untouched for {days} days)", **kw))
                 if yes:
                     subprocess.run(["git", "-C", str(repo), "worktree", "remove", w["path"]])
                     subprocess.run(["git", "-C", str(repo), "branch", "-d", w["branch"]], capture_output=True)
             elif not w["merged"]:
-                print(f"留著(還沒合併):{name} {w['branch']}")
+                print(_("Kept (not merged yet): {project} {branch}", project=name, branch=w['branch']))
     if n and not yes:
-        print("(只列出來;確定沒有 session 還開在裡面,再加 --yes 真的刪)")
+        print(_("(only listed; once you are sure no session is still open in them, add --yes to delete them)"))
     return 0
 
 
 def _cwds_in_use() -> list[str]:
     """所有 process 的 cwd(hubconf.process_cwds:lsof 或 /proc)。閒置的 Desktop session 也有一個 process 待在它的 worktree。"""
     import hubconf
-    return [cwd for _, _, cwd in hubconf.process_cwds()]
+    return [cwd for _pid, _name, cwd in hubconf.process_cwds()]
 
 
 def _transcript_age_days(path: str) -> float | None:
@@ -195,15 +200,18 @@ def auto_prune(dry_run: bool) -> dict:
             if idle >= REMOVE_IDLE_DAYS:
                 unknown = _unknown_ignored(p)
                 if unknown:
-                    res["skipped"].append(f"{label}:有 ignore 的檔案不在可重建清單({', '.join(unknown[:3])}…),留著")
+                    res["skipped"].append(_("{label}: ignored files not on the rebuildable list ({files}…); kept",
+                                            label=label, files=", ".join(unknown[:3])))
                 else:
                     mb = _size_mb(p)
                     if not dry_run:
                         r = subprocess.run(["git", "-C", str(repo), "worktree", "remove", str(p)], capture_output=True, text=True)
                         if r.returncode != 0:
-                            res["skipped"].append(f"{label}:git worktree remove 失敗:{r.stderr.strip()[:200]}")
+                            res["skipped"].append(_("{label}: git worktree remove failed: {err}", label=label,
+                                                    err=r.stderr.strip()[:200]))
                             continue
-                    res["removed"].append(f"{label}(閒置 {idle} 天,{mb} MB;branch 留著)")
+                    res["removed"].append(_("{label} (idle {days} days, {mb} MB; branch kept)", label=label, days=idle,
+                                            mb=mb))
                     res["freed_mb"] += mb
                     continue
             gd = _git_dir(p)
@@ -218,8 +226,9 @@ def auto_prune(dry_run: bool) -> dict:
                     shutil.rmtree(d)
                     if gd:
                         with open(gd / MARKER, "a") as fh:
-                            fh.write(f"{res['at'][:10]} {dep} → 重建:{REBUILD[dep]}\n")
-                res["deps"].append(f"{label} {dep}(閒置 {idle} 天,{mb} MB)")
+                            fh.write(_("{date} {dep} → rebuild: {cmd}", date=res['at'][:10], dep=dep, cmd=REBUILD[dep])
+                                     + "\n")
+                res["deps"].append(_("{label} {dep} (idle {days} days, {mb} MB)", label=label, dep=dep, days=idle, mb=mb))
                 res["freed_mb"] += mb
     res["freed_mb"] = round(res["freed_mb"], 1)
     if not dry_run:

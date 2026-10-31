@@ -12,19 +12,23 @@ import pathlib
 import sys
 
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
+import i18n  # noqa: E402
 import worktrees  # noqa: E402
+
+_ = i18n.domain(__file__)
 
 args = sys.argv[1:]
 if "--auto" in args:
     res = worktrees.auto_prune(dry_run="--dry-run" in args)
-    verb = "會" if res["dry_run"] else "已"
+    dry = res["dry_run"]
     for line in res["deps"]:
-        print(f"{verb}刪依賴:{line}")
+        print(_("Would delete deps: {line}", line=line) if dry else _("Deleted deps: {line}", line=line))
     for line in res["removed"]:
-        print(f"{verb}移除 worktree:{line}")
+        print(_("Would remove worktree: {line}", line=line) if dry else _("Removed worktree: {line}", line=line))
     for line in res["skipped"]:
-        print(f"跳過:{line}")
-    print(f"共{verb}釋放 {res['freed_mb']} MB" + ("(dry-run,沒有動任何東西)" if res["dry_run"] else ""))
+        print(_("Skipped: {line}", line=line))
+    print(_("Would free {mb} MB in total (dry-run, nothing was touched)", mb=res['freed_mb']) if dry
+          else _("Freed {mb} MB in total", mb=res['freed_mb']))
     sys.exit(0)
 proj = args[args.index("--project") + 1] if "--project" in args else None
 sys.exit(worktrees.prune(proj, "--yes" in args))

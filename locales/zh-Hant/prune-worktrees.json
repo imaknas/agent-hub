@@ -1,0 +1,9 @@
+{
+ "Would delete deps: {line}": "會刪依賴:{line}",
+ "Deleted deps: {line}": "已刪依賴:{line}",
+ "Would remove worktree: {line}": "會移除 worktree:{line}",
+ "Removed worktree: {line}": "已移除 worktree:{line}",
+ "Skipped: {line}": "跳過:{line}",
+ "Would free {mb} MB in total (dry-run, nothing was touched)": "共會釋放 {mb} MB(dry-run,沒有動任何東西)",
+ "Freed {mb} MB in total": "共已釋放 {mb} MB"
+}
