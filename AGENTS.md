@@ -351,7 +351,8 @@ memory tracking and runs nothing long-lived (most projects) needs nothing under 
   `type`/`enforce`/`network`/`allow_write`/`privacy`/`metered_models` are security fields that `manifest.update` cannot change.
   Such a project's own services and command jobs run sandboxed as well (`bin/sandboxed-run` → `bin/isolation.py`, one
   adapter per OS: `seatbelt.service_profile` on macOS, `bin/landlock.py` (Landlock + seccomp) on Linux; never
-  unsandboxed: no working adapter means not run; `hub.json` `service_sandbox_exempt` holds a project back temporarily).
+  unsandboxed: no working adapter means not run; each adapter declares its guarantees, `isolation.REQUIRED` must be
+  among them, and the `Conformance` tests run one probe through whichever adapter the machine has; `hub.json` `service_sandbox_exempt` holds a project back temporarily).
   Every model call goes through `bin/llm.py` (judgment points declared in `contracts/llm-points.yaml`, linted
   nightly); an unattended agent job that declares `allow:` in the registry does not stop to ask
 - **User-level tool settings** (e.g. Claude Code's `~/.claude/settings.json`) **are changed only when the owner confirms

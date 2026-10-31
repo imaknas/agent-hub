@@ -56,6 +56,8 @@ is that the platform guarantees the result: what has to hold does not depend on 
    registry-driven settings, tamper detection, service sandboxing and the capability runner stay agent-hub's.
    Security-critical code we maintain ourselves is a liability, and the survey cites a week in July 2026 with sandbox
    escapes in several vendors' tools. Whether a second backend is adopted is an owner decision (below).
+   **Done 11-01**: `guarantees()` per adapter, `isolation.REQUIRED`, and the `Conformance` tests (one probe through
+   `sandboxed-run`, whatever the adapter).
 
 ## Owner decisions
 

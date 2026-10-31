@@ -550,7 +550,7 @@ def cmd_doctor(argv: list[str]) -> int:
     why = isolation.can_sandbox()
     held = [n for n, d in hubconf.projects().items() if isolation.sandboxed(d)]
     if not why:
-        add("ok", _("sandboxed projects' own services and jobs: run isolated ({adapter})", adapter=isolation.adapter()[0]))
+        add("ok", _("sandboxed projects' own services and jobs: run isolated ({adapter})", adapter=f"{isolation.adapter()[0]}: {', '.join(isolation.guarantees())}"))
     else:
         add("bad" if held else "warn",
             _("sandboxed projects' own services and jobs: off, they are not run ({reason})", reason=why)

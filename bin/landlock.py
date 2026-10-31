@@ -30,7 +30,8 @@ What it enforces:
 Can't enforce (the adapter's limits): the listening address (a service may bind 0.0.0.0:<its port>; macOS accepts
 only localhost), UDP binds, the network allowlist (policy.network), signals to the owner's other processes below ABI 6.
 
-  can_sandbox() → None | why not       plan(pol, dirs, port) → {read, write, bind}   exec_service(pol, dirs, port, argv)
+  can_sandbox() → None | why not       guarantees() → set[str]       plan(pol, dirs, port) → {read, write, bind}
+  exec_service(pol, dirs, port, argv)
 """
 from __future__ import annotations
 
@@ -61,6 +62,7 @@ SCOPE_ABSTRACT_UNIX, SCOPE_SIGNAL = 1, 2
 FILE_ONLY = FS["execute"] | FS["write_file"] | FS["read_file"] | FS["truncate"] | FS["ioctl_dev"]
 READ = FS["execute"] | FS["read_file"] | FS["read_dir"]
 MIN_ABI = 4   # TCP bind rules
+SIGNAL_ABI = 6   # signals and abstract unix sockets scoped to the sandbox
 
 TMP = ["/tmp", "/var/tmp", "/dev/shm"]
 DEVICES = ["/dev/null", "/dev/zero", "/dev/random", "/dev/urandom", "/dev/tty", "/dev/full"]
@@ -102,6 +104,13 @@ def can_sandbox() -> str | None:
         return (f"the kernel's Landlock ABI is {v or 'missing'}, ports need ≥ {MIN_ABI} (Linux 6.7, and landlock in "
                 "the lsm= boot list)")
     return None
+
+
+def guarantees() -> set[str]:
+    """isolation.py's backend interface: what plan + the seccomp filter enforce on this kernel (capabilities.md,
+    "What each OS enforces"); not the listening address, so not localhost-inbound-only."""
+    return {"own-writes-only", "isolated-reads", "declared-port-only", "unix-sockets-blocked",
+            *(["signals-blocked"] if abi() >= SIGNAL_ABI else [])}
 
 
 def fs_handled(v: int) -> int:
@@ -222,8 +231,8 @@ def restrict(p: dict) -> None:
     if v < MIN_ABI:
         raise OSError(0, can_sandbox() or "no Landlock")
     fs = fs_handled(v)
-    scoped = (SCOPE_ABSTRACT_UNIX | SCOPE_SIGNAL) if v >= 6 else 0
-    attr = struct.pack("=QQQ", fs, NET_BIND_TCP, scoped) if v >= 6 else struct.pack("=QQ", fs, NET_BIND_TCP)
+    scoped = (SCOPE_ABSTRACT_UNIX | SCOPE_SIGNAL) if v >= SIGNAL_ABI else 0
+    attr = struct.pack("=QQQ", fs, NET_BIND_TCP, scoped) if v >= SIGNAL_ABI else struct.pack("=QQ", fs, NET_BIND_TCP)
     buf = ctypes.create_string_buffer(attr, len(attr))
     fd = libc().syscall(SYS_CREATE_RULESET, buf, ctypes.c_size_t(len(attr)), ctypes.c_uint32(0))
     if fd < 0:

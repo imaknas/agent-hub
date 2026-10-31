@@ -38,7 +38,7 @@ $ agenthub doctor    # launchd, problems
     → bin/hub init
 ✗ 看門狗(local.agent-hub-scheduler-watchdog):載入的不是這份 hub(<HUB>/bin)
     → bin/hub init(會換成這份的)
-✓ 開了 sandbox 的專案自己的服務跟 job:隔離執行(seatbelt)
+✓ 開了 sandbox 的專案自己的服務跟 job:隔離執行(seatbelt: own-writes-only, isolated-reads, declared-port-only)
 ! 排程器還沒 tick 過
     → 裝好之後最多 15 分鐘;還沒有就看 .logs/scheduler-stderr.log
 ! 沒設定警報:排程器停了、服務掛了只寫在狀態頁跟 log
@@ -73,7 +73,7 @@ $ agenthub doctor    # launchd, all fine
 ✓ 判斷點交給執行環境 claude(沒有 llm.providers;schedulectl models 看每個點的模型)
 ✓ 排程器(local.agent-hub-scheduler):已載入
 ✓ 看門狗(local.agent-hub-scheduler-watchdog):已載入
-✓ 開了 sandbox 的專案自己的服務跟 job:隔離執行(seatbelt)
+✓ 開了 sandbox 的專案自己的服務跟 job:隔離執行(seatbelt: own-writes-only, isolated-reads, declared-port-only)
 ✓ 排程器最後一次 tick:0 分鐘前
 ✓ 背景服務、專案設定:跟 config 一致
 ✓ commit 閘門(core.hooksPath):githooks
@@ -151,7 +151,7 @@ $ agenthub doctor    # no service manager, unnamed assistant
     → agenthub llm setup(選一家:API key 或本機 Ollama)
 ✗ 排程器、看門狗:這個系統沒有支援的服務管理器(macOS 的 launchd、Linux 的 systemd user 層級都沒有):排程器、看門狗、專案的長駐服務都不會自己跑
     → 自己排程 `bin/py bin/scheduler.py`(每 15 分鐘)
-✓ 開了 sandbox 的專案自己的服務跟 job:隔離執行(seatbelt)
+✓ 開了 sandbox 的專案自己的服務跟 job:隔離執行(seatbelt: own-writes-only, isolated-reads, declared-port-only)
 ✗ 排程器最後一次 tick:120 分鐘前
     → bin/schedulectl status;看 .logs/scheduler-stderr.log
 ✓ 背景服務、專案設定:跟 config 一致

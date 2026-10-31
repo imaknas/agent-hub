@@ -382,6 +382,12 @@ Standard library only (ctypes), unprivileged; the same for services and command 
 
 ### What each OS enforces and what it can't
 
+Each adapter declares the rows it guarantees in code (`guarantees()`, names in `isolation.GUARANTEES`), and
+`isolation.REQUIRED` (own writes only, isolated reads, declared port only) must be among them or the adapter is refused.
+`tests/test_sandboxed_services.py` `Conformance` runs one probe through `bin/sandboxed-run` with whichever adapter the
+machine has and checks every guarantee it declares, so a second backend (docs/design/competitive-gaps.md) is added by
+passing the same run, not by reading its docs. The table below is the prose form of the two adapters' declarations.
+
 | | macOS (Seatbelt) | Linux (Landlock + seccomp) |
 |---|---|---|
 | writes limited to own folders, bus, caches, temp | yes | yes |

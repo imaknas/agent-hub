@@ -52,6 +52,12 @@ def can_sandbox() -> str | None:
     return None
 
 
+def guarantees() -> set[str]:
+    """isolation.py's backend interface: what service_profile enforces (capabilities.md, "What each OS enforces")."""
+    return {"own-writes-only", "isolated-reads", "declared-port-only", "localhost-inbound-only", "keychain-blocked",
+            "signals-blocked"}
+
+
 def exec_service(pol: dict, dirs: list, port: int | None, argv: list[str]):
     """isolation.py's adapter entry: replace this process with argv under service_profile."""
     import os

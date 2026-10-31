@@ -126,6 +126,25 @@ class Adapter(unittest.TestCase):
                 mock.patch.object(landlock, "abi", lambda: 3):
             self.assertIn("ABI is 3", landlock.can_sandbox())
 
+    def test_an_adapter_missing_a_required_guarantee_is_refused(self):
+        class Weak:
+            can_sandbox = staticmethod(lambda: None)
+            guarantees = staticmethod(lambda: {"own-writes-only", "isolated-reads"})
+            exec_service = mock.Mock()
+        with mock.patch.object(isolation, "adapter", lambda: ("weak", Weak)):
+            self.assertIn("doesn't guarantee declared-port-only", isolation.can_sandbox())
+            self.assertEqual(isolation.guarantees(), [])
+            with self.assertRaises(OSError):
+                isolation.exec_service({}, [], None, ["true"])
+        Weak.exec_service.assert_not_called()
+
+    def test_an_adapter_declaring_an_unknown_guarantee_is_refused(self):
+        class Odd:
+            can_sandbox = staticmethod(lambda: None)
+            guarantees = staticmethod(lambda: {*isolation.REQUIRED, "network-allowlist"})
+        with mock.patch.object(isolation, "adapter", lambda: ("odd", Odd)):
+            self.assertIn("unknown guarantees: network-allowlist", isolation.can_sandbox())
+
     def test_exec_service_refuses_when_the_adapter_cant(self):
         with mock.patch.object(isolation.sys, "platform", "linux"), \
                 mock.patch.object(landlock, "can_sandbox", lambda: "no Landlock here"), \
@@ -178,7 +197,8 @@ class LandlockPlan(Fixture):
         self.assertEqual(pl["bind"], [])
 
 
-# what the real run checks, from a shell and from a child python (rules are inherited)
+# what the real run checks, from a shell and from a child python (rules are inherited); every line is the same on
+# macOS and Linux, so one probe runs through whichever adapter this machine has
 PROBE = """
 touch "$RT/a" && echo rt-write
 touch "$WS/a" && echo ws-write
@@ -186,7 +206,9 @@ touch "$BUS/a" && echo bus-write
 touch "$TOP/outside" 2>/dev/null || echo outside-write-blocked
 cat "$OTHER/secret" >/dev/null 2>&1 || echo other-blocked
 cat "$CRED" >/dev/null 2>&1 || echo cred-blocked
-cat /etc/hostname >/dev/null && echo system-read
+cat /etc/hosts >/dev/null && echo system-read
+kill -0 "$OUTSIDE_PID" 2>/dev/null || echo signal-blocked
+/usr/bin/security list-keychains >/dev/null 2>&1 || echo keychain-blocked
 python3 - <<'PY'
 import socket
 def bind(port):
@@ -194,7 +216,7 @@ def bind(port):
     try:
         s.bind(("127.0.0.1", port)); return "ok"
     except OSError as e:
-        return "blocked" if e.errno == 13 else str(e)
+        return "blocked" if e.errno in (1, 13) else str(e)
     finally:
         s.close()
 print("bind-declared-" + bind(int(__import__("os").environ["PORT"])))
@@ -206,15 +228,26 @@ except OSError:
 a, b = socket.socketpair(); print("socketpair-ok")
 PY
 """
+# what a sandboxed service must still be able to do, whatever the adapter
+WORKS = {"rt-write", "ws-write", "bus-write", "system-read", "bind-declared-ok", "socketpair-ok"}
+# guarantee (isolation.GUARANTEES) → the probe lines that show it holds
+PROBES = {"own-writes-only": {"outside-write-blocked"}, "isolated-reads": {"other-blocked", "cred-blocked"},
+          "declared-port-only": {"bind-other-blocked"}, "unix-sockets-blocked": {"unix-blocked"},
+          "keychain-blocked": {"keychain-blocked"}, "signals-blocked": {"signal-blocked"}}
+# guarantees no probe here can show, with why (checked by hand when an adapter declares them)
+UNPROBED = {"localhost-inbound-only": "needs a second address to connect from (macOS checked live 10-31)"}
 
-# runs sandboxed-run's main() in a child: the registry and hub.json's credentials replaced with the fixture's
+# runs sandboxed-run's main() in a child: the registry, the bus and hub.json's credentials replaced with the fixture's
 RUNNER = """
 import importlib.machinery, importlib.util, pathlib, sys, json
 args = json.loads(sys.argv[1])
 sys.path.insert(0, args["bin"])
-import hubconf, landlock, policy
+import hubconf, landlock, policy, seatbelt
 policy.WRITE_CACHES = []   # exec_service would create ~/.npm and the like: no writing into HOME from a test
-landlock.TMP = []   # the fixture lives in /tmp: a writable /tmp would make every path in it readable too
+# the fixture lives in the temp area: a writable temp area would hide writes outside and make every path in it readable
+landlock.TMP = []
+seatbelt.TMP = []
+hubconf.BUS_DIR = pathlib.Path(args["bus"])
 hubconf.projects = lambda: args["projects"]
 real_get = hubconf.get
 hubconf.get = lambda k, d=None: [args["cred"]] if k == "credentials.files" else real_get(k, d)
@@ -225,33 +258,44 @@ sys.exit(m.main(["--project", "proj", "--cwd", args["ws"], "--port", str(args["p
 """
 
 
-@unittest.skipUnless(sys.platform.startswith("linux") and landlock.can_sandbox() is None,
-                     "needs Linux with Landlock ABI 4")
-class LandlockRun(Fixture):
-    def test_under_the_rules(self):
-        other, bus = self.tmp / "other", pathlib.Path(os.path.realpath(hubconf_bus()))
-        other.mkdir()
+class Conformance(unittest.TestCase):
+    def test_every_guarantee_has_a_probe_or_a_reason(self):
+        self.assertEqual(set(isolation.GUARANTEES), set(PROBES) | set(UNPROBED))
+        self.assertFalse(set(PROBES) & set(UNPROBED))
+
+    def test_the_adapters_declare_known_guarantees_and_the_required_ones(self):
+        with mock.patch.object(landlock, "abi", lambda: 6):
+            for mod in (seatbelt, landlock):
+                self.assertLessEqual(mod.guarantees(), set(isolation.GUARANTEES), mod.__name__)
+                self.assertLessEqual(set(isolation.REQUIRED), mod.guarantees(), mod.__name__)
+
+    @unittest.skipUnless(isolation.can_sandbox() is None, "needs this machine's adapter (sandbox-exec, Landlock ABI 4)")
+    def test_this_machines_adapter_holds_what_it_declares(self):
+        tmp = pathlib.Path(tempfile.mkdtemp()).resolve()
+        self.addCleanup(shutil.rmtree, tmp, ignore_errors=True)
+        ws, other, bus = tmp / "ws", tmp / "other", tmp / "bus"
+        for d in (ws, other, bus):
+            d.mkdir()
         (other / "secret").write_text("x")
-        cred = self.tmp / "cred"
+        cred = tmp / "cred"
         cred.write_text("token")
+        outside = subprocess.Popen(["sleep", "60"])
+        self.addCleanup(outside.wait)
+        self.addCleanup(outside.kill)
         port = 18125
-        args = {"bin": str(BIN), "ws": str(self.ws), "cred": str(cred), "port": port, "probe": PROBE,
-                "projects": {"proj": self.doc,
+        args = {"bin": str(BIN), "ws": str(ws), "cred": str(cred), "port": port, "probe": PROBE, "bus": str(bus),
+                "projects": {"proj": {"name": "proj", "paths": {"workspace": str(ws)}, "enforce": {"sandbox": True}},
                              "other": {"name": "other", "paths": {"workspace": str(other)}}}}
         # no runtime in the fixture (it would be under services_root): the workspace stands in for it
-        env = {**os.environ, "RT": str(self.ws), "WS": str(self.ws), "BUS": str(bus), "TOP": str(self.tmp),
-               "OTHER": str(other), "CRED": str(cred), "PORT": str(port)}
+        env = {**os.environ, "RT": str(ws), "WS": str(ws), "BUS": str(bus), "TOP": str(tmp), "OTHER": str(other),
+               "CRED": str(cred), "PORT": str(port), "OUTSIDE_PID": str(outside.pid)}
         r = subprocess.run([sys.executable, "-c", RUNNER, __import__("json").dumps(args)], capture_output=True,
                            text=True, env=env)
-        self.assertEqual(r.stdout.split(), ["rt-write", "ws-write", "bus-write", "outside-write-blocked",
-                                            "other-blocked", "cred-blocked", "system-read", "bind-declared-ok",
-                                            "bind-other-blocked", "unix-blocked", "socketpair-ok"], r.stderr)
-
-
-def hubconf_bus():
-    sys.path.insert(0, str(BIN))
-    import hubconf
-    return hubconf.BUS_DIR
+        got = set(r.stdout.split())
+        name = isolation.adapter()[0]
+        self.assertLessEqual(WORKS, got, f"{name}: {r.stdout} {r.stderr}")
+        for g in isolation.guarantees():
+            self.assertLessEqual(PROBES.get(g, set()), got, f"{name} declares {g}: {r.stdout} {r.stderr}")
 
 
 class Profile(Fixture):
@@ -265,26 +309,6 @@ class Profile(Fixture):
         p = seatbelt.service_profile(self.pol(self.tmp / "other"), [self.rt, self.ws], 18123)
         self.assertIn('(allow network-bind (local ip "*:18123"))', p)
         self.assertIn('(allow network-inbound (local ip "localhost:*"))', p)
-
-    @unittest.skipUnless(seatbelt.can_sandbox() is None, "needs Seatbelt")
-    def test_under_the_profile(self):
-        other = self.tmp / "other"
-        other.mkdir()
-        (other / "secret").write_text("x")
-        (self.tmp / "bus").mkdir()
-        prof = seatbelt.service_profile(self.pol(other), [self.rt, self.ws], 18124)
-        script = f"""
-set -u
-touch {self.rt}/a && echo rt-write
-touch {self.ws}/a && echo ws-write
-touch {self.tmp}/bus/a && echo bus-write
-cat {other}/secret 2>/dev/null || echo other-blocked
-"""
-        # (writes outside are covered by the temp area here, which the profile allows; checked live on 10-31)
-        r = subprocess.run([seatbelt.SANDBOX_EXEC, "-p", prof, "/bin/sh", "-c", script], capture_output=True, text=True,
-                           cwd=self.rt)
-        self.assertEqual(r.stdout.split(), ["rt-write", "ws-write", "bus-write", "other-blocked"],
-                         r.stderr)
 
 
 if __name__ == "__main__":

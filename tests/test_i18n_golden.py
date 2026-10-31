@@ -399,6 +399,7 @@ if "sm" in sc:
 import isolation   # the sandbox adapter: the scenario's, not this machine's
 isolation.adapter = lambda: (sc.get("adapter", "seatbelt"), None)
 isolation.can_sandbox = lambda: sc.get("no_sandbox")
+isolation.guarantees = lambda: [] if sc.get("no_sandbox") else list(isolation.REQUIRED)   # not this kernel's
 real_run = subprocess.run
 
 def done(cmd, rc=0, out="", err=""):
