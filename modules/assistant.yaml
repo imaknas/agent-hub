@@ -1,7 +1,7 @@
 # The personal assistant (hub.json assistant; an optional tool, docs/design/tool-agnostic.md): reconciling questions to
 # the owner, and channel leases that let the assistant lend its conversation to a project session. A deployment without
 # an assistant leaves this module off (the owner side uses the built-in owner module).
-# The 〔owner〕 to-do registrar moved back to the core on 10-29 (registrar in projects/agent-hub.yaml): it runs whoever
+# The owner to-do registrar moved back to the core on 10-29 (registrar in projects/agent-hub.yaml): it runs whoever
 # the owner side is.
 # The letters reconcile-questions sends are dispatched right away by the mailbox dispatch; it runs only once at night,
 # don't make it an interval job.

@@ -28,7 +28,7 @@ user.
 Progress (10-27): HTH 0.1 draft, conformance test data and reference parser in `~/workspace/agent-ops-specs` (1200eb8,
 local only). agent-hub runs the zh-hant set (`tests/test_hth_conformance.py`, 994a4f2): on the first run it caught two
 deviations already in production: task registration did not accept full-width brackets or a key marker with no space
-after `等`, and gen-todo, under an unrecognised `### 〔…〕`, assigned lines to the previous group (lines with an
+before the owner tag, and gen-todo, under an unrecognised group subheading, assigned lines to the previous group (lines with an
 unrecognised tag were silently dropped). Both fixed; the keys of existing data did not change. A good example for
 article ②: write the spec clearly first, and the conformance tests catch holes the implementation never noticed itself.
 

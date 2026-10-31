@@ -396,7 +396,7 @@ hooksPath, set by `hub init`.
 > and prompts of gen-todo, librarian, consolidate, weekly reflect and trajectory are read from settings (this machine's
 > prompts identical word for word). Personal names 479 → 407. **Handed to the Agent Hub session**: the strings in
 > hubbus, moving `agent-jobs/mailbox.md` to `templates/prompts/`. **Not done yet**: knas-tasks.py's file name/job name
-> (renaming has to be considered together with the assistant's contract and the `(等 owner:` keys already stamped into
+> (renaming has to be considered together with the assistant's contract and the to-do key markers already stamped into
 > STATE.md files; left for now).
 > Step 5 done 10-26: `bin/setup` (checks commands + setup-python, installs nothing itself), `bin/hub`'s init (writes
 > hub.json only when there is none; asks name/time zone/project location/modules; for features left off, their
@@ -510,7 +510,7 @@ step has already routed paths through hubconf, 6 is only changing hubconf's defa
    mistake is "you only find out when something breaks":
    - **Example A (a typo)**: enabling a module, `hub.json` gets `"modules": {"assitant": true}`. Today's hubconf does
      not validate `hub.json`, so the key is simply ignored: the assistant module is not on, knas-tasks and bridge are
-     not scheduled. No error message at all; days later it turns out the assistant has received no new `〔owner〕`
+     not scheduled. No error message at all; days later it turns out the assistant has received no new owner
      tasks. With `config check`: blocked at commit, "`modules.assitant`: no such module (there are: assistant,
      alerts…)".
    - **Example B (impact not visible)**: `modules.assistant` changed from false to true. With `config plan`, before
@@ -542,7 +542,7 @@ step has already routed paths through hubconf, 6 is only changing hubconf's defa
      - (a) **Three more status pages**: `/digest/` (the last few days, markdown converted to HTML), `/todo`,
        `/reflect/` (today's `reflect/index.html` as is). Example: in the morning open the status page on the phone → the
        "today's digest" tab at the top → see the "## <project> …" the librarian wrote last night; the "to-do" tab is
-       today's `todo.md`, with the `〔owner〕` items at the top. gen-status-page regenerates on every tick anyway, so
+       today's `todo.md`, with the owner's items at the top. gen-status-page regenerates on every tick anyway, so
        three more pages cost very little; reachable only on the tailnet, as today.
      - (b) **Only through Muninn**: Muninn already reads `todo.md` and `reflect/` (by path) and could show them in its
        PWA; it does not read the digest today.

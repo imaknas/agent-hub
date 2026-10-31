@@ -156,7 +156,7 @@ yet.
 
 **How to enter it**
 - `POST /v1/leases` with `mode: work`, or midway through a lease `POST /v1/leases/<id>/mode {mode: work|discuss}`
-  (sent only after the owner taps `允許動手` ("allow hands-on work") on the assistant's card; the runner does not judge
+  (sent only after the owner taps the "allow hands-on work" button on the assistant's card; the runner does not judge
   whether the owner agreed, that is the assistant's card).
 - Switching midway = stop the process and resume the same session with `--resume`, under the work judgment point; the
   `state` event carries `mode`.

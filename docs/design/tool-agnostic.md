@@ -141,7 +141,7 @@ hide the user's rules); Gemini's `contextFileName` is in `.gemini/settings.json`
 
 - **The owner side (Principal Handoff 0.3's principal side) can be swapped; Muninn is an optional tool**, on the same
   level as coding agents and LLM providers:
-  - The platform is the **requester side**: the registrar writes `〔owner〕` to-dos as `raised` records and projects'
+  - The platform is the **requester side**: the registrar writes the owner's to-dos as `raised` records and projects'
     questions as decisions, and applies the `settled`/`decided` that come back. This half **belongs to the core** and
     runs whichever owner side is connected. **Today the registrar (`assistant/knas-tasks`) sits in the assistant
     module and goes off with it when there is no Muninn: it must move back to the core**; the assistant module keeps
@@ -159,7 +159,7 @@ hide the user's rules); Gemini's `contextFileName` is in `.gemini/settings.json`
     to the public spec and is interchangeable with Muninn, proving the spec lets two unrelated systems connect, not
     just a private format between agent-hub and Muninn.
   - The owner's machine: `owner_side: muninn`, behaviour unchanged.
-  - **Without an owner side, open-source users' `〔owner〕` to-dos and questions have nowhere to go**: so `builtin`
+  - **Without an owner side, open-source users' owner to-dos and questions have nowhere to go**: so `builtin`
     is in the first version, ahead of any agent adapter.
 - **Notifications**: `alert.py` becomes adapters (Discord, ntfy, email, Slack).
 - **Linux**: scheduling and services are the launchd → systemd user unit / cron layer (the scheduler and

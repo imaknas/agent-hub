@@ -60,7 +60,7 @@
   watching, the status page shows red.
 
 - **In a shell script, backticks in a double-quoted prompt are executed as commands**: a format example in the prompt
-  (`` `- [ ] 〔owner〕…` ``) was eaten by bash (the log showed only `-: command not found`), and the model never saw it
+  (a to-do line between backticks) was eaten by bash (the log showed only `-: command not found`), and the model never saw it
   for weeks. Backticks in a prompt must be written `\``, or use a single-quoted heredoc; after the change, expand the
   prompt and look at it once (the platform's prompts are now all assembled in Python).
 - **To have a headless agent change only one file, restrict it with permission rules, not just the prompt**: Claude

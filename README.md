@@ -9,9 +9,9 @@ requirement. Any CLI agent with a headless mode can be plugged in through a comm
 Antigravity), and the platform's own judgment calls can go to Anthropic, any OpenAI-compatible API, a local Ollama, or the
 coding agent's own login. When a capability is missing, it is switched off explicitly and `agenthub doctor` says why.
 
-> **Status.** Built for, and run every day by, one person on one always-on Mac mini. It is single-user by design. The code
-> comments and design docs are written in Traditional Chinese; this README and the CLI's commands are the English entry
-> points. Agents working in this repo read [`AGENTS.md`](AGENTS.md).
+> **Status.** Built for, and run every day by, one person on one always-on Mac mini. It is single-user by design. An instance
+> picks the language the platform shows you and the language its agents and models write in (`language.ui` and
+> `language.content` in `hub.json`: `en` or `zh-Hant`). Agents working in this repo read [`AGENTS.md`](AGENTS.md).
 
 ## What you get
 

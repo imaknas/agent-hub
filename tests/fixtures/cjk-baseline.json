@@ -1,14 +1,1 @@
-{
- "AGENTS.md": 5,
- "contracts/llm-points.yaml": 1,
- "docs/design/idea-sandboxes.md": 1,
- "docs/design/llm-providers.md": 2,
- "docs/design/new-user.md": 3,
- "docs/design/specs-and-open-source.md": 1,
- "docs/design/tool-agnostic.md": 2,
- "githooks/config/pre-commit": 2,
- "hub.example.json": 1,
- "known-issues.md": 1,
- "modules/assistant.yaml": 1,
- "projects/agent-hub.yaml": 2
-}
+{}

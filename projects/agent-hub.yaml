@@ -22,7 +22,7 @@ jobs:
 # page. The ones specific to the personal assistant (reconcile-questions, channel leases) are in modules/assistant.yaml;
 # without that module these still run. consolidate-memory, mirror-backup, weekly-reflect and backup are in modules/
 # too.
-# the requester side of Principal Handoff 0.3: 〔owner〕 to-dos → raised records; settled ones applied by key.
+# the requester side of Principal Handoff 0.3: the owner's to-dos → raised records; settled ones applied by key.
 - name: registrar
   # moved back from the assistant module to the core on 10-29: runs whether the owner side is the assistant or the
   # built-in one (tool-agnostic.md)
@@ -36,7 +36,7 @@ jobs:
   max_attempts_per_day: 3
   run: bin/py bin/registrar.py
   cwd: hub
-# the cross-project to-do list todo.md (from each project's STATE.md ## 待辦, generated mechanically)
+# the cross-project to-do list todo.md (from each project's STATE.md to-do section, generated mechanically)
 - name: todo
   at: 03:00
   after:

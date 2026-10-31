@@ -7,7 +7,7 @@
   "memory_copies": "~/.memory-copies",
   "git_origin": "~/git-origin",
   "owner": {
-    "_comment": "You: address is the mailbox address letters to you are sent to (part of the protocol, don't change it); tag is the name inside the to-do tag 〔<tag>〕",
+    "_comment": "You: address is the mailbox address letters to you are sent to (part of the protocol, don't change it); tag is your name as the owner label of the zh-Hant to-do lines (contracts/state-todo.v2.md; the English set labels you `owner`)",
     "address": "owner",
     "aliases": [],
     "tag": "Me",

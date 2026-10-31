@@ -48,7 +48,7 @@ agent-hub is meant for anyone, with any coding agent, any LLM, any key.
   the script's location, `AGENT_HUB_ROOT` overrides it). Never hard-code `~/agent-hub`, `~/services`, project names or
   the owner's name.
 - Identifiers in protocols are English (the owner's hubbus address is `owner`; aliases are read from hub.json); the
-  user's identity (the 〔owner〕 tag) is read from settings.
+  user's identity (the owner's tag in to-do lines, `owner.tag`) is read from settings.
 - Never put personal data in code, tests or public docs (`tests/test_personal_boundary.py` checks mechanically); what is
   specific to this deployment goes in the instance directory's `config/AGENTS.local.md`. **Not a single private project
   name may appear in the platform repo** (examples use generic names); the list is in the instance's
@@ -157,8 +157,8 @@ agent-hub is meant for anyone, with any coding agent, any LLM, any key.
   assistant); a session that sees one during the day treats it as reference only; the owner's answers are handled by
   the session that asked, and unhandled ones are also applied at night. Interface and failure modes: `bin/hubbus`
   header
-- **The 〔owner〕 to-do registrar** (`bin/registrar.py`, a core platform job, nightly after the librarian and before
-  todo, zero LLM): sends the 〔owner〕 lines of every STATE.md to the owner side (the assistant, or the built-in
+- **The owner to-do registrar** (`bin/registrar.py`, a core platform job, nightly after the librarian and before
+  todo, zero LLM): sends the owner's to-do lines (state-todo contract) of every STATE.md to the owner side (the assistant, or the built-in
   `bin/owner.py`) following Principal Handoff 0.3, and applies the closes it gets back by key
 
 ## Channel leases (the assistant lends its conversation to a project session; assistant module)
@@ -417,7 +417,7 @@ memory tracking and runs nothing long-lived (most projects) needs nothing under 
   `consumes:`), and the keys for alerts and LLM providers are derived from hub.json by check-secrets; keys for a
   project's own services (LINE, Google OAuth, IG…) **are managed by the project**, declared in its own registry entry
   (the project changes it with manifest.update); issuing new ones at the external service, revoking and replacing
-  them **only the owner can do** (an 〔owner〕 to-do)
+  them **only the owner can do** (an owner to-do)
 - **A registry `secrets:` entry holds only the name, location and expiry, never the value** (format in the
   `bin/registry.py` header); the platform job `agent-hub/secrets` (daily at 08:00, `bin/check-secrets.py`) checks that
   each exists, whether it is backed up (`backup.covers()`, the same rules as the nightly backup) and whether it is about
@@ -429,7 +429,7 @@ memory tracking and runs nothing long-lived (most projects) needs nothing under 
   secrets job first checks every day that the alert channels still work (without sending a message). The scheduler
   watchdog deliberately uses its own copy and does not depend on this script
 - How projects handle it (where values live, how code reads them, no silent degradation, revoking whatever entered the
-  history before open-sourcing) is in the "憑證" section of `templates/agent-instructions.md`, which is in every
+  history before open-sourcing) is in the "Credentials" section of `templates/agent-instructions.md`, which is in every
   project's rules file
 
 ## Safety properties (don't bypass)

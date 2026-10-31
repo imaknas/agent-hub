@@ -39,7 +39,7 @@ platform only writes what it allows"** (today librarian-state holds haiku back w
 
 **The model returns a list of edits, not a full rewrite**: `{"edits": [{"old": "…", "new": "…"}], …}`; each `old` must
 occur exactly once in the original, the platform applies them in order, then checks mechanically that markers like
-`(等 owner:<key>)` are neither missing nor added. That way "every other line unchanged, word for word" is guaranteed by
+the to-do key markers (state-todo contract) are neither missing nor added. That way "every other line unchanged, word for word" is guaranteed by
 construction; a small model will not rewrite an 11KB STATE.md to change one line, dropping sections or breaking keys.
 
 ### Where each point goes
@@ -47,7 +47,7 @@ construction; a small model will not rewrite an 11KB STATE.md to change one line
 | Judgment point | Afterwards | Notes |
 |---|---|---|
 | librarian-state | **completion** | the prompt carries: the memory diff, the current STATE.md, AGENT.md, the list + README of `memory/reference/` (full text only for topic files to compare against), handoffs and records. Returns a list of edits + the metadata in today's JSON. A diff over budget is **split at commit boundaries**, one call per part, the checkpoint advancing to the end of that part (truncation has not triggered in recent nights, so nothing more complicated) |
-| librarian-todo-format | **completion** | returns a list of edits to the `## 待辦` section (give it a schema; today it is text) |
+| librarian-todo-format | **completion** | returns a list of edits to the to-do section (give it a schema; today it is text) |
 | librarian-index | **completion** | returns a list of edits outside the roster block; the digest summaries it gets are filtered by privacy labels first |
 | reflect-week | completion | already is (tools "") |
 | consolidate | **agent (unchanged in the first version)** | has to read every existing dated file and the topic documents (a large project's raw records are 260KB+), which small and local models cannot hold. Could later be split into one completion per topic, separately |

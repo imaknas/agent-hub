@@ -55,7 +55,7 @@ points:
     # don't load the environment's MCP (the global ones include production databases; turning tools off doesn't block
     # them, 10-27 experiment)
     extra_args: ["--strict-mcp-config"]
-    purpose: when the `## 待辦` section of STATE.md is malformed, fix only the format, leaving the content unchanged
+    purpose: when the to-do section of STATE.md (state-todo contract) is malformed, fix only the format, leaving the content unchanged
     permission_mode: dontAsk
     tools: Read,Edit
     allowed_tools: ["Edit(./STATE.md)"]
