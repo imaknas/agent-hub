@@ -1,0 +1,3 @@
+{
+ "A small command for shell scripts to ask about the runtime (runtime abstraction, docs/design/runtime-abstraction.md).\nThe default runtime is set in hub.json.\n\n  hub-runtime instructions-file <folder>   the file the platform's managed block goes into (relative to that folder)\n  hub-runtime local-ignores                this runtime's machine-local files, one per line (to add to .git/info/exclude)\n\nThe system python3 (3.9) can run it.\n": "給 shell 腳本問執行環境的小指令(執行環境抽象,docs/design/runtime-abstraction.md)。預設的 runtime 見 hub.json。\n\n  hub-runtime instructions-file <資料夾>   平台受管區塊要寫進的檔(相對這個資料夾)\n  hub-runtime local-ignores                這個 runtime 的本機專用檔,一行一個(要加進 .git/info/exclude)\n\n系統的 python3(3.9)就能跑。\n"
+}

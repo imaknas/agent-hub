@@ -765,7 +765,7 @@ def cmd_install_cli(argv: list[str]) -> int:
     d = pathlib.Path(os.path.expanduser(argv[argv.index("--dir") + 1] if "--dir" in argv else "~/.local/bin"))
     d.mkdir(parents=True, exist_ok=True)
     f = d / "agenthub"
-    body = (f'#!/bin/sh\n# agent-hub 的 CLI(agenthub install-cli 寫的;hub 搬家就重跑一次)\n'
+    body = (f'#!/bin/sh\n# the agent-hub CLI (written by agenthub install-cli; run it again after moving the hub)\n'
             f'exec "{BIN / "py"}" "{BIN / "agenthub"}" "$@"\n')
     if f.exists() and f.read_text() == body:
         print(_("✓ {path} is up to date", path=f))

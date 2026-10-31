@@ -1,10 +1,11 @@
 #!/bin/sh -c exec${IFS}"${0%/*}/py"${IFS}"$0"${IFS}"$@"
-"""給 shell 腳本問執行環境的小指令(執行環境抽象,docs/design/runtime-abstraction.md)。預設的 runtime 見 hub.json。
+"""A small command for shell scripts to ask about the runtime (runtime abstraction, docs/design/runtime-abstraction.md).
+The default runtime is set in hub.json.
 
-  hub-runtime instructions-file <資料夾>   平台受管區塊要寫進的檔(相對這個資料夾)
-  hub-runtime local-ignores                這個 runtime 的本機專用檔,一行一個(要加進 .git/info/exclude)
+  hub-runtime instructions-file <folder>   the file the platform's managed block goes into (relative to that folder)
+  hub-runtime local-ignores                this runtime's machine-local files, one per line (to add to .git/info/exclude)
 
-系統的 python3(3.9)就能跑。
+The system python3 (3.9) can run it.
 """
 from __future__ import annotations
 
@@ -13,7 +14,10 @@ import pathlib
 import sys
 
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
+import i18n  # noqa: E402
 import runtime_ports  # noqa: E402
+
+_ = i18n.domain(__file__)
 
 
 def main(argv) -> int:
@@ -30,7 +34,7 @@ def main(argv) -> int:
     if argv == ["local-ignores"]:
         print("\n".join(rt.local_ignores()))
         return 0
-    print(__doc__, file=sys.stderr)
+    print(_(__doc__), file=sys.stderr)
     return 2
 
 
