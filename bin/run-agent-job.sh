@@ -25,7 +25,8 @@
 set -uo pipefail
 
 HUB="${AGENT_HUB_ROOT:-$(cd "$(dirname "$0")/.." && pwd)}"
-NAME="${1:?用法: run-agent-job.sh <name> [工作目錄] [prompt 名稱]}"
+source "$(dirname "${BASH_SOURCE[0]}")/hubpaths.sh"
+NAME="${1:?$(hub_msg "usage: run-agent-job.sh <name> [workdir] [prompt name]")}"
 PROMPT="$HUB/agent-jobs/${3:-$NAME}.md"
 case "${3:-}" in /*) PROMPT="$3" ;; esac   # 專案登錄的 agent job:prompt 是 projects/<name>/jobs/*.md 的完整路徑
 OUT="$HUB/.state/agent-jobs/$NAME"
@@ -47,15 +48,16 @@ p.write_text(json.dumps(d, ensure_ascii=False, indent=2))
 PY
 }
 
-[ -f "$PROMPT" ] || { echo "run-agent-job: 找不到 $PROMPT" >&2; exit 1; }
+[ -f "$PROMPT" ] || { hub_say "run-agent-job: {prompt} not found" prompt="$PROMPT" >&2; exit 1; }
 if [ -f "$OUT/STOP" ]; then
-  echo "run-agent-job: $NAME 已經自己停止($(head -1 "$OUT/STOP")),略過"
+  hub_say "run-agent-job: {name} has stopped itself ({reason}), skipping" name="$NAME" reason="$(head -1 "$OUT/STOP")"
   exit 0
 fi
 if [ ! -d "$CWD" ]; then
   # 輸入不見要大聲失敗(known-issues.md):例如專案還沒搬到 mini 的 ~/workspace
-  status failed "error=工作目錄 $CWD 不存在" "started_at=$(date -Iseconds)"
-  echo "run-agent-job: 工作目錄 $CWD 不存在" >&2
+  err="$(hub_msg "workdir {dir} does not exist" dir="$CWD")"
+  status failed "error=$err" "started_at=$(date -Iseconds)"
+  echo "run-agent-job: $err" >&2
   exit 1
 fi
 
@@ -76,7 +78,7 @@ os.dup2(os.open(os.devnull, os.O_RDONLY), 0)
 os.environ["RUN_AGENT_JOB_FOREGROUND"] = "1"
 os.execv("/bin/bash", ["bash", *argv])
 PY
-  echo "run-agent-job: $NAME 已在背景開始,結果見 $OUT/status.json"
+  hub_say "run-agent-job: {name} started in the background, the result goes to {status}" name="$NAME" status="$OUT/status.json"
   exit 0
 fi
 
@@ -98,26 +100,35 @@ MCP_ARGS=()
 "$HUB/bin/py" "$HUB/bin/llm.py" run "${AGENT_JOB_POINT:-agent-job}" --prompt-file "$PROMPT" "${MCP_ARGS[@]}" >"$raw" 2>"$raw.err"
 rc=$?
 
-"$HUB/bin/py" - "$raw" "$report" "$NAME" "$CWD" <<'PY' >"$OUT/.parsed" 2>&1
+# the report's footer is written below (owner-facing text, in the UI language); this step leaves its values in .footer
+rm -f "$OUT/.footer"
+"$HUB/bin/py" - "$raw" "$report" "$OUT/.footer" "$(hub_msg "claude printed no JSON")" <<'PY' >"$OUT/.parsed" 2>&1
 import json, sys
-raw, report, name, cwd = sys.argv[1:]
+raw, report, footer, no_json = sys.argv[1:]
 try:
     d = json.loads(open(raw).read())
 except ValueError:
-    print("error=claude 沒有輸出 JSON")
+    print(f"error={no_json}")
     sys.exit(0)
 result = (d.get("result") or "").strip()
 with open(report, "w") as f:
     f.write(result + "\n\n---\n")
-    f.write(f"job: {name} · 工作目錄: {cwd} · session: {d.get('session_id')} · "
-            f"{d.get('num_turns')} turns · {round((d.get('duration_ms') or 0) / 60000, 1)} 分鐘\n")
-    f.write(f"(接著討論:在 mini 上 cd {cwd} && claude --resume {d.get('session_id')})\n")
+with open(footer, "w") as f:
+    f.write(f"{d.get('session_id')}\n{d.get('num_turns')}\n{round((d.get('duration_ms') or 0) / 60000, 1)}\n")
 print(f"session_id={d.get('session_id', '')}")
 print(f"notify={'yes' if result.startswith('🔔') else 'no'}")
 print(f"summary={result.splitlines()[0][:200] if result else ''}")
 if d.get("is_error"):
     print(f"error={d.get('subtype', 'is_error')}")
 PY
+if [ -f "$OUT/.footer" ]; then
+  { read -r sid; read -r turns; read -r minutes; } <"$OUT/.footer"
+  { hub_say "job: {name} · workdir: {cwd} · session: {session} · {turns} turns · {minutes} min" \
+      name="$NAME" cwd="$CWD" session="$sid" turns="$turns" minutes="$minutes"
+    hub_say "(to continue the discussion: on the hub machine, cd {cwd} && claude --resume {session})" cwd="$CWD" session="$sid"
+  } >>"$report"
+  rm -f "$OUT/.footer"
+fi
 
 mapfile_args=()
 while IFS= read -r line; do mapfile_args+=("$line"); done <"$OUT/.parsed"

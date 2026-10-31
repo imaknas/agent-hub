@@ -1,0 +1,10 @@
+{
+ "usage: run-agent-job.sh <name> [workdir] [prompt name]": "用法: run-agent-job.sh <name> [工作目錄] [prompt 名稱]",
+ "run-agent-job: {prompt} not found": "run-agent-job: 找不到 {prompt}",
+ "run-agent-job: {name} has stopped itself ({reason}), skipping": "run-agent-job: {name} 已經自己停止({reason}),略過",
+ "workdir {dir} does not exist": "工作目錄 {dir} 不存在",
+ "run-agent-job: {name} started in the background, the result goes to {status}": "run-agent-job: {name} 已在背景開始,結果見 {status}",
+ "claude printed no JSON": "claude 沒有輸出 JSON",
+ "job: {name} · workdir: {cwd} · session: {session} · {turns} turns · {minutes} min": "job: {name} · 工作目錄: {cwd} · session: {session} · {turns} turns · {minutes} 分鐘",
+ "(to continue the discussion: on the hub machine, cd {cwd} && claude --resume {session})": "(接著討論:在 mini 上 cd {cwd} && claude --resume {session})"
+}
