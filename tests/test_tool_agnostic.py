@@ -24,8 +24,8 @@ PENDING = {"librarian-state", "librarian-todo-format", "librarian-index"}
 # files using the Claude adapter directly (all Claude-only mechanisms, to move into the runtime interface later):
 DIRECT = {
     "bin/lease-relay.py",               # Claude Code's permission relay (--permission-prompt-tool) itself
-    "bin/lease-runner.py",              # long-running session flags, MCP config (into the runtime
-                                        # after layer 1's open_session)
+    # long-running session flags, MCP config (moves into the runtime after layer 1's open_session)
+    "bin/lease-runner.py",
     "bin/render-project-settings.py",   # neutral policy → Claude's settings.local.json
     "bin/merge-hook-settings.py",       # old entry point, hands off to runtime_claude.install_hooks
     "bin/migrate-to-mini.py",           # one-off migration tool run on the laptop

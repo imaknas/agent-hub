@@ -19,8 +19,8 @@ POINTS = yaml.safe_load((ROOT / "contracts" / "llm-points.yaml").read_text())["p
 # points whose flag is added by the calling program, not in the point's declaration → which program (the test
 # confirms that program really adds it)
 ADDED_BY_CALLER = {
-    "agent-job": "bin/run-agent-job.sh",            # exception: a registry job with connectors: true (needs claude.ai
-                                                    # connectors) does not get it
+    # exception: a registry job with connectors: true (needs claude.ai connectors) does not get it
+    "agent-job": "bin/run-agent-job.sh",
     "mailbox-escalation": "bin/run-agent-job.sh",   # mailbox requests also go through run-agent-job.sh
     "lease-session": "bin/lease-runner.py",         # a lease uses only the permission relay given by --mcp-config
     "lease-work": "bin/lease-runner.py",

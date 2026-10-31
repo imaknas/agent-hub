@@ -179,8 +179,8 @@ class Dispatch(unittest.TestCase):
         self.assertEqual(len(self.handled), 1)
 
     def test_hub_letters_are_handled_too(self):
-        # agent-hub's letters used to be left for its dedicated session: with nobody typing, nobody took them
-        # (m10261706)
+        # agent-hub's letters used to be left for its dedicated session: with nobody typing, nobody took
+        # them (m10261706)
         hub = self.m.hubconf.hub_project()
         self.send("m1", hub, "request")
         self.dispatch()
