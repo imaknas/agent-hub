@@ -489,12 +489,22 @@ because reviewers kept finding holes in the existing sandbox. Not converged; bui
   change the stdlib the scheduler, the gate and services run (verified: the platform venv's interpreter is there).
   Closed 11-01 with the shared caches: `policy.write` has no tool cache left; each repo's are in its own git dir.
 - `paths` is not a security field (`PLATFORM_OWNED`), so a `manifest.update` can set `paths.workspace: ~` and the
-  sandbox then writes the whole home folder; `apply-updates` applies it unattended.
+  sandbox then writes the whole home folder; `apply-updates` applies it unattended. Closed 11-01: `paths` is a
+  security field.
 - Session hooks run outside the sandbox and run git in the project's `.git`: `memory-nudge.py`'s `git log` runs a
-  project-named `gpg.program` after every commit a sandboxed session makes (reproduced by the reviewer).
+  project-named `gpg.program` after every commit a sandboxed session makes (reproduced by the reviewer). Closed 11-01
+  for the platform's hooks: their repo work runs as the project (`hub-event as-project`, `project_git.py run-as`); the
+  `rev-parse` before the hand-off still runs as the user (a FIFO there hangs only that project's own hook).
 - `worktrees.auto_prune` deletes paths taken from project-written gitdir files; `propose_apply.py`, `cap-runner.py`
   and `lease-runner.py` write through project-planted symlinks; a FIFO in a repo's config hangs platform git with no
-  timeout; `merge-branch --project X` runs another project's tests.
+  timeout; `merge-branch --project X` runs another project's tests. Closed 11-01: deletion, copy-back and those
+  writes run as the project, every project job has a timeout and an output cap, `--project` must own the repo;
+  `upgrade-idea.py` (which pushed from the sandbox's repo with the user's GitHub credentials) pushes from a bare repo
+  the platform fills from the project's bundle. Still open: the scheduler has no per-job timeout.
+- Open (found 11-01): a sandboxed project's service or command job may write its whole workspace, including the
+  runtime's local settings file (`.claude/settings.local.json`), and `render-project-settings.py` keeps hook entries
+  it didn't write: a job can add a hook that the next session opened there runs as the user. Closing it means the
+  adapters denying writes to the runtime's settings paths inside the workspace (a neutral list from `runtime_ports`).
 
 Earlier, found by rounds 4 and 5, for a separate change rather than a step of this design (which inherits the
 fixes). Closed on 11-01 except the sender, which waits for the owner (`bus-sender.md`):
