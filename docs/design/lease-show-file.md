@@ -31,10 +31,8 @@ The session calls the platform's **"show the user" tool** `show_file(path, summa
   and returns the result (success / the reason it was blocked) to the session. The tool has to be on the auto-allow
   list of the lease judgment points (`llm-points` lease-session/lease-work; **that file currently belongs to another
   session**, see the end).
-- One line added to the system prompt:
-  `要讓 Knas 看專案裡的圖或檔案,用 show_file(專案內的路徑, 一句說明);他在手機上會直接看到。`
-  (zh-Hant prompt text: to let the owner see an image or file in the project, use show_file(path in the project, a
-  one-line note); he sees it directly on his phone.)
+- One line added to the system prompt: "to let the owner see an image or file in the project, use show_file(path in
+  the project, a one-line note); he sees it directly on his phone."
 - Another agent: its implementation connects the same endpoint to its own tool mechanism; the event and the endpoint
   stay the same.
 
