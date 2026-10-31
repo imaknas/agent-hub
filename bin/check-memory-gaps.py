@@ -1,26 +1,30 @@
 #!/bin/sh -c exec${IFS}"${0%/*}/py"${IFS}"$0"${IFS}"$@"
-"""找出「有在對話、但 memory 沒在記」的專案——零 LLM 成本的機械檢查。
+"""Find projects that "are being talked to but whose memory is not being kept" -- a mechanical check at zero LLM
+cost.
 
-memory 筆記靠 agent 自己寫。session 比 onboard 早開(沒讀到說明)、或 agent 忙到
-沒記,memory 就一直空著,librarian 沒東西可整理,也沒有人會發現。曾經有專案
-就是這樣:onboard 後 88 則對話、0 筆 memory。
+Memory notes depend on the agent writing them. If a session was opened before onboarding (so it never read the
+instructions), or the agent was too busy to write, memory stays empty, the librarian has nothing to work with, and
+nobody notices. A project once went exactly like that: 88 messages after onboarding, 0 memory notes.
 
-做法:對每個 onboarded 專案,數最近 WINDOW 小時內使用者在那個資料夾送出的訊息數
-(含開在它底下的 worktree 裡的 session),再數同一段時間 agent 寫進 memory/ 的 commit
-數。訊息數 >= THRESHOLD 而筆記 commit 為 0,就列出來。
+How: for each onboarded project, count the messages the user sent in that folder in the last WINDOW hours (sessions
+in worktrees under it included), then count the commits the agent made to memory/ in the same period. Messages >=
+THRESHOLD with 0 note commits: list it.
 
-筆記 commit 讀 workspace 的 .agent-memory(session 寫完、hook/每小時同步就 commit 在那裡;~/.memory-copies
-要等 librarian 拉),而且不算平台自己的 commit:consolidate 把舊日期檔整理進 reference/、librarian 寫的、
-onboard 的骨架(init:)、同步時的 merge——這些都會動到 memory/,算進去的話 agent 完全沒記也看不出來。
+Note commits are read from the workspace's .agent-memory (that is where they are committed once a session writes
+them, by the hook/the hourly sync; ~/.memory-copies waits for the librarian's pull), and the platform's own commits
+do not count: consolidate folding old date files into reference/, what the librarian writes, the onboarding skeleton
+(init:), merges during sync -- they all touch memory/, and counting them would hide an agent that wrote nothing.
 
-跑在 hub 那台(librarian 之後);transcript 讀執行環境的 transcript_roots(hub 那台本機的,加上遙控那台用
-transcript-backup.sh 備份過來的)。遙控那台的備份連不上的那段時間,那邊的對話要等恢復後的下一次檢查才數得到。
+Runs on the hub machine (after the librarian); transcripts are read from the runtime's transcript_roots (the hub
+machine's own, plus those backed up from the remote machine by transcript-backup.sh). While the remote machine's
+backup cannot connect, conversations there are counted only by the next check after it recovers.
 
-用法:check-memory-gaps.py [--window-hours 72] [--threshold 10] [--apply]
-輸出:有缺口時每個專案一行 markdown,沒有就什麼都不印。
---apply(平台 job agent-hub/memory-gaps,每晚 todo 之後):結果寫進 todo.md 的固定區塊跟今天 digest 的
-  memory-gaps 段落(沒有缺口就拿掉兩邊),只印一行摘要——不管結果都印,「0 個缺口」跟「根本沒跑」才分得出來。
-  todo.md 是 gen-todo.py 整份重生的,所以這個 job 要排在 todo 後面。
+Usage: check-memory-gaps.py [--window-hours 72] [--threshold 10] [--apply]
+Output: one markdown line per project when there are gaps, nothing at all otherwise.
+--apply (platform job agent-hub/memory-gaps, nightly after todo): the result is written into todo.md's fixed block
+  and the memory-gaps section of today's digest (both removed when there are no gaps), and only a one-line summary
+  is printed -- printed whatever the result, so "0 gaps" can be told apart from "did not run at all".
+  todo.md is regenerated as a whole by gen-todo.py, so this job has to be scheduled after todo.
 """
 import argparse
 import datetime
@@ -33,22 +37,24 @@ sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
 import hubconf  # noqa: E402
 import hublib  # noqa: E402
 import i18n  # noqa: E402
-import runtime_ports  # noqa: E402  對話紀錄只透過介面讀(Claude Code 只是一個實作)
+import runtime_ports  # noqa: E402  transcripts are read only through the interface (Claude Code is one implementation)
 
 _ = i18n.domain(__file__)
 
-# 平台自己寫進 memory/ 的 commit(不是 agent 的筆記);merge 另外用 --no-merges 排除
+# commits the platform itself makes to memory/ (not agent notes); merges are excluded separately with --no-merges
 PLATFORM_SUBJECTS = ("^init:", "^consolidate", "^librarian")
 
 
 def human_messages_since(paths: list[str], since: datetime.datetime) -> int:
-    """只算 Knas 實際送出的訊息(2026-10-03 前連其他 session 的訊息、背景通知也算進去)。"""
+    """Count only messages the owner actually sent (before 2026-10-03, messages from other sessions and background
+    notifications were counted too)."""
     rt = runtime_ports.load(ports=("transcripts",))
     return sum(1 for t in rt.turns(paths, since, worktrees=True) if t.role == "human")
 
 
 def note_commits_since(workspace: str, since: datetime.datetime) -> int:
-    """workspace 的 .agent-memory 在 since 之後有幾個 agent 筆記 commit;沒有 .agent-memory 回 -1。"""
+    """How many agent note commits the workspace's .agent-memory has since `since`; -1 when there is no
+    .agent-memory."""
     repo = pathlib.Path(workspace).expanduser() / ".agent-memory"
     if not (repo / ".git").exists():
         return -1
@@ -71,7 +77,7 @@ def main() -> None:
     try:
         runtime_ports.load(ports=("transcripts",))
     except runtime_ports.Unsupported as e:
-        # 這個檢查要的是「有對話」:沒有對話紀錄就明確不檢查(不是「沒有缺口」)
+        # this check needs "there are conversations": without transcripts it explicitly does not check (not "no gaps")
         msg = _("memory gap check skipped: {reason}", reason=e)
         print(msg)
         if args.apply:
@@ -82,7 +88,7 @@ def main() -> None:
     gaps = []
     for name, paths in hublib.project_paths().items():
         if name not in roster or not roster[name].get("workspace"):
-            continue  # 平台自己、沒有 workspace 的沒有 memory
+            continue  # the platform itself and projects without a workspace have no memory
         msgs = human_messages_since(paths, since)
         if msgs < args.threshold:
             continue
@@ -109,7 +115,8 @@ def heading() -> str:
 
 
 def write_todo_block(todo: pathlib.Path, gaps: list[str]) -> None:
-    """todo.md 的 <!-- memory-gaps:begin/end --> 區塊:有缺口就放在檔尾,沒有就拿掉。todo.md 還沒有就不動。"""
+    """todo.md's <!-- memory-gaps:begin/end --> block: put at the end of the file when there are gaps, removed when
+    there are none. Nothing is done when todo.md does not exist yet."""
     if not todo.exists():
         return
     s = re.sub(r"\n*<!-- memory-gaps:begin -->.*?<!-- memory-gaps:end -->\n?", "\n", todo.read_text(), flags=re.S).rstrip() + "\n"

@@ -1,25 +1,34 @@
 #!/bin/sh -c exec${IFS}"${0%/*}/py"${IFS}"$0"${IFS}"$@"
-"""Principal Handoff Acts 0.3 的 registrar:各專案 STATE.md `## 待辦` 裡只有 owner 能做的事 ↔ 匯流排上的 0.3 record
-(規範 acts/SPEC.md §4;每晚 librarian 之後的 job,零 LLM)。取代舊的任務登記。
+"""The Principal Handoff Acts 0.3 registrar: the things in each project's STATE.md `## 待辦` that only the owner can
+do <-> 0.3 records on the bus (spec acts/SPEC.md §4; a nightly job after the librarian, zero LLM). Replaces the old
+task registration.
 
-每個專案(memory 副本的 STATE.md,加上平台自己的 openclaw-migration-status.md),照規範的順序:
-  1. 套用:從 principal 端來、還沒 done 的 settled / reopened(hubbus records --direction in --pending)。這件的結案
-     是 settled → 刪掉帶這個 key 的行(段落空了補「- (無)」);是 reopened → 那一行不在就用 restore_text 加回。
-     note、related 不歸這裡,留給 librarian 用判斷處理。
-  2. 補 key:送過、沒結案、沒撤回、文件裡找不到 key 的件,有一行沒 key 的 owner 行文字跟它最新的 terms 一模一樣
-     (正規化後)→ 蓋回原本的 key(agent 改寫時把行尾拿掉了),不當成新的一件。
-  3. 送出:剩下沒 key 的 owner 行 → key = task-<專案>-<sha1(正規化文字)[:10]>,先送 raised(id r:<key>)、
-     收到 accepted/duplicate 才蓋章;送不出去就不蓋,隔晚再試(同一個 id,重送是 no-op)。
-  4. 修改:帶 key 的行文字跟最新的 terms 不一樣 → amended(id a:<key>:<rev>,terms_rev +1,supersedes 現在的需求紀錄)。
-  5. 對帳:送過、沒結案、沒撤回、還是找不到 key 的件:有很像的行 → 不送、警告一次;否則送一個 claimed
-     (outcome done,evidence.basis 是 review-log 裡刪掉那一行的理由;id c:<key>:r<重開次數>)。撤回的件刪了行不 claim。
-  6. 有改就 commit + push(memory 副本走 git-safe-push;平台的檔走 commit-hub-files.sh),成功之後才把套用過的
-     record `hubbus done`;失敗就留到隔晚。
+For each project (the STATE.md of its memory copy, plus the platform's own openclaw-migration-status.md), in the
+spec's order:
+  1. Apply: settled / reopened records from the principal side not yet done (hubbus records --direction in --pending).
+     The item's closure is settled -> delete the line carrying this key (an emptied section gets "- (無)"); reopened
+     -> if the line is not there, add it back with restore_text. note and related do not belong here; they are left
+     to the librarian's judgment.
+  2. Restore keys: for an item sent, not closed, not withdrawn and whose key is not in the file, if a keyless owner
+     line's text is identical to its latest terms (after normalisation) -> stamp the original key back (an agent
+     dropped the end of the line while rewriting it) rather than treat it as a new item.
+  3. Send: remaining keyless owner lines -> key = task-<project>-<sha1(normalised text)[:10]>; first send raised
+     (id r:<key>), and stamp only after accepted/duplicate comes back; if it cannot be sent, no stamp, retry the next
+     night (same id; resending is a no-op).
+  4. Amend: a keyed line whose text differs from the latest terms -> amended (id a:<key>:<rev>, terms_rev +1,
+     supersedes the current requirement record).
+  5. Reconcile: items sent, not closed, not withdrawn and whose key still cannot be found: a very similar line exists
+     -> send nothing, warn once; otherwise send a claimed (outcome done, evidence.basis is the reason from the
+     review-log entry that deleted the line; id c:<key>:r<times reopened>). A withdrawn item whose line was deleted is
+     not claimed.
+  6. If anything changed, commit + push (memory copies through git-safe-push; the platform's file through
+     commit-hub-files.sh), and only after that succeeds `hubbus done` the applied records; on failure, wait for the
+     next night.
 
-過渡期(v1 還沒退役):匯流排上 v1 寄過的 task 信跟個人助理的 v1 轉交也算進來(v1_compat),那些 key 在有 record 之前
-就存在。v1 退役時連同 v1_compat 一起刪掉。
+Transition (v1 not yet retired): task letters v1 sent on the bus and the personal assistant's v1 handoffs count too
+(v1_compat); those keys existed before there were records. When v1 is retired, delete v1_compat along with it.
 
-用法:registrar.py [--dry-run]
+Usage: registrar.py [--dry-run]
 """
 from __future__ import annotations
 
@@ -43,9 +52,10 @@ _ = i18n.domain(__file__)
 HUB = hubconf.ROOT
 COPIES = hubconf.p("memory_copies")
 HUBBUS = [sys.executable, str(HUB / "bin" / "hubbus")]
-WARNED = hubconf.STATE / "registrar-warned.json"   # 警告過的 key(很像的行):只警告一次
+WARNED = hubconf.STATE / "registrar-warned.json"   # keys already warned about (very similar lines): warn only once
 REVIEW_LOG = hubconf.data_file("review-log.md")
-SIMILAR = 0.6   # 對帳:跟某一行這麼像就當成改寫(實作自己定,規範 §4 第 5 步)
+SIMILAR = 0.6   # reconcile: this similar to some line counts as a rewrite (left to the
+                # implementation, spec §4 step 5)
 EXT = "acts/0.3"
 TAG = hubconf.owner_tag()
 REGISTRAR = hubconf.party("registrar")
@@ -54,7 +64,8 @@ ITEM = re.compile(rf"^- \[ \] 〔{re.escape(TAG)}〕\s*(.+)$")
 GROUP = re.compile(r"^#{3,4}\s*〔([^〕]+)〕\s*$")
 BARE = re.compile(r"^- \[ \] (?!〔)(.+)$")
 LABELLED = re.compile(r"^- \[ \] 〔[^〕]+〕\s*(.+)$")
-# zh-hant profile 的 marker_pattern:半形/全形括號跟冒號、「等」後面有沒有空格都認,要在行尾
+# the zh-hant profile's marker_pattern: half-/full-width parentheses and colons, with or without a space after 「等」;
+# must be at the end of the line
 KEY = re.compile(rf"[(（]等 ?{re.escape(TAG)}[:：]\s*([^()（）]+?)\s*[)）]\s*$")
 DRY = "--dry-run" in sys.argv
 
@@ -83,7 +94,7 @@ def hubbus(*args: str, stdin: str | None = None) -> subprocess.CompletedProcess:
     return subprocess.run([*HUBBUS, *args], input=stdin, capture_output=True, text=True, timeout=60)
 
 
-# --- 文件 ---
+# --- the file ---
 
 def todo_bounds(lines: list[str]) -> tuple[int, int] | None:
     start = next((i for i, l in enumerate(lines) if l.strip() == "## 待辦"), None)
@@ -94,7 +105,7 @@ def todo_bounds(lines: list[str]) -> tuple[int, int] | None:
 
 
 def owner_lines(lines: list[str]) -> list[dict]:
-    """段落裡 owner 的行:{i, text(去掉 key 標記), key}。"""
+    """The owner's lines in the section: {i, text (key marker removed), key}."""
     b, out, group = todo_bounds(lines), [], None
     for i in range(*(b or (0, 0))):
         l = lines[i].rstrip()
@@ -110,7 +121,7 @@ def owner_lines(lines: list[str]) -> list[dict]:
 
 
 def line_texts(lines: list[str]) -> list[str]:
-    """段落裡所有待辦行的文字(去掉標籤跟 key 標記),給對帳比像不像。"""
+    """The text of every to-do line in the section (tags and key markers removed), for reconciling by similarity."""
     b, out = todo_bounds(lines), []
     for i in range(*(b or (0, 0))):
         l = lines[i].rstrip()
@@ -147,7 +158,8 @@ def readd(lines: list[str], key: str, text: str) -> bool:
 
 
 def apply(lines: list[str], rec: dict) -> bool:
-    """第 1 步,一筆 record:只有 principal 端的 settled(刪掉)跟帶 restore_text 的 reopened(加回)會改文件。"""
+    """Step 1, one record: only the principal side's settled (delete) and reopened with restore_text (add back) change
+    the file."""
     if rec.get("origin") != "principal":
         return False
     if rec.get("type") == "settled":
@@ -158,8 +170,8 @@ def apply(lines: list[str], rec: dict) -> bool:
 
 
 def relink(lines: list[str], vanished: dict[str, str]) -> list[str]:
-    """第 2 步。vanished:送過、沒結案、沒撤回、文件裡找不到的 key → 最新的 terms 文字。文字一模一樣(正規化後)的
-    沒 key owner 行蓋回那個 key;回傳補回的 key。"""
+    """Step 2. vanished: keys sent, not closed, not withdrawn and not found in the file -> latest terms text. A keyless
+    owner line with identical text (after normalisation) gets that key stamped back; returns the restored keys."""
     by_text, done = {norm(t): k for k, t in sorted(vanished.items())}, []
     for t in owner_lines(lines):
         k = by_text.pop(norm(t["text"]), None) if t["key"] is None else None
@@ -170,19 +182,19 @@ def relink(lines: list[str], vanished: dict[str, str]) -> list[str]:
 
 
 def candidates(lines: list[str], project: str) -> list[tuple[int, str, str]]:
-    """第 3 步:沒 key 的 owner 行 → (行號, key, 文字)。蓋章(stamp)要等 raised 送出去之後。"""
+    """Step 3: keyless owner lines -> (line number, key, text). Stamping waits until raised has been sent."""
     return [(t["i"], task_key(project, t["text"]), t["text"]) for t in owner_lines(lines) if t["key"] is None]
 
 
 def amendments(lines: list[str], latest: dict[str, str]) -> list[dict]:
-    """第 4 步。latest:還開著的 key → 最新的 terms 文字。文字不一樣的帶 key 行:[{key, text}]。"""
+    """Step 4. latest: keys still open -> latest terms text. Keyed lines whose text differs: [{key, text}]."""
     return [{"key": t["key"], "text": t["text"]} for t in owner_lines(lines)
             if t["key"] in latest and norm(t["text"]) != norm(latest[t["key"]])]
 
 
 def reconcile(lines: list[str], open_keys: dict[str, str]) -> list[dict]:
-    """第 5 步。open_keys:送過、沒結案、沒撤回的 key → 最新的 terms 文字。文件裡找不到的:有很像的行 → warn,
-    否則 claim。"""
+    """Step 5. open_keys: keys sent, not closed, not withdrawn -> latest terms text. Those not found in the file: a very
+    similar line exists -> warn, otherwise claim."""
     present = {t["key"] for t in owner_lines(lines) if t["key"]}
     texts, out = line_texts(lines), []
     for k, text in sorted(open_keys.items()):
@@ -194,14 +206,14 @@ def reconcile(lines: list[str], open_keys: dict[str, str]) -> list[dict]:
     return out
 
 
-# --- 匯流排上的紀錄 ---
+# --- records on the bus ---
 
 def _when(r: dict) -> tuple:
     return (r.get("ts", ""), r.get("id", ""))
 
 
 def current(recs: list[dict]) -> dict | None:
-    """core §6:沒被別筆 supersedes 的裡面最新的(ts 一樣比 id)。"""
+    """core §6: the newest of those no other record supersedes (equal ts: compare id)."""
     if not recs:
         return None
     replaced = {s for r in recs for s in r.get("supersedes", [])}
@@ -210,7 +222,7 @@ def current(recs: list[dict]) -> dict | None:
 
 
 class Ledger:
-    """一個專案在匯流排上的 Acts 紀錄,照 key 整理。"""
+    """One project's Acts records on the bus, grouped by key."""
 
     def __init__(self, project: str):
         r = hubbus("records", "--project", project, "--ext", EXT)
@@ -231,7 +243,7 @@ class Ledger:
         self.v1_posted, self.v1_closed, self.v1_pending, self.v1_claimed = v1_compat(project)
 
     def terms(self, key: str) -> tuple[str | None, int, str | None]:
-        """(最新的 terms 文字, 最新的 terms_rev, 現在的需求紀錄 id)。"""
+        """(latest terms text, latest terms_rev, current requirement record id)."""
         recs = self.need.get(key, [])
         with_terms = [r for r in recs if r["type"] in ("raised", "amended")]
         latest = max(with_terms, key=lambda r: (r.get("terms_rev", 0), *_when(r))) if with_terms else None
@@ -259,12 +271,14 @@ class Ledger:
 
 
 def v1_compat(project: str) -> tuple[dict, set, list, set]:
-    """過渡期:v1 寄過的 task(key → 文字)、v1 收過結案轉交的 key、還沒套用的 v1 帶 key 轉交、v1 已經寄過推斷結案
-    (id done-<key>)的 key——換成 v2 那晚不要用新的 id 再寄一次。v1 退役時刪掉。"""
+    """Transition: tasks v1 sent (key -> text), keys for which v1 received a closing handoff, v1 keyed handoffs not yet
+    applied, and keys for which v1 already sent an inferred closure (id done-<key>) -- so the night v2 takes over does
+    not send them again under new ids. Delete when v1 is retired."""
     db = hubconf.bus_db()
     if not db.exists():
         return {}, set(), [], set()
-    names = [project, *hubconf.former_names(project)]   # 改名前寄的 v1 信也算(例:idea-1 → garden-app)
+    # v1 letters sent before a rename count too (e.g. idea-1 -> garden-app)
+    names = [project, *hubconf.former_names(project)]
     marks, pm = ",".join("?" * len(OWNERS)), ",".join("?" * len(names))
     c = sqlite3.connect(db, timeout=30)
     posted = {r[0]: json.loads(r[1]).get("text", "") for r in c.execute(
@@ -289,7 +303,7 @@ def v1_compat(project: str) -> tuple[dict, set, list, set]:
 
 
 def publish(recs: list[dict]) -> dict[str, str]:
-    """送出,回傳 {record id: status}。"""
+    """Send; returns {record id: status}."""
     if not recs:
         return {}
     if DRY:
@@ -298,7 +312,7 @@ def publish(recs: list[dict]) -> dict[str, str]:
         return {rec["id"]: "dry-run" for rec in recs}
     r = hubbus("record-publish", "--json", "-", stdin=json.dumps(recs, ensure_ascii=False))
     try:
-        res = {x["id"]: x["status"] for x in json.loads(r.stdout or "[]")}   # 每筆 {id: record id, event, status}
+        res = {x["id"]: x["status"] for x in json.loads(r.stdout or "[]")}   # each {id: record id, event, status}
     except ValueError:
         res = {}
     for rec in recs:
@@ -315,7 +329,7 @@ def record(project: str, type_: str, key: str, rid: str, **kw) -> dict:
 
 
 def removal_reason(key: str) -> str | None:
-    """review-log 裡刪掉帶這個 key 那一行的那一次:「<標題>:<理由>」(最後一次)。"""
+    """The review-log entry that deleted the line carrying this key: "<heading>: <reason>" (the last such entry)."""
     if not REVIEW_LOG.exists():
         return None
     head = why = found = None
@@ -330,7 +344,7 @@ def removal_reason(key: str) -> str | None:
 
 
 def targets() -> list[tuple[str, pathlib.Path, str]]:
-    """(專案, 檔案, 怎麼 commit)"""
+    """(project, file, how to commit)"""
     out = [(d.name, d / "STATE.md", "copy") for d in sorted(COPIES.iterdir())
            if (d / ".git").exists() and (d / "STATE.md").exists()]
     mig = hubconf.data_file("openclaw-migration-status.md")
@@ -353,13 +367,13 @@ def commit(project: str, path: pathlib.Path, how: str, msg: str) -> bool:
     return r.returncode == 0
 
 
-# --- 一個專案 ---
+# --- one project ---
 
 def run_project(project: str, path: pathlib.Path, how: str, warned: set[str]) -> tuple[bool, int]:
-    """回傳 (全部順利, 送出的 record 數)。"""
+    """Returns (all went well, number of records sent)."""
     led, lines = Ledger(project), path.read_text().splitlines()
     changed, ok, sent = False, True, 0
-    # 1. 套用
+    # 1. apply
     applied = []
     for key in sorted({e["record"]["key"] for e in led.pending}):
         cur = current(led.settle[key])
@@ -373,12 +387,12 @@ def run_project(project: str, path: pathlib.Path, how: str, warned: set[str]) ->
         changed |= strike(lines, h["reply_to"]) if h["effect"] != "reopened" else \
             readd(lines, h["reply_to"], h.get("item") or "(重開的任務)")
         applied.append(h["id"])
-    # 2. 補 key
+    # 2. restore keys
     present = {t["key"] for t in owner_lines(lines) if t["key"]}
     for k in relink(lines, {k: led.terms(k)[0] or "" for k in led.open() if k not in present}):
         changed = True
         log(_("{project}: restored key {key} (the key at the end of the line had been removed)", project=project, key=k))
-    # 3. 送出
+    # 3. send
     fresh = []
     for i, k, text in candidates(lines, project):
         if led.settled(k):
@@ -386,7 +400,7 @@ def run_project(project: str, path: pathlib.Path, how: str, warned: set[str]) ->
                   "a duplicate (acts spec §11)", project=project, key=k))
         fresh.append((i, k, record(project, "raised", k, f"r:{k}", terms={"text": norm(text)}, terms_rev=1)))
     for t in owner_lines(lines):
-        if t["key"] and t["key"] not in led.known():   # 過渡期:有 key 但匯流排上沒紀錄(很早以前寄的)
+        if t["key"] and t["key"] not in led.known():   # transition: has a key but no record on the bus (sent long ago)
             fresh.append((None, t["key"], record(project, "raised", t["key"], f"r:{t['key']}",
                                                  terms={"text": norm(t["text"])}, terms_rev=1, context="migration-v1")))
     res = publish([r for _i, _k, r in fresh])
@@ -398,7 +412,7 @@ def run_project(project: str, path: pathlib.Path, how: str, warned: set[str]) ->
                 changed = True
         else:
             ok = False
-    # 4. 修改
+    # 4. amend
     amends = []
     for a in amendments(lines, {k: led.terms(k)[0] for k in led.open() if k in led.need}):
         k, (_text, rev, cur) = a["key"], led.terms(a["key"])
@@ -407,7 +421,7 @@ def run_project(project: str, path: pathlib.Path, how: str, warned: set[str]) ->
     res = publish(amends)
     sent += sum(1 for r in amends if res.get(r["id"]) == "accepted")
     ok &= all(res.get(r["id"]) in ("accepted", "duplicate", "dry-run") for r in amends)
-    # 5. 對帳
+    # 5. reconcile
     claims = []
     for x in reconcile(lines, {k: led.terms(k)[0] or "" for k in led.open() if k not in warned and k not in led.v1_claimed}):
         k = x["key"]
@@ -424,7 +438,7 @@ def run_project(project: str, path: pathlib.Path, how: str, warned: set[str]) ->
     res = publish(claims)
     sent += sum(1 for r in claims if res.get(r["id"]) == "accepted")
     ok &= all(res.get(r["id"]) in ("accepted", "duplicate", "dry-run") for r in claims)
-    # 6. 寫檔、commit,之後才 done
+    # 6. write the file, commit, only then done
     if DRY:
         return ok, sent
     if changed:

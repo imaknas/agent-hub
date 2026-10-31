@@ -1,20 +1,27 @@
 #!/bin/sh -c exec${IFS}"${0%/*}/py"${IFS}"$0"${IFS}"$@"
-"""圖書館員:每晚讀各專案 memory/ 的新增內容,視情況更新 STATE.md,並寫今天 digest 的專案摘要段落、請模型標出
-專案之間的關聯(index.md)。平台 job agent-hub/librarian(排在 consolidate 之後;後面的機械步驟——助理的任務登錄、
-reconcile-questions、todo、memory-gaps、librarian-publish——是各自的 job,不在這支裡)。
+"""The librarian: every night it reads what is new in each project's memory/, updates STATE.md where needed, writes the
+project-summary section of today's digest, and asks the model to mark the relations between projects (index.md).
+Platform job agent-hub/librarian (runs after consolidate; the mechanical steps after it -- the assistant's task
+registry, reconcile-questions, todo, memory-gaps, librarian-publish -- are jobs of their own, not in this script).
 
-10-27 從 librarian.sh 改寫成 Python(行為一樣,在隔離環境用替身 llm.py 逐位元組比對過 prompt、commit、review-log、
-digest、checkpoint):路徑、名字都經過 hubconf,不用在 shell 裡各自推;LLM 輸出的 JSON 直接讀,不用 jq。
+10-27: rewritten from librarian.sh in Python (same behaviour; prompt, commit, review-log, digest and checkpoint were
+compared byte for byte in an isolated environment with a stand-in llm.py): paths and names all go through hubconf
+instead of each being worked out in shell; the LLM's JSON output is read directly, no jq.
 
-robust 化的決定(沿用):
-1. 單一專案的 STATE.md 判斷用 haiku(量大、任務單純);跨專案關聯用 sonnet。模型、權限、工具、輸出 schema 宣告在
-   contracts/llm-points.yaml(判斷點 librarian-state、librarian-todo-format、librarian-index),hub.json llm.points 可覆寫。
-2. 用「實際 git 狀態」而不是模型自報的 state_updated 決定要不要 commit,兩者不一致時記警告。
-3. 每次真的動到 STATE.md,都寫一筆到 review-log.md(連 diff 一起),給人事後抽查,不做阻斷式審批。
-4. push 都經過 git-safe-push.sh(遇到分岔自動 pull 重試;真的內容衝突才失敗讓人看)。
-5. 模型只准動 ./STATE.md(權限規則機械限制);動了別的檔案就搬到隔離區、checkpoint 不推進(第二道防線)。
+Robustness decisions (carried over):
+1. The per-project STATE.md judgment uses haiku (high volume, simple task); cross-project relations use sonnet. Model,
+   permissions, tools and output schema are declared in contracts/llm-points.yaml (judgment points librarian-state,
+   librarian-todo-format, librarian-index); hub.json llm.points can override them.
+2. Whether to commit is decided by the actual git state, not the state_updated the model reports; when the two
+   disagree a warning is logged.
+3. Every real change to STATE.md writes an entry (diff included) to review-log.md for a person to spot-check later;
+   no blocking approval.
+4. Every push goes through git-safe-push.sh (on divergence it pulls and retries; only a real content conflict fails
+   and is left for a person).
+5. The model may touch only ./STATE.md (enforced by permission rules); if it touches other files they are moved to
+   quarantine and the checkpoint does not advance (second line of defence).
 
-用法:librarian.py(log 寫在 .logs/librarian-<日期>.log;在終端機跑時也印到螢幕)
+Usage: librarian.py (log written to .logs/librarian-<date>.log; also printed to the screen when run in a terminal)
 """
 from __future__ import annotations
 
@@ -42,30 +49,36 @@ REVIEW_LOG = hubconf.data_file("review-log.md")
 SAFE_PUSH = HUB / "bin" / "git-safe-push.sh"
 PY = str(HUB / "bin" / "py")
 MAX_DIFF_CHARS = 60000
-# 帶任務 key 的轉交不給模型,之後的 assistant 模組任務登錄 job 照 key 機械套用
+# Handoffs carrying a task key are not given to the model; the assistant module's task-registry job later applies
+# them by key
 KEYED_EFFECTS = ("done", "dropped", "already_done", "reopened")
 
 TODAY = datetime.date.today().isoformat()
 LOG = LOG_DIR / f"librarian-{TODAY}.log"
-OWNER = hubconf.get("owner.tag") or "owner"            # prompt 裡對人、對助理的稱呼
+OWNER = hubconf.get("owner.tag") or "owner"            # how the prompt names the owner and the assistant
 ASSISTANT = hubconf.get("assistant.name") or "個人助理"
-# 影子模式(docs/design/llm-providers.md 步驟 4):completion 版(librarian-state-edits、librarian-index-edits)每晚跟現在的
-# agent 版並跑,只把提議跟實際結果的比對記在 .state/librarian-shadow/,不寫任何真的檔案。比對夠好才切換,切換後拿掉這段。
+# Shadow mode (docs/design/llm-providers.md step 4): the completion version (librarian-state-edits,
+# librarian-index-edits) runs every night alongside today's agent version; only the comparison of its proposal with
+# the actual result is recorded in .state/librarian-shadow/, no real file is written. Switch over once the comparison
+# is good enough, then remove this.
 SHADOW = True
 SHADOW_DIR = STATE_DIR / "librarian-shadow"
-KEY_MARK = re.compile(rf"[(（]等 ?{re.escape(OWNER)}[:：]\s*[^()（）\n]+?\s*[)）]")   # registrar 的 key 標記(不帶行尾錨點)
+# registrar's key marker (without the end-of-line anchor)
+KEY_MARK = re.compile(rf"[(（]等 ?{re.escape(OWNER)}[:：]\s*[^()（）\n]+?\s*[)）]")
 total_cost = 0.0
-cost_added = False   # shell 版沒有任何成本時印 $0,有才印 %.6f
+cost_added = False   # the shell version printed $0 when there was no cost at all, %.6f only when there was
 
 
 def used_model(obj) -> str:
-    """這次呼叫實際用的模型:llm.py 回報的 llm_model(模型只在 llm.model_for 算,這裡不另外猜)。"""
+    """The model this call actually used: the llm_model llm.py reports (the model is computed only in llm.model_for; no
+    guessing here)."""
     m = (obj or {}).get("llm_model")
     return m if isinstance(m, str) and m else _("tool default")
 
 
 def log(msg: str) -> None:
-    """只寫進 LOG;手動在終端機跑時才另外印。排程器把 stdout 導進同一個 log,一律印的話每行會重複兩次。"""
+    """Write to LOG only; print as well only when run by hand in a terminal. The scheduler sends stdout into the same
+    log, so always printing would write every line twice."""
     line = f"[{datetime.datetime.now():%H:%M:%S}] {msg}"
     with LOG.open("a") as f:
         f.write(line + "\n")
@@ -74,7 +87,8 @@ def log(msg: str) -> None:
 
 
 def run(cmd: list, cwd=None, stdin: str | None = None, to_log: bool = False) -> subprocess.CompletedProcess:
-    """執行外部指令;to_log=True 時 stdout 跟 stderr 都附加到 LOG(跟 shell 版的 >>"$LOG" 2>&1 一樣)。"""
+    """Run an external command; with to_log=True both stdout and stderr are appended to LOG (like the shell version's
+    >>"$LOG" 2>&1)."""
     if to_log:
         with LOG.open("a") as f:
             return subprocess.run(cmd, cwd=cwd, input=stdin, text=True, stdout=f, stderr=f)
@@ -82,7 +96,7 @@ def run(cmd: list, cwd=None, stdin: str | None = None, to_log: bool = False) -> 
 
 
 def out(cmd: list, cwd=None) -> str:
-    """指令的 stdout,去掉結尾的換行(跟 shell 的 $(…) 一樣)。"""
+    """The command's stdout without the trailing newline (like shell's $(…))."""
     return run(cmd, cwd=cwd).stdout.rstrip("\n")
 
 
@@ -91,7 +105,8 @@ def git(repo, *args) -> str:
 
 
 def llm(point: str, prompt: str, cwd) -> tuple[int, dict | None, str]:
-    """跑一個判斷點(bin/llm.py run <point>,prompt 從 stdin);stderr 附加到 LOG。回傳 (exit, 解析過的 JSON, 原文)。"""
+    """Run a judgment point (bin/llm.py run <point>, prompt on stdin); stderr is appended to LOG. Returns
+    (exit, parsed JSON, raw text)."""
     with LOG.open("a") as f:
         r = subprocess.run([PY, str(HUB / "bin" / "llm.py"), "run", point], cwd=cwd, input=prompt, text=True,
                            stdout=subprocess.PIPE, stderr=f)
@@ -104,7 +119,7 @@ def llm(point: str, prompt: str, cwd) -> tuple[int, dict | None, str]:
 
 
 def add_cost(obj: dict | None) -> str:
-    """累計成本;回傳給 log 用的字串(沒有成本就是空字串)。"""
+    """Add up the cost; returns the string for the log (empty when there is no cost)."""
     global total_cost, cost_added
     c = (obj or {}).get("total_cost_usd")
     if isinstance(c, (int, float)) and not isinstance(c, bool) and c >= 0:
@@ -115,19 +130,19 @@ def add_cost(obj: dict | None) -> str:
 
 
 def jstr(v) -> str:
-    """jq 的 \\(…) 字串插值:null → "null",字串原樣,其他是 JSON。"""
+    """jq's \\(…) string interpolation: null -> "null", strings as they are, anything else as JSON."""
     if v is None:
         return "null"
     return v if isinstance(v, str) else json.dumps(v, ensure_ascii=False)
 
 
 def present(v) -> bool:
-    """jq 的真假:只有 null 跟 false 是假(空字串、0 都算有)。"""
+    """jq truthiness: only null and false are false (an empty string or 0 counts as present)."""
     return v is not None and v is not False
 
 
 def jq_bool(v) -> str:
-    """jq -r 印一個值:true/false/null,字串原樣。"""
+    """How jq -r prints a value: true/false/null, strings as they are."""
     if v is None:
         return "null"
     if isinstance(v, bool):
@@ -136,16 +151,18 @@ def jq_bool(v) -> str:
 
 
 def head_spaced(text: str, n: int) -> str:
-    """`echo "$x" | head -n | tr '\\n' ' '`:前 n 行,每行後面接一個空白。"""
+    """`echo "$x" | head -n | tr '\\n' ' '`: the first n lines, each followed by a space."""
     return "".join(line + " " for line in text.split("\n")[:n])
 
 
-# ---------- 轉交 ----------
+# ---------- handoffs ----------
 
 def load_handoffs() -> list[dict]:
-    """助理的轉交(owner 告訴個人助理、跟某個專案有關的事實):hubbus-bridge 每 15 分鐘收進各專案信箱,這裡每晚把還沒
-    結案的直接當成這次 STATE.md 呼叫的額外輸入(不寫成流水筆記;改了什麼跟理由留在 review-log.md)。這個專案的結果
-    可信(checkpoint 會推進)才 hubbus done,bridge 再回報助理結案;不可信就留到隔晚。"""
+    """The assistant's handoffs (facts about a project that the owner told the personal assistant): hubbus-bridge puts
+    them into each project's mailbox every 15 minutes; every night the ones not yet closed are used directly as extra
+    input to this STATE.md call (not written as running notes; what changed and why stays in review-log.md). Only when
+    this project's result is trustworthy (the checkpoint advances) does it hubbus done them, and the bridge reports the
+    closure to the assistant; otherwise they wait for the next night."""
     r = run([PY, str(HUB / "bin" / "hubbus"), "open-handoffs"])
     if r.stderr:
         with LOG.open("a") as f:
@@ -166,15 +183,16 @@ def load_handoffs() -> list[dict]:
 
 
 def load_records(proj: str) -> list[dict]:
-    """v2(Principal Handoff 0.3):principal 端送來、還沒 done 的 record 變成跟轉交一樣的輸入——note、Decisions 的
-    settled(答案或「不用回答」)、same_as。Acts 的 settled/reopened 由 registrar 機械套用,這裡不碰。"""
+    """v2 (Principal Handoff 0.3): records sent by the principal side and not yet done become the same kind of input as
+    handoffs -- note, Decisions' settled (an answer or "no answer needed"), same_as. Acts' settled/reopened are applied
+    mechanically by registrar; not touched here."""
     r = run([PY, str(HUB / "bin" / "hubbus"), "records", "--project", proj])
     try:
         events = json.loads(r.stdout) if r.returncode == 0 else []
     except ValueError:
         events = []
     asked = {}
-    for e in events:   # 舊到新:同一個 key 最後的 terms 就是現在問的
+    for e in events:   # oldest to newest: a key's last terms are what is being asked now
         rec = e.get("record") or {}
         if e.get("direction") == "out" and rec.get("type") in ("raised", "amended"):
             asked[rec.get("key")] = (rec.get("terms") or {}).get("text")
@@ -202,7 +220,7 @@ def load_records(proj: str) -> list[dict]:
 
 
 def authority_text(rec: dict) -> str | None:
-    """結案記的決定者跟授權種類(規範 core §5),用人話寫給模型看。"""
+    """Who decided a closure and with what kind of authority (spec core §5), in plain words for the model."""
     a = rec.get("authority") or {}
     basis = (rec.get("evidence") or {}).get("basis")
     return {"principal": f"{OWNER} 本人決定的", "confirmed": f"{OWNER} 確認了{ASSISTANT}的提議",
@@ -300,10 +318,11 @@ def index_prompt() -> str:
 不要編輯那個區塊(改了也會被覆蓋);你的註記寫在區塊外。"""
 
 
-# ---------- 影子模式:completion 版 ----------
+# ---------- shadow mode: the completion version ----------
 
 def _state_rules(proj: str) -> str:
-    """agent 版 prompt 的「規則:」那段原文(同一份規則,不另寫一份);去掉只對有工具的 agent 才有意義的最後一條。"""
+    """The verbatim 「規則:」 (rules) section of the agent version's prompt (the same rules, not a second copy), without
+    the last rule, which only means something to an agent with tools."""
     rules = state_prompt(proj, "", "", "").split("\n規則:\n", 1)[1]
     return rules.rsplit("\n- 除了 ./STATE.md", 1)[0]
 
@@ -368,7 +387,8 @@ def _shadow_call(point: str, prompt: str) -> tuple[dict | None, dict]:
 
 def shadow_state(proj: str, d: pathlib.Path, before: str, after: str, agent_changed: bool,
                  memory_section: str, h_note: str, d_note: str) -> None:
-    """completion 版對同一份輸入的提議,跟 agent 版實際寫出的 STATE.md 比。只記錄,不寫任何真的檔案。"""
+    """Compare the completion version's proposal for the same input with the STATE.md the agent version actually wrote.
+    Records only; writes no real file."""
     if not SHADOW:
         return
     try:
@@ -402,7 +422,7 @@ def shadow_state(proj: str, d: pathlib.Path, before: str, after: str, agent_chan
             _shadow_write(rec)
         log(shadow_line(proj, shadow_changed, agent_changed, rec)
             + (_(", marker problems: {n}", n=len(rec["marker_problems"])) if rec.get("marker_problems") else ""))
-    except Exception as e:   # 影子壞了不影響真的流程
+    except Exception as e:   # a broken shadow does not affect the real run
         log(_("{project}: shadow mode failed: {error_type}: {error}", project=proj, error_type=type(e).__name__, error=e))
 
 
@@ -540,11 +560,12 @@ def record_outcome(case: pathlib.Path | None, outcome: dict, files: dict[str, st
         log(f"eval outcome not recorded ({case.name}): {type(e).__name__}: {e}")
 
 
-# ---------- 一個專案 ----------
+# ---------- one project ----------
 
 def repair_state_todo(proj: str, d: pathlib.Path) -> None:
-    """待辦段落格式不對(haiku 不一定每次照格式寫,gen-todo 就收不到):請模型只修格式、內容不動,修完再驗一次;
-    還是不對就記下來,gen-todo 會在 todo.md 檔尾列出。"""
+    """The to-do section is malformed (haiku does not always follow the format, and then gen-todo cannot collect it):
+    ask the model to fix only the format, content unchanged, and check again afterwards; if it is still wrong, log it
+    and gen-todo lists it at the end of todo.md."""
     check = [PY, str(HUB / "bin" / "check-state-todo.py"), str(d / "STATE.md")]
     r = run(check)
     if r.returncode == 0:
@@ -563,8 +584,9 @@ def repair_state_todo(proj: str, d: pathlib.Path) -> None:
 
 
 def quarantine_stray(proj: str, d: pathlib.Path) -> bool:
-    """模型只准動 ./STATE.md:多出來的(2026-09-26 有 5 個專案寫成 memory/STATE.md)搬到隔離區並記錄,不讓下一次
-    呼叫把它們當成真的內容讀進去。被追蹤的檔案被改或刪:留一份改過的當證據,再還原。"""
+    """The model may touch only ./STATE.md: extra files (on 2026-09-26 five projects wrote memory/STATE.md) are moved
+    to quarantine and logged, so the next call does not read them as real content. A tracked file that was changed or
+    deleted: keep a copy of the changed one as evidence, then restore it."""
     stray = []
     for line in git(d, "status", "--porcelain", "--untracked-files=all").split("\n"):
         parts = line.split()
@@ -587,7 +609,8 @@ def quarantine_stray(proj: str, d: pathlib.Path) -> bool:
 
 
 def dangling_refs(d: pathlib.Path) -> str:
-    """STATE.md 裡提到的 memory/ 路徑(可含 *)現在還存不存在;回傳 shell 版的格式(每個前面一個空白)。"""
+    """Whether the memory/ paths STATE.md mentions (may contain *) still exist; returns the shell version's format
+    (each preceded by a space)."""
     st = d / "STATE.md"
     refs = sorted({r for r in re.findall(r"memory/[A-Za-z0-9._*/-]+\.md", st.read_text(errors="replace"))
                    if "YYYY" not in r}) if st.exists() else []
@@ -598,7 +621,8 @@ def memory_input(d: pathlib.Path, rng: str, changed: str) -> tuple[str, str, boo
     """The prompt's memory section for commits `rng` (changed = the memory files they touch): (section, diff, truncated)."""
     if not changed:
         return memory_text("", "", False), "", False
-    # diff 由腳本直接給:模型沒有 Bash,自己跑不了 git log,也讀不到已經被 git rm 的檔案。太大就截斷,模型再用 Read 補
+    # The script supplies the diff: the model has no Bash, cannot run git log itself and cannot read files already
+    # git rm'd. Too large: truncate it, and the model fills in with Read
     diff = git(d, "log", "-p", "--reverse", "--format==== commit %h %ad %s", "--date=short", rng, "--", "memory/")
     truncated = len(diff) > MAX_DIFF_CHARS
     return memory_text(changed, diff[:MAX_DIFF_CHARS], truncated), diff[:MAX_DIFF_CHARS], truncated
@@ -656,15 +680,17 @@ def process(proj: str, d: pathlib.Path, handoffs: list[dict], digest: list[str])
     d_note = dangling_note(dangling)
 
     pre = git(d, "rev-parse", "HEAD")
-    before = (d / "STATE.md").read_text(errors="replace") if (d / "STATE.md").exists() else ""   # 影子模式的輸入
-    # 只准寫 ./STATE.md:prompt 講了也擋不住(小模型照樣改了 memory/reference/),判斷點
-    # librarian-state 用權限規則機械限制(dontAsk、只准 Edit(./STATE.md));下面的隔離檢查是第二道防線
+    before = (d / "STATE.md").read_text(errors="replace") if (d / "STATE.md").exists() else ""   # input for shadow mode
+    # Only ./STATE.md may be written: saying so in the prompt does not stop it (a small model changed memory/reference/
+    # anyway), so the librarian-state judgment point enforces it with permission rules (dontAsk, only Edit(./STATE.md));
+    # the quarantine check below is the second line of defence
     case = record_state_case(proj, d, pre, before, {"changed": changed, "diff": diff, "truncated": truncated,
                                                      "handoffs": mine, "dangling": dangling},
                              {"memory_section": memory_section, "h_note": h_note, "d_note": d_note})
     rc, obj, text = llm("librarian-state", state_prompt(proj, memory_section, h_note, d_note), d)
     if rc != 0 or not text:
-        # 呼叫本身失敗:可能改到一半,不採用。副本還原成乾淨狀態,不留給下一晚
+        # The call itself failed: it may have stopped halfway, so nothing is kept. Restore the copy to a clean state
+        # rather than leave it for the next night
         run(["git", "-C", str(d), "checkout", "-q", "--", "."])
         run(["git", "-C", str(d), "clean", "-fdq"])
         log(_("{project}: claude invocation failed (exit {rc}); the copy is restored and the checkpoint not advanced",
@@ -674,12 +700,14 @@ def process(proj: str, d: pathlib.Path, handoffs: list[dict], digest: list[str])
         log(f"{proj}: call cost ${cost} (model: {used_model(obj)})")
 
     so = (obj or {}).get("structured_output")
-    # 拿不到 structured_output(每幾晚會發生一次):照常用 git 判斷實際有沒有改、有改就 commit,只是沒有摘要可放
-    # digest、checkpoint 也不推進(改好的 STATE.md 曾經被留到隔晚)
+    # No structured_output (happens every few nights): use git as usual to decide whether anything actually changed,
+    # and commit if it did; there is just no summary for the digest, and the checkpoint does not advance (a fixed
+    # STATE.md used to be left until the next night)
     no_output = so is None
     if no_output:
         o = obj or {}
-        said = (jstr(o.get("result")) if present(o.get("result")) else "") + "\n"   # shell:jq 的換行經 tr 變成結尾的空白
+        # shell: jq's newline became a trailing space through tr
+        said = (jstr(o.get("result")) if present(o.get("result")) else "") + "\n"
         log(_("{project}: no structured_output (subtype={subtype}, turns={turns}; the model last said: {said}); "
               "going by the actual file changes", project=proj,
               subtype=jstr(o.get("subtype")) if present(o.get("subtype")) else "?",
@@ -694,8 +722,9 @@ def process(proj: str, d: pathlib.Path, handoffs: list[dict], digest: list[str])
     stray = quarantine_stray(proj, d)
     repair_state_todo(proj, d)
 
-    # 以實際 git 狀態為準。陷阱:這個專案自己的 SessionEnd hook 在呼叫「進行中」就可能已經 commit+push 過 STATE.md
-    # (headless 呼叫也是一個完整的 session)——先比 HEAD 有沒有動,那才是不會被 hook 蓋掉的真相
+    # Go by the actual git state. Trap: the project's own SessionEnd hook may already have committed and pushed
+    # STATE.md while the call was still running (a headless call is a full session too) -- so first compare whether
+    # HEAD moved; that is the truth the hook cannot overwrite
     post = git(d, "rev-parse", "HEAD")
     changed_state, state_diff, new_sha = False, "", post
     if post != pre:
@@ -712,7 +741,9 @@ def process(proj: str, d: pathlib.Path, handoffs: list[dict], digest: list[str])
                           "model": used_model(obj)}, {"STATE.md": after})
 
     if changed_state:
-        if post == pre:  # hook 沒接手(這個專案這次沒有走 hook,或 hook 沒設好),自己補 commit+push
+        # the hook did not take over (the project did not go through its hook this time, or the hook is not set
+        # up): commit and push ourselves
+        if post == pre:
             if run(["git", "add", "STATE.md"], cwd=d).returncode == 0 and \
                     run(["git", "commit", "-m", "librarian: update STATE.md", "-q"], cwd=d).returncode == 0:
                 run([str(SAFE_PUSH)], cwd=d)
@@ -726,11 +757,13 @@ def process(proj: str, d: pathlib.Path, handoffs: list[dict], digest: list[str])
             f.write(block)
         log(_("{project}: written to review-log.md for later spot checks", project=proj))
     else:
-        # 不更新也留理由:STATE.md 一直是佔位內容時,才分得出是模型太保守還是 prompt 有問題
+        # Keep the reason even when nothing is updated: when STATE.md stays placeholder content, that is how to tell
+        # whether the model is too conservative or the prompt is wrong
         log(_("{project}: STATE.md not updated; reason: {reason}", project=proj,
               reason=reason or _("(the agent gave no reason)")))
 
-    # 模型說有更新、實際沒改,或動了不該動的檔案:這次當作沒處理完,不推進 checkpoint,下次再跑同一個範圍
+    # The model said it updated but nothing changed, or it touched files it should not have: treat this run as not done,
+    # do not advance the checkpoint, and run the same range next time
     if (reported == "true" and actually != "true") or stray or no_output:
         log(_("{project}: this result is not trustworthy; the checkpoint is not advanced, retrying next time", project=proj))
         return
@@ -755,7 +788,7 @@ def main() -> int:
     LOG_DIR.mkdir(parents=True, exist_ok=True)
     copies = hubconf.p("memory_copies", "~/.memory-copies")
     log("=== librarian run start ===")
-    # 隔離區只是留證據,14 天後自動清掉
+    # quarantine only keeps evidence; cleared automatically after 14 days
     cutoff = datetime.datetime.now().timestamp() - 14 * 86400
     for q in (STATE_DIR / "stray").glob("*") if (STATE_DIR / "stray").is_dir() else []:
         if q.stat().st_mtime < cutoff:
@@ -766,8 +799,9 @@ def main() -> int:
     for d in sorted(p for p in copies.glob("*/") if (p / ".git").is_dir()):
         process(d.name, d, handoffs, digest)
 
-    # 今天的 digest:專案摘要這一段,再請模型標出專案之間的關聯(index.md)。digest 是分段寫的(hublib.digest_append):
-    # 各 job 寫自己那段,重跑只換自己的
+    # Today's digest: the project-summary section, then ask the model to mark the relations between projects
+    # (index.md). The digest is written in sections (hublib.digest_append): each job writes its own, and a rerun
+    # replaces only its own
     run(["git", "pull", "-q"], cwd=HUB, to_log=True)
     if digest:
         try:
@@ -794,7 +828,8 @@ def main() -> int:
         shadow_index(index_before, index_file.read_text(errors="replace") if index_file.exists() else "",
                      digest_file.read_text(errors="replace") if digest_file.exists() else "".join(digest))
     else:
-        hublib.digest_append("projects", "")   # 今天沒有專案摘要:拿掉這一段(同一天重跑、上一次有寫過的話)
+        # no project summaries today: drop this section (in case an earlier run the same day wrote one)
+        hublib.digest_append("projects", "")
         log("nothing to digest today")
     log(f"=== librarian run end (total cost today: ${f'{total_cost:.6f}' if cost_added else '0'}) ===")
     return 0

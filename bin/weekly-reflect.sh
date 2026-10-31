@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
-# 每週一由 scheduler 呼叫:產生上一週的跨專案活動分析(reflect/YYYY-Www.json,含模型
-# 寫的分析),重建所有週的報告頁 reflect/index.html,只 commit 這兩個檔案。統計部分
-# 零 LLM,分析每週一次(訂閱額度)。細節見 bin/weekly-reflect.py、bin/reflect_llm.py、
-# templates/reflect.html。
+# Called by the scheduler every Monday: produce the previous week's cross-project activity analysis
+# (reflect/YYYY-Www.json, including the model's analysis), rebuild the report page for all weeks,
+# reflect/index.html, and commit only these two files. The statistics are zero LLM; the analysis is once a week
+# (subscription quota). Details in bin/weekly-reflect.py, bin/reflect_llm.py, templates/reflect.html.
 set -uo pipefail
 export PATH="/opt/homebrew/bin:/usr/local/bin:$PATH"
 HUB="${AGENT_HUB_ROOT:-$(cd "$(dirname "$0")/.." && pwd)}"

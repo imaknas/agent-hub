@@ -1,37 +1,46 @@
 #!/bin/sh -c exec${IFS}"${0%/*}/py"${IFS}"$0"${IFS}"$@"
-"""回頭清理(consolidation):把各專案放太久的 memory 日期檔整理進 reference/,順便修正
-reference/ 跟 STATE.md 裡被較新紀錄推翻的敘述。librarian 只往前看(新增的 memory → STATE.md),
-這支往回看,不讓 memory 變成流水帳、也不讓過時的敘述一直看起來像定論。
+"""Consolidation (looking back): fold each project's memory date files that have sat too long into reference/, and
+along the way fix statements in reference/ and STATE.md that newer records overturned. The librarian only looks
+forward (new memory -> STATE.md); this script looks back, so memory does not become a running log and outdated
+statements do not keep looking settled.
 
-每個專案做的事:
-1. 機械挑選(零 LLM):日期檔(memory/YYYY-MM-DD[-主題].md)比 OLDER_THAN_DAYS 舊的才處理,
-   一次最多 MAX_FOLD_BYTES(由舊到新);沒有就跳過。同一個專案成功後 MIN_INTERVAL_DAYS 內不再跑。
-2. 在暫存目錄 clone 一份乾淨的 memory repo(從 bare repo),模型只在那裡工作——~/.memory-copies
-   在 push 成功前完全不動,失敗就整個丟掉,不會留下改一半的東西。
-3. 模型(判斷點 consolidate 的 model_group: strong;hub.json llm.points.consolidate.model 可改)只准寫 ./memory/reference/** 跟
-   ./STATE.md(--permission-mode dontAsk + --allowedTools,prompt 擋不住 haiku 亂改別的檔案);
-   沒有 Bash,不能刪檔。它用 structured output 回報每個日期檔放到哪裡、沒保留什麼、修正了哪些敘述
-   (每一筆修正都要附較新檔案的逐字引文)。
-4. 腳本自己驗證,不信模型的自我回報:
-   - git status 有 STATE.md / memory/reference/*.md 以外的變化 → 搬到 .state/stray/,整個專案放棄
-   - 「預計/可能…」被改成確定語氣(比對刪掉/整理掉的含保留語氣的句子跟新加的句子),又沒有
-     逐字證據撐腰 → 把那個檔案還原;放到那個檔案的日期檔這次不刪
-   - 修正附的引文在指定檔案裡找不到 → 還原那個檔案
-   - STATE.md 的 `## 待辦` 段落被改壞(check-state-todo.py)→ 還原 STATE.md
-   - 只 git rm 模型宣告已整理完、而且目的地都還在(沒被還原)的日期檔
-   - 被刪的日期檔裡的網址/`程式碼片段` 整理後找不到 → 不擋,列進 review-log 給人抽查
-5. commit → git-safe-push.sh(project session 同時 push 造成分岔就自動 merge 重試;真的衝突就放棄,
-   patch 留在 .state/consolidate/failed/)→ with-lock.sh 底下更新 ~/.memory-copies/<專案>。
-6. 每一筆變化(理由、修正、diff、機械檢查的警告)寫進 review-log.md,用 commit-hub-files.sh commit。
-   librarian 的 checkpoint 剛好停在這次的起點時順便往前推,不讓 librarian 把整理的 diff 再讀一次。
+What it does for each project:
+1. Mechanical selection (zero LLM): only date files (memory/YYYY-MM-DD[-topic].md) older than OLDER_THAN_DAYS, at
+   most MAX_FOLD_BYTES at a time (oldest first); none: skip. After a success, the same project is not run again
+   within MIN_INTERVAL_DAYS.
+2. Clone a clean memory repo (from the bare repo) into a temporary directory; the model works only there --
+   ~/.memory-copies is not touched at all until the push succeeds, and on failure the whole thing is thrown away,
+   so nothing is left half-changed.
+3. The model (judgment point consolidate's model_group: strong; hub.json llm.points.consolidate.model can change it)
+   may write only ./memory/reference/** and ./STATE.md (--permission-mode dontAsk + --allowedTools; the prompt does
+   not stop haiku from changing other files); no Bash, so it cannot delete files. Through structured output it reports
+   where each date file went, what it did not keep, and which statements it corrected (every correction must quote
+   the newer file verbatim).
+4. The script checks for itself and does not trust the model's own report:
+   - git status shows changes outside STATE.md / memory/reference/*.md -> moved to .state/stray/, the whole project
+     is given up
+   - a hedge ("expected/possibly…") turned into a definite statement (comparing deleted/folded sentences that
+     carry a hedge with the newly added ones) without verbatim evidence behind it -> that file is reverted; the date
+     files that went into it are not deleted this time
+   - a correction's quote cannot be found in the file it names -> that file is reverted
+   - the `## 待辦` section of STATE.md got broken (check-state-todo.py) -> STATE.md is reverted
+   - git rm only the date files the model declared folded and whose destinations all still exist (not reverted)
+   - URLs/`code snippets` from the deleted date files that cannot be found after folding -> not blocking, listed in
+     review-log for a person to spot-check
+5. commit -> git-safe-push.sh (a divergence from a project session pushing at the same time is merged and retried
+   automatically; a real conflict gives up, the patch is kept in .state/consolidate/failed/) -> update
+   ~/.memory-copies/<project> under with-lock.sh.
+6. Every change (reason, corrections, diff, warnings from the mechanical checks) is written to review-log.md and
+   committed with commit-hub-files.sh. When the librarian's checkpoint sits exactly at this run's starting point it is
+   advanced too, so the librarian does not read the consolidation diff again.
 
-用法:
-  consolidate-memory.py                      排程用:最多 MAX_PROJECTS 個到期的專案(最需要的先)
-  consolidate-memory.py --list               列出每個專案的狀態(零 LLM)
+Usage:
+  consolidate-memory.py                      for the scheduler: at most MAX_PROJECTS due projects (most needed first)
+  consolidate-memory.py --list               list each project's status (zero LLM)
   consolidate-memory.py --dry-run [--project X] [--keep]
-                                             只產生提議的 diff 跟 review-log 條目,不 push、
-                                             不寫 review-log/狀態;報告在 .state/consolidate/dry-run/
-  consolidate-memory.py --project X          只跑 X(不管 MIN_INTERVAL_DAYS,仍要有夠舊的日期檔)
+                                             only produce the proposed diff and review-log entry; no push, no
+                                             review-log/state writes; report in .state/consolidate/dry-run/
+  consolidate-memory.py --project X          run only X (ignores MIN_INTERVAL_DAYS; still needs old enough date files)
 """
 from __future__ import annotations
 
@@ -63,19 +72,22 @@ REVIEW_LOG = hubconf.data_file("review-log.md")
 BIN = HUB / "bin"
 TODAY = datetime.date.today()
 
-OLDER_THAN_DAYS = 14      # 日期檔要多舊才整理:兩週內的還常被翻,留著
-MIN_INTERVAL_DAYS = 7     # 同一個專案成功後一週內不再跑
-RETRY_AFTER_DAYS = 2      # 失敗後隔多久再試(不要每晚燒同一個失敗)
-MAX_PROJECTS = 3          # 一晚最多幾個專案
-BUDGET_MINUTES = 30       # 超過就不開新的專案:加上 CALL_TIMEOUT 最晚 02:50 結束,不跟 03:00 的 librarian 重疊
-CALL_TIMEOUT = 20 * 60    # 單次模型呼叫上限
-MAX_FOLD_BYTES = 60000    # 一次整理的日期檔總量上限(由舊到新取)
-MAX_LOG_DIFF = 40000      # review-log 裡 diff 的上限,超過就截斷並附完整 diff 的指令
+OLDER_THAN_DAYS = 14      # how old a date file must be to fold: ones from the last two weeks are still looked at often
+MIN_INTERVAL_DAYS = 7     # after a success, not the same project again within a week
+RETRY_AFTER_DAYS = 2      # how long after a failure to retry (don't burn the same failure every night)
+MAX_PROJECTS = 3          # at most this many projects a night
+BUDGET_MINUTES = 30       # past this, no new project is started: with CALL_TIMEOUT it ends by 02:50 at the
+                          # latest, not overlapping the 03:00 librarian
+CALL_TIMEOUT = 20 * 60    # limit for one model call
+MAX_FOLD_BYTES = 60000    # total size limit of the date files folded at once (taken oldest first)
+MAX_LOG_DIFF = 40000      # limit for the diff in review-log; beyond it, truncate and add the command for
+                          # the full diff
 
 RAW_RE = re.compile(r"^memory/(\d{4}-\d{2}-\d{2})(-[a-z0-9-]+)?\.md$")
 REF_RE = re.compile(r"^memory/reference/[^/]+\.md$")
 
-# 保留語氣:這些字從句子裡消失、句子其他部分沒變,就是「預計 → 確認」那種摘要漂移
+# Hedges: when these words vanish from a sentence and the rest of it stays the same, that is the summary drift of
+# "expected -> confirmed"
 HEDGES = [
     "預計", "預期", "預估", "估計", "可能", "也許", "或許", "大概", "大約", "應該", "似乎", "疑似",
     "推測", "猜測", "暫定", "暫時", "待確認", "未確認", "尚未確認", "不確定", "有待", "打算", "計畫",
@@ -86,7 +98,8 @@ HEDGES = [
 
 GIT_ENV = {
     **os.environ,
-    # memory repo 不跑專案的 git hook(見 known-issues「memory worktree 會繼承專案的 git hook」)
+    # the memory repo does not run the project's git hooks (see known-issues, "The memory worktree inherits the
+    # project's git hooks")
     "GIT_CONFIG_COUNT": "1", "GIT_CONFIG_KEY_0": "core.hooksPath", "GIT_CONFIG_VALUE_0": "/dev/null",
     "PATH": "/opt/homebrew/bin:/usr/local/bin:" + os.environ.get("PATH", ""),
 }
@@ -99,7 +112,7 @@ def log(msg: str) -> None:
     if _log_file:
         with open(_log_file, "a") as f:
             f.write(line + "\n")
-    # 排程器把 stdout 導進同一個 log 檔,只在終端機手動跑時才另外印
+    # the scheduler sends stdout into the same log file; print as well only when run by hand in a terminal
     if sys.stdout.isatty() or not _log_file:
         print(line, flush=True)
 
@@ -132,7 +145,7 @@ def days_since(iso: str | None) -> float:
     return (TODAY - datetime.date.fromisoformat(iso)).days
 
 
-# ---------- 機械挑選 ----------
+# ---------- mechanical selection ----------
 
 def project_origin(copy: pathlib.Path) -> str | None:
     r = subprocess.run(["git", "-C", str(copy), "remote", "get-url", "origin"], capture_output=True, text=True)
@@ -141,7 +154,7 @@ def project_origin(copy: pathlib.Path) -> str | None:
 
 
 def survey(name: str, origin: str) -> dict:
-    """直接讀 bare repo 的 agent-memory 分支(最新,而且不用動副本)。"""
+    """Read the bare repo's agent-memory branch directly (the latest, and the copy is not touched)."""
     files = git("ls-tree", "-r", "--name-only", "agent-memory", "memory/", git_dir=origin).split()
     cutoff = TODAY - datetime.timedelta(days=OLDER_THAN_DAYS)
     old = []
@@ -184,14 +197,14 @@ def candidates(state: dict, only: str | None, ignore_interval: bool) -> list[dic
         elif not ignore_interval and s["last_try"] != s["last_ok"] and days_since(s["last_try"]) < RETRY_AFTER_DAYS:
             s["skip"] = _("failed on {date}, retrying after {days} days", date=s["last_try"], days=RETRY_AFTER_DAYS)
         out.append(s)
-    # 最需要的先:從沒整理過的、最舊的日期檔越舊越前面
+    # most needed first: never consolidated, then the older the oldest date file, the earlier
     out.sort(key=lambda s: (s["last_ok"] is not None, s["oldest"] or "9999"))
     return out
 
 
-# ---------- 模型呼叫 ----------
+# ---------- model call ----------
 
-# 輸出 schema 在 contracts/llm/consolidate.schema.json(判斷點 consolidate,bin/llm.py 套用)
+# The output schema is in contracts/llm/consolidate.schema.json (judgment point consolidate, applied by bin/llm.py)
 
 
 def build_prompt(s: dict, repo: pathlib.Path) -> str:
@@ -254,9 +267,10 @@ memory/ 的結構:
 
 
 def run_model(prompt: str, repo: pathlib.Path, model: str) -> tuple[dict | None, str]:
-    # 判斷點 consolidate(權限 dontAsk、只准 Edit memory/reference/** 跟 STATE.md、schema:contracts/llm-points.yaml)
+    # judgment point consolidate (permission dontAsk, only Edit memory/reference/** and STATE.md, schema:
+    # contracts/llm-points.yaml)
     cmd = [sys.executable, str(HUB / "bin" / "llm.py"), "run", "consolidate", *(["--model", model] if model else [])]
-    env = dict(GIT_ENV)  # claude 的憑證由 llm.py 決定(預設 headless token)
+    env = dict(GIT_ENV)  # llm.py decides claude's credentials (headless token by default)
     try:
         r = subprocess.run(cmd, input=prompt, cwd=repo, env=env, capture_output=True, text=True, timeout=CALL_TIMEOUT + 60)
     except subprocess.TimeoutExpired:
@@ -269,7 +283,7 @@ def run_model(prompt: str, repo: pathlib.Path, model: str) -> tuple[dict | None,
         return None, _("the output is not JSON: ") + r.stdout[:300]
 
 
-# ---------- 機械檢查 ----------
+# ---------- mechanical checks ----------
 
 def norm(s: str) -> str:
     return re.sub(r"\s+", "", s)
@@ -288,7 +302,7 @@ def strip_hedges(s: str) -> str:
 
 
 def diff_lines(repo: pathlib.Path, base: str, path: str) -> tuple[list[str], list[str]]:
-    """base 跟工作目錄之間,這個檔案刪掉/加上的行(新檔案就全部算加上)。"""
+    """The lines of this file removed/added between base and the working tree (a new file counts as all added)."""
     out = git("diff", "--no-color", "-U0", base, "--", path, cwd=repo, check=False)
     if not out and not git("ls-files", "--", path, cwd=repo).strip():
         return [], (repo / path).read_text().splitlines()
@@ -319,8 +333,9 @@ def verify_corrections(repo, base, corrections) -> tuple[list[dict], list[dict]]
 
 
 def hedge_upgrades(repo, base, changed, batch, good_corrections) -> dict[str, list[tuple[str, str]]]:
-    """回傳 {檔案: [(原本含保留語氣的句子, 新加的確定句子)]},已經有逐字證據的修正不算。"""
-    hedged_src = []  # 被刪掉或被整理掉的、含保留語氣的句子
+    """Returns {file: [(original hedged sentence, newly added definite sentence)]}; corrections that already have
+    verbatim evidence do not count."""
+    hedged_src = []  # hedged sentences that were deleted or folded away
     for f in batch:
         hedged_src += [l for l in (at_base(repo, base, f) or "").splitlines() if has_hedge(l)]
     per_file_added = {}
@@ -366,14 +381,15 @@ def salient_missing(repo: pathlib.Path, base: str, deleted: list[str]) -> dict[s
 
 
 def state_todo_ok(path: pathlib.Path) -> bool:
-    # 跟 librarian 一樣用 PATH 上的 python3(GIT_ENV 把 Homebrew 放前面):check-state-todo.py 要 3.10+,
-    # 以前排程器的 login shell 給這支的是系統的 python3(3.9);現在一律是平台的 Python(bin/py)
+    # Like the librarian, python3 from PATH (GIT_ENV puts Homebrew first): check-state-todo.py needs 3.10+, and the
+    # scheduler's login shell used to give this script the system python3 (3.9); now it is always the platform's
+    # Python (bin/py)
     return subprocess.run(["python3", str(BIN / "check-state-todo.py"), str(path)],
                           env=GIT_ENV, capture_output=True).returncode == 0
 
 
 def state_todo_broken(repo: pathlib.Path, base: str) -> bool:
-    """這次才把 `## 待辦` 改壞(原本就壞的不算,那是 librarian 的事)。"""
+    """`## 待辦` was broken by this run (already broken before does not count; that is the librarian's business)."""
     if state_todo_ok(repo / "STATE.md"):
         return False
     with tempfile.NamedTemporaryFile("w", suffix=".md") as f:
@@ -382,10 +398,10 @@ def state_todo_broken(repo: pathlib.Path, base: str) -> bool:
         return state_todo_ok(pathlib.Path(f.name))
 
 
-# ---------- 一個專案 ----------
+# ---------- one project ----------
 
 def consolidate(s: dict, model: str, dry_run: bool, keep: bool) -> dict:
-    """回傳 {"status": ok|noop|failed, "entry": review-log 條目或 None, ...}"""
+    """Returns {"status": ok|noop|failed, "entry": the review-log entry or None, ...}"""
     name = s["name"]
     tmp = pathlib.Path(tempfile.mkdtemp(prefix=f"consolidate-{name}-"))
     repo = tmp / "repo"
@@ -457,7 +473,8 @@ def consolidate(s: dict, model: str, dry_run: bool, keep: bool) -> dict:
             warnings.append(_("reverted `STATE.md`: the `{heading}` section's format was broken", heading="## 待辦"))
         good = [c for c in good if c.get("file", "").lstrip("./") not in reverted]
 
-        # 要 git rm 哪些:模型宣告整理完 ∩ 這次給的批次 ∩ 目的地都合法、存在、沒被還原
+        # What to git rm: declared folded by the model ∩ this run's batch ∩ destinations all valid, existing and
+        # not reverted
         to_delete, kept = [], list(so.get("kept", []))
         folded = []
         for item in so.get("folded", []):
@@ -548,15 +565,16 @@ def consolidate(s: dict, model: str, dry_run: bool, keep: bool) -> dict:
             log(_("{project}: git pull of the copy failed (the librarian pulls again next time): {stderr}", project=name,
                   stderr=upd.stderr.strip()[:200]))
 
-        # librarian 的 checkpoint 剛好停在起點、這次是 fast-forward(沒有 merge 別人的 commit),就往前推,
-        # 不然 librarian 會把整理的 diff(含被刪的日期檔全文)當成新內容再讀一次
+        # The librarian's checkpoint sits exactly at the starting point and this was a fast-forward (no one else's
+        # commit merged): advance it, otherwise the librarian reads the consolidation diff (including the full text of
+        # the deleted date files) again as new content
         ckpt = STATE_DIR / f"{name}.sha"
         if pushed == new_sha and ckpt.exists() and ckpt.read_text().strip() == base:
             ckpt.write_text(new_sha + "\n")
             log(_("{project}: librarian checkpoint advanced to {sha}", project=name, sha=new_sha[:8]))
         result["status"] = "ok"
         return result
-    except Exception as e:  # noqa: BLE001 — 任何意外都只影響這個專案,副本沒動
+    except Exception as e:  # noqa: BLE001 — any surprise affects only this project; the copy is untouched
         log(_("{project}: unexpected error, giving up (the copy is untouched): {error_type}: {error}", project=name,
               error_type=type(e).__name__, error=e))
         return result
@@ -625,7 +643,7 @@ def main() -> int:
         return 0
 
     import llm
-    model = llm.model_for("consolidate")   # 全平台只在那裡算(hub.json llm.points 可以蓋過)
+    model = llm.model_for("consolidate")   # computed only there, platform-wide (hub.json llm.points can override)
     due = [s for s in cands if not s.get("skip")]
     for s in cands:
         if s.get("skip") and args.project:

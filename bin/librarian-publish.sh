@@ -1,9 +1,12 @@
 #!/usr/bin/env bash
-# librarian 那一串夜間 job 的最後一步(平台 job agent-hub/librarian-publish,after: librarian、knas-tasks、todo、
-# memory-gaps):重生 index.md 的專案名冊,再只 commit 這一串寫的檔案(今天的 digest、index.md、review-log.md、
-# todo.md)。以前寫在 librarian.sh 的最後;拆出來之後,沒有助理(knas-tasks)的部署一樣照這個順序跑。
-# 名冊在模型改過 index.md 之後才重生,就算模型誤動了區塊也會被蓋回正確內容。
-# 只 commit 列出的檔案,不用 git add -A——working tree 裡可能有別人(其他 session、手動編輯)改到一半的東西。
+# The last step of the librarian's chain of nightly jobs (platform job agent-hub/librarian-publish, after:
+# librarian, knas-tasks, todo, memory-gaps): regenerate index.md's project roster, then commit only the files this
+# chain wrote (today's digest, index.md, review-log.md, todo.md). This used to be the end of librarian.sh; split out,
+# a deployment without an assistant (knas-tasks) runs in the same order.
+# The roster is regenerated after the model has changed index.md, so even if the model touched the block by mistake
+# it is overwritten with the correct content.
+# Commit only the listed files, never git add -A -- the working tree may hold half-done changes by others (other
+# sessions, manual edits).
 set -uo pipefail
 HUB="${AGENT_HUB_ROOT:-$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)}"
 source "$(dirname "${BASH_SOURCE[0]}")/hubpaths.sh"

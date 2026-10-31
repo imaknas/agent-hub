@@ -1,14 +1,17 @@
-"""weekly-reflect.py 的分析段落:把本週統計交給模型,寫出有結論、有證據、有建議的
-每週分析(結構化 JSON,HTML 報告直接用)。每週只呼叫一次(訂閱額度,不是 API 計費)。
+"""The analysis section of weekly-reflect.py: hand the week's statistics to the model and get back a weekly analysis
+with conclusions, evidence and recommendations (structured JSON, used directly by the HTML report). One call a week
+(subscription quota, not API billing).
 
-**對話原文永遠不送雲端模型**(2026-10-21 Knas 決定,跟 muninn 同一條規則:原文只給 mini
-的本機模型讀)。送出去的是統計數字,加上 muninn 本機模型寫的每個 session 摘要
-(`muninn digests --week … --json`:固定欄位、沒有原文;工作 domain 跟認不出 domain 的
-session muninn 自己就扣掉,只給數量)。EXCLUDED 的專案連摘要也不送,只有統計。muninn 沒有
-這個指令、失敗、或這週還沒有摘要時,只送統計。2026-W42 以前的報告是用訊息抽樣寫的,那些
-json 照舊保留。欄位定義在 muninn repo;改了要兩邊一起改。
+**Conversation text is never sent to a cloud model** (decided by the owner on 2026-10-21; the same rule as the
+assistant's: only the hub machine's local model reads the original text). What is sent is the statistics, plus the
+per-session summaries the assistant's local model writes (`<assistant.cli> digests --week … --json`: fixed fields, no
+original text; the assistant itself leaves out sessions in the work domain and sessions whose domain it cannot tell,
+giving only their count). EXCLUDED projects send not even summaries, only statistics. When the assistant lacks the
+command, it fails, or there are no summaries for the week yet, only statistics are sent. Reports before 2026-W42 were
+written from sampled messages; those json files are kept as they are. The fields are defined in the Muninn repo;
+a change there must be made on both sides.
 """
-from __future__ import annotations  # 系統的 python3(3.9)也要能 import
+from __future__ import annotations  # the system python3 (3.9) must be able to import it too
 
 import json
 import pathlib
@@ -21,15 +24,16 @@ import i18n  # noqa: E402
 
 _ = i18n.domain(__file__)   # only what the report page shows (the error, the model); the prompt waits for step 5
 MUNINN_CLI = hubconf.p("assistant.cli")
-# 專案登錄的 privacy.reflection 不是 include 的:連摘要也不送。
-# 登錄讀不到 = None:那就完全不送摘要,只送統計
+# Projects whose registry privacy.reflection is not include: not even summaries are sent.
+# Registry unreadable = None: then no summaries at all, statistics only
 EXCLUDED = hubconf.reflection_private()
 
-# 送給模型前遮掉像憑證的字串:全平台一個遮蔽點(completion.py;llm.py 送任何 provider 前也過同一個)。
+# Mask credential-like strings before sending to the model: one masking point for the whole platform
+# (completion.py; llm.py goes through the same one before sending to any provider).
 from completion import SECRET, redact  # noqa: E402,F401
 
 
-# 輸出 schema 在 contracts/llm/reflect-week.schema.json(判斷點 reflect-week,bin/llm.py 套用)
+# The output schema is in contracts/llm/reflect-week.schema.json (judgment point reflect-week, applied by bin/llm.py)
 
 PROMPT = """你是 {{owner}} 的每週工作回顧分析師。以下是他這一週在 Claude Code 裡的活動統計,
 {digest_intro}
@@ -41,7 +45,7 @@ projects 只列這週有活動的專案。
 
 ## 本週統計
 {stats}{digests}"""
-PROMPT = hubconf.fill_names(PROMPT)  # {{owner}} 換成設定的名字(在 .format() 之前)
+PROMPT = hubconf.fill_names(PROMPT)  # {{owner}} replaced by the configured name (before .format())
 
 DIGEST_INTRO = ("以及本機模型替每個 session 寫的摘要(不是原文;一個長 session 可能有好幾列,每列只涵蓋"
                 "新的那幾輪)。{withheld}")
@@ -49,7 +53,7 @@ NO_DIGEST_INTRO = "只有數字,沒有任何對話內容或摘要。你看不到
 
 
 def muninn_digests(week: str) -> dict | None:
-    """muninn 本機模型寫的 session 摘要;拿不到就回 None(只送統計)。"""
+    """Session summaries written by the assistant's local model; None when they cannot be had (statistics only)."""
     exe = MUNINN_CLI
     if EXCLUDED is None or not exe or not exe.exists():
         return None
@@ -121,14 +125,15 @@ def analyze(stats: dict) -> dict:
                                digests="\n\n## 每個 session 的摘要\n" + digest_rows(d))
     else:
         prompt = PROMPT.format(digest_intro=NO_DIGEST_INTRO, stats=stats_brief(stats), digests="")
-    # 判斷點 reflect-week(工具全關、schema:contracts/llm-points.yaml)
+    # judgment point reflect-week (all tools off, schema: contracts/llm-points.yaml)
     res = subprocess.run([sys.executable, str(pathlib.Path(__file__).resolve().parent / "llm.py"),
                           "run", "reflect-week"],
                          input=prompt, capture_output=True, text=True, timeout=1300)
     try:
         got = json.loads(res.stdout)
         out = got.get("structured_output")
-        meta["model"] = got.get("llm_model") or meta["model"]   # 實際用的(hub.json llm 可能交給別家)
+        # the one actually used (hub.json llm may hand it to another provider)
+        meta["model"] = got.get("llm_model") or meta["model"]
     except ValueError:
         out = None
     if not isinstance(out, dict):
