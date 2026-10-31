@@ -3,7 +3,8 @@
 The baseline (tests/fixtures/cjk-baseline.json) is lines containing CJK characters per file, taken before translation
 started. A file may drop below its baseline, never rise above it; a file not in the baseline may have none. Allowed to
 keep Chinese: `locales/` (catalogs, per-language eval inputs), `tests/fixtures/` and `contracts/fixtures/` (goldens and
-deliberately Chinese data), and SPEC (files that define the zh-Hant token set of a machine format).
+deliberately Chinese data), `contracts/vendor/` (other projects' contracts, copied verbatim) and SPEC (files that
+define the zh-Hant token set of a machine format).
 
     bin/py -m unittest tests.test_i18n_static
     bin/py tests/test_i18n_static.py --update     # lower the baseline after translating (never raises it)
@@ -19,7 +20,10 @@ from unittest import mock
 ROOT = pathlib.Path(__file__).resolve().parents[1]
 BASELINE = ROOT / "tests" / "fixtures" / "cjk-baseline.json"
 CJK = re.compile("[\u3400-\u9fff\uf900-\ufaff\u3000-\u303f\uff00-\uffef]")
-ALLOWED = ("locales/", "tests/fixtures/", "contracts/fixtures/")
+ALLOWED = ("locales/", "tests/fixtures/", "contracts/fixtures/",
+           # verbatim copies of other projects' contracts and conformance vectors (their zh-hant profiles are Chinese by
+           # definition); contracts-check compares them with the originals, so they are never edited here
+           "contracts/vendor/")
 # Files that define or document the zh-Hant token set of a machine format: Chinese there is the spec, not untranslated text
 SPEC = {"docs/design/i18n.md", "contracts/state-todo.v1.md", "contracts/todo-md.v1.md", "contracts/state-todo.v2.md",
         "contracts/todo-md.v2.md", "bin/todo_tokens.py"}   # the to-do token sets readers and writers use
