@@ -63,6 +63,18 @@ class Markers(unittest.TestCase):
         after = DOC.replace("- [ ] 〔Alex〕續約網域(等 Alex:task-p-1)\n", "")
         self.assertTrue(edits.check_markers(DOC, after, KEY, removable=False))
 
+    def test_compared_by_key(self):
+        """with a pattern that has a `key` group (the librarian's: both to-do token sets), a marker rewritten into the
+        other set with the same key is the same marker; a changed key is not"""
+        import todo_tokens
+        pat = todo_tokens.patterns("Alex").key_mark
+        zh, en = todo_tokens.marker("zh-Hant", "Alex", "task-p-1"), todo_tokens.marker("en", "Alex", "task-p-1")
+        self.assertIn(zh, DOC)
+        converted = DOC.replace(zh, " " + en)
+        self.assertEqual(edits.check_markers(DOC, converted, pat), [])
+        self.assertEqual(edits.check_markers(DOC, converted, pat, removable=False), [])
+        self.assertTrue(edits.check_markers(DOC, converted.replace("task-p-1", "task-p-2"), pat))
+
 
 if __name__ == "__main__":
     unittest.main()

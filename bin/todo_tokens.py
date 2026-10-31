@@ -104,8 +104,9 @@ class Patterns:
         # the key marker, either set; half- and full-width parentheses and colons; at the end of the line
         mark = rf"[(（](?:等 ?{o}|waiting on {o})\s*[:：]\s*"
         self.key = re.compile(rf"{mark}(?P<key>[^()（）]+?)\s*[)）]\s*$")
-        # the same anywhere in the text (edits.check_markers: markers may not be rewritten)
-        self.key_mark = re.compile(rf"{mark}[^()（）\n]+?\s*[)）]")
+        # the same anywhere in the text (edits.check_markers: keys may not be rewritten; compared by key, so a marker
+        # rewritten into the other set with the same key is the same marker)
+        self.key_mark = re.compile(rf"{mark}(?P<key>[^()（）\n]+?)\s*[)）]")
         # the review-log reason line, either set
         self.reason = re.compile(rf"^(?:{_alt(zh['reason_label'], en['reason_label'])})\s*[:：]\s*")
 

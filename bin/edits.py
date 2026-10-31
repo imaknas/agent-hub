@@ -45,19 +45,26 @@ def markers(text: str, pattern: re.Pattern) -> list[str]:
     return [m.group(0) for m in pattern.finditer(text)]
 
 
+def keyed(text: str, pattern: re.Pattern) -> dict[str, str]:
+    """{key: the marker's text}: a pattern with a `key` group is compared by key (the same key written in another form,
+    e.g. the other token set, is the same marker); without one, by the whole marker"""
+    by = "key" if "key" in pattern.groupindex else 0
+    return {m.group(by): m.group(0) for m in pattern.finditer(text)}
+
+
 def check_markers(before: str, after: str, pattern: re.Pattern, *, removable: bool = True) -> list[str]:
     """Markers may not be rewritten or appear from nowhere; removable = deleting the whole line (the item is done) is
     allowed. Returns the problems (empty = none)."""
-    b, a = markers(before, pattern), markers(after, pattern)
-    probs = [_("extra marker: {marker}", marker=m) for m in a if m not in b]
+    b, a = keyed(before, pattern), keyed(after, pattern)
+    probs = [_("extra marker: {marker}", marker=m) for k, m in a.items() if k not in b]
     if not removable:
-        probs += [_("missing marker: {marker}", marker=m) for m in b if m not in a]
+        probs += [_("missing marker: {marker}", marker=m) for k, m in b.items() if k not in a]
     else:
         # a removed marker's whole line must be gone too (removing only the marker and keeping the text = a rewrite,
         # not done)
         lines_after = after.splitlines()
-        for m in b:
-            if m not in a:
+        for k, m in b.items():
+            if k not in a:
                 line = next((l for l in before.splitlines() if m in l), "")
                 body = line.replace(m, "").strip()
                 if body and any(body == l.strip() or body in l for l in lines_after):
