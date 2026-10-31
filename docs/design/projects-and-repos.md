@@ -1,6 +1,6 @@
 # Projects and repos: one general model, many combinations
 
-> agent-hub session · 2026-10-31 · r3. Owner's ask: a general architecture in which "one project = one git repo" is only
+> agent-hub session · 2026-10-31 · r4. Owner's ask: a general architecture in which "one project = one git repo" is only
 > one case, so that a monorepo holding many projects, a project spread over several repos, and a project with no repo
 > at all follow from the same logic, not from special cases. Owner's rule for building it: **the final architecture
 > first, no workarounds** — nothing built in a form a later step replaces. **Design only; nothing is implemented.**
@@ -11,6 +11,9 @@
 > and left them to the proposals, 10-31): a shared repo names a root owner; **a repo is one trust domain**, so security
 > settings live in the repo; memory is one clone per project outside any repo, linked into its folders; one deployment
 > clone per repo. Section 9 lists both reviews' findings and what each changed.
+> r4 (same day): the owner's decisions on tests, relayed from the agent-hub i18n session — project v2 with a top-level
+> `tests` list, one result cache per repo, tests in an exported tree (`test-waiting.md` B1, B3, B4). Section 3 follows
+> them.
 
 ## 1. The problem
 
@@ -117,7 +120,7 @@ privacy: {reflection: include}
 
 ```yaml
 # projects/acme-billing.yaml
-v: 1
+v: 2
 name: acme-billing
 paths:
   workspace: ~/workspace/acme/services/billing   # primary folder (required, 2.4)
@@ -126,10 +129,10 @@ scopes:
 - repo: acme
   path: services/billing
 depends_on: [acme-shared]         # its tests also run when acme-shared changes
-tests:                            # the test declaration: test-waiting.md section 4
-  code: ["**/*.py", "pyproject.toml", "uv.lock"]
-  tiers:
-    full: {cmd: "uv run pytest -q -n auto", setup: "uv sync --frozen"}
+code: ["**/*.py", "pyproject.toml", "uv.lock"]
+inputs: ["uv.lock"]
+tests:                            # project v2, test-waiting.md B1
+- {tier: full, run: "uv run pytest -q -n auto", when: [merge, nightly]}
 ```
 
 **One project over several repos:** `scopes: [{repo: storefront-web}, {repo: storefront-api}]` (each repo in its own
@@ -137,9 +140,10 @@ file or in shorthand); its test tiers name the scope they run in.
 
 **A project with no repo:** `paths: {workspace: ~/workspace/field-notes}`, `scopes: [{folder: ~/workspace/field-notes}]`.
 
-**Contracts and validation.** `scopes`, `depends_on`, `tests` and `paths.repo` are added to the registry's known fields
-and to `contracts/project.v1.schema.json` (additive: project stays v1; `runtime.test` stays valid, read by the same
-function as `tests`, test-waiting section 4). `repos/` is a new contract `repo.v1` in `contracts/README.md`; `repos_dir`
+**Contracts and validation.** The test fields (`tests`, `code`, `inputs`; `runtime` keeps only `deploy`) come first, as
+**project v2** (test-waiting B1, the owner's decision): renaming `runtime.test` bumps the version, and every registry
+file is rewritten in one change. `scopes`, `depends_on` and `paths.repo` are later additions to v2 (additive, no
+further bump). `repos/` is a new contract `repo.v1` in `contracts/README.md`; `repos_dir`
 goes into `contracts/hub.v1.schema.json` first; `repos` joins the config paths in `bin/appliers.py` and `bin/config-check`.
 The security fields (`PLATFORM_OWNED`) gain `paths` (whole, since the check compares top-level keys — it decides the
 sandbox's folders and is unprotected today) and `scopes`; a project in a shared repo carrying any repo-level field is
@@ -252,7 +256,7 @@ project's services restart from their folders. For a one-repo project the path i
    `sync-local-setup.sh`, `worktree-memory.sh`, the sandbox policy and both enforcement layers, backup.
 2. The resolver and the registry: `scopes`, `depends_on`, `paths.repo`, `repos/`, repo-level security fields, the
    cross-file rules, the contract work (section 3). Every existing registry file gives the same answers as today (test).
-   The test declaration itself lands earlier (test-waiting section 7, step 1) and is unchanged by this step.
+   Project v2's test fields land earlier (test-waiting section 7, step 1) and are unchanged by this step.
 3. Move the files in section 1 onto the resolver, the step 1 tests staying green; the sandbox derives from repos.
 4. The test system's selection and cache on the resolver (test-waiting section 7, step 4).
 5. Memory: backups of `<memory_root>`; recovery, renaming and onboarding handle both forms; the migration; agent-hub's
@@ -286,7 +290,7 @@ moved/deleted scope folders → merge fails until the registry changes; minor wo
 
 | finding | by | change |
 |---|---|---|
-| The test declaration was undefined and the two documents contradicted each other (a mapping under `runtime:`) | all three | `tests:` block, independent of `runtime:`; `runtime.test` read by the same function (test-waiting section 4) |
+| The test declaration was undefined and the two documents contradicted each other (a mapping under `runtime:`) | all three | a top-level `tests` list, independent of `runtime`, in project v2 (test-waiting B1; owner's decision) |
 | Residual hashes let an ancestor reuse a pass although its runner collects nested tests | architecture | rule 5: an ancestor's tests depend on nested scopes |
 | Two caches and three "what counts as code" rules | workarounds | one result store, one `affected()` (test-waiting section 4) |
 | Open decisions blocked step 2 | workarounds | decided (section 8) |
