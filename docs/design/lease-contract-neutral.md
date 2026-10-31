@@ -1,156 +1,201 @@
-# 租約契約跟執行環境無關(m10251446):設計,待 Knas 確認
+# A lease contract independent of the runtime (m10251446): design, awaiting the owner's confirmation
 
-> **狀態**:10-25 Knas 確認 A–E(截止日改成最多一天)並同一天做完:`f6df0e9`(契約 v2 + v1 相容)、`2482a30`(approvals + relay)。
-> 同一天 Muninn 換到 v2(Muninn `dd3bd3b`)、也出了權限請求 v2,v1 相容層跟 v1 schema 隨即刪掉(schema 移到 `contracts/retired/`),
-> 權限請求只送 v2(不再需要 `lease.permission_requests_v` 設定)。
+> **Status**: the owner confirmed A–E on 10-25 (deadline changed to at most one day) and it was finished the same day:
+> `f6df0e9` (contract v2 + v1 compatibility), `2482a30` (approvals + relay). The same day the assistant switched to v2
+> (Muninn `dd3bd3b`) and also issued permission requests v2; the v1 compatibility layer and the v1 schema were removed
+> right away (the schema moved to `contracts/retired/`), and permission requests are sent only as v2 (the
+> `lease.permission_requests_v` setting is no longer needed).
 
-來源:Muninn 的請求 `m10251446-318e`(10-25 14:46,Knas 已同意方向):`contracts/lease-runner.v1.schema.json` 改成跟 agent
-實作無關的通用類別,Claude Code 的名稱在 runner 這一端翻譯。完成條件(Muninn 的):契約裡不再出現 Claude Code 的工具名跟
-Claude 訂閱專屬的欄位;runner 有翻譯表跟測試;回信說清楚新舊格式並行到哪天。
+Source: the assistant's request `m10251446-318e` (10-25 14:46, direction already agreed by the owner): turn
+`contracts/lease-runner.v1.schema.json` into generic categories independent of the agent implementation, with Claude
+Code's names translated on the runner's side. Done when (the assistant's criteria): no Claude Code tool names or
+Claude-subscription-specific fields remain in the contract; the runner has a translation table and tests; the reply
+says clearly until which day the old and new formats run side by side.
 
-跟其他兩份的關係:
-- `docs/design/capabilities.md`(第 2 層的中立政策 `policy.py`、翻譯 `runtime_claude.settings()`)——這份補上第 2 層還缺的
-  「哪些動作要問人」(`approvals`)。
-- `docs/design/runtime-abstraction.md`(總設計,另一個 session)——這份的「事件翻譯」就是它第 1 層 `events()` 的內容;
-  分工見「跟總設計的分工」(10-25 已對齊)。
+Relation to the two other documents:
+- `docs/design/capabilities.md` (layer 2's neutral policy `policy.py`, translated by `runtime_claude.settings()`): this
+  document adds what layer 2 still lacks, "which actions need asking a person" (`approvals`).
+- `docs/design/runtime-abstraction.md` (the overall design, another session): this document's "event translation" is
+  the content of its layer 1 `events()`; for the split see "Split of work with the overall design" (aligned 10-25).
 
-## 現在綁住的地方(對照 Muninn 列的五點,都查過程式)
+## Where it is tied today (against the five points the assistant listed, all checked in the code)
 
-| # | 綁住的地方 | 程式裡在哪 |
+| # | What is tied | Where in the code |
 |---|---|---|
-| 1 | 事件 `tool_use.name` 是 Claude 的工具名 | `lease-runner.reader()`、`summarize_tool()` |
-| 2 | 權限請求的 `tool`(AskUserQuestion / WebFetch / Bash)、`question` 直接是 AskUserQuestion 的 input;事件 `question`/`permission` 也帶 `tool` | `lease-relay.decide()`、`ask_owner()`;runner 把 relay 的回報原樣轉成事件 |
-| 3 | `rate_limit` 的 `five_hour`/`seven_day`(+`_resets_at`,epoch 秒),事件跟 `/v1/status` 都有 | `reader()` 的 `rate_limit_event` |
-| 4 | `/terminal` 回的指令;接續靠 Claude Code 的對話紀錄(保留 30 天),紀錄不在了會**默默**開新的對話 | `start_proc()` 的 `can_resume`、`bin/lease-resume` |
-| 5 | 錯誤碼 `auth` 其實是「Claude 沒登入」 | `reader()` 結尾從 stderr 猜 |
+| 1 | Event `tool_use.name` is Claude's tool name | `lease-runner.reader()`, `summarize_tool()` |
+| 2 | Permission requests' `tool` (AskUserQuestion / WebFetch / Bash); `question` is AskUserQuestion's input as is; events `question`/`permission` also carry `tool` | `lease-relay.decide()`, `ask_owner()`; the runner turns the relay's reports into events unchanged |
+| 3 | `rate_limit`'s `five_hour`/`seven_day` (+`_resets_at`, epoch seconds), in both the event and `/v1/status` | `reader()`'s `rate_limit_event` |
+| 4 | The command `/terminal` returns; resuming relies on Claude Code's conversation log (kept 30 days), and when the log is gone it **silently** opens a new conversation | `start_proc()`'s `can_resume`, `bin/lease-resume` |
+| 5 | Error code `auth` really means "Claude is not logged in" | guessed from stderr at the end of `reader()` |
 
-另外兩處 Muninn 沒列、但也是 Claude 的字:`/v1/policy` 的 `no_session_domains` 說明寫 WebFetch;relay 回報的事件裡
-`kind: question|permission` 跟事件類型重複(而且新格式要把 `kind` 拿來放動作種類,見下)。
-`lease-handover.v1` 查過,沒有 Claude 的字。
+Two more places the assistant did not list, but also Claude's words: the description of `/v1/policy`'s
+`no_session_domains` says WebFetch; in the events reported by the relay, `kind: question|permission` duplicates the
+event type (and the new format wants `kind` for the kind of action, see below).
+`lease-handover.v1` was checked: no Claude words.
 
-## 一套動作種類(kind),全平台共用
+## One set of action kinds, shared by the whole platform
 
 ```
 read | search | ask_user | open_web | write_file | run_command | other
 ```
 
-- 就是 Muninn 提的那組。**同一組**也用在第 2 層的 `approvals`、判斷點宣告(`llm-points.yaml`)、總設計的對話紀錄統計——
-  總設計的原則 8 已經這樣寫,這份把名單定下來。
-- 名單放在 `runtime_ports.py`(中立,`KINDS`);**Claude 工具名 → kind 的翻譯表只在 `runtime_claude.py`**:
-  `Read`→read;`Glob`、`Grep`、`WebSearch`→search;`WebFetch`→open_web;`Edit`、`Write`、`MultiEdit`、`NotebookEdit`→write_file;
-  `Bash`→run_command;`AskUserQuestion`→ask_user;其他(`Task`、`TodoWrite`、MCP 工具…)→other。
-  `hub-run` 是 run_command(摘要會寫出是哪個能力)。
-- 翻譯函式:`runtime_claude.action(tool, input) -> (kind, collab, target, summary)`——target 是判斷用的(路徑、網址、指令),
-  summary 是給人看的一句。runner 的事件、relay 的權限判斷、對話紀錄的統計都用它,不各自寫一份。
-- **另一個維度:協作方式**(`collab`,跟 kind 分開,只有一份定義):`subagent | workflow | peer_message | skill` 或 None。
-  kind 說「這個動作的效果」(權限、approvals 用),collab 說「怎麼分工」(週報統計用)——交給子 agent、跑 workflow、跨 session
-  傳訊息、用技能,在 kind 裡都是 other,統計會看不到,所以另外帶。`runtime_ports.Action` 改成 `Action(kind, detail, collab=None)`,
-  總設計原本的 `ACTIONS` 跟 `runtime_claude._action` 在 `action()` 做好後由那邊收掉。
+- Exactly the set the assistant proposed. **The same set** is also used by layer 2's `approvals`, the judgment point
+  declarations (`llm-points.yaml`), and the overall design's conversation-log statistics: the overall design's
+  principle 8 already says so; this document fixes the list.
+- The list lives in `runtime_ports.py` (neutral, `KINDS`); **the Claude tool name → kind table is only in
+  `runtime_claude.py`**: `Read`→read; `Glob`, `Grep`, `WebSearch`→search; `WebFetch`→open_web; `Edit`, `Write`,
+  `MultiEdit`, `NotebookEdit`→write_file; `Bash`→run_command; `AskUserQuestion`→ask_user; everything else (`Task`,
+  `TodoWrite`, MCP tools…)→other. `hub-run` is run_command (the summary says which capability).
+- Translation function: `runtime_claude.action(tool, input) -> (kind, collab, target, summary)`: target is for
+  decisions (path, URL, command), summary is one sentence for people. The runner's events, the relay's permission
+  decisions and the conversation-log statistics all use it rather than each writing their own.
+- **Another dimension: how work is shared** (`collab`, separate from kind, defined in one place only):
+  `subagent | workflow | peer_message | skill` or None. kind says "the effect of this action" (used for permissions and
+  approvals), collab says "how work is divided" (used for the weekly statistics): handing to a sub-agent, running a
+  workflow, messaging across sessions, using a skill are all other in kind, invisible to the statistics, so it is
+  carried separately. `runtime_ports.Action` becomes `Action(kind, detail, collab=None)`; the overall design's original
+  `ACTIONS` and `runtime_claude._action` are retired by that side once `action()` is done.
 
-## 契約:v2 跟 v1 並存,Muninn 自己選哪天換
+## Contract: v2 and v1 side by side, the assistant picks the day to switch
 
-**做法(建議)**:新增 `contracts/lease-runner.v2.schema.json`,v1 那份**一個字都不改**。
-- Muninn 用 `v` 選格式:請求帶 `"v": 2` 就回 v2 的形狀;SSE 用 `GET /v1/leases/<id>/events?v=2`。不帶就是 v1,行為跟現在
-  逐位元組相同。所以 Muninn 可以一次切過去,不用處理「同一個事件裡新舊欄位都有」。
-- 這是 CLAUDE.md 的規則「改名/改意思升版、兩版並存到讀的人換完」;不在 v1 裡加欄位並行,因為 `kind` 在 `question`/`permission`
-  事件裡已經有別的意思(question|permission),加欄位會撞名。
-- runner 內部只產生 v2 的事件;v1 是一個轉回舊形狀的小函式(`v1_compat()`),截止日一到整個刪掉。
-- **截止日:Muninn 回報換好就刪,最晚 2026-10-26**(Knas 10-25:只有他在用,迭代要快,不需要等)。之後 runner 只認 v2,
-  v1 的 schema 檔移到 `contracts/retired/`。
-- 每晚的契約檢查不受影響:v1 檔沒變,Muninn 的副本照樣一致;v2 是新檔,Muninn 在自己的登錄加 `consumes` 那天才開始比對。
+**Approach (proposed)**: add `contracts/lease-runner.v2.schema.json`, and change **not one character** of the v1 file.
+- The assistant chooses the format with `v`: a request with `"v": 2` gets v2's shape; SSE uses
+  `GET /v1/leases/<id>/events?v=2`. Without it, it is v1, byte for byte the same behaviour as today. So the assistant
+  can switch over in one go, without handling "old and new fields in the same event".
+- This is the CLAUDE.md rule "renaming/changing meaning bumps the version, both versions coexist until the readers have
+  switched"; no fields are added to v1 to run in parallel, because `kind` already has another meaning
+  (question|permission) in the `question`/`permission` events, and adding the field would clash.
+- Inside the runner only v2 events are produced; v1 is a small function turning them back into the old shape
+  (`v1_compat()`), deleted entirely on the deadline.
+- **Deadline: deleted as soon as the assistant reports it has switched, 2026-10-26 at the latest** (the owner on 10-25:
+  only he uses it, iteration should be fast, no need to wait). After that the runner only accepts v2, and the v1
+  schema file moves to `contracts/retired/`.
+- The nightly contract check is unaffected: the v1 file has not changed, so the assistant's copy stays consistent; v2 is
+  a new file, compared only from the day the assistant adds `consumes` to its registry.
 
-**v2 跟 v1 的差別**(其他欄位、端點不變)
+**Differences between v2 and v1** (other fields and endpoints unchanged)
 
 | | v1 | v2 |
 |---|---|---|
-| 事件 `tool_use` | `name`(Claude 工具名)、`summary` | `kind`、`summary`、`detail: {tool}`(原名,除錯用,Muninn 不讀) |
-| 事件 `question` | relay 的 `phase/tool/summary/kind/decision` 原樣 | `phase`、`kind: ask_user`、`summary`、`question`(通用結構,見下)、`decision` |
-| 事件 `permission` | 同上 | `phase`、`kind`(open_web / write_file / run_command…)、`summary`、`target`、`decision` |
-| 事件 `rate_limit` | `five_hour`、`seven_day`、`*_resets_at`(epoch 秒)、`status` | 改名 `quota`:`{status: ok\|warning\|exhausted, windows: [{id, label, used(0–1), resets_at(ISO)}]}` |
-| `/v1/status` | `rate_limit: {five_hour, …}` | `quota`:同上,加 `at` |
-| `/terminal` 回應 | `{command}` | `{command, hint}`;command 由 runtime 組(現在還是 `lease-resume <id>`),hint 是給人看的一句 |
-| 接續 | 紀錄不在就默默開新的 | `state` 事件帶 `resumed: true\|false`;沒接回就 `resumed: false` + `detail`(「之前的對話紀錄已經不在,從新的對話開始」);`lease` 物件加 `resumable` |
-| 錯誤碼 | `auth` | `agent_login`,`detail` 寫人看得懂的(「專案 session 用的 Claude Code 沒登入或憑證過期,平台會發警報」) |
-| `/v1/policy` | `no_session_domains` 說明寫 WebFetch | 說明改成 open_web(欄位不變) |
+| Event `tool_use` | `name` (Claude tool name), `summary` | `kind`, `summary`, `detail: {tool}` (the original name, for debugging; the assistant does not read it) |
+| Event `question` | the relay's `phase/tool/summary/kind/decision` as is | `phase`, `kind: ask_user`, `summary`, `question` (generic structure, see below), `decision` |
+| Event `permission` | same | `phase`, `kind` (open_web / write_file / run_command…), `summary`, `target`, `decision` |
+| Event `rate_limit` | `five_hour`, `seven_day`, `*_resets_at` (epoch seconds), `status` | renamed `quota`: `{status: ok\|warning\|exhausted, windows: [{id, label, used(0–1), resets_at(ISO)}]}` |
+| `/v1/status` | `rate_limit: {five_hour, …}` | `quota`: same as above, plus `at` |
+| `/terminal` response | `{command}` | `{command, hint}`; command built by the runtime (still `lease-resume <id>` today), hint is one sentence for people |
+| Resuming | silently opens a new one when the log is gone | the `state` event carries `resumed: true\|false`; not resumed → `resumed: false` + `detail` ("The earlier conversation is gone, starting a new conversation"); the `lease` object gets `resumable` |
+| Error code | `auth` | `agent_login`, with a human-readable `detail` ("Claude Code used by project sessions is not logged in or its credentials have expired; the platform sends an alert") |
+| `/v1/policy` | `no_session_domains` described with WebFetch | described with open_web (field unchanged) |
 
-- `rate_limit` 的錯誤碼(額度用完)保留:這個詞本身是通用的。
-- `quota.windows` 的 Claude 實作:`five_hour` → `{id: "five_hour", label: "5 小時"}`、`seven_day` → `{id: "seven_day", label: "7 天"}`;
-  `status` 從 Claude 的 allowed / allowed_warning / rejected 對到 ok / warning / exhausted。Muninn 只照 label 顯示、照 used 判斷。
-- `session_id`(建立租約時 Muninn 給的 UUID)保留:那是租約自己的 id;「要是 UUID」寫成 runtime 的限制,不是契約的意思。
+- The `rate_limit` error code (quota used up) stays: the word itself is generic.
+- Claude's implementation of `quota.windows`: `five_hour` → `{id: "five_hour", label: "5 hours"}`, `seven_day` →
+  `{id: "seven_day", label: "7 days"}`; `status` maps Claude's allowed /
+  allowed_warning / rejected to ok / warning / exhausted. The assistant only displays the label and judges by used.
+- `session_id` (the UUID the assistant gives when creating a lease) stays: it is the lease's own id; "must be a UUID"
+  is written as a runtime limitation, not part of the contract's meaning.
 
-## 權限請求(Muninn 的契約 `permission-requests`)
+## Permission requests (the assistant's contract `permission-requests`)
 
-這份是 **Muninn 定義、我們 vendor** 的(`contracts/vendor/muninn/permission-requests.v1.schema.json`),所以由 Muninn 出 v2,
-我們照著送。建議的形狀(寫在回信裡給它):
+This one is **defined by the assistant and vendored by us**
+(`contracts/vendor/muninn/permission-requests.v1.schema.json`), so the assistant issues v2 and we send accordingly.
+The proposed shape (written in the reply to it):
 
 ```
 request:  {v: 2, id, lease, project, kind, summary, target?, question?, detail?: {tool}}
-  kind      ask_user | open_web | write_file | run_command(會送來問的只有這幾種)
-  question  {questions: [{question, options: [{label, description?}], multi?: bool}]}   通用結構,不是 AskUserQuestion 的 input
-decision: {v: 2, decision: allow | deny | allow_session, answers?: {問題: label 或 [label…](multi)}}
+  kind      ask_user | open_web | write_file | run_command (the only kinds that get sent to ask)
+  question  {questions: [{question, options: [{label, description?}], multi?: bool}]}
+            generic structure, not AskUserQuestion's input
+decision: {v: 2, decision: allow | deny | allow_session, answers?: {question: label or [label…] (multi)}}
 ```
-- 拿掉 `tool`、`input_summary`(改名 `summary`)、`risk`(跟 kind 重複:question→ask_user、external_fetch→open_web)。
-- 多選的答案在 Claude 那邊要合成一個字串,這是 `runtime_claude` 的事,契約用 list。
-- relay 依 Muninn 給的版本送;Muninn 換好之前照 v1 送(relay 讀 Muninn 回的 `v` 或設定)。
+- Drops `tool`, `input_summary` (renamed `summary`), `risk` (duplicates kind: question→ask_user,
+  external_fetch→open_web).
+- On Claude's side the answers of a multiple choice have to be joined into one string; that is `runtime_claude`'s job,
+  the contract uses a list.
+- The relay sends per the version the assistant gives; until the assistant has switched it sends v1 (the relay reads the
+  `v` the assistant returns, or a setting).
 
-## 「哪些動作要問人」:approvals(第 2 層補上的一塊)
+## "Which actions need asking a person": approvals (the piece layer 2 gains)
 
-現在寫死在 `lease-relay.decide()` 裡、用 Claude 工具名判斷。改成中立政策的一部分(`policy.approvals(name, mode)`),
-relay 只剩「Claude 的權限協定 ↔ 中立判斷」的轉接:
+Today this is hard-coded in `lease-relay.decide()`, decided by Claude tool names. It becomes part of the neutral policy
+(`policy.approvals(name, mode)`), and the relay is left with only the adapter "Claude's permission protocol ↔ neutral
+decision":
 
 ```
-discuss:  read/search → allow;open_web → 登錄網域 allow、其他 ask;ask_user → ask;write_file/run_command/other → deny
-work:     同上,加 write_file → 專案資料夾裡 allow、外面 deny;run_command → ask(每次,allow_session 只算這次)
+discuss:  read/search → allow; open_web → registered domains allow, others ask; ask_user → ask;
+          write_file/run_command/other → deny
+work:     same, plus write_file → allow inside the project folder, deny outside;
+          run_command → ask (every time; allow_session counts for this one only)
 ```
-- `ask` = 送 owner(Muninn → Knas 的手機)。`allow_session` 的護欄(`no_session_domains`、指令不能整個租約都允許)也寫在這裡。
-- 規則跟 Knas 10-25 的決定一樣,**行為不變**;現在的 `tests/test_lease_relay_work.py` 全部照過。
-- 判斷點宣告(`llm-points.yaml` 的 `lease-session`/`lease-work`)的 `tools`/`allowed_tools` 也換成 kind 的清單,由 `runtime_claude`
-  翻成 `--tools`/`--allowedTools`。這會動跟 Muninn 共用的 `llm-points.v1.schema.json`——總設計第 1 層本來就要做這件事,
-  這份只提供 kind 跟 approvals 的格式(分工見下)。
+- `ask` = send to the owner (the assistant → the owner's phone). The guard rails of `allow_session`
+  (`no_session_domains`, a command can never be allowed for the whole lease) are written here too.
+- The rules are the same as the owner's decisions of 10-25, **behaviour unchanged**; the existing
+  `tests/test_lease_relay_work.py` all pass as they are.
+- The `tools`/`allowed_tools` of the judgment point declarations (`lease-session`/`lease-work` in `llm-points.yaml`)
+  also become lists of kinds, translated by `runtime_claude` into `--tools`/`--allowedTools`. This touches
+  `llm-points.v1.schema.json`, shared with the assistant: the overall design's layer 1 was going to do that anyway; this
+  document only provides the format of kinds and approvals (split below).
 
-## 跟總設計的分工(10-25 跟那個 session 對齊)
+## Split of work with the overall design (aligned with that session 10-25)
 
-邊界:**這份是「翻譯跟契約」,總設計是「程序生命週期」**。
+The boundary: **this document is "translation and contract", the overall design is "process lifecycle"**.
 
-- **這份(這個 session)**:`KINDS`、`StreamEvent`(中立的對話事件,v2 那張表的形狀;不叫 `Event`/`HubEvent`——`HubEvent`
-  已經是第 3 層 hook 事件的名字)、`Action` 加 `collab`,三個都放 `runtime_ports.py`;`runtime_claude.action()`(工具名 → kind、
-  collab)、`runtime_claude.parse_stream(line) -> [StreamEvent]`、quota/錯誤分類/接續指令的翻譯、`policy.approvals()`、relay 拆成
-  轉接、契約 v2 + v1 相容層、跟 Muninn 協調。會動 `lease-runner.py` 的 `reader()`、事件序列化、`/terminal`、`/v1/status`,跟
-  `lease-relay.py`。
-- **總設計(另一個 session)**:第 1 層長駐 session 的介面(`open_session/send/events/resume`)跟 lease-runner 的程序管理
-  (組旗標、開關程序、`--resume` 判斷),排在這份後面,`events()` 直接用 `parse_stream`;`SessionSpec` 帶
-  `approvals = policy.approvals(name, mode)`,由 runtime 接到自己的權限機制。**`llm-points` 的中立化也是它做**(所有判斷點一次換、
-  跟 Muninn 共用的 schema 只改一次),用這份的 `KINDS` 跟 approvals 格式;`lease-session`/`lease-work` 兩個點排在這份的 relay
-  改完之後(allowed_tools 跟 relay 的行為要一起測)。**這份不改 `llm-points.yaml`。**
-- 對話紀錄的統計改用 `action()` 的 collab,`tool_used` hook 事件之後也帶 kind(那邊做)。
-- **檔案的先後**:那個 session 正在改 `runtime_ports.py`、`runtime_claude.py`(第 3 層 lifecycle),這份等它 commit 才動這兩支;
-  這份做的期間,那邊不動 `lease-runner.py`、`lease-relay.py`,做完 commit 再通知。
-- 那邊的 `runtime-abstraction.md` 會照這裡補三件:SessionSpec 引用 approvals、v2/v1 並存照這裡、HubEvent 跟 StreamEvent 分開。
+- **This document (this session)**: `KINDS`, `StreamEvent` (the neutral conversation event, the shape of the v2 table;
+  not named `Event`/`HubEvent`: `HubEvent` is already the name of layer 3's hook events), `Action` gaining `collab`, all
+  three in `runtime_ports.py`; `runtime_claude.action()` (tool name → kind, collab),
+  `runtime_claude.parse_stream(line) -> [StreamEvent]`, translating quota / error classification / the resume command,
+  `policy.approvals()`, splitting the relay into an adapter, contract v2 + the v1 compatibility layer, coordinating with
+  the assistant. It touches `lease-runner.py`'s `reader()`, event serialisation, `/terminal`, `/v1/status`, and
+  `lease-relay.py`.
+- **The overall design (the other session)**: layer 1's long-running session interface
+  (`open_session/send/events/resume`) and lease-runner's process management (building flags, starting and stopping
+  processes, deciding `--resume`), scheduled after this one, with `events()` using `parse_stream` directly;
+  `SessionSpec` carries `approvals = policy.approvals(name, mode)`, which the runtime connects to its own permission
+  mechanism. **Making `llm-points` neutral is also that side's work** (all judgment points switched at once, the schema
+  shared with the assistant changed only once), using this document's `KINDS` and approvals format; the
+  `lease-session`/`lease-work` points are scheduled after this document's relay changes (allowed_tools and the relay's
+  behaviour have to be tested together). **This document does not change `llm-points.yaml`.**
+- The conversation-log statistics switch to `action()`'s collab, and the `tool_used` hook event later carries kind too
+  (done on that side).
+- **Order of files**: that session is currently changing `runtime_ports.py` and `runtime_claude.py` (layer 3
+  lifecycle); this work waits for its commit before touching those two; while this work is in progress, that side does
+  not touch `lease-runner.py` or `lease-relay.py`, and is told after the commit.
+- That side's `runtime-abstraction.md` adds three things from here: SessionSpec referencing approvals, v2/v1 side by
+  side as here, HubEvent and StreamEvent kept apart.
 
-## 測試
+## Tests
 
-- 翻譯表:每個已知的 Claude 工具都有 kind,不認得的是 other;`action()` 的 target/summary。
-- 事件翻譯:錄一段真的 stream-json(含 tool_use、rate_limit_event、result、錯誤)→ 中立事件,逐項比對。
-- **v1 相容**:同一段錄音,v1 的輸出跟現在的 runner 逐位元組相同(改之前先錄下現在的輸出當基準)。
-- v2 契約的範例都通過 `tests/test_contracts.py`;邊界測試把 `lease-runner.py`、`lease-relay.py` 的判斷部分加進
-  `NEUTRAL`(Claude 的字只准出現在 `runtime_claude.py`、`llm.py`、relay 的 MCP 轉接那幾行)。
-- relay:現在的 `test_lease_relay_work.py` 全部照過(行為不變),加 discuss 的 approvals 測試。
-- 假的 runtime(`runtime_fake`)也產生同樣的中立事件,契約測試兩個都跑(總設計原則 3)。
+- Translation table: every known Claude tool has a kind, unknown ones are other; `action()`'s target/summary.
+- Event translation: record a real stream-json (with tool_use, rate_limit_event, result, errors) → neutral events,
+  compared item by item.
+- **v1 compatibility**: for the same recording, the v1 output is byte for byte the same as today's runner (record
+  today's output as the baseline before changing anything).
+- The v2 contract's examples all pass `tests/test_contracts.py`; the boundary test adds the decision parts of
+  `lease-runner.py` and `lease-relay.py` to `NEUTRAL` (Claude's words may only appear in `runtime_claude.py`, `llm.py`
+  and the relay's few MCP adapter lines).
+- Relay: the existing `test_lease_relay_work.py` all pass (behaviour unchanged), plus approvals tests for discuss.
+- The fake runtime (`runtime_fake`) produces the same neutral events too, and the contract tests run both (overall
+  design principle 3).
 
-## 要 Knas 確認的
+## For the owner to confirm
 
-**A. v2 跟 v1 並存、Muninn 用 `v` 選,Muninn 換好就刪 v1、最晚 2026-10-26**(10-25 確認)。不在 v1 裡加欄位並行(`kind` 會撞名)。
-**B. 一套動作種類**(上面七個),契約、approvals、判斷點、對話紀錄統計都用它。
-**C. 「哪些動作要問人」移進中立政策**(`policy.approvals`),relay 只剩轉接;規則跟現在一樣。
-**D. 跟總設計的分工**(上一段,兩個 session 已對齊):這份做翻譯跟契約,那邊做程序生命週期跟 llm-points,這份先做。
-**E. 權限請求的 v2 由 Muninn 出**(它的契約),我們在回信附上建議的形狀。
+**A. v2 and v1 side by side, the assistant picks with `v`; v1 is deleted once the assistant has switched, 2026-10-26 at
+the latest** (confirmed 10-25). No fields added to v1 in parallel (`kind` would clash).
+**B. One set of action kinds** (the seven above), used by the contract, approvals, judgment points and the
+conversation-log statistics.
+**C. "Which actions need asking a person" moves into the neutral policy** (`policy.approvals`), the relay keeps only
+the adapter; rules as today.
+**D. The split with the overall design** (previous section, both sessions aligned): this one does translation and
+contract, that one does process lifecycle and llm-points; this one goes first.
+**E. Permission requests v2 are issued by the assistant** (its contract); we attach the proposed shape to the reply.
 
-## 順序(每步一個 commit)
+## Order (one commit per step)
 
-1. (等總設計的 session commit 第 3 層)錄下現在 runner 的輸出當 v1 基準;`KINDS`、`StreamEvent`、`Action.collab`、`runtime_claude.action()`、`parse_stream()`;runner 內部改產生 v2 事件、
-   v1 走相容層(v1 輸出逐位元組相同)。
-2. v2 契約 + `?v=2`/`"v": 2` 的選擇 + `quota`、`/terminal` 的 hint、`resumed`/`resumable`、`agent_login`。
-3. `policy.approvals()` + relay 拆成轉接 + 權限請求依 Muninn 的版本送;做完通知總設計的 session(它接著換 llm-points、
-   做長駐 session 的介面)。
-4. 回信 muninn(新格式、截止日、權限請求 v2 的建議形狀);`hubbus done`。
-5. 截止日:刪 v1 相容層、v1 schema 移到 `contracts/retired/`。
+1. (After the overall design's session commits layer 3) record today's runner output as the v1 baseline; `KINDS`,
+   `StreamEvent`, `Action.collab`, `runtime_claude.action()`, `parse_stream()`; inside the runner produce v2 events, v1
+   through the compatibility layer (v1 output byte for byte the same).
+2. The v2 contract + choosing with `?v=2`/`"v": 2` + `quota`, `/terminal`'s hint, `resumed`/`resumable`, `agent_login`.
+3. `policy.approvals()` + the relay split into an adapter + permission requests sent per the assistant's version; when
+   done, tell the overall design's session (it then switches llm-points and builds the long-running session
+   interface).
+4. Reply to `muninn` (new format, deadline, proposed shape of permission requests v2); `hubbus done`.
+5. Deadline: delete the v1 compatibility layer, move the v1 schema to `contracts/retired/`.
