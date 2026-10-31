@@ -14,6 +14,7 @@ as before, and this module takes no part):
     },
     "use": {"fast": "<provider>", "standard": "<provider>", "strong": "<provider>"},   point's model_group → provider
     "points": {"<judgment point>": {"provider": "<name>", "model": "<name>"}},           override for one point
+                                       (or {"runtime": "<registered runtime>"}: an agent-shaped point on that runtime)
     "budget": {"daily_usd": 2.0}
   }
 
@@ -362,9 +363,11 @@ def config_errors(llm: dict) -> list[str]:
             errs.append(_("use.{group} → {name}, but providers.{name}.models has no {group}", group=g, name=name))
     try:
         import yaml
-        known = set(yaml.safe_load((hubconf.ROOT / "contracts" / "llm-points.yaml").read_text())["points"])
+        declared = yaml.safe_load((hubconf.ROOT / "contracts" / "llm-points.yaml").read_text())["points"]
+        known = set(declared)
     except Exception:
-        known = None
+        known, declared = None, {}
+    import runtime_ports
     for pt, pin in (llm.get("points") or {}).items():
         if known is not None and pt not in known:
             errs.append(_("points.{point}: not a declared judgment point", point=pt))
@@ -372,6 +375,20 @@ def config_errors(llm: dict) -> list[str]:
             errs.append(_("points.{point} must be an object ({{model}} or {{provider, model?}})", point=pt))
         elif pin.get("provider") is not None and pin["provider"] not in providers:
             errs.append(_("points.{point}.provider must name one of the providers", point=pt))
-        elif pin.get("provider") is None and not pin.get("model"):
+        elif pin.get("runtime") is not None and pin["runtime"] not in runtime_ports.RUNTIMES:
+            errs.append(_("points.{point}.runtime must name a registered runtime (have: {have})", point=pt,
+                          have=", ".join(runtime_ports.RUNTIMES)))
+        elif pin.get("runtime") is not None and ((declared.get(pt) or {}).get("stream")
+                                                  or pt in runtime_ports.RUNTIME_ARG_POINTS):
+            errs.append(_("points.{point}.runtime: {point} is resumed or streamed with the default runtime's own "
+                          "arguments, so it cannot run on another one", point=pt))
+        elif pin.get("runtime") is not None and (declared.get(pt) or {}).get("shape") == "completion":
+            errs.append(_("points.{point}.runtime: a completion point goes to llm.providers, not to a runtime", point=pt))
+        elif pin.get("runtime") is not None and runtime_ports.throwaway_only(pin["runtime"]) \
+                and pt not in runtime_ports.THROWAWAY_POINTS:
+            errs.append(_("points.{point}.runtime: {runtime} runs only in the platform's throwaway worktree, and {point} "
+                          "does not run in one (those that do: {points})", point=pt, runtime=pin["runtime"],
+                          points=", ".join(runtime_ports.THROWAWAY_POINTS)))
+        elif pin.get("provider") is None and not pin.get("model") and not pin.get("runtime"):
             errs.append(_("points.{point}: without a provider, model is required (the model the runtime uses)", point=pt))
     return errs

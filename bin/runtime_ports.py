@@ -98,11 +98,26 @@ _ = i18n.domain(__file__)
 
 # Registration table: name → module. Several runtimes can be registered at once; each session uses its own (design
 # principle 9).
-RUNTIMES = {"claude": "runtime_claude", "fake": "runtime_fake", "none": "runtime_none", "command": "runtime_command"}
+RUNTIMES = {"claude": "runtime_claude", "fake": "runtime_fake", "none": "runtime_none", "command": "runtime_command",
+            "acp": "runtime_acp"}
 DEFAULT = "claude"   # the default when hub.json has no runtime.default
 # those implementing only the completion interface (LLM APIs): hub.json llm.providers' impl names these, or the name of
 # any runtime with a completion interface
 PROVIDERS = {"anthropic": "provider_anthropic", "openai": "provider_openai", "ollama": "provider_ollama"}
+
+# The judgment points the platform runs only in its own throwaway worktree (bin/propose_apply.py marks the run with
+# HUB_THROWAWAY_COPY). A runtime that can only be trusted there declares THROWAWAY_ONLY = True (runtime_acp: the agent
+# decides when to ask, so nothing else holds it to a point's limits); config check refuses to pin it on other points,
+# and doctor lists what it would refuse.
+THROWAWAY_POINTS = ("mailbox-propose",)
+# Judgment points whose callers pass the default runtime's own arguments (resuming a session): they cannot be pinned
+# to another runtime (hub.json llm.points.<point>.runtime), which would drop those arguments.
+RUNTIME_ARG_POINTS = ("mailbox-conversation", "lease-handover")
+
+
+def throwaway_only(name: str | None = None) -> bool:
+    return bool(getattr(_module(name or default_name()), "THROWAWAY_ONLY", False))
+
 
 # Owner-facing names of the ports (Unsupported reasons, doctor's capability table). PORT_LABELS / FEATURES are built
 # when read (module __getattr__), so they follow the UI language of the moment.
@@ -118,7 +133,8 @@ def port_labels() -> dict[str, str]:
 def features() -> tuple:
     return (
         (_("judgment points (librarian, index, consolidate, weekly report analysis)"), ("agent", "auth")),
-        (_("mailbox tasks (the platform sends an agent for letters nobody picked up)"), ("agent", "auth")),
+        # dispatch needs the session state too: it must know which sessions are live before it delegates (hubbus)
+        (_("mailbox tasks (the platform sends an agent for letters nobody picked up)"), ("agent", "auth", "sessions")),
         (_("unattended agent jobs with allow:, and event-triggered agent jobs"), ("agent", "auth", "confine")),
         (_("mailbox follow-up (replying with an idle session's context)"), ("agent", "sessions")),
         (_("channel leasing (also needs the assistant module)"), ("stream", "sessions", "agent", "auth")),

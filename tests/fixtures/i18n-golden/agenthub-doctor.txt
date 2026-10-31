@@ -95,7 +95,7 @@ $ agenthub doctor    # systemd, runtime none
     → agenthub mcp config 印出要登記的那段;各工具怎麼加:docs/mcp.md
 ! 判斷點(librarian、index、consolidate、週報分析):關掉(執行環境 none 沒有跑 agent、登入狀態)
     → 裝一個有這些能力的 coding agent,hub.json runtime.default 指到它
-! 信箱交辦(沒人收的信由平台派 agent):關掉(執行環境 none 沒有跑 agent、登入狀態)
+! 信箱交辦(沒人收的信由平台派 agent):關掉(執行環境 none 沒有跑 agent、登入狀態、session 狀態)
     → 裝一個有這些能力的 coding agent,hub.json runtime.default 指到它
 ! 宣告 allow: 的無人值守 agent job、事件觸發的 agent job:關掉(執行環境 none 沒有跑 agent、登入狀態、受限執行(只照宣告的權限))
     → 裝一個有這些能力的 coding agent,hub.json runtime.default 指到它
@@ -139,7 +139,7 @@ $ agenthub doctor    # no service manager, unnamed assistant
     → agenthub mcp config 印出要登記的那段;各工具怎麼加:docs/mcp.md
 ! 判斷點(librarian、index、consolidate、週報分析):關掉(執行環境 none 沒有跑 agent、登入狀態)
     → 裝一個有這些能力的 coding agent,hub.json runtime.default 指到它
-! 信箱交辦(沒人收的信由平台派 agent):關掉(執行環境 none 沒有跑 agent、登入狀態)
+! 信箱交辦(沒人收的信由平台派 agent):關掉(執行環境 none 沒有跑 agent、登入狀態、session 狀態)
     → 裝一個有這些能力的 coding agent,hub.json runtime.default 指到它
 ! 宣告 allow: 的無人值守 agent job、事件觸發的 agent job:關掉(執行環境 none 沒有跑 agent、登入狀態、受限執行(只照宣告的權限))
     → 裝一個有這些能力的 coding agent,hub.json runtime.default 指到它

@@ -20,6 +20,7 @@ import yaml
 
 ROOT = pathlib.Path(__file__).resolve().parents[1]
 BIN = ROOT / "bin"
+sys.path.insert(0, str(BIN))
 
 AGENT = r'''
 import json, pathlib, re, sys
@@ -144,14 +145,98 @@ class ProposeApply(unittest.TestCase):
         self.assertEqual([p for p in out["applied"] if p.startswith(".agent-memory/memory/")], [
             f".agent-memory/memory/{datetime.date.today().isoformat()}.md"], out)
 
+    def test_a_failed_run_holds_the_letter_and_asks_the_owner(self):
+        """claimed by dispatch, failed: never left claimed without a word, never dispatched again (nothing loops)"""
+        (self.tmp / "agent.py").write_text("import sys\nsys.exit(2)\n")
+        r = self.run_("hubbus", "send", "--from", "agent-hub", "--to", "demo", "--type", "request", "--text", "do it")
+        mid = r.stdout.strip().split()[-1]
+        self.run_("propose_apply.py", "mailbox", "demo", mid)
+        check = ("import importlib.machinery, importlib.util, json, sys\n"
+                 f"l = importlib.machinery.SourceFileLoader('hb', '{BIN / 'hubbus'}')\n"
+                 "s = importlib.util.spec_from_loader('hb', l); m = importlib.util.module_from_spec(s); l.exec_module(m)\n"
+                 "c = m.db(); mid = sys.argv[1]\n"
+                 "q = lambda sql: c.execute(sql, (mid,)).fetchone()[0]\n"
+                 "print(json.dumps([sorted(m.claimed(c, [mid])),"
+                 " q(\"SELECT COUNT(*) FROM events WHERE type='message' AND ref=? AND id LIKE '%propose-failed'\"),"
+                 " q(\"SELECT COUNT(*) FROM events WHERE type='job.failed' AND ? IS NOT NULL\")]))\n")
+        out = json.loads(subprocess.run([sys.executable, "-c", check, mid], env=self.env, capture_output=True,
+                                        text=True, check=True).stdout)
+        self.assertEqual(out, [[mid], 1, 1])
+
+    def held_and_asked(self, mid):
+        check = ("import importlib.machinery, importlib.util, json, sys\n"
+                 f"l = importlib.machinery.SourceFileLoader('hb', '{BIN / 'hubbus'}')\n"
+                 "s = importlib.util.spec_from_loader('hb', l); m = importlib.util.module_from_spec(s); l.exec_module(m)\n"
+                 "c = m.db(); mid = sys.argv[1]\n"
+                 "print(json.dumps([sorted(m.claimed(c, [mid])), c.execute(\"SELECT COUNT(*) FROM events WHERE "
+                 "type='message' AND ref=? AND id LIKE '%propose-failed'\", (mid,)).fetchone()[0]]))\n")
+        return json.loads(subprocess.run([sys.executable, "-c", check, mid], env=self.env, capture_output=True,
+                                         text=True, check=True).stdout) == [[mid], 1]
+
+    def test_prose_instead_of_the_structured_answer_is_held_not_silent(self):
+        (self.tmp / "agent.py").write_text(
+            "import pathlib, re, sys\nprompt = open(sys.argv[1]).read()\n"
+            "day = re.search(r'memory/(\\d{4}-\\d{2}-\\d{2})\\.md', prompt).group(1)\n"
+            "pathlib.Path(f'.agent-memory/memory/{day}.md').write_text('- a note\\n')\n"
+            "print('I wrote a note.')\n")
+        r = self.run_("hubbus", "send", "--from", "agent-hub", "--to", "demo", "--type", "question", "--text", "hm")
+        mid = r.stdout.strip().split()[-1]
+        r = self.run_("propose_apply.py", "mailbox", "demo", mid)
+        out = json.loads(r.stdout.strip().splitlines()[-1])
+        self.assertEqual((out["ok"], out["applied"]), (False, []), out)
+        self.assertTrue(self.held_and_asked(mid))
+
+    def test_a_letter_left_unanswered_is_held(self):
+        (self.tmp / "agent.py").write_text(
+            "import json\nprint(json.dumps({'replies': [], 'done': [], 'ask_owner': [], 'summary': 'nothing'}))\n")
+        r = self.run_("hubbus", "send", "--from", "agent-hub", "--to", "demo", "--type", "question", "--text", "hm")
+        mid = r.stdout.strip().split()[-1]
+        self.run_("propose_apply.py", "mailbox", "demo", mid)
+        self.assertTrue(self.held_and_asked(mid))
+
+    def test_a_deferred_letter_stays_open_without_a_failure(self):
+        """the prompt's own cases: waits for the owner (asked) or for a code change (a note): left open on purpose"""
+        (self.tmp / "agent.py").write_text(
+            "import json, pathlib, re, sys\nprompt = open(sys.argv[1]).read()\n"
+            "mid = re.search(r'- id ([^\\s,]+),', prompt).group(1)\n"
+            "day = re.search(r'memory/(\\d{4}-\\d{2}-\\d{2})\\.md', prompt).group(1)\n"
+            "pathlib.Path(f'.agent-memory/memory/{day}.md').write_text('- waits for a code change\\n')\n"
+            "print(json.dumps({'replies': [], 'done': [], 'ask_owner': [{'text': 'which one?'}],"
+            " 'deferred': [{'id': mid, 'why': 'owner decides'}], 'summary': mid}))\n")
+        r = self.run_("hubbus", "send", "--from", "agent-hub", "--to", "demo", "--type", "question", "--text", "hm")
+        mid = r.stdout.strip().split()[-1]
+        r = self.run_("propose_apply.py", "mailbox", "demo", mid)
+        out = json.loads(r.stdout.strip().splitlines()[-1])
+        self.assertTrue(out["ok"], out)
+        self.assertEqual(len([p for p in out["applied"] if p.startswith(".agent-memory/memory/")]), 1)
+        self.assertFalse(self.held_and_asked(mid), "no second question, no failure")
+
+    def test_dot_files_under_allowed_paths_are_never_applied(self):
+        (self.tmp / "agent.py").write_text(
+            "import json, re, sys\nprompt = open(sys.argv[1]).read()\n"
+            "mid = re.search(r'- id ([^\\s,]+),', prompt).group(1)\n"
+            "open('.agent-memory/memory/.gitignore', 'w').write('*.md\\n')\n"
+            "open('.agent-memory/memory/.gitattributes', 'w').write('*.md filter=lfs\\n')\n"
+            "print(json.dumps({'replies': [], 'done': [{'id': mid}], 'ask_owner': [], 'summary': mid}))\n")
+        r = self.run_("hubbus", "send", "--from", "agent-hub", "--to", "demo", "--type", "question", "--text", "hm")
+        mid = r.stdout.strip().split()[-1]
+        r = self.run_("propose_apply.py", "mailbox", "demo", mid)
+        out = json.loads(r.stdout.strip().splitlines()[-1])
+        self.assertEqual(out["applied"], [])
+        self.assertFalse((self.ws / ".agent-memory" / "memory" / ".gitignore").exists())
+
     def test_failed_agent_changes_nothing(self):
-        (self.tmp / "agent.py").write_text("import sys\nopen('README.md','w').write('x')\nsys.exit(2)\n")
+        (self.tmp / "agent.py").write_text("import sys\nopen('README.md','w').write('x')\n"
+                                           "open('.agent-memory/memory/2000-01-01.md','w').write('- half done')\n"
+                                           "sys.exit(2)\n")
         r = self.run_("hubbus", "send", "--from", "agent-hub", "--to", "demo", "--type", "request", "--text", "做件事")
         mid = r.stdout.strip().split()[-1]
         r = self.run_("propose_apply.py", "mailbox", "demo", mid)
         self.assertEqual(r.returncode, 1)
         out = json.loads(r.stdout.strip().splitlines()[-1])
         self.assertEqual((out["done"], out["sent"]), ([], []))
+        self.assertFalse((self.ws / ".agent-memory" / "memory" / "2000-01-01.md").exists(),
+                         "even an allowed path is not applied from a failed run (the letter is held and the owner asked)")
         self.assertEqual((self.ws / "README.md").read_text(), "原本的 README\n")
 
 

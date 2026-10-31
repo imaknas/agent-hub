@@ -490,19 +490,34 @@ def cmd_doctor(argv: list[str]) -> int:
         add("ok" if ok else "warn", _("{feature}: available", feature=feat) if ok else
             _("{feature}: off (the runtime {runtime} has no {missing})", feature=feat, runtime=rname, missing=miss),
             "" if ok else _("install a coding agent that supports them, and point hub.json runtime.default at it"))
-    try:
-        auth = runtime_ports.load(ports=("auth",))
-        for c in auth.credentials():
-            if c.mode == "token":  # unattended calls like the schedule and the librarian use this by default
-                add("ok" if c.present else "bad", _("agent login ({label}): present", label=c.label) if c.present
-                    else _("agent login ({label}): missing", label=c.label),
-                    "" if c.present else c.renew)
-            elif not c.present:
-                add("warn", _("agent login ({label}): missing", label=c.label), c.renew)
-    except runtime_ports.Unsupported:
-        pass   # no agent login to check: the feature table above already said which features are off
-    except Exception as e:
-        add("bad", _("cannot read the agent's login state: {error}", error=e), _("agenthub config check"))
+    if runtime_ports.throwaway_only(rname):
+        add("warn", _("the runtime {runtime} runs only in the platform's throwaway worktree: agent-shaped judgment points "
+                      "other than {points} are refused with that reason", runtime=rname,
+                      points=", ".join(runtime_ports.THROWAWAY_POINTS)),
+            _("keep a runtime with session state as runtime.default and put {runtime} on single points "
+              "(hub.json llm.points.<point>.runtime)", runtime=rname))
+    hub_cfg = {"runtime": hubconf.get("runtime") or {}, "llm": hubconf.get("llm") or {},
+               "mailbox": hubconf.get("mailbox") or {}}
+    for name in runtime_ports.RUNTIMES:   # a runtime's own "allowed but weak" settings
+        warn_fn = getattr(runtime_ports._module(name), "warnings", None)
+        for text, hint in (warn_fn(hub_cfg) if callable(warn_fn) else []):
+            add("warn", text, hint)
+    pinned = {pin.get("runtime") for pin in ((hubconf.get("llm") or {}).get("points") or {}).values()
+              if isinstance(pin, dict) and pin.get("runtime")}
+    for name in [rname, *sorted(pinned - {rname})]:   # the default runtime, then each one a point is pinned to
+        try:
+            auth = runtime_ports.load(name, ports=("auth",))
+            for c in auth.credentials():
+                if c.mode == "token":  # unattended calls like the schedule and the librarian use this by default
+                    add("ok" if c.present else "bad", _("agent login ({label}): present", label=c.label) if c.present
+                        else _("agent login ({label}): missing", label=c.label),
+                        "" if c.present else c.renew)
+                elif not c.present:
+                    add("warn", _("agent login ({label}): missing", label=c.label), c.renew)
+        except runtime_ports.Unsupported:
+            pass   # no agent login to check: the feature table above already said which features are off
+        except Exception as e:
+            add("bad", _("cannot read the agent's login state: {error}", error=e), _("agenthub config check"))
     import completion
     if completion.settings():
         for name, ok, why in completion.health_all():

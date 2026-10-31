@@ -34,7 +34,7 @@ $ <HUB>/bin/config-check
 --- stderr
 config-check:✗ hub.json:不認得的鍵 `assitant`(是不是 assistant?);要新增就先加進 contracts/hub.v1.schema.json
 config-check:✗ hub.json:llm:有 providers 就要寫 use(fast / standard / strong 各交給哪一家)
-config-check:✗ hub.json:llm:providers.x.impl `nope` 不認得(有:anthropic, openai, ollama, claude, fake, none, command)
+config-check:✗ hub.json:llm:providers.x.impl `nope` 不認得(有:anthropic, openai, ollama, claude, fake, none, command, acp)
 config-check:✗ models.env:不再使用——模型設定搬進 hub.json 的 llm.points(schedulectl set-model state|index|consolidate <model>,值跟組別預設一樣就不用寫),然後刪掉 models.env
 config-check:✗ mirror-list.txt:3:不像 git remote:not a remote
 config-check:✗ services.tsv:3:label `x` 重複
@@ -47,7 +47,7 @@ $ <HUB>/bin/config-check
 --- stderr
 config-check:✗ hub.json:不認得的鍵 `assitant`(是不是 assistant?);要新增就先加進 contracts/hub.v1.schema.json
 config-check:✗ hub.json:llm:有 providers 就要寫 use(fast / standard / strong 各交給哪一家)
-config-check:✗ hub.json:llm:providers.x.impl `nope` 不認得(有:anthropic, openai, ollama, claude, fake, none, command)
+config-check:✗ hub.json:llm:providers.x.impl `nope` 不認得(有:anthropic, openai, ollama, claude, fake, none, command, acp)
 config-check:✗ schedule.yaml:讀不了(while parsing a flow node
 expected the node content, but found '<stream end>'
   in "<unicode string>", line 2, column 1:

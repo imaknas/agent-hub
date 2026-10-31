@@ -13,5 +13,6 @@
  "{label} ({used_by}): the login expires within {days} {days:day|days} — {renew}": "{label}({used_by})登入 {days} 天內到期——{renew}",
  "{mode}: request failed (does not look like a login problem; {n} {n:time|times} in a row): {err}": "{mode}:請求失敗(不像登入問題,連續第 {n} 次):{err}",
  "claude requests failed {n} times in a row ({mode}): {err}": "claude 請求連續 {n} 次失敗({mode}):{err}",
- "The claude login check is back to normal": "claude 登入檢查恢復正常"
+ "The claude login check is back to normal": "claude 登入檢查恢復正常",
+ "not checked: the runtime {runtime} runs only in the platform's throwaway worktree; its login shows in its runs (a lost login fails them as a login error)": "沒有檢查:執行環境 {runtime} 只在平台的拋棄式 worktree 裡跑;它的登入狀態看它自己的執行(登入失效時會以登入錯誤失敗)"
 }

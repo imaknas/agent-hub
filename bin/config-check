@@ -66,6 +66,21 @@ def check(root: pathlib.Path) -> list[str]:
             errs.append(_("hub.json: unknown key `{key}`{hint}; to add one, put it in contracts/hub.v1.schema.json first",
                           key=k, hint=_(" (did you mean {keys}?)", keys=', '.join(near)) if near else ""))
 
+    import runtime_ports
+    rdefault = (cfg.get("runtime") or {}).get("default")
+    if rdefault and rdefault not in runtime_ports.RUNTIMES:
+        errs.append(_("hub.json: runtime.default `{name}` is not a registered runtime (have: {have})", name=rdefault,
+                      have=", ".join(runtime_ports.RUNTIMES)))
+    elif rdefault and runtime_ports.throwaway_only(rdefault):
+        errs.append(_("hub.json: runtime.default `{name}` runs only in the platform's throwaway worktree, so as the "
+                      "default it would run nothing (dispatch needs session state, every other point is refused); keep "
+                      "another runtime as the default and pin {name} on {points} (llm.points.<point>.runtime)",
+                      name=rdefault, points=", ".join(runtime_ports.THROWAWAY_POINTS)))
+    for name in runtime_ports.RUNTIMES:   # a runtime's own settings (e.g. runtime.acp), checked by its adapter
+        check_conf = getattr(runtime_ports._module(name), "config_errors", None)
+        if callable(check_conf):
+            errs += [_("hub.json: {error}", error=e) for e in check_conf(cfg)]
+
     if "llm" in cfg:
         import completion
         errs += [_("hub.json: llm: {error}", error=e) for e in completion.config_errors(cfg["llm"])]

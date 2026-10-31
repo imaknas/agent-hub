@@ -207,7 +207,48 @@ class CommandFixture:
         hubconf.get = self._get
 
 
-FIXTURES = {"claude": ClaudeFixture, "fake": FakeFixture, "command": CommandFixture}
+class AcpFixture:
+    """An Agent Client Protocol agent (runtime_acp): the fake agent in tests/fixtures/fake_acp_agent.py speaking JSON-RPC
+    over stdio. ACP reports no turn count."""
+    REPORTS = frozenset({"cost", "session", "incomplete"})
+    POINT = "mailbox-propose"   # the only point ACP runs, and only in the platform's copy (made in configure_run)
+    LOGIN_ERROR = "auth_required: the agent needs a login (fake-login): Authentication required"
+
+    def setup(self, tmp: pathlib.Path):
+        import runtime_acp as m
+        import hubconf
+        self._get = hubconf.get
+        self._secrets = hubconf.secrets_dir
+        self.secrets = tmp / "secrets"
+        self.secrets.mkdir()
+        conf = {"agent": "fake", "agents": {"fake": {
+            "command": [sys.executable, str(ROOT / "tests" / "fixtures" / "fake_acp_agent.py")],
+            "credential": {"env": "FAKE_ACP_KEY", "file": "fake-acp-key"}, "login": "fake-acp login"}}}
+        hubconf.get = lambda k, default=None: conf if k == "runtime.acp" else self._get(k, default)
+        hubconf.secrets_dir = lambda: self.secrets
+        return m, {}
+
+    def configure_run(self, tmp: pathlib.Path, mode: str) -> dict:
+        # the Task has no cwd = the process's own directory: made where propose_apply makes its copy, and marked as
+        # it marks it
+        copy = pathlib.Path(tempfile.mkdtemp(prefix="hub-propose-contract-")) / "ws"
+        copy.mkdir()
+        self._cwd = os.getcwd()
+        os.chdir(copy)
+        return {**os.environ, "FAKE_ACP_MODE": mode, "HUB_THROWAWAY_COPY": str(copy)}
+
+    def configure_auth(self, tmp: pathlib.Path, token: bool) -> None:
+        if token:
+            (self.secrets / "fake-acp-key").write_text("contract-token\n")
+
+    def teardown(self):
+        import hubconf
+        hubconf.get, hubconf.secrets_dir = self._get, self._secrets
+        if getattr(self, "_cwd", None):
+            os.chdir(self._cwd)
+
+
+FIXTURES = {"claude": ClaudeFixture, "fake": FakeFixture, "command": CommandFixture, "acp": AcpFixture}
 ALL_REPORTS = frozenset({"cost", "session", "turns", "incomplete"})
 
 
@@ -364,8 +405,9 @@ class RunContract(unittest.TestCase):
                             continue   # this runtime cannot tell "a result but not completed normally"
                         env = fx.configure_run(pathlib.Path(d), mode)
                         rt = runtime_ports.load(name, ports=("agent",))
-                        task = runtime_ports.Task(point="p", prompt="hi", spec={}, env=env or None, timeout_s=30,
-                                                  output_schema={"type": "object"} if name == "command" else None)
+                        task = runtime_ports.Task(point=getattr(fx, "POINT", "p"), prompt="hi", spec={}, env=env or None,
+                                                  timeout_s=30,
+                                                  output_schema={"type": "object"} if name in ("command", "acp") else None)
                         self.reports = reports
                         check(rt.run(task), rt.describe(task))
                     finally:
@@ -391,7 +433,8 @@ class RunContract(unittest.TestCase):
             self.assertTrue(res.ok, "a result means ok; not completing normally is the caller's call "
                                     "(the librarian relies on this)")
             self.assertTrue(res.incomplete)
-            self.assertEqual(res.turns, 50)
+            if "turns" in self.reports:
+                self.assertEqual(res.turns, 50)
         self.each_run("incomplete", check)
 
     def test_failure(self):

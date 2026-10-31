@@ -241,8 +241,8 @@ class Propose(Base):
             return real(cmd, **kw)
         real = subprocess.run
         with mock.patch.object(pa.subprocess, "run", no_agent):
-            with self.assertRaises(RuntimeError):
-                pa.run("proj", r, "mailbox", "prompt", ["memory/**"])
+            res = pa.run("proj", r, "mailbox", "prompt", ["memory/**"])
+        self.assertFalse(res["ok"], "the copy could not be made: a failed run (its letters are held, the owner asked)")
         self.assertNotRun()
         self.assertTrue(self.wrapped)
         self.assertEqual(agents, [], "the agent never started")

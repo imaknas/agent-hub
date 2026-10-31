@@ -67,6 +67,10 @@ def main() -> int:
     now = datetime.datetime.now()
     hard: list[str] = []
     soft: dict[str, str] = {}
+    if runtime_ports.throwaway_only():   # its runs happen only in the platform's throwaway copy; login-check is not one
+        print(_("not checked: the runtime {runtime} runs only in the platform's throwaway worktree; its login shows "
+                "in its runs (a lost login fails them as a login error)", runtime=runtime_ports.default_name()))
+        return 0   # the alert is left as it is: nothing was checked, so nothing recovered either
     rt = runtime_ports.load(ports=("auth",))
     base = rt.clean_env({k: v for k, v in os.environ.items() if k != "LLM_AUTH"})
 

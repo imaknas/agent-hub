@@ -190,7 +190,7 @@ points:
     extra_args: ["--strict-mcp-config"]
     output: {format: json, schema: llm/mailbox-propose.schema.json}
     timeout_s: 1800
-    # the letter is not closed and the next dispatch round dispatches it again by the rules; propose_apply prints why
+    # nothing is applied, sent or closed; propose_apply records job.failed, holds the letter and asks the owner why
     on_failure: say_so
   mailbox-conversation:
     caller: bin/hubbus (dispatch → llm.py run, with runtime_claude.resume_args)

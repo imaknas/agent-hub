@@ -158,12 +158,16 @@ def for_project(name: str) -> dict:
 #   listed      open_web domains in web_allowed are let through, others ask; no_session_domains may not be "allowed
 #               for this whole lease"
 # The work mode decided by the owner on 10-25: writing files inside the folder isn't asked, commands are asked every
-# time.
+# time. unattended: an agent run the platform started with nobody to ask (docs/design/runtime-acp.md); it belongs in
+# the throwaway worktree, so these rules are what the agent is told, not the guarantee ("inside" for a read or search
+# that names no place means where it was started).
 APPROVALS = {
     "discuss": {"read": "allow", "search": "allow", "ask_user": "ask", "open_web": "listed",
                 "write_file": "deny", "run_command": "deny", "other": "deny"},
     "work": {"read": "allow", "search": "allow", "ask_user": "ask", "open_web": "listed",
              "write_file": "inside", "run_command": "ask_once", "other": "deny"},
+    "unattended": {"read": "inside", "search": "inside", "ask_user": "deny", "open_web": "deny",
+                   "write_file": "inside", "run_command": "deny", "other": "deny"},
 }
 
 

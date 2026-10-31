@@ -33,5 +33,9 @@
  "points.{point}: not a declared judgment point": "points.{point}:不是宣告過的判斷點",
  "points.{point} must be an object ({{model}} or {{provider, model?}})": "points.{point} 要是物件({{model}} 或 {{provider, model?}})",
  "points.{point}.provider must name one of the providers": "points.{point}.provider 要是 providers 裡的一家",
- "points.{point}: without a provider, model is required (the model the runtime uses)": "points.{point}:沒有 provider 就要寫 model(交給執行環境時用的模型)"
+ "points.{point}: without a provider, model is required (the model the runtime uses)": "points.{point}:沒有 provider 就要寫 model(交給執行環境時用的模型)",
+ "points.{point}.runtime must name a registered runtime (have: {have})": "points.{point}.runtime 要是登記過的 runtime(有:{have})",
+ "points.{point}.runtime: a completion point goes to llm.providers, not to a runtime": "points.{point}.runtime:completion 判斷點走 llm.providers,不走 runtime",
+ "points.{point}.runtime: {runtime} runs only in the platform's throwaway worktree, and {point} does not run in one (those that do: {points})": "points.{point}.runtime:{runtime} 只在平台的拋棄式 worktree 裡跑,{point} 不是在那裡跑的(是的有:{points})",
+ "points.{point}.runtime: {point} is resumed or streamed with the default runtime's own arguments, so it cannot run on another one": "points.{point}.runtime:{point} 是用預設 runtime 自己的參數接續或串流的,不能換到別的 runtime 跑"
 }

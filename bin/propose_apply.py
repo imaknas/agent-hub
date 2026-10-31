@@ -68,46 +68,70 @@ def changed(project: str, repo: pathlib.Path, base: str) -> list[tuple[str, bool
 def run(project: str, ws: pathlib.Path, point: str, prompt: str, allow: list[str], timeout_s: int = 1800) -> dict:
     """allow: globs relative to ws (e.g. `.agent-memory/memory/**`). Every git command in the project's repo, and the
     copy back into its folder, run as the project (project_git.py); a symlink the agent leaves is refused, never
-    followed."""
+    followed, and so is a path with a dot component (.gitignore, .gitattributes: the platform's own memory sync would
+    follow what they say).
+    All or nothing: a run that failed (or that the runtime cancelled or left incomplete, or that ended without the
+    structured answer the platform acts on) gets nothing copied back and hands back no output (no replies, no
+    closes); the mailbox caller then holds the letters and asks the owner (hold_and_ask)."""
     tmp = pathlib.Path(tempfile.mkdtemp(prefix=f"hub-propose-{project}-"))
     wt, mem = tmp / "ws", ws / ".agent-memory"
     added, bases = [], {}
+    def failed(why: str) -> dict:
+        return {"ok": False, "output": None, "text": None, "applied": [], "refused": [], "error": why}
     try:
-        bases[wt] = add_worktree(project, ws, wt)   # what the agent started from
-        added.append((ws, wt))
-        if (mem / ".git").exists():
-            bases[wt / ".agent-memory"] = add_worktree(project, mem, wt / ".agent-memory")
-            added.append((mem, wt / ".agent-memory"))
+        try:
+            bases[wt] = add_worktree(project, ws, wt)   # what the agent started from
+            added.append((ws, wt))
+            if (mem / ".git").exists():
+                bases[wt / ".agent-memory"] = add_worktree(project, mem, wt / ".agent-memory")
+                added.append((mem, wt / ".agent-memory"))
+        except RuntimeError as e:
+            return failed(_("could not make the throwaway copy: {e}", e=e))
         # the agent itself may not send letters or close them (hubbus honours this variable and the parent process; the
-        # platform decides sender and recipients from the output)
-        r = subprocess.run([PY, str(BIN / "llm.py"), "run", point, "--cwd", str(wt)], input=prompt, text=True,
-                           capture_output=True, timeout=timeout_s + 60, env={**os.environ, "HUB_MAIL_BY_PLATFORM": "1"})
+        # platform decides sender and recipients from the output). HUB_THROWAWAY_COPY tells a runtime that runs only in
+        # the platform's throwaway copy (runtime_acp) that this working directory is one
+        try:
+            r = subprocess.run([PY, str(BIN / "llm.py"), "run", point, "--cwd", str(wt)], input=prompt, text=True,
+                               capture_output=True, timeout=timeout_s + 60,
+                               env={**os.environ, "HUB_MAIL_BY_PLATFORM": "1", "HUB_THROWAWAY_COPY": str(wt)})
+        except subprocess.TimeoutExpired:
+            return failed(_("the agent's run took longer than {secs} s", secs=timeout_s + 60))
         try:
             res = json.loads(r.stdout) if r.stdout.strip() else {}
         except ValueError:
             res = {}
+        ok = r.returncode == 0 and not res.get("is_error")
+        error = "" if ok else (res.get("llm_error") or (_("the agent stopped before finishing ({why})", why=res["subtype"])
+                                                        if res.get("is_error") and res.get("subtype") else "")
+                               or r.stderr.strip()[-300:] or _("the agent's run did not finish"))
+        if ok and not isinstance(res.get("structured_output"), dict):   # the platform acts only on the structured answer
+            ok, error = False, _("the agent gave no structured answer: {text}", text=str(res.get("result") or "")[:200])
         applied, refused = [], []
         for repo, prefix in ((wt, ""), *([(wt / ".agent-memory", ".agent-memory/")] if len(added) > 1 else [])):
             take = []
-            for path, _exists in changed(project, repo, bases[repo]):
+            try:
+                listed = changed(project, repo, bases[repo])
+            except RuntimeError as e:
+                return failed(_("could not read the agent's changes: {e}", e=e))
+            for path, _exists in listed:
                 rel = prefix + path
                 if prefix == "" and rel.startswith(".agent-memory/"):
                     continue
-                if not any(fnmatch.fnmatch(rel, g) for g in allow):
+                hidden = any(part.startswith(".") for part in rel.removeprefix(".agent-memory/").split("/"))
+                if not ok or hidden or not any(fnmatch.fnmatch(rel, g) for g in allow):
                     refused.append(rel)
                     continue
                 take.append(path)
             if take:
                 try:
                     done = project_git.data(project, ws, "copy-back", repo, ws / prefix, *take)
-                except project_git.Unavailable as e:
-                    raise RuntimeError(str(e)) from None
+                except project_git.Unavailable as e:   # say what is already in place
+                    return {**failed(_("could not copy back: {e}", e=e)), "applied": applied, "refused": refused}
                 done = done if isinstance(done, dict) else {}
                 applied += [prefix + p for p in project_git.strs(done.get("copied"))]
                 refused += [prefix + p for p in project_git.strs(done.get("refused"))]
-        ok = r.returncode == 0 and not res.get("is_error")
-        return {"ok": ok, "output": res.get("structured_output"), "text": res.get("result"), "applied": applied,
-                "refused": refused, "error": "" if ok else (res.get("llm_error") or r.stderr.strip()[-300:])}
+        return {"ok": ok, "output": res.get("structured_output") if ok else None, "text": res.get("result"),
+                "applied": applied, "refused": refused, "error": error}
     finally:
         for repo, path in reversed(added):
             project_git.job(project, repo, "worktree-remove", repo, path, "--force")
@@ -170,48 +194,94 @@ def mailbox(project: str, ids: list[str]) -> int:
         _status(project, "done", ids=ids)
 
 
+def hold_and_ask(hb, c, project: str, rows, why: str, applied=()) -> None:
+    """The run did not complete (the runtime failed, it stopped incomplete or without a structured answer, its changes
+    conflict with the workspace, something broke while applying, or it left a letter unanswered): record job.failed, hold the letters (they stay claimed: not dispatched again, so
+    nothing is done twice and nothing loops) and ask the owner about each, saying why and what, if anything, was
+    already applied. Never silent."""
+    hb.publish(c, hb.new_id(), "job.failed", project, None, None,
+               {"job": f"mailbox-propose:{project}", "detail": why[:500]})
+    done_part = _(" Already applied: {paths}.", paths=", ".join(applied)) if applied else ""
+    for r in rows:
+        hb.publish(c, f"{r['id']}:delivered:held", "message.delivered", project, project, r["id"],
+                   {"session": None, "via": "held"})
+        hb.publish(c, f"{r['id']}:propose-failed", "message", hubconf.hub_project(), hb.OWNER_ADDRESS, r["id"],
+                   {"type": "question", "from_session": None, "via": "propose", "text": _(
+                       "The agent the platform sent could not handle letter {id} for {project}: {why}.{done} Open a "
+                       "session in {project} to handle it.", id=r["id"], project=project, why=why[:300], done=done_part)})
+
+
 def _mailbox(project: str, ids: list[str]) -> int:
     hb = _hubbus()
     c = hb.db()
     rows = [c.execute("SELECT * FROM events WHERE id=? AND type='message'", (i,)).fetchone() for i in ids]
     rows = [r for r in rows if r is not None and r["to_project"] == project]
     ws = hubconf.workspace(project)
-    if not rows or not ws:
+    if not rows:
         print(_("{project}: no letters to handle", project=project), file=sys.stderr)
         return 1
-    prompt = mailbox_prompt(letters_text(hb, c, rows), datetime.date.today().isoformat())
-    res = run(project, ws, "mailbox-propose", prompt, [".agent-memory/memory/**"])
-    sent = []
+    try:
+        if not ws:
+            raise RuntimeError(_("{project} has no workspace in the registry", project=project))
+        prompt = mailbox_prompt(letters_text(hb, c, rows), datetime.date.today().isoformat())
+        res = run(project, ws, "mailbox-propose", prompt, [".agent-memory/memory/**"])
+    except Exception as e:   # the letters were claimed for this run: never left claimed without a word
+        c.execute("BEGIN IMMEDIATE")
+        hold_and_ask(hb, c, project, rows, _("the propose run broke: {e!r}", e=e))
+        c.execute("COMMIT")
+        raise
+    sent, done = [], []
     out = res["output"] if isinstance(res.get("output"), dict) else {}
     handled = {r["id"]: r for r in rows}
-    c.execute("BEGIN IMMEDIATE")
-    for rep in out.get("replies") or []:
-        orig = handled.get(rep.get("reply_to"))
-        if orig is None or rep.get("type") not in ("info", "done", "question") or not rep.get("text"):
-            continue   # replies only to the letters of this request, to the original sender
-        mid = hb.new_id()
-        hb.publish(c, mid, "message", project, hb.canon(orig["source"]), orig["id"],
-                   {"type": rep["type"], "text": rep["text"], "from_session": None, "via": "propose"})
-        sent.append(mid)
-    for q in out.get("ask_owner") or []:
-        if q.get("text"):
+    try:
+        c.execute("BEGIN IMMEDIATE")
+        for rep in out.get("replies") or []:
+            orig = handled.get(rep.get("reply_to"))
+            if orig is None or rep.get("type") not in ("info", "done", "question") or not rep.get("text"):
+                continue   # replies only to the letters of this request, to the original sender
             mid = hb.new_id()
-            hb.publish(c, mid, "message", project, hb.OWNER_ADDRESS, None,
-                       {"type": "question", "text": q["text"], "from_session": None, "via": "propose"})
+            hb.publish(c, mid, "message", project, hb.canon(orig["source"]), orig["id"],
+                       {"type": rep["type"], "text": rep["text"], "from_session": None, "via": "propose"})
             sent.append(mid)
-    done = []
-    for d in out.get("done") or []:
-        if d.get("id") in handled:
-            hb.publish(c, f"{d['id']}:done", "message.done", project, project, d["id"],
-                       {"note": d.get("note") or _("handled by an agent the platform sent (propose)")})
-            done.append(d["id"])
-    c.execute("COMMIT")
+        for q in out.get("ask_owner") or []:
+            if q.get("text"):
+                mid = hb.new_id()
+                hb.publish(c, mid, "message", project, hb.OWNER_ADDRESS, None,
+                           {"type": "question", "text": q["text"], "from_session": None, "via": "propose"})
+                sent.append(mid)
+        for d in out.get("done") or []:
+            if d.get("id") in handled:
+                hb.publish(c, f"{d['id']}:done", "message.done", project, project, d["id"],
+                           {"note": d.get("note") or _("handled by an agent the platform sent (propose)")})
+                done.append(d["id"])
+        if not res["ok"]:
+            hold_and_ask(hb, c, project, rows, res["error"], res["applied"])
+        else:
+            replied = {ref for ref in (c.execute("SELECT ref FROM events WHERE id=?", (m,)).fetchone()[0] for m in sent)
+                       if ref}
+            # deferred on purpose (waits for a code change or for the owner): stays open in the project's inbox, still
+            # claimed, as before; only a letter the agent did not account for at all is held and asked about
+            deferred = {d.get("id") for d in out.get("deferred") or [] if isinstance(d, dict)}
+            unanswered = [r for r in rows if r["id"] not in done and r["id"] not in replied and r["id"] not in deferred]
+            if unanswered:
+                hold_and_ask(hb, c, project, unanswered, _("the agent neither answered, closed nor deferred it"),
+                             res["applied"])
+        c.execute("COMMIT")
+    except Exception as e:   # nothing of the above stands; the letters were claimed for this run: hold them, say why
+        if c.in_transaction:
+            c.execute("ROLLBACK")
+        c.execute("BEGIN IMMEDIATE")
+        hold_and_ask(hb, c, project, rows, _("recording the propose run's result broke: {e!r}", e=e), res["applied"])
+        c.execute("COMMIT")
+        raise
     # notes committed + pushed to the memory repo (the same path as the hook)
     if res["applied"] and (ws / ".agent-memory").is_dir():
         subprocess.run([str(BIN / "with-lock.sh"), str(BIN / "git-sync-memory.sh")], cwd=ws / ".agent-memory",
                        capture_output=True)
+    deferred = [{"id": d.get("id"), "why": str(d.get("why") or "")[:300]} for d in out.get("deferred") or []
+                if isinstance(d, dict) and d.get("id") in handled]   # why a letter waits, in the run's log
     print(json.dumps({"project": project, "ok": res["ok"], "applied": res["applied"], "refused": res["refused"],
-                      "sent": sent, "done": done, "error": res["error"]}, ensure_ascii=False))
+                      "sent": sent, "done": done, "deferred": deferred, "error": res["error"]}, ensure_ascii=False))
     return 0 if res["ok"] else 1
 
 

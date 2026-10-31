@@ -7,6 +7,9 @@
                   "text": {"type": "string", "description": "in the content language named in the prompt"}}}},
   "done": {"type": "array", "items": {"type": "object", "required": ["id"],
    "properties": {"id": {"type": "string"}, "note": {"type": "string", "description": "in the content language named in the prompt"}}}},
+  "deferred": {"type": "array", "items": {"type": "object", "required": ["id", "why"],
+   "properties": {"id": {"type": "string", "description": "the id of one of this assignment's letters, left open on purpose"},
+                  "why": {"type": "string", "description": "waits for a code change, or for the owner (asked in ask_owner); in the content language named in the prompt"}}}},
   "ask_owner": {"type": "array", "items": {"type": "object", "required": ["text"], "properties": {"text": {"type": "string", "description": "what to ask the owner (which project, what to decide, the options), in the content language named in the prompt"}}}},
   "summary": {"type": "string", "description": "one line per letter: the id, how it was handled (in the content language named in the prompt)"}
  },

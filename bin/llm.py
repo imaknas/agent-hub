@@ -80,6 +80,13 @@ def output_schema(spec: dict) -> str | None:
     return out.get("schema") if out.get("format") == "json" else None
 
 
+def point_runtime(point: str, spec: dict) -> str | None:
+    """Which runtime a judgment point uses: hub.json `llm.points.<point>.runtime` (a deployment's choice) > the
+    declaration's `runtime` > None (runtime.default)."""
+    pin = ((hubconf.get("llm") or {}).get("points") or {}).get(point) or {}
+    return pin.get("runtime") or spec.get("runtime")
+
+
 def model_for(point: str, spec: dict | None = None, cli: str | None = None, runtime: str | None = None) -> str | None:
     """Which model this judgment point uses when handed to a runtime: computed only here for the whole platform
     (librarian, consolidate, the weekly report, schedulectl all ask here rather than each keeping a default table):
@@ -91,7 +98,7 @@ def model_for(point: str, spec: dict | None = None, cli: str | None = None, runt
     if cli:
         return cli
     spec = spec if spec is not None else points()["points"].get(point) or {}
-    name = runtime or spec.get("runtime") or runtime_ports.default_name()
+    name = runtime or point_runtime(point, spec) or runtime_ports.default_name()
     pin = ((hubconf.get("llm") or {}).get("points") or {}).get(point) or {}
     if pin.get("model") and pin.get("provider") in (None, name):
         return pin["model"]
@@ -125,7 +132,7 @@ def run_completion(a, spec: dict, prompt: str, model: str | None) -> int:
     schema = json.loads((POINTS.parent / output_schema(spec)).read_text()) if output_schema(spec) else None
     target = None
     if not completion.settings():
-        name = spec.get("runtime") or runtime_ports.default_name()
+        name = point_runtime(a.point, spec) or runtime_ports.default_name()
         if "completion" not in runtime_ports.capabilities(name):
             return fail(a.point, spec, _("runtime {name} has no completion interface, and hub.json has no llm section "
                                          "(set up an LLM provider)", name=name))
@@ -200,10 +207,10 @@ def run(a) -> int:
     # can't (docs/design/event-jobs.md section 3.2)
     confined = spec.get("settings") or (spec.get("allow_from_env") and os.environ.get(spec["allow_from_env"]))
     try:
-        rt = runtime_ports.load(spec.get("runtime"), ports=("agent", "confine") if confined else ("agent",))
+        rt = runtime_ports.load(point_runtime(a.point, spec), ports=("agent", "confine") if confined else ("agent",))
     except runtime_ports.Unsupported as e:   # no coding agent: take the declared failure path, reason spelled out
         return fail(a.point, spec, str(e))
-    if "auth" in runtime_ports.capabilities(spec.get("runtime")):
+    if "auth" in runtime_ports.capabilities(point_runtime(a.point, spec)):
         env, why = auth_env(spec, rt)
         if env is None:
             return fail(a.point, spec, why)

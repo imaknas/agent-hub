@@ -36,7 +36,7 @@ $ <HUB>/bin/config-check
 --- stderr
 config-check: ✗ hub.json: unknown key `assitant` (did you mean assistant?); to add one, put it in contracts/hub.v1.schema.json first
 config-check: ✗ hub.json: llm: with providers, use is required (which provider serves fast / standard / strong)
-config-check: ✗ hub.json: llm: providers.x.impl `nope` is not known (have: anthropic, openai, ollama, claude, fake, none, command)
+config-check: ✗ hub.json: llm: providers.x.impl `nope` is not known (have: anthropic, openai, ollama, claude, fake, none, command, acp)
 config-check: ✗ models.env: no longer used; model settings moved into hub.json llm.points (schedulectl set-model state|index|consolidate <model>; a value equal to the group default need not be written), then delete models.env
 config-check: ✗ mirror-list.txt:3: not a git remote: not a remote
 config-check: ✗ services.tsv:3: label `x` repeated
@@ -49,7 +49,7 @@ $ <HUB>/bin/config-check
 --- stderr
 config-check: ✗ hub.json: unknown key `assitant` (did you mean assistant?); to add one, put it in contracts/hub.v1.schema.json first
 config-check: ✗ hub.json: llm: with providers, use is required (which provider serves fast / standard / strong)
-config-check: ✗ hub.json: llm: providers.x.impl `nope` is not known (have: anthropic, openai, ollama, claude, fake, none, command)
+config-check: ✗ hub.json: llm: providers.x.impl `nope` is not known (have: anthropic, openai, ollama, claude, fake, none, command, acp)
 config-check: ✗ schedule.yaml: cannot read it (while parsing a flow node
 expected the node content, but found '<stream end>'
   in "<unicode string>", line 2, column 1:

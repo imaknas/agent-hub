@@ -95,7 +95,7 @@ $ agenthub doctor    # systemd, runtime none
     → agenthub mcp config prints the snippet to register; how to add it per tool: docs/mcp.md
 ! judgment points (librarian, index, consolidate, weekly report analysis): off (the runtime none has no agent runs or login state)
     → install a coding agent that supports them, and point hub.json runtime.default at it
-! mailbox tasks (the platform sends an agent for letters nobody picked up): off (the runtime none has no agent runs or login state)
+! mailbox tasks (the platform sends an agent for letters nobody picked up): off (the runtime none has no agent runs, login state, or session state)
     → install a coding agent that supports them, and point hub.json runtime.default at it
 ! unattended agent jobs with allow:, and event-triggered agent jobs: off (the runtime none has no agent runs, login state, or confined runs (declared permissions only))
     → install a coding agent that supports them, and point hub.json runtime.default at it
@@ -139,7 +139,7 @@ $ agenthub doctor    # no service manager, unnamed assistant
     → agenthub mcp config prints the snippet to register; how to add it per tool: docs/mcp.md
 ! judgment points (librarian, index, consolidate, weekly report analysis): off (the runtime none has no agent runs or login state)
     → install a coding agent that supports them, and point hub.json runtime.default at it
-! mailbox tasks (the platform sends an agent for letters nobody picked up): off (the runtime none has no agent runs or login state)
+! mailbox tasks (the platform sends an agent for letters nobody picked up): off (the runtime none has no agent runs, login state, or session state)
     → install a coding agent that supports them, and point hub.json runtime.default at it
 ! unattended agent jobs with allow:, and event-triggered agent jobs: off (the runtime none has no agent runs, login state, or confined runs (declared permissions only))
     → install a coding agent that supports them, and point hub.json runtime.default at it

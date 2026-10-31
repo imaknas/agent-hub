@@ -264,6 +264,35 @@
         "default": {
           "type": "string",
           "minLength": 1
+        },
+        "acp": {
+          "type": "object",
+          "description": "Agent Client Protocol agents (bin/runtime_acp.py header; docs/design/runtime-acp.md): agent names the entry of agents the acp runtime uses",
+          "additionalProperties": false,
+          "properties": {
+            "_comment": {"type": "string"},
+            "agent": {
+              "type": "string",
+              "minLength": 1
+            },
+            "agents": {
+              "type": "object",
+              "additionalProperties": {
+                "type": "object",
+                "required": ["command"],
+                "additionalProperties": false,
+                "properties": {
+                  "command": {"type": "array", "items": {"type": "string"}, "minItems": 1},
+                  "env": {"type": "object", "additionalProperties": {"type": "string"}},
+                  "models": {"type": "object"},
+                  "credential": {"type": "object", "additionalProperties": false, "required": ["env", "file"], "properties": {"env": {"type": "string"}, "file": {"type": "string"}}},
+                  "auth_method": {"type": "string"},
+                  "mode": {"type": "string"},
+                  "login": {"type": "string"}
+                }
+              }
+            }
+          }
         }
       }
     },
