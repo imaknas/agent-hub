@@ -23,6 +23,11 @@
 > that exists today in the worktree form; other projects' memory bare repos denied; a nested scope's tests also
 > depend on its ancestors' own files; deploy scripts run in the main checkout; the worktree marker's writer; one
 > remote name; a deterministic rule for cross-file conflicts.
+> r7 (11-01): after a fifth review: the platform-git rule restated by who runs git (the platform only in repos it
+> owns; in a project's repo only as the project, handing back bundles and facts), after tests showed read-only
+> commands (`git log`) running project-named programs and a fetch serving another project's objects; every call site
+> listed; memory copies without symlinks and denied whole. Several of these holes exist today; their fix is a
+> separate change, proposed 11-01, to be done before this design's steps.
 
 ## 1. The problem
 
@@ -231,28 +236,45 @@ leak anything the repo's setting does not already allow.
 `.git` (common dir and worktree gitdirs, which `git commit`, `merge-branch`'s lock, `.git/info/exclude` and the result
 cache need) and its deployment clone, plus **its own memory clone** in `<memory_root>` (by real path, since the link
 resolves there) and what it may today (runtime, bus, caches, `allow_write`); every **other** repo, folder-only project
-and **other project's memory clone and memory bare repo** stays denied (today only other projects' memory copies
-are: `policy.py` denies writing `git_origin` but not reading it, so a sandboxed project can read another's raw notes
-from its bare repo — fixed here, and reported as a current gap). Within a repo there is no write fence between projects — it would be cosmetic, since any
+and **other project's memory clone, memory bare repo and memory copy** stays denied (today `policy.py` denies reading
+only `<memory_copies>/*/memory` and writing `git_origin`, so a sandboxed project can read another's STATE.md and every
+note's object from its copy's `.git` or its bare repo — a current gap, fixed with the ones under "Platform git in
+project repos"). Within a repo there is no write fence between projects — it would be cosmetic, since any
 of them can install a git hook that runs in the others' sessions. The platform's own Seatbelt/Landlock layer
 (`seatbelt.py`, `landlock.py`) derives the same set from the resolver, so the repo root of an inner project's service is
 readable.
 
-**Platform git in project repos.** A repo's `.git` (config, hooks, attributes) is writable by its projects, and git
-runs what that config names: a clean or textconv filter, `core.fsmonitor`. Tested 11-01 (git 2.50): `git status` and
-`git add` in a clone with hostile config ran its fsmonitor and filter commands; `git fetch` *from* that clone into a
-separate bare repo ran none of them (filters, fsmonitor, `core.hooksPath`, `core.sshCommand`,
-`uploadpack.packObjectsHook` all inert). So: **the platform never runs git in a project-writable git dir with more
-than that project's authority.** Operations that read a work tree (status, add, commit, diff, checkout, export) run as
-the project — in its session, or through `isolation.wrap` as one of its command jobs; the platform moves commits out of
-such a repo only by fetching from it into a repo it owns, with the URL from the registry, never from the project's
-config. Memory under this rule: the hourly sync commits each clone as a command job of its project; the platform
-fetches the clone's branch into `<name>-memory.git` and fast-forwards it; anything the bare repo has that the clone
-lacks (the librarian's STATE.md commits) is merged inside the clone by the project's own fetch, in that job. The
-platform's other git calls in project repos (`worktrees.py`'s status, `backup.py`'s diff of uncommitted work) follow
-the same rule when they move onto the resolver (step 3). The worktree form has the same gap today (the hourly sync
-runs `git add`/`commit` unsandboxed in a worktree of the project's repo, only `core.hooksPath` neutralized); it is
-reported as a current gap, not left for step 5.
+**Platform git in project repos (r7).** A repo's `.git` (config, hooks, attributes, `objects/info/alternates`) is
+writable by its projects, and git runs or reads what it names. Tested 11-01 (git 2.50), in a repo with hostile config:
+`git status` and `git add` ran its fsmonitor and clean filter; `git log -1 --format=%ct` ran its `gpg.program`
+(`log.showSignature` plus one commit with a forged signature header); `git worktree add`/`remove` ran its hooks and
+filters; `git diff HEAD` ran `diff.external`; and `git fetch` from it into a separate repo ran nothing but **served
+another project's objects** through an `alternates` file, because the serving side ran with the fetcher's authority.
+Inert: `git bundle create`, `rev-parse`, `for-each-ref`, `worktree list`. So the rule is stated by who runs git, not
+by which command:
+
+- **The platform runs git only in repos it owns** — the memory bare repos, the librarian's memory copies, its own
+  checkout.
+- **In a project-writable git dir, every git command runs as the project**: in its session, or through
+  `isolation.wrap` as one of its command jobs. What the platform needs back comes as data that job writes into the
+  project's own folder: a **bundle** (`git bundle create`: commits to move, built with the project's read rights, so
+  it cannot contain objects the project cannot read) or a **facts file** (worktrees, last-commit times, clean or not,
+  commit counts). The platform fetches only from such a bundle file, into a repo it owns, with
+  `transfer.fsckObjects` on.
+- For a project without a sandbox the wrap is a no-op: it has the user's authority already, so there is nothing to
+  cross. Cost: one wrapped job per sandboxed repo wherever the platform needs git facts (the status page, every tick).
+
+What moves under it (none of these may run git in a project repo directly): the status page's worktree view
+(`worktrees.overview()`: `git log`, `git status`, every tick), the worktree cleanup (`worktree remove`, `branch -d`),
+`check-memory-gaps.py` and `weekly-reflect.py` (`git log`), the backup (`bundle create`, the diff of uncommitted work),
+`propose_apply.py` (`worktree add`/`remove`), and memory: the hourly sync commits each clone and writes a bundle as a
+command job of its project; the platform fetches the bundle into `<name>-memory.git` and fast-forwards it; what the
+bare repo has that the clone lacks (the librarian's STATE.md commits) is merged inside the clone by the project's own
+fetch, in that job. The librarian's memory copies are platform-owned but hold project content, so they are checked out
+with `core.symlinks=false` (a committed `STATE.md` symlink would otherwise hand the librarian, and the model, any file
+it points at). **Every one of these runs unsandboxed today** (the worktree form's hourly sync and push included), so a
+sandboxed project can run code as the user within one scheduler tick; that is to be fixed by a separate change
+(proposed 11-01) before this design's steps, not left to one of them; the design inherits the rule.
 
 **merge-branch** (a repo operation; a `--question` goes to the owner once per merge, not once per project): lock → rebase → commit titles → `affected(repo, main, head, merge)` → for each pair, a
 recorded pass for its key or a run (the test system, test-waiting section 4) → fast-forward → one `merge.done` /
@@ -324,11 +346,11 @@ scheduled in `test-waiting.md` section 7.
    cross-file rules, the contract work (section 3). Every existing registry file gives the same answers as today (test).
    Project v2's test fields land earlier (test-waiting section 7, step 2) and are unchanged by this step.
 3. Move the files in section 1 onto the resolver, the step 1 tests staying green; the sandbox derives from repos; the
-   backup and deployment iterate repos (done here, not moved twice); the platform's git calls in project repos follow
-   "Platform git in project repos".
+   backup and deployment iterate repos (done here, not moved twice); the platform's git calls in project repos, moved to
+   project jobs by the separate fix, keep doing so through the resolver.
 4. The test system's selection and cache on the resolver (test-waiting section 7, step 5).
 5. Memory: backups of `<memory_root>` and the sandbox's memory paths (own clone writable; others' clones and bare
-   repos denied); the hourly sync as project command jobs plus a platform fetch; renaming and the memory scripts handle both forms,
+   repos and copies denied); the hourly sync as project command jobs writing bundles; renaming and the memory scripts handle both forms,
    onboarding and recovery create clones; the migration; agent-hub's memory; then removing the worktree-form branches.
 6. Runtime capabilities for nested rules files, hook settings and subfolder worktrees; the worktree marker.
 7. Onboarding and recovery of subfolder and folder-only projects; repo promotion.
@@ -344,7 +366,7 @@ scheduled in `test-waiting.md` section 7.
 
 ## 9. Blind reviews: findings and what each changed
 
-Four rounds; reviewers independent, each with one angle, all Claude models (no other provider is configured, so their
+Five rounds; reviewers independent, each with one angle, all Claude models (no other provider is configured, so their
 errors may be correlated). Findings are the union; each was checked against the source before it changed the design.
 
 **Round 1 (r2):** nested scopes broke the sandbox and let the weakest setting win → repo as one trust domain (r3);
@@ -418,6 +440,38 @@ conflict rule; one memory remote name; the marker's writer and validation; other
 `roster()` readers in the ratchet; `depends_on` never widening a sandbox; step numbers, the `inputs` format,
 signatures and counts across both documents.
 
-Pre-existing, reported separately rather than designed here: a letter's sender is chosen freely and the bus is
-writable in every sandbox, so a `manifest.update` can claim another project; the memory sync's unsandboxed git and the
-readable memory bare repos, which exist today.
+**Round 5 (r7), with `test-waiting.md` r8** (security; order and facts). Blocking:
+
+| finding | by | change |
+|---|---|---|
+| Read-only git the platform runs in project repos executes project-named programs (`git log` → `gpg.program`, tested), every scheduler tick | security | section 4 "Platform git in project repos": the platform runs git only in its own repos |
+| "Fetch from the clone" served another project's objects through `alternates` (tested) | security | the project's job writes a bundle; the platform fetches only from bundles, with `fsckObjects` |
+| The shared uv cache still let one project change another's packages (tested: an edited cached file reached a new environment) | security | test-waiting B4: per-repo package cache, fresh per-run environment (measured 0.07 s warm) |
+| Step 2's order broke every agent-hub merge (the migrated `test-gate --all` cannot run in an export) and needed temporary tier code | order, security | test-waiting section 7: one merge switches readers and callers, agent-hub's tiers written by hand |
+| The project's own code in a cached environment was unspecified (`uv run` syncs the project into it) | order | per-run environments, project installed from the export |
+| Migration defaults (`code` absent, `runtime` emptied) were undefined | order | upgrade on read: absent `code` = every file, `runtime: {}` kept |
+| `bin/run-tests` pointing `AGENT_HUB_ROOT` at a temporary folder fails the suite (reproduced) | order | only HOME and STATE temporary; ROOT the tree under test |
+
+Should-fix, also changed: the runner's source (`--rev`, `--index`); the main guard's limits, fetch-only pulls in
+`commit_gate` repos, and an absolute `core.hooksPath` so a branch cannot replace it; one `config_inputs` key; one
+shared `pre-commit` for `gate: strict` and `commit_gate`; hook installs replacing symlinks; agent-hub's `code` covering
+the registry so the config check still runs; cross-repo pairs left to the nightly run; the v1 upgrade kept permanently
+instead of removed per instance; worker slots built once in step 2.2; `session.report` v2; muninn's lease-handover
+request; `agenthub test` as a session command; the key carrying the runner's version and environment; memory copies
+denied whole and checked out without symlinks.
+
+**Holes that exist today**, found by rounds 4 and 5, for a separate change proposed 11-01 rather than a step of this
+design (which inherits the fixes):
+
+- The status page, worktree cleanup, memory-gaps and weekly statistics, backup, `propose_apply.py` and the hourly
+  memory sync run git unsandboxed in project repos whose config a sandboxed project controls (code execution as the
+  user within one scheduler tick; tested with `git log` and `gpg.program`).
+- The memory push from a project's repo can carry another project's objects (`alternates`).
+- Every sandbox may write the shared package caches (`policy.py` `WRITE_CACHES`), so one project can change the
+  packages another installs.
+- A sandboxed project can read other projects' memory: their bare repos (`git_origin` is only write-denied) and their
+  memory copies outside `memory/` (STATE.md, `.git`).
+- A letter's sender is chosen freely (`hubbus send --from`) and the bus is writable in every sandbox, so a
+  `manifest.update` can claim another project.
+- The librarian reads memory copies' files through symlinks a project can commit.
+- The hook installer writes through a symlink a project planted in `.git/hooks`.
