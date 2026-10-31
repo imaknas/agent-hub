@@ -1,0 +1,16 @@
+{
+ "Malformed request (must be a JSON object with v: 1)": "請求格式不對(要是 v: 1 的 JSON 物件)",
+ "id does not match the file name": "id 跟檔名不一樣",
+ "This project has not declared the capability {cap!r} (registry enforce.capabilities: {caps})": "這個專案沒有宣告能力 {cap!r}(登錄 enforce.capabilities:{caps})",
+ "argv must be a non-empty list of strings": "argv 要是非空的字串 list",
+ "cwd must be a path relative to the project folder": "cwd 要是相對專案資料夾的路徑",
+ "cwd {cwd} is not inside the project folder": "cwd {cwd} 不在專案資料夾裡",
+ "cwd {cwd} is not a folder": "cwd {cwd} 不是資料夾",
+ "timeout_s must be an integer from 1 to {max}": "timeout_s 要是 1–{max} 的整數",
+ "Wrong file name, file type or size": "檔名、檔案類型或大小不對",
+ "This id has already run": "同一個 id 已經跑過",
+ "Cannot read the request: {err}": "請求讀不了:{err}",
+ "Request too old (nobody took it within 10 minutes)": "請求太舊(超過 10 分鐘沒人接手)",
+ "Failed to start: {err!r}": "啟動失敗:{err!r}",
+ "The platform runner restarted; this job did not finish (result unknown), run it again": "平台代跑服務重啟了,這個工作沒跑完(結果不明),請重跑"
+}

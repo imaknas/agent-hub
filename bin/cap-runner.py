@@ -44,6 +44,9 @@ import time
 
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
 import hubconf  # noqa: E402
+import i18n  # noqa: E402
+
+_ = i18n.domain(__file__)
 
 DIR = hubconf.STATE / "cap-runner"
 LOG = DIR / "log.jsonl"
@@ -109,26 +112,27 @@ def read_json(dir_fd: int, name: str):
 def check(req, stem: str, ws: pathlib.Path, caps: list[str]) -> tuple[str, dict]:
     """回傳 (拒絕的理由, 整理好的請求);理由是空字串 = 通過。"""
     if not isinstance(req, dict) or req.get("v") != 1:
-        return "請求格式不對(要是 v: 1 的 JSON 物件)", {}
+        return _("Malformed request (must be a JSON object with v: 1)"), {}
     if req.get("id") != stem:
-        return "id 跟檔名不一樣", {}
+        return _("id does not match the file name"), {}
     cap = req.get("cap")
     if cap not in caps:
-        return f"這個專案沒有宣告能力 {cap!r}(登錄 enforce.capabilities:{', '.join(caps)})", {}
+        return _("This project has not declared the capability {cap!r} (registry enforce.capabilities: {caps})", cap=cap,
+                 caps=", ".join(caps)), {}
     argv = req.get("argv")
     if not (isinstance(argv, list) and argv and all(isinstance(a, str) and "\0" not in a and len(a) <= 4096 for a in argv)):
-        return "argv 要是非空的字串 list", {}
+        return _("argv must be a non-empty list of strings"), {}
     cwd = req.get("cwd", ".")
     if not isinstance(cwd, str) or os.path.isabs(cwd):
-        return "cwd 要是相對專案資料夾的路徑", {}
+        return _("cwd must be a path relative to the project folder"), {}
     real = (ws / cwd).resolve()
     if real != ws and ws not in real.parents:
-        return f"cwd {cwd} 不在專案資料夾裡", {}
+        return _("cwd {cwd} is not inside the project folder", cwd=cwd), {}
     if not real.is_dir():
-        return f"cwd {cwd} 不是資料夾", {}
+        return _("cwd {cwd} is not a folder", cwd=cwd), {}
     t = req.get("timeout_s", conf("timeout_s", 600))
     if not isinstance(t, int) or isinstance(t, bool) or not 0 < t <= conf("max_timeout_s", 1800):
-        return f"timeout_s 要是 1–{conf('max_timeout_s', 1800)} 的整數", {}
+        return _("timeout_s must be an integer from 1 to {max}", max=conf("max_timeout_s", 1800)), {}
     return "", {"cap": cap, "argv": argv, "cwd": real, "timeout_s": t}
 
 
@@ -211,7 +215,7 @@ class Runner:
         st = os.stat(name, dir_fd=req_fd, follow_symlinks=False)
         if not ID.match(stem) or not stat.S_ISREG(st.st_mode) or st.st_size > MAX_REQ:
             os.unlink(name, dir_fd=req_fd)  # 不是合格的請求檔:沒有地方回覆,直接丟掉並記下來
-            log(project=project, id=stem[:80], event="dropped", detail="檔名、檔案類型或大小不對")
+            log(project=project, id=stem[:80], event="dropped", detail=_("Wrong file name, file type or size"))
             return
         jobs_fd = subdir(hr_fd, "jobs", create=True)
         try:
@@ -219,7 +223,7 @@ class Runner:
                 os.mkdir(stem, 0o755, dir_fd=jobs_fd)
             except FileExistsError:
                 os.unlink(name, dir_fd=req_fd)
-                log(project=project, id=stem, event="dropped", detail="同一個 id 已經跑過")
+                log(project=project, id=stem, event="dropped", detail=_("This id has already run"))
                 return
             job_fd = subdir(jobs_fd, stem)
         finally:
@@ -229,9 +233,9 @@ class Runner:
             req = read_json(job_fd, "request.json")
             reason, clean = check(req, stem, ws, caps)
         except (OSError, ValueError) as e:
-            reason, clean = f"請求讀不了:{e}", {}
+            reason, clean = _("Cannot read the request: {err}", err=e), {}
         if not reason and time.time() - st.st_mtime > STALE_S:
-            reason = "請求太舊(超過 10 分鐘沒人接手)"
+            reason = _("Request too old (nobody took it within 10 minutes)")
         if reason:
             write_state(job_fd, state="rejected", reason=reason)
             os.close(job_fd)
@@ -270,7 +274,7 @@ class Runner:
                 os.close(out)
                 os.close(err)
         except Exception as e:  # 任何失敗都要回覆,不然客戶端會一直等「排隊中」(10-25 實測:模組不一致時卡住)
-            write_state(job.fd, state="rejected", reason=f"啟動失敗:{e!r}"[:500])
+            write_state(job.fd, state="rejected", reason=_("Failed to start: {err!r}", err=e)[:500])
             os.close(job.fd)
             log(project=job.project, id=job.id, event="start_failed", detail=str(e)[:300])
             return
@@ -311,7 +315,7 @@ class Runner:
 
     def each_job(self):
         """(專案, 工作 id, jobs 目錄的路徑)——只走不是 symlink 的目錄。"""
-        for project, (ws, _) in eligible().items():
+        for project, (ws, _caps) in eligible().items():
             jobs = ws / ".hub-run" / "jobs"
             if any(p.is_symlink() for p in (ws / ".hub-run", jobs)) or not jobs.is_dir():
                 continue
@@ -332,14 +336,15 @@ class Runner:
                 self.kill(int(st["pid"]), signal.SIGKILL)
             fd = os.open(d, DIRFLAGS)
             try:
-                write_state(fd, state="lost", reason="平台代跑服務重啟了,這個工作沒跑完(結果不明),請重跑")
+                write_state(fd, state="lost", reason=_("The platform runner restarted; this job did not finish (result "
+                                                       "unknown), run it again"))
             finally:
                 os.close(fd)
             log(project=project, id=job_id, event="lost")
 
     def prune(self) -> None:
         cutoff = time.time() - KEEP_S
-        for _, _, d in self.each_job():
+        for _project, _job_id, d in self.each_job():
             try:
                 st = json.loads((d / "state.json").read_text())
                 old = (d / "state.json").stat().st_mtime < cutoff
