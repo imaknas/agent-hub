@@ -16,6 +16,7 @@
 set -uo pipefail
 
 HUB="$(cd "$(dirname "$0")/.." && pwd)"
+source "$HUB/bin/hubpaths.sh"
 cd "$HUB" || exit 1
 CODE='^(bin|tests|contracts|templates|githooks|launchd|capabilities|agent-jobs)/|^(hub\.json|ruff\.toml)$'
 PLATFORM_PY="$("$HUB/bin/py" -c 'import sys; print(sys.executable)')" || exit 1
@@ -30,7 +31,7 @@ mkdir -p "$HUB/.state/test-gate"
 work="$(mktemp -d "$HUB/.state/test-gate/run.XXXXXX")" || exit 1
 trap 'rm -rf "$work"' EXIT
 mkdir -p "$work/tree" "$work/home/workspace"
-git checkout-index -a --prefix="$work/tree/" || { echo "test-gate:匯出暫存區失敗" >&2; exit 1; }
+git checkout-index -a --prefix="$work/tree/" || { hub_say "test-gate: exporting the index failed" >&2; exit 1; }
 # 這個部署的私有專案名字清單(實例的 config,不在 repo 裡):假 HOME 底下找不到,先在這裡問到位置帶進去
 # (tests/test_personal_boundary.py 的 test_no_private_project_names;沒有清單的部署這項略過)
 private="$("$HUB/bin/py" "$HUB/bin/hubconf.py" dir config 2>/dev/null)/private-names.txt"
@@ -56,20 +57,20 @@ wait
 fail=0
 if [ "$lint_fail" -ne 0 ]; then
   fail=1
-  echo "test-gate:lint 沒過(bin/lint,ruff 的 F 規則):" >&2
+  hub_say "test-gate: lint failed (bin/lint, ruff's F rules):" >&2
   echo "$lint_out" | sed "s|$work/tree/||g" >&2
 else
-  echo "test-gate:lint OK"
+  hub_say "test-gate: lint OK"
 fi
 i=0
 for py in "${PYTHONS[@]}"; do
   summary="$(grep -E '^(Ran|OK|FAILED)' "$work/out$i" | tr '\n' ' ')"
   # unittest 的結果行(OK / FAILED)本身:測試印到 stdout 的東西在程序結束時才 flush,可能排在它後面,不能只看最後幾行
   if grep -qE '^OK( \(|$)' "$work/out$i" && ! grep -qE '^FAILED( |$)' "$work/out$i"; then
-    echo "test-gate:$py $summary"
+    hub_say "test-gate: {python} {summary}" python="$py" summary="$summary"
   else
     fail=1
-    echo "test-gate:$py 沒過 $summary" >&2
+    hub_say "test-gate: {python} failed {summary}" python="$py" summary="$summary" >&2
     grep -E '^(ERROR|FAIL):' "$work/out$i" >&2
     tail -30 "$work/out$i" >&2
   fi
@@ -79,12 +80,12 @@ done
 leaked="$(cd "$work/home" && find . -type f | sed 's|^\./|~/|')"
 if [ -n "$leaked" ]; then
   fail=1
-  echo "test-gate:測試寫了使用者目錄(真的跑會寫到真的檔案):" >&2
+  hub_say "test-gate: tests wrote to the user's home (a real run would write real files):" >&2
   echo "$leaked" >&2
 fi
 
 if [ "$fail" -ne 0 ]; then
-  echo "test-gate:不放行。修好再 commit;只改了資料檔就不要把程式碼一起暫存。" >&2
+  hub_say "test-gate: not letting this through. Fix it, then commit; if you only changed data files, do not stage code with them." >&2
   exit 1
 fi
 git write-tree >"$(git rev-parse --git-path test-gate-passed)"

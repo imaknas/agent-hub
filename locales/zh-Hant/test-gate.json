@@ -1,0 +1,9 @@
+{
+ "test-gate: exporting the index failed": "test-gate:匯出暫存區失敗",
+ "test-gate: lint failed (bin/lint, ruff's F rules):": "test-gate:lint 沒過(bin/lint,ruff 的 F 規則):",
+ "test-gate: lint OK": "test-gate:lint OK",
+ "test-gate: {python} {summary}": "test-gate:{python} {summary}",
+ "test-gate: {python} failed {summary}": "test-gate:{python} 沒過 {summary}",
+ "test-gate: tests wrote to the user's home (a real run would write real files):": "test-gate:測試寫了使用者目錄(真的跑會寫到真的檔案):",
+ "test-gate: not letting this through. Fix it, then commit; if you only changed data files, do not stage code with them.": "test-gate:不放行。修好再 commit;只改了資料檔就不要把程式碼一起暫存。"
+}
