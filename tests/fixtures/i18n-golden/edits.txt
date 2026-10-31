@@ -1,0 +1,16 @@
+=== not a dict
+第 1 個編輯不是 {old, new}
+=== no new
+第 1 個編輯不是 {old, new}
+=== empty old
+第 1 個編輯的 old 是空的
+=== old missing
+第 2 個編輯的 old 出現 0 次(要剛好一次):'nowhere'
+=== old twice
+第 1 個編輯的 old 出現 2 次(要剛好一次):'- [ ] '
+=== marker added
+多出標記:(wait: task-p-9)
+=== marker gone, not removable
+少了標記:(wait: task-p-1)
+=== marker stripped, line kept
+標記被拿掉但那一行還在(改寫了 key):- [ ] renew the domain (wait: task-p-1)

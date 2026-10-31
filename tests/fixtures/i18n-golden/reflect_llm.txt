@@ -1,0 +1,4 @@
+=== no activity
+{"error": "這週沒有活動可分析", "meta": {"model": "工具預設", "source": "stats", "excluded": []}}
+=== model call failed
+{"error": "模型呼叫失敗(exit 3),統計部分不受影響", "meta": {"model": "工具預設", "source": "stats", "excluded": []}}

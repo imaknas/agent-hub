@@ -1,0 +1,23 @@
+=== cross_copies
+assistant 的 helper-x 副本跟 helper 的原版不一樣:<HUB>/contracts/hubbus.v1.schema.json vs <TMP>/c.json
+assistant 讀 helper-x v2,helper 現在是 v1(producer 要兩版並存到 consumer 換完)
+assistant 的 helper-x 副本跟 helper 的原版不一樣:<HUB>/contracts/hubbus.v1.schema.json vs <TMP>/c.json
+helper-gone:原版不在(<TMP>/gone.json)
+helper-x:副本不在(<HUB>/contracts/no-such-copy.json)
+assistant 讀 helper-none,但 helper 的登錄沒有 provides 它
+assistant 讀 helper-x,但 helper 的登錄沒有 provides 它
+=== live
+匯流排事件 ev-1:$.type:'x' 不在 ['message', 'message.delivered', 'message.done', 'job.failed', 'merge.done', 'merge.failed', 'session.report', 'config.applied', 'record']
+handoffs --json 不是 JSON(exit 3)
+=== llm_lint
+LLM 呼叫:bin/x.py:3 calls the CLI directly
+llm.py lint 跑不起來:Traceback ...
+boom
+=== main, problems
+exit 1
+stdout: '✗ a: one\n✗ b: two\n✗ c: three\n✗ d: four\n'
+payload: [{'job': 'contracts-check', 'detail': '4 項:a: one;b: two;c: three'}]
+=== main, none
+exit 0
+stdout: '契約:全部一致\n'
+payload: []

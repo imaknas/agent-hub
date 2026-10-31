@@ -1,0 +1,1 @@
+memory 筆記落後了:從 <SINCE> 起這個專案有 3 個 commit 還沒記進 .agent-memory/memory/。在 .agent-memory/memory/<TODAY>.md 補一段做了什麼、做了什麼決定、踩到什麼坑(原始紀錄就好,不用摘要),再繼續。

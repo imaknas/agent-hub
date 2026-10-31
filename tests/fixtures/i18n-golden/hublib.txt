@@ -1,0 +1,2 @@
+exit 2
+用法:hublib.py digest-append <段落名> < 內容 | digest-section <段落名>

@@ -1,0 +1,25 @@
+=== usage
+exit 2
+stdout: ''
+stderr:
+agent 提議,平台套用(docs/design/tool-agnostic.md「核心」):平台啟動、要動到檔案的 agent 工作在丟棄式 worktree 裡跑。
+
+任何 agent(Claude Code、`runtime: command` 接的 Gemini CLI / Codex / opencode…)都一樣:它在 worktree 裡做什麼都碰不到
+真的 checkout;跑完平台看它改了哪些檔,**只把准許的路徑**複製回真的資料夾,其他的記成「不採用」、跟 worktree 一起丟掉。
+要寄的信、要結案的事 agent 寫在結構化輸出裡,平台代寄(寄件人是平台給的,不是 agent 自己說的)。agent 自己跑會改匯流排的
+hubbus 子指令(send、done、ack…)一律被擋(hubbus.platform_mails:這裡設的環境變數,或祖先程序是這支)。
+這套保證不靠工具的權限設定,在沒有沙盒的系統(Linux)上一樣成立。
+
+  propose_apply.py mailbox <專案> <信 id>…     信箱交辦(hub.json mailbox.handler: propose 時由 hubbus dispatch 叫)
+
+  run(project, ws, point, prompt, allow)        給其他程式用:回 {ok, output, applied, refused, error}
+
+worktree:專案的 HEAD(detached)+ 它的 .agent-memory 的 HEAD;agent 的工作目錄是專案那份。
+
+
+=== no letters
+exit 1
+stderr: 'demo:沒有要處理的信\n'
+=== done without a note
+exit 0
+published: [["message.done", {"note": "平台派的 agent 處理了(propose)"}]]
