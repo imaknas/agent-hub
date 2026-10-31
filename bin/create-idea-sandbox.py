@@ -1,23 +1,29 @@
 #!/bin/sh -c exec${IFS}"${0%/*}/py"${IFS}"$0"${IFS}"$@"
-"""替 Muninn 的想法開一個探討用的專案(想法沙盒,docs/design/idea-sandboxes.md)。
+"""Opens a project for exploring one of the assistant's ideas (an idea sandbox, docs/design/idea-sandboxes.md).
 
-想法沙盒 = 正常 onboard(有 .agent-memory:深談收回的交接筆記寫在那裡)、沒有 GitHub remote、
-登錄標 `type: idea` 的專案,放在 <workspace_root>/<名稱>。名稱是想法一開始就有的、人看得懂的代號(例:room-3d;
-2026-10-25 Knas 決定,以前限定 idea-<n>,既有的照常能用):小寫英數跟 -,不能跟登錄、資料夾、memory repo 撞名。
-「是不是想法沙盒」只看登錄的 type: idea,不看名稱。登錄一起寫 purpose、`enforce: {sandbox: true, work: true}`
-(真正的寫入封鎖;work = 深談可以動手,10-25 Knas:想法沙盒預設有)+ 預設的能力(hub.json capabilities 的 default_for,例 gpu;docs/design/capabilities.md)、`privacy: {reflection: stats_only}`,跟登記同一個 commit(onboard 的 ONBOARD_REGISTRY_EXTRA)。
+An idea sandbox = a normally onboarded project (with .agent-memory: the handoff notes from deep talks go there), with no
+GitHub remote, marked `type: idea` in the registry, at <workspace_root>/<name>. The name is a human-readable code the idea
+has from the start (e.g. room-3d; decided by the owner on 2026-10-25, earlier limited to idea-<n>, existing ones still
+work): lowercase letters, digits and -, not clashing with the registry, a folder or a memory repo.
+Whether a project is an idea sandbox depends only on the registry's type: idea, not on the name. The registry also gets
+the purpose, `enforce: {{sandbox: true, work: true}}` (the real write block; work = deep talks may make changes, which idea
+sandboxes have by default, 10-25 the owner) + the default capabilities (default_for in hub.json capabilities, e.g. gpu;
+docs/design/capabilities.md), `privacy: {{reflection: stats_only}}`, in the same commit as the registration (onboard's
+ONBOARD_REGISTRY_EXTRA).
 
-用法:create-idea-sandbox.py <名稱> <purpose>
-輸出:最後一行是一個 JSON 物件(lease-runner 的 POST /v1/sandboxes 直接轉成回應):
-  {"result": "created"|"exists_same", "name"}                              exit 0
-  {"result": "bad_name"|"exists"|"too_many"|"create_failed", "detail", ...}  exit 1
-  too_many 另外帶 limit、current。
-- 重送:同名、同 purpose 已經登錄 → exists_same(Muninn 呼叫逾時重送不會開出第二個)。
-- 撞名:同名但 purpose 不同、跟正式專案同名、或資料夾/bare repo/memory 副本已經存在 → exists。
-- 上限:hub.json 的 ideas.limit(預設 20)個 type: idea 的專案。
-- onboard 失敗:清掉這次建的資料夾、bare repo、memory 副本、還沒 commit 的登錄檔(事前都確認過不存在),
-  再回 create_failed。
-同時只跑一個(鎖在 <state>/idea-sandbox.lock):onboard 會 commit agent-hub。
+Usage: create-idea-sandbox.py <name> <purpose>
+Output: the last line is one JSON object (lease-runner's POST /v1/sandboxes turns it straight into the response):
+  {{"result": "created"|"exists_same", "name"}}                              exit 0
+  {{"result": "bad_name"|"exists"|"too_many"|"create_failed", "detail", ...}}  exit 1
+  too_many also carries limit, current.
+- Resend: same name and same purpose already registered → exists_same (the assistant resending after a timeout does
+  not open a second one).
+- Clash: same name but a different purpose, the name of a project, or the folder/bare repo/memory copy already exists
+  → exists.
+- Limit: hub.json's ideas.limit (default 20) projects of type: idea.
+- onboard fails: removes the folder, bare repo, memory copy and the uncommitted registry file made this time (all
+  checked beforehand not to exist), then returns create_failed.
+Only one runs at a time (lock in <state>/idea-sandbox.lock): onboard commits agent-hub.
 """
 from __future__ import annotations
 
@@ -32,6 +38,9 @@ import sys
 
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
 import hubconf  # noqa: E402
+import i18n  # noqa: E402
+
+_ = i18n.domain(__file__)
 
 NAME = re.compile(r"^[a-z0-9](?:[a-z0-9-]{0,38}[a-z0-9])?$")  # 跟一般專案名稱同一套(rename-project.sh),最多 40 字
 
@@ -63,22 +72,25 @@ def registered() -> dict[str, dict]:
 
 def create(name: str, purpose: str) -> int:
     if not NAME.match(name) or "--" in name:
-        return out("bad_name", 1, detail=f"名稱只能用小寫英文、數字跟 -(開頭結尾不能是 -,最多 40 字),收到 {name!r}")
+        return out("bad_name", 1, detail=_(
+            "The name may only use lowercase letters, digits and - (not at the start or end, at most 40 characters); "
+            "got {name!r}", name=name))
     if name == hubconf.hub_project():
-        return out("exists", 1, detail=f"{name} 是平台自己的名稱")
+        return out("exists", 1, detail=_("{name} is the platform's own name", name=name))
     purpose = " ".join(purpose.split())
     if not purpose:
-        return out("bad_name", 1, detail="purpose 不能是空的")
+        return out("bad_name", 1, detail=_("purpose cannot be empty"))
     if len(purpose) > MAX_PURPOSE:
-        return out("bad_name", 1, detail=f"purpose 太長({len(purpose)} 字,上限 {MAX_PURPOSE})")
+        return out("bad_name", 1, detail=_("purpose is too long ({n} characters, the limit is {limit})",
+                                              n=len(purpose), limit=MAX_PURPOSE))
 
     docs = registered()
     if name in docs:
         d = docs[name]
         if d.get("type") == "idea" and " ".join(str(d.get("purpose", "")).split()) == purpose:
             return out("exists_same", 0, name=name)
-        what = "另一個想法" if d.get("type") == "idea" else "一個正式專案"
-        return out("exists", 1, detail=f"{name} 已經是{what}的名稱")
+        what = _("another idea") if d.get("type") == "idea" else _("a project")
+        return out("exists", 1, detail=_("{name} is already the name of {what}", name=name, what=what))
 
     ws = hubconf.p("workspace_root", "~/workspace") / name
     bare = hubconf.p("git_origin", "~/git-origin") / f"{name}-memory.git"
@@ -86,18 +98,20 @@ def create(name: str, purpose: str) -> int:
     svc = hubconf.p("services_root", "~/services") / name
     taken = [str(x) for x in (ws, bare, copy, svc) if x.exists()]
     if taken:
-        return out("exists", 1, detail=f"{name} 沒有登錄,但這些已經存在:{', '.join(taken)}")
+        return out("exists", 1, detail=_("{name} is not registered, but these already exist: {paths}", name=name,
+                                               paths=', '.join(taken)))
 
     limit = int(hubconf.get("ideas.limit", 20))
     current = sum(1 for d in docs.values() if d.get("type") == "idea")
     if current >= limit:
-        return out("too_many", 1, detail=f"已經有 {current} 個想法沙盒(上限 {limit})", limit=limit, current=current)
+        return out("too_many", 1, detail=_("There are already {current} idea sandboxes (limit {limit})", current=current,
+                                                 limit=limit), limit=limit, current=current)
 
     ws.mkdir(parents=True)
-    (ws / "README.md").write_text(
-        f"# {name}\n\n探討用的專案(想法沙盒),由 Muninn 替這個想法開的:\n\n> {purpose}\n\n"
-        "深談的結論、決定、待辦記在 memory(`.agent-memory/`);要變成正式專案時用 agent-hub 的 "
-        "`bin/upgrade-idea.sh`。\n")
+    (ws / "README.md").write_text(_(
+        "# {name}\n\nA project for exploring an idea (an idea sandbox), opened by the assistant for this idea:\n\n"
+        "> {purpose}\n\nConclusions, decisions and to-dos from the deep talks go in memory (`.agent-memory/`); "
+        "to turn it into a real project, use agent-hub's `bin/upgrade-idea.sh`.\n", name=name, purpose=purpose))
     extra = {"type": "idea", "purpose": purpose, "enforce": {"sandbox": True, "capabilities": default_capabilities(), "work": True},
              "privacy": {"reflection": "stats_only"}}
     env = {**os.environ, "ONBOARD_REGISTRY_EXTRA": json.dumps(extra, ensure_ascii=False)}
@@ -112,8 +126,8 @@ def create(name: str, purpose: str) -> int:
         if reg_file.exists() and not tracked:
             reg_file.unlink()
         tail = " / ".join((r.stderr or r.stdout).strip().splitlines()[-3:])
-        note = "(登錄檔已經 commit,沒有刪,要手動處理)" if tracked else ""
-        return out("create_failed", 1, detail=f"onboard 失敗:{tail}{note}")
+        note = _(" (the registry file was already committed, so it was not deleted: handle it by hand)") if tracked else ""
+        return out("create_failed", 1, detail=_("onboard failed: {tail}{note}", tail=tail, note=note))
 
     subprocess.run([sys.executable, str(HUB / "bin" / "registry.py"), "check", name],
                    capture_output=True)  # 更新快取:attachable 馬上看得到
@@ -125,7 +139,8 @@ def create(name: str, purpose: str) -> int:
 
 def main(argv: list[str]) -> int:
     if len(argv) != 2:
-        print(__doc__.split("\n\n")[2], file=sys.stderr)
+        # the docstring is a formatted msgid (its JSON braces are doubled): format() gives the text
+        print(_(__doc__).format().split("\n\n")[2], file=sys.stderr)
         return 2
     lock = hubconf.STATE / "idea-sandbox.lock"
     lock.parent.mkdir(parents=True, exist_ok=True)

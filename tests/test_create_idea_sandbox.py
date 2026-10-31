@@ -41,6 +41,8 @@ class CleanupOnFailure(unittest.TestCase):
         (self.hub / "projects").mkdir()
         for f in ("create-idea-sandbox.py", "hubconf.py", "i18n.py"):
             shutil.copy(ROOT / "bin" / f, self.hub / "bin" / f)
+        (self.hub / "locales" / "zh-Hant").mkdir(parents=True)
+        shutil.copy(ROOT / "locales" / "zh-Hant" / "create-idea-sandbox.json", self.hub / "locales" / "zh-Hant")
         fake = self.hub / "bin" / "onboard-project.sh"
         fake.write_text(FAKE_ONBOARD)
         fake.chmod(0o755)
