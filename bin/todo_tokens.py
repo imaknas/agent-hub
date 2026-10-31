@@ -115,6 +115,9 @@ class Patterns:
         self.bare = re.compile(r"^- \[ \] (?!〔)(?!\[[^\]]+\](?!\())(?P<text>.+)$")
         # a line that starts with a tag, text or not (a tag with nothing after it is a format problem, not prose)
         self.tag_start = re.compile(r"^- \[ \] (?:〔|\[[^\]]+\](?!\())")
+        # a label right after `- `, the `[ ]` checkbox left out (`- [owner] …` reads like a checkbox: a model drops the
+        # real one); a format problem, not prose, or the item would silently go missing
+        self.no_box = re.compile(r"^- (?:〔[^〕]+〕|\[[^\]\s][^\]]*\](?!\())")
         # a group subheading, known tag or not: an unknown one still ends the previous group
         self.group = re.compile(r"^#{3,4}\s*(?:〔(?P<zh>[^〕]+)〕|\[(?P<en>[^\]]+)\])\s*$")
         # the key marker of either set, the profiles' marker_pattern with half- and full-width parentheses and colons:

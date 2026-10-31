@@ -90,6 +90,8 @@ def parse(source: str, text: str, items: dict, problems: list) -> None:
                 # looks like a to-do but has no (known) owner tag, or is checked off and still there: must be shown,
                 # never silently dropped
                 problems.append(_("{source}: a to-do without an owner tag, or a finished one not removed: `{line}`", source=source, line=line[:60]))
+            elif P.no_box.match(line):
+                problems.append(_("{source}: a to-do without its `- [ ]` checkbox: `{line}`", source=source, line=line[:60]))
             # other lines (explanatory text, "see reference" links, continuation lines) aren't to-dos; skipped
 
 

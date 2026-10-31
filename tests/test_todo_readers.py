@@ -265,6 +265,16 @@ class EnglishGenTodo(unittest.TestCase):
                                        heading=EN["todo_heading"]))
         self.assertEqual(len(problems), 5)
 
+    def test_label_without_checkbox_is_a_problem(self):
+        """`- [owner] …` (the checkbox left out, seen in E2: the label reads like one) is reported, not skipped as
+        prose; the same for the zh-Hant set; a markdown link at the start of a line stays prose"""
+        for line in ("- [owner] renew the domain", "- [agent] write tests", f"- {tag(TAG)}renew"):
+            with self.subTest(line=line):
+                items, problems = parse(state(line, heading=EN["todo_heading"]))
+                self.assertEqual(sum(len(v) for v in items.values()), 0)
+                self.assertEqual(len(problems), 1)
+        self.assertEqual(parse(state("- [the docs](https://x.org) about it", heading=EN["todo_heading"]))[1], [])
+
     def test_en_key_has_no_whitespace(self):
         """the en profile's marker_pattern: a key is one run of non-space characters"""
         self.assertIsNone(gen_todo.P.key.search("renew (waiting on owner: two words)"))
