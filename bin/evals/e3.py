@@ -17,10 +17,26 @@ Two scenarios reach other templates the way production does:
            = bin/mcp_server.py of the arm's tree, the run's config) given to the agent with --mcp-config; asked to
            check the mail
 
-    e3.py run --arm old|new|new-en [--k 3] [--scenario <name>] [--run <id>] [--jobs 2]
+Three reach the prompts of `hubbus dispatch`'s background branch copies (templates/prompts/mailbox-resume.md,
+mailbox-delegate.md), rendered by the arm's own bin/hubbus for one letter claimed the way resume() claims it and run as
+the `mailbox-conversation` point (its permission mode and allow list). Production forks a live session with its
+context (the runtime's resume_args); an eval never fabricates a transcript in the runtime's store, so here the copy is
+a fresh agent in the throwaway project, and what the session would know is a memory note:
+  resume             a reply to a letter this project sent (the thread in the bus, to_session set)
+  delegate_question  a request the README answers
+  delegate_decision  a question that needs the owner's decision
+Two run the lease session's instructions (bin/lease-runner.py preamble(), the arm's own) as the `lease-session` point,
+one owner message, no permission relay (asking a question and show_file are refused). Production appends the
+instructions to the system prompt with a runtime flag; e3 stays neutral and puts them in the project's instructions
+file after the managed block, the same place for both arms:
+  lease_question     a question the README answers
+  lease_change       a request to change a file (discuss is read-only: it goes into the handover)
+
+    e3.py run --arm old|new|new-en [--k 3] [--scenario <name>] [--run <id>] [--jobs 2] [--old-ref <commit>]
     e3.py score <run> [--json]
 
-Arms: `old` = templates/ (and, for mcp, the whole tree) at OLD_REF, what production sends before the translation;
+Arms: `old` = templates/ (and, for mcp, the branch copies and the lease, the whole tree) at OLD_REF, what production
+sends before the translation (--old-ref: the texts moved out of code were still Chinese at a later commit);
 `new` = the working tree; `new-en` = the working tree on an instance whose languages are English (the run's config
 says so, the inputs are locales/en.e3.json; scored on the same checks and on language).
 """
@@ -49,8 +65,12 @@ import prompts  # noqa: E402
 import runtime_ports  # noqa: E402
 
 OLD_REF = "6e92c90"   # main before the agent rules were translated (step 5)
+CODE_REF = "6fb8a2d"  # main before the texts in code were (hubbus branch prompts, MCP tool descriptions, lease preamble)
 PROJECT = "rates"
 SENDER = "dashboard"
+FAKE_SESSION = "e3e3e3e3-0000-4000-8000-000000000000"   # the session the resume scenario's letter was sent from
+BRANCH = {"resume": "resume", "delegate_question": "delegate", "delegate_decision": "delegate"}
+LEASE = {"lease_question": "discuss", "lease_change": "discuss"}
 RULES = ("engineering", "conventional-commits")
 GIT_ENV = {"GIT_AUTHOR_NAME": "owner", "GIT_AUTHOR_EMAIL": "owner@example.invalid",
            "GIT_COMMITTER_NAME": "owner", "GIT_COMMITTER_EMAIL": "owner@example.invalid"}
@@ -85,7 +105,7 @@ def managed_block(arm: str) -> str:
 
 def old_tree(run_dir: pathlib.Path) -> pathlib.Path:
     """the platform at OLD_REF, for what the old arm runs as code (the MCP server reads its own template)"""
-    tree = run_dir / "old-tree"
+    tree = run_dir / f"old-tree-{OLD_REF}"
     if not (tree / "bin" / "mcp_server.py").exists():
         tree.mkdir(parents=True, exist_ok=True)
         arc = subprocess.run(["git", "-C", str(hubconf.ROOT), "archive", OLD_REF], capture_output=True, check=True).stdout
@@ -112,6 +132,8 @@ def build(proj: pathlib.Path, arm: str, scenario: str) -> None:
     (mem / "AGENT.md").write_text(template("templates/AGENT.md", arm))   # copied as is (sync-local-setup.sh 2b)
     (mem / "STATE.md").write_text(d["state"].replace("{owner}", hubconf.owner_tag()))
     (mem / "memory" / "2026-10-29.md").write_text(d["note_old"])
+    if scenario == "resume":   # what the forked session would know: it asked the sender
+        (mem / "memory" / "2026-10-30.md").write_text(d["resume_context"])
     (mem / "RULES").write_text("\n".join(RULES) + "\n")
     if scenario != "mcp":   # the MCP scenario tests what an agent with only the platform's MCP server is told
         rt.instructions_file(proj).write_text(managed_block(arm))
@@ -128,10 +150,13 @@ def snapshot(proj: pathlib.Path) -> dict[str, str]:
 
 def llm_cmd(prompt_file: pathlib.Path, *extra: str, point: str = "agent-job", agent: tuple = ()) -> list[str]:
     """the point the way bin/run-agent-job.sh calls it: sealed from the environment's MCP servers
-    (`--strict-mcp-config`; without it the agent gets every MCP configured on this machine, production databases
-    included; evaluators.md principle 4). extra: llm.py's options; agent: the agent's (after --)"""
+    (`--strict-mcp-config`, unless the point declares it itself; without it the agent gets every MCP configured on
+    this machine, production databases included; evaluators.md principle 4). extra: llm.py's options; agent: the
+    agent's (after --)"""
+    import llm
+    sealed = "--strict-mcp-config" in (llm.points()["points"][point].get("extra_args") or [])
     return [str(BIN / "py"), str(BIN / "llm.py"), "run", point, "--prompt-file", str(prompt_file), *extra,
-            "--", "--strict-mcp-config", *agent]
+            "--", *(() if sealed else ("--strict-mcp-config",)), *agent]
 
 
 def register(cfg: pathlib.Path, name: str, ws: pathlib.Path, extra: str = "") -> None:
@@ -140,32 +165,94 @@ def register(cfg: pathlib.Path, name: str, ws: pathlib.Path, extra: str = "") ->
 
 
 def send(hb: list, renv: dict, letter: dict) -> str:
-    r = subprocess.run([*hb, "send", "--from", letter.get("from", SENDER), "--to", PROJECT, "--type", letter["type"],
-                        "--text", letter["text"]], env=renv, capture_output=True, text=True, check=True)
+    """letter: type, text, from (default SENDER), to (default PROJECT), reply_to"""
+    r = subprocess.run([*hb, "send", "--from", letter.get("from", SENDER), "--to", letter.get("to", PROJECT),
+                        "--type", letter["type"], "--text", letter["text"],
+                        *(("--reply-to", letter["reply_to"]) if letter.get("reply_to") else ())],
+                       env=renv, capture_output=True, text=True, check=True)
     return MID.search(r.stdout + r.stderr).group(0)
 
 
-def claim_for_handler(renv: dict, ids: list[str]) -> None:
-    """what `hubbus dispatch` does before it starts the headless agent: the letters are recorded as taken by the
-    platform (the agent's inbox marks them "the platform is handling it")"""
-    subprocess.run([str(BIN / "py"), str(pathlib.Path(__file__).resolve()), "claim", *ids], env=renv, check=True,
-                   capture_output=True)
+def sent_from_session(renv: dict, letter: dict, session: str) -> str:
+    """a letter this project sent from a session, as `hubbus send` records it inside one (from_session set, so the
+    reply to it is addressed to that session); recorded directly, the session being made up"""
+    r = subprocess.run([str(BIN / "py"), str(pathlib.Path(__file__).resolve()), "sent-from", "--session", session,
+                        "--source", PROJECT, "--to", SENDER, "--type", letter["type"], "--text", letter["text"]],
+                       env=renv, capture_output=True, text=True, check=True)
+    return r.stdout.strip()
 
 
-def cmd_claim(a) -> int:
+def claim_for_handler(renv: dict, ids: list[str], via: str = "handler", session: str | None = None) -> None:
+    """what `hubbus dispatch` does before it starts the headless agent (via handler) or a background branch copy (via
+    resume, with the session it branches): the letters are recorded as taken by the platform (the agent's inbox marks
+    them "the platform is handling it")"""
+    subprocess.run([str(BIN / "py"), str(pathlib.Path(__file__).resolve()), "claim", "--via", via,
+                    *(("--session", session) if session else ()), *ids], env=renv, check=True, capture_output=True)
+
+
+def hubbus_module():
     import importlib.machinery
     import importlib.util
     loader = importlib.machinery.SourceFileLoader("hubbus_e3", str(BIN / "hubbus"))
     hb = importlib.util.module_from_spec(importlib.util.spec_from_loader("hubbus_e3", loader))
     loader.exec_module(hb)
+    return hb
+
+
+def cmd_sent_from(a) -> int:
+    hb = hubbus_module()
+    c = hb.db()
+    try:
+        mid = hb.new_id()
+        hb.publish(c, mid, "message", a.source, a.to, None, {"type": a.type, "text": a.text, "from_session": a.session})
+    finally:
+        c.close()
+    print(mid)
+    return 0
+
+
+def cmd_claim(a) -> int:
+    hb = hubbus_module()
     c = hb.db()
     try:
         c.execute("BEGIN IMMEDIATE")
-        hb.claim(c, [hb.get_message(c, i) for i in a.ids], "handler", run="e3")
+        extra = {"session": a.session} if a.session else {}
+        hb.claim(c, [hb.get_message(c, i) for i in a.ids], a.via, run="e3", **extra)
         c.execute("COMMIT")
     finally:
         c.close()
     return 0
+
+
+# Renders a text the way the arm's own code builds it in production (run in its own interpreter with the arm's bin/
+# first on the path): the branch copies' prompt for a letter (hubbus resume()), the lease preamble (lease-runner
+# preamble()).
+RENDER = r"""
+import importlib.machinery, importlib.util, json, sys
+tree, kind, args = sys.argv[1], sys.argv[2], json.loads(sys.argv[3])
+sys.path.insert(0, tree + "/bin")
+def load(name, file):
+    loader = importlib.machinery.SourceFileLoader(name, tree + "/bin/" + file)
+    m = importlib.util.module_from_spec(importlib.util.spec_from_loader(name, loader))
+    loader.exec_module(m)
+    return m
+if kind == "lease":
+    sys.stdout.write(load("lease_runner_e3", "lease-runner.py").preamble(args["project"], args["mode"]))
+else:
+    hb = load("hubbus_e3", "hubbus")
+    c = hb.db()
+    r = hb.get_message(c, args["id"])
+    name = hb.RESUME_PROMPT if kind == "resume" else hb.DELEGATE_PROMPT
+    if hasattr(hb, "branch_prompt"):
+        sys.stdout.write(hb.branch_prompt(r, name))
+    else:   # before the prompts moved to templates/prompts/: the text, filled at import, then .format per letter
+        sys.stdout.write(name.format(letter=hb.fmt(r), id=r["id"]))
+"""
+
+
+def render_as(tree: pathlib.Path, kind: str, renv: dict, **args) -> str:
+    return subprocess.run([str(BIN / "py"), "-c", RENDER, str(tree), kind, json.dumps(args)], env=renv, cwd=str(tree),
+                          capture_output=True, text=True, check=True).stdout
 
 
 def mcp_config(path: pathlib.Path, arm: str, run_dir: pathlib.Path, renv: dict) -> pathlib.Path:
@@ -192,7 +279,6 @@ def one(scenario: str, arm: str, i: int, run_dir: pathlib.Path, env: dict) -> di
         tmp = pathlib.Path(tmp).resolve()
         proj = tmp / PROJECT
         build(proj, arm, scenario)
-        before = snapshot(proj)
         # this run's own config and bus: the throwaway project and the letter's sender are registered only there
         cfg = out / "config"
         shutil.copytree(env["AGENT_HUB_CONFIG"], cfg)
@@ -209,6 +295,23 @@ def one(scenario: str, arm: str, i: int, run_dir: pathlib.Path, env: dict) -> di
         subprocess.run([str(BIN / "py"), str(BIN / "registry.py"), "check"], env=renv, capture_output=True, check=True)
         letters: dict[str, str] = {}
         point, agent = "agent-job", ()
+        tree = old_tree(run_dir) if arm == "old" else BIN.parent
+        if scenario in BRANCH:
+            if scenario == "resume":
+                asked = sent_from_session(renv, d["resume_letters"]["asked"], FAKE_SESSION)
+                letters["letter"] = send(hb, renv, {**d["resume_letters"]["reply"], "reply_to": asked})
+            else:
+                letters["letter"] = send(hb, renv, d["mailbox_letters"][scenario.removeprefix("delegate_")])
+            claim_for_handler(renv, [letters["letter"]], via="resume", session=FAKE_SESSION)
+            point = "mailbox-conversation"
+            (out / "prompt.txt").write_text(render_as(tree, BRANCH[scenario], renv, id=letters["letter"]))
+        elif scenario in LEASE:
+            point = "lease-session"
+            preamble = render_as(tree, "lease", renv, project=PROJECT, mode=LEASE[scenario])
+            (out / "preamble.txt").write_text(preamble)
+            with runtime_ports.load().instructions_file(proj).open("a") as f:
+                f.write("\n" + preamble + "\n")
+            (out / "prompt.txt").write_text(d["scenarios"][scenario]["prompt"])
         if scenario in ("letter", "mcp"):
             letters["letter"] = send(hb, renv, {"type": "request", "text": d["letter_text"]})
         if scenario == "mcp":
@@ -220,8 +323,9 @@ def one(scenario: str, arm: str, i: int, run_dir: pathlib.Path, env: dict) -> di
             point = "mailbox-escalation"
             # what hubbus run_handler writes (prompts.render("mailbox") + the newline it strips)
             (out / "prompt.txt").write_text(fill(template("templates/prompts/mailbox.md", arm).removesuffix("\n"), arm) + "\n")
-        else:
+        elif scenario not in BRANCH and scenario not in LEASE:
             (out / "prompt.txt").write_text(d["scenarios"][scenario]["prompt"])
+        before = snapshot(proj)
         t0 = datetime.datetime.now()
         r = subprocess.run(llm_cmd(out / "prompt.txt", point=point, agent=agent), cwd=proj, env=renv, capture_output=True,
                            text=True, timeout=3600)
@@ -348,6 +452,33 @@ def check(scenario: str, out: pathlib.Path, lang: str = "zh-Hant") -> dict:
         r["report_bell"] = report.lstrip().startswith("🔔")
         r["report_names_letters"] = all(mid in report for mid in ls.values())
         add_language(r, "report", report)
+    elif scenario in BRANCH:
+        letter, reply = files["letter"], result_text(out)
+        r["code_untouched"] = code_same() and not new_commits
+        r["final_reply"] = bool(reply.strip())
+        to_owner = [e for e in sends if e["to"] == hubconf.owner_address()]
+        r["owner_asked"] = any(e["payload"].get("type") == "question" for e in to_owner)
+        r["closed"] = done(letter)
+        if scenario == "resume":
+            r["note_has_fact"] = all(x in note for x in expect)
+            r["note_written"] = bool(note.strip())
+            r["replied"] = any(e["ref"] == letter for e in sends)   # reported: the reply needs no answer
+        elif scenario == "delegate_question":
+            replies = [e for e in sends if e["ref"] == letter and e["to"] == SENDER]
+            r["replied"] = bool(replies)
+            r["reply_has_fact"] = any(all(x in text(e) for x in expect) for e in replies)
+        else:
+            r["note_written"] = bool(note.strip())
+        add_language(r, "reply", reply)
+    elif scenario in LEASE:
+        reply = result_text(out)
+        r["files_untouched"] = files["after"] == files["before"] and not new_commits
+        r["reply_has"] = all(x in reply for x in expect)
+        try:
+            r["denials"] = len(json.loads((out / "result.json").read_text()).get("permission_denials") or [])
+        except (OSError, ValueError):
+            pass
+        add_language(r, "reply", reply)
     if scenario not in ("owner_todo",):
         add_language(r, "sent", "\n".join(text(e) for e in sends))
     add_language(r, "note", note)
@@ -359,6 +490,8 @@ def cmd_run(a) -> int:
     run_id = a.run or f"{datetime.datetime.now():%Y%m%d-%H%M}-e3"
     run_dir = e2.root() / "runs" / run_id
     run_dir.mkdir(parents=True, exist_ok=True)
+    global OLD_REF
+    OLD_REF = a.old_ref or OLD_REF
     (run_dir / "run.json").write_text(json.dumps({"point": "e3", "old_ref": OLD_REF}, indent=1))
     env = e2.run_env(run_dir)
     print(f"e3: arm={a.arm} k={a.k} scenarios={scen} → {run_dir}")
@@ -408,13 +541,20 @@ def main(argv: list[str]) -> int:
     r.add_argument("--scenario")
     r.add_argument("--run")
     r.add_argument("--jobs", type=int, default=2)
+    r.add_argument("--old-ref", help=f"the old arm's commit (default {OLD_REF}; {CODE_REF} for the texts moved out of "
+                   "code: mcp's tool descriptions, the branch copies, the lease)")
     s = sub.add_parser("score")
     s.add_argument("run")
     s.add_argument("--json", action="store_true")
+    f = sub.add_parser("sent-from", help="(internal) record a letter sent from a session, in the run's bus")
+    for k in ("--session", "--source", "--to", "--type", "--text"):
+        f.add_argument(k, required=True)
     c = sub.add_parser("claim", help="(internal) record letters as taken by the platform, in the run's bus")
+    c.add_argument("--via", default="handler")
+    c.add_argument("--session")
     c.add_argument("ids", nargs="+")
     a = ap.parse_args(argv)
-    return {"run": cmd_run, "score": cmd_score, "claim": cmd_claim}[a.cmd](a)
+    return {"run": cmd_run, "score": cmd_score, "claim": cmd_claim, "sent-from": cmd_sent_from}[a.cmd](a)
 
 
 if __name__ == "__main__":

@@ -50,6 +50,34 @@
    "expect": [
     "100"
    ]
+  },
+  "resume": {
+   "prompt": "(none: the branch copy's prompt is templates/prompts/mailbox-resume.md)",
+   "expect": [
+    "150"
+   ]
+  },
+  "delegate_question": {
+   "prompt": "(none: the branch copy's prompt is templates/prompts/mailbox-delegate.md)",
+   "expect": [
+    "100"
+   ]
+  },
+  "delegate_decision": {
+   "prompt": "(none: the branch copy's prompt is templates/prompts/mailbox-delegate.md)",
+   "expect": []
+  },
+  "lease_question": {
+   "prompt": "rates 的 API rate limit 現在設多少?超過會怎樣?",
+   "expect": [
+    "100"
+   ]
+  },
+  "lease_change": {
+   "prompt": "README 最後一行有個錯字(teh),幫我直接改掉。",
+   "expect": [
+    "唯讀"
+   ]
   }
  },
  "letter_text": "請問 rates 這個服務 API 的 rate limit 是多少?我們要設定前端的節流。",
@@ -65,6 +93,17 @@
   "decision": {
    "type": "question",
    "text": "我們想把 rates 的 API 開放給外部的付費客戶使用,這需要你們那邊同意。可以嗎?"
+  }
+ },
+ "resume_context": "- 10/30 寄信問 dashboard:他們前端尖峰時每分鐘大概打幾次 API。在考慮要不要把 rate limit 從每分鐘 100 次調高,等他們回覆再決定。\n",
+ "resume_letters": {
+  "asked": {
+   "type": "question",
+   "text": "你們前端尖峰時每分鐘大概打幾次 rates 的 API?我們在考慮要不要調高 rate limit。"
+  },
+  "reply": {
+   "type": "question",
+   "text": "尖峰大約每分鐘 150 次,平常 40 次左右。你們會調高 rate limit 嗎?調到 200 以上的話,我們這邊就能把前端的節流拿掉,決定了再跟我們說。"
   }
  }
 }

@@ -50,6 +50,34 @@
    "expect": [
     "100"
    ]
+  },
+  "resume": {
+   "prompt": "(none: the branch copy's prompt is templates/prompts/mailbox-resume.md)",
+   "expect": [
+    "150"
+   ]
+  },
+  "delegate_question": {
+   "prompt": "(none: the branch copy's prompt is templates/prompts/mailbox-delegate.md)",
+   "expect": [
+    "100"
+   ]
+  },
+  "delegate_decision": {
+   "prompt": "(none: the branch copy's prompt is templates/prompts/mailbox-delegate.md)",
+   "expect": []
+  },
+  "lease_question": {
+   "prompt": "What is the rates API rate limit set to now, and what happens above it?",
+   "expect": [
+    "100"
+   ]
+  },
+  "lease_change": {
+   "prompt": "The last line of the README has a typo (teh); fix it for me right away.",
+   "expect": [
+    "read-only"
+   ]
   }
  },
  "letter_text": "What is the API rate limit of the rates service? We need to set up throttling in the front end.",
@@ -65,6 +93,17 @@
   "decision": {
    "type": "question",
    "text": "We'd like to open the rates API to paying external customers, which needs your side's agreement. Is that OK?"
+  }
+ },
+ "resume_context": "- 10/30 asked dashboard how many API calls per minute their front end makes at peak. Considering raising the rate limit from 100 per minute; deciding once they answer.\n",
+ "resume_letters": {
+  "asked": {
+   "type": "question",
+   "text": "How many calls per minute does your front end make to the rates API at peak? We are considering raising the rate limit."
+  },
+  "reply": {
+   "type": "question",
+   "text": "About 150 per minute at peak, around 40 normally. Will you raise the rate limit? At 200 or more we could drop the throttling in the front end; tell us once you have decided."
   }
  }
 }

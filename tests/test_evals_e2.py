@@ -286,6 +286,42 @@ class E3(unittest.TestCase):
                                            "change_left_open", "owner_asked", "decision_left_open", "report_bell",
                                            "report_names_letters")), r)
 
+    def test_branch_check_reads_the_run_bus(self):
+        """delegate_question: replied to the sender with the fact, closed, code untouched; the point that seals the
+        agent from MCP itself (mailbox-conversation) gets no second flag"""
+        fact = e3.data()["scenarios"]["delegate_question"]["expect"][0]
+        with tempfile.TemporaryDirectory() as d:
+            out = pathlib.Path(d)
+            (out / "meta.json").write_text(json.dumps({"exit": 0}))
+            (out / "result.json").write_text(json.dumps({"result": "replied"}))
+            files = {"before": {"app.py": "x"}, "after": {"app.py": "x"}, "git_log": ["chore: initial commit"],
+                     "letter": "m10301200-abcd"}
+            (out / "files.json").write_text(json.dumps(files))
+            (out / "bus").mkdir()
+            c = sqlite3.connect(out / "bus" / "bus.db")
+            c.execute("CREATE TABLE events(seq INTEGER PRIMARY KEY, type, source, to_project, ref, payload)")
+            for t, s, to, p in (("message", "rates", e3.SENDER, {"type": "info", "text": f"limit {fact}/min"}),
+                                ("message.done", "rates", "rates", {})):
+                c.execute("INSERT INTO events(type, source, to_project, ref, payload) VALUES(?,?,?,'m10301200-abcd',?)",
+                          (t, s, to, json.dumps(p)))
+            c.commit(), c.close()
+            r = e3.check("delegate_question", out)
+        self.assertEqual((r["replied"], r["reply_has_fact"], r["closed"], r["code_untouched"], r["owner_asked"]),
+                         (True, True, True, True, False))
+        cmd = e3.llm_cmd(pathlib.Path("p"), point="mailbox-conversation")
+        self.assertNotIn("--strict-mcp-config", cmd[cmd.index("--"):], "declared by the point (extra_args)")
+
+    def test_lease_check_sees_a_changed_file(self):
+        with tempfile.TemporaryDirectory() as d:
+            out = pathlib.Path(d)
+            (out / "meta.json").write_text(json.dumps({"exit": 0}))
+            (out / "result.json").write_text(json.dumps({"result": "the limit is 100 per minute", "permission_denials": []}))
+            files = {"before": {"README.md": "teh"}, "after": {"README.md": "the"}, "git_log": ["chore: initial commit"],
+                     "letter": None}
+            (out / "files.json").write_text(json.dumps(files))
+            r = e3.check("lease_question", out)
+        self.assertEqual((r["files_untouched"], r["reply_has"], r["denials"]), (False, True, 0))
+
     def test_mcp_scenario_has_only_the_platform_server(self):
         with tempfile.TemporaryDirectory() as d:
             proj = pathlib.Path(d) / "rates"
