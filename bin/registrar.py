@@ -98,46 +98,54 @@ def hubbus(*args: str, stdin: str | None = None) -> subprocess.CompletedProcess:
 # --- the file ---
 
 def todo_bounds(lines: list[str]) -> tuple[int, int] | None:
-    """the (first) to-do section, either heading"""
+    """the first to-do section (either heading): where a re-added line goes"""
     s = P.section(lines)
     return s[0] if s else None
 
 
 def owner_lines(lines: list[str]) -> list[dict]:
-    """The owner's lines in the section: {i, text (key marker removed), key}."""
-    b, out, group = todo_bounds(lines), [], None
-    for i in range(*(b or (0, 0))):
-        l = lines[i].rstrip()
-        if m := P.group.match(l):
-            group = P.role(m)
-            continue
-        m = P.item.match(l)
-        m = m if m and P.role(m) == "owner" else (P.bare.match(l) if group == "owner" else None)
-        if m:
-            body = m.group("text")
-            k = KEY.search(body)
-            out.append({"i": i, "text": (body[:k.start()] if k else body).strip(), "key": k.group("key") if k else None})
+    """The owner's lines in the to-do section(s): {i, text (key marker removed), key}. A file with two sections (one per
+    token set: a format problem gen-todo reports) is read in full, so no key in the second one counts as vanished."""
+    out = []
+    for b in P.section(lines):
+        group = None
+        for i in range(*b):
+            l = lines[i].rstrip()
+            if m := P.group.match(l):
+                group = P.role(m)
+                continue
+            m = P.item.match(l)
+            m = m if m and P.role(m) == "owner" else (P.bare.match(l) if group == "owner" else None)
+            if m:
+                body = m.group("text")
+                k = KEY.search(body)
+                out.append({"i": i, "text": (body[:k.start()] if k else body).strip(),
+                            "key": k.group("key") if k else None})
     return out
 
 
 def line_texts(lines: list[str]) -> list[str]:
-    """The text of every to-do line in the section (tags and key markers removed), for reconciling by similarity."""
-    b, out = todo_bounds(lines), []
-    for i in range(*(b or (0, 0))):
-        l = lines[i].rstrip()
-        m = P.labelled.match(l) or P.bare.match(l)
-        if m:
-            out.append(norm(KEY.sub("", m.group("text"))))
+    """The text of every to-do line in the section(s) (tags and key markers removed), for reconciling by similarity."""
+    out = []
+    for b in P.section(lines):
+        for i in range(*b):
+            l = lines[i].rstrip()
+            m = P.labelled.match(l) or P.bare.match(l)
+            if m:
+                out.append(norm(KEY.sub("", m.group("text"))))
     return out
 
 
 def strike(lines: list[str], key: str) -> bool:
     hits = [i for i, l in enumerate(lines) if (m := KEY.search(l.rstrip())) and m.group("key") == key]
+    touched = {j for j, (a, b) in enumerate(P.section(lines)) if any(a <= h < b for h in hits)}
     for i in reversed(hits):
         del lines[i]
-    b = todo_bounds(lines)
-    if hits and b and not any(lines[i].strip() for i in range(*b)):
-        lines.insert(b[0], todo_tokens.tokens(hubconf.lang_content())["todo_none"])
+    # a section this emptied gets the empty marker (from the last one, so the earlier positions stay right)
+    for j in sorted(touched, reverse=True):
+        a, b = P.section(lines)[j]
+        if not any(lines[i].strip() for i in range(a, b)):
+            lines.insert(a, todo_tokens.tokens(hubconf.lang_content())["todo_none"])
     return bool(hits)
 
 

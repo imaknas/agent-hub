@@ -302,6 +302,19 @@ class EnglishRegistrar(unittest.TestCase):
         registrar.strike(lines, "nothing")
         self.assertIn(item("agent", "b"), lines)
 
+    def test_two_sections_no_key_vanishes(self):
+        """a zh-Hant section and an English one in the same file (a format problem gen-todo reports): the registrar
+        sees the keys of both, so nothing is claimed done; a strike empties only its own section"""
+        text = state(item(TAG, "old" + mark("task-p-1"))) + "\n" + EN["todo_heading"] + "\n\n" + \
+            en_item(TAG, "new" + en_mark("task-p-2")) + "\n" + en_item("agent", "a") + "\n"
+        lines = text.splitlines()
+        self.assertEqual([t["key"] for t in registrar.owner_lines(lines)], ["task-p-1", "task-p-2"])
+        self.assertEqual(registrar.reconcile(lines, {"task-p-1": "old", "task-p-2": "new"}), [])
+        registrar.strike(lines, "task-p-2")
+        self.assertNotIn(EN["todo_none"], lines, "the English section still has a line")
+        registrar.strike(lines, "task-p-1")
+        self.assertEqual(lines.count(EN["todo_none"]), 1, "the emptied zh-Hant section gets this writer's marker")
+
     def test_owner_lines(self):
         lines = state(en_item(TAG, "renew the domain" + en_mark("task-p-1")), en_item(TAG, "pay"),
                       item(TAG, "zh line" + mark("task-p-2")), en_item("agent", "write tests"),
