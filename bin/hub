@@ -1,3 +1,4 @@
 #!/bin/sh
-# 舊名稱:平台的 CLI 叫 agenthub(`hub` 跟 GitHub 舊的 hub CLI 撞名)。這支只轉過去,讓舊的腳本、文件、習慣照樣能用。
+# Old name: the platform's CLI is agenthub (`hub` clashes with GitHub's old hub CLI). This one only forwards, so old
+# scripts, docs and habits keep working.
 exec "${0%/*}/py" "${0%/*}/agenthub" "$@"

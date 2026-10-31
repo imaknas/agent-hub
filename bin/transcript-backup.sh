@@ -1,25 +1,28 @@
 #!/usr/bin/env bash
-# 備份 Claude Code「個人」profile 的完整 session transcript
-# (~/.claude-personal/projects/)到 mini,純備份、不處理、零 LLM 成本——
-# 跟圖書館員的摘要管線完全分開(原始過程資料的價值不該用「先壓縮成摘要」
-# 的方式犧牲掉,應該便宜地整份保留,以後有具體需求再挖)。
+# Back up the full session transcripts of Claude Code's "personal" profile
+# (~/.claude-personal/projects/) to the hub machine: pure backup, no processing, zero LLM cost,
+# completely separate from the librarian's summary pipeline (the value of raw process data shouldn't be sacrificed by
+# "compressing it into a summary first"; it should be kept whole, cheaply, and mined later when there's a concrete
+# need).
 #
-# 刻意只碰「個人」profile(~/.claude-personal),絕對不碰 ~/.claude(工作
-# profile,裡面有公司專案的內容)——這條界線是使用者明確劃的,不要因為
-# 方便就擴大範圍。
+# Deliberately touches only the "personal" profile (~/.claude-personal), never ~/.claude (the work profile, which holds
+# company project content): this boundary was drawn explicitly by the user; don't widen the scope for convenience.
 #
-# 用 rsync -a(不加 --delete):mini 上的副本只會變多不會變少,就算本機的
-# Claude Code 快取被清掉,mini 上還留著。
+# Uses rsync -a (no --delete): the copy on the hub machine only grows, never shrinks, so even if the local Claude Code
+# cache is cleared, the hub machine still has it.
 #
-# 這支腳本要在 MBP(本機資料的來源機器)上跑,不是在 mini 上——跟 git
-# mirror-backup 方向相反,因為 mini 沒辦法主動連進 MBP 讀檔案,只能等 MBP
-# 醒著的時候自己把資料推過去。
+# This script runs on the laptop (the machine the local data comes from), not on the hub machine: the opposite
+# direction from git mirror-backup, because the hub machine can't connect into the laptop to read files; it can only
+# wait for the laptop to push the data over itself while it's awake.
 set -uo pipefail
 source "$(dirname "$0")/hubpaths.sh"
 
 SRC="$HOME/.claude-personal/projects/"
-DEST_HOST="$(hub_server)"   # 跑 hub 的那台(hub.json hosts.server)
-[ -n "$DEST_HOST" ] || { echo "transcript-backup:hub.json 沒有 hosts.server(一台機器全包就不需要這支)" >&2; exit 0; }
+DEST_HOST="$(hub_server)"   # the machine that runs the hub (hub.json hosts.server)
+[ -n "$DEST_HOST" ] || {
+  echo "transcript-backup: hub.json has no hosts.server (with one machine doing everything this script isn't needed)" >&2
+  exit 0
+}
 DEST_PATH="transcript-backups/claude-personal-projects/"
 LOG_DIR="$HOME/agent-hub/.logs"
 mkdir -p "$LOG_DIR"
@@ -32,9 +35,9 @@ log "=== transcript-backup run start ==="
 ssh "$DEST_HOST" "mkdir -p $DEST_PATH" 2>>"$LOG"
 
 if rsync -az --stats "$SRC" "$DEST_HOST:$DEST_PATH" >>"$LOG" 2>&1; then
-  log "transcript backup 完成"
+  log "transcript backup done"
 else
-  log "transcript backup 失敗,看 log 找原因"
+  log "transcript backup failed, see the log for the reason"
 fi
 
 log "=== transcript-backup run end ==="

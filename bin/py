@@ -1,14 +1,19 @@
 #!/bin/sh
-# 平台的 Python(最低 3.13,含 PyYAML)。平台的 Python 腳本都經過這裡,不靠 PATH 上剛好是哪個 python3:
-#   - 腳本的第一行:#!/bin/sh -c exec${IFS}"${0%/*}/py"${IFS}"$0"${IFS}"$@"
-#     (macOS 的 kernel 把 #! 後面照空白切開、不理引號,所以用 ${IFS} 代替空白;Linux 不這樣切,這行只在 macOS 能用)
-#   - shell 腳本、launchd、登錄的 run:直接叫腳本(靠第一行),或 "$HUB/bin/py" <腳本>;要 -m / -c 的也用這支
-# 環境在哪只寫在這裡(hubconf 要先有 Python 才能讀 hub.json,所以這是唯一的例外):AGENT_HUB_PYTHON 可以覆蓋
-# (測試的假 HOME 底下用)。建環境、檢查:bin/setup-python。
-# 不經過這裡的刻意例外:scheduler-watchdog.py(平台的 Python 壞了它還要能發警報,用系統內建的 python3)。
+# The platform's Python (minimum 3.13, with PyYAML). All the platform's Python scripts go through here, not through
+# whichever python3 happens to be on PATH:
+#   - a script's first line: #!/bin/sh -c exec${IFS}"${0%/*}/py"${IFS}"$0"${IFS}"$@"
+#     (the macOS kernel splits what follows #! on spaces and ignores quotes, hence ${IFS} instead of spaces; Linux
+#     doesn't split this way, so this line only works on macOS)
+#   - shell scripts, launchd, the registry's run: call the script directly (relying on the first line), or
+#     "$HUB/bin/py" <script>; anything needing -m / -c uses this one too
+# Where the environment lives is written only here (hubconf needs Python before it can read hub.json, so this is the one
+# exception): AGENT_HUB_PYTHON can override it (used under the tests' fake HOME). Building and checking the environment:
+# bin/setup-python.
+# The deliberate exception that doesn't go through here: scheduler-watchdog.py (it must still send alerts when the
+# platform's Python is broken, so it uses the system's built-in python3).
 py="${AGENT_HUB_PYTHON:-$HOME/.local/share/agent-hub/python/bin/python3}"
 if [ ! -x "$py" ]; then
-  echo "agent-hub:找不到平台的 Python($py);在這台機器跑一次 bin/setup-python" >&2
+  echo "agent-hub: the platform's Python was not found ($py); run bin/setup-python once on this machine" >&2
   exit 127
 fi
 exec "$py" "$@"

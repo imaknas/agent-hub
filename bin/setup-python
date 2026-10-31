@@ -1,11 +1,13 @@
 #!/bin/sh
-# 建(或檢查)平台的 Python 環境:uv 管的 Python 3.13 venv + 平台用到的套件。重跑安全(已經好了就只檢查)。
-# 新機器、或 bin/py 說找不到時跑一次。位置跟覆蓋方式看 bin/py。
-#   setup-python           建好/補齊,最後驗證
-#   setup-python --check   只驗證(版本 ≥ 3.13、套件 import 得到),不動任何東西;不合格 exit 1
+# Build (or check) the platform's Python environment: a uv-managed Python 3.13 venv + the packages the platform uses.
+# Safe to rerun (if it's already fine it only checks).
+# Run once on a new machine, or when bin/py says it can't find it. Location and how to override it: see bin/py.
+#   setup-python           build/fill in, verify at the end
+#   setup-python --check   verify only (version ≥ 3.13, packages importable), touches nothing; exit 1 if it fails
 set -eu
 MIN="3.13"
-PKGS="pyyaml==6.0.3 ruff==0.14.0"   # pyyaml:平台腳本唯一 import 的第三方套件;ruff:bin/lint(commit 閘門),不 import
+# pyyaml: the only third-party package platform scripts import; ruff: bin/lint (commit gate), not imported
+PKGS="pyyaml==6.0.3 ruff==0.14.0"
 dir="${AGENT_HUB_PYTHON:+$(dirname "$(dirname "$AGENT_HUB_PYTHON")")}"
 dir="${dir:-$HOME/.local/share/agent-hub/python}"
 py="$dir/bin/python3"
@@ -13,20 +15,20 @@ py="$dir/bin/python3"
 check() {
   "$py" -c "
 import sys
-assert sys.version_info >= (3, 13), f'Python {sys.version.split()[0]} 太舊(最低 $MIN)'
+assert sys.version_info >= (3, 13), f'Python {sys.version.split()[0]} is too old (minimum $MIN)'
 import yaml
-print(f'平台的 Python:{sys.version.split()[0]}({sys.executable}),PyYAML {yaml.__version__}')
-" && { "$dir/bin/ruff" --version >/dev/null 2>&1 || { echo "venv 裡沒有 ruff(跑 bin/setup-python)" >&2; false; }; }
+print(f'Platform Python: {sys.version.split()[0]} ({sys.executable}), PyYAML {yaml.__version__}')
+" && { "$dir/bin/ruff" --version >/dev/null 2>&1 || { echo "no ruff in the venv (run bin/setup-python)" >&2; false; }; }
 }
 
 if [ "${1:-}" = "--check" ]; then
-  [ -x "$py" ] || { echo "沒有 $py(跑 bin/setup-python)" >&2; exit 1; }
+  [ -x "$py" ] || { echo "no $py (run bin/setup-python)" >&2; exit 1; }
   check
   exit
 fi
 
 uv="$(command -v uv || echo "$HOME/.local/bin/uv")"
-[ -x "$uv" ] || { echo "要先裝 uv(https://docs.astral.sh/uv/;裝在 ~/.local/bin)" >&2; exit 1; }
+[ -x "$uv" ] || { echo "install uv first (https://docs.astral.sh/uv/; into ~/.local/bin)" >&2; exit 1; }
 if [ ! -x "$py" ] || ! "$py" -c "import sys; sys.exit(sys.version_info < (3, 13))" 2>/dev/null; then
   "$uv" python install "$MIN"
   "$uv" venv --python "$MIN" --allow-existing "$dir"

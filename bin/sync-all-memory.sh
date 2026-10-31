@@ -1,37 +1,40 @@
 #!/usr/bin/env bash
-# 對專案登錄(projects/*.yaml)裡每個本機有 .agent-memory 的專案,補跑一次
-# memory 同步——SessionEnd/PreCompact hook 的安全網。session 沒正常結束
-# (當掉、一直開著沒關)的話,當天寫的 memory/ 筆記會一直留在 MBP 本機,
-# mini 上的 librarian 看不到。
+# For every project in the project registry (projects/*.yaml) that has a local .agent-memory, run the memory sync
+# once more: the safety net for the SessionEnd/PreCompact hooks. If a session didn't end normally (crashed, or left
+# open), the memory/ notes written that day stay local on the laptop, where the librarian on the hub machine can't
+# see them.
 #
-# 跑在 mini(local.sync-all-memory-mini),launchd 每小時一次:manifest 的路徑(~/workspace/<name>)。
-# (MBP 上以前的那份 local.sync-all-memory 10-29 拿掉了:10-15 所有專案搬到 mini 之後它就不做事。)
-# 零 LLM 成本;沒東西要 commit 就什麼都不做。
+# Runs on the hub machine (local.sync-all-memory-mini), hourly via launchd: the manifest's paths
+# (~/workspace/<name>).
+# (The old copy on the laptop, local.sync-all-memory, was removed on 10-29: after every project moved to the hub
+# machine on 10-15 it had nothing to do.)
+# Zero LLM cost; nothing to commit, nothing done.
 #
-# 每個專案:with-lock 底下跑 git-sync-memory.sh(只 add memory/ 跟 STATE.md,
-# 絕不 git add -A),再把還沒 push 出去的 commit(例如上次 push 失敗、或
-# sync-local-setup.sh 的 AGENT.md commit)補 push。
+# Per project: run git-sync-memory.sh under with-lock (only adds memory/ and STATE.md, never git add -A), then push
+# the commits that haven't gone out yet (e.g. the last push failed, or sync-local-setup.sh's AGENT.md commit).
 set -uo pipefail
 
 HUB="${AGENT_HUB_ROOT:-$(cd "$(dirname "$0")/.." && pwd)}"
 source "$(dirname "${BASH_SOURCE[0]}")/hubpaths.sh"
-SERVER="$(hub_server)"   # 跑 hub 的那台(hub.json hosts.server);空 = 就是這台
+SERVER="$(hub_server)"   # the machine that runs the hub (hub.json hosts.server); empty = this one
 LOG_DIR="$HUB/.logs"
 mkdir -p "$LOG_DIR"
 LOG="$LOG_DIR/sync-all-memory-$(date +%Y-%m-%d).log"
 
-# 補 push 也一樣:memory 的 commit/push 一律不跑專案自己的 git hook:.agent-memory 是同一個 repo 的
-# worktree,會共用 core.hooksPath(例:專案的 husky 跑 npx lint-staged)。
-# launchd 底下沒有 npx,hook 失敗讓筆記卡住沒 commit(2026-10-01);有 npx 時又會被
-# 專案的 prettier 改寫格式。memory 筆記不是專案程式碼,不該經過專案的 lint/格式化。
+# Catch-up pushes too: memory commits/pushes never run the project's own git hooks: .agent-memory is a worktree of
+# the same repo and shares core.hooksPath (e.g. the project's husky runs npx lint-staged).
+# Under launchd there's no npx, so the hook failed and notes got stuck uncommitted (2026-10-01); with npx, the
+# project's prettier rewrites their formatting. Memory notes aren't project code and shouldn't go through the
+# project's lint/formatting.
 export GIT_CONFIG_COUNT=1 GIT_CONFIG_KEY_0=core.hooksPath GIT_CONFIG_VALUE_0=/dev/null
 
 log() { echo "[$(date '+%H:%M:%S')] $*" >>"$LOG"; }
 
-# 先確認連得到 mini。連不到(MBP 不在家、tailnet 斷線;2026-09-30、10-08、10-13 都發生過)
-# 就只在本機 commit、不 push,整輪只記一行——不然每個專案各等一次 SSH 逾時,
-# 一整天累積上百行失敗紀錄。恢復連線後的那一輪會把沒推出去的 commit 補 push。
-# 在 mini 上(~/git-origin 在本機)memory remote 是本機路徑,不用檢查。
+# First check the hub machine is reachable. If not (the laptop is away from home, the tailnet is down; happened on
+# 2026-09-30, 10-08 and 10-13), only commit locally, don't push, and log a single line for the whole round:
+# otherwise every project waits for its own SSH timeout, piling up hundreds of failure lines a day. The first round
+# after the connection is back pushes the commits that didn't go out.
+# On the hub machine (~/git-origin is local) the memory remote is a local path; no check needed.
 GIT_ORIGIN="$(hub_json_get git_origin)"; GIT_ORIGIN="${GIT_ORIGIN:-~/git-origin}"; GIT_ORIGIN="${GIT_ORIGIN/#\~/$HOME}"
 if [ -z "$SERVER" ] || [ -d "$GIT_ORIGIN" ] || ssh -o ConnectTimeout=10 -o BatchMode=yes "$SERVER" true 2>/dev/null; then
   OFFLINE=""
@@ -41,8 +44,8 @@ else
 fi
 export AGENT_HUB_OFFLINE="$OFFLINE"
 
-# manifest 的路徑從 2026-10-15 起就是 mini 的 ~/workspace/<name>;另外掃一次 ~/workspace,
-# 涵蓋還沒登記的資料夾。同一個路徑只做一次。
+# Since 2026-10-15 the manifest's paths are the hub machine's ~/workspace/<name>; ~/workspace is also scanned
+# once, to cover folders not registered yet. Each path is done only once.
 {
   "$HUB/bin/py" "$HUB/bin/hubconf.py" roster | cut -f1,2
   for d in "$HOME"/workspace/*/; do

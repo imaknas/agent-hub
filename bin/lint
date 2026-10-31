@@ -1,9 +1,12 @@
 #!/usr/bin/env bash
-# 平台的 Python 程式碼的 lint:ruff,只開抓錯的 F 規則(pyflakes:沒定義的名字、沒用到的 import/變數…),不管排版。
-# 規則在 repo 根目錄的 ruff.toml(編輯器也讀那份);ruff 裝在平台的 venv(bin/setup-python,固定版本)。
-# commit 閘門(bin/test-gate)對暫存區匯出的副本跑;也可以手動跑。
-#   lint [目錄]     預設 hub 根目錄;有問題 exit 1,沒有 ruff exit 2(說要跑 bin/setup-python)
-# 沒有副檔名的腳本(第一行是 bin/py 的 shebang 或 python)ruff 自己認不出來,這裡列出來一起交給它。
+# Lint for the platform's Python code: ruff, with only the error-catching F rules on (pyflakes: undefined names, unused
+# imports/variables…), no formatting.
+# The rules are in ruff.toml at the repo root (editors read that one too); ruff is installed in the platform's venv
+# (bin/setup-python, pinned version).
+# The commit gate (bin/test-gate) runs it on the copy exported from the index; it can also be run by hand.
+#   lint [dir]      default: the hub root; problems exit 1, no ruff exit 2 (says to run bin/setup-python)
+# Scripts without an extension (first line is bin/py's shebang or python) aren't recognized by ruff on its own; they are
+# listed here and handed to it too.
 set -uo pipefail
 
 HUB="$(cd "$(dirname "$0")/.." && pwd)"

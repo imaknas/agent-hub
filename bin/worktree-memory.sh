@@ -1,23 +1,26 @@
 #!/usr/bin/env bash
-# 讓 git worktree 裡的 session 也接上 memory 追蹤。
+# Hook sessions in a git worktree up to memory tracking too.
 #
-# 問題:Claude Code 開在 worktree 的 session(例:agent 用 worktree 模式叫出來的
-# `<專案>/.claude/worktrees/<名稱>`)只有 git 追蹤的檔案——沒有 .agent-memory、沒有
-# 執行環境的本機專用檔(規則檔、放 hook 的本機設定;都不進版控)。
-# 結果 hook 不跑、筆記不同步、session 也沒拿到 memory 跟跨專案規則。
+# The problem: a Claude Code session opened in a worktree (e.g. `<project>/.claude/worktrees/<name>`, started by an
+# agent in worktree mode) has only the git-tracked files: no .agent-memory, none of the runtime's local-only files
+# (the rules file, the local settings holding the hooks; none are in version control).
+# So hooks don't run, notes don't sync, and the session doesn't get memory or the cross-project rules.
 #
-# 做法:這支掛在**使用者層級**的 settings(不是專案層級,worktree 裡沒有專案的
-# local settings),由 merge-hook-settings.py --worktree 安裝。在主 checkout 裡
-# 什麼都不做(專案自己的 hook 會處理,避免重複);在 linked worktree 裡:
-#   start  把主 checkout 的 .agent-memory、執行環境的本機專用檔(`hub-runtime local-ignores`)用 symlink 接進來,
-#          pull memory,第一次接上時把規則檔(`hub-runtime instructions-file`)印進 context(session 開始時它還不存在),
-#          memory 落後就提醒
-#   end    (SessionEnd / PreCompact)同步 memory 筆記,跟主 checkout 的 hook 同一支腳本
-#   nudge  (PostToolUse)git commit/push 之後筆記落後就提醒;專案信箱有新信就送進來(hubbus,限流)
-#   start 也會把專案信箱還沒結案的信送進 context
-#   prompt (UserPromptSubmit)專案信箱有新信就送進 context(使用者層級的 hook,Knas 核准才裝:U4)
-# symlink 指向同一份 .agent-memory,with-lock 用的是同一個 git dir,不會跟主 checkout 互撞。
-# 刪掉 worktree 只會刪 symlink,不會動到主 checkout 的 memory。
+# The approach: this script hangs off the **user-level** settings (not project level: a worktree has no project local
+# settings), installed by merge-hook-settings.py --worktree. In the main checkout it does nothing (the project's own
+# hooks handle it, no duplication); in a linked worktree:
+#   start  symlink in the main checkout's .agent-memory and the runtime's local-only files
+#          (`hub-runtime local-ignores`), pull memory, the first time it links print the rules file
+#          (`hub-runtime instructions-file`) into the context (it didn't exist yet when the session started),
+#          remind when memory is behind
+#   end    (SessionEnd / PreCompact) sync the memory notes, same script as the main checkout's hook
+#   nudge  (PostToolUse) remind when notes are behind after a git commit/push; deliver new letters from the project
+#          mailbox (hubbus, rate-limited)
+#   start also delivers the project mailbox's letters that aren't closed yet into the context
+#   prompt (UserPromptSubmit) deliver new letters from the project mailbox into the context (a user-level hook,
+#          installed only with the owner's approval: U4)
+# The symlink points at the same .agent-memory, and with-lock uses the same git dir, so it doesn't collide with the
+# main checkout. Deleting the worktree only deletes the symlink, never the main checkout's memory.
 set -uo pipefail
 
 HUB="${AGENT_HUB_ROOT:-$(cd "$(dirname "$0")/.." && pwd)}"
@@ -26,12 +29,12 @@ event="${1:-}"
 
 git_dir=$(git rev-parse --path-format=absolute --git-dir 2>/dev/null) || exit 0
 common=$(git rev-parse --path-format=absolute --git-common-dir 2>/dev/null) || exit 0
-[ "$git_dir" = "$common" ] && exit 0          # 主 checkout:專案自己的 hook 負責
-main=$(dirname "$common")                      # <主 checkout>/.git → <主 checkout>
-[ -d "$main/.agent-memory" ] || exit 0         # 不是 onboard 過的專案
+[ "$git_dir" = "$common" ] && exit 0          # main checkout: the project's own hooks handle it
+main=$(dirname "$common")                      # <main checkout>/.git → <main checkout>
+[ -d "$main/.agent-memory" ] || exit 0         # not an onboarded project
 top=$(git rev-parse --show-toplevel 2>/dev/null) || exit 0
 cd "$top" || exit 0
-# hook JSON(stdin)只能讀一次,memory-nudge 跟 hubbus 都要用
+# the hook JSON (stdin) can be read only once, and both memory-nudge and hubbus need it
 hook_json=""
 [ -t 0 ] || IFS= read -r -t 1 hook_json || true
 
@@ -41,15 +44,17 @@ case "$event" in
     if [ ! -e .agent-memory ]; then
       ln -s "$main/.agent-memory" .agent-memory && linked=1
     fi
-    # 執行環境的本機專用檔(規則檔、本機設定;`hub-runtime local-ignores`)都在主 checkout,worktree 沒有
-    # (gitignored):接上 symlink、加進共用的 info/exclude。Claude Code 會即時重新載入設定(第二階段的 sandbox/權限規則)
+    # the runtime's local-only files (rules file, local settings; `hub-runtime local-ignores`) are all in the main
+    # checkout, not in the worktree (gitignored): symlink them in, add them to the shared info/exclude. Claude Code
+    # reloads settings live (phase two's sandbox/permission rules)
     for f in $("$HUB/bin/py" "$HUB/bin/hub-runtime" local-ignores 2>/dev/null); do
       if [ ! -e "$f" ] && [ -f "$main/$f" ]; then
         mkdir -p "$(dirname "$f")" && ln -s "$main/$f" "$f"
         grep -qxF "$f" "$common/info/exclude" 2>/dev/null || echo "$f" >>"$common/info/exclude"
       fi
     done
-    # .agent-memory/ 這條規則只比對目錄,symlink 要另外排除(info/exclude 所有 worktree 共用)
+    # the .agent-memory/ rule only matches a directory; the symlink needs its own exclude (info/exclude is shared by
+    # all worktrees)
     grep -qxF ".agent-memory" "$common/info/exclude" 2>/dev/null || echo ".agent-memory" >>"$common/info/exclude"
     (cd .agent-memory && "$HUB/bin/with-lock.sh" git pull -q) >/dev/null 2>&1
     instr=$("$HUB/bin/py" "$HUB/bin/hub-runtime" instructions-file "$PWD" 2>/dev/null)
@@ -59,7 +64,8 @@ case "$event" in
       cat "$instr"
     fi
     "$HUB/bin/py" "$HUB/bin/memory-nudge.py" --session-start 2>/dev/null
-    # 每晚的 worktree 清理(bin/worktrees.py auto_prune)刪過這裡的依賴:提醒怎麼重建,免得第一次跑測試時一頭霧水
+    # the nightly worktree cleanup (bin/worktrees.py auto_prune) deleted dependencies here: say how to rebuild them,
+    # so the first test run isn't a puzzle
     if [ -f "$git_dir/agent-hub-deps-pruned" ]; then
       hub_say "(while this worktree sat idle, the nightly cleanup removed dependencies that can be rebuilt, to save space; rebuild them before running code or tests:)"
       sed 's/^/  /' "$git_dir/agent-hub-deps-pruned"
@@ -71,7 +77,8 @@ case "$event" in
     [ -e .agent-memory ] && cd .agent-memory && "$HUB/bin/with-lock.sh" "$HUB/bin/git-sync-memory.sh"
     ;;
   prompt)
-    # UserPromptSubmit:對話中有新信就送進來(主 checkout 有專案自己的 hook,這裡只管 worktree)
+    # UserPromptSubmit: deliver new letters mid-conversation (the main checkout has the project's own hook; this only
+    # handles worktrees)
     [ -n "$hook_json" ] && printf '%s' "$hook_json" | "$HUB/bin/py" "$HUB/bin/hubbus" hook prompt 2>/dev/null
     ;;
   nudge)

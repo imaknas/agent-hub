@@ -1,12 +1,14 @@
-# 給「可能在 MBP、也可能在 mini 上跑」的腳本 source 用。
+# Sourced by scripts that "may run on the laptop, or on the hub machine".
 #
-# 2026-10-15 起所有專案都在 mini 上(~/workspace/<name>),agent-hub 的 session 也跑在 mini。
-# mini 解析不到自己的 tailnet 名稱(ssh 自己的名稱在 hub 那台上會失敗),所以「在 mini 上
-# 做某件事」在 mini 本機就直接執行,在別台(MBP)才走 ssh。
+# Since 2026-10-15 every project lives on the hub machine (~/workspace/<name>), and agent-hub's session runs there too.
+# The hub machine can't resolve its own tailnet name (ssh to its own name fails on the hub machine), so "doing something
+# on the hub machine" runs directly when on the hub machine itself, and goes through ssh only from another machine
+# (the laptop).
 #
-# 判斷「這台就是 mini」:hub.json 的 hosts.server 沒寫(一台機器全包),或 git_origin(memory 的 bare repo 都在這裡)
-# 在這台。server 的 ssh 名稱從 hub.json 讀(hubconf.host("server"));用 plutil 讀 JSON,不靠平台的 Python——
-# 遙控用的那台(MBP)不一定有。
+# Deciding "this is the hub machine": hub.json's hosts.server is not set (one machine does everything), or git_origin
+# (where all the memory bare repos are) is on this machine. The server's ssh name is read from hub.json
+# (hubconf.host("server")); JSON is read with plutil, not the platform's Python: the remote machine (the laptop) may
+# not have it.
 
 source "$(dirname "${BASH_SOURCE[0]}")/hubpaths.sh"
 MINI_HOST="$(hub_server)"
@@ -14,17 +16,17 @@ _GIT_ORIGIN="$(hub_json_get git_origin)"; _GIT_ORIGIN="${_GIT_ORIGIN:-~/git-orig
 
 on_mini() { [ -z "$MINI_HOST" ] || [ -d "$_GIT_ORIGIN" ]; }
 
-# mini_sh '<指令>':在 mini 上執行(字串裡的 ~、$HOME 由 mini 那邊展開)
+# mini_sh '<command>': run on the hub machine (~ and $HOME in the string are expanded on the hub machine's side)
 mini_sh() {
   if on_mini; then bash -c "$1"; else ssh -o BatchMode=yes "$MINI_HOST" "$1"; fi
 }
 
-# mini_bash_stdin <<EOF ... EOF:把整段 script 丟到 mini 執行
+# mini_bash_stdin <<EOF ... EOF: hand a whole script to the hub machine to run
 mini_bash_stdin() {
   if on_mini; then bash -s; else ssh -o BatchMode=yes "$MINI_HOST" "bash -s"; fi
 }
 
-# mini_memory_url <name>:專案 .agent-memory 的 mini remote 要設成什麼
+# mini_memory_url <name>: what a project's .agent-memory remote on the hub machine should be set to
 mini_memory_url() {
   if on_mini; then echo "$_GIT_ORIGIN/$1-memory.git"; else echo "$MINI_HOST:~/git-origin/$1-memory.git"; fi
 }

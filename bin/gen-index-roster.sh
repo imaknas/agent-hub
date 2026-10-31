@@ -1,26 +1,27 @@
 #!/usr/bin/env bash
-# 從專案登錄(projects/*.yaml,bin/hubconf.py roster)機械產生 index.md 裡的「專案名冊」區塊。
+# Mechanically generate the "project roster" block in index.md from the project registry (projects/*.yaml,
+# bin/hubconf.py roster).
 #
-# 為什麼要有這支:index.md 原本整份交給 librarian 的 LLM 步驟維護,專案清單
-# 只會出現模型「自己決定要寫」的專案——2026-09-25 檢查時 19 個已 onboard 的
-# 專案只有 7 個在 index.md 裡(adaptive-iteration 9/23 明明進了 digest,模型
-# 還是沒幫它加一行)。「有哪些專案」是確定性的事實,不該依賴模型判斷。
+# Why this script exists: index.md used to be maintained wholesale by the librarian's LLM step, so the project list
+# only had the projects the model "decided to write": a check on 2026-09-25 found only 7 of 19 onboarded projects in
+# index.md (adaptive-iteration clearly made it into the digest on 9/23, and the model still didn't add a line for
+# it). "Which projects exist" is a deterministic fact and shouldn't depend on the model's judgment.
 #
-# 分工:
-# - 名冊區塊(<!-- roster:begin --> 到 <!-- roster:end -->)只由這支腳本寫,
-#   內容只取專案登錄,不讀任何機器相依的狀態,所以在 MBP 或
-#   mini 跑出來的結果一模一樣,不會互相覆蓋造成 diff 抖動。
-# - 區塊外的註記/跨專案關聯才是 librarian LLM 的工作範圍。
+# Division of work:
+# - The roster block (<!-- roster:begin --> to <!-- roster:end -->) is written only by this script; its content
+#   comes only from the project registry and reads no machine-dependent state, so running it on the laptop or on
+#   the hub machine gives exactly the same result, and the two don't overwrite each other into diff churn.
+# - Notes and cross-project links outside the block are the librarian LLM's scope.
 #
-# 區塊不存在的話,插在第一個 `## ` 標題前面(沒有任何標題就接在檔尾)。
-# 可重複執行;內容沒變就不改檔案。只改 index.md,不 commit——commit 由呼叫
-# 端(librarian.sh / onboard-project.sh)負責。
+# If the block doesn't exist, it's inserted before the first `## ` heading (no heading at all: appended at the end).
+# Safe to rerun; if the content didn't change, the file isn't touched. Only changes index.md, doesn't commit: the
+# caller (librarian.sh / onboard-project.sh) commits.
 set -euo pipefail
 
-HUB="${AGENT_HUB:-${AGENT_HUB_ROOT:-$(cd "$(dirname "$0")/.." && pwd)}}"   # 預設 = 這支腳本所在的 hub
-PY="$(dirname "$0")/py"   # 平台的 Python 跟著這支腳本走(AGENT_HUB 可能指向別的資料目錄)
+HUB="${AGENT_HUB:-${AGENT_HUB_ROOT:-$(cd "$(dirname "$0")/.." && pwd)}}"   # default = the hub this script is in
+PY="$(dirname "$0")/py"   # the platform's Python goes with this script (AGENT_HUB may point at another data directory)
 source "$(dirname "${BASH_SOURCE[0]}")/hubpaths.sh"
-[ -n "${AGENT_HUB:-}" ] && HUB_DATA="$HUB"   # AGENT_HUB 指到別的資料目錄時(測試)用它
+[ -n "${AGENT_HUB:-}" ] && HUB_DATA="$HUB"   # when AGENT_HUB points at another data directory (tests), use it
 INDEX="$HUB_DATA/index.md"
 
 [ -f "$INDEX" ] || printf '# agent-hub index\n' > "$INDEX"
@@ -28,9 +29,10 @@ INDEX="$HUB_DATA/index.md"
 block=$(mktemp); out=$(mktemp); rows=$(mktemp); ideas=$(mktemp)
 trap 'rm -f "$block" "$out" "$rows" "$ideas"' EXIT
 AGENT_HUB_ROOT="$HUB" "$PY" "$HUB/bin/hubconf.py" roster > "$rows"
-AGENT_HUB_ROOT="$HUB" "$PY" "$HUB/bin/hubconf.py" ideas > "$ideas"   # 想法沙盒另外列一組
-# 注意:過濾時想法清單在 awk 的 BEGIN 讀,不要改回 `NR==FNR` 兩個檔案的寫法——清單是空檔(還沒有任何想法)
-# 時 NR==FNR 對每一行都成立,所有專案都會被濾掉(2026-10-24 名冊因此空了一次)
+AGENT_HUB_ROOT="$HUB" "$PY" "$HUB/bin/hubconf.py" ideas > "$ideas"   # idea sandboxes are listed as a separate group
+# Note: when filtering, the idea list is read in awk's BEGIN; don't change it back to the two-file `NR==FNR` form:
+# when the list is an empty file (no ideas yet) NR==FNR holds for every line and every project gets filtered out
+# (the roster went empty once because of this on 2026-10-24)
 [ -s "$rows" ] || { hub_say "gen-index-roster: the project registry is empty ({dir})" dir="$HUB/projects" >&2; exit 1; }
 
 {
