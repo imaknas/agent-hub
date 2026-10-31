@@ -14,7 +14,8 @@ What is backed up (what only the hub machine has, and cannot be recovered once l
     written is never touched
   - the bare repos under ~/git-origin (memory branches, agent-hub itself, projects without a GitHub remote):
     git bundle --all
-  - what each project workspace has not pushed: commits not on any remote as a bundle, uncommitted changes as a diff,
+  - what each project workspace has not pushed: commits not on any remote as a bundle, uncommitted changes as a diff
+    (both made by the project's own job, project_git.py; where its sandbox refuses, the manifest lists it as skipped),
     .env* (up to three levels deep, e.g. backend/.env)
   - the directories listed in hub.json backup.include (the assistant's data, platform state, secrets, service data,
     Claude Code transcripts)
@@ -39,6 +40,8 @@ import tempfile
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
 import hubconf  # noqa: E402
 import i18n  # noqa: E402
+import project_git  # noqa: E402
+from project_git import EX_SANDBOX  # noqa: E402
 
 _ = i18n.domain(__file__)
 
@@ -182,12 +185,21 @@ def stage() -> dict:
         d = STAGE / "workspace" / name
         d.mkdir()
         got = []
-        r = subprocess.run(["git", "-C", str(ws), "bundle", "create", str(d / "unpushed.bundle"), "--branches", "--not", "--remotes"],
-                           capture_output=True, text=True)
+        # git in the project's repo runs as the project (project_git.py: sandboxed when it is); the bundle and the diff
+        # come back on stdout, as data
+        with (d / "unpushed.bundle").open("wb") as fh:
+            r = project_git.job(name, ws, "bundle-unpushed", ws, stdout=fh, stderr=subprocess.PIPE)
+        diff = project_git.job(name, ws, "diff-head", ws, capture_output=True) if r.returncode != EX_SANDBOX else r
+        if EX_SANDBOX in (r.returncode, diff.returncode):
+            why = (diff.stderr or b"").decode(errors="replace").strip()[-200:]
+            manifest.setdefault("skipped", []).append({"project": name, "why": why})
+            say(_("{project}: its unpushed and uncommitted work is not in this backup (its git runs only as the "
+                  "project, and that was refused: {why})", project=name, why=why))
         if r.returncode == 0:
             got.append("unpushed.bundle")
-        diff = subprocess.run(["git", "-C", str(ws), "diff", "HEAD", "--binary"], capture_output=True)
-        if diff.stdout and len(diff.stdout) <= DIFF_LIMIT:
+        else:
+            (d / "unpushed.bundle").unlink()
+        if diff.returncode == 0 and diff.stdout and len(diff.stdout) <= DIFF_LIMIT:
             (d / "uncommitted.diff").write_bytes(diff.stdout)
             got.append("uncommitted.diff")
         for f in workspace_env_files(ws):

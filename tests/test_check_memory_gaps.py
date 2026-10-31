@@ -49,7 +49,7 @@ class NoteCommits(unittest.TestCase):
         self.commit("init: memory skeleton", ".gitkeep")
         self.commit("consolidate: fold 3 raw notes into reference/ (2026-10-25)", "reference.md")
         self.commit("librarian: Knas 任務登錄(Muninn)", "x.md")
-        self.assertEqual(self.m.note_commits_since(str(self.ws), self.since), 0)
+        self.assertEqual(self.m.note_commits_since(str(self.repo), self.since), 0)
 
     def test_agent_notes_count_but_merges_do_not(self):
         self.commit("init: memory skeleton", ".gitkeep")
@@ -58,7 +58,7 @@ class NoteCommits(unittest.TestCase):
         self.git("checkout", "-q", "agent-memory")
         self.commit("consolidate: fold 1 raw notes into reference/ (2026-10-25)", "b.md")
         self.git("merge", "-q", "--no-ff", "-m", "Merge branch 'side' into agent-memory", "side")
-        self.assertEqual(self.m.note_commits_since(str(self.ws), self.since), 1)
+        self.assertEqual(self.m.note_commits_since(str(self.repo), self.since), 1)
 
     def test_no_agent_memory(self):
         self.assertEqual(self.m.note_commits_since(str(self.ws / "nope"), self.since), -1)

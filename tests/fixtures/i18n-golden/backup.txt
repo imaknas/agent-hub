@@ -94,7 +94,8 @@ exit 2
 備份什麼(只有這台 mini 有、丟了救不回來的):
   - SQLite(匯流排 bus.db、muninn.db):用 backup API 複製一份再備份,不碰正在寫的 db/WAL
   - ~/git-origin 底下的 bare repo(memory 分支、agent-hub 本身、沒有 GitHub remote 的專案):git bundle --all
-  - 各專案 workspace 還沒 push 的東西:沒在任何 remote 上的 commit 打成 bundle、還沒 commit 的改動存成 diff、
+  - 各專案 workspace 還沒 push 的東西:沒在任何 remote 上的 commit 打成 bundle、還沒 commit 的改動存成 diff
+    (兩者都由專案自己的 job 產生,project_git.py;它的 sandbox 拒絕時,manifest 列為 skipped)、
     .env*(三層內,例:backend/.env)
   - hub.json backup.include 列的目錄(muninn data、平台狀態、secrets、服務的資料、Claude Code transcript)
 不備份:工作 profile 的 transcript(公司內容)、GitHub mirror、完整 workspace、產生的影片、venv/cache。

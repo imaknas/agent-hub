@@ -10,8 +10,9 @@ How: for each onboarded project, count the messages the user sent in that folder
 in worktrees under it included), then count the commits the agent made to memory/ in the same period. Messages >=
 THRESHOLD with 0 note commits: list it.
 
-Note commits are read from the workspace's .agent-memory (that is where they are committed once a session writes
-them, by the hook/the hourly sync; ~/.memory-copies waits for the librarian's pull), and the platform's own commits
+Note commits are read from the project's memory bare repo (a session's hook and the hourly sync push them there;
+~/.memory-copies waits for the librarian's pull; the workspace's .agent-memory is the project's repo, where the
+platform runs no git: docs/design/projects-and-repos.md section 4), and the platform's own commits
 do not count: consolidate folding old date files into reference/, what the librarian writes, the onboarding skeleton
 (init:), merges during sync -- they all touch memory/, and counting them would hide an agent that wrote nothing.
 
@@ -52,18 +53,25 @@ def human_messages_since(paths: list[str], since: datetime.datetime) -> int:
     return sum(1 for t in rt.turns(paths, since, worktrees=True) if t.role == "human")
 
 
-def note_commits_since(workspace: str, since: datetime.datetime) -> int:
-    """How many agent note commits the workspace's .agent-memory has since `since`; -1 when there is no
-    .agent-memory."""
-    repo = pathlib.Path(workspace).expanduser() / ".agent-memory"
-    if not (repo / ".git").exists():
+def notes_repo(name: str) -> pathlib.Path | None:
+    """Where the project's notes are counted: its memory bare repo, which the platform owns and the hourly sync keeps
+    current. Not the project's .agent-memory: that is a worktree of the project's repo, whose .git config a sandboxed
+    project writes (a `git log` there can run its gpg.program; docs/design/projects-and-repos.md section 4)."""
+    import policy
+    doc = hubconf.projects().get(name)
+    return policy.memory_bare(name, doc) if doc else None
+
+
+def note_commits_since(repo, since: datetime.datetime, branch: str = "agent-memory") -> int:
+    """How many agent note commits the memory repo's branch has since `since`; -1 when there is no memory repo."""
+    if not repo or not pathlib.Path(repo).is_dir():
         return -1
-    out = subprocess.run(
-        ["git", "-C", str(repo), "log", f"--since={since.isoformat()}", "--format=%h", "--no-merges",
+    r = subprocess.run(
+        ["git", "-C", str(repo), "log", branch, f"--since={since.isoformat()}", "--format=%h", "--no-merges",
          "--invert-grep", *(f"--grep={g}" for g in PLATFORM_SUBJECTS), "--", "memory/"],
         capture_output=True, text=True,
-    ).stdout
-    return len(out.split())
+    )
+    return len(r.stdout.split()) if r.returncode == 0 else -1
 
 
 def main() -> None:
@@ -92,7 +100,7 @@ def main() -> None:
         msgs = human_messages_since(paths, since)
         if msgs < args.threshold:
             continue
-        commits = note_commits_since(roster[name]["workspace"], since)
+        commits = note_commits_since(notes_repo(name), since)
         if commits == 0:
             # `**{project}**` is read back below (the names in the summary line): translations keep it
             gaps.append("- [ ] " + _("**{project}**: {n} messages in the last {hours} hours, but no new memory notes; "

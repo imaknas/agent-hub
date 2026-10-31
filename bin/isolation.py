@@ -18,6 +18,9 @@ checks each guarantee it declares (Conformance): a new backend is added by passi
 
   sandboxed(doc) → bool                       whether this project's services and command jobs go through it
   wrap(project, cwd, argv, port) → argv       the command through bin/sandboxed-run
+  run_as(project, cwd, argv, **kw)            subprocess.run of argv as the project: wrapped when it is sandboxed, as
+                                              is otherwise (the platform's git in project repos goes only through this:
+                                              project_git.py)
   adapter() → (name, module) | None           this machine's adapter
   can_sandbox() → None | why not              the adapter's own reason, or a missing/unknown guarantee
   guarantees() → list[str]                    what this machine's adapter guarantees (empty when it can't sandbox)
@@ -88,6 +91,15 @@ def wrap(project: str, cwd, argv: list[str], port: int | None = None) -> list[st
     """argv → the same command through bin/sandboxed-run."""
     return [*hubconf.launch(hubconf.ROOT / "bin" / "sandboxed-run"), "--project", project, "--cwd", str(cwd),
             *(["--port", str(int(port))] if port else []), "--", *argv]
+
+
+def run_as(project: str | None, cwd, argv: list[str], **kw):
+    """Run argv with the project's authority: through bin/sandboxed-run when the project is sandboxed (which refuses,
+    exit 78, where this machine can't sandbox), unchanged otherwise (an unsandboxed project, an unregistered folder or
+    the platform itself (None) has the user's authority already)."""
+    import subprocess
+    doc = hubconf.projects().get(project) if project else None
+    return subprocess.run(wrap(project, cwd, argv) if doc and sandboxed({**doc, "name": project}) else argv, cwd=cwd, **kw)
 
 
 def exec_service(pol: dict, dirs: list, port: int | None, argv: list[str]):

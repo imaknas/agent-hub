@@ -276,7 +276,8 @@ class ShellGolden(unittest.TestCase):
 
     def test_sync_all_memory(self):
         s, out = BIN / "sync-all-memory.sh", []
-        h = self.hub("hub", links=("with-lock.sh", "git-sync-memory.sh", "git-safe-push.sh"))
+        h = self.hub("hub", links=("with-lock.sh", "git-sync-memory.sh", "git-safe-push.sh", "project_git.py",
+                                   "isolation.py", "project-git-job.py"))
         log = h / ".logs"
         a = self.register("alpha")
         self.repo(a)

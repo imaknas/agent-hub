@@ -4,5 +4,6 @@
  "{name}: committed new memory; not pushed yet (cannot reach the hub machine)": "{name}: 已 commit(連不到 mini,先不 push) 新的 memory",
  "{name}: committed and pushed new memory": "{name}: 已 commit+push 新的 memory",
  "{name}: pushed the commits that had not gone out": "{name}: 補 push 了之前沒推出去的 commit",
- "{name}: the catch-up push failed": "{name}: 補 push 失敗"
+ "{name}: the catch-up push failed": "{name}: 補 push 失敗",
+ "{name}: could not tell whether it is sandboxed; skipped": "{name}:判斷不了它有沒有 sandbox;跳過"
 }

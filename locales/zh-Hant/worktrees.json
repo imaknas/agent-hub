@@ -7,5 +7,7 @@
  "{label}: git worktree remove failed: {err}": "{label}:git worktree remove 失敗:{err}",
  "{label} (idle {days} {days:day|days}, {mb} MB; branch kept)": "{label}(閒置 {days} 天,{mb} MB;branch 留著)",
  "{date} {dep} → rebuild: {cmd}": "{date} {dep} → 重建:{cmd}",
- "{label} {dep} (idle {days} {days:day|days}, {mb} MB)": "{label} {dep}(閒置 {days} 天,{mb} MB)"
+ "{label} {dep} (idle {days} {days:day|days}, {mb} MB)": "{label} {dep}(閒置 {days} 天,{mb} MB)",
+ "{label}: its ignored files could not be listed; kept": "{label}:列不出它被忽略的檔案;保留",
+ "{label}: removing {dep} failed: {err}": "{label}:刪除 {dep} 失敗:{err}"
 }

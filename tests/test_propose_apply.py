@@ -90,6 +90,8 @@ class ProposeApply(unittest.TestCase):
                     "HOME": str(t / "home"), "AGENT_HUB_CONFIG": str(t / "config"),
                     "AGENT_HUB_DATA": str(t / "data"), "AGENT_HUB_SECRETS": str(t / "secrets"),
                     "AGENT_HUB_STATE": str(t / "state"), "PROPOSE_TEST_TRIES": str(t / "tries.json"),
+                    # bin/py under the fake HOME (git-sync-memory.sh asks project_git.py whose memory this is)
+                    "AGENT_HUB_PYTHON": os.environ.get("AGENT_HUB_PYTHON", sys.executable),
                     "GIT_AUTHOR_NAME": "t", "GIT_AUTHOR_EMAIL": "t@t", "GIT_COMMITTER_NAME": "t", "GIT_COMMITTER_EMAIL": "t@t"}
 
     def run_(self, script, *args, stdin=""):

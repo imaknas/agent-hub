@@ -101,6 +101,7 @@ class Golden(unittest.TestCase):
                     mock.patch.object(m.hubconf, "roster", return_value={k: {"workspace": f"ws-{k}"} for k in msgs}), \
                     mock.patch.object(m.hublib, "project_paths", return_value={k: [k] for k in (*msgs, "unregistered")}), \
                     mock.patch.object(m, "human_messages_since", side_effect=lambda paths, since: msgs[paths[0]]), \
+                    mock.patch.object(m, "notes_repo", side_effect=lambda name: f"ws-{name}"), \
                     mock.patch.object(m, "note_commits_since", side_effect=lambda ws, since: notes[ws]):
                 out.append(("gaps", capture(m.main, [])))
                 out.append(("gaps --apply", capture(m.main, ["--apply", "--window-hours", "48"])))

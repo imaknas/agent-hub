@@ -68,6 +68,9 @@ class Golden(unittest.TestCase):
         def run(argv, **kw):
             if argv[-1] == str(tmp / "broken"):
                 return subprocess.CompletedProcess(argv, 1, "", "fatal: cannot remove\n")
+            if "remove-dep" in argv:   # the project's job writes the marker into its git dir
+                with open(gitdir / argv[-2], "a") as fh:
+                    fh.write(argv[-1] + "\n")
             return ok
 
         with mock.patch.dict(os.environ, ZH), mock.patch.object(worktrees, "overview", lambda: auto), \
@@ -75,9 +78,8 @@ class Golden(unittest.TestCase):
                 mock.patch.object(hubconf, "STATE", tmp / "state"), \
                 mock.patch.object(worktrees, "_cwds_in_use", lambda: []), \
                 mock.patch.object(worktrees, "_transcript_age_days", lambda path: None), \
-                mock.patch.object(worktrees, "_unknown_ignored", lambda p: unknown.get(str(p), [])), \
+                mock.patch.object(worktrees, "_unknown_ignored", lambda p, project: unknown.get(str(p), [])), \
                 mock.patch.object(worktrees, "_size_mb", lambda p: 12.5), \
-                mock.patch.object(worktrees, "_git_dir", lambda p: gitdir), \
                 mock.patch.object(worktrees.subprocess, "run", run):
             for dry in (True, False):
                 r = worktrees.auto_prune(dry_run=dry)

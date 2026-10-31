@@ -37,39 +37,47 @@ BIN = pathlib.Path(__file__).resolve().parent
 sys.path.insert(0, str(BIN))
 import hubconf  # noqa: E402
 import i18n  # noqa: E402
+import project_git  # noqa: E402
 
 _ = i18n.domain(__file__)
 PY = sys.executable
 
 
-def git(repo, *args, check=True) -> str:
-    r = subprocess.run(["git", "-C", str(repo), *args], capture_output=True, text=True)
-    if check and r.returncode != 0:
-        raise RuntimeError(f"git {' '.join(args)}:{r.stderr.strip()[-200:]}")
-    return r.stdout
+def add_worktree(project: str, repo: pathlib.Path, path: pathlib.Path) -> str:
+    """A detached worktree of repo's HEAD at path, made as the project (its .git runs hooks and filters: project_git.py);
+    returns its HEAD."""
+    r = project_git.job(project, repo, "worktree-add", repo, path, capture_output=True, text=True)
+    if r.returncode != 0:
+        raise RuntimeError(f"git worktree add: {r.stderr.strip()[-200:]}")
+    return r.stdout.strip()
 
 
-def changed(repo: pathlib.Path, base: str = "HEAD") -> list[tuple[str, bool]]:
+def changed(project: str, repo: pathlib.Path, base: str) -> list[tuple[str, bool]]:
     """(path relative to the repo, whether it still exists) -- files changed, added (untracked included) or deleted
     since commit `base`, committed or not: a hook of the agent's own runtime may commit inside the worktree (a user-level
-    session-end hook syncing memory notes did, 10-31), and what it committed is still the agent's change."""
-    paths = set(git(repo, "diff", "--name-only", "--no-renames", base, "--").splitlines())
-    paths |= {line[3:].strip().strip('"') for line in git(repo, "status", "--porcelain", "-uall", "--no-renames").splitlines()}
-    return [(path, (repo / path).exists()) for path in sorted(paths) if path]
+    session-end hook syncing memory notes did, 10-31), and what it committed is still the agent's change. Listed by the
+    project's job (the worktree shares the project's .git config)."""
+    try:
+        rows = project_git.data(project, repo, "changed", repo, base)
+    except project_git.Unavailable as e:
+        raise RuntimeError(str(e)) from None
+    return [(p, e is True) for p, e in (x for x in rows if isinstance(x, list) and len(x) == 2) if isinstance(p, str)] \
+        if isinstance(rows, list) else []
 
 
 def run(project: str, ws: pathlib.Path, point: str, prompt: str, allow: list[str], timeout_s: int = 1800) -> dict:
-    """allow: globs relative to ws (e.g. `.agent-memory/memory/**`)."""
+    """allow: globs relative to ws (e.g. `.agent-memory/memory/**`). Every git command in the project's repo, and the
+    copy back into its folder, run as the project (project_git.py); a symlink the agent leaves is refused, never
+    followed."""
     tmp = pathlib.Path(tempfile.mkdtemp(prefix=f"hub-propose-{project}-"))
     wt, mem = tmp / "ws", ws / ".agent-memory"
-    added = []
+    added, bases = [], {}
     try:
-        git(ws, "worktree", "add", "--detach", str(wt), "HEAD")
+        bases[wt] = add_worktree(project, ws, wt)   # what the agent started from
         added.append((ws, wt))
         if (mem / ".git").exists():
-            git(mem, "worktree", "add", "--detach", str(wt / ".agent-memory"), "HEAD")
+            bases[wt / ".agent-memory"] = add_worktree(project, mem, wt / ".agent-memory")
             added.append((mem, wt / ".agent-memory"))
-        bases = {copy: git(copy, "rev-parse", "HEAD").strip() for _src, copy in added}   # what the agent started from
         # the agent itself may not send letters or close them (hubbus honours this variable and the parent process; the
         # platform decides sender and recipients from the output)
         r = subprocess.run([PY, str(BIN / "llm.py"), "run", point, "--cwd", str(wt)], input=prompt, text=True,
@@ -80,26 +88,29 @@ def run(project: str, ws: pathlib.Path, point: str, prompt: str, allow: list[str
             res = {}
         applied, refused = [], []
         for repo, prefix in ((wt, ""), *([(wt / ".agent-memory", ".agent-memory/")] if len(added) > 1 else [])):
-            for path, exists in changed(repo, bases[repo]):
+            take = []
+            for path, _exists in changed(project, repo, bases[repo]):
                 rel = prefix + path
                 if prefix == "" and rel.startswith(".agent-memory/"):
                     continue
                 if not any(fnmatch.fnmatch(rel, g) for g in allow):
                     refused.append(rel)
                     continue
-                dst = ws / rel
-                if exists:
-                    dst.parent.mkdir(parents=True, exist_ok=True)
-                    shutil.copy2(wt / rel, dst)
-                elif dst.exists():
-                    dst.unlink()
-                applied.append(rel)
+                take.append(path)
+            if take:
+                try:
+                    done = project_git.data(project, ws, "copy-back", repo, ws / prefix, *take)
+                except project_git.Unavailable as e:
+                    raise RuntimeError(str(e)) from None
+                done = done if isinstance(done, dict) else {}
+                applied += [prefix + p for p in project_git.strs(done.get("copied"))]
+                refused += [prefix + p for p in project_git.strs(done.get("refused"))]
         ok = r.returncode == 0 and not res.get("is_error")
         return {"ok": ok, "output": res.get("structured_output"), "text": res.get("result"), "applied": applied,
                 "refused": refused, "error": "" if ok else (res.get("llm_error") or r.stderr.strip()[-300:])}
     finally:
         for repo, path in reversed(added):
-            git(repo, "worktree", "remove", "--force", str(path), check=False)
+            project_git.job(project, repo, "worktree-remove", repo, path, "--force", capture_output=True)
         shutil.rmtree(tmp, ignore_errors=True)
 
 

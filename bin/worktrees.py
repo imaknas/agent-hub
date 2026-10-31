@@ -1,5 +1,6 @@
 """Overview of every project's git worktrees (for the status page) and their cleanup (for bin/prune-worktrees).
-Standard library only.
+Standard library only. Every git command in a project's repo (and every deletion in it) runs as that project
+(project_git.py: through bin/sandboxed-run when it is sandboxed); its facts come back as data.
 
 One worktree = one parallel session's branch. Computed here: the branch, how long ago the last commit was, whether it's
 merged into main, whether it's clean, which files it changed (compared with main), and two or more branches changing
@@ -35,13 +36,13 @@ from __future__ import annotations
 import datetime
 import json
 import pathlib
-import shutil
 import sqlite3
 import subprocess
 import time
 
 import hubconf
 import i18n
+import project_git
 
 _ = i18n.domain(__file__)
 
@@ -53,57 +54,53 @@ REBUILD = {".venv": "uv sync", "node_modules": "npm ci"}
 # level 2: remove the whole worktree only when the ignored things are just these (names)
 REGENERABLE = {".venv", "node_modules", "__pycache__", ".pytest_cache", ".ruff_cache", ".mypy_cache", ".DS_Store"}
 MARKER = "agent-hub-deps-pruned"
+UNGATED_DAYS = 7
 
 
-def git(cwd, *args) -> str:
-    r = subprocess.run(["git", "-C", str(cwd), *args], capture_output=True, text=True)
-    return r.stdout if r.returncode == 0 else ""
+def facts(project: str | None, repo: pathlib.Path) -> dict:
+    """One repo's worktrees and recent main commits, gathered by project-git-job.py as the project (the platform runs
+    no git in a project's repo: project_git.py). {"unavailable": why} when they can't be had (e.g. the sandbox
+    refused): said so, never shown as "no worktrees"."""
+    try:
+        d = project_git.data(project, repo, "worktrees", repo, UNGATED_DAYS)
+    except project_git.Unavailable as e:
+        return {"unavailable": str(e)}
+    d = d if isinstance(d, dict) else {}
+    base = d.get("base") if isinstance(d.get("base"), str) else None
+    wts = []
+    for w in d.get("worktrees") if isinstance(d.get("worktrees"), list) else []:
+        if not (isinstance(w, dict) and isinstance(w.get("path"), str) and isinstance(w.get("branch"), str)):
+            continue
+        last = w.get("last")
+        wts.append({"path": w["path"], "branch": w["branch"], "base": base, "merged": w.get("merged") is True,
+                    "age_days": round((time.time() - last) / 86400, 1) if isinstance(last, int) else None,
+                    "clean": w.get("clean") is True, "exists": w.get("exists") is True,
+                    "files": project_git.strs(w.get("files"))})
+    return {"worktrees": wts, "main": project_git.strs(d.get("main"))}
 
 
-def base_branch(repo: pathlib.Path) -> str | None:
-    return next((b for b in ("main", "master") if git(repo, "rev-parse", "--verify", "-q", b)), None)
-
-
-def project_worktrees(repo: pathlib.Path) -> list[dict]:
-    base = base_branch(repo)
-    if not base:
-        return []
-    out, cur = [], {}
-    for line in git(repo, "worktree", "list", "--porcelain").splitlines() + [""]:
-        if line.startswith("worktree "):
-            cur = {"path": line[9:]}
-        elif line.startswith("branch "):
-            cur["branch"] = line[7:].removeprefix("refs/heads/")
-        elif line == "" and cur:
-            p = pathlib.Path(cur["path"])
-            if p.resolve() != repo.resolve() and p.name != ".agent-memory" and cur.get("branch") not in (None, "agent-memory"):
-                b = cur["branch"]
-                last = git(repo, "log", "-1", "--format=%ct", b).strip()
-                merged = subprocess.run(["git", "-C", str(repo), "merge-base", "--is-ancestor", b, base]).returncode == 0
-                cur.update(base=base, merged=merged,
-                           age_days=round((time.time() - int(last)) / 86400, 1) if last else None,
-                           clean=p.exists() and not git(p, "status", "--porcelain").strip(),
-                           exists=p.exists(),
-                           files=git(repo, "diff", "--name-only", f"{base}...{b}").split())
-                out.append(cur)
-            cur = {}
-    return out
-
-
-def ungated_main_commits(repo: pathlib.Path, project: str, days: int = 7) -> int:
-    """The number of commits on main in the last days days that didn't come in through merge-branch (counted only,
-    never blocked)."""
-    base = base_branch(repo)
-    if not base:
-        return 0
-    shas = git(repo, "log", f"--since={days} days ago", "--format=%H", base).split()
+def ungated_main_commits(shas: list[str], project: str) -> int:
+    """The number of commits on main in the last UNGATED_DAYS days (shas) that didn't come in through merge-branch
+    (counted only, never blocked)."""
     gated = set()
     bus = hubconf.bus_db()
-    if bus.exists():
+    if shas and bus.exists():
         for (pl,) in sqlite3.connect(bus, timeout=10).execute(
                 "SELECT payload FROM events WHERE type='merge.done' AND source=?", (project,)):
             gated |= set(json.loads(pl).get("commits") or [])
     return sum(1 for s in shas if s not in gated)
+
+
+def summary(project: str, f: dict) -> dict:
+    wts = f.get("worktrees", [])
+    touched: dict[str, list[str]] = {}
+    for w in wts:
+        if not w["merged"]:
+            for p in w["files"]:
+                touched.setdefault(p, []).append(w["branch"])
+    return {"worktrees": wts, "overlaps": {p: bs for p, bs in touched.items() if len(bs) > 1},
+            "ungated_main_7d": ungated_main_commits(f.get("main", []), project),
+            **({"unavailable": f["unavailable"]} if "unavailable" in f else {})}
 
 
 def overview() -> dict[str, dict]:
@@ -112,19 +109,15 @@ def overview() -> dict[str, dict]:
         repo = hubconf.workspace(name)
         if not repo or not (repo / ".git").exists():
             continue
-        wts = project_worktrees(repo)
-        touched: dict[str, list[str]] = {}
-        for w in wts:
-            if not w["merged"]:
-                for f in w["files"]:
-                    touched.setdefault(f, []).append(w["branch"])
-        out[name] = {"worktrees": wts, "overlaps": {f: bs for f, bs in touched.items() if len(bs) > 1},
-                     "ungated_main_7d": ungated_main_commits(repo, name)}
-    hub = hubconf.ROOT
+        out[name] = summary(name, facts(name, repo))
     if hubconf.hub_project() not in out:
-        wts = project_worktrees(hub)
-        out[hubconf.hub_project()] = {"worktrees": wts, "overlaps": {}, "ungated_main_7d": ungated_main_commits(hub, hubconf.hub_project())}
+        out[hubconf.hub_project()] = summary(hubconf.hub_project(), facts(None, hubconf.ROOT))
     return out
+
+
+def as_project(name: str) -> str | None:
+    """Who runs git in this project's repo: the project, or the platform in its own checkout."""
+    return None if name == hubconf.hub_project() else name
 
 
 def prune(project: str | None, yes: bool) -> int:
@@ -140,8 +133,8 @@ def prune(project: str | None, yes: bool) -> int:
                 print(_("Deleting: {project} {branch} ({path}, untouched for {days} {days:day|days})", **kw) if yes
                       else _("Can delete: {project} {branch} ({path}, untouched for {days} {days:day|days})", **kw))
                 if yes:
-                    subprocess.run(["git", "-C", str(repo), "worktree", "remove", w["path"]])
-                    subprocess.run(["git", "-C", str(repo), "branch", "-d", w["branch"]], capture_output=True)
+                    project_git.job(as_project(name), repo, "worktree-remove", repo, w["path"])
+                    project_git.job(as_project(name), repo, "branch-delete", repo, w["branch"], capture_output=True)
             elif not w["merged"]:
                 print(_("Kept (not merged yet): {project} {branch}", project=name, branch=w['branch']))
     if n and not yes:
@@ -170,20 +163,14 @@ def _idle_days(w: dict) -> float | None:
     return min(ages) if ages else None
 
 
-def _unknown_ignored(p: pathlib.Path) -> list[str]:
-    """Things that are ignored and not in REGENERABLE (level 2 skips when it meets one)."""
-    out = []
-    for line in git(p, "status", "--porcelain", "--ignored").splitlines():
-        if line.startswith("!! "):
-            entry = line[3:].rstrip("/")
-            if pathlib.PurePath(entry).name not in REGENERABLE:
-                out.append(entry)
-    return out
-
-
-def _git_dir(p: pathlib.Path) -> pathlib.Path | None:
-    g = git(p, "rev-parse", "--absolute-git-dir").strip()
-    return pathlib.Path(g) if g else None
+def _unknown_ignored(p: pathlib.Path, project: str | None) -> list[str] | None:
+    """Things that are ignored and not in REGENERABLE (level 2 skips when it meets one); None when the project's job
+    couldn't say."""
+    try:
+        entries = project_git.strs(project_git.data(project, p, "ignored", p))
+    except project_git.Unavailable:
+        return None
+    return [e for e in entries if pathlib.PurePath(e).name not in REGENERABLE]
 
 
 def _size_mb(p: pathlib.Path) -> float:
@@ -211,14 +198,18 @@ def auto_prune(dry_run: bool) -> dict:
             if any(c == str(p) or c.startswith(str(p) + "/") for c in in_use):
                 continue
             if idle >= REMOVE_IDLE_DAYS:
-                unknown = _unknown_ignored(p)
+                unknown = _unknown_ignored(p, as_project(name))
+                if unknown is None:
+                    res["skipped"].append(_("{label}: its ignored files could not be listed; kept", label=label))
+                    continue
                 if unknown:
                     res["skipped"].append(_("{label}: ignored files not on the rebuildable list ({files}…); kept",
                                             label=label, files=", ".join(unknown[:3])))
                 else:
                     mb = _size_mb(p)
                     if not dry_run:
-                        r = subprocess.run(["git", "-C", str(repo), "worktree", "remove", str(p)], capture_output=True, text=True)
+                        r = project_git.job(as_project(name), repo, "worktree-remove", repo, p, capture_output=True,
+                                            text=True)
                         if r.returncode != 0:
                             res["skipped"].append(_("{label}: git worktree remove failed: {err}", label=label,
                                                     err=r.stderr.strip()[:200]))
@@ -227,7 +218,6 @@ def auto_prune(dry_run: bool) -> dict:
                                             mb=mb))
                     res["freed_mb"] += mb
                     continue
-            gd = _git_dir(p)
             for dep, recipes in DEPS.items():
                 d = p / dep
                 if not d.is_dir() or d.is_symlink():
@@ -236,11 +226,15 @@ def auto_prune(dry_run: bool) -> dict:
                     continue
                 mb = _size_mb(d)
                 if not dry_run:
-                    shutil.rmtree(d)
-                    if gd:
-                        with open(gd / MARKER, "a") as fh:
-                            fh.write(_("{date} {dep} → rebuild: {cmd}", date=res['at'][:10], dep=dep, cmd=REBUILD[dep])
-                                     + "\n")
+                    # deleted, and the marker written into its git dir, as the project (a symlink planted there only
+                    # reaches what the project can write itself)
+                    line = _("{date} {dep} → rebuild: {cmd}", date=res['at'][:10], dep=dep, cmd=REBUILD[dep])
+                    r = project_git.job(as_project(name), p, "remove-dep", p, dep, MARKER, line, capture_output=True,
+                                        text=True)
+                    if r.returncode != 0:
+                        res["skipped"].append(_("{label}: removing {dep} failed: {err}", label=label, dep=dep,
+                                                err=r.stderr.strip()[:200]))
+                        continue
                 res["deps"].append(_("{label} {dep} (idle {days} {days:day|days}, {mb} MB)", label=label, dep=dep, days=idle, mb=mb))
                 res["freed_mb"] += mb
     res["freed_mb"] = round(res["freed_mb"], 1)

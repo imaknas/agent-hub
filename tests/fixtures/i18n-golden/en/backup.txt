@@ -98,7 +98,8 @@ What is backed up (what only the hub machine has, and cannot be recovered once l
     written is never touched
   - the bare repos under ~/git-origin (memory branches, agent-hub itself, projects without a GitHub remote):
     git bundle --all
-  - what each project workspace has not pushed: commits not on any remote as a bundle, uncommitted changes as a diff,
+  - what each project workspace has not pushed: commits not on any remote as a bundle, uncommitted changes as a diff
+    (both made by the project's own job, project_git.py; where its sandbox refuses, the manifest lists it as skipped),
     .env* (up to three levels deep, e.g. backend/.env)
   - the directories listed in hub.json backup.include (the assistant's data, platform state, secrets, service data,
     Claude Code transcripts)

@@ -163,41 +163,50 @@ def gate(name: str, doc: dict, report: bool, quiet: bool = False) -> list[tuple[
     """Registry gate: strict -> install pre-commit / pre-merge-commit; turned off -> remove them (only those carrying
     the platform's marker). A project with its own core.hooksPath (e.g. husky) gets nothing installed, only
     detection. Returns what would be done (report) / was done: (add|update|remove, hook)."""
-    import subprocess
+    import project_git
     say = (lambda *_args: None) if quiet else print
     ws = registry.dirs(doc)["workspace"]
     if not ws or not (ws / ".git").is_dir():
         return []
     want = doc.get("gate") == "strict"
-    hp = subprocess.run(["git", "-C", str(ws), "config", "core.hooksPath"], capture_output=True, text=True).stdout.strip()
+    # the repo's .git is the project's: what is there is read, and the hooks written, by its own job (a symlink
+    # planted in .git/hooks then reaches only what the project can write itself; the job replaces it rather than
+    # writing through it)
+    hooks = ("pre-commit", "pre-merge-commit")
+    try:
+        st = project_git.data(name, ws, "hooks", ws, *hooks)
+    except project_git.Unavailable as e:
+        say(_("{project}: the gate hooks could not be checked ({why})", project=name, why=e))
+        return []
+    st = st if isinstance(st, dict) else {}
+    hp = st.get("hooks_path") if isinstance(st.get("hooks_path"), str) else ""
+    texts = st.get("hooks") if isinstance(st.get("hooks"), dict) else {}
     acts = []
-    for hook in ("pre-commit", "pre-merge-commit"):
-        f = ws / ".git" / "hooks" / hook
-        text = f.read_text(errors="replace") if f.exists() else ""
-        mine = GATE_MARK in text
+    for hook in hooks:
+        text = texts.get(hook) if isinstance(texts.get(hook), str) else None
+        mine = GATE_MARK in (text or "")
         if want and hp:
             say(_("{project}: gate strict not installed (the project uses its own core.hooksPath={path}); detecting only",
                   project=name, path=hp))
             return acts
         if want and not mine:
-            if f.exists():
+            if text is not None:
                 say(_("{project}: .git/hooks/{hook} is already the project's own hook; not overwriting it (the gate only "
                       "detects)", project=name, hook=hook))
                 continue
             acts.append(("add", hook))
             if not report:
-                f.write_text("#!/bin/sh\n" + gate_hook())
-                f.chmod(0o755)
+                project_git.job(name, ws, "hook-write", ws, hook, input="#!/bin/sh\n" + gate_hook(), text=True)
                 say(_("{project}: installed {hook} (gate strict)", project=name, hook=hook))
         elif want and text != "#!/bin/sh\n" + gate_hook():   # the platform's hook from an older version (or language)
             acts.append(("update", hook))
             if not report:
-                f.write_text("#!/bin/sh\n" + gate_hook())
+                project_git.job(name, ws, "hook-write", ws, hook, input="#!/bin/sh\n" + gate_hook(), text=True)
                 say(_("{project}: updated {hook} (gate strict)", project=name, hook=hook))
         elif not want and mine:
             acts.append(("remove", hook))
             if not report:
-                f.unlink()
+                project_git.job(name, ws, "hook-remove", ws, hook)
                 say(_("{project}: gate is off, removed {hook}", project=name, hook=hook))
     return acts
 

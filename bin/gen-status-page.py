@@ -420,6 +420,9 @@ def main() -> None:
         ov = worktrees.overview()
         wt_rows = []
         for proj, info in ov.items():
+            if info.get("unavailable"):   # its git runs only as the project, and that didn't work: said, not hidden
+                alerts.append(("bad", _("{project}: its worktrees could not be read ({why})", project=proj,
+                                        why=info["unavailable"][:200])))
             for w in info["worktrees"]:
                 state_txt = _("merged") + (_(", can be cleaned up (bin/prune-worktrees)") if w["clean"]
                                            else _(", has uncommitted changes")) if w["merged"] \

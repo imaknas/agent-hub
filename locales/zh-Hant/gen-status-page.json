@@ -129,5 +129,6 @@
   "Today": "今天",
   "Tokens": "token",
   "Cost": "花費",
-  "≈${amount} (subscription, not billed)": "≈${amount}(訂閱,不計費)"
+  "≈${amount} (subscription, not billed)": "≈${amount}(訂閱,不計費)",
+  "{project}: its worktrees could not be read ({why})": "{project}:讀不到它的 worktree({why})"
 }
