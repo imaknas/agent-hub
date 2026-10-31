@@ -191,7 +191,8 @@ class Golden(unittest.TestCase):
                 recorded.append([pathlib.Path(cmd[1]).name, *cmd[2:]])
                 return CP(cmd, 0, "", "")
             return subprocess.run(cmd, **kw)
-        fake_sp = types.SimpleNamespace(run=run, CalledProcessError=subprocess.CalledProcessError, STDOUT=subprocess.STDOUT)
+        fake_sp = types.SimpleNamespace(run=run, CalledProcessError=subprocess.CalledProcessError, STDOUT=subprocess.STDOUT,
+                                        Popen=subprocess.Popen, TimeoutExpired=subprocess.TimeoutExpired)
         now = datetime.datetime(2026, 10, 30, 12, 0)
 
         class FakeDT(datetime.datetime):

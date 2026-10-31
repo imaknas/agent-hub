@@ -150,7 +150,7 @@ class EventTick(unittest.TestCase):
         self.t.tick([job], DAY)
         self.bus.publish()
         self.t.tick([job], self.minutes(15))
-        name, _cmd, _log, _now, _today, env, extra = self.t.spawned[0]
+        name, _cmd, _log, _now, _today, env, extra, _minutes = self.t.spawned[0]
         self.assertEqual(name, "p/react")
         self.assertEqual(len(json.loads(env["AGENT_HUB_EVENTS"])["events"]), 1)
         self.assertEqual((extra["events_upto"], extra["project"], extra["chain"]), (1, "p", ["p/react"]))

@@ -113,5 +113,6 @@
  "an agent event job must declare allow: (anyone who can write the bus can start it with their text; allow: is its boundary)": "agent 事件 job 一定要宣告 allow:(能寫 bus 的誰都能用自己的文字啟動它;allow: 就是它的邊界)",
  "the platform's event jobs can't be agent jobs: an event is what its writer claims, and an agent with the platform's authority must not take instructions from it": "平台的事件 job 不能是 agent job:事件只是寫的人的說法,帶平台權限的 agent 不能聽它的指示",
  "an agent event job must run in the workspace (cwd: workspace), where the project's sandbox and rules apply": "agent 事件 job 一定要在 workspace 跑(cwd: workspace),專案的 sandbox 跟規則在那裡才有效",
- "an agent event job can't use connectors: (it would load the user's MCP servers)": "agent 事件 job 不能用 connectors:(會載入使用者的 MCP server)"
+ "an agent event job can't use connectors: (it would load the user's MCP servers)": "agent 事件 job 不能用 connectors:(會載入使用者的 MCP server)",
+ "job {name}: timeout must look like 45m / 2h": "job {name}:timeout 要像 45m / 2h"
 }

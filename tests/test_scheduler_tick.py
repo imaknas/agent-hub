@@ -58,6 +58,11 @@ class Tick:
             raise subprocess.CalledProcessError(int(command.split()[1]), cmd)
         return CP(cmd, 0, "", "")
 
+    def bounded(self, command, job_log, minutes, env=None):
+        """the scheduler's run_bounded (its own process group, a time limit), recorded like run"""
+        self.ran.append({"command": command, "env": env, "minutes": minutes})
+        return int(command.split()[1]) if command.startswith("exit ") else 0
+
     def tick(self, jobs, now, info=None):
         info = info or {"alias": {}, "renames": {}, "skipped": [], "errors": {}}
         fake_sp = types.SimpleNamespace(run=self.run, CalledProcessError=subprocess.CalledProcessError,
@@ -71,6 +76,7 @@ class Tick:
                 mock.patch.object(hubconf, "login_shell", lambda: "/bin/sh"), \
                 mock.patch.object(self.m, "alert_failing", lambda: None), \
                 mock.patch.object(self.m, "spawn_background", lambda *a: self.spawned.append(a)), \
+                mock.patch.object(self.m, "run_bounded", self.bounded), \
                 mock.patch.object(self.m, "all_jobs", lambda log_errors=False: (jobs, info)), \
                 mock.patch("builtins.print"):
             self.m.main()

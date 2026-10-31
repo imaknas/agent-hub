@@ -25,6 +25,11 @@ Long jobs: add background: true
   tick (only a success counts as "ran today"); while it's running, a second copy isn't started. The log is still
   .logs/<name>-<date>.log.
 
+Time limit: every run is stopped past its limit (its whole process group killed: what it started too) and counts as a
+failed run, so one hung job can't hold up every tick after it (round 6, 11-01). Default FOREGROUND_TIMEOUT_MIN for a
+job the tick waits on, BACKGROUND_TIMEOUT_MIN for a background one; a job sets its own with
+  timeout_minutes: 90              (the registry's `timeout: 90m`)
+
 Order: add after: [job name]
   While a listed job is due today but not finished (not yet time, still running, failed but will retry), this job
   doesn't start; the next tick looks again. Once that job succeeded today, used up max_attempts_per_day, isn't
@@ -74,6 +79,9 @@ import i18n  # noqa: E402
 _ = i18n.domain(__file__)
 
 HUB = hubconf.ROOT
+FOREGROUND_TIMEOUT_MIN = 30   # the longest foreground job ran about 8 minutes (11-01, a week of logs)
+BACKGROUND_TIMEOUT_MIN = 240  # the longest background job ran about 31 minutes
+TIMED_OUT = 124
 
 # Environment variables for the projects' jobs, deliberately named without the tool's name: a project repo's code only
 # reads $SAFE_PUSH (falling back to git push without it) and never hardcodes the path here: the repo may become public
@@ -290,8 +298,37 @@ def reconcile(state: dict, jobs: dict[str, dict], merged: list[pathlib.Path]) ->
     return running
 
 
+def run_bounded(command: str, job_log, minutes: float, env: dict | None = None) -> int:
+    """Run the job's command in its own process group; past `minutes`, SIGTERM the group, SIGKILL it 10 s later, and
+    return TIMED_OUT."""
+    import signal
+    p = subprocess.Popen([hubconf.login_shell(), "-lc", command], stdout=job_log, stderr=subprocess.STDOUT,
+                         env=env or JOB_ENV, start_new_session=True)
+    try:
+        return p.wait(timeout=minutes * 60)
+    except subprocess.TimeoutExpired:
+        for sig, grace in ((signal.SIGTERM, 10), (signal.SIGKILL, None)):
+            try:
+                os.killpg(p.pid, sig)
+            except OSError:
+                pass
+            try:
+                p.wait(timeout=grace)
+                break
+            except subprocess.TimeoutExpired:
+                continue
+        job_log.write(f"\n[scheduler] stopped after {minutes:g} minutes (the job's time limit)\n")
+        return TIMED_OUT
+
+
+def timeout_of(job: dict) -> float:
+    return float(job.get("timeout_minutes") or (BACKGROUND_TIMEOUT_MIN if job.get("background")
+                                                else FOREGROUND_TIMEOUT_MIN))
+
+
 def spawn_background(name: str, command: str, job_log_path: pathlib.Path,
-                     now: datetime.datetime, today: str, env: dict | None = None, extra: dict | None = None) -> None:
+                     now: datetime.datetime, today: str, env: dict | None = None, extra: dict | None = None,
+                     minutes: float = BACKGROUND_TIMEOUT_MIN) -> None:
     """double fork + setsid: launchd kills what's left in the same process group when the tick ends
     (run-agent-job.sh hit this on 2026-10-14). The grandchild writes its log and result file itself when done.
     extra goes into the run file (project, chain, an event job's events_upto) for reconcile."""
@@ -314,8 +351,7 @@ def spawn_background(name: str, command: str, job_log_path: pathlib.Path,
         devnull = os.open(os.devnull, os.O_RDONLY)
         os.dup2(devnull, 0)
         with open(job_log_path, "a") as job_log:
-            rc = subprocess.run([hubconf.login_shell(), "-lc", command], stdout=job_log,
-                                stderr=subprocess.STDOUT, env=env or JOB_ENV).returncode
+            rc = run_bounded(command, job_log, minutes, env)
         rec.update(exit=rc, finished=datetime.datetime.now().isoformat(timespec="seconds"))
         write_json(run_file, rec)
         log(f"job '{name}' finished OK" if rc == 0 else
@@ -544,19 +580,15 @@ def tick() -> None:
             log(f"job '{name}' triggered by {len(events)} event(s) (seq {events[0]['seq']}..{events[-1]['seq']})")
         if job.get("background"):
             log(f"running job '{name}' (background): {job['command']}")
-            spawn_background(name, job["command"], job_log_path, now, today, env, extra)
+            spawn_background(name, job["command"], job_log_path, now, today, env, extra, timeout_of(job))
             running.add(name)  # jobs with after: on it in the same tick must wait too
             continue
         log(f"running job '{name}': {job['command']}")
         try:
             with open(job_log_path, "a") as job_log:
-                subprocess.run(
-                    [hubconf.login_shell(), "-lc", job["command"]],
-                    check=True,
-                    stdout=job_log,
-                    stderr=subprocess.STDOUT,
-                    env=env,
-                )
+                rc = run_bounded(job["command"], job_log, timeout_of(job), env)
+            if rc:
+                raise subprocess.CalledProcessError(rc, job["command"])
             state[name] = today
             if "every_minutes" in job:
                 state[f"{name}.last_ok"] = now.isoformat(timespec="seconds")
@@ -574,7 +606,10 @@ def tick() -> None:
     save_state(state)
     alert_failing()
     # the schedule status page (served by local.status-page, on 127.0.0.1 by default), regenerated every tick; a failure doesn't affect scheduling
-    subprocess.run([sys.executable, str(HUB / "bin" / "gen-status-page.py")], capture_output=True)
+    try:
+        subprocess.run([sys.executable, str(HUB / "bin" / "gen-status-page.py")], capture_output=True, timeout=300)
+    except subprocess.TimeoutExpired:
+        log("gen-status-page took over 5 minutes; stopped")
 
 
 if __name__ == "__main__":

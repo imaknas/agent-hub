@@ -61,7 +61,8 @@ schema v1 (contracts/project.v1.md has the full description):
   gate: strict                    the merge gate enforced: main in the main checkout can't be committed to directly
                                   (only via merge-branch); by default it only detects
   jobs:      [{name, at | every | trigger, run | (kind: agent + prompt), cwd?, days?, days_of_month?, months?,
-               until?, between?, background?, after?, max_attempts_per_day?, legacy_name?}]
+               until?, between?, background?, after?, max_attempts_per_day?, timeout?, legacy_name?}]
+    timeout: 45m / 2h: the run is stopped (its whole process group) past this; without it the scheduler's default
     every: 15m / 1h; cwd: runtime (default, when there's a runtime) | workspace | hub | state (agent jobs only: runs
       in its own state directory, without loading the project's settings/MCP)
     trigger: {events: [bus event type], projects?: [self|<project>|*], sources?: [glob], where?: {payload.key: value |
@@ -123,7 +124,8 @@ TOP = {"v", "name", "type", "purpose", "paths", "memory", "privacy", "runtime", 
        "models", "metered_models"}
 SECRET = {"name", "path", "env_key", "expires", "max_age_days", "warn_days", "backup", "why", "rotate"}
 JOB = {"name", "at", "every", "trigger", "run", "kind", "prompt", "cwd", "days", "days_of_month", "months", "until",
-       "between", "background", "after", "before", "max_attempts_per_day", "legacy_name", "allow", "connectors"}
+       "between", "background", "after", "before", "max_attempts_per_day", "timeout", "legacy_name", "allow",
+       "connectors"}
 TRIGGER = {"events", "projects", "sources", "where", "debounce"}
 # the mailbox's own work and bookkeeping (inbox records, delivery and closing written by dispatch, which relays others'
 # letters without a chain): no event job reacts to them (event-jobs.md 3.5)
@@ -426,6 +428,8 @@ def validate_runs(doc: dict, stem: str, d: dict) -> list[str]:
             errs.append(_("job {name}: at must be HH:MM (quoted)", name=n))
         if "every" in job and not EVERY.match(str(job["every"])):
             errs.append(_("job {name}: every must look like 15m / 1h", name=n))
+        if "timeout" in job and not EVERY.match(str(job["timeout"])):
+            errs.append(_("job {name}: timeout must look like 45m / 2h", name=n))
         if set(job.get("days") or []) - DAYS:
             errs.append(_("job {name}: days can only be {days}", name=n, days=sorted(DAYS)))
         cwd_key = job.get("cwd") or default_cwd(doc)
@@ -737,6 +741,8 @@ def scheduler_jobs(index: dict, legacy_names: set[str]) -> tuple[list[dict], lis
                     j["command"] = (f"RUN_AGENT_JOB_FOREGROUND=1 AGENT_JOB_POINT=agent-job-event "
                                     f"AGENT_JOB_PROJECT={shlex.quote(name)} {j['command']}")
                     j["background"] = True
+            if "timeout" in job:
+                j["timeout_minutes"] = every_minutes(str(job["timeout"]))
             if job.get("after"):
                 j["after"] = [a if "/" in a else f"{name}/{a}" for a in job["after"]]
             for t in job.get("before") or []:
