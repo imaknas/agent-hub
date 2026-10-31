@@ -1,156 +1,245 @@
-# 工具中立(開源前):任何 coding agent、任何 LLM、任何 key
+# Tool-agnostic (before open source): any coding agent, any LLM, any key
 
-2026-10-29(第二版:盲審之後改)。Knas:「要最大化 tool agnostic,開源要吸引人用,就不能太多限制。」
+2026-10-29 (second version: revised after blind review). The owner: "maximise tool agnosticism; to attract users when
+open-sourced, it can't have too many restrictions."
 
-總綱;模型與 API key 的細節在 `llm-providers.md`(第二版),介面分層在 `runtime-abstraction.md`,中立權限在 `capabilities.md`。
-這份決定**平台跟工具的界線放在哪**。
+The overview; the details of models and API keys are in `llm-providers.md` (second version), the interface layers in
+`runtime-abstraction.md`, neutral permissions in `capabilities.md`. This document decides **where the line between the
+platform and the tools goes**.
 
-Knas 10-29 同意的五點(第一版的「要決定的」):原則 1 當硬規則、第一個非 Claude 證明用 Gemini CLI、租借改走 ACP、內建最小
-owner 端、Linux 進第一版。盲審之後 Knas 再確認(10-29):原則 1 收窄、租借走 ACP 延後、CLI 改名 `agenthub`;並且**把 Muninn
-明確寫成可選的工具**(owner 端可以換,見「不是工具,但同樣是限制」)。
+The five points the owner agreed on 10-29 (the first version's "to decide"): principle 1 as a hard rule, Gemini CLI as
+the first non-Claude proof, leasing moves to ACP, a minimal built-in owner side, Linux in the first version. After the
+blind review the owner confirmed again (10-29): principle 1 narrowed, leasing over ACP postponed, the CLI renamed
+`agenthub`; and **Muninn written explicitly as an optional tool** (the owner side can be swapped, see "Not tools, but
+limits all the same").
 
-## 問題
+## The problem
 
-agent-hub 對 Claude Code 的依賴有兩種:
+agent-hub depends on Claude Code in two ways:
 
-- **用它做事**(判斷點、信箱代辦、租借):可以換成別的 agent 或直接打 API。
-- **平台的保證靠它的功能**:寫入限制靠 Claude 的權限規則、信件靠 Claude 的 hook、筆記靠 `CLAUDE.local.md`、統計靠 Claude
-  的對話紀錄。換工具,這些不是變差,是**默默消失**。
+- **Using it to do work** (judgment points, mailbox delegation, leasing): can be swapped for another agent or a direct
+  API call.
+- **The platform's guarantees rely on its features**: write limits rely on Claude's permission rules, letters on
+  Claude's hooks, notes on `CLAUDE.local.md`, statistics on Claude's conversation logs. Switch tools and these do not get
+  worse, they **silently disappear**.
 
-第二種才是開源的障礙。
+Only the second is an obstacle to open source.
 
-## 核心:agent 提議,平台套用
+## The core: the agent proposes, the platform applies
 
-第一版想用作業系統的沙盒把任意 agent 包起來,讓「寫不到就是寫不到」。盲審指出做不到:Seatbelt 沒辦法照網域過濾網路
-(agent 要連自己的模型 API,一開網路白名單就是裝飾)、agent 必須讀得到自己的憑證、狀態目錄要可寫(裡面是所有專案的對話紀錄)、
-訂閱登入要 Keychain,而且**沙盒不能疊兩層**(known-issues.md:222)——Claude Code、Codex、Gemini CLI 在 macOS 上自己的沙盒
-都是 Seatbelt,外面再包一層它們自己那層就套不上,Knas 這台的 Bash 會直接失敗。
+The first version wanted to wrap any agent in an operating-system sandbox so that "can't write means can't write". The
+blind review pointed out that this cannot work: Seatbelt cannot filter the network by domain (the agent has to reach
+its own model API, so once the network is open an allow list is decoration), the agent must be able to read its own
+credentials, the state directory must be writable (it holds every project's conversation logs), subscription login
+needs the Keychain, and **sandboxes cannot be nested** (known-issues.md:222): Claude Code, Codex and Gemini CLI all use
+Seatbelt for their own sandbox on macOS, and with another layer around them their own layer cannot be applied; on the
+owner's machine Bash simply fails.
 
-所以保證改成**結構上**成立,不靠沙盒:
+So the guarantees are made to hold **structurally**, not through a sandbox:
 
-- **判斷**(completion):模型回編輯清單,平台檢查、平台寫檔(`llm-providers.md` 第二版)。
-- **平台啟動、要動到檔案的工作**(信箱代辦、agent job、consolidate):在**用完就丟的 worktree** 裡跑任何 agent,結束後平台
-  `git diff` 檢查,**只套用准許的路徑**,其他的丟掉並記下來。agent 在 worktree 裡做什麼都無所謂——它碰不到真的 checkout。
-- **要寄的信、要結案的事**:agent 在結構化輸出裡說,**平台代為寄出**(身分是平台啟動時給的,不是 agent 自己說的)。
-- **匯流排的完整性**:現在 `policy.write` 准 agent 寫匯流排目錄、`hubbus` 在 agent 自己的程序裡跑,agent 可以直接寫 SQLite、
-  冒用寄件人。改成平台的服務 + unix socket(身分由啟動時給),匯流排目錄對 agent 唯讀。
+- **Judgments** (completion): the model returns a list of edits, the platform checks them and the platform writes the
+  files (`llm-providers.md` second version).
+- **Work the platform starts that touches files** (mailbox delegation, agent jobs, consolidate): any agent runs in a
+  **throwaway worktree**; afterwards the platform checks `git diff`, **applies only the allowed paths**, and discards
+  and records the rest. Whatever the agent does in the worktree does not matter: it cannot touch the real checkout.
+- **Letters to send, things to close**: the agent says so in structured output, and **the platform sends them on its
+  behalf** (the identity is the one the platform gave at start, not what the agent claims).
+- **Integrity of the bus**: today `policy.write` lets agents write the bus directory and `hubbus` runs in the agent's
+  own process, so an agent can write SQLite directly and impersonate a sender. It becomes a platform service + unix
+  socket (identity given at start), and the bus directory is read-only to agents.
 
-這套在 Linux 上一樣成立。沙盒降級成**縱深防禦**(擋讀取別的專案、擋外流),只在不會疊兩層的地方用(平台自己代跑的
-cap-runner;平台啟動的 agent 如果那個工具自己的沙盒關掉才包)。
+This holds on Linux just the same. The sandbox is demoted to **defence in depth** (blocking reads of other projects,
+blocking exfiltration), used only where it is not nested (the platform's own cap-runner; an agent the platform starts is
+wrapped only if that tool's own sandbox is off).
 
-**原則 1 的範圍**(要寫進 CLAUDE.md 的版本):**平台啟動的工作、平台的資料完整性(匯流排、登錄、STATE.md、筆記)由平台
-保證,不靠任何工具的功能。使用者自己開的 session(終端機、IDE、Desktop SSH)只有工具原生的保護,平台給建議、不保證**——
-doctor 跟狀態頁照實標出來。Knas 自己的主力是互動 session,這一類現在靠 Claude 的設定(render-project-settings),照舊。
+**The scope of principle 1** (the version to write into CLAUDE.md): **work the platform starts and the integrity of the
+platform's data (bus, registry, STATE.md, notes) are guaranteed by the platform, not by any tool's features. Sessions
+users open themselves (terminal, IDE, Desktop SSH) only have the tool's native protection; the platform advises and
+does not guarantee**: doctor and the status page say so truthfully. The owner's own main work is interactive sessions;
+that kind relies on Claude's settings today (render-project-settings), unchanged.
 
-## 原則
+## Principles
 
-1. 如上:平台啟動的工作與平台的資料,保證在結構上成立。
-2. **用最通用的介面**:檔案跟平台的命令列 > MCP > 各工具的原生 hook/設定(只寫在轉接器裡)。
-3. **能力從轉接器實作了哪些介面推出來**(`runtime_ports` 的 7 個介面,不另外列一份);每個平台功能宣告需要哪些介面;
-   缺的 = 功能明確關掉,doctor 的「工具 × 功能」表寫原因。`load()` 已經只檢查要求的介面,轉接器可以只實作一部分。
-4. **不寫程式也能接新工具**——但誠實:零程式的轉接器只做得到 completion 跟「在丟棄式 worktree 裡跑一次」。
-5. 平台自己的設定只用中立詞彙(ratchet,1186f65)。
-6. 平台推得出來的,不靠 agent 回報。
+1. As above: work the platform starts and the platform's data are guaranteed structurally.
+2. **Use the most general interface**: files and the platform's command line > MCP > each tool's native hooks/settings
+   (written only in adapters).
+3. **Capabilities are derived from which interfaces an adapter implements** (the 7 interfaces of `runtime_ports`, no
+   separate list); each platform feature declares which interfaces it needs; missing = the feature is explicitly off,
+   with the reason in doctor's "tool × feature" table. `load()` already checks only the requested interfaces, so an
+   adapter can implement just a part.
+4. **New tools can be connected without writing code**, but honestly: a zero-code adapter can only do completion and
+   "run once in a throwaway worktree".
+5. The platform's own settings use only neutral vocabulary (ratchet, 1186f65).
+6. What the platform can derive does not rely on agents reporting it.
 
-## 平台跟工具接觸的面
+## Where the platform touches tools
 
-### 1. 判斷(completion)
+### 1. Judgments (completion)
 
-`llm-providers.md` 第二版:librarian 三個點、週報改成 completion;任何 API key、本機模型,或任何 agent 關掉工具跑。
+`llm-providers.md` second version: the librarian's three points and the weekly report move to completion; any API key,
+a local model, or any agent run with its tools off.
 
-### 2. 平台啟動的 agent 工作
+### 2. Agent work the platform starts
 
-| 轉接器 | 能做什麼 |
+| Adapter | What it can do |
 |---|---|
-| `command`(設定裡的指令樣板) | completion;**或**在丟棄式 worktree 裡跑一次(prompt 從 stdin、輸出用工具自己的「最後一則訊息 / 結構化輸出」旗標,例:`codex exec --output-last-message --output-schema`,不解析會變的事件串流)。逾時殺整個程序群組;不提供成本(只記 token,如果工具給)。**樣板不准寫成「全部自動允許」又直接跑在真的 checkout**——跑在 worktree 裡就沒有這個問題,這也是為什麼它只准用在 worktree |
-| `acp` | 同上,外加多輪、事件串流(平台自己記一份中立的對話紀錄,不用每個工具寫解析器)。接續(`session/load`)是選配能力 |
-| 原生(`runtime_claude`) | 全部能力(現在的行為) |
+| `command` (a command template in settings) | completion; **or** run once in a throwaway worktree (prompt on stdin, output through the tool's own "last message / structured output" flags, e.g. `codex exec --output-last-message --output-schema`, without parsing an event stream that changes). On timeout the whole process group is killed; no cost reported (only tokens, if the tool gives them). **The template may not be written as "auto-allow everything" and run directly in the real checkout**: in a worktree that problem does not exist, which is why it is only allowed in worktrees |
+| `acp` | the same, plus multiple turns and an event stream (the platform keeps its own neutral conversation log, no parser per tool). Resuming (`session/load`) is an optional capability |
+| native (`runtime_claude`) | every capability (today's behaviour) |
 
-信箱代辦(只寫筆記、回信、問 owner)本來就只需要「讀專案 + 結構化地說要寫什麼筆記、寄什麼信」:改成提議→平台套用之後,
-**任何轉接器都能跑**。這就是第一個非 Claude 的證明(Gemini CLI)。
+Mailbox delegation (only writing notes, replying, asking the owner) only ever needed "read the project + say in a
+structured way which notes to write and which letters to send": once it becomes propose → the platform applies, **any
+adapter can run it**. That is the first non-Claude proof (Gemini CLI).
 
-### 3. 信件:匯流排保證不漏,推送只是讓人早點看到
+### 3. Letters: the bus guarantees nothing is lost; push only lets people see them sooner
 
-- **「信一定收得到」的保證是 dispatch**(沒人收的 request/question 由平台派 agent 處理,已經有),不是任何推送管道。
-- 推送(早一點讓 session 看到)由好到差:工具原生 hook(轉接器有就接;Claude、Codex、Gemini CLI 都有 SessionStart/
-  UserPromptSubmit,語意不同)> MCP 工具(`收信`)> 規則檔裡請 agent 開始時跑一次收信 > git post-commit(**只當備援**:討論型
-  session 不 commit、IDE 介面的 commit 輸出給人看、husky/lefthook 的 `core.hooksPath` 會衝突、`.agent-memory` worktree 共用
-  hooks 會很吵,而且它不會記 `message.delivered`,dispatch 的等待判斷會失準——所以晚一點再做,而且只印、不記已送達)。
+- **The guarantee "a letter always gets received" is dispatch** (unclaimed request/question are handled by an agent
+  the platform dispatches, already there), not any push channel.
+- Push (letting a session see it sooner), from best to worst: the tool's native hooks (connected if the adapter has
+  them; Claude, Codex and Gemini CLI all have SessionStart/UserPromptSubmit, with different semantics) > an MCP tool
+  (receive mail) > the rule file asking the agent to check mail once at start > git post-commit (**only as a
+  fallback**: discussion sessions don't commit, commit output in IDEs is shown to people, husky/lefthook's
+  `core.hooksPath` would conflict, `.agent-memory` worktrees share hooks and would be noisy, and it records no
+  `message.delivered`, which throws off dispatch's waiting decisions; so it comes later, and only prints without
+  recording delivery).
 
-### 4. 平台的命令列跟 MCP
+### 4. The platform's command line and MCP
 
-- 平台的 CLI 上 PATH,**改名**:`hub` 跟 GitHub 舊的 `hub` CLI 撞名(Homebrew 上還很多,常被 alias 成 git)。候選:`agenthub`。
-- 規則檔裡只寫這個指令,不寫本機路徑。
-- **MCP 伺服器**:收信、寄信、結案、寫筆記、問 owner;MCP 伺服器的 `instructions` 欄位可以帶平台的規則,**不用改任何專案的
-  檔案**就把規則送進支援 MCP 的工具。轉接器負責登記進工具的 MCP 設定;做不到就 doctor 給手動步驟。stdio 的 MCP 繼承
-  agent 的環境;遠端的 HTTP MCP、claude.ai connector 不在平台的控制內(寫明)。
+- The platform's CLI goes on the PATH and is **renamed**: `hub` clashes with GitHub's old `hub` CLI (still common on
+  Homebrew, often aliased as git). Candidate: `agenthub`.
+- Rule files name only this command, no local paths.
+- **MCP server**: receive mail, send mail, close, write notes, ask the owner; the MCP server's `instructions` field can
+  carry the platform's rules, delivering them into tools that support MCP **without changing any project file**.
+  Adapters register it in the tool's MCP settings; when they can't, doctor gives manual steps. A stdio MCP inherits the
+  agent's environment; remote HTTP MCP and claude.ai connectors are outside the platform's control (stated).
 
-### 5. 規則檔:不改使用者 commit 的檔
+### 5. Rule files: don't change files the user commits
 
-盲審查證:Codex 的 `AGENTS.override.md` 會**取代**同目錄的 `AGENTS.md`(會把使用者的規則藏起來);Gemini 的 `contextFileName`
-在 `.gemini/settings.json`(常有 commit);Cursor 的 `.cursor/rules` 常有 commit;symlink 也是改 commit 的檔。所以:
+The blind review checked: Codex's `AGENTS.override.md` **replaces** the `AGENTS.md` in the same directory (it would
+hide the user's rules); Gemini's `contextFileName` is in `.gemini/settings.json` (often committed); Cursor's
+`.cursor/rules` are often committed; a symlink also changes a committed file. So:
 
-- 平台的規則內容要短、沒有本機路徑(指令名稱、MCP 工具名)。
-- 送進工具的方式由好到差:MCP `instructions`(全通用、不碰檔案)> 轉接器知道**不覆蓋**的本機檔(Claude 的
-  `CLAUDE.local.md`,現在就這樣)> doctor 給一行讓使用者自己決定要不要加進他的 `AGENTS.md`。
-- 規則檔現在靠 SessionStart 的 `sync-local-setup.sh` 對齊;沒有 hook 的工具改由平台 job 重生(每 15 分鐘的那批)。
+- The platform's rule content is short, with no local paths (command names, MCP tool names).
+- Ways to get it into the tool, from best to worst: MCP `instructions` (fully general, touches no file) > a local file
+  the adapter knows **overrides nothing** (Claude's `CLAUDE.local.md`, as today) > doctor gives one line for users to
+  decide whether to add it to their `AGENTS.md`.
+- Rule files are kept in line today by SessionStart's `sync-local-setup.sh`; for tools with no hooks a platform job
+  regenerates them (the every-15-minutes batch).
 
-### 6. 平台的輸入
+### 6. The platform's inputs
 
-- memory-gaps 抓的是「有對話、沒 commit、沒筆記」(某個專案 88 則對話、0 筆)——這需要對話紀錄,不能改成只看 git。
-  跟 memory-nudge(有 commit 沒筆記,工具中立)合併成一支;「有對話」那一半是 `transcripts` 能力,沒有就明確只做 commit 那一半。
-- 週報的作息、深夜比例、真人訊息需要對話紀錄:沒有就明確關掉那幾段,commit、筆記、信件的統計照做。
-- 平台自己啟動的 ACP session,平台自己記中立的紀錄(不靠工具的格式)。
+- memory-gaps catches "conversations, no commits, no notes" (one project with 88 conversations and 0 notes): that
+  needs conversation logs and cannot become git-only. It is merged with memory-nudge (commits without notes,
+  tool-neutral) into one script; the "conversations" half is the `transcripts` capability, and without it only the
+  commit half runs, explicitly.
+- The weekly report's working hours, late-night ratio and human messages need conversation logs: without them those
+  sections are explicitly off; the commit, note and letter statistics still run.
+- For ACP sessions the platform starts itself, the platform keeps its own neutral log (not relying on the tool's
+  format).
 
-## 不是工具,但同樣是限制
+## Not tools, but limits all the same
 
-- **owner 端(Principal Handoff 0.3 的 principal 端)可以換,Muninn 是可選的工具**——跟 coding agent、LLM provider 同一個層級:
-  - 平台是 **requester 端**:registrar 把〔owner〕待辦寫成 `raised` record、專案的問題寫成 decision、收回 `settled`/`decided`
-    套用。這一半**屬於核心**,不管接哪個 owner 端都在跑。**現在 registrar(`assistant/knas-tasks`)放在 assistant 模組裡,
-    沒有 Muninn 就跟著關掉——要搬回核心**;assistant 模組只留 Muninn 專屬的(bridge 的 HTTP 那段、reconcile-questions、通道租借)。
-  - **owner 端的實作**(`hub.json` 的 `owner_side`,預設 `builtin`):
-    | 實作 | 是什麼 | 能力 |
+- **The owner side (Principal Handoff 0.3's principal side) can be swapped; Muninn is an optional tool**, on the same
+  level as coding agents and LLM providers:
+  - The platform is the **requester side**: the registrar writes `〔owner〕` to-dos as `raised` records and projects'
+    questions as decisions, and applies the `settled`/`decided` that come back. This half **belongs to the core** and
+    runs whichever owner side is connected. **Today the registrar (`assistant/knas-tasks`) sits in the assistant
+    module and goes off with it when there is no Muninn: it must move back to the core**; the assistant module keeps
+    only what is specific to Muninn (the HTTP part of the bridge, reconcile-questions, channel leasing).
+  - **Owner-side implementations** (`hub.json` `owner_side`, default `builtin`):
+    | Implementation | What it is | Capabilities |
     |---|---|---|
-    | `builtin`(內建,預設) | 平台自己的最小 principal 端:直接讀本機匯流排上給 owner 的 record | 擺出來(`todo.md` + `agenthub owner list`)、通知(通知轉接器)、結案(`agenthub owner done/drop <key>`、`answer <id> "…"` → `settled`/`decided` record,authority `principal`) |
-    | `muninn`(可選,另一個開源專案) | 個人助理:bridge v2 透過 HTTP 交換 record(`POST/GET /api/records`、ack) | 上面全部,加上手機對話、提醒時機、從對話推斷做完(`attested`)、深談、**通道租借** |
-    | 其他 | 任何照 Principal Handoff 0.3 實作 principal 端的系統 | 規範定義的介面就是接口 |
-  - 文件、`hub init`、doctor 都把 Muninn 寫成「可選:想要手機上的個人助理就裝它」,跟「想讓 agent 工作用 Codex 就裝 Codex」
-    同一種說法。通道租借、問題對帳寫明「需要 Muninn(或其他支援租借的 owner 端)」。
-  - **這也是 Principal Handoff 規範的第二個獨立實作**:`builtin` 完全照公開的規範寫、能跟 Muninn 互換,證明規範讓兩個不相干
-    的系統接得起來,不只是 agent-hub 跟 Muninn 之間的私有格式。
-  - Knas 這台:`owner_side: muninn`,行為不變。
-  - **沒有 owner 端,開源使用者的〔owner〕待辦跟問題就無處可去**——所以 `builtin` 在第一版、比任何 agent 轉接器都優先。
-- **通知**:`alert.py` 改成轉接器(Discord、ntfy、email、Slack)。
-- **Linux**:排程跟服務是 launchd → systemd user unit / cron 的那一層(排程器跟 render-services 已經是平台的程式,換的是產生的
-  檔案跟載入指令);沙盒在 Linux 先標「不提供」(提議→套用不需要它)。
+    | `builtin` (built in, default) | the platform's own minimal principal side: reads the records for the owner directly from the local bus | shows them (`todo.md` + `agenthub owner list`), notifies (notification adapters), closes (`agenthub owner done/drop <key>`, `answer <id> "…"` → a `settled`/`decided` record, authority `principal`) |
+    | `muninn` (optional, another open-source project) | a personal assistant: bridge v2 exchanges records over HTTP (`POST/GET /api/records`, ack) | all of the above, plus phone conversations, reminder timing, inferring completion from conversation (`attested`), deep talks, **channel leasing** |
+    | others | any system implementing the principal side of Principal Handoff 0.3 | the interface the spec defines is the connector |
+  - The docs, `hub init` and doctor all describe Muninn as "optional: install it if you want a personal assistant on
+    your phone", the same way as "install Codex if you want agent work done with Codex". Channel leasing and question
+    reconciliation say they "need Muninn (or another owner side that supports leasing)".
+  - **This is also the second independent implementation of the Principal Handoff spec**: `builtin` is written strictly
+    to the public spec and is interchangeable with Muninn, proving the spec lets two unrelated systems connect, not
+    just a private format between agent-hub and Muninn.
+  - The owner's machine: `owner_side: muninn`, behaviour unchanged.
+  - **Without an owner side, open-source users' `〔owner〕` to-dos and questions have nowhere to go**: so `builtin` is in
+    the first version, ahead of any agent adapter.
+- **Notifications**: `alert.py` becomes adapters (Discord, ntfy, email, Slack).
+- **Linux**: scheduling and services are the launchd → systemd user unit / cron layer (the scheduler and
+  render-services are already platform code; what changes is the generated files and the load commands); on Linux the
+  sandbox is marked "not provided" at first (propose → apply does not need it).
 
-## 開源第一版的範圍(盲審建議,採用)
+## Scope of the first open-source version (the blind review's suggestion, adopted)
 
-1. ✅(63fb2f2)**能力表 + `runtime_none`**:能力從介面推、doctor 的「工具 × 功能」表;Claude 專用 job 搬進模組;`bin/setup` 的 claude 改選配。
-2. ✅(27359ce)**completion + providers**:librarian、待辦、index、週報用任何 API key。介面、三家 provider、統一的處理、key、預算都好了;
-   reflect-week 已經是 completion(本機 Ollama 跑通)。librarian 的三個點改成 completion 是另一步(影子模式,`llm-providers.md` 步驟 4)。
-3. ✅(e2a4bd3)**owner 端可以換**:registrar 搬回核心、`owner_side: builtin | muninn`、內建最小 owner 端 + 通知轉接器;Muninn 寫成可選工具。
-4. ✅ **平台 CLI 改名上 PATH**(2d77f1d)、規則內容去掉本機路徑、✅ MCP 伺服器(10-29,`agenthub mcp`,`bin/mcp_server.py`,docs/mcp.md:inbox/show/thread/send/ack/done + ask_owner、note;`instructions` 帶規則跟未結案信數;平台叫起的 agent 一律拒絕)。實跑:Codex(`-c mcp_servers.…` 臨時登記,沒改它的設定)在 read-only 沙盒裡收信、讀 README 回覆、結案、寫筆記,全部落在匯流排跟 memory。登記進各工具的設定由使用者自己做(平台只印出那一段)。propose 的 agent 自己跑 `agenthub send/done/ack`(或任何會改匯流排的 hubbus 子指令)一律被 hubbus 擋下:認 propose_apply 設的環境變數,也看祖先程序裡有沒有 propose_apply.py(清掉環境變數、換工作目錄也躲不掉;10-29)。刻意脫離程序樹(例:交給別的常駐程序代寄)要等平台自己的沙盒才擋得住。
-5. ✅ **提議→平台套用**(ba9649d):丟棄式 worktree、路徑白名單套用、平台代寄信。✅ 10-29 第一個非 Claude 的實跑:Gemini CLI 6 月起不服務個人帳號,改用它的後繼 **Antigravity CLI(`agy`)**,`runtime: command` 樣板接上(`{prompt}` 當參數、`{cwd}` 把 read_file/write_file 限在 worktree、`command(*)` 拒絕),Gemini 4 Argon 處理一封真的交辦:只採用筆記、平台代寄回信並結案、筆記 push 到 memory repo。Flash 會把長的暫存路徑抄錯 → 讀到 worktree 外被擋 → `agy` exit 0 但沒輸出;平台現在把「沒輸出」當失敗、帶 stderr 的原因。同一天 **Codex CLI**(ChatGPT 帳號登入)也跑通,不用改程式:走的是 stdin + `-o {output_file}` 這兩條 `agy` 沒走到的路,它自己的 Seatbelt 沙盒(`workspace-write`)跟平台的丟棄式 worktree 疊在一起沒問題。注意:Codex 的沙盒只限寫、不限讀(讀得到 secrets 目錄),`agy` 的 `read_file({cwd})` 兩邊都限;讀的範圍要等平台自己的沙盒(Linux 那一步)才統一。
-6. **Linux**。✅ 第一段(10-29):平台在 Linux 上跑得起來——平台自己叫腳本一律經過直譯器(`hubconf.launch()`、`bin/py`、hook 字串用 `hubconf.sh_py()`;第一行只是 macOS 的方便,`test_python_floor` 機械檢查沒有地方靠它)、程序的工作目錄改走 `hubconf.process_cwds()`(lsof 或 /proc)、show_file 的 fd 路徑在 Linux 用 /proc/self/fd、`hubconf.service_manager()` 沒有服務管理器時 init/doctor/schedulectl/狀態頁/render-services 明確說「還沒接上」(doctor 標紅)。`bin/linux-test`(docker)在 Linux 容器跑全部測試:515 個全過。macOS 上的輸出一個字都沒變(hook 字串、worktree 清單、各專案的 agent 設定)。✅ 第二段(10-29):**systemd user unit**——`hubconf.service_manager()` 在 Linux 認 `systemctl --user`;`bin/systemd_units.py` 把平台產生的同一份 plist(render-services 的 render()、launchd/ 的排程器跟看門狗樣板)翻成 .service(+ 有間隔的 .timer),init 裝排程器跟看門狗、render-services 套用專案服務、doctor / 狀態頁 / schedulectl(status、start、stop、run = systemd-run)/ 看門狗的診斷都認 systemd;job 用 `hubconf.login_shell()`(macOS 照舊 /bin/zsh,沒有 zsh 用 bash)。macOS 的 plist 跟以前逐字相同。**實機驗證**:lima 的 Ubuntu VM(真的 systemd)從零開始 `bin/setup` → `agenthub init --yes`:排程器、看門狗、信箱 dispatch 的 timer 都在排,排程器第一次 tick 跑完所有 job,狀態頁的服務 回 200,doctor 兩個 timer 都綠。沙盒(cap-runner 的 Seatbelt)在 Linux 不提供。
-   發版前要清(新使用者在任何系統都會碰到,不是 Linux 才有):hub 根目錄的搬家前舊副本(hub.json、todo.md、digest/…,會被 init 當成舊的擺法);平台登錄 `projects/agent-hub.yaml` 宣告的 Discord / B2 / 備份密碼 / 租約 token 跟 Muninn 的契約要搬進各自的模組(現在新使用者的 secrets、contracts-check 兩個 job 一開始就是紅的)。
-7. **匯流排改成平台服務 + socket**(資料完整性;可以在 4 之後)。
+1. ✅ (63fb2f2) **Capability table + `runtime_none`**: capabilities derived from interfaces, doctor's "tool × feature"
+   table; Claude-only jobs moved into modules; claude made optional in `bin/setup`.
+2. ✅ (27359ce) **completion + providers**: librarian, to-dos, index, weekly report with any API key. Interface, three
+   providers, uniform handling, keys and budget are done; reflect-week is already completion (runs on a local Ollama).
+   Moving the librarian's three points to completion is a separate step (shadow mode, `llm-providers.md` step 4).
+3. ✅ (e2a4bd3) **The owner side can be swapped**: registrar moved back to the core, `owner_side: builtin | muninn`, a
+   minimal built-in owner side + notification adapters; Muninn written as an optional tool.
+4. ✅ **Platform CLI renamed and on the PATH** (2d77f1d), local paths removed from the rule content, ✅ MCP server (10-29,
+   `agenthub mcp`, `bin/mcp_server.py`, docs/mcp.md: inbox/show/thread/send/ack/done + ask_owner, note; `instructions`
+   carries the rules and the number of open letters; agents started by the platform are always refused). Live run:
+   Codex (registered temporarily with `-c mcp_servers.…`, without changing its settings), in the read-only sandbox,
+   received mail, read the README to reply, closed it and wrote a note, all landing in the bus and memory. Registering
+   in each tool's settings is up to the user (the platform only prints the snippet). A propose agent running
+   `agenthub send/done/ack` itself (or any hubbus subcommand that changes the bus) is always blocked by hubbus: it
+   recognises the environment variable propose_apply sets, and also looks for propose_apply.py among the ancestor
+   processes (clearing the variable or changing the working directory does not escape it; 10-29). Deliberately leaving
+   the process tree (e.g. handing it to another resident process to send) can only be blocked by the platform's own
+   sandbox.
+5. ✅ **Propose → the platform applies** (ba9649d): throwaway worktree, applying with a path allow list, the platform
+   sending letters on the agent's behalf. ✅ 10-29 the first non-Claude live run: Gemini CLI stopped serving personal
+   accounts from June, so its successor **Antigravity CLI (`agy`)** was used instead, connected with a
+   `runtime: command` template (`{prompt}` as an argument, `{cwd}` restricting read_file/write_file to the worktree,
+   `command(*)` refused); Gemini 4 Argon handled a real delegation: only the note was adopted, the platform sent the
+   reply and closed it, the note was pushed to the memory repo. Flash miscopied a long temporary path → read outside the
+   worktree, blocked → `agy` exited 0 with no output; the platform now treats "no output" as a failure, with the reason
+   from stderr. The same day **Codex CLI** (logged in with a ChatGPT account) also ran through, with no code change: it
+   took the two paths `agy` did not, stdin + `-o {output_file}`, and its own Seatbelt sandbox (`workspace-write`)
+   stacked with the platform's throwaway worktree without trouble. Note: Codex's sandbox only limits writes, not reads
+   (it can read the secrets directory), while `agy`'s `read_file({cwd})` limits both; the read scope is unified only
+   once the platform has its own sandbox (the Linux step).
+6. **Linux**. ✅ First part (10-29): the platform runs on Linux: the platform always calls its scripts through the
+   interpreter (`hubconf.launch()`, `bin/py`, `hubconf.sh_py()` for hook strings; the first line is only a macOS
+   convenience, and `test_python_floor` checks mechanically that nothing relies on it), process working directories go
+   through `hubconf.process_cwds()` (lsof or /proc), show_file's fd path uses /proc/self/fd on Linux, and when
+   `hubconf.service_manager()` finds no service manager, init/doctor/schedulectl/status page/render-services say
+   explicitly "not connected yet" (doctor shows red). `bin/linux-test` (docker) runs all tests in a Linux container:
+   all 515 pass. The output on macOS did not change by a single character (hook strings, worktree lists, each
+   project's agent settings). ✅ Second part (10-29): **systemd user units**: `hubconf.service_manager()` recognises
+   `systemctl --user` on Linux; `bin/systemd_units.py` translates the same plists the platform generates
+   (render-services' render(), the scheduler and watchdog templates in launchd/) into .service (+ a .timer when there is
+   an interval); init installs the scheduler and watchdog, render-services applies project services, and doctor / the
+   status page / schedulectl (status, start, stop, run = systemd-run) / the watchdog's diagnostics all recognise
+   systemd; jobs use `hubconf.login_shell()` (/bin/zsh on macOS as before, bash where there is no zsh). The macOS
+   plists are identical to before, word for word. **Verified on a real machine**: a lima Ubuntu VM (real systemd) from
+   scratch, `bin/setup` → `agenthub init --yes`: the timers of the scheduler, watchdog and mailbox dispatch are all
+   scheduled, the scheduler's first tick ran every job, the status page service answers 200, doctor shows both timers
+   green. The sandbox (cap-runner's Seatbelt) is not provided on Linux.
+   To clean up before release (new users hit these on any system, not just Linux): old pre-move copies in the hub root
+   (hub.json, todo.md, digest/…, which init takes for the old layout); the Discord / B2 / backup password / lease token
+   declared in the platform registry `projects/agent-hub.yaml` and Muninn's contracts must move into their own modules
+   (today a new user's secrets and contracts-check jobs are red from the start).
+7. **The bus becomes a platform service + socket** (data integrity; can come after 4).
 
-第一版能誠實說的:「判斷點用任何 LLM、任何 key;平台啟動的 agent 工作用任何 CLI agent;owner 端內建一個,想要手機上的
-個人助理可以接 Muninn(或任何 Principal Handoff 的實作);互動 session 的整合、對話統計目前只有 Claude Code 是完整的轉接器,
-租借需要 Claude Code + Muninn。」
+What the first version can honestly say: "judgment points with any LLM, any key; agent work the platform starts with
+any CLI agent; one owner side built in, and if you want a personal assistant on your phone you can connect Muninn (or
+any implementation of Principal Handoff); for integrating interactive sessions and conversation statistics only Claude
+Code has a complete adapter today, and leasing needs Claude Code + Muninn."
 
-延後:租借改走 ACP、平台沙盒包 agent、post-commit 推送、`agenthub agent` 啟動器、其他工具的對話紀錄解析。
+Postponed: leasing over ACP, the platform sandbox wrapping agents, post-commit push, an `agenthub agent` launcher,
+conversation-log parsers for other tools.
 
-## 步驟(Knas 這台每一步都不變)
+## Steps (nothing changes on the owner's machine at any step)
 
-0. ✅ ratchet(1186f65)。
-1–7 照上面的範圍,每一步單獨上線。每步的驗證:Knas 這台的夜間流程照跑(影子模式、黃金檔);隔離的 HOME 用只有 API key /
-只有 Gemini CLI 的設定跑一次完整的夜間 + 一封信箱交辦。
+0. ✅ ratchet (1186f65).
+1–7 per the scope above, each going live on its own. Verification for each step: the nightly flow on the owner's
+machine runs as usual (shadow mode, golden files); in an isolated HOME, a full nightly run + one mailbox delegation
+with settings that have only an API key / only Gemini CLI.
 
-## 已確認(10-29)
+## Confirmed (10-29)
 
-1. 原則 1 收窄成「平台啟動的工作 + 平台的資料」;使用者自己開的 session 只給建議。
-2. 租借改走 ACP 延後;第一版維持原生 Claude(租借需要 Claude Code + Muninn)。
-3. 平台 CLI 改名 `agenthub`。
-4. Muninn 是可選的工具;owner 端預設內建,registrar 搬回核心。
+1. Principle 1 narrowed to "work the platform starts + the platform's data"; sessions users open themselves only get
+   advice.
+2. Leasing over ACP postponed; the first version stays native Claude (leasing needs Claude Code + Muninn).
+3. The platform CLI renamed `agenthub`.
+4. Muninn is an optional tool; the owner side is built in by default, and the registrar moves back to the core.
