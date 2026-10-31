@@ -1,21 +1,28 @@
-"""執行環境的轉接層(Claude Code):平台只透過這裡知道 Claude Code 的 session 跟設定格式。
+"""The runtime adapter (Claude Code): the only place the platform learns about Claude Code's sessions and settings
+format.
 
-換工具、或 Claude Code 出了正式的「叫醒一個開著的 session」方法,只改這個檔;hubbus 跟各專案的 agent 都不用動。
-設計:docs/design/mailbox-routing.md(session)、docs/design/capabilities.md(設定)。標準函式庫,系統的 python3(3.9)
-也能 import——所以這裡不 import registry/policy,只吃 policy.policy() 算好的 dict。
+Switching tools, or Claude Code shipping an official way to "wake an open session", changes only this file; hubbus and
+the projects' agents don't need to change. Design: docs/design/mailbox-routing.md (sessions),
+docs/design/capabilities.md (settings). Standard library only; the system python3 (3.9) can import it too, which is why
+this doesn't import registry/policy and only takes the dict policy.policy() computed.
 
-  live_sessions()        還活著的 session id(Claude Code 程序的參數帶著 --resume=<id> 或 --session-id=<id>;
-                         10-24 驗證過跟 hook 的 session_id、CLAUDE_CODE_SESSION_ID 是同一個)
-  context_tokens(sid)    接續這個 session 要載入多少 context(對話紀錄最後一則回覆的 usage;壓縮過的就是
-                         壓縮後的大小)。找不到就 None
-  resume_args(sid)       背景接續用的 claude 參數:--resume <sid> --fork-session(10-24 實測:分支帶著完整 context、
-                         拿到新的 id、原本的對話紀錄完全不動——開著的 session 不受影響)
+  live_sessions()        session ids still alive (Claude Code processes' arguments carry --resume=<id> or
+                         --session-id=<id>; verified 10-24 to be the same as the hook's session_id and
+                         CLAUDE_CODE_SESSION_ID)
+  context_tokens(sid)    how much context resuming this session would load (the usage of the last reply in the
+                         transcript; for a compacted one, the size after compaction). None if not found
+  resume_args(sid)       the claude arguments for resuming in the background: --resume <sid> --fork-session (tested
+                         10-24: the fork carries the full context, gets a new id, and the original transcript is left
+                         completely untouched: an open session isn't affected)
 
-設定(中立政策 → Claude Code 的 settings;政策的欄位見 policy.py):
-  settings(pol)          → (sandbox, deny, allow):專案 .claude/settings.local.json 裡平台管的部分
-                         (render-project-settings.py 負責寫檔、記錄、偵測偏移)
-  lease_settings(pol)    → 租約 `--settings` 的內容:同一份 deny + 使用者層級的憑證 + 擋 `security`
-  settings_path(ws)、sandbox_rendered(ws)   設定檔在哪、OS sandbox 是不是真的已經寫進去了
+Settings (neutral policy → Claude Code's settings; the policy's fields are in policy.py):
+  settings(pol)          → (sandbox, deny, allow): the platform-managed part of the project's
+                         .claude/settings.local.json
+                         (render-project-settings.py writes the file, records it, detects drift)
+  lease_settings(pol)    → the content of a lease's `--settings`: the same deny + user-level credentials + blocking
+                         `security`
+  settings_path(ws), sandbox_rendered(ws)   where the settings file is, whether the OS sandbox really has been written
+                                            into it
 """
 from __future__ import annotations
 
@@ -29,7 +36,8 @@ import i18n
 _ = i18n.domain(__file__)
 NOT_FOUND = "claude not found"   # also what is_login_error looks for (with its translation)
 PROJECTS = pathlib.Path.home() / ".claude" / "projects"
-MODELS = {"fast": "haiku", "standard": "sonnet", "strong": "opus"}   # 判斷點的 model_group → 模型(runtime_ports.models)
+# a judgment point's model_group → model (runtime_ports.models)
+MODELS = {"fast": "haiku", "standard": "sonnet", "strong": "opus"}
 _ID = re.compile(r"--(?:resume|session-id)[= ]([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})")
 
 
@@ -73,7 +81,7 @@ def resume_args(sid: str) -> list[str]:
     return ["--resume", sid, "--fork-session"]
 
 
-# ---------- 設定 ----------
+# ---------- settings ----------
 
 def _tilde(p) -> str:
     s, h = str(p), str(pathlib.Path.home())
@@ -81,14 +89,14 @@ def _tilde(p) -> str:
 
 
 def _cli_rules(commands) -> list[str]:
-    """平台的 session 指令(「agenthub send」)→ Claude 的規則:不帶參數跟帶參數各一條。"""
+    """The platform's session commands ("agenthub send") → Claude rules: one without arguments and one with."""
     return [r for c in commands for r in (f"Bash({c})", f"Bash({c} *)")]
 
 
 def settings(pol: dict) -> tuple[dict, list[str], list[str]]:
     deny = []
     for p in pol["other_projects"]:
-        deny += [f"Read(/{p}/**)", f"Edit(/{p}/**)"]  # //abs:絕對路徑
+        deny += [f"Read(/{p}/**)", f"Edit(/{p}/**)"]  # //abs: an absolute path
     deny += [f"Edit({_tilde(p)}/**)" for p in pol["deny_write"]]
     deny += [f"Read({_tilde(p)}/**)" for p in pol["deny_read"]]
     allow = [f"Bash({_tilde(c)} *)" for c in pol["platform_commands"]] + _cli_rules(pol.get("platform_cli") or [])
@@ -108,8 +116,10 @@ def settings(pol: dict) -> tuple[dict, list[str], list[str]]:
 def lease_settings(pol: dict) -> dict:
     deny = settings(pol)[1]
     deny += [f"Read({_tilde(p)})" for p in pol["credential_files"]] + [f"Read({_tilde(p)}/**)" for p in pol["credentials"]]
-    # Keychain 不是檔案,OS sandbox 擋不住(10-25 實測:sandbox 裡的 Bash 查得到 Claude 的登入憑證)。
-    # 這幾條只是補強——換個寫法(sh -c、python)就繞得過,真正的把關是 work 模式的指令每次都問 Knas
+    # The Keychain isn't a file, so the OS sandbox can't block it (tested 10-25: Bash inside the sandbox could look up
+    # Claude's login credentials).
+    # These rules are only reinforcement: another way of writing it (sh -c, python) gets around them; the real gate
+    # is that every work-mode command asks the owner
     deny += ["Bash(security:*)", "Bash(security *)", "Bash(/usr/bin/security *)"]
     return {"permissions": {"deny": deny}}
 
@@ -119,7 +129,7 @@ def settings_path(ws: pathlib.Path) -> pathlib.Path:
 
 
 def sandbox_rendered(ws) -> tuple[bool, str]:
-    """登錄的 enforce.sandbox 只是意圖,寫出來的設定檔才是事實。"""
+    """The registry's enforce.sandbox is only an intention; the settings file written is the fact."""
     try:
         st = json.loads(settings_path(ws).read_text())
     except (OSError, ValueError, TypeError):
@@ -129,20 +139,21 @@ def sandbox_rendered(ws) -> tuple[bool, str]:
     return True, ""
 
 
-# ---------- sessions(runtime_ports 的 sessions 介面)----------
+# ---------- sessions (runtime_ports' sessions interface) ----------
 
 def context_size(sid: str) -> int | None:
     return context_tokens(sid)
 
 
 def current_session(env) -> str | None:
-    """Claude Code 在 session 裡跑的程序(Bash、hook)都帶著這個環境變數。"""
+    """The processes Claude Code runs inside a session (Bash, hooks) all carry this environment variable."""
     return env.get("CLAUDE_CODE_SESSION_ID") or None
 
 
-# ---------- 對話紀錄(runtime_ports 的 transcripts 介面)----------
-# Claude Code 的對話紀錄是沒有公開文件的內部格式(~/.claude/projects/<slug>/<session>.jsonl)。這裡是平台
-# 唯一讀它的地方:解析成中立的 Turn/Action,認不得的格式明確失敗(TranscriptFormatError),不讓統計默默算錯。
+# ---------- transcripts (runtime_ports' transcripts interface) ----------
+# Claude Code's transcripts are an undocumented internal format (~/.claude/projects/<slug>/<session>.jsonl). This is
+# the only place the platform reads it: parsed into neutral Turn/Action, failing explicitly on an unrecognised format
+# (TranscriptFormatError) rather than letting statistics go silently wrong.
 
 import datetime  # noqa: E402
 
@@ -162,33 +173,36 @@ def _mini_home() -> str:
 
 
 def transcript_roots() -> tuple:
-    """讀哪些地方:MBP 每小時備份過來的(個人 profile)+ mini 本機 session 的。
-    **不要**加工作 profile 的備份(~/transcript-backups/claude-work-projects):weekly-reflect 會把這裡讀到的
-    訊息原文送雲端模型,工作對話只能在本機處理(見 known-issues)。"""
+    """Where to read: what the laptop backs up hourly (the personal profile) + the hub machine's local sessions.
+    **Do not** add the work profile's backup (~/transcript-backups/claude-work-projects): weekly-reflect sends the
+    message text read from here to a cloud model, and work conversations may only be processed locally (see
+    known-issues)."""
     return (pathlib.Path.home() / "transcript-backups" / "claude-personal-projects",
             pathlib.Path(_mini_home()) / ".claude" / "projects",
-            pathlib.Path.home() / ".claude-personal" / "projects")   # 在遙控那台手動跑時的個人 profile
+            # the personal profile when run by hand on the remote machine
+            pathlib.Path.home() / ".claude-personal" / "projects")
 
 
 def slug_for_path(path: str) -> str:
-    """Claude Code 存對話紀錄的資料夾名:路徑裡的 / 跟 . 換成 -。"""
+    """The folder name Claude Code stores transcripts under: / and . in the path replaced by -."""
     return path.replace("/", "-").replace(".", "-")
 
 
 def _is_human_prompt(entry: dict) -> bool:
-    """只算使用者實際送出的訊息。排除:其他 session 傳來的、背景工作通知、slash command 的輸出、壓縮摘要、
-    hook 注入等(它們在對話紀錄裡也是 type=user)。"""
+    """Count only messages the user actually sent. Excluded: those from other sessions, background task notifications,
+    slash command output, compaction summaries, hook injections, etc. (they are type=user in the transcript too)."""
     if entry.get("type") != "user" or entry.get("isMeta") or entry.get("isCompactSummary"):
         return False
     if not isinstance(entry.get("message", {}).get("content"), str):
-        return False  # 工具結果
+        return False  # tool results
     origin = entry.get("origin")
     return isinstance(origin, dict) and origin.get("kind") == "human"
 
 
 def _action(block: dict) -> Action:
-    """對話紀錄裡的一個工具呼叫 → 中立的 Action(kind 是 KINDS、collab 是協作方式)。翻譯表只有一份:action()。
-    detail 只放技能名稱——Claude 的工具名稱不外流到中立格式。"""
+    """One tool call in a transcript → a neutral Action (kind is KINDS, collab the collaboration kind). There's only
+    one translation table: action().
+    detail holds only skill names: Claude's tool names don't leak into the neutral format."""
     name, inp = block.get("name", ""), block.get("input") or {}
     kind, collab, _target, _summary = action(name, inp)
     return Action(kind, str(inp.get("skill", "?")) if collab == "skill" else "", collab)
@@ -216,8 +230,8 @@ def _turn(o: dict, fallback_sid: str) -> Turn | None:
 
 
 def _transcript_dirs(root: pathlib.Path, path: str, worktrees: bool) -> list:
-    """這個工作目錄的對話紀錄資料夾;worktrees=True 再加上 Claude Code 開在 <path>/.claude/worktrees/<名稱> 的
-    session(資料夾名 <slug>--claude-worktrees-<名稱>)。"""
+    """This working directory's transcript folders; worktrees=True adds the sessions Claude Code opened in
+    <path>/.claude/worktrees/<name> (folder name <slug>--claude-worktrees-<name>)."""
     slug = slug_for_path(str(path))
     return [root / slug, *(sorted(root.glob(slug + "--claude-worktrees-*")) if worktrees else ())]
 
@@ -226,7 +240,7 @@ def turns(paths, since: datetime.datetime, until: datetime.datetime | None = Non
     for root, path in ((r, p) for r in transcript_roots() for p in paths):
         for f in (f for d in _transcript_dirs(root, path, worktrees) for f in d.glob("*.jsonl")):
             if datetime.datetime.fromtimestamp(f.stat().st_mtime, datetime.timezone.utc) < since:
-                continue  # 範圍開始前就沒再寫過
+                continue  # not written to since before the range started
             parsed = recognised = 0
             with f.open(errors="replace") as fh:
                 for line in fh:
@@ -252,9 +266,10 @@ def last_activity(path) -> datetime.datetime | None:
     return datetime.datetime.fromtimestamp(max(ts), datetime.timezone.utc) if ts else None
 
 
-# ---------- 跑一次(runtime_ports 的 agent 介面)----------
-# Claude Code 的 `claude -p` 旗標只在這裡組。判斷點宣告(Task.spec)裡的 permission_mode / allowed_tools / tools /
-# prompts / extra_args / allow_from_env / extra_allow_env 是 Claude 專用的,第 2 層中立政策定案前暫時由這裡讀。
+# ---------- a single run (runtime_ports' agent interface) ----------
+# Claude Code's `claude -p` flags are assembled only here. The permission_mode / allowed_tools / tools / prompts /
+# extra_args / allow_from_env / extra_allow_env in the judgment point declaration (Task.spec) are Claude-specific and
+# read here for now, until layer 2's neutral policy is settled.
 
 import os  # noqa: E402
 
@@ -262,9 +277,10 @@ from runtime_ports import TaskResult  # noqa: E402
 
 
 def _env(task) -> dict:
-    """claude 的環境變數:PATH 補上 nvm 預設版本的 bin。claude 本身用完整路徑叫得到,但 plugin 的 hook
-    (例:vercel 的 SessionEnd `node …`)照 PATH 找 node;排程底下的 PATH 沒有 nvm、Homebrew 的 node 也沒了
-    (2026-10-24),librarian 每次都印 node: command not found。"""
+    """claude's environment variables: PATH gets nvm's default-version bin added. claude itself can be called by its
+    full path, but plugin hooks (e.g. vercel's SessionEnd `node …`) find node through PATH; under the scheduler PATH
+    has no nvm and Homebrew's node is gone too (2026-10-24), so the librarian printed node: command not found every
+    time."""
     env = dict(os.environ if task.env is None else task.env)
     try:
         import hubconf
@@ -280,23 +296,25 @@ def _flags(task) -> list:
     spec = task.spec
     try:
         import hubconf
-        exe = hubconf.tool("claude")  # 排程底下的 PATH 沒有 nvm:先照 PATH,再照平台的(nvm 預設版本)
+        exe = hubconf.tool("claude")  # the scheduler's PATH has no nvm: PATH first, then the platform's (nvm default)
     except Exception:
         exe = "claude"
     cmd = [exe, "-p", task.prompt]
     if task.model:
         cmd += ["--model", task.model]
     mode, allowed, prompts = spec.get("permission_mode"), list(spec.get("allowed_tools") or []), spec.get("prompts")
-    if "{platform_mail}" in allowed:   # 判斷點宣告的「平台的信箱指令」:舊的 hubbus 路徑 + PATH 上的 agenthub 收寄信子指令
+    # the judgment point declares "the platform's mailbox commands": the old hubbus path + the agenthub mail
+    # subcommands on PATH
+    if "{platform_mail}" in allowed:
         import policy
         i = allowed.index("{platform_mail}")
         hub_bin = pathlib.Path(__file__).resolve().parent
         allowed[i:i + 1] = [f"Bash({_tilde(hub_bin / 'hubbus')} *)", *_cli_rules(policy.platform_cli(mail_only=True))]
     env = os.environ if task.env is None else task.env
     if spec.get("extra_allow_env") and env.get(spec["extra_allow_env"]):
-        allowed += json.loads(env[spec["extra_allow_env"]])  # 只加規則,不改權限模式
+        allowed += json.loads(env[spec["extra_allow_env"]])  # adds rules only, doesn't change the permission mode
     if spec.get("allow_from_env") and env.get(spec["allow_from_env"]):
-        # 登錄 job 宣告的 allow 清單:無人值守 = dontAsk,沒列的一律拒絕、不提示
+        # the allow list a registry job declares: unattended = dontAsk, anything not listed is refused without a prompt
         allowed += json.loads(env[spec["allow_from_env"]])
         mode, prompts = "dontAsk", "none"
     if mode:
@@ -329,15 +347,16 @@ def run(task) -> TaskResult:
     import sys
     sys.stderr.write(r.stderr)
     if r.returncode != 0 or not r.stdout.strip():
-        # claude -p 的錯誤(例:Login expired)常常只在 stdout 的 JSON 裡
+        # claude -p errors (e.g. Login expired) are often only in the JSON on stdout
         return TaskResult(False, error=_("exit {code}: {detail}", code=r.returncode,
                                                  detail=(r.stderr.strip() or r.stdout.strip())[-300:]))
     try:
         out = json.loads(r.stdout)
     except ValueError:
         return TaskResult(False, error=_("output is not JSON: {output}", output=r.stdout[:200]))
-    # exit 0 而且 JSON 讀得到 = 跑完了(ok)。is_error 只標成 incomplete:以前 llm.py 就是照樣交給呼叫端,
-    # librarian 靠這個「仍以實際檔案變化為準」,不能改成失敗
+    # exit 0 with readable JSON = it ran to the end (ok). is_error only marks it incomplete: llm.py always passed it on
+    # to the caller as is, and the librarian relies on that ("still goes by the actual file changes"), so it can't
+    # become a failure
     return TaskResult(
         ok=True, incomplete=bool(out.get("is_error")), text=str(out.get("result") or ""),
         structured_output=out.get("structured_output"), cost_usd=out.get("total_cost_usd"),
@@ -346,35 +365,39 @@ def run(task) -> TaskResult:
 
 
 def exec_stream(task) -> None:
-    """長駐的串流 session(通道租借用):照宣告組好旗標,直接換成 claude,stdin/stdout 交給呼叫的人。
-    暫時的:之後由第 1 層的 open_session 取代(租約的契約中立化 m10251446 還沒定由誰做),所以不在介面裡。"""
+    """A long-running streaming session (for channel leases): assemble the flags as declared and exec into claude, with
+    stdin/stdout handed to the caller.
+    Temporary: layer 1's open_session will replace it (who does the lease contract neutralisation m10251446 isn't
+    decided yet), so it isn't in the interface."""
     cmd = _flags(task)
-    cmd[1:3] = ["-p"]  # 沒有 prompt 參數,訊息從 stdin(stream-json)來
+    cmd[1:3] = ["-p"]  # no prompt argument; messages come from stdin (stream-json)
     cmd += ["--input-format", "stream-json", "--output-format", "stream-json", "--include-partial-messages", "--verbose"]
     os.execvpe(cmd[0], cmd, _env(task))
 
 
-# ---------- 事件(runtime_ports 的 lifecycle 介面)----------
-# Claude Code 的 hook:事件名稱、matcher、輸入的 JSON、輸出的 hookSpecificOutput 格式只在這裡。
-# 平台這邊只有一個入口 `bin/hub-event <平台事件>`,處理程式回傳中立的文字或拒絕理由。
+# ---------- events (runtime_ports' lifecycle interface) ----------
+# Claude Code's hooks: event names, matchers, the input JSON and the hookSpecificOutput output format are only here.
+# The platform side has a single entry point `bin/hub-event <platform event>`; handlers return neutral text or a reason
+# to refuse.
 
 from runtime_ports import HubEvent  # noqa: E402
 
-# (Claude 的 hook 事件, matcher, 平台事件);matcher None = 這個事件全部都觸發
+# (Claude hook event, matcher, platform event); matcher None = every occurrence of the event triggers it
 HOOK_TABLE = (
     ("SessionStart", None, "session_start"),
     ("SessionEnd", None, "session_end"),
     ("PreCompact", None, "pre_compact"),
     ("UserPromptSubmit", None, "prompt"),
-    ("PostToolUse", "Bash", "tool_used"),                                    # 目前只接「跑指令」
-    ("PreToolUse", "mcp__ccd_session__start_session", "open_session_attempt"),  # Desktop 的開 session 工具
+    ("PostToolUse", "Bash", "tool_used"),                                    # only "run a command" for now
+    ("PreToolUse", "mcp__ccd_session__start_session", "open_session_attempt"),  # Desktop's open-session tool
 )
 _HOOK_NAME = {ev: name for name, _matcher, ev in HOOK_TABLE}
-MANAGED = "/agent-hub/bin/"   # 指令裡有這段 = 平台管的 hook(使用者自己加的不會有)
+MANAGED = "/agent-hub/bin/"   # a command containing this = a platform-managed hook (the user's own never have it)
 
 
 def hook_command(event: str) -> str:
-    # 跟以前一樣:入口不在就安靜地不做事,結束碼永遠 0,不會讓 session 顯示錯誤
+    # as before: if the entry point is missing, quietly do nothing; the exit code is always 0, so the session never
+    # shows an error
     import hubconf
     return f"[ -x ~/agent-hub/bin/hub-event ] && {hubconf.sh_py('~/agent-hub/bin/hub-event')} {event} || true"
 
@@ -385,14 +408,14 @@ def parse_event(event: str, raw: str):
     except ValueError:
         return None
     session = data.get("session_id")
-    if not session:  # 沒有 hook JSON = 不是真的 session 在跑(onboard/recover 也會跑設定)
+    if not session:  # no hook JSON = no real session running (onboard/recover also run the setup)
         return None
     cwd = data.get("cwd") or os.getcwd()
     ti = data.get("tool_input") or {}
     if event == "tool_used":
         return HubEvent(event, session, cwd, command=str(ti.get("command", "")))
     if event == "open_session_attempt":
-        elsewhere = None  # 中立的種類(說明文字由平台寫):repository / machine / unknown_place
+        elsewhere = None  # a neutral kind (the platform writes the wording): repository / machine / unknown_place
         if ti.get("repository"):
             elsewhere = {"kind": "repository", "name": str(ti["repository"])}
         elif ti.get("host") or ti.get("target") == "ssh":
@@ -408,7 +431,7 @@ def inject(event: str, text: str) -> str:
     if not text:
         return ""
     if event == "session_start":
-        return text  # SessionStart 的 stdout 直接進 context
+        return text  # SessionStart's stdout goes straight into context
     if event in ("prompt", "tool_used"):
         return json.dumps({"hookSpecificOutput": {"hookEventName": _HOOK_NAME[event], "additionalContext": text}},
                           ensure_ascii=False)
@@ -423,7 +446,8 @@ def deny(event: str, reason: str) -> str:
 
 
 def install_hooks(settings: dict) -> dict:
-    """平台管的 hook(指令裡有 MANAGED)整組換成 HOOK_TABLE 的 hub-event;使用者自己加的留著;重跑結果一樣。"""
+    """Platform-managed hooks (MANAGED in the command) are replaced as a set by HOOK_TABLE's hub-event; the user's own
+    stay; rerunning gives the same result."""
     hooks = settings.setdefault("hooks", {})
     for name in list(hooks):
         kept = []
@@ -453,10 +477,10 @@ def install_lifecycle(workspace) -> None:
 
 
 
-# ---------- 規則檔(runtime_ports 的 instructions 介面)----------
+# ---------- rules file (runtime_ports' instructions interface) ----------
 
 def instructions_file(workspace) -> pathlib.Path:
-    """Claude Code 會跟 CLAUDE.md 一起載入的本機檔(不進版控);平台的受管區塊寫在這裡。"""
+    """The local file Claude Code loads along with CLAUDE.md (untracked); the platform's managed block goes here."""
     return pathlib.Path(workspace) / "CLAUDE.local.md"
 
 
@@ -464,7 +488,7 @@ def local_ignores() -> list:
     return ["CLAUDE.local.md", ".claude/settings.local.json"]
 
 
-# ---------- 長駐 session 的輸出翻譯(stream 介面;docs/design/lease-contract-neutral.md)----------
+# ---------- translating a long-running session's output (stream interface; docs/design/lease-contract-neutral.md) ----
 
 from runtime_ports import StreamEvent  # noqa: E402
 
@@ -473,9 +497,9 @@ _TOOL_KIND = {"Read": "read", "Glob": "search", "Grep": "search", "WebSearch": "
               "Bash": "run_command", "AskUserQuestion": "ask_user"}
 _TARGET_KEYS = ("file_path", "notebook_path", "url", "command", "pattern", "query", "path")
 _QUOTA_STATUS = {"allowed": "ok", "allowed_warning": "warning", "rejected": "exhausted"}
-RELAY_SERVER = "lease_relay"                      # 租約的平台 MCP server(lease-relay.py)在設定裡的名字
-APPROVE_TOOL = f"mcp__{RELAY_SERVER}__approve"     # 權限轉接(--permission-prompt-tool)
-SHOW_FILE_TOOL = f"mcp__{RELAY_SERVER}__show_file"  # 平台工具 show_file(llm-points 的允許清單也是這個名字)
+RELAY_SERVER = "lease_relay"                      # the name in the settings of the lease's MCP server (lease-relay.py)
+APPROVE_TOOL = f"mcp__{RELAY_SERVER}__approve"     # permission relay (--permission-prompt-tool)
+SHOW_FILE_TOOL = f"mcp__{RELAY_SERVER}__show_file"  # platform tool show_file (llm-points' allow list uses this name)
 
 
 def _verbs() -> dict:
@@ -492,13 +516,14 @@ def _questions(inp: dict) -> str:
 
 
 def action(tool: str, inp: dict | None) -> tuple:
-    """Claude 的工具 → (kind, collab, target, summary)。target 是判斷用的(路徑、網址、指令),summary 是給人看的一句。"""
+    """Claude's tool → (kind, collab, target, summary). target is for judging (path, URL, command), summary a sentence
+    for people."""
     inp = inp or {}
     kind = _TOOL_KIND.get(tool, "other")
     collab = {"Agent": "subagent", "Task": "subagent", "Workflow": "workflow", "Skill": "skill"}.get(tool) or (
         "peer_message" if tool == "SendMessage" or tool.endswith("send_message") else None)
     target = next((str(inp[k]) for k in _TARGET_KEYS if inp.get(k)), "")
-    if tool == SHOW_FILE_TOOL:  # 平台的「給使用者看」工具(租約的 MCP):讀一個檔給他看
+    if tool == SHOW_FILE_TOOL:  # the platform's "show the user" tool (the lease's MCP): read a file to show them
         return "read", None, str(inp.get("path", "")), _("showing you {path}", path=inp.get("path", "")).strip()
     if kind == "ask_user":
         summary = _("question: {questions}", questions=_questions(inp))
@@ -515,7 +540,8 @@ def _iso(epoch) -> str | None:
 
 
 def parse_stream(line: str) -> list:
-    """Claude Code 的 stream-json 輸出(`--output-format stream-json`)的一行 → 中立的對話事件。認不得的行回 []。"""
+    """One line of Claude Code's stream-json output (`--output-format stream-json`) → neutral conversation events.
+    Unrecognised lines return []."""
     try:
         d = json.loads(line)
     except ValueError:
@@ -567,7 +593,7 @@ def parse_stream(line: str) -> list:
 
 def classify_exit(code, stderr_tail: str) -> StreamEvent:
     raw = _("exit {code}: {detail}", code=code, detail=stderr_tail[-200:])
-    if is_login_error(stderr_tail):  # 跟 llm.py 的登入判斷同一份(第 6 層)
+    if is_login_error(stderr_tail):  # the same login check as llm.py's (layer 6)
         return StreamEvent("error", {"error": "agent_login", "detail": _(
             "Claude Code (used by project sessions) is not logged in, or its credentials have expired (the platform's "
             "agent-hub/claude-login sends an alert). {raw}", raw=raw)})
@@ -575,7 +601,8 @@ def classify_exit(code, stderr_tail: str) -> StreamEvent:
 
 
 def resumable(sid: str) -> bool:
-    """接得回來 = 對話紀錄還在(Claude Code 要跑完第一輪才寫出來,保留期限過了也會被清掉)。"""
+    """Resumable = the transcript still exists (Claude Code writes it only after the first turn finishes, and it's
+    cleaned up once the retention period passes)."""
     return transcript(sid) is not None
 
 
@@ -586,7 +613,8 @@ def resume_command(sid: str) -> tuple:
 
 
 def neutral_question(inp: dict) -> dict:
-    """AskUserQuestion 的 input → 通用的提問結構 {questions: [{question, options: [{label, description?}], multi}]}。"""
+    """AskUserQuestion's input → the generic question structure {questions: [{question, options: [{label,
+    description?}], multi}]}."""
     qs = []
     for q in (inp or {}).get("questions") or []:
         opts = [{"label": o.get("label", ""), **({"description": o["description"]} if o.get("description") else {})}
@@ -596,14 +624,16 @@ def neutral_question(inp: dict) -> dict:
 
 
 def native_answers(answers: dict) -> dict:
-    """通用的答案 {問題: label 或 [label…]} → AskUserQuestion 要的 {問題: "label"}(多選用逗號接起來)。"""
+    """Generic answers {question: label or [label…]} → the {question: "label"} AskUserQuestion wants (multiple
+    choices joined with commas)."""
     return {q: (", ".join(a) if isinstance(a, list) else a) for q, a in (answers or {}).items()}
 
 
-# ---------- auth(第 6 層,登入)----------
-# 三份登入:訂閱登入(keychain,launchd 底下讀得到,SSH 底下讀不到)、headless token(`claude setup-token`,一年,
-# 無人值守用的預設)、~/.claude/.credentials.json(SSH 底下互動的 claude 用)。路徑在呼叫時才算(測試換 HOME 就換掉)。
-# 不讀、不印任何值,只有 auth_env 把 token 放進要交給 claude 的環境變數。
+# ---------- auth (layer 6, login) ----------
+# Three logins: the subscription login (keychain; readable under launchd, not under SSH), the headless token (`claude
+# setup-token`, one year, the default for unattended use), ~/.claude/.credentials.json (for interactive claude under
+# SSH). Paths are computed at call time (tests swapping HOME swap them).
+# No value is ever read or printed; only auth_env puts the token into the environment variables handed to claude.
 
 from runtime_ports import Credential  # noqa: E402
 
@@ -625,7 +655,7 @@ def clean_env(env) -> dict:
 
 def auth_env(mode: str, env) -> tuple:
     out = clean_env(env)
-    if mode != "token":  # subscription:不帶 token,claude 自己用 keychain 的登入
+    if mode != "token":  # subscription: no token; claude uses the keychain login itself
         return out, ""
     f = _token_file()
     if not f.is_file():
@@ -663,7 +693,8 @@ def credentials() -> list:
 
 
 def is_login_error(text: str) -> bool:
-    """claude 的登入錯誤(Login expired、/login、401、OAuth…);找不到 claude 本身也要人處理,一起算。"""
+    """claude's login errors (Login expired, /login, 401, OAuth…); claude itself not being found also needs a person,
+    so it counts too."""
     text = text or ""
     # the not-found message comes from another process (llm.py's JSON), maybe in another language: the English msgid,
     # this UI language's text, or the zh-Hant text from before the catalog
@@ -671,8 +702,9 @@ def is_login_error(text: str) -> bool:
 
 
 def relocate(sid: str, old_cwd: str, new_cwd: str) -> bool:
-    """資料夾搬了(改名、升級):Claude Code 的對話紀錄照資料夾的 slug 放,`--resume` 只在目前資料夾的那格找——
-    把 <sid>.jsonl(跟子 agent 的 <sid>/)搬到新資料夾那格。已經在新的地方 = True;哪裡都找不到 = False。"""
+    """The folder moved (rename, upgrade): Claude Code stores transcripts by the folder's slug, and `--resume` looks
+    only in the current folder's slot, so move <sid>.jsonl (and the subagents' <sid>/) to the new folder's slot.
+    Already in the new place = True; found nowhere = False."""
     import shutil
     if not re.fullmatch(r"[0-9a-f-]{36}", sid or ""):
         return False
@@ -688,9 +720,10 @@ def relocate(sid: str, old_cwd: str, new_cwd: str) -> bool:
     return True
 
 
-# ---------- completion(runtime_ports 的 completion 介面;docs/design/llm-providers.md)----------
-# 判斷點的「只回答案」交給 Claude Code 跑:關掉所有工具、不載入任何 MCP、不留 session;prompt 從 stdin 給(argv 有長度上限,
-# 「放得下就全放」的 prompt 會超過);在空的暫存目錄跑——在專案副本裡跑會觸發專案自己的 hook(librarian 記過這個坑)。
+# ---------- completion (runtime_ports' completion interface; docs/design/llm-providers.md) ----------
+# A judgment point's "answer only", run by Claude Code: all tools off, no MCP loaded, no session kept; the prompt goes
+# in through stdin (argv has a length limit, and "put it all in if it fits" prompts exceed it); runs in an empty temp
+# directory: running in a project copy would trigger the project's own hooks (the librarian hit that one).
 
 from runtime_ports import CompletionResult  # noqa: E402
 
@@ -715,7 +748,7 @@ def complete(req, conf) -> CompletionResult:
     env, why = auth_env(conf.get("auth") or "token", os.environ)
     if env is None:
         return CompletionResult(False, stop="error", error=why)
-    env["HUB_LLM_POINT"] = req.point   # 叫起的程序(含它的 hook)知道自己是平台的 headless 呼叫
+    env["HUB_LLM_POINT"] = req.point   # the process started (hooks included) knows it's a platform headless call
     env = _env(type("T", (), {"env": env})())
     with tempfile.TemporaryDirectory(prefix="hub-completion-") as cwd:
         try:
@@ -743,7 +776,8 @@ def complete(req, conf) -> CompletionResult:
 
 
 def health(conf) -> tuple:
-    """不打請求(每小時的 claude-login 已經實際打過):claude 在不在、要用的登入在不在。"""
+    """No request made (the hourly claude-login already makes real ones): whether claude is there and whether the login
+    to use is there."""
     import shutil
     if not shutil.which(_exe()) and not pathlib.Path(_exe()).is_file():
         return False, _(NOT_FOUND)

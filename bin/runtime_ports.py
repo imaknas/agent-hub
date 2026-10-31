@@ -1,54 +1,89 @@
-"""執行環境的介面(ports):平台只依賴這裡定義的東西,Claude Code 只是一個實作。設計:docs/design/runtime-abstraction.md。
+"""The runtime's interfaces (ports): the platform depends only on what is defined here; Claude Code is just one
+implementation. Design: docs/design/runtime-abstraction.md.
 
-一個實作 = 一個模組(`runtime_<名稱>.py`),提供下面各介面要求的函式;Strategy 選的是「用哪個模組」。
-`load()` 會**機械檢查**模組有沒有提供每個函式,缺了就拒絕載入;契約測試(tests/test_runtime_contracts.py)
-從 RUNTIMES 自動找出所有實作來跑,第三個實作加進來不可能沒跑過契約測試。
+One implementation = one module (`runtime_<name>.py`) providing the functions each interface below requires; the
+Strategy chooses "which module". `load()` **checks mechanically** that the module provides every function and refuses
+to load it if any is missing; the contract tests (tests/test_runtime_contracts.py) find every implementation from
+RUNTIMES automatically, so a third implementation can't be added without going through the contract tests.
 
-目前的介面(其他層照設計文件的步驟一層一層加):
-  transcripts(第 5 層):讀對話紀錄,用中立的格式
-    turns(paths, since, until=None, worktrees=False) -> Iterator[Turn]   某個專案(它的工作目錄,可能好幾個)在時間範圍內的每一則;
-                                                        worktrees=True 連 runtime 在這些工作目錄底下開的 worktree 裡的 session 也算
-    last_activity(path) -> datetime | None              這個工作目錄最後一次有對話是什麼時候
-  agent(第 1 層,跑一次):
-    run(task: Task) -> TaskResult                       跑一次判斷點(prompt、工作目錄、模型、輸出 schema、逾時)
-    describe(task: Task) -> list[str]                   會怎麼跑(給 llm.py --dry-run 看;內容是 runtime 自己的)
-    失敗政策(on_failure、job.failed、schema 驗證、成本累計)留在 llm.py,不在 runtime 裡(設計原則 10)。
-    Task.spec 是判斷點的宣告(contracts/llm-points.yaml);裡面還有 Claude 專用的欄位(allowed_tools、permission_mode…),
-    要等第 2 層的中立政策(另一個 session)定案才換掉——在那之前只有 runtime 自己讀這些欄位,llm.py 不讀。
-  lifecycle(第 3 層,事件):平台自己的事件名稱(EVENTS),各 runtime 把原生的 hook 接到 `bin/hub-event <事件>`
-    parse_event(event, raw) -> HubEvent | None          原生的 hook 輸入 → 中立的事件(不是真的 session 在跑就 None)
-    inject(event, text) -> str                           要放進 agent context 的文字 → 原生的輸出格式(這個事件不能放就 "")
-    deny(event, reason) -> str                           擋下這個動作 → 原生的輸出格式
-    install_lifecycle(workspace) -> None                 在這個專案裝好 hook(平台管的換成新的,使用者自己加的留著)
-  instructions(第 4 層,規則檔):規則跟 memory 說明寫到 runtime 會讀的哪個檔(內容是平台的,templates/)
-    instructions_file(workspace) -> Path                 平台受管區塊要寫進的檔(不進版控)
-    local_ignores() -> list[str]                         這個 runtime 的本機專用檔(相對專案資料夾),要加進 .git/info/exclude
-                                                         (.agent-memory 是平台自己的,不在這裡)
-  sessions(第 1 層的一部分):
-    alive(sid) -> bool、live_sessions() -> set[str]、context_size(sid) -> int | None(接續要載入多少 token)
-    current_session(env) -> str | None                   目前這個程序屬於哪個 session(給 hubbus send 記寄件人)
-  auth(第 6 層,登入):平台只說「用哪種登入」(mode:token = 無人值守用的長期憑證、subscription = 互動登入,
-  要 connector 的 job 用;名稱沿用 contracts/llm-points.yaml 的 auth 欄位),憑證放哪、環境變數叫什麼是 runtime 的事
-    auth_env(mode, env) -> (env | None, reason)          這種登入要給 agent 的環境變數(從 env 出發,先清掉這個
-                                                         runtime 自己的憑證變數);憑證不在就 (None, 給人看的原因)
-    clean_env(env) -> dict                               拿掉這個 runtime 的憑證變數(交給別人之前、或要用預設登入時)
-    credentials() -> list[Credential]                   這台機器上有哪些登入、在不在、什麼時候到期(不讀值、不印值)
-    is_login_error(text) -> bool                         這個錯誤訊息是登入的問題嗎(要人去處理),還是別的(逾時、額度…)
-  completion(判斷點的「只回答案」;docs/design/llm-providers.md):模型沒有工具、不碰檔案
-    complete(req: CompletionRequest, conf: dict) -> CompletionResult   conf = hub.json llm.providers 裡這一家的設定
-                                                        (key 由 completion.py 讀好放在 conf["_key"],實作不自己找憑證)
-    health(conf) -> (ok, reason)                         最小的檢查(不花 token 的優先,例:列模型)
-    除了 runtime(Claude Code 關掉工具跑),只會 completion 的 provider 也是這個介面的實作(PROVIDERS)。
-    JSON 的解析、驗證、重試、截斷、退避、記帳在 completion.py,不在實作裡。
-  stream(長駐 session 的輸出翻譯;docs/design/lease-contract-neutral.md):
-    action(tool, input) -> (kind, collab, target, summary)   工具 → KINDS/COLLABS;target 給判斷用,summary 給人看
-    parse_stream(line) -> list[StreamEvent]             runtime 原生的一行輸出 → 中立的對話事件
-    classify_exit(code, stderr_tail) -> StreamEvent      程序結束了:沒登入(agent_login)還是掛了(process_crashed)
-    resumable(sid) -> bool                               這段對話還接得回來嗎(紀錄還在)
-    resume_command(sid) -> (command, hint)               在終端機接續的指令跟給人看的一句
-    relocate(sid, old_cwd, new_cwd) -> bool              專案資料夾搬了(改名、升級):讓這段對話在新資料夾也接得回來
+The current interfaces (the other layers get added one at a time, following the design doc's steps):
+  transcripts (layer 5): read conversation records in a neutral format
+    turns(paths, since, until=None, worktrees=False) -> Iterator[Turn]   every entry of a project (its working
+                                                        directories, maybe several) within the time range;
+                                                        worktrees=True also counts sessions in worktrees the runtime
+                                                        opened under those working directories
+    last_activity(path) -> datetime | None              when this working directory last had a conversation
+  agent (layer 1, a single run):
+    run(task: Task) -> TaskResult                       run a judgment point once (prompt, working directory, model,
+                                                        output schema, timeout)
+    describe(task: Task) -> list[str]                   how it would run (for llm.py --dry-run; the content is the
+                                                        runtime's own)
+    The failure policy (on_failure, job.failed, schema validation, cost accounting) stays in llm.py, not in the
+    runtime (design principle 10).
+    Task.spec is the judgment point's declaration (contracts/llm-points.yaml); it still has Claude-specific fields
+    (allowed_tools, permission_mode…), to be replaced once layer 2's neutral policy (another session) is settled;
+    until then only the runtime itself reads those fields, llm.py doesn't.
+  lifecycle (layer 3, events): the platform's own event names (EVENTS); each runtime wires its native hooks to
+  `bin/hub-event <event>`
+    parse_event(event, raw) -> HubEvent | None          native hook input → a neutral event (None if no real session
+                                                        is running)
+    inject(event, text) -> str                           text to put into the agent's context → the native output
+                                                         format ("" if this event can't take it)
+    deny(event, reason) -> str                           block this action → the native output format
+    install_lifecycle(workspace) -> None                 install the hooks in this project (the platform's replaced
+                                                         with new ones, the user's own kept)
+  instructions (layer 4, rules file): which file the runtime reads that the rules and memory notes go into (the
+  content is the platform's, templates/)
+    instructions_file(workspace) -> Path                 the file the platform-managed block is written into
+                                                         (untracked)
+    local_ignores() -> list[str]                         this runtime's local-only files (relative to the project
+                                                         folder), to add to .git/info/exclude
+                                                         (.agent-memory is the platform's own, not listed here)
+  sessions (part of layer 1):
+    alive(sid) -> bool, live_sessions() -> set[str], context_size(sid) -> int | None (how many tokens resuming would
+    load)
+    current_session(env) -> str | None                   which session the current process belongs to (for hubbus
+                                                         send to record the sender)
+  auth (layer 6, login): the platform says only "which kind of login" (mode: token = a long-lived credential for
+  unattended use, subscription = the interactive login, for jobs that need connectors; the names follow the auth field
+  of contracts/llm-points.yaml); where the credentials are and what the environment variables are called is the
+  runtime's business
+    auth_env(mode, env) -> (env | None, reason)          the environment variables to give the agent for this kind of
+                                                         login (starting from env, with this runtime's own credential
+                                                         variables cleared first); credentials missing →
+                                                         (None, a reason for a person to read)
+    clean_env(env) -> dict                               remove this runtime's credential variables (before handing
+                                                         over to someone else, or to use the default login)
+    credentials() -> list[Credential]                   which logins this machine has, whether present, when they
+                                                        expire (values never read or printed)
+    is_login_error(text) -> bool                         whether this error message is a login problem (a person has
+                                                         to deal with it) or something else (timeout, quota…)
+  completion (a judgment point's "answer only"; docs/design/llm-providers.md): the model has no tools and touches no
+  files
+    complete(req: CompletionRequest, conf: dict) -> CompletionResult   conf = this provider's settings in hub.json
+                                                        llm.providers (the key is read by completion.py and put in
+                                                        conf["_key"]; implementations don't look for credentials)
+    health(conf) -> (ok, reason)                         the smallest check (preferably one that spends no tokens, e.g.
+                                                         listing models)
+    Besides runtimes (Claude Code run with its tools off), providers that only do completion also implement this
+    interface (PROVIDERS).
+    JSON parsing, validation, retries, truncation, backoff and accounting are in completion.py, not in the
+    implementations.
+  stream (translating a long-running session's output; docs/design/lease-contract-neutral.md):
+    action(tool, input) -> (kind, collab, target, summary)   tool → KINDS/COLLABS; target is for judging, summary for
+                                                             people
+    parse_stream(line) -> list[StreamEvent]             one line of the runtime's native output → neutral conversation
+                                                        events
+    classify_exit(code, stderr_tail) -> StreamEvent      the process ended: not logged in (agent_login) or crashed
+                                                         (process_crashed)
+    resumable(sid) -> bool                               whether this conversation can still be resumed (its record
+                                                         still exists)
+    resume_command(sid) -> (command, hint)               the command to resume it in a terminal and a sentence for
+                                                         people
+    relocate(sid, old_cwd, new_cwd) -> bool              the project folder moved (rename, upgrade): make this
+                                                         conversation resumable in the new folder too
 
-標準函式庫,系統的 python3(3.9)也能 import(hubbus 用的就是它)。
+Standard library only; the system python3 (3.9) can import it too (hubbus uses that one).
 """
 from __future__ import annotations
 
@@ -61,10 +96,12 @@ import i18n
 
 _ = i18n.domain(__file__)
 
-# 登記表:名稱 → 模組。多個 runtime 可以同時登記,每個 session 用它自己的(設計原則 9)。
+# Registration table: name → module. Several runtimes can be registered at once; each session uses its own (design
+# principle 9).
 RUNTIMES = {"claude": "runtime_claude", "fake": "runtime_fake", "none": "runtime_none", "command": "runtime_command"}
-DEFAULT = "claude"   # hub.json 沒寫 runtime.default 時的預設
-# 只實作 completion 介面的(LLM API):hub.json llm.providers 的 impl 寫這些名稱,或任何有 completion 介面的 runtime 名稱
+DEFAULT = "claude"   # the default when hub.json has no runtime.default
+# those implementing only the completion interface (LLM APIs): hub.json llm.providers' impl names these, or the name of
+# any runtime with a completion interface
 PROVIDERS = {"anthropic": "provider_anthropic", "openai": "provider_openai", "ollama": "provider_ollama"}
 
 # Owner-facing names of the ports (Unsupported reasons, doctor's capability table). PORT_LABELS / FEATURES are built
@@ -110,7 +147,7 @@ def or_list(items) -> str:
 
 
 def feature_table(name: str | None = None) -> list[tuple[str, bool, str]]:
-    """(功能, 能不能用, 缺什麼)——缺的用 PORT_LABELS 的名稱。"""
+    """(feature, usable or not, what's missing): what's missing uses PORT_LABELS' names."""
     have, labels = capabilities(name), port_labels()
     return [(f, not (miss := [labels[p] for p in need if p not in have]), or_list(miss)) for f, need in features()]
 
@@ -126,103 +163,118 @@ PORTS = {
     "completion": ("complete", "health"),
 }
 
-# 中立的「動作種類」:對話紀錄裡 agent 做了什麼,不用任何 runtime 的工具名稱。
+# Neutral "kinds of action": what the agent did in a conversation record, without any runtime's tool names.
 
 
-# 平台的事件(第 3 層)。runtime 沒有某個時機就不支援,平台照不支援處理,不假裝有。
+# The platform's events (layer 3). A runtime without a given moment doesn't support it; the platform treats it as
+# unsupported rather than pretending.
 EVENTS = ("session_start", "session_end", "pre_compact", "prompt", "tool_used", "open_session_attempt")
 
 
 class HubEvent(NamedTuple):
-    event: str               # EVENTS 之一
-    session: str             # 哪個 session
-    cwd: str                 # 這個 session 在哪個資料夾
-    command: str | None = None   # tool_used:跑了什麼指令(目前只接「跑指令」這種工具)
-    target: dict | None = None   # open_session_attempt:想在哪裡開 {"cwd": 路徑或 None, "elsewhere": 種類或 None}
-                                 # elsewhere = {"kind": "repository", "name"} | {"kind": "machine"} | {"kind": "unknown_place"}
+    event: str               # one of EVENTS
+    session: str             # which session
+    cwd: str                 # which folder this session is in
+    command: str | None = None   # tool_used: the command run (for now only "run a command" tools are wired up)
+    # open_session_attempt: where it wants to open {"cwd": path or None, "elsewhere": kind or None}
+    # elsewhere = {"kind": "repository", "name"} | {"kind": "machine"} | {"kind": "unknown_place"}
+    target: dict | None = None
 
 
-# 動作的效果(docs/design/lease-contract-neutral.md):全平台只有這一套——租約的事件、權限(approvals)、
-# 判斷點宣告、對話紀錄統計都用它,不各自取名。哪個工具算哪種由各 runtime 的 action() 翻譯。
+# Effects of actions (docs/design/lease-contract-neutral.md): the only set in the whole platform: lease events,
+# permissions (approvals), judgment point declarations and transcript statistics all use it rather than naming things
+# their own way. Each runtime's action() translates which tool counts as which.
 KINDS = ("read", "search", "ask_user", "open_web", "write_file", "run_command", "other")
-# 協作方式(跟效果是不同的維度):交給子 agent、跑 workflow、跨 session 傳訊息、用技能;其他動作是 None。
+# Collaboration kinds (a different dimension from effects): handing off to a subagent, running a workflow, messaging
+# across sessions, using a skill; other actions are None.
 COLLABS = ("subagent", "workflow", "peer_message", "skill")
 
 
 class Action(NamedTuple):
-    kind: str            # KINDS 之一(效果:讀、搜尋、問人、開網頁、寫檔、跑指令、其他)
-    detail: str = ""     # 技能名稱(collab 是 skill 時);不放任何 runtime 的工具名稱
-    collab: str | None = None   # COLLABS 之一或 None
+    kind: str            # one of KINDS (effects: read, search, ask a person, open a web page, write a file, run a
+                         # command, other)
+    detail: str = ""     # the skill name (when collab is skill); never any runtime's tool name
+    collab: str | None = None   # one of COLLABS, or None
 
 
-# 對話事件(長駐 session 的輸出;租約契約 v2 的事件就是這個形狀)。跟 HubEvent(hook 事件)是兩回事。
+# Conversation events (a long-running session's output; the lease contract v2's events have exactly this shape). Not the
+# same thing as HubEvent (hook events).
 STREAM_TYPES = ("text_delta", "assistant", "tool_use", "tool_result", "turn_end", "quota", "error")
 QUOTA_STATUS = ("ok", "warning", "exhausted")
 
 
 class StreamEvent(NamedTuple):
-    """type 是 STREAM_TYPES 之一;data 是中立的欄位(見 contracts/lease-runner.v2.schema.json),`_` 開頭的鍵是給 runner 的
-    內部訊號(例:`_detach`),不會送出去。"""
+    """type is one of STREAM_TYPES; data holds the neutral fields (see contracts/lease-runner.v2.schema.json); keys
+    starting with `_` are internal signals for the runner (e.g. `_detach`) and are never sent out."""
     type: str
     data: dict
 
 
 class Turn(NamedTuple):
-    ts: datetime.datetime    # aware,UTC
+    ts: datetime.datetime    # aware, UTC
     session: str
-    role: str                # "human"(使用者實際送出的)| "assistant" | "other"(工具結果、系統訊息、別的 session 傳來的…)
-    text: str = ""           # role == human 時是他打的字
-    actions: tuple = ()      # role == assistant 時,這一則做了哪些 Action
+    role: str                # "human" (what the user actually sent) | "assistant" | "other" (tool results, system
+                             # messages, messages from other sessions…)
+    text: str = ""           # for role == human, what they typed
+    actions: tuple = ()      # for role == assistant, which Actions this entry did
 
 
 class Credential(NamedTuple):
-    """一份登入(第 6 層)。字句欄位是給人看的(警報、檢查輸出),平台照它們組句子;門檻是這份憑證自己的性質。"""
-    name: str                    # 短名稱(檢查輸出的「…:ok」)
-    label: str                   # 壞了時的主詞
-    mode: str | None             # 實際打請求檢查時用哪種登入;None = 不能打請求檢查(只看到期)
-    present: bool                # 在不在(看不到的登入,例:keychain,當作在,只能靠打請求確認)
-    renew: str                   # 怎麼重新登入(給人做的)
-    path: str | None = None      # 憑證檔在哪(只給人看)
-    since: datetime.datetime | None = None          # 什麼時候產生的(看年紀用)
-    max_age: datetime.timedelta | None = None       # 超過就提醒換
-    lifetime: str | None = None                     # 「一年」之類,給人看
-    expires: datetime.datetime | None = None        # 什麼時候到期
-    warn_before: datetime.timedelta | None = None   # 到期前多久提醒
-    used_by: str | None = None                      # 誰在用(給人看;平台知道的用途由平台自己說)
-    note: str | None = None                         # 檢查時要印的說明(例:看不出到期日)
+    """One login (layer 6). The wording fields are for people (alerts, check output), and the platform builds sentences
+    from them; the thresholds are properties of this credential itself."""
+    name: str                    # short name (the "…: ok" in the check output)
+    label: str                   # the subject when it's broken
+    mode: str | None             # which login a real request check uses; None = can't be checked with a request
+                                 # (expiry only)
+    present: bool                # whether it's there (logins that can't be seen, e.g. the keychain, count as present;
+                                 # only a request confirms)
+    renew: str                   # how to log in again (for a person to do)
+    path: str | None = None      # where the credential file is (only shown to people)
+    since: datetime.datetime | None = None          # when it was created (for its age)
+    max_age: datetime.timedelta | None = None       # remind to replace it after this
+    lifetime: str | None = None                     # something like "one year", for people
+    expires: datetime.datetime | None = None        # when it expires
+    warn_before: datetime.timedelta | None = None   # how long before expiry to remind
+    used_by: str | None = None                      # who uses it (for people; the platform states the uses it knows)
+    note: str | None = None                         # a note to print when checking (e.g. the expiry date can't be seen)
 
 
 class Task(NamedTuple):
-    point: str               # 判斷點名稱
+    point: str               # judgment point name
     prompt: str
-    spec: dict               # 判斷點的宣告(見上:暫時帶著 runtime 專用欄位)
+    spec: dict               # the judgment point's declaration (see above: carries runtime-specific fields for now)
     cwd: str | None = None
     model: str | None = None
     output_schema: dict | None = None
     timeout_s: int = 1200
-    env: dict | None = None  # 執行環境變數(已經套好登入:llm.py 用 auth 介面的 auth_env 算出來)
-    extra: tuple = ()        # 呼叫端多給的參數(例:租約交接要接續哪個 session)——之後由 resume 介面取代
+    env: dict | None = None  # the run's environment variables (login already applied: llm.py computes it with the auth
+                             # interface's auth_env)
+    extra: tuple = ()        # extra arguments from the caller (e.g. which session a lease handover resumes): to be
+                             # replaced by a resume interface
 
 
 class TaskResult(NamedTuple):
-    ok: bool                         # runtime 有沒有跑完並給出結果(結構化輸出合不合 schema 是 llm.py 判斷)
-    incomplete: bool = False         # 有結果,但 agent 回報這次沒有正常完成(例:回合上限)——不算失敗,呼叫端自己判斷
-    text: str = ""                   # 最後的回覆文字
+    ok: bool                         # whether the runtime ran to the end and gave a result (whether the structured
+                                     # output fits the schema is llm.py's call)
+    incomplete: bool = False         # there is a result, but the agent reports this run didn't finish normally (e.g.
+                                     # the turn limit): not a failure, the caller decides
+    text: str = ""                   # the final reply text
     structured_output: object = None
     cost_usd: float | None = None
     session_id: str | None = None
     turns: int | None = None
-    stop: str = ""                   # 結束的原因(runtime 自己的說法,只給 log 看)
-    denials: tuple = ()              # 被拒絕的動作
-    error: str = ""                  # ok 是 False 時的原因
+    stop: str = ""                   # why it ended (the runtime's own wording, only for the log)
+    denials: tuple = ()              # actions that were refused
+    error: str = ""                  # the reason when ok is False
 
 
 class CompletionRequest(NamedTuple):
-    """completion 介面的一次請求(docs/design/llm-providers.md):模型沒有工具、不碰檔案,只回文字或合 schema 的 JSON。"""
-    point: str                       # 哪個判斷點(log、記帳用)
+    """One request to the completion interface (docs/design/llm-providers.md): the model has no tools, touches no files,
+    returns only text or JSON matching the schema."""
+    point: str                       # which judgment point (for the log and accounting)
     prompt: str
-    model: str | None = None         # 這個實作自己的模型名稱(llm 設定的 provider.models 給的)
-    schema: dict | None = None       # 要的輸出 JSON schema;None = 文字
+    model: str | None = None         # this implementation's own model name (from provider.models in the llm settings)
+    schema: dict | None = None       # the output JSON schema wanted; None = text
     system: str | None = None
     max_tokens: int = 8192
     timeout_s: int = 600
@@ -230,27 +282,30 @@ class CompletionRequest(NamedTuple):
 
 class CompletionResult(NamedTuple):
     ok: bool
-    text: str = ""                   # 模型回的原文(JSON 也在這裡;解析、驗證、重試在 completion.py,不在實作裡)
-    stop: str = ""                   # COMPLETION_STOPS 之一
-    error: str = ""                  # ok 是 False 時的原因
+    text: str = ""                   # the model's raw reply (JSON is here too; parsing, validation, retries are in
+                                     # completion.py, not in implementations)
+    stop: str = ""                   # one of COMPLETION_STOPS
+    error: str = ""                  # the reason when ok is False
     input_tokens: int | None = None
     output_tokens: int | None = None
-    cost_usd: float | None = None    # 實作自己知道成本才填(例:Claude Code 會回);API 只回 token,成本由 completion.py 照價目算
-    retry_after_s: float | None = None   # stop 是 rate_limited 時,服務端建議等多久
+    cost_usd: float | None = None    # filled only if the implementation knows the cost itself (e.g. Claude Code returns
+                                     # it); APIs return only tokens, and completion.py prices them from the price list
+    retry_after_s: float | None = None   # when stop is rate_limited, how long the service suggests waiting
 
 
-# end = 正常結束;length = 被長度截斷(重試會原樣再截一次,不重試);refused = 模型拒絕;rate_limited = 429/529 之類,退避後重試;
-# error = 其他失敗
+# end = finished normally; length = truncated by length (a retry would truncate the same way, so no retry); refused =
+# the model refused; rate_limited = 429/529 and the like, retried after backing off; error = any other failure
 COMPLETION_STOPS = ("end", "length", "refused", "rate_limited", "error")
 
 
 class MissingFunctions(Exception):
-    """實作了一個介面的一部分函式:這是 bug,載入就拒絕。"""
+    """Part of an interface's functions implemented: that's a bug, refused at load time."""
 
 
 class Unsupported(Exception):
-    """這個 runtime 完全沒有這個介面(例:runtime_none、只會 completion 的轉接器):不是錯誤,是能力不足。
-    呼叫端照「不支援」處理——明確關掉那個功能、說出原因(str(e)),**不是拿空資料照跑**(docs/design/tool-agnostic.md 原則 3)。"""
+    """This runtime has no such interface at all (e.g. runtime_none, a completion-only adapter): not an error, a lack of
+    capability. Callers treat it as "unsupported": switch that feature off explicitly and say why (str(e)), **never run
+    on empty data** (docs/design/tool-agnostic.md principle 3)."""
 
 
 def _module(name: str):
@@ -260,14 +315,16 @@ def _module(name: str):
 
 
 def capabilities(name: str | None = None) -> set[str]:
-    """這個 runtime 有哪些介面:從它實作了哪些函式推出來,不另外宣告(宣告會跟實作不同步)。"""
+    """Which interfaces this runtime has: inferred from which functions it implements, not declared separately (a
+    declaration would drift from the implementation)."""
     mod = _module(name or default_name())
     return {p for p, fns in PORTS.items() if all(callable(getattr(mod, fn, None)) for fn in fns)}
 
 
 def models(name: str | None = None) -> dict:
-    """這個 runtime 的組別 → 模型(`MODELS`;判斷點的 model_group 是 fast/standard/strong)。沒寫的組 = 不指定模型,
-    用工具自己的預設。模型名稱只寫在轉接器裡(AGENTS.md「工具中立」)。"""
+    """This runtime's group → model (`MODELS`; a judgment point's model_group is fast/standard/strong). A group not
+    listed = no model given, the tool's own default. Model names are written only in adapters (AGENTS.md
+    "tool-neutral")."""
     return dict(getattr(_module(name or default_name()), "MODELS", None) or {})
 
 
@@ -280,8 +337,9 @@ def default_name() -> str:
 
 
 def load(name: str | None = None, ports=tuple(PORTS)):
-    """拿到一個 runtime 的模組。要求的介面只實作了一部分 → MissingFunctions(bug,不是等到呼叫時才壞);
-    完全沒有 → Unsupported(能力不足,呼叫端說原因、關掉功能)。"""
+    """Get a runtime's module. A requested interface only partly implemented → MissingFunctions (a bug, not something
+    that breaks only when called); entirely absent → Unsupported (lack of capability: the caller says why and switches
+    the feature off)."""
     name = name or default_name()
     mod = _module(name)
     absent = []
@@ -301,7 +359,8 @@ def load(name: str | None = None, ports=tuple(PORTS)):
 
 
 def load_completion(impl: str):
-    """hub.json llm.providers 的 impl → 實作 completion 介面的模組(provider,或有 completion 的 runtime)。"""
+    """hub.json llm.providers' impl → the module implementing the completion interface (a provider, or a runtime with
+    completion)."""
     if impl in PROVIDERS:
         mod = importlib.import_module(PROVIDERS[impl])
         missing = [fn for fn in PORTS["completion"] if not callable(getattr(mod, fn, None))]
@@ -315,8 +374,10 @@ def load_completion(impl: str):
 
 
 def current_session(env=None) -> str | None:
-    """目前這個程序屬於哪個 session:問預設的 runtime(現在是讀 Claude Code 給的環境變數)。
-    沒有 session 介面(runtime_none)= 不知道,不是錯誤:寄信、記在場照樣做,只是沒有寄件 session。"""
+    """Which session the current process belongs to: asks the default runtime (for now, reading the environment
+    variables Claude Code provides).
+    No session interface (runtime_none) = unknown, not an error: mail is sent and presence recorded as usual, just
+    without a sending session."""
     try:
         return load(ports=("sessions",)).current_session(os.environ if env is None else env)
     except Unsupported:
