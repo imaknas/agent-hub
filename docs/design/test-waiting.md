@@ -298,10 +298,14 @@ more merge states; decided after B6 has run for a week.
 - **muninn:** `-n 4` for the full unit suite, put in `runtime.test`, `deploy.sh` and the documented full-suite command
   — **not in `addopts`**, which would also slow every targeted run with worker start-up (corrected request sent
   10-31). Expected ~10 s per full run, from a single measurement. e2e already runs at `-n 4`.
-- **the-crucible:** asked to register a `runtime.test`; its answer hit the registry gap (2.4), and it is waiting for
-  B2's fix. Then: `pytest-xdist` for the backend (saving **assumed** about half, by analogy with muninn's measured 52%);
-  e2e per-worker backends and a built frontend are its own larger choice. Registering tests adds gate time it does not
-  pay today (merges take 1–2 s); that is the price of main being tested.
+- **the-crucible (done 10-31, its `b5e0d07`, measured by the project):** tests made parallel-safe (each test its own
+  database, uploads, vector store, env) and `pytest-xdist` added: 530 backend tests ~16 s serial, ~10 s at `-n 4`, ~11 s
+  at 14 workers, so `-n 4`. e2e against a production build instead of `next dev`: a full run 4.2 → 3.7 min including
+  the build, and the first-test compile timeouts are gone. Not done: a backend and fixture database per e2e worker (the
+  frontend's API URL is fixed at build time, and the live specs share one fixture database) — it waits for B2 to decide
+  when e2e runs. Its `runtime.test` (backend ruff + pytest `-n 4`, frontend tsc + eslint + jest; 17 s end to end) was
+  sent as a manifest.update and **rejected by the registry gap (2.4)**; it resends once B2's fix is in. Registering
+  tests adds ~17 s per merge that it does not pay today; that is the price of main being tested.
 - **The project that leaked test containers:** fixed 10-31.
 
 ## 6. The floor
@@ -313,13 +317,13 @@ must wait on unless a background gate (B7) hides it. Top-level, deduplicated, pe
 |---|---|---|---|
 | waiting now | 502 min | 103 min | 485 min |
 | targeted runs (kept) | 27 min | 25 min (+16 in subagents) | 51 min |
-| one full run per merge/commit, at today's measured speed | 227 × ~9 s (`-n 4`) ≈ 34 min | **assumed** ~79 × 15 s ≈ 20 min once it has a `runtime.test` | 266 × ~31 s ≈ 137 min, less after A3 |
+| one full run per merge/commit, at today's measured speed | 227 × ~9 s (`-n 4`) ≈ 34 min | ~79 × 17 s ≈ 22 min once its `runtime.test` is accepted | 266 × ~31 s ≈ 137 min, less after A3 |
 | e2e the agent needs while building UI (unknown share of 350 runs, at 28.7 s) | 0–170 min | **assumed** 0–35 min | — |
-| floor without B7 | **~60–230 min** | **~45–80 min** | **~190 min** |
+| floor without B7 | **~60–230 min** | **~47–82 min** | **~190 min** |
 | floor with every gate hidden (B7) | ~27–200 min | ~25–60 min | ~51 min |
 
 - Measured: run counts and durations (transcripts, deduplicated); muninn's suite timings (single runs).
-- Assumed: the-crucible's backend time per merge and its e2e share; that each merge needs exactly one full run (a cache
+- Assumed: the-crucible's e2e share; that each merge needs exactly one full run (a cache
   hit can make it zero; a failure makes it more); for agent-hub, one gate run per code commit.
 - Not counted: contention, which inflates the "now" row.
 
