@@ -6,15 +6,15 @@ GitHub remote, marked `type: idea` in the registry, at <workspace_root>/<name>. 
 has from the start (e.g. room-3d; decided by the owner on 2026-10-25, earlier limited to idea-<n>, existing ones still
 work): lowercase letters, digits and -, not clashing with the registry, a folder or a memory repo.
 Whether a project is an idea sandbox depends only on the registry's type: idea, not on the name. The registry also gets
-the purpose, `enforce: {{sandbox: true, work: true}}` (the real write block; work = deep talks may make changes, which idea
+the purpose, `enforce: {sandbox: true, work: true}` (the real write block; work = deep talks may make changes, which idea
 sandboxes have by default, 10-25 the owner) + the default capabilities (default_for in hub.json capabilities, e.g. gpu;
-docs/design/capabilities.md), `privacy: {{reflection: stats_only}}`, in the same commit as the registration (onboard's
+docs/design/capabilities.md), `privacy: {reflection: stats_only}`, in the same commit as the registration (onboard's
 ONBOARD_REGISTRY_EXTRA).
 
 Usage: create-idea-sandbox.py <name> <purpose>
 Output: the last line is one JSON object (lease-runner's POST /v1/sandboxes turns it straight into the response):
-  {{"result": "created"|"exists_same", "name"}}                              exit 0
-  {{"result": "bad_name"|"exists"|"too_many"|"create_failed", "detail", ...}}  exit 1
+  {"result": "created"|"exists_same", "name"}                              exit 0
+  {"result": "bad_name"|"exists"|"too_many"|"create_failed", "detail", ...}  exit 1
   too_many also carries limit, current.
 - Resend: same name and same purpose already registered → exists_same (the assistant resending after a timeout does
   not open a second one).
@@ -139,8 +139,7 @@ def create(name: str, purpose: str) -> int:
 
 def main(argv: list[str]) -> int:
     if len(argv) != 2:
-        # the docstring is a formatted msgid (its JSON braces are doubled): format() gives the text
-        print(_(__doc__).format().split("\n\n")[2], file=sys.stderr)
+        print(_(__doc__).split("\n\n")[2], file=sys.stderr)
         return 2
     lock = hubconf.STATE / "idea-sandbox.lock"
     lock.parent.mkdir(parents=True, exist_ok=True)

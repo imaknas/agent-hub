@@ -108,6 +108,10 @@ def shell_sources():
             yield f, text
 
 
+def messages_doc(text: str) -> str | None:
+    return ast.get_docstring(ast.parse(text), clean=False)
+
+
 class Catalogs(unittest.TestCase):
     def test_code_and_catalogs_match(self):
         problems, seen = [], {}
@@ -132,7 +136,9 @@ class Catalogs(unittest.TestCase):
                 used.add(msgid)
                 if CJK.search(msgid):
                     problems.append(f"{where}: msgid is not English: {msgid[:50]}")
-                if kws is not None and kws != placeholders(msgid) and (kws or placeholders(msgid)):
+                # _(__doc__) without keywords is returned unformatted: braces in a usage text (JSON examples) are text
+                if kws is not None and kws != placeholders(msgid) and (kws or placeholders(msgid)) \
+                        and not (not kws and msgid == messages_doc(text)):
                     problems.append(f"{where}: passes {sorted(kws)}, msgid has {sorted(placeholders(msgid))}")
                 for lang in LANGS:
                     cat = i18n.catalog(dom, lang)
