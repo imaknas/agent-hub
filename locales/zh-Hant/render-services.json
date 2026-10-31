@@ -16,5 +16,6 @@
  "services: everything matches the registry": "services:都跟登錄一致",
  "{label} ({project}): not loaded in launchd": "{label}({project}):launchd 沒有載入",
  "{label} ({project}): the keepalive service is not running (state = {state})": "{label}({project}):keepalive 的服務沒在跑(state = {state})",
- "The background services are all back to normal (render-services)": "背景服務都恢復正常了(render-services)"
+ "The background services are all back to normal (render-services)": "背景服務都恢復正常了(render-services)",
+ "{project} is sandboxed and {why}; its services are not run unsandboxed": "{project} 開了 sandbox,而 {why};它的服務不會在 sandbox 外跑"
 }

@@ -19,6 +19,8 @@ policy(name, doc, index) → {
   credentials:        user-level credential directories (Path); credential_files: credential files (Path); the
                       locations are in hub.json's credentials
   network:            domains that may be reached (platform defaults + the registry's network)
+  local_bind:         may listen on 127.0.0.1 (to test its own server before declaring it a service; 10-31 owner
+                      confirmed in the agent-hub session)
   platform_commands:  the only channel across the boundary (mailbox CLI, merge gate; Path: the old form, removed once
                       the rules files use platform_cli)
   platform_cli:       the same channels as agenthub subcommands on PATH (strings, e.g. "agenthub send")
@@ -82,6 +84,7 @@ def policy(name: str, doc: dict, index: dict) -> dict:
         "credentials": [hubconf.path(x) for x in hubconf.get("credentials.dirs", [])],
         "credential_files": [hubconf.path(x) for x in hubconf.get("credentials.files", [])],
         "network": DOMAINS + list(doc.get("network") or []),
+        "local_bind": True,
         "platform_commands": [hubconf.ROOT / "bin" / "hubbus", hubconf.ROOT / "bin" / "merge-branch"],
         "platform_cli": platform_cli(),
         "capabilities": list((doc.get("enforce") or {}).get("capabilities") or []),

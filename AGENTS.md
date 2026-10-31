@@ -348,6 +348,8 @@ memory tracking and runs nothing long-lived (most projects) needs nothing under 
   the platform's runner service `bin/cap-runner.py` under the platform's own Seatbelt profile (`bin/seatbelt.py`, which
   can block the Keychain; macOS only). Design in `docs/design/capabilities.md`.
   `type`/`enforce`/`network`/`allow_write`/`privacy` are security fields that `manifest.update` cannot change.
+  Such a project's own services and command jobs run sandboxed as well (`bin/sandboxed-run`, `seatbelt.service_profile`;
+  never unsandboxed: no Seatbelt means not run; `hub.json` `service_sandbox_exempt` holds a project back temporarily).
   Every model call goes through `bin/llm.py` (judgment points declared in `contracts/llm-points.yaml`, linted
   nightly); an unattended agent job that declares `allow:` in the registry does not stop to ask
 - **User-level tool settings** (e.g. Claude Code's `~/.claude/settings.json`) **are changed only when the owner confirms

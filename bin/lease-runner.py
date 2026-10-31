@@ -311,6 +311,11 @@ def preamble(project: str, mode: str = "discuss") -> str:
 - 這個專案可以用平台代跑的能力:{', '.join(caps)}。需要 GPU 的程式(例:Blender)在一般指令裡會被 sandbox 擋住,改用
   `{hub_run} --cap gpu -- <指令…>` 跑(在專案資料夾裡;一樣是一個要 Knas 確認的指令)。代跑的程式只能寫專案資料夾、
   不能連網路。輸出最後才一次出現;這次指令逾時中斷的話,工作照跑,用 `{hub_run} --wait <id>` 接回。"""
+    if mode == "work":
+        base += """
+- Anything that should keep running or needs a port: don't give the user commands to run it. Put it in the handover;
+  the project's session declares it under services: in its registry entry (a manifest.update to agent-hub, internal
+  to the platform, no owner approval needed) and the platform runs it as a service."""
     if doc.get("type") != "idea":
         return base
     return base + f"""

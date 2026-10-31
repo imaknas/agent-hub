@@ -1,0 +1,60 @@
+#!/bin/sh -c exec${IFS}"${0%/*}/py"${IFS}"$0"${IFS}"$@"
+"""Runs a sandboxed project's own service or command job under the platform's Seatbelt profile
+(seatbelt.service_profile): render-services puts it in front of the service's command, the scheduler in front of the
+job's. A project with enforce.sandbox gets its services and jobs through manifest.update without the owner's approval,
+so they must not run with more than the project's sessions have (no Keychain, no other projects, no platform state;
+writes only to its own folders, the bus and tool caches). Design: docs/design/capabilities.md.
+
+  sandboxed-run --project <name> --cwd <dir> [--port <n>] -- <argv…>
+
+The profile is computed fresh on every run (registry changes take effect on the next start). Fails closed: where the
+platform can't sandbox (not macOS, no sandbox-exec, the project unknown) it prints why and exits 78 without running
+the command; never runs it unsandboxed.
+"""
+from __future__ import annotations
+
+import argparse
+import os
+import pathlib
+import sys
+
+sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
+import hubconf  # noqa: E402
+
+EX_CONFIG = 78
+
+
+def refuse(why: str) -> int:
+    print(f"sandboxed-run: {why}; not run (a sandboxed project's service or job never runs unsandboxed)",
+          file=sys.stderr)
+    return EX_CONFIG
+
+
+def main(argv: list[str]) -> int:
+    ap = argparse.ArgumentParser(prog="sandboxed-run")
+    ap.add_argument("--project", required=True)
+    ap.add_argument("--cwd", required=True)
+    ap.add_argument("--port", type=int)
+    ap.add_argument("cmd", nargs=argparse.REMAINDER)
+    a = ap.parse_args(argv)
+    cmd = a.cmd[1:] if a.cmd[:1] == ["--"] else a.cmd
+    if not cmd:
+        return refuse("no command")
+    import policy
+    import registry
+    import seatbelt
+    if (why := seatbelt.can_sandbox()):
+        return refuse(why)
+    projects = hubconf.projects()
+    doc = projects.get(a.project)
+    if not doc:
+        return refuse(f"{a.project} is not in the registry")
+    pol = policy.policy(a.project, doc, {"projects": projects})
+    d = registry.dirs(doc)
+    dirs = [p for p in (d["runtime"], d["workspace"]) if p]
+    os.chdir(a.cwd)
+    os.execv(seatbelt.SANDBOX_EXEC, [seatbelt.SANDBOX_EXEC, "-p", seatbelt.service_profile(pol, dirs, a.port), *cmd])
+
+
+if __name__ == "__main__":
+    sys.exit(main(sys.argv[1:]))

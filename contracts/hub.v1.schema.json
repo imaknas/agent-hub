@@ -250,6 +250,11 @@
     "capabilities": {
       "type": "object"
     },
+    "service_sandbox_exempt": {
+      "type": "array",
+      "items": {"type": "string"},
+      "description": "sandboxed projects whose own services and command jobs still run unsandboxed, temporarily, until they stop reading platform credentials themselves (bin/sandboxed-run, seatbelt.sandboxed). Only the owner adds to it; a project can't (hub.json is the platform's)"
+    },
     "cap_runner": {
       "type": "object"
     },

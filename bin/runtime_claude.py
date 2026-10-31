@@ -108,7 +108,7 @@ def settings(pol: dict) -> tuple[dict, list[str], list[str]]:
             "allowWrite": list(pol["write"]),
             "denyRead": [_tilde(p) for p in pol["other_projects"]] + [_tilde(p) for p in pol["deny_read"]],
         },
-        "network": {"allowedDomains": list(pol["network"])},
+        "network": {"allowedDomains": list(pol["network"]), "allowLocalBinding": bool(pol.get("local_bind"))},
     }
     return sandbox, deny, allow
 

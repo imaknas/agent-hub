@@ -301,3 +301,27 @@ capabilities, locking security fields) → `61ff364` (seatbelt.py) → `92b2898`
 - **Not verified yet**: no real lease has run since lease-runner restarted; the extra line work mode adds to the prompt
   has only been seen in `preamble()`'s output, never walked through from the phone.
 - Reply to `muninn` `m10251527-a8e0`, `m10251437-1f92` closed.
+
+## 10-31: a sandboxed project's own services and jobs run sandboxed too
+
+The hole: a project's `manifest.update` adds `services:` and `jobs:` without the owner's approval (they are not security
+fields), and both ran outside any sandbox (launchd, the scheduler's shell). A sandboxed project could declare a service and
+run anything with the owner's full rights. The owner chose to run them sandboxed (instead of making them owner-approved
+fields), so projects can still set up their own services.
+
+- `bin/sandboxed-run --project <p> --cwd <dir> [--port <n>] -- <argv…>`: computes `seatbelt.service_profile` fresh on every
+  start and `exec`s `sandbox-exec -p`. render-services puts it in front of a sandboxed project's service command, the
+  scheduler (`registry.scheduler_jobs`) in front of its command jobs. Agent jobs already go through `llm.py`.
+- The profile is closer to a session's than to cap-run's: its runtime and workspace, the bus and tool caches
+  (`policy.write`) are writable; other projects, platform state, credentials (`~/.ssh`, `~/.claude`'s token…) and the
+  Keychain are not readable. Outbound network is open: Seatbelt can't filter by domain, so the registry's `network` list
+  is not enforced at this layer. Listening: only `expose.local_port` can be bound, and only connections arriving through
+  localhost are accepted (tested on the mini: LAN and tailnet addresses time out even when listening on 0.0.0.0;
+  inbound rules per port were unreliable, so inbound is `localhost:*` and the port limit sits on bind).
+- Fails closed: without Seatbelt (Linux, no `sandbox-exec`) render-services doesn't render the service (reported like a
+  command that can't be found) and `sandboxed-run` exits 78 without running anything.
+- `hub.json` `service_sandbox_exempt`: projects held back temporarily, owner's decision. The first one on it
+  (its job reads `~/.claude/headless-oauth-token` itself, its service's `git pull` needs `~/.ssh`) until it moves its model
+  calls to the platform and stops reading credentials.
+- Sessions of sandboxed projects may bind 127.0.0.1 (`policy.local_bind` → `allowLocalBinding`; owner confirmed 10-31 in
+  the agent-hub session), so a server can be tested before it's declared.

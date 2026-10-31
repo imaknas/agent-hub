@@ -1,6 +1,9 @@
 #!/bin/sh -c exec${IFS}"${0%/*}/py"${IFS}"$0"${IFS}"$@"
-"""The macOS Seatbelt profile for the platform's run service (cap-runner): neutral policy (policy.py) + capability
-(capabilities/<name>.sb) → SBPL text.
+"""The macOS Seatbelt profiles the platform applies itself: neutral policy (policy.py) → SBPL text. Two kinds:
+  profile(pol, cap)                      cap-runner's run jobs (+ capabilities/<name>.sb), described below
+  service_profile(pol, dirs, port)       a sandboxed project's own services and command jobs (bin/sandboxed-run):
+                                         its folders, the bus and caches writable, outbound network open, only the
+                                         declared port listening
 
 Not through any agent: a second layer can't be applied inside the runtime's sandbox (tested 10-25:
 `sandbox_apply: Operation not permitted`), so this profile is applied only by cap-runner, outside the sandbox, with
@@ -36,6 +39,31 @@ NO_EXEC = ["/usr/bin/open", "/usr/bin/osascript", "/bin/launchctl", "/usr/bin/cr
            "/usr/bin/security"]
 
 
+SANDBOX_EXEC = "/usr/bin/sandbox-exec"
+
+
+def can_sandbox() -> str | None:
+    """None when this system can apply these profiles; otherwise why not (the caller refuses instead of running
+    unsandboxed)."""
+    import os
+    if sys.platform != "darwin" or not os.access(SANDBOX_EXEC, os.X_OK):
+        return f"this system has no Seatbelt ({sys.platform})"
+    return None
+
+
+def sandboxed(doc: dict) -> bool:
+    """The project's own services and command jobs run under service_profile (bin/sandboxed-run). hub.json's
+    service_sandbox_exempt holds projects back temporarily (owner's decision, until they're fixed)."""
+    return (doc.get("enforce") or {}).get("sandbox") is True \
+        and doc.get("name") not in hubconf.get("service_sandbox_exempt", [])
+
+
+def wrap(project: str, cwd, argv: list[str], port: int | None = None) -> list[str]:
+    """argv → the same command through bin/sandboxed-run."""
+    return [*hubconf.launch(hubconf.ROOT / "bin" / "sandboxed-run"), "--project", project, "--cwd", str(cwd),
+            *(["--port", str(int(port))] if port else []), "--", *argv]
+
+
 def q(p) -> str:
     """An SBPL string literal."""
     return '"' + str(p).replace("\\", "\\\\").replace('"', '\\"') + '"'
@@ -65,24 +93,18 @@ def read_denies(pol: dict) -> list[str]:
     return out
 
 
-def profile(pol: dict, cap: str) -> str:
-    ws = pathlib.Path(pol["workspace"]).resolve()
-    lines = [
-        "(version 1)",
-        f"; agent-hub 平台代跑:能力 {cap}(bin/seatbelt.py 產生,每次執行現算;不要手改)",
-        "(allow default)",
-        "; 網路:完全不通(含本機跟 unix socket)",
-        "(deny network-outbound (remote ip))",
-        "(deny network-outbound (remote unix-socket))",
-        "(deny network-inbound (local ip))",
-        "(deny network-bind)",
-        "; 寫入:只准專案資料夾跟暫存區(後面的 allow 優先)",
+def _isolation(pol: dict, writable: list[pathlib.Path], writable_extra: list[str] = ()) -> list[str]:
+    """What both kinds share: writes only to `writable` + the temp area, reads blocked for other projects, platform
+    state and credentials (own folders allowed again), Keychain services, other processes, launching outside."""
+    own = [f"(subpath {q(w)})" for w in writable]
+    return [
+        "; 寫入:只准自己的資料夾跟暫存區(後面的 allow 優先)",
         '(deny file-write* (subpath "/"))',
-        "(allow file-write* " + " ".join([f"(subpath {q(ws)})", *[f"(subpath {q(t)})" for t in TMP],
+        "(allow file-write* " + " ".join([*own, *writable_extra, *[f"(subpath {q(t)})" for t in TMP],
                                           *[f"(literal {q(d)})" for d in DEVICES]]) + ")",
         "; 讀取:別的專案、服務、平台狀態、憑證、Keychain 檔案;自己的資料夾放行",
         "(deny file-read* " + " ".join(read_denies(pol)) + ")",
-        f"(allow file-read* (subpath {q(ws)}))",
+        "(allow file-read* " + " ".join(own + list(writable_extra)) + ")",
         "; Keychain 的系統服務",
         "(deny mach-lookup " + " ".join(f"(global-name {q(s)})" for s in KEYCHAIN_SERVICES) + ")",
         "; 不准請別的系統服務在 sandbox 外替它啟動程式、不准碰別的程序",
@@ -94,11 +116,53 @@ def profile(pol: dict, cap: str) -> str:
         "(allow process-info* (target same-sandbox))",
         "(deny signal)",
         "(allow signal (target same-sandbox))",
+    ]
+
+
+def profile(pol: dict, cap: str) -> str:
+    ws = pathlib.Path(pol["workspace"]).resolve()
+    lines = [
+        "(version 1)",
+        f"; agent-hub 平台代跑:能力 {cap}(bin/seatbelt.py 產生,每次執行現算;不要手改)",
+        "(allow default)",
+        "; 網路:完全不通(含本機跟 unix socket)",
+        "(deny network-outbound (remote ip))",
+        "(deny network-outbound (remote unix-socket))",
+        "(deny network-inbound (local ip))",
+        "(deny network-bind)",
+        *_isolation(pol, [ws]),
         f"; ---------- 能力 {cap}(capabilities/{cap}.sb)----------",
         fragment(cap).rstrip(),
         "",
     ]
     return "\n".join(lines)
+
+
+def service_profile(pol: dict, dirs: list[pathlib.Path], port: int | None = None) -> str:
+    """A sandboxed project's own service or command job (bin/sandboxed-run): like a session of that project, not like
+    cap-run. dirs = its runtime and workspace (read and write); the bus directory and tool caches in policy.write
+    may be written too (agenthub send works, dependencies install). Network: outbound is open: Seatbelt can't filter
+    by domain, so the project's network list is not enforced at this layer (what this layer guarantees is the files,
+    Keychain and processes); listening only on the port the service declares in expose.local_port, and only
+    connections through localhost are accepted (not from the LAN or the tailnet directly: tailscale serve)."""
+    extra = [f"(subpath {q(hubconf.path(w))})" for w in pol["write"]]
+    lines = [
+        "(version 1)",
+        "; agent-hub: a sandboxed project's own service or job (generated by bin/seatbelt.py on every run; don't edit)",
+        "(allow default)",
+        "; network: outbound open (Seatbelt can't filter by domain); listening only on the declared port",
+        "(deny network-bind)",
+        "(deny network-inbound (local ip))",
+    ]
+    if port:
+        # tested 10-31: bind is matched by port (0.0.0.0 gets through too); inbound per port is unreliable (listen()
+        # refused on some ports, allowed on others), so inbound is localhost on any port: only the declared port can be
+        # bound at all, and connections arriving on the LAN or tailnet address are not accepted (tailscale serve
+        # connects through localhost)
+        lines += [f'(allow network-bind (local ip "*:{int(port)}"))',
+                  '(allow network-inbound (local ip "localhost:*"))']
+    lines += _isolation(pol, [pathlib.Path(d).resolve() for d in dirs], extra)
+    return "\n".join(lines + [""])
 
 
 if __name__ == "__main__":  # seatbelt.py <project> <capability>: print the profile it would use (for debugging)

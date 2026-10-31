@@ -84,6 +84,19 @@ librarian 每晚自動寄出、{{owner}} 結案時自動移掉。{{owner}} 在�
 資料夾、不能連網路),輸出跟結束碼照原樣回來;這次指令被中斷的話,工作照跑,用 `agenthub cap-run --wait <id>` 接回。
 沒宣告的能力會被拒絕;要新的能力寫信給 agent-hub。
 
+## Long-running programs and ports (the platform runs them as services)
+
+For something that should keep running (a viewer, a webhook, a bot) or run on a schedule, **don't give {{owner}} commands
+to start it**. Declare it in this project's registry entry under `services:` (`name`, `run`, `keepalive: true`; add
+`expose: {local_port: <port>}` to reach it from the tailnet) or `jobs:`, and send the full YAML with
+`agenthub send --to agent-hub --type manifest.update` (the same way as in "Credentials" above). That letter is internal to
+the platform and **needs no approval from {{owner}}**: once it validates, the platform creates the service within 15
+minutes (`agenthub status <project>` shows it).
+In a sandboxed project, services and jobs run sandboxed too: they can write only the project's own folders, can't read
+other projects, credentials or the Keychain, and may listen only on the declared `local_port`, accepting local
+connections only. Reaching it from the tailnet takes `tailscale serve` on the agent-hub side, still done by hand: write to
+agent-hub with the service and port. Before declaring it, you can test the server on 127.0.0.1 in your session.
+
 這段說明放在 gitignored 的 CLAUDE.local.md,不在共享的 CLAUDE.md:裡面是這台機器專屬的路徑跟設定。
 agent-hub、{{assistant}} 都會開源,提到名稱沒關係;但**這台機器的路徑**(hub 裝在哪、`/Users/<使用者>/…`)、
 帶本機路徑的 hook 指令、個人資料不要寫進任何會 commit 的檔案(CLAUDE.md、`.claude/settings.json`、README、
