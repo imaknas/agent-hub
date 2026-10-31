@@ -1,17 +1,23 @@
 #!/bin/sh -c exec${IFS}"${0%/*}/py"${IFS}"$0"${IFS}"$@"
-"""agent 提議,平台套用(docs/design/tool-agnostic.md「核心」):平台啟動、要動到檔案的 agent 工作在丟棄式 worktree 裡跑。
+"""Agent proposes, platform applies (docs/design/tool-agnostic.md "Core"): agent work that the platform starts and that
+changes files runs in a throwaway worktree.
 
-任何 agent(Claude Code、`runtime: command` 接的 Gemini CLI / Codex / opencode…)都一樣:它在 worktree 裡做什麼都碰不到
-真的 checkout;跑完平台看它改了哪些檔,**只把准許的路徑**複製回真的資料夾,其他的記成「不採用」、跟 worktree 一起丟掉。
-要寄的信、要結案的事 agent 寫在結構化輸出裡,平台代寄(寄件人是平台給的,不是 agent 自己說的)。agent 自己跑會改匯流排的
-hubbus 子指令(send、done、ack…)一律被擋(hubbus.platform_mails:這裡設的環境變數,或祖先程序是這支)。
-這套保證不靠工具的權限設定,在沒有沙盒的系統(Linux)上一樣成立。
+Every agent (Claude Code, Gemini CLI / Codex / opencode through `runtime: command`…) is treated the same: nothing it
+does in the worktree reaches the real checkout; when it is done the platform looks at which files it changed, copies
+**only the allowed paths** back into the real folder, records the rest as "refused" and throws them away with the
+worktree.
+Letters to send and things to close go into the agent's structured output, and the platform sends them (the sender is
+the one the platform gives, not the one the agent claims). hubbus subcommands that change the bus (send, done, ack…) are
+refused when the agent runs them itself (hubbus.platform_mails: the environment variable set here, or this script being
+an ancestor process). The guarantee does not rely on the tool's permission settings and holds on systems without a
+sandbox (Linux) too.
 
-  propose_apply.py mailbox <專案> <信 id>…     信箱交辦(hub.json mailbox.handler: propose 時由 hubbus dispatch 叫)
+  propose_apply.py mailbox <project> <letter id>…  a mailbox assignment (called by hubbus dispatch when hub.json has
+                                                   mailbox.handler: propose)
 
-  run(project, ws, point, prompt, allow)        給其他程式用:回 {ok, output, applied, refused, error}
+  run(project, ws, point, prompt, allow)        for other code: returns {ok, output, applied, refused, error}
 
-worktree:專案的 HEAD(detached)+ 它的 .agent-memory 的 HEAD;agent 的工作目錄是專案那份。
+worktree: the project's HEAD (detached) + the HEAD of its .agent-memory; the agent works in the project's copy.
 """
 from __future__ import annotations
 
@@ -30,7 +36,9 @@ import tempfile
 BIN = pathlib.Path(__file__).resolve().parent
 sys.path.insert(0, str(BIN))
 import hubconf  # noqa: E402
+import i18n  # noqa: E402
 
+_ = i18n.domain(__file__)
 PY = sys.executable
 
 
@@ -138,7 +146,7 @@ def _mailbox(project: str, ids: list[str]) -> int:
     rows = [r for r in rows if r is not None and r["to_project"] == project]
     ws = hubconf.workspace(project)
     if not rows or not ws:
-        print(f"{project}:沒有要處理的信", file=sys.stderr)
+        print(_("{project}: no letters to handle", project=project), file=sys.stderr)
         return 1
     tpl = (BIN.parent / "templates" / "prompts" / "mailbox-propose.md").read_text()
     prompt = hubconf.fill_names(tpl).replace("{{letters}}", letters_text(hb, c, rows)).replace(
@@ -166,7 +174,7 @@ def _mailbox(project: str, ids: list[str]) -> int:
     for d in out.get("done") or []:
         if d.get("id") in handled:
             hb.publish(c, f"{d['id']}:done", "message.done", project, project, d["id"],
-                       {"note": d.get("note") or "平台派的 agent 處理了(propose)"})
+                       {"note": d.get("note") or _("handled by an agent the platform sent (propose)")})
             done.append(d["id"])
     c.execute("COMMIT")
     if res["applied"] and (ws / ".agent-memory").is_dir():   # 筆記 commit + push 到 memory repo(跟 hook 同一條路)
@@ -180,5 +188,5 @@ def _mailbox(project: str, ids: list[str]) -> int:
 if __name__ == "__main__":
     if len(sys.argv) >= 4 and sys.argv[1] == "mailbox":
         sys.exit(mailbox(sys.argv[2], sys.argv[3:]))
-    print(__doc__, file=sys.stderr)
+    print(_(__doc__), file=sys.stderr)
     sys.exit(2)
