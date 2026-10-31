@@ -1,28 +1,33 @@
 #!/usr/bin/env python3
-"""把一個已 onboard 專案的開發環境從 MBP 搬到 mini 的 ~/workspace/<name>。
+"""Move an onboarded project's development environment from the laptop to ~/workspace/<name> on the hub machine.
 
-之後用 Claude Desktop 透過 SSH 在 mini 上開 session:session 跑在 mini,MBP 只是遙控端,
-MBP 斷線/沒電/闔上不會中斷正在跑的工作(試行驗證過)。
+Afterwards sessions are opened on the hub machine from Claude Desktop over SSH: the session runs on the hub machine,
+the laptop is only the remote control, and the laptop disconnecting/running out of battery/closing doesn't interrupt
+running work (verified in a trial).
 
-跑在 MBP。預設 dry-run:列出檢查結果、要複製的不進版控檔案(含大小)、要在 mini 重建的依賴;
-加 --apply 才動手。MBP 上的資料夾原封不動當備份——要不要清掉由 Knas 決定,這支不刪任何東西。
+Runs on the laptop. Dry-run by default: lists the check results, the untracked files to copy (with sizes), and the
+dependencies to rebuild on the hub machine; only --apply acts. The folder on the laptop is left untouched as a backup:
+whether to clear it is the owner's decision, and this deletes nothing.
 
-步驟:
-  1. 前置檢查(不過就停):專案登錄有登記、不是 native、沒有未 commit 的改動、所有本機分支
-     都已 push、沒有程序的工作目錄在專案資料夾(先關掉那個專案的 session)、mini 上
-     ~/workspace/<name> 還不存在
-  2. 補一次 memory 同步 + push,確保 mini 的 bare repo 是最新的
-  3. mini 上 recover-project.sh <name> ~/workspace/<name>(clone + 接上既有 agent-memory 分支)
-  4. rsync 不進版控、又重建不出來的東西(.env、data/、CLAUDE.local.md、.claude/ 本機設定等);
-     依賴、build 產物、cache 不複製
-  4b. Claude Code 的 auto memory、專案範圍的 MCP server 設定、.git/info/exclude(都不在 repo 裡)也搬過去
-  5. mini 上重跑 sync-local-setup.sh:對齊 managed 區塊跟 hook,保留複製過去的其他內容
-  6. MBP 上有 .venv/venv/node_modules 的目錄,在 mini 依 lockfile 重建(失敗只報告,不中斷)
+Steps:
+  1. Preflight checks (stop if any fails): registered in the project registry, not native, no uncommitted changes,
+     every local branch pushed, no process with its working directory in the project folder (close that project's
+     sessions first), ~/workspace/<name> doesn't exist on the hub machine yet
+  2. One more memory sync + push, so the hub machine's bare repo is up to date
+  3. recover-project.sh <name> ~/workspace/<name> on the hub machine (clone + attach the existing agent-memory branch)
+  4. rsync what's untracked and can't be rebuilt (.env, data/, CLAUDE.local.md, the local .claude/ settings, etc.);
+     dependencies, build output and caches aren't copied
+  4b. Claude Code's auto memory, the project-scope MCP server settings and .git/info/exclude (none in the repo) move
+      over too
+  5. Rerun sync-local-setup.sh on the hub machine: align the managed blocks and hooks, keeping the other copied content
+  6. Directories with .venv/venv/node_modules on the laptop are rebuilt on the hub machine from their lockfiles (a
+     failure is only reported, not fatal)
 
-用法:migrate-to-mini.py <name> [--apply] [--allow-local-branches] [--skip <相對路徑>]...
-  --skip:這次不搬的不進版控檔案(例:留在 MBP 備份就好的大型實驗資料庫),可以給多次
+Usage: migrate-to-mini.py <name> [--apply] [--allow-local-branches] [--skip <relative path>]...
+  --skip: an untracked file not to move this time (e.g. a large experiment database that can stay on the laptop as a
+  backup); can be given several times
 """
-from __future__ import annotations  # 系統的 python3(3.9)也要能 import
+from __future__ import annotations  # the system python3 (3.9) must be able to import this too
 
 import argparse
 import datetime
@@ -38,19 +43,19 @@ sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
 import hubconf  # noqa: E402
 import hublib  # noqa: E402
 import i18n  # noqa: E402
-import runtime_claude  # noqa: E402  # 這支搬的是 Claude Code 的 auto memory,本來就是 Claude 專用
+import runtime_claude  # noqa: E402  # this moves Claude Code's auto memory, which is Claude-specific anyway
 
 _ = i18n.domain(__file__)
-MINI = hubconf.host("server")  # 跑 hub 的那台(hub.json hosts.server)
+MINI = hubconf.host("server")  # the machine that runs the hub (hub.json hosts.server)
 MINI_PATH_PREFIX = "export PATH=/opt/homebrew/bin:/opt/homebrew/opt/rustup/bin:$HOME/.local/bin:$HOME/.cargo/bin:$PATH; "
-# 依賴、build 產物、cache:不複製,mini 上需要時重建
+# dependencies, build output, caches: not copied, rebuilt on the hub machine when needed
 REBUILDABLE = {
     "node_modules", ".venv", "venv", "__pycache__", ".pytest_cache", ".ruff_cache", ".mypy_cache",
     "target", "dist", "build", ".next", ".turbo", ".parcel-cache", ".svelte-kit", ".astro",
     ".godot", "coverage", ".DS_Store", ".husky",
 }
 REBUILDABLE_SUFFIX = (".pyc", ".egg-info", ".egg-info/", ".tsbuildinfo")
-# recover-project.sh 自己會建立/對齊的
+# what recover-project.sh creates/aligns itself
 MANAGED = {".agent-memory"}
 
 
@@ -74,8 +79,8 @@ def mini(script: str, check: bool = True) -> subprocess.CompletedProcess:
 
 
 def manifest_row(name: str) -> dict:
-    """path 是 MBP 上的位置:登錄從 2026-10-15 起記的是 mini 的位置,MBP 的舊位置在
-    legacy-paths.tsv(第一筆)。"""
+    """path is the location on the laptop: since 2026-10-15 the registry records the hub machine's location, and the
+    laptop's old location is in legacy-paths.tsv (the first entry)."""
     paths = hubconf.roster().get(name)
     if paths is None:
         fail(_("'{name}' is not in the project registry (projects/)", name=name))
@@ -86,7 +91,7 @@ def manifest_row(name: str) -> dict:
 
 
 def is_rebuildable(rel: str) -> bool:
-    # 任何一層是 build 產物/依賴就算(例:build/web/ 的最後一層是 web)
+    # it counts if any level is build output/dependencies (e.g. for build/web/ the last level is web)
     parts = rel.rstrip("/").split("/")
     return any(part in REBUILDABLE for part in parts) or rel.endswith(REBUILDABLE_SUFFIX)
 
@@ -110,7 +115,7 @@ def human(kb: int) -> str:
 
 
 def preflight(name: str, path: str, origin: str, allow_local_branches: bool) -> list[str]:
-    """回傳警告;致命問題直接 fail。"""
+    """Return warnings; fatal problems fail right away."""
     warnings = []
     if origin == "(native)":
         fail(_("'{name}' is a native project (no GitHub remote): recover-project.sh cannot clone it on the hub machine",
@@ -153,7 +158,7 @@ def preflight(name: str, path: str, origin: str, allow_local_branches: bool) -> 
 
 
 def dep_dirs(path: str, entries: list[str]) -> list[tuple[str, str]]:
-    """MBP 上實際有建過依賴的目錄 → (相對目錄, 類型)。"""
+    """Directories on the laptop where dependencies were actually built → (relative directory, kind)."""
     out = []
     for e in entries:
         rel = e.rstrip("/")
@@ -177,7 +182,7 @@ def python_version(path: str, parent: str, venv: str) -> str | None:
 
 def rebuild_cmd(path: str, parent: str, kind: str) -> str | None:
     d = pathlib.Path(path, parent)
-    """回傳在專案根目錄執行的指令。"""
+    """Return the command to run in the project root."""
     if kind in (".venv", "venv"):
         py = python_version(path, parent, kind)
         pyarg = f" --python {py}" if py else ""
@@ -189,7 +194,7 @@ def rebuild_cmd(path: str, parent: str, kind: str) -> str | None:
         if (d / "pyproject.toml").exists():
             return f"{cd}uv venv {kind}{pyarg} && VIRTUAL_ENV={kind} uv pip install -e ."
         return None
-    # npm/pnpm workspaces:lockfile 可能在上層目錄,在那裡裝一次就涵蓋所有 workspace
+    # npm/pnpm workspaces: the lockfile may be in a parent directory; installing once there covers every workspace
     root = pathlib.Path(path)
     while True:
         rel = d.relative_to(root).as_posix()
@@ -202,7 +207,8 @@ def rebuild_cmd(path: str, parent: str, kind: str) -> str | None:
         d = d.parent
 
 
-# 專案裡有這些檔案 → mini 上需要對應的工具鏈(依賴不複製、要在 mini 上重新 build)
+# these files in the project → the hub machine needs the matching toolchain (dependencies aren't copied, they're
+# rebuilt on the hub machine)
 TOOLCHAINS = {"Cargo.toml": "cargo", "project.godot": "godot", "go.mod": "go"}
 
 
@@ -213,11 +219,12 @@ def missing_toolchains(path: str) -> list[str]:
 
 
 def copy_mcp_servers(name: str, path: str) -> None:
-    """專案範圍(local scope)的 MCP server 設定存在 MBP 的 ~/.claude-personal/.claude.json、以 MBP
-    路徑為 key,不在 repo 裡,clone 不會帶過去(例:專案的唯讀資料庫連線、專案自己的
-    MCP)。轉換路徑後用 `claude mcp add-json` 加到 mini 那個資料夾。設定裡可能有憑證:只經過
-    stdin 傳過去,不印出內容。stdio 的指令在 mini 上找不到時,用同名工具在 mini 的位置;
-    還是找不到(例:要先 build 的專案自己的執行檔)就提醒。"""
+    """Project-scope (local scope) MCP server settings live in the laptop's ~/.claude-personal/.claude.json, keyed by
+    the laptop's paths, not in the repo, so a clone doesn't bring them (e.g. the project's read-only database
+    connection, the project's own MCP). After converting the paths, they're added to that folder on the hub machine
+    with `claude mcp add-json`. The settings may hold credentials: they're passed only through stdin, never printed.
+    When a stdio command can't be found on the hub machine, the same-named tool at the hub machine's location is used;
+    if it still can't be found (e.g. the project's own executable that has to be built first), a reminder is given."""
     cfg = hublib.HOME / ".claude-personal" / ".claude.json"
     if not cfg.exists():
         return
@@ -246,8 +253,9 @@ def copy_mcp_servers(name: str, path: str) -> None:
 
 
 def merge_info_exclude(name: str, path: str) -> None:
-    """MBP repo 的 .git/info/exclude 裡專案/工具自己加的忽略規則(例:impeccable 的 hook.cache.json)
-    不會跟著 clone 過去,缺的話那些檔案在 mini 上會變成未追蹤。把 mini 沒有的行補上。"""
+    """Ignore rules the project/tools added to the laptop repo's .git/info/exclude (e.g. impeccable's hook.cache.json)
+    don't come along with a clone, and without them those files show up as untracked on the hub machine. Adds the
+    lines the hub machine lacks."""
     src = pathlib.Path(run(["git", "rev-parse", "--path-format=absolute", "--git-common-dir"],
                            cwd=path).strip(), "info", "exclude")
     if not src.exists():
@@ -265,9 +273,10 @@ def merge_info_exclude(name: str, path: str) -> None:
 
 
 def copy_auto_memory(name: str, path: str) -> None:
-    """Claude Code 每個專案的 auto memory(MBP:~/.claude-personal/projects/<slug>/memory/)不在 repo 裡,
-    搬到 mini 的 ~/.claude/projects/<mini 路徑的 slug>/memory/(mini 只有個人帳號,所以是 ~/.claude)。
-    改過名的專案,舊路徑的 memory 一起帶過去。mini 上已經有的檔案不覆蓋。"""
+    """Claude Code's per-project auto memory (laptop: ~/.claude-personal/projects/<slug>/memory/) isn't in the repo;
+    move it to the hub machine's ~/.claude/projects/<slug of the hub machine's path>/memory/ (the hub machine has only
+    the personal account, hence ~/.claude). For renamed projects, the old paths' memory comes along too. Files that
+    already exist on the hub machine aren't overwritten."""
     old_paths = [path] + [p for p in hublib.legacy_paths(name) if p != path]
     dest = f".claude/projects/{runtime_claude.slug_for_path(f'{hublib.MINI_WORKSPACE}/{name}')}/memory/"
     for old in old_paths:
@@ -283,8 +292,9 @@ def copy_auto_memory(name: str, path: str) -> None:
 
 
 def missing_logins(path: str) -> list[str]:
-    """mini 上專案會用到、但 SSH session 讀不到的 CLI 登入。憑證要存在檔案裡(SSH 底下讀不到
-    keychain),例如 gh 要用 --insecure-storage 登入。只檢查、不代登入。"""
+    """CLI logins the project uses on the hub machine that an SSH session can't read. Credentials have to be stored in
+    files (the keychain can't be read under SSH), e.g. gh has to log in with --insecure-storage. Only checks, never logs
+    in on anyone's behalf."""
     out = []
     if mini("gh auth status", check=False).returncode != 0:
         out.append(_("gh on the hub machine is not logged in or cannot read its token: in a terminal on the hub machine "
@@ -333,7 +343,7 @@ def main() -> None:
     for p, k in deps:
         cmd = rebuild_cmd(path, p, k)
         if cmd and cmd in seen:
-            continue  # 同一個 workspace root 只裝一次
+            continue  # the same workspace root is installed only once
         seen.add(cmd)
         plans.append((p, k, cmd))
     for w in missing_logins(path):
@@ -381,7 +391,7 @@ def main() -> None:
     print(_("[5/6] Hub machine: sync-local-setup.sh"))
     out = mini(f"cd {target} && ~/agent-hub/bin/sync-local-setup.sh").stdout
     for l in out.splitlines():
-        if l.startswith("⚠️"):  # 已 commit 的檔案提到這套機制等,要那個專案的 session 處理
+        if l.startswith("⚠️"):  # committed files mention this mechanism etc.: for that project's session to handle
             print(f"  ! {l}")
 
     print(_("[6/6] Hub machine: rebuild dependencies"))
@@ -400,8 +410,8 @@ def main() -> None:
         problems.append(_("The working copy on the hub machine has unexpected changes (a rebuild changed a lockfile?):\n"
                           "{dirty}", dirty=dirty))
 
-    # MBP 舊副本留標記(放在 .git 裡,不會被 commit、git status 也看不到):之後在這裡開
-    # session,sync-local-setup.sh 會在 SessionStart 提醒改去 mini 開
+    # leave a marker in the laptop's old copy (inside .git: never committed, invisible to git status): if a session is
+    # opened there later, sync-local-setup.sh reminds at SessionStart to open it on the hub machine instead
     common = run(["git", "rev-parse", "--path-format=absolute", "--git-common-dir"], cwd=path).strip()
     pathlib.Path(common, "agent-hub-migrated-to-mini").write_text(
         f"mini:{target}\t{datetime.date.today().isoformat()}\n")

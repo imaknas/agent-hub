@@ -1,39 +1,42 @@
 #!/bin/sh -c exec${IFS}"${0%/*}/py"${IFS}"$0"${IFS}"$@"
-"""單一排程器：讀 schedule.yaml，到點就跑對應 command，一天只跑一次。
-由 launchd 每 15 分鐘呼叫一次；新增排程只要編輯 schedule.yaml，不用開新 plist。
+"""The single scheduler: reads schedule.yaml and, when a job is due, runs its command, once a day.
+Called by launchd every 15 minutes; adding a schedule only takes editing schedule.yaml, no new plist.
 
-每個 job 除了 time 之外可以加(全部選填,沒寫就是每天):
-  days_of_week:  [mon, wed]       只在這幾天跑
-  days_of_month: [1, 15]          只在每月這幾號跑
-  months:        [1, 4, 7, 10]    只在這幾個月跑(搭配 days_of_month 做季度排程)
-  end_date:      2026-11-01       這天之後不再跑(含這天);一次性的 job 搭配 months+days_of_month
-  max_attempts_per_day: 2         失敗後同一天最多重試幾次;沒寫就維持原本行為
-                                  (每個 tick 都重試到成功為止)——貴的 LLM job
-                                  一定要設,不然失敗一次就一整天每 15 分鐘燒一次
+Besides time, each job can add (all optional; without them, daily):
+  days_of_week:  [mon, wed]       run only on these days
+  days_of_month: [1, 15]          run only on these days of the month
+  months:        [1, 4, 7, 10]    run only in these months (with days_of_month for quarterly schedules)
+  end_date:      2026-11-01       no runs after this day (this day included); one-off jobs pair it with
+                                  months+days_of_month
+  max_attempts_per_day: 2         how many times to retry on the same day after a failure; without it, the original
+                                  behaviour (retry every tick until it succeeds): expensive LLM jobs
+                                  must set it, or one failure burns a run every 15 minutes all day
 
-間隔型 job:不寫 time,改寫 every_minutes(上面的日期條件照樣可以加):
-  every_minutes: 60               距離上次成功超過這麼久就再跑一次(tick 是 15 分鐘,
-                                  實際間隔會落在 every_minutes 之後的第一個 tick)
-  between: "08:00-23:00"          只在這個時段內跑(選填,不跨午夜)
-  max_attempts_per_day 對間隔型 job 是「一天總共最多跑幾次」(成功也算)
+Interval jobs: no time, every_minutes instead (the date conditions above still apply):
+  every_minutes: 60               run again once this long has passed since the last success (the tick is 15 minutes,
+                                  so the actual interval lands on the first tick after every_minutes)
+  between: "08:00-23:00"          run only within this window (optional, doesn't cross midnight)
+  for interval jobs max_attempts_per_day is "at most this many runs in a day in total" (successes count)
 
-長 job:加 background: true
-  在背景跑(脫離 scheduler 的 process group),這個 tick 馬上往下跑別的 job——job 是一個
-  一個依序跑的,一個 30–90 分鐘的 job 會讓後面準時的 job(muninn-tick、上傳)全部等它。
-  跑完的結果寫在 .state/runs/<name>.json,下一個 tick 併回狀態(成功才記「今天跑過」);
-  還在跑的時候不會再開第二份。log 一樣是 .logs/<name>-<日期>.log。
+Long jobs: add background: true
+  Runs in the background (detached from the scheduler's process group) and this tick moves straight on to other
+  jobs: jobs run one at a time, and a 30–90 minute job would make every punctual job after it (muninn-tick, uploads)
+  wait. The result of a finished run is written to .state/runs/<name>.json and merged back into the state on the next
+  tick (only a success counts as "ran today"); while it's running, a second copy isn't started. The log is still
+  .logs/<name>-<date>.log.
 
-順序:加 after: [job 名稱]
-  列出的 job 今天要跑、但還沒跑完(還沒到時間、還在跑、失敗了但還會重試)時,這個 job 先不開始,
-  下個 tick 再看。那個 job 今天成功了、用完 max_attempts_per_day、今天不排或停用了,就不再等。
-  背景 job 之間不能只靠時間錯開(例:consolidate-memory 02:00 → librarian 03:00,兩邊都動
-  ~/.memory-copies,tick 一漂移就可能重疊)。被等的 job 沒設 max_attempts_per_day 又一直失敗,
-  就會等一整天——要掛 after 的話,被等的那個最好設上限。
+Order: add after: [job name]
+  While a listed job is due today but not finished (not yet time, still running, failed but will retry), this job
+  doesn't start; the next tick looks again. Once that job succeeded today, used up max_attempts_per_day, isn't
+  scheduled today or is disabled, it's no longer waited for.
+  Background jobs can't be kept apart by time alone (e.g. consolidate-memory 02:00 → librarian 03:00 both touch
+  ~/.memory-copies, and once the tick drifts they may overlap). If the job waited on has no max_attempts_per_day and
+  keeps failing, the wait lasts all day: when hanging an after on it, better give the waited-on job a limit.
 
-每個 tick 開始、每個 job 跑完都會寫 .state/scheduler-heartbeat,給 scheduler-watchdog.py
-(獨立的 launchd job)判斷排程器是不是停了。
+At the start of every tick and after every job, .state/scheduler-heartbeat is written, for scheduler-watchdog.py
+(a separate launchd job) to tell whether the scheduler has stopped.
 """
-from __future__ import annotations  # 系統的 python3(3.9)也要能 import
+from __future__ import annotations  # the system python3 (3.9) must be able to import this too
 
 import datetime
 import json
@@ -52,9 +55,9 @@ _ = i18n.domain(__file__)
 
 HUB = hubconf.ROOT
 
-# 給各專案 job 用的環境變數,名稱刻意不帶工具名稱:專案 repo 的程式碼只讀
-# $SAFE_PUSH(沒有就退回 git push),不寫死這裡的路徑——repo 之後可能公開,
-# 被 commit 的內容不能出現這套機制的名稱或路徑。
+# Environment variables for the projects' jobs, deliberately named without the tool's name: a project repo's code only
+# reads $SAFE_PUSH (falling back to git push without it) and never hardcodes the path here: the repo may become public
+# later, and committed content mustn't show this mechanism's name or paths.
 JOB_ENV = {**os.environ, "SAFE_PUSH": str(HUB / "bin" / "git-safe-push.sh")}
 SCHEDULE = hubconf.config_file("schedule.yaml")
 STATE_FILE = HUB / ".state" / "scheduler-last-run.json"
@@ -63,19 +66,20 @@ HEARTBEAT = HUB / ".state" / "scheduler-heartbeat"
 LOG_DIR = HUB / ".logs"
 
 
-ALIAS: dict[str, str] = {}  # 切換期間登錄 job 名稱 ↔ schedule.yaml 舊名稱(all_jobs 填)
+ALIAS: dict[str, str] = {}  # during the switch-over: registry job name ↔ old schedule.yaml name (filled by all_jobs)
 
 
 def fs(name: str) -> str:
-    """job 名稱 → 檔名(登錄的 job 叫 <專案>/<job>,斜線不能進檔名)。"""
+    """job name → file name (registry jobs are called <project>/<job>, and a slash can't go into a file name)."""
     return name.replace("/", "__")
 
 
 def all_jobs(log_errors: bool = False) -> tuple[list[dict], dict]:
-    """schedule.yaml 的 job + 專案登錄的 job。切換期間 schedule.yaml 優先:登錄 job 的 legacy_name
-    還在 schedule.yaml 裡就不採用(刪掉 schedule.yaml 那一項就切過來)。登錄壞掉不影響 schedule.yaml。
-    回傳 (jobs, info);info: alias(兩邊名稱對照,給 after: 用)、renames(新→舊,搬狀態用)、
-    skipped、errors。"""
+    """schedule.yaml's jobs + the project registry's jobs. During the switch-over schedule.yaml wins: a registry job
+    whose legacy_name is still in schedule.yaml isn't used (deleting that schedule.yaml entry switches it over). A
+    broken registry doesn't affect schedule.yaml.
+    Returns (jobs, info); info: alias (the two sides' names, for after:), renames (new→old, for moving state),
+    skipped, errors."""
     legacy = (yaml.safe_load(SCHEDULE.read_text()) or {}).get("jobs", []) if SCHEDULE.exists() else []
     info = {"alias": {}, "renames": {}, "skipped": [], "errors": {}}
     try:
@@ -83,13 +87,14 @@ def all_jobs(log_errors: bool = False) -> tuple[list[dict], dict]:
         index = registry.refresh()
         reg_jobs, skipped, renames = registry.scheduler_jobs(index, {j["name"] for j in legacy})
         info.update(renames=renames, skipped=skipped, errors=index["errors"])
-        for d in [*index["projects"].values(), *(index.get("modules") or {}).values()]:  # 模組的 job 一樣有舊名稱
+        # module jobs have old names too
+        for d in [*index["projects"].values(), *(index.get("modules") or {}).values()]:
             for j in d.get("jobs") or []:
                 if j.get("legacy_name"):
                     full = f"{d['name']}/{j['name']}"
                     info["alias"][full] = j["legacy_name"]
                     info["alias"][j["legacy_name"]] = full
-    except Exception as e:  # 登錄整個讀不了:只跑 schedule.yaml 的
+    except Exception as e:  # the whole registry can't be read: run only schedule.yaml's
         reg_jobs = []
         info["errors"]["(registry)"] = [repr(e)]
         if log_errors:
@@ -112,11 +117,13 @@ def save_state(state: dict) -> None:
 
 
 FAILING_FILE = HUB / ".state" / "scheduler-failing.json"
-ALERT_AFTER = datetime.timedelta(minutes=60)   # 失敗持續這麼久才發警報(下個 tick 重試就好的不吵)
+# alert only after failing this long (no noise about the ones the next tick's retry fixes)
+ALERT_AFTER = datetime.timedelta(minutes=60)
 
 
 def mark_job(name: str, failed: bool, detail: str = "") -> None:
-    """記下哪些 job 現在是失敗的(最後一次跑失敗):成功就拿掉。給 alert_failing 用。寫不進去不影響排程。"""
+    """Record which jobs are failing now (last run failed): removed on success. For alert_failing. Failing to write
+    doesn't affect scheduling."""
     try:
         d = json.loads(FAILING_FILE.read_text()) if FAILING_FILE.exists() else {}
         if failed:
@@ -133,7 +140,8 @@ def mark_job(name: str, failed: bool, detail: str = "") -> None:
 
 
 def failing_problems(failing: dict, now: datetime.datetime) -> list[str]:
-    """失敗超過 ALERT_AFTER 的 job → 警報的問題清單(alert.once 照字句去重:同一個 job 的字句要穩定)。"""
+    """Jobs failing for longer than ALERT_AFTER → the alert's problem list (alert.once dedupes by wording: a job's
+    wording must be stable)."""
     out = []
     for name, rec in sorted(failing.items()):
         try:
@@ -147,19 +155,21 @@ def failing_problems(failing: dict, now: datetime.datetime) -> list[str]:
 
 
 def alert_failing() -> None:
-    """10-27:contracts-check 連兩晚失敗沒人知道——排程的 job 失敗以前只有狀態頁紅。現在持續失敗的發警報
-    (alert.py:新問題馬上發、沒解決的每 24 小時提醒、好了發恢復)。"""
+    """10-27: contracts-check failed two nights running and nobody knew: a failed scheduled job used to show only as red
+    on the status page. Now persistent failures raise an alert (alert.py: new problems at once, unresolved ones
+    reminded every 24 hours, recovery sent when fixed)."""
     try:
         import alert
         failing = json.loads(FAILING_FILE.read_text()) if FAILING_FILE.exists() else {}
         alert.once("scheduler-jobs", failing_problems(failing, datetime.datetime.now()),
                    _("The scheduled jobs are all back to normal"))
-    except Exception as e:  # 警報壞掉不影響排程
+    except Exception as e:  # broken alerts don't affect scheduling
         log(_("The scheduled-job alert was not sent: {error!r}", error=e))
 
 
 def job_failed(name: str, code: int, detail: str = "") -> None:
-    """匯流排上的 job.failed(狀態頁、之後的 Muninn 讀);寫不進去不影響排程。"""
+    """job.failed on the bus (read by the status page and, later, the assistant); failing to write doesn't affect
+    scheduling."""
     mark_job(name, True, detail or f"exit {code}")
     subprocess.run([sys.executable, str(HUB / "bin" / "hubbus"), "publish", "job.failed", "--source", "scheduler",
                     "--payload", json.dumps({"job": name, "exit": code, "detail": detail}, ensure_ascii=False)],
@@ -189,7 +199,7 @@ def pid_alive(pid: int | None) -> bool:
 
 
 def reconcile(state: dict, jobs: dict[str, dict]) -> set[str]:
-    """把背景 job 的結果併回 state;回傳還在跑的 job 名稱。"""
+    """Merge the background jobs' results into state; return the names of jobs still running."""
     running = set()
     for f in RUNS_DIR.glob("*.json"):
         name = f.stem.replace("__", "/")
@@ -200,12 +210,13 @@ def reconcile(state: dict, jobs: dict[str, dict]) -> set[str]:
             continue
         if "exit" not in rec:
             started = datetime.datetime.fromisoformat(rec["started"])
-            # pid 還沒寫進去的那一瞬間(剛 fork)也算在跑
+            # the instant before the pid is written (just forked) also counts as running
             if pid_alive(rec.get("pid")) or (rec.get("pid") is None
                                              and datetime.datetime.now() - started < datetime.timedelta(minutes=1)):
                 running.add(name)
                 continue
-            # 沒寫結果就不見了(重開機、被殺):算失敗,嘗試次數在開始前就記過了
+            # gone without writing a result (reboot, killed): counts as a failure; the attempt was recorded before it
+            # started
             log(f"job '{name}' FAILED (exit -1), background process gone without a result")
             job_failed(name, -1, _("the background run vanished midway (reboot or killed)"))
         elif rec["exit"] == 0:
@@ -219,8 +230,8 @@ def reconcile(state: dict, jobs: dict[str, dict]) -> set[str]:
 
 def spawn_background(name: str, command: str, job_log_path: pathlib.Path,
                      now: datetime.datetime, today: str) -> None:
-    """double fork + setsid:launchd 在 tick 結束時會殺掉同一個 process group 剩下的程序
-    (run-agent-job.sh 2026-10-14 踩過)。孫程序跑完自己寫 log 跟結果檔。"""
+    """double fork + setsid: launchd kills what's left in the same process group when the tick ends
+    (run-agent-job.sh hit this on 2026-10-14). The grandchild writes its log and result file itself when done."""
     run_file = RUNS_DIR / f"{fs(name)}.json"
     rec = {"date": today, "started": now.isoformat(timespec="seconds"), "pid": None}
     write_json(run_file, rec)
@@ -272,17 +283,18 @@ def hhmm(now: datetime.datetime, s: str) -> datetime.datetime:
 
 def waiting_on(job: dict, by_name: dict[str, dict], state: dict, running: set[str],
                now: datetime.datetime, today: str) -> str | None:
-    """after: 列的 job 今天還沒結束的話,回傳在等誰;不用等回傳 None。"""
+    """If a job listed in after: hasn't finished today, return whom we're waiting for; None if no need to wait."""
     for dep in job.get("after", []):
         d = by_name.get(dep)
-        if d is None and dep in ALIAS:  # 切換期間:after 寫新名稱、job 還在舊名稱(或反過來)
+        # during the switch-over: after names the new name while the job still has the old one (or vice versa)
+        if d is None and dep in ALIAS:
             dep = ALIAS[dep]
             d = by_name.get(dep)
         if d is None or not d.get("enabled", True) or not runs_today(d, now):
             continue
         if dep in running:
             return dep
-        if "every_minutes" in d:  # 間隔型的沒有「今天跑完」,只等它這次跑完
+        if "every_minutes" in d:  # interval jobs have no "done for today"; wait only for this run to finish
             continue
         if now < hhmm(now, d["time"]):
             return dep
@@ -291,7 +303,7 @@ def waiting_on(job: dict, by_name: dict[str, dict], state: dict, running: set[st
         att = state.get(f"{dep}.attempts", {})
         tried = att.get("count", 0) if att.get("date") == today else 0
         if d.get("max_attempts_per_day") is not None and tried >= d["max_attempts_per_day"]:
-            continue  # 今天放棄了,不再等
+            continue  # given up for today; stop waiting
         return dep
     return None
 
@@ -304,7 +316,7 @@ def is_due(job: dict, state: dict, now: datetime.datetime, today: str) -> bool:
             if not hhmm(now, start) <= now <= hhmm(now, end):
                 return False
         last = state.get(f"{name}.last_ok")
-        # 少 1 分鐘的寬限:launchd 的 tick 會有幾秒漂移,不然 every_minutes: 15 會變成 30
+        # one minute's grace: launchd's tick drifts by a few seconds, or every_minutes: 15 would become 30
         return last is None or now - datetime.datetime.fromisoformat(last) >= \
             datetime.timedelta(minutes=job["every_minutes"] - 1)
     return now >= hhmm(now, job["time"]) and state.get(name) != today
@@ -324,14 +336,14 @@ def main() -> None:
     today = now.strftime("%Y-%m-%d")
     by_name = {j["name"]: j for j in jobs}
     running = reconcile(state, by_name)
-    # 剛從 schedule.yaml 切到登錄的 job:狀態從舊名稱搬過來,不然今天會重跑(在 reconcile 之後:
-    # 舊名稱的背景執行可能剛跑完、結果才併進來)
+    # jobs just switched from schedule.yaml to the registry: move their state over from the old name, or they'd rerun
+    # today (after reconcile: the old name's background run may have just finished and its result only now merged)
     for new, old in info["renames"].items():
         for suffix in ("", ".attempts", ".last_ok"):
             if old + suffix in state and new + suffix not in state:
                 state[new + suffix] = state[old + suffix]
         if old in running:
-            running.add(new)  # 舊名稱還在背景跑:新名稱也算在跑
+            running.add(new)  # the old name is still running in the background: the new name counts as running too
 
     for job in jobs:
         name = job["name"]
@@ -351,15 +363,15 @@ def main() -> None:
         if max_attempts is not None and tried_today >= max_attempts:
             continue
         state[attempts_key] = {"date": today, "count": tried_today + 1}
-        # 跑之前就先存:job 跑到一半 scheduler 被殺(重開機、OOM),嘗試次數也
-        # 已經記下,max_attempts_per_day 才擋得住。
+        # save before running: if the scheduler is killed mid-job (reboot, OOM), the attempt is already
+        # recorded, so max_attempts_per_day can hold.
         save_state(state)
 
         job_log_path = LOG_DIR / f"{fs(name)}-{today}.log"
         if job.get("background"):
             log(f"running job '{name}' (background): {job['command']}")
             spawn_background(name, job["command"], job_log_path, now, today)
-            running.add(name)  # 同一個 tick 裡 after: 它的 job 也要等
+            running.add(name)  # jobs with after: on it in the same tick must wait too
             continue
         log(f"running job '{name}': {job['command']}")
         try:
@@ -384,7 +396,7 @@ def main() -> None:
 
     save_state(state)
     alert_failing()
-    # 排程狀態頁(tailnet 內看得到),每個 tick 重生;失敗不影響排程本身
+    # the schedule status page (visible inside the tailnet), regenerated every tick; a failure doesn't affect scheduling
     subprocess.run([sys.executable, str(HUB / "bin" / "gen-status-page.py")], capture_output=True)
 
 
