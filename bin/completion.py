@@ -62,7 +62,7 @@ SECRET = re.compile(
 
 
 def redact(text: str) -> str:
-    return SECRET.sub("[已遮蔽]", text)
+    return SECRET.sub("[redacted]", text)
 
 
 class Refused(Exception):
@@ -258,8 +258,8 @@ def run(point: str, spec: dict, prompt: str, schema: dict | None, sleep=time.sle
             obj, last_errs = None, [_("not JSON")]
         if not last_errs:
             return _out(point, target, res.text, obj, cost_total)
-        req = req._replace(prompt=prompt + "\n\n---\n上一次的回答不合格(" + "; ".join(last_errs[:5])
-                           + ")。這次只回一個合格的 JSON,不要其他文字。")
+        req = req._replace(prompt=prompt + "\n\n---\nThe previous answer was not valid (" + "; ".join(last_errs[:5])
+                           + "). This time reply with one valid JSON only, no other text.")
     raise Refused(_("output does not match the schema (after one retry): {errors}", errors="; ".join(last_errs[:3])))
 
 

@@ -80,7 +80,8 @@ def _argv(template: list, model: str | None, prompt_file: str, output_file: str,
 def _schema_note(schema: dict | None) -> str:
     if schema is None:
         return ""
-    return ("\n\n---\n最後只回一個 JSON 物件(不要其他文字、不要 ``` 圍起來),符合這個 JSON schema:\n"
+    return ("\n\n---\nAt the end, reply with one JSON object only (no other text, not wrapped in ```), matching this "
+            "JSON schema:\n"
             + json.dumps(schema, ensure_ascii=False))
 
 

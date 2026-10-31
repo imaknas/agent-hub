@@ -43,5 +43,6 @@ def schema_in_prompt(prompt: str, schema: dict) -> str:
     do not accept response_format): write the schema into the prompt. What comes back is still parsed by
     completion.py, validated with minischema and retried once if invalid -- the format does not rely on the
     provider."""
-    return (prompt + "\n\n---\n只回一個 JSON 物件,不要其他文字、不要 ``` 圍起來。它必須符合這個 JSON schema:\n"
+    return (prompt + "\n\n---\nReply with one JSON object only: no other text, not wrapped in ```. It must match this "
+            "JSON schema:\n"
             + json.dumps(schema, ensure_ascii=False))

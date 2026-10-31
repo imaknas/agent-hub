@@ -62,7 +62,7 @@ class Pipeline(Base):
                                      CompletionResult(True, text='{"answer": "ok"}', stop="end"))
         self.assertEqual(self.run_()["structured_output"], {"answer": "ok"})
         self.assertEqual(len(runtime_fake._asked), 2)
-        self.assertIn("不合格", runtime_fake._asked[1][0].prompt)
+        self.assertIn("not valid", runtime_fake._asked[1][0].prompt)
 
     def test_invalid_twice_refuses(self):
         runtime_fake.set_completions("p", CompletionResult(True, text="not json", stop="end"))
@@ -105,7 +105,7 @@ class Pipeline(Base):
         runtime_fake.set_completions("p", CompletionResult(True, text='{"answer": "a"}', stop="end"))
         self.run_(prompt="key sk-ant-abcdefghijklmnop end")
         self.assertNotIn("sk-ant-abcdefghijklmnop", runtime_fake._asked[0][0].prompt)
-        self.assertIn("[已遮蔽]", runtime_fake._asked[0][0].prompt)
+        self.assertIn("[redacted]", runtime_fake._asked[0][0].prompt)
 
     def test_budget(self):
         self.llm["providers"]["f"]["models"]["fast"]["price"] = {"in": 1_000_000, "out": 0}   # 1 token = $1

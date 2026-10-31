@@ -60,7 +60,7 @@ def smoke() -> str | None:
     otherwise the reason."""
     try:
         r = subprocess.run([sys.executable, str(hubconf.ROOT / "bin" / "llm.py"), "run", "login-check"],
-                           input="只回覆 ok 兩個字母。", capture_output=True, text=True, timeout=180,
+                           input="Reply with just the two letters: ok", capture_output=True, text=True, timeout=180,
                            env={**os.environ, "LLM_AUTH": "token"})
     except subprocess.TimeoutExpired:
         return _("no answer for 3 minutes")

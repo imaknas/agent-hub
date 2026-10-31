@@ -24,7 +24,7 @@ def complete(req, conf) -> CompletionResult:
     if req.system:
         body["system"] = req.system
     if req.schema is not None:
-        body["tools"] = [{"name": "output", "description": "回答(照這個格式)", "input_schema": req.schema}]
+        body["tools"] = [{"name": "output", "description": "the answer (in this format)", "input_schema": req.schema}]
         body["tool_choice"] = {"type": "tool", "name": "output"}
     status, data, headers, err = call("POST", (conf.get("base_url") or DEFAULT_BASE).rstrip("/") + "/v1/messages",
                                       body, _headers(conf), req.timeout_s)

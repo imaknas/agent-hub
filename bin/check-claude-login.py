@@ -53,7 +53,7 @@ def ask(env: dict) -> str | None:
     """None = success; otherwise the reason for the failure."""
     try:
         r = subprocess.run([sys.executable, str(hubconf.ROOT / "bin" / "llm.py"), "run", "login-check"],
-                           input="只回覆 ok 兩個字母。", capture_output=True, text=True, timeout=180, env=env)
+                           input="Reply with just the two letters: ok", capture_output=True, text=True, timeout=180, env=env)
     except subprocess.TimeoutExpired:
         return _("No answer for over 3 minutes")
     try:

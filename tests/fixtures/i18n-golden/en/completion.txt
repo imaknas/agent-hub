@@ -28,7 +28,7 @@ output does not match the schema (after one retry): $: missing answer
 hi
 
 ---
-上一次的回答不合格($: missing answer)。這次只回一個合格的 JSON,不要其他文字。
+The previous answer was not valid ($: missing answer). This time reply with one valid JSON only, no other text.
 === run: budget
 today's model spending has reached the budget (llm.budget.daily_usd $5); not sending this one
 === health_all
