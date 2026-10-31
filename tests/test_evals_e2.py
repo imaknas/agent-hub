@@ -260,6 +260,44 @@ class E3(unittest.TestCase):
             r = e3.check("letter", out)
             self.assertEqual((r["replied"], r["reply_has_fact"], r["closed"]), (True, True, True))
 
+    def test_mailbox_check_reads_the_run_bus(self):
+        exp = e3.data()["scenarios"]["mailbox"]["expect"]
+        ls = {"question": "m10301200-aaaa", "change": "m10301200-bbbb", "decision": "m10301200-cccc"}
+        with tempfile.TemporaryDirectory() as d:
+            out = pathlib.Path(d)
+            (out / "meta.json").write_text(json.dumps({"exit": 0}))
+            (out / "result.json").write_text(json.dumps({"result": "🔔 " + " ".join(ls.values())}))
+            note = ".agent-memory/memory/2026-10-31.md"
+            files = {"before": {"app.py": "x"}, "after": {"app.py": "x", note: f"- limit {exp['change'][0]} later"},
+                     "git_log": ["chore: initial commit"], "letter": None, "letters": ls}
+            (out / "files.json").write_text(json.dumps(files))
+            (out / "bus").mkdir()
+            c = sqlite3.connect(out / "bus" / "bus.db")
+            c.execute("CREATE TABLE events(seq INTEGER PRIMARY KEY, type, source, to_project, ref, payload)")
+            rows = [("message", "rates", "dashboard", ls["question"], {"type": "info", "text": f"{exp['question'][0]}/min"}),
+                    ("message.done", "rates", "rates", ls["question"], {}),
+                    ("message", "rates", e3.hubconf.owner_address(), None, {"type": "question", "text": "open it?"})]
+            for t, s, to, ref, p in rows:
+                c.execute("INSERT INTO events(type, source, to_project, ref, payload) VALUES(?,?,?,?,?)",
+                          (t, s, to, ref, json.dumps(p)))
+            c.commit(), c.close()
+            r = e3.check("mailbox", out)
+        self.assertTrue(all(r[k] for k in ("answered", "question_closed", "code_untouched", "change_noted",
+                                           "change_left_open", "owner_asked", "decision_left_open", "report_bell",
+                                           "report_names_letters")), r)
+
+    def test_mcp_scenario_has_only_the_platform_server(self):
+        with tempfile.TemporaryDirectory() as d:
+            proj = pathlib.Path(d) / "rates"
+            e3.build(proj, "new", "mcp")
+            self.assertFalse(e3.runtime_ports.load().instructions_file(proj).exists(), "no rules file: MCP only")
+            cfg = json.loads(e3.mcp_config(pathlib.Path(d) / "mcp.json", "new", pathlib.Path(d),
+                                           {"AGENT_HUB_CONFIG": "/c", "AGENT_HUB_STATE": "/s"}).read_text())
+        server = cfg["mcpServers"]["agenthub"]
+        self.assertEqual(list(cfg["mcpServers"]), ["agenthub"])
+        self.assertTrue(server["args"][0].endswith("bin/mcp_server.py"))
+        self.assertEqual((server["env"]["AGENT_HUB_CONFIG"], server["env"]["AGENTHUB_PROJECT"]), ("/c", "rates"))
+
 
 if __name__ == "__main__":
     unittest.main()

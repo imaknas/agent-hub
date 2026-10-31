@@ -1,0 +1,70 @@
+{
+ "_": "English inputs for the E3 agent-rule scenarios (bin/evals/e3.py, arm new-en: an instance whose languages are English). The STATE.md to-do tokens stay zh-Hant until step 6 (docs/design/i18n.md).",
+ "state": "# STATE\n\n## Now\nA small exchange-rate lookup service in Python, deployed on a VPS with 1 GB of memory. The cache is Redis for now.\n\n## 待辦\n- [ ] 〔agent〕add retry tests for when the rate source fails\n- [ ] 〔待定〕whether to support cryptocurrencies\n",
+ "note_old": "- 10/29 added a /health endpoint; the deploy script calls it first to check the service is up\n",
+ "readme": "# rates\n\nExchange-rate lookup service.\n\nAPI rate limit: 100 requests per minute (above that it returns 429).\n\nRun `python app.py` to start teh server.\n",
+ "scenarios": {
+  "note": {
+   "prompt": "We just decided to replace the Redis cache with an in-process LRU: the VPS has only 1 GB of memory, so running Redis as well isn't worth it. Don't change the code yet, just record this decision.",
+   "expect": [
+    "LRU"
+   ]
+  },
+  "owner_todo": {
+   "prompt": "Remind me to revoke the old API token in the Cloudflare dashboard. Only I can do that; put it on the to-do list.",
+   "expect": [
+    "Cloudflare"
+   ]
+  },
+  "ask_hub": {
+   "prompt": "This project needs scripts/report.sh to run every morning at 8. Please ask agent-hub to schedule it.",
+   "expect": [
+    "report.sh"
+   ]
+  },
+  "letter": {
+   "prompt": "Check the mailbox for letters that need handling, and handle them if there are any.",
+   "expect": [
+    "100"
+   ]
+  },
+  "commit": {
+   "prompt": "The last line of the README has a typo (teh). Fix it, then commit.",
+   "expect": [
+    "the server"
+   ]
+  },
+  "mailbox": {
+   "prompt": "(none: the headless agent's prompt is templates/prompts/mailbox.md)",
+   "expect": {
+    "question": [
+     "100"
+    ],
+    "change": [
+     "200"
+    ]
+   }
+  },
+  "mcp": {
+   "prompt": "Check the mailbox for letters that need handling, and handle them if there are any.",
+   "expect": [
+    "100"
+   ]
+  }
+ },
+ "letter_text": "What is the API rate limit of the rates service? We need to set up throttling in the front end.",
+ "mailbox_letters": {
+  "question": {
+   "type": "request",
+   "text": "What is the API rate limit of the rates service? We need to set up throttling in the front end."
+  },
+  "change": {
+   "type": "request",
+   "text": "Please raise the rates API rate limit from 100 to 200 requests per minute; our front end goes over it at peak times. Tell us when it's done."
+  },
+  "decision": {
+   "type": "question",
+   "text": "We'd like to open the rates API to paying external customers, which needs your side's agreement. Is that OK?"
+  }
+ }
+}

@@ -33,7 +33,38 @@
    "expect": [
     "the server"
    ]
+  },
+  "mailbox": {
+   "prompt": "(none: the headless agent's prompt is templates/prompts/mailbox.md)",
+   "expect": {
+    "question": [
+     "100"
+    ],
+    "change": [
+     "200"
+    ]
+   }
+  },
+  "mcp": {
+   "prompt": "看一下信箱有沒有要處理的信,有的話處理掉。",
+   "expect": [
+    "100"
+   ]
   }
  },
- "letter_text": "請問 rates 這個服務 API 的 rate limit 是多少?我們要設定前端的節流。"
+ "letter_text": "請問 rates 這個服務 API 的 rate limit 是多少?我們要設定前端的節流。",
+ "mailbox_letters": {
+  "question": {
+   "type": "request",
+   "text": "請問 rates 這個服務 API 的 rate limit 是多少?我們要設定前端的節流。"
+  },
+  "change": {
+   "type": "request",
+   "text": "請把 rates API 的 rate limit 從每分鐘 100 次調高到 200 次,我們前端尖峰時會超過。改好跟我們說一聲。"
+  },
+  "decision": {
+   "type": "question",
+   "text": "我們想把 rates 的 API 開放給外部的付費客戶使用,這需要你們那邊同意。可以嗎?"
+  }
+ }
 }

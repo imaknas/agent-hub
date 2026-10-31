@@ -9,10 +9,20 @@ the config (the project registered there, the assistant's API pointed nowhere) a
 delivered; the checks read that bus. (A fake `agenthub` first on PATH does not work: the agent's shell rebuilds PATH from
 the login profile.) Scenario inputs are per content language in `locales/<lang>.e3.json`.
 
-    e3.py run --arm old|new [--k 3] [--scenario <name>] [--run <id>] [--jobs 3]
+Two scenarios reach other templates the way production does:
+  mailbox  templates/prompts/mailbox.md: letters in the project's mailbox, claimed for the platform the way `hubbus
+           dispatch` claims them, and the rendered prompt run as the `mailbox-escalation` point (its permission mode,
+           its tools), as run-agent-job.sh runs it for hubbus
+  mcp      templates/mcp-instructions.md: no rules file in the project, only the platform's MCP server (`agenthub mcp`
+           = bin/mcp_server.py of the arm's tree, the run's config) given to the agent with --mcp-config; asked to
+           check the mail
+
+    e3.py run --arm old|new|new-en [--k 3] [--scenario <name>] [--run <id>] [--jobs 2]
     e3.py score <run> [--json]
 
-Arms: `old` = templates/ at OLD_REF (before translation); `new` = templates/ as they are now.
+Arms: `old` = templates/ (and, for mcp, the whole tree) at OLD_REF, what production sends before the translation;
+`new` = the working tree; `new-en` = the working tree on an instance whose languages are English (the run's config
+says so, the inputs are locales/en.e3.json; scored on the same checks and on language).
 """
 from __future__ import annotations
 
@@ -37,22 +47,32 @@ import e2  # noqa: E402
 import hubconf  # noqa: E402
 import runtime_ports  # noqa: E402
 
-OLD_REF = "13b6788"
-LANG = "zh-Hant"
+OLD_REF = "6e92c90"   # main before the agent rules were translated (step 5)
 PROJECT = "rates"
+SENDER = "dashboard"
 RULES = ("engineering", "conventional-commits")
 GIT_ENV = {"GIT_AUTHOR_NAME": "owner", "GIT_AUTHOR_EMAIL": "owner@example.invalid",
            "GIT_COMMITTER_NAME": "owner", "GIT_COMMITTER_EMAIL": "owner@example.invalid"}
+MID = re.compile(r"\bm\d{8}-[0-9a-f]{4}\b")
 
-def data() -> dict:
-    return json.loads((hubconf.ROOT / "locales" / f"{LANG}.e3.json").read_text())
+
+def lang_of(arm: str) -> str:
+    return "en" if arm == "new-en" else "zh-Hant"
+
+
+def data(lang: str = "zh-Hant") -> dict:
+    return json.loads((hubconf.ROOT / "locales" / f"{lang}.e3.json").read_text())
 
 
 def template(rel: str, arm: str) -> str:
-    if arm == "new":
+    if arm != "old":
         return (hubconf.ROOT / rel).read_text()
     return subprocess.run(["git", "-C", str(hubconf.ROOT), "show", f"{OLD_REF}:{rel}"], capture_output=True, text=True,
                           check=True).stdout
+
+
+def fill(text: str, arm: str) -> str:
+    return hubconf.fill_names(text)
 
 
 def managed_block(arm: str) -> str:
@@ -60,11 +80,21 @@ def managed_block(arm: str) -> str:
     body = "\n".join(template("templates/agent-instructions.md", arm).splitlines()[2:]).strip("\n")
     for name in RULES:
         body += "\n\n" + template(f"templates/rules/{name}.md", arm).strip("\n")
-    return f"<!-- agent-hub:begin -->\n{hubconf.fill_names(body)}\n<!-- agent-hub:end -->\n"
+    return f"<!-- agent-hub:begin -->\n{fill(body, arm)}\n<!-- agent-hub:end -->\n"
+
+
+def old_tree(run_dir: pathlib.Path) -> pathlib.Path:
+    """the platform at OLD_REF, for what the old arm runs as code (the MCP server reads its own template)"""
+    tree = run_dir / "old-tree"
+    if not (tree / "bin" / "mcp_server.py").exists():
+        tree.mkdir(parents=True, exist_ok=True)
+        arc = subprocess.run(["git", "-C", str(hubconf.ROOT), "archive", OLD_REF], capture_output=True, check=True).stdout
+        subprocess.run(["tar", "-x", "-C", str(tree)], input=arc, check=True)
+    return tree
 
 
 def build(proj: pathlib.Path, arm: str, scenario: str) -> None:
-    d = data()
+    d = data(lang_of(arm))
     proj.mkdir(parents=True)
     env = {**os.environ, **GIT_ENV, "GIT_CONFIG_GLOBAL": "/dev/null"}
     git = lambda *a: subprocess.run(["git", "-C", str(proj), *a], env=env, check=True, capture_output=True)  # noqa: E731
@@ -79,11 +109,12 @@ def build(proj: pathlib.Path, arm: str, scenario: str) -> None:
         f.write("\n".join(ignores) + "\n")
     mem = proj / ".agent-memory"
     (mem / "memory").mkdir(parents=True)
-    (mem / "AGENT.md").write_text(hubconf.fill_names(template("templates/AGENT.md", arm)))
+    (mem / "AGENT.md").write_text(template("templates/AGENT.md", arm))   # copied as is (sync-local-setup.sh 2b)
     (mem / "STATE.md").write_text(d["state"].replace("{owner}", hubconf.owner_tag()))
     (mem / "memory" / "2026-10-29.md").write_text(d["note_old"])
     (mem / "RULES").write_text("\n".join(RULES) + "\n")
-    rt.instructions_file(proj).write_text(managed_block(arm))
+    if scenario != "mcp":   # the MCP scenario tests what an agent with only the platform's MCP server is told
+        rt.instructions_file(proj).write_text(managed_block(arm))
 
 
 def snapshot(proj: pathlib.Path) -> dict[str, str]:
@@ -95,17 +126,57 @@ def snapshot(proj: pathlib.Path) -> dict[str, str]:
     return out
 
 
-def llm_cmd(prompt_file: pathlib.Path, *extra: str) -> list[str]:
-    """the agent-job point the way bin/run-agent-job.sh calls it: sealed from the environment's MCP servers
+def llm_cmd(prompt_file: pathlib.Path, *extra: str, point: str = "agent-job", agent: tuple = ()) -> list[str]:
+    """the point the way bin/run-agent-job.sh calls it: sealed from the environment's MCP servers
     (`--strict-mcp-config`; without it the agent gets every MCP configured on this machine, production databases
-    included; evaluators.md principle 4)"""
-    return [str(BIN / "py"), str(BIN / "llm.py"), "run", "agent-job", "--prompt-file", str(prompt_file), *extra,
-            "--", "--strict-mcp-config"]
+    included; evaluators.md principle 4). extra: llm.py's options; agent: the agent's (after --)"""
+    return [str(BIN / "py"), str(BIN / "llm.py"), "run", point, "--prompt-file", str(prompt_file), *extra,
+            "--", "--strict-mcp-config", *agent]
 
 
 def register(cfg: pathlib.Path, name: str, ws: pathlib.Path, extra: str = "") -> None:
     reg = cfg / (json.loads((cfg / e2.HUB_JSON).read_text()).get("registry_dir") or "projects")
     (reg / f"{name}.yaml").write_text(f"v: 1\nname: {name}\npaths:\n  workspace: {ws}\n{extra}")
+
+
+def send(hb: list, renv: dict, letter: dict) -> str:
+    r = subprocess.run([*hb, "send", "--from", letter.get("from", SENDER), "--to", PROJECT, "--type", letter["type"],
+                        "--text", letter["text"]], env=renv, capture_output=True, text=True, check=True)
+    return MID.search(r.stdout + r.stderr).group(0)
+
+
+def claim_for_handler(renv: dict, ids: list[str]) -> None:
+    """what `hubbus dispatch` does before it starts the headless agent: the letters are recorded as taken by the
+    platform (the agent's inbox marks them "the platform is handling it")"""
+    subprocess.run([str(BIN / "py"), str(pathlib.Path(__file__).resolve()), "claim", *ids], env=renv, check=True,
+                   capture_output=True)
+
+
+def cmd_claim(a) -> int:
+    import importlib.machinery
+    import importlib.util
+    loader = importlib.machinery.SourceFileLoader("hubbus_e3", str(BIN / "hubbus"))
+    hb = importlib.util.module_from_spec(importlib.util.spec_from_loader("hubbus_e3", loader))
+    loader.exec_module(hb)
+    c = hb.db()
+    try:
+        c.execute("BEGIN IMMEDIATE")
+        hb.claim(c, [hb.get_message(c, i) for i in a.ids], "handler", run="e3")
+        c.execute("COMMIT")
+    finally:
+        c.close()
+    return 0
+
+
+def mcp_config(path: pathlib.Path, arm: str, run_dir: pathlib.Path, renv: dict) -> pathlib.Path:
+    tree = old_tree(run_dir) if arm == "old" else BIN.parent
+    keys = ("AGENT_HUB_CONFIG", "AGENT_HUB_STATE", "AGENT_HUB_DATA", "AGENT_HUB_SECRETS", "AGENT_HUB_HOME")
+    # HUB_LLM_POINT emptied: the server refuses agents the platform starts (their letters go out through the
+    # platform), and this one stands for a session the owner opened; llm.py is only how the eval runs it headless
+    env = {k: renv[k] for k in keys if renv.get(k)} | {"AGENTHUB_PROJECT": PROJECT, "HUB_LLM_POINT": ""}
+    path.write_text(json.dumps({"mcpServers": {"agenthub": {
+        "command": str(BIN / "py"), "args": [str(tree / "bin" / "mcp_server.py")], "env": env}}}, indent=1))
+    return path
 
 
 def one(scenario: str, arm: str, i: int, run_dir: pathlib.Path, env: dict) -> dict:
@@ -115,7 +186,8 @@ def one(scenario: str, arm: str, i: int, run_dir: pathlib.Path, env: dict) -> di
     if out.exists():
         shutil.rmtree(out)
     out.mkdir(parents=True)
-    d = data()
+    lang = lang_of(arm)
+    d = data(lang)
     with tempfile.TemporaryDirectory(prefix="e3-") as tmp:
         tmp = pathlib.Path(tmp).resolve()
         proj = tmp / PROJECT
@@ -126,28 +198,44 @@ def one(scenario: str, arm: str, i: int, run_dir: pathlib.Path, env: dict) -> di
         shutil.copytree(env["AGENT_HUB_CONFIG"], cfg)
         hub = json.loads((cfg / e2.HUB_JSON).read_text())
         hub["bus_dir"] = str(out / "bus")
+        if arm == "new-en":
+            hub["language"] = {"ui": "en", "content": "en"}
         (cfg / e2.HUB_JSON).write_text(json.dumps(hub, ensure_ascii=False, indent=2))
         register(cfg, PROJECT, proj, "commits: conventional\n")
-        (tmp / "dashboard").mkdir()
-        register(cfg, "dashboard", tmp / "dashboard")
+        (tmp / SENDER).mkdir()
+        register(cfg, SENDER, tmp / SENDER)
         renv = {**env, **GIT_ENV, "AGENT_HUB_CONFIG": str(cfg), "AGENT_HUB_STATE": str(out / "state")}
         hb = [str(BIN / "py"), str(BIN / "hubbus")]
         subprocess.run([str(BIN / "py"), str(BIN / "registry.py"), "check"], env=renv, capture_output=True, check=True)
-        letter = None
-        if scenario == "letter":
-            r = subprocess.run([*hb, "send", "--from", "dashboard", "--to", PROJECT, "--type", "request",
-                                "--text", d["letter_text"]], env=renv, capture_output=True, text=True, check=True)
-            letter = re.search(r"\bm\d{8}-[0-9a-f]{4}\b", r.stdout + r.stderr).group(0)
-        (out / "prompt.txt").write_text(d["scenarios"][scenario]["prompt"])
+        letters: dict[str, str] = {}
+        point, agent = "agent-job", ()
+        if scenario in ("letter", "mcp"):
+            letters["letter"] = send(hb, renv, {"type": "request", "text": d["letter_text"]})
+        if scenario == "mcp":
+            agent = ("--mcp-config", str(mcp_config(out / "mcp.json", arm, run_dir, renv)))
+        if scenario == "mailbox":
+            for key, letter in d["mailbox_letters"].items():
+                letters[key] = send(hb, renv, letter)
+            claim_for_handler(renv, list(letters.values()))
+            point = "mailbox-escalation"
+            # what hubbus run_handler writes (the template, names filled)
+            (out / "prompt.txt").write_text(fill(template("templates/prompts/mailbox.md", arm), arm))
+        else:
+            (out / "prompt.txt").write_text(d["scenarios"][scenario]["prompt"])
         t0 = datetime.datetime.now()
-        r = subprocess.run(llm_cmd(out / "prompt.txt"), cwd=proj, env=renv, capture_output=True, text=True, timeout=3600)
+        r = subprocess.run(llm_cmd(out / "prompt.txt", point=point, agent=agent), cwd=proj, env=renv, capture_output=True,
+                           text=True, timeout=3600)
         secs = (datetime.datetime.now() - t0).total_seconds()
         after = snapshot(proj)
         log = subprocess.run(["git", "-C", str(proj), "log", "--format=%s"], capture_output=True, text=True).stdout
+        bodies = subprocess.run(["git", "-C", str(proj), "log", "--format=%B%x00"], capture_output=True,
+                                text=True).stdout
     (out / "result.json").write_text(r.stdout)
     (out / "stderr.txt").write_text(r.stderr[-20000:])
     (out / "files.json").write_text(json.dumps({"before": before, "after": after, "git_log": log.splitlines(),
-                                                "letter": letter}, ensure_ascii=False, indent=1))
+                                                "git_messages": [m.strip() for m in bodies.split("\0") if m.strip()],
+                                                "letter": letters.get("letter"), "letters": letters},
+                                               ensure_ascii=False, indent=1))
     try:
         obj = json.loads(r.stdout)
     except ValueError:
@@ -181,15 +269,31 @@ def note_text(files: dict) -> str:
                      if k.startswith(".agent-memory/memory/") and v != b.get(k))
 
 
-def check(scenario: str, out: pathlib.Path) -> dict:
+def result_text(out: pathlib.Path) -> str:
+    try:
+        return str(json.loads((out / "result.json").read_text()).get("result") or "")
+    except (OSError, ValueError):
+        return ""
+
+
+def add_language(r: dict, name: str, text: str) -> None:
+    if text.strip():
+        lang = e2.language(text)
+        r[f"{name}_cjk_share"] = lang["cjk_share"]
+        r[f"{name}_simplified"] = bool(lang["simplified"])
+
+
+def check(scenario: str, out: pathlib.Path, lang: str = "zh-Hant") -> dict:
     files = json.loads((out / "files.json").read_text())
-    expect = data()["scenarios"][scenario]["expect"]
+    expect = data(lang)["scenarios"][scenario]["expect"]
     note = note_text(files)
     evs = bus(out)
     sends = [e for e in evs if e["type"] == "message" and e["source"] == PROJECT]
     text = lambda e: str(e["payload"].get("text") or "")  # noqa: E731
+    done = lambda mid: any(e["type"] == "message.done" and e["ref"] == mid for e in evs)  # noqa: E731
+    new_commits = files["git_log"][:max(0, len(files["git_log"]) - 1)]
+    code_same = lambda: all(files["after"].get(f) == files["before"].get(f) for f in ("app.py", "README.md"))  # noqa: E731
     r: dict = {"ran": json.loads((out / "meta.json").read_text())["exit"] == 0}
-    lang = e2.language(note) if note.strip() else None
     if scenario == "note":
         r["note_written"] = bool(note.strip())
         r["note_has_fact"] = all(x in note for x in expect)
@@ -205,42 +309,63 @@ def check(scenario: str, out: pathlib.Path) -> dict:
         r["owner_task_raised"] = any(all(x in str(e["payload"]["record"].get("terms")) for x in expect) for e in tasks)
         r["owner_registered"] = r["owner_item"] or r["owner_task_raised"]
         r["kept_others"] = len(items) >= len(e2.todo_items(files["before"][".agent-memory/STATE.md"]) or ())
+        added = e2.added_text(files["before"][".agent-memory/STATE.md"], st)
+        add_language(r, "sent", "\n".join([added] + [str((e["payload"]["record"].get("terms") or {}).get("text"))
+                                                      for e in tasks]))
     elif scenario == "ask_hub":
         to_hub = [e for e in sends if e["to"] == "agent-hub"]
         r["sent_to_hub"] = bool(to_hub)
         r["actionable_type"] = any(e["payload"].get("type") in ("request", "question") for e in to_hub)
         r["has_fact"] = any(all(x in text(e) for x in expect) for e in to_hub)
-    elif scenario == "letter":
+    elif scenario in ("letter", "mcp"):
         letter = files["letter"]
         replies = [e for e in sends if e["ref"] == letter]
         r["replied"] = bool(replies)
         r["reply_has_fact"] = any(all(x in text(e) for x in expect) for e in replies)
-        r["closed"] = any(e["type"] == "message.done" and e["ref"] == letter for e in evs) or \
-            any(e["payload"].get("type") == "done" for e in replies)
+        r["closed"] = done(letter) or any(e["payload"].get("type") == "done" for e in replies)
+        if scenario == "mcp":
+            r["code_untouched"] = code_same() and not new_commits
+            r["note_written"] = bool(note.strip())
     elif scenario == "commit":
-        new = files["git_log"][:max(0, len(files["git_log"]) - 1)]
-        r["committed"] = bool(new)
-        r["title_ok"] = bool(new) and all(commit_title.problem(t, final=True) is None for t in new)
+        r["committed"] = bool(new_commits)
+        r["title_ok"] = bool(new_commits) and all(commit_title.problem(t, final=True) is None for t in new_commits)
         r["fixed"] = all(x in files["after"].get("README.md", "") for x in expect) and "teh" not in files["after"].get("README.md", "")
         r["note_after_commit"] = bool(note.strip())
-    if lang:
-        r["note_cjk_share"] = lang["cjk_share"]
-        r["note_simplified"] = bool(lang["simplified"])
+        add_language(r, "commit", "\n".join(files.get("git_messages", [])[:len(new_commits)]))
+    elif scenario == "mailbox":
+        ls, report = files["letters"], result_text(out)
+        answers = [e for e in sends if e["ref"] == ls["question"]]
+        to_owner = [e for e in sends if e["to"] == hubconf.owner_address()]
+        r["answered"] = any(all(x in text(e) for x in expect["question"]) for e in answers)
+        r["question_closed"] = done(ls["question"])
+        r["code_untouched"] = code_same() and not new_commits
+        r["change_noted"] = all(x in note for x in expect["change"])
+        r["change_left_open"] = not done(ls["change"])
+        r["owner_asked"] = any(e["payload"].get("type") == "question" for e in to_owner)
+        r["decision_left_open"] = not done(ls["decision"])
+        r["report_bell"] = report.lstrip().startswith("🔔")
+        r["report_names_letters"] = all(mid in report for mid in ls.values())
+        add_language(r, "report", report)
+    if scenario not in ("owner_todo",):
+        add_language(r, "sent", "\n".join(text(e) for e in sends))
+    add_language(r, "note", note)
     return r
 
 
 def cmd_run(a) -> int:
-    scen = [a.scenario] if a.scenario else list(data()["scenarios"])
+    scen = [a.scenario] if a.scenario else list(data(lang_of(a.arm))["scenarios"])
     run_id = a.run or f"{datetime.datetime.now():%Y%m%d-%H%M}-e3"
     run_dir = e2.root() / "runs" / run_id
     run_dir.mkdir(parents=True, exist_ok=True)
-    (run_dir / "run.json").write_text(json.dumps({"point": "e3", "old_ref": OLD_REF, "lang": LANG}, indent=1))
+    (run_dir / "run.json").write_text(json.dumps({"point": "e3", "old_ref": OLD_REF}, indent=1))
     env = e2.run_env(run_dir)
     print(f"e3: arm={a.arm} k={a.k} scenarios={scen} → {run_dir}")
     stop = False
     with concurrent.futures.ThreadPoolExecutor(a.jobs) as pool:
         futs = [pool.submit(one, s, a.arm, i, run_dir, env) for i in range(a.k) for s in scen]
         for f in concurrent.futures.as_completed(futs):
+            if f.cancelled():
+                continue
             m = f.result()
             print(f"  {m['scenario']} {m['arm']}-{m['i']}: exit {m['exit']} {m['secs']}s {m['model'] or ''} {m['error'] or ''}")
             if m["rate_limited"] and not stop:
@@ -259,7 +384,7 @@ def cmd_score(a) -> int:
         if not (out / "meta.json").exists():
             continue
         scenario, arm = out.parent.name, out.name.rsplit("-", 1)[0]
-        report.setdefault(scenario, {}).setdefault(arm, []).append(check(scenario, out))
+        report.setdefault(scenario, {}).setdefault(arm, []).append(check(scenario, out, lang_of(arm)))
     summary = {s: {arm: {k: e2.mean([r.get(k) for r in rs]) for k in sorted({k for r in rs for k in r})}
                    for arm, rs in arms.items()} for s, arms in report.items()}
     (run_dir / "score.json").write_text(json.dumps({"runs": report, "summary": summary}, ensure_ascii=False, indent=1))
@@ -276,16 +401,18 @@ def main(argv: list[str]) -> int:
     ap = argparse.ArgumentParser(prog="e3.py", description=__doc__.split("\n\n")[0])
     sub = ap.add_subparsers(dest="cmd", required=True)
     r = sub.add_parser("run")
-    r.add_argument("--arm", choices=["old", "new"], required=True)
+    r.add_argument("--arm", choices=["old", "new", "new-en"], required=True)
     r.add_argument("--k", type=int, default=3)
     r.add_argument("--scenario")
     r.add_argument("--run")
-    r.add_argument("--jobs", type=int, default=3)
+    r.add_argument("--jobs", type=int, default=2)
     s = sub.add_parser("score")
     s.add_argument("run")
     s.add_argument("--json", action="store_true")
+    c = sub.add_parser("claim", help="(internal) record letters as taken by the platform, in the run's bus")
+    c.add_argument("ids", nargs="+")
     a = ap.parse_args(argv)
-    return cmd_run(a) if a.cmd == "run" else cmd_score(a)
+    return {"run": cmd_run, "score": cmd_score, "claim": cmd_claim}[a.cmd](a)
 
 
 if __name__ == "__main__":
