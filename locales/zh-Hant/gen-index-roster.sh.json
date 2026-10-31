@@ -5,5 +5,5 @@
  "| Idea | Path (hub machine) |": "| 想法 | 路徑(mini) |",
  "## Project roster": "## 專案名冊",
  "gen-index-roster: the roster is unchanged": "gen-index-roster: 名冊沒有變化",
- "gen-index-roster: roster updated ({n} projects)": "gen-index-roster: 名冊已更新({n} 個專案)"
+ "gen-index-roster: roster updated ({n} {n:project|projects})": "gen-index-roster: 名冊已更新({n} 個專案)"
 }

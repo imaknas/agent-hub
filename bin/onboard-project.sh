@@ -62,7 +62,7 @@ while [ $# -gt 0 ]; do
     --public) VISIBILITY="--public"; shift ;;
     --no-remote) NO_REMOTE=true; shift ;;
     --) shift; break ;;
-    -*) fail "$(hub_msg "Unknown argument: {arg}" arg="$1")" ;;
+    -*) fail "$(hub_msg "unknown argument: {arg}" arg="$1")" ;;
     *) break ;;
   esac
 done
@@ -72,7 +72,7 @@ done
 # 這支腳本後面一定要在 mini 上建 bare repo,連不上就不會有任何後續動作
 # 才是安全的:不會 git init、不會建 GitHub repo、不會留下半套的狀態。
 if ! on_mini && ! ssh -o ConnectTimeout=8 -o BatchMode=yes "$MINI_HOST" true 2>/dev/null; then
-  fail "$(hub_msg "Cannot reach the hub machine ({host}). This script creates a bare repo there, so while it cannot reach it, it does nothing: run it again once the hub machine is reachable; this run had no side effects." host="$MINI_HOST")"
+  fail "$(hub_msg "cannot reach the hub machine ({host}). This script creates a bare repo there, so it stopped before doing anything (this run had no side effects): run it again once the hub machine is reachable." host="$MINI_HOST")"
 fi
 
 mkdir -p "$1"
@@ -84,17 +84,17 @@ cd "$PROJ_PATH"
 # 再跑一次會建出全新、跟舊歷史斷開的 agent-memory 分支——不是救回來,是製造第二份記憶。
 # 最常見的情境是「從 GitHub 重新 clone 了一份(沒有 .agent-memory)再叫這支」,所以不能只看
 # 本機有沒有 .agent-memory。唯一的例外是 resume(本機步驟做完、mini 端還沒做完),見下面。
-ROSTER=$("$AGENT_HUB/bin/py" "$AGENT_HUB/bin/hubconf.py" roster) || fail "$(hub_msg "Cannot read the project registry ({path})" path="$AGENT_HUB/projects")"
+ROSTER=$("$AGENT_HUB/bin/py" "$AGENT_HUB/bin/hubconf.py" roster) || fail "$(hub_msg "cannot read the project registry ({path})" path="$AGENT_HUB/projects")"
 RECOVER_HINT="$(hub_msg "To reconnect an existing project (new machine, folder gone, fresh clone) use bin/recover-project.sh {name} [path]" name="$PROJ_NAME")"
 if awk -F'\t' -v n="$PROJ_NAME" '$1==n{f=1} END{exit !f}' <<<"$ROSTER"; then
   fail "$(hub_msg "'{name}' is already in the project registry (projects/{name}.yaml): it cannot be onboarded again. {hint}" name="$PROJ_NAME" hint="$RECOVER_HINT")"
 fi
 if [ ! -e .agent-memory ] && mini_sh "git --git-dir=\"\$HOME/git-origin/${PROJ_NAME}-memory.git\" show-ref --verify --quiet refs/heads/agent-memory" 2>/dev/null; then
-  fail "$(hub_msg "The hub machine already has {name}-memory.git (with agent-memory history): this name was onboarded before. {hint}" name="$PROJ_NAME" hint="$RECOVER_HINT")"
+  fail "$(hub_msg "the hub machine already has {name}-memory.git (with agent-memory history): this name was onboarded before. {hint}" name="$PROJ_NAME" hint="$RECOVER_HINT")"
 fi
 if [ -d .git ] && existing_origin=$(git remote get-url origin 2>/dev/null); then
   same=$(awk -F'\t' -v o="$existing_origin" -v n="$PROJ_NAME" '$3==o && $1!=n{print $1}' <<<"$ROSTER")
-  [ -z "$same" ] || fail "$(hub_msg "This repo (origin {origin}) was onboarded as '{name}' (under another folder name). Reconnect it with bin/recover-project.sh {name} [path]; to rename it, use bin/rename-project.sh" origin="$existing_origin" name="$same")"
+  [ -z "$same" ] || fail "$(hub_msg "this repo (origin {origin}) was onboarded as '{name}' (under another folder name). Reconnect it with bin/recover-project.sh {name} [path]; to rename it, use bin/rename-project.sh" origin="$existing_origin" name="$same")"
 fi
 
 # --- 1. 前置條件檢查跟自動補齊 ---
@@ -115,7 +115,7 @@ $on_hub && fail "$(hub_msg "origin points at the hub machine, which the current 
 if git rev-parse HEAD >/dev/null 2>&1; then
   # 已經有 commit 歷史——這才是需要保護使用者真實工作的情況,working tree
   # 必須乾淨,不猜、不自動清。
-  [ -z "$(git status --porcelain)" ] || fail "$(hub_msg "The working tree is not clean (uncommitted changes or untracked files): clean it up yourself, then run again")"
+  [ -z "$(git status --porcelain)" ] || fail "$(hub_msg "the working tree is not clean (uncommitted changes or untracked files): clean it up yourself, then run again")"
 else
   # 完全是新 repo,還沒有任何 commit——這裡不存在「使用者還沒準備好的工作」
   # 需要保護,直接把現有內容(可能是空的)當成初始內容 commit 掉。
@@ -142,7 +142,7 @@ if [ -e .agent-memory ]; then
   RESUME=true
   hub_say "(The local steps are done, but the hub machine has no bare repo with content for this project: it looks like the last run was interrupted; continuing with the hub machine's steps, without redoing what is done)"
 elif git show-ref --verify --quiet refs/heads/agent-memory; then
-  fail "$(hub_msg "The agent-memory branch exists (but the .agent-memory worktree does not): probably a run that failed halfway; clean up by hand first (git branch -D agent-memory), then run again")"
+  fail "$(hub_msg "the agent-memory branch exists but the .agent-memory worktree does not: probably a run that failed halfway; clean up by hand first (git branch -D agent-memory), then run again")"
 fi
 
 if [ -z "$origin_url" ] && [ "$NO_REMOTE" != true ]; then
@@ -247,15 +247,18 @@ manifest_origin="${origin_url:-(native)}"
 # 跟登記同一個 commit,不會有「已登錄但欄位還沒補」的空窗
 "$AGENT_HUB/bin/py" "$AGENT_HUB/bin/registry.py" add "$PROJ_NAME" "$PROJ_PATH" "$manifest_origin" \
     "~/git-origin/${PROJ_NAME}-memory.git" ${ONBOARD_REGISTRY_EXTRA:+--extra "$ONBOARD_REGISTRY_EXTRA"} \
-  || fail "$(hub_msg "Adding to the project registry failed (projects/{name}.yaml)" name="$PROJ_NAME")"
+  || fail "$(hub_msg "adding to the project registry failed (projects/{name}.yaml)" name="$PROJ_NAME")"
 # 登記完直接 commit+push agent-hub——以前只寫檔不 commit,mini 上的 librarian
 # /mirror-backup 要等有人剛好手動 commit 才看得到新專案(曾經有專案就這樣
 # 卡在本地)。只 commit 這三個檔案,不碰 agent-hub 裡其他未 commit 的東西。
 "$AGENT_HUB/bin/gen-index-roster.sh"
-"$AGENT_HUB/bin/commit-hub-files.sh" "register $PROJ_NAME (onboard-project.sh)" \
-    "projects/$PROJ_NAME.yaml" mirror-list.txt index.md \
-  || hub_say "Warning: committing/pushing agent-hub's registry files failed; do it by hand (the registration itself is written)" >&2
-hub_say "[11/11] Registered in agent-hub's project registry (projects/{name}.yaml); agent-hub committed and pushed" name="$PROJ_NAME"
+if "$AGENT_HUB/bin/commit-hub-files.sh" "register $PROJ_NAME (onboard-project.sh)" \
+    "projects/$PROJ_NAME.yaml" mirror-list.txt index.md; then
+  hub_say "[11/11] Registered in agent-hub's project registry (projects/{name}.yaml); agent-hub committed and pushed" name="$PROJ_NAME"
+else
+  hub_say "Warning: committing/pushing agent-hub's registry files failed; do it by hand (the registration itself is written)" >&2
+  hub_say "[11/11] Registered in agent-hub's project registry (projects/{name}.yaml); committing/pushing agent-hub failed (see the warning)" name="$PROJ_NAME"
+fi
 
 echo
 hub_say "Done: {name} is connected to the agent-hub pipeline." name="$PROJ_NAME"

@@ -68,10 +68,10 @@ for py in "${PYTHONS[@]}"; do
   summary="$(grep -E '^(Ran|OK|FAILED)' "$work/out$i" | tr '\n' ' ')"
   # unittest 的結果行(OK / FAILED)本身:測試印到 stdout 的東西在程序結束時才 flush,可能排在它後面,不能只看最後幾行
   if grep -qE '^OK( \(|$)' "$work/out$i" && ! grep -qE '^FAILED( |$)' "$work/out$i"; then
-    hub_say "test-gate: {python} {summary}" python="$py" summary="$summary"
+    hub_say "test-gate: tests passed ({python}): {summary}" python="$py" summary="$summary"
   else
     fail=1
-    hub_say "test-gate: {python} failed {summary}" python="$py" summary="$summary" >&2
+    hub_say "test-gate: tests failed ({python}): {summary}" python="$py" summary="$summary" >&2
     grep -E '^(ERROR|FAIL):' "$work/out$i" >&2
     tail -30 "$work/out$i" >&2
   fi

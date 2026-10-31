@@ -21,10 +21,10 @@ exit 1
 --- stdout
 --- stderr
 recover-project: 'alpha' was a native project (no external GitHub remote).
-So its code was never backed up anywhere but the original machine: the manifest only has
+So its code was never backed up anywhere but the original machine: the registry entry only has
 memory_bare_repo (hubbox:~/git-origin/alpha-memory.git), which is the history of memory tracking, not code.
 If the original machine's disk is still there, rescue the code from it first, then decide by hand how to attach
-hubbox:~/git-origin/alpha-memory.git; this script does not make code up by guessing.
+hubbox:~/git-origin/alpha-memory.git; this script will not guess at code.
 
 === target exists
 exit 1

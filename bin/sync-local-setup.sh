@@ -40,8 +40,8 @@ cd "${1:-.}" || exit 1
 # 不靠人記得。兩邊同時開 session 的話,同一天的 memory 筆記 push 會衝突。
 moved=$(git rev-parse --git-common-dir 2>/dev/null)/agent-hub-migrated-to-mini
 if [ -f "$moved" ]; then
-  hub_say "⚠️ This project has moved to the hub machine ({target}, moved {date}). This is the old copy kept on the laptop as a backup;
-do not work here: ask the user to close this session and open the folder on the hub machine over SSH ({server}) in Claude Desktop instead." \
+  hub_say "⚠️ This project has moved to the hub machine ({target}, moved from the laptop on {date}). This is the old copy kept on the laptop as a backup;
+do not work here: ask the user to close this session and open the folder on the hub machine over SSH ({server}) from their coding agent instead." \
     target="$(cut -f1 "$moved")" date="$(cut -f2 "$moved")" server="$(hub_server)"
   exit 0
 fi
@@ -125,7 +125,7 @@ fi
 # 由執行環境裝(runtime_ports 的 lifecycle):平台管的 hook 全部換成 `hub-event <事件>`,使用者自己加的留著
 "$AGENT_HUB/bin/py" "$AGENT_HUB/bin/hub-event" install "$PWD" 2>/dev/null; rc=$?
 [ "$rc" = 0 ] && { $QUIET || hub_say "sync-local-setup: hooks aligned"; }
-[ "$rc" = 3 ] && { $QUIET || hub_say "sync-local-setup: this runtime has no session events (hooks), none installed"; }
+[ "$rc" = 3 ] && { $QUIET || hub_say "sync-local-setup: this runtime has no session events (hooks), so none were installed"; }
 
 # --- 2b. .agent-memory/AGENT.md 對齊 templates/AGENT.md ---
 # AGENT.md 在 memory 分支上(會被 commit、同步到 mini),不是本機檔;
@@ -175,9 +175,9 @@ done
 leak_re='~/agent-hub/|/Users/[A-Za-z0-9._-]+/(agent-hub|workspace|\.agent-hub|services|git-origin)'
 leaks=$(git grep -l -I -E "$leak_re" HEAD -- . 2>/dev/null | sed 's#^HEAD:##' | head -10)
 if [ -n "$leaks" ]; then
-  hub_say "⚠️ Files committed in this repo name this machine's paths (the repo may become public, and local paths must not be committed; naming agent-hub is fine):
+  hub_say "⚠️ Files committed in this repo contain this machine's paths (the repo may become public, and local paths must not be committed; naming agent-hub is fine):
 {files}
-Please handle it in this project: move what operations need into {file} (outside the agent-hub:begin/end block, not version-controlled),
+Please handle it in this project: move what is needed to operate it into {file} (outside the agent-hub:begin/end block, not version-controlled),
 and in committed files write it without local paths or delete it, then commit. For details:
 {command}" files="$(echo "$leaks" | sed 's/^/  - /')" file="$INSTR" command="git grep -n -E '$leak_re'"
 fi

@@ -42,10 +42,10 @@ manifest_path=$(echo "$row" | cut -f2)
 TARGET_PATH="${2:-$manifest_path}"
 
 [ "$origin_url" != "(native)" ] || fail "$(hub_msg "'{name}' was a native project (no external GitHub remote).
-So its code was never backed up anywhere but the original machine: the manifest only has
+So its code was never backed up anywhere but the original machine: the registry entry only has
 memory_bare_repo ({memory_bare}), which is the history of memory tracking, not code.
 If the original machine's disk is still there, rescue the code from it first, then decide by hand how to attach
-{memory_bare}; this script does not make code up by guessing." name="$NAME" memory_bare="$memory_bare_repo")"
+{memory_bare}; this script will not guess at code." name="$NAME" memory_bare="$memory_bare_repo")"
 
 [ ! -e "$TARGET_PATH" ] || fail "$(hub_msg "{path} already exists, not overwriting: sort it out by hand, then run again" path="$TARGET_PATH")"
 

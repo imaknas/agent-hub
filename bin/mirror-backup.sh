@@ -19,7 +19,7 @@ LOG="$LOG_DIR/mirror-backup-$(date +%Y-%m-%d).log"
 log() { echo "[$(date '+%H:%M:%S')] $*" | tee -a "$LOG"; }
 
 if [ ! -f "$LIST" ]; then
-  log "$(hub_msg "no {list}, no projects to back up" list="$LIST")"
+  log "$(hub_msg "{list} does not exist; no projects to back up" list="$LIST")"
   exit 0
 fi
 

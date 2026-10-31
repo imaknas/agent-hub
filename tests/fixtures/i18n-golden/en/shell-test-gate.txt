@@ -7,7 +7,7 @@ $ test-gate (passes)
 [exit 0]
 --- stdout
 test-gate: lint OK
-test-gate: <PY> Ran 1 test in <S>s OK 
+test-gate: tests passed (<PY>): Ran 1 test in <S>s OK 
 --- stderr
 
 $ test-gate (fails)
@@ -16,7 +16,7 @@ $ test-gate (fails)
 --- stderr
 test-gate: lint failed (bin/lint, ruff's F rules):
 tests/test_bad.py:1:8: F401 [*] `os` imported but unused
-test-gate: <PY> failed Ran 3 tests in <S>s FAILED (failures=1) 
+test-gate: tests failed (<PY>): Ran 3 tests in <S>s FAILED (failures=1) 
 FAIL: test_fails (test_bad.T.test_fails)
 FAIL: test_fails (test_bad.T.test_fails)
 ----------------------------------------------------------------------

@@ -1,15 +1,15 @@
 {
  "sync-local-setup: {dir} has no .agent-memory, not an onboarded project; skipping": "sync-local-setup: {dir} 沒有 .agent-memory,不是 onboard 過的專案,跳過",
- "⚠️ This project has moved to the hub machine ({target}, moved {date}). This is the old copy kept on the laptop as a backup;\ndo not work here: ask the user to close this session and open the folder on the hub machine over SSH ({server}) in Claude Desktop instead.": "⚠️ 這個專案已經搬到 mini({target},{date} 搬的)。這裡是 MBP 上留著當備份的舊副本,\n不要在這裡做事:請告訴使用者關掉這個 session,改用 Claude Desktop 透過 SSH({server})開 mini 上的那個資料夾。",
+ "⚠️ This project has moved to the hub machine ({target}, moved from the laptop on {date}). This is the old copy kept on the laptop as a backup;\ndo not work here: ask the user to close this session and open the folder on the hub machine over SSH ({server}) from their coding agent instead.": "⚠️ 這個專案已經搬到 mini({target},{date} 搬的)。這裡是 MBP 上留著當備份的舊副本,\n不要在這裡做事:請告訴使用者關掉這個 session,改用 Claude Desktop 透過 SSH({server})開 mini 上的那個資料夾。",
  "sync-local-setup: this runtime has no rules file (hub.json runtime.default); the managed block is not written": "sync-local-setup: 這個執行環境沒有規則檔(hub.json runtime.default),受管區塊不寫",
  "sync-local-setup: hub-runtime could not say where the rules file is; the managed block was not updated": "sync-local-setup: hub-runtime 問不到規則檔要寫到哪,受管區塊沒有更新",
  "sync-local-setup: RULES lists {name}, but {rule} is not there": "sync-local-setup: RULES 登記了 {name},但找不到 {rule}",
  "sync-local-setup: {file} aligned": "sync-local-setup: {file} 已對齊",
  "sync-local-setup: hooks aligned": "sync-local-setup: hook 已對齊",
- "sync-local-setup: this runtime has no session events (hooks), none installed": "sync-local-setup: 這個執行環境沒有 session 事件(hook),不裝",
+ "sync-local-setup: this runtime has no session events (hooks), so none were installed": "sync-local-setup: 這個執行環境沒有 session 事件(hook),不裝",
  "sync-local-setup: AGENT.md aligned with the template and pushed": "sync-local-setup: AGENT.md 已對齊 template 並 push",
  "sync-local-setup: ⚠️ AGENT.md updated, but the commit/push failed; the next session start tries again": "sync-local-setup: ⚠️ AGENT.md 已更新但 commit/push 失敗,下次開 session 會再試",
  "sync-local-setup: ⚠️ {file} is tracked by this repo (it was committed), so ignoring it does nothing; the project's own session has to handle it": "sync-local-setup: ⚠️ {file} 已經被這個 repo 追蹤(commit 過),ignore 無效——請該專案的 session 處理",
  "sync-local-setup: {pattern} added to {exclude}": "sync-local-setup: {pattern} 已加進 {exclude}",
- "⚠️ Files committed in this repo name this machine's paths (the repo may become public, and local paths must not be committed; naming agent-hub is fine):\n{files}\nPlease handle it in this project: move what operations need into {file} (outside the agent-hub:begin/end block, not version-controlled),\nand in committed files write it without local paths or delete it, then commit. For details:\n{command}": "⚠️ 這個 repo 已 commit 的檔案寫了這台機器的路徑(repo 之後可能公開,本機路徑不能進 commit;只提 agent-hub 的名稱沒關係):\n{files}\n請在這個專案裡處理:維運需要的資訊搬到 {file}(agent-hub:begin/end 區塊之外,不進版控),\ncommitted 檔案裡改成不寫本機路徑的寫法或刪掉,然後 commit。細節可用:\n{command}"
+ "⚠️ Files committed in this repo contain this machine's paths (the repo may become public, and local paths must not be committed; naming agent-hub is fine):\n{files}\nPlease handle it in this project: move what is needed to operate it into {file} (outside the agent-hub:begin/end block, not version-controlled),\nand in committed files write it without local paths or delete it, then commit. For details:\n{command}": "⚠️ 這個 repo 已 commit 的檔案寫了這台機器的路徑(repo 之後可能公開,本機路徑不能進 commit;只提 agent-hub 的名稱沒關係):\n{files}\n請在這個專案裡處理:維運需要的資訊搬到 {file}(agent-hub:begin/end 區塊之外,不進版控),\ncommitted 檔案裡改成不寫本機路徑的寫法或刪掉,然後 commit。細節可用:\n{command}"
 }

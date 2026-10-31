@@ -123,7 +123,7 @@ if d.get("is_error"):
 PY
 if [ -f "$OUT/.footer" ]; then
   { read -r sid; read -r turns; read -r minutes; } <"$OUT/.footer"
-  { hub_say "job: {name} · workdir: {cwd} · session: {session} · {turns} turns · {minutes} min" \
+  { hub_say "job: {name} · workdir: {cwd} · session: {session} · {turns} {turns:turn|turns} · {minutes} min" \
       name="$NAME" cwd="$CWD" session="$sid" turns="$turns" minutes="$minutes"
     hub_say "(to continue the discussion: on the hub machine, cd {cwd} && claude --resume {session})" cwd="$CWD" session="$sid"
   } >>"$report"

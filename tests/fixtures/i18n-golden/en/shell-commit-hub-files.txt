@@ -27,5 +27,5 @@ commit-hub-files: hub.json unchanged, nothing committed
 $ commit-hub-files.sh m nope.txt nope2.txt
 [exit 0]
 --- stdout
-commit-hub-files: none of nope.txt nope2.txt exists, nothing committed
+commit-hub-files: none of these exist, nothing committed: nope.txt nope2.txt
 --- stderr

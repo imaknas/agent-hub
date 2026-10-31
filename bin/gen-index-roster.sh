@@ -74,5 +74,5 @@ if cmp -s "$out" "$INDEX"; then
   hub_say "gen-index-roster: the roster is unchanged"
 else
   cat "$out" > "$INDEX"
-  hub_say "gen-index-roster: roster updated ({n} projects)" n="$(grep -c . "$rows")"
+  hub_say "gen-index-roster: roster updated ({n} {n:project|projects})" n="$(grep -c . "$rows")"
 fi

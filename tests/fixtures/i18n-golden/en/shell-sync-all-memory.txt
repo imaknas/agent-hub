@@ -24,4 +24,4 @@ $ sync-all-memory.sh
 
 --- log
 [<T>] cannot reach the hub machine; this round commits locally and does not push
-[<T>] alpha: committed new memory (the hub machine cannot be reached, not pushed yet)
+[<T>] alpha: committed new memory; not pushed yet (cannot reach the hub machine)

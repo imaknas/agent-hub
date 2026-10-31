@@ -8,13 +8,13 @@ rename-project: usage: rename-project.sh <old> <new> [--path <new local path>] [
 exit 1
 --- stdout
 --- stderr
-rename-project: Unknown argument: --bogus
+rename-project: unknown argument: --bogus
 
 === bad new name
 exit 1
 --- stdout
 --- stderr
-rename-project: The new name may only use lowercase letters, digits and -: Beta
+rename-project: the new name may only use lowercase letters, digits and -: Beta
 
 === not in the registry
 exit 1
@@ -62,13 +62,13 @@ rename-project: <TMP>/home/workspace/beta already exists
 exit 1
 --- stdout
 --- stderr
-rename-project: Cannot reach <TMP>/remotes/nope.git
+rename-project: cannot reach <TMP>/remotes/nope.git
 
 === taken on the hub machine
 exit 1
 --- stdout
 --- stderr
-rename-project: On the hub machine the old bare repo is missing, or a path with the new name already exists
+rename-project: on the hub machine, the old bare repo is missing or a path with the new name already exists
 
 === dry-run
 exit 0

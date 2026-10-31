@@ -2,7 +2,7 @@
  "usage: commit-hub-files.sh \"<message>\" <path>...": "用法: commit-hub-files.sh \"<message>\" <path>...",
  "commit-hub-files: {file} is not config (data does not go into git), skipped": "commit-hub-files: {file} 不是 config(data 不進 git),略過",
  "commit-hub-files: {dir} is not a git repo, nothing committed": "commit-hub-files: {dir} 不是 git repo,不 commit",
- "commit-hub-files: none of {paths} exists, nothing committed": "commit-hub-files: {paths} 都不存在,不 commit",
+ "commit-hub-files: none of these exist, nothing committed: {paths}": "commit-hub-files: {paths} 都不存在,不 commit",
  "commit-hub-files: {paths} unchanged, nothing committed": "commit-hub-files: {paths} 沒有變化,不 commit",
  "commit-hub-files: committed and pushed: {paths}": "commit-hub-files: 已 commit+push:{paths}"
 }

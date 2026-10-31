@@ -8,13 +8,13 @@ onboard-project: usage: onboard-project.sh [--public] [--no-remote] <local proje
 exit 1
 --- stdout
 --- stderr
-onboard-project: Unknown argument: --bogus
+onboard-project: unknown argument: --bogus
 
 === hub machine unreachable
 exit 1
 --- stdout
 --- stderr
-onboard-project: Cannot reach the hub machine (hubbox). This script creates a bare repo there, so while it cannot reach it, it does nothing: run it again once the hub machine is reachable; this run had no side effects.
+onboard-project: cannot reach the hub machine (hubbox). This script creates a bare repo there, so it stopped before doing anything (this run had no side effects): run it again once the hub machine is reachable.
 
 === new folder, --no-remote
 exit 0
@@ -46,13 +46,13 @@ onboard-project: 'alpha' is already in the project registry (projects/alpha.yaml
 exit 1
 --- stdout
 --- stderr
-onboard-project: The hub machine already has gamma-memory.git (with agent-memory history): this name was onboarded before. To reconnect an existing project (new machine, folder gone, fresh clone) use bin/recover-project.sh gamma [path]
+onboard-project: the hub machine already has gamma-memory.git (with agent-memory history): this name was onboarded before. To reconnect an existing project (new machine, folder gone, fresh clone) use bin/recover-project.sh gamma [path]
 
 === origin onboarded under another name
 exit 1
 --- stdout
 --- stderr
-onboard-project: This repo (origin <TMP>/remotes/o/proj.git) was onboarded as 'proj' (under another folder name). Reconnect it with bin/recover-project.sh proj [path]; to rename it, use bin/rename-project.sh
+onboard-project: this repo (origin <TMP>/remotes/o/proj.git) was onboarded as 'proj' (under another folder name). Reconnect it with bin/recover-project.sh proj [path]; to rename it, use bin/rename-project.sh
 
 === origin points at the hub machine
 exit 1
@@ -64,13 +64,13 @@ onboard-project: origin points at the hub machine, which the current design neve
 exit 1
 --- stdout
 --- stderr
-onboard-project: The working tree is not clean (uncommitted changes or untracked files): clean it up yourself, then run again
+onboard-project: the working tree is not clean (uncommitted changes or untracked files): clean it up yourself, then run again
 
 === agent-memory branch without a worktree
 exit 1
 --- stdout
 --- stderr
-onboard-project: The agent-memory branch exists (but the .agent-memory worktree does not): probably a run that failed halfway; clean up by hand first (git branch -D agent-memory), then run again
+onboard-project: the agent-memory branch exists but the .agent-memory worktree does not: probably a run that failed halfway; clean up by hand first (git branch -D agent-memory), then run again
 
 === .agent-memory and the bare repo both exist
 exit 1
@@ -116,7 +116,7 @@ sync-local-setup (stand-in): zeta
 [9/11] Cloned the librarian's memory copy on the hub machine to ~/.memory-copies/zeta
 [10/11] Added to the mirror-backup list
 registry: <TMP>/hub/projects/zeta.yaml
-[11/11] Registered in agent-hub's project registry (projects/zeta.yaml); agent-hub committed and pushed
+[11/11] Registered in agent-hub's project registry (projects/zeta.yaml); committing/pushing agent-hub failed (see the warning)
 
 Done: zeta is connected to the agent-hub pipeline.
 --- stderr
@@ -149,5 +149,5 @@ sync-local-setup (stand-in): theta
 [9/11] Cloned the librarian's memory copy on the hub machine to ~/.memory-copies/theta
 [10/11] No external remote, not added to the mirror-backup list
 --- stderr
-the registry entry is invalid; not written: type can only be project or idea
-onboard-project: Adding to the project registry failed (projects/theta.yaml)
+the registry entry is invalid, not written: type can only be project or idea
+onboard-project: adding to the project registry failed (projects/theta.yaml)

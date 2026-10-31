@@ -38,10 +38,10 @@ while [ $# -gt 0 ]; do
     --path) NEW_PATH="$2"; shift 2 ;;
     --origin) NEW_ORIGIN="$2"; shift 2 ;;
     --apply) APPLY=true; shift ;;
-    *) fail "$(hub_msg "Unknown argument: {arg}" arg="$1")" ;;
+    *) fail "$(hub_msg "unknown argument: {arg}" arg="$1")" ;;
   esac
 done
-[[ "$NEW" =~ ^[a-z0-9][a-z0-9-]*$ ]] || fail "$(hub_msg "The new name may only use lowercase letters, digits and -: {name}" name="$NEW")"
+[[ "$NEW" =~ ^[a-z0-9][a-z0-9-]*$ ]] || fail "$(hub_msg "the new name may only use lowercase letters, digits and -: {name}" name="$NEW")"
 
 ROSTER=$("$HUB/bin/py" "$HUB/bin/hubconf.py" roster)
 row=$(awk -F'\t' -v n="$OLD" '$1==n' <<<"$ROSTER")
@@ -63,12 +63,12 @@ git -C "$OLD_PATH/.agent-memory" fetch -q mini
 CUR_ORIGIN=$(git -C "$OLD_PATH" remote get-url origin 2>/dev/null || echo "(native)")
 NEW_ORIGIN="${NEW_ORIGIN:-$CUR_ORIGIN}"
 if [ "$NEW_ORIGIN" != "(native)" ]; then
-  git ls-remote -q "$NEW_ORIGIN" HEAD >/dev/null 2>&1 || fail "$(hub_msg "Cannot reach {origin}" origin="$NEW_ORIGIN")"
+  git ls-remote -q "$NEW_ORIGIN" HEAD >/dev/null 2>&1 || fail "$(hub_msg "cannot reach {origin}" origin="$NEW_ORIGIN")"
 fi
 OLD_MIRROR_NAME=$(basename "$OLD_ORIGIN" .git); NEW_MIRROR_NAME=$(basename "$NEW_ORIGIN" .git)
 
 mini_sh "[ -d ~/git-origin/$OLD-memory.git ] && [ ! -e ~/git-origin/$NEW-memory.git ] && [ ! -e ~/.memory-copies/$NEW ]" \
-  || fail "$(hub_msg "On the hub machine the old bare repo is missing, or a path with the new name already exists")"
+  || fail "$(hub_msg "on the hub machine, the old bare repo is missing or a path with the new name already exists")"
 
 # remote=mini: the name of the git remote (a token)
 if [ "$NEW_PATH" != "$OLD_PATH" ]; then folder="mv $OLD_PATH → $NEW_PATH + git worktree repair"
@@ -135,7 +135,7 @@ if [ "$NEW_PATH" != "$OLD_PATH" ]; then
 fi
 git -C "$NEW_PATH/.agent-memory" fetch -q mini
 [ "$(git -C "$NEW_PATH/.agent-memory" rev-parse HEAD)" = "$(git -C "$NEW_PATH/.agent-memory" rev-parse @{u})" ] \
-  || fail "$(hub_msg "After the move .agent-memory does not match the hub machine; stopping for a manual check")"
+  || fail "$(hub_msg "after the move, .agent-memory does not match the hub machine; stopping for a manual check")"
 "$HUB/bin/sync-local-setup.sh" --quiet "$NEW_PATH" >/dev/null || true
 # Claude Code 的 auto memory 跟著資料夾路徑(slug)走,資料夾搬了就把它帶到新路徑
 if [ "$NEW_PATH" != "$OLD_PATH" ]; then
@@ -153,7 +153,7 @@ hub_say "[local] remote / folder / worktree updated"
 # --- 登記 ---
 # 專案登錄是正本(job、service、隱私標籤都在裡面,一起搬)
 "$HUB/bin/py" "$HUB/bin/registry.py" rename "$OLD" "$NEW" "$NEW_PATH" "$NEW_ORIGIN" "~/git-origin/$NEW-memory.git" \
-  || fail "$(hub_msg "Renaming the registry entry failed (projects/{old}.yaml → {new}.yaml); the other steps are done, fix the registry by hand" old="$OLD" new="$NEW")"
+  || fail "$(hub_msg "renaming the registry entry failed (projects/{old}.yaml → {new}.yaml); the other steps are done, so fix the registry entry by hand" old="$OLD" new="$NEW")"
 # 舊名稱的 transcript 要算到新名稱:legacy-paths.tsv 的名稱改掉,搬走的舊路徑也記進去
 awk -F'\t' -v OFS='\t' -v o="$OLD" -v n="$NEW" '$1==o{$1=n} {print}' "$LEGACY" > "$LEGACY.tmp" && mv "$LEGACY.tmp" "$LEGACY"
 [ "$NEW_PATH" != "$OLD_PATH" ] && printf '%s\t%s\t%s\n' "$NEW" "$OLD_PATH" "$(hub_msg "where it was before the rename ({old})" old="$OLD")" >> "$LEGACY"

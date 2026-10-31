@@ -58,7 +58,7 @@ export AGENT_HUB_OFFLINE="$OFFLINE"
       || log "$(hub_msg "{name}: git-sync-memory failed" name="$name")"
     if [ "$(git rev-parse HEAD)" != "$before" ]; then
       if [ -n "$OFFLINE" ]; then
-        log "$(hub_msg "{name}: committed new memory (the hub machine cannot be reached, not pushed yet)" name="$name")"
+        log "$(hub_msg "{name}: committed new memory; not pushed yet (cannot reach the hub machine)" name="$name")"
       else
         log "$(hub_msg "{name}: committed and pushed new memory" name="$name")"
       fi

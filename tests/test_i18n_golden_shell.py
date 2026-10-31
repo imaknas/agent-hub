@@ -146,7 +146,7 @@ class ShellGolden(unittest.TestCase):
         # moved away (migrate-to-mini.py's marker): printed even with --quiet
         moved = self.repo(self.tmp / "ws" / "moved")
         (moved / ".agent-memory").mkdir()
-        (moved / ".git" / "agent-hub-migrated-to-mini").write_text("2026-10-15\tlaptop\n")
+        (moved / ".git" / "agent-hub-migrated-to-mini").write_text("mini:~/workspace/moved\t2026-10-15\n")
         self.cfg["hosts"] = {"server": "hubhost"}
         self.write_cfg()
         out.append(self.run_(s, "--quiet", moved))

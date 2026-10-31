@@ -1,7 +1,7 @@
 $ mirror-backup.sh
 [exit 0]
 --- stdout
-[<T>] no <TMP>/config/mirror-list.txt, no projects to back up
+[<T>] <TMP>/config/mirror-list.txt does not exist; no projects to back up
 --- stderr
 
 $ mirror-backup.sh

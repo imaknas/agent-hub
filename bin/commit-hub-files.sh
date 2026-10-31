@@ -47,7 +47,7 @@ for f in "$@"; do
     paths+=("$f")
   fi
 done
-[ ${#paths[@]} -gt 0 ] || { hub_say "commit-hub-files: none of {paths} exists, nothing committed" paths="$*"; exit 0; }
+[ ${#paths[@]} -gt 0 ] || { hub_say "commit-hub-files: none of these exist, nothing committed: {paths}" paths="$*"; exit 0; }
 set -- "${paths[@]}"
 
 if [ -z "$(git status --porcelain -- "$@")" ]; then

@@ -116,7 +116,7 @@ sync-local-setup (stand-in): zeta
 [9/11] mini 上已 clone librarian 用的 memory 副本到 ~/.memory-copies/zeta
 [10/11] 已登記進 mirror-backup 清單
 登錄:<TMP>/hub/projects/zeta.yaml
-[11/11] 已登記進 agent-hub 的專案登錄(projects/zeta.yaml),並 commit+push agent-hub
+[11/11] 已登記進 agent-hub 的專案登錄(projects/zeta.yaml),但 agent-hub 的 commit/push 失敗(見上面的警告)
 
 完成:zeta 已接上 agent-hub 管線。
 --- stderr
