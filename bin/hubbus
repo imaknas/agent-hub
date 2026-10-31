@@ -723,7 +723,7 @@ def import_handoffs(c) -> None:
     except ValueError:
         items = None
     if not isinstance(items, list):
-        log(_("reading muninn handoffs failed (exit {code}): {err}", code=r.returncode, err=r.stderr.strip()[-200:]))
+        log(_("reading the assistant's handoffs failed (exit {code}): {err}", code=r.returncode, err=r.stderr.strip()[-200:]))
         return
     known, ack, unknown = projects(), [], []
     c.execute("BEGIN IMMEDIATE")
@@ -743,7 +743,7 @@ def import_handoffs(c) -> None:
     if ack:  # 匯流排 commit 之後才回報;回報失敗下次再報,匯流排的 id 去重不會收兩次
         r = assistant_cli("--delivered", *ack)
         if r.returncode != 0:
-            log(_("telling Muninn they were received failed (retrying next time): {err}", err=r.stderr.strip()[-200:]))
+            log(_("telling the assistant they were received failed (retrying next time): {err}", err=r.stderr.strip()[-200:]))
 
 
 # 助理那邊有 0.3 record 的轉交(它的 handoff_records.Outbox.records 同一條規則);answers 也有(decisions settled),
@@ -840,7 +840,7 @@ def post_assistant(items) -> tuple[int | None, str | None]:
     try:
         with urllib.request.urlopen(req, timeout=20) as resp:
             ok = json.loads(resp.read() or b"{}").get("ok")
-        return 200, None if ok else _("muninn answered ok=false")
+        return 200, None if ok else _("the assistant answered ok=false")
     except urllib.error.HTTPError as e:
         return e.code, f"HTTP {e.code}"
     except (urllib.error.URLError, OSError, ValueError) as e:
@@ -996,24 +996,24 @@ def forward(c) -> None:
                 set_cursor(c, BRIDGE, ev["seq"] - 1)  # 停在這則之前,下次從這裡重送(前面送成功的 id 重送也安全)
                 age = (now() - datetime.datetime.fromisoformat(ev["ts"])).total_seconds() / 3600
                 if age < 0.3 or int(age * 4) % 16 == 0:  # 剛開始記一次,之後約每 4 小時
-                    log(_("sending to Muninn failed ({err}); {id} and the ones after it are resent next time (waited "
+                    log(_("sending to the assistant failed ({err}); {id} and the ones after it are resent next time (waited "
                           "{age:.1f} h)", err=err1, id=ev["id"], age=age))
                 return
         elif err is not None:
             age = (now() - datetime.datetime.fromisoformat(items[0][0]["ts"])).total_seconds() / 3600
             if age < 0.3 or int(age * 4) % 16 == 0:  # 不要每 15 分鐘洗一次 log:剛開始一次,之後約每 4 小時
-                log(_("sending to Muninn failed ({n} waiting, oldest {age:.1f} h): {err}", n=len(items), age=age, err=err))
+                log(_("sending to the assistant failed ({n} waiting, oldest {age:.1f} h): {err}", n=len(items), age=age, err=err))
             return
         else:
-            log(_("sent {n} to Muninn", n=len(items)))
+            log(_("sent {n} to the assistant", n=len(items)))
     set_cursor(c, BRIDGE, last)
 
 
 def reject(c, ev, err) -> None:
     """Muninn 說格式不對的那則:記成 job.failed(狀態頁看得到)、跳過,不擋後面的。"""
-    log(_("Muninn refused {id} ({err}), skipped", id=ev["id"], err=err))
+    log(_("the assistant refused {id} ({err}), skipped", id=ev["id"], err=err))
     publish(c, f"{ev['id']}:rejected", "job.failed", "hubbus-bridge", None, ev["id"],
-            {"job": "hubbus-bridge", "detail": _("Muninn refused {type} {id}: {err}", type=ev["type"], id=ev["id"], err=err)})
+            {"job": "hubbus-bridge", "detail": _("the assistant refused {type} {id}: {err}", type=ev["type"], id=ev["id"], err=err)})
 
 
 def claimed(c, ids) -> set[str]:
@@ -1421,7 +1421,7 @@ def cmd_status(as_json: bool) -> None:
         print(_("Over {hours} h with no session taking them and the platform not taking over: {items}", hours=STUCK_HOURS,
                 items=_(", ").join(f"{s['id']}→{s['to']}" for s in stuck)))
     if items:
-        print(_("Waiting to go to Muninn: {n} (oldest {oldest})", n=len(items), oldest=items[0]["ts"][5:16]))
+        print(_("Waiting to go to the assistant: {n} (oldest {oldest})", n=len(items), oldest=items[0]["ts"][5:16]))
     for f in failed:
         print(_("job.failed {ts} {job}: {detail}", ts=f["ts"][5:16], job=f.get("job"), detail=f.get("detail", "")[:120]))
     if corrupt:
@@ -1442,13 +1442,13 @@ def main() -> None:
     s.add_argument("--from", dest="sender")
     s.add_argument("--id", help=_("a fixed letter id (sending the same id again does nothing; librarian uses it for tasks)"))
     s.add_argument("--task", help=_("task key (with done/drop: which one)"))
-    s.add_argument("--question", help=_("with done/drop: which question this project asked Knas (letter id) was resolved "
+    s.add_argument("--question", help=_("with done/drop: which question this project asked the owner (letter id) was resolved "
                                         "here / is no longer needed"))
     s.add_argument("--due", help="YYYY-MM-DD")
     s.add_argument("--context")
     s.add_argument("--new-reason", help=_("why it is a new task although it looks like one closed in the last 14 days"))
     s.add_argument("--inferred", action="store_true",
-                   help=_("done/drop with --task: only inferred (nobody saw Knas do it); Muninn asks Knas before closing"))
+                   help=_("done/drop with --task: only inferred (nobody saw the owner do it); the assistant asks the owner before closing"))
     sub.add_parser("inbox").add_argument("--project")
     sub.add_parser("show").add_argument("id")
     sub.add_parser("ack").add_argument("ids", nargs="+")

@@ -199,8 +199,8 @@ def main():
         if due:
             age = _("{minutes:.0f} minutes", minutes=age_min) if age_min is not None else _("a long time")
             prefix = "🚨" if not st.get("alerting") else _("⏰ still down:")
-            text = _("{prefix} the agent-hub scheduler has not ticked for {age} (last {when}). librarian, "
-                     "muninn-tick/reflect and the upload jobs have all stopped.", prefix=prefix, age=age, when=when) \
+            text = _("{prefix} the agent-hub scheduler has not ticked for {age} (last {when}). The librarian, "
+                     "the assistant's jobs, reflect and the upload jobs have all stopped.", prefix=prefix, age=age, when=when) \
                 + "\n" + diagnose()
             if send(text):
                 st.update(alerting=True, last_alert=now.isoformat(timespec="seconds"))

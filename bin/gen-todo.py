@@ -94,7 +94,7 @@ def main() -> None:
     for name in names:
         state = PROJECTS / name / "STATE.md"
         if not state.exists():
-            problems.append(_("{name}: no STATE.md on the mini", name=name))
+            problems.append(_("{name}: no STATE.md on the hub machine", name=name))
             continue
         if state.stat().st_size <= PLACEHOLDER_MAX_BYTES:
             continue

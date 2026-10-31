@@ -142,9 +142,9 @@ def decide(args: dict) -> dict:
     tell_runner("end", tool=tool, kind=kind, decision="deny_readonly" if MODE != "work" else "deny_policy")
     if MODE != "work":
         return {"behavior": "deny", "message": _("This is a read-only (discuss) lease; {tool} cannot be used. Write what needs "
-                                                  "changing into the handover and let Knas decide.", tool=tool)}
+                                                  "changing into the handover and let the owner decide.", tool=tool)}
     return {"behavior": "deny", "message": _("This lease cannot use {tool} (it can read and edit files in this folder, and run "
-                                              "commands after asking Knas).", tool=tool)}
+                                              "commands after asking the owner).", tool=tool)}
 
 
 def decide_question(rid: str, tool: str, inp: dict) -> dict:
@@ -156,7 +156,7 @@ def decide_question(rid: str, tool: str, inp: dict) -> dict:
         tell_runner("end", tool=tool, kind="ask_user", decision="answered")
         return {"behavior": "allow", "updatedInput": {**inp, "answers": runtime_claude.native_answers(res["answers"])}}
     tell_runner("end", tool=tool, kind="ask_user", decision="no_answer")
-    return {"behavior": "deny", "message": _("Knas is not answering this question now. Ask him in plain text; do not retry "
+    return {"behavior": "deny", "message": _("The owner is not answering this question now. Ask in plain text; do not retry "
                                               "with the question tool.")}
 
 
@@ -176,9 +176,9 @@ def decide_web(rid: str, tool: str, inp: dict, ap: dict) -> dict:
         tell_runner("end", tool=tool, kind="open_web", decision=d, summary=url, target=url)
         return {"behavior": "allow", "updatedInput": inp}
     tell_runner("end", tool=tool, kind="open_web", decision="deny" if d == "deny" else "timeout", summary=url, target=url)
-    why = _("Knas refused this URL.") if d == "deny" else _("Nobody approved this URL (no answer within 5 minutes).")
+    why = _("The owner refused this URL.") if d == "deny" else _("Nobody approved this URL (no answer within 5 minutes).")
     return {"behavior": "deny", "message": _("{why} {advice}", why=why, advice=_(
-        "Do not retry the same URL; if you need it, tell Knas in plain text why you want to read it."))}
+        "Do not retry the same URL; if you need it, tell the owner in plain text why you want to read it."))}
 
 
 def inside_ws(path: str) -> bool:
@@ -213,7 +213,7 @@ def decide_ask(rid: str, tool: str, kind: str, target: str, inp: dict) -> dict:
         return {"behavior": "allow", "updatedInput": inp}
     tell_runner("end", tool=tool, kind=kind, decision="deny" if d == "deny" else "timeout", summary=summary, target=summary)
     noun = _("command") if kind == "run_command" else _("action")
-    why = (_("Knas refused this {noun}.", noun=noun) if d == "deny"
+    why = (_("The owner refused this {noun}.", noun=noun) if d == "deny"
            else _("Nobody approved this {noun} (no answer within 5 minutes).", noun=noun))
     return {"behavior": "deny", "message": _("{why} {advice}", why=why, advice=_(
         "Do not retry the same {noun}; explain it to him in plain text.", noun=noun))}
@@ -239,10 +239,10 @@ def show_file(args: dict) -> tuple:
     code, res = http("POST", f"{RUNNER}/v1/internal/{LEASE}/show", secret(hubconf.secrets_dir() / "runner-token"),
                      {"path": args.get("path"), "summary": args.get("summary")}, timeout=30)
     if code == 200 and res.get("id"):
-        return _("Shown to Knas: {path} ({mime}, {size} bytes).", path=res.get("path"), mime=res.get("mime"),
+        return _("Shown to the owner: {path} ({mime}, {size} bytes).", path=res.get("path"), mime=res.get("mime"),
                  size=res.get("size")), False
     if code == 0:
-        return _("Not sent: the platform (runner) is unreachable; tell Knas in plain text where the file is."), True
+        return _("Not sent: the platform (runner) is unreachable; tell the owner in plain text where the file is."), True
     return _("Not sent: {why}", why=res.get("detail") or res.get("error") or code), True
 
 

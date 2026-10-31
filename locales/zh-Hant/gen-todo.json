@@ -1,7 +1,7 @@
 {
  "{source}: no `{heading}` section": "{source}:沒有 `{heading}` 段落",
  "{source}: a to-do with no owner, or done and not removed `{line}`": "{source}:待辦沒標負責人或已完成未移除 `{line}`",
- "{name}: no STATE.md on the mini": "{name}:mini 上沒有 STATE.md",
+ "{name}: no STATE.md on the hub machine": "{name}:mini 上沒有 STATE.md",
  "Cross-project to-do": "跨專案待辦",
  "Generated mechanically by `bin/gen-todo.py` from the `{heading}` section of each project's STATE.md ({total} items);": "由 `bin/gen-todo.py` 從各專案 STATE.md 的 `{heading}` 段落機械產生(共 {total} 項),",
  "do not edit by hand: to change the content, change the source (each project's memory, from which librarian updates STATE.md;": "不要手動改——要改內容,改來源(各專案的 memory,librarian 會更新 STATE.md;",

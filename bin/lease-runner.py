@@ -255,7 +255,7 @@ def work_ready(project: str) -> tuple[bool, str]:
     設定還沒渲染的那段時間,不能讓 work 在沒有 sandbox 的情況下跑)。"""
     doc = hubconf.projects().get(project) or {}
     if not (doc.get("enforce") or {}).get("work"):
-        return False, _("{project} has no work mode (enforce.work in the registry; added only with Knas's consent)",
+        return False, _("{project} has no work mode (enforce.work in the registry; added only with the owner's consent)",
                          project=project)
     import runtime_claude
     return runtime_claude.sandbox_rendered(hubconf.workspace(project))
@@ -926,7 +926,7 @@ class H(http.server.BaseHTTPRequestHandler):
                 if l.state in ("terminal", "detaching", "detached"):
                     return self.err(409, "busy", l.state)
                 if l.in_turn or l.waiting:
-                    return self.err(409, "busy", _("answering or waiting for Knas's reply; switch after this turn"))
+                    return self.err(409, "busy", _("answering or waiting for the owner's reply; switch after this turn"))
                 if l.mode == mode:
                     return self.reply(200, {"v": 1, **l.public()})
                 # 換判斷點 = 換程序:停掉、用同一個 session --resume 接回(權限轉接也跟著重開)

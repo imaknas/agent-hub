@@ -18,6 +18,6 @@
  "{minutes:.0f} minutes": "{minutes:.0f} 分鐘",
  "a long time": "很久",
  "⏰ still down:": "⏰ 還沒好:",
- "{prefix} the agent-hub scheduler has not ticked for {age} (last {when}). librarian, muninn-tick/reflect and the upload jobs have all stopped.": "{prefix} agent-hub 排程器已經 {age} 沒有 tick(最後 {when})。librarian、muninn-tick/reflect、上傳 job 都停了。",
+ "{prefix} the agent-hub scheduler has not ticked for {age} (last {when}). The librarian, the assistant's jobs, reflect and the upload jobs have all stopped.": "{prefix} agent-hub 排程器已經 {age} 沒有 tick(最後 {when})。librarian、muninn-tick/reflect、上傳 job 都停了。",
  "the scheduler stopped {age} ago, notified": "排程器停了 {age},已通知"
 }
