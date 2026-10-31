@@ -1,0 +1,10 @@
+=== classify_exit login
+{'error': 'agent_login', 'detail': 'fake runtime 沒登入'}
+=== classify_exit crash
+{'error': 'process_crashed', 'detail': 'exit 2:boom'}
+=== resume_command
+('fake-resume s1', '假的 runtime:接回同一段對話')
+=== auth_env missing
+(None, 'fake runtime 沒有 token 的登入')
+=== credentials
+[('fake subscription', 'fake 的 subscription 登入'), ('fake token', 'fake 的 token 登入')]

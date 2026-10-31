@@ -1,0 +1,69 @@
+=== --help
+exit 0
+--- stdout
+usage: hub-run [-h] [--cap CAP] [--timeout TIMEOUT] [--wait ID] ...
+
+在平台的 profile 底下跑需要能力的程式
+
+positional arguments:
+  cmd
+
+options:
+  -h, --help         show this help message and exit
+  --cap CAP          能力名稱(專案登錄 enforce.capabilities 有的)
+  --timeout TIMEOUT  秒(預設跟上限看 hub.json cap_runner)
+  --wait ID          接回一個工作
+--- stderr
+=== not in a project
+exit 2
+--- stdout
+--- stderr
+hub-run: 要在登錄過的專案資料夾裡跑
+=== usage: no --cap
+exit 2
+--- stdout
+--- stderr
+hub-run: 用法:hub-run --cap <能力> [--timeout 秒] -- <指令…>,或 hub-run --wait <id>
+=== usage: no command
+exit 2
+--- stdout
+--- stderr
+hub-run: 用法:hub-run --cap <能力> [--timeout 秒] -- <指令…>,或 hub-run --wait <id>
+=== wait: unknown id
+exit 2
+--- stdout
+--- stderr
+hub-run: 找不到工作 nope
+=== nobody picks it up
+exit 125
+--- stdout
+--- stderr
+hub-run: 工作 20261031-120000-abcdef(能力 gpu);這次呼叫被中斷的話,工作照跑,用 `hub-run --wait 20261031-120000-abcdef` 接回
+hub-run: 平台的代跑服務沒在跑(30 秒沒人接手),請求已撤回;請告訴使用者(agent-hub 的 cap-runner)
+=== queued, then done
+exit 3
+--- stdout
+--- stderr
+hub-run: 排隊中(同一個專案一次只跑一個、全平台有上限)
+=== timed out
+exit 124
+--- stdout
+partial out
+--- stderr
+partial err
+hub-run: 逾時,工作被停掉了(要更久用 --timeout,上限看 hub.json cap_runner.max_timeout_s)
+=== rejected
+exit 126
+--- stdout
+--- stderr
+hub-run: 請求被拒絕:cwd ../x
+=== lost with a reason
+exit 125
+--- stdout
+--- stderr
+hub-run: restart
+=== lost without a reason
+exit 125
+--- stdout
+--- stderr
+hub-run: 工作弄丟了

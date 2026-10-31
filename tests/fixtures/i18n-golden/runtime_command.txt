@@ -1,0 +1,20 @@
+=== health: no template
+(False, 'hub.json runtime.command.run 沒有設(指令樣板)')
+=== run: no template
+hub.json runtime.command.run 沒有設(指令樣板)
+=== health: not found
+(False, '找不到 /nonexistent/agent-cli')
+=== run: not found
+找不到 /nonexistent/agent-cli
+=== complete: not found
+找不到 /nonexistent/agent-cli
+=== run: timeout
+超過 1 秒
+=== run: no output, empty stderr
+沒有輸出:(stderr 也是空的)
+=== complete: no output
+沒有輸出:
+=== run: no output, stderr
+沒有輸出:oops
+=== complete: no output, stderr
+沒有輸出:oops
