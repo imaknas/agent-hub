@@ -20,8 +20,8 @@ agent-hub depends on Claude Code in two ways:
 - **Using it to do work** (judgment points, mailbox delegation, leasing): can be swapped for another agent or a direct
   API call.
 - **The platform's guarantees rely on its features**: write limits rely on Claude's permission rules, letters on
-  Claude's hooks, notes on `CLAUDE.local.md`, statistics on Claude's conversation logs. Switch tools and these do not get
-  worse, they **silently disappear**.
+  Claude's hooks, notes on `CLAUDE.local.md`, statistics on Claude's conversation logs. Switch tools and these do not
+  get worse, they **silently disappear**.
 
 Only the second is an obstacle to open source.
 
@@ -31,7 +31,7 @@ The first version wanted to wrap any agent in an operating-system sandbox so tha
 blind review pointed out that this cannot work: Seatbelt cannot filter the network by domain (the agent has to reach
 its own model API, so once the network is open an allow list is decoration), the agent must be able to read its own
 credentials, the state directory must be writable (it holds every project's conversation logs), subscription login
-needs the Keychain, and **sandboxes cannot be nested** (known-issues.md:222): Claude Code, Codex and Gemini CLI all use
+needs the Keychain, and **sandboxes cannot be stacked** (known-issues.md:222): Claude Code, Codex and Gemini CLI all use
 Seatbelt for their own sandbox on macOS, and with another layer around them their own layer cannot be applied; on the
 owner's machine Bash simply fails.
 
@@ -159,8 +159,8 @@ hide the user's rules); Gemini's `contextFileName` is in `.gemini/settings.json`
     to the public spec and is interchangeable with Muninn, proving the spec lets two unrelated systems connect, not
     just a private format between agent-hub and Muninn.
   - The owner's machine: `owner_side: muninn`, behaviour unchanged.
-  - **Without an owner side, open-source users' `〔owner〕` to-dos and questions have nowhere to go**: so `builtin` is in
-    the first version, ahead of any agent adapter.
+  - **Without an owner side, open-source users' `〔owner〕` to-dos and questions have nowhere to go**: so `builtin`
+    is in the first version, ahead of any agent adapter.
 - **Notifications**: `alert.py` becomes adapters (Discord, ntfy, email, Slack).
 - **Linux**: scheduling and services are the launchd → systemd user unit / cron layer (the scheduler and
   render-services are already platform code; what changes is the generated files and the load commands); on Linux the
@@ -175,9 +175,10 @@ hide the user's rules); Gemini's `contextFileName` is in `.gemini/settings.json`
    Moving the librarian's three points to completion is a separate step (shadow mode, `llm-providers.md` step 4).
 3. ✅ (e2a4bd3) **The owner side can be swapped**: registrar moved back to the core, `owner_side: builtin | muninn`, a
    minimal built-in owner side + notification adapters; Muninn written as an optional tool.
-4. ✅ **Platform CLI renamed and on the PATH** (2d77f1d), local paths removed from the rule content, ✅ MCP server (10-29,
-   `agenthub mcp`, `bin/mcp_server.py`, docs/mcp.md: inbox/show/thread/send/ack/done + ask_owner, note; `instructions`
-   carries the rules and the number of open letters; agents started by the platform are always refused). Live run:
+4. ✅ **Platform CLI renamed and on the PATH** (2d77f1d), local paths removed from the rule content, ✅ MCP server
+   (10-29, `agenthub mcp`, `bin/mcp_server.py`, docs/mcp.md: inbox/show/thread/send/ack/done + ask_owner, note;
+   `instructions` carries the rules and the number of open letters; agents started by the platform are always
+   refused). Live run:
    Codex (registered temporarily with `-c mcp_servers.…`, without changing its settings), in the read-only sandbox,
    received mail, read the README to reply, closed it and wrote a note, all landing in the bus and memory. Registering
    in each tool's settings is up to the user (the platform only prints the snippet). A propose agent running

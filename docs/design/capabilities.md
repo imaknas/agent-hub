@@ -34,7 +34,7 @@ command, sent to the phone every time for him to allow. That human check does no
    sandbox cannot block (known-issues.md); the platform's rules can (blocking `securityd`'s mach-lookup directly).
    `open` and `osascript` were allowed at first (Calculator really was launched outside the sandbox); only adding
    `(deny lsopen)`, `(deny appleevent-send)` and a process-exec deny blocked them.
-3. **Sandboxes cannot be nested**: running `sandbox-exec` inside Claude Code's sandbox always gives
+3. **Sandboxes cannot be stacked**: running `sandbox-exec` inside Claude Code's sandbox always gives
    `sandbox_apply: Operation not permitted`. So the step that applies the platform's rules cannot happen inside the
    session's sandbox.
 4. **Verified in the real location**: the test folder was put in `~/workspace/<probe>` (the rules first block all of
@@ -254,8 +254,8 @@ the shared temporary area, listed clearly above.
 5. `create-idea-sandbox.py` writes capabilities per `default_for`; one line added to `idea-1`'s registry; one line added
    to work mode's system prompt.
 6. A real run: in `idea-1`, in a session opened with its real settings, run
-   `hub-run --cap gpu -- blender -b … -P tools/blender_render.py …` and get images. Add "sandboxes cannot be nested"
-   and "excludedCommands only works for standalone commands" to `known-issues.md`.
+   `hub-run --cap gpu -- blender -b … -P tools/blender_render.py …` and get images. Add "Sandboxes cannot be stacked"
+   and "`excludedCommands` only works for a command on its own" to `known-issues.md`.
 7. Reply to `muninn` (`m10251437-1f92`): what was done, how to use the command, how it differs from the proposal (the
    platform runs it instead of excluding it), then `hubbus done`.
 
@@ -288,7 +288,7 @@ capabilities, locking security fields) → `61ff364` (seatbelt.py) → `92b2898`
 - **Found in live tests, fixed**: `(deny signal (target others))` did not block sending signals to other processes;
   changed to "block everything, then allow same-sandbox"; the resident cap-runner was not restarted after
   `hubconf.py` changed, and mixing old and new modules left one job stuck in queued: now every start failure answers
-  rejected, and known-issues.md records "restart the service after changing a module it imports".
+  rejected, and known-issues.md records it ("A long-running service runs the code loaded when it started").
 - **Tests**: `test_cap_profile.py` (real sandbox-exec, under workspace_root; files, Keychain, network including local
   and unix sockets, opening apps, Apple Events, launchctl, crontab, signals), `test_cap_runner.py` (14: the various
   rejections, symlinked .hub-run/jobs/requests, timeout killing the whole process group, queueing, restart, the
