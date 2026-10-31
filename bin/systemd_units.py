@@ -18,6 +18,10 @@ import os
 import pathlib
 import subprocess
 
+import i18n
+
+_ = i18n.domain(__file__)
+
 UNIT_DIR = pathlib.Path.home() / ".config" / "systemd" / "user"
 
 
@@ -53,7 +57,8 @@ def files(plist: dict) -> dict[str, str]:
     out = {f"{label}.service": "\n".join(lines) + "\n"}
     if timer:
         out[f"{label}.timer"] = "\n".join([
-            "[Unit]", f"Description=agent-hub {label}(每 {int(plist['StartInterval'])} 秒)", "",
+            "[Unit]", "Description=" + _("agent-hub {label} (every {secs} s)", label=label, secs=int(plist['StartInterval'])),
+            "",
             "[Timer]", "OnActiveSec=1" if plist.get("RunAtLoad") else f"OnActiveSec={int(plist['StartInterval'])}",
             f"OnUnitActiveSec={int(plist['StartInterval'])}", "AccuracySec=1", "",
             "[Install]", "WantedBy=timers.target"]) + "\n"
