@@ -1,6 +1,6 @@
 # Waiting on tests: where agent sessions wait, the floor, and what to change
 
-> agent-hub session · 2026-10-31, r9 2026-11-01. Owner's observation: in the projects being worked on now, the bottleneck is not the
+> agent-hub session · 2026-10-31, r11 2026-11-01. Owner's observation: in the projects being worked on now, the bottleneck is not the
 > agents' output but waiting for tests; the owner wants everything besides model input/output at its theoretical minimum.
 > This doc measures first, then proposes changes. **Nothing here is implemented yet.** Owner's rule for building it:
 > **the final architecture first, no workarounds.**
@@ -42,13 +42,18 @@
 > r9 (11-01): a sixth review found 10 blocking points. Three refute r7/r8 mechanisms that were written without a test
 > (the absolute `core.hooksPath`, `run-tests`' temporary HOME/STATE, a bundle handed over as a file); several are
 > holes in today's sandbox, now given to a separate fix. **Not settled; building does not start.** The refuted
-> sentences are marked open below (section 7, "Open after round 6") instead of being replaced by new guesses.
+> sentences were marked open (since settled, r10) instead of being replaced by new guesses.
 >
 > r10 (11-01, after the owner paused reviews until the sandbox fix landed, which it has): the design's security claim
 > is scoped to "adds no path by which a project exceeds its sandbox" (B1); round 6's open points are decided, each in
 > its section (section 7, "Settled after round 6"), mostly by reusing what the 11-01 fix built (per-repo tool caches
 > with their own interpreters, `project_git.py`); step 2.3's switching merge is rehearsed in a throwaway hub before it
 > lands.
+>
+> r11 (11-01): after a seventh review (4 blocking, each a one-sentence fix): the platform never opens a file in a
+> project-writable folder, results included (B4); the sandbox decision's fallback reads repo files and fails closed
+> (`projects-and-repos.md` 3); step 2.3's landing installs agent-hub's hooks and refreshes the index under the merge
+> lock (section 7); worker slots in a platform-owned folder (B5).
 
 ## Summary
 
@@ -260,19 +265,23 @@ merged, tested commits. It also removes the class of incidents where one session
    tier a fresh `HOME`, B4; the private-names list comes in as a `config:` input). `test-gate` itself becomes a thin
    caller of the runner (B4), so there is no loop.
    **Gate code from main, declaration from the tree under test (decided after round 6):** every caller runs the
-   runner of the hub's main checkout (the `agenthub` on PATH execs it), never a copy inside the tree being tested, so
-   a branch cannot certify its own gate; the runner tests the branch's runner code like any other code. The test
+   runner of the hub's main checkout (the `agenthub` on PATH execs it; the tests name another through one variable,
+   step 2.2), never a copy inside the tree being tested, so a branch cannot change how its results are exported, keyed
+   or recorded; the runner tests the branch's runner code like any other code. (A branch can still declare weaker
+   tiers for itself — this is an accident guard, like the rest of the gate.) The test
    declaration of the hub repo's own entry is read from the tree under test (`projects/agent-hub.yaml` in the
    export), every other project's from the registry, so the merge that changes agent-hub's tiers is tested by the
    tiers it brings. This is what makes step 2.3's switching merge work: the old `merge-branch` runs agent-hub's v1
    `runtime.test` (`bin/test-gate --all`) in the worktree, that is the branch's thin `test-gate`, which calls main's
-   runner (landed in step 2.2) with the branch's v2 tiers; none of them is `test-gate`, so nothing recurses. agent-hub's `code` covers `projects/`, `modules/` and
+   runner (landed in step 2.2) as `--index --when merge` with the branch's v2 tiers; none of them is `test-gate`, so
+   nothing recurses. agent-hub's `code` covers `projects/`, `modules/` and
    `hub.example.json` as well as code, so the config check in the `lint` tier still runs on registry-only commits.
    **Main moves only to a tree that passed (decided after round 6):** the check is `merge-branch`'s own, before it
    fast-forwards: it refuses unless every affected `merge` tier has a recorded pass for the rebased tree, and a refusal
    applies nothing. A move of main by any other path (a hand `merge --ff-only`, `cherry-pick`, `--no-verify`) is
-   **detected, not blocked**: a `reference-transaction` hook in its `committed` state logs it and the status page shows
-   red. Blocking it there would leave the main checkout half-applied (tested in round 6: a refused fast-forward kept
+   **detected, not blocked**: a `reference-transaction` hook in its `committed` state compares the new value with the
+   record `merge-branch` writes before it fast-forwards, logs a move with no such record (in the repo's store, read by
+   the platform only through a `project_git` job, B4), and the status page shows red. Blocking it there would leave the main checkout half-applied (tested in round 6: a refused fast-forward kept
    the ref but left the new files in the working tree and index), which for agent-hub means untested files live in
    the running platform. This replaces `githooks/post-commit`'s bypass log; it only reports when main's value changes
    to a different commit (`pack-refs` and same-value updates are not reported). It is an accident guard, not a security
@@ -378,8 +387,11 @@ tests:
   `agenthub config apply` rewrites the files in the new form afterwards. The upgrade sits where documents enter the
   index (`registry.refresh`, including its last-valid fallback, which serves a cached document through the same
   upgrade); the index records the schema version it was built with, and `hubconf.projects()` — which reads the index
-  without PyYAML — treats an index older than its code as missing and refreshes it; `merge-branch` refuses a
-  document that is not v2 instead of reading it as "no tests". Changing with it: `contracts/project.v2.schema.json`,
+  without PyYAML — never refreshes it itself: an index older than its code is refused by the readers that need v2
+  (`merge-branch` refuses a document that is not v2 instead of reading it as "no tests"), and the index is rebuilt by
+  `registry.refresh` (step 2.3's landing runs it under the merge lock right after the fast-forward; the scheduler's
+  tick otherwise). The index also stores each project's **effective security fields** (merged from its repo file
+  once repo files exist), so every reader that decides whether to sandbox sees them. Changing with it: `contracts/project.v2.schema.json`,
   `registry.py` (known fields, `dirs()`, `default_cwd`, validation, the header) and the one reader of `runtime.test`,
   `merge-branch`; the readers of whether `runtime` exists (`check-secrets.py`, `lease-runner.py`, `hub-run`,
   `render-services.py` through `default_cwd`, and those through `dirs()`) keep their meaning. Later additions
@@ -408,7 +420,7 @@ nested scopes, every scope nested under the one owning the file (test runners lo
 the `depends_on` closure — without being filtered by its own `code` (a dependent's tests depend on the dependency's
 code). Of each project, the tiers whose `when` includes the caller's moment and whose `paths` match. Until the
 resolver exists the repo has one project and this is the same function with one answer. Every caller asks it: the
-commit gate and the `reference-transaction` check, `merge-branch`, `agenthub test`, the nightly run, B7's
+commit gate, `merge-branch`, `agenthub test`, the nightly run, B7's
 classification. A caller runs only the tiers that run in its own repo; a pair in another repo (a cross-repo
 `depends_on`) is reported as pending and left to that repo's nightly run, whose key misses because the dependency's
 folder hash changed. Validation rejects a tier `repo:` in which the project has no scope.
@@ -420,7 +432,8 @@ where `test-gate`'s store already lives and which every session of the repo alre
 
 - `key(project, tier, tree)` = the content the tier's tests depend on in the **exported** tree + the tier's declared
   `run` text and `jobs.max` (not the worker count filled in, which follows the machine's load) + the values of
-  `inputs` + the runner's version and its fixed tier environment (B4). The tree is the one the run exported (the `write-tree` of its temporary index, B4), so what ran is exactly
+  `inputs` + the runner's key format (a constant bumped when what a result means changes, not the platform's commit)
+  and its fixed tier environment (B4). The tree is the one the run exported (the `write-tree` of its temporary index, B4), so what ran is exactly
   what the key names, uncommitted changes included, and no clean-checkout rule is needed. The content is the tree hash
   of the project's folder — for an ancestor including nested scopes, since its runner collects them (the relayed
   text's "scope residual" is unsound there, found in the second review; this doc keeps the sound form and the owner
@@ -458,15 +471,19 @@ rebase, no lock.
 - **Environment (r8):** **a fresh environment per run, built from the lockfile into the run's directory, from the
   repo's own tool caches** — the ones the 11-01 sandbox fix already gives every project in its git dir
   (`agent-hub/cache/<tool>`, set through `policy.env`: `UV_CACHE_DIR`, `UV_PYTHON_INSTALL_DIR`, `PIP_CACHE_DIR`,
-  `npm_config_cache`, `COREPACK_HOME`), so interpreters as well as packages are per repo and no sandbox can write
+  `npm_config_cache`, `COREPACK_HOME`, `UV_TOOL_DIR`), so interpreters as well as packages are per repo and no sandbox can write
   another repo's; the runner sets the same variables for every project, sandboxed or not, and adds the browser
   cache tiers need (`PLAYWRIGHT_BROWSERS_PATH`) to that list. Nothing
-  ready-to-run is shared: a run cannot change what a later run sees, and no other repo can change this repo's
+  ready-to-run is shared across repos: no other repo can change this repo's
   packages. The shared tool caches are not used, because every sandbox may write them and a package changed there is
   linked unchecked into the next environment built from it (shown in review 5 with uv). Measured with muninn's
   lockfile (uv 0.11, APFS): `uv sync --frozen` into a new folder took 4.9 s with a cold cache and **0.07 s warm**
   (120 packages, linked as copy-on-write clones), and the project imported from the export. The project and its
-  workspace members are installed from the export each run, so nothing stale is carried. npm follows the same shape
+  workspace members are installed from the export each run, so nothing stale is carried; the run's directory is
+  removed afterwards, as `test-gate` removes its export today. npm follows the same shape, at a measured cost (review
+  7, the-crucible's lockfile, warm cache, offline, scripts off): 4.6–5.3 s, about 12 CPU-s and 717 MB of
+  `node_modules` per run — accepted as the price of not sharing; B7 shows whether it matters. Otherwise npm follows
+  the same shape
   (`npm ci` from the per-repo cache), measured when it is built; an ecosystem without a layer yet runs in the session's
   own environment, said explicitly. Cost: each repo downloads its packages once on its own.
 - **What a tier sees:** the tool variables above, so a fresh `HOME` hides nothing a tier needs (round 6: with a fresh
@@ -487,28 +504,39 @@ config), the `inputs`, the tier — runs with the authority of the project it te
 - **Runs the platform starts** are command jobs of the project in the registry (the nightly run, B8's worker later), so
   the whole `agenthub test` invocation goes through `isolation.wrap` like every command job: sandboxed for a project
   with `enforce.sandbox` (not run when the sandbox cannot be applied, as `sandboxed-run` does today), and with the
-  user's authority for a project without one, which has no boundary to cross. The platform reads the results from the store as data;
-  it never evaluates a project's commands or inputs itself.
+  user's authority for a project without one, which has no boundary to cross. The job returns its results on
+  **stdout** (the `project_git` pattern, `projects-and-repos.md` section 4); the platform never evaluates a project's
+  commands or inputs itself.
+- **The platform never opens a file in a project-writable folder** (r11): the result store, the output files and the
+  main guard's log all sit in the repo's git dir, which the project can turn into a symlink or a FIFO. Session-started
+  callers read and write them as the session; the platform (the status page, B7, nightly reporting) reads them only
+  through a `project_git` job, which returns data on stdout.
 
 Callers:
 
 - **`merge-branch`** (in the session): after its rebase, the affected `merge` tiers through the runner; after a no-op
   rebase the tree is unchanged and the agent's own `agenthub test` result is a hit (209 of muninn's 227 merges).
-- **Commit gate** (repos with `commit_gate`, `--index`): the `commit` tiers of a branch commit; a commit onto main runs the merge
-  tiers; the `reference-transaction` check keeps main on tested trees (A1).
+- **Commit gate** (repos with `commit_gate`, `--index`): the `commit` tiers of a branch commit; a commit onto main runs
+  the merge tiers. Main is kept on tested trees by `merge-branch`'s own check; the `reference-transaction` hook only
+  reports other moves of main (A1).
 - **Deploy:** the deploy script runs `agenthub test --when deploy`, which covers **every** deploy tier for HEAD's key —
   a lookup when the merge already ran it, a run otherwise (a commit made directly on main is not deployed untested). It
   runs in the main checkout, where deploy scripts run today (AGENTS.md: from the development copy) and where the store
   is local; it tests `--rev HEAD` and refuses when the checkout has uncommitted changes, since it deploys HEAD.
   Requested from projects once the runner exists.
-- **Nightly:** a platform-created command job per project: `agenthub test --when nightly --force --rev <main>`,
+- **Nightly:** a command job the platform synthesizes for every project with tests (not written into the project's
+  file, so a `manifest.update` cannot remove the run that overrides flaky passes): `agenthub test --when nightly
+  --force --rev <main>`,
   exported like every other run (no worktree), after the container cleanup (B5); a failing test is re-run once and both
   results reported.
 
 ### B5. The machine
 
-- **A worker budget for the machine:** one lock file per worker slot next to the bus (which every sandbox can reach by
-  design); a runner holds a slot by an advisory lock on its file, which the kernel releases when the process ends, so
+- **A worker budget for the machine:** one lock file per worker slot, created by the platform in a folder only it can
+  write and every sandbox can read (r11: not next to the bus, where a project could put a symlink or a FIFO in a
+  slot's place); a runner opens a slot read-only, without following links and without blocking, checks that it is a
+  regular file (anything else counts as a missing slot), and holds it by an advisory lock (which works on a read-only
+  descriptor), which the kernel releases when the process ends, so
   a crashed runner frees its slots and nothing has to be reclaimed. The runner passes the count into the tier as
   declared (B1); two suites at once no longer start 2 × 14 workers. Since any sandboxed project can take locks, a wait
   is bounded: after a minute without enough slots a run starts with the slots it holds (at least one), and the status
@@ -596,10 +624,9 @@ replaces; each step only adds to the ones before it.
    (`bus-sender.md`), runtime settings files a sandboxed job can write, the scheduler's per-job timeout.
 1. **A1, in the shared checkout, small:** characterization tests for everything step 2 changes (`test-gate`,
    `post-commit`, `merge-branch`, registry validation of `runtime`, `hubconf`'s layout); then A1 prerequisite 1 (a
-   linked worktree finds the main checkout's instance and state; explicit overrides; `bin/run-tests` pointing them at
-   temporary folders; `tests.config_inputs`; the absolute `core.hooksPath`; agent-hub's `runtime.test`). Then every
-   agent-hub session moves to a linked worktree and merges with `merge-branch` (the rule goes into AGENTS.md;
-   prerequisite 4): branch
+   linked worktree finds the main checkout's instance and state; explicit overrides; `bin/run-tests` setting only
+   `AGENT_HUB_ROOT`; `tests.config_inputs`; agent-hub's `runtime.test`; hooks unchanged). Then every agent-hub session
+   moves to a linked worktree and merges with `merge-branch` (the rule goes into AGENTS.md; prerequisite 4): branch
    commits run today's full gate (correct, slower), merges run it again on the rebased tree (a hit when the rebase
    changed nothing), and the running platform is never half-edited.
 2. **Foundations, in worktrees (final as built), in this order:**
@@ -610,15 +637,29 @@ replaces; each step only adds to the ones before it.
    2. B3, B4 and B5's slots: the cache module (`test-gate`'s store becomes it), the runner (export of worktree, index or
       revision; per-run environments for uv and npm; the fixed tier environment; worker slots; complete-output file;
       process-group stop), `agenthub test` (also a session command), `affected()` answering with today's one project
-      per repo. The runner reads the hub's own declaration from the tree under test (A1 prerequisite 2); with no v2
-      declaration anywhere yet, `agenthub test` elsewhere says "no tests declared". The store's module lands here and
+      per repo, `is_code()` (which `affected()` needs), and B1's upgrade function, used here only by the runner, so
+      every registered project's upgraded tiers are run once through it before 2.3 (from v1 documents; muninn's
+      `runtime.test` meets the export, the fixed environment and the fresh `HOME` here, not at the cutover). The runner
+      reads the hub's own declaration from the tree under test (A1 prerequisite 2), validated in a child process whose
+      `AGENT_HUB_ROOT` is the export (as `config-check --staged` does), so a branch's new scripts resolve. Callers find
+      the runner through one variable the tests can set (`run-tests` and the fake hubs point it at the tree under
+      test), so the suite tests the branch's runner, never the live one. The store's module lands here and
       `test-gate` keeps its own file until 2.3 makes it thin.
-   3. **One merge** switching the readers and callers: the read-time upgrade of v1 documents (B1) and `is_code()`;
-      `merge-branch` on the runner; agent-hub's entry rewritten by hand as v2 with
+   3. **One merge** switching the readers and callers: the read-time upgrade of v1 documents in the live readers (B1);
+      `merge-branch` on the runner, and only the main checkout's `merge-branch` runs (a worktree's copy re-executes
+      main's); agent-hub's entry rewritten by hand as v2 with
       the `lint` and `full` tiers taken out of `test-gate` (its step-1 `runtime` removed); `test-gate` thin; A1
       prerequisites 2–3 (commit tiers by where a commit lands, the `reference-transaction` check, `commit_gate`, the
-      shared `pre-commit`, fetch-only pulls); `session.report` v2 and lease-handover v2 beside v1. Then `agenthub config
-      apply` rewrites the other registry files. Then deploy and the nightly job.
+      shared `pre-commit`, fetch-only pulls); `session.report` v2 and lease-handover v2 beside v1. **Its landing, under
+      the merge lock, right after the fast-forward:** the hook installer installs agent-hub's `pre-commit`,
+      `commit-msg` (for `commits: conventional`) and `reference-transaction` into its git dir and unsets
+      `core.hooksPath` (the installer treats the hub's own legacy `githooks` value as its own to replace; today it
+      skips the hub and calls any set `core.hooksPath` foreign), and `registry.refresh` rebuilds the index. The
+      tracked `githooks/pre-commit`, `post-commit` and `commit-msg` go in the same merge; `githooks/config/` stays (the
+      config repo's hooks). Until the installer has run — seconds, in the same process — a worktree commit runs no
+      hook (a `core.hooksPath` naming a folder without the hook runs nothing, tested in review 7), and the merge's own
+      check still guards main. Then `agenthub config apply` rewrites the other registry files. Then deploy and the
+      nightly job. Rehearsed in a throwaway hub before it lands.
    4. B5's container module and the Spotlight check.
    5. The transcript port extension B7 needs, in every runtime adapter, with contract tests.
    6. B6's proposed rules that hold now; A3's module splits.

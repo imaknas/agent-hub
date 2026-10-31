@@ -1,6 +1,6 @@
 # Projects and repos: one general model, many combinations
 
-> agent-hub session · 2026-10-31, r8 2026-11-01. Owner's ask: a general architecture in which "one project = one git repo" is only
+> agent-hub session · 2026-10-31, r10 2026-11-01. Owner's ask: a general architecture in which "one project = one git repo" is only
 > one case, so that a monorepo holding many projects, a project spread over several repos, and a project with no repo
 > at all follow from the same logic, not from special cases. Owner's rule for building it: **the final architecture
 > first, no workarounds** — nothing built in a form a later step replaces. **Design only; nothing is implemented.**
@@ -34,6 +34,8 @@
 > r9 (11-01, after the sandbox fix landed): the security claim scoped to "adds no path beyond the sandbox"; the
 > resolver starts no git (pointer files, by path); hand-over on stdout, as `project_git.py` built it; a project in
 > several repos needs the same security fields in all of them.
+> r10 (11-01): after a seventh review: the sandbox decision's fallback reads repo files and fails closed (section 3);
+> pointer files need git's back-pointer and must agree with the path answer (2.4); step 3's inventory refreshed.
 
 ## 1. The problem
 
@@ -108,7 +110,12 @@ In `hubconf` (shell scripts get the same answers through `hubconf.py` subcommand
 - `project_at(path)` → the owning project, **without starting git** (round 6: a project's git config can make even
   `rev-parse` hang or run a program): by path against the registered folders, as `project_git.project_at` already
   does (11-01), and inside a linked worktree by reading its `.git` and `commondir` pointer files as plain files
-  (`bin/gitdirs.py`, which the session hooks already use), accepted only when they lead to a registered repo's git dir; so it works in worktrees. A linked worktree may carry a
+  (`bin/gitdirs.py`, which the session hooks already use: non-blocking, regular files only), accepted only when they
+  lead to a registered repo's git dir, **that git dir's back-pointer (`<gitdir>/gitdir`) names this `.git`**, and the
+  answer agrees with the path-prefix answer where there is one; otherwise none (r10: a project could write a `.git`
+  file leading to another registered repo, possibly an unsandboxed one, and have platform work run there with the
+  user's authority). Pointer files are opened without following links and read up to a size cap. So it works in
+  worktrees. A linked worktree may carry a
   marker naming its project (`<git-dir>/agent-hub-project`), which wins, since tools open worktrees at the repo root.
   The session-start hook writes it, as the project (`project_git.run`, so a planted symlink leads nowhere it could not
   already write), from the folder the session was opened in, which the runtime reports (a `runtime_ports` capability,
@@ -127,6 +134,15 @@ shared repo, or in several, also carries `repo: <name>[,<name>…]` in its `path
 `repos/*.yaml` the same line-by-line way, so recovery finds every origin. Validation checks that `paths.workspace` and
 `paths.repo` agree with `scopes`.
 
+**The sandbox decision without the index fails closed (r10).** `isolation.sandboxed` and `as_project` take `enforce`
+from `hubconf.projects()`, whose stdlib fallback (no index yet, an unreadable one, an index older than the code)
+reads `enforce` from the project files today (`roster_sandboxed`, hardened 11-01). Once a shared repo's security
+fields live only in its repo file, that fallback also reads `repos/*.yaml`, and it fails closed: a project with
+`paths.repo` whose repo file cannot be read counts as sandboxed, and so does a registered project whose file is
+invalid or not loaded (a cross-file conflict, below), with platform work in its folders refused until it loads. The
+index stores each project's effective security fields, merged from its repo file. The ratchet (rule 4) also covers
+readers of `enforce` outside the resolver and `isolation`.
+
 ## 3. Registry format
 
 Today's files stay valid and mean what they mean now.
@@ -140,7 +156,9 @@ to `registry_dir`) holding every repo-level field, including `commit_gate` (test
 repo may not set them (one source, so no cross-file equality check — per-file validation could never change such a
 value). `metered_models` stays per project (it is about the project's model calls). A **folder-only project** is its own
 trust domain and carries the repo-level security fields in its own file; a **project in several repos** must have
-the same security fields (`enforce`, `network`, `allow_write`, `privacy`) in all of them — validation rejects the
+the same security fields (`enforce`, `network`, `allow_write`, `privacy`) in all of them, every one of those repos
+has its own repo file (shorthand cannot name two repos), and a change to the shared fields lands in one config
+commit — validation rejects the
 combination otherwise — because its one memory clone and its project-level jobs need a single authority (round 6:
 with different `enforce`, a sandboxed repo's sessions could write the clone that the other repo's unsandboxed
 sessions run git in).
@@ -190,7 +208,7 @@ further bump). `repos/` is a new contract `repo.v1` in `contracts/README.md`; `r
 and `memory_root` go into `contracts/hub.v1.schema.json` first; `repos` joins the config paths in `bin/appliers.py`,
 `bin/config-check` (which the config repo's `githooks/config/pre-commit` runs).
 The security fields (`PLATFORM_OWNED`) gain `paths` (whole, since the check compares top-level keys — it decides the
-sandbox's folders and is unprotected today) and `scopes`; a project in a shared repo carrying any repo-level field is
+sandbox's folders; closed 11-01 by `16c7622`) and `scopes`; a project in a shared repo carrying any repo-level field is
 invalid. Cross-file rules — two projects with the same scope, a repo both in shorthand and in a repo file, two scopes
 resolving to one real path, a project pointing at a missing repo — are checked on every load: **every** file involved
 in a conflict is invalid and keeps its last valid version (none on a new machine or a rebuilt cache, so those projects
@@ -372,7 +390,11 @@ scheduled in `test-waiting.md` section 7.
 2. The resolver and the registry: `scopes`, `depends_on`, `paths.repo`, `repos/`, repo-level security fields, the
    cross-file rules, the contract work (section 3). Every existing registry file gives the same answers as today (test).
    Project v2's test fields land earlier (test-waiting section 7, step 2) and are unchanged by this step.
-3. Move the files in section 1 onto the resolver, the step 1 tests staying green; the sandbox derives from repos; the
+3. Move the files in section 1 onto the resolver, the step 1 tests staying green — the inventory refreshed first:
+   since 10-31, `project_git.py`, `project-git-job.py`, `gitdirs.py` and `hub-event`'s as-project path also read a
+   project's folder; `project_git.project_at` becomes the resolver's, and one pointer-file reader (`gitdirs.py`)
+   serves `hubconf`'s worktree lookup and the resolver; the sandbox derives from repos (`policy.cache_env` takes the
+   repo's git dir from the resolver, not `<workspace>/.git`, which an inner project does not have); the
    backup and deployment iterate repos (done here, not moved twice); the platform's git calls in project repos, moved to
    project jobs by the separate fix, keep doing so through the resolver.
 4. The test system's selection and cache on the resolver (test-waiting section 7, step 5).
@@ -492,8 +514,7 @@ instead of removed per instance; worker slots built once in step 2.2; `session.r
 request; `agenthub test` as a session command; the key carrying the runner's version and environment; memory copies
 denied whole and checked out without symlinks.
 
-**Round 6 (r8), with `test-waiting.md` r9:** 10 blocking points (test-waiting section 7 and section 4 above, "Open
-after round 6"). Three refute r7/r8 mechanisms written without a test; the rest are open design points and holes in
+**Round 6 (r8), with `test-waiting.md` r9:** 10 blocking points (marked open in r8, settled in r9). Three refute r7/r8 mechanisms written without a test; the rest are open design points and holes in
 today's code. The count rose (5, 7, 10) because each round's untested fixes became the next round's findings, and
 because reviewers kept finding holes in the existing sandbox. Not converged then; the owner paused reviews until the
 sandbox fix landed (section 8), and r9 decides the open points.
@@ -539,3 +560,13 @@ fixes). Closed on 11-01 except the sender, which waits for the owner (`bus-sende
   `manifest.update` can claim another project.
 - The librarian reads memory copies' files through symlinks a project can commit.
 - The hook installer writes through a symlink a project planted in `.git/hooks`.
+
+**Round 7 (r10), with `test-waiting.md` r11** (soundness and order; workarounds and gaps). Four blocking, each a
+one-sentence fix: the platform reading results from a project-writable store (now only through a `project_git` job,
+test-waiting B4); the sandbox decision's fallback not reading repo files (section 3, fails closed); step 2.3 leaving
+agent-hub's main checkout with no hooks (its landing installs them under the merge lock, test-waiting section 7);
+worker slots next to the bus (a platform-owned folder, test-waiting B5). Should-fix, also changed: step 1's list
+matching the settled decisions; the index refreshed by `registry.refresh`, never by `hubconf`; pointer files with a
+back-pointer check; the runner found through one variable the tests set; only main's `merge-branch` runs; upgraded
+tiers run once before the cutover; `is_code()` and the upgrade function in step 2.2; the key's format constant; the
+nightly job synthesized, not in the project's file; npm's measured cost; multi-repo projects' repo files.
