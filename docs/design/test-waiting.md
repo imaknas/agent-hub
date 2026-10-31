@@ -1,6 +1,6 @@
 # Waiting on tests: where agent sessions wait, the floor, and what to change
 
-> agent-hub session · 2026-10-31, r12 2026-11-01. Owner's observation: in the projects being worked on now, the bottleneck is not the
+> agent-hub session · 2026-10-31, r13 2026-11-01. Owner's observation: in the projects being worked on now, the bottleneck is not the
 > agents' output but waiting for tests; the owner wants everything besides model input/output at its theoretical minimum.
 > This doc measures first, then proposes changes. **Nothing here is implemented yet.** Owner's rule for building it:
 > **the final architecture first, no workarounds.**
@@ -58,6 +58,10 @@
 > r12 (11-01): after an eighth review (3 blocking): the resolver never answers "none" for a registered folder
 > (`projects-and-repos.md` 2.4); `merge-branch` gets a permanent landing step for the hub repo, so step 2.3's hooks
 > and index have code that runs them (section 7); backups take `.env` files as data from the project's job.
+>
+> r13 (11-01): after a ninth review (2 blocking): a slot wait that is really bounded (B5); scope folders never
+> resolved below a repo root (`projects-and-repos.md` 2.4); `agenthub land` as the landing's one entry point;
+> `config:` inputs passed to the tier.
 
 ## Summary
 
@@ -369,8 +373,11 @@ tests:
 - **`inputs`** are what changes results without being code and is not already in the tested tree: `file:<path>` (a
   file in the repo outside the project's folders, resolved by real path and invalid if it leaves the repo; a file
   inside them adds nothing, it is already in the key's tree hash), `config:<name>` (a bare file name the platform
-  lists in hub.json `tests.config_inputs` (A1) — today only the private-names list, symbolic so a public registry entry names no path; the platform makes
-  each listed file readable only in the sandboxes of projects that declare it, and any other name is invalid), `env:<NAME>` (also passed into the tier,
+  lists in hub.json `tests.config_inputs` (A1) — today only the private-names list, symbolic so a public registry
+  entry names no path; each listed file is readable in sandboxes, as the config folder already is, and is passed to
+  the tier as a path variable named in the same list (the private-names list as `AGENT_HUB_PRIVATE_NAMES`, as
+  `test-gate` exports it today); a listed file that is missing fails the run instead of letting a test skip; any
+  other name is invalid), `env:<NAME>` (also passed into the tier,
   B4), `cmd:<command>` (its output, e.g. an interpreter's version, run in the tier's fixed environment). Inputs are
   evaluated by the runner with the authority of the run (B4), never by the platform on its own. agent-hub declares its Python version and
   `config:private-names.txt`, today's two extra key parts.
@@ -546,8 +553,10 @@ Callers:
   descriptor), which the kernel releases when the process ends, so
   a crashed runner frees its slots and nothing has to be reclaimed. The runner passes the count into the tier as
   declared (B1); two suites at once no longer start 2 × 14 workers. Since any sandboxed project can take locks, a wait
-  is bounded: after a minute without enough slots a run starts with the slots it holds, or waits for its first one,
-  and the status page names the projects holding slots (from the processes holding the locks, mapped by `project_at`)
+  is bounded: after a minute without enough slots a run starts with the slots it holds, **or with one worker and no
+  slot** (round 9: waiting for a first slot had no bound, so a project holding every slot could stop other repos'
+  merges, which wait under their merge lock) — the machine is then over its budget by at most one worker per waiting
+  run — and the status page names the projects holding slots (from the processes holding the locks, mapped by `project_at`)
   — a project can slow others, never stop them. The slots' folder is in every sandbox's read set (`policy.read` and
   the Landlock read set; tested: an advisory lock on a read-only, no-follow, non-blocking descriptor works under
   Seatbelt with read access only).
@@ -652,19 +661,22 @@ replaces; each step only adds to the ones before it.
       job through `isolation.wrap`, since a sandboxed project's `runtime.test` is its own to change), from v1
       documents: muninn's `runtime.test` meets the export, the fixed environment and the fresh `HOME` here, not at the
       cutover. The runner reads the hub's own declaration from the tree under test (A1 prerequisite 2), validated in a
-      child process whose `AGENT_HUB_ROOT` is the export and whose `AGENT_HUB_STATE` is temporary — `test-gate`'s
-      pattern (`config-check --staged` is not the precedent: it validates the platform's entry from the main
-      checkout) — so a branch's new scripts resolve. Callers find
+      child process whose `AGENT_HUB_ROOT` is the export (as `test-gate` sets it) and whose `AGENT_HUB_STATE` is
+      temporary (as `config-check --staged` sets it; that check itself is not the model, since it validates the
+      platform's entry from the committing checkout), so a branch's new scripts resolve. Callers find
       the runner through one variable the tests can set (`run-tests` and the fake hubs point it at the tree under
       test), so the suite tests the branch's runner, never the live one. `merge-branch` gains its landing step for the
-      hub's own repo (step 2.3 below), unused until then except to refresh the index. The store's module lands here and
+      hub's own repo (step 2.3 below), which calls one entry point in the merged tree, `agenthub land`: in 2.2 it only
+      refreshes the index; 2.3 adds the hook install. A landing that fails after the fast-forward is reported (status
+      page red), and the regular applier also owns the hub's hooks with drift detection, so a deployment updated
+      without `merge-branch` (a `git pull`) is brought in line on the next tick. The store's module lands here and
       `test-gate` keeps its own file until 2.3 makes it thin.
    3. **One merge** switching the readers and callers: the read-time upgrade of v1 documents in the live readers (B1);
       `merge-branch` on the runner, and only the main checkout's `merge-branch` runs (a worktree's copy re-executes
       main's). `merge-branch`'s **landing step for the hub's own repo** (permanent, added in step 2.2 so main's copy
       has it when 2.3 merges): after the fast-forward, still under the merge lock, it starts the merged tree's own code
-      as subprocesses (not in-process: the old modules are already imported) — the hook installer for the hub repo
-      only, then `registry.refresh` — so every merge of agent-hub leaves its hooks and the index matching the code it
+      as subprocesses (not in-process: the old modules are already imported) — `agenthub land`: the hook installer for
+      the hub repo only, then `registry.refresh` — so every merge of agent-hub leaves its hooks and the index matching the code it
       landed; agent-hub's entry rewritten by hand as v2 with
       the `lint` and `full` tiers taken out of `test-gate` (its step-1 `runtime` removed); `test-gate` thin; A1
       prerequisites 2–3 (commit tiers by where a commit lands, the `reference-transaction` check, `commit_gate`, the

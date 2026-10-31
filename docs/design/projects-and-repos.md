@@ -1,6 +1,6 @@
 # Projects and repos: one general model, many combinations
 
-> agent-hub session · 2026-10-31, r11 2026-11-01. Owner's ask: a general architecture in which "one project = one git repo" is only
+> agent-hub session · 2026-10-31, r12 2026-11-01. Owner's ask: a general architecture in which "one project = one git repo" is only
 > one case, so that a monorepo holding many projects, a project spread over several repos, and a project with no repo
 > at all follow from the same logic, not from special cases. Owner's rule for building it: **the final architecture
 > first, no workarounds** — nothing built in a form a later step replaces. **Design only; nothing is implemented.**
@@ -39,6 +39,8 @@
 > r11 (11-01): after an eighth review: a pointer never takes the user's authority back — the path answer comes first,
 > "none" only outside every registered folder (2.4); the index keeps unloaded projects' folders and `enforce` (3);
 > backups take `.env` files as data (4); scope collisions compared lexically, symlinked scope folders invalid (3).
+> r12 (11-01): after a ninth review: scope folders never resolved below a repo root, checked at use (2.4); the index's
+> own format version and the stricter security fields (2.4); backup names validated by the platform (4).
 
 ## 1. The problem
 
@@ -111,8 +113,9 @@ In `hubconf` (shell scripts get the same answers through `hubconf.py` subcommand
 
 - `scopes(project)` → its `(repo, path)` pairs / folder
 - `project_at(path)` → the owning project, **without starting git** (round 6: a project's git config can make even
-  `rev-parse` hang or run a program): by path against the registered folders, as `project_git.project_at` already
-  does (11-01), and inside a linked worktree by reading its `.git` and `commondir` pointer files as plain files
+  `rev-parse` hang or run a program): by path against the registered folders, **compared lexically, never resolved
+  below a repo root** (round 9: today's `project_git.project_at` resolves both sides, so an inner scope folder
+  replaced by a symlink to another repo's project claimed every path in that project), and inside a linked worktree by reading its `.git` and `commondir` pointer files as plain files
   (`bin/gitdirs.py`, which the session hooks already use: non-blocking, regular files only), accepted only when they
   lead to a registered repo: `.git` itself is a real directory or a regular file (checked without following links),
   a `.git` file's gitdir resolves to `<a registered repo's common dir>/worktrees/<id>`, and **that** gitdir's
@@ -144,19 +147,29 @@ shared repo, or in several, also carries `repo: <name>[,<name>…]` in its `path
 `repos/*.yaml` the same line-by-line way, so recovery finds every origin. Validation checks that `paths.workspace` and
 `paths.repo` agree with `scopes`.
 
+**Scope folders are used as registered, never through a link (r11).** A project in a repo can write the whole repo,
+so it can replace an inner scope folder (or a folder above it) with a symlink to another repo's project, and the
+same in the deployment clone. So no path below a repo root is resolved: `project_at` compares lexically; the sandbox
+sets are built only from repo roots, deployment-clone roots and memory clones, whose parents the platform owns; and
+every use of a scope folder (a sandbox's folders, a working directory, the writers of settings, rules files and
+links) refuses when any component below the repo root is a symlink, checked when used, not when the registry loads.
+
 **The sandbox decision without the index fails closed (r10).** `isolation.sandboxed` and `as_project` take `enforce`
-from `hubconf.projects()`, whose stdlib fallback (no index yet, or one that cannot be read — `OSError` included)
-reads `enforce` from the project files today (`roster_sandboxed`, hardened 11-01). Once a shared repo's security
+from `hubconf.projects()`, whose stdlib fallback (no index yet, or one that cannot be read — today only a parse
+error is caught, so `OSError` joins it) reads `enforce` from the project files today (`roster_sandboxed`, hardened 11-01). Once a shared repo's security
 fields live only in its repo file, that fallback also reads `repos/*.yaml`, and it fails closed: a project with
 `paths.repo` whose repo file cannot be read counts as sandboxed, and so does a registered project whose file is
 invalid or not loaded (a cross-file conflict, below), with platform work in its folders refused until it loads. The
 same holds with an index: it records every registry file's folders and `enforce` as read line by line, loaded or
 not, so `project_at` still finds an unloaded project's folders and `as_project` refuses there instead of running
 with the user's authority. The index stores each loaded project's effective security fields, merged from the
-current repo file when the index is built (never kept in a project's last-valid cache, which would hold stale repo
-fields). An index built by older code is still read for these fields (v1 has them too); only readers that need v2
-fields refuse it (`test-waiting.md` B1), and `registry.refresh` never overwrites an index built with a newer schema
-version (a long-running process with old code, such as `lease-runner.py`, refreshes on requests). The ratchet (rule 4) also covers
+current repo file when the index is built, and **the stricter** of the last valid version and the current line-by-line
+read (round 9: an edit that turns the sandbox on and also creates a conflict must not leave the project
+unsandboxed on its last valid version). The index has its own **format version**, bumped whenever what it must hold
+for security changes (repo files bring one, although `scopes` and `paths.repo` are additive to project v2): a reader
+deciding security treats an older-format index as absent and uses the line-by-line fallback; readers that need v2
+fields refuse it (`test-waiting.md` B1); and `registry.refresh` never overwrites an index of a newer format (a
+long-running process with old code, such as `lease-runner.py`, refreshes on requests and restarts only when idle). The ratchet (rule 4) also covers
 readers of `enforce` outside the resolver and `isolation`.
 
 ## 3. Registry format
@@ -261,8 +274,11 @@ joins their trust domains**: a session in any of them can change the clone the o
 search runs per scope folder (it looks three levels deep), so inner projects' files are found. Under the rule below
 the platform does not walk a project's folder itself (round 8: today's walk follows symlinks, so another project's
 `.env` could be copied into this project's backup and restored into its folder, and a FIFO hangs it): the `.env`
-files come back as data on the stdout of the project's own backup job, which `project_git.py` already runs for its
-unpushed and uncommitted work.
+files come back as data on the stdout of a backup op run as the project (a new op beside `bundle-unpushed` and
+`diff-head`). The platform validates every name before it writes anything — relative, no `..`, the `.env` pattern, at
+most three levels, unique — as `project_git.py` requires of all job output; and `backup.covers()`, which
+`check-secrets.py` uses as the backup's own rule, moves with it. (Today's walk does follow symlinks; a FIFO named
+`.env` is filtered out by `is_file()`, so only a swap between the check and the copy could hang it.)
 
 **Migration from today's worktree form** (one script, dry-run then `--apply`, per project), only after renaming and the
 memory scripts handle both forms; onboarding and recovery only ever create the clone form (recovering an unmigrated
@@ -349,12 +365,16 @@ recorded pass for its key or a run (the test system, test-waiting section 4) →
 passes of the other pairs are still recorded. A branch that deletes or empties a registered scope fails until the
 registry change lands first (otherwise the moved project's tests would be "not applicable" and the merge would pass
 untested). A test in one repo that depends on another repo is caught only by the nightly run. `--project` no longer
-chooses whose tests run; it only names the repo when ambiguous.
+chooses whose tests run; it only names the repo when ambiguous. In the hub's own repo, `merge-branch` ends with its
+landing step (`agenthub land`, test-waiting section 7).
 
 **Commit gate and git hooks.** `gate: strict` (a main-protection hook the platform already installs) is repo-level and
 installed in the repo's `.git/hooks` once per repo. The test commit gate is opt-in per repo (`commit_gate`,
 test-waiting A1: a `pre-commit` and a `reference-transaction` hook, installed like `gate: strict`'s and never under a
-repo's own `core.hooksPath`); without it the platform installs no test hooks, and `merge-branch` is the gate.
+repo's own `core.hooksPath`); without it the platform installs no test hooks, and `merge-branch` is the gate. Every
+`commits: conventional` repo also gets the platform's `commit-msg`. The pointer reader (2.4) is the one exception to
+"the platform opens no project-writable file": it reads `.git`, `commondir`, `gitdir` and the worktree marker,
+non-blocking, regular files only, without following links.
 
 **Services and deployment.** One deployment clone per repo, `<services_root>/<repo>`; a project's runtime folder is its
 scope path inside it. Its `deploy.sh` is run from the main checkout, as today (AGENTS.md: from the development copy),
@@ -601,3 +621,12 @@ the rule that the platform opens no project-writable file. Should-fix, also chan
 too; old processes cannot overwrite a newer index; step 2.2's one-off runs as each project; the slots' read set;
 `commit-msg` for every conventional repo; the fixed tier environment without `AGENT_HUB_*`; the detector's record
 consumed after the fast-forward; `config:` files readable only where declared.
+
+**Round 9 (r12), with `test-waiting.md` r13.** Two blocking: an inner scope folder replaced by a symlink let a project
+claim another repo's paths through `project_at`'s resolving (no path below a repo root is resolved now, checked at
+use); a worker-slot wait without a bound (a run starts with one worker after the wait). Should-fix, also changed: the
+index's own format version; the stricter of last-valid and current security fields; `agenthub land` as the landing's
+one entry point, with failures reported and the regular applier owning the hub's hooks; backup names validated by the
+platform; `config:` inputs passed to the tier. Found in today's code, outside this design and sent to the sandbox fix:
+`render-project-settings.py` reads and writes a project's runtime settings file through symlinks with the user's
+authority.
