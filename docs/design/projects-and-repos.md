@@ -63,6 +63,9 @@ what this model needs.
    the hub machine); where it shows up in a folder is only a mount point.
 4. **Only `hubconf` knows the mapping.** Everything else asks it (2.4); a ratchet test keeps new code from reading
    `paths.workspace` directly.
+5. **A shared repo's root owner is a dependency of every project in that repo.** Files at the root (a lockfile, root
+   config) are owned by one project but used by all, so a change there runs every project's tests in the repo, not
+   only the owner's. Without this rule such a change would be tested only by the owner and the nightly full run.
 
 ### 2.3 Which level each feature lives at
 
@@ -84,7 +87,10 @@ In `hubconf`, the only code that reads scopes:
 - `repo_of(project)` → its repo **only when it has exactly one**; otherwise an error, so callers that assumed one find
   out
 
-`roster()` must keep working without PyYAML (new machine, the laptop): the format below keeps a line-parsable form.
+`roster()` must keep working without PyYAML (new machine, the laptop). It reads only the `paths:` block, line by line,
+so `paths.workspace` stays **required for every project** and means "the folder where its memory is mounted" (its
+first scope's folder, or its folder). `scopes` refines it and is read only by the validated registry; recovery on a
+new machine needs no more than `paths.workspace` and the memory repo.
 
 ## 3. Registry format
 
@@ -94,8 +100,8 @@ Backward compatible: today's files stay valid and mean exactly what they mean no
 `(that repo, /)`; the repo-level fields in the project file (`paths.origin`, `push_on_merge`, `commits`, `gate`) are that
 repo's settings.
 
-**Several projects in one repo:** the repo gets its own file, `repos/<name>.yaml` beside `projects/`, holding the
-repo-level fields; projects point into it.
+**Several projects in one repo:** the repo gets its own file, `<repos_dir>/<name>.yaml` (a new hub.json key, default
+a `repos/` folder next to `registry_dir`), holding the repo-level fields; projects point into it.
 
 ```yaml
 # repos/acme.yaml
@@ -112,6 +118,8 @@ root: acme-platform             # who owns paths no other scope covers, and sess
 # projects/acme-billing.yaml
 v: 1
 name: acme-billing
+paths:
+  workspace: ~/workspace/acme/services/billing   # where its memory is mounted (required, see 2.4)
 scopes:
 - repo: acme
   path: services/billing
@@ -131,6 +139,8 @@ scopes:
 **A project with no repo:**
 
 ```yaml
+paths:
+  workspace: ~/workspace/field-notes
 scopes:
 - folder: ~/workspace/field-notes
 ```
@@ -145,8 +155,10 @@ sets the sandbox's write paths), so `manifest.update` cannot change it, like `al
 .agent-memory` (a folder-only project: inside its folder). A clone instead of a worktree of the code repo, so any
 number of projects fit in one repo and a project needs no code repo at all. The code repo ignores the mount through its
 `.git/info/exclude` (one file per repo, one line per mount). The librarian is unaffected (it reads
-`~/.memory-copies/<name>/`, already per project). `git-sync-memory.sh`, `sync-all-memory.sh` and `memory-nudge.py` work
-the same — they commit in a git repo either way; the nudge compares the memory's age with the latest commit **touching
+`~/.memory-copies/<name>/`, already per project). `git-sync-memory.sh` and `sync-all-memory.sh` commit and push in a git
+repo either way; today they switch off the project's git hooks for memory commits because the worktree shares the code
+repo's `core.hooksPath` — a separate clone has no such sharing, so that workaround becomes unnecessary (kept, harmless).
+In `memory-nudge.py` the comparison becomes the memory's age against the latest commit **touching
 the project's scopes**, not the repo's latest commit. `worktree-memory.sh` links a worktree's scope folders to the main
 checkout's mounts.
 
@@ -166,7 +178,8 @@ all its projects, each labelled.
 **Mailbox, STATE.md, to-dos, registrar, librarian.** Per project, unchanged.
 
 **merge-branch** (a repo operation): lock the repo → rebase → commit titles (the repo's setting) → the projects touched
-by the branch's changed files (`projects_touched`) → each one's test tiers, run in the worktree with that project's
+by the branch's changed files (`projects_touched`, which includes every project in the repo when a root-owned file
+changed, rule 5) → each one's test tiers, run in the worktree with that project's
 scope folder as the working directory, each with its own cache key (below) → fast-forward → one `merge.done` /
 `session.report` per touched project, plus one for the repo. Files nobody owns: the repo file may declare a test of its
 own; otherwise nothing runs for them, and the report says so. A change across two repos is two merges, as today; there
@@ -224,7 +237,7 @@ of this change.
   projects need. The rules above decide them; the registry validation rejects a shared repo without a root owner.
 - **Tool-dependent parts** (rules files in subfolders, hook settings location) can only be as good as the coding
   agent allows; where it cannot, the platform falls back and says so.
-- **The laptop and new machines** read the registry without PyYAML; the scope format must stay line-parsable.
+- **The laptop and new machines** read the registry without PyYAML, so `paths.workspace` stays required (2.4) even when `scopes` says more.
 
 ## 7. Order of work
 
