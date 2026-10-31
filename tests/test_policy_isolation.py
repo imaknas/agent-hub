@@ -77,7 +77,9 @@ class RegistryFallback(unittest.TestCase):
 
     def test_sandbox_survives_the_fallback(self):
         for text, want in (("enforce:\n  sandbox: true\n", True), ("enforce: {sandbox: true, capabilities: [gpu]}\n", True),
-                           ("enforce:\n  capabilities: [x]\nsandbox: true\n", False), ("enforce:\n  sandbox: false\n", False)):
+                           ("enforce:\n  capabilities: [x]\nsandbox: true\n", False), ("enforce:\n  sandbox: false\n", False),
+                           ("enforce:\n  sandbox: yes\n", True), ("enforce:\n  sandbox: True  # x\n", True),
+                           ("enforce: {sandbox: on}\n", True)):
             self.assertIs(hubconf.roster_sandboxed(text), want, text)
 
 

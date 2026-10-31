@@ -395,17 +395,18 @@ def roster_paths(text: str) -> dict:
 
 
 def roster_sandboxed(text: str) -> bool:
-    """`enforce: {sandbox: true}` in one registry file, block or flow style (line by line, like roster_paths)."""
+    """`enforce: {sandbox: true}` in one registry file, block or flow style (line by line, like roster_paths); every
+    spelling YAML reads as true counts, so the fallback never says "not sandboxed" where the registry says it is."""
     lines = text.splitlines()
     for i, line in enumerate(lines):
         bare = line.split("#")[0].rstrip()
-        if re.match(r"^enforce:\s*\{.*\bsandbox:\s*true\b", bare):
+        if re.match(r"^enforce:\s*\{.*\bsandbox:\s*['\"]?(true|yes|on)\b", bare, re.I):
             return True
         if bare == "enforce:":
             for sub in lines[i + 1:]:
                 if sub.strip() and not sub.startswith((" ", "\t")):
                     break
-                if re.match(r"^\s+sandbox:\s*true\s*(#.*)?$", sub):
+                if re.match(r"^\s+sandbox:\s*['\"]?(true|yes|on)['\"]?\s*(#.*)?$", sub, re.I):
                     return True
     return False
 

@@ -153,7 +153,7 @@ def handle(event: str, raw: str, rt=None) -> str:
     ws = _workspace(ev.cwd)
     proj = project_git.project_at(ws) if ws else None
     caged = bool(proj) and isolation.sandboxed(proj[1]) and not os.environ.get("HUB_AS_PROJECT")
-    inner = _as_project(proj[0], ws, ev) if caged and any(n in AS_PROJECT for n, _fn in HANDLERS[event]) else {}
+    inner = _as_project(proj[0], ws, ev) if caged and _needs_project(ev) else {}
     texts, reasons, ran, failed = [], [], [], []
     for name, fn in HANDLERS[event]:
         try:
@@ -175,6 +175,16 @@ def handle(event: str, raw: str, rt=None) -> str:
     if reasons:
         return rt.deny(event, reasons[0])
     return rt.inject(event, "\n\n".join(texts)) if texts else ""
+
+
+def _needs_project(ev) -> bool:
+    """Whether this event has AS_PROJECT work at all: after a tool call only a git commit/push can nudge (the same test
+    memory-nudge makes, on the command text alone), so the other calls of a sandboxed session don't each start a
+    sandbox."""
+    names = {n for n, _fn in HANDLERS.get(ev.event, [])} & AS_PROJECT
+    if names == {"nudge"} and ev.event == "tool_used":
+        return bool(_load("memory_nudge", BIN / "memory-nudge.py").GIT_WRITE.search(ev.command or ""))
+    return bool(names)
 
 
 def _as_project(project: str, ws: pathlib.Path, ev) -> dict:
