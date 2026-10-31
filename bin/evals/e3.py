@@ -298,6 +298,8 @@ def check(scenario: str, out: pathlib.Path, lang: str = "zh-Hant") -> dict:
         r["note_written"] = bool(note.strip())
         r["note_has_fact"] = all(x in note for x in expect)
         r["code_untouched"] = files["after"].get("app.py") == files["before"].get("app.py")
+        # AGENT.md: STATE.md is the consolidating agent's (reported: the old arm does it now and then too)
+        r["state_untouched"] = files["after"].get(".agent-memory/STATE.md") == files["before"].get(".agent-memory/STATE.md")
     elif scenario == "owner_todo":
         st = files["after"].get(".agent-memory/STATE.md", "")
         items = e2.todo_items(st) or set()
@@ -323,9 +325,9 @@ def check(scenario: str, out: pathlib.Path, lang: str = "zh-Hant") -> dict:
         r["replied"] = bool(replies)
         r["reply_has_fact"] = any(all(x in text(e) for x in expect) for e in replies)
         r["closed"] = done(letter) or any(e["payload"].get("type") == "done" for e in replies)
+        r["note_written"] = bool(note.strip())   # reported: the rules ask for a note after a commit, not per letter
         if scenario == "mcp":
             r["code_untouched"] = code_same() and not new_commits
-            r["note_written"] = bool(note.strip())
     elif scenario == "commit":
         r["committed"] = bool(new_commits)
         r["title_ok"] = bool(new_commits) and all(commit_title.problem(t, final=True) is None for t in new_commits)
