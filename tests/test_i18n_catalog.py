@@ -15,6 +15,8 @@ import string
 import sys
 import unittest
 
+import yaml
+
 ROOT = pathlib.Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "bin"))
 import i18n  # noqa: E402
@@ -24,8 +26,10 @@ LANGS = [d.name for d in sorted(i18n.LOCALES.iterdir()) if d.is_dir()] if i18n.L
 
 
 def fields(text: str) -> set[tuple[str, str, str | None]]:
-    """(name, format spec, conversion) of each placeholder: {cost:.6f} and {cost} are not the same placeholder"""
-    return {(f, spec or "", conv) for _lit, f, spec, conv in string.Formatter().parse(text) if f is not None}
+    """(name, format spec, conversion) of each placeholder: {cost:.6f} and {cost} are not the same placeholder. Plural
+    choices ({n:file|files}) are left out: a language without plural forms has none (the count itself stays a field)."""
+    return {(f, spec or "", conv) for _lit, f, spec, conv in string.Formatter().parse(text)
+            if f is not None and "|" not in (spec or "")}
 
 
 def placeholders(text: str) -> set[str]:
@@ -164,6 +168,17 @@ class Catalogs(unittest.TestCase):
                         problems.append(f"{where}: no {lang} entry for {msgid[:60]!r}")
                     elif fields(cat[msgid]) != fields(msgid):
                         problems.append(f"{where}: {lang} placeholders differ for {msgid[:60]!r}")
+        # module descriptions (modules/*.yaml `description:`, shown by `agenthub modules`): domain "modules"
+        used = seen.setdefault("modules", set())
+        for f in sorted((ROOT / "modules").glob("*.yaml")):
+            desc = (yaml.safe_load(f.read_text()) or {}).get("description")
+            if not desc:
+                continue
+            used.add(desc)
+            if CJK.search(desc):
+                problems.append(f"modules/{f.name}: description is not English: {desc[:50]}")
+            problems += [f"modules/{f.name}: no {lang} entry for its description" for lang in LANGS
+                         if desc not in i18n.catalog("modules", lang)]
         for lang in LANGS:
             for cat_file in sorted((i18n.LOCALES / lang).glob("*.json")):
                 stale = set(json.loads(cat_file.read_text())) - seen.get(cat_file.stem, set())
@@ -175,6 +190,14 @@ class Catalogs(unittest.TestCase):
         self.assertEqual(_.domain, "demo-tool")
         self.assertEqual(i18n.translate("no-such-domain", "Hello {name}", {"name": "a"}, "zh-Hant"), "Hello a")
         self.assertEqual(i18n.translate("no-such-domain", "{literal}", {}, "zh-Hant"), "{literal}", "no kw, no format")
+
+    def test_plural_choice(self):
+        msg = "{n} {n:letter is|letters are} open"
+        self.assertEqual(i18n.translate("no-such-domain", msg, {"n": 1}, "en"), "1 letter is open")
+        self.assertEqual(i18n.translate("no-such-domain", msg, {"n": 3}, "en"), "3 letters are open")
+        self.assertEqual(i18n.translate("no-such-domain", msg, {"n": "1"}, "en"), "1 letter is open", "from shell")
+        self.assertEqual(fields(msg), {("n", "", None)}, "the choice is not a placeholder a translation must keep")
+        self.assertEqual(placeholders(msg), {"n"})
 
     def test_shell_extractor(self):
         src = ('x="$(hub_msg "Hello {name}, \\"q\\"" name="$n")"; echo\n'

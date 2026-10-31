@@ -4,7 +4,7 @@
 v: 1
 name: owner
 type: module
-description: 內建的 owner 端:新的待辦、問題通知(結案、回答用 agenthub owner)
+description: "Built-in owner side: notices of new to-dos and questions (close and answer with agenthub owner)"
 jobs:
 - name: notify
   every: 1h

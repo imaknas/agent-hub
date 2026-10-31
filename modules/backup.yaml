@@ -2,7 +2,7 @@
 v: 1
 name: backup
 type: module
-description: 每晚加密雲端備份 + 每月還原測試
+description: "Nightly encrypted cloud backup + monthly restore test"
 requires_config: [backup.repo]
 jobs:
 - name: backup

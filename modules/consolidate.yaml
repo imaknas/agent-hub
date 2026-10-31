@@ -4,7 +4,7 @@
 v: 1
 name: consolidate
 type: module
-description: 每晚把超過 14 天的 memory 日期檔整理進 reference/(在 librarian 之前)
+description: "Nightly: folds memory date files older than 14 days into reference/ (before the librarian)"
 jobs:
 - name: consolidate-memory
   legacy_name: agent-hub/consolidate-memory

@@ -2,7 +2,7 @@
 v: 1
 name: reflect
 type: module
-description: 每週一產生上一週的跨專案回顧(reflect/)
+description: "Every Monday: the previous week's cross-project review (reflect/)"
 jobs:
 - name: weekly-reflect
   legacy_name: agent-hub/weekly-reflect

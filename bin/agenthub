@@ -158,7 +158,8 @@ def cmd_modules(argv: list[str]) -> int:
     if not argv:
         for f in sorted(registry.MODULES_DIR.glob("*.yaml")):
             doc = yaml.safe_load(f.read_text()) or {}
-            print(f"{'✓' if f.stem in on else ' '} {f.stem:12} {doc.get('description', '')}")
+            desc = i18n.translate("modules", doc.get("description") or "", {})   # catalog: locales/<lang>/modules.json
+            print(f"{'✓' if f.stem in on else ' '} {f.stem:12} {desc}")
         print(_("\nswitch: hub modules enable|disable <name> (changes modules in hub.json, then applies)"))
         return 0
     if len(argv) != 2 or argv[0] not in ("enable", "disable"):

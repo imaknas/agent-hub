@@ -4,7 +4,7 @@
 v: 1
 name: claude
 type: module
-description: Claude Code 的登入檢查、更新、headless token 到期提醒
+description: "Claude Code login check, updates, headless token expiry reminders"
 jobs:
 - name: claude-login             # claude 的三份登入(launchd 訂閱登入、headless token、SSH 用的 .credentials.json)還能用嗎;壞了/快到期發警報
   legacy_name: agent-hub/claude-login

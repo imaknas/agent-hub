@@ -5,7 +5,7 @@
 v: 1
 name: assistant
 type: module
-description: 個人助理:問題對帳、通道租借
+description: "Personal assistant: question reconciliation, channel leases"
 requires_config: [assistant.api]
 jobs:
 - name: reconcile-questions

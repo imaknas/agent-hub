@@ -2,7 +2,7 @@
 v: 1
 name: mirror
 type: module
-description: 每晚更新 mirror-list.txt 裡每個 repo 的 --mirror clone
+description: "Nightly: updates the --mirror clone of every repo in mirror-list.txt"
 jobs:
 - name: mirror-backup
   legacy_name: agent-hub/mirror-backup

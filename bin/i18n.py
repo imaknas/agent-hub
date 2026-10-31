@@ -10,7 +10,12 @@ Code holds the English text (the msgid). Each script is its own domain with its 
 
 Lookup: the catalog of `hubconf.lang_ui()`; a missing entry (or language en) gives the msgid itself. With keyword
 arguments the result is `str.format`ted, so placeholders are `{name}` (literal braces then `{{ }}`); without them the
-text is returned as is. Translations keep exactly the msgid's placeholders (tests/test_i18n_catalog.py).
+text is returned as is. Translations keep exactly the msgid's placeholders (tests/test_i18n_catalog.py), except plural
+choices, which a language without plural forms (zh-Hant) leaves out.
+
+Plurals: `{n:problem|problems}` is the first form when n == 1, else the second; it prints no number, so the count is
+written next to it: `_("{n} {n:problem|problems} found", n=n)`. A verb that agrees goes into the choice too:
+`{n:letter is|letters are}`.
 
 The zh-Hant catalogs were built from the Chinese text the code had before (msgstr = that text, verbatim), which is what
 keeps an instance on zh-Hant byte-identical (tests/test_i18n_golden.py).
@@ -22,6 +27,7 @@ from __future__ import annotations
 import json
 import os
 import pathlib
+import string
 import sys
 
 ROOT = pathlib.Path(__file__).resolve().parents[1]
@@ -54,9 +60,24 @@ def domain_name(file: str) -> str:
     return p.stem if p.suffix == ".py" else p.name
 
 
+class _Formatter(string.Formatter):
+    def format_field(self, value, spec):
+        if "|" in spec:   # a plural choice: one|other
+            one, other = spec.split("|", 1)
+            try:
+                is_one = float(value) == 1   # shell passes "1"
+            except (TypeError, ValueError):
+                is_one = False
+            return one if is_one else other
+        return super().format_field(value, spec)
+
+
+_format = _Formatter().format
+
+
 def translate(name: str, msgid: str, kw: dict, language: str | None = None) -> str:
     text = catalog(name, language or lang()).get(msgid, msgid)
-    return text.format(**kw) if kw else text
+    return _format(text, **kw) if kw else text
 
 
 def domain(file: str):
