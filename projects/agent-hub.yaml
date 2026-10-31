@@ -107,8 +107,11 @@ provides:
 - {contract: lease-runner, v: 2, schema: contracts/lease-runner.v2.schema.json}
 - {contract: lease-handover, v: 1, schema: contracts/lease-handover.v1.schema.json}
 - {contract: hubbus, v: 1, schema: contracts/hubbus.v1.schema.json}
+# v2 = v1 + the English token set; v1 stays until every reader (the assistant) reads v2
 - {contract: todo-md, v: 1, schema: contracts/todo-md.v1.md}
+- {contract: todo-md, v: 2, schema: contracts/todo-md.v2.md}
 - {contract: state-todo, v: 1, schema: contracts/state-todo.v1.md}
+- {contract: state-todo, v: 2, schema: contracts/state-todo.v2.md}
 - {contract: reflect-week, v: 1, schema: contracts/reflect-week.v1.schema.json}
 - {contract: project, v: 1, schema: contracts/project.v1.schema.json}
 - {contract: llm-points, v: 1, schema: contracts/llm-points.v1.schema.json}

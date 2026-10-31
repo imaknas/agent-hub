@@ -10,9 +10,9 @@ changing this list first.
 | the hooks in `.claude/settings.local.json` | `merge-hook-settings.py` (adds only, never removes) | memory sync, memory reminder, project mailbox |
 | a few lines of `.git/info/exclude` | `sync-local-setup.sh` | `.agent-memory/`, `CLAUDE.local.md`, `.claude/settings.local.json` |
 | `.agent-memory/AGENT.md` (memory branch) | `sync-local-setup.sh` (commits+pushes this one file) | `templates/AGENT.md` |
-| `.agent-memory/STATE.md` (memory branch) | the librarian (model), `registrar.py` (mechanical) | the distilled current state, `## 待辦` (contract state-todo) |
+| `.agent-memory/STATE.md` (memory branch) | the librarian (model), `registrar.py` (mechanical) | the distilled current state and its to-do section (contract state-todo, in the content language's token set) |
 | the `.agent-memory` and `CLAUDE.local.md` symlinks in a worktree | `worktree-memory.sh` | point to the main checkout |
 | `~/Library/LaunchAgents/<label>.plist` (not in the repo) | `render-services.py` | the services in the project registry |
-| `.agent-memory/memory/<date>.md` (appends a section) | the channel lease runner (`bin/lease-runner.py`) | the handover note of a lease conversation (`## 租借對話 HH:MM(session <id>)`, with the keys of the tasks it sent) |
+| `.agent-memory/memory/<date>.md` (appends a section) | the channel lease runner (`bin/lease-runner.py`) | the handover note of a lease conversation (a `## ` heading with the time and the session id, in the content language, with the keys of the tasks it sent) |
 | the `sandbox` and the few `permissions.deny/allow` entries the platform adds in `.claude/settings.local.json` | `render-project-settings.py` (registry `enforce.sandbox`) | phase-two sandbox and cross-project deny rules; drift is written back |
 | `.git/hooks/pre-commit`, `pre-merge-commit` (the ones carrying the platform's marker) | `render-project-settings.py` (registry `gate: strict`) | merge gate enforcement |

@@ -75,7 +75,7 @@ def live(index: dict) -> list[str]:
     errs = []
     todo = hubconf.data_file("todo.md")
     if todo.exists():
-        errs += [f"todo.md:{e}" for e in contracts.check_todo_md(todo.read_text(), C / "todo-md.v1.md", hubconf.owner_tag())]
+        errs += [f"todo.md:{e}" for e in contracts.check_todo_md(todo.read_text(), C / "todo-md.v2.md", hubconf.owner_tag())]
     import minischema
     # the shared format of the judgment-point registry (the Muninn project checks against it too)
     pts_schema = json.loads((C / "llm-points.v1.schema.json").read_text())

@@ -36,6 +36,108 @@ class Markdown(unittest.TestCase):
         self.assertEqual(m.group(1), "task-p-0123456789")
 
 
+class MarkdownV2(unittest.TestCase):
+    """v2 = v1 + the English token set: v1 files stay valid, English and mixed files are valid too."""
+    EN = "Ada"   # the English examples' owner tag
+
+    def test_state_todo_examples(self):
+        for f, owner in (("state-todo.v1.example.md", OWNER), ("state-todo.v2.example.md", self.EN),
+                         ("state-todo.v2.mixed.example.md", self.EN)):
+            with self.subTest(f=f):
+                self.assertEqual(contracts.check_state_todo((F / f).read_text(), C / "state-todo.v2.md", owner), [])
+
+    def test_state_todo_v1_rejects_english(self):
+        self.assertTrue(contracts.check_state_todo((F / "state-todo.v2.example.md").read_text(), C / "state-todo.v1.md",
+                                                   self.EN))
+
+    def test_state_todo_problems(self):
+        text = (F / "state-todo.v2.example.md").read_text()
+        for bad in ("- [ ] [someone] Unknown tag", "- [ ] No tag at all", "- [x] [agent] Done, not removed"):
+            with self.subTest(bad=bad):
+                self.assertTrue(contracts.check_state_todo(text.replace("- [ ] [agent] Add tests", bad),
+                                                           C / "state-todo.v2.md", self.EN))
+
+    def test_state_todo_key_regex(self):
+        import re
+        import todo_tokens
+        keys = [re.compile(r) for r in contracts.md_rules(C / "state-todo.v2.md", self.EN)["regex:key"]]
+        full = str.maketrans("(:)", "".join(map(chr, (0xFF08, 0xFF1A, 0xFF09))))
+        for line in ("x" + todo_tokens.marker("zh-Hant", self.EN, "task-p-0123456789"),
+                     "x (waiting on Ada: task-p-0123456789)", "x(waiting on Ada:task-p-0123456789)".translate(full)):
+            with self.subTest(line=line):
+                self.assertEqual([m.group(1) for k in keys if (m := k.search(line))], ["task-p-0123456789"])
+
+    def test_todo_md_examples(self):
+        for f, owner in (("todo-md.v1.example.md", OWNER), ("todo-md.v2.example.md", self.EN)):
+            with self.subTest(f=f):
+                self.assertEqual(contracts.check_todo_md((F / f).read_text(), C / "todo-md.v2.md", owner), [])
+
+    def test_todo_md_english_needs_v2(self):
+        en = (F / "todo-md.v2.example.md").read_text()
+        self.assertTrue(contracts.check_todo_md(en, C / "todo-md.v1.md", self.EN), "a v1 reader refuses it")
+        self.assertTrue(contracts.check_todo_md(en.replace("todo-md v2", "todo-md v1"), C / "todo-md.v2.md", self.EN),
+                        "English headings under a v1 marker")
+
+    def test_todo_md_one_set_per_file(self):
+        import todo_tokens
+        zh_agent = todo_tokens.todo_md_headings("zh-Hant", self.EN)["agent"]
+        mixed = (F / "todo-md.v2.example.md").read_text().replace("## An agent can do", zh_agent)
+        self.assertTrue(contracts.check_todo_md(mixed, C / "todo-md.v2.md", self.EN))
+
+    def test_v1_machine_parts_unchanged(self):
+        """the readers' vendored v1 copies must keep comparing equal: v1's rules are frozen"""
+        rules = contracts.md_rules(C / "state-todo.v1.md")
+        self.assertEqual(sorted(rules), ["regex:bare", "regex:group", "regex:item", "regex:key"])
+        self.assertEqual(sorted(contracts.md_rules(C / "todo-md.v1.md")), ["heading:owner", "regex:item", "regex:project"])
+
+
+class TokenModuleAgrees(unittest.TestCase):
+    """bin/todo_tokens.py (what the platform's readers and writers use) and the v2 contracts (what other repos vendor)
+    define the same two token sets"""
+    EN = "Ada"
+
+    def setUp(self):
+        import todo_tokens
+        self.t = todo_tokens
+
+    def test_headings_and_empty_markers(self):
+        rules = contracts.md_rules(C / "state-todo.v2.md", self.EN)
+        sets = [self.t.tokens(lang) for lang in ("zh-Hant", "en")]
+        self.assertEqual(rules["heading:section"], [s["todo_heading"] for s in sets])
+        self.assertEqual(rules["heading:none"], [s["todo_none"] for s in sets])
+        md = contracts.md_rules(C / "todo-md.v2.md", self.EN)
+        self.assertEqual(md["heading:owner"], list(self.t.todo_md_headings("zh-Hant", self.EN).values()))
+        self.assertEqual(md["heading:owner-en"], list(self.t.todo_md_headings("en", self.EN).values()))
+        v1 = contracts.md_rules(C / "todo-md.v1.md", self.EN)
+        self.assertEqual(v1["heading:owner"], md["heading:owner"])
+
+    def test_same_lines_accepted(self):
+        import re
+        rules = {k: [re.compile(r) for r in v] for k, v in contracts.md_rules(C / "state-todo.v2.md", self.EN).items()
+                 if k.startswith("regex:")}
+        P = self.t.patterns(self.EN)
+        lines = []
+        for lang in ("zh-Hant", "en"):
+            for who in (self.EN, "agent", self.t.tokens(lang)["tbd"], "someone"):
+                lines.append(self.t.item(lang, who, "do it"))
+                lines.append(f"### {self.t.tag(lang, who)}")
+            lines.append(self.t.item(lang, self.EN, "x") + self.t.stamp(lang, self.EN, "task-p-0123456789"))
+        zh_tbd, full = self.t.tokens("zh-Hant")["tbd"], str.maketrans("(:)", "".join(map(chr, (0xFF08, 0xFF1A, 0xFF09))))
+        lines += ["- [ ] [agent](https://example.org) a link", "- [ ] no tag",
+                  self.t.item("zh-Hant", "tbd", "the other set's word"), self.t.item("en", zh_tbd, "the other set's word"),
+                  f"### {self.t.tag('en', zh_tbd)}", "x" + self.t.marker("zh-Hant", self.EN, "task-p-1").translate(full),
+                  "x" + self.t.marker("en", self.EN, "task-p-1").translate(full), "x (waiting on Bob: task-p-1)"]
+        for l in lines:
+            with self.subTest(line=l):
+                m = P.item.match(l)
+                self.assertEqual(any(r.match(l) for r in rules["regex:item"]), bool(m and P.role(m)))
+                g = P.group.match(l)
+                self.assertEqual(any(r.match(l) for r in rules["regex:group"]), bool(g and P.role(g)))
+                self.assertEqual(any(r.match(l) for r in rules["regex:bare"]), bool(P.bare.match(l)))
+                self.assertEqual([m.group(1) for r in rules["regex:key"] if (m := r.search(l))],
+                                 [k.group("key")] if (k := P.key.search(l)) else [])
+
+
 class LlmPoints(unittest.TestCase):
     """The shared format of the judgment point registry (contracts/llm-points.v1.schema.json): our own registry must
     be valid, and so must the other side's way of writing it."""
@@ -78,7 +180,8 @@ class Neutral(unittest.TestCase):
     def test_consumer_facing_contracts_dont_name_the_platform(self):
         """Contracts and examples that other repos vendor must not mention this platform (some of those repos are open
         source)."""
-        for p in [C / "todo-md.v1.md", C / "state-todo.v1.md", C / "reflect-week.v1.schema.json", *F.glob("*.md")]:
+        for p in [*C.glob("todo-md.v*.md"), *C.glob("state-todo.v*.md"), C / "reflect-week.v1.schema.json",
+                  *F.glob("*.md")]:
             text = p.read_text()
             for word in ("agent-hub", "librarian", "bin/"):
                 self.assertNotIn(word, text, f"{p.name} mentions {word}")

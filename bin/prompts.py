@@ -32,17 +32,14 @@ from typing import Callable
 
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
 import hubconf  # noqa: E402
+import todo_tokens  # noqa: E402
 
 DIR = hubconf.ROOT / "templates" / "prompts"
 PLACEHOLDER = re.compile(r"\{\{(\w+)\}\}")
 LANGUAGE_NAMES = {"zh-Hant": "Traditional Chinese (zh-Hant)", "en": "English"}
-# the to-do block's token set per content language; key_marker's {owner} and {key} are filled per use
-TOKENS = {
-    "zh-Hant": {"todo_heading": "## 待辦", "tag": "〔{}〕", "tbd": "待定", "todo_none": "- (無)",
-                "key_marker": "(等 {owner}:{key})"},
-    "en": {"todo_heading": "## To-do", "tag": "[{}]", "tbd": "tbd", "todo_none": "- (none)",
-           "key_marker": "(waiting on {owner}: {key})"},
-}
+# the to-do block's token set per content language (bin/todo_tokens.py); key_marker's {owner} and {key} are filled
+# per use
+TOKENS = todo_tokens.SETS
 LANGUAGE_KEYS = {"content_language", "todo_heading", "tag_owner", "tag_agent", "tag_tbd", "todo_none", "key_marker",
                  "key_pattern"}
 

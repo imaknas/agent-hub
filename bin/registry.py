@@ -649,7 +649,7 @@ def new_doc(name: str, workspace: str, origin: str, memory_bare: str) -> dict:
             "paths": {"workspace": tilde(workspace), "memory_bare": tilde(memory_bare), "origin": origin},
             "memory": True, "privacy": {"reflection": "include"}, "push_on_merge": False,
             "mailbox": {"escalate": True},
-            "publishes": [{"kind": "state", "path": "STATE.md", "contract": "state-todo", "v": 1}]}
+            "publishes": [{"kind": "state", "path": "STATE.md", "contract": "state-todo", "v": 2}]}
 
 
 def header() -> str:
