@@ -1,6 +1,6 @@
 # Staleness anchors in STATE.md
 
-> agent-hub session · 2026-11-01 · r3 (after two blind reviews: history before branches, untracked and ignored
+> agent-hub session · 2026-11-01 · r4 (after three blind reviews: history before branches, untracked and ignored
 > paths, unmerged branches only, a stale note that keeps statements). Item 3 of "Build" in `competitive-gaps.md`.
 
 ## Why
@@ -85,8 +85,8 @@ Fenced code blocks are skipped too (an anchor sign in a pasted log is not a clai
   new file read as `missing`; on the hub machine every merge lands on the local main first, so this is not checked.)
 - **Paths are relative to the workspace folder**, which may be a subfolder of its repo: git is asked for
   `<branch>:./<path>` with `-C <workspace>`, and for `git grep` the pathspec is relative the same way.
-- **A file or directory is present** when `git cat-file -t <branch>:./<path>` is a blob, a tree, or a commit (a
-  submodule).
+- **A file or directory is present** when `git cat-file -t <branch>:./<path>` is a blob or a tree; a submodule
+  (whose commit `cat-file` cannot see) when `git ls-tree --format=%(objecttype)` gives `commit` for the entry.
 - **A symbol is present** when every dot-separated part occurs as a whole word in that file on the branch:
   `git grep -q -w -F -e <part> <branch> -- ./<path>`. This is occurrence, not definition: it works for every language
   with no parser, and a symbol whose definition was deleted while a call to it remains reads as present. Short
@@ -170,7 +170,7 @@ module (before the call, like `dangling_refs`) and appends a note to the prompt 
 sees the code, so it may change a statement only on the strength of the memory notes:
 
 - `renamed`, `deleted`: the statement may be out of date; correct or remove it only if the notes say so, otherwise
-  re-point (renamed) or remove (deleted) the anchor and keep the statement;
+  re-point (renamed) or remove (deleted) the anchor, the sign with its path, and keep the statement;
 - `missing`, `symbol`, `malformed`: the anchor is probably what is wrong (a path relative to the wrong folder, a common
   name); remove the anchor or the `#name` and keep the statement. The
 note shares the `dangling_note` slot; `record_state_case` records the raw list in `args.json` (`anchors`), e2's
@@ -202,7 +202,8 @@ agreement with the before arm not worse than the before arm's own noise floor. N
 The frozen cases all have anchor-free STATE.md, so retention cannot be measured on them. Seeded copies of three cases
 (their existing code spans of real paths turned into anchors, plus one stale anchor recorded in `args.json`) measure
 retention and whether the stale note is acted on (`stale_fixed`: the share of the noted anchors gone or changed after;
-`stale_kept`: the share of the noted statements still there, anchor aside; the seeded stale anchor is a real path, so
+`stale_kept`: the share of the noted statements still there, compared without anchors and code spans, so dropping or
+re-pointing the anchor counts as kept; the seeded stale anchor is a real path, so
 deleting its statement is the wrong move).
 The before arm runs on them too: if it already keeps anchors, the "keep" rule is cheap insurance; if it drops them, the
 rule is required.

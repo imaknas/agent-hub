@@ -173,6 +173,11 @@ class Resolve(RepoCase):
         got = self.outcomes(["src/new.py#Order.total"])
         self.assertEqual(got, [("symbol", "src/job.py")])
 
+    def test_submodule_is_present(self):
+        self.git("update-index", "--add", "--cacheinfo", "160000," + "1" * 40 + ",vendor/lib")
+        self.git("commit", "-q", "-m", "submodule")
+        self.assertEqual(self.outcomes(["vendor/lib", "vendor/lib/", "vendor/"]), [("ok", "")] * 3)
+
     def test_only_unmerged_branches_count(self):
         repo, _ = sa.Repo.open(self.repo)
         self.assertEqual(repo.others(), ["feature"])
@@ -256,7 +261,7 @@ class Librarian(RepoCase):
         self.assertEqual([r["outcome"] for r in stale], ["deleted", "renamed"])
         note = lib.anchor_note(stale)
         self.assertIn("- line 2, ⚓`src/gone.py`: the file was deleted on main (commit ", note)
-        self.assertIn("remove the anchor and keep the statement. The statement: Exports ⚓`src/gone.py`.", note)
+        self.assertIn("remove the anchor (the sign and its path) and keep the statement. The statement: Exports ⚓`src/gone.py`.", note)
         self.assertIn("- line 4, ⚓`src/old.py`: the file was renamed to `src/new.py` (commit ", note)
         self.assertNotIn("feature", note)
         self.assertEqual(lib.anchor_note([]), "")
@@ -274,6 +279,7 @@ class EvalScores(unittest.TestCase):
             "anchors": [{"raw": "src/gone.py", "statement": "Export ⚓`src/gone.py`."}]}))
         before = "- Job ⚓`src/job.py`.\n- Export ⚓`src/gone.py`.\n\n## Tasks\n\n- (none)\n"
         kept = "- Job ⚓`src/job.py`.\n- Export `src/gone.py`.\n"
+        dropped = "- Job ⚓`src/job.py`.\n- Export.\n"
         after = ("- Job ⚓`src/run.py`, helper ⚓`src/guess.py`.\n\n## Tasks\n\n"
                  "- [ ] [agent] Write ⚓`src/later.py`\n")
         r = e2.anchor_scores(case, before, after)
@@ -283,6 +289,7 @@ class EvalScores(unittest.TestCase):
         self.assertEqual(r["stale_kept"], 0.0)
         r = e2.anchor_scores(case, before, kept)
         self.assertEqual((r["stale_fixed"], r["stale_kept"], r["retention"]), (1.0, 1.0, 0.5))
+        self.assertEqual(e2.anchor_scores(case, before, dropped)["stale_kept"], 1.0)   # anchor and path both gone
 
 
 if __name__ == "__main__":

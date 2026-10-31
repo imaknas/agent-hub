@@ -135,8 +135,14 @@ class Repo:
         return cls(ws, base, _git(ws, "rev-parse", "--show-prefix").stdout.strip()), ""
 
     def _type(self, rev: str, path: str) -> str:
-        r = _git(self.ws, "cat-file", "-t", f"{rev}:./{path.rstrip('/')}")
-        return r.stdout.strip() if r.returncode == 0 else ""
+        """blob, tree, commit (a submodule) or "" (not there). cat-file cannot name a submodule (its commit is not in
+        this repository's objects), so a miss asks ls-tree for the entry itself"""
+        p = f"./{path.rstrip('/')}"
+        r = _git(self.ws, "cat-file", "-t", f"{rev}:{p}")
+        if r.returncode == 0:
+            return r.stdout.strip()
+        r = _git(self.ws, "ls-tree", "--format=%(objecttype)", rev, "--", p)
+        return "commit" if r.returncode == 0 and r.stdout.strip() == "commit" else ""
 
     def _present(self, rev: str, path: str) -> bool:
         """a file, a directory or a submodule, whatever the trailing slash says: the check never reports what is
@@ -224,11 +230,12 @@ PROMPT_ACTION = {
     "renamed": "the statement may be out of date: correct it only from what the memory notes say; otherwise just "
                "point the anchor at the new path",
     "deleted": "the statement may be out of date: correct or remove it only if the memory notes say so; otherwise "
-               "remove the anchor and keep the statement",
-    "missing": "the anchor is probably wrong, not the statement: remove the anchor and keep the statement",
+               "remove the anchor (the sign and its path) and keep the statement",
+    "missing": "the anchor is probably wrong, not the statement: remove the anchor (the sign and its path, or just the "
+               "sign if the path is still worth naming) and keep the statement",
     "symbol": "the anchor is probably wrong, not the statement: remove the `#name` (or the anchor) and keep the "
               "statement",
-    "malformed": "remove the anchor and keep the statement",
+    "malformed": "remove the sign (keep the path as plain code if it is worth naming) and keep the statement",
 }
 
 

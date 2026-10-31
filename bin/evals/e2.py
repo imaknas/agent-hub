@@ -466,7 +466,7 @@ def anchor_scores(case: pathlib.Path, before: str, after: str) -> dict:
     reference index): an ungrounded one is a guessed path; in_todo: anchors inside the to-do section (must be 0);
     retention: the share of before's anchors still in after (cases that have some); stale_fixed: the share of the
     anchors the stale note named that are gone from after; stale_kept: the share of the statements the note named still
-    in after, the anchor aside (the note asks to drop most anchors but keep their statements); resolve: the share of added anchors that resolve (ok,
+    in after, anchors and code spans aside (the note asks to drop most anchors but keep their statements); resolve: the share of added anchors that resolve (ok,
     pending) against the project's workspace today (approximate: the code moved on since the case); growth:
     len(after) / len(before)."""
     a = json.loads((case / "args.json").read_text())
@@ -477,7 +477,8 @@ def anchor_scores(case: pathlib.Path, before: str, after: str) -> dict:
     ref = case / "snapshot" / "memory" / "reference" / "README.md"
     shown = a.get("diff", "") + before + (ref.read_text(errors="replace") if ref.exists() else "")
     noted = [x["raw"] for x in a.get("anchors") or []]
-    bare = lambda t: state_anchors.ANCHOR.sub(lambda m: f"`{m.group(1)}`", t)   # noqa: E731  the text, anchors aside
+    # the text without anchors or code spans: the note asks to drop or re-point anchors, and either must count as kept
+    bare = lambda t: " ".join(re.sub(r"`[^`\n]*`", " ", state_anchors.ANCHOR.sub(" ", t)).split())   # noqa: E731
     after_lines = [bare(state_anchors.statement(line)) for line in after.splitlines()]
     kept = [max((difflib.SequenceMatcher(None, bare(x["statement"]), l).ratio() for l in after_lines), default=0) >= 0.8
             for x in a.get("anchors") or []]
