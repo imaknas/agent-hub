@@ -266,10 +266,16 @@ class MemorySync(Base):
         env = {**ENV, "AGENT_HUB_STATE": str(state), "AGENT_HUB_OFFLINE": "1"}
         p = subprocess.run(["bash", str(BIN / "git-sync-memory.sh")], cwd=r / ".agent-memory", env=env,
                            capture_output=True, text=True, timeout=120)
-        self.assertFalse(self.marker.exists() and "secret" in self.marker.read_text(), p.stderr)
-        if isolation.can_sandbox() is None:   # where this machine can sandbox, the note did reach the bare repo
-            self.assertEqual(p.returncode, 0, p.stderr)
-            self.assertIn("memory/n.md", git(bare, "ls-tree", "-r", "--name-only", "agent-memory").split())
+        leaked = self.marker.exists() and "secret" in self.marker.read_text()
+        if isolation.can_sandbox() is not None:   # refused: nothing ran at all
+            self.assertFalse(leaked, p.stderr)
+            return
+        # sandboxed: the note reached the bare repo, and only the bundle path can have put it there (offline, the old
+        # path commits without pushing)
+        self.assertEqual(p.returncode, 0, p.stderr)
+        self.assertIn("memory/n.md", git(bare, "ls-tree", "-r", "--name-only", "agent-memory").split())
+        if sys.platform == "darwin":   # Landlock grants the whole temp area this fixture lives in; Seatbelt only writes
+            self.assertFalse(leaked, p.stderr)
 
     def test_platform_half_fast_forwards_and_refuses_the_rest(self):
         import project_git
