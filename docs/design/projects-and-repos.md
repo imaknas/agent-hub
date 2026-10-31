@@ -267,8 +267,12 @@ by which command:
 
 - **The platform runs git only in repos it owns** — the memory bare repos, the librarian's memory copies, its own
   checkout.
-- **In a project-writable git dir, every git command runs as the project**: in its session, or through
-  `isolation.wrap` as one of its command jobs. What the platform needs back comes as data on that job's **stdout**
+- **In a project-writable git dir, every git command runs as the project**: the agent's own commands in its session
+  (the runtime's sandbox), or through `isolation.wrap` as one of its command jobs. **A session's hooks are not "in its
+  session"**: the coding agent runs them outside its sandbox (Claude Code's sandboxing docs, read 11-01: "The sandbox
+  covers shell commands only", and "command hooks, local MCP servers, … run with your full access"; each runtime
+  adapter answers the same question), so the platform's hook scripts are the platform with the user's authority and
+  run as the project like its jobs. What the platform needs back comes as data on that job's **stdout**
   (r9; never a file in the project's folder, which can be a symlink or a FIFO): a **bundle** (`git bundle create`,
   built with the project's read rights, so it cannot contain objects the project cannot read) or **facts** as JSON
   (worktrees, last-commit times, clean or not, commit counts), with types checked. The platform fetches only from such
