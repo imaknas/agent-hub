@@ -17,7 +17,9 @@ import subprocess
 import sys
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
 import hubconf  # noqa: E402
+import i18n  # noqa: E402
 
+_ = i18n.domain(__file__)   # only what the report page shows (the error, the model); the prompt waits for step 5
 MUNINN_CLI = hubconf.p("assistant.cli")
 # 專案登錄的 privacy.reflection 不是 include 的:連摘要也不送。
 # 登錄讀不到 = None:那就完全不送摘要,只送統計
@@ -105,9 +107,9 @@ def stats_brief(stats: dict) -> str:
 
 def analyze(stats: dict) -> dict:
     import llm
-    meta = {"model": llm.model_for("reflect-week") or "工具預設", "source": "stats", "excluded": sorted(EXCLUDED or [])}
+    meta = {"model": llm.model_for("reflect-week") or _("the tool's default"), "source": "stats", "excluded": sorted(EXCLUDED or [])}
     if not stats["totals"]["prompts"]:
-        return {"error": "這週沒有活動可分析", "meta": meta}
+        return {"error": _("no activity to analyze this week"), "meta": meta}
     d = muninn_digests(stats["week"])
     if d and d["sessions"]:
         meta.update(source="stats+digests", digests=len(d["sessions"]), withheld=d.get("withheld", 0),
@@ -130,6 +132,7 @@ def analyze(stats: dict) -> dict:
     except ValueError:
         out = None
     if not isinstance(out, dict):
-        return {"error": f"模型呼叫失敗(exit {res.returncode}),統計部分不受影響", "meta": meta}
+        return {"error": _("the model call failed (exit {code}); the statistics are not affected", code=res.returncode),
+                "meta": meta}
     out["meta"] = meta
     return out
