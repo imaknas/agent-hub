@@ -1,26 +1,38 @@
 #!/bin/sh -c exec${IFS}"${0%/*}/py"${IFS}"$0"${IFS}"$@"
-"""通道租借的權限轉接:Claude Code 的 `--permission-prompt-tool`(stdio MCP,一個工具 `approve`)。
+"""The permission relay for channel leases: Claude Code's `--permission-prompt-tool` (stdio MCP, one tool, `approve`).
 
-規則(--allowedTools、deny)決定得了的不會到這裡(2026-10-22 試驗 T3);到這裡的照中立政策 `policy.approvals(專案, 模式)`
-決定(規則的意思見 policy.py;docs/design/lease-contract-neutral.md)。工具是哪一種動作(kind)由 `runtime_claude.action()` 翻譯,
-這支只負責 Claude Code 的權限協定(MCP、回 behavior/updatedInput)。目前的規則:
-  ask_user   → 送到 owner 的助理(Muninn)問 Knas;回 allow + updatedInput.answers = {問題: 選項}
-  open_web   → 登錄 network 的網域放行;其他送到手機,顯示完整網址;allow / allow_session(這個租約都允許這個網域)/ deny
-  write_file → discuss 拒絕;work(只限想法沙盒)路徑解析成真實路徑後在專案資料夾裡就直接放行、不問(10-25 Knas 決定:
-               「只有碰資料夾外才問」);資料夾外、../ 繞出去、symlink 指出去都直接 deny(比問更嚴)
-  run_command→ discuss 拒絕;work 每個指令都送手機(ask_once:allow_session 只算這一次,試行期的保守做法):
-               10-24 實測 OS sandbox 擋得住寫資料夾外、讀 ~/.ssh、讀 ~/.claude 的憑證,但其他放機密的位置
-               (各服務的 .env 等)沒有逐一驗證過,而且擋不住 Keychain
-  其他       → deny
-另外提供平台工具 show_file(path, summary):把專案裡的檔案給使用者看(轉給 runner 的 /v1/internal/<lease>/show,檢查在 runner;
-docs/design/lease-show-file.md)。在判斷點的自動放行清單裡,不經過上面的權限判斷。
-沒人回答 5 分鐘 → deny,告訴 session 不要重試。每次請求跟決定都回報給 runner(稽核、等待中不算閒置)。
+What the rules (--allowedTools, deny) can decide never reaches here (2026-10-22 trial T3); what does is decided by
+the neutral policy `policy.approvals(project, mode)` (what the rules mean: see policy.py;
+docs/design/lease-contract-neutral.md). Which kind of action a tool is (kind) is translated by
+`runtime_claude.action()`; this script only handles Claude Code's permission protocol (MCP, answering
+behavior/updatedInput). Current rules:
+  ask_user   -> sent to the owner's assistant to ask the owner; answers allow + updatedInput.answers =
+               {question: option}
+  open_web   -> domains in the registry's network are allowed; others go to the phone showing the full URL;
+               allow / allow_session (allow this domain for the whole lease) / deny
+  write_file -> refused in discuss; in work (idea sandboxes only), a path that resolves to a real path inside the
+               project folder is allowed directly without asking (decided by the owner on 10-25: "ask only when
+               it touches something outside the folder"); outside the folder, escaping with ../ or a symlink pointing
+               out: denied outright (stricter than asking)
+  run_command-> refused in discuss; in work every command goes to the phone (ask_once: allow_session counts only
+               this once; a conservative choice for the trial period): tested on 10-24, the OS sandbox does block
+               writes outside the folder and reading ~/.ssh and the credentials in ~/.claude, but other places that
+               hold secrets (each service's .env etc.) have not been checked one by one, and it cannot block the
+               Keychain
+  other      -> deny
+It also provides the platform tool show_file(path, summary): shows a file in the project to the user (forwarded to
+the runner's /v1/internal/<lease>/show; the checks are in the runner; docs/design/lease-show-file.md). It is in the
+judgment point's auto-allow list and does not go through the permission decisions above.
+No answer for 5 minutes -> deny, and tell the session not to retry. Every request and decision is reported to the
+runner (audit; waiting does not count as idle).
 
-環境變數(runner 給):LEASE_ID、LEASE_PROJECT、LEASE_RUNNER(runner 的 base URL)。token 從檔案讀,不放環境變數。
-助理的 API(Muninn 定義,contracts/vendor/muninn/permission-requests.v2.schema.json):
-  POST <base>/api/permission-requests {v: 2, id, lease, project, kind, summary, target?, question?(通用結構), detail: {tool}}
-       → 200 {v: 2, decision: allow|deny|allow_session, answers?} 或 202 {v: 2, id, pending: true}
-  GET  <base>/api/permission-requests/<id>?wait=25 → 同上(長輪詢)
+Environment variables (given by the runner): LEASE_ID, LEASE_PROJECT, LEASE_RUNNER (the runner's base URL). The token
+is read from a file, not put in the environment.
+The assistant's API (defined by Muninn, contracts/vendor/muninn/permission-requests.v2.schema.json):
+  POST <base>/api/permission-requests {v: 2, id, lease, project, kind, summary, target?, question? (generic
+       structure), detail: {tool}}
+       -> 200 {v: 2, decision: allow|deny|allow_session, answers?} or 202 {v: 2, id, pending: true}
+  GET  <base>/api/permission-requests/<id>?wait=25 -> same as above (long polling)
 """
 from __future__ import annotations
 
@@ -38,7 +50,8 @@ sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
 import hubconf  # noqa: E402
 import i18n  # noqa: E402
 import policy  # noqa: E402
-import runtime_claude  # noqa: E402  這支本身就是 Claude Code 的權限轉接(--permission-prompt-tool):工具 → kind 的翻譯在那裡
+# this script is itself Claude Code's permission relay (--permission-prompt-tool): the tool -> kind translation is there
+import runtime_claude  # noqa: E402
 
 _ = i18n.domain(__file__)
 
@@ -70,7 +83,8 @@ def http(method: str, url: str, token: str, body: dict | None = None, timeout: f
     try:
         with urllib.request.urlopen(req, timeout=timeout) as r:
             return r.status, json.loads(r.read() or b"{}")
-    except urllib.error.HTTPError as e:  # runner 拒絕時 body 裡有原因(error、detail):要帶回去,session 才講得出為什麼
+    # when the runner refuses, the body holds the reason (error, detail): pass it back so the session can say why
+    except urllib.error.HTTPError as e:
         try:
             return e.code, json.loads(e.read() or b"{}")
         except ValueError:
@@ -85,8 +99,10 @@ def tell_runner(phase: str, **kw) -> None:
 
 
 def request_body(rid: str, tool: str, summary: str, risk: str, question: dict | None) -> dict:
-    """送助理的權限請求(Muninn 的 permission-requests v2,contracts/vendor/muninn/):跟執行環境無關——kind、summary、target、
-    通用的提問結構;原生的工具名只放在 detail(助理不讀)。risk 是轉接自己的分類,只給稽核看,不送。"""
+    """The permission request sent to the assistant (Muninn's permission-requests v2, contracts/vendor/muninn/):
+    independent of the runtime -- kind, summary, target, the generic question structure; the native tool name goes
+    only into detail (the assistant does not read it). risk is the relay's own classification, for the audit only;
+    not sent."""
     kind = runtime_claude.action(tool, {})[0]
     body = {"v": 2, "id": rid, "lease": LEASE, "project": PROJECT, "kind": kind, "summary": summary or f"({kind})",
             "detail": {"tool": tool}}
@@ -98,7 +114,8 @@ def request_body(rid: str, tool: str, summary: str, risk: str, question: dict | 
 
 
 def ask_owner(rid: str, tool: str, summary: str, risk: str, question: dict | None) -> dict:
-    """送到助理,等到有答案或逾時。回傳 {decision, answers?} 或 {} (逾時/連不上)。"""
+    """Send to the assistant and wait for an answer or the timeout. Returns {decision, answers?} or {} (timeout/cannot
+    connect)."""
     base, token = assistant_base(), secret(hubconf.p("assistant.ingest_token"))
     body = request_body(rid, tool, summary, risk, question)
     deadline = time.time() + TIMEOUT_S
@@ -109,7 +126,7 @@ def ask_owner(rid: str, tool: str, summary: str, risk: str, question: dict | Non
         if code not in (200, 202) and code != 0:
             return {}
         if code == 0:
-            time.sleep(5)  # 連不上:稍等再試(等的時間算在 5 分鐘裡)
+            time.sleep(5)  # cannot connect: wait a little and retry (the wait counts toward the 5 minutes)
         wait = max(1, min(25, int(deadline - time.time())))
         code, res = http("GET", f"{base}/api/permission-requests/{urllib.parse.quote(rid)}?wait={wait}", token,
                          timeout=wait + 10)
@@ -117,13 +134,14 @@ def ask_owner(rid: str, tool: str, summary: str, risk: str, question: dict | Non
 
 
 def no_session(host: str) -> bool:
-    """hub.json lease.no_session_domains(含子網域)。"""
+    """hub.json lease.no_session_domains (subdomains included)."""
     host = host.lower().rstrip(".")
     return any(host == d or host.endswith("." + d) for d in hubconf.get("lease.no_session_domains", []))
 
 
 def decide(args: dict) -> dict:
-    """要不要放行,照中立政策(policy.approvals)的規則;工具是哪一種動作由 runtime_claude.action() 翻譯。"""
+    """Whether to allow, by the neutral policy's rules (policy.approvals); which kind of action a tool is, is
+    translated by runtime_claude.action()."""
     tool, inp = args.get("tool_name", ""), args.get("input") or {}
     rid = f"{LEASE}:{args.get('tool_use_id') or int(time.time() * 1000)}"
     kind, _collab, target, _summary = runtime_claude.action(tool, inp)
@@ -169,7 +187,9 @@ def decide_web(rid: str, tool: str, inp: dict, ap: dict) -> dict:
     res = ask_owner(rid, tool, url, "external_fetch", None)
     d = res.get("decision")
     if d == "allow_session" and no_session(host):
-        d = "allow"  # 護欄:任何人都能架/看請求的網域,只准這一次(Muninn 那邊也會藏按鈕;兩邊都擋)
+        # guard rail: a domain where anyone can set up an endpoint and see the requests is allowed only this
+        # once (the assistant hides the button too; both sides block it)
+        d = "allow"
     if d in ("allow", "allow_session"):
         if d == "allow_session" and host:
             _allowed_domains.add(host)
@@ -182,7 +202,7 @@ def decide_web(rid: str, tool: str, inp: dict, ap: dict) -> dict:
 
 
 def inside_ws(path: str) -> bool:
-    """解析成真實路徑(../、symlink 都展開)之後還在專案資料夾裡。"""
+    """Still inside the project folder after resolving to the real path (../ and symlinks expanded)."""
     if not path:
         return False
     p = os.path.realpath(path if os.path.isabs(path) else os.path.join(WS, path))
@@ -197,13 +217,15 @@ def decide_write(rid: str, tool: str, kind: str, path: str, inp: dict) -> dict:
         tell_runner("end", tool=tool, kind=kind, decision="deny_outside", summary=path, target=path)
         return {"behavior": "deny", "message": _("Only files in this project folder ({ws}) can be changed; {path} is not in it.",
                                                   ws=WS, path=path or _("(no path)"))}
-    # 資料夾內:直接放行(OS sandbox 本來就只准寫這裡);照樣回報 runner 留稽核紀錄
+    # inside the folder: allow directly (the OS sandbox only allows writes here anyway); still report to the runner for
+    # the audit trail
     tell_runner("end", tool=tool, kind=kind, decision="auto_allow_inside", summary=path, target=path)
     return {"behavior": "allow", "updatedInput": inp}
 
 
 def decide_ask(rid: str, tool: str, kind: str, target: str, inp: dict) -> dict:
-    """送手機問(ask_once:每次都問,「這個租約都允許」只算這一次——目前 run_command 用這個,見檔頭)。"""
+    """Ask on the phone (ask_once: ask every time; "allow for the whole lease" counts only this once -- run_command uses
+    this for now, see the file header)."""
     summary = target[:500]
     tell_runner("start", tool=tool, summary=summary, kind=kind, target=summary)
     res = ask_owner(rid, tool, summary, kind, None)
@@ -228,14 +250,15 @@ def send(obj: dict) -> None:
 def handle_call(mid, args: dict) -> None:
     try:
         decision = decide(args)
-    except Exception as e:  # 轉接壞掉:拒絕(安全的那邊),不要讓 session 卡住
+    except Exception as e:  # the relay broke: deny (the safe side) rather than leave the session stuck
         decision = {"behavior": "deny", "message": _("The permission relay failed ({e!r}); do not use this tool for now.", e=e)}
     send({"jsonrpc": "2.0", "id": mid, "result": {"content": [{"type": "text", "text": json.dumps(decision, ensure_ascii=False)}]}})
 
 
 def show_file(args: dict) -> tuple:
-    """平台的「給使用者看」服務(runner 的 /v1/internal/<lease>/show)接成 Claude Code 的工具:轉給 runner、回結果。
-    檢查(資料夾裡、類型、大小、不像憑證)全部在 runner(lease_files.py),這裡不判斷。"""
+    """The platform's "show the user" service (the runner's /v1/internal/<lease>/show) wired up as a Claude Code tool:
+    forward to the runner, return the result. All checks (inside the folder, type, size, not credential-like) are in
+    the runner (lease_files.py); nothing is decided here."""
     code, res = http("POST", f"{RUNNER}/v1/internal/{LEASE}/show", secret(hubconf.secrets_dir() / "runner-token"),
                      {"path": args.get("path"), "summary": args.get("summary")}, timeout=30)
     if code == 200 and res.get("id"):

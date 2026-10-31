@@ -50,7 +50,7 @@ def git(repo, *args, check=True) -> str:
 
 
 def changed(repo: pathlib.Path) -> list[tuple[str, bool]]:
-    """(相對 repo 的路徑, 還在不在)——改過、新增(含沒追蹤的)、刪掉的檔案。"""
+    """(path relative to the repo, whether it still exists) -- changed, added (untracked included) and deleted files."""
     out = []
     for line in git(repo, "status", "--porcelain", "-uall", "--no-renames").splitlines():
         path = line[3:].strip().strip('"')
@@ -59,7 +59,7 @@ def changed(repo: pathlib.Path) -> list[tuple[str, bool]]:
 
 
 def run(project: str, ws: pathlib.Path, point: str, prompt: str, allow: list[str], timeout_s: int = 1800) -> dict:
-    """allow:相對 ws 的 glob(例 `.agent-memory/memory/**`)。"""
+    """allow: globs relative to ws (e.g. `.agent-memory/memory/**`)."""
     tmp = pathlib.Path(tempfile.mkdtemp(prefix=f"hub-propose-{project}-"))
     wt, mem = tmp / "ws", ws / ".agent-memory"
     added = []
@@ -69,7 +69,8 @@ def run(project: str, ws: pathlib.Path, point: str, prompt: str, allow: list[str
         if (mem / ".git").exists():
             git(mem, "worktree", "add", "--detach", str(wt / ".agent-memory"), "HEAD")
             added.append((mem, wt / ".agent-memory"))
-        # agent 自己不准寄信、結案(hubbus 認這個變數跟上層程序;寄件人、收件人由平台照輸出決定)
+        # the agent itself may not send letters or close them (hubbus honours this variable and the parent process; the
+        # platform decides sender and recipients from the output)
         r = subprocess.run([PY, str(BIN / "llm.py"), "run", point, "--cwd", str(wt)], input=prompt, text=True,
                            capture_output=True, timeout=timeout_s + 60, env={**os.environ, "HUB_MAIL_BY_PLATFORM": "1"})
         try:
@@ -101,7 +102,7 @@ def run(project: str, ws: pathlib.Path, point: str, prompt: str, allow: list[str
         shutil.rmtree(tmp, ignore_errors=True)
 
 
-# ---------- 信箱交辦 ----------
+# ---------- mailbox requests ----------
 
 def _hubbus():
     loader = importlib.machinery.SourceFileLoader("hubbus_pa", str(BIN / "hubbus"))
@@ -125,7 +126,8 @@ def letters_text(hb, c, rows) -> str:
 
 
 def _status(project: str, state: str, **extra) -> None:
-    f = hubconf.STATE / "agent-jobs" / f"mailbox-{project}" / "status.json"   # hubbus dispatch 看 running 就不重派
+    # hubbus dispatch does not re-dispatch while it sees running
+    f = hubconf.STATE / "agent-jobs" / f"mailbox-{project}" / "status.json"
     f.parent.mkdir(parents=True, exist_ok=True)
     f.write_text(json.dumps({"state": state, "ts": datetime.datetime.now().astimezone().isoformat(timespec="seconds"),
                              "via": "propose", **extra}, ensure_ascii=False))
@@ -159,7 +161,7 @@ def _mailbox(project: str, ids: list[str]) -> int:
     for rep in out.get("replies") or []:
         orig = handled.get(rep.get("reply_to"))
         if orig is None or rep.get("type") not in ("info", "done", "question") or not rep.get("text"):
-            continue   # 只准回這次交辦的信、回給原寄件人
+            continue   # replies only to the letters of this request, to the original sender
         mid = hb.new_id()
         hb.publish(c, mid, "message", project, hb.canon(orig["source"]), orig["id"],
                    {"type": rep["type"], "text": rep["text"], "from_session": None, "via": "propose"})
@@ -177,7 +179,8 @@ def _mailbox(project: str, ids: list[str]) -> int:
                        {"note": d.get("note") or _("handled by an agent the platform sent (propose)")})
             done.append(d["id"])
     c.execute("COMMIT")
-    if res["applied"] and (ws / ".agent-memory").is_dir():   # 筆記 commit + push 到 memory repo(跟 hook 同一條路)
+    # notes committed + pushed to the memory repo (the same path as the hook)
+    if res["applied"] and (ws / ".agent-memory").is_dir():
         subprocess.run([str(BIN / "with-lock.sh"), str(BIN / "git-sync-memory.sh")], cwd=ws / ".agent-memory",
                        capture_output=True)
     print(json.dumps({"project": project, "ok": res["ok"], "applied": res["applied"], "refused": res["refused"],

@@ -1,4 +1,5 @@
-"""LLM provider 共用的 HTTP(標準函式庫)。key 只放在這次請求的 header,不進環境變數、不寫 log。"""
+"""The HTTP shared by LLM providers (standard library). Keys go only into this request's headers, never into the
+environment or a log."""
 from __future__ import annotations
 
 import json
@@ -7,7 +8,7 @@ import urllib.request
 
 
 def call(method: str, url: str, body: dict | None, headers: dict, timeout: float) -> tuple[int | None, object, dict, str]:
-    """(HTTP 狀態, 解析過的 JSON 或 None, 回應的 header, 錯誤說明)。狀態 None = 連不上。"""
+    """(HTTP status, parsed JSON or None, response headers, error description). Status None = could not connect."""
     data = None if body is None else json.dumps(body, ensure_ascii=False).encode()
     req = urllib.request.Request(url, data=data, method=method,
                                  headers={"Content-Type": "application/json", "Accept": "application/json", **headers})
@@ -26,7 +27,7 @@ def call(method: str, url: str, body: dict | None, headers: dict, timeout: float
         return None, None, {}, str(e)[:300]
 
 
-RATE_LIMITED = {429, 503, 529}   # 太多請求、暫時過載:退避後重試
+RATE_LIMITED = {429, 503, 529}   # too many requests, temporarily overloaded: back off and retry
 
 
 def retry_after(headers: dict) -> float | None:
@@ -38,7 +39,9 @@ def retry_after(headers: dict) -> float | None:
 
 
 def schema_in_prompt(prompt: str, schema: dict) -> str:
-    """provider 不支援結構化輸出(例:Ollama 的 MLX 後端回 501、有些相容端點不認 response_format):把 schema 寫進 prompt。
-    回來的仍然由 completion.py 解析、用 minischema 驗證、不合格重試一次——不靠 provider 保證格式。"""
+    """The provider does not support structured output (e.g. Ollama's MLX backend answers 501, some compatible endpoints
+    do not accept response_format): write the schema into the prompt. What comes back is still parsed by
+    completion.py, validated with minischema and retried once if invalid -- the format does not rely on the
+    provider."""
     return (prompt + "\n\n---\n只回一個 JSON 物件,不要其他文字、不要 ``` 圍起來。它必須符合這個 JSON schema:\n"
             + json.dumps(schema, ensure_ascii=False))

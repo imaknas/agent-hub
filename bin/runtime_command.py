@@ -1,28 +1,38 @@
-"""任何有 headless 模式的 CLI agent:設定裡寫指令樣板就能接,不用寫程式(docs/design/tool-agnostic.md 原則 4)。
+"""Any CLI agent with a headless mode: plug it in by writing a command template in the settings, no code needed
+(docs/design/tool-agnostic.md principle 4).
 
 hub.json:
   "runtime": {"default": "command",
               "command": {"run": ["agy", "--add-dir", ".", "--mode", "accept-edits", "--model", "{model}", "-p", "{prompt}"],
-                                                   指令樣板(list)
-                          "stdin": true,           prompt 從 stdin 給(預設:樣板裡沒有 {prompt}/{prompt_file} 就從 stdin)
-                          "output_file": false,    true = 樣板裡有 {output_file},跑完讀那個檔(例:codex exec --output-last-message)
-                          "env": {"X": "y"}}}      額外的環境變數(不要放 key 的值;key 用工具自己的登入或 hub.json llm)
-  樣板的佔位:{prompt}(prompt 全文當一個參數:不讀 stdin 的工具用)、{prompt_file}(prompt 寫在暫存檔的路徑)、
-  {output_file}、{cwd}(工作目錄的絕對路徑:把工具的讀寫權限限在丟棄式 worktree 裡用)、{model}(沒有模型就整個
-  參數拿掉:含 {model} 的那一個,連同它前面那個旗標)。
-  例(Antigravity CLI,只准讀寫工作目錄、不准跑指令):
+                                                   the command template (list)
+                          "stdin": true,           the prompt is given on stdin (default: stdin when the template has
+                                                   no {prompt}/{prompt_file})
+                          "output_file": false,    true = the template has {output_file}, read that file afterwards
+                                                   (e.g. codex exec --output-last-message)
+                          "env": {"X": "y"}}}      extra environment variables (no key values here; keys come from
+                                                   the tool's own login or hub.json llm)
+  Template placeholders: {prompt} (the whole prompt as one argument: for tools that do not read stdin), {prompt_file}
+  (path of a temporary file holding the prompt), {output_file}, {cwd} (absolute path of the working directory: for
+  confining the tool's reads and writes to the throwaway worktree), {model} (no model: the whole argument is
+  dropped -- the one containing {model}, together with the flag before it).
+  Example (Antigravity CLI, may read and write only the working directory, may not run commands):
     ["agy", "--add-dir", "{cwd}", "--mode", "accept-edits", "--settings",
      "{\"permissions\": {\"allow\": [\"read_file({cwd})\", \"write_file({cwd})\"], \"deny\": [\"command(*)\"]}}",
      "-p", "{prompt}"]
-  例(Codex CLI,prompt 從 stdin、答案寫進檔案;寫入由它自己的沙盒限在工作目錄,讀不限):
+  Example (Codex CLI, prompt on stdin, answer written to a file; its own sandbox confines writes to the working
+  directory, reads are not limited):
     "run": ["codex", "exec", "--sandbox", "workspace-write", "--skip-git-repo-check", "--ephemeral",
             "--color", "never", "-o", "{output_file}", "-"], "output_file": true
-  跑完 exit 0 卻沒有任何輸出算失敗(有的工具權限被擋就這樣靜靜結束),原因用 stderr。
+  Exit 0 without any output counts as a failure (some tools end quietly like that when a permission is blocked);
+  stderr gives the reason.
 
-只提供兩個介面:agent(跑一次)跟 completion。其他(接續、串流、hook、對話紀錄、登入狀態)都沒有——平台照
-Unsupported 明確關掉那些功能。所以「跑一次」只該用在平台的丟棄式 worktree 裡(bin/propose_apply.py):這種工具的權限
-平台管不到,保證來自「它碰不到真的 checkout,平台只套用准許的路徑」。
-結構化輸出:prompt 最後附上 schema,回來的文字由呼叫端(llm.py / completion.py)解析、驗證。標準函式庫。
+Only two interfaces are provided: agent (one run) and completion. Nothing else (resume, streaming, hooks,
+transcripts, login status) -- the platform turns those features off explicitly via Unsupported. So "one run" should
+only be used in the platform's throwaway worktree (bin/propose_apply.py): the platform cannot control such a tool's
+permissions, and the guarantee comes from "it cannot touch the real checkout, and the platform applies only allowed
+paths".
+Structured output: the schema is appended to the end of the prompt, and the returned text is parsed and validated by
+the caller (llm.py / completion.py). Standard library.
 """
 from __future__ import annotations
 
@@ -56,10 +66,11 @@ def _argv(template: list, model: str | None, prompt_file: str, output_file: str,
     for i, part in enumerate(template):
         if "{model}" in part and not model:
             if out and out[-1].startswith("-") and part.strip() == "{model}":
-                out.pop()   # 「-m {model}」整組拿掉
+                out.pop()   # drop "-m {model}" as a pair
             continue
         if part == "{prompt}":
-            out.append(prompt)   # 整個參數就是 prompt:不再替換裡面的佔位(prompt 本身可能有 {model} 之類的字)
+            out.append(prompt)   # the whole argument is the prompt: no placeholder replacement inside it
+            # (the prompt itself may contain text like {model})
             continue
         out.append(part.replace("{prompt_file}", prompt_file).replace("{output_file}", output_file)
                    .replace("{cwd}", cwd).replace("{model}", model or ""))
@@ -89,7 +100,7 @@ def _run(prompt: str, model: str | None, cwd: str | None, env: dict | None, time
         try:
             out, err = p.communicate(prompt if use_stdin else None, timeout=timeout_s)
         except subprocess.TimeoutExpired:
-            os.killpg(p.pid, signal.SIGKILL)   # 整個程序群組:工具自己叫起的子程序也一起停
+            os.killpg(p.pid, signal.SIGKILL)   # the whole process group: child processes the tool started stop too
             p.communicate()
             return None, "", _("took longer than {secs} s", secs=timeout_s)
         if conf.get("output_file") and of.exists():
@@ -97,7 +108,7 @@ def _run(prompt: str, model: str | None, cwd: str | None, env: dict | None, time
         return p.returncode, out, err
 
 
-# ---------- agent(跑一次)----------
+# ---------- agent (one run) ----------
 
 def describe(task) -> list:
     conf = _conf()
@@ -118,7 +129,7 @@ def run(task) -> TaskResult:
         try:
             so = completion.parse_json(out)
         except ValueError:
-            so = None   # llm.py 照「沒有 structured_output」處理
+            so = None   # llm.py handles it as "no structured_output"
     return TaskResult(True, text=out.strip(), structured_output=so, stop="end")
 
 

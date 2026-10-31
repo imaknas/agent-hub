@@ -1,20 +1,29 @@
-"""深談裡把專案的檔案給使用者看(docs/design/lease-show-file.md):檢查、複製一份、讀回來。跟執行環境無關。
+"""Showing the user a project file during a deep conversation (docs/design/lease-show-file.md): check it, copy it,
+read it back. Independent of the runtime.
 
-lease-runner 收到「給他看這個」(`POST /v1/internal/<lease>/show`,session 那邊由各 runtime 的工具接上來)就呼叫 take():
-  1. 在專案資料夾裡:相對專案資料夾解析,解析成真實路徑後要在資料夾裡(`../`、symlink 指出去都擋),而且是一般檔案
-  2. 類型:副檔名在 TYPES 裡,**內容開頭也要對**(圖片/pdf/glb 看 magic bytes,文字要是 UTF-8);不收 svg、html
-  3. 大小:每個 ≤ MAX_FILE;每個租約**最近 WINDOW_S 內**最多 MAX_COUNT 個、合計 MAX_TOTAL(10-25 m10252240:同一段深談
-     會被接回好幾天,一直迭代算圖,一天幾十張很正常;算整個租約的話長壽租約會被卡死。總量由 prune()/KEEP_DAYS 管)
-  4. 看起來像憑證的檔名、專案登錄 secrets: 宣告的路徑、內容像憑證的文字檔(私鑰、API key)一律不送
-以「打開的那個 fd」為準,不是以字串路徑為準(10-25 review):runner 不在 sandbox 裡,session 可以借它的手讀檔(confused deputy)——
-  hard link(st_nlink > 1)拒絕;打開之後拿實際打開的檔的路徑(macOS F_GETPATH、Linux /proc/self/fd;都沒有就不送),
-  再檢查一次在資料夾裡、不是 secrets。
-檢查完把內容複製到租約自己的目錄(session 寫不到),之後只從這份送:檢查跟送出之間被換掉沒用,原檔改了刪了也還看得到。
-保留 KEEP_DAYS(prune())。標準函式庫。
+When lease-runner receives "show them this" (`POST /v1/internal/<lease>/show`; on the session side each runtime's
+tool is wired to it), it calls take():
+  1. Inside the project folder: resolved relative to the project folder, and the real path must be inside the folder
+     (`../` and symlinks pointing out are both blocked), and it must be a regular file
+  2. Type: the extension is in TYPES, **and the start of the content must match** (images/pdf/glb by magic bytes,
+     text must be UTF-8); no svg or html
+  3. Size: each ≤ MAX_FILE; per lease at most MAX_COUNT files totalling MAX_TOTAL **within the last WINDOW_S**
+     (10-25 m10252240: the same deep conversation gets resumed for several days with images rendered over and over;
+     dozens a day is normal; counting over the whole lease would block long-lived leases. The overall volume is
+     managed by prune()/KEEP_DAYS)
+  4. Credential-like file names, paths declared under the registry's secrets:, and text files whose content looks
+     like a credential (private key, API key) are never sent
+What counts is the fd that was opened, not the string path (10-25 review): the runner is not in the sandbox, so a
+session could use it to read files for it (confused deputy) --
+  hard links (st_nlink > 1) are refused; after opening, take the path of the file actually opened (macOS F_GETPATH,
+  Linux /proc/self/fd; neither: not sent) and check again that it is inside the folder and not a secret.
+After the checks the content is copied into the lease's own directory (which the session cannot write), and only
+that copy is sent: swapping the file between the check and the send achieves nothing, and the file can still be
+seen after the original is changed or deleted. Kept for KEEP_DAYS (prune()). Standard library.
 
-  take(ws, path, summary, store, secret_paths=()) -> (meta, "") 或 (None, 拒絕的原因)
-  read(store, file_id) -> (meta, bytes) 或 None
-  prune(store, older_than_s)                     刪掉超過期限的
+  take(ws, path, summary, store, secret_paths=()) -> (meta, "") or (None, reason for refusing)
+  read(store, file_id) -> (meta, bytes) or None
+  prune(store, older_than_s)                     delete what is past the limit
 """
 from __future__ import annotations
 
@@ -34,12 +43,12 @@ import i18n  # noqa: E402
 _ = i18n.domain(__file__)
 
 MAX_FILE = 20 * 1024 * 1024
-MAX_COUNT = 100                  # 最近 WINDOW_S 內
-MAX_TOTAL = 500 * 1024 * 1024    # 最近 WINDOW_S 內
+MAX_COUNT = 100                  # within the last WINDOW_S
+MAX_TOTAL = 500 * 1024 * 1024    # within the last WINDOW_S
 WINDOW_S = 24 * 3600
 KEEP_DAYS = 30
 TEXT = "text"
-# 副檔名 → (mime, 內容開頭要符合的檢查)
+# extension -> (mime, the check the start of the content must pass)
 TYPES = {
     ".png": ("image/png", lambda b: b.startswith(b"\x89PNG\r\n\x1a\n")),
     ".jpg": ("image/jpeg", lambda b: b.startswith(b"\xff\xd8\xff")),
@@ -54,15 +63,17 @@ TYPES = {
     ".csv": ("text/csv; charset=utf-8", TEXT),
 }
 SECRET_NAME = re.compile(r"(^\.env|\.pem$|\.key$|\.p12$|\.pfx$|^id_(rsa|ed25519|ecdsa)|secret|token|credential|password)", re.I)
-# 文字檔的內容像憑證就不送(檔名看不出來的,例:service-account.json 裡的私鑰)
+# a text file whose content looks like a credential is not sent (when the name does not show it, e.g. the private key
+# in service-account.json)
 SECRET_TEXT = re.compile(r"-----BEGIN [A-Z ]*PRIVATE KEY-----|\"private_key\"\s*:|sk-ant-[A-Za-z0-9_-]{10}|"
                          r"\bghp_[A-Za-z0-9]{20}|\bgithub_pat_[A-Za-z0-9_]{20}|\bAKIA[0-9A-Z]{16}\b|\bxox[bpas]-[A-Za-z0-9-]{10}")
-F_GETPATH = getattr(fcntl, "F_GETPATH", 50)  # macOS:fd 實際對應的路徑
+F_GETPATH = getattr(fcntl, "F_GETPATH", 50)  # macOS: the path the fd actually refers to
 ID = re.compile(r"^[0-9a-f]{16}$")
 
 
 def _fd_path(fd: int) -> pathlib.Path | None:
-    """fd 實際打開的檔在哪(不是當初給的字串路徑)。這個系統問不到就是 None(呼叫端拒絕送)。"""
+    """Where the file the fd actually opened is (not the string path given). None when this system cannot tell (the
+    caller then refuses to send)."""
     if hasattr(fcntl, "F_GETPATH") or os.uname().sysname == "Darwin":
         raw = fcntl.fcntl(fd, F_GETPATH, bytes(1024)).split(b"\0", 1)[0]
         return pathlib.Path(os.fsdecode(raw)).resolve()
@@ -97,7 +108,7 @@ def take(ws, path: str, summary: str | None, store, secret_paths=()) -> tuple:
         st = os.fstat(fd)
         if not stat.S_ISREG(st.st_mode):
             return None, _("{path} is not a regular file", path=rel)
-        if st.st_nlink > 1:  # hard link 可能指著資料夾外的檔(resolve、O_NOFOLLOW 都看不出來)
+        if st.st_nlink > 1:  # a hard link may point at a file outside the folder (resolve and O_NOFOLLOW can't tell)
             return None, _("{path} is a hard link (it may point outside the folder); not sent", path=rel)
         try:
             opened = _fd_path(fd)
@@ -124,7 +135,8 @@ def take(ws, path: str, summary: str | None, store, secret_paths=()) -> tuple:
             return None, _("{path}: the content looks like a credential (a private key or an API key); not sent", path=rel)
     elif not ok(data):
         return None, _("{path}: the content is not {type} (the extension does not match the content)", path=rel, type=ext[1:])
-    # 上限是先讀再寫:同一個租約一次只跑一個回合、工具一次一個,不會兩個 show 同時算
+    # The limit is read-then-write: a lease runs one turn at a time and tools one at a time, so two shows are never
+    # counted at once
     since = time.time() - WINDOW_S
     kept = [k for k in (json.loads(m.read_text()) for m in store.glob("*.json")) if k.get("at", 0) >= since] \
         if store.is_dir() else []
@@ -169,7 +181,7 @@ def prune(store, older_than_s: float) -> int:
                 n += 1
         except (OSError, ValueError):
             continue
-    for f in store.iterdir():  # 寫到一半就掛掉、沒有 meta 的內容
+    for f in store.iterdir():  # content without meta (crashed halfway through writing)
         if ID.match(f.name) and not (store / f"{f.name}.json").exists() and f.stat().st_mtime < cutoff:
             f.unlink(missing_ok=True)
             n += 1

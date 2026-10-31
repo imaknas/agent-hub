@@ -1,10 +1,12 @@
-"""本機 Ollama 的 provider(completion 介面;docs/design/llm-providers.md)。
+"""The provider for a local Ollama (completion interface; docs/design/llm-providers.md).
 
-用**原生 API**(/api/chat),不用它的 OpenAI 相容端點:相容端點不能設 num_ctx,超過預設 context 的 prompt 會被
-默默從前面截掉。模型的 context 寫在 hub.json(provider.models 的 {name, context}),這裡照它設 num_ctx;
-送出前的長度檢查在 completion.py。思考型模型(qwen3…)關掉思考(think: false),剩下的 <think> 由 completion.py 剝掉。
-結構化輸出:先用 `format: <schema>`;後端不支援(MLX 回 501)就改成把 schema 寫進 prompt(provider 設 `structured: false`
-可以直接跳過第一次)。
+Uses the **native API** (/api/chat), not its OpenAI-compatible endpoint: the compatible endpoint cannot set num_ctx,
+so a prompt longer than the default context is silently cut from the front. The model's context is in hub.json
+({name, context} in provider.models) and num_ctx is set from it here; the length check before sending is in
+completion.py. Thinking models (qwen3…) have thinking turned off (think: false); completion.py strips any remaining
+<think>.
+Structured output: first `format: <schema>`; if the backend does not support it (MLX answers 501), the schema is
+written into the prompt instead (setting `structured: false` on the provider skips the first attempt).
 """
 from __future__ import annotations
 
@@ -28,7 +30,8 @@ def complete(req, conf) -> CompletionResult:
         body["format"] = req.schema
     status, data, _h, err = call("POST", url, body, {}, req.timeout_s)
     if req.schema is not None and status == 501 and "format" in body:
-        # 這個模型的後端不支援結構化輸出(MLX 後端:「structured output is unavailable」):改成 schema 寫進 prompt
+        # this model's backend does not support structured output (MLX backend: "structured output is unavailable"):
+        # write the schema into the prompt instead
         body.pop("format")
         body["messages"] = msgs[:-1] + [{"role": "user", "content": schema_in_prompt(req.prompt, req.schema)}]
         status, data, _h, err = call("POST", url, body, {}, req.timeout_s)
@@ -54,6 +57,6 @@ def health(conf) -> tuple:
 
 
 def list_models(conf) -> list[str]:
-    """本機已經 pull 的模型。Ollama 沒開 → 空的。"""
+    """Models already pulled on this machine. Ollama not running -> empty."""
     status, data, _h, _e = call("GET", (conf.get("base_url") or DEFAULT_BASE).rstrip("/") + "/api/tags", None, {}, 10)
     return sorted(m.get("name") for m in (data or {}).get("models") or [] if m.get("name")) if status == 200 else []

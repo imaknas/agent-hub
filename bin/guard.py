@@ -40,8 +40,9 @@ def own_project(cwd: pathlib.Path) -> tuple[str | None, pathlib.Path | None]:
 
 
 def decide(target: dict, cwd) -> str | None:
-    """平台的邏輯:這個 session 想開的新 session 在別的專案(或別的地方)就回傳擋下的理由,否則 None。
-    target 是中立的 {"cwd": 路徑或 None, "elsewhere": 說明或 None}(執行環境的 binding 從原生的參數翻出來)。"""
+    """The platform's logic: if the new session this session wants to open is in another project (or somewhere else),
+    return the reason for blocking it, otherwise None. target is the neutral {"cwd": path or None, "elsewhere":
+    description or None} (the runtime's binding translates it from the native arguments)."""
     proj, root = own_project(pathlib.Path(cwd or os.getcwd()))
     if not proj:
         return None
@@ -53,7 +54,7 @@ def decide(target: dict, cwd) -> str | None:
                  name=where.get('name', ''), how=how)
     if where.get("kind") == "machine":
         return _("A {project} session cannot open a session on another machine. {how}", project=proj, how=how)
-    if where.get("kind"):  # unknown_place:例如存好的地點,看不出是不是同一個專案
+    if where.get("kind"):  # unknown_place: e.g. a saved preset; no way to tell whether it is the same project
         return _("When a {project} session opens a session with a preset, there is no way to tell whether it is the "
                  "same project; for the same project, give no preset or cwd. {how}", project=proj, how=how)
     if target.get("cwd"):
@@ -65,7 +66,8 @@ def decide(target: dict, cwd) -> str | None:
 
 
 def main() -> int:
-    """舊的入口 `guard.py pre-tool`:還沒換新設定的專案還在叫它。輸入、輸出都透過執行環境的 binding。"""
+    """The old entry point `guard.py pre-tool`: projects that have not switched to the new settings still call it. Input
+    and output both go through the runtime's binding."""
     if sys.argv[1:] != ["pre-tool"]:
         print(_(__doc__))
         return 2
@@ -73,14 +75,14 @@ def main() -> int:
         import runtime_ports
         try:
             rt = runtime_ports.load(ports=("lifecycle",))
-        except runtime_ports.Unsupported:   # 沒有 hook 的執行環境不會叫到這裡
+        except runtime_ports.Unsupported:   # a runtime without hooks never gets here
             return 0
         ev = rt.parse_event("open_session_attempt", sys.stdin.read())
         if ev is not None:
             reason = decide(ev.target or {}, ev.cwd)
             if reason:
                 print(rt.deny("open_session_attempt", reason))
-    except Exception:  # 守門壞掉不能擋正常工作
+    except Exception:  # a broken guard must not block normal work
         pass
     return 0
 
