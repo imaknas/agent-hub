@@ -46,12 +46,12 @@ def prune_line() -> str:
         r = json.loads(f.read_text())
     except (OSError, ValueError):
         return ""
-    parts = [_("{n} dependencies deleted", n=len(r.get('deps', []))), _("{n} worktrees removed", n=len(r.get('removed', []))),
+    parts = [_("{n} {n:dependency|dependencies} deleted", n=len(r.get('deps', []))), _("{n} {n:worktree|worktrees} removed", n=len(r.get('removed', []))),
              _("{mb} MB freed", mb=r.get('freed_mb', 0))]
     if r.get("skipped"):
         parts.append(_("{n} skipped (files that may not be rebuildable)", n=len(r['skipped'])))
     return ("<div class=sub style='margin-top:8px'>"
-            + _("worktree auto-cleanup ({at}): {parts}", at=esc(str(r.get('at', ''))[:16]), parts=_(", ").join(parts))
+            + _("Worktree auto-cleanup ({at}): {parts}", at=esc(str(r.get('at', ''))[:16]), parts=_(", ").join(parts))
             + "</div>")
 
 
@@ -73,21 +73,43 @@ def weekday_name(i: int) -> str:
     return (_("Mon"), _("Tue"), _("Wed"), _("Thu"), _("Fri"), _("Sat"), _("Sun"))[i]
 
 
+def month_name(m: int) -> str:
+    return (_("Jan"), _("Feb"), _("Mar"), _("Apr"), _("May"), _("Jun"), _("Jul"), _("Aug"), _("Sep"), _("Oct"), _("Nov"),
+            _("Dec"))[m - 1]
+
+
 def describe_when(job: dict) -> str:
+    """One whole phrase per shape (the same English as schedulectl list): "daily at 06:00", "every 15 minutes, 08:00-20:00",
+    "weekly on Mon, Thu at 10:00", "monthly on days 1 and 15 at 10:00", "in Jan, Apr on day 1 at 06:00 (until …)"."""
     parts = []
     if "months" in job:
-        parts.append(",".join(_("month {m}", m=m) for m in job["months"]))
+        months = month_name(job["months"][0])
+        for m in job["months"][1:]:
+            months = _("{months}, {month}", months=months, month=month_name(m))
+        parts.append(_("in {months}", months=months))
     if "days_of_month" in job:
-        parts.append(("" if parts else _("every month") + " ") + ",".join(_("day {d}", d=d) for d in job["days_of_month"]))
+        names = [_("{day}", day=d) for d in job["days_of_month"]]
+        days = names[0]
+        for i, d in enumerate(names[1:], 1):
+            days = _("{days} and {day}", days=days, day=d) if i == len(names) - 1 else _("{days}, {day}", days=days, day=d)
+        if parts:
+            parts.append(_("on day {days}", days=days) if len(names) == 1 else _("on days {days}", days=days))
+        else:
+            parts.append(_("monthly on day {days}", days=days) if len(names) == 1 else
+                         _("monthly on days {days}", days=days))
     if "days_of_week" in job:
-        parts.append(_("every week {days}", days=_("/").join(weekday_name(WEEKDAYS.index(w)) for w in job["days_of_week"])))
-    when = " ".join(parts) or _("every day")
-    if "end_date" in job:
-        when += _(" (until {date})", date=job['end_date'])
+        wd = weekday_name(WEEKDAYS.index(job["days_of_week"][0]))
+        for w in job["days_of_week"][1:]:
+            wd = _("{weekdays}, {weekday}", weekdays=wd, weekday=weekday_name(WEEKDAYS.index(w)))
+        parts.append(_("weekly on {weekdays}", weekdays=wd))
+    when = " ".join(parts)
+    until = _(" (until {date})", date=job['end_date']) if "end_date" in job else ""
     if "every_minutes" in job:
-        return (_("{when} every {n} minutes", when=when, n=job['every_minutes'])
-                + (_(" ({between})", between=job['between']) if "between" in job else ""))
-    return f"{when} {job['time']}"
+        n, between = job["every_minutes"], _(", {between}", between=job["between"]) if "between" in job else ""
+        if not when:
+            return _("every {n} {n:minute|minutes}{between}{until}", n=n, between=between, until=until)
+        return _("every {n} {n:minute|minutes}{between}, {when}{until}", n=n, between=between, when=when, until=until)
+    return _("{when} at {time}{until}", when=when or _("daily"), time=job["time"], until=until)
 
 
 def next_run(job: dict, state: dict, now: datetime.datetime) -> str:
@@ -98,7 +120,7 @@ def next_run(job: dict, state: dict, now: datetime.datetime) -> str:
         if not last:
             return _("next tick")
         nxt = datetime.datetime.fromisoformat(last) + datetime.timedelta(minutes=job["every_minutes"])
-        return fmt_dt(nxt) + (_(" (only {between})", between=job['between']) if "between" in job else "")
+        return fmt_dt(nxt) + (_(" (only during {between})", between=job['between']) if "between" in job else "")
     hh, mm = map(int, job["time"].split(":"))
     for i in range(0, 400):
         d = now.date() + datetime.timedelta(days=i)
@@ -118,6 +140,11 @@ def fmt_dt(t: datetime.datetime) -> str:
     day = {0: _("today"), 1: _("tomorrow")}.get((t.date() - today).days,
                                                 _("{weekday} {date:%m/%d}", weekday=weekday_name(t.weekday()), date=t))
     return f"{day} {t:%H:%M}"
+
+
+def age_text(days: int) -> str:
+    """a worktree's last commit: "3 days ago"; 0 days is "earlier today" (its own msgid, so a translation can keep "0 …")"""
+    return _("earlier today") if days == 0 else _("{n} {n:day|days} ago", n=days)
 
 
 def scheduler_runs() -> tuple[dict, datetime.datetime | None]:
@@ -142,6 +169,7 @@ def scheduler_runs() -> tuple[dict, datetime.datetime | None]:
         else:
             r = runs.setdefault(ended, {"started": ts})
             r["result"] = "ok" if result == "finished OK" else f"failed (exit {code})"
+            r["code"] = code
             r["ended"] = ts
     return runs, last_tick
 
@@ -182,7 +210,7 @@ def main() -> None:
     alerts, rows, report_blocks = [], [], []
     if not alive:
         alerts.append(("bad", _("The scheduler (local.agent-hub-scheduler) is not loaded: nothing scheduled runs. "
-                                "On the hub machine run schedulectl start")))
+                                "On the hub machine, run schedulectl start")))
     else:
         # scheduler.py 只在有 job 要跑時才寫 log,但每個 tick 都會存狀態檔——用它的修改時間判斷
         # 排程器還有沒有在跑(用 log 判斷,半夜沒 job 的時段會誤報)
@@ -198,15 +226,16 @@ def main() -> None:
         alerts.append(("bad", _("The scheduler watchdog (local.agent-hub-scheduler-watchdog.timer) is not scheduled: "
                                 "nobody is told when the scheduler stops. Run agenthub init")))
     elif sm is None:
-        alerts.append(("bad", _("{text}.", text=hubconf.no_service_manager())))
+        t = _("{text}.", text=hubconf.no_service_manager())
+        alerts.append(("bad", t[:1].upper() + t[1:]))   # an alert line starts upper-case (a no-op on CJK)
     elif sm == "launchd" and subprocess.run(["launchctl", "print", f"gui/{os.getuid()}/local.agent-hub-scheduler-watchdog"],
                                             capture_output=True).returncode != 0:
         alerts.append(("bad", _("The scheduler watchdog (local.agent-hub-scheduler-watchdog) is not loaded: nobody is told "
-                                "when the scheduler stops. On the hub machine run "
+                                "when the scheduler stops. On the hub machine, run "
                                 "bin/recover-service.sh local.agent-hub-scheduler-watchdog")))
     elif not hubconf.get("alerts"):
         alerts.append(("notify", _("No alerts set up (hub.json has no alerts): a stopped scheduler or a dead service only "
-                                   "shows on this page and in the log, nobody is notified")))
+                                   "shows on this page and in the log; nobody is notified")))
     elif not all((hubconf.secrets_dir() / f).exists() for f in ("discord-token", "discord-alert-channel")):
         alerts.append(("bad", _("The scheduler watchdog has no Discord settings (.secrets/discord-token, .secrets/discord-alert-channel): "
                                 "it cannot alert when the scheduler stops")))
@@ -225,8 +254,8 @@ def main() -> None:
     legacy_auto = [j["name"] for j in jobs if "run-agent-job.sh" in j["command"] and "AGENT_JOB_ALLOW=" not in j["command"]
                    and j.get("enabled", True)]
     if legacy_auto:
-        alerts.append(("notify", _("These Claude jobs have not declared allow: in the registry (unattended they run in auto, "
-                                   "not dontAsk): {jobs}", jobs=', '.join(legacy_auto))))
+        alerts.append(("notify", _("These Claude jobs have not declared allow: in the registry (so unattended they run in auto "
+                                   "mode, not dontAsk): {jobs}", jobs=', '.join(legacy_auto))))
 
     config_note = ""
     try:  # config pipeline(new-user.md 3.7):生效的是哪個 config commit,改了還沒套用就提醒
@@ -235,13 +264,13 @@ def main() -> None:
         rec = json.loads(appliers.applied_path().read_text()) if appliers.applied_path().exists() else None
         config_note = f" · config {rec['commit'][:7]}" if rec else ""
         if rec and not rec.get("ok", True):
-            alerts.append(("bad", _("The last hub config apply left things out of line ({at}): bin/hub config plan shows "
-                                    "which", at=rec.get('at', '')[:16])))
+            alerts.append(("bad", _("The last agenthub config apply left differences from the config ({at}): agenthub config "
+                                    "plan shows which", at=rec.get('at', '')[:16])))
         elif rec and rec["commit"] != cur:
-            alerts.append(("notify", _("config changed and not applied with hub config apply (in effect {applied}, now "
-                                       "{current}{dirty}); the 15-minute jobs catch up services and project settings, but "
-                                       "only a run of bin/hub config apply records it", applied=rec['commit'][:7],
-                                       current=cur[:7], dirty=_("+uncommitted") if cur.endswith('+dirty') else '')))
+            alerts.append(("notify", _("The config has changed but has not been applied (agenthub config apply; applied: {applied}; "
+                                       "now: {current}{dirty}). The 15-minute jobs catch up services and project settings, "
+                                       "but only agenthub config apply records it", applied=rec['commit'][:7],
+                                       current=cur[:7], dirty=_(" + uncommitted changes") if cur.endswith('+dirty') else '')))
     except Exception as e:
         alerts.append(("bad", _("Cannot read the config apply record: {e}", e=e)))
 
@@ -249,7 +278,7 @@ def main() -> None:
         alerts.append(("bad", _("Registry entry {project} is invalid (the last valid one is used; with none, its jobs are "
                                 "not scheduled): {errors}{more}. `bin/registry.py check {project}`", project=proj,
                                 errors=_("; ").join(errs[:4]),
-                                more=_("... {n} in all", n=len(errs)) if len(errs) > 4 else "")))
+                                more=_("; … ({n} in all)", n=len(errs)) if len(errs) > 4 else "")))
 
     for job in jobs:
         name = job["name"]
@@ -272,8 +301,8 @@ def main() -> None:
                 detail = _("Stopped itself: {reason}", reason=(AGENT_JOBS / aname / "STOP").read_text().strip()[:120])
         elif result.startswith("failed"):
             # 下一個 tick 成功就不算;只在最後一次是失敗時提醒
-            alerts.append(("bad", _("{name} failed on its last run ({result}), log: .logs/{log}-<date>.log", name=name,
-                                    result=result, log=name.replace('/', '__'))))
+            alerts.append(("bad", _("{name} failed on its last run (exit {code}); log: .logs/{log}-<date>.log", name=name,
+                                    code=run.get("code", "?"), log=name.replace('/', '__'))))
         cls = {"ok": "ok", "running": "run"}.get(result, "bad" if result.startswith("failed") else "")
         label = {"ok": _("succeeded"), "running": _("running"), "failed": _("failed")}.get(result.split(" ")[0], result or "—")
         rows.append(
@@ -315,18 +344,18 @@ def main() -> None:
                                 code=r.returncode, stderr=r.stderr.strip()[-160:])))
     if bus:
         for st in bus["stuck"]:
-            alerts.append(("bad", _("Letter {id} to {to}: over an hour with no session taking it and the platform not "
-                                    "handling it (see the hubbus dispatch log, the daily limit)", id=st['id'], to=st['to'])))
+            alerts.append(("bad", _("Letter {id} to {to}: unclaimed for over an hour: no session took it and the platform did "
+                                    "not handle it (see the hubbus dispatch log and the daily limit)", id=st['id'], to=st['to'])))
         tm = bus["to_muninn"]
         if tm["n"] and now - datetime.datetime.fromisoformat(tm["oldest"]).replace(tzinfo=None) > datetime.timedelta(hours=1):
-            alerts.append(("bad", _("{n} items for the assistant (letters to the owner, handoff closures) are stuck, the "
-                                    "oldest {oldest}; see .state/bus/hubbus.log", n=tm['n'], oldest=tm['oldest'][5:16])))
+            alerts.append(("bad", _("{n} {n:item|items} for the assistant (letters to the owner, handoff closures) {n:is|are} "
+                                    "stuck; the oldest is from {oldest}; see .state/bus/hubbus.log", n=tm['n'], oldest=tm['oldest'][5:16])))
         for f in bus["job_failed_24h"]:
             if f.get("job") == "hubbus-bridge":
                 alerts.append(("bad", _("hubbus: {detail}", detail=f.get('detail', ''))))
         if bus["corrupt"]:
-            alerts.append(("bad", _("bus.db was corrupt; the old file moved to {files} (the letters in it not yet "
-                                    "received are lost)", files=', '.join(bus['corrupt']))))
+            alerts.append(("bad", _("bus.db was corrupt; the old file was moved to {files} (letters in it that "
+                                    "had not been received are lost)", files=', '.join(bus['corrupt']))))
         mail_rows = "".join(f"<tr><td>{esc(p)}</td><td>{v['open']}</td><td>{v['undelivered']}</td>"
                             f"<td>{esc(v['oldest'][5:16].replace('T', ' '))}</td></tr>" for p, v in bus["projects"].items())
         mail_html = (f"<h2 style=\"font-size:18px;margin-top:28px\">{_('Project mailboxes')}</h2>"
@@ -344,17 +373,20 @@ def main() -> None:
             for w in info["worktrees"]:
                 state_txt = _("merged") + (_(", can be cleaned up (bin/prune-worktrees)") if w["clean"]
                                            else _(", has uncommitted changes")) if w["merged"] \
-                    else _("in progress, {n} files changed", n=len(w['files']))
+                    else _("in progress, {n} {n:file|files} changed", n=len(w['files']))
                 hot = any(f in info["overlaps"] for f in w["files"]) and not w["merged"]
-                wt_rows.append(f"<tr><td>{esc(proj)}</td><td>{esc(w['branch'])}</td><td>{_('{n} days ago', n=w['age_days'])}</td>"
+                wt_rows.append(f"<tr><td>{esc(proj)}</td><td>{esc(w['branch'])}</td><td>{age_text(w['age_days'])}</td>"
                                f"<td{' class=\'st bad\'' if hot else ''}>{esc(state_txt)}"
                                f"{_(' (another branch changes the same file)') if hot else ''}</td></tr>")
             for f, bs in info["overlaps"].items():
-                alerts.append(("bad", _("{project}: {n} unmerged branches all change {file} ({branches}); the one merged "
-                                        "later will collide on rebase", project=proj, n=len(bs), file=f, branches=', '.join(bs))))
+                alerts.append(("bad", _("{project}: {n} unmerged branches both change {file} ({branches}); whichever "
+                                        "merges second will conflict on rebase", project=proj, n=len(bs), file=f,
+                                        branches=', '.join(bs)) if len(bs) == 2 else
+                               _("{project}: {n} unmerged branches all change {file} ({branches}); the ones merged later "
+                                 "will conflict on rebase", project=proj, n=len(bs), file=f, branches=', '.join(bs))))
         ungated = {p: i["ungated_main_7d"] for p, i in ov.items() if i["ungated_main_7d"]}
         wt_html = (f"<h2 style=\"font-size:18px;margin-top:28px\">{_('Parallel sessions (worktrees)')}</h2>"
-                   + (f"<table><tr><th>{_('Project')}</th><th>branch</th><th>{_('Last commit')}</th><th>{_('State')}</th></tr>"
+                   + (f"<table><tr><th>{_('Project')}</th><th>{_('Branch')}</th><th>{_('Last commit')}</th><th>{_('State')}</th></tr>"
                       f"{''.join(wt_rows)}</table>"
                       if wt_rows else f"<div class=sub>{_('No worktrees in progress')}</div>")
                    + ("<div class=sub style='margin-top:8px'>"
@@ -398,9 +430,9 @@ details{{background:var(--card);border:1px solid var(--line);border-radius:8px;m
 summary{{cursor:pointer;color:var(--mut)}} pre{{white-space:pre-wrap;word-break:break-word;font:14px/1.55 -apple-system,"PingFang TC",sans-serif}}
 @media (max-width:640px){{td:nth-child(2),th:nth-child(2){{display:none}}}}
 </style></head><body><main>
-<h1>{_('Schedule status')}</h1><div class=sub><a href="digest.html">digest</a> · <a href="todo.html">{_('To-do')}</a> · <a href="reflect/">{_('Weekly review')}</a></div><div class=sub>{generated}{config_note}</div>
+<h1>{_('Schedule status')}</h1><div class=sub><a href="digest.html">{_('Digest')}</a> · <a href="todo.html">{_('To-do')}</a> · <a href="reflect/">{_('Weekly review')}</a></div><div class=sub>{generated}{config_note}</div>
 {alert_html}
-<table><tr><th>Job</th><th>{_('When')}</th><th>{_('Last')}</th><th>{_('Next')}</th></tr>{''.join(rows)}</table>
+<table><tr><th>{_('Job')}</th><th>{_('When')}</th><th>{_('Last')}</th><th>{_('Next')}</th></tr>{''.join(rows)}</table>
 {mail_html}
 {wt_html}
 <h2 style="font-size:18px;margin-top:28px">{_('Claude job reports')}</h2>
@@ -426,7 +458,7 @@ REFLECT_LINK = "reflect"   # 狀態頁資料夾裡連到 data 的 reflect/ 的�
 
 
 def nav() -> str:
-    return (f'<nav><a href="index.html">{_("Schedule status")}</a> · <a href="digest.html">digest</a> · '
+    return (f'<nav><a href="index.html">{_("Schedule status")}</a> · <a href="digest.html">{_("Digest")}</a> · '
             f'<a href="todo.html">{_("To-do")}</a> · <a href="reflect/">{_("Weekly review")}</a></nav>')
 
 
@@ -470,7 +502,7 @@ def write_reading_pages(now) -> None:
     out = OUT.parent
     days = sorted(hubconf.data_file("digest").glob("20*.md"), reverse=True)[:7]
     body = "".join(f"<section>{md_html(f.read_text())}</section>" for f in days) or f"<p class=sub>{_('No digest yet')}</p>"
-    (out / "digest.html").write_text(reading_page(_("digest (last 7 days)"), body, now))
+    (out / "digest.html").write_text(reading_page(_("Digest (last 7 days)"), body, now))
     todo = hubconf.data_file("todo.md")
     (out / "todo.html").write_text(reading_page(_("Cross-project to-do"), f"<section>{md_html(todo.read_text())}</section>"
                                                 if todo.exists() else f"<p class=sub>{_('No todo.md yet')}</p>", now))

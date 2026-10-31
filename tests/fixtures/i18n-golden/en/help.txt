@@ -86,22 +86,22 @@ This tool only does what needs a command to remember, or risks breaking the yaml
 pausing/resuming a single job, and turning the whole scheduler on/off and checking its state.
 
 Usage:
-  schedulectl list                list every job and its state (enabled/paused, time, command)
-  schedulectl pause <name>        pause a job (its settings stay, resume brings it back)
+  schedulectl list                list every job and its state (enabled/paused, when it runs, command)
+  schedulectl pause <name>        pause a job (its settings stay; resume brings it back)
   schedulectl resume <name>       resume a job
-  schedulectl status              whether the scheduler itself (launchd) is running + the latest runs
+  schedulectl status              whether the scheduler itself (launchd) is running, and the latest runs
   schedulectl logs [name] [n]     print the last n lines of a log (default scheduler.log; with name, that job's log for today)
-  schedulectl run <name>          run a job once now (like Desktop's "Run now") and record it as run today
-                                   (an LLM job is then not run again by the schedule the same day). Runs through launchd in
-                                   the user's desktop session: under SSH the keychain can't be read and claude is logged out
+  schedulectl run <name>          run a job once now (like Claude Desktop's "Run now") and record it as run today, so the
+                                  schedule does not run it again that day (which matters for LLM jobs). Runs through launchd
+                                  in the user's desktop session: under SSH the keychain can't be read and claude is logged out
   schedulectl stop                stop the scheduler completely (launchctl bootout; schedule.yaml untouched)
   schedulectl start               start the scheduler again (launchctl bootstrap)
-  schedulectl models               the model each decision point actually uses, and where it comes from (llm.model_for and
-                                   hub.json's llm section)
+  schedulectl models              the model each judgment point actually uses, and where that comes from (llm.model_for
+                                  and hub.json's llm section)
   schedulectl set-model <point|state|index|consolidate> <model|default>
-                                   write into hub.json llm.points (default = drop the pin, back to the group's default);
-                                   state = the single-project STATE.md points, index = the cross-project index.md and weekly
-                                   report, consolidate = the cleanup pass
+                                  write into hub.json llm.points (default = drop the pin and go back to the group's
+                                  default); state = the single-project STATE.md points, index = the cross-project index.md
+                                  and the weekly report, consolidate = the cleanup pass
 
 --- stderr
 

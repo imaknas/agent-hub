@@ -45,7 +45,8 @@ def _diff(cur: dict[str, dict], old: dict[str, dict]) -> list[Change]:
 
 
 def _when(j: dict) -> str:
-    w = j.get("time") or (_("every {n} minutes", n=j['every_minutes']) if j.get("every_minutes") else "")
+    w = _("at {time}", time=j["time"]) if j.get("time") else \
+        _("every {n} {n:minute|minutes}", n=j['every_minutes']) if j.get("every_minutes") else ""
     return w + (_(", after {jobs}", jobs=', '.join(j['after'])) if j.get("after") else "")
 
 

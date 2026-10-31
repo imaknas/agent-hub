@@ -7,22 +7,22 @@ This tool only does what needs a command to remember, or risks breaking the yaml
 pausing/resuming a single job, and turning the whole scheduler on/off and checking its state.
 
 Usage:
-  schedulectl list                list every job and its state (enabled/paused, time, command)
-  schedulectl pause <name>        pause a job (its settings stay, resume brings it back)
+  schedulectl list                list every job and its state (enabled/paused, when it runs, command)
+  schedulectl pause <name>        pause a job (its settings stay; resume brings it back)
   schedulectl resume <name>       resume a job
-  schedulectl status              whether the scheduler itself (launchd) is running + the latest runs
+  schedulectl status              whether the scheduler itself (launchd) is running, and the latest runs
   schedulectl logs [name] [n]     print the last n lines of a log (default scheduler.log; with name, that job's log for today)
-  schedulectl run <name>          run a job once now (like Desktop's "Run now") and record it as run today
-                                   (an LLM job is then not run again by the schedule the same day). Runs through launchd in
-                                   the user's desktop session: under SSH the keychain can't be read and claude is logged out
+  schedulectl run <name>          run a job once now (like Claude Desktop's "Run now") and record it as run today, so the
+                                  schedule does not run it again that day (which matters for LLM jobs). Runs through launchd
+                                  in the user's desktop session: under SSH the keychain can't be read and claude is logged out
   schedulectl stop                stop the scheduler completely (launchctl bootout; schedule.yaml untouched)
   schedulectl start               start the scheduler again (launchctl bootstrap)
-  schedulectl models               the model each decision point actually uses, and where it comes from (llm.model_for and
-                                   hub.json's llm section)
+  schedulectl models              the model each judgment point actually uses, and where that comes from (llm.model_for
+                                  and hub.json's llm section)
   schedulectl set-model <point|state|index|consolidate> <model|default>
-                                   write into hub.json llm.points (default = drop the pin, back to the group's default);
-                                   state = the single-project STATE.md points, index = the cross-project index.md and weekly
-                                   report, consolidate = the cleanup pass
+                                  write into hub.json llm.points (default = drop the pin and go back to the group's
+                                  default); state = the single-project STATE.md points, index = the cross-project index.md
+                                  and the weekly report, consolidate = the cleanup pass
 """
 import datetime
 import json
@@ -81,26 +81,57 @@ def find_job(jobs, name):
     sys.exit(1)
 
 
+def month_name(m: int) -> str:
+    return (_("Jan"), _("Feb"), _("Mar"), _("Apr"), _("May"), _("Jun"), _("Jul"), _("Aug"), _("Sep"), _("Oct"), _("Nov"),
+            _("Dec"))[m - 1]
+
+
+def weekday_name(w: str) -> str:
+    """a days_of_week value (mon…sun) as shown"""
+    return {"mon": _("Mon"), "tue": _("Tue"), "wed": _("Wed"), "thu": _("Thu"), "fri": _("Fri"), "sat": _("Sat"),
+            "sun": _("Sun")}.get(w, w)
+
+
+def day_list(days: list) -> str:
+    """days of the month: "1, 10 and 20" """
+    names = [_("{day}", day=d) for d in days]
+    out = names[0]
+    for i, d in enumerate(names[1:], 1):
+        out = _("{days} and {day}", days=out, day=d) if i == len(names) - 1 else _("{days}, {day}", days=out, day=d)
+    return out
+
+
 def describe_when(job):
-    """跟 scheduler.py 的 runs_today() 用同一組篩選欄位,不然 list 會把每月一次的 job 顯示成每天。"""
+    """跟 scheduler.py 的 runs_today() 用同一組篩選欄位,不然 list 會把每月一次的 job 顯示成每天。
+    One whole phrase per shape: "daily at 06:00", "every 15 minutes, 08:00-20:00", "weekly on Mon, Thu at 10:00",
+    "monthly on days 1 and 15 at 10:00", "in Jan, Apr on day 1 at 06:00 (until 2027-12-31)"."""
     parts = []
     if "months" in job:
-        parts.append(_("yearly in {months}", months=",".join(_("month {m}", m=m) for m in job["months"])))
+        months = month_name(job["months"][0])
+        for m in job["months"][1:]:
+            months = _("{months}, {month}", months=months, month=month_name(m))
+        parts.append(_("in {months}", months=months))
     if "days_of_month" in job:
-        days = ",".join(_("day {d}", d=d) for d in job["days_of_month"])
-        parts.append(days if parts else _("monthly on {days}", days=days))
+        days, one = day_list(job["days_of_month"]), len(job["days_of_month"]) == 1
+        if parts:
+            parts.append(_("on day {days}", days=days) if one else _("on days {days}", days=days))
+        else:
+            parts.append(_("monthly on day {days}", days=days) if one else _("monthly on days {days}", days=days))
     if "days_of_week" in job:
-        parts.append(_("weekly on {days}", days=",".join(job["days_of_week"])))
-    when = " ".join(parts) or _("daily")
-    extra = _(" (at most {n} tries a day)", n=job["max_attempts_per_day"]) if "max_attempts_per_day" in job else ""
+        wd = weekday_name(job["days_of_week"][0])
+        for w in job["days_of_week"][1:]:
+            wd = _("{weekdays}, {weekday}", weekdays=wd, weekday=weekday_name(w))
+        parts.append(_("weekly on {weekdays}", weekdays=wd))
+    when = " ".join(parts)
+    extra = _(" (at most {n} {n:try|tries} a day)", n=job["max_attempts_per_day"]) if "max_attempts_per_day" in job else ""
     if "end_date" in job:
         extra += _(" (until {date})", date=job["end_date"])
     if "every_minutes" in job:
-        at = _("every {n} min ({between})", n=job["every_minutes"], between=job["between"]) if "between" in job else \
-            _("every {n} min", n=job["every_minutes"])
-    else:
-        at = job["time"]
-    return f"{when} {at}{extra}"
+        n, between = job["every_minutes"], _(", {between}", between=job["between"]) if "between" in job else ""
+        if not when:
+            return _("every {n} {n:minute|minutes}{between}{extra}", n=n, between=between, extra=extra)
+        return _("every {n} {n:minute|minutes}{between}, {when}{extra}", n=n, between=between, when=when, extra=extra)
+    return _("{when} at {time}{extra}", when=when or _("daily"), time=job["time"], extra=extra)
 
 
 def cmd_list():
@@ -194,7 +225,7 @@ def cmd_run(name):
                         f"--property=StandardOutput=append:{log}", f"--property=StandardError=append:{log}",
                         f"--setenv=SAFE_PUSH={HUB / 'bin' / 'git-safe-push.sh'}", "/bin/sh", "-lc", job["command"]], check=True)
         _mark_ran_today(name)
-        print(_("Started {name}, its output goes to {log} (today's schedule won't run it again)", name=name, log=log))
+        print(_("Started {name}; its output goes to {log} (today's schedule won't run it again)", name=name, log=log))
         return
     plist = Path("/tmp") / f"{label}.plist"
     import plistlib
@@ -210,7 +241,7 @@ def cmd_run(name):
     subprocess.run(["launchctl", "bootout", f"gui/{uid}/{label}"], capture_output=True)
     subprocess.run(["launchctl", "bootstrap", f"gui/{uid}", str(plist)], check=True)
     _mark_ran_today(name)
-    print(_("Started {name}, its output goes to {log} (today's schedule won't run it again)", name=name, log=log))
+    print(_("Started {name}; its output goes to {log} (today's schedule won't run it again)", name=name, log=log))
 
 
 def _mark_ran_today(name):
@@ -239,7 +270,7 @@ def cmd_models():
             model = llm.model_for(name, spec)
             where = "hub.json llm.points" if (pins.get(name) or {}).get("model") else _("group {group}", group=group)
         print(f"{name:24} {model or _('(tool default)'):16} {where}")
-    print(_("\nchange: schedulectl set-model <point|state|index|consolidate> <model|default>"))
+    print(_("\nTo change one: schedulectl set-model <point|state|index|consolidate> <model|default>"))
 
 
 def cmd_set_model(which, model):
@@ -248,7 +279,7 @@ def cmd_set_model(which, model):
     known = llm.points()["points"]
     targets = MODEL_ALIASES.get(which) or ([which] if which in known else None)
     if not targets:
-        print(_("'{which}' is neither a decision point nor one of {aliases} (the points: schedulectl models)", which=which,
+        print(_("'{which}' is neither a judgment point nor one of {aliases} (the points: schedulectl models)", which=which,
                 aliases=_(", ").join(MODEL_ALIASES)))
         sys.exit(1)
     f = hubconf.config_file("hub.json")

@@ -1,7 +1,7 @@
 + job:p/after  every 60 minutes, after p/at, p/every
-+ job:p/at  06:30
++ job:p/at  at 06:30
 ~ job:p/changed  changed command, time
 + job:p/every  every 15 minutes
 - job:p/gone
 + job:p/plain
-+ job:p/time-after  07:00, after p/at
++ job:p/time-after  at 07:00, after p/at
