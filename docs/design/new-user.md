@@ -357,154 +357,237 @@ may hold someone else's half-done changes; ② the post-commit record of "skippe
 (config-check writes its own marker file when it passes). Once config moves to its own repo, that repo has its own
 hooksPath, set by `hub init`.
 
-## 4. 步驟(每一步單獨上線)
+## 4. Steps (each goes live on its own)
 
-> **進度**:第 0 步 10-26 完成(librarian 拆成核心 + 5 個 job、digest 分段、路徑從 hubconf、README、`hub.example.json`)。
-> 第 1 步 10-26 完成:`tests/test_personal_boundary.py` + `tests/fixtures/personal-baseline.json`(個人名稱 76 個檔 499 處、`.secrets` 字面值 7 個檔 11 處)。
-> 跟 3.5 不同:不分程式/註解,每個檔一個總數只准變少(分類要靠猜,總數 ratchet 一樣擋得住變多)。
-> 第 1.5 步 10-26 完成:`bin/config-check`(+ `contracts/hub.v1.schema.json`)、`bin/appliers.py` + `applier_scheduler.py`、render-services / render-project-settings 包成套用者(重構前後 42 個產出檔逐位元組相同)、`tests/test_appliers.py`、`bin/hub config check/plan/apply`、`config.applied`(Agent Hub session 597883a)、狀態頁顯示生效的 config commit、githooks pre-commit/post-commit 涵蓋 config。**還沒做**:sync-local-setup 的套用者(session 開始時跑的那支,AGENT.md 對齊要拆成 EXTERNAL 的套用者)——它本來就在每個 session 開始時對齊,沒有 plan 只是看不到預覽,留到第 4 步改樣板時一起做。
-> 第 2 步 10-26 完成:只用一個角色 `hosts.server`(跑 hub 的那台;空 = 一台機器全包;沒寫沿用 `memory_host`),`hubconf.host("server")` / `hubconf.py host server`,shell 用 `plutil` 讀(遙控那台不一定有平台的 Python)。7 處寫死的 ssh 名稱換掉。狀態頁、信箱 dispatch、memory 同步搬進 `projects/agent-hub.yaml` 的 `services:`(用 `hub config plan` 先看、再 apply)。`launchd/` 只剩排程器、看門狗(第 5 步由 `hub init` 裝)跟遙控那台的兩份。個人名稱 499 → 479。
-> 第 3 步 10-26 完成:模組 = `modules/<名稱>.yaml`(跟登錄同格式,`registry.load_modules()` 放進 `index["modules"]`),
-> 排程器跟 render-services 讀專案 + 模組;`before:`、繞圈檢查(`registry.job_cycles`)、沒開的模組的 job 不存在。
-> 搬進模組:assistant(knas-tasks、reconcile-questions、lease-runner)、backup、consolidate、mirror、reflect、sandbox(cap-runner),
-> 用 `legacy_name` 帶著排程狀態、別人的 `after:` 經 alias 對得上(muninn 的 `after: agent-hub/weekly-reflect`)。
-> **跟 3.2 不同、留在核心的**:hubbus-bridge(除了 Muninn 的轉交,還清 60 天前結案的信——要拆成兩半是 hubbus 那邊的事)、
-> render-settings(enforce 關掉時的退回、合併閘門的 hook 也是它)、各模組的憑證宣告(還在 `projects/agent-hub.yaml` 的
-> `secrets:`)、vendor/muninn 契約的 `consumes:`(contracts-check 只讀專案登錄)。
-> 第 4 步 10-26 完成(平台這邊):`templates/CLAUDE.md` → `templates/agent-instructions.md`,人名寫成 `{{owner}}`/`{{owner_alias}}`/`{{assistant}}`,sync-local-setup 照 hub.json 填(`hubconf.fill_names`;24 個專案的輸出逐位元組相同);`hub.json` 加 `assistant.name`;gen-todo、librarian、consolidate、weekly reflect、trajectory 的標籤跟 prompt 改從設定讀(這台的 prompt 逐字相同)。個人名稱 479 → 407。**交給 Agent Hub session**:hubbus 裡的字串、`agent-jobs/mailbox.md` 搬到 `templates/prompts/`。**還沒做**:knas-tasks.py 的檔名/job 名(改名要跟 Muninn 的契約、STATE.md 裡已經蓋上的「等 Knas:」key 一起考慮,先留著)。
-> 第 5 步 10-26 完成:`bin/setup`(檢查指令 + setup-python,不自己裝)、`bin/hub` 的 init(沒有 hub.json 才寫、問名字/時區/專案位置/模組;沒開的功能連設定段一起拿掉;排程器跟看門狗從 `launchd/` 的樣板裝,內容一樣就不動)、doctor(用 runtime 的 `auth.credentials()`,排程器要是**這份** hub 的)、modules、onboard/recover/rename/status/jobs/run 包裝。`launchd/` 的 plist 改成 `{{hub}}` 樣板(recover-service 用 sed 填)。沒設定 alerts 的話,看門狗只記錄、狀態頁只提醒,不再永遠紅。`tests/test_new_user.py` = 3.6 的驗收(空實例 + 假 HOME:init → config-check → plan → doctor)。**第 6 步要處理**:平台自己的登錄 `projects/agent-hub.yaml` 還在使用者的登錄資料夾裡(新使用者也需要它),要跟 modules/ 一樣搬回平台。
-> 第 6 步 10-26 **程式碼完成、搬家還沒做**(等 Knas,見第 7 節第 9 題)。定下來的(跟 3.1 不同的地方):
-> - **一個指標檔切換**:`<hub>/.hub-home` 寫著實例目錄 → `<實例>/{config,data,secrets}`;沒有這個檔 = 舊的擺法(今天的樣子)。
->   搬家時最後才寫,刪掉就退回。覆蓋:`AGENT_HUB_HOME`、`AGENT_HUB_CONFIG`/`DATA`/`SECRETS`(config repo 的 pre-commit 只把
->   `AGENT_HUB_CONFIG` 指到匯出的暫存區)。Python:`hubconf.config_dir()/data_dir()/secrets_dir()/config_file()/data_file()`;
->   shell:`bin/hubpaths.sh`(`$HUB_CONFIG`/`$HUB_DATA`/`$HUB_SECRETS`/`hub_server`,只用 plutil);看門狗自己一份(不 import 平台)。
->   三份一致由 `tests/test_instance_layout.py` 檢查。
-> - **`.state`、`.logs` 不搬**:每台機器一份的執行狀態(跟 bus_dir、平台 Python 一樣)。`.logs` 的路徑寫在每個服務的 plist 裡,
->   搬它等於重啟所有服務;`.state` 裡有狀態頁、lease-runner、test-gate、registry 快取,都是這台機器的。
-> - hub.json 裡的相對路徑以 hub.json 所在的 config 目錄為準;`.secrets/<名稱>` 一律指 secrets 目錄。
-> - **平台自己的登錄**固定在平台 repo 的 `projects/agent-hub.yaml`,registry 不管 registry_dir 在哪都讀它。
-> - `commit-hub-files.sh`:新擺法只在 config repo 裡 commit config,data 直接略過(data 不進 git)。
-> - 新使用者一開始就是新擺法:`hub init` 建 `~/.agent-hub/{config(git repo,hooksPath = githooks/config),data,secrets}`,
->   最後寫指標檔(`tests/test_new_user.py`,含 config repo 的閘門擋下不合格的 hub.json)。
-> - ratchet 多一條 `instance-path`(bin/ 裡自己拼 config/data 檔的路徑)。
-> - 這台:42 個產出檔逐位元組相同、`hub config plan` 空、`hub doctor` 沒問題。
-> **還沒做**:別的 session 的檔(lease-relay、lease-runner、upgrade-idea 的 `.secrets`/mirror-list;policy.py 的 `.secrets` deny——搬家時
-> render-settings 會重寫 24 個專案的設定)已寄給它們;實際搬家。
-> **10-26 23:40 搬家完成**(`hub move-instance --to ~/.agent-hub --apply`,先在隔離環境演練兩次、抓到兩個 bug 才做):
-> 快照 + 退回腳本(`~/.agent-hub/secrets/agent-hub-move-snapshot-*/rollback.sh`,在搬過的隔離副本上實測過)→ 停排程器 → 搬 →
-> `hub config plan` 發現舊的 `.secrets` 還在、deny 一換就沒人擋 → 沙盒設計 session 改 policy 兩個都擋(20e6467)→ apply(3 個 sandbox
-> 專案的設定只多了新路徑)→ 重啟 lease-runner、cap-runner → 開回排程器;寫入都到 ~/.agent-hub、舊檔沒被碰。
-> **還沒做(明天)**:確認 03:00 的夜間流程正常;Muninn 改 config(m10262338-f805);之後才 `git rm` 平台 repo 裡的舊檔、刪 `~/agent-hub/.secrets`
-> (policy 會自動拿掉那條 deny);平台 repo 的 pre-commit 在舊檔刪掉之後要改成只驗平台自己的登錄。
-> 狀態頁的三頁(第 7 節第 7 題選 (a))10-26 完成:`digest.html`(最近 7 天)、`todo.html`、`reflect/`(連到 data 的 reflect/),從 data 目錄讀。
+> **Progress**: step 0 done 10-26 (librarian split into core + 5 jobs, digest in sections, paths from hubconf, README,
+> `hub.example.json`).
+> Step 1 done 10-26: `tests/test_personal_boundary.py` + `tests/fixtures/personal-baseline.json` (personal names in 76
+> files, 499 places; `.secrets` literals in 7 files, 11 places).
+> Different from 3.5: no split between code and comments; one total per file that may only go down (classifying would
+> mean guessing, and a total ratchet blocks increases just as well).
+> Step 1.5 done 10-26: `bin/config-check` (+ `contracts/hub.v1.schema.json`), `bin/appliers.py` +
+> `applier_scheduler.py`, render-services / render-project-settings wrapped as appliers (42 output files byte for byte
+> the same before and after the refactor), `tests/test_appliers.py`, `bin/hub config check/plan/apply`,
+> `config.applied` (Agent Hub session 597883a), the status page showing the config commit in effect, githooks
+> pre-commit/post-commit covering config. **Not done yet**: the sync-local-setup applier (the one run at session
+> start; aligning AGENT.md has to be split into an EXTERNAL applier); it already aligns at every session start, and
+> without plan only the preview is missing, so it is left for step 4's template changes.
+> Step 2 done 10-26: only one role, `hosts.server` (the machine running the hub; empty = one machine does everything;
+> unset falls back to `memory_host`), `hubconf.host("server")` / `hubconf.py host server`, read with `plutil` in shell
+> (the remote machine may not have the platform's Python). The 7 hard-coded ssh names replaced. The status page,
+> mailbox dispatch and memory sync moved into `services:` in `projects/agent-hub.yaml` (look first with
+> `hub config plan`, then apply). `launchd/` keeps only the scheduler, the watchdog (installed by `hub init` in step 5)
+> and the remote machine's two. Personal names 499 → 479.
+> Step 3 done 10-26: a module = `modules/<name>.yaml` (same format as the registry; `registry.load_modules()` puts them
+> into `index["modules"]`); the scheduler and render-services read projects + modules; `before:`, the cycle check
+> (`registry.job_cycles`), jobs of modules that are off do not exist.
+> Moved into modules: assistant (knas-tasks, reconcile-questions, lease-runner), backup, consolidate, mirror, reflect,
+> sandbox (cap-runner), carrying their scheduling state with `legacy_name`, and others' `after:` still match through
+> aliases (muninn's `after: agent-hub/weekly-reflect`).
+> **Different from 3.2, left in the core**: hubbus-bridge (besides the assistant's handoffs it also clears letters
+> closed over 60 days ago; splitting it in two is hubbus's side), render-settings (the fallback when enforce is turned
+> off, and the merge gate's hook, are also it), the modules' credential declarations (still in
+> `projects/agent-hub.yaml`'s `secrets:`), the `consumes:` of the vendor/muninn contracts (contracts-check only reads
+> project registries).
+> Step 4 done 10-26 (the platform side): `templates/CLAUDE.md` → `templates/agent-instructions.md`, people's names
+> written as `{{owner}}`/`{{owner_alias}}`/`{{assistant}}`, filled by sync-local-setup from hub.json
+> (`hubconf.fill_names`; the output for 24 projects byte for byte the same); `hub.json` gains `assistant.name`; the tags
+> and prompts of gen-todo, librarian, consolidate, weekly reflect and trajectory are read from settings (this machine's
+> prompts identical word for word). Personal names 479 → 407. **Handed to the Agent Hub session**: the strings in
+> hubbus, moving `agent-jobs/mailbox.md` to `templates/prompts/`. **Not done yet**: knas-tasks.py's file name/job name
+> (renaming has to be considered together with the assistant's contract and the `(等 owner:` keys already stamped into
+> STATE.md files; left for now).
+> Step 5 done 10-26: `bin/setup` (checks commands + setup-python, installs nothing itself), `bin/hub`'s init (writes
+> hub.json only when there is none; asks name/time zone/project location/modules; for features left off, their
+> settings section is removed too; the scheduler and watchdog are installed from the templates in `launchd/`, left
+> alone if identical), doctor (uses the runtime's `auth.credentials()`; the scheduler must be **this** hub's), modules,
+> and onboard/recover/rename/status/jobs/run wrappers. The plists in `launchd/` become `{{hub}}` templates
+> (recover-service fills them with sed). Without alerts configured, the watchdog only logs and the status page only
+> reminds, no longer red forever. `tests/test_new_user.py` = the 3.6 acceptance (empty instance + fake HOME: init →
+> config-check → plan → doctor). **For step 6 to handle**: the platform's own registry `projects/agent-hub.yaml` is
+> still in the user's registry folder (new users need it too); it must move back to the platform like modules/.
+> Step 6 **code done 10-26, the move not yet done** (waiting for the owner, see section 7, question 9). What was settled
+> (where it differs from 3.1):
+> - **Switched by one pointer file**: `<hub>/.hub-home` holds the instance directory →
+>   `<instance>/{config,data,secrets}`; no such file = the old layout (today's). Written last during the move; deleting
+>   it rolls back. Overrides: `AGENT_HUB_HOME`, `AGENT_HUB_CONFIG`/`DATA`/`SECRETS` (the config repo's pre-commit only
+>   points `AGENT_HUB_CONFIG` at the exported staging area). Python:
+>   `hubconf.config_dir()/data_dir()/secrets_dir()/config_file()/data_file()`; shell: `bin/hubpaths.sh`
+>   (`$HUB_CONFIG`/`$HUB_DATA`/`$HUB_SECRETS`/`hub_server`, plutil only); the watchdog has its own copy (it does not
+>   import the platform). `tests/test_instance_layout.py` checks the three agree.
+> - **`.state` and `.logs` do not move**: runtime state, one per machine (like bus_dir and the platform's Python). The
+>   `.logs` path is written into every service's plist, so moving it means restarting every service; `.state` holds
+>   the status page, lease-runner, test-gate and the registry cache, all belonging to this machine.
+> - Relative paths in hub.json are relative to the config directory hub.json is in; `.secrets/<name>` always means the
+>   secrets directory.
+> - **The platform's own registry** is fixed at `projects/agent-hub.yaml` in the platform repo; the registry reads it
+>   wherever registry_dir is.
+> - `commit-hub-files.sh`: in the new layout it commits config only inside the config repo, and simply skips data
+>   (data does not go into git).
+> - New users start in the new layout: `hub init` creates
+>   `~/.agent-hub/{config (git repo, hooksPath = githooks/config),data,secrets}` and writes the pointer file last
+>   (`tests/test_new_user.py`, including the config repo's gate blocking an invalid hub.json).
+> - The ratchet gains an `instance-path` rule (bin/ building config/data file paths itself).
+> - This machine: 42 output files byte for byte the same, `hub config plan` empty, `hub doctor` fine.
+> **Not done yet**: other sessions' files (lease-relay, lease-runner, upgrade-idea's `.secrets`/mirror-list; policy.py's
+> `.secrets` deny: during the move render-settings rewrites 24 projects' settings) have been sent to them; the actual
+> move.
+> **10-26 23:40 the move is done** (`hub move-instance --to ~/.agent-hub --apply`, rehearsed twice in an isolated
+> environment first, which caught two bugs): snapshot + rollback script
+> (`~/.agent-hub/secrets/agent-hub-move-snapshot-*/rollback.sh`, tested on a moved isolated copy) → stop the scheduler
+> → move → `hub config plan` found the old `.secrets` still there, and once the deny switched nothing would block it →
+> the sandbox design session changed policy to block both (20e6467) → apply (the 3 sandbox projects' settings only
+> gained the new path) → restart lease-runner and cap-runner → scheduler back on; all writes went to ~/.agent-hub, old
+> files untouched.
+> **Not done yet (tomorrow)**: confirm the 03:00 nightly flow is fine; the assistant changes its config
+> (m10262338-f805); only then `git rm` the old files in the platform repo and delete `~/agent-hub/.secrets` (policy
+> removes that deny automatically); once the old files are deleted, the platform repo's pre-commit should validate only
+> the platform's own registry.
+> The status page's three pages (section 7, question 7, chose (a)) done 10-26: `digest.html` (last 7 days),
+> `todo.html`, `reflect/` (linking to data's reflect/), read from the data directory.
 
-| 步 | 內容 | 動到的檔案 | 估計 |
+| Step | Content | Files touched | Estimate |
 |---|---|---|---|
-| **0** | librarian 拆成核心 + job(`after:`;knas-tasks 跟 reconcile-questions 先當成獨立 job,第 3 步再歸進 assistant);路徑改從 hubconf;`hub.example.json` + 根目錄 README(新使用者路徑,還沒有的指令寫「規劃中」) | `librarian.sh`、`projects/agent-hub.yaml`、`hublib.py`(digest_append)、`check-memory-gaps.py`、新增 README、`hub.example.json` | 0.5 天 |
-| 1 | 個人名稱 ratchet 測試 + 現況基準(含 tests/、agent-jobs/) | 新增 `tests/test_personal_boundary.py` | 0.25 |
-| **1.5 (r3)** | config pipeline:`config check`(含 `hub.v1.schema.json`)、套用者介面 + 把 render-services / render-project-settings 包成套用者、`plan`/`apply`/`verify`、`config.applied` 事件、狀態頁顯示生效的 commit。config 還在平台 repo 裡,pre-commit 先掛在現在的 `githooks/`(只在改到 config 檔時跑 check,不跑全部測試) | 新增 `bin/config-check`、`bin/appliers.py`(登記表 + 介面)+ 契約測試、`render-services.py`、`render-project-settings.py`、`sync-local-setup.sh`(拆出 AGENT.md 對齊)、`gen-status-page.py`、`githooks/pre-commit` 加一行 + `post-commit` 涵蓋 config(Agent Hub session 同意) | 1.5 |
-| 2 | 機器角色:`hosts`、`hubconf.host()`;換掉 7 處寫死的 ssh 名稱;平台 plist 改成產生(排程器、看門狗除外) | `hubconf.py`、`minilib.sh` 等 7 支、`render-services.py`(動之前先問沙盒設計 session)、`launchd/` | 1 |
-| 3 | 模組:`modules/<名稱>/module.yaml`、排程器讀模組、`before:`(循環偵測、沒開的模組當不存在);assistant(含 lease-runner、想法沙盒)、alerts、sandbox | `scheduler.py`、`registry.py`(不動 validate_enforce)、`gen-status-page.py`、新增 `modules/` | 1.5 |
-| 4 | owner 名稱從設定讀:待辦標籤、prompt 裡的名字;`templates/CLAUDE.md` → `agent-instructions.md` 改名(保留 10-26 加的兩段)跟裡面的名字;`mailbox.md` 搬到 `templates/prompts/`。hubbus 裡的字樣跟 Agent Hub session 約時間一起改 | `gen-todo.py`、`librarian.sh`、`consolidate-memory.py`、`reflect_llm.py`、`trajectory.py`、`templates/`、`sync-local-setup.sh`(讀樣板那行) | 0.5 |
-| 5 | `bin/hub` + `init`(含裝排程器、看門狗的 plist)+ `doctor` | 新增 `bin/hub` | 1 |
-| 6 | 先把 `schedule.yaml` 清到 0 項;實例目錄 `config/` + `data/` + `secrets/`(3.1):`hubconf.config()`/`data()`、讀寫的腳本改用它;`commit-hub-files.sh` 只 commit config repo,寫 data 的腳本不再 commit;`index.md` 拆成名冊 + 附加式註記;`.state/` 的設計文件移到 `docs/design/`;secrets 經過 `hubconf.secret()`;**備份**:新路徑加進 include → **跑一次 `backup.py restore` 到暫存目錄,實際還原出 `config/`、`data/` 才算數**(不等每月的 backup-verify)→ exclude 換成新路徑(順便確認 `backup-staging` 不會被備份兩次)→ `check-secrets` 的 `covers()` 跟 `.secrets` 搬家同一個 commit;外部讀者(Muninn 的 config.yaml 三個路徑)同一步改或留 symlink;**在沒有 job 跑的時段搬**(避開 02:00–04:00 librarian、05:45 backup),或先停排程器、搬完 kickstart;Knas 的資料搬過去;加 3.6 的空實例驗收測試 | 幾乎所有寫產出的腳本、`backup.py`/`hub.json` 的 `backup`、讀 secrets 的 8 支 | 2.5–3 |
-| **7 (r3)** | **開源前小心地重寫平台 repo 的歷史**(Knas 10-26 選的,見第 7 節第 8 題),只在第 6 步完成、tree 裡已經沒有使用者資料之後做:① 先做一份完整的 `--mirror` 備份(不動,出事就從這裡還原)② 在新的 mirror clone 上跑 `git filter-repo`,路徑清單明列(`digest/`、`reflect/`、`index.md`、`todo.md`、`review-log.md`、`projects/`、`hub.json`、`schedule.yaml`、`mirror-list.txt`、`services.tsv`、`legacy-paths.tsv`、`openclaw-migration-status.md`、`agent-jobs/` 的使用者 prompt、`.state/` 誤進版控的)③ 再掃一次內容(個人名稱、帳號、token 的字樣;用 ratchet 同一份規則 + 一個 secret 掃描工具),有命中就逐筆決定改寫或刪 ④ 驗收:重寫後 HEAD 的 tree 跟重寫前 HEAD 減掉那些路徑完全一樣、測試全過 ⑤ 保留 filter-repo 的 commit 對照表(文件、memory 筆記裡引用的舊 commit 編號查得到新的)⑥ 換掉之前停排程器、通知所有 session;mini 的 `~/agent-hub`、MBP 的副本、mirror-backup、各 worktree 全部重新 clone;force push 由 Knas 親自確認 | 平台 repo 的歷史(不改程式) | 1 |
+| **0** | librarian split into core + jobs (`after:`; knas-tasks and reconcile-questions as independent jobs first, moved into assistant in step 3); paths from hubconf; `hub.example.json` + a root README (the new user's path; commands that don't exist yet marked "planned") | `librarian.sh`, `projects/agent-hub.yaml`, `hublib.py` (digest_append), `check-memory-gaps.py`, new README, `hub.example.json` | 0.5 day |
+| 1 | personal-name ratchet test + current baseline (including tests/, agent-jobs/) | new `tests/test_personal_boundary.py` | 0.25 |
+| **1.5 (r3)** | config pipeline: `config check` (including `hub.v1.schema.json`), the applier interface + render-services / render-project-settings wrapped as appliers, `plan`/`apply`/`verify`, the `config.applied` event, the status page showing the commit in effect. Config is still in the platform repo, so pre-commit hangs on today's `githooks/` for now (runs check only when config files change, not all tests) | new `bin/config-check`, `bin/appliers.py` (registry + interface) + contract tests, `render-services.py`, `render-project-settings.py`, `sync-local-setup.sh` (AGENT.md alignment split out), `gen-status-page.py`, one line added to `githooks/pre-commit` + `post-commit` covering config (agreed by the Agent Hub session) | 1.5 |
+| 2 | machine roles: `hosts`, `hubconf.host()`; replace the 7 hard-coded ssh names; platform plists generated (except scheduler and watchdog) | `hubconf.py`, `minilib.sh` and the other 7 scripts, `render-services.py` (ask the sandbox design session before touching it), `launchd/` | 1 |
+| 3 | modules: `modules/<name>/module.yaml`, the scheduler reads modules, `before:` (cycle detection, modules that are off treated as nonexistent); assistant (including lease-runner, idea sandboxes), alerts, sandbox | `scheduler.py`, `registry.py` (validate_enforce untouched), `gen-status-page.py`, new `modules/` | 1.5 |
+| 4 | owner name from settings: the to-do tag, names in prompts; rename `templates/CLAUDE.md` → `agent-instructions.md` (keeping the two sections added 10-26) and the names in it; move `mailbox.md` to `templates/prompts/`. The wording in hubbus is changed together with the Agent Hub session at an agreed time | `gen-todo.py`, `librarian.sh`, `consolidate-memory.py`, `reflect_llm.py`, `trajectory.py`, `templates/`, `sync-local-setup.sh` (the line reading the template) | 0.5 |
+| 5 | `bin/hub` + `init` (including installing the scheduler's and watchdog's plists) + `doctor` | new `bin/hub` | 1 |
+| 6 | first clear `schedule.yaml` to 0 entries; instance directory `config/` + `data/` + `secrets/` (3.1): `hubconf.config()`/`data()`, scripts that read and write switch to them; `commit-hub-files.sh` commits only the config repo, scripts writing data no longer commit; `index.md` split into roster + append-only notes; the design documents in `.state/` moved to `docs/design/`; secrets through `hubconf.secret()`; **backup**: add the new paths to include → **run `backup.py restore` once into a temporary directory; it counts only when `config/` and `data/` are actually restored** (not waiting for the monthly backup-verify) → switch exclude to the new paths (confirming along the way that `backup-staging` is not backed up twice) → `check-secrets`' `covers()` in the same commit as the `.secrets` move; external readers (the three paths in Muninn's config.yaml) changed in the same step or a symlink left behind; **move during a window with no jobs running** (avoiding 02:00–04:00 librarian, 05:45 backup), or stop the scheduler first and kickstart it after the move; the owner's data moved over; add the 3.6 empty-instance acceptance test | nearly every script that writes output, `backup.py`/`hub.json`'s `backup`, the 8 scripts that read secrets | 2.5–3 |
+| **7 (r3)** | **Carefully rewrite the platform repo's history before open source** (chosen by the owner on 10-26, see section 7, question 8), only after step 6 is done and the tree no longer holds user data: ① first make a complete `--mirror` backup (left untouched; restore from it if anything goes wrong) ② run `git filter-repo` on a fresh mirror clone with an explicit path list (`digest/`, `reflect/`, `index.md`, `todo.md`, `review-log.md`, `projects/`, `hub.json`, `schedule.yaml`, `mirror-list.txt`, `services.tsv`, `legacy-paths.tsv`, `openclaw-migration-status.md`, the user prompts in `agent-jobs/`, whatever of `.state/` got into version control by mistake) ③ scan the content again (personal names, accounts, token-like strings; the same rules as the ratchet + a secret-scanning tool), deciding hit by hit whether to rewrite or delete ④ acceptance: the rewritten HEAD's tree is exactly the pre-rewrite HEAD minus those paths, all tests pass ⑤ keep filter-repo's commit map (so old commit ids cited in docs and memory notes can be looked up) ⑥ before switching, stop the scheduler and notify every session; the hub machine's `~/agent-hub`, the laptop's copy, mirror-backup and every worktree are all re-cloned; the force push is confirmed by the owner personally | the platform repo's history (no code changes) | 1 |
 
-順序的理由:0、1 不碰別人的檔、馬上有用;2–4 是新使用者真的會撞到的;6 範圍最大、要 Knas 決定資料怎麼放,放最後,
-而且前面每一步都已經把路徑收進 hubconf,6 就只是改 hubconf 的預設值加搬檔。
+Why this order: 0 and 1 touch nobody else's files and are useful at once; 2–4 are what new users really run into; 6
+has the largest scope and needs the owner to decide how data is laid out, so it comes last, and since every earlier
+step has already routed paths through hubconf, 6 is only changing hubconf's defaults plus moving files.
 
-## 5. 跟其他 session 的邊界
+## 5. Boundaries with other sessions
 
-- **runtime 抽象化**(`runtime_*.py`、`llm.py`、`hub-event`)跟**租約**(`lease-*`、`policy.py`、通道租借的契約 v2、
-  `lease-show-file.md`)是另一個 session 正在做的;這份的步驟都不動那些檔。
-- **(r2) Agent Hub session 的檔,這份也不動**:`bin/hubbus`(dispatch/對帳/分支合併還在試行;給 agent 看的提示由它改)、
-  `bin/py`、`bin/setup-python`、`bin/test-gate`、`githooks/`、`tests/test_python_floor.py`、`bin/upgrade-idea.py`、
-  `registry.py` 的 `validate_enforce`。
-- **(r2)** `scheduler.py`、`render-services.py`、`gen-status-page.py` 沒人在動,這份可以拿;render-services 最近是沙盒設計
-  session 改的,動之前先問它。
-- **(r2)** `templates/CLAUDE.md` 的改名歸這份(第 4 步),runtime 那邊不做了。
-- `hub.json` 的結構(加 `hosts`、`modules`)在第 2、3 步;別的 session 都即時讀它,只加欄位、不改既有欄位的意思,
-  照「加欄位不升版」的規則。第 0 步不動 `hub.json`。
+- **Runtime abstraction** (`runtime_*.py`, `llm.py`, `hub-event`) and **leases** (`lease-*`, `policy.py`, channel
+  leasing contract v2, `lease-show-file.md`) are being done by another session; none of this document's steps touch
+  those files.
+- **(r2) The Agent Hub session's files are not touched by this document either**: `bin/hubbus` (dispatch /
+  reconciliation / fork merging still on trial; the hints for agents are changed by it), `bin/py`,
+  `bin/setup-python`, `bin/test-gate`, `githooks/`, `tests/test_python_floor.py`, `bin/upgrade-idea.py`, `registry.py`'s
+  `validate_enforce`.
+- **(r2)** `scheduler.py`, `render-services.py` and `gen-status-page.py` are not being worked on by anyone, so this
+  document can take them; render-services was last changed by the sandbox design session, so ask it before touching it.
+- **(r2)** Renaming `templates/CLAUDE.md` belongs to this document (step 4); the runtime side no longer does it.
+- The structure of `hub.json` (adding `hosts`, `modules`) is in steps 2 and 3; other sessions read it live, so fields
+  are only added, existing fields keep their meaning, per the rule "adding fields needs no version bump". Step 0 does
+  not touch `hub.json`.
 
-## 6. 不在範圍
+## 6. Out of scope
 
-- Linux / systemd(launchd 只標成邊界)。
-- 第二個真的 agent runtime(runtime-abstraction 那份已經說不做)。
-- 一台機器多個使用者、圖形化安裝。
-- 把 Muninn 本身做成通用的個人助理——這份只讓「沒有助理」也能跑;assistant 模組的介面是 Muninn 定義的那幾份契約。
+- Linux / systemd (launchd only marked as the boundary).
+- A second real agent runtime (the runtime-abstraction document already says not to).
+- Multiple users on one machine, graphical installation.
+- Making Muninn itself a general personal assistant: this document only makes "no assistant" work; the assistant
+  module's interface is the contracts Muninn defines.
 
-## 7. 要 Knas 確認的
+## 7. For the owner to confirm
 
-1. 整體方向:實例目錄 + 模組(沿用登錄/`after:`,加 `before:`)+ 機器角色 + `bin/hub` + ratchet 測試。
-2. 步驟順序,以及第 0 步可以先做(它本身就是上一輪談的「librarian 拆開」)。
-3. ~~實例資料怎麼放~~ **(r3)** 10-26 跟 Knas 定了:config as code,config 放 private config repo;data 不進 git、靠備份;
-   「什麼時候做了什麼」看匯流排跟紀錄本身(3.0)。
-> **10-26 Knas 決定:6 同意;7 選 (a) 狀態頁多三頁;8 選 (a) 小心地重寫歷史(做法見第 4 步的第 7 步)。**
-> **10-26 Knas 決定(第 9 題):(a) config repo 只留本機 git、不設 remote(靠每晚備份);(b) 搬家時間跟 (c) Muninn 設定照建議:先確認 10-27 03:00 拆開後的第一次夜間流程(librarian + 模組的 job)正常,再挑避開 02:00–04:00、05:45 的時段短暫全停後搬;Muninn config.yaml 的三個路徑在搬家當天寄信請 muninn session 一起換。**
+1. The overall direction: instance directory + modules (reusing the registry/`after:`, adding `before:`) + machine
+   roles + `bin/hub` + the ratchet test.
+2. The order of steps, and that step 0 can go first (it is itself the "split the librarian" discussed in the previous
+   round).
+3. ~~How instance data is laid out~~ **(r3)** settled with the owner on 10-26: config as code, config in a private
+   config repo; data not in git, relying on backup; "what was done when" from the bus and the records themselves
+   (3.0).
+> **Decided by the owner on 10-26: 6 agreed; 7 chose (a), three more status pages; 8 chose (a), carefully rewrite the
+> history (how: step 7 in section 4).**
+> **Decided by the owner on 10-26 (question 9): (a) the config repo stays a local git repo with no remote (relying on
+> the nightly backup); (b) the time of the move and (c) the assistant's settings as proposed: first confirm the first
+> nightly flow after the split at 10-27 03:00 (librarian + module jobs) is fine, then pick a window avoiding
+> 02:00–04:00 and 05:45, stop everything briefly and move; for the three paths in Muninn's config.yaml, send a letter on
+> the day of the move asking the muninn session to switch them at the same time.**
 
-6. **(r3) 1.5 步(config pipeline)排在模組(第 3 步)之前嗎?**(Agent Hub session 同意)
-   第 2、3、6 步都在改 config 的**結構**:`hub.json` 加 `hosts`、`modules`,多出 `modules/*/module.yaml`,最後整批搬到
-   `config/`。沒有 pipeline 的話,改錯的代價是「要等出事才知道」:
-   - **範例 A(打錯字)**:開模組時在 `hub.json` 寫成 `"modules": {"assitant": true}`。今天的 hubconf 不驗證 `hub.json`,
-     這個鍵只是被忽略——assistant 模組沒開,knas-tasks、bridge 都不排程。沒有任何錯誤訊息;幾天後才發現 Muninn 沒收到
-     新的〔Knas〕任務。有 `config check`:commit 時就被擋,「`modules.assitant`:沒有這個模組(有:assistant、alerts…)」。
-   - **範例 B(看不到影響)**:`modules.assistant` 從 false 改成 true。有 `config plan` 時,commit 前先看到:
+6. **(r3) Does step 1.5 (config pipeline) come before modules (step 3)?** (agreed by the Agent Hub session)
+   Steps 2, 3 and 6 all change the **structure** of config: `hub.json` gains `hosts` and `modules`,
+   `modules/*/module.yaml` appears, and finally everything moves into `config/`. Without a pipeline, the cost of a
+   mistake is "you only find out when something breaks":
+   - **Example A (a typo)**: enabling a module, `hub.json` gets `"modules": {"assitant": true}`. Today's hubconf does
+     not validate `hub.json`, so the key is simply ignored: the assistant module is not on, knas-tasks and bridge are
+     not scheduled. No error message at all; days later it turns out the assistant has received no new `〔owner〕`
+     tasks. With `config check`: blocked at commit, "`modules.assitant`: no such module (there are: assistant,
+     alerts…)".
+   - **Example B (impact not visible)**: `modules.assistant` changed from false to true. With `config plan`, before
+     committing you see:
      ```
-     scheduler   + assistant/knas-tasks       03:30(after agent-hub/librarian-core,before agent-hub/todo)
-     scheduler   + assistant/bridge           每 15 分鐘
+     scheduler   + assistant/knas-tasks       03:30 (after agent-hub/librarian-core, before agent-hub/todo)
+     scheduler   + assistant/bridge           every 15 minutes
      services    + local.agent-hub.lease-runner   (127.0.0.1:18797)
      ```
-     沒有 plan 的話,只能 commit 之後等 15 分鐘看狀態頁。
-   - **範例 C(今天就會發生的)**:手改 `projects/<專案>.yaml`,`run:` 打錯路徑。現在要等下一個 tick 才被
-     `registry.py` 發現,狀態頁變紅、沿用上一份;有 pre-commit 的 `config-check` 就進不了 commit。
-   反過來說,如果先做模組再做 pipeline,第 3 步改排程器、加 `before:` 的時候,就只能靠「等下一個 tick 看結果」來驗證。
-9. **(第 6 步) 搬家前要 Knas 決定的**:(a) config repo 要不要 remote——新開一個 private GitHub repo(`gh repo create`,對外)
-   或只留本機 git;(b) 搬家的時間:要短暫全停(排程器、lease-runner、cap-runner、信箱 dispatch、狀態頁都拿著路徑),
-   不要在 librarian 02:00–04:00、backup 05:45 前後;(c) Muninn 的 config.yaml 三個路徑(todo、reflect、runner token)
-   由 muninn session 改(寄信),同一個時段換。
-7. **(r3) digest、todo 不進 git 之後,Knas 在哪裡看?**
-   - **現在怎麼看**:狀態頁(tailnet 上的網址)只有一頁 `index.html`——job 成敗、🔔 報告、下次
-     什麼時候跑;**沒有** digest、todo、每週回顧。這三樣現在只能在 repo 裡打開檔案看(session 裡,或 MBP pull 之後開
-     `reflect/index.html`;Knas 沒有用 GitHub 看)。
-   - **搬出 git 之後**:這三樣只在 mini 的 `data/` 裡,MBP pull 不到了。
-   - **選項**:
-     - (a) **狀態頁多三頁**:`/digest/`(最近幾天,markdown 轉成 HTML)、`/todo`、`/reflect/`(直接放現在的 `reflect/index.html`)。
-       範例:早上在手機開狀態頁 → 上方的「今日 digest」分頁 → 看到昨晚 librarian 寫的「## <專案> …」;「待辦」分頁就是
-       今天的 `todo.md`,〔Knas〕的項目排在最上面。gen-status-page 每個 tick 本來就在重生,多產生三頁的成本很小;
-       只在 tailnet 打得開,跟現在一樣。
-     - (b) **只看 Muninn**:Muninn 已經讀 `todo.md` 跟 `reflect/`(用路徑),可以在它的 PWA 裡顯示;digest 它現在不讀。
-     - (c) **不提供**:要看就 SSH 進 mini。
-   - 我建議 (a):不多依賴一個專案,新使用者沒有 Muninn 也看得到。
-8. **(r3) 平台 repo 要公開的話,過去的 git 歷史怎麼辦?** 搬檔不會讓歷史消失——digest、todo、STATE.md 的引文、登錄、
-   `hub.json` 都在過去的 commit 裡。兩個做法:(a) 重寫歷史(`git filter-repo` 拿掉這些路徑,所有 clone 要重拉);
-   (b) 開源時從一個新的 repo 開始(第一個 commit 是當時乾淨的 tree),現在這個 repo 留著當 Knas 自己的私有歷史。
-   我建議 (b):比較不會漏,也不影響現在的 mirror 跟 clone。
-4. 註解裡的決策紀錄(「Knas 決定」)要不要在開源前全部改寫,還是 ratchet 慢慢清就好。
-5. ~~`contracts/vendor/muninn/` 算平台還是 assistant 模組~~ **(r2)** 跟 Agent Hub session 談定:歸 assistant 模組(見 3.2)。
+     Without plan, all you can do is commit and wait 15 minutes to look at the status page.
+   - **Example C (happens today)**: editing `projects/<project>.yaml` by hand with a wrong path in `run:`. Today it is
+     only found by `registry.py` at the next tick, the status page turns red and the last copy stays in use; with
+     `config-check` in pre-commit it never gets into a commit.
+   Conversely, doing modules first and the pipeline later, step 3's changes to the scheduler and adding `before:` could
+   only be verified by "waiting for the next tick to see the result".
+9. **(Step 6) For the owner to decide before the move**: (a) whether the config repo gets a remote: a new private
+   GitHub repo (`gh repo create`, external) or local git only; (b) the time of the move: everything must stop briefly
+   (the scheduler, lease-runner, cap-runner, mailbox dispatch and the status page all hold the paths), not around
+   librarian 02:00–04:00 or backup 05:45; (c) the three paths in Muninn's config.yaml (todo, reflect, runner token) are
+   changed by the muninn session (by letter), switched in the same window.
+7. **(r3) Once digest and todo are out of git, where does the owner read them?**
+   - **How it is read today**: the status page (a URL on the tailnet) has a single page, `index.html`: job success
+     and failure, 🔔 reports, when things run next; **no** digest, todo or weekly review. These three can today only be
+     read by opening the files in the repo (in a session, or opening `reflect/index.html` after pulling on the laptop;
+     the owner does not read them on GitHub).
+   - **Once out of git**: these three exist only in `data/` on the hub machine, and the laptop can no longer pull
+     them.
+   - **Options**:
+     - (a) **Three more status pages**: `/digest/` (the last few days, markdown converted to HTML), `/todo`,
+       `/reflect/` (today's `reflect/index.html` as is). Example: in the morning open the status page on the phone → the
+       "today's digest" tab at the top → see the "## <project> …" the librarian wrote last night; the "to-do" tab is
+       today's `todo.md`, with the `〔owner〕` items at the top. gen-status-page regenerates on every tick anyway, so
+       three more pages cost very little; reachable only on the tailnet, as today.
+     - (b) **Only through Muninn**: Muninn already reads `todo.md` and `reflect/` (by path) and could show them in its
+       PWA; it does not read the digest today.
+     - (c) **Not provided**: SSH into the hub machine to read them.
+   - I propose (a): no dependency on one more project, and new users without Muninn can see them too.
+8. **(r3) If the platform repo goes public, what about the past git history?** Moving files does not make history
+   disappear: the digest, todo, STATE.md quotes, registry and `hub.json` are all in past commits. Two approaches: (a)
+   rewrite history (`git filter-repo` removing those paths; every clone has to be re-pulled); (b) start open source from
+   a new repo (the first commit being the then-clean tree), keeping this repo as the owner's own private history.
+   I propose (b): less likely to miss something, and it does not affect the current mirror and clones.
+4. Whether the decision records in comments (the owner's name + "decided") should all be rewritten before open
+   source, or the ratchet clearing them slowly is enough.
+5. ~~Whether `contracts/vendor/muninn/` counts as platform or assistant module~~ **(r2)** settled with the Agent Hub
+   session: it belongs to the assistant module (see 3.2).
 
-## 8. 討論紀錄
+## 8. Discussion record
 
-**10-26 Agent Hub session 審查 r1**(方向同意:實例目錄 + 模組沿用 jobs/after + 角色 + bin/hub + ratchet)。採納的:
-- 邊界補上它的檔(第 5 節);hubbus 裡給 agent 看的提示由它改,第 4 步改名字時約一起。
-- `before:` 要有循環偵測、指到沒開的模組當不存在,進測試。
-- assistant 模組包含 lease-runner、想法沙盒、show_file、vendor/muninn、租約 v2 契約;程式碼留平台 repo。
-- sandbox 模組的範圍;`enforce` 欄位驗證留核心;信箱 dispatch 是核心。
-- `agent-jobs/mailbox.md` 是平台的 prompt,不進實例。
-- 平台 Python、匯流排是「每台機器一份」,不進實例。
-- 看門狗跟排程器的 plist 不經過 render-services,由 `bin/hub init` 裝;看門狗維持系統 python3。
-- 加「空實例跑得起來」的驗收測試(3.6),比 ratchet 直接。
-- ratchet 範圍加 `tests/`、`agent-jobs/`。
-- 搬家前 `schedule.yaml` 先清到 0 項。
-- `templates/CLAUDE.md` 改名歸這份第 4 步。
+**10-26 the Agent Hub session reviewed r1** (direction agreed: instance directory + modules reusing jobs/after +
+roles + bin/hub + ratchet). Adopted:
+- Boundaries now include its files (section 5); the hints for agents in hubbus are changed by it, coordinated with step
+  4's name changes.
+- `before:` needs cycle detection, and pointers to modules that are off count as nonexistent, with tests.
+- The assistant module includes lease-runner, idea sandboxes, show_file, vendor/muninn and the lease v2 contract; the
+  code stays in the platform repo.
+- The sandbox module's scope; validation of the `enforce` field stays in the core; mailbox dispatch is core.
+- `agent-jobs/mailbox.md` is the platform's prompt and stays out of the instance.
+- The platform's Python and the bus are "one per machine" and stay out of the instance.
+- The watchdog's and scheduler's plists do not go through render-services, they are installed by `bin/hub init`; the
+  watchdog keeps the system python3.
+- Add the "an empty instance runs" acceptance test (3.6), more direct than the ratchet.
+- The ratchet's scope adds `tests/` and `agent-jobs/`.
+- Before the move, `schedule.yaml` is cleared to 0 entries first.
+- Renaming `templates/CLAUDE.md` belongs to step 4 of this document.
 
-**10-26 Agent Hub session 複審 r3**(1.5 排在模組之前,同意)。採納的:
-- `legacy-paths.tsv` 是 data:紀錄,不是 config;匯流排有備份(CLAUDE.md 的說法是舊的)。
-- `.state/` 裡重建不回來、或重建很貴的 7 類明列進備份;放錯地方的設計文件、`.bak` 檔。
-- 外部讀者用路徑讀:Muninn 的 config.yaml(我另外找到第三個:`lease_runner_token_file`)、contracts-check、Knas 在 MBP 看報告。
-- 只有 git 有的歷史(todo、index 註記)會變粗:刻意接受,index-notes 改成附加式。
-- 套用者照 runtime_ports 的寫法:登記表 + 機械檢查 + 三條契約測試;排程器 job 清單 apply 是 no-op;sync-local-setup 帶
-  範圍參數,AGENT.md 對齊拆成有對外動作的套用者。
-- `bin/config-check` 獨立,不是 test-gate 的分支;驗暫存區;post-commit 也涵蓋 config。
-- 備份:加 include 後實際還原驗證、exclude 換路徑、`covers()` 跟 secrets 搬家同一個 commit、secrets 經過
-  `hubconf.secret()`(加進 ratchet)、在沒有 job 的時段搬。
-- 開源前的 git 歷史(第 7 節第 8 題)。
+**10-26 the Agent Hub session re-reviewed r3** (1.5 before modules, agreed). Adopted:
+- `legacy-paths.tsv` is data: records, not config; the bus is backed up (CLAUDE.md's statement is outdated).
+- The 7 kinds of things in `.state/` that cannot be rebuilt, or are expensive to rebuild, listed explicitly in the
+  backup; the design documents in the wrong place, the `.bak` files.
+- External readers read by path: Muninn's config.yaml (I found a third one separately: `lease_runner_token_file`),
+  contracts-check, the owner reading reports on the laptop.
+- History that only git has (todo, index notes) becomes coarser: accepted deliberately; index-notes becomes
+  append-only.
+- Appliers written the same way as runtime_ports: registry + mechanical check + three contract tests; the scheduler
+  job list's apply is a no-op; sync-local-setup takes a scope argument, and AGENT.md alignment is split into an applier
+  with an external action.
+- `bin/config-check` standalone, not a branch of test-gate; validates the staging area; post-commit covers config too.
+- Backup: after adding include, verify by actually restoring; switch exclude paths; `covers()` in the same commit as
+  the secrets move; secrets through `hubconf.secret()` (added to the ratchet); move during a window with no jobs.
+- The git history before open source (section 7, question 8).
