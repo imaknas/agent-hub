@@ -7,6 +7,7 @@ the worktree is cleaned up, replies and closures are sent by the platform on its
 
     bin/py -m unittest discover -s tests
 """
+import datetime
 import json
 import os
 import pathlib
@@ -23,7 +24,7 @@ BIN = ROOT / "bin"
 AGENT = r'''
 import json, pathlib, re, sys
 prompt = open(sys.argv[1]).read()
-mid = re.search(r"- id (\S+),來自", prompt).group(1)
+mid = re.search(r"- id ([^\s,]+),", prompt).group(1)
 day = re.search(r"memory/(\d{4}-\d{2}-\d{2})\.md", prompt).group(1)
 note = pathlib.Path(".agent-memory/memory") / f"{day}.md"
 note.parent.mkdir(parents=True, exist_ok=True)
@@ -121,6 +122,25 @@ class ProposeApply(unittest.TestCase):
         self.assertIn("用 SQLite", inbox)
         status = json.loads((self.tmp / "state" / "agent-jobs" / "mailbox-demo" / "status.json").read_text())
         self.assertEqual(status["state"], "done", "dispatch reads status to decide whether to re-dispatch")
+
+    def test_note_a_hook_committed_is_still_adopted(self):
+        """a session-end hook of the agent's runtime commits the memory notes inside the throwaway worktree (10-31): the
+        note is still the agent's change, compared with the commit the worktree started from"""
+        (self.tmp / "agent.py").write_text(
+            "import json, pathlib, re, subprocess, sys\nprompt = open(sys.argv[1]).read()\n"
+            "mid = re.search(r'- id ([^\\s,]+),', prompt).group(1)\n"
+            "day = re.search(r'memory/(\\d{4}-\\d{2}-\\d{2})\\.md', prompt).group(1)\n"
+            "pathlib.Path(f'.agent-memory/memory/{day}.md').write_text('- a note\\n')\n"
+            "subprocess.run(['git', '-C', '.agent-memory', 'add', '-A'], check=True)\n"
+            "subprocess.run(['git', '-C', '.agent-memory', 'commit', '-qm', 'hook'], check=True)\n"
+            "print(json.dumps({'replies': [], 'done': [{'id': mid}], 'ask_owner': [], 'summary': mid}))\n")
+        r = self.run_("hubbus", "send", "--from", "agent-hub", "--to", "demo", "--type", "question", "--text", "note it")
+        mid = r.stdout.strip().split()[-1]
+        r = self.run_("propose_apply.py", "mailbox", "demo", mid)
+        self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
+        out = json.loads(r.stdout.strip().splitlines()[-1])
+        self.assertEqual([p for p in out["applied"] if p.startswith(".agent-memory/memory/")], [
+            f".agent-memory/memory/{datetime.date.today().isoformat()}.md"], out)
 
     def test_failed_agent_changes_nothing(self):
         (self.tmp / "agent.py").write_text("import sys\nopen('README.md','w').write('x')\nsys.exit(2)\n")
