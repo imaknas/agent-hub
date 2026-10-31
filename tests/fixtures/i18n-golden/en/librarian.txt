@@ -45,10 +45,10 @@ rec:r1 done
 [<T>] pdang: changed memory files: memory/2026-10-27.md 
 [<T>] pdang: STATE.md refers to files that do not exist: memory/reference/gone.md
 [<T>] pdang: call cost $0.01 (model: tool default)
-[<T>] pdang: the STATE.md to-do section is malformed, asking the model to fix only the format: STATE.md: a to-do with no owner, or done and not removed `- [ ] 沒標負責人的一件事` 
+[<T>] pdang: the STATE.md to-do section is malformed, asking the model to fix only the format: STATE.md: a to-do without an owner tag, or a finished one not removed: `- [ ] 沒標負責人的一件事` 
 [<T>] pdang: to-do section format fixed
 [<T>] pdang: warning: the agent reported state_updated=false, but the actual file change=true (going by the actual files)
-[<T>] pdang: the shadow's proposed to-do section is malformed: STATE.md: a to-do with no owner, or done and not removed `- [ ] 沒標負責人的一件事` 
+[<T>] pdang: the shadow's proposed to-do section is malformed: STATE.md: a to-do without an owner tag, or a finished one not removed: `- [ ] 沒標負責人的一件事` 
 [<T>] pdang: shadow (completion version): change=True (agent version=True), similarity 0.971
 [<T>] pdang: STATE.md updated & pushed (<sha>)
 [<T>] pdang: written to review-log.md for later spot checks
@@ -739,7 +739,7 @@ memory/ 的結構:
 只有整份 STATE.md 真的沒有任何待辦時才寫 `- (無)`。排程、已完成的事實不算待辦,留在原處。
 
 目前的問題:
-STATE.md: a to-do with no owner, or done and not removed `- [ ] 沒標負責人的一件事`
+STATE.md: a to-do without an owner tag, or a finished one not removed: `- [ ] 沒標負責人的一件事`
 === prompt librarian-state-edits @ hub
 你是跨專案整合 agent(圖書館員),負責專案 pdang 的 STATE.md。你沒有任何工具:需要的東西都在下面,
 回答只能是一個 JSON(格式由系統指定)。你不直接改檔案,而是回「編輯清單」,平台照順序套用到 STATE.md。

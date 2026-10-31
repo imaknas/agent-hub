@@ -6,5 +6,5 @@
  "Nightly: folds memory date files older than 14 days into reference/ (before the librarian)": "每晚把超過 14 天的 memory 日期檔整理進 reference/(在 librarian 之前)",
  "Nightly: updates the --mirror clone of every repo in mirror-list.txt": "每晚更新 mirror-list.txt 裡每個 repo 的 --mirror clone",
  "Personal assistant: question reconciliation, channel leases": "個人助理:問題對帳、通道租借",
- "Platform-run capabilities (cap-runner): sandboxed projects borrow a capability with hub-run --cap": "平台代跑(cap-runner):sandbox 裡的專案用 hub-run --cap 借能力"
+ "Platform-run capabilities (cap-runner): sandboxed projects borrow a capability with agenthub cap-run --cap": "平台代跑(cap-runner):sandbox 裡的專案用 hub-run --cap 借能力"
 }

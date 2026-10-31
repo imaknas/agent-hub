@@ -81,7 +81,7 @@ def parse(source: str, text: str, items: dict, problems: list) -> None:
             items[group].append((source, bare.group(1).strip()))
         elif bare or line.startswith(("- [ ] 〔", "- [x]", "- [X]")):
             # 看起來是待辦,卻沒有(認得的)負責人,或已打勾還留著:一定要讓人看到,不能默默漏掉
-            problems.append(_("{source}: a to-do with no owner, or done and not removed `{line}`", source=source, line=line[:60]))
+            problems.append(_("{source}: a to-do without an owner tag, or a finished one not removed: `{line}`", source=source, line=line[:60]))
         # 其他行(說明文字、「詳見 reference」連結、續行)不是待辦,略過
 
 
@@ -110,7 +110,7 @@ def main() -> None:
         "# " + _("Cross-project to-do"), "",
         # 標題不放日期:內容沒變時檔案就不該變(要知道哪天產生的,看 git log)
         "> " + _("Generated mechanically by `bin/gen-todo.py` from the `{heading}` section of each project's STATE.md "
-                 "({total} items);", heading="## 待辦", total=total),
+                 "({total} {total:item|items});", heading="## 待辦", total=total),
         "> " + _("do not edit by hand: to change the content, change the source (each project's memory, from which "
                  "librarian updates STATE.md;"),
         "> " + _("agent-hub's own to-do items are in `openclaw-migration-status.md`)."), "",
@@ -120,8 +120,8 @@ def main() -> None:
     for owner in OWNERS:
         o += [f"## {titles[owner]}", ""]
         if owner == TAG and in_assistant:
-            o += ["> " + _("{n} more are registered in {assistant} (marked \"{marker}\" at the end of the line in STATE.md); "
-                           "{assistant} is the authority for them, they are not listed here.",
+            o += ["> " + _("{n} more {n:is|are} registered in {assistant} (marked \"{marker}\" at the end of the line in STATE.md); "
+                           "{assistant} is the authority for them, so they are not listed here.",
                            n=len(in_assistant), assistant=ASSISTANT, marker=f"等 {TAG}:<key>"), ""]
         rows = items[owner]
         if not rows:
@@ -139,7 +139,7 @@ def main() -> None:
         o += [f"- {p}" for p in problems]
         o.append("")
     out.write_text("\n".join(o).rstrip() + "\n")
-    print(_("todo.md: {total} items", total=total) + (_(", {n} format problems", n=len(problems)) if problems else ""))
+    print(_("todo.md: {total} {total:item|items}", total=total) + (_(", {n} format {n:problem|problems}", n=len(problems)) if problems else ""))
     for p in problems:
         print(_("  format problem: {problem}", problem=p))
 

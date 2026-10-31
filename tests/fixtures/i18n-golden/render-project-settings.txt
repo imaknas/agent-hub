@@ -20,11 +20,11 @@ gamma:gate strict 沒裝(專案用自己的 core.hooksPath=.husky),只偵測
 === alpha pre-commit
 #!/bin/sh
 # agent-hub:gate (managed; registry gate: strict)
-# 主 checkout 的 main/master 不能直接 commit 或 merge commit;merge-branch 是 fast-forward,不會觸發這個 hook。
+# No direct commit or merge commit on main/master in the main checkout; merge-branch fast-forwards, which does not run this hook.
 b=$(git symbolic-ref --short -q HEAD)
 case "$b" in main|master) ;; *) exit 0 ;; esac
 [ -n "$MERGE_GATE" ] && exit 0
-echo "這個專案開了合併閘門(gate: strict):不能直接 commit 到 $b。在自己的 worktree/branch 做,完成用 ~/agent-hub/bin/merge-branch。" >&2
+echo "這個專案開了合併閘門(gate: strict):不能直接 commit 到 $b。在自己的 worktree/branch 做,完成用 agenthub merge-branch。" >&2
 exit 1
 === alpha settings
 {

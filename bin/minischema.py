@@ -73,7 +73,7 @@ def errors(schema: dict, x, path: str = "$", root: dict | None = None) -> list[s
                     out += errors(ap, v, f"{path}.{k}", root)
     if isinstance(x, list):
         if "minItems" in schema and len(x) < schema["minItems"]:
-            out.append(_("{path}: needs at least {n} items", path=path, n=schema["minItems"]))
+            out.append(_("{path}: needs at least {n} {n:item|items}", path=path, n=schema["minItems"]))
         if "items" in schema:
             for i, v in enumerate(x):
                 out += errors(schema["items"], v, f"{path}[{i}]", root)

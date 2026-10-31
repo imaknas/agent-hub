@@ -151,7 +151,7 @@ def validate_secrets(secrets) -> list[str]:
         if "expires" in sec and not (isinstance(sec["expires"], str) and re.fullmatch(r"\d{4}-\d{2}-\d{2}", sec["expires"])):
             errs.append(_("{where}: expires must be a quoted \"YYYY-MM-DD\"", where=where))
         if "expires" in sec and "max_age_days" in sec:
-            errs.append(_("{where}: only one of expires and max_age_days", where=where))
+            errs.append(_("{where}: give only one of expires and max_age_days", where=where))
         for k in ("max_age_days", "warn_days"):
             if k in sec and (not isinstance(sec[k], int) or isinstance(sec[k], bool) or sec[k] <= 0):
                 errs.append(_("{where}: {key} must be a positive integer", where=where, key=k))
@@ -278,7 +278,7 @@ def validate_runs(doc: dict, stem: str, d: dict) -> list[str]:
             errs.append(_("job {name}: duplicate name", name=n))
         names.add(n)
         if ("at" in job) == ("every" in job):
-            errs.append(_("job {name}: exactly one of at and every", name=n))
+            errs.append(_("job {name}: give exactly one of at and every", name=n))
         if "at" in job and not re.fullmatch(r"([01]\d|2[0-3]):[0-5]\d", str(job["at"])):
             errs.append(_("job {name}: at must be HH:MM (quoted)", name=n))
         if "every" in job and not EVERY.match(str(job["every"])):
@@ -297,7 +297,7 @@ def validate_runs(doc: dict, stem: str, d: dict) -> list[str]:
         if "connectors" in job and not isinstance(job["connectors"], bool):
             errs.append(_("job {name}: connectors must be true/false", name=n))
         if any(str(x).startswith("mcp__claude_ai_") for x in job.get("allow") or []) and not job.get("connectors"):
-            errs.append(_("job {name}: allow has claude.ai connector tools, add connectors: true (the default headless token "
+            errs.append(_("job {name}: allow has claude.ai connector tools; add connectors: true (the default headless token "
                            "loads no connectors)", name=n))
         if job.get("kind", "command") == "agent":
             prompt = hubconf.registry_dir() / stem / (job.get("prompt") or f"jobs/{n}.md")
@@ -434,7 +434,7 @@ def wrong_registry(old: dict, reg: pathlib.Path, files: list[pathlib.Path]) -> s
                  "reaching this hub's state?). If the registry really moved: registry.py check --rebuild",
                  old=old["registry_dir"], dir=reg)
     if not [f for f in files if f.stem != hubconf.hub_project()]:
-        return _("{dir} has no project files, but the registry index lists {n} projects; not rebuilt. If they really "
+        return _("{dir} has no project files, but the registry index lists {n} {n:project|projects}; not rebuilt. If they really "
                  "were all removed: registry.py check --rebuild", dir=reg, n=len(old["projects"]))
     return None
 
@@ -570,14 +570,14 @@ def cmd_add(name: str, workspace: str, origin: str, memory_bare: str, extra: str
     """extra:JSON 物件,蓋過預設登錄的欄位(例:想法沙盒的 type/purpose/enforce/privacy)。驗證不過就不寫。"""
     f = hubconf.registry_dir() / f"{name}.yaml"
     if f.exists():
-        print(_("{name} is already in the registry ({file}), not overwriting", name=name, file=f))
+        print(_("{name} is already in the registry ({file}); not overwriting", name=name, file=f))
         return 0
     doc = new_doc(name, workspace, origin, memory_bare)
     if extra:
         doc.update(json.loads(extra))
         errs = validate(doc, name)
         if errs:
-            print(_("the registry entry is invalid, not written: {errors}", errors="; ".join(errs)), file=sys.stderr)
+            print(_("the registry entry is invalid; not written: {errors}", errors="; ".join(errs)), file=sys.stderr)
             return 1
     f.parent.mkdir(parents=True, exist_ok=True)
     f.write_text(header() + yaml.safe_dump(doc, allow_unicode=True, sort_keys=False, width=200))
@@ -640,16 +640,16 @@ def cmd_apply_updates() -> int:
             cur = (yaml.safe_load(cur_f.read_text()) or {}) if cur_f.exists() else {}
             errs += platform_owned_changes(doc, cur)
         if errs:
-            reply(sender, mid, _("manifest.update was not applied, the registry is unchanged:\n- {errors}", errors="\n- ".join(errs)),
+            reply(sender, mid, _("manifest.update was not applied; the registry is unchanged:\n- {errors}", errors="\n- ".join(errs)),
                   _("returned: {errors}", errors="; ".join(errs)[:200]))
-            print(_("{sender}: manifest.update {mid} returned ({n} problems)", sender=sender, mid=mid, n=len(errs)))
+            print(_("{sender}: manifest.update {mid} returned ({n} {n:problem|problems})", sender=sender, mid=mid, n=len(errs)))
             continue
         f = hubconf.registry_dir() / f"{sender}.yaml"
         f.write_text("# " + _("Project registry (schema v1, see bin/registry.py). Last updated by manifest.update {mid}", mid=mid) + "\n"
                      + yaml.safe_dump(doc, allow_unicode=True, sort_keys=False, width=200))
         r = subprocess.run([str(hubconf.ROOT / "bin" / "commit-hub-files.sh"), f"registry: {sender} manifest.update {mid}",
                             f"projects/{sender}.yaml"], capture_output=True, text=True)
-        reply(sender, mid, _("manifest.update applied") + ("" if r.returncode == 0 else _(" (the commit failed, the file is written)"))
+        reply(sender, mid, _("manifest.update applied") + ("" if r.returncode == 0 else _(" (the commit failed; the file is written)"))
               + _("; it takes effect at the next scheduler tick."), _("applied"))
         print(_("{sender}: manifest.update {mid} applied", sender=sender, mid=mid))
     return 0
@@ -680,7 +680,7 @@ def main() -> int:
                 print(f"    {e}")
         elif n in index["projects"]:
             doc = index["projects"][n]
-            print(_("✓ {name}: {jobs} jobs, {services} services", name=n, jobs=len(doc.get("jobs") or []),
+            print(_("✓ {name}: {jobs} {jobs:job|jobs}, {services} {services:service|services}", name=n, jobs=len(doc.get("jobs") or []),
                      services=len(doc.get("services") or [])))
         else:
             bad += 1

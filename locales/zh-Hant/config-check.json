@@ -8,7 +8,7 @@
  "{where}: {error}": "{where}:{error}",
  "models.env: no longer used; model settings moved into hub.json llm.points (schedulectl set-model state|index|consolidate <model>; a value equal to the group default need not be written), then delete models.env": "models.env:不再使用——模型設定搬進 hub.json 的 llm.points(schedulectl set-model state|index|consolidate <model>,值跟組別預設一樣就不用寫),然後刪掉 models.env",
  "mirror-list.txt:{line}: not a git remote: {text}": "mirror-list.txt:{line}:不像 git remote:{text}",
- "services.tsv:{line}: {count} columns, the header has {width}": "services.tsv:{line}:{count} 欄,表頭是 {width} 欄",
+ "services.tsv:{line}: {count} {count:column|columns}; the header has {width}": "services.tsv:{line}:{count} 欄,表頭是 {width} 欄",
  "services.tsv:{line}: label `{label}` repeated": "services.tsv:{line}:label `{label}` 重複",
  "schedule.yaml: job `{name}` repeated": "schedule.yaml:job `{name}` 重複",
  "schedule.yaml: cannot read it ({error})": "schedule.yaml:讀不了({error})",

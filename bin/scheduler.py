@@ -93,7 +93,7 @@ def all_jobs(log_errors: bool = False) -> tuple[list[dict], dict]:
         reg_jobs = []
         info["errors"]["(registry)"] = [repr(e)]
         if log_errors:
-            log(_("The project registry can't be read, this tick runs only schedule.yaml: {error!r}", error=e))
+            log(_("The project registry can't be read ({error!r}); this tick runs only schedule.yaml", error=e))
     return legacy + reg_jobs, info
 
 
@@ -207,7 +207,7 @@ def reconcile(state: dict, jobs: dict[str, dict]) -> set[str]:
                 continue
             # 沒寫結果就不見了(重開機、被殺):算失敗,嘗試次數在開始前就記過了
             log(f"job '{name}' FAILED (exit -1), background process gone without a result")
-            job_failed(name, -1, _("the background run vanished midway (reboot, killed)"))
+            job_failed(name, -1, _("the background run vanished midway (reboot or killed)"))
         elif rec["exit"] == 0:
             state[name] = rec["date"]
             mark_job(name, False)

@@ -82,11 +82,11 @@ def write_project(name: str, doc: dict, index: dict, report: bool) -> list[str]:
         for key in ("deny", "allow"):
             missing = set(prev.get(key, [])) - set(perms.get(key, []))
             if missing:
-                drift.append(_("permissions.{key} is missing {n} rules (e.g. {example})", key=key, n=len(missing),
+                drift.append(_("permissions.{key} is missing {n} {n:rule|rules} (e.g. {example})", key=key, n=len(missing),
                                example=sorted(missing)[0]))
     if report:
-        print(_("{project}: would write sandbox (allowWrite {write}, denyRead {read}, {domains} domains), "
-                "{deny} deny rules, {allow} allow rules → {path}", project=name,
+        print(_("{project}: would write sandbox (allowWrite {write}, denyRead {read}, {domains} {domains:domain|domains}), "
+                "{deny} deny {deny:rule|rules}, {allow} allow {allow:rule|rules} → {path}", project=name,
                 write=len(sandbox["filesystem"]["allowWrite"]), read=len(sandbox["filesystem"]["denyRead"]),
                 domains=len(sandbox["network"]["allowedDomains"]), deny=len(deny), allow=len(allow), path=path))
         return drift
@@ -118,7 +118,7 @@ def unapply(name: str, doc: dict) -> None:
 
 GATE_MARK = "# agent-hub:gate (managed; registry gate: strict)"
 GATE_HOOK_HEAD = GATE_MARK + """
-# 主 checkout 的 main/master 不能直接 commit 或 merge commit;merge-branch 是 fast-forward,不會觸發這個 hook。
+# No direct commit or merge commit on main/master in the main checkout; merge-branch fast-forwards, which does not run this hook.
 b=$(git symbolic-ref --short -q HEAD)
 case "$b" in main|master) ;; *) exit 0 ;; esac
 [ -n "$MERGE_GATE" ] && exit 0
@@ -129,12 +129,12 @@ def gate_hook() -> str:
     """the hook's text; the line it prints when it refuses a commit is a message ($b = the branch, filled in by the shell)"""
     return GATE_HOOK_HEAD + 'echo "' + _(
         "This project has the merge gate on (gate: strict): no direct commits to $b. Work in your own worktree/branch "
-        "and finish with ~/agent-hub/bin/merge-branch.") + '" >&2\nexit 1\n'
+        "and finish with agenthub merge-branch.") + '" >&2\nexit 1\n'
 
 
 def gate(name: str, doc: dict, report: bool, quiet: bool = False) -> list[tuple[str, str]]:
     """登錄 gate: strict → 裝 pre-commit / pre-merge-commit;關掉就拿掉(只動有平台標記的)。
-    專案有自己的 core.hooksPath(例:husky)就不裝,只偵測。回傳要做(report)/做了的 (add|remove, hook)。"""
+    專案有自己的 core.hooksPath(例:husky)就不裝,只偵測。回傳要做(report)/做了的 (add|update|remove, hook)。"""
     import subprocess
     say = (lambda *_args: None) if quiet else print
     ws = registry.dirs(doc)["workspace"]
@@ -145,21 +145,27 @@ def gate(name: str, doc: dict, report: bool, quiet: bool = False) -> list[tuple[
     acts = []
     for hook in ("pre-commit", "pre-merge-commit"):
         f = ws / ".git" / "hooks" / hook
-        mine = f.exists() and GATE_MARK in f.read_text(errors="replace")
+        text = f.read_text(errors="replace") if f.exists() else ""
+        mine = GATE_MARK in text
         if want and hp:
-            say(_("{project}: gate strict not installed (the project uses its own core.hooksPath={path}), detecting only",
+            say(_("{project}: gate strict not installed (the project uses its own core.hooksPath={path}); detecting only",
                   project=name, path=hp))
             return acts
         if want and not mine:
             if f.exists():
-                say(_("{project}: .git/hooks/{hook} is already the project's own hook, not overwriting it (gate detects only)",
-                      project=name, hook=hook))
+                say(_("{project}: .git/hooks/{hook} is already the project's own hook; not overwriting it (the gate only "
+                      "detects)", project=name, hook=hook))
                 continue
             acts.append(("add", hook))
             if not report:
                 f.write_text("#!/bin/sh\n" + gate_hook())
                 f.chmod(0o755)
                 say(_("{project}: installed {hook} (gate strict)", project=name, hook=hook))
+        elif want and text != "#!/bin/sh\n" + gate_hook():   # the platform's hook from an older version (or language)
+            acts.append(("update", hook))
+            if not report:
+                f.write_text("#!/bin/sh\n" + gate_hook())
+                say(_("{project}: updated {hook} (gate strict)", project=name, hook=hook))
         elif not want and mine:
             acts.append(("remove", hook))
             if not report:

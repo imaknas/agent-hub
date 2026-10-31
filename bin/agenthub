@@ -106,13 +106,13 @@ def cmd_config(argv: list[str]) -> int:
         return 0
     if sub == "apply":
         if subprocess.run(hubconf.launch(BIN / "config-check")).returncode != 0:
-            print(_("hub config apply: the config is invalid, nothing applied"), file=sys.stderr)
+            print(_("agenthub config apply: the config is invalid; nothing applied"), file=sys.stderr)
             return 1
         done = appliers.apply_all(only=only)
         show(done)
         left = {n: c for n, c in appliers.plan_all(only=only).items() if c}
         if left:  # verify:套用完再 plan 應該是空的
-            print(_("hub config apply: ⚠️ still out of line after applying:"), file=sys.stderr)
+            print(_("agenthub config apply: ⚠️ still differs from the config after applying:"), file=sys.stderr)
             show(left)
         record(done, ok=not left)
         return 1 if left else 0
@@ -137,7 +137,7 @@ def record(done: dict, ok: bool) -> None:
     r = subprocess.run([str(BIN / "py"), str(BIN / "hubbus"), "publish", "config.applied", "--source", hubconf.hub_project(),
                         "--payload", json.dumps(payload, ensure_ascii=False), "--id", eid], capture_output=True, text=True)
     if r.returncode != 0:
-        print(_("hub config apply: recording on the bus failed (.state/config-applied.json was written): {error}",
+        print(_("agenthub config apply: recording on the bus failed (.state/config-applied.json was written): {error}",
                 error=r.stderr.strip()[:200]), file=sys.stderr)
 
 
@@ -160,14 +160,14 @@ def cmd_modules(argv: list[str]) -> int:
             doc = yaml.safe_load(f.read_text()) or {}
             desc = i18n.translate("modules", doc.get("description") or "", {})   # catalog: locales/<lang>/modules.json
             print(f"{'✓' if f.stem in on else ' '} {f.stem:12} {desc}")
-        print(_("\nswitch: hub modules enable|disable <name> (changes modules in hub.json, then applies)"))
+        print(_("\nSwitch: agenthub modules enable|disable <name> (changes modules in hub.json, then applies)"))
         return 0
     if len(argv) != 2 or argv[0] not in ("enable", "disable"):
         print(_(__doc__), file=sys.stderr)
         return 2
     name = argv[1]
     if not (registry.MODULES_DIR / f"{name}.yaml").exists():
-        print(_("hub modules: no module {name} (modules/ has: {available})", name=name,
+        print(_("agenthub modules: no module {name} (modules/ has: {available})", name=name,
                 available=', '.join(sorted(p.stem for p in registry.MODULES_DIR.glob('*.yaml')))), file=sys.stderr)
         return 1
     d = read_hub_json()
@@ -283,7 +283,7 @@ def cmd_init(argv: list[str]) -> int:
         # 舊的擺法(hub.json 在 hub 根目錄,搬家前的樣子):不動,搬家另外做(docs/design/new-user.md 第 6 步)
         print(_("✓ {path} already exists (the old layout); leaving it alone", path=hubconf.config_file('hub.json')))
     elif hubconf.config_file("hub.json").exists():
-        print(_("✓ {path} already exists; leaving it alone (to change it, edit it, then hub config apply)",
+        print(_("✓ {path} already exists; leaving it alone (to change it, edit it, then run agenthub config apply)",
                 path=hubconf.config_file('hub.json')))
     else:
         home = pathlib.Path(os.path.expanduser(args.get("home") or os.environ.get("AGENT_HUB_HOME")
@@ -336,7 +336,7 @@ def cmd_init(argv: list[str]) -> int:
         rc = subprocess.run([*hubconf.launch(BIN / "agenthub"), "config", "apply"]).returncode
         if rc != 0:
             return rc
-    print(_("\nnext: bin/hub doctor shows what is missing; bin/hub onboard ~/workspace/<project> connects the first project"))
+    print(_("\nNext: agenthub doctor shows what is missing; agenthub onboard ~/workspace/<project> connects the first project"))
     return 0
 
 
@@ -362,7 +362,8 @@ def move_plan(home: pathlib.Path) -> list[tuple[pathlib.Path, pathlib.Path]]:
 def cmd_move_instance(argv: list[str]) -> int:
     """hub move-instance --to <實例目錄> [--apply]:複製(不刪來源)、驗證新擺法、最後才寫 <hub>/.hub-home。"""
     if "--to" not in argv:
-        print(_("usage: hub move-instance --to <instance directory> [--apply] (without --apply it only lists what it would do)"),
+        print(_("usage: agenthub move-instance --to <instance directory> [--apply] (without --apply it only lists what it would "
+                "do)"),
               file=sys.stderr)
         return 2
     home = pathlib.Path(os.path.expanduser(argv[argv.index("--to") + 1])).resolve()
@@ -380,7 +381,8 @@ def cmd_move_instance(argv: list[str]) -> int:
     for src, dst in plan:
         print(_("copy {src} → {dst}", src=src, dst=dst) if apply else _("(would copy) {src} → {dst}", src=src, dst=dst))
     if not apply:
-        print(_("\n{count} items; add --apply to do it (copies only, the sources in the hub stay; {pointer} is written last)",
+        print(_("\n{count} {count:item|items}; add --apply to do it (copies only; the originals stay in the hub; {pointer} is "
+                "written last)",
                 count=len(plan), pointer=hubconf.POINTER))
         return 0
     for src, dst in plan:
@@ -426,10 +428,10 @@ def cmd_move_instance(argv: list[str]) -> int:
     hubconf.POINTER.write_text(str(home) + "\n")   # 最後才寫:從這一刻起平台用新擺法;刪掉它就退回
     # the registry dir moved with the config: rebuild the index from it on purpose (refresh() refuses another dir)
     subprocess.run([*hubconf.launch(BIN / "registry.py"), "check", "--rebuild"], capture_output=True, text=True)
-    print(_("\n✓ wrote {pointer}. The old files in the hub are still there (not deleted). Next (for a person):",
+    print(_("\n✓ wrote {pointer}. The old files in the hub are still there (not deleted). Next steps (by hand):",
             pointer=hubconf.POINTER))
-    print(_("  1. bin/hub config plan shows what would change (the secrets path in projects' sandbox settings changes); "
-            "if it looks right, bin/hub config apply"))
+    print(_("  1. agenthub config plan shows what would change (the secrets path in projects' sandbox settings changes); "
+            "if it looks right, run agenthub config apply"))
     print(_("  2. restart the long-running services that read paths (lease-runner, cap-runner)"))
     print(_("  3. only after the nightly flow and the backups (restore check) are fine, git rm those files from the platform repo"))
     return 0
@@ -447,12 +449,12 @@ def cmd_doctor(argv: list[str]) -> int:
     add("ok" if r.returncode == 0 else "bad", (r.stdout.strip() or r.stderr.strip())[:160] or _("the platform's Python"),
         "" if r.returncode == 0 else "bin/setup")
     if not hubconf.config_file("hub.json").exists():
-        add("bad", _("no hub.json"), "bin/hub init")
+        add("bad", _("no hub.json"), _("agenthub init"))
         return report(results)
     r = subprocess.run(hubconf.launch(BIN / "config-check"), capture_output=True, text=True)
     add("ok" if r.returncode == 0 else "bad", _("config: all valid") if r.returncode == 0 else
         _("config: {errors}", errors=r.stderr.strip()[:300]),
-        "" if r.returncode == 0 else _("fix hub.json / projects/ as the messages say, then bin/hub config check"))
+        "" if r.returncode == 0 else _("fix hub.json / projects/ as the messages say, then run agenthub config check"))
 
     side = hubconf.owner_side()
     add("ok", _("owner side: {name} (owner_side: assistant)", name=hubconf.get('assistant.name') or _("assistant"))
@@ -469,8 +471,8 @@ def cmd_doctor(argv: list[str]) -> int:
     rname = runtime_ports.default_name()
     for feat, ok, miss in runtime_ports.feature_table(rname):
         add("ok" if ok else "warn", _("{feature}: available", feature=feat) if ok else
-            _("{feature}: off (runtime {runtime} has no {missing})", feature=feat, runtime=rname, missing=miss),
-            "" if ok else _("install a coding agent that has these, and point hub.json runtime.default at it"))
+            _("{feature}: off (the runtime {runtime} has no {missing})", feature=feat, runtime=rname, missing=miss),
+            "" if ok else _("install a coding agent that supports them, and point hub.json runtime.default at it"))
     try:
         auth = runtime_ports.load(ports=("auth",))
         for c in auth.credentials():
@@ -483,23 +485,23 @@ def cmd_doctor(argv: list[str]) -> int:
     except runtime_ports.Unsupported:
         pass   # 沒有 agent 登入可查:上面的功能表已經說了哪些功能關掉
     except Exception as e:
-        add("bad", _("cannot read the agent's login state: {error}", error=e), "bin/hub config check")
+        add("bad", _("cannot read the agent's login state: {error}", error=e), _("agenthub config check"))
     import completion
     if completion.settings():
         for name, ok, why in completion.health_all():
             add("ok" if ok else "bad", _("LLM provider {name}: available", name=name) if ok else
                 _("LLM provider {name}: {reason}", name=name, reason=why),
-                "" if ok else _("see hub.json llm.providers; set the key with bin/hub llm set-key <provider>"))
+                "" if ok else _("see hub.json llm.providers; set the key with agenthub llm set-key <provider>"))
         s = completion.settings()
-        add("ok", _("model groups of the decision points: {groups}",
-                    groups=",".join(f"{g}→{s['use'].get(g, _('(not set)'))}" for g in completion.GROUPS)))
+        add("ok", _("model groups of the judgment points: {groups}",
+                    groups=_(", ").join(f"{g}→{s['use'].get(g, _('(not set)'))}" for g in completion.GROUPS)))
     else:
         rt = runtime_ports.default_name()
         if "completion" in runtime_ports.capabilities(rt):
-            add("ok", _("decision points go to the runtime {runtime} (no llm.providers; schedulectl models shows each point's "
+            add("ok", _("judgment points go to the runtime {runtime} (no llm.providers; schedulectl models shows each point's "
                        "model)", runtime=rt))
         else:
-            add("bad", _("decision points have nowhere to run: the runtime {runtime} has no completion port and hub.json "
+            add("bad", _("judgment points have nowhere to run: the runtime {runtime} has no completion interface and hub.json "
                          "has no llm.providers", runtime=rt),
                 _("agenthub llm setup (pick one: an API key or a local Ollama)"))
 
@@ -521,20 +523,22 @@ def cmd_doctor(argv: list[str]) -> int:
                         (("local.agent-hub-scheduler", _("scheduler")), ("local.agent-hub-scheduler-watchdog", _("watchdog")))):
         r = subprocess.run(["/bin/launchctl", "print", f"gui/{uid}/{label}"], capture_output=True, text=True)
         if r.returncode != 0:
-            add("bad", _("{what} ({label}): not loaded", what=what, label=label), "bin/hub init")
+            add("bad", _("{what} ({label}): not loaded", what=what, label=label), _("agenthub init"))
         elif str(BIN) not in r.stdout:  # 同一個使用者底下載入的是別份 hub 的(例:另一個 clone)
-            add("bad", _("{what} ({label}): the loaded one is not this hub ({bin})", what=what, label=label, bin=BIN),
-                _("bin/hub init (replaces it with this one)"))
+            add("bad", _("{what} ({label}): the loaded one belongs to a different hub, not {bin}", what=what, label=label, bin=BIN),
+                _("agenthub init (replaces it with this one)"))
         else:
             add("ok", _("{what} ({label}): loaded", what=what, label=label))
     hb = hubconf.STATE / "scheduler-heartbeat"
     if hb.exists():
         age = (datetime.datetime.now() - datetime.datetime.fromtimestamp(hb.stat().st_mtime)).total_seconds() / 60
-        add("ok" if age <= 35 else "bad", _("the scheduler last ticked {age:.0f} minutes ago", age=age),
+        shown = f"{age:.0f}"   # what the message prints: "0" is "just ticked", and the plural follows the shown number
+        add("ok" if age <= 35 else "bad", _("the scheduler just ticked") if shown == "0" else
+            _("the scheduler last ticked {age:.0f} {age:minute|minutes} ago", age=float(shown)),
             "" if age <= 35 else _("bin/schedulectl status; see .logs/scheduler-stderr.log"))
     else:
         add("warn", _("the scheduler has not ticked yet"),
-            _("at most 15 minutes after installing; if still not, see .logs/scheduler-stderr.log"))
+            _("it ticks within 15 minutes of installing; if it still hasn't ticked, see .logs/scheduler-stderr.log"))
     if not hubconf.get("alerts"):
         add("warn", _("no alerts set up: a stopped scheduler or a dead service only shows on the status page and in the logs"),
             _("to be notified, add an alerts section as in hub.example.json"))
@@ -542,12 +546,12 @@ def cmd_doctor(argv: list[str]) -> int:
     import appliers
     left = {n: c for n, c in appliers.plan_all().items() if c and n != "scheduler"}
     add("ok" if not left else "warn", _("background services, project settings: match the config") if not left else
-        _("background services, project settings: {count} not applied yet", count=sum(len(c) for c in left.values())),
-        "" if not left else _("bin/hub config plan, then bin/hub config apply"))
+        _("background services, project settings: {count} {count:change|changes} not applied yet", count=sum(len(c) for c in left.values())),
+        "" if not left else _("agenthub config plan, then agenthub config apply"))
     if (ROOT / ".git").exists():
         hp = subprocess.run(["git", "-C", str(ROOT), "config", "core.hooksPath"], capture_output=True, text=True).stdout.strip()
         add("ok" if hp == "githooks" else "warn", _("commit gate (core.hooksPath): {value}", value=hp or _("not set")),
-            "" if hp == "githooks" else _("bin/hub init (or git config core.hooksPath githooks)"))
+            "" if hp == "githooks" else _("agenthub init (or git config core.hooksPath githooks)"))
     return report(results)
 
 
@@ -557,8 +561,8 @@ def report(results) -> int:
         print(f"{mark[level]} {what}" + (f"\n    → {fix}" if fix else ""))
     bad = sum(1 for r in results if r[0] == "bad")
     warn = sum(1 for r in results if r[0] == "warn")
-    print("\n" + (_("no problems") if not bad else _("{count} problems", count=bad))
-          + (_(", {count} reminders", count=warn) if warn else ""))
+    print("\n" + (_("no problems") if not bad else _("{count} {count:problem|problems}", count=bad))
+          + (_(", {count} {count:reminder|reminders}", count=warn) if warn else ""))
     return 1 if bad else 0
 
 
@@ -604,7 +608,7 @@ def llm_setup(args: dict, yes: bool) -> int:
         print(_("no option {choice} (choices: {choices})", choice=choice, choices=', '.join(LLM_CHOICES)), file=sys.stderr)
         return 2
     if not interactive and not args.get("llm") and choice not in ("runtime", "none") and not args.get("llm-model"):
-        print(_("{choice} is available here, but a model cannot be picked non-interactively: decision points stay unset; "
+        print(_("{choice} is available here, but a model cannot be picked non-interactively: judgment points stay unset; "
                 "run agenthub llm setup later", choice=choice))
         return 0
     d = read_hub_json()
@@ -619,12 +623,12 @@ def llm_setup(args: dict, yes: bool) -> int:
         write_hub_json(d)
         hubconf._cfg = None
         if choice == "none":
-            print(_("decision points stay unset: when needed they fail plainly and say why. Run agenthub llm setup later"))
+            print(_("judgment points stay unset: when needed, they fail plainly and say why. Run agenthub llm setup later"))
         elif "completion" not in runtime_ports.capabilities(rt):
-            print(_("⚠️ the runtime {runtime} has no completion port: decision points will fail. Pick another provider: "
+            print(_("⚠️ the runtime {runtime} has no completion interface: judgment points will fail. Pick another provider: "
                     "agenthub llm setup", runtime=rt))
         else:
-            print(_("decision points go to the runtime {runtime} (its own login; models follow its group table, see "
+            print(_("judgment points go to the runtime {runtime} (its own login; models follow its group table, see "
                     "schedulectl models)", runtime=rt))
         return 0
     mod = runtime_ports.load_completion(choice)
@@ -651,7 +655,8 @@ def llm_setup(args: dict, yes: bool) -> int:
     if args.get("llm-model"):
         picked = {g: args["llm-model"] for g in completion.GROUPS}
     elif not interactive:
-        print(_("non-interactively, name the model with --llm-model <name> (or run agenthub llm setup interactively later)"),
+        print(_("When running non-interactively, give the model with --llm-model <name> (or run agenthub llm setup "
+                "interactively later)"),
               file=sys.stderr)
         return 1
     else:
@@ -682,7 +687,7 @@ def llm_setup(args: dict, yes: bool) -> int:
     write_hub_json(d)
     hubconf._cfg = None
     ok, why = next(((o, w) for n, o, w in completion.health_all() if n == choice), (False, _("not checked")))
-    print(_("hub.json llm: decision points go to {choice} ({models}); {status}", choice=choice,
+    print(_("hub.json llm: judgment points go to {choice} ({models}); {status}", choice=choice,
             models=', '.join(f'{g}={conf['models'][g]}' for g in completion.GROUPS),
             status=_("reachable") if ok else _("⚠️ not usable yet: {reason}", reason=why)))
     print(_("remember to commit hub.json (config as code). Agent work (mailbox handling and the like) needs a coding agent; "

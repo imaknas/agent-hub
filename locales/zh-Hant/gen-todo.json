@@ -1,14 +1,14 @@
 {
  "{source}: no `{heading}` section": "{source}:沒有 `{heading}` 段落",
- "{source}: a to-do with no owner, or done and not removed `{line}`": "{source}:待辦沒標負責人或已完成未移除 `{line}`",
+ "{source}: a to-do without an owner tag, or a finished one not removed: `{line}`": "{source}:待辦沒標負責人或已完成未移除 `{line}`",
  "{name}: no STATE.md on the hub machine": "{name}:mini 上沒有 STATE.md",
  "Cross-project to-do": "跨專案待辦",
- "Generated mechanically by `bin/gen-todo.py` from the `{heading}` section of each project's STATE.md ({total} items);": "由 `bin/gen-todo.py` 從各專案 STATE.md 的 `{heading}` 段落機械產生(共 {total} 項),",
+ "Generated mechanically by `bin/gen-todo.py` from the `{heading}` section of each project's STATE.md ({total} {total:item|items});": "由 `bin/gen-todo.py` 從各專案 STATE.md 的 `{heading}` 段落機械產生(共 {total} 項),",
  "do not edit by hand: to change the content, change the source (each project's memory, from which librarian updates STATE.md;": "不要手動改——要改內容,改來源(各專案的 memory,librarian 會更新 STATE.md;",
  "agent-hub's own to-do items are in `openclaw-migration-status.md`).": "agent-hub 自己的待辦在 `openclaw-migration-status.md`)。",
- "{n} more are registered in {assistant} (marked \"{marker}\" at the end of the line in STATE.md); {assistant} is the authority for them, they are not listed here.": "另有 {n} 項已登記在 {assistant}(STATE.md 行尾標「{marker}」),以 {assistant} 為準,這裡不列。",
+ "{n} more {n:is|are} registered in {assistant} (marked \"{marker}\" at the end of the line in STATE.md); {assistant} is the authority for them, so they are not listed here.": "另有 {n} 項已登記在 {assistant}(STATE.md 行尾標「{marker}」),以 {assistant} 為準,這裡不列。",
  "Format problems (these projects' to-do items were not collected)": "格式問題(這些專案的待辦沒被收進來)",
- "todo.md: {total} items": "todo.md: {total} 項",
- ", {n} format problems": ",{n} 個格式問題",
+ "todo.md: {total} {total:item|items}": "todo.md: {total} 項",
+ ", {n} format {n:problem|problems}": ",{n} 個格式問題",
  "  format problem: {problem}": "  格式問題:{problem}"
 }

@@ -8,16 +8,16 @@ $ agenthub modules
   mirror       Nightly: updates the --mirror clone of every repo in mirror-list.txt
   owner        Built-in owner side: notices of new to-dos and questions (close and answer with agenthub owner)
 ✓ reflect      Every Monday: the previous week's cross-project review (reflect/)
-  sandbox      Platform-run capabilities (cap-runner): sandboxed projects borrow a capability with hub-run --cap
+  sandbox      Platform-run capabilities (cap-runner): sandboxed projects borrow a capability with agenthub cap-run --cap
 
-switch: hub modules enable|disable <name> (changes modules in hub.json, then applies)
+Switch: agenthub modules enable|disable <name> (changes modules in hub.json, then applies)
 --- stderr
 
 $ agenthub modules enable no-such-module
 [exit 1]
 --- stdout
 --- stderr
-hub modules: no module no-such-module (modules/ has: assistant, backup, claude, consolidate, mirror, owner, reflect, sandbox)
+agenthub modules: no module no-such-module (modules/ has: assistant, backup, claude, consolidate, mirror, owner, reflect, sandbox)
 
 $ agenthub modules enable mirror
 [exit 0]

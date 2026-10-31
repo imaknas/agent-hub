@@ -10,6 +10,6 @@
  "{path}: must be >= {minimum}": "{path}:要 >= {minimum}",
  "{path}: missing {key}": "{path}:缺 {key}",
  "{path}: unexpected {key}": "{path}:多了 {key}",
- "{path}: needs at least {n} items": "{path}:至少 {n} 項",
+ "{path}: needs at least {n} {n:item|items}": "{path}:至少 {n} 項",
  "{path}: matches none of the anyOf conditions": "{path}:anyOf 的條件一個都不符合"
 }

@@ -40,7 +40,7 @@ config-check: ✗ hub.json: llm: providers.x.impl `nope` is not known (have: ant
 config-check: ✗ models.env: no longer used; model settings moved into hub.json llm.points (schedulectl set-model state|index|consolidate <model>; a value equal to the group default need not be written), then delete models.env
 config-check: ✗ mirror-list.txt:3: not a git remote: not a remote
 config-check: ✗ services.tsv:3: label `x` repeated
-config-check: ✗ services.tsv:4: 1 columns, the header has 2
+config-check: ✗ services.tsv:4: 1 column; the header has 2
 config-check: ✗ schedule.yaml: job `a` repeated
 
 $ <HUB>/bin/config-check

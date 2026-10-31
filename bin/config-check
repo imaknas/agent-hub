@@ -96,7 +96,7 @@ def check(root: pathlib.Path) -> list[str]:
         for i, r in enumerate(rows[1:], 2):
             cols = r.split("\t")
             if len(cols) != width:
-                errs.append(_("services.tsv:{line}: {count} columns, the header has {width}", line=i, count=len(cols), width=width))
+                errs.append(_("services.tsv:{line}: {count} {count:column|columns}; the header has {width}", line=i, count=len(cols), width=width))
             elif cols[0] in seen:
                 errs.append(_("services.tsv:{line}: label `{label}` repeated", line=i, label=cols[0]))
             seen.add(cols[0])

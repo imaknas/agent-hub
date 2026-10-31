@@ -149,5 +149,5 @@ sync-local-setup (stand-in): theta
 [9/11] Cloned the librarian's memory copy on the hub machine to ~/.memory-copies/theta
 [10/11] No external remote, not added to the mirror-backup list
 --- stderr
-the registry entry is invalid, not written: type can only be project or idea
+the registry entry is invalid; not written: type can only be project or idea
 onboard-project: Adding to the project registry failed (projects/theta.yaml)

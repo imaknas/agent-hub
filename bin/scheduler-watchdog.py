@@ -134,7 +134,7 @@ def send(text):
     try:
         token, channel = TOKEN.read_text().strip(), CHANNEL.read_text().strip()
     except OSError:
-        log(_("failed: {token} or {channel} is not set up, alerts cannot be sent", token=TOKEN, channel=CHANNEL))
+        log(_("failed: {token} or {channel} is not set up; alerts cannot be sent", token=TOKEN, channel=CHANNEL))
         return False
     r = subprocess.run(
         ["/usr/bin/curl", "-sS", "-m", "20", "-o", "/dev/null", "-w", "%{http_code}",
@@ -166,12 +166,13 @@ def main():
         tick = last_tick()
         stale = tick is None or (datetime.datetime.now() - tick).total_seconds() / 60 > STALE_MIN
         if stale:
-            log(_("no alerts set up (hub.json has no alerts), only logging: the scheduler's last tick was {tick}, it stopped",
-                  tick=tick or _("never")))
+            log(_("no alerts set up (hub.json has no alerts), only logging: the scheduler's last tick was {tick}; it has "
+                  "stopped", tick=tick) if tick else
+                _("no alerts set up (hub.json has no alerts), only logging: the scheduler has never ticked"))
         return 0
     if not (TOKEN.exists() and CHANNEL.exists()):
         # 每 5 分鐘印到 launchd 的 stderr log、exit 1;狀態頁也會標出「看門狗沒設定」
-        print(_("scheduler-watchdog: {token} / {channel} not set up, no alert can be sent if the scheduler stops",
+        print(_("scheduler-watchdog: {token} / {channel} not set up; no alert can be sent if the scheduler stops",
                 token=TOKEN, channel=CHANNEL), file=sys.stderr)
         return 1
 
@@ -184,7 +185,7 @@ def main():
 
     if not stale:
         if st.get("alerting"):
-            if send(_("✅ the agent-hub scheduler is back (last tick {when}; it had stopped since about {since})",
+            if send(_("✅ The agent-hub scheduler is back (last tick {when}; it had been stopped since about {since})",
                       when=when, since=st.get("since", "?"))):
                 log(_("recovered, notified"))
                 st = {}
@@ -198,9 +199,12 @@ def main():
             st.get("alerting") and now - datetime.datetime.fromisoformat(last) >= datetime.timedelta(hours=REMIND_H))
         if due:
             age = _("{minutes:.0f} minutes", minutes=age_min) if age_min is not None else _("a long time")
-            prefix = "🚨" if not st.get("alerting") else _("⏰ still down:")
-            text = _("{prefix} the agent-hub scheduler has not ticked for {age} (last {when}). The librarian, "
-                     "the assistant's jobs, reflect and the upload jobs have all stopped.", prefix=prefix, age=age, when=when) \
+            prefix = "🚨" if not st.get("alerting") else _("⏰ Still down:")
+            text = (_("{prefix} The agent-hub scheduler has not ticked for {age} (last tick {when}). The librarian, "
+                      "the assistant's jobs, reflect and the upload jobs have all stopped.", prefix=prefix, age=age, when=when)
+                    if tick else
+                    _("{prefix} The agent-hub scheduler has not ticked for {age} (no tick recorded). The librarian, "
+                      "the assistant's jobs, reflect and the upload jobs have all stopped.", prefix=prefix, age=age)) \
                 + "\n" + diagnose()
             if send(text):
                 st.update(alerting=True, last_alert=now.isoformat(timespec="seconds"))

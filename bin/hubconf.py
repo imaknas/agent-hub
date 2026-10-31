@@ -327,8 +327,9 @@ def principal_is_legal_person() -> bool:
 
 
 def assistant_name() -> str:
-    """個人助理給人看的名字(hub.json assistant.name);沒設定就是通稱。"""
-    return get("assistant.name") or _("personal assistant")
+    """個人助理給人看的名字(hub.json assistant.name);沒設定就是通稱。
+    The default works as a noun phrase mid-sentence ("sent to the personal assistant"), as a configured name does."""
+    return get("assistant.name") or _("the personal assistant")
 
 
 def fill_names(text: str) -> str:

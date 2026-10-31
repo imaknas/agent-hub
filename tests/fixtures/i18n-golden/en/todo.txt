@@ -2,8 +2,8 @@ $ <HUB>/bin/gen-todo.py <TMP>/data/todo.md
 [exit 0]
 --- stdout
 todo.md: 3 items, 3 format problems
-  format problem: beta: a to-do with no owner, or done and not removed `- [ ] 沒有標籤的一行`
-  format problem: beta: a to-do with no owner, or done and not removed `- [ ] 〔誰〕不認得的標籤`
+  format problem: beta: a to-do without an owner tag, or a finished one not removed: `- [ ] 沒有標籤的一行`
+  format problem: beta: a to-do without an owner tag, or a finished one not removed: `- [ ] 〔誰〕不認得的標籤`
   format problem: gamma: no STATE.md on the hub machine
 --- stderr
 
@@ -32,13 +32,13 @@ todo.md: 3 items, 3 format problems
 
 ## Format problems (these projects' to-do items were not collected)
 
-- beta: a to-do with no owner, or done and not removed `- [ ] 沒有標籤的一行`
-- beta: a to-do with no owner, or done and not removed `- [ ] 〔誰〕不認得的標籤`
+- beta: a to-do without an owner tag, or a finished one not removed: `- [ ] 沒有標籤的一行`
+- beta: a to-do without an owner tag, or a finished one not removed: `- [ ] 〔誰〕不認得的標籤`
 - gamma: no STATE.md on the hub machine
 
 $ <HUB>/bin/check-state-todo.py <TMP>/copies/beta/STATE.md
 [exit 1]
 --- stdout
-STATE.md: a to-do with no owner, or done and not removed `- [ ] 沒有標籤的一行`
-STATE.md: a to-do with no owner, or done and not removed `- [ ] 〔誰〕不認得的標籤`
+STATE.md: a to-do without an owner tag, or a finished one not removed: `- [ ] 沒有標籤的一行`
+STATE.md: a to-do without an owner tag, or a finished one not removed: `- [ ] 〔誰〕不認得的標籤`
 --- stderr

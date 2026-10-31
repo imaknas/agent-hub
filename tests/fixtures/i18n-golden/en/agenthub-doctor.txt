@@ -4,7 +4,7 @@ $ agenthub doctor    # no hub.json
 ✗ no venv
     → bin/setup
 ✗ no hub.json
-    → bin/hub init
+    → agenthub init
 
 2 problems
 --- stderr
@@ -14,7 +14,7 @@ $ agenthub doctor    # launchd, problems
 --- stdout
 ✓ python ok
 ✗ config: config-check: ✗ hub.json: unknown key `unknown_key`; to add one, put it in contracts/hub.v1.schema.json first
-    → fix hub.json / projects/ as the messages say, then bin/hub config check
+    → fix hub.json / projects/ as the messages say, then run agenthub config check
 ✓ owner side: built-in (owner_side: builtin; agenthub owner list / done / answer)
 ! agenthub is not on PATH (project sessions cannot reach the mailbox commands)
     → bin/agenthub install-cli
@@ -32,20 +32,20 @@ $ agenthub doctor    # launchd, problems
 ! agent login (~/.claude/.credentials.json): missing
     → run claude once in a terminal on the hub machine so it refreshes, or /login again
 ✗ LLM provider anthropic: no key: <TMP>/secrets/anthropic-api-key does not exist (bin/hub llm set-key writes it)
-    → see hub.json llm.providers; set the key with bin/hub llm set-key <provider>
-✓ model groups of the decision points: fast→(not set),standard→anthropic,strong→(not set)
+    → see hub.json llm.providers; set the key with agenthub llm set-key <provider>
+✓ model groups of the judgment points: fast→(not set), standard→anthropic, strong→(not set)
 ✗ scheduler (local.agent-hub-scheduler): not loaded
-    → bin/hub init
-✗ watchdog (local.agent-hub-scheduler-watchdog): the loaded one is not this hub (<HUB>/bin)
-    → bin/hub init (replaces it with this one)
+    → agenthub init
+✗ watchdog (local.agent-hub-scheduler-watchdog): the loaded one belongs to a different hub, not <HUB>/bin
+    → agenthub init (replaces it with this one)
 ! the scheduler has not ticked yet
-    → at most 15 minutes after installing; if still not, see .logs/scheduler-stderr.log
+    → it ticks within 15 minutes of installing; if it still hasn't ticked, see .logs/scheduler-stderr.log
 ! no alerts set up: a stopped scheduler or a dead service only shows on the status page and in the logs
     → to be notified, add an alerts section as in hub.example.json
-! background services, project settings: 2 not applied yet
-    → bin/hub config plan, then bin/hub config apply
+! background services, project settings: 2 changes not applied yet
+    → agenthub config plan, then agenthub config apply
 ! commit gate (core.hooksPath): not set
-    → bin/hub init (or git config core.hooksPath githooks)
+    → agenthub init (or git config core.hooksPath githooks)
 
 5 problems, 6 reminders
 --- stderr
@@ -69,14 +69,14 @@ $ agenthub doctor    # launchd, all fine
 ✓ agent login (headless token): present
 ! agent login (~/.claude/.credentials.json): missing
     → run claude once in a terminal on the hub machine so it refreshes, or /login again
-✓ decision points go to the runtime claude (no llm.providers; schedulectl models shows each point's model)
+✓ judgment points go to the runtime claude (no llm.providers; schedulectl models shows each point's model)
 ✓ scheduler (local.agent-hub-scheduler): loaded
 ✓ watchdog (local.agent-hub-scheduler-watchdog): loaded
-✓ the scheduler last ticked 0 minutes ago
+✓ the scheduler just ticked
 ✓ background services, project settings: match the config
 ✓ commit gate (core.hooksPath): githooks
 
-no problems, 1 reminders
+no problems, 1 reminder
 --- stderr
 
 $ agenthub doctor    # systemd, runtime none
@@ -89,21 +89,21 @@ $ agenthub doctor    # systemd, runtime none
     → bin/agenthub install-cli
 ✓ MCP server: agenthub mcp (any agent with MCP can use the mailbox and write notes; registering it in the tool's settings is up to you)
     → agenthub mcp config prints the snippet to register; how to add it per tool: docs/mcp.md
-! judgment points (librarian, index, consolidate, weekly report analysis): off (runtime none has no agent runs, login state)
-    → install a coding agent that has these, and point hub.json runtime.default at it
-! mailbox tasks (the platform sends an agent for letters nobody picked up): off (runtime none has no agent runs, login state)
-    → install a coding agent that has these, and point hub.json runtime.default at it
-! mailbox follow-up (replying with an idle session's context): off (runtime none has no agent runs, session state)
-    → install a coding agent that has these, and point hub.json runtime.default at it
-! channel leasing (also needs the assistant module): off (runtime none has no long-running streaming sessions, session state, agent runs, login state)
-    → install a coding agent that has these, and point hub.json runtime.default at it
-! letters seen live in the session, reminders to write notes: off (runtime none has no session events (hooks))
-    → install a coding agent that has these, and point hub.json runtime.default at it
-! platform rules written into the project's rules file: off (runtime none has no rules file)
-    → install a coding agent that has these, and point hub.json runtime.default at it
-! memory gaps, transcript statistics of the weekly report: off (runtime none has no transcripts)
-    → install a coding agent that has these, and point hub.json runtime.default at it
-✗ decision points have nowhere to run: the runtime none has no completion port and hub.json has no llm.providers
+! judgment points (librarian, index, consolidate, weekly report analysis): off (the runtime none has no agent runs, login state)
+    → install a coding agent that supports them, and point hub.json runtime.default at it
+! mailbox tasks (the platform sends an agent for letters nobody picked up): off (the runtime none has no agent runs, login state)
+    → install a coding agent that supports them, and point hub.json runtime.default at it
+! mailbox follow-up (replying with an idle session's context): off (the runtime none has no agent runs, session state)
+    → install a coding agent that supports them, and point hub.json runtime.default at it
+! channel leasing (also needs the assistant module): off (the runtime none has no long-running streaming sessions, session state, agent runs, login state)
+    → install a coding agent that supports them, and point hub.json runtime.default at it
+! letters seen live in the session, reminders to write notes: off (the runtime none has no session events (hooks))
+    → install a coding agent that supports them, and point hub.json runtime.default at it
+! platform rules written into the project's rules file: off (the runtime none has no rules file)
+    → install a coding agent that supports them, and point hub.json runtime.default at it
+! memory gaps, transcript statistics of the weekly report: off (the runtime none has no transcripts)
+    → install a coding agent that supports them, and point hub.json runtime.default at it
+✗ judgment points have nowhere to run: the runtime none has no completion interface and hub.json has no llm.providers
     → agenthub llm setup (pick one: an API key or a local Ollama)
 ✓ scheduler (local.agent-hub-scheduler.timer): enabled
 ✗ watchdog (local.agent-hub-scheduler-watchdog.timer): not installed
@@ -112,8 +112,8 @@ $ agenthub doctor    # systemd, runtime none
     → sudo loginctl enable-linger $USER
 ✗ the scheduler last ticked 120 minutes ago
     → bin/schedulectl status; see .logs/scheduler-stderr.log
-! background services, project settings: 1 not applied yet
-    → bin/hub config plan, then bin/hub config apply
+! background services, project settings: 1 change not applied yet
+    → agenthub config plan, then agenthub config apply
 ✓ commit gate (core.hooksPath): githooks
 
 3 problems, 10 reminders
@@ -129,21 +129,21 @@ $ agenthub doctor    # no service manager, unnamed assistant
     → bin/agenthub install-cli
 ✓ MCP server: agenthub mcp (any agent with MCP can use the mailbox and write notes; registering it in the tool's settings is up to you)
     → agenthub mcp config prints the snippet to register; how to add it per tool: docs/mcp.md
-! judgment points (librarian, index, consolidate, weekly report analysis): off (runtime none has no agent runs, login state)
-    → install a coding agent that has these, and point hub.json runtime.default at it
-! mailbox tasks (the platform sends an agent for letters nobody picked up): off (runtime none has no agent runs, login state)
-    → install a coding agent that has these, and point hub.json runtime.default at it
-! mailbox follow-up (replying with an idle session's context): off (runtime none has no agent runs, session state)
-    → install a coding agent that has these, and point hub.json runtime.default at it
-! channel leasing (also needs the assistant module): off (runtime none has no long-running streaming sessions, session state, agent runs, login state)
-    → install a coding agent that has these, and point hub.json runtime.default at it
-! letters seen live in the session, reminders to write notes: off (runtime none has no session events (hooks))
-    → install a coding agent that has these, and point hub.json runtime.default at it
-! platform rules written into the project's rules file: off (runtime none has no rules file)
-    → install a coding agent that has these, and point hub.json runtime.default at it
-! memory gaps, transcript statistics of the weekly report: off (runtime none has no transcripts)
-    → install a coding agent that has these, and point hub.json runtime.default at it
-✗ decision points have nowhere to run: the runtime none has no completion port and hub.json has no llm.providers
+! judgment points (librarian, index, consolidate, weekly report analysis): off (the runtime none has no agent runs, login state)
+    → install a coding agent that supports them, and point hub.json runtime.default at it
+! mailbox tasks (the platform sends an agent for letters nobody picked up): off (the runtime none has no agent runs, login state)
+    → install a coding agent that supports them, and point hub.json runtime.default at it
+! mailbox follow-up (replying with an idle session's context): off (the runtime none has no agent runs, session state)
+    → install a coding agent that supports them, and point hub.json runtime.default at it
+! channel leasing (also needs the assistant module): off (the runtime none has no long-running streaming sessions, session state, agent runs, login state)
+    → install a coding agent that supports them, and point hub.json runtime.default at it
+! letters seen live in the session, reminders to write notes: off (the runtime none has no session events (hooks))
+    → install a coding agent that supports them, and point hub.json runtime.default at it
+! platform rules written into the project's rules file: off (the runtime none has no rules file)
+    → install a coding agent that supports them, and point hub.json runtime.default at it
+! memory gaps, transcript statistics of the weekly report: off (the runtime none has no transcripts)
+    → install a coding agent that supports them, and point hub.json runtime.default at it
+✗ judgment points have nowhere to run: the runtime none has no completion interface and hub.json has no llm.providers
     → agenthub llm setup (pick one: an API key or a local Ollama)
 ✗ scheduler, watchdog: this system has no supported service manager (neither macOS launchd nor the Linux systemd user level): the scheduler, the watchdog and projects' long-running services will not run by themselves
     → schedule `bin/py bin/scheduler.py` yourself (every 15 minutes)

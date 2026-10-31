@@ -146,7 +146,7 @@ def _desired(index: dict) -> tuple[dict[str, tuple[str, dict]], list[str], set[s
             plist, problem = render(name, doc, svc)
             want[label] = (name, plist)
             if problem:
-                problems.append(_("{label} ({project}): {problem}; the plist is left alone, and not created if missing",
+                problems.append(_("{label} ({project}): {problem}; the plist is left as it is (and not created if it is missing)",
                                   label=label, project=name, problem=problem))
                 keep.add(label)
             if svc.get("keepalive"):

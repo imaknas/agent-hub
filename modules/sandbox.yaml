@@ -3,7 +3,7 @@
 v: 1
 name: sandbox
 type: module
-description: "Platform-run capabilities (cap-runner): sandboxed projects borrow a capability with hub-run --cap"
+description: "Platform-run capabilities (cap-runner): sandboxed projects borrow a capability with agenthub cap-run --cap"
 services:
 - name: cap-runner               # bin/cap-runner.py:用平台的 Seatbelt profile 執行 hub-run 放的請求
   label: local.agent-hub.cap-runner

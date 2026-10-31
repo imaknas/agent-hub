@@ -31,15 +31,15 @@ last line
 === --test printed
 sent
 === sent
-🚨 the agent-hub scheduler has not ticked for 120 minutes (last 10-30 08:00). The librarian, the assistant's jobs, reflect and the upload jobs have all stopped.
+🚨 The agent-hub scheduler has not ticked for 120 minutes (last tick 10-30 08:00). The librarian, the assistant's jobs, reflect and the upload jobs have all stopped.
 <diag>
 ---
-⏰ still down: the agent-hub scheduler has not ticked for 540 minutes (last 10-30 08:00). The librarian, the assistant's jobs, reflect and the upload jobs have all stopped.
+⏰ Still down: The agent-hub scheduler has not ticked for 540 minutes (last tick 10-30 08:00). The librarian, the assistant's jobs, reflect and the upload jobs have all stopped.
 <diag>
 ---
-✅ the agent-hub scheduler is back (last tick 10-30 17:00; it had stopped since about 10-30 08:00)
+✅ The agent-hub scheduler is back (last tick 10-30 17:00; it had been stopped since about 10-30 08:00)
 ---
-🚨 the agent-hub scheduler has not ticked for a long time (last never). The librarian, the assistant's jobs, reflect and the upload jobs have all stopped.
+🚨 The agent-hub scheduler has not ticked for a long time (no tick recorded). The librarian, the assistant's jobs, reflect and the upload jobs have all stopped.
 <diag>
 ---
 🧪 agent-hub scheduler watchdog test message (settings are correct)
@@ -47,15 +47,15 @@ sent
 === no alerts
 exit 0; printed: 
 === no alerts log
-[2026-10-30 17:00:00] no alerts set up (hub.json has no alerts), only logging: the scheduler's last tick was never, it stopped
+[2026-10-30 17:00:00] no alerts set up (hub.json has no alerts), only logging: the scheduler has never ticked
 
 === no secrets
-exit 1; printed: scheduler-watchdog: <TMP>/no-secrets/secrets/discord-token / <TMP>/no-secrets/secrets/discord-alert-channel not set up, no alert can be sent if the scheduler stops
+exit 1; printed: scheduler-watchdog: <TMP>/no-secrets/secrets/discord-token / <TMP>/no-secrets/secrets/discord-alert-channel not set up; no alert can be sent if the scheduler stops
 === log
 [2026-10-30 10:00:00] the scheduler stopped 120 minutes ago, notified
 [2026-10-30 17:00:00] the scheduler stopped 540 minutes ago, notified
 [2026-10-30 17:00:00] recovered, notified
 [2026-10-30 17:00:00] the scheduler stopped a long time ago, notified
 [2026-10-30 17:00:00] Discord send failed: HTTP 500 boom
-[2026-10-30 17:00:00] failed: <TMP>/secrets/discord-token or <TMP>/secrets/discord-alert-channel is not set up, alerts cannot be sent
+[2026-10-30 17:00:00] failed: <TMP>/secrets/discord-token or <TMP>/secrets/discord-alert-channel is not set up; alerts cannot be sent
 
