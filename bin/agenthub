@@ -75,10 +75,11 @@ import i18n  # noqa: E402
 
 _ = i18n.domain(__file__)
 
-ROOT = hubconf.ROOT   # 跟 hubconf 同一個(AGENT_HUB_ROOT 可覆蓋),路徑比對才一致
+ROOT = hubconf.ROOT   # the same one as hubconf's (AGENT_HUB_ROOT can override it), so path comparisons agree
 
 AGENTS = pathlib.Path.home() / "Library" / "LaunchAgents"
-# 排程器跟看門狗不經過 render-services(它是排程器跑的 job;排程器壞了正是看門狗要報的事),由 init 從樣板裝
+# the scheduler and the watchdog don't go through render-services (it's a job the scheduler runs; a broken scheduler
+# is exactly what the watchdog reports); init installs them from the templates
 CORE_PLISTS = ("local.agent-hub-scheduler", "local.agent-hub-scheduler-watchdog")
 
 
@@ -111,7 +112,7 @@ def cmd_config(argv: list[str]) -> int:
         done = appliers.apply_all(only=only)
         show(done)
         left = {n: c for n, c in appliers.plan_all(only=only).items() if c}
-        if left:  # verify:套用完再 plan 應該是空的
+        if left:  # verify: a plan after applying should be empty
             print(_("agenthub config apply: ⚠️ still differs from the config after applying:"), file=sys.stderr)
             show(left)
         record(done, ok=not left)
@@ -121,7 +122,8 @@ def cmd_config(argv: list[str]) -> int:
 
 
 def record(done: dict, ok: bool) -> None:
-    """記下套用了哪個 config commit:.state/config-applied.json(狀態頁讀)+ 匯流排 config.applied(有改東西才發)。"""
+    """Record which config commit was applied: .state/config-applied.json (read by the status page) + config.applied
+    on the bus (sent only when something changed)."""
     import appliers
     commit = appliers.config_commit()
     applied = appliers.applied_path()
@@ -133,7 +135,8 @@ def record(done: dict, ok: bool) -> None:
     if not changes:
         return
     payload = {"commit": commit, "changes": changes, "source": "hub config apply"}
-    eid = "config-" + hashlib.sha1(json.dumps(payload, sort_keys=True).encode()).hexdigest()[:16]  # 同樣的套用重送不重記
+    # the same apply sent again isn't recorded twice
+    eid = "config-" + hashlib.sha1(json.dumps(payload, sort_keys=True).encode()).hexdigest()[:16]
     r = subprocess.run([str(BIN / "py"), str(BIN / "hubbus"), "publish", "config.applied", "--source", hubconf.hub_project(),
                         "--payload", json.dumps(payload, ensure_ascii=False), "--id", eid], capture_output=True, text=True)
     if r.returncode != 0:
@@ -193,12 +196,13 @@ def render_plist(label: str) -> bytes:
 
 
 def install_core_plists(dry: bool) -> list[str]:
-    """排程器 + 看門狗:樣板的內容跟已經裝的一樣就不動(不會無故重載排程器)。"""
+    """Scheduler + watchdog: if the template's content matches what's installed, leave it (no needless scheduler
+    reload)."""
     sm = hubconf.service_manager()
     if sm is None:
         return [_("⚠️ {reason}; to run the nightly flow, schedule `bin/py bin/scheduler.py` yourself (every 15 minutes)",
                   reason=hubconf.no_service_manager())]
-    if sm == "systemd":   # 同一份 launchd/ 樣板翻成 user unit(bin/systemd_units.py)
+    if sm == "systemd":   # the same launchd/ templates turned into user units (bin/systemd_units.py)
         import systemd_units
         done = []
         for label in CORE_PLISTS:
@@ -247,28 +251,33 @@ def new_hub_json(args: dict, yes: bool) -> dict:
     d["workspace_root"] = args.get("workspace") or ask(_("where projects live"), d.get("workspace_root", "~/workspace"), yes)
     shipped = [k for k, v in d.get("modules", {}).items() if not k.startswith("_")]
     import shutil
-    # 照這台有什麼決定預設(docs/design/tool-agnostic.md):有 Claude Code 才開它的維護模組;沒有助理就用內建的 owner 端
+    # defaults follow what this machine has (docs/design/tool-agnostic.md): its maintenance module only with Claude
+    # Code; without an assistant, the built-in owner side
     if "claude" in d["modules"]:
         d["modules"]["claude"] = bool(shutil.which("claude"))
     if "owner" in d["modules"]:
         d["modules"]["owner"] = not (d.get("assistant") or {}).get("api")
     if (d.get("runtime") or {}).get("default", "claude") == "claude" and not shutil.which("claude"):
-        d["runtime"] = {"default": "none"}   # 沒有 coding agent:agent 的功能明確關掉(doctor 的功能表會說)
+        # no coding agent: agent features explicitly off (doctor's feature table says so)
+        d["runtime"] = {"default": "none"}
     default_on = ",".join(k for k in shipped if d["modules"][k] is True)
     picked = args.get("modules") or ask(_("which modules to turn on (available: {modules})", modules=', '.join(shipped)), default_on, yes)
     want = {m.strip() for m in picked.split(",") if m.strip()}
     for k in shipped:
         d["modules"][k] = k in want
-    # 沒開的功能,它的設定段也拿掉(留著範本的佔位值反而會被當成真的設定)
+    # for features left off, their settings section goes too (the template's placeholder values left in would be taken
+    # for real settings)
     for module, section in (("assistant", "assistant"), ("backup", "backup")):
         if module not in want:
             d.pop(section, None)
-    d.pop("alerts", None)  # 警報要先有 Discord bot;要的時候照 hub.example.json 加回 alerts 段
+    # alerts need a Discord bot first; when wanted, add the alerts section back from hub.example.json
+    d.pop("alerts", None)
     gh = shutil.which("gh") and subprocess.run(["gh", "api", "user", "--jq", ".login"], capture_output=True, text=True)
     if gh and gh.returncode == 0 and gh.stdout.strip():
         d["github"]["owner"] = gh.stdout.strip()
     else:
-        d.pop("github", None)  # onboard 時用 --no-remote;要建 GitHub repo 就先 gh auth login,再補 github.owner
+        # onboard with --no-remote; to create GitHub repos, gh auth login first, then add github.owner
+        d.pop("github", None)
     return d
 
 
@@ -280,7 +289,8 @@ def cmd_init(argv: list[str]) -> int:
     created = False
     legacy = hubconf.instance_home() is None and hubconf.config_file("hub.json").exists()
     if legacy:
-        # 舊的擺法(hub.json 在 hub 根目錄,搬家前的樣子):不動,搬家另外做(docs/design/new-user.md 第 6 步)
+        # the old layout (hub.json in the hub root, as before the move): left alone; the move is a separate step
+        # (docs/design/new-user.md step 6)
         print(_("✓ {path} already exists (the old layout); leaving it alone", path=hubconf.config_file('hub.json')))
     elif hubconf.config_file("hub.json").exists():
         print(_("✓ {path} already exists; leaving it alone (to change it, edit it, then run agenthub config apply)",
@@ -290,7 +300,7 @@ def cmd_init(argv: list[str]) -> int:
                                                or ask(_("instance directory (your config, data and credentials live here)"),
                                                        "~/.agent-hub", yes)))
         d = new_hub_json(args, yes)
-        d["registry_dir"] = "projects"   # 相對 config/
+        d["registry_dir"] = "projects"   # relative to config/
         if dry:
             print(_("(dry-run) would create the instance directory {home}/{{config,data,secrets}}, write config/hub.json, "
                     "write {pointer}:\n", home=home, pointer=hubconf.POINTER) + json.dumps(d, ensure_ascii=False, indent=2))
@@ -299,10 +309,10 @@ def cmd_init(argv: list[str]) -> int:
             (home / sub).mkdir(parents=True, exist_ok=True)
         (home / "secrets").chmod(0o700)
         (home / "config" / "hub.json").write_text(json.dumps(d, ensure_ascii=False, indent=2) + "\n")
-        if shutil.which("git") and not (home / "config" / ".git").exists():  # config as code:config 是自己的 repo
+        if shutil.which("git") and not (home / "config" / ".git").exists():  # config as code: config is its own repo
             subprocess.run(["git", "init", "-q", str(home / "config")])
             subprocess.run(["git", "-C", str(home / "config"), "config", "core.hooksPath", str(ROOT / "githooks" / "config")])
-        hubconf.POINTER.write_text(str(home) + "\n")   # 最後才寫:有了它,平台才改用這個實例
+        hubconf.POINTER.write_text(str(home) + "\n")   # written last: once it exists, the platform uses this instance
         hubconf._cfg = None
         created = True
         print(_("✓ instance directory {home} (config is a git repo; owner {owner}, modules {modules})", home=home,
@@ -326,7 +336,8 @@ def cmd_init(argv: list[str]) -> int:
             if not dry:
                 subprocess.run(["git", "-C", str(ROOT), "config", "core.hooksPath", "githooks"])
     if created and not dry:
-        llm_setup(args, yes)   # 失敗不擋 init:doctor 會說判斷點沒地方跑,之後 agenthub llm setup
+        # a failure doesn't block init: doctor will say judgment points have nowhere to run; agenthub llm setup later
+        llm_setup(args, yes)
     if "--no-launchd" in flags:
         print(_("--no-launchd: not installing the scheduler, not applying services"))
         return 0
@@ -340,15 +351,16 @@ def cmd_init(argv: list[str]) -> int:
     return 0
 
 
-# ---------- move-instance(舊的擺法 → 實例目錄,docs/design/new-user.md 第 6 步)----------
+# ---------- move-instance (the old layout → an instance directory, docs/design/new-user.md step 6) ----------
 
 CONFIG_FILES = ["hub.json", "models.env", "mirror-list.txt", "services.tsv", "schedule.yaml"]
 DATA_FILES = ["digest", "reflect", "todo.md", "index.md", "review-log.md", "openclaw-migration-status.md", "legacy-paths.tsv"]
 
 
 def move_plan(home: pathlib.Path) -> list[tuple[pathlib.Path, pathlib.Path]]:
-    """(來源, 目的)。只在舊的擺法跑,所以來源就是 hubconf 現在指的位置。平台自己的登錄(projects/agent-hub.yaml)
-    留在平台;.state、.logs 是這台機器的,不搬。"""
+    """(source, destination). Runs only on the old layout, so the source is where hubconf points now. The platform's
+    own registry (projects/agent-hub.yaml) stays with the platform; .state and .logs belong to this machine and don't
+    move."""
     out = [(hubconf.config_file(f), home / "config" / f) for f in CONFIG_FILES if hubconf.config_file(f).exists()]
     reg = hubconf.registry_dir()
     out += [(f, home / "config" / "projects" / f.name) for f in sorted(reg.iterdir())
@@ -360,7 +372,8 @@ def move_plan(home: pathlib.Path) -> list[tuple[pathlib.Path, pathlib.Path]]:
 
 
 def cmd_move_instance(argv: list[str]) -> int:
-    """hub move-instance --to <實例目錄> [--apply]:複製(不刪來源)、驗證新擺法、最後才寫 <hub>/.hub-home。"""
+    """hub move-instance --to <instance directory> [--apply]: copy (the source isn't deleted), verify the new layout,
+    write <hub>/.hub-home last."""
     if "--to" not in argv:
         print(_("usage: agenthub move-instance --to <instance directory> [--apply] (without --apply it only lists what it would "
                 "do)"),
@@ -391,7 +404,8 @@ def cmd_move_instance(argv: list[str]) -> int:
     for sub in ("config/projects", "data", "secrets"):
         (home / sub).mkdir(parents=True, exist_ok=True)
     (home / "secrets").chmod(0o700)
-    # 備份範圍:舊的 .secrets 換成新的 secrets,config/、data/ 加進去(它們離開 git 之後只剩備份這一份)
+    # backup scope: the old .secrets becomes the new secrets; config/ and data/ are added (once out of git, the backup
+    # is their only copy)
     cfg_path = home / "config" / "hub.json"
     cfg = json.loads(cfg_path.read_text())
     b = cfg.get("backup")
@@ -400,7 +414,7 @@ def cmd_move_instance(argv: list[str]) -> int:
         b["include"] = inc + [str(home / "config"), str(home / "data"), str(home / "secrets")]
     cfg_path.write_text(json.dumps(cfg, ensure_ascii=False, indent=2) + "\n")
     env = {**os.environ, "AGENT_HUB_HOME": str(home)}
-    # 驗證新擺法(還沒寫指標檔:用 AGENT_HUB_HOME 指過去)
+    # verify the new layout (the pointer file isn't written yet: point there with AGENT_HUB_HOME)
     # in a state of its own: the real registry index is rebuilt from the new place once the pointer is written
     check_state = tempfile.mkdtemp()
     r = subprocess.run(hubconf.launch(BIN / "config-check"), env={**env, "AGENT_HUB_STATE": check_state},
@@ -411,7 +425,7 @@ def cmd_move_instance(argv: list[str]) -> int:
         print(_("the config in the new layout is invalid; not writing {pointer} (the copies are in {home}; delete them and "
                 "start over)", pointer=hubconf.POINTER, home=home), file=sys.stderr)
         return 1
-    # config as code:config 是自己的 repo,第一個 commit 就是現在的 config
+    # config as code: config is its own repo, and its first commit is the current config
     cfgdir = home / "config"
     subprocess.run(["git", "init", "-q", str(cfgdir)], check=True)
     for k in ("user.name", "user.email"):
@@ -425,7 +439,8 @@ def cmd_move_instance(argv: list[str]) -> int:
     if r.returncode != 0:
         print(_("the config repo's first commit failed: {error}", error=(r.stdout + r.stderr).strip()[:400]), file=sys.stderr)
         return 1
-    hubconf.POINTER.write_text(str(home) + "\n")   # 最後才寫:從這一刻起平台用新擺法;刪掉它就退回
+    # written last: from this moment the platform uses the new layout; deleting it goes back
+    hubconf.POINTER.write_text(str(home) + "\n")
     # the registry dir moved with the config: rebuild the index from it on purpose (refresh() refuses another dir)
     subprocess.run([*hubconf.launch(BIN / "registry.py"), "check", "--rebuild"], capture_output=True, text=True)
     print(_("\n✓ wrote {pointer}. The old files in the hub are still there (not deleted). Next steps (by hand):",
@@ -440,7 +455,7 @@ def cmd_move_instance(argv: list[str]) -> int:
 # ---------- doctor ----------
 
 def cmd_doctor(argv: list[str]) -> int:
-    results: list[tuple[str, str, str]] = []   # (ok|warn|bad, 什麼, 怎麼修)
+    results: list[tuple[str, str, str]] = []   # (ok|warn|bad, what, how to fix)
 
     def add(level, what, fix=""):
         results.append((level, what, fix))
@@ -476,14 +491,14 @@ def cmd_doctor(argv: list[str]) -> int:
     try:
         auth = runtime_ports.load(ports=("auth",))
         for c in auth.credentials():
-            if c.mode == "token":  # 排程、librarian 這類無人值守的呼叫預設用這個
+            if c.mode == "token":  # unattended calls like the schedule and the librarian use this by default
                 add("ok" if c.present else "bad", _("agent login ({label}): present", label=c.label) if c.present
                     else _("agent login ({label}): missing", label=c.label),
                     "" if c.present else c.renew)
             elif not c.present:
                 add("warn", _("agent login ({label}): missing", label=c.label), c.renew)
     except runtime_ports.Unsupported:
-        pass   # 沒有 agent 登入可查:上面的功能表已經說了哪些功能關掉
+        pass   # no agent login to check: the feature table above already said which features are off
     except Exception as e:
         add("bad", _("cannot read the agent's login state: {error}", error=e), _("agenthub config check"))
     import completion
@@ -524,7 +539,7 @@ def cmd_doctor(argv: list[str]) -> int:
         r = subprocess.run(["/bin/launchctl", "print", f"gui/{uid}/{label}"], capture_output=True, text=True)
         if r.returncode != 0:
             add("bad", _("{what} ({label}): not loaded", what=what, label=label), _("agenthub init"))
-        elif str(BIN) not in r.stdout:  # 同一個使用者底下載入的是別份 hub 的(例:另一個 clone)
+        elif str(BIN) not in r.stdout:  # what's loaded for this user is another hub's (e.g. another clone)
             add("bad", _("{what} ({label}): the loaded one belongs to a different hub, not {bin}", what=what, label=label, bin=BIN),
                 _("agenthub init (replaces it with this one)"))
         else:
@@ -566,13 +581,14 @@ def report(results) -> int:
     return 1 if bad else 0
 
 
-# ---------- 包裝 ----------
+# ---------- wrappers ----------
 
 LLM_CHOICES = ("runtime", "anthropic", "openai", "ollama", "none")
 
 
 def write_secret(name: str, value: str) -> pathlib.Path:
-    """值寫進平台的 secrets 目錄(600,先寫暫存檔再換名);不印值。"""
+    """Write the value into the platform's secrets directory (600, temp file first, then rename); the value isn't
+    printed."""
     d = hubconf.secrets_dir()
     d.mkdir(parents=True, exist_ok=True)
     d.chmod(0o700)
@@ -586,7 +602,8 @@ def write_secret(name: str, value: str) -> pathlib.Path:
 
 
 def default_llm_choice() -> str:
-    """照這台有什麼:coding agent 有 completion 介面就用它自己的登入;不然本機有 Ollama 模型就用 Ollama;都沒有 = 先不設。"""
+    """Based on what this machine has: a coding agent with a completion interface → its own login; otherwise local
+    Ollama models → Ollama; neither = leave unset for now."""
     import provider_ollama
     import runtime_ports
     if "completion" in runtime_ports.capabilities(runtime_ports.default_name()):
@@ -595,7 +612,8 @@ def default_llm_choice() -> str:
 
 
 def llm_setup(args: dict, yes: bool) -> int:
-    """判斷點(每晚整理筆記、週報)交給誰:寫 hub.json 的 llm 段;key 不顯示、寫進 secrets 目錄;模型從那家實際有的清單選。"""
+    """Who handles judgment points (nightly note tidying, the weekly report): writes hub.json's llm section; the key
+    isn't shown and goes into the secrets directory; the model is chosen from that provider's actual list."""
     import completion
     import runtime_ports
     interactive = not yes and sys.stdin.isatty()
@@ -730,7 +748,8 @@ def passthrough(script: str):
     return lambda argv: subprocess.run([*hubconf.launch(BIN / script), *argv]).returncode
 
 
-# 專案的 session(任何 coding agent)用的子指令:跟 policy.platform_cli() 同一份清單(權限規則只放行這些)
+# subcommands for project sessions (any coding agent): the same list as policy.platform_cli() (the permission rules
+# allow only these)
 SESSION_COMMANDS = {**{c: ("hubbus", c) for c in ("send", "inbox", "show", "ack", "done", "thread", "open-questions")},
                     "merge-branch": ("merge-branch", None), "cap-run": ("hub-run", None)}
 
@@ -741,7 +760,8 @@ def session_command(name: str):
 
 
 def cmd_install_cli(argv: list[str]) -> int:
-    """~/.local/bin/agenthub:兩行的轉接腳本(不能用 symlink——agenthub 第一行照自己所在的資料夾找平台的 Python)。"""
+    """~/.local/bin/agenthub: a two-line wrapper script (not a symlink: agenthub's first line finds the platform's
+    Python from the folder it is in)."""
     d = pathlib.Path(os.path.expanduser(argv[argv.index("--dir") + 1] if "--dir" in argv else "~/.local/bin"))
     d.mkdir(parents=True, exist_ok=True)
     f = d / "agenthub"
@@ -768,7 +788,7 @@ COMMANDS = {
     "jobs": lambda argv: subprocess.run([*hubconf.launch(BIN / "schedulectl"), "list", *argv]).returncode,
     "run": lambda argv: subprocess.run([*hubconf.launch(BIN / "schedulectl"), "run", *argv]).returncode,
     "install-cli": cmd_install_cli,
-    # stdio 就是協定:直接換成伺服器的程序,不多一層
+    # stdio is the protocol: exec into the server process, no extra layer
     "mcp": lambda argv: os.execv(sys.executable, [sys.executable, str(BIN / "mcp_server.py"), *argv]),
     "owner": lambda argv: subprocess.run([*hubconf.launch(BIN / "owner.py"), *argv]).returncode,
     **{name: session_command(name) for name in SESSION_COMMANDS},

@@ -1,27 +1,33 @@
-"""判斷點的 completion(只回答案):用哪一家、哪個模型、key 在哪,跟每家都要過的同一套處理。docs/design/llm-providers.md。
+"""Completion for judgment points (answer only): which provider, which model, where the key is, and the same handling
+every provider goes through. docs/design/llm-providers.md.
 
-hub.json 的 `llm` 區塊(沒有這個區塊 = 現在的行為:判斷點照舊交給 runtime.default 的 agent 介面,這支不參與):
+hub.json's `llm` block (no such block = the current behaviour: judgment points go to runtime.default's agent interface
+as before, and this module takes no part):
 
   "llm": {
     "providers": {
-      "<名稱>": {"impl": "anthropic | openai | ollama | <有 completion 的 runtime,例 claude>",
-                 "base_url": "…", "key": {"secret": "<secrets_dir 裡的檔名>"} | {"env": "<環境變數>"},
-                 "location": "cloud | local", "models": {"fast": "<名稱>" | {"name", "context", "price": {"in", "out"}}, …},
+      "<name>": {"impl": "anthropic | openai | ollama | <a runtime with completion, e.g. claude>",
+                 "base_url": "…", "key": {"secret": "<file name in secrets_dir>"} | {"env": "<environment variable>"},
+                 "location": "cloud | local",
+                 "models": {"fast": "<name>" | {"name", "context", "price": {"in", "out"}}, …},
                  "strict": false, "max_tokens_field": "max_tokens"}
     },
-    "use": {"fast": "<provider>", "standard": "<provider>", "strong": "<provider>"},   判斷點的 model_group → provider
-    "points": {"<判斷點>": {"provider": "<名稱>", "model": "<名稱>"}},                  個別判斷點蓋過
+    "use": {"fast": "<provider>", "standard": "<provider>", "strong": "<provider>"},   point's model_group → provider
+    "points": {"<judgment point>": {"provider": "<name>", "model": "<name>"}},           override for one point
     "budget": {"daily_usd": 2.0}
   }
 
-每家都一樣的處理(實作只負責「送出去、拿回原文」):
-  1. 送出前遮掉像憑證的字串(全平台一個遮蔽點)
-  2. 估長度:超過那個模型的 context 就不送(不讓 provider 默默截斷)
-  3. 今天的花費超過 budget.daily_usd 就不送
-  4. 429/503/529 退避重試(最多 3 次);長度截斷不重試(會原樣再截一次)
-  5. 剝掉推理模型的 <think>…</think>,解析 JSON(容忍 ``` 圍起來),用 minischema 驗證;不合格重試一次並附上錯誤
-  6. 每次呼叫記在 .state/llm-usage.jsonl(token、成本)
-key 只在這裡讀(secrets_dir 或環境變數),放進 conf["_key"] 交給實作,不進任何子程序的環境變數。
+The handling is the same for every provider (an implementation only "sends it and brings back the raw text"):
+  1. before sending, mask strings that look like credentials (one masking point for the whole platform)
+  2. estimate the length: over the model's context → not sent (the provider isn't allowed to truncate silently)
+  3. today's spending over budget.daily_usd → not sent
+  4. 429/503/529: back off and retry (at most 3 times); a length truncation isn't retried (it would truncate the same
+     way again)
+  5. strip a reasoning model's <think>…</think>, parse the JSON (tolerating ``` fences), validate with minischema;
+     if invalid, retry once with the errors attached
+  6. every call is recorded in .state/llm-usage.jsonl (tokens, cost)
+The key is read only here (secrets_dir or an environment variable) and handed to the implementation in conf["_key"],
+never put into any subprocess's environment.
 """
 from __future__ import annotations
 
@@ -45,8 +51,9 @@ GROUPS = ("fast", "standard", "strong")
 DEFAULT_GROUP = "standard"
 MAX_RATE_RETRIES = 3
 
-# 送給模型前遮掉像憑證的字串(原本在 reflect_llm.py:第一次試跑時,模型把對話裡貼過的 Finnhub API key 前幾碼引進了報告)。
-# 已知前綴的 token,跟夠長、字母數字混雜的長字串一律換成 [已遮蔽]。
+# Mask strings that look like credentials before sending to a model (originally in reflect_llm.py: in the first trial
+# run the model quoted the first few characters of a Finnhub API key pasted in a conversation into the report).
+# Tokens with known prefixes, and long enough mixed letter-digit strings, are all replaced by the mask text below.
 SECRET = re.compile(
     r"(?:sk-[A-Za-z0-9_\-]{10,}|sk-ant-[A-Za-z0-9_\-]{10,}|AIza[0-9A-Za-z_\-]{20,}|gh[pousr]_[A-Za-z0-9]{20,}"
     r"|xox[abpr]-[A-Za-z0-9\-]{10,}|eyJ[A-Za-z0-9_\-]{20,}\.[A-Za-z0-9_\-.]+"
@@ -58,7 +65,7 @@ def redact(text: str) -> str:
 
 
 class Refused(Exception):
-    """這次不送(設定不對、沒有 key、超過長度、預算用完):原因給人看。"""
+    """Not sent this time (wrong settings, no key, too long, budget used up): the reason is for a person to read."""
 
 
 def settings() -> dict | None:
@@ -67,14 +74,16 @@ def settings() -> dict | None:
 
 
 def key_envs() -> set[str]:
-    """設定裡用環境變數給的 key:交給任何子程序(agent job、信箱 session)之前要拿掉,不然有 Bash 的 agent 都讀得到。"""
+    """Keys the settings give through environment variables: removed before handing over to any subprocess (agent job,
+    mailbox session), or any agent with Bash could read them."""
     s = settings() or {}
     return {p["key"]["env"] for p in (s.get("providers") or {}).values()
             if isinstance(p, dict) and isinstance(p.get("key"), dict) and p["key"].get("env")}
 
 
 def read_key(conf: dict) -> str | None:
-    """None = 這家不需要 key(例:本機的 Ollama、Claude Code 自己登入)。要卻拿不到 → Refused。"""
+    """None = this provider needs no key (e.g. a local Ollama, Claude Code logging in by itself). Needed but not
+    available → Refused."""
     k = conf.get("key")
     if not k:
         return None
@@ -98,7 +107,8 @@ def read_key(conf: dict) -> str | None:
 
 
 def resolve(point: str, spec: dict) -> dict:
-    """這個判斷點交給哪一家、哪個模型:llm.points 的指定 > llm.use[model_group] 的那一家的 models[model_group]。"""
+    """Which provider and model this judgment point goes to: llm.points' choice > models[model_group] of the provider
+    llm.use[model_group] names."""
     s = settings()
     if not s:
         raise Refused(_("hub.json has no llm section"))
@@ -120,7 +130,8 @@ def resolve(point: str, spec: dict) -> dict:
 
 
 def estimate_tokens(text: str) -> int:
-    """寧可高估:UTF-8 位元組 / 3(中文一個字約一個 token、英文約 4 個字元一個 token,這樣兩邊都偏高)。"""
+    """Rather overestimate: UTF-8 bytes / 3 (a Chinese character is about one token, English about 4 characters a
+    token, so both come out high)."""
     return len(text.encode()) // 3 + 1
 
 
@@ -162,7 +173,7 @@ THINK = re.compile(r"<think>.*?</think>", re.S)
 
 def parse_json(text: str):
     t = THINK.sub("", text)
-    if "</think>" in t:            # 沒有開頭標籤的(有些模型只印結尾)
+    if "</think>" in t:            # no opening tag (some models print only the closing one)
         t = t.split("</think>", 1)[1]
     t = t.strip()
     fence = re.match(r"^```(?:json)?\s*(.*?)\s*```$", t, re.S)
@@ -173,19 +184,20 @@ def parse_json(text: str):
     except ValueError:
         i, j = t.find("{"), t.rfind("}")
         if i != -1 and j > i:
-            return json.loads(t[i:j + 1])   # 再不行就丟 ValueError
+            return json.loads(t[i:j + 1])   # if that fails too, ValueError is raised
         raise
 
 
 def runtime_target(name: str, model: str | None, auth: str) -> dict:
-    """沒有 llm.providers 時:交給執行環境(runtime.default)的 completion 介面,模型由 llm.model_for 決定。"""
+    """Without llm.providers: hand over to the runtime's (runtime.default) completion interface, with the model decided
+    by llm.model_for."""
     return {"provider": name, "impl": name, "conf": {"auth": auth}, "group": None, "model": model,
             "context": None, "price": None, "location": "cloud"}
 
 
 def run(point: str, spec: dict, prompt: str, schema: dict | None, sleep=time.sleep, target: dict | None = None) -> dict:
-    """跑一次 completion。回傳跟 llm.py 給呼叫端的同一種形狀;失敗丟 Refused(原因)。
-    target 沒給 = 照 hub.json llm 決定;給了(runtime_target)= 交給那個執行環境。"""
+    """Run one completion. Returns the same shape llm.py gives its callers; raises Refused(reason) on failure.
+    target not given = decided by hub.json's llm; given (runtime_target) = handed to that runtime."""
     import runtime_ports
     target = target or resolve(point, spec)
     conf = dict(target["conf"])
@@ -205,7 +217,7 @@ def run(point: str, spec: dict, prompt: str, schema: dict | None, sleep=time.sle
     req = runtime_ports.CompletionRequest(point=point, prompt=prompt, model=target["model"], schema=schema,
                                           max_tokens=max_tokens, timeout_s=int(spec.get("timeout_s") or 600))
     cost_total, last_errs = 0.0, None
-    for attempt in range(2):   # 第二次 = 輸出不合格時附上錯誤再問一次
+    for attempt in range(2):   # the second = ask again with the errors attached when the output was invalid
         rate_tries = 0
         while True:
             res = impl.complete(req, conf)
@@ -234,13 +246,13 @@ def run(point: str, spec: dict, prompt: str, schema: dict | None, sleep=time.sle
 
 
 def _out(point, target, text, obj, cost) -> dict:
-    # 欄位名稱跟 llm.py 原本給呼叫端的一樣(librarian、consolidate…讀這些)
+    # the field names are the ones llm.py has always given its callers (librarian, consolidate… read these)
     return {"type": "result", "is_error": False, "result": text, "structured_output": obj, "total_cost_usd": cost or None,
             "llm_point": point, "provider": target["provider"], "model": target["model"], "llm_model": target["model"]}
 
 
 def health_all() -> list[tuple[str, bool, str]]:
-    """(provider, 好不好, 原因)——doctor 用。key 拿不到也算不好。"""
+    """(provider, healthy or not, reason): for doctor. A key that can't be read also counts as not healthy."""
     import runtime_ports
     out = []
     for name, conf in ((settings() or {}).get("providers") or {}).items():
@@ -254,9 +266,10 @@ def health_all() -> list[tuple[str, bool, str]]:
     return out
 
 
-# ---------- 設定的檢查(config-check 叫)----------
-# key 的值永遠不准寫在 hub.json:看到像 key 的字串就擋。模型名稱常有數字跟連字號(例:<家族>-<型號>-4-5-20251001),
-# 所以不用 SECRET 那條「夠長、字母數字混雜」的規則,只認已知前綴跟 32 個以上沒有分隔符號的字母數字。
+# ---------- settings checks (called by config-check) ----------
+# A key's value may never be written in hub.json: anything that looks like a key is blocked. Model names often have
+# digits and hyphens (e.g. <family>-<model>-4-5-20251001), so SECRET's "long enough, mixed letters and digits" rule
+# isn't used: only known prefixes and 32 or more letters/digits with no separator.
 KEYLIKE = re.compile(r"^(?:sk-|sk-ant-|AIza|gh[pousr]_|xox[abpr]-|eyJ)|^[A-Za-z0-9]{32,}$")
 PRIVATE = re.compile(r"^(?:localhost|127\.\d+\.\d+\.\d+|\[?::1\]?|10\.\d+\.\d+\.\d+|192\.168\.\d+\.\d+"
                      r"|172\.(?:1[6-9]|2\d|3[01])\.\d+\.\d+|100\.(?:6[4-9]|[7-9]\d|1[01]\d|12[0-7])\.\d+\.\d+|[\w.-]+\.ts\.net)$")

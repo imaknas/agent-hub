@@ -1,25 +1,32 @@
 #!/bin/sh -c exec${IFS}"${0%/*}/py"${IFS}"$0"${IFS}"$@"
-"""agent-hub 唯一呼叫 `claude -p` 的地方。每次呼叫都要是 contracts/llm-points.yaml 宣告過的判斷點:
-旗標(模型、權限模式、工具、allowedTools)照宣告加,輸出照宣告的 schema 驗證,模型不能用或輸出不合格時
-照宣告回安全預設或交給呼叫端的失敗路徑,並在匯流排記 job.failed。
+"""The only place in agent-hub that calls `claude -p`. Every call must be a judgment point declared in
+contracts/llm-points.yaml: flags (model, permission mode, tools, allowedTools) are added as declared, the output is
+validated against the declared schema, and when the model can't be used or the output is invalid, it returns the
+declared safe default or takes the caller's failure path, recording job.failed on the bus.
 
-  llm.py run <point> [--cwd D] [--model M] [--prompt-file F]   prompt 從 --prompt-file 或 stdin
-  輸出:成功時跟 `claude -p --output-format json` 一樣;失敗時
-        {"type": "result", "is_error": true, "structured_output": <default 或 null>, "llm_point": …, "llm_error": …}
-        登錄有寫 `default` 值 → structured_output 是那個值、exit 0;否則 null、exit 1(呼叫端走自己的失敗路徑)。
-        on_failure(skip / retry_later / ask_user / say_so / default)是宣告「失敗時實際發生什麼事」,
-        給人跟評估看的,不影響這支的行為——格式見 contracts/llm-points.v1.schema.json
-  llm.py run <point> --dry-run ...         只印出會執行的指令(JSON list),不呼叫模型
-  llm.py lint     列出 bin/ 裡繞過這支的 `claude -p`(contracts-check 用)
-  llm.py health   hub.json llm 的每一家 provider 能不能用
+  llm.py run <point> [--cwd D] [--model M] [--prompt-file F]   prompt from --prompt-file or stdin
+  Output: on success, the same as `claude -p --output-format json`; on failure
+        {"type": "result", "is_error": true, "structured_output": <default or null>, "llm_point": …, "llm_error": …}
+        the registry has a `default` value → structured_output is that value, exit 0; otherwise null, exit 1 (the
+        caller takes its own failure path).
+        on_failure (skip / retry_later / ask_user / say_so / default) declares "what actually happens on failure",
+        for people and evaluations to read; it doesn't affect what this does. Format:
+        contracts/llm-points.v1.schema.json
+  llm.py run <point> --dry-run ...         only prints the command it would run (a JSON list), doesn't call the model
+  llm.py lint     lists the `claude -p` calls in bin/ that bypass this (for contracts-check)
+  llm.py health   whether each provider in hub.json's llm can be used
 
-判斷點宣告 `shape: completion` → 交給 completion.py(每家同一套處理;docs/design/llm-providers.md):hub.json 有 `llm` 區塊就照它
-選 provider(任何 key),沒有就交給 runtime.default 的 completion 介面(Claude Code 關掉工具跑)。agent 形狀的點照舊交給 agent 介面。
+A judgment point declared `shape: completion` → handed to completion.py (the same handling for every provider;
+docs/design/llm-providers.md): if hub.json has an `llm` block, the provider is chosen from it (any key); otherwise it
+goes to runtime.default's completion interface (Claude Code run with its tools off). Agent-shaped points go to the
+agent interface as before.
 
-憑證(2026-10-24 Knas 決定統一):預設用 ~/.claude/headless-oauth-token(`claude setup-token`,一年,launchd/SSH 都一樣,
-只有一份要換);判斷點宣告 `auth: subscription`、或呼叫端設 LLM_AUTH=subscription(登錄 job 的 `connectors: true`)
-才用訂閱登入(keychain / .credentials.json)——claude.ai connector(Upwork 等)只有訂閱登入才會載入。
-要用 token 卻沒有 token 檔就失敗(不默默改用訂閱登入;agent-hub/claude-login 也會發警報)。
+Credentials (unified, decided by the owner on 2026-10-24): by default ~/.claude/headless-oauth-token (`claude
+setup-token`, one year, the same under launchd and SSH, only one thing to replace); only judgment points declaring
+`auth: subscription`, or callers setting LLM_AUTH=subscription (a registry job's `connectors: true`), use the
+subscription login (keychain / .credentials.json): claude.ai connectors (Upwork etc.) load only with the subscription
+login. Wanting the token but having no token file fails (no silent switch to the subscription login;
+agent-hub/claude-login raises an alert too).
 """
 from __future__ import annotations
 
@@ -56,8 +63,9 @@ def job_failed(point: str, reason: str) -> None:
 
 def fail(point: str, spec: dict, reason: str) -> int:
     job_failed(point, reason)
-    # 只有登錄真的寫了 default 值才回 exit 0:lease-handover 是 on_failure: default,但安全結果由 runner 提供
-    # (它看 exit != 0 才重試、做最小交接),不能因為標記就改成 exit 0
+    # exit 0 only if the registry really has a default value: lease-handover is on_failure: default, but its safe
+    # result comes from the runner (which retries and does a minimal handover only on exit != 0), so the marker alone
+    # can't turn it into exit 0
     has_default = "default" in spec
     print(json.dumps({"type": "result", "is_error": True, "structured_output": spec.get("default"),
                       "llm_point": point, "llm_error": reason}, ensure_ascii=False))
@@ -65,16 +73,18 @@ def fail(point: str, spec: dict, reason: str) -> int:
 
 
 def output_schema(spec: dict) -> str | None:
-    """宣告的輸出 schema 路徑(相對 contracts/);format: text 的點沒有。"""
+    """The declared output schema path (relative to contracts/); points with format: text have none."""
     out = spec.get("output") or {}
     return out.get("schema") if out.get("format") == "json" else None
 
 
 def model_for(point: str, spec: dict | None = None, cli: str | None = None, runtime: str | None = None) -> str | None:
-    """這個判斷點交給執行環境(runtime)時用哪個模型——全平台只在這裡算(librarian、consolidate、週報、schedulectl 都問這裡,
-    不各自留一份預設表):--model > hub.json `llm.points.<點>.model`(沒指定 provider、或 provider 就是這個 runtime)>
-    runtime 的組別表(`runtime_ports.models`)。None = 不指定,用工具自己的預設(model_group: default 的點)。
-    hub.json 有 llm.providers 時 completion 點由 completion.resolve 選,不經過這裡。"""
+    """Which model this judgment point uses when handed to a runtime: computed only here for the whole platform
+    (librarian, consolidate, the weekly report, schedulectl all ask here rather than each keeping a default table):
+    --model > hub.json `llm.points.<point>.model` (when no provider is given, or the provider is this runtime) >
+    the runtime's group table (`runtime_ports.models`). None = unspecified, the tool's own default (points with
+    model_group: default).
+    When hub.json has llm.providers, completion points are chosen by completion.resolve, not here."""
     import runtime_ports
     if cli:
         return cli
@@ -87,14 +97,17 @@ def model_for(point: str, spec: dict | None = None, cli: str | None = None, runt
 
 
 def auth_mode(spec: dict) -> str:
-    """用哪種登入:LLM_AUTH(呼叫端這次指定,例:login-check 檢查 token)> 判斷點宣告的 auth > 預設 token。
-    憑證放哪、環境變數叫什麼是 runtime 的事(auth 介面,第 6 層)。"""
+    """Which login: LLM_AUTH (set by the caller for this call, e.g. login-check checking the token) > the judgment
+    point's declared auth > the token by default.
+    Where the credentials are and what the environment variables are called is the runtime's business (the auth
+    interface, layer 6)."""
     return os.environ.get("LLM_AUTH") or spec.get("auth") or "token"
 
 
 def auth_env(spec: dict, rt) -> tuple[dict | None, str]:
-    """(要交給 agent 的環境變數, 沒有時給人看的原因)。LLM_AUTH 是 llm.py 自己的變數,不往下傳;
-    hub.json llm 用環境變數給的 API key 也不往下傳(有 Bash 的 agent 都讀得到)。"""
+    """(the environment variables to give the agent, the reason shown to a person when there are none). LLM_AUTH is
+    llm.py's own variable and isn't passed down; API keys hub.json's llm gives through environment variables aren't
+    passed down either (any agent with Bash could read them)."""
     import completion
     drop = {"LLM_AUTH"} | completion.key_envs()
     base = {k: v for k, v in os.environ.items() if k not in drop}
@@ -102,9 +115,9 @@ def auth_env(spec: dict, rt) -> tuple[dict | None, str]:
 
 
 def run_completion(a, spec: dict, prompt: str, model: str | None) -> int:
-    """shape: completion 的判斷點:交給 completion.py(每家同一套處理)。
-    hub.json 有 llm.providers → completion.resolve 選 provider 跟模型(--model 不用);
-    沒有 → 交給 runtime.default 的 completion 介面,模型是 model_for 算的那個。"""
+    """A shape: completion judgment point: handed to completion.py (the same handling for every provider).
+    hub.json has llm.providers → completion.resolve picks the provider and model (--model is not used);
+    otherwise → handed to runtime.default's completion interface, with the model model_for computes."""
     import completion
     import runtime_ports
     schema = json.loads((POINTS.parent / output_schema(spec)).read_text()) if output_schema(spec) else None
@@ -124,8 +137,10 @@ def run_completion(a, spec: dict, prompt: str, model: str | None) -> int:
 
 
 def run(a) -> int:
-    """判斷點這一層:讀宣告、組 Task、決定登入,交給執行環境(runtime_ports 的 agent 介面;Claude Code 只是一個實作)。
-    schema 驗證、失敗政策(fail → job.failed、default)、輸出格式留在這裡,不在 runtime 裡。"""
+    """The judgment-point layer: read the declaration, build the Task, decide the login, hand over to the runtime
+    (runtime_ports' agent interface; Claude Code is just one implementation).
+    Schema validation, the failure policy (fail → job.failed, default) and the output format stay here, not in the
+    runtime."""
     import runtime_ports
     spec = points()["points"].get(a.point)
     if spec is None:
@@ -138,25 +153,29 @@ def run(a) -> int:
         return run_completion(a, spec, prompt, model)
     try:
         rt = runtime_ports.load(spec.get("runtime"), ports=("agent",))
-    except runtime_ports.Unsupported as e:   # 沒有 coding agent:照宣告的失敗路徑走,原因寫清楚
+    except runtime_ports.Unsupported as e:   # no coding agent: take the declared failure path, reason spelled out
         return fail(a.point, spec, str(e))
     if "auth" in runtime_ports.capabilities(spec.get("runtime")):
         env, why = auth_env(spec, rt)
         if env is None:
             return fail(a.point, spec, why)
-    else:   # 沒有登入介面的 runtime(例:指令樣板):工具自己登入;平台的 key 照樣不往下傳
+    # a runtime without a login interface (e.g. a command template): the tool logs in itself; the platform's keys still
+    # aren't passed down
+    else:
         import completion
         drop = {"LLM_AUTH"} | completion.key_envs()
         env = {k: v for k, v in os.environ.items() if k not in drop}
-    env["HUB_LLM_POINT"] = a.point   # 叫起的程序(含它的 hook)知道自己是平台的 headless 呼叫:hubbus 不把信送給它
-    # 平台叫起的 agent 打得到 `agenthub …`(規則檔、信箱 prompt 只寫指令名稱,不寫 hub 裝在哪)
+    # the process started (hooks included) knows it's a platform headless call: hubbus doesn't deliver mail to it
+    env["HUB_LLM_POINT"] = a.point
+    # agents the platform starts can reach `agenthub …` (the rules file and mailbox prompt name only the command, not
+    # where the hub is installed)
     env["PATH"] = f"{hubconf.ROOT / 'bin'}:{env.get('PATH', '')}".rstrip(":")
     schema = json.loads((POINTS.parent / output_schema(spec)).read_text()) if output_schema(spec) else None
     task = runtime_ports.Task(point=a.point, prompt=prompt, spec=spec, cwd=a.cwd or None, model=model,
                               output_schema=schema, timeout_s=spec.get("timeout_s", 1200), env=env,
                               extra=tuple(a.extra or ()))
     if a.cmd == "exec":
-        # 長駐的串流 session(例:通道租借)。暫時的:之後由第 1 層的 open_session 取代
+        # a long-lived streaming session (e.g. a channel lease). Temporary: layer 1's open_session will replace it
         if not spec.get("stream"):
             print(_("llm.py: {point} does not declare stream: true, so it cannot run under exec", point=a.point), file=sys.stderr)
             return 2
@@ -172,11 +191,13 @@ def run(a) -> int:
     res = rt.run(task)
     if not res.ok:
         return fail(a.point, spec, res.error)
-    # 沒有 structured_output 不算失敗:原樣交給呼叫端(librarian 刻意「仍以實際檔案變化為準」);有的話要合格
+    # no structured_output isn't a failure: handed to the caller as is (the librarian deliberately "still goes by the
+    # actual file changes"); if present, it must be valid
     if schema is not None and res.structured_output is not None:
         if (errs := minischema.errors(schema, res.structured_output)):
             return fail(a.point, spec, _("output does not match the schema: {errors}", errors="; ".join(errs[:3])))
-    # 輸出的欄位名稱是 llm.py 對呼叫端的約定(librarian、consolidate、lease-runner…讀這些),不隨 runtime 改
+    # the output field names are llm.py's agreement with its callers (librarian, consolidate, lease-runner… read
+    # these), not changed by the runtime
     print(json.dumps({"type": "result", "is_error": res.incomplete, "result": res.text,
                       "structured_output": res.structured_output, "total_cost_usd": res.cost_usd,
                       "session_id": res.session_id, "num_turns": res.turns, "subtype": res.stop,
