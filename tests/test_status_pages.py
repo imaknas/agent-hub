@@ -5,9 +5,13 @@ first, recognise only a few forms, so HTML in the content never becomes real HTM
 """
 import importlib.util
 import pathlib
+import sys
 import unittest
 
 ROOT = pathlib.Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(ROOT / "bin"))
+import todo_tokens  # noqa: E402
+
 spec = importlib.util.spec_from_file_location("gsp", ROOT / "bin" / "gen-status-page.py")
 gsp = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(gsp)
@@ -15,11 +19,12 @@ spec.loader.exec_module(gsp)
 
 class Markdown(unittest.TestCase):
     def test_basic_blocks(self):
-        h = gsp.md_html("# Digest\n\n## proj\n\n摘要 `x` **重點**\n- [ ] 〔agent〕做事\n- 第二項\n\n<!-- c -->結尾")
+        todo = todo_tokens.item("zh-Hant", "agent", "owner", "do it")   # a to-do line as the digest has them
+        h = gsp.md_html(f"# Digest\n\n## proj\n\nRésumé `x` **key point**\n{todo}\n- second item\n\n<!-- c -->the end")
         self.assertIn("<h2>Digest</h2>", h)
         self.assertIn("<h3>proj</h3>", h)
         self.assertIn("<code>x</code>", h)
-        self.assertIn("<strong>重點</strong>", h)
+        self.assertIn("<strong>key point</strong>", h)
         self.assertEqual(h.count("<li>"), 2)
         self.assertNotIn("<!--", h)
 

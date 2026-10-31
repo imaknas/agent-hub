@@ -14,11 +14,14 @@ import importlib.util
 import json
 import os
 import pathlib
+import sys
 import unittest
 from unittest import mock
 
 ROOT = pathlib.Path(__file__).resolve().parents[1]
 FIX = ROOT / "contracts" / "vendor" / "agent-ops-specs" / "principal-handoff-0.3" / "acts"
+sys.path.insert(0, str(ROOT / "bin"))
+import todo_tokens  # noqa: E402
 
 
 def load(name: str, file: str):
@@ -31,6 +34,8 @@ def load(name: str, file: str):
 registrar = load("registrar", "registrar.py")
 gen_todo = load("gen_todo", "gen-todo.py")
 TAG = registrar.TAG
+# the zh-hant key marker's word before the owner tag (the marker without its opening parenthesis, up to the tag)
+LEAD = todo_tokens.tokens("zh-Hant")["key_marker"].split("{owner}")[0][1:]
 
 
 def cases(file: str, profile: str = "zh-hant"):
@@ -39,9 +44,12 @@ def cases(file: str, profile: str = "zh-hant"):
 
 def own(x):
     """Replace the test data's owner tag `Owner` with this machine's owner.tag (in tags and key markers, including the
-    "等Owner" form without a space)."""
+    marker form without the space)."""
     if isinstance(x, str):
-        return x.replace("〔Owner〕", f"〔{TAG}〕").replace("等 Owner", f"等 {TAG}").replace("等Owner", f"等{TAG}")
+        for a, b in ((todo_tokens.bracket("zh-Hant", "Owner"), todo_tokens.bracket("zh-Hant", TAG)),
+                     (LEAD + "Owner", LEAD + TAG), (LEAD.rstrip() + "Owner", LEAD.rstrip() + TAG)):
+            x = x.replace(a, b)
+        return x
     if isinstance(x, list):
         return [own(v) for v in x]
     if isinstance(x, dict):

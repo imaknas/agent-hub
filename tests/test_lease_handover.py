@@ -27,6 +27,15 @@ ROOT = pathlib.Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "bin"))
 
 
+def T(msgid, **kw):
+    """lease-runner's message in zh-Hant (the Handover class runs in zh-Hant and asserts those texts)"""
+    import i18n
+    return i18n.translate("lease-runner", msgid, kw, "zh-Hant")
+
+
+MODEL_FAILED = "the model did not produce a valid handover"
+
+
 def load_runner():
     spec = importlib.util.spec_from_file_location("lease_runner_h", ROOT / "bin" / "lease-runner.py")
     m = importlib.util.module_from_spec(spec)
@@ -73,37 +82,39 @@ class Handover(unittest.TestCase):
 
     def test_no_conversation_is_not_a_failure(self):
         self.has_transcript = False
-        with mock.patch.object(self.m.subprocess, "run", side_effect=AssertionError("不該叫模型")):
+        with mock.patch.object(self.m.subprocess, "run", side_effect=AssertionError("must not call the model")):
             self.m.detach(self.lease(), "user")
         h = self.handover()
         self.assertFalse(h["fallback"])
-        self.assertIn("沒有開始對話", h["summary"])
+        self.assertIn(T("This lease never started a conversation (the session did not start, or it was detached before "
+                        "anything was said); there is nothing to hand over."), h["summary"])
         self.assertNotIn("handover_failed", [kw.get("error") for t, kw in self.events if t == "error"])
 
     def test_good_handover(self):
-        so = {"summary": "談了 A", "decisions": [{"what": "x", "why": "y"}], "open_questions": [], "tasks_for_owner": [],
+        so = {"summary": "talked about A", "decisions": [{"what": "x", "why": "y"}], "open_questions": [], "tasks_for_owner": [],
               "notes_markdown": "n"}
         with self.model({"structured_output": so}):
             self.m.detach(self.lease(), "user")
-        self.assertEqual((self.handover()["fallback"], self.handover()["summary"]), (False, "談了 A"))
+        self.assertEqual((self.handover()["fallback"], self.handover()["summary"]), (False, "talked about A"))
 
     def test_model_failure_says_why(self):
-        bad = {"is_error": True, "structured_output": None, "llm_error": "輸出不合 schema:少了 summary"}
+        bad = {"is_error": True, "structured_output": None, "llm_error": "output does not match the schema: summary is missing"}
         with self.model(bad, bad):
             self.m.detach(self.lease(), "idle")
         h = self.handover()
         self.assertTrue(h["fallback"])
-        self.assertIn("模型", h["summary"])
+        self.assertIn(T("Handover failed ({failed}); the conversation is still there and can be attached again",
+                        failed=T(MODEL_FAILED)), h["summary"])
         errs = [kw["detail"] for t, kw in self.events if t == "error" and kw.get("error") == "handover_failed"]
-        self.assertIn("少了 summary", errs[0])
+        self.assertIn("summary is missing", errs[0])
 
     def test_platform_error_is_not_blamed_on_model(self):
         with mock.patch.object(self.m, "deny_settings", side_effect=AttributeError("no attribute 'settings'")):
             self.m.detach(self.lease(), "idle")
         h = self.handover()
         self.assertTrue(h["fallback"])
-        self.assertIn("平台出錯", h["summary"])
-        self.assertNotIn("模型沒能", h["summary"])
+        self.assertIn(T("a platform error, not the model's"), h["summary"])
+        self.assertNotIn(T(MODEL_FAILED), h["summary"])
 
 
 class HandoverIds(unittest.TestCase):

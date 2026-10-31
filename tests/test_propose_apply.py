@@ -29,23 +29,23 @@ mid = re.search(r"- id ([^\s,]+),", prompt).group(1)
 day = re.search(r"memory/(\d{4}-\d{2}-\d{2})\.md", prompt).group(1)
 note = pathlib.Path(".agent-memory/memory") / f"{day}.md"
 note.parent.mkdir(parents=True, exist_ok=True)
-note.write_text("- 回答了 other 的問題:用 SQLite\n")
-pathlib.Path("README.md").write_text("agent 不該改這個\n")
+note.write_text("- answered other's question: use SQLite (décidé)\n")
+pathlib.Path("README.md").write_text("the agent must not change this\n")
 # sends and closes itself: a plain send, then with the env vars cleared (hubbus must block both; the platform sends
 # from the output instead)
 import os, subprocess
 tries = []
 for env in (dict(os.environ), {k: v for k, v in os.environ.items() if k != "HUB_MAIL_BY_PLATFORM"}):
     r = subprocess.run([sys.executable, "@HUBBUS@", "send", "--from", "demo", "--to", "other", "--type", "info",
-                        "--text", "agent 自己寄的"], env=env, capture_output=True, text=True)
+                        "--text", "sent by the agent itself"], env=env, capture_output=True, text=True)
     tries.append(r.returncode)
 r = subprocess.run([sys.executable, "@HUBBUS@", "done", mid], capture_output=True, text=True)
 tries.append(r.returncode)
 pathlib.Path(os.environ["PROPOSE_TEST_TRIES"]).write_text(json.dumps(tries))
-print(json.dumps({"replies": [{"reply_to": mid, "type": "done", "text": "用 SQLite"},
-                              {"reply_to": "not-this-one", "type": "info", "text": "不該寄出"}],
-                  "done": [{"id": mid, "note": "回答了"}, {"id": "not-this-one"}],
-                  "ask_owner": [], "summary": f"{mid}:回答了"}, ensure_ascii=False))
+print(json.dumps({"replies": [{"reply_to": mid, "type": "done", "text": "use SQLite (décidé)"},
+                              {"reply_to": "not-this-one", "type": "info", "text": "must not be sent"}],
+                  "done": [{"id": mid, "note": "answered"}, {"id": "not-this-one"}],
+                  "ask_owner": [], "summary": f"{mid}: answered"}, ensure_ascii=False))
 '''
 
 
@@ -62,7 +62,7 @@ class ProposeApply(unittest.TestCase):
         ws = self.ws = t / "ws" / "demo"
         ws.mkdir(parents=True)
         sh("git", "init", "-q", "-b", "main", cwd=ws)
-        (ws / "README.md").write_text("原本的 README\n")
+        (ws / "README.md").write_text("the original README\n")
         (ws / ".git" / "info" / "exclude").write_text(".agent-memory/\n")
         sh("git", "add", "README.md", cwd=ws)
         sh("git", "-c", "user.name=t", "-c", "user.email=t@t", "commit", "-qm", "init", cwd=ws)
@@ -100,7 +100,7 @@ class ProposeApply(unittest.TestCase):
                               capture_output=True, text=True, timeout=300)
 
     def test_any_cli_agent_handles_a_letter(self):
-        r = self.run_("hubbus", "send", "--from", "agent-hub", "--to", "demo", "--type", "question", "--text", "快取用哪個?")
+        r = self.run_("hubbus", "send", "--from", "agent-hub", "--to", "demo", "--type", "question", "--text", "which cache should we use?")
         self.assertEqual(r.returncode, 0, r.stderr)
         mid = r.stdout.strip().split()[-1]
         r = self.run_("propose_apply.py", "mailbox", "demo", mid)
@@ -109,20 +109,20 @@ class ProposeApply(unittest.TestCase):
         notes = [p for p in out["applied"] if p.startswith(".agent-memory/memory/")]
         self.assertEqual(len(notes), 1, out)
         self.assertIn("README.md", out["refused"])
-        self.assertEqual((self.ws / "README.md").read_text(), "原本的 README\n", "a path not allowed is not taken")
-        self.assertIn("用 SQLite", (self.ws / notes[0]).read_text())
+        self.assertEqual((self.ws / "README.md").read_text(), "the original README\n", "a path not allowed is not taken")
+        self.assertIn("use SQLite (décidé)", (self.ws / notes[0]).read_text())
         pushed = sh("git", "--git-dir", str(self.tmp / "bare.git"), "show", f"agent-memory:{notes[0].removeprefix('.agent-memory/')}")
-        self.assertIn("用 SQLite", pushed, "the note is committed and pushed to the memory repo")
+        self.assertIn("use SQLite (décidé)", pushed, "the note is committed and pushed to the memory repo")
         self.assertEqual(out["done"], [mid], "closes only this request's letter")
         self.assertEqual(len(out["sent"]), 1, "replies only to this request's letter, to the original sender")
         tries = json.loads((self.tmp / "tries.json").read_text())
         self.assertTrue(all(code != 0 for code in tries),
                         f"the agent's own sends and closures are blocked (with env vars cleared too): {tries}")
-        self.assertNotIn("agent 自己寄的", self.run_("hubbus", "inbox", "--project", "other").stdout)
+        self.assertNotIn("sent by the agent itself", self.run_("hubbus", "inbox", "--project", "other").stdout)
         self.assertEqual(sh("git", "worktree", "list", "--porcelain", cwd=self.ws).count("worktree "), 1,
                          "the throwaway worktree is cleaned up")
         inbox = self.run_("hubbus", "inbox", "--project", "agent-hub").stdout
-        self.assertIn("用 SQLite", inbox)
+        self.assertIn("use SQLite (décidé)", inbox)
         status = json.loads((self.tmp / "state" / "agent-jobs" / "mailbox-demo" / "status.json").read_text())
         self.assertEqual(status["state"], "done", "dispatch reads status to decide whether to re-dispatch")
 
@@ -229,7 +229,7 @@ class ProposeApply(unittest.TestCase):
         (self.tmp / "agent.py").write_text("import sys\nopen('README.md','w').write('x')\n"
                                            "open('.agent-memory/memory/2000-01-01.md','w').write('- half done')\n"
                                            "sys.exit(2)\n")
-        r = self.run_("hubbus", "send", "--from", "agent-hub", "--to", "demo", "--type", "request", "--text", "做件事")
+        r = self.run_("hubbus", "send", "--from", "agent-hub", "--to", "demo", "--type", "request", "--text", "do something")
         mid = r.stdout.strip().split()[-1]
         r = self.run_("propose_apply.py", "mailbox", "demo", mid)
         self.assertEqual(r.returncode, 1)
@@ -237,7 +237,7 @@ class ProposeApply(unittest.TestCase):
         self.assertEqual((out["done"], out["sent"]), ([], []))
         self.assertFalse((self.ws / ".agent-memory" / "memory" / "2000-01-01.md").exists(),
                          "even an allowed path is not applied from a failed run (the letter is held and the owner asked)")
-        self.assertEqual((self.ws / "README.md").read_text(), "原本的 README\n")
+        self.assertEqual((self.ws / "README.md").read_text(), "the original README\n")
 
 
 if __name__ == "__main__":

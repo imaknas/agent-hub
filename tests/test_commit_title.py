@@ -17,17 +17,20 @@ ROOT = pathlib.Path(__file__).resolve().parents[1]
 BIN = ROOT / "bin"
 sys.path.insert(0, str(BIN))
 import commit_title  # noqa: E402
+import i18n  # noqa: E402
 
 
 class Title(unittest.TestCase):
     def test_accepts(self):
-        for t in ("feat: 新增信箱的 MCP 伺服器", "fix(hubbus): dispatch 不再重試", "feat(llm)!: 組名改成 fast/standard/strong",
-                  "chore: initial commit", "revert: feat(llm): 換模型", 'Revert "feat: x"', "Merge branch 'x'"):
+        for t in ("feat: add the mailbox's MCP server", "fix(hubbus): dispatch no longer retries",
+                  "feat(llm)!: group names become fast/standard/strong", "docs: café résumé, non-ASCII is fine",
+                  "chore: initial commit", "revert: feat(llm): switch models", 'Revert "feat: x"', "Merge branch 'x'"):
             with self.subTest(t=t):
                 self.assertIsNone(commit_title.problem(t))
 
     def test_rejects(self):
-        for t in ("Add LICENSE", "feat:沒有空格", "feature: 不在清單", "Fix: 大寫", "fix(): 空的 scope", "", "feat: ",
+        for t in ("Add LICENSE", "feat:no space", "feature: not in the list", "Fix: capitalised", "fix(): empty scope",
+                  "", "feat: ",
                   "Merge gate checks titles", "Revert to old behaviour"):
             with self.subTest(t=t):
                 self.assertIsNotNone(commit_title.problem(t))
@@ -37,7 +40,7 @@ class Title(unittest.TestCase):
         self.assertIsNotNone(commit_title.problem("fixup! feat: x", final=True))
 
     def test_hook_reads_the_first_real_line(self):
-        self.assertEqual(commit_title.title_of("\n# 註解\nfix: x\n\n內文\n"), "fix: x")
+        self.assertEqual(commit_title.title_of("\n# a comment\nfix: x\n\nthe body\n"), "fix: x")
 
     def test_cli(self):
         ok = subprocess.run([sys.executable, str(BIN / "commit_title.py"), "docs: x"], capture_output=True, text=True)
@@ -87,22 +90,22 @@ class MergeGate(unittest.TestCase):
 
     def test_bad_title_blocks_when_registered(self):
         self.register(commits="conventional")
-        self.commit(self.wt, "b", "feat: 好的")
+        self.commit(self.wt, "b", "feat: a fine change")
         self.commit(self.wt, "c", "Update stuff")
         r = self.merge()
         self.assertEqual(r.returncode, 1, r.stdout + r.stderr)
         self.assertIn("commit-titles", r.stdout)
         self.assertIn("Update stuff", r.stdout)
-        self.assertNotIn("好的", r.stdout.split("Conventional Commits")[-1], "lists only the invalid ones")
+        self.assertNotIn("a fine change", r.stdout.split("Conventional Commits")[-1], "lists only the invalid ones")
         self.assertEqual(self.git(self.ws, "log", "--format=%s", "-1").strip(), "chore: initial commit",
                          "main untouched")
 
     def test_good_titles_merge(self):
         self.register(commits="conventional")
-        self.commit(self.wt, "b", "feat(x): 好的")
+        self.commit(self.wt, "b", "feat(x): a fine change")
         r = self.merge()
         self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
-        self.assertEqual(self.git(self.ws, "log", "--format=%s", "-1").strip(), "feat(x): 好的")
+        self.assertEqual(self.git(self.ws, "log", "--format=%s", "-1").strip(), "feat(x): a fine change")
 
     def test_registry_only_knows_conventional(self):
         (self.tmp / "config" / "projects" / "demo.yaml").write_text(
@@ -110,7 +113,8 @@ class MergeGate(unittest.TestCase):
         r = subprocess.run([sys.executable, str(BIN / "registry.py"), "check", "demo"],
                            env={**self.env, "AGENT_HUB_LANG_UI": "zh-Hant"}, capture_output=True, text=True, timeout=60)
         self.assertEqual(r.returncode, 1)
-        self.assertIn("commits 只能是 conventional", r.stdout)
+        self.assertIn(i18n.translate("registry", "commits can only be conventional (absent = commit titles are not checked)",
+                                     {}, "zh-Hant"), r.stdout)
 
     def test_not_registered_means_no_check(self):
         self.register()

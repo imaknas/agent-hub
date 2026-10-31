@@ -44,7 +44,7 @@ class Questions(unittest.TestCase):
         self.c = m.db()
         self.knas = m.KNAS
 
-    def ask(self, qid, project="proj", days_ago=5, text="要用哪個方案?", kind="question"):
+    def ask(self, qid, project="proj", days_ago=5, text="Which plan should we use?", kind="question"):
         ts = (NOW - datetime.timedelta(days=days_ago)).isoformat().replace("+00:00", "Z")
         self.c.execute("INSERT INTO events(id, ts, type, source, to_project, ref, payload) VALUES(?,?,?,?,?,?,?)",
                        (qid, ts, "message", project, self.knas, None, json.dumps({"type": kind, "text": text})))
@@ -61,7 +61,7 @@ class Questions(unittest.TestCase):
     def test_open_means_not_answered_not_closed_not_a_handover(self):
         self.ask("q-open")
         self.ask("q-answered")
-        self.m.publish(self.c, "ans-1", "message", self.knas, "proj", "q-answered", {"type": "info", "text": "用 A"})
+        self.m.publish(self.c, "ans-1", "message", self.knas, "proj", "q-answered", {"type": "info", "text": "Use A"})
         self.ask("lease-abc-q-0")          # a question from a discussion handover: the assistant handles it
         self.ask("p-1", kind="progress")   # not a question
         self.ask("q-other", project="other")
@@ -78,7 +78,7 @@ class Questions(unittest.TestCase):
 
     def test_drop_with_question_is_allowed(self):
         self.ask("q-1")
-        self.send("--to", "owner", "--type", "drop", "--question", "q-1", "--text", "不需要了")
+        self.send("--to", "owner", "--type", "drop", "--question", "q-1", "--text", "not needed any more")
         self.assertEqual(self.open_ids(), [])
 
     def test_question_must_be_this_projects_question_to_knas(self):
@@ -93,7 +93,7 @@ class Questions(unittest.TestCase):
         self.assertEqual(sorted(self.open_ids()), ["q-theirs"])
 
     def test_session_start_note_lists_open_questions(self):
-        self.ask("q-1", text="要不要跑 pilot?")
+        self.ask("q-1", text="Run the pilot or not?")
         note = self.m.questions_note(self.c, "proj")
         self.assertIn("q-1", note)
         self.assertIn("--question <id>", note)
@@ -116,7 +116,7 @@ class Questions(unittest.TestCase):
     def test_reconcile_skips_closed_and_unknown_projects(self):
         self.ask("q-gone", project="renamed-away")
         self.ask("q-closed")
-        self.send("--to", "owner", "--type", "done", "--question", "q-closed", "--text", "解決了")
+        self.send("--to", "owner", "--type", "done", "--question", "q-closed", "--text", "solved")
         self.assertEqual(self.m.reconcile_questions(self.c, now=NOW), [])
 
 

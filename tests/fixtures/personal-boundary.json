@@ -1,0 +1,4 @@
+{
+ "_comment": "tests/test_personal_boundary.py: the words for 'project' that a private name which is also a common word is counted next to (zh-Hant and English text)",
+ "project_words": ["專案", "project"]
+}

@@ -24,11 +24,24 @@ from unittest import mock
 
 ROOT = pathlib.Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "bin"))
+import i18n  # noqa: E402
 import lease_files  # noqa: E402
 import minischema  # noqa: E402
 
 PNG = b"\x89PNG\r\n\x1a\n" + b"\0" * 64
 V2 = json.loads((ROOT / "contracts" / "lease-runner.v2.schema.json").read_text())
+
+
+def T(msgid, **kw):
+    """lease_files' refusal reason in zh-Hant (the classes below run in zh-Hant and assert those texts)"""
+    return i18n.translate("lease_files", msgid, kw, "zh-Hant")
+
+
+SECRET_NAME = "{name} looks like a credential or a secret; not sent"
+SECRET_TEXT = "{path}: the content looks like a credential (a private key or an API key); not sent"
+TOO_MANY = ("This lease has already shown {n} {n:file|files} in the last {hours} {hours:hour|hours}, which is the limit; "
+            "show it later, or say in text where the file is for now")
+HOURS = lease_files.WINDOW_S // 3600
 
 
 def load(name, file):
@@ -49,7 +62,7 @@ class Take(unittest.TestCase):
         (self.tmp / "outside.png").write_bytes(PNG)
 
     def take(self, path, **kw):
-        return lease_files.take(self.ws, path, "看這張", self.store, **kw)
+        return lease_files.take(self.ws, path, "look at this", self.store, **kw)
 
     def refused(self, path, **kw):
         meta, why = self.take(path, **kw)
@@ -61,7 +74,7 @@ class Take(unittest.TestCase):
         meta, why = self.take("results/a.png")
         self.assertEqual(why, "")
         self.assertEqual((meta["path"], meta["name"], meta["mime"], meta["size"], meta["summary"]),
-                         ("results/a.png", "a.png", "image/png", len(PNG), "看這張"))
+                         ("results/a.png", "a.png", "image/png", len(PNG), "look at this"))
         # original changed, then deleted: what is sent is still the copy from then
         (self.ws / "results" / "a.png").write_bytes(b"changed")
         (self.ws / "results" / "a.png").unlink()
@@ -96,10 +109,11 @@ class Take(unittest.TestCase):
             (self.ws / name).write_bytes(data)
             self.refused(name)
         (self.ws / "fake.png").write_bytes(b"not really a png")
-        self.assertIn("對不上", self.refused("fake.png"))
+        self.assertIn(T("{path}: the content is not {type} (the extension does not match the content)", path="fake.png",
+                        type="png"), self.refused("fake.png"))
         (self.ws / "bin.txt").write_bytes(b"\xff\xfe\x00bad")
         self.refused("bin.txt")
-        for name, data in (("n.md", "# 筆記".encode()), ("d.json", b"{}"), ("t.csv", b"a,b"),
+        for name, data in (("n.md", "# café notes".encode()), ("d.json", b"{}"), ("t.csv", b"a,b"),
                            ("p.pdf", b"%PDF-1.7"), ("m.glb", b"glTF\x02"), ("j.jpg", b"\xff\xd8\xff\xe0"),
                            ("g.gif", b"GIF89a"), ("w.webp", b"RIFF\0\0\0\0WEBPVP8 ")):
             (self.ws / name).write_bytes(data)
@@ -107,10 +121,11 @@ class Take(unittest.TestCase):
 
     def test_size_and_lease_limits(self):
         with mock.patch.object(lease_files, "MAX_FILE", 10):
-            self.assertIn("太大", self.refused("results/a.png"))
+            self.assertIn(T("{path} is too big ({mb} MB; the limit is {limit} MB)", path="results/a.png", mb=0, limit=0),
+                          self.refused("results/a.png"))
         with mock.patch.object(lease_files, "MAX_COUNT", 1):
             self.assertIsNotNone(self.take("results/a.png")[0])
-            self.assertIn("上限", self.refused("results/a.png"))
+            self.assertIn(T(TOO_MANY, n=1, hours=HOURS), self.refused("results/a.png"))
         with mock.patch.object(lease_files, "MAX_TOTAL", len(PNG) + 1):
             self.refused("results/a.png")
 
@@ -120,7 +135,7 @@ class Take(unittest.TestCase):
         with mock.patch.object(lease_files, "MAX_COUNT", 2):
             self.assertIsNotNone(self.take("results/a.png")[0])
             self.assertIsNotNone(self.take("results/a.png")[0])
-            self.assertIn("最近 24 小時", self.refused("results/a.png"))
+            self.assertIn(T(TOO_MANY, n=2, hours=HOURS), self.refused("results/a.png"))
             for m in self.store.glob("*.json"):  # make the first two given two days ago
                 d = json.loads(m.read_text())
                 d["at"] -= 2 * 86400
@@ -131,7 +146,7 @@ class Take(unittest.TestCase):
         for name in ("api_token.json", "secrets.json", "credentials.json", "id_rsa.txt", "password.txt", "server.key.txt"):
             (self.ws / name).write_text("{}")
         for name in ("api_token.json", "secrets.json", "credentials.json", "id_rsa.txt", "password.txt"):
-            self.assertIn("憑證", self.refused(name))
+            self.assertIn(T(SECRET_NAME, name=name), self.refused(name))
         (self.ws / "data.json").write_text("{}")
         self.refused("data.json", secret_paths=[self.ws / "data.json"])
 
@@ -154,7 +169,8 @@ class Take(unittest.TestCase):
                 (self.ws / "results").symlink_to(self.tmp / "evil")
             return real_open(path, *a, **k)
         with mock.patch.object(lease_files.os, "open", swap):
-            self.assertIn("不是資料夾裡的那個檔", self.refused("results/a.png"))
+            self.assertIn(T("{path}: what was opened is not that file in the folder (was the path swapped?); not sent",
+                            path="results/a.png"), self.refused("results/a.png"))
 
     def test_secret_content_refused(self):
         for name, text in (("service-account.json", '{"type": "service_account", "private_key": "x"}'),
@@ -162,8 +178,8 @@ class Take(unittest.TestCase):
                            ("env.txt", "ANTHROPIC=sk-ant-api03-abcdefghijklmnop"),
                            ("gh.txt", "ghp_" + "a" * 36), ("aws.csv", "id,AKIAABCDEFGHIJKLMNOP")):
             (self.ws / name).write_text(text)
-            self.assertIn("內容像憑證", self.refused(name), name)
-        (self.ws / "plain.md").write_text("# 房間尺寸\n寬 3.2m")
+            self.assertIn(T(SECRET_TEXT, path=name), self.refused(name), name)
+        (self.ws / "plain.md").write_text("# Room size\nwidth 3.2 m, café corner")
         self.assertIsNotNone(self.take("plain.md")[0])
 
     def test_prune_removes_orphans(self):
@@ -218,14 +234,14 @@ class Runner(unittest.TestCase):
         return [json.loads(l) for l in (self.lease.dir / "events.jsonl").read_text().splitlines()]
 
     def test_show_then_fetch(self):
-        code, _, body = self.call(f"/v1/internal/{self.lease.id}/show", {"path": "r.png", "summary": "俯視圖"})
+        code, _, body = self.call(f"/v1/internal/{self.lease.id}/show", {"path": "r.png", "summary": "vue aérienne"})
         self.assertEqual(code, 200)
         fid = json.loads(body)["id"]
         ev = [e for e in self.events() if e["type"] == "file"][0]
         out = self.m.render(ev)
         self.assertEqual(minischema.errors(V2["$defs"]["event"], out, root=V2), [])
         self.assertEqual(minischema.errors(V2["$defs"]["file_event"], out, root=V2), [])
-        self.assertEqual((out["id"], out["path"], out["summary"]), (fid, "r.png", "俯視圖"))
+        self.assertEqual((out["id"], out["path"], out["summary"]), (fid, "r.png", "vue aérienne"))
         code, headers, data = self.call(f"/v1/leases/{self.lease.id}/files/{fid}")
         self.assertEqual((code, data, headers["Content-Type"], headers["X-Content-Type-Options"]),
                          (200, PNG, "image/png", "nosniff"))
@@ -234,7 +250,7 @@ class Runner(unittest.TestCase):
     def test_refused_says_why_and_sends_nothing(self):
         code, _, body = self.call(f"/v1/internal/{self.lease.id}/show", {"path": "secret.txt"})
         self.assertEqual((code, json.loads(body)["error"]), (400, "file_refused"))
-        self.assertIn("憑證", json.loads(body)["detail"])
+        self.assertIn(T(SECRET_NAME, name="secret.txt"), json.loads(body)["detail"])
         self.assertFalse((self.lease.dir / "events.jsonl").exists())
 
     def test_fetch_unknown(self):
@@ -254,7 +270,7 @@ class Runner(unittest.TestCase):
                 mock.patch.object(self.m.hubconf, "workspace", return_value=self.ws):
             meta, why = self.m.show_file(self.lease, "r.png", None)
         self.assertIsNone(meta)
-        self.assertIn("憑證", why)
+        self.assertIn(T(SECRET_NAME, name="r.png"), why)
 
     def test_preamble_mentions_show_file(self):
         self.assertIn("show_file", self.m.preamble("zz-none", "discuss"))
@@ -283,10 +299,10 @@ class Relay(unittest.TestCase):
             text, err = m.show_file({"path": "r.png"})
         self.assertFalse(err)
         self.assertIn("r.png", text)
-        with mock.patch.object(m, "http", return_value=(400, {"error": "file_refused", "detail": "x.svg 的類型不能送"})):
+        with mock.patch.object(m, "http", return_value=(400, {"error": "file_refused", "detail": "x.svg: this type cannot be sent"})):
             text, err = m.show_file({"path": "x.svg"})
         self.assertTrue(err)
-        self.assertIn("類型不能送", text)
+        self.assertIn("type cannot be sent", text)
 
     def test_http_keeps_the_refusal_reason(self):
         # http() used to drop the body on a 4xx, so the session only saw "Not sent: 400" (m10252240); tested with a
@@ -294,7 +310,7 @@ class Relay(unittest.TestCase):
         import http.server
         class H(http.server.BaseHTTPRequestHandler):
             def do_POST(self):
-                body = json.dumps({"v": 2, "error": "file_refused", "detail": "最近 24 小時已經給了 100 個檔案,到上限了"}).encode()
+                body = json.dumps({"v": 2, "error": "file_refused", "detail": "100 files shown in the last 24 hours, which is the limit"}).encode()
                 self.send_response(400)
                 self.send_header("Content-Type", "application/json")
                 self.send_header("Content-Length", str(len(body)))
@@ -312,7 +328,7 @@ class Relay(unittest.TestCase):
                 mock.patch.object(m, "secret", lambda p: "t"):
             text, err = m.show_file({"path": "a.png"})
         self.assertTrue(err)
-        self.assertIn("到上限了", text)
+        self.assertIn("which is the limit", text)
 
     def test_tool_is_listed(self):
         m = load("lease_relay_sf2", "lease-relay.py")

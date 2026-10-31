@@ -79,7 +79,7 @@ class Endpoint(unittest.TestCase):
                 (m.hubconf, "workspace", lambda name: self.ws.get(name)),
                 (m.hubconf, "projects", lambda: {"room3d": {}, "idea-1": {}}),
                 (rt, "relocate", lambda sid, a, b: (self.moves.append((sid, a, b)), True)[1]),
-                (m, "work_ready", lambda project: (False, "沒有開 work 模式")),
+                (m, "work_ready", lambda project: (False, "work mode is not on")),
                 (m.subprocess, "run", self.fake_run)]:
             p = mock.patch.object(target, attr, value)
             p.start()

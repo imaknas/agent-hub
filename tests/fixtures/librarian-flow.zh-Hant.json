@@ -1,0 +1,19 @@
+{
+ "_": "tests/test_librarian_flow.py (and the librarian E1 golden built on it): the zh-Hant content of the test instance's memory repos, handoffs and records, as it was before the test moved its Chinese here",
+ "status": "現況。",
+ "status_with_ref": "現況,見 memory/reference/gone.md。",
+ "background": "這個專案的背景說明。",
+ "one_thing": "做一件事",
+ "untagged": "沒標負責人",
+ "untagged_line": "沒標負責人的一件事",
+ "old_note": "舊的筆記",
+ "new_note": "{p} 的新筆記",
+ "shadow_miss": "找不到的一段",
+ "handoffs": [["h1", "p0", "relevant", "轉交事實一"], ["h2", "phand", "changes", "只有轉交的事實"], ["h3", "p0", "done", "帶 key 的轉交"]],
+ "quote": "原話",
+ "why": "理由",
+ "question": "快取用哪個?",
+ "note_about": "續約網域",
+ "note": "註冊商說週五前要續約",
+ "answer": "用 SQLite"
+}

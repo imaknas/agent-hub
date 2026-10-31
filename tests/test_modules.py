@@ -12,6 +12,7 @@ from unittest import mock
 
 ROOT = pathlib.Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "bin"))
+import i18n  # noqa: E402
 import registry  # noqa: E402
 import scheduler  # noqa: E402
 
@@ -83,9 +84,13 @@ class Validate(unittest.TestCase):
     @mock.patch.dict("os.environ", {"AGENT_HUB_LANG_UI": "zh-Hant"})
     def test_shipped_modules_are_valid(self):
         import yaml
+        # a requires_config key this test's settings do not have is fine: the fixed part before the key
+        unset = i18n.translate("registry", "{key} must be set in hub.json first", {"key": "{key}"},
+                               "zh-Hant").split("{key}")[0]
+        self.assertTrue(unset)
         for f in sorted((ROOT / "modules").glob("*.yaml")):
             doc = yaml.safe_load(f.read_text())
-            errs = [e for e in registry.validate_module(doc, f.stem) if not e.startswith("要先在 hub.json 設定")]
+            errs = [e for e in registry.validate_module(doc, f.stem) if not e.startswith(unset)]
             with self.subTest(module=f.stem):
                 self.assertEqual(errs, [])
 

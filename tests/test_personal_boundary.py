@@ -22,6 +22,8 @@ import sys
 import unittest
 
 ROOT = pathlib.Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(ROOT / "bin"))
+import todo_tokens  # noqa: E402
 SCOPE = ("bin", "templates", "launchd", "tests", "agent-jobs", "modules")
 # Public docs: what is specific to this deployment goes in the instance directory's config/AGENTS.local.md,
 # known-issues.local.md (cleared 10-29 before open-sourcing; baseline 0).
@@ -29,6 +31,8 @@ SCOPE = ("bin", "templates", "launchd", "tests", "agent-jobs", "modules")
 PUBLIC_DOCS = ("AGENTS.md", "README.md", "known-issues.md", "docs/mcp.md", "hub.example.json")
 BASELINE = ROOT / "tests" / "fixtures" / "personal-baseline.json"
 CJK_BASELINE = ROOT / "tests" / "fixtures" / "cjk-baseline.json"   # file names only (test_i18n_static.py)
+# the words for "project" (zh-Hant and English) that a private name which is also a common word is counted next to
+PROJECT_WORDS = json.loads((ROOT / "tests" / "fixtures" / "personal-boundary.json").read_text())["project_words"]
 SELF = pathlib.Path(__file__).resolve()
 RULES = {
     "personal": re.compile(r"knas|muninn|imaknas", re.I),
@@ -102,7 +106,7 @@ def private_names_file() -> pathlib.Path | None:
 
 def private_name_patterns(text: str) -> list[tuple[str, re.Pattern]]:
     """Each line of the list: a name; a trailing ~ = the name is also a common word, counted only in a path, a registry
-    file name, or next to "專案/project"."""
+    file name, or next to a word for "project" (PROJECT_WORDS)."""
     out = []
     for line in text.splitlines():
         line = line.split("#", 1)[0].strip()
@@ -110,8 +114,9 @@ def private_name_patterns(text: str) -> list[tuple[str, re.Pattern]]:
             continue
         name, common = line.rstrip("~").strip(), line.endswith("~")
         n = re.escape(name)
-        pat = (rf"(?:~/|(?:workspace|projects|services|memory-copies|git-origin)/){n}(?![\w-])|(?<![\w-]){n}\.yaml|(?<![\w-]){n}\s*(?:專案|project)"
-               rf"|(?:專案|project)\s+{n}(?![\w-])") if common else rf"(?<![\w]){n}(?![\w])"
+        w = "|".join(re.escape(x) for x in PROJECT_WORDS)
+        pat = (rf"(?:~/|(?:workspace|projects|services|memory-copies|git-origin)/){n}(?![\w-])|(?<![\w-]){n}\.yaml|(?<![\w-]){n}\s*(?:{w})"
+               rf"|(?:{w})\s+{n}(?![\w-])") if common else rf"(?<![\w]){n}(?![\w])"
         out.append((name, re.compile(pat, re.I)))
     return out
 
@@ -144,7 +149,7 @@ class PersonalBoundary(unittest.TestCase):
 
     def test_counts_only_go_down(self):
         base, now = load_baseline(), counts()
-        worse = [f"{rule} {f}:{n}(基準 {base.get(rule, {}).get(f, 0)})"
+        worse = [f"{rule} {f}:{n}(baseline {base.get(rule, {}).get(f, 0)})"
                  for rule, per in now.items() for f, n in per.items() if n > base.get(rule, {}).get(f, 0)]
         self.assertEqual(worse, [], "personal names / machine names / .secrets paths went up: read them from settings "
                                     "or use the generic term; edit tests/fixtures/personal-baseline.json by hand "
@@ -161,17 +166,18 @@ class PersonalBoundary(unittest.TestCase):
 
     def test_private_name_patterns(self):
         pats = dict(private_name_patterns("secret-app\nnotes ~\n"))
-        self.assertTrue(pats["secret-app"].search("在 secret-app 裡"))
+        self.assertTrue(pats["secret-app"].search("work in secret-app today"))
         self.assertTrue(pats["secret-app"].search("task-secret-app-funnel"), "next to a - counts too")
         self.assertFalse(pats["secret-app"].search("notsecret-apps"))
-        for hit in ("~/workspace/notes", "projects/notes.yaml", "notes 專案"):
+        for hit in ("~/workspace/notes", "projects/notes.yaml", *(f"notes {w}" for w in PROJECT_WORDS),
+                    *(f"{w} notes" for w in PROJECT_WORDS)):
             self.assertTrue(pats["notes"].search(hit), hit)
         for miss in ("--notes", "notes_args", 'claim(c, rows, "notes")', "def notes(c, r):", "pause/notes"):
             self.assertFalse(pats["notes"].search(miss), miss)
 
     def test_rules_match_what_they_should(self):
         p, s = RULES["personal"], RULES["secrets-path"]
-        for hit in ["〔Knas〕", "muninn digests", "imaknas@mbp", "imaknas/x"]:
+        for hit in [todo_tokens.bracket("zh-Hant", "Knas"), "muninn digests", "imaknas@mbp", "imaknas/x"]:
             self.assertTrue(p.search(hit), hit)
         for miss in ["owner.tag", "/Users/moeller", "assistant"]:
             self.assertFalse(p.search(miss), miss)
@@ -179,9 +185,10 @@ class PersonalBoundary(unittest.TestCase):
         self.assertTrue(s.search("~/agent-hub/.secrets/runner-token"))
         self.assertFalse(s.search("hubconf.secret('x')"))
         d = RULES["public-docs"]
-        for hit in ["https://box.tail0a1b2c.ts.net/", "〔Knas〕", "MBP 只當遙控端", "/Users/someone/x"]:
+        for hit in ["https://box.tail0a1b2c.ts.net/", todo_tokens.bracket("zh-Hant", "Knas"), "the MBP is only a remote",
+                    "/Users/someone/x"]:
             self.assertTrue(d.search(hit), hit)
-        for miss in ["<host>.<tailnet>.ts.net", "bin/knas-tasks.py", "minischema", "〔owner〕"]:
+        for miss in ["<host>.<tailnet>.ts.net", "bin/knas-tasks.py", "minischema", todo_tokens.bracket("zh-Hant", "owner")]:
             self.assertFalse(d.search(miss), miss)
 
 

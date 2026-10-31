@@ -114,7 +114,7 @@ class BridgeV2(unittest.TestCase):
     def test_outbound_posts_owner_records_once_and_marks_invalid(self):
         self.m.publish_record(self.c, raised("k1"), "proj", self.owner)
         self.m.publish_record(self.c, raised("k2"), "proj", self.owner)
-        self.m.publish(self.c, "x1", "message", "proj", self.owner, None, {"type": "info", "text": "v1 的不走這裡"})
+        self.m.publish(self.c, "x1", "message", "proj", self.owner, None, {"type": "info", "text": "v1 ones do not go this way"})
         self.m.publish_record(self.c, settled("k9"), self.owner, "proj")   # inbound ones are not sent back
         self.fake.invalid = {"r:k2"}
         self.m.forward_records(self.c)
@@ -225,10 +225,10 @@ class Coexistence(unittest.TestCase):
 
     HANDOFFS = [
         {"id": 70, "status": "pending", "effect": "done", "project": "proj", "reply_to": "task-proj-aaaaaaaaaa", "item": "x"},
-        {"id": 71, "status": "pending", "effect": "relevant", "project": "proj", "fact": "下週出國", "item": None},
-        {"id": 72, "status": "pending", "effect": "asks", "project": "proj", "fact": "查到哪了?"},
+        {"id": 71, "status": "pending", "effect": "relevant", "project": "proj", "fact": "abroad next week", "item": None},
+        {"id": 72, "status": "pending", "effect": "asks", "project": "proj", "fact": "How far along is it?"},
         {"id": 73, "status": "pending", "effect": "answers", "project": "proj", "reply_to": "q1", "fact": "Pick A", "item": "Which one?"},
-        {"id": 74, "status": "pending", "effect": "done", "project": "proj", "fact": "沒有 key 的結案"},
+        {"id": 74, "status": "pending", "effect": "done", "project": "proj", "fact": "a closure without a key"},
         {"id": 75, "status": "pending", "effect": "something-new", "project": "proj", "fact": "?"},
     ]
 

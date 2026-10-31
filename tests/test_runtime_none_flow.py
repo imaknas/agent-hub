@@ -14,6 +14,8 @@ import unittest
 
 ROOT = pathlib.Path(__file__).resolve().parents[1]
 BIN = ROOT / "bin"
+sys.path.insert(0, str(BIN))
+import i18n  # noqa: E402
 
 
 class RuntimeNone(unittest.TestCase):
@@ -36,7 +38,7 @@ class RuntimeNone(unittest.TestCase):
         r = self.run_(BIN / "hub-runtime", "instructions-file", self.tmp / "ws",
                       env={"AGENT_HUB_LANG_UI": "zh-Hant"})   # the message asserted is the zh-Hant one
         self.assertEqual(r.returncode, 3, r.stderr)
-        self.assertIn("規則檔", r.stderr)
+        self.assertIn(i18n.translate("runtime_ports", "rules file", {}, "zh-Hant"), r.stderr)
         self.assertEqual(r.stdout.strip(), "", "must not guess a default file name")
 
     def test_hooks_are_not_installed(self):
@@ -50,12 +52,14 @@ class RuntimeNone(unittest.TestCase):
         self.assertEqual(r.returncode, 1, r.stdout + r.stderr)
         out = json.loads(r.stdout)
         self.assertTrue(out["is_error"])
-        self.assertIn("沒有", out["llm_error"])
+        self.assertIn(i18n.translate("llm", "runtime {name} has no completion interface, and hub.json has no llm section "
+                                     "(set up an LLM provider)", {"name": "none"}, "zh-Hant"), out["llm_error"])
 
     def test_memory_gaps_says_it_did_not_check(self):
         r = self.run_(BIN / "check-memory-gaps.py", env={"AGENT_HUB_LANG_UI": "zh-Hant"})   # the message asserted is the zh-Hant one
         self.assertEqual(r.returncode, 0, r.stderr)
-        self.assertIn("不檢查", r.stdout)
+        self.assertIn(i18n.translate("check-memory-gaps", "memory gap check skipped: {reason}", {"reason": ""}, "zh-Hant"),
+                      r.stdout)
 
     def test_doctor_feature_table(self):
         sys.path.insert(0, str(BIN))

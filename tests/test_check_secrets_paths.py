@@ -13,6 +13,12 @@ from unittest import mock
 ROOT = pathlib.Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "bin"))
 import hubconf  # noqa: E402
+import i18n  # noqa: E402
+
+
+def zh(msgid: str, **kw) -> str:
+    """check-secrets' zh-Hant text of a message (run_main runs in zh-Hant)"""
+    return i18n.translate("check-secrets", msgid, kw, "zh-Hant")
 
 spec = importlib.util.spec_from_file_location("check_secrets", ROOT / "bin" / "check-secrets.py")
 check_secrets = importlib.util.module_from_spec(spec)
@@ -61,14 +67,16 @@ class WhatIsChecked(unittest.TestCase):
         return out.getvalue()
 
     def test_discord_token_only_when_alerts_use_discord(self):
-        self.assertIn("檢查了 0 個憑證", self.run_main(None, {}))
+        self.assertIn(zh("Checked {count} {count:credential|credentials}, {problems} {problems:problem|problems}",
+                         count=0, problems=0), self.run_main(None, {}))
         out = self.run_main({"discord_token_file": "/nonexistent/discord-token"}, {})
-        self.assertIn("discord-bot-token 不在", out)
+        self.assertIn(zh("{name} is missing ({path})", name="discord-bot-token", path="/nonexistent/discord-token"), out)
 
     def test_module_secrets_only_when_enabled(self):
         mod = {"name": "backup", "type": "module",
                "secrets": [{"name": "b2-key", "path": "/nonexistent/b2-env"}]}
-        self.assertIn("b2-key 不在", self.run_main(None, {"backup": mod}))
+        self.assertIn(zh("{name} is missing ({path})", name="b2-key", path="/nonexistent/b2-env"),
+                      self.run_main(None, {"backup": mod}))
         self.assertNotIn("b2-key", self.run_main(None, {}))
 
 

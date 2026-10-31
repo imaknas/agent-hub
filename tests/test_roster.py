@@ -36,7 +36,7 @@ class Roster(unittest.TestCase):
             old = hubconf.registry_dir
             hubconf.registry_dir = lambda: pathlib.Path(d)
             try:
-                pathlib.Path(d, "x.yaml").write_text("# 註解\n" + yaml.safe_dump(doc, allow_unicode=True, sort_keys=False))
+                pathlib.Path(d, "x.yaml").write_text("# a comment, café résumé\n" + yaml.safe_dump(doc, allow_unicode=True, sort_keys=False))
                 self.assertEqual(hubconf.roster(), {"x": doc["paths"]})
             finally:
                 hubconf.registry_dir = old

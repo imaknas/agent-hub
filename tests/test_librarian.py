@@ -25,7 +25,7 @@ class JqSemantics(unittest.TestCase):
 
     def test_interpolation(self):
         self.assertEqual(lib.jstr(None), "null")
-        self.assertEqual(lib.jstr("文字"), "文字")
+        self.assertEqual(lib.jstr("café"), "café")   # not escaped
         self.assertEqual(lib.jstr(3), "3")
         self.assertEqual(lib.jq_bool(True), "true")
         self.assertEqual(lib.jq_bool(None), "null")
@@ -46,7 +46,7 @@ class Handoffs(unittest.TestCase):
 
     def test_empty_quote_is_still_shown_like_jq(self):
         self.assertIn("own words: ", lib.handoff_text({"effect": "x", "fact": "f", "quote": "", "why": "w", "ts": "t"}))
-        self.assertNotIn("原話", lib.handoff_text({"effect": "x", "fact": "f", "quote": None, "why": "w", "ts": "t"}))
+        self.assertNotIn("own words", lib.handoff_text({"effect": "x", "fact": "f", "quote": None, "why": "w", "ts": "t"}))
 
 
 class Dangling(unittest.TestCase):
@@ -54,7 +54,7 @@ class Dangling(unittest.TestCase):
         d = pathlib.Path(tempfile.mkdtemp())
         (d / "memory" / "reference").mkdir(parents=True)
         (d / "memory" / "reference" / "ok.md").write_text("x")
-        (d / "STATE.md").write_text("見 memory/reference/ok.md、memory/reference/gone.md、memory/YYYY-MM-DD.md、memory/reference/*.md\n")
+        (d / "STATE.md").write_text("See memory/reference/ok.md;memory/reference/gone.md, memory/YYYY-MM-DD.md, memory/reference/*.md\n")
         self.assertEqual(lib.dangling_refs(d), " memory/reference/gone.md")
 
     def test_no_state_md(self):

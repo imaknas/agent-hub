@@ -18,9 +18,20 @@ from contextlib import redirect_stdout
 from unittest import mock
 
 ROOT = pathlib.Path(__file__).resolve().parents[1]
-ASKS = {"id": 41, "status": "pending", "effect": "asks", "project": "proj", "fact": "shop-app 的匯入查到哪了?",
-        "quote": "去問一下", "ts": "2026-10-27T10:00:00+08:00"}
-FACT = {"id": 42, "status": "pending", "effect": "relevant", "project": "proj", "fact": "下週出國", "item": None}
+sys.path.insert(0, str(ROOT / "bin"))
+import i18n  # noqa: E402
+
+ASKS = {"id": 41, "status": "pending", "effect": "asks", "project": "proj", "fact": "How far is the shop-app import?",
+        "quote": "go ask", "ts": "2026-10-27T10:00:00+08:00"}
+FACT = {"id": 42, "status": "pending", "effect": "relevant", "project": "proj", "fact": "abroad next week", "item": None}
+# the asks instruction's retired zh-Hant wording (before 10-27: the first reply had to be the answer itself); it must
+# not come back
+RETIRED = json.loads((ROOT / "tests" / "fixtures" / "hubbus-asks.zh-Hant.json").read_text())["retired_first_reply_rule"]
+
+
+def zh(msgid, **kw):
+    """hubbus's message in zh-Hant, the language these tests run the code in"""
+    return i18n.translate("hubbus", msgid, kw, "zh-Hant")
 
 
 def load():
@@ -58,11 +69,15 @@ class Asks(unittest.TestCase):
         self.m.import_handoffs(self.c)
         p = self.m.payload(self.letter(41))
         self.assertEqual((p["type"], p["handoff_id"], p["effect"]), ("question", 41, "asks"))
-        self.assertIn("shop-app 的匯入查到哪了?", p["text"])
-        self.assertIn("回覆一定要帶 --reply-to", p["text"])
-        # since 10-27 the assistant relays every one back to the original conversation (m10291432)
-        self.assertIn("每一則都會原樣講給", p["text"])
-        self.assertNotIn("第一則回覆就要是答案本身", p["text"])
+        self.assertIn("How far is the shop-app import?", p["text"])
+        # the reply must carry --reply-to; since 10-27 the assistant relays every one back to the original conversation
+        # (m10291432)
+        self.assertIn(zh("Reply: `agenthub send --to {alias} --reply-to <this letter's id> --type info --text \"the "
+                         'answer"`. Always add --reply-to: the answer and every later addition are each passed on to '
+                         "{owner} as written. After answering, `agenthub done <id>`; with only a done and no reply, "
+                         "{assistant} reports that this project closed the question without an answer.",
+                         alias=self.m.OWNER_ALIAS, owner=self.m.OWNER, assistant=self.m.ASSISTANT), p["text"])
+        self.assertNotIn(RETIRED, p["text"])
         self.assertEqual(self.m.payload(self.letter(42))["type"], "handoff")   # other effects as before
 
     def test_librarian_does_not_apply_asks(self):
@@ -95,12 +110,12 @@ class Asks(unittest.TestCase):
     def test_reply_carries_the_handoff_id_back(self):
         self.m.import_handoffs(self.c)
         with mock.patch.object(sys, "argv", ["hubbus", "send", "--from", "proj", "--to", self.m.OWNER_ALIAS, "--type", "info",
-                                             "--reply-to", f"{self.m.HANDOFF_ID_PREFIX}41", "--text", "查到 9/11 那筆了"]), \
+                                             "--reply-to", f"{self.m.HANDOFF_ID_PREFIX}41", "--text", "found the 9/11 entry"]), \
                 redirect_stdout(io.StringIO()) as out:
             self.m.main()
         ev = self.c.execute("SELECT * FROM events WHERE id=?", (out.getvalue().strip(),)).fetchone()
         item = self.m.to_assistant(self.c, ev)
-        self.assertEqual((item["handoff_id"], item["text"]), (41, "查到 9/11 那筆了"))
+        self.assertEqual((item["handoff_id"], item["text"]), (41, "found the 9/11 entry"))
 
     # --- a closure must not be taken as the answer (the assistant tells the owner the first one carrying the handoff_id
     # as the answer) ---
@@ -112,26 +127,26 @@ class Asks(unittest.TestCase):
     def test_done_after_a_reply_is_not_forwarded(self):
         self.m.import_handoffs(self.c)
         mid = f"{self.m.HANDOFF_ID_PREFIX}41"
-        self.m.publish(self.c, "r1", "message", "proj", self.m.hubconf.owner_address(), mid, {"type": "info", "text": "答案", "reply_to": mid,
+        self.m.publish(self.c, "r1", "message", "proj", self.m.hubconf.owner_address(), mid, {"type": "info", "text": "the answer", "reply_to": mid,
                                                                       "handoff_id": 41})
-        self.assertIsNone(self.m.to_assistant(self.c, self.done(mid, "已回")))
+        self.assertIsNone(self.m.to_assistant(self.c, self.done(mid, "replied")))
 
     def test_done_with_a_note_and_no_reply_carries_the_note_as_the_answer(self):
         self.m.import_handoffs(self.c)
-        item = self.m.to_assistant(self.c, self.done(f"{self.m.HANDOFF_ID_PREFIX}41", "查到 9/11 那筆"))
-        self.assertEqual((item["type"], item["text"], item["handoff_id"]), ("progress", "查到 9/11 那筆", 41))
+        item = self.m.to_assistant(self.c, self.done(f"{self.m.HANDOFF_ID_PREFIX}41", "found the 9/11 one"))
+        self.assertEqual((item["type"], item["text"], item["handoff_id"]), ("progress", "found the 9/11 one", 41))
 
     def test_done_without_answer_says_so_explicitly(self):
         self.m.import_handoffs(self.c)
         item = self.m.to_assistant(self.c, self.done(f"{self.m.HANDOFF_ID_PREFIX}41"))
         self.assertEqual(item["type"], "done")
-        self.assertIn("沒有回答", item["text"])
-        self.assertNotEqual(item["text"], "已處理")
+        self.assertEqual(item["text"], zh("(this project closed the question without answering it)"))
+        self.assertNotEqual(item["text"], zh("handled"))
 
     def test_ordinary_handoff_done_unchanged(self):
         self.m.import_handoffs(self.c)
         item = self.m.to_assistant(self.c, self.done(f"{self.m.HANDOFF_ID_PREFIX}42"))
-        self.assertEqual((item["type"], item["text"], item["handoff_id"]), ("done", "已處理", 42))
+        self.assertEqual((item["type"], item["text"], item["handoff_id"]), ("done", zh("handled"), 42))
 
     def test_minute_dispatch_pulls_handoffs_but_bridge_path_does_not_double(self):
         class RT:

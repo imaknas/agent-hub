@@ -6,8 +6,8 @@ The scenario table was locked in against the old task registration (v1 task / do
 what both did, the rest what only the registrar does (the old one's bugs in pe and pg: the spec's order, relink before
 reconcile, fixes both). v1's letters still on the bus count (registrar.py's v1_compat): pj, pk.
 
-  pa  〔Alex〕 line without a key                  → raised / task sent, line end stamped
-  pb  line with a key + closed (done)             → that line deleted, an empty section gets "- (無)", closure
+  pa  owner line without a key                    → raised / task sent, line end stamped
+  pb  line with a key + closed (done)             → that line deleted, an empty section gets the empty marker, closure
                                                     marked done
   pc  deleted key + reopened                      → the line added back
   pd  sent, not closed, not found in STATE.md     → one inferred-done claim sent (not sent again on a second run)
@@ -54,32 +54,48 @@ def key(project: str, text: str) -> str:
     return f"task-{project}-" + hashlib.sha1(" ".join(text.split()).encode()).hexdigest()[:10]
 
 
+# the scenarios run on a zh-Hant instance: the registrar reads and writes the zh-Hant to-do tokens (the item texts are
+# opaque to it)
+ZH = todo_tokens.tokens("zh-Hant")
+
+
 def marker(k: str) -> str:
-    return f"(等 {TAG}:{k})"
+    return todo_tokens.stamp("zh-Hant", TAG, k)
+
+
+def owner(text: str) -> str:
+    return todo_tokens.item("zh-Hant", "owner", TAG, text)
+
+
+def agent(text: str) -> str:
+    return todo_tokens.item("zh-Hant", "agent", TAG, text)
 
 
 def state(*todo: str) -> str:
-    return "# STATE\n\n## 現況\n\n測試專案。\n\n## 待辦\n\n" + "\n".join(todo) + "\n"
+    return f"# STATE\n\n## Now\n\nA test project.\n\n{ZH['todo_heading']}\n\n" + "\n".join(todo) + "\n"
 
 
-KB, KC, KD, KE = key("pb", "付網域"), key("pc", "簽合約"), key("pd", "買零件"), key("pe", "續約保險")
-KF, KG, KH, KI = key("pf", "訂機票"), key("pg", "繳稅"), key("ph", "回信給房東"), key("pi", "訂飯店")
+KB, KC, KD, KE = key("pb", "Pay the domain"), key("pc", "Sign the contract"), key("pd", "Buy parts"), key("pe", "Renew the insurance")
+KF, KG, KH, KI = key("pf", "Book flights"), key("pg", "Pay the tax"), key("ph", "Reply to the landlord"), key("pi", "Book the hotel")
 KN, KW = key("pn", "pay rent"), key("pw", "renew insurance")
 EKN = f" (waiting on owner: {KN})"
 SCENES = {
-    "pa": {"state": state("- [ ] 〔Alex〕續約網域", "- [ ] 〔agent〕加重試")},
-    "pb": {"state": state(f"- [ ] 〔Alex〕付網域{marker(KB)}"), "posted": {KB: "付網域"},
-           "settle": [("s-pb", KB, "done", "付網域")]},
-    "pc": {"state": state("- [ ] 〔agent〕別的事"), "posted": {KC: "簽合約"},
-           "settle": [("s-pc", KC, "reopened", "簽合約")]},
-    "pd": {"state": state("- [ ] 〔agent〕別的事"), "posted": {KD: "買零件"}},
-    "pe": {"state": state("- [ ] 〔Alex〕續約保險(今年)"), "posted": {KE: "續約保險"}},
-    "pf": {"state": state(f"- [ ] 〔Alex〕訂機票,要靠走道{marker(KF)}"), "posted": {KF: "訂機票"}},
-    "pg": {"state": state("- [ ] 〔Alex〕繳稅"), "posted": {KG: "繳稅"}},
-    "ph": {"state": state("- [ ] 〔agent〕別的事"), "posted": {KH: "回信給房東"}, "withdrawn": [KH]},
-    "pj": {"state": state("- [ ] 〔agent〕別的事"), "posted": {key("pj", "寄掛號"): "寄掛號"}, "v1_claimed": [key("pj", "寄掛號")]},
-    "pk": {"state": state(f"- [ ] 〔Alex〕寄包裹{marker(key('pk-old', '寄包裹'))}"), "v1_posted_as": ("pk-old", "寄包裹")},
-    "pi": {"state": state("- [ ] 〔Alex〕訂飯店,含早餐"), "posted": {KI: "訂飯店"}, "amended": {KI: "訂飯店,含早餐"}},
+    "pa": {"state": state(owner("Renew the domain"), agent("Add retries"))},
+    "pb": {"state": state(owner("Pay the domain") + marker(KB)), "posted": {KB: "Pay the domain"},
+           "settle": [("s-pb", KB, "done", "Pay the domain")]},
+    "pc": {"state": state(agent("Something else")), "posted": {KC: "Sign the contract"},
+           "settle": [("s-pc", KC, "reopened", "Sign the contract")]},
+    "pd": {"state": state(agent("Something else")), "posted": {KD: "Buy parts"}},
+    "pe": {"state": state(owner("Renew the insurance (this year)")), "posted": {KE: "Renew the insurance"}},
+    "pf": {"state": state(owner("Book flights, aisle seat") + marker(KF)), "posted": {KF: "Book flights"}},
+    "pg": {"state": state(owner("Pay the tax")), "posted": {KG: "Pay the tax"}},
+    "ph": {"state": state(agent("Something else")), "posted": {KH: "Reply to the landlord"}, "withdrawn": [KH]},
+    "pj": {"state": state(agent("Something else")), "posted": {key("pj", "Send a registered letter"): "Send a registered letter"},
+           "v1_claimed": [key("pj", "Send a registered letter")]},
+    "pk": {"state": state(owner("Send the parcel") + marker(key("pk-old", "Send the parcel"))),
+           "v1_posted_as": ("pk-old", "Send the parcel")},
+    "pi": {"state": state(owner("Book the hotel, breakfast included")), "posted": {KI: "Book the hotel"},
+           "amended": {KI: "Book the hotel, breakfast included"}},
     "pl": {"state": state(), "raised_by_project": {"lease-x-1-task-0": "measure the desk"}},
     "pn": {"state": f"# STATE\n\n## Notes\n\n- [ ] [owner] pay rent{EKN}\n\n## Tasks\n\n- [ ] [owner] pay rent{EKN}\n",
            "posted": {KN: "pay rent"}, "settle": [("s-pn", KN, "done", "pay rent")]},
@@ -102,7 +118,7 @@ class Env:
                 (self.hub / "bin" / f.name).symlink_to(f)
         for d in ("projects", ".state", ".logs", "data"):
             (self.hub / d).mkdir()
-        (self.hub / "data" / "openclaw-migration-status.md").write_text("# status\n\n## 待辦\n\n- (無)\n")
+        (self.hub / "data" / "openclaw-migration-status.md").write_text(f"# status\n\n{ZH['todo_heading']}\n\n{ZH['todo_none']}\n")
         (self.hub / ".state" / "project-renames.json").write_text(json.dumps({"pk-old": {"new": "pk", "stage": "done"}}))
         (self.hub / "hub.json").write_text(json.dumps({
             "v": 1, "registry_dir": "projects", "memory_copies": str(tmp / "copies"), "git_origin": str(tmp / "bare"),
@@ -172,7 +188,7 @@ class Env:
             for k in s["v1_claimed"]:
                 c.execute("INSERT INTO events(id, ts, type, source, to_project, ref, payload) VALUES(?,?,?,?,?,?,?)",
                           (f"done-{k}", "2026-10-22T10:00:00+08:00", "message", p, OWNER, None,
-                           json.dumps({"v": 1, "type": "done", "task": k, "inferred": True, "text": "推斷"})))
+                           json.dumps({"v": 1, "type": "done", "task": k, "inferred": True, "text": "inferred"})))
             c.commit(); c.close()
         if recs:
             r = self.hubbus("record-publish", "--json", "-", stdin=json.dumps(recs, ensure_ascii=False))
@@ -226,16 +242,16 @@ class RegistrarFlow(unittest.TestCase):
 
     def test_scenarios(self):
         def check(env, log):
-            ka = key("pa", "續約網域")
+            ka = key("pa", "Renew the domain")
             self.assertIn(marker(ka), env.state("pa"))
             self.assertIn(marker(ka), env.remote_state("pa"), "the stamp is committed and pushed")
             self.assertEqual(env.outputs("pa"), [("raised", ka)])
-            self.assertNotIn("付網域", env.state("pb"))
-            self.assertIn("- (無)", env.state("pb"))
-            self.assertIn(f"〔Alex〕簽合約{marker(KC)}", env.state("pc"))
+            self.assertNotIn("Pay the domain", env.state("pb"))
+            self.assertIn(ZH["todo_none"], env.state("pb"))
+            self.assertIn(owner("Sign the contract") + marker(KC), env.state("pc"))
             self.assertEqual(env.outputs("pd"), [("claim", KD)])
-            self.assertEqual(env.outputs("pe"), [("raised", key("pe", "續約保險(今年)"))])
-            self.assertIn("續約保險(今年)", env.state("pe"))
+            self.assertEqual(env.outputs("pe"), [("raised", key("pe", "Renew the insurance (this year)"))])
+            self.assertIn("Renew the insurance (this year)", env.state("pe"))
             self.assertEqual(env.outputs("pf"), [("amended", KF)])
             self.assertIn(marker(KG), env.state("pg"))
             self.assertEqual(env.outputs("pg"), [])

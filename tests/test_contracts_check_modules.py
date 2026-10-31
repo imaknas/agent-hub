@@ -7,6 +7,7 @@ from the start.
 import importlib.util
 import os
 import pathlib
+import string
 import sys
 import tempfile
 import unittest
@@ -14,10 +15,25 @@ from unittest import mock
 
 ROOT = pathlib.Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "bin"))
+import i18n  # noqa: E402
 
 spec = importlib.util.spec_from_file_location("contracts_check", ROOT / "bin" / "contracts-check.py")
 cc = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(cc)
+
+
+def zh(msgid: str, **kw) -> str:
+    """contracts-check's zh-Hant text of a message, its placeholders filled from kw; a placeholder not given ends it
+    there (the fixed part before it, to look for)"""
+    out = ""
+    for lit, field, spec, conv in string.Formatter().parse(i18n.catalog("contracts-check", "zh-Hant")[msgid]):
+        out += lit
+        if field is None:   # the end, or an escaped brace
+            continue
+        if field not in kw:
+            return out
+        out += format(kw[field], spec)
+    return out
 
 
 class ModuleConsumes(unittest.TestCase):
@@ -35,11 +51,15 @@ class ModuleConsumes(unittest.TestCase):
 
     def test_enabled_module_copies_are_compared(self):
         errs = cc.cross_copies({"projects": {"helper": self.producer}, "modules": {"assistant": self.module}})
-        self.assertTrue(any("assistant 的 helper-x 副本" in e for e in errs), errs)
+        want = zh("{name}'s copy of {contract} differs from {producer}'s original: {copy} vs {orig}", name="assistant",
+                  contract="helper-x", producer="helper")
+        self.assertTrue(any(want in e for e in errs), errs)
 
     def test_missing_producer_is_reported_for_an_enabled_module(self):
         errs = cc.cross_copies({"projects": {}, "modules": {"assistant": self.module}})
-        self.assertTrue(any("helper 的登錄沒有 provides" in e for e in errs), errs)
+        want = zh("{name} reads {contract}, but {producer}'s registry entry does not provide it", name="assistant",
+                  contract="helper-x", producer="helper")
+        self.assertTrue(any(want in e for e in errs), errs)
 
     def test_disabled_module_is_not_compared(self):
         self.assertEqual(cc.cross_copies({"projects": {}, "modules": {}}), [])

@@ -48,7 +48,7 @@ class NoteCommits(unittest.TestCase):
     def test_platform_commits_are_not_notes(self):
         self.commit("init: memory skeleton", ".gitkeep")
         self.commit("consolidate: fold 3 raw notes into reference/ (2026-10-25)", "reference.md")
-        self.commit("librarian: Knas 任務登錄(Muninn)", "x.md")
+        self.commit("librarian: register the owner's tasks (assistant)", "x.md")
         self.assertEqual(self.m.note_commits_since(str(self.repo), self.since), 0)
 
     def test_agent_notes_count_but_merges_do_not(self):
@@ -71,7 +71,7 @@ class TodoBlock(unittest.TestCase):
     def setUp(self):
         self.m = load()
         self.todo = pathlib.Path(tempfile.mkdtemp()) / "todo.md"
-        self.todo.write_text("# todo\n\n- [ ] 〔agent〕x\n")
+        self.todo.write_text("# todo\n\n- [ ] [agent] x\n")
 
     def test_block_added_replaced_removed(self):
         self.m.write_todo_block(self.todo, ["- [ ] **a**:…"])
@@ -80,9 +80,9 @@ class TodoBlock(unittest.TestCase):
         self.assertEqual(s.count("<!-- memory-gaps:begin -->"), 1)
         self.assertIn("**b**", s)
         self.assertNotIn("**a**", s)
-        self.assertTrue(s.startswith("# todo\n\n- [ ] 〔agent〕x\n"))
+        self.assertTrue(s.startswith("# todo\n\n- [ ] [agent] x\n"))
         self.m.write_todo_block(self.todo, [])
-        self.assertEqual(self.todo.read_text(), "# todo\n\n- [ ] 〔agent〕x\n")
+        self.assertEqual(self.todo.read_text(), "# todo\n\n- [ ] [agent] x\n")
 
     def test_missing_todo_is_left_alone(self):
         missing = self.todo.parent / "nope.md"

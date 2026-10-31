@@ -18,6 +18,13 @@ import unittest
 
 ROOT = pathlib.Path(__file__).resolve().parents[1]
 PY = sys.executable   # under the gate this is the platform's Python (bin/py)
+sys.path.insert(0, str(ROOT / "bin"))
+import i18n  # noqa: E402
+
+
+def zh(msgid: str, **kw) -> str:
+    """upgrade-idea's zh-Hant text of a message (the runs below are in zh-Hant)"""
+    return i18n.translate("upgrade-idea", msgid, kw, "zh-Hant")
 
 try:
     import yaml
@@ -49,7 +56,7 @@ sed -e "s/^name: $1\$/name: $2/" -e "s#workspace/$1\$#workspace/$2#" -e "s#/$1-m
 rm "$AGENT_HUB_ROOT/projects/$1.yaml"
 """
 
-IDEA = """# 專案登錄
+IDEA = """# project registry
 v: 1
 name: idea-7
 paths:
@@ -58,7 +65,7 @@ paths:
   origin: (native)
 memory: true
 type: idea
-purpose: 測試用的想法
+purpose: an idea for testing
 enforce:
   sandbox: true
   capabilities: [gpu]
@@ -177,7 +184,9 @@ class Upgrade(unittest.TestCase):
         (self.hub / "projects" / "idea-7.yaml").write_text(before)
         res, code = self.upgrade()
         self.assertEqual((code, res["result"]), (1, "failed"))
-        self.assertIn("什麼都沒動", res["detail"])
+        # the fixed part before the validation errors
+        self.assertIn(zh("the upgraded registry entry would not be valid; nothing was changed: {errors}",
+                         errors="{errors}").split("{errors}")[0], res["detail"])
         self.assertFalse(self.remote().exists(), "no repo is created when validation fails")
         self.assertEqual((self.hub / "projects" / "idea-7.yaml").read_text(), before)
         self.assertEqual(self.record(), {})
@@ -219,7 +228,9 @@ class Upgrade(unittest.TestCase):
             (state / "project-renames.json").write_text(json.dumps(rec))
             res, code = self.upgrade()
             self.assertEqual((code, res["result"]), (1, "failed"))
-            self.assertIn("先把改名的重試做完", res["detail"])
+            [(old, r)] = rec.items()
+            self.assertIn(zh("the rename {old} → {new} stopped halfway (stage {stage}): first retry the rename until it "
+                             "completes", old=old, new=r["new"], stage=r["stage"]), res["detail"])
             self.assertFalse(self.remote().exists())
         (state / "project-renames.json").write_text(json.dumps({"idea-7": {"new": "room-3d", "stage": "done"},
                                                                  "other": {"new": "x", "stage": "github"}}))

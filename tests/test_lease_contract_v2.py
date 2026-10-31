@@ -24,6 +24,7 @@ from unittest import mock
 ROOT = pathlib.Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "bin"))
 import minischema  # noqa: E402
+import i18n  # noqa: E402
 import runtime_ports  # noqa: E402
 
 FIX = ROOT / "tests" / "fixtures" / "lease"
@@ -105,7 +106,7 @@ class Events(unittest.TestCase):
         self.assertEqual([e["kind"] for e in uses],
                          ["read", "search", "search", "run_command", "open_web", "search", "ask_user", "write_file",
                           "write_file", "write_file", "other", "other", "other"])
-        self.assertEqual(uses[1]["summary"], "搜尋 blender")  # what is searched is the pattern, not a path
+        self.assertEqual(uses[1]["summary"], f"{i18n.translate('runtime_claude', 'search', {}, 'zh-Hant')} blender")  # what is searched is the pattern, not a path
 
     def test_quota_and_errors(self):
         q = [e for e in self.stored if e["type"] == "quota"][0]
@@ -122,7 +123,9 @@ class Events(unittest.TestCase):
     def test_show_file_tool_is_translated(self):
         import runtime_claude
         kind, _, target, summary = runtime_claude.action("mcp__lease_relay__show_file", {"path": "r/a.png"})
-        self.assertEqual((kind, target, summary), ("read", "r/a.png", "給你看 r/a.png"))
+        self.assertEqual((kind, target, summary),
+                         ("read", "r/a.png", i18n.translate("runtime_claude", "showing you {path}", {"path": "r/a.png"},
+                                                            "zh-Hant")))
 
     def test_old_stored_events_pass_through(self):
         old = {"v": 1, "seq": 3, "lease_id": "x", "ts": "T", "type": "tool_use", "name": "Read", "summary": "Read a"}
@@ -161,7 +164,8 @@ class ResumeTruthfully(unittest.TestCase):
             m.start_proc(lease, resume=True)
         st, kw = stored[-1]
         self.assertEqual((st, kw["resumed"]), ("running", False))
-        self.assertIn("紀錄已經不在", kw["detail"])
+        self.assertIn(i18n.translate("lease-runner", "The earlier conversation is gone (nothing was said yet, or it is past "
+                                     "retention); starting a new conversation", {}, "zh-Hant"), kw["detail"])
 
 
 class StreamContract(unittest.TestCase):
@@ -170,7 +174,7 @@ class StreamContract(unittest.TestCase):
 
     SCENARIOS = {
         "claude": [
-            {"type": "assistant", "message": {"content": [{"type": "text", "text": "好"},
+            {"type": "assistant", "message": {"content": [{"type": "text", "text": "ok"},
                                                           {"type": "tool_use", "name": "Read", "input": {"file_path": "a.md"}},
                                                           {"type": "tool_use", "name": "Bash", "input": {"command": "ls"}}]}},
             {"type": "rate_limit_event", "rate_limit_info": {"status": "allowed_warning",
@@ -179,7 +183,7 @@ class StreamContract(unittest.TestCase):
             {"type": "result", "is_error": True, "num_turns": 1, "result": "usage limit reached"},
         ],
         "fake": [
-            {"type": "assistant", "data": {"text": "好"}},
+            {"type": "assistant", "data": {"text": "ok"}},
             {"type": "tool_use", "data": {"tool": "read", "input": {"target": "a.md"}}},
             {"type": "tool_use", "data": {"tool": "run_command", "input": {"target": "ls"}}},
             {"type": "quota", "data": {"status": "warning", "windows": [{"id": "w", "label": "w", "used": 0.8}]}},

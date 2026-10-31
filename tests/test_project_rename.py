@@ -22,6 +22,8 @@ import urllib.request
 from unittest import mock
 
 ROOT = pathlib.Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(ROOT / "bin"))
+import i18n  # noqa: E402
 
 FAKE_GH = r"""#!/bin/bash
 echo "gh $*" >> "$LOG"
@@ -33,10 +35,10 @@ fi
 exit 0
 """
 # fake rename-project.sh: renames the registry file like the real one (the other steps only record arguments);
-# with RENAME_BUSY it fails with the real message
+# with RENAME_BUSY it fails with the real message (its English text) and exit code
 FAKE_RENAME = r"""#!/bin/bash
 echo "rename-project.sh $*" >> "$LOG"
-[ -n "$RENAME_BUSY" ] && { echo "rename-project: 還有程序的工作目錄在 /x:claude(1)——先關掉" >&2; exit 75; }
+[ -n "$RENAME_BUSY" ] && { echo "rename-project: processes still have their working directory in /x: claude(1)(close that project's agent sessions / terminal tabs first, then run again)" >&2; exit 75; }
 sed "s/^name: $1$/name: $2/" "$HUB/projects/$1.yaml" > "$HUB/projects/$2.yaml" && rm "$HUB/projects/$1.yaml"
 """
 
@@ -135,7 +137,11 @@ class Script(unittest.TestCase):
         (self.hub / ".state" / "idea-upgrades.json").write_text(json.dumps({"sandbox": {"name": "proj", "stage": "renamed"}}))
         res = self.run_it("proj", "garden-app")
         self.assertEqual(res["result"], "failed")
-        self.assertIn("升級", res["detail"])
+        # the fixed part up to the upgrade's details
+        want = i18n.translate("project-rename", "{name} has an upgrade that stopped halfway ({upgrade}): retry the "
+                              "upgrade until it completes, then rename", {"name": "proj", "upgrade": "{upgrade}"},
+                              "zh-Hant").split("{upgrade}")[0]
+        self.assertIn(want, res["detail"])
         self.assertEqual(self.calls(), [l for l in self.calls() if l.startswith("gh repo view")])
 
     def test_github_failure_changes_nothing(self):

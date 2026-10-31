@@ -43,7 +43,7 @@ class MailHook(unittest.TestCase):
         m.project_of = lambda cwd: "proj"
         self.c = m.db()
         m.db = lambda *a, **k: self.c
-        m.publish(self.c, "m1", "message", "other", "proj", None, {"type": "request", "text": "請處理"})
+        m.publish(self.c, "m1", "message", "other", "proj", None, {"type": "request", "text": "please handle this"})
 
     def hook(self, env):
         clean = {k: v for k, v in os.environ.items() if k not in ("HUB_LLM_POINT", "HUBBUS_LEASE")}

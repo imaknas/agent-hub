@@ -13,6 +13,7 @@ is outside 0.3). info / progress stay v1.
 import importlib.machinery
 import importlib.util
 import io
+import json
 import pathlib
 import re
 import sys
@@ -23,11 +24,10 @@ from unittest import mock
 
 ROOT = pathlib.Path(__file__).resolve().parents[1]
 TS = re.compile(r"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d+)?(Z|[+-]\d{2}:\d{2})$")
-# vectors from acts/0.3 conformance/keys.json (the spec's example key method; the registrar uses the same one)
-KEY_VECTORS = [("demo", "Renew the domain", "task-demo-c3d8af57d4"),
-               ("demo", "  Renew   the\tdomain  ", "task-demo-c3d8af57d4"),
-               ("demo", "Renew the domain.", "task-demo-67ed67cd37"),
-               ("demo", "續約網域", "task-demo-544fefce49")]
+# vectors from acts/0.3 conformance/keys.json (the spec's example key method; the registrar uses the same one), read
+# from the vendored copy: every case, the non-ASCII ones included
+KEY_VECTORS = [(c["project"], c["text"], c["key"]) for c in json.loads(
+    (ROOT / "contracts" / "vendor" / "agent-ops-specs" / "principal-handoff-0.3" / "acts" / "keys.json").read_text())["cases"]]
 # what every kind of record must have (core + the acts schema's required)
 REQUIRED = {"raised": ("terms", "terms_rev"), "claimed": ("outcome", "evidence"), "withdrawn": ("reason",)}
 
@@ -75,30 +75,30 @@ class SendRecords(unittest.TestCase):
 
     # --- switch off: same as before ---
     def test_off_is_v1_unchanged(self):
-        mid = self.send("--type", "task", "--id", "task-proj-0000000001", "--text", "繳房屋稅", "--due", "2026-11-30",
+        mid = self.send("--type", "task", "--id", "task-proj-0000000001", "--text", "Pay the property tax", "--due", "2026-11-30",
                         records=False)
         self.assertEqual(mid, "task-proj-0000000001")
         msgs = self.events("message")
         self.assertEqual([(i, p["type"], p["text"], p["due"]) for i, p in msgs],
-                         [("task-proj-0000000001", "task", "繳房屋稅", "2026-11-30")])
+                         [("task-proj-0000000001", "task", "Pay the property tax", "2026-11-30")])
         self.assertEqual(self.events("record"), [])
 
     # --- switched on ---
     def test_task_with_key_becomes_raised(self):
-        out = self.send("--type", "task", "--id", "task-proj-0000000001", "--text", "繳房屋稅", "--due", "2026-11-30",
-                        "--context", "migration", "--new-reason", "去年那筆是另一棟")
+        out = self.send("--type", "task", "--id", "task-proj-0000000001", "--text", "Pay the property tax", "--due", "2026-11-30",
+                        "--context", "migration", "--new-reason", "last year's was another building")
         eid, r = self.rec()
         self.assertEqual(out, eid)
         self.assertEqual(eid, "rec:acts/0.3:proj:r:task-proj-0000000001")
         self.assertEqual((r["type"], r["id"], r["key"], r["origin"], r["by"], r["terms_rev"]),
                          ("raised", "r:task-proj-0000000001", "task-proj-0000000001", "requester", "project:proj", 1))
-        self.assertEqual(r["terms"], {"text": "繳房屋稅", "due": "2026-11-30"})
-        self.assertEqual((r["context"], r["note"]), ("migration", "去年那筆是另一棟"))
+        self.assertEqual(r["terms"], {"text": "Pay the property tax", "due": "2026-11-30"})
+        self.assertEqual((r["context"], r["note"]), ("migration", "last year's was another building"))
         self.assertEqual(self.events("message"), [])   # no more v1 letter
 
     def test_resend_same_key_is_noop(self):
-        self.send("--type", "task", "--id", "task-proj-0000000001", "--text", "繳房屋稅")
-        self.send("--type", "task", "--id", "task-proj-0000000001", "--text", "繳房屋稅")
+        self.send("--type", "task", "--id", "task-proj-0000000001", "--text", "Pay the property tax")
+        self.send("--type", "task", "--id", "task-proj-0000000001", "--text", "Pay the property tax")
         self.rec()
 
     def test_resend_with_other_terms_amends(self):
@@ -124,55 +124,58 @@ class SendRecords(unittest.TestCase):
         self.assertEqual((w["type"], w["supersedes"]), ("withdrawn", ["r:task-proj-0000000001"]))
 
     def test_task_without_key_uses_the_registrar_recipe(self):
+        # the vectors this test used to list inline are all still there (544fefce49: a CJK text)
+        self.assertLessEqual({"task-demo-c3d8af57d4", "task-demo-67ed67cd37", "task-demo-544fefce49"},
+                             {key for _, _, key in KEY_VECTORS})
         for project, text, key in KEY_VECTORS:
             self.assertEqual(self.m.task_key(project, text), key)
-        self.send("--type", "task", "--text", "  續約網域 ")
+        self.send("--type", "task", "--text", "  café-résumé ")
         _, r = self.rec()
-        self.assertEqual(r["key"], self.m.task_key("proj", "續約網域"))
-        self.assertEqual(r["terms"], {"text": "續約網域"})
+        self.assertEqual(r["key"], self.m.task_key("proj", "café-résumé"))
+        self.assertEqual(r["terms"], {"text": "café-résumé"})
 
     def test_request_to_owner_raises_too(self):
-        self.send("--type", "request", "--text", "幫我簽合約")
+        self.send("--type", "request", "--text", "Sign the contract for me")
         _, r = self.rec()
-        self.assertEqual((r["type"], r["key"]), ("raised", self.m.task_key("proj", "幫我簽合約")))
+        self.assertEqual((r["type"], r["key"]), ("raised", self.m.task_key("proj", "Sign the contract for me")))
 
     def test_done_task_becomes_claimed(self):
-        out = self.send("--type", "done", "--task", "task-proj-0000000001", "--text", "已經繳了,收據在 docs/")
+        out = self.send("--type", "done", "--task", "task-proj-0000000001", "--text", "Paid already, receipt in docs/")
         eid, r = self.rec()
         self.assertEqual(out, eid)
         self.assertEqual((r["type"], r["key"], r["origin"], r["by"], r["outcome"]),
                          ("claimed", "task-proj-0000000001", "agent", "project:proj", "done"))
-        self.assertEqual(r["evidence"], {"basis": "已經繳了,收據在 docs/"})
+        self.assertEqual(r["evidence"], {"basis": "Paid already, receipt in docs/"})
         self.assertTrue(r["id"].startswith("c:task-proj-0000000001:"))
         self.assertNotRegex(r["id"], r":r\d+$")   # kept apart from the registrar's c:<key>:r<n>
         self.assertEqual(self.events("message"), [])
 
     def test_two_claims_get_distinct_ids(self):
-        self.send("--type", "done", "--task", "task-proj-0000000001", "--text", "做了")
-        self.send("--type", "done", "--task", "task-proj-0000000001", "--text", "真的做了")
+        self.send("--type", "done", "--task", "task-proj-0000000001", "--text", "Done it")
+        self.send("--type", "done", "--task", "task-proj-0000000001", "--text", "Really done it")
         self.assertEqual(len({i for i, _ in self.events("record")}), 2)
 
     def test_drop_task_becomes_withdrawn_not_needed(self):
-        self.send("--type", "drop", "--task", "task-proj-0000000001", "--text", "改用別的方案,不用買了")
+        self.send("--type", "drop", "--task", "task-proj-0000000001", "--text", "Went another way, no need to buy it")
         _, r = self.rec()
         self.assertEqual((r["type"], r["key"], r["origin"], r["by"], r["reason"], r["note"]),
                          ("withdrawn", "task-proj-0000000001", "requester", "project:proj", "not_needed",
-                          "改用別的方案,不用買了"))
+                          "Went another way, no need to buy it"))
 
     def test_inferred_is_the_registrars_and_is_rejected(self):
         with self.assertRaises(SystemExit) as e:
-            self.send("--type", "done", "--task", "task-proj-0000000001", "--inferred", "--text", "STATE.md 刪了")
+            self.send("--type", "done", "--task", "task-proj-0000000001", "--inferred", "--text", "deleted from STATE.md")
         self.assertIn("record-publish", str(e.exception.code))
         self.assertEqual(self.events("record") + self.events("message"), [])
 
     def test_info_and_progress_stay_v1(self):
-        self.send("--type", "info", "--text", "部署好了")
+        self.send("--type", "info", "--text", "deployed")
         self.send("--type", "progress", "--text", "halfway")
         self.assertEqual([p["type"] for _, p in self.events("message")], ["info", "progress"])
         self.assertEqual(self.events("record"), [])
 
     def test_done_without_task_to_owner_stays_v1(self):
-        self.send("--type", "done", "--text", "那件事好了")
+        self.send("--type", "done", "--text", "that thing is done")
         self.assertEqual([p["type"] for _, p in self.events("message")], ["done"])
 
     def test_send_works_where_the_sandbox_forbids_ps(self):
@@ -190,7 +193,7 @@ class SendRecords(unittest.TestCase):
         self.assertEqual([p["type"] for _, p in self.events("message")], ["info"])
 
     def test_v1_forward_never_posts_records(self):
-        self.send("--type", "task", "--text", "繳房屋稅")
+        self.send("--type", "task", "--text", "Pay the property tax")
         ev = self.c.execute("SELECT * FROM events WHERE type='record'").fetchone()
         self.assertIsNone(self.m.to_assistant(self.c, ev))
 

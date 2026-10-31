@@ -19,6 +19,25 @@ import unittest
 
 ROOT = pathlib.Path(__file__).resolve().parents[1]
 PERSONAL = re.compile(r"knas|muninn|imaknas", re.I)
+sys.path.insert(0, str(ROOT / "bin"))
+import i18n  # noqa: E402
+
+
+def scheduler_not_running() -> str:
+    """doctor's zh-Hant line for this hub's scheduler when it is not running: not loaded, a different hub's, no service
+    manager at all, or (systemd) not installed"""
+    def zh(domain, msgid, **kw):
+        return i18n.translate(domain, msgid, kw, "zh-Hant")
+    what, label = zh("agenthub", "scheduler"), "local.agent-hub-scheduler"
+    lines = [zh("agenthub", "{what} ({label}): not loaded", what=what, label=label),
+             zh("agenthub", "{what} ({label}): the loaded one belongs to a different hub, not {bin}", what=what,
+                label=label, bin="{bin}").split("{bin}")[0],
+             zh("agenthub", "scheduler, watchdog: {reason}", reason=zh(
+                 "hubconf", "this system has no supported service manager (neither macOS launchd nor the Linux systemd "
+                 "user level): the scheduler, the watchdog and projects' long-running services will not run by "
+                 "themselves")),
+             zh("agenthub", "{what} ({label}.timer): not installed", what=what, label=label)]
+    return "✗ (?:" + "|".join(map(re.escape, lines)) + ")"
 
 
 class NewUser(unittest.TestCase):
@@ -74,8 +93,7 @@ class NewUser(unittest.TestCase):
 
         r = self.hub_cmd("doctor")
         self.assertNotIn("Traceback", r.stdout + r.stderr)
-        self.assertRegex(r.stdout, r"✗ 排程器.*(沒有載入|不是這份 hub|服務管理器|沒有裝)",
-                         "this hub's scheduler is not installed, and doctor must say so")
+        self.assertRegex(r.stdout, scheduler_not_running(), "this hub's scheduler is not installed, and doctor must say so")
 
     def test_config_repo_gate_rejects_bad_config(self):
         self.hub_cmd("init", "--yes", "--no-launchd", "--owner", "Alex")

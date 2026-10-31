@@ -11,10 +11,15 @@ import unittest
 ROOT = pathlib.Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "bin"))
 import contracts  # noqa: E402
+import todo_tokens  # noqa: E402
 
 C = ROOT / "contracts"
 F = C / "fixtures"
-OWNER = "我"  # example files use a neutral owner tag; real files use the configured one (hub.json owner.tag)
+# example files use a neutral owner tag; real files use the configured one (hub.json owner.tag). Read from the v1
+# example's first owner heading.
+_PRE, _POST = todo_tokens.tokens("zh-Hant")["todo_md_headings"][0].split("{owner}")
+OWNER = next(l[len(_PRE):len(l) - len(_POST)] for l in (F / "todo-md.v1.example.md").read_text().splitlines()
+             if l.startswith(_PRE) and l.endswith(_POST))
 
 
 class Markdown(unittest.TestCase):
@@ -22,7 +27,10 @@ class Markdown(unittest.TestCase):
         self.assertEqual(contracts.check_todo_md((F / "todo-md.v1.example.md").read_text(), C / "todo-md.v1.md", OWNER), [])
 
     def test_todo_md_rejects_renamed_heading(self):
-        bad = (F / "todo-md.v1.example.md").read_text().replace("## 只有 我 能做", "## 我的事")
+        text = (F / "todo-md.v1.example.md").read_text()
+        heading = todo_tokens.todo_md_headings("zh-Hant", OWNER)["owner"]
+        self.assertIn(heading, text)
+        bad = text.replace(heading, "## My things")
         self.assertTrue(contracts.check_todo_md(bad, C / "todo-md.v1.md", OWNER))
 
     def test_state_todo_fixture(self):
@@ -32,7 +40,8 @@ class Markdown(unittest.TestCase):
     def test_state_todo_key_regex(self):
         import re
         key = re.compile(contracts.md_rules(C / "state-todo.v1.md", OWNER)["regex:key"][0])
-        m = key.search("- [ ] 〔我〕x(等 我:task-p-0123456789)")
+        m = key.search(todo_tokens.item("zh-Hant", "owner", OWNER, "x")
+                       + todo_tokens.stamp("zh-Hant", OWNER, "task-p-0123456789"))
         self.assertEqual(m.group(1), "task-p-0123456789")
 
 
@@ -166,9 +175,9 @@ class LlmPoints(unittest.TestCase):
     def test_other_side_example_valid(self):
         """The example from the other side's design doc (only the shared fields + its own optional fields)."""
         doc = {"v": 1, "points": {"packet_fit": {
-            "caller": "core/prepare.py", "purpose": "判斷職缺對不對口", "model_group": "draft", "material": "personal",
+            "caller": "core/prepare.py", "purpose": "whether a job opening is a fit", "model_group": "draft", "material": "personal",
             "output": {"format": "json", "schema": "llm/packet_fit.schema.json"}, "on_failure": "retry_later",
-            "eval": {"scorer": "field:verdict", "truth": "使用者後來的回答"},
+            "eval": {"scorer": "field:verdict", "truth": "the user's later answer"},
             "kind": "decide", "labels": ["fit", "not_fit"]}}}
         self.assertEqual(self.errors(self.schema, doc), [])
 
@@ -199,15 +208,18 @@ class Neutral(unittest.TestCase):
             text = p.read_text()
             for word in ("agent-hub", "librarian", "bin/", "Knas", "muninn"):
                 self.assertNotIn(word, text, f"{p.name} mentions {word}")
-        for p in F.glob("*"):  # example files hold no user name either (the owner is the neutral "我")
+        for p in F.glob("*"):  # example files hold no user name either (the owner is a neutral tag, OWNER)
             self.assertNotIn("Knas", p.read_text(), f"{p.name} mentions the user's name")
 
     def test_same_ignores_prose(self):
         import tempfile
         with tempfile.TemporaryDirectory() as d:
             a, b = pathlib.Path(d, "a.md"), pathlib.Path(d, "b.md")
-            a.write_text((C / "todo-md.v1.md").read_text())
-            b.write_text((C / "todo-md.v1.md").read_text().replace("讀的人", "使用的人"))
+            text = (C / "todo-md.v1.md").read_text()
+            prose = "Readers take only items"   # a sentence of the explanation, outside the rule blocks
+            self.assertIn(prose, text)
+            a.write_text(text)
+            b.write_text(text.replace(prose, "Consumers take only items"))
             self.assertTrue(contracts.same(a, b))
             b.write_text((C / "todo-md.v1.md").read_text().replace("^- \\[ \\] (.+)$", "^\\* (.+)$"))
             self.assertFalse(contracts.same(a, b))

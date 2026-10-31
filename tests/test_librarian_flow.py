@@ -28,6 +28,18 @@ import tempfile
 import unittest
 
 ROOT = pathlib.Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(ROOT / "bin"))
+import i18n  # noqa: E402
+import todo_tokens  # noqa: E402
+
+# a zh-Hant instance: the memory repos' content (tests/fixtures/librarian-flow.zh-Hant.json) and STATE.md's to-do tokens
+# are zh-Hant, the log and review-log lines the zh-Hant catalog's
+F = json.loads((ROOT / "tests" / "fixtures" / "librarian-flow.zh-Hant.json").read_text())
+ZH = todo_tokens.tokens("zh-Hant")
+
+
+def zh(msgid: str, **kw) -> str:
+    return i18n.translate("librarian", msgid, kw, "zh-Hant")
 IMPLS = [p for p in ("librarian.sh", "librarian.py") if (ROOT / "bin" / p).exists()]
 TODAY = datetime.date.today().isoformat()
 MODES = {"p0": 0, "p1": 1, "p2": 2, "p3": 3, "pdang": 1, "phand": 0}
@@ -52,22 +64,24 @@ if point == "librarian-state":
         res(structured_output={"state_updated": mode != 1, "summary": f"summary {proj}", "reason": f"reason {proj}",
                                "worth_digesting": mode == 0})
 elif point == "librarian-todo-format":
-    st = cwd / "STATE.md"; st.write_text(st.read_text().replace("- [ ] 沒標負責人", "- [ ] 〔agent〕沒標負責人")); res(structured_output=None)
+    st = cwd / "STATE.md"; st.write_text(st.read_text().replace(os.environ["LIB_TEST_UNTAGGED"], os.environ["LIB_TEST_TAGGED"])); res(structured_output=None)
 elif point == "librarian-index":
     p = cwd / "index.md"; p.write_text(p.read_text() + "\n<!-- index edited -->\n"); res(structured_output={"relations_found": "none"})
 elif point == "librarian-state-edits":   # shadow: touches no file, only returns an edit list
     # (p1 returns an old that does not match)
     import re
     proj = re.search(r"the STATE.md of project (\S+)\. You", prompt).group(1)
-    old = "找不到的一段" if proj == "p1" else "## 待辦"
-    res(structured_output={"state_updated": True, "edits": [{"old": old, "new": f"<!-- shadow {proj} -->\n## 待辦"}],
+    heading = os.environ["LIB_TEST_HEADING"]
+    old = os.environ["LIB_TEST_MISS"] if proj == "p1" else heading
+    res(structured_output={"state_updated": True, "edits": [{"old": old, "new": f"<!-- shadow {proj} -->\n{heading}"}],
                            "worth_digesting": False, "summary": "", "reason": f"shadow {proj}"})
 elif point == "librarian-index-edits":
     res(structured_output={"index_updated": False, "edits": [], "relations_found": "none"})
 '''
 
 # must be bigger than a placeholder (check-state-todo skips small placeholder files, gen-todo.PLACEHOLDER_MAX_BYTES)
-STATE_OK = "# STATE\n\n現況。\n\n" + "這個專案的背景說明。" * 40 + "\n\n## 待辦\n- [ ] 〔agent〕做一件事\n"
+STATE_OK = (f"# STATE\n\n{F['status']}\n\n" + F["background"] * 40 + f"\n\n{ZH['todo_heading']}\n"
+            + todo_tokens.item("zh-Hant", "agent", "Alex", F["one_thing"]) + "\n")
 
 
 def sh(*cmd, cwd=None, env=None):
@@ -99,7 +113,9 @@ class Env:
         # the log and review-log lines asserted below are the zh-Hant catalog's (docs/design/i18n.md), the STATE.md
         # files zh-Hant content
         self.env = {**e, "AGENT_HUB_ROOT": str(self.hub), "AGENT_HUB_LANG_UI": "zh-Hant", "AGENT_HUB_LANG_CONTENT": "zh-Hant",
-                    "LIB_TEST_ENV": str(tmp), "LIB_TEST_MODES": json.dumps(MODES),
+                    "LIB_TEST_ENV": str(tmp), "LIB_TEST_MODES": json.dumps(MODES), "LIB_TEST_HEADING": ZH["todo_heading"],
+                    "LIB_TEST_MISS": F["shadow_miss"], "LIB_TEST_UNTAGGED": "- [ ] " + F["untagged"],
+                    "LIB_TEST_TAGGED": todo_tokens.item("zh-Hant", "agent", "Alex", F["untagged"]),
                     "GIT_AUTHOR_NAME": "t", "GIT_AUTHOR_EMAIL": "t@t", "GIT_COMMITTER_NAME": "t", "GIT_COMMITTER_EMAIL": "t@t",
                     "GIT_CONFIG_GLOBAL": "/dev/null", "GIT_CONFIG_NOSYSTEM": "1"}
         for p in (*MODES, "pidle"):
@@ -116,17 +132,17 @@ class Env:
         sh("git", "clone", "-q", str(bare), str(copy), env=self.env)
         (copy / "memory").mkdir()
         (copy / "AGENT.md").write_text("agent\n")
-        (copy / "memory" / "2026-10-20.md").write_text("- 舊的筆記\n")
+        (copy / "memory" / "2026-10-20.md").write_text(f"- {F['old_note']}\n")
         (copy / "STATE.md").write_text(STATE_OK)
         self.git(copy, "add", "-A"); self.git(copy, "commit", "-qm", "init"); self.git(copy, "push", "-q", "origin", "HEAD")
         (self.hub / ".state" / f"{p}.sha").write_text(self.git(copy, "rev-parse", "HEAD") + "\n")
         if p in ("phand", "pidle"):
             return
         # new memory pushed to the bare repo and the copy reset back, so the librarian's git pull gets "new commits"
-        (copy / "memory" / "2026-10-27.md").write_text(f"- {p} 的新筆記\n")
+        (copy / "memory" / "2026-10-27.md").write_text("- " + F["new_note"].format(p=p) + "\n")
         if p == "pdang":
-            (copy / "STATE.md").write_text(STATE_OK.replace("現況。", "現況,見 memory/reference/gone.md。")
-                                           + "- [ ] 沒標負責人的一件事\n")
+            (copy / "STATE.md").write_text(STATE_OK.replace(F["status"], F["status_with_ref"])
+                                           + "- [ ] " + F["untagged_line"] + "\n")
         self.git(copy, "add", "-A"); self.git(copy, "commit", "-qm", "new note")
         self.git(copy, "push", "-q", "origin", "HEAD"); self.git(copy, "reset", "-q", "--hard", "HEAD~1")
 
@@ -134,10 +150,9 @@ class Env:
         subprocess.run([str(self.hub / "bin" / "py"), str(self.hub / "bin" / "hubbus"), "open-handoffs"], env=self.env,
                        capture_output=True, check=True)   # creates the bus tables
         c = sqlite3.connect(self.tmp / "bus" / "bus.db")
-        for eid, proj, eff, fact in (("h1", "p0", "relevant", "轉交事實一"), ("h2", "phand", "changes", "只有轉交的事實"),
-                                     ("h3", "p0", "done", "帶 key 的轉交")):
+        for eid, proj, eff, fact in F["handoffs"]:
             payload = {"v": 1, "type": "handoff", "handoff_id": int(eid[1]) + 100, "effect": eff,
-                       "handoff": {"fact": fact, "quote": "原話" if eid == "h1" else None, "item": None, "why": "理由",
+                       "handoff": {"fact": fact, "quote": F["quote"] if eid == "h1" else None, "item": None, "why": F["why"],
                                    "ts": "2026-10-26T10:00:00"}}
             c.execute("INSERT INTO events(id, ts, type, source, to_project, ref, payload) VALUES(?,?,?,?,?,?,?)",
                       (eid, "2026-10-26T10:00:00+08:00", "message", "owner", proj, None, json.dumps(payload, ensure_ascii=False)))
@@ -203,12 +218,13 @@ class LibrarianFlow(unittest.TestCase):
             self.assertIn(("librarian-todo-format", "pdang"), by)
             self.assertIn(("librarian-index", "hub"), by)
             p0 = by[("librarian-state", "p0")]
-            self.assertIn("〔Alex〕", p0)
+            self.assertIn(todo_tokens.tag("zh-Hant", "owner", "Alex"), p0)
             self.assertIn("Hugin", p0)
-            self.assertIn("轉交事實一", p0)
-            self.assertIn("Alex's own words: 原話", p0)
-            self.assertNotIn("帶 key 的轉交", p0, "a handoff with a key is not given to the model")
-            self.assertIn("p0 的新筆記", p0, "the diff goes into the prompt")
+            fact, keyed = F["handoffs"][0][3], F["handoffs"][2][3]
+            self.assertIn(fact, p0)
+            self.assertIn(f"Alex's own words: {F['quote']}", p0)
+            self.assertNotIn(keyed, p0, "a handoff with a key is not given to the model")
+            self.assertIn(F["new_note"].format(p="p0"), p0, "the diff goes into the prompt")
             self.assertIn("STATE.md now refers to these files, which no longer exist", by[("librarian-state", "pdang")])
             self.assertIn("memory/reference/gone.md", by[("librarian-state", "pdang")])
             self.assertIn("Nothing changed in memory/ this time; there are only Alex's handoffs below", by[("librarian-state", "phand")])
@@ -224,7 +240,7 @@ class LibrarianFlow(unittest.TestCase):
             # review-log, digest, index
             rl = (env.hub / "review-log.md").read_text()
             self.assertIn(f"## {TODAY} · p0", rl)
-            self.assertIn("**Hugin 轉交**: #101", rl)
+            self.assertIn(zh("**Handoffs from {assistant}**: {nums}", assistant="Hugin", nums="#101"), rl)
             self.assertNotIn("· p1", rl)
             dg = (env.hub / "digest" / f"{TODAY}.md").read_text()
             self.assertIn("## p0", dg)
@@ -239,9 +255,12 @@ class LibrarianFlow(unittest.TestCase):
             self.assertEqual(done, {"h1", "h2"})
             # the judgments visible in the log
             self.assertIn("pidle: no new commits, skip", log)
-            self.assertIn("p1: STATE.md 未更新,理由: reason p1", log)
-            self.assertIn("pdang: 待辦段落格式已修正", log)
-            self.assertEqual(log.count("這次結果不可信"), 2)
+            self.assertIn(zh("{project}: STATE.md not updated; reason: {reason}", project="p1", reason="reason p1"), log)
+            self.assertIn(zh("{project}: to-do section format fixed", project="pdang"), log)
+            untrusted = "{project}: this result is not trustworthy; the checkpoint is not advanced, retrying next time"
+            self.assertEqual(log.count(zh(untrusted, project="")), 2)
+            for p in ("p2", "p3"):
+                self.assertIn(zh(untrusted, project=p), log)
         self.each(check)
 
     @unittest.skipUnless("librarian.py" in IMPLS, "only librarian.py handles v2")
@@ -257,19 +276,19 @@ class LibrarianFlow(unittest.TestCase):
                            json.dumps({"v": 1, "record": rec}, ensure_ascii=False)))
             base = {"ph": "0.3", "project": "p1", "ts": "2026-10-26T02:00:00Z"}
             put("rec:decisions/0.3:p1:r:q1", "p1", "owner", {**base, "ext": "decisions/0.3", "id": "r:q1", "type": "raised",
-                "origin": "requester", "by": "project:p1", "key": "q1", "terms": {"text": "快取用哪個?"}, "terms_rev": 1})
+                "origin": "requester", "by": "project:p1", "key": "q1", "terms": {"text": F["question"]}, "terms_rev": 1})
             put("rec:acts/0.3:p1:n1", "owner", "p1", {**base, "ext": "acts/0.3", "id": "n1", "type": "note",
-                "origin": "principal", "by": "helper", "key": "k1", "about": {"quote": "續約網域"}, "note": "註冊商說週五前要續約"})
+                "origin": "principal", "by": "helper", "key": "k1", "about": {"quote": F["note_about"]}, "note": F["note"]})
             put("rec:decisions/0.3:p1:s1", "owner", "p1", {**base, "ext": "decisions/0.3", "id": "s1", "type": "settled",
                 "origin": "principal", "by": "helper", "key": "q1", "outcome": "decided", "terms_rev": 1,
-                "answer": {"text": "用 SQLite"}, "authority": {"kind": "principal", "decider": "person:alex"}})
+                "answer": {"text": F["answer"]}, "authority": {"kind": "principal", "decider": "person:alex"}})
             put("rec:acts/0.3:p1:s2", "owner", "p1", {**base, "ext": "acts/0.3", "id": "s2", "type": "settled",
                 "origin": "principal", "by": "helper", "key": "k2", "outcome": "done", "terms_rev": 1,
                 "authority": {"kind": "principal", "decider": "person:alex"}})
             c.commit()
             self.assertEqual(env.run("librarian.py").returncode, 0)
             p1 = next(x["prompt"] for x in env.calls() if x["point"] == "librarian-state" and x["cwd"] == "p1")
-            for want in ("[note]", "註冊商說週五前要續約", "續約網域", "[answers]", "用 SQLite", "快取用哪個?",
+            for want in ("[note]", F["note"], F["note_about"], "[answers]", F["answer"], F["question"],
                          "Alex decided it personally", "[dismissed]"):
                 self.assertIn(want, p1)
             self.assertNotIn("k2", p1, "Acts' settled belongs to the registrar")
@@ -298,7 +317,7 @@ class LibrarianFlow(unittest.TestCase):
             self.assertTrue(any(r["point"] == "librarian-index-edits" for r in recs))
             prompt = next(c["prompt"] for c in env.calls() if c["point"] == "librarian-state-edits" and "p0" in c["prompt"])
             self.assertIn("<<<STATE", prompt)
-            self.assertNotIn("請讀 ./AGENT.md", prompt,
+            self.assertNotIn("read ./AGENT.md", prompt,
                              "the completion version has no tools: the content is given directly")
 
     @unittest.skipUnless(len(IMPLS) == 2, "only one implementation left")

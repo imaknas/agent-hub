@@ -29,7 +29,7 @@ class WorkReady(unittest.TestCase):
         for mod, name, fake in ((self.m.hubconf, "projects", lambda: self.docs),
                                 (self.m.hubconf, "workspace", lambda name: pathlib.Path("/w") / name),
                                 (runtime_claude, "sandbox_rendered",
-                                 lambda ws: (self.rendered[ws.name], "" if self.rendered[ws.name] else "還沒渲染"))):
+                                 lambda ws: (self.rendered[ws.name], "" if self.rendered[ws.name] else "not rendered yet"))):
             self.addCleanup(setattr, mod, name, getattr(mod, name))
             setattr(mod, name, fake)
 

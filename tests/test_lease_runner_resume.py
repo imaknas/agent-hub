@@ -159,7 +159,7 @@ class Attachments(unittest.TestCase):
         self.assertIsNotNone(self.m.check_attachments([{"name": "a", "data": self.b64(b"x")}]))
 
     def test_saved_cleaned_unique_and_excluded_from_git(self):
-        att = {"name": "../../房間 照片.jpg", "media_type": "image/jpeg", "data": self.b64(b"jpegbytes")}
+        att = {"name": "../../café résumé.jpg", "media_type": "image/jpeg", "data": self.b64(b"jpegbytes")}
         p1 = self.m.save_attachments(self.lease, [att])
         p2 = self.m.save_attachments(self.lease, [att])
         self.assertTrue(all(p.startswith("attachments/") and ".." not in p for p in p1 + p2))
@@ -170,17 +170,20 @@ class Attachments(unittest.TestCase):
     def test_images_become_content_blocks_and_paths_listed(self):
         img = {"name": "room.png", "media_type": "image/png", "data": self.b64(b"png")}
         pdf = {"name": "plan.pdf", "media_type": "application/pdf", "data": self.b64(b"pdf")}
-        self.m.send_message(self.lease, "看一下", [img, pdf])
+        self.m.send_message(self.lease, "take a look", [img, pdf])
         content = json.loads(self.sent[-1])["message"]["content"]
         self.assertEqual([b["type"] for b in content], ["image", "text"], "only images become image blocks")
-        self.assertIn("看一下", content[-1]["text"])
+        self.assertIn("take a look", content[-1]["text"])
         self.assertIn("plan.pdf", content[-1]["text"])
 
     def test_image_only_message(self):
         img = {"name": "room.png", "media_type": "image/png", "data": self.b64(b"png")}
         self.m.send_message(self.lease, "", [img])
         content = json.loads(self.sent[-1])["message"]["content"]
-        self.assertTrue(content[-1]["text"].startswith("附件已存到"))
+        import i18n
+        # the message with its list of paths left empty: the fixed part before the paths
+        prefix = i18n.translate("lease-runner", "Attachments saved to: {paths}", {"paths": ""}, "zh-Hant")
+        self.assertTrue(content[-1]["text"].startswith(prefix), content[-1]["text"])
 
     def test_plain_text_unchanged(self):
         self.m.send_message(self.lease, "hi")

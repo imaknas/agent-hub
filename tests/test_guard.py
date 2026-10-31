@@ -14,8 +14,16 @@ from unittest import mock
 
 ROOT = pathlib.Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "bin"))
+import i18n  # noqa: E402
 
-HOW = "跨專案的事請寄信:agenthub send --to <專案> --type request --text \"…\";或請 Knas 自己到那個專案開 session。"
+
+def zh(msgid, **kw):
+    """guard.py's reason in zh-Hant, the language these tests run it in; the whole sentence, word for word"""
+    return i18n.translate("guard", msgid, kw, "zh-Hant")
+
+
+HOW = zh("To ask another project for something, send a letter: agenthub send --to <project> --type request "
+         "--text \"…\"; or ask the owner to open a session in that project themselves.")
 
 
 def load_guard():
@@ -47,7 +55,8 @@ class Decide(unittest.TestCase):
     def test_other_folder_denied(self):
         other = self.root.parent / "other"
         self.assertEqual(self.decide({"cwd": str(other)}),
-                         f"proj 的 session 不能在 {other} 開 session(那不是這個專案)。{HOW}")
+                         zh("A {project} session cannot open a session in {cwd} (that is not this project). {how}",
+                            project="proj", cwd=str(other), how=HOW))
 
     def test_sibling_with_same_prefix_denied(self):
         # proj-2 starts with proj as a string, but is not under it
@@ -55,11 +64,15 @@ class Decide(unittest.TestCase):
 
     def test_elsewhere_denied_with_its_own_reason(self):
         self.assertEqual(self.decide({"elsewhere": {"kind": "repository", "name": "o/r"}}),
-                         f"proj 的 session 不能在別的 repository(o/r)開 session。{HOW}")
+                         zh("A {project} session cannot open a session in another repository ({name}). {how}",
+                            project="proj", name="o/r", how=HOW))
         self.assertEqual(self.decide({"elsewhere": {"kind": "machine", "name": "devbox"}}),
-                         f"proj 的 session 不能到別台機器開 session。{HOW}")
+                         zh("A {project} session cannot open a session on another machine. {how}", project="proj",
+                            how=HOW))
         self.assertEqual(self.decide({"elsewhere": {"kind": "unknown_place"}}),
-                         f"proj 的 session 用 preset 開 session 時看不出是不是同一個專案;同一個專案就不要給 preset/cwd。{HOW}")
+                         zh("When a {project} session opens a session with a preset, there is no way to tell whether "
+                            "it is the same project; for the same project, give no preset or cwd. {how}",
+                            project="proj", how=HOW))
 
     def test_not_an_onboarded_project_never_denied(self):
         self.m.own_project = lambda cwd: (None, None)

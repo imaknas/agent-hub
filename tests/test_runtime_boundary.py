@@ -44,7 +44,7 @@ class TestRuntimeBoundary(unittest.TestCase):
         for bad in ['deny += ["Read(~/x/**)"]', 'p = home / ".claude"', "settings.local.json",
                     'cmd = ["claude", "-p"]', '"--resume", sid', "os.environ['CLAUDE_CODE_OAUTH_TOKEN']"]:
             self.assertTrue(any(p.search(bad) for p, _ in PATTERNS), bad)
-        for ok in ["runtime_claude.settings(pol)", "翻成 Claude Code 的設定"]:
+        for ok in ["runtime_claude.settings(pol)", "translated into Claude Code's settings"]:
             self.assertFalse(any(p.search(ok) for p, _ in PATTERNS), ok)
 
 

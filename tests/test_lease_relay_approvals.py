@@ -80,10 +80,10 @@ class Relay(unittest.TestCase):
         self.assertEqual(len(self.asked), 2)
 
     def test_question_with_multi_answer(self):
-        self.answer = {"decision": "allow", "answers": {"哪些?": ["臥室", "客廳"]}}
-        r = self.call("AskUserQuestion", questions=[{"question": "哪些?", "multiSelect": True,
-                                                     "options": [{"label": "臥室"}, {"label": "客廳"}]}])
-        self.assertEqual(r["updatedInput"]["answers"], {"哪些?": "臥室, 客廳"})
+        self.answer = {"decision": "allow", "answers": {"Which ones?": ["bedroom", "living room"]}}
+        r = self.call("AskUserQuestion", questions=[{"question": "Which ones?", "multiSelect": True,
+                                                     "options": [{"label": "bedroom"}, {"label": "living room"}]}])
+        self.assertEqual(r["updatedInput"]["answers"], {"Which ones?": "bedroom, living room"})
         self.assertEqual(self.reported[0][1]["kind"], "ask_user")
 
     def test_discuss_denies_everything_else(self):
@@ -99,8 +99,8 @@ class RequestBody(unittest.TestCase):
 
     def setUp(self):
         self.m = load_relay()
-        self.q = {"questions": [{"question": "測哪個?", "header": "h", "multiSelect": False,
-                                 "options": [{"label": "臥室", "description": "小"}, {"label": "客廳"}]}]}
+        self.q = {"questions": [{"question": "Measure which one?", "header": "h", "multiSelect": False,
+                                 "options": [{"label": "bedroom", "description": "small"}, {"label": "living room"}]}]}
 
     def check(self, b):
         self.assertEqual(minischema.errors(self.SCHEMA["$defs"]["request"], b, root=self.SCHEMA), [])
@@ -112,9 +112,9 @@ class RequestBody(unittest.TestCase):
         self.assertEqual((b["v"], b["kind"], b["target"], b["detail"]), (2, "open_web", "https://a", {"tool": "WebFetch"}))
 
     def test_question_is_generic(self):
-        q = self.check(self.m.request_body("L:t1", "AskUserQuestion", "測哪個?", "question", self.q))
-        self.assertEqual(q["question"], {"questions": [{"question": "測哪個?", "multi": False, "options": [
-            {"label": "臥室", "description": "小"}, {"label": "客廳"}]}]})
+        q = self.check(self.m.request_body("L:t1", "AskUserQuestion", "Measure which one?", "question", self.q))
+        self.assertEqual(q["question"], {"questions": [{"question": "Measure which one?", "multi": False, "options": [
+            {"label": "bedroom", "description": "small"}, {"label": "living room"}]}]})
 
     def test_command_and_empty_summary(self):
         self.assertEqual(self.check(self.m.request_body("L:t1", "Bash", "ls", "run_command", None))["kind"], "run_command")

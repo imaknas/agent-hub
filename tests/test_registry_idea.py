@@ -31,7 +31,7 @@ class IdeaFields(unittest.TestCase):
 
     def test_idea_needs_purpose(self):
         self.assertTrue(self.errs(doc(type="idea")))
-        self.assertEqual(self.errs(doc(type="idea", purpose="試試看把講座配成中文")), [])
+        self.assertEqual(self.errs(doc(type="idea", purpose="try dubbing the lectures into French (café, résumé)")), [])
 
     def test_unknown_type(self):
         self.assertTrue(self.errs(doc(type="sandbox", purpose="x")))

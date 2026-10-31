@@ -10,6 +10,7 @@ import http.server
 import json
 import os
 import pathlib
+import string
 import sys
 import tempfile
 import threading
@@ -19,12 +20,27 @@ from unittest import mock
 ROOT = pathlib.Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "bin"))
 import completion  # noqa: E402
+import i18n  # noqa: E402
 import runtime_fake  # noqa: E402
 import runtime_ports  # noqa: E402
 from runtime_ports import CompletionRequest, CompletionResult  # noqa: E402
 
 SCHEMA = {"type": "object", "required": ["answer"], "properties": {"answer": {"type": "string"}}}
 SPEC = {"model_group": "fast", "max_tokens": 100}
+
+
+def zh(msgid: str, **kw) -> str:
+    """completion's zh-Hant text of a message, its placeholders filled from kw; a placeholder not given ends it there (the
+    fixed part before it, to look for)"""
+    out = ""
+    for lit, field, spec, conv in string.Formatter().parse(i18n.catalog("completion", "zh-Hant")[msgid]):
+        out += lit
+        if field is None:   # the end, or an escaped brace
+            continue
+        if field not in kw:
+            return out
+        out += format(repr(kw[field]) if conv == "r" else kw[field], spec)
+    return out
 
 
 def setUpModule():
@@ -74,7 +90,8 @@ class Pipeline(Base):
         runtime_fake.set_completions("p", CompletionResult(False, text='{"ans', stop="length", error="x"))
         with self.assertRaises(completion.Refused) as cm:
             self.run_()
-        self.assertIn("截斷", str(cm.exception))
+        self.assertIn(zh("output cut off at the length limit ({provider}/{model}, max_tokens {max_tokens}); not retried",
+                         provider="f", model="m1", max_tokens=100), str(cm.exception))
         self.assertEqual(len(runtime_fake._asked), 1)
 
     def test_rate_limit_backs_off_then_succeeds(self):
@@ -97,8 +114,10 @@ class Pipeline(Base):
 
     def test_too_long_is_not_sent(self):
         with self.assertRaises(completion.Refused) as cm:
-            self.run_(prompt="字" * 2000)   # context 1000
-        self.assertIn("太長", str(cm.exception))
+            self.run_(prompt="é" * 3000)   # 6000 UTF-8 bytes, as before; context 1000
+        # the fixed part before the token estimate
+        self.assertIn(zh("prompt too long: about {tokens} tokens plus {max_tokens} of output exceed {provider}/{model}'s "
+                         "{context}-token context"), str(cm.exception))
         self.assertEqual(runtime_fake._asked, [])
 
     def test_secrets_are_masked_before_sending(self):
@@ -114,7 +133,8 @@ class Pipeline(Base):
         self.run_()
         with self.assertRaises(completion.Refused) as cm:
             self.run_()
-        self.assertIn("預算", str(cm.exception))
+        self.assertIn(zh("today's model spending has reached the budget (llm.budget.daily_usd ${budget}); not sending "
+                         "this one", budget=5), str(cm.exception))
         rows = [json.loads(x) for x in (self.tmp / "usage.jsonl").read_text().splitlines()]
         self.assertEqual(rows[0]["cost_usd"], 10.0)
 
@@ -166,7 +186,9 @@ class ConfigErrors(unittest.TestCase):
     def test_key_value_in_config(self):
         bad = json.loads(json.dumps(self.OK))
         bad["providers"]["a"]["key"] = {"secret": "sk-ant-api03-xxxxxxxxxxxx"}
-        self.assertTrue(any("key 的值" in e for e in completion.config_errors(bad)))
+        want = zh("{where} looks like a key value: the value goes in the secrets directory ({{\"secret\": file name}}) or "
+                  "an environment variable ({{\"env\": name}})", where="providers.a.key.secret")
+        self.assertIn(want, completion.config_errors(bad))
 
     def test_local_must_be_private(self):
         bad = json.loads(json.dumps(self.OK))
@@ -183,15 +205,21 @@ class ConfigErrors(unittest.TestCase):
         bad["use"]["strong"] = "a"   # a has no strong
         bad["points"] = {"not-a-point": {"provider": "zz"}}
         errs = completion.config_errors(bad)
-        for want in ("不認得", "沒有 strong", "不是宣告過的判斷點", "providers 裡的一家"):
+        for want in (zh("providers.{name}.impl `{impl}` is not known (have: {have})", name="a", impl="nope"),
+                     zh("use.{group} → {name}, but providers.{name}.models has no {group}", group="strong", name="a"),
+                     zh("points.{point}: not a declared judgment point", point="not-a-point"),
+                     zh("points.{point}.provider must name one of the providers", point="not-a-point")):
             self.assertTrue(any(want in e for e in errs), (want, errs))
 
     def test_points_alone_pin_the_runtime_model(self):
         self.assertEqual(completion.config_errors({"points": {"consolidate": {"model": "m"}}}), [])
         errs = completion.config_errors({"points": {"consolidate": {}}, "use": {"fast": "a"}})
-        for want in ("沒有 provider 就要寫 model", "沒有 providers"):
+        for want in (zh("points.{point}: without a provider, model is required (the model the runtime uses)",
+                        point="consolidate"),
+                     zh("use is set but providers is not (to pin only some judgment points' models, write only points)")):
             self.assertTrue(any(want in e for e in errs), (want, errs))
-        self.assertTrue(any("要寫 use" in e for e in completion.config_errors({"providers": self.OK["providers"]})))
+        self.assertIn(zh("with providers, use is required (which provider serves fast / standard / strong)"),
+                      completion.config_errors({"providers": self.OK["providers"]}))
 
 
 class FakeServer:

@@ -21,6 +21,13 @@ sys.path.insert(0, str(BIN))
 KEY = "test-key-not-real"
 
 
+def T(msgid, **kw):
+    """agenthub's message in zh-Hant (the CLI runs with AGENT_HUB_LANG_UI=zh-Hant and the assertions compare those
+    texts)"""
+    import i18n
+    return i18n.translate("agenthub", msgid, kw, "zh-Hant")
+
+
 class Fake(http.server.BaseHTTPRequestHandler):
     def log_message(self, *a):
         pass
@@ -77,7 +84,7 @@ class Setup(unittest.TestCase):
     def test_openai_compatible_then_key(self):
         r = self.hub("llm", "setup", "--llm", "openai", "--llm-base-url", f"{self.base}/v1", "--llm-model", "m-small", "--yes")
         self.assertEqual(r.returncode, 1, "key not set yet: written to settings, but says it cannot be used yet")
-        self.assertIn("還不能用", r.stdout)
+        self.assertIn(T("⚠️ not usable yet: {reason}", reason=""), r.stdout)   # the reason (the provider's) comes last
         llm = self.hub_json()["llm"]
         self.assertEqual(llm["providers"]["openai"], {"impl": "openai", "base_url": f"{self.base}/v1",
                                                       "key": {"secret": "openai-api-key"},
@@ -105,7 +112,8 @@ class Setup(unittest.TestCase):
         self.hub("llm", "setup", "--llm", "ollama", "--llm-base-url", self.base, "--llm-model", "local-a", "--yes")
         r = self.hub("llm", "setup", "--llm", "runtime", "--yes")
         self.assertEqual(r.returncode, 0)
-        self.assertIn("沒有 completion 介面", r.stdout,
+        self.assertIn(T("⚠️ the runtime {runtime} has no completion interface: judgment points will fail. Pick another "
+                        "provider: agenthub llm setup", runtime="none"), r.stdout,
                       "runtime none, picking runtime: says plainly that judgment points will fail")
         self.assertEqual(self.hub_json()["llm"], {"points": {"consolidate": {"model": "pinned"}}})
 

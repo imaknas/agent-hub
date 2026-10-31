@@ -21,6 +21,22 @@ from unittest import mock
 
 ROOT = pathlib.Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "bin"))
+import i18n  # noqa: E402
+
+
+def ui(msgid, **kw):
+    """the zh-Hant text of the check script's message (the assertions compare the zh-Hant wording)"""
+    return i18n.translate("check-claude-login", msgid, kw, "zh-Hant")
+
+
+def rt(msgid, **kw):
+    """the zh-Hant text of a runtime_claude message (the credentials' names, labels and how to renew them)"""
+    return i18n.translate("runtime_claude", msgid, kw, "zh-Hant")
+
+
+SUB_NAME, SUB_LABEL = rt("subscription login (launchd)"), rt("claude's subscription login")
+SSH_NAME = rt(".credentials.json (for SSH)")
+NOT_FOUND = rt("claude not found")   # what llm.py reports in zh-Hant; is_login_error must recognise it
 
 
 class Check(unittest.TestCase):
@@ -67,65 +83,76 @@ class Check(unittest.TestCase):
         self.creds_expiring(30)
         code, out, hard = self.run_check()
         self.assertEqual((code, hard), (0, []))
-        self.assertEqual(out, ["訂閱登入(launchd):ok", "headless token:ok", ".credentials.json(SSH 用):refresh 還有 30 天"])
+        self.assertEqual(out, [ui("{name}: ok", name=SUB_NAME), ui("{name}: ok", name="headless token"),
+                               ui("{name}: refresh valid for {days} more {days:day|days}", name=SSH_NAME, days=30)])
         self.assertEqual(self.asked, [None, "token"])
-        self.assertEqual(self.alerts, [("claude-login", [], "claude 登入檢查恢復正常")])
+        self.assertEqual(self.alerts, [("claude-login", [], ui("The claude login check is back to normal"))])
 
     def test_subscription_login_broken(self):
         self.fresh_token()
         self.answers[None] = "Login expired · Please run /login"
         code, _, hard = self.run_check()
         self.assertEqual(code, 1)
-        self.assertEqual(hard, ["claude 的訂閱登入(Upwork job、Muninn 用的)不能用了:Login expired · Please run /login"
-                                "——在 mini 上登入(`claude` → /login)"])
+        self.assertEqual(hard, [ui("{label} ({used_by}) does not work: {err} — {renew}", label=SUB_LABEL,
+                                   used_by=ui("used by the connector jobs and the assistant"),
+                                   err="Login expired · Please run /login",
+                                   renew=rt("log in on the hub machine (`claude` → /login)"))])
 
     def test_token_broken(self):
         self.fresh_token()
         self.answers["token"] = "401 unauthorized"
         _, _, hard = self.run_check()
-        self.assertEqual(hard, [f"headless token(所有排程跟租借用的)不能用了:401 unauthorized"
-                                f"——重跑 `claude setup-token` 寫進 {self.token}"])
+        self.assertEqual(hard, [ui("{label} ({used_by}) does not work: {err} — {renew}", label="headless token",
+                                   used_by=ui("used by all scheduled jobs and leases"), err="401 unauthorized",
+                                   renew=rt("rerun `claude setup-token` and write it to {path}", path=self.token))])
 
     def test_token_missing_is_not_probed(self):
         _, out, hard = self.run_check()
         self.assertEqual(self.asked, [None])
-        self.assertEqual(hard, [f"沒有 {self.token}(所有排程跟租借都會失敗)"])
+        self.assertEqual(hard, [ui("{path} is missing ({means})", path=self.token,
+                                   means=ui("all scheduled jobs and leases will fail"))])
 
     def test_token_getting_old(self):
         self.fresh_token(days_old=340)
         _, _, hard = self.run_check()
-        self.assertEqual(hard, [f"headless token 已經 340 天(一年到期),快要重跑 `claude setup-token` 寫進 {self.token}"])
+        self.assertEqual(hard, [ui("{label} is {days} {days:day|days} old (expires after {lifetime}); soon: {renew}",
+                                   label="headless token", days=340, lifetime=rt("one year"),
+                                   renew=rt("rerun `claude setup-token` and write it to {path}", path=self.token))])
 
     def test_ssh_credentials_expiring(self):
         self.fresh_token()
         self.creds_expiring(3)
         _, out, hard = self.run_check()
-        self.assertIn(".credentials.json(SSH 用):refresh 還有 3 天", out)
-        self.assertEqual(hard, ["~/.claude/.credentials.json(SSH 底下的 claude 用的)登入 3 天內到期——"
-                                "在 mini 的終端機跑一次 claude 讓它更新,或重新 /login"])
+        self.assertIn(ui("{name}: refresh valid for {days} more {days:day|days}", name=SSH_NAME, days=3), out)
+        self.assertEqual(hard, [ui("{label} ({used_by}): the login expires within {days} {days:day|days} — {renew}",
+                                   label="~/.claude/.credentials.json", used_by=rt("used by claude under SSH"), days=3,
+                                   renew=rt("run claude once in a terminal on the hub machine so it refreshes, "
+                                            "or /login again"))])
 
     def test_credentials_without_expiry(self):
         self.fresh_token()
         self.creds.write_text(json.dumps({"claudeAiOauth": {"accessToken": "x"}}))
         _, out, hard = self.run_check()
-        self.assertIn(".credentials.json:沒有 refreshTokenExpiresAt,略過到期檢查", out)
+        self.assertIn(rt(".credentials.json: no refreshTokenExpiresAt, expiry check skipped"), out)
         self.assertEqual(hard, [])
 
     def test_runtime_missing_is_hard(self):
         self.fresh_token()
-        self.answers[None] = "找不到 claude"
+        self.answers[None] = NOT_FOUND
         _, _, hard = self.run_check()
         self.assertEqual(len(hard), 1)
-        self.assertIn("訂閱登入", hard[0])
+        self.assertIn(SUB_LABEL, hard[0])
 
     def test_runtime_missing_is_hard_for_the_token_probe_too(self):
         # changed on purpose in layer 6: before, only the subscription login treated "claude not found" as needing a person;
         # the token one treated it as an ordinary failure
         self.fresh_token()
-        self.answers[None] = self.answers["token"] = "找不到 claude"
+        self.answers[None] = self.answers["token"] = NOT_FOUND
         _, _, hard = self.run_check()
         self.assertEqual(len(hard), 2)
-        self.assertTrue(hard[1].startswith("headless token(所有排程跟租借用的)不能用了:找不到 claude"))
+        self.assertTrue(hard[1].startswith(ui("{label} ({used_by}) does not work: {err} — {renew}", label="headless token",
+                                              used_by=ui("used by all scheduled jobs and leases"), err=NOT_FOUND,
+                                              renew="")))
 
     def test_non_login_failure_alerts_only_on_third_in_a_row(self):
         self.fresh_token()
@@ -133,9 +160,11 @@ class Check(unittest.TestCase):
         for n in (1, 2):
             code, out, hard = self.run_check()
             self.assertEqual((code, hard), (0, []))
-            self.assertIn(f"token:請求失敗(不像登入問題,連續第 {n} 次):timeout talking to api", out)
+            self.assertIn(ui("{mode}: request failed (does not look like a login problem; {n} {n:time|times} in a row): "
+                             "{err}", mode="token", n=n, err="timeout talking to api"), out)
         _, _, hard = self.run_check()
-        self.assertEqual(hard, ["claude 請求連續 3 次失敗(token):timeout talking to api"])
+        self.assertEqual(hard, [ui("claude requests failed {n} times in a row ({mode}): {err}", n=3, mode="token",
+                                   err="timeout talking to api")])
         self.answers["token"] = None
         _, _, hard = self.run_check()
         self.assertEqual(hard, [])

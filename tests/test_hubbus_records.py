@@ -37,7 +37,7 @@ def settled(key="abc123", rid="s:abc123:1"):
 
 def raised(key="abc123"):
     return {"ph": "0.3", "ext": "acts/0.3", "id": f"r:{key}", "type": "raised", "origin": "requester", "by": "project:proj",
-            "key": key, "project": "proj", "ts": TS, "terms": {"text": "繳房屋稅"}, "terms_rev": 1}
+            "key": key, "project": "proj", "ts": TS, "terms": {"text": "Pay the property tax"}, "terms_rev": 1}
 
 
 class Records(unittest.TestCase):

@@ -27,7 +27,7 @@ class IndexRoster(unittest.TestCase):
             (hub / "projects").mkdir()
             for name, text in projects.items():
                 (hub / "projects" / f"{name}.yaml").write_text(text)
-            (hub / "index.md").write_text("# index\n\n## 其他\n")
+            (hub / "index.md").write_text("# index\n\n## Other\n")
             subprocess.run([str(ROOT / "bin" / "gen-index-roster.sh")], env={"AGENT_HUB": str(hub), "PATH": "/usr/bin:/bin",
                                 **{k: os.environ[k] for k in ("HOME", "AGENT_HUB_PYTHON") if k in os.environ}},
                            check=True, capture_output=True)
@@ -40,7 +40,7 @@ class IndexRoster(unittest.TestCase):
         self.assertEqual(len(rows), 2)
 
     def test_ideas_listed_separately(self):
-        rows = self.render({"alpha": project("alpha"), "idea-3": project("idea-3", "type: idea\npurpose: 試試看\n")})
+        rows = self.render({"alpha": project("alpha"), "idea-3": project("idea-3", "type: idea\npurpose: give it a try\n")})
         self.assertEqual(len(rows), 2)
         self.assertTrue(rows[0].startswith("| `alpha`"))
         self.assertTrue(rows[1].startswith("| `idea-3`"))

@@ -38,7 +38,7 @@ class Builtin(unittest.TestCase):
         return subprocess.run([sys.executable, str(BIN / script), *args], input=stdin, env=self.env, cwd=self.tmp,
                               capture_output=True, text=True, timeout=120)
 
-    def raise_task(self, key="task-agent-hub-0001", text="續約網域"):
+    def raise_task(self, key="task-agent-hub-0001", text="Renew café-résumé.example"):
         rec = {"ph": "0.3", "ext": "acts/0.3", "id": f"r:{key}", "type": "raised", "origin": "requester",
                "by": "agent-hub:registrar", "key": key, "project": "agent-hub", "ts": "2026-10-29T01:00:00Z",
                "terms": {"text": text}, "terms_rev": 1}
@@ -54,8 +54,8 @@ class Builtin(unittest.TestCase):
         self.raise_task()
         r = self.run_("owner.py", "list")
         self.assertIn("task-agent-hub-0001", r.stdout)
-        self.assertIn("續約網域", r.stdout)
-        r = self.run_("owner.py", "done", "task-agent-hub-0001", "--note", "週五續好了")
+        self.assertIn("Renew café-résumé.example", r.stdout)
+        r = self.run_("owner.py", "done", "task-agent-hub-0001", "--note", "renewed on Friday")
         self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
         settled = [e for e in self.records() if e["record"]["type"] == "settled"]
         self.assertEqual(len(settled), 1)
@@ -114,7 +114,7 @@ class Notify(unittest.TestCase):
         import alert
         tmp = pathlib.Path(tempfile.mkdtemp())
         sent, failed = [], []
-        items = [{"kind": "task", "project": "p", "key": "k1", "text": "做 A"}]
+        items = [{"kind": "task", "project": "p", "key": "k1", "text": "Do A"}]
         import contextlib
         import io
         with contextlib.redirect_stdout(io.StringIO()), mock.patch.object(owner, "SEEN", tmp / "seen.json"), \
@@ -125,12 +125,12 @@ class Notify(unittest.TestCase):
             self.assertEqual(owner.notify(), 0)
             self.assertEqual(owner.notify(), 0)
             self.assertEqual(len(sent), 1, "the same item is not notified twice")
-            items.append({"kind": "question", "project": "p", "id": "q1", "text": "選哪個?"})
+            items.append({"kind": "question", "project": "p", "id": "q1", "text": "Which one?"})
             owner.notify()
             self.assertEqual(len(sent), 2)
-            self.assertIn("選哪個", sent[1])
-            self.assertNotIn("做 A", sent[1])
-            items.append({"kind": "task", "project": "p", "key": "k2", "text": "做 B"})
+            self.assertIn("Which one", sent[1])
+            self.assertNotIn("Do A", sent[1])
+            items.append({"kind": "task", "project": "p", "key": "k2", "text": "Do B"})
             with mock.patch.object(alert, "send", lambda text: False):
                 self.assertEqual(owner.notify(), 1)
             self.assertEqual(failed, ["owner-notify"])

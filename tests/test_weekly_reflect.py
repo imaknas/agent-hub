@@ -58,8 +58,8 @@ class Scan(unittest.TestCase):
         self.assertEqual(dict(w.skills), {"dataviz": 2, "pdf": 1})
 
     def test_this_week_and_previous_week_split(self):
-        self.add("/w/proj", 2, "human", text="這週", sid="a")
-        self.add("/w/proj", -3, "human", text="上週", sid="b")
+        self.add("/w/proj", 2, "human", text="this week", sid="a")
+        self.add("/w/proj", -3, "human", text="last week", sid="b")
         self.add("/w/proj", -3, "assistant", Action("other", "", "subagent"))
         weeks = self.m.scan(START, END)
         self.assertEqual(weeks["this"].prompts["proj"], 1)

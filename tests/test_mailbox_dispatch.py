@@ -12,11 +12,19 @@ import importlib.machinery
 import importlib.util
 import os
 import pathlib
+import sys
 import tempfile
 import unittest
 import unittest.mock
 
 ROOT = pathlib.Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(ROOT / "bin"))
+import i18n  # noqa: E402
+
+
+def zh(msgid, **kw):
+    """hubbus's message in zh-Hant (the tests that assert one run the code in zh-Hant)"""
+    return i18n.translate("hubbus", msgid, kw, "zh-Hant")
 
 
 def load_hubbus():
@@ -157,7 +165,7 @@ class Dispatch(unittest.TestCase):
     def test_replied_is_not_redispatched(self):
         self.send("m1", "proj", "question", minutes_ago=300)
         self.seen_by_session("m1", minutes_ago=200)
-        self.m.publish(self.c, "r1", "message", "proj", "other", "m1", {"type": "info", "text": "回了", "reply_to": "m1"})
+        self.m.publish(self.c, "r1", "message", "proj", "other", "m1", {"type": "info", "text": "replied", "reply_to": "m1"})
         self.dispatch()
         self.assertEqual(self.handled, [])
 
@@ -304,7 +312,7 @@ class Dispatch(unittest.TestCase):
         self.send("m1", "proj", "question", to_session="A", minutes_ago=60)
         self.dispatch()
         # the branch is done
-        self.m.publish(self.c, "m1:done", "message.done", "proj", "proj", "m1", {"note": "分支處理了"})
+        self.m.publish(self.c, "m1:done", "message.done", "proj", "proj", "m1", {"note": "the branch handled it"})
         seen = []
         orig = self.m.mark_delivered
         self.m.mark_delivered = lambda c, rows, sess, via: (seen.extend(r["id"] for r in rows), orig(c, rows, sess, via))
@@ -370,12 +378,13 @@ class ForkMerge(unittest.TestCase):
         self.forked()
         log = self.tmp / "state" / "mailbox"
         log.mkdir(parents=True)
-        (log / "resume-m1.log").write_text('stderr noise\n{"type": "result", "result": "查了 production,昨天的匯入失敗 3 筆"}\n')
+        (log / "resume-m1.log").write_text('stderr noise\n{"type": "result", "result": "checked production, yesterday\'s import failed 3 rows"}\n')
         self.m.publish(self.c, "r1", "message", "proj", "other", "m1",
-                       {"type": "info", "text": "回覆:失敗的是 3 筆", "reply_to": "m1"})
+                       {"type": "info", "text": "reply: 3 rows failed", "reply_to": "m1"})
         text = self.hook()
-        self.assertIn("分支的回覆:查了 production", text)
-        self.assertIn("[r1] → other:回覆:失敗的是 3 筆", text)
+        self.assertIn(zh("The branch's reply: {text}", text="checked production, yesterday's import failed 3 rows"), text)
+        self.assertIn(zh("Letter the branch sent [{id}] → {to}: {text}", id="r1", to="other", text="reply: 3 rows failed"),
+                      text)
         self.assertNotIn("m1", self.hook(), "mentioned only once")
 
 
@@ -397,6 +406,6 @@ class DispatchWithoutAgent(Dispatch):
         self.assertEqual(self.handled, [])
         self.assertEqual(self.resumed, [])
         self.assertEqual(logged[0][0], "dispatch-unsupported")
-        self.assertIn("不派 agent", logged[0][1])
+        self.assertIn(zh("mailbox delegation dispatches no agent: {e}", e=""), logged[0][1])
         row = self.c.execute("SELECT id FROM events WHERE id='m1'").fetchone()
         self.assertIsNotNone(row)

@@ -16,6 +16,8 @@ import tempfile
 import unittest
 
 ROOT = pathlib.Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(ROOT / "bin"))
+import i18n  # noqa: E402
 
 try:
     import yaml  # noqa: F401  create-idea-sandbox.py needs it to read the registry
@@ -29,7 +31,7 @@ ws="${@: -1}"; name=$(basename "$ws")
 mkdir -p "$ws/.agent-memory" "$GO/$name-memory.git" "$MC/$name"
 printf 'v: 1\nname: %s\n' "$name" > "$HUB/projects/$name.yaml"
 if [ -n "$FAKE_COMMIT" ]; then git -C "$HUB" add "projects/$name.yaml" && git -C "$HUB" commit -qm reg; fi
-echo "boom: mini 上建 bare repo 失敗" >&2
+echo "boom: building the bare repo on the hub machine failed" >&2
 exit 1
 """
 
@@ -63,7 +65,7 @@ class CleanupOnFailure(unittest.TestCase):
         e = {**os.environ, "AGENT_HUB_ROOT": str(self.hub), "AGENT_HUB_LANG_UI": "zh-Hant", "HUB": str(self.hub), "GO": str(self.go),
              "MC": str(self.mc), "GIT_AUTHOR_NAME": "t", "GIT_AUTHOR_EMAIL": "t@t", "GIT_COMMITTER_NAME": "t",
              "GIT_COMMITTER_EMAIL": "t@t", **env}
-        r = subprocess.run([sys.executable, str(self.hub / "bin" / "create-idea-sandbox.py"), name, "試試看"],
+        r = subprocess.run([sys.executable, str(self.hub / "bin" / "create-idea-sandbox.py"), name, "give it a try"],
                            capture_output=True, text=True, env=e)
         return r.returncode, json.loads(r.stdout.strip().splitlines()[-1])
 
@@ -79,7 +81,8 @@ class CleanupOnFailure(unittest.TestCase):
     def test_committed_registry_is_kept_and_reported(self):
         code, res = self.create(FAKE_COMMIT="1")
         self.assertEqual(res["result"], "create_failed")
-        self.assertIn("手動處理", res["detail"])
+        self.assertIn(i18n.translate("create-idea-sandbox", " (the registry file was already committed, so it was not "
+                                     "deleted: handle it by hand)", {}, "zh-Hant"), res["detail"])
         self.assertTrue((self.hub / "projects" / "idea-5.yaml").exists(),
                         "a committed registry file must not be deleted automatically")
         for p in (self.ws / "idea-5", self.go / "idea-5-memory.git", self.mc / "idea-5"):

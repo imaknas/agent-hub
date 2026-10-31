@@ -1,6 +1,6 @@
 {
  "_": "tests/test_registrar_flow.py test_messages_zh_hant: what registrar.py printed and wrote for people before its messages moved to locales/ (zh-Hant instance)",
- "pa_text": "續約網域",
+ "pa_text": "Renew the domain",
  "dry_run": "[registrar] (dry-run) 會送 raised {ka}\n",
  "log": [
   "pb: 套用 settled {kb}",

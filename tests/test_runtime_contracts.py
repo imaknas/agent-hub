@@ -30,18 +30,18 @@ SID2 = "bbbbbbbb-2222-4222-8222-222222222222"   # another project's session (a r
 # Scenario: one human message, one system injection (not human), one assistant turn that calls a subagent, a skill,
 # runs a command (not collaboration), one tool result; one human message in another project
 SCENARIO = [
-    (WS, runtime_ports.Turn(T0, SID, "human", "幫我看一下測試")),
+    (WS, runtime_ports.Turn(T0, SID, "human", "regarde les tests, s'il te plaît")),
     (WS, runtime_ports.Turn(T0 + datetime.timedelta(minutes=1), SID, "other")),
     (WS, runtime_ports.Turn(T0 + datetime.timedelta(minutes=2), SID, "assistant", "",
                             (runtime_ports.Action("other", "", "subagent"), runtime_ports.Action("other", "dataviz", "skill"),
                              runtime_ports.Action("run_command")))),
     (WS, runtime_ports.Turn(T0 + datetime.timedelta(minutes=3), SID, "other")),
-    ("/Users/someone/workspace/other", runtime_ports.Turn(T0, SID2, "human", "別的專案")),
+    ("/Users/someone/workspace/other", runtime_ports.Turn(T0, SID2, "human", "l'autre projet")),
 ]
 # one human message from a session in a worktree the runtime opened under the same project: counts only with
 # turns(worktrees=True)
 SID3 = "cccccccc-3333-4333-8333-333333333333"
-WORKTREE_SCENARIO = [(WS, runtime_ports.Turn(T0 + datetime.timedelta(seconds=30), SID3, "human", "worktree 裡的訊息"))]
+WORKTREE_SCENARIO = [(WS, runtime_ports.Turn(T0 + datetime.timedelta(seconds=30), SID3, "human", "un message du worktree"))]
 
 
 # three scenarios for "run once": completed normally, a result but not completed normally (e.g. turn limit), failed
@@ -341,7 +341,7 @@ class Contract(unittest.TestCase):
         def check(m, env):
             ts = sorted(m.turns([WS], T0 - datetime.timedelta(hours=1)), key=lambda t: t.ts)
             self.assertEqual([t.role for t in ts], ["human", "other", "assistant", "other"])
-            self.assertEqual(ts[0].text, "幫我看一下測試")
+            self.assertEqual(ts[0].text, "regarde les tests, s'il te plaît")
             self.assertEqual(ts[0].session, SID)
             self.assertEqual([(a.kind, a.collab, a.detail) for a in ts[2].actions],
                              [("other", "subagent", ""), ("other", "skill", "dataviz"), ("run_command", None, "")])
@@ -358,7 +358,7 @@ class Contract(unittest.TestCase):
     def test_paths_are_separate(self):
         def check(m, env):
             humans = [t.text for t in m.turns(["/Users/someone/workspace/other"], T0 - datetime.timedelta(hours=1))]
-            self.assertEqual(humans, ["別的專案"])
+            self.assertEqual(humans, ["l'autre projet"])
             self.assertEqual(list(m.turns(["/Users/someone/workspace/none"], T0 - datetime.timedelta(hours=1))), [])
         self.each(check)
 
@@ -366,10 +366,10 @@ class Contract(unittest.TestCase):
         def check(m, env):
             def humans(**kw):
                 return {t.text for t in m.turns([WS], T0 - datetime.timedelta(hours=1), **kw) if t.role == "human"}
-            self.assertEqual(humans(), {"幫我看一下測試"})
-            self.assertEqual(humans(worktrees=True), {"幫我看一下測試", "worktree 裡的訊息"})
+            self.assertEqual(humans(), {"regarde les tests, s'il te plaît"})
+            self.assertEqual(humans(worktrees=True), {"regarde les tests, s'il te plaît", "un message du worktree"})
             self.assertEqual({t.text for t in m.turns(["/Users/someone/workspace/other"], T0 - datetime.timedelta(hours=1),
-                                                      worktrees=True) if t.role == "human"}, {"別的專案"})
+                                                      worktrees=True) if t.role == "human"}, {"l'autre projet"})
         self.each(check)
 
     def test_last_activity(self):
@@ -654,8 +654,8 @@ class CommandTemplate(unittest.TestCase):
 
     def test_prompt_as_argument_is_not_substituted_again(self):
         import runtime_command as m
-        argv = m._argv(["tool", "--model", "{model}", "-p", "{prompt}"], None, "/p", "/o", "用 {model} 寫 {prompt_file}")
-        self.assertEqual(argv, ["tool", "-p", "用 {model} 寫 {prompt_file}"],
+        argv = m._argv(["tool", "--model", "{model}", "-p", "{prompt}"], None, "/p", "/o", "use {model} to write {prompt_file}")
+        self.assertEqual(argv, ["tool", "-p", "use {model} to write {prompt_file}"],
                          "no model drops the whole flag group; the prompt goes in as is")
 
     def test_prompt_argument_means_no_stdin(self):
@@ -668,10 +668,10 @@ class CommandTemplate(unittest.TestCase):
         conf = {"run": [sys.executable, str(script), "{prompt}"]}
         hubconf.get = lambda k, default=None: conf if k == "runtime.command" else saved(k, default)
         try:
-            code, out, _ = m._run("嗨", None, str(tmp), None, 30)
+            code, out, _ = m._run("héllo", None, str(tmp), None, 30)
         finally:
             hubconf.get = saved
-        self.assertEqual((code, out.strip()), (0, "'' 嗨"))
+        self.assertEqual((code, out.strip()), (0, "'' héllo"))
 
     def test_cwd_placeholder_is_the_absolute_workdir(self):
         import runtime_command as m
@@ -688,7 +688,7 @@ class CommandTemplate(unittest.TestCase):
         conf = {"run": [sys.executable, str(script)]}
         hubconf.get = lambda k, default=None: conf if k == "runtime.command" else saved(k, default)
         try:
-            res = m.run(runtime_ports.Task(point="p", prompt="嗨", spec={}, cwd=str(tmp), model=None,
+            res = m.run(runtime_ports.Task(point="p", prompt="héllo", spec={}, cwd=str(tmp), model=None,
                                            output_schema=None, timeout_s=30, env=None))
         finally:
             hubconf.get = saved

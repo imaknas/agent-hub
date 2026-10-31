@@ -44,26 +44,26 @@ class HubEvent(unittest.TestCase):
         return fn
 
     def test_texts_from_several_handlers_are_combined(self):
-        self.m.HANDLERS["tool_used"] = [("nudge", self.stub("nudge", "記得寫筆記")), ("mail", self.stub("mail", "有信"))]
+        self.m.HANDLERS["tool_used"] = [("nudge", self.stub("nudge", "write your notes")), ("mail", self.stub("mail", "you have mail"))]
         out = json.loads(self.m.handle("tool_used", self.raw(cmd="git commit"), runtime_fake))
-        self.assertEqual(out["say"], "記得寫筆記\n\n有信")
+        self.assertEqual(out["say"], "write your notes\n\nyou have mail")
 
     def test_one_failure_does_not_stop_the_rest_and_is_logged(self):
         self.m.HANDLERS["session_start"] = [("memory_pull", self.stub("memory_pull", boom=True)),
-                                            ("mail", self.stub("mail", "有信"))]
+                                            ("mail", self.stub("mail", "you have mail"))]
         out = json.loads(self.m.handle("session_start", self.raw(), runtime_fake))
-        self.assertEqual(out["say"], "有信")
+        self.assertEqual(out["say"], "you have mail")
         log = self.m.LOG.read_text()
         self.assertIn("session_start", log)
         self.assertIn("failed=memory_pull:RuntimeError", log)
 
     def test_deny_wins(self):
-        self.m.HANDLERS["open_session_attempt"] = [("guard", self.stub("guard", "那是別的專案"))]
+        self.m.HANDLERS["open_session_attempt"] = [("guard", self.stub("guard", "that is another project"))]
         out = json.loads(self.m.handle("open_session_attempt", self.raw(where="/x"), runtime_fake))
-        self.assertEqual(out["block"], "那是別的專案")
+        self.assertEqual(out["block"], "that is another project")
 
     def test_not_a_session_does_nothing(self):
-        self.m.HANDLERS["prompt"] = [("mail", self.stub("mail", "有信"))]
+        self.m.HANDLERS["prompt"] = [("mail", self.stub("mail", "you have mail"))]
         self.assertEqual(self.m.handle("prompt", json.dumps({"dir": "/x"}), runtime_fake), "")
         self.assertEqual(self.calls, [])
 
