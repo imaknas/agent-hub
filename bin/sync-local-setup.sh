@@ -41,8 +41,10 @@ cd "${1:-.}" || exit 1
 # Printed with --quiet too: SessionStart's stdout goes into the context, so the reminder comes the moment a session
 # opens in the old copy on the laptop, without relying on anyone remembering. With sessions open on both sides, the
 # same day's memory note pushes would conflict.
-moved=$(git rev-parse --git-common-dir 2>/dev/null)/agent-hub-migrated-to-mini
-if [ -f "$moved" ]; then
+# The common git dir is read from the .git pointer files (bin/gitdirs.py), not asked of git.
+moved=$("$AGENT_HUB/bin/py" "$AGENT_HUB/bin/gitdirs.py" "$PWD" 2>/dev/null | cut -f3)
+moved=${moved:+$moved/agent-hub-migrated-to-mini}
+if [ -n "$moved" ] && [ -f "$moved" ]; then
   hub_say "⚠️ This project has moved to the hub machine ({target}, moved from the laptop on {date}). This is the old copy kept on the laptop as a backup;
 do not work here: ask the user to close this session and open the folder on the hub machine over SSH ({server}) from their coding agent instead." \
     target="$(cut -f1 "$moved")" date="$(cut -f2 "$moved")" server="$(hub_server)"

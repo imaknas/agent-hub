@@ -118,6 +118,7 @@ import urllib.request
 
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
 import event_jobs  # noqa: E402  the causal chain of scheduled runs (docs/design/event-jobs.md section 7)
+import gitdirs  # noqa: E402  where a folder's repo is, read without starting git
 import hubconf  # noqa: E402  paths, the owner address, the project registry all come from the platform settings
 import i18n  # noqa: E402
 import prompts  # noqa: E402  the platform's templates and prompt texts, filled with the configured names
@@ -272,16 +273,16 @@ def canon(addr: str) -> str:
 
 def project_of(cwd: pathlib.Path) -> str | None:
     """Which project cwd belongs to: git's main checkout (worktrees and .agent-memory count as the main project),
-    then path-prefix matching."""
+    then path-prefix matching. The main checkout is read from the .git pointer files (gitdirs), not asked of git: a
+    hook runs this as the user, and the repo's config can hang even rev-parse."""
     paths = {}
     for name, p in projects().items():
         try:
             paths[p.resolve()] = name
         except OSError:
             pass
-    r = subprocess.run(["git", "-C", str(cwd), "rev-parse", "--path-format=absolute", "--git-common-dir"],
-                       capture_output=True, text=True)
-    candidates = [pathlib.Path(r.stdout.strip()).parent.resolve()] if r.returncode == 0 else []
+    found = gitdirs.dirs(cwd)
+    candidates = [found.common.parent] if found else []
     candidates.append(cwd.resolve())
     for cand in candidates:
         for p in (cand, *cand.parents):

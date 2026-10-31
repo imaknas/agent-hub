@@ -14,10 +14,10 @@ from __future__ import annotations
 
 import os
 import pathlib
-import subprocess
 import sys
 
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
+import gitdirs  # noqa: E402
 import hubconf  # noqa: E402
 import i18n  # noqa: E402
 
@@ -25,9 +25,10 @@ _ = i18n.domain(__file__)
 
 
 def main_checkout(cwd: pathlib.Path) -> pathlib.Path | None:
-    r = subprocess.run(["git", "-C", str(cwd), "rev-parse", "--path-format=absolute", "--git-common-dir"],
-                       capture_output=True, text=True)
-    return pathlib.Path(r.stdout.strip()).parent.resolve() if r.returncode == 0 else None
+    """From the .git pointer files, not git: the hook runs as the user, and the repo's config can hang even
+    rev-parse."""
+    found = gitdirs.dirs(cwd)
+    return found.common.parent if found else None
 
 
 def own_project(cwd: pathlib.Path) -> tuple[str | None, pathlib.Path | None]:

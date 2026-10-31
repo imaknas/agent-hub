@@ -107,8 +107,8 @@ In `hubconf` (shell scripts get the same answers through `hubconf.py` subcommand
 - `scopes(project)` → its `(repo, path)` pairs / folder
 - `project_at(path)` → the owning project, **without starting git** (round 6: a project's git config can make even
   `rev-parse` hang or run a program): by path against the registered folders, as `project_git.project_at` already
-  does (11-01), and inside a linked worktree by reading its `.git` and `commondir` pointer files as plain files,
-  accepted only when they lead to a registered repo's git dir; so it works in worktrees. A linked worktree may carry a
+  does (11-01), and inside a linked worktree by reading its `.git` and `commondir` pointer files as plain files
+  (`bin/gitdirs.py`, which the session hooks already use), accepted only when they lead to a registered repo's git dir; so it works in worktrees. A linked worktree may carry a
   marker naming its project (`<git-dir>/agent-hub-project`), which wins, since tools open worktrees at the repo root.
   The session-start hook writes it, as the project (`project_git.run`, so a planted symlink leads nowhere it could not
   already write), from the folder the session was opened in, which the runtime reports (a `runtime_ports` capability,
@@ -508,8 +508,11 @@ sandbox fix landed (section 8), and r9 decides the open points.
   security field.
 - Session hooks run outside the sandbox and run git in the project's `.git`: `memory-nudge.py`'s `git log` runs a
   project-named `gpg.program` after every commit a sandboxed session makes (reproduced by the reviewer). Closed 11-01
-  for the platform's hooks: their repo work runs as the project (`hub-event as-project`, `project_git.py run-as`); the
-  `rev-parse` before the hand-off still runs as the user (a FIFO there hangs only that project's own hook).
+  for the platform's hooks: their repo work runs as the project (`hub-event as-project`, `project_git.py run-as`);
+  finding whose repo it is, before the hand-off, starts no git: `bin/gitdirs.py` reads the `.git`, `gitdir:` and
+  `commondir` pointer files as plain files (non-blocking, regular files only), so a FIFO the repo's config includes
+  hangs nothing (`hubbus.project_of`, `guard.main_checkout`, `worktree-memory.sh`, `sync-local-setup.sh`; closed
+  11-01).
 - `worktrees.auto_prune` deletes paths taken from project-written gitdir files; `propose_apply.py`, `cap-runner.py`
   and `lease-runner.py` write through project-planted symlinks; a FIFO in a repo's config hangs platform git with no
   timeout; `merge-branch --project X` runs another project's tests. Closed 11-01: deletion, copy-back and those

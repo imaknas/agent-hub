@@ -18,6 +18,7 @@ import shutil
 import subprocess
 import sys
 import tempfile
+import time
 import unittest
 from unittest import mock
 
@@ -110,6 +111,22 @@ class Base(unittest.TestCase):
 
     def assertNotRun(self):
         self.assertFalse(self.marker.exists(), self.marker.read_text() if self.marker.exists() else "")
+
+    def project_with_memory(self, name, sandbox=True):
+        r = self.repo(name, sandbox)
+        bare = self.tmp / "origin" / f"{name}-memory.git"
+        bare.mkdir(parents=True)
+        git(bare, "init", "-q", "--bare", "-b", "agent-memory")
+        seed = self.tmp / f"seed-{name}"
+        git(self.tmp, "init", "-q", "-b", "agent-memory", str(seed))
+        commit(seed, "memory/.gitkeep", "", "init: memory skeleton")
+        git(seed, "push", "-q", str(bare), "agent-memory")
+        git(r, "remote", "add", "mini", str(bare))
+        git(r, "fetch", "-q", "mini")
+        git(r, "worktree", "add", "-q", "-b", "agent-memory", str(r / ".agent-memory"), "mini/agent-memory")
+        git(r / ".agent-memory", "branch", "-q", "--set-upstream-to=mini/agent-memory")
+        self.docs[name]["paths"]["memory_bare"] = str(bare)
+        return r, bare
 
 
 class StatusPage(Base):
@@ -250,22 +267,6 @@ class Propose(Base):
 
 
 class MemorySync(Base):
-    def project_with_memory(self, name, sandbox=True):
-        r = self.repo(name, sandbox)
-        bare = self.tmp / "origin" / f"{name}-memory.git"
-        bare.mkdir(parents=True)
-        git(bare, "init", "-q", "--bare", "-b", "agent-memory")
-        seed = self.tmp / f"seed-{name}"
-        git(self.tmp, "init", "-q", "-b", "agent-memory", str(seed))
-        commit(seed, "memory/.gitkeep", "", "init: memory skeleton")
-        git(seed, "push", "-q", str(bare), "agent-memory")
-        git(r, "remote", "add", "mini", str(bare))
-        git(r, "fetch", "-q", "mini")
-        git(r, "worktree", "add", "-q", "-b", "agent-memory", str(r / ".agent-memory"), "mini/agent-memory")
-        git(r / ".agent-memory", "branch", "-q", "--set-upstream-to=mini/agent-memory")
-        self.docs[name]["paths"]["memory_bare"] = str(bare)
-        return r, bare
-
     def test_sync_of_a_sandboxed_project_runs_as_the_project(self):
         import project_git
         r, bare = self.project_with_memory("proj")
@@ -415,6 +416,67 @@ class Hooks(Base):
         he.handle("tool_used", json.dumps({"sid": "S", "dir": str(r), "cmd": "git commit -m x"}), runtime_fake)
         self.assertNotRun()
         self.assertIn(("proj", str(r)), [(p, c) for p, c, _a in self.wrapped])
+
+
+class FindingTheRepo(Base):
+    """Every session hook first finds out whose repo it is in, before it can hand anything to the project: that runs
+    as the user, so it runs no git there (`[include] path=<fifo>` in the repo's config hangs even rev-parse)."""
+
+    def fifo_included(self, repo) -> pathlib.Path:
+        fifo = self.tmp / "fifo"
+        os.mkfifo(fifo)
+        with open(pathlib.Path(repo) / ".git" / "config", "a") as fh:
+            fh.write(f"[include]\n\tpath = {fifo}\n")
+        self.addCleanup(self.release, fifo)
+        return fifo
+
+    @staticmethod
+    def release(fifo):
+        """Let whatever git got stuck on the FIFO finish (one reader each time)."""
+        for _ in range(20):
+            try:
+                os.close(os.open(fifo, os.O_WRONLY | os.O_NONBLOCK))
+            except OSError:
+                return
+            time.sleep(0.05)
+
+    def worktree(self):
+        r, _bare = self.project_with_memory("proj")
+        wt = r / ".claude" / "worktrees" / "w"
+        git(r, "worktree", "add", "-q", str(wt), "-b", "feature")
+        self.fifo_included(r)
+        return r, wt
+
+    def test_finding_whose_repo_runs_no_git(self):
+        import concurrent.futures
+        import project_git
+        r, wt = self.worktree()
+        he = load("hub_event_holes", BIN / "hub-event")
+        hubbus = load("hubbus_holes", BIN / "hubbus")
+        guard = load("guard_holes", BIN / "guard.py")
+        calls = {"hub-event": lambda: he._workspace(str(wt)), "hubbus": lambda: hubbus.project_of(wt),
+                 "guard": lambda: guard.main_checkout(wt), "project_at": lambda: project_git.project_at(wt)}
+        ex = concurrent.futures.ThreadPoolExecutor(len(calls))
+        self.addCleanup(ex.shutdown, wait=False)
+        futures = {k: ex.submit(f) for k, f in calls.items()}
+        got = {}
+        for k, f in futures.items():
+            with self.subTest(k):
+                got[k] = f.result(timeout=10)
+        self.assertEqual(got.get("hub-event"), wt)
+        self.assertEqual(got.get("hubbus"), "proj")
+        self.assertEqual(got.get("guard"), r)
+        self.assertEqual((got.get("project_at") or ("",))[0], "proj")
+
+    def test_worktree_hook_finds_its_repo_without_git(self):
+        _r, wt = self.worktree()
+        state = self.tmp / "state"
+        (state / "registry").mkdir(parents=True)
+        (state / "registry" / "index.json").write_text(json.dumps({"projects": self.docs}))
+        env = {**ENV, "AGENT_HUB_STATE": str(state), "AGENT_HUB_OFFLINE": "1"}
+        p = subprocess.run(["bash", str(BIN / "worktree-memory.sh"), "prompt"], cwd=wt, env=env,
+                           capture_output=True, text=True, timeout=30, stdin=subprocess.DEVNULL)
+        self.assertEqual(p.returncode, 0, p.stderr)
 
 
 class GateHooks(Base):

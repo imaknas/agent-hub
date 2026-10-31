@@ -27,12 +27,12 @@ HUB="${AGENT_HUB_ROOT:-$(cd "$(dirname "$0")/.." && pwd)}"
 source "$(dirname "${BASH_SOURCE[0]}")/hubpaths.sh"
 event="${1:-}"
 
-git_dir=$(git rev-parse --path-format=absolute --git-dir 2>/dev/null) || exit 0
-common=$(git rev-parse --path-format=absolute --git-common-dir 2>/dev/null) || exit 0
+# where the repo is, from the .git pointer files (bin/gitdirs.py), not from git: this part runs as the user before it
+# knows whose repo it is, and the repo's config can hang even rev-parse
+IFS=$'\t' read -r top git_dir common < <("$HUB/bin/py" "$HUB/bin/gitdirs.py" "$PWD" 2>/dev/null) || exit 0
 [ "$git_dir" = "$common" ] && exit 0          # main checkout: the project's own hooks handle it
 main=$(dirname "$common")                      # <main checkout>/.git → <main checkout>
 [ -d "$main/.agent-memory" ] || exit 0         # not an onboarded project
-top=$(git rev-parse --show-toplevel 2>/dev/null) || exit 0
 cd "$top" || exit 0
 # the hook JSON (stdin) can be read only once, and both memory-nudge and hubbus need it
 hook_json=""
@@ -40,8 +40,8 @@ hook_json=""
 
 # Hooks run outside the agent's sandbox, with the user's authority. For a sandboxed project, everything below (git in
 # its repo, files it can plant, such as the marker or the rules file that get printed into the session) runs as the
-# project instead (project_git.py run-as → sandboxed-run); its memory sync is the platform's bundle path. Only the
-# rev-parse calls above run here: at worst a FIFO in its config hangs its own session's hook.
+# project instead (project_git.py run-as → sandboxed-run); its memory sync is the platform's bundle path. What runs
+# here first, finding the repo above, starts no git.
 if [ -z "${HUB_AS_PROJECT:-}" ]; then
   "$HUB/bin/py" "$HUB/bin/project_git.py" sandboxed "$main/.agent-memory"
   case $? in
