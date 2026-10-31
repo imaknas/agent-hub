@@ -131,6 +131,26 @@ class MergeGate(unittest.TestCase):
         self.assertIn("not in the validated project registry", r.stderr)
         self.assertEqual(self.git(self.ws, "log", "--format=%s", "-1").strip(), "chore: initial commit", "main untouched")
 
+    def test_project_must_own_the_repo(self):
+        """Round 6: --project chose whose runtime.test ran while the repo came from the cwd, so naming a project with
+        no tests merged untested."""
+        (self.tmp / "config" / "hub.json").write_text(json.dumps({"bus_dir": str(self.tmp / "bus"), "registry_dir": "projects",
+                                                                  "services_root": str(self.tmp / "services")}))
+        (self.tmp / "services" / "demo").mkdir(parents=True)
+        (self.tmp / "config" / "projects" / "demo.yaml").write_text(
+            f"v: 1\nname: demo\npaths:\n  workspace: {self.ws}\nruntime:\n  test: 'false'\n")
+        other = self.tmp / "other"
+        other.mkdir()
+        (self.tmp / "config" / "projects" / "other.yaml").write_text(f"v: 1\nname: other\npaths:\n  workspace: {other}\n")
+        r = subprocess.run([sys.executable, str(BIN / "registry.py"), "check", "--rebuild"], env=self.env,
+                           capture_output=True, text=True, timeout=60)
+        self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
+        self.commit(self.wt, "b", "feat: b")
+        r = subprocess.run([sys.executable, str(BIN / "merge-branch"), "--project", "other"], cwd=self.wt, env=self.env,
+                           capture_output=True, text=True, timeout=120)
+        self.assertEqual(r.returncode, 1, r.stdout + r.stderr)
+        self.assertEqual(self.git(self.ws, "log", "--format=%s", "-1").strip(), "chore: initial commit", "main untouched")
+
     def test_roster_paths_alone_are_not_enough(self):
         """no index yet: hubconf.projects() falls back to roster(), which knows the folder but not the tests"""
         (self.tmp / "config" / "projects" / "demo.yaml").write_text(

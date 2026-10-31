@@ -74,8 +74,8 @@ def main() -> int:
     a = ap.parse_args()
 
     wt = pathlib.Path.cwd()
-    proj, main_dir = project_of(wt)
-    proj = a.project or proj
+    owner, main_dir = project_of(wt)
+    proj = a.project or owner
     if not proj or not main_dir:
         sys.exit(_("merge-branch: cannot tell which project's repo this is (add --project)"))
     info = hubconf.projects().get(proj)
@@ -83,6 +83,12 @@ def main() -> int:
         sys.exit(_("merge-branch: {project} is not in the validated project registry, so its test command and commit "
                    "rules are unknown; nothing was merged. `agenthub config check` rebuilds the registry and says what "
                    "is wrong", project=proj))
+    # whose tests and commit rules apply is the repo's, never the caller's choice: --project only names it, and must
+    # name the project whose workspace this repo is (round 6: naming one without tests merged untested)
+    named = hubconf.workspace(proj)
+    if not named or named.resolve() != main_dir:
+        sys.exit(_("merge-branch: {project}'s folder is not this repo ({path}); nothing was merged", project=proj,
+                   path=main_dir))
     branch = a.branch or git(wt, "rev-parse", "--abbrev-ref", "HEAD").stdout.strip()
     base = next((b for b in ("main", "master") if git(main_dir, "rev-parse", "--verify", "-q", b).returncode == 0), None)
     if not base:
