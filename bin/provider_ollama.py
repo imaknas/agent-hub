@@ -8,8 +8,11 @@
 """
 from __future__ import annotations
 
+import i18n
 from provider_http import RATE_LIMITED, call, schema_in_prompt
 from runtime_ports import CompletionResult
+
+_ = i18n.domain(__file__)
 
 DEFAULT_BASE = "http://127.0.0.1:11434"
 
@@ -23,12 +26,12 @@ def complete(req, conf) -> CompletionResult:
     url = (conf.get("base_url") or DEFAULT_BASE).rstrip("/") + "/api/chat"
     if req.schema is not None and conf.get("structured", True):
         body["format"] = req.schema
-    status, data, _, err = call("POST", url, body, {}, req.timeout_s)
+    status, data, _h, err = call("POST", url, body, {}, req.timeout_s)
     if req.schema is not None and status == 501 and "format" in body:
         # 這個模型的後端不支援結構化輸出(MLX 後端:「structured output is unavailable」):改成 schema 寫進 prompt
         body.pop("format")
         body["messages"] = msgs[:-1] + [{"role": "user", "content": schema_in_prompt(req.prompt, req.schema)}]
-        status, data, _, err = call("POST", url, body, {}, req.timeout_s)
+        status, data, _h, err = call("POST", url, body, {}, req.timeout_s)
     if status in RATE_LIMITED:
         return CompletionResult(False, stop="rate_limited", error=err)
     if status != 200 or not isinstance(data, dict):
@@ -40,16 +43,17 @@ def complete(req, conf) -> CompletionResult:
 
 
 def health(conf) -> tuple:
-    status, data, _, err = call("GET", (conf.get("base_url") or DEFAULT_BASE).rstrip("/") + "/api/tags", None, {}, 10)
+    status, data, _h, err = call("GET", (conf.get("base_url") or DEFAULT_BASE).rstrip("/") + "/api/tags", None, {}, 10)
     if status != 200:
         return False, err or f"HTTP {status}"
     have = {m.get("name") for m in (data or {}).get("models") or []}
     want = {m if isinstance(m, str) else m.get("name") for m in (conf.get("models") or {}).values()}
     missing = sorted(w for w in want if w and w not in have and f"{w}:latest" not in have)
-    return (not missing), (f"本機沒有模型:{', '.join(missing)}(ollama pull <名稱>)" if missing else "")
+    return (not missing), (_("models not on this machine: {models} (ollama pull <name>)", models=", ".join(missing))
+                            if missing else "")
 
 
 def list_models(conf) -> list[str]:
     """本機已經 pull 的模型。Ollama 沒開 → 空的。"""
-    status, data, _, _ = call("GET", (conf.get("base_url") or DEFAULT_BASE).rstrip("/") + "/api/tags", None, {}, 10)
+    status, data, _h, _e = call("GET", (conf.get("base_url") or DEFAULT_BASE).rstrip("/") + "/api/tags", None, {}, 10)
     return sorted(m.get("name") for m in (data or {}).get("models") or [] if m.get("name")) if status == 200 else []

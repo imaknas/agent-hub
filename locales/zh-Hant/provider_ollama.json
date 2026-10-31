@@ -1,0 +1,3 @@
+{
+ "models not on this machine: {models} (ollama pull <name>)": "本機沒有模型:{models}(ollama pull <名稱>)"
+}

@@ -9,8 +9,11 @@
 """
 from __future__ import annotations
 
+import i18n
 from provider_http import RATE_LIMITED, call, retry_after, schema_in_prompt
 from runtime_ports import CompletionResult
+
+_ = i18n.domain(__file__)
 
 DEFAULT_BASE = "https://api.openai.com/v1"
 
@@ -37,7 +40,7 @@ def complete(req, conf) -> CompletionResult:
     if status in RATE_LIMITED:
         return CompletionResult(False, stop="rate_limited", error=err, retry_after_s=retry_after(headers))
     if status != 200 or not isinstance(data, dict) or not data.get("choices"):
-        return CompletionResult(False, stop="error", error=err or f"回應沒有 choices(HTTP {status})")
+        return CompletionResult(False, stop="error", error=err or _("no choices in the response (HTTP {status})", status=status))
     choice = data["choices"][0]
     msg = choice.get("message") or {}
     usage = data.get("usage") or {}
@@ -51,11 +54,11 @@ def complete(req, conf) -> CompletionResult:
 
 
 def health(conf) -> tuple:
-    status, _, _, err = call("GET", (conf.get("base_url") or DEFAULT_BASE).rstrip("/") + "/models", None, _headers(conf), 20)
+    status, _d, _h, err = call("GET", (conf.get("base_url") or DEFAULT_BASE).rstrip("/") + "/models", None, _headers(conf), 20)
     return (status == 200), ("" if status == 200 else err or f"HTTP {status}")
 
 
 def list_models(conf) -> list[str]:
     """這把 key 看得到的模型(agenthub llm setup 讓使用者選;平台不猜模型名稱)。拿不到 → 空的。"""
-    status, data, _, _ = call("GET", (conf.get("base_url") or DEFAULT_BASE).rstrip("/") + "/models", None, _headers(conf), 20)
+    status, data, _h, _e = call("GET", (conf.get("base_url") or DEFAULT_BASE).rstrip("/") + "/models", None, _headers(conf), 20)
     return sorted(m.get("id") for m in (data or {}).get("data") or [] if m.get("id")) if status == 200 else []
