@@ -248,8 +248,9 @@ How memory/ is organised:
   the most accurate current version, and where it conflicts with the older running record, reference/ wins.
 
 Rules:
-- Write in English: everything you add to STATE.md (prose and to-do items) is in that language, in the
-  style of the text already there. Code, paths, commands and names stay as they are.
+- Write in English: everything you add to STATE.md (prose and to-do items), and the summary and reason in
+  your answer, are in that language, in the style of the text already there. Code, paths, commands and names stay as
+  they are.
 - Edit STATE.md only when there is a *substantive change* (it is a distilled current state, not a log); with no
   substantive change, do not touch STATE.md at all.
   If STATE.md still holds the placeholder content from onboarding while memory/ already has substantive content, that
@@ -257,9 +258,11 @@ Rules:
 - Where STATE.md mentions files that have been moved, or open questions that newer content has answered or overturned,
   fix those too.
 - STATE.md must have a `## 待辦` section in a fixed format, one item per line:
-  `- [ ] 〔Alex〕…` (only Alex can do it: accounts, passwords, payments, decisions Alex has to make)
+  `- [ ] 〔Alex〕…` (only Alex can do it: accounts, passwords, payments, a decision or an answer that is
+  Alex's to give)
   `- [ ] 〔agent〕…` (an agent can do it directly)
-  `- [ ] 〔待定〕…` (a decision has to be made before anyone can act)
+  `- [ ] 〔待定〕…` (blocked until something still open is settled, other than a decision that is Alex's: an
+  item waiting on Alex's decision is 〔Alex〕)
   The `(等 Alex:task-…)` at the end of a 〔Alex〕 line is the key of Hugin's task registry: **keep it exactly as
   it is, and do not change that line's text** (when Hugin closes the task, Alex's line is removed
   automatically by its key; if the text changes, the key no longer matches).
@@ -330,8 +333,9 @@ agent
 STATE>>>
 
 Rules:
-- Write in English: everything you add to STATE.md (prose and to-do items) is in that language, in the
-  style of the text already there. Code, paths, commands and names stay as they are.
+- Write in English: everything you add to STATE.md (prose and to-do items), and the summary and reason in
+  your answer, are in that language, in the style of the text already there. Code, paths, commands and names stay as
+  they are.
 - Edit STATE.md only when there is a *substantive change* (it is a distilled current state, not a log); with no
   substantive change, do not touch STATE.md at all.
   If STATE.md still holds the placeholder content from onboarding while memory/ already has substantive content, that
@@ -339,9 +343,11 @@ Rules:
 - Where STATE.md mentions files that have been moved, or open questions that newer content has answered or overturned,
   fix those too.
 - STATE.md must have a `## 待辦` section in a fixed format, one item per line:
-  `- [ ] 〔Alex〕…` (only Alex can do it: accounts, passwords, payments, decisions Alex has to make)
+  `- [ ] 〔Alex〕…` (only Alex can do it: accounts, passwords, payments, a decision or an answer that is
+  Alex's to give)
   `- [ ] 〔agent〕…` (an agent can do it directly)
-  `- [ ] 〔待定〕…` (a decision has to be made before anyone can act)
+  `- [ ] 〔待定〕…` (blocked until something still open is settled, other than a decision that is Alex's: an
+  item waiting on Alex's decision is 〔Alex〕)
   The `(等 Alex:task-…)` at the end of a 〔Alex〕 line is the key of Hugin's task registry: **keep it exactly as
   it is, and do not change that line's text** (when Hugin closes the task, Alex's line is removed
   automatically by its key; if the text changes, the key no longer matches).
@@ -356,6 +362,7 @@ The format of the edit list:
 - With nothing to change: state_updated: false, edits: [].
 - The `(等 Alex:task-…)` marker at the end of a 〔Alex〕 line must not change; when that item is done, delete the
   whole line.
+- summary and reason are written in English, like the text in STATE.md.
 === prompt librarian-state @ p1
 You are the cross-project integration agent (the librarian), now working in the directory of project p1.
 Since the last check, these memory files of this project changed:
@@ -426,8 +433,9 @@ How memory/ is organised:
   the most accurate current version, and where it conflicts with the older running record, reference/ wins.
 
 Rules:
-- Write in English: everything you add to STATE.md (prose and to-do items) is in that language, in the
-  style of the text already there. Code, paths, commands and names stay as they are.
+- Write in English: everything you add to STATE.md (prose and to-do items), and the summary and reason in
+  your answer, are in that language, in the style of the text already there. Code, paths, commands and names stay as
+  they are.
 - Edit STATE.md only when there is a *substantive change* (it is a distilled current state, not a log); with no
   substantive change, do not touch STATE.md at all.
   If STATE.md still holds the placeholder content from onboarding while memory/ already has substantive content, that
@@ -435,9 +443,11 @@ Rules:
 - Where STATE.md mentions files that have been moved, or open questions that newer content has answered or overturned,
   fix those too.
 - STATE.md must have a `## 待辦` section in a fixed format, one item per line:
-  `- [ ] 〔Alex〕…` (only Alex can do it: accounts, passwords, payments, decisions Alex has to make)
+  `- [ ] 〔Alex〕…` (only Alex can do it: accounts, passwords, payments, a decision or an answer that is
+  Alex's to give)
   `- [ ] 〔agent〕…` (an agent can do it directly)
-  `- [ ] 〔待定〕…` (a decision has to be made before anyone can act)
+  `- [ ] 〔待定〕…` (blocked until something still open is settled, other than a decision that is Alex's: an
+  item waiting on Alex's decision is 〔Alex〕)
   The `(等 Alex:task-…)` at the end of a 〔Alex〕 line is the key of Hugin's task registry: **keep it exactly as
   it is, and do not change that line's text** (when Hugin closes the task, Alex's line is removed
   automatically by its key; if the text changes, the key no longer matches).
@@ -529,8 +539,9 @@ agent
 STATE>>>
 
 Rules:
-- Write in English: everything you add to STATE.md (prose and to-do items) is in that language, in the
-  style of the text already there. Code, paths, commands and names stay as they are.
+- Write in English: everything you add to STATE.md (prose and to-do items), and the summary and reason in
+  your answer, are in that language, in the style of the text already there. Code, paths, commands and names stay as
+  they are.
 - Edit STATE.md only when there is a *substantive change* (it is a distilled current state, not a log); with no
   substantive change, do not touch STATE.md at all.
   If STATE.md still holds the placeholder content from onboarding while memory/ already has substantive content, that
@@ -538,9 +549,11 @@ Rules:
 - Where STATE.md mentions files that have been moved, or open questions that newer content has answered or overturned,
   fix those too.
 - STATE.md must have a `## 待辦` section in a fixed format, one item per line:
-  `- [ ] 〔Alex〕…` (only Alex can do it: accounts, passwords, payments, decisions Alex has to make)
+  `- [ ] 〔Alex〕…` (only Alex can do it: accounts, passwords, payments, a decision or an answer that is
+  Alex's to give)
   `- [ ] 〔agent〕…` (an agent can do it directly)
-  `- [ ] 〔待定〕…` (a decision has to be made before anyone can act)
+  `- [ ] 〔待定〕…` (blocked until something still open is settled, other than a decision that is Alex's: an
+  item waiting on Alex's decision is 〔Alex〕)
   The `(等 Alex:task-…)` at the end of a 〔Alex〕 line is the key of Hugin's task registry: **keep it exactly as
   it is, and do not change that line's text** (when Hugin closes the task, Alex's line is removed
   automatically by its key; if the text changes, the key no longer matches).
@@ -555,6 +568,7 @@ The format of the edit list:
 - With nothing to change: state_updated: false, edits: [].
 - The `(等 Alex:task-…)` marker at the end of a 〔Alex〕 line must not change; when that item is done, delete the
   whole line.
+- summary and reason are written in English, like the text in STATE.md.
 === prompt librarian-state @ p2
 You are the cross-project integration agent (the librarian), now working in the directory of project p2.
 Since the last check, these memory files of this project changed:
@@ -582,8 +596,9 @@ How memory/ is organised:
   the most accurate current version, and where it conflicts with the older running record, reference/ wins.
 
 Rules:
-- Write in English: everything you add to STATE.md (prose and to-do items) is in that language, in the
-  style of the text already there. Code, paths, commands and names stay as they are.
+- Write in English: everything you add to STATE.md (prose and to-do items), and the summary and reason in
+  your answer, are in that language, in the style of the text already there. Code, paths, commands and names stay as
+  they are.
 - Edit STATE.md only when there is a *substantive change* (it is a distilled current state, not a log); with no
   substantive change, do not touch STATE.md at all.
   If STATE.md still holds the placeholder content from onboarding while memory/ already has substantive content, that
@@ -591,9 +606,11 @@ Rules:
 - Where STATE.md mentions files that have been moved, or open questions that newer content has answered or overturned,
   fix those too.
 - STATE.md must have a `## 待辦` section in a fixed format, one item per line:
-  `- [ ] 〔Alex〕…` (only Alex can do it: accounts, passwords, payments, decisions Alex has to make)
+  `- [ ] 〔Alex〕…` (only Alex can do it: accounts, passwords, payments, a decision or an answer that is
+  Alex's to give)
   `- [ ] 〔agent〕…` (an agent can do it directly)
-  `- [ ] 〔待定〕…` (a decision has to be made before anyone can act)
+  `- [ ] 〔待定〕…` (blocked until something still open is settled, other than a decision that is Alex's: an
+  item waiting on Alex's decision is 〔Alex〕)
   The `(等 Alex:task-…)` at the end of a 〔Alex〕 line is the key of Hugin's task registry: **keep it exactly as
   it is, and do not change that line's text** (when Hugin closes the task, Alex's line is removed
   automatically by its key; if the text changes, the key no longer matches).
@@ -642,8 +659,9 @@ agent
 STATE>>>
 
 Rules:
-- Write in English: everything you add to STATE.md (prose and to-do items) is in that language, in the
-  style of the text already there. Code, paths, commands and names stay as they are.
+- Write in English: everything you add to STATE.md (prose and to-do items), and the summary and reason in
+  your answer, are in that language, in the style of the text already there. Code, paths, commands and names stay as
+  they are.
 - Edit STATE.md only when there is a *substantive change* (it is a distilled current state, not a log); with no
   substantive change, do not touch STATE.md at all.
   If STATE.md still holds the placeholder content from onboarding while memory/ already has substantive content, that
@@ -651,9 +669,11 @@ Rules:
 - Where STATE.md mentions files that have been moved, or open questions that newer content has answered or overturned,
   fix those too.
 - STATE.md must have a `## 待辦` section in a fixed format, one item per line:
-  `- [ ] 〔Alex〕…` (only Alex can do it: accounts, passwords, payments, decisions Alex has to make)
+  `- [ ] 〔Alex〕…` (only Alex can do it: accounts, passwords, payments, a decision or an answer that is
+  Alex's to give)
   `- [ ] 〔agent〕…` (an agent can do it directly)
-  `- [ ] 〔待定〕…` (a decision has to be made before anyone can act)
+  `- [ ] 〔待定〕…` (blocked until something still open is settled, other than a decision that is Alex's: an
+  item waiting on Alex's decision is 〔Alex〕)
   The `(等 Alex:task-…)` at the end of a 〔Alex〕 line is the key of Hugin's task registry: **keep it exactly as
   it is, and do not change that line's text** (when Hugin closes the task, Alex's line is removed
   automatically by its key; if the text changes, the key no longer matches).
@@ -668,6 +688,7 @@ The format of the edit list:
 - With nothing to change: state_updated: false, edits: [].
 - The `(等 Alex:task-…)` marker at the end of a 〔Alex〕 line must not change; when that item is done, delete the
   whole line.
+- summary and reason are written in English, like the text in STATE.md.
 === prompt librarian-state @ p3
 You are the cross-project integration agent (the librarian), now working in the directory of project p3.
 Since the last check, these memory files of this project changed:
@@ -695,8 +716,9 @@ How memory/ is organised:
   the most accurate current version, and where it conflicts with the older running record, reference/ wins.
 
 Rules:
-- Write in English: everything you add to STATE.md (prose and to-do items) is in that language, in the
-  style of the text already there. Code, paths, commands and names stay as they are.
+- Write in English: everything you add to STATE.md (prose and to-do items), and the summary and reason in
+  your answer, are in that language, in the style of the text already there. Code, paths, commands and names stay as
+  they are.
 - Edit STATE.md only when there is a *substantive change* (it is a distilled current state, not a log); with no
   substantive change, do not touch STATE.md at all.
   If STATE.md still holds the placeholder content from onboarding while memory/ already has substantive content, that
@@ -704,9 +726,11 @@ Rules:
 - Where STATE.md mentions files that have been moved, or open questions that newer content has answered or overturned,
   fix those too.
 - STATE.md must have a `## 待辦` section in a fixed format, one item per line:
-  `- [ ] 〔Alex〕…` (only Alex can do it: accounts, passwords, payments, decisions Alex has to make)
+  `- [ ] 〔Alex〕…` (only Alex can do it: accounts, passwords, payments, a decision or an answer that is
+  Alex's to give)
   `- [ ] 〔agent〕…` (an agent can do it directly)
-  `- [ ] 〔待定〕…` (a decision has to be made before anyone can act)
+  `- [ ] 〔待定〕…` (blocked until something still open is settled, other than a decision that is Alex's: an
+  item waiting on Alex's decision is 〔Alex〕)
   The `(等 Alex:task-…)` at the end of a 〔Alex〕 line is the key of Hugin's task registry: **keep it exactly as
   it is, and do not change that line's text** (when Hugin closes the task, Alex's line is removed
   automatically by its key; if the text changes, the key no longer matches).
@@ -755,8 +779,9 @@ agent
 STATE>>>
 
 Rules:
-- Write in English: everything you add to STATE.md (prose and to-do items) is in that language, in the
-  style of the text already there. Code, paths, commands and names stay as they are.
+- Write in English: everything you add to STATE.md (prose and to-do items), and the summary and reason in
+  your answer, are in that language, in the style of the text already there. Code, paths, commands and names stay as
+  they are.
 - Edit STATE.md only when there is a *substantive change* (it is a distilled current state, not a log); with no
   substantive change, do not touch STATE.md at all.
   If STATE.md still holds the placeholder content from onboarding while memory/ already has substantive content, that
@@ -764,9 +789,11 @@ Rules:
 - Where STATE.md mentions files that have been moved, or open questions that newer content has answered or overturned,
   fix those too.
 - STATE.md must have a `## 待辦` section in a fixed format, one item per line:
-  `- [ ] 〔Alex〕…` (only Alex can do it: accounts, passwords, payments, decisions Alex has to make)
+  `- [ ] 〔Alex〕…` (only Alex can do it: accounts, passwords, payments, a decision or an answer that is
+  Alex's to give)
   `- [ ] 〔agent〕…` (an agent can do it directly)
-  `- [ ] 〔待定〕…` (a decision has to be made before anyone can act)
+  `- [ ] 〔待定〕…` (blocked until something still open is settled, other than a decision that is Alex's: an
+  item waiting on Alex's decision is 〔Alex〕)
   The `(等 Alex:task-…)` at the end of a 〔Alex〕 line is the key of Hugin's task registry: **keep it exactly as
   it is, and do not change that line's text** (when Hugin closes the task, Alex's line is removed
   automatically by its key; if the text changes, the key no longer matches).
@@ -781,6 +808,7 @@ The format of the edit list:
 - With nothing to change: state_updated: false, edits: [].
 - The `(等 Alex:task-…)` marker at the end of a 〔Alex〕 line must not change; when that item is done, delete the
   whole line.
+- summary and reason are written in English, like the text in STATE.md.
 === prompt librarian-state @ pdang
 You are the cross-project integration agent (the librarian), now working in the directory of project pdang.
 Since the last check, these memory files of this project changed:
@@ -810,8 +838,9 @@ How memory/ is organised:
   the most accurate current version, and where it conflicts with the older running record, reference/ wins.
 
 Rules:
-- Write in English: everything you add to STATE.md (prose and to-do items) is in that language, in the
-  style of the text already there. Code, paths, commands and names stay as they are.
+- Write in English: everything you add to STATE.md (prose and to-do items), and the summary and reason in
+  your answer, are in that language, in the style of the text already there. Code, paths, commands and names stay as
+  they are.
 - Edit STATE.md only when there is a *substantive change* (it is a distilled current state, not a log); with no
   substantive change, do not touch STATE.md at all.
   If STATE.md still holds the placeholder content from onboarding while memory/ already has substantive content, that
@@ -819,9 +848,11 @@ Rules:
 - Where STATE.md mentions files that have been moved, or open questions that newer content has answered or overturned,
   fix those too.
 - STATE.md must have a `## 待辦` section in a fixed format, one item per line:
-  `- [ ] 〔Alex〕…` (only Alex can do it: accounts, passwords, payments, decisions Alex has to make)
+  `- [ ] 〔Alex〕…` (only Alex can do it: accounts, passwords, payments, a decision or an answer that is
+  Alex's to give)
   `- [ ] 〔agent〕…` (an agent can do it directly)
-  `- [ ] 〔待定〕…` (a decision has to be made before anyone can act)
+  `- [ ] 〔待定〕…` (blocked until something still open is settled, other than a decision that is Alex's: an
+  item waiting on Alex's decision is 〔Alex〕)
   The `(等 Alex:task-…)` at the end of a 〔Alex〕 line is the key of Hugin's task registry: **keep it exactly as
   it is, and do not change that line's text** (when Hugin closes the task, Alex's line is removed
   automatically by its key; if the text changes, the key no longer matches).
@@ -834,10 +865,11 @@ Fix only the format of the `## 待辦` section of ./STATE.md. Do not change anyt
 to-dos, and do not touch any other file.
 
 The correct format (one item per line; with no to-dos write `- (無)`; STATE.md must have this section):
-  `- [ ] 〔Alex〕…` (only Alex can do it: accounts, passwords, payments, decisions Alex has to make, things
-  Alex has to buy or do personally)
+  `- [ ] 〔Alex〕…` (only Alex can do it: accounts, passwords, payments, a decision or an answer that is
+  Alex's to give, things Alex has to buy or do personally)
   `- [ ] 〔agent〕…` (an agent can do it directly)
-  `- [ ] 〔待定〕…` (a decision has to be made before anyone can act)
+  `- [ ] 〔待定〕…` (blocked until something still open is settled, other than a decision that is Alex's: an
+  item waiting on Alex's decision is 〔Alex〕)
 
 If STATE.md has to-do-like lists elsewhere (for example "open questions", "needs Alex to decide", "can be done by
 an agent", "next steps", "not done yet"), **move** those items into `## 待辦` (marking who is responsible) and
@@ -891,8 +923,9 @@ agent
 STATE>>>
 
 Rules:
-- Write in English: everything you add to STATE.md (prose and to-do items) is in that language, in the
-  style of the text already there. Code, paths, commands and names stay as they are.
+- Write in English: everything you add to STATE.md (prose and to-do items), and the summary and reason in
+  your answer, are in that language, in the style of the text already there. Code, paths, commands and names stay as
+  they are.
 - Edit STATE.md only when there is a *substantive change* (it is a distilled current state, not a log); with no
   substantive change, do not touch STATE.md at all.
   If STATE.md still holds the placeholder content from onboarding while memory/ already has substantive content, that
@@ -900,9 +933,11 @@ Rules:
 - Where STATE.md mentions files that have been moved, or open questions that newer content has answered or overturned,
   fix those too.
 - STATE.md must have a `## 待辦` section in a fixed format, one item per line:
-  `- [ ] 〔Alex〕…` (only Alex can do it: accounts, passwords, payments, decisions Alex has to make)
+  `- [ ] 〔Alex〕…` (only Alex can do it: accounts, passwords, payments, a decision or an answer that is
+  Alex's to give)
   `- [ ] 〔agent〕…` (an agent can do it directly)
-  `- [ ] 〔待定〕…` (a decision has to be made before anyone can act)
+  `- [ ] 〔待定〕…` (blocked until something still open is settled, other than a decision that is Alex's: an
+  item waiting on Alex's decision is 〔Alex〕)
   The `(等 Alex:task-…)` at the end of a 〔Alex〕 line is the key of Hugin's task registry: **keep it exactly as
   it is, and do not change that line's text** (when Hugin closes the task, Alex's line is removed
   automatically by its key; if the text changes, the key no longer matches).
@@ -917,6 +952,7 @@ The format of the edit list:
 - With nothing to change: state_updated: false, edits: [].
 - The `(等 Alex:task-…)` marker at the end of a 〔Alex〕 line must not change; when that item is done, delete the
   whole line.
+- summary and reason are written in English, like the text in STATE.md.
 === prompt librarian-state @ phand
 You are the cross-project integration agent (the librarian), now working in the directory of project phand.
 Nothing changed in memory/ this time; there are only Alex's handoffs below to handle.
@@ -953,8 +989,9 @@ How memory/ is organised:
   the most accurate current version, and where it conflicts with the older running record, reference/ wins.
 
 Rules:
-- Write in English: everything you add to STATE.md (prose and to-do items) is in that language, in the
-  style of the text already there. Code, paths, commands and names stay as they are.
+- Write in English: everything you add to STATE.md (prose and to-do items), and the summary and reason in
+  your answer, are in that language, in the style of the text already there. Code, paths, commands and names stay as
+  they are.
 - Edit STATE.md only when there is a *substantive change* (it is a distilled current state, not a log); with no
   substantive change, do not touch STATE.md at all.
   If STATE.md still holds the placeholder content from onboarding while memory/ already has substantive content, that
@@ -962,9 +999,11 @@ Rules:
 - Where STATE.md mentions files that have been moved, or open questions that newer content has answered or overturned,
   fix those too.
 - STATE.md must have a `## 待辦` section in a fixed format, one item per line:
-  `- [ ] 〔Alex〕…` (only Alex can do it: accounts, passwords, payments, decisions Alex has to make)
+  `- [ ] 〔Alex〕…` (only Alex can do it: accounts, passwords, payments, a decision or an answer that is
+  Alex's to give)
   `- [ ] 〔agent〕…` (an agent can do it directly)
-  `- [ ] 〔待定〕…` (a decision has to be made before anyone can act)
+  `- [ ] 〔待定〕…` (blocked until something still open is settled, other than a decision that is Alex's: an
+  item waiting on Alex's decision is 〔Alex〕)
   The `(等 Alex:task-…)` at the end of a 〔Alex〕 line is the key of Hugin's task registry: **keep it exactly as
   it is, and do not change that line's text** (when Hugin closes the task, Alex's line is removed
   automatically by its key; if the text changes, the key no longer matches).
@@ -1022,8 +1061,9 @@ agent
 STATE>>>
 
 Rules:
-- Write in English: everything you add to STATE.md (prose and to-do items) is in that language, in the
-  style of the text already there. Code, paths, commands and names stay as they are.
+- Write in English: everything you add to STATE.md (prose and to-do items), and the summary and reason in
+  your answer, are in that language, in the style of the text already there. Code, paths, commands and names stay as
+  they are.
 - Edit STATE.md only when there is a *substantive change* (it is a distilled current state, not a log); with no
   substantive change, do not touch STATE.md at all.
   If STATE.md still holds the placeholder content from onboarding while memory/ already has substantive content, that
@@ -1031,9 +1071,11 @@ Rules:
 - Where STATE.md mentions files that have been moved, or open questions that newer content has answered or overturned,
   fix those too.
 - STATE.md must have a `## 待辦` section in a fixed format, one item per line:
-  `- [ ] 〔Alex〕…` (only Alex can do it: accounts, passwords, payments, decisions Alex has to make)
+  `- [ ] 〔Alex〕…` (only Alex can do it: accounts, passwords, payments, a decision or an answer that is
+  Alex's to give)
   `- [ ] 〔agent〕…` (an agent can do it directly)
-  `- [ ] 〔待定〕…` (a decision has to be made before anyone can act)
+  `- [ ] 〔待定〕…` (blocked until something still open is settled, other than a decision that is Alex's: an
+  item waiting on Alex's decision is 〔Alex〕)
   The `(等 Alex:task-…)` at the end of a 〔Alex〕 line is the key of Hugin's task registry: **keep it exactly as
   it is, and do not change that line's text** (when Hugin closes the task, Alex's line is removed
   automatically by its key; if the text changes, the key no longer matches).
@@ -1048,6 +1090,7 @@ The format of the edit list:
 - With nothing to change: state_updated: false, edits: [].
 - The `(等 Alex:task-…)` marker at the end of a 〔Alex〕 line must not change; when that item is done, delete the
   whole line.
+- summary and reason are written in English, like the text in STATE.md.
 === prompt librarian-index @ hub
 Update index.md: today's (<TODAY>) summaries of each project are in digest/<TODAY>.md. Read them, then mark the
 connections between projects that are actually visible; where there is no clear connection, do not invent one, and keep

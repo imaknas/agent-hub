@@ -26,3 +26,4 @@ The format of the edit list:
 - With nothing to change: state_updated: false, edits: [].
 - The `{{key_marker}}` marker at the end of a {{tag_owner}} line must not change; when that item is done, delete the
   whole line.
+- summary and reason are written in {{content_language}}, like the text in STATE.md.

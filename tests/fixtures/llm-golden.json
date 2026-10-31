@@ -416,7 +416,7 @@
    "--output-format",
    "json",
    "--json-schema",
-   "{\"type\": \"object\", \"description\": \"librarian-index 的 completion 版(影子模式):回 index.md 名冊區塊外的編輯清單,平台套用(bin/edits.py)\", \"properties\": {\"index_updated\": {\"type\": \"boolean\"}, \"edits\": {\"type\": \"array\", \"items\": {\"type\": \"object\", \"properties\": {\"old\": {\"type\": \"string\"}, \"new\": {\"type\": \"string\"}}, \"required\": [\"old\", \"new\"]}}, \"relations_found\": {\"type\": \"string\", \"description\": \"今天找到的跨專案關聯簡述;沒有明顯關聯就寫「(無明顯關聯)」\"}}, \"required\": [\"index_updated\", \"edits\", \"relations_found\"]}"
+   "{\"type\": \"object\", \"description\": \"the completion version of librarian-index (shadow mode): returns a list of edits to index.md outside the roster block, which the platform applies (bin/edits.py)\", \"properties\": {\"index_updated\": {\"type\": \"boolean\"}, \"edits\": {\"type\": \"array\", \"items\": {\"type\": \"object\", \"properties\": {\"old\": {\"type\": \"string\"}, \"new\": {\"type\": \"string\"}}, \"required\": [\"old\", \"new\"]}}, \"relations_found\": {\"type\": \"string\", \"description\": \"a short account of the cross-project connections found today, in the content language named in the prompt; with no clear connection, say so in a few words\"}}, \"required\": [\"index_updated\", \"edits\", \"relations_found\"]}"
   ],
   "exit": 0,
   "token_passed": true
@@ -432,7 +432,7 @@
    "--output-format",
    "json",
    "--json-schema",
-   "{\"type\": \"object\", \"description\": \"librarian-index 的 completion 版(影子模式):回 index.md 名冊區塊外的編輯清單,平台套用(bin/edits.py)\", \"properties\": {\"index_updated\": {\"type\": \"boolean\"}, \"edits\": {\"type\": \"array\", \"items\": {\"type\": \"object\", \"properties\": {\"old\": {\"type\": \"string\"}, \"new\": {\"type\": \"string\"}}, \"required\": [\"old\", \"new\"]}}, \"relations_found\": {\"type\": \"string\", \"description\": \"今天找到的跨專案關聯簡述;沒有明顯關聯就寫「(無明顯關聯)」\"}}, \"required\": [\"index_updated\", \"edits\", \"relations_found\"]}"
+   "{\"type\": \"object\", \"description\": \"the completion version of librarian-index (shadow mode): returns a list of edits to index.md outside the roster block, which the platform applies (bin/edits.py)\", \"properties\": {\"index_updated\": {\"type\": \"boolean\"}, \"edits\": {\"type\": \"array\", \"items\": {\"type\": \"object\", \"properties\": {\"old\": {\"type\": \"string\"}, \"new\": {\"type\": \"string\"}}, \"required\": [\"old\", \"new\"]}}, \"relations_found\": {\"type\": \"string\", \"description\": \"a short account of the cross-project connections found today, in the content language named in the prompt; with no clear connection, say so in a few words\"}}, \"required\": [\"index_updated\", \"edits\", \"relations_found\"]}"
   ],
   "exit": 0,
   "token_passed": true
@@ -448,7 +448,7 @@
    "--output-format",
    "json",
    "--json-schema",
-   "{\"type\": \"object\", \"description\": \"librarian-index 的 completion 版(影子模式):回 index.md 名冊區塊外的編輯清單,平台套用(bin/edits.py)\", \"properties\": {\"index_updated\": {\"type\": \"boolean\"}, \"edits\": {\"type\": \"array\", \"items\": {\"type\": \"object\", \"properties\": {\"old\": {\"type\": \"string\"}, \"new\": {\"type\": \"string\"}}, \"required\": [\"old\", \"new\"]}}, \"relations_found\": {\"type\": \"string\", \"description\": \"今天找到的跨專案關聯簡述;沒有明顯關聯就寫「(無明顯關聯)」\"}}, \"required\": [\"index_updated\", \"edits\", \"relations_found\"]}"
+   "{\"type\": \"object\", \"description\": \"the completion version of librarian-index (shadow mode): returns a list of edits to index.md outside the roster block, which the platform applies (bin/edits.py)\", \"properties\": {\"index_updated\": {\"type\": \"boolean\"}, \"edits\": {\"type\": \"array\", \"items\": {\"type\": \"object\", \"properties\": {\"old\": {\"type\": \"string\"}, \"new\": {\"type\": \"string\"}}, \"required\": [\"old\", \"new\"]}}, \"relations_found\": {\"type\": \"string\", \"description\": \"a short account of the cross-project connections found today, in the content language named in the prompt; with no clear connection, say so in a few words\"}}, \"required\": [\"index_updated\", \"edits\", \"relations_found\"]}"
   ],
   "exit": 0,
   "token_passed": false
@@ -464,7 +464,7 @@
    "--output-format",
    "json",
    "--json-schema",
-   "{\"type\": \"object\", \"description\": \"librarian-index 的 completion 版(影子模式):回 index.md 名冊區塊外的編輯清單,平台套用(bin/edits.py)\", \"properties\": {\"index_updated\": {\"type\": \"boolean\"}, \"edits\": {\"type\": \"array\", \"items\": {\"type\": \"object\", \"properties\": {\"old\": {\"type\": \"string\"}, \"new\": {\"type\": \"string\"}}, \"required\": [\"old\", \"new\"]}}, \"relations_found\": {\"type\": \"string\", \"description\": \"今天找到的跨專案關聯簡述;沒有明顯關聯就寫「(無明顯關聯)」\"}}, \"required\": [\"index_updated\", \"edits\", \"relations_found\"]}"
+   "{\"type\": \"object\", \"description\": \"the completion version of librarian-index (shadow mode): returns a list of edits to index.md outside the roster block, which the platform applies (bin/edits.py)\", \"properties\": {\"index_updated\": {\"type\": \"boolean\"}, \"edits\": {\"type\": \"array\", \"items\": {\"type\": \"object\", \"properties\": {\"old\": {\"type\": \"string\"}, \"new\": {\"type\": \"string\"}}, \"required\": [\"old\", \"new\"]}}, \"relations_found\": {\"type\": \"string\", \"description\": \"a short account of the cross-project connections found today, in the content language named in the prompt; with no clear connection, say so in a few words\"}}, \"required\": [\"index_updated\", \"edits\", \"relations_found\"]}"
   ],
   "exit": 0,
   "token_passed": true
@@ -485,7 +485,7 @@
    "--output-format",
    "json",
    "--json-schema",
-   "{\"type\": \"object\", \"properties\": {\"index_updated\": {\"type\": \"boolean\", \"description\": \"是否編輯了 index.md\"}, \"relations_found\": {\"type\": \"string\", \"description\": \"今天找到的跨專案關聯簡述；沒有明顯關聯就寫「(無明顯關聯)」，不要硬掰\"}}, \"required\": [\"index_updated\", \"relations_found\"]}"
+   "{\"type\": \"object\", \"properties\": {\"index_updated\": {\"type\": \"boolean\", \"description\": \"whether index.md was edited\"}, \"relations_found\": {\"type\": \"string\", \"description\": \"a short account of the cross-project connections found today, in the content language named in the prompt; with no clear connection, say so in a few words rather than invent one\"}}, \"required\": [\"index_updated\", \"relations_found\"]}"
   ],
   "exit": 0,
   "token_passed": true
@@ -506,7 +506,7 @@
    "--output-format",
    "json",
    "--json-schema",
-   "{\"type\": \"object\", \"properties\": {\"index_updated\": {\"type\": \"boolean\", \"description\": \"是否編輯了 index.md\"}, \"relations_found\": {\"type\": \"string\", \"description\": \"今天找到的跨專案關聯簡述；沒有明顯關聯就寫「(無明顯關聯)」，不要硬掰\"}}, \"required\": [\"index_updated\", \"relations_found\"]}"
+   "{\"type\": \"object\", \"properties\": {\"index_updated\": {\"type\": \"boolean\", \"description\": \"whether index.md was edited\"}, \"relations_found\": {\"type\": \"string\", \"description\": \"a short account of the cross-project connections found today, in the content language named in the prompt; with no clear connection, say so in a few words rather than invent one\"}}, \"required\": [\"index_updated\", \"relations_found\"]}"
   ],
   "exit": 0,
   "token_passed": true
@@ -527,7 +527,7 @@
    "--output-format",
    "json",
    "--json-schema",
-   "{\"type\": \"object\", \"properties\": {\"index_updated\": {\"type\": \"boolean\", \"description\": \"是否編輯了 index.md\"}, \"relations_found\": {\"type\": \"string\", \"description\": \"今天找到的跨專案關聯簡述；沒有明顯關聯就寫「(無明顯關聯)」，不要硬掰\"}}, \"required\": [\"index_updated\", \"relations_found\"]}"
+   "{\"type\": \"object\", \"properties\": {\"index_updated\": {\"type\": \"boolean\", \"description\": \"whether index.md was edited\"}, \"relations_found\": {\"type\": \"string\", \"description\": \"a short account of the cross-project connections found today, in the content language named in the prompt; with no clear connection, say so in a few words rather than invent one\"}}, \"required\": [\"index_updated\", \"relations_found\"]}"
   ],
   "exit": 0,
   "token_passed": false
@@ -548,7 +548,7 @@
    "--output-format",
    "json",
    "--json-schema",
-   "{\"type\": \"object\", \"properties\": {\"index_updated\": {\"type\": \"boolean\", \"description\": \"是否編輯了 index.md\"}, \"relations_found\": {\"type\": \"string\", \"description\": \"今天找到的跨專案關聯簡述；沒有明顯關聯就寫「(無明顯關聯)」，不要硬掰\"}}, \"required\": [\"index_updated\", \"relations_found\"]}"
+   "{\"type\": \"object\", \"properties\": {\"index_updated\": {\"type\": \"boolean\", \"description\": \"whether index.md was edited\"}, \"relations_found\": {\"type\": \"string\", \"description\": \"a short account of the cross-project connections found today, in the content language named in the prompt; with no clear connection, say so in a few words rather than invent one\"}}, \"required\": [\"index_updated\", \"relations_found\"]}"
   ],
   "exit": 0,
   "token_passed": true
@@ -564,7 +564,7 @@
    "--output-format",
    "json",
    "--json-schema",
-   "{\"type\": \"object\", \"description\": \"librarian-state 的 completion 版(影子模式):模型沒有工具,回 STATE.md 的編輯清單,平台套用(bin/edits.py)\", \"properties\": {\"state_updated\": {\"type\": \"boolean\", \"description\": \"要不要改 STATE.md;false 時 edits 是空的\"}, \"edits\": {\"type\": \"array\", \"description\": \"照順序套用;每個 old 要是目前 STATE.md 裡剛好出現一次的一段原文(含換行),new 是換成的文字(空字串 = 刪掉)\", \"items\": {\"type\": \"object\", \"properties\": {\"old\": {\"type\": \"string\"}, \"new\": {\"type\": \"string\"}}, \"required\": [\"old\", \"new\"]}}, \"worth_digesting\": {\"type\": \"boolean\", \"description\": \"這次的內容是否值得放進跨專案 digest\"}, \"summary\": {\"type\": \"string\", \"description\": \"給跨專案 digest 用的摘要,不超過三句話\"}, \"reason\": {\"type\": \"string\", \"description\": \"為什麼這樣改(或不改),給人事後抽查用\"}}, \"required\": [\"state_updated\", \"edits\", \"worth_digesting\", \"summary\", \"reason\"]}"
+   "{\"type\": \"object\", \"description\": \"the completion version of librarian-state (shadow mode): the model has no tools and returns a list of edits to STATE.md, which the platform applies (bin/edits.py)\", \"properties\": {\"state_updated\": {\"type\": \"boolean\", \"description\": \"whether to change STATE.md; when false, edits is empty\"}, \"edits\": {\"type\": \"array\", \"description\": \"applied in order; each old must be a passage that occurs exactly once in the current STATE.md (newlines included), and new is the text that replaces it (an empty string deletes it)\", \"items\": {\"type\": \"object\", \"properties\": {\"old\": {\"type\": \"string\"}, \"new\": {\"type\": \"string\"}}, \"required\": [\"old\", \"new\"]}}, \"worth_digesting\": {\"type\": \"boolean\", \"description\": \"whether this time's content is worth putting into the cross-project digest\"}, \"summary\": {\"type\": \"string\", \"description\": \"a summary for the cross-project digest, at most three sentences, in the content language named in the prompt\"}, \"reason\": {\"type\": \"string\", \"description\": \"why it changes this (or nothing), for a person spot-checking later; in the content language named in the prompt\"}}, \"required\": [\"state_updated\", \"edits\", \"worth_digesting\", \"summary\", \"reason\"]}"
   ],
   "exit": 0,
   "token_passed": true
@@ -580,7 +580,7 @@
    "--output-format",
    "json",
    "--json-schema",
-   "{\"type\": \"object\", \"description\": \"librarian-state 的 completion 版(影子模式):模型沒有工具,回 STATE.md 的編輯清單,平台套用(bin/edits.py)\", \"properties\": {\"state_updated\": {\"type\": \"boolean\", \"description\": \"要不要改 STATE.md;false 時 edits 是空的\"}, \"edits\": {\"type\": \"array\", \"description\": \"照順序套用;每個 old 要是目前 STATE.md 裡剛好出現一次的一段原文(含換行),new 是換成的文字(空字串 = 刪掉)\", \"items\": {\"type\": \"object\", \"properties\": {\"old\": {\"type\": \"string\"}, \"new\": {\"type\": \"string\"}}, \"required\": [\"old\", \"new\"]}}, \"worth_digesting\": {\"type\": \"boolean\", \"description\": \"這次的內容是否值得放進跨專案 digest\"}, \"summary\": {\"type\": \"string\", \"description\": \"給跨專案 digest 用的摘要,不超過三句話\"}, \"reason\": {\"type\": \"string\", \"description\": \"為什麼這樣改(或不改),給人事後抽查用\"}}, \"required\": [\"state_updated\", \"edits\", \"worth_digesting\", \"summary\", \"reason\"]}"
+   "{\"type\": \"object\", \"description\": \"the completion version of librarian-state (shadow mode): the model has no tools and returns a list of edits to STATE.md, which the platform applies (bin/edits.py)\", \"properties\": {\"state_updated\": {\"type\": \"boolean\", \"description\": \"whether to change STATE.md; when false, edits is empty\"}, \"edits\": {\"type\": \"array\", \"description\": \"applied in order; each old must be a passage that occurs exactly once in the current STATE.md (newlines included), and new is the text that replaces it (an empty string deletes it)\", \"items\": {\"type\": \"object\", \"properties\": {\"old\": {\"type\": \"string\"}, \"new\": {\"type\": \"string\"}}, \"required\": [\"old\", \"new\"]}}, \"worth_digesting\": {\"type\": \"boolean\", \"description\": \"whether this time's content is worth putting into the cross-project digest\"}, \"summary\": {\"type\": \"string\", \"description\": \"a summary for the cross-project digest, at most three sentences, in the content language named in the prompt\"}, \"reason\": {\"type\": \"string\", \"description\": \"why it changes this (or nothing), for a person spot-checking later; in the content language named in the prompt\"}}, \"required\": [\"state_updated\", \"edits\", \"worth_digesting\", \"summary\", \"reason\"]}"
   ],
   "exit": 0,
   "token_passed": true
@@ -596,7 +596,7 @@
    "--output-format",
    "json",
    "--json-schema",
-   "{\"type\": \"object\", \"description\": \"librarian-state 的 completion 版(影子模式):模型沒有工具,回 STATE.md 的編輯清單,平台套用(bin/edits.py)\", \"properties\": {\"state_updated\": {\"type\": \"boolean\", \"description\": \"要不要改 STATE.md;false 時 edits 是空的\"}, \"edits\": {\"type\": \"array\", \"description\": \"照順序套用;每個 old 要是目前 STATE.md 裡剛好出現一次的一段原文(含換行),new 是換成的文字(空字串 = 刪掉)\", \"items\": {\"type\": \"object\", \"properties\": {\"old\": {\"type\": \"string\"}, \"new\": {\"type\": \"string\"}}, \"required\": [\"old\", \"new\"]}}, \"worth_digesting\": {\"type\": \"boolean\", \"description\": \"這次的內容是否值得放進跨專案 digest\"}, \"summary\": {\"type\": \"string\", \"description\": \"給跨專案 digest 用的摘要,不超過三句話\"}, \"reason\": {\"type\": \"string\", \"description\": \"為什麼這樣改(或不改),給人事後抽查用\"}}, \"required\": [\"state_updated\", \"edits\", \"worth_digesting\", \"summary\", \"reason\"]}"
+   "{\"type\": \"object\", \"description\": \"the completion version of librarian-state (shadow mode): the model has no tools and returns a list of edits to STATE.md, which the platform applies (bin/edits.py)\", \"properties\": {\"state_updated\": {\"type\": \"boolean\", \"description\": \"whether to change STATE.md; when false, edits is empty\"}, \"edits\": {\"type\": \"array\", \"description\": \"applied in order; each old must be a passage that occurs exactly once in the current STATE.md (newlines included), and new is the text that replaces it (an empty string deletes it)\", \"items\": {\"type\": \"object\", \"properties\": {\"old\": {\"type\": \"string\"}, \"new\": {\"type\": \"string\"}}, \"required\": [\"old\", \"new\"]}}, \"worth_digesting\": {\"type\": \"boolean\", \"description\": \"whether this time's content is worth putting into the cross-project digest\"}, \"summary\": {\"type\": \"string\", \"description\": \"a summary for the cross-project digest, at most three sentences, in the content language named in the prompt\"}, \"reason\": {\"type\": \"string\", \"description\": \"why it changes this (or nothing), for a person spot-checking later; in the content language named in the prompt\"}}, \"required\": [\"state_updated\", \"edits\", \"worth_digesting\", \"summary\", \"reason\"]}"
   ],
   "exit": 0,
   "token_passed": false
@@ -612,7 +612,7 @@
    "--output-format",
    "json",
    "--json-schema",
-   "{\"type\": \"object\", \"description\": \"librarian-state 的 completion 版(影子模式):模型沒有工具,回 STATE.md 的編輯清單,平台套用(bin/edits.py)\", \"properties\": {\"state_updated\": {\"type\": \"boolean\", \"description\": \"要不要改 STATE.md;false 時 edits 是空的\"}, \"edits\": {\"type\": \"array\", \"description\": \"照順序套用;每個 old 要是目前 STATE.md 裡剛好出現一次的一段原文(含換行),new 是換成的文字(空字串 = 刪掉)\", \"items\": {\"type\": \"object\", \"properties\": {\"old\": {\"type\": \"string\"}, \"new\": {\"type\": \"string\"}}, \"required\": [\"old\", \"new\"]}}, \"worth_digesting\": {\"type\": \"boolean\", \"description\": \"這次的內容是否值得放進跨專案 digest\"}, \"summary\": {\"type\": \"string\", \"description\": \"給跨專案 digest 用的摘要,不超過三句話\"}, \"reason\": {\"type\": \"string\", \"description\": \"為什麼這樣改(或不改),給人事後抽查用\"}}, \"required\": [\"state_updated\", \"edits\", \"worth_digesting\", \"summary\", \"reason\"]}"
+   "{\"type\": \"object\", \"description\": \"the completion version of librarian-state (shadow mode): the model has no tools and returns a list of edits to STATE.md, which the platform applies (bin/edits.py)\", \"properties\": {\"state_updated\": {\"type\": \"boolean\", \"description\": \"whether to change STATE.md; when false, edits is empty\"}, \"edits\": {\"type\": \"array\", \"description\": \"applied in order; each old must be a passage that occurs exactly once in the current STATE.md (newlines included), and new is the text that replaces it (an empty string deletes it)\", \"items\": {\"type\": \"object\", \"properties\": {\"old\": {\"type\": \"string\"}, \"new\": {\"type\": \"string\"}}, \"required\": [\"old\", \"new\"]}}, \"worth_digesting\": {\"type\": \"boolean\", \"description\": \"whether this time's content is worth putting into the cross-project digest\"}, \"summary\": {\"type\": \"string\", \"description\": \"a summary for the cross-project digest, at most three sentences, in the content language named in the prompt\"}, \"reason\": {\"type\": \"string\", \"description\": \"why it changes this (or nothing), for a person spot-checking later; in the content language named in the prompt\"}}, \"required\": [\"state_updated\", \"edits\", \"worth_digesting\", \"summary\", \"reason\"]}"
   ],
   "exit": 0,
   "token_passed": true
@@ -635,7 +635,7 @@
    "--output-format",
    "json",
    "--json-schema",
-   "{\"type\": \"object\", \"properties\": {\"state_updated\": {\"type\": \"boolean\", \"description\": \"這次是否編輯了 STATE.md\"}, \"worth_digesting\": {\"type\": \"boolean\", \"description\": \"這次的內容是否值得放進跨專案 digest；純粹確認流程正常、沒有實質更新的話填 false\"}, \"summary\": {\"type\": \"string\", \"description\": \"給跨專案 digest 用的摘要，不超過三句話（worth_digesting 為 false 時可以簡短說明沒有更新的原因，或留空）\"}, \"reason\": {\"type\": \"string\", \"description\": \"為什麼做出這個判斷（更新或不更新 STATE.md），給人事後抽查用\"}}, \"required\": [\"state_updated\", \"worth_digesting\", \"summary\", \"reason\"]}"
+   "{\"type\": \"object\", \"properties\": {\"state_updated\": {\"type\": \"boolean\", \"description\": \"whether STATE.md was edited this time\"}, \"worth_digesting\": {\"type\": \"boolean\", \"description\": \"whether this time's content is worth putting into the cross-project digest; false when it only confirms things work and nothing substantive changed\"}, \"summary\": {\"type\": \"string\", \"description\": \"a summary for the cross-project digest, at most three sentences, in the content language named in the prompt (when worth_digesting is false, it may briefly say why nothing was updated, or be empty)\"}, \"reason\": {\"type\": \"string\", \"description\": \"why this judgement was made (updating STATE.md or not), for a person spot-checking later; in the content language named in the prompt\"}}, \"required\": [\"state_updated\", \"worth_digesting\", \"summary\", \"reason\"]}"
   ],
   "exit": 0,
   "token_passed": true
@@ -658,7 +658,7 @@
    "--output-format",
    "json",
    "--json-schema",
-   "{\"type\": \"object\", \"properties\": {\"state_updated\": {\"type\": \"boolean\", \"description\": \"這次是否編輯了 STATE.md\"}, \"worth_digesting\": {\"type\": \"boolean\", \"description\": \"這次的內容是否值得放進跨專案 digest；純粹確認流程正常、沒有實質更新的話填 false\"}, \"summary\": {\"type\": \"string\", \"description\": \"給跨專案 digest 用的摘要，不超過三句話（worth_digesting 為 false 時可以簡短說明沒有更新的原因，或留空）\"}, \"reason\": {\"type\": \"string\", \"description\": \"為什麼做出這個判斷（更新或不更新 STATE.md），給人事後抽查用\"}}, \"required\": [\"state_updated\", \"worth_digesting\", \"summary\", \"reason\"]}"
+   "{\"type\": \"object\", \"properties\": {\"state_updated\": {\"type\": \"boolean\", \"description\": \"whether STATE.md was edited this time\"}, \"worth_digesting\": {\"type\": \"boolean\", \"description\": \"whether this time's content is worth putting into the cross-project digest; false when it only confirms things work and nothing substantive changed\"}, \"summary\": {\"type\": \"string\", \"description\": \"a summary for the cross-project digest, at most three sentences, in the content language named in the prompt (when worth_digesting is false, it may briefly say why nothing was updated, or be empty)\"}, \"reason\": {\"type\": \"string\", \"description\": \"why this judgement was made (updating STATE.md or not), for a person spot-checking later; in the content language named in the prompt\"}}, \"required\": [\"state_updated\", \"worth_digesting\", \"summary\", \"reason\"]}"
   ],
   "exit": 0,
   "token_passed": true
@@ -681,7 +681,7 @@
    "--output-format",
    "json",
    "--json-schema",
-   "{\"type\": \"object\", \"properties\": {\"state_updated\": {\"type\": \"boolean\", \"description\": \"這次是否編輯了 STATE.md\"}, \"worth_digesting\": {\"type\": \"boolean\", \"description\": \"這次的內容是否值得放進跨專案 digest；純粹確認流程正常、沒有實質更新的話填 false\"}, \"summary\": {\"type\": \"string\", \"description\": \"給跨專案 digest 用的摘要，不超過三句話（worth_digesting 為 false 時可以簡短說明沒有更新的原因，或留空）\"}, \"reason\": {\"type\": \"string\", \"description\": \"為什麼做出這個判斷（更新或不更新 STATE.md），給人事後抽查用\"}}, \"required\": [\"state_updated\", \"worth_digesting\", \"summary\", \"reason\"]}"
+   "{\"type\": \"object\", \"properties\": {\"state_updated\": {\"type\": \"boolean\", \"description\": \"whether STATE.md was edited this time\"}, \"worth_digesting\": {\"type\": \"boolean\", \"description\": \"whether this time's content is worth putting into the cross-project digest; false when it only confirms things work and nothing substantive changed\"}, \"summary\": {\"type\": \"string\", \"description\": \"a summary for the cross-project digest, at most three sentences, in the content language named in the prompt (when worth_digesting is false, it may briefly say why nothing was updated, or be empty)\"}, \"reason\": {\"type\": \"string\", \"description\": \"why this judgement was made (updating STATE.md or not), for a person spot-checking later; in the content language named in the prompt\"}}, \"required\": [\"state_updated\", \"worth_digesting\", \"summary\", \"reason\"]}"
   ],
   "exit": 0,
   "token_passed": false
@@ -704,7 +704,7 @@
    "--output-format",
    "json",
    "--json-schema",
-   "{\"type\": \"object\", \"properties\": {\"state_updated\": {\"type\": \"boolean\", \"description\": \"這次是否編輯了 STATE.md\"}, \"worth_digesting\": {\"type\": \"boolean\", \"description\": \"這次的內容是否值得放進跨專案 digest；純粹確認流程正常、沒有實質更新的話填 false\"}, \"summary\": {\"type\": \"string\", \"description\": \"給跨專案 digest 用的摘要，不超過三句話（worth_digesting 為 false 時可以簡短說明沒有更新的原因，或留空）\"}, \"reason\": {\"type\": \"string\", \"description\": \"為什麼做出這個判斷（更新或不更新 STATE.md），給人事後抽查用\"}}, \"required\": [\"state_updated\", \"worth_digesting\", \"summary\", \"reason\"]}"
+   "{\"type\": \"object\", \"properties\": {\"state_updated\": {\"type\": \"boolean\", \"description\": \"whether STATE.md was edited this time\"}, \"worth_digesting\": {\"type\": \"boolean\", \"description\": \"whether this time's content is worth putting into the cross-project digest; false when it only confirms things work and nothing substantive changed\"}, \"summary\": {\"type\": \"string\", \"description\": \"a summary for the cross-project digest, at most three sentences, in the content language named in the prompt (when worth_digesting is false, it may briefly say why nothing was updated, or be empty)\"}, \"reason\": {\"type\": \"string\", \"description\": \"why this judgement was made (updating STATE.md or not), for a person spot-checking later; in the content language named in the prompt\"}}, \"required\": [\"state_updated\", \"worth_digesting\", \"summary\", \"reason\"]}"
   ],
   "exit": 0,
   "token_passed": true

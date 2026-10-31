@@ -3,19 +3,19 @@
  "properties": {
   "state_updated": {
    "type": "boolean",
-   "description": "這次是否編輯了 STATE.md"
+   "description": "whether STATE.md was edited this time"
   },
   "worth_digesting": {
    "type": "boolean",
-   "description": "這次的內容是否值得放進跨專案 digest；純粹確認流程正常、沒有實質更新的話填 false"
+   "description": "whether this time's content is worth putting into the cross-project digest; false when it only confirms things work and nothing substantive changed"
   },
   "summary": {
    "type": "string",
-   "description": "給跨專案 digest 用的摘要，不超過三句話（worth_digesting 為 false 時可以簡短說明沒有更新的原因，或留空）"
+   "description": "a summary for the cross-project digest, at most three sentences, in the content language named in the prompt (when worth_digesting is false, it may briefly say why nothing was updated, or be empty)"
   },
   "reason": {
    "type": "string",
-   "description": "為什麼做出這個判斷（更新或不更新 STATE.md），給人事後抽查用"
+   "description": "why this judgement was made (updating STATE.md or not), for a person spot-checking later; in the content language named in the prompt"
   }
  },
  "required": [

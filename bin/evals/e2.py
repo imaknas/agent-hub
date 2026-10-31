@@ -6,6 +6,8 @@ frozen here from history. A run calls the point through bin/llm.py exactly as pr
 state dir and bus (a copy of the config with bus_dir changed), so eval calls never reach the real bus or status page.
 
     e2.py freeze librarian-state <project> [--since <rev> | --night N]   a case from the memory repo (see freeze_state)
+    e2.py freeze librarian-index <YYYY-MM-DD>                a case from that night's digest (see freeze_index)
+    e2.py freeze librarian-todo-format <state case> --kind K [--state-file F]   a broken STATE.md (see freeze_todo)
     e2.py cases [<point>]                                    list cases
     e2.py run <point> --arm old|new|new-en [--rules old|new] [--k 3] [--case <glob>] [--run <id>] [--jobs 3]
     e2.py score <run> [--json]                               per-arm validity, language, agreement vs the noise floor
@@ -43,8 +45,14 @@ sys.path.insert(0, str(BIN))
 import edits  # noqa: E402
 import hubconf  # noqa: E402
 
-AGENT_POINTS = {"librarian-state"}
-POINT_CASES = {"librarian-state": "librarian-state", "librarian-state-edits": "librarian-state"}
+AGENT_POINTS = {"librarian-state", "librarian-index", "librarian-todo-format"}
+POINT_CASES = {"librarian-state": "librarian-state", "librarian-state-edits": "librarian-state",
+               "librarian-index": "librarian-index", "librarian-index-edits": "librarian-index",
+               "librarian-todo-format": "librarian-todo-format"}
+# The code before step 5 (docs/design/i18n.md): renders the `old` arm of a case frozen after the prompts changed
+OLD_REF = "ebd7f90"
+ROSTER = re.compile(r"<!-- roster:begin.*?<!-- roster:end -->", re.S)
+INDEX_MD, DIGEST_DIR = "index.md", "digest"   # the layout of an index run's temp data dir (what the agent sees)
 RATE_LIMIT = re.compile(r"rate.?limit|usage limit|429|overloaded", re.I)
 
 HUB_JSON = hubconf.config_file("hub.json").name   # the file name, inside a run's config copy
@@ -59,6 +67,18 @@ def _load(name: str, file: str):
 
 def librarian():
     return _load("librarian_e2", "librarian.py")
+
+
+def old_librarian():
+    """librarian.py as it was at OLD_REF (the Chinese prompts), loaded from a temp file; its imports resolve to bin/."""
+    src = subprocess.run(["git", "-C", str(hubconf.ROOT), "show", f"{OLD_REF}:bin/librarian.py"], capture_output=True,
+                         text=True, check=True).stdout
+    f = pathlib.Path(tempfile.mkdtemp(prefix="e2-old-")) / "librarian.py"
+    f.write_text(src)
+    spec = importlib.util.spec_from_file_location("librarian_old_e2", f)
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    return mod
 
 
 def root() -> pathlib.Path:
@@ -112,6 +132,71 @@ def freeze_state(project: str, since: str | None, night: int | None = None) -> p
         return _freeze_in(lib, project, d, since, after)
 
 
+def freeze_index(date: str) -> pathlib.Path:
+    """a librarian-index case: the latest recorded index.md with the digest of night `date`. The data dir keeps every
+    night's digest but not index.md's history, so these cases pair one index.md with several nights' digests. The `old`
+    prompt is rendered by the code at OLD_REF."""
+    rec = sorted(p for p in (root() / "cases" / "librarian-index").glob("2*/index") if (p / "args.json").exists())
+    if not rec:
+        sys.exit("e2: no recorded librarian-index case to take index.md from")
+    base = json.loads((rec[-1] / "args.json").read_text())
+    digest_f = hubconf.data_file("digest") / f"{date}.md"
+    if not digest_f.exists():
+        sys.exit(f"e2: no digest for {date}")
+    c = root() / "cases" / "librarian-index" / "frozen" / date
+    c.mkdir(parents=True, exist_ok=True)
+    args = {**base, "date": date, "digest": digest_f.read_text(), "frozen_from": f"index.md of {rec[-1].parent.name}"}
+    (c / "args.json").write_text(json.dumps(args, ensure_ascii=False, indent=1))
+    old = old_librarian()
+    old.TODAY, old.OWNER, old.ASSISTANT = date, base["owner"], base["assistant"]
+    (c / "prompt.librarian-index.txt").write_text(old.index_prompt())
+    (c / "prompt.librarian-index-edits.txt").write_text(old.index_edits_prompt(base["index_before"], args["digest"]))
+    return c
+
+
+TODO_HEADING = "## \u5f85\u8fa6"   # the zh-Hant to-do heading (contracts/state-todo.v1.md)
+
+
+def _broken(kind: str, text: str) -> str:
+    """a STATE.md with one typical to-do format problem (made from a real one)"""
+    lines = text.split("\n")
+    tagged = [i for i, line in enumerate(lines) if re.match(r"- \[ \] \u3014", line)]
+    if kind == "untagged":         # owner tags left off
+        for i in tagged[:2]:
+            lines[i] = re.sub(r"^- \[ \] \u3014[^\u3015]*\u3015", "- [ ] ", lines[i])
+    elif kind == "done-left":      # a finished item ticked instead of removed
+        lines[tagged[0]] = lines[tagged[0]].replace("- [ ]", "- [x]", 1)
+    elif kind == "no-section":     # the to-dos kept under another heading
+        lines = ["## \u4e0b\u4e00\u6b65" if line.strip() == TODO_HEADING else line for line in lines]
+    return "\n".join(lines)
+
+
+def freeze_todo(kind: str, source: str, state_file: str | None = None) -> pathlib.Path:
+    """a librarian-todo-format case: the snapshot of librarian-state case `source` with a broken STATE.md, either made
+    (kind untagged / done-left / no-section) or a real output that failed the check (state_file, kind real-<name>).
+    The problems are what check-state-todo.py reports; the `old` prompt is rendered by the code at OLD_REF."""
+    src = root() / "cases" / "librarian-state" / source
+    a = json.loads((src / "args.json").read_text())
+    broken = pathlib.Path(state_file).read_text() if state_file else _broken(kind, (src / "snapshot" / "STATE.md").read_text())
+    c = root() / "cases" / "librarian-todo-format" / kind / src.name
+    if c.exists():
+        shutil.rmtree(c)
+    shutil.copytree(src / "snapshot", c / "snapshot")
+    (c / "snapshot" / "STATE.md").write_text(broken)
+    chk = subprocess.run([*hubconf.launch(BIN / "check-state-todo.py"), str(c / "snapshot" / "STATE.md")],
+                         capture_output=True, text=True)
+    if chk.returncode == 0:
+        shutil.rmtree(c)
+        sys.exit(f"e2: {kind} of {source} passes the check; not a case")
+    args = {k: a[k] for k in ("date", "owner", "assistant", "project")} | {"problems": chk.stdout.strip(), "kind": kind,
+                                                                          "from": source}
+    (c / "args.json").write_text(json.dumps(args, ensure_ascii=False, indent=1))
+    old = old_librarian()
+    old.TODAY, old.OWNER, old.ASSISTANT = a["date"], a["owner"], a["assistant"]
+    (c / "prompt.librarian-todo-format.txt").write_text(old.todo_fix_prompt(args["problems"]))
+    return c
+
+
 def _freeze_in(lib, project: str, d: pathlib.Path, since: str, after: str | None = None) -> pathlib.Path:
     head = lib.git(d, "rev-parse", "HEAD")
     base = lib.git(d, "rev-parse", since)
@@ -159,6 +244,12 @@ def prompt(point: str, case: pathlib.Path, arm: str) -> str:
     lib = librarian()
     lib.TODAY, lib.OWNER, lib.ASSISTANT = a["date"], a["owner"], a["assistant"]   # pin what the prompt interpolates
     lib.CONTENT_LANG = "en" if base_arm(arm) == "new-en" else "zh-Hant"
+    if point == "librarian-index":
+        return lib.index_prompt()
+    if point == "librarian-todo-format":
+        return lib.todo_fix_prompt(a["problems"])
+    if point == "librarian-index-edits":
+        return lib.index_edits_prompt(a["index_before"], a["digest"])
     if point in ("librarian-state", "librarian-state-edits"):
         ms = lib.memory_text(a["changed"], a["diff"], a["truncated"])
         hn = lib.handoff_note(a["handoffs"]) if a["handoffs"] else ""
@@ -197,7 +288,12 @@ def one(point: str, case: pathlib.Path, arm: str, i: int, run_dir: pathlib.Path,
     (out / "prompt.txt").write_text(text)
     with tempfile.TemporaryDirectory(prefix="e2-") as tmp:
         cwd = pathlib.Path(tmp) / case.name.split("@")[0]
-        if point in AGENT_POINTS:
+        if point == "librarian-index":   # the data dir as the agent sees it: index.md and that night's digest
+            a = json.loads((case / "args.json").read_text())
+            (cwd / DIGEST_DIR).mkdir(parents=True)
+            (cwd / INDEX_MD).write_text(a["index_before"])
+            (cwd / DIGEST_DIR / f"{a['date']}.md").write_text(a["digest"])
+        elif point in AGENT_POINTS:
             snapshot(case, arm, cwd)
         else:
             cwd.mkdir()
@@ -205,7 +301,9 @@ def one(point: str, case: pathlib.Path, arm: str, i: int, run_dir: pathlib.Path,
         r = subprocess.run([str(BIN / "py"), str(BIN / "llm.py"), "run", point, "--prompt-file", str(out / "prompt.txt")],
                            cwd=cwd, env=env, capture_output=True, text=True, timeout=3600)
         secs = (datetime.datetime.now() - t0).total_seconds()
-        if point in AGENT_POINTS and (cwd / "STATE.md").exists():
+        if point == "librarian-index" and (cwd / INDEX_MD).exists():
+            shutil.copy(cwd / INDEX_MD, out / "after.index.md")
+        elif point in AGENT_POINTS and (cwd / "STATE.md").exists():
             shutil.copy(cwd / "STATE.md", out / "after.STATE.md")
     (out / "result.json").write_text(r.stdout)
     (out / "stderr.txt").write_text(r.stderr[-20000:])
@@ -291,8 +389,35 @@ def state_check(text: str) -> list[str]:
     return contracts.check_state_todo(text, hubconf.ROOT / "contracts" / "state-todo.v1.md", hubconf.owner_tag())
 
 
+def index_outcome(point: str, case: pathlib.Path, out: pathlib.Path) -> dict:
+    """an index run → valid, changed, the roster block untouched (contract), the language of what it wrote"""
+    before = json.loads((case / "args.json").read_text())["index_before"]
+    try:
+        obj = json.loads((out / "result.json").read_text())
+    except (OSError, ValueError):
+        obj = {}
+    so = obj.get("structured_output")
+    r = {"valid": isinstance(so, dict) and not obj.get("is_error"), "after": None, "error": obj.get("llm_error")}
+    if point == "librarian-index-edits" and r["valid"]:
+        try:
+            r["after"] = edits.apply(before, so.get("edits") or []) if so.get("index_updated") else before
+        except edits.EditError as e:
+            r["valid"], r["error"] = False, f"edits: {e}"
+    elif point == "librarian-index" and (out / "after.index.md").exists():
+        r["after"] = (out / "after.index.md").read_text(errors="replace")
+    if r["after"] is None:
+        return r
+    roster = (lambda t: (m.group(0) if (m := ROSTER.search(t)) else None))
+    r.update({"changed": r["after"] != before, "contract_ok": roster(r["after"]) == roster(before), "items": None,
+              "lang": language(added_text(before, r["after"]) + "\n" +
+                               (str(so.get("relations_found") or "") if isinstance(so, dict) else ""))})
+    return r
+
+
 def outcome(point: str, case: pathlib.Path, out: pathlib.Path) -> dict:
     """one run → what is scored: valid, decision, resulting STATE.md, to-do items, language of what it wrote"""
+    if point.startswith("librarian-index"):
+        return index_outcome(point, case, out)
     before_f = case / "snapshot" / "STATE.md"
     before = before_f.read_text(errors="replace") if before_f.exists() else ""
     try:
@@ -301,13 +426,15 @@ def outcome(point: str, case: pathlib.Path, out: pathlib.Path) -> dict:
         obj = {}
     so = obj.get("structured_output")
     r = {"valid": isinstance(so, dict) and not obj.get("is_error"), "after": None, "error": obj.get("llm_error")}
-    if point == "librarian-state-edits" and r["valid"]:
+    if point == "librarian-todo-format":   # no structured output: valid = the call ended normally
+        r["valid"] = bool(obj) and not obj.get("is_error") and not obj.get("llm_error")
+    if point in ("librarian-state", "librarian-todo-format") and (out / "after.STATE.md").exists():
+        r["after"] = (out / "after.STATE.md").read_text(errors="replace")
+    elif point == "librarian-state-edits" and r["valid"]:
         try:
             r["after"] = edits.apply(before, so.get("edits") or []) if so.get("state_updated") else before
         except edits.EditError as e:
             r["valid"], r["error"] = False, f"edits: {e}"
-    elif point == "librarian-state" and (out / "after.STATE.md").exists():
-        r["after"] = (out / "after.STATE.md").read_text(errors="replace")
     if r["after"] is None:
         return r
     after = r["after"]
@@ -436,10 +563,12 @@ def main(argv: list[str]) -> int:
     ap = argparse.ArgumentParser(prog="e2.py", description=__doc__.split("\n\n")[0])
     sub = ap.add_subparsers(dest="cmd", required=True)
     f = sub.add_parser("freeze")
-    f.add_argument("point", choices=["librarian-state"])
-    f.add_argument("project")
+    f.add_argument("point", choices=["librarian-state", "librarian-index", "librarian-todo-format"])
+    f.add_argument("project", help="librarian-state: the project; librarian-index: the night (YYYY-MM-DD) whose digest")
     f.add_argument("--since", help="start of the range (default: the librarian's checkpoint)")
     f.add_argument("--night", type=int, help="the Nth most recent night the librarian changed STATE.md")
+    f.add_argument("--kind", help="librarian-todo-format: untagged | done-left | no-section | real-<name>")
+    f.add_argument("--state-file", help="librarian-todo-format: a real STATE.md that fails the check")
     c = sub.add_parser("cases")
     c.add_argument("point", nargs="?", default="librarian-state")
     r = sub.add_parser("run")
@@ -455,7 +584,10 @@ def main(argv: list[str]) -> int:
     s.add_argument("--json", action="store_true")
     a = ap.parse_args(argv)
     if a.cmd == "freeze":
-        print(freeze_state(a.project, a.since, a.night))
+        if a.point == "librarian-todo-format":
+            print(freeze_todo(a.kind, a.project, a.state_file))
+        else:
+            print(freeze_index(a.project) if a.point == "librarian-index" else freeze_state(a.project, a.since, a.night))
     elif a.cmd == "cases":
         for p in cases(a.point):
             print(case_id(p))

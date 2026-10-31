@@ -3,11 +3,11 @@
  "properties": {
   "index_updated": {
    "type": "boolean",
-   "description": "是否編輯了 index.md"
+   "description": "whether index.md was edited"
   },
   "relations_found": {
    "type": "string",
-   "description": "今天找到的跨專案關聯簡述；沒有明顯關聯就寫「(無明顯關聯)」，不要硬掰"
+   "description": "a short account of the cross-project connections found today, in the content language named in the prompt; with no clear connection, say so in a few words rather than invent one"
   }
  },
  "required": [
