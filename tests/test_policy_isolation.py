@@ -56,6 +56,30 @@ class Policy(unittest.TestCase):
         self.assertEqual(set(a["env"]), {"UV_CACHE_DIR", "UV_PYTHON_INSTALL_DIR", "UV_TOOL_DIR", "PIP_CACHE_DIR",
                                          "npm_config_cache", "COREPACK_HOME"})
 
+    def test_no_sandbox_writes_the_platforms_interpreter(self):
+        """Round 6: ~/.local/share/uv (where uv installs the platform's Python) was writable from every sandbox; a
+        sitecustomize.py there runs in the scheduler, the gate and every service."""
+        import os
+        protected = {pathlib.Path(os.path.realpath(p)) for p in (sys.prefix, sys.base_prefix, sys.executable)}
+        protected |= {hubconf.path("~/.local/share/uv/python"), hubconf.path("~/.local/share/uv")}
+        pol = self.pol("a")
+        writable = [hubconf.path(w) for w in pol["write"]] + [pathlib.Path(v) for v in pol.get("env", {}).values()] \
+            + [pathlib.Path(pol["workspace"])]
+        for w in writable:
+            w = pathlib.Path(os.path.realpath(w))
+            for p in protected:
+                self.assertFalse(p.is_relative_to(w) or w.is_relative_to(p), f"{w} can write {p}")
+
+
+class RegistryFallback(unittest.TestCase):
+    """Without the registry index (a new machine, a failed refresh), hubconf.projects() reads the files line by line:
+    whether a project is sandboxed must survive that, or its work would run unwrapped."""
+
+    def test_sandbox_survives_the_fallback(self):
+        for text, want in (("enforce:\n  sandbox: true\n", True), ("enforce: {sandbox: true, capabilities: [gpu]}\n", True),
+                           ("enforce:\n  capabilities: [x]\nsandbox: true\n", False), ("enforce:\n  sandbox: false\n", False)):
+            self.assertIs(hubconf.roster_sandboxed(text), want, text)
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -394,6 +394,22 @@ def roster_paths(text: str) -> dict:
     return paths
 
 
+def roster_sandboxed(text: str) -> bool:
+    """`enforce: {sandbox: true}` in one registry file, block or flow style (line by line, like roster_paths)."""
+    lines = text.splitlines()
+    for i, line in enumerate(lines):
+        bare = line.split("#")[0].rstrip()
+        if re.match(r"^enforce:\s*\{.*\bsandbox:\s*true\b", bare):
+            return True
+        if bare == "enforce:":
+            for sub in lines[i + 1:]:
+                if sub.strip() and not sub.startswith((" ", "\t")):
+                    break
+                if re.match(r"^\s+sandbox:\s*true\s*(#.*)?$", sub):
+                    return True
+    return False
+
+
 _TYPE_LINE = re.compile(r"^type:\s*['\"]?(\w+)['\"]?\s*(?:#.*)?$")
 
 
@@ -419,7 +435,15 @@ def projects() -> dict[str, dict]:
             return json.loads(REGISTRY_INDEX.read_text())["projects"]
         except (ValueError, KeyError):
             pass
-    return {name: {"name": name, "paths": paths} for name, paths in roster().items()}
+    out = {}
+    d = registry_dir()
+    for f in sorted(d.glob("*.yaml")) if d and d.is_dir() else []:
+        if f.stem != hub_project():
+            text = f.read_text()
+            # whether it is sandboxed must not be lost here: everything that decides to wrap a project's work reads it
+            out[f.stem] = {"name": f.stem, "paths": roster_paths(text),
+                           **({"enforce": {"sandbox": True}} if roster_sandboxed(text) else {})}
+    return out
 
 
 def reflection_private() -> set[str] | None:
