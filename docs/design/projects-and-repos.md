@@ -31,6 +31,9 @@
 > r8 (11-01): a sixth review refuted parts of r7's rule (a bundle handed over as a file can be a symlink to another
 > project's bundle; the resolver itself would run git in project repos; "Inert" and the call-site list were wrong) and
 > found more holes in today's code. Marked open in section 4 and listed in section 9; not settled.
+> r9 (11-01, after the sandbox fix landed): the security claim scoped to "adds no path beyond the sandbox"; the
+> resolver starts no git (pointer files, by path); hand-over on stdout, as `project_git.py` built it; a project in
+> several repos needs the same security fields in all of them.
 
 ## 1. The problem
 
@@ -84,7 +87,7 @@ Counts exclude `bin/evals/`. `hubbus`'s
 4. **Only the resolver knows the mapping** (2.4); a ratchet test keeps other code from reading `paths.workspace`,
    `registry.dirs()["workspace"]`, `roster()`'s folder column (whose readers take it as a repo root; `roster()` gains a
    repo column from the resolver) or `hubbus`'s own project table.
-5. **What a project's tests depend on is computed, not assumed** (section 4, "Which tests a change needs"): the files
+5. **What a project's tests depend on is computed, not assumed** (`test-waiting.md` B2 and B3): the files
    in its scopes **including nested scopes** (test runners collect recursively), the own files of every ancestor scope
    (test runners load configuration from parent folders; the root owner's files are the case of `/`), and the scopes
    of the projects in its `depends_on` closure.
@@ -102,12 +105,15 @@ Counts exclude `bin/evals/`. `hubbus`'s
 In `hubconf` (shell scripts get the same answers through `hubconf.py` subcommands, as `roster` does today):
 
 - `scopes(project)` → its `(repo, path)` pairs / folder
-- `project_at(path)` → the owning project: through git (the repo from the git common dir, the path relative to the
-  worktree's top), so it works in worktrees; a linked worktree may carry a marker naming its project
-  (`<git-dir>/agent-hub-project`), which wins, since tools open worktrees at the repo root. The session-start hook
-  writes it from the folder the session was opened in, which the runtime reports (a `runtime_ports` capability, step
-  6; without it doctor says inner projects' worktree sessions count for the root owner); a marker naming a project
-  that has no scope in this repo is ignored and reported. A deployment clone resolves to the repo it deploys (services
+- `project_at(path)` → the owning project, **without starting git** (round 6: a project's git config can make even
+  `rev-parse` hang or run a program): by path against the registered folders, as `project_git.project_at` already
+  does (11-01), and inside a linked worktree by reading its `.git` and `commondir` pointer files as plain files,
+  accepted only when they lead to a registered repo's git dir; so it works in worktrees. A linked worktree may carry a
+  marker naming its project (`<git-dir>/agent-hub-project`), which wins, since tools open worktrees at the repo root.
+  The session-start hook writes it, as the project (`project_git.run`, so a planted symlink leads nowhere it could not
+  already write), from the folder the session was opened in, which the runtime reports (a `runtime_ports` capability,
+  step 6; without it doctor says inner projects' worktree sessions count for the root owner); a marker naming a
+  project that has no scope in this repo is ignored and reported. A deployment clone resolves to the repo it deploys (services
   and jobs run there); a path inside a
   memory clone or a folder-only project resolves by its folder, as `hubbus` does today
 - the hub repo is the main checkout of the running copy's git common dir, so a worktree of agent-hub is recognized
@@ -133,8 +139,11 @@ and the repo-level fields in the project file (`paths.origin`, `push_on_merge`, 
 to `registry_dir`) holding every repo-level field, including `commit_gate` (test-waiting A1); project files in that
 repo may not set them (one source, so no cross-file equality check — per-file validation could never change such a
 value). `metered_models` stays per project (it is about the project's model calls). A **folder-only project** is its own
-trust domain and carries the repo-level security fields in its own file; a **project in several repos** takes, for
-project-level uses such as `privacy.reflection`, the strictest of its repos' settings.
+trust domain and carries the repo-level security fields in its own file; a **project in several repos** must have
+the same security fields (`enforce`, `network`, `allow_write`, `privacy`) in all of them — validation rejects the
+combination otherwise — because its one memory clone and its project-level jobs need a single authority (round 6:
+with different `enforce`, a sandboxed repo's sessions could write the clone that the other repo's unsandboxed
+sessions run git in).
 
 ```yaml
 # repos/acme.yaml
@@ -239,10 +248,10 @@ leak anything the repo's setting does not already allow.
 `.git` (common dir and worktree gitdirs, which `git commit`, `merge-branch`'s lock, `.git/info/exclude` and the result
 cache need) and its deployment clone, plus **its own memory clone** in `<memory_root>` (by real path, since the link
 resolves there) and what it may today (runtime, bus, caches, `allow_write`); every **other** repo, folder-only project
-and **other project's memory clone, memory bare repo and memory copy** stays denied (today `policy.py` denies reading
-only `<memory_copies>/*/memory` and writing `git_origin`, so a sandboxed project can read another's STATE.md and every
-note's object from its copy's `.git` or its bare repo — a current gap, fixed with the ones under "Platform git in
-project repos"). Within a repo there is no write fence between projects — it would be cosmetic, since any
+and **other project's memory clone, memory bare repo and memory copy** stays denied (closed for today's layout on
+11-01: `policy.py` puts every memory repo that is not the project's own into `other_projects`). **What this design
+claims** (decided after round 6): it adds no path by which a project exceeds its sandbox; whether the sandbox itself
+holds is the sandbox's own scope (section 9, the 11-01 fix, `bus-sender.md`). Within a repo there is no write fence between projects — it would be cosmetic, since any
 of them can install a git hook that runs in the others' sessions. The platform's own Seatbelt/Landlock layer
 (`seatbelt.py`, `landlock.py`) derives the same set from the resolver, so the repo root of an inner project's service is
 readable.
@@ -259,11 +268,11 @@ by which command:
 - **The platform runs git only in repos it owns** — the memory bare repos, the librarian's memory copies, its own
   checkout.
 - **In a project-writable git dir, every git command runs as the project**: in its session, or through
-  `isolation.wrap` as one of its command jobs. What the platform needs back comes as data that job writes into the
-  project's own folder: a **bundle** (`git bundle create`: commits to move, built with the project's read rights, so
-  it cannot contain objects the project cannot read) or a **facts file** (worktrees, last-commit times, clean or not,
-  commit counts). The platform fetches only from such a bundle file, into a repo it owns, with
-  `transfer.fsckObjects` on.
+  `isolation.wrap` as one of its command jobs. What the platform needs back comes as data on that job's **stdout**
+  (r9; never a file in the project's folder, which can be a symlink or a FIFO): a **bundle** (`git bundle create`,
+  built with the project's read rights, so it cannot contain objects the project cannot read) or **facts** as JSON
+  (worktrees, last-commit times, clean or not, commit counts), with types checked. The platform fetches only from such
+  a bundle, into a repo it owns, with `transfer.fsckObjects` on.
 - For a project without a sandbox the wrap is a no-op: it has the user's authority already, so there is nothing to
   cross. Cost: one wrapped job per sandboxed repo wherever the platform needs git facts (the status page, every tick).
 
@@ -271,7 +280,7 @@ What moves under it (none of these may run git in a project repo directly): the 
 (`worktrees.overview()`: `git log`, `git status`, every tick), the worktree cleanup (`worktree remove`, `branch -d`),
 `check-memory-gaps.py` and `weekly-reflect.py` (`git log`), the backup (`bundle create`, the diff of uncommitted work),
 `propose_apply.py` (`worktree add`/`remove`), and memory: the hourly sync commits each clone and writes a bundle as a
-command job of its project; the platform fetches the bundle into `<name>-memory.git` and fast-forwards it; what the
+command job of its project, the bundle on its stdout; the platform fetches it into `<name>-memory.git` and fast-forwards it; what the
 bare repo has that the clone lacks (the librarian's STATE.md commits) is merged inside the clone by the project's own
 fetch, in that job. The librarian's memory copies are platform-owned but hold project content, so they are checked out
 with `core.symlinks=false` (a committed `STATE.md` symlink would otherwise hand the librarian, and the model, any file
@@ -280,15 +289,15 @@ sandboxed project could run code as the user within one scheduler tick; the sepa
 to today's code (`bin/project-git-job.py` runs as the project, `bin/project_git.py` reads back its JSON or fetches its
 bundle), and this design inherits it.
 
-**Open after round 6 (11-01):** a bundle or facts file the project writes into its own folder can be a symlink or a
-FIFO (tested: a symlinked bundle fetched into a platform repo left another project's objects there, past
-`fsckObjects`), so the hand-over is unsettled — the candidate is the wrapped job's stdout, with a size cap and a
-timeout. `project_at` resolving "through git" would run git in project repos; the candidate is reading the `.git` and
-`commondir` pointer files as plain files and checking them against registered repos. `[include] path=<fifo>` hangs
-even `rev-parse` and `worktree list`, so "Inert" above is withdrawn and the call-site list is incomplete (also
-`render-project-settings.py`, `cap-runner.py`, `lease-runner.py`, `upgrade-idea.py`, rename/recover/migrate, and the
-session hooks, which run outside the sandbox). A project in several repos with different `enforce` has no single
-authority (round 6 B5); the candidate is requiring identical security fields across its repos.
+**Built 11-01, by the sandbox fix:** `bin/project_git.py` is this rule for today's layout. A project's git work runs
+as the project with a timeout and an output cap (its process group is killed: a `[include] path=<fifo>` hangs even
+`rev-parse`), and what comes back is data on the job's **stdout**, never a file in the project's folder (round 6: a
+bundle file can be a symlink to another project's bundle, and fetching it left that project's objects in the
+platform's repo past `fsckObjects`); a bundle on stdout is fetched into a repo the platform owns. The call sites
+round 6 added (`render-project-settings.py`, `cap-runner.py`, `lease-runner.py`, `upgrade-idea.py`, the session hooks)
+moved with it (section 9). "Inert" above is withdrawn: no git command is assumed safe; the design's resolver starts
+none (2.4). Under this design the same module serves repos and scopes: the memory clone's sync and the per-repo calls
+go through it.
 
 **merge-branch** (a repo operation; a `--question` goes to the owner once per merge, not once per project): lock → rebase → commit titles → `affected(repo, main, head, merge)` → for each pair, a
 recorded pass for its key or a run (the test system, test-waiting section 4) → fast-forward → one `merge.done` /
@@ -364,7 +373,8 @@ scheduled in `test-waiting.md` section 7.
    project jobs by the separate fix, keep doing so through the resolver.
 4. The test system's selection and cache on the resolver (test-waiting section 7, step 5).
 5. Memory: backups of `<memory_root>` and the sandbox's memory paths (own clone writable; others' clones and bare
-   repos and copies denied); the hourly sync as project command jobs writing bundles; renaming and the memory scripts handle both forms,
+   repos and copies denied); the hourly sync re-pointed from the worktree to the clone (it already runs as project
+   jobs handing back bundles, since 11-01); renaming and the memory scripts handle both forms,
    onboarding and recovery create clones; the migration; agent-hub's memory; then removing the worktree-form branches.
 6. Runtime capabilities for nested rules files, hook settings and subfolder worktrees; the worktree marker.
 7. Onboarding and recovery of subfolder and folder-only projects; repo promotion.
@@ -481,7 +491,8 @@ denied whole and checked out without symlinks.
 **Round 6 (r8), with `test-waiting.md` r9:** 10 blocking points (test-waiting section 7 and section 4 above, "Open
 after round 6"). Three refute r7/r8 mechanisms written without a test; the rest are open design points and holes in
 today's code. The count rose (5, 7, 10) because each round's untested fixes became the next round's findings, and
-because reviewers kept finding holes in the existing sandbox. Not converged; building does not start.
+because reviewers kept finding holes in the existing sandbox. Not converged then; the owner paused reviews until the
+sandbox fix landed (section 8), and r9 decides the open points.
 
 **Holes that exist today, worst first** (round 6 added the first three):
 
