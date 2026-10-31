@@ -1,5 +1,6 @@
-"""Linux 的服務管理器(bin/systemd_units.py):平台產生的 launchd plist → systemd user unit;render-services 在 systemd 上
-plan / apply 的樣子(systemctl 是假的,只記下叫了什麼)。真的 systemd 上的驗證在 docs/design/tool-agnostic.md 第 6 步。
+"""The Linux service manager (bin/systemd_units.py): the launchd plists the platform generates → systemd user units;
+what render-services' plan / apply look like on systemd (systemctl is fake, it only records what was called).
+Verification on a real systemd is in docs/design/tool-agnostic.md step 6.
 
     bin/py -m unittest discover -s tests
 """
@@ -35,9 +36,11 @@ class Files(unittest.TestCase):
                                  "RunAtLoad": True})
         self.assertEqual(sorted(f), ["local.x.tick.service", "local.x.tick.timer"])
         self.assertIn("Type=oneshot", f["local.x.tick.service"])
-        self.assertIn('ExecStart="/bin/echo" "cost $$5"', f["local.x.tick.service"], "ExecStart 的 $ 要跳脫")
-        self.assertNotIn("[Install]", f["local.x.tick.service"], "timer 叫它,service 本身不 enable")
-        self.assertIn("OnActiveSec=1\nOnUnitActiveSec=900", f["local.x.tick.timer"], "載入就跑一次(RunAtLoad),之後每 900 秒")
+        self.assertIn('ExecStart="/bin/echo" "cost $$5"', f["local.x.tick.service"], "$ in ExecStart is escaped")
+        self.assertNotIn("[Install]", f["local.x.tick.service"],
+                         "the timer calls it, the service itself is not enabled")
+        self.assertIn("OnActiveSec=1\nOnUnitActiveSec=900", f["local.x.tick.timer"],
+                      "runs once on load (RunAtLoad), then every 900 seconds")
         self.assertEqual(systemd_units.target({"Label": "local.x.tick", "StartInterval": 900}), "local.x.tick.timer")
 
     def test_core_templates_translate(self):
@@ -76,12 +79,12 @@ class RenderServicesOnSystemd(unittest.TestCase):
     def test_plan_apply_then_nothing_left(self):
         first = self.m.plan(self.index)
         self.assertEqual([c.op for c in first], ["add"])
-        self.assertFalse(self.calls, "plan 不動 systemd")
+        self.assertFalse(self.calls, "plan does not touch systemd")
         self.m.apply(self.index)
         unit = (self.tmp / "units" / "local.demo.web.service").read_text()
         self.assertIn('ExecStart="/bin/echo" "hi"', unit)
         self.assertIn(("enable", "--now", "local.demo.web.service"), self.calls)
-        self.assertEqual(self.m.plan(self.index), [], "套用完再 plan 是空的")
+        self.assertEqual(self.m.plan(self.index), [], "plan after apply is empty")
         self.index["projects"]["demo"]["services"] = []
         self.assertEqual([c.op for c in self.m.plan(self.index)], ["remove"])
         self.m.apply(self.index)

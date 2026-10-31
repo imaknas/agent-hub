@@ -1,5 +1,6 @@
-"""沒有 coding agent(hub.json runtime.default: none)時,平台每個用到執行環境的地方都明確說「不支援」,
-不是當掉、也不是拿空資料照跑(docs/design/tool-agnostic.md 原則 3)。在隔離的 HOME / config / data 跑真的指令。
+"""With no coding agent (hub.json runtime.default: none), every place in the platform that uses the runtime says
+"unsupported" explicitly, neither crashing nor carrying on with empty data (docs/design/tool-agnostic.md principle 3).
+Runs the real commands in an isolated HOME / config / data.
 
     bin/py -m unittest discover -s tests
 """
@@ -36,12 +37,12 @@ class RuntimeNone(unittest.TestCase):
                       env={"AGENT_HUB_LANG_UI": "zh-Hant"})   # the message asserted is the zh-Hant one
         self.assertEqual(r.returncode, 3, r.stderr)
         self.assertIn("規則檔", r.stderr)
-        self.assertEqual(r.stdout.strip(), "", "不能猜一個預設檔名")
+        self.assertEqual(r.stdout.strip(), "", "must not guess a default file name")
 
     def test_hooks_are_not_installed(self):
         r = self.run_(BIN / "hub-event", "install", self.tmp / "ws")
         self.assertEqual(r.returncode, 3, r.stderr)
-        self.assertEqual(list((self.tmp / "ws").iterdir()), [], "沒有 hook 可裝就什麼都不寫")
+        self.assertEqual(list((self.tmp / "ws").iterdir()), [], "no hook to install means nothing is written")
 
     def test_llm_point_fails_with_the_reason(self):
         r = self.run_(BIN / "llm.py", "run", "reflect-week", stdin="x",

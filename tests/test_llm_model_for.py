@@ -1,7 +1,9 @@
-"""判斷點用哪個模型:全平台只在 llm.model_for 算(10-29 起;以前五個地方各留一份預設表,10-27 盲審查到互相不同步)。
+"""Which model a judgment point uses: computed only in llm.model_for across the platform (since 10-29; five places
+used to keep their own default table each, and a blind review on 10-27 found them out of sync).
 
-優先順序:--model > hub.json llm.points.<點>.model(沒指定 provider、或 provider 就是這個執行環境)> 執行環境的組別表
-(runtime_<名稱>.MODELS)> 不指定(model_group: default 的點,用工具自己的預設)。models.env 不再有人讀。
+Precedence: --model > hub.json llm.points.<point>.model (no provider given, or the provider is this runtime) > the
+runtime's group table (runtime_<name>.MODELS) > none (a model_group: default point uses the tool's own default).
+Nobody reads models.env any more.
 
     bin/py -m unittest discover -s tests
 """
@@ -33,7 +35,7 @@ class ModelFor(unittest.TestCase):
         self.cfg = pathlib.Path(tempfile.mkdtemp())
         self.prompt = self.cfg / "p.txt"
         self.prompt.write_text("x")
-        # 登入:假的 HOME 放一個假的 token(不靠這台機器的真憑證;閘門也是假 HOME)
+        # login: a fake token in a fake HOME (never this machine's real credentials; the gate uses a fake HOME too)
         self.home = pathlib.Path(tempfile.mkdtemp())
         (self.home / ".claude").mkdir()
         (self.home / ".claude" / "headless-oauth-token").write_text("not-a-real-token\n")
@@ -55,7 +57,7 @@ class ModelFor(unittest.TestCase):
                 hubconf._cfg = None
         cmd = json.loads(out.getvalue())
         used = cmd[cmd.index("--model") + 1] if "--model" in cmd else None
-        self.assertEqual(used, direct, "實際的指令跟 model_for 回報的(寫進 log 的)要一樣")
+        self.assertEqual(used, direct, "the actual command matches what model_for reports (what goes in the log)")
         return used
 
     def test_group_defaults_from_the_runtime(self):
@@ -64,12 +66,12 @@ class ModelFor(unittest.TestCase):
         self.assertEqual(self.model_for("consolidate"), "opus")
 
     def test_default_group_passes_no_model(self):
-        self.assertIsNone(self.model_for("agent-job"), "model_group: default = 用工具自己的預設,不帶 --model")
+        self.assertIsNone(self.model_for("agent-job"), "model_group: default = the tool's own default, no --model")
 
     def test_pin_in_hub_json(self):
         hub = {"llm": {"points": {"librarian-state": {"model": "opus"}}}}
         self.assertEqual(self.model_for("librarian-state", hub), "opus")
-        self.assertEqual(self.model_for("librarian-index", hub), "sonnet", "沒指定的點照組別")
+        self.assertEqual(self.model_for("librarian-index", hub), "sonnet", "a point with nothing set follows its group")
 
     def test_pin_for_another_provider_is_not_the_runtime_model(self):
         hub = {"llm": {"points": {"librarian-state": {"provider": "elsewhere", "model": "x"}}}}

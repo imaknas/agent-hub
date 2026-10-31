@@ -1,8 +1,10 @@
-"""平台的 headless 判斷點不載入環境裡的 MCP 伺服器(10-27 封閉實驗查到的洞)。
+"""The platform's headless judgment points do not load the environment's MCP servers (a hole found by the 10-27
+sealing experiment).
 
-實驗:`claude -p --tools ""`(工具全關)照樣拿到全域/plugin 的 MCP 工具——265 個,含 某個專案正式資料庫的
-execute_sql。關工具不等於關 MCP;只有 `--strict-mcp-config` 擋得掉(實驗確認它也擋 plugin 的 MCP,不影響 --mcp-config
-明確給的)。所以每個判斷點都要帶它,例外要寫在這裡、有理由。
+Experiment: `claude -p --tools ""` (all tools off) still got the global/plugin MCP tools, 265 of them, including
+execute_sql on a project's production database. Turning tools off does not turn MCP off; only `--strict-mcp-config`
+blocks them (the experiment confirmed it blocks plugin MCP too, without affecting what --mcp-config gives explicitly).
+So every judgment point must carry it; exceptions are written here, with a reason.
 
     bin/py -m unittest discover -s tests
 """
@@ -14,11 +16,13 @@ import yaml
 ROOT = pathlib.Path(__file__).resolve().parents[1]
 FLAG = "--strict-mcp-config"
 POINTS = yaml.safe_load((ROOT / "contracts" / "llm-points.yaml").read_text())["points"]
-# 不在判斷點宣告裡、由叫它的程式加上旗標的點 → 哪支程式(測試確認那支程式真的有加)
+# points whose flag is added by the calling program, not in the point's declaration → which program (the test
+# confirms that program really adds it)
 ADDED_BY_CALLER = {
-    "agent-job": "bin/run-agent-job.sh",            # 例外:登錄 job 寫 connectors: true(要 claude.ai connector)的不加
-    "mailbox-escalation": "bin/run-agent-job.sh",   # 信箱的交辦也經過 run-agent-job.sh
-    "lease-session": "bin/lease-runner.py",         # 租約只用 --mcp-config 給的權限轉接
+    "agent-job": "bin/run-agent-job.sh",            # exception: a registry job with connectors: true (needs claude.ai
+                                                    # connectors) does not get it
+    "mailbox-escalation": "bin/run-agent-job.sh",   # mailbox requests also go through run-agent-job.sh
+    "lease-session": "bin/lease-runner.py",         # a lease uses only the permission relay given by --mcp-config
     "lease-work": "bin/lease-runner.py",
     "lease-handover": "bin/lease-runner.py",
 }
@@ -27,7 +31,8 @@ ADDED_BY_CALLER = {
 class McpSealed(unittest.TestCase):
     def test_every_point_is_sealed_from_ambient_mcp(self):
         missing = []
-        # completion 形狀的點:沒有 llm 區塊時交給 runtime_claude.complete,它每次都帶這個旗標(構造上封閉,不靠宣告)
+        # completion-shaped points: with no llm block they go to runtime_claude.complete, which always carries this flag
+        # (sealed by construction, not by declaration)
         complete_src = (ROOT / "bin" / "runtime_claude.py").read_text().split("def complete(", 1)[1].split("\ndef ", 1)[0]
         self.assertIn(FLAG, complete_src)
         for name, spec in POINTS.items():
@@ -37,10 +42,12 @@ class McpSealed(unittest.TestCase):
             if caller and FLAG in (ROOT / caller).read_text():
                 continue
             missing.append(name)
-        self.assertEqual(missing, [], f"這些判斷點會載入環境裡的 MCP(含正式資料庫):加 {FLAG},或在這裡寫明誰加、為什麼")
+        self.assertEqual(missing, [], f"these judgment points would load the environment's MCP (production databases "
+                                      f"included): add {FLAG}, or write here who adds it and why")
 
     def test_no_point_gets_the_flag_twice(self):
-        # 宣告裡有、呼叫端又加一次:不需要,也不確定 CLI 收不收重複的旗標
+        # in the declaration and added again by the caller: not needed, and it is unclear whether the CLI accepts a
+        # repeated flag
         both = [n for n, c in ADDED_BY_CALLER.items() if FLAG in (POINTS.get(n, {}).get("extra_args") or [])]
         self.assertEqual(both, [])
 

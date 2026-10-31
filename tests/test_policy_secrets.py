@@ -1,4 +1,5 @@
-"""平台憑證的讀取封鎖:搬家期間新舊兩個位置都擋(2026-10-26 實例目錄搬家:secrets 只複製到新位置,舊的還在)。
+"""Read block on the platform's credentials: during a move both the old and new locations are blocked (the 2026-10-26
+instance directory move: secrets were only copied to the new location, the old ones are still there).
 
     bin/py -m unittest discover -s tests
 """

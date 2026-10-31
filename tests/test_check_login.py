@@ -1,7 +1,8 @@
-"""check-claude-login.py:三份登入的檢查(實際打請求 + 看到期)。警報照字句去重(alert.once 比對問題清單),
-所以字句一變就會重發——這裡連字都比。
+"""check-claude-login.py: checks of the three logins (a real request + the expiry). Alerts are deduplicated by wording
+(alert.once compares the problem list), so a change of wording re-sends them: this compares down to the words.
 
-不打真的請求(ask 換成假的)、不發 Discord(alert.once 換成記錄)、HOME 換成暫存目錄(不讀真的憑證)。
+No real requests (ask is faked), no Discord (alert.once is replaced with a recorder), HOME is a temp directory (real
+credentials are never read).
 
     bin/py -m unittest discover -s tests
 """
@@ -37,7 +38,7 @@ class Check(unittest.TestCase):
         self.m.STREAK = self.home / "streak.json"
         self.alerts = []
         self.m.alert.once = lambda key, problems, ok: self.alerts.append((key, list(problems), ok))
-        self.answers = {None: None, "token": None}   # LLM_AUTH → ask 的結果(None = 成功)
+        self.answers = {None: None, "token": None}   # LLM_AUTH → ask's result (None = success)
         self.asked = []
 
         def ask(env):
@@ -118,7 +119,8 @@ class Check(unittest.TestCase):
         self.assertIn("訂閱登入", hard[0])
 
     def test_runtime_missing_is_hard_for_the_token_probe_too(self):
-        # 第 6 層刻意改的:以前只有訂閱登入那次把「找不到 claude」當要人處理,token 那次當成一般失敗
+        # changed on purpose in layer 6: before, only the subscription login treated "找不到 claude" as needing a person;
+        # the token one treated it as an ordinary failure
         self.fresh_token()
         self.answers[None] = self.answers["token"] = "找不到 claude"
         _, _, hard = self.run_check()

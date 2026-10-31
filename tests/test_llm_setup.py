@@ -1,6 +1,7 @@
-"""agenthub llm setup(init 也叫它):選一家 provider、key 寫進 secrets(600、不印)、模型從那家實際有的清單選,寫 hub.json llm。
+"""agenthub llm setup (init calls it too): pick a provider, write the key into secrets (600, never printed), pick the
+models from that provider's actual list, write hub.json llm.
 
-隔離的 config/secrets;provider 是本機的假 API(OpenAI 相容、Ollama),不送任何東西出去。
+Isolated config/secrets; the providers are local fake APIs (OpenAI-compatible, Ollama); nothing is sent out.
 
     bin/py -m unittest discover -s tests
 """
@@ -75,22 +76,22 @@ class Setup(unittest.TestCase):
 
     def test_openai_compatible_then_key(self):
         r = self.hub("llm", "setup", "--llm", "openai", "--llm-base-url", f"{self.base}/v1", "--llm-model", "m-small", "--yes")
-        self.assertEqual(r.returncode, 1, "key 還沒設:寫進設定,但說還不能用")
+        self.assertEqual(r.returncode, 1, "key not set yet: written to settings, but says it cannot be used yet")
         self.assertIn("還不能用", r.stdout)
         llm = self.hub_json()["llm"]
         self.assertEqual(llm["providers"]["openai"], {"impl": "openai", "base_url": f"{self.base}/v1",
                                                       "key": {"secret": "openai-api-key"},
                                                       "models": {"fast": "m-small", "standard": "m-small", "strong": "m-small"}})
         self.assertEqual(llm["use"], {"fast": "openai", "standard": "openai", "strong": "openai"})
-        self.assertEqual(llm["points"], {"consolidate": {"model": "pinned"}}, "個別判斷點的指定不被蓋掉")
+        self.assertEqual(llm["points"], {"consolidate": {"model": "pinned"}}, "a per-point setting is not overwritten")
         r = self.hub("llm", "set-key", "openai", stdin=KEY + "\n")
         self.assertEqual(r.returncode, 0, r.stderr)
         f = self.tmp / "secrets" / "openai-api-key"
         self.assertEqual((f.read_text().strip(), oct(f.stat().st_mode & 0o777)), (KEY, "0o600"))
-        self.assertNotIn(KEY, r.stdout + r.stderr, "不印 key")
-        self.assertNotIn(KEY, (self.tmp / "config" / "hub.json").read_text(), "hub.json 裡沒有值")
+        self.assertNotIn(KEY, r.stdout + r.stderr, "the key is not printed")
+        self.assertNotIn(KEY, (self.tmp / "config" / "hub.json").read_text(), "no value in hub.json")
         self.assertEqual(self.hub("llm", "setup", "--llm", "openai", "--llm-base-url", f"{self.base}/v1",
-                                  "--llm-model", "m-small", "--yes").returncode, 0, "有 key 就連得上")
+                                  "--llm-model", "m-small", "--yes").returncode, 0, "with a key it connects")
 
     def test_ollama_is_local(self):
         r = self.hub("llm", "setup", "--llm", "ollama", "--llm-base-url", self.base, "--llm-model", "local-a", "--yes")
@@ -98,20 +99,22 @@ class Setup(unittest.TestCase):
         p = self.hub_json()["llm"]["providers"]["ollama"]
         self.assertEqual((p["location"], p["base_url"], "key" in p), ("local", self.base, False))
         import completion
-        self.assertEqual(completion.config_errors(self.hub_json()["llm"]), [], "寫出來的設定過得了 config check")
+        self.assertEqual(completion.config_errors(self.hub_json()["llm"]), [], "the written settings pass config check")
 
     def test_runtime_choice_drops_providers_keeps_pins(self):
         self.hub("llm", "setup", "--llm", "ollama", "--llm-base-url", self.base, "--llm-model", "local-a", "--yes")
         r = self.hub("llm", "setup", "--llm", "runtime", "--yes")
         self.assertEqual(r.returncode, 0)
-        self.assertIn("沒有 completion 介面", r.stdout, "runtime none 選 runtime:明說判斷點會失敗")
+        self.assertIn("沒有 completion 介面", r.stdout,
+                      "runtime none, picking runtime: says plainly that judgment points will fail")
         self.assertEqual(self.hub_json()["llm"], {"points": {"consolidate": {"model": "pinned"}}})
 
     def test_non_interactive_needs_a_model(self):
         before = (self.tmp / "config" / "hub.json").read_text()
         r = self.hub("llm", "setup", "--llm", "ollama", "--llm-base-url", self.base, "--yes")
         self.assertEqual(r.returncode, 1)
-        self.assertEqual((self.tmp / "config" / "hub.json").read_text(), before, "沒選模型就不動 hub.json")
+        self.assertEqual((self.tmp / "config" / "hub.json").read_text(), before,
+                         "no model picked means hub.json is untouched")
 
     def test_list_models_from_each_provider(self):
         import provider_anthropic
@@ -119,8 +122,10 @@ class Setup(unittest.TestCase):
         import provider_openai
         self.assertEqual(provider_ollama.list_models({"base_url": self.base}), ["local-a", "local-b"])
         self.assertEqual(provider_openai.list_models({"base_url": f"{self.base}/v1", "_key": KEY}), ["m-big", "m-small"])
-        self.assertEqual(provider_openai.list_models({"base_url": f"{self.base}/v1", "_key": "wrong"}), [], "key 錯 = 空的")
-        self.assertEqual(provider_anthropic.list_models({"base_url": "http://127.0.0.1:9", "_key": KEY}), [], "連不上 = 空的")
+        self.assertEqual(provider_openai.list_models({"base_url": f"{self.base}/v1", "_key": "wrong"}), [],
+                         "wrong key = empty")
+        self.assertEqual(provider_anthropic.list_models({"base_url": "http://127.0.0.1:9", "_key": KEY}), [],
+                         "cannot connect = empty")
 
 
 if __name__ == "__main__":

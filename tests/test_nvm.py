@@ -1,4 +1,4 @@
-"""hubconf.nvm_bin():nvm 預設版本(alias,可以串接)對到已安裝版本裡最新的那個。
+"""hubconf.nvm_bin(): nvm's default version (an alias, which can chain) maps to the newest matching installed version.
 
     bin/py -m unittest discover -s tests
 """

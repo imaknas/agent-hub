@@ -1,7 +1,9 @@
-"""中立的檔案裡不准出現執行環境(Claude Code)的語法或路徑——翻譯只在 runtime_claude.py(docs/design/capabilities.md)。
+"""Neutral files may not contain the runtime's (Claude Code's) syntax or paths: translation happens only in
+runtime_claude.py (docs/design/capabilities.md).
 
-檢查的是程式碼跟字串,不是「Claude」這個字:說明文字可以提到翻譯在哪,但不能自己寫出 Claude 的設定格式。
-新的中立檔案加進 NEUTRAL;m10251446(契約跟執行環境無關)做完再把 lease-runner.py 加進來。
+What is checked is code and strings, not the word "Claude": explanatory text may say where the translation lives, but
+may not write out Claude's settings format itself.
+New neutral files go into NEUTRAL; add lease-runner.py once m10251446 (contracts independent of the runtime) is done.
 """
 import json
 import pathlib
@@ -14,12 +16,13 @@ ROOT = pathlib.Path(__file__).resolve().parents[1]
 BIN = ROOT / "bin"
 NEUTRAL = ["policy.py", "seatbelt.py", "cap-runner.py", "hub-run", "appliers.py", "applier_scheduler.py", "config-check", "hub"]
 PATTERNS = [
-    (re.compile(r"(?<![\w])\.claude\b"), "Claude 的設定/憑證目錄"),
-    (re.compile(r"\b(Read|Edit|Write|MultiEdit|NotebookEdit|Bash|WebFetch|WebSearch|Glob|Grep)\("), "Claude 的權限規則語法"),
-    (re.compile(r"settings\.local\.json"), "Claude 的設定檔"),
-    (re.compile(r"\bclaude\s+-p\b|[\"']claude[\"']\s*,"), "直接呼叫 claude"),
-    (re.compile(r"--(resume|session-id|permission-prompt-tool|allowedTools|append-system-prompt)\b"), "claude 的旗標"),
-    (re.compile(r"\bCLAUDE_[A-Z_]+"), "Claude 的環境變數"),
+    (re.compile(r"(?<![\w])\.claude\b"), "Claude's settings/credentials directory"),
+    (re.compile(r"\b(Read|Edit|Write|MultiEdit|NotebookEdit|Bash|WebFetch|WebSearch|Glob|Grep)\("),
+     "Claude's permission rule syntax"),
+    (re.compile(r"settings\.local\.json"), "Claude's settings file"),
+    (re.compile(r"\bclaude\s+-p\b|[\"']claude[\"']\s*,"), "calling claude directly"),
+    (re.compile(r"--(resume|session-id|permission-prompt-tool|allowedTools|append-system-prompt)\b"), "claude's flags"),
+    (re.compile(r"\bCLAUDE_[A-Z_]+"), "Claude's environment variables"),
 ]
 
 
@@ -33,7 +36,7 @@ class TestRuntimeBoundary(unittest.TestCase):
             checked += 1
             for i, line in enumerate(f.read_text().splitlines(), 1):
                 for pat, what in PATTERNS:
-                    self.assertIsNone(pat.search(line), f"{name}:{i} 出現{what}:{line.strip()}")
+                    self.assertIsNone(pat.search(line), f"{name}:{i} contains {what}: {line.strip()}")
         self.assertGreater(checked, 0)
 
     def test_patterns_catch_examples(self):
@@ -45,13 +48,15 @@ class TestRuntimeBoundary(unittest.TestCase):
 
 
 
-# ---------- ratchet:平台其他地方的執行環境語法只准變少(docs/design/llm-providers.md 步驟 1)----------
-# 目標是「Claude 只出現在 runtime_claude.py」;現在還有很多,一次清不完,所以跟 test_personal_boundary 一樣記基準、只准變少。
-# 多一個 Claude 專用的模型名稱也算(判斷點要寫 tier,不是 haiku/sonnet/opus)。
+# ---------- ratchet: runtime syntax elsewhere in the platform may only go down (docs/design/llm-providers.md step 1) --
+# The goal is "Claude appears only in runtime_claude.py"; there are still many, too many to clear at once, so like
+# test_personal_boundary it records a baseline that may only go down.
+# One more Claude-specific model name counts too (a judgment point names a tier, not haiku/sonnet/opus).
 RATCHET_SCOPE = ("bin", "modules", "agent-jobs", "contracts/llm-points.yaml")
-RATCHET_EXEMPT = {"bin/runtime_claude.py",   # 翻譯只在這裡
-                  "modules/claude.yaml"}    # Claude Code 專用的維護(登入檢查、更新、token):沒用 Claude 的人不開這個模組
-RATCHET = PATTERNS + [(re.compile(r"\b(haiku|sonnet|opus)\b", re.I), "Claude 的模型名稱")]
+RATCHET_EXEMPT = {"bin/runtime_claude.py",   # the translation lives only here
+                  "modules/claude.yaml"}    # Claude Code-only upkeep (login check, update, token):
+                  # someone not using Claude leaves this module off
+RATCHET = PATTERNS + [(re.compile(r"\b(haiku|sonnet|opus)\b", re.I), "Claude's model names")]
 RUNTIME_BASELINE = ROOT / "tests" / "fixtures" / "runtime-baseline.json"
 
 
@@ -62,7 +67,7 @@ def ratchet_files() -> list[pathlib.Path]:
         paths = [ROOT / p for p in out.split("\0") if p]
     except (OSError, subprocess.CalledProcessError):
         paths = []
-    if not paths:  # test-gate 的匯出副本不是 git repo
+    if not paths:  # the test-gate's exported copy is not a git repo
         paths = [p for d in RATCHET_SCOPE for p in ((ROOT / d).rglob("*") if (ROOT / d).is_dir() else [ROOT / d])]
     return sorted(p for p in paths if p.is_file() and "__pycache__" not in p.parts
                   and str(p.relative_to(ROOT)) not in RATCHET_EXEMPT)
@@ -86,13 +91,14 @@ class TestRuntimeRatchet(unittest.TestCase):
 
     def test_counts_only_go_down(self):
         base = json.loads(RUNTIME_BASELINE.read_text())
-        worse = [f"{f}:{n}(基準 {base.get(f, 0)})" for f, n in ratchet_counts().items() if n > base.get(f, 0)]
-        self.assertEqual(worse, [], "執行環境(Claude)專用的語法變多了——放進 runtime_claude.py、或判斷點寫 tier;"
-                                    "真的有理由才手動改 tests/fixtures/runtime-baseline.json")
+        worse = [f"{f}:{n} (baseline {base.get(f, 0)})" for f, n in ratchet_counts().items() if n > base.get(f, 0)]
+        self.assertEqual(worse, [], "runtime-specific (Claude) syntax went up: move it into runtime_claude.py, "
+                                    "or have the judgment point name a tier; edit "
+                                    "tests/fixtures/runtime-baseline.json by hand only for a real reason")
 
 
 def update() -> int:
-    """基準只降不升(跟 test_personal_boundary 一樣)。"""
+    """The baseline only goes down (same as test_personal_boundary)."""
     now = ratchet_counts()
     base = json.loads(RUNTIME_BASELINE.read_text()) if RUNTIME_BASELINE.exists() else dict(now)
     for f in list(base):
@@ -102,7 +108,7 @@ def update() -> int:
         elif n < base[f]:
             base[f] = n
     RUNTIME_BASELINE.write_text(json.dumps(dict(sorted(base.items())), ensure_ascii=False, indent=1) + "\n")
-    print(f"{len(base)} 個檔案,共 {sum(base.values())} 處")
+    print(f"{len(base)} files, {sum(base.values())} occurrences in all")
     return 0
 
 

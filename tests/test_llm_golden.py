@@ -1,11 +1,14 @@
-"""llm.py 對每個判斷點「會怎麼跑」的黃金檔:指令(--dry-run 印的)跟登入方式(哪種憑證、有沒有帶 token)。
+"""Golden file of how llm.py "will run" each judgment point: the command (what --dry-run prints) and the login (which
+credentials, whether a token is passed).
 
-重構 llm.py / runtime_claude / 登入(第 6 層 AuthProvider)時,外面看到的行為不能變——以前是手動比 20 種組合,
-現在固定在 tests/fixtures/llm-golden.json。判斷點的宣告(contracts/llm-points.yaml)真的改了才重生:
+When refactoring llm.py / runtime_claude / login (layer 6 AuthProvider), the behaviour seen from outside must not
+change: it used to be compared by hand across 20 combinations, now it is pinned in tests/fixtures/llm-golden.json.
+Regenerate only when the judgment point declarations (contracts/llm-points.yaml) really changed:
 
     LLM_GOLDEN_UPDATE=1 bin/py -m unittest tests.test_llm_golden
 
-不印、不存任何 token 的值(假的 token 檔,只記「有沒有帶」)。機器相關的路徑換成 <HUB>、<HOME>、claude。
+Prints and stores no token value (a fake token file; only records "passed or not"). Machine-specific paths become
+<HUB>, <HOME>, claude.
 """
 import argparse
 import contextlib
@@ -25,7 +28,7 @@ GOLDEN = ROOT / "tests" / "fixtures" / "llm-golden.json"
 TOKEN_ENV = "CLAUDE_CODE_OAUTH_TOKEN"
 
 try:
-    import yaml  # noqa: F401  llm.py 需要
+    import yaml  # noqa: F401  llm.py needs it
 except ImportError:
     yaml = None
 
@@ -37,13 +40,14 @@ def load_llm():
     return m
 
 
-@unittest.skipIf(yaml is None, "需要 PyYAML")
+@unittest.skipIf(yaml is None, "needs PyYAML")
 class Golden(unittest.TestCase):
     VARIANTS = {"default": {}, "model": {"model": "golden-model"}, "subscription": {"LLM_AUTH": "subscription"},
                 "token": {"LLM_AUTH": "token"}}
 
     def setUp(self):
-        # 憑證放在假的 HOME(不 patch 模組裡的變數:登入搬到哪一層,這個測試都不用改)
+        # credentials go in a fake HOME (no patching of module variables: wherever login moves, this test needs
+        # no change)
         tmp = pathlib.Path(tempfile.mkdtemp()).resolve()
         (tmp / ".claude").mkdir()
         self.token_file = tmp / ".claude" / "headless-oauth-token"
@@ -69,7 +73,8 @@ class Golden(unittest.TestCase):
         if "LLM_AUTH" in variant:
             env["LLM_AUTH"] = variant["LLM_AUTH"]
         with mock.patch.dict(os.environ, env, clear=True):
-            # 登入的觀察點是 auth 介面:用哪種(auth)、有沒有多帶憑證變數(token_passed)——不認變數名稱
+            # login is observed at the auth interface: which kind (auth), whether an extra credential variable is passed
+            # (token_passed); variable names are not checked
             import runtime_ports
             rt = runtime_ports.load(spec.get("runtime"), ports=("auth",))
             auth = self.m.auth_mode(spec)
@@ -92,7 +97,8 @@ class Golden(unittest.TestCase):
             GOLDEN.parent.mkdir(parents=True, exist_ok=True)
             GOLDEN.write_text(json.dumps(now, ensure_ascii=False, indent=1, sort_keys=True) + "\n")
         want = json.loads(GOLDEN.read_text())
-        self.assertEqual(sorted(now), sorted(want), "判斷點跟黃金檔對不上(加了/刪了判斷點就重生)")
+        self.assertEqual(sorted(now), sorted(want),
+                         "judgment points do not match the golden file (regenerate after adding/removing a point)")
         for key in sorted(want):
             with self.subTest(key):
                 self.assertEqual(now[key], want[key])

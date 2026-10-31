@@ -1,4 +1,5 @@
-# bin/linux-test 用的 Linux 環境:平台需要的最少東西(Python 3.13 + PyYAML、git、ps、sqlite3),一般使用者(不是 root)。
+# The Linux environment for bin/linux-test: the least the platform needs (Python 3.13 + PyYAML, git, ps, sqlite3), an
+# ordinary user (not root).
 FROM python:3.13-slim
 RUN apt-get update -qq && apt-get install -y -qq --no-install-recommends git procps sqlite3 jq >/dev/null \
     && rm -rf /var/lib/apt/lists/* && pip install -q pyyaml==6.0.3

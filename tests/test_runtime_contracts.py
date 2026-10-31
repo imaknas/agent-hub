@@ -1,7 +1,10 @@
-"""執行環境的契約測試(docs/design/runtime-abstraction.md):runtime_ports 登記的每一個實作都跑同一組檢查。
+"""Runtime contract tests (docs/design/runtime-abstraction.md): every implementation registered in runtime_ports runs
+the same set of checks.
 
-同一個情境分別放進每個實作(Claude:寫成真的 jsonl 對話紀錄;Fake:直接放資料),再用同樣的斷言檢查——
-介面的語意是測出來的,不是靠約定。登記表裡有實作卻沒有對應的情境設定,測試直接失敗:新的實作不可能跳過契約測試。
+The same scenario is put into each implementation (Claude: written as a real jsonl transcript; Fake: the data placed
+directly), then checked with the same assertions: the interface's semantics are tested, not agreed on. An
+implementation in the registry without a matching scenario setup fails the test outright: a new implementation cannot
+skip the contract tests.
 
     bin/py -m unittest discover -s tests
 """
@@ -22,10 +25,10 @@ UTC = datetime.timezone.utc
 T0 = datetime.datetime(2026, 10, 20, 9, 0, tzinfo=UTC)
 WS = "/Users/someone/workspace/proj"
 SID = "aaaaaaaa-1111-4111-8111-111111111111"
-SID2 = "bbbbbbbb-2222-4222-8222-222222222222"   # 另一個專案的 session(現實中一個 session 只在一個專案裡)
+SID2 = "bbbbbbbb-2222-4222-8222-222222222222"   # another project's session (a real session is in one project only)
 
-# 情境:一則真人訊息、一則系統注入(不算真人)、一則助理叫了子 agent、一個技能、跑了一個指令(不是協作)、一則工具結果;
-# 另一個專案一則真人訊息
+# Scenario: one human message, one system injection (not human), one assistant turn that calls a subagent, a skill,
+# runs a command (not collaboration), one tool result; one human message in another project
 SCENARIO = [
     (WS, runtime_ports.Turn(T0, SID, "human", "幫我看一下測試")),
     (WS, runtime_ports.Turn(T0 + datetime.timedelta(minutes=1), SID, "other")),
@@ -35,12 +38,13 @@ SCENARIO = [
     (WS, runtime_ports.Turn(T0 + datetime.timedelta(minutes=3), SID, "other")),
     ("/Users/someone/workspace/other", runtime_ports.Turn(T0, SID2, "human", "別的專案")),
 ]
-# 同一個專案、runtime 在它底下開的 worktree 裡的 session 一則真人訊息:只有 turns(worktrees=True) 才算
+# one human message from a session in a worktree the runtime opened under the same project: counts only with
+# turns(worktrees=True)
 SID3 = "cccccccc-3333-4333-8333-333333333333"
 WORKTREE_SCENARIO = [(WS, runtime_ports.Turn(T0 + datetime.timedelta(seconds=30), SID3, "human", "worktree 裡的訊息"))]
 
 
-# 「跑一次」的三種情境:正常完成、有結果但沒正常完成(例:回合上限)、失敗
+# three scenarios for "run once": completed normally, a result but not completed normally (e.g. turn limit), failed
 RUN_OK = {"text": "done", "structured_output": {"x": 1}, "cost": 0.5, "session": "s1", "turns": 2}
 
 
@@ -49,7 +53,7 @@ def _iso(t):
 
 
 class ClaudeFixture:
-    """把情境寫成 Claude Code 的對話紀錄格式(~/.claude/projects/<slug>/<session>.jsonl)。"""
+    """Write the scenario in Claude Code's transcript format (~/.claude/projects/<slug>/<session>.jsonl)."""
 
     def setup(self, tmp: pathlib.Path):
         import runtime_claude as m
@@ -80,7 +84,7 @@ class ClaudeFixture:
             elif t.ts == T0 + datetime.timedelta(minutes=1):
                 o = {"type": "user", "timestamp": _iso(t.ts), "sessionId": t.session, "isMeta": True,
                      "message": {"role": "user", "content": "<system-reminder>…</system-reminder>"}}
-            else:  # 工具結果:也是 type=user,但不是真人
+            else:  # tool result: also type=user, but not human
                 o = {"type": "user", "timestamp": _iso(t.ts), "sessionId": t.session,
                      "message": {"role": "user", "content": [{"type": "tool_result", "content": "ok"}]}}
             with open(d / f"{t.session}.jsonl", "a") as fh:
@@ -88,7 +92,7 @@ class ClaudeFixture:
         return m, {"CLAUDE_CODE_SESSION_ID": SID}
 
     def configure_run(self, tmp: pathlib.Path, mode: str) -> dict:
-        """PATH 最前面放一支假的 claude:不呼叫模型,照 mode 吐出 claude -p 的 JSON 或失敗。"""
+        """Put a fake claude first on PATH: calls no model, prints claude -p's JSON or fails, depending on mode."""
         b = tmp / "bin"
         b.mkdir(exist_ok=True)
         out = {"ok": {"type": "result", "is_error": False, "result": RUN_OK["text"], "structured_output": RUN_OK["structured_output"],
@@ -105,7 +109,7 @@ class ClaudeFixture:
         return dict(os.environ)
 
     def raw(self, sid, cwd, command=None, target_cwd=None, elsewhere=None):
-        """Claude Code 的 hook JSON。"""
+        """Claude Code's hook JSON."""
         d = {"session_id": sid, "cwd": cwd} if sid else {"cwd": cwd}
         ti = {}
         if command is not None:
@@ -121,7 +125,7 @@ class ClaudeFixture:
     LOGIN_ERROR = "Invalid API key · Please run /login"
 
     def configure_auth(self, tmp: pathlib.Path, token: bool) -> None:
-        """登入情境:HOME 換成暫存目錄,token 檔在或不在。"""
+        """Login scenario: HOME swapped for a temp directory, the token file present or not."""
         self._home = os.environ.get("HOME")
         os.environ["HOME"] = str(tmp)
         (tmp / ".claude").mkdir(exist_ok=True)
@@ -148,7 +152,7 @@ class FakeFixture:
         return m, {"FAKE_RUNTIME_SESSION": SID}
 
     def raw(self, sid, cwd, command=None, target_cwd=None, elsewhere=None):
-        """Fake 自己的格式(故意跟 Claude 不一樣)。"""
+        """Fake's own format (deliberately different from Claude's)."""
         d = {"sid": sid, "dir": cwd} if sid else {"dir": cwd}
         if command is not None:
             d["cmd"] = command
@@ -179,8 +183,9 @@ class FakeFixture:
 
 
 class CommandFixture:
-    """設定裡的指令樣板(runtime_command):用一支假的 CLI agent。它只回文字/JSON,沒有成本、session、回合數、「沒正常完成」。"""
-    REPORTS = frozenset()   # 這個 runtime 回報得出來的(cost、session、turns、incomplete)
+    """The command template from settings (runtime_command): a fake CLI agent. It returns only text/JSON: no cost,
+    session, turn count or "not completed normally"."""
+    REPORTS = frozenset()   # what this runtime can report (cost, session, turns, incomplete)
 
     def setup(self, tmp: pathlib.Path):
         import runtime_command as m
@@ -207,14 +212,16 @@ ALL_REPORTS = frozenset({"cost", "session", "turns", "incomplete"})
 
 
 def having(port: str) -> list[str]:
-    """有這個介面的實作:契約測試只對它們跑(沒有的由 load() 丟 Unsupported,NoneRuntime 檢查)。"""
+    """Implementations with this interface: the contract tests run only on them (the others raise Unsupported from
+    load(), checked by NoneRuntime)."""
     return [n for n in runtime_ports.RUNTIMES if port in runtime_ports.capabilities(n)]
 
 
 class Registry(unittest.TestCase):
     def test_every_registered_runtime_has_a_fixture(self):
         withports = {n for n in runtime_ports.RUNTIMES if runtime_ports.capabilities(n)}
-        self.assertEqual(withports, set(FIXTURES), "新的 runtime 要在這裡加情境設定,才算跑過契約測試")
+        self.assertEqual(withports, set(FIXTURES),
+                         "a new runtime needs its scenario setup here to count as having run the contract tests")
 
     def test_load_rejects_incomplete_module(self):
         bad = types.ModuleType("runtime_broken")
@@ -234,7 +241,7 @@ class Registry(unittest.TestCase):
 
 
 class NoneRuntime(unittest.TestCase):
-    """沒有 coding agent(runtime.default: none):每個介面都是「不支援」,不是錯誤、也不是空資料。"""
+    """No coding agent (runtime.default: none): every interface is "unsupported", neither an error nor empty data."""
 
     def test_has_no_ports(self):
         self.assertEqual(runtime_ports.capabilities("none"), set())
@@ -251,7 +258,7 @@ class NoneRuntime(unittest.TestCase):
 
     def test_partial_port_is_still_a_bug(self):
         bad = types.ModuleType("runtime_half")
-        bad.turns = lambda *a: iter(())   # transcripts 只有一半
+        bad.turns = lambda *a: iter(())   # only half of transcripts
         sys.modules["runtime_half"] = bad
         runtime_ports.RUNTIMES["half"] = "runtime_half"
         try:
@@ -273,10 +280,11 @@ class NoneRuntime(unittest.TestCase):
 
 
 class Contract(unittest.TestCase):
-    """每一個實作都跑這些(subTest 標出是哪一個)。"""
+    """Every implementation runs these (subTest marks which one)."""
 
     def each(self, check):
-        """對每一個有對話紀錄的實作:放進情境 → 機械檢查介面 → 跑 check(m, env) → 清掉。失敗會標出是哪一個實作。"""
+        """For each implementation with transcripts: put the scenario in → check the interface mechanically → run
+            check(m, env) → clean up. A failure names the implementation."""
         for name in having("transcripts"):
             with self.subTest(runtime=name):
                 fx = FIXTURES[name]()
@@ -296,7 +304,7 @@ class Contract(unittest.TestCase):
             self.assertEqual(ts[0].session, SID)
             self.assertEqual([(a.kind, a.collab, a.detail) for a in ts[2].actions],
                              [("other", "subagent", ""), ("other", "skill", "dataviz"), ("run_command", None, "")])
-            self.assertTrue(all(t.ts.tzinfo is not None for t in ts), "時間要帶時區")
+            self.assertTrue(all(t.ts.tzinfo is not None for t in ts), "timestamps carry a time zone")
         self.each(check)
 
     def test_time_window(self):
@@ -341,7 +349,8 @@ class Contract(unittest.TestCase):
 
 
 class RunContract(unittest.TestCase):
-    """第 1 層「跑一次」:每一個實作都一樣——正常完成、有結果但沒正常完成(不算失敗)、失敗。"""
+    """Layer 1, "run once": the same for every implementation: completed normally, a result but not completed
+    normally (not a failure), failed."""
 
     def each_run(self, mode, check):
         for name in having("agent"):
@@ -352,7 +361,7 @@ class RunContract(unittest.TestCase):
                     try:
                         reports = getattr(fx, "REPORTS", ALL_REPORTS)
                         if mode == "incomplete" and "incomplete" not in reports:
-                            continue   # 這個 runtime 分不出「有結果但沒正常完成」
+                            continue   # this runtime cannot tell "a result but not completed normally"
                         env = fx.configure_run(pathlib.Path(d), mode)
                         rt = runtime_ports.load(name, ports=("agent",))
                         task = runtime_ports.Task(point="p", prompt="hi", spec={}, env=env or None, timeout_s=30,
@@ -370,7 +379,7 @@ class RunContract(unittest.TestCase):
             if self.reports == ALL_REPORTS:
                 self.assertEqual((res.text, res.cost_usd, res.session_id, res.turns),
                                  (RUN_OK["text"], RUN_OK["cost"], RUN_OK["session"], RUN_OK["turns"]))
-            else:   # 回報不出來的就是 None(不能編一個)
+            else:   # what it cannot report is None (never make one up)
                 for field, attr in (("cost", "cost_usd"), ("session", "session_id"), ("turns", "turns")):
                     if field not in self.reports:
                         self.assertIsNone(getattr(res, attr), field)
@@ -379,7 +388,8 @@ class RunContract(unittest.TestCase):
 
     def test_incomplete_is_not_failure(self):
         def check(res, desc):
-            self.assertTrue(res.ok, "有結果就是 ok;沒正常完成交給呼叫端判斷(librarian 依賴這點)")
+            self.assertTrue(res.ok, "a result means ok; not completing normally is the caller's call "
+                                    "(the librarian relies on this)")
             self.assertTrue(res.incomplete)
             self.assertEqual(res.turns, 50)
         self.each_run("incomplete", check)
@@ -392,7 +402,8 @@ class RunContract(unittest.TestCase):
 
 
 class LifecycleContract(unittest.TestCase):
-    """第 3 層:每一個實作把原生的 hook 輸入翻成同樣的中立事件,輸出只在該有的時候有。"""
+    """Layer 3: every implementation turns its native hook input into the same neutral events, with output only when
+    there should be some."""
 
     def each(self, check):
         for name in having("lifecycle"):
@@ -415,7 +426,7 @@ class LifecycleContract(unittest.TestCase):
             self.assertEqual((t["cwd"], t["elsewhere"]), ("/elsewhere", None))
             t = m.parse_event("open_session_attempt", fx.raw(SID, WS, elsewhere="machine")).target
             self.assertEqual(t["elsewhere"], {"kind": "machine"})
-            self.assertIsNone(m.parse_event("prompt", fx.raw(None, WS)), "沒有 session = 不是真的 session 在跑")
+            self.assertIsNone(m.parse_event("prompt", fx.raw(None, WS)), "no session = not a real session running")
             self.assertIsNone(m.parse_event("prompt", "not json"))
         self.each(check)
 
@@ -423,9 +434,9 @@ class LifecycleContract(unittest.TestCase):
         def check(m, fx, tmp):
             for ev in ("session_start", "prompt", "tool_used"):
                 self.assertIn("hello", m.inject(ev, "hello"), ev)
-                self.assertEqual(m.inject(ev, ""), "", f"{ev}:沒有文字就沒有輸出")
+                self.assertEqual(m.inject(ev, ""), "", f"{ev}: no text, no output")
             for ev in ("session_end", "pre_compact", "open_session_attempt"):
-                self.assertEqual(m.inject(ev, "hello"), "", f"{ev} 不能放進 context")
+                self.assertEqual(m.inject(ev, "hello"), "", f"{ev} cannot go into the context")
             self.assertIn("no", m.deny("open_session_attempt", "no"))
             self.assertEqual(m.deny("prompt", "no"), "")
         self.each(check)
@@ -436,14 +447,16 @@ class LifecycleContract(unittest.TestCase):
             ws.mkdir()
             m.install_lifecycle(ws)
             snap = {p: p.read_bytes() for p in ws.rglob("*") if p.is_file()}
-            self.assertTrue(snap, "裝了要留下東西")
+            self.assertTrue(snap, "installing leaves something behind")
             m.install_lifecycle(ws)
-            self.assertEqual(snap, {p: p.read_bytes() for p in ws.rglob("*") if p.is_file()}, "重跑結果一樣")
+            self.assertEqual(snap, {p: p.read_bytes() for p in ws.rglob("*") if p.is_file()},
+                             "a rerun gives the same result")
         self.each(check)
 
 
 class AuthContract(unittest.TestCase):
-    """第 6 層:平台只說用哪種登入(token / subscription);每個實作自己決定憑證放哪、變數叫什麼。"""
+    """Layer 6: the platform only says which login to use (token / subscription); each implementation decides where
+    the credentials go and what the variables are called."""
 
     BASE = {"PATH": "/usr/bin", "LLM_AUTH": "x-not-the-runtimes"}
 
@@ -464,9 +477,9 @@ class AuthContract(unittest.TestCase):
         def check(m, fx):
             env, why = m.auth_env("token", dict(self.BASE))
             self.assertEqual(why, "")
-            self.assertNotEqual(env, m.clean_env(env), "token 登入應該多帶憑證")
+            self.assertNotEqual(env, m.clean_env(env), "a token login should carry extra credentials")
             self.assertEqual(m.clean_env(env), m.clean_env(dict(self.BASE)))
-            # 已經帶著舊憑證的環境:換成這次的,不會疊兩份
+            # an env already carrying old credentials: replaced with this one's, never two stacked
             again, _ = m.auth_env("token", env)
             self.assertEqual(again, env)
         self.each(True, check)
@@ -520,7 +533,8 @@ class AuthContract(unittest.TestCase):
 
 
 class InstructionsContract(unittest.TestCase):
-    """第 4 層:規則檔在專案資料夾裡,而且它自己就在本機專用檔的清單上(不然會被 commit 進 repo)。"""
+    """Layer 4: the rules file is in the project folder, and is itself on the local-only file list (otherwise it
+    would be committed into the repo)."""
 
     def test_instructions_file_is_local_and_ignored(self):
         for name in having("instructions"):
@@ -528,16 +542,16 @@ class InstructionsContract(unittest.TestCase):
                 m = runtime_ports.load(name, ports=("instructions",))
                 ws = pathlib.Path("/Users/someone/workspace/proj")
                 f = m.instructions_file(ws)
-                self.assertEqual(f.parent, ws, "規則檔要直接放在專案資料夾裡")
+                self.assertEqual(f.parent, ws, "the rules file goes directly in the project folder")
                 ignores = m.local_ignores()
-                self.assertIn(f.name, ignores, "規則檔要在本機專用檔清單上")
-                self.assertNotIn(".agent-memory", ignores, ".agent-memory 是平台的,不是 runtime 的")
+                self.assertIn(f.name, ignores, "the rules file must be on the local-only file list")
+                self.assertNotIn(".agent-memory", ignores, ".agent-memory belongs to the platform, not the runtime")
                 self.assertTrue(all(not pathlib.PurePath(p).is_absolute() and ".." not in pathlib.PurePath(p).parts
-                                    for p in ignores), "清單裡都是專案資料夾裡的相對路徑")
+                                    for p in ignores), "the list holds only paths relative to the project folder")
 
 
 class ClaudeHooks(unittest.TestCase):
-    """Claude 專屬:hook 設定的替換規則、輸出格式。"""
+    """Claude only: the replacement rules for hook settings, the output format."""
 
     def test_replace_managed_keep_user(self):
         import runtime_claude as m
@@ -551,15 +565,16 @@ class ClaudeHooks(unittest.TestCase):
         cmds = [h["command"] for es in out["hooks"].values() for e in es for h in e["hooks"]]
         self.assertIn("echo mine", cmds)
         self.assertIn("my-linter", cmds)
-        self.assertFalse([c for c in cmds if "agent-hub/bin/" in c and "hub-event" not in c], "舊的平台 hook 要拿掉")
-        self.assertNotIn("Stop", out["hooks"], "只剩舊平台 hook 的事件整個拿掉")
-        self.assertEqual(out["model"], "x", "其他設定不動")
+        self.assertFalse([c for c in cmds if "agent-hub/bin/" in c and "hub-event" not in c],
+                         "old platform hooks are removed")
+        self.assertNotIn("Stop", out["hooks"], "an event left with only old platform hooks is removed entirely")
+        self.assertEqual(out["model"], "x", "other settings untouched")
         for name, matcher, ev in m.HOOK_TABLE:
             entries = [e for e in out["hooks"][name] if any(f"hub-event {ev}" in h["command"] for h in e["hooks"])]
             self.assertEqual(len(entries), 1, ev)
             self.assertEqual(entries[0].get("matcher"), matcher)
         again = m.install_hooks(json.loads(json.dumps(out)))
-        self.assertEqual(again, out, "重跑不變")
+        self.assertEqual(again, out, "a rerun changes nothing")
 
     def test_output_shapes(self):
         import runtime_claude as m
@@ -571,7 +586,8 @@ class ClaudeHooks(unittest.TestCase):
 
 
 class ClaudeOnly(unittest.TestCase):
-    """Claude 實作自己的事:認不得的對話紀錄格式要明確失敗,不能默默算錯。"""
+    """The Claude implementation's own concern: a transcript format it does not recognise fails explicitly, never
+    silently miscounts."""
 
     def test_unrecognised_format_fails_loudly(self):
         import runtime_claude as m
@@ -590,12 +606,14 @@ class ClaudeOnly(unittest.TestCase):
 
 
 class CommandTemplate(unittest.TestCase):
-    """指令樣板的佔位:不讀 stdin 的工具(例 agy -p)要 prompt 全文當參數。"""
+    """Placeholders in the command template: a tool that does not read stdin (e.g. agy -p) gets the full prompt as an
+        argument."""
 
     def test_prompt_as_argument_is_not_substituted_again(self):
         import runtime_command as m
         argv = m._argv(["tool", "--model", "{model}", "-p", "{prompt}"], None, "/p", "/o", "用 {model} 寫 {prompt_file}")
-        self.assertEqual(argv, ["tool", "-p", "用 {model} 寫 {prompt_file}"], "沒有模型拿掉整組旗標;prompt 原樣放進去")
+        self.assertEqual(argv, ["tool", "-p", "用 {model} 寫 {prompt_file}"],
+                         "no model drops the whole flag group; the prompt goes in as is")
 
     def test_prompt_argument_means_no_stdin(self):
         import runtime_command as m
@@ -631,7 +649,8 @@ class CommandTemplate(unittest.TestCase):
                                            output_schema=None, timeout_s=30, env=None))
         finally:
             hubconf.get = saved
-        self.assertFalse(res.ok, "權限被擋、什麼都沒說就結束的工具不能當成功的空答案")
+        self.assertFalse(res.ok, "a tool that was blocked by permissions and ended without saying anything "
+                                 "is not a successful empty answer")
         self.assertIn("auto-denied", res.error)
 
 

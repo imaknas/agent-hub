@@ -1,5 +1,6 @@
-"""bin/guard.py 的 decide:專案的 session 不能開別的專案的 session。字句是給 agent 看的(叫它改寄信),
-第 3 層抽象化時曾經因為中立格式少了資訊而跑掉,所以這裡連字都比。
+"""bin/guard.py's decide: a project's session cannot open a session in another project. The wording is for the agent
+(it tells it to send a letter instead), and drifted once during the layer 3 abstraction when the neutral format lost
+information, so this compares down to the words.
 
     bin/py -m unittest discover -s tests
 """
@@ -49,7 +50,7 @@ class Decide(unittest.TestCase):
                          f"proj 的 session 不能在 {other} 開 session(那不是這個專案)。{HOW}")
 
     def test_sibling_with_same_prefix_denied(self):
-        # proj-2 字串上以 proj 開頭,但不是它底下
+        # proj-2 starts with proj as a string, but is not under it
         self.assertIsNotNone(self.decide({"cwd": str(self.root.parent / "proj-2")}))
 
     def test_elsewhere_denied_with_its_own_reason(self):

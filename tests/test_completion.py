@@ -1,6 +1,8 @@
-"""completion(判斷點的「只回答案」;docs/design/llm-providers.md):每家都要過的同一套處理,跟三個 provider 的請求/回應。
+"""completion (a judgment point that "only returns the answer"; docs/design/llm-providers.md): the same handling every
+provider must pass, and the three providers' requests/responses.
 
-處理用替身(runtime_fake 的 completion)測;provider 用本機的假 HTTP 伺服器測(不連外、不需要 key)。
+The handling is tested with a stand-in (runtime_fake's completion); the providers with a local fake HTTP server (no
+outside connection, no key needed).
 
     bin/py -m unittest discover -s tests
 """
@@ -178,7 +180,7 @@ class ConfigErrors(unittest.TestCase):
     def test_wiring(self):
         bad = json.loads(json.dumps(self.OK))
         bad["providers"]["a"]["impl"] = "nope"
-        bad["use"]["strong"] = "a"   # a 沒有 strong
+        bad["use"]["strong"] = "a"   # a has no strong
         bad["points"] = {"not-a-point": {"provider": "zz"}}
         errs = completion.config_errors(bad)
         for want in ("不認得", "沒有 strong", "不是宣告過的判斷點", "providers 裡的一家"):
@@ -193,7 +195,7 @@ class ConfigErrors(unittest.TestCase):
 
 
 class FakeServer:
-    """本機的假 API:記下收到的請求,照 handler 回應。"""
+    """Local fake API: records the requests it gets, responds per handler."""
 
     def __init__(self, handler):
         outer = self
@@ -308,7 +310,7 @@ class Providers(unittest.TestCase):
 
 
 class CompletionContract(unittest.TestCase):
-    """completion 介面:每個有它的 runtime 跟每個 provider 都實作得完整。"""
+    """The completion interface: every runtime that has it and every provider implement it completely."""
 
     def test_every_impl_loads(self):
         names = [*runtime_ports.PROVIDERS, *[n for n in runtime_ports.RUNTIMES
@@ -339,9 +341,9 @@ class CompletionContract(unittest.TestCase):
         cmd = seen["cmd"]
         self.assertEqual(cmd[cmd.index("--tools") + 1], "")
         self.assertIn("--strict-mcp-config", cmd)
-        self.assertNotIn("hi", cmd, "prompt 從 stdin 給,不放 argv")
+        self.assertNotIn("hi", cmd, "the prompt comes on stdin, not in argv")
         self.assertEqual(seen["input"], "hi")
-        self.assertEqual(seen["files"], [], "在空的暫存目錄跑")
+        self.assertEqual(seen["files"], [], "runs in an empty temp directory")
 
 
 if __name__ == "__main__":
