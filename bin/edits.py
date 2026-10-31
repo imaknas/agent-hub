@@ -11,6 +11,9 @@ from __future__ import annotations
 
 import re
 
+import i18n   # its callers have bin/ on sys.path; the catalog is read only when a problem is reported
+
+_ = i18n.domain(__file__)
 
 class EditError(Exception):
     pass
@@ -21,13 +24,14 @@ def apply(text: str, edits: list) -> str:
     out = text
     for i, e in enumerate(edits or []):
         if not isinstance(e, dict) or not isinstance(e.get("old"), str) or not isinstance(e.get("new"), str):
-            raise EditError(f"第 {i + 1} 個編輯不是 {{old, new}}")
+            raise EditError(_("edit {index} is not {{old, new}}", index=i + 1))
         old, new = e["old"], e["new"]
         if not old:
-            raise EditError(f"第 {i + 1} 個編輯的 old 是空的")
+            raise EditError(_("edit {index} has an empty old", index=i + 1))
         n = out.count(old)
         if n != 1:
-            raise EditError(f"第 {i + 1} 個編輯的 old 出現 {n} 次(要剛好一次):{old[:60]!r}")
+            raise EditError(_("edit {index}: old occurs {count} times (it must occur exactly once): {old!r}", index=i + 1,
+                              count=n, old=old[:60]))
         out = out.replace(old, new, 1)
     return out
 
@@ -39,9 +43,9 @@ def markers(text: str, pattern: re.Pattern) -> list[str]:
 def check_markers(before: str, after: str, pattern: re.Pattern, *, removable: bool = True) -> list[str]:
     """標記不能被改寫或憑空多出來;removable = 整行刪掉(那一項做完)可以。回傳問題(空 = 沒問題)。"""
     b, a = markers(before, pattern), markers(after, pattern)
-    probs = [f"多出標記:{m}" for m in a if m not in b]
+    probs = [_("extra marker: {marker}", marker=m) for m in a if m not in b]
     if not removable:
-        probs += [f"少了標記:{m}" for m in b if m not in a]
+        probs += [_("missing marker: {marker}", marker=m) for m in b if m not in a]
     else:
         # 刪掉的標記,它那一整行都要不見了(只刪標記、留下文字 = 改寫,不是做完)
         lines_after = after.splitlines()
@@ -50,5 +54,6 @@ def check_markers(before: str, after: str, pattern: re.Pattern, *, removable: bo
                 line = next((l for l in before.splitlines() if m in l), "")
                 body = line.replace(m, "").strip()
                 if body and any(body == l.strip() or body in l for l in lines_after):
-                    probs.append(f"標記被拿掉但那一行還在(改寫了 key):{line.strip()[:80]}")
+                    probs.append(_("marker removed but its line is still there (the key was rewritten): {line}",
+                                    line=line.strip()[:80]))
     return probs

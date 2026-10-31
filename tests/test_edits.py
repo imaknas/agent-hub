@@ -2,10 +2,12 @@
 
     bin/py -m unittest discover -s tests
 """
+import os
 import pathlib
 import re
 import sys
 import unittest
+from unittest import mock
 
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[1] / "bin"))
 import edits  # noqa: E402
@@ -39,6 +41,11 @@ class Apply(unittest.TestCase):
 
 
 class Markers(unittest.TestCase):
+    def setUp(self):
+        zh = mock.patch.dict(os.environ, {"AGENT_HUB_LANG_UI": "zh-Hant"})   # one assertion reads a zh-Hant text
+        zh.start()
+        self.addCleanup(zh.stop)
+
     def test_whole_line_removed_is_fine(self):
         after = DOC.replace("- [ ] 〔Alex〕續約網域(等 Alex:task-p-1)\n", "")
         self.assertEqual(edits.check_markers(DOC, after, KEY), [])

@@ -1,0 +1,8 @@
+{
+ "edit {index} is not {{old, new}}": "第 {index} 個編輯不是 {{old, new}}",
+ "edit {index} has an empty old": "第 {index} 個編輯的 old 是空的",
+ "edit {index}: old occurs {count} times (it must occur exactly once): {old!r}": "第 {index} 個編輯的 old 出現 {count} 次(要剛好一次):{old!r}",
+ "extra marker: {marker}": "多出標記:{marker}",
+ "missing marker: {marker}": "少了標記:{marker}",
+ "marker removed but its line is still there (the key was rewritten): {line}": "標記被拿掉但那一行還在(改寫了 key):{line}"
+}
