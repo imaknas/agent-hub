@@ -13,7 +13,7 @@
  "Nobody approved this {noun} (no answer within 5 minutes).": "沒有人核准這個{noun}(5 分鐘內沒回)。",
  "Do not retry the same {noun}; explain it to the owner in plain text.": "不要重試同一個{noun};用文字跟他說明。",
  "The permission relay failed ({e!r}); do not use this tool for now.": "權限轉接出錯({e!r}),先不要用這個工具。",
- "Shown to the owner: {path} ({mime}, {size} bytes).": "已經給 Knas 看了:{path}({mime},{size} bytes)。",
+ "Shown to the owner: {path} ({mime}, {size} {size:byte|bytes}).": "已經給 Knas 看了:{path}({mime},{size} bytes)。",
  "Not sent: the platform (runner) is unreachable; tell the owner in plain text where the file is.": "沒送出去:連不到平台(runner),先用文字跟 Knas 說檔案在哪。",
  "Not sent: {why}": "沒送出去:{why}",
  "Not sent: platform error ({e!r})": "沒送出去:平台出錯({e!r})",

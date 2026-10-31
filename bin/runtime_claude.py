@@ -323,7 +323,7 @@ def run(task) -> TaskResult:
         r = subprocess.run(cmd, cwd=task.cwd or None, capture_output=True, text=True, timeout=task.timeout_s,
                            env=_env(task))
     except subprocess.TimeoutExpired:
-        return TaskResult(False, error=_("over {minutes} minutes", minutes=task.timeout_s // 60))
+        return TaskResult(False, error=_("over {minutes} {minutes:minute|minutes}", minutes=task.timeout_s // 60))
     except FileNotFoundError:
         return TaskResult(False, error=_(NOT_FOUND))
     import sys
@@ -721,7 +721,7 @@ def complete(req, conf) -> CompletionResult:
         try:
             r = subprocess.run(cmd, input=req.prompt, cwd=cwd, capture_output=True, text=True, timeout=req.timeout_s, env=env)
         except subprocess.TimeoutExpired:
-            return CompletionResult(False, stop="error", error=_("over {seconds} seconds", seconds=req.timeout_s))
+            return CompletionResult(False, stop="error", error=_("over {seconds} {seconds:second|seconds}", seconds=req.timeout_s))
         except FileNotFoundError:
             return CompletionResult(False, stop="error", error=_(NOT_FOUND))
     try:

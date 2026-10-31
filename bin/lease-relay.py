@@ -239,7 +239,7 @@ def show_file(args: dict) -> tuple:
     code, res = http("POST", f"{RUNNER}/v1/internal/{LEASE}/show", secret(hubconf.secrets_dir() / "runner-token"),
                      {"path": args.get("path"), "summary": args.get("summary")}, timeout=30)
     if code == 200 and res.get("id"):
-        return _("Shown to the owner: {path} ({mime}, {size} bytes).", path=res.get("path"), mime=res.get("mime"),
+        return _("Shown to the owner: {path} ({mime}, {size} {size:byte|bytes}).", path=res.get("path"), mime=res.get("mime"),
                  size=res.get("size")), False
     if code == 0:
         return _("Not sent: the platform (runner) is unreachable; tell the owner in plain text where the file is."), True

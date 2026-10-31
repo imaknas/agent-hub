@@ -2,7 +2,7 @@
  "cannot read the project registry: {e}": "讀不到專案登錄:{e}",
  "the working directory {cwd} is not inside any registered project: start this server in the project folder, or set the environment variable AGENTHUB_PROJECT=<project name> in the tool's MCP settings": "工作目錄 {cwd} 不在任何登錄過的專案裡:在專案資料夾裡啟動這個伺服器,或在工具的 MCP 設定給環境變數 AGENTHUB_PROJECT=<專案名稱>",
  "(unrecognized)": "(認不出來)",
- "📬 {n} letters are still open; look with inbox first.": "📬 現在有 {n} 封還沒結案的信,先用 inbox 看。",
+ "📬 {n} {n:letter is|letters are} still open; look with inbox first.": "📬 現在有 {n} 封還沒結案的信,先用 inbox 看。",
  "📭 No open letters now.": "📭 現在沒有還沒結案的信。",
  "(cannot read the mailbox: {e})": "(讀不到信箱:{e})",
  "done": "好了",

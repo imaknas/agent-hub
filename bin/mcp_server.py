@@ -81,7 +81,7 @@ def instructions(project: str | None, why: str) -> str:
     hb = _hubbus()
     try:
         n = unread(project)
-        line = _("📬 {n} letters are still open; look with inbox first.", n=n) if n else _("📭 No open letters now.")
+        line = _("📬 {n} {n:letter is|letters are} still open; look with inbox first.", n=n) if n else _("📭 No open letters now.")
     except Exception as e:
         line = _("(cannot read the mailbox: {e})", e=e)
     return (text.replace("{{project}}", project).replace("{{unread}}", line)

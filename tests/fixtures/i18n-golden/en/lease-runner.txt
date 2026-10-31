@@ -94,5 +94,5 @@ demo has a lease that is answering, waiting for a reply, open in a terminal, or 
 [<TS>] 77777777 show_file refused: ../x.png: ../x.png is not in this project folder (only files in the project folder can be shown)
 [<TS>] bin/ changed and no lease is running: exiting so launchd restarts with the new code
 [<TS>] upgrade demo → demo: lease 77777777 follows (conversation moved)
-[<TS>] lease-runner started, <HOST:PORT>, 1 lease records
+[<TS>] lease-runner started, <HOST:PORT>, 1 lease record
 

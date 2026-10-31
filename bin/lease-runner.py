@@ -1101,7 +1101,7 @@ def main() -> None:
     threading.Thread(target=idle_loop, daemon=True).start()
     srv = http.server.ThreadingHTTPServer((HOST, PORT), H)
     srv.daemon_threads = True
-    log(_("lease-runner started, {host}:{port}, {n} lease records", host=HOST, port=PORT, n=len(LEASES)))
+    log(_("lease-runner started, {host}:{port}, {n} lease {n:record|records}", host=HOST, port=PORT, n=len(LEASES)))
     srv.serve_forever()
 
 
