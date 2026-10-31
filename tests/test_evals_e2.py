@@ -130,8 +130,8 @@ class FrozenCase(unittest.TestCase):
 
 
 class Plugins(unittest.TestCase):
-    """the points with their own E2 module (e2_reflect, e2_propose…): the new arm renders a complete prompt, the scorers
-    read a run as production returns it"""
+    """the points with their own E2 module (e2_reflect, e2_propose, e2_handover): the new arm renders a complete prompt,
+    the scorers read a run as production returns it"""
 
     STATS = {"week": "2026-W40", "totals": {"prompts": 9, "prompts_prev": 4, "sessions": 2, "projects": 1, "days": 2},
              "projects": [{"name": "demo", "prompts": 9, "prompts_prev": 4, "sessions": 2, "days": 2, "commits": 3,
@@ -190,6 +190,26 @@ class Plugins(unittest.TestCase):
             q = e2_propose.outcome(case, out)
             self.assertFalse(q["contract_ok"])
             self.assertEqual(e2_propose.agree(r, q)["closed"], 0.5)
+
+    def test_handover(self):
+        import e2_handover
+        turns = [["user", "do it?"], ["assistant", "yes"]]
+        lr = e2_handover._runner((e2.BIN / "lease-runner.py").read_text(), "lease_runner_t")
+        p = e2_handover.conversation(turns) + lr.handover_prompt(owner="Alex", lang="zh-Hant")
+        self.assertTrue(p.startswith("<conversation>\n[user]\ndo it?\n\n[assistant]\nyes\n</conversation>\n\n"))
+        self.assertIn("in Traditional Chinese (zh-Hant)", p)
+        self.assertNotIn("{{", p)
+        with tempfile.TemporaryDirectory() as d:
+            out = pathlib.Path(d)
+            so = {"summary": "Decided.", "decisions": [{"what": "do the thing", "why": "worth it"}], "open_questions": [],
+                  "tasks_for_owner": [{"text": "measure the ceiling by Friday", "due": "2026-11-06"}], "notes_markdown": "- do"}
+            (out / "result.json").write_text(json.dumps({"is_error": False, "structured_output": so}))
+            x = e2_handover.outcome(out)
+            so["tasks_for_owner"][0]["due"] = "2026-11-07"
+            (out / "result.json").write_text(json.dumps({"is_error": False, "structured_output": so}))
+            y = e2_handover.outcome(out)
+        a = e2_handover.agree(x, y)
+        self.assertEqual((a["decisions"], a["tasks_for_owner"], a["due"], a["open_questions_empty"]), (1.0, 1.0, 0.0, 1.0))
 
 
 class E3(unittest.TestCase):

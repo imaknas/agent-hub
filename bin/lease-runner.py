@@ -99,10 +99,6 @@ LEASE_IDLE_S = int(os.environ.get("LEASE_IDLE_S", 1800))        # how long a lea
 WARN_GRACE_S = int(os.environ.get("LEASE_WARN_GRACE_S", 600))   # how long with no reply after warned before reclaiming
 IDLE_TICK_S = int(os.environ.get("LEASE_IDLE_TICK_S", 20))
 DEFAULT_MAX_TURNS = 200
-HANDOVER_PROMPT = ("租約要收回了。根據這整段對話寫交接,用繁體中文:summary(重點)、decisions(談定的決定與理由)、"
-                   "open_questions(要 Knas 回答的問題)、tasks_for_owner(只有 Knas 本人能做的事,有期限就寫 due)、"
-                   "notes_markdown(要記進這個專案 memory 的原始筆記:討論了什麼、決定、踩到的問題;保留「預計/可能」"
-                   "這類不確定的語氣)。沒有的項目給空陣列。只回結構化輸出。")
 PREAMBLE = """這是「通道租借」的深談:Knas 正在手機上透過他的助理 Muninn 跟你(這個專案的 session)對話。
 - 這是唯讀的深談(discuss):你可以讀檔、搜尋、查資料,不能改檔或跑指令。需要改的東西寫進最後的交接,讓 Knas 決定。
 - 要 Knas 在幾個選項裡選時,用提問工具(AskUserQuestion),他會在手機上回答;沒回答就用文字問。
@@ -498,6 +494,13 @@ def empty_handover() -> dict:
             "decisions": [], "open_questions": [], "tasks_for_owner": [], "notes_markdown": ""}
 
 
+def handover_prompt(**names) -> str:
+    """judgment point lease-handover's prompt, said to the resumed session (templates/prompts/lease-handover.md, in
+    English; the handover is written in the content language). names: owner= / lang= pinned by an eval"""
+    import prompts
+    return prompts.render("lease-handover", **names)
+
+
 def run_handover(lease: Lease) -> tuple[dict | None, str]:
     """(handover, reason for failure). No transcript = nothing was said: return the fixed "no content", not a failure
     (10-25 lease 34c84c53: the session crashed right at the start, and the handover used --resume on a conversation
@@ -508,7 +511,7 @@ def run_handover(lease: Lease) -> tuple[dict | None, str]:
            "--resume", lease.id, "--strict-mcp-config", "--settings", str(deny_settings(lease.project))]
     why = ""
     for attempt in (1, 2):  # retry once if invalid
-        r = subprocess.run(cmd, input=HANDOVER_PROMPT, cwd=lease.cwd, env=env_for(lease), capture_output=True, text=True,
+        r = subprocess.run(cmd, input=handover_prompt(), cwd=lease.cwd, env=env_for(lease), capture_output=True, text=True,
                            timeout=900)
         try:
             out = json.loads(r.stdout)
