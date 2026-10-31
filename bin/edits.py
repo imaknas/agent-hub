@@ -6,7 +6,7 @@ it becomes}, …]`, the platform applies them in order, and the platform decides
 Rules (guaranteeing by construction that "every other line stays verbatim"):
   - no old may be empty, and it must occur exactly once in the text **as it stands at that step** (zero or several
     occurrences = the list is rejected)
-  - after applying, the protected markers (e.g. the "(等 owner:task-…)" at the end of an 〔owner〕 to-do line) may not
+  - after applying, the protected markers (e.g. the key marker at the end of an owner to-do line) may not
     lose or gain a single one: markers are managed by the registrar, the model may only delete the whole line (the item
     is done), never change a key; when a whole line is to be deleted, that key is taken out of "should be present" (the
     caller decides)

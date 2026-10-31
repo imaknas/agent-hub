@@ -242,9 +242,10 @@ agent-hub is meant for anyone, with any coding agent, any LLM, any key.
   `--dry-run --project <name>` only produces the proposed diff. Changes are recorded in `review-log.md`; details in
   the header comment
 - `bin/gen-todo.py`: platform job `agent-hub/todo` (nightly after the librarian and the registrar): collects the
-  `## 待辦` section of every project's STATE.md (fixed format `- [ ] 〔owner|agent|待定〕…`, maintained by the
-  librarian) and mechanically produces `todo.md`, no LLM; projects with a malformed section are listed at the end of
-  the file
+  to-do section of every project's STATE.md (fixed format, `contracts/state-todo.v2.md`, maintained by the librarian;
+  both token sets, zh-Hant and English, are defined once in `bin/todo_tokens.py`: readers take either, writers use the
+  content language's) and mechanically produces `todo.md`, no LLM; projects with a malformed section are listed at the
+  end of the file
 - `bin/weekly-reflect.sh` (→ `weekly-reflect.py` + `reflect_llm.py`, page template `templates/reflect.html`; reflect
   module): every Monday at 07:00, an analysis of the previous week's cross-project activity. The statistics (messages/
   sessions/commits/notes per project, time of day, late-night share, longest continuous stretch of work, how work was
