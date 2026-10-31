@@ -7,10 +7,11 @@
 set -uo pipefail
 
 HUB="$(cd "$(dirname "$0")/.." && pwd)"
+source "$HUB/bin/hubpaths.sh"
 dir="${1:-$HUB}"
 py="${AGENT_HUB_PYTHON:-$("$HUB/bin/py" -c 'import sys; print(sys.executable)')}" || exit 2
 ruff="$(dirname "$py")/ruff"
-[ -x "$ruff" ] || { echo "lint:平台的 venv 裡沒有 ruff($ruff);跑 bin/setup-python" >&2; exit 2; }
+[ -x "$ruff" ] || { hub_say "lint: no ruff in the platform's venv ({ruff}); run bin/setup-python" ruff="$ruff" >&2; exit 2; }
 
 cd "$dir" || exit 2
 files=()

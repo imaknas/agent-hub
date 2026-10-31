@@ -1,0 +1,4 @@
+{
+ "openclaw session backup done": "openclaw session backup 完成",
+ "openclaw session backup failed; the log says why": "openclaw session backup 失敗,看 log 找原因"
+}

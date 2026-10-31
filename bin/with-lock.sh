@@ -14,17 +14,19 @@
 #
 # 用法:with-lock.sh <command...>
 set -uo pipefail
+source "$(dirname "${BASH_SOURCE[0]}")/hubpaths.sh"
 
-[ $# -ge 1 ] || { echo "用法: with-lock.sh <command...>" >&2; exit 1; }
+[ $# -ge 1 ] || { hub_say "usage: with-lock.sh <command...>" >&2; exit 1; }
 
-GIT_DIR=$(git rev-parse --git-dir 2>/dev/null) || { echo "with-lock: 不在 git repo 裡" >&2; exit 1; }
+GIT_DIR=$(git rev-parse --git-dir 2>/dev/null) || { hub_say "with-lock: not in a git repo" >&2; exit 1; }
 LOCK_DIR="$GIT_DIR/agent-hub-op.lock"
 MAX_WAIT=30
 waited=0
 
 while ! mkdir "$LOCK_DIR" 2>/dev/null; do
   if [ "$waited" -ge "$MAX_WAIT" ]; then
-    echo "with-lock: 等超過 ${MAX_WAIT}s 還是拿不到鎖(可能有其他 session 卡住),放棄這次操作" >&2
+    hub_say "with-lock: still no lock after waiting over {seconds}s (another session may be stuck); giving up this time" \
+      seconds="$MAX_WAIT" >&2
     exit 1
   fi
   sleep 1

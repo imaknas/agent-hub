@@ -1,0 +1,5 @@
+{
+ "git-safe-push: blocked by a branch protection rule, not by diverged history; retrying will not help:": "git-safe-push: 被 branch protection 規則擋下,不是分岔問題,重試沒用:",
+ "git-safe-push: the pull could not merge, possibly a real content conflict; a person has to look:": "git-safe-push: pull 合併失敗,可能是真的內容衝突,需要人工處理:",
+ "git-safe-push: the push still fails after {n} attempts": "git-safe-push: 重試 {n} 次後仍然 push 失敗"
+}

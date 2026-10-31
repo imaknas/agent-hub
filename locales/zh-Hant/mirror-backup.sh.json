@@ -1,0 +1,7 @@
+{
+ "no {list}, no projects to back up": "沒有 {list},沒有要備份的專案",
+ "{name}: mirror updated": "{name}: mirror 已更新",
+ "{name}: remote update failed, the old mirror is left as it was": "{name}: remote update 失敗,保留舊的 mirror 不動",
+ "{name}: first clone --mirror done": "{name}: 第一次 clone --mirror 完成",
+ "{name}: clone --mirror failed": "{name}: clone --mirror 失敗"
+}

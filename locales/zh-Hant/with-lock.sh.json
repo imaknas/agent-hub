@@ -1,0 +1,5 @@
+{
+ "usage: with-lock.sh <command...>": "用法: with-lock.sh <command...>",
+ "with-lock: not in a git repo": "with-lock: 不在 git repo 裡",
+ "with-lock: still no lock after waiting over {seconds}s (another session may be stuck); giving up this time": "with-lock: 等超過 {seconds}s 還是拿不到鎖(可能有其他 session 卡住),放棄這次操作"
+}

@@ -1,0 +1,4 @@
+{
+ "usage: lease-resume <session id>": "用法: lease-resume <session id>",
+ "no such lease: {id}": "找不到這個租約:{id}"
+}

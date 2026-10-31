@@ -6,18 +6,19 @@
 # 只 commit 列出的檔案,不用 git add -A——working tree 裡可能有別人(其他 session、手動編輯)改到一半的東西。
 set -uo pipefail
 HUB="${AGENT_HUB_ROOT:-$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)}"
+source "$(dirname "${BASH_SOURCE[0]}")/hubpaths.sh"
 TODAY=$(date +%Y-%m-%d)
 cd "$HUB" || exit 1
 git pull -q || true
 
 rc=0
-"$HUB/bin/gen-index-roster.sh" || { echo "gen-index-roster 失敗"; rc=1; }
+"$HUB/bin/gen-index-roster.sh" || { hub_say "gen-index-roster failed"; rc=1; }
 files=(index.md review-log.md todo.md)
 [ -f "digest/$TODAY.md" ] && files+=("digest/$TODAY.md")
 if "$HUB/bin/commit-hub-files.sh" "librarian: digest / index / review-log / todo $TODAY" "${files[@]}"; then
-  echo "已 commit(有變化的話)並 push:${files[*]}"
+  hub_say "committed (if anything changed) and pushed: {files}" files="${files[*]}"
 else
-  echo "commit/push 失敗:${files[*]}"
+  hub_say "commit/push failed: {files}" files="${files[*]}"
   rc=1
 fi
 exit $rc

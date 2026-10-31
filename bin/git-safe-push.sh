@@ -13,6 +13,7 @@
 # 用法:在已經 cd 進目標 repo 之後呼叫,例如 git-safe-push.sh 或
 # git-safe-push.sh origin main。
 set -uo pipefail
+source "$(dirname "${BASH_SOURCE[0]}")/hubpaths.sh"
 
 max_attempts=5
 attempt=1
@@ -23,7 +24,7 @@ while [ $attempt -le $max_attempts ]; do
   if echo "$push_err" | grep -qE "rule violations|GH0[0-9]+|required_signatures|protected branch"; then
     # branch protection 規則擋下(例如要求走 PR、要求簽名),不是分岔造成的,
     # pull 重試沒有用,重試只會浪費時間。
-    echo "git-safe-push: 被 branch protection 規則擋下,不是分岔問題,重試沒用:" >&2
+    hub_say "git-safe-push: blocked by a branch protection rule, not by diverged history; retrying will not help:" >&2
     echo "$push_err" >&2
     exit 1
   fi
@@ -35,7 +36,7 @@ while [ $attempt -le $max_attempts ]; do
   fi
 
   if ! pull_err=$(git pull --no-rebase -q 2>&1); then
-    echo "git-safe-push: pull 合併失敗,可能是真的內容衝突,需要人工處理:" >&2
+    hub_say "git-safe-push: the pull could not merge, possibly a real content conflict; a person has to look:" >&2
     echo "$pull_err" >&2
     exit 1
   fi
@@ -43,5 +44,5 @@ while [ $attempt -le $max_attempts ]; do
   attempt=$((attempt + 1))
 done
 
-echo "git-safe-push: 重試 $max_attempts 次後仍然 push 失敗" >&2
+hub_say "git-safe-push: the push still fails after {n} attempts" n="$max_attempts" >&2
 exit 1

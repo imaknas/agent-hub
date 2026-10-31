@@ -390,7 +390,9 @@ class ShellGolden(unittest.TestCase):
                              label="weekly-reflect.sh (fails)"))
         # lease-resume: the usage line
         out.append(self.run_(BIN / "lease-resume"))
-        # lint without ruff
+        # lint without ruff: a platform Python with no ruff next to it
+        (self.tmp / "nopy" / "bin").mkdir(parents=True)
+        (self.tmp / "nopy" / "bin" / "python3").symlink_to(PY)
         out.append(self.run_(BIN / "lint", AGENT_HUB_PYTHON=str(self.tmp / "nopy" / "bin" / "python3")))
         self.check("small-scripts", out)
 

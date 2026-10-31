@@ -1,0 +1,3 @@
+{
+ "lint: no ruff in the platform's venv ({ruff}); run bin/setup-python": "lint:平台的 venv 裡沒有 ruff({ruff});跑 bin/setup-python"
+}

@@ -38,9 +38,9 @@ log() { echo "[$(date '+%H:%M:%S')] $*" | tee -a "$LOG"; }
 log "=== openclaw-session-backup run start ==="
 
 if rsync -az --stats -e ssh "$SRC_HOST:$SRC_PATH" "$DEST" >>"$LOG" 2>&1; then
-  log "openclaw session backup 完成"
+  log "$(hub_msg "openclaw session backup done")"
 else
-  log "openclaw session backup 失敗,看 log 找原因"
+  log "$(hub_msg "openclaw session backup failed; the log says why")"
 fi
 
 log "=== openclaw-session-backup run end ==="

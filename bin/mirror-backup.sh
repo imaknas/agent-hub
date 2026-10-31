@@ -19,7 +19,7 @@ LOG="$LOG_DIR/mirror-backup-$(date +%Y-%m-%d).log"
 log() { echo "[$(date '+%H:%M:%S')] $*" | tee -a "$LOG"; }
 
 if [ ! -f "$LIST" ]; then
-  log "沒有 $LIST,沒有要備份的專案"
+  log "$(hub_msg "no {list}, no projects to back up" list="$LIST")"
   exit 0
 fi
 
@@ -34,15 +34,15 @@ while IFS= read -r url; do
 
   if [ -d "$dest" ]; then
     if git --git-dir="$dest" remote update --prune >>"$LOG" 2>&1; then
-      log "$name: mirror 已更新"
+      log "$(hub_msg "{name}: mirror updated" name="$name")"
     else
-      log "$name: remote update 失敗,保留舊的 mirror 不動"
+      log "$(hub_msg "{name}: remote update failed, the old mirror is left as it was" name="$name")"
     fi
   else
     if git clone --mirror "$url" "$dest" >>"$LOG" 2>&1; then
-      log "$name: 第一次 clone --mirror 完成"
+      log "$(hub_msg "{name}: first clone --mirror done" name="$name")"
     else
-      log "$name: clone --mirror 失敗"
+      log "$(hub_msg "{name}: clone --mirror failed" name="$name")"
       rm -rf "$dest"
     fi
   fi

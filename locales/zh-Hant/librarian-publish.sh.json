@@ -1,0 +1,5 @@
+{
+ "gen-index-roster failed": "gen-index-roster 失敗",
+ "committed (if anything changed) and pushed: {files}": "已 commit(有變化的話)並 push:{files}",
+ "commit/push failed: {files}": "commit/push 失敗:{files}"
+}
