@@ -1,5 +1,6 @@
 {
  "{source}: no `{heading}` section": "{source}:沒有 `{heading}` 段落",
+ "{source}: {n} to-do sections; there must be one": "{source}:有 {n} 個待辦段落,只能有一個",
  "{source}: a to-do without an owner tag, or a finished one not removed: `{line}`": "{source}:待辦沒標負責人或已完成未移除 `{line}`",
  "{name}: no STATE.md on the hub machine": "{name}:mini 上沒有 STATE.md",
  "Cross-project to-do": "跨專案待辦",

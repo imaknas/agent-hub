@@ -48,6 +48,7 @@ BIN = pathlib.Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(BIN))
 import edits  # noqa: E402
 import hubconf  # noqa: E402
+import todo_tokens  # noqa: E402
 
 AGENT_POINTS = {"librarian-state", "librarian-index", "librarian-todo-format"}
 POINT_CASES = {"librarian-state": "librarian-state", "librarian-state-edits": "librarian-state",
@@ -170,20 +171,18 @@ def freeze_index(date: str) -> pathlib.Path:
     return c
 
 
-TODO_HEADING = "## \u5f85\u8fa6"   # the zh-Hant to-do heading (contracts/state-todo.v1.md)
-
-
 def _broken(kind: str, text: str) -> str:
-    """a STATE.md with one typical to-do format problem (made from a real one)"""
+    """a STATE.md with one typical to-do format problem (made from a real one, either token set)"""
+    P = todo_tokens.patterns(hubconf.owner_tag())
     lines = text.split("\n")
-    tagged = [i for i, line in enumerate(lines) if re.match(r"- \[ \] \u3014", line)]
+    tagged = [i for i, line in enumerate(lines) if P.labelled.match(line)]
     if kind == "untagged":         # owner tags left off
         for i in tagged[:2]:
-            lines[i] = re.sub(r"^- \[ \] \u3014[^\u3015]*\u3015", "- [ ] ", lines[i])
+            lines[i] = "- [ ] " + P.labelled.match(lines[i]).group("text")
     elif kind == "done-left":      # a finished item ticked instead of removed
         lines[tagged[0]] = lines[tagged[0]].replace("- [ ]", "- [x]", 1)
-    elif kind == "no-section":     # the to-dos kept under another heading
-        lines = ["## \u4e0b\u4e00\u6b65" if line.strip() == TODO_HEADING else line for line in lines]
+    elif kind == "no-section":     # the to-dos kept under another heading ("next steps")
+        lines = ["## \u4e0b\u4e00\u6b65" if P.heading.match(line.strip()) else line for line in lines]
     return "\n".join(lines)
 
 
@@ -397,16 +396,16 @@ _gen_todo = None
 def todo_items(text: str) -> set[tuple[str, str]] | None:
     global _gen_todo
     _gen_todo = _gen_todo or _load("gen_todo_e2", "gen-todo.py")
-    items, problems = {o: [] for o in _gen_todo.OWNERS}, []
-    if _gen_todo.todo_section(text) is None:
+    items, problems = {o: [] for o in _gen_todo.OWNERS}, []   # by role, so either token set compares
+    if not _gen_todo.todo_sections(text):
         return None
     _gen_todo.parse("x", text, items, problems)
-    return {(o, _gen_todo.OWNER_KEY.sub("", t).strip()) for o, lst in items.items() for _, t in lst}
+    return {(o, _gen_todo.P.key.sub("", t).strip()) for o, lst in items.items() for _, t in lst}
 
 
 def state_check(text: str) -> list[str]:
     import contracts
-    return contracts.check_state_todo(text, hubconf.ROOT / "contracts" / "state-todo.v1.md", hubconf.owner_tag())
+    return contracts.check_state_todo(text, hubconf.ROOT / "contracts" / "state-todo.v2.md", hubconf.owner_tag())
 
 
 def index_outcome(point: str, case: pathlib.Path, out: pathlib.Path) -> dict:

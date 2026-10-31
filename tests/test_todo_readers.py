@@ -68,9 +68,9 @@ class GenTodoParse(unittest.TestCase):
         items, problems = parse(state(item(TAG, "renew the domain"), item("agent", "write tests"),
                                       item(TBD, "go public?")))
         self.assertEqual(problems, [])
-        self.assertEqual(items[TAG], [("p", "renew the domain")])
+        self.assertEqual(items["owner"], [("p", "renew the domain")])
         self.assertEqual(items["agent"], [("p", "write tests")])
-        self.assertEqual(items[TBD], [("p", "go public?")])
+        self.assertEqual(items["tbd"], [("p", "go public?")])
 
     def test_empty_marker_and_notes_are_not_items(self):
         items, problems = parse(state(NONE, "> a note", "a continuation line"))
@@ -81,7 +81,7 @@ class GenTodoParse(unittest.TestCase):
         items, problems = parse(state(f"### {tag(TAG)}", "- [ ] renew the domain", f"#### {tag('agent')}",
                                       "- [ ] write tests"))
         self.assertEqual(problems, [])
-        self.assertEqual(items[TAG], [("p", "renew the domain")])
+        self.assertEqual(items["owner"], [("p", "renew the domain")])
         self.assertEqual(items["agent"], [("p", "write tests")])
 
     def test_unknown_group_does_not_inherit(self):
@@ -108,9 +108,9 @@ class GenTodoParse(unittest.TestCase):
     def test_owner_key_half_and_full_width(self):
         for form in (None, "full_width_marker", "spaced_marker"):
             with self.subTest(form=form):
-                m = gen_todo.OWNER_KEY.search("renew" + mark("task-p-0123456789", form=form))
-                self.assertEqual(m.group(1), "task-p-0123456789")
-        self.assertIsNone(gen_todo.OWNER_KEY.search("renew" + mark("task-p-0123456789") + " later"), "only at the end")
+                m = gen_todo.P.key.search("renew" + mark("task-p-0123456789", form=form))
+                self.assertEqual(m.group("key"), "task-p-0123456789")
+        self.assertIsNone(gen_todo.P.key.search("renew" + mark("task-p-0123456789") + " later"), "only at the end")
 
 
 class Registrar(unittest.TestCase):
@@ -205,6 +205,103 @@ class ContractCheck(unittest.TestCase):
     def test_problems(self):
         self.assertTrue(contracts.check_state_todo(state("- [ ] no tag"), self.C, self.OWNER))
         self.assertTrue(contracts.check_state_todo("# STATE\n", self.C, self.OWNER))
+
+
+# ---- the English set, and files that mix the two (contracts/state-todo.v2.md): every reader, whatever the settings
+
+EN = prompts.TOKENS["en"]
+
+
+def en_item(t: str, text: str) -> str:
+    return f"- [ ] {EN['tag'].format(t)} {text}"
+
+
+def en_mark(key: str, owner: str = TAG) -> str:
+    return " " + EN["key_marker"].format(owner=owner, key=key)
+
+
+class EnglishGenTodo(unittest.TestCase):
+    def test_tagged_items(self):
+        items, problems = parse(state(en_item(TAG, "renew the domain"), en_item("agent", "write tests"),
+                                      en_item("tbd", "go public?"), EN["todo_none"], heading=EN["todo_heading"]))
+        self.assertEqual(problems, [])
+        self.assertEqual(items, {"owner": [("p", "renew the domain")], "agent": [("p", "write tests")],
+                                 "tbd": [("p", "go public?")]})
+
+    def test_grouped_form_and_links(self):
+        items, problems = parse(state(f"### [{TAG}]", "- [ ] renew the domain", "- [ ] [the docs](https://x.org) first",
+                                      en_item("agent", "read [the notes](n.md)"), heading=EN["todo_heading"]))
+        self.assertEqual(problems, [])
+        self.assertEqual(items["owner"], [("p", "renew the domain"), ("p", "[the docs](https://x.org) first")])
+        self.assertEqual(items["agent"], [("p", "read [the notes](n.md)")])
+
+    def test_problems(self):
+        _items, problems = parse(state("- [ ] no tag", en_item("someone", "unknown tag"), en_item(TBD, "zh word"),
+                                       "- [x] [agent] done already", heading=EN["todo_heading"]))
+        self.assertEqual(len(problems), 4)
+
+    def test_owner_key(self):
+        for line in ("renew" + en_mark("task-p-0123456789"), f"renew (waiting on {TAG}:task-p-0123456789)",
+                     "renew" + en_mark("task-p-0123456789").translate(str.maketrans("(:)", "".join(map(chr, (0xFF08, 0xFF1A, 0xFF09)))))):
+            with self.subTest(line=line):
+                self.assertEqual(gen_todo.P.key.search(line).group("key"), "task-p-0123456789")
+
+    def test_mixed_lines(self):
+        items, problems = parse(state(item(TAG, "old line" + mark("task-p-1")), en_item(TAG, "new line" + en_mark("task-p-2")),
+                                      item(TAG, "zh tag, en marker" + en_mark("task-p-3")), en_item("agent", "a"),
+                                      item("agent", "b"), NONE, heading=EN["todo_heading"]))
+        self.assertEqual(problems, [])
+        self.assertEqual([gen_todo.P.key.search(t).group("key") for _p, t in items["owner"]],
+                         ["task-p-1", "task-p-2", "task-p-3"])
+        self.assertEqual(items["agent"], [("p", "a"), ("p", "b")])
+
+    def test_two_sections_are_both_read_and_reported(self):
+        text = state(item("agent", "a")) + "\n" + EN["todo_heading"] + "\n\n" + en_item("agent", "b") + "\n"
+        items, problems = parse(text)
+        self.assertEqual(items["agent"], [("p", "a"), ("p", "b")])
+        self.assertEqual(len(problems), 1)
+
+
+class EnglishRegistrar(unittest.TestCase):
+    def test_owner_lines(self):
+        lines = state(en_item(TAG, "renew the domain" + en_mark("task-p-1")), en_item(TAG, "pay"),
+                      item(TAG, "zh line" + mark("task-p-2")), en_item("agent", "write tests"),
+                      f"### [{TAG}]", "- [ ] grouped", heading=EN["todo_heading"]).splitlines()
+        got = [(t["text"], t["key"]) for t in registrar.owner_lines(lines)]
+        self.assertEqual(got, [("renew the domain", "task-p-1"), ("pay", None), ("zh line", "task-p-2"), ("grouped", None)])
+        self.assertEqual(registrar.line_texts(lines), ["renew the domain", "pay", "zh line", "write tests", "grouped"])
+
+    def test_strike_by_key_in_either_set(self):
+        for marker in (en_mark("task-p-1"), mark("task-p-1")):
+            with self.subTest(marker=marker):
+                lines = state(en_item(TAG, "renew" + marker), en_item("agent", "a"), heading=EN["todo_heading"]).splitlines()
+                self.assertTrue(registrar.strike(lines, "task-p-1"))
+                self.assertNotIn("renew", "\n".join(lines))
+
+    def test_readd_knows_the_english_empty_marker_and_heading(self):
+        lines = state(EN["todo_none"], heading=EN["todo_heading"]).splitlines()
+        registrar.readd(lines, "task-p-1", "sign")
+        self.assertNotIn(EN["todo_none"], lines)
+        self.assertEqual(lines.count(EN["todo_heading"]), 1)
+        self.assertNotIn(HEAD, lines, "no second section")
+
+    def test_removal_reason_either_label(self):
+        with tempfile.TemporaryDirectory() as d:
+            log = pathlib.Path(d) / "review-log.md"
+            log.write_text(f"## 2026-10-30 · p\n\n**Reason**: done\n\n```diff\n-{en_item(TAG, 'x' + en_mark('task-p-1'))}\n```\n"
+                           f"\n## 2026-10-31 · p\n\n{FX['reason_label']}{chr(0xFF1A)} full-width colon\n\n```diff\n-x{mark('task-p-2')}\n```\n")
+            with mock.patch.object(registrar, "REVIEW_LOG", log):
+                self.assertEqual(registrar.removal_reason("task-p-1"), "2026-10-30 · p:done")
+                self.assertEqual(registrar.removal_reason("task-p-2"), "2026-10-31 · p:full-width colon")
+
+
+class EnglishLibrarianMarkers(unittest.TestCase):
+    def test_both_markers_protected(self):
+        doc = state(en_item(LIB_TAG, "renew" + en_mark("task-p-1", LIB_TAG)), item(LIB_TAG, "x" + mark("task-p-2", LIB_TAG)),
+                    heading=EN["todo_heading"])
+        self.assertEqual(edits.markers(doc, librarian.KEY_MARK),
+                         [en_mark("task-p-1", LIB_TAG).strip(), mark("task-p-2", LIB_TAG)])
+        self.assertTrue(edits.check_markers(doc, doc.replace("task-p-1", "task-p-x"), librarian.KEY_MARK))
 
 
 if __name__ == "__main__":

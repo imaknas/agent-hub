@@ -1,5 +1,6 @@
 #!/bin/sh -c exec${IFS}"${0%/*}/py"${IFS}"$0"${IFS}"$@"
-"""Check the format of a STATE.md's `## 待辦` section, with the same parsing rules as gen-todo.py.
+"""Check the format of a STATE.md's to-do section (contracts/state-todo.v2.md, either token set), with the same
+parsing rules as gen-todo.py.
 
 The librarian calls it every time it has changed a project's STATE.md: problems are printed (exit code 1), so the
 librarian asks the model to fix only the format. No problems: prints nothing, exit code 0. Small placeholder files are

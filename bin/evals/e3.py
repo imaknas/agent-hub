@@ -408,7 +408,7 @@ def check(scenario: str, out: pathlib.Path, lang: str = "zh-Hant") -> dict:
         st = files["after"].get(".agent-memory/STATE.md", "")
         items = e2.todo_items(st) or set()
         r["contract_ok"] = not e2.state_check(st)
-        r["owner_item"] = any(o == hubconf.owner_tag() and all(x in t for x in expect) for o, t in items)
+        r["owner_item"] = any(o == "owner" and all(x in t for x in expect) for o, t in items)   # by role
         # the rules give two routes: a [owner] line in STATE.md (registered at night) or `send --type task` right away
         tasks = [e for e in evs if e["type"] == "record" and e["source"] == PROJECT
                  and (e["payload"].get("record") or {}).get("type") == "raised"]

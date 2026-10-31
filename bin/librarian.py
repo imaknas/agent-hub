@@ -42,6 +42,7 @@ import hubconf  # noqa: E402
 import hublib  # noqa: E402
 import i18n  # noqa: E402
 import prompts  # noqa: E402
+import todo_tokens  # noqa: E402
 
 _ = i18n.domain(__file__)
 HUB = hubconf.ROOT
@@ -65,8 +66,8 @@ CONTENT_LANG = hubconf.lang_content()                 # the language the model w
 # is good enough, then remove this.
 SHADOW = True
 SHADOW_DIR = STATE_DIR / "librarian-shadow"
-# registrar's key marker (without the end-of-line anchor)
-KEY_MARK = re.compile(rf"[(（]等 ?{re.escape(OWNER)}[:：]\s*[^()（）\n]+?\s*[)）]")
+# registrar's key marker in either token set (without the end-of-line anchor)
+KEY_MARK = todo_tokens.patterns(OWNER).key_mark
 total_cost = 0.0
 cost_added = False   # the shell version printed $0 when there was no cost at all, %.6f only when there was
 

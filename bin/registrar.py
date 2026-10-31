@@ -1,12 +1,16 @@
 #!/bin/sh -c exec${IFS}"${0%/*}/py"${IFS}"$0"${IFS}"$@"
-"""The Principal Handoff Acts 0.3 registrar: the things in each project's STATE.md `## 待辦` that only the owner can
-do <-> 0.3 records on the bus (spec acts/SPEC.md §4; a nightly job after the librarian, zero LLM). Replaces the old
+"""The Principal Handoff Acts 0.3 registrar: the things in each project's STATE.md to-do section that only the owner
+can do <-> 0.3 records on the bus (spec acts/SPEC.md §4; a nightly job after the librarian, zero LLM). Replaces the old
 task registration.
+
+The section is read in either token set (contracts/state-todo.v2.md, bin/todo_tokens.py), also mixed in one file;
+what the registrar writes (the key stamp, a re-added line, the empty marker, a missing section's heading) is in the
+set of the content language, and it touches no other line.
 
 For each project (the STATE.md of its memory copy, plus the platform's own openclaw-migration-status.md), in the
 spec's order:
   1. Apply: settled / reopened records from the principal side not yet done (hubbus records --direction in --pending).
-     The item's closure is settled -> delete the line carrying this key (an emptied section gets "- (無)"); reopened
+     The item's closure is settled -> delete the line carrying this key (an emptied section gets the empty marker); reopened
      -> if the line is not there, add it back with restore_text. note and related do not belong here; they are left
      to the librarian's judgment.
   2. Restore keys: for an item sent, not closed, not withdrawn and whose key is not in the file, if a keyless owner
@@ -37,7 +41,6 @@ import difflib
 import hashlib
 import json
 import pathlib
-import re
 import shlex
 import sqlite3
 import subprocess
@@ -46,6 +49,7 @@ import sys
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
 import hubconf  # noqa: E402
 import i18n  # noqa: E402
+import todo_tokens  # noqa: E402
 
 _ = i18n.domain(__file__)
 
@@ -60,13 +64,10 @@ EXT = "acts/0.3"
 TAG = hubconf.owner_tag()
 REGISTRAR = hubconf.party("registrar")
 OWNERS = sorted(hubconf.owner_addresses())
-ITEM = re.compile(rf"^- \[ \] 〔{re.escape(TAG)}〕\s*(.+)$")
-GROUP = re.compile(r"^#{3,4}\s*〔([^〕]+)〕\s*$")
-BARE = re.compile(r"^- \[ \] (?!〔)(.+)$")
-LABELLED = re.compile(r"^- \[ \] 〔[^〕]+〕\s*(.+)$")
-# the zh-hant profile's marker_pattern: half-/full-width parentheses and colons, with or without a space after 「等」;
-# must be at the end of the line
-KEY = re.compile(rf"[(（]等 ?{re.escape(TAG)}[:：]\s*([^()（）]+?)\s*[)）]\s*$")
+# both token sets (the profiles' marker_pattern: half-/full-width parentheses and colons; at the end of the line)
+P = todo_tokens.patterns(TAG)
+KEY = P.key
+WRITE = "zh-Hant"   # the token set the registrar writes
 DRY = "--dry-run" in sys.argv
 
 
@@ -87,7 +88,7 @@ def task_key(project: str, text: str) -> str:
 
 
 def stamp(key: str) -> str:
-    return f"(等 {TAG}:{key})"
+    return todo_tokens.stamp(WRITE, TAG, key)
 
 
 def hubbus(*args: str, stdin: str | None = None) -> subprocess.CompletedProcess:
@@ -97,11 +98,9 @@ def hubbus(*args: str, stdin: str | None = None) -> subprocess.CompletedProcess:
 # --- the file ---
 
 def todo_bounds(lines: list[str]) -> tuple[int, int] | None:
-    start = next((i for i, l in enumerate(lines) if l.strip() == "## 待辦"), None)
-    if start is None:
-        return None
-    end = next((i for i in range(start + 1, len(lines)) if lines[i].startswith("## ")), len(lines))
-    return start + 1, end
+    """the (first) to-do section, either heading"""
+    s = P.section(lines)
+    return s[0] if s else None
 
 
 def owner_lines(lines: list[str]) -> list[dict]:
@@ -109,14 +108,15 @@ def owner_lines(lines: list[str]) -> list[dict]:
     b, out, group = todo_bounds(lines), [], None
     for i in range(*(b or (0, 0))):
         l = lines[i].rstrip()
-        if m := GROUP.match(l):
-            group = m.group(1)
+        if m := P.group.match(l):
+            group = P.role(m)
             continue
-        m = ITEM.match(l) or (BARE.match(l) if group == TAG else None)
+        m = P.item.match(l)
+        m = m if m and P.role(m) == "owner" else (P.bare.match(l) if group == "owner" else None)
         if m:
-            body = m.group(1)
+            body = m.group("text")
             k = KEY.search(body)
-            out.append({"i": i, "text": (body[:k.start()] if k else body).strip(), "key": k.group(1) if k else None})
+            out.append({"i": i, "text": (body[:k.start()] if k else body).strip(), "key": k.group("key") if k else None})
     return out
 
 
@@ -125,32 +125,32 @@ def line_texts(lines: list[str]) -> list[str]:
     b, out = todo_bounds(lines), []
     for i in range(*(b or (0, 0))):
         l = lines[i].rstrip()
-        m = LABELLED.match(l) or BARE.match(l)
+        m = P.labelled.match(l) or P.bare.match(l)
         if m:
-            out.append(norm(KEY.sub("", m.group(1))))
+            out.append(norm(KEY.sub("", m.group("text"))))
     return out
 
 
 def strike(lines: list[str], key: str) -> bool:
-    hits = [i for i, l in enumerate(lines) if (m := KEY.search(l.rstrip())) and m.group(1) == key]
+    hits = [i for i, l in enumerate(lines) if (m := KEY.search(l.rstrip())) and m.group("key") == key]
     for i in reversed(hits):
         del lines[i]
     b = todo_bounds(lines)
     if hits and b and not any(lines[i].strip() for i in range(*b)):
-        lines.insert(b[0], "- (無)")
+        lines.insert(b[0], todo_tokens.tokens(WRITE)["todo_none"])
     return bool(hits)
 
 
 def readd(lines: list[str], key: str, text: str) -> bool:
-    if any((m := KEY.search(l.rstrip())) and m.group(1) == key for l in lines):
+    if any((m := KEY.search(l.rstrip())) and m.group("key") == key for l in lines):
         return False
-    new = f"- [ ] 〔{TAG}〕{norm(text)}{stamp(key)}"
+    new = todo_tokens.item(WRITE, TAG, norm(text)) + stamp(key)
     b = todo_bounds(lines)
     if b is None:
-        lines += ["", "## 待辦", "", new]
+        lines += ["", todo_tokens.tokens(WRITE)["todo_heading"], "", new]
         return True
     body = [i for i in range(*b) if lines[i].strip()]
-    if len(body) == 1 and lines[body[0]].strip() == "- (無)":
+    if len(body) == 1 and P.is_none(lines[body[0]]):
         lines[body[0]] = new
     else:
         lines.insert((body[-1] + 1) if body else b[0], new)
@@ -336,8 +336,8 @@ def removal_reason(key: str) -> str | None:
     for line in REVIEW_LOG.read_text().splitlines():
         if line.startswith("## "):
             head, why = line[3:].strip(), None
-        elif line.startswith("**理由**"):
-            why = re.sub(r"^\*\*理由\*\*\s*[::]\s*", "", line).strip()
+        elif m := P.reason.match(line):   # the librarian's reason line, either set
+            why = line[m.end():].strip()
         elif line.startswith("-") and not line.startswith("---") and key in line:
             found = f"{head}:{why}" if why else head
     return found

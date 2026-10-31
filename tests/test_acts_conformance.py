@@ -2,9 +2,11 @@
 contracts/vendor/.../SOURCE): proves that bin/registrar.py (the registry's steps) and bin/gen-todo.py (classifying the
 to-do section) meet the spec.
 
-Runs only the zh-hant profile (the one agent-hub uses). The owner tag in the data is `Owner`; per the
+Runs the zh-hant profile (this instance's token set). The owner tag in the data is `Owner`; per the
 conformance/README rules it is replaced with this machine's configured owner.tag before comparing. parse's full
-classification (agent, 待定, format problems) is in gen-todo; the registrar handles only the owner's lines.
+classification (agent, to be decided, format problems) is in gen-todo; the registrar handles only the owner's lines.
+parse also runs the spec's en profile, translated into agent-hub's English set (EN_PROFILE: the spec's default English
+profile differs from it in the heading, the tbd label and the owner tag, which agent-hub takes from settings).
 
     bin/py -m unittest discover -s tests
 """
@@ -50,33 +52,56 @@ def nonblank(lines):
     return [l.rstrip() for l in lines if l.strip()]
 
 
-ASSIGNEE = {TAG: "principal", "agent": "agent", "待定": "undecided"}
+ASSIGNEE = {"owner": "principal", "agent": "agent", "tbd": "undecided"}   # gen-todo's roles -> the spec's assignees
+# the spec's en profile -> agent-hub's English set (bin/todo_tokens.py): the only differences between the two
+EN_PROFILE = {"## Tasks": "## To-do", "[owner]": f"[{TAG}]", "[undecided]": "[tbd]",
+              "(waiting on owner:": f"(waiting on {TAG}:"}
+
+
+def en(x):
+    if isinstance(x, str):
+        for a, b in EN_PROFILE.items():
+            x = x.replace(a, b)
+        return x
+    if isinstance(x, list):
+        return [en(v) for v in x]
+    return x
 
 
 class Acts(unittest.TestCase):
+    def check_parse(self, c, own):
+        text = "\n".join(own(c["document"])) + "\n"
+        exp = c["expect"]
+        self.assertEqual(gen_todo.todo_sections(text) != [], exp["section"])
+        items = {o: [] for o in gen_todo.OWNERS}
+        problems: list = []
+        gen_todo.parse("demo", text, items, problems)
+        got = []
+        for owner, rows in items.items():
+            for _, t in rows:
+                m = registrar.KEY.search(t)
+                got.append((ASSIGNEE[owner], (t[:m.start()] if m else t).strip(), m.group(1) if m else None))
+        want = [(t["assignee"], own(t["text"]), t["key"]) for t in exp["tasks"]]
+        self.assertEqual(sorted(got), sorted(want))
+        self.assertEqual(len(problems) - (not exp["section"]), len(exp["problems"]), "no section is one problem here")
+        # the owner lines the registrar sees match the spec
+        mine = [(t["text"], t["key"]) for t in registrar.owner_lines(own(c["document"]))]
+        self.assertEqual(sorted(mine), sorted((own(t["text"]), t["key"]) for t in exp["tasks"]
+                                              if t["assignee"] == "principal"))
+
     def test_parse(self):
         cs = cases("parse.json")
         self.assertTrue(cs)
         for c in cs:
             with self.subTest(case=c["id"]):
-                text = "\n".join(own(c["document"])) + "\n"
-                exp = c["expect"]
-                self.assertEqual(gen_todo.todo_section(text) is not None, exp["section"])
-                items = {o: [] for o in gen_todo.OWNERS}
-                problems: list = []
-                gen_todo.parse("demo", text, items, problems)
-                got = []
-                for owner, rows in items.items():
-                    for _, t in rows:
-                        m = registrar.KEY.search(t)
-                        got.append((ASSIGNEE[owner], (t[:m.start()] if m else t).strip(), m.group(1) if m else None))
-                want = [(t["assignee"], own(t["text"]), t["key"]) for t in exp["tasks"]]
-                self.assertEqual(sorted(got), sorted(want))
-                self.assertEqual(len([p for p in problems if "沒有 `## 待辦`" not in p]), len(exp["problems"]))
-                # the owner lines the registrar sees match the spec
-                mine = [(t["text"], t["key"]) for t in registrar.owner_lines(own(c["document"]))]
-                self.assertEqual(sorted(mine), sorted((own(t["text"]), t["key"]) for t in exp["tasks"]
-                                                      if t["assignee"] == "principal"))
+                self.check_parse(c, own)
+
+    def test_parse_english(self):
+        cs = [c for c in json.loads((FIX / "parse.json").read_text())["cases"] if c.get("profile") == "en"]
+        self.assertTrue(cs)
+        for c in cs:
+            with self.subTest(case=c["id"]):
+                self.check_parse(c, en)
 
     def test_keys(self):
         for c in json.loads((FIX / "keys.json").read_text())["cases"]:

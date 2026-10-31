@@ -23,7 +23,7 @@ What it does for each project:
      carry a hedge with the newly added ones) without verbatim evidence behind it -> that file is reverted; the date
      files that went into it are not deleted this time
    - a correction's quote cannot be found in the file it names -> that file is reverted
-   - the `## 待辦` section of STATE.md got broken (check-state-todo.py) -> STATE.md is reverted
+   - the to-do section of STATE.md got broken (check-state-todo.py) -> STATE.md is reverted
    - git rm only the date files the model declared folded and whose destinations all still exist (not reverted)
    - URLs/`code snippets` from the deleted date files that cannot be found after folding -> not blocking, listed in
      review-log for a person to spot-check
@@ -348,7 +348,7 @@ def state_todo_ok(path: pathlib.Path) -> bool:
 
 
 def state_todo_broken(repo: pathlib.Path, base: str) -> bool:
-    """`## 待辦` was broken by this run (already broken before does not count; that is the librarian's business)."""
+    """The to-do section was broken by this run (already broken before does not count; that is the librarian's business)."""
     if state_todo_ok(repo / "STATE.md"):
         return False
     with tempfile.NamedTemporaryFile("w", suffix=".md") as f:
