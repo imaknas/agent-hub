@@ -81,9 +81,16 @@ def check(project: str, doc: dict, sec: dict, today: datetime.date) -> tuple[lis
         left = (exp - today).days
         if left < 0:
             probs.append(_("{name} has expired ({date})", name=name, date=exp) + how)
+        elif left == 0:
+            probs.append(_("{name} expires today ({date})", name=name, date=exp) + how)
         elif left <= sec.get("warn_days", WARN_DAYS):
-            probs.append(_("{name} expires in {days} days ({date})", name=name, days=left, date=exp) + how)
-        notes.append(_("{name}: expires {date} ({days} days left)", name=name, date=exp, days=left))
+            probs.append(_("{name} expires in {days} {days:day|days} ({date})", name=name, days=left, date=exp) + how)
+        if left < 0:
+            notes.append(_("{name}: expired {days} {days:day|days} ago ({date})", name=name, date=exp, days=-left))
+        elif left == 0:
+            notes.append(_("{name}: expires today ({date})", name=name, date=exp))
+        else:
+            notes.append(_("{name}: expires {date} ({days} {days:day|days} left)", name=name, date=exp, days=left))
     mode = path.stat().st_mode
     if mode & (stat.S_IRGRP | stat.S_IROTH):
         notes.append(_("{name}: readable by group/others ({mode}, chmod 600 recommended)", name=name, mode=oct(mode & 0o777)))
@@ -162,7 +169,8 @@ def main(argv: list[str]) -> int:
         alert.once("secrets", problems, _("The credentials declared in the registry are all fine again"))
     for p in problems:
         print(f"⚠️ {p}")
-    print(_("Checked {count} credentials, {problems} problems", count=count, problems=len(problems)))
+    print(_("Checked {count} {count:credential|credentials}, {problems} {problems:problem|problems}", count=count,
+            problems=len(problems)))
     return 1 if problems else 0
 
 
