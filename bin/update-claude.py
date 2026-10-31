@@ -29,6 +29,9 @@ import pathlib
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
 import alert  # noqa: E402
 import hubconf  # noqa: E402
+import i18n  # noqa: E402
+
+_ = i18n.domain(__file__)
 
 PKG = "@anthropic-ai/claude-code"
 
@@ -55,7 +58,7 @@ def smoke() -> str | None:
                            input="只回覆 ok 兩個字母。", capture_output=True, text=True, timeout=180,
                            env={**os.environ, "LLM_AUTH": "token"})
     except subprocess.TimeoutExpired:
-        return "超過 3 分鐘沒回應"
+        return _("no answer for 3 minutes")
     if r.returncode == 0:
         return None
     try:
@@ -69,7 +72,8 @@ def main() -> int:
     ok, msg = update(dry)
     print(msg, file=sys.stdout if ok else sys.stderr)
     if not dry:
-        alert.once("claude-version", [] if ok else [f"claude 沒辦法更新到最新版:{msg}"], f"claude 回到最新版了({msg})")
+        alert.once("claude-version", [] if ok else [_("claude cannot get to the latest version: {msg}", msg=msg)],
+                   _("claude is on the latest version again ({msg})", msg=msg))
     return 0 if ok else 1
 
 
@@ -77,32 +81,37 @@ def update(dry: bool) -> tuple[bool, str]:
     """(有沒有在最新版, 說明)"""
     bin_dir = hubconf.nvm_bin()
     if not bin_dir:
-        return False, "找不到 nvm 的預設版本(~/.nvm/alias/default)"
+        return False, _("no nvm default version (~/.nvm/alias/default)")
     npm, claude = bin_dir / "npm", bin_dir / "claude"
     old = version(claude) if claude.exists() else None
     r = run(str(npm), "view", PKG, "version", timeout=120)
     latest = r.stdout.strip()
     if r.returncode != 0 or not re.fullmatch(r"\d+\.\d+\.\d+", latest):
-        return False, f"查不到最新版本(現在是 {old}):{(r.stderr or r.stdout).strip()[-200:]}"
+        return False, _("could not look up the latest version (now {old}): {detail}", old=old,
+                         detail=(r.stderr or r.stdout).strip()[-200:])
     if old == latest:
-        return True, f"claude {old}(node {bin_dir.parent.name}):已經是最新版"
+        return True, _("claude {old} (node {node}): already the latest", old=old, node=bin_dir.parent.name)
     if dry:
-        return True, f"(dry-run) claude {old or '沒有安裝'} → {latest}(node {bin_dir.parent.name})"
+        return True, _("(dry-run) claude {old} → {latest} (node {node})", old=old or _("not installed"), latest=latest,
+                       node=bin_dir.parent.name)
     if old and (err := smoke()):
-        return False, (f"還在 {old}(最新 {latest}):現在的版本就打不通請求,先不更新"
-                       f"(登入或網路的問題,看 agent-hub/claude-login):{err[-200:]}")
+        return False, _("still on {old} (latest {latest}): the current version already fails a request, not updating "
+                         "(a login or network problem, see agent-hub/claude-login): {error}", old=old, latest=latest,
+                         error=err[-200:])
     r = run(str(npm), "install", "-g", f"{PKG}@{latest}", "--no-audit", "--no-fund")
     new = version(claude) if r.returncode == 0 else None
     err = smoke() if new == latest else None
     if new == latest and err is None:
-        return True, f"claude {old or '沒有安裝'} → {new}(node {bin_dir.parent.name}),請求測試通過"
+        return True, _("claude {old} → {new} (node {node}), the request test passed", old=old or _("not installed"),
+                       new=new, node=bin_dir.parent.name)
     detail = (err or (r.stderr or r.stdout).strip())[-200:]
     if old:
         back = run(str(npm), "install", "-g", f"{PKG}@{old}", "--no-audit", "--no-fund")
         restored = back.returncode == 0 and version(claude) == old
-        return False, (f"{latest} 裝不起來({detail})," +
-                       (f"已裝回 {old}" if restored else "裝回也失敗,claude 現在可能不能用"))
-    return False, f"{latest} 裝不起來:{detail}"
+        return False, (_("{latest} would not install ({detail}), ", latest=latest, detail=detail) +
+                       (_("put {old} back", old=old) if restored
+                        else _("putting it back failed too, claude may not work now")))
+    return False, _("{latest} would not install: {detail}", latest=latest, detail=detail)
 
 
 if __name__ == "__main__":

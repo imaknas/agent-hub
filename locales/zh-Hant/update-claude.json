@@ -1,0 +1,16 @@
+{
+ "no answer for 3 minutes": "超過 3 分鐘沒回應",
+ "claude cannot get to the latest version: {msg}": "claude 沒辦法更新到最新版:{msg}",
+ "claude is on the latest version again ({msg})": "claude 回到最新版了({msg})",
+ "no nvm default version (~/.nvm/alias/default)": "找不到 nvm 的預設版本(~/.nvm/alias/default)",
+ "could not look up the latest version (now {old}): {detail}": "查不到最新版本(現在是 {old}):{detail}",
+ "claude {old} (node {node}): already the latest": "claude {old}(node {node}):已經是最新版",
+ "(dry-run) claude {old} → {latest} (node {node})": "(dry-run) claude {old} → {latest}(node {node})",
+ "not installed": "沒有安裝",
+ "still on {old} (latest {latest}): the current version already fails a request, not updating (a login or network problem, see agent-hub/claude-login): {error}": "還在 {old}(最新 {latest}):現在的版本就打不通請求,先不更新(登入或網路的問題,看 agent-hub/claude-login):{error}",
+ "claude {old} → {new} (node {node}), the request test passed": "claude {old} → {new}(node {node}),請求測試通過",
+ "{latest} would not install ({detail}), ": "{latest} 裝不起來({detail}),",
+ "put {old} back": "已裝回 {old}",
+ "putting it back failed too, claude may not work now": "裝回也失敗,claude 現在可能不能用",
+ "{latest} would not install: {detail}": "{latest} 裝不起來:{detail}"
+}
