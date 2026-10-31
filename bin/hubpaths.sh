@@ -1,9 +1,11 @@
-# 給 shell 腳本 source:實例目錄的位置(跟 hubconf.config_dir/data_dir/secrets_dir 同一套規則,docs/design/new-user.md 3.1),
-# 只用 shell + plutil(macOS)/ jq(其他系統)——遙控那台(MBP)不一定有平台的 Python。
-#   HUB_ROOT     平台(這份 repo)    HUB_CONFIG  config(hub.json、登錄、mirror-list.txt、services.tsv)
-#   HUB_DATA     data(digest/、reflect/、todo.md、index.md、review-log.md…)    HUB_SECRETS  憑證
-#   HUB_JSON     hub.json 的完整路徑;hub_json_get <點分隔的 key> 讀單一值(沒有就印空、回非 0)
-# <hub>/.hub-home 寫著實例目錄 → <實例>/{config,data,secrets};沒有這個檔 = 舊的擺法(全部在 hub 根目錄)。
+# Sourced by shell scripts: where the instance directory is (same rules as hubconf.config_dir/data_dir/secrets_dir,
+# docs/design/new-user.md 3.1), using only shell + plutil (macOS) / jq (other systems): the remote machine (the laptop)
+# doesn't necessarily have the platform's Python.
+#   HUB_ROOT     the platform (this repo)    HUB_CONFIG  config (hub.json, registry, mirror-list.txt, services.tsv)
+#   HUB_DATA     data (digest/, reflect/, todo.md, index.md, review-log.md…)    HUB_SECRETS  credentials
+#   HUB_JSON     full path of hub.json; hub_json_get <dotted key> reads one value (prints nothing, non-zero if absent)
+# <hub>/.hub-home holds the instance directory → <instance>/{config,data,secrets}; no such file = the old layout
+# (everything in the hub root).
 HUB_ROOT="${AGENT_HUB_ROOT:-$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)}"
 _hp_home="${AGENT_HUB_HOME:-}"
 [ -n "$_hp_home" ] || { [ -f "$HUB_ROOT/.hub-home" ] && _hp_home="$(head -1 "$HUB_ROOT/.hub-home")"; }
@@ -16,7 +18,8 @@ else
   HUB_SECRETS="${AGENT_HUB_SECRETS:-$HUB_ROOT/.secrets}"
 fi
 HUB_JSON="$HUB_CONFIG/hub.json"
-# macOS 用內建的 plutil;其他系統用 jq(bin/setup 要求有)。兩邊都是:沒有這個值(或不是單一值)→ 印空、回非 0
+# macOS uses the built-in plutil; other systems jq (bin/setup requires it). Either way: no such value (or not a single
+# value) → print nothing, return non-zero
 hub_json_get() {
   if command -v plutil >/dev/null 2>&1; then
     plutil -extract "$1" raw -o - "$HUB_JSON" 2>/dev/null
@@ -25,7 +28,7 @@ hub_json_get() {
       "$HUB_JSON" 2>/dev/null
   fi
 }
-# 跑 hub 的那台(hosts.server;舊的鍵 memory_host);空 = 一台機器全包
+# The machine that runs the hub (hosts.server; the old key memory_host); empty = one machine does everything
 hub_server() { hub_json_get hosts.server || hub_json_get memory_host; }
 # Owner-facing text in the UI language (docs/design/i18n.md): hub_msg "<English msgid>" [name=value …] prints it without
 # a newline, hub_say adds one. The domain is the file the call is in (BASH_SOURCE), so its catalog is

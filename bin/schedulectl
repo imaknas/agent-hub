@@ -43,7 +43,8 @@ SCHEDULE = hubconf.config_file("schedule.yaml")
 LOG_DIR = HUB / ".logs"
 LABEL = "local.agent-hub-scheduler"
 PLIST = Path.home() / "Library/LaunchAgents" / f"{LABEL}.plist"
-# set-model 的簡稱 → 判斷點(以前 models.env 的 STATE_MODEL / INDEX_MODEL / CONSOLIDATE_MODEL 管的那幾個)
+# set-model shorthands → judgment points (the ones models.env's STATE_MODEL / INDEX_MODEL / CONSOLIDATE_MODEL used
+# to set)
 MODEL_ALIASES = {"state": ["librarian-state", "librarian-todo-format", "librarian-state-edits"],
                  "index": ["librarian-index", "librarian-index-edits", "reflect-week"],
                  "consolidate": ["consolidate"]}
@@ -54,15 +55,15 @@ def load_jobs():
 
 
 def all_jobs():
-    """schedule.yaml + 專案登錄(跟 scheduler.py 同一份清單)。pause/resume 只管 schedule.yaml 的;
-    登錄裡的 job 要改就改 projects/<專案>.yaml。"""
+    """schedule.yaml + the project registry (the same list scheduler.py uses). pause/resume only handle schedule.yaml's;
+    to change a registry job, edit projects/<project>.yaml."""
     sys.path.insert(0, str(HUB / "bin"))
     import scheduler
     return scheduler.all_jobs()[0]
 
 
 def commit_hub_file(path, msg):
-    """改了被版控的檔案就當場 commit+push(只 commit 這個檔案),不留給人手動補。"""
+    """Changed a version-controlled file: commit+push it on the spot (only that file), not left for a person to do."""
     rc = subprocess.run([str(HUB / "bin/commit-hub-files.sh"), msg, path.name]).returncode
     if rc != 0:
         print(_("warning: {file} was written, but the commit/push failed; it needs a manual fix", file=path.name))
@@ -102,7 +103,7 @@ def day_list(days: list) -> str:
 
 
 def describe_when(job):
-    """跟 scheduler.py 的 runs_today() 用同一組篩選欄位,不然 list 會把每月一次的 job 顯示成每天。
+    """Uses the same filter fields as scheduler.py's runs_today(), or list would show a monthly job as daily.
     One whole phrase per shape: "daily at 06:00", "every 15 minutes, 08:00-20:00", "weekly on Mon, Thu at 10:00",
     "monthly on days 1 and 15 at 10:00", "in Jan, Apr on day 1 at 06:00 (until 2027-12-31)"."""
     parts = []
@@ -219,7 +220,7 @@ def cmd_run(name):
     uid = subprocess.check_output(["id", "-u"]).decode().strip()
     label = f"local.agent-hub-run-now.{name.replace('/', '.')}"
     log = HUB / ".logs" / f"{name.replace('/', '__')}-{datetime.date.today().isoformat()}.log"
-    if hubconf.service_manager() == "systemd":   # 一次性的 user unit(跑完自己收掉)
+    if hubconf.service_manager() == "systemd":   # a one-off user unit (cleans itself up when done)
         subprocess.run(["systemctl", "--user", "reset-failed", f"{label}.service"], capture_output=True)
         subprocess.run(["systemd-run", "--user", "--collect", f"--unit={label}",
                         f"--property=StandardOutput=append:{log}", f"--property=StandardError=append:{log}",
@@ -237,7 +238,7 @@ def cmd_run(name):
         "StandardOutPath": str(log),
         "StandardErrorPath": str(log),
     }))
-    # 上一次手動執行留下的同名 job 先清掉(跑完的 job 還會留在 launchd 裡)
+    # first clear a same-named job left by the previous manual run (finished jobs stay in launchd)
     subprocess.run(["launchctl", "bootout", f"gui/{uid}/{label}"], capture_output=True)
     subprocess.run(["launchctl", "bootstrap", f"gui/{uid}", str(plist)], check=True)
     _mark_ran_today(name)
@@ -245,7 +246,8 @@ def cmd_run(name):
 
 
 def _mark_ran_today(name):
-    # 記成今天已跑:不然排程時間已過的 job,下一個 tick 會再跑一次(LLM job 等於多花一次錢)
+    # mark as run today: otherwise a job whose scheduled time has passed runs again on the next tick (for an LLM job,
+    # paying twice)
     state_file = HUB / ".state" / "scheduler-last-run.json"
     state = json.loads(state_file.read_text()) if state_file.exists() else {}
     state[name] = datetime.date.today().isoformat()

@@ -1,11 +1,11 @@
 #!/usr/bin/env bash
-# 新機器/mini 重灌後,重新建立一個在 services.tsv 裡登記過的背景服務。
-# 只有 agent-hub 自己管的 plist(plist_location 開頭是 agent-hub/launchd/)
-# 能全自動處理;其他 owner(OpenClaw、Homebrew、GitHub Actions 等)的東西
-# 印出 recreate_notes 讓人自己判斷,不會用猜的去重建——那些不是 agent-hub
-# 管轄範圍,亂做反而可能弄壞。
+# On a new machine / after reinstalling the hub machine, recreate a background service registered in services.tsv.
+# Only plists agent-hub manages itself (plist_location starting with agent-hub/launchd/)
+# are handled fully automatically; things with other owners (OpenClaw, Homebrew, GitHub Actions, etc.)
+# get their recreate_notes printed for a person to judge, never rebuilt by guessing: those are not agent-hub's
+# jurisdiction, and meddling could break them.
 #
-# 用法:recover-service.sh <label>
+# Usage: recover-service.sh <label>
 set -euo pipefail
 
 AGENT_HUB="${AGENT_HUB_ROOT:-$(cd "$(dirname "$0")/.." && pwd)}"
@@ -30,7 +30,7 @@ recreate_notes=$(echo "$row" | cut -f6)
 
 case "$plist_location" in
   projects/*)
-    # 專案登錄裡宣告的 service:照登錄重新產生 plist 並載入
+    # a service declared in the project registry: regenerate the plist from the registry and load it
     "$AGENT_HUB/bin/py" "$AGENT_HUB/bin/render-services.py" --only "$LABEL"
     hub_say "Rebuilt from {source}: {label}" source="$plist_location" label="$LABEL"
     hub_say "Purpose: {purpose}" purpose="$purpose"
@@ -39,7 +39,8 @@ case "$plist_location" in
   agent-hub/launchd/*)
     plist_path="$AGENT_HUB/${plist_location#agent-hub/}"
     [ -f "$plist_path" ] || fail "$(hub_msg "{path} does not exist: is agent-hub itself behind (not pulled)?" path="$plist_path")"
-    # launchd/ 底下是樣板:{{hub}} 換成這台的 hub 位置(用 sed,遙控那台不一定有平台的 Python)
+    # what's under launchd/ is a template: {{hub}} becomes this machine's hub location (with sed: the remote machine
+    # may not have the platform's Python)
     sed "s#{{hub}}#$AGENT_HUB#g" "$plist_path" >"$HOME/Library/LaunchAgents/${LABEL}.plist"
     launchctl bootstrap "gui/$(id -u)" "$HOME/Library/LaunchAgents/${LABEL}.plist"
     hub_say "Rebuilt and started: {label}" label="$LABEL"

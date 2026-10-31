@@ -1,11 +1,14 @@
 #!/bin/sh -c exec${IFS}"${0%/*}/py"${IFS}"$0"${IFS}"$@"
-"""librarian 影子模式的比對結果(docs/design/llm-providers.md 步驟 4):completion 版能不能取代 agent 版。
+"""Results of the librarian's shadow mode (docs/design/llm-providers.md step 4): can the completion version replace the
+agent version.
 
   librarian-shadow-report.py [--days 7]
 
-讀 .state/librarian-shadow/<日期>.jsonl(librarian.py 每晚寫),每個判斷點列:幾次、有沒有結果、編輯清單合不合規、
-「要不要改」跟 agent 版一致的比例、跟 agent 版寫出的內容多像、key 標記出問題的次數、成本。
-不一致的逐筆列出來(專案、日期、兩邊的判斷、completion 版的理由),提議的全文在 .state/librarian-shadow/<日期>/。
+Reads .state/librarian-shadow/<date>.jsonl (written nightly by librarian.py) and lists per judgment point: how many
+runs, whether there was a result, whether the edit list was valid, the share agreeing with the agent version on "change
+or not", how similar the written content is to the agent version's, how many times the key markers went wrong, and cost.
+Disagreements are listed one by one (project, date, both sides' decisions, the completion version's reason); the full
+proposals are in .state/librarian-shadow/<date>/.
 """
 from __future__ import annotations
 

@@ -1,24 +1,30 @@
 #!/bin/sh -c exec${IFS}"${0%/*}/py"${IFS}"$0"${IFS}"$@"
-"""把一個專案(正式專案或想法沙盒)整套改名,包括 GitHub repo——lease-runner 的 POST /v1/projects/<名稱>/rename 用
-(10-25 Muninn m10251650,Knas 確認)。
+"""Rename a whole project (a regular project or an idea sandbox), GitHub repo included: used by lease-runner's
+POST /v1/projects/<name>/rename (10-25, the assistant's m10251650, confirmed by the owner).
 
-rename-project.sh 管登記、memory bare repo/副本、mirror、本機資料夾,但要求 GitHub repo 先改好;這支把那一步補上,
-再交給它,並記下做到哪裡,中途失敗再叫一次可以接著做。
+rename-project.sh handles the registration, the memory bare repo/copies, the mirror and the local folder, but requires
+the GitHub repo to be renamed first; this adds that step, then hands over to it, recording how far it got so that
+calling it again after a failure picks up where it stopped.
 
-用法:project-rename.py <舊名稱> <新名稱> [--apply] [--json]
-  不加 --apply 只印出會做什麼。--json:最後一行印結果:
+Usage: project-rename.py <old name> <new name> [--apply] [--json]
+  Without --apply it only prints what it would do. --json: the last line prints the result:
     {"result": "renamed"|"already", "name", "origin"}                                         exit 0
     {"result": "bad_name"|"not_found"|"name_taken"|"busy"|"failed", "detail"}                exit 1
-做的事(照順序;每做完一個改外面的步驟就記進 .state/project-renames.json):
-  1. 檢查(動手前全部做完):新名稱的規則(小寫英數跟 -,最多 40 字;跟沙盒同一套)、不是平台自己、新名稱沒被登錄/資料夾/
-     memory repo 用掉;origin 是 GitHub 的話,GitHub 上新名稱的 repo 不存在(或是上次自己改過去的);
-     **沒有程序的工作目錄在舊資料夾裡**(含子資料夾,例:worktree 裡的 session)→ 有就 busy,GitHub 也還沒動(10-25 review);
-     這個專案沒有做到一半的升級(upgrade-idea.py 的紀錄)→ 有就先把升級重試做完
-  2. GitHub repo 改名(gh repo rename;GitHub 會把舊網址轉到新的)、本機 origin 改成新網址——沒有 remote 的(想法沙盒)跳過
-  3. rename-project.sh <舊> <新> --origin <新網址> --apply(登記、memory、mirror、資料夾、legacy-paths 一起改)
-     有程序的工作目錄還在舊資料夾(例:開著的 session)它會拒絕 → busy
-重試:舊名稱已經不在登錄、新名稱在、紀錄說是這次改名 → already。GitHub 已經改好(紀錄的 stage)就跳過第 2 步。
-不做:租約跟對話紀錄(lease-runner 呼叫完這支自己處理)、改專案程式碼裡的名稱(專案自己的事)。
+What it does (in order; each step that changes something outside is recorded in .state/project-renames.json when done):
+  1. Checks (all done before touching anything): the new name's rules (lowercase letters, digits and -, at most 40
+     characters; the same rules as sandboxes), not the platform itself, the new name not taken by the registry/a
+     folder/a memory repo; if the origin is GitHub, no repo with the new name exists on GitHub (or it's the one we
+     renamed last time); **no process has its working directory in the old folder** (subfolders included, e.g. a
+     session in a worktree) → if one does, busy, with GitHub still untouched (10-25 review); this project has no
+     half-done upgrade (upgrade-idea.py's record) → if it does, finish retrying the upgrade first
+  2. Rename the GitHub repo (gh repo rename; GitHub redirects the old URL to the new one) and point the local origin at
+     the new URL; skipped for projects without a remote (idea sandboxes)
+  3. rename-project.sh <old> <new> --origin <new URL> --apply (registration, memory, mirror, folder, legacy-paths
+     all at once); it refuses if a process's working directory is still in the old folder (e.g. an open session) → busy
+Retry: old name no longer in the registry, new name present, and the record says it's this rename → already. If GitHub
+is already renamed (the record's stage), step 2 is skipped.
+Not done here: leases and conversation records (lease-runner handles those itself after calling this), renaming the
+name inside the project's code (the project's own business).
 """
 from __future__ import annotations
 
@@ -36,8 +42,8 @@ import i18n  # noqa: E402
 _ = i18n.domain(__file__)
 
 RECORD = hubconf.STATE / "project-renames.json"
-UPGRADES = hubconf.STATE / "idea-upgrades.json"   # upgrade-idea.py 的紀錄:做到一半的升級要先做完
-BUSY = 75  # rename-project.sh「有程序的工作目錄在舊資料夾」的 exit code
+UPGRADES = hubconf.STATE / "idea-upgrades.json"   # upgrade-idea.py's record: a half-done upgrade must be finished first
+BUSY = 75  # rename-project.sh's exit code for "a process's working directory is in the old folder"
 NAME = re.compile(r"^[a-z0-9](?:[a-z0-9-]{0,38}[a-z0-9])?$")
 GITHUB = re.compile(r"^(?:git@github\.com:|https://github\.com/)([^/]+)/([^/]+?)(?:\.git)?$")
 JSON = False
@@ -76,7 +82,7 @@ def load(name: str) -> dict | None:
 
 
 def users_in(path) -> str:
-    """工作目錄在這個資料夾(含子資料夾)裡的程序。"""
+    """Processes whose working directory is in this folder (subfolders included)."""
     return " ".join(hubconf.cwd_users(path))
 
 
@@ -104,7 +110,7 @@ def main(argv: list[str]) -> int:
     old, new = args
     rec = records().get(old) or {}
 
-    # 重試:上次已經改完了
+    # retry: the last run already finished
     if load(old) is None:
         doc = load(new)
         if rec.get("new") == new and rec.get("stage") == "done" and doc is not None:
@@ -173,7 +179,7 @@ def main(argv: list[str]) -> int:
     r = subprocess.run(cmd, capture_output=True, text=True)
     if r.returncode != 0:
         out = (r.stderr or r.stdout).strip()
-        if r.returncode == BUSY:  # 檢查完到這裡之間又有人進去了
+        if r.returncode == BUSY:  # someone went in between the checks and here
             fail(_("processes are still in the {name} folder (e.g. an open session); close them first: {out}",
                    name=old, out=out[-300:]), "busy")
         fail(_("rename-project.sh failed: {out}", out=out[-400:]))

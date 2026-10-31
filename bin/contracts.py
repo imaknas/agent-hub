@@ -1,8 +1,9 @@
-"""契約的共用工具(標準函式庫):讀 contracts/ 底下的 JSON Schema 跟 markdown 契約,檢查實際資料。
+"""Shared contract tools (standard library): read the JSON Schema and markdown contracts under contracts/ and check
+actual data.
 
-- JSON 契約:`<名稱>.v<N>.schema.json`,用 minischema 驗證
-- markdown 契約:`<名稱>.v<N>.md`,裡面 ```regex <名字>``` / ```heading <名字>``` 的區塊是機器讀的規則
-tests/test_contracts.py(各 repo 自己的 ② 檢查)跟 bin/contracts-check.py(每晚的 ① 檢查)都用這支。
+- JSON contracts: `<name>.v<N>.schema.json`, validated with minischema
+- markdown contracts: `<name>.v<N>.md`; the ```regex <name>``` / ```heading <name>``` blocks are machine-read rules
+tests/test_contracts.py (each repo's own ② check) and bin/contracts-check.py (the nightly ① check) both use this.
 """
 from __future__ import annotations
 
@@ -19,8 +20,8 @@ FENCE = re.compile(r"^```(regex|heading) (\S+)\n(.*?)\n```", re.M | re.S)
 
 
 def md_rules(path: pathlib.Path, owner: str | None = None) -> dict[str, list[str]]:
-    """markdown 契約裡的 regex/heading 區塊:{名字: [每行一條]}。owner 有給就把 {owner} 換掉
-    (regex 區塊換成 re.escape 過的)。"""
+    """The regex/heading blocks in a markdown contract: {name: [one rule per line]}. If owner is given, {owner} is
+    replaced (with the re.escape'd form in regex blocks)."""
     out = {}
     for kind, name, body in FENCE.findall(path.read_text()):
         if owner is not None:
@@ -88,7 +89,7 @@ PROSE = {"$id", "$schema", "title", "description"}
 
 
 def _machine(o):
-    """JSON schema 去掉說明性的欄位,只留會影響驗證的部分。"""
+    """A JSON schema with the explanatory fields removed, keeping only the parts that affect validation."""
     if isinstance(o, dict):
         return {k: _machine(v) for k, v in o.items() if k not in PROSE}
     if isinstance(o, list):
@@ -97,8 +98,8 @@ def _machine(o):
 
 
 def same(a: pathlib.Path, b: pathlib.Path) -> bool:
-    """兩份契約的「機器讀的部分」一樣:JSON 比去掉 $id/title/description 的 schema,markdown 比 regex/heading
-    區塊跟版本標記——說明文字改了不算不一致。"""
+    """The two contracts' "machine-read parts" are the same: for JSON, the schema without $id/title/description; for
+    markdown, the regex/heading blocks and the version marker. Changed explanatory text doesn't count as a mismatch."""
     if a.suffix == ".json" and b.suffix == ".json":
         return _machine(json.loads(a.read_text())) == _machine(json.loads(b.read_text()))
     ta, tb = a.read_text(), b.read_text()

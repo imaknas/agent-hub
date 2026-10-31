@@ -1,16 +1,23 @@
-"""config 的套用者(docs/design/new-user.md 3.7):把 config(專案登錄、hub.json…)變成機器上的實際狀態的程式。
+"""Config appliers (docs/design/new-user.md 3.7): the programs that turn config (project registry, hub.json…) into
+actual state on the machine.
 
-一個套用者 = 一個模組,提供:
-  plan(index=None) -> list[Change]    會改什麼;**不准有副作用**(不寫它管的檔、不動 launchd)
-  apply(index=None) -> list[Change]   改下去,回傳改了什麼——要跟剛才的 plan 一樣;改完再 plan 是空的(冪等)
-  EXTERNAL: bool                      apply 會不會對外(push、寄信)。plan 不管 EXTERNAL 都不准對外
-index 是 registry.refresh() 的結果;不給就自己讀(測試給假的)。
+An applier = a module providing:
+  plan(index=None) -> list[Change]    what would change; **no side effects allowed** (doesn't write the files it
+                                      manages, doesn't touch launchd)
+  apply(index=None) -> list[Change]   makes the change and returns what changed: must equal the plan just made; a plan
+                                      after it is empty (idempotent)
+  EXTERNAL: bool                      whether apply reaches outside (push, sending mail). plan may never reach outside,
+                                      whatever EXTERNAL says
+index is the result of registry.refresh(); if not given, the applier reads it itself (tests pass a fake one).
 
-跟 runtime_ports 同一種寫法:登記表 APPLIERS、load() 機械檢查函式在不在、tests/test_appliers.py 對每一個登記的
-套用者跑同一組契約(plan 沒副作用、apply == plan、apply 完再 plan 是空的)。沒過契約測試的套用者進不來。
-Change 用中立的詞:target 是「誰的什麼」(service:<label>、agent-settings:<專案>、job:<名稱>),不寫執行環境的格式。
+Written the same way as runtime_ports: a registration table APPLIERS, load() checking mechanically that the functions
+exist, and tests/test_appliers.py running the same contract on every registered applier (plan has no side effects,
+apply == plan, a plan after apply is empty). An applier that fails the contract tests doesn't get in.
+Change uses neutral words: target is "what of whom" (service:<label>, agent-settings:<project>, job:<name>), never a
+runtime's format.
 
-每 15 分鐘的那幾個 job(render-services、render-settings)照跑,是安全網;`bin/hub config apply` 是「現在就套用」。
+The 15-minute jobs (render-services, render-settings) keep running as a safety net; `bin/hub config apply` is "apply
+now".
 """
 from __future__ import annotations
 
@@ -29,7 +36,7 @@ _ = i18n.domain(__file__)
 
 class Change(NamedTuple):
     op: str        # add | update | remove
-    target: str    # service:<label> | agent-settings:<專案> | hook:<專案>/<hook> | job:<名稱>
+    target: str    # service:<label> | agent-settings:<project> | hook:<project>/<hook> | job:<name>
     detail: str = ""
 
     def line(self) -> str:
@@ -39,7 +46,8 @@ class Change(NamedTuple):
 
 OPS = ("add", "update", "remove")
 FUNCTIONS = ("plan", "apply")
-# 名稱 → 模組檔(bin/ 底下)。順序就是 apply 的順序:排程先(只是記錄),再服務、再專案的 agent 設定
+# name → module file (under bin/). The order is the apply order: schedule first (just records), then services, then the
+# projects' agent settings
 APPLIERS = {
     "scheduler": "applier_scheduler.py",
     "services": "render-services.py",
@@ -55,7 +63,7 @@ _loaded: dict[str, object] = {}
 
 
 def load(name: str):
-    """登記的套用者模組;缺 plan/apply/EXTERNAL 就拒絕載入。"""
+    """A registered applier module; refuses to load one missing plan/apply/EXTERNAL."""
     if name in _loaded:
         return _loaded[name]
     path = BIN / APPLIERS[name]
@@ -71,7 +79,8 @@ def load(name: str):
     return m
 
 
-# config 檔(new-user.md 3.0):git 裡追蹤的是這些;第 6 步搬到 config repo 之後由 hubconf 指過去
+# config files (new-user.md 3.0): these are what git tracks; after step 6 moves them to the config repo, hubconf points
+# there
 CONFIG_PATHS = ["hub.json", "mirror-list.txt", "services.tsv", "schedule.yaml", "projects"]
 
 
@@ -81,7 +90,7 @@ def applied_path() -> pathlib.Path:
 
 
 def config_commit() -> str:
-    """config 檔最後一次被 commit 的版本;working tree 還有沒 commit 的 config 修改就加 +dirty。"""
+    """The last commit of the config files; adds +dirty if the working tree has uncommitted config changes."""
     import subprocess
     import hubconf
 

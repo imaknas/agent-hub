@@ -1,9 +1,9 @@
-"""JSON Schema 的一小部分(只用標準函式庫)——contracts/ 跟 muninn 的契約只用到這些:
-type(含 ["string","null"])、required、properties、additionalProperties(true/false/schema)、items、
-enum、const、pattern、minimum、minLength、maxLength、minItems、if/then/else、anyOf、$ref(#/$defs/…)。
-不認得的關鍵字直接忽略(跟 JSON Schema 規格一樣)。
+"""A small subset of JSON Schema (standard library only): all that contracts/ and muninn's contracts use:
+type (including ["string","null"]), required, properties, additionalProperties (true/false/schema), items,
+enum, const, pattern, minimum, minLength, maxLength, minItems, if/then/else, anyOf, $ref (#/$defs/…).
+Unknown keywords are ignored (as in the JSON Schema spec).
 
-  errors(schema, instance) -> list[str]     空的 = 合格
+  errors(schema, instance) -> list[str]     empty = valid
 """
 from __future__ import annotations
 

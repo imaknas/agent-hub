@@ -1,8 +1,10 @@
 #!/usr/bin/env bash
-# 通道租借 L3:在終端機接續一個租借中的 session(Muninn 按「在終端機接續」時給的指令)。
+# Channel lease L3: resume a leased session in the terminal (the command the assistant gives when "resume in
+# terminal" is pressed).
 #   lease-resume <session id>
-# runner 已經停掉它自己的程序;這裡 cd 到那個專案、帶 headless token(SSH 底下 claude 讀不到 keychain,
-# 會是「未登入」;代價:claude.ai 的 connector 不會載入),接回同一段對話。結束後回 Muninn 按「收回」做交接。
+# The runner has already stopped its own process; this cds into that project and brings the headless token (under SSH
+# claude can't read the keychain and would be "not logged in"; the cost: claude.ai connectors don't load), then rejoins
+# the same conversation. When done, go back to the assistant and press "reclaim" to do the handover.
 set -euo pipefail
 source "$(dirname "${BASH_SOURCE[0]}")/hubpaths.sh"
 id="${1:?$(hub_msg "usage: lease-resume <session id>")}"

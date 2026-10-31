@@ -1,16 +1,16 @@
-"""Linux 的服務管理器:平台產生的 launchd plist(render-services 的 render()、launchd/ 的排程器跟看門狗樣板)→ systemd 的
-user unit(~/.config/systemd/user/),跟載入、查狀態、卸載。macOS 照舊用 launchd,這支只在 hubconf.service_manager() 是
-systemd 時用。標準函式庫。
+"""Linux's service manager: the launchd plists the platform produces (render-services' render(), the scheduler and
+watchdog templates in launchd/) → systemd user units (~/.config/systemd/user/), plus loading, status and unloading.
+macOS keeps using launchd; this is used only when hubconf.service_manager() is systemd. Standard library only.
 
-對應(平台用到的 plist 欄位就這些):
-  ProgramArguments → ExecStart(每個參數用雙引號;% 跟 $ 照 systemd 的規則跳脫)
-  WorkingDirectory、EnvironmentVariables → WorkingDirectory=、Environment=
+Mapping (these are all the plist fields the platform uses):
+  ProgramArguments → ExecStart (each argument double-quoted; % and $ escaped by systemd's rules)
+  WorkingDirectory, EnvironmentVariables → WorkingDirectory=, Environment=
   StandardOutPath / StandardErrorPath → StandardOutput=append: / StandardError=append:
-  KeepAlive → Restart=always(RestartSec = ThrottleInterval,沒寫 10 秒)、WantedBy=default.target
-  StartInterval(沒有 KeepAlive)→ Type=oneshot 的 service + 一個 timer(OnActiveSec 1 秒 = 載入就跑一次,像 RunAtLoad;
-                                    OnUnitActiveSec = 間隔)
-  RunAtLoad、沒有間隔、沒有 KeepAlive → 一般的 service,WantedBy=default.target
-登出之後也要跑:要開 `loginctl enable-linger <使用者>`(doctor 會說)。
+  KeepAlive → Restart=always (RestartSec = ThrottleInterval, 10 s if unset), WantedBy=default.target
+  StartInterval (without KeepAlive) → a Type=oneshot service + a timer (OnActiveSec 1 s = runs once on load, like
+                                    RunAtLoad; OnUnitActiveSec = the interval)
+  RunAtLoad, no interval, no KeepAlive → a plain service, WantedBy=default.target
+To keep running after logout: `loginctl enable-linger <user>` is needed (doctor says so).
 """
 from __future__ import annotations
 
@@ -26,17 +26,19 @@ UNIT_DIR = pathlib.Path.home() / ".config" / "systemd" / "user"
 
 
 def _q(s: str) -> str:
-    """一個 ExecStart 參數 / Environment 值:雙引號包起來;\\ 跟 " 跳脫;% 變 %%(specifier);ExecStart 裡的 $ 變 $$。"""
+    """One ExecStart argument / Environment value: double-quoted; \\ and " escaped; % becomes %% (specifier); $ in
+    ExecStart becomes $$."""
     return '"' + str(s).replace("\\", "\\\\").replace('"', '\\"').replace("%", "%%") + '"'
 
 
 def target(plist: dict) -> str:
-    """要 enable 的那一個 unit:有間隔、不是一直跑的 → timer;其他 → service。"""
+    """The one unit to enable: with an interval and not always running → the timer; otherwise → the service."""
     return f"{plist['Label']}.timer" if plist.get("StartInterval") and not plist.get("KeepAlive") else f"{plist['Label']}.service"
 
 
 def files(plist: dict) -> dict[str, str]:
-    """plist → {檔名: 內容}。內容只由 plist 決定(同一份 plist 每次一樣),render-services 比對內容決定要不要重載。"""
+    """plist → {file name: content}. The content depends only on the plist (the same plist gives the same result every
+    time); render-services compares content to decide whether to reload."""
     label = plist["Label"]
     timer = target(plist).endswith(".timer")
     lines = ["[Unit]", f"Description=agent-hub {label}", "", "[Service]",
@@ -66,7 +68,7 @@ def files(plist: dict) -> dict[str, str]:
 
 
 def installed(label: str) -> dict[str, str]:
-    """現在裝著的這個 label 的 unit 檔(沒有 = 空的)。"""
+    """The unit files currently installed for this label (none = empty)."""
     out = {}
     for suffix in (".service", ".timer"):
         f = UNIT_DIR / f"{label}{suffix}"
@@ -80,11 +82,12 @@ def systemctl(*args: str) -> subprocess.CompletedProcess:
 
 
 def install(plist: dict) -> subprocess.CompletedProcess:
-    """寫 unit 檔、daemon-reload、enable --now 要跑的那個;service 已經在跑就 restart(換上新的內容)。"""
+    """Write the unit files, daemon-reload, enable --now the one to run; if the service is already running, restart it
+    (to pick up the new content)."""
     label, want = plist["Label"], files(plist)
     UNIT_DIR.mkdir(parents=True, exist_ok=True)
     for name in set(installed(label)) - set(want):
-        (UNIT_DIR / name).unlink()   # 例:原本有間隔、現在改成一直跑
+        (UNIT_DIR / name).unlink()   # e.g. it used to have an interval and now runs all the time
     for name, text in want.items():
         (UNIT_DIR / name).write_text(text)
     systemctl("daemon-reload")
@@ -102,8 +105,8 @@ def remove(label: str) -> None:
 
 
 def state(label: str) -> str | None:
-    """跟 render-services 的 running() 同一種回答:沒載入 = None;一直跑的 service → running / not running;
-    timer → 它有沒有在排(active)。"""
+    """The same kind of answer as render-services' running(): not loaded = None; an always-running service → running /
+    not running; a timer → whether it is scheduled (active)."""
     have = installed(label)
     if not have:
         return None
@@ -113,7 +116,7 @@ def state(label: str) -> str | None:
 
 
 def linger() -> bool | None:
-    """登出之後 user unit 還跑不跑(loginctl enable-linger);查不到 = None。"""
+    """Whether user units keep running after logout (loginctl enable-linger); can't tell = None."""
     r = subprocess.run(["loginctl", "show-user", os.environ.get("USER") or str(os.getuid()), "-p", "Linger"],
                        capture_output=True, text=True)
     return None if r.returncode != 0 else r.stdout.strip() == "Linger=yes"

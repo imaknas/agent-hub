@@ -1,18 +1,24 @@
 #!/bin/sh -c exec${IFS}"${0%/*}/py"${IFS}"$0"${IFS}"$@"
-"""平台代跑(cap-runner)用的 macOS Seatbelt profile:中立政策(policy.py)+ 能力(capabilities/<名稱>.sb)→ SBPL 文字。
+"""The macOS Seatbelt profile for the platform's run service (cap-runner): neutral policy (policy.py) + capability
+(capabilities/<name>.sb) → SBPL text.
 
-不經過任何 agent:執行環境的 sandbox 裡套不了第二層(10-25 實測 `sandbox_apply: Operation not permitted`),
-所以這份 profile 只在 sandbox 外的 cap-runner 用 `sandbox-exec -f` 套上。設計:docs/design/capabilities.md。
+Not through any agent: a second layer can't be applied inside the runtime's sandbox (tested 10-25:
+`sandbox_apply: Operation not permitted`), so this profile is applied only by cap-runner, outside the sandbox, with
+`sandbox-exec -f`. Design: docs/design/capabilities.md.
 
-base 是「先全部放行,再擋危險的部分」(deny-list;試行期,Metal 才跑得起來):
-  寫入   只准專案資料夾 + 暫存區(刻意不照 policy.write:代跑的工作不該直接寫匯流排或共用的套件 cache)
-  讀取   擋 workspace_root、services_root 整個(自己的資料夾除外)、別的專案、policy.deny_read、憑證、平台狀態跟匯流排、Keychain 檔案
-  網路   完全不通(含 127.0.0.1 跟 unix socket);Seatbelt 沒辦法照網域過濾
-  其他   擋 Keychain 的系統服務(執行環境的 sandbox 擋不住的那個洞)、開 app、Apple Events、
-         launchctl/crontab/at、看別的程序/對別的程序送信號
-能力片段接在 base 後面(後面的規則優先);gpu 的片段是空的,能力在這裡的作用是授權。
+The base is "allow everything, then block the dangerous parts" (a deny-list; trial period, so that Metal can run):
+  write    only the project folder + the temp area (deliberately not policy.write: a run job shouldn't write the bus
+           or the shared package caches directly)
+  read     blocks all of workspace_root and services_root (except its own folder), other projects, policy.deny_read,
+           credentials, platform state and the bus, Keychain files
+  network  fully off (127.0.0.1 and unix sockets included); Seatbelt can't filter by domain
+  other    blocks the Keychain system services (the hole the runtime's sandbox can't close), opening apps, Apple Events,
+           launchctl/crontab/at, inspecting or signalling other processes
+Capability fragments follow the base (later rules win); the gpu fragment is empty: here a capability's role is
+authorization.
 
-  profile(pol, cap) → str        路徑直接寫進 profile(每次執行時現算),不用 -D 參數
+  profile(pol, cap) → str        paths are written straight into the profile (computed fresh on every run), no -D
+                                 parameters
 """
 from __future__ import annotations
 
@@ -31,12 +37,12 @@ NO_EXEC = ["/usr/bin/open", "/usr/bin/osascript", "/bin/launchctl", "/usr/bin/cr
 
 
 def q(p) -> str:
-    """SBPL 的字串常值。"""
+    """An SBPL string literal."""
     return '"' + str(p).replace("\\", "\\\\").replace('"', '\\"') + '"'
 
 
 def glob_regex(p) -> str:
-    """policy.deny_read 裡的 glob(只用到 *)→ SBPL regex,含底下全部。"""
+    """A glob from policy.deny_read (only * is used) → an SBPL regex, everything below included."""
     import re
     parts = [re.escape(x) for x in str(p).split("*")]
     return '#"^' + "[^/]+".join(parts).replace('"', '\\"') + '(/|$)"'
@@ -83,7 +89,8 @@ def profile(pol: dict, cap: str) -> str:
         "(deny lsopen)",
         "(deny appleevent-send)",
         "(deny process-exec " + " ".join(f"(literal {q(x)})" for x in NO_EXEC) + ")",
-        "(deny process-info*)",  # 10-25 實測:(deny signal (target others)) 擋不住,要先全擋再放行同一個 sandbox
+        # tested 10-25: (deny signal (target others)) doesn't block it; block everything first, then allow the same sandbox
+        "(deny process-info*)",
         "(allow process-info* (target same-sandbox))",
         "(deny signal)",
         "(allow signal (target same-sandbox))",
@@ -94,6 +101,6 @@ def profile(pol: dict, cap: str) -> str:
     return "\n".join(lines)
 
 
-if __name__ == "__main__":  # seatbelt.py <專案> <能力>:印出會用的 profile(除錯用)
+if __name__ == "__main__":  # seatbelt.py <project> <capability>: print the profile it would use (for debugging)
     import policy
     print(profile(policy.for_project(sys.argv[1]), sys.argv[2]))

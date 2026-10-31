@@ -1,17 +1,22 @@
 #!/bin/sh -c exec${IFS}"${0%/*}/py"${IFS}"$0"${IFS}"$@"
-"""平台的事件入口(執行環境抽象第 3 層,docs/design/runtime-abstraction.md):各 runtime 把它原生的 hook 接到這裡。
+"""The platform's event entry point (runtime abstraction layer 3, docs/design/runtime-abstraction.md): each runtime
+wires its native hooks to this.
 
-  hub-event <事件>          事件是平台自己的名稱(runtime_ports.EVENTS);stdin 是 runtime 原生的 hook 輸入
-  hub-event install <資料夾>  在這個專案裝好 hook(平台管的換成新的,使用者自己加的留著)——sync-local-setup 呼叫
+  hub-event <event>          the event is the platform's own name (runtime_ports.EVENTS); stdin is the runtime's
+                             native hook input
+  hub-event install <folder>  install the hooks in this project (the platform's replaced with new ones, the user's own
+                              kept): called by sync-local-setup
 
-流程:binding.parse_event 把原生輸入翻成中立的 HubEvent → 依事件依序跑平台的處理程式(各自攔錯,一個壞了不影響其他)
-→ 收集要放進 context 的文字或「擋下」的理由 → binding.inject / deny 翻回原生的輸出。處理程式只回傳中立的東西,
-不知道任何 runtime 的格式。
+Flow: binding.parse_event turns the native input into a neutral HubEvent → the platform's handlers for that event run
+in order (each catching its own errors, so one broken handler doesn't affect the others) → collect the text to put into
+context or the reason to "block" → binding.inject / deny turn it back into the native output. Handlers return only
+neutral things and know no runtime's format.
 
-不變的性質(跟以前每條 hook 後面的 `|| true` 一樣):一律 exit 0;不是真的 session、不在 onboard 過的專案裡,
-什麼都不做。hook 的錯誤輸出會被丟掉,所以每次跑都在 .logs/hub-event.log 記一行(事件、專案、跑了哪些、哪些失敗)。
+Invariants (the same as the `|| true` after every hook used to be): always exit 0; not a real session, or not in an
+onboarded project: do nothing. A hook's error output is thrown away, so every run logs one line in .logs/hub-event.log
+(event, project, which ran, which failed).
 
-平台的 Python 跑(bin/py,最低 3.13)。
+Runs on the platform's Python (bin/py, 3.13 minimum).
 """
 from __future__ import annotations
 
@@ -40,12 +45,13 @@ def _load(name: str, path: pathlib.Path):
 
 
 def _workspace(cwd: str) -> pathlib.Path | None:
-    """這個 session 所在的專案資料夾(git 主 checkout 或 worktree 的根);有 .agent-memory 才算接上平台的專案。"""
+    """The project folder this session is in (the root of the main git checkout or of a worktree); it counts as a
+    project connected to the platform only if it has .agent-memory."""
     r = subprocess.run(["git", "-C", cwd, "rev-parse", "--show-toplevel"], capture_output=True, text=True)
     return pathlib.Path(r.stdout.strip()) if r.returncode == 0 and r.stdout.strip() else None
 
 
-# ---------- 處理程式:平台的邏輯,只回傳中立的結果(文字 / None / 擋下的理由) ----------
+# ---------- handlers: the platform's logic, returning only neutral results (text / None / reason to block) ----------
 
 def memory_pull(ev, ws):
     if ws and (ws / ".agent-memory").is_dir():
@@ -60,7 +66,8 @@ def memory_sync(ev, ws):
 
 
 def local_setup(ev, ws):
-    """本機設定對齊範本(受管區塊、hook、ignore、AGENT.md)。它印的東西(例:搬家提醒)也放進 context。"""
+    """Align the local setup with the templates (managed blocks, hooks, ignores, AGENT.md). What it prints (e.g. a
+    moved-folder reminder) also goes into context."""
     if ws and (ws / ".agent-memory").is_dir():
         r = subprocess.run([str(BIN / "sync-local-setup.sh"), "--quiet", str(ws)], capture_output=True, text=True,
                            timeout=120, stdin=subprocess.DEVNULL)
@@ -84,7 +91,7 @@ def guard(ev, ws):
     return g.decide(ev.target or {}, ev.cwd)
 
 
-# 每個事件依序跑哪些;"deny" 類的回傳值是擋下的理由
+# which handlers run for each event, in order; for the "deny" kind the return value is the reason to block
 HANDLERS = {
     "session_start": [("memory_pull", memory_pull), ("local_setup", local_setup), ("nudge", nudge), ("mail", mail)],
     "session_end": [("memory_sync", memory_sync)],
@@ -116,7 +123,7 @@ def _log(event, project, ran, failed) -> None:
 
 
 def handle(event: str, raw: str, rt=None) -> str:
-    """跑一個事件,回傳要印到 stdout 的原生輸出(沒有就 "")。給 main 跟測試用。"""
+    """Run one event and return the native output to print to stdout ("" if none). For main and tests."""
     rt = rt or runtime_ports.load(ports=("lifecycle",))
     ev = rt.parse_event(event, raw)
     if ev is None or event not in HANDLERS:
@@ -127,7 +134,7 @@ def handle(event: str, raw: str, rt=None) -> str:
         try:
             out = fn(ev, ws)
             ran.append(name)
-        except Exception as e:  # 一個處理程式壞了,其他照跑
+        except Exception as e:  # one handler broke; the others still run
             failed.append(f"{name}:{type(e).__name__}")
             continue
         if out:
@@ -143,7 +150,7 @@ def main(argv) -> int:
         if argv[:1] == ["install"] and len(argv) == 2:
             try:
                 rt = runtime_ports.load(ports=("lifecycle",))
-            except runtime_ports.Unsupported as e:   # 沒有 hook 可裝:說原因,結束碼 3 讓呼叫端照「不支援」處理
+            except runtime_ports.Unsupported as e:   # no hooks to install: say why; exit code 3 for "unsupported"
                 print(e, file=sys.stderr)
                 return 3
             rt.install_lifecycle(pathlib.Path(argv[1]).resolve())
@@ -152,7 +159,7 @@ def main(argv) -> int:
             out = handle(argv[0], _read_stdin())
             if out:
                 print(out)
-    except Exception as e:  # hook 壞掉不能影響 session
+    except Exception as e:  # a broken hook must not affect the session
         _log(argv[0] if argv else "?", None, [], [f"hub-event:{type(e).__name__}"])
     return 0
 

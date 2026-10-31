@@ -1,15 +1,17 @@
 #!/usr/bin/env bash
-# 在 Linux 容器裡跑平台的全部測試(發版前跑;太慢,不在 commit 閘門裡)。需要 docker。
-#   bin/linux-test [unittest 的參數…]     例:bin/linux-test tests.test_new_user
-# 拿目前的 working tree(版控裡的檔 + 還沒 commit 的改動,不含沒追蹤的檔)複製進容器裡一份新的 git repo 跑,不動這份 checkout。
-# 預期:0 failures;只在 macOS 有意義的測試會 skip。
+# Run the platform's full test suite in a Linux container (run before a release; too slow for the commit gate).
+# Needs docker.
+#   bin/linux-test [unittest arguments…]     e.g. bin/linux-test tests.test_new_user
+# Copies the current working tree (tracked files + uncommitted changes, not untracked files) into a fresh git repo in
+# the container and runs it there, leaving this checkout alone.
+# Expected: 0 failures; tests that only make sense on macOS are skipped.
 set -euo pipefail
 hub="$(cd "$(dirname "$0")/.." && pwd)"
-# colima / Docker Desktop 預設只把家目錄掛進 VM:複製到家目錄底下,不用 /tmp
+# colima / Docker Desktop mount only the home directory into the VM by default: copy under home, not /tmp
 work="${AGENT_HUB_LINUX_TEST_DIR:-$HOME/.cache/agent-hub-linux}"
 rm -rf "$work/src" && mkdir -p "$work/src"
 (cd "$hub" && git ls-files -z --cached --others --exclude-standard | xargs -0 -I{} sh -c '[ -e "$1" ] && echo "$1"' _ {}) \
-  | (cd "$hub" && COPYFILE_DISABLE=1 tar -cf - -T -) | tar -xf - -C "$work/src"   # 不帶 macOS 的 ._ 檔
+  | (cd "$hub" && COPYFILE_DISABLE=1 tar -cf - -T -) | tar -xf - -C "$work/src"   # no macOS ._ files
 docker build -q -t agent-hub-linux-test -f "$hub/tests/linux/Dockerfile" "$hub/tests/linux" >/dev/null
 args=("$@"); [ ${#args[@]} -gt 0 ] || args=(discover -s tests)
 docker run --rm -v "$work/src:/src:ro" -e AGENT_HUB_PYTHON=/usr/local/bin/python3 \

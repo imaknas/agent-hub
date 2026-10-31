@@ -1,11 +1,16 @@
-"""模型回的編輯清單 → 新的文字(docs/design/llm-providers.md「模型回編輯清單,不是整份重寫」)。
+"""A model's edit list → the new text (docs/design/llm-providers.md "the model returns an edit list, not a full
+rewrite").
 
-completion 形狀的判斷點不碰檔案:模型回 `[{"old": 原文的一段, "new": 換成什麼}, …]`,平台照順序套用,寫哪個檔是平台決定的。
-規則(構造上保證「其他行逐字不動」):
-  - 每個 old 不能是空的,而且在**套用到這一步時**的文字裡剛好出現一次(出現零次或好幾次 = 這個清單不採用)
-  - 套用完,受保護的標記(例:〔owner〕待辦行尾的「(等 owner:task-…)」)一個都不能少、不能多——標記由 registrar 管,
-    模型只能整行刪掉(那一項做完了),不能改 key;要刪整行時那個 key 就從「應該在」裡拿掉(呼叫端決定)
-標準函式庫。
+Completion-shaped judgment points don't touch files: the model returns `[{"old": a piece of the original, "new": what
+it becomes}, …]`, the platform applies them in order, and the platform decides which file is written.
+Rules (guaranteeing by construction that "every other line stays verbatim"):
+  - no old may be empty, and it must occur exactly once in the text **as it stands at that step** (zero or several
+    occurrences = the list is rejected)
+  - after applying, the protected markers (e.g. the "(等 owner:task-…)" at the end of an 〔owner〕 to-do line) may not
+    lose or gain a single one: markers are managed by the registrar, the model may only delete the whole line (the item
+    is done), never change a key; when a whole line is to be deleted, that key is taken out of "should be present" (the
+    caller decides)
+Standard library only.
 """
 from __future__ import annotations
 
@@ -20,7 +25,7 @@ class EditError(Exception):
 
 
 def apply(text: str, edits: list) -> str:
-    """照順序套用;任何一個不合規就丟 EditError(整份不採用,不套一半)。"""
+    """Apply in order; any invalid edit raises EditError (the whole list is rejected, never half applied)."""
     out = text
     for i, e in enumerate(edits or []):
         if not isinstance(e, dict) or not isinstance(e.get("old"), str) or not isinstance(e.get("new"), str):
@@ -41,13 +46,15 @@ def markers(text: str, pattern: re.Pattern) -> list[str]:
 
 
 def check_markers(before: str, after: str, pattern: re.Pattern, *, removable: bool = True) -> list[str]:
-    """標記不能被改寫或憑空多出來;removable = 整行刪掉(那一項做完)可以。回傳問題(空 = 沒問題)。"""
+    """Markers may not be rewritten or appear from nowhere; removable = deleting the whole line (the item is done) is
+    allowed. Returns the problems (empty = none)."""
     b, a = markers(before, pattern), markers(after, pattern)
     probs = [_("extra marker: {marker}", marker=m) for m in a if m not in b]
     if not removable:
         probs += [_("missing marker: {marker}", marker=m) for m in b if m not in a]
     else:
-        # 刪掉的標記,它那一整行都要不見了(只刪標記、留下文字 = 改寫,不是做完)
+        # a removed marker's whole line must be gone too (removing only the marker and keeping the text = a rewrite,
+        # not done)
         lines_after = after.splitlines()
         for m in b:
             if m not in a:

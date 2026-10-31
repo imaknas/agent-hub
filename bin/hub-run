@@ -1,19 +1,23 @@
 #!/bin/sh -c exec${IFS}"${0%/*}/py"${IFS}"$0"${IFS}"$@"
-"""在平台的 profile 底下跑一個需要「能力」的程式(例:用 GPU 的 Blender)——客戶端。
+"""Run a program that needs a "capability" under the platform's profile (e.g. Blender using the GPU): the client.
 
-  hub-run --cap gpu [--timeout 秒] -- blender -b … -P tools/render.py …
-  hub-run --wait <id>          接回一個還在跑(或跑完)的工作,印出輸出、用它的結束碼結束
+  hub-run --cap gpu [--timeout seconds] -- blender -b … -P tools/render.py …
+  hub-run --wait <id>          reattach to a job still running (or finished), print its output, exit with its exit code
 
-在專案資料夾(或底下)跑。這支只把請求寫進自己專案的 `.hub-run/requests/`,平台的代跑服務(cap-runner.py,
-不在 sandbox 裡)檢查過才執行,輸出跟結束碼寫回 `.hub-run/jobs/<id>/`,這支一邊等一邊照原樣印出來。
-所以它在執行環境的 sandbox 裡也能用,對執行環境只要求「能寫自己的資料夾」。設計:docs/design/capabilities.md。
+Run in the project folder (or below it). This only writes the request into its own project's `.hub-run/requests/`; the
+platform's run service (cap-runner.py, not in the sandbox) checks it before running it, writes the output and exit code
+back to `.hub-run/jobs/<id>/`, and this prints them as they come, unchanged. So it works inside the runtime's sandbox
+too, asking of the runtime only "can write its own folder". Design: docs/design/capabilities.md.
 
-能用哪些能力看專案登錄的 enforce.capabilities。工作的限制:只能寫專案資料夾跟暫存區、讀不到別的專案跟憑證、
-不能連網路(含本機)、不能開 app 或叫別的程式替它啟動東西。
+Which capabilities are allowed: the project registry's enforce.capabilities. Limits on the job: it can only write the
+project folder and the temp area, can't read other projects or credentials, has no network (local included), can't open
+apps or have another program launch things for it.
 
-一開始會印出工作 id:這次呼叫被中斷(例:工具呼叫逾時),工作本身照跑,用 --wait <id> 接回。
-結束碼:工作自己的結束碼;逾時 124;代跑服務沒在跑或服務重啟弄丟了工作 125;請求被拒絕 126;用法錯 2。
-標準函式庫。
+It prints the job id first: if this call is interrupted (e.g. a tool call times out), the job keeps running; reattach
+with --wait <id>.
+Exit codes: the job's own exit code; timeout 124; the run service isn't running or a service restart lost the job 125;
+request refused 126; usage error 2.
+Standard library only.
 """
 from __future__ import annotations
 
@@ -31,7 +35,7 @@ import i18n  # noqa: E402
 
 _ = i18n.domain(__file__)
 
-PICKUP_S = 30  # 服務改版時會自己重啟(launchd 等 10 秒),留餘裕
+PICKUP_S = 30  # the service restarts itself on an upgrade (launchd waits 10 s); leave a margin
 
 
 def say(msg: str) -> None:
@@ -58,7 +62,7 @@ def submit(ws: pathlib.Path, cap: str, argv: list[str], timeout: int | None) -> 
         req["timeout_s"] = timeout
     d = ws / ".hub-run" / "requests"
     d.mkdir(parents=True, exist_ok=True)
-    tmp = d / f".{job_id}.tmp"  # 先寫暫存檔再 rename:服務不會讀到寫一半的請求
+    tmp = d / f".{job_id}.tmp"  # write a temp file, then rename: the service never reads a half-written request
     tmp.write_text(json.dumps(req, ensure_ascii=False))
     tmp.rename(d / f"{job_id}.json")
     return job_id
@@ -97,9 +101,9 @@ def follow(ws: pathlib.Path, job_id: str, pickup: bool) -> int:
                 return 2
             if pickup and time.time() - t0 > PICKUP_S:
                 try:
-                    req.unlink()  # 晚啟動的服務不會跑一個沒人在等的工作
+                    req.unlink()  # a service that starts late won't run a job nobody is waiting for
                 except FileNotFoundError:
-                    continue  # 剛好被接手了
+                    continue  # just got picked up
                 say(_("the platform's run service is not running (nobody picked the request up in {secs:g} s), so the "
                       "request was withdrawn. Tell the user that agent-hub's cap-runner service is not running", secs=PICKUP_S))
                 return 125
