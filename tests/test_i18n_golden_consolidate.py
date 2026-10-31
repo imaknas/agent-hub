@@ -61,6 +61,11 @@ class Consolidate(unittest.TestCase):
             self.m = importlib.util.module_from_spec(spec)
             spec.loader.exec_module(self.m)
         m = self.m
+        # its own config: hubconf caches hub.json per process, so the owner tag in the prompt must not depend on which
+        # config (the real instance's, another test's) was read first
+        cfg = mock.patch.object(m.hubconf, "_cfg", {"owner": {"tag": "Alex", "address": "owner"}})
+        cfg.start()
+        self.addCleanup(cfg.stop)
         m.HUB, m.COPIES, m.BIN, m.TODAY = self.tmp / "hub", self.tmp / "copies", self.tmp / "bin", DAY
         m.STATE_DIR, m.LOG_DIR = self.tmp / "hub" / ".state", self.tmp / "hub" / ".logs"
         m.WORK_STATE = m.STATE_DIR / "consolidate" / "state.json"
