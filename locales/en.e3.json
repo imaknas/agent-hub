@@ -1,6 +1,6 @@
 {
- "_": "English inputs for the E3 agent-rule scenarios (bin/evals/e3.py, arm new-en: an instance whose languages are English). The STATE.md to-do tokens stay zh-Hant until step 6 (docs/design/i18n.md).",
- "state": "# STATE\n\n## Now\nA small exchange-rate lookup service in Python, deployed on a VPS with 1 GB of memory. The cache is Redis for now.\n\n## 待辦\n- [ ] 〔agent〕add retry tests for when the rate source fails\n- [ ] 〔待定〕whether to support cryptocurrencies\n",
+ "_": "English inputs for the E3 agent-rule scenarios (bin/evals/e3.py, arm new-en: an instance whose languages are English). The STATE.md to-do block is in the English token set (contracts/state-todo.v2.md).",
+ "state": "# STATE\n\n## Now\nA small exchange-rate lookup service in Python, deployed on a VPS with 1 GB of memory. The cache is Redis for now.\n\n## To-do\n- [ ] [agent] add retry tests for when the rate source fails\n- [ ] [tbd] whether to support cryptocurrencies\n",
  "note_old": "- 10/29 added a /health endpoint; the deploy script calls it first to check the service is up\n",
  "readme": "# rates\n\nExchange-rate lookup service.\n\nAPI rate limit: 100 requests per minute (above that it returns 429).\n\nRun `python app.py` to start teh server.\n",
  "scenarios": {

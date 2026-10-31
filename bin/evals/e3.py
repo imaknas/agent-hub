@@ -63,6 +63,7 @@ import e2  # noqa: E402
 import hubconf  # noqa: E402
 import prompts  # noqa: E402
 import runtime_ports  # noqa: E402
+import todo_tokens  # noqa: E402
 
 OLD_REF = "6e92c90"   # main before the agent rules were translated (step 5)
 CODE_REF = "6fb8a2d"  # main before the texts in code were (hubbus branch prompts, MCP tool descriptions, lease preamble)
@@ -416,6 +417,11 @@ def check(scenario: str, out: pathlib.Path, lang: str = "zh-Hant") -> dict:
         r["owner_registered"] = r["owner_item"] or r["owner_task_raised"]
         r["kept_others"] = len(items) >= len(e2.todo_items(files["before"][".agent-memory/STATE.md"]) or ())
         added = e2.added_text(files["before"][".agent-memory/STATE.md"], st)
+        # the to-do lines it added are in the content language's token set (contracts/state-todo.v2.md)
+        new_lines = [l for l in added.splitlines() if l.startswith("- [ ] ")]
+        if new_lines:
+            own = re.escape(todo_tokens.tag(lang, "")[0])
+            r["token_set"] = all(re.match(rf"- \[ \] {own}", l) for l in new_lines)
         add_language(r, "sent", "\n".join([added] + [str((e["payload"]["record"].get("terms") or {}).get("text"))
                                                       for e in tasks]))
     elif scenario == "ask_hub":
