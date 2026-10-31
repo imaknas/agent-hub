@@ -22,8 +22,8 @@ spec's order:
   4. Amend: a keyed line whose text differs from the latest terms -> amended (id a:<key>:<rev>, terms_rev +1,
      supersedes the current requirement record).
   5. Reconcile: items this registrar raised from a line, not closed, not withdrawn and whose key still cannot be
-     found: a very similar line exists
-     -> send nothing, warn once; otherwise send a claimed (outcome done, evidence.basis is the reason from the
+     found: a very similar line exists -> send nothing, warn once (and again only after the key has been found or
+     the similar line has gone too); otherwise send a claimed (outcome done, evidence.basis is the reason from the
      review-log entry that deleted the line; id c:<key>:r<times reopened>). A withdrawn item whose line was deleted is
      not claimed.
   Steps 2 and 5 leave out items a project raised itself (agenthub send --type task, a lease handover): they never had
@@ -146,8 +146,12 @@ def present_keys(lines: list[str]) -> set[str]:
 
 
 def strike(lines: list[str], key: str) -> bool:
-    hits = [i for i, l in enumerate(lines) if (m := KEY.search(l.rstrip())) and m.group("key") == key]
-    touched = {j for j, (a, b) in enumerate(P.section(lines)) if any(a <= h < b for h in hits)}
+    """Delete the lines of the to-do section(s) carrying this key (spec §5.5.2; a line elsewhere in the file is not
+    the registrar's)."""
+    sections = P.section(lines)
+    hits = [i for a, b in sections for i in range(a, b)
+            if (m := KEY.search(lines[i].rstrip())) and m.group("key") == key]
+    touched = {j for j, (a, b) in enumerate(sections) if any(a <= h < b for h in hits)}
     for i in reversed(hits):
         del lines[i]
     # a section this emptied gets the empty marker (from the last one, so the earlier positions stay right)
@@ -446,13 +450,18 @@ def run_project(project: str, path: pathlib.Path, how: str, warned: set[str]) ->
     ok &= all(res.get(r["id"]) in ("accepted", "duplicate", "dry-run") for r in amends)
     # 5. reconcile
     claims = []
-    for x in reconcile(lines, {k: led.terms(k)[0] or "" for k in led.open()
-                               if k not in warned and k not in led.v1_claimed and led.bound(k)}):
+    found = reconcile(lines, {k: led.terms(k)[0] or "" for k in led.open() if k not in led.v1_claimed and led.bound(k)})
+    # warned once per stretch: a key leaves the list when it no longer looks rewritten (found again, settled, or the
+    # similar line gone too, which then gets its claim)
+    still = {x["key"] for x in found if x["action"] == "warn"}
+    warned.difference_update(k for k in led.known() if k not in still)
+    for x in found:
         k = x["key"]
         if x["action"] == "warn":
-            log(_("{project}: warning — {key} is not settled and its key is gone, but a very similar line exists "
-                  "(the line end dropped in a rewrite?); no claim sent", project=project, key=k))
-            warned.add(k)
+            if k not in warned:
+                log(_("{project}: warning — {key} is not settled and its key is gone, but a very similar line exists "
+                      "(the line end dropped in a rewrite?); no claim sent", project=project, key=k))
+                warned.add(k)
             continue
         why = removal_reason(k)
         basis = (_c("Inferred done by the librarian: the item is no longer among STATE.md's to-dos. ")

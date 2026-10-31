@@ -8,7 +8,8 @@
   "pe: 警告——{ke} 還沒結案,找不到 key 但有很像的行(改寫時拿掉了行尾?),不送 claim",
   "pg: 補回 key {kg}(行尾的 key 被拿掉了)",
   "pi: 補回 key {ki}(行尾的 key 被拿掉了)",
-  "送出 4 筆 record、0 個專案有失敗"
+  "pn: 套用 settled {kn}",
+  "送出 5 筆 record、0 個專案有失敗"
  ],
  "commit": "registrar: owner 的待辦對齊 個人助理",
  "note": "registrar 照 key 更新了 STATE.md 的待辦"

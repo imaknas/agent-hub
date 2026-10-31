@@ -31,6 +31,10 @@ same key. The spec's order (relink before reconcile) fixes both.
                                                     the key gets restored)
   pl  an item the project raised itself (send, a  → nothing sent, no claim: it never had a line here, so finding
       lease handover), no line in STATE.md          none is no sign it was done (new one only)
+  pn  closed (done), its key also on a line       → only the to-do line deleted (new one only)
+      outside the to-do section
+  pw  warned about before (a very similar line),  → the claim is sent now: a warning holds only while the similar
+      that similar line gone too                    line is there (new one only)
 
     bin/py -m unittest discover -s tests
 """
@@ -68,6 +72,8 @@ def state(*todo: str) -> str:
 
 KB, KC, KD, KE = key("pb", "付網域"), key("pc", "簽合約"), key("pd", "買零件"), key("pe", "續約保險")
 KF, KG, KH, KI = key("pf", "訂機票"), key("pg", "繳稅"), key("ph", "回信給房東"), key("pi", "訂飯店")
+KN, KW = key("pn", "pay rent"), key("pw", "renew insurance")
+EKN = f" (waiting on owner: {KN})"
 SCENES = {
     "pa": {"state": state("- [ ] 〔Alex〕續約網域", "- [ ] 〔agent〕加重試")},
     "pb": {"state": state(f"- [ ] 〔Alex〕付網域{marker(KB)}"), "posted": {KB: "付網域"},
@@ -83,6 +89,9 @@ SCENES = {
     "pk": {"state": state(f"- [ ] 〔Alex〕寄包裹{marker(key('pk-old', '寄包裹'))}"), "v1_posted_as": ("pk-old", "寄包裹")},
     "pi": {"state": state("- [ ] 〔Alex〕訂飯店,含早餐"), "posted": {KI: "訂飯店"}, "amended": {KI: "訂飯店,含早餐"}},
     "pl": {"state": state(), "raised_by_project": {"lease-x-1-task-0": "measure the desk"}},
+    "pn": {"state": f"# STATE\n\n## Notes\n\n- [ ] [owner] pay rent{EKN}\n\n## Tasks\n\n- [ ] [owner] pay rent{EKN}\n",
+           "posted": {KN: "pay rent"}, "settle": [("s-pn", KN, "done", "pay rent")]},
+    "pw": {"state": state(), "posted": {KW: "renew insurance"}, "warned": [KW]},
 }
 
 
@@ -120,6 +129,8 @@ class Env:
         self.scenes = {p: s for p, s in (scenes or SCENES).items() if impl == NEW or p in V1}
         for p, s in self.scenes.items():
             self.project(p, s)
+        (self.hub / ".state" / "registrar-warned.json").write_text(
+            json.dumps(sorted(k for s in self.scenes.values() for k in s.get("warned", []))))
 
     def hubbus(self, *args, stdin=None):
         return subprocess.run([str(self.hub / "bin" / "py"), str(self.hub / "bin" / "hubbus"), *args], env=self.env,
@@ -281,6 +292,9 @@ class RegistrarFlow(unittest.TestCase):
                 self.assertEqual(env.outputs("pj"), [], "an inferred closure v1 already sent is not sent again")
                 self.assertEqual(env.outputs("pk"), [], "one sent before the rename is recognised")
                 self.assertEqual(env.outputs("pl"), [], "an item raised outside the document is never claimed done")
+                self.assertEqual(env.state("pn").count(KN), 1, "the line outside the to-do section is kept")
+                self.assertIn("## Notes\n\n- [ ] [owner] pay rent", env.state("pn"))
+                self.assertEqual(env.outputs("pw"), [("claim", KW)], "a warning holds only while the similar line is")
         self.each(check)
 
     def test_second_run_sends_nothing_new(self):
@@ -296,7 +310,7 @@ class RegistrarFlow(unittest.TestCase):
         """what registrar.py writes for people (log, the memory commit title, the note on done letters) stays
         byte-identical on a zh-Hant instance; expected text in tests/fixtures/registrar-messages.zh-Hant.json"""
         want = json.loads((ROOT / "tests" / "fixtures" / "registrar-messages.zh-Hant.json").read_text())
-        keys = {"ka": key("pa", want["pa_text"]), "kb": KB, "kc": KC, "ke": KE, "kg": KG, "ki": KI}
+        keys = {"ka": key("pa", want["pa_text"]), "kb": KB, "kc": KC, "ke": KE, "kg": KG, "ki": KI, "kn": KN}
         with tempfile.TemporaryDirectory() as d:
             env = Env(pathlib.Path(d), NEW)
             env.env["AGENT_HUB_LANG_UI"] = "zh-Hant"
