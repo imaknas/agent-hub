@@ -349,6 +349,11 @@ memory tracking and runs nothing long-lived (most projects) needs nothing under 
   the platform's runner service `bin/cap-runner.py` under the platform's own Seatbelt profile (`bin/seatbelt.py`, which
   can block the Keychain; macOS only). Design in `docs/design/capabilities.md`.
   `type`/`enforce`/`network`/`allow_write`/`privacy`/`metered_models` are security fields that `manifest.update` cannot change.
+  **The platform runs git only in repos it owns** (memory bare repos, memory copies, its own checkout): in a
+  project's repo every git command (status page facts, worktree cleanup, backup, propose, memory sync, gate hooks) goes
+  through `bin/project_git.py` → `bin/project-git-job.py` as the project (`isolation.run_as`, sandboxed when it is), and
+  only its JSON or bundle comes back (docs/design/projects-and-repos.md section 4). New code that needs git facts from a
+  project's repo adds an op there; it never runs `git -C <workspace>` itself.
   Such a project's own services and command jobs run sandboxed as well (`bin/sandboxed-run` → `bin/isolation.py`, one
   adapter per OS: `seatbelt.service_profile` on macOS, `bin/landlock.py` (Landlock + seccomp) on Linux; never
   unsandboxed: no working adapter means not run; each adapter declares its guarantees, `isolation.REQUIRED` must be

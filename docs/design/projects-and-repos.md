@@ -275,9 +275,10 @@ command job of its project; the platform fetches the bundle into `<name>-memory.
 bare repo has that the clone lacks (the librarian's STATE.md commits) is merged inside the clone by the project's own
 fetch, in that job. The librarian's memory copies are platform-owned but hold project content, so they are checked out
 with `core.symlinks=false` (a committed `STATE.md` symlink would otherwise hand the librarian, and the model, any file
-it points at). **Every one of these runs unsandboxed today** (the worktree form's hourly sync and push included), so a
-sandboxed project can run code as the user within one scheduler tick; that is to be fixed by a separate change
-(proposed 11-01) before this design's steps, not left to one of them; the design inherits the rule.
+it points at). Until 11-01 every one of these ran unsandboxed (the worktree form's hourly sync and push included), so a
+sandboxed project could run code as the user within one scheduler tick; the separate change of 11-01 applies the rule
+to today's code (`bin/project-git-job.py` runs as the project, `bin/project_git.py` reads back its JSON or fetches its
+bundle), and this design inherits it.
 
 **Open after round 6 (11-01):** a bundle or facts file the project writes into its own folder can be a symlink or a
 FIFO (tested: a symlinked bundle fetched into a platform repo left another project's objects there, past
@@ -486,6 +487,7 @@ because reviewers kept finding holes in the existing sandbox. Not converged; bui
 
 - Every sandbox may write `~/.local/share/uv`, where the platform's own interpreter lives: a sandboxed project can
   change the stdlib the scheduler, the gate and services run (verified: the platform venv's interpreter is there).
+  Closed 11-01 with the shared caches: `policy.write` has no tool cache left; each repo's are in its own git dir.
 - `paths` is not a security field (`PLATFORM_OWNED`), so a `manifest.update` can set `paths.workspace: ~` and the
   sandbox then writes the whole home folder; `apply-updates` applies it unattended.
 - Session hooks run outside the sandbox and run git in the project's `.git`: `memory-nudge.py`'s `git log` runs a
@@ -494,8 +496,8 @@ because reviewers kept finding holes in the existing sandbox. Not converged; bui
   and `lease-runner.py` write through project-planted symlinks; a FIFO in a repo's config hangs platform git with no
   timeout; `merge-branch --project X` runs another project's tests.
 
-Earlier, found by rounds 4 and 5, for a separate change proposed 11-01 rather than a step of this
-design (which inherits the fixes):
+Earlier, found by rounds 4 and 5, for a separate change rather than a step of this design (which inherits the
+fixes). Closed on 11-01 except the sender, which waits for the owner (`bus-sender.md`):
 
 - The status page, worktree cleanup, memory-gaps and weekly statistics, backup, `propose_apply.py` and the hourly
   memory sync run git unsandboxed in project repos whose config a sandboxed project controls (code execution as the
