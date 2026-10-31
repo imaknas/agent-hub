@@ -76,7 +76,6 @@ import hubconf
 import prompts
 
 BEGIN, END = "<!-- agent-hub:begin -->", "<!-- agent-hub:end -->"
-LEGACY_HEADING = "## agent-hub memory 追蹤"
 
 path, rules_file = Path(sys.argv[2]), Path(sys.argv[3])
 names = rules_file.read_text().split() if rules_file.exists() else []
@@ -96,18 +95,8 @@ old = path.read_text() if path.exists() else ""
 if BEGIN in old and END in old:
     new = re.sub(re.escape(BEGIN) + r".*?" + re.escape(END) + r"\n?", lambda _: block, old, count=1, flags=re.S)
 else:
-    # old-style pointer: remove everything from its heading to the next "## " heading (or the end of the file), and
-    # put the managed block in its place
-    lines, out, skipping = old.splitlines(keepends=True), [], False
-    for line in lines:
-        if line.rstrip("\n") == LEGACY_HEADING:
-            skipping = True
-            continue
-        if skipping and line.startswith("## "):
-            skipping = False
-        if not skipping:
-            out.append(line)
-    rest = "".join(out).strip("\n")
+    # no block yet: it goes after what the file has (the pre-block pointer of 09-25 is gone from every project)
+    rest = old.strip("\n")
     new = (rest + "\n\n" if rest else "") + block
 
 if new != old:
