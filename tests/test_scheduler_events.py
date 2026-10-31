@@ -26,6 +26,17 @@ from test_scheduler_tick import DAY, Tick  # noqa: E402
 
 LOCAL = datetime.datetime.now().astimezone().tzinfo
 
+# the assertions read the English texts: pin the UI language (an instance's hub.json may set another)
+_LANG = mock.patch.dict(os.environ, {"AGENT_HUB_LANG_UI": "en"})
+
+
+def setUpModule():
+    _LANG.start()
+
+
+def tearDownModule():
+    _LANG.stop()
+
 
 class Bus:
     def __init__(self, d: pathlib.Path, generation="g1"):
