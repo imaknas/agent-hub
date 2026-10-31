@@ -104,9 +104,13 @@ class RepoCase(unittest.TestCase):
         self.write("src/gone.py", "y = 2\n")
         self.write("src/lib/util.py", "def helper(): ...\n")
         self.write("other/moved_here.py", "def run_job(): ...\n")
+        self.write("out/app.js", "built\n")
         self.commit("init")
         self.git("mv", "src/old.py", "src/new.py")
         self.git("rm", "-q", "src/gone.py")
+        self.git("rm", "-q", "--cached", "out/app.js")       # left git as build output: ignored, still on disk
+        self.write(".gitignore", "out/\n")
+        self.git("add", ".gitignore")
         self.commit("rename and delete")
         self.git("branch", "merged")                    # an old, merged branch: never a reason for pending
         self.git("checkout", "-q", "--orphan", "agent-memory")
@@ -122,7 +126,7 @@ class RepoCase(unittest.TestCase):
         self.git("checkout", "-q", "main")
         self.write("src/dirty.py", "uncommitted\n")   # the working tree is not a fact
         self.write("data/cache.bin", "x")
-        self.write(".gitignore", "data/\n")
+        self.write(".gitignore", "out/\ndata/\n")
 
     def git(self, *a, cwd=None):
         return subprocess.run(["git", "-C", str(cwd or self.repo), *a], check=True, capture_output=True, text=True,
@@ -158,12 +162,23 @@ class Resolve(RepoCase):
             ("pending", "feature"), ("untracked", ""), ("missing", ""), ("ok", ""), ("malformed", "line-number"),
             ("untracked", ""), ("missing", "")])
 
+    def test_ignored_build_output_is_not_deleted(self):
+        self.assertEqual(self.outcomes(["out/app.js", "out/"]), [("untracked", ""), ("untracked", "")])
+        (self.repo / "out/app.js").unlink()
+        self.assertEqual(self.outcomes(["out/app.js"])[0][0], "deleted")
+
+    def test_dotted_symbol_hint_needs_every_part(self):
+        self.write("src/other.py", "total = 0\n")
+        self.commit("other")
+        got = self.outcomes(["src/new.py#Order.total"])
+        self.assertEqual(got, [("symbol", "src/job.py")])
+
     def test_only_unmerged_branches_count(self):
         repo, _ = sa.Repo.open(self.repo)
         self.assertEqual(repo.others(), ["feature"])
 
     def test_history_wins_over_an_old_branch(self):
-        self.git("checkout", "-q", "-b", "stale", "HEAD~1")   # still has src/gone.py, and is not merged
+        self.git("checkout", "-qf", "-b", "stale", "HEAD~1")   # still has src/gone.py, and is not merged
         self.write("src/extra.py", "e\n")
         self.commit("extra")
         self.git("checkout", "-q", "main")
@@ -241,6 +256,7 @@ class Librarian(RepoCase):
         self.assertEqual([r["outcome"] for r in stale], ["deleted", "renamed"])
         note = lib.anchor_note(stale)
         self.assertIn("- line 2, ⚓`src/gone.py`: the file was deleted on main (commit ", note)
+        self.assertIn("remove the anchor and keep the statement. The statement: Exports ⚓`src/gone.py`.", note)
         self.assertIn("- line 4, ⚓`src/old.py`: the file was renamed to `src/new.py` (commit ", note)
         self.assertNotIn("feature", note)
         self.assertEqual(lib.anchor_note([]), "")
@@ -255,14 +271,18 @@ class EvalScores(unittest.TestCase):
         case = pathlib.Path(tempfile.mkdtemp())
         (case / "args.json").write_text(json.dumps({
             "owner": OWNER, "project": "nowhere", "diff": "+ moved the job to src/run.py",
-            "anchors": [{"raw": "src/gone.py"}]}))
+            "anchors": [{"raw": "src/gone.py", "statement": "Export ⚓`src/gone.py`."}]}))
         before = "- Job ⚓`src/job.py`.\n- Export ⚓`src/gone.py`.\n\n## Tasks\n\n- (none)\n"
+        kept = "- Job ⚓`src/job.py`.\n- Export `src/gone.py`.\n"
         after = ("- Job ⚓`src/run.py`, helper ⚓`src/guess.py`.\n\n## Tasks\n\n"
                  "- [ ] [agent] Write ⚓`src/later.py`\n")
         r = e2.anchor_scores(case, before, after)
         self.assertEqual((r["anchors"], r["added"], r["grounded"], r["in_todo"], r["retention"], r["stale_fixed"]),
                          (2, 2, 0.5, 1, 0.0, 1.0))
         self.assertIsNone(r["resolve"])   # the project is not in the registry
+        self.assertEqual(r["stale_kept"], 0.0)
+        r = e2.anchor_scores(case, before, kept)
+        self.assertEqual((r["stale_fixed"], r["stale_kept"], r["retention"]), (1.0, 1.0, 0.5))
 
 
 if __name__ == "__main__":

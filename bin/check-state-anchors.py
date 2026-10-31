@@ -69,17 +69,16 @@ def describe(r: state_anchors.Result) -> str:
 def line(project: str, r: state_anchors.Result, box: str = "- [ ] ") -> str:
     s = r.anchor.statement
     s = s if len(s) <= EXCERPT else s[:EXCERPT - 1] + "…"
-    # `**{project}**` is read back below (the names in the summary line): translations keep it
     return box + _("**{project}**: ⚓`{anchor}` {what} (STATE.md line {line}: \"{statement}\")", project=project,
                         anchor=r.anchor.raw, what=describe(r), line=r.anchor.line_no, statement=s)
 
 
-def scan(only: str | None) -> tuple[list[str], list[str], list[str], int]:
-    """(stale lines, lines listed apart (pending, untracked), not-checked lines, anchors checked) over every onboarded
-    project"""
+def scan(only: str | None) -> tuple[list[str], list[str], list[str], int, list[str]]:
+    """(stale lines, lines listed apart (pending, untracked), not-checked lines, anchors checked, projects with stale
+    anchors) over every onboarded project"""
     copies = hubconf.p("memory_copies", "~/.memory-copies")
     owner = hubconf.owner_tag()
-    stale, pending, unchecked, n = [], [], [], 0
+    stale, pending, unchecked, n, names = [], [], [], 0, []
     for name, paths in sorted(hubconf.roster().items()):
         if only and name != only:
             continue
@@ -92,8 +91,9 @@ def scan(only: str | None) -> tuple[list[str], list[str], list[str], int]:
             continue
         n += len(results)
         stale += [line(name, r) for r in state_anchors.stale(results)]
+        names += [name] if state_anchors.stale(results) else []
         pending += [line(name, r, "- ") for r in results if r.outcome in ("pending", "untracked")]
-    return stale, pending, unchecked, n
+    return stale, pending, unchecked, n, names
 
 
 def main() -> None:
@@ -101,7 +101,7 @@ def main() -> None:
     ap.add_argument("--project")
     ap.add_argument("--apply", action="store_true")
     args = ap.parse_args()
-    stale, pending, unchecked, n = scan(args.project)
+    stale, pending, unchecked, n, projects = scan(args.project)
     if not args.apply:
         if stale:
             print("\n".join(stale))
@@ -115,7 +115,7 @@ def main() -> None:
         parts.append("\n".join(unchecked))
     body = "\n\n".join(p for p in parts if p)
     hublib.digest_append("state-anchors", f"## {heading()}\n\n{body}" if body else "")
-    names = " ".join(dict.fromkeys(re.findall(r"\*\*([^*]+)\*\*", "\n".join(stale))))
+    names = " ".join(projects)
     print(_("state anchor check: {n} {n:anchor|anchors} checked, {stale} stale, {pending} listed apart, "
             "{unchecked} {unchecked:project|projects} not checked", n=n, stale=len(stale), pending=len(pending),
             unchecked=len(unchecked))

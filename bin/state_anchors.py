@@ -139,8 +139,9 @@ class Repo:
         return r.stdout.strip() if r.returncode == 0 else ""
 
     def _present(self, rev: str, path: str) -> bool:
-        """a file or a directory, whatever the trailing slash says: the check never reports what is there"""
-        return self._type(rev, path) in ("blob", "tree")
+        """a file, a directory or a submodule, whatever the trailing slash says: the check never reports what is
+        there"""
+        return self._type(rev, path) in ("blob", "tree", "commit")   # commit: a submodule
 
     def others(self) -> list[str]:
         """local branches not merged into the base branch (merged ones outlive their worktrees and hold old files),
@@ -155,16 +156,23 @@ class Repo:
         """on disk in the working tree but not in git (ignored or never added): data, output, a cache"""
         return (self.ws / path).exists() and _git(self.ws, "ls-files", "--error-unmatch", "--", path).returncode != 0
 
+    def ignored_on_disk(self, path: str) -> bool:
+        """on disk and gitignored: a file that left git for .gitignore (build output) is not gone"""
+        return (self.ws / path).exists() and _git(self.ws, "check-ignore", "-q", "--", path).returncode == 0
+
     def has_word(self, rev: str, word: str, path: str = ".") -> bool:
         return _git(self.ws, "grep", "-q", "-w", "-F", "-e", word, rev, "--", f"./{path}").returncode == 0
 
-    def files_with(self, word: str, limit: int = 3) -> list[str]:
-        out = _git(self.ws, "grep", "-l", "-w", "-F", "-e", word, self.base, "--", ".").stdout.splitlines()
+    def files_with(self, parts: list[str], limit: int = 3) -> list[str]:
+        """files on the base branch where every part of a dotted name occurs as a word"""
+        out = _git(self.ws, "grep", "-l", "-w", "-F", "--all-match", *(x for p in parts for x in ("-e", p)),
+                   self.base, "--", ".").stdout.splitlines()
         return [l.split(":", 1)[1] for l in out if ":" in l][:limit]
 
     def resolve(self, a: Anchor) -> Result:
         """the base branch's history decides first (a file deleted there stays deleted, whatever old branch still has
-        it); only a path never on the base branch can be pending or untracked"""
+        it), unless it is now gitignored and still on disk (it left git as build output: untracked); only a path never
+        on the base branch can be pending or untracked otherwise"""
         if a.problem:
             return Result(a, "malformed", a.problem)
         if self._present(self.base, a.path):
@@ -173,8 +181,10 @@ class Repo:
             parts = a.symbol.split(".")
             if all(self.has_word(self.base, p, a.path) for p in parts):
                 return Result(a, "ok")
-            return Result(a, "symbol", ", ".join(f for f in self.files_with(parts[-1]) if f != a.path))
+            return Result(a, "symbol", ", ".join([f for f in self.files_with(parts, 4) if f != a.path][:3]))
         last = _git(self.ws, "log", "-1", "--format=%H", self.base, "--", f"./{a.path.rstrip('/')}").stdout.strip()
+        if last and self.ignored_on_disk(a.path.rstrip("/")):
+            return Result(a, "untracked")
         if last:
             full = self.prefix + a.path.rstrip("/")
             for line in _git(self.ws, "show", "-M", "--name-status", "--format=", last).stdout.splitlines():
@@ -208,11 +218,24 @@ def record(r: Result) -> dict:
             "statement": r.anchor.statement}
 
 
+# what the librarian may do about each (it never sees the code): a gone file may mean a stale statement, a bad anchor
+# usually does not
+PROMPT_ACTION = {
+    "renamed": "the statement may be out of date: correct it only from what the memory notes say; otherwise just "
+               "point the anchor at the new path",
+    "deleted": "the statement may be out of date: correct or remove it only if the memory notes say so; otherwise "
+               "remove the anchor and keep the statement",
+    "missing": "the anchor is probably wrong, not the statement: remove the anchor and keep the statement",
+    "symbol": "the anchor is probably wrong, not the statement: remove the `#name` (or the anchor) and keep the "
+              "statement",
+    "malformed": "remove the anchor and keep the statement",
+}
+
+
 def note_line(rec: dict) -> str:
     what = PROMPT_TEXT[rec["outcome"]].format(hint=rec["hint"], commit=rec.get("commit", ""))
-    if rec["outcome"] == "symbol" and rec["hint"]:
-        what += f" (it now occurs in {rec['hint']})"
-    return f"- line {rec['line_no']}, ⚓`{rec['raw']}`: {what}. The statement: {rec['statement']}"
+    return (f"- line {rec['line_no']}, ⚓`{rec['raw']}`: {what}; {PROMPT_ACTION[rec['outcome']]}. "
+            f"The statement: {rec['statement']}")
 
 
 def _git(ws: pathlib.Path, *args: str) -> subprocess.CompletedProcess:

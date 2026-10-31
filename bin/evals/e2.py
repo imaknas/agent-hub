@@ -465,7 +465,8 @@ def anchor_scores(case: pathlib.Path, before: str, after: str) -> dict:
     share of added anchors whose path occurs in what the librarian was shown (memory diff, STATE.md before, the
     reference index): an ungrounded one is a guessed path; in_todo: anchors inside the to-do section (must be 0);
     retention: the share of before's anchors still in after (cases that have some); stale_fixed: the share of the
-    anchors the stale note named that are gone from after; resolve: the share of added anchors that resolve (ok,
+    anchors the stale note named that are gone from after; stale_kept: the share of the statements the note named still
+    in after, the anchor aside (the note asks to drop most anchors but keep their statements); resolve: the share of added anchors that resolve (ok,
     pending) against the project's workspace today (approximate: the code moved on since the case); growth:
     len(after) / len(before)."""
     a = json.loads((case / "args.json").read_text())
@@ -476,6 +477,10 @@ def anchor_scores(case: pathlib.Path, before: str, after: str) -> dict:
     ref = case / "snapshot" / "memory" / "reference" / "README.md"
     shown = a.get("diff", "") + before + (ref.read_text(errors="replace") if ref.exists() else "")
     noted = [x["raw"] for x in a.get("anchors") or []]
+    bare = lambda t: state_anchors.ANCHOR.sub(lambda m: f"`{m.group(1)}`", t)   # noqa: E731  the text, anchors aside
+    after_lines = [bare(state_anchors.statement(line)) for line in after.splitlines()]
+    kept = [max((difflib.SequenceMatcher(None, bare(x["statement"]), l).ratio() for l in after_lines), default=0) >= 0.8
+            for x in a.get("anchors") or []]
     new = [x for x in state_anchors.find(after, owner) if x.raw in added]
     repo, _why = state_anchors.Repo.open(hubconf.path((hubconf.roster().get(a["project"]) or {}).get("workspace")))
     return {"anchors": len(f), "added": len(added),
@@ -484,6 +489,7 @@ def anchor_scores(case: pathlib.Path, before: str, after: str) -> dict:
             "in_todo": state_anchors.in_todo(after, owner),
             "retention": round(sum(x in f for x in b) / len(b), 3) if b else None,
             "stale_fixed": round(sum(x not in f for x in noted) / len(noted), 3) if noted else None,
+            "stale_kept": mean(kept) if kept else None,
             "growth": round(len(after) / len(before), 3) if before else None}
 
 
@@ -640,7 +646,7 @@ def cmd_score(a) -> int:
             "full_punct": mean([g["full_punct"] for g in langs]),
             **({f"anchor_{k}": (sum(r["anchor"][k] for r in rs if "anchor" in r) if k == "in_todo" else
                                 mean([r["anchor"][k] for r in rs if "anchor" in r]))
-                for k in ("anchors", "added", "grounded", "resolve", "in_todo", "retention", "stale_fixed", "growth")}
+                for k in ("anchors", "added", "grounded", "resolve", "in_todo", "retention", "stale_fixed", "stale_kept", "growth")}
                if any("anchor" in r for r in rs) else {}),
             "errors": sorted({r["error"] for r in rs if r.get("error")})[:5]}
     for x, y in [(p, p) for p in arms] + list(itertools.combinations(arms, 2)):

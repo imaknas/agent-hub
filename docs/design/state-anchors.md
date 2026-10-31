@@ -1,7 +1,7 @@
 # Staleness anchors in STATE.md
 
-> agent-hub session · 2026-11-01 · r2 (after a blind review: history before branches, untracked paths, unmerged
-> branches only). Item 3 of "Build" in `competitive-gaps.md`.
+> agent-hub session · 2026-11-01 · r3 (after two blind reviews: history before branches, untracked and ignored
+> paths, unmerged branches only, a stale note that keeps statements). Item 3 of "Build" in `competitive-gaps.md`.
 
 ## Why
 
@@ -85,7 +85,8 @@ Fenced code blocks are skipped too (an anchor sign in a pasted log is not a clai
   new file read as `missing`; on the hub machine every merge lands on the local main first, so this is not checked.)
 - **Paths are relative to the workspace folder**, which may be a subfolder of its repo: git is asked for
   `<branch>:./<path>` with `-C <workspace>`, and for `git grep` the pathspec is relative the same way.
-- **A file or directory is present** when `git cat-file -t <branch>:./<path>` is a blob or a tree.
+- **A file or directory is present** when `git cat-file -t <branch>:./<path>` is a blob, a tree, or a commit (a
+  submodule).
 - **A symbol is present** when every dot-separated part occurs as a whole word in that file on the branch:
   `git grep -q -w -F -e <part> <branch> -- ./<path>`. This is occurrence, not definition: it works for every language
   with no parser, and a symbol whose definition was deleted while a call to it remains reads as present. Short
@@ -94,8 +95,9 @@ Fenced code blocks are skipped too (an anchor sign in a pasted log is not a clai
 
 ## What counts as gone
 
-Each anchor gets one outcome, decided in this order: present on the base branch; else the base branch's history
-(`renamed`, `deleted`); else the unmerged branches (`pending`); else the working tree (`untracked`); else `missing`.
+Each anchor gets one outcome, decided in this order: present on the base branch; else, if the base branch's history
+has it but it is now gitignored and still on disk, `untracked` (a file that left git as build output, e.g. JavaScript
+compiled from TypeScript after a migration); else the base branch's history (`renamed`, `deleted`); else the unmerged branches (`pending`); else the working tree (`untracked`); else `missing`.
 **History comes before branches**: merged branches outlive their worktrees (the nightly prune keeps branches), so a file
 deleted on main is often still on an old branch; a real project on the hub machine had 206 local branches, 193 of them
 merged, and about one in six files deleted on main still on one of them. A file deleted on main is `deleted`, whatever
@@ -109,7 +111,7 @@ branch still has it.
 | `renamed` | was on the base branch; the last commit there that touched it renamed it (`git show -M --name-status`) | todo.md + digest, with the new path and the commit |
 | `deleted` | was on the base branch; the last commit there that touched it removed it | todo.md + digest, with the commit |
 | `missing` | none of the above (a wrong path in the notes, a path relative to the wrong folder, a branch already deleted) | todo.md + digest |
-| `symbol` | the file is present, the symbol is not; if the symbol now occurs in other files on the branch, the first three are named | todo.md + digest |
+| `symbol` | the file is present, the symbol is not; files on the branch where every part of the name occurs are named (three at most) | todo.md + digest |
 | `malformed` | the anchor breaks the syntax above | todo.md + digest |
 
 `pending` is the common case right after a session works in a worktree: the librarian reads its notes the same night,
@@ -164,8 +166,13 @@ line in the digest section: never a silent "0 stale" (tool neutrality: a missing
 
 **Being told what is stale.** When `process()` runs for a project, it resolves that project's anchors with the same
 module (before the call, like `dangling_refs`) and appends a note to the prompt listing the stale ones (`renamed`,
-`deleted`, `missing`, `symbol`, `malformed`; not `pending` or `untracked`), asking to update the statement and its anchor when the
-notes say where the code went, or drop the anchor (and the statement, if it is no longer true) when they do not. The
+`deleted`, `missing`, `symbol`, `malformed`; not `pending` or `untracked`), each with what to do. The librarian never
+sees the code, so it may change a statement only on the strength of the memory notes:
+
+- `renamed`, `deleted`: the statement may be out of date; correct or remove it only if the notes say so, otherwise
+  re-point (renamed) or remove (deleted) the anchor and keep the statement;
+- `missing`, `symbol`, `malformed`: the anchor is probably what is wrong (a path relative to the wrong folder, a common
+  name); remove the anchor or the `#name` and keep the statement. The
 note shares the `dangling_note` slot; `record_state_case` records the raw list in `args.json` (`anchors`), e2's
 `prompt()` re-renders it from `a.get("anchors", [])` (cases frozen before this change have no key: no note), and
 `_freeze_in` resolves it when it freezes a case.
@@ -194,7 +201,9 @@ agreement with the before arm not worse than the before arm's own noise floor. N
 
 The frozen cases all have anchor-free STATE.md, so retention cannot be measured on them. Seeded copies of three cases
 (their existing code spans of real paths turned into anchors, plus one stale anchor recorded in `args.json`) measure
-retention and whether the stale note is acted on (`stale_fixed`: the share of the noted anchors gone or changed after).
+retention and whether the stale note is acted on (`stale_fixed`: the share of the noted anchors gone or changed after;
+`stale_kept`: the share of the noted statements still there, anchor aside; the seeded stale anchor is a real path, so
+deleting its statement is the wrong move).
 The before arm runs on them too: if it already keeps anchors, the "keep" rule is cheap insurance; if it drops them, the
 rule is required.
 

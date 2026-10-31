@@ -545,10 +545,9 @@ def stale_anchors(proj: str, d: pathlib.Path) -> list[dict]:
 
 
 def anchor_note(stale: list[dict]) -> str:
-    return ("\nThese code anchors in STATE.md no longer resolve on the project's main branch; the statements they mark "
-            "are probably out of date. For each: if the memory notes say where the code went or what replaced it, "
-            "update the statement and its anchor; otherwise remove the anchor, and remove or correct the statement if "
-            "it is no longer true:\n" + "\n".join(state_anchors.note_line(r) for r in stale)) if stale else ""
+    return ("\nThese code anchors in STATE.md no longer resolve on the project's main branch. You cannot see the "
+            "code, so change a statement only on the strength of the memory notes; what to do with each:\n"
+            + "\n".join(state_anchors.note_line(r) for r in stale)) if stale else ""
 
 
 def memory_input(d: pathlib.Path, rng: str, changed: str) -> tuple[str, str, bool]:
