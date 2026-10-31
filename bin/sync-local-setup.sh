@@ -25,22 +25,24 @@
 set -uo pipefail
 
 AGENT_HUB="${AGENT_HUB_ROOT:-$(cd "$(dirname "$0")/.." && pwd)}"
+source "$(dirname "${BASH_SOURCE[0]}")/hubpaths.sh"
 QUIET=false
 [ "${1:-}" = "--quiet" ] && { QUIET=true; shift; }
-say() { $QUIET || echo "sync-local-setup: $*"; }
+# Progress lines print only without --quiet ($QUIET || …): the SessionStart hook's stdout goes into the session, and the
+# quiet path must not spawn anything. Warnings meant for that session print either way.
 
 cd "${1:-.}" || exit 1
-[ -d .agent-memory ] || { say "$(pwd) 沒有 .agent-memory,不是 onboard 過的專案,跳過"; exit 0; }
+[ -d .agent-memory ] || {
+  $QUIET || hub_say "sync-local-setup: {dir} has no .agent-memory, not an onboarded project; skipping" dir="$(pwd)"; exit 0; }
 
 # --- 0. 這份資料夾已經搬到 mini(migrate-to-mini.py 留的標記)---
 # --quiet 也印:SessionStart 的 stdout 會進 context,在 MBP 舊副本開 session 的那一刻就提醒,
 # 不靠人記得。兩邊同時開 session 的話,同一天的 memory 筆記 push 會衝突。
 moved=$(git rev-parse --git-common-dir 2>/dev/null)/agent-hub-migrated-to-mini
 if [ -f "$moved" ]; then
-  cat <<MSG
-⚠️ 這個專案已經搬到 mini($(cut -f1 "$moved"),$(cut -f2 "$moved") 搬的)。這裡是 MBP 上留著當備份的舊副本,
-不要在這裡做事:請告訴使用者關掉這個 session,改用 Claude Desktop 透過 SSH($(source "$AGENT_HUB/bin/hubpaths.sh"; hub_server))開 mini 上的那個資料夾。
-MSG
+  hub_say "⚠️ This project has moved to the hub machine ({target}, moved {date}). This is the old copy kept on the laptop as a backup;
+do not work here: ask the user to close this session and open the folder on the hub machine over SSH ({server}) in Claude Desktop instead." \
+    target="$(cut -f1 "$moved")" date="$(cut -f2 "$moved")" server="$(hub_server)"
   exit 0
 fi
 
@@ -50,14 +52,18 @@ fi
 # 結束碼 3 = 這個執行環境沒有規則檔(例:runtime.default 是 none):明確跳過,其他步驟照做。
 INSTR=$("$AGENT_HUB/bin/py" "$AGENT_HUB/bin/hub-runtime" instructions-file "$PWD" 2>/dev/null); rc=$?
 if [ "$rc" = 3 ]; then
-  say "這個執行環境沒有規則檔(hub.json runtime.default),受管區塊不寫"
+  $QUIET || hub_say "sync-local-setup: this runtime has no rules file (hub.json runtime.default); the managed block is not written"
 elif [ "$rc" != 0 ] || [ -z "$INSTR" ]; then
-  echo "sync-local-setup: hub-runtime 問不到規則檔要寫到哪,受管區塊沒有更新" >&2; exit 1
+  hub_say "sync-local-setup: hub-runtime could not say where the rules file is; the managed block was not updated" >&2; exit 1
 else
 # 專案有在 memory 分支的 .agent-memory/RULES 登記額外規則(一行一個名稱,例如
 # engineering)的話,把 templates/rules/<名稱>.md 接在區塊後面。登記放在 memory
 # 分支上:換機器 recover 也還在;規則內容放 agent-hub:改一次,所有登記的專案都跟上。
-"$AGENT_HUB/bin/py" - "$AGENT_HUB/templates/agent-instructions.md" "$INSTR" .agent-memory/RULES "$AGENT_HUB/templates/rules" <<'PY' && say "$INSTR 已對齊"
+# stdout: "<name>\t<path>" for each listed rule whose file is missing (reported below, in the UI language). A temp file,
+# not $(…): bash 3.2 misparses a heredoc inside a command substitution
+missing=$(mktemp) || exit 1
+"$AGENT_HUB/bin/py" - "$AGENT_HUB/templates/agent-instructions.md" "$INSTR" .agent-memory/RULES "$AGENT_HUB/templates/rules" \
+  <<'PY' >"$missing"
 import re, sys
 from pathlib import Path
 sys.path.insert(0, str(Path(sys.argv[1]).resolve().parents[1] / "bin"))
@@ -82,7 +88,7 @@ if names:
         if rule.exists():
             body += "\n\n" + rule.read_text().strip("\n")
         else:
-            print(f"sync-local-setup: RULES 登記了 {name},但找不到 {rule}", file=sys.stderr)
+            print(f"{name}\t{rule}")
 block = f"{BEGIN}\n{hubconf.fill_names(body)}\n{END}\n"
 old = path.read_text() if path.exists() else ""
 
@@ -107,13 +113,19 @@ if new != old:
     tmp.write_text(new)
     tmp.replace(path)
 PY
+rc=$?
+while IFS=$'\t' read -r name rule; do
+  hub_say "sync-local-setup: RULES lists {name}, but {rule} is not there" name="$name" rule="$rule" >&2
+done <"$missing"
+rm -f "$missing"
+[ "$rc" = 0 ] && { $QUIET || hub_say "sync-local-setup: {file} aligned" file="$INSTR"; }
 fi
 
 # --- 2. hook ---
 # 由執行環境裝(runtime_ports 的 lifecycle):平台管的 hook 全部換成 `hub-event <事件>`,使用者自己加的留著
 "$AGENT_HUB/bin/py" "$AGENT_HUB/bin/hub-event" install "$PWD" 2>/dev/null; rc=$?
-[ "$rc" = 0 ] && say "hook 已對齊"
-[ "$rc" = 3 ] && say "這個執行環境沒有 session 事件(hook),不裝"
+[ "$rc" = 0 ] && { $QUIET || hub_say "sync-local-setup: hooks aligned"; }
+[ "$rc" = 3 ] && { $QUIET || hub_say "sync-local-setup: this runtime has no session events (hooks), none installed"; }
 
 # --- 2b. .agent-memory/AGENT.md 對齊 templates/AGENT.md ---
 # AGENT.md 在 memory 分支上(會被 commit、同步到 mini),不是本機檔;
@@ -130,8 +142,8 @@ if ! git -C .agent-memory show HEAD:AGENT.md 2>/dev/null | cmp -s "$AGENT_HUB/te
     && "$AGENT_HUB/bin/with-lock.sh" sh -c \
          'git commit -q -m "agent-hub: sync AGENT.md from template" -- AGENT.md \
           && "$0/bin/git-safe-push.sh"' "$AGENT_HUB" ) >/dev/null 2>&1 \
-    && say "AGENT.md 已對齊 template 並 push" \
-    || say "⚠️ AGENT.md 已更新但 commit/push 失敗,下次開 session 會再試"
+    && { $QUIET || hub_say "sync-local-setup: AGENT.md aligned with the template and pushed"; } \
+    || { $QUIET || hub_say "sync-local-setup: ⚠️ AGENT.md updated, but the commit/push failed; the next session start tries again"; }
 fi
 
 # --- 3. 本機檔一定要被 ignore ---
@@ -140,7 +152,7 @@ exclude=$(git rev-parse --git-path info/exclude 2>/dev/null) || exit 0
 for f in .agent-memory $("$AGENT_HUB/bin/py" "$AGENT_HUB/bin/hub-runtime" local-ignores 2>/dev/null); do
   if git ls-files --error-unmatch "$f" >/dev/null 2>&1; then
     # 已經被 commit 進 repo:ignore 救不了,要那個專案自己的 session 處理
-    say "⚠️ $f 已經被這個 repo 追蹤(commit 過),ignore 無效——請該專案的 session 處理"
+    $QUIET || hub_say "sync-local-setup: ⚠️ {file} is tracked by this repo (it was committed), so ignoring it does nothing; the project's own session has to handle it" file="$f"
   else
     # 一律寫進 exclude,不管 .gitignore 有沒有:.gitignore 裡的那行之後會被拿掉
     # (它本身就洩漏名稱),不能依賴它。
@@ -148,7 +160,7 @@ for f in .agent-memory $("$AGENT_HUB/bin/py" "$AGENT_HUB/bin/hub-runtime" local-
     if ! grep -qxF "$pat" "$exclude" 2>/dev/null; then
       mkdir -p "$(dirname "$exclude")"
       printf '%s\n' "$pat" >> "$exclude"
-      say "$pat 已加進 $exclude"
+      $QUIET || hub_say "sync-local-setup: {pattern} added to {exclude}" pattern="$pat" exclude="$exclude"
     fi
   fi
 done
@@ -160,14 +172,13 @@ done
 # 出現在已 commit 的內容裡就提醒。這段刻意在 --quiet 下也輸出——SessionStart hook
 # 的 stdout 會進 session context,等於每次開 session 都把待修清單交給這個專案
 # 自己的 session,不用靠人記得去巡。沒有違規就什麼都不印。
-leaks=$(git grep -l -I -E '~/agent-hub/|/Users/[A-Za-z0-9._-]+/(agent-hub|workspace|\.agent-hub|services|git-origin)' HEAD -- . 2>/dev/null | sed 's#^HEAD:##' | head -10)
+leak_re='~/agent-hub/|/Users/[A-Za-z0-9._-]+/(agent-hub|workspace|\.agent-hub|services|git-origin)'
+leaks=$(git grep -l -I -E "$leak_re" HEAD -- . 2>/dev/null | sed 's#^HEAD:##' | head -10)
 if [ -n "$leaks" ]; then
-  cat <<MSG
-⚠️ 這個 repo 已 commit 的檔案寫了這台機器的路徑(repo 之後可能公開,本機路徑不能進 commit;只提 agent-hub 的名稱沒關係):
-$(echo "$leaks" | sed 's/^/  - /')
-請在這個專案裡處理:維運需要的資訊搬到 $INSTR(agent-hub:begin/end 區塊之外,不進版控),
-committed 檔案裡改成不寫本機路徑的寫法或刪掉,然後 commit。細節可用:
-git grep -n -E '~/agent-hub/|/Users/[A-Za-z0-9._-]+/(agent-hub|workspace|\.agent-hub|services|git-origin)'
-MSG
+  hub_say "⚠️ Files committed in this repo name this machine's paths (the repo may become public, and local paths must not be committed; naming agent-hub is fine):
+{files}
+Please handle it in this project: move what operations need into {file} (outside the agent-hub:begin/end block, not version-controlled),
+and in committed files write it without local paths or delete it, then commit. For details:
+{command}" files="$(echo "$leaks" | sed 's/^/  - /')" file="$INSTR" command="git grep -n -E '$leak_re'"
 fi
 exit 0
