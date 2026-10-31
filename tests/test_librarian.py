@@ -39,13 +39,13 @@ class Handoffs(unittest.TestCase):
     def test_quote_and_missing_item(self):
         t = lib.handoff_text({"effect": "changes", "fact": "F", "quote": "Q", "item": None, "why": "W",
                               "ts": "2026-10-26T10:00:00+08:00"})
-        self.assertIn("- [changes] 事實:F", t)
-        self.assertIn(f"\n  {lib.OWNER} 原話:Q", t)
-        self.assertIn("對應待辦:(沒有指定)", t)
+        self.assertIn("- [changes] Fact: F", t)
+        self.assertIn(f"\n  {lib.OWNER}'s own words: Q", t)
+        self.assertIn("Matching to-do: (none given)", t)
         self.assertTrue(t.endswith("(2026-10-26T10:00)"))
 
     def test_empty_quote_is_still_shown_like_jq(self):
-        self.assertIn("原話:", lib.handoff_text({"effect": "x", "fact": "f", "quote": "", "why": "w", "ts": "t"}))
+        self.assertIn("own words: ", lib.handoff_text({"effect": "x", "fact": "f", "quote": "", "why": "w", "ts": "t"}))
         self.assertNotIn("原話", lib.handoff_text({"effect": "x", "fact": "f", "quote": None, "why": "w", "ts": "t"}))
 
 
@@ -64,7 +64,7 @@ class Dangling(unittest.TestCase):
 class Prompts(unittest.TestCase):
     def test_names_come_from_settings(self):
         p = lib.state_prompt("demo", "M", "", "")
-        self.assertIn("現在在專案 demo 的目錄裡工作。\nM\n\n\n\n背景請讀", p)
+        self.assertIn("now working in the directory of project demo.\nM\n\n\n\nFor background, read", p)
         self.assertIn(f"〔{lib.OWNER}〕", p)
         self.assertIn(lib.ASSISTANT, p)
         self.assertNotIn("{", p.replace("{owner}", ""), "the f-string leaves no unfilled braces")

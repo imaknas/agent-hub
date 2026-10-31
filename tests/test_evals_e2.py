@@ -18,6 +18,7 @@ sys.path.insert(0, str(ROOT / "bin"))
 sys.path.insert(0, str(ROOT / "bin" / "evals"))
 import e2  # noqa: E402
 import e3  # noqa: E402
+import prompts  # noqa: E402
 
 IN = json.loads((ROOT / "tests" / "fixtures" / "evals-e2.json").read_text())
 IN["state"] = IN["state"].replace("{owner}", e2._load("gen_todo_t", "gen-todo.py").TAG)   # whatever owner tag this env has
@@ -100,8 +101,22 @@ class FrozenCase(unittest.TestCase):
         self.assertIn("memory/2026-10-02.md", args["changed"])
         self.assertIn(IN["item_a_reworded"], (case / "after.STATE.md").read_text(), "that night's outcome is kept")
         self.assertIn(IN["item_a"], (case / "snapshot" / "STATE.md").read_text(), "the input is the commit before it")
+        # old = the recorded prompt; new = the English template, content zh-Hant; new-en = content en (the to-do
+        # tokens stay zh-Hant until step 6); --rules new swaps in templates/AGENT.md, ~oldrules keeps the snapshot's
+        agent_md = (case / "snapshot" / "AGENT.md").read_text()
+        template = (e2.hubconf.ROOT / "templates" / "AGENT.md").read_text()
         for point in ("librarian-state", "librarian-state-edits"):
-            self.assertEqual(e2.prompt(point, case, "new"), e2.prompt(point, case, "old"), point)
+            old, new, new_en = (e2.prompt(point, case, a) for a in ("old", "new", "new-en"))
+            self.assertEqual(old, (case / f"prompt.{point}.txt").read_text())
+            self.assertIn("Write in Traditional Chinese (zh-Hant)", new)
+            self.assertIn("Write in English", new_en)
+            for p in (new, new_en):
+                self.assertIn(prompts.TOKENS["zh-Hant"]["todo_heading"], p)
+                self.assertNotIn("{{", p, "every placeholder filled")
+        edits_new = e2.prompt("librarian-state-edits", case, "new")
+        edits_oldrules = e2.prompt("librarian-state-edits", case, "new~oldrules")
+        self.assertIn(template.strip()[:40], edits_new)
+        self.assertIn(agent_md.strip()[:40], edits_oldrules)
         out = self.tmp / "run" / "old-0"
         out.mkdir(parents=True)
         so = {"state_updated": True, "edits": [{"old": IN["item_b"], "new": IN["item_b"] + "!"}], "worth_digesting": False,

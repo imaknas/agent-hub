@@ -41,6 +41,7 @@ import edits  # noqa: E402
 import hubconf  # noqa: E402
 import hublib  # noqa: E402
 import i18n  # noqa: E402
+import prompts  # noqa: E402
 
 _ = i18n.domain(__file__)
 HUB = hubconf.ROOT
@@ -56,7 +57,8 @@ KEYED_EFFECTS = ("done", "dropped", "already_done", "reopened")
 TODAY = datetime.date.today().isoformat()
 LOG = LOG_DIR / f"librarian-{TODAY}.log"
 OWNER = hubconf.get("owner.tag") or "owner"            # how the prompt names the owner and the assistant
-ASSISTANT = hubconf.get("assistant.name") or "個人助理"
+ASSISTANT = hubconf.assistant_name()
+CONTENT_LANG = hubconf.lang_content()                 # the language the model writes STATE.md and index.md in
 # Shadow mode (docs/design/llm-providers.md step 4): the completion version (librarian-state-edits,
 # librarian-index-edits) runs every night alongside today's agent version; only the comparison of its proposal with
 # the actual result is recorded in .state/librarian-shadow/, no real file is written. Switch over once the comparison
@@ -209,13 +211,13 @@ def load_records(proj: str) -> list[dict]:
             effect, fact = ("answers", (rec.get("answer") or {}).get("text")) if decided else ("dismissed", rec.get("note"))
         elif t == "related" and (rec.get("relation") or {}).get("kind") == "same_as":
             tg = (rec.get("relation") or {}).get("target") or {}
-            effect, fact = "same_as", f"跟 {tg.get('project') or tg.get('uri')} 的 {tg.get('key') or ''} 是同一件"
+            effect, fact = "same_as", f"the same item as {tg.get('key') or ''} in {tg.get('project') or tg.get('uri')}"
         else:
             continue
         about = rec.get("about") or {}
         out.append({"id": e.get("id"), "handoff_id": rec.get("id"), "project": proj, "effect": effect, "fact": fact,
                     "quote": None, "item": about.get("quote") or asked.get(about.get("key") or rec.get("key")),
-                    "why": authority_text(rec) or "(沒有說明)", "ts": rec.get("ts"), "v2": True})
+                    "why": authority_text(rec) or "(no explanation)", "ts": rec.get("ts"), "v2": True})
     return out
 
 
@@ -223,146 +225,67 @@ def authority_text(rec: dict) -> str | None:
     """Who decided a closure and with what kind of authority (spec core §5), in plain words for the model."""
     a = rec.get("authority") or {}
     basis = (rec.get("evidence") or {}).get("basis")
-    return {"principal": f"{OWNER} 本人決定的", "confirmed": f"{OWNER} 確認了{ASSISTANT}的提議",
-            "attested": f"{ASSISTANT}依證據認定({basis})" if basis else f"{ASSISTANT}依證據認定",
-            "delegated": f"{ASSISTANT}依 {OWNER} 給的授權代為決定"}.get(a.get("kind"), rec.get("context"))
+    return {"principal": f"{OWNER} decided it personally", "confirmed": f"{OWNER} confirmed {ASSISTANT}'s proposal",
+            "attested": f"{ASSISTANT} concluded it from evidence ({basis})" if basis else f"{ASSISTANT} concluded it from evidence",
+            "delegated": f"{ASSISTANT} decided it under authority {OWNER} gave"}.get(a.get("kind"), rec.get("context"))
 
 
 def handoff_text(h: dict) -> str:
-    s = f"- [{jstr(h.get('effect'))}] 事實:{jstr(h.get('fact'))}"
+    s = f"- [{jstr(h.get('effect'))}] Fact: {jstr(h.get('fact'))}"
     if present(h.get("quote")):
-        s += f"\n  {OWNER} 原話:{jstr(h.get('quote'))}"
-    item = h.get("item") if present(h.get("item")) else "(沒有指定)"
+        s += f"\n  {OWNER}'s own words: {jstr(h.get('quote'))}"
+    item = h.get("item") if present(h.get("item")) else "(none given)"
     ts = h.get("ts")
-    return s + f"\n  對應待辦:{jstr(item)}\n  助理的判斷理由:{jstr(h.get('why'))}\n  ({jstr(ts[0:16] if isinstance(ts, str) else ts)})"
+    return s + (f"\n  Matching to-do: {jstr(item)}\n  The assistant's reasoning: {jstr(h.get('why'))}"
+                f"\n  ({jstr(ts[0:16] if isinstance(ts, str) else ts)})")
 
 
-# ---------- prompt ----------
+# ---------- prompt (templates/prompts/librarian-*.md) ----------
+
+def render(name: str, **values) -> str:
+    """A librarian prompt in English, the model writing in the content language; the names and date are this module's
+    (an eval pins them)."""
+    return prompts.render(name, lang=CONTENT_LANG, owner=OWNER, assistant=ASSISTANT, today=TODAY, **values)
+
 
 def state_prompt(proj: str, memory_section: str, handoff_note: str, dangling_note: str) -> str:
-    return f"""你是跨專案整合 agent(圖書館員),現在在專案 {proj} 的目錄裡工作。
-{memory_section}
-{handoff_note}
-{dangling_note}
-
-背景請讀 ./AGENT.md 跟 ./STATE.md。**STATE.md 在專案根目錄(./STATE.md),不在 memory/ 底下**;
-memory/ 底下沒有、也不能有 STATE.md。
-
-memory/ 的結構:
-- memory/YYYY-MM-DD.md、memory/YYYY-MM-DD-<主題>.md:原始流水紀錄,只會往後加。
-- memory/reference/<主題>.md(有 README.md 當索引):整理過的主題文件,會被改寫,
-  內容是目前最準的版本;跟舊的流水紀錄衝突時以 reference/ 為準。
-
-規則:
-- 只有在有『實質變化』時才編輯 STATE.md(精煉現況,不是流水帳);沒有實質變化就完全不要動 STATE.md。
-  STATE.md 還是 onboard 時的佔位內容、而 memory/ 已經有實質內容的話,這本身就算實質變化。
-- STATE.md 裡提到已被搬走的檔案、或已經被新內容回答/推翻的待決事項,要一併修正。
-- STATE.md 一定要有一個 `## 待辦` 段落,格式固定,一行一項:
-  `- [ ] 〔{OWNER}〕…`(只有 {OWNER} 本人能做:帳號、密碼、付款、要他拍板的決定)
-  `- [ ] 〔agent〕…`(agent 可以直接做的)
-  `- [ ] 〔待定〕…`(還要先做決定才能動的)
-  〔{OWNER}〕行尾的「(等 {OWNER}:task-…)」是 {ASSISTANT} 任務登錄的 key,**原樣保留,不要改那一行的文字**
-  ({OWNER} 在 {ASSISTANT} 結案時會照 key 自動移掉;文字一改 key 就對不上)。
-  沒有待辦就寫 `- (無)`。只列還沒完成、具體可行動的事;完成、被推翻或過時的直接移除,
-  不要留著打勾。待辦只放在這個段落,不要在 STATE.md 別的地方另開「下一步」「未完成」之類的清單。
-- 除了 ./STATE.md,不要建立、修改或刪除任何檔案。"""
+    return render("librarian-state", project=proj, memory_section=memory_section, handoff_note=handoff_note,
+                  dangling_note=dangling_note, rules=_state_rules())
 
 
 def handoff_note(items: list[dict]) -> str:
-    return f"""
-{OWNER} 透過他的個人助理({ASSISTANT})告訴我們這些跟這個專案有關的事(比舊的 memory 紀錄新,也比較可信):
-{chr(10).join(handoff_text(h) for h in items)}
-
-處理方式(這些轉交本身就算實質變化):
-- [resolves]:{OWNER} 已經處理或回答了對應待辦。從 `## 待辦` 移除那一條(用意思比對,文字不一定一樣),
-  並把事實寫進 STATE.md 合適的段落。
-- [changes]:對應待辦還在,但前提或日期變了。依事實改寫那一條,必要時一併更新相關段落。
-- [relevant]:只供參考,影響到現況才更新 STATE.md。
-- [answers]:{OWNER} 回答了這個專案問過他的問題(對應待辦 = 當初的問題,事實 = 回答)。把決定寫進相關段落;
-  有在等這個回答的待辦就依回答移除或改寫。
-- 對應待辦在 STATE.md 找不到時不要硬套到別條,只把事實記進相關段落(有關的話)。
-- 「事實」是助理轉述的,可能比 {OWNER} 原話講得更肯定。有原話以原話為準;寫進 STATE.md 時保留
-  不確定的語氣(預計、預期、可能、打算),不要寫成已確定。"""+(V2_NOTE if any(h.get("v2") for h in items) else "")
-
-
-V2_NOTE = f"""
-- [note]:{ASSISTANT}帶來的資訊(前提或日期變了、跟哪件待辦有關)。對應待辦是專案原話,用意思比對;影響到那件待辦
-  就依事實改寫,否則記進相關段落。note 不代表做完了,不要因為 note 就刪掉待辦。
-- [dismissed]:{OWNER} 決定這個問題不用回答。移除在等這個回答的待辦;需要的話記一筆為什麼。
-- [same_as]:{ASSISTANT}把這一件跟別的專案的同一件合併了,只供參考,不用改待辦。
-- 「助理的判斷理由」寫的是誰決定的、根據什麼:{OWNER} 本人決定的就照著寫;{ASSISTANT}依證據認定的,寫進 STATE.md 時
-  標明是推斷,不要寫成 {OWNER} 說的。"""
+    note = render("librarian-handoffs", items="\n".join(handoff_text(h) for h in items))
+    return note + (render("librarian-handoffs-v2") if any(h.get("v2") for h in items) else "")
 
 
 def todo_fix_prompt(problems: str) -> str:
-    return f"""只修 ./STATE.md 的 `## 待辦` 段落格式,其他地方、待辦的內容都不要改,也不要動任何其他檔案。
-
-正確格式(一行一項;沒有待辦就寫 `- (無)`;STATE.md 一定要有這個段落):
-  `- [ ] 〔{OWNER}〕…`(只有 {OWNER} 本人能做:帳號、密碼、付款、要他拍板的決定、他自己要買/做的事)
-  `- [ ] 〔agent〕…`(agent 可以直接做的)
-  `- [ ] 〔待定〕…`(還要先做決定才能動的)
-
-如果 STATE.md 別的地方有待辦性質的清單(例如「待決事項」「需要 {OWNER} 拍板」「可由 agent 執行」
-「下一步」「未完成」),把那些項目**搬進** `## 待辦`(標上負責人)並刪掉原本那段;
-只有整份 STATE.md 真的沒有任何待辦時才寫 `- (無)`。排程、已完成的事實不算待辦,留在原處。
-
-目前的問題:
-{problems}"""
+    return render("librarian-todo-format", problems=problems)
 
 
 def index_prompt() -> str:
-    return f"""更新 index.md:今天({TODAY})各專案的摘要在 digest/{TODAY}.md,讀進來後,
-標出專案之間看得出來的關聯——沒有明顯關聯就不要硬掰,保持精簡。
-直接編輯 index.md,不要重寫整份格式風格。如果沒有值得改的地方,可以不動這個檔案。
-<!-- roster:begin --> 到 <!-- roster:end --> 之間的專案名冊是 gen-index-roster.sh 機械產生的,
-不要編輯那個區塊(改了也會被覆蓋);你的註記寫在區塊外。"""
+    return render("librarian-index")
 
 
 # ---------- shadow mode: the completion version ----------
 
-def _state_rules(proj: str) -> str:
-    """The verbatim 「規則:」 (rules) section of the agent version's prompt (the same rules, not a second copy), without
-    the last rule, which only means something to an agent with tools."""
-    rules = state_prompt(proj, "", "", "").split("\n規則:\n", 1)[1]
-    return rules.rsplit("\n- 除了 ./STATE.md", 1)[0]
+def _state_rules() -> str:
+    """The rules shared by the agent version and the edit-list version (the agent version adds its file-scope rule)."""
+    return render("librarian-state-rules")
 
 
 def _reference(d: pathlib.Path, limit: int = 12000) -> str:
     ref = d / "memory" / "reference"
     if not ref.is_dir():
-        return "(沒有 memory/reference/)"
+        return "(no memory/reference/)"
     names = sorted(p.name for p in ref.glob("*.md"))
-    readme = (ref / "README.md").read_text(errors="replace")[:limit] if (ref / "README.md").exists() else "(沒有 README.md)"
-    return "檔案:" + "、".join(names) + "\n\nREADME.md:\n" + readme
+    readme = (ref / "README.md").read_text(errors="replace")[:limit] if (ref / "README.md").exists() else "(no README.md)"
+    return "Files: " + ", ".join(names) + "\n\nREADME.md:\n" + readme
 
 
 def state_edits_prompt(proj: str, d: pathlib.Path, before: str, memory_section: str, h_note: str, d_note: str) -> str:
-    agent_md = (d / "AGENT.md").read_text(errors="replace") if (d / "AGENT.md").exists() else "(沒有 AGENT.md)"
-    return f"""你是跨專案整合 agent(圖書館員),負責專案 {proj} 的 STATE.md。你沒有任何工具:需要的東西都在下面,
-回答只能是一個 JSON(格式由系統指定)。你不直接改檔案,而是回「編輯清單」,平台照順序套用到 STATE.md。
-{memory_section}
-{h_note}
-{d_note}
-
-## AGENT.md(這個專案的 agent 規則,背景)
-{agent_md}
-
-## memory/reference/(整理過的主題文件,跟舊的流水紀錄衝突時以這裡為準)
-{_reference(d)}
-
-## 現在的 STATE.md(完整內容)
-<<<STATE
-{before}
-STATE>>>
-
-規則:
-{_state_rules(proj)}
-
-編輯清單的格式:
-- edits 是照順序套用的 {{"old", "new"}}:old 一定要是**現在 STATE.md 裡剛好出現一次**的一段原文(逐字、含換行;
-  太短會出現好幾次,就多帶幾個字),new 是換成的文字(空字串 = 刪掉那一段)。不要回整份 STATE.md。
-- 不用改就 state_updated: false、edits: []。
-- 〔{OWNER}〕行尾的「(等 {OWNER}:…)」標記不能改;那一項做完了就把整行刪掉。"""
+    agent_md = (d / "AGENT.md").read_text(errors="replace") if (d / "AGENT.md").exists() else "(no AGENT.md)"
+    return render("librarian-state-edits", project=proj, memory_section=memory_section, handoff_note=h_note,
+                  dangling_note=d_note, agent_md=agent_md, reference=_reference(d), before=before, rules=_state_rules())
 
 
 def _shadow_write(rec: dict, name: str | None = None, text: str | None = None) -> None:
@@ -435,18 +358,7 @@ def shadow_line(what: str, shadow_changed: bool, agent_changed: bool, rec: dict)
 
 
 def index_edits_prompt(before: str, digest_text: str) -> str:
-    return f"""更新 index.md:下面是今天({TODAY})各專案的摘要(digest)跟現在的 index.md。標出專案之間看得出來的關聯——
-沒有明顯關聯就不要硬掰,保持精簡,不要重寫整份格式風格;沒有值得改的地方就 index_updated: false、edits: []。
-你沒有任何工具,回答只能是一個 JSON:edits 是照順序套用的 {{"old", "new"}},old 一定要是現在 index.md 裡剛好出現一次的原文。
-<!-- roster:begin --> 到 <!-- roster:end --> 之間的專案名冊是機械產生的,不要編輯那個區塊;你的註記寫在區塊外。
-
-## 今天的 digest
-{digest_text}
-
-## 現在的 index.md
-<<<INDEX
-{before}
-INDEX>>>"""
+    return render("librarian-index-edits", digest=digest_text, before=before)
 
 
 ROSTER = re.compile(r"<!-- roster:begin -->.*?<!-- roster:end -->", re.S)
@@ -630,14 +542,17 @@ def memory_input(d: pathlib.Path, rng: str, changed: str) -> tuple[str, str, boo
 
 def memory_text(changed: str, diff: str, truncated: bool) -> str:
     if not changed:
-        return f"這次 memory/ 沒有新變動,只有下面 {OWNER} 的轉交要處理。"
-    note = f"(diff 太長,只附前 {MAX_DIFF_CHARS} 字元;其餘請用 Read 讀上面列出、目前還存在的檔案)" if truncated else ""
-    return f"這個專案自上次檢查後,以下 memory 檔案有變動:\n{changed}\n\n實際變動內容(git log -p,由舊到新){note}:\n{diff}"
+        return f"Nothing changed in memory/ this time; there are only {OWNER}'s handoffs below to handle."
+    note = (f" (the diff is too long: only its first {MAX_DIFF_CHARS} characters are attached; read the rest with Read, "
+            "from the files listed above that still exist)") if truncated else ""
+    return (f"Since the last check, these memory files of this project changed:\n{changed}\n\n"
+            f"What actually changed (git log -p, oldest first){note}:\n{diff}")
 
 
 def dangling_note(dangling: str) -> str:
-    return ("\nSTATE.md 目前引用了這些已經不存在的檔案(被搬走或刪除),這次一定要修正引用,\n"
-            f"指向現在實際存放內容的地方(通常是 memory/reference/ 底下的主題文件):{dangling}") if dangling else ""
+    return ("\nSTATE.md now refers to these files, which no longer exist (moved or deleted); this time the references "
+            "must be fixed\nto point where the content actually lives now (usually a topic document under "
+            f"memory/reference/):{dangling}") if dangling else ""
 
 
 def process(proj: str, d: pathlib.Path, handoffs: list[dict], digest: list[str]) -> None:

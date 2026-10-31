@@ -58,7 +58,7 @@ elif point == "librarian-index":
 elif point == "librarian-state-edits":   # shadow: touches no file, only returns an edit list
     # (p1 returns an old that does not match)
     import re
-    proj = re.search(r"負責專案 (\S+) 的 STATE.md", prompt).group(1)
+    proj = re.search(r"the STATE.md of project (\S+)\. You", prompt).group(1)
     old = "找不到的一段" if proj == "p1" else "## 待辦"
     res(structured_output={"state_updated": True, "edits": [{"old": old, "new": f"<!-- shadow {proj} -->\n## 待辦"}],
                            "worth_digesting": False, "summary": "", "reason": f"shadow {proj}"})
@@ -85,6 +85,8 @@ class Env:
             if f.is_file() and f.name != "llm.py":
                 (self.hub / "bin" / f.name).symlink_to(f)
         (self.hub / "bin" / "llm.py").write_text(STUB)
+        (self.hub / "templates").mkdir()
+        (self.hub / "templates" / "prompts").symlink_to(ROOT / "templates" / "prompts")   # the judgment points' prompts
         for d in ("projects", ".state", ".logs", "digest"):
             (self.hub / d).mkdir()
         (self.hub / "index.md").write_text("# index\n")
@@ -203,12 +205,12 @@ class LibrarianFlow(unittest.TestCase):
             self.assertIn("〔Alex〕", p0)
             self.assertIn("Hugin", p0)
             self.assertIn("轉交事實一", p0)
-            self.assertIn("Alex 原話:原話", p0)
+            self.assertIn("Alex's own words: 原話", p0)
             self.assertNotIn("帶 key 的轉交", p0, "a handoff with a key is not given to the model")
             self.assertIn("p0 的新筆記", p0, "the diff goes into the prompt")
-            self.assertIn("STATE.md 目前引用了這些已經不存在的檔案", by[("librarian-state", "pdang")])
+            self.assertIn("STATE.md now refers to these files, which no longer exist", by[("librarian-state", "pdang")])
             self.assertIn("memory/reference/gone.md", by[("librarian-state", "pdang")])
-            self.assertIn("這次 memory/ 沒有新變動,只有下面 Alex 的轉交要處理", by[("librarian-state", "phand")])
+            self.assertIn("Nothing changed in memory/ this time; there are only Alex's handoffs below", by[("librarian-state", "phand")])
             # a changed STATE.md is committed; the checkpoint advances only when the result is trustworthy
             for p in ("p0", "p2", "p3", "phand"):
                 self.assertEqual(env.subjects(p)[0], "librarian: update STATE.md", p)
@@ -267,7 +269,7 @@ class LibrarianFlow(unittest.TestCase):
             self.assertEqual(env.run("librarian.py").returncode, 0)
             p1 = next(x["prompt"] for x in env.calls() if x["point"] == "librarian-state" and x["cwd"] == "p1")
             for want in ("[note]", "註冊商說週五前要續約", "續約網域", "[answers]", "用 SQLite", "快取用哪個?",
-                         "Alex 本人決定的", "[dismissed]"):
+                         "Alex decided it personally", "[dismissed]"):
                 self.assertIn(want, p1)
             self.assertNotIn("k2", p1, "Acts' settled belongs to the registrar")
             self.assertNotIn(":null", p1, "a note without a reason does not print null")

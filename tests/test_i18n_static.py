@@ -21,7 +21,8 @@ BASELINE = ROOT / "tests" / "fixtures" / "cjk-baseline.json"
 CJK = re.compile("[\u3400-\u9fff\uf900-\ufaff\u3000-\u303f\uff00-\uffef]")
 ALLOWED = ("locales/", "tests/fixtures/", "contracts/fixtures/")
 # Files that define or document the zh-Hant token set of a machine format: Chinese there is the spec, not untranslated text
-SPEC = {"docs/design/i18n.md", "contracts/state-todo.v1.md", "contracts/todo-md.v1.md"}
+SPEC = {"docs/design/i18n.md", "contracts/state-todo.v1.md", "contracts/todo-md.v1.md",
+        "bin/prompts.py"}   # the to-do token sets the prompts fill in
 
 
 def tracked() -> list[str]:

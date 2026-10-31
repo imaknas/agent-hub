@@ -7,11 +7,15 @@ state dir and bus (a copy of the config with bus_dir changed), so eval calls nev
 
     e2.py freeze librarian-state <project> [--since <rev> | --night N]   a case from the memory repo (see freeze_state)
     e2.py cases [<point>]                                    list cases
-    e2.py run <point> --arm old|new [--k 3] [--case <glob>] [--run <id>] [--jobs 3]
+    e2.py run <point> --arm old|new|new-en [--rules old|new] [--k 3] [--case <glob>] [--run <id>] [--jobs 3]
     e2.py score <run> [--json]                               per-arm validity, language, agreement vs the noise floor
 
 Arms: `old` = the prompt file recorded with the case (byte-exact what production sent); `new` = re-rendered from the
-case's raw arguments with the code as it is now (before translation, new == old: a check of the renderer itself).
+case's raw arguments with the code as it is now, content language zh-Hant (before translation, new == old: a check of
+the renderer itself); `new-en` = the same with content language en (scored on validity and language only).
+--rules new (the default for new arms) swaps the snapshot's AGENT.md for templates/AGENT.md as it is now, which is what
+production reads after the rules change; --rules old keeps the snapshot's, to tell a prompt regression from a rules
+one. The arm's label then says so: `new~oldrules`.
 Points: librarian-state (agent: runs on a fresh copy of the snapshot, scored on STATE.md after), librarian-state-edits
 (completion: edits applied to the snapshot's STATE.md). Others are added as their cases exist.
 """
@@ -132,12 +136,29 @@ def _freeze_in(lib, project: str, d: pathlib.Path, since: str, after: str | None
 
 # ---------- prompts ----------
 
+def base_arm(arm: str) -> str:
+    return arm.split("~")[0]
+
+
+def new_rules(arm: str) -> bool:
+    return base_arm(arm) != "old" and not arm.endswith("~oldrules")
+
+
+def snapshot(case: pathlib.Path, arm: str, into: pathlib.Path) -> pathlib.Path:
+    """A copy of the case's snapshot as this arm's agent sees it (the current AGENT.md template under the new rules)."""
+    shutil.copytree(case / "snapshot", into)
+    if new_rules(arm):
+        shutil.copy(hubconf.ROOT / "templates" / "AGENT.md", into / "AGENT.md")
+    return into
+
+
 def prompt(point: str, case: pathlib.Path, arm: str) -> str:
     if arm == "old":
         return (case / f"prompt.{point}.txt").read_text()
     a = json.loads((case / "args.json").read_text())
     lib = librarian()
     lib.TODAY, lib.OWNER, lib.ASSISTANT = a["date"], a["owner"], a["assistant"]   # pin what the prompt interpolates
+    lib.CONTENT_LANG = "en" if base_arm(arm) == "new-en" else "zh-Hant"
     if point in ("librarian-state", "librarian-state-edits"):
         ms = lib.memory_text(a["changed"], a["diff"], a["truncated"])
         hn = lib.handoff_note(a["handoffs"]) if a["handoffs"] else ""
@@ -145,7 +166,8 @@ def prompt(point: str, case: pathlib.Path, arm: str) -> str:
         if point == "librarian-state":
             return lib.state_prompt(a["project"], ms, hn, dn)
         before = (case / "snapshot" / "STATE.md").read_text(errors="replace") if (case / "snapshot" / "STATE.md").exists() else ""
-        return lib.state_edits_prompt(a["project"], case / "snapshot", before, ms, hn, dn)
+        with tempfile.TemporaryDirectory(prefix="e2-snap-") as tmp:
+            return lib.state_edits_prompt(a["project"], snapshot(case, arm, pathlib.Path(tmp) / "s"), before, ms, hn, dn)
     raise SystemExit(f"e2: no renderer for {point}")
 
 
@@ -176,7 +198,7 @@ def one(point: str, case: pathlib.Path, arm: str, i: int, run_dir: pathlib.Path,
     with tempfile.TemporaryDirectory(prefix="e2-") as tmp:
         cwd = pathlib.Path(tmp) / case.name.split("@")[0]
         if point in AGENT_POINTS:
-            shutil.copytree(case / "snapshot", cwd)
+            snapshot(case, arm, cwd)
         else:
             cwd.mkdir()
         t0 = datetime.datetime.now()
@@ -208,8 +230,9 @@ def cmd_run(a) -> int:
     (run_dir / "run.json").write_text(json.dumps({"point": a.point, "code": subprocess.run(
         ["git", "-C", str(hubconf.ROOT), "rev-parse", "HEAD"], capture_output=True, text=True).stdout.strip()}, indent=1))
     env = run_env(run_dir)
-    jobs = [(c, a.arm, i) for i in range(a.k) for c in cs]
-    print(f"e2: {a.point} arm={a.arm} k={a.k} cases={len(cs)} → {run_dir}")
+    arm = a.arm + ("~oldrules" if a.arm != "old" and a.rules == "old" else "")
+    jobs = [(c, arm, i) for i in range(a.k) for c in cs]
+    print(f"e2: {a.point} arm={arm} k={a.k} cases={len(cs)} → {run_dir}")
     stop = False
     with concurrent.futures.ThreadPoolExecutor(a.jobs) as pool:
         futs = {pool.submit(one, a.point, c, arm, i, run_dir, env): (c, i) for c, arm, i in jobs}
@@ -421,7 +444,8 @@ def main(argv: list[str]) -> int:
     c.add_argument("point", nargs="?", default="librarian-state")
     r = sub.add_parser("run")
     r.add_argument("point", choices=sorted(POINT_CASES))
-    r.add_argument("--arm", choices=["old", "new"], required=True)
+    r.add_argument("--arm", choices=["old", "new", "new-en"], required=True)
+    r.add_argument("--rules", choices=["old", "new"], default="new", help="AGENT.md the agent reads (new arms only)")
     r.add_argument("--k", type=int, default=3)
     r.add_argument("--case", default="*")
     r.add_argument("--run")
