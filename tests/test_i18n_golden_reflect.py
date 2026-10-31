@@ -3,6 +3,10 @@
 week's json for the report page (no activity; the model call failed; the model shown when none is configured).
 The prompt itself is not here (step 5).
 
+The report page (reflect/index.html) is rendered by its own script in the browser: tests/reflect_page.js runs that script
+in node with a stub DOM over the weeks in tests/fixtures/i18n-golden/reflect-weeks.json (every kind of week the page
+shows) and the golden is what each week renders. Skipped where there is no node (the hub machine has it: nvm).
+
 llm.py is never run: subprocess.run is a canned answer.
 
     bin/py -m unittest tests.test_i18n_golden_reflect
@@ -12,6 +16,7 @@ import io
 import json
 import os
 import pathlib
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -26,8 +31,18 @@ sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
 import golden_lang  # noqa: E402
 
 GOLDEN = golden_lang.GOLDEN
+INPUTS = golden_lang.INPUTS
 UPDATE = os.environ.get("I18N_GOLDEN_UPDATE") == "1"
 ZH = {"AGENT_HUB_LANG_UI": golden_lang.LANG}
+
+
+def node() -> str | None:
+    import hubconf
+    found = shutil.which("node")
+    if found:
+        return found
+    b = hubconf.nvm_bin()
+    return str(b / "node") if b and (b / "node").exists() else None
 
 
 class Golden(unittest.TestCase):
@@ -59,6 +74,24 @@ class Golden(unittest.TestCase):
             m.main()
         out.append(("no transcripts", o.getvalue().replace(str(tmp), "<TMP>")))
         self.compare("weekly-reflect.txt", "\n".join(f"=== {k}\n{v}" for k, v in out))
+
+    @unittest.skipUnless(node(), "no node")
+    def test_page(self):
+        spec = importlib.util.spec_from_file_location("weekly_reflect_page", ROOT / "bin" / "weekly-reflect.py")
+        m = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(m)
+        out = []
+        for label, weeks in (("weeks", json.loads((INPUTS / "reflect-weeks.json").read_text())), ("no weeks", [])):
+            tmp = pathlib.Path(tempfile.mkdtemp())
+            for w in weeks:
+                (tmp / f"{w['week']}.json").write_text(json.dumps(w, ensure_ascii=False, indent=1))
+            with mock.patch.dict(os.environ, ZH), mock.patch.object(m, "OUT", tmp):
+                page = m.build_html()
+            r = subprocess.run([node(), str(ROOT / "tests" / "reflect_page.js"), str(page)], capture_output=True,
+                               text=True, timeout=60)
+            self.assertEqual(r.returncode, 0, r.stderr)
+            out.append(f"##### {label}\n{r.stdout}")
+        self.compare("reflect-page.txt", "".join(out))
 
     def test_reflect_llm(self):
         import reflect_llm as m

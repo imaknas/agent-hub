@@ -167,6 +167,8 @@ class Golden(unittest.TestCase):
         self.call("hub machine unreachable", s, ["--no-remote", ws / "x"])
         self.hub_json()
         self.call("new folder, --no-remote", s, ["--no-remote", ws / "alpha"])
+        # the placeholder STATE.md it writes is content (the content language), not a message
+        self.out.append("=== alpha's STATE.md\n" + (ws / "alpha" / ".agent-memory" / "STATE.md").read_text())
         self.call("already in the registry", s, ["--no-remote", ws / "alpha"])
         git(self.home, "clone", "-q", "--bare", str(go / "alpha-memory.git"), str(go / "gamma-memory.git"))
         self.call("memory bare repo exists on the hub machine", s, ["--no-remote", ws / "gamma"])

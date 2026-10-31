@@ -1,0 +1,93 @@
+{
+ "cases": [
+  {
+   "text": "預計下週上線 webhook。",
+   "hedged": true,
+   "stripped": "下週上線webhook"
+  },
+  {
+   "text": "webhook 已經上線。",
+   "hedged": false,
+   "stripped": "webhook已經上線"
+  },
+  {
+   "text": "可能要改用 SQLite(待確認)",
+   "hedged": true,
+   "stripped": "要改用sqlite"
+  },
+  {
+   "text": "看起來是權限問題?",
+   "hedged": true,
+   "stripped": "是權限問題"
+  },
+  {
+   "text": "部署目標是 11 月",
+   "hedged": true,
+   "stripped": "部署11月"
+  },
+  {
+   "text": "尚未確認的需求:匯出 CSV",
+   "hedged": true,
+   "stripped": "的需求匯出csv"
+  },
+  {
+   "text": "We expect the API to be ready next week.",
+   "hedged": true,
+   "stripped": "wetheapitobereadynextweek"
+  },
+  {
+   "text": "The API is ready.",
+   "hedged": false,
+   "stripped": "theapiisready"
+  },
+  {
+   "text": "Probably a permissions issue?",
+   "hedged": true,
+   "stripped": "apermissionsissue"
+  },
+  {
+   "text": "Plan to migrate to SQLite, TBD",
+   "hedged": true,
+   "stripped": "migratetosqlite"
+  },
+  {
+   "text": "- **Deploy**: done, see `bin/deploy.sh`",
+   "hedged": false,
+   "stripped": "deploydoneseebin/deploysh"
+  },
+  {
+   "text": "決定用 A 方案,理由:快。",
+   "hedged": false,
+   "stripped": "決定用a方案理由快"
+  },
+  {
+   "text": "Not yet decided: export format",
+   "hedged": true,
+   "stripped": "decidedexportformat"
+  },
+  {
+   "text": "大約 3 天能做完,也許更快",
+   "hedged": true,
+   "stripped": "3天能做完更快"
+  },
+  {
+   "text": "初步假設是 cache 過期",
+   "hedged": true,
+   "stripped": "是cache過期"
+  },
+  {
+   "text": "「定案」:用 A,(不再改)",
+   "hedged": false,
+   "stripped": "定案用a不再改"
+  },
+  {
+   "text": "決定：用 A，（不再改）；完成、OK？",
+   "hedged": true,
+   "stripped": "決定用a不再改完成ok"
+  }
+ ],
+ "salient": {
+  "text": "部署說明見「https://example.com/docs」,腳本 `bin/deploy.sh`。\n另見 https://example.org/x)與 https://example.net/y」。\n",
+  "missing": ["bin/deploy.sh", "https://example.com/docs", "https://example.net/y", "https://example.org/x"]
+ }
+}

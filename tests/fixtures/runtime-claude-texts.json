@@ -1,0 +1,19 @@
+{
+ "_comment": "texts other processes print, in either language, that runtime_claude.py recognises (tests/test_runtime_claude_texts.py)",
+ "login_error": [
+  {"text": "claude not found", "expect": true},
+  {"text": "找不到 claude", "expect": true},
+  {"text": "llm.py: 找不到 claude(PATH 裡沒有)", "expect": true},
+  {"text": "Login expired · Please run /login", "expect": true},
+  {"text": "timed out after 120s", "expect": false},
+  {"text": "找不到檔案", "expect": false}
+ ],
+ "rate_limit": [
+  {"text": "Claude AI usage limit reached|1761000000", "expect": true},
+  {"text": "API Error: rate-limit exceeded", "expect": true},
+  {"text": "Rate limit hit", "expect": true},
+  {"text": "這個月的額度用完了", "expect": true},
+  {"text": "API Error: 500 internal", "expect": false},
+  {"text": "找不到檔案", "expect": false}
+ ]
+}

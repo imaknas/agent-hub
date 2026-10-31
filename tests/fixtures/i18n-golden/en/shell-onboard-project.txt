@@ -36,6 +36,12 @@ commit-hub-files (stand-in): register alpha (onboard-project.sh)
 Done: alpha is connected to the agent-hub pipeline.
 --- stderr
 
+=== alpha's STATE.md
+# STATE
+
+> 由跨專案整合 agent(「圖書館員」)維護,只在有實質變化時改寫。整合 agent 尚未開始跑,
+> 這份檔案目前只是佔位。
+
 === already in the registry
 exit 1
 --- stdout

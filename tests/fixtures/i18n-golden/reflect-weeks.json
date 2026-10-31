@@ -1,0 +1,113 @@
+[
+ {
+  "week": "2026-W39", "start": "2026-09-21", "end": "2026-09-27", "generated": "2026-09-28T07:00+08:00",
+  "totals": {"prompts": 120, "prompts_prev": 80, "sessions": 14, "projects": 3, "days": 6},
+  "projects": [
+   {"name": "alpha", "prompts": 70, "prompts_prev": 40, "sessions": 8, "days": 5, "commits": 12, "notes": 4},
+   {"name": "beta", "prompts": 30, "prompts_prev": 30, "sessions": 4, "days": 3, "commits": null, "notes": 1},
+   {"name": "gamma", "prompts": 20, "prompts_prev": 0, "sessions": 2, "days": 2, "commits": 0, "notes": null},
+   {"name": "delta", "prompts": 0, "prompts_prev": 10, "sessions": 0, "days": 0, "commits": 0, "notes": 0},
+   {"name": "epsilon", "prompts": 5, "prompts_prev": 3, "sessions": 1, "days": 1, "commits": 1, "notes": 0},
+   {"name": "zeta", "prompts": 0, "prompts_prev": 2, "sessions": 0, "days": 0, "commits": 0, "notes": 0}
+  ],
+  "matrix": [[0,0,0,0,0,0,0,0,0,1,2,3,0,0,0,0,0,0,0,0,0,0,0,4],[2,0,0,0,0,0,0,0,0,0,0,0,0,5,0,0,0,0,0,0,0,0,0,0],[0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],[0,0,0,0,0,0,0,0,0,0,9,0,0,0,0,0,0,0,0,0,0,0,0,0],[0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],[0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],[0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1]],
+  "rhythm": {"late": 2, "late_share": 0.0167, "late_prev": 5, "longest_hours": 3.5, "longest_start": "2026-09-22T13:00+08:00",
+             "last_per_day": [{"day": "09/21", "time": "23:40", "late": false}, {"day": "09/22", "time": "00:30", "late": true}]},
+  "delegation": {"agents": 6, "agents_prev": 2, "workflows": 0, "peer": 3, "peer_prev": 1, "skills": {"pdf": 2}},
+  "changes": {"new": ["gamma"], "quiet": ["delta"]},
+  "analysis": {
+   "headline": "這週主力在 alpha,收尾了兩件事",
+   "summary": "訊息比上週多五成,大多在 alpha。beta 持平。",
+   "insights": [
+    {"title": "alpha 推得快", "analysis": "連續三天集中處理同一個功能。", "evidence": "alpha 70 則訊息、12 個 commit", "so_what": "可以先停下來整理筆記。"},
+    {"title": "深夜少了", "analysis": "深夜訊息從 5 則降到 2 則。", "evidence": "深夜 2 則", "so_what": "維持現在的作息。"},
+    {"title": "新專案起步", "analysis": "gamma 這週才開始。", "evidence": "gamma 20 則", "so_what": "先定下第一個里程碑。"}
+   ],
+   "projects": [
+    {"name": "alpha", "focus": "匯入功能", "assessment": "進度明顯", "status": "推進", "next": "補測試"},
+    {"name": "beta", "focus": "維護", "assessment": "沒有新進展", "status": "穩定", "next": "決定要不要繼續"},
+    {"name": "gamma", "focus": "起步", "assessment": "方向還在找", "status": "發散", "next": "收斂成一個問題"},
+    {"name": "epsilon", "focus": "收尾", "assessment": "快好了", "status": "收尾", "next": "發布"},
+    {"name": "omega", "focus": "卡在權限", "assessment": "等外部回覆", "status": "卡住", "next": "寄信追問"}
+   ],
+   "rhythm": {"verdict": "白天為主", "analysis": "大部分訊息在白天。", "pattern": "週二最集中"},
+   "fluency": [
+    {"dimension": "交辦", "level": "強項", "observation": "常開 subagent。", "evidence": "6 次", "suggestion": "繼續。", "quote": "去查一下"},
+    {"dimension": "描述", "level": "穩定", "observation": "描述清楚。", "evidence": "少有重問", "suggestion": "保持。"},
+    {"dimension": "判斷", "level": "可改進", "observation": "有一次直接接受。", "evidence": "一則", "suggestion": "多問一句為什麼。", "quote": "好,就這樣"},
+    {"dimension": "把關", "level": "強項", "observation": "會跑測試。", "evidence": "commit 前都跑", "suggestion": "繼續。"}
+   ],
+   "next_week": [
+    {"action": "補 alpha 的測試", "why": "推得快,測試沒跟上"},
+    {"action": "決定 beta 的去留", "why": "持平兩週"}
+   ],
+   "meta": {"model": "model-x", "sampled": 40, "excluded": ["beta", "gamma"]}
+  }
+ },
+ {
+  "v": 1, "week": "2026-W40", "start": "2026-09-28", "end": "2026-10-04", "generated": "2026-10-05T07:00+08:00",
+  "totals": {"prompts": 10, "prompts_prev": 120, "sessions": 2, "projects": 1, "days": 2},
+  "projects": [{"name": "alpha", "prompts": 10, "prompts_prev": 70, "sessions": 2, "days": 2, "commits": 3, "notes": 1}],
+  "matrix": [[0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],[0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],[0,0,0,0,0,0,0,0,0,0,5,0,0,0,0,0,0,0,0,0,0,0,0,0],[0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],[0,0,0,0,0,0,0,0,0,0,0,0,0,0,5,0,0,0,0,0,0,0,0,0],[0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],[0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0]],
+  "rhythm": {"late": 0, "late_share": 0, "late_prev": 2, "longest_hours": 1.0, "longest_start": null, "last_per_day": []},
+  "delegation": {"agents": 0, "agents_prev": 6, "workflows": 0, "peer": 0, "peer_prev": 3, "skills": {}},
+  "changes": {"new": [], "quiet": []},
+  "analysis": {
+   "headline": "安靜的一週", "summary": "只有 alpha 有動。",
+   "insights": [{"title": "量少", "analysis": "訊息少。", "evidence": "10 則", "so_what": "休息也好。"}],
+   "projects": [{"name": "alpha", "focus": "小修", "assessment": "持平", "status": "穩定", "next": "繼續"}],
+   "rhythm": {"verdict": "很少工作", "analysis": "只有兩天。", "pattern": "週三、週五"},
+   "fluency": [
+    {"dimension": "交辦", "level": "穩定", "observation": "沒開 subagent。", "evidence": "0 次", "suggestion": "無。"},
+    {"dimension": "描述", "level": "穩定", "observation": "無。", "evidence": "統計撐不起判斷", "suggestion": "無。"},
+    {"dimension": "判斷", "level": "穩定", "observation": "無。", "evidence": "統計撐不起判斷", "suggestion": "無。"},
+    {"dimension": "把關", "level": "可改進", "observation": "commit 少。", "evidence": "3 個", "suggestion": "小步提交。"}
+   ],
+   "next_week": [{"action": "回到 alpha", "why": "停太久"}, {"action": "整理筆記", "why": "筆記少"}],
+   "meta": {"model": "model-y", "source": "stats+digests", "digests": 4, "withheld": 1, "excluded": ["beta"], "complete": false, "undigested": 2}
+  }
+ },
+ {
+  "v": 1, "week": "2026-W41", "start": "2026-10-05", "end": "2026-10-11", "generated": "2026-10-12T07:00+08:00",
+  "totals": {"prompts": 3, "prompts_prev": 10, "sessions": 1, "projects": 1, "days": 1},
+  "projects": [{"name": "alpha", "prompts": 3, "prompts_prev": 10, "sessions": 1, "days": 1, "commits": 0, "notes": 0}],
+  "matrix": [[0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],[0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],[0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],[0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],[0,0,0,0,0,0,0,0,0,0,0,3,0,0,0,0,0,0,0,0,0,0,0,0],[0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],[0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0]],
+  "rhythm": {"late": 0, "late_share": 0, "late_prev": 0, "longest_hours": 0.2, "longest_start": null, "last_per_day": [{"day": "10/09", "time": "11:20", "late": false}]},
+  "delegation": {"agents": 0, "agents_prev": 0, "workflows": 0, "peer": 0, "peer_prev": 0, "skills": {}},
+  "changes": {"new": [], "quiet": []},
+  "analysis": {"error": "model call failed (exit 3); the statistics are not affected", "meta": {"model": "model-z", "source": "stats", "excluded": []}}
+ },
+ {
+  "v": 1, "week": "2026-W42", "start": "2026-10-12", "end": "2026-10-18", "generated": "2026-10-19T07:00+08:00",
+  "totals": {"prompts": 0, "prompts_prev": 3, "sessions": 0, "projects": 0, "days": 0},
+  "projects": [],
+  "matrix": [[0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],[0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],[0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],[0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],[0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],[0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],[0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0]],
+  "rhythm": {"late": 0, "late_share": 0, "late_prev": 0, "longest_hours": 0.0, "longest_start": null, "last_per_day": []},
+  "delegation": {"agents": 0, "agents_prev": 0, "workflows": 0, "peer": 0, "peer_prev": 0, "skills": {}},
+  "changes": {"new": [], "quiet": []},
+  "unsupported": "this runtime keeps no transcripts"
+ },
+ {
+  "v": 1, "week": "2026-W43", "start": "2026-10-19", "end": "2026-10-25", "generated": "2026-10-26T07:00+08:00",
+  "totals": {"prompts": 4, "prompts_prev": 0, "sessions": 1, "projects": 1, "days": 1},
+  "projects": [{"name": "beta", "prompts": 4, "prompts_prev": 0, "sessions": 1, "days": 1, "commits": 1, "notes": 0}],
+  "matrix": [[0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],[0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],[0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],[0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],[0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],[0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],[0,0,0,0,0,0,0,0,0,0,4,0,0,0,0,0,0,0,0,0,0,0,0,0]],
+  "rhythm": {"late": 0, "late_share": 0, "late_prev": 0, "longest_hours": 0.5, "longest_start": null, "last_per_day": [{"day": "10/25", "time": "10:50", "late": false}]},
+  "delegation": {"agents": 1, "agents_prev": 0, "workflows": 0, "peer": 0, "peer_prev": 0, "skills": {}},
+  "changes": {"new": ["beta"], "quiet": []},
+  "analysis": {
+   "headline": "只看得到數字", "summary": "這週只有統計。",
+   "insights": [{"title": "一個 session", "analysis": "量太少。", "evidence": "4 則", "so_what": "無從判斷。"}],
+   "projects": [{"name": "beta", "focus": "看不出內容", "assessment": "無從判斷", "status": "穩定", "next": "無"}],
+   "rhythm": {"verdict": "白天", "analysis": "只有上午。", "pattern": "週日上午"},
+   "fluency": [
+    {"dimension": "交辦", "level": "穩定", "observation": "一次 subagent。", "evidence": "1 次", "suggestion": "無。"},
+    {"dimension": "描述", "level": "穩定", "observation": "統計看不出。", "evidence": "無", "suggestion": "無。"},
+    {"dimension": "判斷", "level": "穩定", "observation": "統計看不出。", "evidence": "無", "suggestion": "無。"},
+    {"dimension": "把關", "level": "穩定", "observation": "一個 commit。", "evidence": "1 個", "suggestion": "無。"}
+   ],
+   "next_week": [{"action": "無", "why": "量太少"}, {"action": "無", "why": "量太少"}],
+   "meta": {"model": "model-w", "source": "stats", "excluded": []}
+  }
+ }
+]
