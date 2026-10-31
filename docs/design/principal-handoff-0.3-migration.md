@@ -111,7 +111,8 @@ can only be replaced by a new record.
   vendored in `contracts/vendor/principal-handoff/`): `POST /api/records` answers
   accepted/duplicate/unsupported/invalid per record; `GET /api/records?project=&after=` + `POST /api/records/ack`. An
   ack marks the corresponding handoff delivered (it disappears from `muninn handoffs`): while both transports coexist,
-  whoever acks first takes it; send the ack only once agent-hub has written it durably. When switching from v1, start from the cursor read the first time, not from 0.
+  whoever acks first takes it; send the ack only once agent-hub has written it durably. When switching from v1, start
+  from the cursor read the first time, not from 0.
 - **Principal identifier**: `person:knas`, Muninn itself is `muninn`; agent-hub's hub.json must use the same.
 - **Behaviour change (in effect)**: v1's `drop --task`, like v2 acts `withdrawn`, no longer settles it directly when
   only this project wanted it; the owner is asked instead.
