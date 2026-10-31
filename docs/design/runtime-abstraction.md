@@ -1,206 +1,263 @@
-# 執行環境抽象:平台每一層都是介面,Claude Code 只是一個實作
+# Runtime abstraction: every layer of the platform is an interface, Claude Code is just one implementation
 
-> **進度**(10-25):步驟 1(骨架)、2(第 5 層對話紀錄)、3(第 1 層「跑一次」)、5(第 3 層事件 `hub-event`、第 4 層規則檔
-> `hub-runtime`)、6(第 6 層登入,介面 `auth`)完成,24 個專案都換成新的 hook。**還沒做**:第 1 層長駐 session(排在另一個
-> session 的租約中立化之後,見 `lease-contract-neutral.md`)、判斷點宣告的中立化(等第 2 層的 approvals;順便加
-> `platform_tools`)、`templates/CLAUDE.md` 改名、job 改名(`runtime-login`、`update-runtime`)。
-> **第 6 層還留著的 Claude 名稱**:`lease-resume`(直接讀 token 檔、叫 `claude --resume`;跟長駐 session 的 `resume_command`
-> 一起換)、`run-agent-job.sh` 跟 `lease-runner.py` 的 `unset/去掉 CLAUDE_CODE_OAUTH_TOKEN`(多一層保險,llm.py 已經經過
-> `auth_env`;可以刪)、`classify_exit` 自己一份登入錯誤的判斷(之後改用 `is_login_error`)。
-> **每一步的驗收**:`bin/test-gate`(commit 閘門)跟黃金檔——重構前先把外面看得到的行為固定成測試(第 6 層:
-> `tests/test_check_login.py` 連警報字句都比、`tests/fixtures/llm-golden.json` 沒重生)。
-> **還在用舊入口的兩處**(輸出跟以前一字不差,照樣能用):agent-hub 自己的 `.claude/settings.json`(它的 session 開始還要拉
-> agent-hub 的 repo,`hub-event` 沒有這一步),跟使用者層級的 worktree hook(U4,要 Knas 親自改)。
+> **Progress** (10-25): steps 1 (skeleton), 2 (layer 5, conversation logs), 3 (layer 1, "run once"), 5 (layer 3 events
+> `hub-event`, layer 4 rule files `hub-runtime`) and 6 (layer 6 login, interface `auth`) are done; all 24 projects
+> switched to the new hooks. **Not done yet**: layer 1's long-running session (scheduled after the other session's
+> lease neutralisation, see `lease-contract-neutral.md`), neutralising the judgment point declarations (waits for
+> layer 2's approvals; adding `platform_tools` along the way), renaming `templates/CLAUDE.md`, renaming jobs
+> (`runtime-login`, `update-runtime`).
+> **Claude names layer 6 still has**: `lease-resume` (reads the token file directly and calls `claude --resume`;
+> switched together with the long-running session's `resume_command`), the `unset/remove CLAUDE_CODE_OAUTH_TOKEN` in
+> `run-agent-job.sh` and `lease-runner.py` (an extra safety layer; llm.py already goes through `auth_env`; can be
+> deleted), `classify_exit`'s own copy of the login-error check (to switch to `is_login_error` later).
+> **Acceptance for every step**: `bin/test-gate` (the commit gate) and the golden files: before refactoring, the
+> externally visible behaviour is fixed as tests (layer 6: `tests/test_check_login.py` compares even the alert
+> wording, and `tests/fixtures/llm-golden.json` was not regenerated).
+> **Two places still using the old entry points** (output identical to before, still working): agent-hub's own
+> `.claude/settings.json` (its session start still has to pull agent-hub's repo, a step `hub-event` does not have), and
+> the user-level worktree hook (U4, which the owner must change personally).
 
-## 目標
+## Goal
 
-10-25 Knas:「這些都要變成接口,Claude Code 只是一個實作,每層都要有這樣的抽象以及泛化。」
+The owner on 10-25: "all of these must become interfaces; Claude Code is just one implementation, and every layer
+needs this kind of abstraction and generalisation."
 
-現在 agent-hub 跟 Claude Code 的耦合散在六個地方(盤點見各層)。目標是:平台的程式只依賴**平台自己定義的介面**,
-跟 Claude Code 有關的細節全部收進 `ClaudeCode*` 實作;要換工具、或同時用第二種(例如 Muninn 的本機模型、
-其他 CLI),就是多寫一組實作,平台其他程式不用動。
+Today agent-hub's coupling to Claude Code is spread over six places (inventory in each layer). The goal: the
+platform's code depends only on **interfaces the platform defines itself**, and every detail tied to Claude Code is
+gathered into `ClaudeCode*` implementations; switching tools, or using a second one alongside (e.g. the assistant's
+local models, other CLIs), means writing one more set of implementations, with no change to the rest of the platform.
 
-## 原則
+## Principles
 
-1. **ports & adapters 是結構,Strategy 是選實作的方式。** 每一層一個小介面(port,Python `Protocol`,跟 Muninn
-   `core/ports.py` 同一種寫法);實作(adapter)是可替換的 Strategy,由設定決定用哪一個,呼叫端只拿到介面。
-   不是每一層都長得像 Strategy:hook 那層是事件(平台定義事件、各 runtime 接上來),權限那層是翻譯。
-2. **介面從平台的需要往下設計,不照 Claude Code 的功能往上抽。** 判斷標準:介面的名詞跟參數,換一個完全不同的
-   工具還說得通嗎?說不通(例如出現 `allowedTools`、`--resume`、jsonl)就是把實作的形狀漏進介面了。
-3. **至少兩個實作:Claude Code + 一個假的(Fake)。** 每個介面一組契約測試,兩個實作都要跑過。只有一個實作的
-   介面一定會長成那個實作的樣子;假的實作也是平台其他程式的測試替身(今天信箱分流的測試已經這樣用)。
-   真要換工具時,新的實作跑過同一組契約測試才算可以替換。
-4. **一層一層換(strangler),不一次重寫。** 每一層:定介面 → 把現有的程式包成 `ClaudeCode*` 實作 → 呼叫端改成
-   依賴介面 → 補契約測試 → 刪掉散在各處的 Claude 細節。每一步都能單獨上線、單獨回退。
-5. **一個實作 = 一個模組,Strategy 選的是模組**(照 `bin/` 現在的寫法,模組層級的函式,不硬套 class):
-   Claude Code 的實作就是 `bin/runtime_claude.py`(所有層共用;第 2 層的翻譯函式也在這裡,見下),假的實作是
-   `bin/runtime_fake.py`。介面寫在 `bin/runtime_ports.py`(`Protocol`,只描述模組要提供哪些函式)。選哪個寫在
-   `hub.json` 的 `runtime.default`(現在是 `claude`),必要時專案登錄或判斷點可以覆寫;平台程式用
-   `runtime_ports.load(name)` 拿到模組,不直接 `import runtime_claude`。
+1. **Ports & adapters is the structure; Strategy is how the implementation is chosen.** One small interface per layer
+   (a port, a Python `Protocol`, written the same way as Muninn's `core/ports.py`); implementations (adapters) are
+   interchangeable Strategies, chosen by settings, and callers only get the interface.
+   Not every layer looks like a Strategy: the hook layer is events (the platform defines events, each runtime
+   connects to them), the permission layer is translation.
+2. **Interfaces are designed down from what the platform needs, not abstracted up from Claude Code's features.** The
+   test: do the interface's nouns and parameters still make sense for a completely different tool? If not (e.g.
+   `allowedTools`, `--resume`, jsonl appear), the implementation's shape has leaked into the interface.
+3. **At least two implementations: Claude Code + a fake one.** Each interface has a set of contract tests, and both
+   implementations must pass them. An interface with only one implementation inevitably grows into that
+   implementation's shape; the fake is also the test double for the rest of the platform (today's mailbox routing
+   tests already use it that way). When a tool is really switched, a new implementation counts as a replacement only
+   after passing the same contract tests.
+4. **Switch layer by layer (strangler), no rewrite in one go.** For each layer: define the interface → wrap the
+   existing code as a `ClaudeCode*` implementation → callers depend on the interface → add contract tests → delete the
+   Claude details scattered around. Every step can go live and be rolled back on its own.
+5. **One implementation = one module; the Strategy chooses a module** (as `bin/` is written today, module-level
+   functions, no forced classes): the Claude Code implementation is `bin/runtime_claude.py` (shared by all layers;
+   layer 2's translation functions are here too, see below), the fake one is `bin/runtime_fake.py`. The interfaces
+   are in `bin/runtime_ports.py` (`Protocol`, only describing which functions a module must provide). Which one is
+   used is written in `hub.json`'s `runtime.default` (currently `claude`), overridable by the project registry or a
+   judgment point when needed; platform code gets the module with `runtime_ports.load(name)` and does not
+   `import runtime_claude` directly.
 
-6. **符合介面是機械檢查,不是靠約定**:`runtime_ports.load(name)` 檢查模組有沒有提供每個介面要求的函式,缺了就拒絕
-   載入;契約測試從登記表自動找出所有實作來跑,不是手寫 `[claude, fake]`——第三個實作加進來不可能沒跑過契約測試。
-7. **契約測試檢查語意,不是只看有沒有被呼叫**:例如分支接續之後原本對話的 context 大小跟紀錄完全不變、對話結束後
-   `alive` 是 False、不認得的 id `context_size` 回 None、每次 `send` 剛好有一個 `turn_end`。所以 Fake 要真的記得狀態。
-   Fake 也能從設定選(暫存 hub 裡 `runtime.default: fake`):librarian、信箱分流可以端到端跑、不花模型的錢。
-8. **全系統只有一套「動作種類」(kind)**:讀、搜尋、問人、開網頁、寫檔、跑指令。第 1 層判斷點的政策、第 2 層的
-   `approvals`、跟 Muninn 的權限契約都用同一組名稱,不各自取名。
-9. **session 帶著它屬於哪個 runtime**:`SessionHandle = (runtime, id)`;信箱的在場紀錄、租約紀錄多一欄 `runtime`;
-   `hubbus send` 的寄件 session 從 `runtime_ports.current_session()` 拿(現在直接讀 `CLAUDE_CODE_SESSION_ID`)。
-   多個 runtime 可以同時登記、每個 session 用它自己的——是「並存、依 session 選」,不是「整個換掉」,舊的對話紀錄
-   也一直讀得到。
-10. **失敗政策留在介面上面**:`AgentRuntime.run` 只回中立的 `TaskResult`(成功/失敗、結構化輸出、成本、token);
-   `on_failure`、`job.failed`、成本累計留在 `llm.py`,不讓每個 runtime 各自實作一套。
+6. **Conforming to the interface is checked mechanically, not by convention**: `runtime_ports.load(name)` checks that
+   the module provides every function the interfaces require, and refuses to load it otherwise; the contract tests
+   find every implementation from the registry automatically rather than a hand-written `[claude, fake]`: a third
+   implementation cannot be added without passing the contract tests.
+7. **Contract tests check semantics, not just whether something was called**: e.g. after a forked continuation the
+   original conversation's context size and log are completely unchanged, `alive` is False after a conversation ends,
+   `context_size` returns None for an unknown id, every `send` has exactly one `turn_end`. So the Fake has to really
+   keep state. The Fake can also be chosen in settings (`runtime.default: fake` in a temporary hub): librarian and
+   mailbox routing can run end to end without spending money on models.
+8. **The whole system has one set of "action kinds"**: read, search, ask a person, open web, write file, run command.
+   Layer 1's judgment point policies, layer 2's `approvals` and the permission contract with the assistant all use the
+   same names, none naming them separately.
+9. **A session carries which runtime it belongs to**: `SessionHandle = (runtime, id)`; the mailbox's presence records
+   and the lease records get a `runtime` column; `hubbus send` gets the sending session from
+   `runtime_ports.current_session()` (today it reads `CLAUDE_CODE_SESSION_ID` directly). Several runtimes can be
+   registered at once and each session uses its own: "side by side, chosen per session", not "replace the whole
+   thing"; old conversation logs remain readable.
+10. **Failure policy stays above the interface**: `AgentRuntime.run` returns only a neutral `TaskResult` (success /
+   failure, structured output, cost, tokens); `on_failure`, `job.failed` and cost accounting stay in `llm.py`, rather
+   than each runtime implementing its own.
 
-## 分層
+## Layers
 
-檔案:`bin/runtime_ports.py`(介面 + `load`)、`bin/runtime_claude.py`(Claude Code 實作,所有層)、`bin/runtime_fake.py`
-(假的實作)、`tests/test_runtime_contracts.py`(契約測試,兩個模組都跑)。下面各層的介面用 class 寫只是為了看得清楚,
-實作是模組裡同名的函式。
+Files: `bin/runtime_ports.py` (interfaces + `load`), `bin/runtime_claude.py` (the Claude Code implementation, all
+layers), `bin/runtime_fake.py` (the fake implementation), `tests/test_runtime_contracts.py` (contract tests, run on both
+modules). The interfaces below are written as classes only for readability; the implementations are functions of the
+same names in a module.
 
-### 1. AgentRuntime:讓一個 agent 做事
+### 1. AgentRuntime: having an agent do work
 
-平台需要的:跑一次判斷點(給 prompt、工作目錄、政策、輸出格式,拿結果)、開一個長駐的對話(深談)、接續一個
-既有的對話、在不動原本對話的情況下分支接續、這個對話還活著嗎、接續要載入多少 context、對話的事件串流。
+What the platform needs: run a judgment point once (give a prompt, working directory, policy and output format, get
+the result), open a long-running conversation (a deep talk), continue an existing conversation, fork a continuation
+without touching the original conversation, whether this conversation is still alive, how much context a
+continuation would load, and the conversation's event stream.
 
 ```python
 class AgentRuntime(Protocol):
-    def run(self, task: Task) -> TaskResult: ...                 # 一次:prompt、cwd、policy、output_schema、timeout
-    def open_session(self, spec: SessionSpec) -> SessionHandle: ...   # 長駐:id、cwd、policy、說明文字、能不能問人
-    def send(self, h: SessionHandle, msg: Message) -> None: ...  # 文字 + 附件
-    def events(self, h: SessionHandle) -> Iterator[Event]: ...   # 中立事件:text、tool_use、tool_result、turn_end、error
+    def run(self, task: Task) -> TaskResult: ...                 # once: prompt, cwd, policy, output_schema, timeout
+    def open_session(self, spec: SessionSpec) -> SessionHandle: ...   # long-lived: id, cwd, policy, preamble, may ask
+    def send(self, h: SessionHandle, msg: Message) -> None: ...  # text + attachments
+    def events(self, h: SessionHandle) -> Iterator[Event]: ...   # neutral: text, tool_use, tool_result, turn_end, error
     def resume(self, sid: str, *, fork: bool, spec: SessionSpec) -> SessionHandle: ...
     def alive(self, sid: str) -> bool: ...
     def context_size(self, sid: str) -> int | None: ...
 ```
 
-- 現在在哪:`llm.py`(`claude -p` 的旗標、輸出格式)、`lease-runner.py`(組旗標、解析 stream-json)、`runtime_claude.py`、
-  `run-agent-job.sh`、`check-claude-login.py`/`update-claude.py` 呼叫 `claude`。
-- `llm.py` 變成「判斷點 → Task」的一層:讀 `llm-points.yaml`、組 `Task`、交給 `AgentRuntime.run`,不再自己組 Claude 旗標。
-  `llm-points.yaml` 裡 Claude 專用的欄位(`allowed_tools`、`permission_mode`、`tools`)改成中立的政策(交給第 2 層翻譯);
-  判斷點可以宣告 `runtime`(選填,預設 `hub.json`)——這要改共用的 `llm-points.v1.schema.json`,跟 Muninn 同一天同步。
-- 「能不能問人」(權限轉接、提問)是 `SessionSpec` 的一部分:平台提供一個中立的「問人」服務(現在的 lease-relay 背後
-  那套:送 Muninn、等回覆),各 runtime 的實作負責把它接到自己的權限機制上(Claude Code 是 `--permission-prompt-tool`)。
-- 事件串流用中立的事件型別;lease-runner 現在已經把 Claude 的格式轉成自己的事件(`assistant`、`tool_use`、`text_delta`),
-  這段轉換搬進 `runtime_claude.events`。
-- **長駐 session(深談)這部分這份只定介面,不寫實作**:租約的契約中立化(Muninn 的 m10251446:tool → kind 翻譯表、
-  事件、配額、錯誤碼、權限轉接改看 kind)橫跨這層跟第 2 層,還沒決定由哪個 session 做;定案前兩邊都不動
-  lease-runner 的旗標、stream-json、lease-relay。
+- Where it is today: `llm.py` (`claude -p` flags, output format), `lease-runner.py` (building flags, parsing
+  stream-json), `runtime_claude.py`, `run-agent-job.sh`, `check-claude-login.py`/`update-claude.py` calling `claude`.
+- `llm.py` becomes the "judgment point → Task" layer: it reads `llm-points.yaml`, builds a `Task` and hands it to
+  `AgentRuntime.run`, no longer building Claude flags itself. The Claude-specific fields in `llm-points.yaml`
+  (`allowed_tools`, `permission_mode`, `tools`) become a neutral policy (translated by layer 2); a judgment point can
+  declare `runtime` (optional, default from `hub.json`): this changes the shared `llm-points.v1.schema.json`, synced
+  with Muninn the same day.
+- "May it ask a person" (permission relay, questions) is part of `SessionSpec`: the platform provides a neutral "ask a
+  person" service (what is behind today's lease-relay: send to the assistant, wait for the answer), and each runtime's
+  implementation connects it to its own permission mechanism (for Claude Code, `--permission-prompt-tool`).
+- The event stream uses neutral event types; lease-runner already turns Claude's format into its own events
+  (`assistant`, `tool_use`, `text_delta`), and that conversion moves into `runtime_claude.events`.
+- **For the long-running session (deep talk) this document only defines the interface, no implementation**: the
+  lease contract's neutralisation (the assistant's m10251446: a tool → kind translation table, events, quota, error
+  codes, the permission relay deciding by kind) spans this layer and layer 2, and which session does it is not decided
+  yet; until it is, neither side touches lease-runner's flags, stream-json or lease-relay.
 
-### 2. PolicyCompiler:權限政策(另一個 session 負責)
+### 2. PolicyCompiler: permission policy (owned by another session)
 
-中立的政策翻成各 runtime 的設定。設計與實作由「沙盒設計與 Claude Code 耦合」session 負責,見
-`docs/design/capabilities.md`(Knas 確認前格式都可能變)。這份只引用、不另外定義:
+The neutral policy translated into each runtime's settings. Design and implementation are owned by the "sandbox design
+and Claude Code coupling" session, see `docs/design/capabilities.md` (the format may change until the owner confirms).
+This document only references it, defining nothing separately:
 
-- **中立政策**:`policy.policy(name, index) -> dict`,欄位 `workspace`、`write`、`deny_write`、`deny_read`、`credentials`、
-  `network`、`platform_commands`、`capabilities`。
-- **翻譯(= 這層的 Claude Code 實作,模組層級函式)**:`runtime_claude.settings(policy)`(專案的 Claude 設定)、
-  `runtime_claude.lease_settings(policy)`(租約的設定)、`runtime_claude.sandbox_rendered(...)`(work 模式開放條件)。
-  平台自己的 Seatbelt `seatbelt.profile(policy, cap)` 跟 runtime 無關。
-- **「哪些動作要問人」**(`approvals`,以動作種類 kind 為 key:讀、搜尋、問人、開網頁、寫檔、跑指令)還沒定案,
-  會定在 m10251446 那份設計;第 1 層的 `SessionSpec` 等它定了再接。
-- `AgentRuntime` 的 `Task`/`SessionSpec` 帶的是中立政策,由對應 runtime 的翻譯函式轉成它的設定。
+- **Neutral policy**: `policy.policy(name, index) -> dict`, fields `workspace`, `write`, `deny_write`, `deny_read`,
+  `credentials`, `network`, `platform_commands`, `capabilities`.
+- **Translation (= this layer's Claude Code implementation, module-level functions)**:
+  `runtime_claude.settings(policy)` (the project's Claude settings), `runtime_claude.lease_settings(policy)` (the
+  lease's settings), `runtime_claude.sandbox_rendered(...)` (the condition for opening work mode). The platform's own
+  Seatbelt `seatbelt.profile(policy, cap)` is runtime-independent.
+- **"Which actions need asking a person"** (`approvals`, keyed by action kind: read, search, ask a person, open web,
+  write file, run command) is not settled yet; it will be defined in the m10251446 design, and layer 1's `SessionSpec`
+  connects to it once it is.
+- `AgentRuntime`'s `Task`/`SessionSpec` carry the neutral policy, converted to its settings by the corresponding
+  runtime's translation functions.
 
-### 3. LifecycleEvents:平台的事件,各 runtime 怎麼接上來
+### 3. LifecycleEvents: the platform's events, and how each runtime connects to them
 
-平台需要知道的時機:session 開始(含壓縮後重新開始)、session 結束、要壓縮了、用完一個工具、使用者送出訊息,
-以及在這些時機「把一段文字放進 agent 的 context」(信箱、memory 提醒)。
+The moments the platform needs to know about: session start (including restart after compaction), session end, about
+to compact, a tool finished, the user sent a message; and at these moments, "put a piece of text into the agent's
+context" (mailbox, memory reminders).
 
 ```python
 class LifecycleBinding(Protocol):
-    def install(self, workspace: Path) -> None: ...        # 把 runtime 的原生 hook 接到 `hub event <事件>`
-    def parse(self, event: str, raw: bytes) -> HubEvent: ...   # 原生輸入 → 中立的 HubEvent(session、cwd、事件)
-    def inject(self, event: str, text: str) -> bytes: ...  # 中立的「放進 context」→ 原生輸出格式
+    def install(self, workspace: Path) -> None: ...        # connect the runtime's native hooks to `hub event <event>`
+    def parse(self, event: str, raw: bytes) -> HubEvent: ...   # native input → neutral HubEvent (session, cwd, event)
+    def inject(self, event: str, text: str) -> bytes: ...  # neutral "put into context" → native output format
 ```
 
-- 平台這邊只有一個入口 `bin/hub-event <事件>`:用 `parse` 讀輸入,依事件呼叫平台的處理(memory 同步、信箱、
-  memory 提醒、跨專案寫入防護、在場紀錄),用 `inject` 輸出。處理的程式(hubbus hook、memory-nudge、guard、
-  git-sync-memory)不再知道 `hookSpecificOutput`、`session_id` 這些名字。
-- 現在在哪:`merge-hook-settings.py`(寫 Claude 的 hook 設定)、`sync-local-setup.sh`、`worktree-memory.sh`、
-  `hubbus hook`、`memory-nudge.py`、`guard.py`、`CLAUDE_CODE_SESSION_ID`。
-- 對應:Claude Code 的 SessionStart/SessionEnd/PreCompact/PostToolUse/UserPromptSubmit/PreToolUse。
-- **過渡期**:`hubbus hook …` 先留著當轉接(內部呼叫 `hub-event`),等每個專案都重跑過 `sync-local-setup` 才拿掉——
-  hook 的錯誤輸出是被丟掉的,直接拿掉舊指令會讓 memory 同步無聲壞掉。
-- **worktree 的 hook 掛在使用者層級**(`~/.claude/settings.json`,U4):照 CLAUDE.md,改那個檔要 Knas 在那個 session
-  直接確認,所以第 3 層上線時這一步要他動手。沒有某個時機的 runtime
-  (例如沒有「壓縮前」),實作宣告不支援,平台照不支援處理(例如改成定時同步),不假裝有。
+- On the platform side there is one entry point, `bin/hub-event <event>`: it reads the input with `parse`, calls the
+  platform's handling per event (memory sync, mailbox, memory reminders, cross-project write guard, presence records),
+  and outputs with `inject`. The handling code (hubbus hook, memory-nudge, guard, git-sync-memory) no longer knows
+  names like `hookSpecificOutput` or `session_id`.
+- Where it is today: `merge-hook-settings.py` (writes Claude's hook settings), `sync-local-setup.sh`,
+  `worktree-memory.sh`, `hubbus hook`, `memory-nudge.py`, `guard.py`, `CLAUDE_CODE_SESSION_ID`.
+- Mapping: Claude Code's SessionStart/SessionEnd/PreCompact/PostToolUse/UserPromptSubmit/PreToolUse.
+- **Transition**: `hubbus hook …` stays as an adapter for now (calling `hub-event` internally), removed only after every
+  project has rerun `sync-local-setup`: hook error output is discarded, and removing the old command directly would
+  break memory sync silently.
+- **The worktree hook is at user level** (`~/.claude/settings.json`, U4): per CLAUDE.md, changing that file needs the
+  owner's direct confirmation in that session, so when layer 3 goes live this step is his to do. A runtime lacking
+  some moment (e.g. no "before compaction") declares it unsupported in its implementation, and the platform handles it
+  as unsupported (e.g. switching to timed sync) rather than pretending.
 
-### 4. InstructionsChannel:規則跟 memory 說明怎麼交給 agent
+### 4. InstructionsChannel: how rules and memory instructions reach the agent
 
 ```python
 class InstructionsChannel(Protocol):
-    def write(self, workspace: Path, block: str) -> None: ...   # 平台受管的區塊(寫在 runtime 會讀的地方,不進版控)
-    def ignore_paths(self) -> list[str]: ...                     # 要加進 .git/info/exclude 的檔
+    def write(self, workspace: Path, block: str) -> None: ...   # managed block, where the runtime reads it; untracked
+    def ignore_paths(self) -> list[str]: ...                     # files to add to .git/info/exclude
 ```
 
-- 現在在哪:`sync-local-setup.sh`(`CLAUDE.local.md` 受管區塊)、`onboard/recover/migrate` 的 ignore。
-- 區塊的**內容**(`templates/CLAUDE.md`、`templates/rules/`)是平台的,跟 runtime 無關,改名成 `templates/agent-instructions.md`;
-  只有「寫到哪個檔、什麼格式」是實作的事(Claude Code:`CLAUDE.local.md`;別的工具可能是 `AGENTS.md`)。
+- Where it is today: `sync-local-setup.sh` (the managed block in `CLAUDE.local.md`), the ignores in
+  `onboard/recover/migrate`.
+- The block's **content** (`templates/CLAUDE.md`, `templates/rules/`) belongs to the platform, is runtime-independent,
+  and is renamed `templates/agent-instructions.md`; only "which file, what format" is the implementation's business
+  (Claude Code: `CLAUDE.local.md`; another tool might use `AGENTS.md`).
 
-### 5. TranscriptSource:讀對話紀錄
+### 5. TranscriptSource: reading conversation logs
 
 ```python
 class TranscriptSource(Protocol):
-    def sessions(self, since: datetime | None = None) -> Iterator[SessionInfo]: ...  # id、工作目錄、開始/最後時間
-    def turns(self, sid: str) -> Iterator[Turn]: ...    # 誰說的(human/assistant/tool/system)、時間、文字、token
+    def sessions(self, since: datetime | None = None) -> Iterator[SessionInfo]: ...  # id, working dir, start/last time
+    def turns(self, sid: str) -> Iterator[Turn]: ...    # who said it (human/assistant/tool/system), time, text, tokens
     def last_activity(self, workspace: Path) -> datetime | None: ...
 ```
 
-- 現在在哪:`hublib.py`(`~/.claude/projects/<slug>/*.jsonl`、`origin.kind == human`、slug 規則)、`weekly-reflect.py`、
-  `check-memory-gaps.py`、`trajectory.py`、`worktrees.py`(閒置天數)、`migrate-to-mini.py`、`runtime_claude.context_tokens`。
-- 這一層**最容易無聲壞掉**:Claude Code 的對話紀錄是沒有公開文件的內部格式。`ClaudeCodeTranscripts` 讀的時候做格式檢查
-  (認不得的版本 → 明確失敗、狀態頁標紅),不讓統計默默算錯。
+- Where it is today: `hublib.py` (`~/.claude/projects/<slug>/*.jsonl`, `origin.kind == human`, the slug rule),
+  `weekly-reflect.py`, `check-memory-gaps.py`, `trajectory.py`, `worktrees.py` (idle days), `migrate-to-mini.py`,
+  `runtime_claude.context_tokens`.
+- This layer is **the most likely to break silently**: Claude Code's conversation logs are an undocumented internal
+  format. `ClaudeCodeTranscripts` checks the format as it reads (an unknown version → explicit failure, red on the
+  status page), so statistics are never silently wrong.
 
-### 6. AuthProvider:登入狀態
+### 6. AuthProvider: login state
 
 ```python
 class AuthProvider(Protocol):
-    def check(self, mode: str) -> AuthStatus: ...   # 能不能用、什麼時候到期;mode = 無人值守 / 訂閱
-    def env(self, mode: str) -> dict: ...           # 交給 AgentRuntime 用的環境(不印值)
+    def check(self, mode: str) -> AuthStatus: ...   # usable or not, when it expires; mode = unattended / subscription
+    def env(self, mode: str) -> dict: ...           # the environment handed to AgentRuntime (values never printed)
 ```
 
-**實作的形狀**(10-25,`runtime_ports` 的 `auth`):`auth_env(mode, env) -> (env | None, 原因)`、`clean_env(env)`、
-`credentials() -> [Credential]`、`is_login_error(text)`。跟上面草稿的差別:「能不能用」不是 runtime 回答——實際打一次請求
-(`llm.py run login-check`)是平台的檢查,runtime 只描述有哪些登入、到期、門檻、怎麼重新登入(`Credential`),跟分辨錯誤是不是
-登入問題。mode 沿用 llm-points 的 `token`/`subscription`(跟 Muninn 共用的宣告,改名等中立化)。`check-claude-login.py` 照
-`Credential` 組回原本的句子(警報照字句去重,一字不差);刻意改的一處:token 那次「找不到 claude」也算要人處理。
+**The shape as implemented** (10-25, `runtime_ports`' `auth`): `auth_env(mode, env) -> (env | None, reason)`,
+`clean_env(env)`, `credentials() -> [Credential]`, `is_login_error(text)`. The difference from the draft above: "is it
+usable" is not the runtime's answer: actually making a request (`llm.py run login-check`) is the platform's check; the
+runtime only describes which logins exist, expiry, thresholds, how to log in again (`Credential`), and tells whether an
+error is a login problem. mode keeps llm-points' `token`/`subscription` (a declaration shared with Muninn; renamed
+when neutralised). `check-claude-login.py` rebuilds its original sentences from `Credential` (alerts are deduplicated
+by wording, so word for word); one deliberate change: "claude not found" on the token run also counts as needing a
+person.
 
-- 現在在哪:`llm.py auth_env`(headless token / 訂閱登入)、`check-claude-login.py`、`update-claude.py`、`lease-resume`。
-- 平台的 job(`agent-hub/claude-login`、`update-claude`)改成「對設定裡用到的每個 runtime 檢查」,名稱改成 `runtime-login`、
-  `update-runtime`(用登錄的 `legacy_name`,狀態跟著搬)。
+- Where it is today: `llm.py auth_env` (headless token / subscription login), `check-claude-login.py`,
+  `update-claude.py`, `lease-resume`.
+- The platform's jobs (`agent-hub/claude-login`, `update-claude`) become "check every runtime the settings use", renamed
+  `runtime-login`, `update-runtime` (with the registry's `legacy_name`, so their state moves along).
 
-## 不在範圍
+## Out of scope
 
-- **Claude Desktop 的 session 管理**(列 session、封存、「整理 session」):那是 Desktop 給 session 用的工具,不是平台程式
-  呼叫的東西;平台這邊只有 `AgentRuntime.alive/resume` 需要它的概念。
-- **現在就寫第二個真的 runtime**:不做。Fake 實作負責證明介面沒漏;真的第二個(Muninn 的本機模型、其他 CLI)等有需要再寫。
-- **信箱、memory、librarian 的邏輯本身**:它們已經是平台的東西,只改成透過介面拿 runtime 的資訊。
+- **Claude Desktop's session management** (listing sessions, archiving, "tidy sessions"): those are Desktop's tools for
+  sessions, not something platform code calls; on the platform side only `AgentRuntime.alive/resume` needs the
+  concept.
+- **Writing a second real runtime now**: not done. The Fake proves the interfaces don't leak; a real second one (the
+  assistant's local models, other CLIs) is written when needed.
+- **The logic of the mailbox, memory and librarian themselves**: they already belong to the platform; only how they
+  get runtime information changes, through the interfaces.
 
-## 步驟(每一步單獨上線)
+## Steps (each goes live on its own)
 
-1. **骨架**:`runtime_ports.py`(介面、`load` 的機械檢查、`current_session`、`hub.json` 的 `runtime.default`)、契約測試的框架、
-   `runtime_fake.py`(有狀態)。這一步完全不碰別的檔,可以馬上做。
-   **等另一個 session 第 2 層的第一步(`policy.py`、把設定翻譯搬進 `runtime_claude.py`)commit 之後才動
-   `runtime_claude.py`、`render-project-settings.py`、`lease-runner.py`**——它們會同時改這三支。
-2. **第 5 層 TranscriptSource**(最容易無聲壞掉、範圍最小;Claude 的實作寫進 `runtime_claude.py`——另一個 session 的第 1 步
-   已經 commit(2568776),可以動了;它之後還會改 `lease-runner.py` 的 preamble,動那支前先跟它說):`hublib` 的對話紀錄解析、`runtime_claude.context_tokens`、
-   `worktrees` 的閒置天數改走介面;加格式檢查。
-3. **第 1 層 AgentRuntime 的「跑一次」**:`llm.py` 改成組 `Task` 交給介面;所有排程 job 不動就自動跟上。
-   `llm-points` 的中立化跟第 2 層一起做(要等那個 session 的政策格式)。
-4. **第 1 層的長駐 session**:lease-runner 改走 `open_session/send/events/resume`(跟第 2 層的 session 一起確認)。
-5. **第 3、4 層**:`hub-event` 入口、`LifecycleBinding`、`InstructionsChannel`;各專案的 hook 跟受管區塊下次開 session 時
-   自動換成新的(`sync-local-setup.sh` 本來就會)。
-6. **第 6 層 AuthProvider**,把平台 job 改名。
-7. **收尾**:`grep` 不到任何 `claude`、`.claude/`、Claude 的旗標出現在 `runtime_claude.py` 以外(加進每晚的
-   contracts-check 當 lint,跟現在「bin/ 裡不准直接 claude -p」同一種檢查)。
+1. **Skeleton**: `runtime_ports.py` (interfaces, `load`'s mechanical check, `current_session`, `runtime.default` in
+   `hub.json`), the contract test framework, `runtime_fake.py` (stateful). This step touches no other file and can be
+   done right away.
+   **`runtime_claude.py`, `render-project-settings.py` and `lease-runner.py` are touched only after the other
+   session's first layer-2 step (`policy.py`, moving the settings translation into `runtime_claude.py`) is
+   committed**: it changes those three at the same time.
+2. **Layer 5 TranscriptSource** (the most likely to break silently, and the smallest; the Claude implementation goes
+   into `runtime_claude.py`: the other session's step 1 is committed (2568776), so it can be touched now; it will
+   later change `lease-runner.py`'s preamble, so tell it before touching that one): `hublib`'s conversation-log
+   parsing, `runtime_claude.context_tokens` and `worktrees`' idle days go through the interface; add the format check.
+3. **Layer 1 AgentRuntime "run once"**: `llm.py` builds a `Task` and hands it to the interface; every scheduled job
+   follows automatically without changes. Neutralising `llm-points` is done together with layer 2 (it waits for that
+   session's policy format).
+4. **Layer 1 long-running session**: lease-runner goes through `open_session/send/events/resume` (confirmed together
+   with the layer 2 session).
+5. **Layers 3 and 4**: the `hub-event` entry point, `LifecycleBinding`, `InstructionsChannel`; each project's hooks and
+   managed block switch to the new ones the next time a session opens (`sync-local-setup.sh` already does that).
+6. **Layer 6 AuthProvider**, renaming the platform jobs.
+7. **Wrap-up**: `grep` finds no `claude`, `.claude/` or Claude flags outside `runtime_claude.py` (added to the nightly
+   contracts-check as a lint, the same kind of check as today's "no direct claude -p in bin/").
 
-## 要 Knas 確認的
+## For the owner to confirm
 
-0. (這份跟另一個 session 已經對齊邊界:第 2 層、能力、租約的契約中立化由它負責或待定;它 commit 第 1 步之前,
-   這份不動 `runtime_claude.py`、`render-project-settings.py`、`lease-runner.py`。)
+0. (This document and the other session have aligned the boundary: layer 2, capabilities and the lease contract's
+   neutralisation are that session's or undecided; until it commits step 1, this work does not touch
+   `runtime_claude.py`, `render-project-settings.py` or `lease-runner.py`.)
 
-1. 整體做法(ports & adapters + Strategy 選實作 + Claude Code / Fake 兩個實作跑同一組契約測試 + 一層一層換)。
-2. 順序(先第 5 層,再第 1 層)。
-3. `llm-points.v1.schema.json` 加 `runtime`、把 Claude 專用欄位換成中立政策——這會動到跟 Muninn 共用的格式,兩邊要同一天同步。
-4. 第 3 層上線時,worktree 的 hook(使用者層級設定)要你親自改。
-5. 改名 `templates/CLAUDE.md` → `templates/agent-instructions.md` 時,skills 跟兩份 CLAUDE.md 裡引用它的地方一起改。
+1. The overall approach (ports & adapters + Strategy choosing implementations + Claude Code / Fake implementations
+   passing the same contract tests + switching layer by layer).
+2. The order (layer 5 first, then layer 1).
+3. `llm-points.v1.schema.json` gains `runtime`, and the Claude-specific fields are replaced by a neutral policy: this
+   touches the format shared with Muninn, so both sides must sync the same day.
+4. When layer 3 goes live, the worktree hook (user-level settings) must be changed by you personally.
+5. When renaming `templates/CLAUDE.md` → `templates/agent-instructions.md`, the skills and the two CLAUDE.md files that
+   reference it change together.
