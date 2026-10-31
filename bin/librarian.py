@@ -667,7 +667,8 @@ def process(proj: str, d: pathlib.Path, handoffs: list[dict], digest: list[str])
         # 呼叫本身失敗:可能改到一半,不採用。副本還原成乾淨狀態,不留給下一晚
         run(["git", "-C", str(d), "checkout", "-q", "--", "."])
         run(["git", "-C", str(d), "clean", "-fdq"])
-        log(_("{project}: claude invocation failed (exit {rc}), copy restored, checkpoint not advanced", project=proj, rc=rc))
+        log(_("{project}: claude invocation failed (exit {rc}); the copy is restored and the checkpoint not advanced",
+              project=proj, rc=rc))
         return
     if (cost := add_cost(obj)):
         log(f"{proj}: call cost ${cost} (model: {used_model(obj)})")
@@ -679,7 +680,7 @@ def process(proj: str, d: pathlib.Path, handoffs: list[dict], digest: list[str])
     if no_output:
         o = obj or {}
         said = (jstr(o.get("result")) if present(o.get("result")) else "") + "\n"   # shell:jq 的換行經 tr 變成結尾的空白
-        log(_("{project}: no structured_output (subtype={subtype} turns={turns} the model last said: {said}); "
+        log(_("{project}: no structured_output (subtype={subtype}, turns={turns}; the model last said: {said}); "
               "going by the actual file changes", project=proj,
               subtype=jstr(o.get("subtype")) if present(o.get("subtype")) else "?",
               turns=jstr(o.get("num_turns")) if present(o.get("num_turns")) else "?",
@@ -719,19 +720,19 @@ def process(proj: str, d: pathlib.Path, handoffs: list[dict], digest: list[str])
         log(f"{proj}: STATE.md updated & pushed ({new_sha})")
         # `**理由**` is a label registrar.py reads back (removal_reason): a token, not a message
         block = (f"## {TODAY} · {proj}\n\n**commit**: `{new_sha}`\n\n**理由**: {reason or _('(the agent gave no reason)')}\n\n"
-                 + (_("**{assistant} handoffs**: {nums}", assistant=ASSISTANT, nums=nums) + "\n\n" if ids else "")
+                 + (_("**Handoffs from {assistant}**: {nums}", assistant=hubconf.assistant_name(), nums=nums) + "\n\n" if ids else "")
                  + f"```diff\n{state_diff}\n```\n\n---\n\n")
         with REVIEW_LOG.open("a") as f:
             f.write(block)
         log(_("{project}: written to review-log.md for later spot checks", project=proj))
     else:
         # 不更新也留理由:STATE.md 一直是佔位內容時,才分得出是模型太保守還是 prompt 有問題
-        log(_("{project}: STATE.md not updated, reason: {reason}", project=proj,
+        log(_("{project}: STATE.md not updated; reason: {reason}", project=proj,
               reason=reason or _("(the agent gave no reason)")))
 
     # 模型說有更新、實際沒改,或動了不該動的檔案:這次當作沒處理完,不推進 checkpoint,下次再跑同一個範圍
     if (reported == "true" and actually != "true") or stray or no_output:
-        log(_("{project}: this result is not trustworthy, checkpoint not advanced, retrying next time", project=proj))
+        log(_("{project}: this result is not trustworthy; the checkpoint is not advanced, retrying next time", project=proj))
         return
     ckpt.write_text(new_sha + "\n")
 
@@ -739,9 +740,10 @@ def process(proj: str, d: pathlib.Path, handoffs: list[dict], digest: list[str])
         r = run([PY, str(HUB / "bin" / "hubbus"), "done", *ids, "--note",
                  _("librarian applied this to STATE.md ({date}, see review-log)", date=TODAY)], to_log=True)
         if r.returncode == 0:
-            log(_("{project}: assistant handoffs {nums} closed (bridge will report to the assistant)", project=proj, nums=nums))
+            log(_("{project}: assistant handoffs {nums} closed (the bridge reports it to the assistant)", project=proj,
+                  nums=nums))
         else:
-            log(_("{project}: closing the assistant handoffs failed, they are processed again tomorrow night (STATE.md "
+            log(_("{project}: closing the assistant handoffs failed; they are processed again tomorrow night (STATE.md "
                   "was already changed; processing them again should change nothing)", project=proj))
 
     if worth == "true" and summary:

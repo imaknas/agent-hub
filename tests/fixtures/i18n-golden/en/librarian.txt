@@ -13,18 +13,18 @@
 [<T>] p0: STATE.md updated & pushed (<sha>)
 [<T>] p0: written to review-log.md for later spot checks
 h1 done
-[<T>] p0: assistant handoffs #101 closed (bridge will report to the assistant)
+[<T>] p0: assistant handoffs #101 closed (the bridge reports it to the assistant)
 [<T>] --- p1 ---
 [<T>] p1: changed memory files: memory/2026-10-27.md 
 [<T>] p1: assistant handoffs #n1 #s1 #s3 #r1
 [<T>] p1: call cost $0.01 (model: tool default)
 [<T>] p1: shadow (completion version): change=False (agent version=False), edit list invalid: edit 1: old occurs 0 times (it must occur exactly once): '找不到的一段'
-[<T>] p1: STATE.md not updated, reason: reason p1
+[<T>] p1: STATE.md not updated; reason: reason p1
 rec:n1 done
 rec:s1 done
 rec:s3 done
 rec:r1 done
-[<T>] p1: assistant handoffs #n1 #s1 #s3 #r1 closed (bridge will report to the assistant)
+[<T>] p1: assistant handoffs #n1 #s1 #s3 #r1 closed (the bridge reports it to the assistant)
 [<T>] --- p2 ---
 [<T>] p2: changed memory files: memory/2026-10-27.md 
 [<T>] p2: call cost $0.01 (model: tool default)
@@ -32,15 +32,15 @@ rec:r1 done
 [<T>] p2: shadow (completion version): change=True (agent version=True), similarity 0.958
 [<T>] p2: STATE.md updated & pushed (<sha>)
 [<T>] p2: written to review-log.md for later spot checks
-[<T>] p2: this result is not trustworthy, checkpoint not advanced, retrying next time
+[<T>] p2: this result is not trustworthy; the checkpoint is not advanced, retrying next time
 [<T>] --- p3 ---
 [<T>] p3: changed memory files: memory/2026-10-27.md 
 [<T>] p3: call cost $0.01 (model: tool default)
-[<T>] p3: no structured_output (subtype=success turns=1 the model last said: no structured output ); going by the actual file changes
+[<T>] p3: no structured_output (subtype=success, turns=1; the model last said: no structured output ); going by the actual file changes
 [<T>] p3: shadow (completion version): change=True (agent version=True), similarity 0.958
 [<T>] p3: STATE.md updated & pushed (<sha>)
 [<T>] p3: written to review-log.md for later spot checks
-[<T>] p3: this result is not trustworthy, checkpoint not advanced, retrying next time
+[<T>] p3: this result is not trustworthy; the checkpoint is not advanced, retrying next time
 [<T>] --- pdang ---
 [<T>] pdang: changed memory files: memory/2026-10-27.md 
 [<T>] pdang: STATE.md refers to files that do not exist: memory/reference/gone.md
@@ -59,7 +59,7 @@ rec:r1 done
 [<T>] phand: STATE.md updated & pushed (<sha>)
 [<T>] phand: written to review-log.md for later spot checks
 h2 done
-[<T>] phand: assistant handoffs #102 closed (bridge will report to the assistant)
+[<T>] phand: assistant handoffs #102 closed (the bridge reports it to the assistant)
 [<T>] --- pidle ---
 [<T>] pidle: no new commits, skip
 fatal: not a git repository (or any of the parent directories): .git
@@ -75,7 +75,7 @@ fatal: not a git repository (or any of the parent directories): .git
 
 **理由**: reason p0
 
-**Hugin handoffs**: #101
+**Handoffs from Hugin**: #101
 
 ```diff
 diff --git a/STATE.md b/STATE.md
@@ -161,7 +161,7 @@ index <sha>..<sha> 100644
 
 **理由**: reason phand
 
-**Hugin handoffs**: #102
+**Handoffs from Hugin**: #102
 
 ```diff
 diff --git a/STATE.md b/STATE.md
@@ -942,23 +942,23 @@ INDEX>>>
 [<T>] --- p0 ---
 [<T>] p0: changed memory files: memory/2026-10-27.md 
 [<T>] p0: assistant handoffs #101
-[<T>] p0: claude invocation failed (exit 1), copy restored, checkpoint not advanced
+[<T>] p0: claude invocation failed (exit 1); the copy is restored and the checkpoint not advanced
 [<T>] --- p1 ---
 [<T>] p1: changed memory files: memory/2026-10-27.md 
-[<T>] p1: claude invocation failed (exit 1), copy restored, checkpoint not advanced
+[<T>] p1: claude invocation failed (exit 1); the copy is restored and the checkpoint not advanced
 [<T>] --- p2 ---
 [<T>] p2: changed memory files: memory/2026-10-27.md 
-[<T>] p2: claude invocation failed (exit 1), copy restored, checkpoint not advanced
+[<T>] p2: claude invocation failed (exit 1); the copy is restored and the checkpoint not advanced
 [<T>] --- p3 ---
 [<T>] p3: changed memory files: memory/2026-10-27.md 
-[<T>] p3: claude invocation failed (exit 1), copy restored, checkpoint not advanced
+[<T>] p3: claude invocation failed (exit 1); the copy is restored and the checkpoint not advanced
 [<T>] --- pdang ---
 [<T>] pdang: changed memory files: memory/2026-10-27.md 
 [<T>] pdang: STATE.md refers to files that do not exist: memory/reference/gone.md
-[<T>] pdang: claude invocation failed (exit 1), copy restored, checkpoint not advanced
+[<T>] pdang: claude invocation failed (exit 1); the copy is restored and the checkpoint not advanced
 [<T>] --- phand ---
 [<T>] phand: assistant handoffs #102
-[<T>] phand: claude invocation failed (exit 1), copy restored, checkpoint not advanced
+[<T>] phand: claude invocation failed (exit 1); the copy is restored and the checkpoint not advanced
 [<T>] --- pidle ---
 [<T>] pidle: no new commits, skip
 fatal: not a git repository (or any of the parent directories): .git

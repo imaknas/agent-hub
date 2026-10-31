@@ -180,7 +180,7 @@ def candidates(state: dict, only: str | None, ignore_interval: bool) -> list[dic
         if not s["batch"]:
             s["skip"] = _("no date files older than {days} days", days=OLDER_THAN_DAYS)
         elif not ignore_interval and days_since(s["last_ok"]) < MIN_INTERVAL_DAYS:
-            s["skip"] = _("consolidated only on {date}", date=s["last_ok"])
+            s["skip"] = _("consolidated recently ({date}); next run after a week", date=s["last_ok"])
         elif not ignore_interval and s["last_try"] != s["last_ok"] and days_since(s["last_try"]) < RETRY_AFTER_DAYS:
             s["skip"] = _("failed on {date}, retrying after {days} days", date=s["last_try"], days=RETRY_AFTER_DAYS)
         out.append(s)
@@ -393,26 +393,27 @@ def consolidate(s: dict, model: str, dry_run: bool, keep: bool) -> dict:
     try:
         git("clone", "-q", "--branch", "agent-memory", s["origin"], str(repo))
         base = git("rev-parse", "HEAD", cwd=repo).strip()
-        log(_("{project}: consolidating {n} date files ({bytes} bytes, {first} … {last}), {left} left for next time; "
+        log(_("{project}: consolidating {n} {n:date file|date files} ({bytes} bytes, {first} … {last}), {left} left for next time; "
               "model {model}", project=name, n=len(s["batch"]), bytes=s["batch_bytes"], first=s["batch"][0],
               last=s["batch"][-1], left=len(s["old"]) - len(s["batch"]), model=model))
 
         out, err = run_model(build_prompt(s, repo), repo, model)
         if out is None:
-            log(_("{project}: the model call failed ({error}), giving up, the copy is untouched", project=name, error=err))
+            log(_("{project}: the model call failed ({error}); giving up, the copy is untouched", project=name,
+                  error=err))
             return result
         cost = out.get("total_cost_usd")
         denials = out.get("permission_denials") or []
-        log(_("{project}: model done (turns={turns} cost=${cost}), blocked by permissions {n} times", project=name,
+        log(_("{project}: model done (turns={turns}, cost=${cost}), blocked by permissions {n} {n:time|times}", project=name,
               turns=out.get("num_turns"), cost=cost, n=len(denials)))
         so = out.get("structured_output")
         if not so:
-            log(_("{project}: no structured_output (the model last said: {said}), giving up", project=name,
+            log(_("{project}: no structured_output (the model last said: {said}); giving up", project=name,
                   said=str(out.get("result", ""))[:300]))
             return result
 
         if git("rev-parse", "HEAD", cwd=repo).strip() != base:
-            log(_("{project}: HEAD was moved (the model should not be able to commit), giving up", project=name))
+            log(_("{project}: HEAD was moved (the model should not be able to commit); giving up", project=name))
             return result
         changed, stray = [], []
         for line in git("status", "--porcelain", "--untracked-files=all", cwd=repo).splitlines():
@@ -491,8 +492,10 @@ def consolidate(s: dict, model: str, dry_run: bool, keep: bool) -> dict:
         for f in to_delete:
             where = [k for k, text in curated.items() if pathlib.PurePath(f).name in text]
             if where:
-                warnings.append(_("`{files}` still refer to the deleted `{file}` (the librarian's broken-link check "
-                                  "takes over)", files=", ".join(where), file=f))
+                warnings.append((_("`{files}` still refers to the deleted `{file}` (the librarian's broken-link check "
+                                   "takes over)", files=", ".join(where), file=f) if len(where) == 1 else
+                                 _("`{files}` still refer to the deleted `{file}` (the librarian's broken-link check "
+                                   "takes over)", files=", ".join(where), file=f)))
         refs = sorted(p.name for p in (repo / "memory" / "reference").glob("*.md") if p.name != "README.md")
         readme = repo / "memory" / "reference" / "README.md"
         unindexed = [r for r in refs if r not in (readme.read_text() if readme.exists() else "")]
@@ -502,7 +505,7 @@ def consolidate(s: dict, model: str, dry_run: bool, keep: bool) -> dict:
         git("add", "-A", "--", "STATE.md", "memory/reference", cwd=repo)
         if not git("status", "--porcelain", cwd=repo).strip():
             log(_("{project}: nothing to commit after the checks", project=name)
-                + (_(" ({n} warnings)", n=len(warnings)) if warnings else ""))
+                + (_(" ({n} {n:warning|warnings})", n=len(warnings)) if warnings else ""))
             for w in warnings:
                 log(f"{name}:   {w}")
             result["status"] = "noop"
@@ -521,8 +524,8 @@ def consolidate(s: dict, model: str, dry_run: bool, keep: bool) -> dict:
             log(f"{name}: ⚠️ {w}")
 
         if dry_run:
-            log(_("{project}: dry-run, no push; rm {n} date files, {changed} files changed", project=name, n=len(to_delete),
-                  changed=len(changed) - len(reverted)))
+            log(_("{project}: dry-run, no push; rm {n} {n:date file|date files}, {changed} {changed:file|files} changed",
+                  project=name, n=len(to_delete), changed=len(changed) - len(reverted)))
             result["status"] = "ok"
             return result
 
@@ -635,7 +638,7 @@ def main() -> int:
     start, failed, entries = time.monotonic(), 0, []
     for s in due[: args.max]:
         if time.monotonic() - start > BUDGET_MINUTES * 60:
-            log(_("over {minutes} minutes, the rest is done tomorrow", minutes=BUDGET_MINUTES))
+            log(_("over {minutes} minutes; the rest runs tomorrow", minutes=BUDGET_MINUTES))
             break
         r = consolidate(s, model, args.dry_run, args.keep)
         if args.dry_run:

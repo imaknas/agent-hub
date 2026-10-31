@@ -5,7 +5,7 @@ exit 0
 alpha                        date files   6  over 14 days   5  last ok -           due (5 this time)
 beta                         date files   1  over 14 days   0  last ok -           no date files older than 14 days
 delta                        date files   6  over 14 days   5  last ok 2026-10-01  failed on 2026-10-14, retrying after 2 days
-gamma                        date files   6  over 14 days   5  last ok 2026-10-12  consolidated only on 2026-10-12
+gamma                        date files   6  over 14 days   5  last ok 2026-10-12  consolidated recently (2026-10-12); next run after a week
 
 === --help
 exit SystemExit(0)
@@ -25,31 +25,31 @@ options:
 === model failed
 status failed
 [<T>] alpha: consolidating 5 date files (163 bytes, memory/2026-09-01.md … memory/2026-09-05.md), 0 left for next time; model test-model
-[<T>] alpha: the model call failed (exit 1:boom), giving up, the copy is untouched
+[<T>] alpha: the model call failed (exit 1:boom); giving up, the copy is untouched
 
 === no structured output
 status failed
 [<T>] alpha: consolidating 5 date files (163 bytes, memory/2026-09-01.md … memory/2026-09-05.md), 0 left for next time; model test-model
-[<T>] alpha: model done (turns=2 cost=$None), blocked by permissions 0 times
-[<T>] alpha: no structured_output (the model last said: gave up), giving up
+[<T>] alpha: model done (turns=2, cost=$None), blocked by permissions 0 times
+[<T>] alpha: no structured_output (the model last said: gave up); giving up
 
 === HEAD moved
 status failed
 [<T>] alpha: consolidating 5 date files (163 bytes, memory/2026-09-01.md … memory/2026-09-05.md), 0 left for next time; model test-model
-[<T>] alpha: model done (turns=None cost=$None), blocked by permissions 0 times
-[<T>] alpha: HEAD was moved (the model should not be able to commit), giving up
+[<T>] alpha: model done (turns=None, cost=$None), blocked by permissions 0 times
+[<T>] alpha: HEAD was moved (the model should not be able to commit); giving up
 
 === stray files
 status failed
 [<T>] alpha: consolidating 5 date files (163 bytes, memory/2026-09-01.md … memory/2026-09-05.md), 0 left for next time; model test-model
-[<T>] alpha: model done (turns=None cost=$None), blocked by permissions 0 times
+[<T>] alpha: model done (turns=None, cost=$None), blocked by permissions 0 times
 [<T>] alpha: warning: the model touched files it may not touch, evidence in <TMP>/hub/.state/stray/consolidate-alpha-2026-10-15: AGENT.md memory/2026-10-29.md; giving up entirely
 
 === nothing to commit
 status noop
 [<T>] alpha: consolidating 5 date files (163 bytes, memory/2026-09-01.md … memory/2026-09-05.md), 0 left for next time; model test-model
-[<T>] alpha: model done (turns=None cost=$None), blocked by permissions 0 times
-[<T>] alpha: nothing to commit after the checks (1 warnings)
+[<T>] alpha: model done (turns=None, cost=$None), blocked by permissions 0 times
+[<T>] alpha: nothing to commit after the checks (1 warning)
 [<T>] alpha:   the model says it consolidated `memory/2099-01-01.md`, but it is not in this batch; ignored
 
 === unexpected error
@@ -60,14 +60,14 @@ status failed
 === dry run, every warning
 status ok
 [<T>] alpha: consolidating 5 date files (163 bytes, memory/2026-09-01.md … memory/2026-09-05.md), 0 left for next time; model test-model
-[<T>] alpha: model done (turns=3 cost=$0.5), blocked by permissions 1 times
+[<T>] alpha: model done (turns=3, cost=$0.5), blocked by permissions 1 time
 [<T>] alpha: ⚠️ reverted `STATE.md`: the quote for the correction “nothing” → “Now done.” is not in `memory/2026-10-29.md`
 [<T>] alpha: ⚠️ reverted `memory/reference/infra.md`: hedging seems to have been removed, with no verbatim evidence: “- The database migration is probably done by Friday night” → “- The database migration is done by Friday night”
 [<T>] alpha: ⚠️ the model says it consolidated `memory/2099-01-01.md`, but it is not in this batch; ignored
 [<T>] alpha: ⚠️ strings in `memory/2026-09-01.md` not found after consolidating (maybe rewritten or lost, for spot checks): `https://example.com/doc`, `make deploy`
-[<T>] alpha: ⚠️ `memory/reference/notes.md` still refer to the deleted `memory/2026-09-01.md` (the librarian's broken-link check takes over)
+[<T>] alpha: ⚠️ `memory/reference/notes.md` still refers to the deleted `memory/2026-09-01.md` (the librarian's broken-link check takes over)
 [<T>] alpha: ⚠️ memory/reference/README.md does not list: notes.md
-[<T>] alpha: dry-run, no push; rm 1 date files, 1 files changed
+[<T>] alpha: dry-run, no push; rm 1 date file, 1 file changed
 [<T>] alpha: the temp clone is kept in <CLONE-alpha>
 --- entry
 ## 2026-10-15 · alpha · consolidation (dry-run, not pushed)
@@ -97,7 +97,7 @@ status ok
 - ⚠️ reverted `memory/reference/infra.md`: hedging seems to have been removed, with no verbatim evidence: “- The database migration is probably done by Friday night” → “- The database migration is done by Friday night”
 - ⚠️ the model says it consolidated `memory/2099-01-01.md`, but it is not in this batch; ignored
 - ⚠️ strings in `memory/2026-09-01.md` not found after consolidating (maybe rewritten or lost, for spot checks): `https://example.com/doc`, `make deploy`
-- ⚠️ `memory/reference/notes.md` still refer to the deleted `memory/2026-09-01.md` (the librarian's broken-link check takes over)
+- ⚠️ `memory/reference/notes.md` still refers to the deleted `memory/2026-09-01.md` (the librarian's broken-link check takes over)
 - ⚠️ memory/reference/README.md does not list: notes.md
 
 ```
@@ -193,7 +193,7 @@ memory/ 的結構:
 === push, checkpoint
 status ok
 [<T>] alpha: consolidating 5 date files (163 bytes, memory/2026-09-01.md … memory/2026-09-05.md), 0 left for next time; model test-model
-[<T>] alpha: model done (turns=1 cost=$0.1), blocked by permissions 0 times
+[<T>] alpha: model done (turns=1, cost=$0.1), blocked by permissions 0 times
 [<T>] alpha: ⚠️ reverted `STATE.md`: the `## 待辦` section's format was broken
 [<T>] alpha: pushed <sha>
 [<T>] alpha: librarian checkpoint advanced to <sha>
@@ -244,7 +244,7 @@ index <sha>..<sha>
 === push failed
 status failed
 [<T>] alpha: consolidating 4 date files (75 bytes, memory/2026-09-02-topic.md … memory/2026-09-05.md), 0 left for next time; model test-model
-[<T>] alpha: model done (turns=1 cost=$0.1), blocked by permissions 0 times
+[<T>] alpha: model done (turns=1, cost=$0.1), blocked by permissions 0 times
 [<T>] alpha: ⚠️ the model says it consolidated `memory/2026-09-01.md`, but it is not in this batch; ignored
 [<T>] alpha: push failed (most likely a project session changed the same part at the same time), patch left in <TMP>/hub/.state/consolidate/failed; the copy is untouched: git-safe-push: rejected
 --- entry
@@ -331,9 +331,9 @@ exit 0
 === log file
 [<T>] === consolidate start (dry-run, 1 due, at most 3 this time) ===
 [<T>] alpha: consolidating 4 date files (75 bytes, memory/2026-09-02-topic.md … memory/2026-09-05.md), 0 left for next time; model test-model
-[<T>] alpha: model done (turns=1 cost=$0.1), blocked by permissions 0 times
+[<T>] alpha: model done (turns=1, cost=$0.1), blocked by permissions 0 times
 [<T>] alpha: ⚠️ the model says it consolidated `memory/2026-09-01.md`, but it is not in this batch; ignored
-[<T>] alpha: dry-run, no push; rm 0 date files, 1 files changed
+[<T>] alpha: dry-run, no push; rm 0 date files, 1 file changed
 [<T>] alpha: the proposed review-log entry is in <TMP>/hub/.state/consolidate/dry-run/alpha-2026-10-15.md
 [<T>] === consolidate end (0 failed) ===
 [<T>] beta: skipped: no date files older than 14 days
@@ -343,14 +343,14 @@ exit 0
 [<T>] zeta: cannot read the agent-memory branch, skipped: git ls-tree -r --name-only agent-memory memory/ failed: fatal: <git error>
 [<T>] === consolidate start (2 due, at most 3 this time) ===
 [<T>] eta: consolidating 5 date files (163 bytes, memory/2026-09-01.md … memory/2026-09-05.md), 0 left for next time; model test-model
-[<T>] eta: model done (turns=1 cost=$0.1), blocked by permissions 0 times
+[<T>] eta: model done (turns=1, cost=$0.1), blocked by permissions 0 times
 [<T>] eta: pushed <sha>
-[<T>] over 30 minutes, the rest is done tomorrow
+[<T>] over 30 minutes; the rest runs tomorrow
 [<T>] review-log.md committed and pushed
 [<T>] === consolidate end (0 failed) ===
 [<T>] === consolidate start (1 due, at most 3 this time) ===
 [<T>] theta: consolidating 5 date files (163 bytes, memory/2026-09-01.md … memory/2026-09-05.md), 0 left for next time; model test-model
-[<T>] theta: model done (turns=1 cost=$0.1), blocked by permissions 0 times
+[<T>] theta: model done (turns=1, cost=$0.1), blocked by permissions 0 times
 [<T>] theta: pushed <sha>
 [<T>] review-log.md commit/push failed: nothing to push
 

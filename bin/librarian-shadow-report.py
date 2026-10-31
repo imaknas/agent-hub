@@ -33,7 +33,7 @@ def main() -> int:
         if f.stem >= since:
             recs += [{**json.loads(x), "_day": f.stem} for x in f.read_text().splitlines() if x.strip()]
     if not recs:
-        print(_("no shadow records in the last {days} days ({dir})", days=a.days, dir=DIR))
+        print(_("no shadow records in the last {days} {days:day|days} ({dir})", days=a.days, dir=DIR))
         return 1
     for point in sorted({r["point"] for r in recs}):
         rs = [r for r in recs if r["point"] == point]
@@ -41,7 +41,7 @@ def main() -> int:
         sims = [r["similarity"] for r in ok if "similarity" in r]
         cost = sum(r.get("cost_usd") or 0 for r in rs)
         pct = lambda n, d: f"{n}/{d}" + (f"({n * 100 // d}%)" if d else "")
-        print(_("== {point}: {n} runs, {nights} nights, cost ${cost:.3f}", point=point, n=len(rs),
+        print(_("== {point}: {n} {n:run|runs}, {nights} {nights:night|nights}, cost ${cost:.3f}", point=point, n=len(rs),
                 nights=len({r["_day"] for r in rs}), cost=cost))
         print("  " + _("got a result, valid edit list  {valid}; invalid {invalid}, no result {none}",
                        valid=pct(len(ok), len(rs)), invalid=sum(1 for r in rs if "edit_error" in r),
@@ -53,7 +53,7 @@ def main() -> int:
                            mean=sum(sims) / len(sims), low=min(sims), n=sum(1 for r in ok if r.get("identical_to_agent"))))
         marks = [r for r in ok if r.get("marker_problems")]
         if marks:
-            print("  ⚠️ " + _("key marker problems {n} times: ", n=len(marks))
+            print("  ⚠️ " + _("key marker problems {n} {n:time|times}: ", n=len(marks))
                   + ";".join(f"{r.get('project')} {r['_day']}" for r in marks))
         if point.endswith("index-edits"):
             print("  " + _("roster block untouched {n}", n=pct(sum(1 for r in ok if r.get("roster_untouched")), len(ok))))
