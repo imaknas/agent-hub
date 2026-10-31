@@ -1,6 +1,6 @@
 # Event-triggered jobs
 
-> agent-hub session · 2026-11-01 · r6. Item 1 of "Build" in `competitive-gaps.md`: a registry job can start when
+> agent-hub session · 2026-11-01 · r7. Item 1 of "Build" in `competitive-gaps.md`: a registry job can start when
 > matching bus events appear, not only on a clock or `after:` another job. External sources (CI finished, a webhook)
 > are out of scope: they will arrive later as bus events from one receiver, so jobs only ever react to bus events.
 >
@@ -32,6 +32,10 @@
 > exemption doesn't apply to an agent anyone can start); a runtime that can't honour declared permissions refuses
 > the run (`runtime_ports` "confine"); the platform part of the boundary is only the mail commands; `connectors` is
 > refused with `trigger`.
+>
+> r7 after a sixth review: the platform's sandbox block for an event job sets `autoAllowBashIfSandboxed: false`
+> (the CLI defaults it to true, which approves any sandboxed Bash command before `allow:` is consulted; verified live
+> both ways). Doctor lists the feature against the `confine` port. No blocking finding remains after this.
 
 ## 1. What exists
 
@@ -138,7 +142,8 @@ The trust model (1: the bus is a peer log) decides what an event job may do with
   judgment point `agent-job-event`, declared `settings: platform`: the run loads none of the user's, the project's or
   local tool settings, only a settings file the platform writes from the policy: the project's sandbox when the
   registry enforces it (`enforce.sandbox`, as for its sessions; hub.json's `service_sandbox_exempt` is for services
-  and command jobs and doesn't apply here), the deny list, and the mail commands (`agenthub send/inbox/done…`; not raw
+  and command jobs and doesn't apply here), with sandboxed commands **not** approved automatically (Claude Code's
+  `autoAllowBashIfSandboxed` defaults to true, which would let any sandboxed Bash command past `allow:`), the deny list, and the mail commands (`agenthub send/inbox/done…`; not raw
   `hubbus`, merging or `cap-run`). So the boundary is exactly `allow:` plus those; permissions a person accumulated in
   the project's settings, and the project's hooks, don't apply (memory notes the job writes are committed by the
   hourly memory sync). Still loaded: managed (admin) settings, which are the machine owner's, and the project's

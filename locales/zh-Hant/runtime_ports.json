@@ -22,5 +22,6 @@
  "no such completion implementation: {impl} (have: {have})": "沒有這個 completion 實作:{impl}(有:{have})",
  "{a} or {b}": "{a}、{b}",
  "{items}, or {last}": "{items}、{last}",
- "confined runs (declared permissions only)": "受限執行(只照宣告的權限)"
+ "confined runs (declared permissions only)": "受限執行(只照宣告的權限)",
+ "unattended agent jobs with allow:, and event-triggered agent jobs": "宣告 allow: 的無人值守 agent job、事件觸發的 agent job"
 }

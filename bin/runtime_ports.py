@@ -119,6 +119,7 @@ def features() -> tuple:
     return (
         (_("judgment points (librarian, index, consolidate, weekly report analysis)"), ("agent", "auth")),
         (_("mailbox tasks (the platform sends an agent for letters nobody picked up)"), ("agent", "auth")),
+        (_("unattended agent jobs with allow:, and event-triggered agent jobs"), ("agent", "auth", "confine")),
         (_("mailbox follow-up (replying with an idle session's context)"), ("agent", "sessions")),
         (_("channel leasing (also needs the assistant module)"), ("stream", "sessions", "agent", "auth")),
         (_("letters seen live in the session, reminders to write notes"), ("lifecycle",)),

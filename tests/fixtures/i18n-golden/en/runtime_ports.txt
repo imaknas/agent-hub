@@ -5,6 +5,8 @@ judgment points (librarian, index, consolidate, weekly report analysis) | False 
 === feature (none)
 mailbox tasks (the platform sends an agent for letters nobody picked up) | False | agent runs or login state
 === feature (none)
+unattended agent jobs with allow:, and event-triggered agent jobs | False | agent runs, login state, or confined runs (declared permissions only)
+=== feature (none)
 mailbox follow-up (replying with an idle session's context) | False | agent runs or session state
 === feature (none)
 channel leasing (also needs the assistant module) | False | long-running streaming sessions, session state, agent runs, or login state

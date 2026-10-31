@@ -22,6 +22,7 @@ $ agenthub doctor    # launchd, problems
     → agenthub mcp config 印出要登記的那段;各工具怎麼加:docs/mcp.md
 ✓ 判斷點(librarian、index、consolidate、週報分析):可以用
 ✓ 信箱交辦(沒人收的信由平台派 agent):可以用
+✓ 宣告 allow: 的無人值守 agent job、事件觸發的 agent job:可以用
 ✓ 信箱接續(用閒置 session 的 context 回信):可以用
 ✓ 通道租借(另外要助理模組):可以用
 ✓ session 裡即時看到信、提醒寫筆記:可以用
@@ -62,6 +63,7 @@ $ agenthub doctor    # launchd, all fine
     → agenthub mcp config 印出要登記的那段;各工具怎麼加:docs/mcp.md
 ✓ 判斷點(librarian、index、consolidate、週報分析):可以用
 ✓ 信箱交辦(沒人收的信由平台派 agent):可以用
+✓ 宣告 allow: 的無人值守 agent job、事件觸發的 agent job:可以用
 ✓ 信箱接續(用閒置 session 的 context 回信):可以用
 ✓ 通道租借(另外要助理模組):可以用
 ✓ session 裡即時看到信、提醒寫筆記:可以用
@@ -95,6 +97,8 @@ $ agenthub doctor    # systemd, runtime none
     → 裝一個有這些能力的 coding agent,hub.json runtime.default 指到它
 ! 信箱交辦(沒人收的信由平台派 agent):關掉(執行環境 none 沒有跑 agent、登入狀態)
     → 裝一個有這些能力的 coding agent,hub.json runtime.default 指到它
+! 宣告 allow: 的無人值守 agent job、事件觸發的 agent job:關掉(執行環境 none 沒有跑 agent、登入狀態、受限執行(只照宣告的權限))
+    → 裝一個有這些能力的 coding agent,hub.json runtime.default 指到它
 ! 信箱接續(用閒置 session 的 context 回信):關掉(執行環境 none 沒有跑 agent、session 狀態)
     → 裝一個有這些能力的 coding agent,hub.json runtime.default 指到它
 ! 通道租借(另外要助理模組):關掉(執行環境 none 沒有長駐串流 session、session 狀態、跑 agent、登入狀態)
@@ -120,7 +124,7 @@ $ agenthub doctor    # systemd, runtime none
     → bin/hub config plan,再 bin/hub config apply
 ✓ commit 閘門(core.hooksPath):githooks
 
-3 個問題、11 個提醒
+3 個問題、12 個提醒
 --- stderr
 
 $ agenthub doctor    # no service manager, unnamed assistant
@@ -136,6 +140,8 @@ $ agenthub doctor    # no service manager, unnamed assistant
 ! 判斷點(librarian、index、consolidate、週報分析):關掉(執行環境 none 沒有跑 agent、登入狀態)
     → 裝一個有這些能力的 coding agent,hub.json runtime.default 指到它
 ! 信箱交辦(沒人收的信由平台派 agent):關掉(執行環境 none 沒有跑 agent、登入狀態)
+    → 裝一個有這些能力的 coding agent,hub.json runtime.default 指到它
+! 宣告 allow: 的無人值守 agent job、事件觸發的 agent job:關掉(執行環境 none 沒有跑 agent、登入狀態、受限執行(只照宣告的權限))
     → 裝一個有這些能力的 coding agent,hub.json runtime.default 指到它
 ! 信箱接續(用閒置 session 的 context 回信):關掉(執行環境 none 沒有跑 agent、session 狀態)
     → 裝一個有這些能力的 coding agent,hub.json runtime.default 指到它
@@ -157,5 +163,5 @@ $ agenthub doctor    # no service manager, unnamed assistant
 ✓ 背景服務、專案設定:跟 config 一致
 ✓ commit 閘門(core.hooksPath):githooks
 
-3 個問題、8 個提醒
+3 個問題、9 個提醒
 --- stderr

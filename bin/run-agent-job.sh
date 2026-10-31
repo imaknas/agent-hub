@@ -22,6 +22,8 @@
 # When the workdir is an onboarded project, that project's hooks also fire in this claude -p run (see the similar
 # comment in librarian.sh): SessionEnd commits+pushes the .agent-memory notes, which is exactly what we want (notes the
 # job writes go into memory automatically); the job may only append notes, never touch the project's code.
+# Not for event-triggered agent jobs (judgment point agent-job-event): they load only the platform's settings, so no
+# project hooks run; their notes are committed by the hourly sync-all-memory.
 #
 # Uses the claude.ai subscription login (the hub machine's keychain; readable under launchd, not under SSH);
 # llm.py decides the credentials: the headless token by default; registry jobs that set connectors: true (claude.ai

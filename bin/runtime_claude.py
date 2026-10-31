@@ -145,7 +145,9 @@ def platform_settings(project: str) -> pathlib.Path:
     out = {"permissions": {"deny": lease_settings(pol)["permissions"]["deny"], "allow": allow}}
     # the registry's enforce.sandbox, as render-project-settings decides it (not the services-only exemption)
     if (doc.get("enforce") or {}).get("sandbox") is True:
-        out["sandbox"] = sandbox
+        # autoAllowBashIfSandboxed defaults to true: a sandboxed Bash command would be approved before allow: is
+        # consulted, so allow: would stop being the boundary exactly in the sandboxed projects
+        out["sandbox"] = {**sandbox, "autoAllowBashIfSandboxed": False}
     p = hubconf.STATE / "agent-jobs" / ".settings" / f"{project}.json"
     p.parent.mkdir(parents=True, exist_ok=True)
     tmp = p.with_name(f".{p.name}.{os.getpid()}")

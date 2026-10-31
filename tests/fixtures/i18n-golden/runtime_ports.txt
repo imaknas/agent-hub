@@ -5,6 +5,8 @@
 === feature (none)
 信箱交辦(沒人收的信由平台派 agent) | False | 跑 agent、登入狀態
 === feature (none)
+宣告 allow: 的無人值守 agent job、事件觸發的 agent job | False | 跑 agent、登入狀態、受限執行(只照宣告的權限)
+=== feature (none)
 信箱接續(用閒置 session 的 context 回信) | False | 跑 agent、session 狀態
 === feature (none)
 通道租借(另外要助理模組) | False | 長駐串流 session、session 狀態、跑 agent、登入狀態

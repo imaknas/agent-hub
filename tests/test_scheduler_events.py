@@ -396,6 +396,8 @@ class PlatformSettings(unittest.TestCase):
             self.assertIn("Bash(agenthub send *)", d["permissions"]["allow"])
             self.assertFalse(any("merge-branch" in r or "hubbus" in r or "cap-run" in r for r in d["permissions"]["allow"]))
             self.assertEqual("sandbox" in d, enforced)
+            if enforced:   # the CLI's default (true) would approve sandboxed Bash before allow: is consulted
+                self.assertIs(d["sandbox"]["autoAllowBashIfSandboxed"], False)
 
     def test_a_runtime_that_cannot_confine_refuses(self):
         import importlib.util
