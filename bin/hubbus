@@ -447,7 +447,7 @@ def fmt(r, long=True) -> str:
     p = payload(r)
     tags = p.get("type", "?")
     if p.get("handoff_id") is not None:
-        tags = _("{tags}, {tag}", tags=tags, tag=_("{assistant} handoff #{id}", assistant=ASSISTANT, id=p["handoff_id"]))
+        tags = _("{tags}, {tag}", tags=tags, tag=_("handoff #{id} from {assistant}", assistant=ASSISTANT, id=p["handoff_id"]))
     if p.get("reply_to"):
         tags = _("{tags}, {tag}", tags=tags, tag=_("reply to {id}", id=p["reply_to"]))
     head = _("[{id}] from {source} ({tags}, {ts})", id=r["id"], source=r["source"], tags=tags,
@@ -659,7 +659,7 @@ def handoff_text(h: dict) -> str:
         lines.append(_("{owner}'s words: {quote}", owner=OWNER, quote=h["quote"]))
     lines.append(_("To-do: {item}", item=h.get("item") or _("(none given)")))
     if h.get("why"):
-        lines.append(_("{assistant}'s reasoning: {why}", assistant=ASSISTANT, why=h["why"]))
+        lines.append(_("Reasoning from {assistant}: {why}", assistant=ASSISTANT, why=h["why"]))
     lines.append(_("To do: librarian applies it to STATE.md tonight (to-dos, related sections) and reports to {assistant} "
                    "that it is closed; no note and no done needed. If it bears on the current work, adjust to it.",
                    assistant=ASSISTANT))
@@ -738,7 +738,7 @@ def import_handoffs(c) -> None:
             continue
         ack.append(str(h.get("id")))
     c.execute("COMMIT")
-    log_once("handoffs-unknown", _("{assistant}'s handoffs are addressed to projects not in the roster, left with "
+    log_once("handoffs-unknown", _("Handoffs from {assistant} are addressed to projects not in the roster; left with "
                                    "{assistant}: {items}", assistant=ASSISTANT, items=", ".join(unknown)) if unknown else "")
     if ack:  # 匯流排 commit 之後才回報;回報失敗下次再報,匯流排的 id 去重不會收兩次
         r = assistant_cli("--delivered", *ack)
@@ -778,7 +778,7 @@ def publish_handoff(c, h: dict, known) -> str | None:
         if orig is not None and payload(orig).get("from_session"):
             p["to_session"] = payload(orig)["from_session"]
     if publish(c, f"{HANDOFF_ID_PREFIX}{hid}", "message", KNAS, proj, h.get("reply_to"), p):
-        log(_("{assistant} handoff #{id} → {project}", assistant=ASSISTANT, id=hid, project=proj))
+        log(_("handoff #{id} from {assistant} → {project}", assistant=ASSISTANT, id=hid, project=proj))
     return proj
 
 
@@ -892,7 +892,7 @@ def forward_records(c) -> None:
                 if ev is not None and res.get("status") == "invalid":
                     reject(c, ev, "; ".join(map(str, res.get("errors") or [])) or "invalid")
                 elif ev is not None and res.get("status") == "unsupported":
-                    log(_("{assistant} does not support {ext}: {id} accepted but not handled", assistant=ASSISTANT,
+                    log(_("{ext} is not supported by {assistant}: {id} accepted but not handled", assistant=ASSISTANT,
                           ext=payload(ev)["record"].get("ext"), id=ev["id"]))
             log(_("sent {n} {n:record|records} to {assistant}", assistant=ASSISTANT, n=len(recs)))
         set_cursor(c, RECORDS_OUT, evs[-1]["seq"])
@@ -947,13 +947,13 @@ def pull_records(c) -> None:
             if known:
                 for rec in page:
                     if (errs := incoming_errors(rec, name)):
-                        log(_("{assistant}'s record {id!r} for {project} refused: {errors}", assistant=ASSISTANT,
+                        log(_("record {id!r} from {assistant} for {project} refused: {errors}", assistant=ASSISTANT,
                               id=(rec or {}).get("id") if isinstance(rec, dict) else rec, project=name,
                               errors="; ".join(errs)))
                         continue
                     if str(rec.get("ext", "")).startswith("decisions/"):
                         if not answer_from_record(c, rec):   # 其他 decisions record 等這邊的 Decisions 換上再收
-                            log(_("{assistant}'s {id} for {project} not taken in yet (Decisions still go through v1)",
+                            log(_("{id} from {assistant} for {project} not taken in yet (Decisions still go through v1)",
                                   assistant=ASSISTANT, id=rec.get("id"), project=name))
                         continue
                     publish_record(c, rec, OWNER_ADDRESS, proj)
