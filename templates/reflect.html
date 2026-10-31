@@ -95,10 +95,10 @@ section h2 { font-size: 22px; font-weight: 600; }
 .proj .name strong { font-family: var(--font-data); font-weight: 500; font-size: 15px; }
 .chip { font-size: 12px; font-weight: 700; border-radius: 4px; padding: 1px 8px; letter-spacing: .04em; }
 .s-advancing { background: var(--accent-soft); color: var(--accent); }
-.s-steady { background: var(--heat-0); color: var(--muted); }
+.s-stable { background: var(--heat-0); color: var(--muted); }
 .s-wrapping_up { background: var(--heat-0); color: var(--muted); }
 .s-stuck { background: color-mix(in srgb, var(--bad) 14%, transparent); color: var(--bad); }
-.s-scattered { background: color-mix(in srgb, var(--warn) 16%, transparent); color: var(--warn); }
+.s-diverging { background: color-mix(in srgb, var(--warn) 16%, transparent); color: var(--warn); }
 .proj .focus { font-size: 14px; color: var(--muted); }
 .proj .next { font-size: 14px; }
 .proj .next::before { content: attr(data-label); font-weight: 700; color: var(--accent); }
@@ -117,8 +117,8 @@ section h2 { font-size: 22px; font-weight: 600; }
 .fl .en { font-family: var(--font-data); font-size: 11px; color: var(--muted); letter-spacing: .06em; text-transform: uppercase; }
 .lv { font-size: 12px; font-weight: 700; padding: 1px 8px; border-radius: 4px; }
 .lv-strength { background: color-mix(in srgb, var(--good) 15%, transparent); color: var(--good); }
-.lv-steady { background: var(--heat-0); color: var(--muted); }
-.lv-to_improve { background: color-mix(in srgb, var(--warn) 16%, transparent); color: var(--warn); }
+.lv-stable { background: var(--heat-0); color: var(--muted); }
+.lv-needs_work { background: color-mix(in srgb, var(--warn) 16%, transparent); color: var(--warn); }
 .quote { font-size: 14px; color: var(--muted); }
 .quote::before { content: attr(data-open); } .quote::after { content: attr(data-close); }
 .tip { font-size: 14px; border-top: 1px dashed var(--rule); padding-top: 8px; }
@@ -154,9 +154,9 @@ const WEEKS = /*__REFLECT_DATA__*/[];
 const PAGE = /*__REFLECT_PAGE__*/{"text": {}, "assistant": ""};
 const t = (id, kw = {}) => (PAGE.text[id] ?? id).replace(/\{(\w+)(?::([^{}|]*)\|([^{}]*))?\}/g,
   (m, k, one, other) => !(k in kw) ? m : one === undefined ? String(kw[k]) : (Number(kw[k]) === 1 ? one : other));
-const STATUS = { advancing: t("Advancing"), steady: t("Steady"), stuck: t("Stuck"), scattered: t("Scattered"),
+const STATUS = { advancing: t("Advancing"), stable: t("Stable"), stuck: t("Stuck"), diverging: t("Diverging"),
   wrapping_up: t("Wrapping up") };
-const LEVEL = { strength: t("Strength"), steady: t("Steady"), to_improve: t("Could improve") };
+const LEVEL = { strength: t("Strength"), stable: t("Stable"), needs_work: t("Needs work") };
 // the 4D framework's own names, shown under each dimension's name in the UI language
 const DIMS = { delegation: "Delegation", description: "Description", discernment: "Discernment", diligence: "Diligence" };
 const DIM = { delegation: t("Delegation"), description: t("Description"), discernment: t("Discernment"),

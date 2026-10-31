@@ -29,7 +29,7 @@ Weekly Reflect
   </section><section><header><span class="eyebrow">Projects</span><h2>By project</h2>
       <p class="muted" style="font-size:14px">The bars on the right: this week's messages on top, last week's in grey below.</p></header><div class="projects"><div class="proj">
       <div class="main">
-        <div class="name"><strong>beta</strong><span class="chip s-steady">Steady</span></div>
+        <div class="name"><strong>beta</strong><span class="chip s-stable">Stable</span></div>
         <p class="focus">看不出內容</p>
         <p>無從判斷</p>
         <p class="next" data-label="Next step ">無</p>
@@ -47,13 +47,13 @@ Weekly Reflect
     </div></div></section><section><header><span class="eyebrow">AI fluency · 4D</span><h2>How the work with AI went</h2>
       <p class="muted" style="font-size:14px">1 subagent this week (last week 0), 0 messages between sessions (last week 0).</p></header>
       <div class="fluency"><article class="fl"><header><div><h3>Delegation</h3><span class="en"></span></div>
-        <span class="lv lv-steady">Steady</span></header>
+        <span class="lv lv-stable">Stable</span></header>
         <p>一次 subagent。</p><p class="evidence">1 次</p><p class="tip">無。</p></article><article class="fl"><header><div><h3>Description</h3><span class="en"></span></div>
-        <span class="lv lv-steady">Steady</span></header>
+        <span class="lv lv-stable">Stable</span></header>
         <p>統計看不出。</p><p class="evidence">無</p><p class="tip">無。</p></article><article class="fl"><header><div><h3>Discernment</h3><span class="en"></span></div>
-        <span class="lv lv-steady">Steady</span></header>
+        <span class="lv lv-stable">Stable</span></header>
         <p>統計看不出。</p><p class="evidence">無</p><p class="tip">無。</p></article><article class="fl"><header><div><h3>Diligence</h3><span class="en"></span></div>
-        <span class="lv lv-steady">Steady</span></header>
+        <span class="lv lv-stable">Stable</span></header>
         <p>一個 commit。</p><p class="evidence">1 個</p><p class="tip">無。</p></article></div></section><section><header><span class="eyebrow">Next week</span><h2>Do these first next week</h2></header><ol class="actions"><li><span class="act">無</span><span class="why">量太少</span></li><li><span class="act">無</span><span class="why">量太少</span></li></ol></section><footer class="method">
     <p>Data: the Claude Code sessions of the personal profile (the work profile is not backed up; for claude.ai's conversations see claude.ai's Reflect). Only the messages you actually sent count. Times are Taipei time.</p>
     <p>The analysis was written by model-w from the statistics above only; it is the model's reading. The conversations' text is not sent to a cloud model, so it cannot see what the work was.</p>
@@ -87,7 +87,7 @@ Weekly Reflect
   </section><section><header><span class="eyebrow">Projects</span><h2>By project</h2>
       <p class="muted" style="font-size:14px">The bars on the right: this week's messages on top, last week's in grey below.</p></header><div class="projects"><div class="proj">
       <div class="main">
-        <div class="name"><strong>beta</strong><span class="chip s-steady">Steady</span></div>
+        <div class="name"><strong>beta</strong><span class="chip s-stable">Stable</span></div>
         <p class="focus">看不出內容</p>
         <p>無從判斷</p>
         <p class="next" data-label="Next step ">無</p>
@@ -105,13 +105,13 @@ Weekly Reflect
     </div></div></section><section><header><span class="eyebrow">AI fluency · 4D</span><h2>How the work with AI went</h2>
       <p class="muted" style="font-size:14px">1 subagent this week (last week 0), 0 messages between sessions (last week 0).</p></header>
       <div class="fluency"><article class="fl"><header><div><h3>Delegation</h3><span class="en"></span></div>
-        <span class="lv lv-steady">Steady</span></header>
+        <span class="lv lv-stable">Stable</span></header>
         <p>一次 subagent。</p><p class="evidence">1 次</p><p class="tip">無。</p></article><article class="fl"><header><div><h3>Description</h3><span class="en"></span></div>
-        <span class="lv lv-steady">Steady</span></header>
+        <span class="lv lv-stable">Stable</span></header>
         <p>統計看不出。</p><p class="evidence">無</p><p class="tip">無。</p></article><article class="fl"><header><div><h3>Discernment</h3><span class="en"></span></div>
-        <span class="lv lv-steady">Steady</span></header>
+        <span class="lv lv-stable">Stable</span></header>
         <p>統計看不出。</p><p class="evidence">無</p><p class="tip">無。</p></article><article class="fl"><header><div><h3>Diligence</h3><span class="en"></span></div>
-        <span class="lv lv-steady">Steady</span></header>
+        <span class="lv lv-stable">Stable</span></header>
         <p>一個 commit。</p><p class="evidence">1 個</p><p class="tip">無。</p></article></div></section><section><header><span class="eyebrow">Next week</span><h2>Do these first next week</h2></header><ol class="actions"><li><span class="act">無</span><span class="why">量太少</span></li><li><span class="act">無</span><span class="why">量太少</span></li></ol></section><footer class="method">
     <p>Data: the Claude Code sessions of the personal profile (the work profile is not backed up; for claude.ai's conversations see claude.ai's Reflect). Only the messages you actually sent count. Times are Taipei time.</p>
     <p>The analysis was written by model-w from the statistics above only; it is the model's reading. The conversations' text is not sent to a cloud model, so it cannot see what the work was.</p>
@@ -222,7 +222,7 @@ Weekly Reflect
   </section><section><header><span class="eyebrow">Projects</span><h2>By project</h2>
       <p class="muted" style="font-size:14px">The bars on the right: this week's messages on top, last week's in grey below.</p></header><div class="projects"><div class="proj">
       <div class="main">
-        <div class="name"><strong>alpha</strong><span class="chip s-steady">Steady</span></div>
+        <div class="name"><strong>alpha</strong><span class="chip s-stable">Stable</span></div>
         <p class="focus">小修</p>
         <p>持平</p>
         <p class="next" data-label="Next step ">繼續</p>
@@ -240,13 +240,13 @@ Weekly Reflect
     </div></div></section><section><header><span class="eyebrow">AI fluency · 4D</span><h2>How the work with AI went</h2>
       <p class="muted" style="font-size:14px">0 subagents this week (last week 6), 0 messages between sessions (last week 3).</p></header>
       <div class="fluency"><article class="fl"><header><div><h3>Delegation</h3><span class="en"></span></div>
-        <span class="lv lv-steady">Steady</span></header>
+        <span class="lv lv-stable">Stable</span></header>
         <p>沒開 subagent。</p><p class="evidence">0 次</p><p class="tip">無。</p></article><article class="fl"><header><div><h3>Description</h3><span class="en"></span></div>
-        <span class="lv lv-steady">Steady</span></header>
+        <span class="lv lv-stable">Stable</span></header>
         <p>無。</p><p class="evidence">統計撐不起判斷</p><p class="tip">無。</p></article><article class="fl"><header><div><h3>Discernment</h3><span class="en"></span></div>
-        <span class="lv lv-steady">Steady</span></header>
+        <span class="lv lv-stable">Stable</span></header>
         <p>無。</p><p class="evidence">統計撐不起判斷</p><p class="tip">無。</p></article><article class="fl"><header><div><h3>Diligence</h3><span class="en"></span></div>
-        <span class="lv lv-to_improve">Could improve</span></header>
+        <span class="lv lv-needs_work">Needs work</span></header>
         <p>commit 少。</p><p class="evidence">3 個</p><p class="tip">小步提交。</p></article></div></section><section><header><span class="eyebrow">Next week</span><h2>Do these first next week</h2></header><ol class="actions"><li><span class="act">回到 alpha</span><span class="why">停太久</span></li><li><span class="act">整理筆記</span><span class="why">筆記少</span></li></ol></section><footer class="method">
     <p>Data: the Claude Code sessions of the personal profile (the work profile is not backed up; for claude.ai's conversations see claude.ai's Reflect). Only the messages you actually sent count. Times are Taipei time.</p>
     <p>The analysis was written by model-y from the statistics above and 4 session summaries written by Helper's local model; it is the model's reading, and the conversations' text is not sent to a cloud model. 1 work-related session and beta count only in the statistics; 2 more sessions have no summary.</p>
@@ -299,7 +299,7 @@ Weekly Reflect
       </div>
     </div><div class="proj">
       <div class="main">
-        <div class="name"><strong>beta</strong><span class="chip s-steady">Steady</span></div>
+        <div class="name"><strong>beta</strong><span class="chip s-stable">Stable</span></div>
         <p class="focus">維護</p>
         <p>沒有新進展</p>
         <p class="next" data-label="Next step ">決定要不要繼續</p>
@@ -316,7 +316,7 @@ Weekly Reflect
       </div>
     </div><div class="proj">
       <div class="main">
-        <div class="name"><strong>gamma</strong><span class="chip s-scattered">Scattered</span></div>
+        <div class="name"><strong>gamma</strong><span class="chip s-diverging">Diverging</span></div>
         <p class="focus">起步</p>
         <p>方向還在找</p>
         <p class="next" data-label="Next step ">收斂成一個問題</p>
@@ -353,9 +353,9 @@ Weekly Reflect
       <div class="fluency"><article class="fl"><header><div><h3>Delegation</h3><span class="en"></span></div>
         <span class="lv lv-strength">Strength</span></header>
         <p>常開 subagent。</p><p class="quote" data-open="“" data-close="”">去查一下</p><p class="tip">繼續。</p></article><article class="fl"><header><div><h3>Description</h3><span class="en"></span></div>
-        <span class="lv lv-steady">Steady</span></header>
+        <span class="lv lv-stable">Stable</span></header>
         <p>描述清楚。</p><p class="evidence">少有重問</p><p class="tip">保持。</p></article><article class="fl"><header><div><h3>Discernment</h3><span class="en"></span></div>
-        <span class="lv lv-to_improve">Could improve</span></header>
+        <span class="lv lv-needs_work">Needs work</span></header>
         <p>有一次直接接受。</p><p class="quote" data-open="“" data-close="”">好,就這樣</p><p class="tip">多問一句為什麼。</p></article><article class="fl"><header><div><h3>Diligence</h3><span class="en"></span></div>
         <span class="lv lv-strength">Strength</span></header>
         <p>會跑測試。</p><p class="evidence">commit 前都跑</p><p class="tip">繼續。</p></article></div></section><section><header><span class="eyebrow">Next week</span><h2>Do these first next week</h2></header><ol class="actions"><li><span class="act">補 alpha 的測試</span><span class="why">推得快,測試沒跟上</span></li><li><span class="act">決定 beta 的去留</span><span class="why">持平兩週</span></li></ol></section><footer class="method">

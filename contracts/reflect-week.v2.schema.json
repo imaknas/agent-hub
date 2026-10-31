@@ -90,9 +90,9 @@
               "status": {
                 "enum": [
                   "advancing",
-                  "steady",
+                  "stable",
                   "stuck",
-                  "scattered",
+                  "diverging",
                   "wrapping_up"
                 ]
               }
@@ -115,8 +115,8 @@
               "level": {
                 "enum": [
                   "strength",
-                  "steady",
-                  "to_improve"
+                  "stable",
+                  "needs_work"
                 ]
               }
             }
@@ -132,9 +132,9 @@
   "x-v1-values": {
     "status": {
       "推進": "advancing",
-      "穩定": "steady",
+      "穩定": "stable",
       "卡住": "stuck",
-      "發散": "scattered",
+      "發散": "diverging",
       "收尾": "wrapping_up"
     },
     "dimension": {
@@ -145,8 +145,8 @@
     },
     "level": {
       "強項": "strength",
-      "穩定": "steady",
-      "可改進": "to_improve"
+      "穩定": "stable",
+      "可改進": "needs_work"
     }
   }
 }

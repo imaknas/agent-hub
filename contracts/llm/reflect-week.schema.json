@@ -80,12 +80,12 @@
       "type": "string",
       "enum": [
        "advancing",
-       "steady",
+       "stable",
        "stuck",
-       "scattered",
+       "diverging",
        "wrapping_up"
       ],
-      "description": "advancing: clear progress toward its goal; steady: kept going, no big movement; stuck: blocked or going in circles; scattered: effort spread over many directions without converging; wrapping_up: finishing and closing out"
+      "description": "advancing: moved forward toward its goal; stable: kept at a stable pace, no notable progress or trouble; stuck: blocked, or effort without visible progress; diverging: effort spread over several directions or topics instead of converging on one; wrapping_up: finishing or closing out"
      },
      "next": {
       "type": "string",
@@ -146,10 +146,10 @@
       "type": "string",
       "enum": [
        "strength",
-       "steady",
-       "to_improve"
+       "stable",
+       "needs_work"
       ],
-      "description": "strength: clearly good this week; steady: fine, nothing notable; to_improve: could improve"
+      "description": "strength: a clear strength the data shows; stable: adequate, nothing notable either way; needs_work: could improve, including a gap the data shows or a practice worth changing"
      },
      "observation": {
       "type": "string",
