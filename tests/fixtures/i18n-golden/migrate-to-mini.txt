@@ -1,0 +1,212 @@
+=== --help (description and --skip)
+exit 0
+--- stdout
+把一個已 onboard 專案的開發環境從 MBP 搬到 mini 的 ~/workspace/<name>。
+  --skip SKIP           不搬的不進版控檔案(相對路徑)
+--- stderr
+
+=== not in the registry
+exit 1
+--- stdout
+--- stderr
+migrate-to-mini: 專案登錄(projects/)裡沒有 'nosuch'
+
+=== no laptop path in legacy-paths.tsv
+exit 1
+--- stdout
+--- stderr
+migrate-to-mini: legacy-paths.tsv 裡沒有 'nolegacy' 在 MBP 上的位置
+
+=== native project
+exit 1
+--- stdout
+--- stderr
+migrate-to-mini: 'nat' 是 native 專案(沒有 GitHub remote),recover-project.sh 沒辦法在 mini 上 clone
+
+=== folder missing
+exit 1
+--- stdout
+--- stderr
+migrate-to-mini: <TMP>/home/dev/gone 不存在
+
+=== folder is not a git repo (a command fails)
+exit 1
+--- stdout
+--- stderr
+migrate-to-mini: git status --porcelain 失敗:
+fatal: not a git repository (or any of the parent directories): .git
+
+=== uncommitted changes
+exit 1
+--- stdout
+--- stderr
+migrate-to-mini: <TMP>/home/dev/dirty 有未 commit 的改動——請那個專案的 session 先 commit+push:
+?? b.txt
+
+=== unpushed branches
+exit 1
+--- stdout
+--- stderr
+migrate-to-mini: 本機分支沒 push,mini 上 clone 不到:feature(沒有 upstream), main([ahead 1])
+先 push(或確認不要了),或加 --allow-local-branches 留在 MBP
+
+=== unpushed branches allowed, a stash: dry-run
+exit 0
+--- stdout
+== br:<TMP>/home/dev/br → mini ~/workspace/br
+  ! 本機分支沒 push,mini 上 clone 不到:feature(沒有 upstream), main([ahead 1])(--allow-local-branches:留在 MBP)
+  ! 有 git stash,不會搬過去(留在 MBP)
+  複製(不進版控、重建不出來的),共 0K:
+  ! mini 上 gh 沒登入或讀不到 token:在 mini 的終端機跑 `gh auth login -h github.com --git-protocol ssh --web --insecure-storage`
+
+(dry-run;確認後加 --apply)
+--- stderr
+
+=== folder busy
+exit 1
+--- stdout
+--- stderr
+migrate-to-mini: 還有程序的工作目錄在 <TMP>/home/dev/alpha:node(4242) zsh(777)——先關掉那個專案的 Claude session / 終端機分頁
+
+=== target exists on the hub machine
+exit 1
+--- stdout
+--- stderr
+migrate-to-mini: mini 上 ~/workspace/alpha 已經存在——已經搬過了?確認後手動處理
+
+=== dry-run listing
+exit 0
+--- stdout
+== alpha:<TMP>/home/dev/alpha → mini ~/workspace/alpha
+  複製(不進版控、重建不出來的),共 20M:
+        8K  .env
+        8K  .vercel/
+       20M  data/
+  不複製(依賴/build/cache):.venv/ app/node_modules/ build/ lib/.venv/ node_modules/ svc/venv/ tools/venv/ web/node_modules/ x.pyc
+  不搬(--skip,留在 MBP 備份),共 3M:big.db
+  ! mini 上 gh 沒登入或讀不到 token:在 mini 的終端機跑 `gh auth login -h github.com --git-protocol ssh --web --insecure-storage`
+  ! 這個專案用 Vercel,但 mini 上 vercel 沒登入:在 mini 的終端機跑 `vercel login`
+  ! mini 上沒有 cargo
+  mini 上重建 ./.venv:uv sync --frozen --all-extras --python 3.12
+  mini 上重建 app/node_modules:cd app && pnpm install --frozen-lockfile
+  mini 上重建 lib/.venv:cd lib && uv venv .venv && VIRTUAL_ENV=.venv uv pip install -e .
+  mini 上重建 ./node_modules:npm ci
+  mini 上重建 svc/venv:cd svc && uv venv venv --python 3.11 && VIRTUAL_ENV=venv uv pip install -r requirements.txt
+  mini 上重建 tools/venv:(找不到 lockfile,手動處理)
+
+(dry-run;確認後加 --apply)
+--- stderr
+
+=== apply: memory push fails
+exit 1
+--- stdout
+== beta:<TMP>/home/dev/beta → mini ~/workspace/beta
+  複製(不進版控、重建不出來的),共 8K:
+        8K  .env
+[2/6] 補 memory 同步 + push
+--- stderr
+migrate-to-mini: git-safe-push.sh 失敗:push (stand-in): rejected
+non-fast-forward
+
+
+=== apply: recover-project.sh fails on the hub machine
+exit 1
+--- stdout
+== beta:<TMP>/home/dev/beta → mini ~/workspace/beta
+  複製(不進版控、重建不出來的),共 8K:
+        8K  .env
+[2/6] 補 memory 同步 + push
+[3/6] mini:recover-project.sh
+--- stderr
+migrate-to-mini: mini 上執行失敗:git -C ~/agent-hub pull -q && mkdir -p ~/workspace && ~/agent-hub/bin/recover-project.sh beta ~/workspace/beta
+recover-project (stand-in): no memory repo for beta
+
+
+=== apply: rsync fails
+exit 1
+--- stdout
+== beta:<TMP>/home/dev/beta → mini ~/workspace/beta
+  複製(不進版控、重建不出來的),共 8K:
+        8K  .env
+[2/6] 補 memory 同步 + push
+[3/6] mini:recover-project.sh
+[4/6] rsync 1 項(8K)
+--- stderr
+migrate-to-mini: rsync 失敗:rsync (stand-in): connection closed
+
+
+=== apply: auto memory rsync fails
+exit 1
+--- stdout
+== beta:<TMP>/home/dev/beta → mini ~/workspace/beta
+  複製(不進版控、重建不出來的),共 8K:
+        8K  .env
+[2/6] 補 memory 同步 + push
+[3/6] mini:recover-project.sh
+[4/6] rsync 1 項(8K)
+--- stderr
+migrate-to-mini: auto memory rsync 失敗:rsync (stand-in): connection closed
+
+
+=== apply: clean
+exit 0
+--- stdout
+== beta:<TMP>/home/dev/beta → mini ~/workspace/beta
+  複製(不進版控、重建不出來的),共 8K:
+        8K  .env
+[2/6] 補 memory 同步 + push
+[3/6] mini:recover-project.sh
+[4/6] rsync 1 項(8K)
+  auto memory:<TMP-SLUG>-home-dev-beta → mini ~/.claude/projects/<TMP-SLUG>-home-workspace-beta/memory/
+[5/6] mini:sync-local-setup.sh
+  ! ⚠️ README.md mentions the platform's hooks: let that project's session handle it
+[6/6] mini:重建依賴
+
+完成:beta 在 mini 的 ~/workspace/beta。在 Claude Desktop 用 SSH(hubbox)開這個資料夾。
+MBP 上的 <TMP>/home/dev/beta 沒動,當備份(.git 裡留了標記:在那裡開 session 會被提醒改去 mini)。
+--- stderr
+
+=== apply with problems
+exit 1
+--- stdout
+== alpha:<TMP>/home/dev/alpha → mini ~/workspace/alpha
+  複製(不進版控、重建不出來的),共 20M:
+        8K  .env
+        8K  .vercel/
+       20M  data/
+  不複製(依賴/build/cache):.venv/ app/node_modules/ build/ lib/.venv/ node_modules/ svc/venv/ tools/venv/ web/node_modules/ x.pyc
+  不搬(--skip,留在 MBP 備份),共 3M:big.db
+  ! mini 上 gh 沒登入或讀不到 token:在 mini 的終端機跑 `gh auth login -h github.com --git-protocol ssh --web --insecure-storage`
+  ! 這個專案用 Vercel,但 mini 上 vercel 沒登入:在 mini 的終端機跑 `vercel login`
+  ! mini 上沒有 cargo
+  mini 上重建 ./.venv:uv sync --frozen --all-extras --python 3.12
+  mini 上重建 app/node_modules:cd app && pnpm install --frozen-lockfile
+  mini 上重建 lib/.venv:cd lib && uv venv .venv && VIRTUAL_ENV=.venv uv pip install -e .
+  mini 上重建 ./node_modules:npm ci
+  mini 上重建 svc/venv:cd svc && uv venv venv --python 3.11 && VIRTUAL_ENV=venv uv pip install -r requirements.txt
+  mini 上重建 tools/venv:(找不到 lockfile,手動處理)
+[2/6] 補 memory 同步 + push
+[3/6] mini:recover-project.sh
+[4/6] rsync 3 項(20M)
+  info/exclude 補上 1 條忽略規則
+  MCP db:已加到 mini
+  MCP own:已加到 mini(mini 上還沒有 <TMP>/home/workspace/alpha/target/release/own,先 build/安裝)
+  MCP web:失敗 Invalid configuration: url is not reachable
+[5/6] mini:sync-local-setup.sh
+  ! ⚠️ README.md mentions the platform's hooks: let that project's session handle it
+[6/6] mini:重建依賴
+  . (uv sync --frozen --all-extras --python 3.12):ok
+  app (cd app && pnpm install --frozen-lockfile):ok
+  lib (cd lib && uv venv .venv && VIRTUAL_ENV=.venv uv pip install -e .):ok
+  . (npm ci):失敗
+  svc (cd svc && uv venv venv --python 3.11 && VIRTUAL_ENV=venv uv pip install -r requirements.txt):ok
+
+完成:alpha 在 mini 的 ~/workspace/alpha。在 Claude Desktop 用 SSH(hubbox)開這個資料夾。
+MBP 上的 <TMP>/home/dev/alpha 沒動,當備份(.git 裡留了標記:在那裡開 session 會被提醒改去 mini)。
+  ! .:npm ci 失敗
+npm (stand-in): ci failed: lockfile out of date
+
+  ! tools:venv 找不到 lockfile,沒重建
+  ! mini 上的工作副本有非預期的改動(重建依賴改到 lockfile?):
+M app/pnpm-lock.yaml
+--- stderr
