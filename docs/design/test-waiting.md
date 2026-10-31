@@ -359,3 +359,6 @@ each at the fastest the machine runs them. Everything else (gates, pre-gate full
 
 Left to decide (owner): whether to send the C requests now, and B7 after the measured week — including whether an agent
 may end its turn before its merge is green.
+
+The C requests were sent on 10-31 (muninn, the-crucible). `projects-and-repos.md` generalizes "project = repo"; if it
+goes ahead, B1's cache key and B2's tiers should be built per scope (its section 7, step 4) rather than on whole trees.
