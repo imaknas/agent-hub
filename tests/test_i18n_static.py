@@ -1,35 +1,40 @@
-"""E0 of docs/design/i18n.md: Chinese text in tracked files may only go down, until only the catalogs and fixtures have it.
+"""E0 of docs/design/i18n.md: the repo is English. A tracked file may contain CJK characters only where Chinese is
+data, not untranslated text:
 
-The baseline (tests/fixtures/cjk-baseline.json) is lines containing CJK characters per file, taken before translation
-started. A file may drop below its baseline, never rise above it; a file not in the baseline may have none. Allowed to
-keep Chinese: `locales/` (catalogs, per-language eval inputs), `tests/fixtures/` and `contracts/fixtures/` (goldens and
-deliberately Chinese data), `contracts/vendor/` (other projects' contracts, copied verbatim) and SPEC (files that
-define the zh-Hant token set of a machine format).
+- `locales/`: the catalogs (zh-Hant text of every message), per-language data (consolidate's hedge words, eval inputs,
+  the Simplified-character list)
+- `tests/fixtures/`, `contracts/fixtures/`: goldens of what a zh-Hant instance outputs, and zh-Hant input data
+- `contracts/vendor/`: other projects' contracts and conformance vectors, copied verbatim
+- SPEC: the files that define the zh-Hant tokens of a machine format
+
+Everything else has none (step 7 brought it from 8,400 lines to zero; the per-file baseline it ratcheted down is gone).
 
     bin/py -m unittest tests.test_i18n_static
-    bin/py tests/test_i18n_static.py --update     # lower the baseline after translating (never raises it)
 """
-import json
 import pathlib
 import re
 import subprocess
-import sys
 import unittest
 from unittest import mock
 
 ROOT = pathlib.Path(__file__).resolve().parents[1]
-BASELINE = ROOT / "tests" / "fixtures" / "cjk-baseline.json"
 CJK = re.compile("[\u3400-\u9fff\uf900-\ufaff\u3000-\u303f\uff00-\uffef]")
 ALLOWED = ("locales/", "tests/fixtures/", "contracts/fixtures/",
            # verbatim copies of other projects' contracts and conformance vectors (their zh-hant profiles are Chinese by
            # definition); contracts-check compares them with the originals, so they are never edited here
            "contracts/vendor/")
-# Files that define or document the zh-Hant token set of a machine format: Chinese there is the spec, not untranslated text
-SPEC = {"docs/design/i18n.md", "contracts/state-todo.v1.md", "contracts/todo-md.v1.md", "contracts/state-todo.v2.md",
-        "contracts/todo-md.v2.md", "bin/todo_tokens.py",   # the to-do token sets readers and writers use
-        # reflect-week v1 stored the analysis's classifications as zh-Hant words; v2 maps each to its value
-        # (x-v1-values), which is how readers take the weeks stored before v2
-        "contracts/reflect-week.v2.schema.json"}
+# Chinese there is the spec, not untranslated text: each file defines or documents zh-Hant tokens a reader must accept
+SPEC = {
+    # the to-do formats' zh-Hant set (heading, tags, key marker, empty marker, todo.md headings): the v1 contracts,
+    # their v2 successors (v1 + the English set), and the one table readers and writers build from
+    "contracts/state-todo.v1.md", "contracts/state-todo.v2.md", "contracts/todo-md.v1.md", "contracts/todo-md.v2.md",
+    "bin/todo_tokens.py",
+    # reflect-week v1 stored the analysis's classifications as zh-Hant words; v2 maps each to its value
+    # (x-v1-values), which is how readers take the weeks stored before v2
+    "contracts/reflect-week.v2.schema.json",
+    # the i18n design: both token sets side by side and the Simplified-only characters the evals score
+    "docs/design/i18n.md",
+}
 
 
 def tracked() -> list[str]:
@@ -42,7 +47,8 @@ def tracked() -> list[str]:
         return [str(r) for r in rels if not {".git", ".state", ".logs", "__pycache__"} & set(r.parts)]
 
 
-def counts() -> dict[str, int]:
+def with_cjk() -> dict[str, list[int]]:
+    """file -> the line numbers with CJK characters, for every tracked file outside the allowed places"""
     out = {}
     for rel in tracked():
         if rel.startswith(ALLOWED) or rel in SPEC:
@@ -51,22 +57,25 @@ def counts() -> dict[str, int]:
             text = (ROOT / rel).read_text(encoding="utf-8")
         except (UnicodeDecodeError, OSError):
             continue
-        n = sum(1 for line in text.splitlines() if CJK.search(line))
-        if n:
-            out[rel] = n
+        lines = [i for i, line in enumerate(text.splitlines(), 1) if CJK.search(line)]
+        if lines:
+            out[rel] = lines
     return out
 
 
-def load_baseline() -> dict[str, int]:
-    return json.loads(BASELINE.read_text()) if BASELINE.exists() else {}
+class NoCJK(unittest.TestCase):
+    def test_none_outside_the_allowed_places(self):
+        found = [f"{f}:{','.join(map(str, ls[:10]))}" for f, ls in sorted(with_cjk().items())]
+        self.assertEqual(found, [], "Chinese text outside locales/, fixtures, contracts/vendor/ and the spec files. "
+                                    "New text is English; owner-facing text goes through the catalog (_(), hub_msg, "
+                                    "the page's t()), zh-Hant tokens come from their definition (bin/todo_tokens.py), "
+                                    "zh-Hant test data goes in tests/fixtures/ (docs/design/i18n.md)")
 
-
-class CJKRatchet(unittest.TestCase):
-    def test_only_goes_down(self):
-        base, now = load_baseline(), counts()
-        worse = [f"{f}: {n} lines with Chinese (baseline {base.get(f, 0)})" for f, n in sorted(now.items()) if n > base.get(f, 0)]
-        self.assertEqual(worse, [], "Chinese text went up. New text is English; owner-facing Chinese goes in locales/ "
-                                    "(docs/design/i18n.md). Lower the baseline with --update after translating.")
+    def test_spec_and_allowed_exist(self):
+        """a renamed or deleted spec file must leave the list, not keep an exemption nobody uses"""
+        files = tracked()
+        self.assertEqual(sorted(s for s in SPEC if s not in files), [])
+        self.assertEqual([a for a in ALLOWED if not any(f.startswith(a) for f in files)], [])
 
     def test_sees_files_without_git(self):
         """the fallback (no git, as in the commit gate) must still find the tracked files"""
@@ -81,19 +90,5 @@ class CJKRatchet(unittest.TestCase):
         self.assertFalse(CJK.search("To-do — [agent] “quoted” café"))
 
 
-def update() -> int:
-    """Lower entries that went down, drop ones that reached zero; never raise one (that is what the test is for)."""
-    base, now = load_baseline(), counts()
-    if not BASELINE.exists():
-        base = now
-    else:
-        base = {f: min(n, now[f]) for f, n in base.items() if now.get(f)}
-    BASELINE.write_text(json.dumps(dict(sorted(base.items())), ensure_ascii=False, indent=1) + "\n")
-    print(f"cjk baseline: {len(base)} files, {sum(base.values())} lines")
-    return 0
-
-
 if __name__ == "__main__":
-    if sys.argv[1:] == ["--update"]:
-        sys.exit(update())
     unittest.main()

@@ -30,7 +30,6 @@ SCOPE = ("bin", "templates", "launchd", "tests", "agent-jobs", "modules")
 # docs/design/ holds dated decision records, where the maintainer's name is normal: not scanned
 PUBLIC_DOCS = ("AGENTS.md", "README.md", "known-issues.md", "docs/mcp.md", "hub.example.json")
 BASELINE = ROOT / "tests" / "fixtures" / "personal-baseline.json"
-CJK_BASELINE = ROOT / "tests" / "fixtures" / "cjk-baseline.json"   # file names only (test_i18n_static.py)
 # the words for "project" (zh-Hant and English) that a private name which is also a common word is counted next to
 PROJECT_WORDS = json.loads((ROOT / "tests" / "fixtures" / "personal-boundary.json").read_text())["project_words"]
 SELF = pathlib.Path(__file__).resolve()
@@ -67,7 +66,7 @@ def files() -> list[pathlib.Path]:
     # did this, and the ratchet passed having scanned nothing)
     if not paths:
         paths = [p for d in SCOPE for p in (ROOT / d).rglob("*") if p.is_file()] + [ROOT / f for f in PUBLIC_DOCS]
-    return sorted(p for p in paths if p.is_file() and p.resolve() not in (SELF, BASELINE.resolve(), CJK_BASELINE.resolve())
+    return sorted(p for p in paths if p.is_file() and p.resolve() not in (SELF, BASELINE.resolve())
                   and "__pycache__" not in p.parts)
 
 
