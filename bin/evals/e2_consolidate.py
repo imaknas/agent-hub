@@ -63,7 +63,11 @@ def git(repo: pathlib.Path, *args: str, check: bool = True) -> str:
 
 # ---------- cases ----------
 
-def freeze(project: str, today: str | None, rev: str | None = None) -> pathlib.Path:
+def freeze(a) -> list[pathlib.Path]:
+    return [freeze_case(a.project, a.today, a.since)]
+
+
+def freeze_case(project: str, today: str | None, rev: str | None = None) -> pathlib.Path:
     """a case: the project's memory bare repo cloned at `rev` (default the agent-memory tip), the survey at `today`"""
     m = cm()
     origin = hubconf.p("git_origin", "~/git-origin") / f"{project}-memory.git"
@@ -310,9 +314,8 @@ def ref_keeps_language(pair: tuple[float, float]) -> bool:
     return (base >= 0.15) == (added >= 0.15)
 
 
-def cmd_score(a) -> int:
+def report(run_dir: pathlib.Path) -> dict:
     m = cm()
-    run_dir = e2.root() / "runs" / a.run
     by: dict[str, dict[str, list[dict]]] = {}
     for out in sorted(run_dir.glob("*/*/*-*")):
         if not (out / "result.json").exists():
@@ -322,7 +325,7 @@ def cmd_score(a) -> int:
         r = checks(m, case, out)
         r["secs"] = json.loads((out / "meta.json").read_text()).get("secs")
         by.setdefault(cid, {}).setdefault(arm, []).append(r)
-    report = {"run": a.run, "point": POINT, "arms": {}, "pairs": {}, "cases": {}}
+    report = {"arms": {}, "pairs": {}, "cases": {}}
     arms = sorted({arm for v in by.values() for arm in v})
     mean = e2.mean
     for arm in arms:
@@ -364,13 +367,4 @@ def cmd_score(a) -> int:
                                        "new": r.get("new_files"), "corr": r.get("corrections_good"),
                                        "reverted": r.get("reverted"), "valid": r["valid"]} for r in rs]
                                 for arm, rs in v.items()}
-    if a.json:
-        print(json.dumps(report, ensure_ascii=False, indent=1))
-    else:
-        print(f"{a.run} ({POINT})")
-        for arm, st in report["arms"].items():
-            print(f"  {arm}: " + ", ".join(f"{k}={v}" for k, v in st.items()))
-        for k, st in report["pairs"].items():
-            print(f"  {k}: n={st['n']} " + ", ".join(f"{mt}={st[mt]['mean']} {st[mt]['ci90'] or ''}" for mt in METRICS))
-    (run_dir / "score.json").write_text(json.dumps(report, ensure_ascii=False, indent=1))
-    return 0
+    return report

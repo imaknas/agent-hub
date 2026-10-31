@@ -129,6 +129,40 @@ class FrozenCase(unittest.TestCase):
         self.assertFalse(e2.outcome("librarian-state-edits", case, out)["valid"])
 
 
+class Plugins(unittest.TestCase):
+    """the points with their own E2 module (e2_reflect…): the new arm renders a complete prompt, the scorers read a run
+    as production returns it"""
+
+    STATS = {"week": "2026-W40", "totals": {"prompts": 9, "prompts_prev": 4, "sessions": 2, "projects": 1, "days": 2},
+             "projects": [{"name": "demo", "prompts": 9, "prompts_prev": 4, "sessions": 2, "days": 2, "commits": 3,
+                           "notes": 1}],
+             "rhythm": {"late": 1, "late_share": 0.11, "late_prev": 0, "longest_hours": 1.5,
+                        "last_per_day": [{"day": "10/01", "time": "23:10"}]},
+             "delegation": {"agents": 0, "agents_prev": 1, "peer": 2, "peer_prev": 0, "skills": {}},
+             "changes": {"new": ["demo"], "quiet": []}}
+
+    def test_reflect_prompt(self):
+        rl = e2._load("reflect_llm_t", "reflect_llm.py")
+        d = {"sessions": [{"date": "10-01", "project": "demo", "summary": "a summary", "themes": ["cache"], "user_turns": 3}],
+             "withheld": 2, "complete": False, "undigested_sessions": 1}
+        for lang, name in (("zh-Hant", "Traditional Chinese (zh-Hant)"), ("en", "English")):
+            p = rl.build_prompt(self.STATS, d, lang=lang, owner="Alex")
+            self.assertIn(f"in {name}", p)
+            self.assertIn("- demo: messages 9 (last week 4)", p)
+            self.assertIn("[demo] a summary | themes: cache | 3 messages", p, "the summaries are data, kept as they are")
+            self.assertIn(" 2 more work-related sessions", p)
+            self.assertIn(" 1 sessions were not summarized", p)
+            self.assertNotIn("{{", p)
+        self.assertIn(rl.NO_DIGEST_INTRO, rl.build_prompt(self.STATS, None, lang="zh-Hant", owner="Alex"))
+        import e2_reflect
+        props = json.loads((ROOT / "contracts" / "llm" / "reflect-week.schema.json").read_text())["properties"]
+        status = props["projects"]["items"]["properties"]["status"]["enum"]   # the enum values are tokens, kept
+        level = props["fluency"]["items"]["properties"]["level"]["enum"]
+        a = {"valid": True, "status": {"demo": status[0], "x": status[1]}, "level": {"d": level[0]}, "text": "t"}
+        b = {"valid": True, "status": {"demo": status[0]}, "level": {"d": level[1]}, "text": "t"}
+        self.assertEqual(e2_reflect.agree(a, b), {"projects": 0.5, "status": 1.0, "level": 0.0, "text_sim": 1.0})
+
+
 class E3(unittest.TestCase):
     def test_project_has_the_rules(self):
         with tempfile.TemporaryDirectory() as d:

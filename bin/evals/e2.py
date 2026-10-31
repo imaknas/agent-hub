@@ -21,6 +21,9 @@ production reads after the rules change; --rules old keeps the snapshot's, to te
 one. The arm's label then says so: `new~oldrules`.
 Points: librarian-state (agent: runs on a fresh copy of the snapshot, scored on STATE.md after), librarian-state-edits
 (completion: edits applied to the snapshot's STATE.md). Others are added as their cases exist.
+A point whose shape differs keeps its freeze / render / run / score code in its own module (PLUGINS: e2_<name>.py with
+freeze(a) → the case dirs, prompt(case, arm), one(case, arm, i, run_dir, env), report(run_dir) → arms and pairs, and
+cmd_run(a) when its runs need more than e2's loop); e2.py only dispatches to it.
 """
 from __future__ import annotations
 
@@ -51,7 +54,7 @@ POINT_CASES = {"librarian-state": "librarian-state", "librarian-state-edits": "l
                "librarian-index": "librarian-index", "librarian-index-edits": "librarian-index",
                "librarian-todo-format": "librarian-todo-format", "consolidate": "consolidate"}
 # points whose freeze / run / score live in their own module bin/evals/e2_<point>.py (their shapes differ)
-PLUGINS = {"consolidate": "e2_consolidate"}
+PLUGINS = {"consolidate": "e2_consolidate", "reflect-week": "e2_reflect"}
 # The code before step 5 (docs/design/i18n.md): renders the `old` arm of a case frozen after the prompts changed
 OLD_REF = "ebd7f90"
 ROSTER = re.compile(r"<!-- roster:begin.*?<!-- roster:end -->", re.S)
@@ -61,15 +64,20 @@ RATE_LIMIT = re.compile(r"rate.?limit|usage limit|429|overloaded", re.I)
 HUB_JSON = hubconf.config_file("hub.json").name   # the file name, inside a run's config copy
 
 
+def plugin(point: str):
+    """the module of a point with its own E2 code (bin/evals/e2_<name>.py), or None"""
+    if point not in PLUGINS:
+        return None
+    sys.modules.setdefault("e2", sys.modules[__name__])   # run as a script: the plugin's `import e2` is this module
+    sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
+    return importlib.import_module(PLUGINS[point])
+
+
 def _load(name: str, file: str):
     spec = importlib.util.spec_from_file_location(name, BIN / file)
     mod = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(mod)
     return mod
-
-
-def plugin(point: str):
-    return _load(PLUGINS[point], f"evals/{PLUGINS[point]}.py")
 
 
 def librarian():
@@ -245,6 +253,8 @@ def snapshot(case: pathlib.Path, arm: str, into: pathlib.Path) -> pathlib.Path:
 
 
 def prompt(point: str, case: pathlib.Path, arm: str) -> str:
+    if p := plugin(point):
+        return p.prompt(case, arm)
     if arm == "old":
         return (case / f"prompt.{point}.txt").read_text()
     a = json.loads((case / "args.json").read_text())
@@ -287,6 +297,8 @@ def run_env(run_dir: pathlib.Path) -> dict:
 
 
 def one(point: str, case: pathlib.Path, arm: str, i: int, run_dir: pathlib.Path, env: dict) -> dict:
+    if p := plugin(point):
+        return p.one(case, arm, i, run_dir, env)
     out = run_dir / case.parent.name / case.name / f"{arm}-{i}"
     if (out / "result.json").exists():
         return json.loads((out / "meta.json").read_text())
@@ -519,8 +531,8 @@ def boot(v, n=1000, seed=0):
 def cmd_score(a) -> int:
     run_dir = root() / "runs" / a.run
     point = json.loads((run_dir / "run.json").read_text())["point"]
-    if point in PLUGINS:
-        return plugin(point).cmd_score(a)
+    if p := plugin(point):
+        return emit({"run": a.run, "point": point} | p.report(run_dir), a, run_dir)
     by: dict[str, dict[str, list[dict]]] = {}
     for out in sorted(run_dir.glob("*/*/*-*")):
         if not (out / "result.json").exists():
@@ -556,14 +568,18 @@ def cmd_score(a) -> int:
         rows = [r for r in rows if r]
         report["pairs"][f"{x}~{y}"] = {k: {"mean": mean([r[k] for r in rows]), "ci90": boot([r[k] for r in rows])}
                                        for k in METRICS} | {"n": len(rows)}
+    return emit(report, a, run_dir)
+
+
+def emit(report: dict, a, run_dir: pathlib.Path) -> int:
     if a.json:
         print(json.dumps(report, ensure_ascii=False, indent=1))
     else:
-        print(f"{a.run} ({point})")
+        print(f"{a.run} ({report['point']})")
         for arm, s in report["arms"].items():
             print(f"  {arm}: " + ", ".join(f"{k}={v}" for k, v in s.items()))
         for k, s in report["pairs"].items():
-            print(f"  {k}: n={s['n']} " + ", ".join(f"{m}={s[m]['mean']} {s[m]['ci90'] or ''}" for m in METRICS))
+            print(f"  {k}: n={s['n']} " + ", ".join(f"{m}={v['mean']} {v['ci90'] or ''}" for m, v in s.items() if m != "n"))
     (run_dir / "score.json").write_text(json.dumps(report, ensure_ascii=False, indent=1))
     return 0
 
@@ -582,7 +598,7 @@ def main(argv: list[str]) -> int:
     c = sub.add_parser("cases")
     c.add_argument("point", nargs="?", default="librarian-state")
     r = sub.add_parser("run")
-    r.add_argument("point", choices=sorted(POINT_CASES))
+    r.add_argument("point", choices=sorted({*POINT_CASES, *PLUGINS}))
     r.add_argument("--arm", choices=["old", "new", "new-en"], required=True)
     r.add_argument("--rules", choices=["old", "new"], default="new", help="AGENT.md the agent reads (new arms only)")
     r.add_argument("--k", type=int, default=3)
@@ -593,10 +609,11 @@ def main(argv: list[str]) -> int:
     s.add_argument("run")
     s.add_argument("--json", action="store_true")
     a = ap.parse_args(argv)
-    if a.cmd == "freeze":
-        if a.point in PLUGINS:
-            print(plugin(a.point).freeze(a.project, a.today, a.since))
-        elif a.point == "librarian-todo-format":
+    if a.cmd == "freeze" and (p := plugin(a.point)):
+        for c in p.freeze(a):
+            print(case_id(c))
+    elif a.cmd == "freeze":
+        if a.point == "librarian-todo-format":
             print(freeze_todo(a.kind, a.project, a.state_file))
         else:
             print(freeze_index(a.project) if a.point == "librarian-index" else freeze_state(a.project, a.since, a.night))
@@ -604,7 +621,8 @@ def main(argv: list[str]) -> int:
         for p in cases(a.point):
             print(case_id(p))
     elif a.cmd == "run":
-        return plugin(a.point).cmd_run(a) if a.point in PLUGINS else cmd_run(a)
+        p = plugin(a.point)
+        return p.cmd_run(a) if hasattr(p, "cmd_run") else cmd_run(a)
     elif a.cmd == "score":
         return cmd_score(a)
     return 0
