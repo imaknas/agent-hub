@@ -242,8 +242,7 @@ RUNNER = """
 import importlib.machinery, importlib.util, pathlib, sys, json
 args = json.loads(sys.argv[1])
 sys.path.insert(0, args["bin"])
-import hubconf, landlock, policy, seatbelt
-policy.WRITE_CACHES = []   # exec_service would create ~/.npm and the like: no writing into HOME from a test
+import hubconf, landlock, seatbelt
 # the fixture lives in the temp area: a writable temp area would hide writes outside and make every path in it readable
 landlock.TMP = []
 seatbelt.TMP = []

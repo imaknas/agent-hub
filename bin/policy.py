@@ -12,9 +12,14 @@ No runtime syntax or paths allowed here (checked by tests/test_runtime_boundary.
 
 policy(name, doc, index) → {
   workspace:          the project folder (Path or None)
-  write:              what may be written beyond the platform defaults (its own runtime, the bus directory, tool
-                      caches, the registry's allow_write; strings starting with ~)
-  other_projects:     other projects' workspace/runtime (no reading or writing; Path)
+  write:              what may be written beyond the platform defaults (its own runtime, the bus directory, the
+                      registry's allow_write; strings starting with ~). Not the shared tool caches: one project could
+                      change a package another installs next
+  env:                environment for its sessions, services and jobs: the tool caches (uv, pip, npm, corepack) in its
+                      own repo's git dir (<workspace>/.git/agent-hub/cache/<tool>), which only it can write
+  other_projects:     other projects' workspace/runtime, and every memory repo that isn't its own: other projects'
+                      bare repos and memory copies, the mirrors, anything else under git_origin / memory_copies (no
+                      reading or writing; Path)
   deny_write:         the platform's places (hub, bare repos, memory copies, LaunchAgents; Path)
   deny_read:          the raw notes in the memory copies (glob), the platform's secrets (Path; during the move both the
                       old and new locations are blocked)
@@ -42,8 +47,9 @@ import hubconf  # noqa: E402
 # (so lease-relay can import this without yaml)
 
 HOME = pathlib.Path.home()
-WRITE_CACHES = ["~/.cache/uv", "~/.cache/pip", "~/.npm", "~/.cache/node", "~/Library/Caches/pip",
-                "~/Library/Caches/uv", "~/.local/share/uv"]
+# each tool's cache (and uv's Python installs and tools) per repo, under its git dir: not shared, never untracked files
+CACHE_ENV = {"UV_CACHE_DIR": "uv", "UV_PYTHON_INSTALL_DIR": "uv-python", "UV_TOOL_DIR": "uv-tools",
+             "PIP_CACHE_DIR": "pip", "npm_config_cache": "npm", "COREPACK_HOME": "corepack"}
 DOMAINS = ["github.com", "api.github.com", "codeload.github.com", "objects.githubusercontent.com",
            "raw.githubusercontent.com", "pypi.org", "files.pythonhosted.org", "registry.npmjs.org"]
 
@@ -73,6 +79,32 @@ def secret_dirs() -> list[pathlib.Path]:
     return [cur] + ([old] if old.exists() and old.resolve() != cur.resolve() else [])
 
 
+def memory_bare(name: str, doc: dict) -> pathlib.Path:
+    return hubconf.path((doc.get("paths") or {}).get("memory_bare")) \
+        or hubconf.p("git_origin", "~/git-origin") / f"{name}-memory.git"
+
+
+def others_memory(name: str, doc: dict, index: dict) -> list[pathlib.Path]:
+    """Every memory repo that isn't this project's: other projects' bare repos and copies (registered, whether they
+    exist yet or not), plus whatever else is under git_origin (mirrors, the hub's bare repo, old ones) and
+    memory_copies right now."""
+    copies = hubconf.p("memory_copies", "~/.memory-copies")
+    own = {memory_bare(name, doc), copies / name}
+    out = [p for n, d in index["projects"].items() if n != name for p in (memory_bare(n, d), copies / n)]
+    for root in (hubconf.p("git_origin", "~/git-origin"), copies):
+        out += sorted(root.iterdir()) if root and root.is_dir() else []
+    seen, res = set(), []
+    for p in out:
+        if p not in own and p not in seen:
+            seen.add(p)
+            res.append(p)
+    return res
+
+
+def cache_env(ws: pathlib.Path | None) -> dict[str, str]:
+    return {k: str(ws / ".git" / "agent-hub" / "cache" / v) for k, v in CACHE_ENV.items()} if ws else {}
+
+
 def policy(name: str, doc: dict, index: dict) -> dict:
     import registry
     d = registry.dirs(doc)
@@ -80,9 +112,10 @@ def policy(name: str, doc: dict, index: dict) -> dict:
     copies = hubconf.p("memory_copies", "~/.memory-copies")
     return {
         "workspace": d["workspace"],
-        "write": ([tilde(d["runtime"])] if d["runtime"] else []) + [tilde(hubconf.BUS_DIR)] + WRITE_CACHES
+        "write": ([tilde(d["runtime"])] if d["runtime"] else []) + [tilde(hubconf.BUS_DIR)]
                  + list(doc.get("allow_write") or []),
-        "other_projects": others,
+        "env": cache_env(d["workspace"]),
+        "other_projects": others + others_memory(name, doc, index),
         "deny_write": [hubconf.ROOT, hubconf.p("git_origin"), copies, HOME / "Library" / "LaunchAgents"],
         "deny_read": [copies / "*" / "memory", *secret_dirs()],
         "credentials": [hubconf.path(x) for x in hubconf.get("credentials.dirs", [])],

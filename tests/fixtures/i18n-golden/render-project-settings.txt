@@ -55,6 +55,9 @@ exit 1
     "allow": [
       "Bash(agenthub send:*)"
     ]
+  },
+  "env": {
+    "UV_CACHE_DIR": "/cache/uv"
   }
 }
 === plan, after write

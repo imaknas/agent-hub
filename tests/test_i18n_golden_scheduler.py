@@ -348,7 +348,8 @@ class Golden(unittest.TestCase):
         def plan(label):
             out.append((label, "\n".join(c.line() for c in m.plan(index)) or "(none)"))
         settings = alpha / ".claude" / "settings.local.json"
-        with mock.patch.object(m, "desired", desired), mock.patch.object(m.registry, "refresh", lambda: index):
+        with mock.patch.object(m, "desired", desired), mock.patch.object(m.registry, "refresh", lambda: index), \
+                mock.patch.object(m, "desired_env", lambda name, doc, index: {"UV_CACHE_DIR": "/cache/uv"}):
             plan("plan, first")
             main("report", "--report")
             main("write")

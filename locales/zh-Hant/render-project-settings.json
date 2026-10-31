@@ -14,5 +14,6 @@
  "record": "紀錄",
  ", ": "、",
  "⚠️ {project}'s settings drifted (report mode: not written back): {drift}": "⚠️ {project} 的設定偏移(已(report 模式不)寫回):{drift}",
- "⚠️ {project}'s settings drifted (written back): {drift}": "⚠️ {project} 的設定偏移(已寫回):{drift}"
+ "⚠️ {project}'s settings drifted (written back): {drift}": "⚠️ {project} 的設定偏移(已寫回):{drift}",
+ "env was changed": "env 被改了"
 }

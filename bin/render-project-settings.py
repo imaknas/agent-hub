@@ -9,9 +9,10 @@ Written only for projects registered with `enforce: {sandbox: true}`; for other 
 would write (--report). Not applied to the platform itself (agent-hub).
 What is written:
   sandbox (the whole key is managed by the platform): enabled, failIfUnavailable, allowUnsandboxedCommands: false,
-    filesystem.allowWrite (its own runtime, the bus directory, tool caches, the registry's allow_write),
+    filesystem.allowWrite (its own runtime, the bus directory, the registry's allow_write),
     filesystem.denyRead (other projects' workspace/runtime, raw memory notes, the platform's secrets),
     network.allowedDomains (platform defaults + the registry's network)
+  env: the variables the platform sets (its own tool caches, policy.py env); other variables are untouched
   the entries the platform adds to permissions.deny / permissions.allow (other entries are untouched -- an
   interactive session's "always allow" is written there too):
     deny  Read/Edit other projects' workspace/runtime, Edit the platform/bare repos/memory copies/LaunchAgents,
@@ -50,6 +51,11 @@ def desired(name: str, doc: dict, index: dict) -> tuple[dict, list[str], list[st
     return runtime_claude.settings(policy.policy(name, doc, index))
 
 
+def desired_env(name: str, doc: dict, index: dict) -> dict[str, str]:
+    """The environment its sessions get (its own tool caches)."""
+    return runtime_claude.session_env(policy.policy(name, doc, index))
+
+
 def settings_path(doc: dict) -> pathlib.Path | None:
     ws = registry.dirs(doc)["workspace"]
     return runtime_claude.settings_path(ws) if ws else None
@@ -72,7 +78,12 @@ def compose(name: str, doc: dict, index: dict) -> tuple[pathlib.Path, dict, dict
         keep = [r for r in p2.get(key, []) if r not in set(prev.get(key, []))]
         p2[key] = keep + [r for r in mine if r not in keep]
     new["permissions"] = p2
-    return path, cur, new, prev, {"sandbox": sandbox, "deny": deny, "allow": allow}
+    env = desired_env(name, doc, index)
+    e2 = {k: v for k, v in (cur.get("env") or {}).items() if k not in set(prev.get("env") or {})}
+    e2.update(env)
+    if e2:
+        new["env"] = e2
+    return path, cur, new, prev, {"sandbox": sandbox, "deny": deny, "allow": allow, "env": env}
 
 
 def write_project(name: str, doc: dict, index: dict, report: bool) -> list[str]:
@@ -93,6 +104,8 @@ def write_project(name: str, doc: dict, index: dict, report: bool) -> list[str]:
             if missing:
                 drift.append(_("permissions.{key} is missing {n} {n:rule|rules} (e.g. {example})", key=key, n=len(missing),
                                example=sorted(missing)[0]))
+        if any((cur.get("env") or {}).get(k) != v for k, v in (prev.get("env") or {}).items()):
+            drift.append(_("env was changed"))
     if report:
         print(_("{project}: would write sandbox (allowWrite {write}, denyRead {read}, {domains} {domains:domain|domains}), "
                 "{deny} deny {deny:rule|rules}, {allow} allow {allow:rule|rules} → {path}", project=name,
@@ -120,6 +133,11 @@ def unapply(name: str, doc: dict) -> None:
     for key in ("deny", "allow"):
         if key in perms:
             perms[key] = [r for r in perms[key] if r not in set(prev.get(key, []))]
+    env = {k: v for k, v in (cur.get("env") or {}).items() if k not in set(prev.get("env") or {})}
+    if env:
+        cur["env"] = env
+    else:
+        cur.pop("env", None)
     path.write_text(json.dumps(cur, indent=2, ensure_ascii=False) + "\n")
     rec.unlink()
     print(_("{project}: enforce is off, removed the platform's sandbox/rules", project=name))

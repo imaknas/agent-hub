@@ -113,6 +113,11 @@ def settings(pol: dict) -> tuple[dict, list[str], list[str]]:
     return sandbox, deny, allow
 
 
+def session_env(pol: dict) -> dict[str, str]:
+    """The settings file's env for a sandboxed project's sessions (its own tool caches: policy.py env)."""
+    return dict(pol.get("env") or {})
+
+
 def lease_settings(pol: dict) -> dict:
     deny = settings(pol)[1]
     deny += [f"Read({_tilde(p)})" for p in pol["credential_files"]] + [f"Read({_tilde(p)}/**)" for p in pol["credentials"]]

@@ -312,8 +312,9 @@ fields), so projects can still set up their own services.
 - `bin/sandboxed-run --project <p> --cwd <dir> [--port <n>] -- <argv…>`: computes `seatbelt.service_profile` fresh on every
   start and `exec`s `sandbox-exec -p`. render-services puts it in front of a sandboxed project's service command, the
   scheduler (`registry.scheduler_jobs`) in front of its command jobs. Agent jobs already go through `llm.py`.
-- The profile is closer to a session's than to cap-run's: its runtime and workspace, the bus and tool caches
-  (`policy.write`) are writable; other projects, platform state, credentials (`~/.ssh`, `~/.claude`'s token…) and the
+- The profile is closer to a session's than to cap-run's: its runtime and workspace and the bus (`policy.write`)
+  are writable, and its tool caches are its own, in its repo's git dir (`policy.env`; 11-01: the shared uv/pip/npm
+  caches were writable from every sandbox, so one project could change a package another installs next); other projects, platform state, credentials (`~/.ssh`, `~/.claude`'s token…) and the
   Keychain are not readable. Outbound network is open: Seatbelt can't filter by domain, so the registry's `network` list
   is not enforced at this layer. Listening: only `expose.local_port` can be bound, and only connections arriving through
   localhost are accepted (tested on the mini: LAN and tailnet addresses time out even when listening on 0.0.0.0;
@@ -361,7 +362,7 @@ registered project is sandboxed and nothing can isolate it).
 `sandboxed-run` restricts its own process and then execs the command (children inherit it, it can't be undone).
 Standard library only (ctypes), unprivileged; the same for services and command jobs.
 
-- **Writes**: own runtime/workspace, `policy.write` (bus, tool caches, `allow_write`), `/tmp`, `/var/tmp`, `/dev/shm`,
+- **Writes**: own runtime/workspace (its tool caches included: `policy.env`), `policy.write` (bus, `allow_write`), `/tmp`, `/var/tmp`, `/dev/shm`,
   a few devices. A missing writable folder is created first when its parent exists (a rule needs an fd).
 - **Reads**: Landlock can only allow, so the deny-list is inverted: walk from `/`; a path with nothing denied inside is
   allowed whole, a denied one is skipped, one with something denied inside is walked into. Denied: `workspace_root`,
@@ -390,7 +391,7 @@ passing the same run, not by reading its docs. The table below is the prose form
 
 | | macOS (Seatbelt) | Linux (Landlock + seccomp) |
 |---|---|---|
-| writes limited to own folders, bus, caches, temp | yes | yes |
+| writes limited to own folders (own tool caches included), bus, temp | yes | yes |
 | other projects, platform state, credentials unreadable | yes | yes (complement walk; new files next to denied paths unreadable too) |
 | Keychain / D-Bus, launchd / systemd user manager | Keychain services and launchctl blocked | unix-domain sockets blocked (no D-Bus, no `systemctl --user`) |
 | bind only the declared port | yes | yes (TCP only; UDP binds are not covered) |

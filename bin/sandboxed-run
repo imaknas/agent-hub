@@ -3,7 +3,8 @@
 macOS seatbelt.service_profile, Linux landlock.py): render-services puts it in front of the service's command, the
 scheduler in front of the job's. A project with enforce.sandbox gets its services and jobs through manifest.update
 without the owner's approval, so they must not run with more than the project's sessions have (no credentials, no
-other projects, no platform state; writes only to its own folders, the bus and tool caches).
+other projects, no platform state; writes only to its own folders and the bus; its tool caches are its own, in its
+repo's git dir: policy.py env).
 Design: docs/design/capabilities.md.
 
   sandboxed-run --project <name> --cwd <dir> [--port <n>] -- <argv…>
@@ -54,6 +55,7 @@ def main(argv: list[str]) -> int:
     d = registry.dirs(doc)
     dirs = [p for p in (d["runtime"], d["workspace"]) if p]
     os.chdir(a.cwd)
+    os.environ.update(pol.get("env") or {})   # its own tool caches (the shared ones aren't writable in the sandbox)
     try:
         isolation.exec_service(pol, dirs, a.port, cmd)
     except OSError as e:
