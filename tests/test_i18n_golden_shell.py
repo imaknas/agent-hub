@@ -29,6 +29,17 @@ UPDATE = os.environ.get("I18N_GOLDEN_UPDATE") == "1"
 PY = os.environ.get("AGENT_HUB_PYTHON") or sys.executable
 
 
+def utf8_locale() -> str:
+    """A UTF-8 locale this machine has (macOS: en_US.UTF-8; Debian/Ubuntu often only C.UTF-8): an LC_ALL it lacks makes
+    bash print a setlocale warning into every script's stderr."""
+    have = subprocess.run(["locale", "-a"], capture_output=True, text=True).stdout.split()
+    norm = {x.lower().replace("-", ""): x for x in have}
+    return next((norm[k] for k in ("en_us.utf8", "c.utf8") if k in norm), "C")
+
+
+LOCALE = utf8_locale()
+
+
 class ShellGolden(unittest.TestCase):
     maxDiff = None
 
@@ -47,7 +58,7 @@ class ShellGolden(unittest.TestCase):
                     "AGENT_HUB_STATE": str(self.tmp / "state"), "AGENT_HUB_LANG_UI": golden_lang.LANG,
                     "GIT_CONFIG_GLOBAL": "/dev/null", "GIT_CONFIG_NOSYSTEM": "1",
                     "GIT_AUTHOR_NAME": "t", "GIT_AUTHOR_EMAIL": "t@t", "GIT_COMMITTER_NAME": "t",
-                    "GIT_COMMITTER_EMAIL": "t@t", "LANG": "en_US.UTF-8", "LC_ALL": "en_US.UTF-8", "TZ": "Asia/Taipei",
+                    "GIT_COMMITTER_EMAIL": "t@t", "LANG": LOCALE, "LC_ALL": LOCALE, "TZ": "Asia/Taipei",
                     "PATH": f"{self.tmp / 'fakebin'}:{os.environ.get('PATH', '/usr/bin:/bin')}"}
 
     # --- helpers ------------------------------------------------------------------------------------------------

@@ -107,16 +107,15 @@ def remote_url(owner: str, name: str) -> str:
 
 
 def remote_is_ours(ws: pathlib.Path, url: str) -> bool:
-    """The remote was pushed by this sandbox itself (the last run stopped halfway): empty, or the remote HEAD is in
-    the local history."""
-    r = subprocess.run(["git", "-C", str(ws), "ls-remote", url, "HEAD"], text=True, capture_output=True)
+    """The remote was pushed by this sandbox itself (the last run stopped halfway): no branches, or every branch tip is
+    in the local history. Every branch, not just HEAD: a repo whose HEAD names a branch nobody pushed (the default
+    branch name differs between git setups) would otherwise look empty while it holds someone else's history."""
+    r = subprocess.run(["git", "-C", str(ws), "ls-remote", "--heads", url], text=True, capture_output=True)
     if r.returncode != 0:
         return False
-    sha = r.stdout.split()[0] if r.stdout.split() else ""
-    if not sha:
-        return True
-    return subprocess.run(["git", "-C", str(ws), "merge-base", "--is-ancestor", sha, "HEAD"],
-                          capture_output=True).returncode == 0
+    tips = [line.split()[0] for line in r.stdout.splitlines() if line.strip()]
+    return all(subprocess.run(["git", "-C", str(ws), "merge-base", "--is-ancestor", sha, "HEAD"],
+                              capture_output=True).returncode == 0 for sha in tips)
 
 
 def upgraded_doc(doc: dict, final: str, url: str) -> dict:
