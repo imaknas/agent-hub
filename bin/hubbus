@@ -1246,28 +1246,14 @@ def session_cwd(c, sid):
     return pathlib.Path(r["cwd"]) if r and r["cwd"] and pathlib.Path(r["cwd"]).is_dir() else None
 
 
-RESUME_PROMPT = prompts.fill("""(平台訊息,不是使用者打的字)你之前寄出的信有了回覆。你這個 session 現在沒有人在用,所以平台在背景
-用你的 context 接著處理(這是一個分支副本:{{owner}} 在原本的 session 裡看不到這段,結論要寫進回信或 memory 筆記)。
-
-{letter}
-
-照你原本的工作脈絡處理這封信。這個背景副本只能:讀檔、寫 memory 筆記(.agent-memory/memory/)、用
-`agenthub` 回信/問 {{owner}}/結案。要改程式碼或設定、需要 {{owner}} 判斷、不可逆或對外的事都不要做——
-寫進 memory 筆記,需要的話 `agenthub send --to {{owner_alias}} --type question` 問他。處理完 `agenthub done {id}`。
-最後回覆一行:這封信怎麼處理了。""")
+# The prompts of the background branch copies (templates/prompts/<name>.md): a reply reaching an idle session (resume)
+# and a request handed to the session that used the project last (delegate)
+RESUME_PROMPT, DELEGATE_PROMPT = "mailbox-resume", "mailbox-delegate"
 
 
-DELEGATE_PROMPT = prompts.fill("""(平台訊息,不是使用者打的字)有一封給這個專案的信,你這個 session 是最近在用這個專案的,但現在沒有人在
-打字,所以平台在背景用你的 context 處理(這是一個分支副本:{{owner}} 在原本的 session 裡看不到這段;分支的最後回覆會在原本的
-session 下次有動作時帶給它)。
-
-{letter}
-
-用你手上的脈絡回答或處理。這個背景副本只能:讀檔、寫 memory 筆記(.agent-memory/memory/)、用
-`agenthub` 回信/問 {{owner}}/結案。要改程式碼或設定、需要 {{owner}} 判斷、不可逆或對外的事都不要做——
-寫進 memory 筆記,需要的話 `agenthub send --to {{owner_alias}} --type question` 問他。回信寄給寄件人
-(`agenthub send --to <寄件人> --reply-to {id} …`),處理完 `agenthub done {id}`。
-最後回覆:這封信怎麼處理了、回了什麼(兩三句)。""")
+def branch_prompt(r, prompt=None) -> str:
+    """The prompt a background branch copy gets for letter r, filled when it is sent (the content language of now)."""
+    return prompts.render(prompt or RESUME_PROMPT, letter=fmt(r), id=r["id"])
 
 
 def recent_session(c, proj, live) -> str | None:
@@ -1364,6 +1350,7 @@ def resume(c, r, sid, cwd, rt, ws=None, prompt=None) -> None:
     """Conversation: resume with that session's context in the background (a fork; the original session is
     untouched). If it can't be started, dispatch it as a delegation right away."""
     run = f"r{now():%m%d%H%M%S}-{secrets.token_hex(2)}"
+    text = branch_prompt(r, prompt)
     c.execute("BEGIN IMMEDIATE")
     claim(c, [r], "resume", session=sid, run=run)
     c.execute("COMMIT")
@@ -1375,7 +1362,7 @@ def resume(c, r, sid, cwd, rt, ws=None, prompt=None) -> None:
                                   "--cwd", str(cwd), "--", *rt.resume_args(sid)],
                                  stdin=subprocess.PIPE, stdout=fh, stderr=subprocess.STDOUT, cwd=str(cwd), text=True,
                                  start_new_session=True)
-            p.stdin.write((prompt or RESUME_PROMPT).format(letter=fmt(r), id=r["id"]))
+            p.stdin.write(text)
             p.stdin.close()
     except OSError as e:
         log(_("{project}: {id}: the background resume could not start ({e!r}); delegating instead",

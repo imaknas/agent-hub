@@ -205,6 +205,19 @@ class Dispatch(unittest.TestCase):
         self.assertEqual((self.resumed, self.handled), ([("m1", "S1")], []))
         self.assertIs(self.prompts[0], self.m.DELEGATE_PROMPT)
 
+    def test_branch_prompts_carry_the_letter_as_is(self):
+        """templates/prompts/mailbox-resume.md / mailbox-delegate.md, filled per letter: the letter's id where the
+        commands need it, and braces in a letter stay text (the old .format() of the filled text raised on them)"""
+        self.m.publish(self.c, "m1", "message", "other", "proj", None, {"type": "request", "text": "set {x} and {{owner}}"})
+        r = self.m.get_message(self.c, "m1")
+        for name in (self.m.RESUME_PROMPT, self.m.DELEGATE_PROMPT):
+            text = self.m.branch_prompt(r, name)
+            self.assertIn("set {x} and {{owner}}", text)
+            self.assertIn("agenthub done m1", text)
+            self.assertIn("not inside a script together with other commands", text)
+            self.assertNotIn("{{", text.replace("{{owner}}", ""))
+        self.assertIn("--reply-to m1", self.m.branch_prompt(r, self.m.DELEGATE_PROMPT))
+
     def test_delegation_waits_for_typing_then_forks(self):
         self.rt.live.add("S1")
         self.rt.tokens["S1"] = 80_000
