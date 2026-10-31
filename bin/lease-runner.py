@@ -99,18 +99,53 @@ LEASE_IDLE_S = int(os.environ.get("LEASE_IDLE_S", 1800))        # how long a lea
 WARN_GRACE_S = int(os.environ.get("LEASE_WARN_GRACE_S", 600))   # how long with no reply after warned before reclaiming
 IDLE_TICK_S = int(os.environ.get("LEASE_IDLE_TICK_S", 20))
 DEFAULT_MAX_TURNS = 200
-PREAMBLE = """這是「通道租借」的深談:Knas 正在手機上透過他的助理 Muninn 跟你(這個專案的 session)對話。
-- 這是唯讀的深談(discuss):你可以讀檔、搜尋、查資料,不能改檔或跑指令。需要改的東西寫進最後的交接,讓 Knas 決定。
-- 要 Knas 在幾個選項裡選時,用提問工具(AskUserQuestion),他會在手機上回答;沒回答就用文字問。
-- 要讀不在允許清單的網站時,系統會先問 Knas;被拒絕就不要重試同一個網址。
-- 回覆簡短、適合在手機上讀。收回時系統會要你寫一份結構化交接(摘要、決定、未決問題、Knas 要做的事、memory 筆記)。"""
+# The lease session's instructions (appended to its system prompt), English templates filled by prompts.fill when the
+# session starts: the names configured, replies in the content language
+PREAMBLE = """This is a channel lease, a discussion: {{owner}} is talking to you (this project's session) on a phone,
+through {{assistant}}, {{owner}}'s assistant.
+- This is a read-only discussion (discuss): you can read files, search and look things up, but not change files or run
+  commands. What needs changing goes into the final handover, for {{owner}} to decide.
+- When {{owner}} should choose between a few options, use the question tool (AskUserQuestion); {{owner}} answers on the
+  phone. Without an answer, ask in text.
+- Reading a website that is not on the allowed list asks {{owner}} first; if that is refused, don't retry the same URL.
+- Reply in {{content_language}}, briefly, in a form that reads well on a phone. When the lease is detached, the system
+  asks you for a structured handover (summary, decisions, open questions, what {{owner}} has to do, memory notes)."""
 
-PREAMBLE_WORK = """這是「通道租借」的深談,而且 Knas 已經允許你在這個專案裡動手(work):Knas 正在手機上透過他的助理 Muninn 跟你對話。
-- 你可以讀檔、搜尋、查資料,也可以直接改這個專案資料夾裡的檔案(不用問);**每一個指令(Bash)都會先送到他手機上確認**,
-  所以一次跑一件清楚的事,先用一兩句說明你要跑什麼、為什麼。被拒絕就不要重試同一件事,用文字問他。
-- 只能動這個專案的資料夾;資料夾外的寫入會直接被拒絕,指令也在 sandbox 裡(寫不到別處、網路只有白名單)。
-- 要 Knas 在幾個選項裡選時,用提問工具(AskUserQuestion)。回覆簡短、適合在手機上讀。
-- 收回時系統會要你寫一份結構化交接(摘要、決定、未決問題、Knas 要做的事、memory 筆記)。"""
+PREAMBLE_WORK = """This is a channel lease, a discussion, and {{owner}} has allowed you to work in this project (work):
+{{owner}} is talking to you on a phone, through {{assistant}}, {{owner}}'s assistant.
+- You can read files, search and look things up, and you can change files in this project's folder directly (without
+  asking); **every command (Bash) is first sent to {{owner}}'s phone for approval**, so run one clear thing at a time
+  and first say in a sentence or two what you will run and why. If one is refused, don't retry the same thing; ask in
+  text.
+- You may only touch this project's folder: writes outside it are refused outright, and commands run in a sandbox (no
+  writing elsewhere, network only to the allowed list).
+- When {{owner}} should choose between a few options, use the question tool (AskUserQuestion). Reply in
+  {{content_language}}, briefly, in a form that reads well on a phone.
+- When the lease is detached, the system asks you for a structured handover (summary, decisions, open questions, what
+  {{owner}} has to do, memory notes)."""
+
+HINT_SHOW_FILE = """
+- To show {{owner}} a picture or a file from the project (png, jpg, pdf, glb, md, csv…), use the show_file tool (a path
+  in the project folder + one sentence saying what it is): {{owner}} sees it right on the phone. Don't ask {{owner}} to
+  open it on a computer; one at a time; files that are too large (20 MB or more) or look like credentials are not
+  sent."""
+
+HINT_CAPABILITIES = """
+- This project can use capabilities the platform runs for it: {{capabilities}}. A program that needs the GPU (e.g.
+  Blender) is blocked by the sandbox as a plain command; run it with `{{hub_run}} --cap gpu -- <command…>` instead (in
+  the project folder; it is still a command {{owner}} approves). What the platform runs can only write the project
+  folder and has no network. The output appears all at once at the end; if the command times out, the work goes on,
+  and `{{hub_run}} --wait <id>` picks it up again."""
+
+HINT_SERVICES = """
+- Anything that should keep running or needs a port: don't give {{owner}} commands to run it. Put it in the handover;
+  the project's session declares it under services: in its registry entry (a manifest.update to agent-hub, internal
+  to the platform, no owner approval needed) and the platform runs it as a service."""
+
+HINT_IDEA = """
+- This project is an idea sandbox: {{assistant}} opened it to explore one of {{owner}}'s ideas. The idea: "{{purpose}}".
+  The goal is to help {{owner}} get this idea clear (is it feasible, what does it need, the risks, the next step); the
+  conclusions and decisions go into the handover notes."""
 
 _lock = threading.RLock()
 LEASES: dict[str, "Lease"] = {}
@@ -294,29 +329,19 @@ def work_projects() -> list[str]:
 def preamble(project: str, mode: str = "discuss") -> str:
     """The lease instructions (discuss is read-only / work can make changes, asking for every write); idea sandboxes
     (registry type: idea) get an extra section: which idea is being explored."""
-    base = PREAMBLE_WORK if mode == "work" else PREAMBLE
-    base += """
-- 要讓 Knas 看專案裡的圖或檔案(png、jpg、pdf、glb、md、csv…),用 show_file 工具(專案資料夾裡的路徑 + 一句說明):
-  他在手機上會直接看到。不要叫他回電腦打開;一次給一個,太大(20 MB 以上)或像憑證的檔不會送。"""
+    import prompts
     doc = hubconf.projects().get(project) or {}
     caps = (doc.get("enforce") or {}).get("capabilities") or []
+    text = (PREAMBLE_WORK if mode == "work" else PREAMBLE) + HINT_SHOW_FILE
     # the platform's run service (docs/design/capabilities.md): what the sandbox blocks (e.g. the GPU) goes through it
     if mode == "work" and caps:
-        hub_run = hubconf.ROOT / "bin" / "hub-run"
-        base += f"""
-- 這個專案可以用平台代跑的能力:{', '.join(caps)}。需要 GPU 的程式(例:Blender)在一般指令裡會被 sandbox 擋住,改用
-  `{hub_run} --cap gpu -- <指令…>` 跑(在專案資料夾裡;一樣是一個要 Knas 確認的指令)。代跑的程式只能寫專案資料夾、
-  不能連網路。輸出最後才一次出現;這次指令逾時中斷的話,工作照跑,用 `{hub_run} --wait <id>` 接回。"""
+        text += HINT_CAPABILITIES
     if mode == "work":
-        base += """
-- Anything that should keep running or needs a port: don't give the user commands to run it. Put it in the handover;
-  the project's session declares it under services: in its registry entry (a manifest.update to agent-hub, internal
-  to the platform, no owner approval needed) and the platform runs it as a service."""
-    if doc.get("type") != "idea":
-        return base
-    return base + f"""
-- 這個專案是想法沙盒:Muninn 替 Knas 的一個想法開的探討用專案,想法是:「{doc.get('purpose', '')}」。
-  目標是幫他把這個想法查清楚、想清楚(可行嗎、要什麼、風險、下一步),結論和決定會進交接筆記。"""
+        text += HINT_SERVICES
+    if doc.get("type") == "idea":
+        text += HINT_IDEA
+    return prompts.fill(text, capabilities=", ".join(caps), hub_run=hubconf.ROOT / "bin" / "hub-run",
+                        purpose=doc.get("purpose", ""))
 
 
 def start_proc(lease: Lease, resume: bool) -> None:

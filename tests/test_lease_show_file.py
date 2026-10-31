@@ -260,6 +260,21 @@ class Runner(unittest.TestCase):
         self.assertIn("show_file", self.m.preamble("zz-none", "discuss"))
         self.assertIn("show_file", self.m.preamble("zz-none", "work"))
 
+    def test_preamble_is_filled_with_the_configured_names(self):
+        """the names and the content language come from settings; an idea's purpose is inserted as it is"""
+        idea = {"type": "idea", "purpose": "try {{x}}", "enforce": {"capabilities": ["gpu"]}}
+        with mock.patch.object(self.m.hubconf, "projects", return_value={"idea-1": idea}):
+            work = self.m.preamble("idea-1", "work")
+        discuss = self.m.preamble("zz-none", "discuss")
+        for text in (work, discuss):
+            self.assertIn(self.m.hubconf.owner_tag(), text)
+            self.assertIn(self.m.hubconf.assistant_name(), text)
+            self.assertNotIn("{{owner", text)
+        self.assertIn('"try {{x}}"', work)
+        self.assertIn("hub-run --cap gpu", work)
+        self.assertIn("read-only", discuss)
+        self.assertNotIn("hub-run", discuss)
+
 
 class Relay(unittest.TestCase):
     def test_tool_passes_through(self):

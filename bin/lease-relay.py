@@ -294,11 +294,12 @@ def main() -> None:
                 "inputSchema": {"type": "object", "properties": {"tool_name": {"type": "string"}, "input": {"type": "object"},
                                                                  "tool_use_id": {"type": "string"}}}}, {
                 "name": "show_file",
-                "description": "把專案資料夾裡的一個檔案(圖片 png/jpg/webp/gif、pdf、glb 3D 模型、txt/md/json/csv)直接顯示給正在跟你對話的"
-                               "使用者看(他在手機上)。path 是專案資料夾裡的路徑,summary 是一句說明(這是什麼、要他看哪裡)。",
+                "description": "Show the user you are talking with (who is on a phone) a file from the project folder: an image "
+                               "(png/jpg/webp/gif), a pdf, a glb 3D model, or txt/md/json/csv. path is its path in the project "
+                               "folder, summary one sentence (what it is, what to look at).",
                 "inputSchema": {"type": "object", "required": ["path"], "properties": {
-                    "path": {"type": "string", "description": "專案資料夾裡的檔案路徑(相對或絕對)"},
-                    "summary": {"type": "string", "description": "一句說明"}}}}]}})
+                    "path": {"type": "string", "description": "the file's path in the project folder (relative or absolute)"},
+                    "summary": {"type": "string", "description": "one sentence"}}}}]}})
         elif method == "tools/call":
             params = msg.get("params") or {}
             target = handle_show if params.get("name") == "show_file" else handle_call
