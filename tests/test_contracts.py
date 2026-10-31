@@ -189,7 +189,7 @@ class Neutral(unittest.TestCase):
     def test_consumer_facing_contracts_dont_name_the_platform(self):
         """Contracts and examples that other repos vendor must not mention this platform (some of those repos are open
         source)."""
-        for p in [*C.glob("todo-md.v*.md"), *C.glob("state-todo.v*.md"), C / "reflect-week.v1.schema.json",
+        for p in [*C.glob("todo-md.v*.md"), *C.glob("state-todo.v*.md"), *C.glob("reflect-week.v*.schema.json"),
                   *F.glob("*.md")]:
             text = p.read_text()
             for word in ("agent-hub", "librarian", "bin/"):

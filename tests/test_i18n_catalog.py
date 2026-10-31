@@ -3,7 +3,9 @@
 For every script that does `_ = i18n.domain(__file__)`: each `_("…")` msgid is English, has an entry in each
 non-English catalog (`locales/<lang>/<domain>.json`), the entry keeps exactly the msgid's placeholders, the call passes
 exactly those placeholders, and the catalog has no entries the code no longer uses. Shell scripts likewise for each
-`hub_msg "…"` / `hub_say "…"` / `hub_content "…"` (bin/hubpaths.sh): the domain is the file's own name.
+`hub_msg "…"` / `hub_say "…"` / `hub_content "…"` (bin/hubpaths.sh): the domain is the file's own name. Pages under
+templates/ likewise for each `t("…", {name: …})` call in their script and their <title> (the domain is the page's file
+name; bin/weekly-reflect.py fills the page's texts from that catalog).
 
     bin/py -m unittest tests.test_i18n_catalog
 """
@@ -119,6 +121,25 @@ def shell_sources():
             yield f, text
 
 
+PAGE_MSG = re.compile(r'\bt\("')
+PAGE_CALL = re.compile(r'\bt\("((?:[^"\\]|\\.)*)"(?:\s*,\s*\{([^{}]*)\})?\s*\)')
+
+
+def page_messages(text: str) -> list[tuple[int, str | None, set[str]]]:
+    """(line, msgid, names passed) of each t("…") call in a page and of its <title>; msgid None = a call this reader
+    cannot take apart (keep the second argument a plain {name: value} object, without braces inside)"""
+    calls = {m.start(): m for m in PAGE_CALL.finditer(text)}
+    out = []
+    for m in PAGE_MSG.finditer(text):
+        line = text.count("\n", 0, m.start()) + 1
+        c = calls.get(m.start())
+        out.append((line, json.loads(f'"{c.group(1)}"'), set(re.findall(r"(\w+)\s*:", c.group(2) or ""))) if c
+                   else (line, None, set()))
+    if title := re.search(r"<title>(.*?)</title>", text):
+        out.append((text.count("\n", 0, title.start()) + 1, title.group(1), set()))
+    return out
+
+
 def messages_doc(text: str) -> str | None:
     return ast.get_docstring(ast.parse(text), clean=False)
 
@@ -175,6 +196,24 @@ class Catalogs(unittest.TestCase):
                         problems.append(f"{where}: no {lang} entry for {msgid[:60]!r}")
                     elif fields(cat[msgid]) != fields(msgid):
                         problems.append(f"{where}: {lang} placeholders differ for {msgid[:60]!r}")
+        for f in sorted((ROOT / "templates").glob("*.html")):
+            rel, used = f.relative_to(ROOT), seen.setdefault(f.name, set())
+            for line, msgid, names in page_messages(f.read_text()):
+                where = f"{rel}:{line}"
+                if msgid is None:
+                    problems.append(f"{where}: a t() call this test cannot read")
+                    continue
+                used.add(msgid)
+                if CJK.search(msgid):
+                    problems.append(f"{where}: msgid is not English: {msgid[:50]}")
+                if names != placeholders(msgid):
+                    problems.append(f"{where}: passes {sorted(names)}, msgid has {sorted(placeholders(msgid))}")
+                for lang in LANGS:
+                    cat = i18n.catalog(f.name, lang)
+                    if msgid not in cat:
+                        problems.append(f"{where}: no {lang} entry for {msgid[:60]!r}")
+                    elif fields(cat[msgid]) != fields(msgid):
+                        problems.append(f"{where}: {lang} placeholders differ for {msgid[:60]!r}")
         # module descriptions (modules/*.yaml `description:`, shown by `agenthub modules`): domain "modules"
         used = seen.setdefault("modules", set())
         for f in sorted((ROOT / "modules").glob("*.yaml")):
@@ -215,6 +254,12 @@ class Catalogs(unittest.TestCase):
         self.assertEqual(i18n.translate("no-such-domain", msg, {"n": "1"}, "en"), "1 letter is open", "from shell")
         self.assertEqual(fields(msg), {("n", "", None)}, "the choice is not a placeholder a translation must keep")
         self.assertEqual(placeholders(msg), {"n"})
+
+    def test_page_extractor(self):
+        src = ('<title>A page</title>\n<script>\nconst x = t("Hi {name}", { name: esc(p.name) }) + t("Plain");\n'
+               'const y = t("Bad {a}", { a: f({}) });\n</script>\n')
+        self.assertEqual(page_messages(src), [(3, "Hi {name}", {"name"}), (3, "Plain", set()), (4, None, set()),
+                                              (1, "A page", set())])
 
     def test_shell_extractor(self):
         src = ('x="$(hub_msg "Hello {name}, \\"q\\"" name="$n")"; echo\n'

@@ -99,8 +99,10 @@ def live(index: dict) -> list[str]:
     weeks = sorted(hubconf.data_file("reflect").glob("20*-W*.json"))
     if weeks:
         d = json.loads(weeks[-1].read_text())
-        d.setdefault("v", 1)
-        errs += [f"{weeks[-1].name}:{e}" for e in contracts.check_json(C / "reflect-week.v1.schema.json", d)]
+        d.setdefault("v", 1)   # weeks before 2026-W43 have no v: read as 1
+        schema = C / f"reflect-week.v{d['v']}.schema.json"
+        errs += [f"{weeks[-1].name}:{e}" for e in contracts.check_json(schema, d)] if schema.exists() else \
+            [_("{week}: no contract for reflect-week v{v}", week=weeks[-1].name, v=d["v"])]
     cli = hubconf.p("assistant.cli")
     copy = C / "vendor" / "muninn" / "handoffs.v1.schema.json"
     if cli and cli.exists() and copy.exists():

@@ -11,5 +11,6 @@
  "llm.py lint does not run: {error}": "llm.py lint 跑不起來:{error}",
  "{n} {n:problem|problems}: ": "{n} 項:",
  "; ": ";",
- "contracts: all consistent": "契約:全部一致"
+ "contracts: all consistent": "契約:全部一致",
+ "{week}: no contract for reflect-week v{v}": "{week}:沒有 reflect-week v{v} 的契約"
 }

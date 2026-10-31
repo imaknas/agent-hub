@@ -85,7 +85,9 @@ class Golden(unittest.TestCase):
             tmp = pathlib.Path(tempfile.mkdtemp())
             for w in weeks:
                 (tmp / f"{w['week']}.json").write_text(json.dumps(w, ensure_ascii=False, indent=1))
-            with mock.patch.dict(os.environ, ZH), mock.patch.object(m, "OUT", tmp):
+            # the page names the configured assistant (hub.json assistant.name)
+            with mock.patch.dict(os.environ, ZH), mock.patch.object(m, "OUT", tmp), \
+                    mock.patch.object(m.hubconf, "assistant_name", return_value="Helper"):
                 page = m.build_html()
             r = subprocess.run([node(), str(ROOT / "tests" / "reflect_page.js"), str(page)], capture_output=True,
                                text=True, timeout=60)

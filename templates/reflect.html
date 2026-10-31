@@ -1,4 +1,4 @@
-<title>週報 Reflect</title>
+<title>Weekly Reflect</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Noto+Serif+TC:wght@600;800&family=Noto+Sans+TC:wght@400;500;700&family=IBM+Plex+Mono:wght@400;500&display=swap">
@@ -94,14 +94,14 @@ section h2 { font-size: 22px; font-weight: 600; }
 .proj .name { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
 .proj .name strong { font-family: var(--font-data); font-weight: 500; font-size: 15px; }
 .chip { font-size: 12px; font-weight: 700; border-radius: 4px; padding: 1px 8px; letter-spacing: .04em; }
-.s-推進 { background: var(--accent-soft); color: var(--accent); }
-.s-穩定 { background: var(--heat-0); color: var(--muted); }
-.s-收尾 { background: var(--heat-0); color: var(--muted); }
-.s-卡住 { background: color-mix(in srgb, var(--bad) 14%, transparent); color: var(--bad); }
-.s-發散 { background: color-mix(in srgb, var(--warn) 16%, transparent); color: var(--warn); }
+.s-advancing { background: var(--accent-soft); color: var(--accent); }
+.s-steady { background: var(--heat-0); color: var(--muted); }
+.s-wrapping_up { background: var(--heat-0); color: var(--muted); }
+.s-stuck { background: color-mix(in srgb, var(--bad) 14%, transparent); color: var(--bad); }
+.s-scattered { background: color-mix(in srgb, var(--warn) 16%, transparent); color: var(--warn); }
 .proj .focus { font-size: 14px; color: var(--muted); }
 .proj .next { font-size: 14px; }
-.proj .next::before { content: "下一步 "; font-weight: 700; color: var(--accent); }
+.proj .next::before { content: attr(data-label); font-weight: 700; color: var(--accent); }
 .proj .side { display: grid; gap: 6px; align-content: start; font-family: var(--font-data); font-size: 12px; color: var(--muted); }
 .bars { display: grid; gap: 3px; }
 .bar { height: 6px; border-radius: 3px; background: var(--accent); }
@@ -116,11 +116,11 @@ section h2 { font-size: 22px; font-weight: 600; }
 .fl h3 { font-size: 18px; font-weight: 600; }
 .fl .en { font-family: var(--font-data); font-size: 11px; color: var(--muted); letter-spacing: .06em; text-transform: uppercase; }
 .lv { font-size: 12px; font-weight: 700; padding: 1px 8px; border-radius: 4px; }
-.lv-強項 { background: color-mix(in srgb, var(--good) 15%, transparent); color: var(--good); }
-.lv-穩定 { background: var(--heat-0); color: var(--muted); }
-.lv-可改進 { background: color-mix(in srgb, var(--warn) 16%, transparent); color: var(--warn); }
+.lv-strength { background: color-mix(in srgb, var(--good) 15%, transparent); color: var(--good); }
+.lv-steady { background: var(--heat-0); color: var(--muted); }
+.lv-to_improve { background: color-mix(in srgb, var(--warn) 16%, transparent); color: var(--warn); }
 .quote { font-size: 14px; color: var(--muted); }
-.quote::before { content: "「"; } .quote::after { content: "」"; }
+.quote::before { content: attr(data-open); } .quote::after { content: attr(data-close); }
 .tip { font-size: 14px; border-top: 1px dashed var(--rule); padding-top: 8px; }
 
 /* next week */
@@ -148,7 +148,19 @@ footer.method { font-size: 13px; color: var(--muted); border-top: 1px solid var(
 
 <script>
 const WEEKS = /*__REFLECT_DATA__*/[];
-const DIMS = { "交辦": "Delegation", "描述": "Description", "判斷": "Discernment", "把關": "Diligence" };
+// The page's texts in the UI language and the names it shows: bin/weekly-reflect.py fills PAGE from the catalog
+// (locales/<lang>/reflect.html.json, msgid = the English text each t call passes). Placeholders {name}; {n:one|other} is a plural
+// choice. The analysis's classifications are v2 ids (weekly-reflect.py turns a v1 week's values into them).
+const PAGE = /*__REFLECT_PAGE__*/{"text": {}, "assistant": ""};
+const t = (id, kw = {}) => (PAGE.text[id] ?? id).replace(/\{(\w+)(?::([^{}|]*)\|([^{}]*))?\}/g,
+  (m, k, one, other) => !(k in kw) ? m : one === undefined ? String(kw[k]) : (Number(kw[k]) === 1 ? one : other));
+const STATUS = { advancing: t("Advancing"), steady: t("Steady"), stuck: t("Stuck"), scattered: t("Scattered"),
+  wrapping_up: t("Wrapping up") };
+const LEVEL = { strength: t("Strength"), steady: t("Steady"), to_improve: t("Could improve") };
+// the 4D framework's own names, shown under each dimension's name in the UI language
+const DIMS = { delegation: "Delegation", description: "Description", discernment: "Discernment", diligence: "Diligence" };
+const DIM = { delegation: t("Delegation"), description: t("Description"), discernment: t("Discernment"),
+  diligence: t("Diligence") };
 const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 const pct = x => Math.round(x * 100) + "%";
 
@@ -167,14 +179,15 @@ function heatColor(n, max) {
 
 function heatmap(matrix) {
   const max = Math.max(1, ...matrix.flat());
-  const days = "一二三四五六日";
-  let h = `<div class="heat" role="img" aria-label="星期 × 小時的訊息分佈"><span></span>`;
+  const days = t("Mon Tue Wed Thu Fri Sat Sun").split(" ");
+  let h = `<div class="heat" role="img" aria-label="${t("Messages by weekday × hour")}"><span></span>`;
   for (let hr = 0; hr < 24; hr++) h += `<span class="hr">${hr % 3 === 0 ? hr : ""}</span>`;
   matrix.forEach((row, d) => {
     h += `<span class="lab">${days[d]}</span>`;
     row.forEach((n, hr) => {
       const night = hr < 6 ? " n" : "";
-      h += `<span class="cell${night}" style="background:${heatColor(n, max)}" title="週${days[d]} ${String(hr).padStart(2, "0")}:00 · ${n} 則"></span>`;
+      const hour = String(hr).padStart(2, "0");
+      h += `<span class="cell${night}" style="background:${heatColor(n, max)}" title="${t("{day} {hour}:00 · {n} {n:message|messages}", { day: days[d], hour: hour, n: n })}"></span>`;
     });
   });
   return h + `</div>`;
@@ -191,85 +204,95 @@ function projectRows(w) {
     const an = byName[p.name] || {};
     h += `<div class="proj">
       <div class="main">
-        <div class="name"><strong>${esc(p.name)}</strong>${an.status ? `<span class="chip s-${esc(an.status)}">${esc(an.status)}</span>` : ""}</div>
+        <div class="name"><strong>${esc(p.name)}</strong>${an.status ? `<span class="chip s-${esc(an.status)}">${esc(STATUS[an.status] ?? an.status)}</span>` : ""}</div>
         ${an.focus ? `<p class="focus">${esc(an.focus)}</p>` : ""}
         ${an.assessment ? `<p>${esc(an.assessment)}</p>` : ""}
-        ${an.next ? `<p class="next">${esc(an.next)}</p>` : ""}
+        ${an.next ? `<p class="next" data-label="${t("Next step")} ">${esc(an.next)}</p>` : ""}
       </div>
       <div class="side">
-        <div class="bars" title="訊息:這週 ${p.prompts} / 上週 ${p.prompts_prev}">
+        <div class="bars" title="${t("Messages: this week {n} / last week {prev}", { n: p.prompts, prev: p.prompts_prev })}">
           <div class="bar" style="width:${Math.max(2, p.prompts / max * 100)}%"></div>
           <div class="bar prev" style="width:${Math.max(2, p.prompts_prev / max * 100)}%"></div>
         </div>
-        <div class="mini"><span>訊息</span><span class="num">${p.prompts} ← ${p.prompts_prev}</span></div>
+        <div class="mini"><span>${t("Messages")}</span><span class="num">${p.prompts} ← ${p.prompts_prev}</span></div>
         <div class="mini"><span>commit</span><span class="num">${p.commits ?? "—"}</span></div>
-        <div class="mini"><span>memory 筆記</span><span class="num">${p.notes ?? "—"}</span></div>
-        <div class="mini"><span>活躍天 / session</span><span class="num">${p.days} / ${p.sessions}</span></div>
+        <div class="mini"><span>${t("memory notes")}</span><span class="num">${p.notes ?? "—"}</span></div>
+        <div class="mini"><span>${t("active days / sessions")}</span><span class="num">${p.days} / ${p.sessions}</span></div>
       </div>
     </div>`;
   }
   h += `</div>`;
-  if (quiet.length) h += `<p class="quiet-list">這週沒動:${quiet.map(p => `${esc(p.name)}(上週 ${p.prompts_prev})`).join("、")}</p>`;
+  const quietList = quiet.map(p => t("{name} (last week {n})", { name: esc(p.name), n: p.prompts_prev })).join(t(", "));
+  if (quiet.length) h += `<p class="quiet-list">${t("Quiet this week: {list}", { list: quietList })}</p>`;
   return h;
 }
 
 function render(w) {
   const a = w.analysis && !w.analysis.error ? w.analysis : null;
-  const t = w.totals, r = w.rhythm, d = w.delegation;
+  const t_ = w.totals, r = w.rhythm, d = w.delegation;
   const opts = WEEKS.map(x => `<option value="${esc(x.week)}"${x.week === w.week ? " selected" : ""}>${esc(x.week)} · ${esc(x.start.slice(5))}–${esc(x.end.slice(5))}</option>`).join("");
+  const notice = w.unsupported ? t("No conversation statistics: {reason}", { reason: w.unsupported })
+    : (w.analysis?.error || t("This week has only statistics; no analysis was made."));
   let h = `
   <div class="top">
-    <span class="eyebrow">Claude Code 每週回顧 · ${esc(w.start)} – ${esc(w.end)}</span>
-    ${WEEKS.length > 1 ? `<label><span class="eyebrow" style="margin-right:8px">週次</span><select id="week">${opts}</select></label>` : ""}
+    <span class="eyebrow">${t("Claude Code weekly review · {start} – {end}", { start: esc(w.start), end: esc(w.end) })}</span>
+    ${WEEKS.length > 1 ? `<label><span class="eyebrow" style="margin-right:8px">${t("Week")}</span><select id="week">${opts}</select></label>` : ""}
   </div>
   <div class="hero">
-    <h1>${esc(a ? a.headline : `${w.week} 活動統計`)}</h1>
-    ${a ? `<p class="summary">${esc(a.summary)}</p>` : `<p class="notice">${esc(w.unsupported ? "沒有對話的統計:" + w.unsupported : (w.analysis?.error || "這一週只有統計,沒有產生分析。"))}</p>`}
+    <h1>${esc(a ? a.headline : t("{week} activity statistics", { week: w.week }))}</h1>
+    ${a ? `<p class="summary">${esc(a.summary)}</p>` : `<p class="notice">${esc(notice)}</p>`}
   </div>
   <div class="figures">
-    <div class="fig"><b>${t.prompts}</b><span>則訊息 ${delta(t.prompts, t.prompts_prev)}</span></div>
-    <div class="fig"><b>${t.projects}</b><span>個專案</span></div>
-    <div class="fig"><b>${t.sessions}</b><span>個 session</span></div>
-    <div class="fig"><b>${t.days}/7</b><span>天有工作</span></div>
-    <div class="fig night"><b>${pct(r.late_share)}</b><span>深夜訊息 ${delta(r.late, r.late_prev)}</span></div>
-    <div class="fig"><b>${r.longest_hours}h</b><span>最長連續</span></div>
+    <div class="fig"><b>${t_.prompts}</b><span>${t("messages")} ${delta(t_.prompts, t_.prompts_prev)}</span></div>
+    <div class="fig"><b>${t_.projects}</b><span>${t("projects")}</span></div>
+    <div class="fig"><b>${t_.sessions}</b><span>${t("sessions")}</span></div>
+    <div class="fig"><b>${t_.days}/7</b><span>${t("days with work")}</span></div>
+    <div class="fig night"><b>${pct(r.late_share)}</b><span>${t("late-night messages")} ${delta(r.late, r.late_prev)}</span></div>
+    <div class="fig"><b>${r.longest_hours}h</b><span>${t("longest stretch")}</span></div>
   </div>`;
 
   if (a) {
-    h += `<section><header><span class="eyebrow">Insights</span><h2>這週看到的模式</h2></header><div class="insights">` +
+    h += `<section><header><span class="eyebrow">Insights</span><h2>${t("Patterns this week")}</h2></header><div class="insights">` +
       a.insights.map(i => `<article class="insight"><h3>${esc(i.title)}</h3><p>${esc(i.analysis)}</p>
         <p class="evidence">${esc(i.evidence)}</p><p class="sowhat">${esc(i.so_what)}</p></article>`).join("") + `</div></section>`;
   }
 
-  h += `<section><header><span class="eyebrow">Rhythm</span><h2>作息</h2></header>
+  h += `<section><header><span class="eyebrow">Rhythm</span><h2>${t("Working hours")}</h2></header>
     ${a ? `<p class="verdict">${esc(a.rhythm.verdict)}</p><p>${esc(a.rhythm.analysis)}</p><p class="muted">${esc(a.rhythm.pattern)}</p>` : ""}
     <div class="heat-wrap">${heatmap(w.matrix)}</div>
-    <div class="legend"><span><i class="sw" style="background:var(--accent)"></i>訊息越多顏色越深</span>
-      <span><i class="sw" style="box-shadow:inset 0 0 0 1px var(--night);background:var(--heat-0)"></i>00:00–05:59 深夜時段</span></div>
-    <div><p class="eyebrow" style="margin-bottom:8px">每天收工(最後一則訊息,凌晨 6 點前算前一天)</p>
+    <div class="legend"><span><i class="sw" style="background:var(--accent)"></i>${t("The more messages, the darker")}</span>
+      <span><i class="sw" style="box-shadow:inset 0 0 0 1px var(--night);background:var(--heat-0)"></i>${t("00:00–05:59 late night")}</span></div>
+    <div><p class="eyebrow" style="margin-bottom:8px">${t("When work ended each day (the last message; before 6 a.m. counts as the day before)")}</p>
       <div class="stops">${r.last_per_day.map(x => `<span class="stop${x.late ? " late" : ""}">${esc(x.day)} ${esc(x.time)}</span>`).join("")}</div></div>
   </section>`;
 
-  h += `<section><header><span class="eyebrow">Projects</span><h2>各專案</h2>
-      <p class="muted" style="font-size:14px">右側長條:上面是這週訊息,下面灰色是上週。</p></header>${projectRows(w)}</section>`;
+  h += `<section><header><span class="eyebrow">Projects</span><h2>${t("By project")}</h2>
+      <p class="muted" style="font-size:14px">${t("The bars on the right: this week's messages on top, last week's in grey below.")}</p></header>${projectRows(w)}</section>`;
 
   if (a) {
-    h += `<section><header><span class="eyebrow">AI fluency · 4D</span><h2>跟 AI 協作的方式</h2>
-      <p class="muted" style="font-size:14px">這週開了 ${d.agents} 次 subagent(上週 ${d.agents_prev})、session 之間傳了 ${d.peer} 次訊息(上週 ${d.peer_prev})。</p></header>
-      <div class="fluency">` + a.fluency.map(f => `<article class="fl"><header><div><h3>${esc(f.dimension)}</h3><span class="en">${DIMS[f.dimension] || ""}</span></div>
-        <span class="lv lv-${esc(f.level)}">${esc(f.level)}</span></header>
-        <p>${esc(f.observation)}</p>${f.quote ? `<p class="quote">${esc(f.quote)}</p>` : `<p class="evidence">${esc(f.evidence)}</p>`}<p class="tip">${esc(f.suggestion)}</p></article>`).join("") + `</div></section>`;
-    h += `<section><header><span class="eyebrow">Next week</span><h2>下週先做這幾件</h2></header><ol class="actions">` +
+    const collab = t("{agents} {agents:subagent|subagents} this week (last week {agents_prev}), {peer} {peer:message|messages} between sessions (last week {peer_prev}).",
+      { agents: d.agents, agents_prev: d.agents_prev, peer: d.peer, peer_prev: d.peer_prev });
+    h += `<section><header><span class="eyebrow">AI fluency · 4D</span><h2>${t("How the work with AI went")}</h2>
+      <p class="muted" style="font-size:14px">${collab}</p></header>
+      <div class="fluency">` + a.fluency.map(f => {
+        const name = DIM[f.dimension] ?? f.dimension, en = DIMS[f.dimension] || "";
+        return `<article class="fl"><header><div><h3>${esc(name)}</h3><span class="en">${en !== name ? en : ""}</span></div>
+        <span class="lv lv-${esc(f.level)}">${esc(LEVEL[f.level] ?? f.level)}</span></header>
+        <p>${esc(f.observation)}</p>${f.quote ? `<p class="quote" data-open="${t("“")}" data-close="${t("”")}">${esc(f.quote)}</p>` : `<p class="evidence">${esc(f.evidence)}</p>`}<p class="tip">${esc(f.suggestion)}</p></article>`;
+      }).join("") + `</div></section>`;
+    h += `<section><header><span class="eyebrow">Next week</span><h2>${t("Do these first next week")}</h2></header><ol class="actions">` +
       a.next_week.map(n => `<li><span class="act">${esc(n.action)}</span><span class="why">${esc(n.why)}</span></li>`).join("") + `</ol></section>`;
   }
 
   const m = w.analysis?.meta;
+  const excluded = esc((m?.excluded || []).join(t(", ")));
+  const undigested = m && !m.complete ? t("; {n} more {n:session has|sessions have} no summary", { n: m.undigested || 0 }) : "";
   h += `<footer class="method">
-    <p>資料:個人 profile 的 Claude Code session(工作 profile 不備份;claude.ai 的對話請看 claude.ai 的 Reflect)。訊息只算你實際送出的。時間為台北時間。</p>
-    ${m && m.source === "stats+digests" ? `<p>分析由 ${esc(m.model)} 根據上面的統計與 ${m.digests} 則 Muninn 本機模型寫的 session 摘要撰寫,是模型的解讀;對話原文不送雲端模型。工作相關的 ${m.withheld || 0} 個 session、${esc((m.excluded || []).join("、"))} 只算在統計裡${m.complete ? "" : `;還有 ${m.undigested || 0} 個 session 沒有摘要`}。</p>`
-      : m && m.source === "stats" ? `<p>分析由 ${esc(m.model)} 只根據上面的統計撰寫,是模型的解讀;對話原文不送雲端模型,所以它看不到你做了什麼內容。</p>`
-      : m ? `<p>分析由 ${esc(m.model)} 根據 ${m.sampled} 則訊息抽樣與上面的統計撰寫,是模型的解讀;${esc((m.excluded || []).join("、"))} 只提供數字、不送原文;送出前已遮掉像金鑰的字串。</p>` : ""}
-    <p class="num">產生時間 ${esc(w.generated)}</p>
+    <p>${t("Data: the Claude Code sessions of the personal profile (the work profile is not backed up; for claude.ai's conversations see claude.ai's Reflect). Only the messages you actually sent count. Times are Taipei time.")}</p>
+    ${m && m.source === "stats+digests" ? `<p>${t("The analysis was written by {model} from the statistics above and {digests} session {digests:summary|summaries} written by {assistant}'s local model; it is the model's reading, and the conversations' text is not sent to a cloud model. {withheld} work-related {withheld:session|sessions} and {excluded} count only in the statistics{undigested}.", { model: esc(m.model), digests: m.digests, assistant: esc(PAGE.assistant), withheld: m.withheld || 0, excluded: excluded, undigested: undigested })}</p>`
+      : m && m.source === "stats" ? `<p>${t("The analysis was written by {model} from the statistics above only; it is the model's reading. The conversations' text is not sent to a cloud model, so it cannot see what the work was.", { model: esc(m.model) })}</p>`
+      : m ? `<p>${t("The analysis was written by {model} from a sample of {sampled} messages and the statistics above; it is the model's reading. {excluded} only gave numbers, never text; strings that look like keys were masked before sending.", { model: esc(m.model), sampled: m.sampled, excluded: excluded })}</p>` : ""}
+    <p class="num">${t("Generated {time}", { time: esc(w.generated) })}</p>
   </footer>`;
   return h;
 }
@@ -277,7 +300,7 @@ function render(w) {
 function show(weekId) {
   const w = WEEKS.find(x => x.week === weekId) || WEEKS[0];
   const app = document.getElementById("app");
-  if (!w) { app.innerHTML = `<p class="notice">還沒有任何一週的報告。</p>`; return; }
+  if (!w) { app.innerHTML = `<p class="notice">${t("No week has a report yet.")}</p>`; return; }
   app.innerHTML = render(w);
   const sel = document.getElementById("week");
   if (sel) sel.addEventListener("change", e => { show(e.target.value); try { history.replaceState(null, "", "#" + e.target.value); } catch (_) {} });

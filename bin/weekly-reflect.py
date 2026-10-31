@@ -25,6 +25,7 @@ import collections
 import datetime
 import json
 import pathlib
+import re
 import subprocess
 import sys
 import zoneinfo
@@ -41,6 +42,7 @@ MIRRORS = hubconf.p("git_origin", "~/git-origin") / "mirrors"
 MEMORY_COPIES = hublib.MEMORY_COPIES
 OUT = hubconf.data_file("reflect")
 TEMPLATE = hublib.HUB / "templates" / "reflect.html"
+CONTRACT = hublib.HUB / "contracts" / "reflect-week.v2.schema.json"   # what a week's json follows (v1 weeks: read too)
 LATE_NIGHT = range(0, 6)       # 00:00–05:59 Taipei time
 BREAK_MINUTES = 30             # a gap between two messages longer than this counts as a break
 QUIET_THRESHOLD = 10           # at least this many last week and 0 this week → a stopped project
@@ -148,7 +150,7 @@ def build_stats(label: str, start: datetime.datetime, end: datetime.datetime, we
         day = (t - datetime.timedelta(hours=6)).date()  # before 6 a.m. counts as the previous day's stopping time
         last_per_day[day] = max(last_per_day.get(day, t), t)
     return {
-        "v": 1,  # contract contracts/reflect-week.v1.schema.json
+        "v": 2,  # contract contracts/reflect-week.v2.schema.json
         "week": label,
         "start": start.date().isoformat(), "end": (end - datetime.timedelta(days=1)).date().isoformat(),
         "generated": datetime.datetime.now(TZ).isoformat(timespec="minutes"),
@@ -173,11 +175,42 @@ def build_stats(label: str, start: datetime.datetime, end: datetime.datetime, we
     }
 
 
+def as_v2(week: dict) -> dict:
+    """A stored week with the analysis's classifications as v2 values: a v1 week (no "v" = 1) carries them as the
+    zh-Hant words the v2 contract maps (x-v1-values); a value it doesn't know is left as it is."""
+    a = week.get("analysis")
+    if week.get("v", 1) >= 2 or not isinstance(a, dict):
+        return week
+    v1 = json.loads(CONTRACT.read_text())["x-v1-values"]
+    for p in a.get("projects") or []:
+        p["status"] = v1["status"].get(p.get("status"), p.get("status"))
+    for f in a.get("fluency") or []:
+        f["dimension"] = v1["dimension"].get(f.get("dimension"), f.get("dimension"))
+        f["level"] = v1["level"].get(f.get("level"), f.get("level"))
+    return week
+
+
+PAGE_MSG = re.compile(r'\bt\("((?:[^"\\]|\\.)*)"')   # the page's t("…") calls (tests/test_i18n_catalog.py reads them too)
+TITLE = re.compile(r"<title>(.*?)</title>")
+
+
+def page_text(html: str) -> dict[str, str]:
+    """The page's texts in the UI language: every t("…") msgid and the <title>, from the page's own catalog
+    (locales/<lang>/reflect.html.json), left unformatted (the page fills the placeholders)."""
+    ids = {json.loads(f'"{m}"') for m in PAGE_MSG.findall(html)} | set(TITLE.findall(html))
+    return {i: i18n.translate(TEMPLATE.name, i, {}) for i in sorted(ids)}
+
+
 def build_html() -> pathlib.Path:
-    """Embed all of reflect/*.json into templates/reflect.html and write reflect/index.html."""
-    weeks = [json.loads(p.read_text()) for p in sorted(OUT.glob("*-W*.json"), reverse=True)]
+    """Embed all of reflect/*.json into templates/reflect.html, with the page's texts in the UI language, and write
+    reflect/index.html."""
+    weeks = [as_v2(json.loads(p.read_text())) for p in sorted(OUT.glob("*-W*.json"), reverse=True)]
     data = json.dumps(weeks, ensure_ascii=False).replace("</", "<\\/")
-    html = TEMPLATE.read_text().replace("/*__REFLECT_DATA__*/[]", data)
+    page = TEMPLATE.read_text()
+    text = page_text(page)
+    names = json.dumps({"text": text, "assistant": hubconf.assistant_name()}, ensure_ascii=False).replace("</", "<\\/")
+    html = TITLE.sub(lambda m: f"<title>{text[m.group(1)]}</title>", page, count=1)
+    html = html.replace("/*__REFLECT_DATA__*/[]", data).replace('/*__REFLECT_PAGE__*/{"text": {}, "assistant": ""}', names)
     path = OUT / "index.html"
     path.write_text(html)
     return path

@@ -79,12 +79,13 @@
      "status": {
       "type": "string",
       "enum": [
-       "推進",
-       "穩定",
-       "卡住",
-       "發散",
-       "收尾"
-      ]
+       "advancing",
+       "steady",
+       "stuck",
+       "scattered",
+       "wrapping_up"
+      ],
+      "description": "advancing: clear progress toward its goal; steady: kept going, no big movement; stuck: blocked or going in circles; scattered: effort spread over many directions without converging; wrapping_up: finishing and closing out"
      },
      "next": {
       "type": "string",
@@ -134,19 +135,21 @@
      "dimension": {
       "type": "string",
       "enum": [
-       "交辦",
-       "描述",
-       "判斷",
-       "把關"
-      ]
+       "delegation",
+       "description",
+       "discernment",
+       "diligence"
+      ],
+      "description": "the 4D AI fluency framework: one item per dimension"
      },
      "level": {
       "type": "string",
       "enum": [
-       "強項",
-       "穩定",
-       "可改進"
-      ]
+       "strength",
+       "steady",
+       "to_improve"
+      ],
+      "description": "strength: clearly good this week; steady: fine, nothing notable; to_improve: could improve"
      },
      "observation": {
       "type": "string",

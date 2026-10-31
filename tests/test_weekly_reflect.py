@@ -1,18 +1,24 @@
 """weekly-reflect's statistics: read only through the transcripts interface (with a fake runtime); collaboration
-styles are counted by Action.collab.
+styles are counted by Action.collab. Its weeks follow reflect-week v2, and the page reads v1 weeks too.
 
     bin/py -m unittest discover -s tests
 """
+import copy
 import datetime
 import importlib.util
+import json
 import pathlib
 import sys
 import unittest
 
 ROOT = pathlib.Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "bin"))
+import contracts  # noqa: E402
 import runtime_fake  # noqa: E402
 from runtime_ports import Action, Turn  # noqa: E402
+
+C = ROOT / "contracts"
+WEEKS = json.loads((ROOT / "tests" / "fixtures" / "i18n-golden" / "reflect-weeks.json").read_text())   # v1 weeks
 
 UTC = datetime.timezone.utc
 START = datetime.datetime(2026, 10, 19, tzinfo=UTC)   # this week's Monday
@@ -67,6 +73,49 @@ class Scan(unittest.TestCase):
         w = self.m.scan(START, END)["this"]
         self.assertEqual(dict(w.prompts), {"proj": 1, "other": 1})
         self.assertEqual({k: len(v) for k, v in w.sessions.items()}, {"proj": 1, "other": 1})
+
+
+class Versions(unittest.TestCase):
+    """reflect-week v2: the analysis's classifications are fixed English values; a v1 week (zh-Hant words) is read as
+    v2 through the contract's x-v1-values, and every v1 value has its v2 value."""
+
+    def setUp(self):
+        self.m = load()
+        self.v2 = json.loads((C / "reflect-week.v2.schema.json").read_text())
+
+    def enums(self, schema: dict) -> dict:
+        a = schema["properties"]
+        a = a["analysis"]["properties"] if "analysis" in a and "properties" in a["analysis"] else a
+        return {"status": a["projects"]["items"]["properties"]["status"]["enum"],
+                "dimension": a["fluency"]["items"]["properties"]["dimension"]["enum"],
+                "level": a["fluency"]["items"]["properties"]["level"]["enum"]}
+
+    def test_the_model_is_asked_for_the_v2_values(self):
+        point = json.loads((C / "llm" / "reflect-week.schema.json").read_text())
+        self.assertEqual(self.enums(point), self.enums(self.v2))
+
+    def test_every_v1_value_has_a_v2_value(self):
+        for field, values in self.v2["x-v1-values"].items():
+            self.assertEqual(sorted(set(values.values())), sorted(self.enums(self.v2)[field]), field)
+
+    def test_v1_weeks_read_as_v2(self):
+        for w in WEEKS:
+            with self.subTest(week=w["week"]):
+                self.assertEqual(contracts.check_json(C / "reflect-week.v1.schema.json", {"v": 1, **w}), [])
+                got = self.m.as_v2(copy.deepcopy(w))
+                self.assertEqual(contracts.check_json(C / "reflect-week.v2.schema.json", {**got, "v": 2}), [])
+                a = got.get("analysis") or {}
+                seen = [p["status"] for p in a.get("projects") or []] + \
+                    [x for f in a.get("fluency") or [] for x in (f["dimension"], f["level"])]
+                self.assertTrue(all(v.isascii() for v in seen), seen)
+        self.assertNotEqual(WEEKS[0]["analysis"]["projects"][0]["status"], "advancing", "the fixture stays v1")
+        self.assertNotEqual(contracts.check_json(C / "reflect-week.v2.schema.json", {**WEEKS[0], "v": 2}), [],
+                            "v1's values are not v2's")
+
+    def test_a_v2_week_is_left_alone(self):
+        w = {"v": 2, "analysis": {"projects": [{"name": "x", "status": "stuck"}],
+                                  "fluency": [{"dimension": "diligence", "level": "strength"}]}}
+        self.assertEqual(self.m.as_v2(copy.deepcopy(w)), w)
 
 
 if __name__ == "__main__":

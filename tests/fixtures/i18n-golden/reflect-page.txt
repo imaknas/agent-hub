@@ -29,10 +29,10 @@
   </section><section><header><span class="eyebrow">Projects</span><h2>各專案</h2>
       <p class="muted" style="font-size:14px">右側長條:上面是這週訊息,下面灰色是上週。</p></header><div class="projects"><div class="proj">
       <div class="main">
-        <div class="name"><strong>beta</strong><span class="chip s-穩定">穩定</span></div>
+        <div class="name"><strong>beta</strong><span class="chip s-steady">穩定</span></div>
         <p class="focus">看不出內容</p>
         <p>無從判斷</p>
-        <p class="next">無</p>
+        <p class="next" data-label="下一步 ">無</p>
       </div>
       <div class="side">
         <div class="bars" title="訊息:這週 4 / 上週 0">
@@ -47,13 +47,13 @@
     </div></div></section><section><header><span class="eyebrow">AI fluency · 4D</span><h2>跟 AI 協作的方式</h2>
       <p class="muted" style="font-size:14px">這週開了 1 次 subagent(上週 0)、session 之間傳了 0 次訊息(上週 0)。</p></header>
       <div class="fluency"><article class="fl"><header><div><h3>交辦</h3><span class="en">Delegation</span></div>
-        <span class="lv lv-穩定">穩定</span></header>
+        <span class="lv lv-steady">穩定</span></header>
         <p>一次 subagent。</p><p class="evidence">1 次</p><p class="tip">無。</p></article><article class="fl"><header><div><h3>描述</h3><span class="en">Description</span></div>
-        <span class="lv lv-穩定">穩定</span></header>
+        <span class="lv lv-steady">穩定</span></header>
         <p>統計看不出。</p><p class="evidence">無</p><p class="tip">無。</p></article><article class="fl"><header><div><h3>判斷</h3><span class="en">Discernment</span></div>
-        <span class="lv lv-穩定">穩定</span></header>
+        <span class="lv lv-steady">穩定</span></header>
         <p>統計看不出。</p><p class="evidence">無</p><p class="tip">無。</p></article><article class="fl"><header><div><h3>把關</h3><span class="en">Diligence</span></div>
-        <span class="lv lv-穩定">穩定</span></header>
+        <span class="lv lv-steady">穩定</span></header>
         <p>一個 commit。</p><p class="evidence">1 個</p><p class="tip">無。</p></article></div></section><section><header><span class="eyebrow">Next week</span><h2>下週先做這幾件</h2></header><ol class="actions"><li><span class="act">無</span><span class="why">量太少</span></li><li><span class="act">無</span><span class="why">量太少</span></li></ol></section><footer class="method">
     <p>資料:個人 profile 的 Claude Code session(工作 profile 不備份;claude.ai 的對話請看 claude.ai 的 Reflect)。訊息只算你實際送出的。時間為台北時間。</p>
     <p>分析由 model-w 只根據上面的統計撰寫,是模型的解讀;對話原文不送雲端模型,所以它看不到你做了什麼內容。</p>
@@ -87,10 +87,10 @@
   </section><section><header><span class="eyebrow">Projects</span><h2>各專案</h2>
       <p class="muted" style="font-size:14px">右側長條:上面是這週訊息,下面灰色是上週。</p></header><div class="projects"><div class="proj">
       <div class="main">
-        <div class="name"><strong>beta</strong><span class="chip s-穩定">穩定</span></div>
+        <div class="name"><strong>beta</strong><span class="chip s-steady">穩定</span></div>
         <p class="focus">看不出內容</p>
         <p>無從判斷</p>
-        <p class="next">無</p>
+        <p class="next" data-label="下一步 ">無</p>
       </div>
       <div class="side">
         <div class="bars" title="訊息:這週 4 / 上週 0">
@@ -105,13 +105,13 @@
     </div></div></section><section><header><span class="eyebrow">AI fluency · 4D</span><h2>跟 AI 協作的方式</h2>
       <p class="muted" style="font-size:14px">這週開了 1 次 subagent(上週 0)、session 之間傳了 0 次訊息(上週 0)。</p></header>
       <div class="fluency"><article class="fl"><header><div><h3>交辦</h3><span class="en">Delegation</span></div>
-        <span class="lv lv-穩定">穩定</span></header>
+        <span class="lv lv-steady">穩定</span></header>
         <p>一次 subagent。</p><p class="evidence">1 次</p><p class="tip">無。</p></article><article class="fl"><header><div><h3>描述</h3><span class="en">Description</span></div>
-        <span class="lv lv-穩定">穩定</span></header>
+        <span class="lv lv-steady">穩定</span></header>
         <p>統計看不出。</p><p class="evidence">無</p><p class="tip">無。</p></article><article class="fl"><header><div><h3>判斷</h3><span class="en">Discernment</span></div>
-        <span class="lv lv-穩定">穩定</span></header>
+        <span class="lv lv-steady">穩定</span></header>
         <p>統計看不出。</p><p class="evidence">無</p><p class="tip">無。</p></article><article class="fl"><header><div><h3>把關</h3><span class="en">Diligence</span></div>
-        <span class="lv lv-穩定">穩定</span></header>
+        <span class="lv lv-steady">穩定</span></header>
         <p>一個 commit。</p><p class="evidence">1 個</p><p class="tip">無。</p></article></div></section><section><header><span class="eyebrow">Next week</span><h2>下週先做這幾件</h2></header><ol class="actions"><li><span class="act">無</span><span class="why">量太少</span></li><li><span class="act">無</span><span class="why">量太少</span></li></ol></section><footer class="method">
     <p>資料:個人 profile 的 Claude Code session(工作 profile 不備份;claude.ai 的對話請看 claude.ai 的 Reflect)。訊息只算你實際送出的。時間為台北時間。</p>
     <p>分析由 model-w 只根據上面的統計撰寫,是模型的解讀;對話原文不送雲端模型,所以它看不到你做了什麼內容。</p>
@@ -222,10 +222,10 @@
   </section><section><header><span class="eyebrow">Projects</span><h2>各專案</h2>
       <p class="muted" style="font-size:14px">右側長條:上面是這週訊息,下面灰色是上週。</p></header><div class="projects"><div class="proj">
       <div class="main">
-        <div class="name"><strong>alpha</strong><span class="chip s-穩定">穩定</span></div>
+        <div class="name"><strong>alpha</strong><span class="chip s-steady">穩定</span></div>
         <p class="focus">小修</p>
         <p>持平</p>
-        <p class="next">繼續</p>
+        <p class="next" data-label="下一步 ">繼續</p>
       </div>
       <div class="side">
         <div class="bars" title="訊息:這週 10 / 上週 70">
@@ -240,16 +240,16 @@
     </div></div></section><section><header><span class="eyebrow">AI fluency · 4D</span><h2>跟 AI 協作的方式</h2>
       <p class="muted" style="font-size:14px">這週開了 0 次 subagent(上週 6)、session 之間傳了 0 次訊息(上週 3)。</p></header>
       <div class="fluency"><article class="fl"><header><div><h3>交辦</h3><span class="en">Delegation</span></div>
-        <span class="lv lv-穩定">穩定</span></header>
+        <span class="lv lv-steady">穩定</span></header>
         <p>沒開 subagent。</p><p class="evidence">0 次</p><p class="tip">無。</p></article><article class="fl"><header><div><h3>描述</h3><span class="en">Description</span></div>
-        <span class="lv lv-穩定">穩定</span></header>
+        <span class="lv lv-steady">穩定</span></header>
         <p>無。</p><p class="evidence">統計撐不起判斷</p><p class="tip">無。</p></article><article class="fl"><header><div><h3>判斷</h3><span class="en">Discernment</span></div>
-        <span class="lv lv-穩定">穩定</span></header>
+        <span class="lv lv-steady">穩定</span></header>
         <p>無。</p><p class="evidence">統計撐不起判斷</p><p class="tip">無。</p></article><article class="fl"><header><div><h3>把關</h3><span class="en">Diligence</span></div>
-        <span class="lv lv-可改進">可改進</span></header>
+        <span class="lv lv-to_improve">可改進</span></header>
         <p>commit 少。</p><p class="evidence">3 個</p><p class="tip">小步提交。</p></article></div></section><section><header><span class="eyebrow">Next week</span><h2>下週先做這幾件</h2></header><ol class="actions"><li><span class="act">回到 alpha</span><span class="why">停太久</span></li><li><span class="act">整理筆記</span><span class="why">筆記少</span></li></ol></section><footer class="method">
     <p>資料:個人 profile 的 Claude Code session(工作 profile 不備份;claude.ai 的對話請看 claude.ai 的 Reflect)。訊息只算你實際送出的。時間為台北時間。</p>
-    <p>分析由 model-y 根據上面的統計與 4 則 Muninn 本機模型寫的 session 摘要撰寫,是模型的解讀;對話原文不送雲端模型。工作相關的 1 個 session、beta 只算在統計裡;還有 2 個 session 沒有摘要。</p>
+    <p>分析由 model-y 根據上面的統計與 4 則 Helper 本機模型寫的 session 摘要撰寫,是模型的解讀;對話原文不送雲端模型。工作相關的 1 個 session、beta 只算在統計裡;還有 2 個 session 沒有摘要。</p>
     <p class="num">產生時間 2026-10-05T07:00+08:00</p>
   </footer>
 === 2026-W39
@@ -282,10 +282,10 @@
   </section><section><header><span class="eyebrow">Projects</span><h2>各專案</h2>
       <p class="muted" style="font-size:14px">右側長條:上面是這週訊息,下面灰色是上週。</p></header><div class="projects"><div class="proj">
       <div class="main">
-        <div class="name"><strong>alpha</strong><span class="chip s-推進">推進</span></div>
+        <div class="name"><strong>alpha</strong><span class="chip s-advancing">推進</span></div>
         <p class="focus">匯入功能</p>
         <p>進度明顯</p>
-        <p class="next">補測試</p>
+        <p class="next" data-label="下一步 ">補測試</p>
       </div>
       <div class="side">
         <div class="bars" title="訊息:這週 70 / 上週 40">
@@ -299,10 +299,10 @@
       </div>
     </div><div class="proj">
       <div class="main">
-        <div class="name"><strong>beta</strong><span class="chip s-穩定">穩定</span></div>
+        <div class="name"><strong>beta</strong><span class="chip s-steady">穩定</span></div>
         <p class="focus">維護</p>
         <p>沒有新進展</p>
-        <p class="next">決定要不要繼續</p>
+        <p class="next" data-label="下一步 ">決定要不要繼續</p>
       </div>
       <div class="side">
         <div class="bars" title="訊息:這週 30 / 上週 30">
@@ -316,10 +316,10 @@
       </div>
     </div><div class="proj">
       <div class="main">
-        <div class="name"><strong>gamma</strong><span class="chip s-發散">發散</span></div>
+        <div class="name"><strong>gamma</strong><span class="chip s-scattered">發散</span></div>
         <p class="focus">起步</p>
         <p>方向還在找</p>
-        <p class="next">收斂成一個問題</p>
+        <p class="next" data-label="下一步 ">收斂成一個問題</p>
       </div>
       <div class="side">
         <div class="bars" title="訊息:這週 20 / 上週 0">
@@ -333,10 +333,10 @@
       </div>
     </div><div class="proj">
       <div class="main">
-        <div class="name"><strong>epsilon</strong><span class="chip s-收尾">收尾</span></div>
+        <div class="name"><strong>epsilon</strong><span class="chip s-wrapping_up">收尾</span></div>
         <p class="focus">收尾</p>
         <p>快好了</p>
-        <p class="next">發布</p>
+        <p class="next" data-label="下一步 ">發布</p>
       </div>
       <div class="side">
         <div class="bars" title="訊息:這週 5 / 上週 3">
@@ -351,13 +351,13 @@
     </div></div><p class="quiet-list">這週沒動:delta(上週 10)、zeta(上週 2)</p></section><section><header><span class="eyebrow">AI fluency · 4D</span><h2>跟 AI 協作的方式</h2>
       <p class="muted" style="font-size:14px">這週開了 6 次 subagent(上週 2)、session 之間傳了 3 次訊息(上週 1)。</p></header>
       <div class="fluency"><article class="fl"><header><div><h3>交辦</h3><span class="en">Delegation</span></div>
-        <span class="lv lv-強項">強項</span></header>
-        <p>常開 subagent。</p><p class="quote">去查一下</p><p class="tip">繼續。</p></article><article class="fl"><header><div><h3>描述</h3><span class="en">Description</span></div>
-        <span class="lv lv-穩定">穩定</span></header>
+        <span class="lv lv-strength">強項</span></header>
+        <p>常開 subagent。</p><p class="quote" data-open="「" data-close="」">去查一下</p><p class="tip">繼續。</p></article><article class="fl"><header><div><h3>描述</h3><span class="en">Description</span></div>
+        <span class="lv lv-steady">穩定</span></header>
         <p>描述清楚。</p><p class="evidence">少有重問</p><p class="tip">保持。</p></article><article class="fl"><header><div><h3>判斷</h3><span class="en">Discernment</span></div>
-        <span class="lv lv-可改進">可改進</span></header>
-        <p>有一次直接接受。</p><p class="quote">好,就這樣</p><p class="tip">多問一句為什麼。</p></article><article class="fl"><header><div><h3>把關</h3><span class="en">Diligence</span></div>
-        <span class="lv lv-強項">強項</span></header>
+        <span class="lv lv-to_improve">可改進</span></header>
+        <p>有一次直接接受。</p><p class="quote" data-open="「" data-close="」">好,就這樣</p><p class="tip">多問一句為什麼。</p></article><article class="fl"><header><div><h3>把關</h3><span class="en">Diligence</span></div>
+        <span class="lv lv-strength">強項</span></header>
         <p>會跑測試。</p><p class="evidence">commit 前都跑</p><p class="tip">繼續。</p></article></div></section><section><header><span class="eyebrow">Next week</span><h2>下週先做這幾件</h2></header><ol class="actions"><li><span class="act">補 alpha 的測試</span><span class="why">推得快,測試沒跟上</span></li><li><span class="act">決定 beta 的去留</span><span class="why">持平兩週</span></li></ol></section><footer class="method">
     <p>資料:個人 profile 的 Claude Code session(工作 profile 不備份;claude.ai 的對話請看 claude.ai 的 Reflect)。訊息只算你實際送出的。時間為台北時間。</p>
     <p>分析由 model-x 根據 40 則訊息抽樣與上面的統計撰寫,是模型的解讀;beta、gamma 只提供數字、不送原文;送出前已遮掉像金鑰的字串。</p>

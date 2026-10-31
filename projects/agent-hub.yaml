@@ -123,7 +123,9 @@ provides:
 - {contract: todo-md, v: 2, schema: contracts/todo-md.v2.md}
 - {contract: state-todo, v: 1, schema: contracts/state-todo.v1.md}
 - {contract: state-todo, v: 2, schema: contracts/state-todo.v2.md}
+# v2 = fixed English values for the analysis's classifications (v1: zh-Hant words); v1 stays until the assistant reads v2
 - {contract: reflect-week, v: 1, schema: contracts/reflect-week.v1.schema.json}
+- {contract: reflect-week, v: 2, schema: contracts/reflect-week.v2.schema.json}
 - {contract: project, v: 1, schema: contracts/project.v1.schema.json}
 - {contract: llm-points, v: 1, schema: contracts/llm-points.v1.schema.json}
 # reading the assistant's contracts is declared in the consumes of modules/assistant.yaml (not compared when the

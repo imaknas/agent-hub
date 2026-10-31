@@ -33,6 +33,8 @@ import e2
 POINT = "reflect-week"
 hubconf = e2.hubconf
 ENUMS = ("name", "status", "dimension", "level")   # not free text: the report page reads these values
+# an arm whose schema still has reflect-week v1's zh-Hant values is compared in v2's (contracts/reflect-week.v2)
+V1 = json.loads((hubconf.ROOT / "contracts" / "reflect-week.v2.schema.json").read_text())["x-v1-values"]
 
 
 def _load(src: str, name: str):
@@ -165,8 +167,9 @@ def outcome(out: pathlib.Path) -> dict:
     if not r["valid"]:
         return r
     text = "\n".join(free_text(so))
-    r.update({"status": {p.get("name"): p.get("status") for p in so.get("projects") or []},
-              "level": {f.get("dimension"): f.get("level") for f in so.get("fluency") or []},
+    r.update({"status": {p.get("name"): V1["status"].get(p.get("status"), p.get("status")) for p in so.get("projects") or []},
+              "level": {V1["dimension"].get(f.get("dimension"), f.get("dimension")):
+                        V1["level"].get(f.get("level"), f.get("level")) for f in so.get("fluency") or []},
               "text": text, "lang": e2.language(text)})
     return r
 
