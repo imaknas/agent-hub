@@ -1,15 +1,10 @@
 """Behaviour tests for the task registry (the registrar of Principal Handoff Acts): runs the whole script once, with
 its own memory repo, bus and hub.json; never touches real data.
 
-The same scenario table runs against every implementation under bin/:
-  the old one    v1 task / done --inferred letters and the personal assistant's handoffs on the bus
-  registrar.py   (new) 0.3 record events on the bus (hubbus record-publish / records)
-The old one runs only the scenarios it can do (V1); the new one runs all. This is the behaviour locked in before the
-old one was replaced with registrar.py; after the switch it is a regression test.
-The old one has known bugs in pe and pg, so they are not in V1: the rewrite match compares the whole line (including
-"- [ ] 〔Alex〕"), so it almost never judges a line rewritten; and it checks vanished keys before sending new lines, so
-a line with the same text that lost its key first gets a wrong "inferred done" sent, then is stamped back with the
-same key. The spec's order (relink before reconcile) fixes both.
+The scenario table was locked in against the old task registration (v1 task / done --inferred letters, removed on
+11-01) before bin/registrar.py replaced it (0.3 record events on the bus: hubbus record-publish / records); pa-pd are
+what both did, the rest what only the registrar does (the old one's bugs in pe and pg: the spec's order, relink before
+reconcile, fixes both). v1's letters still on the bus count (registrar.py's v1_compat): pj, pk.
 
   pa  〔Alex〕 line without a key                  → raised / task sent, line end stamped
   pb  line with a key + closed (done)             → that line deleted, an empty section gets "- (無)", closure
@@ -18,23 +13,23 @@ same key. The spec's order (relink before reconcile) fixes both.
   pd  sent, not closed, not found in STATE.md     → one inferred-done claim sent (not sent again on a second run)
   pe  as above, but with a very similar line      → no claim for the old key, only a warning; that line raised as
       (no key)                                      a new item
-  pf  line with a key whose text changed          → amended (new one only)
-  pg  line that lost its key, same text as before → the original key restored, no new raised (new one only)
-  ph  need already withdrawn, line deleted too    → no claim (new one only)
-  pj  an item v1 already sent an inferred         → no claim on the night of the switch (new one only)
+  pf  line with a key whose text changed          → amended
+  pg  line that lost its key, same text as before → the original key restored, no new raised
+  ph  need already withdrawn, line deleted too    → no claim
+  pj  an item v1 already sent an inferred         → no claim on the night of the switch
       closure for (done-<key>)
-  pk  an item sent through v1 before a rename     → recognised, not raised again (new one only)
+  pk  an item sent through v1 before a rename     → recognised, not raised again
       (pk-old), line still there
   pi  an amended item that lost its key           → the original key restored per the amended text, not a new item
-                                                    (new one only; when the text was never changed the recomputed
-                                                    key is the same anyway, so only an amended text shows whether
-                                                    the key gets restored)
+                                                    (when the text was never changed the recomputed key is the same
+                                                    anyway, so only an amended text shows whether the key gets
+                                                    restored)
   pl  an item the project raised itself (send, a  → nothing sent, no claim: it never had a line here, so finding
-      lease handover), no line in STATE.md          none is no sign it was done (new one only)
-  pn  closed (done), its key also on a line       → only the to-do line deleted (new one only)
+      lease handover), no line in STATE.md          none is no sign it was done
+  pn  closed (done), its key also on a line       → only the to-do line deleted
       outside the to-do section
   pw  warned about before (a very similar line),  → the claim is sent now: a warning holds only while the similar
-      that similar line gone too                    line is there (new one only)
+      that similar line gone too                    line is there
 
     bin/py -m unittest discover -s tests
 """
@@ -52,10 +47,7 @@ ROOT = pathlib.Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "bin"))
 import todo_tokens  # noqa: E402
 
-OLD, NEW = "knas-tasks.py", "registrar.py"   # the old file name goes once registrar.py has replaced it
-IMPLS = [p for p in (OLD, NEW) if (ROOT / "bin" / p).exists()]
 TAG, OWNER, PRINCIPAL, SIDE = "Alex", "owner", "person:alex", "helper"
-V1 = {"pa", "pb", "pc", "pd"}   # scenarios the old one can do (pe, pg are its known bugs, see above)
 
 
 def key(project: str, text: str) -> str:
@@ -102,8 +94,8 @@ def sh(*cmd, cwd=None, env=None):
 class Env:
     """A temporary hub (bin/ linked to the real one) + a bare repo and memory copy per project + a bus."""
 
-    def __init__(self, tmp: pathlib.Path, impl: str, scenes: dict | None = None, lang: str = "zh-Hant"):
-        self.tmp, self.hub, self.impl = tmp, tmp / "hub", impl
+    def __init__(self, tmp: pathlib.Path, scenes: dict | None = None, lang: str = "zh-Hant"):
+        self.tmp, self.hub = tmp, tmp / "hub"
         (self.hub / "bin").mkdir(parents=True)
         for f in (ROOT / "bin").iterdir():
             if f.is_file():
@@ -126,7 +118,7 @@ class Env:
                     "GIT_COMMITTER_EMAIL": "t@t", "GIT_CONFIG_GLOBAL": "/dev/null", "GIT_CONFIG_NOSYSTEM": "1"}
         self.hubbus("inbox", "--project", "pa")   # creates the bus tables
         self.db = tmp / "bus" / "bus.db"
-        self.scenes = {p: s for p, s in (scenes or SCENES).items() if impl == NEW or p in V1}
+        self.scenes = scenes or SCENES
         for p, s in self.scenes.items():
             self.project(p, s)
         (self.hub / ".state" / "registrar-warned.json").write_text(
@@ -147,46 +139,14 @@ class Env:
         (copy / "STATE.md").write_text(s["state"])
         self.git(copy, "add", "-A"); self.git(copy, "commit", "-qm", "init"); self.git(copy, "push", "-q", "origin", "HEAD")
         (self.hub / "projects" / f"{p}.yaml").write_text(f"v: 1\nname: {p}\npaths:\n  workspace: {copy}\nmemory: true\n")
-        if self.impl == OLD:
-            self.v1_inputs(p, s)
-        else:
-            self.v2_inputs(p, s)
+        self.inputs(p, s)
 
-    # --- old: v1 letters ---
-    def v1_inputs(self, p, s):
-        c = sqlite3.connect(self.db)
-        for k, text in s.get("posted", {}).items():
-            c.execute("INSERT INTO events(id, ts, type, source, to_project, ref, payload) VALUES(?,?,?,?,?,?,?)",
-                      (k, "2026-10-20T10:00:00+08:00", "message", p, OWNER, None,
-                       json.dumps({"v": 1, "type": "task", "text": text}, ensure_ascii=False)))
-        for hid, k, effect, text in s.get("settle", []):
-            payload = {"v": 1, "type": "handoff", "handoff_id": abs(hash(hid)) % 10000, "effect": effect,
-                       "handoff": {"reply_to": k, "item": text, "fact": text, "why": "測試", "effect": effect,
-                                   "ts": "2026-10-26T10:00:00"}}
-            c.execute("INSERT INTO events(id, ts, type, source, to_project, ref, payload) VALUES(?,?,?,?,?,?,?)",
-                      (hid, "2026-10-26T10:00:00+08:00", "message", OWNER, p, None, json.dumps(payload, ensure_ascii=False)))
-        c.commit(); c.close()
-
-    def v1_outputs(self, p):
-        """Letters this run sent to the owner: [(kind, key)], kind raised or claim."""
-        c = sqlite3.connect(self.db)
-        rows = c.execute("SELECT id, payload FROM events WHERE type='message' AND source=? AND to_project=?"
-                         " AND ts > '2026-10-27'", (p, OWNER)).fetchall()
-        out = []
-        for eid, pl in rows:
-            d = json.loads(pl)
-            if d.get("type") == "task":
-                out.append(("raised", eid))
-            elif d.get("type") == "done" and d.get("inferred"):
-                out.append(("claim", d.get("task")))
-        return sorted(out)
-
-    # --- new: 0.3 records ---
+    # --- 0.3 records ---
     def rec(self, p, rid, type_, origin, by, k, **kw):
         return {"ph": "0.3", "ext": "acts/0.3", "id": rid, "type": type_, "origin": origin, "by": by, "key": k,
                 "project": p, "ts": "2026-10-20T10:00:00Z", **kw}
 
-    def v2_inputs(self, p, s):
+    def inputs(self, p, s):
         recs = []
         for k, text in s.get("posted", {}).items():
             recs.append(self.rec(p, f"r:{k}", "raised", "requester", "agent-hub:registrar", k,
@@ -233,7 +193,7 @@ class Env:
                            json.dumps({"v": 1, "record": r}, ensure_ascii=False)))
             c.commit(); c.close()
 
-    def v2_outputs(self, p):
+    def outputs(self, p):
         r = self.hubbus("records", "--project", p, "--direction", "out")
         out = []
         for e in json.loads(r.stdout or "[]"):
@@ -245,13 +205,9 @@ class Env:
                 out.append((kind, rec["key"]))
         return sorted(out)
 
-    # --- shared ---
     def run(self):
-        return subprocess.run([str(self.hub / "bin" / "py"), str(self.hub / "bin" / self.impl)], cwd=self.hub,
+        return subprocess.run([str(self.hub / "bin" / "py"), str(self.hub / "bin" / "registrar.py")], cwd=self.hub,
                               env=self.env, capture_output=True, text=True, timeout=300)
-
-    def outputs(self, p):
-        return self.v1_outputs(p) if self.impl == OLD else self.v2_outputs(p)
 
     def state(self, p):
         return (self.tmp / "copies" / p / "STATE.md").read_text()
@@ -260,15 +216,13 @@ class Env:
         return self.git(self.tmp / "bare" / f"{p}-memory.git", "show", "agent-memory:STATE.md")
 
 
-@unittest.skipUnless(IMPLS, "no task registry implementation")
 class RegistrarFlow(unittest.TestCase):
     def each(self, check):
-        for impl in IMPLS:
-            with self.subTest(impl=impl), tempfile.TemporaryDirectory() as d:
-                env = Env(pathlib.Path(d), impl)
-                r = env.run()
-                self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
-                check(env, r.stdout + r.stderr)
+        with tempfile.TemporaryDirectory() as d:
+            env = Env(pathlib.Path(d))
+            r = env.run()
+            self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
+            check(env, r.stdout + r.stderr)
 
     def test_scenarios(self):
         def check(env, log):
@@ -280,21 +234,20 @@ class RegistrarFlow(unittest.TestCase):
             self.assertIn("- (無)", env.state("pb"))
             self.assertIn(f"〔Alex〕簽合約{marker(KC)}", env.state("pc"))
             self.assertEqual(env.outputs("pd"), [("claim", KD)])
-            if env.impl == NEW:
-                self.assertEqual(env.outputs("pe"), [("raised", key("pe", "續約保險(今年)"))])
-                self.assertIn("續約保險(今年)", env.state("pe"))
-                self.assertEqual(env.outputs("pf"), [("amended", KF)])
-                self.assertIn(marker(KG), env.state("pg"))
-                self.assertEqual(env.outputs("pg"), [])
-                self.assertEqual(env.outputs("ph"), [])
-                self.assertIn(marker(KI), env.state("pi"))
-                self.assertEqual(env.outputs("pi"), [])
-                self.assertEqual(env.outputs("pj"), [], "an inferred closure v1 already sent is not sent again")
-                self.assertEqual(env.outputs("pk"), [], "one sent before the rename is recognised")
-                self.assertEqual(env.outputs("pl"), [], "an item raised outside the document is never claimed done")
-                self.assertEqual(env.state("pn").count(KN), 1, "the line outside the to-do section is kept")
-                self.assertIn("## Notes\n\n- [ ] [owner] pay rent", env.state("pn"))
-                self.assertEqual(env.outputs("pw"), [("claim", KW)], "a warning holds only while the similar line is")
+            self.assertEqual(env.outputs("pe"), [("raised", key("pe", "續約保險(今年)"))])
+            self.assertIn("續約保險(今年)", env.state("pe"))
+            self.assertEqual(env.outputs("pf"), [("amended", KF)])
+            self.assertIn(marker(KG), env.state("pg"))
+            self.assertEqual(env.outputs("pg"), [])
+            self.assertEqual(env.outputs("ph"), [])
+            self.assertIn(marker(KI), env.state("pi"))
+            self.assertEqual(env.outputs("pi"), [])
+            self.assertEqual(env.outputs("pj"), [], "an inferred closure v1 already sent is not sent again")
+            self.assertEqual(env.outputs("pk"), [], "one sent before the rename is recognised")
+            self.assertEqual(env.outputs("pl"), [], "an item raised outside the document is never claimed done")
+            self.assertEqual(env.state("pn").count(KN), 1, "the line outside the to-do section is kept")
+            self.assertIn("## Notes\n\n- [ ] [owner] pay rent", env.state("pn"))
+            self.assertEqual(env.outputs("pw"), [("claim", KW)], "a warning holds only while the similar line is")
         self.each(check)
 
     def test_second_run_sends_nothing_new(self):
@@ -305,16 +258,15 @@ class RegistrarFlow(unittest.TestCase):
             self.assertEqual({p: env.outputs(p) for p in env.scenes}, first)
         self.each(check)
 
-    @unittest.skipUnless(NEW in IMPLS, "no registrar.py")
     def test_messages_zh_hant(self):
         """what registrar.py writes for people (log, the memory commit title, the note on done letters) stays
         byte-identical on a zh-Hant instance; expected text in tests/fixtures/registrar-messages.zh-Hant.json"""
         want = json.loads((ROOT / "tests" / "fixtures" / "registrar-messages.zh-Hant.json").read_text())
         keys = {"ka": key("pa", want["pa_text"]), "kb": KB, "kc": KC, "ke": KE, "kg": KG, "ki": KI, "kn": KN}
         with tempfile.TemporaryDirectory() as d:
-            env = Env(pathlib.Path(d), NEW)
+            env = Env(pathlib.Path(d))
             env.env["AGENT_HUB_LANG_UI"] = "zh-Hant"
-            dry = subprocess.run([str(env.hub / "bin" / "py"), str(env.hub / "bin" / NEW), "--dry-run"], cwd=env.hub,
+            dry = subprocess.run([str(env.hub / "bin" / "py"), str(env.hub / "bin" / "registrar.py"), "--dry-run"], cwd=env.hub,
                                  env=env.env, capture_output=True, text=True, timeout=300)
             self.assertIn(want["dry_run"].format(**keys), dry.stdout)
             r = env.run()
@@ -353,11 +305,10 @@ EN_SCENES = {
 }
 
 
-@unittest.skipUnless(NEW in IMPLS, "no registrar.py")
 class RegistrarFlowEnglish(unittest.TestCase):
     def test_english_instance(self):
         with tempfile.TemporaryDirectory() as d:
-            env = Env(pathlib.Path(d), NEW, EN_SCENES, "en")
+            env = Env(pathlib.Path(d), EN_SCENES, "en")
             r = env.run()
             self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
             ka = key("pa", "Renew the domain")

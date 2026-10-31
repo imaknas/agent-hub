@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 # The last step of the librarian's chain of nightly jobs (platform job agent-hub/librarian-publish, after:
-# librarian, knas-tasks, todo, memory-gaps, state-anchors): regenerate index.md's project roster, then commit only the
+# librarian, registrar, todo, memory-gaps, state-anchors): regenerate index.md's project roster, then commit only the
 # files this chain wrote (today's digest, index.md, review-log.md, todo.md). This used to be the end of librarian.sh;
-# split out, a deployment without an assistant (knas-tasks) runs in the same order.
+# split out, a deployment without an assistant runs in the same order.
 # The roster is regenerated after the model has changed index.md, so even if the model touched the block by mistake
 # it is overwritten with the correct content.
 # Commit only the listed files, never git add -A -- the working tree may hold half-done changes by others (other

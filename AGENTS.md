@@ -159,8 +159,7 @@ agent-hub is meant for anyone, with any coding agent, any LLM, any key.
   header
 - **The 〔owner〕 to-do registrar** (`bin/registrar.py`, a core platform job, nightly after the librarian and before
   todo, zero LLM): sends the 〔owner〕 lines of every STATE.md to the owner side (the assistant, or the built-in
-  `bin/owner.py`) following Principal Handoff 0.3, and applies the closes it gets back by key; the old
-  `bin/knas-tasks.py` stays during the transition
+  `bin/owner.py`) following Principal Handoff 0.3, and applies the closes it gets back by key
 
 ## Channel leases (the assistant lends its conversation to a project session; assistant module)
 
