@@ -1,0 +1,5 @@
+{
+ "add the analysis the model writes": "附加模型寫的分析",
+ "only rebuild index.html from the existing json": "只用現有 json 重建 index.html",
+ "weekly report: no conversation statistics: {reason}": "週報:沒有對話的統計——{reason}"
+}

@@ -31,8 +31,10 @@ import zoneinfo
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
 import hubconf  # noqa: E402
 import hublib  # noqa: E402
+import i18n  # noqa: E402
 import runtime_ports  # noqa: E402  對話紀錄只透過介面讀(Claude Code 只是一個實作)
 
+_ = i18n.domain(__file__)
 TZ = zoneinfo.ZoneInfo("Asia/Taipei")
 MIRRORS = hubconf.p("git_origin", "~/git-origin") / "mirrors"
 MEMORY_COPIES = hublib.MEMORY_COPIES
@@ -134,7 +136,7 @@ def build_stats(label: str, start: datetime.datetime, end: datetime.datetime, we
             "commits": git_count(mirror_for(n), start, end, work_only=True),
             "notes": git_count(MEMORY_COPIES / n, start, end, "--invert-grep", "--grep=^init:", "--", "memory/"),
         })
-    matrix = [[0] * 24 for _ in range(7)]
+    matrix = [[0] * 24 for _day in range(7)]
     for t in this.times:
         matrix[t.weekday()][t.hour] += 1
     total = sum(this.prompts.values())
@@ -183,8 +185,8 @@ def build_html() -> pathlib.Path:
 def main() -> None:
     ap = argparse.ArgumentParser()
     ap.add_argument("--week")
-    ap.add_argument("--llm", action="store_true", help="附加模型寫的分析")
-    ap.add_argument("--html-only", action="store_true", help="只用現有 json 重建 index.html")
+    ap.add_argument("--llm", action="store_true", help=_("add the analysis the model writes"))
+    ap.add_argument("--html-only", action="store_true", help=_("only rebuild index.html from the existing json"))
     args = ap.parse_args()
     OUT.mkdir(parents=True, exist_ok=True)
     if not args.html_only:
@@ -197,7 +199,7 @@ def main() -> None:
         stats = build_stats(label, start, end, scan(start, end) if not unsupported else {"this": Week(), "prev": Week()})
         if unsupported:
             stats["unsupported"] = unsupported
-            print(f"週報:沒有對話的統計——{unsupported}")
+            print(_("weekly report: no conversation statistics: {reason}", reason=unsupported))
         elif args.llm:
             import reflect_llm
             stats["analysis"] = reflect_llm.analyze(stats)
