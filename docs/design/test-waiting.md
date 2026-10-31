@@ -29,8 +29,12 @@
 ## 1. How this was measured
 
 Everything below is measured on the hub machine (Apple M4 Pro, 10 performance + 4 efficiency cores) unless marked
-**assumed**. Reproducible with throwaway scripts (kept out of the repo: they parse one runtime's transcript format, which
-belongs in a runtime adapter; see 3.9).
+**assumed**. The scripts were throwaway and are not in the repo (they parse one runtime's transcript format, which
+belongs in a runtime adapter); the method is described here in enough detail to rebuild them (3.9).
+
+**Which projects.** The three with the most `merge.done` / `session.report` bus events since 10-24 and sessions seen
+today: muninn (226 merges), the-crucible (22 merges, plus commits made without the merge gate) and agent-hub itself
+(commits straight to main). Others had a handful of merges that week.
 
 **Session transcripts** (the runtime's transcript directory, one folder per project; top-level sessions only, because a
 subagent's tool calls already show up as the parent's wait). Window: 2026-10-24 00:00 to 2026-10-31 ~18:00 (+08:00).
@@ -208,8 +212,11 @@ after the commit and before any push, failure reported to the committing session
 `merge.done` / `merge.failed` on the bus — which already reaches the session (hook on its next action, or the mailbox
 dispatcher resumes it if it is idle). The lock is held only for rebase and fast-forward, not during tests.
 
-- Saving: every gate wait leaves the critical path, **if** the agent has other work for that long. After a merge it always
-  does: the memory note and the report it writes are model time. muninn's gate waits were 82 min (+ the gate share of
+- Saving: every gate wait leaves the critical path, **if** the agent has other work for that long. Measured: after each
+  gate that took over 10 s, the time the agent then spent on non-test work (model and other tools) before its next test
+  command or the owner's next message. **muninn: at least the gate's length after 189 of 213 gates (89%), median 5.3× the
+  gate.** agent-hub: 129 of 229 (56%), median 1.2× — its sessions more often commit and go straight on to the next test
+  run, so an asynchronous commit gate there would hide about half of the wait, not all of it. muninn's gate waits were 82 min (+ the gate share of
   combined commands); the lock no longer serializes the 22% of merges that overlapped.
 - Risk: the agent learns about a failure later, maybe after it moved on or ended its turn; work stacked on an unmerged
   branch has to be rebased if the merge fails. Two queued merges that each pass alone can fail together — the worker tests
@@ -277,9 +284,9 @@ Measured per week, today's waits vs that floor:
 What is measured and what is assumed in that floor:
 
 - Measured: run counts and durations of targeted runs (transcripts); muninn e2e at `-n 8` (28.7 s).
-- Assumed: that every gate and every pre-gate full run can be asynchronous (3.4) or skipped by the cache (3.1) — true when
-  the agent has at least that much model work after it, which held for the merges looked at (memory note, report) but was
-  not measured per merge; that targeted runs do not get faster (they could, under less load); for the-crucible, that a
+- Assumed: that every gate and every pre-gate full run can be asynchronous (3.4) or skipped by the cache (3.1). Measured
+  for the asynchronous part: the agent had at least the gate's length of other work after 89% of muninn's gates and 56% of
+  agent-hub's (3.4), so agent-hub's floor is reached only with the cache and selection, not with asynchrony alone; that targeted runs do not get faster (they could, under less load); for the-crucible, that a
   parallel e2e halves it.
 - The muninn range is the question of how many of its 425 e2e runs the agent really needs while it works: the low end
   keeps none (gate only, asynchronous), the high end keeps all at parallel speed. The transcripts cannot tell which runs
