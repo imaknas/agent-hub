@@ -1,0 +1,32 @@
+{
+ "hedges": [
+  "maybe",
+  "likely",
+  "probably",
+  "expected",
+  "expect",
+  "estimate",
+  "tentative",
+  "tbd",
+  "might",
+  "plan to",
+  "planned",
+  "should be",
+  "assume",
+  "unconfirmed",
+  "not yet",
+  "?"
+ ],
+ "prompt_hedges": [
+  "expected",
+  "probably",
+  "might",
+  "should be",
+  "plan to",
+  "tentative",
+  "not yet",
+  "?"
+ ],
+ "punctuation": "",
+ "link_end": ""
+}

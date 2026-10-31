@@ -89,17 +89,20 @@ RAW_RE = re.compile(r"^memory/(\d{4}-\d{2}-\d{2})(-[a-z0-9-]+)?\.md$")
 REF_RE = re.compile(r"^memory/reference/[^/]+\.md$")
 
 # Hedges: when these words vanish from a sentence and the rest of it stays the same, that is the summary drift of
-# "expected -> confirmed"
-HEDGES = [
-    "預計", "預期", "預估", "估計", "可能", "也許", "或許", "大概", "大約", "應該", "似乎", "疑似",
-    "推測", "猜測", "暫定", "暫時", "待確認", "未確認", "尚未確認", "不確定", "有待", "打算", "計畫",
-    "傾向", "考慮", "初步", "假設", "據說", "看起來", "目標是", "希望", "?", "？",
-    "maybe", "likely", "probably", "expected", "expect", "estimate", "tentative", "tbd",
-    "might", "plan to", "planned", "should be", "assume", "unconfirmed", "not yet",
-]
+# "expected -> confirmed". Content-language data: locales/<lang>.consolidate.json, per language the hedges, the ones the
+# prompt names as examples, the punctuation the comparison ignores besides ASCII's, and what ends a link besides ASCII's
+# brackets. The checks use every language's (a note may be in any of them), the content language's first; the prompt
+# names the content language's examples.
+def _text_data() -> dict[str, dict]:
+    first = hubconf.lang_content()
+    files = sorted(i18n.LOCALES.glob("*.consolidate.json"), key=lambda f: (f.name != f"{first}.consolidate.json", f.name))
+    return {f.name.removesuffix(".consolidate.json"): json.loads(f.read_text()) for f in files}
 
-# The hedges the prompt names as examples (the notes are mostly Chinese; the check itself uses all of HEDGES)
-PROMPT_HEDGES = ["預計", "預期", "可能", "應該", "打算", "暫定", "待確認", "?"]
+
+TEXT = _text_data()
+HEDGES = list(dict.fromkeys(h for d in TEXT.values() for h in d["hedges"]))
+PUNCTUATION = "".join(dict.fromkeys(c for d in TEXT.values() for c in d["punctuation"]))
+LINK_END = "".join(dict.fromkeys(c for d in TEXT.values() for c in d["link_end"]))
 
 GIT_ENV = {
     **os.environ,
@@ -226,7 +229,7 @@ def build_prompt(s: dict, repo: pathlib.Path, *, owner: str | None = None, lang:
     return prompts.render("consolidate", lang=lang, owner=owner, project=s["name"], older_than_days=OLDER_THAN_DAYS,
                           batch_text=batch_text, newer=", ".join(newer) or "(none)",
                           refs="\n".join(refs) or "(no topic documents yet)", state_when=state_when or "?",
-                          hedges="/".join(PROMPT_HEDGES))
+                          hedges="/".join(TEXT[lang or hubconf.lang_content()]["prompt_hedges"]))
 
 
 def run_model(prompt: str, repo: pathlib.Path, model: str) -> tuple[dict | None, str]:
@@ -261,7 +264,7 @@ def strip_hedges(s: str) -> str:
     low = s.lower()
     for h in sorted(HEDGES, key=len, reverse=True):
         low = low.replace(h, "")
-    return re.sub(r"[\s\-*#>`_,.;:()\[\]，。、；：（）「」]+", "", low)
+    return re.sub(r"[\s\-*#>`_,.;:()\[\]" + re.escape(PUNCTUATION) + "]+", "", low)
 
 
 def diff_lines(repo: pathlib.Path, base: str, path: str) -> tuple[list[str], list[str]]:
@@ -336,7 +339,8 @@ def salient_missing(repo: pathlib.Path, base: str, deleted: list[str]) -> dict[s
     out = {}
     for f in deleted:
         text = at_base(repo, base, f) or ""
-        toks = set(re.findall(r"https?://[^\s)>\]」]+", text)) | set(re.findall(r"`([^`\n]{3,80})`", text))
+        toks = set(re.findall(r"https?://[^\s)>\]" + re.escape(LINK_END) + "]+", text)) | \
+            set(re.findall(r"`([^`\n]{3,80})`", text))
         miss = sorted(t for t in toks if norm(t) not in corpus)
         if miss:
             out[f] = miss[:15]
