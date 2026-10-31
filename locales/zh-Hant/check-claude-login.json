@@ -1,0 +1,17 @@
+{
+ "used by the connector jobs and the assistant": "Upwork job、Muninn 用的",
+ "used by all scheduled jobs and leases": "所有排程跟租借用的",
+ "all scheduled jobs and leases will fail": "所有排程跟租借都會失敗",
+ "every call with this login will fail": "這種登入的呼叫都會失敗",
+ "No answer for over 3 minutes": "超過 3 分鐘沒回應",
+ "llm.py printed no JSON (exit {code}): {err}": "llm.py 沒有輸出 JSON(exit {code}):{err}",
+ "{path} is missing ({means})": "沒有 {path}({means})",
+ "{name}: ok": "{name}:ok",
+ "{label} ({used_by}) does not work: {err} — {renew}": "{label}({used_by})不能用了:{err}——{renew}",
+ "{label} is {days} days old (expires after {lifetime}); soon: {renew}": "{label} 已經 {days} 天({lifetime}到期),快要{renew}",
+ "{name}: refresh valid for {days} more days": "{name}:refresh 還有 {days} 天",
+ "{label} ({used_by}): the login expires within {days} days — {renew}": "{label}({used_by})登入 {days} 天內到期——{renew}",
+ "{mode}: request failed (does not look like a login problem; {n} in a row): {err}": "{mode}:請求失敗(不像登入問題,連續第 {n} 次):{err}",
+ "claude requests failed {n} times in a row ({mode}): {err}": "claude 請求連續 {n} 次失敗({mode}):{err}",
+ "The claude login check is back to normal": "claude 登入檢查恢復正常"
+}
