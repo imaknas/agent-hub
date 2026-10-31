@@ -468,6 +468,31 @@ def wrong_registry(old: dict, reg: pathlib.Path, files: list[pathlib.Path]) -> s
     return None
 
 
+REFUSED_LOG = hubconf.STATE / "registry-refused.jsonl"
+
+
+def record_refusal(why: str, reg: pathlib.Path) -> str:
+    """Who tried to rebuild the index from the wrong registry: appended to REFUSED_LOG, so the next attempt names the
+    process instead of us replaying test runs. Returns a one-line summary for the '(registry)' error."""
+    ppid = os.getppid()
+    try:
+        parent = subprocess.run(["ps", "-o", "command=", "-p", str(ppid)], capture_output=True, text=True,
+                                timeout=5).stdout.strip()
+    except (OSError, subprocess.SubprocessError):   # a tool's sandbox may forbid ps
+        parent = None
+    entry = {"at": datetime.datetime.now().astimezone().isoformat(timespec="seconds"), "why": why,
+             "argv": sys.argv, "pid": os.getpid(), "ppid": ppid, "parent": parent, "cwd": os.getcwd(),
+             "registry_dir": str(reg), "config": str(hubconf.config_dir()), "home": os.environ.get("HOME"),
+             "state": str(hubconf.STATE)}
+    try:
+        with REFUSED_LOG.open("a") as f:
+            f.write(json.dumps(entry, ensure_ascii=False) + "\n")
+    except OSError:
+        pass
+    return f"at {entry['at']} by pid {entry['pid']} (parent {ppid}: {(parent or '?')[:200]}), argv {sys.argv}, " \
+           f"cwd {entry['cwd']}, config {entry['config']}; log {REFUSED_LOG}"
+
+
 def refresh(only: list[str] | None = None, rebuild: bool = False) -> dict:
     """Validate the whole registry, refresh the cache and index.json, return the index."""
     CACHE.mkdir(parents=True, exist_ok=True)
@@ -478,8 +503,9 @@ def refresh(only: list[str] | None = None, rebuild: bool = False) -> dict:
     except (OSError, ValueError):
         old = {}
     if not rebuild and (why := wrong_registry(old, reg, files)):
-        print(f"registry: {why}", file=sys.stderr)
-        return {**old, "errors": {**(old.get("errors") or {}), "(registry)": [why]}}
+        who = record_refusal(why, reg)
+        print(f"registry: {why}\n  {who}", file=sys.stderr)
+        return {**old, "errors": {**(old.get("errors") or {}), "(registry)": [why, who]}}
     # The platform's own registry entry is read wherever registry_dir is, and always from the platform repo: a file
     # with the same name in the user's registry (e.g. an extra copy made during the move) isn't used, or the
     # platform's updates to its own entry would never take effect

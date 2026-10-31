@@ -53,6 +53,13 @@ class Guard(unittest.TestCase):
         self.assertIn("not rebuilt", r.stderr)
         self.assertEqual(self.users(), ["proj-a"])
         self.assertTrue((self.state / "registry" / "proj-a.json").exists(), "the cache stays")
+        log = [json.loads(l) for l in (self.state / "registry-refused.jsonl").read_text().splitlines()]
+        self.assertEqual(len(log), 1)
+        self.assertEqual((log[0]["config"], log[0]["state"], log[0]["argv"][1:]),
+                         (str(self.tmp / "b"), str(self.state), ["check"]))
+        for k in ("at", "why", "pid", "ppid", "parent", "cwd", "home"):
+            self.assertIn(k, log[0])
+        self.assertIn(f"pid {log[0]['pid']}", r.stderr, "the error names the caller too")
         self.assertEqual(self.check("b", "--rebuild").returncode, 0)
         self.assertEqual(self.users(), ["proj-b"])
         self.assertEqual(self.check("b").returncode, 0, "rebuilt from b, b may refresh it again")
