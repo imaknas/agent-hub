@@ -288,7 +288,7 @@ class EvalScores(unittest.TestCase):
         self.assertIsNone(r["resolve"])   # the project is not in the registry
         self.assertEqual(r["stale_kept"], 0.0)
         r = e2.anchor_scores(case, before, kept)
-        self.assertEqual((r["stale_fixed"], r["stale_kept"], r["retention"]), (1.0, 1.0, 0.5))
+        self.assertEqual((r["stale_fixed"], r["stale_kept"], r["retention"]), (1.0, 1.0, 1.0))
         self.assertEqual(e2.anchor_scores(case, before, dropped)["stale_kept"], 1.0)   # anchor and path both gone
         (case / "args.json").write_text(json.dumps({"owner": OWNER, "project": "nowhere",
                                                     "anchors": [{"raw": "src/gone.py", "statement": "⚓`src/gone.py`"}]}))

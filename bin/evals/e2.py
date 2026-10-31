@@ -464,7 +464,7 @@ def anchor_scores(case: pathlib.Path, before: str, after: str) -> dict:
     """docs/design/state-anchors.md: what a run did with anchors. added: anchors in after not in before; grounded: the
     share of added anchors whose path occurs in what the librarian was shown (memory diff, STATE.md before, the
     reference index): an ungrounded one is a guessed path; in_todo: anchors inside the to-do section (must be 0);
-    retention: the share of before's anchors still in after (cases that have some); stale_fixed: the share of the
+    retention: the share of before's anchors still in after, those the stale note named aside (cases that have some); stale_fixed: the share of the
     anchors the stale note named that are gone from after; stale_kept: the share of the statements the note named still
     in after, anchors and code spans aside (the note asks to drop most anchors but keep their statements); resolve: the share of added anchors that resolve (ok,
     pending) against the project's workspace today (approximate: the code moved on since the case); growth:
@@ -489,7 +489,8 @@ def anchor_scores(case: pathlib.Path, before: str, after: str) -> dict:
             "grounded": mean([state_anchors.parse(x)[0].rstrip("/") in shown for x in added]) if added else None,
             "resolve": mean([repo.resolve(x).outcome in ("ok", "pending") for x in new]) if new and repo else None,
             "in_todo": state_anchors.in_todo(after, owner),
-            "retention": round(sum(x in f for x in b) / len(b), 3) if b else None,
+            "retention": round(sum(x in f for x in keep) / len(keep), 3) if (keep := [x for x in b if x not in noted])
+            else None,
             "stale_fixed": round(sum(x not in f for x in noted) / len(noted), 3) if noted else None,
             "stale_kept": mean(kept) if kept else None,
             "growth": round(len(after) / len(before), 3) if before else None}
