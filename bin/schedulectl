@@ -278,7 +278,7 @@ def main():
 
     cmd, rest = args[0], args[1:]
     if cmd in ("status", "run", "stop", "start") and hubconf.service_manager() is None:
-        print(_("schedulectl {cmd}: {reason}", cmd=cmd, reason=hubconf.NO_SERVICE_MANAGER))
+        print(_("schedulectl {cmd}: {reason}", cmd=cmd, reason=hubconf.no_service_manager()))
         sys.exit(2)
     if cmd == "list":
         cmd_list()

@@ -196,7 +196,7 @@ def install_core_plists(dry: bool) -> list[str]:
     sm = hubconf.service_manager()
     if sm is None:
         return [_("⚠️ {reason}; to run the nightly flow, schedule `bin/py bin/scheduler.py` yourself (every 15 minutes)",
-                  reason=hubconf.NO_SERVICE_MANAGER)]
+                  reason=hubconf.no_service_manager())]
     if sm == "systemd":   # 同一份 launchd/ 樣板翻成 user unit(bin/systemd_units.py)
         import systemd_units
         done = []
@@ -504,7 +504,7 @@ def cmd_doctor(argv: list[str]) -> int:
 
     uid = os.getuid()
     if hubconf.service_manager() is None:
-        add("bad", _("scheduler, watchdog: {reason}", reason=hubconf.NO_SERVICE_MANAGER),
+        add("bad", _("scheduler, watchdog: {reason}", reason=hubconf.no_service_manager()),
             _("schedule `bin/py bin/scheduler.py` yourself (every 15 minutes)"))
     elif hubconf.service_manager() == "systemd":
         import systemd_units

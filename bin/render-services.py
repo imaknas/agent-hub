@@ -241,7 +241,7 @@ def apply(index: dict | None = None) -> list:
 
 def main() -> int:
     if hubconf.service_manager() is None:
-        print(_("services: {reason}", reason=hubconf.NO_SERVICE_MANAGER))
+        print(_("services: {reason}", reason=hubconf.no_service_manager()))
         return 0
     dry = "--dry-run" in sys.argv
     only = sys.argv[sys.argv.index("--only") + 1] if "--only" in sys.argv else None

@@ -23,7 +23,7 @@ class Layout(unittest.TestCase):
     def setUp(self):
         self.hub = pathlib.Path(tempfile.mkdtemp())
         (self.hub / "bin").mkdir()
-        for f in ("hubconf.py", "hubpaths.sh", "scheduler-watchdog.py"):
+        for f in ("hubconf.py", "i18n.py", "hubpaths.sh", "scheduler-watchdog.py"):
             shutil.copy(ROOT / "bin" / f, self.hub / "bin")
 
     def tearDown(self):

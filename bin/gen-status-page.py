@@ -198,7 +198,7 @@ def main() -> None:
         alerts.append(("bad", _("The scheduler watchdog (local.agent-hub-scheduler-watchdog.timer) is not scheduled: "
                                 "nobody is told when the scheduler stops. Run agenthub init")))
     elif sm is None:
-        alerts.append(("bad", _("{text}.", text=hubconf.NO_SERVICE_MANAGER)))
+        alerts.append(("bad", _("{text}.", text=hubconf.no_service_manager())))
     elif sm == "launchd" and subprocess.run(["launchctl", "print", f"gui/{os.getuid()}/local.agent-hub-scheduler-watchdog"],
                                             capture_output=True).returncode != 0:
         alerts.append(("bad", _("The scheduler watchdog (local.agent-hub-scheduler-watchdog) is not loaded: nobody is told "

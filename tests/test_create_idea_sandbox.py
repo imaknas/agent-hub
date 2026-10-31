@@ -39,7 +39,7 @@ class CleanupOnFailure(unittest.TestCase):
         self.hub = self.tmp / "hub"
         (self.hub / "bin").mkdir(parents=True)
         (self.hub / "projects").mkdir()
-        for f in ("create-idea-sandbox.py", "hubconf.py"):
+        for f in ("create-idea-sandbox.py", "hubconf.py", "i18n.py"):
             shutil.copy(ROOT / "bin" / f, self.hub / "bin" / f)
         fake = self.hub / "bin" / "onboard-project.sh"
         fake.write_text(FAKE_ONBOARD)

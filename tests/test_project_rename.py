@@ -45,7 +45,7 @@ class Script(unittest.TestCase):
         self.hub = self.tmp / "hub"
         (self.hub / "bin").mkdir(parents=True)
         (self.hub / "projects").mkdir()
-        for f in ("project-rename.py", "hubconf.py"):
+        for f in ("project-rename.py", "hubconf.py", "i18n.py"):
             shutil.copy(ROOT / "bin" / f, self.hub / "bin" / f)
         for name, text in (("rename-project.sh", FAKE_RENAME),):
             (self.hub / "bin" / name).write_text(text)

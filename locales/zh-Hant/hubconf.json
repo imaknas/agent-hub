@@ -1,0 +1,9 @@
+{
+ "party({role}) needs a project": "party({role}) 要給 project",
+ "unknown role {role}": "不認得的角色 {role}",
+ "personal assistant": "個人助理",
+ "this system has no supported service manager (neither macOS launchd nor the Linux systemd user level): the scheduler, the watchdog and projects' long-running services will not run by themselves": "這個系統沒有支援的服務管理器(macOS 的 launchd、Linux 的 systemd user 層級都沒有):排程器、看門狗、專案的長駐服務都不會自己跑",
+ "hubconf.py get: {key} is not set or not a single value": "hubconf.py get:{key} 沒有設定或不是單一值",
+ "hubconf.py path: {key} is not set": "hubconf.py path:{key} 沒有設定",
+ "usage: hubconf.py roster | ideas | get <key> | path <key> | host server | dir config|data|secrets|state|logs": "用法:hubconf.py roster | ideas | get <key> | path <key> | host server | dir config|data|secrets|state|logs"
+}

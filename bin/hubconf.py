@@ -30,6 +30,11 @@ import pathlib
 import re
 import sys
 
+sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
+import i18n  # noqa: E402
+
+_ = i18n.domain(__file__)
+
 ROOT = pathlib.Path(os.environ.get("AGENT_HUB_ROOT") or pathlib.Path(__file__).resolve().parents[1])
 POINTER = ROOT / ".hub-home"
 _cfg: dict | None = None
@@ -132,7 +137,7 @@ def nvm_bin() -> pathlib.Path | None:
     if not versions.is_dir():
         return None
     spec = "default"
-    for _ in range(5):  # alias 可以指到另一個 alias(lts/* → lts/jod → v22…)
+    for _hop in range(5):  # alias 可以指到另一個 alias(lts/* → lts/jod → v22…)
         f = nvm / "alias" / spec
         if not f.is_file():
             break
@@ -293,11 +298,11 @@ def party(role: str, project: str | None = None) -> str:
         return get("assistant.party_id") or get("assistant.project") or "assistant"
     if role in ("requester", "agent"):
         if not project:
-            raise ValueError(f"party({role!r}) 要給 project")
+            raise ValueError(_("party({role}) needs a project", role=repr(role)))
         return f"project:{project}"
     if role == "registrar":
         return f"{hub_project()}:registrar"
-    raise ValueError(f"不認得的角色 {role!r}")
+    raise ValueError(_("unknown role {role}", role=repr(role)))
 
 
 def former_names(project: str) -> list[str]:
@@ -323,7 +328,7 @@ def principal_is_legal_person() -> bool:
 
 def assistant_name() -> str:
     """個人助理給人看的名字(hub.json assistant.name);沒設定就是通稱。"""
-    return get("assistant.name") or "個人助理"
+    return get("assistant.name") or _("personal assistant")
 
 
 def fill_names(text: str) -> str:
@@ -479,8 +484,10 @@ def service_manager() -> str | None:
     return _SERVICE_MANAGER[0]
 
 
-NO_SERVICE_MANAGER = ("這個系統沒有支援的服務管理器(macOS 的 launchd、Linux 的 systemd user 層級都沒有):"
-                      "排程器、看門狗、專案的長駐服務都不會自己跑")
+def no_service_manager() -> str:
+    """Why nothing runs by itself on this system (service_manager() is None)."""
+    return _("this system has no supported service manager (neither macOS launchd nor the Linux systemd user level): the "
+             "scheduler, the watchdog and projects' long-running services will not run by themselves")
 
 
 def process_cwds() -> list[tuple[int, str, str]]:
@@ -533,7 +540,7 @@ def main(argv: list[str]) -> int:
     if len(argv) == 2 and argv[0] == "get":
         v = get(argv[1])
         if v is None or isinstance(v, (dict, list)):
-            print(f"hubconf.py get:{argv[1]} 沒有設定或不是單一值", file=sys.stderr)
+            print(_("hubconf.py get: {key} is not set or not a single value", key=argv[1]), file=sys.stderr)
             return 1
         print(v)
         return 0
@@ -550,7 +557,7 @@ def main(argv: list[str]) -> int:
     if len(argv) == 2 and argv[0] == "path":  # shell 腳本拿展開過的路徑(例:memory_copies),不要自己寫死
         v = p(argv[1])
         if v is None:
-            print(f"hubconf.py path:{argv[1]} 沒有設定", file=sys.stderr)
+            print(_("hubconf.py path: {key} is not set", key=argv[1]), file=sys.stderr)
             return 1
         print(v)
         return 0
@@ -558,7 +565,8 @@ def main(argv: list[str]) -> int:
         for name in ideas():
             print(name)
         return 0
-    print("用法:hubconf.py roster | ideas | get <key> | path <key> | host server | dir config|data|secrets|state|logs", file=sys.stderr)
+    print(_("usage: hubconf.py roster | ideas | get <key> | path <key> | host server | dir config|data|secrets|state|logs"),
+          file=sys.stderr)
     return 2
 
 
