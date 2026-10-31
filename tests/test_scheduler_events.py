@@ -423,3 +423,44 @@ class PlatformSettings(unittest.TestCase):
         with mock.patch.object(registry.isolation, "sandboxed", lambda doc: False):
             cmd = registry.scheduler_jobs(index, set())[0][0]["command"]
         self.assertTrue(cmd.startswith("RUN_AGENT_JOB_FOREGROUND=1 AGENT_JOB_POINT=agent-job-event AGENT_JOB_PROJECT=p "))
+
+
+class ConfinedMail(unittest.TestCase):
+    """A confined run (event agent job) uses the mail commands only as and for its own project."""
+
+    def setUp(self):
+        import importlib.machinery
+        import importlib.util
+        loader = importlib.machinery.SourceFileLoader("hubbus_conf", str(ROOT / "bin" / "hubbus"))
+        spec = importlib.util.spec_from_loader("hubbus_conf", loader)
+        self.hb = importlib.util.module_from_spec(spec)
+        loader.exec_module(self.hb)
+        p = mock.patch.dict(os.environ, {"AGENT_HUB_CONFINED": "1"})
+        p.start()
+        self.addCleanup(p.stop)
+
+    def refused(self, **a):
+        return self.hb.confined_refusal(types.SimpleNamespace(**{"sender": None, "task": None, "project": None, **a}), "p")
+
+    def test_refusals(self):
+        self.assertIsNone(self.refused(cmd="send", type="info"))
+        self.assertIsNone(self.refused(cmd="send", type="question"))
+        self.assertIsNone(self.refused(cmd="inbox"))
+        self.assertIsNone(self.refused(cmd="send", type="info", sender="p"))
+        for a in ({"cmd": "send", "type": "info", "sender": "q"},
+                  {"cmd": "send", "type": "manifest.update"},
+                  {"cmd": "send", "type": "task"},
+                  {"cmd": "send", "type": "done", "task": "k1"},
+                  {"cmd": "inbox", "project": "q"},
+                  {"cmd": "publish"}, {"cmd": "record-publish"}, {"cmd": "dispatch"}):
+            self.assertTrue(self.refused(**a), a)
+        with self.assertRaises(SystemExit):
+            self.hb.confined_letter({"to_project": "q", "source": "r"}, "p")
+        self.hb.confined_letter({"to_project": "p", "source": "r"}, "p")
+        with mock.patch.dict(os.environ, {"AGENT_HUB_CONFINED": ""}):
+            self.assertIsNone(self.refused(cmd="send", type="manifest.update", sender="q"))
+
+    def test_llm_marks_confined_runs(self):
+        src = (ROOT / "bin" / "llm.py").read_text()
+        self.assertIn('if spec.get("settings") == "platform":\n        # a confined run', src)
+        self.assertIn('env["AGENT_HUB_CONFINED"] = "1"', src)

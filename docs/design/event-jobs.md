@@ -1,6 +1,6 @@
 # Event-triggered jobs
 
-> agent-hub session · 2026-11-01 · r7. Item 1 of "Build" in `competitive-gaps.md`: a registry job can start when
+> agent-hub session · 2026-11-01 · r8. Item 1 of "Build" in `competitive-gaps.md`: a registry job can start when
 > matching bus events appear, not only on a clock or `after:` another job. External sources (CI finished, a webhook)
 > are out of scope: they will arrive later as bus events from one receiver, so jobs only ever react to bus events.
 >
@@ -35,7 +35,11 @@
 >
 > r7 after a sixth review: the platform's sandbox block for an event job sets `autoAllowBashIfSandboxed: false`
 > (the CLI defaults it to true, which approves any sandboxed Bash command before `allow:` is consulted; verified live
-> both ways). Doctor lists the feature against the `confine` port. No blocking finding remains after this.
+> both ways). Doctor lists the feature against the `confine` port.
+>
+> r8 after a seventh review (a hunt for CLI defaults; none found, tested live): the mail commands themselves could
+> widen the boundary (`send --from` is unchecked, `manifest.update` rewrites a registry entry's `run` without the
+> owner), so a confined run uses them only as and for its own project (3.2).
 
 ## 1. What exists
 
@@ -146,7 +150,12 @@ The trust model (1: the bus is a peer log) decides what an event job may do with
   `autoAllowBashIfSandboxed` defaults to true, which would let any sandboxed Bash command past `allow:`), the deny list, and the mail commands (`agenthub send/inbox/done…`; not raw
   `hubbus`, merging or `cap-run`). So the boundary is exactly `allow:` plus those; permissions a person accumulated in
   the project's settings, and the project's hooks, don't apply (memory notes the job writes are committed by the
-  hourly memory sync). Still loaded: managed (admin) settings, which are the machine owner's, and the project's
+  hourly memory sync). The mail commands are narrowed too: `llm.py` marks a confined run (`AGENT_HUB_CONFINED`),
+  and `hubbus` then sends only as the run's own project (no `--from`), never `manifest.update` (a registry rewrite,
+  whose `run` fields the platform applies without the owner) or the owner's to-dos (`task`, `drop`, `--task`), reads
+  and closes only its own project's letters, and refuses `publish`, `record-publish` and the relays. An `allow:` that
+  names an interpreter (`Bash(python3:*)`) grants arbitrary code within the sandbox, by definition, including
+  reading the run's environment. Still loaded: managed (admin) settings, which are the machine owner's, and the project's
   rules file (`CLAUDE.md`), which is instructions, not permissions. MCP servers stay off (`run-agent-job.sh` passes
   `--strict-mcp-config`; `connectors: true` is refused with `trigger`, since it would turn that off). The sandbox
   comes from the policy, not from whatever is rendered in the workspace at that moment. For Claude Code the adapter
@@ -336,7 +345,9 @@ The page reads the bus through `event_jobs`, the same functions the scheduler us
 ## 11. Out of scope, recorded
 
 - The receiver for external sources and its auth.
-- Authenticated bus writes (3.2).
+- Authenticated bus writes (3.2). Until then, any process that can write the bus can also send a `manifest.update`
+  in another project's name, and `registry.py apply-updates` applies changed `run` fields (jobs, services) without the
+  owner; event jobs are kept out of that path (3.2), but sessions and other agents are not. Both belong to that task.
 - Waking the scheduler on publish.
 
 ## 12. Files

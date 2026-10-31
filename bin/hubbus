@@ -1339,6 +1339,33 @@ def fork_result(c, r) -> tuple[bool, str]:
     return bool(text or done or stale), "\n  ".join(parts)
 
 
+CONFINED_TYPES = ("manifest.update", "task", "drop")
+
+
+def confined_refusal(a, here) -> str | None:
+    """A confined run (AGENT_HUB_CONFINED, set by llm.py for settings: platform points, i.e. event-triggered agent jobs
+    that anyone who can write the bus can start) uses the mail commands only as its own project, for its own letters:
+    no other sender, no registry rewrite (manifest.update), no owner to-dos, no other project's mailbox."""
+    if not os.environ.get("AGENT_HUB_CONFINED"):
+        return None
+    if getattr(a, "sender", None) and a.sender != here:
+        return _("hubbus: a confined run sends only as its own project (no --from)")
+    if a.cmd == "send" and (a.type in CONFINED_TYPES or getattr(a, "task", None)):
+        return _("hubbus: a confined run can't send {type} (registry changes and the owner's to-dos need a person)",
+                 type=a.type)
+    if a.cmd == "inbox" and getattr(a, "project", None) and a.project != here:
+        return _("hubbus: a confined run reads only its own project's mailbox")
+    if a.cmd in ("publish", "record-publish", "bridge", "dispatch", "reconcile-questions"):
+        return _("hubbus: a confined run can't use {cmd}", cmd=a.cmd)
+    return None
+
+
+def confined_letter(r, here) -> None:
+    """A confined run touches only letters to or from its own project (show, thread, ack, done)."""
+    if os.environ.get("AGENT_HUB_CONFINED") and here not in (r["to_project"], r["source"]):
+        sys.exit(_("hubbus: a confined run reads only its own project's letters"))
+
+
 def chain_env(rows) -> dict:
     """The environment for a handler of these letters: the chain of the runs that sent them, so what the handler
     publishes stays in that chain although it isn't the run's child process (event-jobs.md section 7)."""
@@ -1736,6 +1763,8 @@ def main() -> None:
         # scheduled run's own doing, so they don't take the run's chain; dispatch passes each letter's chain on itself
         os.environ.pop(event_jobs.CHAIN_ENV, None)
         os.environ.pop(event_jobs.DEPTH_ENV, None)
+    if os.environ.get("AGENT_HUB_CONFINED") and (why := confined_refusal(a, project_of(pathlib.Path.cwd()))):
+        sys.exit(why)
 
     if a.cmd in WRITES and (how := platform_mails()):
         sys.exit(_("hubbus: this is work the platform sends letters for (recognized by the {how}): write the letters "
@@ -1758,7 +1787,9 @@ def main() -> None:
         return
     if a.cmd == "thread":
         c = db()
-        for r in thread_chain(c, must_message(c, a.id)):
+        r = must_message(c, a.id)
+        confined_letter(r, project_of(pathlib.Path.cwd()))
+        for r in thread_chain(c, r):
             print(fmt(r))
         return
     if a.cmd == "open-questions":
@@ -1877,6 +1908,7 @@ def main() -> None:
             c.execute("COMMIT")
     elif a.cmd == "show":
         r = must_message(c, a.id)
+        confined_letter(r, here)
         print(fmt(r))
         for e in c.execute("SELECT * FROM events WHERE ref=? ORDER BY seq", (a.id,)):
             print(f"  {e['ts'][5:16]} {e['type']} {e['payload']}")
@@ -1886,6 +1918,7 @@ def main() -> None:
         # hook delivery an ack recorded nothing)
         for i in a.ids:
             r = must_message(c, i)
+            confined_letter(r, here)
             publish(c, f"{r['id']}:ack:{session or 'cli'}", "message.delivered", r["to_project"], r["to_project"], r["id"],
                     {"session": session, "via": "ack"})
         c.execute("COMMIT")
@@ -1893,6 +1926,7 @@ def main() -> None:
         for i in a.ids:
             # a letter or a record (once the registrar has applied a record, it's done too)
             r = get_event(c, i) or must_message(c, i)
+            confined_letter(r, here)
             publish(c, f"{i}:done", "message.done", here or r["to_project"], r["to_project"], i,
                     {"note": a.note or _("handled"), "session": session})
             print(f"{i} done")

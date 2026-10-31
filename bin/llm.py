@@ -215,6 +215,9 @@ def run(a) -> int:
         env = {k: v for k, v in os.environ.items() if k not in drop}
     # the process started (hooks included) knows it's a platform headless call: hubbus doesn't deliver mail to it
     env["HUB_LLM_POINT"] = a.point
+    if spec.get("settings") == "platform":
+        # a confined run (docs/design/event-jobs.md 3.2): the mail commands act only as and for its own project
+        env["AGENT_HUB_CONFINED"] = "1"
     # agents the platform starts can reach `agenthub …` (the rules file and mailbox prompt name only the command, not
     # where the hub is installed)
     env["PATH"] = f"{hubconf.ROOT / 'bin'}:{env.get('PATH', '')}".rstrip(":")

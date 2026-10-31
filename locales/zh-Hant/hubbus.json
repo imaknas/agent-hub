@@ -120,5 +120,10 @@
  "hubbus: {key!r} is not a valid question id": "hubbus: {key!r} 不是合格的問題 id",
  "answered in a session of {project}": "在 {project} 的 session 裡回答了",
  "Question: {text}": "問題:{text}",
- "Carry on with it, then `agenthub done {id}`; without a done, librarian applies it to STATE.md tonight.": "照這個繼續,然後 `agenthub done {id}`;沒 done 的話,librarian 今晚會套用進 STATE.md。"
+ "Carry on with it, then `agenthub done {id}`; without a done, librarian applies it to STATE.md tonight.": "照這個繼續,然後 `agenthub done {id}`;沒 done 的話,librarian 今晚會套用進 STATE.md。",
+ "hubbus: a confined run can't send {type} (registry changes and the owner's to-dos need a person)": "hubbus:受限的執行不能寄 {type}(改登錄跟主人的待辦要有人來)",
+ "hubbus: a confined run can't use {cmd}": "hubbus:受限的執行不能用 {cmd}",
+ "hubbus: a confined run reads only its own project's letters": "hubbus:受限的執行只能看自己專案的信",
+ "hubbus: a confined run reads only its own project's mailbox": "hubbus:受限的執行只能看自己專案的信箱",
+ "hubbus: a confined run sends only as its own project (no --from)": "hubbus:受限的執行只能用自己專案的名義寄(不能 --from)"
 }
