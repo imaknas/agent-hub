@@ -114,16 +114,33 @@ def _hubbus():
 
 
 def letters_text(hb, c, rows) -> str:
-    out = []
+    """the letters of a mailbox request as the prompt lists them (the bus rows, with the letter each one answers)"""
+    letters = []
     for r in rows:
         p = hb.payload(r)
-        thread = ""
+        x = {"id": r["id"], "source": r["source"], "type": p.get("type"), "text": p.get("text", "")}
         if r["ref"]:
             prev = c.execute("SELECT * FROM events WHERE id=?", (r["ref"],)).fetchone()
             if prev is not None:
-                thread = f"\n  (回覆 {r['ref']}:{hb.payload(prev).get('text', '')[:600]})"
-        out.append(f"- id {r['id']},來自 {r['source']},類型 {p.get('type')}:\n  {p.get('text', '')}{thread}")
+                x.update(reply_to=r["ref"], reply_text=hb.payload(prev).get("text", ""))
+        letters.append(x)
+    return letter_lines(letters)
+
+
+def letter_lines(letters: list[dict]) -> str:
+    """letters: {id, source, type, text[, reply_to, reply_text]}; the letter text is data and stays as it is"""
+    out = []
+    for x in letters:
+        thread = f"\n  (reply to {x['reply_to']}: {x['reply_text'][:600]})" if x.get("reply_to") else ""
+        out.append(f"- id {x['id']}, from {x['source']}, type {x['type']}:\n  {x['text']}{thread}")
     return "\n".join(out)
+
+
+def mailbox_prompt(letters: str, today: str, **names) -> str:
+    """judgment point mailbox-propose's prompt (templates/prompts/mailbox-propose.md, in English; the agent writes in the
+    content language). names: owner= / assistant= / lang= pinned by an eval"""
+    import prompts
+    return prompts.render("mailbox-propose", letters=letters, today=today, **names)
 
 
 def _status(project: str, state: str, **extra) -> None:
@@ -151,9 +168,7 @@ def _mailbox(project: str, ids: list[str]) -> int:
     if not rows or not ws:
         print(_("{project}: no letters to handle", project=project), file=sys.stderr)
         return 1
-    tpl = (BIN.parent / "templates" / "prompts" / "mailbox-propose.md").read_text()
-    prompt = hubconf.fill_names(tpl).replace("{{letters}}", letters_text(hb, c, rows)).replace(
-        "{{today}}", datetime.date.today().isoformat())
+    prompt = mailbox_prompt(letters_text(hb, c, rows), datetime.date.today().isoformat())
     res = run(project, ws, "mailbox-propose", prompt, [".agent-memory/memory/**"])
     sent = []
     out = res["output"] if isinstance(res.get("output"), dict) else {}

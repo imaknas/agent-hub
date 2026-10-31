@@ -54,7 +54,8 @@ POINT_CASES = {"librarian-state": "librarian-state", "librarian-state-edits": "l
                "librarian-index": "librarian-index", "librarian-index-edits": "librarian-index",
                "librarian-todo-format": "librarian-todo-format", "consolidate": "consolidate"}
 # points whose freeze / run / score live in their own module bin/evals/e2_<point>.py (their shapes differ)
-PLUGINS = {"consolidate": "e2_consolidate", "reflect-week": "e2_reflect"}
+PLUGINS = {"consolidate": "e2_consolidate", "reflect-week": "e2_reflect", "mailbox-propose": "e2_propose",
+           "lease-handover": "e2_handover"}
 # The code before step 5 (docs/design/i18n.md): renders the `old` arm of a case frozen after the prompts changed
 OLD_REF = "ebd7f90"
 ROSTER = re.compile(r"<!-- roster:begin.*?<!-- roster:end -->", re.S)

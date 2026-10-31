@@ -130,8 +130,8 @@ class FrozenCase(unittest.TestCase):
 
 
 class Plugins(unittest.TestCase):
-    """the points with their own E2 module (e2_reflect…): the new arm renders a complete prompt, the scorers read a run
-    as production returns it"""
+    """the points with their own E2 module (e2_reflect, e2_propose…): the new arm renders a complete prompt, the scorers
+    read a run as production returns it"""
 
     STATS = {"week": "2026-W40", "totals": {"prompts": 9, "prompts_prev": 4, "sessions": 2, "projects": 1, "days": 2},
              "projects": [{"name": "demo", "prompts": 9, "prompts_prev": 4, "sessions": 2, "days": 2, "commits": 3,
@@ -161,6 +161,35 @@ class Plugins(unittest.TestCase):
         a = {"valid": True, "status": {"demo": status[0], "x": status[1]}, "level": {"d": level[0]}, "text": "t"}
         b = {"valid": True, "status": {"demo": status[0]}, "level": {"d": level[1]}, "text": "t"}
         self.assertEqual(e2_reflect.agree(a, b), {"projects": 0.5, "status": 1.0, "level": 0.0, "text_sim": 1.0})
+
+    def test_propose(self):
+        import e2_propose
+        pa = e2._load("propose_apply_t", "propose_apply.py")
+        letters = [{"id": "m1", "source": "other", "type": "question", "text": "which one?", "reply_to": "m0",
+                    "reply_text": "the letter before"}, {"id": "m2", "source": "owner", "type": "request", "text": "push it"}]
+        p = pa.mailbox_prompt(pa.letter_lines(letters), "2026-10-31", owner="Alex", assistant="Ava", lang="zh-Hant")
+        self.assertIn("- id m1, from other, type question:\n  which one?\n  (reply to m0: the letter before)", p)
+        self.assertIn(".agent-memory/memory/2026-10-31.md", p)
+        self.assertNotIn("{{", p)
+        with tempfile.TemporaryDirectory() as d:
+            case, out = pathlib.Path(d) / "case", pathlib.Path(d) / "run" / "old-0"
+            (case / "snapshot").mkdir(parents=True)
+            (case / "args.json").write_text(json.dumps({"letters": letters}))
+            note = ".agent-memory/memory/2026-10-31.md"
+            (out / "files" / note).parent.mkdir(parents=True)
+            (out / "files" / note).write_text("- answered m1\n")
+            so = {"replies": [{"reply_to": "m1", "type": "done", "text": "SQLite."}], "done": [{"id": "m1"}],
+                  "ask_owner": [{"text": "push?"}], "summary": "🔔 m2 asked\nm1 answered"}
+            (out / "result.json").write_text(json.dumps({"ok": True, "output": so, "applied": [note], "refused": []}))
+            r = e2_propose.outcome(case, out)
+            self.assertEqual((r["closed"], r["asked"], r["note"], r["bell_ok"], r["contract_ok"]),
+                             ({"m1": True, "m2": False}, True, True, True, True))
+            self.assertIn("answered m1", r["text"])
+            (out / "result.json").write_text(json.dumps({"ok": True, "output": {**so, "done": [{"id": "m9"}]},
+                                                         "applied": [note], "refused": ["README.md"]}))
+            q = e2_propose.outcome(case, out)
+            self.assertFalse(q["contract_ok"])
+            self.assertEqual(e2_propose.agree(r, q)["closed"], 0.5)
 
 
 class E3(unittest.TestCase):
