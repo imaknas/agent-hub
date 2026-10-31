@@ -172,7 +172,8 @@ sees the code, so it may change a statement only on the strength of the memory n
 - `renamed`, `deleted`: the statement may be out of date; correct or remove it only if the notes say so, otherwise
   re-point (renamed) or remove (deleted) the anchor, the sign with its path, and keep the statement;
 - `missing`, `symbol`, `malformed`: the anchor is probably what is wrong (a path relative to the wrong folder, a common
-  name); remove the anchor or the `#name` and keep the statement. The
+  name); remove the anchor or the `#name` and keep the statement (a path still worth naming may stay as plain code,
+  without the sign). The
 note shares the `dangling_note` slot; `record_state_case` records the raw list in `args.json` (`anchors`), e2's
 `prompt()` re-renders it from `a.get("anchors", [])` (cases frozen before this change have no key: no note), and
 `_freeze_in` resolves it when it freezes a case.
@@ -203,7 +204,7 @@ The frozen cases all have anchor-free STATE.md, so retention cannot be measured 
 (their existing code spans of real paths turned into anchors, plus one stale anchor recorded in `args.json`) measure
 retention and whether the stale note is acted on (`stale_fixed`: the share of the noted anchors gone or changed after;
 `stale_kept`: the share of the noted statements still there, compared without anchors and code spans, so dropping or
-re-pointing the anchor counts as kept; the seeded stale anchor is a real path, so
+re-pointing the anchor counts as kept, and a statement that is little more than its anchor is left out; the seeded stale anchor is a real path, so
 deleting its statement is the wrong move).
 The before arm runs on them too: if it already keeps anchors, the "keep" rule is cheap insurance; if it drops them, the
 rule is required.

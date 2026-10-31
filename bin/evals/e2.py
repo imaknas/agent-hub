@@ -479,9 +479,10 @@ def anchor_scores(case: pathlib.Path, before: str, after: str) -> dict:
     noted = [x["raw"] for x in a.get("anchors") or []]
     # the text without anchors or code spans: the note asks to drop or re-point anchors, and either must count as kept
     bare = lambda t: " ".join(re.sub(r"`[^`\n]*`", " ", state_anchors.ANCHOR.sub(" ", t)).split())   # noqa: E731
-    after_lines = [bare(state_anchors.statement(line)) for line in after.splitlines()]
-    kept = [max((difflib.SequenceMatcher(None, bare(x["statement"]), l).ratio() for l in after_lines), default=0) >= 0.8
-            for x in a.get("anchors") or []]
+    after_lines = [t for line in after.splitlines() if (t := bare(state_anchors.statement(line)))]
+    # a statement that is little more than its anchor has nothing to compare: left out (None), not counted kept
+    kept = [max((difflib.SequenceMatcher(None, t, l).ratio() for l in after_lines), default=0) >= 0.8
+            for x in a.get("anchors") or [] if len(t := bare(x["statement"])) >= 8]
     new = [x for x in state_anchors.find(after, owner) if x.raw in added]
     repo, _why = state_anchors.Repo.open(hubconf.path((hubconf.roster().get(a["project"]) or {}).get("workspace")))
     return {"anchors": len(f), "added": len(added),

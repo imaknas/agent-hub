@@ -290,6 +290,9 @@ class EvalScores(unittest.TestCase):
         r = e2.anchor_scores(case, before, kept)
         self.assertEqual((r["stale_fixed"], r["stale_kept"], r["retention"]), (1.0, 1.0, 0.5))
         self.assertEqual(e2.anchor_scores(case, before, dropped)["stale_kept"], 1.0)   # anchor and path both gone
+        (case / "args.json").write_text(json.dumps({"owner": OWNER, "project": "nowhere",
+                                                    "anchors": [{"raw": "src/gone.py", "statement": "⚓`src/gone.py`"}]}))
+        self.assertIsNone(e2.anchor_scores(case, "- ⚓`src/gone.py`\n", "- Other thing.\n\n- More.\n")["stale_kept"])
 
 
 if __name__ == "__main__":
