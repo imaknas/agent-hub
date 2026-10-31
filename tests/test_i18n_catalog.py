@@ -2,7 +2,8 @@
 
 For every script that does `_ = i18n.domain(__file__)`: each `_("…")` msgid is English, has an entry in each
 non-English catalog (`locales/<lang>/<domain>.json`), the entry keeps exactly the msgid's placeholders, the call passes
-exactly those placeholders, and the catalog has no entries the code no longer uses.
+exactly those placeholders, and the catalog has no entries the code no longer uses. Shell scripts likewise for each
+`hub_msg "…"` / `hub_say "…"` (bin/hubpaths.sh): the domain is the file's own name.
 
     bin/py -m unittest tests.test_i18n_catalog
 """
@@ -61,6 +62,52 @@ def messages(tree: ast.AST) -> tuple[set[str], list[tuple[int, str, set[str] | N
     return names, calls
 
 
+SHELL_CALL = re.compile(r'\bhub_(?:msg|say)[ \t]+')
+
+
+def shell_messages(text: str) -> list[tuple[int, str | None, set[str]]]:
+    """(line, msgid, names passed as name=value) of each hub_msg / hub_say call in a shell script; msgid None = not a
+    plain "…" literal. A call's arguments end at an unquoted ; | & ) > < or the end of the (continued) line."""
+    text = text.replace("\\\n", " \r")   # a continued line: \r keeps the line count
+    calls = []
+    for m in SHELL_CALL.finditer(text):
+        if text[max(0, m.start() - 1)] in "_\"'":
+            continue
+        line = text.count("\n", 0, m.start()) + text.count("\r", 0, m.start()) + 1
+        rest = text[m.end():]
+        lit = re.match(r'"((?:[^"\\$`]|\\["\\])*)"', rest)
+        if not lit:
+            calls.append((line, None, set()))
+            continue
+        msgid = re.sub(r'\\(["\\])', r"\1", lit.group(1))
+        args, quote, i = "", None, lit.end()
+        while i < len(rest):
+            c = rest[i]
+            if quote:
+                if c == "\\" and quote == '"':
+                    args += c + rest[i + 1:i + 2]
+                    i += 2
+                    continue
+                quote = None if c == quote else quote
+            elif c in "'\"":
+                quote = c
+            elif c in ";|&)><\n":
+                break
+            args += c
+            i += 1
+        calls.append((line, msgid, set(re.findall(r'(?:^|\s)([A-Za-z_]\w*)=', args))))
+    return calls
+
+
+def shell_sources():
+    for f in sorted((ROOT / "bin").iterdir()):
+        if not f.is_file() or f.name == "hubpaths.sh" or f.suffix == ".py":
+            continue
+        text = f.read_text(errors="ignore")
+        if not text.startswith("#!/bin/sh -c exec") and SHELL_CALL.search(text):
+            yield f, text
+
+
 class Catalogs(unittest.TestCase):
     def test_code_and_catalogs_match(self):
         problems, seen = [], {}
@@ -93,6 +140,24 @@ class Catalogs(unittest.TestCase):
                         problems.append(f"{where}: no {lang} entry for {msgid[:60]!r}")
                     elif fields(cat[msgid]) != fields(msgid):
                         problems.append(f"{where}: {lang} placeholders differ for {msgid[:60]!r}")
+        for f, text in shell_sources():
+            rel, used = f.relative_to(ROOT), seen.setdefault(f.name, set())
+            for line, msgid, names in shell_messages(text):
+                where = f"{rel}:{line}"
+                if msgid is None:
+                    problems.append(f"{where}: the msgid must be a plain \"…\" literal (no $ or backquote)")
+                    continue
+                used.add(msgid)
+                if CJK.search(msgid):
+                    problems.append(f"{where}: msgid is not English: {msgid[:50]}")
+                if names != placeholders(msgid):
+                    problems.append(f"{where}: passes {sorted(names)}, msgid has {sorted(placeholders(msgid))}")
+                for lang in LANGS:
+                    cat = i18n.catalog(f.name, lang)
+                    if msgid not in cat:
+                        problems.append(f"{where}: no {lang} entry for {msgid[:60]!r}")
+                    elif fields(cat[msgid]) != fields(msgid):
+                        problems.append(f"{where}: {lang} placeholders differ for {msgid[:60]!r}")
         for lang in LANGS:
             for cat_file in sorted((i18n.LOCALES / lang).glob("*.json")):
                 stale = set(json.loads(cat_file.read_text())) - seen.get(cat_file.stem, set())
@@ -104,6 +169,14 @@ class Catalogs(unittest.TestCase):
         self.assertEqual(_.domain, "demo-tool")
         self.assertEqual(i18n.translate("no-such-domain", "Hello {name}", {"name": "a"}, "zh-Hant"), "Hello a")
         self.assertEqual(i18n.translate("no-such-domain", "{literal}", {}, "zh-Hant"), "{literal}", "no kw, no format")
+
+    def test_shell_extractor(self):
+        src = ('x="$(hub_msg "Hello {name}, \\"q\\"" name="$n")"; echo\n'
+               'hub_say "a {x} and {y}" x="$(f)" \\\n  y=\'1;2\' >&2\n'
+               'hub_say "bad $v"\n'
+               '_hub_msg "$dom" "$id"\n')
+        self.assertEqual(shell_messages(src), [(1, 'Hello {name}, "q"', {"name"}), (2, "a {x} and {y}", {"x", "y"}),
+                                               (4, None, set())])
 
 
 if __name__ == "__main__":

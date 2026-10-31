@@ -27,3 +27,25 @@ hub_json_get() {
 }
 # 跑 hub 的那台(hosts.server;舊的鍵 memory_host);空 = 一台機器全包
 hub_server() { hub_json_get hosts.server || hub_json_get memory_host; }
+# Owner-facing text in the UI language (docs/design/i18n.md): hub_msg "<English msgid>" [name=value …] prints it without
+# a newline, hub_say adds one. The domain is the file the call is in (BASH_SOURCE), so its catalog is
+# locales/<lang>/<that file's name>.json, looked up by bin/i18n.py. Without the platform's Python (the remote machine,
+# before bin/setup-python) the English msgid comes out, its {name} placeholders filled. The msgid is a plain "…" literal
+# (no $, no backquote): tests/test_i18n_catalog.py reads it from the source.
+_hp_bin="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+_hub_msg() {
+  local dom="${1##*/}" id="$2" out kv; shift 2
+  if out="$("$_hp_bin/py" "$_hp_bin/i18n.py" msg "$dom" "$id" "$@" 2>/dev/null)"; then
+    printf '%s' "$out"; return 0
+  fi
+  for kv in "$@"; do id="$(_hp_replace "$id" "{${kv%%=*}}" "${kv#*=}")"; done
+  id="$(_hp_replace "$id" "{{" "{")"; _hp_replace "$id" "}}" "}"
+}
+# literal replace-all: ${s//pat/rep} treats rep differently in bash 3.2 (quotes kept) and 5.2 (& is the match)
+_hp_replace() {
+  local s="$1" out=""
+  while [[ "$s" == *"$2"* ]]; do out+="${s%%"$2"*}$3"; s="${s#*"$2"}"; done
+  printf '%s' "$out$s"
+}
+hub_msg() { _hub_msg "${BASH_SOURCE[1]}" "$@"; }
+hub_say() { _hub_msg "${BASH_SOURCE[1]}" "$@"; echo; }
