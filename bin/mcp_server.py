@@ -36,8 +36,11 @@ BIN = pathlib.Path(__file__).resolve().parent
 sys.path.insert(0, str(BIN))
 import hubconf  # noqa: E402
 import i18n  # noqa: E402
+import prompts  # noqa: E402
 
 _ = i18n.domain(__file__)
+
+INSTRUCTIONS = BIN.parent / "templates" / "mcp-instructions.md"   # filled by prompts.fill
 
 PROTOCOL = "2025-06-18"
 TYPES = ["request", "question", "info", "progress", "done"]
@@ -80,18 +83,16 @@ def unread(project: str) -> int:
 
 
 def instructions(project: str | None, why: str) -> str:
-    text = hubconf.fill_names((BIN.parent / "templates" / "mcp-instructions.md").read_text())
+    text = INSTRUCTIONS.read_text()
     if not project:
-        return text.replace("{{project}}", _("(unrecognized)")).replace("{{unread}}", f"⚠️ {why}").replace(
-            "{{take_timeout}}", "60")
+        return prompts.fill(text, project=_("(unrecognized)"), unread=f"⚠️ {why}", take_timeout=60)
     hb = _hubbus()
     try:
         n = unread(project)
         line = _("📬 {n} {n:letter is|letters are} still open; look with inbox first.", n=n) if n else _("📭 No open letters now.")
     except Exception as e:
         line = _("(cannot read the mailbox: {e})", e=e)
-    return (text.replace("{{project}}", project).replace("{{unread}}", line)
-            .replace("{{take_timeout}}", str(hb.TAKE_TIMEOUT_MIN)))
+    return prompts.fill(text, project=project, unread=line, take_timeout=hb.TAKE_TIMEOUT_MIN)
 
 
 def _str(desc: str) -> dict:

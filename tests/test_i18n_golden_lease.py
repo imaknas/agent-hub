@@ -394,7 +394,9 @@ class Mcp(Golden):
         out += [("inbox (one letter)", re.sub(r"\b\d{2}-\d{2} \d{2}:\d{2}\b", "<TS>", one))]
         # in-process: the unread line of the instructions, the registry error, config
         m = load("mcp_server_golden", "mcp_server.py")
-        with mock.patch.object(m.hubconf, "fill_names", lambda text: "P={{project}} U={{unread}} T={{take_timeout}}"):
+        tpl = self.tmp / "mcp-instructions.md"
+        tpl.write_text("P={{project}} U={{unread}} T={{take_timeout}}")
+        with mock.patch.object(m, "INSTRUCTIONS", tpl):
             out.append(("instructions unknown", m.instructions(None, "why")))
             for name, hb in [("2 unread", types.SimpleNamespace(TAKE_TIMEOUT_MIN=60, db=lambda: types.SimpleNamespace(
                                  close=lambda: None), inbox=lambda c, p: [1, 2])),

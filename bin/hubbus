@@ -109,6 +109,7 @@ import urllib.request
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
 import hubconf  # noqa: E402  paths, the owner address, the project registry all come from the platform settings
 import i18n  # noqa: E402
+import prompts  # noqa: E402  the platform's templates and prompt texts, filled with the configured names
 
 _ = i18n.domain(__file__)
 
@@ -129,7 +130,7 @@ TYPES = ("request", "question", "info", "progress", "done", "task", "drop", "man
 # validates it, then applies or rejects it
 OWNER = hubconf.owner_tag()                         # the name people see (the to-do tag), here hub.json owner.tag
 ASSISTANT = hubconf.assistant_name()                # the personal assistant's display name (hub.json assistant.name)
-OWNER_ALIAS = hubconf.fill_names("{{owner_alias}}")  # the address agents mail the owner at (first of owner.aliases)
+OWNER_ALIAS = hubconf.owner_alias()                 # the address agents mail the owner at (first of owner.aliases)
 # id prefix of letters taken in from handoffs (the bus already holds this format: can't change, or a resend would be
 # taken twice)
 HANDOFF_ID_PREFIX = "muninn-handoff-"
@@ -1169,7 +1170,7 @@ def session_cwd(c, sid):
     return pathlib.Path(r["cwd"]) if r and r["cwd"] and pathlib.Path(r["cwd"]).is_dir() else None
 
 
-RESUME_PROMPT = hubconf.fill_names("""(平台訊息,不是使用者打的字)你之前寄出的信有了回覆。你這個 session 現在沒有人在用,所以平台在背景
+RESUME_PROMPT = prompts.fill("""(平台訊息,不是使用者打的字)你之前寄出的信有了回覆。你這個 session 現在沒有人在用,所以平台在背景
 用你的 context 接著處理(這是一個分支副本:{{owner}} 在原本的 session 裡看不到這段,結論要寫進回信或 memory 筆記)。
 
 {letter}
@@ -1180,7 +1181,7 @@ RESUME_PROMPT = hubconf.fill_names("""(平台訊息,不是使用者打的字)你
 最後回覆一行:這封信怎麼處理了。""")
 
 
-DELEGATE_PROMPT = hubconf.fill_names("""(平台訊息,不是使用者打的字)有一封給這個專案的信,你這個 session 是最近在用這個專案的,但現在沒有人在
+DELEGATE_PROMPT = prompts.fill("""(平台訊息,不是使用者打的字)有一封給這個專案的信,你這個 session 是最近在用這個專案的,但現在沒有人在
 打字,所以平台在背景用你的 context 處理(這是一個分支副本:{{owner}} 在原本的 session 裡看不到這段;分支的最後回覆會在原本的
 session 下次有動作時帶給它)。
 
@@ -1230,7 +1231,7 @@ def fork_result(c, r) -> tuple[bool, str]:
 
 
 def run_handler(c, proj, ws, rows) -> None:
-    """Delegation: dispatch a headless agent in that project (templates/prompts/mailbox.md with names filled in,
+    """Delegation: dispatch a headless agent in that project (templates/prompts/mailbox.md, filled by prompts.render;
     judgment point mailbox-escalation)."""
     st = AGENT_JOBS / f"mailbox-{proj}" / "status.json"
     try:
@@ -1259,10 +1260,10 @@ def run_handler(c, proj, ws, rows) -> None:
         log(_("{project}: dispatched an agent (propose) for {n} {n:letter|letters} ({ids}, {run})", project=proj, n=len(rows),
               ids=", ".join(r["id"] for r in rows), run=run))
         return
-    # the platform's template (no personal names) with this machine's names filled in
+    # the platform's template (no personal names) with this machine's names and content language filled in
     prompt = AGENT_JOBS / f"mailbox-{proj}" / "prompt.md"
     prompt.parent.mkdir(parents=True, exist_ok=True)
-    prompt.write_text(hubconf.fill_names((HUB / "templates" / "prompts" / "mailbox.md").read_text()))
+    prompt.write_text(prompts.render("mailbox") + "\n")
     res = subprocess.run([str(HUB / "bin" / "run-agent-job.sh"), f"mailbox-{proj}", str(ws), str(prompt)],
                          capture_output=True, text=True, env={**os.environ, "AGENT_JOB_POINT": "mailbox-escalation"})
     log(_("{project}: dispatched a headless agent for {n} {n:letter|letters} ({ids}, {run})", project=proj, n=len(rows),

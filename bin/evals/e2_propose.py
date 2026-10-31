@@ -71,7 +71,8 @@ def old_prompt(letters: list[dict], today: str) -> str:
     pa = _load_src(_show("bin/propose_apply.py"), "propose_apply_old_e2")
     tpl = _show("templates/prompts/mailbox-propose.md")
     hb, c, rows = _rows(letters)
-    return hubconf.fill_names(tpl).replace("{{letters}}", pa.letters_text(hb, c, rows)).replace("{{today}}", today)
+    import prompts
+    return prompts.fill(tpl, letters=pa.letters_text(hb, c, rows), today=today)
 
 
 def _bus_letter(c, mid: str) -> dict:

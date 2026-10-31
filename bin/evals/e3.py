@@ -45,6 +45,7 @@ sys.path.insert(0, str(BIN / "evals"))
 import commit_title  # noqa: E402
 import e2  # noqa: E402
 import hubconf  # noqa: E402
+import prompts  # noqa: E402
 import runtime_ports  # noqa: E402
 
 OLD_REF = "6e92c90"   # main before the agent rules were translated (step 5)
@@ -72,15 +73,14 @@ def template(rel: str, arm: str) -> str:
 
 
 def fill(text: str, arm: str) -> str:
-    return hubconf.fill_names(text)
+    return prompts.fill(text, lang=lang_of(arm))
 
 
 def managed_block(arm: str) -> str:
-    """what sync-local-setup.sh writes into the instructions file: the template minus its title, plus the rules"""
-    body = "\n".join(template("templates/agent-instructions.md", arm).splitlines()[2:]).strip("\n")
-    for name in RULES:
-        body += "\n\n" + template(f"templates/rules/{name}.md", arm).strip("\n")
-    return f"<!-- agent-hub:begin -->\n{fill(body, arm)}\n<!-- agent-hub:end -->\n"
+    """what sync-local-setup.sh writes into the instructions file (prompts.agent_rules on the arm's templates)"""
+    body, missing = prompts.agent_rules(list(RULES), read=lambda rel: template(rel, arm), lang=lang_of(arm))
+    assert not missing, missing
+    return f"<!-- agent-hub:begin -->\n{body}\n<!-- agent-hub:end -->\n"
 
 
 def old_tree(run_dir: pathlib.Path) -> pathlib.Path:
@@ -218,8 +218,8 @@ def one(scenario: str, arm: str, i: int, run_dir: pathlib.Path, env: dict) -> di
                 letters[key] = send(hb, renv, letter)
             claim_for_handler(renv, list(letters.values()))
             point = "mailbox-escalation"
-            # what hubbus run_handler writes (the template, names filled)
-            (out / "prompt.txt").write_text(fill(template("templates/prompts/mailbox.md", arm), arm))
+            # what hubbus run_handler writes (prompts.render("mailbox") + the newline it strips)
+            (out / "prompt.txt").write_text(fill(template("templates/prompts/mailbox.md", arm).removesuffix("\n"), arm) + "\n")
         else:
             (out / "prompt.txt").write_text(d["scenarios"][scenario]["prompt"])
         t0 = datetime.datetime.now()

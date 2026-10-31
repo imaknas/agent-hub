@@ -3,9 +3,10 @@
 # commits any tracked file in the project repo:
 #
 #   1. In the runtime's rules file (`hub-runtime instructions-file`; for Claude Code, CLAUDE.local.md), the block
-#      between <!-- agent-hub:begin/end --> is regenerated whole from templates/agent-instructions.md (names filled
-#      in from hub.json, hubconf.fill_names; plus the templates/rules/*.md listed in .agent-memory/RULES): change the
-#      template and every project catches up at its next session, without anyone having to remember to patch it.
+#      between <!-- agent-hub:begin/end --> is regenerated whole from templates/agent-instructions.md plus the
+#      templates/rules/*.md listed in .agent-memory/RULES (prompts.agent_rules: the names, the content language and
+#      the to-do tokens filled in from hub.json): change the template and every project catches up at its next
+#      session, without anyone having to remember to patch it.
 #      Content outside the block is untouched. An old-style pointer section, appended directly without markers, is
 #      replaced with the marked block.
 #   2. hooks (installed by the runtime: `hub-event install`; the platform's are replaced, the user's own are kept)
@@ -65,19 +66,17 @@ else
 # stdout: "<name>\t<path>" for each listed rule whose file is missing (reported below, in the UI language). A temp file,
 # not $(…): bash 3.2 misparses a heredoc inside a command substitution
 missing=$(mktemp) || exit 1
-"$AGENT_HUB/bin/py" - "$AGENT_HUB/templates/agent-instructions.md" "$INSTR" .agent-memory/RULES "$AGENT_HUB/templates/rules" \
-  <<'PY' >"$missing"
+"$AGENT_HUB/bin/py" - "$AGENT_HUB/bin" "$INSTR" .agent-memory/RULES <<'PY' >"$missing"
 import re, sys
 from pathlib import Path
-sys.path.insert(0, str(Path(sys.argv[1]).resolve().parents[1] / "bin"))
+sys.path.insert(0, sys.argv[1])
 import hubconf
+import prompts
 
 BEGIN, END = "<!-- agent-hub:begin -->", "<!-- agent-hub:end -->"
 LEGACY_HEADING = "## agent-hub memory 追蹤"
 
-tpl, path = Path(sys.argv[1]), Path(sys.argv[2])
-rules_file, rules_dir = Path(sys.argv[3]), Path(sys.argv[4])
-body = "\n".join(tpl.read_text().splitlines()[2:]).strip("\n")  # drop the "# CLAUDE.md" heading
+path, rules_file = Path(sys.argv[2]), Path(sys.argv[3])
 names = rules_file.read_text().split() if rules_file.exists() else []
 # rules decided by the registry (not via RULES): commits: conventional → the merge gate checks titles, so the rules
 # file must carry the explanation
@@ -86,14 +85,10 @@ proj = next((d for n, d in hubconf.projects().items()
              if (ws := hubconf.workspace(n)) and ws.resolve() == here), {})
 if proj.get("commits") == "conventional" and "conventional-commits" not in names:
     names.append("conventional-commits")
-if names:
-    for name in names:
-        rule = rules_dir / f"{name}.md"
-        if rule.exists():
-            body += "\n\n" + rule.read_text().strip("\n")
-        else:
-            print(f"{name}\t{rule}")
-block = f"{BEGIN}\n{hubconf.fill_names(body)}\n{END}\n"
+body, absent = prompts.agent_rules(names)   # the template minus its title, the listed rules, filled
+for name in absent:
+    print(f"{name}\t{hubconf.ROOT / 'templates' / 'rules' / f'{name}.md'}")
+block = f"{BEGIN}\n{body}\n{END}\n"
 old = path.read_text() if path.exists() else ""
 
 if BEGIN in old and END in old:

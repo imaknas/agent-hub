@@ -375,8 +375,9 @@ memory tracking and runs nothing long-lived (most projects) needs nothing under 
   `registry.py check` validates. What the scheduler runs = `schedule.yaml` (old entries during the transition) +
   registry jobs (`<project>/<job>`)
 - `templates/`: skeleton files (`AGENT.md`, `agent-instructions.md`: the instructions for each project's agent, with
-  people's names written as `{{owner}}`/`{{owner_alias}}`/`{{assistant}}` and filled from hub.json by
-  sync-local-setup (`hubconf.fill_names`)); the hook settings are not here but in `bin/merge-hook-settings.py`.
+  people's names written as `{{owner}}`/`{{owner_alias}}`/`{{assistant}}` and the content language as
+  `{{content_language}}`, filled from hub.json by sync-local-setup (`prompts.agent_rules`; every template under
+  `templates/` is filled by `bin/prompts.py`)); the hook settings are not here but in `bin/merge-hook-settings.py`.
   `templates/rules/<name>.md` are optional project rules, added to a project's rules file only when the project lists
   the name in `.agent-memory/RULES` (onboarding a new project lists `engineering` and `multi-agent-review`
   automatically)

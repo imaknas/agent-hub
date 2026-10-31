@@ -357,14 +357,11 @@ def assistant_name() -> str:
     return get("assistant.name") or _("the personal assistant")
 
 
-def fill_names(text: str) -> str:
-    """Replace {{owner}} (the to-do tag, how the owner is addressed), {{owner_alias}} (the hubbus send --to address) and
-    {{assistant}} in a template with the configured values. All agent instructions under templates/ go through here;
-    the templates themselves name no one."""
+def owner_alias() -> str:
+    """The address agents are told to mail the owner at (`agenthub send --to …`): the first of owner.aliases, else the
+    owner's address. Templates name it as {{owner_alias}} (bin/prompts.py fills them)."""
     aliases = get("owner.aliases") or []
-    return (text.replace("{{owner}}", owner_tag())
-                .replace("{{owner_alias}}", aliases[0] if aliases else owner_address())
-                .replace("{{assistant}}", assistant_name()))
+    return aliases[0] if aliases else owner_address()
 
 
 _PATHS_LINE = re.compile(r"^\s+(\w+):\s*(.*?)\s*(?:#.*)?$")
