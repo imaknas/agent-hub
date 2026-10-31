@@ -112,12 +112,14 @@ class Debounce(unittest.TestCase):
         self.assertTrue(ej.quiet(j, [self.at(40), self.at(1, 2)], self.NOW))   # 4 × debounce: not starved
         self.assertTrue(ej.quiet(job(), [self.at(0)], self.NOW))
         self.assertTrue(ej.quiet(job(), [self.at(-60)], self.NOW))   # a ts in the future counts as now
+        self.assertTrue(ej.quiet(j, [ev(ts="garbage")], self.NOW))     # an unreadable ts can't stall the job
 
     def test_local_time(self):
         self.assertEqual(ej.local("2026-10-30T04:00:00+00:00"),
                          datetime.datetime(2026, 10, 30, 4, 0, tzinfo=datetime.timezone.utc).astimezone()
                          .replace(tzinfo=None))
         self.assertEqual(ej.local("2026-10-30T04:00:00"), datetime.datetime(2026, 10, 30, 4, 0))
+        self.assertEqual(ej.local("garbage"), datetime.datetime(1970, 1, 1))     # never raises
 
 
 class Batch(unittest.TestCase):
@@ -134,7 +136,7 @@ class Batch(unittest.TestCase):
 
     def test_one_event_too_big_goes_without_its_payload(self):
         b = ej.take({"head": 9, "events": [ev(seq=7, text="x" * 100000, chain=["a"]), ev(seq=8)]})
-        self.assertEqual(b["events"][0]["payload"], {"v": 1, "truncated": True, "chain": ["a"]})
+        self.assertEqual(b["events"][0]["payload"], {"v": 1, "truncated": True, "chain": ["a"], "depth": 1})
         self.assertEqual(b["events"][0]["id"], "e7")
         self.assertEqual(b["upto"], 9)
 

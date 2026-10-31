@@ -15,7 +15,8 @@ Usage:
   schedulectl run <name>          run a job once now (like Claude Desktop's "Run now") and record it as run today, so the
                                   schedule does not run it again that day (which matters for LLM jobs). Runs through launchd
                                   in the user's desktop session: under SSH the keychain can't be read and claude is logged out.
-                                  An event job runs with no events and its cursor stays: a manual run is a test
+                                  An event job runs with no events and its cursor stays: a manual run is a test. While a
+                                  tick is running a job in the foreground it waits 30 seconds, then gives up
   schedulectl events <name>       an event job's cursor and the events waiting for it (and the ones the loop chain holds
                                   back): why it didn't run, what its next run gets
   schedulectl skip <name>         move an event job's cursor to the bus head: the events waiting are dropped for good (a
@@ -243,8 +244,17 @@ def cmd_run(name):
     if job is None:
         sys.exit(_("Neither schedule.yaml nor the project registry has '{name}'", name=name))
     env = run_env(job)
-    # recorded before it starts: if the state can't be written (a tick holds it), nothing runs twice
-    _mark_ran_today(name)
+    # recorded before it starts: if the state can't be written (a tick holds it), nothing runs twice; taken back if
+    # the start fails, so the day's scheduled run isn't lost
+    prev = _mark_ran_today(name)
+    try:
+        start(name, job, env)
+    except BaseException:
+        edit_state(lambda state: state.pop(name, None) if prev is None else state.__setitem__(name, prev))
+        raise
+
+
+def start(name, job, env):
     uid = subprocess.check_output(["id", "-u"]).decode().strip()
     label = f"local.agent-hub-run-now.{name.replace('/', '.')}"
     log = HUB / ".logs" / f"{name.replace('/', '__')}-{datetime.date.today().isoformat()}.log"
@@ -296,7 +306,11 @@ def edit_state(fn):
 def _mark_ran_today(name):
     # mark as run today: otherwise a job whose scheduled time has passed runs again on the next tick (for an LLM job,
     # paying twice)
-    edit_state(lambda state: state.__setitem__(name, datetime.date.today().isoformat()))
+    def mark(state):
+        prev = state.get(name)
+        state[name] = datetime.date.today().isoformat()
+        return prev
+    return edit_state(mark)
 
 
 def event_job(name):
@@ -329,13 +343,13 @@ def cmd_events(name):
 
 def cmd_skip(name):
     job = event_job(name)
-    head = event_jobs.read(0, [])[0]
 
     def skip(state):
+        head, gen, _rows = event_jobs.read(0, [])
         old = state.get(f"{name}.event_seq")
-        state[f"{name}.event_seq"] = max(old or 0, head)
-        return old
-    old = edit_state(skip)
+        state[f"{name}.event_seq"], state[f"{name}.event_gen"] = max(old or 0, head), gen
+        return old, head
+    old, head = edit_state(skip)
     print(_("{name}: cursor {old} → {head}; the events in between won't be run", name=job["name"], old=old, head=head))
 
 

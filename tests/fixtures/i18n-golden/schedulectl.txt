@@ -15,7 +15,7 @@
   schedulectl logs [name] [n]     印最近 n 行 log(預設 scheduler.log;給 name 則印該 job 當天的 log)
   schedulectl run <name>          現在就跑一次某個 job(像 Desktop 的「Run now」),並記成今天已跑
                                    (LLM job 同一天不會再被排程跑一次)。透過 launchd 在使用者的桌面 session 跑——
-                                   SSH 底下讀不到 keychain,claude 會是未登入。事件 job 跑的時候沒有事件、游標不動:手動跑是測試
+                                   SSH 底下讀不到 keychain,claude 會是未登入。事件 job 跑的時候沒有事件、游標不動:手動跑是測試。tick 正在前景跑 job 時,等 30 秒就放棄
   schedulectl events <name>       事件 job 的游標、在等它的事件(跟被迴圈鏈擋下的):為什麼沒跑、下一次會拿到什麼
   schedulectl skip <name>         把事件 job 的游標移到 bus 最新處:在等的事件就此丟掉(一直失敗的那批)
   schedulectl stop                完全停用排程器(launchctl bootout,不動 schedule.yaml)
@@ -41,7 +41,7 @@
   schedulectl logs [name] [n]     印最近 n 行 log(預設 scheduler.log;給 name 則印該 job 當天的 log)
   schedulectl run <name>          現在就跑一次某個 job(像 Desktop 的「Run now」),並記成今天已跑
                                    (LLM job 同一天不會再被排程跑一次)。透過 launchd 在使用者的桌面 session 跑——
-                                   SSH 底下讀不到 keychain,claude 會是未登入。事件 job 跑的時候沒有事件、游標不動:手動跑是測試
+                                   SSH 底下讀不到 keychain,claude 會是未登入。事件 job 跑的時候沒有事件、游標不動:手動跑是測試。tick 正在前景跑 job 時,等 30 秒就放棄
   schedulectl events <name>       事件 job 的游標、在等它的事件(跟被迴圈鏈擋下的):為什麼沒跑、下一次會拿到什麼
   schedulectl skip <name>         把事件 job 的游標移到 bus 最新處:在等的事件就此丟掉(一直失敗的那批)
   schedulectl stop                完全停用排程器(launchctl bootout,不動 schedule.yaml)

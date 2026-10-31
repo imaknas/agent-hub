@@ -16,7 +16,8 @@ Usage:
   schedulectl run <name>          run a job once now (like Claude Desktop's "Run now") and record it as run today, so the
                                   schedule does not run it again that day (which matters for LLM jobs). Runs through launchd
                                   in the user's desktop session: under SSH the keychain can't be read and claude is logged out.
-                                  An event job runs with no events and its cursor stays: a manual run is a test
+                                  An event job runs with no events and its cursor stays: a manual run is a test. While a
+                                  tick is running a job in the foreground it waits 30 seconds, then gives up
   schedulectl events <name>       an event job's cursor and the events waiting for it (and the ones the loop chain holds
                                   back): why it didn't run, what its next run gets
   schedulectl skip <name>         move an event job's cursor to the bus head: the events waiting are dropped for good (a
@@ -47,7 +48,8 @@ Usage:
   schedulectl run <name>          run a job once now (like Claude Desktop's "Run now") and record it as run today, so the
                                   schedule does not run it again that day (which matters for LLM jobs). Runs through launchd
                                   in the user's desktop session: under SSH the keychain can't be read and claude is logged out.
-                                  An event job runs with no events and its cursor stays: a manual run is a test
+                                  An event job runs with no events and its cursor stays: a manual run is a test. While a
+                                  tick is running a job in the foreground it waits 30 seconds, then gives up
   schedulectl events <name>       an event job's cursor and the events waiting for it (and the ones the loop chain holds
                                   back): why it didn't run, what its next run gets
   schedulectl skip <name>         move an event job's cursor to the bus head: the events waiting are dropped for good (a

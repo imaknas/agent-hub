@@ -222,7 +222,8 @@ def db(timeout: float = 30) -> sqlite3.Connection:
     -- the generation it was taken in (a corrupt file moved aside starts a new one, seq from 1 again)
     CREATE TABLE IF NOT EXISTS meta(key TEXT PRIMARY KEY, value TEXT NOT NULL);
     """)
-    c.execute("INSERT OR IGNORE INTO meta(key, value) VALUES('generation', ?)", (secrets.token_hex(8),))
+    if not c.execute("SELECT 1 FROM meta WHERE key='generation'").fetchone():   # a read first: readers take no write lock
+        c.execute("INSERT OR IGNORE INTO meta(key, value) VALUES('generation', ?)", (secrets.token_hex(8),))
     return c
 
 

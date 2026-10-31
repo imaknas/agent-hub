@@ -145,17 +145,18 @@ def pending(job: dict, cursor: int, db: pathlib.Path | None = None) -> dict:
 
 
 def local(ts: str) -> datetime.datetime:
-    """An event's ts (timezone-aware) as naive local time, the scheduler's clock."""
-    t = datetime.datetime.fromisoformat(ts)
+    """An event's ts (timezone-aware) as naive local time, the scheduler's clock. A ts that can't be read (a row written
+    by hand) reads as the epoch's start, never an exception: the status page and schedulectl must not break on it."""
+    try:
+        t = datetime.datetime.fromisoformat(ts)
+    except (TypeError, ValueError):
+        return datetime.datetime(1970, 1, 1)
     return t.astimezone().replace(tzinfo=None) if t.tzinfo else t
 
 
 def age(ev: dict, now: datetime.datetime) -> datetime.timedelta:
     """How long ago the event was published; a ts in the future (a wrong clock, a hand-written row) counts as now."""
-    try:
-        return max(now - local(ev["ts"]), datetime.timedelta(0))
-    except (TypeError, ValueError):
-        return datetime.timedelta(0)
+    return max(now - local(ev.get("ts")), datetime.timedelta(0))   # an unreadable ts: old, so it can't stall the job
 
 
 def quiet(job: dict, events: list[dict], now: datetime.datetime) -> bool:
@@ -185,7 +186,7 @@ def take(got: dict) -> dict:
     for ev in got["events"]:
         n = len(json.dumps(ev, ensure_ascii=False).encode()) + 2
         if not kept and size + n > ENV_LIMIT:   # one event alone too big: its envelope, the payload left out
-            ev = {**ev, "payload": {"v": 1, "truncated": True, "chain": chain_of(ev)}}
+            ev = {**ev, "payload": {"v": 1, "truncated": True, "chain": chain_of(ev), "depth": depth_of(ev)}}
             n = len(json.dumps(ev, ensure_ascii=False).encode()) + 2
         if kept and size + n > ENV_LIMIT:
             break

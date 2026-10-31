@@ -1,6 +1,6 @@
 # Event-triggered jobs
 
-> agent-hub session · 2026-11-01 · r3. Item 1 of "Build" in `competitive-gaps.md`: a registry job can start when
+> agent-hub session · 2026-11-01 · r4. Item 1 of "Build" in `competitive-gaps.md`: a registry job can start when
 > matching bus events appear, not only on a clock or `after:` another job. External sources (CI finished, a webhook)
 > are out of scope: they will arrive later as bus events from one receiver, so jobs only ever react to bus events.
 >
@@ -17,6 +17,11 @@
 > by depth, carried separately from the chain's membership (7); a prompt the batch can't be put into fails the run
 > (6); the batch sits between random-token delimiters; lock waits are bounded (4); no cursor while there is no bus
 > file; a former name now used by another project is not "self".
+>
+> r4 after a third blind review: an agent event job must run in the workspace, where the project's sandbox and rules
+> apply (3.2); smaller fixes (the bus generation is written only when missing, an unreadable `ts` can't break the page,
+> a rename during a background run keeps its advance, `schedulectl run` takes its mark back if the start fails), and
+> the owner-answer loop is named (7). No blocking finding remains.
 
 ## 1. What exists
 
@@ -75,7 +80,7 @@ Registry validation (`bin/registry.py`); every error makes the file invalid like
 - `projects` is a non-empty list of `self`, a project name or `*`. An ordinary project may only name itself; the
   platform project and modules may name others or `*`;
 - the platform project's and modules' event jobs can't be `kind: agent`; a project's agent event job must declare
-  `allow:` (3.2);
+  `allow:` and run in the workspace (`cwd: workspace`, explicit when the project has a runtime) (3.2);
 - `sources` is a non-empty list of strings;
 - `where` maps payload keys (dots for nesting: `record.type`) to a scalar or a non-empty list of scalars;
 - `message` in `events` needs `where.type` limited to `info`, `progress`, `done` (3.5);
@@ -120,7 +125,9 @@ The trust model (1: the bus is a peer log) decides what an event job may do with
   permissions are fixed and narrow (`mailbox-escalation`: memory notes and the mail commands). An event agent job runs
   with its own `allow:`, and anyone who can write the bus can start it with a forged event addressed to the project.
   So a project's agent event job **must declare `allow:`** (no unattended `auto` mode): that list is its boundary,
-  and the project chooses it knowing the trigger is unauthenticated. A command job runs only its own code; it reads
+  and the project chooses it knowing the trigger is unauthenticated. And it **must run in the workspace**: the
+  project's sandbox and rules live in the workspace's tool settings (`render-project-settings.py`), so an agent run
+  from `state`, `runtime` or `hub` would have neither. A command job runs only its own code; it reads
   the payload as claims (e.g. re-check a merge in git before acting on it).
 - **The platform's event jobs are never agents**, whatever their `projects`: even an event "from" the platform
   project can be forged by any project, and an agent with the platform's authority must not take instructions from
@@ -260,7 +267,9 @@ Consequences, stated: a job doesn't react to the consequences of its own runs, i
 (request and reply belong to the mailbox and a session, not to an event job); and one chained event in a batch puts
 the job in the chain of everything that run publishes. A chain can be dropped on purpose (unset the variable, write
 the bus directly); that only lets a project loop on its own jobs, bounded by the daily cap and debounce. Hops the
-platform doesn't drive (a person's session acting on an event) are outside the chain.
+platform doesn't drive are outside the chain: a person's session acting on an event, and the owner side answering a
+letter (the bridge is a relay, so an owner answer comes back without a chain; a job reacting to notices could go round
+that way once per answer, bounded by the cap).
 
 `chain` and `depth` are new optional payload fields; they keep the hubbus contract at v1.
 
@@ -294,7 +303,7 @@ The page reads the bus through `event_jobs`, the same functions the scheduler us
 - `run <event job>`: section 6.
 - `events <job>`: the cursor, the head, what is waiting and what the chain holds back (seq, time, type, belongs to,
   chain).
-- `skip <job>`: move the cursor to the head, under the lock (4).
+- `skip <job>`: move the cursor to the head, read and written under the lock (4).
 
 ## 11. Out of scope, recorded
 

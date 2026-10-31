@@ -174,6 +174,15 @@ class EventTick(unittest.TestCase):
         self.t.tick([job], DAY + datetime.timedelta(days=3))
         self.assertEqual(len(self.events_of()), 1)
 
+    def test_an_old_names_late_advance_still_counts(self):
+        for _ in range(3):
+            self.bus.publish(project="other")
+        st = {"old/react.event_seq": 3, "old/react.event_gen": "g1", "new/react.event_seq": 1, "new/react.event_gen": "g1"}
+        self.t.m.STATE_FILE.write_text(json.dumps(st))
+        with mock.patch.object(hubconf, "former_names", lambda p: ["old"] if p == "new" else []):
+            self.t.tick([ejob("new/react", trigger={"projects": ["new", "old"]})], DAY)
+        self.assertEqual(self.t.state()["new/react.event_seq"], 3)
+
     def test_a_renamed_project_keeps_its_cursor_and_old_events(self):
         st = {"old/react.event_seq": 0, "old/react.event_gen": "g1"}
         self.t.m.STATE_FILE.write_text(json.dumps(st))
@@ -235,6 +244,8 @@ class RegistryTrigger(unittest.TestCase):
         self.assertEqual(self.errs({"events": ["message"], "where": {"type": ["info", "done"]}}), [])
         self.assertEqual(self.errs({"events": ["merge.done"], "projects": ["*"]}, stem=hubconf.hub_project()), [])
         self.assertEqual(self.errs({"events": ["merge.done"]}, kind="agent", allow=["Read"]), [])
+        rt = {"name": "p", "runtime": {}}
+        self.assertEqual(self.errs({"events": ["merge.done"]}, doc=rt, kind="agent", allow=["Read"], cwd="workspace"), [])
 
     def test_invalid(self):
         for trigger, extra, what in (
@@ -244,6 +255,7 @@ class RegistryTrigger(unittest.TestCase):
                 ({"events": ["message.delivered"]}, {}, "mailbox work"),
                 ({"events": ["message.done"]}, {}, "mailbox work"),
                 ({"events": ["merge.done"]}, {"kind": "agent"}, "must declare allow"),
+                ({"events": ["merge.done"]}, {"kind": "agent", "allow": ["Read"], "cwd": "state"}, "in the workspace"),
                 ({"events": ["message"]}, {}, "notices"),
                 ({"events": ["message"], "where": {"type": "request"}}, {}, "notices"),
                 ({"events": ["merge.done"], "projects": ["q"]}, {}, "own project"),

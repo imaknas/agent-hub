@@ -70,9 +70,10 @@ schema v1 (contracts/project.v1.md has the full description):
       type enum; message only with where.type limited to info/progress/done (the rest is mailbox work).
       An ordinary project sees only events addressed to it (self, including names from before a rename); the platform
       project and modules may name others or *. Bus events are their writers' claims: the platform's event jobs are
-      never agent jobs, and a project's agent event job must declare allow: (its boundary). message.delivered and
-      message.done are refused like record. max_attempts_per_day defaults to 12; an agent event job always runs as the scheduler's background job, in place,
-      so the scheduler sees its outcome. legacy_name is refused
+      never agent jobs, and a project's agent event job must declare allow: (its boundary) and run in the workspace
+      (cwd: workspace, where its sandbox and rules apply). message.delivered and message.done are refused like record.
+      max_attempts_per_day defaults to 12; an agent event job always runs as the scheduler's background job, in
+      place, so the scheduler sees its outcome. legacy_name is refused
     after: [job] (same project) or [project/job]
     connectors: true (agent jobs only): needs claude.ai connectors (Upwork etc.) → uses the subscription login, not
       the default headless token (tools in allow with mcp__claude_ai_ but this not set: invalid)
@@ -358,9 +359,15 @@ def validate_trigger(job: dict, doc: dict, stem: str) -> list[str]:
     if job.get("kind") == "agent" and platform_doc(doc, stem):
         errs.append(_("the platform's event jobs can't be agent jobs: an event is what its writer claims, and an agent "
                       "with the platform's authority must not take instructions from it"))
-    elif job.get("kind") == "agent" and not job.get("allow"):
-        errs.append(_("an agent event job must declare allow: (anyone who can write the bus can start it with their "
-                      "text; allow: is its boundary)"))
+    elif job.get("kind") == "agent":
+        if not job.get("allow"):
+            errs.append(_("an agent event job must declare allow: (anyone who can write the bus can start it with their "
+                          "text; allow: is its boundary)"))
+        if (job.get("cwd") or default_cwd(doc)) != "workspace":
+            # the project's own protections (its sandbox, its rules) live in its workspace's settings: run anywhere
+            # else, an agent anyone can start would run without them
+            errs.append(_("an agent event job must run in the workspace (cwd: workspace), where the project's sandbox "
+                          "and rules apply"))
     sources = on.get("sources")
     if sources is not None and (not isinstance(sources, list) or not sources
                                 or not all(isinstance(x, str) and x for x in sources)):

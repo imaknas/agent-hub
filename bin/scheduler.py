@@ -406,11 +406,16 @@ def held_back(state: dict, name: str, held: list[dict], today: str) -> None:
 
 def adopt_cursor(job: dict, state: dict) -> None:
     """A renamed project's job takes the cursor its old name had (hubconf.former_names)."""
-    project, short = job.get("project"), job["name"].split("/", 1)[-1]
+    project, short, name = job.get("project"), job["name"].split("/", 1)[-1], job["name"]
     for old in hubconf.former_names(project) if project else []:
-        for suffix in (".event_seq", ".event_gen"):
-            if f"{old}/{short}{suffix}" in state and f"{job['name']}{suffix}" not in state:
-                state[f"{job['name']}{suffix}"] = state[f"{old}/{short}{suffix}"]
+        seq, gen = state.get(f"{old}/{short}.event_seq"), state.get(f"{old}/{short}.event_gen")
+        if seq is None:
+            continue
+        if f"{name}.event_seq" not in state:
+            state[f"{name}.event_seq"], state[f"{name}.event_gen"] = seq, gen
+        elif gen == state.get(f"{name}.event_gen"):
+            # a background run under the old name may finish after the copy: its advance must still count
+            state[f"{name}.event_seq"] = max(state[f"{name}.event_seq"], seq)
 
 
 def first_sight(job: dict, state: dict) -> None:
