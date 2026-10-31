@@ -19,13 +19,13 @@ big.png:超過 0 MB
 這次深談沒有開始對話(session 沒有啟動成功,或還沒說過話就收回),沒有內容要交接。
 === detach model failed
 ["error", {"error": "handover_failed", "detail": "已送出最小交接。原因:schema: no summary"}]
-["handover", {"handover": {"v": 1, "project": "demo", "session_id": "77777777-7777-4777-8777-777777777779", "mode": "discuss", "reason": "user", "summary": "交接失敗(模型沒能產生合格的交接);對話紀錄還在,可以重新 attach 接續", "decisions": [], "open_questions": [], "tasks_for_owner": [], "notes_markdown": "", "notes_written": false, "fallback": true, "branch": null, "commits": [], "tests": null}}]
+["handover", {"handover": {"v": 1, "project": "demo", "session_id": "77777777-7777-4777-8777-777777777779", "mode": "discuss", "reason": "user", "summary": "交接失敗(模型沒能產生合格的交接);對話紀錄還在,可以重新 attach 接續", "decisions": [], "open_questions": [], "tasks_for_owner": [], "ended": [], "notes_markdown": "", "notes_written": false, "fallback": true, "branch": null, "commits": [], "tests": null}}]
 === detach platform failed
 ["error", {"error": "handover_failed", "detail": "已送出最小交接。原因:RuntimeError('old module')"}]
-["handover", {"handover": {"v": 1, "project": "demo", "session_id": "77777777-7777-4777-8777-777777777770", "mode": "discuss", "reason": "user", "summary": "交接失敗(平台出錯,不是模型的問題);對話紀錄還在,可以重新 attach 接續", "decisions": [], "open_questions": [], "tasks_for_owner": [], "notes_markdown": "", "notes_written": false, "fallback": true, "branch": null, "commits": [], "tests": null}}]
+["handover", {"handover": {"v": 1, "project": "demo", "session_id": "77777777-7777-4777-8777-777777777770", "mode": "discuss", "reason": "user", "summary": "交接失敗(平台出錯,不是模型的問題);對話紀錄還在,可以重新 attach 接續", "decisions": [], "open_questions": [], "tasks_for_owner": [], "ended": [], "notes_markdown": "", "notes_written": false, "fallback": true, "branch": null, "commits": [], "tests": null}}]
 === detach deliver failed
 ["error", {"error": "handover_failed", "detail": "OSError('bus')"}]
-["handover", {"handover": {"v": 1, "project": "demo", "session_id": "77777777-7777-4777-8777-777777777771", "mode": "discuss", "reason": "user", "summary": "s", "decisions": [], "open_questions": [], "tasks_for_owner": [], "notes_markdown": "", "notes_written": false, "fallback": false, "branch": null, "commits": [], "tests": null}}]
+["handover", {"handover": {"v": 1, "project": "demo", "session_id": "77777777-7777-4777-8777-777777777771", "mode": "discuss", "reason": "user", "summary": "s", "decisions": [], "open_questions": [], "tasks_for_owner": [], "ended": [], "notes_markdown": "", "notes_written": false, "fallback": false, "branch": null, "commits": [], "tests": null}}]
 === detach terminal open
 [["error", {"error": "busy", "detail": "terminal_open:終端機裡的 session 還開著,先結束它再收回"}]]
 === deliver letters

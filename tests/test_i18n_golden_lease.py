@@ -177,7 +177,8 @@ class Runner(Golden):
             ev = []
             l = self.lease(sid=SID[:-1] + str(len(out) % 10), events=ev)
             patches = [mock.patch.object(m.subprocess, "run", lambda *a, **k: bad),
-                       mock.patch.object(m, "deliver", deliver or (lambda lease, h, n: None))]
+                       mock.patch.object(m, "deliver", deliver or (lambda lease, h, n, earlier=None: None)),
+                       mock.patch.object(m, "earlier_tasks", lambda project: [])]
             if run_handover:
                 patches.append(mock.patch.object(m, "run_handover", run_handover))
             for p in patches:

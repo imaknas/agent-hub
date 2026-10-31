@@ -63,6 +63,7 @@ from __future__ import annotations
 
 import datetime
 import http.server
+import importlib.util
 import json
 import os
 import pathlib
@@ -520,14 +521,38 @@ def empty_handover() -> dict:
             "decisions": [], "open_questions": [], "tasks_for_owner": [], "notes_markdown": ""}
 
 
-def handover_prompt(**names) -> str:
+def handover_prompt(earlier: list[dict] | None = None, **names) -> str:
     """judgment point lease-handover's prompt, said to the resumed session (templates/prompts/lease-handover.md, in
-    English; the handover is written in the content language). names: owner= / lang= pinned by an eval"""
+    English; the handover is written in the content language). names: owner= / lang= pinned by an eval. With earlier
+    items (earlier_tasks) it also lists them (templates/prompts/lease-handover-earlier.md), so the handover can name
+    them by ref instead of raising them again."""
     import prompts
-    return prompts.render("lease-handover", **names)
+    text = prompts.render("lease-handover", **names)
+    if earlier:
+        items = "\n".join(f"- {e['ref']}: {' '.join(e['text'].split())}" for e in earlier)
+        text += "\n\n" + prompts.render("lease-handover-earlier", items=items, **names)
+    return text
 
 
-def run_handover(lease: Lease) -> tuple[dict | None, str]:
+def earlier_tasks(project: str) -> list[dict]:
+    """The project's to-dos still waiting on the owner (Acts items raised, not settled, not withdrawn), as the handover
+    sees them: [{ref: T1…, key, text, bound: raised by the registrar from a STATE.md line}]. Every handover used to
+    raise each still-open task again under a new key (lease-<id>-<n>-task-<i>), leaving the assistant to tell which
+    were the same; now it names the earlier item instead. [] when the register cannot be read (logged)."""
+    try:
+        spec = importlib.util.spec_from_file_location("registrar_lease", HUB / "bin" / "registrar.py")
+        reg = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(reg)
+        led = reg.Ledger(project)
+        return [{"ref": f"T{i}", "key": k, "text": led.terms(k)[0] or "", "bound": led.bound(k)}
+                for i, k in enumerate(led.open(), 1)]
+    except (Exception, SystemExit) as e:
+        log(_("{project}: the earlier to-dos could not be read, the handover goes without them: {e!r}", project=project,
+              e=e))
+        return []
+
+
+def run_handover(lease: Lease, earlier: list[dict] | None = None) -> tuple[dict | None, str]:
     """(handover, reason for failure). No transcript = nothing was said: return the fixed "no content", not a failure
     (10-25 lease 34c84c53: the session crashed right at the start, and the handover used --resume on a conversation
     that didn't exist, which was taken as "the model didn't write a valid handover")."""
@@ -537,7 +562,7 @@ def run_handover(lease: Lease) -> tuple[dict | None, str]:
            "--resume", lease.id, "--strict-mcp-config", "--settings", str(deny_settings(lease.project))]
     why = ""
     for attempt in (1, 2):  # retry once if invalid
-        r = subprocess.run(cmd, input=handover_prompt(), cwd=lease.cwd, env=env_for(lease), capture_output=True, text=True,
+        r = subprocess.run(cmd, input=handover_prompt(earlier), cwd=lease.cwd, env=env_for(lease), capture_output=True, text=True,
                            timeout=900)
         try:
             out = json.loads(r.stdout)
@@ -564,11 +589,22 @@ def handover_id(sid: str, n: int, part: str) -> str:
     return f"lease-{sid}-{n}-{part}"
 
 
-def deliver(lease: Lease, h: dict, n: int) -> None:
+def deliver(lease: Lease, h: dict, n: int, earlier: list[dict] | None = None) -> None:
     sid, proj, owner = lease.id, lease.project, hubconf.owner_address()
-    keys = []
+    keys, byref = [], {e["ref"]: e for e in earlier or []}
+    unused = dict(byref)
     for i, t in enumerate(h.get("tasks_for_owner") or []):
-        key = handover_id(sid, n, f"task-{i}")
+        ref = t.pop("ref", None)
+        e = unused.pop(ref, None) if ref else None
+        if ref and e is None:
+            log(_("{id}: handover task ref {ref} is not an earlier item (or is used twice); sent as a new task", id=sid,
+                  ref=ref))
+        if e is not None and e["bound"]:
+            t["key"] = e["key"]   # a STATE.md line: its wording changes there (the registrar amends from the line)
+            keys.append(e["key"])
+            continue
+        # an earlier item keeps its key: hubbus sends amended when the wording changed, nothing when it did not
+        key = e["key"] if e is not None else handover_id(sid, n, f"task-{i}")
         args = ["send", "--from", proj, "--to", owner, "--type", "task", "--id", key, "--text", t["text"],
                 "--context", f"lease:{sid}"]
         if t.get("due"):
@@ -576,6 +612,19 @@ def deliver(lease: Lease, h: dict, n: int) -> None:
         hubbus(*args)
         t["key"] = key
         keys.append(key)
+    for i, x in enumerate(h.get("ended") or []):
+        e = byref.get(x.pop("ref", None))
+        if e is None:
+            log(_("{id}: handover ended item is not an earlier item; ignored", id=sid))
+            continue
+        x["key"] = e["key"]
+        if x.get("outcome") == "done":   # heard in the conversation: a claim, the assistant settles it
+            hubbus("send", "--from", proj, "--to", owner, "--type", "done", "--task", e["key"], "--id",
+                   handover_id(sid, n, f"done-{i}"), "--text", x.get("basis") or "", "--context", f"lease:{sid}")
+        elif not e["bound"]:   # no longer needed: withdrawn (a STATE.md line is withdrawn by editing the line)
+            hubbus("send", "--from", proj, "--to", owner, "--type", "drop", "--task", e["key"], "--id",
+                   handover_id(sid, n, f"drop-{i}"), "--text", x.get("basis") or "", "--context", f"lease:{sid}")
+    h["ended"] = [x for x in h.get("ended") or [] if "key" in x]
     for i, q in enumerate(h.get("open_questions") or []):
         hubbus("send", "--from", proj, "--to", owner, "--type", "question", "--id", handover_id(sid, n, f"q-{i}"), "--text", q,
                "--context", f"lease:{sid}")
@@ -615,9 +664,10 @@ def detach(lease: Lease, reason: str) -> None:
             lease.emit("error", error="busy", detail=_("terminal_open: the session in the terminal is still open; end it before detaching"))
             return
         stop_proc(lease, "detaching")
-    so, why = None, ""
+    so, why, earlier = None, "", []
     try:
-        so, why = run_handover(lease)
+        earlier = earlier_tasks(lease.project)
+        so, why = run_handover(lease, earlier)
         failed = _("the model did not produce a valid handover")
     except Exception as e:  # the platform's own error (not the model's): give the reason as it is
         log(_("{id} handover failed: {e!r}", id=lease.id, e=e))
@@ -629,6 +679,7 @@ def detach(lease: Lease, reason: str) -> None:
          "decisions": [] if fallback else so.get("decisions", []),
          "open_questions": [] if fallback else so.get("open_questions", []),
          "tasks_for_owner": [] if fallback else so.get("tasks_for_owner", []),
+         "ended": [] if fallback else so.get("ended", []),
          "notes_markdown": "" if fallback else so.get("notes_markdown", ""),
          "notes_written": False, "fallback": fallback, "branch": None, "commits": [], "tests": None}
     try:
@@ -637,7 +688,7 @@ def detach(lease: Lease, reason: str) -> None:
         with _lock:
             lease.handovers += 1
             save()
-        deliver(lease, h, lease.handovers)
+        deliver(lease, h, lease.handovers, earlier)
     except Exception as e:
         log(_("{id} sending the handover failed: {e!r}", id=lease.id, e=e))
         lease.emit("error", error="handover_failed", detail=repr(e)[:300])

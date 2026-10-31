@@ -19,13 +19,13 @@ big.png: over 0 MB
 This lease never started a conversation (the session did not start, or it was detached before anything was said); there is nothing to hand over.
 === detach model failed
 ["error", {"error": "handover_failed", "detail": "Sent a minimal handover. Reason: schema: no summary"}]
-["handover", {"handover": {"v": 1, "project": "demo", "session_id": "77777777-7777-4777-8777-777777777779", "mode": "discuss", "reason": "user", "summary": "Handover failed (the model did not produce a valid handover); the conversation is still there and can be attached again", "decisions": [], "open_questions": [], "tasks_for_owner": [], "notes_markdown": "", "notes_written": false, "fallback": true, "branch": null, "commits": [], "tests": null}}]
+["handover", {"handover": {"v": 1, "project": "demo", "session_id": "77777777-7777-4777-8777-777777777779", "mode": "discuss", "reason": "user", "summary": "Handover failed (the model did not produce a valid handover); the conversation is still there and can be attached again", "decisions": [], "open_questions": [], "tasks_for_owner": [], "ended": [], "notes_markdown": "", "notes_written": false, "fallback": true, "branch": null, "commits": [], "tests": null}}]
 === detach platform failed
 ["error", {"error": "handover_failed", "detail": "Sent a minimal handover. Reason: RuntimeError('old module')"}]
-["handover", {"handover": {"v": 1, "project": "demo", "session_id": "77777777-7777-4777-8777-777777777770", "mode": "discuss", "reason": "user", "summary": "Handover failed (a platform error, not the model's); the conversation is still there and can be attached again", "decisions": [], "open_questions": [], "tasks_for_owner": [], "notes_markdown": "", "notes_written": false, "fallback": true, "branch": null, "commits": [], "tests": null}}]
+["handover", {"handover": {"v": 1, "project": "demo", "session_id": "77777777-7777-4777-8777-777777777770", "mode": "discuss", "reason": "user", "summary": "Handover failed (a platform error, not the model's); the conversation is still there and can be attached again", "decisions": [], "open_questions": [], "tasks_for_owner": [], "ended": [], "notes_markdown": "", "notes_written": false, "fallback": true, "branch": null, "commits": [], "tests": null}}]
 === detach deliver failed
 ["error", {"error": "handover_failed", "detail": "OSError('bus')"}]
-["handover", {"handover": {"v": 1, "project": "demo", "session_id": "77777777-7777-4777-8777-777777777771", "mode": "discuss", "reason": "user", "summary": "s", "decisions": [], "open_questions": [], "tasks_for_owner": [], "notes_markdown": "", "notes_written": false, "fallback": false, "branch": null, "commits": [], "tests": null}}]
+["handover", {"handover": {"v": 1, "project": "demo", "session_id": "77777777-7777-4777-8777-777777777771", "mode": "discuss", "reason": "user", "summary": "s", "decisions": [], "open_questions": [], "tasks_for_owner": [], "ended": [], "notes_markdown": "", "notes_written": false, "fallback": false, "branch": null, "commits": [], "tests": null}}]
 === detach terminal open
 [["error", {"error": "busy", "detail": "terminal_open: the session in the terminal is still open; end it before detaching"}]]
 === deliver letters

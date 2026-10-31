@@ -15,6 +15,7 @@
     "decisions": {"type": "array", "items": {"type": "object", "required": ["what"], "properties": {"what": {"type": "string"}, "why": {"type": "string"}}}},
     "open_questions": {"type": "array", "items": {"type": "string"}},
     "tasks_for_owner": {"type": "array", "items": {"type": "object", "required": ["text"], "properties": {"text": {"type": "string"}, "due": {"type": "string"}, "key": {"type": "string"}}}},
+    "ended": {"type": "array", "description": "earlier to-dos this conversation shows have ended: done (a claimed record was sent) or not_needed (withdrawn, unless it is a STATE.md line)", "items": {"type": "object", "required": ["key", "outcome"], "properties": {"key": {"type": "string"}, "outcome": {"enum": ["done", "not_needed"]}, "basis": {"type": "string"}}}},
     "notes_markdown": {"type": "string"},
     "notes_written": {"type": "boolean"},
     "fallback": {"type": "boolean"},

@@ -8,8 +8,13 @@
    "properties": {"what": {"type": "string"}, "why": {"type": "string"}}}, "description": "the decisions settled this time and why (in the content language named in the prompt)"},
   "open_questions": {"type": "array", "items": {"type": "string"}, "description": "questions with no answer yet, for the owner to answer (in the content language named in the prompt)"},
   "tasks_for_owner": {"type": "array", "items": {"type": "object", "additionalProperties": false, "required": ["text"],
-   "properties": {"text": {"type": "string"}, "due": {"type": "string", "pattern": "^\\d{4}-\\d{2}-\\d{2}$"}}},
+   "properties": {"text": {"type": "string"}, "due": {"type": "string", "pattern": "^\\d{4}-\\d{2}-\\d{2}$"},
+    "ref": {"type": "string", "pattern": "^T\\d+$", "description": "the earlier item this task is, when the prompt lists earlier items"}}},
    "description": "things only the owner can do (in the content language named in the prompt)"},
+  "ended": {"type": "array", "items": {"type": "object", "additionalProperties": false, "required": ["ref", "outcome", "basis"],
+   "properties": {"ref": {"type": "string", "pattern": "^T\\d+$"}, "outcome": {"enum": ["done", "not_needed"]},
+    "basis": {"type": "string", "minLength": 1}}},
+   "description": "earlier items (listed in the prompt) this conversation shows have ended, and how it shows it"},
   "notes_markdown": {"type": "string", "description": "raw notes (markdown) for the project's memory: what was discussed, the decisions, the problems run into; uncertain wording kept (in the content language named in the prompt)"}
  }
 }

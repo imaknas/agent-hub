@@ -42,7 +42,8 @@ class Handover(unittest.TestCase):
         m.DIR = self.tmp
         self.delivered = []
         for name, value in [("deny_settings", lambda project: self.tmp / "deny.json"), ("env_for", lambda lease: {}),
-                            ("deliver", lambda lease, h, n: self.delivered.append((n, h)))]:
+                            ("deliver", lambda lease, h, n, earlier=None: self.delivered.append((n, h))),
+                            ("earlier_tasks", lambda project: [])]:
             p = mock.patch.object(m, name, value)
             p.start()
             self.addCleanup(p.stop)
@@ -156,6 +157,54 @@ class HandoverIds(unittest.TestCase):
                                                 for t in ("state", "handover", "assistant", "handover")))
         self.assertEqual(self.m.Lease({"lease_id": sid, "project": "p", "cwd": "/tmp"}).handovers, 2)
         self.assertEqual(self.m.Lease({"lease_id": sid, "project": "p", "cwd": "/tmp", "handovers": 5}).handovers, 5)
+
+
+class EarlierTasks(HandoverIds):
+    """11-01: every handover raised each still-open task again under a new key (lease-<id>-<n>-task-<i>; one project
+    had the same question to the owner open three times). The handover now sees what is already waiting and names it
+    by ref: the same item keeps its key, and an item the conversation shows has ended is claimed or withdrawn."""
+
+    EARLIER = [{"ref": "T1", "key": "lease-old-1-task-0", "text": "measure the desk", "bound": False},
+               {"ref": "T2", "key": "task-p-0123456789", "text": "renew the domain", "bound": True},
+               {"ref": "T3", "key": "lease-old-1-task-1", "text": "photo of the shelf", "bound": False},
+               {"ref": "T4", "key": "task-p-9876543210", "text": "sign the lease", "bound": True}]
+
+    def sends(self, type_):
+        return [a for a in self.sent if a[:1] == ("send",) and a[a.index("--type") + 1] == type_]
+
+    def test_prompt_lists_earlier_items_only_when_there_are_some(self):
+        base = self.m.handover_prompt()
+        self.assertNotIn("T1", base)
+        with_items = self.m.handover_prompt(self.EARLIER)
+        self.assertTrue(with_items.startswith(base))
+        self.assertIn("- T1: measure the desk", with_items)
+        self.assertIn("- T4: sign the lease", with_items)
+
+    def test_same_item_keeps_its_key(self):
+        lease = self.m.Lease({"lease_id": "77777777-7777-4777-8777-777777777777", "project": "p", "cwd": "/nonexistent"})
+        h = {"summary": "s", "open_questions": [], "notes_markdown": "",
+             "tasks_for_owner": [{"text": "measure the desk and chair", "ref": "T1"}, {"text": "renew it", "ref": "T2"},
+                                 {"text": "something new"}, {"text": "again", "ref": "T1"}, {"text": "x", "ref": "T9"}],
+             "ended": [{"ref": "T3", "outcome": "done", "basis": "sent the photo"},
+                       {"ref": "T4", "outcome": "not_needed", "basis": "moved"},
+                       {"ref": "T3", "outcome": "not_needed", "basis": "no"}, {"ref": "T8", "outcome": "done", "basis": "?"}]}
+        self.m.deliver(lease, h, 2, self.EARLIER)
+        tasks = self.sends("task")
+        self.assertEqual([a[a.index("--id") + 1] for a in tasks],
+                         ["lease-old-1-task-0", f"lease-{lease.id}-2-task-2", f"lease-{lease.id}-2-task-3",
+                          f"lease-{lease.id}-2-task-4"],
+                         "T1 keeps its key; the STATE.md item (T2) is not sent; a ref used twice or unknown is new")
+        self.assertEqual([t["key"] for t in h["tasks_for_owner"]][:2], ["lease-old-1-task-0", "task-p-0123456789"],
+                         "the handover lists the earlier keys, so the assistant keeps them open")
+        self.assertTrue(all("ref" not in t for t in h["tasks_for_owner"]))
+        done, drop = self.sends("done"), self.sends("drop")
+        self.assertEqual([(a[a.index("--task") + 1], a[a.index("--text") + 1]) for a in done],
+                         [("lease-old-1-task-1", "sent the photo")])
+        self.assertEqual([a[a.index("--task") + 1] for a in drop], ["lease-old-1-task-1"],
+                         "a STATE.md item (T4) is not withdrawn from here; an unknown ref is ignored")
+        self.assertEqual([(x["key"], x["outcome"]) for x in h["ended"]],
+                         [("lease-old-1-task-1", "done"), ("task-p-9876543210", "not_needed"),
+                          ("lease-old-1-task-1", "not_needed")])
 
 
 class RestartOnCodeChange(unittest.TestCase):
