@@ -1,13 +1,13 @@
 {
   "v": 1,
-  "_comment": "新使用者的範本:複製成 hub.json 再改(平台的 bin/hubconf.py 讀 hub.json)。路徑可用 ~ 開頭;相對路徑以 hub 根目錄為準。不需要的段落(assistant、alerts、backup、github…)可以整段刪掉:讀它的功能就是沒開。完整說明見 README.md 跟 docs/design/new-user.md。",
+  "_comment": "Template for new users: copy it to hub.json and edit (the platform's bin/hubconf.py reads hub.json). Paths may start with ~; relative paths are relative to the hub root. Sections you don't need (assistant, alerts, backup, github…) can be deleted whole: the features that read them are simply off. Full explanation in README.md and docs/design/new-user.md.",
   "registry_dir": "projects",
   "services_root": "~/services",
   "workspace_root": "~/workspace",
   "memory_copies": "~/.memory-copies",
   "git_origin": "~/git-origin",
   "owner": {
-    "_comment": "你自己:address 是信箱裡寄給你的地址(協定的一部分,不用改);tag 是待辦標籤〔<tag>〕裡的名字",
+    "_comment": "You: address is the mailbox address letters to you are sent to (part of the protocol, don't change it); tag is the name inside the to-do tag 〔<tag>〕",
     "address": "owner",
     "aliases": [],
     "tag": "Me",
@@ -16,7 +16,7 @@
     "legal_person": false
   },
   "assistant": {
-    "_comment": "選配:個人助理(收 owner 地址的信、送轉交回來)。沒有就整段刪掉",
+    "_comment": "Optional: a personal assistant (receives letters to the owner address, sends handoffs back). Without one, delete the whole section",
     "project": "my-assistant",
     "name": "我的助理",
     "party_id": "my-assistant",
@@ -25,14 +25,14 @@
     "cli": "~/services/my-assistant/.venv/bin/my-assistant"
   },
   "alerts": {
-    "_comment": "選配:警報送 Discord(bot token、頻道 id 各放一個檔,不進版控)。沒有就整段刪掉",
+    "_comment": "Optional: alerts sent to Discord (bot token and channel id each in a file, not in version control). Without them, delete the whole section",
     "discord_token_file": ".secrets/discord-token",
     "discord_channel_file": ".secrets/discord-alert-channel"
   },
   "bus_dir": "~/.local/state/agent-hub-bus",
-  "_bus_dir_comment": "事件匯流排(bus.db、hubbus.log)。刻意放在 hub 目錄外:沙箱裡的專案 deny 寫 ~/agent-hub/**,而 deny 會蓋過 sandbox 的 allowWrite(2026-10-22 pilot 實測)",
+  "_bus_dir_comment": "The event bus (bus.db, hubbus.log). Deliberately outside the hub directory: sandboxed projects deny writes to ~/agent-hub/**, and a deny overrides the sandbox's allowWrite (tested in the 2026-10-22 pilot)",
   "backup": {
-    "_comment": "選配:每晚加密備份(restic)。密碼在 .secrets/backup-password(另存一份在你的密碼管理器),B2 金鑰在 .secrets/b2-env。沒有就整段刪掉",
+    "_comment": "Optional: nightly encrypted backup (restic). The password is in .secrets/backup-password (keep another copy in your password manager), the B2 key in .secrets/b2-env. Without it, delete the whole section",
     "repo": "b2:<your-bucket>:agent-hub",
     "sqlite": [],
     "bare_repos": "~/git-origin",
@@ -51,22 +51,22 @@
     }
   },
   "github": {
-    "_comment": "選配:onboard 時建 GitHub repo 用的帳號(要先 gh auth login)",
+    "_comment": "Optional: the account used to create GitHub repos when onboarding (gh auth login first)",
     "owner": "<your-github-user>"
   },
   "ideas": {
     "limit": 20,
-    "_comment": "想法沙盒(type: idea)同時最多幾個,create-idea-sandbox.py / POST /v1/sandboxes"
+    "_comment": "The maximum number of idea sandboxes (type: idea) at once, create-idea-sandbox.py / POST /v1/sandboxes"
   },
   "mailbox": {
     "conversation_wait_min": 5,
     "resume_max_tokens": 150000,
     "thread_max_rounds": 4,
     "daily_runs_per_project": 6,
-    "_comment": "專案信箱的分流(bin/hubbus dispatch,docs/design/mailbox-routing.md):有人在用/對話對象開著先等幾分鐘、接續的 context 上限(超過改派新的)、同一串最多代為處理幾輪、每個專案每天最多派幾次"
+    "_comment": "Project mailbox routing (bin/hubbus dispatch, docs/design/mailbox-routing.md): how many minutes to wait first when someone is using the project/the conversation partner is open, the context limit for continuing (beyond it a fresh one is dispatched), the maximum rounds handled per thread, the maximum dispatches per project per day"
   },
   "credentials": {
-    "_comment": "使用者層級的憑證位置(policy.py → 各執行環境的 sandbox 讀不到;租約的 --settings、平台代跑的 profile 都擋)。dirs 連底下全部,files 單一檔案",
+    "_comment": "User-level credential locations (policy.py → unreadable in every runtime's sandbox; blocked by the lease's --settings and the platform runner's profile too). dirs include everything below them, files are single files",
     "dirs": [
       "~/.claude",
       "~/.ssh",
@@ -78,27 +78,27 @@
     ]
   },
   "capabilities": {
-    "_comment": "平台的能力清單(docs/design/capabilities.md):專案登錄 enforce.capabilities 只收這裡有的名稱,每個能力一個 profile 片段 capabilities/<名稱>.sb。default_for:建立那種專案時自動寫進登錄(create-idea-sandbox.py);risk: high 的不會自動加,要 owner 同意後由 agent-hub 的 session 改登錄",
+    "_comment": "The platform's list of capabilities (docs/design/capabilities.md): a project registry's enforce.capabilities accepts only names listed here, each capability with a profile fragment capabilities/<name>.sb. default_for: written into the registry automatically when that kind of project is created (create-idea-sandbox.py); risk: high ones are never added automatically, an agent-hub session changes the registry after the owner agrees",
     "gpu": {
       "risk": "low",
       "default_for": [
         "idea"
       ],
-      "description": "用 GPU(Metal)跑程式,例:Blender 出圖。檔案跟網路範圍不變大"
+      "description": "Run programs on the GPU (Metal), e.g. Blender renders. The file and network scope do not grow"
     }
   },
   "cap_runner": {
-    "_comment": "平台代跑(bin/cap-runner.py、bin/hub-run):工作逾時預設/上限(秒)、同時最多跑幾個(每個專案固定 1 個)",
+    "_comment": "The platform runner (bin/cap-runner.py, bin/hub-run): job timeout default/maximum (seconds), the maximum running at once (always 1 per project)",
     "timeout_s": 600,
     "max_timeout_s": 1800,
     "concurrency": 2
   },
   "runtime": {
     "default": "claude",
-    "_comment": "平台用哪個執行環境(runtime_ports.RUNTIMES 的名稱;docs/design/runtime-abstraction.md)。Claude Code 只是一個實作"
+    "_comment": "Which runtime the platform uses (a name in runtime_ports.RUNTIMES; docs/design/runtime-abstraction.md). Claude Code is just one implementation"
   },
   "lease": {
-    "_comment": "通道租借:這些網域(含子網域)任何人都能架、看得到誰來請求或貼了什麼,WebFetch 只能一次一次核准,不能「這個租約都允許」(個人助理的權限卡片從 runner 的 GET /v1/policy 讀同一份)",
+    "_comment": "Channel leases: anyone can host on these domains (including subdomains) and see who requests or what was posted, so WebFetch to them can only be approved one at a time, never \"allowed for this whole lease\" (the personal assistant's permission card reads the same list from the runner's GET /v1/policy)",
     "no_session_domains": [
       "webhook.site",
       "requestbin.com",
@@ -137,13 +137,13 @@
     ]
   },
   "hosts": {
-    "_comment": "server:跑 hub 的那台機器的 ssh 名稱——只有「在一台機器跑、從另一台遙控」時才需要;一台機器全包就留空。mbp_home/mini_home:讀舊對話紀錄的路徑換算,通常不用填",
+    "_comment": "server: the ssh name of the machine that runs the hub, needed only when it runs on one machine and is driven from another; leave it empty when one machine does everything. mbp_home/mini_home: path translation for reading old transcripts, usually left empty",
     "server": "",
     "mbp_home": "",
     "mini_home": ""
   },
   "modules": {
-    "_comment": "可以不開的功能(modules/<名稱>.yaml):true 才採用。assistant 要先設定 assistant 段、backup 要先設定 backup 段",
+    "_comment": "Features that can stay off (modules/<name>.yaml): adopted only when true. assistant needs the assistant section set up first, backup the backup section",
     "consolidate": true,
     "reflect": true,
     "mirror": false,

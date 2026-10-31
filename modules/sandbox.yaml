@@ -1,11 +1,14 @@
-# 第二階段強制的「能力」:sandbox 擋住的程式用 bin/hub-run --cap <能力> 交給平台代跑(docs/design/capabilities.md)。
-# 登錄的 enforce 欄位驗證、render-settings(寫 sandbox 設定)留在核心:沒開模組也要讀得到登錄、關掉 enforce 也要能退回。
+# "Capabilities" for phase-two enforcement: a program the sandbox blocks is handed to the platform runner with
+# bin/hub-run --cap <capability> (docs/design/capabilities.md).
+# Validating the registry's enforce field and render-settings (writes the sandbox settings) stay in the core: the
+# registry must be readable without the module, and turning enforce off must be able to revert.
 v: 1
 name: sandbox
 type: module
 description: "Platform-run capabilities (cap-runner): sandboxed projects borrow a capability with agenthub cap-run --cap"
 services:
-- name: cap-runner               # bin/cap-runner.py:用平台的 Seatbelt profile 執行 hub-run 放的請求
+# bin/cap-runner.py: runs the requests hub-run drops off under the platform's Seatbelt profile
+- name: cap-runner
   label: local.agent-hub.cap-runner
   run: bin/py bin/cap-runner.py
   keepalive: true

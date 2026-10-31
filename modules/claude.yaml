@@ -1,16 +1,21 @@
-# Claude Code 專用的維護(docs/design/tool-agnostic.md):登入檢查、更新 claude、headless token 的到期。
-# 用 Claude Code 當執行環境(runtime.default: claude)或判斷點交給它跑的才開;沒用 Claude 的人不開,這些 job 跟憑證檢查就不存在,
-# 也不會因為「沒有 Claude 的 token」收到警報。
+# Maintenance specific to Claude Code (docs/design/tool-agnostic.md): login check, updating claude, headless token
+# expiry. Turn it on only when Claude Code is the runtime (runtime.default: claude) or judgment points are handed to it;
+# someone who doesn't use Claude leaves it off, so these jobs and credential checks don't exist and no alert arrives for
+# "no Claude token".
 v: 1
 name: claude
 type: module
 description: "Claude Code login check, updates, headless token expiry reminders"
 jobs:
-- name: claude-login             # claude 的三份登入(launchd 訂閱登入、headless token、SSH 用的 .credentials.json)還能用嗎;壞了/快到期發警報
+# do claude's three logins (launchd subscription login, headless token, the .credentials.json used over SSH) still work;
+# alerts when broken/about to expire
+- name: claude-login
   legacy_name: agent-hub/claude-login
   every: 1h
   run: bin/py bin/check-claude-login.py
-- name: update-claude            # nvm 預設版本底下的 claude 更新到最新(排程/租借/助理用這份;Desktop 的 session 用自己的);裝不起來就裝回舊版、失敗
+# updates the claude under the nvm default version to the latest (schedules/leases/the assistant use this one; Desktop
+# sessions use their own); if the install fails, reinstalls the old version and fails
+- name: update-claude
   legacy_name: agent-hub/update-claude
   at: "01:15"
   max_attempts_per_day: 2

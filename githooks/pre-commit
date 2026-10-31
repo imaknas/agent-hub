@@ -1,8 +1,10 @@
 #!/usr/bin/env bash
-# agent-hub 的 commit 閘門(git config core.hooksPath githooks):
-#   改到程式碼 → 平台的 Python 跑全部測試都過(bin/test-gate,只管「程式碼過測試」)
-#   改到 config(hub.json、登錄、models.env…)→ config 合格(bin/config-check --staged;沒改到 config 就直接過)
-# 兩支都驗暫存區,不是 working tree。
+# agent-hub's commit gate (git config core.hooksPath githooks):
+#   code changed → all tests pass with the platform's Python (bin/test-gate, which only covers "the code passes the
+#   tests")
+#   config changed (hub.json, registry, models.env…) → the config is valid (bin/config-check --staged; passes at once
+#   when no config changed)
+# Both check the index, not the working tree.
 root="$(git rev-parse --show-toplevel)"
 "$root/bin/test-gate" || exit 1
 exec "$root/bin/py" "$root/bin/config-check" --staged

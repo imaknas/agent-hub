@@ -3,8 +3,9 @@
 __pycache__/
 .secrets/
 
-# 實例目錄的指標檔(docs/design/new-user.md 3.1):每台機器自己的,絕不進版控
+# Pointer to the instance directory (docs/design/new-user.md 3.1): each machine's own, never in version control
 .hub-home
 
-# 這台的規則檔(Claude Code 讀;內容只是引用實例目錄的 config/AGENTS.local.md),不進版控
+# This machine's rules file (read by Claude Code; it only references the instance directory's config/AGENTS.local.md),
+# not in version control
 CLAUDE.local.md

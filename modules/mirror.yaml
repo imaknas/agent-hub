@@ -1,4 +1,4 @@
-# GitHub repo 的唯讀 --mirror clone(mirror-list.txt),純粹災難復原用,零 LLM。
+# Read-only --mirror clones of GitHub repos (mirror-list.txt), purely for disaster recovery, zero LLM.
 v: 1
 name: mirror
 type: module

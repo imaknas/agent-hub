@@ -1,6 +1,9 @@
-# 內建的最小 owner 端(bin/owner.py;docs/design/tool-agnostic.md「owner 端可以換」):沒有個人助理的人用這個。
-# 給 owner 的待辦、問題有新的就照 hub.json alerts 的管道通知;結案、回答用 `agenthub owner …`。
-# 有助理(owner_side: assistant)的部署不開這個模組——兩個 principal 端會打架。
+# The built-in minimal owner side (bin/owner.py; docs/design/tool-agnostic.md, "the owner side can be swapped"): for
+# people
+# without a personal assistant. New to-dos and questions for the owner are notified through the hub.json alerts
+# channels;
+# close and answer with `agenthub owner …`.
+# A deployment with an assistant (owner_side: assistant) leaves this module off: two principal sides would fight.
 v: 1
 name: owner
 type: module

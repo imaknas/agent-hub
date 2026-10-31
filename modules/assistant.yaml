@@ -1,7 +1,10 @@
-# 個人助理(hub.json assistant;可選的工具,docs/design/tool-agnostic.md):問 owner 的問題對帳、
-# 讓助理把對話借給專案 session 的通道租借。沒有助理的部署不開這個模組(owner 端用內建的 owner 模組)。
-# 〔owner〕待辦的 registrar 10-29 搬回核心(projects/agent-hub.yaml 的 registrar):不管 owner 端是誰都要跑。
-# reconcile-questions 寄的信會被信箱 dispatch 馬上分派,只在晚上跑一次,不要改成間隔型。
+# The personal assistant (hub.json assistant; an optional tool, docs/design/tool-agnostic.md): reconciling questions to
+# the owner, and channel leases that let the assistant lend its conversation to a project session. A deployment without
+# an assistant leaves this module off (the owner side uses the built-in owner module).
+# The 〔owner〕 to-do registrar moved back to the core on 10-29 (registrar in projects/agent-hub.yaml): it runs whoever
+# the owner side is.
+# The letters reconcile-questions sends are dispatched right away by the mailbox dispatch; it runs only once at night,
+# don't make it an interval job.
 v: 1
 name: assistant
 type: module
@@ -15,15 +18,18 @@ jobs:
   max_attempts_per_day: 1
   run: bin/py bin/hubbus reconcile-questions
 services:
-- name: lease-runner             # 通道租借(bin/lease-runner.py):127.0.0.1:18797,Bearer token 在 .secrets/runner-token
+# channel leases (bin/lease-runner.py): 127.0.0.1:18797, Bearer token in .secrets/runner-token
+- name: lease-runner
   label: local.agent-hub.lease-runner
   run: bin/py bin/lease-runner.py
   keepalive: true
   throttle_s: 10
-  env: {PATH: "$PLATFORM_PATH"}   # nvm 預設版本(claude)+ Homebrew,見 hubconf.LAUNCHD_PATH
-secrets:   # 開了這個模組才檢查(check-secrets.py)
+  env: {PATH: "$PLATFORM_PATH"}   # the nvm default version (claude) + Homebrew, see hubconf.LAUNCHD_PATH
+secrets:   # checked only when this module is on (check-secrets.py)
 - {name: lease-runner-token, path: .secrets/runner-token, why: "通道租借的 Bearer token;不見了 runner 會重產,助理那邊要跟著換"}
-consumes:   # 助理定義的格式(副本在 contracts/vendor/ 底下);沒開這個模組就不比對(contracts-check.py)
+# formats the assistant defines (copies under contracts/vendor/); not compared when this module is off
+# (contracts-check.py)
+consumes:
 - {contract: muninn-handoffs, v: 1, copy: contracts/vendor/muninn/handoffs.v1.schema.json, from: muninn}
 - {contract: muninn-digests, v: 1, copy: contracts/vendor/muninn/digests.v1.schema.json, from: muninn}
 - {contract: muninn-messages, v: 1, copy: contracts/vendor/muninn/messages.v1.schema.json, from: muninn}

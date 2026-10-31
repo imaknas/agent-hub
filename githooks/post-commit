@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
-# 抓出跳過閘門的 commit(git commit --no-verify):改到程式碼(或 config)、但 tree 不是 bin/test-gate
-# (或 bin/config-check)剛驗過的那個,就記一行到 .state/test-gate-bypassed.log 並提醒。不擋(commit 已經成立),只讓它看得見。
+# Catches commits that skipped the gate (git commit --no-verify): when code (or config) changed but the tree is not the
+# one bin/test-gate (or bin/config-check) just validated, writes a line to .state/test-gate-bypassed.log and warns.
+# It doesn't block (the commit already exists), it only makes it visible.
 root="$(git rev-parse --show-toplevel)" || exit 0
 tree="$(git rev-parse 'HEAD^{tree}')"
 files="$(git diff-tree --no-commit-id --name-only -r HEAD)"
@@ -15,6 +16,6 @@ if echo "$files" | grep -Eq "$CONFIG" && [ "$(cat "$(git rev-parse --git-path co
 fi
 [ ${#bypassed[@]} -eq 0 ] && exit 0
 mkdir -p "$root/.state"
-echo "$(date '+%Y-%m-%dT%H:%M:%S') $(git rev-parse --short HEAD) $(git log -1 --format=%s)(沒跑:${bypassed[*]})" >>"$root/.state/test-gate-bypassed.log"
-echo "post-commit:這個 commit 沒有通過閘門(記在 .state/test-gate-bypassed.log)。請跑:${bypassed[*]}。" >&2
+echo "$(date '+%Y-%m-%dT%H:%M:%S') $(git rev-parse --short HEAD) $(git log -1 --format=%s) (not run: ${bypassed[*]})" >>"$root/.state/test-gate-bypassed.log"
+echo "post-commit: this commit did not pass the gate (recorded in .state/test-gate-bypassed.log). Please run: ${bypassed[*]}." >&2
 exit 0

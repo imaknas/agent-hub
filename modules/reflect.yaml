@@ -1,4 +1,5 @@
-# 每週回顧(bin/weekly-reflect.sh):上一週的跨專案活動統計 + 一次模型呼叫(只送統計數字)。
+# Weekly review (bin/weekly-reflect.sh): the previous week's cross-project activity statistics + one model call (only
+# the statistics are sent).
 v: 1
 name: reflect
 type: module

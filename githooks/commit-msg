@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
-# agent-hub 的 commit 標題要是 Conventional Commits(bin/commit_title.py;type 跟助理的 repo 同一組、共用 cliff.toml)。
+# agent-hub commit titles must be Conventional Commits (bin/commit_title.py; the same set of types as the assistant's
+# repo, sharing cliff.toml).
 root="$(git rev-parse --show-toplevel)"
 exec "$root/bin/py" "$root/bin/commit_title.py" --file "$1"

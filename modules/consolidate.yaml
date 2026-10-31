@@ -1,6 +1,8 @@
-# 回頭清理(bin/consolidate-memory.py):超過 14 天的 memory 日期檔整理進 reference/、修正被推翻的敘述。
-# opus、一晚最多 3 個專案、每個專案最多一週一次,沒有夠舊的日期檔就零 LLM 跳過。背景跑;用 before: 排在 librarian 前面,
-# librarian 拿到的是整理過的副本。腳本 30 分鐘後不開新專案、單次呼叫上限 20 分鐘。失敗不重試(LLM job)。
+# Looking back (bin/consolidate-memory.py): folds memory date files older than 14 days into reference/ and corrects
+# statements that were overturned. opus, at most 3 projects a night and each project at most once a week; with no date
+# files old enough it skips with zero LLM. Runs in the background; before: puts it ahead of the librarian, so the
+# librarian gets the consolidated copy. After 30 minutes the script starts no new project; a single call is capped at
+# 20 minutes. No retry on failure (LLM job).
 v: 1
 name: consolidate
 type: module

@@ -1,4 +1,4 @@
-# ruff(bin/lint、commit 閘門):只開抓錯的 pyflakes 規則,排版跟命名風格不管。
+# ruff (bin/lint, the commit gate): only the pyflakes rules that catch errors; layout and naming style are not checked.
 target-version = "py313"
 line-length = 140
 

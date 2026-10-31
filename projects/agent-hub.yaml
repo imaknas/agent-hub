@@ -1,48 +1,60 @@
-# 專案登錄(schema v1,見 bin/registry.py);直接改這個檔
-# background: true = 在背景跑,不擋後面的 job;超過幾分鐘的 job 都要加。
-# hubbus-bridge:Muninn 的轉交收進各專案信箱、給 owner 的信跟轉交的 done 送進 Muninn、太久沒人收的信交給
-#   headless agent、清掉 60 天前結案的。短、冪等、零 LLM(升級時才會開 claude -p)。
+# Project registry entry (schema v1, see bin/registry.py); edit this file directly
+# background: true = runs in the background without holding up the jobs after it; every job longer than a few minutes
+#   needs it.
+# hubbus-bridge: brings the assistant's handoffs into each project's mailbox, sends letters for the owner and done for
+#   handoffs to the assistant, hands letters nobody picked up for too long to a headless agent, clears those closed more
+#   than 60 days ago. Short, idempotent, zero LLM (only an escalation opens claude -p).
 v: 1
 name: agent-hub
 memory: false
 push_on_merge: false
-commits: conventional          # commit 標題(bin/commit_title.py;這個 repo 另外有 githooks/commit-msg)
+commits: conventional          # commit titles (bin/commit_title.py; this repo also has githooks/commit-msg)
 jobs:
 - name: librarian
   legacy_name: librarian
   at: 03:00
   background: true
-  run: bin/py bin/librarian.py   # 10-27 換掉 librarian.sh(行為測試 tests/test_librarian_flow.py 兩支都跑過)
+  # replaced librarian.sh on 10-27 (the behavior test tests/test_librarian_flow.py ran against both)
+  run: bin/py bin/librarian.py
   cwd: hub
-# librarian 之後的機械步驟(零 LLM),以前寫死在 librarian.sh 的最後,現在各自是一個 job(docs/design/new-user.md 第 0 步):
-# 各自重跑、各自在狀態頁顯示成敗。個人助理專屬的(reconcile-questions、通道租借)在 modules/assistant.yaml;
-# 沒開那個模組時這裡照樣跑。consolidate-memory、mirror-backup、weekly-reflect、backup 也在 modules/。
-- name: registrar                # Principal Handoff 0.3 的 requester 端:〔owner〕待辦 → raised record、收回 settled 照 key 套用。
-  legacy_name: assistant/knas-tasks   # 10-29 從 assistant 模組搬回核心:不管 owner 端是助理還是內建的都要跑(tool-agnostic.md)
+# The mechanical steps after the librarian (zero LLM), formerly hard-coded at the end of librarian.sh, are now each a
+# job of their own (docs/design/new-user.md step 0): each re-runs on its own and shows its own result on the status
+# page. The ones specific to the personal assistant (reconcile-questions, channel leases) are in modules/assistant.yaml;
+# without that module these still run. consolidate-memory, mirror-backup, weekly-reflect and backup are in modules/
+# too.
+# the requester side of Principal Handoff 0.3: 〔owner〕 to-dos → raised records; settled ones applied by key.
+- name: registrar
+  # moved back from the assistant module to the core on 10-29: runs whether the owner side is the assistant or the
+  # built-in one (tool-agnostic.md)
+  legacy_name: assistant/knas-tasks
   at: 03:00
   after:
   - librarian
-  before:                        # todo.md 要是套用過的(todo、publish 排在它後面)
+  before:                        # todo.md must reflect what was applied (todo and publish come after it)
   - todo
   - librarian-publish
   max_attempts_per_day: 3
   run: bin/py bin/registrar.py
   cwd: hub
-- name: todo                     # 跨專案待辦清單 todo.md(各專案 STATE.md 的 ## 待辦,機械產生)
+# the cross-project to-do list todo.md (from each project's STATE.md ## 待辦, generated mechanically)
+- name: todo
   at: 03:00
   after:
   - librarian
   max_attempts_per_day: 3
-  run: bin/py bin/gen-todo.py   # 寫到 data 目錄的 todo.md(hubconf.data_file)
+  run: bin/py bin/gen-todo.py   # writes todo.md in the data directory (hubconf.data_file)
   cwd: hub
-- name: memory-gaps              # 有對話但沒記 memory 的專案 → todo.md 的固定區塊 + 今天的 digest;todo 會整份重生,所以排在它後面
+# projects with conversations but no memory notes → a fixed block in todo.md + today's digest; todo regenerates the
+# whole file, so this comes after it
+- name: memory-gaps
   at: 03:00
   after:
   - todo
   max_attempts_per_day: 3
   run: bin/py bin/check-memory-gaps.py --apply
   cwd: hub
-- name: librarian-publish        # 重生 index.md 的名冊,commit 今天的 digest、index.md、review-log.md、todo.md
+# regenerates the roster in index.md, commits today's digest, index.md, review-log.md, todo.md
+- name: librarian-publish
   at: 03:00
   after:
   - librarian
@@ -60,31 +72,39 @@ jobs:
   every: 15m
   cwd: hub
   run: bin/py bin/render-services.py
-- name: render-settings          # 第二階段:登錄 enforce.sandbox 的專案 → sandbox + 權限規則;偏移就寫回並失敗(狀態頁紅)
+# phase two: projects with enforce.sandbox in the registry → sandbox + permission rules; drift is written back and the
+# job fails (status page red)
+- name: render-settings
   every: 15m
   cwd: hub
   run: bin/py bin/render-project-settings.py
-- name: registry-updates         # 專案寄來的 manifest.update 信:驗證後套用或退回(零 LLM)
+- name: registry-updates         # manifest.update letters from projects: validated, then applied or returned (zero LLM)
   every: 15m
   cwd: hub
   run: bin/py bin/registry.py apply-updates
-- name: secrets                  # 登錄宣告的憑證(各專案的 secrets:)在不在、有沒有被備份、快不快到期;不讀值。有問題發 Discord
+# the credentials declared in the registry (each project's secrets:): present, backed up, about to expire; values are
+# not read. Sends Discord on problems
+- name: secrets
   at: "08:00"
   cwd: hub
   max_attempts_per_day: 2
   run: bin/py bin/check-secrets.py
-- name: prune-worktrees           # 已合併、乾淨的 worktree:閒置 ≥ 2 天刪重建得回來的依賴、≥ 14 天且沒人在用才移除(branch 留著)
+# merged, clean worktrees: idle ≥ 2 days, delete rebuildable dependencies; removed only at ≥ 14 days with nobody using
+# them (branch kept)
+- name: prune-worktrees
   at: "04:30"
   cwd: hub
   max_attempts_per_day: 1
   run: bin/py bin/prune-worktrees --auto
-- name: contracts-check          # 契約副本 == 原版(兩個方向)+ 實際資料照契約;不一致發 job.failed
+# contract copies == originals (both directions) + real data follows the contracts; a mismatch sends job.failed
+- name: contracts-check
   at: "01:30"
   cwd: hub
   max_attempts_per_day: 1
   run: bin/py bin/contracts-check.py --quiet
 provides:
-- {contract: lease-runner, v: 2, schema: contracts/lease-runner.v2.schema.json}   # 跟執行環境無關;v1 10-25 Muninn 換好後刪了(contracts/retired/)
+# runtime-independent; v1 was deleted on 10-25 once the assistant had switched (contracts/retired/)
+- {contract: lease-runner, v: 2, schema: contracts/lease-runner.v2.schema.json}
 - {contract: lease-handover, v: 1, schema: contracts/lease-handover.v1.schema.json}
 - {contract: hubbus, v: 1, schema: contracts/hubbus.v1.schema.json}
 - {contract: todo-md, v: 1, schema: contracts/todo-md.v1.md}
@@ -92,29 +112,38 @@ provides:
 - {contract: reflect-week, v: 1, schema: contracts/reflect-week.v1.schema.json}
 - {contract: project, v: 1, schema: contracts/project.v1.schema.json}
 - {contract: llm-points, v: 1, schema: contracts/llm-points.v1.schema.json}
-# 讀助理(Muninn)的契約寫在 modules/assistant.yaml 的 consumes(沒開助理模組就不比對)
+# reading the assistant's contracts is declared in the consumes of modules/assistant.yaml (not compared when the
+# assistant module is off)
 services:
-# 平台自己的三個常駐/定時程式(lease-runner 在 modules/assistant.yaml、cap-runner 在 modules/sandbox.yaml):以前是 launchd/ 底下寫死 /Users/<you> 的 plist,10-26 起跟專案的服務一樣由 render-services 產生
-# (路徑從 hubconf)。排程器跟看門狗刻意不在這裡:render-services 是排程器跑的 job,而排程器壞了正是看門狗要報的事
-# (那兩份由 bin/hub init 裝,docs/design/new-user.md 3.3)。
-- name: mailbox-dispatch          # 沒人收的 request/question 由平台處理(hubbus dispatch,每分鐘;docs/design/mailbox-routing.md)
+# The platform's own three long-running/periodic programs (lease-runner is in modules/assistant.yaml, cap-runner in
+# modules/sandbox.yaml): formerly plists under launchd/ with /Users/<you> hard-coded, since 10-26 generated by
+# render-services like the projects' services (paths from hubconf). The scheduler and the watchdog are deliberately not
+# here: render-services is a job the scheduler runs, and a broken scheduler is exactly what the watchdog has to report
+# (those two are installed by bin/hub init, docs/design/new-user.md 3.3).
+# requests/questions nobody picks up are handled by the platform (hubbus dispatch, every minute;
+# docs/design/mailbox-routing.md)
+- name: mailbox-dispatch
   label: local.agent-hub-mailbox-dispatch
   cwd: hub
   run: bin/py bin/hubbus dispatch
   interval_s: 60
-  env: {PATH: "$PLATFORM_PATH:/usr/sbin:/sbin"}   # dispatch 會開 headless agent(claude、git);sbin 照舊 plist 留著
-- name: status-page               # 排程狀態頁(gen-status-page.py 產生的 .state/status,tailscale serve 對 tailnet 開)
+  # dispatch opens headless agents (claude, git); sbin kept as in the old plist
+  env: {PATH: "$PLATFORM_PATH:/usr/sbin:/sbin"}
+# the schedule status page (.state/status produced by gen-status-page.py, opened to the tailnet with tailscale serve)
+- name: status-page
   label: local.status-page
   cwd: hub
   run: bin/py -m http.server 18790 --bind 127.0.0.1 --directory .state/status
   keepalive: true
   log: .logs/status-page.log
-- name: sync-all-memory           # 每小時對所有專案的 .agent-memory 補 commit + push(SessionEnd hook 的安全網)
+# hourly catch-up commit + push of every project's .agent-memory (the safety net for the SessionEnd hook)
+- name: sync-all-memory
   label: local.sync-all-memory-mini
   cwd: hub
   run: bin/sync-all-memory.sh
   interval_s: 3600
 
-# 機器層級的憑證(平台管)不寫在這裡:用到的功能各自宣告——備份的在 modules/backup.yaml、通道租借的在 modules/assistant.yaml、
-# Claude Code 的在 modules/claude.yaml;警報(hub.json alerts)跟 LLM provider(hub.json llm)的 key 由 check-secrets.py 從設定推出來。
-# 沒開的功能不檢查(新使用者不會被要一堆他沒用的憑證)
+# Machine-level credentials (managed by the platform) are not listed here: each feature that uses one declares it (the
+# backup's in modules/backup.yaml, channel leases' in modules/assistant.yaml, Claude Code's in modules/claude.yaml); the
+# keys for alerts (hub.json alerts) and LLM providers (hub.json llm) are derived from the settings by check-secrets.py.
+# Features that are off are not checked (a new user is not asked for a pile of credentials they don't use)
