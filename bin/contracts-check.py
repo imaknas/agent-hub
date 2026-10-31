@@ -83,8 +83,11 @@ def live(index: dict) -> list[str]:
     if bus.exists():
         c = sqlite3.connect(bus, timeout=30)
         c.row_factory = sqlite3.Row
-        for r in c.execute("SELECT * FROM events ORDER BY seq DESC LIMIT 500"):
-            ev = dict(r)
+        try:
+            rows = [dict(r) for r in c.execute("SELECT * FROM events ORDER BY seq DESC LIMIT 500")]
+        finally:
+            c.close()
+        for ev in rows:
             ev["payload"] = json.loads(ev["payload"] or "{}")
             ev["payload"].setdefault("v", 1)  # 2026-10-22 之前的事件沒有 v,讀成 1
             if (e := contracts.check_json(C / "hubbus.v1.schema.json", ev)):

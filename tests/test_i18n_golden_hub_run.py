@@ -6,6 +6,7 @@ In-process with a fake clock; no cap-runner runs (the job's state.json is writte
     bin/py -m unittest tests.test_i18n_golden_hub_run
     I18N_GOLDEN_UPDATE=1 bin/py -m unittest tests.test_i18n_golden_hub_run    # regenerate (only before a conversion)
 """
+import gc
 import importlib.machinery
 import importlib.util
 import io
@@ -16,6 +17,7 @@ import sys
 import tempfile
 import types
 import unittest
+import warnings
 from unittest import mock
 
 ROOT = pathlib.Path(__file__).resolve().parents[1]
@@ -38,14 +40,16 @@ class Golden(unittest.TestCase):
 
     def run_main(self, hr, argv, ws, on_sleep=None, clock=None):
         """main() with argv; returns (exit code, stdout, stderr)."""
+        gc.collect()   # a connection another test (or its leftover thread) left open must not warn into this capture
         out, err = io.TextIOWrapper(io.BytesIO(), encoding="utf-8"), io.TextIOWrapper(io.BytesIO(), encoding="utf-8")
         ticks = iter(clock or [0.0] * 1000)
         fake_time = types.SimpleNamespace(time=lambda: next(ticks), strftime=lambda fmt: "20261031-120000",
                                           sleep=lambda s: on_sleep and on_sleep())
-        with mock.patch.object(sys, "argv", ["hub-run", *argv]), mock.patch.object(sys, "stdout", out), \
+        with warnings.catch_warnings(), mock.patch.object(sys, "argv", ["hub-run", *argv]), mock.patch.object(sys, "stdout", out), \
                 mock.patch.object(sys, "stderr", err), mock.patch.object(hr, "find_workspace", lambda: ws), \
                 mock.patch.object(hr, "time", fake_time), \
                 mock.patch.object(hr, "secrets", types.SimpleNamespace(token_hex=lambda n: "abcdef")):
+            warnings.simplefilter("ignore", ResourceWarning)
             try:
                 code = hr.main()
             except SystemExit as e:
