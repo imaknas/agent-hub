@@ -12,6 +12,9 @@ import pathlib
 import re
 
 import hubconf  # 同在 bin/;用 hublib 的腳本都已經把 bin/ 放進 sys.path
+import i18n
+
+_ = i18n.domain(__file__)
 
 HOME = pathlib.Path.home()
 HUB = hubconf.ROOT
@@ -85,7 +88,7 @@ def digest_append(section: str, text: str, day: str | None = None) -> pathlib.Pa
     block = f"{begin}\n{text.strip()}\n{end}" if text.strip() else ""
     pat = re.compile(rf"\n*{re.escape(begin)}.*?{re.escape(end)}", flags=re.S)
     if old and pat.search(old):  # 原地換掉,段落順序不變
-        body = pat.sub(lambda _: f"\n\n{block}" if block else "", old, count=1)
+        body = pat.sub(lambda _m: f"\n\n{block}" if block else "", old, count=1)
     else:
         body = (old.rstrip() or f"# Digest {day}") + (f"\n\n{block}" if block else "")
     f.parent.mkdir(parents=True, exist_ok=True)
@@ -107,7 +110,7 @@ def main(argv: list) -> int:
                       f.read_text() if f.exists() else "", flags=re.S)
         print(m.group(1) if m else "", end="")
         return 0
-    print("用法:hublib.py digest-append <段落名> < 內容 | digest-section <段落名>", file=sys.stderr)
+    print(_("usage: hublib.py digest-append <section> < content | digest-section <section>"), file=sys.stderr)
     return 2
 
 
