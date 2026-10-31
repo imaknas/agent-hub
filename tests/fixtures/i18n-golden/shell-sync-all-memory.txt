@@ -1,0 +1,27 @@
+$ sync-all-memory.sh
+[exit 0]
+--- stdout
+--- stderr
+
+--- log
+[<T>] alpha: 已 commit+push 新的 memory
+[<T>] beta: 補 push 了之前沒推出去的 commit
+[<T>] gamma: git-sync-memory 失敗
+
+$ sync-all-memory.sh
+[exit 0]
+--- stdout
+--- stderr
+
+--- log
+[<T>] beta: 補 push 失敗
+[<T>] gamma: git-sync-memory 失敗
+
+$ sync-all-memory.sh
+[exit 0]
+--- stdout
+--- stderr
+
+--- log
+[<T>] 連不到 mini,這輪只在本機 commit、不 push
+[<T>] alpha: 已 commit(連不到 mini,先不 push)1 新的 memory

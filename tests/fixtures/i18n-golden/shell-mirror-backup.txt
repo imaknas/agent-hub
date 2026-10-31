@@ -1,0 +1,32 @@
+$ mirror-backup.sh
+[exit 0]
+--- stdout
+[<T>] 沒有 <TMP>/config/mirror-list.txt,沒有要備份的專案
+--- stderr
+
+$ mirror-backup.sh
+[exit 0]
+--- stdout
+[<T>] === mirror-backup run start ===
+[<T>] proj: 第一次 clone --mirror 完成
+[<T>] missing: clone --mirror 失敗
+[<T>] === mirror-backup run end ===
+--- stderr
+
+$ mirror-backup.sh
+[exit 0]
+--- stdout
+[<T>] === mirror-backup run start ===
+[<T>] proj: mirror 已更新
+[<T>] missing: clone --mirror 失敗
+[<T>] === mirror-backup run end ===
+--- stderr
+
+$ mirror-backup.sh
+[exit 0]
+--- stdout
+[<T>] === mirror-backup run start ===
+[<T>] proj: remote update 失敗,保留舊的 mirror 不動
+[<T>] missing: clone --mirror 失敗
+[<T>] === mirror-backup run end ===
+--- stderr

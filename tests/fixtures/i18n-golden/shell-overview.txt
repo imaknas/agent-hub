@@ -1,0 +1,54 @@
+$ overview.sh
+[exit 0]
+--- stdout
+==========================================
+專案:alpha
+路徑:<TMP>/ws/alpha
+origin:(native)
+
+-- 綁定的服務 --
+  - local.alpha-web [NOT running] (agent-hub) — web
+
+-- STATE.md --
+# alpha state
+
+==========================================
+專案:beta
+路徑:<TMP>/ws/beta
+origin:(native)
+
+-- 綁定的服務 --
+(沒有登記任何服務)
+
+-- STATE.md --
+(這台機器上讀不到 STATE.md——試過 <TMP>/ws/beta/.agent-memory/STATE.md 跟 <TMP>/copies/beta/STATE.md,都不存在)
+
+==========================================
+專案:gamma
+路徑:<TMP>/ws/gamma
+origin:(native)
+
+-- 綁定的服務 --
+(沒有登記任何服務)
+
+-- STATE.md --
+(讀自 mini 的 memory-only clone:<TMP>/copies/gamma/STATE.md)
+# gamma copy
+
+--- stderr
+
+$ overview.sh beta
+[exit 0]
+--- stdout
+==========================================
+專案:beta
+路徑:<TMP>/ws/beta
+origin:(native)
+
+-- 綁定的服務 --
+(沒有登記任何服務)
+
+-- STATE.md --
+(這台機器上讀不到 STATE.md——試過 <TMP>/ws/beta/.agent-memory/STATE.md 跟 <TMP>/copies/beta/STATE.md,都不存在)
+
+--- stderr

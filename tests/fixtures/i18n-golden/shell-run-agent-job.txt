@@ -1,0 +1,56 @@
+$ run-agent-job.sh
+[exit 1]
+--- stdout
+--- stderr
+<HUB>/bin/run-agent-job.sh: line <N>: 1: 用法: run-agent-job.sh <name> [工作目錄] [prompt 名稱]
+
+$ run-agent-job.sh no-prompt
+[exit 1]
+--- stdout
+--- stderr
+run-agent-job: 找不到 <TMP>/hub/agent-jobs/no-prompt.md
+
+$ run-agent-job.sh job-a
+[exit 0]
+--- stdout
+run-agent-job: job-a 已經自己停止(condition met),略過
+--- stderr
+
+$ run-agent-job.sh job-a <TMP>/nowhere
+[exit 1]
+--- stdout
+--- stderr
+run-agent-job: 工作目錄 <TMP>/nowhere 不存在
+
+error=工作目錄 <TMP>/nowhere 不存在
+$ run-agent-job.sh job-a <TMP>/ws/job
+[exit 0]
+--- stdout
+--- stderr
+
+state=ok
+notify=yes
+summary=🔔 needs a look
+error=
+--- file <DATE>.md
+🔔 needs a look
+second line
+
+---
+job: job-a · 工作目錄: <TMP>/ws/job · session: s-1 · 3 turns · 1.5 分鐘
+(接著討論:在 mini 上 cd <TMP>/ws/job && claude --resume s-1)
+
+$ run-agent-job.sh job-a <TMP>/ws/job
+[exit 0]
+--- stdout
+--- stderr
+
+state=failed
+error=claude 沒有輸出 JSON
+$ run-agent-job.sh job-a <TMP>/ws/job
+[exit 0]
+--- stdout
+run-agent-job: job-a 已在背景開始,結果見 <TMP>/hub/.state/agent-jobs/job-a/status.json
+--- stderr
+
+state=ok

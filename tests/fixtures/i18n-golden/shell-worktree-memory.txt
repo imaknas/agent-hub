@@ -1,0 +1,15 @@
+$ worktree-memory.sh start (main checkout)
+[exit 0]
+--- stdout
+--- stderr
+
+$ worktree-memory.sh start (linked worktree)
+[exit 0]
+--- stdout
+(這個 session 在 <TMP>/ws/wt-main 的 git worktree 裡。memory 已經接上主 checkout 的 .agent-memory;
+ CLAUDE.local.md 在 session 開始時還不存在,內容如下,照它做:)
+project rules
+(這個 worktree 閒置期間,每晚的清理刪掉了重建得回來的依賴以節省空間;要跑程式或測試前先重建:)
+  npm install
+  重建好之後刪掉標記:rm "<TMP>/ws/wt-main/.git/worktrees/wt-linked/agent-hub-deps-pruned"
+--- stderr

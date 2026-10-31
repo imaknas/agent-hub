@@ -1,0 +1,52 @@
+$ sync-local-setup.sh <TMP>/ws/plain
+[exit 0]
+--- stdout
+sync-local-setup: <TMP>/ws/plain 沒有 .agent-memory,不是 onboard 過的專案,跳過
+--- stderr
+
+$ sync-local-setup.sh --quiet <TMP>/ws/moved
+[exit 0]
+--- stdout
+⚠️ 這個專案已經搬到 mini(<DATE>,laptop 搬的)。這裡是 MBP 上留著當備份的舊副本,
+不要在這裡做事:請告訴使用者關掉這個 session,改用 Claude Desktop 透過 SSH(hubhost)開 mini 上的那個資料夾。
+--- stderr
+
+$ sync-local-setup.sh <TMP>/ws/proj
+[exit 0]
+--- stdout
+sync-local-setup: CLAUDE.local.md 已對齊
+sync-local-setup: hook 已對齊
+sync-local-setup: ⚠️ AGENT.md 已更新但 commit/push 失敗,下次開 session 會再試
+sync-local-setup: .agent-memory/ 已加進 .git/info/exclude
+sync-local-setup: ⚠️ CLAUDE.local.md 已經被這個 repo 追蹤(commit 過),ignore 無效——請該專案的 session 處理
+sync-local-setup: .claude/settings.local.json 已加進 .git/info/exclude
+⚠️ 這個 repo 已 commit 的檔案寫了這台機器的路徑(repo 之後可能公開,本機路徑不能進 commit;只提 agent-hub 的名稱沒關係):
+  - README
+請在這個專案裡處理:維運需要的資訊搬到 CLAUDE.local.md(agent-hub:begin/end 區塊之外,不進版控),
+committed 檔案裡改成不寫本機路徑的寫法或刪掉,然後 commit。細節可用:
+git grep -n -E '~/agent-hub/|/Users/[A-Za-z0-9._-]+/(agent-hub|workspace|\.agent-hub|services|git-origin)'
+--- stderr
+sync-local-setup: RULES 登記了 no-such-rule,但找不到 <HUB>/templates/rules/no-such-rule.md
+
+$ sync-local-setup.sh <TMP>/ws/clean
+[exit 0]
+--- stdout
+sync-local-setup: CLAUDE.local.md 已對齊
+sync-local-setup: hook 已對齊
+sync-local-setup: AGENT.md 已對齊 template 並 push
+sync-local-setup: .agent-memory/ 已加進 .git/info/exclude
+sync-local-setup: CLAUDE.local.md 已加進 .git/info/exclude
+sync-local-setup: .claude/settings.local.json 已加進 .git/info/exclude
+--- stderr
+
+$ sync-local-setup.sh --quiet <TMP>/ws/clean
+[exit 0]
+--- stdout
+--- stderr
+
+$ sync-local-setup.sh <TMP>/ws/clean
+[exit 0]
+--- stdout
+sync-local-setup: 這個執行環境沒有規則檔(hub.json runtime.default),受管區塊不寫
+sync-local-setup: 這個執行環境沒有 session 事件(hook),不裝
+--- stderr

@@ -1,0 +1,92 @@
+$ librarian-publish.sh (pub-ok)
+[exit 0]
+--- stdout
+已 commit(有變化的話)並 push:index.md review-log.md todo.md
+--- stderr
+
+$ librarian-publish.sh (pub-bad)
+[exit 1]
+--- stdout
+gen-index-roster 失敗
+commit/push 失敗:index.md review-log.md todo.md
+--- stderr
+
+$ openclaw-session-backup.sh (rsync exit 0)
+[exit 0]
+--- stdout
+[<T>] === openclaw-session-backup run start ===
+[<T>] openclaw session backup 完成
+[<T>] === openclaw-session-backup run end ===
+--- stderr
+
+$ openclaw-session-backup.sh (rsync exit 1)
+[exit 0]
+--- stdout
+[<T>] === openclaw-session-backup run start ===
+[<T>] openclaw session backup 失敗,看 log 找原因
+[<T>] === openclaw-session-backup run end ===
+--- stderr
+
+$ git-safe-push.sh (protected)
+[exit 1]
+--- stdout
+--- stderr
+git-safe-push: 被 branch protection 規則擋下,不是分岔問題,重試沒用:
+remote: error: GH006: Protected branch update failed
+
+$ git-safe-push.sh (conflict)
+[exit 1]
+--- stdout
+--- stderr
+git-safe-push: pull 合併失敗,可能是真的內容衝突,需要人工處理:
+CONFLICT (content): Merge conflict in a.txt
+
+$ git-safe-push.sh (diverged)
+[exit 1]
+--- stdout
+--- stderr
+git-safe-push: 重試 5 次後仍然 push 失敗
+
+$ with-lock.sh
+[exit 1]
+--- stdout
+--- stderr
+用法: with-lock.sh <command...>
+
+$ with-lock.sh true
+[exit 1]
+--- stdout
+--- stderr
+with-lock: 不在 git repo 裡
+
+$ with-lock.sh echo inside
+[exit 0]
+--- stdout
+inside
+--- stderr
+
+$ weekly-reflect.sh
+[exit 0]
+--- stdout
+寫入 reflect/2026-W44.json
+reflect/index.html
+commit reflect: 2026-W44 reflect/2026-W44.json reflect/index.html
+--- stderr
+
+$ weekly-reflect.sh (fails)
+[exit 1]
+--- stdout
+--- stderr
+weekly-reflect.py 失敗
+
+$ lease-resume
+[exit 1]
+--- stdout
+--- stderr
+<HUB>/bin/lease-resume: line <N>: 1: 用法: lease-resume <session id>
+
+$ lint
+[exit 2]
+--- stdout
+--- stderr
+lint:平台的 venv 裡沒有 ruff(<TMP>/nopy/bin/ruff);跑 bin/setup-python

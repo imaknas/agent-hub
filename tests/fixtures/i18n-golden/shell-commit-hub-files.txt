@@ -1,0 +1,31 @@
+$ commit-hub-files.sh only-message
+[exit 1]
+--- stdout
+--- stderr
+用法: commit-hub-files.sh "<message>" <path>...
+
+$ commit-hub-files.sh m hub.json todo.md
+[exit 0]
+--- stdout
+commit-hub-files: todo.md 不是 config(data 不進 git),略過
+commit-hub-files: <TMP>/config 不是 git repo,不 commit
+--- stderr
+
+$ commit-hub-files.sh m hub.json todo.md
+[exit 0]
+--- stdout
+commit-hub-files: todo.md 不是 config(data 不進 git),略過
+commit-hub-files: 已 commit+push:hub.json
+--- stderr
+
+$ commit-hub-files.sh m hub.json
+[exit 0]
+--- stdout
+commit-hub-files: hub.json 沒有變化,不 commit
+--- stderr
+
+$ commit-hub-files.sh m nope.txt nope2.txt
+[exit 0]
+--- stdout
+commit-hub-files: nope.txt nope2.txt 都不存在,不 commit
+--- stderr

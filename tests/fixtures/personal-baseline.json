@@ -44,6 +44,7 @@
   "tests/fixtures/i18n-golden/lease-runner.txt": 4,
   "tests/fixtures/i18n-golden/runtime_claude.txt": 1,
   "tests/fixtures/i18n-golden/scheduler-watchdog.txt": 3,
+  "tests/fixtures/i18n-golden/shell-gen-index-roster.txt": 2,
   "tests/fixtures/i18n-golden/status-page-inputs.json": 2,
   "tests/fixtures/i18n-golden/status-page.txt": 2,
   "tests/fixtures/llm-golden.json": 8,

@@ -1,0 +1,62 @@
+$ gen-index-roster.sh
+[exit 0]
+--- stdout
+gen-index-roster: 名冊已更新(3 個專案)
+--- stderr
+
+--- file index.md
+# index
+
+## 專案名冊
+
+<!-- roster:begin — 由 bin/gen-index-roster.sh 從專案登錄產生,不要手動改 -->
+| 專案 | 路徑(mini) |
+|---|---|
+| `alpha` | `<TMP>/ws/alpha` |
+| `beta` | `<TMP>/ws/beta` |
+
+想法沙盒(Muninn 替想法開的探討用專案,登錄 `type: idea`):
+
+| 想法 | 路徑(mini) |
+|---|---|
+| `idea-1` | `<TMP>/ws/idea-1` |
+<!-- roster:end -->
+
+## other
+
+$ gen-index-roster.sh
+[exit 0]
+--- stdout
+gen-index-roster: 名冊沒有變化
+--- stderr
+
+$ gen-index-roster.sh
+[exit 0]
+--- stdout
+gen-index-roster: 名冊已更新(3 個專案)
+--- stderr
+
+--- file index.md
+# index
+
+## 專案名冊
+
+<!-- roster:begin — 由 bin/gen-index-roster.sh 從專案登錄產生,不要手動改 -->
+| 專案 | 路徑(mini) |
+|---|---|
+| `alpha` | `<TMP>/ws/alpha` |
+| `beta` | `<TMP>/ws/beta` |
+
+想法沙盒(Muninn 替想法開的探討用專案,登錄 `type: idea`):
+
+| 想法 | 路徑(mini) |
+|---|---|
+| `idea-1` | `<TMP>/ws/idea-1` |
+<!-- roster:end -->
+
+
+$ gen-index-roster.sh
+[exit 1]
+--- stdout
+--- stderr
+gen-index-roster: 專案登錄是空的(<HUB>/projects)
