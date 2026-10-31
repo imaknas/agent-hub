@@ -1,10 +1,11 @@
 #!/bin/sh -c exec${IFS}"${0%/*}/py"${IFS}"$0"${IFS}"$@"
-"""檢查一份 STATE.md 的 `## 待辦` 段落格式,跟 gen-todo.py 用同一套解析規則。
+"""Check the format of a STATE.md's `## 待辦` section, with the same parsing rules as gen-todo.py.
 
-librarian 每次改完一個專案的 STATE.md 就呼叫:有問題就印出來(結束碼 1),讓
-librarian 請模型只修格式。沒問題什麼都不印、結束碼 0。佔位用的小檔案不檢查。
+The librarian calls it every time it has changed a project's STATE.md: problems are printed (exit code 1), so the
+librarian asks the model to fix only the format. No problems: prints nothing, exit code 0. Small placeholder files are
+not checked.
 
-用法:check-state-todo.py <STATE.md>
+Usage: check-state-todo.py <STATE.md>
 """
 import importlib.util
 import pathlib

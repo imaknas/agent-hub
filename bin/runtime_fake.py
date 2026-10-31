@@ -1,10 +1,13 @@
-"""假的執行環境:runtime_ports 介面的第二個實作。設計:docs/design/runtime-abstraction.md。
+"""A fake runtime: the second implementation of the runtime_ports interface. Design: docs/design/runtime-abstraction.md.
 
-兩個用途:
-1. 證明介面沒有漏出 Claude Code 的形狀——同一組契約測試(tests/test_runtime_contracts.py)Claude 跟這個都要跑過。
-2. 平台其他程式的測試替身:真的記得狀態(對話紀錄、哪些 session 活著、context 多大),不是只記錄有沒有被呼叫。
+Two uses:
+1. Prove the interface doesn't leak Claude Code's shape: Claude and this one must both pass the same contract tests
+   (tests/test_runtime_contracts.py).
+2. A test double for the platform's other programs: it really remembers state (transcripts, which sessions are alive,
+   how big the context is), not just whether it was called.
 
-全部存在記憶體;測試用 reset() 清掉,用 add_turn / start / end / set_context 放資料。標準函式庫。
+Everything lives in memory; tests clear it with reset() and put data in with add_turn / start / end / set_context.
+Standard library.
 """
 from __future__ import annotations
 
@@ -16,9 +19,9 @@ from runtime_ports import TaskResult, Turn
 
 _ = i18n.domain(__file__)
 
-_turns: list[tuple[str, Turn, bool]] = []   # (工作目錄, Turn, 是不是在它底下的 worktree 裡)
-_replies: dict[str, TaskResult] = {}     # 判斷點 → 要回的結果
-_ran: list = []                          # 跑過的 Task(測試看它收到什麼)
+_turns: list[tuple[str, Turn, bool]] = []   # (working dir, Turn, whether in a worktree under it)
+_replies: dict[str, TaskResult] = {}     # judgment point → the result to return
+_ran: list = []                          # Tasks run (tests check what it received)
 _live: set[str] = set()
 _context: dict[str, int] = {}
 _env_key = "FAKE_RUNTIME_SESSION"
@@ -37,10 +40,10 @@ def reset() -> None:
     _context.clear()
 
 
-# ---------- 給測試放資料 ----------
+# ---------- putting data in, for tests ----------
 
 def add_turn(path: str, turn: Turn, worktree: bool = False) -> None:
-    """worktree=True:這則是在 path 底下 runtime 開的 worktree 裡的 session 說的。"""
+    """worktree=True: this turn was said by a session in a worktree the runtime opened under path."""
     _turns.append((str(pathlib.Path(path)), turn, worktree))
 
 
@@ -104,9 +107,9 @@ def current_session(env) -> str | None:
     return env.get(_env_key) or None
 
 
-# ---------- lifecycle(用自己的格式,不是 Claude 的:證明介面沒有 Claude 的形狀)----------
-# 原生輸入:{"sid", "dir", "cmd"?, "where"?, "elsewhere"?};輸出:{"say": 文字} / {"block": 理由};
-# 安裝:在專案資料夾寫 .fake-hooks.json(事件清單)。
+# ---------- lifecycle (its own format, not Claude's: proves the interface has no Claude shape) ----------
+# Native input: {"sid", "dir", "cmd"?, "where"?, "elsewhere"?}; output: {"say": text} / {"block": reason};
+# install: write .fake-hooks.json (the event list) in the project folder.
 
 import json  # noqa: E402
 
@@ -149,8 +152,9 @@ def local_ignores() -> list:
     return [".fake-instructions.md", ".fake-hooks.json"]
 
 
-# ---------- stream(長駐 session 的輸出)----------
-# 假的原生格式:工具名稱就是 kind(認不得的是 other),輸出的每一行是 {"type": ..., "data": {...}}。
+# ---------- stream (output of a long-running session) ----------
+# Fake native format: the tool name is the kind (unrecognized ones are other), each output line is
+# {"type": ..., "data": {...}}.
 
 from runtime_ports import KINDS, StreamEvent  # noqa: E402
 
@@ -175,7 +179,7 @@ def parse_stream(line: str) -> list:
     if not isinstance(d, dict) or not isinstance(d.get("data"), dict):
         return []
     data = dict(d["data"])
-    if d.get("type") == "tool_use":  # 跟 Claude 一樣經過 action() 翻譯,不直接相信輸入
+    if d.get("type") == "tool_use":  # translated through action() like Claude's, the input isn't trusted directly
         kind, _collab, _target, summary = action(data.pop("tool", ""), data.pop("input", None))
         data = {"kind": kind, "summary": summary, "detail": {}}
     return [StreamEvent(d["type"], data)]
@@ -196,12 +200,12 @@ def resume_command(sid: str) -> tuple:
     return (f"fake-resume {sid}", _("fake runtime: resume the same conversation"))
 
 
-# ---------- auth(用自己的變數名稱跟錯誤字句,不是 Claude 的)----------
+# ---------- auth (its own variable names and error wording, not Claude's) ----------
 
 from runtime_ports import Credential  # noqa: E402
 
 _AUTH_VAR = "FAKE_RUNTIME_KEY"
-_creds: dict = {"subscription": True, "token": True}   # mode → 在不在
+_creds: dict = {"subscription": True, "token": True}   # mode → present or not
 
 
 def set_credential(mode: str, present: bool) -> None:
@@ -231,14 +235,15 @@ def is_login_error(text: str) -> bool:
 
 
 def relocate(sid: str, old_cwd, new_cwd) -> bool:
-    return sid in _resumable  # 假的 runtime 沒有照資料夾放的紀錄:接得回來的就接得回來
+    return sid in _resumable  # the fake runtime keeps no per-folder records: whatever can be resumed can be resumed
 
 
 # ---------- completion ----------
 from runtime_ports import CompletionResult  # noqa: E402
 
-_completions: dict[str, list] = {}   # 判斷點 → 依序要回的 CompletionResult(用完了就一直回最後一個)
-_asked: list = []                    # 收到的 (CompletionRequest, conf)
+# judgment point → CompletionResults to return in order (once used up, keeps returning the last)
+_completions: dict[str, list] = {}
+_asked: list = []                    # the (CompletionRequest, conf) pairs received
 
 
 def set_completions(point: str, *results) -> None:

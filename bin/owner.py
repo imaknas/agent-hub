@@ -1,18 +1,25 @@
 #!/bin/sh -c exec${IFS}"${0%/*}/py"${IFS}"$0"${IFS}"$@"
-"""內建的最小 owner 端:Principal Handoff 0.3 的 principal 端(docs/design/tool-agnostic.md「owner 端可以換」)。
+"""The built-in minimal owner side: the principal side of Principal Handoff 0.3 (docs/design/tool-agnostic.md,
+"the owner side can be swapped").
 
-沒有個人助理的人用這個:hub.json `owner_side: builtin`(沒有 assistant.api 時的預設)。跟助理是同一個介面的
-兩個實作——registrar(requester 端)照樣把〔owner〕待辦寫成 `raised` record、收回 `settled` 套用,不知道對面是誰。
+For people without a personal assistant: hub.json `owner_side: builtin` (the default when there is no assistant.api).
+It and the assistant are two implementations of the same interface: the registrar (requester side) still writes
+〔owner〕 to-dos as `raised` records and applies the `settled` ones it gets back, without knowing who's on the other
+side.
 
-  owner.py list [--project P]                 還開著的待辦(Acts)跟問題
+  owner.py list [--project P]                 open to-dos (Acts) and questions
   owner.py done | drop | already-done <key> [--note "…"]
-                                              結案一個待辦:寫 `settled`(authority principal = owner 本人說的),
-                                              registrar 今晚照 key 刪掉那一行
-  owner.py answer <問題 id> "回答"             回答專案問的問題(回到發問的專案,librarian / 那個 session 套用)
-  owner.py notify                             有新的待辦或問題就發通知(hub.json alerts 的管道);排程 job 用
+                                              close a to-do: write `settled` (authority principal = the owner said so),
+                                              the registrar deletes that line by key tonight
+  owner.py answer <question id> "answer"      answer a question a project asked (goes back to the asking project; the
+                                              librarian / that session applies it)
+  owner.py notify                             send a notification when there are new to-dos or questions (the channels
+                                              in hub.json alerts); used by a scheduled job
 
-結案、回答只有 owner 本人跑(這不是專案 session 的指令:權限規則只放行信箱指令,不放行這個)。owner 端是 assistant 時
-這支只能 list——結案在助理那邊做,不然兩個 principal 端會打架(規範 R2:settlement 只屬於 principal 端)。
+Only the owner runs closing and answering (this is not a command for project sessions: the permission rules only let
+the mailbox commands through, not this one). When the owner side is the assistant this script can only list: closing
+is done on the assistant's side, otherwise two principal sides would fight (spec R2: settlement belongs only to the
+principal side).
 """
 from __future__ import annotations
 
@@ -136,7 +143,8 @@ def answer(qid: str, text: str) -> int:
 
 
 def notify() -> int:
-    """新出現的待辦、問題才通知(記住通知過哪些);沒有新的不發。發不出去記在 alert 的失敗紀錄,狀態頁標紅。"""
+    """Notify only about newly appeared to-dos and questions (remembers which were notified); nothing new, nothing sent.
+    If it can't be sent, it's recorded in alert's failure record and the status page shows red."""
     import alert
     items = open_items()
     ids = {it.get("key") or it.get("id") for it in items}
@@ -158,7 +166,7 @@ def notify() -> int:
             print(_("the notification could not be sent"), file=sys.stderr)
             return 1
     SEEN.parent.mkdir(parents=True, exist_ok=True)
-    SEEN.write_text(json.dumps(sorted(x for x in ids if x)))   # 結案的拿掉,重開的會再通知一次
+    SEEN.write_text(json.dumps(sorted(x for x in ids if x)))   # closed ones drop out; reopened ones are notified again
     print(_("owner side: {open} open, {new} new", open=len(items), new=len(new)))
     return 0
 

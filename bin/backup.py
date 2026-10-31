@@ -112,7 +112,8 @@ def is_env_name(name: str) -> bool:
 
 
 def workspace_env_files(ws: pathlib.Path) -> list[pathlib.Path]:
-    """workspace 裡(三層內,跳過 node_modules 之類)的 .env / .env.*:不進版控、丟了救不回來(例:backend/.env)。"""
+    """.env / .env.* in the workspace (up to three levels deep, skipping node_modules and the like): not in version
+    control, can't be recovered if lost (e.g. backend/.env)."""
     out = []
     for dirpath, dirnames, filenames in os.walk(ws):
         depth = len(pathlib.Path(dirpath).relative_to(ws).parts)
@@ -122,12 +123,13 @@ def workspace_env_files(ws: pathlib.Path) -> list[pathlib.Path]:
 
 
 def covers(path: pathlib.Path) -> bool:
-    """這個檔案會不會進備份(check-secrets.py 用;規則跟 cmd_run / stage 一樣):在 include 底下、沒被 exclude,
-    或是登錄的專案 workspace 裡的 .env / .env.*(stage 會複製,見 workspace_env_files)。"""
+    """Whether this file goes into the backup (used by check-secrets.py; same rules as cmd_run / stage): under include
+    and not excluded, or a .env / .env.* in a registered project's workspace (stage copies those, see
+    workspace_env_files)."""
     import fnmatch
     path = path.expanduser().resolve()
     dbs = [hubconf.bus_db(), *(hubconf.path(d["path"]) for d in CFG.get("sqlite") or [])]
-    if any(db and path == db.resolve() for db in dbs):  # SQLite 用 backup API 另外複製
+    if any(db and path == db.resolve() for db in dbs):  # SQLite is copied separately with the backup API
         return True
     for x in CFG.get("exclude") or []:
         pat = str(hubconf.path(x)) if x.startswith(("~", "/")) else x
@@ -201,7 +203,7 @@ def stage() -> dict:
     return manifest
 
 
-# ---------- 指令 ----------
+# ---------- commands ----------
 
 def cmd_run() -> int:
     try:
@@ -209,7 +211,8 @@ def cmd_run() -> int:
         m = stage()
         say(_("stage: SQLite {sqlite}, bare repos {bundles}, workspaces with unpushed work {workspaces}",
               sqlite=len(m["sqlite"]), bundles=len(m["bundles"]), workspaces=len(m["workspace"])))
-        # stage 目錄在 .state 底下,.state 本身在 include 裡,不另外列(不然快照裡會有兩份)
+        # the stage directory is under .state, and .state itself is in include, so it isn't listed separately
+        # (otherwise the snapshot would hold two copies)
         paths = [str(p) for p in (hubconf.path(x) for x in CFG.get("include") or []) if p and p.exists()]
         if not any(STAGE.is_relative_to(pathlib.Path(x)) for x in paths):
             paths.insert(0, str(STAGE))
@@ -218,7 +221,7 @@ def cmd_run() -> int:
             args += ["--exclude", str(hubconf.path(x)) if x.startswith("~") else x]
         r = restic(*args, *paths, capture=True)
         summary = next((json.loads(l) for l in r.stdout.splitlines() if '"message_type":"summary"' in l), {})
-        if now().weekday() == 6:  # 週日套保留規則
+        if now().weekday() == 6:  # apply the retention rules on Sundays
             k = CFG.get("keep") or {}
             restic("forget", "--prune", "--keep-daily", str(k.get("daily", 14)), "--keep-weekly", str(k.get("weekly", 8)),
                    "--keep-monthly", str(k.get("monthly", 12)), capture=True)

@@ -1,12 +1,14 @@
 #!/bin/sh -c exec${IFS}"${0%/*}/py"${IFS}"$0"${IFS}"$@"
-"""清掉已經合併進 main、而且乾淨的 worktree。
+"""Clean up worktrees that are already merged into main and clean.
 
-  prune-worktrees [--project P]          只列出可以刪的(人用)
-  prune-worktrees [--project P] --yes    真的刪,連 branch 一起(人確認過沒有 session 開在裡面)
-  prune-worktrees --auto [--dry-run]     每晚的自動清理(平台 job agent-hub/prune-worktrees):
-                                         閒置 ≥ 2 天只刪重建得回來的依賴(.venv 等,資料夾留著);
-                                         閒置 ≥ 14 天、沒有 process 在裡面、ignore 的檔案都能重建,才移除
-                                         worktree(branch 留著)。規則跟理由在 bin/worktrees.py 檔頭
+  prune-worktrees [--project P]          only list what can be deleted (for people)
+  prune-worktrees [--project P] --yes    really delete, branch included (a person has checked no session is open in it)
+  prune-worktrees --auto [--dry-run]     the nightly automatic cleanup (platform job agent-hub/prune-worktrees):
+                                         idle ≥ 2 days: only delete dependencies that can be rebuilt (.venv etc.,
+                                         the folder stays);
+                                         idle ≥ 14 days, no process inside, and every ignored file can be rebuilt:
+                                         only then remove the worktree (the branch stays). Rules and reasons in the
+                                         header of bin/worktrees.py
 """
 import pathlib
 import sys

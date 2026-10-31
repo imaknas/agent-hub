@@ -1,11 +1,13 @@
-"""OpenAI Chat Completions 相容的 provider(completion 介面;docs/design/llm-providers.md)。
+"""Provider compatible with OpenAI Chat Completions (completion interface; docs/design/llm-providers.md).
 
-同一個實作涵蓋 OpenAI、OpenRouter、Gemini 的相容端點、DeepSeek、LM Studio、vLLM…:hub.json 的 provider 寫 `base_url`
-(預設 https://api.openai.com/v1)。設定:
-  max_tokens_field   預設 max_tokens;OpenAI 的推理模型要 max_completion_tokens
-  structured         false = 不送 response_format,直接把 schema 寫進 prompt(端點不支援時;沒寫也會在 400 時自動改)
-  strict             true = json_schema 的 strict 模式(那家要每個欄位都 required、additionalProperties: false,平台的 schema
-                     多半不符合);預設 false:照樣給 schema 引導,驗證由 completion.py 用 minischema 做
+One implementation covers OpenAI, OpenRouter, Gemini's compatible endpoint, DeepSeek, LM Studio, vLLM…: the provider
+in hub.json sets `base_url` (default https://api.openai.com/v1). Settings:
+  max_tokens_field   default max_tokens; OpenAI's reasoning models need max_completion_tokens
+  structured         false = don't send response_format, write the schema into the prompt instead (when the endpoint
+                     doesn't support it; if unset, it also switches automatically on a 400)
+  strict             true = json_schema's strict mode (that provider wants every field required and
+                     additionalProperties: false, which the platform's schemas mostly don't meet); default false: the
+                     schema is still given as guidance, validation is done by completion.py with minischema
 """
 from __future__ import annotations
 
@@ -33,7 +35,8 @@ def complete(req, conf) -> CompletionResult:
         body.pop("response_format", None)
     status, data, headers, err = call("POST", url, body, _headers(conf), req.timeout_s)
     if req.schema is not None and status in (400, 422, 501) and "response_format" in body and "response_format" in err:
-        # 相容端點不認 response_format / json_schema:改成 schema 寫進 prompt(驗證照樣在 completion.py)
+        # the compatible endpoint doesn't know response_format / json_schema: write the schema into the prompt instead
+        # (validation still happens in completion.py)
         body.pop("response_format")
         body["messages"] = msgs[:-1] + [{"role": "user", "content": schema_in_prompt(req.prompt, req.schema)}]
         status, data, headers, err = call("POST", url, body, _headers(conf), req.timeout_s)
@@ -59,6 +62,7 @@ def health(conf) -> tuple:
 
 
 def list_models(conf) -> list[str]:
-    """這把 key 看得到的模型(agenthub llm setup 讓使用者選;平台不猜模型名稱)。拿不到 → 空的。"""
+    """The models this key can see (agenthub llm setup lets the user choose; the platform doesn't guess model names).
+    Can't get them → empty."""
     status, data, _h, _e = call("GET", (conf.get("base_url") or DEFAULT_BASE).rstrip("/") + "/models", None, _headers(conf), 20)
     return sorted(m.get("id") for m in (data or {}).get("data") or [] if m.get("id")) if status == 200 else []

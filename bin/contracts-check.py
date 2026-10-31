@@ -1,15 +1,16 @@
 #!/bin/sh -c exec${IFS}"${0%/*}/py"${IFS}"$0"${IFS}"$@"
-"""每晚的契約檢查(平台 job;零 LLM)。各 repo 自己的測試只做 ②(範例照自己的副本驗證,不依賴別的 repo);
-這支做只有平台做得到的:
+"""The nightly contract check (platform job; zero LLM). Each repo's own tests only do ② (examples validated against
+its own copy, not depending on other repos); this one does what only the platform can:
 
-  ① 副本 == 原版:專案登錄裡每個 `consumes`(copy 路徑,from 哪個專案)跟那個專案 `provides` 的原版比,
-     兩個方向都比(agent-hub 的 vendor 副本 ↔ 別人的原版;別人 vendor 的 agent-hub 契約 ↔ agent-hub 的原版)
-  ③ 實際資料照契約:todo.md、所有登錄檔、最近的匯流排事件、最新一週的 reflect json、
-     owner 助理現在的 `handoffs --json` 輸出
+  ① copy == original: every `consumes` in the project registry (copy path, from which project) is compared with the
+     original that project `provides`, in both directions (agent-hub's vendor copies ↔ others' originals; others'
+     vendored agent-hub contracts ↔ agent-hub's originals)
+  ③ real data follows the contracts: todo.md, every registry file, recent bus events, the latest week's reflect json,
+     the owner's assistant's current `handoffs --json` output
 
-不一致就在匯流排發 job.failed(狀態頁看得到)並 exit 1。
+On a mismatch it publishes job.failed on the bus (visible on the status page) and exits 1.
 
-用法:contracts-check.py [--quiet]
+Usage: contracts-check.py [--quiet]
 """
 from __future__ import annotations
 
@@ -34,20 +35,22 @@ C = HUB / "contracts"
 
 def ws(index: dict, name: str) -> pathlib.Path | None:
     if name in (index.get("modules") or {}):
-        return HUB   # 模組的檔案都在平台裡
+        return HUB   # a module's files are all in the platform
     doc = index["projects"].get(name)
     return registry.dirs(doc)["workspace"] if doc else None
 
 
 def cross_copies(index: dict) -> list[str]:
     errs = []
-    # 專案 + 開著的模組(沒開的模組讀的契約不比對:例:沒有助理就不用助理的格式)
+    # projects + enabled modules (contracts read by a module that's off aren't compared: e.g. no assistant, no need for
+    # the assistant's format)
     for name, doc in [*index["projects"].items(), *(index.get("modules") or {}).items()]:
         for cons in doc.get("consumes") or []:
             producer = cons.get("from") or hubconf.hub_project()
             pdoc = index["projects"].get(producer)
             provs = [p for p in (pdoc or {}).get("provides") or [] if p["contract"] == cons["contract"]]
-            # 兩版並存時同一個契約會有兩筆 provides:先找同一版,沒有才拿第一筆(底下會報版本不合)
+            # while two versions coexist the same contract has two provides: look for the same version first, else take
+            # the first one (the version mismatch is reported below)
             prov = next((p for p in provs if p.get("v") == cons.get("v")), provs[0] if provs else None)
             if prov is None:
                 errs.append(_("{name} reads {contract}, but {producer}'s registry entry does not provide it", name=name,
@@ -74,7 +77,8 @@ def live(index: dict) -> list[str]:
     if todo.exists():
         errs += [f"todo.md:{e}" for e in contracts.check_todo_md(todo.read_text(), C / "todo-md.v1.md", hubconf.owner_tag())]
     import minischema
-    pts_schema = json.loads((C / "llm-points.v1.schema.json").read_text())  # 判斷點登錄的共用格式(muninn 也照它檢查)
+    # the shared format of the judgment-point registry (the Muninn project checks against it too)
+    pts_schema = json.loads((C / "llm-points.v1.schema.json").read_text())
     errs += [f"contracts/llm-points.yaml:{e}" for e in minischema.errors(pts_schema, yaml.safe_load((C / "llm-points.yaml").read_text()))]
     schema = json.loads((C / "project.v1.schema.json").read_text())
     for f in sorted(hubconf.registry_dir().glob("*.yaml")):
@@ -89,7 +93,7 @@ def live(index: dict) -> list[str]:
             c.close()
         for ev in rows:
             ev["payload"] = json.loads(ev["payload"] or "{}")
-            ev["payload"].setdefault("v", 1)  # 2026-10-22 之前的事件沒有 v,讀成 1
+            ev["payload"].setdefault("v", 1)  # events before 2026-10-22 have no v; read as 1
             if (e := contracts.check_json(C / "hubbus.v1.schema.json", ev)):
                 errs.append(_("bus event {id}: {problem}", id=ev['id'], problem=e[0]))
     weeks = sorted(hubconf.data_file("reflect").glob("20*-W*.json"))
@@ -110,7 +114,8 @@ def live(index: dict) -> list[str]:
 
 
 def llm_lint() -> list[str]:
-    """第二階段:bin/ 裡每一次叫 Claude CLI 的非互動呼叫都要經過 bin/llm.py(contracts/llm-points.yaml 宣告的判斷點)。"""
+    """Phase two: every non-interactive call to the Claude CLI in bin/ must go through bin/llm.py (the judgment points
+    declared in contracts/llm-points.yaml)."""
     r = subprocess.run([sys.executable, str(HUB / "bin" / "llm.py"), "lint"], capture_output=True, text=True)
     return [_("LLM call: {problem}", problem=l) for l in r.stdout.splitlines() if l.strip()] + \
         ([_("llm.py lint does not run: {error}", error=r.stderr.strip()[-200:])] if r.returncode not in (0, 1) else [])

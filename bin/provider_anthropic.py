@@ -1,7 +1,8 @@
-"""Anthropic Messages API 的 provider(completion 介面;docs/design/llm-providers.md)。
+"""Provider for the Anthropic Messages API (completion interface; docs/design/llm-providers.md).
 
-要結構化輸出時用一個 tool(input_schema = 要的 schema、tool_choice 指定它),模型的 tool 輸入就是答案。
-max_tokens 一定要給(這家必填);stop_reason=max_tokens 當成截斷,不重試。
+Structured output uses one tool (input_schema = the wanted schema, tool_choice names it); the model's tool input is
+the answer.
+max_tokens must always be given (this provider requires it); stop_reason=max_tokens counts as truncated, no retry.
 """
 from __future__ import annotations
 
@@ -50,7 +51,8 @@ def health(conf) -> tuple:
 
 
 def list_models(conf) -> list[str]:
-    """這把 key 看得到的模型(新的在前;agenthub llm setup 讓使用者選,平台不猜模型名稱)。拿不到 → 空的。"""
+    """The models this key can see (newest first; agenthub llm setup lets the user choose, the platform doesn't guess
+    model names). Can't get them → empty."""
     status, data, _, _ = call("GET", (conf.get("base_url") or DEFAULT_BASE).rstrip("/") + "/v1/models?limit=100", None,
                               _headers(conf), 20)
     return [m.get("id") for m in (data or {}).get("data") or [] if m.get("id")] if status == 200 else []

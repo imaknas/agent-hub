@@ -42,11 +42,13 @@ import i18n  # noqa: E402
 
 _ = i18n.domain(__file__)
 
-NAME = re.compile(r"^[a-z0-9](?:[a-z0-9-]{0,38}[a-z0-9])?$")  # 跟一般專案名稱同一套(rename-project.sh),最多 40 字
+# same rules as ordinary project names (rename-project.sh), at most 40 characters
+NAME = re.compile(r"^[a-z0-9](?:[a-z0-9-]{0,38}[a-z0-9])?$")
 
 
 def default_capabilities() -> list[str]:
-    """hub.json capabilities 裡 default_for 有 idea、risk 不是 high 的能力(明寫進登錄,不靠 type 隱含)。"""
+    """Capabilities in hub.json's capabilities whose default_for includes idea and whose risk isn't high (written
+    explicitly into the registry, not implied by the type)."""
     return sorted(k for k, v in hubconf.capabilities().items()
                   if "idea" in (v.get("default_for") or []) and v.get("risk") != "high")
 MAX_PURPOSE = 500
@@ -59,7 +61,7 @@ def out(result: str, code: int, **extra) -> int:
 
 
 def registered() -> dict[str, dict]:
-    """登錄目錄裡的原始檔(比快取新:剛 onboard 的也算)。"""
+    """The source files in the registry directory (newer than the cache: counts one onboarded just now)."""
     import yaml
     docs = {}
     for f in hubconf.registry_dir().glob("*.yaml"):
@@ -130,8 +132,9 @@ def create(name: str, purpose: str) -> int:
         return out("create_failed", 1, detail=_("onboard failed: {tail}{note}", tail=tail, note=note))
 
     subprocess.run([sys.executable, str(HUB / "bin" / "registry.py"), "check", name],
-                   capture_output=True)  # 更新快取:attachable 馬上看得到
-    # sandbox 設定馬上寫進去,不等 15 分鐘的平台 job:work 模式(lease-runner 的 work_ready)要看到它才放行
+                   capture_output=True)  # refresh the cache: attachable sees it right away
+    # write the sandbox settings now, not waiting for the 15-minute platform job: work mode (lease-runner's work_ready)
+    # only lets it through once it sees them
     subprocess.run([sys.executable, str(HUB / "bin" / "render-project-settings.py"), "--only", name],
                    capture_output=True)
     return out("created", 0, name=name)

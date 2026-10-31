@@ -1,19 +1,25 @@
 #!/bin/sh -c exec${IFS}"${0%/*}/py"${IFS}"$0"${IFS}"$@"
-"""合併閘門:平行的 session 在自己的 worktree/branch 寫東西,完成時用這支合併回 main——唯一的合併點。
+"""The merge gate: parallel sessions write in their own worktree/branch and, when done, merge back into main with this
+script: the only merge point.
 
-在 session 自己的 worktree 裡跑:
-  merge-branch [--project P] [--branch B] [--note "做了什麼"] [--question "要 Knas 決定的事"]... [--dry-run]
+Run in the session's own worktree:
+  merge-branch [--project P] [--branch B] [--note "what was done"] [--question "something for the owner to decide"]...
+               [--dry-run]
 
-  1. 鎖(同一個 repo 一次只合一個)。worktree 要乾淨(沒 commit 的改動先 commit 或丟掉)。
-  2. `git rebase <main>`:衝突就 abort、列出衝突的檔、記 merge.failed,停。
-  2b. 登錄 `commits: conventional`:這個 branch 上每個 commit 的標題要合格(bin/commit_title.py),不合格就停。
-  3. 跑專案登錄的 `runtime.test`(沒有就略過並註明):失敗附最後 40 行、記 merge.failed,停。
-  4. 到主 checkout `git merge --ff-only <branch>`(主 checkout 有沒 commit 的改動擋到就停)。
-  5. **只有登錄 `push_on_merge: true` 才 push**(預設不 push:有公開的 repo,合併 ≠ 發布)。
-  6. 匯流排記 merge.done 跟 session.report(branch、commits、檔案、測試、問題、有沒有 push);
-     有 --question 就同時寄給 owner(→ 個人助理)。
+  1. Lock (one merge per repo at a time). The worktree must be clean (commit or discard uncommitted changes first).
+  2. `git rebase <main>`: on a conflict, abort, list the conflicting files, record merge.failed, stop.
+  2b. Registry `commits: conventional`: every commit title on this branch must pass (bin/commit_title.py); stop if
+      one doesn't.
+  3. Run the project registry's `runtime.test` (none: skipped and noted): on failure attach the last 40 lines, record
+     merge.failed, stop.
+  4. In the main checkout, `git merge --ff-only <branch>` (stop if uncommitted changes in the main checkout get in the
+     way).
+  5. **Push only when the registry has `push_on_merge: true`** (no push by default: some repos are public, and
+     merging ≠ publishing).
+  6. Record merge.done and session.report on the bus (branch, commits, files, tests, questions, pushed or not);
+     with --question, also send it to the owner (→ the personal assistant).
 
-報告的格式在 contracts/hubbus.v1.schema.json(session.report 事件)。
+The report's format is in contracts/hubbus.v1.schema.json (the session.report event).
 """
 from __future__ import annotations
 
@@ -115,12 +121,13 @@ def main() -> int:
         head = git(wt, "rev-parse", "HEAD").stdout.strip()
         commits = [dict(zip(("sha", "subject"), l.split("\t", 1)))
                    for l in git(wt, "log", "--format=%h\t%s", f"{base}..{head}").stdout.splitlines()]
-        full = git(wt, "log", "--format=%H", f"{base}..{head}").stdout.split()  # merge.done 記完整 sha(偵測用)
+        # merge.done records full shas (for detection)
+        full = git(wt, "log", "--format=%H", f"{base}..{head}").stdout.split()
         files = git(wt, "diff", "--name-only", f"{base}...{head}").stdout.split()
         report.update(head=head, commits=commits, files=files)
         if not commits:
             return fail("empty", _("{branch} is the same as {base}; nothing to merge", branch=branch, base=base))
-        # 2b. commit 標題
+        # 2b. commit titles
         if info.get("commits") == "conventional":
             bad = [_("{sha} {subject}: {why}", sha=c["sha"], subject=c["subject"], why=why) for c in commits
                    if (why := commit_title.problem(c["subject"], final=True))]
@@ -152,13 +159,13 @@ def main() -> int:
         if r.returncode != 0:
             return fail("main", _("the main checkout cannot fast-forward: {output}", output=(r.stderr or r.stdout).strip()))
         report["merged"] = True
-        # 5. push(只有登錄說要)
+        # 5. push (only when the registry says so)
         if info.get("push_on_merge"):
             p = subprocess.run([str(hubconf.ROOT / "bin" / "git-safe-push.sh")], cwd=main_dir, capture_output=True, text=True)
             report["pushed"] = p.returncode == 0
             if p.returncode != 0:
                 report["push_error"] = (p.stderr or p.stdout).strip()[-500:]
-    # 6. 記錄
+    # 6. record
     publish("merge.done", proj, f"{eid}:done", {"project": proj, "branch": branch, "head": head, "commits": full})
     publish("session.report", proj, f"{eid}:report", report)
     for q in a.question:
