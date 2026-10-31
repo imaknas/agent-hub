@@ -1,33 +1,41 @@
 #!/bin/sh -c exec${IFS}"${0%/*}/py"${IFS}"$0"${IFS}"$@"
-"""專案登錄的 services → launchd plist(~/Library/LaunchAgents/<label>.plist)。
+"""Registry services -> launchd plists (~/Library/LaunchAgents/<label>.plist).
 
-每個專案在 projects/<name>.yaml 宣告它的長駐程式,平台照這裡的規則產生 plist,內容變了才
-bootout/bootstrap(沒變什麼都不做,不會無故重啟服務)。登錄裡拿掉的 service:只有這支產生過的
-(記在 .state/rendered-services.json)才會被卸載,別人的 plist 不碰。平台自己的核心(排程器、
-看門狗、狀態頁)不在這裡:它們是 launchd/ 底下版控的 plist——排程器不能自己重載自己。
+Each project declares its long-running programs in projects/<name>.yaml; the platform generates the plists by the
+rules here and does bootout/bootstrap only when the content changed (nothing changed: nothing happens, no service is
+restarted for no reason). A service removed from the registry is unloaded only if this script generated it (recorded
+in .state/rendered-services.json); other plists are not touched. The platform's own core (scheduler, watchdog, status
+page) is not here: those are version-controlled plists under launchd/ -- the scheduler cannot reload itself.
 
-service 欄位(registry.py 驗證):
-  name                 必填;label 預設 local.<專案>.<name>
-  label                沿用舊 label(例:別的腳本按 label 重啟)
-  run                  指令;第一個字解析成絕對路徑,其他參數是 cwd 底下存在的檔案也換成絕對路徑
-  cwd                  runtime(有 runtime 時預設)| workspace | hub
-  keepalive: true      KeepAlive(掛了就重啟);不寫就是只跑一次 / 照 interval_s 跑
-  interval_s           StartInterval(每隔幾秒跑一次)
+service fields (validated by registry.py):
+  name                 required; label defaults to local.<project>.<name>
+  label                keep an old label (e.g. other scripts restart it by label)
+  run                  command; the first word is resolved to an absolute path, other arguments that are files
+                       existing under cwd become absolute paths too
+  cwd                  runtime (default when there is a runtime) | workspace | hub
+  keepalive: true      KeepAlive (restart when it dies); without it: runs once / per interval_s
+  interval_s           StartInterval (run every so many seconds)
   throttle_s           ThrottleInterval
-  env                  環境變數;值是 cwd 底下存在的相對路徑就換成絕對路徑。run 的第一個字是指令名稱(node)
-                       而且沒寫 PATH:照 hubconf.LAUNCHD_PATH 找、也把它寫進 plist(nvm 預設版本的 bin 在
-                       最前面——node 只由 nvm 管,見 hubconf.nvm_bin)。用路徑跑的(bin/x.sh)不加 PATH;
-                       env 的值裡寫 $PLATFORM_PATH 會換成同一個 PATH
-  log                  一個檔(stdout、stderr 都寫這裡,相對 cwd);沒寫就是 <hub>/.logs/<label 去掉 local.>-{stdout,stderr}.log
-  expose               只宣告(tailnet port),不會自動開——狀態頁提醒要手動 tailscale serve
+  env                  environment variables; a value that is a relative path existing under cwd becomes an absolute
+                       path. When run's first word is a command name (node) and no PATH is given: it is looked up
+                       by hubconf.LAUNCHD_PATH, which is also written into the plist (the nvm default version's bin
+                       first -- node is managed only by nvm, see hubconf.nvm_bin). Run by path (bin/x.sh): no PATH
+                       added; $PLATFORM_PATH in an env value is replaced by that same PATH
+  log                  one file (stdout and stderr both go there, relative to cwd); without it:
+                       <hub>/.logs/<label without local.>-{stdout,stderr}.log
+  expose               declaration only (tailnet port), not opened automatically -- the status page reminds you to
+                       run tailscale serve by hand
 
-安全網(2026-10-24:Homebrew 的 node 被刪,這支把 plist 換成找不到的 `node`,LINE bot 停了一天半沒人知道):
-  - 指令的第一個字解析不到 → 不動現在的 plist(能跑的照跑),只報問題
-  - bootstrap 失敗、keepalive 的服務沒在跑、該載入的沒載入 → 報問題
-  問題發 Discord(同一組只發一次,恢復時再發一次),exit 1(排程器記 job.failed,狀態頁紅)。
+Safety net (2026-10-24: Homebrew's node was deleted, this script switched the plist to a `node` that could not be
+found, and a LINE bot was down for a day and a half without anyone knowing):
+  - the command's first word cannot be resolved -> leave the current plist alone (what runs keeps running), only
+    report the problem
+  - bootstrap failed, a keepalive service is not running, something that should be loaded is not -> report it
+  Problems go to Discord (once per set, once more on recovery), exit 1 (the scheduler records job.failed, the status
+  page turns red).
 
-用法:render-services.py [--dry-run] [--only <label>]
-也是套用者(appliers.py):plan()/apply(),給 `bin/hub config plan/apply` 用。
+Usage: render-services.py [--dry-run] [--only <label>]
+Also an applier (appliers.py): plan()/apply(), used by `bin/hub config plan/apply`.
 """
 from __future__ import annotations
 
@@ -49,8 +57,8 @@ import registry  # noqa: E402
 _ = i18n.domain(__file__)
 
 AGENTS = pathlib.Path.home() / "Library" / "LaunchAgents"
-# launchd 底下的 PATH:指令照這個(或 service 自己 env 的 PATH)解析,不看跑這支的 shell 的 PATH
-# (shell 可能有 nvm 之類的,launchd 沒有)
+# The PATH under launchd: commands are resolved by this (or by the service's own env PATH), not by the PATH of the
+# shell running this script (the shell may have nvm and the like; launchd does not)
 DEFAULT_PATH = hubconf.LAUNCHD_PATH
 RENDERED = hubconf.STATE / "rendered-services.json"
 
@@ -60,7 +68,7 @@ def label_of(project: str, svc: dict) -> str:
 
 
 def render(project: str, doc: dict, svc: dict) -> tuple[dict, str | None]:
-    """(plist, 問題)。問題 = 指令的第一個字解析不到(這時 plist 不能用)。"""
+    """(plist, problem). problem = the command's first word cannot be resolved (the plist is then unusable)."""
     d = registry.dirs(doc)
     cwd = d[svc.get("cwd") or registry.default_cwd(doc)]
     words = shlex.split(svc["run"])
@@ -76,7 +84,9 @@ def render(project: str, doc: dict, svc: dict) -> tuple[dict, str | None]:
     env = {k: (str(cwd / v) if isinstance(v, str) and not v.startswith("/") and (cwd / v).exists()
                else hubconf.expand_env(str(v))) for k, v in (svc.get("env") or {}).items()}
     if "/" not in words[0] and "PATH" not in env:
-        env["PATH"] = DEFAULT_PATH  # 指令照平台的 PATH 找到的(node 等),程序自己(npm 的子程序)也要看得到
+        # the command was found by the platform's PATH (node etc.); the process itself (npm's child processes) must
+        # see it too
+        env["PATH"] = DEFAULT_PATH
     if env:
         p["EnvironmentVariables"] = env
     p["RunAtLoad"] = True
@@ -95,8 +105,9 @@ def render(project: str, doc: dict, svc: dict) -> tuple[dict, str | None]:
 
 
 def bootstrap(uid: int, label: str, path: pathlib.Path) -> subprocess.CompletedProcess:
-    """bootout 是非同步的:舊程序還沒結束就 bootstrap 會 `5: Input/output error`(服務就停在沒載入)。
-    等它從 launchd 消失(最多 20 秒),失敗再試幾次。"""
+    """bootout is asynchronous: bootstrapping before the old process has ended gives `5: Input/output error` (and the
+    service stays unloaded). Wait for it to disappear from launchd (at most 20 seconds), and retry a few times on
+    failure."""
     import time
     for _wait in range(40):
         if launchctl("print", f"gui/{uid}/{label}").returncode != 0:
@@ -111,7 +122,7 @@ def bootstrap(uid: int, label: str, path: pathlib.Path) -> subprocess.CompletedP
 
 
 def running(uid: int, label: str) -> str | None:
-    """launchctl print 的 state(running / not running / …);沒載入回傳 None。"""
+    """The state from launchctl print (running / not running / …); None when not loaded."""
     if hubconf.service_manager() == "systemd":
         import systemd_units
         return systemd_units.state(label)
@@ -128,18 +139,21 @@ def launchctl(*args: str) -> subprocess.CompletedProcess:
     return subprocess.run(["/bin/launchctl", *args], capture_output=True, text=True)
 
 
-# ---------- 套用者(appliers.py):plan 只算、不動 launchd;apply 寫 plist + 重載;健康檢查跟警報留在 main ----------
+# ---------- applier (appliers.py): plan only computes, does not touch launchd; apply writes plists + reloads;
+# health checks and alerts stay in main ----------
 
 EXTERNAL = False
 
 
 def _desired(index: dict) -> tuple[dict[str, tuple[str, dict]], list[str], set[str], set[str]]:
-    """(label → (專案, plist), 問題, 指令解析不到所以不動的, keepalive 的)。"""
+    """(label -> (project, plist), problems, labels left alone because the command cannot be resolved, keepalive
+    labels)."""
     want: dict[str, tuple[str, dict]] = {}
     problems: list[str] = []
-    keep: set[str] = set()       # 指令解析不到:現在的 plist 不動
-    keepalive: set[str] = set()  # 應該一直在跑的
-    docs = sorted(index["projects"].items()) + sorted((index.get("modules") or {}).items())  # 開著的模組的服務也是
+    keep: set[str] = set()       # command cannot be resolved: the current plist is left alone
+    keepalive: set[str] = set()  # should be running all the time
+    # services of enabled modules too
+    docs = sorted(index["projects"].items()) + sorted((index.get("modules") or {}).items())
     for name, doc in docs:
         for svc in doc.get("services") or []:
             label = label_of(name, svc)
@@ -162,7 +176,7 @@ def _mine() -> set[str]:
 
 
 def _changes(want: dict, keep: set[str], only: str | None = None) -> list[tuple]:
-    """(Change, plist 現在的內容, 要寫的 plist);remove 的後兩個是 None。"""
+    """(Change, the plist's current content, the plist to write); for remove the last two are None."""
     from appliers import Change
     out = []
     systemd = hubconf.service_manager() == "systemd"
@@ -171,7 +185,7 @@ def _changes(want: dict, keep: set[str], only: str | None = None) -> list[tuple]
     for label, (proj, plist) in sorted(want.items()):
         if (only and label != only) or label in keep:
             continue
-        if systemd:   # 比的是產生的 unit 檔內容(plist 是同一份來源)
+        if systemd:   # compares the generated unit file's content (the plist has the same source)
             cur_units, want_units = systemd_units.installed(label), systemd_units.files(plist)
             if cur_units != want_units:
                 keys = sorted(n for n in set(cur_units) | set(want_units) if cur_units.get(n) != want_units.get(n))
@@ -221,7 +235,7 @@ def _apply_one(uid: int, ch, plist: dict | None, problems: list[str]) -> None:
 
 def plan(index: dict | None = None) -> list:
     if hubconf.service_manager() is None:
-        return []   # 沒有服務管理器:沒有東西能套用(doctor 跟 main 會說)
+        return []   # no service manager: nothing can be applied (doctor and main say so)
     want, _problems, keep, _keepalive = _desired(index or registry.refresh())
     return [c for c, _cur, _plist in _changes(want, keep)]
 

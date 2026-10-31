@@ -1,5 +1,6 @@
-"""套用者:排程的 job 清單(appliers.py)。排程器每個 tick 自己讀登錄,不需要「套用」;這個套用者只回報
-job 的增減跟改動(plan),apply 把現在的清單記成「已套用」(.state/config-applied/jobs.json),下次 plan 跟它比。"""
+"""Applier: the scheduler's job list (appliers.py). The scheduler reads the registry itself on every tick, so there
+is nothing to "apply"; this applier only reports jobs added, removed and changed (plan), and apply records the current
+list as "applied" (.state/config-applied/jobs.json) for the next plan to compare against."""
 from __future__ import annotations
 
 import json
@@ -20,7 +21,8 @@ KEYS = ("time", "every_minutes", "days_of_week", "days_of_month", "months", "end
 
 
 def jobs(index=None) -> dict[str, dict]:
-    """名稱 → 排程看得到的欄位。給 index 就只看登錄(測試);不給就跟排程器一樣(schedule.yaml + 登錄)。"""
+    """Name -> the fields the scheduler sees. Given an index, only the registry is looked at (tests); otherwise the same
+    as the scheduler (schedule.yaml + registry)."""
     if index is None:
         import scheduler
         js, _info = scheduler.all_jobs()
@@ -28,7 +30,8 @@ def jobs(index=None) -> dict[str, dict]:
         import registry
         js, _skipped, _renames = registry.scheduler_jobs(index, set())
     out = {j["name"]: {k: j[k] for k in KEYS if k in j} for j in js}
-    return json.loads(json.dumps(out, default=str))  # 日期之類的值變成字串,跟存起來的快照才比得起來
+    # values like dates become strings so they compare with the stored snapshot
+    return json.loads(json.dumps(out, default=str))
 
 
 def _diff(cur: dict[str, dict], old: dict[str, dict]) -> list[Change]:

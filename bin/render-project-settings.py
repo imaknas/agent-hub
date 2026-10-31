@@ -1,25 +1,30 @@
 #!/bin/sh -c exec${IFS}"${0%/*}/py"${IFS}"$0"${IFS}"$@"
-"""第二階段:每個專案的 sandbox + 權限規則從專案登錄產生,寫進 `.claude/settings.local.json`(managed file)。
+"""Stage two: each project's sandbox + permission rules, generated from the project registry and written into
+`.claude/settings.local.json` (managed file).
 
-要寫什麼:policy.py 算中立的政策、runtime_claude.settings() 翻成 Claude Code 的格式;這支只管寫檔、記錄、偵測偏移。
+What to write: policy.py computes the neutral policy, runtime_claude.settings() translates it into Claude Code's
+format; this script only writes the file, records, and detects drift.
 
-只對登錄 `enforce: {sandbox: true}` 的專案寫;其他專案只算出「會寫什麼」(--report)。平台自己(agent-hub)不套。
-寫的內容:
-  sandbox(整個 key 由平台管):enabled、failIfUnavailable、allowUnsandboxedCommands: false、
-    filesystem.allowWrite(自己的 runtime、匯流排目錄、工具 cache、登錄的 allow_write)、
-    filesystem.denyRead(其他專案的 workspace/runtime、memory 原始筆記、平台的 secrets)、
-    network.allowedDomains(平台預設 + 登錄的 network)
-  permissions.deny / permissions.allow 裡平台加的那幾條(其他條不動——互動 session 按「一律允許」也寫在這裡):
-    deny  Read/Edit 其他專案的 workspace/runtime、Edit 平台/bare repo/memory 副本/LaunchAgents、
-          Read memory 副本的原始筆記、Read 平台 secrets
-    allow 信箱 CLI、合併閘門(跨界的唯一通道)
-  上一次寫了哪些條記在 .state/rendered-settings/<專案>.json,下次先拿掉再加,不會累積。
+Written only for projects registered with `enforce: {sandbox: true}`; for other projects it only computes what it
+would write (--report). Not applied to the platform itself (agent-hub).
+What is written:
+  sandbox (the whole key is managed by the platform): enabled, failIfUnavailable, allowUnsandboxedCommands: false,
+    filesystem.allowWrite (its own runtime, the bus directory, tool caches, the registry's allow_write),
+    filesystem.denyRead (other projects' workspace/runtime, raw memory notes, the platform's secrets),
+    network.allowedDomains (platform defaults + the registry's network)
+  the entries the platform adds to permissions.deny / permissions.allow (other entries are untouched -- an
+  interactive session's "always allow" is written there too):
+    deny  Read/Edit other projects' workspace/runtime, Edit the platform/bare repos/memory copies/LaunchAgents,
+          Read the raw notes in memory copies, Read the platform's secrets
+    allow the mailbox CLI, the merge gate (the only channels across the boundary)
+  Which entries were written last time is recorded in .state/rendered-settings/<project>.json; next time those are
+  removed first and then added again, so nothing piles up.
 
-偏移偵測:實際檔案跟應該的不一樣(session 改了自己的設定、或有人手改)→ 印出來、exit 1(平台 job 失敗 →
-狀態頁),而且馬上寫回去。
+Drift detection: the actual file differs from what it should be (a session changed its own settings, or someone
+edited it by hand) -> print it, exit 1 (platform job failed -> status page), and write it back right away.
 
-用法:render-project-settings.py [--report] [--only <專案>]
-也是套用者(appliers.py):plan()/apply(),給 `bin/hub config plan/apply` 用。
+Usage: render-project-settings.py [--report] [--only <project>]
+Also an applier (appliers.py): plan()/apply(), used by `bin/hub config plan/apply`.
 """
 from __future__ import annotations
 
@@ -40,7 +45,8 @@ RENDERED = hubconf.STATE / "rendered-settings"
 
 
 def desired(name: str, doc: dict, index: dict) -> tuple[dict, list[str], list[str]]:
-    """(sandbox, deny 規則, allow 規則):中立政策(policy.py)翻成 Claude Code 的設定(runtime_claude.py)。"""
+    """(sandbox, deny rules, allow rules): the neutral policy (policy.py) translated into Claude Code settings
+    (runtime_claude.py)."""
     return runtime_claude.settings(policy.policy(name, doc, index))
 
 
@@ -50,7 +56,8 @@ def settings_path(doc: dict) -> pathlib.Path | None:
 
 
 def compose(name: str, doc: dict, index: dict) -> tuple[pathlib.Path, dict, dict, dict, dict] | None:
-    """純計算、不寫:(設定檔, 現在的內容, 應該的內容, 上次平台寫的紀錄, 這次要記的紀錄)。沒有 workspace 回 None。"""
+    """Pure computation, no writes: (settings file, current content, intended content, the record of what the platform
+    wrote last time, the record to keep this time). None when there is no workspace."""
     path = settings_path(doc)
     if not path:
         return None
@@ -61,14 +68,16 @@ def compose(name: str, doc: dict, index: dict) -> tuple[pathlib.Path, dict, dict
     new["sandbox"] = sandbox
     p2 = dict(cur.get("permissions", {}))
     for key, mine in (("deny", deny), ("allow", allow)):
-        keep = [r for r in p2.get(key, []) if r not in set(prev.get(key, []))]  # 拿掉上次平台加的,留別人的
+        # drop what the platform added last time, keep everyone else's
+        keep = [r for r in p2.get(key, []) if r not in set(prev.get(key, []))]
         p2[key] = keep + [r for r in mine if r not in keep]
     new["permissions"] = p2
     return path, cur, new, prev, {"sandbox": sandbox, "deny": deny, "allow": allow}
 
 
 def write_project(name: str, doc: dict, index: dict, report: bool) -> list[str]:
-    """回傳偏移(實際跟應該的不一樣的地方)。report=True 只算、不寫。"""
+    """Returns the drift (where the actual file differs from what it should be). report=True only computes, no
+    writes."""
     c = compose(name, doc, index)
     if not c:
         return []
@@ -76,7 +85,7 @@ def write_project(name: str, doc: dict, index: dict, report: bool) -> list[str]:
     sandbox, deny, allow = record["sandbox"], record["deny"], record["allow"]
     perms = cur.get("permissions", {})
     drift = []
-    if prev:  # 寫過才談得上偏移
+    if prev:  # drift only makes sense once it has been written
         if cur.get("sandbox") != prev.get("sandbox"):
             drift.append(_("sandbox was changed"))
         for key in ("deny", "allow"):
@@ -99,7 +108,7 @@ def write_project(name: str, doc: dict, index: dict, report: bool) -> list[str]:
 
 
 def unapply(name: str, doc: dict) -> None:
-    """登錄關掉 enforce:拿掉平台寫的 sandbox 跟那幾條規則(退回)。"""
+    """enforce turned off in the registry: remove the sandbox and the rules the platform wrote (roll back)."""
     rec = RENDERED / f"{name}.json"
     path = settings_path(doc)
     if not rec.exists() or not path or not path.exists():
@@ -133,8 +142,9 @@ def gate_hook() -> str:
 
 
 def gate(name: str, doc: dict, report: bool, quiet: bool = False) -> list[tuple[str, str]]:
-    """登錄 gate: strict → 裝 pre-commit / pre-merge-commit;關掉就拿掉(只動有平台標記的)。
-    專案有自己的 core.hooksPath(例:husky)就不裝,只偵測。回傳要做(report)/做了的 (add|update|remove, hook)。"""
+    """Registry gate: strict -> install pre-commit / pre-merge-commit; turned off -> remove them (only those carrying
+    the platform's marker). A project with its own core.hooksPath (e.g. husky) gets nothing installed, only
+    detection. Returns what would be done (report) / was done: (add|update|remove, hook)."""
     import subprocess
     say = (lambda *_args: None) if quiet else print
     ws = registry.dirs(doc)["workspace"]
@@ -174,8 +184,9 @@ def gate(name: str, doc: dict, report: bool, quiet: bool = False) -> list[tuple[
     return acts
 
 
-# ---------- 套用者(appliers.py)----------
-# Change 只用中立的詞(agent-settings:<專案>、hook:<專案>/<名稱>);執行環境的設定格式留在 runtime_claude。
+# ---------- applier (appliers.py) ----------
+# A Change uses only neutral words (agent-settings:<project>, hook:<project>/<name>); the runtime's settings format
+# stays in runtime_claude.
 
 EXTERNAL = False
 

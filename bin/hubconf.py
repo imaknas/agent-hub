@@ -1,26 +1,34 @@
-"""平台設定與專案登錄的唯一入口(只用標準函式庫;平台的 Python 是 bin/py,最低 3.13)。
+"""The single entry point for platform settings and the project registry (standard library only; the platform's
+Python is bin/py, 3.13 at least).
 
-新程式一律從這裡拿路徑、名稱、owner,不要再寫死 ~/agent-hub、~/services、專案名稱。
-  - hub 根目錄:這個檔案所在的 bin/ 的上一層;環境變數 AGENT_HUB_ROOT 可以覆蓋
-  - 設定:<config>/hub.json(實例目錄,見下)
-  - 實例目錄(docs/design/new-user.md 3.1):使用者自己的東西分三塊——config(hub.json、登錄、schedule.yaml…;
-    config repo)、data(digest、todo、review-log、reflect…;不進 git、靠備份)、secrets。位置由**一個指標檔**決定:
-    <hub>/.hub-home 寫著實例目錄的路徑 → <實例>/config、<實例>/data、<實例>/secrets;沒有這個檔 = 舊的擺法
-    (三塊都是 hub 根目錄、secrets 是 <hub>/.secrets),也就是搬家之前的樣子。搬家時最後才寫指標檔,刪掉就退回。
-    個別覆蓋:AGENT_HUB_HOME(= 指標檔的內容)、AGENT_HUB_CONFIG、AGENT_HUB_DATA、AGENT_HUB_SECRETS(例:config repo
-    的 pre-commit 把暫存區匯出到暫存目錄,只有 config 指過去)。
-    .state、.logs 不在實例裡:跟匯流排(bus_dir)、平台的 Python 一樣是每台機器一份的執行狀態,留在 hub 根目錄
-    (.logs 的路徑寫在每個服務的 plist 裡,搬它等於重啟所有服務)。
-  - 平台自己的登錄(<hub>/projects/agent-hub.yaml)是平台的一部分:registry 不管 registry_dir 在哪都會讀它
-  - 專案登錄:<registry_dir>/<name>.yaml(人改的 YAML),scheduler 每個 tick 用 registry.py
-    驗證後寫成 <hub>/.state/registry/index.json——這裡讀的是那份 JSON(不需要 PyYAML);
-    還沒產生的話(新機器、MBP)退回 roster():直接從 YAML 檔讀名稱跟 paths
+New code always takes paths, names and the owner from here; do not hard-code ~/agent-hub, ~/services or project names.
+  - hub root: the parent of the bin/ this file is in; the environment variable AGENT_HUB_ROOT can override it
+  - settings: <config>/hub.json (instance directory, see below)
+  - instance directory (docs/design/new-user.md 3.1): the user's own things in three parts -- config (hub.json,
+    registry, schedule.yaml…; the config repo), data (digest, todo, review-log, reflect…; not in git, relies on
+    backup), secrets. Where they are is decided by **one pointer file**: <hub>/.hub-home holds the instance
+    directory's path -> <instance>/config, <instance>/data, <instance>/secrets; no such file = the old layout (all
+    three are the hub root, secrets is <hub>/.secrets), i.e. how things were before the move. The move writes the
+    pointer file last; deleting it falls back.
+    Individual overrides: AGENT_HUB_HOME (= the pointer file's content), AGENT_HUB_CONFIG, AGENT_HUB_DATA,
+    AGENT_HUB_SECRETS (e.g. the config repo's pre-commit exports the index to a temporary directory and points only
+    config there).
+    .state and .logs are not in the instance: like the bus (bus_dir) and the platform's Python they are per-machine
+    run state and stay in the hub root (the .logs path is written into every service's plist; moving it means
+    restarting every service).
+  - The platform's own registry entry (<hub>/projects/agent-hub.yaml) is part of the platform: registry reads it
+    wherever registry_dir is
+  - Project registry: <registry_dir>/<name>.yaml (YAML edited by people); every tick the scheduler validates it with
+    registry.py and writes <hub>/.state/registry/index.json -- this module reads that JSON (no PyYAML needed); if it
+    has not been produced yet (new machine, the laptop), fall back to roster(): names and paths read straight from
+    the YAML files
 
-給 shell 腳本用("$HUB/bin/py" hubconf.py …):
-  hubconf.py ideas     想法沙盒(登錄 type: idea)的名稱,一行一個
-  hubconf.py get <key> hub.json 的單一值(點分隔,例:github.owner),給 shell 腳本用
-  hubconf.py roster    每個專案一行 name<TAB>workspace<TAB>origin<TAB>memory_bare,沒有標題列;
-                       workspace 展開 ~、沒有 origin 印 (native)、memory_bare 前面加 hub.json 的 memory_host:
+For shell scripts ("$HUB/bin/py" hubconf.py …):
+  hubconf.py ideas     names of idea sandboxes (registry type: idea), one per line
+  hubconf.py get <key> a single value from hub.json (dot-separated, e.g. github.owner), for shell scripts
+  hubconf.py roster    one line per project name<TAB>workspace<TAB>origin<TAB>memory_bare, no header line;
+                       workspace with ~ expanded, (native) when there is no origin, memory_bare prefixed with
+                       hub.json's memory_host:
 """
 from __future__ import annotations
 
@@ -41,7 +49,7 @@ _cfg: dict | None = None
 
 
 def instance_home() -> pathlib.Path | None:
-    """實例目錄;None = 舊的擺法(全部在 hub 根目錄)。"""
+    """The instance directory; None = the old layout (everything in the hub root)."""
     v = os.environ.get("AGENT_HUB_HOME")
     if not v and POINTER.is_file():
         v = POINTER.read_text().strip()
@@ -56,12 +64,13 @@ def _part(env: str, sub: str, legacy: pathlib.Path) -> pathlib.Path:
 
 
 def config_dir() -> pathlib.Path:
-    """config(hub.json、登錄、mirror-list.txt、services.tsv、schedule.yaml)所在。"""
+    """Where config lives (hub.json, registry, mirror-list.txt, services.tsv, schedule.yaml)."""
     return _part("AGENT_HUB_CONFIG", "config", ROOT)
 
 
 def data_dir() -> pathlib.Path:
-    """data(digest/、reflect/、todo.md、index.md、review-log.md、openclaw-migration-status.md、legacy-paths.tsv)所在。"""
+    """Where data lives (digest/, reflect/, todo.md, index.md, review-log.md, openclaw-migration-status.md,
+    legacy-paths.tsv)."""
     return _part("AGENT_HUB_DATA", "data", ROOT)
 
 
@@ -82,8 +91,9 @@ def config() -> dict:
 
 
 def path(value: str | None, base: pathlib.Path | None = None) -> pathlib.Path | None:
-    """~ 展開;相對路徑以 base(預設 hub.json 所在的 config 目錄;舊擺法就是 hub 根目錄)為準。
-    `.secrets/<名稱>` 一律指平台的憑證目錄(secrets_dir()),不管 hub.json 放在哪。"""
+    """Expand ~; a relative path is taken from base (by default the config directory hub.json is in; in the old layout
+    that is the hub root). `.secrets/<name>` always means the platform's secrets directory (secrets_dir()), wherever
+    hub.json is."""
     if not value:
         return None
     if base is None and value.startswith(".secrets/"):
@@ -93,7 +103,7 @@ def path(value: str | None, base: pathlib.Path | None = None) -> pathlib.Path | 
 
 
 def get(key: str, default=None):
-    """點分隔的 key:get("owner.tag")。"""
+    """A dot-separated key: get("owner.tag")."""
     cur = config()
     for k in key.split("."):
         if not isinstance(cur, dict) or k not in cur:
@@ -107,37 +117,41 @@ def p(key: str, default: str | None = None) -> pathlib.Path | None:
 
 
 def secrets_dir() -> pathlib.Path:
-    """平台的憑證目錄(不進版控、每晚加密備份)。程式都從這裡拿,不自己拼路徑。"""
+    """The platform's secrets directory (not in version control, backed up encrypted every night). Code always takes it
+    from here instead of building the path itself."""
     return _part("AGENT_HUB_SECRETS", "secrets", legacy_secrets_dir())
 
 
 def legacy_secrets_dir() -> pathlib.Path:
-    """搬家前的憑證位置(<hub>/.secrets)。搬家只複製、確認沒問題才刪,這段期間它還有真的憑證——
-    sandbox 的讀取封鎖要連它一起擋(policy.secret_dirs())。"""
+    """Where secrets were before the move (<hub>/.secrets). The move only copies and deletes after checking, so during
+    that time it still holds real secrets -- the sandbox's read block has to cover it too (policy.secret_dirs())."""
     return ROOT / ".secrets"
 
 
 def host(role: str) -> str:
-    """機器角色 → ssh 名稱;"" = 就是這台(一台機器全包)。目前只有一個角色 server:跑 hub 的那台(memory bare repo、
-    排程器、workspace 都在它上面)。另一台(遙控用的筆電)上的腳本要 ssh 過去,在 server 本機的就直接做。
-    hosts.server 沒寫時沿用舊的 memory_host。"""
+    """Machine role -> ssh name; "" = this machine (one machine does everything). For now there is only one role,
+    server: the machine running the hub (memory bare repos, scheduler and workspaces are all on it). Scripts on the
+    other machine (the laptop used as a remote) ssh over; on the server itself they act locally. Without hosts.server
+    the old memory_host is used."""
     if role != "server":
         raise KeyError(role)
     return get("hosts.server") or get("memory_host") or ""
 
 
 def nvm_bin() -> pathlib.Path | None:
-    """nvm 預設版本(~/.nvm/alias/default,例:24、lts/*、node、v24.19.0)對到的已安裝版本裡最新的 bin/。
+    """The bin/ of the newest installed version matching nvm's default version (~/.nvm/alias/default, e.g. 24, lts/*,
+    node, v24.19.0).
 
-    node(跟裝在它底下的 claude)只由 nvm 管(2026-10-24 Knas 決定;Homebrew 的 node 被 autoremove 刪掉、
-    LINE bot 停了一天半之後)。背景服務跟排程沒有 shell 的 nvm 設定,靠這裡換算成完整路徑;nvm 升級後
-    下一個 render-services 會跟著換、重啟服務。"""
+    node (and the claude installed under it) is managed only by nvm (decided by the owner on 2026-10-24, after
+    Homebrew's node was deleted by autoremove and a LINE bot was down for a day and a half). Background services and
+    scheduled jobs have no shell nvm setup, so this turns it into a full path; after an nvm upgrade the next
+    render-services switches over and restarts the services."""
     nvm = pathlib.Path(os.environ.get("NVM_DIR") or pathlib.Path.home() / ".nvm")
     versions = nvm / "versions" / "node"
     if not versions.is_dir():
         return None
     spec = "default"
-    for _hop in range(5):  # alias 可以指到另一個 alias(lts/* → lts/jod → v22…)
+    for _hop in range(5):  # an alias can point to another alias (lts/* -> lts/jod -> v22…)
         f = nvm / "alias" / spec
         if not f.is_file():
             break
@@ -152,36 +166,43 @@ def nvm_bin() -> pathlib.Path | None:
     return installed[-1] / "bin" if installed else None
 
 
-# launchd 底下的 PATH(plist 沒寫 PATH 的時候,render-services 也把這個寫進 plist):指令解析要照這個,
-# 不是跑檢查的那個 shell 的 PATH。nvm 預設版本的 bin 放最前面(node、claude)。
+# The PATH under launchd (when a plist sets no PATH; render-services also writes this into plists): commands must be
+# resolved against this, not the PATH of the shell running the check. The nvm default version's bin comes first
+# (node, claude).
 LAUNCHD_PATH = ":".join([*([str(nvm_bin())] if nvm_bin() else []), "/opt/homebrew/bin", "/usr/local/bin", "/usr/bin", "/bin"])
 
 
 def expand_env(value: str) -> str:
-    """登錄 service 的 env 值裡的 $PLATFORM_PATH 換成 LAUNCHD_PATH(要 Homebrew 又要 nvm 的 node/claude 時用)。"""
+    """Replace $PLATFORM_PATH in a registry service's env values with LAUNCHD_PATH (for when it needs both Homebrew and
+    nvm's node/claude)."""
     return value.replace("$PLATFORM_PATH", LAUNCHD_PATH)
 
 
 def tool(name: str) -> str:
-    """無人值守的程式要跑的指令(claude 等)的完整路徑:先照目前的 PATH,再照 LAUNCHD_PATH;找不到就原樣回傳。"""
+    """Full path of a command an unattended program runs (claude etc.): first by the current PATH, then by
+    LAUNCHD_PATH; not found: returned as it is."""
     import shutil
     return shutil.which(name, path=f"{os.environ.get('PATH', '')}:{LAUNCHD_PATH}") or name
 
-STATE = pathlib.Path(os.environ["AGENT_HUB_STATE"]) if os.environ.get("AGENT_HUB_STATE") else ROOT / ".state"   # 測試用另一個
+# tests use another
+STATE = pathlib.Path(os.environ["AGENT_HUB_STATE"]) if os.environ.get("AGENT_HUB_STATE") else ROOT / ".state"
 LOGS = ROOT / ".logs"
 REGISTRY_INDEX = STATE / "registry" / "index.json"
 
 
-# 事件匯流排有自己的目錄(hub.json bus_dir):第二階段的 sandbox 只對這個目錄開寫入(session 寄信、hook 收信都要寫)。
-# 不放在 hub 目錄底下:專案的權限規則 deny 寫 ~/agent-hub/**,而 deny 會蓋過 sandbox 的 allowWrite。
+# The event bus has its own directory (hub.json bus_dir): the stage-two sandbox opens writes only to this directory
+# (a session sending a letter and a hook receiving one both write). Not under the hub directory: the projects'
+# permission rules deny writes to ~/agent-hub/**, and deny overrides the sandbox's allowWrite.
 BUS_DIR = p("bus_dir", ".state/bus")
 BUS_LOG = BUS_DIR / "hubbus.log"
-_OLD_BUS = [STATE / "bus" / "bus.db", STATE / "bus.db"]  # 以前放過的位置(依序找)
+_OLD_BUS = [STATE / "bus" / "bus.db", STATE / "bus.db"]  # where it used to be (searched in order)
 
 
 def bus_db() -> pathlib.Path:
-    """匯流排的 SQLite 檔。新位置還沒有、舊位置有 → 搬過來:一個連線拿 RESERVED 鎖(BEGIN IMMEDIATE)
-    擋住其他寫入,另一個連線用 backup API 讀出來(同一個連線鎖著自己再 backup 會卡死),改名之後才放鎖。"""
+    """The bus's SQLite file. Not yet at the new location but present at an old one -> move it: one connection takes
+    the RESERVED lock (BEGIN IMMEDIATE) to hold off other writes, another connection reads it out with the backup API
+    (a connection that holds the lock and then backs itself up deadlocks), and the lock is released only after the
+    rename."""
     new = BUS_DIR / "bus.db"
     BUS_DIR.mkdir(parents=True, exist_ok=True)
     old = next((o for o in _OLD_BUS if o.exists() and o != new), None)
@@ -191,7 +212,7 @@ def bus_db() -> pathlib.Path:
     lock = sqlite3.connect(old, timeout=60, isolation_level=None)
     try:
         lock.execute("BEGIN IMMEDIATE")
-        if not new.exists():  # 另一個程序可能剛搬完
+        if not new.exists():  # another process may just have moved it
             tmp = BUS_DIR / "bus.db.migrating"
             src, dst = sqlite3.connect(old, timeout=60), sqlite3.connect(tmp)
             src.backup(dst)
@@ -208,7 +229,7 @@ def bus_db() -> pathlib.Path:
     oldlog = old.parent / "hubbus.log" if old.parent.name == "bus" else LOGS / "hubbus.log"
     if oldlog.exists() and not oldlog.is_symlink() and not BUS_LOG.exists():
         oldlog.rename(BUS_LOG)
-    link = LOGS / "hubbus.log"  # 還在讀 .logs/hubbus.log 的(其他 session 的監看)照樣讀得到
+    link = LOGS / "hubbus.log"  # whatever still reads .logs/hubbus.log (other sessions' monitors) can still read it
     if link.is_symlink() or not link.exists():
         link.unlink(missing_ok=True)
         LOGS.mkdir(parents=True, exist_ok=True)   # a fresh checkout (or the commit gate's copy) has no .logs yet
@@ -260,7 +281,8 @@ def registry_dir() -> pathlib.Path:
 
 
 def platform_registry() -> pathlib.Path:
-    """平台自己的登錄(核心的 job、服務、憑證宣告、契約):是平台的一部分,在平台 repo 裡,不在使用者的 registry_dir。"""
+    """The platform's own registry entry (core jobs, services, secret declarations, contracts): part of the platform,
+    in the platform repo, not in the user's registry_dir."""
     return ROOT / "projects" / f"{hub_project()}.yaml"
 
 
@@ -269,7 +291,7 @@ def owner_address() -> str:
 
 
 def owner_addresses() -> set[str]:
-    """owner 的地址跟別名(舊的信用 knas,兩個都收)。"""
+    """The owner's address and aliases (old letters use knas; both are accepted)."""
     return {owner_address(), *get("owner.aliases", [])}
 
 
@@ -278,8 +300,9 @@ def owner_tag() -> str:
 
 
 def owner_side() -> str:
-    """Principal Handoff 的 principal 端是誰(hub.json owner_side):assistant = hub.json assistant 設定的助理(bridge 跟它的 API 交換);
-    builtin = 平台內建的最小 owner 端(bin/owner.py)。沒寫:有 assistant.api 就是 assistant,否則 builtin。"""
+    """Who the Principal Handoff's principal side is (hub.json owner_side): assistant = the assistant set in hub.json
+    assistant (the bridge exchanges with its API); builtin = the platform's minimal built-in owner side (bin/owner.py).
+    Not set: assistant if there is assistant.api, otherwise builtin."""
     v = get("owner_side")
     if v in ("assistant", "builtin"):
         return v
@@ -287,9 +310,10 @@ def owner_side() -> str:
 
 
 def party(role: str, project: str | None = None) -> str:
-    """Principal Handoff 的參與者識別字(規範 core §1、R6;記錄的 by、authority.decider 都用這個)。
-    principal / principal_side 從 hub.json 讀(owner.principal_id、assistant.party_id);requester 跟 agent 是
-    project:<專案>(要給 project);registrar 是 <平台>:registrar(一個 registrar 服務所有專案)。"""
+    """Principal Handoff participant identifiers (spec core §1, R6; a record's by and authority.decider use these).
+    principal / principal_side are read from hub.json (owner.principal_id, assistant.party_id); requester and agent
+    are project:<project> (project must be given); registrar is <platform>:registrar (one registrar serves every
+    project)."""
     if role == "principal":
         return get("owner.principal_id") or f"person:{owner_address()}"
     if role == "principal_side":
@@ -306,8 +330,9 @@ def party(role: str, project: str | None = None) -> str:
 
 
 def former_names(project: str) -> list[str]:
-    """這個專案改名前用過的名稱(照 .state/project-renames.json,只算改完的 stage done)。匯流排上舊的信、助理寄來的
-    record 可能還用舊名稱(例:idea-1 升級改名成 garden-app)。"""
+    """The names this project had before being renamed (from .state/project-renames.json, counting only finished
+    renames, stage done). Old letters on the bus and records the assistant sends may still use an old name (e.g.
+    idea-1 upgraded and renamed to garden-app)."""
     try:
         renames = json.loads((STATE / "project-renames.json").read_text())
     except (OSError, ValueError):
@@ -327,14 +352,15 @@ def principal_is_legal_person() -> bool:
 
 
 def assistant_name() -> str:
-    """個人助理給人看的名字(hub.json assistant.name);沒設定就是通稱。
+    """The personal assistant's name as people see it (hub.json assistant.name); a generic term when not set.
     The default works as a noun phrase mid-sentence ("sent to the personal assistant"), as a configured name does."""
     return get("assistant.name") or _("the personal assistant")
 
 
 def fill_names(text: str) -> str:
-    """樣板裡的 {{owner}}(待辦標籤、對人的稱呼)、{{owner_alias}}(hubbus send --to 的地址)、{{assistant}} 換成設定的值。
-    templates/ 底下給 agent 看的說明都經過這裡,樣板本身不寫人名。"""
+    """Replace {{owner}} (the to-do tag, how the owner is addressed), {{owner_alias}} (the hubbus send --to address) and
+    {{assistant}} in a template with the configured values. All agent instructions under templates/ go through here;
+    the templates themselves name no one."""
     aliases = get("owner.aliases") or []
     return (text.replace("{{owner}}", owner_tag())
                 .replace("{{owner_alias}}", aliases[0] if aliases else owner_address())
@@ -345,10 +371,10 @@ _PATHS_LINE = re.compile(r"^\s+(\w+):\s*(.*?)\s*(?:#.*)?$")
 
 
 def roster() -> dict[str, dict]:
-    """登錄裡有哪些專案(平台自己除外)→ 它的 paths(原始字串,~ 沒展開)。
+    """The projects in the registry (except the platform itself) -> their paths (raw strings, ~ not expanded).
 
-    直接讀 <registry_dir>/*.yaml 的檔名跟 `paths:` 區塊:不驗證、不需要 PyYAML、不靠 .state 的快取,
-    所以新機器(recover)、MBP 都能用。要驗證過的完整登錄用 projects()。"""
+    Reads the file names and `paths:` blocks of <registry_dir>/*.yaml directly: no validation, no PyYAML, no .state
+    cache, so it works on a new machine (recover) and on the laptop. For the full validated registry use projects()."""
     out = {}
     d = registry_dir()
     for f in sorted(d.glob("*.yaml")) if d and d.is_dir() else []:
@@ -358,7 +384,8 @@ def roster() -> dict[str, dict]:
 
 
 def roster_paths(text: str) -> dict:
-    """一個登錄檔的 `paths:` 區塊(逐行解析,只認 block 格式;registry.py 驗證時會比對跟 YAML 讀到的一樣)。"""
+    """One registry file's `paths:` block (parsed line by line, block style only; registry.py checks during validation
+    that it matches what YAML reads)."""
     paths, inside = {}, False
     for line in text.splitlines():
         if line.split("#")[0].rstrip() == "paths:":
@@ -374,7 +401,8 @@ _TYPE_LINE = re.compile(r"^type:\s*['\"]?(\w+)['\"]?\s*(?:#.*)?$")
 
 
 def ideas() -> list[str]:
-    """登錄 `type: idea` 的專案(想法沙盒)。跟 roster() 一樣逐行讀頂層的 `type:`,不需要 PyYAML。"""
+    """Projects registered with `type: idea` (idea sandboxes). Like roster(), reads the top-level `type:` line by line;
+    no PyYAML needed."""
     d = registry_dir()
     out = []
     for f in sorted(d.glob("*.yaml")) if d and d.is_dir() else []:
@@ -387,7 +415,8 @@ def ideas() -> list[str]:
 
 
 def projects() -> dict[str, dict]:
-    """名稱 → 驗證過的登錄(dict)。快取還沒產生(新機器、MBP)就用 roster() 湊最小的欄位。"""
+    """Name -> validated registry entry (dict). If the cache has not been produced yet (new machine, the laptop),
+    roster() supplies the minimal fields."""
     if REGISTRY_INDEX.exists():
         try:
             return json.loads(REGISTRY_INDEX.read_text())["projects"]
@@ -397,8 +426,9 @@ def projects() -> dict[str, dict]:
 
 
 def reflection_private() -> set[str] | None:
-    """privacy.reflection 不是 include 的專案(stats_only / exclude):它們的對話內容(連摘要)不送雲端模型。
-    登錄還沒產生、讀不到時回傳 None——呼叫的人要當成「全部都不能送內容」,不是「沒有限制」。"""
+    """Projects whose privacy.reflection is not include (stats_only / exclude): their conversation content (summaries
+    included) is not sent to cloud models. Returns None when the registry has not been produced or cannot be read --
+    the caller must treat that as "no content may be sent for any project", not as "no restriction"."""
     if not REGISTRY_INDEX.exists():
         return None
     try:
@@ -417,19 +447,22 @@ def workspace(name: str) -> pathlib.Path | None:
 
 
 def capabilities() -> dict[str, dict]:
-    """平台有的能力(docs/design/capabilities.md):hub.json 的 capabilities,而且 capabilities/<名稱>.sb 存在。"""
+    """The capabilities the platform has (docs/design/capabilities.md): hub.json's capabilities whose
+    capabilities/<name>.sb exists."""
     cat = {k: v for k, v in (get("capabilities") or {}).items() if not k.startswith("_") and isinstance(v, dict)}
     return {k: v for k, v in cat.items() if (ROOT / "capabilities" / f"{k}.sb").is_file()}
 
 
 def code_stamp() -> float:
-    """bin/ 底下的程式最後一次被改的時間。常駐服務啟動時記下,之後變了就找空檔自己結束、讓 launchd 重啟——
-    不然它載入的舊模組會跟磁碟上的新模組混用(2026-10-25 lease-runner、cap-runner 都因此壞過一次)。"""
+    """When the code under bin/ was last changed. A long-running service records it at start; once it changes, the
+    service exits at a quiet moment and lets launchd restart it -- otherwise the old modules it loaded get mixed with
+    the new ones on disk (on 2026-10-25 lease-runner and cap-runner each broke once because of this)."""
     stamps = [f.stat().st_mtime for f in (ROOT / "bin").iterdir() if f.is_file()]
     return max(stamps) if stamps else 0.0
 
 
-PY_SHEBANG = "#!/bin/sh -c exec"   # 平台 Python 腳本的第一行(bin/py 檔頭):只有 macOS 的 kernel 照它切參數
+PY_SHEBANG = "#!/bin/sh -c exec"   # first line of platform Python scripts (bin/py header): only the
+                                   # macOS kernel splits arguments by it
 
 
 def is_platform_python(script: pathlib.Path) -> bool:
@@ -441,23 +474,25 @@ def is_platform_python(script: pathlib.Path) -> bool:
 
 
 def launch(script: pathlib.Path | str) -> list[str]:
-    """叫起平台的一支腳本的 argv。平台的 Python 腳本一律經過目前的直譯器(sys.executable = 平台的 Python),不靠第一行:
-    那一行只在 macOS 有用(Linux 的 kernel 把 #! 後面整串當一個參數)。shell 腳本照常直接叫。"""
+    """The argv that launches one of the platform's scripts. Platform Python scripts always go through the current
+    interpreter (sys.executable = the platform's Python), not their first line: that line works only on macOS (the
+    Linux kernel takes everything after #! as one argument). Shell scripts are called directly as usual."""
     script = pathlib.Path(script)
     return [sys.executable, str(script)] if is_platform_python(script) else [str(script)]
 
 
 def sh_py(path_expr: str) -> str:
-    """寫進 shell 字串(hook 指令之類)的平台 Python 腳本:macOS 照舊直接叫(輸出跟以前一個字都不差),其他系統前面加
-    同一個資料夾的 py。path_expr 是 shell 裡的路徑寫法(例:~/agent-hub/bin/hubbus)。"""
+    """A platform Python script written into a shell string (hook commands and the like): on macOS it is called directly
+    as before (output identical to before, character for character); on other systems the py from the same folder is
+    put in front. path_expr is the path as written in shell (e.g. ~/agent-hub/bin/hubbus)."""
     if sys.platform == "darwin":
         return path_expr
     return f"{path_expr.rsplit('/', 1)[0]}/py {path_expr}"
 
 
 def login_shell() -> str:
-    """跑 job、測試指令的 login shell(`<shell> -lc <指令>`,讀使用者的 PATH、nvm 之類):macOS 一律 /bin/zsh(跟以前一樣);
-    其他系統沒有 zsh 就用 bash,再沒有就 sh。"""
+    """The login shell that runs jobs and test commands (`<shell> -lc <command>`, reading the user's PATH, nvm and the
+    like): always /bin/zsh on macOS (as before); on other systems bash when there is no zsh, otherwise sh."""
     for sh in ("/bin/zsh", "/bin/bash", "/usr/bin/bash"):
         if os.access(sh, os.X_OK):
             return sh
@@ -468,9 +503,10 @@ _SERVICE_MANAGER: list = []
 
 
 def service_manager() -> str | None:
-    """這台機器用哪個服務管理器跑排程器、看門狗、專案的長駐服務:macOS = launchd;Linux 有 systemd 的 user 層級
-    (`systemctl --user` 叫得通)= systemd(bin/systemd_units.py)。都沒有(例:容器)= None:裝、查、重載都明確說
-    「這個系統沒有服務管理器」,不假裝跑起來了。"""
+    """Which service manager this machine uses for the scheduler, the watchdog and projects' long-running services:
+    macOS = launchd; Linux with a systemd user level (`systemctl --user` works) = systemd (bin/systemd_units.py).
+    Neither (e.g. a container) = None: install, status and reload all say plainly "this system has no service
+    manager" instead of pretending it is running."""
     if not _SERVICE_MANAGER:
         if sys.platform == "darwin":
             _SERVICE_MANAGER.append("launchd")
@@ -492,8 +528,9 @@ def no_service_manager() -> str:
 
 
 def process_cwds() -> list[tuple[int, str, str]]:
-    """(pid, 程式名稱, 工作目錄):每個程序的工作目錄。有 lsof 用 lsof(macOS 一定有);沒有就讀 /proc(Linux 常常沒裝 lsof);
-    兩個都沒有 = 空的(呼叫端說「查不到」)。"""
+    """(pid, program name, working directory): every process's working directory. lsof when there is one (macOS
+    always has it); otherwise read /proc (Linux often has no lsof); neither = empty (the caller says it could not
+    find out)."""
     import shutil
     import subprocess
     if shutil.which("lsof"):
@@ -519,14 +556,14 @@ def process_cwds() -> list[tuple[int, str, str]]:
 
 
 def cwd_users(path: str | pathlib.Path) -> list[str]:
-    """工作目錄在這個資料夾(含子資料夾)裡的程序:「程式名稱(pid)」。"""
+    """Processes whose working directory is in this folder (subfolders included): "program name(pid)"."""
     root = os.path.realpath(path)
     return sorted({f"{name}({pid})" for pid, name, cwd in process_cwds()
                    if cwd == root or cwd.startswith(root.rstrip("/") + "/")})
 
 
 def hub_project() -> str:
-    """平台自己在登錄裡的名稱。"""
+    """The platform's own name in the registry."""
     return "agent-hub"
 
 
@@ -549,13 +586,15 @@ def main(argv: list[str]) -> int:
         print({"config": config_dir, "data": data_dir, "secrets": secrets_dir}.get(argv[1], lambda: None)()
               or (STATE if argv[1] == "state" else LOGS))
         return 0
-    if len(argv) == 2 and argv[0] == "cwd-users":  # 工作目錄在這個資料夾裡的程序(shell 腳本用;沒有 lsof 也能用)
+    # processes whose working directory is in this folder (for shell scripts; works without lsof too)
+    if len(argv) == 2 and argv[0] == "cwd-users":
         print(" ".join(cwd_users(argv[1])))
         return 0
-    if len(argv) == 2 and argv[0] == "host":  # 印 ssh 名稱;一台機器全包時印空行
+    if len(argv) == 2 and argv[0] == "host":  # print the ssh name; an empty line when one machine does everything
         print(host(argv[1]))
         return 0
-    if len(argv) == 2 and argv[0] == "path":  # shell 腳本拿展開過的路徑(例:memory_copies),不要自己寫死
+    # shell scripts get the expanded path (e.g. memory_copies) instead of hard-coding it
+    if len(argv) == 2 and argv[0] == "path":
         v = p(argv[1])
         if v is None:
             print(_("hubconf.py path: {key} is not set", key=argv[1]), file=sys.stderr)

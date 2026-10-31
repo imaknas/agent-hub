@@ -1,14 +1,16 @@
 #!/bin/sh -c exec${IFS}"${0%/*}/py"${IFS}"$0"${IFS}"$@"
-"""排程狀態頁:取代 Claude Desktop「Scheduled」的檢視,所有排程(schedule.yaml)一頁看完。
+"""The schedule status page: replaces Claude Desktop's "Scheduled" view; every scheduled job (schedule.yaml) on one
+page.
 
-跑在 mini。scheduler.py 每個 tick 結束、run-agent-job.sh 每次跑完都會重生,零 LLM。
-輸出 .state/status/index.html,用 `tailscale serve` 只對 tailnet 開放(MBP、手機打得開,
-外網打不開):https://<hub 那台>.<tailnet>.ts.net/
+Runs on the hub machine. Regenerated at the end of every scheduler.py tick and after every run-agent-job.sh run;
+zero LLM. Writes .state/status/index.html, opened only to the tailnet with `tailscale serve` (the laptop and the
+phone can open it, the internet cannot): https://<the hub machine>.<tailnet>.ts.net/
 
-內容:
-  - 需要處理:報告第一行 🔔 的 agent job(7 天內)、失敗的 job、排程器本身沒在跑
-  - 每個 job:什麼時候跑、上次結果、下次什麼時候
-  - agent job(run-agent-job.sh)的最近幾份報告全文
+Contents:
+  - needs attention: agent jobs whose report starts with 🔔 (within 7 days), failed jobs, the scheduler itself not
+    running
+  - each job: when it runs, last result, next run
+  - the full text of the latest few reports of agent jobs (run-agent-job.sh)
 """
 import sys
 import datetime
@@ -37,7 +39,7 @@ LOG_LINE = re.compile(r"^\[(\S+ \S+)\] (?:running job '([^']+)'|job '([^']+)' (f
 
 
 def prune_line() -> str:
-    """每晚 worktree 清理(prune-worktrees --auto)的結果,一行;沒跑過就不顯示。"""
+    """The result of the nightly worktree cleanup (prune-worktrees --auto), one line; nothing shown if it never ran."""
     import json, pathlib, sys
     sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
     import hubconf
@@ -56,7 +58,7 @@ def prune_line() -> str:
 
 
 def runs_on(job: dict, d: datetime.date) -> bool:
-    """跟 scheduler.py 的 runs_today() 同一組篩選。"""
+    """The same filters as scheduler.py's runs_today()."""
     if "days_of_week" in job and WEEKDAYS[d.weekday()] not in job["days_of_week"]:
         return False
     if "days_of_month" in job and d.day not in job["days_of_month"]:
@@ -128,7 +130,7 @@ def next_run(job: dict, state: dict, now: datetime.datetime) -> str:
             continue
         due = datetime.datetime.combine(d, datetime.time(hh, mm))
         if i == 0 and state.get(job["name"]) == d.isoformat():
-            continue  # 今天已經跑完
+            continue  # already ran today
         if i == 0 and now >= due:
             return _("today (waiting for the next tick, or out of retries)")
         return fmt_dt(due)
@@ -148,7 +150,7 @@ def age_text(days: int) -> str:
 
 
 def scheduler_runs() -> tuple[dict, datetime.datetime | None]:
-    """job 名稱 → 最後一次 {started, result};以及最後一次 tick 的時間。"""
+    """job name -> last {started, result}; and the time of the last tick."""
     runs: dict[str, dict] = {}
     last_tick = None
     if not SCHED_LOG.exists():
@@ -179,7 +181,7 @@ def scheduler_alive() -> bool:
         import systemd_units
         return systemd_units.state("local.agent-hub-scheduler") == "running"
     if hubconf.service_manager() != "launchd":
-        return False   # 沒有服務管理器(下面的警報會說)
+        return False   # no service manager (the alert below says so)
     r = subprocess.run(["launchctl", "print", f"gui/{os.getuid()}/local.agent-hub-scheduler"],
                        capture_output=True, text=True)
     return r.returncode == 0
@@ -199,9 +201,9 @@ def esc(s: str) -> str:
 
 
 def main() -> None:
-    import hubconf  # 下面也有一處 import:放在最前面,整個函式都看得到
+    import hubconf  # imported further down too: put first so the whole function sees it
     now = datetime.datetime.now()
-    import scheduler  # schedule.yaml + 專案登錄,跟排程器用同一份清單
+    import scheduler  # schedule.yaml + the project registry, the same list the scheduler uses
     jobs, reg_info = scheduler.all_jobs()
     state = json.loads(STATE.read_text()) if STATE.exists() else {}
     runs, last_tick = scheduler_runs()
@@ -212,15 +214,17 @@ def main() -> None:
         alerts.append(("bad", _("The scheduler (local.agent-hub-scheduler) is not loaded: nothing scheduled runs. "
                                 "On the hub machine, run schedulectl start")))
     else:
-        # scheduler.py 只在有 job 要跑時才寫 log,但每個 tick 都會存狀態檔——用它的修改時間判斷
-        # 排程器還有沒有在跑(用 log 判斷,半夜沒 job 的時段會誤報)
+        # scheduler.py writes its log only when a job runs, but saves its state file on every tick -- use that file's
+        # mtime to tell whether the scheduler is still running (going by the log raises false alarms in night hours
+        # with no jobs)
         tick = datetime.datetime.fromtimestamp(STATE.stat().st_mtime) if STATE.exists() else None
         if tick is None or now - tick > datetime.timedelta(minutes=40):
             alerts.append(("bad", _("The scheduler's last tick was {tick:%m/%d %H:%M}, over 40 minutes ago", tick=tick) if tick
                            else _("The scheduler's state file is missing")))
 
-    # 排程器的看門狗(scheduler-watchdog.py,獨立的 launchd job):這頁是排程器自己產生的,
-    # 排程器停了這頁也不會更新——真正會叫的是看門狗,所以它沒在顧要在這裡講
+    # The scheduler's watchdog (scheduler-watchdog.py, a separate launchd job): this page is produced by the scheduler
+    # itself, so it stops updating when the scheduler stops -- the one that actually raises the alarm is the watchdog,
+    # so when it is not on watch, this page has to say so
     sm = hubconf.service_manager()
     if sm == "systemd" and __import__("systemd_units").state("local.agent-hub-scheduler-watchdog") != "running":
         alerts.append(("bad", _("The scheduler watchdog (local.agent-hub-scheduler-watchdog.timer) is not scheduled: "
@@ -240,17 +244,19 @@ def main() -> None:
         alerts.append(("bad", _("The scheduler watchdog has no Discord settings (.secrets/discord-token, .secrets/discord-alert-channel): "
                                 "it cannot alert when the scheduler stops")))
 
-    # 警報發不出去(bin/alert.py 記的;Discord token 失效、網路斷了…):不能默默算了
+    # alerts that could not be sent (recorded by bin/alert.py; Discord token invalid, network down…): must not pass
+    # silently
     try:
         import alert
         for key, f in sorted(alert.failures().items()):
             alerts.append(("bad", _("A Discord alert could not be sent ({key}, {at}): {text}. Check that .secrets/discord-token "
                                     "still works; it is tried again next time",
                                     key=key, at=f.get('at', '')[:16], text=f.get('text', ''))))
-    except Exception as e:  # 狀態頁不能因為這個掛掉
+    except Exception as e:  # the status page must not crash because of this
         alerts.append(("bad", _("Cannot read the alert state: {e}", e=e)))
 
-    # 第二階段:無人值守的 agent job 要在登錄宣告 allow:(dontAsk);還沒宣告的列出來(暫時是 auto)
+    # stage two: unattended agent jobs must declare allow: (dontAsk) in the registry; list those that have not yet
+    # (auto for now)
     legacy_auto = [j["name"] for j in jobs if "run-agent-job.sh" in j["command"] and "AGENT_JOB_ALLOW=" not in j["command"]
                    and j.get("enabled", True)]
     if legacy_auto:
@@ -258,7 +264,8 @@ def main() -> None:
                                    "mode, not dontAsk): {jobs}", jobs=', '.join(legacy_auto))))
 
     config_note = ""
-    try:  # config pipeline(new-user.md 3.7):生效的是哪個 config commit,改了還沒套用就提醒
+    # config pipeline (new-user.md 3.7): which config commit is in effect; remind when a change is not applied yet
+    try:
         import appliers
         cur = appliers.config_commit()
         rec = json.loads(appliers.applied_path().read_text()) if appliers.applied_path().exists() else None
@@ -283,7 +290,8 @@ def main() -> None:
     for job in jobs:
         name = job["name"]
         is_agent = "run-agent-job.sh" in job["command"]
-        aname = job.get("agent_name", name)  # 登錄的 agent job 狀態目錄用舊名稱或 <專案>-<job>
+        # a registry agent job's state directory uses the old name or <project>-<job>
+        aname = job.get("agent_name", name)
         run = runs.get(name, {})
         result, detail = run.get("result", ""), ""
         last = run.get("started", "")[5:16]
@@ -300,7 +308,7 @@ def main() -> None:
             if (AGENT_JOBS / aname / "STOP").exists():
                 detail = _("Stopped itself: {reason}", reason=(AGENT_JOBS / aname / "STOP").read_text().strip()[:120])
         elif result.startswith("failed"):
-            # 下一個 tick 成功就不算;只在最後一次是失敗時提醒
+            # a success on the next tick cancels it; remind only when the last run failed
             alerts.append(("bad", _("{name} failed on its last run (exit {code}); log: .logs/{log}-<date>.log", name=name,
                                     code=run.get("code", "?"), log=name.replace('/', '__'))))
         cls = {"ok": "ok", "running": "run"}.get(result, "bad" if result.startswith("failed") else "")
@@ -321,7 +329,7 @@ def main() -> None:
                     for i, r in enumerate(reps))
                 report_blocks.append(f"<section><h3>{esc(name)}</h3>{items}</section>")
 
-    # 加密雲端備份(bin/backup.py):最後一次成功太久、還原測試太久都標紅
+    # encrypted cloud backup (bin/backup.py): red when the last success or the last restore test is too long ago
     bdir = HUB / ".state" / "backup"
     for fname, limit_h, what in (("last.json", 36, _("backup")), ("last-verify.json", 40 * 24, _("restore test"))):
         f = bdir / fname
@@ -333,7 +341,8 @@ def main() -> None:
         except (OSError, ValueError, KeyError):
             alerts.append(("bad", _("No successful {what} on record yet (.state/backup/{fname})", what=what, fname=fname)))
 
-    # 專案信箱/事件匯流排(bin/hubbus):卡住的信、送不進 Muninn 的、壞掉被移開的 bus.db
+    # project mailboxes / event bus (bin/hubbus): stuck letters, ones that cannot be delivered to the assistant, a
+    # broken bus.db moved aside
     mail_html = ""
     r = subprocess.run([sys.executable, str(HUB / "bin" / "hubbus"), "status", "--json"], capture_output=True, text=True)
     try:
@@ -363,7 +372,7 @@ def main() -> None:
                         f"<th>{_('Oldest')}</th></tr>{mail_rows}</table>"
                         if mail_rows else f"<div class=sub>{_('No open letters')}</div>"))
 
-    # 平行 session 的 worktree / 合併閘門(bin/worktrees.py、bin/merge-branch)
+    # worktrees of parallel sessions / the merge gate (bin/worktrees.py, bin/merge-branch)
     wt_html = ""
     try:
         import worktrees
@@ -403,7 +412,7 @@ def main() -> None:
                 f = json.loads(pl)
                 alerts.append(("bad", _("merge-branch failed: {project} {branch} ({stage}): {detail}", project=f.get('project'),
                                         branch=f.get('branch'), stage=f.get('stage'), detail=(f.get('detail') or '')[:160])))
-    except Exception as e:  # 一覽壞掉不影響狀態頁其他部分
+    except Exception as e:  # a broken overview does not affect the rest of the page
         wt_html = f"<div class=sub>{_('Worktree overview failed: {e}', e=esc(repr(e)))}</div>"
 
     alert_html = "".join(f"<div class='alert {c}'>{'🔔' if c == 'notify' else '⚠️'} {esc(t)}</div>"
@@ -445,7 +454,8 @@ summary{{cursor:pointer;color:var(--mut)}} pre{{white-space:pre-wrap;word-break:
     write_reading_pages(now)
 
 
-# ---------- 給人看的三頁:digest、待辦、每週回顧(new-user.md 第 7 節第 7 題:data 不進 git 之後只能從這裡看)----------
+# ---------- three pages for people: digest, to-do, weekly review (new-user.md section 7, question 7: once data is
+# out of git, this is the only place to read them) ----------
 
 PAGE_CSS = """:root{--bg:#fafaf9;--fg:#1c1917;--mut:#78716c;--line:#e7e5e4;--card:#fff;--acc:#1d4ed8}
 @media (prefers-color-scheme:dark){:root{--bg:#1c1917;--fg:#f5f5f4;--mut:#a8a29e;--line:#44403c;--card:#292524;--acc:#93c5fd}}
@@ -454,7 +464,7 @@ main{max-width:860px;margin:0 auto;padding:16px} a{color:var(--acc)} nav{margin:
 section{background:var(--card);border:1px solid var(--line);border-radius:8px;padding:4px 16px;margin:12px 0}
 h1{font-size:22px;margin:8px 0} h2{font-size:18px} h3{font-size:16px} code{font-size:14px;background:var(--line);padding:0 3px;border-radius:3px}
 li{margin:2px 0} .sub{color:var(--mut);font-size:13px}"""
-REFLECT_LINK = "reflect"   # 狀態頁資料夾裡連到 data 的 reflect/ 的連結名稱
+REFLECT_LINK = "reflect"   # name of the link in the status page folder pointing to data's reflect/
 
 
 def nav() -> str:
@@ -463,7 +473,8 @@ def nav() -> str:
 
 
 def md_html(text: str) -> str:
-    """很小的 markdown → HTML(標題、清單、段落、`code`、**粗體**、[文字](連結));先 escape,不吃任何原始 HTML。"""
+    """A very small markdown -> HTML (headings, lists, paragraphs, `code`, **bold**, [text](link)); escapes first,
+    accepts no raw HTML."""
     def inline(t: str) -> str:
         t = esc(t)
         t = re.sub(r"`([^`]+)`", r"<code>\1</code>", t)
@@ -506,7 +517,7 @@ def write_reading_pages(now) -> None:
     todo = hubconf.data_file("todo.md")
     (out / "todo.html").write_text(reading_page(_("Cross-project to-do"), f"<section>{md_html(todo.read_text())}</section>"
                                                 if todo.exists() else f"<p class=sub>{_('No todo.md yet')}</p>", now))
-    link, target = out / REFLECT_LINK, hubconf.data_file("reflect")   # 每週回顧本來就是一個網站:直接連過去
+    link, target = out / REFLECT_LINK, hubconf.data_file("reflect")   # the weekly review is a site already: link to it
     if target.is_dir() and not (link.is_symlink() and link.resolve() == target.resolve()):
         if link.is_symlink() or link.exists():
             link.unlink()
