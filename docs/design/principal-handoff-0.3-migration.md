@@ -60,8 +60,8 @@ Kinds of authority (Muninn's existing `DecidedBy` maps almost one to one):
 | answering on the owner's behalf from his standing preferences (AnswerQuestion kind) | `delegated` (`under` = reference to the preference or standing instruction, `chain` = [principal, Muninn]) | Muninn |
 | `AGENT` (said by the project) | this is a claim; when Muninn adopts it, `attested` + `adopts` | Muninn |
 
-`OUTWARD_HELD` (can be withdrawn before sending) = core §10 "a record not yet sent can be withdrawn"; after sending it can
-only be replaced by a new record.
+`OUTWARD_HELD` (can be withdrawn before sending) = core §10 "a record not yet sent can be withdrawn"; after sending it
+can only be replaced by a new record.
 
 ## Transport
 
@@ -77,10 +77,10 @@ only be replaced by a new record.
 
 ## Phases (both versions side by side until the readers have switched: the rule for agent-hub contracts)
 
-1. **Coordinate**: Muninn reviews this mapping and fixes the v2 schema (it can vendor the spec's schema directly, or wrap
-   it).
-2. **Muninn receives and sends v2 first**: `/api/records` and the pull endpoint go live, v1 keeps running; inside Muninn,
-   `DecidedBy` maps to authority.
+1. **Coordinate**: Muninn reviews this mapping and fixes the v2 schema (it can vendor the spec's schema directly, or
+   wrap it).
+2. **Muninn receives and sends v2 first**: `/api/records` and the pull endpoint go live, v1 keeps running; inside
+   Muninn, `DecidedBy` maps to authority.
 3. **agent-hub switches**: the bridge sends and receives v2; `knas-tasks.py` becomes the Acts registrar (relink, amend,
    claim, withdraw); the librarian applies settlements and judges notes; vendor spec 0.3's conformance test data, and
    agent-hub runs the Acts suite directly (no longer through an adapter).
@@ -107,11 +107,11 @@ only be replaced by a new record.
 - **A rule Muninn added itself**: in a record sent to a project, the text (note, quote, evidence) only carries what that
   project may hear; content from a deep talk or another project only goes back to the project it came from (Muninn's
   existing only_to/via). Spec core §13 does not cover this direction; it could be written into the spec later.
-- **Phase 2 is live** (Muninn 9ef9442, format `contracts/records.v2.md`, the spec's schema and conformance cases vendored
-  in `contracts/vendor/principal-handoff/`): `POST /api/records` answers accepted/duplicate/unsupported/invalid per
-  record; `GET /api/records?project=&after=` + `POST /api/records/ack`. An ack marks the corresponding handoff delivered
-  (it disappears from `muninn handoffs`): while both transports coexist, whoever acks first takes it; send the ack only
-  once agent-hub has written it durably. When switching from v1, start from the cursor read the first time, not from 0.
+- **Phase 2 is live** (Muninn 9ef9442, format `contracts/records.v2.md`, the spec's schema and conformance cases
+  vendored in `contracts/vendor/principal-handoff/`): `POST /api/records` answers
+  accepted/duplicate/unsupported/invalid per record; `GET /api/records?project=&after=` + `POST /api/records/ack`. An
+  ack marks the corresponding handoff delivered (it disappears from `muninn handoffs`): while both transports coexist,
+  whoever acks first takes it; send the ack only once agent-hub has written it durably. When switching from v1, start from the cursor read the first time, not from 0.
 - **Principal identifier**: `person:knas`, Muninn itself is `muninn`; agent-hub's hub.json must use the same.
 - **Behaviour change (in effect)**: v1's `drop --task`, like v2 acts `withdrawn`, no longer settles it directly when
   only this project wanted it; the owner is asked instead.
