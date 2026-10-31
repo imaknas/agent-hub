@@ -1,43 +1,63 @@
 #!/bin/sh -c exec${IFS}"${0%/*}/py"${IFS}"$0"${IFS}"$@"
-"""通道租借的 runner:Muninn 把一個對話串「借」給某個專案的 Claude Code session,這裡負責開、接續、轉送、收回。
+"""The channel-lease runner: the assistant "lends" a conversation thread to a project's Claude Code session; this
+opens, resumes, relays and reclaims it.
 
-只聽 127.0.0.1(預設 18797),每個請求要 `Authorization: Bearer <平台憑證目錄(hubconf.secrets_dir())的 runner-token>`。
-契約 v2(contracts/lease-runner.v2.schema.json;docs/design/lease-contract-neutral.md):跟執行環境無關——動作用 kind、
-配額用 quota.windows、錯誤碼 agent_login。v1 在 10-25 Muninn 換好之後刪了(schema 在 contracts/retired/);改版前存下的事件照原樣送。
-Claude Code 的輸出怎麼翻成中立事件在 runtime 的 parse_stream(rt())。
+Listens only on 127.0.0.1 (default 18797); every request needs `Authorization: Bearer <runner-token in the platform's
+credentials directory (hubconf.secrets_dir())>`.
+Contract v2 (contracts/lease-runner.v2.schema.json; docs/design/lease-contract-neutral.md): independent of the
+runtime: actions use kind, quota uses quota.windows, the error code is agent_login. v1 was deleted on 10-25 once the
+assistant had switched over (the schema is in contracts/retired/); events stored before the change are sent as they are.
+How Claude Code's output becomes neutral events is in the runtime's parse_stream (rt()).
 API:
   POST /v1/leases                     {v, project, mode: discuss, session_id, thread, resume?, max_turns?} → 201
-  POST /v1/leases/<id>/messages       {v, text, client_msg_id, attachments?} → 202(同一個 client_msg_id 只送一次;程序停了自動接回)
-                                      attachments: [{name, media_type, data(base64)}],最多 8 個、每個 ≤ 10 MB;存進專案的
-                                      attachments/<時間>-<名稱>(不進 git),圖片也直接給模型看;有附件時 text 可以是空字串
-  GET  /v1/leases/<id>/events         SSE;Last-Event-ID 之後的補送
-  POST /v1/leases/<id>/warned         Muninn 確認「還要繼續嗎」的推播真的送出去了(之後 10 分鐘沒回應才收回)
-  POST /v1/leases/<id>/keepalive      回答「繼續」
-  POST /v1/leases/<id>/terminal       L3:停掉程序,回 {command, hint}(runtime 的 resume_command)
-  POST /v1/leases/<id>/detach         {v, reason} → 202;交接在背景跑,結果走事件
-  GET  /v1/leases、GET /v1/status、GET /v1/policy(不能 allow_session 的網域,hub.json lease.no_session_domains)
-  POST /v1/leases/<id>/mode           {v, mode: discuss|work} → 200;正在回答中 409 busy;work 只限想法沙盒(見 work_ready)
-  POST /v1/sandboxes                  {v, name: <想法的代號>, purpose} → 201 新建 / 200 同名同 purpose 已存在(重送)
-                                      / 400 bad_name / 409 exists / 429 too_many(帶 limit、current)/ 500 create_failed
-                                      想法沙盒:bin/create-idea-sandbox.py 建(docs/design/idea-sandboxes.md),建好就在 attachable
-  POST /v1/projects/<name>/rename     {v, to} → 200 {name, origin, renamed}(改名到一半的重試回 renamed:false)/ 400 bad_name
+  POST /v1/leases/<id>/messages       {v, text, client_msg_id, attachments?} → 202 (a client_msg_id is sent only once;
+                                      a stopped process is resumed automatically)
+                                      attachments: [{name, media_type, data(base64)}], at most 8, each ≤ 10 MB; stored
+                                      in the project's attachments/<time>-<name> (not in git), images also shown to the
+                                      model directly; with attachments, text may be an empty string
+  GET  /v1/leases/<id>/events         SSE; replays what came after Last-Event-ID
+  POST /v1/leases/<id>/warned         the assistant confirms the "still continuing?" push really went out (reclaimed
+                                      only after 10 minutes with no reply from then)
+  POST /v1/leases/<id>/keepalive      answers "continue"
+  POST /v1/leases/<id>/terminal       L3: stop the process, return {command, hint} (the runtime's resume_command)
+  POST /v1/leases/<id>/detach         {v, reason} → 202; the handover runs in the background, the result comes as
+                                      events
+  GET  /v1/leases, GET /v1/status, GET /v1/policy (the domains that can't get allow_session, hub.json
+                                      lease.no_session_domains)
+  POST /v1/leases/<id>/mode           {v, mode: discuss|work} → 200; 409 busy while answering; work only for idea
+                                      sandboxes (see work_ready)
+  POST /v1/sandboxes                  {v, name: <the idea's code name>, purpose} → 201 created / 200 same name and
+                                      purpose already exists (a resend)
+                                      / 400 bad_name / 409 exists / 429 too_many (with limit, current)
+                                      / 500 create_failed
+                                      idea sandboxes: created by bin/create-idea-sandbox.py
+                                      (docs/design/idea-sandboxes.md), attachable as soon as they exist
+  POST /v1/projects/<name>/rename     {v, to} → 200 {name, origin, renamed} (a retry of a half-done rename returns
+                                      renamed:false) / 400 bad_name
                                       / 404 not_found / 409 busy|name_taken / 500 rename_failed = bin/project-rename.py
-                                      (GitHub repo、登記、memory、資料夾);深談的處理跟升級一樣(quiesce、follow_move)
-  POST /v1/sandboxes/<name>/upgrade   {v, rename?} → 200 {name, origin, upgraded}(升級過的再送回 upgraded:false + 現在的名稱)
+                                      (GitHub repo, registration, memory, folder); deep talks are handled the same way
+                                      as for an upgrade (quiesce, follow_move)
+  POST /v1/sandboxes/<name>/upgrade   {v, rename?} → 200 {name, origin, upgraded} (an already-upgraded one returns
+                                      upgraded:false + the current name)
                                       / 404 not_found / 409 not_idea|dirty|name_taken / 500 upgrade_failed
-                                      = bin/upgrade-idea.py --apply --json(GitHub repo 預設 private;Muninn 問過 Knas 才送)
-  POST /v1/internal/<id>/relay        權限轉接回報(稽核 + 等待中不算閒置)
-  POST /v1/internal/<id>/show         {path, summary?}:給使用者看專案裡的一個檔案(lease_files.py 檢查、複製)→ v2 的 file 事件
-  GET  /v1/leases/<id>/files/<file id> 取那個檔案(複製的那份,保留 30 天);設計 docs/design/lease-show-file.md
-每個租約一個長駐程序:`llm.py exec lease-session`(宣告在 contracts/llm-points.yaml)+ `--session-id`/`--resume`、
-只有權限轉接的 MCP(--strict-mcp-config)、`--settings`(第二階段的 deny 清單,不管專案有沒有開 enforce)、
-`--append-system-prompt`(租約說明)、`--max-turns`;cwd = 專案登錄的 workspace,環境有 HUBBUS_LEASE=1(信箱 hook
-把信給它看但不標 delivered)。
-閒置:程序 10 分鐘沒事就停(租約還在,下一則 --resume 接回);租約 30 分鐘沒事送 idle_warning,Muninn 回報
-warned 之後 10 分鐘還沒回應才收回 + 交接;等權限/提問回答的時間不算閒置。
-收回:停程序(終端機還開著就 busy)→ `llm.py run lease-handover -- --resume <id>`(不合格重試一次,再不行最小交接)
-→ 匯流排 session.report + 專案信箱 + 給 owner 的 progress/task/question(固定 id,重送不重複)+ 筆記寫進 memory
-→ 馬上跑一次 hubbus bridge。
+                                      = bin/upgrade-idea.py --apply --json (GitHub repo private by default; the
+                                      assistant sends it only after asking the owner)
+  POST /v1/internal/<id>/relay        permission relay report (audit + waiting doesn't count as idle)
+  POST /v1/internal/<id>/show         {path, summary?}: show the user a file in the project (lease_files.py checks and
+                                      copies it) → v2's file event
+  GET  /v1/leases/<id>/files/<file id> fetch that file (the copy, kept 30 days); design docs/design/lease-show-file.md
+One long-running process per lease: `llm.py exec lease-session` (declared in contracts/llm-points.yaml) +
+`--session-id`/`--resume`, only the permission-relay MCP (--strict-mcp-config), `--settings` (the second stage's deny
+list, whether or not the project has enforce on), `--append-system-prompt` (the lease instructions), `--max-turns`;
+cwd = the registry's workspace for the project, with HUBBUS_LEASE=1 in the environment (the mailbox hook shows it
+letters without marking them delivered).
+Idle: the process stops after 10 minutes with nothing to do (the lease remains; the next message resumes it with
+--resume); after 30 minutes with nothing, the lease sends idle_warning, and only if there's still no reply 10 minutes
+after the assistant reports warned is it reclaimed + handed over; time spent waiting for a permission/question answer
+doesn't count as idle.
+Reclaim: stop the process (busy if a terminal still has it open) → `llm.py run lease-handover -- --resume <id>`
+(retried once if invalid, then a minimal handover) → bus session.report + the project mailbox + progress/task/question
+to the owner (fixed ids, a resend doesn't duplicate) + notes written into memory → run hubbus bridge once right away.
 """
 from __future__ import annotations
 
@@ -64,18 +84,19 @@ _ = i18n.domain(__file__)
 
 
 def rt():
-    """這個 runner 用的執行環境(runtime_ports;現在全部是 hub.json 的 runtime.default)。Claude Code 的細節都在它裡面。"""
+    """The runtime this runner uses (runtime_ports; for now always hub.json's runtime.default). All of Claude Code's
+    details are inside it."""
     return runtime_ports.load()
 
 HUB = hubconf.ROOT
 HOST, PORT = "127.0.0.1", int(os.environ.get("LEASE_RUNNER_PORT", "18797"))
-DIR = pathlib.Path(os.environ.get("LEASE_RUNNER_DIR") or hubconf.STATE / "lease-runner")  # 測試用另一個目錄
+DIR = pathlib.Path(os.environ.get("LEASE_RUNNER_DIR") or hubconf.STATE / "lease-runner")  # another directory for tests
 TOKEN_FILE = hubconf.secrets_dir() / "runner-token"
 PY = sys.executable
 GLOBAL_CAP = 3
-PROC_IDLE_S = int(os.environ.get("LEASE_PROC_IDLE_S", 600))     # 程序閒置多久就停
-LEASE_IDLE_S = int(os.environ.get("LEASE_IDLE_S", 1800))        # 租約閒置多久送 idle_warning
-WARN_GRACE_S = int(os.environ.get("LEASE_WARN_GRACE_S", 600))   # warned 之後多久沒回應就收回
+PROC_IDLE_S = int(os.environ.get("LEASE_PROC_IDLE_S", 600))     # how long a process may idle before it's stopped
+LEASE_IDLE_S = int(os.environ.get("LEASE_IDLE_S", 1800))        # how long a lease may idle before idle_warning is sent
+WARN_GRACE_S = int(os.environ.get("LEASE_WARN_GRACE_S", 600))   # how long with no reply after warned before reclaiming
 IDLE_TICK_S = int(os.environ.get("LEASE_IDLE_TICK_S", 20))
 DEFAULT_MAX_TURNS = 200
 HANDOVER_PROMPT = ("租約要收回了。根據這整段對話寫交接,用繁體中文:summary(重點)、decisions(談定的決定與理由)、"
@@ -114,7 +135,7 @@ def log(msg: str) -> None:
 
 
 def handovers_logged(lease_id: str) -> int:
-    """事件紀錄(events.jsonl)裡這個租約交接過幾次。"""
+    """How many times this lease has been handed over, from the event log (events.jsonl)."""
     f = DIR / lease_id / "events.jsonl"
     try:
         return sum(1 for line in f.open() if '"type": "handover"' in line)
@@ -140,10 +161,12 @@ class Lease:
         self.intent_stop = False
         self.proc: subprocess.Popen | None = None
         self.seen_msgs: list[str] = d.get("seen_msgs", [])[-200:]
-        # 這段深談交接過幾次:交接轉成的訊息 id 帶著它(同一個 id 接回再收回不撞號)。不低於事件紀錄裡的交接次數:
-        # 改版前的紀錄沒有這欄,從 0 算的話,補送用的 id(lease-<id>-<n>-…)之後會被真的第 n 次交接撞到
+        # how many times this deep talk has been handed over: the message ids the handover turns into carry it (the
+        # same id resumed and reclaimed again doesn't collide). Never lower than the handover count in the event log:
+        # records from before the change lack this field, and counting from 0, the ids used for replays
+        # (lease-<id>-<n>-…) would later collide with the real n-th handover
         self.handovers = max(int(d.get("handovers") or 0), handovers_logged(self.id))
-        self.recent: list[dict] = []          # 最近的事件(含 text_delta),SSE 補送用
+        self.recent: list[dict] = []          # recent events (text_delta included), for SSE replays
         self.cond = threading.Condition(_lock)
 
     def dump(self) -> dict:
@@ -162,14 +185,15 @@ class Lease:
         return DIR / self.id
 
     def emit(self, etype: str, **data) -> dict:
-        """契約 v2 的事件。`_` 開頭的欄位是內部訊號,不存、不送。"""
+        """Contract v2 events. Fields starting with `_` are internal signals: not stored, not sent."""
         with _lock:
             self.seq += 1
             ev = {"v": 2, "seq": self.seq, "lease_id": self.id, "ts": iso(), "type": etype,
                   **{k: v for k, v in data.items() if not k.startswith("_")}}
             self.recent.append(ev)
             del self.recent[:-3000]
-            if etype != "text_delta":  # 逐字的不存檔(量大;斷線補送從完整的 assistant 事件看得到)
+            # token-by-token deltas aren't stored (large; a reconnect replay has the full assistant event)
+            if etype != "text_delta":
                 self.dir.mkdir(parents=True, exist_ok=True)
                 with open(self.dir / "events.jsonl", "a") as f:
                     f.write(json.dumps(ev, ensure_ascii=False) + "\n")
@@ -187,7 +211,8 @@ class Lease:
 
 
 def render(ev: dict) -> dict:
-    """存下來的事件 → 送出去的樣子(拿掉內部欄位)。改版前存的事件(v: 1)照原樣送。"""
+    """A stored event → what's sent (internal fields removed). Events stored before the change (v: 1) are sent as they
+    are."""
     return {k: v for k, v in ev.items() if k != "_v1"}
 
 
@@ -206,14 +231,15 @@ def load() -> None:
     for lid, d in json.loads(f.read_text()).items():
         lease = Lease(d)
         if lease.state in ("running", "resuming", "attaching", "crashed"):
-            lease.state = "idle_stopped"  # runner 重啟:子程序都不在了,下一則訊息 --resume 接回
+            lease.state = "idle_stopped"  # runner restarted: children gone; the next message resumes with --resume
         LEASES[lid] = lease
 
 
-# ---------- 設定:deny 清單、MCP、網域 ----------
+# ---------- settings: deny list, MCP, domains ----------
 
 def deny_settings(project: str) -> pathlib.Path:
-    """跟 render-project-settings 同一份政策的 deny(不管專案有沒有開 enforce)+ 使用者層級的憑證(runtime_claude.lease_settings)。"""
+    """The deny from the same policy as render-project-settings (whether or not the project has enforce on) +
+    user-level credentials (runtime_claude.lease_settings)."""
     import policy
     import runtime_claude
     p = DIR / project / "settings.json"
@@ -223,7 +249,9 @@ def deny_settings(project: str) -> pathlib.Path:
 
 
 def mcp_config(lease: Lease) -> pathlib.Path:
-    import runtime_claude  # 租約的 MCP 設定還是 Claude Code 的格式(長駐 session 那層之後搬進 runtime)
+    # the lease's MCP settings are still in Claude Code's format (to move into the runtime with the long-running
+    # session layer)
+    import runtime_claude
     p = lease.dir / "mcp.json"
     p.parent.mkdir(parents=True, exist_ok=True)
     p.write_text(json.dumps({"mcpServers": {runtime_claude.RELAY_SERVER: {
@@ -238,21 +266,23 @@ def allow_rules(project: str) -> list[str]:
 
 
 def env_for(lease: Lease) -> dict:
-    env = rt().clean_env(os.environ)  # 憑證由 llm.py exec 決定(runtime 的 auth_env)
+    env = rt().clean_env(os.environ)  # credentials are decided by llm.py exec (the runtime's auth_env)
     env.update(HUBBUS_LEASE="1", LEASE_ALLOW=json.dumps(allow_rules(lease.project)),
-               LEASE_MODE=lease.mode, LEASE_WS=lease.cwd,  # 權限轉接:work 模式才放行(問 Knas)寫入
-               PATH=os.environ.get("LEASE_PATH_PREFIX", "") +  # 測試用:把假的 claude 放前面
+               # permission relay: writes allowed (asking the owner) in work mode only
+               LEASE_MODE=lease.mode, LEASE_WS=lease.cwd,
+               PATH=os.environ.get("LEASE_PATH_PREFIX", "") +  # for tests: put the fake claude first
                     f"{hubconf.LAUNCHD_PATH}:{pathlib.Path.home()}/.local/bin:/usr/sbin:/sbin")
     return env
 
 
-# ---------- 程序 ----------
+# ---------- processes ----------
 
 def work_ready(project: str) -> tuple[bool, str]:
-    """work 模式(第二階段)只開給登錄有 enforce.work: true 的專案(Knas 明確授權;想法沙盒建立時寫上、升級帶過去,
-    10-25),而且 OS sandbox 要真的已經寫進那個專案的設定——登錄的
-    enforce.sandbox 只是意圖,render-project-settings 寫出來的 settings.local.json 才是事實(沙盒剛建好、
-    設定還沒渲染的那段時間,不能讓 work 在沒有 sandbox 的情況下跑)。"""
+    """Work mode (the second stage) is open only to projects whose registry has enforce.work: true (explicitly
+    authorized by the owner; written when an idea sandbox is created and carried over on upgrade, 10-25), and only if
+    the OS sandbox really has been written into that project's settings: the registry's
+    enforce.sandbox is only an intention, the settings.local.json render-project-settings writes is the fact (in the
+    window after a sandbox is created and before its settings are rendered, work must not run without a sandbox)."""
     doc = hubconf.projects().get(project) or {}
     if not (doc.get("enforce") or {}).get("work"):
         return False, _("{project} has no work mode (enforce.work in its registry entry; added only with the owner's consent)",
@@ -266,14 +296,16 @@ def work_projects() -> list[str]:
 
 
 def preamble(project: str, mode: str = "discuss") -> str:
-    """租約說明(discuss 唯讀 / work 可以動手,每次寫入都問);想法沙盒(登錄 type: idea)多一段:在探討哪個想法。"""
+    """The lease instructions (discuss is read-only / work can make changes, asking for every write); idea sandboxes
+    (registry type: idea) get an extra section: which idea is being explored."""
     base = PREAMBLE_WORK if mode == "work" else PREAMBLE
     base += """
 - 要讓 Knas 看專案裡的圖或檔案(png、jpg、pdf、glb、md、csv…),用 show_file 工具(專案資料夾裡的路徑 + 一句說明):
   他在手機上會直接看到。不要叫他回電腦打開;一次給一個,太大(20 MB 以上)或像憑證的檔不會送。"""
     doc = hubconf.projects().get(project) or {}
     caps = (doc.get("enforce") or {}).get("capabilities") or []
-    if mode == "work" and caps:  # 平台代跑(docs/design/capabilities.md):sandbox 擋住的東西(例:GPU)走這裡
+    # the platform's run service (docs/design/capabilities.md): what the sandbox blocks (e.g. the GPU) goes through it
+    if mode == "work" and caps:
         hub_run = hubconf.ROOT / "bin" / "hub-run"
         base += f"""
 - 這個專案可以用平台代跑的能力:{', '.join(caps)}。需要 GPU 的程式(例:Blender)在一般指令裡會被 sandbox 擋住,改用
@@ -287,9 +319,10 @@ def preamble(project: str, mode: str = "discuss") -> str:
 
 
 def start_proc(lease: Lease, resume: bool) -> None:
-    # 接續的前提是對話紀錄已經存在:Claude Code 要跑完第一輪才會寫出來。還沒說過話就切換模式、閒置停掉、
-    # runner 重啟時用 --resume 會 "No conversation found" 掛掉(10-25 Knas 遇到,lease 34c84c53)
-    import runtime_claude  # 旗標還是 Claude Code 的(長駐 session 那層之後搬進 runtime)
+    # resuming presumes the transcript exists: Claude Code writes it only after the first turn finishes. Switching
+    # mode, an idle stop or a runner restart before anything was said would crash --resume with "No conversation
+    # found" (the owner hit it on 10-25, lease 34c84c53)
+    import runtime_claude  # the flags are still Claude Code's (to move into the runtime with the long-running sessions)
     wanted = resume or lease.started_once
     can_resume = wanted and rt().resumable(lease.id)
     flag = ["--resume", lease.id] if can_resume else ["--session-id", lease.id]
@@ -303,8 +336,9 @@ def start_proc(lease: Lease, resume: bool) -> None:
     err = open(lease.dir / "stderr.log", "a")
     lease.proc = subprocess.Popen(cmd, cwd=lease.cwd, env=env_for(lease), stdin=subprocess.PIPE, stdout=subprocess.PIPE,
                                   stderr=err, text=True, bufsize=1)
-    lease.intent_stop = False  # started_once 等第一輪真的跑完才設(reader 收到 num_turns > 0 的 result)
-    if wanted and not can_resume:  # 要接回卻接不回(紀錄不在):照實說,不默默開新的
+    # started_once is set only once the first turn really finishes (reader gets a result with num_turns > 0)
+    lease.intent_stop = False
+    if wanted and not can_resume:  # wanted to resume but can't (no record): say so rather than silently start a new one
         lease.set_state("running", pid=lease.proc.pid, resumed=False,
                         detail=_("The earlier conversation is gone (nothing was said yet, or it is past retention); "
                                   "starting a new conversation"))
@@ -332,7 +366,8 @@ def stop_proc(lease: Lease, new_state: str) -> None:
 
 
 def reader(lease: Lease, proc: subprocess.Popen) -> None:
-    """runtime 的原生輸出 → 中立的對話事件(rt().parse_stream)→ 送出;回合結束時更新租約的狀態。"""
+    """The runtime's native output → neutral conversation events (rt().parse_stream) → sent; updates the lease's state
+    when a turn ends."""
     runtime = rt()
     for line in proc.stdout:
         events = runtime.parse_stream(line)
@@ -340,12 +375,13 @@ def reader(lease: Lease, proc: subprocess.Popen) -> None:
         if done:
             with _lock:
                 lease.in_turn = False
-                # 啟動就失敗的程序也會先吐一個 is_error、num_turns=0 的 result 再退出:那不算成功,
-                # 不能把 crashes 歸零(不然永遠到不了 2、不會自動收回,每則訊息都重新掛一次)
+                # a process that fails at start also emits a result with is_error and num_turns=0 before exiting: that
+                # isn't a success and mustn't reset crashes to zero (or it never reaches 2, is never reclaimed
+                # automatically, and every message crashes it again)
                 if not (done[0].data.get("is_error") and not done[0].data.get("num_turns")):
                     lease.crashes = 0
                 if done[0].data.get("num_turns"):
-                    lease.started_once = True  # 對話紀錄寫出來了,之後可以接回
+                    lease.started_once = True  # the transcript has been written; it can be resumed from now on
                 lease.touch()
         for e in events:
             if e.type == "quota":
@@ -365,7 +401,7 @@ def reader(lease: Lease, proc: subprocess.Popen) -> None:
         if lease.crashes >= 2:
             threading.Thread(target=detach, args=(lease, "crash"), daemon=True).start()
         else:
-            lease.set_state("idle_stopped")  # 下一則訊息自動 --resume 一次
+            lease.set_state("idle_stopped")  # the next message resumes once with --resume automatically
 
 
 MAX_ATTACHMENTS, MAX_ATTACHMENT_BYTES, MAX_BODY_BYTES = 8, 10 * 1024 * 1024, 100 * 1024 * 1024
@@ -373,7 +409,7 @@ IMAGE_TYPES = ("image/jpeg", "image/png", "image/gif", "image/webp")
 
 
 def check_attachments(atts) -> str | None:
-    """不合格就回原因(400 bad_request)。"""
+    """Invalid → return the reason (400 bad_request)."""
     import base64
     if atts is None:
         return None
@@ -392,8 +428,9 @@ def check_attachments(atts) -> str | None:
 
 
 def save_attachments(lease: Lease, atts: list) -> list[str]:
-    """存進專案資料夾的 attachments/(檔名清乾淨、不覆蓋),回傳相對路徑。attachments/ 寫進 .git/info/exclude:
-    照片不進 repo 歷史(想法沙盒沒有 remote,但 memory 以外的東西也不該被 commit 進去)。"""
+    """Store into the project folder's attachments/ (cleaned file name, never overwriting) and return the relative path.
+    attachments/ is written into .git/info/exclude: photos stay out of the repo history (idea sandboxes have no remote,
+    but things other than memory shouldn't be committed either)."""
     import base64
     ws = pathlib.Path(lease.cwd)
     d = ws / "attachments"
@@ -437,10 +474,11 @@ def send_message(lease: Lease, text: str, attachments: list | None = None) -> No
         lease.proc.stdin.flush()
 
 
-# ---------- 收回與交接 ----------
+# ---------- reclaim and handover ----------
 
 def terminal_open(lease: Lease) -> bool:
-    """終端機(lease-resume)還開著這個 session 嗎:transcript 最近 2 分鐘有被寫,或有程序開著它。"""
+    """Does a terminal (lease-resume) still have this session open: the transcript was written in the last 2 minutes,
+    or a process has it open."""
     slug = re.sub(r"[/.]", "-", str(pathlib.Path(lease.cwd).resolve()))
     tr = pathlib.Path.home() / ".claude" / "projects" / slug / f"{lease.id}.jsonl"
     if tr.exists() and time.time() - tr.stat().st_mtime < 120:
@@ -456,14 +494,15 @@ def empty_handover() -> dict:
 
 
 def run_handover(lease: Lease) -> tuple[dict | None, str]:
-    """(交接, 失敗的原因)。沒有對話紀錄 = 沒說過話:回固定的「沒有內容」,不算失敗(10-25 租約 34c84c53:
-    session 一開始就掛掉,交接拿 --resume 去接一段不存在的對話,被當成「模型沒寫出合格交接」)。"""
+    """(handover, reason for failure). No transcript = nothing was said: return the fixed "no content", not a failure
+    (10-25 lease 34c84c53: the session crashed right at the start, and the handover used --resume on a conversation
+    that didn't exist, which was taken as "the model didn't write a valid handover")."""
     if not rt().resumable(lease.id):
         return empty_handover(), ""
     cmd = [PY, str(HUB / "bin" / "llm.py"), "run", "lease-handover", "--cwd", lease.cwd, "--",
            "--resume", lease.id, "--strict-mcp-config", "--settings", str(deny_settings(lease.project))]
     why = ""
-    for attempt in (1, 2):  # 不合格重試一次
+    for attempt in (1, 2):  # retry once if invalid
         r = subprocess.run(cmd, input=HANDOVER_PROMPT, cwd=lease.cwd, env=env_for(lease), capture_output=True, text=True,
                            timeout=900)
         try:
@@ -483,9 +522,11 @@ def hubbus(*args: str) -> subprocess.CompletedProcess:
 
 
 def handover_id(sid: str, n: int, part: str) -> str:
-    """交接轉成的訊息 id:lease-<租約>-<第幾次交接>-<部分>。10-26 m10262322:同一段深談接回再收回時 lease id 沿用,
-    以前每次都從 0 編號(lease-<id>-task-0…),第二次以後撞號的全被當成重送吞掉(匯流排跟助理都是)。
-    舊格式的 id 不改;新格式多一段次數,不會跟舊的撞。"""
+    """The message ids a handover turns into: lease-<lease>-<handover number>-<part>. 10-26 m10262322: resuming and
+    reclaiming the same deep talk keeps the lease id, and numbering used to start from 0 each time
+    (lease-<id>-task-0…), so from the second handover on the colliding ones were all swallowed as resends (by both the
+    bus and the assistant).
+    Old-format ids are unchanged; the new format has an extra count segment, so it can't collide with the old."""
     return f"lease-{sid}-{n}-{part}"
 
 
@@ -512,7 +553,8 @@ def deliver(lease: Lease, h: dict, n: int) -> None:
     body += [_("- Open question: {q}", q=q) for q in h.get("open_questions") or []]
     hubbus("send", "--from", hubconf.hub_project(), "--to", proj, "--type", "info", "--id", handover_id(sid, n, "report"),
            "--text", "\n".join(body))
-    # 筆記寫進專案 memory(managed-files 有登記);附上寄出的任務 key,免得 librarian 又把同一件事寄一次
+    # notes written into the project's memory (registered in managed-files); the task keys sent are attached, so the
+    # librarian doesn't send the same thing again
     h["notes_written"] = False
     notes = (h.get("notes_markdown") or "").strip()
     mem = pathlib.Path(lease.cwd) / ".agent-memory" / "memory"
@@ -525,7 +567,7 @@ def deliver(lease: Lease, h: dict, n: int) -> None:
     hubbus("publish", "session.report", "--source", proj, "--to", proj, "--id", handover_id(sid, n, "handover"),
            "--payload", json.dumps(h, ensure_ascii=False))
     subprocess.Popen([sys.executable, str(HUB / "bin" / "hubbus"), "bridge"], stdout=subprocess.DEVNULL,
-                     stderr=subprocess.DEVNULL, start_new_session=True)  # 馬上送出,不等 15 分鐘
+                     stderr=subprocess.DEVNULL, start_new_session=True)  # send right away, don't wait 15 minutes
 
 
 def detach(lease: Lease, reason: str) -> None:
@@ -541,7 +583,7 @@ def detach(lease: Lease, reason: str) -> None:
     try:
         so, why = run_handover(lease)
         failed = _("the model did not produce a valid handover")
-    except Exception as e:  # 平台自己的錯(不是模型的):原因照實說
+    except Exception as e:  # the platform's own error (not the model's): give the reason as it is
         log(_("{id} handover failed: {e!r}", id=lease.id, e=e))
         why, failed = repr(e)[:300], _("a platform error, not the model's")
     fallback = so is None
@@ -554,7 +596,9 @@ def detach(lease: Lease, reason: str) -> None:
          "notes_markdown": "" if fallback else so.get("notes_markdown", ""),
          "notes_written": False, "fallback": fallback, "branch": None, "commits": [], "tests": None}
     try:
-        with _lock:  # 第幾次交接:先記下來再送,同一次交接重送拿到同一組 id(匯流排、助理都靠 id 去重)
+        # which handover this is: recorded before sending, so a resend of the same handover gets the same ids (the bus
+        # and the assistant both dedupe by id)
+        with _lock:
             lease.handovers += 1
             save()
         deliver(lease, h, lease.handovers)
@@ -567,7 +611,7 @@ def detach(lease: Lease, reason: str) -> None:
     lease.set_state("detached", reason=reason)
 
 
-# ---------- 閒置 ----------
+# ---------- idle ----------
 
 STATUS: dict = {"quota": None}
 
@@ -602,14 +646,17 @@ def idle_loop() -> None:
 
 BUSY = ("attaching", "running", "resuming", "detaching")
 CODE_AT_START = 0.0
-CODE_SETTLE_S = 60  # 每次重啟 launchd 要等 10 秒才拉起來(throttle),連續改檔時不要一直重啟
+# each restart makes launchd wait 10 s before starting it (throttle); don't keep restarting while files keep changing
+CODE_SETTLE_S = 60
 
 
 def restart_if_code_changed() -> None:
-    """bin/ 的程式改過、而且沒有租約在跑或在交接:自己結束,讓 launchd(KeepAlive)用新的程式重啟。
-    不然舊的模組會跟磁碟上的新模組混用(10-25 租約 9af483fb 的交接因此失敗)。閒置的租約重啟後照常 --resume 接回。"""
+    """The code in bin/ changed and no lease is running or being handed over: exit, so that launchd (KeepAlive)
+    restarts with the new code. Otherwise old modules would mix with the new ones on disk (lease 9af483fb's handover
+    failed that way on 10-25). Idle leases resume with --resume as usual after the restart."""
     stamp = hubconf.code_stamp()
-    if stamp <= CODE_AT_START or time.time() - stamp < CODE_SETTLE_S:  # 改到一半(連續存檔)先不重啟,穩定了才一次重啟
+    # mid-change (saving repeatedly): wait, and restart once when it settles
+    if stamp <= CODE_AT_START or time.time() - stamp < CODE_SETTLE_S:
         return
     with _lock:
         busy = [l.id[:8] for l in LEASES.values() if l.state in BUSY or l.waiting or l.in_turn]
@@ -630,7 +677,8 @@ def token() -> str:
 
 
 def relay_event(b: dict) -> tuple:
-    """權限轉接的回報 → (事件類型, 欄位)。kind 是動作種類(runtime_ports.KINDS);轉接送原生工具名時由 runtime 翻譯。"""
+    """A permission relay report → (event type, fields). kind is the action kind (runtime_ports.KINDS); when the relay
+    sends a native tool name, the runtime translates it."""
     kind = b.get("kind")
     if kind not in runtime_ports.KINDS:
         kind = rt().action(b.get("tool") or "", {})[0]
@@ -642,7 +690,8 @@ def relay_event(b: dict) -> tuple:
 
 
 def secret_paths(project: str) -> list:
-    """專案登錄 secrets: 宣告的檔案(相對 runtime,沒有 runtime 就相對 workspace)——給使用者看檔案時一律不送。"""
+    """The files the project registry's secrets: declares (relative to runtime, or to workspace if there's no runtime):
+    never sent when showing the user a file."""
     doc = hubconf.projects().get(project) or {}
     base = (hubconf.p("services_root") / project) if doc.get("runtime") is not None else hubconf.workspace(project)
     out = []
@@ -654,7 +703,8 @@ def secret_paths(project: str) -> list:
 
 
 def show_file(lease: "Lease", path: str, summary: str | None) -> tuple:
-    """給使用者看專案裡的一個檔案(docs/design/lease-show-file.md):檢查、複製到租約目錄、送 file 事件(只有 v2)。"""
+    """Show the user a file in the project (docs/design/lease-show-file.md): check it, copy it into the lease directory,
+    send a file event (v2 only)."""
     import lease_files
     meta, why = lease_files.take(lease.cwd, path, summary, lease.dir / "files", secret_paths(lease.project))
     if meta is None:
@@ -669,7 +719,7 @@ LAST_FILE_PRUNE = [0.0]
 
 
 def prune_files() -> None:
-    """給使用者看過的檔案保留 lease_files.KEEP_DAYS 天;一小時清一次。"""
+    """Files shown to the user are kept lease_files.KEEP_DAYS days; cleaned once an hour."""
     import lease_files
     if time.time() - LAST_FILE_PRUNE[0] < 3600:
         return
@@ -681,8 +731,9 @@ def prune_files() -> None:
 
 
 def quiesce(project: str) -> str:
-    """改名、升級之前:這個專案有深談正在回答、等回覆、在終端機或正在收回 → 回原因(不動任何東西);
-    其他的先停程序(租約還在,之後的訊息自動接回)。"""
+    """Before a rename or upgrade: if this project has a deep talk answering, waiting for a reply, in a terminal or
+    being reclaimed → return the reason (touching nothing); otherwise stop the processes first (the leases remain, and
+    later messages resume them automatically)."""
     with _lock:
         mine = [l for l in LEASES.values() if l.project == project]
         if any(live(l) and (l.in_turn or l.waiting or l.state in ("attaching", "resuming", "detaching", "terminal"))
@@ -696,7 +747,8 @@ def quiesce(project: str) -> str:
 
 
 def follow_move(old: str, new: str, old_ws: str) -> None:
-    """改名、升級完:這個專案的租約跟上新的名稱、資料夾(對話紀錄跟著搬);新的登錄沒開 work 的話 work 改回 discuss。"""
+    """After a rename or upgrade: this project's leases follow the new name and folder (transcripts move along); if the
+    new registry doesn't have work on, work goes back to discuss."""
     import registry
     registry.refresh()
     new_ws = str(hubconf.workspace(new) or old_ws)
@@ -731,7 +783,7 @@ class H(http.server.BaseHTTPRequestHandler):
         pass
 
     def reply(self, code: int, body: dict) -> None:
-        body = {**body, "v": 2} if "v" in body else body  # 契約 v2(v1 已刪)
+        body = {**body, "v": 2} if "v" in body else body  # contract v2 (v1 is deleted)
         data = json.dumps(body, ensure_ascii=False).encode()
         self.send_response(code)
         self.send_header("Content-Type", "application/json")
@@ -744,7 +796,8 @@ class H(http.server.BaseHTTPRequestHandler):
 
     def body(self) -> dict:
         n = int(self.headers.get("Content-Length") or 0)
-        if n > MAX_BODY_BYTES:  # 附件是 base64 放在 JSON 裡;太大的請求不讀(不然整個吃進記憶體)
+        # attachments are base64 inside the JSON; too-large requests aren't read (or they'd all go into memory)
+        if n > MAX_BODY_BYTES:
             self.rfile.read(0)
             return {"__bad__": True}
         try:
@@ -774,7 +827,8 @@ class H(http.server.BaseHTTPRequestHandler):
                 ls = sorted(LEASES.values(), key=lambda x: x.last_activity, reverse=True)
                 return self.reply(200, {"v": 1, "leases": [l.public() for l in ls if live(l)] +
                                         [l.public() for l in ls if not live(l)][:20]})
-        if path == "/v1/policy":  # 給 Muninn 的權限卡片:不能「整個租約都允許」的網域(唯一的一份清單)
+        # for the assistant's permission cards: the domains that can't be "allowed for the whole lease" (the only list)
+        if path == "/v1/policy":
             import registry
             idx = registry.refresh()
             return self.reply(200, {"v": 1, "no_session_domains": hubconf.get("lease.no_session_domains", []),
@@ -794,7 +848,7 @@ class H(http.server.BaseHTTPRequestHandler):
         self.err(404, "not_found", path)
 
     def send_file(self, lid: str, fid: str) -> None:
-        """GET /v1/leases/<id>/files/<file id>:給使用者看過的檔案(送的是當時複製的那份)。"""
+        """GET /v1/leases/<id>/files/<file id>: a file shown to the user (what's sent is the copy made then)."""
         import lease_files
         l = LEASES.get(lid)
         got = lease_files.read(l.dir / "files", fid) if l else None
@@ -819,7 +873,7 @@ class H(http.server.BaseHTTPRequestHandler):
         self.send_header("Content-Type", "text/event-stream")
         self.send_header("Cache-Control", "no-cache")
         self.end_headers()
-        # 先補送:檔案裡的(不含逐字)+ 記憶體裡的
+        # replay first: what's in the file (without deltas) + what's in memory
         sent = last
         backlog = []
         f = l.dir / "events.jsonl"
@@ -930,7 +984,8 @@ class H(http.server.BaseHTTPRequestHandler):
                     return self.err(409, "busy", _("answering or waiting for the owner's reply; switch after this turn"))
                 if l.mode == mode:
                     return self.reply(200, {"v": 1, **l.public()})
-                # 換判斷點 = 換程序:停掉、用同一個 session --resume 接回(權限轉接也跟著重開)
+                # switching judgment point = switching process: stop it, resume the same session with --resume (the
+                # permission relay restarts too)
                 stop_proc(l, "attaching")
                 l.mode = mode
                 l.emit("state", state="attaching", mode=mode)
@@ -963,7 +1018,8 @@ class H(http.server.BaseHTTPRequestHandler):
         self.err(404, "not_found", action)
 
     def create_sandbox(self, b: dict) -> None:
-        """想法沙盒:交給 create-idea-sandbox.py(驗證、重送、上限、失敗清理都在那裡),把結果轉成 HTTP。"""
+        """Idea sandboxes: handed to create-idea-sandbox.py (validation, resends, the limit and failure cleanup are all
+        there), with the result turned into HTTP."""
         name, purpose = b.get("name"), b.get("purpose")
         if not isinstance(name, str) or not isinstance(purpose, str):
             return self.err(400, "bad_name", _("name and purpose must be strings"))
@@ -987,8 +1043,10 @@ class H(http.server.BaseHTTPRequestHandler):
         return self.reply(code, body)
 
     def rename_project(self, name: str, b: dict) -> None:
-        """POST /v1/projects/<name>/rename {v, to}:正式專案或想法沙盒整套改名(10-25 Muninn m10251650)。
-        交給 project-rename.py(GitHub repo、登記、memory、資料夾;重試接得上);深談的處理跟升級一樣(quiesce、follow_move)。"""
+        """POST /v1/projects/<name>/rename {v, to}: rename a regular project or an idea sandbox as a whole (10-25, the
+        assistant's m10251650).
+        Handed to project-rename.py (GitHub repo, registration, memory, folder; retries pick up where it stopped); deep
+        talks are handled the same way as for an upgrade (quiesce, follow_move)."""
         to = b.get("to")
         if not isinstance(to, str) or not to:
             return self.err(400, "bad_name", _("to must be the new name"))
@@ -1015,11 +1073,15 @@ class H(http.server.BaseHTTPRequestHandler):
                                  "detail": res.get("detail") or (r.stderr or "").strip()[-300:]})
 
     def upgrade_sandbox(self, name: str, b: dict) -> None:
-        """想法沙盒升級成正式專案:交給 upgrade-idea.py(檢查、改名、建 GitHub repo、登錄),把結果轉成 HTTP。
-        那個沙盒有租約時(10-25 m10251626、m10251631):正在回答或等使用者回覆 → 409 busy;否則先停程序(租約還在,
-        之後的訊息自動接回)。改名的話資料夾會搬:對話紀錄跟著搬到新資料夾(rt().relocate)、租約的 project/cwd 改成新的,
-        還沒收回的租約送 state 事件帶新的 project——之後的訊息照常送,runner 在新資料夾接回同一段對話。
-        升級會把 work(enforce.work)帶過去;新的登錄沒有 work 的話,work 中的租約改回 discuss(state 事件帶 mode 跟 detail)。"""
+        """Upgrade an idea sandbox to a regular project: handed to upgrade-idea.py (checks, rename, creating the GitHub
+        repo, registry), with the result turned into HTTP.
+        When that sandbox has a lease (10-25 m10251626, m10251631): answering or waiting for the user's reply → 409
+        busy; otherwise stop the process first (the lease remains, and later messages resume it automatically). With a
+        rename the folder moves: the transcript moves to the new folder (rt().relocate), the lease's project/cwd become
+        the new ones, and leases not yet reclaimed get a state event with the new project; later messages are sent as
+        usual and the runner resumes the same conversation in the new folder.
+        An upgrade carries work (enforce.work) over; if the new registry has no work, leases in work go back to discuss
+        (the state event carries mode and detail)."""
         rename = b.get("rename")
         if rename is not None and not isinstance(rename, str):
             return self.err(400, "bad_request", _("rename must be a string"))
@@ -1047,7 +1109,7 @@ class H(http.server.BaseHTTPRequestHandler):
     def create(self, b: dict) -> None:
         proj, sid = b.get("project"), str(b.get("session_id") or "")
         mode = b.get("mode", "discuss")
-        need = {"agent", "auth", "sessions", "stream"}   # 長駐串流 + 接續 + 登入:租借要的能力
+        need = {"agent", "auth", "sessions", "stream"}   # long-running streaming + resuming + login: what leasing needs
         if (miss := need - runtime_ports.capabilities()):
             return self.err(409, "runtime_unsupported",
                             _("runtime {name} has no {missing}; cannot open a lease", name=runtime_ports.default_name(),
@@ -1059,7 +1121,7 @@ class H(http.server.BaseHTTPRequestHandler):
         except ValueError:
             return self.err(400, "bad_request", _("session_id must be a UUID"))
         import registry
-        registry.refresh()  # 剛加進登錄的專案也認得
+        registry.refresh()  # also recognise projects just added to the registry
         ws = hubconf.workspace(proj) if proj in hubconf.projects() or proj == hubconf.hub_project() else None
         if not ws or not ws.is_dir():
             return self.err(404, "not_registered", str(proj))
@@ -1073,10 +1135,11 @@ class H(http.server.BaseHTTPRequestHandler):
             if sum(1 for l in LEASES.values() if live(l)) >= GLOBAL_CAP:
                 return self.reply(409, {"v": 1, "error": "cap_reached", "detail": _("at most {n} at a time", n=GLOBAL_CAP),
                                         "leases": [l.public() for l in LEASES.values() if live(l)]})
-            prev = LEASES.get(sid)  # 已收回的租約用同一個 id 接回(Muninn 回到同一段對話):
-            if prev and prev.cwd != str(ws):  # 資料夾搬過(改名、升級):對話紀錄跟過來,才接得回
+            prev = LEASES.get(sid)  # a reclaimed lease resumed with the same id (the assistant back in that thread):
+            if prev and prev.cwd != str(ws):  # the folder moved (rename, upgrade): the transcript follows, or no resume
                 rt().relocate(sid, prev.cwd, str(ws))
-            # 事件序號、處理過的訊息要接著舊的,不然序號從 0 重來、跟 events.jsonl 裡的舊事件撞號,SSE 續接會亂
+            # the event sequence and processed messages must continue from the old ones, or the sequence restarts at 0,
+            # collides with the old events in events.jsonl and SSE resumption gets confused
             lease = Lease({"lease_id": sid, "project": proj, "mode": mode, "thread": b.get("thread", ""),
                            "cwd": str(ws), "started_once": bool(b.get("resume")), "state": "attaching",
                            "max_turns": int(b.get("max_turns") or DEFAULT_MAX_TURNS),

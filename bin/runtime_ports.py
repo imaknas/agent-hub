@@ -323,8 +323,8 @@ def capabilities(name: str | None = None) -> set[str]:
 
 def models(name: str | None = None) -> dict:
     """This runtime's group → model (`MODELS`; a judgment point's model_group is fast/standard/strong). A group not
-    listed = no model given, the tool's own default. Model names are written only in adapters (AGENTS.md
-    "tool-neutral")."""
+    listed = no model given, the tool's own default. Model names are written only in adapters (AGENTS.md, Tool
+    neutrality)."""
     return dict(getattr(_module(name or default_name()), "MODELS", None) or {})
 
 
