@@ -375,6 +375,10 @@ scheduled in `test-waiting.md` section 7.
 - 10-31, owner: final architecture first, no workarounds; the test system is built on this model.
 - 10-31, owner had no preference; the proposals stand: a shared repo names a root owner; repo-level security settings
   (one trust domain); one memory clone per project outside the repos, linked in; one deployment clone per repo.
+- 11-01, owner: a review round passes with no blocking findings (should-fix and minor go to each step's own review).
+- 11-01, owner: design reviews pause until the separate fix of today's sandbox holes lands. Then the design's security
+  claim is "adds no path by which a project exceeds its sandbox" (the sandbox's own soundness is that fix's scope),
+  step 1 and step 2.3 are settled by running them in a throwaway hub, and round 7 reviews the result.
 - Open, outside this change: whether idea sandboxes become folder-only projects.
 
 ## 9. Blind reviews: findings and what each changed
