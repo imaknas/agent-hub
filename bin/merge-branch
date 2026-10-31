@@ -140,9 +140,9 @@ def main() -> int:
             if not report["tests"]["ok"]:
                 return fail("tests", _("`{cmd}` failed:\n{tail}", cmd=test, tail=report["tests"]["tail"]))
         else:
-            report["tests"] = {"cmd": None, "ok": None, "tail": _("the project registry has no runtime.test; no tests were run")}
+            report["tests"] = {"cmd": None, "ok": None, "tail": _("the registry entry has no runtime.test; no tests were run")}
         if a.dry_run:
-            print(_("(dry-run) would fast-forward {n} commits of {branch} into {base}; tests: {tests}",
+            print(_("(dry-run) would fast-forward {n} {n:commit|commits} of {branch} into {base}; tests: {tests}",
                     n=len(commits), branch=branch, base=base, tests=report["tests"]["ok"]))
             return 0
         # 4. fast-forward main
@@ -166,7 +166,7 @@ def main() -> int:
                         "--text", f"[{proj} · {branch}] {q}"], capture_output=True)
     push = _("pushed") if report["pushed"] else \
         _("not pushed") + (_(" (push_on_merge is false)") if not info.get("push_on_merge") else "")
-    print(_("✓ {n} commits of {branch} merged into {base} (tests: {tests}; {push})",
+    print(_("✓ {n} {n:commit|commits} of {branch} merged into {base} (tests: {tests}; {push})",
             n=len(commits), branch=branch, base=base, tests=report["tests"]["ok"], push=push))
     return 0
 

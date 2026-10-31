@@ -2,21 +2,21 @@ $ <HUB>/bin/commit_title.py Add LICENSE
 [exit 1]
 --- stdout
 --- stderr
-commit title: not in the Conventional Commits format. format: <type>[(<scope>)][!]: <description>, where type is feat / fix / perf / refactor / test / docs / build / ci / chore / revert; e.g. `fix(hubbus): dispatch no longer retries on an unsupported runtime`
+commit title: not in the Conventional Commits format. Format: <type>[(<scope>)][!]: <description>, where type is feat / fix / perf / refactor / test / docs / build / ci / chore / revert; e.g. `fix(hubbus): dispatch no longer retries on an unsupported runtime`
   title: 'Add LICENSE'
 
 $ <HUB>/bin/commit_title.py feature: x
 [exit 1]
 --- stdout
 --- stderr
-commit title: type `feature` is not in the list. format: <type>[(<scope>)][!]: <description>, where type is feat / fix / perf / refactor / test / docs / build / ci / chore / revert; e.g. `fix(hubbus): dispatch no longer retries on an unsupported runtime`
+commit title: type `feature` is not in the list. Format: <type>[(<scope>)][!]: <description>, where type is feat / fix / perf / refactor / test / docs / build / ci / chore / revert; e.g. `fix(hubbus): dispatch no longer retries on an unsupported runtime`
   title: 'feature: x'
 
 $ <HUB>/bin/commit_title.py feat:x
 [exit 1]
 --- stdout
 --- stderr
-commit title: not in the Conventional Commits format. format: <type>[(<scope>)][!]: <description>, where type is feat / fix / perf / refactor / test / docs / build / ci / chore / revert; e.g. `fix(hubbus): dispatch no longer retries on an unsupported runtime`
+commit title: not in the Conventional Commits format. Format: <type>[(<scope>)][!]: <description>, where type is feat / fix / perf / refactor / test / docs / build / ci / chore / revert; e.g. `fix(hubbus): dispatch no longer retries on an unsupported runtime`
   title: 'feat:x'
 
 $ <HUB>/bin/commit_title.py 

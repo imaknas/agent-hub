@@ -32,7 +32,7 @@ AUTOSQUASH = re.compile(r"^(fixup|squash|amend)! ")
 
 
 def help_text() -> str:
-    return _("format: <type>[(<scope>)][!]: <description>, where type is {types}; "
+    return _("Format: <type>[(<scope>)][!]: <description>, where type is {types}; "
              "e.g. `fix(hubbus): dispatch no longer retries on an unsupported runtime`", types=" / ".join(TYPES))
 
 

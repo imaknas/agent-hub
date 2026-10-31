@@ -83,7 +83,8 @@ def unfinished_rename(name: str) -> str | None:
         return None
     for old, r in recs.items():
         if isinstance(r, dict) and r.get("stage") != "done" and name in (old, r.get("new")):
-            return _("The rename {old} → {new} stopped halfway (stage {stage}): finish retrying the rename first",
+            return _("the rename {old} → {new} stopped halfway (stage {stage}): first retry the rename until it "
+                     "completes",
                      old=old, new=r.get('new'), stage=r.get('stage'))
     return None
 
@@ -148,8 +149,9 @@ def main(argv: list[str]) -> int:
     renamed = bool(prev and prev.get("stage") in ("renamed", "repo") and prev["name"] != name)
     if renamed:  # 上次改名之後停了:登錄跟資料夾已經是新名稱
         if new and new != prev["name"]:
-            fail(_("The last upgrade of {name} stopped halfway, already renamed to {new}; call again with that same "
-                   "name", name=name, new=prev['name']), "name_taken")
+            fail(_("the last upgrade of {name} stopped halfway after renaming to {new}; run it again with the name "
+                   "{new}",
+                   name=name, new=prev['name']), "name_taken")
         new = None
     final = prev["name"] if renamed else (new or name)
     reg = hubconf.registry_dir() / f"{final if renamed else name}.yaml"
@@ -166,10 +168,10 @@ def main(argv: list[str]) -> int:
     url = remote_url(owner, final)
     errs = registry.validate(upgraded_doc(doc, final, url), final)
     if errs:
-        fail(_("The upgraded registry entry would not be valid; nothing was changed: {errors}", errors='; '.join(errs)))
+        fail(_("the upgraded registry entry would not be valid; nothing was changed: {errors}", errors='; '.join(errs)))
     if new:
         if not re.fullmatch(r"[a-z0-9][a-z0-9-]*", new):
-            fail(_("The new name may only use lowercase letters, digits and -: {name}", name=new), "name_taken")
+            fail(_("the new name may only use lowercase letters, digits and -: {name}", name=new), "name_taken")
         taken = [w for w, hit in ((f"projects/{new}.yaml", (hubconf.registry_dir() / f"{new}.yaml").exists()),
                                   (f"~/workspace/{new}", (hubconf.p("workspace_root", "~/workspace") / new).exists()))
                  if hit]
@@ -181,7 +183,8 @@ def main(argv: list[str]) -> int:
 
     plan = [_("rename {old} → {new} (rename-project.sh)", old=name, new=new) if new
             else (_("already renamed to {name}", name=final) if renamed else _("no rename")),
-            (_("{owner}/{name} on GitHub was made last time: push only", owner=owner, name=final) if repo_exists else
+            (_("{owner}/{name} on GitHub was created by the previous run: push only", owner=owner, name=final)
+             if repo_exists else
              f"gh repo create {owner}/{final} --{'public' if public else 'private'} + push") + _(", origin = {url}", url=url),
             _("registry projects/{name}.yaml: type: project, paths.origin: {url} (purpose/enforce/privacy kept)",
               name=final, url=url),
@@ -216,8 +219,8 @@ def main(argv: list[str]) -> int:
     doc = upgraded_doc(doc, final, url)
     errs = registry.validate(doc, final)
     if errs:  # 動手前驗證過;到這裡還不合格是登錄在中途被改了。repo 留著,修好登錄再叫一次會接著做
-        fail(_("The registry entry is not valid: {errors} (the GitHub repo is already created; fix the registry entry "
-               "and call again to continue)", errors='; '.join(errs)))
+        fail(_("the registry entry is not valid: {errors} (the GitHub repo is already created; fix the registry entry "
+               "and run this again to continue)", errors='; '.join(errs)))
     reg.write_text(head + yaml.safe_dump(doc, allow_unicode=True, sort_keys=False, width=200))
 
     mirror = hubconf.config_file("mirror-list.txt")   # config(實例目錄;沒搬家時就是 hub 裡那份)
@@ -229,7 +232,7 @@ def main(argv: list[str]) -> int:
                     f"projects/{final}.yaml", "mirror-list.txt", "index.md"], check=False)
     record(name, name=final, origin=url, stage="done")
     if not JSON:
-        print(_("Done: {name} is now a project, {new} ({url})", name=name, new=final, url=url))
+        print(_("Done: {name} is now the project {new} ({url})", name=name, new=final, url=url))
     done("upgraded", 0, name=final, origin=url)
 
 

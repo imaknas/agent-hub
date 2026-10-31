@@ -1,15 +1,15 @@
 #!/bin/sh -c exec${IFS}"${0%/*}/py"${IFS}"$0"${IFS}"$@"
 """Opens a project for exploring one of the assistant's ideas (an idea sandbox, docs/design/idea-sandboxes.md).
 
-An idea sandbox = a normally onboarded project (with .agent-memory: the handoff notes from deep talks go there), with no
-GitHub remote, marked `type: idea` in the registry, at <workspace_root>/<name>. The name is a human-readable code the idea
-has from the start (e.g. room-3d; decided by the owner on 2026-10-25, earlier limited to idea-<n>, existing ones still
-work): lowercase letters, digits and -, not clashing with the registry, a folder or a memory repo.
+An idea sandbox = a normally onboarded project (with .agent-memory: the handoff notes from discuss leases go there),
+with no GitHub remote, marked `type: idea` in the registry, at <workspace_root>/<name>. The name is a human-readable
+code the idea has from the start (e.g. room-3d; decided by the owner on 2026-10-25, earlier limited to idea-<n>,
+existing ones still work): lowercase letters, digits and -, not clashing with the registry, a folder or a memory repo.
 Whether a project is an idea sandbox depends only on the registry's type: idea, not on the name. The registry also gets
-the purpose, `enforce: {sandbox: true, work: true}` (the real write block; work = deep talks may make changes, which idea
-sandboxes have by default, 10-25 the owner) + the default capabilities (default_for in hub.json capabilities, e.g. gpu;
-docs/design/capabilities.md), `privacy: {reflection: stats_only}`, in the same commit as the registration (onboard's
-ONBOARD_REGISTRY_EXTRA).
+the purpose, `enforce: {sandbox: true, work: true}` (the real write block; work = a lease may be a work lease and make
+changes, which idea sandboxes allow by default, 10-25 the owner) + the default capabilities (default_for in hub.json
+capabilities, e.g. gpu; docs/design/capabilities.md), `privacy: {reflection: stats_only}`, in the same commit as the
+registration (onboard's ONBOARD_REGISTRY_EXTRA).
 
 Usage: create-idea-sandbox.py <name> <purpose>
 Output: the last line is one JSON object (lease-runner's POST /v1/sandboxes turns it straight into the response):
@@ -23,7 +23,7 @@ Output: the last line is one JSON object (lease-runner's POST /v1/sandboxes turn
 - Limit: hub.json's ideas.limit (default 20) projects of type: idea.
 - onboard fails: removes the folder, bare repo, memory copy and the uncommitted registry file made this time (all
   checked beforehand not to exist), then returns create_failed.
-Only one runs at a time (lock in <state>/idea-sandbox.lock): onboard commits agent-hub.
+Only one runs at a time (lock in <state>/idea-sandbox.lock) because onboarding commits to agent-hub.
 """
 from __future__ import annotations
 
@@ -104,14 +104,14 @@ def create(name: str, purpose: str) -> int:
     limit = int(hubconf.get("ideas.limit", 20))
     current = sum(1 for d in docs.values() if d.get("type") == "idea")
     if current >= limit:
-        return out("too_many", 1, detail=_("There are already {current} idea sandboxes (limit {limit})", current=current,
-                                                 limit=limit), limit=limit, current=current)
+        return out("too_many", 1, detail=_("There {current:is|are} already {current} idea {current:sandbox|sandboxes} "
+                                           "(limit {limit})", current=current, limit=limit), limit=limit, current=current)
 
     ws.mkdir(parents=True)
     (ws / "README.md").write_text(_(
         "# {name}\n\nA project for exploring an idea (an idea sandbox), opened by the assistant for this idea:\n\n"
-        "> {purpose}\n\nConclusions, decisions and to-dos from the deep talks go in memory (`.agent-memory/`); "
-        "to turn it into a real project, use agent-hub's `bin/upgrade-idea.sh`.\n", name=name, purpose=purpose))
+        "> {purpose}\n\nConclusions, decisions and to-dos from discuss leases go in memory (`.agent-memory/`); "
+        "to turn it into a real project, use agent-hub's `bin/upgrade-idea.py`.\n", name=name, purpose=purpose))
     extra = {"type": "idea", "purpose": purpose, "enforce": {"sandbox": True, "capabilities": default_capabilities(), "work": True},
              "privacy": {"reflection": "stats_only"}}
     env = {**os.environ, "ONBOARD_REGISTRY_EXTRA": json.dumps(extra, ensure_ascii=False)}

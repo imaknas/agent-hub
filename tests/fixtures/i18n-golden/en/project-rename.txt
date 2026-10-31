@@ -14,19 +14,19 @@ project-rename: nope is not in the registry
 exit 1
 --- stdout
 --- stderr
-project-rename: The new name may only use lowercase letters, digits and - (not at the start or end, at most 40 characters): 'Garden_App'
+project-rename: the new name may only use lowercase letters, digits and - (not at the start or end, at most 40 characters): 'Garden_App'
 
 === same name
 exit 1
 --- stdout
 --- stderr
-project-rename: The new name is the same as the old one
+project-rename: the new name is the same as the old one
 
 === the platform
 exit 1
 --- stdout
 --- stderr
-project-rename: The platform itself cannot be renamed
+project-rename: the platform itself cannot be renamed
 
 === taken
 exit 1
@@ -45,7 +45,7 @@ exit 0
 --- stdout
   1. GitHub: me/proj → me/garden-app
   2. local origin: git@github.com:me/proj.git → git@github.com:me/garden-app.git
-  3. rename-project.sh proj garden-app --origin git@github.com:me/garden-app.git (registration, memory, mirror, folders)
+  3. rename-project.sh proj garden-app --origin git@github.com:me/garden-app.git (registry entry, memory, mirror, folders)
 (dry-run; add --apply to run it)
 --- stderr
 
@@ -54,7 +54,7 @@ exit 0
 --- stdout
   1. GitHub: nothing to change (no remote, or already renamed)
   2. local origin: unchanged
-  3. rename-project.sh sandbox room-3d --origin (native) (registration, memory, mirror, folders)
+  3. rename-project.sh sandbox room-3d --origin (native) (registry entry, memory, mirror, folders)
 (dry-run; add --apply to run it)
 --- stderr
 
@@ -62,38 +62,38 @@ exit 0
 exit 1
 --- stdout
 --- stderr
-project-rename: sandbox has an upgrade stopped halfway (sandbox → orchard (stage renamed)): finish retrying the upgrade before renaming
+project-rename: sandbox has an upgrade that stopped halfway (sandbox → orchard, stage renamed): retry the upgrade until it completes, then rename
 
 === busy
 exit 1
 --- stdout
 --- stderr
-project-rename: Processes still have their working directory in <TMP>/workspace/proj: sleep(<PID>). Close that project's sessions / terminal tabs first
+project-rename: processes still have their working directory in <TMP>/workspace/proj: sleep(<PID>); close that project's sessions / terminal tabs first
 
 === gh rename fails
 exit 1
 --- stdout
   1. GitHub: me/proj → me/garden-app
   2. local origin: git@github.com:me/proj.git → git@github.com:me/garden-app.git
-  3. rename-project.sh proj garden-app --origin git@github.com:me/garden-app.git (registration, memory, mirror, folders)
+  3. rename-project.sh proj garden-app --origin git@github.com:me/garden-app.git (registry entry, memory, mirror, folders)
 --- stderr
-project-rename: Renaming the GitHub repo failed: gh: HTTP 403
+project-rename: renaming the GitHub repo failed: gh: HTTP 403
 
 === rename-project.sh busy
 exit 1
 --- stdout
   1. GitHub: me/proj → me/garden-app
   2. local origin: git@github.com:me/proj.git → git@github.com:me/garden-app.git
-  3. rename-project.sh proj garden-app --origin git@github.com:me/garden-app.git (registration, memory, mirror, folders)
+  3. rename-project.sh proj garden-app --origin git@github.com:me/garden-app.git (registry entry, memory, mirror, folders)
 --- stderr
-project-rename: Processes are still in the proj folder (e.g. an open session); close them first: rename-project: busy /x: claude(<PID>)
+project-rename: processes are still in the proj folder (e.g. an open session); close them first: rename-project: busy /x: claude(<PID>)
 
 === rename-project.sh fails
 exit 1
 --- stdout
   1. GitHub: nothing to change (no remote, or already renamed)
   2. local origin: git@github.com:me/proj.git → git@github.com:me/garden-app.git
-  3. rename-project.sh proj garden-app --origin git@github.com:me/garden-app.git (registration, memory, mirror, folders)
+  3. rename-project.sh proj garden-app --origin git@github.com:me/garden-app.git (registry entry, memory, mirror, folders)
 --- stderr
 project-rename: rename-project.sh failed: rename-project: memory bare repo is missing
 
@@ -102,7 +102,7 @@ exit 0
 --- stdout
   1. GitHub: nothing to change (no remote, or already renamed)
   2. local origin: git@github.com:me/proj.git → git@github.com:me/garden-app.git
-  3. rename-project.sh proj garden-app --origin git@github.com:me/garden-app.git (registration, memory, mirror, folders)
+  3. rename-project.sh proj garden-app --origin git@github.com:me/garden-app.git (registry entry, memory, mirror, folders)
 --- stderr
 
 === renamed --json

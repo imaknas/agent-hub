@@ -69,7 +69,7 @@ def mini(script: str, check: bool = True) -> subprocess.CompletedProcess:
     r = subprocess.run(["ssh", "-o", "BatchMode=yes", MINI, MINI_PATH_PREFIX + script],
                        capture_output=True, text=True)
     if check and r.returncode != 0:
-        fail(_("Failed on the hub machine: {script}\n{output}", script=script, output=r.stdout + r.stderr))
+        fail(_("failed on the hub machine: {script}\n{output}", script=script, output=r.stdout + r.stderr))
     return r
 
 
@@ -131,21 +131,23 @@ def preflight(name: str, path: str, origin: str, allow_local_branches: bool) -> 
         if not up or "ahead" in track or "gone" in track:
             unpushed.append(_("{branch} ({state})", branch=b, state=_("no upstream") if not up else track))
     if unpushed:
-        msg = _("Local branches not pushed, the hub machine cannot clone them: {branches}",
-                branches=", ".join(unpushed))
+        branches = ", ".join(unpushed)
         if not allow_local_branches:
-            fail(_("{problem}\nPush them first (or confirm they are not needed), or add --allow-local-branches to leave "
-                   "them on the laptop", problem=msg))
-        warnings.append(_("{problem} (--allow-local-branches: they stay on the laptop)", problem=msg))
+            fail(_("local branches are not pushed, so the hub machine cannot clone them: {branches}\n"
+                   "Push them first (or confirm they are not needed), or add --allow-local-branches to leave them on "
+                   "the laptop",
+                   branches=branches))
+        warnings.append(_("Local branches are not pushed, so the hub machine cannot clone them: {branches} "
+                          "(--allow-local-branches: they stay on the laptop)", branches=branches))
     if run(["git", "stash", "list"], cwd=path).strip():
         warnings.append(_("There is a git stash: it does not move (it stays on the laptop)"))
     users = run(["lsof", "+d", path], check=False)
     procs = sorted({f"{f[0]}({f[1]})" for f in (l.split() for l in users.splitlines()[1:]) if f})
     if procs:
-        fail(_("Processes still have their working directory in {path}: {procs}. Close that project's agent session / "
+        fail(_("processes still have their working directory in {path}: {procs}; close that project's agent session / "
                "terminal tab first", path=path, procs=' '.join(procs)))
     if mini(f"test -e ~/workspace/{shlex.quote(name)}", check=False).returncode == 0:
-        fail(_("~/workspace/{name} already exists on the hub machine: moved already? Check, then handle it by hand",
+        fail(_("~/workspace/{name} already exists on the hub machine: already moved? Check, then handle it by hand",
                name=name))
     return warnings
 
@@ -239,7 +241,7 @@ def copy_mcp_servers(name: str, path: str) -> None:
                                input=json.dumps(conf2) + "\n", capture_output=True, text=True)
             ok = r.returncode == 0 or "already exists" in (r.stdout + r.stderr)
             error = (r.stderr or r.stdout).strip()[:200]
-            result = _("added on the hub machine") if ok else _("failed {error}", error=error)
+            result = _("added on the hub machine") if ok else _("failed: {error}", error=error)
             print(_("  MCP {server}: {result}{note}", server=server, result=result, note=note))
 
 
@@ -259,7 +261,7 @@ def merge_info_exclude(name: str, path: str) -> None:
     if missing:
         body = "\n".join(missing)
         mini(f"mkdir -p {target}/.git/info && printf '%s\\n' {shlex.quote(body)} >> {target}/.git/info/exclude")
-        print(_("  info/exclude: added {count} ignore rules", count=len(missing)))
+        print(_("  info/exclude: added {count} ignore {count:rule|rules}", count=len(missing)))
 
 
 def copy_auto_memory(name: str, path: str) -> None:
@@ -342,13 +344,13 @@ def main() -> None:
                           tool=t))
         print(_("  ! The hub machine has no {tool}", tool=t))
     for p, k, cmd in plans:
-        print(_("  Rebuild on the hub machine {dir}: {cmd}", dir=f"{p}/{'node_modules' if k == 'node' else k}",
+        print(_("  Rebuild {dir} on the hub machine: {cmd}", dir=f"{p}/{'node_modules' if k == 'node' else k}",
                 cmd=cmd or _("(no lockfile found, handle it by hand)")))
     if not a.apply:
         print(_("\n(dry-run; add --apply once you have checked)"))
         return
 
-    print(_("[2/6] Catch up the memory sync + push"))
+    print(_("[2/6] Catching up memory sync and push"))
     mem = os.path.join(path, ".agent-memory")
     env = dict(os.environ, GIT_CONFIG_COUNT="1", GIT_CONFIG_KEY_0="core.hooksPath",
                GIT_CONFIG_VALUE_0="/dev/null")
@@ -363,7 +365,7 @@ def main() -> None:
          f"~/agent-hub/bin/recover-project.sh {shlex.quote(a.name)} {target}")
 
     if copy:
-        print(_("[4/6] rsync {count} entries ({size})", count=len(copy), size=human(sum(sizes.values()))))
+        print(_("[4/6] rsync {count} {count:entry|entries} ({size})", count=len(copy), size=human(sum(sizes.values()))))
         excludes = [f"--exclude={x}" for x in sorted(REBUILDABLE)] + ["--exclude=*.pyc"]
         r = subprocess.run(["rsync", "-a", "-r", "--from0", "--files-from=-", *excludes,
                             f"{path}/", f"{MINI}:workspace/{a.name}/"],
@@ -386,7 +388,7 @@ def main() -> None:
     problems = []
     for p, k, cmd in plans:
         if not cmd:
-            problems.append(_("{dir}: {kind} has no lockfile, not rebuilt", dir=p, kind=k))
+            problems.append(_("{dir}: no lockfile for {kind}, so it was not rebuilt", dir=p, kind=k))
             continue
         r = mini(f"cd {target} && {cmd}", check=False)
         status = "ok" if r.returncode == 0 else _("failed")

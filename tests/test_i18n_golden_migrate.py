@@ -141,13 +141,13 @@ class Golden(unittest.TestCase):
         return subprocess.run(["git", "-C", str(cwd), *args], capture_output=True, text=True, check=True,
                               env=self.env).stdout.strip()
 
-    def call(self, label: str, args: list, env: dict | None = None, keep=None) -> None:
+    def call(self, label: str, args: list, env: dict | None = None, fix=None) -> None:
         python = os.environ.get("I18N_GOLDEN_PYTHON") or sys.executable
         r = subprocess.run([python, str(SCRIPT), *map(str, args)], capture_output=True, text=True,
                            stdin=subprocess.DEVNULL, env={**self.env, **(env or {})}, timeout=120, cwd=self.home)
         out, err = r.stdout, r.stderr
-        if keep:
-            out = "".join(line for line in out.splitlines(True) if keep(line))
+        if fix:
+            out = fix(out)
         self.out.append(f"=== {label}\nexit {r.returncode}\n--- stdout\n{out}--- stderr\n{err}")
 
     def register(self, name: str, origin: str = "git@github.com:o/{name}.git", legacy: bool = True) -> pathlib.Path:
@@ -194,8 +194,9 @@ class Golden(unittest.TestCase):
 
     def test_migrate(self):
         ws, home = self.home / "workspace", self.home
+        # argparse's heading for the options is "optional arguments:" up to 3.9 (the laptop's python3), "options:" after
         self.call("--help (description and --skip)", ["--help"],
-                  keep=lambda line: not line.isascii())
+                  fix=lambda out: out.replace("\noptional arguments:\n", "\noptions:\n"))
 
         # preflight refusals, in the order the script checks them
         self.call("not in the registry", ["nosuch"])

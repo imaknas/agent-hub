@@ -1,7 +1,17 @@
 === --help (description and --skip)
 exit 0
 --- stdout
+usage: migrate-to-mini.py [-h] [--apply] [--allow-local-branches] [--skip SKIP] name
+
 把一個已 onboard 專案的開發環境從 MBP 搬到 mini 的 ~/workspace/<name>。
+
+positional arguments:
+  name
+
+options:
+  -h, --help            show this help message and exit
+  --apply
+  --allow-local-branches
   --skip SKIP           不搬的不進版控檔案(相對路徑)
 --- stderr
 

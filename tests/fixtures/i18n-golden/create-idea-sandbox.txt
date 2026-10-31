@@ -88,7 +88,7 @@ exit 0
 
 > a 3D model of the room
 
-深談的結論、決定、待辦記在 memory(`.agent-memory/`);要變成正式專案時用 agent-hub 的 `bin/upgrade-idea.sh`。
+深談的結論、決定、待辦記在 memory(`.agent-memory/`);要變成正式專案時用 agent-hub 的 `bin/upgrade-idea.py`。
 
 === too many
 exit 1

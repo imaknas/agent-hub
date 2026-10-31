@@ -87,7 +87,7 @@ def unfinished_upgrade(*names: str) -> str:
         return ""
     for idea, rec in ups.items():
         if rec.get("stage", "done") != "done" and ({idea, rec.get("name")} & set(names)):
-            return _("{idea} → {name} (stage {stage})", idea=idea, name=rec.get('name'), stage=rec.get('stage'))
+            return _("{idea} → {name}, stage {stage}", idea=idea, name=rec.get('name'), stage=rec.get('stage'))
     return ""
 
 
@@ -111,12 +111,12 @@ def main(argv: list[str]) -> int:
             done("already", 0, name=new, origin=(doc.get("paths") or {}).get("origin", ""))
         fail(_("{name} is not in the registry", name=old), "not_found")
     if not NAME.match(new) or "--" in new:
-        fail(_("The new name may only use lowercase letters, digits and - (not at the start or end, at most 40 "
+        fail(_("the new name may only use lowercase letters, digits and - (not at the start or end, at most 40 "
                "characters): {name!r}", name=new), "bad_name")
     if new == old:
-        fail(_("The new name is the same as the old one"), "bad_name")
+        fail(_("the new name is the same as the old one"), "bad_name")
     if old == hubconf.hub_project() or new == hubconf.hub_project():
-        fail(_("The platform itself cannot be renamed"), "bad_name")
+        fail(_("the platform itself cannot be renamed"), "bad_name")
     taken = [str(p) for p in (hubconf.registry_dir() / f"{new}.yaml", hubconf.p("workspace_root", "~/workspace") / new,
                               hubconf.p("services_root", "~/services") / new,
                               hubconf.p("git_origin", "~/git-origin") / f"{new}-memory.git",
@@ -129,11 +129,12 @@ def main(argv: list[str]) -> int:
     ws = hubconf.path((doc.get("paths") or {}).get("workspace"))
     up = unfinished_upgrade(old, new)
     if up:
-        fail(_("{name} has an upgrade stopped halfway ({upgrade}): finish retrying the upgrade before renaming",
+        fail(_("{name} has an upgrade that stopped halfway ({upgrade}): retry the upgrade until it completes, then "
+               "rename",
                name=old, upgrade=up))
     who = users_in(ws) if ws and ws.is_dir() else ""
     if who:
-        fail(_("Processes still have their working directory in {path}: {who}. Close that project's sessions / "
+        fail(_("processes still have their working directory in {path}: {who}; close that project's sessions / "
                "terminal tabs first", path=ws, who=who), "busy")
     m = GITHUB.match(origin)
     new_origin, gh_step = origin, None
@@ -150,7 +151,7 @@ def main(argv: list[str]) -> int:
             else _("GitHub: nothing to change (no remote, or already renamed)"),
             _("local origin: {old} → {new}", old=origin, new=new_origin) if new_origin != origin
             else _("local origin: unchanged"),
-            _("rename-project.sh {old} {new} --origin {origin} (registration, memory, mirror, folders)",
+            _("rename-project.sh {old} {new} --origin {origin} (registry entry, memory, mirror, folders)",
               old=old, new=new, origin=new_origin)]
     if not JSON:
         print("\n".join(f"  {i}. {p}" for i, p in enumerate(plan, 1)))
@@ -162,7 +163,7 @@ def main(argv: list[str]) -> int:
     if gh_step:
         r = subprocess.run(["gh", "repo", "rename", gh_step[1], "-R", gh_step[0], "--yes"], capture_output=True, text=True)
         if r.returncode != 0:
-            fail(_("Renaming the GitHub repo failed: {err}", err=(r.stderr or r.stdout).strip()[-300:]))
+            fail(_("renaming the GitHub repo failed: {err}", err=(r.stderr or r.stdout).strip()[-300:]))
         record(old, new=new, stage="github")
     if new_origin != origin and ws:
         subprocess.run(["git", "-C", str(ws), "remote", "set-url", "origin", new_origin], capture_output=True)
@@ -173,7 +174,7 @@ def main(argv: list[str]) -> int:
     if r.returncode != 0:
         out = (r.stderr or r.stdout).strip()
         if r.returncode == BUSY:  # 檢查完到這裡之間又有人進去了
-            fail(_("Processes are still in the {name} folder (e.g. an open session); close them first: {out}",
+            fail(_("processes are still in the {name} folder (e.g. an open session); close them first: {out}",
                    name=old, out=out[-300:]), "busy")
         fail(_("rename-project.sh failed: {out}", out=out[-400:]))
     record(old, new=new, stage="done", origin=new_origin)
