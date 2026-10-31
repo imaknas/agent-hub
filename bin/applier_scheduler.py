@@ -8,7 +8,10 @@ import sys
 
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
 import hubconf  # noqa: E402
+import i18n  # noqa: E402
 from appliers import Change  # noqa: E402
+
+_ = i18n.domain(__file__)
 
 EXTERNAL = False
 SNAPSHOT = hubconf.STATE / "config-applied" / "jobs.json"
@@ -20,10 +23,10 @@ def jobs(index=None) -> dict[str, dict]:
     """名稱 → 排程看得到的欄位。給 index 就只看登錄(測試);不給就跟排程器一樣(schedule.yaml + 登錄)。"""
     if index is None:
         import scheduler
-        js, _ = scheduler.all_jobs()
+        js, _info = scheduler.all_jobs()
     else:
         import registry
-        js, _, _ = registry.scheduler_jobs(index, set())
+        js, _skipped, _renames = registry.scheduler_jobs(index, set())
     out = {j["name"]: {k: j[k] for k in KEYS if k in j} for j in js}
     return json.loads(json.dumps(out, default=str))  # 日期之類的值變成字串,跟存起來的快照才比得起來
 
@@ -37,13 +40,13 @@ def _diff(cur: dict[str, dict], old: dict[str, dict]) -> list[Change]:
             out.append(Change("remove", f"job:{n}"))
         elif cur[n] != old[n]:
             keys = sorted(k for k in set(cur[n]) | set(old[n]) if cur[n].get(k) != old[n].get(k))
-            out.append(Change("update", f"job:{n}", "改了 " + "、".join(keys)))
+            out.append(Change("update", f"job:{n}", _("changed {keys}", keys=_(", ").join(keys))))
     return out
 
 
 def _when(j: dict) -> str:
-    w = j.get("time") or (f"每 {j['every_minutes']} 分鐘" if j.get("every_minutes") else "")
-    return w + (f",after {', '.join(j['after'])}" if j.get("after") else "")
+    w = j.get("time") or (_("every {n} minutes", n=j['every_minutes']) if j.get("every_minutes") else "")
+    return w + (_(", after {jobs}", jobs=', '.join(j['after'])) if j.get("after") else "")
 
 
 def _old() -> dict[str, dict]:

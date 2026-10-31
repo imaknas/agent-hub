@@ -1,0 +1,6 @@
+{
+ "changed {keys}": "改了 {keys}",
+ ", ": "、",
+ "every {n} minutes": "每 {n} 分鐘",
+ ", after {jobs}": ",after {jobs}"
+}
