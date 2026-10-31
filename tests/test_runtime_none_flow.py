@@ -44,7 +44,8 @@ class RuntimeNone(unittest.TestCase):
         self.assertEqual(list((self.tmp / "ws").iterdir()), [], "沒有 hook 可裝就什麼都不寫")
 
     def test_llm_point_fails_with_the_reason(self):
-        r = self.run_(BIN / "llm.py", "run", "reflect-week", stdin="x")
+        r = self.run_(BIN / "llm.py", "run", "reflect-week", stdin="x",
+                      env={"AGENT_HUB_LANG_UI": "zh-Hant"})   # the reason asserted is the zh-Hant one
         self.assertEqual(r.returncode, 1, r.stdout + r.stderr)
         out = json.loads(r.stdout)
         self.assertTrue(out["is_error"])

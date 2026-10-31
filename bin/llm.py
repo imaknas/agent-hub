@@ -33,11 +33,13 @@ import sys
 
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
 import hubconf  # noqa: E402
+import i18n  # noqa: E402
 import minischema  # noqa: E402
 
 import yaml  # noqa: E402
 
 POINTS = hubconf.ROOT / "contracts" / "llm-points.yaml"
+_ = i18n.domain(__file__)
 CALL = re.compile(r"""(\bclaude\s+-p\b|["']claude["']\s*,\s*["']-p["'])""")
 
 
@@ -110,7 +112,8 @@ def run_completion(a, spec: dict, prompt: str, model: str | None) -> int:
     if not completion.settings():
         name = spec.get("runtime") or runtime_ports.default_name()
         if "completion" not in runtime_ports.capabilities(name):
-            return fail(a.point, spec, f"執行環境 {name} 沒有 completion 介面,hub.json 也沒有 llm 區塊(設一家 LLM provider)")
+            return fail(a.point, spec, _("runtime {name} has no completion interface, and hub.json has no llm section "
+                                         "(set up an LLM provider)", name=name))
         target = completion.runtime_target(name, model, auth_mode(spec))
     try:
         out = completion.run(a.point, spec, prompt, schema, target=target)
@@ -126,7 +129,8 @@ def run(a) -> int:
     import runtime_ports
     spec = points()["points"].get(a.point)
     if spec is None:
-        print(f"llm.py:{a.point} 不是宣告過的判斷點(contracts/llm-points.yaml)", file=sys.stderr)
+        print(_("llm.py: {point} is not a declared judgment point (contracts/llm-points.yaml)", point=a.point),
+              file=sys.stderr)
         return 2
     prompt = "" if a.cmd == "exec" else (pathlib.Path(a.prompt_file).read_text() if a.prompt_file else sys.stdin.read())
     model = model_for(a.point, spec, a.model)
@@ -154,10 +158,11 @@ def run(a) -> int:
     if a.cmd == "exec":
         # 長駐的串流 session(例:通道租借)。暫時的:之後由第 1 層的 open_session 取代
         if not spec.get("stream"):
-            print(f"llm.py:{a.point} 沒有宣告 stream: true,不能 exec", file=sys.stderr)
+            print(_("llm.py: {point} does not declare stream: true, so it cannot exec", point=a.point), file=sys.stderr)
             return 2
         if not hasattr(rt, "exec_stream"):
-            print(f"llm.py:{a.point} 這個執行環境不支援長駐的串流 session", file=sys.stderr)
+            print(_("llm.py: {point}: this runtime does not support long-running streaming sessions", point=a.point),
+                  file=sys.stderr)
             return 2
         rt.exec_stream(task)
         return 0
@@ -170,7 +175,7 @@ def run(a) -> int:
     # 沒有 structured_output 不算失敗:原樣交給呼叫端(librarian 刻意「仍以實際檔案變化為準」);有的話要合格
     if schema is not None and res.structured_output is not None:
         if (errs := minischema.errors(schema, res.structured_output)):
-            return fail(a.point, spec, "輸出不符合 schema:" + "; ".join(errs[:3]))
+            return fail(a.point, spec, _("output does not match the schema: {errors}", errors="; ".join(errs[:3])))
     # 輸出的欄位名稱是 llm.py 對呼叫端的約定(librarian、consolidate、lease-runner…讀這些),不隨 runtime 改
     print(json.dumps({"type": "result", "is_error": res.incomplete, "result": res.text,
                       "structured_output": res.structured_output, "total_cost_usd": res.cost_usd,
@@ -195,10 +200,11 @@ def lint() -> list[str]:
         for i, line in enumerate(text.splitlines(), 1):
             code = line.split("#", 1)[0] if not f.suffix == ".md" else line
             if CALL.search(code):
-                bad.append(f"{rel}:{i}:沒有經過 bin/llm.py 的 claude -p")
+                bad.append(_("{file}:{line}: a claude -p that does not go through bin/llm.py", file=rel, line=i))
     for name, spec in p["points"].items():
         if output_schema(spec) and not (POINTS.parent / output_schema(spec)).exists():
-            bad.append(f"判斷點 {name} 的 output.schema {output_schema(spec)} 不存在")
+            bad.append(_("judgment point {name}: output.schema {schema} does not exist", name=name,
+                         schema=output_schema(spec)))
     return bad
 
 
@@ -210,16 +216,17 @@ def main() -> int:
     r.add_argument("--cwd")
     r.add_argument("--model")
     r.add_argument("--prompt-file")
-    r.add_argument("--dry-run", action="store_true", help="只印出會執行的指令,不呼叫模型")
-    r.add_argument("extra", nargs="*", help="額外的 claude 參數(放在 -- 後面)")
-    e = sub.add_parser("exec", help="長駐串流 session:照宣告組旗標後 exec 成 claude(stdin/stdout 是 stream-json)")
+    r.add_argument("--dry-run", action="store_true", help=_("only print the command that would run; no model call"))
+    r.add_argument("extra", nargs="*", help=_("extra claude arguments (after --)"))
+    e = sub.add_parser("exec", help=_("long-running streaming session: build the flags from the declaration, then exec "
+                                      "claude (stdin/stdout are stream-json)"))
     e.add_argument("point")
     e.add_argument("--cwd")
     e.add_argument("--model")
     e.add_argument("--prompt-file")
     e.add_argument("extra", nargs="*")
     sub.add_parser("lint")
-    sub.add_parser("health", help="hub.json llm 的每一家 provider 能不能用(key、連線、模型在不在)")
+    sub.add_parser("health", help=_("whether each provider in hub.json llm works (key, connection, model there)"))
     a = ap.parse_args()
     if a.cmd == "exec" and a.cwd:
         os.chdir(a.cwd)
@@ -230,7 +237,7 @@ def main() -> int:
         rows = completion.health_all()
         for name, ok, why in rows:
             print(f"{'✓' if ok else '✗'} {name}" + (f":{why}" if why else ""))
-        return 0 if all(ok for _, ok, _ in rows) else 1
+        return 0 if all(ok for _name, ok, _why in rows) else 1
     bad = lint()
     for b in bad:
         print(b)
