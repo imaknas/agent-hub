@@ -59,7 +59,7 @@ class Script(unittest.TestCase):
             "v": 1, "registry_dir": "projects", "workspace_root": str(self.ws), "git_origin": str(self.tmp / "go"),
             "memory_copies": str(self.tmp / "mc"), "services_root": str(self.tmp / "services")}))
         self.log = self.tmp / "log"
-        self.env = {**os.environ, "AGENT_HUB_ROOT": str(self.hub), "HUB": str(self.hub), "LOG": str(self.log),
+        self.env = {**os.environ, "AGENT_HUB_ROOT": str(self.hub), "AGENT_HUB_LANG_UI": "zh-Hant", "HUB": str(self.hub), "LOG": str(self.log),
                     "PATH": f"{fakebin}:{os.environ['PATH']}"}
         self.reg("proj", "git@github.com:me/proj.git")
         self.reg("sandbox", "(native)", type_="idea")

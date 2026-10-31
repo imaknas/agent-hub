@@ -1,0 +1,97 @@
+=== usage
+exit 2
+--- stdout
+--- stderr
+用法:create-idea-sandbox.py <名稱> <purpose>
+輸出:最後一行是一個 JSON 物件(lease-runner 的 POST /v1/sandboxes 直接轉成回應):
+  {"result": "created"|"exists_same", "name"}                              exit 0
+  {"result": "bad_name"|"exists"|"too_many"|"create_failed", "detail", ...}  exit 1
+  too_many 另外帶 limit、current。
+- 重送:同名、同 purpose 已經登錄 → exists_same(Muninn 呼叫逾時重送不會開出第二個)。
+- 撞名:同名但 purpose 不同、跟正式專案同名、或資料夾/bare repo/memory 副本已經存在 → exists。
+- 上限:hub.json 的 ideas.limit(預設 20)個 type: idea 的專案。
+- onboard 失敗:清掉這次建的資料夾、bare repo、memory 副本、還沒 commit 的登錄檔(事前都確認過不存在),
+  再回 create_failed。
+同時只跑一個(鎖在 <state>/idea-sandbox.lock):onboard 會 commit agent-hub。
+
+
+=== bad name
+exit 1
+--- stdout
+{"result": "bad_name", "detail": "名稱只能用小寫英文、數字跟 -(開頭結尾不能是 -,最多 40 字),收到 'Bad_Name'"}
+--- stderr
+
+=== platform name
+exit 1
+--- stdout
+{"result": "exists", "detail": "agent-hub 是平台自己的名稱"}
+--- stderr
+
+=== empty purpose
+exit 1
+--- stdout
+{"result": "bad_name", "detail": "purpose 不能是空的"}
+--- stderr
+
+=== purpose too long
+exit 1
+--- stdout
+{"result": "bad_name", "detail": "purpose 太長(501 字,上限 500)"}
+--- stderr
+
+=== same idea again
+exit 0
+--- stdout
+{"result": "exists_same", "name": "idea-1"}
+--- stderr
+
+=== another idea
+exit 1
+--- stdout
+{"result": "exists", "detail": "idea-1 已經是另一個想法的名稱"}
+--- stderr
+
+=== a project
+exit 1
+--- stdout
+{"result": "exists", "detail": "proj 已經是一個正式專案的名稱"}
+--- stderr
+
+=== folders exist
+exit 1
+--- stdout
+{"result": "exists", "detail": "notes 沒有登錄,但這些已經存在:<TMP>/a/workspace/notes, <TMP>/a/go/notes-memory.git"}
+--- stderr
+
+=== onboard fails
+exit 1
+--- stdout
+{"result": "create_failed", "detail": "onboard 失敗:step 1 ok / step 2 ok / boom: could not create the bare repo"}
+--- stderr
+
+=== onboard fails after commit
+exit 1
+--- stdout
+{"result": "create_failed", "detail": "onboard 失敗:step 1 ok / step 2 ok / boom: could not create the bare repo(登錄檔已經 commit,沒有刪,要手動處理)"}
+--- stderr
+
+=== created
+exit 0
+--- stdout
+{"result": "created", "name": "room-3d"}
+--- stderr
+
+=== README
+# room-3d
+
+探討用的專案(想法沙盒),由 Muninn 替這個想法開的:
+
+> a 3D model of the room
+
+深談的結論、決定、待辦記在 memory(`.agent-memory/`);要變成正式專案時用 agent-hub 的 `bin/upgrade-idea.sh`。
+
+=== too many
+exit 1
+--- stdout
+{"result": "too_many", "detail": "已經有 1 個想法沙盒(上限 1)", "limit": 1, "current": 1}
+--- stderr

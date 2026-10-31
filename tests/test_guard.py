@@ -4,10 +4,12 @@
     bin/py -m unittest discover -s tests
 """
 import importlib.util
+import os
 import pathlib
 import sys
 import tempfile
 import unittest
+from unittest import mock
 
 ROOT = pathlib.Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "bin"))
@@ -24,6 +26,9 @@ def load_guard():
 
 class Decide(unittest.TestCase):
     def setUp(self):
+        p = mock.patch.dict(os.environ, {"AGENT_HUB_LANG_UI": "zh-Hant"})   # the reasons compared here are zh-Hant
+        p.start()
+        self.addCleanup(p.stop)
         self.root = pathlib.Path(tempfile.mkdtemp()).resolve() / "proj"
         (self.root / ".claude" / "worktrees" / "wt1").mkdir(parents=True)
         self.m = load_guard()

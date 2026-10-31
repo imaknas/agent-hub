@@ -1,0 +1,112 @@
+=== usage
+exit 1
+--- stdout
+--- stderr
+project-rename: 用法:project-rename.py <舊名稱> <新名稱> [--apply] [--json]
+
+=== not in the registry
+exit 1
+--- stdout
+--- stderr
+project-rename: 登錄裡沒有 nope
+
+=== bad name
+exit 1
+--- stdout
+--- stderr
+project-rename: 新名稱只能用小寫英文、數字跟 -(開頭結尾不能是 -,最多 40 字):'Garden_App'
+
+=== same name
+exit 1
+--- stdout
+--- stderr
+project-rename: 新名稱跟舊的一樣
+
+=== the platform
+exit 1
+--- stdout
+--- stderr
+project-rename: 平台自己不能改名
+
+=== taken
+exit 1
+--- stdout
+--- stderr
+project-rename: other 已經被用掉了:<TMP>/hub/projects/other.yaml, <TMP>/workspace/other
+
+=== on GitHub already
+exit 1
+--- stdout
+--- stderr
+project-rename: GitHub 上已經有 me/garden-app
+
+=== dry-run github
+exit 0
+--- stdout
+  1. GitHub:me/proj → me/garden-app
+  2. 本機 origin:git@github.com:me/proj.git → git@github.com:me/garden-app.git
+  3. rename-project.sh proj garden-app --origin git@github.com:me/garden-app.git(登記、memory、mirror、資料夾)
+(dry-run,加 --apply 執行)
+--- stderr
+
+=== dry-run native
+exit 0
+--- stdout
+  1. GitHub:不用改(沒有 remote 或已經改好)
+  2. 本機 origin:不變
+  3. rename-project.sh sandbox room-3d --origin (native)(登記、memory、mirror、資料夾)
+(dry-run,加 --apply 執行)
+--- stderr
+
+=== unfinished upgrade
+exit 1
+--- stdout
+--- stderr
+project-rename: sandbox 有做到一半的升級(sandbox → orchard(stage renamed)),先把升級的重試做完再改名
+
+=== busy
+exit 1
+--- stdout
+--- stderr
+project-rename: 還有程序的工作目錄在 <TMP>/workspace/proj:sleep(<PID>)——先關掉那個專案的 session / 終端機分頁
+
+=== gh rename fails
+exit 1
+--- stdout
+  1. GitHub:me/proj → me/garden-app
+  2. 本機 origin:git@github.com:me/proj.git → git@github.com:me/garden-app.git
+  3. rename-project.sh proj garden-app --origin git@github.com:me/garden-app.git(登記、memory、mirror、資料夾)
+--- stderr
+project-rename: GitHub repo 改名失敗:gh: HTTP 403
+
+=== rename-project.sh busy
+exit 1
+--- stdout
+  1. GitHub:me/proj → me/garden-app
+  2. 本機 origin:git@github.com:me/proj.git → git@github.com:me/garden-app.git
+  3. rename-project.sh proj garden-app --origin git@github.com:me/garden-app.git(登記、memory、mirror、資料夾)
+--- stderr
+project-rename: 有程序還在 proj 的資料夾裡(例:開著的 session),先關掉:rename-project: busy /x: claude(<PID>)
+
+=== rename-project.sh fails
+exit 1
+--- stdout
+  1. GitHub:不用改(沒有 remote 或已經改好)
+  2. 本機 origin:git@github.com:me/proj.git → git@github.com:me/garden-app.git
+  3. rename-project.sh proj garden-app --origin git@github.com:me/garden-app.git(登記、memory、mirror、資料夾)
+--- stderr
+project-rename: rename-project.sh 失敗:rename-project: memory bare repo is missing
+
+=== renamed
+exit 0
+--- stdout
+  1. GitHub:不用改(沒有 remote 或已經改好)
+  2. 本機 origin:git@github.com:me/proj.git → git@github.com:me/garden-app.git
+  3. rename-project.sh proj garden-app --origin git@github.com:me/garden-app.git(登記、memory、mirror、資料夾)
+--- stderr
+
+=== renamed --json
+exit 0
+--- stdout
+{"result": "renamed", "name": "room-3d", "origin": "(native)"}
+--- stderr

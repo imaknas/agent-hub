@@ -1,0 +1,7 @@
++ job:p/after  每 60 分鐘,after p/at, p/every
++ job:p/at  06:30
+~ job:p/changed  改了 command、time
++ job:p/every  每 15 分鐘
+- job:p/gone
++ job:p/plain
++ job:p/time-after  07:00,after p/at

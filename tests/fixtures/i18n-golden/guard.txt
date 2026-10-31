@@ -1,0 +1,23 @@
+=== usage
+exit 2
+第二階段的守門:專案的 session 不能開別的專案的 session(跨專案只能寄信)。
+
+平台事件 open_session_attempt(bin/hub-event 呼叫 decide)。輸入是中立的 target——執行環境的 binding 從原生的
+參數翻出來(Claude Code:Desktop 的 start_session 工具;見 runtime_claude.parse_event):
+  cwd        → 不在這個 session 自己的專案(主 checkout 或它的 worktree)底下就擋
+  elsewhere  → 別的 repository、別台機器、看不出是哪裡的 preset:擋
+都沒給 = 同一個專案,放行。擋的時候回理由(叫它寄信),由 binding 翻成原生的「拒絕」。
+不是 onboard 過的專案(例:平台自己)不擋;這支自己出錯一律放行(不能因為守門壞掉擋住正常工作)。
+`guard.py pre-tool` 是舊的入口,還沒換新設定的專案還在叫它。
+
+
+=== other cwd
+proj 的 session 不能在 <TMP>/other 開 session(那不是這個專案)。跨專案的事請寄信:agenthub send --to <專案> --type request --text "…";或請 Knas 自己到那個專案開 session。
+=== repository
+proj 的 session 不能在別的 repository(o/r)開 session。跨專案的事請寄信:agenthub send --to <專案> --type request --text "…";或請 Knas 自己到那個專案開 session。
+=== machine
+proj 的 session 不能到別台機器開 session。跨專案的事請寄信:agenthub send --to <專案> --type request --text "…";或請 Knas 自己到那個專案開 session。
+=== unknown place
+proj 的 session 用 preset 開 session 時看不出是不是同一個專案;同一個專案就不要給 preset/cwd。跨專案的事請寄信:agenthub send --to <專案> --type request --text "…";或請 Knas 自己到那個專案開 session。
+=== same project
+None

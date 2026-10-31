@@ -1,0 +1,174 @@
+=== usage
+exit 1
+--- stdout
+--- stderr
+upgrade-idea: 用法:upgrade-idea.py <沙盒名稱> [--rename <新名稱>] [--public] [--apply]
+
+=== --rename without a name
+exit 1
+--- stdout
+--- stderr
+upgrade-idea: --rename 要給新名稱
+
+=== not in the registry
+exit 1
+--- stdout
+--- stderr
+upgrade-idea: 登錄裡沒有 idea-9
+
+=== dry-run
+exit 0
+--- stdout
+  1. 不改名
+  2. gh repo create o/idea-7 --private + push,origin = <TMP>/a/remotes/o/idea-7.git
+  3. 登錄 projects/idea-7.yaml:type: project、paths.origin: <TMP>/a/remotes/o/idea-7.git(purpose/enforce/privacy 留著)
+  4. mirror-list.txt 加上 origin、重生 index.md、commit agent-hub
+(dry-run,加 --apply 執行)
+--- stderr
+
+=== dry-run --json
+exit 0
+--- stdout
+(dry-run,加 --apply 執行)
+--- stderr
+
+=== dry-run rename public
+exit 0
+--- stdout
+  1. 改名 idea-7 → garden(rename-project.sh)
+  2. gh repo create o/garden --public + push,origin = <TMP>/a/remotes/o/garden.git
+  3. 登錄 projects/garden.yaml:type: project、paths.origin: <TMP>/a/remotes/o/garden.git(purpose/enforce/privacy 留著)
+  4. mirror-list.txt 加上 origin、重生 index.md、commit agent-hub
+(dry-run,加 --apply 執行)
+--- stderr
+
+=== bad new name
+exit 1
+--- stdout
+--- stderr
+upgrade-idea: 新名稱只能用小寫英數跟 -:Garden!
+
+=== new name taken
+exit 1
+--- stdout
+--- stderr
+upgrade-idea: taken 已經被用掉了:projects/taken.yaml, ~/workspace/taken
+
+=== dry-run, repo from last time
+exit 0
+--- stdout
+  1. 不改名
+  2. GitHub 上的 o/idea-7 是上次建的:只 push,origin = <TMP>/a/remotes/o/idea-7.git
+  3. 登錄 projects/idea-7.yaml:type: project、paths.origin: <TMP>/a/remotes/o/idea-7.git(purpose/enforce/privacy 留著)
+  4. mirror-list.txt 加上 origin、重生 index.md、commit agent-hub
+(dry-run,加 --apply 執行)
+--- stderr
+
+=== repo is someone else's
+exit 1
+--- stdout
+--- stderr
+upgrade-idea: GitHub 上已經有 o/idea-7(不是這個沙盒的歷史)
+
+=== dirty
+exit 1
+--- stdout
+--- stderr
+upgrade-idea: <TMP>/a/home/workspace/idea-7 有未 commit 的追蹤檔變更,先處理
+
+=== gh create fails
+exit 1
+--- stdout
+  1. 不改名
+  2. gh repo create o/idea-7 --private + push,origin = <TMP>/a/remotes/o/idea-7.git
+  3. 登錄 projects/idea-7.yaml:type: project、paths.origin: <TMP>/a/remotes/o/idea-7.git(purpose/enforce/privacy 留著)
+  4. mirror-list.txt 加上 origin、重生 index.md、commit agent-hub
+--- stderr
+upgrade-idea: gh repo create 失敗:HTTP 502: bad gateway
+
+=== rename fails
+exit 1
+--- stdout
+  1. 改名 idea-7 → garden(rename-project.sh)
+  2. gh repo create o/garden --private + push,origin = <TMP>/a/remotes/o/garden.git
+  3. 登錄 projects/garden.yaml:type: project、paths.origin: <TMP>/a/remotes/o/garden.git(purpose/enforce/privacy 留著)
+  4. mirror-list.txt 加上 origin、重生 index.md、commit agent-hub
+--- stderr
+rename-project: folder is busy
+upgrade-idea: rename-project.sh 失敗,停在這裡(還沒建 GitHub repo)
+
+=== upgraded
+exit 0
+--- stdout
+  1. 不改名
+  2. gh repo create o/idea-7 --private + push,origin = <TMP>/a/remotes/o/idea-7.git
+  3. 登錄 projects/idea-7.yaml:type: project、paths.origin: <TMP>/a/remotes/o/idea-7.git(purpose/enforce/privacy 留著)
+  4. mirror-list.txt 加上 origin、重生 index.md、commit agent-hub
+完成:idea-7 已升級成正式專案 idea-7(<TMP>/a/remotes/o/idea-7.git)
+--- stderr
+
+=== already
+exit 0
+--- stdout
+{"result": "already", "name": "idea-7", "origin": "<TMP>/a/remotes/o/idea-7.git"}
+--- stderr
+
+=== not an idea
+exit 1
+--- stdout
+--- stderr
+upgrade-idea: idea-7 不是想法沙盒(type: project)
+
+=== invalid registry
+exit 1
+--- stdout
+--- stderr
+upgrade-idea: 升級後的登錄不合格,什麼都沒動:未知的欄位 bogus
+
+=== unfinished rename
+exit 1
+--- stdout
+--- stderr
+upgrade-idea: idea-7 → garden 的改名做到一半(stage github),先把改名的重試做完
+
+=== rename then stop
+exit 1
+--- stdout
+  1. 改名 idea-7 → garden(rename-project.sh)
+  2. gh repo create o/garden --private + push,origin = <TMP>/b/remotes/o/garden.git
+  3. 登錄 projects/garden.yaml:type: project、paths.origin: <TMP>/b/remotes/o/garden.git(purpose/enforce/privacy 留著)
+  4. mirror-list.txt 加上 origin、重生 index.md、commit agent-hub
+--- stderr
+upgrade-idea: gh repo create 失敗:HTTP 502: bad gateway
+
+=== other name after a rename
+exit 1
+--- stdout
+--- stderr
+upgrade-idea: idea-7 上次升級做到一半,已經改名成 garden;要用同一個名稱再叫一次
+
+=== dry-run after a rename
+exit 0
+--- stdout
+  1. 已經改名成 garden
+  2. gh repo create o/garden --private + push,origin = <TMP>/b/remotes/o/garden.git
+  3. 登錄 projects/garden.yaml:type: project、paths.origin: <TMP>/b/remotes/o/garden.git(purpose/enforce/privacy 留著)
+  4. mirror-list.txt 加上 origin、重生 index.md、commit agent-hub
+(dry-run,加 --apply 執行)
+--- stderr
+
+=== no github.owner
+exit 1
+--- stdout
+--- stderr
+upgrade-idea: hub.json 沒有 github.owner
+
+=== registry broken by the rename
+exit 1
+--- stdout
+  1. 改名 idea-7 → garden(rename-project.sh)
+  2. gh repo create o/garden --private + push,origin = <TMP>/d/remotes/o/garden.git
+  3. 登錄 projects/garden.yaml:type: project、paths.origin: <TMP>/d/remotes/o/garden.git(purpose/enforce/privacy 留著)
+  4. mirror-list.txt 加上 origin、重生 index.md、commit agent-hub
+--- stderr
+upgrade-idea: 登錄不合格:未知的欄位 bogus(GitHub repo 已經建好;修好登錄再叫一次會接著做)

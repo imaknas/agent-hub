@@ -98,7 +98,7 @@ class Upgrade(unittest.TestCase):
         git(self.ws, "commit", "-q", "-m", "first")
         (self.hub / "projects" / "idea-7.yaml").write_text(IDEA)
         self.env = {**{k: v for k, v in os.environ.items() if not k.startswith("GIT_")},
-                    "AGENT_HUB_ROOT": str(self.hub), "HOME": str(self.home), "FAKE_REMOTES": str(self.remotes),
+                    "AGENT_HUB_ROOT": str(self.hub), "AGENT_HUB_LANG_UI": "zh-Hant", "HOME": str(self.home), "FAKE_REMOTES": str(self.remotes),
                     "PATH": f"{fakebin}:{os.environ['PATH']}"}
 
     def upgrade(self, *args, **env):

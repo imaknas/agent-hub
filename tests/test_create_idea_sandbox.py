@@ -56,7 +56,7 @@ class CleanupOnFailure(unittest.TestCase):
         shutil.rmtree(self.tmp, ignore_errors=True)
 
     def create(self, name="idea-5", **env):
-        e = {**os.environ, "AGENT_HUB_ROOT": str(self.hub), "HUB": str(self.hub), "GO": str(self.go),
+        e = {**os.environ, "AGENT_HUB_ROOT": str(self.hub), "AGENT_HUB_LANG_UI": "zh-Hant", "HUB": str(self.hub), "GO": str(self.go),
              "MC": str(self.mc), "GIT_AUTHOR_NAME": "t", "GIT_AUTHOR_EMAIL": "t@t", "GIT_COMMITTER_NAME": "t",
              "GIT_COMMITTER_EMAIL": "t@t", **env}
         r = subprocess.run([sys.executable, str(self.hub / "bin" / "create-idea-sandbox.py"), name, "試試看"],
