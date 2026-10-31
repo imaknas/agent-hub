@@ -71,6 +71,16 @@ class Asks(unittest.TestCase):
             self.m.cmd_open_handoffs()
         self.assertEqual([h["handoff_id"] for h in json.loads(out.getvalue())], [42])
 
+    def test_open_handoff_without_raw_fields(self):
+        """listed with the fields empty: the text meant for sessions is not parsed back"""
+        self.m.publish(self.c, "h-old", "message", self.m.hubconf.owner_address(), "proj", None,
+                       {"type": "handoff", "handoff_id": 7, "effect": "relevant", "text": "Fact: x"})
+        with redirect_stdout(io.StringIO()) as out:
+            self.m.cmd_open_handoffs()
+        got = [(h["fact"], h["quote"], h["item"], h["why"], h["effect"]) for h in json.loads(out.getvalue())
+               if h["handoff_id"] == 7]
+        self.assertEqual(got, [("", None, None, "", "relevant")])
+
     def test_dispatch_routes_it_like_any_question(self):
         self.m.import_handoffs(self.c)
         handled = []

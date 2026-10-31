@@ -1643,18 +1643,8 @@ def cmd_open_handoffs() -> None:
         p = payload(r)
         if p.get("type") != "handoff":
             continue
-        h = p.get("handoff")
-        # the first three taken in on 2026-10-21 have no raw fields: split them back out of the text meant for
-        # sessions
-        if h is None:
-            labels = {"事實:": "fact", f"{OWNER} 原話:": "quote", "對應待辦:": "item", f"{ASSISTANT} 的判斷理由:": "why"}
-            h = {}
-            for line in p.get("text", "").splitlines():
-                for label, key in labels.items():
-                    if line.startswith(label):
-                        h[key] = line[len(label):]
-            if h.get("item") == "(沒有指定)":
-                h["item"] = None
+        # every handoff carries its raw fields; only the first three taken in (10-21) had none, and they are closed
+        h = p.get("handoff") or {}
         out.append({"id": r["id"], "project": r["to_project"], "ts": h.get("ts") or r["ts"],
                     "handoff_id": p.get("handoff_id"), "effect": p.get("effect") or h.get("effect") or "relevant",
                     "fact": h.get("fact") or "", "quote": h.get("quote"), "item": h.get("item"), "why": h.get("why") or "",
