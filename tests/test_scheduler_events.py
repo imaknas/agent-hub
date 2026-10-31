@@ -7,7 +7,9 @@ The tick runs in-process (tests/test_scheduler_tick.py's harness) against a real
     bin/py -m unittest tests.test_scheduler_events
 """
 import datetime
+import io
 import json
+import types
 import os
 import pathlib
 import sqlite3
@@ -266,6 +268,7 @@ class RegistryTrigger(unittest.TestCase):
                 ({"events": ["message.done"]}, {}, "mailbox work"),
                 ({"events": ["merge.done"]}, {"kind": "agent"}, "must declare allow"),
                 ({"events": ["merge.done"]}, {"kind": "agent", "allow": ["Read"], "cwd": "state"}, "in the workspace"),
+                ({"events": ["merge.done"]}, {"kind": "agent", "allow": ["Read"], "connectors": True}, "connectors"),
                 ({"events": ["message"]}, {}, "notices"),
                 ({"events": ["message"], "where": {"type": "request"}}, {}, "notices"),
                 ({"events": ["merge.done"], "projects": ["q"]}, {}, "own project"),
@@ -369,6 +372,10 @@ class PlatformSettings(unittest.TestCase):
         self.assertEqual(cmd[cmd.index("--tools") + 1], "Bash,Glob,Grep,Read,WebFetch")
         self.assertEqual(cmd[cmd.index("--permission-mode") + 1], "dontAsk")
         self.assertIn("Bash(git log:*)", cmd)
+        env2 = {**env, "AGENT_JOB_ALLOW": json.dumps(["mcp__claude_ai_x__y", "Edit(./a/**)"])}
+        with mock.patch.object(runtime_claude, "platform_settings", lambda p: pathlib.Path(f"/s/{p}.json")):
+            cmd = runtime_claude._flags(task._replace(env=env2))
+        self.assertEqual(cmd[cmd.index("--tools") + 1], "Bash,Edit,Glob,Grep,Read")   # no MCP names in --tools
         with self.assertRaises(ValueError):   # no project: never a run with whatever settings happen to load
             runtime_claude._flags(task._replace(env={"AGENT_JOB_ALLOW": "[]"}))
 
@@ -380,12 +387,32 @@ class PlatformSettings(unittest.TestCase):
         tmp = pathlib.Path(tempfile.mkdtemp())
         for enforced in (False, True):
             doc = {"name": "p", "enforce": {"sandbox": enforced}}
-            with mock.patch("policy.for_project", lambda p: pol), mock.patch.object(hubconf, "STATE", tmp), \
-                    mock.patch.object(hubconf, "projects", lambda: {"p": doc}):
+            # the services-only exemption must not take the sandbox away from an agent anyone can start
+            with mock.patch("policy.policy", lambda name, d, i: pol), mock.patch.object(hubconf, "STATE", tmp), \
+                    mock.patch("registry.refresh", lambda: {"projects": {"p": doc}}), \
+                    mock.patch.object(hubconf, "get", lambda k, d=None: ["p"] if k == "service_sandbox_exempt" else d):
                 d = json.loads(runtime_claude.platform_settings("p").read_text())
             self.assertIn("Read(//w/q/**)", d["permissions"]["deny"])
             self.assertIn("Bash(agenthub send *)", d["permissions"]["allow"])
+            self.assertFalse(any("merge-branch" in r or "hubbus" in r or "cap-run" in r for r in d["permissions"]["allow"]))
             self.assertEqual("sandbox" in d, enforced)
+
+    def test_a_runtime_that_cannot_confine_refuses(self):
+        import importlib.util
+        import runtime_ports
+        spec = importlib.util.spec_from_file_location("llm_conf", ROOT / "bin" / "llm.py")
+        llm = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(llm)
+        self.assertIn("confine", runtime_ports.capabilities("claude"))
+        self.assertNotIn("confine", runtime_ports.capabilities("command"))
+        failed = []
+        a = types.SimpleNamespace(cmd="run", point="agent-job-event", cwd=None, model=None, prompt_file=None,
+                                  dry_run=True, extra=[])
+        with mock.patch.object(llm, "fail", lambda point, spec, why: failed.append(why) or 1), \
+                mock.patch.object(runtime_ports, "default_name", lambda: "command"), \
+                mock.patch("sys.stdin", io.StringIO("x")):
+            self.assertEqual(llm.run(a), 1)
+        self.assertIn("confine", failed[0])
 
     def test_registry_points_agent_event_jobs_at_it(self):
         import registry

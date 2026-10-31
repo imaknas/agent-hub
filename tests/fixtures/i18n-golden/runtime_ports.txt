@@ -1,5 +1,5 @@
 === port labels
-[('agent', '跑 agent'), ('auth', '登入狀態'), ('completion', 'completion(只回答案)'), ('instructions', '規則檔'), ('lifecycle', 'session 事件(hook)'), ('sessions', 'session 狀態'), ('stream', '長駐串流 session'), ('transcripts', '對話紀錄')]
+[('agent', '跑 agent'), ('auth', '登入狀態'), ('completion', 'completion(只回答案)'), ('confine', '受限執行(只照宣告的權限)'), ('instructions', '規則檔'), ('lifecycle', 'session 事件(hook)'), ('sessions', 'session 狀態'), ('stream', '長駐串流 session'), ('transcripts', '對話紀錄')]
 === feature (none)
 判斷點(librarian、index、consolidate、週報分析) | False | 跑 agent、登入狀態
 === feature (none)
@@ -16,8 +16,8 @@ session 裡即時看到信、提醒寫筆記 | False | session 事件(hook)
 memory 缺口、週報的對話統計 | False | 對話紀錄
 === unknown runtime
 沒有登記的 runtime:nosuch(有:claude, fake, none, command)
-=== unsupported ('agent', 'lifecycle', 'instructions', 'transcripts', 'sessions', 'stream', 'auth', 'completion')
-執行環境 none 沒有跑 agent、session 事件(hook)、規則檔、對話紀錄、session 狀態、長駐串流 session、登入狀態、completion(只回答案)(hub.json runtime.default;要這個功能就裝一個有的 coding agent)
+=== unsupported ('agent', 'lifecycle', 'instructions', 'transcripts', 'sessions', 'stream', 'auth', 'completion', 'confine')
+執行環境 none 沒有跑 agent、session 事件(hook)、規則檔、對話紀錄、session 狀態、長駐串流 session、登入狀態、completion(只回答案)、受限執行(只照宣告的權限)(hub.json runtime.default;要這個功能就裝一個有的 coding agent)
 === unsupported ('completion',)
 執行環境 none 沒有completion(只回答案)(hub.json runtime.default;要這個功能就裝一個有的 coding agent)
 === missing functions (runtime)

@@ -1,6 +1,6 @@
 # Event-triggered jobs
 
-> agent-hub session · 2026-11-01 · r5. Item 1 of "Build" in `competitive-gaps.md`: a registry job can start when
+> agent-hub session · 2026-11-01 · r6. Item 1 of "Build" in `competitive-gaps.md`: a registry job can start when
 > matching bus events appear, not only on a clock or `after:` another job. External sources (CI finished, a webhook)
 > are out of scope: they will arrive later as bus events from one receiver, so jobs only ever react to bus events.
 >
@@ -27,6 +27,11 @@
 > permissions (every "always allow" a person clicked there), so `allow:` was not the whole boundary. Agent event jobs
 > now run under their own judgment point, `agent-job-event`, which loads **only** the platform's settings for the
 > project (3.2); verified against the installed CLI. A renamed job doesn't start while its old name still runs.
+>
+> r6 after a fifth review (of r5's fix): the sandbox follows the registry's `enforce.sandbox` (the services-only
+> exemption doesn't apply to an agent anyone can start); a runtime that can't honour declared permissions refuses
+> the run (`runtime_ports` "confine"); the platform part of the boundary is only the mail commands; `connectors` is
+> refused with `trigger`.
 
 ## 1. What exists
 
@@ -131,13 +136,20 @@ The trust model (1: the bus is a peer log) decides what an event job may do with
   with its own `allow:`, and anyone who can write the bus can start it with a forged event addressed to the project.
   So a project's agent event job **must declare `allow:`** (no unattended `auto` mode), and it runs under the
   judgment point `agent-job-event`, declared `settings: platform`: the run loads none of the user's, the project's or
-  local tool settings, only a settings file the platform writes from the policy (`policy.for_project`): the
-  project's sandbox when it is enforced, the deny list, and the platform's own commands. So the boundary is exactly
-  `allow:` plus the platform's settings; permissions a person accumulated in the project's settings, and the
-  project's hooks, don't apply (memory notes the job writes are committed by the hourly memory sync). The sandbox
+  local tool settings, only a settings file the platform writes from the policy: the project's sandbox when the
+  registry enforces it (`enforce.sandbox`, as for its sessions; hub.json's `service_sandbox_exempt` is for services
+  and command jobs and doesn't apply here), the deny list, and the mail commands (`agenthub send/inbox/done…`; not raw
+  `hubbus`, merging or `cap-run`). So the boundary is exactly `allow:` plus those; permissions a person accumulated in
+  the project's settings, and the project's hooks, don't apply (memory notes the job writes are committed by the
+  hourly memory sync). Still loaded: managed (admin) settings, which are the machine owner's, and the project's
+  rules file (`CLAUDE.md`), which is instructions, not permissions. MCP servers stay off (`run-agent-job.sh` passes
+  `--strict-mcp-config`; `connectors: true` is refused with `trigger`, since it would turn that off). The sandbox
   comes from the policy, not from whatever is rendered in the workspace at that moment. For Claude Code the adapter
   translates this to `--restricted --settings <file> --tools <the tools the rules use>` (`runtime_claude`; checked on
-  2.1.316: a project-level allow no longer applies, a `--settings` one does). The job also **must run in the
+  2.1.316: a project-level allow no longer applies, a `--settings` one does). A runtime that can't honour declared
+  permissions (`allow_from_env`, `settings: platform`) lacks the `confine` port (`runtime_ports`: it has no
+  `platform_settings`), and `llm.py` refuses such a point on it with the reason, instead of running unconfined; this
+  also covers clock agent jobs that declare `allow:`. The job also **must run in the
   workspace** (`cwd: workspace`), so its files and rules files are the project's. A command job runs only its own code; it reads
   the payload as claims (e.g. re-check a merge in git before acting on it).
 - **The platform's event jobs are never agents**, whatever their `projects`: even an event "from" the platform

@@ -361,6 +361,8 @@ def validate_trigger(job: dict, doc: dict, stem: str) -> list[str]:
         errs.append(_("the platform's event jobs can't be agent jobs: an event is what its writer claims, and an agent "
                       "with the platform's authority must not take instructions from it"))
     elif job.get("kind") == "agent":
+        if job.get("connectors"):
+            errs.append(_("an agent event job can't use connectors: (it would load the user's MCP servers)"))
         if not job.get("allow"):
             errs.append(_("an agent event job must declare allow: (anyone who can write the bus can start it with their "
                           "text; allow: is its boundary)"))

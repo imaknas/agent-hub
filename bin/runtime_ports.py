@@ -110,7 +110,7 @@ def port_labels() -> dict[str, str]:
     return {"agent": _("agent runs"), "lifecycle": _("session events (hooks)"), "instructions": _("rules file"),
             "transcripts": _("transcripts"), "sessions": _("session state"),
             "stream": _("long-running streaming sessions"), "auth": _("login state"),
-            "completion": _("completion interface")}
+            "completion": _("completion interface"), "confine": _("confined runs (declared permissions only)")}
 
 
 # Which ports each platform feature needs (doctor's "tool x feature" table; docs/design/tool-agnostic.md principle 3).
@@ -161,6 +161,10 @@ PORTS = {
     "stream": ("action", "parse_stream", "classify_exit", "resumable", "resume_command", "relocate"),
     "auth": ("auth_env", "clean_env", "credentials", "is_login_error"),
     "completion": ("complete", "health"),
+    # confine: the runtime honours a judgment point's declared permissions (allow_from_env: only those rules, nothing
+    # asked; settings: platform: none of the user's, project's or local settings, only the platform's for the project).
+    # A point that declares them refuses to run on a runtime without it (llm.py)
+    "confine": ("platform_settings",),
 }
 
 # Neutral "kinds of action": what the agent did in a conversation record, without any runtime's tool names.

@@ -258,5 +258,10 @@ def complete(req, conf) -> CompletionResult:
     return queue.pop(0) if len(queue) > 1 else queue[0]
 
 
+def platform_settings(project: str):
+    """confine: the fake honours declared permissions by construction (it runs nothing)."""
+    return None
+
+
 def health(conf) -> tuple:
     return (not conf.get("fake_unhealthy"), "fake_unhealthy" if conf.get("fake_unhealthy") else "")

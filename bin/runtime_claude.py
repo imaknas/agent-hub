@@ -134,16 +134,23 @@ def platform_settings(project: str) -> pathlib.Path:
     reads none of the user's, project's or local files): the project's sandbox when it's enforced, the deny list and
     the platform's commands, all from the policy, never from what is rendered in the workspace."""
     import hubconf
-    import isolation
     import policy
-    pol = policy.for_project(project)
-    sandbox, _deny, allow = settings(pol)
+    import registry
+    index = registry.refresh()
+    doc = index["projects"][project]
+    pol = policy.policy(project, doc, index)
+    sandbox = settings(pol)[0]
+    # only the mail commands (read, send, close letters): not raw hubbus, merging or running code through the platform
+    allow = _cli_rules(policy.platform_cli(mail_only=True))
     out = {"permissions": {"deny": lease_settings(pol)["permissions"]["deny"], "allow": allow}}
-    if isolation.sandboxed(hubconf.projects().get(project) or {}):
+    # the registry's enforce.sandbox, as render-project-settings decides it (not the services-only exemption)
+    if (doc.get("enforce") or {}).get("sandbox") is True:
         out["sandbox"] = sandbox
     p = hubconf.STATE / "agent-jobs" / ".settings" / f"{project}.json"
     p.parent.mkdir(parents=True, exist_ok=True)
-    p.write_text(json.dumps(out, ensure_ascii=False))
+    tmp = p.with_name(f".{p.name}.{os.getpid()}")
+    tmp.write_text(json.dumps(out, ensure_ascii=False))
+    tmp.replace(p)
     return p
 
 
@@ -351,7 +358,8 @@ def _flags(task) -> list:
         if not project:
             raise ValueError(f"judgment point {task.point}: settings: platform needs the project in "
                              f"${spec.get('project_env')}")
-        tools = {"Read", "Glob", "Grep", "Bash"} | {r.split("(", 1)[0] for r in allowed}
+        # built-in tools only (MCP tools aren't named in --tools)
+        tools = {"Read", "Glob", "Grep", "Bash"} | {r.split("(", 1)[0] for r in allowed if not r.startswith("mcp__")}
         cmd += ["--restricted", "--settings", str(platform_settings(project)), "--tools", ",".join(sorted(tools))]
     elif "tools" in spec:
         cmd += ["--tools", spec["tools"]]
