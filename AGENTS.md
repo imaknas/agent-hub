@@ -223,7 +223,8 @@ agent-hub is meant for anyone, with any coding agent, any LLM, any key.
   moves the cursor. Every scheduled run gets `AGENT_HUB_JOB` and the causal chain (`AGENT_HUB_JOB_CHAIN` /
   `_DEPTH`), which hubbus stamps on what it publishes, so a job never triggers itself. Bus events are their writers'
   claims (any project can write the bus): the platform's event jobs are never agents, and a project's agent event job
-  must declare `allow:`. `schedulectl events <job>` shows what waits and why, `schedulectl skip <job>` drops a batch
+  must declare `allow:` and runs under judgment point `agent-job-event`, which loads only the platform's settings for
+  the project (so `allow:` is its whole boundary). `schedulectl events <job>` shows what waits and why, `schedulectl skip <job>` drops a batch
   that keeps failing. Logic in `bin/event_jobs.py`, design in `docs/design/event-jobs.md`
 - **Long jobs get `background: true`**: the scheduler runs jobs one at a time in order, so a job that takes minutes or
   more (e.g. the librarian) without it makes everything after it wait. A background job's result is merged back into

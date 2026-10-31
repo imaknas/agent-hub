@@ -497,6 +497,10 @@ def tick() -> None:
                 state[new + suffix] = state[old + suffix]
         if old in running:
             running.add(new)  # the old name is still running in the background: the new name counts as running too
+    for job in jobs:   # a renamed project's job whose old name still runs in the background: not a second copy
+        short = job["name"].split("/", 1)[-1]
+        if job.get("project") and any(f"{old}/{short}" in running for old in hubconf.former_names(job["project"])):
+            running.add(job["name"])
     save_state(state)
     for f in merged:
         f.unlink(missing_ok=True)

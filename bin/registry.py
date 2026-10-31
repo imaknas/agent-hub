@@ -71,7 +71,8 @@ schema v1 (contracts/project.v1.md has the full description):
       An ordinary project sees only events addressed to it (self, including names from before a rename); the platform
       project and modules may name others or *. Bus events are their writers' claims: the platform's event jobs are
       never agent jobs, and a project's agent event job must declare allow: (its boundary) and run in the workspace
-      (cwd: workspace, where its sandbox and rules apply). message.delivered and message.done are refused like record.
+      (cwd: workspace); it runs under judgment point agent-job-event, which loads only the platform's settings for
+      the project (no accumulated project or user permissions). message.delivered and message.done are refused like record.
       max_attempts_per_day defaults to 12; an agent event job always runs as the scheduler's background job, in
       place, so the scheduler sees its outcome. legacy_name is refused
     after: [job] (same project) or [project/job]
@@ -729,8 +730,10 @@ def scheduler_jobs(index: dict, legacy_names: set[str]) -> tuple[list[dict], lis
                 j.setdefault("max_attempts_per_day", event_jobs.DEFAULT_CAP)
                 j["platform"] = platform_doc(doc, name)
                 if job.get("kind") == "agent":
-                    # the scheduler owns the detachment so it sees the run's real outcome (event-jobs.md section 2)
-                    j["command"] = f"RUN_AGENT_JOB_FOREGROUND=1 {j['command']}"
+                    # the scheduler owns the detachment so it sees the run's real outcome (event-jobs.md section 2);
+                    # judgment point agent-job-event: only allow: and the platform's settings apply (section 3.2)
+                    j["command"] = (f"RUN_AGENT_JOB_FOREGROUND=1 AGENT_JOB_POINT=agent-job-event "
+                                    f"AGENT_JOB_PROJECT={shlex.quote(name)} {j['command']}")
                     j["background"] = True
             if job.get("after"):
                 j["after"] = [a if "/" in a else f"{name}/{a}" for a in job["after"]]

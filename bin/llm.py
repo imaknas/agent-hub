@@ -231,9 +231,16 @@ def run(a) -> int:
         rt.exec_stream(task)
         return 0
     if getattr(a, "dry_run", False):
-        print(json.dumps(rt.describe(task), ensure_ascii=False))
+        try:
+            print(json.dumps(rt.describe(task), ensure_ascii=False))
+        except ValueError as e:   # the declaration can't be met (e.g. settings: platform without its project)
+            print(e, file=sys.stderr)
+            return 2
         return 0
-    res = rt.run(task)
+    try:
+        res = rt.run(task)
+    except ValueError as e:
+        return fail(a.point, spec, str(e))
     if not res.ok:
         return fail(a.point, spec, res.error)
     # no structured_output isn't a failure: handed to the caller as is (the librarian deliberately "still goes by the

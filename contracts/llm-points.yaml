@@ -133,6 +133,23 @@ points:
     timeout_s: 3600
     output: {format: text}
     on_failure: say_so      # the job fails, status page red
+  agent-job-event:
+    caller: bin/run-agent-job.sh (event-triggered registry jobs; docs/design/event-jobs.md)
+    shape: agent
+    model_group: default
+    purpose: "an agent job started by bus events: anyone who can write the bus can start it with their text, so only
+      the job's declared allow: rules and the platform's own settings for the project apply"
+    # Unattended and always declared (registry validation): dontAsk + only those rules. settings: platform = the
+    # project's accumulated tool permissions and the user's are not loaded (the runtime decides how); its sandbox and
+    # deny list come from the platform's policy, not from what happens to be rendered in the workspace.
+    permission_mode: dontAsk
+    prompts: none
+    allow_from_env: AGENT_JOB_ALLOW
+    settings: platform
+    project_env: AGENT_JOB_PROJECT
+    timeout_s: 3600
+    output: {format: text}
+    on_failure: say_so      # the run fails, its events wait for the next attempt
   login-check:
     caller: bin/check-claude-login.py
     shape: agent

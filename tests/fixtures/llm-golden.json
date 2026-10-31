@@ -1,4 +1,28 @@
 {
+ "agent-job-event/default": {
+  "auth": "token",
+  "cmd": null,
+  "exit": 2,
+  "token_passed": true
+ },
+ "agent-job-event/model": {
+  "auth": "token",
+  "cmd": null,
+  "exit": 2,
+  "token_passed": true
+ },
+ "agent-job-event/subscription": {
+  "auth": "subscription",
+  "cmd": null,
+  "exit": 2,
+  "token_passed": false
+ },
+ "agent-job-event/token": {
+  "auth": "token",
+  "cmd": null,
+  "exit": 2,
+  "token_passed": true
+ },
  "agent-job/default": {
   "auth": "token",
   "cmd": [

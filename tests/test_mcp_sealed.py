@@ -22,6 +22,7 @@ ADDED_BY_CALLER = {
     # exception: a registry job with connectors: true (needs claude.ai connectors) does not get it
     "agent-job": "bin/run-agent-job.sh",
     "mailbox-escalation": "bin/run-agent-job.sh",   # mailbox requests also go through run-agent-job.sh
+    "agent-job-event": "bin/run-agent-job.sh",      # event-triggered agent jobs too
     "lease-session": "bin/lease-runner.py",         # a lease uses only the permission relay given by --mcp-config
     "lease-work": "bin/lease-runner.py",
     "lease-handover": "bin/lease-runner.py",

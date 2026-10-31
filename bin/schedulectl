@@ -249,8 +249,12 @@ def cmd_run(name):
     prev = _mark_ran_today(name)
     try:
         start(name, job, env)
-    except BaseException:
-        edit_state(lambda state: state.pop(name, None) if prev is None else state.__setitem__(name, prev))
+    except BaseException as e:
+        try:
+            edit_state(lambda state: state.pop(name, None) if prev is None else state.__setitem__(name, prev))
+        except SystemExit as held:   # the mark stays; say so without hiding why the start failed
+            print(_("{name} did not start ({error!r}), and its mark as run today could not be taken back: {why}",
+                    name=name, error=e, why=held), file=sys.stderr)
         raise
 
 

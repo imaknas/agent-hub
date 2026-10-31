@@ -129,6 +129,24 @@ def lease_settings(pol: dict) -> dict:
     return {"permissions": {"deny": deny}}
 
 
+def platform_settings(project: str) -> pathlib.Path:
+    """A judgment point with settings: platform: the only settings file the run loads (with --restricted, Claude Code
+    reads none of the user's, project's or local files): the project's sandbox when it's enforced, the deny list and
+    the platform's commands, all from the policy, never from what is rendered in the workspace."""
+    import hubconf
+    import isolation
+    import policy
+    pol = policy.for_project(project)
+    sandbox, _deny, allow = settings(pol)
+    out = {"permissions": {"deny": lease_settings(pol)["permissions"]["deny"], "allow": allow}}
+    if isolation.sandboxed(hubconf.projects().get(project) or {}):
+        out["sandbox"] = sandbox
+    p = hubconf.STATE / "agent-jobs" / ".settings" / f"{project}.json"
+    p.parent.mkdir(parents=True, exist_ok=True)
+    p.write_text(json.dumps(out, ensure_ascii=False))
+    return p
+
+
 def settings_path(ws: pathlib.Path) -> pathlib.Path:
     return pathlib.Path(ws) / ".claude" / "settings.local.json"
 
@@ -326,7 +344,16 @@ def _flags(task) -> list:
         cmd += ["--permission-mode", mode]
     if prompts:
         cmd += ["--permission-prompts", prompts]
-    if "tools" in spec:
+    if spec.get("settings") == "platform":
+        # --restricted: no user/project/local settings files (only --settings applies), and the tools that run code
+        # are off unless --tools names them; the tools named are the ones the rules use, plus reading
+        project = env.get(spec.get("project_env") or "")
+        if not project:
+            raise ValueError(f"judgment point {task.point}: settings: platform needs the project in "
+                             f"${spec.get('project_env')}")
+        tools = {"Read", "Glob", "Grep", "Bash"} | {r.split("(", 1)[0] for r in allowed}
+        cmd += ["--restricted", "--settings", str(platform_settings(project)), "--tools", ",".join(sorted(tools))]
+    elif "tools" in spec:
         cmd += ["--tools", spec["tools"]]
     if allowed:
         cmd += ["--allowedTools", *allowed]

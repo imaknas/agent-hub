@@ -1,6 +1,6 @@
 # Event-triggered jobs
 
-> agent-hub session · 2026-11-01 · r4. Item 1 of "Build" in `competitive-gaps.md`: a registry job can start when
+> agent-hub session · 2026-11-01 · r5. Item 1 of "Build" in `competitive-gaps.md`: a registry job can start when
 > matching bus events appear, not only on a clock or `after:` another job. External sources (CI finished, a webhook)
 > are out of scope: they will arrive later as bus events from one receiver, so jobs only ever react to bus events.
 >
@@ -21,7 +21,12 @@
 > r4 after a third blind review: an agent event job must run in the workspace, where the project's sandbox and rules
 > apply (3.2); smaller fixes (the bus generation is written only when missing, an unreadable `ts` can't break the page,
 > a rename during a background run keeps its advance, `schedulectl run` takes its mark back if the start fails), and
-> the owner-answer loop is named (7). No blocking finding remains.
+> the owner-answer loop is named (7).
+>
+> r5 after a fourth review (of r4's fix): running in the workspace also loaded the project's accumulated tool
+> permissions (every "always allow" a person clicked there), so `allow:` was not the whole boundary. Agent event jobs
+> now run under their own judgment point, `agent-job-event`, which loads **only** the platform's settings for the
+> project (3.2); verified against the installed CLI. A renamed job doesn't start while its old name still runs.
 
 ## 1. What exists
 
@@ -124,10 +129,16 @@ The trust model (1: the bus is a peer log) decides what an event job may do with
 - **Event jobs do add reach, and it is gated.** A request letter only ever starts a mailbox handler, whose
   permissions are fixed and narrow (`mailbox-escalation`: memory notes and the mail commands). An event agent job runs
   with its own `allow:`, and anyone who can write the bus can start it with a forged event addressed to the project.
-  So a project's agent event job **must declare `allow:`** (no unattended `auto` mode): that list is its boundary,
-  and the project chooses it knowing the trigger is unauthenticated. And it **must run in the workspace**: the
-  project's sandbox and rules live in the workspace's tool settings (`render-project-settings.py`), so an agent run
-  from `state`, `runtime` or `hub` would have neither. A command job runs only its own code; it reads
+  So a project's agent event job **must declare `allow:`** (no unattended `auto` mode), and it runs under the
+  judgment point `agent-job-event`, declared `settings: platform`: the run loads none of the user's, the project's or
+  local tool settings, only a settings file the platform writes from the policy (`policy.for_project`): the
+  project's sandbox when it is enforced, the deny list, and the platform's own commands. So the boundary is exactly
+  `allow:` plus the platform's settings; permissions a person accumulated in the project's settings, and the
+  project's hooks, don't apply (memory notes the job writes are committed by the hourly memory sync). The sandbox
+  comes from the policy, not from whatever is rendered in the workspace at that moment. For Claude Code the adapter
+  translates this to `--restricted --settings <file> --tools <the tools the rules use>` (`runtime_claude`; checked on
+  2.1.316: a project-level allow no longer applies, a `--settings` one does). The job also **must run in the
+  workspace** (`cwd: workspace`), so its files and rules files are the project's. A command job runs only its own code; it reads
   the payload as claims (e.g. re-check a merge in git before acting on it).
 - **The platform's event jobs are never agents**, whatever their `projects`: even an event "from" the platform
   project can be forged by any project, and an agent with the platform's authority must not take instructions from

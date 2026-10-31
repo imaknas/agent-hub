@@ -174,6 +174,16 @@ class EventTick(unittest.TestCase):
         self.t.tick([job], DAY + datetime.timedelta(days=3))
         self.assertEqual(len(self.events_of()), 1)
 
+    def test_a_renamed_job_does_not_start_while_its_old_name_runs(self):
+        st = {"old/react.event_seq": 0, "old/react.event_gen": "g1"}
+        self.t.m.STATE_FILE.write_text(json.dumps(st))
+        (self.t.m.RUNS_DIR / "old__react.json").write_text(json.dumps(
+            {"date": "2026-10-30", "started": "2026-10-30T11:50:00", "pid": os.getpid()}))
+        self.bus.publish(project="old")
+        with mock.patch.object(hubconf, "former_names", lambda p: ["old"] if p == "new" else []):
+            self.t.tick([ejob("new/react", background=True, trigger={"projects": ["new", "old"]})], DAY)
+        self.assertEqual(self.t.spawned, [])
+
     def test_an_old_names_late_advance_still_counts(self):
         for _ in range(3):
             self.bus.publish(project="other")
@@ -337,3 +347,50 @@ class Publish(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class PlatformSettings(unittest.TestCase):
+    """judgment point agent-job-event (contracts/llm-points.yaml): only allow: and the platform's settings apply."""
+
+    def spec(self):
+        import yaml
+        return yaml.safe_load((ROOT / "contracts" / "llm-points.yaml").read_text())["points"]["agent-job-event"]
+
+    def test_flags(self):
+        import runtime_claude
+        import runtime_ports
+        env = {"AGENT_JOB_ALLOW": json.dumps(["Bash(git log:*)", "WebFetch(domain:example.org)"]),
+               "AGENT_JOB_PROJECT": "p"}
+        task = runtime_ports.Task("agent-job-event", "x", self.spec(), env=env)
+        with mock.patch.object(runtime_claude, "platform_settings", lambda p: pathlib.Path(f"/s/{p}.json")):
+            cmd = runtime_claude._flags(task)
+        self.assertIn("--restricted", cmd)
+        self.assertEqual(cmd[cmd.index("--settings") + 1], "/s/p.json")
+        self.assertEqual(cmd[cmd.index("--tools") + 1], "Bash,Glob,Grep,Read,WebFetch")
+        self.assertEqual(cmd[cmd.index("--permission-mode") + 1], "dontAsk")
+        self.assertIn("Bash(git log:*)", cmd)
+        with self.assertRaises(ValueError):   # no project: never a run with whatever settings happen to load
+            runtime_claude._flags(task._replace(env={"AGENT_JOB_ALLOW": "[]"}))
+
+    def test_settings_file(self):
+        import runtime_claude
+        pol = {"other_projects": [pathlib.Path("/w/q")], "deny_write": [], "deny_read": [], "platform_commands": [],
+               "platform_cli": ["agenthub send"], "write": ["/w/p"], "network": [], "credential_files": [],
+               "credentials": []}
+        tmp = pathlib.Path(tempfile.mkdtemp())
+        for enforced in (False, True):
+            doc = {"name": "p", "enforce": {"sandbox": enforced}}
+            with mock.patch("policy.for_project", lambda p: pol), mock.patch.object(hubconf, "STATE", tmp), \
+                    mock.patch.object(hubconf, "projects", lambda: {"p": doc}):
+                d = json.loads(runtime_claude.platform_settings("p").read_text())
+            self.assertIn("Read(//w/q/**)", d["permissions"]["deny"])
+            self.assertIn("Bash(agenthub send *)", d["permissions"]["allow"])
+            self.assertEqual("sandbox" in d, enforced)
+
+    def test_registry_points_agent_event_jobs_at_it(self):
+        import registry
+        index = {"projects": {"p": {"name": "p", "paths": {"workspace": "/tmp/p-ws"}, "jobs": [
+            {"name": "a", "trigger": {"events": ["merge.done"]}, "kind": "agent", "allow": ["Read"]}]}}}
+        with mock.patch.object(registry.isolation, "sandboxed", lambda doc: False):
+            cmd = registry.scheduler_jobs(index, set())[0][0]["command"]
+        self.assertTrue(cmd.startswith("RUN_AGENT_JOB_FOREGROUND=1 AGENT_JOB_POINT=agent-job-event AGENT_JOB_PROJECT=p "))
