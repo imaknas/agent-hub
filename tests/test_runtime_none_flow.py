@@ -32,7 +32,8 @@ class RuntimeNone(unittest.TestCase):
                               capture_output=True, text=True, timeout=120)
 
     def test_instructions_file_is_unsupported(self):
-        r = self.run_(BIN / "hub-runtime", "instructions-file", self.tmp / "ws")
+        r = self.run_(BIN / "hub-runtime", "instructions-file", self.tmp / "ws",
+                      env={"AGENT_HUB_LANG_UI": "zh-Hant"})   # the message asserted is the zh-Hant one
         self.assertEqual(r.returncode, 3, r.stderr)
         self.assertIn("規則檔", r.stderr)
         self.assertEqual(r.stdout.strip(), "", "不能猜一個預設檔名")

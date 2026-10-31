@@ -57,33 +57,51 @@ import importlib
 import os
 from typing import NamedTuple
 
+import i18n
+
+_ = i18n.domain(__file__)
+
 # 登記表:名稱 → 模組。多個 runtime 可以同時登記,每個 session 用它自己的(設計原則 9)。
 RUNTIMES = {"claude": "runtime_claude", "fake": "runtime_fake", "none": "runtime_none", "command": "runtime_command"}
 DEFAULT = "claude"   # hub.json 沒寫 runtime.default 時的預設
 # 只實作 completion 介面的(LLM API):hub.json llm.providers 的 impl 寫這些名稱,或任何有 completion 介面的 runtime 名稱
 PROVIDERS = {"anthropic": "provider_anthropic", "openai": "provider_openai", "ollama": "provider_ollama"}
 
-# 介面給人看的名稱(Unsupported 的原因、doctor 的能力表)
-PORT_LABELS = {"agent": "跑 agent", "lifecycle": "session 事件(hook)", "instructions": "規則檔",
-               "transcripts": "對話紀錄", "sessions": "session 狀態", "stream": "長駐串流 session", "auth": "登入狀態",
-               "completion": "completion(只回答案)"}
+# Owner-facing names of the ports (Unsupported reasons, doctor's capability table). PORT_LABELS / FEATURES are built
+# when read (module __getattr__), so they follow the UI language of the moment.
+def port_labels() -> dict[str, str]:
+    return {"agent": _("agent runs"), "lifecycle": _("session events (hooks)"), "instructions": _("rules file"),
+            "transcripts": _("transcripts"), "sessions": _("session state"),
+            "stream": _("long-running streaming sessions"), "auth": _("login state"),
+            "completion": _("completion (answer only)")}
 
-# 平台的功能需要哪些介面(doctor 的「工具 × 功能」表;docs/design/tool-agnostic.md 原則 3)。缺任何一個 = 那個功能關掉。
-FEATURES = (
-    ("判斷點(librarian、index、consolidate、週報分析)", ("agent", "auth")),
-    ("信箱交辦(沒人收的信由平台派 agent)", ("agent", "auth")),
-    ("信箱接續(用閒置 session 的 context 回信)", ("agent", "sessions")),
-    ("通道租借(另外要助理模組)", ("stream", "sessions", "agent", "auth")),
-    ("session 裡即時看到信、提醒寫筆記", ("lifecycle",)),
-    ("平台規則寫進專案的規則檔", ("instructions",)),
-    ("memory 缺口、週報的對話統計", ("transcripts",)),
-)
+
+# Which ports each platform feature needs (doctor's "tool x feature" table; docs/design/tool-agnostic.md principle 3).
+# Missing any one = that feature is off.
+def features() -> tuple:
+    return (
+        (_("judgment points (librarian, index, consolidate, weekly report analysis)"), ("agent", "auth")),
+        (_("mailbox tasks (the platform sends an agent for letters nobody picked up)"), ("agent", "auth")),
+        (_("mailbox follow-up (replying with an idle session's context)"), ("agent", "sessions")),
+        (_("channel leasing (also needs the assistant module)"), ("stream", "sessions", "agent", "auth")),
+        (_("letters seen live in the session, reminders to write notes"), ("lifecycle",)),
+        (_("platform rules written into the project's rules file"), ("instructions",)),
+        (_("memory gaps, transcript statistics of the weekly report"), ("transcripts",)),
+    )
+
+
+def __getattr__(name: str):
+    if name == "PORT_LABELS":
+        return port_labels()
+    if name == "FEATURES":
+        return features()
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
 
 
 def feature_table(name: str | None = None) -> list[tuple[str, bool, str]]:
     """(功能, 能不能用, 缺什麼)——缺的用 PORT_LABELS 的名稱。"""
-    have = capabilities(name)
-    return [(f, not (miss := [PORT_LABELS[p] for p in need if p not in have]), "、".join(miss)) for f, need in FEATURES]
+    have, labels = capabilities(name), port_labels()
+    return [(f, not (miss := [labels[p] for p in need if p not in have]), _(", ").join(miss)) for f, need in features()]
 
 
 PORTS = {
@@ -226,7 +244,7 @@ class Unsupported(Exception):
 
 def _module(name: str):
     if name not in RUNTIMES:
-        raise KeyError(f"沒有登記的 runtime:{name}(有:{', '.join(RUNTIMES)})")
+        raise KeyError(_("no registered runtime: {name} (have: {have})", name=name, have=", ".join(RUNTIMES)))
     return importlib.import_module(RUNTIMES[name])
 
 
@@ -262,10 +280,12 @@ def load(name: str | None = None, ports=tuple(PORTS)):
             absent.append(p)
         elif len(have) < len(PORTS[p]):
             missing = [f"{p}.{fn}" for fn in PORTS[p] if fn not in have]
-            raise MissingFunctions(f"runtime {name}({RUNTIMES[name]})缺少:{', '.join(missing)}")
+            raise MissingFunctions(_("runtime {name} ({module}) is missing: {missing}", name=name, module=RUNTIMES[name],
+                                     missing=", ".join(missing)))
     if absent:
-        raise Unsupported(f"執行環境 {name} 沒有{'、'.join(PORT_LABELS.get(p, p) for p in absent)}"
-                          f"(hub.json runtime.default;要這個功能就裝一個有的 coding agent)")
+        labels = port_labels()
+        raise Unsupported(_("runtime {name} has no {missing} (hub.json runtime.default; for this feature install a coding "
+                            "agent that has it)", name=name, missing=_(", ").join(labels.get(p, p) for p in absent)))
     return mod
 
 
@@ -275,11 +295,12 @@ def load_completion(impl: str):
         mod = importlib.import_module(PROVIDERS[impl])
         missing = [fn for fn in PORTS["completion"] if not callable(getattr(mod, fn, None))]
         if missing:
-            raise MissingFunctions(f"provider {impl} 缺少:{', '.join(missing)}")
+            raise MissingFunctions(_("provider {impl} is missing: {missing}", impl=impl, missing=", ".join(missing)))
         return mod
     if impl in RUNTIMES:
         return load(impl, ports=("completion",))
-    raise KeyError(f"沒有這個 completion 實作:{impl}(有:{', '.join([*PROVIDERS, *RUNTIMES])})")
+    raise KeyError(_("no such completion implementation: {impl} (have: {have})", impl=impl,
+                     have=", ".join([*PROVIDERS, *RUNTIMES])))
 
 
 def current_session(env=None) -> str | None:
