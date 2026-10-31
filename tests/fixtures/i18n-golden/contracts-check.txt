@@ -7,7 +7,7 @@ helper-x:副本不在(<HUB>/contracts/no-such-copy.json)
 assistant 讀 helper-none,但 helper 的登錄沒有 provides 它
 assistant 讀 helper-x,但 helper 的登錄沒有 provides 它
 === live
-匯流排事件 ev-1:$.type:'x' 不在 ['message', 'message.delivered', 'message.done', 'job.failed', 'merge.done', 'merge.failed', 'session.report', 'config.applied', 'record']
+匯流排事件 ev-1:$.payload:缺 type
 handoffs --json 不是 JSON(exit 3)
 === llm_lint
 LLM 呼叫:bin/x.py:3 calls the CLI directly

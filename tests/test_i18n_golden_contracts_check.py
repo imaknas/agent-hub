@@ -55,7 +55,7 @@ class Golden(unittest.TestCase):
         db = tmp / "bus.db"
         c = sqlite3.connect(db)
         c.execute("CREATE TABLE events (seq INTEGER, id TEXT, ts TEXT, type TEXT, source TEXT, payload TEXT)")
-        c.execute("INSERT INTO events VALUES (1, 'ev-1', 'not a time', 'x', 's', '{}')")
+        c.execute("INSERT INTO events VALUES (1, 'ev-1', 'not a time', 'message', 's', '{}')")   # not the type enum: adding a bus event type must not change this golden
         c.commit()
         c.close()
         cli = tmp / "a" / "b" / "c" / "cli"
