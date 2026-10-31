@@ -188,10 +188,12 @@ def stage() -> dict:
         # git in the project's repo runs as the project (project_git.py: sandboxed when it is); the bundle and the diff
         # come back on stdout, as data
         with (d / "unpushed.bundle").open("wb") as fh:
-            r = project_git.job(name, ws, "bundle-unpushed", ws, stdout=fh, stderr=subprocess.PIPE)
-        diff = project_git.job(name, ws, "diff-head", ws, capture_output=True) if r.returncode != EX_SANDBOX else r
+            r = project_git.job(name, ws, "bundle-unpushed", ws, out=fh, timeout=project_git.BUNDLE_TIMEOUT_S,
+                                cap=project_git.MAX_BUNDLE)
+        diff = project_git.job(name, ws, "diff-head", ws, timeout=project_git.BUNDLE_TIMEOUT_S, cap=DIFF_LIMIT) \
+            if r.returncode != EX_SANDBOX else r
         if EX_SANDBOX in (r.returncode, diff.returncode):
-            why = (diff.stderr or b"").decode(errors="replace").strip()[-200:]
+            why = diff.stderr.strip()[-200:]
             manifest.setdefault("skipped", []).append({"project": name, "why": why})
             say(_("{project}: its unpushed and uncommitted work is not in this backup (its git runs only as the "
                   "project, and that was refused: {why})", project=name, why=why))
@@ -199,7 +201,7 @@ def stage() -> dict:
             got.append("unpushed.bundle")
         else:
             (d / "unpushed.bundle").unlink()
-        if diff.returncode == 0 and diff.stdout and len(diff.stdout) <= DIFF_LIMIT:
+        if diff.returncode == 0 and diff.stdout:   # over DIFF_LIMIT the job was stopped (TOO_BIG): not kept
             (d / "uncommitted.diff").write_bytes(diff.stdout)
             got.append("uncommitted.diff")
         for f in workspace_env_files(ws):

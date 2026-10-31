@@ -56,13 +56,15 @@ export AGENT_HUB_OFFLINE="$OFFLINE"
   [ -d "$mem" ] || continue
   (
     cd "$mem" || exit 1
-    # a sandboxed project's sync runs as the project (git-sync-memory.sh hands it to project_git.py), which bundles
-    # everything the bare repo lacks: no catch-up push from here (that would be git in its repo with the user's
-    # authority)
+    # a sandboxed project's .git is its own to write: no git runs here at all (not even with-lock's rev-parse, which a
+    # FIFO named by its config can hang). Its job commits, merges and bundles everything the bare repo lacks, taking
+    # the lock itself; the platform fetches the bundle (project_git.py)
     "$HUB/bin/py" "$HUB/bin/project_git.py" sandboxed "$(pwd -P)"
     case $? in
-      0) sandboxed=1 ;;
-      3) sandboxed="" ;;
+      0) "$HUB/bin/py" "$HUB/bin/project_git.py" sync-memory --lock "$(pwd -P)" >>"$LOG" 2>&1 \
+           || log "$(hub_msg "{name}: git-sync-memory failed" name="$name")"
+         exit 0 ;;
+      3) ;;
       *) log "$(hub_msg "{name}: could not tell whether it is sandboxed; skipped" name="$name")"; exit 0 ;;
     esac
     before=$(git rev-parse HEAD)
@@ -75,7 +77,7 @@ export AGENT_HUB_OFFLINE="$OFFLINE"
         log "$(hub_msg "{name}: committed and pushed new memory" name="$name")"
       fi
     fi
-    if [ -z "$OFFLINE" ] && [ -z "$sandboxed" ] && [ -n "$(git rev-list '@{u}..HEAD' 2>/dev/null)" ]; then
+    if [ -z "$OFFLINE" ] && [ -n "$(git rev-list '@{u}..HEAD' 2>/dev/null)" ]; then
       "$HUB/bin/with-lock.sh" "$HUB/bin/git-safe-push.sh" >>"$LOG" 2>&1 \
         && log "$(hub_msg "{name}: pushed the commits that had not gone out" name="$name")" \
         || log "$(hub_msg "{name}: the catch-up push failed" name="$name")"

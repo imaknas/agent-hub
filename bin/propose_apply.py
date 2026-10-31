@@ -46,10 +46,10 @@ PY = sys.executable
 def add_worktree(project: str, repo: pathlib.Path, path: pathlib.Path) -> str:
     """A detached worktree of repo's HEAD at path, made as the project (its .git runs hooks and filters: project_git.py);
     returns its HEAD."""
-    r = project_git.job(project, repo, "worktree-add", repo, path, capture_output=True, text=True)
+    r = project_git.job(project, repo, "worktree-add", repo, path, timeout=project_git.BUNDLE_TIMEOUT_S)
     if r.returncode != 0:
         raise RuntimeError(f"git worktree add: {r.stderr.strip()[-200:]}")
-    return r.stdout.strip()
+    return r.stdout.decode(errors="replace").strip()
 
 
 def changed(project: str, repo: pathlib.Path, base: str) -> list[tuple[str, bool]]:
@@ -110,7 +110,7 @@ def run(project: str, ws: pathlib.Path, point: str, prompt: str, allow: list[str
                 "refused": refused, "error": "" if ok else (res.get("llm_error") or r.stderr.strip()[-300:])}
     finally:
         for repo, path in reversed(added):
-            project_git.job(project, repo, "worktree-remove", repo, path, "--force", capture_output=True)
+            project_git.job(project, repo, "worktree-remove", repo, path, "--force")
         shutil.rmtree(tmp, ignore_errors=True)
 
 

@@ -46,9 +46,10 @@ class Golden(unittest.TestCase):
         manual = {"proj": {"worktrees": [wt(tmp / "a", "feat-a", age=1.5), wt(tmp / "b", "feat-b", merged=False),
                                          wt(tmp / "c", "feat-c", clean=False)]}}
         ok = subprocess.CompletedProcess([], 0, "", "")
+        done = worktrees.project_git.Result(0, b"", "")
         with mock.patch.dict(os.environ, ZH), mock.patch.object(worktrees, "overview", lambda: manual), \
                 mock.patch.object(hubconf, "workspace", lambda name: repo), \
-                mock.patch.object(worktrees.subprocess, "run", lambda *a, **k: ok):
+                mock.patch.object(worktrees.project_git, "job", lambda *a, **k: done):
             for yes in (False, True):
                 buf = io.StringIO()
                 with contextlib.redirect_stdout(buf):
@@ -65,13 +66,13 @@ class Golden(unittest.TestCase):
                                        wt(tmp / "broken", "old-fail", age=20.0), wt(deps, "idle", age=3.0)]}}
         unknown = {str(tmp / "secret"): [".env", "build", "dist", "more"]}
 
-        def run(argv, **kw):
-            if argv[-1] == str(tmp / "broken"):
-                return subprocess.CompletedProcess(argv, 1, "", "fatal: cannot remove\n")
-            if "remove-dep" in argv:   # the project's job writes the marker into its git dir
-                with open(gitdir / argv[-2], "a") as fh:
-                    fh.write(argv[-1] + "\n")
-            return ok
+        def job(project, cwd, op, *args, **kw):   # the project's job (project_git.py), canned
+            if op == "worktree-remove" and str(args[-1]) == str(tmp / "broken"):
+                return worktrees.project_git.Result(1, b"", "fatal: cannot remove\n")
+            if op == "remove-dep":   # it writes the marker into the worktree's git dir
+                with open(gitdir / args[-2], "a") as fh:
+                    fh.write(args[-1] + "\n")
+            return done
 
         with mock.patch.dict(os.environ, ZH), mock.patch.object(worktrees, "overview", lambda: auto), \
                 mock.patch.object(hubconf, "workspace", lambda name: repo), \
@@ -80,7 +81,8 @@ class Golden(unittest.TestCase):
                 mock.patch.object(worktrees, "_transcript_age_days", lambda path: None), \
                 mock.patch.object(worktrees, "_unknown_ignored", lambda p, project: unknown.get(str(p), [])), \
                 mock.patch.object(worktrees, "_size_mb", lambda p: 12.5), \
-                mock.patch.object(worktrees.subprocess, "run", run):
+                mock.patch.object(worktrees.subprocess, "run", lambda *a, **k: ok), \
+                mock.patch.object(worktrees.project_git, "job", job):
             for dry in (True, False):
                 r = worktrees.auto_prune(dry_run=dry)
                 for k in ("deps", "removed", "skipped"):

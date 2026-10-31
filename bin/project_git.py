@@ -1,12 +1,16 @@
 #!/bin/sh -c exec${IFS}"${0%/*}/py"${IFS}"$0"${IFS}"$@"
 """The platform's git work in project repos (docs/design/projects-and-repos.md section 4, "Platform git in project
 repos"): the platform runs git only in repos it owns (the memory bare repos, the librarian's memory copies, its own
-checkout); in a project's repo every git command runs as that project, through project-git-job.py started by
-isolation.run_as (sandboxed when the project is). What comes back is data: JSON parsed here with types checked, or a
-bundle fetched into a repo the platform owns with transfer.fsckObjects on. Nothing derived from it is used for a write
-outside the project's own job.
+checkout); in a project's repo every git command runs as that project, through project-git-job.py started with
+isolation.as_project (sandboxed when the project is). What comes back is data on its stdout (never a file in the
+project's folder, which could be a symlink or a FIFO): JSON parsed here with types checked, or a bundle fetched into a
+repo the platform owns with transfer.fsckObjects on. Every job has a timeout (its whole process group is killed: a
+`[include] path=<fifo>` in the repo's config hangs any git) and an output cap. Nothing derived from the output is used
+for a write outside the project's own job.
 
-  job(project, cwd, op, *args, **kw) → CompletedProcess     one op of project-git-job.py as the project
+  job(project, cwd, op, *args, input, out, timeout, cap) → Result
+                                                            one op of project-git-job.py as the project: returncode,
+                                                            stdout (bytes; streamed into `out` when given), stderr
   data(project, cwd, op, *args) → object                    its JSON output; raises Unavailable (sandbox refused,
                                                             git failed, malformed output)
   fetch_bundle(bare, bundle, branch) → None | why not       fast-forward <bare>'s branch to the bundle's HEAD
@@ -17,15 +21,22 @@ outside the project's own job.
 CLI (git-sync-memory.sh, sync-all-memory.sh):
   project_git.py sandboxed <dir>      exit 0 when <dir> is the .agent-memory of a sandboxed project, 3 when not (any
                                       other exit: it couldn't tell)
-  project_git.py sync-memory <dir>    sync_memory for that project (exit 1 with the reason on stderr)
+  project_git.py sync-memory [--lock] <dir>
+                                      sync_memory for that project (exit 1 with the reason on stderr); --lock: the job
+                                      takes with-lock.sh's lock (a caller under with-lock.sh holds it already)
 """
 from __future__ import annotations
 
 import json
+import os
 import pathlib
+import selectors
+import signal
 import subprocess
 import sys
 import tempfile
+import time
+from typing import NamedTuple
 
 BIN = pathlib.Path(__file__).resolve().parent
 sys.path.insert(0, str(BIN))
@@ -34,7 +45,11 @@ import isolation  # noqa: E402
 import policy  # noqa: E402
 
 JOB = BIN / "project-git-job.py"
-MAX_JSON = 8 << 20
+MAX_JSON = 8 << 20          # facts
+MAX_BUNDLE = 4 << 30        # a bundle of unpushed work or memory
+TIMEOUT_S = 120
+BUNDLE_TIMEOUT_S = 1800
+TIMED_OUT, TOO_BIG = 124, 125
 INCOMING = "refs/agent-hub/incoming"
 NOT_SANDBOXED = 3
 EX_SANDBOX = 78   # sandboxed-run refused (no sandbox on this machine): the work is not done, never done unsandboxed
@@ -44,18 +59,71 @@ class Unavailable(Exception):
     pass
 
 
-def job(project: str | None, cwd, op: str, *args, **kw) -> subprocess.CompletedProcess:
-    return isolation.run_as(project, cwd, [*hubconf.launch(JOB), op, *map(str, args)], **kw)
+class Result(NamedTuple):
+    returncode: int
+    stdout: bytes
+    stderr: str
+
+
+def job(project: str | None, cwd, op: str, *args, input: str | None = None, out=None, timeout: float = TIMEOUT_S,
+        cap: int | None = None) -> Result:
+    """Run one op as the project. Over `timeout` seconds or `cap` bytes of stdout (default MAX_JSON), the whole process
+    group is killed (returncode TIMED_OUT / TOO_BIG); stdout goes into the binary file `out` when given."""
+    cap = MAX_JSON if cap is None else cap
+    argv = isolation.as_project(project, cwd, [*hubconf.launch(JOB), op, *map(str, args)])
+    p = subprocess.Popen(argv, cwd=cwd, stdin=subprocess.PIPE if input is not None else subprocess.DEVNULL,
+                         stdout=subprocess.PIPE, stderr=subprocess.PIPE, start_new_session=True)
+    if input is not None:
+        p.stdin.write(input.encode())
+        p.stdin.close()
+    sel = selectors.DefaultSelector()
+    sel.register(p.stdout, selectors.EVENT_READ, "out")
+    sel.register(p.stderr, selectors.EVENT_READ, "err")
+    got, err, n, why = [], bytearray(), 0, None
+    deadline = time.monotonic() + timeout
+    while sel.get_map() and why is None:
+        left = deadline - time.monotonic()
+        if left <= 0:
+            why = (TIMED_OUT, f"timed out after {timeout:g}s")
+            break
+        for key, _mask in sel.select(left):
+            chunk = os.read(key.fileobj.fileno(), 1 << 16)
+            if not chunk:
+                sel.unregister(key.fileobj)
+            elif key.data == "err":
+                err += chunk[:max(0, 65536 - len(err))]
+            else:
+                n += len(chunk)
+                if n > cap:
+                    why = (TOO_BIG, f"output over {cap} bytes")
+                    break
+                if out is not None:
+                    out.write(chunk)
+                else:
+                    got.append(chunk)
+    if why is None:
+        try:   # stdout closed is not the end: a process left behind may still run
+            rc = p.wait(timeout=max(0.0, deadline - time.monotonic()))
+        except subprocess.TimeoutExpired:
+            why = (TIMED_OUT, f"timed out after {timeout:g}s")
+    if why:
+        try:
+            os.killpg(p.pid, signal.SIGKILL)
+        except OSError:
+            pass
+        rc = p.wait()
+    for fo in (p.stdout, p.stderr):
+        fo.close()
+    sel.close()
+    return Result(why[0] if why else rc, b"".join(got), why[1] if why else err.decode(errors="replace"))
 
 
 def data(project: str | None, cwd, op: str, *args):
-    r = job(project, cwd, op, *args, capture_output=True, text=True)
+    r = job(project, cwd, op, *args)
     if r.returncode == EX_SANDBOX:
         raise Unavailable(f"{project}: the sandbox refused ({r.stderr.strip()[-200:]})")
     if r.returncode != 0:
         raise Unavailable(f"{project}: {op} failed ({r.stderr.strip()[-200:]})")
-    if len(r.stdout) > MAX_JSON:
-        raise Unavailable(f"{project}: {op} output too large")
     try:
         return json.loads(r.stdout)
     except ValueError:
@@ -98,15 +166,17 @@ def memory_project(d) -> tuple[str, dict] | None:
     return None
 
 
-def sync_memory(name: str, doc: dict, memdir, branch: str = "agent-memory") -> str | None:
+def sync_memory(name: str, doc: dict, memdir, branch: str = "agent-memory", lock: bool = False) -> str | None:
+    """lock: the job takes with-lock's lock itself (the hourly sync; a hook's call already holds it)."""
     bare = policy.memory_bare(name, doc)
     if not (bare / "objects").is_dir():
         return f"{name}: no local memory bare repo at {bare}"
     with tempfile.TemporaryDirectory(prefix="hub-memory-") as tmp:
         bundle = pathlib.Path(tmp) / "memory.bundle"
         with bundle.open("wb") as fh:
-            r = job(name, memdir, "memory-sync", memdir, bare, branch, stdout=fh, stderr=subprocess.PIPE)
-        err = r.stderr.decode(errors="replace").strip()[-300:]
+            r = job(name, memdir, "memory-sync", memdir, bare, branch, *(["--lock"] if lock else []), out=fh,
+                    timeout=BUNDLE_TIMEOUT_S, cap=MAX_BUNDLE)
+        err = r.stderr.strip()[-300:]
         if r.returncode == EX_SANDBOX:
             return f"{name}: the sandbox refused; memory not synced ({err})"
         if r.returncode != 0:
@@ -118,8 +188,10 @@ def sync_memory(name: str, doc: dict, memdir, branch: str = "agent-memory") -> s
 
 
 def main(argv: list[str]) -> int:
+    lock = "--lock" in argv
+    argv = [a for a in argv if a != "--lock"]
     if len(argv) != 2 or argv[0] not in ("sandboxed", "sync-memory"):
-        print("usage: project_git.py sandboxed|sync-memory <dir>", file=sys.stderr)
+        print("usage: project_git.py sandboxed <dir> | sync-memory [--lock] <dir>", file=sys.stderr)
         return 2
     found = memory_project(argv[1])
     if argv[0] == "sandboxed":
@@ -127,7 +199,7 @@ def main(argv: list[str]) -> int:
     if not found:
         print(f"{argv[1]} is no registered project's .agent-memory", file=sys.stderr)
         return 1
-    why = sync_memory(*found, argv[1])
+    why = sync_memory(*found, argv[1], lock=lock)
     if why:
         print(why, file=sys.stderr)
     return 1 if why else 0

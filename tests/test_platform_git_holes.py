@@ -150,6 +150,31 @@ class StatusPage(Base):
         self.assertEqual(self.wrapped, [])
 
 
+class Bounded(Base):
+    """Round 6: `[include] path=<fifo>` hangs any git in the repo, even rev-parse; a job's output is the project's to
+    choose. Every job has a timeout (its process group killed) and an output cap."""
+
+    def test_a_fifo_in_the_config_times_out_instead_of_hanging(self):
+        import project_git
+        r = self.repo("open", sandbox=False)
+        fifo = self.tmp / "fifo"
+        os.mkfifo(fifo)
+        git(r, "config", "include.path", str(fifo))
+        t = __import__("time").monotonic()
+        res = project_git.job("open", r, "worktrees", r, 7, timeout=2)
+        self.assertEqual(res.returncode, project_git.TIMED_OUT, res.stderr)
+        self.assertLess(__import__("time").monotonic() - t, 30)
+
+    def test_output_over_the_cap_is_cut_off(self):
+        import project_git
+        r = self.repo("open", sandbox=False)
+        res = project_git.job("open", r, "worktrees", r, 7, cap=10)
+        self.assertEqual(res.returncode, project_git.TOO_BIG)
+        with self.assertRaises(project_git.Unavailable):
+            with mock.patch.object(project_git, "MAX_JSON", 10):
+                project_git.data("open", r, "worktrees", r, 7)
+
+
 class MemoryGaps(Base):
     def test_note_count_comes_from_the_platforms_bare_repo(self):
         gaps = load("check_memory_gaps_holes", BIN / "check-memory-gaps.py")

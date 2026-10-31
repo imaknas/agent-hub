@@ -196,12 +196,12 @@ def gate(name: str, doc: dict, report: bool, quiet: bool = False) -> list[tuple[
                 continue
             acts.append(("add", hook))
             if not report:
-                project_git.job(name, ws, "hook-write", ws, hook, input="#!/bin/sh\n" + gate_hook(), text=True)
+                project_git.job(name, ws, "hook-write", ws, hook, input="#!/bin/sh\n" + gate_hook())
                 say(_("{project}: installed {hook} (gate strict)", project=name, hook=hook))
         elif want and text != "#!/bin/sh\n" + gate_hook():   # the platform's hook from an older version (or language)
             acts.append(("update", hook))
             if not report:
-                project_git.job(name, ws, "hook-write", ws, hook, input="#!/bin/sh\n" + gate_hook(), text=True)
+                project_git.job(name, ws, "hook-write", ws, hook, input="#!/bin/sh\n" + gate_hook())
                 say(_("{project}: updated {hook} (gate strict)", project=name, hook=hook))
         elif not want and mine:
             acts.append(("remove", hook))

@@ -6,7 +6,7 @@ A repo's `.git` (config, hooks, attributes, `objects/info/alternates`) is writab
 reads what it names: `git log` runs the repo's `gpg.program`, `status`/`add` its fsmonitor and clean filters, `diff` its
 `diff.external`, `worktree add`/`remove` its hooks and filters, and a fetch or push from the repo serves whatever its
 `alternates` point at with the reader's authority. So the platform never runs git in a project's repo itself:
-isolation.run_as() starts this script, through bin/sandboxed-run for a project with enforce.sandbox (a no-op for the
+project_git.job() starts this script (isolation.as_project), through bin/sandboxed-run for a project with enforce.sandbox (a no-op for the
 others: they have the user's authority already), and what the platform needs back comes as data on stdout (JSON facts,
 or a bundle) that it parses or fetches into a repo it owns (project_git.py).
 
@@ -32,8 +32,10 @@ readable. Nothing here decides anything for the platform; the caller treats the 
   hook-remove <repo> <hook>
   bundle-unpushed <ws>                    stdout: a bundle of the branches not on any remote (exit 3: nothing)
   diff-head <ws>                          stdout: git diff HEAD --binary
-  memory-sync <memdir> <bare> <branch>    commit memory/ and STATE.md, merge what <bare>'s <branch> has, then stdout: a
-                                          bundle of HEAD that <bare> lacks (empty: nothing to push)
+  memory-sync <memdir> <bare> <branch> [--lock]
+                                          commit memory/ and STATE.md, merge what <bare>'s <branch> has, then stdout: a
+                                          bundle of HEAD that <bare> lacks (empty: nothing to push); --lock takes
+                                          with-lock.sh's lock
 """
 from __future__ import annotations
 
@@ -43,11 +45,13 @@ import pathlib
 import shutil
 import subprocess
 import sys
+import time
 
 # memory notes are not project code: the project's own git hooks don't run on them (git-sync-memory.sh says why)
 NO_HOOKS = {"GIT_CONFIG_COUNT": "1", "GIT_CONFIG_KEY_0": "core.hooksPath", "GIT_CONFIG_VALUE_0": "/dev/null"}
 MEMORY_PATHS = ("memory", "STATE.md")
 NOTHING = 3
+LOCK_WAIT_S = 30
 
 
 def git(cwd, *args, check=False, env=None, text=True, **kw) -> subprocess.CompletedProcess:
@@ -202,12 +206,32 @@ def op_diff_head(ws: str) -> int:
     return git(ws, "diff", "HEAD", "--binary", text=False, stdout=sys.stdout.buffer).returncode
 
 
-def op_memory_sync(memdir: str, bare: str, branch: str) -> int:
+def op_memory_sync(memdir: str, bare: str, branch: str, *flags: str) -> int:
     """git-sync-memory.sh's commit, then what git-safe-push.sh's pull did (merge the bare repo's branch), then a bundle
-    of what the bare repo lacks. The caller holds with-lock's lock."""
+    of what the bare repo lacks. --lock: take with-lock.sh's lock (the same directory in the git dir); without it the
+    caller holds it."""
     if out(memdir, "rev-parse", "--show-toplevel").strip() != str(pathlib.Path(memdir).resolve()):
         sys.stderr.write(f"{memdir} is not a checkout of its own\n")
         return 1
+    if "--lock" not in flags:
+        return memory_sync(memdir, bare, branch)
+    lock = pathlib.Path(out(memdir, "rev-parse", "--absolute-git-dir").strip()) / "agent-hub-op.lock"
+    for _ in range(LOCK_WAIT_S):
+        try:
+            lock.mkdir()
+            break
+        except FileExistsError:
+            time.sleep(1)
+    else:
+        sys.stderr.write(f"still no lock after {LOCK_WAIT_S}s ({lock}); not synced this time\n")
+        return 1
+    try:
+        return memory_sync(memdir, bare, branch)
+    finally:
+        lock.rmdir()
+
+
+def memory_sync(memdir: str, bare: str, branch: str) -> int:
     for p in MEMORY_PATHS:
         if os.path.lexists(pathlib.Path(memdir) / p) or git(memdir, "ls-files", "--error-unmatch", "--", p).returncode == 0:
             git(memdir, "add", "-A", "--", p, env=NO_HOOKS)

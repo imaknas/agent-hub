@@ -134,7 +134,7 @@ def prune(project: str | None, yes: bool) -> int:
                       else _("Can delete: {project} {branch} ({path}, untouched for {days} {days:day|days})", **kw))
                 if yes:
                     project_git.job(as_project(name), repo, "worktree-remove", repo, w["path"])
-                    project_git.job(as_project(name), repo, "branch-delete", repo, w["branch"], capture_output=True)
+                    project_git.job(as_project(name), repo, "branch-delete", repo, w["branch"])
             elif not w["merged"]:
                 print(_("Kept (not merged yet): {project} {branch}", project=name, branch=w['branch']))
     if n and not yes:
@@ -211,8 +211,7 @@ def auto_prune(dry_run: bool) -> dict:
                 else:
                     mb = _size_mb(p)
                     if not dry_run:
-                        r = project_git.job(as_project(name), repo, "worktree-remove", repo, p, capture_output=True,
-                                            text=True)
+                        r = project_git.job(as_project(name), repo, "worktree-remove", repo, p)
                         if r.returncode != 0:
                             res["skipped"].append(_("{label}: git worktree remove failed: {err}", label=label,
                                                     err=r.stderr.strip()[:200]))
@@ -232,8 +231,8 @@ def auto_prune(dry_run: bool) -> dict:
                     # deleted, and the marker written into its git dir, as the project (a symlink planted there only
                     # reaches what the project can write itself)
                     line = _("{date} {dep} → rebuild: {cmd}", date=res['at'][:10], dep=dep, cmd=REBUILD[dep])
-                    r = project_git.job(as_project(name), p, "remove-dep", p, dep, MARKER, line, capture_output=True,
-                                        text=True)
+                    r = project_git.job(as_project(name), p, "remove-dep", p, dep, MARKER, line,
+                                        timeout=project_git.BUNDLE_TIMEOUT_S)
                     if r.returncode != 0:
                         res["skipped"].append(_("{label}: removing {dep} failed: {err}", label=label, dep=dep,
                                                 err=r.stderr.strip()[:200]))
