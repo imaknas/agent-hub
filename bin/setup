@@ -1,41 +1,43 @@
 #!/usr/bin/env bash
-# 新機器第一步(docs/design/new-user.md 2):檢查平台要的指令都在,再建平台的 Python(bin/setup-python)。
-# 缺什麼就印怎麼裝,**不自己裝**(用哪個套件管理器是使用者的事)。重跑安全。
+# First step on a new machine (docs/design/new-user.md 2): check that the commands the platform needs are there,
+# then build the platform's Python (bin/setup-python).
+# Whatever is missing, it prints how to install it and **does not install anything itself** (which package manager
+# to use is the user's call). Safe to rerun.
 #
-#   bin/setup            檢查 + 建平台的 Python
-#   bin/setup --check    只檢查,不建任何東西(缺必要的就 exit 1)
+#   bin/setup            check + build the platform's Python
+#   bin/setup --check    check only, build nothing (exit 1 when something required is missing)
 #
-# 下一步:agenthub init(setup 會用 install-cli 把 agenthub 放上 PATH)
+# Next step: agenthub init (setup puts agenthub on the PATH with install-cli)
 set -uo pipefail
 HUB="${AGENT_HUB_ROOT:-$(cd "$(dirname "$0")/.." && pwd)}"
 check_only=""; [ "${1:-}" = "--check" ] && check_only=1
 
 missing=0
-need() {  # need <指令> <必要|選配> <用來做什麼> <怎麼裝>
+need() {  # need <command> <required|optional> <what it is for> <how to install>
   if command -v "$1" >/dev/null 2>&1; then
     printf '  ✓ %-8s %s\n' "$1" "$3"
-  elif [ "$2" = 必要 ]; then
-    printf '  ✗ %-8s %s——沒有。%s\n' "$1" "$3" "$4"; missing=1
+  elif [ "$2" = required ]; then
+    printf '  ✗ %-8s %s -- missing. %s\n' "$1" "$3" "$4"; missing=1
   else
-    printf '  - %-8s %s(選配,沒有就不能用這個功能)。%s\n' "$1" "$3" "$4"
+    printf '  - %-8s %s (optional; without it this feature cannot be used). %s\n' "$1" "$3" "$4"
   fi
 }
 
-echo "agent-hub:檢查需要的指令"
-[ "$(uname -s)" = Darwin ] || echo "  ⚠️ 不是 macOS:平台跑得起來,但排程跟背景服務還沒接上(launchd 以外的服務管理器之後做;doctor 會說)"
-need git     必要 "版本控制、memory 同步"            "macOS:xcode-select --install"
-need jq      必要 "librarian 讀 JSON"               "brew install jq"
-need uv      必要 "建平台的 Python(bin/setup-python)" "https://docs.astral.sh/uv/"
-[ "$(uname -s)" = Darwin ] && need plutil 必要 "shell 腳本讀 hub.json" "macOS 內建"   # 其他系統用 jq
-need claude  選配 "coding agent(Claude Code;沒有的話 hub.json runtime.default 設 none,agent 的功能關掉)" "https://claude.com/claude-code,裝好後 claude 登入一次"
-need gh      選配 "onboard 時建 GitHub repo"         "brew install gh && gh auth login"
-need restic  選配 "雲端備份(backup 模組)"           "brew install restic"
+echo "agent-hub: checking the commands it needs"
+[ "$(uname -s)" = Darwin ] || echo "  ⚠️ not macOS: the platform runs, but scheduling and background services are not wired up yet (service managers other than launchd come later; doctor says so)"
+need git     required "version control, memory sync"                "macOS: xcode-select --install"
+need jq      required "the librarian reads JSON"                    "brew install jq"
+need uv      required "builds the platform's Python (bin/setup-python)" "https://docs.astral.sh/uv/"
+[ "$(uname -s)" = Darwin ] && need plutil required "shell scripts read hub.json" "built into macOS"   # other systems use jq
+need claude  optional "coding agent (Claude Code; without it set hub.json runtime.default to none and the agent features are off)" "https://claude.com/claude-code, then log in to claude once"
+need gh      optional "creates the GitHub repo when onboarding"     "brew install gh && gh auth login"
+need restic  optional "cloud backup (backup module)"                "brew install restic"
 
-[ "$missing" = 0 ] || { echo "先把 ✗ 的裝好再跑一次 bin/setup"; exit 1; }
+[ "$missing" = 0 ] || { echo "Install what is marked ✗ first, then run bin/setup again"; exit 1; }
 if [ -n "$check_only" ]; then
   "$HUB/bin/setup-python" --check
   exit $?
 fi
 "$HUB/bin/setup-python" || exit 1
-"$HUB/bin/py" "$HUB/bin/agenthub" install-cli || echo "  (agenthub 沒放上 PATH:之後用 bin/py bin/agenthub …)"
-echo "下一步:agenthub init"
+"$HUB/bin/py" "$HUB/bin/agenthub" install-cli || echo "  (agenthub is not on the PATH: use bin/py bin/agenthub … from now on)"
+echo "Next step: agenthub init"

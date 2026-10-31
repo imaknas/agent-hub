@@ -1,18 +1,25 @@
 #!/bin/sh -c exec${IFS}"${0%/*}/py"${IFS}"$0"${IFS}"$@"
-"""登錄宣告的憑證(projects/<p>.yaml 的 secrets:)在不在、有沒有被備份、快不快到期(平台 job agent-hub/secrets,每天)。
+"""Whether the secrets declared in the registry (secrets: in projects/<p>.yaml) exist, are backed up, and are close to
+expiring (platform job agent-hub/secrets, daily).
 
-憑證的分工(2026-10-24 Knas 決定):機器層級的(claude、Discord、B2、備份密碼…)平台管,宣告在 agent-hub 的登錄;
-專案自己服務的金鑰專案管,宣告在自己的登錄(manifest.update);到外部服務發新的、撤銷、換掉是 Knas 做。
-登錄只寫名稱、位置、到期,**不寫值**;這支也不讀值、不印值:
-  - 在不在:檔案存在、不是空的;有 env_key 的(.env 裡的一行)只看那個 key 有沒有、等號後面是不是空的
-  - 備份:backup 沒寫 false 的,照 backup.covers()(跟每晚的備份同一套規則)
-  - 到期:expires 日期,或檔案修改時間 + max_age_days;剩不到 warn_days(預設 14)天就報
-  - 權限:群組/其他人讀得到只印出來,不算問題
-  - 沒宣告的:各專案的 runtime / workspace(跟平台的 .secrets/)裡檔名像憑證、卻沒宣告的檔案,只列出來提醒
-    (不算問題,也不讀內容)——要嘛宣告,要嘛確認它不是憑證
-有問題就發 Discord(同一組只發一次,解決後發一次恢復)、exit 1(排程器記失敗,狀態頁紅)。
+Who owns which secrets (decided by the owner on 2026-10-24): machine-level ones (claude, Discord, B2, the backup
+password…) are the platform's, declared in agent-hub's registry entry; keys for a project's own services are the
+project's, declared in its own registry entry (manifest.update); issuing new ones at the external service, revoking
+and replacing them is done by the owner.
+The registry holds only names, locations and expiry, **never values**; this script neither reads nor prints values:
+  - exists: the file exists and is not empty; with env_key (one line in a .env) only whether that key is there and
+    the part after the equals sign is not empty
+  - backup: unless backup is false, per backup.covers() (the same rules as the nightly backup)
+  - expiry: the expires date, or the file's mtime + max_age_days; reported when fewer than warn_days (default 14)
+    days remain
+  - permissions: readable by group/others is only printed, not a problem
+  - undeclared: files in each project's runtime / workspace (and the platform's .secrets/) whose names look like
+    credentials but are not declared are only listed as a reminder (not a problem, content not read) -- either
+    declare them or confirm they are not credentials
+On problems: Discord (once per set, once more on recovery), exit 1 (the scheduler records a failure, the status page
+turns red).
 
-用法:check-secrets.py [專案...]
+Usage: check-secrets.py [project...]
 """
 from __future__ import annotations
 
@@ -40,7 +47,8 @@ SKIP_DIRS = {"node_modules", ".venv", "venv", ".git", "dist", "build", "__pycach
 
 
 def locate(project: str, doc: dict, raw: str) -> pathlib.Path | None:
-    """平台自己(含模組)的路徑照 hubconf.path 解(憑證在 secrets_dir(),搬家後不在 hub 根目錄);專案的相對 runtime/workspace。"""
+    """The platform's own paths (modules included) are resolved by hubconf.path (secrets are in secrets_dir(), not in
+    the hub root after the move); a project's are relative to its runtime/workspace."""
     if raw.startswith(("~", "/")) or project == hubconf.hub_project() or doc.get("type") == "module":
         return hubconf.path(raw)
     d = registry.dirs(doc)
@@ -49,7 +57,7 @@ def locate(project: str, doc: dict, raw: str) -> pathlib.Path | None:
 
 
 def has_key(path: pathlib.Path, key: str) -> bool:
-    """.env 裡有沒有 `KEY=<非空>`。只比對 key,值不留、不印。"""
+    """Whether the .env has `KEY=<non-empty>`. Only the key is compared; the value is neither kept nor printed."""
     for line in path.read_text(errors="replace").splitlines():
         k, sep, v = line.strip().removeprefix("export ").partition("=")
         if sep and k.strip() == key:
@@ -58,7 +66,7 @@ def has_key(path: pathlib.Path, key: str) -> bool:
 
 
 def check(project: str, doc: dict, sec: dict, today: datetime.date) -> tuple[list[str], list[str]]:
-    """(問題, 備註)"""
+    """(problems, notes)"""
     name = f"{project}:{sec['name']}"
     path = locate(project, doc, sec["path"])
     how = _(" — {rotate}", rotate=sec["rotate"]) if sec.get("rotate") else ""
@@ -98,7 +106,8 @@ def check(project: str, doc: dict, sec: dict, today: datetime.date) -> tuple[lis
 
 
 def undeclared(project: str, doc: dict, declared: set[pathlib.Path]) -> list[pathlib.Path]:
-    """runtime / workspace 底下(三層內)檔名像憑證、沒宣告的檔案。平台自己只看 .secrets/。"""
+    """Files under runtime / workspace (within three levels) whose names look like credentials and are not declared. For
+    the platform itself only .secrets/ is looked at."""
     d = registry.dirs(doc)
     roots = [hubconf.secrets_dir()] if project == hubconf.hub_project() else \
         [r for r in (d["runtime"], d["workspace"]) if r]
@@ -118,21 +127,24 @@ def undeclared(project: str, doc: dict, declared: set[pathlib.Path]) -> list[pat
 
 def main(argv: list[str]) -> int:
     today = datetime.date.today()
-    index = registry.refresh()  # 剛改的登錄也算,不等排程器的 tick
+    index = registry.refresh()  # a registry change just made counts too, without waiting for the scheduler's tick
     projects = index["projects"]
-    # 開著的模組的憑證是平台的(例:claude 模組的 headless token);沒開的模組不檢查——沒用 Claude 的人不會被要 Claude 的 token
+    # Enabled modules' secrets are the platform's (e.g. the claude module's headless token); disabled modules are not
+    # checked -- someone who does not use Claude is not asked for a Claude token
     modules = {n: d for n, d in (index.get("modules") or {}).items() if d.get("secrets")}
     module_paths = {p.resolve() for d in modules.values() for s in d["secrets"] if (p := locate(d["name"], d, s["path"]))}
     problems, count = [], 0
     hub = hubconf.hub_project()
     if hub in projects:
-        # hub.json llm 的 API key(放在 secrets 目錄的那種)是平台的憑證:不用另外寫進登錄
+        # the API key of hub.json llm (the kind kept in the secrets directory) is a platform secret: no need to add it
+        # to the registry
         import completion
         llm_keys = [{"name": f"llm-{n}-key", "path": str(hubconf.secrets_dir() / p["key"]["secret"]),
                      "why": _("API key of hub.json llm.providers.{name}", name=n)}
                     for n, p in (((completion.settings() or {}).get("providers")) or {}).items()
                     if isinstance(p, dict) and isinstance(p.get("key"), dict) and p["key"].get("secret")]
-        # 警報管道的憑證(hub.json alerts 設了 Discord 才有):一樣是平台的,不用另外寫進登錄
+        # the alert channel's credentials (only when hub.json alerts sets up Discord): the platform's too, no need to
+        # add them to the registry
         alert_keys = [{"name": "discord-bot-token", "path": tok,
                        "why": _("the Discord bot for alerts (watchdog, render-services, claude-login, secrets)")}
                       for tok in [hubconf.get("alerts.discord_token_file")] if tok]
@@ -154,7 +166,8 @@ def main(argv: list[str]) -> int:
             print(_("{project}: not declared, file name looks like a credential: {path} (declare it under secrets: in "
                     "the registry, or confirm it is not one)", project=project, path=path))
     if not argv:
-        # 警報管道本身:token 失效的話,出事時所有警報都發不出去——每天先確認一次(不發訊息)
+        # the alert channel itself: if the token stops working, no alert can be sent when something goes wrong -- check
+        # once a day first (without sending a message)
         if alert.probe():
             alert.clear_failure("discord-probe")
         elif not alert.configured():

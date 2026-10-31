@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
-# 讀 agent-hub/mirror-list.txt(每行一個 git remote URL),對每個 URL 在 mini
-# 上維護一份 --mirror clone 當災難復原備份。純只讀:對外部 remote(GitHub)
-# 只 fetch,不 push 任何東西,不會觸發任何 CI/部署。
+# Read agent-hub/mirror-list.txt (one git remote URL per line) and keep a --mirror clone of each URL on the hub
+# machine as a disaster-recovery backup. Read-only: it only fetches from the external remotes (GitHub), never pushes
+# anything, and never triggers any CI/deployment.
 #
-# 由 schedule.yaml 排程執行,不用另外開 plist。
+# Scheduled by schedule.yaml; no separate plist needed.
 set -uo pipefail
 export PATH="/opt/homebrew/bin:/usr/local/bin:$PATH"
 

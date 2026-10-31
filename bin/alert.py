@@ -1,17 +1,23 @@
-"""發警報 / 通知(hub.json alerts)。管道可以好幾個,設了哪個就發哪個(docs/design/tool-agnostic.md:不綁 Discord):
-  discord   discord_token_file + discord_channel_file(bot token、頻道 id 的檔案,在 secrets 目錄,不進版控)
-  ntfy      {"topic": …, "base_url": 預設 https://ntfy.sh, "token_file": 選填}(手機 app 就收得到,不用帳號)
-  email     {"host", "port": 預設 587, "user", "from", "to", "password_file", "ssl": false = STARTTLS}
-  macos     true(這台機器的系統通知;只有人坐在這台前面才看得到)
+"""Send alerts / notifications (hub.json alerts). There can be several channels; whichever are set up get the message
+(docs/design/tool-agnostic.md: not tied to Discord):
+  discord   discord_token_file + discord_channel_file (files with the bot token and channel id, in the secrets
+            directory, not in version control)
+  ntfy      {"topic": …, "base_url": default https://ntfy.sh, "token_file": optional} (the phone app receives it,
+            no account needed)
+  email     {"host", "port": default 587, "user", "from", "to", "password_file", "ssl": false = STARTTLS}
+  macos     true (this machine's system notifications; seen only by someone sitting at this machine)
 
-只用標準函式庫 + 系統的 curl(不靠 Homebrew)。排程器看門狗刻意有自己的一份,不 import 這支
-(它要在排程器、平台程式碼都壞掉的時候還能發)。
+Standard library + the system's curl only (no Homebrew). The scheduler watchdog deliberately has its own copy and
+does not import this (it must still be able to send when the scheduler and the platform code are both broken).
 
   alert.send(text) -> bool
-  alert.once(key, problems, ok_text) -> None   新的問題馬上發;沒解決的每 24 小時再提醒一次;解決時發一次恢復
-  alert.probe() -> bool                         token 還能不能用(GET /users/@me,不發訊息;check-secrets 每天呼叫)
+  alert.once(key, problems, ok_text) -> None   new problems are sent at once; unresolved ones are repeated every 24
+                                               hours; one recovery message when resolved
+  alert.probe() -> bool                         whether the token still works (GET /users/@me, no message sent;
+                                               check-secrets calls it daily)
 
-發不出去不會默默算了(2026-10-24):記在 .state/alerts-failed.json,狀態頁標紅,下次再試;發得出去就清掉。
+A failure to send does not pass silently (2026-10-24): recorded in .state/alerts-failed.json, the status page turns
+red, and it is tried again next time; cleared once a send succeeds.
 """
 from __future__ import annotations
 
@@ -24,8 +30,8 @@ import i18n
 
 _ = i18n.domain(__file__)
 
-SENT = hubconf.STATE / "alerts-sent.json"      # key → {"problems": [...], "at": 上次發的時間}
-FAILED = hubconf.STATE / "alerts-failed.json"  # key → {"at": …, "text": 發不出去的那則的第一行}
+SENT = hubconf.STATE / "alerts-sent.json"      # key -> {"problems": [...], "at": when last sent}
+FAILED = hubconf.STATE / "alerts-failed.json"  # key -> {"at": …, "text": first line of the one not sent}
 REMIND = datetime.timedelta(hours=24)
 API = "https://discord.com/api/v10"
 
@@ -39,7 +45,7 @@ def _creds() -> tuple[str, str] | None:
 
 
 def _curl(*args: str, data: str | None = None) -> str:
-    """回傳 HTTP 狀態碼(字串);curl 本身失敗是空字串。"""
+    """Returns the HTTP status code (a string); an empty string when curl itself fails."""
     r = subprocess.run(["/usr/bin/curl", "-sS", "-m", "20", "-o", "/dev/null", "-w", "%{http_code}", *args],
                        input=data, capture_output=True, text=True)
     return r.stdout.strip()
@@ -108,13 +114,15 @@ def configured() -> list[str]:
 
 
 def send(text: str) -> bool:
-    """設了的管道全部發;全部都發出去才算成功(有一個發不出去就記失敗,狀態頁會標紅)。一個都沒設 = False。"""
+    """Send on every channel set up; success only when all of them went out (one failing is recorded as a failure, and
+    the status page turns red). None set up = False."""
     chans = configured()
     return bool(chans) and all(CHANNELS[n][0](text) for n in chans)
 
 
 def probe() -> bool:
-    """警報管道本身能不能用:Discord 打 /users/@me(不發訊息);其他管道沒有不發訊息的檢查,設了就當可以。沒有任何管道 = False。"""
+    """Whether the alert channels themselves work: Discord calls /users/@me (no message sent); other channels have no
+    check that sends nothing, so being set up counts as working. No channel at all = False."""
     chans = configured()
     if not chans:
         return False
@@ -148,7 +156,7 @@ def clear_failure(key: str) -> None:
 
 
 def failures() -> dict:
-    """發不出去、還沒補發成功的警報(狀態頁用)。"""
+    """Alerts that could not be sent and have not been resent successfully yet (for the status page)."""
     return _load(FAILED)
 
 
@@ -156,12 +164,12 @@ def once(key: str, problems: list[str], ok_text: str) -> None:
     now = datetime.datetime.now()
     sent = _load(SENT)
     last = sent.get(key)
-    if isinstance(last, list):  # 舊格式:只有問題清單
+    if isinstance(last, list):  # old format: only the list of problems
         last = {"problems": last, "at": None}
     last_problems = (last or {}).get("problems", [])
     if sorted(problems) == sorted(last_problems):
         if not problems:
-            clear_failure(key)  # 之前那則沒發出去、問題已經自己好了:沒有要補發的
+            clear_failure(key)  # the earlier one was not sent and the problem has fixed itself: nothing to resend
             return
         at = (last or {}).get("at")
         if at and now - datetime.datetime.fromisoformat(at) < REMIND:

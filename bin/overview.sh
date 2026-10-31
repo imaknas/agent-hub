@@ -1,13 +1,13 @@
 #!/usr/bin/env bash
-# 給 agent 用的集中化總覽:每個專案的路徑/origin、跟它綁定的服務(有沒有
-# 在跑,如果這台機器上跑得到 launchctl 的話)、還有它目前的 STATE.md。
+# A central overview for agents: each project's path/origin, the services bound to it (whether they are running, if
+# launchctl is reachable on this machine), and its current STATE.md.
 #
-# 刻意不做成另一份要手動維護、會跟真相脫節的檔案——專案登錄(projects/*.yaml)、
-# services.tsv、每個專案自己的 .agent-memory/STATE.md 已經是三個獨立但
-# 各自準確的真相來源,這支腳本只是每次執行時即時把三個接起來顯示,不儲存
-# 任何自己的狀態。
+# Deliberately not another hand-maintained file that drifts from the truth -- the project registry
+# (projects/*.yaml), services.tsv and each project's own .agent-memory/STATE.md are already three independent,
+# individually accurate sources of truth; this script only joins the three live on every run and stores no state of
+# its own.
 #
-# 用法:overview.sh [專案名稱]——不帶參數就列出全部專案的總覽。
+# Usage: overview.sh [project name] -- without an argument it lists the overview of every project.
 set -uo pipefail
 
 AGENT_HUB="${AGENT_HUB_ROOT:-$(cd "$(dirname "$0")/.." && pwd)}"
@@ -53,18 +53,18 @@ origin: {origin}" name="$name" path="$local_path" origin="$origin"
   echo
 
   echo "-- STATE.md --"
-  # local_path 是 mini 上的 ~/workspace/<name>(2026-10-15 起);在 MBP 上跑時不存在,
-  # 這時讀 mini 上 onboard-project.sh 步驟 9 建的 memory-only clone
-  # (~/.memory-copies/<name>/STATE.md)——兩個路徑都試,不用管在哪台機器跑。
+  # local_path is ~/workspace/<name> on the hub machine (since 2026-10-15); it does not exist when run on the
+  # laptop, so then read the memory-only clone that onboard-project.sh step 9 created on the hub machine
+  # (~/.memory-copies/<name>/STATE.md) -- both paths are tried, whichever machine this runs on.
   state_dir="$local_path/.agent-memory"
   state_file="$state_dir/STATE.md"
   _mc="$(hub_json_get memory_copies)"; _mc="${_mc:-~/.memory-copies}"
   mini_clone_state_file="${_mc/#\~/$HOME}/$name/STATE.md"
-  # .agent-memory 平常只在該專案自己開新 session 時(SessionStart hook)才
-  # 會 git pull——這支腳本是隨時可能在別的資料夾被叫用來看別的專案,不會
-  # 觸發那個 hook,直接讀本地檔案可能讀到 librarian 已經 push 但這台機器
-  # 還沒拉下來的舊內容。讀之前先自己 pull 一次,拉不到(離線、還沒連上
-  # mini)就當作沒這回事,不讓整支腳本失敗。
+  # .agent-memory is normally pulled only when the project itself opens a new session (SessionStart hook) -- this
+  # script may be called at any time from another folder to look at another project and never triggers that hook,
+  # so reading the local file directly could give old content the librarian already pushed but this machine has not
+  # pulled yet. Pull once before reading; if that fails (offline, the hub machine not reachable yet), carry on as if
+  # nothing happened rather than fail the whole script.
   if [ -d "$state_dir" ]; then
     git -C "$state_dir" pull -q 2>/dev/null || true
   fi

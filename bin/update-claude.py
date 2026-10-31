@@ -1,21 +1,25 @@
 #!/bin/sh -c exec${IFS}"${0%/*}/py"${IFS}"$0"${IFS}"$@"
-"""每晚把 nvm 預設版本底下的 claude(npm 全域的 @anthropic-ai/claude-code)更新到最新版。
+"""Every night, update the claude under nvm's default version (npm global @anthropic-ai/claude-code) to the latest.
 
-排程、通道租借、Muninn 用的都是這一份(hubconf.tool("claude"));Claude Desktop 的 SSH session 用它自己推過來的
-~/.claude/remote/ccd-cli/<版本>,會自己升級。這一份以前只有人在終端機裝/升級時才會動,版本一直落後
-(2026-10-24 Knas:不要每次手動更新)。
+The scheduler, channel leases and the assistant all use this copy (hubconf.tool("claude")); Claude Desktop's SSH
+sessions use the ~/.claude/remote/ccd-cli/<version> it pushes over itself, which upgrades itself. This copy used to
+change only when someone installed/upgraded it in a terminal, so it kept falling behind (the owner, 2026-10-24: no
+manual updating every time).
 
-  1. 先用現在的版本實際打一次請求(llm.py 的 login-check,用排程用的 headless token)——已經失敗就不更新
-     (那是登入或網路的問題,不是新版的問題;claude-login 會報),exit 1
-  2. npm install -g @anthropic-ai/claude-code@latest(用 nvm 預設版本的 npm)
-  3. 新版 `claude --version` 跑不起來、或同一個請求失敗(例:-p 的旗標改了)→ 裝回舊版本,exit 1
-     (排程器記 job.failed,狀態頁紅)
-  沒有新版就什麼都不做(不打請求)。
-Claude Code 自己的自動更新照常(Knas 2026-10-24:不用統一更新流程,但不能默默落後):這支是每晚的保險,
-任何一種「沒辦法到最新版」(查不到最新版、裝不起來、裝回舊版、現在的版本就打不通)都發 Discord
-(alert.once:沒解決的每 24 小時再提醒,回到最新版時發一次恢復),不只是狀態頁紅。
+  1. First make a real request with the current version (llm.py's login-check, with the scheduler's headless
+     token) -- if that already fails, do not update (it is a login or network problem, not the new version's;
+     claude-login reports it), exit 1
+  2. npm install -g @anthropic-ai/claude-code@latest (with the nvm default version's npm)
+  3. The new version's `claude --version` does not run, or the same request fails (e.g. a -p flag changed) ->
+     reinstall the old version, exit 1 (the scheduler records job.failed, the status page turns red)
+  No new version: nothing is done (no request made).
+Claude Code's own auto-update carries on as usual (the owner, 2026-10-24: no unified update process needed, but it
+must not fall behind silently): this script is the nightly safety net, and any kind of "cannot get to the latest
+version" (latest version cannot be looked up, install fails, reinstalled the old version, the current version
+cannot get through) goes to Discord (alert.once: unresolved ones are repeated every 24 hours, one recovery message
+when back on the latest), not just a red status page.
 
-用法:update-claude.py [--dry-run]
+Usage: update-claude.py [--dry-run]
 """
 from __future__ import annotations
 
@@ -37,7 +41,7 @@ PKG = "@anthropic-ai/claude-code"
 
 
 def run(*args: str, timeout: int = 600) -> subprocess.CompletedProcess:
-    # npm 是 `#!/usr/bin/env node` 的腳本:PATH 要找得到 nvm 的 node
+    # npm is a `#!/usr/bin/env node` script: PATH must find nvm's node
     env = {**os.environ, "PATH": hubconf.LAUNCHD_PATH}
     return subprocess.run(args, capture_output=True, text=True, timeout=timeout, env=env)
 
@@ -52,7 +56,8 @@ def version(claude: pathlib.Path) -> str | None:
 
 
 def smoke() -> str | None:
-    """實際打一次最小的請求(跟排程同一條路:llm.py、headless token)。None = 成功,否則是原因。"""
+    """Make one real minimal request (the same path as the scheduler: llm.py, headless token). None = success,
+    otherwise the reason."""
     try:
         r = subprocess.run([sys.executable, str(hubconf.ROOT / "bin" / "llm.py"), "run", "login-check"],
                            input="只回覆 ok 兩個字母。", capture_output=True, text=True, timeout=180,
@@ -78,7 +83,7 @@ def main() -> int:
 
 
 def update(dry: bool) -> tuple[bool, str]:
-    """(有沒有在最新版, 說明)"""
+    """(whether it is on the latest version, explanation)"""
     bin_dir = hubconf.nvm_bin()
     if not bin_dir:
         return False, _("no nvm default version (~/.nvm/alias/default)")

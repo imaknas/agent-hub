@@ -1,16 +1,21 @@
 #!/bin/sh -c exec${IFS}"${0%/*}/py"${IFS}"$0"${IFS}"$@"
-"""claude 的登入還能不能用(平台 job agent-hub/claude-login,每小時)。壞了或快到期就發 Discord。
+"""Whether claude's logins still work (platform job agent-hub/claude-login, hourly). Broken or about to expire:
+Discord.
 
-mini 上 claude 的憑證有三份,各自會壞(2026-10-24 Knas:登入失效時 Muninn 默默改用本機模型是嚴重的 silent fail):
-  1. 訂閱登入,launchd 底下(要 claude.ai connector 的 job、Muninn):keychain。實際打一次最小的請求(llm.py 的 login-check)
-  2. headless token(~/.claude/headless-oauth-token,`claude setup-token`,一年):llm.py 預設的憑證(排程、租借、
-     lease-resume)。LLM_AUTH=token 打一次請求;檔案超過 335 天就提醒(一年到期前 30 天)
-  3. ~/.claude/.credentials.json(SSH 底下讀不到 keychain 時 claude 用這份):只看 refreshTokenExpiresAt,
-     剩不到 7 天就提醒——不讀、不印任何 token
-請求失敗而且是登入問題(Login expired、/login、401、OAuth…)才算登入壞了;逾時、額度之類的只記在輸出,不發警報
-(連續 3 次才發:可能是 claude 本身壞了)。
+claude has three sets of credentials on the hub machine, each of which can break (the owner, 2026-10-24: the
+assistant silently falling back to the local model when the login lapsed is a serious silent failure):
+  1. subscription login, under launchd (jobs that need claude.ai connectors, the assistant): keychain. Make one real
+     minimal request (llm.py's login-check)
+  2. headless token (~/.claude/headless-oauth-token, `claude setup-token`, one year): llm.py's default credential
+     (scheduler, leases, lease-resume). One request with LLM_AUTH=token; remind once the file is over 335 days old
+     (30 days before the year runs out)
+  3. ~/.claude/.credentials.json (what claude uses when the keychain cannot be read under SSH): only
+     refreshTokenExpiresAt is looked at, reminding when fewer than 7 days remain -- no token is read or printed
+Only a failed request that is a login problem (Login expired, /login, 401, OAuth…) counts as a broken login;
+timeouts, quota and the like are only recorded in the output, no alert (alerting only after 3 in a row: claude
+itself may be broken).
 
-用法:check-claude-login.py
+Usage: check-claude-login.py
 """
 from __future__ import annotations
 
@@ -25,14 +30,16 @@ sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
 import alert  # noqa: E402
 import hubconf  # noqa: E402
 import i18n  # noqa: E402
-import runtime_ports  # noqa: E402  有哪些登入、放哪、錯誤長怎樣是 runtime 的事(auth 介面,第 6 層)
+# which logins exist, where they live and what their errors look like is the runtime's business (auth interface,
+# layer 6)
+import runtime_ports  # noqa: E402
 
 STREAK = hubconf.STATE / "claude-login-streak.json"
 SOFT_LIMIT = 3
 _ = i18n.domain(__file__)
 
 
-# 平台知道的:每種登入是誰在用(壞了的時候,警報要說影響到誰)
+# What the platform knows: who uses each kind of login (when one breaks, the alert must say who is affected)
 def used_by(mode: str) -> str | None:
     return {"subscription": _("used by the connector jobs and the assistant"),
             "token": _("used by all scheduled jobs and leases")}.get(mode)
@@ -43,7 +50,7 @@ def missing_means(mode: str) -> str:
 
 
 def ask(env: dict) -> str | None:
-    """None = 成功;否則是失敗原因。"""
+    """None = success; otherwise the reason for the failure."""
     try:
         r = subprocess.run([sys.executable, str(hubconf.ROOT / "bin" / "llm.py"), "run", "login-check"],
                            input="只回覆 ok 兩個字母。", capture_output=True, text=True, timeout=180, env=env)
@@ -64,7 +71,7 @@ def main() -> int:
     base = rt.clean_env({k: v for k, v in os.environ.items() if k != "LLM_AUTH"})
 
     for c in rt.credentials():
-        if c.mode:  # 能打請求檢查的登入:在就打一次,不在就是問題
+        if c.mode:  # a login that can be checked with a request: if present make one, if absent that is a problem
             if not c.present:
                 hard.append(_("{path} is missing ({means})", path=c.path, means=missing_means(c.mode)))
                 continue
