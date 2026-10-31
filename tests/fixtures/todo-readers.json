@@ -1,0 +1,7 @@
+{
+  "_": "zh-Hant variants of the to-do tokens that tests/test_todo_readers.py feeds the readers (the canonical token sets come from the code)",
+  "full_width_marker": "（等{owner}：{key}）",
+  "spaced_marker": "(等 {owner}: {key} )",
+  "unknown_tag": "誰",
+  "reason_label": "**理由**"
+}

@@ -28,6 +28,7 @@ import golden_lang  # noqa: E402
 
 GOLDEN = golden_lang.GOLDEN
 UPDATE = os.environ.get("I18N_GOLDEN_UPDATE") == "1"
+LANG = {"AGENT_HUB_LANG_UI": golden_lang.LANG, "AGENT_HUB_LANG_CONTENT": golden_lang.LANG}   # an instance on one language
 DAY = datetime.date(2026, 10, 15)   # a day that is never today again: TODAY in the code vs commit dates
 GIT = {"GIT_AUTHOR_NAME": "t", "GIT_AUTHOR_EMAIL": "t@t", "GIT_COMMITTER_NAME": "t", "GIT_COMMITTER_EMAIL": "t@t",
        "GIT_CONFIG_GLOBAL": "/dev/null", "GIT_CONFIG_NOSYSTEM": "1"}
@@ -59,7 +60,7 @@ class Consolidate(unittest.TestCase):
         for f in ("git-safe-push.sh", "with-lock.sh", "check-state-todo.py"):
             (self.tmp / "bin" / f).symlink_to(ROOT / "bin" / f)
         self.commit_ok(True)
-        with mock.patch.dict(os.environ, {"AGENT_HUB_LANG_UI": golden_lang.LANG}):
+        with mock.patch.dict(os.environ, LANG):
             spec = importlib.util.spec_from_file_location("consolidate_golden", ROOT / "bin" / "consolidate-memory.py")
             self.m = importlib.util.module_from_spec(spec)
             spec.loader.exec_module(self.m)
@@ -100,7 +101,7 @@ class Consolidate(unittest.TestCase):
 
     def capture(self, fn, *a, **kw):
         buf = io.StringIO()
-        with contextlib.redirect_stdout(buf), mock.patch.dict(os.environ, {"AGENT_HUB_LANG_UI": golden_lang.LANG, "COLUMNS": "100"}):
+        with contextlib.redirect_stdout(buf), mock.patch.dict(os.environ, {**LANG, "COLUMNS": "100"}):
             try:
                 ret = fn(*a, **kw)
             except SystemExit as e:

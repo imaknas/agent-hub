@@ -103,7 +103,9 @@ class Env:
             "assistant": {"project": SIDE, "api": "http://127.0.0.1:9/x", "party_id": SIDE}}))
         e = {k: v for k, v in os.environ.items() if not k.startswith(("GIT_", "AGENT_HUB_HOME", "AGENT_HUB_CONFIG",
                                                                      "AGENT_HUB_DATA", "AGENT_HUB_SECRETS"))}
+        # the scenarios' STATE.md files are zh-Hant content
         self.env = {**e, "AGENT_HUB_ROOT": str(self.hub), "AGENT_HUB_DATA": str(self.hub / "data"),
+                    "AGENT_HUB_LANG_CONTENT": "zh-Hant",
                     "GIT_AUTHOR_NAME": "t", "GIT_AUTHOR_EMAIL": "t@t", "GIT_COMMITTER_NAME": "t",
                     "GIT_COMMITTER_EMAIL": "t@t", "GIT_CONFIG_GLOBAL": "/dev/null", "GIT_CONFIG_NOSYSTEM": "1"}
         self.hubbus("inbox", "--project", "pa")   # creates the bus tables

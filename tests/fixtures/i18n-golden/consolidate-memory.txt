@@ -189,7 +189,7 @@ document wins. List every correction in corrections; its evidence_quote is copie
 
 - Language: what you add to an existing topic document is in that document's own language and style. New topic
   documents, what you write in STATE.md, and the free-text fields of your answer (summary, folded[].dropped,
-  kept[].reason) are in English. Code, paths, commands and names stay as they are.
+  kept[].reason) are in Traditional Chinese (zh-Hant). Code, paths, commands and names stay as they are.
 - **Keep uncertain wording uncertain**: where the original hedges (預計/預期/可能/應該/打算/暫定/待確認/?; in English: maybe, likely, probably,
   expected, planned, tentative, not yet, tbd…), keep that hedge after folding; do not turn it into a definite
   statement. Only when a newer record states the outcome explicitly (e.g. "is live", "confirmed to be …") may you

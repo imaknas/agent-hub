@@ -248,7 +248,7 @@ How memory/ is organised:
   the most accurate current version, and where it conflicts with the older running record, reference/ wins.
 
 Rules:
-- Write in English: everything you add to STATE.md (prose and to-do items), and the summary and reason in
+- Write in Traditional Chinese (zh-Hant): everything you add to STATE.md (prose and to-do items), and the summary and reason in
   your answer, are in that language, in the style of the text already there. Code, paths, commands and names stay as
   they are.
 - Edit STATE.md only when there is a *substantive change* (it is a distilled current state, not a log); with no
@@ -333,7 +333,7 @@ agent
 STATE>>>
 
 Rules:
-- Write in English: everything you add to STATE.md (prose and to-do items), and the summary and reason in
+- Write in Traditional Chinese (zh-Hant): everything you add to STATE.md (prose and to-do items), and the summary and reason in
   your answer, are in that language, in the style of the text already there. Code, paths, commands and names stay as
   they are.
 - Edit STATE.md only when there is a *substantive change* (it is a distilled current state, not a log); with no
@@ -362,7 +362,7 @@ The format of the edit list:
 - With nothing to change: state_updated: false, edits: [].
 - The `(等 Alex:task-…)` marker at the end of a 〔Alex〕 line must not change; when that item is done, delete the
   whole line.
-- summary and reason are written in English, like the text in STATE.md.
+- summary and reason are written in Traditional Chinese (zh-Hant), like the text in STATE.md.
 === prompt librarian-state @ p1
 You are the cross-project integration agent (the librarian), now working in the directory of project p1.
 Since the last check, these memory files of this project changed:
@@ -433,7 +433,7 @@ How memory/ is organised:
   the most accurate current version, and where it conflicts with the older running record, reference/ wins.
 
 Rules:
-- Write in English: everything you add to STATE.md (prose and to-do items), and the summary and reason in
+- Write in Traditional Chinese (zh-Hant): everything you add to STATE.md (prose and to-do items), and the summary and reason in
   your answer, are in that language, in the style of the text already there. Code, paths, commands and names stay as
   they are.
 - Edit STATE.md only when there is a *substantive change* (it is a distilled current state, not a log); with no
@@ -539,7 +539,7 @@ agent
 STATE>>>
 
 Rules:
-- Write in English: everything you add to STATE.md (prose and to-do items), and the summary and reason in
+- Write in Traditional Chinese (zh-Hant): everything you add to STATE.md (prose and to-do items), and the summary and reason in
   your answer, are in that language, in the style of the text already there. Code, paths, commands and names stay as
   they are.
 - Edit STATE.md only when there is a *substantive change* (it is a distilled current state, not a log); with no
@@ -568,7 +568,7 @@ The format of the edit list:
 - With nothing to change: state_updated: false, edits: [].
 - The `(等 Alex:task-…)` marker at the end of a 〔Alex〕 line must not change; when that item is done, delete the
   whole line.
-- summary and reason are written in English, like the text in STATE.md.
+- summary and reason are written in Traditional Chinese (zh-Hant), like the text in STATE.md.
 === prompt librarian-state @ p2
 You are the cross-project integration agent (the librarian), now working in the directory of project p2.
 Since the last check, these memory files of this project changed:
@@ -596,7 +596,7 @@ How memory/ is organised:
   the most accurate current version, and where it conflicts with the older running record, reference/ wins.
 
 Rules:
-- Write in English: everything you add to STATE.md (prose and to-do items), and the summary and reason in
+- Write in Traditional Chinese (zh-Hant): everything you add to STATE.md (prose and to-do items), and the summary and reason in
   your answer, are in that language, in the style of the text already there. Code, paths, commands and names stay as
   they are.
 - Edit STATE.md only when there is a *substantive change* (it is a distilled current state, not a log); with no
@@ -659,7 +659,7 @@ agent
 STATE>>>
 
 Rules:
-- Write in English: everything you add to STATE.md (prose and to-do items), and the summary and reason in
+- Write in Traditional Chinese (zh-Hant): everything you add to STATE.md (prose and to-do items), and the summary and reason in
   your answer, are in that language, in the style of the text already there. Code, paths, commands and names stay as
   they are.
 - Edit STATE.md only when there is a *substantive change* (it is a distilled current state, not a log); with no
@@ -688,7 +688,7 @@ The format of the edit list:
 - With nothing to change: state_updated: false, edits: [].
 - The `(等 Alex:task-…)` marker at the end of a 〔Alex〕 line must not change; when that item is done, delete the
   whole line.
-- summary and reason are written in English, like the text in STATE.md.
+- summary and reason are written in Traditional Chinese (zh-Hant), like the text in STATE.md.
 === prompt librarian-state @ p3
 You are the cross-project integration agent (the librarian), now working in the directory of project p3.
 Since the last check, these memory files of this project changed:
@@ -716,7 +716,7 @@ How memory/ is organised:
   the most accurate current version, and where it conflicts with the older running record, reference/ wins.
 
 Rules:
-- Write in English: everything you add to STATE.md (prose and to-do items), and the summary and reason in
+- Write in Traditional Chinese (zh-Hant): everything you add to STATE.md (prose and to-do items), and the summary and reason in
   your answer, are in that language, in the style of the text already there. Code, paths, commands and names stay as
   they are.
 - Edit STATE.md only when there is a *substantive change* (it is a distilled current state, not a log); with no
@@ -779,7 +779,7 @@ agent
 STATE>>>
 
 Rules:
-- Write in English: everything you add to STATE.md (prose and to-do items), and the summary and reason in
+- Write in Traditional Chinese (zh-Hant): everything you add to STATE.md (prose and to-do items), and the summary and reason in
   your answer, are in that language, in the style of the text already there. Code, paths, commands and names stay as
   they are.
 - Edit STATE.md only when there is a *substantive change* (it is a distilled current state, not a log); with no
@@ -808,7 +808,7 @@ The format of the edit list:
 - With nothing to change: state_updated: false, edits: [].
 - The `(等 Alex:task-…)` marker at the end of a 〔Alex〕 line must not change; when that item is done, delete the
   whole line.
-- summary and reason are written in English, like the text in STATE.md.
+- summary and reason are written in Traditional Chinese (zh-Hant), like the text in STATE.md.
 === prompt librarian-state @ pdang
 You are the cross-project integration agent (the librarian), now working in the directory of project pdang.
 Since the last check, these memory files of this project changed:
@@ -838,7 +838,7 @@ How memory/ is organised:
   the most accurate current version, and where it conflicts with the older running record, reference/ wins.
 
 Rules:
-- Write in English: everything you add to STATE.md (prose and to-do items), and the summary and reason in
+- Write in Traditional Chinese (zh-Hant): everything you add to STATE.md (prose and to-do items), and the summary and reason in
   your answer, are in that language, in the style of the text already there. Code, paths, commands and names stay as
   they are.
 - Edit STATE.md only when there is a *substantive change* (it is a distilled current state, not a log); with no
@@ -875,7 +875,7 @@ The correct format (one item per line; with no to-dos write `- (無)`; STATE.md 
 If STATE.md has to-do-like lists elsewhere (for example "open questions", "needs Alex to decide", "can be done by
 an agent", "next steps", "not done yet"), **move** those items into `## 待辦` (marking who is responsible) and
 delete the original section; write `- (無)` only when the whole STATE.md truly has no to-dos. Schedules and facts
-about finished work are not to-dos: leave them where they are. Anything you write is in English, like the
+about finished work are not to-dos: leave them where they are. Anything you write is in Traditional Chinese (zh-Hant), like the
 rest of the file.
 
 The current problems:
@@ -924,7 +924,7 @@ agent
 STATE>>>
 
 Rules:
-- Write in English: everything you add to STATE.md (prose and to-do items), and the summary and reason in
+- Write in Traditional Chinese (zh-Hant): everything you add to STATE.md (prose and to-do items), and the summary and reason in
   your answer, are in that language, in the style of the text already there. Code, paths, commands and names stay as
   they are.
 - Edit STATE.md only when there is a *substantive change* (it is a distilled current state, not a log); with no
@@ -953,7 +953,7 @@ The format of the edit list:
 - With nothing to change: state_updated: false, edits: [].
 - The `(等 Alex:task-…)` marker at the end of a 〔Alex〕 line must not change; when that item is done, delete the
   whole line.
-- summary and reason are written in English, like the text in STATE.md.
+- summary and reason are written in Traditional Chinese (zh-Hant), like the text in STATE.md.
 === prompt librarian-state @ phand
 You are the cross-project integration agent (the librarian), now working in the directory of project phand.
 Nothing changed in memory/ this time; there are only Alex's handoffs below to handle.
@@ -990,7 +990,7 @@ How memory/ is organised:
   the most accurate current version, and where it conflicts with the older running record, reference/ wins.
 
 Rules:
-- Write in English: everything you add to STATE.md (prose and to-do items), and the summary and reason in
+- Write in Traditional Chinese (zh-Hant): everything you add to STATE.md (prose and to-do items), and the summary and reason in
   your answer, are in that language, in the style of the text already there. Code, paths, commands and names stay as
   they are.
 - Edit STATE.md only when there is a *substantive change* (it is a distilled current state, not a log); with no
@@ -1062,7 +1062,7 @@ agent
 STATE>>>
 
 Rules:
-- Write in English: everything you add to STATE.md (prose and to-do items), and the summary and reason in
+- Write in Traditional Chinese (zh-Hant): everything you add to STATE.md (prose and to-do items), and the summary and reason in
   your answer, are in that language, in the style of the text already there. Code, paths, commands and names stay as
   they are.
 - Edit STATE.md only when there is a *substantive change* (it is a distilled current state, not a log); with no
@@ -1091,20 +1091,20 @@ The format of the edit list:
 - With nothing to change: state_updated: false, edits: [].
 - The `(等 Alex:task-…)` marker at the end of a 〔Alex〕 line must not change; when that item is done, delete the
   whole line.
-- summary and reason are written in English, like the text in STATE.md.
+- summary and reason are written in Traditional Chinese (zh-Hant), like the text in STATE.md.
 === prompt librarian-index @ hub
 Update index.md: today's (<TODAY>) summaries of each project are in digest/<TODAY>.md. Read them, then mark the
 connections between projects that are actually visible; where there is no clear connection, do not invent one, and keep
 it concise.
 Edit index.md directly; do not rewrite its overall format and style. If nothing is worth changing, you may leave the
-file alone. Write in English, like the rest of the file.
+file alone. Write in Traditional Chinese (zh-Hant), like the rest of the file.
 The project roster between <!-- roster:begin --> and <!-- roster:end --> is generated mechanically by
 gen-index-roster.sh: do not edit that block (changes are overwritten); write your notes outside it.
 === prompt librarian-index-edits @ hub
 Update index.md: below are today's (<TODAY>) summaries of each project (the digest) and the current index.md. Mark
 the connections between projects that are actually visible; where there is no clear connection, do not invent one. Keep
 it concise and do not rewrite its overall format and style; if nothing is worth changing: index_updated: false,
-edits: []. Write in English, like the rest of the file.
+edits: []. Write in Traditional Chinese (zh-Hant), like the rest of the file.
 You have no tools, and your answer can only be one JSON object: edits are {"old", "new"} pairs applied in order, and old
 must be a passage that occurs exactly once in the current index.md.
 The project roster between <!-- roster:begin --> and <!-- roster:end --> is generated mechanically: do not edit that
