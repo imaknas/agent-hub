@@ -22,7 +22,7 @@ class Fill(unittest.TestCase):
     def test_known_placeholders_are_replaced(self):
         out = prompts.fill("{{tag_owner}} --to {{owner_alias}} {{assistant}} {{content_language}}", lang="en")
         self.assertNotIn("{{", out)
-        self.assertIn(prompts.TOKENS[prompts.TOKEN_SET]["tag"].format(hubconf.owner_tag()), out)
+        self.assertIn(prompts.TOKENS["en"]["tag"].format(hubconf.owner_tag()), out)
         self.assertIn(hubconf.owner_alias(), out)
         self.assertIn(hubconf.assistant_name(), out)
         self.assertIn("English", out)
@@ -36,6 +36,17 @@ class Fill(unittest.TestCase):
 
     def test_text_without_placeholders_is_returned_as_is(self):
         self.assertEqual(prompts.fill("a {b} ${{ x }}"), "a {b} ${{ x }}")
+
+    def test_tokens_follow_the_content_language(self):
+        """the to-do tokens are the content language's set (contracts/state-todo.v2.md); every reader takes both"""
+        text = "{{todo_heading}} {{tag_owner}} {{tag_agent}} {{tag_tbd}} {{todo_none}} {{key_marker}}"
+        for lang in prompts.LANGUAGE_NAMES:
+            with self.subTest(lang=lang):
+                t = prompts.TOKENS[lang]
+                out = prompts.fill(text, lang=lang, owner="Alex")
+                self.assertEqual(out, " ".join([t["todo_heading"], t["tag"].format("Alex"), t["tag"].format("agent"),
+                                                t["tag"].format(t["tbd"]), t["todo_none"],
+                                                t["key_marker"].format(owner="Alex", key="task-…")]))
 
     def test_key_pattern(self):
         out = prompts.fill("{{key_pattern}}", lang="en", owner="Alex")

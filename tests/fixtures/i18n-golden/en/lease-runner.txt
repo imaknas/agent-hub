@@ -42,11 +42,11 @@ talked about A
 - Open question: which Z?
 === deliver memory
 
-## 租借對話 <HM>(session 77777777-7777-4777-8777-777777777777)
+## Lease conversation <HM> (session 77777777-7777-4777-8777-777777777777)
 
 - note one
 
-已登錄給 Alex 的任務:lease-77777777-7777-4777-8777-777777777777-1-task-0
+Tasks registered for Alex: lease-77777777-7777-4777-8777-777777777777-1-task-0
 
 === show_file refused
 ../x.png is not in this project folder (only files in the project folder can be shown)

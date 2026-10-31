@@ -73,7 +73,7 @@ fatal: not a git repository (or any of the parent directories): .git
 
 **commit**: `<sha>`
 
-**理由**: reason p0
+**Reason**: reason p0
 
 **Handoffs from Hugin**: #101
 
@@ -96,7 +96,7 @@ index <sha>..<sha> 100644
 
 **commit**: `<sha>`
 
-**理由**: reason p2
+**Reason**: reason p2
 
 ```diff
 diff --git a/STATE.md b/STATE.md
@@ -117,7 +117,7 @@ index <sha>..<sha> 100644
 
 **commit**: `<sha>`
 
-**理由**: (the agent gave no reason)
+**Reason**: (the agent gave no reason)
 
 ```diff
 diff --git a/STATE.md b/STATE.md
@@ -138,7 +138,7 @@ index <sha>..<sha> 100644
 
 **commit**: `<sha>`
 
-**理由**: reason pdang
+**Reason**: reason pdang
 
 ```diff
 diff --git a/STATE.md b/STATE.md
@@ -159,7 +159,7 @@ index <sha>..<sha> 100644
 
 **commit**: `<sha>`
 
-**理由**: reason phand
+**Reason**: reason phand
 
 **Handoffs from Hugin**: #102
 
@@ -225,7 +225,7 @@ the old memory records, and more reliable:
 
 How to handle them (these handoffs in themselves count as a substantive change):
 - [resolves]: Alex has already dealt with or answered the matching to-do. Remove that item from
-  `## 待辦` (match by meaning; the wording may differ), and write the fact into the right section of STATE.md.
+  `## To-do` (match by meaning; the wording may differ), and write the fact into the right section of STATE.md.
 - [changes]: the matching to-do still stands, but its premise or date has changed. Rewrite that item according to the
   fact, and update related sections if needed.
 - [relevant]: for reference only; update STATE.md only if it affects the current state.
@@ -257,16 +257,16 @@ Rules:
   in itself counts as a substantive change.
 - Where STATE.md mentions files that have been moved, or open questions that newer content has answered or overturned,
   fix those too.
-- STATE.md must have a `## 待辦` section in a fixed format, one item per line:
-  `- [ ] 〔Alex〕…` (only Alex can do it: accounts, passwords, payments, a decision or an answer that is
+- STATE.md must have a `## To-do` section in a fixed format, one item per line:
+  `- [ ] [Alex]…` (only Alex can do it: accounts, passwords, payments, a decision or an answer that is
   Alex's to give)
-  `- [ ] 〔agent〕…` (an agent can do it directly)
-  `- [ ] 〔待定〕…` (blocked until something still open is settled, other than a decision that is Alex's: an
-  item waiting on Alex's decision is 〔Alex〕)
-  The `(等 Alex:task-…)` at the end of a 〔Alex〕 line is the key of Hugin's task registry: **keep it exactly as
+  `- [ ] [agent]…` (an agent can do it directly)
+  `- [ ] [tbd]…` (blocked until something still open is settled, other than a decision that is Alex's: an
+  item waiting on Alex's decision is [Alex])
+  The `(waiting on Alex: task-…)` at the end of a [Alex] line is the key of Hugin's task registry: **keep it exactly as
   it is, and do not change that line's text** (when Hugin closes the task, Alex's line is removed
   automatically by its key; if the text changes, the key no longer matches).
-  With no to-dos, write `- (無)`. List only what is not yet done and concretely actionable; remove what is done,
+  With no to-dos, write `- (none)`. List only what is not yet done and concretely actionable; remove what is done,
   overturned or out of date instead of leaving it ticked. To-dos go only in this section: do not open other lists such
   as "next steps" or "not done yet" anywhere else in STATE.md.
 - Do not create, modify or delete any file other than ./STATE.md.
@@ -298,7 +298,7 @@ the old memory records, and more reliable:
 
 How to handle them (these handoffs in themselves count as a substantive change):
 - [resolves]: Alex has already dealt with or answered the matching to-do. Remove that item from
-  `## 待辦` (match by meaning; the wording may differ), and write the fact into the right section of STATE.md.
+  `## To-do` (match by meaning; the wording may differ), and write the fact into the right section of STATE.md.
 - [changes]: the matching to-do still stands, but its premise or date has changed. Rewrite that item according to the
   fact, and update related sections if needed.
 - [relevant]: for reference only; update STATE.md only if it affects the current state.
@@ -342,16 +342,16 @@ Rules:
   in itself counts as a substantive change.
 - Where STATE.md mentions files that have been moved, or open questions that newer content has answered or overturned,
   fix those too.
-- STATE.md must have a `## 待辦` section in a fixed format, one item per line:
-  `- [ ] 〔Alex〕…` (only Alex can do it: accounts, passwords, payments, a decision or an answer that is
+- STATE.md must have a `## To-do` section in a fixed format, one item per line:
+  `- [ ] [Alex]…` (only Alex can do it: accounts, passwords, payments, a decision or an answer that is
   Alex's to give)
-  `- [ ] 〔agent〕…` (an agent can do it directly)
-  `- [ ] 〔待定〕…` (blocked until something still open is settled, other than a decision that is Alex's: an
-  item waiting on Alex's decision is 〔Alex〕)
-  The `(等 Alex:task-…)` at the end of a 〔Alex〕 line is the key of Hugin's task registry: **keep it exactly as
+  `- [ ] [agent]…` (an agent can do it directly)
+  `- [ ] [tbd]…` (blocked until something still open is settled, other than a decision that is Alex's: an
+  item waiting on Alex's decision is [Alex])
+  The `(waiting on Alex: task-…)` at the end of a [Alex] line is the key of Hugin's task registry: **keep it exactly as
   it is, and do not change that line's text** (when Hugin closes the task, Alex's line is removed
   automatically by its key; if the text changes, the key no longer matches).
-  With no to-dos, write `- (無)`. List only what is not yet done and concretely actionable; remove what is done,
+  With no to-dos, write `- (none)`. List only what is not yet done and concretely actionable; remove what is done,
   overturned or out of date instead of leaving it ticked. To-dos go only in this section: do not open other lists such
   as "next steps" or "not done yet" anywhere else in STATE.md.
 
@@ -360,7 +360,7 @@ The format of the edit list:
   once** (verbatim, newlines included; if it is so short that it occurs several times, take a few more characters), and
   new is the text that replaces it (an empty string deletes the passage). Do not return the whole STATE.md.
 - With nothing to change: state_updated: false, edits: [].
-- The `(等 Alex:task-…)` marker at the end of a 〔Alex〕 line must not change; when that item is done, delete the
+- The `(waiting on Alex: task-…)` marker at the end of a [Alex] line must not change; when that item is done, delete the
   whole line.
 - summary and reason are written in English, like the text in STATE.md.
 === prompt librarian-state @ p1
@@ -400,7 +400,7 @@ the old memory records, and more reliable:
 
 How to handle them (these handoffs in themselves count as a substantive change):
 - [resolves]: Alex has already dealt with or answered the matching to-do. Remove that item from
-  `## 待辦` (match by meaning; the wording may differ), and write the fact into the right section of STATE.md.
+  `## To-do` (match by meaning; the wording may differ), and write the fact into the right section of STATE.md.
 - [changes]: the matching to-do still stands, but its premise or date has changed. Rewrite that item according to the
   fact, and update related sections if needed.
 - [relevant]: for reference only; update STATE.md only if it affects the current state.
@@ -442,16 +442,16 @@ Rules:
   in itself counts as a substantive change.
 - Where STATE.md mentions files that have been moved, or open questions that newer content has answered or overturned,
   fix those too.
-- STATE.md must have a `## 待辦` section in a fixed format, one item per line:
-  `- [ ] 〔Alex〕…` (only Alex can do it: accounts, passwords, payments, a decision or an answer that is
+- STATE.md must have a `## To-do` section in a fixed format, one item per line:
+  `- [ ] [Alex]…` (only Alex can do it: accounts, passwords, payments, a decision or an answer that is
   Alex's to give)
-  `- [ ] 〔agent〕…` (an agent can do it directly)
-  `- [ ] 〔待定〕…` (blocked until something still open is settled, other than a decision that is Alex's: an
-  item waiting on Alex's decision is 〔Alex〕)
-  The `(等 Alex:task-…)` at the end of a 〔Alex〕 line is the key of Hugin's task registry: **keep it exactly as
+  `- [ ] [agent]…` (an agent can do it directly)
+  `- [ ] [tbd]…` (blocked until something still open is settled, other than a decision that is Alex's: an
+  item waiting on Alex's decision is [Alex])
+  The `(waiting on Alex: task-…)` at the end of a [Alex] line is the key of Hugin's task registry: **keep it exactly as
   it is, and do not change that line's text** (when Hugin closes the task, Alex's line is removed
   automatically by its key; if the text changes, the key no longer matches).
-  With no to-dos, write `- (無)`. List only what is not yet done and concretely actionable; remove what is done,
+  With no to-dos, write `- (none)`. List only what is not yet done and concretely actionable; remove what is done,
   overturned or out of date instead of leaving it ticked. To-dos go only in this section: do not open other lists such
   as "next steps" or "not done yet" anywhere else in STATE.md.
 - Do not create, modify or delete any file other than ./STATE.md.
@@ -494,7 +494,7 @@ the old memory records, and more reliable:
 
 How to handle them (these handoffs in themselves count as a substantive change):
 - [resolves]: Alex has already dealt with or answered the matching to-do. Remove that item from
-  `## 待辦` (match by meaning; the wording may differ), and write the fact into the right section of STATE.md.
+  `## To-do` (match by meaning; the wording may differ), and write the fact into the right section of STATE.md.
 - [changes]: the matching to-do still stands, but its premise or date has changed. Rewrite that item according to the
   fact, and update related sections if needed.
 - [relevant]: for reference only; update STATE.md only if it affects the current state.
@@ -548,16 +548,16 @@ Rules:
   in itself counts as a substantive change.
 - Where STATE.md mentions files that have been moved, or open questions that newer content has answered or overturned,
   fix those too.
-- STATE.md must have a `## 待辦` section in a fixed format, one item per line:
-  `- [ ] 〔Alex〕…` (only Alex can do it: accounts, passwords, payments, a decision or an answer that is
+- STATE.md must have a `## To-do` section in a fixed format, one item per line:
+  `- [ ] [Alex]…` (only Alex can do it: accounts, passwords, payments, a decision or an answer that is
   Alex's to give)
-  `- [ ] 〔agent〕…` (an agent can do it directly)
-  `- [ ] 〔待定〕…` (blocked until something still open is settled, other than a decision that is Alex's: an
-  item waiting on Alex's decision is 〔Alex〕)
-  The `(等 Alex:task-…)` at the end of a 〔Alex〕 line is the key of Hugin's task registry: **keep it exactly as
+  `- [ ] [agent]…` (an agent can do it directly)
+  `- [ ] [tbd]…` (blocked until something still open is settled, other than a decision that is Alex's: an
+  item waiting on Alex's decision is [Alex])
+  The `(waiting on Alex: task-…)` at the end of a [Alex] line is the key of Hugin's task registry: **keep it exactly as
   it is, and do not change that line's text** (when Hugin closes the task, Alex's line is removed
   automatically by its key; if the text changes, the key no longer matches).
-  With no to-dos, write `- (無)`. List only what is not yet done and concretely actionable; remove what is done,
+  With no to-dos, write `- (none)`. List only what is not yet done and concretely actionable; remove what is done,
   overturned or out of date instead of leaving it ticked. To-dos go only in this section: do not open other lists such
   as "next steps" or "not done yet" anywhere else in STATE.md.
 
@@ -566,7 +566,7 @@ The format of the edit list:
   once** (verbatim, newlines included; if it is so short that it occurs several times, take a few more characters), and
   new is the text that replaces it (an empty string deletes the passage). Do not return the whole STATE.md.
 - With nothing to change: state_updated: false, edits: [].
-- The `(等 Alex:task-…)` marker at the end of a 〔Alex〕 line must not change; when that item is done, delete the
+- The `(waiting on Alex: task-…)` marker at the end of a [Alex] line must not change; when that item is done, delete the
   whole line.
 - summary and reason are written in English, like the text in STATE.md.
 === prompt librarian-state @ p2
@@ -605,16 +605,16 @@ Rules:
   in itself counts as a substantive change.
 - Where STATE.md mentions files that have been moved, or open questions that newer content has answered or overturned,
   fix those too.
-- STATE.md must have a `## 待辦` section in a fixed format, one item per line:
-  `- [ ] 〔Alex〕…` (only Alex can do it: accounts, passwords, payments, a decision or an answer that is
+- STATE.md must have a `## To-do` section in a fixed format, one item per line:
+  `- [ ] [Alex]…` (only Alex can do it: accounts, passwords, payments, a decision or an answer that is
   Alex's to give)
-  `- [ ] 〔agent〕…` (an agent can do it directly)
-  `- [ ] 〔待定〕…` (blocked until something still open is settled, other than a decision that is Alex's: an
-  item waiting on Alex's decision is 〔Alex〕)
-  The `(等 Alex:task-…)` at the end of a 〔Alex〕 line is the key of Hugin's task registry: **keep it exactly as
+  `- [ ] [agent]…` (an agent can do it directly)
+  `- [ ] [tbd]…` (blocked until something still open is settled, other than a decision that is Alex's: an
+  item waiting on Alex's decision is [Alex])
+  The `(waiting on Alex: task-…)` at the end of a [Alex] line is the key of Hugin's task registry: **keep it exactly as
   it is, and do not change that line's text** (when Hugin closes the task, Alex's line is removed
   automatically by its key; if the text changes, the key no longer matches).
-  With no to-dos, write `- (無)`. List only what is not yet done and concretely actionable; remove what is done,
+  With no to-dos, write `- (none)`. List only what is not yet done and concretely actionable; remove what is done,
   overturned or out of date instead of leaving it ticked. To-dos go only in this section: do not open other lists such
   as "next steps" or "not done yet" anywhere else in STATE.md.
 - Do not create, modify or delete any file other than ./STATE.md.
@@ -668,16 +668,16 @@ Rules:
   in itself counts as a substantive change.
 - Where STATE.md mentions files that have been moved, or open questions that newer content has answered or overturned,
   fix those too.
-- STATE.md must have a `## 待辦` section in a fixed format, one item per line:
-  `- [ ] 〔Alex〕…` (only Alex can do it: accounts, passwords, payments, a decision or an answer that is
+- STATE.md must have a `## To-do` section in a fixed format, one item per line:
+  `- [ ] [Alex]…` (only Alex can do it: accounts, passwords, payments, a decision or an answer that is
   Alex's to give)
-  `- [ ] 〔agent〕…` (an agent can do it directly)
-  `- [ ] 〔待定〕…` (blocked until something still open is settled, other than a decision that is Alex's: an
-  item waiting on Alex's decision is 〔Alex〕)
-  The `(等 Alex:task-…)` at the end of a 〔Alex〕 line is the key of Hugin's task registry: **keep it exactly as
+  `- [ ] [agent]…` (an agent can do it directly)
+  `- [ ] [tbd]…` (blocked until something still open is settled, other than a decision that is Alex's: an
+  item waiting on Alex's decision is [Alex])
+  The `(waiting on Alex: task-…)` at the end of a [Alex] line is the key of Hugin's task registry: **keep it exactly as
   it is, and do not change that line's text** (when Hugin closes the task, Alex's line is removed
   automatically by its key; if the text changes, the key no longer matches).
-  With no to-dos, write `- (無)`. List only what is not yet done and concretely actionable; remove what is done,
+  With no to-dos, write `- (none)`. List only what is not yet done and concretely actionable; remove what is done,
   overturned or out of date instead of leaving it ticked. To-dos go only in this section: do not open other lists such
   as "next steps" or "not done yet" anywhere else in STATE.md.
 
@@ -686,7 +686,7 @@ The format of the edit list:
   once** (verbatim, newlines included; if it is so short that it occurs several times, take a few more characters), and
   new is the text that replaces it (an empty string deletes the passage). Do not return the whole STATE.md.
 - With nothing to change: state_updated: false, edits: [].
-- The `(等 Alex:task-…)` marker at the end of a 〔Alex〕 line must not change; when that item is done, delete the
+- The `(waiting on Alex: task-…)` marker at the end of a [Alex] line must not change; when that item is done, delete the
   whole line.
 - summary and reason are written in English, like the text in STATE.md.
 === prompt librarian-state @ p3
@@ -725,16 +725,16 @@ Rules:
   in itself counts as a substantive change.
 - Where STATE.md mentions files that have been moved, or open questions that newer content has answered or overturned,
   fix those too.
-- STATE.md must have a `## 待辦` section in a fixed format, one item per line:
-  `- [ ] 〔Alex〕…` (only Alex can do it: accounts, passwords, payments, a decision or an answer that is
+- STATE.md must have a `## To-do` section in a fixed format, one item per line:
+  `- [ ] [Alex]…` (only Alex can do it: accounts, passwords, payments, a decision or an answer that is
   Alex's to give)
-  `- [ ] 〔agent〕…` (an agent can do it directly)
-  `- [ ] 〔待定〕…` (blocked until something still open is settled, other than a decision that is Alex's: an
-  item waiting on Alex's decision is 〔Alex〕)
-  The `(等 Alex:task-…)` at the end of a 〔Alex〕 line is the key of Hugin's task registry: **keep it exactly as
+  `- [ ] [agent]…` (an agent can do it directly)
+  `- [ ] [tbd]…` (blocked until something still open is settled, other than a decision that is Alex's: an
+  item waiting on Alex's decision is [Alex])
+  The `(waiting on Alex: task-…)` at the end of a [Alex] line is the key of Hugin's task registry: **keep it exactly as
   it is, and do not change that line's text** (when Hugin closes the task, Alex's line is removed
   automatically by its key; if the text changes, the key no longer matches).
-  With no to-dos, write `- (無)`. List only what is not yet done and concretely actionable; remove what is done,
+  With no to-dos, write `- (none)`. List only what is not yet done and concretely actionable; remove what is done,
   overturned or out of date instead of leaving it ticked. To-dos go only in this section: do not open other lists such
   as "next steps" or "not done yet" anywhere else in STATE.md.
 - Do not create, modify or delete any file other than ./STATE.md.
@@ -788,16 +788,16 @@ Rules:
   in itself counts as a substantive change.
 - Where STATE.md mentions files that have been moved, or open questions that newer content has answered or overturned,
   fix those too.
-- STATE.md must have a `## 待辦` section in a fixed format, one item per line:
-  `- [ ] 〔Alex〕…` (only Alex can do it: accounts, passwords, payments, a decision or an answer that is
+- STATE.md must have a `## To-do` section in a fixed format, one item per line:
+  `- [ ] [Alex]…` (only Alex can do it: accounts, passwords, payments, a decision or an answer that is
   Alex's to give)
-  `- [ ] 〔agent〕…` (an agent can do it directly)
-  `- [ ] 〔待定〕…` (blocked until something still open is settled, other than a decision that is Alex's: an
-  item waiting on Alex's decision is 〔Alex〕)
-  The `(等 Alex:task-…)` at the end of a 〔Alex〕 line is the key of Hugin's task registry: **keep it exactly as
+  `- [ ] [agent]…` (an agent can do it directly)
+  `- [ ] [tbd]…` (blocked until something still open is settled, other than a decision that is Alex's: an
+  item waiting on Alex's decision is [Alex])
+  The `(waiting on Alex: task-…)` at the end of a [Alex] line is the key of Hugin's task registry: **keep it exactly as
   it is, and do not change that line's text** (when Hugin closes the task, Alex's line is removed
   automatically by its key; if the text changes, the key no longer matches).
-  With no to-dos, write `- (無)`. List only what is not yet done and concretely actionable; remove what is done,
+  With no to-dos, write `- (none)`. List only what is not yet done and concretely actionable; remove what is done,
   overturned or out of date instead of leaving it ticked. To-dos go only in this section: do not open other lists such
   as "next steps" or "not done yet" anywhere else in STATE.md.
 
@@ -806,7 +806,7 @@ The format of the edit list:
   once** (verbatim, newlines included; if it is so short that it occurs several times, take a few more characters), and
   new is the text that replaces it (an empty string deletes the passage). Do not return the whole STATE.md.
 - With nothing to change: state_updated: false, edits: [].
-- The `(等 Alex:task-…)` marker at the end of a 〔Alex〕 line must not change; when that item is done, delete the
+- The `(waiting on Alex: task-…)` marker at the end of a [Alex] line must not change; when that item is done, delete the
   whole line.
 - summary and reason are written in English, like the text in STATE.md.
 === prompt librarian-state @ pdang
@@ -847,34 +847,34 @@ Rules:
   in itself counts as a substantive change.
 - Where STATE.md mentions files that have been moved, or open questions that newer content has answered or overturned,
   fix those too.
-- STATE.md must have a `## 待辦` section in a fixed format, one item per line:
-  `- [ ] 〔Alex〕…` (only Alex can do it: accounts, passwords, payments, a decision or an answer that is
+- STATE.md must have a `## To-do` section in a fixed format, one item per line:
+  `- [ ] [Alex]…` (only Alex can do it: accounts, passwords, payments, a decision or an answer that is
   Alex's to give)
-  `- [ ] 〔agent〕…` (an agent can do it directly)
-  `- [ ] 〔待定〕…` (blocked until something still open is settled, other than a decision that is Alex's: an
-  item waiting on Alex's decision is 〔Alex〕)
-  The `(等 Alex:task-…)` at the end of a 〔Alex〕 line is the key of Hugin's task registry: **keep it exactly as
+  `- [ ] [agent]…` (an agent can do it directly)
+  `- [ ] [tbd]…` (blocked until something still open is settled, other than a decision that is Alex's: an
+  item waiting on Alex's decision is [Alex])
+  The `(waiting on Alex: task-…)` at the end of a [Alex] line is the key of Hugin's task registry: **keep it exactly as
   it is, and do not change that line's text** (when Hugin closes the task, Alex's line is removed
   automatically by its key; if the text changes, the key no longer matches).
-  With no to-dos, write `- (無)`. List only what is not yet done and concretely actionable; remove what is done,
+  With no to-dos, write `- (none)`. List only what is not yet done and concretely actionable; remove what is done,
   overturned or out of date instead of leaving it ticked. To-dos go only in this section: do not open other lists such
   as "next steps" or "not done yet" anywhere else in STATE.md.
 - Do not create, modify or delete any file other than ./STATE.md.
 === prompt librarian-todo-format @ pdang
-Fix only the format of the `## 待辦` section of ./STATE.md. Do not change anything else, nor the content of the
+Fix only the format of the `## To-do` section of ./STATE.md. Do not change anything else, nor the content of the
 to-dos, and do not touch any other file. Keep the tag each item already has (an item you move into the section keeps
 its tag); only an item without a tag gets one.
 
-The correct format (one item per line; with no to-dos write `- (無)`; STATE.md must have this section):
-  `- [ ] 〔Alex〕…` (only Alex can do it: accounts, passwords, payments, a decision or an answer that is
+The correct format (one item per line; with no to-dos write `- (none)`; STATE.md must have this section):
+  `- [ ] [Alex]…` (only Alex can do it: accounts, passwords, payments, a decision or an answer that is
   Alex's to give, things Alex has to buy or do personally)
-  `- [ ] 〔agent〕…` (an agent can do it directly)
-  `- [ ] 〔待定〕…` (blocked until something still open is settled, other than a decision that is Alex's: an
-  item waiting on Alex's decision is 〔Alex〕)
+  `- [ ] [agent]…` (an agent can do it directly)
+  `- [ ] [tbd]…` (blocked until something still open is settled, other than a decision that is Alex's: an
+  item waiting on Alex's decision is [Alex])
 
 If STATE.md has to-do-like lists elsewhere (for example "open questions", "needs Alex to decide", "can be done by
-an agent", "next steps", "not done yet"), **move** those items into `## 待辦` (marking who is responsible) and
-delete the original section; write `- (無)` only when the whole STATE.md truly has no to-dos. Schedules and facts
+an agent", "next steps", "not done yet"), **move** those items into `## To-do` (marking who is responsible) and
+delete the original section; write `- (none)` only when the whole STATE.md truly has no to-dos. Schedules and facts
 about finished work are not to-dos: leave them where they are. Anything you write is in English, like the
 rest of the file.
 
@@ -933,16 +933,16 @@ Rules:
   in itself counts as a substantive change.
 - Where STATE.md mentions files that have been moved, or open questions that newer content has answered or overturned,
   fix those too.
-- STATE.md must have a `## 待辦` section in a fixed format, one item per line:
-  `- [ ] 〔Alex〕…` (only Alex can do it: accounts, passwords, payments, a decision or an answer that is
+- STATE.md must have a `## To-do` section in a fixed format, one item per line:
+  `- [ ] [Alex]…` (only Alex can do it: accounts, passwords, payments, a decision or an answer that is
   Alex's to give)
-  `- [ ] 〔agent〕…` (an agent can do it directly)
-  `- [ ] 〔待定〕…` (blocked until something still open is settled, other than a decision that is Alex's: an
-  item waiting on Alex's decision is 〔Alex〕)
-  The `(等 Alex:task-…)` at the end of a 〔Alex〕 line is the key of Hugin's task registry: **keep it exactly as
+  `- [ ] [agent]…` (an agent can do it directly)
+  `- [ ] [tbd]…` (blocked until something still open is settled, other than a decision that is Alex's: an
+  item waiting on Alex's decision is [Alex])
+  The `(waiting on Alex: task-…)` at the end of a [Alex] line is the key of Hugin's task registry: **keep it exactly as
   it is, and do not change that line's text** (when Hugin closes the task, Alex's line is removed
   automatically by its key; if the text changes, the key no longer matches).
-  With no to-dos, write `- (無)`. List only what is not yet done and concretely actionable; remove what is done,
+  With no to-dos, write `- (none)`. List only what is not yet done and concretely actionable; remove what is done,
   overturned or out of date instead of leaving it ticked. To-dos go only in this section: do not open other lists such
   as "next steps" or "not done yet" anywhere else in STATE.md.
 
@@ -951,7 +951,7 @@ The format of the edit list:
   once** (verbatim, newlines included; if it is so short that it occurs several times, take a few more characters), and
   new is the text that replaces it (an empty string deletes the passage). Do not return the whole STATE.md.
 - With nothing to change: state_updated: false, edits: [].
-- The `(等 Alex:task-…)` marker at the end of a 〔Alex〕 line must not change; when that item is done, delete the
+- The `(waiting on Alex: task-…)` marker at the end of a [Alex] line must not change; when that item is done, delete the
   whole line.
 - summary and reason are written in English, like the text in STATE.md.
 === prompt librarian-state @ phand
@@ -967,7 +967,7 @@ the old memory records, and more reliable:
 
 How to handle them (these handoffs in themselves count as a substantive change):
 - [resolves]: Alex has already dealt with or answered the matching to-do. Remove that item from
-  `## 待辦` (match by meaning; the wording may differ), and write the fact into the right section of STATE.md.
+  `## To-do` (match by meaning; the wording may differ), and write the fact into the right section of STATE.md.
 - [changes]: the matching to-do still stands, but its premise or date has changed. Rewrite that item according to the
   fact, and update related sections if needed.
 - [relevant]: for reference only; update STATE.md only if it affects the current state.
@@ -999,16 +999,16 @@ Rules:
   in itself counts as a substantive change.
 - Where STATE.md mentions files that have been moved, or open questions that newer content has answered or overturned,
   fix those too.
-- STATE.md must have a `## 待辦` section in a fixed format, one item per line:
-  `- [ ] 〔Alex〕…` (only Alex can do it: accounts, passwords, payments, a decision or an answer that is
+- STATE.md must have a `## To-do` section in a fixed format, one item per line:
+  `- [ ] [Alex]…` (only Alex can do it: accounts, passwords, payments, a decision or an answer that is
   Alex's to give)
-  `- [ ] 〔agent〕…` (an agent can do it directly)
-  `- [ ] 〔待定〕…` (blocked until something still open is settled, other than a decision that is Alex's: an
-  item waiting on Alex's decision is 〔Alex〕)
-  The `(等 Alex:task-…)` at the end of a 〔Alex〕 line is the key of Hugin's task registry: **keep it exactly as
+  `- [ ] [agent]…` (an agent can do it directly)
+  `- [ ] [tbd]…` (blocked until something still open is settled, other than a decision that is Alex's: an
+  item waiting on Alex's decision is [Alex])
+  The `(waiting on Alex: task-…)` at the end of a [Alex] line is the key of Hugin's task registry: **keep it exactly as
   it is, and do not change that line's text** (when Hugin closes the task, Alex's line is removed
   automatically by its key; if the text changes, the key no longer matches).
-  With no to-dos, write `- (無)`. List only what is not yet done and concretely actionable; remove what is done,
+  With no to-dos, write `- (none)`. List only what is not yet done and concretely actionable; remove what is done,
   overturned or out of date instead of leaving it ticked. To-dos go only in this section: do not open other lists such
   as "next steps" or "not done yet" anywhere else in STATE.md.
 - Do not create, modify or delete any file other than ./STATE.md.
@@ -1027,7 +1027,7 @@ the old memory records, and more reliable:
 
 How to handle them (these handoffs in themselves count as a substantive change):
 - [resolves]: Alex has already dealt with or answered the matching to-do. Remove that item from
-  `## 待辦` (match by meaning; the wording may differ), and write the fact into the right section of STATE.md.
+  `## To-do` (match by meaning; the wording may differ), and write the fact into the right section of STATE.md.
 - [changes]: the matching to-do still stands, but its premise or date has changed. Rewrite that item according to the
   fact, and update related sections if needed.
 - [relevant]: for reference only; update STATE.md only if it affects the current state.
@@ -1071,16 +1071,16 @@ Rules:
   in itself counts as a substantive change.
 - Where STATE.md mentions files that have been moved, or open questions that newer content has answered or overturned,
   fix those too.
-- STATE.md must have a `## 待辦` section in a fixed format, one item per line:
-  `- [ ] 〔Alex〕…` (only Alex can do it: accounts, passwords, payments, a decision or an answer that is
+- STATE.md must have a `## To-do` section in a fixed format, one item per line:
+  `- [ ] [Alex]…` (only Alex can do it: accounts, passwords, payments, a decision or an answer that is
   Alex's to give)
-  `- [ ] 〔agent〕…` (an agent can do it directly)
-  `- [ ] 〔待定〕…` (blocked until something still open is settled, other than a decision that is Alex's: an
-  item waiting on Alex's decision is 〔Alex〕)
-  The `(等 Alex:task-…)` at the end of a 〔Alex〕 line is the key of Hugin's task registry: **keep it exactly as
+  `- [ ] [agent]…` (an agent can do it directly)
+  `- [ ] [tbd]…` (blocked until something still open is settled, other than a decision that is Alex's: an
+  item waiting on Alex's decision is [Alex])
+  The `(waiting on Alex: task-…)` at the end of a [Alex] line is the key of Hugin's task registry: **keep it exactly as
   it is, and do not change that line's text** (when Hugin closes the task, Alex's line is removed
   automatically by its key; if the text changes, the key no longer matches).
-  With no to-dos, write `- (無)`. List only what is not yet done and concretely actionable; remove what is done,
+  With no to-dos, write `- (none)`. List only what is not yet done and concretely actionable; remove what is done,
   overturned or out of date instead of leaving it ticked. To-dos go only in this section: do not open other lists such
   as "next steps" or "not done yet" anywhere else in STATE.md.
 
@@ -1089,7 +1089,7 @@ The format of the edit list:
   once** (verbatim, newlines included; if it is so short that it occurs several times, take a few more characters), and
   new is the text that replaces it (an empty string deletes the passage). Do not return the whole STATE.md.
 - With nothing to change: state_updated: false, edits: [].
-- The `(等 Alex:task-…)` marker at the end of a 〔Alex〕 line must not change; when that item is done, delete the
+- The `(waiting on Alex: task-…)` marker at the end of a [Alex] line must not change; when that item is done, delete the
   whole line.
 - summary and reason are written in English, like the text in STATE.md.
 === prompt librarian-index @ hub

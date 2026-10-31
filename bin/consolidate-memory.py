@@ -60,6 +60,7 @@ import time
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
 import hubconf  # noqa: E402
 import i18n  # noqa: E402
+import todo_tokens  # noqa: E402
 
 _ = i18n.domain(__file__)
 HOME = pathlib.Path.home()
@@ -429,7 +430,8 @@ def consolidate(s: dict, model: str, dry_run: bool, keep: bool) -> dict:
         if "STATE.md" in changed and "STATE.md" not in reverted and state_todo_broken(repo, base):
             revert(repo, base, "STATE.md")
             reverted.add("STATE.md")
-            warnings.append(_("reverted `STATE.md`: the `{heading}` section's format was broken", heading="## 待辦"))
+            warnings.append(_("reverted `STATE.md`: the `{heading}` section's format was broken",
+                              heading=todo_tokens.tokens(hubconf.lang_content())["todo_heading"]))
         good = [c for c in good if c.get("file", "").lstrip("./") not in reverted]
 
         # What to git rm: declared folded by the model ∩ this run's batch ∩ destinations all valid, existing and

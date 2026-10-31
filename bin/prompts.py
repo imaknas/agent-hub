@@ -16,9 +16,9 @@ the values passed in:
                                     them)
   content_language                  the language the model or agent writes in: hub.json language.content, or lang=
   todo_heading, tag_owner, tag_agent, tag_tbd, todo_none, key_marker, key_pattern
-                                    the to-do block's tokens (contracts/state-todo.v1.md): the zh-Hant set until every
-                                    reader accepts the English one too (step 6, TOKEN_SET). key_marker is a line's
-                                    marker with an example key, key_pattern the same with `<key>` in its place
+                                    the to-do block's tokens in the content language's set (contracts/state-todo.v2.md,
+                                    bin/todo_tokens.py; every reader accepts both sets). key_marker is a line's marker
+                                    with an example key, key_pattern the same with `<key>` in its place
 A placeholder left unfilled is an error, not text sent to a model or an agent. Values are inserted in one pass: a
 `{{…}}` inside a value (a memory diff, a letter) stays as it is. The language values are looked up only when the text
 uses them.
@@ -44,14 +44,8 @@ LANGUAGE_KEYS = {"content_language", "todo_heading", "tag_owner", "tag_agent", "
                  "key_pattern"}
 
 
-# Until step 6 (docs/design/i18n.md) every reader of STATE.md's to-do block (check-state-todo, gen-todo, registrar, the
-# assistant) knows only the zh-Hant set, so the tokens stay zh-Hant whatever the content language; the prose follows
-# content_language. Step 6 makes this TOKENS[lang] once the readers accept both sets.
-TOKEN_SET = "zh-Hant"
-
-
 def language_values(lang: str, owner: str) -> dict[str, str]:
-    t = TOKENS[TOKEN_SET]
+    t = TOKENS[lang]
     return {"content_language": LANGUAGE_NAMES[lang], "todo_heading": t["todo_heading"],
             "tag_owner": t["tag"].format(owner), "tag_agent": t["tag"].format("agent"), "tag_tbd": t["tag"].format(t["tbd"]),
             "todo_none": t["todo_none"], "key_marker": t["key_marker"].format(owner=owner, key="task-…"),

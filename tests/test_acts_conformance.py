@@ -2,18 +2,21 @@
 contracts/vendor/.../SOURCE): proves that bin/registrar.py (the registry's steps) and bin/gen-todo.py (classifying the
 to-do section) meet the spec.
 
-Runs the zh-hant profile (this instance's token set). The owner tag in the data is `Owner`; per the
-conformance/README rules it is replaced with this machine's configured owner.tag before comparing. parse's full
-classification (agent, to be decided, format problems) is in gen-todo; the registrar handles only the owner's lines.
-parse also runs the spec's en profile, translated into agent-hub's English set (EN_PROFILE: the spec's default English
-profile differs from it in the heading, the tbd label and the owner tag, which agent-hub takes from settings).
+Runs both profiles, each with the content language that writes it: zh-hant (this instance's token set) and the spec's
+en profile translated into agent-hub's English set (EN_PROFILE: the spec's default English profile differs from it in
+the heading, the tbd label and the owner tag, which agent-hub takes from settings). The owner tag in the data is
+`Owner`; per the conformance/README rules it is replaced with this machine's configured owner.tag before comparing.
+parse's full classification (agent, to be decided, format problems) is in gen-todo; the registrar handles only the
+owner's lines.
 
     bin/py -m unittest discover -s tests
 """
 import importlib.util
 import json
+import os
 import pathlib
 import unittest
+from unittest import mock
 
 ROOT = pathlib.Path(__file__).resolve().parents[1]
 FIX = ROOT / "contracts" / "vendor" / "agent-ops-specs" / "principal-handoff-0.3" / "acts"
@@ -31,8 +34,8 @@ gen_todo = load("gen_todo", "gen-todo.py")
 TAG = registrar.TAG
 
 
-def cases(file: str):
-    return [c for c in json.loads((FIX / file).read_text())["cases"] if c.get("profile", "zh-hant") == "zh-hant"]
+def cases(file: str, profile: str = "zh-hant"):
+    return [c for c in json.loads((FIX / file).read_text())["cases"] if c.get("profile", "zh-hant") == profile]
 
 
 def own(x):
@@ -65,43 +68,47 @@ def en(x):
         return x
     if isinstance(x, list):
         return [en(v) for v in x]
+    if isinstance(x, dict):
+        return {k: en(v) for k, v in x.items()}
     return x
 
 
+# profile in the data -> (its translation, the content language whose writer produces it)
+PROFILES = {"zh-hant": (own, "zh-Hant"), "en": (en, "en")}
+
+
 class Acts(unittest.TestCase):
-    def check_parse(self, c, own):
-        text = "\n".join(own(c["document"])) + "\n"
-        exp = c["expect"]
-        self.assertEqual(gen_todo.todo_sections(text) != [], exp["section"])
-        items = {o: [] for o in gen_todo.OWNERS}
-        problems: list = []
-        gen_todo.parse("demo", text, items, problems)
-        got = []
-        for owner, rows in items.items():
-            for _, t in rows:
-                m = registrar.KEY.search(t)
-                got.append((ASSIGNEE[owner], (t[:m.start()] if m else t).strip(), m.group(1) if m else None))
-        want = [(t["assignee"], own(t["text"]), t["key"]) for t in exp["tasks"]]
-        self.assertEqual(sorted(got), sorted(want))
-        self.assertEqual(len(problems) - (not exp["section"]), len(exp["problems"]), "no section is one problem here")
-        # the owner lines the registrar sees match the spec
-        mine = [(t["text"], t["key"]) for t in registrar.owner_lines(own(c["document"]))]
-        self.assertEqual(sorted(mine), sorted((own(t["text"]), t["key"]) for t in exp["tasks"]
-                                              if t["assignee"] == "principal"))
+    def each(self, file: str, check) -> None:
+        """every case of both profiles: check(case, its translation), under the content language that writes it"""
+        n = 0
+        for profile, (tr, lang) in PROFILES.items():
+            for c in cases(file, profile):
+                n += 1
+                with self.subTest(case=c["id"]), mock.patch.dict(os.environ, {"AGENT_HUB_LANG_CONTENT": lang}):
+                    check(c, tr)
+        self.assertTrue(n)
 
     def test_parse(self):
-        cs = cases("parse.json")
-        self.assertTrue(cs)
-        for c in cs:
-            with self.subTest(case=c["id"]):
-                self.check_parse(c, own)
-
-    def test_parse_english(self):
-        cs = [c for c in json.loads((FIX / "parse.json").read_text())["cases"] if c.get("profile") == "en"]
-        self.assertTrue(cs)
-        for c in cs:
-            with self.subTest(case=c["id"]):
-                self.check_parse(c, en)
+        def check(c, own):
+            text = "\n".join(own(c["document"])) + "\n"
+            exp = c["expect"]
+            self.assertEqual(gen_todo.todo_sections(text) != [], exp["section"])
+            items = {o: [] for o in gen_todo.OWNERS}
+            problems: list = []
+            gen_todo.parse("demo", text, items, problems)
+            got = []
+            for owner, rows in items.items():
+                for _, t in rows:
+                    m = registrar.KEY.search(t)
+                    got.append((ASSIGNEE[owner], (t[:m.start()] if m else t).strip(), m.group(1) if m else None))
+            want = [(t["assignee"], own(t["text"]), t["key"]) for t in exp["tasks"]]
+            self.assertEqual(sorted(got), sorted(want))
+            self.assertEqual(len(problems) - (not exp["section"]), len(exp["problems"]), "no section is one problem here")
+            # the owner lines the registrar sees match the spec
+            mine = [(t["text"], t["key"]) for t in registrar.owner_lines(own(c["document"]))]
+            self.assertEqual(sorted(mine), sorted((own(t["text"]), t["key"]) for t in exp["tasks"]
+                                                  if t["assignee"] == "principal"))
+        self.each("parse.json", check)
 
     def test_keys(self):
         for c in json.loads((FIX / "keys.json").read_text())["cases"]:
@@ -109,50 +116,40 @@ class Acts(unittest.TestCase):
                 self.assertEqual(registrar.task_key(c["project"], c["text"]), c["key"])
 
     def test_register(self):
-        cs = cases("register.json")
-        self.assertTrue(cs)
-        for c in cs:
-            with self.subTest(case=c["id"]):
-                lines = own(c["document"])
-                raised = []
-                for i, k, text in registrar.candidates(lines, c["project"]):
-                    raised.append({"key": k, "text": text})
-                    lines[i] = lines[i].rstrip() + registrar.stamp(k)
-                self.assertEqual(raised, own(c["expect"]["raised"]))
-                self.assertEqual(nonblank(lines), nonblank(own(c["expect"]["document"])))
-                self.assertEqual(registrar.candidates(lines, c["project"]), [], "not sent a second time")
+        def check(c, own):
+            lines = own(c["document"])
+            raised = []
+            for i, k, text in registrar.candidates(lines, c["project"]):
+                raised.append({"key": k, "text": text})
+                lines[i] = lines[i].rstrip() + registrar.stamp(k)
+            self.assertEqual(raised, own(c["expect"]["raised"]))
+            self.assertEqual(nonblank(lines), nonblank(own(c["expect"]["document"])))
+            self.assertEqual(registrar.candidates(lines, c["project"]), [], "not sent a second time")
+        self.each("register.json", check)
 
     def test_relink(self):
-        cs = cases("relink.json")
-        self.assertTrue(cs)
-        for c in cs:
-            with self.subTest(case=c["id"]):
-                lines = own(c["document"])
-                self.assertEqual(registrar.relink(lines, own(c["vanished"])), c["expect"]["relinked"])
-                self.assertEqual(nonblank(lines), nonblank(own(c["expect"]["document"])))
+        def check(c, own):
+            lines = own(c["document"])
+            self.assertEqual(registrar.relink(lines, own(c["vanished"])), c["expect"]["relinked"])
+            self.assertEqual(nonblank(lines), nonblank(own(c["expect"]["document"])))
+        self.each("relink.json", check)
 
     def test_amend(self):
-        cs = cases("amend.json")
-        self.assertTrue(cs)
-        for c in cs:
-            with self.subTest(case=c["id"]):
-                self.assertEqual(registrar.amendments(own(c["document"]), own(c["latest"])), own(c["expect"]))
+        def check(c, own):
+            self.assertEqual(registrar.amendments(own(c["document"]), own(c["latest"])), own(c["expect"]))
+        self.each("amend.json", check)
 
     def test_apply(self):
-        cs = cases("apply.json")
-        self.assertTrue(cs)
-        for c in cs:
-            with self.subTest(case=c["id"]):
-                lines = own(c["document"])
-                self.assertEqual(registrar.apply(lines, own(c["record"])), c["expect"]["changed"])
-                self.assertEqual(nonblank(lines), nonblank(own(c["expect"]["document"])))
+        def check(c, own):
+            lines = own(c["document"])
+            self.assertEqual(registrar.apply(lines, own(c["record"])), c["expect"]["changed"])
+            self.assertEqual(nonblank(lines), nonblank(own(c["expect"]["document"])))
+        self.each("apply.json", check)
 
     def test_reconcile(self):
-        cs = cases("reconcile.json")
-        self.assertTrue(cs)
-        for c in cs:
-            with self.subTest(case=c["id"]):
-                self.assertEqual(registrar.reconcile(own(c["document"]), own(c["open"])), c["expect"])
+        def check(c, own):
+            self.assertEqual(registrar.reconcile(own(c["document"]), own(c["open"])), c["expect"])
+        self.each("reconcile.json", check)
 
 
 if __name__ == "__main__":

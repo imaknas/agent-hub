@@ -113,7 +113,17 @@ class GenTodoParse(unittest.TestCase):
         self.assertIsNone(gen_todo.P.key.search("renew" + mark("task-p-0123456789") + " later"), "only at the end")
 
 
+def content(lang: str):
+    """the content language the registrar writes in"""
+    return mock.patch.dict("os.environ", {"AGENT_HUB_LANG_CONTENT": lang})
+
+
 class Registrar(unittest.TestCase):
+    def setUp(self):
+        p = content("zh-Hant")   # this instance's setting: what the registrar writes is the zh-Hant set
+        p.start()
+        self.addCleanup(p.stop)
+
     def test_owner_lines_and_keys(self):
         lines = state(item(TAG, "renew the domain" + mark("task-p-1")),
                       item(TAG, "sign" + mark("task-p-2", form="full_width_marker")),
@@ -263,6 +273,35 @@ class EnglishGenTodo(unittest.TestCase):
 
 
 class EnglishRegistrar(unittest.TestCase):
+    def setUp(self):
+        p = content("en")
+        p.start()
+        self.addCleanup(p.stop)
+
+    def test_writes_the_english_set(self):
+        self.assertEqual(registrar.stamp("task-p-1"), en_mark("task-p-1"))
+        lines = state(en_item(TAG, "renew" + en_mark("task-p-1")), heading=EN["todo_heading"]).splitlines()
+        registrar.strike(lines, "task-p-1")
+        self.assertIn(EN["todo_none"], lines)
+        registrar.readd(lines, "task-p-2", "sign")
+        self.assertIn(en_item(TAG, "sign" + en_mark("task-p-2")), lines)
+        self.assertNotIn(EN["todo_none"], lines)
+        lines = "# STATE\n\n## Now\n\nAbout.".splitlines()
+        registrar.readd(lines, "task-p-3", "pay")
+        self.assertEqual(lines[-3:], [EN["todo_heading"], "", en_item(TAG, "pay" + en_mark("task-p-3"))])
+
+    def test_mixed_file_only_what_it_writes_changes(self):
+        """an English instance with an older zh-Hant section: the stamp is English, the zh line's tag and the heading
+        stay as they are"""
+        lines = state(item(TAG, "old line"), item("agent", "b")).splitlines()
+        self.assertEqual(registrar.relink(lines, {"task-p-9": "old line"}), ["task-p-9"])
+        self.assertIn(item(TAG, "old line") + en_mark("task-p-9"), lines)
+        self.assertIn(HEAD, lines)
+        self.assertEqual([t["key"] for t in registrar.owner_lines(lines)], ["task-p-9"], "read back")
+        registrar.strike(lines, "task-p-9")
+        registrar.strike(lines, "nothing")
+        self.assertIn(item("agent", "b"), lines)
+
     def test_owner_lines(self):
         lines = state(en_item(TAG, "renew the domain" + en_mark("task-p-1")), en_item(TAG, "pay"),
                       item(TAG, "zh line" + mark("task-p-2")), en_item("agent", "write tests"),

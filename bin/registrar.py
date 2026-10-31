@@ -52,6 +52,7 @@ import i18n  # noqa: E402
 import todo_tokens  # noqa: E402
 
 _ = i18n.domain(__file__)
+_c = i18n.domain(__file__, content=True)   # texts in the records the assistant reads: content
 
 HUB = hubconf.ROOT
 COPIES = hubconf.p("memory_copies")
@@ -67,7 +68,6 @@ OWNERS = sorted(hubconf.owner_addresses())
 # both token sets (the profiles' marker_pattern: half-/full-width parentheses and colons; at the end of the line)
 P = todo_tokens.patterns(TAG)
 KEY = P.key
-WRITE = "zh-Hant"   # the token set the registrar writes
 DRY = "--dry-run" in sys.argv
 
 
@@ -88,7 +88,7 @@ def task_key(project: str, text: str) -> str:
 
 
 def stamp(key: str) -> str:
-    return todo_tokens.stamp(WRITE, TAG, key)
+    return todo_tokens.stamp(hubconf.lang_content(), TAG, key)
 
 
 def hubbus(*args: str, stdin: str | None = None) -> subprocess.CompletedProcess:
@@ -137,17 +137,17 @@ def strike(lines: list[str], key: str) -> bool:
         del lines[i]
     b = todo_bounds(lines)
     if hits and b and not any(lines[i].strip() for i in range(*b)):
-        lines.insert(b[0], todo_tokens.tokens(WRITE)["todo_none"])
+        lines.insert(b[0], todo_tokens.tokens(hubconf.lang_content())["todo_none"])
     return bool(hits)
 
 
 def readd(lines: list[str], key: str, text: str) -> bool:
     if any((m := KEY.search(l.rstrip())) and m.group("key") == key for l in lines):
         return False
-    new = todo_tokens.item(WRITE, TAG, norm(text)) + stamp(key)
+    new = todo_tokens.item(hubconf.lang_content(), TAG, norm(text)) + stamp(key)
     b = todo_bounds(lines)
     if b is None:
-        lines += ["", todo_tokens.tokens(WRITE)["todo_heading"], "", new]
+        lines += ["", todo_tokens.tokens(hubconf.lang_content())["todo_heading"], "", new]
         return True
     body = [i for i in range(*b) if lines[i].strip()]
     if len(body) == 1 and P.is_none(lines[body[0]]):
@@ -385,7 +385,7 @@ def run_project(project: str, path: pathlib.Path, how: str, warned: set[str]) ->
     applied += [e["id"] for e in led.pending]
     for h in led.v1_pending:
         changed |= strike(lines, h["reply_to"]) if h["effect"] != "reopened" else \
-            readd(lines, h["reply_to"], h.get("item") or "(重開的任務)")
+            readd(lines, h["reply_to"], h.get("item") or _c("(a reopened task)"))
         applied.append(h["id"])
     # 2. restore keys
     present = {t["key"] for t in owner_lines(lines) if t["key"]}
@@ -431,8 +431,9 @@ def run_project(project: str, path: pathlib.Path, how: str, warned: set[str]) ->
             warned.add(k)
             continue
         why = removal_reason(k)
-        basis = ("librarian 推斷已完成:STATE.md 的待辦裡已經沒有這一件。"
-                 + (f"刪掉的那次({why[:300]})" if why else "review-log 沒有記錄是哪一次刪掉的"))
+        basis = (_c("Inferred done by the librarian: the item is no longer among STATE.md's to-dos. ")
+                 + (_c("The run that deleted it: {why}", why=why[:300]) if why else
+                    _c("The review-log does not record which run deleted it")))
         claims.append(record(project, "claimed", k, f"c:{k}:r{led.reopens(k)}", origin="registrar", outcome="done",
                              evidence={"basis": basis}))
     res = publish(claims)

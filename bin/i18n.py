@@ -7,6 +7,7 @@ Code holds the English text (the msgid). Each script is its own domain with its 
     import i18n
     _ = i18n.domain(__file__)                        # domain = the script's file name without .py
     print(_("{n} open letters for {project}", n=3, project=p))
+    _c = i18n.domain(__file__, content=True)         # content (notes, record texts): in language.content instead
 
 Lookup: the catalog of `hubconf.lang_ui()`; a missing entry (or language en) gives the msgid itself. With keyword
 arguments the result is `str.format`ted, so placeholders are `{name}` (literal braces then `{{ }}`); without them the
@@ -80,11 +81,21 @@ def translate(name: str, msgid: str, kw: dict, language: str | None = None) -> s
     return _format(text, **kw) if kw else text
 
 
-def domain(file: str):
+def content_lang() -> str:
+    """The content language (hub.json language.content): what models and agents read and write."""
+    if str(ROOT / "bin") not in sys.path:
+        sys.path.insert(0, str(ROOT / "bin"))
+    import hubconf
+    return hubconf.lang_content()
+
+
+def domain(file: str, content: bool = False):
+    """content=True: the texts are content, not messages for the owner (a note written into a project's memory, the
+    text of a record another agent reads): looked up in the content language, same catalog."""
     name = domain_name(file)
 
     def _(msgid: str, **kw) -> str:
-        return translate(name, msgid, kw)
+        return translate(name, msgid, kw, content_lang() if content else None)
     _.domain = name
     return _
 

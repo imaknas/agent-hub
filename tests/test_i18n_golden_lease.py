@@ -34,7 +34,7 @@ import golden_lang  # noqa: E402
 
 GOLDEN = golden_lang.GOLDEN
 UPDATE = os.environ.get("I18N_GOLDEN_UPDATE") == "1"
-ZH = {"AGENT_HUB_LANG_UI": golden_lang.LANG}
+ZH = {"AGENT_HUB_LANG_UI": golden_lang.LANG, "AGENT_HUB_LANG_CONTENT": golden_lang.LANG}   # an instance on one language
 SID = "77777777-7777-4777-8777-777777777777"
 PNG = b"\x89PNG\r\n\x1a\n" + b"\0" * 64
 
@@ -52,7 +52,7 @@ def dump(out: list, tmp: pathlib.Path) -> str:
     text = re.sub(r"\[\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}\]", "[<TS>]", text)
     text = re.sub(r"\d{8}-\d{6}-", "<STAMP>-", text)
     text = re.sub(r"\d{4}-\d{2}-\d{2}\.md", "<DATE>.md", text)
-    return re.sub(r"(## \S+ )\d{2}:\d{2}", r"\1<HM>", text)
+    return re.sub(r"(## [^\n]*? )\d{2}:\d{2}( ?\(session)", r"\1<HM>\2", text)   # the lease note's heading
 
 
 class Golden(unittest.TestCase):

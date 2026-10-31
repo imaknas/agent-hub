@@ -101,8 +101,8 @@ class FrozenCase(unittest.TestCase):
         self.assertIn("memory/2026-10-02.md", args["changed"])
         self.assertIn(IN["item_a_reworded"], (case / "after.STATE.md").read_text(), "that night's outcome is kept")
         self.assertIn(IN["item_a"], (case / "snapshot" / "STATE.md").read_text(), "the input is the commit before it")
-        # old = the recorded prompt; new = the English template, content zh-Hant; new-en = content en (the to-do
-        # tokens stay zh-Hant until step 6); --rules new swaps in templates/AGENT.md, ~oldrules keeps the snapshot's
+        # old = the recorded prompt; new = the English template, content zh-Hant; new-en = content en (with the English
+        # to-do tokens); --rules new swaps in templates/AGENT.md, ~oldrules keeps the snapshot's
         agent_md = (case / "snapshot" / "AGENT.md").read_text()
         template = (e2.hubconf.ROOT / "templates" / "AGENT.md").read_text()
         for point in ("librarian-state", "librarian-state-edits"):
@@ -110,8 +110,9 @@ class FrozenCase(unittest.TestCase):
             self.assertEqual(old, (case / f"prompt.{point}.txt").read_text())
             self.assertIn("Write in Traditional Chinese (zh-Hant)", new)
             self.assertIn("Write in English", new_en)
+            self.assertIn(prompts.TOKENS["zh-Hant"]["todo_heading"], new)
+            self.assertIn(f"`{prompts.TOKENS['en']['todo_heading']}` section", new_en)   # (the case's STATE.md is zh)
             for p in (new, new_en):
-                self.assertIn(prompts.TOKENS["zh-Hant"]["todo_heading"], p)
                 self.assertNotIn("{{", p, "every placeholder filled")
         edits_new = e2.prompt("librarian-state-edits", case, "new")
         edits_oldrules = e2.prompt("librarian-state-edits", case, "new~oldrules")

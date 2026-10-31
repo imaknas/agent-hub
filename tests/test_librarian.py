@@ -65,7 +65,7 @@ class Prompts(unittest.TestCase):
     def test_names_come_from_settings(self):
         p = lib.state_prompt("demo", "M", "", "")
         self.assertIn("now working in the directory of project demo.\nM\n\n\n\nFor background, read", p)
-        self.assertIn(f"〔{lib.OWNER}〕", p)
+        self.assertIn(lib.todo_tokens.tag(lib.CONTENT_LANG, lib.OWNER), p)   # the content language's to-do tokens
         self.assertIn(lib.ASSISTANT, p)
         self.assertNotIn("{", p.replace("{owner}", ""), "the f-string leaves no unfilled braces")
 

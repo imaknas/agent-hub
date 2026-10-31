@@ -52,7 +52,7 @@ PLACEHOLDER_MAX_BYTES = 200  # the placeholder STATE.md from onboarding, which h
 
 def content_heading() -> str:
     """the to-do heading this instance's writers use (named in messages)"""
-    return todo_tokens.tokens("zh-Hant")["todo_heading"]
+    return todo_tokens.tokens(hubconf.lang_content())["todo_heading"]
 
 
 def todo_sections(text: str) -> list[list[str]]:
@@ -114,7 +114,7 @@ def main() -> None:
     in_assistant = [r for r in items["owner"] if P.key.search(r[1])]
     items["owner"] = [r for r in items["owner"] if not P.key.search(r[1])]
     total = sum(len(v) for v in items.values())
-    ui = todo_tokens.tokens("zh-Hant")
+    ui = todo_tokens.tokens(hubconf.lang_ui())   # todo.md is for the owner: its headings in the UI language
     o = [
         f"<!-- contract: todo-md v{ui['todo_md_version']} -->",  # the layout's contract is contracts/todo-md.v2.md
         "# " + _("Cross-project to-do"), "",
@@ -128,9 +128,9 @@ def main() -> None:
     ]
     # the Muninn project uses these three headings to tell whose to-do it is (the mapping is in its data/config.yaml
     # external_todo_owners); changing a heading means changing it there too
-    titles = todo_tokens.todo_md_headings("zh-Hant", TAG)
+    titles = todo_tokens.todo_md_headings(hubconf.lang_ui(), TAG)
     # the marker as the note names it: without its parentheses
-    marker = todo_tokens.marker("zh-Hant", TAG, "<key>")[1:-1]
+    marker = todo_tokens.marker(hubconf.lang_content(), TAG, "<key>")[1:-1]
     for owner in OWNERS:
         o += [titles[owner], ""]
         if owner == "owner" and in_assistant:

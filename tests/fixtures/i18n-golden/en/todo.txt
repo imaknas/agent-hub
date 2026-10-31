@@ -8,24 +8,24 @@ todo.md: 3 items, 3 format problems
 --- stderr
 
 === todo.md
-<!-- contract: todo-md v1 -->
+<!-- contract: todo-md v2 -->
 # Cross-project to-do
 
-> Generated mechanically by `bin/gen-todo.py` from the `## 待辦` section of each project's STATE.md (3 items);
+> Generated mechanically by `bin/gen-todo.py` from the `## To-do` section of each project's STATE.md (3 items);
 > do not edit by hand: to change the content, change the source (each project's memory, from which librarian updates STATE.md;
 > agent-hub's own to-do items are in `openclaw-migration-status.md`).
 
-## 只有 Alex 能做
+## Only Alex can do
 
 ### alpha
 - [ ] 續約網域
 
-## 待定(需要先做決定)
+## To be decided (a decision comes first)
 
 ### alpha
 - [ ] 要不要開公開的 issue tracker
 
-## agent 可以做
+## An agent can do
 
 ### alpha
 - [ ] 把 README 改成英文

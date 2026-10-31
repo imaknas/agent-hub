@@ -10,5 +10,9 @@
  "registrar: owner to-dos in step with {assistant}": "registrar: owner 的待辦對齊 {assistant}",
  "registrar updated the STATE.md to-dos by key": "registrar 照 key 更新了 STATE.md 的待辦",
  "registrar: STATE.md was already in this state": "registrar:STATE.md 已經是這個狀態",
- "sent {sent} {sent:record|records}; {failed} {failed:project|projects} had failures": "送出 {sent} 筆 record、{failed} 個專案有失敗"
+ "sent {sent} {sent:record|records}; {failed} {failed:project|projects} had failures": "送出 {sent} 筆 record、{failed} 個專案有失敗",
+ "(a reopened task)": "(重開的任務)",
+ "Inferred done by the librarian: the item is no longer among STATE.md's to-dos. ": "librarian 推斷已完成:STATE.md 的待辦裡已經沒有這一件。",
+ "The run that deleted it: {why}": "刪掉的那次({why})",
+ "The review-log does not record which run deleted it": "review-log 沒有記錄是哪一次刪掉的"
 }

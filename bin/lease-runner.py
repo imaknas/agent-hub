@@ -81,6 +81,7 @@ import runtime_ports  # noqa: E402
 import i18n  # noqa: E402
 
 _ = i18n.domain(__file__)
+_c = i18n.domain(__file__, content=True)   # the note written into the project's memory: content, read by the librarian
 
 
 def rt():
@@ -593,9 +594,11 @@ def deliver(lease: Lease, h: dict, n: int) -> None:
     mem = pathlib.Path(lease.cwd) / ".agent-memory" / "memory"
     if notes and mem.is_dir():
         f = mem / f"{now():%Y-%m-%d}.md"
-        extra = (f"\n\n已登錄給 {hubconf.owner_tag()} 的任務:" + "、".join(keys)) if keys else ""   # content (step 6)
+        extra = ("\n\n" + _c("Tasks registered for {owner}: {keys}", owner=hubconf.owner_tag(),
+                                 keys=_c(", ").join(keys))) if keys else ""
         with open(f, "a") as fh:
-            fh.write(f"\n## 租借對話 {now():%H:%M}(session {sid})\n\n{notes}{extra}\n")
+            fh.write("\n" + _c("## Lease conversation {time} (session {session})", time=f"{now():%H:%M}", session=sid)
+                     + f"\n\n{notes}{extra}\n")
         h["notes_written"] = True
     hubbus("publish", "session.report", "--source", proj, "--to", proj, "--id", handover_id(sid, n, "handover"),
            "--payload", json.dumps(h, ensure_ascii=False))

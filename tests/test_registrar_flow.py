@@ -38,10 +38,14 @@ import os
 import pathlib
 import sqlite3
 import subprocess
+import sys
 import tempfile
 import unittest
 
 ROOT = pathlib.Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(ROOT / "bin"))
+import todo_tokens  # noqa: E402
+
 OLD, NEW = "knas-tasks.py", "registrar.py"   # the old file name goes once registrar.py has replaced it
 IMPLS = [p for p in (OLD, NEW) if (ROOT / "bin" / p).exists()]
 TAG, OWNER, PRINCIPAL, SIDE = "Alex", "owner", "person:alex", "helper"
@@ -86,7 +90,7 @@ def sh(*cmd, cwd=None, env=None):
 class Env:
     """A temporary hub (bin/ linked to the real one) + a bare repo and memory copy per project + a bus."""
 
-    def __init__(self, tmp: pathlib.Path, impl: str):
+    def __init__(self, tmp: pathlib.Path, impl: str, scenes: dict | None = None, lang: str = "zh-Hant"):
         self.tmp, self.hub, self.impl = tmp, tmp / "hub", impl
         (self.hub / "bin").mkdir(parents=True)
         for f in (ROOT / "bin").iterdir():
@@ -103,14 +107,14 @@ class Env:
             "assistant": {"project": SIDE, "api": "http://127.0.0.1:9/x", "party_id": SIDE}}))
         e = {k: v for k, v in os.environ.items() if not k.startswith(("GIT_", "AGENT_HUB_HOME", "AGENT_HUB_CONFIG",
                                                                      "AGENT_HUB_DATA", "AGENT_HUB_SECRETS"))}
-        # the scenarios' STATE.md files are zh-Hant content
+        # the content language the scenarios' STATE.md files are written in (SCENES: zh-Hant)
         self.env = {**e, "AGENT_HUB_ROOT": str(self.hub), "AGENT_HUB_DATA": str(self.hub / "data"),
-                    "AGENT_HUB_LANG_CONTENT": "zh-Hant",
+                    "AGENT_HUB_LANG_CONTENT": lang,
                     "GIT_AUTHOR_NAME": "t", "GIT_AUTHOR_EMAIL": "t@t", "GIT_COMMITTER_NAME": "t",
                     "GIT_COMMITTER_EMAIL": "t@t", "GIT_CONFIG_GLOBAL": "/dev/null", "GIT_CONFIG_NOSYSTEM": "1"}
         self.hubbus("inbox", "--project", "pa")   # creates the bus tables
         self.db = tmp / "bus" / "bus.db"
-        self.scenes = {p: s for p, s in SCENES.items() if impl == NEW or p in V1}
+        self.scenes = {p: s for p, s in (scenes or SCENES).items() if impl == NEW or p in V1}
         for p, s in self.scenes.items():
             self.project(p, s)
 
@@ -301,6 +305,58 @@ class RegistrarFlow(unittest.TestCase):
                 "SELECT payload FROM events WHERE type='message.done' AND id LIKE 'rec:acts:%'")}
             c.close()
             self.assertEqual(notes, {want["note"]})
+
+
+# An English-content instance (contracts/state-todo.v2.md): the same steps, the English token set written; pm is an
+# English instance with an older zh-Hant line, which keeps its tag and gets the English stamp.
+EN = todo_tokens.tokens("en")
+
+
+def en_state(*todo: str) -> str:
+    return f"# STATE\n\n## Now\n\nA test project.\n\n{EN['todo_heading']}\n\n" + "\n".join(todo) + "\n"
+
+
+def en_marker(k: str) -> str:
+    return todo_tokens.stamp("en", TAG, k)
+
+
+EKB, EKC, EKD = key("pb", "Pay the domain"), key("pc", "Sign the contract"), key("pd", "Buy parts")
+EN_SCENES = {
+    "pa": {"state": en_state(todo_tokens.item("en", TAG, "Renew the domain"), todo_tokens.item("en", "agent", "Add retry"))},
+    "pb": {"state": en_state(todo_tokens.item("en", TAG, "Pay the domain") + en_marker(EKB)), "posted": {EKB: "Pay the domain"},
+           "settle": [("s-pb", EKB, "done", "Pay the domain")]},
+    "pc": {"state": en_state(todo_tokens.item("en", "agent", "Something else")), "posted": {EKC: "Sign the contract"},
+           "settle": [("s-pc", EKC, "reopened", "Sign the contract")]},
+    "pd": {"state": en_state(todo_tokens.item("en", "agent", "Something else")), "posted": {EKD: "Buy parts"}},
+    "pm": {"state": en_state(todo_tokens.item("zh-Hant", TAG, "An older line"))},
+}
+
+
+@unittest.skipUnless(NEW in IMPLS, "no registrar.py")
+class RegistrarFlowEnglish(unittest.TestCase):
+    def test_english_instance(self):
+        with tempfile.TemporaryDirectory() as d:
+            env = Env(pathlib.Path(d), NEW, EN_SCENES, "en")
+            r = env.run()
+            self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
+            ka = key("pa", "Renew the domain")
+            self.assertIn(todo_tokens.item("en", TAG, "Renew the domain") + en_marker(ka), env.state("pa"))
+            self.assertEqual(env.outputs("pa"), [("raised", ka)])
+            self.assertEqual([l for l in env.state("pb").splitlines() if l.strip()],
+                             [l for l in en_state(EN["todo_none"]).splitlines() if l.strip()],
+                             "the line removed, the English empty marker")
+            self.assertIn(todo_tokens.item("en", TAG, "Sign the contract") + en_marker(EKC), env.state("pc"))
+            self.assertEqual(env.outputs("pd"), [("claim", EKD)])
+            km = key("pm", "An older line")
+            self.assertIn(todo_tokens.item("zh-Hant", TAG, "An older line") + en_marker(km), env.state("pm"))
+            self.assertIn(EN["todo_heading"], env.state("pm"))
+            basis = [e["record"]["evidence"]["basis"] for e in json.loads(env.hubbus(
+                "records", "--project", "pd", "--direction", "out").stdout) if e["record"]["type"] == "claimed"]
+            self.assertEqual(len(basis), 1)
+            self.assertTrue(basis[0].startswith("Inferred done by the librarian"), basis[0])
+            r = env.run()   # a second night changes nothing
+            self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
+            self.assertEqual(env.outputs("pa"), [("raised", ka)])
 
 
 if __name__ == "__main__":

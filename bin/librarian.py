@@ -666,8 +666,10 @@ def process(proj: str, d: pathlib.Path, handoffs: list[dict], digest: list[str])
                 run([str(SAFE_PUSH)], cwd=d)
             new_sha = git(d, "rev-parse", "HEAD")
         log(f"{proj}: STATE.md updated & pushed ({new_sha})")
-        # `**理由**` is a label registrar.py reads back (removal_reason): a token, not a message
-        block = (f"## {TODAY} · {proj}\n\n**commit**: `{new_sha}`\n\n**理由**: {reason or _('(the agent gave no reason)')}\n\n"
+        # the reason label is a token registrar.py reads back (removal_reason, either set): the UI language's, like the
+        # rest of the block
+        label = todo_tokens.tokens(hubconf.lang_ui())["reason_label"]
+        block = (f"## {TODAY} · {proj}\n\n**commit**: `{new_sha}`\n\n{label}: {reason or _('(the agent gave no reason)')}\n\n"
                  + (_("**Handoffs from {assistant}**: {nums}", assistant=hubconf.assistant_name(), nums=nums) + "\n\n" if ids else "")
                  + f"```diff\n{state_diff}\n```\n\n---\n\n")
         with REVIEW_LOG.open("a") as f:
