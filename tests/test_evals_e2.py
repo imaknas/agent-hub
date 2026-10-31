@@ -128,6 +128,14 @@ class FrozenCase(unittest.TestCase):
         (out / "result.json").write_text(json.dumps({"is_error": False, "structured_output": {
             **so, "edits": [{"old": "not there", "new": "x"}]}}))
         self.assertFalse(e2.outcome("librarian-state-edits", case, out)["valid"])
+        # a case recorded after the anchors change re-renders its stale note (older cases have no key: no note)
+        self.assertNotIn("code anchors in STATE.md no longer resolve", e2.prompt("librarian-state", case, "new"))
+        args["anchors"] = [{"raw": "src/a.py", "outcome": "deleted", "hint": "0123abcd", "commit": "", "line_no": 3,
+                            "statement": "the job is in ⚓`src/a.py`"}]
+        (case / "args.json").write_text(json.dumps(args))
+        for point in ("librarian-state", "librarian-state-edits"):
+            self.assertIn("- line 3, ⚓`src/a.py`: the file was deleted on main (commit 0123abcd).",
+                          e2.prompt(point, case, "new"))
 
 
 class Plugins(unittest.TestCase):

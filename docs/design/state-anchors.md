@@ -1,6 +1,7 @@
 # Staleness anchors in STATE.md
 
-> agent-hub session · 2026-11-01 · r1. Item 3 of "Build" in `competitive-gaps.md`.
+> agent-hub session · 2026-11-01 · r2 (after a blind review: history before branches, untracked paths, unmerged
+> branches only). Item 3 of "Build" in `competitive-gaps.md`.
 
 ## Why
 
@@ -23,12 +24,15 @@ already does that, and memory files live on the memory branch, not on main).
 An anchor is the anchor sign `⚓` (U+2693; an optional U+FE0F after it is accepted) directly followed by a code span:
 
     ⚓`src/checks/run.ts`                 a file
-    ⚓`src/checks/`                       a directory (trailing slash)
+    ⚓`src/checks/`                       a directory
     ⚓`bin/librarian.py#dangling_refs`    a symbol in a file
     ⚓`app/models.py#Order.total`         a dotted symbol
 
-Reading rule: `⚓️? ?` then `` `([^`\n]+)` ``. Inside the span, everything before the last `#` is the path,
-the rest is the symbol.
+Reading rule: `⚓`, an optional U+FE0F, an optional space, then `` `([^`\n]+)` ``. Inside the span, everything
+before the last `#` is the path, the rest is the symbol. Writers put nothing between the sign and the span; readers
+accept one space, because a model or an editor sometimes adds one and a lost anchor is worse than a lenient reader. A
+trailing `/` is the convention for a directory, not a requirement: a path that exists as a file or a directory is
+present either way.
 
 **The anchor replaces the path's code span; it does not add a second mention.** A statement that already writes
 `` `src/checks/run.ts` `` gains one character. That keeps STATE.md from growing and keeps the anchor attached to the
@@ -36,12 +40,11 @@ words that make the claim.
 
 Why this form, against the two token sets of `contracts/state-todo.v2.md` (`bin/todo_tokens.py`):
 
-- A **label** is a bracket at the start of an item: the zh-Hant set's tortoise-shell brackets (U+3014/U+3015) or `[…]`
-  not followed by `(`. An anchor starts with `⚓`,
-  never with a bracket, and stands inside the text, never at its start after `- [ ] `. The `labelled`, `bare`,
-  `tag_start` and `no_box` patterns only look at the start of a line, so no anchor can match them.
-- A **key marker** is a parenthesised marker at the end of a line (`(waiting on owner: <key>)` and its zh-Hant twin). An anchor
-  has no parentheses and no colon form; the `key` / `key_mark` patterns need the set's marker word right after the
+- A **label** is a bracket at the start of an item: the zh-Hant set's tortoise-shell brackets (U+3014/U+3015) or
+  `[…]` not followed by `(`. An anchor starts with `⚓`, never with a bracket. The `labelled`, `bare`, `tag_start` and
+  `no_box` patterns only look at the start of a line, so no anchor can match them.
+- A **key marker** is a parenthesised marker at the end of a line (`(waiting on owner: <key>)` and its zh-Hant twin).
+  An anchor has no parentheses; the `key` / `key_mark` patterns need the set's marker word right after the
   parenthesis.
 - Neither set uses `⚓` or backticks. A test (`tests/test_state_anchors.py`) runs every pattern of both sets over lines
   that carry anchors and asserts that the labels, roles and keys read the same with and without them.
@@ -51,7 +54,8 @@ Why this form, against the two token sets of `contracts/state-todo.v2.md` (`bin/
 
 Malformed anchors are reported, not skipped: an absolute path (`/…`, `~…`), a `..` segment, a URL (`://`), a line
 number (`path:42`; line numbers drift with every edit, which is exactly what an anchor must not do), an empty path,
-or a symbol that is not `[A-Za-z_$][\w$]*` joined by dots.
+a symbol that is not `[A-Za-z_$][\w$]*` joined by dots, or a memory path (`memory/…`, `.agent-memory/…`,
+`STATE.md`: notes, not code; `dangling_refs` covers them).
 
 ## Where anchors may appear
 
@@ -73,14 +77,15 @@ Fenced code blocks are skipped too (an anchor sign in a pasted log is not a clai
 - **Which STATE.md**: the librarian's memory copy, `hubconf.p("memory_copies")/<project>/STATE.md`. The check runs
   after the librarian, so this is the file it just wrote and pushed; the workspace's `.agent-memory` catches up only on
   the next sync.
-- **Which tree**: the project's `paths.workspace` from the registry (`hubconf.roster()`), on its local base branch: the
+- **Which tree**: the project's `paths.workspace` from the registry (`hubconf.roster()`, expanded with
+  `hubconf.path()`), on its local base branch: the
   first of `main`, `master` that exists, the same rule as `merge-branch` and `worktrees.base_branch`. The local branch,
   not `origin/…` and not the working tree: on the hub machine `merge-branch` fast-forwards the local main, and the
-  working tree holds unfinished work that is not a fact yet.
+  working tree holds unfinished work that is not a fact yet. (A local base branch behind `origin/<base>` would make a
+  new file read as `missing`; on the hub machine every merge lands on the local main first, so this is not checked.)
 - **Paths are relative to the workspace folder**, which may be a subfolder of its repo: git is asked for
   `<branch>:./<path>` with `-C <workspace>`, and for `git grep` the pathspec is relative the same way.
-- **A file or directory is present** when `git cat-file -e <branch>:./<path>` succeeds (a trailing `/` must be a
-  tree, otherwise a blob).
+- **A file or directory is present** when `git cat-file -t <branch>:./<path>` is a blob or a tree.
 - **A symbol is present** when every dot-separated part occurs as a whole word in that file on the branch:
   `git grep -q -w -F -e <part> <branch> -- ./<path>`. This is occurrence, not definition: it works for every language
   with no parser, and a symbol whose definition was deleted while a call to it remains reads as present. Short
@@ -89,22 +94,34 @@ Fenced code blocks are skipped too (an anchor sign in a pasted log is not a clai
 
 ## What counts as gone
 
-Each anchor gets one outcome:
+Each anchor gets one outcome, decided in this order: present on the base branch; else the base branch's history
+(`renamed`, `deleted`); else the unmerged branches (`pending`); else the working tree (`untracked`); else `missing`.
+**History comes before branches**: merged branches outlive their worktrees (the nightly prune keeps branches), so a file
+deleted on main is often still on an old branch; a real project on the hub machine had 206 local branches, 193 of them
+merged, and about one in six files deleted on main still on one of them. A file deleted on main is `deleted`, whatever
+branch still has it.
 
 | outcome | when | reported |
 |---|---|---|
 | `ok` | path (and symbol) present on the base branch | no |
-| `pending` | not on the base branch, but present on another local branch of the repo (a worktree session's branch not merged yet) | digest only, with the branch |
+| `pending` | never on the base branch, present on an unmerged local branch (a worktree session's work not merged yet) | digest only, with the branch |
+| `untracked` | none of the above, but on disk in the workspace and not in git (gitignored data, output, a cache, a file never added) | digest only |
 | `renamed` | was on the base branch; the last commit there that touched it renamed it (`git show -M --name-status`) | todo.md + digest, with the new path and the commit |
 | `deleted` | was on the base branch; the last commit there that touched it removed it | todo.md + digest, with the commit |
-| `missing` | never on the base branch nor on any local branch (a wrong path in the notes, or a branch already deleted) | todo.md + digest |
+| `missing` | none of the above (a wrong path in the notes, a path relative to the wrong folder, a branch already deleted) | todo.md + digest |
 | `symbol` | the file is present, the symbol is not; if the symbol now occurs in other files on the branch, the first three are named | todo.md + digest |
 | `malformed` | the anchor breaks the syntax above | todo.md + digest |
 
 `pending` is the common case right after a session works in a worktree: the librarian reads its notes the same night,
 before `merge-branch` lands the code on main. Reporting it as stale would be a false alarm every night until the
-merge, so it is listed apart and is not a to-do. "Another local branch" means `git for-each-ref refs/heads`, excluding
-the base branch; no state is kept between nights.
+merge, so it is listed apart and is not a to-do. The branches are `git for-each-ref --no-merged <base> refs/heads`
+(about a dozen instead of hundreds), without the memory branch `agent-memory`, which holds notes and is never merged.
+No state is kept between nights.
+
+`untracked` exists because STATE.md rightly talks about gitignored files ("the replay cache in
+`backend/experiments/.replay-cache` saves cost", "`data/…` must never be published"). Main cannot vouch for them, but
+they are not stale, and the stale note must never ask the librarian to drop such a statement. The librarian is also
+told not to anchor them (below).
 
 The rename and the "now found in" hints are only hints: one git call each, no `--follow` through history, no fuzzy
 matching. A directory that was moved reads as `deleted` (its files were renamed one by one).
@@ -123,7 +140,7 @@ line in the digest section: never a silent "0 stale" (tool neutrality: a missing
 - `check-state-anchors.py [--project P]` prints the stale anchors as markdown lines, nothing when there are none;
 - `--apply` (platform job `agent-hub/state-anchors`, nightly, `after: [librarian, todo]`) writes todo.md's
   `<!-- state-anchors:begin/end -->` block (stale only; removed when there are none) and the `state-anchors` section of
-  today's digest (stale, pending and not-checked), and always prints a one-line summary, so "0 stale" can be told from
+  today's digest (stale; pending and untracked listed apart; not checked), and always prints a one-line summary, so "0 stale" can be told from
   "did not run". `librarian-publish` gets `state-anchors` in its `after:` so the block is in the commit.
 - One todo.md line per stale anchor: `- [ ] **<project>**: ⚓`<anchor>` <outcome and hint> — "<the statement>"`,
   the statement cut to 100 characters. All owner-facing strings go through `_()` with `locales/zh-Hant`.
@@ -140,16 +157,18 @@ line in the digest section: never a silent "0 stale" (tool neutrality: a missing
   must not guess a path);
 - at most one anchor per statement; a symbol only when the statement is about that symbol and its name is
   distinctive;
-- not in the to-do section, not for `memory/` files, URLs, routes, paths outside the project, or history ("was
-  removed on 10-24");
+- only tracked source code and docs: not data, output, cache or gitignored paths, not `memory/` files, URLs, routes,
+  paths in other repos, and not history ("was removed on 10-24");
+- not in the to-do section;
 - keep every existing anchor exactly as written unless the statement goes, or the note below says it is stale.
 
 **Being told what is stale.** When `process()` runs for a project, it resolves that project's anchors with the same
 module (before the call, like `dangling_refs`) and appends a note to the prompt listing the stale ones (`renamed`,
-`deleted`, `missing`, `symbol`, `malformed`; not `pending`), asking to update the statement and its anchor when the
+`deleted`, `missing`, `symbol`, `malformed`; not `pending` or `untracked`), asking to update the statement and its anchor when the
 notes say where the code went, or drop the anchor (and the statement, if it is no longer true) when they do not. The
-note shares the `dangling_note` slot; `record_state_case` records the raw list in `args.json` (`anchors`) so evals
-re-render it.
+note shares the `dangling_note` slot; `record_state_case` records the raw list in `args.json` (`anchors`), e2's
+`prompt()` re-renders it from `a.get("anchors", [])` (cases frozen before this change have no key: no note), and
+`_freeze_in` resolves it when it freezes a case.
 
 The librarian runs for a project only when its memory changed or a handoff arrived, so a stale anchor in a quiet
 project stays in todo.md until the project has activity again. That is accepted: a quiet project's STATE.md is not
@@ -160,12 +179,15 @@ a file nobody is using.
 
 The rule change goes through E2 (`docs/design/i18n.md`) on both points, `librarian-state` (production) and
 `librarian-state-edits` (shadow), comparing the prompts before and after this change (`new` arms of the same code
-before and after; `e2.py run --tag` labels them). Pass = the usual: validity, contract and language not lower,
+before and after, each run from a checkout of its own commit; `e2.py run --tag before|after` appends the tag to the
+arm's label, the same way as `new~oldrules`, so both land in one run and are scored as two arms). Pass = the usual: validity, contract and language not lower,
 agreement with the before arm not worse than the before arm's own noise floor. New scores added to e2 for this:
 
 - `anchors`: anchors in STATE.md after the run, and how many were added;
 - `anchors_grounded`: the share of added anchors whose path appears verbatim in what the librarian was shown (memory
   diff, STATE.md before, reference index); an ungrounded anchor is a guessed path;
+- `anchors_resolve`: the share of added anchors that resolve (`ok`, `pending`) against the project's workspace today:
+  the false-alarm rate the nightly check would see (approximate: the code has moved on since the case was frozen);
 - `anchors_in_todo`: anchors written inside the to-do section (must be 0);
 - `growth`: STATE.md length after / before, compared with the before arm (the inflation check);
 - `anchor_retention`: on cases whose STATE.md already has anchors, the share still present after.

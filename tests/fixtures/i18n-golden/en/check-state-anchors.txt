@@ -1,0 +1,69 @@
+=== stale
+exit None
+- [ ] **alpha**: ⚓`src/job.py#retry_later` the name is gone from the file (STATE.md line 5: "The nightly job runs in ⚓`src/job.py#run_job`; retries in ⚓`src/job.py#retry_later`.")
+- [ ] **alpha**: ⚓`src/old.py` renamed to `src/settings.py` in 083dad4a (STATE.md line 6: "Settings are read by ⚓`src/old.py`, the exporter is ⚓`src/gone.py`, and the cache in ⚓`data/` is ne…")
+- [ ] **alpha**: ⚓`src/gone.py` deleted in 083dad4a (STATE.md line 6: "Settings are read by ⚓`src/old.py`, the exporter is ⚓`src/gone.py`, and the cache in ⚓`data/` is ne…")
+- [ ] **alpha**: ⚓`src/never.py` not on main nor on any branch (STATE.md line 7: "The new parser ⚓`src/feature.py` and ⚓`src/never.py`; see ⚓`src/job.py:12`.")
+- [ ] **alpha**: ⚓`src/job.py:12` malformed: a line number (lines drift; anchor a symbol instead) (STATE.md line 7: "The new parser ⚓`src/feature.py` and ⚓`src/never.py`; see ⚓`src/job.py:12`.")
+
+=== stale --apply
+exit None
+state anchor check: 8 anchors checked, 5 stale, 2 listed apart, 1 project not checked; stale in: alpha
+
+=== todo.md
+# todo
+
+- [ ] x
+
+<!-- state-anchors:begin -->
+## STATE.md statements whose code is gone (mechanical check)
+
+STATE.md marks these statements with a code anchor that no longer resolves on the project's main branch: the statement is probably out of date. The librarian is told on its next run for the project; a project session can fix it sooner.
+
+- [ ] **alpha**: ⚓`src/job.py#retry_later` the name is gone from the file (STATE.md line 5: "The nightly job runs in ⚓`src/job.py#run_job`; retries in ⚓`src/job.py#retry_later`.")
+- [ ] **alpha**: ⚓`src/old.py` renamed to `src/settings.py` in 083dad4a (STATE.md line 6: "Settings are read by ⚓`src/old.py`, the exporter is ⚓`src/gone.py`, and the cache in ⚓`data/` is ne…")
+- [ ] **alpha**: ⚓`src/gone.py` deleted in 083dad4a (STATE.md line 6: "Settings are read by ⚓`src/old.py`, the exporter is ⚓`src/gone.py`, and the cache in ⚓`data/` is ne…")
+- [ ] **alpha**: ⚓`src/never.py` not on main nor on any branch (STATE.md line 7: "The new parser ⚓`src/feature.py` and ⚓`src/never.py`; see ⚓`src/job.py:12`.")
+- [ ] **alpha**: ⚓`src/job.py:12` malformed: a line number (lines drift; anchor a symbol instead) (STATE.md line 7: "The new parser ⚓`src/feature.py` and ⚓`src/never.py`; see ⚓`src/job.py:12`.")
+<!-- state-anchors:end -->
+
+=== digest
+# Digest <TODAY>
+
+<!-- digest:state-anchors:begin -->
+## STATE.md statements whose code is gone
+
+- [ ] **alpha**: ⚓`src/job.py#retry_later` the name is gone from the file (STATE.md line 5: "The nightly job runs in ⚓`src/job.py#run_job`; retries in ⚓`src/job.py#retry_later`.")
+- [ ] **alpha**: ⚓`src/old.py` renamed to `src/settings.py` in 083dad4a (STATE.md line 6: "Settings are read by ⚓`src/old.py`, the exporter is ⚓`src/gone.py`, and the cache in ⚓`data/` is ne…")
+- [ ] **alpha**: ⚓`src/gone.py` deleted in 083dad4a (STATE.md line 6: "Settings are read by ⚓`src/old.py`, the exporter is ⚓`src/gone.py`, and the cache in ⚓`data/` is ne…")
+- [ ] **alpha**: ⚓`src/never.py` not on main nor on any branch (STATE.md line 7: "The new parser ⚓`src/feature.py` and ⚓`src/never.py`; see ⚓`src/job.py:12`.")
+- [ ] **alpha**: ⚓`src/job.py:12` malformed: a line number (lines drift; anchor a symbol instead) (STATE.md line 7: "The new parser ⚓`src/feature.py` and ⚓`src/never.py`; see ⚓`src/job.py:12`.")
+
+Not on main, but not stale either (waiting on a merge, or not in git):
+
+- **alpha**: ⚓`data/` on disk but not in git; anchors are for tracked code (STATE.md line 6: "Settings are read by ⚓`src/old.py`, the exporter is ⚓`src/gone.py`, and the cache in ⚓`data/` is ne…")
+- **alpha**: ⚓`src/feature.py` only on branch `feature` (not merged yet) (STATE.md line 7: "The new parser ⚓`src/feature.py` and ⚓`src/never.py`; see ⚓`src/job.py:12`.")
+
+- **beta**: anchors not checked: no workspace in the registry
+<!-- digest:state-anchors:end -->
+
+=== none stale --apply
+exit None
+state anchor check: 1 anchor checked, 0 stale, 0 listed apart, 0 projects not checked
+
+=== todo.md
+# todo
+
+- [ ] x
+
+=== digest
+# Digest <TODAY>
+
+=== --help
+exit SystemExit(0)
+usage: x [-h] [--project PROJECT] [--apply]
+
+options:
+  -h, --help         show this help message and exit
+  --project PROJECT
+  --apply

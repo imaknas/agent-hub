@@ -7,8 +7,8 @@ marks a statement about code that exists now. Anchors in the to-do section and i
     import state_anchors
     anchors = state_anchors.find(text, owner_tag)
     repo = state_anchors.Repo.open(workspace)       # None + reason when it cannot be checked
-    results = [repo.resolve(a) for a in anchors]    # Result.outcome: ok | pending | renamed | deleted | missing |
-                                                    #                 symbol | malformed
+    results = [repo.resolve(a) for a in anchors]    # Result.outcome: ok | pending | untracked | renamed | deleted |
+                                                    #                 missing | symbol | malformed
 
 Users: check-state-anchors.py (the nightly job), librarian.py (the stale note in its prompt), bin/evals/e2.py (scores).
 """
@@ -27,8 +27,10 @@ SYMBOL = re.compile(r"^[A-Za-z_$][\w$]*(?:\.[A-Za-z_$][\w$]*)*$")
 LINE_NO = re.compile(r":\d+(?:[-:]\d+)?$")
 FENCE = re.compile(r"^\s*(```|~~~)")
 # the codes callers turn into text: why an anchor is malformed, why a workspace cannot be checked
-PROBLEMS = ("empty", "url", "absolute", "parent", "line-number", "symbol-name", "directory-symbol")
+PROBLEMS = ("empty", "url", "absolute", "parent", "line-number", "symbol-name", "directory-symbol", "memory")
 UNCHECKED = ("no-workspace", "no-directory", "not-git", "no-base-branch")
+# the memory worktree's branch (onboard-project.sh): it holds notes, not code, and is never merged into main
+MEMORY_BRANCH = "agent-memory"
 STALE = ("renamed", "deleted", "missing", "symbol", "malformed")   # what is reported as stale (pending is not)
 
 
@@ -46,7 +48,9 @@ class Anchor:
 class Result:
     anchor: Anchor
     outcome: str
-    hint: str = ""        # renamed: the new path; deleted: the commit; pending: the branch; symbol: other files
+    hint: str = ""        # renamed: the new path; deleted: the commit; pending: the branch; symbol: other files;
+                          # malformed: a code of PROBLEMS
+    commit: str = ""      # renamed: the commit that renamed it
 
 
 def parse(raw: str) -> tuple[str, str | None, str | None]:
@@ -62,6 +66,8 @@ def parse(raw: str) -> tuple[str, str | None, str | None]:
         return path, symbol, "absolute"
     if ".." in path.split("/"):
         return path, symbol, "parent"
+    if path.split("/")[0] in ("memory", ".agent-memory") or path == "STATE.md":
+        return path, symbol, "memory"
     if LINE_NO.search(path):
         return path, symbol, "line-number"
     if symbol is not None and not SYMBOL.match(symbol):
@@ -133,14 +139,21 @@ class Repo:
         return r.stdout.strip() if r.returncode == 0 else ""
 
     def _present(self, rev: str, path: str) -> bool:
-        t = self._type(rev, path)
-        return t == "tree" if path.endswith("/") else t == "blob"
+        """a file or a directory, whatever the trailing slash says: the check never reports what is there"""
+        return self._type(rev, path) in ("blob", "tree")
 
     def others(self) -> list[str]:
+        """local branches not merged into the base branch (merged ones outlive their worktrees and hold old files),
+        without the memory branch"""
         if self._others is None:
-            refs = _git(self.ws, "for-each-ref", "--format=%(refname:short)", "refs/heads").stdout.split()
-            self._others = [b for b in refs if b != self.base]
+            refs = _git(self.ws, "for-each-ref", "--no-merged", self.base, "--format=%(refname:short)",
+                        "refs/heads").stdout.split()
+            self._others = [b for b in refs if b not in (self.base, MEMORY_BRANCH)]
         return self._others
+
+    def untracked(self, path: str) -> bool:
+        """on disk in the working tree but not in git (ignored or never added): data, output, a cache"""
+        return (self.ws / path).exists() and _git(self.ws, "ls-files", "--error-unmatch", "--", path).returncode != 0
 
     def has_word(self, rev: str, word: str, path: str = ".") -> bool:
         return _git(self.ws, "grep", "-q", "-w", "-F", "-e", word, rev, "--", f"./{path}").returncode == 0
@@ -150,6 +163,8 @@ class Repo:
         return [l.split(":", 1)[1] for l in out if ":" in l][:limit]
 
     def resolve(self, a: Anchor) -> Result:
+        """the base branch's history decides first (a file deleted there stays deleted, whatever old branch still has
+        it); only a path never on the base branch can be pending or untracked"""
         if a.problem:
             return Result(a, "malformed", a.problem)
         if self._present(self.base, a.path):
@@ -166,12 +181,38 @@ class Repo:
                 f = line.split("\t")
                 if len(f) == 3 and f[0].startswith("R") and f[1] == full:
                     new = f[2][len(self.prefix):] if f[2].startswith(self.prefix) else f[2]
-                    return Result(a, "renamed", f"{new} ({last[:8]})")
+                    return Result(a, "renamed", new, last[:8])
             return Result(a, "deleted", last[:8])
         branch = next((b for b in self.others() if self._present(b, a.path)), None)
         if branch:
             return Result(a, "pending", branch)
+        if self.untracked(a.path.rstrip("/")):
+            return Result(a, "untracked")
         return Result(a, "missing")
+
+
+# what each stale outcome means, for the librarian's prompt (prompts are English; the model writes in the content
+# language): the owner-facing text is check-state-anchors.py's, through locales/
+PROMPT_TEXT = {
+    "renamed": "the file was renamed to `{hint}` (commit {commit})",
+    "deleted": "the file was deleted on main (commit {hint})",
+    "missing": "the path is not in the project's repository, on main or any branch",
+    "symbol": "the file is there, but the name no longer occurs in it",
+    "malformed": "not a valid anchor ({hint})",
+}
+
+
+def record(r: Result) -> dict:
+    """a stale result as plain data (the librarian's eval cases record it in args.json)"""
+    return {"raw": r.anchor.raw, "outcome": r.outcome, "hint": r.hint, "commit": r.commit, "line_no": r.anchor.line_no,
+            "statement": r.anchor.statement}
+
+
+def note_line(rec: dict) -> str:
+    what = PROMPT_TEXT[rec["outcome"]].format(hint=rec["hint"], commit=rec.get("commit", ""))
+    if rec["outcome"] == "symbol" and rec["hint"]:
+        what += f" (it now occurs in {rec['hint']})"
+    return f"- line {rec['line_no']}, ⚓`{rec['raw']}`: {what}. The statement: {rec['statement']}"
 
 
 def _git(ws: pathlib.Path, *args: str) -> subprocess.CompletedProcess:

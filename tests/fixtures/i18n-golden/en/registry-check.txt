@@ -1,7 +1,7 @@
 $ <HUB>/bin/registry.py check
 [exit 1]
 --- stdout
-✓ agent-hub: 12 jobs, 3 services
+✓ agent-hub: 13 jobs, 3 services
 ✗ bad-idea
     type: idea needs a purpose (the idea itself)
     paths.workspace is required

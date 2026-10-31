@@ -7,6 +7,13 @@
   in itself counts as a substantive change.
 - Where STATE.md mentions files that have been moved, or open questions that newer content has answered or overturned,
   fix those too.
+- Code anchors: `⚓` right before the code span of a path (⚓`src/job.py`, or ⚓`src/job.py#run_job` for one named
+  function or class) marks a statement about code as it exists now; a nightly check flags it once the path or name is
+  gone from the project's main branch. Keep every existing anchor exactly as written. Add one only by putting `⚓`
+  before a code span the statement already has, for a repo-relative path of tracked source code or docs that the
+  memory notes or STATE.md name verbatim; at most one per statement; `#name` only when the statement is about that
+  function or class and the name is distinctive. Never in the `{{todo_heading}}` section, and never for data, output,
+  cache or ignored files, `memory/` files, URLs, routes, paths in other repositories, or code that no longer exists.
 - STATE.md must have a `{{todo_heading}}` section in a fixed format, one item per line:
   `- [ ] {{tag_owner}}…` (only {{owner}} can do it: accounts, passwords, payments, a decision or an answer that is
   {{owner}}'s to give)

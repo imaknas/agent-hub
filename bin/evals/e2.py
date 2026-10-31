@@ -226,10 +226,12 @@ def _freeze_in(lib, project: str, d: pathlib.Path, since: str, after: str | None
         sys.exit(f"e2: no memory/ changes in {since}..HEAD")
     memory_section, diff, truncated = lib.memory_input(d, rng, changed)
     dangling = lib.dangling_refs(d)
+    anchors = lib.stale_anchors(project, d)   # against the workspace today, not as of `since` (the code tree has no history here)
     before = (d / "STATE.md").read_text(errors="replace") if (d / "STATE.md").exists() else ""
     raw = {"changed": changed, "diff": diff, "truncated": truncated, "handoffs": [], "dangling": dangling,
-           "frozen_from": rng}
-    rendered = {"memory_section": memory_section, "h_note": "", "d_note": lib.dangling_note(dangling)}
+           "anchors": anchors, "frozen_from": rng}
+    rendered = {"memory_section": memory_section, "h_note": "",
+                "d_note": lib.dangling_note(dangling) + lib.anchor_note(anchors)}
     c = lib.record_state_case(project, d, head, before, raw, rendered, name=f"{project}@{head[:8]}")
     if c is None:
         sys.exit("e2: case not recorded (see the librarian log)")
@@ -320,7 +322,7 @@ def prompt(point: str, case: pathlib.Path, arm: str) -> str:
     if point in ("librarian-state", "librarian-state-edits"):
         ms = lib.memory_text(a["changed"], a["diff"], a["truncated"])
         hn = lib.handoff_note(a["handoffs"]) if a["handoffs"] else ""
-        dn = lib.dangling_note(a["dangling"])
+        dn = lib.dangling_note(a["dangling"]) + lib.anchor_note(a.get("anchors") or [])   # older cases have no anchors
         if point == "librarian-state":
             return lib.state_prompt(a["project"], ms, hn, dn)
         before = (case / "snapshot" / "STATE.md").read_text(errors="replace") if (case / "snapshot" / "STATE.md").exists() else ""
@@ -463,7 +465,9 @@ def anchor_scores(case: pathlib.Path, before: str, after: str) -> dict:
     share of added anchors whose path occurs in what the librarian was shown (memory diff, STATE.md before, the
     reference index): an ungrounded one is a guessed path; in_todo: anchors inside the to-do section (must be 0);
     retention: the share of before's anchors still in after (cases that have some); stale_fixed: the share of the
-    anchors the stale note named that are gone from after; growth: len(after) / len(before)."""
+    anchors the stale note named that are gone from after; resolve: the share of added anchors that resolve (ok,
+    pending) against the project's workspace today (approximate: the code moved on since the case); growth:
+    len(after) / len(before)."""
     a = json.loads((case / "args.json").read_text())
     owner = a.get("owner") or hubconf.owner_tag()
     b = [x.raw for x in state_anchors.find(before, owner)]
@@ -472,8 +476,11 @@ def anchor_scores(case: pathlib.Path, before: str, after: str) -> dict:
     ref = case / "snapshot" / "memory" / "reference" / "README.md"
     shown = a.get("diff", "") + before + (ref.read_text(errors="replace") if ref.exists() else "")
     noted = [x["raw"] for x in a.get("anchors") or []]
+    new = [x for x in state_anchors.find(after, owner) if x.raw in added]
+    repo, _why = state_anchors.Repo.open(hubconf.path((hubconf.roster().get(a["project"]) or {}).get("workspace")))
     return {"anchors": len(f), "added": len(added),
             "grounded": mean([state_anchors.parse(x)[0].rstrip("/") in shown for x in added]) if added else None,
+            "resolve": mean([repo.resolve(x).outcome in ("ok", "pending") for x in new]) if new and repo else None,
             "in_todo": state_anchors.in_todo(after, owner),
             "retention": round(sum(x in f for x in b) / len(b), 3) if b else None,
             "stale_fixed": round(sum(x not in f for x in noted) / len(noted), 3) if noted else None,
@@ -633,7 +640,7 @@ def cmd_score(a) -> int:
             "full_punct": mean([g["full_punct"] for g in langs]),
             **({f"anchor_{k}": (sum(r["anchor"][k] for r in rs if "anchor" in r) if k == "in_todo" else
                                 mean([r["anchor"][k] for r in rs if "anchor" in r]))
-                for k in ("anchors", "added", "grounded", "in_todo", "retention", "stale_fixed", "growth")}
+                for k in ("anchors", "added", "grounded", "resolve", "in_todo", "retention", "stale_fixed", "growth")}
                if any("anchor" in r for r in rs) else {}),
             "errors": sorted({r["error"] for r in rs if r.get("error")})[:5]}
     for x, y in [(p, p) for p in arms] + list(itertools.combinations(arms, 2)):

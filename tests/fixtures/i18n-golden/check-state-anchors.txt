@@ -1,0 +1,69 @@
+=== stale
+exit None
+- [ ] **alpha**:⚓`src/job.py#retry_later` 檔案裡已經沒有這個名稱(STATE.md 第 5 行:「The nightly job runs in ⚓`src/job.py#run_job`; retries in ⚓`src/job.py#retry_later`.」)
+- [ ] **alpha**:⚓`src/old.py` 在 083dad4a 改名成 `src/settings.py`(STATE.md 第 6 行:「Settings are read by ⚓`src/old.py`, the exporter is ⚓`src/gone.py`, and the cache in ⚓`data/` is ne…」)
+- [ ] **alpha**:⚓`src/gone.py` 在 083dad4a 刪掉了(STATE.md 第 6 行:「Settings are read by ⚓`src/old.py`, the exporter is ⚓`src/gone.py`, and the cache in ⚓`data/` is ne…」)
+- [ ] **alpha**:⚓`src/never.py` main 跟其他 branch 都沒有(STATE.md 第 7 行:「The new parser ⚓`src/feature.py` and ⚓`src/never.py`; see ⚓`src/job.py:12`.」)
+- [ ] **alpha**:⚓`src/job.py:12` 格式不對:寫了行號(行號會漂移;改錨定名稱)(STATE.md 第 7 行:「The new parser ⚓`src/feature.py` and ⚓`src/never.py`; see ⚓`src/job.py:12`.」)
+
+=== stale --apply
+exit None
+STATE.md 錨點檢查:檢查 8 個錨點,5 個過時,2 個另列,1 個專案沒檢查;過時的在:alpha
+
+=== todo.md
+# todo
+
+- [ ] x
+
+<!-- state-anchors:begin -->
+## STATE.md 裡程式碼已經不在的敘述(機械檢查)
+
+STATE.md 用程式碼錨點標記的這些敘述,在專案的 main 上已經找不到——敘述大概過時了。librarian 下次整理這個專案時會收到提醒;專案的 session 也可以先改。
+
+- [ ] **alpha**:⚓`src/job.py#retry_later` 檔案裡已經沒有這個名稱(STATE.md 第 5 行:「The nightly job runs in ⚓`src/job.py#run_job`; retries in ⚓`src/job.py#retry_later`.」)
+- [ ] **alpha**:⚓`src/old.py` 在 083dad4a 改名成 `src/settings.py`(STATE.md 第 6 行:「Settings are read by ⚓`src/old.py`, the exporter is ⚓`src/gone.py`, and the cache in ⚓`data/` is ne…」)
+- [ ] **alpha**:⚓`src/gone.py` 在 083dad4a 刪掉了(STATE.md 第 6 行:「Settings are read by ⚓`src/old.py`, the exporter is ⚓`src/gone.py`, and the cache in ⚓`data/` is ne…」)
+- [ ] **alpha**:⚓`src/never.py` main 跟其他 branch 都沒有(STATE.md 第 7 行:「The new parser ⚓`src/feature.py` and ⚓`src/never.py`; see ⚓`src/job.py:12`.」)
+- [ ] **alpha**:⚓`src/job.py:12` 格式不對:寫了行號(行號會漂移;改錨定名稱)(STATE.md 第 7 行:「The new parser ⚓`src/feature.py` and ⚓`src/never.py`; see ⚓`src/job.py:12`.」)
+<!-- state-anchors:end -->
+
+=== digest
+# Digest <TODAY>
+
+<!-- digest:state-anchors:begin -->
+## STATE.md 裡程式碼已經不在的敘述
+
+- [ ] **alpha**:⚓`src/job.py#retry_later` 檔案裡已經沒有這個名稱(STATE.md 第 5 行:「The nightly job runs in ⚓`src/job.py#run_job`; retries in ⚓`src/job.py#retry_later`.」)
+- [ ] **alpha**:⚓`src/old.py` 在 083dad4a 改名成 `src/settings.py`(STATE.md 第 6 行:「Settings are read by ⚓`src/old.py`, the exporter is ⚓`src/gone.py`, and the cache in ⚓`data/` is ne…」)
+- [ ] **alpha**:⚓`src/gone.py` 在 083dad4a 刪掉了(STATE.md 第 6 行:「Settings are read by ⚓`src/old.py`, the exporter is ⚓`src/gone.py`, and the cache in ⚓`data/` is ne…」)
+- [ ] **alpha**:⚓`src/never.py` main 跟其他 branch 都沒有(STATE.md 第 7 行:「The new parser ⚓`src/feature.py` and ⚓`src/never.py`; see ⚓`src/job.py:12`.」)
+- [ ] **alpha**:⚓`src/job.py:12` 格式不對:寫了行號(行號會漂移;改錨定名稱)(STATE.md 第 7 行:「The new parser ⚓`src/feature.py` and ⚓`src/never.py`; see ⚓`src/job.py:12`.」)
+
+不在 main 上、但不算過時(等合併,或不在 git 裡):
+
+- **alpha**:⚓`data/` 在磁碟上但不在 git 裡——錨點只標 git 追蹤的程式碼(STATE.md 第 6 行:「Settings are read by ⚓`src/old.py`, the exporter is ⚓`src/gone.py`, and the cache in ⚓`data/` is ne…」)
+- **alpha**:⚓`src/feature.py` 只在 branch `feature`(還沒合併)(STATE.md 第 7 行:「The new parser ⚓`src/feature.py` and ⚓`src/never.py`; see ⚓`src/job.py:12`.」)
+
+- **beta**:錨點沒有檢查——登錄裡沒有 workspace
+<!-- digest:state-anchors:end -->
+
+=== none stale --apply
+exit None
+STATE.md 錨點檢查:檢查 1 個錨點,0 個過時,0 個另列,0 個專案沒檢查
+
+=== todo.md
+# todo
+
+- [ ] x
+
+=== digest
+# Digest <TODAY>
+
+=== --help
+exit SystemExit(0)
+usage: x [-h] [--project PROJECT] [--apply]
+
+options:
+  -h, --help         show this help message and exit
+  --project PROJECT
+  --apply

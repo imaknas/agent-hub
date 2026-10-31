@@ -8,8 +8,8 @@ memory notes and never sees the code, so a renamed file or a deleted function st
 project's STATE.md (the librarian's memory copy) against the workspace's local main/master (bin/state_anchors.py).
 
 Outcomes: renamed, deleted, missing (never on any branch), symbol (the file is there, the name is not) and malformed
-are stale; pending (only on another local branch: a worktree session's work not merged yet) is listed apart and is
-not a to-do. A project with anchors that cannot be checked (no workspace, not git, no main/master) gets a
+are stale; pending (only on an unmerged local branch: a worktree session's work not merged yet) and untracked (on disk
+but not in git: data, output, a cache) are listed apart in the digest and are not to-dos. A project with anchors that cannot be checked (no workspace, not git, no main/master) gets a
 "not checked" line, never a silent 0.
 
 Usage: check-state-anchors.py [--project P] [--apply]
@@ -40,7 +40,8 @@ def problem(code: str) -> str:
             "absolute": lambda: _("not relative to the project folder"), "parent": lambda: _("leaves the project (..)"),
             "line-number": lambda: _("a line number (lines drift; anchor a symbol instead)"),
             "symbol-name": lambda: _("not a symbol name"),
-            "directory-symbol": lambda: _("a symbol in a directory")}[code]()
+            "directory-symbol": lambda: _("a symbol in a directory"),
+            "memory": lambda: _("a memory file, not code")}[code]()
 
 
 def unchecked_reason(code: str) -> str:
@@ -54,13 +55,14 @@ def unchecked_reason(code: str) -> str:
 def describe(r: state_anchors.Result) -> str:
     """what happened to the anchor, in the UI language"""
     return {
-        "renamed": lambda: _("renamed to `{path}`", path=r.hint),
+        "renamed": lambda: _("renamed to `{path}` in {commit}", path=r.hint, commit=r.commit),
         "deleted": lambda: _("deleted in {commit}", commit=r.hint),
         "missing": lambda: _("not on main nor on any branch"),
         "symbol": lambda: (_("the name is gone from the file; now in {files}", files=r.hint) if r.hint
                            else _("the name is gone from the file")),
         "malformed": lambda: _("malformed: {problem}", problem=problem(r.hint)),
         "pending": lambda: _("only on branch `{branch}` (not merged yet)", branch=r.hint),
+        "untracked": lambda: _("on disk but not in git; anchors are for tracked code"),
     }[r.outcome]()
 
 
@@ -73,7 +75,8 @@ def line(project: str, r: state_anchors.Result, box: str = "- [ ] ") -> str:
 
 
 def scan(only: str | None) -> tuple[list[str], list[str], list[str], int]:
-    """(stale lines, pending lines, not-checked lines, anchors checked) over every onboarded project"""
+    """(stale lines, lines listed apart (pending, untracked), not-checked lines, anchors checked) over every onboarded
+    project"""
     copies = hubconf.p("memory_copies", "~/.memory-copies")
     owner = hubconf.owner_tag()
     stale, pending, unchecked, n = [], [], [], 0
@@ -83,13 +86,13 @@ def scan(only: str | None) -> tuple[list[str], list[str], list[str], int]:
         st = copies / name / "STATE.md"
         if not st.exists():
             continue
-        results, why = state_anchors.check(st.read_text(errors="replace"), owner, paths.get("workspace"))
+        results, why = state_anchors.check(st.read_text(errors="replace"), owner, hubconf.path(paths.get("workspace")))
         if why:
             unchecked.append("- " + _("**{project}**: anchors not checked: {reason}", project=name, reason=unchecked_reason(why)))
             continue
         n += len(results)
         stale += [line(name, r) for r in state_anchors.stale(results)]
-        pending += [line(name, r, "- ") for r in results if r.outcome == "pending"]
+        pending += [line(name, r, "- ") for r in results if r.outcome in ("pending", "untracked")]
     return stale, pending, unchecked, n
 
 
@@ -106,16 +109,17 @@ def main() -> None:
     write_todo_block(hubconf.data_file("todo.md"), stale)
     parts = [("\n".join(stale)) if stale else ""]
     if pending:
-        parts.append(_("Waiting on a merge (not stale):") + "\n\n" + "\n".join(pending))
+        parts.append(_("Not on main, but not stale either (waiting on a merge, or not in git):") + "\n\n"
+                     + "\n".join(pending))
     if unchecked:
         parts.append("\n".join(unchecked))
     body = "\n\n".join(p for p in parts if p)
     hublib.digest_append("state-anchors", f"## {heading()}\n\n{body}" if body else "")
     names = " ".join(dict.fromkeys(re.findall(r"\*\*([^*]+)\*\*", "\n".join(stale))))
-    print(_("state anchor check: {n} {n:anchor|anchors} checked, {stale} stale, {pending} waiting on a merge, "
+    print(_("state anchor check: {n} {n:anchor|anchors} checked, {stale} stale, {pending} listed apart, "
             "{unchecked} {unchecked:project|projects} not checked", n=n, stale=len(stale), pending=len(pending),
             unchecked=len(unchecked))
-          + (_(" ({names})", names=names) if names else ""))
+          + (_("; stale in: {names}", names=names) if names else ""))
 
 
 def heading() -> str:

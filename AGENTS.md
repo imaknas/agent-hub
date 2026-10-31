@@ -272,6 +272,11 @@ agent-hub is meant for anyone, with any coding agent, any LLM, any key.
 - `bin/check-memory-gaps.py`: platform job `agent-hub/memory-gaps` (`--apply`, nightly after todo): projects with
   conversations in the last 72 hours but no new memory notes are listed in a fixed block of `todo.md` and in the digest
   (zero LLM cost)
+- `bin/check-state-anchors.py`: platform job `agent-hub/state-anchors` (`--apply`, nightly after the librarian and
+  todo): STATE.md statements marked with a code anchor (⚓ + a code span: `path` or `path#symbol`) whose path or name
+  is gone from the project's main branch are listed in a fixed block of `todo.md` and in the digest; the librarian is
+  told about them on its next run for that project (`bin/state_anchors.py`, design in `docs/design/state-anchors.md`;
+  zero LLM cost)
 - `bin/sync-all-memory.sh`: hourly, re-runs `git-sync-memory.sh` + the push for every project's `.agent-memory` (the
   safety net for the hooks; service `local.sync-all-memory-mini`)
 

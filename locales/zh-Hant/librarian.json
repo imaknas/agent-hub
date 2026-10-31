@@ -27,5 +27,6 @@
   "librarian applied this to STATE.md ({date}, see review-log)": "librarian 套用進 STATE.md({date},見 review-log)",
   "{project}: assistant handoffs {nums} closed (the bridge reports it to the assistant)": "{project}: 助理的轉交 {nums} 已結案(bridge 會回報助理)",
   "{project}: closing the assistant handoffs failed; they are processed again tomorrow night (STATE.md was already changed; processing them again should change nothing)": "{project}: 助理的轉交結案失敗,隔晚會再處理一次(STATE.md 已經改過,重複處理應該不會再改)",
-  "digest {date}: write failed": "digest {date} 寫入失敗"
+  "digest {date}: write failed": "digest {date} 寫入失敗",
+  "{project}: STATE.md has stale code anchors: {anchors}": "{project}:STATE.md 有過時的程式碼錨點:{anchors}"
 }

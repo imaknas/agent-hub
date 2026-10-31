@@ -53,6 +53,16 @@ jobs:
   max_attempts_per_day: 3
   run: bin/py bin/check-memory-gaps.py --apply
   cwd: hub
+# STATE.md statements whose code anchor no longer resolves on the project's main → a fixed block in todo.md + today's
+# digest (docs/design/state-anchors.md); reads the STATE.md the librarian just wrote, and todo regenerates the file
+- name: state-anchors
+  at: 03:00
+  after:
+  - librarian
+  - todo
+  max_attempts_per_day: 3
+  run: bin/py bin/check-state-anchors.py --apply
+  cwd: hub
 # regenerates the roster in index.md, commits today's digest, index.md, review-log.md, todo.md
 - name: librarian-publish
   at: 03:00
@@ -60,6 +70,7 @@ jobs:
   - librarian
   - todo
   - memory-gaps
+  - state-anchors
   max_attempts_per_day: 3
   run: bin/librarian-publish.sh
   cwd: hub

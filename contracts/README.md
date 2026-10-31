@@ -7,7 +7,7 @@ repos are open source, and the vendored copy gets committed there).
 
 | Contract | Who produces it (implementation on this side) | Who reads it |
 |---|---|---|
-| `todo-md.v2.md` (v1 alongside) | `bin/gen-todo.py` (the librarian, nightly, zero LLM; headings in the UI language, marker v1 for the zh-Hant set, v2 for the English one); the librarian then adds the memory-gaps block | the owner, the owner's personal assistant (vendors v1; needs v2 before it reads an English instance) |
+| `todo-md.v2.md` (v1 alongside) | `bin/gen-todo.py` (the librarian, nightly, zero LLM; headings in the UI language, marker v1 for the zh-Hant set, v2 for the English one); the librarian then adds the memory-gaps and state-anchors blocks | the owner, the owner's personal assistant (vendors v1; needs v2 before it reads an English instance) |
 | `state-todo.v2.md` (v1 alongside) | the librarian (model rewrite, in the content language's token set) + `bin/check-state-todo.py` (format check) + `bin/registrar.py` (stamps keys mechanically, deletes/re-adds by key); both token sets defined once in `bin/todo_tokens.py` | `bin/gen-todo.py`, `bin/registrar.py`, the personal assistant (vendors v1) |
 | `reflect-week.v1.schema.json` | `bin/weekly-reflect.py` (every Monday 07:00) | the personal assistant's weekly reflection |
 | `hubbus.v1.schema.json` | `bin/hubbus` | the platform itself (sessions, bridge, librarian, status page) |

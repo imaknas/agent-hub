@@ -2,7 +2,7 @@
 """The librarian: every night it reads what is new in each project's memory/, updates STATE.md where needed, writes the
 project-summary section of today's digest, and asks the model to mark the relations between projects (index.md).
 Platform job agent-hub/librarian (runs after consolidate; the mechanical steps after it -- the assistant's task
-registry, reconcile-questions, todo, memory-gaps, librarian-publish -- are jobs of their own, not in this script).
+registry, reconcile-questions, todo, memory-gaps, state-anchors, librarian-publish -- are jobs of their own, not in this script).
 
 10-27: rewritten from librarian.sh in Python (same behaviour; prompt, commit, review-log, digest and checkpoint were
 compared byte for byte in an isolated environment with a stand-in llm.py): paths and names all go through hubconf
@@ -42,6 +42,7 @@ import hubconf  # noqa: E402
 import hublib  # noqa: E402
 import i18n  # noqa: E402
 import prompts  # noqa: E402
+import state_anchors  # noqa: E402
 import todo_tokens  # noqa: E402
 
 _ = i18n.domain(__file__)
@@ -531,6 +532,25 @@ def dangling_refs(d: pathlib.Path) -> str:
     return "".join(f" {r}" for r in refs if not glob.glob(r, root_dir=d))
 
 
+def stale_anchors(proj: str, d: pathlib.Path) -> list[dict]:
+    """STATE.md's anchors that no longer resolve on the project's base branch (docs/design/state-anchors.md), as
+    records; pending and untracked are not stale, and a workspace that cannot be checked gives none (the nightly
+    state-anchors job reports that)"""
+    st = d / "STATE.md"
+    if not st.exists():
+        return []
+    ws = hubconf.path((hubconf.roster().get(proj) or {}).get("workspace"))
+    results, _why = state_anchors.check(st.read_text(errors="replace"), OWNER, ws)
+    return [state_anchors.record(r) for r in state_anchors.stale(results)]
+
+
+def anchor_note(stale: list[dict]) -> str:
+    return ("\nThese code anchors in STATE.md no longer resolve on the project's main branch; the statements they mark "
+            "are probably out of date. For each: if the memory notes say where the code went or what replaced it, "
+            "update the statement and its anchor; otherwise remove the anchor, and remove or correct the statement if "
+            "it is no longer true:\n" + "\n".join(state_anchors.note_line(r) for r in stale)) if stale else ""
+
+
 def memory_input(d: pathlib.Path, rng: str, changed: str) -> tuple[str, str, bool]:
     """The prompt's memory section for commits `rng` (changed = the memory files they touch): (section, diff, truncated)."""
     if not changed:
@@ -596,7 +616,11 @@ def process(proj: str, d: pathlib.Path, handoffs: list[dict], digest: list[str])
     dangling = dangling_refs(d)
     if dangling:
         log(_("{project}: STATE.md refers to files that do not exist:{files}", project=proj, files=dangling))
-    d_note = dangling_note(dangling)
+    anchors = stale_anchors(proj, d)
+    if anchors:
+        log(_("{project}: STATE.md has stale code anchors: {anchors}", project=proj,
+              anchors=" ".join(a["raw"] for a in anchors)))
+    d_note = dangling_note(dangling) + anchor_note(anchors)
 
     pre = git(d, "rev-parse", "HEAD")
     before = (d / "STATE.md").read_text(errors="replace") if (d / "STATE.md").exists() else ""   # input for shadow mode
@@ -604,7 +628,7 @@ def process(proj: str, d: pathlib.Path, handoffs: list[dict], digest: list[str])
     # anyway), so the librarian-state judgment point enforces it with permission rules (dontAsk, only Edit(./STATE.md));
     # the quarantine check below is the second line of defence
     case = record_state_case(proj, d, pre, before, {"changed": changed, "diff": diff, "truncated": truncated,
-                                                     "handoffs": mine, "dangling": dangling},
+                                                     "handoffs": mine, "dangling": dangling, "anchors": anchors},
                              {"memory_section": memory_section, "h_note": h_note, "d_note": d_note})
     rc, obj, text = llm("librarian-state", state_prompt(proj, memory_section, h_note, d_note), d)
     if rc != 0 or not text:
