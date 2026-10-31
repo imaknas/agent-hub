@@ -37,8 +37,10 @@ import sys
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
 import hubconf  # noqa: E402
 import hublib  # noqa: E402
+import i18n  # noqa: E402
 import runtime_claude  # noqa: E402  # 這支搬的是 Claude Code 的 auto memory,本來就是 Claude 專用
 
+_ = i18n.domain(__file__)
 MINI = hubconf.host("server")  # 跑 hub 的那台(hub.json hosts.server)
 MINI_PATH_PREFIX = "export PATH=/opt/homebrew/bin:/opt/homebrew/opt/rustup/bin:$HOME/.local/bin:$HOME/.cargo/bin:$PATH; "
 # 依賴、build 產物、cache:不複製,mini 上需要時重建
@@ -59,7 +61,7 @@ def fail(msg: str) -> None:
 def run(cmd: list[str], cwd: str | None = None, check: bool = True) -> str:
     r = subprocess.run(cmd, cwd=cwd, capture_output=True, text=True)
     if check and r.returncode != 0:
-        fail(f"{' '.join(cmd)} 失敗:\n{r.stderr.strip()}")
+        fail(_("{cmd} failed:\n{stderr}", cmd=' '.join(cmd), stderr=r.stderr.strip()))
     return r.stdout
 
 
@@ -67,7 +69,7 @@ def mini(script: str, check: bool = True) -> subprocess.CompletedProcess:
     r = subprocess.run(["ssh", "-o", "BatchMode=yes", MINI, MINI_PATH_PREFIX + script],
                        capture_output=True, text=True)
     if check and r.returncode != 0:
-        fail(f"mini 上執行失敗:{script}\n{r.stdout}{r.stderr}")
+        fail(_("Failed on the hub machine: {script}\n{output}", script=script, output=r.stdout + r.stderr))
     return r
 
 
@@ -76,10 +78,10 @@ def manifest_row(name: str) -> dict:
     legacy-paths.tsv(第一筆)。"""
     paths = hubconf.roster().get(name)
     if paths is None:
-        fail(f"專案登錄(projects/)裡沒有 '{name}'")
+        fail(_("'{name}' is not in the project registry (projects/)", name=name))
     mbp = [p for p in hublib.legacy_paths(name) if p.startswith(hublib.MBP_HOME + "/")]
     if not mbp:
-        fail(f"legacy-paths.tsv 裡沒有 '{name}' 在 MBP 上的位置")
+        fail(_("legacy-paths.tsv has no location on the laptop for '{name}'", name=name))
     return {"path": mbp[0], "origin": paths.get("origin") or "(native)"}
 
 
@@ -111,12 +113,14 @@ def preflight(name: str, path: str, origin: str, allow_local_branches: bool) -> 
     """回傳警告;致命問題直接 fail。"""
     warnings = []
     if origin == "(native)":
-        fail(f"'{name}' 是 native 專案(沒有 GitHub remote),recover-project.sh 沒辦法在 mini 上 clone")
+        fail(_("'{name}' is a native project (no GitHub remote): recover-project.sh cannot clone it on the hub machine",
+               name=name))
     if not os.path.isdir(path):
-        fail(f"{path} 不存在")
+        fail(_("{path} does not exist", path=path))
     dirty = run(["git", "status", "--porcelain"], cwd=path).strip()
     if dirty:
-        fail(f"{path} 有未 commit 的改動——請那個專案的 session 先 commit+push:\n{dirty}")
+        fail(_("{path} has uncommitted changes: ask that project's session to commit+push first:\n{dirty}",
+               path=path, dirty=dirty))
     branches = run(["git", "for-each-ref", "--format=%(refname:short)\t%(upstream:short)\t%(upstream:track)",
                     "refs/heads"], cwd=path)
     unpushed = []
@@ -125,20 +129,24 @@ def preflight(name: str, path: str, origin: str, allow_local_branches: bool) -> 
         if b == "agent-memory":
             continue
         if not up or "ahead" in track or "gone" in track:
-            unpushed.append(f"{b}({'沒有 upstream' if not up else track})")
+            unpushed.append(_("{branch} ({state})", branch=b, state=_("no upstream") if not up else track))
     if unpushed:
-        msg = "本機分支沒 push,mini 上 clone 不到:" + ", ".join(unpushed)
+        msg = _("Local branches not pushed, the hub machine cannot clone them: {branches}",
+                branches=", ".join(unpushed))
         if not allow_local_branches:
-            fail(msg + "\n先 push(或確認不要了),或加 --allow-local-branches 留在 MBP")
-        warnings.append(msg + "(--allow-local-branches:留在 MBP)")
+            fail(_("{problem}\nPush them first (or confirm they are not needed), or add --allow-local-branches to leave "
+                   "them on the laptop", problem=msg))
+        warnings.append(_("{problem} (--allow-local-branches: they stay on the laptop)", problem=msg))
     if run(["git", "stash", "list"], cwd=path).strip():
-        warnings.append("有 git stash,不會搬過去(留在 MBP)")
+        warnings.append(_("There is a git stash: it does not move (it stays on the laptop)"))
     users = run(["lsof", "+d", path], check=False)
     procs = sorted({f"{f[0]}({f[1]})" for f in (l.split() for l in users.splitlines()[1:]) if f})
     if procs:
-        fail(f"還有程序的工作目錄在 {path}:{' '.join(procs)}——先關掉那個專案的 Claude session / 終端機分頁")
+        fail(_("Processes still have their working directory in {path}: {procs}. Close that project's agent session / "
+               "terminal tab first", path=path, procs=' '.join(procs)))
     if mini(f"test -e ~/workspace/{shlex.quote(name)}", check=False).returncode == 0:
-        fail(f"mini 上 ~/workspace/{name} 已經存在——已經搬過了?確認後手動處理")
+        fail(_("~/workspace/{name} already exists on the hub machine: moved already? Check, then handle it by hand",
+               name=name))
     return warnings
 
 
@@ -225,12 +233,14 @@ def copy_mcp_servers(name: str, path: str) -> None:
                 if found:
                     conf2["command"] = found
                 else:
-                    note = f"(mini 上還沒有 {cmd},先 build/安裝)"
+                    note = _(" (the hub machine has no {cmd} yet: build/install it first)", cmd=cmd)
             r = subprocess.run(["ssh", "-o", "BatchMode=yes", MINI, MINI_PATH_PREFIX +
                                 f"cd {target} && read -r J && claude mcp add-json {shlex.quote(server)} \"$J\""],
                                input=json.dumps(conf2) + "\n", capture_output=True, text=True)
             ok = r.returncode == 0 or "already exists" in (r.stdout + r.stderr)
-            print(f"  MCP {server}:{'已加到 mini' if ok else '失敗 ' + (r.stderr or r.stdout).strip()[:200]}{note}")
+            error = (r.stderr or r.stdout).strip()[:200]
+            result = _("added on the hub machine") if ok else _("failed {error}", error=error)
+            print(_("  MCP {server}: {result}{note}", server=server, result=result, note=note))
 
 
 def merge_info_exclude(name: str, path: str) -> None:
@@ -249,7 +259,7 @@ def merge_info_exclude(name: str, path: str) -> None:
     if missing:
         body = "\n".join(missing)
         mini(f"mkdir -p {target}/.git/info && printf '%s\\n' {shlex.quote(body)} >> {target}/.git/info/exclude")
-        print(f"  info/exclude 補上 {len(missing)} 條忽略規則")
+        print(_("  info/exclude: added {count} ignore rules", count=len(missing)))
 
 
 def copy_auto_memory(name: str, path: str) -> None:
@@ -266,8 +276,8 @@ def copy_auto_memory(name: str, path: str) -> None:
         r = subprocess.run(["rsync", "-a", "--ignore-existing", f"{src}/", f"{MINI}:{dest}"],
                            capture_output=True, text=True)
         if r.returncode != 0:
-            fail(f"auto memory rsync 失敗:{r.stderr}")
-        print(f"  auto memory:{src.parent.name} → mini ~/{dest}")
+            fail(_("auto memory rsync failed: {stderr}", stderr=r.stderr))
+        print(_("  auto memory: {src} → the hub machine ~/{dest}", src=src.parent.name, dest=dest))
 
 
 def missing_logins(path: str) -> list[str]:
@@ -275,20 +285,22 @@ def missing_logins(path: str) -> list[str]:
     keychain),例如 gh 要用 --insecure-storage 登入。只檢查、不代登入。"""
     out = []
     if mini("gh auth status", check=False).returncode != 0:
-        out.append("mini 上 gh 沒登入或讀不到 token:在 mini 的終端機跑 "
-                   "`gh auth login -h github.com --git-protocol ssh --web --insecure-storage`")
+        out.append(_("gh on the hub machine is not logged in or cannot read its token: in a terminal on the hub machine "
+                     "run {cmd}", cmd="`gh auth login -h github.com --git-protocol ssh --web --insecure-storage`"))
     if os.path.isdir(os.path.join(path, ".vercel")) and \
             mini("vercel whoami", check=False).returncode != 0:
-        out.append("這個專案用 Vercel,但 mini 上 vercel 沒登入:在 mini 的終端機跑 `vercel login`")
+        out.append(_("This project uses Vercel, but vercel is not logged in on the hub machine: in a terminal on the hub "
+                     "machine run `vercel login`"))
     return out
 
 
 def main() -> None:
-    ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
+    ap = argparse.ArgumentParser(description=_(
+        "Move an onboarded project's development setup from the laptop to ~/workspace/<name> on the hub machine."))
     ap.add_argument("name")
     ap.add_argument("--apply", action="store_true")
     ap.add_argument("--allow-local-branches", action="store_true")
-    ap.add_argument("--skip", action="append", default=[], help="不搬的不進版控檔案(相對路徑)")
+    ap.add_argument("--skip", action="append", default=[], help=_("untracked files not to move (relative path)"))
     a = ap.parse_args()
 
     row = manifest_row(a.name)
@@ -304,16 +316,17 @@ def main() -> None:
     deps = dep_dirs(path, entries)
     sizes = {e: du_kb(path, e) for e in copy}
 
-    print(f"== {a.name}:{path} → mini {target}")
+    print(_("== {name}: {path} → the hub machine {target}", name=a.name, path=path, target=target))
     for w in warnings:
         print(f"  ! {w}")
-    print(f"  複製(不進版控、重建不出來的),共 {human(sum(sizes.values()))}:")
+    print(_("  Copy (untracked, cannot be rebuilt), {size} in all:", size=human(sum(sizes.values()))))
     for e in copy:
         print(f"    {human(sizes[e]):>6}  {e}")
     if skipped:
-        print("  不複製(依賴/build/cache):" + " ".join(skipped))
+        print(_("  Not copied (dependencies/build/cache): {entries}", entries=" ".join(skipped)))
     if left:
-        print(f"  不搬(--skip,留在 MBP 備份),共 {human(sum(du_kb(path, e) for e in left))}:" + " ".join(left))
+        print(_("  Not moved (--skip, kept on the laptop as a backup), {size} in all: {entries}",
+                size=human(sum(du_kb(path, e) for e in left)), entries=" ".join(left)))
     plans, seen = [], set()
     for p, k in deps:
         cmd = rebuild_cmd(path, p, k)
@@ -325,15 +338,17 @@ def main() -> None:
         warnings.append(w)
         print(f"  ! {w}")
     for t in missing_toolchains(path):
-        warnings.append(f"mini 上沒有 {t},這個專案需要它才能 build/執行——先在 mini 安裝")
-        print(f"  ! mini 上沒有 {t}")
+        warnings.append(_("The hub machine has no {tool}; this project needs it to build/run. Install it there first",
+                          tool=t))
+        print(_("  ! The hub machine has no {tool}", tool=t))
     for p, k, cmd in plans:
-        print(f"  mini 上重建 {p}/{'node_modules' if k == 'node' else k}:{cmd or '(找不到 lockfile,手動處理)'}")
+        print(_("  Rebuild on the hub machine {dir}: {cmd}", dir=f"{p}/{'node_modules' if k == 'node' else k}",
+                cmd=cmd or _("(no lockfile found, handle it by hand)")))
     if not a.apply:
-        print("\n(dry-run;確認後加 --apply)")
+        print(_("\n(dry-run; add --apply once you have checked)"))
         return
 
-    print("[2/6] 補 memory 同步 + push")
+    print(_("[2/6] Catch up the memory sync + push"))
     mem = os.path.join(path, ".agent-memory")
     env = dict(os.environ, GIT_CONFIG_COUNT="1", GIT_CONFIG_KEY_0="core.hooksPath",
                GIT_CONFIG_VALUE_0="/dev/null")
@@ -341,46 +356,47 @@ def main() -> None:
         r = subprocess.run([str(hublib.HUB / "bin/with-lock.sh"), str(hublib.HUB / "bin" / script)],
                            cwd=mem, env=env, capture_output=True, text=True)
         if r.returncode != 0:
-            fail(f"{script} 失敗:{r.stdout}{r.stderr}")
+            fail(_("{script} failed: {output}", script=script, output=r.stdout + r.stderr))
 
-    print("[3/6] mini:recover-project.sh")
+    print(_("[3/6] Hub machine: recover-project.sh"))
     mini(f"git -C ~/agent-hub pull -q && mkdir -p ~/workspace && "
          f"~/agent-hub/bin/recover-project.sh {shlex.quote(a.name)} {target}")
 
     if copy:
-        print(f"[4/6] rsync {len(copy)} 項({human(sum(sizes.values()))})")
+        print(_("[4/6] rsync {count} entries ({size})", count=len(copy), size=human(sum(sizes.values()))))
         excludes = [f"--exclude={x}" for x in sorted(REBUILDABLE)] + ["--exclude=*.pyc"]
         r = subprocess.run(["rsync", "-a", "-r", "--from0", "--files-from=-", *excludes,
                             f"{path}/", f"{MINI}:workspace/{a.name}/"],
                            input="\0".join(e.rstrip("/") for e in copy), text=True,
                            capture_output=True)
         if r.returncode != 0:
-            fail(f"rsync 失敗:{r.stderr}")
+            fail(_("rsync failed: {stderr}", stderr=r.stderr))
 
     copy_auto_memory(a.name, path)
     merge_info_exclude(a.name, path)
     copy_mcp_servers(a.name, path)
 
-    print("[5/6] mini:sync-local-setup.sh")
+    print(_("[5/6] Hub machine: sync-local-setup.sh"))
     out = mini(f"cd {target} && ~/agent-hub/bin/sync-local-setup.sh").stdout
     for l in out.splitlines():
         if l.startswith("⚠️"):  # 已 commit 的檔案提到這套機制等,要那個專案的 session 處理
             print(f"  ! {l}")
 
-    print("[6/6] mini:重建依賴")
+    print(_("[6/6] Hub machine: rebuild dependencies"))
     problems = []
     for p, k, cmd in plans:
         if not cmd:
-            problems.append(f"{p}:{k} 找不到 lockfile,沒重建")
+            problems.append(_("{dir}: {kind} has no lockfile, not rebuilt", dir=p, kind=k))
             continue
         r = mini(f"cd {target} && {cmd}", check=False)
-        status = "ok" if r.returncode == 0 else "失敗"
-        print(f"  {p} ({cmd}):{status}")
+        status = "ok" if r.returncode == 0 else _("failed")
+        print(_("  {dir} ({cmd}): {status}", dir=p, cmd=cmd, status=status))
         if r.returncode != 0:
-            problems.append(f"{p}:{cmd} 失敗\n{(r.stdout + r.stderr)[-800:]}")
+            problems.append(_("{dir}: {cmd} failed\n{output}", dir=p, cmd=cmd, output=(r.stdout + r.stderr)[-800:]))
     dirty = mini(f"cd {target} && git status --porcelain").stdout.strip()
     if dirty:
-        problems.append(f"mini 上的工作副本有非預期的改動(重建依賴改到 lockfile?):\n{dirty}")
+        problems.append(_("The working copy on the hub machine has unexpected changes (a rebuild changed a lockfile?):\n"
+                          "{dirty}", dirty=dirty))
 
     # MBP 舊副本留標記(放在 .git 裡,不會被 commit、git status 也看不到):之後在這裡開
     # session,sync-local-setup.sh 會在 SessionStart 提醒改去 mini 開
@@ -388,8 +404,10 @@ def main() -> None:
     pathlib.Path(common, "agent-hub-migrated-to-mini").write_text(
         f"mini:{target}\t{datetime.date.today().isoformat()}\n")
 
-    print(f"\n完成:{a.name} 在 mini 的 {target}。在 Claude Desktop 用 SSH({MINI})開這個資料夾。")
-    print(f"MBP 上的 {path} 沒動,當備份(.git 裡留了標記:在那裡開 session 會被提醒改去 mini)。")
+    print(_("\nDone: {name} is at {target} on the hub machine. Open this folder over SSH ({host}) from your coding "
+            "agent.", name=a.name, target=target, host=MINI))
+    print(_("{path} on the laptop is untouched, kept as a backup (a marker in .git: a session opened there is told to "
+            "go to the hub machine).", path=path))
     for p in problems:
         print(f"  ! {p}")
     sys.exit(1 if problems else 0)
