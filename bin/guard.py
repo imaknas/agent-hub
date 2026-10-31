@@ -1,13 +1,14 @@
 #!/bin/sh -c exec${IFS}"${0%/*}/py"${IFS}"$0"${IFS}"$@"
-"""第二階段的守門:專案的 session 不能開別的專案的 session(跨專案只能寄信)。
+"""Second-stage guard: a project's session may not open a session for another project (across projects: letters only).
 
-平台事件 open_session_attempt(bin/hub-event 呼叫 decide)。輸入是中立的 target——執行環境的 binding 從原生的
-參數翻出來(Claude Code:Desktop 的 start_session 工具;見 runtime_claude.parse_event):
-  cwd        → 不在這個 session 自己的專案(主 checkout 或它的 worktree)底下就擋
-  elsewhere  → 別的 repository、別台機器、看不出是哪裡的 preset:擋
-都沒給 = 同一個專案,放行。擋的時候回理由(叫它寄信),由 binding 翻成原生的「拒絕」。
-不是 onboard 過的專案(例:平台自己)不擋;這支自己出錯一律放行(不能因為守門壞掉擋住正常工作)。
-`guard.py pre-tool` 是舊的入口,還沒換新設定的專案還在叫它。
+Platform event open_session_attempt (bin/hub-event calls decide). The input is a neutral target, which the runtime's
+binding translates from the native arguments (Claude Code: the Desktop start_session tool; see runtime_claude.parse_event):
+  cwd        → not under this session's own project (the main checkout or one of its worktrees): denied
+  elsewhere  → another repository, another machine, a preset that does not say where: denied
+Neither given = the same project, allowed. A denial returns the reason (telling it to send a letter), which the binding
+turns into the native "deny". Projects never onboarded (e.g. the platform itself) are not guarded; when this script itself
+fails it allows (a broken guard must not block normal work).
+`guard.py pre-tool` is the old entry point; projects that have not switched to the new settings still call it.
 """
 from __future__ import annotations
 
@@ -18,6 +19,9 @@ import sys
 
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
 import hubconf  # noqa: E402
+import i18n  # noqa: E402
+
+_ = i18n.domain(__file__)
 
 
 def main_checkout(cwd: pathlib.Path) -> pathlib.Path | None:
@@ -41,25 +45,29 @@ def decide(target: dict, cwd) -> str | None:
     proj, root = own_project(pathlib.Path(cwd or os.getcwd()))
     if not proj:
         return None
-    how = "跨專案的事請寄信:agenthub send --to <專案> --type request --text \"…\";或請 Knas 自己到那個專案開 session。"
+    how = _("To ask another project for something, send a letter: agenthub send --to <project> --type request "
+            "--text \"…\"; or ask the owner to open a session in that project themselves.")
     where = target.get("elsewhere") or {}
     if where.get("kind") == "repository":
-        return f"{proj} 的 session 不能在別的 repository({where.get('name', '')})開 session。{how}"
+        return _("A {project} session cannot open a session in another repository ({name}). {how}", project=proj,
+                 name=where.get('name', ''), how=how)
     if where.get("kind") == "machine":
-        return f"{proj} 的 session 不能到別台機器開 session。{how}"
+        return _("A {project} session cannot open a session on another machine. {how}", project=proj, how=how)
     if where.get("kind"):  # unknown_place:例如存好的地點,看不出是不是同一個專案
-        return f"{proj} 的 session 用 preset 開 session 時看不出是不是同一個專案;同一個專案就不要給 preset/cwd。{how}"
+        return _("A {project} session opening a session with a preset: cannot tell whether it is the same project; "
+                 "for the same project give no preset/cwd. {how}", project=proj, how=how)
     if target.get("cwd"):
         t = pathlib.Path(target["cwd"]).resolve()
         if t != root and root not in t.parents:
-            return f"{proj} 的 session 不能在 {target['cwd']} 開 session(那不是這個專案)。{how}"
+            return _("A {project} session cannot open a session in {cwd} (that is not this project). {how}",
+                     project=proj, cwd=target['cwd'], how=how)
     return None
 
 
 def main() -> int:
     """舊的入口 `guard.py pre-tool`:還沒換新設定的專案還在叫它。輸入、輸出都透過執行環境的 binding。"""
     if sys.argv[1:] != ["pre-tool"]:
-        print(__doc__)
+        print(_(__doc__))
         return 2
     try:
         import runtime_ports
