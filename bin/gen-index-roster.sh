@@ -31,11 +31,11 @@ AGENT_HUB_ROOT="$HUB" "$PY" "$HUB/bin/hubconf.py" roster > "$rows"
 AGENT_HUB_ROOT="$HUB" "$PY" "$HUB/bin/hubconf.py" ideas > "$ideas"   # 想法沙盒另外列一組
 # 注意:過濾時想法清單在 awk 的 BEGIN 讀,不要改回 `NR==FNR` 兩個檔案的寫法——清單是空檔(還沒有任何想法)
 # 時 NR==FNR 對每一行都成立,所有專案都會被濾掉(2026-10-24 名冊因此空了一次)
-[ -s "$rows" ] || { echo "gen-index-roster: 專案登錄是空的($HUB/projects)" >&2; exit 1; }
+[ -s "$rows" ] || { hub_say "gen-index-roster: the project registry is empty ({dir})" dir="$HUB/projects" >&2; exit 1; }
 
 {
   echo "<!-- roster:begin — 由 bin/gen-index-roster.sh 從專案登錄產生,不要手動改 -->"
-  echo "| 專案 | 路徑(mini) |"
+  hub_say "| Project | Path (hub machine) |"
   echo "|---|---|"
   cut -f1,2 "$rows" | sort | awk -F'\t' -v f="$ideas" 'BEGIN{while((getline l < f) > 0) if (l != "") idea[l]=1} !($1 in idea)' \
     | while IFS=$'\t' read -r name path; do
@@ -43,9 +43,9 @@ AGENT_HUB_ROOT="$HUB" "$PY" "$HUB/bin/hubconf.py" ideas > "$ideas"   # 想法沙
       done
   if [ -s "$ideas" ]; then
     echo
-    echo "想法沙盒(Muninn 替想法開的探討用專案,登錄 \`type: idea\`):"
+    hub_say "Idea sandboxes (projects the assistant opens to explore ideas, registered as {type}):" type='`type: idea`'
     echo
-    echo "| 想法 | 路徑(mini) |"
+    hub_say "| Idea | Path (hub machine) |"
     echo "|---|---|"
     cut -f1,2 "$rows" | sort | awk -F'\t' -v f="$ideas" 'BEGIN{while((getline l < f) > 0) if (l != "") idea[l]=1} ($1 in idea)' \
       | while IFS=$'\t' read -r name path; do
@@ -62,8 +62,8 @@ if grep -q '^<!-- roster:begin' "$INDEX"; then
     !skip { print }
   ' "$INDEX" > "$out"
 else
-  awk -v blockfile="$block" '
-    function emit() { print "## 專案名冊"; print ""; while ((getline l < blockfile) > 0) print l; print ""; done=1 }
+  awk -v blockfile="$block" -v heading="$(hub_msg "## Project roster")" '
+    function emit() { print heading; print ""; while ((getline l < blockfile) > 0) print l; print ""; done=1 }
     /^## / && !done { emit() }
     { print }
     END { if (!done) { print ""; emit() } }
@@ -71,8 +71,8 @@ else
 fi
 
 if cmp -s "$out" "$INDEX"; then
-  echo "gen-index-roster: 名冊沒有變化"
+  hub_say "gen-index-roster: the roster is unchanged"
 else
   cat "$out" > "$INDEX"
-  echo "gen-index-roster: 名冊已更新($(grep -c . "$rows") 個專案)"
+  hub_say "gen-index-roster: roster updated ({n} projects)" n="$(grep -c . "$rows")"
 fi
