@@ -14,13 +14,13 @@ MANIFEST="$HUB_CONFIG/services.tsv"
 
 fail() { echo "recover-service: $1" >&2; exit 1; }
 
-[ $# -eq 1 ] || fail "用法: recover-service.sh <label>"
+[ $# -eq 1 ] || fail "$(hub_msg "usage: recover-service.sh <label>")"
 LABEL="$1"
 
-[ -f "$MANIFEST" ] || fail "找不到 $MANIFEST"
+[ -f "$MANIFEST" ] || fail "$(hub_msg "{path} not found" path="$MANIFEST")"
 
 row=$(awk -F'\t' -v n="$LABEL" '$1==n{print; found=1} END{exit !found}' "$MANIFEST") \
-  || fail "在 $MANIFEST 裡找不到 '$LABEL'"
+  || fail "$(hub_msg "'{label}' is not in {path}" label="$LABEL" path="$MANIFEST")"
 
 project=$(echo "$row" | cut -f2)
 owner=$(echo "$row" | cut -f3)
@@ -32,23 +32,23 @@ case "$plist_location" in
   projects/*)
     # 專案登錄裡宣告的 service:照登錄重新產生 plist 並載入
     "$AGENT_HUB/bin/py" "$AGENT_HUB/bin/render-services.py" --only "$LABEL"
-    echo "已照 $plist_location 重建:$LABEL"
-    echo "用途:$purpose"
-    [ -n "$recreate_notes" ] && echo "注意:$recreate_notes"
+    hub_say "Rebuilt from {source}: {label}" source="$plist_location" label="$LABEL"
+    hub_say "Purpose: {purpose}" purpose="$purpose"
+    [ -n "$recreate_notes" ] && hub_say "Note: {notes}" notes="$recreate_notes"
     ;;
   agent-hub/launchd/*)
     plist_path="$AGENT_HUB/${plist_location#agent-hub/}"
-    [ -f "$plist_path" ] || fail "$plist_path 不存在——agent-hub 本身是不是還沒 pull 到最新?"
+    [ -f "$plist_path" ] || fail "$(hub_msg "{path} does not exist: is agent-hub itself behind (not pulled)?" path="$plist_path")"
     # launchd/ 底下是樣板:{{hub}} 換成這台的 hub 位置(用 sed,遙控那台不一定有平台的 Python)
     sed "s#{{hub}}#$AGENT_HUB#g" "$plist_path" >"$HOME/Library/LaunchAgents/${LABEL}.plist"
     launchctl bootstrap "gui/$(id -u)" "$HOME/Library/LaunchAgents/${LABEL}.plist"
-    echo "已重建並啟動:$LABEL"
-    echo "用途:$purpose"
-    [ -n "$recreate_notes" ] && echo "注意:$recreate_notes"
+    hub_say "Rebuilt and started: {label}" label="$LABEL"
+    hub_say "Purpose: {purpose}" purpose="$purpose"
+    [ -n "$recreate_notes" ] && hub_say "Note: {notes}" notes="$recreate_notes"
     ;;
   *)
-    echo "'$LABEL' 不是 agent-hub 管轄的服務(owner: $owner),無法自動重建。"
-    echo "用途:$purpose"
-    echo "怎麼重建:$recreate_notes"
+    hub_say "'{label}' is not a service agent-hub manages (owner: {owner}); it cannot be rebuilt automatically." label="$LABEL" owner="$owner"
+    hub_say "Purpose: {purpose}" purpose="$purpose"
+    hub_say "How to rebuild: {notes}" notes="$recreate_notes"
     ;;
 esac
