@@ -26,7 +26,7 @@ services:
   throttle_s: 10
   env: {PATH: "$PLATFORM_PATH"}   # the nvm default version (claude) + Homebrew, see hubconf.LAUNCHD_PATH
 secrets:   # checked only when this module is on (check-secrets.py)
-- {name: lease-runner-token, path: .secrets/runner-token, why: "通道租借的 Bearer token;不見了 runner 會重產,助理那邊要跟著換"}
+- {name: lease-runner-token, path: .secrets/runner-token, why: "the Bearer token of channel leases; if it is gone the runner makes a new one, and the assistant has to switch to it"}
 # formats the assistant defines (copies under contracts/vendor/); not compared when this module is off
 # (contracts-check.py)
 consumes:

@@ -21,5 +21,5 @@ jobs:
   max_attempts_per_day: 1
   run: bin/py bin/backup.py verify
 secrets:   # checked only when this module is on (check-secrets.py)
-- {name: b2-key, path: .secrets/b2-env, rotate: "Backblaze 後台重發 application key,寫進 .secrets/b2-env"}
-- {name: backup-password, path: .secrets/backup-password, why: "restic 密碼;還原要靠 owner 自己另外存的那一份(例:密碼管理器;備份裡這份解不開自己)"}
+- {name: b2-key, path: .secrets/b2-env, rotate: "issue a new application key in the Backblaze console and write it into .secrets/b2-env"}
+- {name: backup-password, path: .secrets/backup-password, why: "the restic password; a restore needs the copy the owner keeps elsewhere (e.g. a password manager: the copy inside the backup cannot unlock itself)"}

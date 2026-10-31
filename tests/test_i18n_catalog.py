@@ -171,14 +171,17 @@ class Catalogs(unittest.TestCase):
         # module descriptions (modules/*.yaml `description:`, shown by `agenthub modules`): domain "modules"
         used = seen.setdefault("modules", set())
         for f in sorted((ROOT / "modules").glob("*.yaml")):
-            desc = (yaml.safe_load(f.read_text()) or {}).get("description")
-            if not desc:
-                continue
-            used.add(desc)
-            if CJK.search(desc):
-                problems.append(f"modules/{f.name}: description is not English: {desc[:50]}")
-            problems += [f"modules/{f.name}: no {lang} entry for its description" for lang in LANGS
-                         if desc not in i18n.catalog("modules", lang)]
+            doc = yaml.safe_load(f.read_text()) or {}
+            # what check-secrets shows: the description (`agenthub modules`) and each secret's rotate text
+            for what, text in [("description", doc.get("description"))] + \
+                    [(f"secret {s.get('name')} rotate", s.get("rotate")) for s in doc.get("secrets") or []]:
+                if not text:
+                    continue
+                used.add(text)
+                if CJK.search(text):
+                    problems.append(f"modules/{f.name}: {what} is not English: {text[:50]}")
+                problems += [f"modules/{f.name}: no {lang} entry for its {what}" for lang in LANGS
+                             if text not in i18n.catalog("modules", lang)]
         for lang in LANGS:
             for cat_file in sorted((i18n.LOCALES / lang).glob("*.json")):
                 stale = set(json.loads(cat_file.read_text())) - seen.get(cat_file.stem, set())

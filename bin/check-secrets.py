@@ -69,7 +69,8 @@ def check(project: str, doc: dict, sec: dict, today: datetime.date) -> tuple[lis
     """(problems, notes)"""
     name = f"{project}:{sec['name']}"
     path = locate(project, doc, sec["path"])
-    how = _(" — {rotate}", rotate=sec["rotate"]) if sec.get("rotate") else ""
+    # a module's rotate text is in the "modules" catalog; a project's own registry text is shown as written
+    how = _(" — {rotate}", rotate=i18n.translate("modules", sec["rotate"], {})) if sec.get("rotate") else ""
     if not path or not path.exists():
         return [_("{name} is missing ({path})", name=name, path=path or sec["path"]) + how], []
     probs, notes = [], []

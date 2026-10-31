@@ -26,5 +26,5 @@ secrets:
   max_age_days: 365
   warn_days: 30
   backup: false
-  why: "claude setup-token 產生(llm.py 預設的憑證);丟了重跑就有新的,不用備份"
-  rotate: "跑 claude setup-token,把新的 token 寫進 ~/.claude/headless-oauth-token(chmod 600)"
+  why: "made by claude setup-token (llm.py's default credential); if lost, run it again for a new one: no backup needed"
+  rotate: "run claude setup-token and write the new token into ~/.claude/headless-oauth-token (chmod 600)"
