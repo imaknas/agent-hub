@@ -96,6 +96,9 @@ HEDGES = [
     "might", "plan to", "planned", "should be", "assume", "unconfirmed", "not yet",
 ]
 
+# The hedges the prompt names as examples (the notes are mostly Chinese; the check itself uses all of HEDGES)
+PROMPT_HEDGES = ["預計", "預期", "可能", "應該", "打算", "暫定", "待確認", "?"]
+
 GIT_ENV = {
     **os.environ,
     # the memory repo does not run the project's git hooks (see known-issues, "The memory worktree inherits the
@@ -207,63 +210,21 @@ def candidates(state: dict, only: str | None, ignore_interval: bool) -> list[dic
 # The output schema is in contracts/llm/consolidate.schema.json (judgment point consolidate, applied by bin/llm.py)
 
 
-def build_prompt(s: dict, repo: pathlib.Path) -> str:
+def build_prompt(s: dict, repo: pathlib.Path, *, owner: str | None = None, lang: str | None = None) -> str:
+    """The prompt (templates/prompts/consolidate.md); owner and lang default to the configured ones (an eval pins them)."""
+    import prompts
     batch_text = "\n\n".join(f"===== {f} =====\n{(repo / f).read_text()}" for f in s["batch"])
     newer = [f for f in s["raw"] if f not in s["batch"]]
     refs = []
     for p in sorted((repo / "memory" / "reference").glob("*.md")):
         rel = str(p.relative_to(repo))
         when = git("log", "-1", "--format=%ad", "--date=short", "--", rel, cwd=repo).strip()
-        refs.append(f"- {rel}(最後修改 {when or '?'})")
+        refs.append(f"- {rel} (last modified {when or '?'})")
     state_when = git("log", "-1", "--format=%ad", "--date=short", "--", "STATE.md", cwd=repo).strip()
-    return f"""你是 agent-hub 的「回頭清理」agent,現在在專案 {s['name']} 的 memory repo 裡工作。
-背景先讀 ./AGENT.md(memory 的結構跟規則)。
-
-memory/ 的結構:
-- memory/YYYY-MM-DD.md、memory/YYYY-MM-DD-<主題>.md:原始流水紀錄(日期檔),只往後加。
-- memory/reference/<主題>.md:整理過的主題文件,README.md 是索引。
-- ./STATE.md(專案根目錄):精煉的現況,由每晚的 librarian 維護。
-
-## 任務一:把下面這幾個超過 {OLDER_THAN_DAYS} 天的日期檔整理進 memory/reference/
-
-{batch_text}
-
-做法:
-- 先讀 memory/reference/README.md 跟相關的主題文件,把日期檔裡有長期價值的內容整理進對的主題文件:
-  決定跟理由、被否決的選項跟原因、踩到的坑跟解法、數字/設定/帳號以外的事實、還沒解決的問題。
-  寫成主題文件的樣子(按主題、不按日期);需要時間脈絡就寫「(2026-09-26)」這種標註。
-  沿用主題文件原本的語言跟風格。
-- 沒有合適的主題文件就開新的 memory/reference/<主題>.md(小寫英文加連字號),並更新 README.md 索引。
-  **沒有地方放的事實不能丟**——開新文件或擴充既有文件。
-- 可以不保留的只有:(a) 已經在 reference/ 或 STATE.md 寫過的;(b) 被較新紀錄推翻/取代的
-  (如果那是個決定,在主題文件裡留一句「原本…,(日期)改成…,因為…」);(c) 沒有長期價值的流程雜訊
-  (單純的 commit hash、「已 push」、時間戳記本身)。每個不保留的都要寫進 folded[].dropped。
-- 一個日期檔只有在它的內容都放好(或確定可以不保留)之後,才列進 folded;還有疑慮就列進 kept 並說明。
-  你不能刪檔案——列進 folded 的,腳本會在檢查過後幫你 git rm。
-- ./STATE.md 或 memory/reference/ 裡指向這批日期檔的引用(例如「見 memory/2026-09-25.md」),改成指向接手內容的
-  主題文件——檔案刪掉後那些引用就斷了。這是機械性的修正,不用列進 corrections。
-
-## 任務二:修正被推翻的敘述
-
-讀所有現存的日期檔(包括比較新的:{', '.join(newer) or '(無)'}),找出 memory/reference/ 跟 ./STATE.md
-裡已經被較新紀錄推翻或取代的敘述,改成現況。主題文件最後修改日期:
-{chr(10).join(refs) or '(還沒有主題文件)'}
-- ./STATE.md(最後修改 {state_when or '?'})
-判斷新舊看日期:日期檔的日期比主題文件最後修改日期新、而且內容衝突,才算推翻;比較舊的日期檔跟主題文件衝突時,
-以主題文件為準。每一筆修正都列進 corrections,evidence_quote 要從 evidence_file **逐字複製**(腳本會比對,
-對不上的修正會被整個檔案還原)。
-
-## 不能違反的規則
-
-- **保留不確定的語氣**:原文寫「預計/預期/可能/應該/打算/暫定/待確認/?」的,整理後照樣保留那個語氣,
-  不能改成確定的說法。只有較新的紀錄明確寫出結果(例如「已上線」「確認是…」)時才能改,而且要列進 corrections
-  附逐字引文。腳本會機械比對:保留語氣被拿掉、又沒有對應引文的檔案會被還原。
-- 只能建立/修改 ./memory/reference/ 底下的 .md 跟 ./STATE.md。日期檔、AGENT.md、RULES 都不要動;
-  memory/reference/ 底下不開子目錄。
-- STATE.md 是精煉現況:只修正被推翻/過時的敘述(包括 `## 待辦` 裡已經完成或被推翻的項目——直接移除),
-  不要把日期檔的內容搬進 STATE.md,也不要改 `## 待辦` 的格式(`- [ ] 〔{hubconf.owner_tag()}|agent|待定〕…`,沒有就 `- (無)`)。
-- 沒有被推翻的東西不要改寫、不要重新措辭——每一個改動都會出現在 diff 給人抽查。
-"""
+    return prompts.render("consolidate", lang=lang, owner=owner, project=s["name"], older_than_days=OLDER_THAN_DAYS,
+                          batch_text=batch_text, newer=", ".join(newer) or "(none)",
+                          refs="\n".join(refs) or "(no topic documents yet)", state_when=state_when or "?",
+                          hedges="/".join(PROMPT_HEDGES))
 
 
 def run_model(prompt: str, repo: pathlib.Path, model: str) -> tuple[dict | None, str]:

@@ -8,6 +8,7 @@ state dir and bus (a copy of the config with bus_dir changed), so eval calls nev
     e2.py freeze librarian-state <project> [--since <rev> | --night N]   a case from the memory repo (see freeze_state)
     e2.py freeze librarian-index <YYYY-MM-DD>                a case from that night's digest (see freeze_index)
     e2.py freeze librarian-todo-format <state case> --kind K [--state-file F]   a broken STATE.md (see freeze_todo)
+    e2.py freeze consolidate <project> [--today D] [--since <rev>]   a memory repo clone + survey (bin/evals/e2_consolidate.py)
     e2.py cases [<point>]                                    list cases
     e2.py run <point> --arm old|new|new-en [--rules old|new] [--k 3] [--case <glob>] [--run <id>] [--jobs 3]
     e2.py score <run> [--json]                               per-arm validity, language, agreement vs the noise floor
@@ -48,7 +49,9 @@ import hubconf  # noqa: E402
 AGENT_POINTS = {"librarian-state", "librarian-index", "librarian-todo-format"}
 POINT_CASES = {"librarian-state": "librarian-state", "librarian-state-edits": "librarian-state",
                "librarian-index": "librarian-index", "librarian-index-edits": "librarian-index",
-               "librarian-todo-format": "librarian-todo-format"}
+               "librarian-todo-format": "librarian-todo-format", "consolidate": "consolidate"}
+# points whose freeze / run / score live in their own module bin/evals/e2_<point>.py (their shapes differ)
+PLUGINS = {"consolidate": "e2_consolidate"}
 # The code before step 5 (docs/design/i18n.md): renders the `old` arm of a case frozen after the prompts changed
 OLD_REF = "ebd7f90"
 ROSTER = re.compile(r"<!-- roster:begin.*?<!-- roster:end -->", re.S)
@@ -63,6 +66,10 @@ def _load(name: str, file: str):
     mod = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(mod)
     return mod
+
+
+def plugin(point: str):
+    return _load(PLUGINS[point], f"evals/{PLUGINS[point]}.py")
 
 
 def librarian():
@@ -512,6 +519,8 @@ def boot(v, n=1000, seed=0):
 def cmd_score(a) -> int:
     run_dir = root() / "runs" / a.run
     point = json.loads((run_dir / "run.json").read_text())["point"]
+    if point in PLUGINS:
+        return plugin(point).cmd_score(a)
     by: dict[str, dict[str, list[dict]]] = {}
     for out in sorted(run_dir.glob("*/*/*-*")):
         if not (out / "result.json").exists():
@@ -563,12 +572,13 @@ def main(argv: list[str]) -> int:
     ap = argparse.ArgumentParser(prog="e2.py", description=__doc__.split("\n\n")[0])
     sub = ap.add_subparsers(dest="cmd", required=True)
     f = sub.add_parser("freeze")
-    f.add_argument("point", choices=["librarian-state", "librarian-index", "librarian-todo-format"])
+    f.add_argument("point", choices=["librarian-state", "librarian-index", "librarian-todo-format", *PLUGINS])
     f.add_argument("project", help="librarian-state: the project; librarian-index: the night (YYYY-MM-DD) whose digest")
     f.add_argument("--since", help="start of the range (default: the librarian's checkpoint)")
     f.add_argument("--night", type=int, help="the Nth most recent night the librarian changed STATE.md")
     f.add_argument("--kind", help="librarian-todo-format: untagged | done-left | no-section | real-<name>")
     f.add_argument("--state-file", help="librarian-todo-format: a real STATE.md that fails the check")
+    f.add_argument("--today", help="consolidate: the day the survey is made for (default today)")
     c = sub.add_parser("cases")
     c.add_argument("point", nargs="?", default="librarian-state")
     r = sub.add_parser("run")
@@ -584,7 +594,9 @@ def main(argv: list[str]) -> int:
     s.add_argument("--json", action="store_true")
     a = ap.parse_args(argv)
     if a.cmd == "freeze":
-        if a.point == "librarian-todo-format":
+        if a.point in PLUGINS:
+            print(plugin(a.point).freeze(a.project, a.today, a.since))
+        elif a.point == "librarian-todo-format":
             print(freeze_todo(a.kind, a.project, a.state_file))
         else:
             print(freeze_index(a.project) if a.point == "librarian-index" else freeze_state(a.project, a.since, a.night))
@@ -592,7 +604,7 @@ def main(argv: list[str]) -> int:
         for p in cases(a.point):
             print(case_id(p))
     elif a.cmd == "run":
-        return cmd_run(a)
+        return plugin(a.point).cmd_run(a) if a.point in PLUGINS else cmd_run(a)
     elif a.cmd == "score":
         return cmd_score(a)
     return 0

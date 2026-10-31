@@ -121,15 +121,15 @@ index <sha>..<sha>
 
 
 === prompt
-你是 agent-hub 的「回頭清理」agent,現在在專案 alpha 的 memory repo 裡工作。
-背景先讀 ./AGENT.md(memory 的結構跟規則)。
+You are agent-hub's consolidation agent (it looks back), now working in the memory repo of project alpha.
+For background, read ./AGENT.md first (how memory is organised, and its rules).
 
-memory/ 的結構:
-- memory/YYYY-MM-DD.md、memory/YYYY-MM-DD-<主題>.md:原始流水紀錄(日期檔),只往後加。
-- memory/reference/<主題>.md:整理過的主題文件,README.md 是索引。
-- ./STATE.md(專案根目錄):精煉的現況,由每晚的 librarian 維護。
+How memory/ is organised:
+- memory/YYYY-MM-DD.md, memory/YYYY-MM-DD-<topic>.md: the raw running record (date files), only ever appended to.
+- memory/reference/<topic>.md: curated topic documents; README.md is the index.
+- ./STATE.md (at the project root): the distilled current state, maintained by the nightly librarian.
 
-## 任務一:把下面這幾個超過 14 天的日期檔整理進 memory/reference/
+## Task 1: fold these date files, older than 14 days, into memory/reference/
 
 ===== memory/2026-09-01.md =====
 - Deploy notes: https://example.com/doc and `make deploy`
@@ -152,43 +152,57 @@ memory/ 的結構:
 - Fifth note
 
 
-做法:
-- 先讀 memory/reference/README.md 跟相關的主題文件,把日期檔裡有長期價值的內容整理進對的主題文件:
-  決定跟理由、被否決的選項跟原因、踩到的坑跟解法、數字/設定/帳號以外的事實、還沒解決的問題。
-  寫成主題文件的樣子(按主題、不按日期);需要時間脈絡就寫「(2026-09-26)」這種標註。
-  沿用主題文件原本的語言跟風格。
-- 沒有合適的主題文件就開新的 memory/reference/<主題>.md(小寫英文加連字號),並更新 README.md 索引。
-  **沒有地方放的事實不能丟**——開新文件或擴充既有文件。
-- 可以不保留的只有:(a) 已經在 reference/ 或 STATE.md 寫過的;(b) 被較新紀錄推翻/取代的
-  (如果那是個決定,在主題文件裡留一句「原本…,(日期)改成…,因為…」);(c) 沒有長期價值的流程雜訊
-  (單純的 commit hash、「已 push」、時間戳記本身)。每個不保留的都要寫進 folded[].dropped。
-- 一個日期檔只有在它的內容都放好(或確定可以不保留)之後,才列進 folded;還有疑慮就列進 kept 並說明。
-  你不能刪檔案——列進 folded 的,腳本會在檢查過後幫你 git rm。
-- ./STATE.md 或 memory/reference/ 裡指向這批日期檔的引用(例如「見 memory/2026-09-25.md」),改成指向接手內容的
-  主題文件——檔案刪掉後那些引用就斷了。這是機械性的修正,不用列進 corrections。
+How:
+- First read memory/reference/README.md and the related topic documents, then put what in the date files has lasting
+  value into the right topic documents: decisions and their reasons, options rejected and why, pitfalls hit and how
+  they were solved, facts beyond numbers/settings/accounts, problems not yet solved.
+  Write it the way a topic document reads (by topic, not by date); where the time matters, note it like
+  "(2026-09-26)". Keep the topic document's existing language and style.
+- With no fitting topic document, open a new memory/reference/<topic>.md (lowercase English words joined by hyphens)
+  and update the README.md index. **A fact with no place to go must not be dropped**: open a new document or extend an
+  existing one.
+- The only things you may leave out: (a) what is already written in reference/ or STATE.md; (b) what a newer record
+  overturned or replaced (if it was a decision, leave a sentence in the topic document: "originally …, changed to …
+  on (date), because …"); (c) process noise with no lasting value (bare commit hashes, "pushed", timestamps by
+  themselves). Everything left out goes into folded[].dropped.
+- List a date file in folded only once all its content has been placed (or is certain to be safe to leave out); if
+  in doubt, list it in kept and say why. You cannot delete files: the script runs git rm on the ones in folded for you,
+  after its checks.
+- References in ./STATE.md or memory/reference/ that point at these date files (e.g. "see memory/2026-09-25.md"):
+  point them at the topic document that took over the content, since they break once the files are deleted. This is a
+  mechanical fix; it does not go into corrections.
 
-## 任務二:修正被推翻的敘述
+## Task 2: correct overturned statements
 
-讀所有現存的日期檔(包括比較新的:memory/2026-10-29.md),找出 memory/reference/ 跟 ./STATE.md
-裡已經被較新紀錄推翻或取代的敘述,改成現況。主題文件最後修改日期:
-- memory/reference/README.md(最後修改 <REAL-TODAY>)
-- memory/reference/infra.md(最後修改 <REAL-TODAY>)
-- ./STATE.md(最後修改 <REAL-TODAY>)
-判斷新舊看日期:日期檔的日期比主題文件最後修改日期新、而且內容衝突,才算推翻;比較舊的日期檔跟主題文件衝突時,
-以主題文件為準。每一筆修正都列進 corrections,evidence_quote 要從 evidence_file **逐字複製**(腳本會比對,
-對不上的修正會被整個檔案還原)。
+Read all the existing date files (the newer ones too: memory/2026-10-29.md), and find the statements in memory/reference/ and
+./STATE.md that newer records have overturned or replaced; change them to the current state. When each topic document
+was last modified:
+- memory/reference/README.md (last modified <REAL-TODAY>)
+- memory/reference/infra.md (last modified <REAL-TODAY>)
+- ./STATE.md (last modified <REAL-TODAY>)
+Tell new from old by date: a date file overturns a statement only when its date is newer than the topic document's
+last modification and its content conflicts; when an older date file conflicts with a topic document, the topic
+document wins. List every correction in corrections; its evidence_quote is copied **verbatim** from its evidence_file
+(the script compares them, and a correction that does not match gets its whole file reverted).
 
-## 不能違反的規則
+## Rules you must not break
 
-- **保留不確定的語氣**:原文寫「預計/預期/可能/應該/打算/暫定/待確認/?」的,整理後照樣保留那個語氣,
-  不能改成確定的說法。只有較新的紀錄明確寫出結果(例如「已上線」「確認是…」)時才能改,而且要列進 corrections
-  附逐字引文。腳本會機械比對:保留語氣被拿掉、又沒有對應引文的檔案會被還原。
-- 只能建立/修改 ./memory/reference/ 底下的 .md 跟 ./STATE.md。日期檔、AGENT.md、RULES 都不要動;
-  memory/reference/ 底下不開子目錄。
-- STATE.md 是精煉現況:只修正被推翻/過時的敘述(包括 `## 待辦` 裡已經完成或被推翻的項目——直接移除),
-  不要把日期檔的內容搬進 STATE.md,也不要改 `## 待辦` 的格式(`- [ ] 〔Alex|agent|待定〕…`,沒有就 `- (無)`)。
-- 沒有被推翻的東西不要改寫、不要重新措辭——每一個改動都會出現在 diff 給人抽查。
-
+- Language: what you add to an existing topic document is in that document's own language and style. New topic
+  documents, what you write in STATE.md, and the free-text fields of your answer (summary, folded[].dropped,
+  kept[].reason) are in English. Code, paths, commands and names stay as they are.
+- **Keep uncertain wording uncertain**: where the original hedges (預計/預期/可能/應該/打算/暫定/待確認/?; in English: maybe, likely, probably,
+  expected, planned, tentative, not yet, tbd…), keep that hedge after folding; do not turn it into a definite
+  statement. Only when a newer record states the outcome explicitly (e.g. "is live", "confirmed to be …") may you
+  change it, and then it goes into corrections with a verbatim quote. The script checks this mechanically: a file whose
+  hedge was removed with no matching quote is reverted.
+- Create or modify only the .md files under ./memory/reference/ and ./STATE.md. Do not touch the date files, AGENT.md
+  or RULES; do not create subdirectories under memory/reference/.
+- STATE.md is the distilled current state: only correct statements that were overturned or are out of date (including
+  items in `## 待辦` that are done or overturned: remove them outright); do not move the date files' content
+  into STATE.md, and do not change the format of `## 待辦` (`- [ ] 〔Alex〕…`, `- [ ] 〔agent〕…`,
+  `- [ ] 〔待定〕…`; with none, `- (無)`).
+- Do not rewrite or reword anything that was not overturned: every change shows up in the diff for a person to
+  spot-check.
 === push, checkpoint
 status ok
 [<T>] alpha: 整理 5 個日期檔(163 bytes,memory/2026-09-01.md … memory/2026-09-05.md),還有 0 個留到下次;模型 test-model
