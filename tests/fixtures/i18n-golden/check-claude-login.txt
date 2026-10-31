@@ -1,0 +1,12 @@
+=== timeout
+'超過 3 分鐘沒回應'
+=== no json
+'llm.py 沒有輸出 JSON(exit 3):Traceback ...\nboom'
+=== empty output
+'llm.py 沒有輸出 JSON(exit 1):'
+=== llm_error
+'Login expired'
+=== is_error
+'401'
+=== ok
+None

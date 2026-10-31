@@ -1,0 +1,38 @@
+=== check: not an object
+請求格式不對(要是 v: 1 的 JSON 物件)
+=== check: wrong v
+請求格式不對(要是 v: 1 的 JSON 物件)
+=== check: id mismatch
+id 跟檔名不一樣
+=== check: undeclared cap
+這個專案沒有宣告能力 'net'(登錄 enforce.capabilities:gpu)
+=== check: argv empty
+argv 要是非空的字串 list
+=== check: cwd absolute
+cwd 要是相對專案資料夾的路徑
+=== check: cwd outside
+cwd ../x 不在專案資料夾裡
+=== check: cwd not a dir
+cwd f.txt 不是資料夾
+=== check: timeout too long
+timeout_s 要是 1–1800 的整數
+=== check: ok
+(passes)
+=== take: broken
+請求讀不了:Expecting value: line 1 column 1 (char 0)
+=== take: stale
+請求太舊(超過 10 分鐘沒人接手)
+=== take: wrongv
+請求格式不對(要是 v: 1 的 JSON 物件)
+=== start fails
+啟動失敗:RuntimeError('boom')
+=== recover
+平台代跑服務重啟了,這個工作沒跑完(結果不明),請重跑
+=== log
+{"project": "demo", "id": "bad name", "event": "dropped", "detail": "檔名、檔案類型或大小不對"}
+{"project": "demo", "id": "dup", "event": "dropped", "detail": "同一個 id 已經跑過"}
+{"project": "demo", "id": "broken", "event": "rejected", "detail": "請求讀不了:Expecting value: line 1 column 1 (char 0)"}
+{"project": "demo", "id": "stale", "event": "rejected", "detail": "請求太舊(超過 10 分鐘沒人接手)"}
+{"project": "demo", "id": "wrongv", "event": "rejected", "detail": "請求格式不對(要是 v: 1 的 JSON 物件)"}
+{"project": "demo", "id": "boom", "event": "start_failed", "detail": "boom"}
+{"project": "demo", "id": "left", "event": "lost"}

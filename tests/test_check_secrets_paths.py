@@ -54,7 +54,8 @@ class WhatIsChecked(unittest.TestCase):
         with mock.patch.object(check_secrets.registry, "refresh", lambda: index), \
              mock.patch.object(hubconf, "get", lambda k, d=None: (alerts or {}).get(k.split(".", 1)[1], d)
                                if k.startswith("alerts.") else real_get(k, d)), \
-             mock.patch.object(check_secrets, "undeclared", lambda *a: []), contextlib.redirect_stdout(out):
+             mock.patch.object(check_secrets, "undeclared", lambda *a: []), contextlib.redirect_stdout(out), \
+             mock.patch.dict("os.environ", {"AGENT_HUB_LANG_UI": "zh-Hant"}):
             check_secrets.main([hub, *modules])   # 給名稱 = 不碰警報管道
         return out.getvalue()
 

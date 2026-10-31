@@ -28,7 +28,7 @@ class Check(unittest.TestCase):
         (self.home / ".claude").mkdir()
         self.token = self.home / ".claude" / "headless-oauth-token"
         self.creds = self.home / ".claude" / ".credentials.json"
-        env = mock.patch.dict(os.environ, {"HOME": str(self.home)})
+        env = mock.patch.dict(os.environ, {"HOME": str(self.home), "AGENT_HUB_LANG_UI": "zh-Hant"})
         env.start()
         self.addCleanup(env.stop)
         spec = importlib.util.spec_from_file_location("check_login_t", ROOT / "bin" / "check-claude-login.py")
