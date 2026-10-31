@@ -135,6 +135,16 @@ class Registrar(unittest.TestCase):
     def test_stamp(self):
         self.assertEqual(registrar.stamp("task-p-1"), mark("task-p-1"))
 
+    def test_key_on_a_retagged_line_is_present(self):
+        """an owner item re-tagged (here tbd, then agent) that kept its key is not vanished: no claim, no warning,
+        not stamped back elsewhere (live case: a tbd line carrying the owner's key)"""
+        for t in (TBD, "agent"):
+            with self.subTest(tag=t):
+                lines = state(item(t, "decide later" + mark("task-p-1")), item(TAG, "something else")).splitlines()
+                self.assertEqual(registrar.present_keys(lines), {"task-p-1"})
+                self.assertEqual(registrar.reconcile(lines, {"task-p-1": "an unrelated text"}), [])
+                self.assertEqual([t["key"] for t in registrar.owner_lines(lines)], [None], "still not an owner line")
+
     def test_strike_leaves_empty_marker(self):
         lines = state(item(TAG, "renew the domain" + mark("task-p-1"))).splitlines()
         self.assertTrue(registrar.strike(lines, "task-p-1"))
@@ -354,7 +364,6 @@ class EnglishLibrarianMarkers(unittest.TestCase):
         self.assertEqual(edits.markers(doc, librarian.KEY_MARK),
                          [en_mark("task-p-1", LIB_TAG).strip(), mark("task-p-2", LIB_TAG)])
         self.assertTrue(edits.check_markers(doc, doc.replace("task-p-1", "task-p-x"), librarian.KEY_MARK))
-
 
 if __name__ == "__main__":
     unittest.main()

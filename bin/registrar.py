@@ -136,6 +136,12 @@ def line_texts(lines: list[str]) -> list[str]:
     return out
 
 
+def present_keys(lines: list[str]) -> set[str]:
+    """Every key on a line of the to-do section(s), whatever the line's tag: an owner item re-tagged (e.g. to tbd) that
+    kept its key is still there, not vanished (never claimed done, never stamped back elsewhere)."""
+    return {k.group("key") for b in P.section(lines) for i in range(*b) if (k := KEY.search(lines[i].rstrip()))}
+
+
 def strike(lines: list[str], key: str) -> bool:
     hits = [i for i, l in enumerate(lines) if (m := KEY.search(l.rstrip())) and m.group("key") == key]
     touched = {j for j, (a, b) in enumerate(P.section(lines)) if any(a <= h < b for h in hits)}
@@ -203,7 +209,7 @@ def amendments(lines: list[str], latest: dict[str, str]) -> list[dict]:
 def reconcile(lines: list[str], open_keys: dict[str, str]) -> list[dict]:
     """Step 5. open_keys: keys sent, not closed, not withdrawn -> latest terms text. Those not found in the file: a very
     similar line exists -> warn, otherwise claim."""
-    present = {t["key"] for t in owner_lines(lines) if t["key"]}
+    present = present_keys(lines)
     texts, out = line_texts(lines), []
     for k, text in sorted(open_keys.items()):
         if k in present:
@@ -396,7 +402,7 @@ def run_project(project: str, path: pathlib.Path, how: str, warned: set[str]) ->
             readd(lines, h["reply_to"], h.get("item") or _c("(a reopened task)"))
         applied.append(h["id"])
     # 2. restore keys
-    present = {t["key"] for t in owner_lines(lines) if t["key"]}
+    present = present_keys(lines)
     for k in relink(lines, {k: led.terms(k)[0] or "" for k in led.open() if k not in present}):
         changed = True
         log(_("{project}: restored key {key} (the key at the end of the line had been removed)", project=project, key=k))
