@@ -862,7 +862,8 @@ Rules:
 - Do not create, modify or delete any file other than ./STATE.md.
 === prompt librarian-todo-format @ pdang
 Fix only the format of the `## 待辦` section of ./STATE.md. Do not change anything else, nor the content of the
-to-dos, and do not touch any other file.
+to-dos, and do not touch any other file. Keep the tag each item already has (an item you move into the section keeps
+its tag); only an item without a tag gets one.
 
 The correct format (one item per line; with no to-dos write `- (無)`; STATE.md must have this section):
   `- [ ] 〔Alex〕…` (only Alex can do it: accounts, passwords, payments, a decision or an answer that is

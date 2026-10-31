@@ -1,5 +1,6 @@
 Fix only the format of the `{{todo_heading}}` section of ./STATE.md. Do not change anything else, nor the content of the
-to-dos, and do not touch any other file.
+to-dos, and do not touch any other file. Keep the tag each item already has (an item you move into the section keeps
+its tag); only an item without a tag gets one.
 
 The correct format (one item per line; with no to-dos write `{{todo_none}}`; STATE.md must have this section):
   `- [ ] {{tag_owner}}…` (only {{owner}} can do it: accounts, passwords, payments, a decision or an answer that is
