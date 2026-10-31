@@ -195,7 +195,7 @@ class StatusPage(unittest.TestCase):
                "AGENT_HUB_SECRETS": str(secrets), "AGENT_HUB_STATE": str(state), "AGENT_HUB_HOME": "",
                "AGENT_HUB_LANG_UI": golden_lang.LANG, "HOME": str(tmp)}
         with mock.patch.dict(os.environ, env), mock.patch.dict(sys.modules):
-            for m in ("hubconf", "i18n"):
+            for m in ("hubconf", "i18n", "completion"):   # completion.USAGE follows STATE
                 sys.modules.pop(m, None)
             sys.modules.update(mods)
             spec = importlib.util.spec_from_file_location("gsp_golden", ROOT / "bin" / "gen-status-page.py")

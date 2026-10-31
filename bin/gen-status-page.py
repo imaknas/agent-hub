@@ -218,17 +218,24 @@ def model_usage_html(now: datetime.datetime) -> str:
             continue
         if not r.get("project") or str(r.get("ts", "")) < since:
             continue
-        v = per.setdefault(r["project"], {"calls": 0, "today": 0, "tokens": 0, "cost": 0.0, "priced": False})
+        v = per.setdefault(r["project"], {"calls": 0, "today": 0, "tokens": 0, "billed": None, "estimate": None})
         v["calls"] += 1
         v["today"] += str(r.get("ts", "")).startswith(today)
         v["tokens"] += (r.get("input_tokens") or 0) + (r.get("output_tokens") or 0)
         if r.get("cost_usd") is not None:
-            v["cost"] += float(r["cost_usd"])
-            v["priced"] = True
+            # rows from before billing was recorded are all subscription (no metered provider was set up then)
+            k = "billed" if r.get("billing") == "metered" else "estimate"
+            v[k] = (v[k] or 0.0) + float(r["cost_usd"])
     if not per:
         return ""
+
+    def cost(v: dict) -> str:
+        parts = [] if v["billed"] is None else ["$%.2f" % v["billed"]]
+        if v["estimate"] is not None:
+            parts.append(_("≈${amount} (subscription, not billed)", amount="%.2f" % v["estimate"]))
+        return esc(" + ".join(parts)) if parts else "—"
     rows = "".join(f"<tr><td>{esc(p)}</td><td>{v['calls']}</td><td>{v['today']}</td><td>{v['tokens']:,}</td>"
-                   f"<td>{'$%.2f' % v['cost'] if v['priced'] else '—'}</td></tr>" for p, v in sorted(per.items()))
+                   f"<td>{cost(v)}</td></tr>" for p, v in sorted(per.items()))
     return (f"<h2 style=\"font-size:18px;margin-top:28px\">{_('Model calls by project (7 days)')}</h2>"
             f"<table><tr><th>{_('Project')}</th><th>{_('Calls')}</th><th>{_('Today')}</th><th>{_('Tokens')}</th>"
             f"<th>{_('Cost')}</th></tr>{rows}</table>")

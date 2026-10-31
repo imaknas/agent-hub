@@ -67,7 +67,8 @@ class ProjectCall(unittest.TestCase):
         rc, out = self.call()
         self.assertEqual((rc, out["is_error"]), (0, False))
         [row] = self.rows()
-        self.assertEqual((row["project"], row["point"], row["model"]), ("proj", "proj/classify", "m-fast"))
+        self.assertEqual((row["project"], row["point"], row["model"], row["billing"]),
+                         ("proj", "proj/classify", "m-fast", "subscription"))
 
     def test_undeclared_point_is_refused_before_sending(self):
         rc, out = self.call("summarize")
@@ -85,7 +86,7 @@ class ProjectCall(unittest.TestCase):
             self.projects["proj"]["metered_models"] = True
             rc, _ = self.call()
         self.assertEqual(rc, 0)
-        self.assertEqual(len(self.rows()), 1)
+        self.assertEqual([r["billing"] for r in self.rows()], ["metered"])
 
     def test_local_and_subscription_targets_are_not_metered(self):
         self.assertFalse(completion.metered({"location": "local", "conf": {"key": {"env": "X"}}}))
@@ -97,6 +98,28 @@ class ProjectCall(unittest.TestCase):
         rc, out = self.call()
         self.assertEqual(rc, 1)
         self.assertEqual([r["provider"] for r in self.rows()], ["f"])
+
+
+class StatusPage(unittest.TestCase):
+    def test_subscription_cost_is_marked_not_billed_but_still_shown(self):
+        page = load("status_page_pc", "gen-status-page.py")
+        tmp = pathlib.Path(tempfile.mkdtemp())
+        self.addCleanup(shutil.rmtree, tmp, ignore_errors=True)
+        usage = tmp / "usage.jsonl"
+        now = page.datetime.datetime.now().astimezone()
+        ts = now.isoformat(timespec="seconds")
+        usage.write_text("\n".join(json.dumps(r) for r in [
+            {"ts": ts, "project": "a", "cost_usd": 0.5, "billing": "subscription", "input_tokens": 10},
+            {"ts": ts, "project": "a", "cost_usd": 0.25, "billing": "subscription"},
+            {"ts": ts, "project": "b", "cost_usd": 1.0, "billing": "metered"},
+            {"ts": ts, "project": "c", "cost_usd": None, "billing": "local"}]) + "\n")
+        with mock.patch.object(completion, "USAGE", usage), mock.patch.dict(os.environ, {"AGENT_HUB_LANG_UI": "en"}):
+            html = page.model_usage_html(now)
+        rows = {r.split("</td>")[0].split("<td>")[-1]: r for r in html.split("<tr>")[2:]}
+        self.assertIn("≈$0.75 (subscription, not billed)", rows["a"])
+        self.assertIn("$1.00", rows["b"])
+        self.assertNotIn("not billed", rows["b"])
+        self.assertIn("—", rows["c"])
 
 
 class Registry(unittest.TestCase):

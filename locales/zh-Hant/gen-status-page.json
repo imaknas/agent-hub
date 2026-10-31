@@ -128,5 +128,6 @@
   "Calls": "次數",
   "Today": "今天",
   "Tokens": "token",
-  "Cost": "花費"
+  "Cost": "花費",
+  "≈${amount} (subscription, not billed)": "≈${amount}(訂閱,不計費)"
 }

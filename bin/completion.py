@@ -25,7 +25,8 @@ The handling is the same for every provider (an implementation only "sends it an
      way again)
   5. strip a reasoning model's <think>…</think>, parse the JSON (tolerating ``` fences), validate with minischema;
      if invalid, retry once with the errors attached
-  6. every call is recorded in .state/llm-usage.jsonl (tokens, cost; and the project, for a project's own calls)
+  6. every call is recorded in .state/llm-usage.jsonl (tokens, cost, billing = metered | subscription | local; and the
+     project, for a project's own calls). A subscription call's cost_usd is the tool's own estimate, not a charge
 The key is read only here (secrets_dir or an environment variable) and handed to the implementation in conf["_key"],
 never put into any subprocess's environment.
 """
@@ -157,6 +158,14 @@ def metered(target: dict) -> bool:
     return target.get("location", "cloud") == "cloud" and bool((target.get("conf") or {}).get("key"))
 
 
+def billing(target: dict) -> str:
+    """How a call is paid for, written on every usage row: metered (pay-per-use, the cost is real), local (no money),
+    subscription (a runtime's own login: cost_usd is what the tool reports the call would cost, not a charge)."""
+    if metered(target):
+        return "metered"
+    return "local" if target.get("location") == "local" else "subscription"
+
+
 def record(point: str, target: dict, res, project: str | None = None) -> float | None:
     cost = res.cost_usd
     price = target.get("price") or {}
@@ -164,7 +173,7 @@ def record(point: str, target: dict, res, project: str | None = None) -> float |
         cost = ((res.input_tokens or 0) * float(price.get("in", 0)) + (res.output_tokens or 0) * float(price.get("out", 0))) / 1e6
     row = {"ts": datetime.datetime.now().astimezone().isoformat(timespec="seconds"), "point": point,
            "provider": target["provider"], "model": target["model"], "input_tokens": res.input_tokens,
-           "output_tokens": res.output_tokens, "cost_usd": cost, "stop": res.stop}
+           "output_tokens": res.output_tokens, "cost_usd": cost, "stop": res.stop, "billing": billing(target)}
     if project:
         row["project"] = project
     try:
