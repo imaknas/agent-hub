@@ -70,6 +70,9 @@ def run_reader(m, stream, stderr=None):
 
 class Events(unittest.TestCase):
     def setUp(self):
+        env = mock.patch.dict(os.environ, {"AGENT_HUB_LANG_UI": "zh-Hant"})   # the summaries asserted are the zh-Hant ones
+        env.start()
+        self.addCleanup(env.stop)
         self.m = load_runner()
         self.all = run_reader(self.m, (FIX / "claude-stream.jsonl").read_text())
         self.stored = [e for e in self.all if "_detach" not in e]

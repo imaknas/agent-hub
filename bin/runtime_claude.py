@@ -24,6 +24,10 @@ import pathlib
 import re
 import subprocess
 
+import i18n
+
+_ = i18n.domain(__file__)
+NOT_FOUND = "claude not found"   # also what is_login_error looks for (with its translation)
 PROJECTS = pathlib.Path.home() / ".claude" / "projects"
 MODELS = {"fast": "haiku", "standard": "sonnet", "strong": "opus"}   # 判斷點的 model_group → 模型(runtime_ports.models)
 _ID = re.compile(r"--(?:resume|session-id)[= ]([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})")
@@ -119,9 +123,9 @@ def sandbox_rendered(ws) -> tuple[bool, str]:
     try:
         st = json.loads(settings_path(ws).read_text())
     except (OSError, ValueError, TypeError):
-        return False, "sandbox 還沒寫進這個專案的設定(settings.local.json 讀不到)"
+        return False, _("the sandbox is not in this project's settings yet (settings.local.json cannot be read)")
     if not (st.get("sandbox") or {}).get("enabled"):
-        return False, "sandbox 還沒寫進這個專案的設定(sandbox.enabled 不是 true)"
+        return False, _("the sandbox is not in this project's settings yet (sandbox.enabled is not true)")
     return True, ""
 
 
@@ -238,7 +242,8 @@ def turns(paths, since: datetime.datetime, until: datetime.datetime | None = Non
                     if t and t.ts >= since and (until is None or t.ts < until):
                         yield t
             if parsed >= 5 and recognised == 0:
-                raise TranscriptFormatError(f"{f}:{parsed} 筆紀錄沒有一筆是認得的格式(Claude Code 改了對話紀錄格式?)")
+                raise TranscriptFormatError(_("{file}: none of {n} records is in a known format (did Claude Code change its "
+                                              "transcript format?)", file=f, n=parsed))
 
 
 def last_activity(path) -> datetime.datetime | None:
@@ -318,9 +323,9 @@ def run(task) -> TaskResult:
         r = subprocess.run(cmd, cwd=task.cwd or None, capture_output=True, text=True, timeout=task.timeout_s,
                            env=_env(task))
     except subprocess.TimeoutExpired:
-        return TaskResult(False, error=f"超過 {task.timeout_s // 60} 分鐘")
+        return TaskResult(False, error=_("over {minutes} minutes", minutes=task.timeout_s // 60))
     except FileNotFoundError:
-        return TaskResult(False, error="找不到 claude")
+        return TaskResult(False, error=_(NOT_FOUND))
     import sys
     sys.stderr.write(r.stderr)
     if r.returncode != 0 or not r.stdout.strip():
@@ -329,7 +334,7 @@ def run(task) -> TaskResult:
     try:
         out = json.loads(r.stdout)
     except ValueError:
-        return TaskResult(False, error="輸出不是 JSON:" + r.stdout[:200])
+        return TaskResult(False, error=_("output is not JSON: {output}", output=r.stdout[:200]))
     # exit 0 而且 JSON 讀得到 = 跑完了(ok)。is_error 只標成 incomplete:以前 llm.py 就是照樣交給呼叫端,
     # librarian 靠這個「仍以實際檔案變化為準」,不能改成失敗
     return TaskResult(
@@ -363,7 +368,7 @@ HOOK_TABLE = (
     ("PostToolUse", "Bash", "tool_used"),                                    # 目前只接「跑指令」
     ("PreToolUse", "mcp__ccd_session__start_session", "open_session_attempt"),  # Desktop 的開 session 工具
 )
-_HOOK_NAME = {ev: name for name, _, ev in HOOK_TABLE}
+_HOOK_NAME = {ev: name for name, _matcher, ev in HOOK_TABLE}
 MANAGED = "/agent-hub/bin/"   # 指令裡有這段 = 平台管的 hook(使用者自己加的不會有)
 
 
@@ -466,12 +471,19 @@ _TOOL_KIND = {"Read": "read", "Glob": "search", "Grep": "search", "WebSearch": "
               "Edit": "write_file", "Write": "write_file", "MultiEdit": "write_file", "NotebookEdit": "write_file",
               "Bash": "run_command", "AskUserQuestion": "ask_user"}
 _TARGET_KEYS = ("file_path", "notebook_path", "url", "command", "pattern", "query", "path")
-_VERB = {"read": "讀", "search": "搜尋", "open_web": "開網頁", "write_file": "寫", "run_command": "跑"}
 _QUOTA_STATUS = {"allowed": "ok", "allowed_warning": "warning", "rejected": "exhausted"}
 RELAY_SERVER = "lease_relay"                      # 租約的平台 MCP server(lease-relay.py)在設定裡的名字
 APPROVE_TOOL = f"mcp__{RELAY_SERVER}__approve"     # 權限轉接(--permission-prompt-tool)
 SHOW_FILE_TOOL = f"mcp__{RELAY_SERVER}__show_file"  # 平台工具 show_file(llm-points 的允許清單也是這個名字)
-_WINDOWS = (("five_hour", "5 小時"), ("seven_day", "7 天"))
+
+
+def _verbs() -> dict:
+    return {"read": _("read"), "search": _("search"), "open_web": _("open web page"), "write_file": _("write"),
+            "run_command": _("run")}
+
+
+def _windows() -> tuple:
+    return (("five_hour", _("5 hours")), ("seven_day", _("7 days")))
 
 
 def _questions(inp: dict) -> str:
@@ -486,13 +498,13 @@ def action(tool: str, inp: dict | None) -> tuple:
         "peer_message" if tool == "SendMessage" or tool.endswith("send_message") else None)
     target = next((str(inp[k]) for k in _TARGET_KEYS if inp.get(k)), "")
     if tool == SHOW_FILE_TOOL:  # 平台的「給使用者看」工具(租約的 MCP):讀一個檔給他看
-        return "read", None, str(inp.get("path", "")), f"給你看 {inp.get('path', '')}".strip()
+        return "read", None, str(inp.get("path", "")), _("showing you {path}", path=inp.get("path", "")).strip()
     if kind == "ask_user":
-        summary = "提問:" + _questions(inp)
+        summary = _("question: {questions}", questions=_questions(inp))
     elif kind == "other":
         summary = f"{tool} {target[:160]}".strip()
     else:
-        summary = f"{_VERB[kind]} {target[:160]}".strip()
+        summary = f"{_verbs()[kind]} {target[:160]}".strip()
     return kind, collab, target, summary
 
 
@@ -521,7 +533,7 @@ def parse_stream(line: str) -> list:
                 out.append(StreamEvent("assistant", {"text": block["text"]}))
             elif block.get("type") == "tool_use":
                 name, inp = block.get("name", ""), block.get("input") or {}
-                kind, _, _, summary = action(name, inp)
+                kind, _collab, _target, summary = action(name, inp)
                 out.append(StreamEvent("tool_use", {"kind": kind, "summary": summary, "detail": {"tool": name}}))
     elif t == "user":
         content = (d.get("message") or {}).get("content")
@@ -536,7 +548,7 @@ def parse_stream(line: str) -> list:
         w = info.get("unifiedWindows") or {}
         windows = [{"id": wid, "label": label, "used": (w.get(wid) or {})["utilization"],
                     "resets_at": _iso((w.get(wid) or {}).get("resetsAt"))}
-                   for wid, label in _WINDOWS if (w.get(wid) or {}).get("utilization") is not None]
+                   for wid, label in _windows() if (w.get(wid) or {}).get("utilization") is not None]
         out.append(StreamEvent("quota", {"status": _QUOTA_STATUS.get(info.get("status")), "windows": windows}))
     elif t == "system" and d.get("subtype") == "post_turn_summary":
         out.append(StreamEvent("turn_end", {"summary": d.get("status_detail", "")}))
@@ -545,7 +557,8 @@ def parse_stream(line: str) -> list:
         if d.get("is_error") and re.search(r"rate.?limit|usage limit|額度", text, re.I):
             out.append(StreamEvent("error", {"error": "rate_limit", "detail": text[:300]}))
         elif d.get("subtype") == "error_max_turns":
-            out.append(StreamEvent("error", {"error": "bad_request", "detail": "回合上限到了,收回", "_detach": "budget"}))
+            out.append(StreamEvent("error", {"error": "bad_request", "detail": _("turn limit reached, taking it back"),
+                                             "_detach": "budget"}))
         out.append(StreamEvent("turn_end", {"cost": d.get("total_cost_usd"), "num_turns": d.get("num_turns"),
                                             "duration_ms": d.get("duration_ms"), "is_error": bool(d.get("is_error"))}))
     return out
@@ -554,8 +567,9 @@ def parse_stream(line: str) -> list:
 def classify_exit(code, stderr_tail: str) -> StreamEvent:
     raw = f"exit {code}:{stderr_tail[-200:]}"
     if is_login_error(stderr_tail):  # 跟 llm.py 的登入判斷同一份(第 6 層)
-        return StreamEvent("error", {"error": "agent_login", "detail": "專案 session 用的 Claude Code 沒登入或憑證過期"
-                                     "(平台的 agent-hub/claude-login 會發警報)。" + raw})
+        return StreamEvent("error", {"error": "agent_login", "detail": _(
+            "the Claude Code of project sessions is not logged in or its credentials expired "
+            "(the platform's agent-hub/claude-login sends an alert). {raw}", raw=raw)})
     return StreamEvent("error", {"error": "process_crashed", "detail": raw})
 
 
@@ -566,7 +580,8 @@ def resumable(sid: str) -> bool:
 
 def resume_command(sid: str) -> tuple:
     return (f"~/agent-hub/bin/lease-resume {sid}",
-            "在 mini 的終端機貼上:會接回同一段對話(Claude Code)。談完回 Muninn 按「收回」做交接。")
+            _("Paste it in a terminal on the hub machine: it resumes the same conversation (Claude Code). When done, go "
+              "back to the assistant and press \"take back\" for the handover."))
 
 
 def neutral_question(inp: dict) -> dict:
@@ -613,19 +628,20 @@ def auth_env(mode: str, env) -> tuple:
         return out, ""
     f = _token_file()
     if not f.is_file():
-        return None, f"沒有 {f}(預設用 headless token;要用訂閱登入就宣告 auth: subscription)"
+        return None, _("no {file} (the default is the headless token; to use the subscription login declare "
+                       "auth: subscription)", file=f)
     out[TOKEN_VAR] = f.read_text().strip()
     return out, ""
 
 
 def credentials() -> list:
     token, creds = _token_file(), _creds_file()
-    out = [Credential(name="訂閱登入(launchd)", label="claude 的訂閱登入", mode="subscription", present=True,
-                      renew="在 mini 上登入(`claude` → /login)"),
+    out = [Credential(name=_("subscription login (launchd)"), label=_("claude's subscription login"), mode="subscription",
+                      present=True, renew=_("log in on the hub machine (`claude` → /login)")),
            Credential(name="headless token", label="headless token", mode="token", present=token.exists(),
-                      renew=f"重跑 `claude setup-token` 寫進 {token}", path=str(token),
+                      renew=_("rerun `claude setup-token` and write it to {path}", path=token), path=str(token),
                       since=datetime.datetime.fromtimestamp(token.stat().st_mtime) if token.exists() else None,
-                      max_age=datetime.timedelta(days=335), lifetime="一年")]
+                      max_age=datetime.timedelta(days=335), lifetime=_("one year"))]
     expires, note, present = None, None, creds.exists()
     if present:
         try:
@@ -636,17 +652,21 @@ def credentials() -> list:
         if exp:
             expires = datetime.datetime.fromtimestamp(exp / 1000)
         elif oauth:
-            note = ".credentials.json:沒有 refreshTokenExpiresAt,略過到期檢查"
-    out.append(Credential(name=".credentials.json(SSH 用)", label="~/.claude/.credentials.json", mode=None,
-                          present=present, renew="在 mini 的終端機跑一次 claude 讓它更新,或重新 /login",
+            note = _(".credentials.json: no refreshTokenExpiresAt, expiry check skipped")
+    out.append(Credential(name=_(".credentials.json (for SSH)"), label="~/.claude/.credentials.json", mode=None,
+                          present=present, renew=_("run claude once in a terminal on the hub machine so it refreshes, "
+                                                   "or /login again"),
                           path=str(creds), expires=expires, warn_before=datetime.timedelta(days=7),
-                          used_by="SSH 底下的 claude 用的", note=note))
+                          used_by=_("used by claude under SSH"), note=note))
     return out
 
 
 def is_login_error(text: str) -> bool:
     """claude 的登入錯誤(Login expired、/login、401、OAuth…);找不到 claude 本身也要人處理,一起算。"""
-    return bool(_LOGIN_ERROR.search(text or "")) or "找不到 claude" in (text or "")
+    text = text or ""
+    # the not-found message comes from another process (llm.py's JSON), maybe in another language: the English msgid,
+    # this UI language's text, or the zh-Hant text from before the catalog
+    return bool(_LOGIN_ERROR.search(text)) or any(s in text for s in (NOT_FOUND, _(NOT_FOUND), "找不到 claude"))
 
 
 def relocate(sid: str, old_cwd: str, new_cwd: str) -> bool:
@@ -700,9 +720,9 @@ def complete(req, conf) -> CompletionResult:
         try:
             r = subprocess.run(cmd, input=req.prompt, cwd=cwd, capture_output=True, text=True, timeout=req.timeout_s, env=env)
         except subprocess.TimeoutExpired:
-            return CompletionResult(False, stop="error", error=f"超過 {req.timeout_s} 秒")
+            return CompletionResult(False, stop="error", error=_("over {seconds} seconds", seconds=req.timeout_s))
         except FileNotFoundError:
-            return CompletionResult(False, stop="error", error="找不到 claude")
+            return CompletionResult(False, stop="error", error=_(NOT_FOUND))
     try:
         out = json.loads(r.stdout)
     except ValueError:
@@ -723,6 +743,6 @@ def health(conf) -> tuple:
     """不打請求(每小時的 claude-login 已經實際打過):claude 在不在、要用的登入在不在。"""
     import shutil
     if not shutil.which(_exe()) and not pathlib.Path(_exe()).is_file():
-        return False, "找不到 claude"
+        return False, _(NOT_FOUND)
     env, why = auth_env(conf.get("auth") or "token", {})
     return (env is not None), why
