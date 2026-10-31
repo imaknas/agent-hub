@@ -1,7 +1,8 @@
 === --help
 exit 0
 --- stdout
-usage: hub-run [-h] [--cap CAP] [--timeout TIMEOUT] [--wait ID] ...
+usage: hub-run [-h] [--cap CAP] [--timeout TIMEOUT] [--wait ID] [--complete POINT] [--schema FILE]
+               ...
 
 在平台的 profile 底下跑需要能力的程式
 
@@ -13,6 +14,8 @@ options:
   --cap CAP          能力名稱(專案登錄 enforce.capabilities 有的)
   --timeout TIMEOUT  秒(預設跟上限看 hub.json cap_runner)
   --wait ID          接回一個工作
+  --complete POINT   這個專案宣告的模型呼叫(登錄 models:):提示從 stdin 進,JSON 結果從 stdout 出
+  --schema FILE      跟 --complete 一起用:回答必須符合的 JSON schema
 --- stderr
 === not in a project
 exit 2

@@ -42,6 +42,8 @@ owner(你本人;不是專案 session 的指令):
   agenthub send | inbox | show | ack | done | thread | open-questions …   = 專案信箱(bin/hubbus 同名的子指令)
   agenthub merge-branch …    = bin/merge-branch(平行 session 的合併閘門)
   agenthub cap-run --cap <能力> -- <指令…>   = bin/hub-run(平台代跑 sandbox 擋住的程式)
+  agenthub complete <呼叫點> [--schema F] < 提示       = bin/hub-run --complete(專案在登錄 models: 宣告的模型呼叫,
+                                                       由平台代跑)
   agenthub install-cli [--dir <資料夾>]   在 <資料夾>(預設 ~/.local/bin)放 agenthub 的轉接腳本(要在 PATH 上)
   agenthub mcp               平台的 MCP 伺服器(stdio):任何支援 MCP 的 coding agent 都能收發信箱、寫筆記(= bin/mcp_server.py)
   agenthub mcp config        印出要登記進工具 MCP 設定的那一段(平台不替你改工具的設定;docs/mcp.md)

@@ -1,12 +1,13 @@
 $ llm.py --help    # help
 [exit 0]
 --- stdout
-usage: llm.py [-h] {run,exec,lint,health} ...
+usage: llm.py [-h] {run,exec,project,lint,health} ...
 
 positional arguments:
-  {run,exec,lint,health}
+  {run,exec,project,lint,health}
     exec                long-running streaming session: build the flags from the declaration, then
                         exec claude (stdin/stdout are stream-json)
+    project             a project's own declared model call (run by cap-runner)
     health              whether each provider in hub.json llm works (key, connection, model there)
 
 options:

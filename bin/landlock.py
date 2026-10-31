@@ -161,7 +161,8 @@ def plan(pol: dict, dirs: list, port: int | None = None) -> dict:
     own = [pathlib.Path(os.path.realpath(d)) for d in dirs]
     extra = [pathlib.Path(os.path.realpath(hubconf.path(w))) for w in pol["write"]]
     write = [*own, *extra, *[pathlib.Path(t) for t in TMP]]
-    return {"read": read_roots(denied(pol)), "write": write, "devices": [pathlib.Path(d) for d in DEVICES],
+    readable = [pathlib.Path(os.path.realpath(r)) for r in pol.get("read") or []]   # the registry index (policy.read)
+    return {"read": [*read_roots(denied(pol)), *readable], "write": write, "devices": [pathlib.Path(d) for d in DEVICES],
             "bind": [int(port)] if port else []}
 
 

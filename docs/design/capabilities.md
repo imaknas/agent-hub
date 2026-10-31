@@ -392,3 +392,28 @@ Standard library only (ctypes), unprivileged; the same for services and command 
 | outbound domain allowlist (`policy.network`) | no (Seatbelt can't filter by domain) | **no**: needs a network namespace + proxy, i.e. user namespaces, refused above; not cheap, not implemented |
 | signals to the owner's other processes | blocked | only with ABI ≥ 6 (kernel 6.12); on 6.8 a service can signal the owner's processes |
 | programs that need unix sockets of their own (a local database socket, syslog) | allowed | refused (`EACCES`) |
+
+## 10-31: projects' own model calls (`agenthub complete`)
+
+A sandboxed service or job can't read the platform's credentials, so a project's model calls go through the platform.
+Owner's decisions (10-31): tier only, never model names; per-project usage on the status page; a metered provider only
+with the owner's per-project opt-in; fail visibly, no fallback; one platform-wide daily budget for now (per-project
+budgets later, if a project spends a lot).
+
+- Registry: `models: {<point>: {tier}}` (the project declares it, through manifest.update); `metered_models: true`
+  (owner-only, in PLATFORM_OWNED).
+- Path: `agenthub complete <point>` = `hub-run --complete` writes `{"kind": "complete", point, prompt, schema}` into its
+  own folder's `.hub-run/requests/` (workspace or runtime: services and jobs run in the runtime folder). cap-runner finds
+  it; the folder decides the project (no self-declared identity), the point must be declared, and the prompt is copied
+  into `.state/cap-runner/<project>/<id>.in.json`, never read back from the project's folder. It runs `llm.py project
+  <project> <point>` outside any sandbox.
+- `llm.py project` resolves the actual target (after `llm.points` pins) and refuses before sending if it is metered and
+  the project has no `metered_models`. Metered = `completion.metered`: a cloud provider reached with an API key; a
+  runtime's own login (subscription / headless token) and local providers are not. Usage rows get `project`; the point
+  is named `<project>/<point>` (pins in `llm.points` use that name).
+- Services' profile now also reads `policy.read` (the registry index): without it `agenthub send`/`complete` inside a
+  sandboxed service couldn't tell which project it was in.
+- Not guarded: a project that brings its own API key and calls a provider directly. That is the project's own credential
+  and spending (declared under `secrets:`), not the platform's (owner, 10-31).
+- Checked 10-31 in a throwaway instance with a fake provider: a client under the service profile → the real cap-runner →
+  `llm.py project`; the declared call answered, an undeclared one was rejected (126), the usage row carries the project.

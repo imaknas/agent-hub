@@ -25,7 +25,7 @@ The handling is the same for every provider (an implementation only "sends it an
      way again)
   5. strip a reasoning model's <think>…</think>, parse the JSON (tolerating ``` fences), validate with minischema;
      if invalid, retry once with the errors attached
-  6. every call is recorded in .state/llm-usage.jsonl (tokens, cost)
+  6. every call is recorded in .state/llm-usage.jsonl (tokens, cost; and the project, for a project's own calls)
 The key is read only here (secrets_dir or an environment variable) and handed to the implementation in conf["_key"],
 never put into any subprocess's environment.
 """
@@ -151,7 +151,13 @@ def today_cost() -> float:
     return total
 
 
-def record(point: str, target: dict, res) -> float | None:
+def metered(target: dict) -> bool:
+    """Pay-per-use: a cloud provider reached with an API key. A runtime's own login (subscription / headless token) and
+    local providers are not. The one rule the project opt-in (registry metered_models) is checked against."""
+    return target.get("location", "cloud") == "cloud" and bool((target.get("conf") or {}).get("key"))
+
+
+def record(point: str, target: dict, res, project: str | None = None) -> float | None:
     cost = res.cost_usd
     price = target.get("price") or {}
     if cost is None and price and res.input_tokens is not None:
@@ -159,6 +165,8 @@ def record(point: str, target: dict, res) -> float | None:
     row = {"ts": datetime.datetime.now().astimezone().isoformat(timespec="seconds"), "point": point,
            "provider": target["provider"], "model": target["model"], "input_tokens": res.input_tokens,
            "output_tokens": res.output_tokens, "cost_usd": cost, "stop": res.stop}
+    if project:
+        row["project"] = project
     try:
         USAGE.parent.mkdir(parents=True, exist_ok=True)
         with USAGE.open("a") as f:
@@ -195,7 +203,8 @@ def runtime_target(name: str, model: str | None, auth: str) -> dict:
             "context": None, "price": None, "location": "cloud"}
 
 
-def run(point: str, spec: dict, prompt: str, schema: dict | None, sleep=time.sleep, target: dict | None = None) -> dict:
+def run(point: str, spec: dict, prompt: str, schema: dict | None, sleep=time.sleep, target: dict | None = None,
+        project: str | None = None) -> dict:
     """Run one completion. Returns the same shape llm.py gives its callers; raises Refused(reason) on failure.
     target not given = decided by hub.json's llm; given (runtime_target) = handed to that runtime."""
     import runtime_ports
@@ -221,7 +230,7 @@ def run(point: str, spec: dict, prompt: str, schema: dict | None, sleep=time.sle
         rate_tries = 0
         while True:
             res = impl.complete(req, conf)
-            cost_total += record(point, target, res) or 0
+            cost_total += record(point, target, res, project) or 0
             if res.stop != "rate_limited" or rate_tries >= MAX_RATE_RETRIES:
                 break
             rate_tries += 1

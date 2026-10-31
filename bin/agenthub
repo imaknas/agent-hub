@@ -48,6 +48,8 @@ for project sessions (these are what the rules files name; the permission rules 
                         same name)
   agenthub merge-branch …    = bin/merge-branch (the merge gate for parallel sessions)
   agenthub cap-run --cap <capability> -- <command…>   = bin/hub-run (the platform runs a program the sandbox blocks)
+  agenthub complete <point> [--schema F] < prompt    = bin/hub-run --complete (a model call the project declares in
+                                                       its registry models:, run by the platform)
   agenthub install-cli [--dir <folder>]   put agenthub's forwarding script in <folder> (default ~/.local/bin; must be on PATH)
   agenthub mcp               the platform's MCP server (stdio): any coding agent with MCP can use the mailbox and write notes
                         (= bin/mcp_server.py)
@@ -762,7 +764,8 @@ def passthrough(script: str):
 # subcommands for project sessions (any coding agent): the same list as policy.platform_cli() (the permission rules
 # allow only these)
 SESSION_COMMANDS = {**{c: ("hubbus", c) for c in ("send", "inbox", "show", "ack", "done", "thread", "open-questions")},
-                    "merge-branch": ("merge-branch", None), "cap-run": ("hub-run", None)}
+                    "merge-branch": ("merge-branch", None), "cap-run": ("hub-run", None),
+                    "complete": ("hub-run", "--complete")}
 
 
 def session_command(name: str):

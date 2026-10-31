@@ -156,6 +156,8 @@ def service_profile(pol: dict, dirs: list[pathlib.Path], port: int | None = None
         lines += [f'(allow network-bind (local ip "*:{int(port)}"))',
                   '(allow network-inbound (local ip "localhost:*"))']
     lines += _isolation(pol, [pathlib.Path(d).resolve() for d in dirs], extra)
+    # the registry index the platform CLI reads (agenthub send / complete inside a service): read-only
+    lines += [f"(allow file-read* (subpath {q(pathlib.Path(r).resolve())}))" for r in pol.get("read") or []]
     return "\n".join(lines + [""])
 
 

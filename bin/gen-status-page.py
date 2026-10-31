@@ -200,6 +200,40 @@ def esc(s: str) -> str:
     return html.escape(s or "")
 
 
+def model_usage_html(now: datetime.datetime) -> str:
+    """Projects' own model calls (agenthub complete) in the last 7 days, from completion's usage log: calls, tokens,
+    cost (only what the provider reports or the model's price gives; a subscription login shows none)."""
+    import completion
+    since = (now - datetime.timedelta(days=7)).isoformat()
+    today = now.date().isoformat()
+    per: dict[str, dict] = {}
+    try:
+        lines = completion.USAGE.read_text().splitlines()
+    except OSError:
+        lines = []
+    for line in lines:
+        try:
+            r = json.loads(line)
+        except ValueError:
+            continue
+        if not r.get("project") or str(r.get("ts", "")) < since:
+            continue
+        v = per.setdefault(r["project"], {"calls": 0, "today": 0, "tokens": 0, "cost": 0.0, "priced": False})
+        v["calls"] += 1
+        v["today"] += str(r.get("ts", "")).startswith(today)
+        v["tokens"] += (r.get("input_tokens") or 0) + (r.get("output_tokens") or 0)
+        if r.get("cost_usd") is not None:
+            v["cost"] += float(r["cost_usd"])
+            v["priced"] = True
+    if not per:
+        return ""
+    rows = "".join(f"<tr><td>{esc(p)}</td><td>{v['calls']}</td><td>{v['today']}</td><td>{v['tokens']:,}</td>"
+                   f"<td>{'$%.2f' % v['cost'] if v['priced'] else '—'}</td></tr>" for p, v in sorted(per.items()))
+    return (f"<h2 style=\"font-size:18px;margin-top:28px\">{_('Model calls by project (7 days)')}</h2>"
+            f"<table><tr><th>{_('Project')}</th><th>{_('Calls')}</th><th>{_('Today')}</th><th>{_('Tokens')}</th>"
+            f"<th>{_('Cost')}</th></tr>{rows}</table>")
+
+
 def main() -> None:
     import hubconf  # imported further down too: put first so the whole function sees it
     now = datetime.datetime.now()
@@ -415,6 +449,8 @@ def main() -> None:
     except Exception as e:  # a broken overview does not affect the rest of the page
         wt_html = f"<div class=sub>{_('Worktree overview failed: {e}', e=esc(repr(e)))}</div>"
 
+    usage_html = model_usage_html(now)
+
     alert_html = "".join(f"<div class='alert {c}'>{'🔔' if c == 'notify' else '⚠️'} {esc(t)}</div>"
                          for c, t in alerts) or f"<div class='alert good'>✅ {_('Nothing needs attention')}</div>"
     generated = _("the hub machine · generated {now:%Y-%m-%d %H:%M} · refreshes every 5 minutes · schedules are defined "
@@ -443,7 +479,7 @@ summary{{cursor:pointer;color:var(--mut)}} pre{{white-space:pre-wrap;word-break:
 {alert_html}
 <table><tr><th>{_('Job')}</th><th>{_('When')}</th><th>{_('Last')}</th><th>{_('Next')}</th></tr>{''.join(rows)}</table>
 {mail_html}
-{wt_html}
+{wt_html}{usage_html}
 <h2 style="font-size:18px;margin-top:28px">{_('Claude job reports')}</h2>
 {''.join(report_blocks) or f"<div class=sub>{_('No reports yet')}</div>"}
 </main></body></html>"""

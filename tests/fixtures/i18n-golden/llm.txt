@@ -1,11 +1,12 @@
 $ llm.py --help    # help
 [exit 0]
 --- stdout
-usage: llm.py [-h] {run,exec,lint,health} ...
+usage: llm.py [-h] {run,exec,project,lint,health} ...
 
 positional arguments:
-  {run,exec,lint,health}
+  {run,exec,project,lint,health}
     exec                長駐串流 session:照宣告組旗標後 exec 成 claude(stdin/stdout 是 stream-json)
+    project             專案自己宣告的模型呼叫(由 cap-runner 執行)
     health              hub.json llm 的每一家 provider 能不能用(key、連線、模型在不在)
 
 options:

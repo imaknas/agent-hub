@@ -18,8 +18,12 @@ folder used to run it comes from the registry.
 state.json: {state: queued|running|done|rejected|lost, reason?, exit?, timed_out?, at}
   exit follows the shell convention: killed by a signal = 128 + signal; timed out = 124 (timed_out: true)
 
-Serves only projects whose registry entry has enforce.sandbox: true and declares enforce.capabilities (idea sandboxes
-get gpu by default, and keep it after being upgraded into a real project). Checks (failing one → rejected + reason):
+Serves projects whose registry entry has enforce.sandbox: true and declares enforce.capabilities (idea sandboxes
+get gpu by default, and keep it after being upgraded into a real project), and, for model calls, projects that declare
+models: (sandboxed or not; their workspace and runtime folders are both scanned, so a service or job can call too).
+A model call ({"v": 1, "id", "kind": "complete", "point", "prompt", "schema"?}, from `agenthub complete`): the point
+must be in models:; it runs `llm.py project <project> <point>` outside any sandbox (the platform's credentials), which
+checks the provider (metered only with the owner's metered_models) before sending. stdout = llm.py's JSON. Checks (failing one → rejected + reason):
   .hub-run/, requests/ and jobs/ must not be symlinks (everything goes through O_NOFOLLOW directory fds, so results
   can't be redirected into another project); the request is a regular file, ≤ 64 KB, within 10 minutes; id is a
   plain file name; cap is one this project declares; argv is a list of strings;
@@ -62,7 +66,7 @@ _ = i18n.domain(__file__)
 DIR = hubconf.STATE / "cap-runner"
 LOG = DIR / "log.jsonl"
 ID = re.compile(r"^[A-Za-z0-9_-]{1,64}$")
-MAX_REQ = 64 * 1024
+MAX_REQ = 512 * 1024      # a model call's prompt can be long; a cap request is still argv only
 STALE_S = 600
 KEEP_S = 7 * 86400
 DIRFLAGS = os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW
@@ -83,14 +87,25 @@ def log(**rec) -> None:
         f.write(json.dumps({"at": now(), **rec}, ensure_ascii=False) + "\n")
 
 
-def eligible() -> dict[str, tuple[pathlib.Path, list[str]]]:
+def eligible() -> dict[str, dict]:
+    """project → {dirs: folders whose .hub-run/ is served (workspace, runtime), caps, models}. caps only for sandboxed
+    projects that declare enforce.capabilities; models (registry models:) for any project, so a call made from its
+    service's or job's runtime folder is served too."""
+    import registry
     out = {}
     for name, doc in hubconf.projects().items():
         enf = doc.get("enforce") or {}
-        caps = list(enf.get("capabilities") or [])
-        ws = hubconf.workspace(name)
-        if enf.get("sandbox") is True and caps and ws and ws.is_dir():
-            out[name] = (ws.resolve(), caps)
+        caps = list(enf.get("capabilities") or []) if enf.get("sandbox") is True else []
+        models = doc.get("models") or {}
+        if not caps and not models:
+            continue
+        d = registry.dirs(doc)
+        dirs = []
+        for p in (d.get("workspace"), d.get("runtime") if models else None):
+            if p and p.is_dir() and p.resolve() not in dirs:
+                dirs.append(p.resolve())
+        if dirs:
+            out[name] = {"dirs": dirs, "caps": caps, "models": models}
     return out
 
 
@@ -120,12 +135,14 @@ def read_json(dir_fd: int, name: str):
         return json.loads(f.read(MAX_REQ + 1).decode())
 
 
-def check(req, stem: str, ws: pathlib.Path, caps: list[str]) -> tuple[str, dict]:
+def check(req, stem: str, ws: pathlib.Path, caps: list[str], models: dict | None = None) -> tuple[str, dict]:
     """Return (reason for rejection, the tidied request); an empty reason = passed."""
     if not isinstance(req, dict) or req.get("v") != 1:
         return _("Malformed request (must be a JSON object with v: 1)"), {}
     if req.get("id") != stem:
         return _("id does not match the file name"), {}
+    if req.get("kind") == "complete":
+        return check_complete(req, models or {})
     cap = req.get("cap")
     if cap not in caps:
         return _("This project has not declared the capability {cap!r} (its registry entry's enforce.capabilities: "
@@ -146,6 +163,21 @@ def check(req, stem: str, ws: pathlib.Path, caps: list[str]) -> tuple[str, dict]
     if not isinstance(t, int) or isinstance(t, bool) or not 0 < t <= conf("max_timeout_s", 1800):
         return _("timeout_s must be an integer from 1 to {max}", max=conf("max_timeout_s", 1800)), {}
     return "", {"cap": cap, "argv": argv, "cwd": real, "timeout_s": t}
+
+
+def check_complete(req: dict, models: dict) -> tuple[str, dict]:
+    """A model call (agenthub complete): the point must be in the registry's models:; the rest (which provider, metered
+    or not) is llm.py project's to check, outside the project's reach."""
+    point = req.get("point")
+    if not isinstance(point, str) or point not in models:
+        return _("This project has not declared the model call {point!r} (its registry entry's models: {have})",
+                 point=point, have=", ".join(sorted(models)) or _("none")), {}
+    if not isinstance(req.get("prompt"), str) or not req["prompt"].strip():
+        return _("prompt must be a non-empty string"), {}
+    if req.get("schema") is not None and not isinstance(req["schema"], dict):
+        return _("schema must be a JSON object"), {}
+    return "", {"kind": "complete", "point": point, "prompt": req["prompt"], "schema": req.get("schema"),
+                "timeout_s": conf("timeout_s", 600)}
 
 
 def make_profile(project: str, cap: str, job_id: str) -> pathlib.Path:
@@ -190,13 +222,14 @@ class Runner:
     # ---------- taking requests ----------
 
     def scan(self) -> None:
-        for project, (ws, caps) in eligible().items():
-            try:
-                self.scan_project(project, ws, caps)
-            except OSError as e:  # .hub-run is a symlink, wrong permissions and such: skip this project, log it
-                log(project=project, event="scan_error", detail=str(e)[:300])
+        for project, e in eligible().items():
+            for ws in e["dirs"]:
+                try:
+                    self.scan_project(project, ws, e["caps"], e["models"])
+                except OSError as err:  # .hub-run is a symlink, wrong permissions and such: skip this folder, log it
+                    log(project=project, event="scan_error", detail=str(err)[:300])
 
-    def scan_project(self, project: str, ws: pathlib.Path, caps: list[str]) -> None:
+    def scan_project(self, project: str, ws: pathlib.Path, caps: list[str], models: dict | None = None) -> None:
         ws_fd = os.open(ws, DIRFLAGS)
         try:
             try:
@@ -210,11 +243,11 @@ class Runner:
                     return
                 try:
                     names = sorted(n for n in os.listdir(req_fd) if n.endswith(".json") and not n.startswith("."))
-                    if names and project not in self.excluded:
+                    if names and str(ws) not in self.excluded:
                         exclude_hub_run(ws)
-                        self.excluded.add(project)
+                        self.excluded.add(str(ws))
                     for n in names:
-                        self.take(project, ws, caps, hr_fd, req_fd, n)
+                        self.take(project, ws, caps, hr_fd, req_fd, n, models)
                 finally:
                     os.close(req_fd)
             finally:
@@ -222,7 +255,8 @@ class Runner:
         finally:
             os.close(ws_fd)
 
-    def take(self, project: str, ws: pathlib.Path, caps: list[str], hr_fd: int, req_fd: int, name: str) -> None:
+    def take(self, project: str, ws: pathlib.Path, caps: list[str], hr_fd: int, req_fd: int, name: str,
+             models: dict | None = None) -> None:
         stem = name[:-5]
         st = os.stat(name, dir_fd=req_fd, follow_symlinks=False)
         if not ID.match(stem) or not stat.S_ISREG(st.st_mode) or st.st_size > MAX_REQ:
@@ -243,7 +277,7 @@ class Runner:
         os.rename(name, "request.json", src_dir_fd=req_fd, dst_dir_fd=job_fd)
         try:
             req = read_json(job_fd, "request.json")
-            reason, clean = check(req, stem, ws, caps)
+            reason, clean = check(req, stem, ws, caps, models)
         except (OSError, ValueError) as e:
             reason, clean = _("Cannot read the request: {err}", err=e), {}
         if not reason and time.time() - st.st_mtime > STALE_S:
@@ -272,14 +306,26 @@ class Runner:
     def start(self, job: Job) -> None:
         r = job.req
         try:
-            profile = make_profile(job.project, r["cap"], job.id)
             flags = os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW
             out = os.open("stdout", flags, 0o644, dir_fd=job.fd)
             err = os.open("stderr", flags, 0o644, dir_fd=job.fd)
             env = {"PATH": hubconf.LAUNCHD_PATH, "HOME": str(pathlib.Path.home()),
                    "TMPDIR": os.environ.get("TMPDIR", "/private/tmp"), "LANG": os.environ.get("LANG", "en_US.UTF-8")}
+            if r.get("kind") == "complete":
+                # the platform's own model call, outside any sandbox (it needs the credentials): the prompt goes
+                # through a file in platform state, never read back from the project's folder
+                inp = DIR / job.project / f"{job.id}.in.json"
+                inp.parent.mkdir(parents=True, exist_ok=True)
+                inp.write_text(json.dumps({"prompt": r["prompt"], "schema": r["schema"]}, ensure_ascii=False))
+                argv = [*hubconf.launch(hubconf.ROOT / "bin" / "llm.py"), "project", job.project, r["point"],
+                        "--request", str(inp)]
+                env.update({k: v for k, v in os.environ.items() if k.startswith("AGENT_HUB_")})
+                cwd = DIR
+            else:
+                profile = make_profile(job.project, r["cap"], job.id)
+                argv, cwd = ["/usr/bin/sandbox-exec", "-f", str(profile), *r["argv"]], r["cwd"]
             try:
-                job.proc = subprocess.Popen(["/usr/bin/sandbox-exec", "-f", str(profile), *r["argv"]], cwd=r["cwd"],
+                job.proc = subprocess.Popen(argv, cwd=cwd,
                                             env=env, stdin=subprocess.DEVNULL, stdout=out, stderr=err,
                                             start_new_session=True)
             finally:
@@ -294,9 +340,13 @@ class Runner:
             return
         job.started = time.time()
         job.deadline = job.started + r["timeout_s"]
-        write_state(job.fd, state="running", pid=job.proc.pid, cap=r["cap"])
-        log(project=job.project, id=job.id, event="started", cap=r["cap"], argv=r["argv"][:20],
-            cwd=str(r["cwd"]), pid=job.proc.pid)
+        if r.get("kind") == "complete":
+            write_state(job.fd, state="running", pid=job.proc.pid, kind="complete")
+            log(project=job.project, id=job.id, event="started", kind="complete", point=r["point"], pid=job.proc.pid)
+        else:
+            write_state(job.fd, state="running", pid=job.proc.pid, cap=r["cap"])
+            log(project=job.project, id=job.id, event="started", cap=r["cap"], argv=r["argv"][:20],
+                cwd=str(r["cwd"]), pid=job.proc.pid)
         self.running.append(job)
 
     def poll(self) -> None:
@@ -330,13 +380,14 @@ class Runner:
 
     def each_job(self):
         """(project, job id, path of the jobs directory): only walks directories that aren't symlinks."""
-        for project, (ws, _caps) in eligible().items():
-            jobs = ws / ".hub-run" / "jobs"
-            if any(p.is_symlink() for p in (ws / ".hub-run", jobs)) or not jobs.is_dir():
-                continue
-            for d in jobs.iterdir():
-                if d.is_dir() and not d.is_symlink():
-                    yield project, d.name, d
+        for project, e in eligible().items():
+            for ws in e["dirs"]:
+                jobs = ws / ".hub-run" / "jobs"
+                if any(p.is_symlink() for p in (ws / ".hub-run", jobs)) or not jobs.is_dir():
+                    continue
+                for d in jobs.iterdir():
+                    if d.is_dir() and not d.is_symlink():
+                        yield project, d.name, d
 
     def recover(self) -> None:
         """The service restarted: jobs still marked queued/running from the last round have nobody minding them."""
@@ -367,7 +418,7 @@ class Runner:
                 continue
             if old and st.get("state") in TERMINAL:
                 shutil.rmtree(d, ignore_errors=True)
-        for p in DIR.glob("*/*.sb"):
+        for p in [*DIR.glob("*/*.sb"), *DIR.glob("*/*.in.json")]:
             if p.stat().st_mtime < cutoff:
                 p.unlink(missing_ok=True)
 

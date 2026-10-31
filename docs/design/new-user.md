@@ -149,7 +149,7 @@ file.
 
 **Automatic flows changing config** (onboard, rename, `manifest.update`, upgrade-idea): once validated they commit
 directly to the config repo, without waiting for a person to approve; the security fields
-(`type`/`enforce`/`network`/`allow_write`/`privacy`) can still only be changed by a person (as today). This is version
+(`type`/`enforce`/`network`/`allow_write`/`privacy`/`metered_models`) can still only be changed by a person (as today). This is version
 control, not an activity log: what is committed is "the desired state changed".
 
 **"What was done when"** is answered uniformly by bus events and the records themselves (the digest's date,

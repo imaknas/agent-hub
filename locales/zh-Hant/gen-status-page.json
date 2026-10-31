@@ -123,5 +123,10 @@
   "No digest yet": "還沒有 digest",
   "Digest (last 7 days)": "digest(最近 7 天)",
   "Cross-project to-do": "跨專案待辦",
-  "No todo.md yet": "還沒有 todo.md"
+  "No todo.md yet": "還沒有 todo.md",
+  "Model calls by project (7 days)": "各專案的模型呼叫(7 天)",
+  "Calls": "次數",
+  "Today": "今天",
+  "Tokens": "token",
+  "Cost": "花費"
 }

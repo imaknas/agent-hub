@@ -12,5 +12,9 @@
  "Cannot read the request: {err}": "請求讀不了:{err}",
  "Request too old (nobody took it within 10 minutes)": "請求太舊(超過 10 分鐘沒人接手)",
  "Failed to start: {err!r}": "啟動失敗:{err!r}",
- "The platform runner restarted and this job did not finish (result unknown); run it again": "平台代跑服務重啟了,這個工作沒跑完(結果不明),請重跑"
+ "The platform runner restarted and this job did not finish (result unknown); run it again": "平台代跑服務重啟了,這個工作沒跑完(結果不明),請重跑",
+ "This project has not declared the model call {point!r} (its registry entry's models: {have})": "這個專案沒有宣告模型呼叫 {point!r}(它登錄的 models:{have})",
+ "prompt must be a non-empty string": "prompt 必須是非空字串",
+ "schema must be a JSON object": "schema 必須是 JSON 物件",
+ "none": "沒有"
 }

@@ -84,7 +84,7 @@ class Golden(unittest.TestCase):
             out.append(("start fails", json.loads((jobs / "boom" / "state.json").read_text()).get("reason")))
             (jobs / "left").mkdir()
             (jobs / "left" / "state.json").write_text(json.dumps({"state": "running"}))
-            with mock.patch.object(m, "eligible", lambda: {"demo": (ws, caps)}):
+            with mock.patch.object(m, "eligible", lambda: {"demo": {"dirs": [ws], "caps": caps, "models": {}}}):
                 r.recover()
             out.append(("recover", json.loads((jobs / "left" / "state.json").read_text()).get("reason")))
             log = [json.loads(line) for line in (tmp / "state" / "log.jsonl").read_text().splitlines()]

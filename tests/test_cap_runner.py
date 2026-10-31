@@ -47,7 +47,8 @@ class CapRunner(unittest.TestCase):
         (self.tmp / "state").mkdir()
         allow = self.tmp / "allow.sb"
         allow.write_text("(version 1)(allow default)")
-        self.projects = {"p-a": (self.a, ["gpu"]), "p-b": (self.b, ["gpu"])}
+        self.projects = {"p-a": {"dirs": [self.a], "caps": ["gpu"], "models": {}},
+                         "p-b": {"dirs": [self.b], "caps": ["gpu"], "models": {}}}
         for target, value in [("eligible", lambda: self.projects), ("make_profile", lambda *a: allow),
                               ("DIR", self.tmp / "state"), ("LOG", self.tmp / "state" / "log.jsonl"),
                               ("exclude_hub_run", lambda ws: None)]:

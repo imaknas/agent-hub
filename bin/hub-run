@@ -3,6 +3,10 @@
 
   hub-run --cap gpu [--timeout seconds] -- blender -b … -P tools/render.py …
   hub-run --wait <id>          reattach to a job still running (or finished), print its output, exit with its exit code
+  hub-run --complete <point> [--schema F] < prompt
+                               a model call the project declares (registry models: {point: {tier}}); the platform
+                               runs it with its own credentials (agenthub complete). stdout = the JSON result
+                               ({structured_output, result, …}); exit 1 = refused or failed, the reason in llm_error
 
 Run in the project folder (or below it). This only writes the request into its own project's `.hub-run/requests/`; the
 platform's run service (cap-runner.py, not in the sandbox) checks it before running it, writes the output and exit code
@@ -43,15 +47,17 @@ def say(msg: str) -> None:
 
 
 def find_workspace() -> pathlib.Path | None:
+    """The project folder this runs in: its workspace, or its runtime folder (a service's or job's cwd)."""
     cwd = pathlib.Path.cwd().resolve()
     best = None
-    for name in hubconf.projects():
-        ws = hubconf.workspace(name)
-        if not ws:
-            continue
-        ws = ws.resolve()
-        if (cwd == ws or ws in cwd.parents) and (best is None or len(str(ws)) > len(str(best))):
-            best = ws
+    services = hubconf.p("services_root")
+    for name, doc in hubconf.projects().items():
+        for ws in (hubconf.workspace(name), services / name if services and doc.get("runtime") is not None else None):
+            if not ws:
+                continue
+            ws = ws.resolve()
+            if (cwd == ws or ws in cwd.parents) and (best is None or len(str(ws)) > len(str(best))):
+                best = ws
     return best
 
 
@@ -63,6 +69,19 @@ def submit(ws: pathlib.Path, cap: str, argv: list[str], timeout: int | None) -> 
     d = ws / ".hub-run" / "requests"
     d.mkdir(parents=True, exist_ok=True)
     tmp = d / f".{job_id}.tmp"  # write a temp file, then rename: the service never reads a half-written request
+    tmp.write_text(json.dumps(req, ensure_ascii=False))
+    tmp.rename(d / f"{job_id}.json")
+    return job_id
+
+
+def submit_complete(ws: pathlib.Path, point: str, prompt: str, schema: dict | None) -> str:
+    job_id = f"{time.strftime('%Y%m%d-%H%M%S')}-{secrets.token_hex(3)}"
+    req = {"v": 1, "id": job_id, "kind": "complete", "point": point, "prompt": prompt}
+    if schema is not None:
+        req["schema"] = schema
+    d = ws / ".hub-run" / "requests"
+    d.mkdir(parents=True, exist_ok=True)
+    tmp = d / f".{job_id}.tmp"
     tmp.write_text(json.dumps(req, ensure_ascii=False))
     tmp.rename(d / f"{job_id}.json")
     return job_id
@@ -137,6 +156,9 @@ def main() -> int:
     ap.add_argument("--cap", help=_("capability name (one of the registry entry's enforce.capabilities)"))
     ap.add_argument("--timeout", type=int, help=_("seconds (default and limit: hub.json cap_runner)"))
     ap.add_argument("--wait", metavar="ID", help=_("reattach to a job"))
+    ap.add_argument("--complete", metavar="POINT",
+                    help=_("a model call this project declares (registry models:): prompt on stdin, JSON result on stdout"))
+    ap.add_argument("--schema", metavar="FILE", help=_("with --complete: JSON schema the answer must match"))
     ap.add_argument("cmd", nargs=argparse.REMAINDER)
     a = ap.parse_args()
     cmd = a.cmd[1:] if a.cmd[:1] == ["--"] else a.cmd
@@ -146,6 +168,17 @@ def main() -> int:
         return 2
     if a.wait:
         return follow(ws, a.wait, pickup=False)
+    if a.complete:
+        try:
+            schema = json.loads(pathlib.Path(a.schema).read_text()) if a.schema else None
+        except (OSError, ValueError) as e:
+            say(_("cannot read the schema: {err}", err=e))
+            return 2
+        prompt = sys.stdin.read()
+        if not prompt.strip():
+            say(_("the prompt (stdin) is empty"))
+            return 2
+        return follow(ws, submit_complete(ws, a.complete, prompt, schema), pickup=True)
     if not a.cap or not cmd:
         say(_("usage: hub-run --cap <capability> [--timeout seconds] -- <command…>, or hub-run --wait <id>"))
         return 2

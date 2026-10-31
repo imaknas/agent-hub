@@ -1,7 +1,8 @@
 === --help
 exit 0
 --- stdout
-usage: hub-run [-h] [--cap CAP] [--timeout TIMEOUT] [--wait ID] ...
+usage: hub-run [-h] [--cap CAP] [--timeout TIMEOUT] [--wait ID] [--complete POINT] [--schema FILE]
+               ...
 
 Run a program that needs a capability under the platform's profile
 
@@ -13,6 +14,9 @@ options:
   --cap CAP          capability name (one of the registry entry's enforce.capabilities)
   --timeout TIMEOUT  seconds (default and limit: hub.json cap_runner)
   --wait ID          reattach to a job
+  --complete POINT   a model call this project declares (registry models:): prompt on stdin, JSON
+                     result on stdout
+  --schema FILE      with --complete: JSON schema the answer must match
 --- stderr
 === not in a project
 exit 2

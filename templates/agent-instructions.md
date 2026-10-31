@@ -69,7 +69,7 @@ librarian 每晚自動寄出、{{owner}} 結案時自動移掉。{{owner}} 在�
 - **這個專案用了哪些憑證,宣告在平台的專案登錄**(這個專案的那一份;`agenthub status <專案>` 看得到)的 `secrets:`(只寫名稱、
   位置、到期,**不寫值**),平台每天檢查在不在、有沒有被備份、快不快到期,有問題發警報。新增、拿掉、換位置:
   把改好的完整 YAML 寄出 `agenthub send --to agent-hub --type manifest.update --text "$(cat <改好的檔>)"`
-  (驗證不過會退回;`type`、`enforce`、`network`、`allow_write`、`privacy` 是安全欄位,改到就整封退回——要改用
+  (驗證不過會退回;`type`、`enforce`、`network`、`allow_write`、`privacy`、`metered_models` 是安全欄位,改到就整封退回——要改用
   `--type request` 寫信給 agent-hub 說明為什麼,由 {{owner}} 確認)。
 - **機器層級的憑證是平台的**(claude 的登入/token、平台的 Discord、備份):不要在專案裡另存一份、不要自己去讀
   `~/.claude` 底下的憑證檔;需要就寄信給 agent-hub。
@@ -101,3 +101,14 @@ agent-hub with the service and port. Before declaring it, you can test the serve
 agent-hub、{{assistant}} 都會開源,提到名稱沒關係;但**這台機器的路徑**(hub 裝在哪、`/Users/<使用者>/…`)、
 帶本機路徑的 hook 指令、個人資料不要寫進任何會 commit 的檔案(CLAUDE.md、`.claude/settings.json`、README、
 程式註解、commit 訊息等),公開 repo 會跟著外洩。
+
+## Model calls (the platform runs them)
+
+When this project's code needs a model (classify, summarize, judge: a prompt in, an answer out), don't call `claude`
+or a provider with the platform's credentials, and don't read `~/.claude`. Declare the call in this project's registry
+entry, `models: {<name>: {tier: fast|standard|strong}}` (a manifest.update, no approval needed; the platform picks the
+model for the tier), then call `agenthub complete <name> [--schema <file.json>] < prompt`: stdout is the JSON result
+(`structured_output` when a schema is given), exit 1 means refused or failed with the reason in `llm_error`. It works
+from sessions, services and jobs, sandboxed or not. When it fails, fail visibly: don't switch to another model or
+provider. A provider billed per use is only used if {{owner}} allowed it for this project (`metered_models`, which
+only {{owner}} sets); calls show per project on the platform's status page.

@@ -15,6 +15,8 @@ declared safe default or takes the caller's failure path, recording job.failed o
   llm.py run <point> --dry-run ...         only prints the command it would run (a JSON list), doesn't call the model
   llm.py lint     lists the `claude -p` calls in bin/ that bypass this (for contracts-check)
   llm.py health   whether each provider in hub.json's llm can be used
+  llm.py project <project> <point> --request F   a project's own declared model call (cap-runner runs it; see
+                  project_call)
 
 A judgment point declared `shape: completion` → handed to completion.py (the same handling for every provider;
 docs/design/llm-providers.md): if hub.json has an `llm` block, the provider is chosen from it (any key); otherwise it
@@ -136,6 +138,49 @@ def run_completion(a, spec: dict, prompt: str, model: str | None) -> int:
     return 0
 
 
+def project_call(project: str, point: str, request: pathlib.Path) -> int:
+    """A project's own model call (agenthub complete → cap-runner → here, outside the project's sandbox): request is
+    {"prompt", "schema"?} written by cap-runner in platform state (never read from the project's folder). Checked
+    before anything is sent: the point is declared in the project's registry entry (models: {point: {tier}}); the
+    provider it resolves to is metered (completion.metered) only if the owner set metered_models: true. Not available
+    → refused with the reason, no other provider or model is tried. Usage rows carry the project."""
+    import completion
+    import runtime_ports
+    name = f"{project}/{point}"
+    spec = {"shape": "completion", "model_group": "standard"}
+    doc = hubconf.projects().get(project)
+    if not doc:
+        return fail(name, spec, _("{project} is not in the registry", project=project))
+    decl = (doc.get("models") or {}).get(point)
+    if not decl:
+        return fail(name, spec, _("{project} has not declared the model call {point} (registry models:)",
+                                  project=project, point=point))
+    spec["model_group"] = decl["tier"]
+    try:
+        req = json.loads(request.read_text())
+        prompt, schema = req["prompt"], req.get("schema")
+    except (OSError, ValueError, KeyError, TypeError) as e:
+        return fail(name, spec, _("cannot read the request: {err}", err=e))
+    try:
+        if completion.settings():
+            target = completion.resolve(name, spec)
+        else:
+            rt = runtime_ports.default_name()
+            if "completion" not in runtime_ports.capabilities(rt):
+                return fail(name, spec, _("runtime {name} has no completion interface, and hub.json has no llm "
+                                          "section (set up an LLM provider)", name=rt))
+            target = completion.runtime_target(rt, model_for(name, spec), auth_mode(spec))
+        if completion.metered(target) and doc.get("metered_models") is not True:
+            return fail(name, spec, _("{provider}/{model} is pay-per-use and the owner has not allowed metered models for "
+                                      "{project} (registry metered_models); not sent", provider=target["provider"],
+                                      model=target["model"], project=project))
+        out = completion.run(name, spec, prompt, schema, target=target, project=project)
+    except completion.Refused as e:
+        return fail(name, spec, str(e))
+    print(json.dumps(out, ensure_ascii=False))
+    return 0
+
+
 def run(a) -> int:
     """The judgment-point layer: read the declaration, build the Task, decide the login, hand over to the runtime
     (runtime_ports' agent interface; Claude Code is just one implementation).
@@ -246,6 +291,10 @@ def main() -> int:
     e.add_argument("--model")
     e.add_argument("--prompt-file")
     e.add_argument("extra", nargs="*")
+    pc = sub.add_parser("project", help=_("a project's own declared model call (run by cap-runner)"))
+    pc.add_argument("project")
+    pc.add_argument("point")
+    pc.add_argument("--request", required=True)
     sub.add_parser("lint")
     sub.add_parser("health", help=_("whether each provider in hub.json llm works (key, connection, model there)"))
     a = ap.parse_args()
@@ -253,6 +302,8 @@ def main() -> int:
         os.chdir(a.cwd)
     if a.cmd in ("run", "exec"):
         return run(a)
+    if a.cmd == "project":
+        return project_call(a.project, a.point, pathlib.Path(a.request))
     if a.cmd == "health":
         import completion
         rows = completion.health_all()

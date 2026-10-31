@@ -40,9 +40,13 @@ schema v1 (contracts/project.v1.md has the full description):
                                   The record of the owner's explicit authorization (10-25): written when an idea
                                   sandbox is created, carried over on upgrade; other projects add it only with the
                                   owner's consent
+  models: {<point>: {tier}}       model calls this project makes through the platform (agenthub complete; tier fast |
+                                  standard | strong, hub.json decides the model). Undeclared points are refused
+  metered_models: true            the owner allows metered (pay-per-use) providers for those calls; without it a call
+                                  that would go to one is refused (llm.py project)
   network: [domains]              what the sandbox needs to reach beyond the platform defaults
   allow_write: [paths]            what the sandbox needs to write beyond the platform defaults
-    type, enforce, network, allow_write and privacy are security fields: a manifest.update a project sends that
+    type, enforce, network, allow_write, privacy and metered_models are security fields: a manifest.update a project sends that
     changes them is rejected whole (a project can't switch off its own sandbox, widen its scope or add capabilities);
     to change them, ask the agent-hub session (the owner confirms)
   secrets:   [{name, path, env_key?, expires? | max_age_days?, warn_days?, backup?, why?, rotate?}]
@@ -102,13 +106,16 @@ _ = i18n.domain(__file__)
 
 CACHE = hubconf.STATE / "registry"
 TOP = {"v", "name", "type", "purpose", "paths", "memory", "privacy", "runtime", "push_on_merge", "commits", "mailbox",
-       "publishes", "provides", "consumes", "services", "jobs", "enforce", "network", "allow_write", "gate", "secrets"}
+       "publishes", "provides", "consumes", "services", "jobs", "enforce", "network", "allow_write", "gate", "secrets",
+       "models", "metered_models"}
 SECRET = {"name", "path", "env_key", "expires", "max_age_days", "warn_days", "backup", "why", "rotate"}
 JOB = {"name", "at", "every", "run", "kind", "prompt", "cwd", "days", "days_of_month", "months", "until",
        "between", "background", "after", "before", "max_attempts_per_day", "legacy_name", "allow", "connectors"}
 SERVICE = {"name", "run", "label", "keepalive", "interval_s", "throttle_s", "env", "cwd", "log", "expose"}
 DAYS = {"mon", "tue", "wed", "thu", "fri", "sat", "sun"}
 EVERY = re.compile(r"^(\d+)(m|h)$")
+TIERS = ("fast", "standard", "strong")
+MODEL_POINT = re.compile(r"^[a-z0-9][a-z0-9-]{0,47}$")
 
 
 def dirs(doc: dict) -> dict[str, pathlib.Path | None]:
@@ -215,7 +222,25 @@ def validate_enforce(doc: dict) -> list[str]:
     return errs
 
 
-PLATFORM_OWNED = ("type", "enforce", "network", "allow_write", "privacy")
+def validate_models(doc: dict) -> list[str]:
+    """models: {<point>: {tier}}: the model calls this project makes through the platform (agenthub complete);
+    metered_models: true = the owner allows metered (pay-per-use) providers for them (owner-only, PLATFORM_OWNED)."""
+    errs = []
+    models = doc.get("models")
+    if models is not None:
+        if not isinstance(models, dict):
+            return [_("models must be a mapping of point name → {{tier: fast|standard|strong}}")]
+        for name, decl in models.items():
+            if not isinstance(name, str) or not MODEL_POINT.match(name):
+                errs.append(_("models: point name {name!r} must be lowercase letters, digits and -", name=name))
+            if not isinstance(decl, dict) or set(decl) - {"tier"} or decl.get("tier") not in TIERS:
+                errs.append(_("models.{name} must be {{tier: fast|standard|strong}}", name=name))
+    if "metered_models" in doc and not isinstance(doc["metered_models"], bool):
+        errs.append(_("metered_models must be true or false"))
+    return errs
+
+
+PLATFORM_OWNED = ("type", "enforce", "network", "allow_write", "privacy", "metered_models")
 
 
 def platform_owned_changes(new: dict, cur: dict) -> list[str]:
@@ -246,6 +271,7 @@ def validate(doc, stem: str) -> list[str]:
     if not is_hub and not paths.get("workspace"):
         errs.append(_("paths.workspace is required"))
     errs += validate_enforce(doc)
+    errs += validate_models(doc)
     if doc.get("commits") not in (None, "conventional"):
         errs.append(_("commits can only be conventional (absent = commit titles are not checked)"))
     if doc.get("gate") not in (None, "strict", "detect"):
