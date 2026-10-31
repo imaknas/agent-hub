@@ -1,0 +1,58 @@
+=== read_key: missing secret
+沒有 key:<TMP>/secrets/k 不在(bin/hub llm set-key 寫進去)
+=== read_key: missing env
+沒有 key:環境變數 GOLDEN_NO_KEY 沒有設(排程跑在 launchd 底下,讀不到 shell 的設定——用 secret 比較可靠)
+=== read_key: bad shape
+key 要寫成 {"secret": 檔名} 或 {"env": 變數名}
+=== read_key: empty
+沒有 key:<TMP>/secrets/empty 是空的
+=== resolve: no llm
+hub.json 沒有 llm 區塊
+=== resolve: no use
+llm.use 沒有寫 strong 要交給哪一家
+=== resolve: no provider
+llm.providers 沒有 zz
+=== resolve: no model
+llm.providers.k.models 沒有 fast
+=== run: too long
+prompt 太長:估計 1334 token + 輸出 100 超過 f/m1 的 context 1000
+=== run: truncated
+輸出被長度截斷(f/m1,max_tokens 100);不重試
+=== run: error
+f/m1:error:boom
+=== run: not json twice
+輸出不符合 schema(重試一次後):不是 JSON
+=== run: schema twice
+輸出不符合 schema(重試一次後):$:缺 answer
+=== retry prompt
+hi
+
+---
+上一次的回答不合格($:缺 answer)。這次只回一個合格的 JSON,不要其他文字。
+=== run: budget
+今天的模型花費已經到預算(llm.budget.daily_usd $5),這次不送
+=== health_all
+[('f', True, ''), ('k', False, '沒有 key:<TMP>/secrets/nokey 不在(bin/hub llm set-key 寫進去)'), ('x', False, "'沒有這個 completion 實作:nosuch(有:anthropic, openai, ollama, claude, fake, none, command)'")]
+=== config_errors
+providers.a.key.secret 看起來是 key 的值——值放 secrets 目錄({"secret": 檔名})或環境變數({"env": 名稱})
+providers.a.models.huge:組名只能是 fast / standard / strong
+providers.a.models.huge 要是模型名稱,或 {name, context?, price?}
+providers.a.models.standard 要是模型名稱,或 {name, context?, price?}
+providers.b:執行環境 none 沒有 completion 介面
+providers.b.key.secret 只寫檔名(放在平台的 secrets 目錄裡)
+providers.b.location 只能是 cloud / local
+providers.c.impl `nope` 不認得(有:anthropic, openai, ollama, claude, fake, none, command)
+providers.c.key 要寫成 {"secret": 檔名} 或 {"env": 變數名}(只能一種)
+providers.c:location local 只准本機、私有網段、tailnet 的 base_url(現在是 'https://api.example.com')
+providers.d 要是物件
+use.strong → a,但 providers.a.models 沒有 strong
+use.standard:沒有 provider zz
+use.huge:組名只能是 fast / standard / strong
+points.not-a-point:不是宣告過的判斷點
+points.not-a-point.provider 要是 providers 裡的一家
+points.consolidate:沒有 provider 就要寫 model(交給執行環境時用的模型)
+points.reflect-week 要是物件({model} 或 {provider, model?})
+=== config_errors: providers not a dict
+[]
+=== config_errors: use without providers
+['寫了 use 但沒有 providers(只想指定個別判斷點的模型:只寫 points)', 'use.fast:沒有 provider a']

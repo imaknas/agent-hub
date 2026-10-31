@@ -42,6 +42,7 @@
   "tests/fixtures/i18n-golden/guard.txt": 4,
   "tests/fixtures/i18n-golden/lease-relay.txt": 10,
   "tests/fixtures/i18n-golden/lease-runner.txt": 4,
+  "tests/fixtures/i18n-golden/runtime_claude.txt": 1,
   "tests/fixtures/i18n-golden/scheduler-watchdog.txt": 3,
   "tests/fixtures/i18n-golden/status-page-inputs.json": 2,
   "tests/fixtures/i18n-golden/status-page.txt": 2,

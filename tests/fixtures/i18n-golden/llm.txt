@@ -1,0 +1,110 @@
+$ llm.py --help    # help
+[exit 0]
+--- stdout
+usage: llm.py [-h] {run,exec,lint,health} ...
+
+positional arguments:
+  {run,exec,lint,health}
+    exec                長駐串流 session:照宣告組旗標後 exec 成 claude(stdin/stdout 是 stream-json)
+    health              hub.json llm 的每一家 provider 能不能用(key、連線、模型在不在)
+
+options:
+  -h, --help            show this help message and exit
+--- stderr
+
+$ llm.py run --help    # help
+[exit 0]
+--- stdout
+usage: llm.py run [-h] [--cwd CWD] [--model MODEL] [--prompt-file PROMPT_FILE] [--dry-run]
+                  point [extra ...]
+
+positional arguments:
+  point
+  extra                 額外的 claude 參數(放在 -- 後面)
+
+options:
+  -h, --help            show this help message and exit
+  --cwd CWD
+  --model MODEL
+  --prompt-file PROMPT_FILE
+  --dry-run             只印出會執行的指令,不呼叫模型
+--- stderr
+
+$ llm.py exec --help    # help
+[exit 0]
+--- stdout
+usage: llm.py exec [-h] [--cwd CWD] [--model MODEL] [--prompt-file PROMPT_FILE] point [extra ...]
+
+positional arguments:
+  point
+  extra
+
+options:
+  -h, --help            show this help message and exit
+  --cwd CWD
+  --model MODEL
+  --prompt-file PROMPT_FILE
+--- stderr
+
+$ llm.py run nosuch    # unknown point
+[exit 2]
+--- stdout
+--- stderr
+llm.py:nosuch 不是宣告過的判斷點(contracts/llm-points.yaml)
+
+$ llm.py exec reflect-week    # exec without stream
+[exit 2]
+--- stdout
+--- stderr
+llm.py:reflect-week 沒有宣告 stream: true,不能 exec
+
+$ llm.py exec lease-session    # runtime without stream
+[exit 2]
+--- stdout
+--- stderr
+llm.py:lease-session 這個執行環境不支援長駐的串流 session
+
+$ llm.py run reflect-week    # no completion
+[exit 1]
+--- stdout
+{"type": "result", "is_error": true, "structured_output": null, "llm_point": "reflect-week", "llm_error": "執行環境 none 沒有 completion 介面,hub.json 也沒有 llm 區塊(設一家 LLM provider)"}
+--- stderr
+
+$ llm.py run agent-job    # no agent
+[exit 1]
+--- stdout
+{"type": "result", "is_error": true, "structured_output": null, "llm_point": "agent-job", "llm_error": "執行環境 none 沒有跑 agent(hub.json runtime.default;要這個功能就裝一個有的 coding agent)"}
+--- stderr
+
+$ llm.py run agent-job    # token missing
+[exit 1]
+--- stdout
+{"type": "result", "is_error": true, "structured_output": null, "llm_point": "agent-job", "llm_error": "沒有 <TMP>/home/.claude/headless-oauth-token(預設用 headless token;要用訂閱登入就宣告 auth: subscription)"}
+--- stderr
+
+$ llm.py run consolidate    # schema
+[exit 1]
+--- stdout
+{"type": "result", "is_error": true, "structured_output": null, "llm_point": "consolidate", "llm_error": "輸出不符合 schema:$:缺 folded; $:缺 kept; $:缺 corrections"}
+--- stderr
+
+$ llm.py run agent-job    # run failed
+[exit 1]
+--- stdout
+{"type": "result", "is_error": true, "structured_output": null, "llm_point": "agent-job", "llm_error": "it broke"}
+--- stderr
+
+$ llm.py health    # health
+[exit 1]
+--- stdout
+✗ k:沒有 key:<TMP>/secrets/nokey 不在(bin/hub llm set-key 寫進去)
+✓ f
+--- stderr
+
+$ llm.py lint    # lint
+[exit 1]
+--- stdout
+bin/x.sh:2:沒有經過 bin/llm.py 的 claude -p
+判斷點 pt 的 output.schema llm/nope.schema.json 不存在
+--- stderr
+

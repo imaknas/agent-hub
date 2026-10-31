@@ -1,0 +1,62 @@
+=== sandbox: no settings
+(False, 'sandbox 還沒寫進這個專案的設定(settings.local.json 讀不到)')
+=== sandbox: not enabled
+(False, 'sandbox 還沒寫進這個專案的設定(sandbox.enabled 不是 true)')
+=== transcript format
+<TMP>/transcripts/<TMP-SLUG>-ws/s1.jsonl:5 筆紀錄沒有一筆是認得的格式(Claude Code 改了對話紀錄格式?)
+=== run: timeout
+(False, '超過 20 分鐘')
+=== run: not found
+(False, '找不到 claude')
+=== run: exit
+(False, 'exit 2:bad things')
+=== run: not json
+(False, '輸出不是 JSON:plain text')
+=== is_login_error(run: not found)
+True
+=== is_login_error(timeout)
+False
+=== action Read
+('read', None, 'a.py', '讀 a.py')
+=== action Grep
+('search', None, 'x', '搜尋 x')
+=== action WebFetch
+('open_web', None, 'https://e.x', '開網頁 https://e.x')
+=== action Edit
+('write_file', None, 'b.py', '寫 b.py')
+=== action Bash
+('run_command', None, 'ls', '跑 ls')
+=== action Mystery
+('other', None, 'p', 'Mystery p')
+=== action AskUserQuestion
+('ask_user', None, '', '提問:Q1? / Q2?')
+=== action mcp__lease_relay__show_file
+('read', None, 'r/a.png', '給你看 r/a.png')
+=== stream rate_limit_event
+[('quota', {'status': 'warning', 'windows': [{'id': 'five_hour', 'label': '5 小時', 'used': 0.8, 'resets_at': None}, {'id': 'seven_day', 'label': '7 天', 'used': 0.5, 'resets_at': None}]})]
+=== stream result
+[('error', {'error': 'bad_request', 'detail': '回合上限到了,收回', '_detach': 'budget'}), ('turn_end', {'cost': None, 'num_turns': None, 'duration_ms': None, 'is_error': False})]
+=== stream result
+[('error', {'error': 'rate_limit', 'detail': 'usage limit reached'}), ('turn_end', {'cost': None, 'num_turns': None, 'duration_ms': None, 'is_error': True})]
+=== classify_exit login
+StreamEvent(type='error', data={'error': 'agent_login', 'detail': '專案 session 用的 Claude Code 沒登入或憑證過期(平台的 agent-hub/claude-login 會發警報)。exit 1:Login expired'})
+=== classify_exit crash
+StreamEvent(type='error', data={'error': 'process_crashed', 'detail': 'exit 1:segfault'})
+=== resume_command
+('~/agent-hub/bin/lease-resume 0000', '在 mini 的終端機貼上:會接回同一段對話(Claude Code)。談完回 Muninn 按「收回」做交接。')
+=== auth_env token missing
+(None, '沒有 <TMP>/home/.claude/headless-oauth-token(預設用 headless token;要用訂閱登入就宣告 auth: subscription)')
+=== credential subscription
+('訂閱登入(launchd)', 'claude 的訂閱登入', '在 mini 上登入(`claude` → /login)', None, None, None)
+=== credential token
+('headless token', 'headless token', '重跑 `claude setup-token` 寫進 <TMP>/home/.claude/headless-oauth-token', '一年', None, None)
+=== credential None
+('.credentials.json(SSH 用)', '~/.claude/.credentials.json', '在 mini 的終端機跑一次 claude 讓它更新,或重新 /login', None, 'SSH 底下的 claude 用的', '.credentials.json:沒有 refreshTokenExpiresAt,略過到期檢查')
+=== complete: timeout
+(False, 'error', '超過 30 秒')
+=== complete: not found
+(False, 'error', '找不到 claude')
+=== health: not found
+(False, '找不到 claude')
+=== health: token missing
+(False, '沒有 <TMP>/home/.claude/headless-oauth-token(預設用 headless token;要用訂閱登入就宣告 auth: subscription)')
