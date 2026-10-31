@@ -1,6 +1,6 @@
 # Waiting on tests: where agent sessions wait, the floor, and what to change
 
-> agent-hub session · 2026-10-31, r11 2026-11-01. Owner's observation: in the projects being worked on now, the bottleneck is not the
+> agent-hub session · 2026-10-31, r12 2026-11-01. Owner's observation: in the projects being worked on now, the bottleneck is not the
 > agents' output but waiting for tests; the owner wants everything besides model input/output at its theoretical minimum.
 > This doc measures first, then proposes changes. **Nothing here is implemented yet.** Owner's rule for building it:
 > **the final architecture first, no workarounds.**
@@ -54,6 +54,10 @@
 > project-writable folder, results included (B4); the sandbox decision's fallback reads repo files and fails closed
 > (`projects-and-repos.md` 3); step 2.3's landing installs agent-hub's hooks and refreshes the index under the merge
 > lock (section 7); worker slots in a platform-owned folder (B5).
+>
+> r12 (11-01): after an eighth review (3 blocking): the resolver never answers "none" for a registered folder
+> (`projects-and-repos.md` 2.4); `merge-branch` gets a permanent landing step for the hub repo, so step 2.3's hooks
+> and index have code that runs them (section 7); backups take `.env` files as data from the project's job.
 
 ## Summary
 
@@ -231,7 +235,7 @@ merged, tested commits. It also removes the class of incidents where one session
    - An explicit `AGENT_HUB_ROOT`, `AGENT_HUB_HOME` or `AGENT_HUB_STATE` skips the lookup — the commit gate's exported
      tree (no `.git`, under `GIT_CEILING_DIRECTORIES`) and every test set them. `bin/run-tests` sets none of them today
      (only `PYTHONPATH` and `AGENT_HUB_TEST_RUNNER`); in the same change it sets `AGENT_HUB_ROOT` to the tree it tests
-     when unset, **and nothing else**: that is how `test-gate` runs the suite on every commit today (`AGENT_HUB_ROOT`
+     when unset (and, from step 2.2, the variable naming the runner) — not `AGENT_HUB_HOME` or `AGENT_HUB_STATE`: that is how `test-gate` runs the suite on every commit today (`AGENT_HUB_ROOT`
      = the exported tree), and an explicit root skips the lookup, so a run in a worktree sees that worktree's own empty
      layout, never the live instance. Setting `AGENT_HUB_HOME` or `AGENT_HUB_STATE` as well fails 7 modules, whose
      fake hubs would inherit them (round 6, reproduced). The shell scripts that
@@ -280,7 +284,9 @@ merged, tested commits. It also removes the class of incidents where one session
    fast-forwards: it refuses unless every affected `merge` tier has a recorded pass for the rebased tree, and a refusal
    applies nothing. A move of main by any other path (a hand `merge --ff-only`, `cherry-pick`, `--no-verify`) is
    **detected, not blocked**: a `reference-transaction` hook in its `committed` state compares the new value with the
-   record `merge-branch` writes before it fast-forwards, logs a move with no such record (in the repo's store, read by
+   record `merge-branch` writes before it fast-forwards (and consumes after it, so a stale record from a failed
+   fast-forward cannot hide a later hand move; the hook matches `refs/heads/<main>` in shell before starting anything,
+   since it fires for every ref), logs a move with no such record (in the repo's store, read by
    the platform only through a `project_git` job, B4), and the status page shows red. Blocking it there would leave the main checkout half-applied (tested in round 6: a refused fast-forward kept
    the ref but left the new files in the working tree and index), which for agent-hub means untested files live in
    the running platform. This replaces `githooks/post-commit`'s bypass log; it only reports when main's value changes
@@ -364,7 +370,7 @@ tests:
   file in the repo outside the project's folders, resolved by real path and invalid if it leaves the repo; a file
   inside them adds nothing, it is already in the key's tree hash), `config:<name>` (a bare file name the platform
   lists in hub.json `tests.config_inputs` (A1) — today only the private-names list, symbolic so a public registry entry names no path; the platform makes
-  each listed file readable in sandboxes, and any other name is invalid), `env:<NAME>` (also passed into the tier,
+  each listed file readable only in the sandboxes of projects that declare it, and any other name is invalid), `env:<NAME>` (also passed into the tier,
   B4), `cmd:<command>` (its output, e.g. an interpreter's version, run in the tier's fixed environment). Inputs are
   evaluated by the runner with the authority of the run (B4), never by the platform on its own. agent-hub declares its Python version and
   `config:private-names.txt`, today's two extra key parts.
@@ -488,7 +494,8 @@ rebase, no lock.
   own environment, said explicitly. Cost: each repo downloads its packages once on its own.
 - **What a tier sees:** the tool variables above, so a fresh `HOME` hides nothing a tier needs (round 6: with a fresh
   `HOME`, uv found no managed interpreter and Playwright no browsers), and a fixed environment (the platform's `PATH`,
-  which has uv and nvm's node; `AGENT_HUB_PYTHON` for agent-hub's tiers; locale; the
+  which has uv and nvm's node; `AGENT_HUB_PYTHON` for agent-hub's tiers, but never `AGENT_HUB_ROOT`, `_HOME`,
+  `_STATE` or `_CONFIG`, so a tier's own tests choose their roots; locale; the
   platform's variables; the run environment's `bin`) plus its declared `env:`
   inputs; nothing else from the caller, so a session's `PYTEST_ADDOPTS` or `SKIP_E2E` cannot turn a pass into a false
   one; `GIT_*` cleared; `HOME` and `TMPDIR` fresh folders inside the run's directory.
@@ -539,8 +546,11 @@ Callers:
   descriptor), which the kernel releases when the process ends, so
   a crashed runner frees its slots and nothing has to be reclaimed. The runner passes the count into the tier as
   declared (B1); two suites at once no longer start 2 × 14 workers. Since any sandboxed project can take locks, a wait
-  is bounded: after a minute without enough slots a run starts with the slots it holds (at least one), and the status
-  page names the projects holding slots — a project can slow others, never stop them.
+  is bounded: after a minute without enough slots a run starts with the slots it holds, or waits for its first one,
+  and the status page names the projects holding slots (from the processes holding the locks, mapped by `project_at`)
+  — a project can slow others, never stop them. The slots' folder is in every sandbox's read set (`policy.read` and
+  the Landlock read set; tested: an advisory lock on a read-only, no-follow, non-blocking descriptor works under
+  Seatbelt with read access only).
 - Test containers: the runner's process-group stop removes the usual cause; a nightly job that removes containers labelled
   `org.testcontainers` older than a day is a **module** (it is specific to Docker and one library), with a count on the
   status page.
@@ -638,27 +648,35 @@ replaces; each step only adds to the ones before it.
       revision; per-run environments for uv and npm; the fixed tier environment; worker slots; complete-output file;
       process-group stop), `agenthub test` (also a session command), `affected()` answering with today's one project
       per repo, `is_code()` (which `affected()` needs), and B1's upgrade function, used here only by the runner, so
-      every registered project's upgraded tiers are run once through it before 2.3 (from v1 documents; muninn's
-      `runtime.test` meets the export, the fixed environment and the fresh `HOME` here, not at the cutover). The runner
-      reads the hub's own declaration from the tree under test (A1 prerequisite 2), validated in a child process whose
-      `AGENT_HUB_ROOT` is the export (as `config-check --staged` does), so a branch's new scripts resolve. Callers find
+      every registered project's upgraded tiers are run once through it before 2.3, each **as its project** (a command
+      job through `isolation.wrap`, since a sandboxed project's `runtime.test` is its own to change), from v1
+      documents: muninn's `runtime.test` meets the export, the fixed environment and the fresh `HOME` here, not at the
+      cutover. The runner reads the hub's own declaration from the tree under test (A1 prerequisite 2), validated in a
+      child process whose `AGENT_HUB_ROOT` is the export and whose `AGENT_HUB_STATE` is temporary — `test-gate`'s
+      pattern (`config-check --staged` is not the precedent: it validates the platform's entry from the main
+      checkout) — so a branch's new scripts resolve. Callers find
       the runner through one variable the tests can set (`run-tests` and the fake hubs point it at the tree under
-      test), so the suite tests the branch's runner, never the live one. The store's module lands here and
+      test), so the suite tests the branch's runner, never the live one. `merge-branch` gains its landing step for the
+      hub's own repo (step 2.3 below), unused until then except to refresh the index. The store's module lands here and
       `test-gate` keeps its own file until 2.3 makes it thin.
    3. **One merge** switching the readers and callers: the read-time upgrade of v1 documents in the live readers (B1);
       `merge-branch` on the runner, and only the main checkout's `merge-branch` runs (a worktree's copy re-executes
-      main's); agent-hub's entry rewritten by hand as v2 with
+      main's). `merge-branch`'s **landing step for the hub's own repo** (permanent, added in step 2.2 so main's copy
+      has it when 2.3 merges): after the fast-forward, still under the merge lock, it starts the merged tree's own code
+      as subprocesses (not in-process: the old modules are already imported) — the hook installer for the hub repo
+      only, then `registry.refresh` — so every merge of agent-hub leaves its hooks and the index matching the code it
+      landed; agent-hub's entry rewritten by hand as v2 with
       the `lint` and `full` tiers taken out of `test-gate` (its step-1 `runtime` removed); `test-gate` thin; A1
       prerequisites 2–3 (commit tiers by where a commit lands, the `reference-transaction` check, `commit_gate`, the
-      shared `pre-commit`, fetch-only pulls); `session.report` v2 and lease-handover v2 beside v1. **Its landing, under
-      the merge lock, right after the fast-forward:** the hook installer installs agent-hub's `pre-commit`,
-      `commit-msg` (for `commits: conventional`) and `reference-transaction` into its git dir and unsets
-      `core.hooksPath` (the installer treats the hub's own legacy `githooks` value as its own to replace; today it
-      skips the hub and calls any set `core.hooksPath` foreign), and `registry.refresh` rebuilds the index. The
+      shared `pre-commit`, fetch-only pulls); `session.report` v2 and lease-handover v2 beside v1. **Its landing** (the
+      step above, run by main's 2.2 `merge-branch`): the hook installer installs agent-hub's `pre-commit`, `commit-msg`
+      and `reference-transaction` into its git dir and unsets `core.hooksPath` (the installer treats the hub's own
+      legacy `githooks` value as its own to replace; today it skips the hub and calls any set `core.hooksPath`
+      foreign); every `commits: conventional` repo gets the same platform `commit-msg`, not only agent-hub. The
       tracked `githooks/pre-commit`, `post-commit` and `commit-msg` go in the same merge; `githooks/config/` stays (the
-      config repo's hooks). Until the installer has run — seconds, in the same process — a worktree commit runs no
-      hook (a `core.hooksPath` naming a folder without the hook runs nothing, tested in review 7), and the merge's own
-      check still guards main. Then `agenthub config apply` rewrites the other registry files. Then deploy and the
+      config repo's hooks). Until the landing step has run — seconds — a worktree already rebased onto the new main
+      runs no hook (its `githooks/` has none; tested in review 7), one not yet rebased runs its own old hooks, and the
+      merge's own check guards main either way. Then `agenthub config apply` rewrites the other registry files. Then deploy and the
       nightly job. Rehearsed in a throwaway hub before it lands.
    4. B5's container module and the Spotlight check.
    5. The transcript port extension B7 needs, in every runtime adapter, with contract tests.
