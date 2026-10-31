@@ -49,6 +49,7 @@ class Fill(unittest.TestCase):
                 text, missing = prompts.agent_rules(rules, lang=lang)
                 self.assertEqual(missing, [])
                 self.assertEqual(LEFT.findall(text), [])
+                self.assertIn(prompts.LANGUAGE_NAMES[lang], text)
 
     def test_agent_rules_report_missing_rules(self):
         text, missing = prompts.agent_rules(["no-such-rule"])

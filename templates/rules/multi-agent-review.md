@@ -1,31 +1,48 @@
-## 多 agent 互審規則
+## Multi-agent review rules
 
-叫多個 agent／模型一起看同一件事（design、計畫、程式、文件、答案）時，先決定要的是什麼，再選做法。
+When several agents/models look at the same thing together (a design, a plan, code, a document, an answer), first
+decide what you want, then choose how.
 
-**要一個判斷或答案（這個設計可不可行、哪個選項對）→ 平行盲審，不要辯論。**
+**You want a judgment or an answer (is this design feasible, which option is right) → parallel blind review, not a
+debate.**
 
-- 每個審查者獨立作答，看不到彼此的結果，最後才匯總。互相看過答案之後的一致不算證據：模型會往多數、或往看起來比較強的一方靠，連原本答對的都會被拉走。
-- 匯總方式：選項或數值用多數決；開放式的交給一個匯總者，要求它列出分歧，不要抹平。
-- 審查者盡量用不同的模型家族，錯誤比較不會相關。
-- 獨立作答還一致，才算證據。有分歧代表「這裡要自己看」，不是要消掉的雜訊。
+- Each reviewer answers independently, without seeing the others' results; combine them only at the end. Agreement
+  reached after seeing each other's answers is not evidence: models drift toward the majority, or toward whoever looks
+  stronger, and even those who had it right get pulled away.
+- How to combine: majority vote for options or values; for open-ended answers, hand them to one aggregator and require
+  it to list the disagreements, not smooth them over.
+- Use reviewers from different model families where possible: their errors are less correlated.
+- Only agreement among independent answers counts as evidence. A disagreement means "look at this yourself", not noise
+  to be removed.
 
-**要找問題（漏洞、風險、bug、遺漏）→ 平行盲審，問題取聯集。**
+**You want to find problems (holes, risks, bugs, omissions) → parallel blind review, union of the problems.**
 
-- 每個審查者獨立審，最好各給一個角度（安全、成本、使用者體驗、唱反調…）。
-- 「有哪些問題」取聯集：只要有一個審查者提出就列出來，並標明是誰提的。不要用多數決篩問題，少數人才看到的往往最有價值。
-- 「這個問題成不成立」要逐項回到原始資料（程式碼、資料、重現）查證，或交給人判斷。
+- Each reviewer reviews independently, preferably each from a given angle (security, cost, user experience, devil's
+  advocate…).
+- "What problems are there" is a union: list a problem as soon as one reviewer raises it, and say who raised it. Don't
+  filter problems by majority vote: what only a few see is often the most valuable.
+- "Does this problem hold" is checked item by item against the source (code, data, a reproduction), or left to a person
+  to judge.
 
-**要看清楚論點，由人做決定 → 這時才用辯論。**
+**You want the arguments laid out clearly and a person decides → only then use a debate.**
 
-- 辯論的價值是把各方最強的論點攤在判斷者（人）面前。參與者匿名（A/B/C，不寫模型或角色名），1–2 輪就夠，輪數越多越容易從眾。
-- 不要把「最後達成一致」當成結論正確的證據。
+- The value of a debate is putting each side's strongest arguments in front of the judge (a person). Participants are
+  anonymous (A/B/C, no model or role names); 1–2 rounds are enough: the more rounds, the more conformity.
+- Don't treat "they agreed in the end" as evidence that the conclusion is right.
 
-**折衷做法：** 先獨立作答 → 再匿名互評，但不准改自己的答案 → 判斷仍然根據原本的獨立答案，互評只當證據。
+**A middle way:** answer independently first → then anonymous cross-review, but no one may change their own answer →
+the judgment is still based on the original independent answers; the cross-review counts only as evidence.
 
-**通則：**
+**In general:**
 
-- 不要讓審查者知道其他審查者是誰、是哪個模型，prompt 裡也不要給權威暗示（「資深專家認為…」）。
-- 審查者的報告是證據，不是結論。關鍵說法要回到原始資料查證後才採用，轉述時標明哪些已查證、哪些沒有。
-- 這些原則的依據有兩種，要分開看：
-  - 「匯總前保持獨立」「找問題取聯集」是統計上的道理，模型變強也不會失效。
-  - 「辯論會不會讓答案更準」「從眾有多嚴重」是現在模型的行為，會隨模型改變。能驗證的題目（數學、程式）上，強模型可能比較不會盲目從眾；沒辦法當場驗證的（事實、判斷）上，從眾可能一直存在。有新一代模型時要重新量，再調整做法。
+- Don't let reviewers know who the other reviewers are or which models they are, and give no authority cues in the
+  prompt ("a senior expert thinks…").
+- A reviewer's report is evidence, not a conclusion. Key claims are checked against the source before they are adopted;
+  when passing them on, say which have been checked and which have not.
+- These principles rest on two kinds of grounds, to be kept apart:
+  - "Stay independent until combining" and "union of the problems found" are statistical reasoning, and stronger models
+    don't make them obsolete.
+  - "Does a debate make answers more accurate" and "how strong is conformity" are how current models behave, and change
+    with the models. On questions that can be verified (math, code) strong models may conform blindly less; on ones that
+    can't be verified on the spot (facts, judgments) conformity may persist. When a new generation of models arrives,
+    measure again and adjust.

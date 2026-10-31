@@ -1,30 +1,37 @@
-## 軟體工程規則(MUST)
+## Software engineering rules (MUST)
 
-目標是第一版就把地基打對:地基一旦歪掉,之後的程式碼會照著歪掉的寫法一路複製下去。
-「地基」指的是改起來最貴、最容易被模仿擴散的東西,不是抽象越多越好。
+The goal is to get the foundations right in the first version: once the foundations are crooked, later code copies the
+crooked pattern all the way down. "Foundations" means what is most expensive to change and most easily imitated, not
+"the more abstraction the better".
 
-**必須做到:**
+**Must:**
 
-- **依賴從外部傳入**:核心邏輯不直接建立或抓取外部依賴(API client、資料庫、檔案系統、
-  時鐘、設定、全域單例),一律由建構子或參數傳入。把具體實作接起來的地方集中在程式
-  進入點一處。在 Python 這類語言裡,把函式或物件當參數傳進來就算數,不需要硬做類別階層。
-- **邊界清楚**:核心邏輯跟 I/O、平台、外部服務分開;依賴方向永遠是外圍依賴核心的抽象,
-  不是核心依賴外圍的具體實作。
-- **已知的變化點第一版就做對**:只要現在已經有、或已經確定會有兩種以上做法(不同平台、
-  供應商、模型、通知管道、輸出格式、評分方式…),就抽成一個共同介面,每種做法一個實作,
-  由呼叫端注入要用哪一個。不要先寫 if/elif/switch 分支、打算以後再改。
-- **沒有變化點就不預先抽象**:只有一種做法、也看不出會有第二種的地方,不要先做介面、
-  工廠或空殼層。錯誤的抽象跟錯誤的分支一樣會被照抄,而且更難拆。
+- **Dependencies come in from outside**: core logic doesn't create or fetch its external dependencies (API clients,
+  databases, the file system, the clock, configuration, global singletons) itself; they are always passed in through
+  the constructor or parameters. Where the concrete implementations are wired together is one place, the program's
+  entry point. In languages like Python, passing a function or an object in as a parameter counts; there is no need to
+  force a class hierarchy.
+- **Clear boundaries**: core logic is kept apart from I/O, the platform and external services; dependencies always point
+  from the outside in, onto the core's abstractions, never from the core onto the outside's concrete implementations.
+- **Known points of variation are done right in the first version**: as soon as there are, or are certain to be, two or
+  more ways of doing something (different platforms, providers, models, notification channels, output formats, scoring
+  methods…), make one common interface with one implementation per way, and let the caller inject which one to use.
+  Don't write an if/elif/switch first, planning to change it later.
+- **No point of variation, no abstraction in advance**: where there is only one way and no sign of a second, don't make
+  an interface, a factory or an empty layer first. A wrong abstraction gets copied just like a wrong branch, and is
+  harder to take apart.
 
-**設計判斷準則**(用來檢視設計,不是逐條打勾的清單):每個模組只負責一件事;擴充靠
-新增實作而不是改既有程式;替換實作時呼叫端不需要知道差異;介面小而專一;高層邏輯依賴
-抽象而不是具體實作。
+**Design criteria** (for examining a design, not a checklist to tick off line by line): each module is responsible for
+one thing; extending means adding an implementation, not changing existing code; swapping an implementation needs no
+change in its callers; interfaces are small and focused; high-level logic depends on abstractions, not on concrete
+implementations.
 
-**既有程式碼不是範本**:既有寫法跟這些規則衝突時,以規則為準。不要為了「跟既有風格
-一致」照抄有問題的寫法;指出來,並提議(或在範圍內直接做)重構。專案還小的時候就重構,
-不要等歪掉的寫法擴散。
+**Existing code is not a template**: where existing code conflicts with these rules, the rules win. Don't copy a flawed
+pattern to "stay consistent with the existing style"; point it out and propose a refactor (or do it, when it is in
+scope). Refactor while the project is still small; don't wait for the crooked pattern to spread.
 
-**不要寫出這些規則的來源**:程式碼、註解、README、文件、commit 訊息、PR 描述裡,不要寫
-「依照使用者/{{owner}} 的要求」「根據專案規則」「因為規則規定」這類說明規則是被指示的字眼。
-設計理由照常寫(例如「平台之間要能替換,所以抽成介面」);設計原則或模式的名稱也可以
-正常使用——只是不要把它們說成是某人交代的規定。
+**Don't write where these rules come from**: in code, comments, README, docs, commit messages and PR descriptions, don't
+write wording that says a rule was given as an instruction, such as "as the user/{{owner}} asked", "according to the
+project rules" or "because the rules require it". Write design reasons as usual (e.g. "the platforms must be
+interchangeable, so this is an interface"); names of design principles or patterns may be used as usual too; just don't
+present them as rules someone handed down.

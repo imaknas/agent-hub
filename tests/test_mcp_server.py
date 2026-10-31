@@ -83,7 +83,7 @@ class Server(unittest.TestCase):
         text = init["instructions"]
         self.assertIn("demo", text)
         self.assertIn("1 封還沒結案", text)
-        self.assertIn("不是使用者在這個 session 說的話", text)
+        self.assertIn("not something the user said in this session", text)
         self.assertNotIn(str(ROOT), text, "no local paths in the rules")
         self.assertNotIn("{{", text)
 
