@@ -1,4 +1,4 @@
-"""登錄的 type / purpose(想法沙盒,docs/design/idea-sandboxes.md)。
+"""The registry's type / purpose (idea sandboxes, docs/design/idea-sandboxes.md).
 
     bin/py -m unittest discover -s tests
 """
@@ -10,7 +10,7 @@ ROOT = pathlib.Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "bin"))
 
 try:
-    import registry  # noqa: E402  需要 PyYAML
+    import registry  # noqa: E402  needs PyYAML
 except ImportError:
     registry = None
 
@@ -21,7 +21,7 @@ def doc(**extra):
     return d
 
 
-@unittest.skipIf(registry is None, "需要 PyYAML")
+@unittest.skipIf(registry is None, "needs PyYAML")
 class IdeaFields(unittest.TestCase):
     def errs(self, d):
         return [e for e in registry.validate(d, "idea-7") if "type" in e or "purpose" in e]

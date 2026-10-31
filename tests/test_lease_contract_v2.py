@@ -1,8 +1,11 @@
-"""租約契約跟執行環境無關(docs/design/lease-contract-neutral.md,Muninn m10251446)。v1 在 10-25 Muninn 換好之後刪了。
+"""The lease contract is independent of the runtime (docs/design/lease-contract-neutral.md, the assistant's
+m10251446). v1 was deleted on 10-25 after the assistant had switched.
 
-- 事件、/v1/status、/terminal、租約物件都合 contracts/lease-runner.v2.schema.json,沒有實作的名字。
-- stream 介面的契約:runtime_ports 登記的每個實作,同一個情境翻成同樣的中立事件(Claude 用真的 stream-json,Fake 用它的格式)。
-- 權限轉接的回報、接不回來的對話。
+- Events, /v1/status, /terminal and the lease object all match contracts/lease-runner.v2.schema.json, with no
+  implementation names.
+- The stream interface's contract: every implementation registered in runtime_ports turns the same scenario into the
+  same neutral events (Claude with real stream-json, Fake with its own format).
+- Permission relay reports, conversations that cannot be resumed.
 
     bin/py -m unittest discover -s tests
 """
@@ -49,7 +52,7 @@ class P:
 
 
 def run_reader(m, stream, stderr=None):
-    """reader 跑一段輸出,回傳存下來的事件(跟真的 emit 一樣的形狀)。"""
+    """Run the reader over some output, return the events it stored (the same shape as a real emit)."""
     stored = []
     lease = m.Lease({"lease_id": "66666666-6666-4666-8666-666666666666", "project": "p", "cwd": "/tmp"})
 
@@ -89,8 +92,9 @@ class Events(unittest.TestCase):
 
     def test_no_runtime_vocabulary(self):
         for ev in self.stored:
-            out = {k: v for k, v in self.m.render(ev).items() if k not in ("detail",)}  # detail 是除錯用、明說不要依賴
-            # 時間窗的 id 是不透明的識別字(讀的一方照 label 顯示),不算實作的字彙
+            # detail is for debugging, explicitly not to rely on
+            out = {k: v for k, v in self.m.render(ev).items() if k not in ("detail",)}
+            # a time window's id is an opaque identifier (the reader shows its label), not implementation vocabulary
             out["windows"] = [{k: v for k, v in w.items() if k != "id"} for w in out.get("windows") or []]
             text = json.dumps(out, ensure_ascii=False)
             for w in RUNTIME_WORDS:
@@ -101,14 +105,14 @@ class Events(unittest.TestCase):
         self.assertEqual([e["kind"] for e in uses],
                          ["read", "search", "search", "run_command", "open_web", "search", "ask_user", "write_file",
                           "write_file", "write_file", "other", "other", "other"])
-        self.assertEqual(uses[1]["summary"], "搜尋 blender")  # 搜尋的對象是 pattern,不是 path
+        self.assertEqual(uses[1]["summary"], "搜尋 blender")  # what is searched is the pattern, not a path
 
     def test_quota_and_errors(self):
         q = [e for e in self.stored if e["type"] == "quota"][0]
         self.assertEqual((q["status"], [w["id"] for w in q["windows"]], q["windows"][0]["used"]),
                          ("warning", ["five_hour", "seven_day"], 0.81))
         self.assertTrue(q["windows"][0]["resets_at"].startswith("2026-"))
-        self.assertEqual(self.m.STATUS["quota"]["status"], "ok")  # 最後一個 quota 事件
+        self.assertEqual(self.m.STATUS["quota"]["status"], "ok")  # the last quota event
         codes = [e["error"] for e in self.stored if e["type"] == "error"]
         self.assertEqual(codes, ["rate_limit", "bad_request", "agent_login", "process_crashed"])
 
@@ -161,7 +165,8 @@ class ResumeTruthfully(unittest.TestCase):
 
 
 class StreamContract(unittest.TestCase):
-    """每個登記的 runtime:同一個情境(一段文字、讀一個檔、跑一個指令、配額 80%、一輪結束、額度用完)→ 同樣的中立事件。"""
+    """Every registered runtime: the same scenario (some text, reading a file, running a command, quota at 80%, end of
+    a turn, quota used up) → the same neutral events."""
 
     SCENARIOS = {
         "claude": [
@@ -186,7 +191,8 @@ class StreamContract(unittest.TestCase):
 
     @staticmethod
     def streaming():
-        """有長駐串流介面的實作(runtime_none 這種沒有的,由 load() 丟 Unsupported,不在這裡跑)。"""
+        """Implementations with a long-running stream interface (those without, like runtime_none, raise Unsupported
+        from load() and are not run here)."""
         return [n for n in runtime_ports.RUNTIMES if "stream" in runtime_ports.capabilities(n)]
 
     def test_every_runtime_has_a_scenario(self):

@@ -1,11 +1,14 @@
-"""想法沙盒升級時,正在用它的深談怎麼辦(10-25 Muninn m10251626-26e9、m10251631-2bdd)。
+"""What happens to a discussion using an idea sandbox when the sandbox is upgraded (10-25, the assistant's
+m10251626-26e9, m10251631-2bdd).
 
-- 正在回答/等回覆/在終端機 → 409 busy,不升級;閒著的先停程序。
-- 改名:對話紀錄搬到新資料夾(Claude Code 照資料夾的 slug 放,--resume 只找目前那格)、租約的 project/cwd 跟上、
-  還沒收回的送 state 事件帶新的 project;新的登錄沒開 work(enforce.work)的話 work 改回 discuss。
-- 接回時(POST /v1/leases 同一個 session_id)資料夾跟上次不同:先把對話紀錄搬過來。
+- Answering / waiting for a reply / in the terminal → 409 busy, no upgrade; an idle one has its process stopped first.
+- Rename: the transcript moves to the new folder (Claude Code files them by the folder's slug, and --resume only looks
+  in the current one), the lease's project/cwd follow, one not yet taken back gets a state event with the new
+  project; if the new registry entry does not enable work (enforce.work), work goes back to discuss.
+- On resume (POST /v1/leases with the same session_id) with a folder different from last time: the transcript is
+  moved over first.
 
-不會真的升級:upgrade-idea.py 的呼叫換成假的。
+Never really upgrades: the call to upgrade-idea.py is faked.
 
     bin/py -m unittest discover -s tests
 """
@@ -49,7 +52,7 @@ class Relocate(unittest.TestCase):
         self.assertTrue((nd / f"{SID}.jsonl").exists())
         self.assertTrue((nd / SID / "sub.jsonl").exists())
         self.assertFalse((self.tmp / runtime_claude.slug_for_path(self.old) / f"{SID}.jsonl").exists())
-        self.assertTrue(runtime_claude.relocate(SID, self.old, self.new), "已經在新的地方 = True")
+        self.assertTrue(runtime_claude.relocate(SID, self.old, self.new), "already in the new place = True")
 
     def test_unknown_or_bad_ids(self):
         self.assertFalse(runtime_claude.relocate(SID2, self.old, self.new))
@@ -135,7 +138,7 @@ class Endpoint(unittest.TestCase):
         self.assertEqual(sorted(s for s, _, _ in self.moves), [SID, SID2])
         ev = [e for e in self.events(live) if e["type"] == "state"][-1]
         self.assertEqual((ev["project"], ev["mode"], live.mode), ("room3d", "discuss", "discuss"))
-        self.assertEqual(self.events(done), [], "已經收回的不送事件")
+        self.assertEqual(self.events(done), [], "one already taken back gets no event")
 
     def test_no_rename_keeps_folder(self):
         l = self.lease(SID, mode="discuss")

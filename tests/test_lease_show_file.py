@@ -1,8 +1,11 @@
-"""深談裡把專案的檔案給使用者看(docs/design/lease-show-file.md,Muninn m10251606)。
+"""Showing the user a project's file during a discussion (docs/design/lease-show-file.md, the assistant's
+m10251606).
 
-- lease_files:資料夾外/symlink/不是一般檔案/類型/內容對不上/太大/租約上限/像憑證/登錄的 secrets 都擋;送的是複製的那份。
-- runner:/v1/internal/<lease>/show 送 v2 的 file 事件(合 schema);GET …/files/<id> 回檔案跟 header;拒絕回原因。
-- relay 的 show_file 工具:轉給 runner、把結果回給 session。
+- lease_files: outside the folder / symlink / not a regular file / type / content mismatch / too big / lease limit /
+  looks like credentials / registered secrets are all blocked; what is sent is the copy.
+- runner: /v1/internal/<lease>/show sends a v2 file event (valid per schema); GET …/files/<id> returns the file and
+  headers; a refusal returns the reason.
+- relay's show_file tool: forwards to the runner, returns the result to the session.
 
     bin/py -m unittest discover -s tests
 """
@@ -59,7 +62,8 @@ class Take(unittest.TestCase):
         self.assertEqual(why, "")
         self.assertEqual((meta["path"], meta["name"], meta["mime"], meta["size"], meta["summary"]),
                          ("results/a.png", "a.png", "image/png", len(PNG), "看這張"))
-        (self.ws / "results" / "a.png").write_bytes(b"changed")  # 原檔改掉、刪掉,送的還是當時那份
+        # original changed, then deleted: what is sent is still the copy from then
+        (self.ws / "results" / "a.png").write_bytes(b"changed")
         (self.ws / "results" / "a.png").unlink()
         got_meta, data = lease_files.read(self.store, meta["id"])
         self.assertEqual(data, PNG)
@@ -111,12 +115,13 @@ class Take(unittest.TestCase):
             self.refused("results/a.png")
 
     def test_limits_count_only_the_recent_window(self):
-        # 長壽租約(同一段深談接回好幾天):舊的不算,不會被卡死(m10252240)
+        # a long-lived lease (the same discussion resumed over several days): old ones do not count, so it never
+        # gets stuck (m10252240)
         with mock.patch.object(lease_files, "MAX_COUNT", 2):
             self.assertIsNotNone(self.take("results/a.png")[0])
             self.assertIsNotNone(self.take("results/a.png")[0])
             self.assertIn("最近 24 小時", self.refused("results/a.png"))
-            for m in self.store.glob("*.json"):  # 把前兩張變成兩天前給的
+            for m in self.store.glob("*.json"):  # make the first two given two days ago
                 d = json.loads(m.read_text())
                 d["at"] -= 2 * 86400
                 m.write_text(json.dumps(d))
@@ -131,16 +136,17 @@ class Take(unittest.TestCase):
         self.refused("data.json", secret_paths=[self.ws / "data.json"])
 
     def test_hard_link_refused(self):
-        """10-25 review:hard link 指到資料夾外的檔,resolve/O_NOFOLLOW 看不出來(runner 不在 sandbox,不能讓它代讀)。"""
+        """10-25 review: a hard link to a file outside the folder, which resolve/O_NOFOLLOW cannot see (the runner is
+        not in the sandbox, so it must not read on the session's behalf)."""
         (self.tmp / "out.txt").write_text("outside")
         os.link(self.tmp / "out.txt", self.ws / "looks-fine.txt")
         self.assertIn("hard link", self.refused("looks-fine.txt"))
 
     def test_opened_file_must_be_inside(self):
-        """10-25 review:resolve 到 open 之間路徑被換掉——以實際打開的 fd 為準。"""
+        """10-25 review: the path swapped between resolve and open: the fd actually opened is what counts."""
         real_open = os.open
 
-        def swap(path, *a, **k):  # 打開前把資料夾換成指到外面的 symlink
+        def swap(path, *a, **k):  # swap the folder for a symlink pointing outside before opening
             if str(path).endswith("a.png") and not (self.ws / "results").is_symlink():
                 shutil.move(str(self.ws / "results"), str(self.tmp / "moved"))
                 (self.tmp / "evil").mkdir()
@@ -268,7 +274,8 @@ class Relay(unittest.TestCase):
         self.assertIn("類型不能送", text)
 
     def test_http_keeps_the_refusal_reason(self):
-        # 以前 http() 遇到 4xx 丟掉 body,session 只看到「沒送出去:400」(m10252240);用真的 HTTP server 測,不 mock http()
+        # http() used to drop the body on a 4xx, so the session only saw "Not sent: 400" (m10252240); tested with a
+        # real HTTP server, not by mocking http()
         import http.server
         class H(http.server.BaseHTTPRequestHandler):
             def do_POST(self):

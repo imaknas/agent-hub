@@ -1,9 +1,11 @@
-"""lease-runner 的接續判斷(10-25 Knas 遇到:切換模式後深談永遠掛掉,lease 34c84c53)。
+"""lease-runner's resume decision (hit by the owner on 10-25: after switching mode the discussion died for good,
+lease 34c84c53).
 
-- 第一輪還沒跑完(沒有對話紀錄)就不能 --resume,要用 --session-id
-- 啟動就失敗的 is_error、num_turns=0 result 不能把 crashes 歸零(不然永遠不會自動收回)
+- Before the first turn has finished (no transcript yet), --resume is not allowed; use --session-id
+- An is_error, num_turns=0 result from failing at startup must not reset crashes to zero (or it would never be taken
+  back automatically)
 
-不會真的開 claude:Popen 換成記錄參數的假物件。
+Never really starts claude: Popen is replaced with a fake object that records the arguments.
 
     bin/py -m unittest discover -s tests
 """
@@ -52,7 +54,8 @@ class Resume(unittest.TestCase):
         m.preamble = lambda project, mode="discuss": "p"
         m.reader = lambda lease, proc: None
         self.cmds = []
-        # m.subprocess 就是全域的 subprocess 模組:換掉之後一定要在 tearDown 還原,不然後面的測試全部拿到假物件
+        # m.subprocess is the global subprocess module: once swapped it must be restored in tearDown, or every
+        # later test gets the fake object
         self._popen = m.subprocess.Popen
         m.subprocess.Popen = lambda cmd, **kw: (self.cmds.append(cmd), FakeProc())[1]
         import runtime_claude
@@ -79,7 +82,7 @@ class Resume(unittest.TestCase):
         self.assertEqual(self.flag(), "--session-id")
 
     def test_started_but_no_transcript_uses_session_id(self):
-        """切換模式/閒置停掉/重啟時第一輪還沒跑完:不能 --resume。"""
+        """Switching mode / stopped when idle / restarting before the first turn has finished: no --resume."""
         l = self.lease(started_once=True)
         self.m.start_proc(l, resume=True)
         self.assertEqual(self.flag(), "--session-id")
@@ -102,7 +105,7 @@ class Reader(unittest.TestCase):
 
     def run_reader(self, lease, lines):
         proc = FakeProc(lines)
-        lease.proc = object()  # 不是這個 proc → 讀完後不走崩潰處理,只看 result 的效果
+        lease.proc = object()  # not this proc → after reading, no crash handling; only the result's effect counts
         self.m.reader(lease, proc)
 
     def lease(self):
@@ -130,7 +133,8 @@ if __name__ == "__main__":
 
 @mock.patch.dict(os.environ, {"AGENT_HUB_LANG_UI": "zh-Hant"})   # the assertions are the zh-Hant texts
 class Attachments(unittest.TestCase):
-    """POST /v1/leases/<id>/messages 的附件(10-25 Muninn 要求:在深談裡傳照片)。"""
+    """Attachments on POST /v1/leases/<id>/messages (asked for by the assistant on 10-25: sending photos in a
+    discussion)."""
 
     def setUp(self):
         import base64
@@ -144,7 +148,7 @@ class Attachments(unittest.TestCase):
         self.sent = []
         proc = FakeProc()
         proc.stdin = type("W", (), {"write": lambda _s, x: self.sent.append(x), "flush": lambda _s: None})()
-        proc.poll = lambda: None  # 程序還在跑:send_message 不要重新啟動
+        proc.poll = lambda: None  # the process is still running: send_message must not restart it
         self.lease.proc = proc
 
     def test_rejects_bad_attachments(self):
@@ -159,7 +163,7 @@ class Attachments(unittest.TestCase):
         p1 = self.m.save_attachments(self.lease, [att])
         p2 = self.m.save_attachments(self.lease, [att])
         self.assertTrue(all(p.startswith("attachments/") and ".." not in p for p in p1 + p2))
-        self.assertNotEqual(p1, p2, "同名不覆蓋")
+        self.assertNotEqual(p1, p2, "the same name does not overwrite")
         self.assertEqual((self.ws / p1[0]).read_bytes(), b"jpegbytes")
         self.assertIn("attachments/", (self.ws / ".git" / "info" / "exclude").read_text())
 
@@ -168,7 +172,7 @@ class Attachments(unittest.TestCase):
         pdf = {"name": "plan.pdf", "media_type": "application/pdf", "data": self.b64(b"pdf")}
         self.m.send_message(self.lease, "看一下", [img, pdf])
         content = json.loads(self.sent[-1])["message"]["content"]
-        self.assertEqual([b["type"] for b in content], ["image", "text"], "只有圖片變成 image block")
+        self.assertEqual([b["type"] for b in content], ["image", "text"], "only images become image blocks")
         self.assertIn("看一下", content[-1]["text"])
         self.assertIn("plan.pdf", content[-1]["text"])
 

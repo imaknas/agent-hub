@@ -1,6 +1,7 @@
-"""lease-relay.py 的 work 模式(第二階段):資料夾外的寫入不問就拒絕、資料夾內直接放行(10-25 Knas 決定)、指令每次都問。
+"""lease-relay.py's work mode (phase two): writes outside the folder are refused without asking, writes inside are
+allowed directly (decided by the owner on 10-25), commands are asked about every time.
 
-送手機(ask_owner)跟回報 runner(tell_runner)都換成假的,不發任何請求。
+Sending to the phone (ask_owner) and reporting to the runner (tell_runner) are both faked; no request is made.
 
     bin/py -m unittest discover -s tests
 """
@@ -38,7 +39,7 @@ class WorkMode(unittest.TestCase):
     def test_write_inside_allowed_without_asking(self):
         r = self.call("Write", file_path=os.path.join(self.ws, "notes.md"), content="x")
         self.assertEqual(r["behavior"], "allow")
-        self.assertEqual(self.asked, [], "資料夾內的寫檔不送去問")
+        self.assertEqual(self.asked, [], "a write inside the folder is not sent to ask")
 
     def test_relative_path_resolves_against_workspace(self):
         r = self.call("Edit", file_path="src/a.py", old_string="a", new_string="b")
@@ -48,7 +49,7 @@ class WorkMode(unittest.TestCase):
         for p in ("/etc/hosts", os.path.join(self.ws, "..", "other", "x"), os.path.expanduser("~/.zshrc")):
             r = self.call("Write", file_path=p, content="x")
             self.assertEqual(r["behavior"], "deny", p)
-        self.assertEqual(self.asked, [], "資料夾外不該送去問")
+        self.assertEqual(self.asked, [], "outside the folder must not be sent to ask")
 
     def test_symlink_pointing_out_denied(self):
         outside = os.path.join(self.tmp, "outside")

@@ -1,7 +1,8 @@
-"""create-idea-sandbox.py 在 onboard 中途失敗時的清理(docs/design/idea-sandboxes.md)。
+"""create-idea-sandbox.py's cleanup when onboarding fails midway (docs/design/idea-sandboxes.md).
 
-整個 hub 搭在暫存目錄(AGENT_HUB_ROOT),onboard-project.sh 換成一支「建一半就失敗」的假腳本,
-不碰真的 ~/workspace、~/git-origin、~/.memory-copies、projects/。
+The whole hub is set up in a temp directory (AGENT_HUB_ROOT), onboard-project.sh is replaced with a fake script that
+"fails halfway through building", and the real ~/workspace, ~/git-origin, ~/.memory-copies and projects/ are never
+touched.
 
     bin/py -m unittest discover -s tests
 """
@@ -17,11 +18,12 @@ import unittest
 ROOT = pathlib.Path(__file__).resolve().parents[1]
 
 try:
-    import yaml  # noqa: F401  create-idea-sandbox.py 讀登錄要用
+    import yaml  # noqa: F401  create-idea-sandbox.py needs it to read the registry
 except ImportError:
     yaml = None
 
-# 假的 onboard:跟真的一樣依序建出 workspace 裡的東西、bare repo、memory 副本、登錄檔,然後失敗
+# fake onboard: builds, in order like the real one, the workspace contents, bare repo, memory copy and registry
+# file, then fails
 FAKE_ONBOARD = r"""#!/bin/bash
 ws="${@: -1}"; name=$(basename "$ws")
 mkdir -p "$ws/.agent-memory" "$GO/$name-memory.git" "$MC/$name"
@@ -32,7 +34,7 @@ exit 1
 """
 
 
-@unittest.skipIf(yaml is None, "需要 PyYAML")
+@unittest.skipIf(yaml is None, "needs PyYAML")
 class CleanupOnFailure(unittest.TestCase):
     def setUp(self):
         self.tmp = pathlib.Path(tempfile.mkdtemp())
@@ -72,29 +74,31 @@ class CleanupOnFailure(unittest.TestCase):
         self.assertIn("boom", res["detail"])
         for p in (self.ws / "idea-5", self.go / "idea-5-memory.git", self.mc / "idea-5",
                   self.hub / "projects" / "idea-5.yaml"):
-            self.assertFalse(p.exists(), f"{p} 應該被清掉")
+            self.assertFalse(p.exists(), f"{p} should be cleaned up")
 
     def test_committed_registry_is_kept_and_reported(self):
         code, res = self.create(FAKE_COMMIT="1")
         self.assertEqual(res["result"], "create_failed")
         self.assertIn("手動處理", res["detail"])
-        self.assertTrue((self.hub / "projects" / "idea-5.yaml").exists(), "已 commit 的登錄檔不能自己刪")
+        self.assertTrue((self.hub / "projects" / "idea-5.yaml").exists(),
+                        "a committed registry file must not be deleted automatically")
         for p in (self.ws / "idea-5", self.go / "idea-5-memory.git", self.mc / "idea-5"):
-            self.assertFalse(p.exists(), f"{p} 應該被清掉")
+            self.assertFalse(p.exists(), f"{p} should be cleaned up")
 
     def test_retry_after_cleanup_is_not_blocked(self):
         self.create()
-        code, res = self.create()  # 清乾淨之後再送一次:應該再試一次 onboard,不是回 exists
+        code, res = self.create()  # sent again after cleanup: should try onboard again, not return exists
         self.assertEqual(res["result"], "create_failed")
 
 
 class Names(CleanupOnFailure):
-    """名稱是想法的代號,不限 idea-<n>(10-25 Muninn m10251646);是不是想法沙盒只看登錄的 type。"""
+    """The name is the idea's code name, not limited to idea-<n> (10-25, the assistant's m10251646); whether it is an
+        idea sandbox depends only on the registry's type."""
 
     def test_human_readable_name_passes_checks(self):
-        code, res = self.create("room-3d")  # 過了名稱檢查才會走到 onboard(假的會失敗)
+        code, res = self.create("room-3d")  # onboard is reached only after the name check (the fake one fails)
         self.assertEqual(res["result"], "create_failed")
-        self.assertFalse((self.ws / "room-3d").exists(), "失敗要清乾淨")
+        self.assertFalse((self.ws / "room-3d").exists(), "a failure is cleaned up")
 
     def test_old_style_still_ok(self):
         self.assertEqual(self.create("idea-12")[1]["result"], "create_failed")
@@ -105,7 +109,7 @@ class Names(CleanupOnFailure):
                 self.assertEqual(self.create(name)[1]["result"], "bad_name")
 
     def test_taken_names(self):
-        (self.ws / "notes").mkdir(parents=True)  # 沒登錄、但資料夾在
+        (self.ws / "notes").mkdir(parents=True)  # not registered, but the folder exists
         (self.tmp / "services" / "svc").mkdir(parents=True)
         for name in ("agent-hub", "notes", "svc"):
             with self.subTest(name):

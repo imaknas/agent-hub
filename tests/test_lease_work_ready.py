@@ -1,5 +1,6 @@
-"""lease-runner 的 work_ready:深談能不能用 work 模式。看登錄的 enforce.work(Knas 明確授權,10-25),不看 type;
-而且 OS sandbox 要真的寫進那個專案的設定(render-project-settings 寫出來的才是事實)。
+"""lease-runner's work_ready: whether a discussion may use work mode. Looks at the registry's enforce.work (explicit
+authorisation by the owner, 10-25), not at type; and the OS sandbox must really be written into that project's settings
+(what render-project-settings wrote is the fact).
 
     bin/py -m unittest discover -s tests
 """

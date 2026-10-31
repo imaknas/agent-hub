@@ -1,7 +1,9 @@
-"""bin/upgrade-idea.py:想法沙盒升級成正式專案。整個成功、或什麼都沒動、或中途停了再叫一次能接上(10-25 idea-1 停在一半)。
+"""bin/upgrade-idea.py: upgrading an idea sandbox into a full project. Either all of it succeeds, or nothing is
+touched, or a run stopped midway can be picked up by calling it again (on 10-25 idea-1 stopped halfway).
 
-跑真的 upgrade-idea.py,但在暫存的 hub(AGENT_HUB_ROOT)跟暫存的 HOME 底下;「GitHub」是本機的 bare repo
-(hub.json 的 github.remote)加一個假的 gh;改名、重生名冊、commit 換成替身腳本。
+Runs the real upgrade-idea.py, but under a temporary hub (AGENT_HUB_ROOT) and a temporary HOME; "GitHub" is a local
+bare repo (hub.json's github.remote) plus a fake gh; renaming, regenerating the roster and committing are stand-in
+scripts.
 
     bin/py -m unittest discover -s tests
 """
@@ -15,7 +17,7 @@ import tempfile
 import unittest
 
 ROOT = pathlib.Path(__file__).resolve().parents[1]
-PY = sys.executable   # 閘門底下就是平台的 Python(bin/py)
+PY = sys.executable   # under the gate this is the platform's Python (bin/py)
 
 try:
     import yaml
@@ -23,7 +25,7 @@ except ImportError:
     yaml = None
 
 FAKE_GH = r"""#!/bin/bash
-# 假的 gh:repo view <owner/name> / repo create <owner/name> ... --source=<dir> --push
+# fake gh: repo view <owner/name> / repo create <owner/name> ... --source=<dir> --push
 set -u
 case "$1 $2" in
   "repo view") [ -d "$FAKE_REMOTES/$3.git" ];;
@@ -39,7 +41,8 @@ esac
 """
 
 FAKE_RENAME = r"""#!/bin/bash
-# 替身 rename-project.sh <old> <new> --apply:搬資料夾、登錄改名(真的那支另外有測試)
+# stand-in rename-project.sh <old> <new> --apply: moves the folder, renames the registry entry (the real one has its
+# own tests)
 set -eu
 mv "$HOME/workspace/$1" "$HOME/workspace/$2"
 sed -e "s/^name: $1\$/name: $2/" -e "s#workspace/$1\$#workspace/$2#" -e "s#/$1-memory.git#/$2-memory.git#" \
@@ -68,7 +71,7 @@ def git(cwd, *args):
                           capture_output=True, text=True, check=True).stdout.strip()
 
 
-@unittest.skipIf(yaml is None, "需要 PyYAML(平台的 Python 有,bin/setup-python)")
+@unittest.skipIf(yaml is None, "needs PyYAML (the platform's Python has it, bin/setup-python)")
 class Upgrade(unittest.TestCase):
     def setUp(self):
         t = pathlib.Path(tempfile.mkdtemp()).resolve()
@@ -122,7 +125,8 @@ class Upgrade(unittest.TestCase):
         self.assertEqual((code, res["result"], res["name"]), (0, "upgraded", "idea-7"), res)
         doc = self.reg()
         self.assertEqual(doc["type"], "project")
-        # work 沒明寫的舊沙盒:升級時補上(想法沙盒預設能在深談裡動手,10-25 Knas)
+        # an old sandbox without work spelled out: added on upgrade (an idea sandbox can act in a discussion by default,
+        # the owner, 10-25)
         self.assertEqual(doc["enforce"], {"sandbox": True, "capabilities": ["gpu"], "work": True})
         self.assertEqual(doc["paths"]["origin"], str(self.remote()))
         self.assertEqual(git(self.remote(), "rev-parse", "HEAD"), git(self.ws, "rev-parse", "HEAD"))
@@ -142,7 +146,7 @@ class Upgrade(unittest.TestCase):
         res, code = self.upgrade()
         self.assertEqual((code, res["result"]), (1, "failed"))
         self.assertIn("什麼都沒動", res["detail"])
-        self.assertFalse(self.remote().exists(), "驗證不過就不該建 repo")
+        self.assertFalse(self.remote().exists(), "no repo is created when validation fails")
         self.assertEqual((self.hub / "projects" / "idea-7.yaml").read_text(), before)
         self.assertEqual(self.record(), {})
 

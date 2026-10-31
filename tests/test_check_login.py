@@ -119,7 +119,7 @@ class Check(unittest.TestCase):
         self.assertIn("訂閱登入", hard[0])
 
     def test_runtime_missing_is_hard_for_the_token_probe_too(self):
-        # changed on purpose in layer 6: before, only the subscription login treated "找不到 claude" as needing a person;
+        # changed on purpose in layer 6: before, only the subscription login treated "claude not found" as needing a person;
         # the token one treated it as an ordinary failure
         self.fresh_token()
         self.answers[None] = self.answers["token"] = "找不到 claude"

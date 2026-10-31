@@ -1,7 +1,8 @@
-"""lease-relay.py 照中立政策(policy.approvals)決定(docs/design/lease-contract-neutral.md)。
+"""lease-relay.py decides per the neutral policy (policy.approvals) (docs/design/lease-contract-neutral.md).
 
-work 模式的寫檔/指令在 test_lease_relay_work.py;這裡測開網頁、提問、送助理的請求格式(v1/v2)、政策本身。
-送手機(ask_owner 的 HTTP)跟回報 runner 都換成假的,不發任何請求。
+Writes/commands in work mode are in test_lease_relay_work.py; this tests opening web pages, questions, the format of
+requests sent to the assistant (v1/v2), and the policy itself.
+Sending to the phone (ask_owner's HTTP) and reporting to the runner are both faked; no request is made.
 
     bin/py -m unittest discover -s tests
 """
@@ -46,7 +47,7 @@ class Relay(unittest.TestCase):
         self.m.ask_owner = lambda rid, tool, summary, risk, q: (self.asked.append((tool, summary, risk)), self.answer)[1]
         self.m.tell_runner = lambda phase, **kw: self.reported.append((phase, kw))
         self.ap = {"network": ["docs.example"]}
-        real = policy.approvals  # 跟 relay 用的是同一個模組:先拿到原本的,再換掉
+        real = policy.approvals  # the same module relay uses: take the original first, then swap it
         p = mock.patch.object(self.m.policy, "approvals", lambda name, mode: real(name, mode, doc=self.ap))
         p.start()
         self.addCleanup(p.stop)
@@ -66,7 +67,9 @@ class Relay(unittest.TestCase):
         self.assertEqual(self.reported[0][1]["kind"], "open_web")
 
     def test_no_session_domain_only_this_once(self):
-        real_get = self.m.hubconf.get   # hub.json lease.no_session_domains:這個測試自己給,不靠跑測試那台的設定
+        # hub.json lease.no_session_domains: this test supplies it, never relying on the settings of the machine
+        # running the tests
+        real_get = self.m.hubconf.get
         g = mock.patch.object(self.m.hubconf, "get", lambda k, d=None: ["webhook.site"] if k == "lease.no_session_domains"
                               else real_get(k, d))
         g.start()
@@ -90,7 +93,8 @@ class Relay(unittest.TestCase):
 
 
 class RequestBody(unittest.TestCase):
-    """送助理的權限請求:Muninn 的 permission-requests v2(vendor 的副本),跟執行環境無關。"""
+    """Permission requests sent to the assistant: Muninn's permission-requests v2 (the vendored copy), independent of
+    the runtime."""
     SCHEMA = json.loads((ROOT / "contracts" / "vendor" / "muninn" / "permission-requests.v2.schema.json").read_text())
 
     def setUp(self):

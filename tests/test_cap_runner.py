@@ -1,7 +1,9 @@
-"""平台代跑(bin/cap-runner.py、bin/hub-run):請求的檢查跟執行(docs/design/capabilities.md)。
+"""The platform running things on a project's behalf (bin/cap-runner.py, bin/hub-run): checking and running requests
+(docs/design/capabilities.md).
 
-profile 換成全放行的(profile 本身擋不擋得住由 test_cap_profile.py 測);這裡測的是「哪些請求不能跑、
-結果會不會被導到別的專案、逾時/排隊/重啟」。
+The profile is replaced with one that allows everything (whether the profile itself blocks is tested by
+test_cap_profile.py); this tests "which requests must not run, whether results can be redirected to another project,
+timeouts / queueing / restarts".
 """
 import importlib.machinery
 import importlib.util
@@ -34,7 +36,7 @@ hr = load("hub_run", "hub-run")
 CAN_SANDBOX = sys.platform == "darwin" and shutil.which("sandbox-exec")
 
 
-@unittest.skipUnless(CAN_SANDBOX, "要在 mac 上(sandbox-exec)")
+@unittest.skipUnless(CAN_SANDBOX, "needs a mac (sandbox-exec)")
 class CapRunner(unittest.TestCase):
     def setUp(self):
         self.tmp = pathlib.Path(tempfile.mkdtemp()).resolve()
@@ -76,7 +78,7 @@ class CapRunner(unittest.TestCase):
             if st and st["state"] in cr.TERMINAL:
                 return st
             time.sleep(0.1)
-        self.fail(f"{job_id} 沒有在 {limit} 秒內結束:{self.state(ws, job_id)}")
+        self.fail(f"{job_id} did not finish within {limit} seconds: {self.state(ws, job_id)}")
 
     def test_runs_and_reports(self):
         self.request(self.a)
@@ -122,7 +124,7 @@ class CapRunner(unittest.TestCase):
         self.assertEqual(self.run_until(self.a)["state"], "rejected")
 
     def test_hub_run_dir_symlink_is_ignored(self):
-        # a 的 .hub-run 指到 b 的:結果不能被寫進 b,工作也不能用 a 的身分跑
+        # a's .hub-run points to b's: results must not be written into b, and the job must not run as a
         self.request(self.b, "x")
         (self.a / ".hub-run").symlink_to(self.b / ".hub-run")
         del self.projects["p-b"]
@@ -155,7 +157,7 @@ class CapRunner(unittest.TestCase):
         st = self.run_until(self.a, limit=20)
         self.assertEqual((st["state"], st["exit"], st["timed_out"]), ("done", 124, True))
         time.sleep(3.5)
-        self.assertFalse(marker.exists(), "逾時後背景的子程序還活著")
+        self.assertFalse(marker.exists(), "a background child process is still alive after the timeout")
 
     def test_one_job_per_project(self):
         self.request(self.a, "j1", argv=["/bin/sleep", "1"])
@@ -173,7 +175,7 @@ class CapRunner(unittest.TestCase):
         self.assertEqual(self.state(self.a)["state"], "lost")
         time.sleep(0.2)
         self.runner.running[0].proc.poll()
-        self.assertIsNotNone(self.runner.running[0].proc.returncode, f"pid {pid} 還活著")
+        self.assertIsNotNone(self.runner.running[0].proc.returncode, f"pid {pid} still alive")
 
     def test_start_failure_is_reported(self):
         with mock.patch.object(cr, "make_profile", side_effect=AttributeError("boom")):
@@ -201,7 +203,7 @@ class CapRunner(unittest.TestCase):
             out.flush()
             self.assertEqual(code, 7)
             self.assertEqual(out.buffer.getvalue(), b"hello\n")
-            self.assertEqual(hr.follow(self.a, job, pickup=False), 7)  # --wait 接回跑完的工作
+            self.assertEqual(hr.follow(self.a, job, pickup=False), 7)  # --wait picks up the finished job
 
     def test_client_gives_up_without_service(self):
         with mock.patch.object(hr, "PICKUP_S", 0.5), mock.patch.object(sys, "stderr", io.TextIOWrapper(io.BytesIO())), \

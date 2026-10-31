@@ -1,4 +1,5 @@
-"""登錄的 enforce.capabilities 跟 manifest.update 不能改的安全欄位(docs/design/capabilities.md)。
+"""The registry's enforce.capabilities and the security fields manifest.update cannot change
+(docs/design/capabilities.md).
 
     bin/py -m unittest discover -s tests
 """
@@ -11,7 +12,7 @@ ROOT = pathlib.Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "bin"))
 
 try:
-    import registry  # noqa: E402  需要 PyYAML
+    import registry  # noqa: E402  needs PyYAML
 except ImportError:
     registry = None
 
@@ -24,7 +25,7 @@ def doc(**extra):
     return d
 
 
-@unittest.skipIf(registry is None, "需要 PyYAML")
+@unittest.skipIf(registry is None, "needs PyYAML")
 class Capabilities(unittest.TestCase):
     def setUp(self):
         p = mock.patch.object(registry, "capabilities", return_value=CATALOG)
@@ -55,7 +56,8 @@ class Capabilities(unittest.TestCase):
         self.assertTrue(self.errs(doc(enforce={"capabilities": ["gpu"]})))
 
     def test_projects_keep_capabilities_too(self):
-        # 10-25 m10251626:升級成正式專案後,Knas 同意過的能力跟著留;同意的紀錄是平台擁有的 enforce,不看 type
+        # 10-25 m10251626: after upgrading to a full project, capabilities the owner approved stay; the approval
+        # record is the platform-owned enforce, type is not looked at
         self.assertEqual(self.errs(doc(type="project", enforce={"sandbox": True, "capabilities": ["gpu"]})), [])
         self.assertTrue(self.errs(doc(type="project", enforce={"sandbox": False, "capabilities": ["gpu"]})))
 
@@ -72,7 +74,7 @@ class Capabilities(unittest.TestCase):
             self.assertNotIn("_comment", registry.capabilities())
 
 
-@unittest.skipIf(registry is None, "需要 PyYAML")
+@unittest.skipIf(registry is None, "needs PyYAML")
 class PlatformOwned(unittest.TestCase):
     cur = doc(enforce={"sandbox": True, "capabilities": ["gpu"]}, privacy={"reflection": "stats_only"})
 
