@@ -13,6 +13,7 @@ from __future__ import annotations
 import datetime
 import pathlib
 import re
+import subprocess
 
 import hubconf  # also in bin/; scripts using hublib have already put bin/ on sys.path
 import i18n
@@ -38,6 +39,32 @@ MEMORY_COPIES = hubconf.p("memory_copies", "~/.memory-copies")
 EXTRA_PROJECTS = {
     "agent-hub": f"{MINI_HOME}/agent-hub",
 }
+
+
+# A memory copy is the platform's repo, its content the project's: checked out without symlinks, a committed link is a
+# plain file holding the path it pointed at, so the librarian, the registrar and the model never read through one
+# (docs/design/projects-and-repos.md section 4). Every clone of a memory repo the platform reads files from passes it.
+NO_SYMLINKS = ["-c", "core.symlinks=false"]
+
+
+def harden_copy(repo: pathlib.Path) -> None:
+    """core.symlinks=false in a copy cloned before it was the rule, and its links checked out again as plain files."""
+    def git(*args, **kw):
+        return subprocess.run(["git", "-C", str(repo), *args], capture_output=True, **kw)
+    git("config", "core.symlinks", "false")
+    links = [e.split(b"\t", 1)[1].decode(errors="surrogateescape") for e in git("ls-files", "-s", "-z").stdout.split(b"\0")
+             if e.startswith(b"120000 ")]
+    for p in links:
+        if (repo / p).is_symlink():
+            (repo / p).unlink()
+    if links:
+        git("checkout", "--", *links)
+
+
+def pull_copy(repo: pathlib.Path, **kw) -> subprocess.CompletedProcess:
+    """git pull in a memory copy, hardened first (kw: subprocess.run's, e.g. where the output goes)."""
+    harden_copy(pathlib.Path(repo))
+    return subprocess.run(["git", *NO_SYMLINKS, "pull", "-q"], cwd=repo, **kw)
 
 
 def legacy_paths(name: str | None = None) -> dict[str, list[str]] | list[str]:

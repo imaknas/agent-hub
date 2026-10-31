@@ -229,7 +229,8 @@ mini_sh "git --git-dir=\"\$HOME/git-origin/${PROJ_NAME}-memory.git\" symbolic-re
 hub_say "[8/11] Bare repo created on the hub machine, agent-memory branch pushed"
 
 # --- 9. clone a working copy on the hub machine for the librarian ---
-mini_sh "mkdir -p ~/.memory-copies && git clone -q ~/git-origin/${PROJ_NAME}-memory.git ~/.memory-copies/${PROJ_NAME}"
+# without symlinks (core.symlinks=false): the librarian reads its files, and a committed link must not point it elsewhere
+mini_sh "mkdir -p ~/.memory-copies && git clone -q --config core.symlinks=false ~/git-origin/${PROJ_NAME}-memory.git ~/.memory-copies/${PROJ_NAME}"
 hub_say "[9/11] Cloned the librarian's memory copy on the hub machine to ~/.memory-copies/{name}" name="$PROJ_NAME"
 
 # --- 10. add to the mirror-backup list only when there's an external origin ---

@@ -59,6 +59,7 @@ import time
 
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
 import hubconf  # noqa: E402
+import hublib  # noqa: E402
 import i18n  # noqa: E402
 import todo_tokens  # noqa: E402
 
@@ -367,7 +368,8 @@ def consolidate(s: dict, model: str, dry_run: bool, keep: bool) -> dict:
     repo = tmp / "repo"
     result = {"status": "failed", "entry": None, "tmp": tmp}
     try:
-        git("clone", "-q", "--branch", "agent-memory", s["origin"], str(repo))
+        # without symlinks: the date files are read, sent to the model and folded into what gets pushed back
+        git("clone", "-q", "--config", "core.symlinks=false", "--branch", "agent-memory", s["origin"], str(repo))
         base = git("rev-parse", "HEAD", cwd=repo).strip()
         log(_("{project}: consolidating {n} {n:date file|date files} ({bytes} bytes, {first} … {last}), {left} left for next time; "
               "model {model}", project=name, n=len(s["batch"]), bytes=s["batch_bytes"], first=s["batch"][0],
@@ -520,8 +522,9 @@ def consolidate(s: dict, model: str, dry_run: bool, keep: bool) -> dict:
         log(_("{project}: pushed {sha}", project=name, sha=pushed))
 
         copy = COPIES / name
-        upd = subprocess.run([str(BIN / "with-lock.sh"), "git", "pull", "-q"], cwd=copy, env=GIT_ENV,
-                             capture_output=True, text=True)
+        hublib.harden_copy(copy)
+        upd = subprocess.run([str(BIN / "with-lock.sh"), "git", *hublib.NO_SYMLINKS, "pull", "-q"], cwd=copy,
+                             env=GIT_ENV, capture_output=True, text=True)
         if upd.returncode != 0:
             log(_("{project}: git pull of the copy failed (the librarian pulls again next time): {stderr}", project=name,
                   stderr=upd.stderr.strip()[:200]))

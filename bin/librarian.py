@@ -559,7 +559,9 @@ def dangling_note(dangling: str) -> str:
 
 def process(proj: str, d: pathlib.Path, handoffs: list[dict], digest: list[str]) -> None:
     log(f"--- {proj} ---")
-    if run(["git", "pull", "-q"], cwd=d, to_log=True).returncode != 0:
+    with LOG.open("a") as fh:   # hardened against committed symlinks first (hublib.pull_copy)
+        pulled = hublib.pull_copy(d, text=True, stdout=fh, stderr=fh)
+    if pulled.returncode != 0:
         log(f"{proj}: git pull failed, skip")
         return
     head = git(d, "rev-parse", "HEAD")
