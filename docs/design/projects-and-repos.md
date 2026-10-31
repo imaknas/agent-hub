@@ -46,7 +46,7 @@ what this model needs.
 - **Repo**: a git repository on the hub machine, identified by its main checkout. It owns what git owns: main, the
   merge lock, worktrees, commit hooks, the origin and pushing, mirroring.
 - **Project**: an identity. It owns what a person or the assistant talks about: name, mailbox address, memory,
-  STATE.md and its to-dos, 〔owner〕 tasks, privacy labels, secrets, services and jobs, reflection statistics.
+  STATE.md and its to-dos, owner-tagged tasks, privacy labels, secrets, services and jobs, reflection statistics.
 - **Scope**: what connects them. A project has zero or more scopes; a scope is a **(repo, path)** pair — "the files
   under `path` in that repo" — or, for a project without a repo, a plain **folder**.
 
@@ -72,7 +72,7 @@ what this model needs.
 | level | features |
 |---|---|
 | repo | worktrees and their nightly cleanup; `merge-branch`'s lock, rebase, commit-title check and fast-forward; the commit gate; origin, `push_on_merge`, mirror backup; backup of uncommitted/unpushed work; the status page's worktree list; the `gate: strict` setting |
-| project | memory, STATE.md, the librarian, to-dos, the registrar; mailbox; 〔owner〕 tasks and questions; privacy; secrets; services and jobs; reflection and memory-gap statistics; merge reports (`merge.done`, `session.report`) |
+| project | memory, STATE.md, the librarian, to-dos, the registrar; mailbox; owner-tagged tasks and questions; privacy; secrets; services and jobs; reflection and memory-gap statistics; merge reports (`merge.done`, `session.report`) |
 | scope | which tests a change needs; which project a session or a commit counts for; the sandbox's write paths; where the rules file and the memory mount go |
 
 ### 2.4 The resolver
