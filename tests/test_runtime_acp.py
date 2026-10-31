@@ -12,6 +12,7 @@ import sys
 import tempfile
 import time
 import unittest
+from unittest import mock
 
 ROOT = pathlib.Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "bin"))
@@ -19,6 +20,17 @@ import hubconf  # noqa: E402
 import runtime_ports  # noqa: E402
 
 FAKE = ROOT / "tests" / "fixtures" / "fake_acp_agent.py"
+
+# the assertions read the English texts: pin the UI language (an instance's hub.json may set another)
+_LANG = mock.patch.dict(os.environ, {"AGENT_HUB_LANG_UI": "en"})
+
+
+def setUpModule():
+    _LANG.start()
+
+
+def tearDownModule():
+    _LANG.stop()
 
 
 class AcpCase(unittest.TestCase):
