@@ -36,11 +36,12 @@ words that make the claim.
 
 Why this form, against the two token sets of `contracts/state-todo.v2.md` (`bin/todo_tokens.py`):
 
-- A **label** is a bracket at the start of an item: `〔…〕` or `[…]` not followed by `(`. An anchor starts with `⚓`,
+- A **label** is a bracket at the start of an item: the zh-Hant set's tortoise-shell brackets (U+3014/U+3015) or `[…]`
+  not followed by `(`. An anchor starts with `⚓`,
   never with a bracket, and stands inside the text, never at its start after `- [ ] `. The `labelled`, `bare`,
   `tag_start` and `no_box` patterns only look at the start of a line, so no anchor can match them.
-- A **key marker** is a parenthesised `(等 {owner}:<key>)` / `(waiting on owner: <key>)` at the end of a line. An anchor
-  has no parentheses and no colon form; the `key` / `key_mark` patterns need `等`/`waiting on owner` right after the
+- A **key marker** is a parenthesised marker at the end of a line (`(waiting on owner: <key>)` and its zh-Hant twin). An anchor
+  has no parentheses and no colon form; the `key` / `key_mark` patterns need the set's marker word right after the
   parenthesis.
 - Neither set uses `⚓` or backticks. A test (`tests/test_state_anchors.py`) runs every pattern of both sets over lines
   that carry anchors and asserts that the labels, roles and keys read the same with and without them.

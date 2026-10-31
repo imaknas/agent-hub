@@ -1,0 +1,194 @@
+"""Staleness anchors in STATE.md (docs/design/state-anchors.md): find them, resolve them against the project's base
+branch, say which no longer resolve. Zero LLM; standard library and git only.
+
+An anchor is `⚓` directly followed by a code span: ⚓`path`, ⚓`dir/`, ⚓`path#Symbol`, ⚓`path#Class.method`. It
+marks a statement about code that exists now. Anchors in the to-do section and in fenced code blocks are not read.
+
+    import state_anchors
+    anchors = state_anchors.find(text, owner_tag)
+    repo = state_anchors.Repo.open(workspace)       # None + reason when it cannot be checked
+    results = [repo.resolve(a) for a in anchors]    # Result.outcome: ok | pending | renamed | deleted | missing |
+                                                    #                 symbol | malformed
+
+Users: check-state-anchors.py (the nightly job), librarian.py (the stale note in its prompt), bin/evals/e2.py (scores).
+"""
+from __future__ import annotations
+
+import dataclasses
+import pathlib
+import re
+import subprocess
+
+import todo_tokens
+
+ANCHOR = re.compile(r"⚓️? ?`([^`\n]+)`")
+SIGN = "⚓"
+SYMBOL = re.compile(r"^[A-Za-z_$][\w$]*(?:\.[A-Za-z_$][\w$]*)*$")
+LINE_NO = re.compile(r":\d+(?:[-:]\d+)?$")
+FENCE = re.compile(r"^\s*(```|~~~)")
+# the codes callers turn into text: why an anchor is malformed, why a workspace cannot be checked
+PROBLEMS = ("empty", "url", "absolute", "parent", "line-number", "symbol-name", "directory-symbol")
+UNCHECKED = ("no-workspace", "no-directory", "not-git", "no-base-branch")
+STALE = ("renamed", "deleted", "missing", "symbol", "malformed")   # what is reported as stale (pending is not)
+
+
+@dataclasses.dataclass(frozen=True)
+class Anchor:
+    raw: str              # the code span's content
+    path: str
+    symbol: str | None
+    problem: str | None   # why it is malformed (a code: PROBLEMS), None when it is well-formed
+    line_no: int          # 1-based
+    statement: str        # the line it is on, list marker stripped
+
+
+@dataclasses.dataclass(frozen=True)
+class Result:
+    anchor: Anchor
+    outcome: str
+    hint: str = ""        # renamed: the new path; deleted: the commit; pending: the branch; symbol: other files
+
+
+def parse(raw: str) -> tuple[str, str | None, str | None]:
+    """an anchor's content → (path, symbol, problem); problem is None for a well-formed anchor"""
+    path, sep, symbol = raw.strip().rpartition("#")
+    if not sep:
+        path, symbol = raw.strip(), None
+    if not path:
+        return path, symbol, "empty"
+    if "://" in path:
+        return path, symbol, "url"
+    if path.startswith(("/", "~")):
+        return path, symbol, "absolute"
+    if ".." in path.split("/"):
+        return path, symbol, "parent"
+    if LINE_NO.search(path):
+        return path, symbol, "line-number"
+    if symbol is not None and not SYMBOL.match(symbol):
+        return path, symbol, "symbol-name"
+    if symbol is not None and path.endswith("/"):
+        return path, symbol, "directory-symbol"
+    return path, symbol, None
+
+
+def statement(line: str) -> str:
+    return re.sub(r"^\s*(?:[-*+]\s+(?:\[[ xX]\]\s+)?|\d+[.)]\s+|#+\s+)", "", line).strip()
+
+
+def find(text: str, owner: str) -> list[Anchor]:
+    """every anchor in the text, outside the to-do section(s) and fenced code blocks"""
+    lines = text.splitlines()
+    skip = set()
+    for first, end in todo_tokens.patterns(owner).section(lines):
+        skip.update(range(first - 1, end))   # the heading line too
+    out, fenced = [], False
+    for i, line in enumerate(lines):
+        if FENCE.match(line):
+            fenced = not fenced
+            continue
+        if fenced or i in skip:
+            continue
+        for m in ANCHOR.finditer(line):
+            path, symbol, problem = parse(m.group(1))
+            out.append(Anchor(m.group(1), path, symbol, problem, i + 1, statement(line)))
+    return out
+
+
+def count(text: str, owner: str) -> int:
+    return len(find(text, owner))
+
+
+def in_todo(text: str, owner: str) -> int:
+    """anchors written inside the to-do section (the librarian must not write any)"""
+    lines = text.splitlines()
+    return sum(len(ANCHOR.findall(lines[j])) for first, end in todo_tokens.patterns(owner).section(lines)
+               for j in range(first, end))
+
+
+class Repo:
+    """a project's workspace and its base branch (the first of main, master that exists)"""
+
+    def __init__(self, ws: pathlib.Path, base: str, prefix: str):
+        self.ws, self.base, self.prefix = ws, base, prefix
+        self._others: list[str] | None = None
+
+    @classmethod
+    def open(cls, workspace: str | pathlib.Path | None) -> tuple[Repo | None, str]:
+        """(the repo, "") or (None, why it cannot be checked: a code of UNCHECKED)"""
+        if not workspace:
+            return None, "no-workspace"
+        ws = pathlib.Path(workspace).expanduser()
+        if not ws.is_dir():
+            return None, "no-directory"
+        if _git(ws, "rev-parse", "--is-inside-work-tree").returncode != 0:
+            return None, "not-git"
+        base = next((b for b in ("main", "master")
+                     if _git(ws, "rev-parse", "--verify", "-q", f"refs/heads/{b}").returncode == 0), None)
+        if not base:
+            return None, "no-base-branch"
+        return cls(ws, base, _git(ws, "rev-parse", "--show-prefix").stdout.strip()), ""
+
+    def _type(self, rev: str, path: str) -> str:
+        r = _git(self.ws, "cat-file", "-t", f"{rev}:./{path.rstrip('/')}")
+        return r.stdout.strip() if r.returncode == 0 else ""
+
+    def _present(self, rev: str, path: str) -> bool:
+        t = self._type(rev, path)
+        return t == "tree" if path.endswith("/") else t == "blob"
+
+    def others(self) -> list[str]:
+        if self._others is None:
+            refs = _git(self.ws, "for-each-ref", "--format=%(refname:short)", "refs/heads").stdout.split()
+            self._others = [b for b in refs if b != self.base]
+        return self._others
+
+    def has_word(self, rev: str, word: str, path: str = ".") -> bool:
+        return _git(self.ws, "grep", "-q", "-w", "-F", "-e", word, rev, "--", f"./{path}").returncode == 0
+
+    def files_with(self, word: str, limit: int = 3) -> list[str]:
+        out = _git(self.ws, "grep", "-l", "-w", "-F", "-e", word, self.base, "--", ".").stdout.splitlines()
+        return [l.split(":", 1)[1] for l in out if ":" in l][:limit]
+
+    def resolve(self, a: Anchor) -> Result:
+        if a.problem:
+            return Result(a, "malformed", a.problem)
+        if self._present(self.base, a.path):
+            if a.symbol is None:
+                return Result(a, "ok")
+            parts = a.symbol.split(".")
+            if all(self.has_word(self.base, p, a.path) for p in parts):
+                return Result(a, "ok")
+            return Result(a, "symbol", ", ".join(f for f in self.files_with(parts[-1]) if f != a.path))
+        last = _git(self.ws, "log", "-1", "--format=%H", self.base, "--", f"./{a.path.rstrip('/')}").stdout.strip()
+        if last:
+            full = self.prefix + a.path.rstrip("/")
+            for line in _git(self.ws, "show", "-M", "--name-status", "--format=", last).stdout.splitlines():
+                f = line.split("\t")
+                if len(f) == 3 and f[0].startswith("R") and f[1] == full:
+                    new = f[2][len(self.prefix):] if f[2].startswith(self.prefix) else f[2]
+                    return Result(a, "renamed", f"{new} ({last[:8]})")
+            return Result(a, "deleted", last[:8])
+        branch = next((b for b in self.others() if self._present(b, a.path)), None)
+        if branch:
+            return Result(a, "pending", branch)
+        return Result(a, "missing")
+
+
+def _git(ws: pathlib.Path, *args: str) -> subprocess.CompletedProcess:
+    return subprocess.run(["git", "-C", str(ws), *args], capture_output=True, text=True)
+
+
+def check(text: str, owner: str, workspace) -> tuple[list[Result], str]:
+    """all anchors of a STATE.md resolved: (results, "") or ([], why not checked: UNCHECKED) when it has anchors but the
+    workspace cannot be checked; ([], "") when it has none"""
+    anchors = find(text, owner)
+    if not anchors:
+        return [], ""
+    repo, why = Repo.open(workspace)
+    if repo is None:
+        return [], why
+    return [repo.resolve(a) for a in anchors], ""
+
+
+def stale(results: list[Result]) -> list[Result]:
+    return [r for r in results if r.outcome in STALE]

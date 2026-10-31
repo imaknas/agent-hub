@@ -9,8 +9,9 @@ state dir and bus (a copy of the config with bus_dir changed), so eval calls nev
     e2.py freeze librarian-index <YYYY-MM-DD>                a case from that night's digest (see freeze_index)
     e2.py freeze librarian-todo-format <state case> --kind K [--state-file F]   a broken STATE.md (see freeze_todo)
     e2.py freeze consolidate <project> [--today D] [--since <rev>]   a memory repo clone + survey (bin/evals/e2_consolidate.py)
+    e2.py seed-anchors <state case> [--n 4]                 a copy of a case whose STATE.md carries anchors (seed_anchors)
     e2.py cases [<point>]                                    list cases
-    e2.py run <point> --arm old|new|new-en [--rules old|new] [--k 3] [--case <glob>] [--run <id>] [--jobs 3]
+    e2.py run <point> --arm old|new|new-en [--rules old|new] [--tag T] [--k 3] [--case <glob>] [--run <id>] [--jobs 3]
     e2.py score <run> [--json]                               per-arm validity, language, agreement vs the noise floor
 
 Arms: `old` = the prompt file recorded with the case (byte-exact what production sent); `new` = re-rendered from the
@@ -18,7 +19,9 @@ case's raw arguments with the code as it is now, content language zh-Hant (befor
 the renderer itself); `new-en` = the same with content language en (scored on validity and language only).
 --rules new (the default for new arms) swaps the snapshot's AGENT.md for templates/AGENT.md as it is now, which is what
 production reads after the rules change; --rules old keeps the snapshot's, to tell a prompt regression from a rules
-one. The arm's label then says so: `new~oldrules`.
+one. The arm's label then says so: `new~oldrules`. --tag T appends `~T` to the label, so the same arm run by two
+versions of the code (a prompt change: once before it, once after, from a checkout of each) lands in one run and is
+scored as two arms.
 Points: librarian-state (agent: runs on a fresh copy of the snapshot, scored on STATE.md after), librarian-state-edits
 (completion: edits applied to the snapshot's STATE.md). Others are added as their cases exist.
 A point whose shape differs keeps its freeze / render / run / score code in its own module (PLUGINS: e2_<name>.py with
@@ -48,6 +51,7 @@ BIN = pathlib.Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(BIN))
 import edits  # noqa: E402
 import hubconf  # noqa: E402
+import state_anchors  # noqa: E402
 import todo_tokens  # noqa: E402
 
 AGENT_POINTS = {"librarian-state", "librarian-index", "librarian-todo-format"}
@@ -234,6 +238,52 @@ def _freeze_in(lib, project: str, d: pathlib.Path, since: str, after: str | None
     return c
 
 
+CODE_SPAN = re.compile(r"(?<![`⚓])`([A-Za-z0-9_][A-Za-z0-9_.-]*(?:/[A-Za-z0-9_.-]+)*/?)`(?!`)")
+
+
+def seed_anchors(case_id_: str, n: int) -> pathlib.Path:
+    """A copy of a librarian-state case (<name>-anchored) whose snapshot STATE.md has its first n code spans of
+    repo-relative paths (a `/` or a file extension; not memory/, not in the to-do section) turned into anchors
+    (docs/design/state-anchors.md), and the first of them recorded in args.json as stale (deleted): the note the
+    librarian gets. What it measures: whether a run keeps anchors (anchor_retention) and acts on the note
+    (stale_fixed). The recorded prompts are left as they were (the `old` arm does not read anchors)."""
+    src = root() / "cases" / "librarian-state" / case_id_
+    if not (src / "args.json").exists():
+        sys.exit(f"e2: no case {case_id_}")
+    c = src.with_name(src.name + "-anchored")
+    if c.exists():
+        shutil.rmtree(c)
+    shutil.copytree(src, c)
+    a = json.loads((c / "args.json").read_text())
+    st = c / "snapshot" / "STATE.md"
+    lines = st.read_text().splitlines(keepends=True)
+    todo = {j for first, end in todo_tokens.patterns(a["owner"]).section([l.rstrip("\n") for l in lines])
+            for j in range(first - 1, end)}
+    seeded = []
+    for i, line in enumerate(lines):
+        if i in todo:
+            continue
+        for m in CODE_SPAN.finditer(line):
+            p = m.group(1)
+            if len(seeded) < n and ("/" in p or re.search(r"\.[a-z]{1,5}$", p)) and not p.startswith("memory/") \
+                    and p not in seeded:
+                line = line.replace(m.group(0), "⚓" + m.group(0), 1)
+                seeded.append(p)
+        lines[i] = line
+    if not seeded:
+        shutil.rmtree(c)
+        sys.exit(f"e2: {case_id_} has no code spans of paths to seed")
+    st.write_text("".join(lines))
+    first = next(x for x in state_anchors.find(st.read_text(), a["owner"]) if x.raw == seeded[0])
+    a["anchors"] = [{"raw": first.raw, "outcome": "deleted", "hint": "0000000", "line_no": first.line_no,
+                     "statement": first.statement}]
+    a["seeded_from"] = case_id_
+    (c / "args.json").write_text(json.dumps(a, ensure_ascii=False, indent=1))
+    for f in ("after.STATE.md", "outcome.json"):   # production never saw this STATE.md: no prod arm
+        (c / f).unlink(missing_ok=True)
+    return c
+
+
 # ---------- prompts ----------
 
 def base_arm(arm: str) -> str:
@@ -241,7 +291,7 @@ def base_arm(arm: str) -> str:
 
 
 def new_rules(arm: str) -> bool:
-    return base_arm(arm) != "old" and not arm.endswith("~oldrules")
+    return base_arm(arm) != "old" and "oldrules" not in arm.split("~")
 
 
 def snapshot(case: pathlib.Path, arm: str, into: pathlib.Path) -> pathlib.Path:
@@ -347,7 +397,7 @@ def cmd_run(a) -> int:
     (run_dir / "run.json").write_text(json.dumps({"point": a.point, "code": subprocess.run(
         ["git", "-C", str(hubconf.ROOT), "rev-parse", "HEAD"], capture_output=True, text=True).stdout.strip()}, indent=1))
     env = run_env(run_dir)
-    arm = a.arm + ("~oldrules" if a.arm != "old" and a.rules == "old" else "")
+    arm = a.arm + ("~oldrules" if a.arm != "old" and a.rules == "old" else "") + (f"~{a.tag}" if a.tag else "")
     jobs = [(c, arm, i) for i in range(a.k) for c in cs]
     print(f"e2: {a.point} arm={arm} k={a.k} cases={len(cs)} → {run_dir}")
     stop = False
@@ -408,6 +458,28 @@ def state_check(text: str) -> list[str]:
     return contracts.check_state_todo(text, hubconf.ROOT / "contracts" / "state-todo.v2.md", hubconf.owner_tag())
 
 
+def anchor_scores(case: pathlib.Path, before: str, after: str) -> dict:
+    """docs/design/state-anchors.md: what a run did with anchors. added: anchors in after not in before; grounded: the
+    share of added anchors whose path occurs in what the librarian was shown (memory diff, STATE.md before, the
+    reference index): an ungrounded one is a guessed path; in_todo: anchors inside the to-do section (must be 0);
+    retention: the share of before's anchors still in after (cases that have some); stale_fixed: the share of the
+    anchors the stale note named that are gone from after; growth: len(after) / len(before)."""
+    a = json.loads((case / "args.json").read_text())
+    owner = a.get("owner") or hubconf.owner_tag()
+    b = [x.raw for x in state_anchors.find(before, owner)]
+    f = [x.raw for x in state_anchors.find(after, owner)]
+    added = [x for x in f if x not in b]
+    ref = case / "snapshot" / "memory" / "reference" / "README.md"
+    shown = a.get("diff", "") + before + (ref.read_text(errors="replace") if ref.exists() else "")
+    noted = [x["raw"] for x in a.get("anchors") or []]
+    return {"anchors": len(f), "added": len(added),
+            "grounded": mean([state_anchors.parse(x)[0].rstrip("/") in shown for x in added]) if added else None,
+            "in_todo": state_anchors.in_todo(after, owner),
+            "retention": round(sum(x in f for x in b) / len(b), 3) if b else None,
+            "stale_fixed": round(sum(x not in f for x in noted) / len(noted), 3) if noted else None,
+            "growth": round(len(after) / len(before), 3) if before else None}
+
+
 def index_outcome(point: str, case: pathlib.Path, out: pathlib.Path) -> dict:
     """an index run → valid, changed, the roster block untouched (contract), the language of what it wrote"""
     before = json.loads((case / "args.json").read_text())["index_before"]
@@ -464,6 +536,7 @@ def outcome(point: str, case: pathlib.Path, out: pathlib.Path) -> dict:
     free = added_text(before, after) + "\n" + (str(so.get("summary") or "") + "\n" + str(so.get("reason") or "")
                                                if isinstance(so, dict) else "")
     r["lang"] = language(free)
+    r["anchor"] = anchor_scores(case, before, after)
     return r
 
 
@@ -558,6 +631,10 @@ def cmd_score(a) -> int:
             "simplified_runs": sum(bool(g["simplified"]) for g in langs),
             "simplified_chars": sorted({c for g in langs for c in g["simplified"]}),
             "full_punct": mean([g["full_punct"] for g in langs]),
+            **({f"anchor_{k}": (sum(r["anchor"][k] for r in rs if "anchor" in r) if k == "in_todo" else
+                                mean([r["anchor"][k] for r in rs if "anchor" in r]))
+                for k in ("anchors", "added", "grounded", "in_todo", "retention", "stale_fixed", "growth")}
+               if any("anchor" in r for r in rs) else {}),
             "errors": sorted({r["error"] for r in rs if r.get("error")})[:5]}
     for x, y in [(p, p) for p in arms] + list(itertools.combinations(arms, 2)):
         rows = []
@@ -595,12 +672,16 @@ def main(argv: list[str]) -> int:
     f.add_argument("--kind", help="librarian-todo-format: untagged | done-left | no-section | real-<name>")
     f.add_argument("--state-file", help="librarian-todo-format: a real STATE.md that fails the check")
     f.add_argument("--today", help="consolidate: the day the survey is made for (default today)")
+    sa = sub.add_parser("seed-anchors")
+    sa.add_argument("case", help="a librarian-state case id (<date>/<name>)")
+    sa.add_argument("--n", type=int, default=4)
     c = sub.add_parser("cases")
     c.add_argument("point", nargs="?", default="librarian-state")
     r = sub.add_parser("run")
     r.add_argument("point", choices=sorted({*POINT_CASES, *PLUGINS}))
     r.add_argument("--arm", choices=["old", "new", "new-en"], required=True)
     r.add_argument("--rules", choices=["old", "new"], default="new", help="AGENT.md the agent reads (new arms only)")
+    r.add_argument("--tag", help="appended to the arm's label (the same arm run by two versions of the code)")
     r.add_argument("--k", type=int, default=3)
     r.add_argument("--case", default="*")
     r.add_argument("--run")
@@ -617,6 +698,8 @@ def main(argv: list[str]) -> int:
             print(freeze_todo(a.kind, a.project, a.state_file))
         else:
             print(freeze_index(a.project) if a.point == "librarian-index" else freeze_state(a.project, a.since, a.night))
+    elif a.cmd == "seed-anchors":
+        print(case_id(seed_anchors(a.case, a.n)))
     elif a.cmd == "cases":
         for p in cases(a.point):
             print(case_id(p))
