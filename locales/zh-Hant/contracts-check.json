@@ -1,0 +1,15 @@
+{
+ "{name} reads {contract}, but {producer}'s registry entry does not provide it": "{name} 讀 {contract},但 {producer} 的登錄沒有 provides 它",
+ "{name} reads {contract} v{v}, {producer} is now at v{current} (the producer keeps both versions until the consumer has switched)": "{name} 讀 {contract} v{v},{producer} 現在是 v{current}(producer 要兩版並存到 consumer 換完)",
+ "{contract}: the {which} is missing ({path})": "{contract}:{which}不在({path})",
+ "original": "原版",
+ "copy": "副本",
+ "{name}'s copy of {contract} differs from {producer}'s original: {copy} vs {orig}": "{name} 的 {contract} 副本跟 {producer} 的原版不一樣:{copy} vs {orig}",
+ "bus event {id}: {problem}": "匯流排事件 {id}:{problem}",
+ "handoffs --json is not JSON (exit {code})": "handoffs --json 不是 JSON(exit {code})",
+ "LLM call: {problem}": "LLM 呼叫:{problem}",
+ "llm.py lint does not run: {error}": "llm.py lint 跑不起來:{error}",
+ "{n} problems: ": "{n} 項:",
+ "; ": ";",
+ "contracts: all consistent": "契約:全部一致"
+}

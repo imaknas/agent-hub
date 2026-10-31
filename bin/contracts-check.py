@@ -22,10 +22,12 @@ import sys
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
 import contracts  # noqa: E402
 import hubconf  # noqa: E402
+import i18n  # noqa: E402
 import registry  # noqa: E402
 
 import yaml  # noqa: E402
 
+_ = i18n.domain(__file__)
 HUB = hubconf.ROOT
 C = HUB / "contracts"
 
@@ -48,16 +50,21 @@ def cross_copies(index: dict) -> list[str]:
             # 兩版並存時同一個契約會有兩筆 provides:先找同一版,沒有才拿第一筆(底下會報版本不合)
             prov = next((p for p in provs if p.get("v") == cons.get("v")), provs[0] if provs else None)
             if prov is None:
-                errs.append(f"{name} 讀 {cons['contract']},但 {producer} 的登錄沒有 provides 它")
+                errs.append(_("{name} reads {contract}, but {producer}'s registry entry does not provide it", name=name,
+                              contract=cons['contract'], producer=producer))
                 continue
             if prov.get("v") != cons.get("v"):
-                errs.append(f"{name} 讀 {cons['contract']} v{cons.get('v')},{producer} 現在是 v{prov.get('v')}"
-                            "(producer 要兩版並存到 consumer 換完)")
+                errs.append(_("{name} reads {contract} v{v}, {producer} is now at v{current} "
+                              "(the producer keeps both versions until the consumer has switched)", name=name,
+                              contract=cons['contract'], v=cons.get('v'), producer=producer, current=prov.get('v')))
             orig, copy = ws(index, producer) / prov["schema"], ws(index, name) / cons["copy"]
             if not orig.exists() or not copy.exists():
-                errs.append(f"{cons['contract']}:{'原版' if not orig.exists() else '副本'}不在({orig if not orig.exists() else copy})")
+                errs.append(_("{contract}: the {which} is missing ({path})", contract=cons['contract'],
+                              which=_("original") if not orig.exists() else _("copy"),
+                              path=orig if not orig.exists() else copy))
             elif not contracts.same(orig, copy):
-                errs.append(f"{name} 的 {cons['contract']} 副本跟 {producer} 的原版不一樣:{copy} vs {orig}")
+                errs.append(_("{name}'s copy of {contract} differs from {producer}'s original: {copy} vs {orig}",
+                              name=name, contract=cons['contract'], producer=producer, copy=copy, orig=orig))
     return errs
 
 
@@ -81,7 +88,7 @@ def live(index: dict) -> list[str]:
             ev["payload"] = json.loads(ev["payload"] or "{}")
             ev["payload"].setdefault("v", 1)  # 2026-10-22 之前的事件沒有 v,讀成 1
             if (e := contracts.check_json(C / "hubbus.v1.schema.json", ev)):
-                errs.append(f"匯流排事件 {ev['id']}:{e[0]}")
+                errs.append(_("bus event {id}: {problem}", id=ev['id'], problem=e[0]))
     weeks = sorted(hubconf.data_file("reflect").glob("20*-W*.json"))
     if weeks:
         d = json.loads(weeks[-1].read_text())
@@ -95,15 +102,15 @@ def live(index: dict) -> list[str]:
             data = json.loads(r.stdout)
             errs += [f"handoffs --json:{e}" for e in contracts.check_json(copy, data)[:5]]
         except ValueError:
-            errs.append(f"handoffs --json 不是 JSON(exit {r.returncode})")
+            errs.append(_("handoffs --json is not JSON (exit {code})", code=r.returncode))
     return errs
 
 
 def llm_lint() -> list[str]:
     """第二階段:bin/ 裡每一次叫 Claude CLI 的非互動呼叫都要經過 bin/llm.py(contracts/llm-points.yaml 宣告的判斷點)。"""
     r = subprocess.run([sys.executable, str(HUB / "bin" / "llm.py"), "lint"], capture_output=True, text=True)
-    return [f"LLM 呼叫:{l}" for l in r.stdout.splitlines() if l.strip()] + \
-        ([f"llm.py lint 跑不起來:{r.stderr.strip()[-200:]}"] if r.returncode not in (0, 1) else [])
+    return [_("LLM call: {problem}", problem=l) for l in r.stdout.splitlines() if l.strip()] + \
+        ([_("llm.py lint does not run: {error}", error=r.stderr.strip()[-200:])] if r.returncode not in (0, 1) else [])
 
 
 def main() -> int:
@@ -114,11 +121,12 @@ def main() -> int:
     if errs:
         subprocess.run([sys.executable, str(HUB / "bin" / "hubbus"), "publish", "job.failed",
                         "--source", "contracts-check", "--payload",
-                        json.dumps({"job": "contracts-check", "detail": f"{len(errs)} 項:" + ";".join(errs[:3])},
+                        json.dumps({"job": "contracts-check",
+                                    "detail": _("{n} problems: ", n=len(errs)) + _("; ").join(errs[:3])},
                                    ensure_ascii=False)], capture_output=True)
         return 1
     if "--quiet" not in sys.argv:
-        print("契約:全部一致")
+        print(_("contracts: all consistent"))
     return 0
 
 

@@ -4,10 +4,12 @@
     bin/py -m unittest discover -s tests
 """
 import importlib.util
+import os
 import pathlib
 import sys
 import tempfile
 import unittest
+from unittest import mock
 
 ROOT = pathlib.Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "bin"))
@@ -19,6 +21,9 @@ spec.loader.exec_module(cc)
 
 class ModuleConsumes(unittest.TestCase):
     def setUp(self):
+        zh = mock.patch.dict(os.environ, {"AGENT_HUB_LANG_UI": "zh-Hant"})   # the assertions read the zh-Hant texts
+        zh.start()
+        self.addCleanup(zh.stop)
         self.ws = pathlib.Path(tempfile.mkdtemp()).resolve()
         (self.ws / "c.json").write_text('{"type": "object"}\n')
         self.producer = {"name": "helper", "paths": {"workspace": str(self.ws)},
