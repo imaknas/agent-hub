@@ -51,16 +51,22 @@ def _workspace(cwd: str) -> pathlib.Path | None:
     return pathlib.Path(r.stdout.strip()) if r.returncode == 0 and r.stdout.strip() else None
 
 
+def _memory(ws) -> bool:
+    """Whether this project's memory is connected: .agent-memory is its own checkout (a worktree has a .git file). A
+    plain folder of that name (agent-hub itself, memory: false) is not: git commands there act on the enclosing repo."""
+    return bool(ws) and (ws / ".agent-memory" / ".git").exists()
+
+
 # ---------- handlers: the platform's logic, returning only neutral results (text / None / reason to block) ----------
 
 def memory_pull(ev, ws):
-    if ws and (ws / ".agent-memory").is_dir():
+    if _memory(ws):
         subprocess.run([str(BIN / "with-lock.sh"), "git", "pull", "-q"], cwd=ws / ".agent-memory",
                        capture_output=True, timeout=60)
 
 
 def memory_sync(ev, ws):
-    if ws and (ws / ".agent-memory").is_dir():
+    if _memory(ws):
         subprocess.run([str(BIN / "with-lock.sh"), str(BIN / "git-sync-memory.sh")], cwd=ws / ".agent-memory",
                        capture_output=True, timeout=120)
 
@@ -68,14 +74,14 @@ def memory_sync(ev, ws):
 def local_setup(ev, ws):
     """Align the local setup with the templates (managed blocks, hooks, ignores, AGENT.md). What it prints (e.g. a
     moved-folder reminder) also goes into context."""
-    if ws and (ws / ".agent-memory").is_dir():
+    if _memory(ws):
         r = subprocess.run([str(BIN / "sync-local-setup.sh"), "--quiet", str(ws)], capture_output=True, text=True,
                            timeout=120, stdin=subprocess.DEVNULL)
         return r.stdout.strip() or None
 
 
 def nudge(ev, ws):
-    if ws and (ws / ".agent-memory").is_dir():
+    if _memory(ws):
         mn = _load("memory_nudge", BIN / "memory-nudge.py")
         return mn.nudge_text(ws, ev.command if ev.event == "tool_used" else None)
 

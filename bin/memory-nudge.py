@@ -41,7 +41,7 @@ def unrecorded_commits(root: pathlib.Path):
     """Return the times of commits representing project work since the latest note (or the moment of onboarding);
     None when not applicable."""
     mem = root / ".agent-memory" / "memory"
-    if not mem.is_dir():
+    if not mem.is_dir() or not (root / ".agent-memory" / ".git").exists():   # a plain folder is not connected memory
         return None
     notes = [p.stat().st_mtime for p in mem.rglob("*.md")]
     # the baseline is at least the moment of onboarding (the memory branch's first commit): work before onboarding

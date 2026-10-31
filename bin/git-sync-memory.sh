@@ -13,13 +13,23 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # are not project code and should not go through the project's lint/formatting.
 export GIT_CONFIG_COUNT=1 GIT_CONFIG_KEY_0=core.hooksPath GIT_CONFIG_VALUE_0=/dev/null
 
-git add memory/ STATE.md 2>/dev/null
+# Only in a checkout of its own (a project's .agent-memory worktree, or a native project's root). A plain folder inside
+# another repo (agent-hub's own, memory: false) would make every git command below act on that repo: on 10-31 a bare
+# `git commit` here committed and pushed another session's staged files as "sync memory/STATE.md".
+[ "$(git rev-parse --show-toplevel 2>/dev/null)" = "$(pwd -P)" ] || exit 0
 
-if git diff --cached --quiet; then
-  exit 0
-fi
+# each path on its own: one that does not exist (no STATE.md yet) makes `git add a b` add nothing at all; -A picks up
+# deletions of tracked files too
+for p in memory STATE.md; do
+  if [ -e "$p" ] || git ls-files --error-unmatch -- "$p" >/dev/null 2>&1; then git add -A -- "$p" 2>/dev/null; fi
+done
 
-git commit -q -m "agent-hub: sync memory/STATE.md"
+# commit only these two paths, whatever else is staged (bash 3.2: no mapfile)
+files=()
+while IFS= read -r f; do files+=("$f"); done < <(git diff --cached --name-only -- memory/ STATE.md)
+[ ${#files[@]} -eq 0 ] && exit 0
+
+git commit -q -m "agent-hub: sync memory/STATE.md" -- "${files[@]}"
 # when the hub machine cannot be reached (the caller has checked), commit locally only; a later round with a
 # connection pushes it
 [ -n "${AGENT_HUB_OFFLINE:-}" ] && exit 0
