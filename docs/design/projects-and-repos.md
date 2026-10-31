@@ -1,6 +1,6 @@
 # Projects and repos: one general model, many combinations
 
-> agent-hub session · 2026-10-31 · r4. Owner's ask: a general architecture in which "one project = one git repo" is only
+> agent-hub session · 2026-10-31 · r5. Owner's ask: a general architecture in which "one project = one git repo" is only
 > one case, so that a monorepo holding many projects, a project spread over several repos, and a project with no repo
 > at all follow from the same logic, not from special cases. Owner's rule for building it: **the final architecture
 > first, no workarounds** — nothing built in a form a later step replaces. **Design only; nothing is implemented.**
@@ -14,6 +14,9 @@
 > r4 (same day): the owner's decisions on tests, relayed from the agent-hub i18n session — project v2 with a top-level
 > `tests` list, one result cache per repo, tests in an exported tree (`test-waiting.md` B1, B3, B4). Section 3 follows
 > them.
+> r5: after a third blind review: memory clones join the sandbox's paths (own clone writable, others' denied); the
+> worktree marker for inner projects; identity from the session-start hook; exclude before link; neutral remote name;
+> folder-only and multi-repo projects' security fields; backup and deployment per repo at step 3.
 
 ## 1. The problem
 
@@ -80,16 +83,21 @@ as a worktree of the code repo; 11 derive the project from git (`--show-toplevel
 In `hubconf` (shell scripts get the same answers through `hubconf.py` subcommands, as `roster` does today):
 
 - `scopes(project)` → its `(repo, path)` pairs / folder
-- `project_at(path)` → the owning project: through git (the repo from `--git-common-dir`, the path relative to
-  `--show-toplevel`), so it works in worktrees; a path inside a memory clone or a folder-only project resolves by its
-  folder, as `hubbus` does today
+- `project_at(path)` → the owning project: through git (the repo from the git common dir, the path relative to the
+  worktree's top), so it works in worktrees; a linked worktree may carry a marker naming its project
+  (`<git-dir>/agent-hub-project`, written by the platform when a session of an inner project starts one), which wins,
+  since tools open worktrees at the repo root; a deployment clone resolves to the repo it deploys; a path inside a
+  memory clone or a folder-only project resolves by its folder, as `hubbus` does today
+- the hub repo is the main checkout of the running copy's git common dir, so a worktree of agent-hub is recognized
 - `projects_in(repo)`, `repo_of(project)` (only when it has exactly one; otherwise an error)
 - `affected(repo, base, head)` → the (project, tier) pairs a change needs, defined in `test-waiting.md` section 4 and
   used by every caller that decides what to test
 
-`roster()` keeps working without PyYAML (new machine, the laptop): `paths.workspace` stays **required** and means the
-project's primary folder (its first scope's folder); a project inside a shared repo also carries `repo: <name>` in its
-`paths:` block, and `roster()` reads `repos/*.yaml` the same line-by-line way, so recovery finds the origin.
+`roster()` keeps working without PyYAML (new machine, the laptop): `paths.workspace` stays **required** (except for the
+platform's own entry, as today) and means the project's primary folder (its first scope's folder); a project in a
+shared repo, or in several, also carries `repo: <name>[,<name>…]` in its `paths:` block, and `roster()` reads
+`repos/*.yaml` the same line-by-line way, so recovery finds every origin. Validation checks that `paths.workspace` and
+`paths.repo` agree with `scopes`.
 
 ## 3. Registry format
 
@@ -100,8 +108,11 @@ and the repo-level fields in the project file (`paths.origin`, `push_on_merge`, 
 `network`, `allow_write`, `privacy`) are that repo's.
 
 **Several projects in one repo:** the repo has its own file in `<repos_dir>` (a new hub.json key, default `repos/` next
-to `registry_dir`) holding every repo-level field; project files in that repo may not set them (one source, so no
-cross-file equality check — per-file validation could never change such a value).
+to `registry_dir`) holding every repo-level field, including `commit_gate` (test-waiting A1); project files in that
+repo may not set them (one source, so no cross-file equality check — per-file validation could never change such a
+value). `metered_models` stays per project (it is about the project's model calls). A **folder-only project** is its own
+trust domain and carries the repo-level security fields in its own file; a **project in several repos** takes, for
+project-level uses such as `privacy.reflection`, the strictest of its repos' settings.
 
 ```yaml
 # repos/acme.yaml
@@ -144,7 +155,8 @@ file or in shorthand); its test tiers name the scope they run in.
 **project v2** (test-waiting B1, the owner's decision): renaming `runtime.test` bumps the version, and every registry
 file is rewritten in one change. `scopes`, `depends_on` and `paths.repo` are later additions to v2 (additive, no
 further bump). `repos/` is a new contract `repo.v1` in `contracts/README.md`; `repos_dir`
-goes into `contracts/hub.v1.schema.json` first; `repos` joins the config paths in `bin/appliers.py` and `bin/config-check`.
+and `memory_root` go into `contracts/hub.v1.schema.json` first; `repos` joins the config paths in `bin/appliers.py`,
+`bin/config-check` and `githooks/post-commit` (whose path patterns become `is_code()` on agent-hub's declaration).
 The security fields (`PLATFORM_OWNED`) gain `paths` (whole, since the check compares top-level keys — it decides the
 sandbox's folders and is unprotected today) and `scopes`; a project in a shared repo carrying any repo-level field is
 invalid. Cross-file rules — two projects with the same scope, a repo both in shorthand and in a repo file, two scopes
@@ -158,41 +170,51 @@ introduces the conflict is invalid (it keeps its last valid version), the others
 memory script expects. Each of the project's scope folders gets a symlink `.agent-memory` → that clone, so a session in
 any of its repos writes notes to the same place, and a refactor that moves or deletes a folder removes only a link.
 Code repos ignore the link with the pattern `.agent-memory` (no trailing slash: a symlink is not a directory to git;
-today's `.agent-memory/` would not match it). The librarian keeps reading `~/.memory-copies/<name>/`. `git-sync-memory.sh`,
-`sync-all-memory.sh` and `memory-nudge.py` work in the clone (their toplevel guard accepts it through `pwd -P`); the
-nudge's `git log -- .` runs from each scope folder. The hooks-off setting in `git-sync-memory.sh` (memory commits must
-not run a code repo's hooks) becomes unnecessary once no project uses the worktree form and is removed then. Session hooks
+today's `.agent-memory/` would not match it, while `worktree-memory.sh` already writes the slash-less form). The exclude
+is written **before** a link is created and links are relative where possible, so a `git add -A` can never commit a
+link carrying an absolute machine path into a public repo. The librarian keeps reading `~/.memory-copies/<name>/`. `git-sync-memory.sh`
+(whose toplevel guard accepts a clone reached through a link, via `pwd -P`), `sync-all-memory.sh` and `memory-nudge.py`
+(which checks `.agent-memory/.git`) work in the clone; the nudge's `git log -- .` runs from each scope folder. The
+hooks-off setting in `git-sync-memory.sh` stays: a user-level `core.hooksPath` would still apply to a standalone clone.
+New clones name their remote `memory` (neutral); the scripts accept `mini` while projects are migrating.
+`worktree-memory.sh` stays: in a linked worktree it creates the link at each scope path of the worktree (not only its
+root) and links the rules file and settings, as it does today. Session hooks
 sync the project `project_at` names, and the hourly job syncs every clone in `<memory_root>`.
 
 **Backups.** The nightly backup bundles every clone's unpushed commits from `<memory_root>` (one place) and iterates
-**repos** (repo files and shorthand) for code repos' unpushed and uncommitted work, instead of projects.
+**repos** (repo files and shorthand) for code repos' unpushed and uncommitted work, instead of projects; the `.env`
+search runs per scope folder (it looks three levels deep), so inner projects' files are found.
 
-**Migration from today's worktree form** (one script, dry-run then `--apply`, per project), only after recovery,
-renaming and onboarding handle both forms. It refuses unless no session is open in the project (`hubconf.cwd_users()`),
+**Migration from today's worktree form** (one script, dry-run then `--apply`, per project), only after renaming and the
+memory scripts handle both forms; onboarding and recovery only ever create the clone form (recovering an unmigrated
+project is its migration). It refuses unless no session is open in the project (`hubconf.cwd_users()`),
 the mount has no untracked files, and the memory branch is pushed. Then: clone into `<memory_root>/<name>.new`, verify
 its HEAD equals `mini/agent-memory`, remove the worktree, move the clone into place, create the links, delete the code
 repo's `agent-memory` ref, its `mini` remote and `refs/remotes/mini/*`, update the exclude pattern. agent-hub's own
-plain-folder memory becomes a normal clone the same way. When every project is migrated, the worktree-form code is
-removed from onboarding, recovery, renaming, `worktree-memory.sh` and the worktree cleanup.
+plain-folder memory (no bare repo today) gets a bare repo created and its notes imported, then the same steps. When every project is migrated, the worktree-form branches are removed from renaming, the memory scripts and the
+worktree cleanup.
 
 **Rules files and hooks.** Written in each scope folder. Whether a coding agent reads a rules file in a subfolder of
 where it started, where it reads hook settings from, and whether its worktree mode can open a worktree at a subfolder,
 are runtime capabilities (`runtime_ports`), answered by each adapter; where one is missing, doctor's feature table says
-so and the platform writes at the repo root, one marked section per project.
+so and the platform writes at the repo root, one marked section per project. A tool that also reads rules files in
+parent folders (Claude Code does) would see two projects' blocks in an inner folder, so a session's identity is
+delivered by the platform's session-start hook (`project_at`), and the static blocks name no project.
 
 **Which project a session belongs to.** `project_at(the session's folder)`; at a shared repo's root, the root owner.
 Since a repo is one trust domain with one privacy setting, a root session working in an inner project's files cannot
 leak anything the repo's setting does not already allow.
 
 **Sandbox.** A repo is one trust domain: a session of any project in a repo may read and write the whole repo, its
-`.git` (common dir and worktree gitdirs, which `git commit`, `merge-branch`'s lock and `.git/info/exclude` need) and its
-deployment clone, plus what it may today (runtime, bus, caches, `allow_write`); every **other** repo and folder-only
-project stays denied, as today. Within a repo there is no write fence between projects — it would be cosmetic, since any
+`.git` (common dir and worktree gitdirs, which `git commit`, `merge-branch`'s lock, `.git/info/exclude` and the result
+cache need) and its deployment clone, plus **its own memory clone** in `<memory_root>` (by real path, since the link
+resolves there) and what it may today (runtime, bus, caches, `allow_write`); every **other** repo, folder-only project
+and **other project's memory clone** stays denied, as other projects' memory copies are today. Within a repo there is no write fence between projects — it would be cosmetic, since any
 of them can install a git hook that runs in the others' sessions. The platform's own Seatbelt/Landlock layer
 (`seatbelt.py`, `landlock.py`) derives the same set from the resolver, so the repo root of an inner project's service is
 readable.
 
-**merge-branch** (a repo operation): lock → rebase → commit titles → `affected(repo, main, head)` → for each pair, a
+**merge-branch** (a repo operation; a `--question` goes to the owner once per merge, not once per project): lock → rebase → commit titles → `affected(repo, main, head)` → for each pair, a
 recorded pass for its key or a run (the test system, test-waiting section 4) → fast-forward → one `merge.done` /
 `session.report` per affected project (the bus contract keeps one `project` per event). A failure blocks the merge; the
 passes of the other pairs are still recorded. A branch that deletes or empties a registered scope fails until the
@@ -207,7 +229,8 @@ gate.
 
 **Services and deployment.** One deployment clone per repo, `<services_root>/<repo>`; a project's runtime folder is its
 scope path inside it, and its `deploy.sh` lives there (the root owner's at the root). One pull deploys the repo; each
-project's services restart from their folders. For a one-repo project the path is today's `<services_root>/<name>`.
+project's services restart from their folders. When a repo is promoted, its name defaults to the root owner's, so the
+existing `<services_root>/<name>` stays where it is. For a one-repo project the path is today's `<services_root>/<name>`.
 
 **Onboarding, recovery, renaming.**
 
@@ -222,7 +245,8 @@ project's services restart from their folders. For a one-repo project the path i
   that moves a folder records the old path for statistics, as renames do today (`legacy-paths.tsv`).
 
 **Statistics.** A project's commits are those touching its scopes (`git log -- <paths>`); its sessions are those
-`project_at` assigns to it, from the session folder the runtime's transcript port reports.
+`project_at` assigns to it, from the session folder the runtime's transcript port reports — an extension of the port
+scheduled in `test-waiting.md` section 7.
 
 **Idea sandboxes** could become folder-only projects, with a repo only when upgraded — not part of this change.
 
@@ -253,15 +277,17 @@ project's services restart from their folders. For a one-repo project the path i
 0. **Prerequisite:** agent-hub works in worktrees (`test-waiting.md` A1), so this refactor never edits the running
    platform's checkout. Steps 2–3 happen in a worktree and merge only with the step 1 tests green.
 1. Characterization tests of today's single-repo behaviour: onboarding, recovery, renaming, `merge-branch`, `project_of`,
-   `sync-local-setup.sh`, `worktree-memory.sh`, the sandbox policy and both enforcement layers, backup.
+   `sync-local-setup.sh`, `worktree-memory.sh`, the sandbox policy and both enforcement layers (including that a
+   project's memory path is writable and other projects' are not), backup.
 2. The resolver and the registry: `scopes`, `depends_on`, `paths.repo`, `repos/`, repo-level security fields, the
    cross-file rules, the contract work (section 3). Every existing registry file gives the same answers as today (test).
    Project v2's test fields land earlier (test-waiting section 7, step 1) and are unchanged by this step.
-3. Move the files in section 1 onto the resolver, the step 1 tests staying green; the sandbox derives from repos.
+3. Move the files in section 1 onto the resolver, the step 1 tests staying green; the sandbox derives from repos; the
+   backup and deployment iterate repos (done here, not moved twice).
 4. The test system's selection and cache on the resolver (test-waiting section 7, step 4).
-5. Memory: backups of `<memory_root>`; recovery, renaming and onboarding handle both forms; the migration; agent-hub's
-   memory; then removing the worktree form.
-6. Backups and deployment per repo; runtime capabilities for nested rules files, hook settings and subfolder worktrees.
+5. Memory: backups of `<memory_root>` and the sandbox's memory paths; renaming and the memory scripts handle both forms,
+   onboarding and recovery create clones; the migration; agent-hub's memory; then removing the worktree-form branches.
+6. Runtime capabilities for nested rules files, hook settings and subfolder worktrees; the worktree marker.
 7. Onboarding and recovery of subfolder and folder-only projects; repo promotion.
 8. End to end: a throwaway monorepo (root owner, two projects, one depending on the other) through onboarding, a
    session, a merge touching both, a deploy and the nightly run, in its own config copy and bus.
@@ -310,3 +336,19 @@ moved/deleted scope folders → merge fails until the registry changes; minor wo
 Checked and found sound by the reviewers: keeping `paths.workspace` required; per-git-dir locks; `.agent-memory` toplevel
 guards accepting a clone; `propose_apply.py` working unchanged on a clone; the hub never becoming origin of a project's
 main; the librarian's memory copies untouched; "tests before rewrite"; the end-to-end step.
+
+**Round 3 (r5), with `test-waiting.md` r6:**
+
+| finding | by | change |
+|---|---|---|
+| Platform-started test runs would execute project-declared commands outside the project's sandbox | architecture, workarounds | test-waiting B4: every platform run goes through `isolation.wrap` |
+| Memory clones outside the repo: a sandboxed project could not write its notes, and could read other projects' raw notes | architecture, workarounds | section 4 "Sandbox": own clone writable, others' denied; step 1 tests it |
+| Moving `.state` reversed a documented decision and touched ~40 files and the running scheduler | facts, architecture, workarounds | test-waiting A1: `.state` stays, found through the git common dir |
+| Inner projects' worktree sessions attributed to the root owner; rules files read from parents give two identities | architecture | worktree marker; identity from the session-start hook |
+| `merge-branch` cannot recognize the hub from a worktree | architecture | 2.4: the hub repo via the git common dir |
+| A link committed before its exclude would leak an absolute path | architecture | exclude first, relative links |
+| `.env` search per repo misses inner projects | architecture | per scope folder |
+| Folder-only and multi-repo projects had no place for security fields | architecture | section 3 |
+| `worktree-memory.sh` is still needed; `memory-nudge` has no toplevel guard | facts | section 4 "Memory" |
+| Onboarding "both forms" duplicated; backup/deploy moved twice (steps 3 and 6) | workarounds | clone form only; per repo at step 3 |
+| Remote name `mini`, `memory_root` missing from the hub schema, `commit_gate` field, `metered_models`, roster for multi-repo | facts, workarounds, architecture | sections 3, 4 |
