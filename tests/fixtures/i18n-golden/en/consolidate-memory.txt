@@ -199,16 +199,16 @@ document wins. List every correction in corrections; its evidence_quote is copie
 - Create or modify only the .md files under ./memory/reference/ and ./STATE.md. Do not touch the date files, AGENT.md
   or RULES; do not create subdirectories under memory/reference/.
 - STATE.md is the distilled current state: only correct statements that were overturned or are out of date (including
-  items in `## To-do` that are done or overturned: remove them outright); do not move the date files' content
-  into STATE.md, and do not change the format of `## To-do` (`- [ ] [Alex]…`, `- [ ] [agent]…`,
-  `- [ ] [tbd]…`; with none, `- (none)`).
+  items in `## Tasks` that are done or overturned: remove them outright); do not move the date files' content
+  into STATE.md, and do not change the format of `## Tasks` (`- [ ] [owner]…`, `- [ ] [agent]…`,
+  `- [ ] [undecided]…`; with none, `- (none)`).
 - Do not rewrite or reword anything that was not overturned: every change shows up in the diff for a person to
   spot-check.
 === push, checkpoint
 status ok
 [<T>] alpha: consolidating 5 date files (163 bytes, memory/2026-09-01.md … memory/2026-09-05.md), 0 left for next time; model test-model
 [<T>] alpha: model done (turns=1, cost=$0.1), blocked by permissions 0 times
-[<T>] alpha: ⚠️ reverted `STATE.md`: the `## To-do` section's format was broken
+[<T>] alpha: ⚠️ reverted `STATE.md`: the `## Tasks` section's format was broken
 [<T>] alpha: pushed <sha>
 [<T>] alpha: librarian checkpoint advanced to <sha>
 --- entry
@@ -224,7 +224,7 @@ status ok
 
 **Mechanical checks**:
 
-- ⚠️ reverted `STATE.md`: the `## To-do` section's format was broken
+- ⚠️ reverted `STATE.md`: the `## Tasks` section's format was broken
 
 ```
  memory/2026-09-01.md       | 2 --

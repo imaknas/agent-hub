@@ -11,11 +11,11 @@ todo.md: 3 items, 3 format problems
 <!-- contract: todo-md v2 -->
 # Cross-project to-do
 
-> Generated mechanically by `bin/gen-todo.py` from the `## To-do` section of each project's STATE.md (3 items);
+> Generated mechanically by `bin/gen-todo.py` from the `## Tasks` section of each project's STATE.md (3 items);
 > do not edit by hand: to change the content, change the source (each project's memory, from which librarian updates STATE.md;
 > agent-hub's own to-do items are in `openclaw-migration-status.md`).
 
-## Only Alex can do
+## Only the owner can do
 
 ### alpha
 - [ ] 續約網域

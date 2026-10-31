@@ -14,7 +14,9 @@ file), `v2` for the English set.
    old file without it reads as v1).
 2. One `# ` title, followed by lines starting with `>` (notes, not items).
 3. Three owner sections, with fixed heading text in a fixed order: only the owner can do it; to be decided (a decision
-   comes first); an agent can do it. One set per file: the zh-Hant set (any marker), or the English set (marker v2):
+   comes first); an agent can do it. One set per file: the zh-Hant set (any marker), or the English set (marker v2).
+   The zh-Hant headings name the configured owner tag; the English ones say "the owner", like the English to-do
+   label `[owner]` (state-todo v2), so no English heading carries a name:
 
 ```heading owner
 ## 只有 {owner} 能做
@@ -23,7 +25,7 @@ file), `v2` for the English set.
 ```
 
 ```heading owner-en
-## Only {owner} can do
+## Only the owner can do
 ## To be decided (a decision comes first)
 ## An agent can do
 ```

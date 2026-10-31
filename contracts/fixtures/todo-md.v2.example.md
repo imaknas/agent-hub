@@ -3,9 +3,9 @@
 
 > Generated mechanically (3 items).
 
-## Only Ada can do
+## Only the owner can do
 
-> 2 more are registered in the assistant (marked "waiting on Ada: <key>" at the end of the line in STATE.md); they are not listed here.
+> 2 more are registered in the assistant (marked "waiting on owner: <key>" at the end of the line in STATE.md); they are not listed here.
 
 ### example-project
 - [ ] Decide whether to open a second account

@@ -22,7 +22,7 @@ class Fill(unittest.TestCase):
     def test_known_placeholders_are_replaced(self):
         out = prompts.fill("{{tag_owner}} --to {{owner_alias}} {{assistant}} {{content_language}}", lang="en")
         self.assertNotIn("{{", out)
-        self.assertIn(prompts.TOKENS["en"]["tag"].format(hubconf.owner_tag()), out)
+        self.assertIn("[owner]", out)   # the en set's owner label is the word itself
         self.assertIn(hubconf.owner_alias(), out)
         self.assertIn(hubconf.assistant_name(), out)
         self.assertIn("English", out)
@@ -44,12 +44,13 @@ class Fill(unittest.TestCase):
             with self.subTest(lang=lang):
                 t = prompts.TOKENS[lang]
                 out = prompts.fill(text, lang=lang, owner="Alex")
-                self.assertEqual(out, " ".join([t["todo_heading"], t["tag"].format("Alex"), t["tag"].format("agent"),
+                owner_label = t["owner_label"] or "Alex"   # en: the word `owner`; zh-Hant: the configured tag
+                self.assertEqual(out, " ".join([t["todo_heading"], t["tag"].format(owner_label), t["tag"].format("agent"),
                                                 t["tag"].format(t["tbd"]), t["todo_none"],
                                                 t["key_marker"].format(owner="Alex", key="task-…")]))
 
     def test_key_pattern(self):
-        out = prompts.fill("{{key_pattern}}", lang="en", owner="Alex")
+        out = prompts.fill("{{key_pattern}}", lang="zh-Hant", owner="Alex")
         self.assertIn("Alex", out)
         self.assertIn("<key>", out)
 

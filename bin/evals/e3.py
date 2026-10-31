@@ -420,7 +420,7 @@ def check(scenario: str, out: pathlib.Path, lang: str = "zh-Hant") -> dict:
         # the to-do lines it added are in the content language's token set (contracts/state-todo.v2.md)
         new_lines = [l for l in added.splitlines() if l.startswith("- [ ] ")]
         if new_lines:
-            own = re.escape(todo_tokens.tag(lang, "")[0])
+            own = re.escape(todo_tokens.bracket(lang, "")[0])
             r["token_set"] = all(re.match(rf"- \[ \] {own}", l) for l in new_lines)
         add_language(r, "sent", "\n".join([added] + [str((e["payload"]["record"].get("terms") or {}).get("text"))
                                                       for e in tasks]))

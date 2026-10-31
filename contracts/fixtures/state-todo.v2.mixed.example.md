@@ -2,15 +2,15 @@
 
 ## Now
 
-An English instance whose older lines are still in the zh-Hant set.
+An English instance whose older lines are still in the zh-Hant set (the owner's tag there is `Ada`).
 
-## To-do
+## Tasks
 
-- [ ] [Ada] Renew the domain (waiting on Ada: task-example-project-0123456789)
-- [ ] 〔Ada〕舊的一件 (waiting on Ada: task-example-project-1111111111)
+- [ ] [owner] Renew the domain (waiting on owner: task-example-project-0123456789)
+- [ ] 〔Ada〕舊的一件 (waiting on owner: task-example-project-1111111111)
 - [ ] 〔Ada〕另一件(等 Ada:task-example-project-2222222222)
 - [ ] 〔agent〕補測試
-- [ ] [tbd] Split into two repos?
+- [ ] [undecided] Split into two repos?
 
 ## References
 

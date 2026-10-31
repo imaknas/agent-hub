@@ -47,9 +47,10 @@ LANGUAGE_KEYS = {"content_language", "todo_heading", "tag_owner", "tag_agent", "
 def language_values(lang: str, owner: str) -> dict[str, str]:
     t = TOKENS[lang]
     return {"content_language": LANGUAGE_NAMES[lang], "todo_heading": t["todo_heading"],
-            "tag_owner": t["tag"].format(owner), "tag_agent": t["tag"].format("agent"), "tag_tbd": t["tag"].format(t["tbd"]),
-            "todo_none": t["todo_none"], "key_marker": t["key_marker"].format(owner=owner, key="task-…"),
-            "key_pattern": t["key_marker"].format(owner=owner, key="<key>")}
+            "tag_owner": todo_tokens.tag(lang, "owner", owner), "tag_agent": todo_tokens.tag(lang, "agent", owner),
+            "tag_tbd": todo_tokens.tag(lang, "tbd", owner), "todo_none": t["todo_none"],
+            "key_marker": todo_tokens.marker(lang, owner, "task-…"),
+            "key_pattern": todo_tokens.marker(lang, owner, "<key>")}
 
 
 def fill(text: str, *, lang: str | None = None, owner: str | None = None, assistant: str | None = None,

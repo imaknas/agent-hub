@@ -2,10 +2,9 @@
 implementations already running (gen-todo's parsing, the task registry's keys and applying) meet the spec. The test
 data is vendored in contracts/vendor/agent-ops-specs/hth-0.1/ (source commit in SOURCE).
 
-Runs the zh-hant profile (this instance's token set); parse also runs the en profile, translated into agent-hub's
-English set (EN_PROFILE: the spec's default English profile differs from it in the heading, the tbd label and the
-owner tag, which agent-hub takes from settings). The owner tag in the data is `Owner`; per the conformance/README rules it is replaced with this machine's
-configured owner.tag before comparing.
+Runs the zh-hant profile (this instance's token set); parse also runs the en profile as it is (agent-hub's English set
+is that profile). The zh-hant data's owner tag is `Owner`; per the conformance/README rules it is replaced with this
+machine's configured owner.tag before comparing.
 Applying routes: agent-hub applies only events sent back from the owner side (hubbus open-handoffs takes only
 handoffs sent from the owner address); a done that an agent reports in a session, or that the registrar infers itself,
 never reaches apply_keyed, so here those two kinds of case are "unchanged".
@@ -55,18 +54,9 @@ def lines_cmp(lines):
 
 
 ASSIGNEE = {"owner": "owner", "agent": "agent", "tbd": "undecided"}   # gen-todo's roles -> the spec's assignees
-# the spec's en profile -> agent-hub's English set (bin/todo_tokens.py): the only differences between the two
-EN_PROFILE = {"## Tasks": "## To-do", "[owner]": f"[{TAG}]", "[undecided]": "[tbd]",
-              "(waiting on owner:": f"(waiting on {TAG}:"}
 
 
-def en(x):
-    if isinstance(x, str):
-        for a, b in EN_PROFILE.items():
-            x = x.replace(a, b)
-        return x
-    if isinstance(x, list):
-        return [en(v) for v in x]
+def as_is(x):
     return x
 
 
@@ -95,12 +85,12 @@ class Parse(unittest.TestCase):
                 self.check(c, own)
 
     def test_parse_vectors_english(self):
-        """the spec's en profile, translated into agent-hub's English set"""
+        """the spec's en profile is agent-hub's English set: its vectors run as they are"""
         cs = [c for c in json.loads((FIX / "parse.json").read_text())["cases"] if c.get("profile") == "en"]
         self.assertTrue(cs)
         for c in cs:
             with self.subTest(case=c["id"]):
-                self.check(c, en)
+                self.check(c, as_is)
 
 
 class Keys(unittest.TestCase):

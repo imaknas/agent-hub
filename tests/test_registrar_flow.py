@@ -322,13 +322,13 @@ def en_marker(k: str) -> str:
 
 EKB, EKC, EKD = key("pb", "Pay the domain"), key("pc", "Sign the contract"), key("pd", "Buy parts")
 EN_SCENES = {
-    "pa": {"state": en_state(todo_tokens.item("en", TAG, "Renew the domain"), todo_tokens.item("en", "agent", "Add retry"))},
-    "pb": {"state": en_state(todo_tokens.item("en", TAG, "Pay the domain") + en_marker(EKB)), "posted": {EKB: "Pay the domain"},
+    "pa": {"state": en_state(todo_tokens.item("en", "owner", TAG, "Renew the domain"), todo_tokens.item("en", "agent", TAG, "Add retry"))},
+    "pb": {"state": en_state(todo_tokens.item("en", "owner", TAG, "Pay the domain") + en_marker(EKB)), "posted": {EKB: "Pay the domain"},
            "settle": [("s-pb", EKB, "done", "Pay the domain")]},
-    "pc": {"state": en_state(todo_tokens.item("en", "agent", "Something else")), "posted": {EKC: "Sign the contract"},
+    "pc": {"state": en_state(todo_tokens.item("en", "agent", TAG, "Something else")), "posted": {EKC: "Sign the contract"},
            "settle": [("s-pc", EKC, "reopened", "Sign the contract")]},
-    "pd": {"state": en_state(todo_tokens.item("en", "agent", "Something else")), "posted": {EKD: "Buy parts"}},
-    "pm": {"state": en_state(todo_tokens.item("zh-Hant", TAG, "An older line"))},
+    "pd": {"state": en_state(todo_tokens.item("en", "agent", TAG, "Something else")), "posted": {EKD: "Buy parts"}},
+    "pm": {"state": en_state(todo_tokens.item("zh-Hant", "owner", TAG, "An older line"))},
 }
 
 
@@ -340,15 +340,15 @@ class RegistrarFlowEnglish(unittest.TestCase):
             r = env.run()
             self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
             ka = key("pa", "Renew the domain")
-            self.assertIn(todo_tokens.item("en", TAG, "Renew the domain") + en_marker(ka), env.state("pa"))
+            self.assertIn(todo_tokens.item("en", "owner", TAG, "Renew the domain") + en_marker(ka), env.state("pa"))
             self.assertEqual(env.outputs("pa"), [("raised", ka)])
             self.assertEqual([l for l in env.state("pb").splitlines() if l.strip()],
                              [l for l in en_state(EN["todo_none"]).splitlines() if l.strip()],
                              "the line removed, the English empty marker")
-            self.assertIn(todo_tokens.item("en", TAG, "Sign the contract") + en_marker(EKC), env.state("pc"))
+            self.assertIn(todo_tokens.item("en", "owner", TAG, "Sign the contract") + en_marker(EKC), env.state("pc"))
             self.assertEqual(env.outputs("pd"), [("claim", EKD)])
             km = key("pm", "An older line")
-            self.assertIn(todo_tokens.item("zh-Hant", TAG, "An older line") + en_marker(km), env.state("pm"))
+            self.assertIn(todo_tokens.item("zh-Hant", "owner", TAG, "An older line") + en_marker(km), env.state("pm"))
             self.assertIn(EN["todo_heading"], env.state("pm"))
             basis = [e["record"]["evidence"]["basis"] for e in json.loads(env.hubbus(
                 "records", "--project", "pd", "--direction", "out").stdout) if e["record"]["type"] == "claimed"]

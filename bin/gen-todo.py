@@ -4,13 +4,13 @@
 Source format (contracts/state-todo.v2.md; the librarian writes STATE.md this way, agent-hub's own to-dos are in
 openclaw-migration-status.md), in either token set (bin/todo_tokens.py), shown here in the English one:
 
-    ## To-do
-    - [ ] [{owner}] something only the owner can do (accounts, passwords, payments, decisions)
+    ## Tasks
+    - [ ] [owner] something only the owner can do (accounts, passwords, payments, decisions)
     - [ ] [agent] something an agent can do
-    - [ ] [tbd] something that needs a decision first
+    - [ ] [undecided] something that needs a decision first
     - (none)                     ← when there are no to-dos
 
-Also accepted: grouping with `- [ ] …` under a `### [{owner}]` subheading. Explanatory text and reference links in
+Also accepted: grouping with `- [ ] …` under a `### [owner]` subheading. Explanatory text and reference links in
 the section are skipped; only lines that "look like a to-do but have no (known) owner tag" or "are checked off and
 still there" count as format problems. Both token sets are read whatever the settings, also mixed in one file.
 
@@ -71,7 +71,7 @@ def parse(source: str, text: str, items: dict, problems: list) -> None:
         # both are read (nothing dropped), but the file must get one section back
         problems.append(_("{source}: {n} to-do sections; there must be one", source=source, n=len(sections)))
     for lines in sections:
-        group = None  # the other accepted form: `- [ ] …` without an owner tag under a `### [{owner}]` subheading
+        group = None  # the other accepted form: `- [ ] …` without a label under an owner subheading (`### [owner]`)
         for line in lines:
             if P.is_none(line):
                 continue

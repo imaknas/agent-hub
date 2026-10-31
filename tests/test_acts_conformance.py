@@ -2,10 +2,9 @@
 contracts/vendor/.../SOURCE): proves that bin/registrar.py (the registry's steps) and bin/gen-todo.py (classifying the
 to-do section) meet the spec.
 
-Runs both profiles, each with the content language that writes it: zh-hant (this instance's token set) and the spec's
-en profile translated into agent-hub's English set (EN_PROFILE: the spec's default English profile differs from it in
-the heading, the tbd label and the owner tag, which agent-hub takes from settings). The owner tag in the data is
-`Owner`; per the conformance/README rules it is replaced with this machine's configured owner.tag before comparing.
+Runs both profiles, each with the content language that writes it: zh-hant (this instance's token set) and en (the
+English set is the spec's en profile, so its vectors run as they are). The zh-hant data's owner tag is `Owner`; per the
+conformance/README rules it is replaced with this machine's configured owner.tag before comparing.
 parse's full classification (agent, to be decided, format problems) is in gen-todo; the registrar handles only the
 owner's lines.
 
@@ -56,25 +55,15 @@ def nonblank(lines):
 
 
 ASSIGNEE = {"owner": "principal", "agent": "agent", "tbd": "undecided"}   # gen-todo's roles -> the spec's assignees
-# the spec's en profile -> agent-hub's English set (bin/todo_tokens.py): the only differences between the two
-EN_PROFILE = {"## Tasks": "## To-do", "[owner]": f"[{TAG}]", "[undecided]": "[tbd]",
-              "(waiting on owner:": f"(waiting on {TAG}:"}
 
 
-def en(x):
-    if isinstance(x, str):
-        for a, b in EN_PROFILE.items():
-            x = x.replace(a, b)
-        return x
-    if isinstance(x, list):
-        return [en(v) for v in x]
-    if isinstance(x, dict):
-        return {k: en(v) for k, v in x.items()}
+def as_is(x):
     return x
 
 
-# profile in the data -> (its translation, the content language whose writer produces it)
-PROFILES = {"zh-hant": (own, "zh-Hant"), "en": (en, "en")}
+# profile in the data -> (the parameter substitution, the content language whose writer produces it); the en profile
+# has no parameter: its vectors run as they are
+PROFILES = {"zh-hant": (own, "zh-Hant"), "en": (as_is, "en")}
 
 
 class Acts(unittest.TestCase):

@@ -52,7 +52,8 @@ class MarkdownV2(unittest.TestCase):
 
     def test_state_todo_problems(self):
         text = (F / "state-todo.v2.example.md").read_text()
-        for bad in ("- [ ] [someone] Unknown tag", "- [ ] No tag at all", "- [x] [agent] Done, not removed"):
+        for bad in ("- [ ] [someone] Unknown tag", "- [ ] No tag at all", "- [x] [agent] Done, not removed",
+                    "- [ ] [Ada] The configured tag is not an English label"):
             with self.subTest(bad=bad):
                 self.assertTrue(contracts.check_state_todo(text.replace("- [ ] [agent] Add tests", bad),
                                                            C / "state-todo.v2.md", self.EN))
@@ -63,9 +64,12 @@ class MarkdownV2(unittest.TestCase):
         keys = [re.compile(r) for r in contracts.md_rules(C / "state-todo.v2.md", self.EN)["regex:key"]]
         full = str.maketrans("(:)", "".join(map(chr, (0xFF08, 0xFF1A, 0xFF09))))
         for line in ("x" + todo_tokens.marker("zh-Hant", self.EN, "task-p-0123456789"),
-                     "x (waiting on Ada: task-p-0123456789)", "x(waiting on Ada:task-p-0123456789)".translate(full)):
+                     "x (waiting on owner: task-p-0123456789)", "x(waiting on owner:task-p-0123456789)".translate(full)):
             with self.subTest(line=line):
                 self.assertEqual([m.group(1) for k in keys if (m := k.search(line))], ["task-p-0123456789"])
+        for line in ("x (waiting on Ada: task-p-0123456789)", "x (waiting on owner: two words)"):
+            with self.subTest(line=line):   # the en profile: the word `owner`, a key without whitespace
+                self.assertEqual([m for k in keys if (m := k.search(line))], [])
 
     def test_todo_md_examples(self):
         for f, owner in (("todo-md.v1.example.md", OWNER), ("todo-md.v2.example.md", self.EN)):
@@ -118,15 +122,20 @@ class TokenModuleAgrees(unittest.TestCase):
         P = self.t.patterns(self.EN)
         lines = []
         for lang in ("zh-Hant", "en"):
-            for who in (self.EN, "agent", self.t.tokens(lang)["tbd"], "someone"):
-                lines.append(self.t.item(lang, who, "do it"))
-                lines.append(f"### {self.t.tag(lang, who)}")
-            lines.append(self.t.item(lang, self.EN, "x") + self.t.stamp(lang, self.EN, "task-p-0123456789"))
+            for role in self.t.ROLES:
+                lines.append(self.t.item(lang, role, self.EN, "do it"))
+                lines.append(f"### {self.t.tag(lang, role, self.EN)}")
+            for other in ("someone", self.EN, "owner", "tbd"):   # unknown in this set, or the other set's word
+                lines.append(f"- [ ] {self.t.bracket(lang, other)} do it")
+                lines.append(f"### {self.t.bracket(lang, other)}")
+            lines.append(self.t.item(lang, "owner", self.EN, "x") + self.t.stamp(lang, self.EN, "task-p-0123456789"))
         zh_tbd, full = self.t.tokens("zh-Hant")["tbd"], str.maketrans("(:)", "".join(map(chr, (0xFF08, 0xFF1A, 0xFF09))))
         lines += ["- [ ] [agent](https://example.org) a link", "- [ ] no tag",
-                  self.t.item("zh-Hant", "tbd", "the other set's word"), self.t.item("en", zh_tbd, "the other set's word"),
-                  f"### {self.t.tag('en', zh_tbd)}", "x" + self.t.marker("zh-Hant", self.EN, "task-p-1").translate(full),
-                  "x" + self.t.marker("en", self.EN, "task-p-1").translate(full), "x (waiting on Bob: task-p-1)"]
+                  self.t.item("zh-Hant", "tbd", self.EN, "x").replace(zh_tbd, "undecided"),
+                  f"- [ ] {self.t.bracket('en', zh_tbd)} the other set's word", f"### {self.t.bracket('en', zh_tbd)}",
+                  "x" + self.t.marker("zh-Hant", self.EN, "task-p-1").translate(full),
+                  "x" + self.t.marker("en", self.EN, "task-p-1").translate(full), "x (waiting on Bob: task-p-1)",
+                  "x (waiting on owner: two words)"]
         for l in lines:
             with self.subTest(line=l):
                 m = P.item.match(l)

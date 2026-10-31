@@ -158,7 +158,7 @@ def strike(lines: list[str], key: str) -> bool:
 def readd(lines: list[str], key: str, text: str) -> bool:
     if any((m := KEY.search(l.rstrip())) and m.group("key") == key for l in lines):
         return False
-    new = todo_tokens.item(hubconf.lang_content(), TAG, norm(text)) + stamp(key)
+    new = todo_tokens.item(hubconf.lang_content(), "owner", TAG, norm(text)) + stamp(key)
     b = todo_bounds(lines)
     if b is None:
         lines += ["", todo_tokens.tokens(hubconf.lang_content())["todo_heading"], "", new]

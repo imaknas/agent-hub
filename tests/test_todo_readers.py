@@ -233,7 +233,9 @@ EN = prompts.TOKENS["en"]
 
 
 def en_item(t: str, text: str) -> str:
-    return f"- [ ] {EN['tag'].format(t)} {text}"
+    """an English line; t: the configured owner tag (written as the en set's owner label), "tbd", or any label as is"""
+    lab = {TAG: EN["owner_label"], LIB_TAG: EN["owner_label"], "tbd": EN["tbd"]}.get(t, t)
+    return f"- [ ] {EN['tag'].format(lab)} {text}"
 
 
 def en_mark(key: str, owner: str = TAG) -> str:
@@ -249,19 +251,27 @@ class EnglishGenTodo(unittest.TestCase):
                                  "tbd": [("p", "go public?")]})
 
     def test_grouped_form_and_links(self):
-        items, problems = parse(state(f"### [{TAG}]", "- [ ] renew the domain", "- [ ] [the docs](https://x.org) first",
+        items, problems = parse(state("### [owner]", "- [ ] renew the domain", "- [ ] [the docs](https://x.org) first",
                                       en_item("agent", "read [the notes](n.md)"), heading=EN["todo_heading"]))
         self.assertEqual(problems, [])
         self.assertEqual(items["owner"], [("p", "renew the domain"), ("p", "[the docs](https://x.org) first")])
         self.assertEqual(items["agent"], [("p", "read [the notes](n.md)")])
 
     def test_problems(self):
+        """in English brackets the owner is `owner`: the configured tag there is an unknown label, like the zh-Hant
+        tbd word"""
         _items, problems = parse(state("- [ ] no tag", en_item("someone", "unknown tag"), en_item(TBD, "zh word"),
-                                       "- [x] [agent] done already", heading=EN["todo_heading"]))
-        self.assertEqual(len(problems), 4)
+                                       f"- [ ] [{TAG}] the configured tag", "- [x] [agent] done already",
+                                       heading=EN["todo_heading"]))
+        self.assertEqual(len(problems), 5)
+
+    def test_en_key_has_no_whitespace(self):
+        """the en profile's marker_pattern: a key is one run of non-space characters"""
+        self.assertIsNone(gen_todo.P.key.search("renew (waiting on owner: two words)"))
+        self.assertIsNone(gen_todo.P.key.search(f"renew (waiting on {TAG}: task-p-1)") if TAG != "owner" else None)
 
     def test_owner_key(self):
-        for line in ("renew" + en_mark("task-p-0123456789"), f"renew (waiting on {TAG}:task-p-0123456789)",
+        for line in ("renew" + en_mark("task-p-0123456789"), "renew (waiting on owner:task-p-0123456789)",
                      "renew" + en_mark("task-p-0123456789").translate(str.maketrans("(:)", "".join(map(chr, (0xFF08, 0xFF1A, 0xFF09)))))):
             with self.subTest(line=line):
                 self.assertEqual(gen_todo.P.key.search(line).group("key"), "task-p-0123456789")
@@ -328,7 +338,7 @@ class EnglishRegistrar(unittest.TestCase):
     def test_owner_lines(self):
         lines = state(en_item(TAG, "renew the domain" + en_mark("task-p-1")), en_item(TAG, "pay"),
                       item(TAG, "zh line" + mark("task-p-2")), en_item("agent", "write tests"),
-                      f"### [{TAG}]", "- [ ] grouped", heading=EN["todo_heading"]).splitlines()
+                      "### [owner]", "- [ ] grouped", heading=EN["todo_heading"]).splitlines()
         got = [(t["text"], t["key"]) for t in registrar.owner_lines(lines)]
         self.assertEqual(got, [("renew the domain", "task-p-1"), ("pay", None), ("zh line", "task-p-2"), ("grouped", None)])
         self.assertEqual(registrar.line_texts(lines), ["renew the domain", "pay", "zh line", "write tests", "grouped"])
