@@ -1,6 +1,6 @@
 # Waiting on tests: where agent sessions wait, the floor, and what to change
 
-> agent-hub session · 2026-10-31, r13 2026-11-01. Owner's observation: in the projects being worked on now, the bottleneck is not the
+> agent-hub session · 2026-10-31, r14 2026-11-01. Owner's observation: in the projects being worked on now, the bottleneck is not the
 > agents' output but waiting for tests; the owner wants everything besides model input/output at its theoretical minimum.
 > This doc measures first, then proposes changes. **Nothing here is implemented yet.** Owner's rule for building it:
 > **the final architecture first, no workarounds.**
@@ -62,6 +62,10 @@
 > r13 (11-01): after a ninth review (2 blocking): a slot wait that is really bounded (B5); scope folders never
 > resolved below a repo root (`projects-and-repos.md` 2.4); `agenthub land` as the landing's one entry point;
 > `config:` inputs passed to the tier.
+>
+> r14 (11-01): after a tenth review (3 blocking): an unlisted `config:` name counts as absent (B1);
+> `tests.config_inputs` entries carry their variable (A1); `agenthub land` refreshes before installing (section 7);
+> path rules in `projects-and-repos.md` 2.4.
 
 ## Summary
 
@@ -254,8 +258,9 @@ merged, tested commits. It also removes the class of incidents where one session
      --staged` validates a staged registry file that way, into a temporary state, from a worktree's pre-commit. The
      test runner and its per-checkout files are not such writers.
    - hub.json lists the instance files tests may use as `config:` inputs (`tests.config_inputs`, a new key in
-     `contracts/hub.v1.schema.json`; B1 uses the same key); `test-gate` fails, instead of skipping, when the
-     private-names list is listed and cannot be found.
+     `contracts/hub.v1.schema.json`, entries `{file, env}` from the start, since B1 needs the variable name and the
+     schema rejects unknown keys); `test-gate` fails, instead of skipping, when the private-names list is listed and
+     cannot be found, and skips as today when it is not listed (a deployment without the list).
    - The hooks stay as they are in step 1: `githooks/pre-commit` runs the committing checkout's own `test-gate`, so a
      branch's commits and its merge are gated by the branch's gate scripts — what the shared checkout does today,
      where the working tree's copy runs. Gate code taken from the main checkout comes with the runner (prerequisite 2,
@@ -376,8 +381,10 @@ tests:
   lists in hub.json `tests.config_inputs` (A1) — today only the private-names list, symbolic so a public registry
   entry names no path; each listed file is readable in sandboxes, as the config folder already is, and is passed to
   the tier as a path variable named in the same list (the private-names list as `AGENT_HUB_PRIVATE_NAMES`, as
-  `test-gate` exports it today); a listed file that is missing fails the run instead of letting a test skip; any
-  other name is invalid), `env:<NAME>` (also passed into the tier,
+  `test-gate` exports it today); a listed file that is missing fails the run instead of letting a test skip; a
+  declared name hub.json does not list counts as absent — the key records "absent" and the test skips, as on a
+  deployment without a private-names list today (round 10: "invalid" would have made the platform's own entry
+  invalid on every such deployment)), `env:<NAME>` (also passed into the tier,
   B4), `cmd:<command>` (its output, e.g. an interpreter's version, run in the tier's fixed environment). Inputs are
   evaluated by the runner with the authority of the run (B4), never by the platform on its own. agent-hub declares its Python version and
   `config:private-names.txt`, today's two extra key parts.
@@ -675,8 +682,9 @@ replaces; each step only adds to the ones before it.
       `merge-branch` on the runner, and only the main checkout's `merge-branch` runs (a worktree's copy re-executes
       main's). `merge-branch`'s **landing step for the hub's own repo** (permanent, added in step 2.2 so main's copy
       has it when 2.3 merges): after the fast-forward, still under the merge lock, it starts the merged tree's own code
-      as subprocesses (not in-process: the old modules are already imported) — `agenthub land`: the hook installer for
-      the hub repo only, then `registry.refresh` — so every merge of agent-hub leaves its hooks and the index matching the code it
+      as subprocesses (not in-process: the old modules are already imported) — `agenthub land`: `registry.refresh`
+      first (the installer decides from the index, which must already hold the merged entry with `commit_gate`), then
+      the hook installer for the hub repo only; `land` is not a session command — so every merge of agent-hub leaves its hooks and the index matching the code it
       landed; agent-hub's entry rewritten by hand as v2 with
       the `lint` and `full` tiers taken out of `test-gate` (its step-1 `runtime` removed); `test-gate` thin; A1
       prerequisites 2–3 (commit tiers by where a commit lands, the `reference-transaction` check, `commit_gate`, the
