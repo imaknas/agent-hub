@@ -1,68 +1,91 @@
 #!/bin/sh -c exec${IFS}"${0%/*}/py"${IFS}"$0"${IFS}"$@"
-"""agent-hub 的事件匯流排:只 append 的事件 log + 讀取游標,專案信箱是它的投影。
+"""agent-hub's event bus: an append-only event log + read cursors; the project mailboxes are a projection of it.
 
-為什麼:跨專案(跟 owner)的溝通不能靠 session 還活著——session 放久了就互相看不到。
-這裡沒有任何長駐的訂閱者(排程 15 分鐘跑一次就結束、session 會閒置),所以是 pull:
-每個讀者記自己讀到哪(cursor),從那之後往下讀。有些事件有好幾個讀者(例:個人助理 轉交的
-done 要讓 個人助理 結案,job 失敗要給狀態頁),不用各自接一條檔案/CLI。
+Why: communication across projects (and with the owner) can't depend on a session still being alive: sessions left
+for a while can't see each other. Nothing here is a long-running subscriber (the schedule runs every 15 minutes and
+exits, sessions go idle), so it's pull: each reader records how far it has read (cursor) and reads on from there.
+Some events have several readers (e.g. a done for a handoff from the personal assistant must let the personal
+assistant close it, a failed job must reach the status page), without each wiring up its own file/CLI.
 
-存放:.state/bus/bus.db(SQLite WAL、busy_timeout、寫入都包在 transaction,好幾個 process 一起寫也安全;
-不進版控、沒有備份——壞掉的話還沒被收的信會不見,owner 2026-10-21 接受)。
-  events(seq 遞增, id 唯一=寄件端給的 id(重送 = 什麼都不做), ts, type, source, to_project, ref, payload JSON)
+Storage: .state/bus/bus.db (SQLite WAL, busy_timeout, every write wrapped in a transaction, so several processes
+writing at once is safe; not version-controlled, no backup: if it breaks, letters not yet received are lost,
+accepted by the owner on 2026-10-21).
+  events(seq increasing, id unique = the id the sender gave (resend = nothing happens), ts, type, source,
+         to_project, ref, payload JSON)
   cursors(consumer, seq)
-事件種類(要新增先有讀者再說):
-  message            一封信。to_project = 收件地址(專案名稱、agent-hub,或 knas = 送進 個人助理)
+Event types (to add one, have a reader first):
+  message            a letter. to_project = the recipient address (a project name, agent-hub, or owner = into the
+                     personal assistant; the old alias knas is accepted too)
                      payload: type(request|question|info|progress|done|handoff), text,
-                              from_session(寄件 session,只是提示), to_session(回覆先等發問的 session),
+                              from_session (the sending session, only a hint), to_session (a reply first waits for
+                              the asking session),
                               reply_to, handoff_id
-  message.delivered  ref = 信的 id;已經送進某個 session 的 context(payload: session, via)
-  message.done       ref = 信的 id;收件專案處理完了(payload: note)
-  job.failed         排程 job 失敗(payload: job, exit, detail)
-信的狀態是投影,不會原地修改:收件匣 = 給 X、還沒有 done 事件指向它的 message。
+  message.delivered  ref = the letter's id; it was delivered into some session's context (payload: session, via)
+  message.done       ref = the letter's id; the receiving project has handled it (payload: note)
+  job.failed         a scheduled job failed (payload: job, exit, detail)
+A letter's state is a projection, never modified in place: inbox = messages to X that no done event points at yet.
 
-地址是專案(專案登錄 projects/*.yaml 的名稱、agent-hub)跟 knas,永遠不是 session。
+Addresses are projects (names in the project registry projects/*.yaml, agent-hub) and owner, never sessions.
 
-用法(在專案目錄裡;寄件人預設是目前目錄的專案):
-  hubbus send --to <專案|knas> --type <request|question|info|progress|done> --text "…" [--reply-to <id>]
-  hubbus send --to knas --type task --text "…" [--due YYYY-MM-DD] [--context …] [--new-reason …] [--id …]
-  hubbus send --to knas --type done|drop --task <key> --text "…"   owner 在這個專案做完了 / 不需要了
-  hubbus send --to knas --type done|drop --question <id> --text "…"   這個專案問 owner 的問題在這裡解決了 / 不需要了
-                                      (owner 在 session 裡直接回答過):個人助理 把它從「等你」收掉,不會再送答案回來
-  hubbus open-questions [--project P] [--json]   問 owner、還沒回答也還沒在專案收掉的問題
-  hubbus reconcile-questions          librarian 每晚:開著超過 QUESTION_CHECK_DAYS 天的問題,寄一封 request 問發問的
-                                      專案還要不要(之後每 7 天再問一次);深談交接的問題(lease-…)由 個人助理 自己管,不問
-  hubbus inbox [--project P]          給這個專案、還沒 done 的信(順便記 delivered)
+Usage (in a project directory; the sender defaults to the current directory's project):
+  hubbus send --to <project|owner> --type <request|question|info|progress|done> --text "…" [--reply-to <id>]
+  hubbus send --to owner --type task --text "…" [--due YYYY-MM-DD] [--context …] [--new-reason …] [--id …]
+  hubbus send --to owner --type done|drop --task <key> --text "…"   the owner finished it in this project / not needed
+  hubbus send --to owner --type done|drop --question <id> --text "…"   this project's question to the owner was
+                                      settled here / isn't needed (the owner answered directly in the session):
+                                      the personal assistant takes it off "waiting on you" and won't send an answer
+                                      back
+  hubbus open-questions [--project P] [--json]   questions to the owner not answered yet and not closed in the
+                                      project
+  hubbus reconcile-questions          the librarian, nightly: for questions open longer than QUESTION_CHECK_DAYS
+                                      days, send a request asking the asking project whether it still needs them
+                                      (then again every 7 days); questions from discuss-lease handovers (lease-…) are
+                                      managed by the personal assistant itself, not asked
+  hubbus inbox [--project P]          letters to this project not done yet (also records delivered)
   hubbus show <id>
-  hubbus ack <id>...                  記 delivered
-  hubbus done <id>... [--note "…"]    處理完;個人助理 轉交的會由 bridge 回報 個人助理 結案
-給 hook / 排程 / 其他腳本用的:
-  hubbus hook session-start|prompt|post-tool   把新信送進 session(stdin 是 hook JSON;失敗一律安靜)
-  hubbus bridge                       排程每 15 分鐘:個人助理 轉交 → 信、給 knas 的信跟轉交的 done → 個人助理、
-                                      分派(同 dispatch)、清掉 60 天前結案的
-  hubbus dispatch                     平台處理沒人收的信(launchd 每分鐘;設計 docs/design/mailbox-routing.md):
-                                      對話(回覆某個 session 的 request/question)→ 那個 session 開著就等它的 hook
-                                      CONVERSATION_WAIT 分鐘,之後在背景接續它(context 不大時)或當交辦;
-                                      交辦 → 專案有人正在用就等同樣久;之後這個專案 FORK_RECENT_H 內有動作、還活著
-                                      的 session 用它的 context 在背景分支處理(10-26 試行),沒有才派 headless agent
-                                      (notes 能力)。agent-hub 的信也一樣。分支做完,原本的 session 下次有動作時收到
-                                      分支的最後回覆跟它寄出的信(fork_result)。
-                                      派出去的信記 message.delivered(via handler|resume|held),hook 不再當成要做的事
-  hubbus thread <id>                  這封信所在的整串往來(由舊到新)
-  hubbus open-handoffs                還沒結案的 個人助理 轉交(librarian 每晚套用進 STATE.md,可信才 done)
+  hubbus ack <id>...                  record delivered
+  hubbus done <id>... [--note "…"]    handled; for handoffs from the personal assistant, the bridge reports back to
+                                      the personal assistant to close them
+For hooks / the schedule / other scripts:
+  hubbus hook session-start|prompt|post-tool   deliver new letters into the session (stdin is the hook JSON;
+                                      failures are always silent)
+  hubbus bridge                       the schedule, every 15 minutes: handoffs from the personal assistant →
+                                      letters, letters to the owner and dones for handoffs → the personal assistant,
+                                      dispatch (same as dispatch), prune letters closed more than 60 days ago
+  hubbus dispatch                     the platform handles letters nobody took (launchd, every minute; design
+                                      docs/design/mailbox-routing.md):
+                                      conversation (a request/question replying to some session) → if that session
+                                      is open, wait CONVERSATION_WAIT minutes for its hook, then resume it in the
+                                      background (when the context isn't large) or treat it as a delegation;
+                                      delegation → if someone is using the project, wait just as long; then a live
+                                      session with activity in this project within FORK_RECENT_H handles it in a
+                                      background fork with its context (trial since 10-26); only without one is a
+                                      headless agent dispatched (notes capability). agent-hub's letters too. When the
+                                      fork is done, the original session gets the fork's last reply and the letters it
+                                      sent at its next activity (fork_result).
+                                      dispatched letters record message.delivered (via handler|resume|held), and
+                                      hooks no longer treat them as work to do
+  hubbus thread <id>                  the whole thread this letter is in (oldest first)
+  hubbus open-handoffs                handoffs from the personal assistant not closed yet (the librarian applies them
+                                      into STATE.md nightly, and marks done only when trustworthy)
   hubbus publish <type> --source S [--to P] [--ref ID] [--payload JSON] [--id ID]
   hubbus status [--json]
 
-個人助理 的介面(muninn 那邊定,改了要兩邊一起改):
-  進:`muninn handoffs --json`(待送的轉交),收進匯流排 commit 之後才 `--delivered <ids>`。
-      owner 的回答是 effect=answers、reply_to=當初問題的事件 id 的轉交,送回發問的專案。
-  出:POST http://127.0.0.1:18795/api/messages(本機,不走 tailnet 的 TLS),Bearer = muninn 的
-      data/secrets/ingest_token。{"messages":[{id=事件 id, project, type=question|progress|done, text,
-      handoff_id?}]};id 是 idempotency key,重送安全;400 = 整批裡有一則不合格、整批被拒。
-  v2(Principal Handoff 0.3 record,助理那邊的 contracts/records.v2.md;hub.json mailbox.records 開了才用,預設關):
-      send 寄給 owner 的 task/request → acts raised、done --task → claimed、drop --task → withdrawn(不需要了),
-      不再寄 v1 信;question/info/progress 照舊 v1。dispatch 每分鐘:寄給 owner 的 record 批次 POST /api/records
-      (invalid 記 job.failed 不重試);每個專案(含改名前的名稱)GET /api/records?project=&after=,寫進匯流排
-      commit 之後才 POST /api/records/ack。第一次讀只定起點(v1 已經送過的不再收)。
+The personal assistant's interface (defined on the Muninn side; a change there means changing both sides):
+  in:  `muninn handoffs --json` (handoffs waiting to be sent); `--delivered <ids>` only after they're committed
+       into the bus. The owner's answers are handoffs with effect=answers, reply_to = the event id of the original
+       question, sent back to the asking project.
+  out: POST http://127.0.0.1:18795/api/messages (local, not via the tailnet's TLS), Bearer = Muninn's
+       data/secrets/ingest_token. {"messages":[{id=event id, project, type=question|progress|done, text,
+       handoff_id?}]}; id is the idempotency key, so resending is safe; 400 = one item in the batch is invalid and
+       the whole batch is rejected.
+  v2 (Principal Handoff 0.3 records, the assistant's contracts/records.v2.md; used only with hub.json
+      mailbox.records on, off by default):
+      send's task/request to the owner → acts raised, done --task → claimed, drop --task → withdrawn (not needed),
+      no more v1 letters for these; question/info/progress stay v1. dispatch, every minute: records to the owner are
+      POSTed in batches to /api/records (invalid ones record job.failed, no retry); for each project (including names
+      before a rename) GET /api/records?project=&after=, and POST /api/records/ack only after they're committed
+      into the bus. The first read only sets the starting point (what v1 already delivered isn't taken again).
 """
 from __future__ import annotations
 
@@ -84,7 +107,7 @@ import urllib.parse
 import urllib.request
 
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
-import hubconf  # noqa: E402  路徑、owner 地址、專案登錄都從平台設定來
+import hubconf  # noqa: E402  paths, the owner address, the project registry all come from the platform settings
 import i18n  # noqa: E402
 
 _ = i18n.domain(__file__)
@@ -97,40 +120,58 @@ ASSISTANT_HOME = ASSISTANT_CLI.parents[2] if ASSISTANT_CLI else None   # <runtim
 ASSISTANT_API = hubconf.get("assistant.api")
 INGEST_TOKEN = hubconf.p("assistant.ingest_token")
 LOG = hubconf.BUS_LOG
-# owner(= owner)的地址:新的信用 owner,舊的 knas 一樣收(hub.json 的 owner.address/aliases)
+# the owner's address: new letters use owner, the old knas is still accepted (hub.json's owner.address/aliases)
 OWNER_ADDRESS = hubconf.owner_address()
-KNAS = OWNER_ADDRESS   # 舊名稱,新程式用 OWNER_ADDRESS
+KNAS = OWNER_ADDRESS   # old name; new code uses OWNER_ADDRESS
 OWNERS = hubconf.owner_addresses()
 TYPES = ("request", "question", "info", "progress", "done", "task", "drop", "manifest.update")
-# manifest.update:專案寄完整的登錄 YAML 給平台(--to agent-hub),registry.py apply-updates 驗證後套用或退回
-OWNER = hubconf.owner_tag()                         # 給人看的稱呼(待辦的〔標籤〕),這台是 hub.json owner.tag
-ASSISTANT = hubconf.assistant_name()                # 個人助理給人看的名字(hub.json assistant.name)
-OWNER_ALIAS = hubconf.fill_names("{{owner_alias}}")  # agent 寄信給 owner 用的地址(hub.json owner.aliases 的第一個)
-HANDOFF_ID_PREFIX = "muninn-handoff-"   # 轉交收進來的信 id 開頭(匯流排裡已經是這個格式:不能改,改了重送會收兩次)
-KNAS_ONLY = ("task", "drop")   # 助理 的任務登錄:只有 owner 能做的事,只寄給 knas
-# 寄給 knas 的 type → 助理 收的 type。request = 要 owner 去做一件事 = 任務;要他用文字回答的才是 question
+# manifest.update: a project sends its full registry YAML to the platform (--to agent-hub); registry.py apply-updates
+# validates it, then applies or rejects it
+OWNER = hubconf.owner_tag()                         # the name people see (the to-do tag), here hub.json owner.tag
+ASSISTANT = hubconf.assistant_name()                # the personal assistant's display name (hub.json assistant.name)
+OWNER_ALIAS = hubconf.fill_names("{{owner_alias}}")  # the address agents mail the owner at (first of owner.aliases)
+# id prefix of letters taken in from handoffs (the bus already holds this format: can't change, or a resend would be
+# taken twice)
+HANDOFF_ID_PREFIX = "muninn-handoff-"
+KNAS_ONLY = ("task", "drop")   # the assistant's task registry: things only the owner can do, sent only to the owner
+# type sent to the owner → type the assistant receives. request = asks the owner to go do something = a task; only
+# ones he's to answer in words are question
 TO_MUNINN = {"request": "task", "task": "task", "question": "question", "info": "progress",
              "progress": "progress", "done": "done", "drop": "drop"}
-TASK_FIELDS = ("task", "due", "context", "new_reason", "inferred", "question")   # 照原樣轉給 助理
-QUESTION_CHECK_DAYS = 3   # 問 owner 的問題開著幾天後,問發問的專案還要不要(m10252237:在專案 session 裡解決了,助理 不知道)
-KEYED = ("done", "dropped", "already_done", "reopened")  # 帶任務 key 的轉交:librarian 照 key 機械套用
+TASK_FIELDS = ("task", "due", "context", "new_reason", "inferred", "question")   # passed through to the assistant as is
+# days a question to the owner stays open before asking the asking project whether it still needs it (m10252237:
+# settled in the project's session, and the assistant didn't know)
+QUESTION_CHECK_DAYS = 3
+KEYED = ("done", "dropped", "already_done", "reopened")  # handoffs with a task key: the librarian applies them by key
 BRIDGE = "muninn-bridge"
-ACTIONABLE = ("request", "question")  # 平台會處理的信;轉交(handoff)由 librarian 每晚套用、通知類不用處理
+# letters the platform handles; handoffs are applied by the librarian nightly, notifications need no handling
+ACTIONABLE = ("request", "question")
 _MB = hubconf.get("mailbox", {}) or {}
-CONVERSATION_WAIT_MIN = int(_MB.get("conversation_wait_min", 5))   # 有人正在用/對話對象還開著:先等它的 hook
+# someone is using it / the other party is still open: wait for its hook
+CONVERSATION_WAIT_MIN = int(_MB.get("conversation_wait_min", 5))
 RESUME_MAX_TOKENS = int(_MB.get("resume_max_tokens", 150000))
-RECORDS = bool(_MB.get("records", False))   # 寄給 owner 的任務改寄 0.3 record(助理收 v2 之後才開;bridge v2 跟著同一個開關)
-TAKE_TIMEOUT_MIN = int(_MB.get("take_timeout_min", 60))   # 送進 session 只算「看過」;這麼久沒 ack/回信/done → 當沒人收,照常分派
-SEEN_VIA = ("session-start", "prompt", "post-tool", "inbox")   # 這些只代表信出現在某個 session 的畫面上,不代表有人接手      # 接續的 context 超過這個就改派新的(附整串)
-THREAD_MAX_ROUNDS = int(_MB.get("thread_max_rounds", 4))           # 同一串往來平台最多代為處理幾輪
-DAILY_RUNS = int(_MB.get("daily_runs_per_project", 6))             # 每個專案每天最多派幾次
-STUCK_HOURS = 1          # 狀態:寄出超過這麼久,沒有 session 收、平台也沒接手
-RESUME_TIMEOUT_MIN = 35  # 背景接續超過這麼久還沒結案(mailbox-conversation 的 timeout 是 30 分鐘)→ 改派交辦
-FORK_RECENT_H = int(_MB.get("fork_recent_hours", 24))   # 交辦:這麼久內有動作、還活著的 session 用它的 context 分支處理
-REPLY_WAIT_MIN = 30      # 回覆先等發問的 session 這麼久,過了就給任何 session
-POST_TOOL_EVERY_S = 120  # PostToolUse 每個 session 最多這麼久查一次
+# tasks to the owner are sent as 0.3 records instead (turn on only once the assistant takes v2; bridge v2 follows the
+# same switch)
+RECORDS = bool(_MB.get("records", False))
+# delivery into a session only counts as "seen"; no ack/reply/done for this long → treated as untaken, dispatched as
+# usual
+TAKE_TIMEOUT_MIN = int(_MB.get("take_timeout_min", 60))
+# these only mean the letter appeared on some session's screen, not that anyone took it on
+# if the resumed context exceeds this, dispatch a new one (with the whole thread)
+SEEN_VIA = ("session-start", "prompt", "post-tool", "inbox")
+THREAD_MAX_ROUNDS = int(_MB.get("thread_max_rounds", 4))           # max rounds the platform handles in one thread
+DAILY_RUNS = int(_MB.get("daily_runs_per_project", 6))             # max dispatches per project per day
+STUCK_HOURS = 1          # status: sent longer ago than this, no session took it, the platform didn't either
+# a background resume not closed after this long (mailbox-conversation's timeout is 30 minutes) → dispatch as a
+# delegation
+RESUME_TIMEOUT_MIN = 35
+# delegation: a live session with activity within this window handles it in a fork with its context
+FORK_RECENT_H = int(_MB.get("fork_recent_hours", 24))
+REPLY_WAIT_MIN = 30      # a reply first waits this long for the asking session, then goes to any session
+POST_TOOL_EVERY_S = 120  # PostToolUse checks at most this often per session
 PRUNE_DAYS = 60
-POISON_HOURS = 24        # 助理 回 400 的那則重試這麼久,還是不收才跳過(記 job.failed)
+# the item the assistant answers 400 to is retried this long, and skipped only if still refused (records job.failed)
+POISON_HOURS = 24
 HOOK_TIMEOUT_S = 2
 
 
@@ -162,15 +203,16 @@ def db(timeout: float = 30) -> sqlite3.Connection:
     CREATE INDEX IF NOT EXISTS events_type_to ON events(type, to_project);
     CREATE INDEX IF NOT EXISTS events_ref ON events(ref);
     CREATE TABLE IF NOT EXISTS cursors(consumer TEXT PRIMARY KEY, seq INTEGER NOT NULL, updated TEXT);
-    -- 在場紀錄(不是事件:每次 hook 都更新,不進 log):哪個 session 在哪個專案、cwd、最後一次動作
+    -- presence (not events: updated on every hook, not in the log): which session is in which project, cwd, last
+    -- activity
     CREATE TABLE IF NOT EXISTS presence(session TEXT PRIMARY KEY, project TEXT NOT NULL, cwd TEXT, seen TEXT NOT NULL);
     """)
     return c
 
 
 def publish(c, eid, etype, source, to_project=None, ref=None, payload=None) -> bool:
-    """回傳是不是新的(同一個 id 已經有了就什麼都不做)。"""
-    body = {"v": 1, **(payload or {})}  # 契約 contracts/hubbus.v1.schema.json
+    """Return whether it's new (if the same id already exists, nothing happens)."""
+    body = {"v": 1, **(payload or {})}  # contract: contracts/hubbus.v1.schema.json
     cur = c.execute("INSERT OR IGNORE INTO events(id, ts, type, source, to_project, ref, payload) VALUES(?,?,?,?,?,?,?)",
                     (eid, iso(), etype, source, to_project, ref, json.dumps(body, ensure_ascii=False)))
     return cur.rowcount == 1
@@ -190,7 +232,7 @@ def payload(r) -> dict:
     return json.loads(r["payload"] or "{}")
 
 
-# ---------- 地址 ----------
+# ---------- addresses ----------
 
 def projects() -> dict[str, pathlib.Path]:
     out = {hubconf.hub_project(): HUB}
@@ -206,7 +248,8 @@ def canon(addr: str) -> str:
 
 
 def project_of(cwd: pathlib.Path) -> str | None:
-    """cwd 屬於哪個專案:git 的主 checkout(worktree、.agent-memory 都算主專案),再比對路徑前綴。"""
+    """Which project cwd belongs to: git's main checkout (worktrees and .agent-memory count as the main project),
+    then path-prefix matching."""
     paths = {}
     for name, p in projects().items():
         try:
@@ -224,17 +267,21 @@ def project_of(cwd: pathlib.Path) -> str | None:
     return None
 
 
-# 會改匯流排的子指令:平台代寄的工作(propose)裡的 agent 一律不准跑(見 platform_mails())
+# subcommands that change the bus: an agent in a platform-sends-for-it job (propose) may never run them (see
+# platform_mails())
 WRITES = {"send", "done", "ack", "publish", "record-publish", "bridge", "dispatch", "reconcile-questions"}
-PLATFORM_MAILS_ENV = "HUB_MAIL_BY_PLATFORM"   # bin/propose_apply.py 設給它叫起的 agent
-# 它真的被叫起來的樣子(這份 hub 的絕對路徑 + mailbox 子指令);只比對名稱會把引號裡提到它的指令(例:commit 訊息)也算進來
+PLATFORM_MAILS_ENV = "HUB_MAIL_BY_PLATFORM"   # set by bin/propose_apply.py for the agent it starts
+# what it looks like when it's really started (this hub's absolute path + the mailbox subcommand); matching only the
+# name would also count commands that mention it in quotes (e.g. a commit message)
 PROPOSE_CMD = re.compile(rf"(?:^|\s){re.escape(str(HUB / 'bin' / 'propose_apply.py'))}\s+mailbox(?:\s|$)")
 
 
 def platform_mails() -> str | None:
-    """這個程序是不是在「agent 提議、平台套用」的工作裡(bin/propose_apply.py):那種工作要寄的信、要結案的事由平台照 agent 的
-    輸出代寄,agent 自己寄就繞過了只准回原寄件人、寄件人由平台給的保證。兩種認法(任一成立就是):
-    propose_apply 設的環境變數;祖先程序裡有 propose_apply.py(環境變數被清掉、換了工作目錄也躲不掉)。"""
+    """Whether this process is inside an "agent proposes, platform applies" job (bin/propose_apply.py): in that kind
+    of job the letters to send and things to close are sent by the platform from the agent's output; an agent sending
+    by itself would bypass the guarantee that it may only reply to the original sender and that the platform sets the
+    sender. Two ways to tell (either one means yes): the environment variable propose_apply sets; propose_apply.py
+    among the ancestor processes (can't be dodged by clearing the environment or changing the working directory)."""
     if os.environ.get(PLATFORM_MAILS_ENV):
         return _("environment variable")
     pid = os.getppid()
@@ -244,7 +291,8 @@ def platform_mails() -> str | None:
         try:
             r = subprocess.run(["ps", "-o", "ppid=,command=", "-p", str(pid)], capture_output=True, text=True)
         except OSError:
-            # 工具的沙盒不准跑 ps(setuid),而且本來就只看得到同一個沙盒裡的程序:跟「看不到那個程序」一樣,只剩環境變數這道
+            # the tool's sandbox doesn't allow running ps (setuid), and can only see processes in the same sandbox
+            # anyway: same as "can't see that process", leaving only the environment variable check
             return None
         ppid, _sep, cmd = r.stdout.strip().partition(" ")
         if r.returncode != 0 or not ppid.strip().isdigit():
@@ -259,7 +307,7 @@ def valid_address(a: str) -> bool:
     return a in OWNERS or a in projects()
 
 
-# ---------- 信(message 的投影) ----------
+# ---------- letters (the projection of message) ----------
 
 def new_id() -> str:
     return f"m{now():%m%d%H%M}-{secrets.token_hex(2)}"
@@ -269,11 +317,12 @@ def get_message(c, mid):
     return c.execute("SELECT * FROM events WHERE id=? AND type='message'", (mid,)).fetchone()
 
 
-# ---------- Principal Handoff 0.3 records(docs/design/principal-handoff-0.3-migration.md 階段 3)----------
-# 匯流排的事件 type "record",payload {"v": 1, "record": <0.3 record 原樣>}。往助理的:source = 專案、to_project = owner;
-# 從助理來的:source = owner、to_project = 專案(改名過的追到現在的名字;record 本身不改)。
-# 事件 id = rec:<ext>:<project>:<record id>(core 的去重範圍是 (ext, project, id)),重送是 no-op。
-KEY_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$")   # core 0.3 的 key
+# ---------- Principal Handoff 0.3 records (docs/design/principal-handoff-0.3-migration.md, stage 3) ----------
+# Bus event type "record", payload {"v": 1, "record": <the 0.3 record as is>}. To the assistant: source = project,
+# to_project = owner; from the assistant: source = owner, to_project = project (renamed ones followed to their
+# current name; the record itself is unchanged).
+# Event id = rec:<ext>:<project>:<record id> (core's dedup scope is (ext, project, id)), so a resend is a no-op.
+KEY_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$")   # a core 0.3 key
 RECORD_REQUIRED = ("ph", "ext", "id", "type", "origin", "by", "key", "project", "ts")
 
 
@@ -282,7 +331,7 @@ def record_event_id(rec: dict) -> str:
 
 
 def record_errors(rec) -> list[str]:
-    """只檢查 core 的必要欄位跟版本(完整的 schema 驗證由收的那一方做)。"""
+    """Only checks core's required fields and the version (full schema validation is the receiver's job)."""
     if not isinstance(rec, dict):
         return [_("not a JSON object")]
     errs = [_("missing {k}", k=k) for k in RECORD_REQUIRED if not rec.get(k)]
@@ -292,12 +341,13 @@ def record_errors(rec) -> list[str]:
 
 
 def task_key(project: str, text: str) -> str:
-    """Acts 規範的範例 key 做法(acts §7.2;registrar 用同一個):文字一樣就是同一件。"""
+    """The Acts spec's example way of making keys (acts §7.2; the registrar uses the same): same text, same task."""
     return f"task-{project}-{hashlib.sha1(' '.join(text.split()).encode()).hexdigest()[:10]}"
 
 
 def send_record(c, a, sender: str, mid: str) -> str | None:
-    """send 寄給 owner 的任務翻成 Acts record(方向一的對應表);不歸 Acts 管的回 None(照寄 v1 信)。"""
+    """Translate a task send mails to the owner into an Acts record (direction one's mapping table); for what Acts
+    doesn't cover, return None (sent as a v1 letter as usual)."""
     kind = "raised" if a.type in ("task", "request") else \
         "claimed" if a.type == "done" and a.task else "withdrawn" if a.type == "drop" and a.task else None
     if kind is None:
@@ -310,11 +360,14 @@ def send_record(c, a, sender: str, mid: str) -> str | None:
         rec |= {"id": f"r:{key}", "origin": "requester", "by": hubconf.party("requester", sender),
                 "terms": {"text": " ".join(a.text.split()), **({"due": a.due} if a.due else {})}, "terms_rev": 1}
         if a.new_reason:
-            rec["note"] = a.new_reason   # 跟最近結案的很像、但確實是新的一件:助理據此不合併
+            # much like a recently closed one, but really new: the assistant then doesn't merge them
+            rec["note"] = a.new_reason
     elif kind == "claimed":
         rec |= {"id": f"c:{key}:{mid}", "origin": "agent", "by": hubconf.party("agent", sender), "outcome": "done",
                 "evidence": {"basis": a.text}}
-    else:   # drop --task = 這個專案不需要了:助理保留、問 owner(其他專案的需求不受影響)
+    else:
+        # drop --task = this project doesn't need it: the assistant keeps it and asks the owner (other projects' needs
+        # aren't affected)
         rec |= {"id": f"w:{key}:{mid}", "origin": "requester", "by": hubconf.party("requester", sender),
                 "reason": "not_needed", "note": a.text}
     if a.context:
@@ -328,8 +381,9 @@ def publish_record(c, rec: dict, source: str, to_project: str) -> tuple[str, boo
 
 
 def records(c, project, ext=None, types=None, pending=False, direction=None) -> list[dict]:
-    """這個專案的 record,兩個方向、舊到新:{id: 事件 id, ts, direction: out(專案寄給助理)| in(助理寄來), done, record}。
-    registrar 從 out 的 raised/amended 算最新的 terms/terms_rev、知道哪些 key 已經 withdrawn——匯流排就是它的紀錄。"""
+    """This project's records, both directions, oldest first: {id: event id, ts, direction: out (project to the
+    assistant) | in (from the assistant), done, record}. The registrar works out the latest terms/terms_rev from the
+    out raised/amended ones and knows which keys were withdrawn: the bus is its record."""
     owners = tuple(OWNERS)
     marks = ",".join("?" * len(owners))
     out = []
@@ -347,7 +401,7 @@ def records(c, project, ext=None, types=None, pending=False, direction=None) -> 
 
 
 def fmt_record(r, long=True) -> str:
-    """session 看得懂的 record:是哪一件、誰決定的、什麼授權。"""
+    """A record as a session can read it: which item, who decided, what authority."""
     rec = payload(r).get("record") or {}
     family, kind = rec.get("ext", "?").split("/")[0], rec.get("type", "?")
     what = {"acts": _("task"), "decisions": _("question")}.get(family, family)
@@ -379,7 +433,7 @@ def fmt_record(r, long=True) -> str:
 
 
 def get_event(c, eid):
-    """信或 record(done、show 用)。"""
+    """A letter or a record (for done, show)."""
     return c.execute("SELECT * FROM events WHERE id=? AND type IN ('message','record')", (eid,)).fetchone()
 
 
@@ -403,7 +457,8 @@ ORDER BY m.seq"""
 
 
 def inbox(c, project, session=None, only_new=False):
-    """給這個專案、還沒 done 的信。指定回覆給某個 session 的,先等那個 session 一陣子。"""
+    """Letters to this project not done yet. A reply addressed to a particular session waits for that session a
+    while first."""
     cutoff = iso(now() - datetime.timedelta(minutes=REPLY_WAIT_MIN))
     rows = []
     for r in c.execute(INBOX_SQL, (project,)).fetchall():
@@ -417,8 +472,9 @@ def inbox(c, project, session=None, only_new=False):
 
 
 def mark_delivered(c, rows, session, via) -> None:
-    # 通道租借的 session(runner 設 HUBBUS_LEASE=1):信照樣送進 context 讓深談看得到,但不標 delivered——
-    # 唯讀的深談處理不了 request,不能讓它擋掉 12 小時的升級
+    # a channel-lease session (the runner sets HUBBUS_LEASE=1): letters still go into the context so the discuss lease
+    # sees them, but aren't marked delivered: a read-only discuss lease can't handle a request, and mustn't block the
+    # 12-hour escalation
     if os.environ.get("HUBBUS_LEASE") and via in ("session-start", "prompt", "post-tool"):
         return
     for r in rows:
@@ -427,16 +483,19 @@ def mark_delivered(c, rows, session, via) -> None:
 
 
 def take_state(c, mid, to_project=None):
-    """這封信的接手狀態:"taken"(有 session ack、平台派出去了、或擋下)/ 最後一次被看到的時間(只被看過)/ None(沒送出去過)。
-    10-27:信被 hook 送進一個正在忙別的事的 session 就沒人處理了——delivered 不等於有人接手(m10270201-921a)。"""
+    """Who has taken this letter on: "taken" (a session acked it, the platform dispatched it, or held it) / the last
+    time it was seen (only seen) / None (never delivered).
+    10-27: a letter a hook delivered into a session busy with something else went unhandled: delivered doesn't mean
+    someone took it on (m10270201-921a)."""
     if to_project and c.execute("SELECT 1 FROM events WHERE type='message' AND ref=? AND source=?",
                                 (mid, to_project)).fetchone():
-        return "taken"   # 收件的專案已經回信了(回了但還沒 done,也是有人在處理)
+        # the receiving project already replied (replied but not done yet still means someone is handling it)
+        return "taken"
     seen = None
     for r in c.execute("SELECT ts, json_extract(payload,'$.via') AS via FROM events WHERE type='message.delivered' AND ref=?",
                        (mid,)):
         if r["via"] not in SEEN_VIA:
-            return "taken"   # ack、handler、resume、held
+            return "taken"   # ack, handler, resume, held
         seen = max(seen or r["ts"], r["ts"])
     return seen
 
@@ -483,19 +542,20 @@ def hook_input() -> dict:
     return {}
 
 
-HOOK_EVENTS = {"session-start": "session_start", "prompt": "prompt", "post-tool": "tool_used"}  # 舊名稱 → 平台事件
+HOOK_EVENTS = {"session-start": "session_start", "prompt": "prompt", "post-tool": "tool_used"}  # old name → event
 
 
 def cmd_hook(event: str) -> None:
-    """舊的 `hubbus hook <事件>` 入口:worktree 的使用者層級 hook 跟還沒換新設定的專案還在叫它(Knas 改使用者層級
-    設定之前都要能用)。邏輯在 mail_text;輸出透過執行環境的 inject,跟以前一字不差。"""
+    """The old `hubbus hook <event>` entry point: worktrees' user-level hooks and projects without the new settings
+    still call it (it must keep working until the owner changes the user-level settings). The logic is in mail_text;
+    output goes through the runtime's inject, word for word as before."""
     import runtime_ports
     data = hook_input()
     text = mail_text(event, data.get("session_id"), data.get("cwd"))
     if text:
         try:
             rt = runtime_ports.load(ports=("lifecycle",))
-        except runtime_ports.Unsupported:   # 沒有 hook 的執行環境不會叫到這裡;信照樣在信箱裡
+        except runtime_ports.Unsupported:   # a runtime without hooks never gets here; the letters stay in the mailbox
             return
         out = rt.inject(HOOK_EVENTS[event], text)
         if out:
@@ -503,8 +563,9 @@ def cmd_hook(event: str) -> None:
 
 
 def open_questions(c, project=None) -> list:
-    """問 Knas、還開著的問題:沒有 Knas 的回答(回答是 knas 寄回來、ref = 問題 id 的信),也沒有發問的專案送
-    done/drop --question 收掉。深談交接的問題(id 是 lease-…)Muninn 自己管(最新一次交接為準),不算在這裡。"""
+    """Questions to the owner still open: no answer from the owner (an answer is a letter from the owner with ref =
+    the question id), and not closed by the asking project with done/drop --question. Questions from discuss-lease
+    handovers (id lease-…) are managed by the assistant itself (the latest handover wins), not counted here."""
     owners = tuple(OWNERS)
     marks = ",".join("?" * len(owners))
     answered = {r["ref"] for r in c.execute(
@@ -521,7 +582,8 @@ def open_questions(c, project=None) -> list:
 
 
 def questions_note(c, project) -> str | None:
-    """開 session 時:這個專案問 Knas、還開著的問題。在這裡解決了要送 --question 收掉,Muninn 才知道。"""
+    """At session start: this project's questions to the owner that are still open. One settled here must be closed
+    with --question, so the assistant knows."""
     qs = open_questions(c, project)
     if not qs:
         return None
@@ -535,8 +597,10 @@ def questions_note(c, project) -> str | None:
 
 
 def reconcile_questions(c, now=None) -> list:
-    """開著超過 QUESTION_CHECK_DAYS 天的問題:寄一封 request 給發問的專案(平台的分派送進開著的 session,沒人就派
-    headless agent 看 memory 判斷),問還要不要。id 固定(問題 + 第幾週),重跑不重寄;回傳寄出的信 id。"""
+    """Questions open longer than QUESTION_CHECK_DAYS days: send a request to the asking project (the platform's
+    dispatch delivers it into an open session, or with nobody there sends a headless agent to judge from memory),
+    asking whether it's still needed. The id is fixed (question + which week), so a rerun doesn't resend; returns the
+    ids of the letters sent."""
     now = now or datetime.datetime.now(datetime.timezone.utc)
     sent = []
     for r in open_questions(c):
@@ -559,19 +623,22 @@ def reconcile_questions(c, now=None) -> list:
 
 
 def mail_text(event: str, session, cwd) -> str | None:
-    """平台的邏輯:記在場紀錄、把這個 session 該收的信送進去,回傳要放進 context 的文字(沒有就 None)。
-    event 是 session-start / prompt / post-tool。跟執行環境無關。"""
-    # 沒有 session = 不是真的 session 在跑(onboard/rename 也會用 --quiet 跑 sync-local-setup.sh):
-    # 什麼都不做,不然信會被記成 delivered,卻沒有任何 session 看到
+    """The platform's logic: record presence, deliver the letters this session should get, return the text to put
+    into the context (None if there's none). event is session-start / prompt / post-tool. Runtime-independent."""
+    # no session = no real session is running (onboard/rename also run sync-local-setup.sh with --quiet):
+    # do nothing, or letters would be recorded as delivered without any session seeing them
     if not session or not DB.exists():
         return None
-    # 平台自己的 headless 模型呼叫(llm.py 設 HUB_LLM_POINT,例:每小時的 login-check)不是收件人:不送信、不記在場。
-    # 不擋的話,在 hub 根目錄跑的呼叫會繼承 agent-hub 的 SessionStart hook,把新信標成送進去了,dispatch 就不派
-    # (10-27 盲審查到;m10250040-50a0 等被 login-check 收走)。租約的 session 例外:深談要看得到信(下面照舊不標 delivered)
+    # The platform's own headless model calls (llm.py sets HUB_LLM_POINT, e.g. the hourly login-check) aren't
+    # recipients: no letters delivered, no presence recorded. Unblocked, a call run in the hub root inherits
+    # agent-hub's SessionStart hook and marks new letters delivered, so dispatch doesn't send anyone (found by a
+    # blind review on 10-27; m10250040-50a0 and others were swallowed by login-check). Lease sessions are the exception:
+    # a discuss lease must see letters (still not marked delivered, below)
     if os.environ.get("HUB_LLM_POINT") and not os.environ.get("HUBBUS_LEASE"):
         return None
     if event == "post-tool":
-        # 限流:每個 session 最多 POST_TOOL_EVERY_S 查一次(戳記放 /tmp,不寫進匯流排;在查 git 之前就擋掉)
+        # rate limit: each session checks at most once per POST_TOOL_EVERY_S (the stamp lives in /tmp, not the bus;
+        # stopped before querying git)
         stamp = pathlib.Path(os.environ.get("TMPDIR", "/tmp")) / f"hubbus-post-tool-{session}"
         try:
             if time.time() - stamp.stat().st_mtime < POST_TOOL_EVERY_S:
@@ -585,12 +652,13 @@ def mail_text(event: str, session, cwd) -> str | None:
         return None
     c = db(timeout=HOOK_TIMEOUT_S)
     c.execute("BEGIN IMMEDIATE")
-    if not os.environ.get("HUBBUS_LEASE"):  # 租約的 session 不算收件人
+    if not os.environ.get("HUBBUS_LEASE"):  # lease sessions don't count as recipients
         c.execute("INSERT INTO presence(session, project, cwd, seen) VALUES(?,?,?,?) ON CONFLICT(session) DO UPDATE"
                   " SET project=excluded.project, cwd=excluded.cwd, seen=excluded.seen",
                   (session, project, str(cwd), iso()))
     if event == "session-start":
-        # 開 session(含壓縮後):新的全送,之前送過但還沒 done 的列一行,不然壓縮後就看不到了
+        # session start (including after compaction): deliver all new ones, list one line for each delivered before
+        # but not done yet, otherwise they'd be invisible after compaction
         rows = inbox(c, project, session)
         new = [r for r in rows if not r["delivered"]]
         old = [r for r in rows if r["delivered"]]
@@ -608,8 +676,10 @@ def mail_text(event: str, session, cwd) -> str | None:
         return note
     rows = inbox(c, project, session, only_new=True)
     mark_delivered(c, rows, session, event)
-    # 給這個 session 的對話回信,在它閒置時被平台在背景接續處理掉了:下次有動作時提一行,不然它不知道
-    # 分支還在跑的先不提(做完才把它說了什麼帶過來,不然原本的 session 只知道「處理了」,不知道結果)
+    # Conversation replies to this session that the platform handled by resuming it in the background while it was
+    # idle: mention them in a line at its next activity, otherwise it wouldn't know.
+    # Forks still running aren't mentioned yet (what they said is brought over once done; otherwise the original
+    # session would only know "handled", not the outcome)
     handled, merged = [], {}
     for r in c.execute("""SELECT m.* FROM events m JOIN events d ON d.ref=m.id AND d.type='message.delivered'
         AND json_extract(d.payload,'$.via')='resume' AND json_extract(d.payload,'$.session')=?
@@ -633,7 +703,7 @@ def mail_text(event: str, session, cwd) -> str | None:
     return None
 
 
-# ---------- bridge:助理 ↔ 匯流排、升級、清理 ----------
+# ---------- bridge: assistant ↔ bus, escalation, cleanup ----------
 
 def handoff_text(h: dict) -> str:
     e = h.get("effect")
@@ -667,8 +737,9 @@ def handoff_text(h: dict) -> str:
 
 
 def current_name(proj: str) -> str:
-    """改名過的專案現在叫什麼(照 .state/project-renames.json 一路追;沒改過就原樣)。助理的轉交可能還用舊名稱
-    (例:idea-1 升級改名成 garden-app 之後還有轉交寄給 idea-1)。"""
+    """What a renamed project is called now (followed all the way through .state/project-renames.json; unchanged if
+    never renamed). The assistant's handoffs may still use the old name (e.g. after idea-1 was upgraded and renamed to
+    garden-app, handoffs still came addressed to idea-1)."""
     try:
         renames = json.loads((hubconf.STATE / "project-renames.json").read_text())
     except (OSError, ValueError):
@@ -681,14 +752,15 @@ def current_name(proj: str) -> str:
 
 
 def log_once(key: str, msg: str) -> None:
-    """同一件事只在內容變的時候記一次(每分鐘跑的 dispatch 不要把同一行灌滿 log)。"""
+    """Log the same thing only once, until its content changes (the every-minute dispatch mustn't flood the log
+    with the same line)."""
     f = hubconf.STATE / f"hubbus-logged-{key}.txt"
     try:
         if f.read_text() == msg:
             return
     except OSError:
         pass
-    if msg:  # 空的 = 這件事已經沒了:只重設紀錄,不記空行
+    if msg:  # empty = the issue is gone: just reset the record, don't log an empty line
         log(msg)
     try:
         f.write_text(msg)
@@ -697,8 +769,9 @@ def log_once(key: str, msg: str) -> None:
 
 
 def asks_text(h: dict) -> str:
-    """effect=asks:owner 透過助理問這個專案一件事(m10261731-817c)。寄成 question,照 dispatch 的規則處理
-    (有人在打字先等;沒有就用這個專案最近活著的 session 分支回答)。回覆一定要帶 --reply-to,handoff_id 才會跟著回去。"""
+    """effect=asks: the owner asks this project something through the assistant (m10261731-817c). Sent as a question
+    and handled by dispatch's rules (if someone is typing, wait; otherwise a fork of this project's most recent live
+    session answers). A reply must carry --reply-to, so the handoff_id goes back with it."""
     return (_("{owner} asks this project through {assistant} and is waiting for the answer:\n{fact}",
               owner=OWNER, assistant=ASSISTANT, fact=h.get("fact", ""))
             + ("\n" + _("{owner}'s words: {quote}", owner=OWNER, quote=h["quote"]) if h.get("quote") else "")
@@ -731,7 +804,9 @@ def import_handoffs(c) -> None:
         if h.get("status", "pending") != "pending":
             continue
         if RECORDS and has_record(h):
-            continue   # v2 會送(助理 ack 之後 v1 就不再列);兩邊都拿,librarian/registrar 會看到兩次
+            # v2 delivers it (once the assistant acks, v1 stops listing it); taking both would let the
+            # librarian/registrar see it twice
+            continue
         proj = publish_handoff(c, h, known)
         if proj is None:
             unknown.append(f"#{h.get('id')}→{h.get('project')}")
@@ -740,14 +815,16 @@ def import_handoffs(c) -> None:
     c.execute("COMMIT")
     log_once("handoffs-unknown", _("Handoffs from {assistant} are addressed to projects not in the roster; left with "
                                    "{assistant}: {items}", assistant=ASSISTANT, items=", ".join(unknown)) if unknown else "")
-    if ack:  # 匯流排 commit 之後才回報;回報失敗下次再報,匯流排的 id 去重不會收兩次
+    # report only after the bus commit; if reporting fails, report next time: the bus's id dedup won't take it twice
+    if ack:
         r = assistant_cli("--delivered", *ack)
         if r.returncode != 0:
             log(_("could not tell the assistant they were received (retrying next time): {err}", err=r.stderr.strip()[-200:]))
 
 
-# 助理那邊有 0.3 record 的轉交(它的 handoff_records.Outbox.records 同一條規則);answers 也有(decisions settled),
-# 但這邊的 Decisions 還沒換,v1 照拿,v2 的寫成同一封信
+# Handoffs the assistant also has as 0.3 records (the same rule as its handoff_records.Outbox.records); answers have
+# them too (decisions settled), but Decisions hasn't been switched over on this side, so v1 is still taken and v2's
+# are written as the same letter
 V2_KEYED = ("done", "dropped", "already_done", "reopened", "same_as", "premise")
 V2_NOTES = ("resolves", "changes", "relevant")
 
@@ -758,17 +835,19 @@ def has_record(h: dict) -> bool:
 
 
 def publish_handoff(c, h: dict, known) -> str | None:
-    """一筆轉交寫成專案信箱的信(id 固定 = HANDOFF_ID_PREFIX + 轉交 id,重寫是 no-op)。回傳收件專案;不認得的回 None。"""
+    """Write one handoff as a letter in the project mailbox (fixed id = HANDOFF_ID_PREFIX + handoff id, so rewriting
+    is a no-op). Returns the receiving project; None for one it doesn't recognize."""
     hid, proj = h.get("id"), h.get("project")
     orig = get_message(c, h["reply_to"]) if h.get("reply_to") else None
     if orig is not None and orig["source"] in known:
-        proj = orig["source"]  # owner 的回答送回發問的專案
+        proj = orig["source"]  # the owner's answer goes back to the asking project
     if proj not in known:
         proj = current_name(proj)
     if proj not in known:
         return None
     if h.get("effect") == "asks":
-        # 不是要套用進 STATE.md 的轉交(open-handoffs 只收 type handoff),是要專案回答的問題
+        # not a handoff to apply into STATE.md (open-handoffs only takes type handoff): a question for the project
+        # to answer
         p = {"type": "question", "text": asks_text(h), "handoff_id": hid, "effect": "asks"}
     else:
         p = {"type": "handoff", "text": handoff_text(h), "handoff_id": hid, "effect": h.get("effect"),
@@ -783,7 +862,8 @@ def publish_handoff(c, h: dict, known) -> str | None:
 
 
 def answer_from_record(c, rec: dict) -> bool:
-    """v2 的 decisions settled(owner 回答了 / 說不用回答)→ 跟 v1 answers 同一封信(同一個 id,誰先到都只有一封)。"""
+    """v2's decisions settled (the owner answered / said no answer is needed) → the same letter as v1 answers (same
+    id, so whichever arrives first, there's only one letter)."""
     m = re.search(r":h(\d+)$", rec.get("id") or "")
     if rec.get("type") != "settled" or not m:
         return False
@@ -798,7 +878,7 @@ def answer_from_record(c, rec: dict) -> bool:
 
 
 def to_assistant(c, ev) -> dict | None:
-    """這個事件要不要送 Muninn;要的話回傳要 POST 的那一則。"""
+    """Whether this event goes to the assistant; if so, return the item to POST."""
     p = payload(ev)
     if ev["type"] == "message" and ev["to_project"] in OWNERS:
         item = {"id": ev["id"], "project": ev["source"], "type": TO_MUNINN.get(p.get("type"), "progress"),
@@ -814,14 +894,15 @@ def to_assistant(c, ev) -> dict | None:
         if m is not None and payload(m).get("handoff_id") is not None:
             hid = payload(m)["handoff_id"]
             if payload(m).get("effect") == "asks":
-                # 助理替 owner 問的:助理把帶這個 handoff_id 的第一則當答案講給 owner——結案的「已處理」不能變成答案
+                # asked by the assistant for the owner: the assistant tells the owner the first item carrying this
+                # handoff_id as the answer, so a closing "handled" must not become the answer
                 replied = c.execute("SELECT 1 FROM events WHERE type='message' AND ref=? AND source=?",
                                     (m["id"], m["to_project"])).fetchone()
                 if replied:
-                    return None   # 回信已經帶著答案過去了
+                    return None   # the reply already took the answer over
                 if p.get("note"):
                     return {"id": ev["id"], "project": m["to_project"], "type": "progress", "text": p["note"],
-                            "handoff_id": hid}   # 沒回信、在 done 的 note 裡寫了答案
+                            "handoff_id": hid}   # no reply; the answer is in the done's note
                 return {"id": ev["id"], "project": m["to_project"], "type": "done", "handoff_id": hid,
                         "text": _("(this project closed the question without answering it)")}
             return {"id": ev["id"], "project": m["to_project"], "type": "done",
@@ -847,11 +928,12 @@ def post_assistant(items) -> tuple[int | None, str | None]:
         return None, str(e)[:200]
 
 
-RECORDS_OUT = "records-out"   # cursor:寄給 owner 的 record 送到哪了(bridge v2)
+RECORDS_OUT = "records-out"   # cursor: how far the records to the owner have been sent (bridge v2)
 
 
 def records_http(method: str, path: str, body=None, query=None) -> tuple[int | None, dict | None, str | None]:
-    """助理的 /api/records(records.v2):跟 /api/messages 同一台、同一個 token。回 (HTTP 狀態, JSON, 錯誤)。"""
+    """The assistant's /api/records (records.v2): same host and token as /api/messages. Returns (HTTP status, JSON,
+    error)."""
     try:
         token = INGEST_TOKEN.read_text().strip()
     except OSError as e:
@@ -871,9 +953,12 @@ def records_http(method: str, path: str, body=None, query=None) -> tuple[int | N
 
 
 def forward_records(c) -> None:
-    """往外:寄給 owner 的 record 批次送助理。逐筆看 status:invalid 記 job.failed、不重試(重送也一樣不合格);
-    送不出去就整批停在原地,下次重送(助理照 (ext, project, id) 去重)。"""
-    while True:   # 一次追到底(剛打開開關時匯流排上已經有上千筆別的事件)
+    """Outbound: records to the owner are sent to the assistant in batches. Each status is checked: invalid records
+    job.failed, no retry (a resend would be just as invalid); if it can't be sent, the whole batch stays where it is
+    and is resent next time (the assistant dedups by (ext, project, id))."""
+    # catch up all the way in one go (when the switch is first turned on, the bus already holds thousands of other
+    # events)
+    while True:
         start = cursor(c, RECORDS_OUT)
         evs = c.execute("SELECT * FROM events WHERE seq > ? ORDER BY seq LIMIT 500", (start,)).fetchall()
         if not evs:
@@ -903,7 +988,8 @@ def ev_rec_id(ev) -> str:
 
 
 def pull_names() -> dict[str, str]:
-    """要拉的專案名稱 → 寫進匯流排用的名稱:每個專案,加上改名前的舊名稱(助理可能還用舊名稱寄)。"""
+    """Project names to pull → the name used when writing into the bus: every project, plus names from before a
+    rename (the assistant may still send under the old name)."""
     current = projects()
     names = {p: p for p in current}
     try:
@@ -926,9 +1012,11 @@ def incoming_errors(rec, asked: str) -> list[str]:
 
 
 def pull_records(c) -> None:
-    """往內:每個專案拉助理的 record,寫成 record 事件(寄件人 owner),commit 之後才 ack。
-    開關剛打開的第一次(還沒有任何專案的 cursor)只定起點:v1 已經送過的不再收一次;之後才出現的名稱(新專案、改名)從頭讀,
-    不然它在助理那邊排著的會被跳過。ack 送不出去下次補。"""
+    """Inbound: pull the assistant's records for each project, write them as record events (sender owner), ack only
+    after the commit. The first time after the switch is turned on (no project has a cursor yet) only sets the
+    starting point: what v1 already delivered isn't taken again; names that appear later (new projects, renames) are
+    read from the start, or what's queued for them on the assistant's side would be skipped. An ack that can't be sent
+    is made up next time."""
     switch_on = c.execute("SELECT 1 FROM cursors WHERE consumer LIKE 'records-in:%' LIMIT 1").fetchone() is None
     for name, proj in pull_names().items():
         got, acked = f"records-in:{name}", f"records-ack:{name}"
@@ -952,14 +1040,15 @@ def pull_records(c) -> None:
                               errors="; ".join(errs)))
                         continue
                     if str(rec.get("ext", "")).startswith("decisions/"):
-                        if not answer_from_record(c, rec):   # 其他 decisions record 等這邊的 Decisions 換上再收
+                        # other decisions records are taken once Decisions is switched over on this side
+                        if not answer_from_record(c, rec):
                             log(_("{id} from {assistant} for {project} not taken in yet (Decisions still go through v1)",
                                   assistant=ASSISTANT, id=rec.get("id"), project=name))
                         continue
                     publish_record(c, rec, OWNER_ADDRESS, proj)
             set_cursor(c, got, nxt)
             if not known:
-                set_cursor(c, acked, nxt)   # 起點:之前的由 v1 送,這邊不 ack
+                set_cursor(c, acked, nxt)   # starting point: earlier ones came via v1, not acked here
             c.execute("COMMIT")
             if not page or nxt <= after:
                 break
@@ -984,8 +1073,9 @@ def forward(c) -> None:
     if items:
         code, err = post_assistant([it for _ev, it in items])
         if code == 400:
-            # 整批被拒:一則一則送,找出不合格的那則。400 也可能是 助理 還沒部署支援這個 type
-            # (例:task 剛加的那晚),所以 POISON_HOURS 內先停在這則、下次重送,超過才跳過
+            # the whole batch was refused: send one by one to find the invalid item. A 400 can also mean the
+            # assistant hasn't deployed support for this type yet (e.g. the night task was added), so within
+            # POISON_HOURS stop at this item and resend next time; skip it only after that
             for ev, it in items:
                 code1, err1 = post_assistant([it]) if len(items) > 1 else (code, err)
                 if err1 is None:
@@ -993,15 +1083,18 @@ def forward(c) -> None:
                 if code1 == 400 and now() - datetime.datetime.fromisoformat(ev["ts"]) > datetime.timedelta(hours=POISON_HOURS):
                     reject(c, ev, err1)
                     continue
-                set_cursor(c, BRIDGE, ev["seq"] - 1)  # 停在這則之前,下次從這裡重送(前面送成功的 id 重送也安全)
+                # stop just before this item and resend from here next time (resending ids that went through is
+                # safe)
+                set_cursor(c, BRIDGE, ev["seq"] - 1)
                 age = (now() - datetime.datetime.fromisoformat(ev["ts"])).total_seconds() / 3600
-                if age < 0.3 or int(age * 4) % 16 == 0:  # 剛開始記一次,之後約每 4 小時
+                if age < 0.3 or int(age * 4) % 16 == 0:  # log once at the start, then about every 4 hours
                     log(_("sending to the assistant failed ({err}); {id} and the ones after it are resent next time (waited "
                           "{age:.1f} h)", err=err1, id=ev["id"], age=age))
                 return
         elif err is not None:
             age = (now() - datetime.datetime.fromisoformat(items[0][0]["ts"])).total_seconds() / 3600
-            if age < 0.3 or int(age * 4) % 16 == 0:  # 不要每 15 分鐘洗一次 log:剛開始一次,之後約每 4 小時
+            # don't flood the log every 15 minutes: once at the start, then about every 4 hours
+            if age < 0.3 or int(age * 4) % 16 == 0:
                 log(_("sending to the assistant failed ({n} waiting, oldest {age:.1f} h): {err}", n=len(items), age=age, err=err))
             return
         else:
@@ -1010,14 +1103,15 @@ def forward(c) -> None:
 
 
 def reject(c, ev, err) -> None:
-    """Muninn 說格式不對的那則:記成 job.failed(狀態頁看得到)、跳過,不擋後面的。"""
+    """An item the assistant says is malformed: recorded as job.failed (visible on the status page) and skipped,
+    without blocking the ones after it."""
     log(_("the assistant refused {id} ({err}); skipped", id=ev["id"], err=err))
     publish(c, f"{ev['id']}:rejected", "job.failed", "hubbus-bridge", None, ev["id"],
             {"job": "hubbus-bridge", "detail": _("the assistant refused {type} {id}: {err}", type=ev["type"], id=ev["id"], err=err)})
 
 
 def claimed(c, ids) -> set[str]:
-    """平台已經接手(派人處理/背景接續/擋下)的信。"""
+    """Letters the platform has already taken on (dispatched someone / resumed in the background / held)."""
     if not ids:
         return set()
     q = ",".join("?" * len(ids))
@@ -1033,7 +1127,7 @@ def claim(c, rows, via, **extra) -> None:
 
 
 def thread_chain(c, r) -> list:
-    """這封信往回追 reply_to 的整串(由舊到新)。"""
+    """The whole thread of this letter, following reply_to back (oldest first)."""
     chain, seen = [r], {r["id"]}
     while payload(chain[0]).get("reply_to"):
         o = get_message(c, payload(chain[0])["reply_to"])
@@ -1100,7 +1194,8 @@ session 下次有動作時帶給它)。
 
 
 def recent_session(c, proj, live) -> str | None:
-    """這個專案最近有動作、還活著的 session(FORK_RECENT_H 內;租約的 session 不記在場紀錄)。"""
+    """The live session with recent activity in this project (within FORK_RECENT_H; lease sessions don't record
+    presence)."""
     cutoff = iso(now() - datetime.timedelta(hours=FORK_RECENT_H))
     for r in c.execute("SELECT session FROM presence WHERE project=? AND seen >= ? ORDER BY seen DESC", (proj, cutoff)):
         if r["session"] in live:
@@ -1109,7 +1204,8 @@ def recent_session(c, proj, live) -> str | None:
 
 
 def fork_result(c, r) -> tuple[bool, str]:
-    """背景分支處理這封信的結果:(做完了沒, 分支最後的回覆 + 它為這封寄出的信)。做完 = 有結果、信結案了、或逾時。"""
+    """The outcome of a background fork handling this letter: (finished or not, the fork's last reply + the letters it
+    sent for this one). Finished = has a result, the letter is closed, or timed out."""
     out = hubconf.STATE / "mailbox" / f"resume-{r['id']}.log"
     text = ""
     try:
@@ -1134,11 +1230,12 @@ def fork_result(c, r) -> tuple[bool, str]:
 
 
 def run_handler(c, proj, ws, rows) -> None:
-    """交辦:在那個專案派一個 headless agent(templates/prompts/mailbox.md 填上名字、判斷點 mailbox-escalation)。"""
+    """Delegation: dispatch a headless agent in that project (templates/prompts/mailbox.md with names filled in,
+    judgment point mailbox-escalation)."""
     st = AGENT_JOBS / f"mailbox-{proj}" / "status.json"
     try:
         if json.loads(st.read_text()).get("state") == "running":
-            return  # 同一個專案一次一個;這幾封下一輪再派
+            return  # one at a time per project; these letters are dispatched next round
     except (OSError, ValueError):
         pass
     if runs_today(c, proj) >= DAILY_RUNS:
@@ -1151,8 +1248,9 @@ def run_handler(c, proj, ws, rows) -> None:
     claim(c, rows, "handler", run=run)
     c.execute("COMMIT")
     if (hubconf.get("mailbox") or {}).get("handler") == "propose":
-        # agent 提議、平台套用(bin/propose_apply.py;docs/design/tool-agnostic.md):任何 agent 都能跑,在丟棄式 worktree 裡,
-        # 平台只採用 memory 筆記、代寄信。背景跑;它自己寫 status.json(running → done),同一個專案一次一個
+        # agent proposes, platform applies (bin/propose_apply.py; docs/design/tool-agnostic.md): any agent can run it,
+        # in a throwaway worktree; the platform only takes the memory notes and sends the letters on its behalf. Runs
+        # in the background; it writes status.json itself (running → done), one at a time per project
         log_f = AGENT_JOBS / f"mailbox-{proj}" / "propose.log"
         log_f.parent.mkdir(parents=True, exist_ok=True)
         with log_f.open("a") as f:
@@ -1161,7 +1259,8 @@ def run_handler(c, proj, ws, rows) -> None:
         log(_("{project}: dispatched an agent (propose) for {n} {n:letter|letters} ({ids}, {run})", project=proj, n=len(rows),
               ids=", ".join(r["id"] for r in rows), run=run))
         return
-    prompt = AGENT_JOBS / f"mailbox-{proj}" / "prompt.md"   # 平台的樣板(不寫人名)填上這台的名字
+    # the platform's template (no personal names) with this machine's names filled in
+    prompt = AGENT_JOBS / f"mailbox-{proj}" / "prompt.md"
     prompt.parent.mkdir(parents=True, exist_ok=True)
     prompt.write_text(hubconf.fill_names((HUB / "templates" / "prompts" / "mailbox.md").read_text()))
     res = subprocess.run([str(HUB / "bin" / "run-agent-job.sh"), f"mailbox-{proj}", str(ws), str(prompt)],
@@ -1173,7 +1272,8 @@ def run_handler(c, proj, ws, rows) -> None:
 
 
 def stale_resumes(c, proj) -> list:
-    """背景接續過、超過 RESUME_TIMEOUT_MIN 還沒結案、也還沒改派的信(接續失敗不能讓信卡死)。"""
+    """Letters resumed in the background, not closed after RESUME_TIMEOUT_MIN and not re-dispatched yet (a failed
+    resume mustn't leave a letter stuck)."""
     cutoff = iso(now() - datetime.timedelta(minutes=RESUME_TIMEOUT_MIN))
     return c.execute("""SELECT m.* FROM events m JOIN events d ON d.ref=m.id AND d.type='message.delivered'
         AND json_extract(d.payload,'$.via')='resume' AND d.ts < ?
@@ -1184,7 +1284,8 @@ def stale_resumes(c, proj) -> list:
 
 
 def resume(c, r, sid, cwd, rt, ws=None, prompt=None) -> None:
-    """對話:用那個 session 的 context 在背景接續(分支,不動原本的 session)。開不起來就馬上改派交辦。"""
+    """Conversation: resume with that session's context in the background (a fork; the original session is
+    untouched). If it can't be started, dispatch it as a delegation right away."""
     run = f"r{now():%m%d%H%M%S}-{secrets.token_hex(2)}"
     c.execute("BEGIN IMMEDIATE")
     claim(c, [r], "resume", session=sid, run=run)
@@ -1209,7 +1310,7 @@ def resume(c, r, sid, cwd, rt, ws=None, prompt=None) -> None:
 
 
 def hold(c, r) -> None:
-    """同一串往來平台已經代為處理太多輪:不再處理,問 Knas。"""
+    """The platform has already handled too many rounds of this thread: stop handling it, ask the owner."""
     c.execute("BEGIN IMMEDIATE")
     claim(c, [r], "held")
     text = payload(r).get("text", "")
@@ -1225,14 +1326,15 @@ def hold(c, r) -> None:
 
 
 def dispatch(c, rt=None) -> int:
-    """平台處理沒人收的 request/question(見檔頭)。回傳還在等 hook 的信數。"""
+    """The platform handles requests/questions nobody took (see the file header). Returns the number of letters still
+    waiting for a hook."""
     if rt is None:
-        import runtime_ports  # 執行環境只透過介面拿(Claude Code 只是一個實作)
+        import runtime_ports  # the runtime is only reached through the interface (Claude Code is one implementation)
         try:
             rt = runtime_ports.load(ports=("agent", "sessions"))
         except runtime_ports.Unsupported as e:
-            # 沒有 coding agent(runtime.default: none):不派 agent,信留在信箱等人(開 session、或 owner 端看得到);
-            # 原因只記一次,不每分鐘洗 log
+            # no coding agent (runtime.default: none): no agent dispatched, letters stay in the mailbox for a person
+            # (a session opening, or the owner side, sees them); the reason is logged once, not every minute
             log_once("dispatch-unsupported", _("mailbox delegation dispatches no agent: {e}", e=e))
             return 0
         log_once("dispatch-unsupported", "")
@@ -1252,7 +1354,7 @@ def dispatch(c, rt=None) -> int:
                 st = take_state(c, r["id"], r["to_project"])
                 if st == "taken":
                     continue
-                if st and st >= take_cut:   # 剛送進某個 session:給它時間 ack、回信或 done
+                if st and st >= take_cut:   # just delivered into a session: give it time to ack, reply or done
                     waiting += 1
                     continue
                 log(_("{project}: {id} sat in a session for over {minutes} {minutes:minute|minutes} with no ack, reply "
@@ -1261,7 +1363,8 @@ def dispatch(c, rt=None) -> int:
                 hold(c, r)
                 continue
             to_s = p.get("to_session")
-            if to_s and to_s not in leases:  # 對話:回覆某個 session(租約的 session 不接續,當交辦)
+            # conversation: a reply to some session (lease sessions aren't resumed; treated as a delegation)
+            if to_s and to_s not in leases:
                 if to_s in live and r["ts"] >= wait_cut:
                     waiting += 1
                     continue
@@ -1269,42 +1372,50 @@ def dispatch(c, rt=None) -> int:
                 if tokens is not None and tokens <= RESUME_MAX_TOKENS and runs_today(c, proj) < DAILY_RUNS:
                     resume(c, r, to_s, session_cwd(c, to_s) or ws, rt, ws)
                     continue
-                # context 太大或找不到對話紀錄 → 當交辦(handler 用 hubbus thread 看整串)
-            elif active_sessions(c, proj, live) and r["ts"] >= wait_cut:  # 有人正在用這個專案:先給它
+                # context too large or no transcript found → treat it as a delegation (the handler reads the whole
+                # thread with hubbus thread)
+            elif active_sessions(c, proj, live) and r["ts"] >= wait_cut:  # someone is using the project: theirs first
                 waiting += 1
                 continue
             else:
-                # 交辦:這個專案最近有動作、還活著的 session → 用它的 context 在背景分支處理(10-26 owner 試行,
-                # m10261706),答得出那個 session 手上的事;沒有、context 太大或今天派滿 → headless agent
+                # delegation: a live session with recent activity in this project → handled in a background fork with
+                # its context (owner's trial since 10-26, m10261706), which can answer about what that session has on
+                # hand; none, context too large, or today's quota used up → headless agent
                 sid = recent_session(c, proj, live)
                 tokens = rt.context_size(sid) if sid else None
                 if tokens is not None and tokens <= RESUME_MAX_TOKENS and runs_today(c, proj) < DAILY_RUNS:
                     resume(c, r, sid, session_cwd(c, sid) or ws, rt, ws, prompt=DELEGATE_PROMPT)
                     continue
             delegate.append(r)
-        delegate += stale_resumes(c, proj)  # 背景接續失敗或沒結案:改派
-        if delegate:  # agent-hub 的信也一樣(以前留給它專用的 session,沒人打字就沒人收,m10261706)
+        delegate += stale_resumes(c, proj)  # background resume failed or never closed: re-dispatch
+        # agent-hub's letters too (they used to be left for its dedicated session; with nobody typing, nobody took
+        # them, m10261706)
+        if delegate:
             run_handler(c, proj, ws, delegate)
     return waiting
 
 
 def dispatch_locked(c, pull=False) -> None:
-    """bridge 也會分派:跟 launchd 每分鐘那個拿同一把鎖,拿不到就跳過(避免兩邊同時派人)。"""
+    """The bridge dispatches too: it takes the same lock as launchd's every-minute run, and skips if it can't get it
+    (so the two never dispatch at the same time)."""
     import fcntl
     with open(DB.parent / "dispatch.lock", "w") as lock:
         try:
             fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
         except OSError:
             return
-        if pull and hubconf.owner_side() == "assistant":  # 每分鐘也拉一次轉交(0.2 秒):助理替 owner 問的問題(asks)不用等 bridge 的 15 分鐘
-            # owner 端是內建的(builtin)就沒有助理可以拉:給 owner 的 record 留在匯流排上,bin/owner.py 直接讀
+        # also pull handoffs every minute (0.2 s): questions the assistant asks for the owner (asks) needn't wait for
+        # the bridge's 15 minutes
+        if pull and hubconf.owner_side() == "assistant":
+            # with the built-in owner side (builtin) there's no assistant to pull from: records for the owner stay on
+            # the bus, and bin/owner.py reads them directly
             try:
                 import_handoffs(c)
             except Exception as e:
                 if c.in_transaction:
                     c.execute("ROLLBACK")
                 log(_("dispatch: pulling handoffs failed: {e!r}", e=e))
-            if RECORDS:   # bridge v2:每分鐘送、拉 0.3 record
+            if RECORDS:   # bridge v2: send and pull 0.3 records every minute
                 for step in (forward_records, pull_records):
                     try:
                         step(c)
@@ -1316,13 +1427,15 @@ def dispatch_locked(c, pull=False) -> None:
 
 
 def prune(c) -> None:
-    """結案超過 PRUNE_DAYS 的信(連同它的 delivered/done)、更舊的 job.failed 清掉。bridge 還沒讀到的不動。"""
+    """Remove letters closed more than PRUNE_DAYS ago (with their delivered/done) and older job.failed. Anything the
+    bridge hasn't read yet is left alone."""
     cutoff, upto = iso(now() - datetime.timedelta(days=PRUNE_DAYS)), cursor(c, BRIDGE)
     c.execute("BEGIN IMMEDIATE")
     old = [r["ref"] for r in c.execute("SELECT ref FROM events WHERE type='message.done' AND ts < ? AND seq <= ?",
                                        (cutoff, upto))]
     for mid in old:
-        # 只刪這封信跟它的 delivered/done;回覆它的信(ref 也指向它)有自己的生命週期
+        # only delete this letter and its delivered/done; letters replying to it (ref also points at it) have their
+        # own lifecycle
         c.execute("DELETE FROM events WHERE id=? OR (ref=? AND type IN ('message.delivered', 'message.done'))",
                   (mid, mid))
     c.execute("DELETE FROM events WHERE type='job.failed' AND ts < ? AND seq <= ?", (cutoff, upto))
@@ -1330,7 +1443,8 @@ def prune(c) -> None:
 
 
 def check_integrity() -> bool:
-    """壞掉就移到旁邊、開新的(還沒收的信會不見;沒有備份,Knas 接受)。"""
+    """If it's broken, move it aside and start a new one (letters not yet received are lost; no backup, accepted by
+    the owner)."""
     if not DB.exists():
         return True
     try:
@@ -1356,15 +1470,16 @@ def cmd_bridge() -> None:
     for step in (import_handoffs, forward, dispatch_locked, prune):
         try:
             step(c)
-        except Exception as e:  # 一步壞掉不影響其他步
+        except Exception as e:  # one broken step doesn't affect the others
             if c.in_transaction:
                 c.execute("ROLLBACK")
             log(_("bridge {step} failed: {e!r}", step=step.__name__, e=e))
 
 
 def cmd_open_handoffs() -> None:
-    """librarian 用:所有專案還沒結案的 Muninn 轉交,格式跟 `muninn handoffs --json` 差不多
-    (id 是匯流排的信 id;librarian 套用可信後用 `hubbus done <id>` 結案,bridge 再回報 Muninn)。"""
+    """For the librarian: the assistant's handoffs not closed yet, across all projects, in about the same format as
+    `muninn handoffs --json` (id is the bus's letter id; once the librarian has applied one and trusts it, it closes
+    it with `hubbus done <id>`, and the bridge then reports back to the assistant)."""
     c = db()
     out = []
     owners = sorted(OWNERS)
@@ -1375,7 +1490,9 @@ def cmd_open_handoffs() -> None:
         if p.get("type") != "handoff":
             continue
         h = p.get("handoff")
-        if h is None:  # 2026-10-21 最早收進來的三筆沒有原始欄位,從給 session 看的文字拆回來
+        # the first three taken in on 2026-10-21 have no raw fields: split them back out of the text meant for
+        # sessions
+        if h is None:
             labels = {"事實:": "fact", f"{OWNER} 原話:": "quote", "對應待辦:": "item", f"{ASSISTANT} 的判斷理由:": "why"}
             h = {}
             for line in p.get("text", "").splitlines():
@@ -1401,7 +1518,8 @@ def cmd_status(as_json: bool) -> None:
         if rows:
             new = [r for r in rows if not r["delivered"]]
             per[proj] = {"open": len(rows), "undelivered": len(new), "oldest": rows[0]["ts"]}
-            # 只有要處理的(request/question)才算卡住;info/progress/done 是通知,沒人收不是問題(m10261706)
+            # only letters to handle (request/question) count as stuck; info/progress/done are notifications, and
+            # nobody taking them isn't a problem (m10261706)
             stuck += [{"id": r["id"], "to": proj, "ts": r["ts"]} for r in new
                       if r["ts"] < cutoff and payload(r).get("type") in ACTIONABLE]
     items = [ev for ev in c.execute("SELECT * FROM events WHERE seq > ? ORDER BY seq", (cursor(c, BRIDGE),))
@@ -1478,8 +1596,9 @@ def main() -> None:
                                                  ph="0.3"))
     rp.add_argument("--json", default="-", help=_("only - (stdin) is supported"))
     pb = sub.add_parser("publish")
+    # letters have their own command; config.applied = which config version bin/hub config apply applied
     pb.add_argument("type", choices=("job.failed", "merge.done", "merge.failed", "session.report",
-                                     "config.applied"))  # 信有專用指令;config.applied = bin/hub config apply 套用了哪版 config
+                                     "config.applied"))
     pb.add_argument("--source", required=True)
     pb.add_argument("--to")
     pb.add_argument("--ref")
@@ -1495,13 +1614,14 @@ def main() -> None:
     if a.cmd == "hook":
         try:
             cmd_hook(a.event)
-        except Exception as e:  # hook 壞掉不能影響 session
+        except Exception as e:  # a broken hook must not affect the session
             log(_("hook {event} failed: {e!r}", event=a.event, e=e))
         return
     if a.cmd == "bridge":
         return cmd_bridge()
     if a.cmd == "dispatch":
-        # launchd 每分鐘(local.agent-hub-mailbox-dispatch);同時只跑一個(bridge 用同一把鎖)
+        # launchd, every minute (local.agent-hub-mailbox-dispatch); only one at a time (the bridge uses the same
+        # lock)
         if DB.exists():
             check_integrity()
             dispatch_locked(db(), pull=True)
@@ -1532,7 +1652,7 @@ def main() -> None:
         recs = data if isinstance(data, list) else [data]
         out, bad = [], 0
         c.execute("BEGIN IMMEDIATE")
-        for r in recs:   # 逐筆:一筆不合格不擋其他筆
+        for r in recs:   # one by one: an invalid one doesn't block the others
             errs = record_errors(r)
             if not errs and not valid_address(r["project"]):
                 errs = [_("unknown project {project}", project=r["project"])]
@@ -1564,7 +1684,7 @@ def main() -> None:
         return cmd_status(a.json)
 
     c = db()
-    import runtime_ports  # 寄件的 session:問執行環境(現在是 Claude Code 給的環境變數)
+    import runtime_ports  # the sending session: ask the runtime (currently an environment variable Claude Code sets)
     session = runtime_ports.current_session()
     here = project_of(pathlib.Path.cwd())
     if a.cmd == "publish":
@@ -1611,7 +1731,7 @@ def main() -> None:
             if (eid := send_record(c, a, sender, mid)):
                 print(eid)
                 return
-        publish(c, mid, "message", sender, a.to, a.reply_to, p)  # 同一個 id 已經寄過就什麼都不做
+        publish(c, mid, "message", sender, a.to, a.reply_to, p)  # already sent with the same id: nothing happens
         print(mid)
     elif a.cmd == "inbox":
         project = a.project or here
@@ -1633,7 +1753,8 @@ def main() -> None:
             print(f"  {e['ts'][5:16]} {e['type']} {e['payload']}")
     elif a.cmd == "ack":
         c.execute("BEGIN IMMEDIATE")
-        # ack = 「我接手了」:跟 hook 送進來的那一筆分開記(以前同一個 id,hook 送過之後 ack 什麼都沒記到)
+        # ack = "I've taken it on": recorded separately from the hook's delivery (they used to share an id, so after a
+        # hook delivery an ack recorded nothing)
         for i in a.ids:
             r = must_message(c, i)
             publish(c, f"{r['id']}:ack:{session or 'cli'}", "message.delivered", r["to_project"], r["to_project"], r["id"],
@@ -1641,7 +1762,8 @@ def main() -> None:
         c.execute("COMMIT")
     elif a.cmd == "done":
         for i in a.ids:
-            r = get_event(c, i) or must_message(c, i)   # 信或 record(registrar 套用完 record 也是 done)
+            # a letter or a record (once the registrar has applied a record, it's done too)
+            r = get_event(c, i) or must_message(c, i)
             publish(c, f"{i}:done", "message.done", here or r["to_project"], r["to_project"], i,
                     {"note": a.note or _("handled"), "session": session})
             print(f"{i} done")
