@@ -1,6 +1,6 @@
 # Projects and repos: one general model, many combinations
 
-> agent-hub session · 2026-10-31 · r5. Owner's ask: a general architecture in which "one project = one git repo" is only
+> agent-hub session · 2026-10-31, r8 2026-11-01. Owner's ask: a general architecture in which "one project = one git repo" is only
 > one case, so that a monorepo holding many projects, a project spread over several repos, and a project with no repo
 > at all follow from the same logic, not from special cases. Owner's rule for building it: **the final architecture
 > first, no workarounds** — nothing built in a form a later step replaces. **Design only; nothing is implemented.**
@@ -28,6 +28,9 @@
 > commands (`git log`) running project-named programs and a fetch serving another project's objects; every call site
 > listed; memory copies without symlinks and denied whole. Several of these holes exist today; their fix is a
 > separate change, proposed 11-01, to be done before this design's steps.
+> r8 (11-01): a sixth review refuted parts of r7's rule (a bundle handed over as a file can be a symlink to another
+> project's bundle; the resolver itself would run git in project repos; "Inert" and the call-site list were wrong) and
+> found more holes in today's code. Marked open in section 4 and listed in section 9; not settled.
 
 ## 1. The problem
 
@@ -276,6 +279,16 @@ it points at). **Every one of these runs unsandboxed today** (the worktree form'
 sandboxed project can run code as the user within one scheduler tick; that is to be fixed by a separate change
 (proposed 11-01) before this design's steps, not left to one of them; the design inherits the rule.
 
+**Open after round 6 (11-01):** a bundle or facts file the project writes into its own folder can be a symlink or a
+FIFO (tested: a symlinked bundle fetched into a platform repo left another project's objects there, past
+`fsckObjects`), so the hand-over is unsettled — the candidate is the wrapped job's stdout, with a size cap and a
+timeout. `project_at` resolving "through git" would run git in project repos; the candidate is reading the `.git` and
+`commondir` pointer files as plain files and checking them against registered repos. `[include] path=<fifo>` hangs
+even `rev-parse` and `worktree list`, so "Inert" above is withdrawn and the call-site list is incomplete (also
+`render-project-settings.py`, `cap-runner.py`, `lease-runner.py`, `upgrade-idea.py`, rename/recover/migrate, and the
+session hooks, which run outside the sandbox). A project in several repos with different `enforce` has no single
+authority (round 6 B5); the candidate is requiring identical security fields across its repos.
+
 **merge-branch** (a repo operation; a `--question` goes to the owner once per merge, not once per project): lock → rebase → commit titles → `affected(repo, main, head, merge)` → for each pair, a
 recorded pass for its key or a run (the test system, test-waiting section 4) → fast-forward → one `merge.done` /
 `session.report` per affected project (the bus contract keeps one `project` per event). A failure blocks the merge; the
@@ -460,7 +473,24 @@ instead of removed per instance; worker slots built once in step 2.2; `session.r
 request; `agenthub test` as a session command; the key carrying the runner's version and environment; memory copies
 denied whole and checked out without symlinks.
 
-**Holes that exist today**, found by rounds 4 and 5, for a separate change proposed 11-01 rather than a step of this
+**Round 6 (r8), with `test-waiting.md` r9:** 10 blocking points (test-waiting section 7 and section 4 above, "Open
+after round 6"). Three refute r7/r8 mechanisms written without a test; the rest are open design points and holes in
+today's code. The count rose (5, 7, 10) because each round's untested fixes became the next round's findings, and
+because reviewers kept finding holes in the existing sandbox. Not converged; building does not start.
+
+**Holes that exist today, worst first** (round 6 added the first three):
+
+- Every sandbox may write `~/.local/share/uv`, where the platform's own interpreter lives: a sandboxed project can
+  change the stdlib the scheduler, the gate and services run (verified: the platform venv's interpreter is there).
+- `paths` is not a security field (`PLATFORM_OWNED`), so a `manifest.update` can set `paths.workspace: ~` and the
+  sandbox then writes the whole home folder; `apply-updates` applies it unattended.
+- Session hooks run outside the sandbox and run git in the project's `.git`: `memory-nudge.py`'s `git log` runs a
+  project-named `gpg.program` after every commit a sandboxed session makes (reproduced by the reviewer).
+- `worktrees.auto_prune` deletes paths taken from project-written gitdir files; `propose_apply.py`, `cap-runner.py`
+  and `lease-runner.py` write through project-planted symlinks; a FIFO in a repo's config hangs platform git with no
+  timeout; `merge-branch --project X` runs another project's tests.
+
+Earlier, found by rounds 4 and 5, for a separate change proposed 11-01 rather than a step of this
 design (which inherits the fixes):
 
 - The status page, worktree cleanup, memory-gaps and weekly statistics, backup, `propose_apply.py` and the hourly

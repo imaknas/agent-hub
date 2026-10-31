@@ -1,6 +1,6 @@
 # Waiting on tests: where agent sessions wait, the floor, and what to change
 
-> agent-hub session · 2026-10-31 · r6. Owner's observation: in the projects being worked on now, the bottleneck is not the
+> agent-hub session · 2026-10-31, r9 2026-11-01. Owner's observation: in the projects being worked on now, the bottleneck is not the
 > agents' output but waiting for tests; the owner wants everything besides model input/output at its theoretical minimum.
 > This doc measures first, then proposes changes. **Nothing here is implemented yet.** Owner's rule for building it:
 > **the final architecture first, no workarounds.**
@@ -38,6 +38,11 @@
 > 0.07 s warm — so no environment and no package cache is shared across repos or between runs (B4); the runner
 > exports a revision, the index or the worktree (B4); the main guard is an accident guard with stated limits (A1);
 > the platform runs git in a project's repo only as that project (`projects-and-repos.md` section 4).
+>
+> r9 (11-01): a sixth review found 10 blocking points. Three refute r7/r8 mechanisms that were written without a test
+> (the absolute `core.hooksPath`, `run-tests`' temporary HOME/STATE, a bundle handed over as a file); several are
+> holes in today's sandbox, now given to a separate fix. **Not settled; building does not start.** The refuted
+> sentences are marked open below (section 7, "Open after round 6") instead of being replaced by new guesses.
 
 ## Summary
 
@@ -52,7 +57,7 @@
 - The plan (7): agent-hub's own work moves into worktrees first (they find the main checkout's instance; merges run
   the full gate); then the foundations that are final as built — project v2 with a `tests` list independent of
   `runtime` (which lets the-crucible declare tests), one result cache per repo, tests always in an exported tree with
-  environments cached per repo by lockfile hash, the machine's worker budget; then the projects-and-repos resolver,
+  per-run environments from a per-repo package cache, the machine's worker budget; then the projects-and-repos resolver,
   onto which selection and keys extend.
 
 ## 1. How this was measured
@@ -538,6 +543,29 @@ must wait on unless an asynchronous merge (B8) hides it. Top-level, deduplicated
 - Not counted: contention, which inflates the "now" row.
 
 ## 7. Order of work
+
+**Open after round 6 (11-01)** — these sentences in this document are refuted or unsettled, and stay open until the
+self-hosting steps are reproduced in a throwaway hub (the fake-hub pattern the tests already use) and the text is
+written from what ran:
+
+- **Where agent-hub's own test declaration is read from** at step 2.3 (round 6 K1): read from the main checkout or the
+  cache, the switching merge recurses or passes untested. Candidate rule, not yet tested: the declaration comes from
+  the tree under test, the gate's code from the main checkout.
+- **Where agent-hub's guard hooks live** (K2): with `core.hooksPath` on the main checkout's tracked `githooks/`, a
+  fast-forward writes the branch's hook before it runs, and `pre-commit` calls the branch's `test-gate` (both
+  tested). A1 prerequisite 1's "absolute `core.hooksPath`" bullet and prerequisite 3's agent-hub exception are
+  withdrawn. A refused fast-forward also leaves the main checkout half-applied (S1), which argues for the check inside
+  `merge-branch` before the fast-forward, with `reference-transaction` only as a tripwire for hand fast-forwards.
+- **`bin/run-tests`' variables** (K4): setting `AGENT_HUB_HOME` or `AGENT_HUB_STATE` fails 7 modules (reproduced:
+  `test_project_rename` fails with `AGENT_HUB_STATE` set, passes without). A1 prerequisite 1's sentence is withdrawn;
+  whatever replaces it is run against the full suite first.
+- **The v1 upgrade and the registry cache** (B6, S2): `hubconf.projects()` reads the index raw, and the last-valid
+  fallback serves cached documents unupgraded, so "readers only ever see v2" does not hold yet.
+- **Interpreters and tool installs for tiers** (K3, S4): the per-run environments link to an interpreter in a folder
+  every sandbox can write today; a fresh `HOME` hides uv's managed interpreters and Playwright's browsers. Depends on
+  the separate sandbox fix.
+- **Step 0 and B4 on caches** (S5), **2.1's validation going live too early** (S6), the full list of pulls in the hub
+  checkout (S3), `agenthub init`/doctor and `core.hooksPath` (S7).
 
 **Decided 10-31 (owner): the final architecture first, no workarounds.** Nothing is built in a form a later step
 replaces; each step only adds to the ones before it.
