@@ -348,17 +348,18 @@ each at the fastest the machine runs them. Everything else (gates, pre-gate full
 
 ## 7. Order and what is left to decide
 
-1. **B1 + B2 + B3 + B5** (cache and `agenthub test`, test tiers, nightly full run, rules), **B4**'s cleanup job and
-   Spotlight check, and **A2 + A4** (agent-hub's tiered gate, no pre-gate full run). Small to medium, low risk, the
-   nightly run covers what the shortcuts could miss.
-2. **A1**: add agent-hub's `runtime.test`, fix `.hub-home` for worktrees, let the sessions in the main checkout finish,
-   then switch agent-hub to worktrees.
-3. **C** requests to muninn and the-crucible (now for the parallel flags and the-crucible's `runtime.test`; tiers once B2
-   exists).
-4. **B6** for a week, then decide **B7** (merge queue) and **A3** (cheaper critical-path tests) on the numbers.
+Decided 10-31 (owner): **B1 and B2 are built on scopes** (`projects-and-repos.md`), not on whole trees first. So the
+order is:
 
-Left to decide (owner): whether to send the C requests now, and B7 after the measured week — including whether an agent
-may end its turn before its merge is green.
+1. **Now, independent of scopes:** B3 (nightly full run on every project's main), B4's container cleanup job and
+   Spotlight check, B5 (test rules for every project's agents), A4 (agent-hub sessions do not pre-run the full suite).
+   The C requests were sent 10-31 to muninn and the-crucible; the-crucible answered with a `runtime.test` in a
+   manifest.update.
+2. **`projects-and-repos.md` steps 1–3:** characterization tests, the resolver and registry fields, the callers moved
+   onto it.
+3. **On the resolver (its step 4):** B1 (cache keyed by scope hashes, `agenthub test`), B2 (test tiers per project, the
+   scope as the default paths), A2 (agent-hub's tiered commit gate with test-impact selection).
+4. **A1:** agent-hub's `runtime.test`, `.hub-home` for worktrees, the main checkout cleared, then agent-hub on worktrees.
+5. **B6** for a week, then decide **B7** (merge queue) and **A3** (cheaper critical-path tests) on the numbers.
 
-The C requests were sent on 10-31 (muninn, the-crucible). `projects-and-repos.md` generalizes "project = repo"; if it
-goes ahead, B1's cache key and B2's tiers should be built per scope (its section 7, step 4) rather than on whole trees.
+Still open: B7 after the measured week, including whether an agent may end its turn before its merge is green.

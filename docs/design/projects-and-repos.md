@@ -263,5 +263,4 @@ Following "tests before rewrite": pin today's behaviour first, then change it.
 - Memory as a clone for every project, including 1:1 ones (one mechanism, the proposal), or keep worktrees there and
   use clones only in shared repos?
 - Should idea sandboxes become folder-only projects?
-- Order against test-waiting.md: build B1/B2 on scopes (step 4 here) and do step 1–3 first, or ship B1/B2 on whole trees
-  now and generalize later?
+- ~~Order against test-waiting.md~~ — **decided 10-31: B1/B2 are built on scopes** (step 4 here), after steps 1–3.
