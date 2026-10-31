@@ -62,17 +62,17 @@ while [ $# -gt 0 ]; do
     --public) VISIBILITY="--public"; shift ;;
     --no-remote) NO_REMOTE=true; shift ;;
     --) shift; break ;;
-    -*) fail "未知參數:$1" ;;
+    -*) fail "$(hub_msg "Unknown argument: {arg}" arg="$1")" ;;
     *) break ;;
   esac
 done
-[ $# -eq 1 ] || fail "用法: onboard-project.sh [--public] [--no-remote] <本機專案路徑>"
+[ $# -eq 1 ] || fail "$(hub_msg "usage: onboard-project.sh [--public] [--no-remote] <local project path>")"
 
 # --- 0. mini 連線檢查,最先做——在任何本機/GitHub 副作用發生之前。
 # 這支腳本後面一定要在 mini 上建 bare repo,連不上就不會有任何後續動作
 # 才是安全的:不會 git init、不會建 GitHub repo、不會留下半套的狀態。
 if ! on_mini && ! ssh -o ConnectTimeout=8 -o BatchMode=yes "$MINI_HOST" true 2>/dev/null; then
-  fail "連不上 mini($MINI_HOST)。這支腳本會在 mini 上建 bare repo,連不上就不做任何事——等 mini 恢復連線再重跑,這次呼叫沒有任何副作用。"
+  fail "$(hub_msg "Cannot reach the hub machine ({host}). This script creates a bare repo there, so while it cannot reach it, it does nothing: run it again once the hub machine is reachable; this run had no side effects." host="$MINI_HOST")"
 fi
 
 mkdir -p "$1"
@@ -84,17 +84,17 @@ cd "$PROJ_PATH"
 # 再跑一次會建出全新、跟舊歷史斷開的 agent-memory 分支——不是救回來,是製造第二份記憶。
 # 最常見的情境是「從 GitHub 重新 clone 了一份(沒有 .agent-memory)再叫這支」,所以不能只看
 # 本機有沒有 .agent-memory。唯一的例外是 resume(本機步驟做完、mini 端還沒做完),見下面。
-ROSTER=$("$AGENT_HUB/bin/py" "$AGENT_HUB/bin/hubconf.py" roster) || fail "讀不到專案登錄($AGENT_HUB/projects)"
-RECOVER_HINT="要把既有專案接回來(新機器、資料夾不見、重新 clone)請用 bin/recover-project.sh $PROJ_NAME [路徑]"
+ROSTER=$("$AGENT_HUB/bin/py" "$AGENT_HUB/bin/hubconf.py" roster) || fail "$(hub_msg "Cannot read the project registry ({path})" path="$AGENT_HUB/projects")"
+RECOVER_HINT="$(hub_msg "To reconnect an existing project (new machine, folder gone, fresh clone) use bin/recover-project.sh {name} [path]" name="$PROJ_NAME")"
 if awk -F'\t' -v n="$PROJ_NAME" '$1==n{f=1} END{exit !f}' <<<"$ROSTER"; then
-  fail "'$PROJ_NAME' 已經登記在專案登錄(projects/$PROJ_NAME.yaml)——不能再 onboard 一次。$RECOVER_HINT"
+  fail "$(hub_msg "'{name}' is already in the project registry (projects/{name}.yaml): it cannot be onboarded again. {hint}" name="$PROJ_NAME" hint="$RECOVER_HINT")"
 fi
 if [ ! -e .agent-memory ] && mini_sh "git --git-dir=\"\$HOME/git-origin/${PROJ_NAME}-memory.git\" show-ref --verify --quiet refs/heads/agent-memory" 2>/dev/null; then
-  fail "mini 上已經有 ${PROJ_NAME}-memory.git(含 agent-memory 歷史)——這個名稱 onboard 過了。$RECOVER_HINT"
+  fail "$(hub_msg "The hub machine already has {name}-memory.git (with agent-memory history): this name was onboarded before. {hint}" name="$PROJ_NAME" hint="$RECOVER_HINT")"
 fi
 if [ -d .git ] && existing_origin=$(git remote get-url origin 2>/dev/null); then
   same=$(awk -F'\t' -v o="$existing_origin" -v n="$PROJ_NAME" '$3==o && $1!=n{print $1}' <<<"$ROSTER")
-  [ -z "$same" ] || fail "這個 repo(origin $existing_origin)已經以 '$same' 的名稱 onboard 過(資料夾名稱不同)。用 bin/recover-project.sh $same [路徑] 接回來;要改名用 bin/rename-project.sh"
+  [ -z "$same" ] || fail "$(hub_msg "This repo (origin {origin}) was onboarded as '{name}' (under another folder name). Reconnect it with bin/recover-project.sh {name} [path]; to rename it, use bin/rename-project.sh" origin="$existing_origin" name="$same")"
 fi
 
 # --- 1. 前置條件檢查跟自動補齊 ---
@@ -104,13 +104,13 @@ fi
 
 origin_url=$(git remote get-url origin 2>/dev/null || true)
 case "$origin_url" in
-  *"$MINI_HOST"*|*/git-origin/*) fail "origin 目前指向 mini,這不該發生在新設計裡——這個專案可能是舊版 onboarding 遺留的,需要先手動處理" ;;
+  *"$MINI_HOST"*|*/git-origin/*) fail "$(hub_msg "origin points at the hub machine, which the current design never does: this project is probably left over from the old onboarding; deal with it by hand first")" ;;
 esac
 
 if git rev-parse HEAD >/dev/null 2>&1; then
   # 已經有 commit 歷史——這才是需要保護使用者真實工作的情況,working tree
   # 必須乾淨,不猜、不自動清。
-  [ -z "$(git status --porcelain)" ] || fail "working tree 不乾淨(有未 commit 的變動或未追蹤檔案),先自己處理乾淨再跑"
+  [ -z "$(git status --porcelain)" ] || fail "$(hub_msg "The working tree is not clean (uncommitted changes or untracked files): clean it up yourself, then run again")"
 else
   # 完全是新 repo,還沒有任何 commit——這裡不存在「使用者還沒準備好的工作」
   # 需要保護,直接把現有內容(可能是空的)當成初始內容 commit 掉。
@@ -128,21 +128,21 @@ if [ -e .agent-memory ]; then
   # 光檢查 bare repo 的目錄存不存在不夠——`git init --bare` 自己就會建出
   # 目錄,不代表 agent-memory 分支真的推上去過。要檢查那個 ref 是否存在。
   if mini_sh "cd ~/git-origin/${PROJ_NAME}-memory.git 2>/dev/null && git show-ref --verify --quiet refs/heads/agent-memory" 2>/dev/null; then
-    fail ".agent-memory 已經存在,而且 mini 上也已經有對應的 bare repo(agent-memory 分支已推送)——這個專案應該已經 onboard 過了"
+    fail "$(hub_msg ".agent-memory already exists and the hub machine already has its bare repo (agent-memory branch pushed): this project should already be onboarded")"
   fi
   # .agent-memory 在本機存在,但 mini 上沒有對應、有實際內容的 bare repo
   # ——這正是「mini 連不上導致上次 onboarding 卡在中途」的痕跡(本機步驟都
   # 做完了,mini 端的步驟沒機會跑,或跑到一半失敗)。不當成錯誤,直接從
   # mini 端的步驟繼續。
   RESUME=true
-  echo "(偵測到本機已完成前面的步驟,但 mini 上沒有對應、有實際內容的 bare repo——像是上次被中途打斷,接著從 mini 端繼續,不重做已完成的部分)"
+  hub_say "(The local steps are done, but the hub machine has no bare repo with content for this project: it looks like the last run was interrupted; continuing with the hub machine's steps, without redoing what is done)"
 elif git show-ref --verify --quiet refs/heads/agent-memory; then
-  fail "agent-memory 分支已經存在(但 .agent-memory worktree 不存在),可能上次跑到一半失敗——請先手動清理(git branch -D agent-memory)再重跑"
+  fail "$(hub_msg "The agent-memory branch exists (but the .agent-memory worktree does not): probably a run that failed halfway; clean up by hand first (git branch -D agent-memory), then run again")"
 fi
 
 if [ -z "$origin_url" ] && [ "$NO_REMOTE" != true ]; then
   # 帳號從 hub.json 的 github.owner 讀,不寫死(CLAUDE.md「寫新程式的規則」)
-  GH_OWNER=$("$AGENT_HUB/bin/py" "$AGENT_HUB/bin/hubconf.py" get github.owner) || fail "hub.json 沒有 github.owner,建不了 GitHub repo"
+  GH_OWNER=$("$AGENT_HUB/bin/py" "$AGENT_HUB/bin/hubconf.py" get github.owner) || fail "$(hub_msg "hub.json has no github.owner: cannot create the GitHub repo")"
   gh repo create "$GH_OWNER/$PROJ_NAME" $VISIBILITY --source=. --remote=origin
   git remote set-url origin "git@github.com:${GH_OWNER}/${PROJ_NAME}.git"
   outer_branch=$(git branch --show-current)
@@ -151,15 +151,15 @@ if [ -z "$origin_url" ] && [ "$NO_REMOTE" != true ]; then
 fi
 
 if [ -n "$origin_url" ]; then
-  echo "[1/11] 前置條件檢查通過:$PROJ_NAME(有外部 remote:$origin_url)"
+  hub_say "[1/11] Preconditions OK: {name} (external remote: {origin})" name="$PROJ_NAME" origin="$origin_url"
 else
-  echo "[1/11] 前置條件檢查通過:$PROJ_NAME(--no-remote,維持純本機)"
+  hub_say "[1/11] Preconditions OK: {name} (--no-remote, stays local only)" name="$PROJ_NAME"
 fi
 
 if [ "$RESUME" != true ]; then
   # --- 2. 建立 orphan worktree ---
   git worktree add --orphan -b agent-memory .agent-memory -q
-  echo "[2/11] 已建立 .agent-memory worktree(agent-memory 分支,跟主分支完全隔離)"
+  hub_say "[2/11] Created the .agent-memory worktree (agent-memory branch, fully separate from the main branch)"
 
   # --- 3. 複製骨架、commit ---
   cp "$TEMPLATES/AGENT.md" .agent-memory/AGENT.md
@@ -175,28 +175,28 @@ EOF
   # CLAUDE.local.md)。engineering 2026-09-27 起、multi-agent-review 2026-10-27 起新專案預設登記,既有專案同日全部補上。
   printf 'engineering\nmulti-agent-review\n' > .agent-memory/RULES
   ( cd .agent-memory && git add -A && git commit -q -m "init: agent-hub memory skeleton (AGENT.md/STATE.md/memory)" )
-  echo "[3/11] 骨架檔案就位並已在 agent-memory 分支上 commit"
+  hub_say "[3/11] Skeleton files in place and committed on the agent-memory branch"
 
   # --- 4. ignore .agent-memory/ ---
   # 寫進本機的 .git/info/exclude,不寫 .gitignore:.gitignore 會 commit,連
   # `.agent-memory/` 這個名稱都不該進 repo(之後會不會公開沒有定論)。
   # sync-local-setup.sh(步驟 5-6、每次 SessionStart、recover)也會確保這件事。
   "$AGENT_HUB/bin/sync-local-setup.sh" --quiet . >/dev/null
-  git check-ignore -q .agent-memory || fail ".agent-memory 沒有被 ignore,停下來(不然 git add -A 會把它當 embedded repo 加進去)"
-  echo "[4/11] .agent-memory/ 已在 .git/info/exclude 排除(不動 .gitignore)"
+  git check-ignore -q .agent-memory || fail "$(hub_msg ".agent-memory is not ignored, stopping (otherwise git add -A would add it as an embedded repo)")"
+  hub_say "[4/11] .agent-memory/ is excluded in .git/info/exclude (.gitignore untouched)"
 
   # --- 5-6. 本機專用設定:hook(.claude/settings.local.json)跟 CLAUDE.local.md
   # 的 agent-hub 區塊——都不進 repo(含 ~/agent-hub 路徑/名稱,公開 repo 會外洩)。
   # 交給 sync-local-setup.sh,跟 recover、每次 SessionStart 用同一份邏輯。
   "$AGENT_HUB/bin/sync-local-setup.sh" .
-  echo "[5-6/11] .claude/settings.local.json hook 跟 CLAUDE.local.md 區塊已就位(不進版控)"
+  hub_say "[5-6/11] Hooks and the rules-file block are in place (not version-controlled)"
 
   # --- 7. 外層 repo 不 commit 任何東西 ---
   # 以前這裡會 commit .gitignore(訊息還寫著工具名稱);現在本機設定全在
   # ignore/exclude 的檔案裡,專案 repo 的歷史完全不會出現這套機制。
-  echo "[7/11] 外層 repo 沒有任何變更、不 commit"
+  hub_say "[7/11] No changes to the outer repo, nothing committed"
 else
-  echo "[2-7/11] resume 模式,已在前一次呼叫完成,跳過"
+  hub_say "[2-7/11] Resume mode: done by the previous run, skipped"
 fi
 
 # --- 8. mini 上建 bare repo,push agent-memory 分支 ---
@@ -218,11 +218,11 @@ mini_sh "mkdir -p ~/git-origin && git init --bare -q ~/git-origin/${PROJ_NAME}-m
 # refs/heads/main——但這裡只會推 agent-memory,main 永遠不會存在,HEAD 會
 # 懸空,導致下一步的 plain git clone 抓不到東西。明確把 HEAD 導向正確的分支。
 mini_sh "git --git-dir=\"\$HOME/git-origin/${PROJ_NAME}-memory.git\" symbolic-ref HEAD refs/heads/agent-memory"
-echo "[8/11] mini 上已建 bare repo,agent-memory 分支已推送"
+hub_say "[8/11] Bare repo created on the hub machine, agent-memory branch pushed"
 
 # --- 9. mini 上 clone 工作副本給 librarian ---
 mini_sh "mkdir -p ~/.memory-copies && git clone -q ~/git-origin/${PROJ_NAME}-memory.git ~/.memory-copies/${PROJ_NAME}"
-echo "[9/11] mini 上已 clone librarian 用的 memory 副本到 ~/.memory-copies/${PROJ_NAME}"
+hub_say "[9/11] Cloned the librarian's memory copy on the hub machine to ~/.memory-copies/{name}" name="$PROJ_NAME"
 
 # --- 10. 有外部 origin 才登記進 mirror-backup 清單 ---
 if [ -n "$origin_url" ]; then
@@ -231,9 +231,9 @@ if [ -n "$origin_url" ]; then
   if ! grep -qxF "$origin_url" "$HUB_CONFIG/mirror-list.txt"; then
     echo "$origin_url" >> "$HUB_CONFIG/mirror-list.txt"
   fi
-  echo "[10/11] 已登記進 mirror-backup 清單"
+  hub_say "[10/11] Added to the mirror-backup list"
 else
-  echo "[10/11] 沒有外部 remote,跳過 mirror-backup 登記"
+  hub_say "[10/11] No external remote, not added to the mirror-backup list"
 fi
 
 # --- 11. 登記進 agent-hub 的專案登錄 projects/<name>.yaml(一律登記,無論有沒有 origin) ---
@@ -242,15 +242,15 @@ manifest_origin="${origin_url:-(native)}"
 # 跟登記同一個 commit,不會有「已登錄但欄位還沒補」的空窗
 "$AGENT_HUB/bin/py" "$AGENT_HUB/bin/registry.py" add "$PROJ_NAME" "$PROJ_PATH" "$manifest_origin" \
     "~/git-origin/${PROJ_NAME}-memory.git" ${ONBOARD_REGISTRY_EXTRA:+--extra "$ONBOARD_REGISTRY_EXTRA"} \
-  || fail "登記進專案登錄失敗(projects/$PROJ_NAME.yaml)"
+  || fail "$(hub_msg "Adding to the project registry failed (projects/{name}.yaml)" name="$PROJ_NAME")"
 # 登記完直接 commit+push agent-hub——以前只寫檔不 commit,mini 上的 librarian
 # /mirror-backup 要等有人剛好手動 commit 才看得到新專案(曾經有專案就這樣
 # 卡在本地)。只 commit 這三個檔案,不碰 agent-hub 裡其他未 commit 的東西。
 "$AGENT_HUB/bin/gen-index-roster.sh"
 "$AGENT_HUB/bin/commit-hub-files.sh" "register $PROJ_NAME (onboard-project.sh)" \
     "projects/$PROJ_NAME.yaml" mirror-list.txt index.md \
-  || echo "警告:agent-hub 登記檔 commit/push 失敗,請手動處理(登記內容本身已寫入)" >&2
-echo "[11/11] 已登記進 agent-hub 的專案登錄(projects/$PROJ_NAME.yaml),並 commit+push agent-hub"
+  || hub_say "Warning: committing/pushing agent-hub's registry files failed; do it by hand (the registration itself is written)" >&2
+hub_say "[11/11] Registered in agent-hub's project registry (projects/{name}.yaml); agent-hub committed and pushed" name="$PROJ_NAME"
 
 echo
-echo "完成:$PROJ_NAME 已接上 agent-hub 管線。"
+hub_say "Done: {name} is connected to the agent-hub pipeline." name="$PROJ_NAME"
