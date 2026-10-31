@@ -16,9 +16,8 @@
     "legal_person": false
   },
   "assistant": {
-    "_comment": "Optional: a personal assistant (receives letters to the owner address, sends handoffs back). Without one, delete the whole section",
+    "_comment": "Optional: a personal assistant (receives letters to the owner address, sends handoffs back). Without one, delete the whole section. Add \"name\" to call it by name in texts; unset, the UI language's generic term is used (\"the personal assistant\")",
     "project": "my-assistant",
-    "name": "我的助理",
     "party_id": "my-assistant",
     "api": "http://127.0.0.1:18795/api/messages",
     "ingest_token": "~/services/my-assistant/data/secrets/ingest_token",
