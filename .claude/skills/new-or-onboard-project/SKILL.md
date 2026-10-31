@@ -5,61 +5,62 @@ description: Create a brand-new project or bring an existing folder into the age
 
 # New or Onboard Project
 
-`bin/onboard-project.sh` 現在會自動處理 git init、第一個 commit、GitHub
-repo 建立——一次呼叫做完全套。這份 skill 只負責它做不到、需要判斷的部分。
-不要把已經機械化的事再手動做一次(不用自己先 `git init`、先手動
-`gh repo create`——腳本會做)。
+`bin/onboard-project.sh` now handles git init, the first commit and creating the GitHub repo automatically: one call does
+the whole set. This skill only covers the parts it cannot do, the ones that need judgment. Don't redo by hand what is
+already mechanized (no need to `git init` first or run `gh repo create` by hand: the script does it).
 
-## 判斷 1:這是全新專案,還是要 onboard 既有資料夾?
+## Decision 1: a brand-new project, or onboarding an existing folder?
 
-- **全新專案**(使用者說「幫我建一個新專案」):目錄通常還不存在或是空的。
-  跳到判斷 2、3、4,決定好之後直接呼叫腳本,腳本自己會建目錄。
-- **onboard 既有資料夾**(使用者說「幫我 onboard 這個」或指了一個已經有
-  程式碼的路徑):跳過判斷 3(語言鷹架,東西已經在那裡了),直接看判斷 4,
-  然後呼叫腳本。如果那個資料夾已經是 git repo 且 working tree 是髒的,
-  腳本會直接 fail 並印出原因——**不要試著幫使用者先清乾淨再重跑**,把
-  這個訊息原封不動轉告使用者,讓他自己決定要 commit 還是丟棄那些變動。
-  這是刻意的安全機制,保護使用者真實的、還沒準備好的工作。
+- **Brand-new project** (the user says "create a new project for me"): the directory usually doesn't exist yet or is
+  empty. Go to decisions 2, 3 and 4, and once they are made call the script directly; the script creates the directory
+  itself.
+- **Onboarding an existing folder** (the user says "onboard this" or points at a path that already has code): skip
+  decision 3 (language scaffolding: things are already there), look at decision 4, then call the script. If that folder
+  is already a git repo with a dirty working tree, the script fails right away and prints why: **don't try to clean it
+  up for the user and re-run**; pass the message on to the user unchanged and let them decide whether to commit or
+  discard those changes. This is a deliberate safety mechanism protecting the user's real work that isn't ready yet.
 
-## 判斷 2:專案要放在哪個路徑?
+## Decision 2: which path does the project go in?
 
-2026-10-15 起所有專案都在 **mini 的 `~/workspace/<name>`**(MBP 只當遙控端,用 Claude Desktop
-透過 SSH 在 mini 上開 session)。這支 skill 跟 `onboard-project.sh` 都在 mini 上跑:
+Since 2026-10-15 every project lives in **the hub machine's `~/workspace/<name>`** (the laptop is only a remote, using
+Claude Desktop to open sessions on the hub machine over SSH). This skill and `onboard-project.sh` both run on the hub
+machine:
 
-- **預設**:`~/workspace/<name>`,不分語言、不分是不是程式碼專案。
-- 不要放 `~/.memory-copies/`(librarian 的 memory 副本)或 `~/services/`(正式服務的部署副本)。
-- 使用者自己指定路徑的話,以使用者說的為準,不要覆蓋——但要提醒:不在 `~/workspace/` 底下的話,
-  `sync-all-memory.sh` 的掃描跟一些慣例(資料夾名稱 = 專案名稱)會對不上。
+- **Default**: `~/workspace/<name>`, whatever the language and whether or not it is a code project.
+- Not in `~/.memory-copies/` (the librarian's memory copies) or `~/services/` (deployed copies of production services).
+- If the user names a path themselves, what the user says goes; don't override it, but remind them: outside
+  `~/workspace/`, the `sync-all-memory.sh` scan and some conventions (folder name = project name) won't line up.
 
-## 判斷 3:全新專案需要語言鷹架嗎?
+## Decision 3: does a brand-new project need language scaffolding?
 
-如果使用者講了語言/框架(「幫我建一個 Rust 專案」「用 Python」),先在
-目錄裡跑對應的初始化指令(`cargo init`、`uv init`、`npm init` 等),生出
-真的初始檔案,**再**呼叫 `onboard-project.sh`——這樣腳本自動 commit 的
-第一個 commit 就是真的鷹架,不是只有一份空白 README.md 佔位。
+If the user named a language/framework ("create a Rust project for me", "use Python"), first run the matching init
+command in the directory (`cargo init`, `uv init`, `npm init` etc.) to produce real initial files, **then** call
+`onboard-project.sh`: that way the first commit the script makes automatically is the real scaffolding, not just a blank
+README.md placeholder.
 
-如果使用者沒講語言、只是要一個地方記東西(像研究筆記那種筆記型
-專案),不用鷹架,讓腳本自己補的 README.md 佔位就好。
+If the user named no language and just wants a place to keep things (a notes-style project like research notes), no
+scaffolding: the README.md placeholder the script adds itself is enough.
 
-## 判斷 4:GitHub repo 要 public 還是 private?
+## Decision 4: should the GitHub repo be public or private?
 
-**預設一律 private**——這也是腳本自己的預設值,不用加任何 flag。
+**Always private by default**: that is also the script's own default, no flag needed.
 
-只有使用者明確說這是要公開的作品集/開源專案才加 `--public`。不確定的話,問使用者,不要自己猜
-「這個看起來可以公開」。
+Add `--public` only when the user explicitly says this is a portfolio/open-source project meant to be public. If
+unsure, ask the user; don't guess "this looks fine to make public".
 
-如果使用者明確說這個專案暫時不需要 GitHub(罕見,今天已經把所有 native
-專案都轉成 hosted 了,因為 native = 沒有本機以外的備份),才加
-`--no-remote`,並且要跟使用者確認他知道這個取捨。
+Only if the user explicitly says the project doesn't need GitHub for now (rare: today every native project was turned
+into a hosted one, because native = no backup beyond the local machine) add `--no-remote`, and confirm with the user
+that they know the trade-off.
 
-## 執行
+## Run
 
-決定完判斷 2-4,一行指令做完全套:
+With decisions 2-4 made, one command does the whole set:
 
 ```bash
 ~/agent-hub/bin/onboard-project.sh [--public] [--no-remote] <path>
 ```
 
-腳本本身處理 mini 連不上的情況(整個不做,不留半套狀態)跟中途被打斷的
-resume——這兩個不需要 skill 介入,腳本自己會印清楚訊息。腳本跑完直接把
-輸出(包含 GitHub URL、有沒有裝 --public)貼給使用者看,不用另外摘要。
+The script itself handles the hub machine being unreachable (it does nothing at all, leaving no half-done state) and
+resuming after an interruption: neither needs the skill to step in, and the script prints clear messages itself. When
+the script finishes, paste its output (including the GitHub URL and whether --public was used) to the user as is; no
+separate summary needed.

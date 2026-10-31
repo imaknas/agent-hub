@@ -1,18 +1,18 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "records-hubbus.v1",
-  "title": "hubbus 事件(.state/bus.db 的一列;bin/hubbus)",
-  "description": "只 append 的事件 log。payload 是 JSON 字串解開後的物件,一律帶 \"v\": 1(2026-10-22 之前的事件沒有,讀成 1)。加欄位不升版;改名/改意思升版並兩版並存。",
+  "title": "hubbus event (one row of .state/bus.db; bin/hubbus)",
+  "description": "Append-only event log. payload is the object decoded from the JSON string and always carries \"v\": 1 (events before 2026-10-22 have none; read as 1). Adding a field keeps the version; renaming/changing a meaning bumps it, with both versions side by side.",
   "type": "object",
   "required": ["seq", "id", "ts", "type", "source", "payload"],
   "properties": {
     "seq": {"type": "integer", "minimum": 1},
-    "id": {"type": "string", "minLength": 1, "description": "寄件端給的唯一 id;重送同一個 id = 什麼都不做"},
+    "id": {"type": "string", "minLength": 1, "description": "unique id given by the sender; resending the same id = does nothing"},
     "ts": {"type": "string"},
     "type": {"enum": ["message", "message.delivered", "message.done", "job.failed", "merge.done", "merge.failed", "session.report", "config.applied", "record"]},
-    "source": {"type": "string", "description": "寄件地址:專案名稱、平台,或 owner(別名 knas)"},
-    "to_project": {"type": ["string", "null"], "description": "message 的收件地址"},
-    "ref": {"type": ["string", "null"], "description": "這個事件講的是哪個事件(delivered/done → 信 id;回覆 → 原信)"},
+    "source": {"type": "string", "description": "sender address: a project name, the platform, or owner (or the owner's configured alias)"},
+    "to_project": {"type": ["string", "null"], "description": "the recipient address of a message"},
+    "ref": {"type": ["string", "null"], "description": "which event this event is about (delivered/done → the letter id; reply → the original letter)"},
     "payload": {"type": "object", "properties": {"v": {"const": 1}}}
   },
   "if": {"properties": {"type": {"const": "message"}}},
@@ -24,7 +24,7 @@
   "$defs": {
     "record": {
       "type": "object",
-      "description": "Principal Handoff 0.3 的一筆 record(hubbus record-publish 寫、bridge v2 跟助理交換;事件 id = rec:<ext>:<project>:<record id>)。record 本身的完整格式照 agent-ops-specs 的 core/acts/decisions schema,寫進匯流排前就驗證過,這裡只確認外框",
+      "description": "one Principal Handoff 0.3 record (written by hubbus record-publish, exchanged with the assistant by bridge v2; event id = rec:<ext>:<project>:<record id>). The record's full format follows the agent-ops-specs core/acts/decisions schemas and is validated before it is written to the bus; here only the envelope is checked",
       "required": ["record"],
       "properties": {
         "v": {"const": 1},
@@ -35,7 +35,7 @@
     },
     "config_applied": {
       "type": "object",
-      "description": "bin/hub config apply 套用了一版 config(docs/design/new-user.md 3.7):commit = config 檔最後一次修改的 commit,changes = 各套用者實際做的變更",
+      "description": "bin/hub config apply applied a version of the config (docs/design/new-user.md 3.7): commit = the commit that last changed the config files, changes = the changes each applier actually made",
       "required": ["commit", "changes"],
       "properties": {
         "v": {"const": 1},

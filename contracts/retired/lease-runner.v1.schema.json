@@ -1,8 +1,8 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "records-lease-runner.v1",
-  "title": "通道租借 runner API v1",
-  "description": "本機 HTTP(127.0.0.1,Bearer token)。$defs 是各個請求、事件、錯誤的形狀。加欄位不升版。",
+  "title": "Channel lease runner API v1",
+  "description": "Local HTTP (127.0.0.1, Bearer token). $defs are the shapes of the requests, events and errors. Adding a field keeps the version.",
   "$defs": {
     "create": {
       "type": "object",
@@ -23,7 +23,7 @@
             "discuss",
             "work"
           ],
-          "description": "discuss = 唯讀深談;work = 可以改這個專案的檔案、跑指令,每次都先問使用者(只開給 policy 的 work_projects)"
+          "description": "discuss = read-only discussion; work = may change this project's files and run commands, asking the user first every time (only for the policy's work_projects)"
         },
         "session_id": {
           "type": "string",
@@ -60,7 +60,7 @@
         "attachments": {
           "type": "array",
           "maxItems": 8,
-          "description": "附件:存進那個專案資料夾的 attachments/<YYYYMMDD-HHMMSS>-<名稱>(檔名清乾淨、不覆蓋、不進 git);圖片(image/jpeg|png|gif|webp)同時直接給模型看;文字後面會附一行存放路徑。每個解碼後最多 10 MB;整個請求最多 100 MB。",
+          "description": "attachments: saved in that project folder as attachments/<YYYYMMDD-HHMMSS>-<name> (file name cleaned, never overwritten, not in git); images (image/jpeg|png|gif|webp) are also shown to the model directly; the text gets a line with the saved path appended. At most 10 MB each after decoding; at most 100 MB for the whole request.",
           "items": {
             "type": "object",
             "required": [
@@ -86,7 +86,7 @@
           }
         }
       },
-      "description": "POST /v1/leases/<id>/messages。text 跟 attachments 至少要有一個(只傳附件時 text 可以是空字串)。"
+      "description": "POST /v1/leases/<id>/messages. At least one of text and attachments is required (text can be an empty string when only attachments are sent)."
     },
     "detach": {
       "type": "object",
@@ -225,11 +225,11 @@
         },
         "limit": {
           "type": "integer",
-          "description": "too_many:同時最多幾個想法沙盒"
+          "description": "too_many: the maximum number of idea sandboxes at once"
         },
         "current": {
           "type": "integer",
-          "description": "too_many:現在有幾個"
+          "description": "too_many: how many there are now"
         }
       }
     },
@@ -249,14 +249,14 @@
           "items": {
             "type": "string"
           },
-          "description": "WebFetch 不能「整個租約都允許」的網域(含子網域)"
+          "description": "domains (including subdomains) WebFetch can never \"allow for the whole lease\""
         },
         "attachable": {
           "type": "array",
           "items": {
             "type": "string"
           },
-          "description": "可以借用的專案名稱"
+          "description": "names of the projects that can be leased"
         },
         "modes": {
           "type": "array",
@@ -269,7 +269,7 @@
           "items": {
             "type": "string"
           },
-          "description": "可以用 work 模式的專案(想法沙盒,而且 OS sandbox 已經寫進它的設定)"
+          "description": "projects that can use work mode (idea sandboxes whose settings already have the OS sandbox written in)"
         }
       }
     },
@@ -285,7 +285,7 @@
         },
         "command": {
           "type": "string",
-          "description": "在終端機接續這個 session 的指令,照原樣顯示"
+          "description": "the command to continue this session in a terminal, displayed as is"
         }
       }
     },
@@ -345,7 +345,7 @@
     },
     "rate_limit_event": {
       "type": "object",
-      "description": "type=rate_limit 的事件內容;resets_at 是 epoch 秒",
+      "description": "the content of a type=rate_limit event; resets_at is in epoch seconds",
       "properties": {
         "status": {
           "type": [
@@ -386,7 +386,7 @@
         "name",
         "purpose"
       ],
-      "description": "POST /v1/sandboxes:替一個想法開探討用的專案(預設唯讀)。同名、同 purpose 再送一次回同一個專案(200),不另開新的。",
+      "description": "POST /v1/sandboxes: opens an exploration project for an idea (read-only by default). Sending the same name and purpose again returns the same project (200) instead of opening another.",
       "properties": {
         "v": {
           "const": 1
@@ -399,7 +399,7 @@
           "type": "string",
           "minLength": 1,
           "maxLength": 500,
-          "description": "想法本身"
+          "description": "the idea itself"
         }
       }
     },
@@ -410,7 +410,7 @@
         "name",
         "created"
       ],
-      "description": "201(新建)或 200(已存在,重送)。之後這個名稱出現在 policy 的 attachable,可以照一般專案借用。錯誤:400 bad_name、409 exists(同名但 purpose 不同,或名稱已被正式專案用掉)、429 too_many(帶 limit、current)、500 create_failed。",
+      "description": "201 (created) or 200 (already exists, resent). After that the name appears in the policy's attachable and can be leased like any project. Errors: 400 bad_name, 409 exists (same name but a different purpose, or the name is taken by a real project), 429 too_many (with limit, current), 500 create_failed.",
       "properties": {
         "v": {
           "const": 1
@@ -429,7 +429,7 @@
         "v",
         "mode"
       ],
-      "description": "POST /v1/leases/<id>/mode:深談中途切換 discuss / work(使用者在卡片上允許動手之後才送)。成功回 200 + lease;正在回答或等使用者回覆時 409 busy;不在 work_projects 回 400 work_not_allowed。切換會停掉程序、用同一個 session 接回,權限轉接也重新開始(先前「這個租約都允許」的網域、寫檔要重新允許)。",
+      "description": "POST /v1/leases/<id>/mode: switches discuss / work midway through a discussion (sent only after the user allows hands-on work on the card). Success returns 200 + lease; 409 busy while answering or waiting for the user's reply; 400 work_not_allowed when not in work_projects. Switching stops the process and resumes the same session, and the permission relay starts over too (domains previously \"allowed for the whole lease\" and file writes must be allowed again).",
       "properties": {
         "v": {
           "const": 1
@@ -447,7 +447,7 @@
       "required": [
         "v"
       ],
-      "description": "POST /v1/sandboxes/<name>/upgrade:想法沙盒升級成正式專案(歷史、檔案、memory 都留著;建 private GitHub repo)。使用者在對話裡同意之後才送。已經升級過的再送一次回 200 + upgraded:false 跟現在的名稱(重送安全,改過名也查得到)。",
+      "description": "POST /v1/sandboxes/<name>/upgrade: upgrades an idea sandbox to a real project (history, files and memory all kept; creates a private GitHub repo). Sent only after the user agrees in the conversation. Sending it again for one already upgraded returns 200 + upgraded:false and the current name (safe to resend, found even after a rename).",
       "properties": {
         "v": {
           "const": 1
@@ -455,7 +455,7 @@
         "rename": {
           "type": "string",
           "pattern": "^[a-z0-9][a-z0-9-]*$",
-          "description": "升級時順便改名"
+          "description": "rename while upgrading"
         }
       }
     },
@@ -467,7 +467,7 @@
         "origin",
         "upgraded"
       ],
-      "description": "200。錯誤:404 not_found(沒有這個沙盒)、409 not_idea(不是想法沙盒)、409 dirty(有未 commit 的變更)、409 name_taken(新名稱或 GitHub repo 已經存在)、500 upgrade_failed。",
+      "description": "200. Errors: 404 not_found (no such sandbox), 409 not_idea (not an idea sandbox), 409 dirty (uncommitted changes), 409 name_taken (the new name or GitHub repo already exists), 500 upgrade_failed.",
       "properties": {
         "v": {
           "const": 1

@@ -1,5 +1,5 @@
 {
-  "$comment": "平台設定 hub.json(bin/hubconf.py 讀;範本 hub.example.json)。bin/config-check 用 minischema 驗證,另外擋「不認得的頂層鍵」(_ 開頭的說明鍵除外)——打錯字的鍵不會被默默忽略。加欄位不升版。",
+  "$comment": "The platform settings hub.json (read by bin/hubconf.py; template hub.example.json). bin/config-check validates it with minischema and also rejects unknown top-level keys (except explanation keys starting with _), so a misspelled key is never silently ignored. Adding a field keeps the version.",
   "type": "object",
   "required": [
     "v",
@@ -126,7 +126,7 @@
     },
     "owner_side": {
       "enum": ["assistant", "builtin"],
-      "description": "Principal Handoff 的 principal 端:assistant = hub.json assistant 的助理(例:Muninn,透過它的 API);builtin = 平台內建的最小 owner 端(bin/owner.py)。沒寫:有 assistant.api 就是 assistant,否則 builtin"
+      "description": "the principal side of Principal Handoff: assistant = the assistant in hub.json assistant (through its API); builtin = the platform's built-in minimal owner side (bin/owner.py). Absent: assistant if assistant.api is set, otherwise builtin"
     },
     "backup": {
       "type": "object",
@@ -227,7 +227,7 @@
     "mailbox": {
       "type": "object",
       "properties": {
-        "handler": {"enum": ["agent", "propose"], "description": "沒人收的交辦怎麼派:agent = runtime 的 agent 直接處理(要工具的權限,現在只有 Claude Code);propose = 丟棄式 worktree 裡跑任何 agent、平台只採用 memory 筆記、代寄信(bin/propose_apply.py)。預設 agent"}
+        "handler": {"enum": ["agent", "propose"], "description": "how a request nobody picks up is dispatched: agent = the runtime's agent handles it directly (needs the tool's permissions; only Claude Code for now); propose = any agent runs in a throwaway worktree, the platform adopts only the memory notes and sends the letters for it (bin/propose_apply.py). Default agent"}
       }
     },
     "credentials": {
@@ -278,7 +278,7 @@
     },
     "llm": {
       "type": "object",
-      "description": "判斷點用哪一家 LLM、哪個模型、key 在哪(bin/completion.py 檔頭;docs/design/llm-providers.md)。沒有 providers = 判斷點交給 runtime.default,模型照執行環境的組別表;points 可以單獨寫(個別判斷點的模型)。模型怎麼選只在 llm.model_for / completion.resolve;語意檢查在 completion.config_errors()",
+      "description": "which LLM provider and model the judgment points use, and where the key is (bin/completion.py header; docs/design/llm-providers.md). No providers = judgment points go to runtime.default, models from the runtime's group table; points can be set on their own (the model of individual judgment points). How models are chosen lives only in llm.model_for / completion.resolve; semantic checks in completion.config_errors()",
       "properties": {
         "_comment": {"type": "string"},
         "providers": {"type": "object"},

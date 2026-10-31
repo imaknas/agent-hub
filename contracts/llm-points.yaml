@@ -1,194 +1,211 @@
-# LLM 判斷點登錄(第二階段):agent-hub 裡每一次 `claude -p` 都要經過 bin/llm.py,而且要是這裡宣告過的判斷點。
-# 每個點:誰呼叫、做什麼判斷、用哪個模型、權限、能用的工具、輸出 schema、模型不能用/輸出不合格時怎麼辦。
-# contracts-check 每晚 lint:bin/ 裡出現 claude -p 卻不在 bin/llm.py(也不在 exempt)就失敗。
+# LLM judgment point registry (phase two): every `claude -p` in agent-hub must go through bin/llm.py and be a judgment
+# point declared here.
+# Each point: who calls it, what it judges, which model, permissions, the tools it may use, the output schema, what
+# happens when the model is unavailable/the output is invalid.
+# contracts-check lints nightly: a claude -p in bin/ that is not in bin/llm.py (nor in exempt) fails.
 #
-# 格式:contracts/llm-points.v1.schema.json(跟 muninn 共用格式,它 vendor 一份;內容不共用)。
-# output:{format: json, schema: <相對這個目錄>} 或 {format: text}。
+# Format: contracts/llm-points.v1.schema.json (a format shared with muninn, which vendors a copy; the contents are not
+# shared).
+# output: {format: json, schema: <relative to this directory>} or {format: text}.
 #
-# on_failure = 模型沒回或輸出不合格時「實際發生什麼事」(兩邊同一組值;每個點的標記是讀呼叫端的程式整理的):
-#   skip        這次不做、不留結果            retry_later  不推進進度,下一輪再試
-#   ask_user    改成問 Knas                   say_so       明白說模型沒回(狀態頁、警報、事件)
-#   default     用安全結果:登錄有寫 default 值就由 llm.py 回那個值,否則由呼叫端提供
-# llm.py 的機制:登錄有 `default` 值 → 印 {"is_error": true, "structured_output": <default>}、exit 0;
-#   其他一律 structured_output: null、exit 1,呼叫端走它自己的失敗路徑(上面標的就是那條路徑做的事)。
-# 不管哪種都在匯流排記 job.failed(point、原因)。
+# on_failure = "what actually happens" when the model does not answer or the output is invalid (the same set of values
+# on both sides; each point's mark was worked out by reading the caller's code):
+#   skip        don't do it this time, keep no result    retry_later  don't advance progress, try again next round
+#   ask_user    ask the owner instead                    say_so       say plainly that the model did not answer
+#                                                                     (status page, alert, event)
+#   default     use a safe result: if the registry has a default value llm.py returns it, otherwise the caller supplies one
+# llm.py's mechanism: registry has a `default` value → prints {"is_error": true, "structured_output": <default>}, exit 0;
+#   everything else is structured_output: null, exit 1, and the caller takes its own failure path (what is marked above
+#   is what that path does).
+# Either way, job.failed (point, reason) is recorded on the bus.
 #
-# shape:completion(模型沒有工具、只回答案;hub.json 有 llm 區塊時交給 completion.py,任何 provider)| agent(coding agent)。
-# model_group:fast | standard | strong——要多強的模型,不寫哪一家的名字;default = 不指定,用工具自己的預設(只給 agent 點)。
-#   組別 → 模型:執行環境的轉接器(runtime_<名稱>.MODELS)或 hub.json llm.providers 的 models;
-#   個別判斷點蓋過寫在 hub.json llm.points.<點>.model(schedulectl set-model)。算法只在 llm.model_for。
-# auth:token(預設,~/.claude/headless-oauth-token)| subscription(訂閱登入;claude.ai connector 只有這樣才載入)。
-#   呼叫端的 LLM_AUTH 環境變數優先(登錄 job 的 connectors: true 會設 LLM_AUTH=subscription)。
+# shape: completion (the model has no tools and only returns an answer; when hub.json has an llm block it goes to
+#   completion.py, any provider) | agent (coding agent).
+# model_group: fast | standard | strong: how strong a model, never naming a provider; default = unspecified, use the
+#   tool's own default (agent points only).
+#   group → model: the runtime's adapter (runtime_<name>.MODELS) or the models of hub.json llm.providers;
+#   overrides for individual judgment points go in hub.json llm.points.<point>.model (schedulectl set-model). The
+#   algorithm lives only in llm.model_for.
+# auth: token (default, ~/.claude/headless-oauth-token) | subscription (subscription login; claude.ai connectors load
+#   only this way).
+#   The caller's LLM_AUTH environment variable takes precedence (a registry job's connectors: true sets
+#   LLM_AUTH=subscription).
 v: 1
 points:
   librarian-state:
     caller: bin/librarian.py
     shape: agent
     model_group: fast
-    extra_args: ["--strict-mcp-config"]   # 不載入環境裡的 MCP(全域的含正式資料庫;關掉工具也擋不掉,10-27 實驗)
-    purpose: 每晚依 memory 變動與 Muninn 轉交,決定要不要、怎麼更新一個專案的 STATE.md(只准改 ./STATE.md)
+    extra_args: ["--strict-mcp-config"]   # don't load the environment's MCP (the global ones include production databases; turning tools off doesn't block them, 10-27 experiment)
+    purpose: nightly, from memory changes and the assistant's handoffs, decide whether and how to update a project's STATE.md (may only change ./STATE.md)
     permission_mode: dontAsk
     tools: Read,Write,Edit,Glob,Grep
     allowed_tools: ["Edit(./STATE.md)"]
     output: {format: json, schema: llm/librarian-state.schema.json}
     timeout_s: 1200
-    on_failure: retry_later # checkpoint 不推進,隔晚重試
+    on_failure: retry_later # checkpoint not advanced, retried the next night
   librarian-todo-format:
     caller: bin/librarian.py
     shape: agent
     model_group: fast
-    extra_args: ["--strict-mcp-config"]   # 不載入環境裡的 MCP(全域的含正式資料庫;關掉工具也擋不掉,10-27 實驗)
-    purpose: STATE.md 的 `## 待辦` 格式不對時,只修格式、內容不動
+    extra_args: ["--strict-mcp-config"]   # don't load the environment's MCP (the global ones include production databases; turning tools off doesn't block them, 10-27 experiment)
+    purpose: when the `## 待辦` section of STATE.md is malformed, fix only the format, leaving the content unchanged
     permission_mode: dontAsk
     tools: Read,Edit
     allowed_tools: ["Edit(./STATE.md)"]
     timeout_s: 600
     output: {format: text}
-    on_failure: skip        # 修不好就留著,check-state-todo 會再檢查、todo.md 檔尾列出
+    on_failure: skip        # if it can't be fixed it stays; check-state-todo checks again and the end of todo.md lists it
   librarian-index:
     caller: bin/librarian.py
     shape: agent
     model_group: standard
-    extra_args: ["--strict-mcp-config"]   # 不載入環境裡的 MCP(全域的含正式資料庫;關掉工具也擋不掉,10-27 實驗)
-    purpose: 更新跨專案 index.md 名冊區塊外的註記、找跨專案關聯
+    extra_args: ["--strict-mcp-config"]   # don't load the environment's MCP (the global ones include production databases; turning tools off doesn't block them, 10-27 experiment)
+    purpose: update the notes outside the roster block of the cross-project index.md, find cross-project links
     permission_mode: acceptEdits
     tools: Read,Write,Edit,Glob,Grep
     output: {format: json, schema: llm/librarian-index.schema.json}
     timeout_s: 1200
-    on_failure: skip        # index.md 的註記這晚不更新;名冊區塊照常由腳本重生
+    on_failure: skip        # index.md's notes are not updated this night; the roster block is regenerated by the script as usual
   librarian-state-edits:
-    caller: bin/librarian.py(影子模式,每晚跟 librarian-state 並跑、只比對不寫;比對沒問題才取代它)
+    caller: bin/librarian.py (shadow mode, runs alongside librarian-state every night, comparing only, never writing; replaces it only once the comparison holds up)
     shape: completion
     model_group: fast
-    purpose: librarian-state 的 completion 版:平台把 STATE.md、AGENT.md、memory 變動、轉交放進 prompt,模型回編輯清單
+    purpose: "the completion version of librarian-state: the platform puts STATE.md, AGENT.md, memory changes and handoffs in the prompt, the model returns a list of edits"
     output: {format: json, schema: llm/librarian-state-edits.schema.json}
     max_tokens: 8192
     timeout_s: 600
-    on_failure: skip        # 影子:失敗只記在影子紀錄,真的 STATE.md 由 librarian-state 照常處理
+    on_failure: skip        # shadow: a failure is only recorded in the shadow log; the real STATE.md is handled by librarian-state as usual
   librarian-index-edits:
-    caller: bin/librarian.py(影子模式,跟 librarian-index 並跑、只比對不寫)
+    caller: bin/librarian.py (shadow mode, runs alongside librarian-index, comparing only, never writing)
     shape: completion
     model_group: standard
-    purpose: librarian-index 的 completion 版:平台把 index.md 跟今天的 digest 放進 prompt,模型回名冊區塊外的編輯清單
+    purpose: "the completion version of librarian-index: the platform puts index.md and today's digest in the prompt, the model returns a list of edits outside the roster block"
     output: {format: json, schema: llm/librarian-index-edits.schema.json}
     max_tokens: 8192
     timeout_s: 600
-    on_failure: skip        # 影子:失敗只記在影子紀錄
+    on_failure: skip        # shadow: a failure is only recorded in the shadow log
   consolidate:
     caller: bin/consolidate-memory.py
     shape: agent
     model_group: strong
-    purpose: 把超過 14 天的 memory 日期檔整理進 reference/、修正被推翻的敘述(只准改 memory/reference/ 跟 STATE.md)
+    purpose: fold memory date files older than 14 days into reference/ and correct statements that were overturned (may only change memory/reference/ and STATE.md)
     permission_mode: dontAsk
     tools: Read,Write,Edit,Glob,Grep
     allowed_tools: ["Edit(./memory/reference/**)", "Edit(./STATE.md)"]
     extra_args: ["--strict-mcp-config", "--no-session-persistence"]
     output: {format: json, schema: llm/consolidate.schema.json}
     timeout_s: 1200
-    on_failure: retry_later # 那個專案這次不整理,2 天後再試
+    on_failure: retry_later # that project is not consolidated this time; tried again 2 days later
   reflect-week:
     caller: bin/reflect_llm.py
     shape: completion
     model_group: standard
-    extra_args: ["--strict-mcp-config"]   # 不載入環境裡的 MCP(全域的含正式資料庫;關掉工具也擋不掉,10-27 實驗)
-    purpose: 每週活動分析(只拿統計 + muninn 的 session 摘要,不拿對話原文)
+    extra_args: ["--strict-mcp-config"]   # don't load the environment's MCP (the global ones include production databases; turning tools off doesn't block them, 10-27 experiment)
+    purpose: weekly activity analysis (takes only statistics + the assistant's session summaries, never conversation text)
     tools: ""
     output: {format: json, schema: llm/reflect-week.schema.json}
     timeout_s: 1200
-    on_failure: say_so      # 呼叫端只放統計、標「模型呼叫失敗」
+    on_failure: say_so      # the caller includes only the statistics and marks "model call failed"
   agent-job:
     caller: bin/run-agent-job.sh
     shape: agent
     model_group: default
-    purpose: "排程的 Claude job(專案登錄的 kind: agent);prompt 是 job 自己的"
-    # 無人值守:job 在登錄宣告了 allow: → dontAsk + --permission-prompts none + 只准那些規則(沒列的一律拒絕,
-    # 不會卡在提示);沒宣告的暫時維持 auto(不是 bypass),狀態頁列出來。永遠不用 bypassPermissions。
+    purpose: "scheduled Claude jobs (kind: agent in the project registry); the prompt is the job's own"
+    # Unattended: a job that declares allow: in the registry → dontAsk + --permission-prompts none + only those rules
+    # (anything not listed is refused, it never hangs on a prompt); one that doesn't declare it stays on auto for now
+    # (not bypass), listed on the status page. Never bypassPermissions.
     permission_mode: auto
     allow_from_env: AGENT_JOB_ALLOW
     timeout_s: 3600
     output: {format: text}
-    on_failure: say_so      # job 失敗,狀態頁標紅
+    on_failure: say_so      # the job fails, status page red
   login-check:
     caller: bin/check-claude-login.py
     shape: agent
     model_group: fast
-    extra_args: ["--strict-mcp-config"]   # 不載入環境裡的 MCP(全域的含正式資料庫;關掉工具也擋不掉,10-27 實驗)
-    purpose: "每小時確認 claude 的登入還能用(launchd 底下的訂閱登入、headless token 各打一次最小的請求);壞了發 Discord"
-    auth: subscription            # 檢查 token 那次呼叫端設 LLM_AUTH=token
+    extra_args: ["--strict-mcp-config"]   # don't load the environment's MCP (the global ones include production databases; turning tools off doesn't block them, 10-27 experiment)
+    purpose: "hourly check that claude's login still works (one minimal request each with the subscription login under launchd and the headless token); sends Discord when broken"
+    auth: subscription            # for the token check the caller sets LLM_AUTH=token
     tools: ""
     timeout_s: 120
     output: {format: text}
-    on_failure: say_so      # 發 Discord 警報
+    on_failure: say_so      # sends a Discord alert
   mailbox-escalation:
-    caller: bin/hubbus(dispatch → run-agent-job.sh)
+    caller: bin/hubbus (dispatch → run-agent-job.sh)
     shape: agent
     model_group: default
-    purpose: "專案信箱的交辦沒人收(專案沒人在用,或等了幾分鐘):在那個專案開 headless session,只寫 memory 筆記、回信、問 owner"
+    purpose: "a request in a project mailbox nobody picked up (nobody is using the project, or it waited a few minutes): open a headless session in that project that only writes memory notes, replies, asks the owner"
     permission_mode: dontAsk
     prompts: none
     tools: Read,Edit,Write,Glob,Grep,Bash
-    allowed_tools: ["Edit(./.agent-memory/memory/**)", "{platform_mail}"]   # {platform_mail}:平台的收信、寄信、結案指令(runtime 翻成自己的規則)
+    allowed_tools: ["Edit(./.agent-memory/memory/**)", "{platform_mail}"]   # {platform_mail}: the platform's commands to read, send and close letters (the runtime turns them into its own rules)
     timeout_s: 1800
     output: {format: text}
-    on_failure: say_so      # bridge 回報升級失敗
+    on_failure: say_so      # the bridge reports the escalation failure
   mailbox-propose:
-    caller: "bin/propose_apply.py(hub.json mailbox.handler: propose 時,hubbus dispatch 叫)"
+    caller: "bin/propose_apply.py (called by hubbus dispatch when hub.json mailbox.handler: propose)"
     shape: agent
     model_group: default
-    purpose: "信箱交辦的 propose 版:在丟棄式 worktree 裡讀專案、只寫 memory 筆記;要寄的信、結案寫在輸出,平台代寄(任何 agent 都能跑)"
-    # 寫入的保證來自丟棄式 worktree + 平台只採用 .agent-memory/memory/**,不靠工具的權限;不給跑指令的工具:要寄信也不用自己跑
+    purpose: "the propose version of mailbox requests: reads the project in a throwaway worktree and writes only memory notes; letters to send and closes go in the output and the platform sends them (any agent can run it)"
+    # The write guarantee comes from the throwaway worktree + the platform adopting only .agent-memory/memory/**, not from
+    # the tool's permissions; no tool that runs commands is given: sending letters doesn't need it to run anything
     permission_mode: acceptEdits
     tools: Read,Edit,Write,Glob,Grep
     extra_args: ["--strict-mcp-config"]
     output: {format: json, schema: llm/mailbox-propose.schema.json}
     timeout_s: 1800
-    on_failure: say_so      # 信不結案,下一輪 dispatch 照規則再派;propose_apply 印出原因
+    on_failure: say_so      # the letter is not closed and the next dispatch round dispatches it again by the rules; propose_apply prints why
   mailbox-conversation:
-    caller: bin/hubbus(dispatch → llm.py run,帶 runtime_claude.resume_args)
+    caller: bin/hubbus (dispatch → llm.py run, with runtime_claude.resume_args)
     shape: agent
     model_group: standard
-    purpose: "對話的回信送到一個閒置的 session:用它的 context 在背景接續(分支副本,不動原本的 session),只寫筆記、回信、問 owner"
-    # 權限跟 mailbox-escalation 一樣,不沿用原本 session 的權限模式(它可能是 acceptEdits/auto,沒人看著不能照用)
+    purpose: "a reply in a conversation reaches an idle session: continue in the background with its context (a branched copy, the original session untouched), only writing notes, replies, asking the owner"
+    # Same permissions as mailbox-escalation; the original session's permission mode is not carried over (it may be
+    # acceptEdits/auto, which can't be used as is with nobody watching)
     permission_mode: dontAsk
     prompts: none
     tools: Read,Edit,Write,Glob,Grep,Bash
-    allowed_tools: ["Edit(./.agent-memory/memory/**)", "{platform_mail}"]   # {platform_mail}:平台的收信、寄信、結案指令(runtime 翻成自己的規則)
-    extra_args: ["--strict-mcp-config"]   # 不載入專案的 MCP 伺服器(例:專案的正式資料庫),背景副本用不到
+    allowed_tools: ["Edit(./.agent-memory/memory/**)", "{platform_mail}"]   # {platform_mail}: the platform's commands to read, send and close letters (the runtime turns them into its own rules)
+    extra_args: ["--strict-mcp-config"]   # don't load the project's MCP servers (e.g. the project's production database); the background copy doesn't need them
     timeout_s: 1800
     output: {format: text}
-    on_failure: retry_later  # 失敗記 job.failed;35 分鐘還沒結案,dispatch 改派交辦(stale_resumes)
+    on_failure: retry_later  # a failure records job.failed; not closed after 35 minutes, dispatch hands it on as a request (stale_resumes)
   lease-session:
-    caller: bin/lease-runner.py(llm.py exec)
+    caller: bin/lease-runner.py (llm.py exec)
     shape: agent
     model_group: standard
-    purpose: "通道租借的 discuss session:長駐的 stream-json 程序,Knas 透過 Muninn 跟專案深談;唯讀"
-    # 只給讀的工具;讀類規則放行(不送到轉接),不在登錄網域的 WebFetch、AskUserQuestion 走權限轉接(送到手機)
+    purpose: "the discuss session of a channel lease: a long-running stream-json process where the owner discusses the project in depth through the assistant; read-only"
+    # Only read tools; read rules are allowed (not sent to the relay); WebFetch to domains outside the registry and
+    # AskUserQuestion go through the permission relay (sent to the phone)
     tools: Read,Glob,Grep,WebSearch,WebFetch,AskUserQuestion
-    allowed_tools: ["Read", "Glob", "Grep", "WebSearch", "mcp__lease_relay__show_file"]   # show_file:把專案裡的檔案給使用者看(docs/design/lease-show-file.md)
-    extra_allow_env: LEASE_ALLOW        # runner 加:登錄 network 網域的 WebFetch(domain:…)
+    allowed_tools: ["Read", "Glob", "Grep", "WebSearch", "mcp__lease_relay__show_file"]   # show_file: shows the user a file from the project (docs/design/lease-show-file.md)
+    extra_allow_env: LEASE_ALLOW        # added by the runner: WebFetch(domain:…) for the registry's network domains
     stream: true
     output: {format: text}
-    on_failure: say_so      # runner 發 process_crashed 事件,手機上看得到
+    on_failure: say_so      # the runner sends a process_crashed event, visible on the phone
   lease-work:
-    caller: bin/lease-runner.py(llm.py exec)
+    caller: bin/lease-runner.py (llm.py exec)
     shape: agent
     model_group: standard
-    purpose: "通道租借的 work session(第二階段,只限想法沙盒):Knas 允許動手後,可以改這個專案的檔案、跑指令,每次都先問他"
-    # 沒有 permission_mode / prompts:寫入要走權限轉接(--permission-prompt-tool)送手機;dontAsk 會在那之前就拒絕。
-    # 自動放行的還是只有讀;Edit/Write/Bash 全部經過 lease-relay.py(資料夾外直接拒絕,其他問 Knas)。
+    purpose: "the work session of a channel lease (phase two, idea sandboxes only): once the owner allows hands-on work, it may change this project's files and run commands, asking the owner first every time"
+    # No permission_mode / prompts: writes must go through the permission relay (--permission-prompt-tool) to the phone;
+    # dontAsk would refuse them before that.
+    # Only reads are still allowed automatically; Edit/Write/Bash all go through lease-relay.py (refused outright outside
+    # the folder, otherwise the owner is asked).
     tools: Read,Glob,Grep,WebSearch,WebFetch,AskUserQuestion,Edit,Write,NotebookEdit,Bash
     allowed_tools: ["Read", "Glob", "Grep", "WebSearch", "mcp__lease_relay__show_file"]
     extra_allow_env: LEASE_ALLOW
     stream: true
     output: {format: text}
-    on_failure: say_so     # runner 發 process_crashed 事件,手機上看得到
+    on_failure: say_so     # the runner sends a process_crashed event, visible on the phone
   lease-handover:
     caller: bin/lease-runner.py
     shape: agent
     model_group: standard
-    purpose: "收回租約時:接回同一個 session,寫結構化交接(摘要、決定、未決問題、Knas 要做的事、memory 筆記)"
+    purpose: "on detaching a lease: resume the same session and write a structured handover (summary, decisions, open questions, what the owner has to do, memory notes)"
     tools: ""
     output: {format: json, schema: llm/lease-handover.schema.json}
     timeout_s: 600
-    on_failure: default     # runner 重試一次,再不行產生最小交接(fallback: true)——安全結果由 runner 提供,不是登錄
+    on_failure: default     # the runner retries once, failing that it produces a minimal handover (fallback: true); the safe result is supplied by the runner, not the registry
 exempt: []
