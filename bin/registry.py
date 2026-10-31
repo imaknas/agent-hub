@@ -1,64 +1,83 @@
 #!/bin/sh -c exec${IFS}"${0%/*}/py"${IFS}"$0"${IFS}"$@"
-"""專案登錄:<registry_dir>/<name>.yaml(一個專案一個檔,hub.json 指定目錄)→ 驗證 → JSON 快取。
+"""The project registry: <registry_dir>/<name>.yaml (one file per project, directory set in hub.json) → validation →
+JSON cache.
 
-平台的程式碼裡不寫專案名稱:專案的 job、service、隱私標籤、路徑都在登錄裡。scheduler 每個 tick
-呼叫 refresh():每個檔各自驗證,合格的寫進 .state/registry/<name>.json(上一份合格的快取),
-不合格的沿用上一份合格的、錯誤記在 index.json 的 errors(狀態頁標紅),**不影響其他專案**。
-index.json 是給只能用標準函式庫的程式(hubconf.py、hubbus)讀的。
+The platform's code holds no project names: a project's jobs, services, privacy labels and paths are all in the
+registry. The scheduler calls refresh() on every tick: each file is validated on its own; valid ones are written to
+.state/registry/<name>.json (the cache of the last valid version), invalid ones keep using the last valid version and
+their errors go into index.json's errors (red on the status page), **without affecting other projects**.
+index.json is for programs that may only use the standard library (hubconf.py, hubbus).
 
-schema v1(contracts/project.v1.md 有完整說明):
-  v: 1                      必填
-  name                      必填,= 檔名
-  type: project | idea      預設 project。idea = Muninn 替想法開的探討用專案(bin/create-idea-sandbox.py 建,
-                            名稱是想法的代號、一般專案名稱的規則(早期的叫 idea-<n>),沒有 GitHub remote;
-                            bin/upgrade-idea.py 升級成 project)。是不是想法沙盒只看這個欄位,不看名稱
-  purpose                   想法本身(一兩句);type: idea 必填,lease 的系統提示會帶上
-  paths: {workspace, memory_bare, origin}       workspace 必填(平台自己除外)
-  memory: true              參加 memory 追蹤
+schema v1 (contracts/project.v1.md has the full description):
+  v: 1                      required
+  name                      required, = the file name
+  type: project | idea      default project. idea = a project the assistant opens to explore an idea (created by
+                            bin/create-idea-sandbox.py; the name is the idea's code name, following the ordinary
+                            project-name rules (early ones were called idea-<n>); no GitHub remote;
+                            bin/upgrade-idea.py upgrades it to project). Whether it's an idea sandbox depends only on
+                            this field, not on the name
+  purpose                   the idea itself (a sentence or two); required for type: idea, included in the lease's
+                            system prompt
+  paths: {workspace, memory_bare, origin}       workspace required (except for the platform itself)
+  memory: true              takes part in memory tracking
   privacy: {reflection: include|stats_only|exclude}
-  runtime: {deploy, test}   有 runtime = 有 <services_root>/<name>
+  runtime: {deploy, test}   has a runtime = has <services_root>/<name>
   push_on_merge: false
-  commits: conventional      commit 標題用 Conventional Commits:merge-branch 合併前檢查(bin/commit_title.py),
-                            規則檔自動帶 templates/rules/conventional-commits.md。沒寫 = 不檢查
+  commits: conventional      commit titles use Conventional Commits: merge-branch checks before merging
+                            (bin/commit_title.py), and the rules file automatically carries
+                            templates/rules/conventional-commits.md. Not set = no check
   mailbox: {escalate: true}
   publishes: [{kind, path, contract, v}]
-  provides:  [{contract, v, schema}]           schema 相對 workspace
+  provides:  [{contract, v, schema}]           schema relative to workspace
   services:  [{name, run, label?, keepalive?, throttle_s?, env?, cwd?, expose?}]
   enforce: {sandbox: false, capabilities: [], work: false}
-                                  第二階段:sandbox true = render-project-settings.py 寫 sandbox + 權限規則;
-                                  capabilities = 平台的能力(hub.json capabilities,例 gpu),要 sandbox: true;
-                                  沙盒裡用 hub-run --cap <能力> 透過平台代跑(docs/design/capabilities.md);
-                                  work = 深談(租約)可以用 work 模式動手(資料夾內寫檔、指令每次問),要 sandbox: true。
-                                  Knas 明確授權的紀錄(10-25):想法沙盒建立時寫上、升級帶過去,其他專案要他同意才加
-  network: [網域]                 sandbox 平台預設之外還要連的
-  allow_write: [路徑]             sandbox 平台預設之外還要寫的
-    type、enforce、network、allow_write、privacy 是安全欄位:專案寄的 manifest.update 改到就整封退回
-    (專案不能替自己關 sandbox、開大範圍、加能力);要改請 agent-hub session(Knas 確認)
+                                  phase two: sandbox true = render-project-settings.py writes the sandbox +
+                                  permission rules; capabilities = platform capabilities (hub.json capabilities,
+                                  e.g. gpu), needs sandbox: true; inside the sandbox, hub-run --cap <capability> runs
+                                  things through the platform (docs/design/capabilities.md);
+                                  work = a discuss lease may make changes in work mode (writing files inside the
+                                  folder, commands asked every time), needs sandbox: true.
+                                  The record of the owner's explicit authorization (10-25): written when an idea
+                                  sandbox is created, carried over on upgrade; other projects add it only with the
+                                  owner's consent
+  network: [domains]              what the sandbox needs to reach beyond the platform defaults
+  allow_write: [paths]            what the sandbox needs to write beyond the platform defaults
+    type, enforce, network, allow_write and privacy are security fields: a manifest.update a project sends that
+    changes them is rejected whole (a project can't switch off its own sandbox, widen its scope or add capabilities);
+    to change them, ask the agent-hub session (the owner confirms)
   secrets:   [{name, path, env_key?, expires? | max_age_days?, warn_days?, backup?, why?, rotate?}]
-                                  這個專案要用的憑證:只寫名稱、位置、到期,**不寫值**(check-secrets.py 每天檢查
-                                  在不在、有沒有被備份、快不快到期)。path 相對 runtime(有 runtime 時)否則 workspace,
-                                  或 ~/、絕對路徑;env_key = 那個檔是 .env、憑證是其中一行(只檢查有沒有這個 key);
-                                  expires 是 "YYYY-MM-DD"(要加引號);max_age_days 照檔案修改時間算(換新就重算);
-                                  backup: false 要寫 why(例:重發就好)
-  gate: strict                    合併閘門強制:主 checkout 的 main 不能直接 commit(只能 merge-branch);預設只偵測
+                                  the credentials this project uses: only name, location and expiry, **never the
+                                  value** (check-secrets.py checks daily that they exist, are backed up, and aren't
+                                  about to expire). path is relative to runtime (if there is one) else workspace, or
+                                  ~/ or an absolute path; env_key = the file is a .env and the credential is one line
+                                  of it (only checks that the key is there); expires is "YYYY-MM-DD" (quote it);
+                                  max_age_days counts from the file's modification time (replacing it restarts the
+                                  count); backup: false needs a why (e.g. just reissue it)
+  gate: strict                    the merge gate enforced: main in the main checkout can't be committed to directly
+                                  (only via merge-branch); by default it only detects
   jobs:      [{name, at | every, run | (kind: agent + prompt), cwd?, days?, days_of_month?, months?,
                until?, between?, background?, after?, max_attempts_per_day?, legacy_name?}]
-    every: 15m / 1h;cwd: runtime(預設,有 runtime 時)| workspace | hub | state(只有 agent job:在自己的
-      狀態目錄跑,不載入專案的設定/MCP)
-    after: [job](同專案)或 [專案/job]
-    connectors: true(只有 agent job):要 claude.ai connector(Upwork 等)→ 用訂閱登入,不用預設的 headless token
-      (allow 有 mcp__claude_ai_ 的工具卻沒寫就不合格)
-    legacy_name: schedule.yaml 裡的舊名稱——舊名稱還在 schedule.yaml 時這個 job 不採用(切換期間
-                 舊的優先,刪掉 schedule.yaml 那一項就切過來;狀態也從舊名稱搬過來)
-驗證:未知的欄位、名稱重複、after 指到不存在的 job、run/deploy/test 的第一個字找不到(相對 cwd 的
-檔案、PATH 上的指令、或存在的絕對路徑)都算不合格。
+    every: 15m / 1h; cwd: runtime (default, when there's a runtime) | workspace | hub | state (agent jobs only: runs
+      in its own state directory, without loading the project's settings/MCP)
+    after: [job] (same project) or [project/job]
+    connectors: true (agent jobs only): needs claude.ai connectors (Upwork etc.) → uses the subscription login, not
+      the default headless token (tools in allow with mcp__claude_ai_ but this not set: invalid)
+    legacy_name: the old name in schedule.yaml: while the old name is still in schedule.yaml this job isn't used
+                 (during the switch the old one wins; delete that entry from schedule.yaml to switch over; the state
+                 moves over from the old name too)
+Validation: unknown fields, duplicate names, after pointing at a job that doesn't exist, the first word of
+run/deploy/test not found (a file relative to cwd, a command on PATH, or an existing absolute path) all count as
+invalid.
 
-用法:registry.py [check [name...]]   驗證並更新快取,印出結果
-      registry.py check --rebuild         rebuild even from another or an empty registry dir (wrong_registry())
-      registry.py add <name> <workspace> <origin> <memory_bare> [--extra <JSON>]
-                                          onboard 時新增(已存在就不動;extra 蓋過預設欄位,驗證不過不寫)
-      registry.py rename <old> <new> <workspace> <origin> <memory_bare> 改名(檔案、prompt 目錄一起搬)
-      registry.py apply-updates           套用專案寄來的 manifest.update 信(平台 job,每 15 分鐘)
+Usage: registry.py [check [name...]]   validate and refresh the cache, print the result
+       registry.py check --rebuild         rebuild even from another or an empty registry dir (wrong_registry())
+       registry.py add <name> <workspace> <origin> <memory_bare> [--extra <JSON>]
+                                           add at onboarding (left alone if it exists; extra overrides default
+                                           fields; nothing written if validation fails)
+       registry.py rename <old> <new> <workspace> <origin> <memory_bare>
+                                           rename (the file and the prompt directory move together)
+       registry.py apply-updates           apply the manifest.update letters projects sent (platform job, every
+                                           15 minutes)
 """
 from __future__ import annotations
 
@@ -92,7 +111,7 @@ EVERY = re.compile(r"^(\d+)(m|h)$")
 
 
 def dirs(doc: dict) -> dict[str, pathlib.Path | None]:
-    """這個專案的 runtime / workspace / hub 目錄。"""
+    """This project's runtime / workspace / hub directories."""
     name = doc.get("name", "")
     if name == hubconf.hub_project() or doc.get("type") == "module":
         return {"runtime": hubconf.ROOT, "workspace": hubconf.ROOT, "hub": hubconf.ROOT}
@@ -108,7 +127,7 @@ def default_cwd(doc: dict) -> str:
 
 
 def resolves(cmd: str, cwd: pathlib.Path | None, search: str | None = None) -> str | None:
-    """第一個字找得到嗎;找不到回傳錯誤訊息。"""
+    """Can the first word be found? If not, return an error message."""
     try:
         words = shlex.split(cmd)
     except ValueError as e:
@@ -175,7 +194,8 @@ def validate_enforce(doc: dict) -> list[str]:
     work = enf.get("work", False)
     if not isinstance(work, bool):
         return [_("enforce.work must be true or false")]
-    if work and not enf.get("sandbox"):  # 深談能寫入,靠的就是 OS sandbox 擋資料夾外的寫入
+    # a discuss lease can write only because the OS sandbox blocks writes outside the folder
+    if work and not enf.get("sandbox"):
         return [_("enforce.work needs enforce.sandbox: true")]
     caps = enf.get("capabilities")
     if caps is None:
@@ -187,9 +207,10 @@ def validate_enforce(doc: dict) -> list[str]:
                cap=c, have=", ".join(sorted(have)) or _("none")) for c in caps if c not in have]
     if caps and not enf.get("sandbox"):
         errs.append(_("enforce.capabilities needs enforce.sandbox: true"))
-    # 不看 type:想法沙盒升級成正式專案後,Knas 同意過的能力跟著留(10-25 m10251626)。同意的紀錄就是 enforce 本身——
-    # 平台擁有的欄位,專案自己的 manifest.update 改不了(PLATFORM_OWNED);能力能做什麼由平台的 Seatbelt profile 決定,
-    # 跟專案是哪一種無關
+    # Not based on type: after an idea sandbox is upgraded into a real project, the capabilities the owner agreed to
+    # stay with it (10-25 m10251626). The record of that consent is enforce itself: a platform-owned field that the
+    # project's own manifest.update can't change (PLATFORM_OWNED); what a capability can do is decided by the
+    # platform's Seatbelt profile, regardless of what kind of project it is
     return errs
 
 
@@ -197,7 +218,7 @@ PLATFORM_OWNED = ("type", "enforce", "network", "allow_write", "privacy")
 
 
 def platform_owned_changes(new: dict, cur: dict) -> list[str]:
-    """manifest.update 不能改的安全欄位:跟現在的登錄不一樣就列出來。"""
+    """Security fields manifest.update can't change: list them when they differ from the current registry entry."""
     return [_("{key} is a security field that only agent-hub can change ({owner} confirms); this letter changes it", key=k,
               owner=hubconf.owner_tag())
             for k in PLATFORM_OWNED
@@ -255,7 +276,7 @@ def validate(doc, stem: str) -> list[str]:
 
 
 def validate_runs(doc: dict, stem: str, d: dict) -> list[str]:
-    """services 跟 jobs(專案登錄跟模組共用)。"""
+    """services and jobs (shared by the project registry and modules)."""
     errs: list[str] = []
     names = set()
     for svc in doc.get("services") or []:
@@ -287,7 +308,9 @@ def validate_runs(doc: dict, stem: str, d: dict) -> list[str]:
             errs.append(_("job {name}: days can only be {days}", name=n, days=sorted(DAYS)))
         cwd_key = job.get("cwd") or default_cwd(doc)
         if cwd_key == "state" and job.get("kind") == "agent":
-            pass  # agent job 在自己的狀態目錄跑(不載入專案的設定/MCP;例:專案自己的同名 MCP 會蓋掉 claude.ai connector)
+            # an agent job runs in its own state directory (without loading the project's settings/MCP; e.g. the
+            # project's own MCP with the same name would shadow a claude.ai connector)
+            pass
         elif cwd_key not in ("runtime", "workspace", "hub"):
             errs.append(_("job {name}: cwd can only be runtime / workspace / hub (an agent job may also use state)", name=n))
             continue
@@ -322,10 +345,12 @@ def validate_runs(doc: dict, stem: str, d: dict) -> list[str]:
     return errs
 
 
-# ---------- 模組(docs/design/new-user.md 3.2)----------
-# 可以不開的功能(個人助理、備份、mirror、每週回顧…):平台 repo 的 modules/<名稱>.yaml,格式跟專案登錄的 jobs/services
-# 一樣(cwd 一律是 hub);hub.json 的 modules.<名稱>: true 才採用。job 在排程裡叫 <模組>/<job>。
-# 搬進模組的 job 用 legacy_name 寫舊的全名(例:agent-hub/backup),排程狀態照搬、別人的 after: 也照樣對得上。
+# ---------- modules (docs/design/new-user.md 3.2) ----------
+# Optional features (personal assistant, backup, mirror, weekly reflection…): modules/<name>.yaml in the platform
+# repo, in the same format as the project registry's jobs/services (cwd is always hub); used only with
+# modules.<name>: true in hub.json. In the schedule a job is called <module>/<job>.
+# A job moved into a module carries its old full name in legacy_name (e.g. agent-hub/backup), so its schedule state
+# moves over and others' after: still match.
 
 MODULES_DIR = hubconf.ROOT / "modules"
 MODULE_TOP = {"v", "name", "type", "description", "requires_config", "jobs", "services", "secrets", "consumes"}
@@ -354,8 +379,11 @@ def validate_module(doc, stem: str) -> list[str]:
                 errs.append(_("{kind} {name}: a module's cwd can only be hub", kind=key[:-1], name=x.get("name")))
             if key == "jobs" and isinstance(x, dict) and x.get("kind", "command") != "command":
                 errs.append(_("job {name}: a module can only have command jobs", name=x.get("name")))
-    errs += validate_secrets(doc.get("secrets"))   # 模組自己的憑證(平台的;沒開的模組不檢查)
-    for c in doc.get("consumes") or []:   # 模組讀別人的契約(例:助理模組讀助理的轉交格式);沒開的模組不比對
+    # the module's own credentials (the platform's; modules that are off aren't checked)
+    errs += validate_secrets(doc.get("secrets"))
+    # contracts of others the module reads (e.g. the assistant module reads the assistant's handoff format); modules
+    # that are off aren't compared
+    for c in doc.get("consumes") or []:
         if not isinstance(c, dict) or not all(c.get(k) for k in ("contract", "v", "copy")):
             errs.append(_("each consumes item needs contract, v and copy"))
     return errs + validate_runs(doc, stem, dirs(doc))
@@ -367,7 +395,8 @@ def enabled_modules() -> list[str]:
 
 
 def load_modules() -> tuple[dict, dict]:
-    """(開著的模組 → doc, 錯誤)。開了卻沒有檔案、或不合格:記錯誤、不採用(它的 job/service 就不存在)。"""
+    """(enabled module → doc, errors). Enabled but no file, or invalid: record the error and don't use it (its
+    jobs/services then don't exist)."""
     mods, errors = {}, {}
     for name in enabled_modules():
         f = MODULES_DIR / f"{name}.yaml"
@@ -387,7 +416,7 @@ def load_modules() -> tuple[dict, dict]:
 
 
 def job_cycles(index: dict) -> list[str]:
-    """after:/before: 串起來有沒有繞圈(有的話排程器會永遠等)。"""
+    """Whether after:/before: chain into a cycle (if so the scheduler would wait forever)."""
     jobs, _skipped, _renames = scheduler_jobs(index, set())
     graph = {j["name"]: set(j.get("after") or []) for j in jobs}
     out, state = [], {}
@@ -409,8 +438,8 @@ def job_cycles(index: dict) -> list[str]:
 
 
 def roster_mismatch(doc, text: str) -> list[str]:
-    """hubconf.roster()(不用 PyYAML 的逐行解析:recover、sync-all-memory、名冊用它)讀到的 paths 要跟 YAML 一樣,
-    不然那些腳本會默默拿到空的或錯的路徑。"""
+    """The paths hubconf.roster() reads (a line-by-line parse without PyYAML, used by recover, sync-all-memory and
+    the roster) must match the YAML, or those scripts silently get empty or wrong paths."""
     if not isinstance(doc, dict) or not isinstance(doc.get("paths") or {}, dict):
         return []
     want = {k: (None if v is None else str(v)) for k, v in (doc.get("paths") or {}).items()}
@@ -440,7 +469,7 @@ def wrong_registry(old: dict, reg: pathlib.Path, files: list[pathlib.Path]) -> s
 
 
 def refresh(only: list[str] | None = None, rebuild: bool = False) -> dict:
-    """驗證全部登錄、更新快取跟 index.json,回傳 index。"""
+    """Validate the whole registry, refresh the cache and index.json, return the index."""
     CACHE.mkdir(parents=True, exist_ok=True)
     reg = hubconf.registry_dir()
     files = sorted(reg.glob("*.yaml")) if reg.is_dir() else []
@@ -451,8 +480,9 @@ def refresh(only: list[str] | None = None, rebuild: bool = False) -> dict:
     if not rebuild and (why := wrong_registry(old, reg, files)):
         print(f"registry: {why}", file=sys.stderr)
         return {**old, "errors": {**(old.get("errors") or {}), "(registry)": [why]}}
-    # 平台自己的登錄不管 registry_dir 在哪都讀,而且一律用平台 repo 那份:使用者的登錄裡同名的檔(例:搬家時多複製的)
-    # 不採用,不然平台更新了自己的登錄也不會生效
+    # The platform's own registry entry is read wherever registry_dir is, and always from the platform repo: a file
+    # with the same name in the user's registry (e.g. an extra copy made during the move) isn't used, or the
+    # platform's updates to its own entry would never take effect
     plat = hubconf.platform_registry()
     if plat.exists():
         files = sorted([f for f in files if f.stem != plat.stem] + [plat])
@@ -471,9 +501,9 @@ def refresh(only: list[str] | None = None, rebuild: bool = False) -> dict:
             projects[stem] = doc
         else:
             errors[stem] = errs
-            if cache.exists():  # 沿用上一份合格的
+            if cache.exists():  # keep using the last valid version
                 projects[stem] = json.loads(cache.read_text())
-    # 登錄檔被刪掉的專案:快取也拿掉(刪掉登錄 = 拿掉這個專案)
+    # projects whose registry file was deleted: drop the cache too (deleting the entry = removing the project)
     for c in CACHE.glob("*.json"):
         if c.name != "index.json" and c.stem not in {f.stem for f in files}:
             c.unlink()
@@ -496,7 +526,8 @@ def every_minutes(s: str) -> int:
 
 
 def scheduler_jobs(index: dict, legacy_names: set[str]) -> tuple[list[dict], list[str], dict[str, str]]:
-    """登錄 → scheduler.py 的 job dict。回傳 (jobs, 因為舊名稱還在 schedule.yaml 而沒採用的, 新名稱→舊名稱)。"""
+    """Registry → scheduler.py's job dicts. Returns (jobs, the ones not used because their old name is still in
+    schedule.yaml, new name → old name)."""
     out, skipped, renames = [], [], {}
     before: dict[str, list[str]] = {}
     docs = sorted(index["projects"].items()) + sorted((index.get("modules") or {}).items())
@@ -517,9 +548,11 @@ def scheduler_jobs(index: dict, legacy_names: set[str]) -> tuple[list[dict], lis
                 agent_name = job.get("legacy_name") or f"{name}-{job['name']}"
                 cmd = (f"{shlex.quote(str(hubconf.ROOT / 'bin' / 'run-agent-job.sh'))} {shlex.quote(agent_name)} "
                        f"{shlex.quote(str(cwd))} {shlex.quote(str(prompt))}")
-                if job.get("allow"):  # 無人值守的權限:只准這些(llm.py 的 agent-job 判斷點會改用 dontAsk)
+                # unattended permissions: only these allowed (llm.py's agent-job judgment point switches to dontAsk)
+                if job.get("allow"):
                     cmd = f"AGENT_JOB_ALLOW={shlex.quote(json.dumps(job['allow'], ensure_ascii=False))} {cmd}"
-                if job.get("connectors"):  # 要 claude.ai connector:用訂閱登入,不用預設的 headless token
+                # needs claude.ai connectors: use the subscription login, not the default headless token
+                if job.get("connectors"):
                     cmd = f"LLM_AUTH=subscription {cmd}"
             else:
                 cmd = f"cd {shlex.quote(str(cwd))} && {job['run']}"
@@ -540,7 +573,8 @@ def scheduler_jobs(index: dict, legacy_names: set[str]) -> tuple[list[dict], lis
             for t in job.get("before") or []:
                 before.setdefault(t if "/" in t else f"{name}/{t}", []).append(full)
             out.append(j)
-    # before: [X] = X 的 after 多一個我(模組把自己插進核心流程中間,核心不用知道它)。X 不存在(那個模組沒開)就不管
+    # before: [X] = X's after gets one more entry, me (a module inserts itself into the core flow without the core
+    # knowing about it). If X doesn't exist (that module is off), ignore it
     by_name = {j["name"]: j for j in out}
     for target, deps in before.items():
         if target in by_name:
@@ -554,7 +588,7 @@ def tilde(p: str) -> str:
 
 
 def new_doc(name: str, workspace: str, origin: str, memory_bare: str) -> dict:
-    """onboard 時的預設登錄。"""
+    """The default registry entry at onboarding."""
     return {"v": 1, "name": name,
             "paths": {"workspace": tilde(workspace), "memory_bare": tilde(memory_bare), "origin": origin},
             "memory": True, "privacy": {"reflection": "include"}, "push_on_merge": False,
@@ -567,7 +601,8 @@ def header() -> str:
 
 
 def cmd_add(name: str, workspace: str, origin: str, memory_bare: str, extra: str | None = None) -> int:
-    """extra:JSON 物件,蓋過預設登錄的欄位(例:想法沙盒的 type/purpose/enforce/privacy)。驗證不過就不寫。"""
+    """extra: a JSON object overriding fields of the default entry (e.g. an idea sandbox's
+    type/purpose/enforce/privacy). Nothing is written if validation fails."""
     f = hubconf.registry_dir() / f"{name}.yaml"
     if f.exists():
         print(_("{name} is already in the registry ({file}); not overwriting", name=name, file=f))
@@ -594,7 +629,7 @@ def cmd_rename(old: str, new: str, workspace: str, origin: str, memory_bare: str
     doc = yaml.safe_load(text)
     doc["name"] = new
     doc.setdefault("paths", {}).update(workspace=tilde(workspace), origin=origin, memory_bare=tilde(memory_bare))
-    # 保留檔頭的註解
+    # keep the header comments
     head = "".join(l for l in text.splitlines(keepends=True) if l.startswith("#")) if text.startswith("#") else header()
     dst.write_text(head + yaml.safe_dump(doc, allow_unicode=True, sort_keys=False, width=200))
     src.unlink()
@@ -605,8 +640,9 @@ def cmd_rename(old: str, new: str, workspace: str, origin: str, memory_bare: str
 
 
 def cmd_apply_updates() -> int:
-    """專案寄來的 manifest.update 信(text = 完整的登錄 YAML):驗證過就寫進登錄 + commit,不過就把錯誤
-    寄回那個專案的信箱;兩種都把信結案。只能改寄件專案自己的登錄。零 LLM。"""
+    """manifest.update letters sent by projects (text = the full registry YAML): if valid, write it into the registry
+    + commit; if not, send the errors back to that project's mailbox; either way the letter is closed. Only the
+    sending project's own entry can be changed. Zero LLM."""
     import sqlite3
     bus = hubconf.bus_db()
     if not bus.exists():

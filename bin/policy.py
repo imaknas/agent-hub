@@ -1,22 +1,28 @@
 #!/bin/sh -c exec${IFS}"${0%/*}/py"${IFS}"$0"${IFS}"$@"
-"""一個專案的權限政策,從專案登錄算出來,只用跟執行環境無關的詞(路徑、網域、能力名稱)。
+"""A project's permission policy, computed from the project registry, in runtime-neutral terms only (paths, domains,
+capability names).
 
-翻譯成各執行環境的設定是別的模組的事(設計:docs/design/capabilities.md):
-  runtime_claude.settings(policy) / lease_settings(policy)   Claude Code 的 settings
-  seatbelt.profile(policy, cap)                               平台代跑(cap-runner)用的 macOS Seatbelt profile
-這裡不准出現任何執行環境的語法或路徑(tests/test_runtime_boundary.py 檢查)。
+Translating it into each runtime's settings is other modules' job (design: docs/design/capabilities.md):
+  runtime_claude.settings(policy) / lease_settings(policy)   Claude Code's settings
+  seatbelt.profile(policy, cap)                               the macOS Seatbelt profile for platform-run commands
+                                                              (cap-runner)
+No runtime syntax or paths allowed here (checked by tests/test_runtime_boundary.py).
 
 policy(name, doc, index) → {
-  workspace:          專案資料夾(Path 或 None)
-  write:              平台預設之外還准寫的(自己的 runtime、匯流排目錄、工具 cache、登錄的 allow_write;字串,~ 開頭)
-  other_projects:     別的專案的 workspace/runtime(讀寫都不准;Path)
-  deny_write:         平台的地方(hub、bare repo、memory 副本、LaunchAgents;Path)
-  deny_read:          memory 副本的原始筆記(glob)、平台 secrets(Path;搬家期間新舊兩個位置都擋)
-  credentials:        使用者層級的憑證目錄(Path);credential_files:憑證檔(Path)——位置在 hub.json 的 credentials
-  network:            准連的網域(平台預設 + 登錄的 network)
-  platform_commands:  跨界的唯一通道(信箱 CLI、合併閘門;Path——舊的寫法,規則檔改用 platform_cli 之後拿掉)
-  platform_cli:       同一組通道,用 PATH 上的 agenthub 子指令(字串,例 "agenthub send")
-  capabilities:       登錄 enforce.capabilities
+  workspace:          the project folder (Path or None)
+  write:              what may be written beyond the platform defaults (its own runtime, the bus directory, tool
+                      caches, the registry's allow_write; strings starting with ~)
+  other_projects:     other projects' workspace/runtime (no reading or writing; Path)
+  deny_write:         the platform's places (hub, bare repos, memory copies, LaunchAgents; Path)
+  deny_read:          the raw notes in the memory copies (glob), the platform's secrets (Path; during the move both the
+                      old and new locations are blocked)
+  credentials:        user-level credential directories (Path); credential_files: credential files (Path); the
+                      locations are in hub.json's credentials
+  network:            domains that may be reached (platform defaults + the registry's network)
+  platform_commands:  the only channel across the boundary (mailbox CLI, merge gate; Path: the old form, removed once
+                      the rules files use platform_cli)
+  platform_cli:       the same channels as agenthub subcommands on PATH (strings, e.g. "agenthub send")
+  capabilities:       the registry's enforce.capabilities
 }
 """
 from __future__ import annotations
@@ -26,7 +32,8 @@ import sys
 
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
 import hubconf  # noqa: E402
-# registry 要 PyYAML:只在算路徑政策時才 import,approvals() 只用標準函式庫(lease-relay 不需要 yaml 也 import 得到)
+# registry needs PyYAML: imported only when computing the path policy; approvals() uses only the standard library
+# (so lease-relay can import this without yaml)
 
 HOME = pathlib.Path.home()
 WRITE_CACHES = ["~/.cache/uv", "~/.cache/pip", "~/.npm", "~/.cache/node", "~/Library/Caches/pip",
@@ -52,8 +59,9 @@ def project_paths(index: dict) -> dict[str, list[pathlib.Path]]:
 
 
 def secret_dirs() -> list[pathlib.Path]:
-    """平台憑證所在的資料夾,全部擋:現在的(hubconf.secrets_dir()),加上搬家前的舊位置還在、而且不是同一個的話也擋——
-    搬家只複製、舊的確認沒問題才刪(2026-10-26 實例目錄搬家),這段期間兩邊都有真的憑證。"""
+    """The folders holding the platform's credentials, all blocked: the current one (hubconf.secrets_dir()), plus the
+    old pre-move location if it still exists and isn't the same one: the move only copies, and the old one is deleted
+    only once confirmed fine (the 2026-10-26 instance-directory move), so meanwhile both hold real credentials."""
     cur = hubconf.secrets_dir()
     old = hubconf.legacy_secrets_dir()
     return [cur] + ([old] if old.exists() and old.resolve() != cur.resolve() else [])
@@ -80,14 +88,16 @@ def policy(name: str, doc: dict, index: dict) -> dict:
     }
 
 
-# 專案的 session 用的平台指令(在 PATH 上的 agenthub;bin/agenthub 的 SESSION_COMMANDS 同一份):權限只放行這些子指令,
-# 不放行 agenthub 的管理指令(config apply、onboard…)
+# The platform commands a project's session uses (agenthub on PATH; the same list as bin/agenthub's
+# SESSION_COMMANDS): permissions let only these subcommands through, not agenthub's admin commands (config apply,
+# onboard…)
 MAIL_SUBCOMMANDS = ("send", "inbox", "show", "ack", "done", "thread", "open-questions")
 SESSION_SUBCOMMANDS = (*MAIL_SUBCOMMANDS, "merge-branch", "cap-run")
 
 
 def platform_cli(mail_only: bool = False) -> list[str]:
-    """mail_only:平台派的信箱 agent 只能收信、寄信、結案(不能合併、不能叫代跑)。"""
+    """mail_only: a mailbox agent dispatched by the platform can only read, send and close letters (no merging, no
+    platform-run commands)."""
     return [f"agenthub {c}" for c in (MAIL_SUBCOMMANDS if mail_only else SESSION_SUBCOMMANDS)]
 
 
@@ -97,14 +107,17 @@ def for_project(name: str) -> dict:
     return policy(name, index["projects"][name], index)
 
 
-# ---------- 哪些動作要問人(approvals;docs/design/lease-contract-neutral.md)----------
-# 規則的值:
-#   allow       直接放行            deny        直接拒絕(不問)
-#   ask         問 owner(手機),可以「這個租約都允許」
-#   ask_once    問 owner,每次都問(「這個租約都允許」只算這一次)
-#   inside      專案資料夾裡放行、外面拒絕(不問;路徑解析成真實路徑再判斷)
-#   listed      open_web 的網域在 web_allowed 裡放行,其他 ask;no_session_domains 不准「這個租約都允許」
-# 10-25 Knas 決定的 work 模式:資料夾內寫檔不問、指令每次都問。
+# ---------- which actions need a person to approve (approvals; docs/design/lease-contract-neutral.md) ----------
+# Rule values:
+#   allow       let through directly      deny        reject directly (no asking)
+#   ask         ask the owner (phone); "allow for this whole lease" is possible
+#   ask_once    ask the owner, every time ("allow for this whole lease" only counts for this once)
+#   inside      let through inside the project folder, reject outside (no asking; paths are resolved to real paths
+#               first)
+#   listed      open_web domains in web_allowed are let through, others ask; no_session_domains may not be "allowed
+#               for this whole lease"
+# The work mode decided by the owner on 10-25: writing files inside the folder isn't asked, commands are asked every
+# time.
 APPROVALS = {
     "discuss": {"read": "allow", "search": "allow", "ask_user": "ask", "open_web": "listed",
                 "write_file": "deny", "run_command": "deny", "other": "deny"},
@@ -114,7 +127,8 @@ APPROVALS = {
 
 
 def approvals(name: str, mode: str, doc: dict | None = None) -> dict:
-    """{mode, rules: {kind: 規則}, web_allowed: [網域], no_session_domains: [網域]}——各 runtime 接到自己的權限機制。"""
+    """{mode, rules: {kind: rule}, web_allowed: [domains], no_session_domains: [domains]}: each runtime hooks it into
+    its own permission mechanism."""
     doc = doc if doc is not None else (hubconf.projects().get(name) or {})
     return {"mode": mode, "rules": dict(APPROVALS["work" if mode == "work" else "discuss"]),
             "web_allowed": list(doc.get("network") or []),

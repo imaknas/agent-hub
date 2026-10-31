@@ -1,25 +1,27 @@
 #!/usr/bin/env python3
-"""排程器看門狗:scheduler.py 停了(launchd job 不見、tick 卡死、python 壞掉)就發 Discord。
+"""Scheduler watchdog: when scheduler.py stops (launchd job gone, tick stuck, python broken), post to Discord.
 
-scheduler.py 是 librarian、weekly-reflect、mirror-backup、所有 muninn-* job 唯一的觸發點,
-它停了什麼都不會叫——muninn 的 web server 是另一個 launchd job,PWA 照樣打得開,只是不再更新。
-所以這支刻意不靠排程器、也不靠 muninn:
+scheduler.py is the only trigger for the librarian, weekly-reflect, mirror-backup and every muninn-* job; when it
+stops nothing gets called: the assistant's web server is a separate launchd job, so the PWA still opens, it just
+stops updating. So this script deliberately depends neither on the scheduler nor on the assistant:
 
-- 自己一個 launchd job(local.agent-hub-scheduler-watchdog,每 5 分鐘)
-- 用系統的 /usr/bin/python3、只用標準函式庫:Homebrew 的 python 壞掉讓排程器停了,這支還在
-- 通知走 Discord REST(bot token,curl),不經過 muninn
+- its own launchd job (local.agent-hub-scheduler-watchdog, every 5 minutes)
+- the system's /usr/bin/python3, standard library only: if Homebrew's python breaks and stops the scheduler, this
+  one keeps going
+- notifications go through Discord REST (bot token, curl), not through the assistant
 
-判斷:scheduler.py 每個 tick 開始、每個 job 跑完都寫 .state/scheduler-heartbeat;超過
-STALE_MIN 分鐘沒更新、連續兩次檢查都這樣(剛開機/剛恢復的那一輪不誤報)才發。之後每
-REMIND_H 小時提醒一次,恢復時發一則「恢復了」。
+The check: scheduler.py writes .state/scheduler-heartbeat at the start of every tick and after every job; it alerts
+only when that hasn't been updated for more than STALE_MIN minutes, two checks in a row (no false alarm on the
+round right after boot/recovery). After that it reminds every REMIND_H hours, and posts a "recovered" message when it
+recovers.
 
-設定(不進版控,.secrets/ 在 .gitignore):
-  .secrets/discord-token          bot token(可以跟其他專案共用同一個 bot)
-  .secrets/discord-alert-channel  要發到哪個頻道的 channel id
-沒設定就在 log 裡大聲失敗(exit 1),不會假裝有在顧。
+Settings (not version-controlled, .secrets/ is in .gitignore):
+  .secrets/discord-token          bot token (can share the same bot with other projects)
+  .secrets/discord-alert-channel  the channel id to post to
+Without them it fails loudly in the log (exit 1), rather than pretend to be watching.
 
-用法:scheduler-watchdog.py          檢查一次(launchd 用)
-      scheduler-watchdog.py --test   發一則測試訊息,確認 token/頻道設定對
+Usage: scheduler-watchdog.py          check once (for launchd)
+       scheduler-watchdog.py --test   post a test message, to confirm the token/channel settings are right
 """
 import datetime
 import json
@@ -28,12 +30,12 @@ import pathlib
 import subprocess
 import sys
 
-HUB = pathlib.Path(os.environ.get("AGENT_HUB_ROOT") or pathlib.Path(__file__).resolve().parents[1])  # 跟 hubconf.ROOT 一樣
+HUB = pathlib.Path(os.environ.get("AGENT_HUB_ROOT") or pathlib.Path(__file__).resolve().parents[1])  # same as hubconf.ROOT
 
 
 def _instance(sub: str, legacy: pathlib.Path) -> pathlib.Path:
-    """實例目錄的擺法(跟 hubconf 同一套規則,docs/design/new-user.md 3.1)。刻意不 import 平台的任何模組:
-    平台壞了這支也要能跑(tests/test_python_floor.py 檢查)。"""
+    """The instance directory's layout (same rules as hubconf, docs/design/new-user.md 3.1). Deliberately imports no
+    platform module: this must still run when the platform is broken (checked by tests/test_python_floor.py)."""
     env = {"config": "AGENT_HUB_CONFIG", "secrets": "AGENT_HUB_SECRETS"}[sub]
     if os.environ.get(env):
         return pathlib.Path(os.path.expanduser(os.environ[env]))
@@ -77,7 +79,7 @@ LOG = HUB / ".logs" / "scheduler-watchdog.log"
 TOKEN = SECRETS_DIR / "discord-token"
 CHANNEL = SECRETS_DIR / "discord-alert-channel"
 LABEL = "local.agent-hub-scheduler"
-STALE_MIN = 35  # tick 每 15 分鐘;兩個 tick 沒來再加幾分鐘漂移
+STALE_MIN = 35  # a tick every 15 minutes; two missed ticks plus a few minutes of drift
 REMIND_H = 6
 
 
@@ -88,8 +90,9 @@ def log(msg):
 
 
 def last_tick():
-    """最後一次 tick 的時間:heartbeat,沒有的話退回狀態檔的修改時間(舊版 scheduler)。
-    不取兩者較新的:schedulectl run 也會寫狀態檔,會蓋掉排程器其實停了的事實。"""
+    """The time of the last tick: the heartbeat, falling back to the state file's modification time (older
+    scheduler). Not the newer of the two: schedulectl run writes the state file too, which would hide the fact that
+    the scheduler has actually stopped."""
     for p in (HEARTBEAT, STATE_FILE):
         if p.exists():
             return datetime.datetime.fromtimestamp(p.stat().st_mtime)
@@ -98,7 +101,9 @@ def last_tick():
 
 def diagnose():
     uid = os.getuid()
-    if sys.platform != "darwin":   # Linux:排程器是 systemd 的 user timer(bin/systemd_units.py;這支刻意不 import 平台的模組)
+    # Linux: the scheduler is a systemd user timer (bin/systemd_units.py; this script deliberately imports no platform
+    # module)
+    if sys.platform != "darwin":
         r = subprocess.run(["systemctl", "--user", "status", "--no-pager", f"{LABEL}.timer"], capture_output=True, text=True)
         lines = [_("`systemctl --user status {label}.timer`:\n```\n{out}\n```", label=LABEL,
                    out=(r.stdout or r.stderr).strip()[:600]),
@@ -112,7 +117,7 @@ def diagnose():
         lines = [_("{label} is not in launchd (booted out?) → `schedulectl start`", label=LABEL)]
     else:
         info = {}
-        for l in r.stdout.splitlines():  # 第一個出現的才是 job 本身的(後面還有 endpoint 之類的 state)
+        for l in r.stdout.splitlines():  # the first one is the job's own (endpoints etc. have states further down)
             k, eq, v = l.partition("=")
             if eq:
                 info.setdefault(k.strip(), v.strip())
@@ -130,7 +135,7 @@ def diagnose():
 
 
 def send(text):
-    """回傳是否送成功。curl 是系統內建的,不靠 Homebrew。"""
+    """Return whether it was sent. curl is built into the system, no Homebrew needed."""
     try:
         token, channel = TOKEN.read_text().strip(), CHANNEL.read_text().strip()
     except OSError:
@@ -152,7 +157,7 @@ def alerts_configured() -> bool:
     try:
         return bool(json.loads((CONFIG_DIR / "hub.json").read_text()).get("alerts"))
     except (OSError, ValueError):
-        return True  # 讀不到 hub.json 就照舊:要有 Discord 才算有在顧
+        return True  # hub.json unreadable: as before, only Discord counts as watching
 
 
 def main():
@@ -162,7 +167,8 @@ def main():
         return 0 if ok else 1
 
     if not alerts_configured():
-        # hub.json 沒有 alerts 段 = owner 選了不要警報(新使用者的預設):照樣檢查、記 log,不當成失敗
+        # no alerts section in hub.json = the owner chose no alerts (the default for new users): still check and log,
+        # not treated as a failure
         tick = last_tick()
         stale = tick is None or (datetime.datetime.now() - tick).total_seconds() / 60 > STALE_MIN
         if stale:
@@ -171,7 +177,7 @@ def main():
                 _("no alerts set up (hub.json has no alerts), only logging: the scheduler has never ticked"))
         return 0
     if not (TOKEN.exists() and CHANNEL.exists()):
-        # 每 5 分鐘印到 launchd 的 stderr log、exit 1;狀態頁也會標出「看門狗沒設定」
+        # printed to launchd's stderr log every 5 minutes, exit 1; the status page also flags "watchdog not set up"
         print(_("scheduler-watchdog: {token} / {channel} not set up; no alert can be sent if the scheduler stops",
                 token=TOKEN, channel=CHANNEL), file=sys.stderr)
         return 1

@@ -4,8 +4,8 @@
 
 For people without a personal assistant: hub.json `owner_side: builtin` (the default when there is no assistant.api).
 It and the assistant are two implementations of the same interface: the registrar (requester side) still writes
-〔owner〕 to-dos as `raised` records and applies the `settled` ones it gets back, without knowing who's on the other
-side.
+the owner's to-dos as `raised` records and applies the `settled` ones it gets back, without knowing who's on the
+other side.
 
   owner.py list [--project P]                 open to-dos (Acts) and questions
   owner.py done | drop | already-done <key> [--note "…"]

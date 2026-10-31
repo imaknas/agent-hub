@@ -1,55 +1,57 @@
 #!/usr/bin/env bash
-# 把任何專案接上 agent-hub 的 memory 追蹤管線。統一做法,不分 native/hosted、
-# 不分「全新專案」跟「既有專案」:假設每個 repo 遲早都會有真的外部 remote
-# (GitHub),所以 mini 永遠不當任何專案主分支的 origin,永遠只用一個完全
-# 隔離的 orphan worktree 處理 memory 追蹤——這個安全性質不該建立在「這個
-# 專案剛好還沒有外部歷史」這種會過期的前提上。
+# Connect any project to agent-hub's memory-tracking pipeline. One approach for all, native or hosted, "brand-new"
+# or "existing": assume every repo will sooner or later have a real external remote (GitHub), so the hub machine is
+# never the origin of any project's main branch, and memory tracking always uses a fully isolated orphan worktree:
+# this safety property shouldn't rest on a premise that expires, like "this project happens to have no external
+# history yet".
 #
-# 純機械化操作——每一步都是固定指令,沒有任何地方需要判斷。能自動補齊的
-# 前提(還不是 git repo、還沒有任何 commit、還沒有 GitHub remote)一律自動
-# 補齊,不需要使用者先手動做完才能跑這支腳本。唯一不會自動處理、直接失敗
-# 退出的情況只有一種:**已經有 commit 歷史、但 working tree 目前是髒的**
-# ——這代表使用者有真實的、還沒準備好 commit 的工作,腳本不會用猜的清掉它。
+# Purely mechanical: every step is a fixed command, nothing anywhere needs judgment. Preconditions that can be filled
+# in automatically (not a git repo yet, no commits yet, no GitHub remote yet) always are; the user doesn't have to do
+# them by hand before running this script. There's only one case it won't handle and exits with a failure:
+# **there's commit history, but the working tree is dirty**: that means the user has real work not ready to commit,
+# and the script won't guess and clear it away.
 #
-# 用法:onboard-project.sh [--public] [--no-remote] <本機專案路徑>
-#   在 mini 上跑,新專案放 ~/workspace/<name>(2026-10-15 起所有專案都在 mini)
-#   --public     建立 GitHub repo 時設成 public(預設 private)
-#   --no-remote  不要自動建立 GitHub remote,維持純本機(native)——只有
-#                真的確定這個專案不需要備份到 GitHub 時才用這個
+# Usage: onboard-project.sh [--public] [--no-remote] <local project path>
+#   run on the hub machine, new projects go in ~/workspace/<name> (since 2026-10-15 every project is on the hub
+#   machine)
+#   --public     make the GitHub repo public when creating it (default private)
+#   --no-remote  don't create a GitHub remote automatically, stay purely local (native): only use this when you're
+#                really sure the project doesn't need a backup on GitHub
 #
-# 做的事(照順序):
-#   1. 前置條件檢查跟自動補齊:
-#        - 目錄不存在就建立
-#        - 不是 git repo 就 git init
-#        - 完全沒有 commit 過,就把現有內容(可能是空的,會補一份最小
-#          README.md)直接 commit 成第一個 commit——這個情況下沒有「使用者
-#          還沒準備好的工作」需要保護,所以可以自動做
-#        - 已經有 commit 但 working tree 髒:直接 fail,不猜、不清
-#        - 沒有 origin 且沒帶 --no-remote:自動建立 GitHub repo(預設
-#          private)、push 剛剛的內容過去
+# What it does (in order):
+#   1. Precondition checks and automatic fill-in:
+#        - create the directory if it doesn't exist
+#        - git init if it's not a git repo
+#        - no commits at all: commit the existing content (possibly empty; a minimal README.md is added) as the
+#          first commit: in this case there's no "work the user isn't ready with" to protect, so it can be done
+#          automatically
+#        - commits exist but the working tree is dirty: fail right away, no guessing, no clearing
+#        - no origin and no --no-remote: create a GitHub repo automatically (private by default) and push what was
+#          just committed
 #   2. git worktree add --orphan -b agent-memory .agent-memory
-#   3. 複製 AGENT.md/STATE.md 骨架、建空的 memory/,在 agent-memory 分支上 commit
-#   4. .agent-memory/ 寫進本機的 .git/info/exclude(不動會 commit 的 .gitignore)
-#   5. 合併(不是覆寫)外層 .claude/settings.local.json 的 hook 設定(步驟
-#      5-6 都交給 sync-local-setup.sh)——
-#      刻意不用共享的 settings.json:hook 指令裡有 ~/agent-hub/... 路徑,
-#      寫進會 commit 的檔案就等於把個人工具的名字/路徑放進 repo 歷史
-#      (2026-09 在公開的 sycophancy-eval、the-crucible 發生過)。
-#      換機器時 recover-project.sh 會重新產生這份本機檔案。
-#   6. agent-hub 區塊寫進本機的 CLAUDE.local.md(gitignored,Claude Code 會
-#      跟 CLAUDE.md 一起載入)——不動專案共享的 CLAUDE.md。區塊有標記,之後
-#      每次 SessionStart 都會照 templates/agent-instructions.md 重生
-#   7. 外層 repo 不 commit 任何東西(舊版會 commit .gitignore)
-#   8. mini 上建 bare repo,push agent-memory 分支過去(不動任何外部 remote)
-#   9. mini 上 clone 一份工作副本給 librarian
-#   10. 如果有外部 origin,登記進 mirror-backup 清單;沒有就跳過
-#   11. 登記進 agent-hub 自己的專案登錄 projects/<name>.yaml(不分 native/hosted,
-#       一律登記)——這是換新機器或本機資料夾遺失時,唯一能找到「這裡曾經
-#       onboard 過哪些專案」的地方,不依賴任何單一專案自己的 repo 內容
+#   3. copy the AGENT.md/STATE.md skeleton, create an empty memory/, commit on the agent-memory branch
+#   4. write .agent-memory/ into the local .git/info/exclude (the committed .gitignore is untouched)
+#   5. merge (not overwrite) the hook settings into the outer .claude/settings.local.json (steps 5-6 are both
+#      handed to sync-local-setup.sh):
+#      deliberately not the shared settings.json: the hook commands contain ~/agent-hub/... paths, and writing them
+#      into a committed file puts a personal tool's name/paths into the repo history
+#      (happened in 2026-09 in the public sycophancy-eval and the-crucible).
+#      On a machine change, recover-project.sh regenerates this local file.
+#   6. write the agent-hub block into the local CLAUDE.local.md (gitignored; Claude Code loads it together with
+#      CLAUDE.md): the project's shared CLAUDE.md is untouched. The block is marked, and every SessionStart after
+#      that regenerates it from templates/agent-instructions.md
+#   7. commit nothing to the outer repo (old versions committed .gitignore)
+#   8. create a bare repo on the hub machine and push the agent-memory branch there (no external remote touched)
+#   9. clone a working copy on the hub machine for the librarian
+#   10. if there's an external origin, add it to the mirror-backup list; otherwise skip
+#   11. register in agent-hub's own project registry projects/<name>.yaml (native or hosted, always registered):
+#       on a new machine or after a local folder is lost, this is the only place to find "which projects were ever
+#       onboarded here", independent of any single project's own repo content
 set -euo pipefail
 
 AGENT_HUB="${AGENT_HUB_ROOT:-$(cd "$(dirname "$0")/.." && pwd)}"
-# 在 mini 上跑(2026-10-15 起的常態:新專案開在 mini 的 ~/workspace/<name>)就直接在本機做 mini 端的步驟
+# when running on the hub machine (the norm since 2026-10-15: new projects open in the hub machine's
+# ~/workspace/<name>) the hub machine's steps run locally
 . "$AGENT_HUB/bin/minilib.sh"
 TEMPLATES="$AGENT_HUB/templates"
 
@@ -68,9 +70,9 @@ while [ $# -gt 0 ]; do
 done
 [ $# -eq 1 ] || fail "$(hub_msg "usage: onboard-project.sh [--public] [--no-remote] <local project path>")"
 
-# --- 0. mini 連線檢查,最先做——在任何本機/GitHub 副作用發生之前。
-# 這支腳本後面一定要在 mini 上建 bare repo,連不上就不會有任何後續動作
-# 才是安全的:不會 git init、不會建 GitHub repo、不會留下半套的狀態。
+# --- 0. Check the connection to the hub machine, first of all: before any local/GitHub side effect.
+# Later this script must create a bare repo on the hub machine; if it can't connect, the safe thing is that nothing
+# else happens: no git init, no GitHub repo, no half-done state left behind.
 if ! on_mini && ! ssh -o ConnectTimeout=8 -o BatchMode=yes "$MINI_HOST" true 2>/dev/null; then
   fail "$(hub_msg "cannot reach the hub machine ({host}). This script creates a bare repo there, so it stopped before doing anything (this run had no side effects): run it again once the hub machine is reachable." host="$MINI_HOST")"
 fi
@@ -80,10 +82,11 @@ PROJ_PATH="$(cd "$1" && pwd)"
 PROJ_NAME="$(basename "$PROJ_PATH")"
 cd "$PROJ_PATH"
 
-# --- 0b. 防呆:已經 onboard 過的專案不能再 onboard 一次(在任何副作用之前檢查)。
-# 再跑一次會建出全新、跟舊歷史斷開的 agent-memory 分支——不是救回來,是製造第二份記憶。
-# 最常見的情境是「從 GitHub 重新 clone 了一份(沒有 .agent-memory)再叫這支」,所以不能只看
-# 本機有沒有 .agent-memory。唯一的例外是 resume(本機步驟做完、mini 端還沒做完),見下面。
+# --- 0b. Guard: an already onboarded project can't be onboarded again (checked before any side effect).
+# Running again would create a brand-new agent-memory branch cut off from the old history: not a rescue, but a
+# second memory. The most common case is "cloned again from GitHub (no .agent-memory), then called this", so looking
+# only at whether .agent-memory exists locally isn't enough. The only exception is resume (local steps done, the hub
+# machine's steps not yet), see below.
 ROSTER=$("$AGENT_HUB/bin/py" "$AGENT_HUB/bin/hubconf.py" roster) || fail "$(hub_msg "cannot read the project registry ({path})" path="$AGENT_HUB/projects")"
 RECOVER_HINT="$(hub_msg "To reconnect an existing project (new machine, folder gone, fresh clone) use bin/recover-project.sh {name} [path]" name="$PROJ_NAME")"
 if awk -F'\t' -v n="$PROJ_NAME" '$1==n{f=1} END{exit !f}' <<<"$ROSTER"; then
@@ -97,7 +100,7 @@ if [ -d .git ] && existing_origin=$(git remote get-url origin 2>/dev/null); then
   [ -z "$same" ] || fail "$(hub_msg "this repo (origin {origin}) was onboarded as '{name}' (under another folder name). Reconnect it with bin/recover-project.sh {name} [path]; to rename it, use bin/rename-project.sh" origin="$existing_origin" name="$same")"
 fi
 
-# --- 1. 前置條件檢查跟自動補齊 ---
+# --- 1. precondition checks and automatic fill-in ---
 if [ ! -d .git ]; then
   git init -q
 fi
@@ -113,14 +116,14 @@ fi
 $on_hub && fail "$(hub_msg "origin points at the hub machine, which the current design never does: this project is probably left over from the old onboarding; deal with it by hand first")"
 
 if git rev-parse HEAD >/dev/null 2>&1; then
-  # 已經有 commit 歷史——這才是需要保護使用者真實工作的情況,working tree
-  # 必須乾淨,不猜、不自動清。
+  # There's commit history: this is the case where the user's real work needs protecting; the working tree must be
+  # clean, no guessing, no automatic clearing.
   [ -z "$(git status --porcelain)" ] || fail "$(hub_msg "the working tree is not clean (uncommitted changes or untracked files): clean it up yourself, then run again")"
 else
-  # 完全是新 repo,還沒有任何 commit——這裡不存在「使用者還沒準備好的工作」
-  # 需要保護,直接把現有內容(可能是空的)當成初始內容 commit 掉。
-  # 用 find 排除 .git 本身再檢查是否為空——git init 之後 .git 一定存在,
-  # `ls -A` 會把它算進去,單靠 ls -A 永遠判斷不出「空」。
+  # A brand-new repo with no commits at all: there's no "work the user isn't ready with" to protect here, so the
+  # existing content (possibly empty) is committed as the initial content.
+  # Check for emptiness with find, excluding .git itself: after git init .git always exists, and `ls -A` counts it,
+  # so ls -A alone can never tell "empty".
   if [ -z "$(find . -mindepth 1 -not -path './.git' -not -path './.git/*')" ]; then
     printf '# %s\n' "$PROJ_NAME" > README.md
   fi
@@ -130,15 +133,15 @@ fi
 
 RESUME=false
 if [ -e .agent-memory ]; then
-  # 光檢查 bare repo 的目錄存不存在不夠——`git init --bare` 自己就會建出
-  # 目錄,不代表 agent-memory 分支真的推上去過。要檢查那個 ref 是否存在。
+  # Checking whether the bare repo's directory exists isn't enough: `git init --bare` creates the directory by
+  # itself, which doesn't mean the agent-memory branch was ever pushed. Check whether that ref exists.
   if mini_sh "cd ~/git-origin/${PROJ_NAME}-memory.git 2>/dev/null && git show-ref --verify --quiet refs/heads/agent-memory" 2>/dev/null; then
     fail "$(hub_msg ".agent-memory already exists and the hub machine already has its bare repo (agent-memory branch pushed): this project should already be onboarded")"
   fi
-  # .agent-memory 在本機存在,但 mini 上沒有對應、有實際內容的 bare repo
-  # ——這正是「mini 連不上導致上次 onboarding 卡在中途」的痕跡(本機步驟都
-  # 做完了,mini 端的步驟沒機會跑,或跑到一半失敗)。不當成錯誤,直接從
-  # mini 端的步驟繼續。
+  # .agent-memory exists locally, but the hub machine has no matching bare repo with real content: exactly the
+  # trace of "the hub machine was unreachable, so the last onboarding got stuck halfway" (the local steps all done,
+  # the hub machine's steps never got to run, or failed halfway). Not treated as an error: continue from the hub
+  # machine's steps.
   RESUME=true
   hub_say "(The local steps are done, but the hub machine has no bare repo with content for this project: it looks like the last run was interrupted; continuing with the hub machine's steps, without redoing what is done)"
 elif git show-ref --verify --quiet refs/heads/agent-memory; then
@@ -146,7 +149,7 @@ elif git show-ref --verify --quiet refs/heads/agent-memory; then
 fi
 
 if [ -z "$origin_url" ] && [ "$NO_REMOTE" != true ]; then
-  # 帳號從 hub.json 的 github.owner 讀,不寫死(CLAUDE.md「寫新程式的規則」)
+  # the account is read from hub.json's github.owner, not hard-coded (CLAUDE.md, "rules for writing new code")
   GH_OWNER=$("$AGENT_HUB/bin/py" "$AGENT_HUB/bin/hubconf.py" get github.owner) || fail "$(hub_msg "hub.json has no github.owner: cannot create the GitHub repo")"
   gh repo create "$GH_OWNER/$PROJ_NAME" $VISIBILITY --source=. --remote=origin
   git remote set-url origin "git@github.com:${GH_OWNER}/${PROJ_NAME}.git"
@@ -162,11 +165,11 @@ else
 fi
 
 if [ "$RESUME" != true ]; then
-  # --- 2. 建立 orphan worktree ---
+  # --- 2. create the orphan worktree ---
   git worktree add --orphan -b agent-memory .agent-memory -q
   hub_say "[2/11] Created the .agent-memory worktree (agent-memory branch, fully separate from the main branch)"
 
-  # --- 3. 複製骨架、commit ---
+  # --- 3. copy the skeleton, commit ---
   cp "$TEMPLATES/AGENT.md" .agent-memory/AGENT.md
   cat > .agent-memory/STATE.md <<'EOF'
 # STATE
@@ -176,42 +179,42 @@ if [ "$RESUME" != true ]; then
 EOF
   mkdir -p .agent-memory/memory
   touch .agent-memory/memory/.gitkeep
-  # 所有專案一律啟用的規則(內容在 templates/rules/,由 sync-local-setup.sh 放進
-  # CLAUDE.local.md)。engineering 2026-09-27 起、multi-agent-review 2026-10-27 起新專案預設登記,既有專案同日全部補上。
+  # Rules enabled for every project (content in templates/rules/, put into CLAUDE.local.md by sync-local-setup.sh).
+  # New projects get engineering registered by default since 2026-09-27 and multi-agent-review since 2026-10-27;
+  # existing projects were all given them the same day.
   printf 'engineering\nmulti-agent-review\n' > .agent-memory/RULES
   ( cd .agent-memory && git add -A && git commit -q -m "init: agent-hub memory skeleton (AGENT.md/STATE.md/memory)" )
   hub_say "[3/11] Skeleton files in place and committed on the agent-memory branch"
 
   # --- 4. ignore .agent-memory/ ---
-  # 寫進本機的 .git/info/exclude,不寫 .gitignore:.gitignore 會 commit,連
-  # `.agent-memory/` 這個名稱都不該進 repo(之後會不會公開沒有定論)。
-  # sync-local-setup.sh(步驟 5-6、每次 SessionStart、recover)也會確保這件事。
+  # Written into the local .git/info/exclude, not .gitignore: .gitignore gets committed, and not even the name
+  # `.agent-memory/` should go into the repo (whether it goes public later is undecided).
+  # sync-local-setup.sh (steps 5-6, every SessionStart, recover) also makes sure of this.
   "$AGENT_HUB/bin/sync-local-setup.sh" --quiet . >/dev/null
   git check-ignore -q .agent-memory || fail "$(hub_msg ".agent-memory is not ignored, stopping (otherwise git add -A would add it as an embedded repo)")"
   hub_say "[4/11] .agent-memory/ is excluded in .git/info/exclude (.gitignore untouched)"
 
-  # --- 5-6. 本機專用設定:hook(.claude/settings.local.json)跟 CLAUDE.local.md
-  # 的 agent-hub 區塊——都不進 repo(含 ~/agent-hub 路徑/名稱,公開 repo 會外洩)。
-  # 交給 sync-local-setup.sh,跟 recover、每次 SessionStart 用同一份邏輯。
+  # --- 5-6. Local-only setup: the hooks (.claude/settings.local.json) and the agent-hub block in CLAUDE.local.md:
+  # neither goes into the repo (they contain ~/agent-hub paths/names, which a public repo would leak).
+  # Handed to sync-local-setup.sh, the same logic as recover and every SessionStart.
   "$AGENT_HUB/bin/sync-local-setup.sh" .
   hub_say "[5-6/11] Hooks and the rules-file block are in place (not version-controlled)"
 
-  # --- 7. 外層 repo 不 commit 任何東西 ---
-  # 以前這裡會 commit .gitignore(訊息還寫著工具名稱);現在本機設定全在
-  # ignore/exclude 的檔案裡,專案 repo 的歷史完全不會出現這套機制。
+  # --- 7. commit nothing to the outer repo ---
+  # This used to commit .gitignore (with the tool's name in the message, even); now the local setup is all in
+  # ignored/excluded files, and this machinery never shows up in the project repo's history.
   hub_say "[7/11] No changes to the outer repo, nothing committed"
 else
   hub_say "[2-7/11] Resume mode: done by the previous run, skipped"
 fi
 
-# --- 8. mini 上建 bare repo,push agent-memory 分支 ---
+# --- 8. create the bare repo on the hub machine, push the agent-memory branch ---
 mini_sh "mkdir -p ~/git-origin && git init --bare -q ~/git-origin/${PROJ_NAME}-memory.git"
-# 注意:遠端分支名稱刻意跟本地一樣叫 agent-memory,不要用 main——名稱不一樣
-# 會讓 branch.agent-memory.merge 指向 refs/heads/main,雖然功能上沒問題
-# (那本來就是遠端唯一存在的 ref),但看起來像設定錯誤,容易讓人(或其他
-# agent)誤判成 bug 去查。
-# remote add 不是冪等的——resume 模式下,mini 這個 remote 可能已經從上次
-# (在 mini 端步驟失敗前)設定好了,存在就改 URL,不存在才新增。
+# Note: the remote branch is deliberately named agent-memory like the local one, not main: a different name makes
+# branch.agent-memory.merge point at refs/heads/main, which works (it's the only ref on the remote anyway) but looks
+# like a misconfiguration, and people (or other agents) easily mistake it for a bug and go digging.
+# remote add isn't idempotent: in resume mode the mini remote may already be set from last time (before the hub
+# machine's steps failed); if it exists, change its URL, only add it if it doesn't.
 ( cd .agent-memory && \
   if git remote get-url mini >/dev/null 2>&1; then
     git remote set-url mini "$(mini_memory_url "$PROJ_NAME")"
@@ -219,17 +222,17 @@ mini_sh "mkdir -p ~/git-origin && git init --bare -q ~/git-origin/${PROJ_NAME}-m
     git remote add mini "$(mini_memory_url "$PROJ_NAME")"
   fi && \
   git push -u mini agent-memory:agent-memory -q )
-# mini 的 git init.defaultBranch 是 main,新的 bare repo HEAD 預設指向
-# refs/heads/main——但這裡只會推 agent-memory,main 永遠不會存在,HEAD 會
-# 懸空,導致下一步的 plain git clone 抓不到東西。明確把 HEAD 導向正確的分支。
+# The hub machine's git init.defaultBranch is main, so a new bare repo's HEAD points at refs/heads/main by default;
+# but only agent-memory is ever pushed here, main never exists, HEAD dangles, and the plain git clone in the next
+# step gets nothing. Point HEAD at the right branch explicitly.
 mini_sh "git --git-dir=\"\$HOME/git-origin/${PROJ_NAME}-memory.git\" symbolic-ref HEAD refs/heads/agent-memory"
 hub_say "[8/11] Bare repo created on the hub machine, agent-memory branch pushed"
 
-# --- 9. mini 上 clone 工作副本給 librarian ---
+# --- 9. clone a working copy on the hub machine for the librarian ---
 mini_sh "mkdir -p ~/.memory-copies && git clone -q ~/git-origin/${PROJ_NAME}-memory.git ~/.memory-copies/${PROJ_NAME}"
 hub_say "[9/11] Cloned the librarian's memory copy on the hub machine to ~/.memory-copies/{name}" name="$PROJ_NAME"
 
-# --- 10. 有外部 origin 才登記進 mirror-backup 清單 ---
+# --- 10. add to the mirror-backup list only when there's an external origin ---
 if [ -n "$origin_url" ]; then
   source "$AGENT_HUB/bin/hubpaths.sh"
   touch "$HUB_CONFIG/mirror-list.txt"
@@ -241,16 +244,17 @@ else
   hub_say "[10/11] No external remote, not added to the mirror-backup list"
 fi
 
-# --- 11. 登記進 agent-hub 的專案登錄 projects/<name>.yaml(一律登記,無論有沒有 origin) ---
+# --- 11. register in agent-hub's project registry projects/<name>.yaml (always, origin or not) ---
 manifest_origin="${origin_url:-(native)}"
-# ONBOARD_REGISTRY_EXTRA(JSON):呼叫端要一起登記的欄位(create-idea-sandbox.sh 的 type: idea 等),
-# 跟登記同一個 commit,不會有「已登錄但欄位還沒補」的空窗
+# ONBOARD_REGISTRY_EXTRA (JSON): fields the caller wants registered too (create-idea-sandbox.sh's type: idea etc.),
+# in the same commit as the registration, so there's no window of "registered but the fields not filled in yet"
 "$AGENT_HUB/bin/py" "$AGENT_HUB/bin/registry.py" add "$PROJ_NAME" "$PROJ_PATH" "$manifest_origin" \
     "~/git-origin/${PROJ_NAME}-memory.git" ${ONBOARD_REGISTRY_EXTRA:+--extra "$ONBOARD_REGISTRY_EXTRA"} \
   || fail "$(hub_msg "adding to the project registry failed (projects/{name}.yaml)" name="$PROJ_NAME")"
-# 登記完直接 commit+push agent-hub——以前只寫檔不 commit,mini 上的 librarian
-# /mirror-backup 要等有人剛好手動 commit 才看得到新專案(曾經有專案就這樣
-# 卡在本地)。只 commit 這三個檔案,不碰 agent-hub 裡其他未 commit 的東西。
+# Commit+push agent-hub right after registering: it used to only write the file without committing, so the
+# librarian/mirror-backup on the hub machine only saw a new project once someone happened to commit by hand (a
+# project once got stuck locally that way). Only these three files are committed; nothing else uncommitted in
+# agent-hub is touched.
 "$AGENT_HUB/bin/gen-index-roster.sh"
 if "$AGENT_HUB/bin/commit-hub-files.sh" "register $PROJ_NAME (onboard-project.sh)" \
     "projects/$PROJ_NAME.yaml" mirror-list.txt index.md; then

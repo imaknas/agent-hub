@@ -1,32 +1,43 @@
 #!/bin/sh -c exec${IFS}"${0%/*}/py"${IFS}"$0"${IFS}"$@"
-"""平台代跑:專案在自己資料夾放請求,這裡(不在任何 sandbox 裡)檢查過才用平台的 Seatbelt profile 執行。
+"""Platform-run commands: a project puts a request in its own folder; this service (not inside any sandbox) checks it
+and only then runs it under the platform's Seatbelt profile.
 
-設計:docs/design/capabilities.md。服務 `local.agent-hub.cap-runner`(登錄 agent-hub 的 services,KeepAlive;
-render-services 會在它沒在跑時發警報)。客戶端是 bin/hub-run。
+Design: docs/design/capabilities.md. Service `local.agent-hub.cap-runner` (in agent-hub's registry services,
+KeepAlive; render-services alerts when it isn't running). The client is bin/hub-run.
 
-為什麼要代跑:執行環境的 sandbox 裡套不了第二層 sandbox,而它自己的 sandbox 擋住 GPU(Metal)。
-為什麼請求放在專案資料夾:sandbox 只准每個專案寫自己的資料夾,**請求在哪個資料夾被找到,就是哪個專案**——
-請求裡沒有「我是哪個專案」可以偽造;執行用的資料夾從登錄來。
+Why run it for them: a second sandbox can't be nested inside the runtime's sandbox, and the runtime's own sandbox
+blocks the GPU (Metal).
+Why requests go in the project folder: the sandbox only lets each project write its own folder, so **the folder a
+request is found in is the project it belongs to**: there's no "which project I am" in the request to forge; the
+folder used to run it comes from the registry.
 
 <workspace>/.hub-run/
-  requests/<id>.json   客戶端放的(先寫 .<id>.tmp 再 rename):{"v": 1, "id", "cap", "argv": [...], "cwd", "timeout_s"}
-  jobs/<id>/           這裡建的:request.json(從 requests/ 搬過來)、state.json、stdout、stderr
-state.json:{state: queued|running|done|rejected|lost, reason?, exit?, timed_out?, at}
-  exit 照 shell 的習慣:被信號殺掉 = 128 + 信號;逾時 = 124(timed_out: true)
+  requests/<id>.json   put there by the client (written as .<id>.tmp, then renamed):
+                       {"v": 1, "id", "cap", "argv": [...], "cwd", "timeout_s"}
+  jobs/<id>/           created here: request.json (moved over from requests/), state.json, stdout, stderr
+state.json: {state: queued|running|done|rejected|lost, reason?, exit?, timed_out?, at}
+  exit follows the shell convention: killed by a signal = 128 + signal; timed out = 124 (timed_out: true)
 
-只服務登錄 enforce.sandbox: true、enforce.capabilities 有宣告的專案(想法沙盒預設有 gpu,升級成正式專案後照樣保留)。檢查(不過就 rejected + 理由):
-  .hub-run/、requests/、jobs/ 都不能是 symlink(全部用 O_NOFOLLOW 的目錄 fd 操作,結果不會被導到別的專案)、
-  請求是一般檔案、≤ 64 KB、10 分鐘內;id 是單純的檔名;cap 是這個專案宣告的;argv 是字串 list;
-  cwd 解析成真實路徑後在專案資料夾裡;timeout_s ≤ hub.json cap_runner.max_timeout_s。
-profile 每次現算(seatbelt.py),放 .state/cap-runner/<專案>/<id>.sb——session 寫不到的地方。
-argv 直接 exec(`sandbox-exec -f <profile> <argv>`),中間沒有 shell 字串;環境只給 PATH、HOME、TMPDIR、LANG。
-逾時整個 process group 一起殺;同時最多 cap_runner.concurrency 個、每個專案 1 個(其他排隊)。
-每個工作記一行在 .state/cap-runner/log.jsonl;做完超過 7 天的 jobs/ 跟 profile 會清掉。
-服務重啟時還標 running 的工作:殺掉那個 process group,標 lost(結果不明)。
-bin/ 的程式改過(hubconf.code_stamp())、而且沒有工作在跑或排隊:自己結束,讓 launchd 用新的程式重啟。
+Serves only projects whose registry entry has enforce.sandbox: true and declares enforce.capabilities (idea sandboxes
+get gpu by default, and keep it after being upgraded into a real project). Checks (failing one → rejected + reason):
+  .hub-run/, requests/ and jobs/ must not be symlinks (everything goes through O_NOFOLLOW directory fds, so results
+  can't be redirected into another project); the request is a regular file, ≤ 64 KB, within 10 minutes; id is a
+  plain file name; cap is one this project declares; argv is a list of strings;
+  cwd, resolved to its real path, is inside the project folder; timeout_s ≤ hub.json cap_runner.max_timeout_s.
+The profile is computed fresh every time (seatbelt.py) and put in .state/cap-runner/<project>/<id>.sb: a place the
+session can't write.
+argv is exec'd directly (`sandbox-exec -f <profile> <argv>`), no shell string in between; the environment gets only
+PATH, HOME, TMPDIR, LANG.
+On a timeout the whole process group is killed; at most cap_runner.concurrency at a time, 1 per project (the rest
+queue).
+Each job logs one line in .state/cap-runner/log.jsonl; jobs/ and profiles finished more than 7 days ago are cleaned up.
+Jobs still marked running when the service restarts: their process group is killed, and they're marked lost (outcome
+unknown).
+When the code in bin/ has changed (hubconf.code_stamp()) and no job is running or queued: it exits by itself, so
+launchd restarts it with the new code.
 
-用法:cap-runner.py            常駐(launchd)
-      cap-runner.py --once     掃一次、跑完排到的工作就結束(測試/除錯)
+Usage: cap-runner.py            long-running (launchd)
+       cap-runner.py --once     scan once, run the queued jobs, then exit (tests/debugging)
 """
 from __future__ import annotations
 
@@ -84,7 +95,7 @@ def eligible() -> dict[str, tuple[pathlib.Path, list[str]]]:
 
 
 def subdir(parent_fd: int, name: str, create: bool = False) -> int:
-    """parent 底下的目錄 fd;是 symlink 或不是目錄就 OSError。"""
+    """A directory fd under parent; OSError if it's a symlink or not a directory."""
     if create:
         try:
             os.mkdir(name, 0o755, dir_fd=parent_fd)
@@ -110,7 +121,7 @@ def read_json(dir_fd: int, name: str):
 
 
 def check(req, stem: str, ws: pathlib.Path, caps: list[str]) -> tuple[str, dict]:
-    """回傳 (拒絕的理由, 整理好的請求);理由是空字串 = 通過。"""
+    """Return (reason for rejection, the tidied request); an empty reason = passed."""
     if not isinstance(req, dict) or req.get("v") != 1:
         return _("Malformed request (must be a JSON object with v: 1)"), {}
     if req.get("id") != stem:
@@ -147,7 +158,7 @@ def make_profile(project: str, cap: str, job_id: str) -> pathlib.Path:
 
 
 def exclude_hub_run(ws: pathlib.Path) -> None:
-    """.hub-run/ 不進專案的 git(跟 attachments/ 一樣寫 .git/info/exclude)。"""
+    """Keep .hub-run/ out of the project's git (written into .git/info/exclude, like attachments/)."""
     r = subprocess.run(["git", "-C", str(ws), "rev-parse", "--path-format=absolute", "--git-common-dir"],
                        capture_output=True, text=True)
     if r.returncode != 0:
@@ -176,13 +187,13 @@ class Runner:
         self.excluded: set[str] = set()
         self.last_prune = 0.0
 
-    # ---------- 收請求 ----------
+    # ---------- taking requests ----------
 
     def scan(self) -> None:
         for project, (ws, caps) in eligible().items():
             try:
                 self.scan_project(project, ws, caps)
-            except OSError as e:  # .hub-run 是 symlink、權限不對之類:跳過這個專案,記下來
+            except OSError as e:  # .hub-run is a symlink, wrong permissions and such: skip this project, log it
                 log(project=project, event="scan_error", detail=str(e)[:300])
 
     def scan_project(self, project: str, ws: pathlib.Path, caps: list[str]) -> None:
@@ -215,7 +226,7 @@ class Runner:
         stem = name[:-5]
         st = os.stat(name, dir_fd=req_fd, follow_symlinks=False)
         if not ID.match(stem) or not stat.S_ISREG(st.st_mode) or st.st_size > MAX_REQ:
-            os.unlink(name, dir_fd=req_fd)  # 不是合格的請求檔:沒有地方回覆,直接丟掉並記下來
+            os.unlink(name, dir_fd=req_fd)  # not a valid request file: nowhere to reply, so drop it and log it
             log(project=project, id=stem[:80], event="dropped", detail=_("Wrong file name, file type or size"))
             return
         jobs_fd = subdir(hr_fd, "jobs", create=True)
@@ -245,7 +256,7 @@ class Runner:
         write_state(job_fd, state="queued")
         self.queue.append(Job(project, stem, job_fd, clean))
 
-    # ---------- 執行 ----------
+    # ---------- running ----------
 
     def start_ready(self) -> None:
         busy = {j.project for j in self.running}
@@ -274,7 +285,9 @@ class Runner:
             finally:
                 os.close(out)
                 os.close(err)
-        except Exception as e:  # 任何失敗都要回覆,不然客戶端會一直等「排隊中」(10-25 實測:模組不一致時卡住)
+        # every failure must be answered, or the client keeps waiting on "queued" (seen on 10-25: stuck when
+        # modules were inconsistent)
+        except Exception as e:
             write_state(job.fd, state="rejected", reason=_("Failed to start: {err!r}", err=e)[:500])
             os.close(job.fd)
             log(project=job.project, id=job.id, event="start_failed", detail=str(e)[:300])
@@ -297,7 +310,8 @@ class Runner:
                 elif job.timed_out and t - job.killed_at > 5:
                     self.kill(job.proc.pid, signal.SIGKILL)
                 continue
-            self.kill(job.proc.pid, signal.SIGKILL)  # 主程序結束了,留在背景的子程序也收掉
+            # the main process ended; reap child processes left in the background too
+            self.kill(job.proc.pid, signal.SIGKILL)
             code = 124 if job.timed_out else (128 - rc if rc < 0 else rc)
             write_state(job.fd, state="done", exit=code, timed_out=job.timed_out)
             os.close(job.fd)
@@ -312,10 +326,10 @@ class Runner:
         except (ProcessLookupError, PermissionError):
             pass
 
-    # ---------- 重啟、清理 ----------
+    # ---------- restart, cleanup ----------
 
     def each_job(self):
-        """(專案, 工作 id, jobs 目錄的路徑)——只走不是 symlink 的目錄。"""
+        """(project, job id, path of the jobs directory): only walks directories that aren't symlinks."""
         for project, (ws, _caps) in eligible().items():
             jobs = ws / ".hub-run" / "jobs"
             if any(p.is_symlink() for p in (ws / ".hub-run", jobs)) or not jobs.is_dir():
@@ -325,7 +339,7 @@ class Runner:
                     yield project, d.name, d
 
     def recover(self) -> None:
-        """服務重啟:上一輪還標 queued/running 的工作沒人在管了。"""
+        """The service restarted: jobs still marked queued/running from the last round have nobody minding them."""
         for project, job_id, d in self.each_job():
             try:
                 st = json.loads((d / "state.json").read_text())
@@ -381,11 +395,15 @@ def main() -> int:
     while True:
         try:
             r.tick()
-        except Exception as e:  # 一個專案的怪資料不能讓整個服務掛掉(launchd 會重啟,但正在跑的工作就變 lost)
+        # one project's odd data must not bring down the whole service (launchd would restart it, but running jobs
+        # would become lost)
+        except Exception as e:
             log(event="tick_error", detail=repr(e)[:300])
         stamp = hubconf.code_stamp()
-        if not r.running and not r.queue and stamp > code_at_start and time.time() - stamp > 60:  # 改完穩定 60 秒才重啟
-            log(event="code_changed_restart")  # 舊模組跟新模組混用會壞(10-25 卡住過一個工作):空檔時讓 launchd 重啟
+        # restart only once the change has been stable for 60 seconds
+        if not r.running and not r.queue and stamp > code_at_start and time.time() - stamp > 60:
+            # mixing old and new modules breaks things (a job got stuck on 10-25): let launchd restart when idle
+            log(event="code_changed_restart")
             return 0
         time.sleep(1)
 
