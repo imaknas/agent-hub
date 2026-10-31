@@ -70,6 +70,26 @@ is that the platform guarantees the result: what has to hold does not depend on 
 
   Recommendation: build item 4 first. Then run nono behind the interface against our own tests. Switch the default
   only if it passes and still blocks what ours blocks (the Keychain on macOS, other projects' folders).
+
+  **Tried 11-01 (owner: "try it"), nono 0.81.0 on macOS and in the Linux test container (kernel 6.8), the Conformance
+  probe run by hand** (fixture outside the temp area, which nono allows by default):
+
+  | guarantee | macOS | Linux 6.8 |
+  |---|---|---|
+  | own-writes-only | yes | yes |
+  | isolated-reads (it allows only what is granted) | yes | yes |
+  | declared-port-only | **no**: `--listen-port`/`--open-port` don't restrict; any port binds and listens, `0.0.0.0` too. `--block-net` blocks every bind, the declared port included | **no**, the same |
+  | keychain-blocked | yes | (n/a) |
+  | signals-blocked | yes | no (ABI < 6, like ours) |
+  | unix-sockets-blocked | no | no |
+  | outbound domain allowlist | **yes** (`--allow-domain`: direct connects refused, HTTP(S) through its proxy filtered by host) | (not tried) |
+
+  **Decision: not adopted as a backend.** It lacks `declared-port-only`, which is in `isolation.REQUIRED`, so
+  `isolation.can_sandbox()` would refuse it. No adapter is written for it, because one would only ever be refused.
+  What it has and we don't is the outbound domain allowlist (`policy.network` is enforced by neither of our
+  adapters). It can't be layered on top of ours: on macOS both use Seatbelt, and Seatbelt profiles can't be stacked.
+  Look again when a release restricts listening to the declared ports. Reporting the gap upstream is an outward
+  action, so it is the owner's call.
 - **Publish Principal Handoff outward?** The Acts profiles already live in agent-ops-specs. No standard covers
   cross-session owner questions that persist, carry a key and close with done/drop: ACP's elicitation (stable
   2026-07-24) works only inside one live session. The choices are to publish the spec as it is, to propose an RFD to
