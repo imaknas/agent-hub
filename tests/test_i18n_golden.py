@@ -270,7 +270,8 @@ class Golden(unittest.TestCase):
         self.heartbeat(120)
         out.append(self.agenthub("doctor", label="systemd, runtime none", sc={
             "sm": "systemd", "systemd": {"local.agent-hub-scheduler": "running", "local.agent-hub-scheduler-watchdog": None},
-            "linger": False, "plan": {"services": ["a"]}, "hooks": "githooks"}))
+            "linger": False, "plan": {"services": ["a"]}, "hooks": "githooks", "adapter": "landlock",
+            "no_sandbox": "the kernel's Landlock ABI is 3, ports need ≥ 4"}))
         self.valid_cfg(owner_side="assistant", assistant={"project": "helper", "api": "http://127.0.0.1:9"})
         out.append(self.agenthub("doctor", label="no service manager, unnamed assistant",
                                  sc={"sm": None, "plan": {}, "hooks": "githooks"}))
@@ -395,6 +396,9 @@ sys.path.insert(0, str(BIN))
 import hubconf
 if "sm" in sc:
     hubconf._SERVICE_MANAGER[:] = [sc["sm"]]
+import isolation   # the sandbox adapter: the scenario's, not this machine's
+isolation.adapter = lambda: (sc.get("adapter", "seatbelt"), None)
+isolation.can_sandbox = lambda: sc.get("no_sandbox")
 real_run = subprocess.run
 
 def done(cmd, rc=0, out="", err=""):

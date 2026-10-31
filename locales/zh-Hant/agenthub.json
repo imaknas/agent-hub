@@ -132,5 +132,9 @@
  "wrote {path}": "寫了 {path}",
  "⚠️ {dir} is not on PATH: add it to your shell setup (e.g. export PATH=\"{dir}:$PATH\") so sessions can reach agenthub": "⚠️ {dir} 不在 PATH 上:加進 shell 的設定(例:export PATH=\"{dir}:$PATH\"),session 才打得到 agenthub",
  "the scheduler just ticked": "排程器最後一次 tick:0 分鐘前",
- ", ": ","
+ ", ": ",",
+ "sandboxed projects' own services and jobs: run isolated ({adapter})": "開了 sandbox 的專案自己的服務跟 job:隔離執行({adapter})",
+ "sandboxed projects' own services and jobs: off, they are not run ({reason})": "開了 sandbox 的專案自己的服務跟 job:不能隔離,不會執行({reason})",
+ "; affects: {projects}": ";影響:{projects}",
+ "what each system needs: docs/design/capabilities.md (macOS: sandbox-exec; Linux: kernel 6.7 or later with Landlock enabled)": "各系統需要什麼:docs/design/capabilities.md(macOS:sandbox-exec;Linux:6.7 以上、開了 Landlock 的 kernel)"
 }

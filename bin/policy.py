@@ -6,6 +6,8 @@ Translating it into each runtime's settings is other modules' job (design: docs/
   runtime_claude.settings(policy) / lease_settings(policy)   Claude Code's settings
   seatbelt.profile(policy, cap)                               the macOS Seatbelt profile for platform-run commands
                                                               (cap-runner)
+  seatbelt.service_profile / landlock.plan                    a sandboxed project's own services and command jobs
+                                                              (through isolation.py: macOS / Linux)
 No runtime syntax or paths allowed here (checked by tests/test_runtime_boundary.py).
 
 policy(name, doc, index) → {

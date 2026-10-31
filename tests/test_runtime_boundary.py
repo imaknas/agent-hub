@@ -14,7 +14,8 @@ import unittest
 
 ROOT = pathlib.Path(__file__).resolve().parents[1]
 BIN = ROOT / "bin"
-NEUTRAL = ["policy.py", "seatbelt.py", "cap-runner.py", "hub-run", "appliers.py", "applier_scheduler.py", "config-check", "hub"]
+NEUTRAL = ["policy.py", "seatbelt.py", "landlock.py", "isolation.py", "sandboxed-run", "cap-runner.py", "hub-run",
+           "appliers.py", "applier_scheduler.py", "config-check", "hub"]
 PATTERNS = [
     (re.compile(r"(?<![\w])\.claude\b"), "Claude's settings/credentials directory"),
     (re.compile(r"\b(Read|Edit|Write|MultiEdit|NotebookEdit|Bash|WebFetch|WebSearch|Glob|Grep)\("),

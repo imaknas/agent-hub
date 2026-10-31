@@ -1,7 +1,8 @@
 #!/bin/sh -c exec${IFS}"${0%/*}/py"${IFS}"$0"${IFS}"$@"
 """The macOS Seatbelt profiles the platform applies itself: neutral policy (policy.py) → SBPL text. Two kinds:
   profile(pol, cap)                      cap-runner's run jobs (+ capabilities/<name>.sb), described below
-  service_profile(pol, dirs, port)       a sandboxed project's own services and command jobs (bin/sandboxed-run):
+  service_profile(pol, dirs, port)       a sandboxed project's own services and command jobs (bin/sandboxed-run,
+                                         through isolation.py; landlock.py is the Linux counterpart):
                                          its folders, the bus and caches writable, outbound network open, only the
                                          declared port listening
 
@@ -51,17 +52,10 @@ def can_sandbox() -> str | None:
     return None
 
 
-def sandboxed(doc: dict) -> bool:
-    """The project's own services and command jobs run under service_profile (bin/sandboxed-run). hub.json's
-    service_sandbox_exempt holds projects back temporarily (owner's decision, until they're fixed)."""
-    return (doc.get("enforce") or {}).get("sandbox") is True \
-        and doc.get("name") not in hubconf.get("service_sandbox_exempt", [])
-
-
-def wrap(project: str, cwd, argv: list[str], port: int | None = None) -> list[str]:
-    """argv → the same command through bin/sandboxed-run."""
-    return [*hubconf.launch(hubconf.ROOT / "bin" / "sandboxed-run"), "--project", project, "--cwd", str(cwd),
-            *(["--port", str(int(port))] if port else []), "--", *argv]
+def exec_service(pol: dict, dirs: list, port: int | None, argv: list[str]):
+    """isolation.py's adapter entry: replace this process with argv under service_profile."""
+    import os
+    os.execv(SANDBOX_EXEC, [SANDBOX_EXEC, "-p", service_profile(pol, dirs, port), *argv])
 
 
 def q(p) -> str:

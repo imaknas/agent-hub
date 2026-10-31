@@ -1,15 +1,15 @@
 #!/bin/sh -c exec${IFS}"${0%/*}/py"${IFS}"$0"${IFS}"$@"
-"""Runs a sandboxed project's own service or command job under the platform's Seatbelt profile
-(seatbelt.service_profile): render-services puts it in front of the service's command, the scheduler in front of the
-job's. A project with enforce.sandbox gets its services and jobs through manifest.update without the owner's approval,
-so they must not run with more than the project's sessions have (no Keychain, no other projects, no platform state;
-writes only to its own folders, the bus and tool caches). Design: docs/design/capabilities.md.
+"""Runs a sandboxed project's own service or command job isolated, through this machine's adapter (isolation.py:
+macOS seatbelt.service_profile, Linux landlock.py): render-services puts it in front of the service's command, the
+scheduler in front of the job's. A project with enforce.sandbox gets its services and jobs through manifest.update
+without the owner's approval, so they must not run with more than the project's sessions have (no credentials, no
+other projects, no platform state; writes only to its own folders, the bus and tool caches). Design: docs/design/capabilities.md.
 
   sandboxed-run --project <name> --cwd <dir> [--port <n>] -- <argv…>
 
-The profile is computed fresh on every run (registry changes take effect on the next start). Fails closed: where the
-platform can't sandbox (not macOS, no sandbox-exec, the project unknown) it prints why and exits 78 without running
-the command; never runs it unsandboxed.
+The rules are computed fresh on every run (registry changes take effect on the next start). Fails closed: where the
+platform can't sandbox (no adapter for this OS, the adapter can't work here, the project unknown) it prints why and
+exits 78 without running the command; never runs it unsandboxed.
 """
 from __future__ import annotations
 
@@ -42,8 +42,8 @@ def main(argv: list[str]) -> int:
         return refuse("no command")
     import policy
     import registry
-    import seatbelt
-    if (why := seatbelt.can_sandbox()):
+    import isolation
+    if (why := isolation.can_sandbox()):
         return refuse(why)
     projects = hubconf.projects()
     doc = projects.get(a.project)
@@ -53,7 +53,11 @@ def main(argv: list[str]) -> int:
     d = registry.dirs(doc)
     dirs = [p for p in (d["runtime"], d["workspace"]) if p]
     os.chdir(a.cwd)
-    os.execv(seatbelt.SANDBOX_EXEC, [seatbelt.SANDBOX_EXEC, "-p", seatbelt.service_profile(pol, dirs, a.port), *cmd])
+    try:
+        isolation.exec_service(pol, dirs, a.port, cmd)
+    except OSError as e:
+        return refuse(f"the sandbox could not be applied ({e.strerror or e})")
+    return refuse("the adapter returned without running the command")
 
 
 if __name__ == "__main__":

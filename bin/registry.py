@@ -94,7 +94,7 @@ import sys
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
 import hubconf  # noqa: E402
 import i18n  # noqa: E402
-import seatbelt  # noqa: E402
+import isolation  # noqa: E402
 
 import yaml  # noqa: E402
 
@@ -581,9 +581,9 @@ def scheduler_jobs(index: dict, legacy_names: set[str]) -> tuple[list[dict], lis
                 # needs claude.ai connectors: use the subscription login, not the default headless token
                 if job.get("connectors"):
                     cmd = f"LLM_AUTH=subscription {cmd}"
-            elif seatbelt.sandboxed(doc):
+            elif isolation.sandboxed(doc):
                 # a sandboxed project's command job runs under its profile (bin/sandboxed-run; refuses where it can't)
-                cmd = shlex.join(seatbelt.wrap(name, cwd, ["/bin/sh", "-c", job["run"]]))
+                cmd = shlex.join(isolation.wrap(name, cwd, ["/bin/sh", "-c", job["run"]]))
             else:
                 cmd = f"cd {shlex.quote(str(cwd))} && {job['run']}"
             j = {"name": full, "command": cmd, "project": name}

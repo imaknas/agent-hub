@@ -38,6 +38,7 @@ $ agenthub doctor    # launchd, problems
     → agenthub init
 ✗ watchdog (local.agent-hub-scheduler-watchdog): the loaded one belongs to a different hub, not <HUB>/bin
     → agenthub init (replaces it with this one)
+✓ sandboxed projects' own services and jobs: run isolated (seatbelt)
 ! the scheduler has not ticked yet
     → it ticks within 15 minutes of installing; if it still hasn't ticked, see .logs/scheduler-stderr.log
 ! no alerts set up: a stopped scheduler or a dead service only shows on the status page and in the logs
@@ -72,6 +73,7 @@ $ agenthub doctor    # launchd, all fine
 ✓ judgment points go to the runtime claude (no llm.providers; schedulectl models shows each point's model)
 ✓ scheduler (local.agent-hub-scheduler): loaded
 ✓ watchdog (local.agent-hub-scheduler-watchdog): loaded
+✓ sandboxed projects' own services and jobs: run isolated (seatbelt)
 ✓ the scheduler just ticked
 ✓ background services, project settings: match the config
 ✓ commit gate (core.hooksPath): githooks
@@ -110,13 +112,15 @@ $ agenthub doctor    # systemd, runtime none
     → agenthub init
 ! the scheduler and services stop after logout (systemd linger is off)
     → sudo loginctl enable-linger $USER
+! sandboxed projects' own services and jobs: off, they are not run (the kernel's Landlock ABI is 3, ports need ≥ 4)
+    → what each system needs: docs/design/capabilities.md (macOS: sandbox-exec; Linux: kernel 6.7 or later with Landlock enabled)
 ✗ the scheduler last ticked 120 minutes ago
     → bin/schedulectl status; see .logs/scheduler-stderr.log
 ! background services, project settings: 1 change not applied yet
     → agenthub config plan, then agenthub config apply
 ✓ commit gate (core.hooksPath): githooks
 
-3 problems, 10 reminders
+3 problems, 11 reminders
 --- stderr
 
 $ agenthub doctor    # no service manager, unnamed assistant
@@ -147,6 +151,7 @@ $ agenthub doctor    # no service manager, unnamed assistant
     → agenthub llm setup (pick one: an API key or a local Ollama)
 ✗ scheduler, watchdog: this system has no supported service manager (neither macOS launchd nor the Linux systemd user level): the scheduler, the watchdog and projects' long-running services will not run by themselves
     → schedule `bin/py bin/scheduler.py` yourself (every 15 minutes)
+✓ sandboxed projects' own services and jobs: run isolated (seatbelt)
 ✗ the scheduler last ticked 120 minutes ago
     → bin/schedulectl status; see .logs/scheduler-stderr.log
 ✓ background services, project settings: match the config

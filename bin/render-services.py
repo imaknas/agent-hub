@@ -26,8 +26,10 @@ service fields (validated by registry.py):
   expose               {tailnet_https, local_port}: declaration only, tailscale serve is not run automatically --
                        the status page reminds you to run it by hand. For a sandboxed project local_port is the only
                        port its service may listen on
-A sandboxed project's (enforce.sandbox) services run through bin/sandboxed-run (seatbelt.service_profile); on a system
-without Seatbelt they are not rendered (reported like a command that can't be found).
+A sandboxed project's (enforce.sandbox) services run through bin/sandboxed-run (isolation.py: Seatbelt on macOS,
+Landlock on Linux); where no adapter works they are not rendered (reported like a command that can't be found). On
+Linux the unit gets no sandboxing directives of its own: a systemd user unit silently drops them when user namespaces
+are restricted (measured 10-31, docs/design/capabilities.md).
 
 Safety net (2026-10-24: Homebrew's node was deleted, this script switched the plist to a `node` that could not be
 found, and a LINE bot was down for a day and a half without anyone knowing):
@@ -55,8 +57,8 @@ sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
 import alert  # noqa: E402
 import hubconf  # noqa: E402
 import i18n  # noqa: E402
+import isolation  # noqa: E402
 import registry  # noqa: E402
-import seatbelt  # noqa: E402
 
 _ = i18n.domain(__file__)
 
@@ -83,12 +85,12 @@ def render(project: str, doc: dict, svc: dict) -> tuple[dict, str | None]:
     problem = None if pathlib.Path(first).is_absolute() and os.access(first, os.X_OK) else \
         _("`{command}` not found (PATH={path})", command=words[0], path=search)
     args = [first] + [str(cwd / w) if not w.startswith(("/", "-")) and (cwd / w).exists() else w for w in words[1:]]
-    if seatbelt.sandboxed(doc):
+    if isolation.sandboxed(doc):
         # a sandboxed project's service gets no more than its sessions (bin/sandboxed-run); where that can't be done it
         # is not rendered at all
-        if (why := seatbelt.can_sandbox()):
+        if (why := isolation.can_sandbox()):
             problem = _("{project} is sandboxed and {why}; its services are not run unsandboxed", project=project, why=why)
-        args = seatbelt.wrap(project, cwd, args, (svc.get("expose") or {}).get("local_port"))
+        args = isolation.wrap(project, cwd, args, (svc.get("expose") or {}).get("local_port"))
     label = label_of(project, svc)
     p: dict = {"Label": label, "ProgramArguments": args, "WorkingDirectory": str(cwd)}
     env = {k: (str(cwd / v) if isinstance(v, str) and not v.startswith("/") and (cwd / v).exists()

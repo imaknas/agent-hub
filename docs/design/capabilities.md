@@ -318,10 +318,76 @@ fields), so projects can still set up their own services.
   is not enforced at this layer. Listening: only `expose.local_port` can be bound, and only connections arriving through
   localhost are accepted (tested on the mini: LAN and tailnet addresses time out even when listening on 0.0.0.0;
   inbound rules per port were unreliable, so inbound is `localhost:*` and the port limit sits on bind).
-- Fails closed: without Seatbelt (Linux, no `sandbox-exec`) render-services doesn't render the service (reported like a
-  command that can't be found) and `sandboxed-run` exits 78 without running anything.
+- Fails closed: where no adapter works (see the Linux section below for the adapters) render-services doesn't render the
+  service (reported like a command that can't be found) and `sandboxed-run` exits 78 without running anything.
 - `hub.json` `service_sandbox_exempt`: projects held back temporarily, owner's decision. The first one on it
   (its job reads `~/.claude/headless-oauth-token` itself, its service's `git pull` needs `~/.ssh`) until it moves its model
   calls to the platform and stops reading credentials.
 - Sessions of sandboxed projects may bind 127.0.0.1 (`policy.local_bind` → `allowLocalBinding`; owner confirmed 10-31 in
   the agent-hub session), so a server can be tested before it's declared.
+
+## 10-31 (Linux): one adapter per OS behind the same policy
+
+`bin/isolation.py` is the neutral front: `sandboxed(doc)`, `wrap()`, `can_sandbox()`, `exec_service()`; it picks the
+adapter for this machine (`darwin` → `seatbelt.py`, `linux` → `landlock.py`, anything else → none). `sandboxed-run`,
+render-services and `registry.scheduler_jobs` only talk to it. `policy.py` stays OS-neutral. No adapter, or the adapter
+can't work on this machine → refused with the reason, never unsandboxed; `agenthub doctor` has a row for it (red when a
+registered project is sandboxed and nothing can isolate it).
+
+### What was measured (colima VM, Ubuntu kernel 6.8.0, `kernel.apparmor_restrict_unprivileged_userns=1`, as on Ubuntu 24.04)
+
+- **Unprivileged user namespaces: refused.** `unshare -Ur` → `write failed /proc/self/uid_map: Operation not permitted`;
+  `bwrap` → `setting up uid map: Permission denied` (Debian 13 container with systemd 257). In the plain Docker container
+  `bin/linux-test` uses, Docker's seccomp profile refuses `unshare(CLONE_NEWUSER)` too. So bubblewrap is out.
+- **A systemd user unit's sandboxing, one directive at a time** (a unit file under `~/.config/systemd/user`, systemd 257,
+  probing writes, reads of another folder and `~/.ssh`, binds, and the user's D-Bus socket):
+
+  | directive | in a user unit here |
+  |---|---|
+  | `NoNewPrivileges=yes` | applied (just a prctl) |
+  | `PrivateTmp`, `ProtectSystem=strict`, `ProtectHome`, `ReadWritePaths`, `InaccessiblePaths`, `PrivateUsers` | **silently dropped**: "Failed to unshare the mount namespace: Operation not permitted … Failed to set up namespace, assuming containerized execution and ignoring"; the service starts with full access |
+  | `SocketBindAllow`/`SocketBindDeny` | silently dropped (cgroup BPF, which a user manager can't attach); every port binds |
+  | `IPAddressAllow`/`IPAddressDeny` | silently dropped (same reason) |
+  | `RestrictAddressFamilies=AF_INET AF_INET6` | applied (seccomp); but it would break DNS (`AF_NETLINK`) and socketpair-based child processes (node) |
+
+  A user unit therefore can't be the guarantee: wherever user namespaces are restricted, systemd starts the service
+  unsandboxed without failing. The units render-services writes carry no sandboxing directives; the enforcement is
+  `sandboxed-run` in `ExecStart`, the same as on macOS.
+- **Landlock: ABI 4** (TCP bind/connect rules, kernel ≥ 6.7). Its syscalls and a nested seccomp filter are allowed in
+  the plain Docker container, so `bin/linux-test` runs the real check (`tests.test_sandboxed_services.LandlockRun`).
+
+### The Linux adapter: `bin/landlock.py`
+
+`sandboxed-run` restricts its own process and then execs the command (children inherit it, it can't be undone).
+Standard library only (ctypes), unprivileged; the same for services and command jobs.
+
+- **Writes**: own runtime/workspace, `policy.write` (bus, tool caches, `allow_write`), `/tmp`, `/var/tmp`, `/dev/shm`,
+  a few devices. A missing writable folder is created first when its parent exists (a rule needs an fd).
+- **Reads**: Landlock can only allow, so the deny-list is inverted: walk from `/`; a path with nothing denied inside is
+  allowed whole, a denied one is skipped, one with something denied inside is walked into. Denied: `workspace_root`,
+  `services_root`, other projects, platform state, the bus directory (allowed again through `policy.write`),
+  `policy.deny_read` (globs expanded now; the folder holding the matches is walked, so later matches stay unreadable),
+  credential directories and files. Paths that don't exist yet still count, so a credentials file created later is not
+  readable either. Symlinks are allowed only when their target would be. Own folders are allowed explicitly.
+- **Network**: bind only `expose.local_port` (TCP); outbound open (only `BIND_TCP` is handled), as on macOS.
+- **Other**: `no_new_privs`; seccomp turns `socket(AF_UNIX)` and `io_uring_setup` into `EACCES` (socketpair still
+  works). Without this a service could reach the user's D-Bus or systemd's private socket and run
+  `systemd-run --user …` outside the sandbox: Landlock on 6.8 doesn't cover connecting to a pathname socket. Checked
+  in the systemd container: from inside, `systemd-run --user` fails ("Failed to connect to user scope bus … Operation
+  not permitted") and `~/.ssh` is unreadable. Landlock itself refuses ptrace and `/proc/<pid>/environ` of processes
+  outside the sandbox. With ABI ≥ 6 (kernel 6.12) signals and abstract unix sockets are scoped as well.
+- **Refuses** (`can_sandbox()`): not Linux, an architecture without a seccomp entry (only x86_64 and aarch64), Landlock
+  ABI < 4 (kernel < 6.7, or `landlock` not in the `lsm=` list).
+
+### What each OS enforces and what it can't
+
+| | macOS (Seatbelt) | Linux (Landlock + seccomp) |
+|---|---|---|
+| writes limited to own folders, bus, caches, temp | yes | yes |
+| other projects, platform state, credentials unreadable | yes | yes (complement walk; new files next to denied paths unreadable too) |
+| Keychain / D-Bus, launchd / systemd user manager | Keychain services and launchctl blocked | unix-domain sockets blocked (no D-Bus, no `systemctl --user`) |
+| bind only the declared port | yes | yes (TCP only; UDP binds are not covered) |
+| inbound only through localhost | yes | **no**: a service can bind `0.0.0.0:<its port>`; Landlock can't see the address and the unit's `IPAddressDeny` is dropped in a user unit. A host firewall is the place for this |
+| outbound domain allowlist (`policy.network`) | no (Seatbelt can't filter by domain) | **no**: needs a network namespace + proxy, i.e. user namespaces, refused above; not cheap, not implemented |
+| signals to the owner's other processes | blocked | only with ABI ≥ 6 (kernel 6.12); on 6.8 a service can signal the owner's processes |
+| programs that need unix sockets of their own (a local database socket, syslog) | allowed | refused (`EACCES`) |
