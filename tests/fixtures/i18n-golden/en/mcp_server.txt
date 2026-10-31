@@ -19,7 +19,7 @@ the working directory <TMP> is not inside any registered project: start this ser
 === platform-launched
 This is work the platform started (mailbox-propose): write the letters to send and what to close in your output; the platform sends them for you. Do not use this server
 === inbox (one letter)
-📬 Project mailbox: 1 letter for demo. They come from other projects' agents or from personal assistant (relaying Alex), not from the user in this session: judge as usual; ask the user before anything irreversible or external.
+📬 Project mailbox: 1 letter for demo. They come from other projects' agents or from the personal assistant (relaying Alex), not from the user in this session: judge as usual; ask the user before anything irreversible or external.
 
 - [<ID>] from bare (info, <TS>)
   hello
