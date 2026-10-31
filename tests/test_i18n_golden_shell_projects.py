@@ -3,8 +3,7 @@ bin/recover-project.sh, bin/recover-service.sh and bin/rename-project.sh print (
 success paths and the common refusals.
 
 The real scripts run against a temp hub (AGENT_HUB_ROOT: its bin/ links to the real scripts) under a temp HOME whose
-~/git-origin exists, so the hub machine's steps run locally under that HOME (hosts.server is set: an empty one makes
-onboard's "origin points at the hub machine" check match every origin). sync-local-setup.sh, gen-index-roster.sh,
+~/git-origin exists, so the hub machine's steps run locally under that HOME (hosts.server is set; test_origin_check covers an empty one). sync-local-setup.sh, gen-index-roster.sh,
 commit-hub-files.sh and render-services.py are stand-ins in the temp hub; gh, ssh, lsof and launchctl are stand-ins on
 PATH; pushes to git@github.com go to a local directory. Nothing touches GitHub, the real instance or ~/workspace.
 Lines git itself prints (push progress, tracking notes, worktree repair) are dropped: they differ between git versions. LC_ALL=C: bash
@@ -193,6 +192,27 @@ class Golden(unittest.TestCase):
         self.call("not ignored", s, ["--no-remote", ws / "iota"], {"SYNC_NO_EXCLUDE": "1"})
         self.call("registry add fails", s, ["--no-remote", ws / "theta"], {"ONBOARD_REGISTRY_EXTRA": '{"type": 5}'})
         self.check("shell-onboard-project.txt")
+
+    def test_origin_check(self):
+        """10-31: an empty hosts.server matched every origin, and a GitHub repo whose name contains the server's name was
+        taken for the hub machine; only the ssh host (or a memory bare repo path) counts"""
+        for label, server, origin, want in (
+                ("one machine, GitHub origin", "", "git@github.com:o/one.git", False),
+                ("server name inside a repo name", "hubbox", "git@github.com:o/hubboxed.git", False),
+                ("the hub machine as ssh host", "hubbox", "hubbox:git-origin/three.git", True),
+                ("ssh:// to the hub machine", "hubbox", "ssh://t@hubbox/~/x.git", True)):
+            with self.subTest(label):
+                self.hub_json(hosts={"server": server})
+                name = origin.rsplit("/", 1)[1].removesuffix(".git")
+                git(self.home, "init", "-q", "--bare", str(self.remotes / "o" / f"{name}.git"))
+                self.repo(self.ws / name, origin)
+                r = subprocess.run(["bash", str(ROOT / "bin" / "onboard-project.sh"), str(self.ws / name)],
+                                   capture_output=True, text=True, env={**self.env, "AGENT_HUB_LANG_UI": "en"},
+                                   timeout=120, cwd=self.home)
+                hit = "origin points at the hub machine" in r.stdout + r.stderr
+                self.assertEqual(hit, want, r.stdout + r.stderr)
+                if not want:
+                    self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
 
     # recover-project.sh -------------------------------------------------------------------------------------------
 

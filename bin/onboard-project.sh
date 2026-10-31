@@ -103,9 +103,14 @@ if [ ! -d .git ]; then
 fi
 
 origin_url=$(git remote get-url origin 2>/dev/null || true)
-case "$origin_url" in
-  *"$MINI_HOST"*|*/git-origin/*) fail "$(hub_msg "origin points at the hub machine, which the current design never does: this project is probably left over from the old onboarding; deal with it by hand first")" ;;
-esac
+# the hub machine as the ssh host of origin (only when hosts.server is set: an empty name would match every URL), or a
+# memory bare repo path
+on_hub=false
+case "$origin_url" in */git-origin/*) on_hub=true ;; esac
+if [ -n "$MINI_HOST" ]; then
+  case "$origin_url" in "$MINI_HOST":*|*@"$MINI_HOST":*|ssh://"$MINI_HOST"[:/]*|ssh://*@"$MINI_HOST"[:/]*) on_hub=true ;; esac
+fi
+$on_hub && fail "$(hub_msg "origin points at the hub machine, which the current design never does: this project is probably left over from the old onboarding; deal with it by hand first")"
 
 if git rev-parse HEAD >/dev/null 2>&1; then
   # 已經有 commit 歷史——這才是需要保護使用者真實工作的情況,working tree
