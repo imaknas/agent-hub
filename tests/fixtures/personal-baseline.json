@@ -30,8 +30,8 @@
  },
  "secrets-path": {},
  "public-docs": {
-  "README.md": 4,
-  "README.zh-Hant.md": 2
+  "README.md": 7,
+  "README.zh-Hant.md": 6
  },
  "instance-path": {
   "bin/config-check": 5

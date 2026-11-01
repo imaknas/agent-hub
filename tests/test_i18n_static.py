@@ -35,7 +35,7 @@ SPEC = {
     # the i18n design: both token sets side by side and the Simplified-only characters the evals score
     "docs/design/i18n.md",
     # the README for zh-Hant readers: the prompt they paste into their AI app is Chinese by definition
-    "README.zh-Hant.md",
+    "README.zh-Hant.md", "assets/readme/loop.zh-Hant.svg", "assets/readme/loop.zh-Hant-dark.svg",
 }
 
 
