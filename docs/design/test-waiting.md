@@ -657,7 +657,7 @@ replaces; each step only adds to the ones before it.
    commits run today's full gate (correct, slower), merges run it again on the rebased tree (a hit when the rebase
    changed nothing), and the running platform is never half-edited.
 2. **Foundations, in worktrees (final as built), in this order:**
-   1. B1's schema: `contracts/project.v2.schema.json` (`tests`, `code`, `inputs`, `commit_gate`; `runtime` =
+   1. (done 11-01: `registry.validate_v2`, `tests/test_registry_v2.py`) B1's schema: `contracts/project.v2.schema.json` (`tests`, `code`, `inputs`, `commit_gate`; `runtime` =
       `deploy`) and its validation, unit-tested only: the live validators (`apply-updates`, the config repo's
       pre-commit, `registry.refresh`) keep refusing v2 until 2.3, so no v2 file can land while the old `merge-branch`
       would read it as untested.

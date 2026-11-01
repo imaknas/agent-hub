@@ -13,6 +13,7 @@ repos are open source, and the vendored copy gets committed there).
 | `hubbus.v1.schema.json` | `bin/hubbus` | the platform itself (sessions, bridge, librarian, status page) |
 | `llm-points.v1.schema.json` | `contracts/llm-points.yaml` (edited by people; `bin/llm.py` builds the flags from it, contracts-check validates it nightly) | the personal assistant (its own judgment-point registry follows this format; the contents are not shared) |
 | `project.v1.schema.json` | people (or a manifest.update letter) edit `projects/*.yaml`; `bin/registry.py` validates | the platform itself |
+| `project.v2.schema.json` (v1 alongside) | tests leave `runtime` for a top-level `tests` list with `code` and `inputs` (docs/design/test-waiting.md B1); `bin/registry.py` `validate_v2` checks it, not yet wired into the live validators (until the runner and readers switch, step 2.3) | the platform itself |
 | `managed-files.md` | — | the list of files the platform writes into projects |
 | `vendor/<project>/` | copies of contracts defined by other projects | the programs on this side |
 

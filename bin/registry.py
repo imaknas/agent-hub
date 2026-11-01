@@ -82,6 +82,22 @@ schema v1 (contracts/project.v1.md has the full description):
     legacy_name: the old name in schedule.yaml: while the old name is still in schedule.yaml this job isn't used
                  (during the switch the old one wins; delete that entry from schedule.yaml to switch over; the state
                  moves over from the old name too)
+
+schema v2 (contracts/project.v2.schema.json; docs/design/test-waiting.md B1): v1's fields, except that tests leave
+runtime. validate_v2() checks it; the live validators keep refusing v2 until the runner and the readers switch over
+(test-waiting step 2.3).
+  runtime: {deploy}         only deployment is left (present = has <services_root>/<name>, as in v1)
+  code: [glob]              the changed files that count as this project's code, relative to its folder; absent =
+                            every file
+  inputs: [kind:value]      what changes results without being code: file:<path in the repo outside the project's
+                            folders> | config:<file name listed in hub.json tests.config_inputs> | env:<NAME> |
+                            cmd:<command whose output counts>
+  tests: [{tier, run, when, paths?, jobs?}]
+                            tier: a name, unique; run: the command, run in an exported tree ({jobs} = the worker
+                            count); when: any of commit (needs commit_gate) | merge | nightly | deploy; paths: the
+                            tier runs only when a change touches one of them; jobs: {max?, env?} (max needs {jobs} in
+                            run or env)
+  commit_gate: true         the repo opts into the platform's commit gate (a repo-level field)
 Validation: unknown fields, duplicate names, after pointing at a job that doesn't exist, the first word of
 run/deploy/test not found (a file relative to cwd, a command on PATH, or an existing absolute path) all count as
 invalid.
@@ -122,6 +138,10 @@ CACHE = hubconf.STATE / "registry"
 TOP = {"v", "name", "type", "purpose", "paths", "memory", "privacy", "runtime", "push_on_merge", "commits", "mailbox",
        "publishes", "provides", "consumes", "services", "jobs", "enforce", "network", "allow_write", "gate", "secrets",
        "models", "metered_models"}
+TOP_V2 = TOP | {"tests", "code", "inputs", "commit_gate"}
+MOMENTS = ("commit", "merge", "nightly", "deploy")
+TIER_KEYS = {"tier", "run", "when", "paths", "jobs"}
+ENV_NAME = re.compile(r"^[A-Z_][A-Z0-9_]*$")
 SECRET = {"name", "path", "env_key", "expires", "max_age_days", "warn_days", "backup", "why", "rotate"}
 JOB = {"name", "at", "every", "trigger", "run", "kind", "prompt", "cwd", "days", "days_of_month", "months", "until",
        "between", "background", "after", "before", "max_attempts_per_day", "timeout", "legacy_name", "allow",
@@ -274,14 +294,101 @@ def platform_owned_changes(new: dict, cur: dict) -> list[str]:
 
 
 def validate(doc, stem: str) -> list[str]:
-    errs: list[str] = []
     if not isinstance(doc, dict):
         return [_("not a YAML mapping")]
-    if doc.get("v") != 1:
-        errs.append(_("v must be 1 (it is {v!r})", v=doc.get("v")))
+    errs = [] if doc.get("v") == 1 else [_("v must be 1 (it is {v!r})", v=doc.get("v"))]
+    return errs + _validate_body(doc, stem, TOP, ("deploy", "test"))
+
+
+def validate_v2(doc, stem: str) -> list[str]:
+    """Project v2 (the header's "schema v2"). Not used by the live validators until test-waiting step 2.3."""
+    if not isinstance(doc, dict):
+        return [_("not a YAML mapping")]
+    errs = [] if doc.get("v") == 2 else [_("v must be 2 (it is {v!r})", v=doc.get("v"))]
+    rt = doc.get("runtime")
+    if isinstance(rt, dict) and set(rt) - {"deploy"}:
+        errs.append(_("runtime keeps only deploy in project v2 (tests go in tests); not allowed: {keys}",
+                      keys=", ".join(sorted(map(str, set(rt) - {"deploy"})))))
+    return errs + _validate_body(doc, stem, TOP_V2, ("deploy",)) + validate_tests(doc, dirs(doc))
+
+
+def _strings(v) -> bool:
+    return isinstance(v, list) and all(isinstance(x, str) and x for x in v)
+
+
+def validate_tests(doc: dict, d: dict) -> list[str]:
+    """v2's code, inputs, tests and commit_gate."""
+    errs: list[str] = []
+    if "code" in doc and not _strings(doc["code"]):
+        errs.append(_("code must be a list of patterns"))
+    if "commit_gate" in doc and not isinstance(doc["commit_gate"], bool):
+        errs.append(_("commit_gate must be true or false"))
+    inputs = doc.get("inputs", [])
+    if not _strings(inputs):
+        errs.append(_("inputs must be a list of kind:value strings"))
+        inputs = []
+    for item in inputs:
+        kind, _sep, value = item.partition(":")
+        if kind not in ("file", "config", "env", "cmd") or not value:
+            errs.append(_("inputs: {item!r} must be file:<path>, config:<name>, env:<NAME> or cmd:<command>", item=item))
+        elif kind == "file" and (value.startswith(("/", "~")) or ".." in pathlib.PurePosixPath(value).parts):
+            errs.append(_("inputs: {item!r}: a file input is a path inside the repo", item=item))
+        elif kind == "config" and ("/" in value or value in (".", "..")):
+            errs.append(_("inputs: {item!r}: a config input is a bare file name", item=item))
+        elif kind == "env" and not ENV_NAME.match(value):
+            errs.append(_("inputs: {item!r}: an environment variable name is upper case letters, digits and _",
+                          item=item))
+        elif kind == "cmd" and (e := resolves(value, d["workspace"])):
+            errs.append(_("inputs: {item!r}: {error}", item=item, error=e))
+    tiers = doc.get("tests", [])
+    if not isinstance(tiers, list):
+        return errs + [_("tests must be a list")]
+    seen: set[str] = set()
+    for i, t in enumerate(tiers):
+        if not isinstance(t, dict):
+            errs.append(_("tests[{i}] must be a mapping", i=i))
+            continue
+        name = t.get("tier")
+        where = name if isinstance(name, str) else f"tests[{i}]"
+        errs += [_("tests.{tier}: unknown field {key}", tier=where, key=k) for k in t if k not in TIER_KEYS]
+        if not isinstance(name, str) or not MODEL_POINT.match(name):
+            errs.append(_("tests.{tier}: tier must be lowercase letters, digits and -", tier=where))
+        elif name in seen:
+            errs.append(_("tests.{tier}: the tier name is used twice", tier=where))
+        seen.add(where)
+        run = t.get("run")
+        if not isinstance(run, str) or not run.strip():
+            errs.append(_("tests.{tier}: run is required", tier=where))
+        elif (e := resolves(run.replace("{jobs}", "1"), d["workspace"])):
+            errs.append(_("tests.{tier}: run: {error}", tier=where, error=e))
+        when = t.get("when")
+        if not isinstance(when, list) or not when or any(w not in MOMENTS for w in when) or len(set(when)) != len(when):
+            errs.append(_("tests.{tier}: when must list one or more of commit, merge, nightly, deploy", tier=where))
+        elif "commit" in when and doc.get("commit_gate") is not True:
+            errs.append(_("tests.{tier}: when: commit needs commit_gate: true", tier=where))
+        if "paths" in t and not _strings(t["paths"]):
+            errs.append(_("tests.{tier}: paths must be a list of patterns", tier=where))
+        jobs = t.get("jobs")
+        if jobs is not None:
+            if not isinstance(jobs, dict) or set(jobs) - {"max", "env"}:
+                errs.append(_("tests.{tier}: jobs can only be {{max, env}}", tier=where))
+            else:
+                mx, env = jobs.get("max"), jobs.get("env")
+                if mx is not None and (isinstance(mx, bool) or not isinstance(mx, int) or mx < 1):
+                    errs.append(_("tests.{tier}: jobs.max must be a whole number of at least 1", tier=where))
+                if env is not None and (not isinstance(env, str) or not ENV_NAME.match(env)):
+                    errs.append(_("tests.{tier}: jobs.env must be an environment variable name", tier=where))
+                if mx is not None and env is None and "{jobs}" not in (run or ""):
+                    errs.append(_("tests.{tier}: jobs.max needs {{jobs}} in run or jobs.env", tier=where))
+    return errs
+
+
+def _validate_body(doc: dict, stem: str, top: set[str], runtime_keys: tuple[str, ...]) -> list[str]:
+    """What v1 and v2 share: everything but v and what tests are."""
+    errs: list[str] = []
     if doc.get("name") != stem:
         errs.append(_("name ({name!r}) must be the same as the file name {stem}", name=doc.get("name"), stem=stem))
-    errs += [_("unknown field {key}", key=k) for k in doc if k not in TOP]
+    errs += [_("unknown field {key}", key=k) for k in doc if k not in top]
     if doc.get("type", "project") not in ("project", "idea"):
         errs.append(_("type can only be project or idea"))
     if doc.get("purpose") is not None and (not isinstance(doc["purpose"], str) or not doc["purpose"].strip()):
@@ -316,7 +423,7 @@ def validate(doc, stem: str) -> list[str]:
         if not isinstance(doc.get(key, []), list):
             errs.append(_("{key} must be a list", key=key))
     errs += validate_runs(doc, stem, d)
-    for key in ("deploy", "test"):
+    for key in runtime_keys:
         if isinstance(rt, dict) and rt.get(key):
             base = d["workspace"] if key == "test" else d["workspace"]
             if (e := resolves(rt[key], base)):
