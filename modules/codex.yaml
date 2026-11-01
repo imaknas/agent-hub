@@ -18,6 +18,8 @@ runtime_preset:
     status: [codex, login, status]
   # global in ~/.codex/config.toml, shared with the Codex (ChatGPT) desktop app
   mcp_register: [codex, mcp, add, agenthub, --, "{agenthub}", mcp]
+  # agenthub uninstall
+  mcp_unregister: [codex, mcp, remove, agenthub]
   settings:
     runtime:
       default: command

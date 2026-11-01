@@ -107,7 +107,7 @@ AI App 幫你安裝 agent-hub 的過程中，有些事會直接問你，不經�
 
 | 內容 | 文件 |
 |---|---|
-| 安裝、需求、會睡眠的電腦、檔案放在哪裡 | [docs/install.md](docs/install.md) |
+| 安裝、需求、會睡眠的電腦、檔案放在哪裡、移除 | [docs/install.md](docs/install.md) |
 | agent-hub 做的每件事 | [docs/features.md](docs/features.md) |
 | 日常指令 | [docs/commands.md](docs/commands.md) |
 | 更新與退回 | [docs/upgrading.md](docs/upgrading.md) |

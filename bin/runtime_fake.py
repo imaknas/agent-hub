@@ -162,6 +162,14 @@ def install_lifecycle(workspace, check: bool = False) -> bool:
     return changed
 
 
+def remove_lifecycle(workspace, check: bool = False) -> bool:
+    path = pathlib.Path(workspace) / ".fake-hooks.json"
+    there = path.exists()
+    if there and not check:
+        path.unlink()
+    return there
+
+
 
 # ---------- control (what sessions load settings and hooks from) ----------
 

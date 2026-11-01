@@ -40,6 +40,9 @@ The current interfaces (the other layers get added one at a time, following the 
                                                          with new ones, the user's own kept); whether that changed
                                                          anything. check=True only says whether it would, writing
                                                          nothing (an applier's plan)
+    remove_lifecycle(workspace, check=False) -> bool     optional: the platform's hooks out of this project, the
+                                                         user's own kept (agenthub uninstall); whether that changed
+                                                         anything. Without it, uninstall says the hooks stay
   instructions (layer 4, rules file): which file the runtime reads that the rules and memory notes go into (the
   content is the platform's, templates/)
     instructions_file(workspace) -> Path                 the file the platform-managed block is written into

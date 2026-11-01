@@ -102,3 +102,18 @@ The repo holds no user data. `agenthub init` creates an **instance directory**, 
 
 Projects live wherever you choose, `~/workspace/<name>` by default. Their memory bare repos and the librarian's read-only
 copies sit beside them; the paths are set in `hub.json`.
+
+## Uninstalling
+
+```bash
+agenthub uninstall              # lists what it would remove; nothing changes
+agenthub uninstall --apply      # removes it
+```
+
+It stops this hub's scheduler, watchdog and the background services it generated, and takes the platform's parts out
+of each connected project: the block in the rules file, the hooks in the agent's settings, the sandbox rules and the
+git hooks it wrote. Your own lines and hooks next to them stay, and the projects' code is never touched. It asks, at
+the terminal, before removing agent-hub from your AI apps' tools (a setting for your user). Your notes stay: the
+settings folder (`~/.agent-hub`), the memory repos and each project's `.agent-memory`. `--purge` removes those too,
+and they can't be brought back. nvm, node, the AI agents, uv and git stay. The last step is yours: it prints the
+`rm -rf` for the hub folder.

@@ -138,7 +138,7 @@ say it's done, then run the same command again.
 
 | Topic | Where |
 |---|---|
-| Installing, requirements, machines that sleep, where things are kept | [docs/install.md](docs/install.md) |
+| Installing, requirements, machines that sleep, where things are kept, uninstalling | [docs/install.md](docs/install.md) |
 | Everything agent-hub does, in detail | [docs/features.md](docs/features.md) |
 | Everyday commands | [docs/commands.md](docs/commands.md) |
 | Updating, and going back | [docs/upgrading.md](docs/upgrading.md) |

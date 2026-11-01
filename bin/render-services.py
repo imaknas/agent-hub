@@ -265,6 +265,19 @@ def apply(index: dict | None = None) -> list:
     return [c for c, _cur, _plist in todo]
 
 
+def uninstall(apply: bool) -> list[str]:
+    """agenthub uninstall: every service this script generated (and only those), unloaded and its file removed; the
+    labels."""
+    from appliers import Change
+    labels = sorted(_mine())
+    if apply and labels and hubconf.service_manager():
+        uid, problems = os.getuid(), []
+        for label in labels:
+            _apply_one(uid, Change("remove", f"service:{label}", ""), None, problems)
+        RENDERED.unlink(missing_ok=True)
+    return labels
+
+
 def main() -> int:
     if hubconf.service_manager() is None:
         print(_("services: {reason}", reason=hubconf.no_service_manager()))

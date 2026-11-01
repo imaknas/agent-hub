@@ -51,6 +51,8 @@ projects:
   agenthub recover <name>    = bin/recover-project.sh (new machine / the folder is gone)
   agenthub rename <old> <new>  = bin/rename-project.sh (dry-run first, then add --apply)
   agenthub status [project]  = bin/overview.sh
+  agenthub uninstall [--apply] [--purge]
+                        take agent-hub off this machine (bin/uninstall.py): lists first; notes stay unless --purge
 scheduling:
   agenthub jobs              = schedulectl list
   agenthub run <job>         = schedulectl run (run it once now)

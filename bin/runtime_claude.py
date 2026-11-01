@@ -693,20 +693,26 @@ def deny(event: str, reason: str) -> str:
                                              "permissionDecisionReason": reason}}, ensure_ascii=False)
 
 
-def install_hooks(settings: dict) -> dict:
-    """Platform-managed hooks (MANAGED in the command) are replaced as a set by HOOK_TABLE's hub-event; the user's own
-    stay; rerunning gives the same result."""
+def _strip_hooks(settings: dict, ours) -> dict:
+    """settings without the hooks whose command `ours` matches; an entry or event left empty goes with them."""
     hooks = settings.setdefault("hooks", {})
     for name in list(hooks):
         kept = []
         for entry in hooks[name]:
-            inner = [h for h in entry.get("hooks", []) if not MANAGED.search(str(h.get("command", "")))]
+            inner = [h for h in entry.get("hooks", []) if not ours(str(h.get("command", "")))]
             if inner:
                 kept.append({**entry, "hooks": inner})
         if kept:
             hooks[name] = kept
         else:
             del hooks[name]
+    return settings
+
+
+def install_hooks(settings: dict) -> dict:
+    """Platform-managed hooks (MANAGED in the command) are replaced as a set by HOOK_TABLE's hub-event; the user's own
+    stay; rerunning gives the same result."""
+    hooks = _strip_hooks(settings, MANAGED.search)["hooks"]
     for name, matcher, event in HOOK_TABLE:
         entry = {"hooks": [{"type": "command", "command": hook_command(event)}]}
         if matcher:
@@ -724,6 +730,48 @@ def install_lifecycle(workspace, check: bool = False) -> bool:
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text(out)
     return changed
+
+
+def remove_lifecycle(workspace, check: bool = False) -> bool:
+    """agenthub uninstall: the platform's hooks out of this project's settings, the user's own kept; whether that
+    changed anything (a settings file that is a link is left alone)."""
+    path = settings_path(workspace)
+    if not path.is_file() or path.is_symlink():
+        return False
+    before = path.read_text()
+    settings = _strip_hooks(json.loads(before), MANAGED.search)
+    if not settings["hooks"]:
+        del settings["hooks"]
+    out = json.dumps(settings, indent=2) + "\n"
+    if out != before and not check:
+        if settings:
+            path.write_text(out)
+        else:   # only the platform's were there: the file goes
+            path.unlink()
+    return out != before
+
+
+def user_cleanup(apply: bool) -> list[str]:
+    """agenthub uninstall, user level (only on the owner's own yes): the worktree hooks merge-hook-settings.py --worktree
+    put in the user's settings for this hub. What there is (or was) to remove."""
+    path = pathlib.Path.home() / ".claude" / "settings.json"
+    if not path.is_file() or path.is_symlink():
+        return []
+    import hubconf
+    mark = hubconf.hub_bin("worktree-memory.sh")
+    before = path.read_text()
+    try:
+        settings = _strip_hooks(json.loads(before), lambda c: mark in c)
+    except ValueError:
+        return []
+    if not settings["hooks"]:
+        del settings["hooks"]
+    out = json.dumps(settings, indent=2) + "\n"
+    if out == before:
+        return []
+    if apply:
+        path.write_text(out)
+    return [_("the worktree hooks in {file}", file=path)]
 
 
 
@@ -973,6 +1021,7 @@ def install_info() -> dict:
                            "needs": _("a Claude Pro, Max, Ultra, Team or Enterprise plan")},
             # user scope: ~/.claude.json, which the Desktop app's Code tab reads too
             "mcp_register": ["claude", "mcp", "add", "--scope", "user", "agenthub", "--", "{agenthub}", "mcp"],
+            "mcp_unregister": ["claude", "mcp", "remove", "--scope", "user", "agenthub"],
             "settings": {"runtime": {"default": "claude"}, "modules": {"claude": True}}}
 
 

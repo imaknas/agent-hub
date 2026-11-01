@@ -235,7 +235,7 @@ def wanted_hooks(doc: dict) -> dict[str, tuple[str, str]]:
     return out
 
 
-def gate(name: str, doc: dict, report: bool, quiet: bool = False) -> list[tuple[str, str]]:
+def gate(name: str, doc: dict, report: bool, quiet: bool = False, remove_all: bool = False) -> list[tuple[str, str]]:
     """The platform's git hooks for a repo (wanted_hooks): installed when its registry entry wants them, updated when
     their text changed, removed when it no longer does (only those carrying the platform's marker). A project with
     its own core.hooksPath (e.g. husky) gets nothing installed, only detection. Returns what would be done (report) /
@@ -245,7 +245,7 @@ def gate(name: str, doc: dict, report: bool, quiet: bool = False) -> list[tuple[
     ws = registry.dirs(doc)["workspace"]
     if not ws or not (ws / ".git").is_dir():
         return []
-    want = wanted_hooks(doc)
+    want = {} if remove_all else wanted_hooks(doc)   # remove_all: agenthub uninstall
     # the repo's .git is the project's: what is there is read, and the hooks written, by its own job (a symlink
     # planted in .git/hooks then reaches only what the project can write itself; the job replaces it rather than
     # writing through it)
