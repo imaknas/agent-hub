@@ -1,0 +1,6 @@
+Vendored from agent-ops-specs (https://github.com/imaknas/agent-ops-specs, specs/principal-handoff/) at tag principal-handoff-0.5 (commit 20912e3, release-2026-11-01b), byte-identical, in the tag's own layout: the JSON files of core/, acts/, decisions/ and acts-markdown/ (conformance/ and schemas/). The schemas' relative $ref resolve inside this directory.
+agent-hub runs, as a requester and Acts registrar (tests/test_acts_conformance.py, tests/test_ph_records.py, tests/test_ph_wire.py):
+- acts-markdown/conformance: every binding case (parse, keys, register, relink, amend, apply, reconcile), in both profiles;
+- acts/ and decisions/conformance/records.json in full; lifecycle.json compared on the settlement view (settlement, outcome, answer, authority, stale);
+- core/conformance/terms-digest.json and convert.json (the Criteria cases excepted: agent-hub does not implement Criteria).
+bin/ph_records.py validates records against the schemas here.

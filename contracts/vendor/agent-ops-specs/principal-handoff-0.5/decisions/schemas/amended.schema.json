@@ -1,0 +1,25 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "decisions/schemas/amended.schema.json",
+  "title": "Principal Handoff Decisions 0.5: amended",
+  "description": "Requester -> principal side: new terms for the item; terms_rev increases by one.",
+  "$ref": "../../core/schemas/record.schema.json",
+  "required": [
+    "terms",
+    "terms_rev"
+  ],
+  "properties": {
+    "ext": {
+      "const": "decisions/0.5"
+    },
+    "type": {
+      "const": "amended"
+    },
+    "origin": {
+      "const": "requester"
+    },
+    "terms": {
+      "$ref": "terms.schema.json"
+    }
+  }
+}

@@ -1,0 +1,32 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "acts/schemas/settled.schema.json",
+  "title": "Principal Handoff Acts 0.5: settled",
+  "description": "Principal side -> requester's project: the item is settled, with the decider and authority kind.",
+  "$ref": "../../core/schemas/record.schema.json",
+  "required": [
+    "outcome",
+    "authority",
+    "terms_rev",
+    "terms_digest"
+  ],
+  "properties": {
+    "ext": {
+      "const": "acts/0.5"
+    },
+    "type": {
+      "const": "settled"
+    },
+    "origin": {
+      "const": "principal"
+    },
+    "outcome": {
+      "type": "string",
+      "enum": [
+        "done",
+        "dropped",
+        "already_done"
+      ]
+    }
+  }
+}

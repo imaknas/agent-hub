@@ -1,0 +1,40 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "acts/schemas/claimed.schema.json",
+  "title": "Principal Handoff Acts 0.5: claimed",
+  "description": "Anyone but the principal side: asserts an outcome it has no authority to record. Changes no register.",
+  "$ref": "../../core/schemas/record.schema.json",
+  "required": [
+    "outcome",
+    "evidence"
+  ],
+  "properties": {
+    "ext": {
+      "const": "acts/0.5"
+    },
+    "type": {
+      "const": "claimed"
+    },
+    "origin": {
+      "type": "string",
+      "enum": [
+        "agent",
+        "registrar",
+        "requester"
+      ]
+    },
+    "outcome": {
+      "type": "string",
+      "enum": [
+        "done",
+        "dropped"
+      ]
+    },
+    "evidence": {
+      "type": "object",
+      "required": [
+        "basis"
+      ]
+    }
+  }
+}

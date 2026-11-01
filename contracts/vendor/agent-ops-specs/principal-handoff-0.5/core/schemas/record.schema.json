@@ -1,0 +1,227 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "core/schemas/record.schema.json",
+  "title": "Principal Handoff Core 0.5 record",
+  "description": "Members shared by every record, whatever its extension, module records included. Receivers MUST ignore members they do not know.",
+  "type": "object",
+  "required": [
+    "ph",
+    "ext",
+    "id",
+    "type",
+    "origin",
+    "by",
+    "key",
+    "project",
+    "ts"
+  ],
+  "properties": {
+    "ph": {
+      "description": "Core version.",
+      "const": "0.5"
+    },
+    "ext": {
+      "description": "Extension name and version, e.g. acts/0.5.",
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9-]*/[0-9]+\\.[0-9]+$"
+    },
+    "id": {
+      "description": "Record id; stable across retransmissions.",
+      "type": "string",
+      "pattern": "^\\S{1,256}$"
+    },
+    "type": {
+      "description": "A core record type, or a module record type an extension's table lists (core sections 4 and 11).",
+      "type": "string",
+      "pattern": "^[a-z][a-z_]*$"
+    },
+    "origin": {
+      "description": "Role that emitted the record.",
+      "type": "string",
+      "pattern": "^[a-z][a-z_]*$"
+    },
+    "by": {
+      "description": "Party identifier of the emitter.",
+      "type": "string",
+      "pattern": "^\\S{1,256}$"
+    },
+    "key": {
+      "description": "Opaque key of the item.",
+      "type": "string",
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$"
+    },
+    "project": {
+      "type": "string",
+      "pattern": "^\\S{1,128}$"
+    },
+    "ts": {
+      "description": "RFC 3339 creation time, at most six fractional digits; compared as instants.",
+      "type": "string",
+      "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}[Tt][0-9]{2}:[0-9]{2}:[0-9]{2}(\\.[0-9]{1,6})?([Zz]|[+-][0-9]{2}:[0-9]{2})$"
+    },
+    "supersedes": {
+      "description": "Ids of records of the same register this one replaces.",
+      "type": "array",
+      "items": {
+        "type": "string",
+        "pattern": "^\\S{1,256}$"
+      }
+    },
+    "terms": {
+      "description": "What the item asks; members defined by the extension.",
+      "type": "object",
+      "required": [
+        "text"
+      ],
+      "properties": {
+        "text": {
+          "type": "string",
+          "pattern": "\\S"
+        },
+        "due": {
+          "type": "string",
+          "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}$"
+        }
+      }
+    },
+    "terms_rev": {
+      "description": "Terms version (need records), the version a settlement was made against, or the version a claim or note refers to.",
+      "type": "integer"
+    },
+    "outcome": {
+      "type": "string",
+      "pattern": "^[a-z][a-z_]*$"
+    },
+    "terms_digest": {
+      "description": "On settled: the terms digest (core section 4) of the need record it was made against.",
+      "type": "string",
+      "pattern": "^sha-256:[0-9a-f]{64}$"
+    },
+    "authority": {
+      "type": "object",
+      "required": [
+        "kind",
+        "decider"
+      ],
+      "properties": {
+        "kind": {
+          "type": "string",
+          "enum": [
+            "principal",
+            "confirmed",
+            "delegated",
+            "attested"
+          ]
+        },
+        "decider": {
+          "type": "string",
+          "pattern": "^\\S{1,256}$"
+        },
+        "under": {
+          "type": "string",
+          "pattern": "\\S",
+          "description": "Reference to the mandate; opaque except for the prefixes modules reserve (core section 11)."
+        },
+        "chain": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "pattern": "^\\S{1,256}$"
+          }
+        },
+        "representative": {
+          "type": "string",
+          "pattern": "^\\S{1,256}$"
+        }
+      }
+    },
+    "evidence": {
+      "type": "object",
+      "properties": {
+        "presented": {
+          "type": "string",
+          "pattern": "^sha-256:[0-9a-f]{64}$"
+        },
+        "proposal": {
+          "type": "string",
+          "pattern": "\\S"
+        },
+        "basis": {
+          "type": "string",
+          "pattern": "\\S"
+        }
+      },
+      "description": "Core members; other members are defined by modules (Evidence) and ignored by receivers that do not implement them."
+    },
+    "relation": {
+      "type": "object",
+      "required": [
+        "kind",
+        "target",
+        "active"
+      ],
+      "properties": {
+        "kind": {
+          "type": "string",
+          "enum": [
+            "same_as",
+            "derived_from",
+            "replaced_by"
+          ]
+        },
+        "target": {
+          "type": "object",
+          "properties": {
+            "ext": {
+              "type": "string"
+            },
+            "project": {
+              "type": "string"
+            },
+            "key": {
+              "type": "string",
+              "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$"
+            },
+            "uri": {
+              "type": "string",
+              "pattern": "\\S"
+            }
+          }
+        },
+        "active": {
+          "type": "boolean"
+        }
+      }
+    },
+    "reason": {
+      "type": "string",
+      "pattern": "^[a-z][a-z_]*$"
+    },
+    "adopts": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "pattern": "^\\S{1,256}$"
+      }
+    },
+    "about": {
+      "type": "object",
+      "properties": {
+        "key": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$"
+        },
+        "quote": {
+          "type": "string",
+          "pattern": "\\S"
+        }
+      }
+    },
+    "note": {
+      "type": "string"
+    },
+    "context": {
+      "type": "string"
+    }
+  }
+}

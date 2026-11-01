@@ -1,0 +1,41 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "acts/schemas/raised.schema.json",
+  "title": "Principal Handoff Acts 0.5: raised",
+  "description": "Requester -> principal side: a new item.",
+  "$ref": "../../core/schemas/record.schema.json",
+  "required": [
+    "terms",
+    "terms_rev"
+  ],
+  "properties": {
+    "ext": {
+      "const": "acts/0.5"
+    },
+    "type": {
+      "const": "raised"
+    },
+    "origin": {
+      "const": "requester"
+    },
+    "terms": {
+      "type": "object",
+      "required": [
+        "text"
+      ],
+      "properties": {
+        "text": {
+          "type": "string",
+          "pattern": "\\S"
+        },
+        "due": {
+          "type": "string",
+          "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}$"
+        }
+      }
+    },
+    "terms_rev": {
+      "const": 1
+    }
+  }
+}

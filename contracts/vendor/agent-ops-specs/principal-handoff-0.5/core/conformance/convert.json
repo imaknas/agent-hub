@@ -1,0 +1,692 @@
+{
+  "suite": "core/0.5",
+  "description": "Core section 14 with the 0.4 <-> 0.5 conversion of Acts section 6, Decisions section 6 and Criteria section 10: record + target version + the records the converter holds about the item -> the converted record. A converter converts again at each fold, so a digest kept because its need record is not held yet is replaced once it is.",
+  "cases": [
+    {
+      "id": "need-record-up",
+      "record": {
+        "ph": "0.4",
+        "ext": "acts/0.4",
+        "id": "r:task-demo-c3d8af57d4",
+        "type": "raised",
+        "origin": "requester",
+        "by": "registrar:demo",
+        "key": "task-demo-c3d8af57d4",
+        "project": "demo",
+        "ts": "2026-10-27T02:10:00Z",
+        "terms": {
+          "text": "Renew the domain"
+        },
+        "terms_rev": 1
+      },
+      "to": "0.5",
+      "held": [
+        {
+          "ph": "0.4",
+          "ext": "acts/0.4",
+          "id": "r:task-demo-c3d8af57d4",
+          "type": "raised",
+          "origin": "requester",
+          "by": "registrar:demo",
+          "key": "task-demo-c3d8af57d4",
+          "project": "demo",
+          "ts": "2026-10-27T02:10:00Z",
+          "terms": {
+            "text": "Renew the domain"
+          },
+          "terms_rev": 1
+        }
+      ],
+      "expect": {
+        "ph": "0.5",
+        "ext": "acts/0.5",
+        "id": "r:task-demo-c3d8af57d4",
+        "type": "raised",
+        "origin": "requester",
+        "by": "registrar:demo",
+        "key": "task-demo-c3d8af57d4",
+        "project": "demo",
+        "ts": "2026-10-27T02:10:00Z",
+        "terms": {
+          "text": "Renew the domain"
+        },
+        "terms_rev": 1
+      }
+    },
+    {
+      "id": "need-record-down",
+      "record": {
+        "ph": "0.5",
+        "ext": "acts/0.5",
+        "id": "r:task-demo-c3d8af57d4",
+        "type": "raised",
+        "origin": "requester",
+        "by": "registrar:demo",
+        "key": "task-demo-c3d8af57d4",
+        "project": "demo",
+        "ts": "2026-10-27T02:10:00Z",
+        "terms": {
+          "text": "Renew the domain"
+        },
+        "terms_rev": 1
+      },
+      "to": "0.4",
+      "held": [
+        {
+          "ph": "0.5",
+          "ext": "acts/0.5",
+          "id": "r:task-demo-c3d8af57d4",
+          "type": "raised",
+          "origin": "requester",
+          "by": "registrar:demo",
+          "key": "task-demo-c3d8af57d4",
+          "project": "demo",
+          "ts": "2026-10-27T02:10:00Z",
+          "terms": {
+            "text": "Renew the domain"
+          },
+          "terms_rev": 1
+        }
+      ],
+      "expect": {
+        "ph": "0.4",
+        "ext": "acts/0.4",
+        "id": "r:task-demo-c3d8af57d4",
+        "type": "raised",
+        "origin": "requester",
+        "by": "registrar:demo",
+        "key": "task-demo-c3d8af57d4",
+        "project": "demo",
+        "ts": "2026-10-27T02:10:00Z",
+        "terms": {
+          "text": "Renew the domain"
+        },
+        "terms_rev": 1
+      }
+    },
+    {
+      "id": "settled-up-replaces-digest-and-drops-proof",
+      "record": {
+        "ph": "0.4",
+        "ext": "acts/0.4",
+        "id": "s-81f2",
+        "type": "settled",
+        "origin": "principal",
+        "by": "ps:assistant",
+        "key": "task-demo-c3d8af57d4",
+        "project": "demo",
+        "ts": "2026-10-28T08:30:00Z",
+        "terms_rev": 1,
+        "terms_digest": "sha-256:e0800bf76e20f21349abccc7cfdd5e13f29152762c8f643708a2e23e19dd40ab",
+        "outcome": "done",
+        "authority": {
+          "kind": "principal",
+          "decider": "p:owner"
+        },
+        "evidence": {
+          "presented": "sha-256:2222222222222222222222222222222222222222222222222222222222222222",
+          "proof": "eyJhbGciOiJFZERTQSJ9..c2ln"
+        }
+      },
+      "to": "0.5",
+      "held": [
+        {
+          "ph": "0.4",
+          "ext": "acts/0.4",
+          "id": "r:task-demo-c3d8af57d4",
+          "type": "raised",
+          "origin": "requester",
+          "by": "registrar:demo",
+          "key": "task-demo-c3d8af57d4",
+          "project": "demo",
+          "ts": "2026-10-27T02:10:00Z",
+          "terms": {
+            "text": "Renew the domain"
+          },
+          "terms_rev": 1
+        }
+      ],
+      "expect": {
+        "ph": "0.5",
+        "ext": "acts/0.5",
+        "id": "s-81f2",
+        "type": "settled",
+        "origin": "principal",
+        "by": "ps:assistant",
+        "key": "task-demo-c3d8af57d4",
+        "project": "demo",
+        "ts": "2026-10-28T08:30:00Z",
+        "terms_rev": 1,
+        "terms_digest": "sha-256:a9467037327c1e0e7ce14815d5180ad390e1c754a703d4680b06ff1eafa26c0f",
+        "outcome": "done",
+        "authority": {
+          "kind": "principal",
+          "decider": "p:owner"
+        },
+        "evidence": {
+          "presented": "sha-256:2222222222222222222222222222222222222222222222222222222222222222"
+        }
+      }
+    },
+    {
+      "id": "settled-down",
+      "record": {
+        "ph": "0.5",
+        "ext": "acts/0.5",
+        "id": "s-81f2",
+        "type": "settled",
+        "origin": "principal",
+        "by": "ps:assistant",
+        "key": "task-demo-c3d8af57d4",
+        "project": "demo",
+        "ts": "2026-10-28T08:30:00Z",
+        "terms_rev": 1,
+        "terms_digest": "sha-256:a9467037327c1e0e7ce14815d5180ad390e1c754a703d4680b06ff1eafa26c0f",
+        "outcome": "done",
+        "authority": {
+          "kind": "principal",
+          "decider": "p:owner"
+        },
+        "evidence": {
+          "presented": "sha-256:2222222222222222222222222222222222222222222222222222222222222222"
+        }
+      },
+      "to": "0.4",
+      "held": [
+        {
+          "ph": "0.5",
+          "ext": "acts/0.5",
+          "id": "r:task-demo-c3d8af57d4",
+          "type": "raised",
+          "origin": "requester",
+          "by": "registrar:demo",
+          "key": "task-demo-c3d8af57d4",
+          "project": "demo",
+          "ts": "2026-10-27T02:10:00Z",
+          "terms": {
+            "text": "Renew the domain"
+          },
+          "terms_rev": 1
+        }
+      ],
+      "expect": {
+        "ph": "0.4",
+        "ext": "acts/0.4",
+        "id": "s-81f2",
+        "type": "settled",
+        "origin": "principal",
+        "by": "ps:assistant",
+        "key": "task-demo-c3d8af57d4",
+        "project": "demo",
+        "ts": "2026-10-28T08:30:00Z",
+        "terms_rev": 1,
+        "terms_digest": "sha-256:e0800bf76e20f21349abccc7cfdd5e13f29152762c8f643708a2e23e19dd40ab",
+        "outcome": "done",
+        "authority": {
+          "kind": "principal",
+          "decider": "p:owner"
+        },
+        "evidence": {
+          "presented": "sha-256:2222222222222222222222222222222222222222222222222222222222222222"
+        }
+      }
+    },
+    {
+      "id": "settled-up-on-other-terms-keeps-digest",
+      "record": {
+        "ph": "0.4",
+        "ext": "acts/0.4",
+        "id": "s-81f2",
+        "type": "settled",
+        "origin": "principal",
+        "by": "ps:assistant",
+        "key": "task-demo-c3d8af57d4",
+        "project": "demo",
+        "ts": "2026-10-28T08:30:00Z",
+        "terms_rev": 1,
+        "terms_digest": "sha-256:922d3a4dc88620f55fbc64b65cb2f652d55254db02840cd2079c314514d9b535",
+        "outcome": "done",
+        "authority": {
+          "kind": "principal",
+          "decider": "p:owner"
+        },
+        "evidence": {
+          "presented": "sha-256:2222222222222222222222222222222222222222222222222222222222222222",
+          "proof": "eyJhbGciOiJFZERTQSJ9..c2ln"
+        }
+      },
+      "to": "0.5",
+      "held": [
+        {
+          "ph": "0.4",
+          "ext": "acts/0.4",
+          "id": "r:task-demo-c3d8af57d4",
+          "type": "raised",
+          "origin": "requester",
+          "by": "registrar:demo",
+          "key": "task-demo-c3d8af57d4",
+          "project": "demo",
+          "ts": "2026-10-27T02:10:00Z",
+          "terms": {
+            "text": "Renew the domain"
+          },
+          "terms_rev": 1
+        }
+      ],
+      "expect": {
+        "ph": "0.5",
+        "ext": "acts/0.5",
+        "id": "s-81f2",
+        "type": "settled",
+        "origin": "principal",
+        "by": "ps:assistant",
+        "key": "task-demo-c3d8af57d4",
+        "project": "demo",
+        "ts": "2026-10-28T08:30:00Z",
+        "terms_rev": 1,
+        "terms_digest": "sha-256:922d3a4dc88620f55fbc64b65cb2f652d55254db02840cd2079c314514d9b535",
+        "outcome": "done",
+        "authority": {
+          "kind": "principal",
+          "decider": "p:owner"
+        },
+        "evidence": {
+          "presented": "sha-256:2222222222222222222222222222222222222222222222222222222222222222"
+        }
+      }
+    },
+    {
+      "id": "settled-up-picks-the-matching-need-record",
+      "record": {
+        "ph": "0.4",
+        "ext": "acts/0.4",
+        "id": "s-81f2",
+        "type": "settled",
+        "origin": "principal",
+        "by": "ps:assistant",
+        "key": "task-demo-c3d8af57d4",
+        "project": "demo",
+        "ts": "2026-10-28T08:30:00Z",
+        "terms_rev": 1,
+        "terms_digest": "sha-256:922d3a4dc88620f55fbc64b65cb2f652d55254db02840cd2079c314514d9b535",
+        "outcome": "done",
+        "authority": {
+          "kind": "principal",
+          "decider": "p:owner"
+        },
+        "evidence": {
+          "presented": "sha-256:2222222222222222222222222222222222222222222222222222222222222222",
+          "proof": "eyJhbGciOiJFZERTQSJ9..c2ln"
+        }
+      },
+      "to": "0.5",
+      "held": [
+        {
+          "ph": "0.4",
+          "ext": "acts/0.4",
+          "id": "r:task-demo-c3d8af57d4",
+          "type": "raised",
+          "origin": "requester",
+          "by": "registrar:demo",
+          "key": "task-demo-c3d8af57d4",
+          "project": "demo",
+          "ts": "2026-10-27T02:10:00Z",
+          "terms": {
+            "text": "Renew the domain"
+          },
+          "terms_rev": 1
+        },
+        {
+          "ph": "0.4",
+          "ext": "acts/0.4",
+          "id": "r:task-demo-c3d8af57d4-b",
+          "type": "raised",
+          "origin": "requester",
+          "by": "registrar:demo",
+          "key": "task-demo-c3d8af57d4",
+          "project": "demo",
+          "ts": "2026-10-27T02:10:00Z",
+          "terms": {
+            "text": "Renew the domain and the certificate"
+          },
+          "terms_rev": 1
+        }
+      ],
+      "expect": {
+        "ph": "0.5",
+        "ext": "acts/0.5",
+        "id": "s-81f2",
+        "type": "settled",
+        "origin": "principal",
+        "by": "ps:assistant",
+        "key": "task-demo-c3d8af57d4",
+        "project": "demo",
+        "ts": "2026-10-28T08:30:00Z",
+        "terms_rev": 1,
+        "terms_digest": "sha-256:59c0efee786b1aa9a430cc5fc0b1133cae76a9268050d7fd27f0b85a98d60d86",
+        "outcome": "done",
+        "authority": {
+          "kind": "principal",
+          "decider": "p:owner"
+        },
+        "evidence": {
+          "presented": "sha-256:2222222222222222222222222222222222222222222222222222222222222222"
+        }
+      }
+    },
+    {
+      "id": "settled-up-without-its-need-record-keeps-digest",
+      "record": {
+        "ph": "0.4",
+        "ext": "acts/0.4",
+        "id": "s-81f2",
+        "type": "settled",
+        "origin": "principal",
+        "by": "ps:assistant",
+        "key": "task-demo-c3d8af57d4",
+        "project": "demo",
+        "ts": "2026-10-28T08:30:00Z",
+        "terms_rev": 2,
+        "terms_digest": "sha-256:cdc1539301cc1be97863e31427efc481d90e958a423850d1f920df9138cddd6f",
+        "outcome": "done",
+        "authority": {
+          "kind": "principal",
+          "decider": "p:owner"
+        },
+        "evidence": {
+          "presented": "sha-256:2222222222222222222222222222222222222222222222222222222222222222",
+          "proof": "eyJhbGciOiJFZERTQSJ9..c2ln"
+        }
+      },
+      "to": "0.5",
+      "held": [
+        {
+          "ph": "0.4",
+          "ext": "acts/0.4",
+          "id": "r:task-demo-c3d8af57d4",
+          "type": "raised",
+          "origin": "requester",
+          "by": "registrar:demo",
+          "key": "task-demo-c3d8af57d4",
+          "project": "demo",
+          "ts": "2026-10-27T02:10:00Z",
+          "terms": {
+            "text": "Renew the domain"
+          },
+          "terms_rev": 1
+        }
+      ],
+      "expect": {
+        "ph": "0.5",
+        "ext": "acts/0.5",
+        "id": "s-81f2",
+        "type": "settled",
+        "origin": "principal",
+        "by": "ps:assistant",
+        "key": "task-demo-c3d8af57d4",
+        "project": "demo",
+        "ts": "2026-10-28T08:30:00Z",
+        "terms_rev": 2,
+        "terms_digest": "sha-256:cdc1539301cc1be97863e31427efc481d90e958a423850d1f920df9138cddd6f",
+        "outcome": "done",
+        "authority": {
+          "kind": "principal",
+          "decider": "p:owner"
+        },
+        "evidence": {
+          "presented": "sha-256:2222222222222222222222222222222222222222222222222222222222222222"
+        }
+      }
+    },
+    {
+      "id": "grant-up-names-no-after",
+      "record": {
+        "ph": "0.4",
+        "ext": "decisions/0.4",
+        "id": "ap1",
+        "type": "approved",
+        "origin": "principal",
+        "by": "ps:assistant",
+        "key": "q-demo-7",
+        "project": "demo",
+        "ts": "2026-10-27T10:00:00Z",
+        "terms_rev": 1,
+        "approval": {
+          "active": true,
+          "terms_digest": "sha-256:57ef46e4e51ce70e543d3e5961b077782fe344fc560dbe332fbc0871db29f03d"
+        },
+        "authority": {
+          "kind": "principal",
+          "decider": "p:owner"
+        },
+        "evidence": {
+          "presented": "sha-256:2222222222222222222222222222222222222222222222222222222222222222"
+        }
+      },
+      "to": "0.5",
+      "held": [
+        {
+          "ph": "0.4",
+          "ext": "decisions/0.4",
+          "id": "r:q-demo-7",
+          "type": "raised",
+          "origin": "requester",
+          "by": "agent:demo",
+          "key": "q-demo-7",
+          "project": "demo",
+          "ts": "2026-10-27T09:00:00Z",
+          "terms": {
+            "text": "Merge the export feature?",
+            "criteria": {
+              "subject": {
+                "uri": "git:demo@refs/heads/feature-export",
+                "digest": "sha-256:3333333333333333333333333333333333333333333333333333333333333333"
+              },
+              "checks": [
+                {
+                  "id": "tests",
+                  "text": "The test suite passes",
+                  "format": "in-toto",
+                  "implementation": {
+                    "uri": "git:demo@ci/test.yml",
+                    "digest": "sha-256:4444444444444444444444444444444444444444444444444444444444444444"
+                  },
+                  "trust": [
+                    "sigstore:ci"
+                  ]
+                }
+              ],
+              "answer": {
+                "text": "Merge the export feature"
+              }
+            }
+          },
+          "terms_rev": 1
+        },
+        {
+          "ph": "0.4",
+          "ext": "decisions/0.4",
+          "id": "s:q-demo-7:1",
+          "type": "settled",
+          "origin": "principal",
+          "by": "ps:assistant",
+          "key": "q-demo-7",
+          "project": "demo",
+          "ts": "2026-10-27T09:30:00Z",
+          "outcome": "dismissed",
+          "terms_rev": 1,
+          "terms_digest": "sha-256:57ef46e4e51ce70e543d3e5961b077782fe344fc560dbe332fbc0871db29f03d",
+          "authority": {
+            "kind": "principal",
+            "decider": "p:owner"
+          }
+        },
+        {
+          "ph": "0.4",
+          "ext": "decisions/0.4",
+          "id": "o:q-demo-7:1",
+          "type": "reopened",
+          "origin": "principal",
+          "by": "ps:assistant",
+          "key": "q-demo-7",
+          "project": "demo",
+          "ts": "2026-10-27T09:40:00Z",
+          "supersedes": [
+            "s:q-demo-7:1"
+          ]
+        }
+      ],
+      "expect": {
+        "ph": "0.5",
+        "ext": "decisions/0.5",
+        "id": "ap1",
+        "type": "approved",
+        "origin": "principal",
+        "by": "ps:assistant",
+        "key": "q-demo-7",
+        "project": "demo",
+        "ts": "2026-10-27T10:00:00Z",
+        "terms_rev": 1,
+        "approval": {
+          "active": true,
+          "terms_digest": "sha-256:422240c17a6422d4ec29c820396a79b504b8ef71e76d4169fec2e6eee81c0c0a"
+        },
+        "authority": {
+          "kind": "principal",
+          "decider": "p:owner"
+        },
+        "evidence": {
+          "presented": "sha-256:2222222222222222222222222222222222222222222222222222222222222222"
+        }
+      },
+      "module": "criteria"
+    },
+    {
+      "id": "grant-down-drops-after",
+      "record": {
+        "ph": "0.5",
+        "ext": "decisions/0.5",
+        "id": "ap1",
+        "type": "approved",
+        "origin": "principal",
+        "by": "ps:assistant",
+        "key": "q-demo-7",
+        "project": "demo",
+        "ts": "2026-10-27T10:00:00Z",
+        "terms_rev": 1,
+        "approval": {
+          "active": true,
+          "terms_digest": "sha-256:422240c17a6422d4ec29c820396a79b504b8ef71e76d4169fec2e6eee81c0c0a",
+          "after": "o:q-demo-7:1"
+        },
+        "authority": {
+          "kind": "principal",
+          "decider": "p:owner"
+        },
+        "evidence": {
+          "presented": "sha-256:2222222222222222222222222222222222222222222222222222222222222222"
+        }
+      },
+      "to": "0.4",
+      "held": [
+        {
+          "ph": "0.5",
+          "ext": "decisions/0.5",
+          "id": "r:q-demo-7",
+          "type": "raised",
+          "origin": "requester",
+          "by": "agent:demo",
+          "key": "q-demo-7",
+          "project": "demo",
+          "ts": "2026-10-27T09:00:00Z",
+          "terms": {
+            "text": "Merge the export feature?",
+            "criteria": {
+              "subject": {
+                "uri": "git:demo@refs/heads/feature-export",
+                "digest": "sha-256:3333333333333333333333333333333333333333333333333333333333333333"
+              },
+              "checks": [
+                {
+                  "id": "tests",
+                  "text": "The test suite passes",
+                  "format": "in-toto",
+                  "implementation": {
+                    "uri": "git:demo@ci/test.yml",
+                    "digest": "sha-256:4444444444444444444444444444444444444444444444444444444444444444"
+                  },
+                  "trust": [
+                    "sigstore:ci"
+                  ]
+                }
+              ],
+              "answer": {
+                "text": "Merge the export feature"
+              }
+            }
+          },
+          "terms_rev": 1
+        }
+      ],
+      "expect": {
+        "ph": "0.4",
+        "ext": "decisions/0.4",
+        "id": "ap1",
+        "type": "approved",
+        "origin": "principal",
+        "by": "ps:assistant",
+        "key": "q-demo-7",
+        "project": "demo",
+        "ts": "2026-10-27T10:00:00Z",
+        "terms_rev": 1,
+        "approval": {
+          "active": true,
+          "terms_digest": "sha-256:57ef46e4e51ce70e543d3e5961b077782fe344fc560dbe332fbc0871db29f03d"
+        },
+        "authority": {
+          "kind": "principal",
+          "decider": "p:owner"
+        },
+        "evidence": {
+          "presented": "sha-256:2222222222222222222222222222222222222222222222222222222222222222"
+        }
+      },
+      "module": "criteria"
+    },
+    {
+      "id": "note-up",
+      "record": {
+        "ph": "0.4",
+        "ext": "decisions/0.4",
+        "id": "n1",
+        "type": "note",
+        "origin": "requester",
+        "by": "agent:demo",
+        "key": "q-demo-7",
+        "project": "demo",
+        "ts": "2026-10-27T11:00:00Z",
+        "about": {
+          "key": "q-demo-7"
+        },
+        "note": "Waiting on CI."
+      },
+      "to": "0.5",
+      "held": [],
+      "expect": {
+        "ph": "0.5",
+        "ext": "decisions/0.5",
+        "id": "n1",
+        "type": "note",
+        "origin": "requester",
+        "by": "agent:demo",
+        "key": "q-demo-7",
+        "project": "demo",
+        "ts": "2026-10-27T11:00:00Z",
+        "about": {
+          "key": "q-demo-7"
+        },
+        "note": "Waiting on CI."
+      }
+    }
+  ]
+}

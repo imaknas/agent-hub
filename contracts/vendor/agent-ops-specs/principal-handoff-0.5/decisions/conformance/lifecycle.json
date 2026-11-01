@@ -1,0 +1,1881 @@
+{
+  "suite": "decisions/0.5",
+  "principal": "p:owner",
+  "description": "Records one receiver holds for one decision -> its state (core §6; a withdrawn decision is no longer presented, decisions §2).",
+  "cases": [
+    {
+      "id": "open",
+      "spec": "core §6",
+      "records": [
+        {
+          "ph": "0.5",
+          "ext": "decisions/0.5",
+          "id": "r1",
+          "type": "raised",
+          "origin": "requester",
+          "by": "agent:demo",
+          "key": "q-demo-1",
+          "project": "demo",
+          "ts": "2026-10-27T09:00:00Z",
+          "terms": {
+            "text": "Postgres or SQLite for the cache?",
+            "options": [
+              {
+                "id": "pg",
+                "label": "Postgres"
+              },
+              {
+                "id": "sqlite",
+                "label": "SQLite"
+              }
+            ],
+            "default": "sqlite"
+          },
+          "terms_rev": 1
+        }
+      ],
+      "expect": {
+        "state": "open",
+        "outcome": null,
+        "settlement": null,
+        "authority": null,
+        "answer": null,
+        "stale": false,
+        "withdrawn": false,
+        "terms_rev": 1,
+        "conflict": false,
+        "claims": [],
+        "ignored": []
+      }
+    },
+    {
+      "id": "settled",
+      "spec": "core §6",
+      "records": [
+        {
+          "ph": "0.5",
+          "ext": "decisions/0.5",
+          "id": "r1",
+          "type": "raised",
+          "origin": "requester",
+          "by": "agent:demo",
+          "key": "q-demo-1",
+          "project": "demo",
+          "ts": "2026-10-27T09:00:00Z",
+          "terms": {
+            "text": "Postgres or SQLite for the cache?",
+            "options": [
+              {
+                "id": "pg",
+                "label": "Postgres"
+              },
+              {
+                "id": "sqlite",
+                "label": "SQLite"
+              }
+            ],
+            "default": "sqlite"
+          },
+          "terms_rev": 1
+        },
+        {
+          "ph": "0.5",
+          "ext": "decisions/0.5",
+          "id": "s1",
+          "type": "settled",
+          "origin": "principal",
+          "by": "ps:assistant",
+          "key": "q-demo-1",
+          "project": "demo",
+          "ts": "2026-10-28T08:00:00Z",
+          "outcome": "decided",
+          "terms_rev": 1,
+          "terms_digest": "sha-256:4754723d44d4160bb80c93a3bdc94912e852b91fca599a834e6fbe22e1cdbf04",
+          "authority": {
+            "kind": "principal",
+            "decider": "p:owner"
+          },
+          "answer": {
+            "text": "SQLite",
+            "option": "sqlite"
+          }
+        }
+      ],
+      "expect": {
+        "state": "settled",
+        "outcome": "decided",
+        "settlement": "s1",
+        "authority": "principal",
+        "answer": {
+          "text": "SQLite",
+          "option": "sqlite"
+        },
+        "stale": false,
+        "withdrawn": false,
+        "terms_rev": 1,
+        "conflict": false,
+        "claims": [],
+        "ignored": []
+      }
+    },
+    {
+      "id": "duplicate",
+      "spec": "core §10: an id counts once",
+      "records": [
+        {
+          "ph": "0.5",
+          "ext": "decisions/0.5",
+          "id": "r1",
+          "type": "raised",
+          "origin": "requester",
+          "by": "agent:demo",
+          "key": "q-demo-1",
+          "project": "demo",
+          "ts": "2026-10-27T09:00:00Z",
+          "terms": {
+            "text": "Postgres or SQLite for the cache?",
+            "options": [
+              {
+                "id": "pg",
+                "label": "Postgres"
+              },
+              {
+                "id": "sqlite",
+                "label": "SQLite"
+              }
+            ],
+            "default": "sqlite"
+          },
+          "terms_rev": 1
+        },
+        {
+          "ph": "0.5",
+          "ext": "decisions/0.5",
+          "id": "s1",
+          "type": "settled",
+          "origin": "principal",
+          "by": "ps:assistant",
+          "key": "q-demo-1",
+          "project": "demo",
+          "ts": "2026-10-28T08:00:00Z",
+          "outcome": "decided",
+          "terms_rev": 1,
+          "terms_digest": "sha-256:4754723d44d4160bb80c93a3bdc94912e852b91fca599a834e6fbe22e1cdbf04",
+          "authority": {
+            "kind": "principal",
+            "decider": "p:owner"
+          },
+          "answer": {
+            "text": "SQLite",
+            "option": "sqlite"
+          }
+        },
+        {
+          "ph": "0.5",
+          "ext": "decisions/0.5",
+          "id": "s1",
+          "type": "settled",
+          "origin": "principal",
+          "by": "ps:assistant",
+          "key": "q-demo-1",
+          "project": "demo",
+          "ts": "2026-10-28T08:00:00Z",
+          "outcome": "decided",
+          "terms_rev": 1,
+          "terms_digest": "sha-256:4754723d44d4160bb80c93a3bdc94912e852b91fca599a834e6fbe22e1cdbf04",
+          "authority": {
+            "kind": "principal",
+            "decider": "p:owner"
+          },
+          "answer": {
+            "text": "SQLite",
+            "option": "sqlite"
+          }
+        }
+      ],
+      "expect": {
+        "state": "settled",
+        "outcome": "decided",
+        "settlement": "s1",
+        "authority": "principal",
+        "answer": {
+          "text": "SQLite",
+          "option": "sqlite"
+        },
+        "stale": false,
+        "withdrawn": false,
+        "terms_rev": 1,
+        "conflict": false,
+        "claims": [],
+        "ignored": []
+      }
+    },
+    {
+      "id": "superseded",
+      "spec": "core §6: the superseding settlement is current",
+      "records": [
+        {
+          "ph": "0.5",
+          "ext": "decisions/0.5",
+          "id": "r1",
+          "type": "raised",
+          "origin": "requester",
+          "by": "agent:demo",
+          "key": "q-demo-1",
+          "project": "demo",
+          "ts": "2026-10-27T09:00:00Z",
+          "terms": {
+            "text": "Postgres or SQLite for the cache?",
+            "options": [
+              {
+                "id": "pg",
+                "label": "Postgres"
+              },
+              {
+                "id": "sqlite",
+                "label": "SQLite"
+              }
+            ],
+            "default": "sqlite"
+          },
+          "terms_rev": 1
+        },
+        {
+          "ph": "0.5",
+          "ext": "decisions/0.5",
+          "id": "s1",
+          "type": "settled",
+          "origin": "principal",
+          "by": "ps:assistant",
+          "key": "q-demo-1",
+          "project": "demo",
+          "ts": "2026-10-28T08:00:00Z",
+          "outcome": "decided",
+          "terms_rev": 1,
+          "terms_digest": "sha-256:4754723d44d4160bb80c93a3bdc94912e852b91fca599a834e6fbe22e1cdbf04",
+          "authority": {
+            "kind": "principal",
+            "decider": "p:owner"
+          },
+          "answer": {
+            "text": "SQLite",
+            "option": "sqlite"
+          }
+        },
+        {
+          "ph": "0.5",
+          "ext": "decisions/0.5",
+          "id": "s2",
+          "type": "settled",
+          "origin": "principal",
+          "by": "ps:assistant",
+          "key": "q-demo-1",
+          "project": "demo",
+          "ts": "2026-10-29T08:00:00Z",
+          "outcome": "decided",
+          "terms_rev": 1,
+          "terms_digest": "sha-256:4754723d44d4160bb80c93a3bdc94912e852b91fca599a834e6fbe22e1cdbf04",
+          "authority": {
+            "kind": "principal",
+            "decider": "p:owner"
+          },
+          "supersedes": [
+            "s1"
+          ],
+          "answer": {
+            "text": "Postgres after all",
+            "option": "pg"
+          }
+        }
+      ],
+      "expect": {
+        "state": "settled",
+        "outcome": "decided",
+        "settlement": "s2",
+        "authority": "principal",
+        "answer": {
+          "text": "Postgres after all",
+          "option": "pg"
+        },
+        "stale": false,
+        "withdrawn": false,
+        "terms_rev": 1,
+        "conflict": false,
+        "claims": [],
+        "ignored": []
+      }
+    },
+    {
+      "id": "superseded-out-of-order",
+      "spec": "core §6: supersedes, not arrival",
+      "records": [
+        {
+          "ph": "0.5",
+          "ext": "decisions/0.5",
+          "id": "s2",
+          "type": "settled",
+          "origin": "principal",
+          "by": "ps:assistant",
+          "key": "q-demo-1",
+          "project": "demo",
+          "ts": "2026-10-29T08:00:00Z",
+          "outcome": "decided",
+          "terms_rev": 1,
+          "terms_digest": "sha-256:4754723d44d4160bb80c93a3bdc94912e852b91fca599a834e6fbe22e1cdbf04",
+          "authority": {
+            "kind": "principal",
+            "decider": "p:owner"
+          },
+          "supersedes": [
+            "s1"
+          ],
+          "answer": {
+            "text": "Postgres after all",
+            "option": "pg"
+          }
+        },
+        {
+          "ph": "0.5",
+          "ext": "decisions/0.5",
+          "id": "r1",
+          "type": "raised",
+          "origin": "requester",
+          "by": "agent:demo",
+          "key": "q-demo-1",
+          "project": "demo",
+          "ts": "2026-10-27T09:00:00Z",
+          "terms": {
+            "text": "Postgres or SQLite for the cache?",
+            "options": [
+              {
+                "id": "pg",
+                "label": "Postgres"
+              },
+              {
+                "id": "sqlite",
+                "label": "SQLite"
+              }
+            ],
+            "default": "sqlite"
+          },
+          "terms_rev": 1
+        },
+        {
+          "ph": "0.5",
+          "ext": "decisions/0.5",
+          "id": "s1",
+          "type": "settled",
+          "origin": "principal",
+          "by": "ps:assistant",
+          "key": "q-demo-1",
+          "project": "demo",
+          "ts": "2026-10-28T08:00:00Z",
+          "outcome": "decided",
+          "terms_rev": 1,
+          "terms_digest": "sha-256:4754723d44d4160bb80c93a3bdc94912e852b91fca599a834e6fbe22e1cdbf04",
+          "authority": {
+            "kind": "principal",
+            "decider": "p:owner"
+          },
+          "answer": {
+            "text": "SQLite",
+            "option": "sqlite"
+          }
+        }
+      ],
+      "expect": {
+        "state": "settled",
+        "outcome": "decided",
+        "settlement": "s2",
+        "authority": "principal",
+        "answer": {
+          "text": "Postgres after all",
+          "option": "pg"
+        },
+        "stale": false,
+        "withdrawn": false,
+        "terms_rev": 1,
+        "conflict": false,
+        "claims": [],
+        "ignored": []
+      }
+    },
+    {
+      "id": "fork",
+      "spec": "core §6: two heads, later ts current, conflict",
+      "records": [
+        {
+          "ph": "0.5",
+          "ext": "decisions/0.5",
+          "id": "r1",
+          "type": "raised",
+          "origin": "requester",
+          "by": "agent:demo",
+          "key": "q-demo-1",
+          "project": "demo",
+          "ts": "2026-10-27T09:00:00Z",
+          "terms": {
+            "text": "Postgres or SQLite for the cache?",
+            "options": [
+              {
+                "id": "pg",
+                "label": "Postgres"
+              },
+              {
+                "id": "sqlite",
+                "label": "SQLite"
+              }
+            ],
+            "default": "sqlite"
+          },
+          "terms_rev": 1
+        },
+        {
+          "ph": "0.5",
+          "ext": "decisions/0.5",
+          "id": "s1",
+          "type": "settled",
+          "origin": "principal",
+          "by": "ps:assistant",
+          "key": "q-demo-1",
+          "project": "demo",
+          "ts": "2026-10-28T08:00:00Z",
+          "outcome": "decided",
+          "terms_rev": 1,
+          "terms_digest": "sha-256:4754723d44d4160bb80c93a3bdc94912e852b91fca599a834e6fbe22e1cdbf04",
+          "authority": {
+            "kind": "principal",
+            "decider": "p:owner"
+          },
+          "answer": {
+            "text": "SQLite",
+            "option": "sqlite"
+          }
+        },
+        {
+          "ph": "0.5",
+          "ext": "decisions/0.5",
+          "id": "b1",
+          "type": "settled",
+          "origin": "principal",
+          "by": "ps:assistant",
+          "key": "q-demo-1",
+          "project": "demo",
+          "ts": "2026-10-28T09:00:00Z",
+          "outcome": "decided",
+          "terms_rev": 1,
+          "terms_digest": "sha-256:4754723d44d4160bb80c93a3bdc94912e852b91fca599a834e6fbe22e1cdbf04",
+          "authority": {
+            "kind": "principal",
+            "decider": "p:owner"
+          },
+          "answer": {
+            "text": "Postgres after all",
+            "option": "pg"
+          }
+        }
+      ],
+      "expect": {
+        "state": "settled",
+        "outcome": "decided",
+        "settlement": "b1",
+        "authority": "principal",
+        "answer": {
+          "text": "Postgres after all",
+          "option": "pg"
+        },
+        "stale": false,
+        "withdrawn": false,
+        "terms_rev": 1,
+        "conflict": true,
+        "claims": [],
+        "ignored": []
+      }
+    },
+    {
+      "id": "reopened",
+      "spec": "core §6: reopened settlement leaves the need deciding",
+      "records": [
+        {
+          "ph": "0.5",
+          "ext": "decisions/0.5",
+          "id": "r1",
+          "type": "raised",
+          "origin": "requester",
+          "by": "agent:demo",
+          "key": "q-demo-1",
+          "project": "demo",
+          "ts": "2026-10-27T09:00:00Z",
+          "terms": {
+            "text": "Postgres or SQLite for the cache?",
+            "options": [
+              {
+                "id": "pg",
+                "label": "Postgres"
+              },
+              {
+                "id": "sqlite",
+                "label": "SQLite"
+              }
+            ],
+            "default": "sqlite"
+          },
+          "terms_rev": 1
+        },
+        {
+          "ph": "0.5",
+          "ext": "decisions/0.5",
+          "id": "s1",
+          "type": "settled",
+          "origin": "principal",
+          "by": "ps:assistant",
+          "key": "q-demo-1",
+          "project": "demo",
+          "ts": "2026-10-28T08:00:00Z",
+          "outcome": "decided",
+          "terms_rev": 1,
+          "terms_digest": "sha-256:4754723d44d4160bb80c93a3bdc94912e852b91fca599a834e6fbe22e1cdbf04",
+          "authority": {
+            "kind": "principal",
+            "decider": "p:owner"
+          },
+          "answer": {
+            "text": "SQLite",
+            "option": "sqlite"
+          }
+        },
+        {
+          "ph": "0.5",
+          "ext": "decisions/0.5",
+          "id": "o1",
+          "type": "reopened",
+          "origin": "principal",
+          "by": "ps:assistant",
+          "key": "q-demo-1",
+          "project": "demo",
+          "ts": "2026-10-29T08:00:00Z",
+          "supersedes": [
+            "s1"
+          ]
+        }
+      ],
+      "expect": {
+        "state": "open",
+        "outcome": null,
+        "settlement": "o1",
+        "authority": null,
+        "answer": null,
+        "stale": false,
+        "withdrawn": false,
+        "terms_rev": 1,
+        "conflict": false,
+        "claims": [],
+        "ignored": []
+      }
+    },
+    {
+      "id": "withdrawn-open",
+      "spec": "core §6 and the extension's policy (withdrawn)",
+      "records": [
+        {
+          "ph": "0.5",
+          "ext": "decisions/0.5",
+          "id": "r1",
+          "type": "raised",
+          "origin": "requester",
+          "by": "agent:demo",
+          "key": "q-demo-1",
+          "project": "demo",
+          "ts": "2026-10-27T09:00:00Z",
+          "terms": {
+            "text": "Postgres or SQLite for the cache?",
+            "options": [
+              {
+                "id": "pg",
+                "label": "Postgres"
+              },
+              {
+                "id": "sqlite",
+                "label": "SQLite"
+              }
+            ],
+            "default": "sqlite"
+          },
+          "terms_rev": 1
+        },
+        {
+          "ph": "0.5",
+          "ext": "decisions/0.5",
+          "id": "w1",
+          "type": "withdrawn",
+          "origin": "requester",
+          "by": "agent:demo",
+          "key": "q-demo-1",
+          "project": "demo",
+          "ts": "2026-10-27T13:00:00Z",
+          "reason": "settled",
+          "supersedes": [
+            "r1"
+          ]
+        }
+      ],
+      "expect": {
+        "state": "withdrawn",
+        "outcome": null,
+        "settlement": null,
+        "authority": null,
+        "answer": null,
+        "stale": false,
+        "withdrawn": true,
+        "terms_rev": 1,
+        "conflict": false,
+        "claims": [],
+        "ignored": []
+      }
+    },
+    {
+      "id": "settled-after-withdrawal",
+      "spec": "core §2: a withdrawal settles nothing, a settlement stands",
+      "records": [
+        {
+          "ph": "0.5",
+          "ext": "decisions/0.5",
+          "id": "r1",
+          "type": "raised",
+          "origin": "requester",
+          "by": "agent:demo",
+          "key": "q-demo-1",
+          "project": "demo",
+          "ts": "2026-10-27T09:00:00Z",
+          "terms": {
+            "text": "Postgres or SQLite for the cache?",
+            "options": [
+              {
+                "id": "pg",
+                "label": "Postgres"
+              },
+              {
+                "id": "sqlite",
+                "label": "SQLite"
+              }
+            ],
+            "default": "sqlite"
+          },
+          "terms_rev": 1
+        },
+        {
+          "ph": "0.5",
+          "ext": "decisions/0.5",
+          "id": "w1",
+          "type": "withdrawn",
+          "origin": "requester",
+          "by": "agent:demo",
+          "key": "q-demo-1",
+          "project": "demo",
+          "ts": "2026-10-27T13:00:00Z",
+          "reason": "settled",
+          "supersedes": [
+            "r1"
+          ]
+        },
+        {
+          "ph": "0.5",
+          "ext": "decisions/0.5",
+          "id": "s1",
+          "type": "settled",
+          "origin": "principal",
+          "by": "ps:assistant",
+          "key": "q-demo-1",
+          "project": "demo",
+          "ts": "2026-10-28T08:00:00Z",
+          "outcome": "decided",
+          "terms_rev": 1,
+          "terms_digest": "sha-256:4754723d44d4160bb80c93a3bdc94912e852b91fca599a834e6fbe22e1cdbf04",
+          "authority": {
+            "kind": "principal",
+            "decider": "p:owner"
+          },
+          "answer": {
+            "text": "SQLite",
+            "option": "sqlite"
+          }
+        }
+      ],
+      "expect": {
+        "state": "settled",
+        "outcome": "decided",
+        "settlement": "s1",
+        "authority": "principal",
+        "answer": {
+          "text": "SQLite",
+          "option": "sqlite"
+        },
+        "stale": false,
+        "withdrawn": true,
+        "terms_rev": 1,
+        "conflict": false,
+        "claims": [],
+        "ignored": []
+      }
+    },
+    {
+      "id": "stale",
+      "spec": "core §6: settled against terms_rev 1, terms now at 2",
+      "records": [
+        {
+          "ph": "0.5",
+          "ext": "decisions/0.5",
+          "id": "r1",
+          "type": "raised",
+          "origin": "requester",
+          "by": "agent:demo",
+          "key": "q-demo-1",
+          "project": "demo",
+          "ts": "2026-10-27T09:00:00Z",
+          "terms": {
+            "text": "Postgres or SQLite for the cache?",
+            "options": [
+              {
+                "id": "pg",
+                "label": "Postgres"
+              },
+              {
+                "id": "sqlite",
+                "label": "SQLite"
+              }
+            ],
+            "default": "sqlite"
+          },
+          "terms_rev": 1
+        },
+        {
+          "ph": "0.5",
+          "ext": "decisions/0.5",
+          "id": "a1",
+          "type": "amended",
+          "origin": "requester",
+          "by": "agent:demo",
+          "key": "q-demo-1",
+          "project": "demo",
+          "ts": "2026-10-27T12:00:00Z",
+          "terms": {
+            "text": "Postgres or SQLite for the cache? (revised)",
+            "options": [
+              {
+                "id": "pg",
+                "label": "Postgres"
+              },
+              {
+                "id": "sqlite",
+                "label": "SQLite"
+              }
+            ],
+            "default": "sqlite"
+          },
+          "terms_rev": 2,
+          "supersedes": [
+            "r1"
+          ]
+        },
+        {
+          "ph": "0.5",
+          "ext": "decisions/0.5",
+          "id": "s1",
+          "type": "settled",
+          "origin": "principal",
+          "by": "ps:assistant",
+          "key": "q-demo-1",
+          "project": "demo",
+          "ts": "2026-10-28T08:00:00Z",
+          "outcome": "decided",
+          "terms_rev": 1,
+          "terms_digest": "sha-256:4754723d44d4160bb80c93a3bdc94912e852b91fca599a834e6fbe22e1cdbf04",
+          "authority": {
+            "kind": "principal",
+            "decider": "p:owner"
+          },
+          "answer": {
+            "text": "SQLite",
+            "option": "sqlite"
+          }
+        }
+      ],
+      "expect": {
+        "state": "settled",
+        "outcome": "decided",
+        "settlement": "s1",
+        "authority": "principal",
+        "answer": {
+          "text": "SQLite",
+          "option": "sqlite"
+        },
+        "stale": true,
+        "withdrawn": false,
+        "terms_rev": 2,
+        "conflict": false,
+        "claims": [],
+        "ignored": []
+      }
+    },
+    {
+      "id": "claim-changes-nothing",
+      "spec": "core R3",
+      "records": [
+        {
+          "ph": "0.5",
+          "ext": "decisions/0.5",
+          "id": "r1",
+          "type": "raised",
+          "origin": "requester",
+          "by": "agent:demo",
+          "key": "q-demo-1",
+          "project": "demo",
+          "ts": "2026-10-27T09:00:00Z",
+          "terms": {
+            "text": "Postgres or SQLite for the cache?",
+            "options": [
+              {
+                "id": "pg",
+                "label": "Postgres"
+              },
+              {
+                "id": "sqlite",
+                "label": "SQLite"
+              }
+            ],
+            "default": "sqlite"
+          },
+          "terms_rev": 1
+        },
+        {
+          "ph": "0.5",
+          "ext": "decisions/0.5",
+          "id": "c1",
+          "type": "claimed",
+          "origin": "agent",
+          "by": "agent:other",
+          "key": "q-demo-1",
+          "project": "demo",
+          "ts": "2026-10-27T15:00:00Z",
+          "outcome": "decided",
+          "evidence": {
+            "basis": "said in session"
+          },
+          "answer": {
+            "text": "SQLite",
+            "option": "sqlite"
+          }
+        }
+      ],
+      "expect": {
+        "state": "open",
+        "outcome": null,
+        "settlement": null,
+        "authority": null,
+        "answer": null,
+        "stale": false,
+        "withdrawn": false,
+        "terms_rev": 1,
+        "conflict": false,
+        "claims": [
+          "c1"
+        ],
+        "ignored": []
+      }
+    },
+    {
+      "id": "requester-cannot-settle",
+      "spec": "core R2, §10: an invalid record is ignored",
+      "records": [
+        {
+          "ph": "0.5",
+          "ext": "decisions/0.5",
+          "id": "r1",
+          "type": "raised",
+          "origin": "requester",
+          "by": "agent:demo",
+          "key": "q-demo-1",
+          "project": "demo",
+          "ts": "2026-10-27T09:00:00Z",
+          "terms": {
+            "text": "Postgres or SQLite for the cache?",
+            "options": [
+              {
+                "id": "pg",
+                "label": "Postgres"
+              },
+              {
+                "id": "sqlite",
+                "label": "SQLite"
+              }
+            ],
+            "default": "sqlite"
+          },
+          "terms_rev": 1
+        },
+        {
+          "ph": "0.5",
+          "ext": "decisions/0.5",
+          "id": "x1",
+          "type": "settled",
+          "origin": "requester",
+          "by": "agent:demo",
+          "key": "q-demo-1",
+          "project": "demo",
+          "ts": "2026-10-28T08:00:00Z",
+          "outcome": "decided",
+          "terms_rev": 1,
+          "terms_digest": "sha-256:4754723d44d4160bb80c93a3bdc94912e852b91fca599a834e6fbe22e1cdbf04",
+          "authority": {
+            "kind": "principal",
+            "decider": "p:owner"
+          },
+          "answer": {
+            "text": "SQLite",
+            "option": "sqlite"
+          }
+        }
+      ],
+      "expect": {
+        "state": "open",
+        "outcome": null,
+        "settlement": null,
+        "authority": null,
+        "answer": null,
+        "stale": false,
+        "withdrawn": false,
+        "terms_rev": 1,
+        "conflict": false,
+        "claims": [],
+        "ignored": [
+          "x1"
+        ]
+      }
+    },
+    {
+      "id": "delegated",
+      "spec": "core §5",
+      "records": [
+        {
+          "ph": "0.5",
+          "ext": "decisions/0.5",
+          "id": "r1",
+          "type": "raised",
+          "origin": "requester",
+          "by": "agent:demo",
+          "key": "q-demo-1",
+          "project": "demo",
+          "ts": "2026-10-27T09:00:00Z",
+          "terms": {
+            "text": "Postgres or SQLite for the cache?",
+            "options": [
+              {
+                "id": "pg",
+                "label": "Postgres"
+              },
+              {
+                "id": "sqlite",
+                "label": "SQLite"
+              }
+            ],
+            "default": "sqlite"
+          },
+          "terms_rev": 1
+        },
+        {
+          "ph": "0.5",
+          "ext": "decisions/0.5",
+          "id": "d1",
+          "type": "settled",
+          "origin": "principal",
+          "by": "ps:assistant",
+          "key": "q-demo-1",
+          "project": "demo",
+          "ts": "2026-10-28T08:00:00Z",
+          "outcome": "decided",
+          "terms_rev": 1,
+          "terms_digest": "sha-256:4754723d44d4160bb80c93a3bdc94912e852b91fca599a834e6fbe22e1cdbf04",
+          "authority": {
+            "kind": "delegated",
+            "decider": "ps:assistant",
+            "under": "standing:prefs",
+            "chain": [
+              "p:owner",
+              "ps:assistant"
+            ]
+          },
+          "answer": {
+            "text": "SQLite",
+            "option": "sqlite"
+          }
+        }
+      ],
+      "expect": {
+        "state": "settled",
+        "outcome": "decided",
+        "settlement": "d1",
+        "authority": "delegated",
+        "answer": {
+          "text": "SQLite",
+          "option": "sqlite"
+        },
+        "stale": false,
+        "withdrawn": false,
+        "terms_rev": 1,
+        "conflict": false,
+        "claims": [],
+        "ignored": []
+      }
+    },
+    {
+      "id": "settlement-before-raise",
+      "spec": "core §10: ordering not guaranteed",
+      "records": [
+        {
+          "ph": "0.5",
+          "ext": "decisions/0.5",
+          "id": "s1",
+          "type": "settled",
+          "origin": "principal",
+          "by": "ps:assistant",
+          "key": "q-demo-1",
+          "project": "demo",
+          "ts": "2026-10-28T08:00:00Z",
+          "outcome": "decided",
+          "terms_rev": 1,
+          "terms_digest": "sha-256:0000000000000000000000000000000000000000000000000000000000000000",
+          "authority": {
+            "kind": "principal",
+            "decider": "p:owner"
+          },
+          "answer": {
+            "text": "SQLite",
+            "option": "sqlite"
+          }
+        }
+      ],
+      "expect": {
+        "state": "settled",
+        "outcome": "decided",
+        "settlement": "s1",
+        "authority": "principal",
+        "answer": {
+          "text": "SQLite",
+          "option": "sqlite"
+        },
+        "stale": false,
+        "withdrawn": false,
+        "terms_rev": 0,
+        "conflict": false,
+        "claims": [],
+        "ignored": []
+      }
+    },
+    {
+      "id": "tie-broken-by-id",
+      "spec": "core §6: equal ts, the greater id is current; two heads are a conflict",
+      "records": [
+        {
+          "ph": "0.5",
+          "ext": "decisions/0.5",
+          "id": "r1",
+          "type": "raised",
+          "origin": "requester",
+          "by": "agent:demo",
+          "key": "q-demo-1",
+          "project": "demo",
+          "ts": "2026-10-27T09:00:00Z",
+          "terms": {
+            "text": "Postgres or SQLite for the cache?",
+            "options": [
+              {
+                "id": "pg",
+                "label": "Postgres"
+              },
+              {
+                "id": "sqlite",
+                "label": "SQLite"
+              }
+            ],
+            "default": "sqlite"
+          },
+          "terms_rev": 1
+        },
+        {
+          "ph": "0.5",
+          "ext": "decisions/0.5",
+          "id": "s1",
+          "type": "settled",
+          "origin": "principal",
+          "by": "ps:assistant",
+          "key": "q-demo-1",
+          "project": "demo",
+          "ts": "2026-10-28T08:00:00Z",
+          "outcome": "decided",
+          "terms_rev": 1,
+          "terms_digest": "sha-256:4754723d44d4160bb80c93a3bdc94912e852b91fca599a834e6fbe22e1cdbf04",
+          "authority": {
+            "kind": "principal",
+            "decider": "p:owner"
+          },
+          "answer": {
+            "text": "SQLite",
+            "option": "sqlite"
+          }
+        },
+        {
+          "ph": "0.5",
+          "ext": "decisions/0.5",
+          "id": "b2",
+          "type": "settled",
+          "origin": "principal",
+          "by": "ps:assistant",
+          "key": "q-demo-1",
+          "project": "demo",
+          "ts": "2026-10-28T08:00:00Z",
+          "outcome": "decided",
+          "terms_rev": 1,
+          "terms_digest": "sha-256:4754723d44d4160bb80c93a3bdc94912e852b91fca599a834e6fbe22e1cdbf04",
+          "authority": {
+            "kind": "principal",
+            "decider": "p:owner"
+          },
+          "answer": {
+            "text": "Postgres",
+            "option": "pg"
+          }
+        }
+      ],
+      "expect": {
+        "state": "settled",
+        "outcome": "decided",
+        "settlement": "s1",
+        "authority": "principal",
+        "answer": {
+          "text": "SQLite",
+          "option": "sqlite"
+        },
+        "stale": false,
+        "withdrawn": false,
+        "terms_rev": 1,
+        "conflict": true,
+        "claims": [],
+        "ignored": []
+      }
+    },
+    {
+      "id": "cycle",
+      "spec": "core §6: no head, latest ts among all, conflict",
+      "records": [
+        {
+          "ph": "0.5",
+          "ext": "decisions/0.5",
+          "id": "r1",
+          "type": "raised",
+          "origin": "requester",
+          "by": "agent:demo",
+          "key": "q-demo-1",
+          "project": "demo",
+          "ts": "2026-10-27T09:00:00Z",
+          "terms": {
+            "text": "Postgres or SQLite for the cache?",
+            "options": [
+              {
+                "id": "pg",
+                "label": "Postgres"
+              },
+              {
+                "id": "sqlite",
+                "label": "SQLite"
+              }
+            ],
+            "default": "sqlite"
+          },
+          "terms_rev": 1
+        },
+        {
+          "ph": "0.5",
+          "ext": "decisions/0.5",
+          "id": "y1",
+          "type": "settled",
+          "origin": "principal",
+          "by": "ps:assistant",
+          "key": "q-demo-1",
+          "project": "demo",
+          "ts": "2026-10-28T08:00:00Z",
+          "outcome": "decided",
+          "terms_rev": 1,
+          "terms_digest": "sha-256:4754723d44d4160bb80c93a3bdc94912e852b91fca599a834e6fbe22e1cdbf04",
+          "authority": {
+            "kind": "principal",
+            "decider": "p:owner"
+          },
+          "supersedes": [
+            "y2"
+          ],
+          "answer": {
+            "text": "SQLite",
+            "option": "sqlite"
+          }
+        },
+        {
+          "ph": "0.5",
+          "ext": "decisions/0.5",
+          "id": "y2",
+          "type": "settled",
+          "origin": "principal",
+          "by": "ps:assistant",
+          "key": "q-demo-1",
+          "project": "demo",
+          "ts": "2026-10-29T08:00:00Z",
+          "outcome": "decided",
+          "terms_rev": 1,
+          "terms_digest": "sha-256:4754723d44d4160bb80c93a3bdc94912e852b91fca599a834e6fbe22e1cdbf04",
+          "authority": {
+            "kind": "principal",
+            "decider": "p:owner"
+          },
+          "supersedes": [
+            "y1"
+          ],
+          "answer": {
+            "text": "Postgres",
+            "option": "pg"
+          }
+        }
+      ],
+      "expect": {
+        "state": "settled",
+        "outcome": "decided",
+        "settlement": "y2",
+        "authority": "principal",
+        "answer": {
+          "text": "Postgres",
+          "option": "pg"
+        },
+        "stale": false,
+        "withdrawn": false,
+        "terms_rev": 1,
+        "conflict": true,
+        "claims": [],
+        "ignored": []
+      }
+    },
+    {
+      "id": "invalid-then-valid-same-id",
+      "spec": "core §10: an invalid record does not block a valid one with the same id",
+      "records": [
+        {
+          "ph": "0.5",
+          "ext": "decisions/0.5",
+          "id": "r1",
+          "type": "raised",
+          "origin": "requester",
+          "by": "agent:demo",
+          "key": "q-demo-1",
+          "project": "demo",
+          "ts": "2026-10-27T09:00:00Z",
+          "terms": {
+            "text": "Postgres or SQLite for the cache?",
+            "options": [
+              {
+                "id": "pg",
+                "label": "Postgres"
+              },
+              {
+                "id": "sqlite",
+                "label": "SQLite"
+              }
+            ],
+            "default": "sqlite"
+          },
+          "terms_rev": 1
+        },
+        {
+          "ph": "0.5",
+          "ext": "decisions/0.5",
+          "id": "s1",
+          "type": "settled",
+          "origin": "requester",
+          "by": "ps:assistant",
+          "key": "q-demo-1",
+          "project": "demo",
+          "ts": "2026-10-28T08:00:00Z",
+          "outcome": "decided",
+          "terms_rev": 1,
+          "terms_digest": "sha-256:4754723d44d4160bb80c93a3bdc94912e852b91fca599a834e6fbe22e1cdbf04",
+          "authority": {
+            "kind": "principal",
+            "decider": "p:owner"
+          },
+          "answer": {
+            "text": "SQLite",
+            "option": "sqlite"
+          }
+        },
+        {
+          "ph": "0.5",
+          "ext": "decisions/0.5",
+          "id": "s1",
+          "type": "settled",
+          "origin": "principal",
+          "by": "ps:assistant",
+          "key": "q-demo-1",
+          "project": "demo",
+          "ts": "2026-10-28T08:00:00Z",
+          "outcome": "decided",
+          "terms_rev": 1,
+          "terms_digest": "sha-256:4754723d44d4160bb80c93a3bdc94912e852b91fca599a834e6fbe22e1cdbf04",
+          "authority": {
+            "kind": "principal",
+            "decider": "p:owner"
+          },
+          "answer": {
+            "text": "SQLite",
+            "option": "sqlite"
+          }
+        }
+      ],
+      "expect": {
+        "state": "settled",
+        "outcome": "decided",
+        "settlement": "s1",
+        "authority": "principal",
+        "answer": {
+          "text": "SQLite",
+          "option": "sqlite"
+        },
+        "stale": false,
+        "withdrawn": false,
+        "terms_rev": 1,
+        "conflict": false,
+        "claims": [],
+        "ignored": []
+      }
+    },
+    {
+      "id": "reused-id",
+      "spec": "core §10: an id reused with different valid content keeps the greater canonical form",
+      "records": [
+        {
+          "ph": "0.5",
+          "ext": "decisions/0.5",
+          "id": "r1",
+          "type": "raised",
+          "origin": "requester",
+          "by": "agent:demo",
+          "key": "q-demo-1",
+          "project": "demo",
+          "ts": "2026-10-27T09:00:00Z",
+          "terms": {
+            "text": "Postgres or SQLite for the cache?",
+            "options": [
+              {
+                "id": "pg",
+                "label": "Postgres"
+              },
+              {
+                "id": "sqlite",
+                "label": "SQLite"
+              }
+            ],
+            "default": "sqlite"
+          },
+          "terms_rev": 1
+        },
+        {
+          "ph": "0.5",
+          "ext": "decisions/0.5",
+          "id": "s1",
+          "type": "settled",
+          "origin": "principal",
+          "by": "ps:assistant",
+          "key": "q-demo-1",
+          "project": "demo",
+          "ts": "2026-10-28T08:00:00Z",
+          "outcome": "decided",
+          "terms_rev": 1,
+          "terms_digest": "sha-256:4754723d44d4160bb80c93a3bdc94912e852b91fca599a834e6fbe22e1cdbf04",
+          "authority": {
+            "kind": "principal",
+            "decider": "p:owner"
+          },
+          "answer": {
+            "text": "SQLite",
+            "option": "sqlite"
+          },
+          "note": "a"
+        },
+        {
+          "ph": "0.5",
+          "ext": "decisions/0.5",
+          "id": "s1",
+          "type": "settled",
+          "origin": "principal",
+          "by": "ps:assistant",
+          "key": "q-demo-1",
+          "project": "demo",
+          "ts": "2026-10-28T08:00:00Z",
+          "outcome": "decided",
+          "terms_rev": 1,
+          "terms_digest": "sha-256:4754723d44d4160bb80c93a3bdc94912e852b91fca599a834e6fbe22e1cdbf04",
+          "authority": {
+            "kind": "principal",
+            "decider": "p:owner"
+          },
+          "answer": {
+            "text": "SQLite",
+            "option": "sqlite"
+          },
+          "note": "b"
+        }
+      ],
+      "expect": {
+        "state": "settled",
+        "outcome": "decided",
+        "settlement": "s1",
+        "authority": "principal",
+        "answer": {
+          "text": "SQLite",
+          "option": "sqlite"
+        },
+        "stale": false,
+        "withdrawn": false,
+        "terms_rev": 1,
+        "conflict": false,
+        "claims": [],
+        "ignored": []
+      }
+    },
+    {
+      "id": "settlement-on-other-terms-is-stale",
+      "spec": "core §6: a settlement whose terms digest is not the current need record's at the same terms_rev is stale",
+      "records": [
+        {
+          "ph": "0.5",
+          "ext": "decisions/0.5",
+          "id": "r:q-demo-7",
+          "type": "raised",
+          "origin": "requester",
+          "by": "agent:demo",
+          "key": "q-demo-7",
+          "project": "demo",
+          "ts": "2026-10-27T09:00:00Z",
+          "terms": {
+            "text": "Merge the export feature (branch feature-export)?",
+            "options": [
+              {
+                "id": "merge",
+                "label": "Merge"
+              },
+              {
+                "id": "hold",
+                "label": "Hold"
+              }
+            ],
+            "default": "hold"
+          },
+          "terms_rev": 1
+        },
+        {
+          "ph": "0.5",
+          "ext": "decisions/0.5",
+          "id": "s:other",
+          "type": "settled",
+          "origin": "principal",
+          "by": "ps:assistant",
+          "key": "q-demo-7",
+          "project": "demo",
+          "ts": "2026-10-28T08:00:00Z",
+          "outcome": "decided",
+          "terms_rev": 1,
+          "terms_digest": "sha-256:2222222222222222222222222222222222222222222222222222222222222222",
+          "answer": {
+            "text": "Hold"
+          },
+          "authority": {
+            "kind": "principal",
+            "decider": "p:owner"
+          }
+        }
+      ],
+      "expect": {
+        "state": "settled",
+        "outcome": "decided",
+        "settlement": "s:other",
+        "authority": "principal",
+        "answer": {
+          "text": "Hold"
+        },
+        "stale": true,
+        "withdrawn": false,
+        "terms_rev": 1,
+        "conflict": false,
+        "claims": [],
+        "ignored": []
+      }
+    },
+    {
+      "id": "ids-scoped-by-origin",
+      "spec": "core §10: ids are scoped by origin, so a claim reusing the raised id displaces nothing",
+      "records": [
+        {
+          "ph": "0.5",
+          "ext": "decisions/0.5",
+          "id": "r:q-demo-7",
+          "type": "raised",
+          "origin": "requester",
+          "by": "agent:demo",
+          "key": "q-demo-7",
+          "project": "demo",
+          "ts": "2026-10-27T09:00:00Z",
+          "terms": {
+            "text": "Merge the export feature (branch feature-export)?",
+            "options": [
+              {
+                "id": "merge",
+                "label": "Merge"
+              },
+              {
+                "id": "hold",
+                "label": "Hold"
+              }
+            ],
+            "default": "hold"
+          },
+          "terms_rev": 1
+        },
+        {
+          "ph": "0.5",
+          "ext": "decisions/0.5",
+          "id": "r:q-demo-7",
+          "type": "claimed",
+          "origin": "agent",
+          "by": "agent:other",
+          "key": "q-demo-7",
+          "project": "demo",
+          "ts": "2026-10-28T08:00:00Z",
+          "outcome": "decided",
+          "answer": {
+            "text": "Merge"
+          },
+          "evidence": {
+            "basis": "heard it"
+          }
+        }
+      ],
+      "expect": {
+        "state": "open",
+        "outcome": null,
+        "settlement": null,
+        "authority": null,
+        "answer": null,
+        "stale": false,
+        "withdrawn": false,
+        "terms_rev": 1,
+        "conflict": false,
+        "claims": [
+          "r:q-demo-7"
+        ],
+        "ignored": []
+      }
+    },
+    {
+      "id": "withdrawn-replaced",
+      "spec": "decisions §2: a decision withdrawn as replaced stops being presented",
+      "records": [
+        {
+          "ph": "0.5",
+          "ext": "decisions/0.5",
+          "id": "r:q-demo-7",
+          "type": "raised",
+          "origin": "requester",
+          "by": "agent:demo",
+          "key": "q-demo-7",
+          "project": "demo",
+          "ts": "2026-10-27T09:00:00Z",
+          "terms": {
+            "text": "Merge the export feature (branch feature-export)?",
+            "options": [
+              {
+                "id": "merge",
+                "label": "Merge"
+              },
+              {
+                "id": "hold",
+                "label": "Hold"
+              }
+            ],
+            "default": "hold"
+          },
+          "terms_rev": 1
+        },
+        {
+          "ph": "0.5",
+          "ext": "decisions/0.5",
+          "id": "w3",
+          "type": "withdrawn",
+          "origin": "requester",
+          "by": "agent:demo",
+          "key": "q-demo-7",
+          "project": "demo",
+          "ts": "2026-10-27T12:00:00Z",
+          "reason": "replaced",
+          "supersedes": [
+            "r:q-demo-7"
+          ]
+        }
+      ],
+      "expect": {
+        "state": "withdrawn",
+        "outcome": null,
+        "settlement": null,
+        "authority": null,
+        "answer": null,
+        "stale": false,
+        "withdrawn": true,
+        "terms_rev": 1,
+        "conflict": false,
+        "claims": [],
+        "ignored": []
+      }
+    },
+    {
+      "id": "self-superseding-record",
+      "spec": "core §6: a record that lists itself in supersedes is still a head, and a cycle",
+      "records": [
+        {
+          "ph": "0.5",
+          "ext": "decisions/0.5",
+          "id": "r1",
+          "type": "raised",
+          "origin": "requester",
+          "by": "agent:demo",
+          "key": "q-demo-1",
+          "project": "demo",
+          "ts": "2026-10-27T09:00:00Z",
+          "terms": {
+            "text": "Postgres or SQLite for the cache?",
+            "options": [
+              {
+                "id": "pg",
+                "label": "Postgres"
+              },
+              {
+                "id": "sqlite",
+                "label": "SQLite"
+              }
+            ],
+            "default": "sqlite"
+          },
+          "terms_rev": 1
+        },
+        {
+          "ph": "0.5",
+          "ext": "decisions/0.5",
+          "id": "s0",
+          "type": "settled",
+          "origin": "principal",
+          "by": "ps:assistant",
+          "key": "q-demo-1",
+          "project": "demo",
+          "ts": "2026-10-28T01:00:00Z",
+          "outcome": "decided",
+          "answer": {
+            "text": "Yes"
+          },
+          "terms_rev": 1,
+          "terms_digest": "sha-256:4754723d44d4160bb80c93a3bdc94912e852b91fca599a834e6fbe22e1cdbf04",
+          "authority": {
+            "kind": "principal",
+            "decider": "p:owner"
+          }
+        },
+        {
+          "ph": "0.5",
+          "ext": "decisions/0.5",
+          "id": "s1",
+          "type": "settled",
+          "origin": "principal",
+          "by": "ps:assistant",
+          "key": "q-demo-1",
+          "project": "demo",
+          "ts": "2026-10-28T03:00:00Z",
+          "outcome": "decided",
+          "answer": {
+            "text": "No"
+          },
+          "terms_rev": 1,
+          "terms_digest": "sha-256:4754723d44d4160bb80c93a3bdc94912e852b91fca599a834e6fbe22e1cdbf04",
+          "authority": {
+            "kind": "principal",
+            "decider": "p:owner"
+          },
+          "supersedes": [
+            "s1"
+          ]
+        }
+      ],
+      "expect": {
+        "state": "settled",
+        "outcome": "decided",
+        "settlement": "s1",
+        "authority": "principal",
+        "answer": {
+          "text": "No"
+        },
+        "stale": false,
+        "withdrawn": false,
+        "terms_rev": 1,
+        "conflict": true,
+        "claims": [],
+        "ignored": []
+      }
+    },
+    {
+      "id": "answer-option-not-an-option",
+      "spec": "decisions §3: a settlement whose answer.option is not an option is still accepted; answer.text counts",
+      "records": [
+        {
+          "ph": "0.5",
+          "ext": "decisions/0.5",
+          "id": "r1",
+          "type": "raised",
+          "origin": "requester",
+          "by": "agent:demo",
+          "key": "q-demo-1",
+          "project": "demo",
+          "ts": "2026-10-27T09:00:00Z",
+          "terms": {
+            "text": "Postgres or SQLite for the cache?",
+            "options": [
+              {
+                "id": "pg",
+                "label": "Postgres"
+              },
+              {
+                "id": "sqlite",
+                "label": "SQLite"
+              }
+            ],
+            "default": "sqlite"
+          },
+          "terms_rev": 1
+        },
+        {
+          "ph": "0.5",
+          "ext": "decisions/0.5",
+          "id": "s-opt",
+          "type": "settled",
+          "origin": "principal",
+          "by": "ps:assistant",
+          "key": "q-demo-1",
+          "project": "demo",
+          "ts": "2026-10-28T01:00:00Z",
+          "outcome": "decided",
+          "answer": {
+            "text": "Use MySQL",
+            "option": "mysql"
+          },
+          "terms_rev": 1,
+          "terms_digest": "sha-256:4754723d44d4160bb80c93a3bdc94912e852b91fca599a834e6fbe22e1cdbf04",
+          "authority": {
+            "kind": "principal",
+            "decider": "p:owner"
+          }
+        }
+      ],
+      "expect": {
+        "state": "settled",
+        "outcome": "decided",
+        "settlement": "s-opt",
+        "authority": "principal",
+        "answer": {
+          "text": "Use MySQL",
+          "option": "mysql"
+        },
+        "stale": false,
+        "withdrawn": false,
+        "terms_rev": 1,
+        "conflict": false,
+        "claims": [],
+        "ignored": []
+      }
+    },
+    {
+      "id": "same-id-other-type-displaces-nothing",
+      "spec": "core §10: a record never displaces a record of another type",
+      "records": [
+        {
+          "ph": "0.5",
+          "ext": "decisions/0.5",
+          "id": "r1",
+          "type": "raised",
+          "origin": "requester",
+          "by": "agent:demo",
+          "key": "q-demo-1",
+          "project": "demo",
+          "ts": "2026-10-27T09:00:00Z",
+          "terms": {
+            "text": "Postgres or SQLite for the cache?",
+            "options": [
+              {
+                "id": "pg",
+                "label": "Postgres"
+              },
+              {
+                "id": "sqlite",
+                "label": "SQLite"
+              }
+            ],
+            "default": "sqlite"
+          },
+          "terms_rev": 1
+        },
+        {
+          "ph": "0.5",
+          "ext": "decisions/0.5",
+          "id": "x1",
+          "type": "withdrawn",
+          "origin": "requester",
+          "by": "agent:demo",
+          "key": "q-demo-1",
+          "project": "demo",
+          "ts": "2026-10-28T05:00:00Z",
+          "reason": "not_needed",
+          "supersedes": [
+            "r1"
+          ]
+        },
+        {
+          "ph": "0.5",
+          "ext": "decisions/0.5",
+          "id": "x1",
+          "type": "note",
+          "origin": "requester",
+          "by": "agent:demo",
+          "key": "q-demo-1",
+          "project": "demo",
+          "ts": "2026-10-28T06:00:00Z",
+          "about": {
+            "key": "q-demo-1"
+          },
+          "note": "Reused id."
+        }
+      ],
+      "expect": {
+        "state": "withdrawn",
+        "outcome": null,
+        "settlement": null,
+        "authority": null,
+        "answer": null,
+        "stale": false,
+        "withdrawn": true,
+        "terms_rev": 1,
+        "conflict": false,
+        "claims": [],
+        "ignored": []
+      }
+    }
+  ]
+}

@@ -1,0 +1,265 @@
+{
+  "suite": "acts/0.5",
+  "description": "Registrar step 2: an unkeyed principal line whose normalised text equals the latest terms of a vanished open key gets that key back.",
+  "cases": [
+    {
+      "id": "relinked",
+      "profile": "en",
+      "document": [
+        "## Tasks",
+        "- [ ] [owner] Renew the domain"
+      ],
+      "active": {
+        "task-demo-aaaaaaaaaa": "Renew  the domain"
+      },
+      "expect": {
+        "relinked": [
+          "task-demo-aaaaaaaaaa"
+        ],
+        "document": [
+          "## Tasks",
+          "- [ ] [owner] Renew the domain (waiting on owner: task-demo-aaaaaaaaaa)"
+        ]
+      }
+    },
+    {
+      "id": "different-text-not-relinked",
+      "profile": "en",
+      "document": [
+        "## Tasks",
+        "- [ ] [owner] Renew the domain for two years"
+      ],
+      "active": {
+        "task-demo-aaaaaaaaaa": "Renew the domain"
+      },
+      "expect": {
+        "relinked": [],
+        "document": [
+          "## Tasks",
+          "- [ ] [owner] Renew the domain for two years"
+        ]
+      }
+    },
+    {
+      "id": "agent-line-not-relinked",
+      "profile": "en",
+      "document": [
+        "## Tasks",
+        "- [ ] [agent] Renew the domain"
+      ],
+      "active": {
+        "task-demo-aaaaaaaaaa": "Renew the domain"
+      },
+      "expect": {
+        "relinked": [],
+        "document": [
+          "## Tasks",
+          "- [ ] [agent] Renew the domain"
+        ]
+      }
+    },
+    {
+      "id": "zh-relinked",
+      "profile": "zh-hant",
+      "document": [
+        "## 待辦",
+        "- [ ] 〔Owner〕續約網域"
+      ],
+      "active": {
+        "task-demo-aaaaaaaaaa": "續約網域"
+      },
+      "expect": {
+        "relinked": [
+          "task-demo-aaaaaaaaaa"
+        ],
+        "document": [
+          "## 待辦",
+          "- [ ] 〔Owner〕續約網域(等 Owner:task-demo-aaaaaaaaaa)"
+        ]
+      }
+    },
+    {
+      "id": "not-raised-through-binding",
+      "profile": "en",
+      "document": [
+        "## Tasks",
+        "- [ ] [owner] Renew the domain"
+      ],
+      "active": {
+        "task-demo-aaaaaaaaaa": "Renew the domain"
+      },
+      "bound": [],
+      "expect": {
+        "relinked": [],
+        "document": [
+          "## Tasks",
+          "- [ ] [owner] Renew the domain"
+        ]
+      }
+    },
+    {
+      "id": "bound-relinked",
+      "profile": "en",
+      "document": [
+        "## Tasks",
+        "- [ ] [owner] Renew the domain"
+      ],
+      "active": {
+        "task-demo-aaaaaaaaaa": "Renew the domain"
+      },
+      "bound": [
+        "task-demo-aaaaaaaaaa"
+      ],
+      "expect": {
+        "relinked": [
+          "task-demo-aaaaaaaaaa"
+        ],
+        "document": [
+          "## Tasks",
+          "- [ ] [owner] Renew the domain (waiting on owner: task-demo-aaaaaaaaaa)"
+        ]
+      }
+    },
+    {
+      "id": "ambiguous-two-lines",
+      "profile": "en",
+      "document": [
+        "## Tasks",
+        "- [ ] [owner] Renew the domain",
+        "- [ ] [owner] Renew the domain"
+      ],
+      "active": {
+        "task-demo-aaaaaaaaaa": "Renew the domain"
+      },
+      "bound": [
+        "task-demo-aaaaaaaaaa"
+      ],
+      "expect": {
+        "relinked": [],
+        "document": [
+          "## Tasks",
+          "- [ ] [owner] Renew the domain",
+          "- [ ] [owner] Renew the domain"
+        ]
+      }
+    },
+    {
+      "id": "ambiguous-two-keys",
+      "profile": "en",
+      "document": [
+        "## Tasks",
+        "- [ ] [owner] Renew the domain"
+      ],
+      "active": {
+        "task-demo-aaaaaaaaaa": "Renew the domain",
+        "task-demo-bbbbbbbbbb": "Renew  the domain"
+      },
+      "bound": [
+        "task-demo-aaaaaaaaaa",
+        "task-demo-bbbbbbbbbb"
+      ],
+      "expect": {
+        "relinked": [],
+        "document": [
+          "## Tasks",
+          "- [ ] [owner] Renew the domain"
+        ]
+      }
+    },
+    {
+      "id": "broken-marker-relinked",
+      "profile": "en",
+      "document": [
+        "## Tasks",
+        "- [ ] [owner] Renew the domain (waiting on owner: task-demo-zzzzzzzzzz)"
+      ],
+      "active": {
+        "task-demo-aaaaaaaaaa": "Renew the domain"
+      },
+      "bound": [
+        "task-demo-aaaaaaaaaa"
+      ],
+      "expect": {
+        "relinked": [
+          "task-demo-aaaaaaaaaa"
+        ],
+        "document": [
+          "## Tasks",
+          "- [ ] [owner] Renew the domain (waiting on owner: task-demo-aaaaaaaaaa)"
+        ]
+      }
+    },
+    {
+      "id": "still-mentioned-not-relinked",
+      "profile": "en",
+      "document": [
+        "## Tasks",
+        "- [ ] [owner] Renew the domain",
+        "- [ ] [agent] Renew the domain (waiting on owner: task-demo-aaaaaaaaaa)"
+      ],
+      "active": {
+        "task-demo-aaaaaaaaaa": "Renew the domain"
+      },
+      "bound": [
+        "task-demo-aaaaaaaaaa"
+      ],
+      "expect": {
+        "relinked": [],
+        "document": [
+          "## Tasks",
+          "- [ ] [owner] Renew the domain",
+          "- [ ] [agent] Renew the domain (waiting on owner: task-demo-aaaaaaaaaa)"
+        ]
+      }
+    },
+    {
+      "id": "second-section-not-relinked",
+      "profile": "en",
+      "document": [
+        "## Tasks",
+        "- [ ] [agent] Other",
+        "## Tasks",
+        "- [ ] [owner] Renew the domain"
+      ],
+      "active": {
+        "task-demo-aaaaaaaaaa": "Renew the domain"
+      },
+      "bound": [
+        "task-demo-aaaaaaaaaa"
+      ],
+      "expect": {
+        "relinked": [],
+        "document": [
+          "## Tasks",
+          "- [ ] [agent] Other",
+          "## Tasks",
+          "- [ ] [owner] Renew the domain"
+        ]
+      }
+    },
+    {
+      "id": "known-marker-not-relinked",
+      "profile": "en",
+      "document": [
+        "## Tasks",
+        "- [ ] [owner] Renew the domain (waiting on owner: ask-demo-1f2e3d)"
+      ],
+      "active": {
+        "task-demo-aaaaaaaaaa": "Renew the domain"
+      },
+      "bound": [
+        "task-demo-aaaaaaaaaa"
+      ],
+      "known": [
+        "ask-demo-1f2e3d"
+      ],
+      "expect": {
+        "relinked": [],
+        "document": [
+          "## Tasks",
+          "- [ ] [owner] Renew the domain (waiting on owner: ask-demo-1f2e3d)"
+        ]
+      }
+    }
+  ]
+}

@@ -1,0 +1,27 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "acts/schemas/note.schema.json",
+  "title": "Principal Handoff Acts 0.5: note",
+  "description": "Information about an item or a project; changes no register.",
+  "$ref": "../../core/schemas/record.schema.json",
+  "required": [
+    "about"
+  ],
+  "properties": {
+    "ext": {
+      "const": "acts/0.5"
+    },
+    "type": {
+      "const": "note"
+    },
+    "origin": {
+      "type": "string",
+      "enum": [
+        "requester",
+        "principal",
+        "agent",
+        "registrar"
+      ]
+    }
+  }
+}

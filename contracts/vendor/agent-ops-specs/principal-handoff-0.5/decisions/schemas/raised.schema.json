@@ -1,0 +1,28 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "decisions/schemas/raised.schema.json",
+  "title": "Principal Handoff Decisions 0.5: raised",
+  "description": "Requester -> principal side: a new item.",
+  "$ref": "../../core/schemas/record.schema.json",
+  "required": [
+    "terms",
+    "terms_rev"
+  ],
+  "properties": {
+    "ext": {
+      "const": "decisions/0.5"
+    },
+    "type": {
+      "const": "raised"
+    },
+    "origin": {
+      "const": "requester"
+    },
+    "terms": {
+      "$ref": "terms.schema.json"
+    },
+    "terms_rev": {
+      "const": 1
+    }
+  }
+}

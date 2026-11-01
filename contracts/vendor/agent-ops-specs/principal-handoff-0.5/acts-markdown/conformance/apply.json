@@ -1,0 +1,1268 @@
+{
+  "suite": "acts/0.5",
+  "description": "Registrar step 1: document + one record -> document. Only principal-side settled/reopened change it (I2).",
+  "cases": [
+    {
+      "id": "zh-done-strikes",
+      "profile": "zh-hant",
+      "document": [
+        "# demo",
+        "",
+        "## 待辦",
+        "",
+        "- [ ] 〔Owner〕續約網域(等 Owner:task-demo-aaaaaaaaaa)",
+        "- [ ] 〔agent〕上傳加重試",
+        "",
+        "## 參考"
+      ],
+      "expect": {
+        "changed": true,
+        "document": [
+          "# demo",
+          "",
+          "## 待辦",
+          "",
+          "- [ ] 〔agent〕上傳加重試",
+          "",
+          "## 參考"
+        ]
+      },
+      "record": {
+        "ph": "0.5",
+        "ext": "acts/0.5",
+        "id": "done-task-demo-aaaaaaaaaa",
+        "key": "task-demo-aaaaaaaaaa",
+        "project": "demo",
+        "ts": "2026-10-27T09:00:00Z",
+        "type": "settled",
+        "origin": "principal",
+        "by": "ps:assistant",
+        "outcome": "done",
+        "terms_rev": 1,
+        "terms_digest": "sha-256:0000000000000000000000000000000000000000000000000000000000000000",
+        "authority": {
+          "kind": "principal",
+          "decider": "p:owner"
+        }
+      }
+    },
+    {
+      "id": "zh-dropped-last-writes-placeholder",
+      "profile": "zh-hant",
+      "document": [
+        "# demo",
+        "",
+        "## 待辦",
+        "",
+        "- [ ] 〔Owner〕續約網域(等 Owner:task-demo-aaaaaaaaaa)",
+        "",
+        "## 參考"
+      ],
+      "expect": {
+        "changed": true,
+        "document": [
+          "# demo",
+          "",
+          "## 待辦",
+          "- (無)",
+          "",
+          "## 參考"
+        ]
+      },
+      "record": {
+        "ph": "0.5",
+        "ext": "acts/0.5",
+        "id": "dropped-task-demo-aaaaaaaaaa",
+        "key": "task-demo-aaaaaaaaaa",
+        "project": "demo",
+        "ts": "2026-10-27T09:00:00Z",
+        "type": "settled",
+        "origin": "principal",
+        "by": "ps:assistant",
+        "outcome": "dropped",
+        "terms_rev": 1,
+        "terms_digest": "sha-256:0000000000000000000000000000000000000000000000000000000000000000",
+        "authority": {
+          "kind": "principal",
+          "decider": "p:owner"
+        }
+      }
+    },
+    {
+      "id": "zh-already-done-strikes-duplicates",
+      "profile": "zh-hant",
+      "document": [
+        "## 待辦",
+        "- [ ] 〔Owner〕續約網域(等 Owner:task-demo-aaaaaaaaaa)",
+        "- [ ] 〔Owner〕另一件",
+        "- [ ] 〔Owner〕續約網域(等 Owner:task-demo-aaaaaaaaaa)"
+      ],
+      "expect": {
+        "changed": true,
+        "document": [
+          "## 待辦",
+          "- [ ] 〔Owner〕另一件"
+        ]
+      },
+      "record": {
+        "ph": "0.5",
+        "ext": "acts/0.5",
+        "id": "already_done-task-demo-aaaaaaaaaa",
+        "key": "task-demo-aaaaaaaaaa",
+        "project": "demo",
+        "ts": "2026-10-27T09:00:00Z",
+        "type": "settled",
+        "origin": "principal",
+        "by": "ps:assistant",
+        "outcome": "already_done",
+        "terms_rev": 1,
+        "terms_digest": "sha-256:0000000000000000000000000000000000000000000000000000000000000000",
+        "authority": {
+          "kind": "principal",
+          "decider": "p:owner"
+        }
+      }
+    },
+    {
+      "id": "zh-done-full-width-marker",
+      "profile": "zh-hant",
+      "document": [
+        "## 待辦",
+        "- [ ] 〔Owner〕甲（等 Owner：task-demo-aaaaaaaaaa）",
+        "- [ ] 〔Owner〕乙"
+      ],
+      "expect": {
+        "changed": true,
+        "document": [
+          "## 待辦",
+          "- [ ] 〔Owner〕乙"
+        ]
+      },
+      "record": {
+        "ph": "0.5",
+        "ext": "acts/0.5",
+        "id": "done-task-demo-aaaaaaaaaa",
+        "key": "task-demo-aaaaaaaaaa",
+        "project": "demo",
+        "ts": "2026-10-27T09:00:00Z",
+        "type": "settled",
+        "origin": "principal",
+        "by": "ps:assistant",
+        "outcome": "done",
+        "terms_rev": 1,
+        "terms_digest": "sha-256:0000000000000000000000000000000000000000000000000000000000000000",
+        "authority": {
+          "kind": "principal",
+          "decider": "p:owner"
+        }
+      }
+    },
+    {
+      "id": "zh-done-unknown-key",
+      "profile": "zh-hant",
+      "document": [
+        "# demo",
+        "",
+        "## 待辦",
+        "",
+        "- [ ] 〔Owner〕續約網域(等 Owner:task-demo-aaaaaaaaaa)",
+        "- [ ] 〔agent〕上傳加重試",
+        "",
+        "## 參考"
+      ],
+      "expect": {
+        "changed": false,
+        "document": [
+          "# demo",
+          "",
+          "## 待辦",
+          "",
+          "- [ ] 〔Owner〕續約網域(等 Owner:task-demo-aaaaaaaaaa)",
+          "- [ ] 〔agent〕上傳加重試",
+          "",
+          "## 參考"
+        ]
+      },
+      "record": {
+        "ph": "0.5",
+        "ext": "acts/0.5",
+        "id": "done-task-demo-bbbbbbbbbb",
+        "key": "task-demo-bbbbbbbbbb",
+        "project": "demo",
+        "ts": "2026-10-27T09:00:00Z",
+        "type": "settled",
+        "origin": "principal",
+        "by": "ps:assistant",
+        "outcome": "done",
+        "terms_rev": 1,
+        "terms_digest": "sha-256:0000000000000000000000000000000000000000000000000000000000000000",
+        "authority": {
+          "kind": "principal",
+          "decider": "p:owner"
+        }
+      }
+    },
+    {
+      "id": "zh-agent-report-not-applied",
+      "profile": "zh-hant",
+      "document": [
+        "# demo",
+        "",
+        "## 待辦",
+        "",
+        "- [ ] 〔Owner〕續約網域(等 Owner:task-demo-aaaaaaaaaa)",
+        "- [ ] 〔agent〕上傳加重試",
+        "",
+        "## 參考"
+      ],
+      "expect": {
+        "changed": false,
+        "document": [
+          "# demo",
+          "",
+          "## 待辦",
+          "",
+          "- [ ] 〔Owner〕續約網域(等 Owner:task-demo-aaaaaaaaaa)",
+          "- [ ] 〔agent〕上傳加重試",
+          "",
+          "## 參考"
+        ]
+      },
+      "record": {
+        "ph": "0.5",
+        "ext": "acts/0.5",
+        "id": "done-task-demo-aaaaaaaaaa",
+        "key": "task-demo-aaaaaaaaaa",
+        "project": "demo",
+        "ts": "2026-10-27T09:00:00Z",
+        "type": "claimed",
+        "origin": "agent",
+        "by": "agent:demo",
+        "outcome": "done",
+        "evidence": {
+          "basis": "reported in session"
+        }
+      }
+    },
+    {
+      "id": "zh-inferred-done-not-applied",
+      "profile": "zh-hant",
+      "document": [
+        "# demo",
+        "",
+        "## 待辦",
+        "",
+        "- [ ] 〔Owner〕續約網域(等 Owner:task-demo-aaaaaaaaaa)",
+        "- [ ] 〔agent〕上傳加重試",
+        "",
+        "## 參考"
+      ],
+      "expect": {
+        "changed": false,
+        "document": [
+          "# demo",
+          "",
+          "## 待辦",
+          "",
+          "- [ ] 〔Owner〕續約網域(等 Owner:task-demo-aaaaaaaaaa)",
+          "- [ ] 〔agent〕上傳加重試",
+          "",
+          "## 參考"
+        ]
+      },
+      "record": {
+        "ph": "0.5",
+        "ext": "acts/0.5",
+        "id": "done-task-demo-aaaaaaaaaa",
+        "key": "task-demo-aaaaaaaaaa",
+        "project": "demo",
+        "ts": "2026-10-27T09:00:00Z",
+        "type": "claimed",
+        "origin": "registrar",
+        "by": "registrar:demo",
+        "outcome": "done",
+        "evidence": {
+          "basis": "line removed"
+        }
+      }
+    },
+    {
+      "id": "zh-reopened-present",
+      "profile": "zh-hant",
+      "document": [
+        "# demo",
+        "",
+        "## 待辦",
+        "",
+        "- [ ] 〔Owner〕續約網域(等 Owner:task-demo-aaaaaaaaaa)",
+        "- [ ] 〔agent〕上傳加重試",
+        "",
+        "## 參考"
+      ],
+      "expect": {
+        "changed": false,
+        "document": [
+          "# demo",
+          "",
+          "## 待辦",
+          "",
+          "- [ ] 〔Owner〕續約網域(等 Owner:task-demo-aaaaaaaaaa)",
+          "- [ ] 〔agent〕上傳加重試",
+          "",
+          "## 參考"
+        ]
+      },
+      "record": {
+        "ph": "0.5",
+        "ext": "acts/0.5",
+        "id": "reopened-task-demo-aaaaaaaaaa",
+        "key": "task-demo-aaaaaaaaaa",
+        "project": "demo",
+        "ts": "2026-10-27T09:00:00Z",
+        "type": "reopened",
+        "origin": "principal",
+        "by": "ps:assistant",
+        "supersedes": [
+          "s-task-demo-aaaaaaaaaa"
+        ],
+        "restore_text": "續約網域"
+      }
+    },
+    {
+      "id": "zh-reopened-replaces-placeholder",
+      "profile": "zh-hant",
+      "document": [
+        "# demo",
+        "",
+        "## 待辦",
+        "",
+        "- (無)",
+        "",
+        "## 參考"
+      ],
+      "expect": {
+        "changed": true,
+        "document": [
+          "# demo",
+          "",
+          "## 待辦",
+          "",
+          "- [ ] 〔Owner〕續約網域(等 Owner:task-demo-aaaaaaaaaa)",
+          "",
+          "## 參考"
+        ]
+      },
+      "record": {
+        "ph": "0.5",
+        "ext": "acts/0.5",
+        "id": "reopened-task-demo-aaaaaaaaaa",
+        "key": "task-demo-aaaaaaaaaa",
+        "project": "demo",
+        "ts": "2026-10-27T09:00:00Z",
+        "type": "reopened",
+        "origin": "principal",
+        "by": "ps:assistant",
+        "supersedes": [
+          "s-task-demo-aaaaaaaaaa"
+        ],
+        "restore_text": "續約網域"
+      }
+    },
+    {
+      "id": "zh-reopened-appends",
+      "profile": "zh-hant",
+      "document": [
+        "## 待辦",
+        "",
+        "- [ ] 〔agent〕上傳加重試",
+        "",
+        "## 參考"
+      ],
+      "expect": {
+        "changed": true,
+        "document": [
+          "## 待辦",
+          "",
+          "- [ ] 〔agent〕上傳加重試",
+          "- [ ] 〔Owner〕打給 銀行(等 Owner:task-demo-bbbbbbbbbb)",
+          "",
+          "## 參考"
+        ]
+      },
+      "record": {
+        "ph": "0.5",
+        "ext": "acts/0.5",
+        "id": "reopened-task-demo-bbbbbbbbbb",
+        "key": "task-demo-bbbbbbbbbb",
+        "project": "demo",
+        "ts": "2026-10-27T09:00:00Z",
+        "type": "reopened",
+        "origin": "principal",
+        "by": "ps:assistant",
+        "supersedes": [
+          "s-task-demo-bbbbbbbbbb"
+        ],
+        "restore_text": "  打給   銀行 "
+      }
+    },
+    {
+      "id": "zh-reopened-no-section",
+      "profile": "zh-hant",
+      "document": [
+        "# demo",
+        "",
+        "說明。"
+      ],
+      "expect": {
+        "changed": true,
+        "document": [
+          "# demo",
+          "",
+          "說明。",
+          "",
+          "## 待辦",
+          "",
+          "- [ ] 〔Owner〕續約網域(等 Owner:task-demo-aaaaaaaaaa)"
+        ]
+      },
+      "record": {
+        "ph": "0.5",
+        "ext": "acts/0.5",
+        "id": "reopened-task-demo-aaaaaaaaaa",
+        "key": "task-demo-aaaaaaaaaa",
+        "project": "demo",
+        "ts": "2026-10-27T09:00:00Z",
+        "type": "reopened",
+        "origin": "principal",
+        "by": "ps:assistant",
+        "supersedes": [
+          "s-task-demo-aaaaaaaaaa"
+        ],
+        "restore_text": "續約網域"
+      }
+    },
+    {
+      "id": "en-done-in-group",
+      "profile": "en",
+      "document": [
+        "## Tasks",
+        "### [owner]",
+        "- [ ] Call the bank (waiting on owner: task-demo-aaaaaaaaaa)",
+        "- [ ] Renew the domain"
+      ],
+      "expect": {
+        "changed": true,
+        "document": [
+          "## Tasks",
+          "### [owner]",
+          "- [ ] Renew the domain"
+        ]
+      },
+      "record": {
+        "ph": "0.5",
+        "ext": "acts/0.5",
+        "id": "done-task-demo-aaaaaaaaaa",
+        "key": "task-demo-aaaaaaaaaa",
+        "project": "demo",
+        "ts": "2026-10-27T09:00:00Z",
+        "type": "settled",
+        "origin": "principal",
+        "by": "ps:assistant",
+        "outcome": "done",
+        "terms_rev": 1,
+        "terms_digest": "sha-256:0000000000000000000000000000000000000000000000000000000000000000",
+        "authority": {
+          "kind": "principal",
+          "decider": "p:owner"
+        }
+      }
+    },
+    {
+      "id": "en-done-last-in-group-keeps-heading",
+      "profile": "en",
+      "document": [
+        "## Tasks",
+        "### [owner]",
+        "- [ ] Call the bank (waiting on owner: task-demo-aaaaaaaaaa)"
+      ],
+      "expect": {
+        "changed": true,
+        "document": [
+          "## Tasks",
+          "### [owner]"
+        ]
+      },
+      "record": {
+        "ph": "0.5",
+        "ext": "acts/0.5",
+        "id": "done-task-demo-aaaaaaaaaa",
+        "key": "task-demo-aaaaaaaaaa",
+        "project": "demo",
+        "ts": "2026-10-27T09:00:00Z",
+        "type": "settled",
+        "origin": "principal",
+        "by": "ps:assistant",
+        "outcome": "done",
+        "terms_rev": 1,
+        "terms_digest": "sha-256:0000000000000000000000000000000000000000000000000000000000000000",
+        "authority": {
+          "kind": "principal",
+          "decider": "p:owner"
+        }
+      }
+    },
+    {
+      "id": "en-dropped-last-writes-placeholder",
+      "profile": "en",
+      "document": [
+        "## Tasks",
+        "",
+        "- [ ] [owner] Renew the domain (waiting on owner: task-demo-aaaaaaaaaa)",
+        "",
+        "## Notes"
+      ],
+      "expect": {
+        "changed": true,
+        "document": [
+          "## Tasks",
+          "- (none)",
+          "",
+          "## Notes"
+        ]
+      },
+      "record": {
+        "ph": "0.5",
+        "ext": "acts/0.5",
+        "id": "dropped-task-demo-aaaaaaaaaa",
+        "key": "task-demo-aaaaaaaaaa",
+        "project": "demo",
+        "ts": "2026-10-27T09:00:00Z",
+        "type": "settled",
+        "origin": "principal",
+        "by": "ps:assistant",
+        "outcome": "dropped",
+        "terms_rev": 1,
+        "terms_digest": "sha-256:0000000000000000000000000000000000000000000000000000000000000000",
+        "authority": {
+          "kind": "principal",
+          "decider": "p:owner"
+        }
+      }
+    },
+    {
+      "id": "en-reopened-appends",
+      "profile": "en",
+      "document": [
+        "## Tasks",
+        "",
+        "- [ ] [agent] Add retry to the uploader",
+        "",
+        "## Notes"
+      ],
+      "expect": {
+        "changed": true,
+        "document": [
+          "## Tasks",
+          "",
+          "- [ ] [agent] Add retry to the uploader",
+          "- [ ] [owner] Renew the domain (waiting on owner: task-demo-aaaaaaaaaa)",
+          "",
+          "## Notes"
+        ]
+      },
+      "record": {
+        "ph": "0.5",
+        "ext": "acts/0.5",
+        "id": "reopened-task-demo-aaaaaaaaaa",
+        "key": "task-demo-aaaaaaaaaa",
+        "project": "demo",
+        "ts": "2026-10-27T09:00:00Z",
+        "type": "reopened",
+        "origin": "principal",
+        "by": "ps:assistant",
+        "supersedes": [
+          "s-task-demo-aaaaaaaaaa"
+        ],
+        "restore_text": "Renew the domain"
+      }
+    },
+    {
+      "id": "withdrawal-leaves-line",
+      "profile": "en",
+      "document": [
+        "## Tasks",
+        "",
+        "- [ ] [owner] Renew the domain (waiting on owner: task-demo-aaaaaaaaaa)"
+      ],
+      "record": {
+        "ph": "0.5",
+        "ext": "acts/0.5",
+        "id": "w1",
+        "type": "withdrawn",
+        "origin": "requester",
+        "by": "registrar:demo",
+        "key": "task-demo-aaaaaaaaaa",
+        "project": "demo",
+        "ts": "2026-10-27T09:00:00Z",
+        "reason": "not_needed",
+        "supersedes": [
+          "task-demo-aaaaaaaaaa"
+        ]
+      },
+      "expect": {
+        "changed": false,
+        "document": [
+          "## Tasks",
+          "",
+          "- [ ] [owner] Renew the domain (waiting on owner: task-demo-aaaaaaaaaa)"
+        ]
+      }
+    },
+    {
+      "id": "note-leaves-line",
+      "profile": "en",
+      "document": [
+        "## Tasks",
+        "",
+        "- [ ] [owner] Renew the domain (waiting on owner: task-demo-aaaaaaaaaa)"
+      ],
+      "record": {
+        "ph": "0.5",
+        "ext": "acts/0.5",
+        "id": "n1",
+        "type": "note",
+        "origin": "principal",
+        "by": "ps:assistant",
+        "key": "task-demo-aaaaaaaaaa",
+        "project": "demo",
+        "ts": "2026-10-27T09:00:00Z",
+        "about": {
+          "key": "task-demo-aaaaaaaaaa"
+        },
+        "note": "The registrar moved the renewal date to Friday"
+      },
+      "expect": {
+        "changed": false,
+        "document": [
+          "## Tasks",
+          "",
+          "- [ ] [owner] Renew the domain (waiting on owner: task-demo-aaaaaaaaaa)"
+        ]
+      }
+    },
+    {
+      "id": "en-done-strikes-in-every-section",
+      "profile": "en",
+      "document": [
+        "# Demo",
+        "## Tasks",
+        "- [ ] [owner] Renew the domain (waiting on owner: task-demo-aaaaaaaaaa)",
+        "## Notes",
+        "Prose.",
+        "## Tasks",
+        "- [ ] [agent] Add retries",
+        "- [ ] [owner] Renew the domain (waiting on owner: task-demo-aaaaaaaaaa)"
+      ],
+      "record": {
+        "ph": "0.5",
+        "ext": "acts/0.5",
+        "id": "s-81f2",
+        "key": "task-demo-aaaaaaaaaa",
+        "project": "demo",
+        "ts": "2026-10-28T08:30:00Z",
+        "type": "settled",
+        "origin": "principal",
+        "by": "ps:assistant",
+        "outcome": "done",
+        "terms_rev": 1,
+        "terms_digest": "sha-256:0000000000000000000000000000000000000000000000000000000000000000",
+        "authority": {
+          "kind": "principal",
+          "decider": "p:owner"
+        }
+      },
+      "expect": {
+        "changed": true,
+        "document": [
+          "# Demo",
+          "## Tasks",
+          "- (none)",
+          "## Notes",
+          "Prose.",
+          "## Tasks",
+          "- [ ] [agent] Add retries"
+        ]
+      }
+    },
+    {
+      "id": "en-done-two-sections-emptied",
+      "profile": "en",
+      "document": [
+        "## Tasks",
+        "- [ ] [owner] Renew the domain (waiting on owner: task-demo-aaaaaaaaaa)",
+        "## Tasks",
+        "- [ ] [owner] Renew the domain (waiting on owner: task-demo-aaaaaaaaaa)"
+      ],
+      "record": {
+        "ph": "0.5",
+        "ext": "acts/0.5",
+        "id": "s-81f2",
+        "key": "task-demo-aaaaaaaaaa",
+        "project": "demo",
+        "ts": "2026-10-28T08:30:00Z",
+        "type": "settled",
+        "origin": "principal",
+        "by": "ps:assistant",
+        "outcome": "done",
+        "terms_rev": 1,
+        "terms_digest": "sha-256:0000000000000000000000000000000000000000000000000000000000000000",
+        "authority": {
+          "kind": "principal",
+          "decider": "p:owner"
+        }
+      },
+      "expect": {
+        "changed": true,
+        "document": [
+          "## Tasks",
+          "- (none)",
+          "## Tasks",
+          "- (none)"
+        ]
+      }
+    },
+    {
+      "id": "en-reopened-uses-first-section",
+      "profile": "en",
+      "document": [
+        "## Tasks",
+        "- [ ] [agent] Add retries",
+        "## Notes",
+        "Prose.",
+        "## Tasks",
+        "- [ ] [agent] Write docs"
+      ],
+      "record": {
+        "ph": "0.5",
+        "ext": "acts/0.5",
+        "id": "o-81f2",
+        "key": "task-demo-aaaaaaaaaa",
+        "project": "demo",
+        "ts": "2026-10-29T08:30:00Z",
+        "type": "reopened",
+        "origin": "principal",
+        "by": "ps:assistant",
+        "supersedes": [
+          "s-81f2"
+        ],
+        "restore_text": "Renew the domain"
+      },
+      "expect": {
+        "changed": true,
+        "document": [
+          "## Tasks",
+          "- [ ] [agent] Add retries",
+          "- [ ] [owner] Renew the domain (waiting on owner: task-demo-aaaaaaaaaa)",
+          "## Notes",
+          "Prose.",
+          "## Tasks",
+          "- [ ] [agent] Write docs"
+        ]
+      }
+    },
+    {
+      "id": "stale-settlement-not-struck",
+      "profile": "en",
+      "document": [
+        "## Tasks",
+        "- [ ] [owner] Renew the domain for two years (waiting on owner: task-demo-aaaaaaaaaa)"
+      ],
+      "record": {
+        "ph": "0.5",
+        "ext": "acts/0.5",
+        "id": "s-81f2",
+        "key": "task-demo-aaaaaaaaaa",
+        "project": "demo",
+        "ts": "2026-10-28T08:30:00Z",
+        "type": "settled",
+        "origin": "principal",
+        "by": "ps:assistant",
+        "outcome": "done",
+        "terms_rev": 1,
+        "terms_digest": "sha-256:1111111111111111111111111111111111111111111111111111111111111111",
+        "authority": {
+          "kind": "principal",
+          "decider": "p:owner"
+        }
+      },
+      "latest": {
+        "text": "Renew the domain for two years",
+        "terms_rev": 2
+      },
+      "expect": {
+        "changed": false,
+        "document": [
+          "## Tasks",
+          "- [ ] [owner] Renew the domain for two years (waiting on owner: task-demo-aaaaaaaaaa)"
+        ]
+      }
+    },
+    {
+      "id": "edited-line-not-struck",
+      "profile": "en",
+      "document": [
+        "## Tasks",
+        "- [ ] [owner] Renew the domain for two years (waiting on owner: task-demo-aaaaaaaaaa)"
+      ],
+      "record": {
+        "ph": "0.5",
+        "ext": "acts/0.5",
+        "id": "s-81f2",
+        "key": "task-demo-aaaaaaaaaa",
+        "project": "demo",
+        "ts": "2026-10-28T08:30:00Z",
+        "type": "settled",
+        "origin": "principal",
+        "by": "ps:assistant",
+        "outcome": "done",
+        "terms_rev": 1,
+        "terms_digest": "sha-256:1111111111111111111111111111111111111111111111111111111111111111",
+        "authority": {
+          "kind": "principal",
+          "decider": "p:owner"
+        }
+      },
+      "latest": {
+        "text": "Renew the domain",
+        "terms_rev": 1
+      },
+      "expect": {
+        "changed": false,
+        "document": [
+          "## Tasks",
+          "- [ ] [owner] Renew the domain for two years (waiting on owner: task-demo-aaaaaaaaaa)"
+        ]
+      }
+    },
+    {
+      "id": "copied-marker-not-struck",
+      "profile": "en",
+      "document": [
+        "## Tasks",
+        "- [ ] [owner] Renew the domain (waiting on owner: task-demo-aaaaaaaaaa)",
+        "- [ ] [agent] Write docs",
+        "### [owner]",
+        "- [ ] Sign the contract (waiting on owner: task-demo-aaaaaaaaaa)"
+      ],
+      "record": {
+        "ph": "0.5",
+        "ext": "acts/0.5",
+        "id": "s-81f2",
+        "key": "task-demo-aaaaaaaaaa",
+        "project": "demo",
+        "ts": "2026-10-28T08:30:00Z",
+        "type": "settled",
+        "origin": "principal",
+        "by": "ps:assistant",
+        "outcome": "done",
+        "terms_rev": 1,
+        "terms_digest": "sha-256:1111111111111111111111111111111111111111111111111111111111111111",
+        "authority": {
+          "kind": "principal",
+          "decider": "p:owner"
+        }
+      },
+      "latest": {
+        "text": "Renew the domain",
+        "terms_rev": 1
+      },
+      "expect": {
+        "changed": false,
+        "document": [
+          "## Tasks",
+          "- [ ] [owner] Renew the domain (waiting on owner: task-demo-aaaaaaaaaa)",
+          "- [ ] [agent] Write docs",
+          "### [owner]",
+          "- [ ] Sign the contract (waiting on owner: task-demo-aaaaaaaaaa)"
+        ]
+      }
+    },
+    {
+      "id": "agent-line-kept",
+      "profile": "en",
+      "document": [
+        "## Tasks",
+        "- [ ] [owner] Renew the domain (waiting on owner: task-demo-aaaaaaaaaa)",
+        "- [ ] [agent] Renew the domain (waiting on owner: task-demo-aaaaaaaaaa)"
+      ],
+      "record": {
+        "ph": "0.5",
+        "ext": "acts/0.5",
+        "id": "s-81f2",
+        "key": "task-demo-aaaaaaaaaa",
+        "project": "demo",
+        "ts": "2026-10-28T08:30:00Z",
+        "type": "settled",
+        "origin": "principal",
+        "by": "ps:assistant",
+        "outcome": "done",
+        "terms_rev": 1,
+        "terms_digest": "sha-256:1111111111111111111111111111111111111111111111111111111111111111",
+        "authority": {
+          "kind": "principal",
+          "decider": "p:owner"
+        }
+      },
+      "latest": {
+        "text": "Renew the domain",
+        "terms_rev": 1
+      },
+      "expect": {
+        "changed": true,
+        "document": [
+          "## Tasks",
+          "- [ ] [agent] Renew the domain (waiting on owner: task-demo-aaaaaaaaaa)"
+        ]
+      }
+    },
+    {
+      "id": "ticked-principal-line-struck",
+      "profile": "en",
+      "document": [
+        "## Tasks",
+        "- [x] [owner] Renew the domain (waiting on owner: task-demo-aaaaaaaaaa)",
+        "- [ ] [agent] Other"
+      ],
+      "record": {
+        "ph": "0.5",
+        "ext": "acts/0.5",
+        "id": "s-81f2",
+        "key": "task-demo-aaaaaaaaaa",
+        "project": "demo",
+        "ts": "2026-10-28T08:30:00Z",
+        "type": "settled",
+        "origin": "principal",
+        "by": "ps:assistant",
+        "outcome": "done",
+        "terms_rev": 1,
+        "terms_digest": "sha-256:1111111111111111111111111111111111111111111111111111111111111111",
+        "authority": {
+          "kind": "principal",
+          "decider": "p:owner"
+        }
+      },
+      "latest": {
+        "text": "Renew the domain",
+        "terms_rev": 1
+      },
+      "expect": {
+        "changed": true,
+        "document": [
+          "## Tasks",
+          "- [ ] [agent] Other"
+        ]
+      }
+    },
+    {
+      "id": "fenced-line-untouched",
+      "profile": "en",
+      "document": [
+        "## Tasks",
+        "- [ ] [owner] Renew the domain (waiting on owner: task-demo-aaaaaaaaaa)",
+        "```",
+        "- [ ] [owner] Renew the domain (waiting on owner: task-demo-aaaaaaaaaa)",
+        "```"
+      ],
+      "record": {
+        "ph": "0.5",
+        "ext": "acts/0.5",
+        "id": "s-81f2",
+        "key": "task-demo-aaaaaaaaaa",
+        "project": "demo",
+        "ts": "2026-10-28T08:30:00Z",
+        "type": "settled",
+        "origin": "principal",
+        "by": "ps:assistant",
+        "outcome": "done",
+        "terms_rev": 1,
+        "terms_digest": "sha-256:1111111111111111111111111111111111111111111111111111111111111111",
+        "authority": {
+          "kind": "principal",
+          "decider": "p:owner"
+        }
+      },
+      "latest": {
+        "text": "Renew the domain",
+        "terms_rev": 1
+      },
+      "expect": {
+        "changed": true,
+        "document": [
+          "## Tasks",
+          "```",
+          "- [ ] [owner] Renew the domain (waiting on owner: task-demo-aaaaaaaaaa)",
+          "```"
+        ]
+      }
+    },
+    {
+      "id": "incomplete-untouched",
+      "profile": "en",
+      "document": [
+        "## Tasks",
+        "- [ ] [owner] Renew the domain (waiting on owner: task-demo-aaaaaaaaaa)",
+        "```"
+      ],
+      "record": {
+        "ph": "0.5",
+        "ext": "acts/0.5",
+        "id": "s-81f2",
+        "key": "task-demo-aaaaaaaaaa",
+        "project": "demo",
+        "ts": "2026-10-28T08:30:00Z",
+        "type": "settled",
+        "origin": "principal",
+        "by": "ps:assistant",
+        "outcome": "done",
+        "terms_rev": 1,
+        "terms_digest": "sha-256:1111111111111111111111111111111111111111111111111111111111111111",
+        "authority": {
+          "kind": "principal",
+          "decider": "p:owner"
+        }
+      },
+      "latest": {
+        "text": "Renew the domain",
+        "terms_rev": 1
+      },
+      "expect": {
+        "changed": false,
+        "document": [
+          "## Tasks",
+          "- [ ] [owner] Renew the domain (waiting on owner: task-demo-aaaaaaaaaa)",
+          "```"
+        ]
+      }
+    },
+    {
+      "id": "reopened-from-latest-terms",
+      "profile": "en",
+      "document": [
+        "## Tasks",
+        "- (none)"
+      ],
+      "record": {
+        "ph": "0.5",
+        "ext": "acts/0.5",
+        "id": "o-81f2",
+        "key": "task-demo-aaaaaaaaaa",
+        "project": "demo",
+        "ts": "2026-10-29T08:30:00Z",
+        "type": "reopened",
+        "origin": "principal",
+        "by": "ps:assistant",
+        "supersedes": [
+          "s-81f2"
+        ],
+        "restore_text": "Renew the domain"
+      },
+      "latest": {
+        "text": "Renew the domain for two years",
+        "terms_rev": 2
+      },
+      "expect": {
+        "changed": true,
+        "document": [
+          "## Tasks",
+          "- [ ] [owner] Renew the domain for two years (waiting on owner: task-demo-aaaaaaaaaa)"
+        ]
+      }
+    },
+    {
+      "id": "reopened-archived-readded",
+      "profile": "en",
+      "document": [
+        "## Tasks",
+        "- [ ] [agent] Other",
+        "## Tasks",
+        "- [ ] [owner] Renew the domain (waiting on owner: task-demo-aaaaaaaaaa)"
+      ],
+      "record": {
+        "ph": "0.5",
+        "ext": "acts/0.5",
+        "id": "o-81f2",
+        "key": "task-demo-aaaaaaaaaa",
+        "project": "demo",
+        "ts": "2026-10-29T08:30:00Z",
+        "type": "reopened",
+        "origin": "principal",
+        "by": "ps:assistant",
+        "supersedes": [
+          "s-81f2"
+        ],
+        "restore_text": "Renew the domain"
+      },
+      "latest": {
+        "text": "Renew the domain",
+        "terms_rev": 1
+      },
+      "expect": {
+        "changed": true,
+        "document": [
+          "## Tasks",
+          "- [ ] [agent] Other",
+          "- [ ] [owner] Renew the domain (waiting on owner: task-demo-aaaaaaaaaa)",
+          "## Tasks",
+          "- [ ] [owner] Renew the domain (waiting on owner: task-demo-aaaaaaaaaa)"
+        ]
+      }
+    },
+    {
+      "id": "settled-on-other-terms-not-struck",
+      "profile": "en",
+      "document": [
+        "## Tasks",
+        "- [ ] [owner] Renew the domain (waiting on owner: task-demo-aaaaaaaaaa)"
+      ],
+      "record": {
+        "ph": "0.5",
+        "ext": "acts/0.5",
+        "id": "s-81f2",
+        "key": "task-demo-aaaaaaaaaa",
+        "project": "demo",
+        "ts": "2026-10-28T08:30:00Z",
+        "type": "settled",
+        "origin": "principal",
+        "by": "ps:assistant",
+        "outcome": "done",
+        "terms_rev": 1,
+        "terms_digest": "sha-256:1111111111111111111111111111111111111111111111111111111111111111",
+        "authority": {
+          "kind": "principal",
+          "decider": "p:owner"
+        }
+      },
+      "latest": {
+        "text": "Renew the domain",
+        "terms_rev": 1,
+        "terms_digest": "sha-256:2222222222222222222222222222222222222222222222222222222222222222"
+      },
+      "expect": {
+        "changed": false,
+        "document": [
+          "## Tasks",
+          "- [ ] [owner] Renew the domain (waiting on owner: task-demo-aaaaaaaaaa)"
+        ]
+      }
+    },
+    {
+      "id": "reopened-key-not-raised-here",
+      "profile": "en",
+      "document": [
+        "## Tasks",
+        "- (none)"
+      ],
+      "record": {
+        "ph": "0.5",
+        "ext": "acts/0.5",
+        "id": "o:ask",
+        "type": "reopened",
+        "origin": "principal",
+        "by": "ps:assistant",
+        "key": "ask-demo-1f2e3d",
+        "project": "demo",
+        "ts": "2026-10-29T08:00:00Z",
+        "supersedes": [
+          "s:ask"
+        ],
+        "restore_text": "Renew the domain"
+      },
+      "bound": [],
+      "expect": {
+        "changed": false,
+        "document": [
+          "## Tasks",
+          "- (none)"
+        ]
+      }
+    },
+    {
+      "id": "known-key-settled-other-text-kept",
+      "profile": "en",
+      "document": [
+        "## Tasks",
+        "- [ ] [owner] Renew the domain this week (waiting on owner: ask-demo-1f2e3d)"
+      ],
+      "record": {
+        "ph": "0.5",
+        "ext": "acts/0.5",
+        "id": "s:ask",
+        "type": "settled",
+        "origin": "principal",
+        "by": "ps:assistant",
+        "key": "ask-demo-1f2e3d",
+        "project": "demo",
+        "ts": "2026-10-29T07:00:00Z",
+        "outcome": "done",
+        "terms_rev": 1,
+        "terms_digest": "sha-256:5555555555555555555555555555555555555555555555555555555555555555",
+        "authority": {
+          "kind": "principal",
+          "decider": "p:owner"
+        }
+      },
+      "bound": [],
+      "latest": {
+        "text": "Renew the domain",
+        "terms_rev": 1,
+        "terms_digest": "sha-256:5555555555555555555555555555555555555555555555555555555555555555"
+      },
+      "expect": {
+        "changed": false,
+        "document": [
+          "## Tasks",
+          "- [ ] [owner] Renew the domain this week (waiting on owner: ask-demo-1f2e3d)"
+        ]
+      }
+    },
+    {
+      "id": "known-key-settled-same-text-struck",
+      "profile": "en",
+      "document": [
+        "## Tasks",
+        "- [ ] [owner] Renew the domain (waiting on owner: ask-demo-1f2e3d)"
+      ],
+      "record": {
+        "ph": "0.5",
+        "ext": "acts/0.5",
+        "id": "s:ask",
+        "type": "settled",
+        "origin": "principal",
+        "by": "ps:assistant",
+        "key": "ask-demo-1f2e3d",
+        "project": "demo",
+        "ts": "2026-10-29T07:00:00Z",
+        "outcome": "done",
+        "terms_rev": 1,
+        "terms_digest": "sha-256:5555555555555555555555555555555555555555555555555555555555555555",
+        "authority": {
+          "kind": "principal",
+          "decider": "p:owner"
+        }
+      },
+      "bound": [],
+      "latest": {
+        "text": "Renew the domain",
+        "terms_rev": 1,
+        "terms_digest": "sha-256:5555555555555555555555555555555555555555555555555555555555555555"
+      },
+      "expect": {
+        "changed": true,
+        "document": [
+          "## Tasks",
+          "- (none)"
+        ]
+      }
+    }
+  ]
+}
