@@ -235,6 +235,39 @@ class NewUser(unittest.TestCase):
         self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
         self.assertEqual(len(self.git_cfg("log", "--format=%s", env=env).stdout.splitlines()), 2)
 
+    def cfg_json(self):
+        import json
+        return json.loads((self.home / ".agent-hub" / "config" / "hub.json").read_text())
+
+    def test_init_writes_the_language(self):
+        r = self.hub_cmd("init", "--yes", "--no-launchd", "--owner", "Alex", "--llm", "none", "--lang", "en,zh-Hant")
+        self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
+        self.assertEqual(self.cfg_json()["language"], {"ui": "en", "content": "zh-Hant"})
+
+    def test_init_defaults_to_the_environments_language(self):
+        r = self.hub_cmd("init", "--yes", "--no-launchd", "--owner", "Alex", "--llm", "none")
+        self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
+        self.assertEqual(self.cfg_json()["language"], {"ui": "zh-Hant", "content": "zh-Hant"})
+
+    def test_init_lang_on_an_existing_instance_changes_only_the_language(self):
+        subprocess.run(["git", "init", "-q", str(self.hub)], env=self.env, check=True)   # a clone, as a real hub is
+        self.hub_cmd("init", "--yes", "--no-launchd", "--owner", "Alex", "--llm", "none")
+        before = self.cfg_json()
+        commits = len(self.git_cfg("log", "--format=%s").stdout.splitlines())
+        r = self.hub_cmd("init", "--lang", "en")
+        self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
+        after = self.cfg_json()
+        self.assertEqual(after.pop("language"), {"ui": "en", "content": "en"})
+        before.pop("language")
+        self.assertEqual(after, before, "nothing but the language changed")
+        self.assertEqual(len(self.git_cfg("log", "--format=%s").stdout.splitlines()), commits + 1)
+        self.assertEqual(self.git_cfg("status", "--porcelain", "--", "hub.json").stdout, "")
+
+    def test_init_refuses_an_unknown_language(self):
+        r = self.hub_cmd("init", "--yes", "--no-launchd", "--lang", "fr")
+        self.assertEqual(r.returncode, 2)
+        self.assertFalse((self.home / ".agent-hub").exists(), "nothing was done")
+
     def test_init_never_overwrites_hub_json(self):
         (self.hub / "hub.json").write_text('{"v": 1, "registry_dir": "projects", "owner": {"address": "owner", "tag": "Keep"}}\n')
         r = self.hub_cmd("init", "--yes", "--no-launchd", "--owner", "Other")

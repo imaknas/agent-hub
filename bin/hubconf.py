@@ -289,6 +289,50 @@ def bus_db() -> pathlib.Path:
 LANGUAGES = ("en", "zh-Hant")
 
 
+def language_of(tag: str) -> str:
+    """A locale or language tag (zh_TW.UTF-8, zh-Hant-TW, en_US, de) → one of LANGUAGES. Traditional Chinese (Hant, or
+    Taiwan / Hong Kong / Macau) is zh-Hant; Simplified Chinese and everything else is en until it has a catalog."""
+    t = tag.split(".")[0].split("@")[0].replace("-", "_").lower()
+    parts = t.split("_")
+    if parts[0] == "zh" and ("hant" in parts or set(parts) & {"tw", "hk", "mo"}):
+        return "zh-Hant"
+    return "en"
+
+
+def is_simplified_chinese(tag: str) -> bool:
+    """zh that language_of maps to en (zh_CN, zh-Hans): init says so instead of pretending English was asked for."""
+    t = tag.split(".")[0].replace("-", "_").lower()
+    return t.split("_")[0] == "zh" and language_of(tag) == "en"
+
+
+def _apple_languages() -> list[str]:
+    """macOS's preferred languages, in order (AppleLanguages). LANG there follows the Region setting, not the language
+    the user reads, so this comes first. Empty when it can't be read."""
+    if sys.platform != "darwin":
+        return []
+    import plistlib
+    import subprocess
+    try:
+        r = subprocess.run(["/usr/bin/defaults", "export", "-g", "-"], capture_output=True, timeout=5)
+        return [str(x) for x in plistlib.loads(r.stdout).get("AppleLanguages") or []] if r.returncode == 0 else []
+    except (OSError, subprocess.SubprocessError, ValueError, plistlib.InvalidFileException):
+        return []
+
+
+def system_tag(env=None, apple: list[str] | None = None) -> str:
+    """The language tag this machine prefers: macOS's first AppleLanguages entry, else LC_ALL, LC_MESSAGES, LANG."""
+    langs = _apple_languages() if apple is None else apple
+    if langs:
+        return langs[0]
+    env = os.environ if env is None else env
+    return next((env[k] for k in ("LC_ALL", "LC_MESSAGES", "LANG") if env.get(k)), "")
+
+
+def system_language(env=None, apple: list[str] | None = None) -> str:
+    """init's default language (docs/design/newcomer-path.md B0)."""
+    return language_of(system_tag(env, apple))
+
+
 def lang_ui() -> str:
     """The language the platform shows the owner (CLI output, status page, alerts, headings): hub.json `language.ui`,
     or AGENT_HUB_LANG_UI. Default en (docs/design/i18n.md)."""

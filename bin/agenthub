@@ -404,7 +404,79 @@ def config_repo_first_commit(cfgdir: pathlib.Path, owner: str) -> tuple[bool, li
 
 
 INIT_FLAGS = ("--yes", "--no-launchd", "--dry-run", "--scheduler-only")
-INIT_OPTIONS = ("--owner", "--timezone", "--workspace", "--modules", "--home", "--llm", "--llm-model", "--llm-base-url")
+INIT_OPTIONS = ("--owner", "--timezone", "--workspace", "--modules", "--home", "--llm", "--llm-model", "--llm-base-url",
+                "--lang")
+
+
+def parse_lang(value: str) -> tuple[str, str] | None:
+    """--lang <ui>[,<content>] → (ui, content); None when either isn't one of hubconf.LANGUAGES."""
+    parts = [x.strip() for x in value.split(",")]
+    ui, content = parts[0], parts[1] if len(parts) > 1 else parts[0]
+    if len(parts) > 2 or ui not in hubconf.LANGUAGES or content not in hubconf.LANGUAGES:
+        return None
+    return ui, content
+
+
+def both(variants: list[str]) -> str:
+    """A text in every language at once (from _.variants), for the one question asked before the language is known."""
+    return " / ".join(variants)
+
+
+def ask_one_language(question: str, default: str) -> str:
+    names = {"en": "English", "zh-Hant": both(_.variants("Traditional Chinese"))}
+    codes = list(hubconf.LANGUAGES)
+    print(question)
+    for i, code in enumerate(codes, 1):
+        print(f"  {i}. {names[code]}")
+    while True:
+        a = input(f"[{codes.index(default) + 1}]: ").strip()
+        if not a:
+            return default
+        if a.isdigit() and 1 <= int(a) <= len(codes):
+            return codes[int(a) - 1]
+
+
+def choose_language(args: dict, yes: bool) -> tuple[str, str] | None:
+    """init's first question (docs/design/newcomer-path.md B0): (ui, content). The default is the environment's
+    AGENT_HUB_LANG_UI, else the system's language. Asked in every language at once, since none is chosen yet."""
+    if args.get("lang"):
+        return parse_lang(args["lang"])
+    env_ui = os.environ.get("AGENT_HUB_LANG_UI")
+    default = env_ui if env_ui in hubconf.LANGUAGES else hubconf.system_language()
+    env_content = os.environ.get("AGENT_HUB_LANG_CONTENT")
+    if yes or not sys.stdin.isatty():
+        return default, env_content if env_content in hubconf.LANGUAGES else default
+    if hubconf.is_simplified_chinese(hubconf.system_tag()):
+        print(both(_.variants("Simplified Chinese has no translation yet, so English is the default.")))
+    print(both(_.variants("Language")))
+    print("  1. English")
+    print(f"  2. {both(_.variants("Traditional Chinese"))}")
+    print(f"  3. {both(_.variants("A different language for notes than for the interface"))}")
+    choice = ""
+    while choice not in ("1", "2", "3"):
+        choice = input(f"[{2 if default == 'zh-Hant' else 1}]: ").strip() or ("2" if default == "zh-Hant" else "1")
+    if choice != "3":
+        lang = "en" if choice == "1" else "zh-Hant"
+        return lang, lang
+    ui = ask_one_language(both(_.variants("Interface language")), default)
+    return ui, ask_one_language(both(_.variants("Notes and project state")), ui)
+
+
+def set_language(ui: str, content: str) -> int:
+    """init --lang on an existing instance: only the language changes (hub.json, committed alone), nothing else of
+    init runs."""
+    d = read_hub_json()
+    d["language"] = {**(d.get("language") or {}), "ui": ui, "content": content}
+    write_hub_json(d)
+    hubconf._cfg = None
+    os.environ["AGENT_HUB_LANG_UI"] = ui
+    print(_("✓ language: interface {ui}, notes and project state {content}", ui=ui, content=content))
+    rc = subprocess.run([str(BIN / "commit-hub-files.sh"), f"chore(config): language {ui}, content {content}",
+                         "hub.json"]).returncode
+    if rc != 0:
+        print(_("warning: {file} was written, but the commit/push failed; it needs a manual fix", file="hub.json"))
+    print(_("Commands use it from now on; long-running processes (lease-runner, an open MCP server) after they restart."))
+    return 0 if rc == 0 else 1
 
 
 def init_argv_problem(argv: list[str]) -> str | None:
@@ -439,6 +511,12 @@ def cmd_init(argv: list[str]) -> int:
     flags = {a for a in argv if a in INIT_FLAGS}
     args = {k.lstrip("-"): argv[i + 1] for i, k in enumerate(argv[:-1]) if k in INIT_OPTIONS}
     dry, yes = "--dry-run" in flags, "--yes" in flags
+    if args.get("lang") and not parse_lang(args["lang"]):
+        print(_("agenthub init: --lang takes {languages}, or two of them as <interface>,<notes> (nothing was done)",
+                languages=", ".join(hubconf.LANGUAGES)), file=sys.stderr)
+        return 2
+    if args.get("lang") and hubconf.config_file("hub.json").exists():
+        return set_language(*parse_lang(args["lang"]))   # an existing instance: only the language
     created = False
     legacy = hubconf.instance_home() is None and hubconf.config_file("hub.json").exists()
     if legacy:
@@ -449,11 +527,14 @@ def cmd_init(argv: list[str]) -> int:
         print(_("✓ {path} already exists; leaving it alone (to change it, edit it, then run agenthub config apply)",
                 path=hubconf.config_file('hub.json')))
     else:
+        ui, content = choose_language(args, yes)
+        os.environ["AGENT_HUB_LANG_UI"], os.environ["AGENT_HUB_LANG_CONTENT"] = ui, content   # every later question
         home = pathlib.Path(os.path.expanduser(args.get("home") or os.environ.get("AGENT_HUB_HOME")
                                                or ask(_("instance directory (your config, data and credentials live here)"),
                                                        "~/.agent-hub", yes)))
         d = new_hub_json(args, yes)
         d["registry_dir"] = "projects"   # relative to config/
+        d["language"] = {**(d.get("language") or {}), "ui": ui, "content": content}
         if dry:
             print(_("(dry-run) would create the instance directory {home}/{{config,data,secrets}}, write config/hub.json, "
                     "write {pointer}:\n", home=home, pointer=hubconf.POINTER) + json.dumps(d, ensure_ascii=False, indent=2))
@@ -629,6 +710,8 @@ def cmd_doctor(argv: list[str]) -> int:
     add("ok" if r.returncode == 0 else "bad", _("config: all valid") if r.returncode == 0 else
         _("config: {errors}", errors=r.stderr.strip()[:300]),
         "" if r.returncode == 0 else _("fix hub.json / projects/ as the messages say, then run agenthub config check"))
+    add("ok", _("language: interface {ui}, notes and project state {content} (change: agenthub init --lang "
+                "<interface>[,<notes>])", ui=hubconf.lang_ui(), content=hubconf.lang_content()))
 
     import upgrade
     for level, what, fix in upgrade.doctor_lines():   # the release; network at most once a day (bin/upgrade.py)

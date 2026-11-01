@@ -159,5 +159,16 @@
  "{runtime}: the platform's rules go into {file}": "{runtime}:平台規則寫進 {file}",
  "{runtime}: no rules file; its sessions get the platform's rules from the MCP server's instructions (agenthub mcp) or their session-start hook": "{runtime}:沒有規則檔;它的 session 從 MCP server 的 instructions(agenthub mcp)或 session 開始的 hook 拿到平台規則",
  "{runtime}: its hooks are not installed in sandboxed projects, and a session of it there gets no letters or notes from the platform (it has no {missing})": "{runtime}:沙盒專案不裝它的 hook,它在那裡的 session 收不到平台的信和提醒(它沒有{missing})",
- "use a runtime with both in sandboxed projects": "沙盒專案用兩個都有的 runtime"
+ "use a runtime with both in sandboxed projects": "沙盒專案用兩個都有的 runtime",
+ "Traditional Chinese": "繁體中文",
+ "Simplified Chinese has no translation yet, so English is the default.": "簡體中文還沒有翻譯,所以預設用英文。",
+ "Language": "語言",
+ "A different language for notes than for the interface": "筆記和介面用不同語言",
+ "Interface language": "介面語言",
+ "Notes and project state": "筆記和專案狀態",
+ "✓ language: interface {ui}, notes and project state {content}": "✓ 語言:介面 {ui},筆記和專案狀態 {content}",
+ "Commands use it from now on; long-running processes (lease-runner, an open MCP server) after they restart.": "之後的指令就會用新語言;長駐的程序(lease-runner、開著的 MCP 伺服器)要重新啟動後才會換。",
+ "agenthub init: --lang takes {languages}, or two of them as <interface>,<notes> (nothing was done)": "agenthub init:--lang 只接受 {languages},或用 <介面>,<筆記> 給兩個(什麼都沒做)",
+ "language: interface {ui}, notes and project state {content} (change: agenthub init --lang <interface>[,<notes>])": "語言:介面 {ui},筆記和專案狀態 {content}(要改:agenthub init --lang <介面>[,<筆記>])",
+ "warning: {file} was written, but the commit/push failed; it needs a manual fix": "警告:{file} 已寫入,但 commit/push 失敗,需要手動處理"
 }

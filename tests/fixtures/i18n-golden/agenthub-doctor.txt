@@ -15,6 +15,7 @@ $ agenthub doctor    # launchd, problems
 ✓ python ok
 ✗ config:config-check:✗ hub.json:不認得的鍵 `unknown_key`;要新增就先加進 contracts/hub.v1.schema.json
     → 照訊息改 hub.json / projects/,再 bin/hub config check
+✓ 語言:介面 zh-Hant,筆記和專案狀態 zh-Hant(要改:agenthub init --lang <介面>[,<筆記>])
 ✓ owner 端:內建的(owner_side: builtin;agenthub owner list / done / answer)
 ! agenthub 不在 PATH 上(專案的 session 打不到信箱指令)
     → bin/agenthub install-cli
@@ -56,6 +57,7 @@ $ agenthub doctor    # launchd, all fine
 --- stdout
 ✓ python 3.13 ok
 ✓ config:都合格
+✓ 語言:介面 zh-Hant,筆記和專案狀態 zh-Hant(要改:agenthub init --lang <介面>[,<筆記>])
 ! agent-hub v0.3.0 出了;這個 checkout 在 v0.2.0(<TS> 查的)
     → agenthub upgrade --check 看會改什麼;agenthub upgrade 裝上
 ! 上次 agenthub upgrade 讓這台機器對齊之後(在 v0.1.0),checkout 移到了 v0.2.0:Python 套件、服務、排程器跟 hook 可能是舊的
@@ -92,6 +94,7 @@ $ agenthub doctor    # systemd, runtime none
 --- stdout
 ✓ python ok
 ✓ config:都合格
+✓ 語言:介面 zh-Hant,筆記和專案狀態 zh-Hant(要改:agenthub init --lang <介面>[,<筆記>])
 ✓ agent-hub v0.3.0-2-gabc1234;最新的 release 是 v0.3.0(<TS> 查的)
 ✓ owner 端:內建的(owner_side: builtin;agenthub owner list / done / answer)
 ! agenthub 不在 PATH 上(專案的 session 打不到信箱指令)
@@ -139,6 +142,7 @@ $ agenthub doctor    # no service manager, unnamed assistant
 --- stdout
 ✓ python ok
 ✓ config:都合格
+✓ 語言:介面 zh-Hant,筆記和專案狀態 zh-Hant(要改:agenthub init --lang <介面>[,<筆記>])
 ✓ agent-hub v0.3.0(<TS> 查不到有沒有新版:Could not resolve host: example.org;doctor 一天後再試)
 ! 上次 agenthub upgrade 讓這台機器對齊之後(在 v0.1.0),checkout 移到了 v0.3.0:Python 套件、服務、排程器跟 hook 可能是舊的
     → agenthub upgrade

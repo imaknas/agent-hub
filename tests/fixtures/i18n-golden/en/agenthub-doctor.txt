@@ -15,6 +15,7 @@ $ agenthub doctor    # launchd, problems
 ✓ python ok
 ✗ config: config-check: ✗ hub.json: unknown key `unknown_key`; to add one, put it in contracts/hub.v1.schema.json first
     → fix hub.json / projects/ as the messages say, then run agenthub config check
+✓ language: interface en, notes and project state en (change: agenthub init --lang <interface>[,<notes>])
 ✓ owner side: built-in (owner_side: builtin; agenthub owner list / done / answer)
 ! agenthub is not on PATH (project sessions cannot reach the mailbox commands)
     → bin/agenthub install-cli
@@ -56,6 +57,7 @@ $ agenthub doctor    # launchd, all fine
 --- stdout
 ✓ python 3.13 ok
 ✓ config: all valid
+✓ language: interface en, notes and project state en (change: agenthub init --lang <interface>[,<notes>])
 ! agent-hub v0.3.0 is out; this checkout is at v0.2.0 (checked <TS>)
     → agenthub upgrade --check shows what changes; agenthub upgrade installs it
 ! the checkout moved to v0.2.0 after agenthub upgrade last brought this machine in step (at v0.1.0): the Python packages, services, scheduler and hooks may be stale
@@ -92,6 +94,7 @@ $ agenthub doctor    # systemd, runtime none
 --- stdout
 ✓ python ok
 ✓ config: all valid
+✓ language: interface en, notes and project state en (change: agenthub init --lang <interface>[,<notes>])
 ✓ agent-hub v0.3.0-2-gabc1234; the newest release is v0.3.0 (checked <TS>)
 ✓ owner side: built-in (owner_side: builtin; agenthub owner list / done / answer)
 ! agenthub is not on PATH (project sessions cannot reach the mailbox commands)
@@ -139,6 +142,7 @@ $ agenthub doctor    # no service manager, unnamed assistant
 --- stdout
 ✓ python ok
 ✓ config: all valid
+✓ language: interface en, notes and project state en (change: agenthub init --lang <interface>[,<notes>])
 ✓ agent-hub v0.3.0 (could not check for newer releases at <TS>: Could not resolve host: example.org; doctor tries again after a day)
 ! the checkout moved to v0.3.0 after agenthub upgrade last brought this machine in step (at v0.1.0): the Python packages, services, scheduler and hooks may be stale
     → agenthub upgrade
