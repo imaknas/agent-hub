@@ -7,7 +7,8 @@ version.
 2. A user runs only Claude Code, which has its own way for sessions to message each other. Is the mailbox then a step
    back?
 
-Status: design, nothing implemented.
+Status: step 1 (A3) implemented on 11-01 (record in `docs/design/mailbox-routing.md`, "11-01: an MCP session holds a
+delegation back"); steps 2 and 3 are design.
 
 r2 followed two cold reviews: one against the code, one against the tools' documentation. r3 fixes a third review of
 r2: the messaging tokens move to the secrets directory, the hold covers only letters not yet delivered, and presence
@@ -272,7 +273,11 @@ implements it, port by port, saying the rest is unsupported. What the reviews fo
 ## Order of work (each step stands on its own)
 
 1. **A3**: MCP presence, holding dispatch back, the tool-result notice. Characterization tests on today's dispatch
-   first.
+   first. **Done 11-01.** As built: `presence` gained the `runtime` and `via` (initialize / tool) columns now, not in
+   A1 (the 5- vs 30-minute rule needs `via`; A1 only fills `runtime` for hook rows). The command-line check (this
+   platform's `mcp_server.py`) applies to every `mcp:` row, not only to outbox ones. An outbox `presence` entry from a
+   server that has exited by intake is dropped without telling the project, not refused (a server restarting would
+   otherwise send it a letter each time); a malformed one is refused as usual.
 2. **B1**: the `wake` port, its once-per-letter use in dispatch, the delivery column, doctor's row. The Claude socket
    implementation follows if the payload format checks out; otherwise the port ships `Unsupported` with that reason.
 3. **A1**: `runtime.installed`, runtime-routed calls, hooks carrying their runtime, the presence column, doctor's

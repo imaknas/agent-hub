@@ -14,5 +14,8 @@
  "wrong arguments: {e}": "參數不對:{e}",
  "platform error: {e!r}": "平台出錯:{e!r}",
  "Register this stdio MCP server in your coding agent (start it in the project folder; a tool opened from the GUI may not have your PATH, hence the absolute paths):\n": "把這個 stdio MCP 伺服器登記進你的 coding agent(在專案資料夾裡啟動;GUI 開的工具不一定有你的 PATH,所以用絕對路徑):\n",
- "\nHow to add it in each tool: docs/mcp.md. For a tool not started in the project folder, add AGENTHUB_PROJECT=<project name> to its env.": "\n各工具怎麼加:docs/mcp.md。不在專案資料夾裡啟動的工具,在 env 加 AGENTHUB_PROJECT=<專案名稱>。"
+ "\nHow to add it in each tool: docs/mcp.md. For a tool not started in the project folder, add AGENTHUB_PROJECT=<project name> to its env.": "\n各工具怎麼加:docs/mcp.md。不在專案資料夾裡啟動的工具,在 env 加 AGENTHUB_PROJECT=<專案名稱>。",
+ "presence not recorded: the working directory {cwd} is not in {project} (named by AGENTHUB_PROJECT), so dispatch is not held for this server": "不記錄在場:工作目錄 {cwd} 不在 {project}(AGENTHUB_PROJECT 指定的)裡,所以平台分派不會為這個伺服器等",
+ "presence not recorded: cannot read this process's start time, so dispatch is not held for this server": "不記錄在場:讀不到這個程序的啟動時間,所以平台分派不會為這個伺服器等",
+ "cannot record presence: {e!r}": "記錄在場失敗:{e!r}"
 }

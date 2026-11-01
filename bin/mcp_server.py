@@ -16,6 +16,11 @@ in its folder (docs/design/bus-sender.md).
 The `instructions` returned by `initialize` carry the platform's rules (templates/mcp-instructions.md) and the number
 of letters still open -- the rules reach any tool that supports MCP without changing any file in the project.
 
+Presence (docs/design/mailbox-runtimes.md A3, class Presence): at `initialize` and at each tool call the server
+records that its client uses the project, as mcp:<pid>:<start time> (a sandboxed project's through its outbox), so
+the platform's dispatch holds a request for this session instead of sending another agent onto the project (hubbus
+mcp_sessions); every tool result but inbox's ends with the number of letters still open, so the session knows.
+
 Agents the platform starts (environment variable HUB_LLM_POINT, set by llm.py) are always refused: the letters such
 work wants to send are written in its output and sent by the platform on its behalf (propose_apply).
 
@@ -32,6 +37,7 @@ import os
 import pathlib
 import subprocess
 import sys
+import time
 
 BIN = pathlib.Path(__file__).resolve().parent
 sys.path.insert(0, str(BIN))
@@ -81,6 +87,70 @@ def unread(project: str) -> int:
         return len(hb.inbox(c, project))
     finally:
         c.close()
+
+
+class Presence:
+    """That this server's client uses the project (docs/design/mailbox-runtimes.md A3): written at initialize and at
+    each agenthub tool call, so dispatch holds a letter for it instead of sending another agent onto the project. stdio
+    MCP has no session id, so the id is mcp:<this process's pid>:<its start time> (a session id the runtime gives in
+    this process's environment is used instead). Not written for agents the platform started (HUB_LLM_POINT) or lease
+    sessions (HUBBUS_LEASE), nor by a server whose project comes from AGENTHUB_PROJECT while its working directory is
+    outside that project: one global server in a tool must not keep a project in use for good."""
+
+    EVERY_S = 60   # the same kind of write at most this often (a sandboxed project's goes through a file per write)
+
+    def __init__(self, project: str | None):
+        self.project, self.sid, self.client, self.last = project, None, None, (None, 0.0)
+        if not project or os.environ.get("HUB_LLM_POINT") or os.environ.get("HUBBUS_LEASE"):
+            return
+        self.hb = _hubbus()
+        named = os.environ.get("AGENTHUB_PROJECT")
+        if named:
+            try:
+                here = self.hb.project_of(pathlib.Path.cwd())
+            except Exception:
+                here = None
+            if here != named:
+                log(_("presence not recorded: the working directory {cwd} is not in {project} (named by "
+                      "AGENTHUB_PROJECT), so dispatch is not held for this server", cwd=pathlib.Path.cwd(), project=named))
+                return
+        import runtime_ports
+        try:
+            sid = runtime_ports.current_session()
+        except Exception:   # broken platform settings: the synthetic id below still holds dispatch back
+            sid = None
+        if sid:
+            self.sid = sid
+            return
+        start = self.hb.proc_start(os.getpid())
+        if not start:
+            log(_("presence not recorded: cannot read this process's start time, so dispatch is not held for this "
+                  "server"))
+            return
+        self.sid = f"mcp:{os.getpid()}:{start}"
+
+    def touch(self, via: str, client=None) -> None:
+        if client:
+            self.client = client
+        if not self.sid or (self.last[0] == via and time.monotonic() - self.last[1] < self.EVERY_S):
+            return
+        try:
+            self.hb.mcp_presence(self.project, self.sid, pathlib.Path.cwd(), self.client, via)
+            self.last = (via, time.monotonic())
+        except Exception as e:   # never in the way of the call itself
+            log(_("cannot record presence: {e!r}", e=e))
+
+
+def notice(project: str | None, name: str) -> str:
+    """Appended to an agenthub tool's result: how many letters are open, so a session told only through MCP knows
+    the platform is holding them for it (inbox shows them itself). A sandboxed project's count is from its view."""
+    if not project or name == "inbox" or os.environ.get("HUB_LLM_POINT"):
+        return ""
+    try:
+        n = unread(project)
+    except Exception:
+        return ""
+    return "\n\n" + _("📬 {n} {n:letter is|letters are} still open; look with inbox first.", n=n) if n else ""
 
 
 def instructions(project: str | None, why: str) -> str:
@@ -195,6 +265,7 @@ def send(msg: dict) -> None:
 def serve() -> int:
     project, why = resolve_project()
     log(_("project: {project}", project=project or _("(unrecognized)")))
+    presence = Presence(project)
     for line in sys.stdin:
         try:
             msg = json.loads(line)
@@ -202,6 +273,7 @@ def serve() -> int:
             continue
         mid, method = msg.get("id"), msg.get("method")
         if method == "initialize":
+            presence.touch("initialize", ((msg.get("params") or {}).get("clientInfo") or {}).get("name"))
             send({"jsonrpc": "2.0", "id": mid, "result": {
                 "protocolVersion": (msg.get("params") or {}).get("protocolVersion") or PROTOCOL,
                 "capabilities": {"tools": {}}, "serverInfo": {"name": "agenthub", "version": "1"},
@@ -210,12 +282,14 @@ def serve() -> int:
             send({"jsonrpc": "2.0", "id": mid, "result": {"tools": TOOLS}})
         elif method == "tools/call":
             params = msg.get("params") or {}
+            presence.touch("tool")
             try:
                 ok, text = call(project, why, params.get("name", ""), params.get("arguments") or {})
             except (KeyError, TypeError) as e:
                 ok, text = False, _("wrong arguments: {e}", e=e)
             except Exception as e:
                 ok, text = False, _("platform error: {e!r}", e=e)
+            text += notice(project, str(params.get("name", "")))
             send({"jsonrpc": "2.0", "id": mid, "result": {"content": [{"type": "text", "text": text}], "isError": not ok}})
         elif mid is not None:   # ping and the like: empty result; notifications (no id) get no reply
             send({"jsonrpc": "2.0", "id": mid, "result": {}})

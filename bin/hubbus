@@ -41,7 +41,8 @@ inbox/show/thread/open-questions read the view of its own letters (<workspace>/.
 service (dispatch, every minute) moves each outbox file into the bus with source = the outbox's project (a sender named
 in the file is never read), checked like the command it stands for, then deletes it; a file it refuses is reported to
 the project in a letter and deleted too. It writes each view back after dispatching. The session hooks deliver mail
-outside the sandbox, from the bus, to the project the folder belongs to by path.
+outside the sandbox, from the bus, to the project the folder belongs to by path. The platform's MCP server in such a
+project records its presence through the outbox too (op presence; taken in only while that server process runs).
 
 Usage (in a project directory; the sender defaults to the current directory's project):
   hubbus send --to <project|owner> --type <request|question|info|progress|done> --text "…" [--reply-to <id>]
@@ -74,7 +75,10 @@ For hooks / the schedule / other scripts:
                                       conversation (a request/question replying to some session) → if that session
                                       is open, wait CONVERSATION_WAIT minutes for its hook, then resume it in the
                                       background (when the context isn't large) or treat it as a delegation;
-                                      delegation → if someone is using the project, wait just as long; then a live
+                                      delegation → if an MCP session uses the project (the platform's MCP server
+                                      records presence, mcp_sessions), hold a letter not yet delivered to any session
+                                      while it does, up to MCP_HOLD_MAX_MIN; if someone else is using the project,
+                                      wait CONVERSATION_WAIT minutes as for a conversation; then a live
                                       session with activity in this project within FORK_RECENT_H handles it in a
                                       background fork with its context (trial since 10-26); only without one is a
                                       headless agent dispatched (notes capability). agent-hub's letters too. When the
@@ -193,6 +197,18 @@ STUCK_HOURS = 1          # status: sent longer ago than this, no session took it
 RESUME_TIMEOUT_MIN = 35
 # delegation: a live session with activity within this window handles it in a fork with its context
 FORK_RECENT_H = int(_MB.get("fork_recent_hours", 24))
+# A session that reaches the mailbox only through the platform's MCP server (any coding agent;
+# docs/design/mailbox-runtimes.md A3) records presence as mcp:<server pid>:<its start time>. Such a row counts as
+# using its project by itself, while that very server process runs, for this long after its last agenthub tool call
+# (one that only initialized: CONVERSATION_WAIT_MIN)
+MCP_PRESENCE_MIN = int(_MB.get("mcp_presence_min", 30))
+# while it does, a request/question to the project not yet delivered to any session is held, at most this long from
+# the letter's timestamp; then it is dispatched as usual
+MCP_HOLD_MAX_MIN = int(_MB.get("mcp_hold_max_min", 120))
+MCP_SID = re.compile(r"^mcp:(\d{1,10}):(\d{1,20})$")
+MCP_VIA = ("initialize", "tool")
+MCP_SERVER = pathlib.Path(__file__).resolve().parent / "mcp_server.py"
+MCP_PRUNE_H = 24          # presence rows of MCP servers not seen for this long are removed (one row per process)
 REPLY_WAIT_MIN = 30      # a reply first waits this long for the asking session, then goes to any session
 POST_TOOL_EVERY_S = 120  # PostToolUse checks at most this often per session
 PRUNE_DAYS = 60
@@ -246,6 +262,13 @@ def db(timeout: float = 30) -> sqlite3.Connection:
     c.execute(f"PRAGMA busy_timeout={int(timeout * 1000)}")
     c.execute("PRAGMA journal_mode=WAL")
     c.executescript(SCHEMA)
+    have = {r[1] for r in c.execute("PRAGMA table_info(presence)")}
+    for col in ("runtime", "via"):   # a bus from before MCP presence (11-01)
+        if col not in have:
+            try:
+                c.execute(f"ALTER TABLE presence ADD COLUMN {col} TEXT")
+            except sqlite3.OperationalError:   # another process added it just now, or the bus is busy: next time
+                pass
     if not c.execute("SELECT 1 FROM meta WHERE key='generation'").fetchone():   # a read first: readers take no write lock
         c.execute("INSERT OR IGNORE INTO meta(key, value) VALUES('generation', ?)", (secrets.token_hex(8),))
     return c
@@ -284,8 +307,10 @@ SCHEMA = """
     CREATE INDEX IF NOT EXISTS events_ref ON events(ref);
     CREATE TABLE IF NOT EXISTS cursors(consumer TEXT PRIMARY KEY, seq INTEGER NOT NULL, updated TEXT);
     -- presence (not events: updated on every hook, not in the log): which session is in which project, cwd, last
-    -- activity
-    CREATE TABLE IF NOT EXISTS presence(session TEXT PRIMARY KEY, project TEXT NOT NULL, cwd TEXT, seen TEXT NOT NULL);
+    -- activity; an MCP server's row (session mcp:<pid>:<start>) also has runtime (mcp:<client name>) and via
+    -- (initialize | tool: what wrote seen); NULL in rows the hooks write
+    CREATE TABLE IF NOT EXISTS presence(session TEXT PRIMARY KEY, project TEXT NOT NULL, cwd TEXT, seen TEXT NOT NULL,
+                                        runtime TEXT, via TEXT);
     -- meta.generation: a random id fixed when this file is created; a reader's cursor (event jobs) is only valid for
     -- the generation it was taken in (a corrupt file moved aside starts a new one, seq from 1 again)
     CREATE TABLE IF NOT EXISTS meta(key TEXT PRIMARY KEY, value TEXT NOT NULL);
@@ -843,6 +868,45 @@ def reconcile_questions(c, now=None) -> list:
     return sent
 
 
+def record_presence(c, session: str, project: str, cwd, runtime: str | None = None, via: str | None = None) -> None:
+    """This session is in this project, in cwd, now (inside the caller's transaction). The hooks write session,
+    project, cwd and seen; an MCP server's row (mcp:<pid>:<start>) also its runtime and what wrote seen (via)."""
+    if via is None:
+        c.execute("INSERT INTO presence(session, project, cwd, seen) VALUES(?,?,?,?) ON CONFLICT(session) DO UPDATE"
+                  " SET project=excluded.project, cwd=excluded.cwd, seen=excluded.seen",
+                  (session, project, str(cwd), iso()))
+        return
+    c.execute("INSERT INTO presence(session, project, cwd, seen, runtime, via) VALUES(?,?,?,?,?,?) ON CONFLICT(session)"
+              " DO UPDATE SET project=excluded.project, cwd=excluded.cwd, seen=excluded.seen,"
+              " runtime=excluded.runtime, via=excluded.via", (session, project, str(cwd), iso(), runtime, via))
+
+
+def mcp_runtime(client) -> str:
+    """The runtime an MCP server's presence names: mcp:<the client's name from initialize>, in a safe shape."""
+    name = re.sub(r"[^A-Za-z0-9._-]+", "-", str(client or "").removeprefix("mcp:")).strip("-")[:40]
+    return f"mcp:{name or 'unknown'}"
+
+
+def mcp_presence(project: str, session: str, cwd, client, via: str) -> None:
+    """The platform's MCP server records that its client uses this project (docs/design/mailbox-runtimes.md A3): on the
+    bus, or for a sandboxed project in its outbox (the platform checks the server process when it takes it in). A
+    session id the runtime gave (the server inherits its client's environment) is a plain presence row, which the
+    hooks write in a sandboxed project's sessions anyway."""
+    mcp = bool(MCP_SID.match(session))
+    if outboxed(project):
+        if mcp:
+            outbox_put(project, {"op": "presence", "session": session, "cwd": str(cwd), "runtime": mcp_runtime(client),
+                                 "via": via})
+        return
+    c = db(timeout=HOOK_TIMEOUT_S)
+    try:
+        c.execute("BEGIN IMMEDIATE")
+        record_presence(c, session, project, cwd, *((mcp_runtime(client), via) if mcp else ()))
+        c.execute("COMMIT")
+    finally:
+        c.close()
+
+
 def mail_text(event: str, session, cwd) -> str | None:
     """The platform's logic: record presence, deliver the letters this session should get, return the text to put
     into the context (None if there's none). event is session-start / prompt / post-tool. Runtime-independent."""
@@ -874,9 +938,7 @@ def mail_text(event: str, session, cwd) -> str | None:
     c = db(timeout=HOOK_TIMEOUT_S)
     c.execute("BEGIN IMMEDIATE")
     if not os.environ.get("HUBBUS_LEASE"):  # lease sessions don't count as recipients
-        c.execute("INSERT INTO presence(session, project, cwd, seen) VALUES(?,?,?,?) ON CONFLICT(session) DO UPDATE"
-                  " SET project=excluded.project, cwd=excluded.cwd, seen=excluded.seen",
-                  (session, project, str(cwd), iso()))
+        record_presence(c, session, project, cwd)
     if event == "session-start":
         # session start (including after compaction): deliver all new ones, list one line for each delivered before
         # but not done yet, otherwise they'd be invisible after compaction
@@ -1379,10 +1441,72 @@ def lease_ids() -> set[str]:
         return set()
 
 
-def active_sessions(c, proj, live) -> list[str]:
+def proc_start(pid: int) -> str | None:
+    """When process pid started, in whole seconds since the epoch (None: no such process, or it can't be read). With
+    the pid it names one process: a pid reused later has another start time."""
+    try:
+        if pathlib.Path("/proc/self/stat").exists():
+            # field 22 of /proc/<pid>/stat: clock ticks after boot (the fields after "(comm)" start at field 3)
+            ticks = int(pathlib.Path(f"/proc/{pid}/stat").read_text().rsplit(")", 1)[1].split()[19])
+            btime = next(int(l.split()[1]) for l in pathlib.Path("/proc/stat").read_text().splitlines()
+                         if l.startswith("btime "))
+            return str(btime + ticks // os.sysconf("SC_CLK_TCK"))
+        r = subprocess.run(["ps", "-o", "lstart=", "-p", str(pid)], capture_output=True, text=True, timeout=10,
+                           env={**os.environ, "LC_ALL": "C", "TZ": "UTC"})
+        if r.returncode or not r.stdout.strip():
+            return None
+        import calendar
+        return str(calendar.timegm(time.strptime(" ".join(r.stdout.split()), "%a %b %d %H:%M:%S %Y")))
+    except (OSError, ValueError, IndexError, StopIteration, subprocess.SubprocessError):
+        return None
+
+
+def proc_cmdline(pid: int) -> str:
+    """Process pid's command line, its arguments joined by spaces ("" when it can't be read)."""
+    try:
+        f = pathlib.Path(f"/proc/{pid}/cmdline")
+        if pathlib.Path("/proc/self/cmdline").exists():
+            return f.read_bytes().replace(b"\0", b" ").decode(errors="replace").strip()
+        r = subprocess.run(["ps", "-o", "command=", "-p", str(pid)], capture_output=True, text=True, timeout=10)
+        return r.stdout.strip() if r.returncode == 0 else ""
+    except (OSError, subprocess.SubprocessError):
+        return ""
+
+
+def mcp_process(sid: str) -> bool:
+    """An MCP server's presence id names a running process: that pid exists, started at the time the id gives (not a
+    reused pid), and runs this platform's MCP server (a sandboxed project could name any pid in its outbox)."""
+    m = MCP_SID.match(sid or "")
+    if not m:
+        return False
+    try:
+        os.kill(int(m[1]), 0)
+    except PermissionError:
+        pass   # exists, run by someone else: the start time and command line decide
+    except (OSError, OverflowError):
+        return False
+    return proc_start(int(m[1])) == m[2] and str(MCP_SERVER) in proc_cmdline(int(m[1]))
+
+
+def mcp_sessions(c, proj) -> list:
+    """The MCP sessions using this project now, by themselves (no runtime asked): presence rows of an MCP server
+    still running, seen within MCP_PRESENCE_MIN of an agenthub tool call, or CONVERSATION_WAIT_MIN of only an
+    initialize (a session that doesn't use the mailbox stops counting quickly)."""
+    t = now()
+    tool_cut = iso(t - datetime.timedelta(minutes=MCP_PRESENCE_MIN))
+    init_cut = iso(t - datetime.timedelta(minutes=CONVERSATION_WAIT_MIN))
+    rows = c.execute("SELECT session, runtime, via, seen FROM presence WHERE project=? AND session LIKE 'mcp:%'"
+                     " AND seen >= ? ORDER BY seen DESC", (proj, min(tool_cut, init_cut))).fetchall()
+    return [r for r in rows if r["seen"] >= (tool_cut if r["via"] == "tool" else init_cut) and mcp_process(r["session"])]
+
+
+def active_sessions(c, proj, live, mcp=None) -> list[str]:
+    """Sessions using this project now: one the runtime reports live with a hook within CONVERSATION_WAIT_MIN, and
+    the MCP sessions (mcp_sessions; mcp: already computed)."""
     cutoff = iso(now() - datetime.timedelta(minutes=CONVERSATION_WAIT_MIN))
-    return [r["session"] for r in c.execute("SELECT session FROM presence WHERE project=? AND seen >= ?", (proj, cutoff))
-            if r["session"] in live]
+    return [r["session"] for r in c.execute("SELECT session FROM presence WHERE project=? AND seen >= ?"
+                                            " AND session NOT LIKE 'mcp:%'", (proj, cutoff))
+            if r["session"] in live] + [r["session"] for r in (mcp_sessions(c, proj) if mcp is None else mcp)]
 
 
 def session_cwd(c, sid):
@@ -1402,9 +1526,10 @@ def branch_prompt(r, prompt=None) -> str:
 
 def recent_session(c, proj, live) -> str | None:
     """The live session with recent activity in this project (within FORK_RECENT_H; lease sessions don't record
-    presence)."""
+    presence). An MCP server's row is never one: there is no session behind it to fork."""
     cutoff = iso(now() - datetime.timedelta(hours=FORK_RECENT_H))
-    for r in c.execute("SELECT session FROM presence WHERE project=? AND seen >= ? ORDER BY seen DESC", (proj, cutoff)):
+    for r in c.execute("SELECT session FROM presence WHERE project=? AND seen >= ? AND session NOT LIKE 'mcp:%'"
+                       " ORDER BY seen DESC", (proj, cutoff)):
         if r["session"] in live:
             return r["session"]
     return None
@@ -1594,11 +1719,12 @@ def dispatch(c, rt=None) -> int:
     live, leases = rt.live_sessions(), lease_ids()
     wait_cut = iso(now() - datetime.timedelta(minutes=CONVERSATION_WAIT_MIN))
     take_cut = iso(now() - datetime.timedelta(minutes=TAKE_TIMEOUT_MIN))
+    hold_cut = iso(now() - datetime.timedelta(minutes=MCP_HOLD_MAX_MIN))
     waiting = 0
     for proj, ws in projects().items():
         if not ws.is_dir():
             continue
-        delegate = []
+        delegate, mcp = [], None   # mcp: the project's MCP sessions, looked up once, only when a letter needs it
         for r in c.execute(INBOX_SQL, (proj,)).fetchall():
             p = payload(r)
             if p.get("type") not in ACTIONABLE:
@@ -1627,10 +1753,19 @@ def dispatch(c, rt=None) -> int:
                     continue
                 # context too large or no transcript found → treat it as a delegation (the handler reads the whole
                 # thread with hubbus thread)
-            elif active_sessions(c, proj, live) and r["ts"] >= wait_cut:  # someone is using the project: theirs first
+            elif not r["delivered"] and (mcp := mcp_sessions(c, proj) if mcp is None else mcp) \
+                    and r["ts"] >= hold_cut:
+                # an MCP session uses the project: held while it does (it is told at each agenthub tool call), up to
+                # MCP_HOLD_MAX_MIN; a letter delivered to a session is under the seen rule above instead
+                waiting += 1
+                continue
+            elif active_sessions(c, proj, live, mcp) and r["ts"] >= wait_cut:  # someone is using the project: theirs first
                 waiting += 1
                 continue
             else:
+                if not r["delivered"] and mcp:
+                    log(_("{project}: {id} was held {minutes} {minutes:minute|minutes} while an MCP session used the "
+                          "project; dispatching it now", project=proj, id=r["id"], minutes=MCP_HOLD_MAX_MIN))
                 # delegation: a live session with recent activity in this project → handled in a background fork with
                 # its context (owner's trial since 10-26, m10261706), which can answer about what that session has on
                 # hand; none, context too large, or today's quota used up → headless agent
@@ -1691,8 +1826,9 @@ def take_outboxes(c) -> None:
 
 def own_session(c, project: str, session) -> str | None:
     """A session id named in an outbox file, only when the hooks saw that session in this project (presence is
-    written outside the sandbox): a reply to it is resumed in that session, so another project's must never pass."""
-    if not isinstance(session, str):
+    written outside the sandbox): a reply to it is resumed in that session, so another project's must never pass. An
+    MCP server's id never: there is no session behind it to reply to."""
+    if not isinstance(session, str) or session.startswith("mcp:"):
         return None
     r = c.execute("SELECT project FROM presence WHERE session=?", (session,)).fetchone()
     return session if r and r["project"] == project else None
@@ -1741,6 +1877,21 @@ def take(c, proj: str, entry) -> None:
             refuse(_("hubbus: a published event needs an id and a payload, and a type of {types}",
                      types="/".join(OUTBOX_PUBLISH)))
         publish(c, f"outbox:{proj}:{entry['id']}", entry["type"], proj, proj, None, entry["payload"])
+    elif op == "presence":
+        # the platform's MCP server in this project (docs/design/mailbox-runtimes.md A3): it counts only while that
+        # very process runs, and only for this project
+        _strings(entry, ("session", "cwd", "runtime", "via", "project"))
+        if entry.get("project") not in (None, proj):
+            refuse(_("hubbus: {project} records presence only in itself", project=proj))
+        if not MCP_SID.match(entry.get("session") or "") or entry.get("via") not in MCP_VIA:
+            refuse(_("hubbus: a presence entry names an MCP server (mcp:<pid>:<start time>) and initialize or tool"))
+        if not mcp_process(entry["session"]):
+            return   # that server has exited since (or never was one): nothing to record, nothing to tell
+        ws = hubconf.workspace(proj)
+        cwd = pathlib.Path(os.path.normpath(entry.get("cwd") or "/"))
+        inside = ws is not None and (cwd == ws or ws in cwd.parents)
+        record_presence(c, entry["session"], proj, cwd if inside else ws, mcp_runtime(entry.get("runtime")),
+                        entry["via"])
     else:
         refuse(_("hubbus: unknown outbox operation {op!r}", op=op))
 
@@ -1865,6 +2016,8 @@ def prune(c) -> None:
         c.execute("DELETE FROM events WHERE id=? OR (ref=? AND type IN ('message.delivered', 'message.done'))",
                   (mid, mid))
     c.execute("DELETE FROM events WHERE type='job.failed' AND ts < ? AND seq <= ?", (cutoff, upto))
+    c.execute("DELETE FROM presence WHERE session LIKE 'mcp:%' AND seen < ?",   # one row per MCP server process
+              (iso(now() - datetime.timedelta(hours=MCP_PRUNE_H)),))
     c.execute("COMMIT")
 
 
@@ -1928,7 +2081,8 @@ def cmd_status(as_json: bool) -> None:
     c = db()
     per: dict[str, dict] = {}
     cutoff = iso(now() - datetime.timedelta(hours=STUCK_HOURS))
-    stuck = []
+    hold_cut = iso(now() - datetime.timedelta(minutes=MCP_HOLD_MAX_MIN))
+    stuck, held = [], []
     for proj in sorted(projects()):
         rows = inbox(c, proj)
         if rows:
@@ -1936,15 +2090,21 @@ def cmd_status(as_json: bool) -> None:
             per[proj] = {"open": len(rows), "undelivered": len(new), "oldest": rows[0]["ts"]}
             # only letters to handle (request/question) count as stuck; info/progress/done are notifications, and
             # nobody taking them isn't a problem (m10261706)
-            stuck += [{"id": r["id"], "to": proj, "ts": r["ts"]} for r in new
-                      if r["ts"] < cutoff and payload(r).get("type") in ACTIONABLE]
+            todo = [r for r in new if payload(r).get("type") in ACTIONABLE]
+            # held while an MCP session uses the project (dispatch's rule), not unclaimed
+            mcp = mcp_sessions(c, proj) if any(r["ts"] >= hold_cut for r in todo) else []
+            by = sorted({m["runtime"] or "mcp" for m in mcp})
+            held += [{"id": r["id"], "to": proj, "ts": r["ts"], "by": by} for r in todo if mcp and r["ts"] >= hold_cut]
+            stuck += [{"id": r["id"], "to": proj, "ts": r["ts"]} for r in todo
+                      if r["ts"] < cutoff and not (mcp and r["ts"] >= hold_cut)]
     items = [ev for ev in c.execute("SELECT * FROM events WHERE seq > ? ORDER BY seq", (cursor(c, BRIDGE),))
              if to_assistant(c, ev)]
     failed = [dict(id=r["id"], ts=r["ts"], **payload(r)) for r in c.execute(
         "SELECT * FROM events WHERE type='job.failed' AND ts > ? ORDER BY seq DESC LIMIT 20",
         (iso(now() - datetime.timedelta(days=1)),))]
     corrupt = sorted(p.name for p in DB.parent.glob("bus.db.corrupt-*") if not p.name.endswith(("-wal", "-shm")))
-    out = {"projects": per, "stuck": stuck, "to_muninn": {"n": len(items), "oldest": items[0]["ts"] if items else None},
+    out = {"projects": per, "stuck": stuck, "held": held,
+           "to_muninn": {"n": len(items), "oldest": items[0]["ts"] if items else None},
            "job_failed_24h": failed, "corrupt": corrupt}
     if as_json:
         print(json.dumps(out, ensure_ascii=False))
@@ -1956,6 +2116,9 @@ def cmd_status(as_json: bool) -> None:
     if stuck:
         print(_("Unclaimed for over {hours} h (no session took them and the platform did not handle them): {items}", hours=STUCK_HOURS,
                 items=_(", ").join(f"{s['id']}→{s['to']}" for s in stuck)))
+    if held:
+        print(_("Held while an MCP session uses the project (dispatched after {minutes} minutes at most): {items}",
+                minutes=MCP_HOLD_MAX_MIN, items=_(", ").join(f"{s['id']}→{s['to']}" for s in held)))
     if items:
         print(_("Waiting to go to the assistant: {n} (oldest {oldest})", n=len(items), oldest=items[0]["ts"][5:16]))
     for f in failed:
@@ -2006,6 +2169,8 @@ def send_letter(c, a, sender: str, session, here, boxed: bool = False, mid: str 
     if not valid_address(a.to):
         refuse(_("hubbus: there is no address {to} (project names are in the project registry, {hub}, or {owners})",
                  to=a.to, hub=hubconf.hub_project(), owners="/".join(sorted(OWNERS))))
+    if isinstance(session, str) and session.startswith("mcp:"):
+        session = None   # an MCP server's id is no session to reply to
     p = {"type": a.type, "text": a.text, "from_session": session}
     if a.type in OWNER_ONLY and a.to != OWNER_ADDRESS:
         refuse(_("hubbus: {type} can only be sent to {alias}", type=a.type, alias=OWNER_ALIAS))

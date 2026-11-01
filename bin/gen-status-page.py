@@ -442,7 +442,11 @@ def main() -> None:
         mail_html = (f"<h2 style=\"font-size:18px;margin-top:28px\">{_('Project mailboxes')}</h2>"
                      + (f"<table><tr><th>{_('To')}</th><th>{_('Open')}</th><th>{_('Not yet in a session')}</th>"
                         f"<th>{_('Oldest')}</th></tr>{mail_rows}</table>"
-                        if mail_rows else f"<div class=sub>{_('No open letters')}</div>"))
+                        if mail_rows else f"<div class=sub>{_('No open letters')}</div>")
+                     # held for an MCP session using the project (hubbus mcp_sessions), not unclaimed
+                     + "".join("<div class=sub>" + esc(_("Held: {id} ({project} in use by {by})", id=h["id"],
+                                                         project=h["to"], by=", ".join(h.get("by") or ["mcp"])))
+                               + "</div>" for h in bus.get("held", [])))
 
     # worktrees of parallel sessions / the merge gate (bin/worktrees.py, bin/merge-branch)
     wt_html = ""

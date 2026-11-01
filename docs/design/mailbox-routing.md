@@ -194,3 +194,29 @@ latest; for faster, ask the assistant to run `hubbus bridge` once right after qu
   and two sides moving forward at once would overwrite each other; a summary in the next prompt has the same effect.
 - **info does not count as stuck**: "stuck" in `hubbus status` counts only request/question; the sessions' instructions
   say to use request/question when the other side has to do something.
+
+## 11-01: an MCP session holds a delegation back (`docs/design/mailbox-runtimes.md` step 1, A3)
+
+A coding agent that reaches the mailbox only through the platform's MCP server (`agenthub mcp`, e.g. Codex) has no hook,
+so before this the platform saw nobody in the project and handled a request in a background copy or with a headless
+agent while the user was working there. Now:
+
+- **Presence**: the MCP server writes a `presence` row at `initialize` and at every tool call, with session
+  `mcp:<server pid>:<start time>`, `runtime` = `mcp:<clientInfo.name>` and `via` = `initialize` / `tool` (two columns
+  added to the table; the hooks leave them empty). A sandboxed project's server writes it through its outbox (operation
+  `presence`), taken in only for the outbox's own project and only while that server process runs. Not written under
+  `HUB_LLM_POINT` / `HUBBUS_LEASE`, nor by a server whose project comes from `AGENTHUB_PROJECT` while its working
+  directory is outside it.
+- **Live by itself** (`hubbus mcp_sessions`, no runtime asked): the pid runs, its start time is the one in the id, its
+  command line is this platform's `mcp_server.py`, and `seen` is within `MCP_PRESENCE_MIN` (`mailbox.mcp_presence_min`,
+  30) of a tool call, or `CONVERSATION_WAIT_MIN` (5) of only an `initialize`. `active_sessions` includes these rows;
+  `recent_session` never picks one (nothing to fork), and an `mcp:` id is never a `from_session` (so never a
+  `to_session`).
+- **Hold**: a delegation not yet delivered to any session, to a project with such a row, is held while it stays live, up
+  to `MCP_HOLD_MAX_MIN` (`mailbox.mcp_hold_max_min`, 120) from the letter's timestamp; then it is routed as before (a
+  log line says it was held). Holding writes nothing on the bus; a letter already delivered is under the 60-minute seen
+  rule and is never held. Conversations are routed as before. A Claude Code session's presence keeps the 5 minutes.
+- **The session is told**: every tool result except `inbox`'s ends with the number of open letters.
+- **Status**: `hubbus status --json` has `held` (`id`, `to`, `ts`, `by` = the runtimes), and those letters are not in
+  `stuck`; the status page shows "held: <id> (<project> in use by …)".
+- MCP rows not seen for 24 hours are pruned with closed letters (bridge).

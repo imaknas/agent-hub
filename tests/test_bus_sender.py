@@ -353,6 +353,50 @@ class Outbox(Fixture):
         self.assertEqual([r["source"] for r in self.rows("type='message' AND to_project='open'")], ["box"])
 
 
+class McpPresence(Fixture):
+    """docs/design/mailbox-runtimes.md step 1 (A3): a sandboxed project's MCP server records presence through its
+    outbox (op presence), taken in only while that server process runs; its notice counts from the view."""
+
+    def presence(self):
+        db = self.tmp / "bus" / "bus.db"
+        c = sqlite3.connect(db)
+        try:
+            return c.execute("SELECT session, project, runtime, via FROM presence").fetchall()
+        finally:
+            c.close()
+
+    def test_presence_goes_through_the_outbox_and_counts_only_while_the_server_runs(self):
+        self.letter_to("box", "for box")
+        self.dispatch()   # the view now has the letter
+        p = subprocess.Popen([sys.executable, str(BIN / "mcp_server.py")], stdin=subprocess.PIPE, stdout=subprocess.PIPE,
+                             stderr=subprocess.DEVNULL, env=self.env, cwd=self.ws["box"], text=True)
+        self.addCleanup(p.stdout.close)
+        self.addCleanup(p.kill)
+
+        def rpc(i, method, params):
+            p.stdin.write(json.dumps({"jsonrpc": "2.0", "id": i, "method": method, "params": params}) + "\n")
+            p.stdin.flush()
+            return json.loads(p.stdout.readline())
+
+        rpc(0, "initialize", {"clientInfo": {"name": "codex"}})
+        text = rpc(1, "tools/call", {"name": "show", "arguments": {"id": "nothing"}})["result"]["content"][0]["text"]
+        self.assertIn("📬 1", text, "the count comes from the view")
+        ops = sorted(json.loads(f.read_text())["op"] for f in self.outbox().iterdir())
+        self.assertEqual(ops, ["presence", "presence"])
+        self.assertFalse(any("presence" in str(r) for r in self.rows()), "nothing written to the bus by the server")
+        self.dispatch()
+        rows = self.presence()
+        self.assertEqual([r[1:] for r in rows], [("box", "mcp:codex", "tool")])
+        self.assertRegex(rows[0][0], rf"^mcp:{p.pid}:\d+$")
+        self.assertEqual(self.refusals(), [])
+        p.stdin.close()
+        p.wait(timeout=30)
+        self.drop({"v": 1, "op": "presence", "session": rows[0][0], "cwd": str(self.ws["box"]), "via": "tool",
+                   "runtime": "mcp:codex"}, name="late.json")
+        self.hubbus("dispatch")
+        self.assertEqual(self.refusals(), [], "a server that has exited since is dropped quietly")
+
+
 class Policy(Fixture):
     def test_the_bus_is_in_no_sandbox_of_a_sandboxed_project(self):
         import policy

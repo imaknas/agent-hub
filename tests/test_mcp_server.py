@@ -139,23 +139,66 @@ class Server(unittest.TestCase):
                          point="mailbox-propose"), res[0][1])
         self.assertFalse(self.events("message"), "nothing sent")
 
-    def test_no_presence_no_notice_and_no_sending_session(self):
-        """What the server does today besides the mailbox commands (characterization, pinned before
-        docs/design/mailbox-runtimes.md step 1): it records no presence, a tool result is only the command's output,
-        and a letter it sends names no sending session."""
-        self.hubbus("send", "--from", "other", "--to", "demo", "--type", "request", "--text", "please look")
-        _, res = self.session([("send", {"to": "other", "type": "info", "text": "hello"}),
-                               ("note", {"text": "an entry"})])
-        self.assertEqual([e for e, _ in res], [False, False], res)
-        self.assertFalse(any("📬" in text for _, text in res), res)
+    def presence(self):
         import sqlite3
         c = sqlite3.connect(self.tmp / "bus" / "bus.db")
         try:
-            self.assertEqual(c.execute("SELECT COUNT(*) FROM presence").fetchone()[0], 0)
+            return c.execute("SELECT session, project, runtime, via FROM presence").fetchall()
         finally:
             c.close()
+
+    def test_presence_notice_and_no_sending_session(self):
+        """Besides the mailbox commands (docs/design/mailbox-runtimes.md step 1, A3): the server records presence as
+        mcp:<pid>:<start time>, each tool result but inbox's ends with the number of open letters, and a letter it
+        sends still names no sending session (before step 1 it recorded no presence and added no notice)."""
+        self.hubbus("send", "--from", "other", "--to", "demo", "--type", "request", "--text", "please look")
+        _, res = self.session([("send", {"to": "other", "type": "info", "text": "hello"}),
+                               ("note", {"text": "an entry"}), ("inbox", {})])
+        self.assertEqual([e for e, _ in res], [False, False, False], res)
+        notice = T("mcp_server", "📬 {n} {n:letter is|letters are} still open; look with inbox first.", n=1)
+        self.assertTrue(res[0][1].endswith("\n\n" + notice), res[0][1])
+        self.assertTrue(res[1][1].endswith("\n\n" + notice), res[1][1])
+        self.assertNotIn(notice, res[2][1], "inbox lists the letters itself")
+        rows = self.presence()
+        self.assertEqual(len(rows), 1, rows)
+        self.assertRegex(rows[0][0], r"^mcp:\d+:\d+$")
+        self.assertEqual(rows[0][1:], ("demo", "mcp:t", "tool"))
         sent = [json.loads(p) for s, _, _, p in self.events("message") if s == "demo"]
         self.assertEqual([p.get("from_session") for p in sent], [None])
+
+    def test_no_presence_for_platform_agents_leases_or_a_global_server_elsewhere(self):
+        self.hubbus("send", "--from", "other", "--to", "demo", "--type", "info", "--text", "a bus to be present on")
+        for env, cwd in (({"HUB_LLM_POINT": "mailbox-propose"}, None), ({"HUBBUS_LEASE": "1"}, None),
+                         ({"AGENTHUB_PROJECT": "demo"}, self.tmp)):
+            _, res = self.session([("show", {"id": "nothing"})], cwd=cwd, env=env)
+            self.assertEqual(self.presence(), [], env)
+        self.session([("show", {"id": "nothing"})], env={"AGENTHUB_PROJECT": "demo"})
+        self.assertEqual(len(self.presence()), 1, "AGENTHUB_PROJECT naming the folder's own project counts")
+
+    def test_a_running_session_holds_a_request_and_status_says_so(self):
+        """The server live, on this instance's bus: a request to its project is held (status: held, not stuck), and
+        stops being held once the server exits. Dispatch itself is covered with a fake runtime in
+        tests.test_mailbox_dispatch (here it would start a real agent)."""
+        p = subprocess.Popen([sys.executable, str(BIN / "mcp_server.py")], stdin=subprocess.PIPE, stdout=subprocess.PIPE,
+                             stderr=subprocess.DEVNULL, env=self.env, cwd=self.ws, text=True)
+        self.addCleanup(p.stdout.close)
+        self.addCleanup(p.kill)
+
+        def rpc(i, method, params):
+            p.stdin.write(json.dumps({"jsonrpc": "2.0", "id": i, "method": method, "params": params}) + "\n")
+            p.stdin.flush()
+            return json.loads(p.stdout.readline())
+
+        rpc(0, "initialize", {"protocolVersion": "2025-06-18", "clientInfo": {"name": "codex", "version": "1"}})
+        self.hubbus("send", "--from", "other", "--to", "demo", "--type", "request", "--text", "please look")
+        res = rpc(1, "tools/call", {"name": "note", "arguments": {"text": "working"}})["result"]["content"][0]["text"]
+        self.assertIn("📬", res)
+        st = json.loads(self.hubbus("status", "--json"))
+        self.assertEqual([(h["to"], h["by"]) for h in st["held"]], [("demo", ["mcp:codex"])])
+        self.assertEqual(st["stuck"], [])
+        p.stdin.close()
+        p.wait(timeout=30)
+        self.assertEqual(json.loads(self.hubbus("status", "--json"))["held"], [])
 
     def test_unknown_methods_get_an_empty_result_and_notifications_none(self):
         msgs = [{"jsonrpc": "2.0", "id": 5, "method": "ping"}, {"jsonrpc": "2.0", "method": "notifications/initialized"}]

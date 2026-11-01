@@ -145,5 +145,9 @@
  "A file in {project}'s outbox was not sent and has been deleted ({name}): {why}": "{project} 寄件匣裡有一個檔案沒有送出,已經刪掉({name}):{why}",
  "{project}: cannot write its mailbox view: {e}": "{project}:寫不進它的信箱檢視:{e}",
  "ph is {ph!r}, must be one of {versions}": "ph 是 {ph!r},要是 {versions} 其中之一",
- "hubbus: {key} is a to-do in STATE.md; change its line there (the registrar sends the change)": "hubbus: {key} 是 STATE.md 裡的待辦;到 STATE.md 改那一行(registrar 會把改動送出)"
+ "hubbus: {key} is a to-do in STATE.md; change its line there (the registrar sends the change)": "hubbus: {key} 是 STATE.md 裡的待辦;到 STATE.md 改那一行(registrar 會把改動送出)",
+ "hubbus: {project} records presence only in itself": "hubbus: {project} 只能記錄自己的在場",
+ "hubbus: a presence entry names an MCP server (mcp:<pid>:<start time>) and initialize or tool": "hubbus: 在場記錄要寫明 MCP 伺服器(mcp:<pid>:<啟動時間>),以及 initialize 或 tool",
+ "{project}: {id} was held {minutes} {minutes:minute|minutes} while an MCP session used the project; dispatching it now": "{project}:{id} 因為有 MCP session 在用這個專案已經壓了 {minutes} 分鐘,現在分派",
+ "Held while an MCP session uses the project (dispatched after {minutes} minutes at most): {items}": "有 MCP session 在用專案,先壓著(最多 {minutes} 分鐘後分派):{items}"
 }
