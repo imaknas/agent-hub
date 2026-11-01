@@ -9,6 +9,15 @@
 
 **Many projects, run by AI agents. Each one remembers, and you decide.**
 
+Install (macOS or Linux), then answer a few questions:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/imaknas/agent-hub/main/install.sh | sh
+agenthub init
+```
+
+What it does and what comes next: [Quick start](#quick-start).
+
 Your agents write down what they do and learn. Every night agent-hub settles those notes into each project's current
 state, corrects what has changed, and gathers what matters across all your projects, so nothing is lost between
 sessions or tools. What only you can decide comes back to you.
