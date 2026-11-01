@@ -108,6 +108,31 @@ class CharacterizeSecrets(unittest.TestCase):
                          [self.secrets / "api-token"])
 
 
+class CharacterizeClaudeWake(Harness):
+    """Claude's wake before the asyncRewake waiter (docs/design/mailbox-runtimes.md B1), through the real adapter:
+    Unsupported, so dispatch records nothing and routes as usual; doctor's row is off; no Stop hook is installed."""
+
+    def test_the_claude_sessions_port_cannot_wake(self):
+        import runtime_ports
+        with self.assertRaises(runtime_ports.Unsupported):
+            runtime_ports.Sessions(["claude"]).wake("S1", "x")
+
+    def test_dispatch_through_the_claude_adapter_records_no_wake(self):
+        import runtime_ports
+        self.send("m1", "proj", "request")
+        self.m.wake(self.c, runtime_ports.Sessions(["claude"]), self.m.get_message(self.c, "m1"), "S1")
+        self.assertEqual(self.types(), {"message"})
+
+    def test_doctors_wake_row_is_off(self):
+        import runtime_ports
+        [row] = [r for r in runtime_ports.feature_table("claude") if r[0] in runtime_ports.optional_features()]
+        self.assertFalse(row[1])
+
+    def test_no_stop_hook_is_installed(self):
+        import runtime_claude
+        self.assertNotIn("Stop", runtime_claude.install_hooks({})["hooks"])
+
+
 class WakingRuntime(tmd.FakeRuntime):
     """tests.test_mailbox_dispatch's fake runtime with the wake port."""
 
