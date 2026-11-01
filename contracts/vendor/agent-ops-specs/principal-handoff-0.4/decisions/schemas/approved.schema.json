@@ -1,0 +1,21 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "decisions/schemas/approved.schema.json",
+  "title": "Principal Handoff Decisions 0.4: approved",
+  "description": "Principal side: the principal approved the decision's terms at one terms_rev (core section 5.3), or the approval is retracted (active false). Changes no register.",
+  "$ref": "../../core/schemas/record.schema.json",
+  "required": [
+    "approval"
+  ],
+  "properties": {
+    "ext": {
+      "const": "decisions/0.4"
+    },
+    "type": {
+      "const": "approved"
+    },
+    "origin": {
+      "const": "principal"
+    }
+  }
+}

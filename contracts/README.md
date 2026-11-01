@@ -16,7 +16,7 @@ repos are open source, and the vendored copy gets committed there).
 | `project.v2.schema.json` (v1 alongside) | tests leave `runtime` for a top-level `tests` list with `code` and `inputs` (docs/design/test-waiting.md B1); `bin/registry.py` `validate_v2` checks it, not yet wired into the live validators (until the runner and readers switch, step 2.3) | the platform itself |
 | `managed-files.md` | — | the list of files the platform writes into projects |
 | `vendor/<project>/` | copies of contracts defined by other projects | the programs on this side |
-| `vendor/agent-ops-specs/principal-handoff-<version>/` | the Principal Handoff spec's conformance fixtures, and for 0.5 its schemas, byte-identical to the spec's tag (`SOURCE` says which); one directory per version agent-hub still sends or receives | `bin/ph_records.py` validates records against the 0.5 schemas at run time; the tests run the fixtures (`SOURCE` lists which) |
+| `vendor/agent-ops-specs/principal-handoff-<version>/` | the Principal Handoff spec's conformance fixtures, and for 0.4 and 0.5 its schemas, byte-identical to the spec's tag (`SOURCE` says which); one directory per version agent-hub still sends or receives | `bin/ph_records.py` validates a record against the schemas of its own version at run time (a 0.3 record against 0.5's); the tests run the fixtures (`SOURCE` lists which) |
 
 - `{owner}`: the owner tag in machine-read rules; this side fills it from `hub.json` `owner.tag` (here, the owner's
   name); readers use their own settings.

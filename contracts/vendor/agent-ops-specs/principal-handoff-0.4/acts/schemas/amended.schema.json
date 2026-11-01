@@ -1,0 +1,38 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "acts/schemas/amended.schema.json",
+  "title": "Principal Handoff Acts 0.4: amended",
+  "description": "Requester -> principal side: new terms for the item; terms_rev increases by one.",
+  "$ref": "../../core/schemas/record.schema.json",
+  "required": [
+    "terms",
+    "terms_rev"
+  ],
+  "properties": {
+    "ext": {
+      "const": "acts/0.4"
+    },
+    "type": {
+      "const": "amended"
+    },
+    "origin": {
+      "const": "requester"
+    },
+    "terms": {
+      "type": "object",
+      "required": [
+        "text"
+      ],
+      "properties": {
+        "text": {
+          "type": "string",
+          "pattern": "\\S"
+        },
+        "due": {
+          "type": "string",
+          "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}$"
+        }
+      }
+    }
+  }
+}

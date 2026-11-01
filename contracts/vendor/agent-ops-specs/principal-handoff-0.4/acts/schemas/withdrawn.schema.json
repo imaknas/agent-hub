@@ -1,0 +1,28 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "acts/schemas/withdrawn.schema.json",
+  "title": "Principal Handoff Acts 0.4: withdrawn",
+  "description": "Requester -> principal side: the requester no longer needs it. Never a settlement.",
+  "$ref": "../../core/schemas/record.schema.json",
+  "required": [
+    "reason"
+  ],
+  "properties": {
+    "ext": {
+      "const": "acts/0.4"
+    },
+    "type": {
+      "const": "withdrawn"
+    },
+    "origin": {
+      "const": "requester"
+    },
+    "reason": {
+      "type": "string",
+      "enum": [
+        "not_needed",
+        "replaced"
+      ]
+    }
+  }
+}

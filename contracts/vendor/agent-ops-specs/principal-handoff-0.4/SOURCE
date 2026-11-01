@@ -1,0 +1,4 @@
+Vendored from agent-ops-specs (https://github.com/imaknas/agent-ops-specs, specs/principal-handoff/) at tag principal-handoff-0.4 (commit 81a0486, DOI 10.5281/zenodo.23852711), byte-identical:
+- core/schemas/, acts/schemas/ and decisions/schemas/, in the tag's layout, so the schemas' relative $ref resolve inside this directory. bin/ph_records.py validates a 0.4 record against them, by 0.4's rules (core §14, mixed versions: a record in N-1 is validated under N-1);
+- decisions/records.json (the tag's decisions/conformance/records.json) and acts/records.json: run in full against that validation in tests/test_ph_records.py.
+acts/SOURCE says what else of acts/ and core/ is here and which tests run it.

@@ -1,0 +1,52 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "decisions/schemas/claimed.schema.json",
+  "title": "Principal Handoff Decisions 0.4: claimed",
+  "description": "Anyone but the principal side: asserts an outcome it has no authority to record. Changes no register.",
+  "$ref": "../../core/schemas/record.schema.json",
+  "required": [
+    "outcome",
+    "evidence",
+    "answer"
+  ],
+  "properties": {
+    "ext": {
+      "const": "decisions/0.4"
+    },
+    "type": {
+      "const": "claimed"
+    },
+    "origin": {
+      "type": "string",
+      "enum": [
+        "agent",
+        "requester"
+      ]
+    },
+    "outcome": {
+      "const": "decided"
+    },
+    "evidence": {
+      "type": "object",
+      "required": [
+        "basis"
+      ]
+    },
+    "answer": {
+      "type": "object",
+      "required": [
+        "text"
+      ],
+      "properties": {
+        "text": {
+          "type": "string",
+          "pattern": "\\S"
+        },
+        "option": {
+          "type": "string",
+          "pattern": "^\\S{1,64}$"
+        }
+      }
+    }
+  }
+}

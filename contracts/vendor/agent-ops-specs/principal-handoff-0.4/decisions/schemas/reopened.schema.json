@@ -1,0 +1,21 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "decisions/schemas/reopened.schema.json",
+  "title": "Principal Handoff Decisions 0.4: reopened",
+  "description": "Principal side -> requester's project: an earlier settlement no longer stands.",
+  "$ref": "../../core/schemas/record.schema.json",
+  "required": [
+    "supersedes"
+  ],
+  "properties": {
+    "ext": {
+      "const": "decisions/0.4"
+    },
+    "type": {
+      "const": "reopened"
+    },
+    "origin": {
+      "const": "principal"
+    }
+  }
+}

@@ -1,0 +1,349 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "core/schemas/record.schema.json",
+  "title": "Principal Handoff Core 0.4 record",
+  "description": "Members shared by every record, whatever its extension. Receivers MUST ignore members they do not know.",
+  "type": "object",
+  "required": [
+    "ph",
+    "ext",
+    "id",
+    "type",
+    "origin",
+    "by",
+    "key",
+    "project",
+    "ts"
+  ],
+  "properties": {
+    "ph": {
+      "description": "Core version.",
+      "const": "0.4"
+    },
+    "ext": {
+      "description": "Extension name and version, e.g. acts/0.4.",
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9-]*/[0-9]+\\.[0-9]+$"
+    },
+    "id": {
+      "description": "Record id; stable across retransmissions.",
+      "type": "string",
+      "pattern": "^\\S{1,256}$"
+    },
+    "type": {
+      "type": "string",
+      "enum": [
+        "raised",
+        "amended",
+        "withdrawn",
+        "settled",
+        "reopened",
+        "claimed",
+        "related",
+        "note",
+        "approved"
+      ]
+    },
+    "origin": {
+      "description": "Role that emitted the record.",
+      "type": "string",
+      "pattern": "^[a-z][a-z_]*$"
+    },
+    "by": {
+      "description": "Party identifier of the emitter.",
+      "type": "string",
+      "pattern": "^\\S{1,256}$"
+    },
+    "key": {
+      "description": "Opaque key of the item.",
+      "type": "string",
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$"
+    },
+    "project": {
+      "type": "string",
+      "pattern": "^\\S{1,128}$"
+    },
+    "ts": {
+      "description": "RFC 3339 creation time, at most six fractional digits; compared as instants.",
+      "type": "string",
+      "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}[Tt][0-9]{2}:[0-9]{2}:[0-9]{2}(\\.[0-9]{1,6})?([Zz]|[+-][0-9]{2}:[0-9]{2})$"
+    },
+    "supersedes": {
+      "description": "Ids of records of the same register this one replaces.",
+      "type": "array",
+      "items": {
+        "type": "string",
+        "pattern": "^\\S{1,256}$"
+      }
+    },
+    "terms": {
+      "description": "What the item asks; members defined by the extension.",
+      "type": "object",
+      "required": [
+        "text"
+      ],
+      "properties": {
+        "text": {
+          "type": "string",
+          "pattern": "\\S"
+        },
+        "due": {
+          "type": "string",
+          "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}$"
+        }
+      }
+    },
+    "terms_rev": {
+      "description": "Terms version (need records), the version a settlement or approval was made against, or the version a claim or note refers to.",
+      "type": "integer"
+    },
+    "outcome": {
+      "type": "string",
+      "pattern": "^[a-z][a-z_]*$"
+    },
+    "terms_digest": {
+      "description": "On settled: the terms digest (core section 5.3) of the need record it was made against.",
+      "type": "string",
+      "pattern": "^sha-256:[0-9a-f]{64}$"
+    },
+    "authority": {
+      "type": "object",
+      "required": [
+        "kind",
+        "decider"
+      ],
+      "properties": {
+        "kind": {
+          "type": "string",
+          "enum": [
+            "principal",
+            "confirmed",
+            "delegated",
+            "attested"
+          ]
+        },
+        "decider": {
+          "type": "string",
+          "pattern": "^\\S{1,256}$"
+        },
+        "under": {
+          "type": "string",
+          "pattern": "\\S"
+        },
+        "chain": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "pattern": "^\\S{1,256}$"
+          }
+        },
+        "representative": {
+          "type": "string",
+          "pattern": "^\\S{1,256}$"
+        }
+      }
+    },
+    "evidence": {
+      "type": "object",
+      "properties": {
+        "presented": {
+          "type": "string",
+          "pattern": "^sha-256:[0-9a-f]{64}$"
+        },
+        "proposal": {
+          "type": "string",
+          "pattern": "\\S"
+        },
+        "basis": {
+          "type": "string",
+          "pattern": "\\S"
+        },
+        "proof": {
+          "type": "string",
+          "pattern": "\\S"
+        },
+        "verifiable": {
+          "description": "Independently verifiable proofs of facts (core section 5.2). Each entry carries exactly one of proof and proof_ref.",
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": [
+              "id",
+              "format",
+              "statement"
+            ],
+            "properties": {
+              "id": {
+                "type": "string",
+                "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$"
+              },
+              "format": {
+                "type": "string",
+                "pattern": "^\\S{1,128}$"
+              },
+              "statement": {
+                "type": "string",
+                "pattern": "\\S"
+              },
+              "proof": {
+                "type": "string",
+                "pattern": "\\S"
+              },
+              "proof_ref": {
+                "type": "object",
+                "required": [
+                  "uri",
+                  "digest"
+                ],
+                "properties": {
+                  "uri": {
+                    "type": "string",
+                    "pattern": "\\S"
+                  },
+                  "digest": {
+                    "type": "string",
+                    "pattern": "^sha-256:[0-9a-f]{64}$"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "verified": {
+          "description": "What the principal side checked (core section 5.2); on settlements and principal-side notes only.",
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": [
+              "of",
+              "verifier",
+              "result",
+              "at"
+            ],
+            "properties": {
+              "of": {
+                "type": "object",
+                "required": [
+                  "record",
+                  "entry"
+                ],
+                "properties": {
+                  "record": {
+                    "type": "string",
+                    "pattern": "^\\S{1,256}$"
+                  },
+                  "entry": {
+                    "type": "string",
+                    "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$"
+                  }
+                }
+              },
+              "verifier": {
+                "type": "string",
+                "pattern": "^\\S{1,256}$"
+              },
+              "result": {
+                "type": "string",
+                "enum": [
+                  "valid",
+                  "invalid",
+                  "unsupported"
+                ]
+              },
+              "at": {
+                "type": "string",
+                "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}[Tt][0-9]{2}:[0-9]{2}:[0-9]{2}(\\.[0-9]{1,6})?([Zz]|[+-][0-9]{2}:[0-9]{2})$"
+              }
+            }
+          }
+        }
+      }
+    },
+    "relation": {
+      "type": "object",
+      "required": [
+        "kind",
+        "target",
+        "active"
+      ],
+      "properties": {
+        "kind": {
+          "type": "string",
+          "enum": [
+            "same_as",
+            "derived_from",
+            "replaced_by"
+          ]
+        },
+        "target": {
+          "type": "object",
+          "properties": {
+            "ext": {
+              "type": "string"
+            },
+            "project": {
+              "type": "string"
+            },
+            "key": {
+              "type": "string",
+              "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$"
+            },
+            "uri": {
+              "type": "string",
+              "pattern": "\\S"
+            }
+          }
+        },
+        "active": {
+          "type": "boolean"
+        }
+      }
+    },
+    "approval": {
+      "description": "On approved: what the approval binds (core section 5.3).",
+      "type": "object",
+      "required": [
+        "active"
+      ],
+      "properties": {
+        "terms_digest": {
+          "type": "string",
+          "pattern": "^sha-256:[0-9a-f]{64}$"
+        },
+        "active": {
+          "type": "boolean"
+        }
+      }
+    },
+    "reason": {
+      "type": "string",
+      "pattern": "^[a-z][a-z_]*$"
+    },
+    "adopts": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "pattern": "^\\S{1,256}$"
+      }
+    },
+    "about": {
+      "type": "object",
+      "properties": {
+        "key": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$"
+        },
+        "quote": {
+          "type": "string",
+          "pattern": "\\S"
+        }
+      }
+    },
+    "note": {
+      "type": "string"
+    },
+    "context": {
+      "type": "string"
+    }
+  }
+}
