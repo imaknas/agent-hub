@@ -268,10 +268,9 @@ class Adapters(unittest.TestCase):
         self.assertEqual(self.failed(), {})
         self.assertEqual(json.loads((self.tmp / "SENT.json").read_text())["k"]["problems"], ["broken one", "broken two"])
 
-    @unittest.expectedFailure
     def test_every_channel_is_tried_when_one_fails(self):
-        """send() says "send on every channel set up"; all() over a generator stops at the first failure, so a broken
-        Discord keeps ntfy from ever being tried. Pinned as a known bug: remove expectedFailure once fixed."""
+        """send() sends on every channel set up: a broken Discord must not keep ntfy from being tried (all() over a
+        generator used to stop at the first failure)"""
         self.discord()
         self.cfg["alerts"]["ntfy"] = {"topic": "t"}
         self.fake_run_codes(iter(["500", "200"]))

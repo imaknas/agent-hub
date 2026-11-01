@@ -119,7 +119,8 @@ def send(text: str) -> bool:
     """Send on every channel set up; success only when all of them went out (one failing is recorded as a failure, and
     the status page turns red). None set up = False."""
     chans = configured()
-    return bool(chans) and all(CHANNELS[n][0](text) for n in chans)
+    results = [CHANNELS[n][0](text) for n in chans]   # every channel is tried: a broken one must not silence the rest
+    return bool(chans) and all(results)
 
 
 def probe() -> bool:
