@@ -40,21 +40,27 @@ class TimeZone(unittest.TestCase):
         from unittest import mock
         with mock.patch.object(hubconf, "_cfg", {"owner": {"timezone": "America/New_York"}}):
             m = load()
-        self.assertEqual(str(m.TZ), "Asia/Taipei")
+        self.assertEqual(str(m.TZ), "America/New_York")
+        start, _end, _label = m.week_bounds("2026-W43")
+        self.assertEqual(start.utcoffset(), datetime.timedelta(hours=-4))
 
     def test_no_time_zone_data(self):
-        """a bare Ubuntu has no tzdata package"""
+        """a bare Ubuntu has no tzdata package: the local zone, said on stderr, and the job goes on"""
+        import contextlib
         import hubconf
+        import io
         import zoneinfo
         from unittest import mock
 
         def missing(key):
             raise zoneinfo.ZoneInfoNotFoundError(f"No time zone found with key {key}")
+        err = io.StringIO()
         with mock.patch.object(hubconf, "_cfg", {"owner": {"timezone": "America/New_York"}}), \
-                mock.patch.object(zoneinfo, "ZoneInfo", missing):
-            with self.assertRaises(zoneinfo.ZoneInfoNotFoundError):
-                load()
-
+                mock.patch.object(zoneinfo, "ZoneInfo", missing), contextlib.redirect_stderr(err):
+            m = load()
+        self.assertEqual(m.TZ, datetime.datetime.now().astimezone().tzinfo)
+        self.assertIn("America/New_York", err.getvalue())
+        self.assertIn("setup-python", err.getvalue())
 
 class Scan(unittest.TestCase):
     def setUp(self):

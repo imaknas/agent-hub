@@ -6,8 +6,9 @@
 #   setup-python --check   verify only (version ≥ 3.13, packages importable), touches nothing; exit 1 if it fails
 set -eu
 MIN="3.13"
-# pyyaml: the only third-party package platform scripts import; ruff: bin/lint (commit gate), not imported
-PKGS="pyyaml==6.0.3 ruff==0.14.0"
+# pyyaml: the only third-party package platform scripts import; ruff: bin/lint (commit gate), not imported;
+# tzdata: the IANA time zones for zoneinfo where the system has none (a bare Ubuntu/Debian; hubconf.tz)
+PKGS="pyyaml==6.0.3 ruff==0.14.0 tzdata==2025.2"
 dir="${AGENT_HUB_PYTHON:+$(dirname "$(dirname "$AGENT_HUB_PYTHON")")}"
 dir="${dir:-$HOME/.local/share/agent-hub/python}"
 py="$dir/bin/python3"

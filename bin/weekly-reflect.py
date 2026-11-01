@@ -7,16 +7,16 @@ sessions; this report fills that gap. Output:
   reflect/index.html      the report page for all weeks (data embedded in the page, templates/reflect.html as layout)
 
 Statistics are all computed mechanically, zero LLM: per-project messages/sessions/active days/commits/memory notes
-(compared with last week), the work distribution by weekday × hour (Taipei time), the late-night share, the longest
-continuous stretch, the daily stopping time, how work was delegated (subagents, cross-session messages, skills),
-projects started/stopped. The analysis section: see reflect_llm.py.
+(compared with last week), the work distribution by weekday × hour (in the owner's time zone, hub.json owner.timezone),
+the late-night share, the longest continuous stretch, the daily stopping time, how work was delegated (subagents,
+cross-session messages, skills), projects started/stopped. The analysis section: see reflect_llm.py.
 
 Data: the runtime's transcript_roots (sessions local to the hub machine, plus those from the remote machine backed up
 by transcript-backup.sh, personal profile only: the work profile is deliberately not read), ~/git-origin/mirrors
 (updated daily at 04:00), the memory copies in ~/.memory-copies/<name>.
 
 Usage: weekly-reflect.py [--week 2026-W40] [--llm]
-  --week omitted = the last full week (Monday to Sunday, Taipei time). Prints the path of the json written.
+  --week omitted = the last full week (Monday to Sunday, the owner's time zone). Prints the path of the json written.
 """
 from __future__ import annotations  # the system python3 (3.9) must be able to import this too
 
@@ -28,7 +28,6 @@ import pathlib
 import re
 import subprocess
 import sys
-import zoneinfo
 
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
 import hubconf  # noqa: E402
@@ -37,13 +36,13 @@ import i18n  # noqa: E402
 import runtime_ports  # noqa: E402  conversation records only through the interface (Claude Code is one implementation)
 
 _ = i18n.domain(__file__)
-TZ = zoneinfo.ZoneInfo("Asia/Taipei")
+TZ = hubconf.tz()   # the owner's clock (hub.json owner.timezone)
 MIRRORS = hubconf.p("git_origin", "~/git-origin") / "mirrors"
 MEMORY_COPIES = hublib.MEMORY_COPIES
 OUT = hubconf.data_file("reflect")
 TEMPLATE = hublib.HUB / "templates" / "reflect.html"
 CONTRACT = hublib.HUB / "contracts" / "reflect-week.v2.schema.json"   # what a week's json follows (v1 weeks: read too)
-LATE_NIGHT = range(0, 6)       # 00:00–05:59 Taipei time
+LATE_NIGHT = range(0, 6)       # 00:00–05:59 in the owner's time zone
 BREAK_MINUTES = 30             # a gap between two messages longer than this counts as a break
 QUIET_THRESHOLD = 10           # at least this many last week and 0 this week → a stopped project
 
@@ -154,6 +153,7 @@ def build_stats(label: str, start: datetime.datetime, end: datetime.datetime, we
         "week": label,
         "start": start.date().isoformat(), "end": (end - datetime.timedelta(days=1)).date().isoformat(),
         "generated": datetime.datetime.now(TZ).isoformat(timespec="minutes"),
+        "timezone": str(TZ),   # the zone the hours are counted in
         "totals": {"prompts": total, "prompts_prev": sum(prev.prompts.values()),
                    "sessions": sum(len(s) for s in this.sessions.values()),
                    "projects": len(this.prompts), "days": len({t.date() for t in this.times})},

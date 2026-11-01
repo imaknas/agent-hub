@@ -332,6 +332,24 @@ def owner_tag() -> str:
     return get("owner.tag", "Owner")
 
 
+def tz():
+    """The owner's time zone (hub.json owner.timezone, an IANA name) as a tzinfo, for what is counted by the owner's
+    clock (the weekly report's hours). Not set: this machine's local zone. Set but not found -- the zone data is
+    missing (a bare Linux has no tzdata package; bin/setup-python installs the Python one) or the name is wrong --
+    says so on stderr and uses the local zone rather than stopping the job."""
+    import datetime
+    import zoneinfo
+    name = get("owner.timezone")
+    if name:
+        try:
+            return zoneinfo.ZoneInfo(name)
+        except (zoneinfo.ZoneInfoNotFoundError, ValueError) as e:
+            print(_("time zone {name} (hub.json owner.timezone) not found ({error}); using this machine's local time "
+                    "instead. Without the system's tzdata, rerun bin/setup-python (it installs the Python tzdata "
+                    "package)", name=name, error=e), file=sys.stderr)
+    return datetime.datetime.now().astimezone().tzinfo
+
+
 def owner_side() -> str:
     """Who the Principal Handoff's principal side is (hub.json owner_side): assistant = the assistant set in hub.json
     assistant (the bridge exchanges with its API); builtin = the platform's minimal built-in owner side (bin/owner.py).

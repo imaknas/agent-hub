@@ -1,6 +1,6 @@
 [
  {
-  "week": "2026-W39", "start": "2026-09-21", "end": "2026-09-27", "generated": "2026-09-28T07:00+08:00",
+  "week": "2026-W39", "start": "2026-09-21", "end": "2026-09-27", "generated": "2026-09-28T07:00+08:00", "timezone": "Asia/Taipei",
   "totals": {"prompts": 120, "prompts_prev": 80, "sessions": 14, "projects": 3, "days": 6},
   "projects": [
    {"name": "alpha", "prompts": 70, "prompts_prev": 40, "sessions": 8, "days": 5, "commits": 12, "notes": 4},

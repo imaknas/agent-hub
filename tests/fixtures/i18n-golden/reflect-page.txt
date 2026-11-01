@@ -55,7 +55,7 @@
         <p>統計看不出。</p><p class="evidence">無</p><p class="tip">無。</p></article><article class="fl"><header><div><h3>把關</h3><span class="en">Diligence</span></div>
         <span class="lv lv-stable">穩定</span></header>
         <p>一個 commit。</p><p class="evidence">1 個</p><p class="tip">無。</p></article></div></section><section><header><span class="eyebrow">Next week</span><h2>下週先做這幾件</h2></header><ol class="actions"><li><span class="act">無</span><span class="why">量太少</span></li><li><span class="act">無</span><span class="why">量太少</span></li></ol></section><footer class="method">
-    <p>資料:個人 profile 的 Claude Code session(工作 profile 不備份;claude.ai 的對話請看 claude.ai 的 Reflect)。訊息只算你實際送出的。時間為台北時間。</p>
+    <p>資料:這台機器上 coding agent 的 session。訊息只算你實際送出的。</p>
     <p>分析由 model-w 只根據上面的統計撰寫,是模型的解讀;對話原文不送雲端模型,所以它看不到你做了什麼內容。</p>
     <p class="num">產生時間 2026-10-26T07:00+08:00</p>
   </footer>
@@ -113,7 +113,7 @@
         <p>統計看不出。</p><p class="evidence">無</p><p class="tip">無。</p></article><article class="fl"><header><div><h3>把關</h3><span class="en">Diligence</span></div>
         <span class="lv lv-stable">穩定</span></header>
         <p>一個 commit。</p><p class="evidence">1 個</p><p class="tip">無。</p></article></div></section><section><header><span class="eyebrow">Next week</span><h2>下週先做這幾件</h2></header><ol class="actions"><li><span class="act">無</span><span class="why">量太少</span></li><li><span class="act">無</span><span class="why">量太少</span></li></ol></section><footer class="method">
-    <p>資料:個人 profile 的 Claude Code session(工作 profile 不備份;claude.ai 的對話請看 claude.ai 的 Reflect)。訊息只算你實際送出的。時間為台北時間。</p>
+    <p>資料:這台機器上 coding agent 的 session。訊息只算你實際送出的。</p>
     <p>分析由 model-w 只根據上面的統計撰寫,是模型的解讀;對話原文不送雲端模型,所以它看不到你做了什麼內容。</p>
     <p class="num">產生時間 2026-10-26T07:00+08:00</p>
   </footer>
@@ -143,7 +143,7 @@
       <div class="stops"></div></div>
   </section><section><header><span class="eyebrow">Projects</span><h2>各專案</h2>
       <p class="muted" style="font-size:14px">右側長條:上面是這週訊息,下面灰色是上週。</p></header><div class="projects"></div></section><footer class="method">
-    <p>資料:個人 profile 的 Claude Code session(工作 profile 不備份;claude.ai 的對話請看 claude.ai 的 Reflect)。訊息只算你實際送出的。時間為台北時間。</p>
+    <p>資料:這台機器上 coding agent 的 session。訊息只算你實際送出的。</p>
     
     <p class="num">產生時間 2026-10-19T07:00+08:00</p>
   </footer>
@@ -190,7 +190,7 @@
         <div class="mini"><span>活躍天 / session</span><span class="num">1 / 1</span></div>
       </div>
     </div></div></section><footer class="method">
-    <p>資料:個人 profile 的 Claude Code session(工作 profile 不備份;claude.ai 的對話請看 claude.ai 的 Reflect)。訊息只算你實際送出的。時間為台北時間。</p>
+    <p>資料:這台機器上 coding agent 的 session。訊息只算你實際送出的。</p>
     <p>分析由 model-z 只根據上面的統計撰寫,是模型的解讀;對話原文不送雲端模型,所以它看不到你做了什麼內容。</p>
     <p class="num">產生時間 2026-10-12T07:00+08:00</p>
   </footer>
@@ -248,7 +248,7 @@
         <p>無。</p><p class="evidence">統計撐不起判斷</p><p class="tip">無。</p></article><article class="fl"><header><div><h3>把關</h3><span class="en">Diligence</span></div>
         <span class="lv lv-needs_work">可改進</span></header>
         <p>commit 少。</p><p class="evidence">3 個</p><p class="tip">小步提交。</p></article></div></section><section><header><span class="eyebrow">Next week</span><h2>下週先做這幾件</h2></header><ol class="actions"><li><span class="act">回到 alpha</span><span class="why">停太久</span></li><li><span class="act">整理筆記</span><span class="why">筆記少</span></li></ol></section><footer class="method">
-    <p>資料:個人 profile 的 Claude Code session(工作 profile 不備份;claude.ai 的對話請看 claude.ai 的 Reflect)。訊息只算你實際送出的。時間為台北時間。</p>
+    <p>資料:這台機器上 coding agent 的 session。訊息只算你實際送出的。</p>
     <p>分析由 model-y 根據上面的統計與 4 則 Helper 本機模型寫的 session 摘要撰寫,是模型的解讀;對話原文不送雲端模型。工作相關的 1 個 session、beta 只算在統計裡;還有 2 個 session 沒有摘要。</p>
     <p class="num">產生時間 2026-10-05T07:00+08:00</p>
   </footer>
@@ -359,7 +359,7 @@
         <p>有一次直接接受。</p><p class="quote" data-open="「" data-close="」">好,就這樣</p><p class="tip">多問一句為什麼。</p></article><article class="fl"><header><div><h3>把關</h3><span class="en">Diligence</span></div>
         <span class="lv lv-strength">強項</span></header>
         <p>會跑測試。</p><p class="evidence">commit 前都跑</p><p class="tip">繼續。</p></article></div></section><section><header><span class="eyebrow">Next week</span><h2>下週先做這幾件</h2></header><ol class="actions"><li><span class="act">補 alpha 的測試</span><span class="why">推得快,測試沒跟上</span></li><li><span class="act">決定 beta 的去留</span><span class="why">持平兩週</span></li></ol></section><footer class="method">
-    <p>資料:個人 profile 的 Claude Code session(工作 profile 不備份;claude.ai 的對話請看 claude.ai 的 Reflect)。訊息只算你實際送出的。時間為台北時間。</p>
+    <p>資料:這台機器上 coding agent 的 session。訊息只算你實際送出的。時間為 Asia/Taipei。</p>
     <p>分析由 model-x 根據 40 則訊息抽樣與上面的統計撰寫,是模型的解讀;beta、gamma 只提供數字、不送原文;送出前已遮掉像金鑰的字串。</p>
     <p class="num">產生時間 2026-09-28T07:00+08:00</p>
   </footer>

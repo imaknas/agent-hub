@@ -55,7 +55,7 @@ Weekly Reflect
         <p>統計看不出。</p><p class="evidence">無</p><p class="tip">無。</p></article><article class="fl"><header><div><h3>Diligence</h3><span class="en"></span></div>
         <span class="lv lv-stable">Stable</span></header>
         <p>一個 commit。</p><p class="evidence">1 個</p><p class="tip">無。</p></article></div></section><section><header><span class="eyebrow">Next week</span><h2>Do these first next week</h2></header><ol class="actions"><li><span class="act">無</span><span class="why">量太少</span></li><li><span class="act">無</span><span class="why">量太少</span></li></ol></section><footer class="method">
-    <p>Data: the Claude Code sessions of the personal profile (the work profile is not backed up; for claude.ai's conversations see claude.ai's Reflect). Only the messages you actually sent count. Times are Taipei time.</p>
+    <p>Data: the coding agent's sessions on this machine. Only the messages you actually sent count.</p>
     <p>The analysis was written by model-w from the statistics above only; it is the model's reading. The conversations' text is not sent to a cloud model, so it cannot see what the work was.</p>
     <p class="num">Generated 2026-10-26T07:00+08:00</p>
   </footer>
@@ -113,7 +113,7 @@ Weekly Reflect
         <p>統計看不出。</p><p class="evidence">無</p><p class="tip">無。</p></article><article class="fl"><header><div><h3>Diligence</h3><span class="en"></span></div>
         <span class="lv lv-stable">Stable</span></header>
         <p>一個 commit。</p><p class="evidence">1 個</p><p class="tip">無。</p></article></div></section><section><header><span class="eyebrow">Next week</span><h2>Do these first next week</h2></header><ol class="actions"><li><span class="act">無</span><span class="why">量太少</span></li><li><span class="act">無</span><span class="why">量太少</span></li></ol></section><footer class="method">
-    <p>Data: the Claude Code sessions of the personal profile (the work profile is not backed up; for claude.ai's conversations see claude.ai's Reflect). Only the messages you actually sent count. Times are Taipei time.</p>
+    <p>Data: the coding agent's sessions on this machine. Only the messages you actually sent count.</p>
     <p>The analysis was written by model-w from the statistics above only; it is the model's reading. The conversations' text is not sent to a cloud model, so it cannot see what the work was.</p>
     <p class="num">Generated 2026-10-26T07:00+08:00</p>
   </footer>
@@ -143,7 +143,7 @@ Weekly Reflect
       <div class="stops"></div></div>
   </section><section><header><span class="eyebrow">Projects</span><h2>By project</h2>
       <p class="muted" style="font-size:14px">The bars on the right: this week's messages on top, last week's in grey below.</p></header><div class="projects"></div></section><footer class="method">
-    <p>Data: the Claude Code sessions of the personal profile (the work profile is not backed up; for claude.ai's conversations see claude.ai's Reflect). Only the messages you actually sent count. Times are Taipei time.</p>
+    <p>Data: the coding agent's sessions on this machine. Only the messages you actually sent count.</p>
     
     <p class="num">Generated 2026-10-19T07:00+08:00</p>
   </footer>
@@ -190,7 +190,7 @@ Weekly Reflect
         <div class="mini"><span>active days / sessions</span><span class="num">1 / 1</span></div>
       </div>
     </div></div></section><footer class="method">
-    <p>Data: the Claude Code sessions of the personal profile (the work profile is not backed up; for claude.ai's conversations see claude.ai's Reflect). Only the messages you actually sent count. Times are Taipei time.</p>
+    <p>Data: the coding agent's sessions on this machine. Only the messages you actually sent count.</p>
     <p>The analysis was written by model-z from the statistics above only; it is the model's reading. The conversations' text is not sent to a cloud model, so it cannot see what the work was.</p>
     <p class="num">Generated 2026-10-12T07:00+08:00</p>
   </footer>
@@ -248,7 +248,7 @@ Weekly Reflect
         <p>無。</p><p class="evidence">統計撐不起判斷</p><p class="tip">無。</p></article><article class="fl"><header><div><h3>Diligence</h3><span class="en"></span></div>
         <span class="lv lv-needs_work">Needs work</span></header>
         <p>commit 少。</p><p class="evidence">3 個</p><p class="tip">小步提交。</p></article></div></section><section><header><span class="eyebrow">Next week</span><h2>Do these first next week</h2></header><ol class="actions"><li><span class="act">回到 alpha</span><span class="why">停太久</span></li><li><span class="act">整理筆記</span><span class="why">筆記少</span></li></ol></section><footer class="method">
-    <p>Data: the Claude Code sessions of the personal profile (the work profile is not backed up; for claude.ai's conversations see claude.ai's Reflect). Only the messages you actually sent count. Times are Taipei time.</p>
+    <p>Data: the coding agent's sessions on this machine. Only the messages you actually sent count.</p>
     <p>The analysis was written by model-y from the statistics above and 4 session summaries written by Helper's local model; it is the model's reading, and the conversations' text is not sent to a cloud model. 1 work-related session and beta count only in the statistics; 2 more sessions have no summary.</p>
     <p class="num">Generated 2026-10-05T07:00+08:00</p>
   </footer>
@@ -359,7 +359,7 @@ Weekly Reflect
         <p>有一次直接接受。</p><p class="quote" data-open="“" data-close="”">好,就這樣</p><p class="tip">多問一句為什麼。</p></article><article class="fl"><header><div><h3>Diligence</h3><span class="en"></span></div>
         <span class="lv lv-strength">Strength</span></header>
         <p>會跑測試。</p><p class="evidence">commit 前都跑</p><p class="tip">繼續。</p></article></div></section><section><header><span class="eyebrow">Next week</span><h2>Do these first next week</h2></header><ol class="actions"><li><span class="act">補 alpha 的測試</span><span class="why">推得快,測試沒跟上</span></li><li><span class="act">決定 beta 的去留</span><span class="why">持平兩週</span></li></ol></section><footer class="method">
-    <p>Data: the Claude Code sessions of the personal profile (the work profile is not backed up; for claude.ai's conversations see claude.ai's Reflect). Only the messages you actually sent count. Times are Taipei time.</p>
+    <p>Data: the coding agent's sessions on this machine. Only the messages you actually sent count. Times are in Asia/Taipei.</p>
     <p>The analysis was written by model-x from a sample of 40 messages and the statistics above; it is the model's reading. beta, gamma only gave numbers, never text; strings that look like keys were masked before sending.</p>
     <p class="num">Generated 2026-09-28T07:00+08:00</p>
   </footer>

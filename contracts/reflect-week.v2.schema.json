@@ -31,6 +31,10 @@
     "generated": {
       "type": "string"
     },
+    "timezone": {
+      "description": "the time zone the hours are counted in (hub.json owner.timezone); weeks written before it was added were counted in Asia/Taipei",
+      "type": "string"
+    },
     "totals": {
       "type": "object",
       "required": [

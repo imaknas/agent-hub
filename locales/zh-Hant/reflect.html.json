@@ -44,12 +44,13 @@
  "“": "「",
  "”": "」",
  "Do these first next week": "下週先做這幾件",
- "Data: the Claude Code sessions of the personal profile (the work profile is not backed up; for claude.ai's conversations see claude.ai's Reflect). Only the messages you actually sent count. Times are Taipei time.": "資料:個人 profile 的 Claude Code session(工作 profile 不備份;claude.ai 的對話請看 claude.ai 的 Reflect)。訊息只算你實際送出的。時間為台北時間。",
+ "Data: the coding agent's sessions on this machine. Only the messages you actually sent count. Times are in {zone}.": "資料:這台機器上 coding agent 的 session。訊息只算你實際送出的。時間為 {zone}。",
  "The analysis was written by {model} from the statistics above only; it is the model's reading. The conversations' text is not sent to a cloud model, so it cannot see what the work was.": "分析由 {model} 只根據上面的統計撰寫,是模型的解讀;對話原文不送雲端模型,所以它看不到你做了什麼內容。",
  "The analysis was written by {model} from a sample of {sampled} messages and the statistics above; it is the model's reading. {excluded} only gave numbers, never text; strings that look like keys were masked before sending.": "分析由 {model} 根據 {sampled} 則訊息抽樣與上面的統計撰寫,是模型的解讀;{excluded} 只提供數字、不送原文;送出前已遮掉像金鑰的字串。",
  "Generated {time}": "產生時間 {time}",
  "No week has a report yet.": "還沒有任何一週的報告。",
  "{agents} {agents:subagent|subagents} this week (last week {agents_prev}), {peer} {peer:message|messages} between sessions (last week {peer_prev}).": "這週開了 {agents} 次 subagent(上週 {agents_prev})、session 之間傳了 {peer} 次訊息(上週 {peer_prev})。",
  "; {n} more {n:session has|sessions have} no summary": ";還有 {n} 個 session 沒有摘要",
- "The analysis was written by {model} from the statistics above and {digests} session {digests:summary|summaries} written by {assistant}'s local model; it is the model's reading, and the conversations' text is not sent to a cloud model. {withheld} work-related {withheld:session|sessions} and {excluded} count only in the statistics{undigested}.": "分析由 {model} 根據上面的統計與 {digests} 則 {assistant} 本機模型寫的 session 摘要撰寫,是模型的解讀;對話原文不送雲端模型。工作相關的 {withheld} 個 session、{excluded} 只算在統計裡{undigested}。"
+ "The analysis was written by {model} from the statistics above and {digests} session {digests:summary|summaries} written by {assistant}'s local model; it is the model's reading, and the conversations' text is not sent to a cloud model. {withheld} work-related {withheld:session|sessions} and {excluded} count only in the statistics{undigested}.": "分析由 {model} 根據上面的統計與 {digests} 則 {assistant} 本機模型寫的 session 摘要撰寫,是模型的解讀;對話原文不送雲端模型。工作相關的 {withheld} 個 session、{excluded} 只算在統計裡{undigested}。",
+ "Data: the coding agent's sessions on this machine. Only the messages you actually sent count.": "資料:這台機器上 coding agent 的 session。訊息只算你實際送出的。"
 }
