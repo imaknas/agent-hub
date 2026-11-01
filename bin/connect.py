@@ -76,15 +76,17 @@ def layout(p: pathlib.Path) -> tuple[str, list[pathlib.Path]]:
     return "plain", [p]
 
 
-def refusal(p: pathlib.Path) -> str | None:
-    """Why this folder can't be connected, or None."""
+def refusal(p: pathlib.Path, root: bool = False) -> str | None:
+    """Why this folder can't be connected, or None. root: for a folder of projects (add_root), which may hold the hub or
+    the instance (connecting them is still refused) but not be or sit inside them."""
     home = pathlib.Path.home().resolve()
     if p == home or home.is_relative_to(p):
         return _("{path} is your home folder or contains it; name the folder of one project (or of several)", path=p)
     if any(part.startswith(".") for part in p.relative_to(p.anchor).parts):
         return _("{path} is a hidden folder", path=p)
     for what, where in ((_("the hub"), hubconf.MAIN), (_("the instance directory"), hubconf.instance_home())):
-        if where and (p == where.resolve() or p.is_relative_to(where.resolve()) or where.resolve().is_relative_to(p)):
+        if where and (p == where.resolve() or p.is_relative_to(where.resolve())
+                      or (not root and where.resolve().is_relative_to(p))):
             return _("{path} is or holds {what}", path=p, what=what)
     for name, doc in (hubconf.projects() or {}).items():
         ws = ((doc.get("paths") or {}).get("workspace") or "")
@@ -116,13 +118,13 @@ def in_roots(given: pathlib.Path, roots: list[pathlib.Path]) -> str | None:
 
 def add_root(folder: str) -> int:
     p = pathlib.Path(os.path.expanduser(folder)).resolve()
-    if (why := refusal(p)) and not p.is_dir():
-        print(_("agenthub connect: {reason}; nothing was done", reason=why), file=sys.stderr)
-        return 2
     home = pathlib.Path.home().resolve()
     if p == home or home.is_relative_to(p):
         print(_("agenthub connect: {path} is your home folder or contains it; name the folder that holds your projects",
                 path=p), file=sys.stderr)
+        return 2
+    if (why := refusal(p, root=True)):
+        print(_("agenthub connect: {reason}; nothing was done", reason=why), file=sys.stderr)
         return 2
     f = hubconf.config_file("hub.json")
     d = json.loads(f.read_text())

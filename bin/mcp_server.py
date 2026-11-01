@@ -223,6 +223,10 @@ class Client:
 
     def __init__(self):
         self.elicitation, self.next_id = False, 0
+        self.pending: list[str] = []   # what arrived while waiting for an answer, for serve() to handle next
+
+    def line(self) -> str:
+        return self.pending.pop(0) if self.pending else sys.stdin.readline()
 
     def confirm(self, message: str) -> bool | None:
         """Ask the user through the client, bypassing the model: True / False, or None when the client can't ask."""
@@ -233,7 +237,7 @@ class Client:
         send({"jsonrpc": "2.0", "id": rid, "method": "elicitation/create", "params": {
             "message": message, "requestedSchema": {"type": "object", "required": ["connect"], "properties": {
                 "connect": {"type": "boolean", "title": _("Connect it")}}}}})
-        for line in sys.stdin:   # the client's answer; anything else that arrives meanwhile is set aside
+        while (line := sys.stdin.readline()):   # the client's answer; anything else is kept for serve()
             try:
                 msg = json.loads(line)
             except ValueError:
@@ -241,6 +245,7 @@ class Client:
             if msg.get("id") == rid and "method" not in msg:
                 res = msg.get("result") or {}
                 return res.get("action") == "accept" and (res.get("content") or {}).get("connect") is True
+            self.pending.append(line)
         return False
 
 
@@ -339,7 +344,7 @@ def serve() -> int:
     log(_("project: {project}", project=project or _("(unrecognized)")))
     presence = Presence(project)
     client = Client()
-    for line in sys.stdin:
+    while (line := client.line()):
         try:
             msg = json.loads(line)
         except ValueError:

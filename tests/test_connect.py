@@ -6,6 +6,7 @@ Nothing is onboarded: --dry-run, or onboarding replaced.
 import importlib.machinery
 import importlib.util
 import io
+import json
 import os
 import pathlib
 import shutil
@@ -126,6 +127,32 @@ class Connect(unittest.TestCase):
             with self.subTest(given=given):
                 self.assertIsNotNone(connect.in_roots(given, roots))
         self.assertIsNotNone(connect.in_roots(inside, []), "no roots: nothing is inside")
+
+    def test_add_root(self):
+        """A folder of projects: not home or above it, not hidden, not the hub or inside it, not inside a project; it
+        may hold the hub. Recorded in hub.json connect.roots."""
+        (self.tmp / "instance" / "config").mkdir(parents=True)
+        hub_json = self.tmp / "instance" / "config" / "hub.json"
+        hub_json.write_text("{}")
+        (self.home / ".ssh").mkdir()
+        (self.tmp / "hub" / "bin").mkdir(parents=True)
+        repo(self.code / "inside")
+        self.projects = {"inside": {"paths": {"workspace": str(self.code / "inside")}}}
+        with mock.patch.object(connect.hubconf, "config_file", lambda name: self.tmp / "instance" / "config" / name), \
+             mock.patch.object(connect.subprocess, "run") as run:
+            for folder in (self.home, self.home / ".ssh", self.tmp / "hub", self.tmp / "hub" / "bin",
+                           self.code / "inside", self.code / "missing"):
+                with self.subTest(folder=folder):
+                    with redirect_stderr(io.StringIO()):
+                        self.assertEqual(connect.add_root(str(folder)), 2)
+            self.assertEqual(json.loads(hub_json.read_text()), {}, "nothing recorded")
+            run.assert_not_called()
+            with redirect_stdout(io.StringIO()):
+                self.assertEqual(connect.add_root(str(self.code)), 0)
+                (self.home / "src" / "agent-hub").mkdir(parents=True)
+                with mock.patch.object(connect.hubconf, "MAIN", self.home / "src" / "agent-hub"):
+                    self.assertEqual(connect.add_root(str(self.home / "src")), 0, "may hold the hub")
+        self.assertEqual(json.loads(hub_json.read_text())["connect"]["roots"], [str(self.code), str(self.home / "src")])
 
     def test_untrusted_git_runs_without_hooks(self):
         app = repo(self.code / "app")

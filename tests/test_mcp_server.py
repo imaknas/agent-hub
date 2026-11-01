@@ -169,14 +169,38 @@ class Server(unittest.TestCase):
                     "clientInfo": {"name": "t", "version": "0"}}},
                 {"jsonrpc": "2.0", "id": 1, "method": "tools/call", "params": {
                     "name": "connect_project", "arguments": {"path": str(code / "notes")}}},
+                {"jsonrpc": "2.0", "id": 2, "method": "ping"},   # arrives while the server waits: answered after
                 {"jsonrpc": "2.0", "id": "agenthub-elicit-1", "result": {"action": "decline"}}]
         r = subprocess.run([sys.executable, str(BIN / "mcp_server.py")], input="".join(json.dumps(m) + "\n" for m in msgs),
                            env=self.env, cwd=self.tmp, capture_output=True, text=True, timeout=120)
         out = [json.loads(x) for x in r.stdout.splitlines()]
         self.assertEqual(out[1]["method"], "elicitation/create", r.stdout)
         self.assertIn(str(code / "notes"), out[1]["params"]["message"])
+        self.assertEqual([m.get("id") for m in out[2:]], [1, 2], "the ping waited, it wasn't dropped")
         self.assertTrue(out[2]["result"]["isError"])
         self.assertFalse((code / "notes" / ".git").exists(), "declined: nothing was done")
+
+    def test_connect_project_runs_connect_with_the_roots_onboard_reads(self):
+        """The happy path, up to the hand-off: connect.py --yes on the real path, the roots as onboard-project.sh
+        parses them (real paths, colon-separated). That onboard accepts them: test_onboard_inside_the_roots."""
+        import importlib.machinery
+        import importlib.util
+        from unittest import mock
+        code = self.tmp / "code"
+        (code / "notes").mkdir(parents=True)
+        loader = importlib.machinery.SourceFileLoader("mcp_server_t", str(BIN / "mcp_server.py"))
+        spec = importlib.util.spec_from_loader("mcp_server_t", loader)
+        m = importlib.util.module_from_spec(spec)
+        loader.exec_module(m)
+        done = subprocess.CompletedProcess([], 0, "connected", "")
+        with mock.patch.object(m.hubconf, "project_roots", lambda: [code.resolve()]), \
+             mock.patch.object(m.subprocess, "run", return_value=done) as run, \
+             mock.patch.dict(os.environ, {"HUBBUS_LEASE": "", "HUB_LLM_POINT": ""}):
+            ok, text = m.outside("connect_project", {"path": str(code / "notes")}, m.Client())
+        self.assertTrue(ok, text)
+        argv, env = run.call_args.args[0], run.call_args.kwargs["env"]
+        self.assertEqual(argv[1:], [str(BIN / "connect.py"), str((code / "notes").resolve()), "--yes"])
+        self.assertEqual(env["AGENTHUB_CONNECT_ROOTS"], str(code.resolve()))
 
     def test_onboard_rechecks_the_roots_on_its_real_path(self):
         code = self.tmp / "code"

@@ -200,6 +200,28 @@ class Golden(unittest.TestCase):
         self.call("no coding agent", s, ["--no-remote", ws / "kappa"])
         self.check("shell-onboard-project.txt")
 
+    def test_onboard_inside_the_roots(self):
+        """B5: connect_project hands onboard the roots (AGENTHUB_CONNECT_ROOTS, real paths, colon-separated); onboard
+        re-checks them on the folder's real path: inside one it goes ahead, outside or through a symlink it refuses
+        before creating anything."""
+        roots = f"{self.home / 'other'}:{self.ws.resolve()}"
+        (self.ws / "inside").mkdir(parents=True)
+        (self.ws / "inside" / "a.md").write_text("x\n")
+        r = subprocess.run(["bash", str(ROOT / "bin" / "onboard-project.sh"), "--no-remote", str(self.ws / "inside")],
+                           capture_output=True, text=True, env={**self.env, "AGENTHUB_CONNECT_ROOTS": roots},
+                           timeout=120, cwd=self.home)
+        self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
+        (self.home / "outside").mkdir()
+        (self.ws / "link").symlink_to(self.home / "outside")
+        for folder in (self.home / "outside", self.ws / "link", self.ws / "missing"):
+            with self.subTest(folder=folder.name):
+                r = subprocess.run(["bash", str(ROOT / "bin" / "onboard-project.sh"), "--no-remote", str(folder)],
+                                   capture_output=True, text=True, env={**self.env, "AGENTHUB_CONNECT_ROOTS": roots},
+                                   timeout=120, cwd=self.home)
+                self.assertNotEqual(r.returncode, 0, r.stdout)
+        self.assertFalse((self.home / "outside" / ".git").exists())
+        self.assertFalse((self.ws / "missing").exists(), "never creates the folder")
+
     def test_origin_check(self):
         """10-31: an empty hosts.server matched every origin, and a GitHub repo whose name contains the server's name was
         taken for the hub machine; only the ssh host (or a memory bare repo path) counts"""
