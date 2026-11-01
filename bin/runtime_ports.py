@@ -85,8 +85,12 @@ The current interfaces (the other layers get added one at a time, following the 
     says about reaching that session, which the platform keeps in secrets_dir()/sessions/<sid>.json (mode 600; in no
     sandbox, the bus, .state or the backup) for wake to use; wait(raw, env) -> (exit code, stderr, how): a hook that
     waits for a wake (`hub-event wait`; its files go in the same folder, hubconf.session_file); unsupported(port) ->
-    str | None: why it lacks a port (doctor shows it in the feature table instead of only the port's name); and
-    note(port) -> str | None: what to know about a port it has (doctor shows it after "available")
+    str | None: why it lacks a port (doctor shows it in the feature table instead of only the port's name);
+    note(port) -> str | None: what to know about a port it has (doctor shows it after "available"); and
+    session_pid(env) -> int | None: the session's own process, from a hook's environment, which the platform records
+    beside the session's id (record_session below; its live_sessions adds recorded_sessions(<its name>)), so a session
+    whose id is on no command line (a fork) still counts as live; with person_session(pid, env) -> bool: whether that
+    session is one a person works in (a headless run gets no record)
   auth (layer 6, login): the platform says only "which kind of login" (mode: token = a long-lived credential for
   unattended use, subscription = the interactive login, for jobs that need connectors; the names follow the auth field
   of contracts/llm-points.yaml); where the credentials are and what the environment variables are called is the
@@ -620,6 +624,126 @@ def ancestors(pid: int | None = None, limit: int = 64):
         if ppid <= 1:
             return
         pid = ppid
+
+
+def process_starts(pids) -> dict:
+    """When each of these processes started, in whole seconds since the epoch: {pid: "<seconds>"}, a process that
+    doesn't exist (or can't be read) left out. With the pid it names one process: a pid reused later has another start
+    time. One ps for all of them (macOS), or /proc (Linux)."""
+    import subprocess
+    import time
+    pids = sorted({p for p in pids if isinstance(p, int) and not isinstance(p, bool) and p > 0})
+    if not pids:
+        return {}
+    out = {}
+    try:
+        if os.path.exists("/proc/self/stat"):
+            with open("/proc/stat") as fh:
+                btime = next(int(line.split()[1]) for line in fh if line.startswith("btime "))
+            tick = os.sysconf("SC_CLK_TCK")
+            for pid in pids:
+                try:
+                    with open(f"/proc/{pid}/stat") as fh:
+                        # field 22: clock ticks after boot (the fields after "(comm)" start at field 3)
+                        out[pid] = str(btime + int(fh.read().rsplit(")", 1)[1].split()[19]) // tick)
+                except (OSError, ValueError, IndexError):
+                    pass
+            return out
+        import calendar
+        r = subprocess.run(["ps", "-o", "pid=,lstart=", "-p", ",".join(map(str, pids))], capture_output=True,
+                           text=True, timeout=10, env={**os.environ, "LC_ALL": "C", "TZ": "UTC"})
+        for line in r.stdout.splitlines():
+            pid, _sp, when = line.strip().partition(" ")
+            try:
+                out[int(pid)] = str(calendar.timegm(time.strptime(" ".join(when.split()), "%a %b %d %H:%M:%S %Y")))
+            except ValueError:
+                pass
+    except (OSError, ValueError, StopIteration, subprocess.SubprocessError):
+        pass
+    return out
+
+
+def process_start(pid: int) -> str | None:
+    """When process pid started (process_starts); None: no such process, or it can't be read."""
+    return process_starts([pid]).get(pid)
+
+
+# ---------- the sessions the hooks saw running (docs/design/mailbox-runtimes.md B1, "forked sessions") ----------
+# A session's hook knows both its real session id (the hook input) and its process (the runtime's session_pid(env)),
+# which the process table alone doesn't pair up: a session started as a fork of another runs under a new id that is on
+# no command line. So every hook in a project records <session>.live in hubconf.session_addresses_dir() (the secrets
+# directory: written by the hook outside any sandbox, in every sandbox's deny_read, not backed up, removed at the
+# session's end with its other files): {runtime, pid, start, cwd}. A record counts while that pid runs with that start
+# time, so a reused pid never fakes it. One process runs one session at a time: writing a record drops the others
+# naming the same process (a /clear, a fork whose first hook still carried the parent's id).
+
+SESSION_RECORD = "live"
+
+
+def _read_record(path) -> dict | None:
+    import json
+    try:
+        rec = json.loads(path.read_text())
+    except (OSError, ValueError):
+        return None
+    ok = isinstance(rec, dict) and isinstance(rec.get("pid"), int) and isinstance(rec.get("start"), str) \
+        and isinstance(rec.get("runtime"), str)
+    return rec if ok else None
+
+
+def record_session(session: str, runtime: str, pid, cwd: str, *, refresh: bool = True, wanted=None) -> bool:
+    """Record that this session (a platform id) runs in process pid. refresh=False (the hooks after a session's start)
+    leaves a record naming the same process as it is, so a tool call costs no process lookup. wanted(pid): asked only
+    when it would write (the runtime's person_session: a headless run gets none). Whether it wrote."""
+    import hubconf
+    f = hubconf.session_file(session, SESSION_RECORD)
+    if not f or not isinstance(pid, int) or pid <= 1:
+        return False
+    if not refresh:
+        old = _read_record(f)
+        if old and old["pid"] == pid and old["runtime"] == runtime:
+            return False
+    if wanted is not None and not wanted(pid):
+        return False
+    start = process_start(pid)
+    if not start:
+        return False
+    import json
+    f.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
+    tmp = f.with_name(f".{f.name}.{os.getpid()}.tmp")
+    fd = os.open(tmp, os.O_WRONLY | os.O_CREAT | os.O_TRUNC | getattr(os, "O_NOFOLLOW", 0), 0o600)
+    with os.fdopen(fd, "w") as fh:
+        json.dump({"runtime": runtime, "pid": pid, "start": start, "cwd": cwd}, fh)
+    os.replace(tmp, f)
+    for other in f.parent.glob(f"*.{SESSION_RECORD}"):
+        rec = _read_record(other) if other != f else None
+        if rec and rec["pid"] == pid and rec["start"] == start:
+            other.unlink(missing_ok=True)
+    return True
+
+
+def running_records(paths) -> dict:
+    """Of these session records, the ones whose process still runs with the start time recorded: {path: record}. One
+    process lookup for all of them."""
+    recs = {p: r for p in paths if (r := _read_record(p))}
+    starts = process_starts([r["pid"] for r in recs.values()])
+    return {p: r for p, r in recs.items() if starts.get(r["pid"]) == r["start"]}
+
+
+def recorded_sessions(runtime: str) -> set[str]:
+    """This runtime's sessions (its own ids) whose recorded process still runs."""
+    import hubconf
+    try:
+        files = list(hubconf.session_addresses_dir().glob(f"*.{SESSION_RECORD}"))
+    except OSError:
+        return set()
+    out = set()
+    for f, rec in running_records(files).items():
+        session = hubconf.session_of_file(f.name)
+        name, native = runtime_of(session) if session else (None, None)
+        if rec["runtime"] == runtime and name == runtime:
+            out.add(native)
+    return out
 
 
 def current_session(env=None) -> str | None:

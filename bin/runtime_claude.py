@@ -6,9 +6,13 @@ agents don't need to change. Design: docs/design/mailbox-routing.md (sessions),
 docs/design/capabilities.md (settings). Standard library only; the system python3 (3.9) can import it too, which is why
 this doesn't import registry/policy and only takes the dict policy.policy() computed.
 
-  live_sessions()        session ids still alive (Claude Code processes' arguments carry --resume=<id> or
+  live_sessions()        session ids still alive: those on Claude Code processes' command lines (--resume=<id> or
                          --session-id=<id>; verified 10-24 to be the same as the hook's session_id and
-                         CLAUDE_CODE_SESSION_ID)
+                         CLAUDE_CODE_SESSION_ID), plus those the hooks recorded with their process
+                         (runtime_ports.recorded_sessions): a session started as a fork (`--resume=<old>
+                         --fork-session`, Desktop's branch, /branch) runs under a new id on no command line
+  session_pid(env)       the session's own process, from a hook's environment (CLAUDE_PID: Desktop's CLI or the
+                         terminal's claude, never looked for by name), for those records
   context_tokens(sid)    how much context resuming this session would load (the usage of the last reply in the
                          transcript; for a compacted one, the size after compaction). None if not found
   resume_args(sid)       the claude arguments for resuming in the background: --resume <sid> --fork-session (tested
@@ -55,8 +59,18 @@ _ID = re.compile(r"--(?:resume|session-id)[= ]([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{
 
 
 def live_sessions() -> set[str]:
+    import runtime_ports
     r = subprocess.run(["ps", "-axo", "command"], capture_output=True, text=True)
-    return set(_ID.findall(r.stdout)) if r.returncode == 0 else set()
+    return (set(_ID.findall(r.stdout)) if r.returncode == 0 else set()) | runtime_ports.recorded_sessions(NAME)
+
+
+def session_pid(env) -> int | None:
+    """The session's process, as its hooks see it (CLAUDE_PID): None when not set or not a pid."""
+    try:
+        pid = int(env.get("CLAUDE_PID") or 0)
+    except ValueError:
+        return None
+    return pid if pid > 1 else None
 
 
 def alive(sid: str | None) -> bool:
@@ -338,6 +352,17 @@ def _printing(argv: list[str]) -> bool:
     return any(a in ("-p", "--print") or a.startswith("--print=") for a in argv[1:])
 
 
+def person_session(pid: int, env) -> bool:
+    """Whether the session in process pid is one a person works in, by the waiter's rules: not an SDK or -p run (the
+    entrypoint, then the process's own arguments, since a -p run inside a session inherits its entrypoint), and not one
+    whose arguments can't be read. Only such a session gets a record (runtime_ports.record_session): dispatch holds a
+    project's letters back for a live one."""
+    if env.get("CLAUDE_CODE_ENTRYPOINT") in HEADLESS_ENTRYPOINTS:
+        return False
+    argv = _argv(pid)
+    return argv is not None and not _printing(argv)
+
+
 def wait(raw: str, env, *, clock=None, sleep=None, poll: float = WAIT_POLL_S, argv_of=None) -> tuple[int, str, str]:
     """The Stop hook's waiter (see above): (exit code, stderr, how it ended). Exit 2 with the notices wakes the
     session; 0 ends quietly. It arms only when the session's process is known (CLAUDE_PID) and isn't a -p run: a
@@ -359,10 +384,7 @@ def wait(raw: str, env, *, clock=None, sleep=None, poll: float = WAIT_POLL_S, ar
     waiter = hubconf.session_file(key, "waiter")
     if not waiter:
         return 0, "", "no-session"
-    try:
-        pid = int(env.get("CLAUDE_PID") or 0) or None
-    except ValueError:
-        pid = None
+    pid = session_pid(env)
     argv = (argv_of or _argv)(pid) if pid else None
     if argv is None:
         return 0, "", "no-session-process"   # can't tell it isn't -p: a missed wake, never a hung run

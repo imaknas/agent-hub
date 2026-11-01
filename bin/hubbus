@@ -1623,22 +1623,10 @@ def lease_ids() -> set[str]:
 
 def proc_start(pid: int) -> str | None:
     """When process pid started, in whole seconds since the epoch (None: no such process, or it can't be read). With
-    the pid it names one process: a pid reused later has another start time."""
-    try:
-        if pathlib.Path("/proc/self/stat").exists():
-            # field 22 of /proc/<pid>/stat: clock ticks after boot (the fields after "(comm)" start at field 3)
-            ticks = int(pathlib.Path(f"/proc/{pid}/stat").read_text().rsplit(")", 1)[1].split()[19])
-            btime = next(int(l.split()[1]) for l in pathlib.Path("/proc/stat").read_text().splitlines()
-                         if l.startswith("btime "))
-            return str(btime + ticks // os.sysconf("SC_CLK_TCK"))
-        r = subprocess.run(["ps", "-o", "lstart=", "-p", str(pid)], capture_output=True, text=True, timeout=10,
-                           env={**os.environ, "LC_ALL": "C", "TZ": "UTC"})
-        if r.returncode or not r.stdout.strip():
-            return None
-        import calendar
-        return str(calendar.timegm(time.strptime(" ".join(r.stdout.split()), "%a %b %d %H:%M:%S %Y")))
-    except (OSError, ValueError, IndexError, StopIteration, subprocess.SubprocessError):
-        return None
+    the pid it names one process: a pid reused later has another start time. The one rule for a process's identity,
+    shared with the runtimes' session records (runtime_ports.process_start)."""
+    import runtime_ports
+    return runtime_ports.process_start(pid)
 
 
 def proc_cmdline(pid: int) -> str:
@@ -2263,21 +2251,28 @@ def prune_wake_addresses(live=None) -> list[str]:
     """Remove what hubconf.session_addresses_dir holds for sessions that are gone: SessionEnd removes its own session's
     files, this catches a session that ended without it (killed, crashed). An address (<session>.json) goes when its
     session no longer runs (live: the sessions running now, the runtime's live_sessions; a runtime without session
-    state keeps none). A waiter's record goes when its heartbeat stopped, and a wake request or a dot file (one being
-    written or taken) when it is old: neither is judged by live, which misses some sessions (a forked one's id is not on
-    its command line). Returns the sessions whose files went."""
+    state keeps none). A session's process record (<session>.live) goes when that process no longer runs with the
+    start time it recorded, however long the session has been idle (live_sessions reads these records, so they are
+    never judged by live). A waiter's record goes when its heartbeat stopped, and a wake request or a dot file (one
+    being written or taken) when it is old. Returns the sessions whose files went."""
     d = hubconf.session_addresses_dir()
     if not d.is_dir():
         return []
+    import runtime_ports
     if live is None and any(d.glob("*.json")):
-        import runtime_ports
         live = runtime_ports.Sessions().live_sessions()   # every installed runtime's, in the platform's ids
+    # one listing: a record a hook writes after it is never judged without its process looked up
+    files = list(d.iterdir())
+    running = runtime_ports.running_records([f for f in files if f.name.endswith(f".{runtime_ports.SESSION_RECORD}")])
     gone = []
-    for f in d.iterdir():
+    for f in files:
         try:
-            if time.time() - f.lstat().st_mtime <= ADDRESS_GRACE_S:
-                continue
             session = hubconf.session_of_file(f.name)
+            if session and f.name.endswith(f".{runtime_ports.SESSION_RECORD}"):
+                if f in running:
+                    continue
+            elif time.time() - f.lstat().st_mtime <= ADDRESS_GRACE_S:
+                continue
             if f.name.endswith(".json") and session in (live or set()):
                 continue
             f.unlink()

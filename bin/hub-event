@@ -125,7 +125,8 @@ def guard(ev, ws):
     return g.decide(ev.target or {}, ev.cwd)
 
 
-_RT = None   # the runtime whose hook this is (handle sets it): wake_address asks it about the hook's environment
+_RT = None   # the runtime whose hook this is (handle sets it): wake_address, session_record ask it about the hook's
+#              environment
 _RT_NAME = None   # its name: presence records it
 
 
@@ -149,9 +150,26 @@ def wake_address(ev, ws):
     return None
 
 
+def session_record(ev, ws):
+    """Record the process this session runs in (runtime_ports.record_session; docs/design/mailbox-runtimes.md B1,
+    "forked sessions"), so dispatch counts it live even when its id is on no command line. At the session's start it is
+    written again (a resumed session has a new process); after that only when the process differs. Only for a session
+    in a project (the only sessions dispatch looks for), never for the platform's own runs (they record no presence)
+    nor for a headless one the runtime tells apart (person_session: a -p or SDK run, which a person isn't in).
+    Not run as the project: it writes only the secrets directory, which no sandbox can reach."""
+    fn = getattr(_RT, "session_pid", None)
+    if not callable(fn) or not ws or platform_run(os.environ) or not project_git.project_at(ws):
+        return None
+    pid, person = fn(os.environ), getattr(_RT, "person_session", None)
+    if pid:
+        runtime_ports.record_session(ev.session, _RT_NAME, pid, ev.cwd, refresh=ev.event == "session_start",
+                                     wanted=(lambda p: person(p, os.environ)) if callable(person) else None)
+    return None
+
+
 def wake_address_drop(ev, ws):
-    """The session ended: its address, its waiter's record (the waiter sees it gone and exits) and any wake request
-    left for it go."""
+    """The session ended: its address, its waiter's record (the waiter sees it gone and exits), any wake request left
+    for it and its process record go."""
     for f in hubconf.session_files(ev.session):
         f.unlink(missing_ok=True)
 
@@ -187,11 +205,12 @@ def wait(name: str | None, raw: str) -> int:
 # which handlers run for each event, in order; for the "deny" kind the return value is the reason to block
 HANDLERS = {
     "session_start": [("hub_pull", hub_pull), ("memory_pull", memory_pull), ("local_setup", local_setup),
-                      ("nudge", nudge), ("mail", mail), ("wake_address", wake_address)],
+                      ("nudge", nudge), ("mail", mail), ("wake_address", wake_address),
+                      ("session_record", session_record)],
     "session_end": [("wake_address_drop", wake_address_drop), ("memory_sync", memory_sync)],
     "pre_compact": [("memory_sync", memory_sync)],
-    "prompt": [("mail", mail)],
-    "tool_used": [("nudge", nudge), ("mail", mail)],
+    "prompt": [("mail", mail), ("session_record", session_record)],
+    "tool_used": [("nudge", nudge), ("mail", mail), ("session_record", session_record)],
     "open_session_attempt": [("guard", guard)],
 }
 DENY_HANDLERS = {"guard"}

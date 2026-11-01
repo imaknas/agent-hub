@@ -335,9 +335,8 @@ implements it, port by port, saying the rest is unsupported. What the reviews fo
    - `wake()` is True only while the session's waiter heartbeats; False otherwise, recorded as `ok: false`.
    - The waiter's liveness is its heartbeat, not `live_sessions()`: a Desktop session started with `--resume=<id>
      --fork-session` runs under a new id that is not on its command line, so `live_sessions()` would miss it and prune
-     its record. Dispatch
-     itself still asks `live_sessions()` before it wakes (`to_s in live`, `wake_target`), so such a session is not
-     woken; that gap is the sessions port's, not the waiter's.
+     its record. Dispatch itself asks `live_sessions()` before it wakes (`to_s in live`, `wake_target`) and when it
+     holds back (`active_sessions`); that gap, the sessions port's, was closed the same day (below).
    - The socket token is no longer kept (`runtime_claude.wake_address` removed): the waiter needs none.
    - "Woken, not picked up" (the session didn't take the letter within `CONVERSATION_WAIT_MIN` of the wake) is a step on
      the status page, and doctor reminds when it happens twice in 7 days (`hubbus wake-misses`), so a change in how
@@ -348,9 +347,40 @@ implements it, port by port, saying the rest is unsupported. What the reviews fo
      worktree hooks carry a Stop waiter too (`merge-hook-settings.py --worktree`, `worktree-memory.sh wait`), which,
      like every user-level change, is installed only when the owner says so.
 
+   **Forked sessions in `live_sessions()` (11-02).** A session started as a fork (Desktop's `--resume=<old>
+   --fork-session`, its branch action, `/branch` in the terminal) runs under a new id that is on no command line, so
+   dispatch never woke it and could dispatch a background agent while the owner was in it. Every hook already knows the
+   real id (its input) and the session's process (the runtime's new optional `session_pid(env)`; Claude: `CLAUDE_PID`,
+   Desktop's CLI or the terminal's, never looked for by name). As built:
+   - hub-event's `session_record` handler (last on `session_start`, `prompt`, `tool_used`; only in a project, never
+     for platform runs) writes `<session>.live` = `{runtime, pid, start, cwd}` through `runtime_ports.record_session`,
+     tmp + rename, mode 600. At `session_start` it is always rewritten (a resumed session has a new process); after
+     that only when the pid differs, so a tool call costs no process lookup. A headless run gets none, by the waiter's
+     rules (the adapter's optional `person_session(pid, env)`: not an SDK entrypoint, not `-p` among the process's own
+     arguments, arguments readable), asked only when it would write: a person isn't in it, so letters shouldn't wait
+     for it.
+   - Where: `secrets_dir()/sessions/`, beside the waiter and its requests, not the bus `presence` table. It is written
+     by the hook outside any sandbox (`session_record` is not in `AS_PROJECT`), lies in every sandbox's `deny_read`
+     and outside its `allowWrite`, is not backed up, and goes at `SessionEnd` with the session's other files
+     (`hubconf.session_files`). The presence table also takes rows from sandboxed projects' outboxes (MCP presence),
+     and `live_sessions()` is the runtime's port, which shouldn't read the bus schema.
+   - Identity: the pid with its start time, the rule MCP presence already used; `hubbus.proc_start` moved to
+     `runtime_ports.process_start(s)` (one `ps` for all records) and the two share it. A dead pid or another start
+     time (a reused pid) doesn't count.
+   - One process runs one session: writing a record drops any other naming the same process. So whichever id a fork's
+     `SessionStart` carries (its `source` is `fork`; the CLI's hook schema has the value, but which id it carries
+     wasn't observed: no live session was started for this), the next prompt or tool hook with the new id replaces it.
+   - `runtime_claude.live_sessions()` = the command-line ids (unchanged) ∪ `runtime_ports.recorded_sessions("claude")`;
+     dispatch (`wake_target`, `active_sessions`, `recent_session`, the conversation's `to_s in live`) needed no change.
+   - `prune_wake_addresses` removes a record when its process is gone, however long the session has been idle; never
+     by age or by `live` (which reads the records).
+
    Left: whether Claude Code picks up hooks from a settings file that appears mid-session (the worktree link); whether
-   a woken session in a permission-skipping mode behaves the same; dispatch's `live_sessions()` missing forked sessions;
-   a session idle longer than the timeout (a day) isn't wakeable until its next turn.
+   a woken session in a permission-skipping mode behaves the same; a session idle longer than the timeout (a day) isn't
+   wakeable until its next turn; a fork is live only from its first hook (a session that ran none since this shipped
+   is still missed); a fork's command line still reads as its parent (`--resume=<old> --fork-session` puts the old id
+   in `live`, as before: that process runs another id; left as it was because the platform's own background resumes
+   run that way, and dropping it would change how a second letter to that session waits).
 3. **A1**: `runtime.installed`, runtime-routed calls, hooks carrying their runtime, the presence column, doctor's
    columns. **Done 11-01.** Characterization tests of a Claude-only machine first (`tests/test_runtime_installed.py`
    ClaudeOnlyToday, through the real Claude adapter); with `runtime.installed` absent or `[claude]` every golden is
