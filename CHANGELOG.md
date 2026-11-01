@@ -3,6 +3,25 @@
 What changed in each version, generated from the commit messages (git cliff) when it is tagged; only new features,
 fixes, speed-ups and reverts are listed.
 
+## v0.3.0 (2026-11-01)
+
+### New
+
+- **install:** A one-line installer, and CI on macOS
+- **records:** Read Principal Handoff 0.5, send the version hub.json names
+- **acts:** The registrar follows the Acts Markdown binding 0.5
+- **registrar:** Migrate-v1 gives each owner to-do that exists only as a v1 letter a need record under its key
+
+### Fixed
+
+- **seatbelt:** A sandboxed process can stat the folders above its own
+- **upgrade-idea:** A git that fails is not read as a detached HEAD
+
+### Changed (breaking)
+
+- **registrar:** Retire v1_compat; only records count (**breaking:** an owner to-do that exists only as a v1 task letter is no longer held; its line is raised again.
+Run registrar.py migrate-v1 --apply (the previous commit) before this one lands.)
+
 ## v0.2.0 (2026-11-01)
 
 ### New
@@ -190,4 +209,8 @@ git dir; githooks/pre-commit, post-commit and commit-msg are gone.)
 - **test-gate:** Skip a tree that already passed; run slow modules test by test
 - **tests:** Tiers keep a cache folder; the Landlock plan tests walk their own folder
 - **tests:** Agent-hub's full tier keeps run-tests' durations in its tier cache
+
+### Changed (breaking)
+
+- Remove knas-tasks.py, replaced by registrar.py (**breaking:** bin/knas-tasks.py is gone; run bin/registrar.py.)
 
