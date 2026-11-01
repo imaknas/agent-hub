@@ -8,10 +8,16 @@ RUNTIMES automatically, so a third implementation can't be added without going t
 
 The current interfaces (the other layers get added one at a time, following the design doc's steps):
   transcripts (layer 5): read conversation records in a neutral format
-    turns(paths, since, until=None, worktrees=False) -> Iterator[Turn]   every entry of a project (its working
-                                                        directories, maybe several) within the time range;
-                                                        worktrees=True also counts sessions in worktrees the runtime
-                                                        opened under those working directories
+    turns(paths, since, until=None, worktrees=False, subagents=False) -> Iterator[Turn]
+                                                        every entry of a project (its working directories, maybe
+                                                        several) within the time range; worktrees=True also counts
+                                                        sessions in worktrees the runtime opened under those working
+                                                        directories; subagents=True also the subagents those sessions
+                                                        started (Turn.subagent). Each entry carries its own id (a
+                                                        branched or resumed session copies earlier entries: count an id
+                                                        once), the folder it ran in, and the tool calls it started
+                                                        (Action.call, .command) or returned results for (Turn.results),
+                                                        so a call's duration is the time between the two
     last_activity(path) -> datetime | None              when this working directory last had a conversation
   agent (layer 1, a single run):
     run(task: Task) -> TaskResult                       run a judgment point once (prompt, working directory, model,
@@ -229,6 +235,9 @@ class Action(NamedTuple):
                          # command, other)
     detail: str = ""     # the skill name (when collab is skill); never any runtime's tool name
     collab: str | None = None   # one of COLLABS, or None
+    call: str = ""       # the call's id: the entry that returns its result names it in Turn.results
+    command: str = ""    # for run_command, the command text
+    background: bool = False    # started without waiting for it
 
 
 # Conversation events (a long-running session's output; the lease contract v2's events have exactly this shape). Not the
@@ -251,6 +260,10 @@ class Turn(NamedTuple):
                              # messages, messages from other sessions…)
     text: str = ""           # for role == human, what they typed
     actions: tuple = ()      # for role == assistant, which Actions this entry did
+    id: str = ""             # the entry's own id ("" when the runtime has none)
+    folder: str = ""         # the working folder the session was in at this entry
+    subagent: bool = False   # an entry of a subagent the session started
+    results: tuple = ()      # the call ids (Action.call) whose results this entry returns
 
 
 class Credential(NamedTuple):

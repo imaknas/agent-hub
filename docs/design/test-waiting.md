@@ -718,7 +718,10 @@ replaces; each step only adds to the ones before it.
       merge's own check guards main either way. Then `agenthub config apply` rewrites the other registry files. Then deploy and the
       nightly job. Rehearsed in a throwaway hub before it lands.
    4. B5's container module and the Spotlight check.
-   5. The transcript port extension B7 needs, in every runtime adapter, with contract tests.
+   5. The transcript port extension B7 needs, in every runtime adapter, with contract tests. (Done 11-01: Turn.id,
+      .folder, .subagent, .results; Action.call, .command, .background; turns(subagents=); the Claude and fake
+      adapters, the others have no transcripts. On two hours of real transcripts, 519 of 520 commands paired with
+      their results.)
    6. B6's proposed rules that hold now; A3's module splits.
    7. Requests: the-crucible declares its tests; muninn's deploy runs its deploy tiers through the runner; muninn
       moves its vendored lease-handover to v2.

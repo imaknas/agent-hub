@@ -246,7 +246,8 @@ def _action(block: dict) -> Action:
     detail holds only skill names: Claude's tool names don't leak into the neutral format."""
     name, inp = block.get("name", ""), block.get("input") or {}
     kind, collab, _target, _summary = action(name, inp)
-    return Action(kind, str(inp.get("skill", "?")) if collab == "skill" else "", collab)
+    return Action(kind, str(inp.get("skill", "?")) if collab == "skill" else "", collab, str(block.get("id") or ""),
+                  str(inp.get("command") or "") if kind == "run_command" else "", bool(inp.get("run_in_background")))
 
 
 def _parse_ts(ts: str) -> datetime.datetime:
@@ -261,13 +262,17 @@ def _turn(o: dict, fallback_sid: str) -> Turn | None:
     if not ts:
         return None
     sid = o.get("sessionId") or fallback_sid
+    common = {"id": str(o.get("uuid") or ""), "folder": str(o.get("cwd") or ""), "subagent": bool(o.get("isSidechain"))}
     if _is_human_prompt(o):
-        return Turn(_parse_ts(ts), sid, "human", o["message"]["content"])
+        return Turn(_parse_ts(ts), sid, "human", o["message"]["content"], **common)
+    content = (o.get("message") or {}).get("content")
+    content = content if isinstance(content, list) else []
     if o.get("type") == "assistant":
-        content = (o.get("message") or {}).get("content") or []
         acts = tuple(_action(c) for c in content if isinstance(c, dict) and c.get("type") == "tool_use")
-        return Turn(_parse_ts(ts), sid, "assistant", "", acts)
-    return Turn(_parse_ts(ts), sid, "other")
+        return Turn(_parse_ts(ts), sid, "assistant", "", acts, **common)
+    done = tuple(str(c.get("tool_use_id")) for c in content if isinstance(c, dict) and c.get("type") == "tool_result"
+                 and c.get("tool_use_id"))
+    return Turn(_parse_ts(ts), sid, "other", results=done, **common)
 
 
 def _transcript_dirs(root: pathlib.Path, path: str, worktrees: bool) -> list:
@@ -277,9 +282,12 @@ def _transcript_dirs(root: pathlib.Path, path: str, worktrees: bool) -> list:
     return [root / slug, *(sorted(root.glob(slug + "--claude-worktrees-*")) if worktrees else ())]
 
 
-def turns(paths, since: datetime.datetime, until: datetime.datetime | None = None, worktrees: bool = False):
+def turns(paths, since: datetime.datetime, until: datetime.datetime | None = None, worktrees: bool = False,
+          subagents: bool = False):
+    # a session's subagents are in <session>/subagents/*.jsonl beside it
+    globs = ("*.jsonl", "*/subagents/*.jsonl") if subagents else ("*.jsonl",)
     for root, path in ((r, p) for r in transcript_roots() for p in paths):
-        for f in (f for d in _transcript_dirs(root, path, worktrees) for f in d.glob("*.jsonl")):
+        for f in (f for d in _transcript_dirs(root, path, worktrees) for g in globs for f in d.glob(g)):
             if datetime.datetime.fromtimestamp(f.stat().st_mtime, datetime.timezone.utc) < since:
                 continue  # not written to since before the range started
             parsed = recognised = 0

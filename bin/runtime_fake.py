@@ -77,10 +77,12 @@ def describe(task) -> list:
 
 # ---------- transcripts ----------
 
-def turns(paths, since: datetime.datetime, until: datetime.datetime | None = None, worktrees: bool = False):
+def turns(paths, since: datetime.datetime, until: datetime.datetime | None = None, worktrees: bool = False,
+          subagents: bool = False):
     want = {str(pathlib.Path(p)) for p in paths}
     for path, t, wt in sorted(_turns, key=lambda x: x[1].ts):
-        if path in want and (worktrees or not wt) and t.ts >= since and (until is None or t.ts < until):
+        if (path in want and (worktrees or not wt) and (subagents or not t.subagent) and t.ts >= since
+                and (until is None or t.ts < until)):
             yield t
 
 

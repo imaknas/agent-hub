@@ -30,14 +30,18 @@ SID2 = "bbbbbbbb-2222-4222-8222-222222222222"   # another project's session (a r
 # Scenario: one human message, one system injection (not human), one assistant turn that calls a subagent, a skill,
 # runs a command (not collaboration), one tool result; one human message in another project
 SCENARIO = [
-    (WS, runtime_ports.Turn(T0, SID, "human", "regarde les tests, s'il te plaît")),
-    (WS, runtime_ports.Turn(T0 + datetime.timedelta(minutes=1), SID, "other")),
+    (WS, runtime_ports.Turn(T0, SID, "human", "regarde les tests, s'il te plaît", id="e1", folder=WS)),
+    (WS, runtime_ports.Turn(T0 + datetime.timedelta(minutes=1), SID, "other", id="e2", folder=WS)),
     (WS, runtime_ports.Turn(T0 + datetime.timedelta(minutes=2), SID, "assistant", "",
                             (runtime_ports.Action("other", "", "subagent"), runtime_ports.Action("other", "dataviz", "skill"),
-                             runtime_ports.Action("run_command")))),
-    (WS, runtime_ports.Turn(T0 + datetime.timedelta(minutes=3), SID, "other")),
+                             runtime_ports.Action("run_command", call="call-1", command="ls")), id="e3", folder=WS)),
+    (WS, runtime_ports.Turn(T0 + datetime.timedelta(minutes=3), SID, "other", id="e4", folder=WS, results=("call-1",))),
     ("/Users/someone/workspace/other", runtime_ports.Turn(T0, SID2, "human", "l'autre projet")),
 ]
+# an entry of a subagent the session started: counts only with turns(subagents=True)
+SUBAGENT_SCENARIO = [(WS, runtime_ports.Turn(T0 + datetime.timedelta(minutes=4), SID, "assistant", "",
+                                             (runtime_ports.Action("run_command", call="call-2", command="pytest -q"),),
+                                             id="s1", folder=WS, subagent=True))]
 # one human message from a session in a worktree the runtime opened under the same project: counts only with
 # turns(worktrees=True)
 SID3 = "cccccccc-3333-4333-8333-333333333333"
@@ -61,7 +65,7 @@ class ClaudeFixture:
         root = tmp / "projects"
         m.transcript_roots = lambda: (root,)
         m.PROJECTS = root
-        for path, t in SCENARIO + [(p + "/.claude/worktrees/wt1", t) for p, t in WORKTREE_SCENARIO]:
+        for path, t in SCENARIO + SUBAGENT_SCENARIO + [(p + "/.claude/worktrees/wt1", t) for p, t in WORKTREE_SCENARIO]:
             d = root / m.slug_for_path(path)
             d.mkdir(parents=True, exist_ok=True)
             if t.role == "human":
@@ -77,7 +81,9 @@ class ClaudeFixture:
                     inp = dict(inputs.get(key, {}))
                     if "skill" in inp:
                         inp["skill"] = a.detail
-                    blocks.append({"type": "tool_use", "name": names[key], "input": inp})
+                    if a.command:
+                        inp["command"] = a.command
+                    blocks.append({"type": "tool_use", "name": names[key], "input": inp, **({"id": a.call} if a.call else {})})
                 o = {"type": "assistant", "timestamp": _iso(t.ts), "sessionId": t.session,
                      "message": {"role": "assistant", "content": blocks,
                                  "usage": {"input_tokens": 10, "cache_read_input_tokens": 1000, "cache_creation_input_tokens": 0}}}
@@ -86,7 +92,18 @@ class ClaudeFixture:
                      "message": {"role": "user", "content": "<system-reminder>…</system-reminder>"}}
             else:  # tool result: also type=user, but not human
                 o = {"type": "user", "timestamp": _iso(t.ts), "sessionId": t.session,
-                     "message": {"role": "user", "content": [{"type": "tool_result", "content": "ok"}]}}
+                     "message": {"role": "user", "content": [{"type": "tool_result", "content": "ok",
+                                                              **({"tool_use_id": t.results[0]} if t.results else {})}]}}
+            if t.id:
+                o["uuid"] = t.id
+            if t.folder:
+                o["cwd"] = t.folder
+            if t.subagent:   # a subagent's transcript: beside its session, isSidechain on every entry
+                o["isSidechain"] = True
+                (d / t.session / "subagents").mkdir(parents=True, exist_ok=True)
+                with open(d / t.session / "subagents" / "agent-1.jsonl", "a") as fh:
+                    fh.write(json.dumps(o, ensure_ascii=False) + "\n")
+                continue
             with open(d / f"{t.session}.jsonl", "a") as fh:
                 fh.write(json.dumps(o, ensure_ascii=False) + "\n")
         return m, {"CLAUDE_CODE_SESSION_ID": SID}
@@ -148,6 +165,8 @@ class FakeFixture:
             m.add_turn(path, t)
         for path, t in WORKTREE_SCENARIO:
             m.add_turn(path, t, worktree=True)
+        for path, t in SUBAGENT_SCENARIO:
+            m.add_turn(path, t)
         m.set_context(SID, 1010)
         return m, {"FAKE_RUNTIME_SESSION": SID}
 
@@ -346,6 +365,25 @@ class Contract(unittest.TestCase):
             self.assertEqual([(a.kind, a.collab, a.detail) for a in ts[2].actions],
                              [("other", "subagent", ""), ("other", "skill", "dataviz"), ("run_command", None, "")])
             self.assertTrue(all(t.ts.tzinfo is not None for t in ts), "timestamps carry a time zone")
+        self.each(check)
+
+    def test_entry_ids_folders_and_calls(self):
+        """What the waiting report needs (docs/design/test-waiting.md B7): ids to count copied entries once, the
+        session's folder, a command's text and its call id, and the entry that returned its result."""
+        def check(m, env):
+            ts = sorted(m.turns([WS], T0 - datetime.timedelta(hours=1)), key=lambda t: t.ts)
+            self.assertEqual([t.id for t in ts], ["e1", "e2", "e3", "e4"])
+            self.assertTrue(all(t.folder == WS for t in ts))
+            run = ts[2].actions[2]
+            self.assertEqual((run.call, run.command, run.background), ("call-1", "ls", False))
+            self.assertEqual(ts[3].results, ("call-1",))
+            self.assertFalse(any(t.subagent for t in ts), "subagents only when asked")
+        self.each(check)
+
+    def test_subagents(self):
+        def check(m, env):
+            subs = [t for t in m.turns([WS], T0 - datetime.timedelta(hours=1), subagents=True) if t.subagent]
+            self.assertEqual([(t.id, t.session, t.actions[0].command) for t in subs], [("s1", SID, "pytest -q")])
         self.each(check)
 
     def test_time_window(self):
