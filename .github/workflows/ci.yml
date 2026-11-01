@@ -35,6 +35,8 @@ jobs:
           echo "TMPDIR=$TMPDIR HOME=$HOME"; sw_vers
           cd tests && ../bin/py -m unittest -v test_upgrade_idea.Upgrade.test_idea_with_capabilities_upgrades_and_keeps_them 2>&1 | head -150 || true
           ../bin/py -m unittest -v test_propose_apply.ProposeApply.test_dot_files_under_allowed_paths_are_never_applied 2>&1 | grep -v '^$' | head -200 || true
+          echo "=== again with GIT_CONFIG_NOSYSTEM=1"
+          GIT_CONFIG_NOSYSTEM=1 ../bin/py -m unittest -v test_propose_apply.ProposeApply.test_dot_files_under_allowed_paths_are_never_applied 2>&1 | grep -v '^$' | head -200 || true
       - run: bin/run-tests
   install:
     runs-on: ubuntu-latest
