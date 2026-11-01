@@ -131,6 +131,7 @@ def run(project: str | None, cwd, argv: list[str], input: str | bytes | None = N
 
 def data(project: str | None, cwd, op: str, *args):
     r = job(project, cwd, op, *args)
+    sys.stderr.write(f"DIAG data {op} rc={r.returncode} stdout={r.stdout[:500]!r}\nDIAG stderr: {r.stderr}\n")
     if r.returncode == EX_SANDBOX:
         raise Unavailable(f"{project}: the sandbox refused ({r.stderr.strip()[-200:]})")
     if r.returncode != 0:

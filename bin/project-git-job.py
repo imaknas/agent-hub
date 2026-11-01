@@ -144,6 +144,10 @@ def op_remove_dep(wt: str, dep: str, marker: str, line: str) -> int:
 
 
 def op_changed(repo: str, base: str) -> int:
+    for a in (["diff", "--name-only", "--no-renames", base, "--"], ["status", "--porcelain", "-uall", "--no-renames"],
+              ["config", "--list", "--show-origin"], ["check-attr", "-a", ".agent-memory/memory/README.md"]):
+        r = git(repo, *a)
+        sys.stderr.write(f"DIAG changed {a} rc={r.returncode} out={r.stdout[-1500:]!r} err={r.stderr[-1500:]!r}\n")
     paths = set(out(repo, "diff", "--name-only", "--no-renames", base, "--").splitlines())
     paths |= {line[3:].strip().strip('"') for line in out(repo, "status", "--porcelain", "-uall", "--no-renames").splitlines()}
     return emit([[p, os.path.lexists(pathlib.Path(repo) / p)] for p in sorted(paths) if p])
@@ -301,6 +305,11 @@ def op_save(ws: str, folder: str, name: str) -> int:
 def op_head(ws: str) -> int:
     """JSON {branch, dirty}: the checked-out branch (null when detached) and whether tracked files have changes."""
     b = git(ws, "symbolic-ref", "--short", "-q", "HEAD")
+    sys.stderr.write(f"DIAG head rc={b.returncode} out={b.stdout!r} err={b.stderr!r}\n")
+    for a in (["--version"], ["config", "--list", "--show-origin"], ["status"], ["rev-parse", "--git-dir", "HEAD"]):
+        r = git(ws, *a)
+        sys.stderr.write(f"DIAG git {a} rc={r.returncode} out={r.stdout[-1500:]!r} err={r.stderr[-1500:]!r}\n")
+    sys.stderr.write(f"DIAG env HOME={os.environ.get('HOME')} PATH={os.environ.get('PATH')} which={shutil.which('git')}\n")
     return emit({"branch": b.stdout.strip() if b.returncode == 0 else None,
                  "dirty": bool(out(ws, "status", "--porcelain", "--untracked-files=no").strip())})
 

@@ -27,6 +27,14 @@ jobs:
       - uses: actions/checkout@v4
       - uses: astral-sh/setup-uv@v5
       - run: bin/setup-python
+      - name: diag
+        continue-on-error: true
+        run: |
+          which -a git; git --version; git config --system --list --show-origin || true
+          git config --global --list --show-origin || true; git lfs version || true
+          echo "TMPDIR=$TMPDIR HOME=$HOME"; sw_vers
+          cd tests && ../bin/py -m unittest -v test_upgrade_idea.Upgrade.test_idea_with_capabilities_upgrades_and_keeps_them 2>&1 | head -150 || true
+          ../bin/py -m unittest -v test_propose_apply.ProposeApply.test_dot_files_under_allowed_paths_are_never_applied 2>&1 | grep -v '^$' | head -200 || true
       - run: bin/run-tests
   install:
     runs-on: ubuntu-latest
