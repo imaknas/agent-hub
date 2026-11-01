@@ -24,7 +24,7 @@ gamma: the platform's hooks are not installed (the project uses its own core.hoo
 b=$(git symbolic-ref --short -q HEAD)
 case "$b" in main|master) ;; *) exit 0 ;; esac
 [ -n "$MERGE_GATE" ] && exit 0
-echo "This project has the merge gate on (gate: strict): no direct commits to $b. Work in your own worktree/branch and finish with agenthub merge-branch." >&2
+echo "This project has the merge gate on (gate: strict): no direct commits to ${b}. Work in your own worktree/branch and finish with agenthub merge-branch." >&2
 exit 1
 === alpha settings
 {

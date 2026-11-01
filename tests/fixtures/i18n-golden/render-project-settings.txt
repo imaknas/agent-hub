@@ -24,7 +24,7 @@ gamma:平台的 hook 沒裝(專案用自己的 core.hooksPath=.husky),只偵測
 b=$(git symbolic-ref --short -q HEAD)
 case "$b" in main|master) ;; *) exit 0 ;; esac
 [ -n "$MERGE_GATE" ] && exit 0
-echo "這個專案開了合併閘門(gate: strict):不能直接 commit 到 $b。在自己的 worktree/branch 做,完成用 agenthub merge-branch。" >&2
+echo "這個專案開了合併閘門(gate: strict):不能直接 commit 到 ${b}。在自己的 worktree/branch 做,完成用 agenthub merge-branch。" >&2
 exit 1
 === alpha settings
 {

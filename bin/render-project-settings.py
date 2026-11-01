@@ -190,11 +190,17 @@ case "$b" in main|master) ;; *) exit 0 ;; esac
 """
 
 
+# the branch, as the hook's shell expands it: braced, since a translation may put a non-ASCII character right after it
+# ($b followed by a full-width full stop, U+3002, makes some shells read its first byte as part of the name,
+# dropping the branch and leaving broken UTF-8)
+BRANCH = "${b}"
+
+
 def gate_hook() -> str:
-    """the hook's text; the line it prints when it refuses a commit is a message ($b = the branch, filled in by the shell)"""
+    """the hook's text; the line it prints when it refuses a commit is a message ({branch} is filled in by the shell)"""
     return GATE_HOOK_HEAD + 'echo "' + _(
-        "This project has the merge gate on (gate: strict): no direct commits to $b. Work in your own worktree/branch "
-        "and finish with agenthub merge-branch.") + '" >&2\nexit 1\n'
+        "This project has the merge gate on (gate: strict): no direct commits to {branch}. Work in your own "
+        "worktree/branch and finish with agenthub merge-branch.", branch=BRANCH) + '" >&2\nexit 1\n'
 
 
 MARK = "# agent-hub:gate"   # every hook the platform writes starts with it; others are the project's own
@@ -214,8 +220,8 @@ def wanted_hooks(doc: dict) -> dict[str, tuple[str, str]]:
         out["pre-commit"] = ("#!/bin/sh\n" + gate_hook(), "gate strict")
     elif cg:
         refuse = ('  main|master) [ -n "$MERGE_GATE" ] || { echo "' + _(
-            "This project has the merge gate on (gate: strict): no direct commits to $b. Work in your own worktree/branch "
-            "and finish with agenthub merge-branch.") + '" >&2; exit 1; } ;;\n') if strict else "  main|master) moment=merge ;;\n"
+            "This project has the merge gate on (gate: strict): no direct commits to {branch}. Work in your own "
+            "worktree/branch and finish with agenthub merge-branch.", branch=BRANCH) + '" >&2; exit 1; } ;;\n') if strict else "  main|master) moment=merge ;;\n"
         out["pre-commit"] = ("#!/bin/sh\n" + MARK + " (managed; registry commit_gate)\n"
                              "# a commit on a branch runs the commit tiers, one onto main the merge tiers\n"
                              "b=$(git symbolic-ref --short -q HEAD)\nmoment=commit\ncase \"$b\" in\n" + refuse +

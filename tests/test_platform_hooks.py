@@ -81,7 +81,9 @@ class HooksInARepo(unittest.TestCase):
         text, _why = rps.wanted_hooks({"commit_gate": True, "gate": "strict"})["pre-commit"]
         exec_line = next(line for line in text.splitlines() if line.startswith("exec "))
         self.install("pre-commit", text.replace(exec_line, "exit 0"))
-        self.assertNotEqual(self.commit("chore: a").returncode, 0)
+        r = self.commit("chore: a")
+        self.assertNotEqual(r.returncode, 0)
+        self.assertIn("main", r.stderr, "the refusal names the branch")
         self.git(self.repo, "checkout", "-q", "-b", "work")
         self.assertEqual(self.commit("chore: b").returncode, 0)
 

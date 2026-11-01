@@ -239,6 +239,16 @@ class Catalogs(unittest.TestCase):
                 problems += [f"{cat_file.relative_to(ROOT)}: unused entry {m[:60]!r}" for m in sorted(stale)]
         self.assertEqual(problems, [])
 
+    def test_shell_variables_are_braced_before_non_ascii(self):
+        """a message a shell expands: $b right before a non-ASCII character (e.g. U+3002) makes some shells read that
+        character's first byte as part of the name, which drops the value and leaves broken UTF-8; ${b} is safe"""
+        unbraced = re.compile(r"\$[A-Za-z_][A-Za-z0-9_]*(?=[^\x00-\x7f])")
+        problems = [f"{f.relative_to(ROOT)}: {s[:80]!r}" for lang in LANGS
+                    for f in sorted((i18n.LOCALES / lang).glob("*.json"))
+                    for k, v in json.loads(f.read_text()).items() for s in (k, v)
+                    if isinstance(s, str) and unbraced.search(s)]
+        self.assertEqual(problems, [])
+
     def test_lookup(self):
         _ = i18n.domain("/x/bin/demo-tool")
         self.assertEqual(_.domain, "demo-tool")
