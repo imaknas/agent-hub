@@ -212,6 +212,8 @@ touch "$WS/a" && echo ws-write
 touch "$BUS/a" 2>/dev/null || echo bus-write-blocked
 ls "$BUS" >/dev/null 2>&1 || echo bus-read-blocked
 touch "$TOP/outside" 2>/dev/null || echo outside-write-blocked
+[ -d "$ROOT" ] && echo root-stat
+ls "$ROOT" >/dev/null 2>&1 || echo root-list-blocked
 mkdir -p "$WS/.ctl" && { touch "$WS/.ctl/settings" 2>/dev/null || echo control-blocked; }
 cat "$OTHER/secret" >/dev/null 2>&1 || echo other-blocked
 cat "$CRED" >/dev/null 2>&1 || echo cred-blocked
@@ -237,11 +239,13 @@ except OSError:
 a, b = socket.socketpair(); print("socketpair-ok")
 PY
 """
-# what a sandboxed service must still be able to do, whatever the adapter
-WORKS = {"rt-write", "ws-write", "system-read", "bind-declared-ok", "socketpair-ok"}
+# what a sandboxed service must still be able to do, whatever the adapter; root-stat: the folder above its own (the
+# workspace root, whose contents it can't read) can be stat'ed, or a program resolving the path to its own folder fails
+# (git 2.56 resolves every component of `git -C <dir>`: "Invalid path '<workspace root>': Operation not permitted")
+WORKS = {"rt-write", "ws-write", "system-read", "bind-declared-ok", "socketpair-ok", "root-stat"}
 # guarantee (isolation.GUARANTEES) → the probe lines that show it holds
 PROBES = {"own-writes-only": {"outside-write-blocked", "bus-write-blocked"},
-          "isolated-reads": {"other-blocked", "cred-blocked", "bus-read-blocked"},
+          "isolated-reads": {"other-blocked", "cred-blocked", "bus-read-blocked", "root-list-blocked"},
           "declared-port-only": {"bind-other-blocked"}, "unix-sockets-blocked": {"unix-blocked"},
           "keychain-blocked": {"keychain-blocked"}, "signals-blocked": {"signal-blocked"},
           "runtime-files-locked": {"control-blocked"}}
@@ -259,6 +263,8 @@ policy.protect = lambda: [{"name": ".ctl/settings", "tree": True}]   # what a ru
 landlock.TMP = []
 seatbelt.TMP = []
 hubconf.BUS_DIR = pathlib.Path(args["bus"])
+real_p = hubconf.p
+hubconf.p = lambda k, d=None: pathlib.Path(args["root"]) if k == "workspace_root" else real_p(k, d)
 hubconf.projects = lambda: args["projects"]
 real_get = hubconf.get
 hubconf.get = lambda k, d=None: [args["cred"]] if k == "credentials.files" else real_get(k, d)
@@ -284,9 +290,10 @@ class Conformance(unittest.TestCase):
     def test_this_machines_adapter_holds_what_it_declares(self):
         tmp = pathlib.Path(tempfile.mkdtemp()).resolve()
         self.addCleanup(shutil.rmtree, tmp, ignore_errors=True)
-        ws, other, bus = tmp / "ws", tmp / "other", tmp / "bus"
+        root = tmp / "workspace"   # the workspace root: the projects' folders are in it
+        ws, other, bus = root / "ws", root / "other", tmp / "bus"
         for d in (ws, other, bus):
-            d.mkdir()
+            d.mkdir(parents=True)
         (other / "secret").write_text("x")
         cred = tmp / "cred"
         cred.write_text("token")
@@ -295,10 +302,12 @@ class Conformance(unittest.TestCase):
         self.addCleanup(outside.kill)
         port = 18125
         args = {"bin": str(BIN), "ws": str(ws), "cred": str(cred), "port": port, "probe": PROBE, "bus": str(bus),
+                "root": str(root),
                 "projects": {"proj": {"name": "proj", "paths": {"workspace": str(ws)}, "enforce": {"sandbox": True}},
                              "other": {"name": "other", "paths": {"workspace": str(other)}}}}
         # no runtime in the fixture (it would be under services_root): the workspace stands in for it
         env = {**os.environ, "RT": str(ws), "WS": str(ws), "BUS": str(bus), "TOP": str(tmp), "OTHER": str(other),
+               "ROOT": str(root),
                "CRED": str(cred), "PORT": str(port), "OUTSIDE_PID": str(outside.pid),
                "PY": sys.executable}   # the platform's Python: never rely on a python3 on PATH (AGENTS.md)
         r = subprocess.run([sys.executable, "-c", RUNNER, __import__("json").dumps(args)], capture_output=True,
