@@ -203,10 +203,13 @@ vendors):
    `shape`, the same day as Muninn.
 4. Judgment points switched to completion one by one, each first in **shadow mode**: the completion version runs in
    dry-run alongside today's agent version for a few nights, comparing the proposed results (STATE.md, to-do section,
-   index notes), and switches when there is no problem. Order: todo-format → index → state. The golden files change to
+   index notes), and switches when there is no problem. ~~Order: todo-format → index → state.~~ Order changed to
+   index → state → todo-format (see "Step 4: the comparison and the switch" below). The golden files change to
    fix "the edit list the stand-in returns → what the platform writes" (today's stand-in writes files directly to
    imitate the agent, and has to change accordingly); the path in `librarian.py` "no structured_output, go by the actual
    files" is removed after the switch.
+   **11-02**: all three completion versions exist and run in shadow; the switch is built (`hub.json`
+   `librarian.completion`), production not switched. Numbers and recommendation in the section below.
 5. ⏸ Privacy routing: **to be settled once evaluators mature** (the owner on 10-29: no enforced privacy policy for now).
    A version was made on 10-29 (b8f359d: `privacy.memory`, `material` marked on each point, llm.py blocking the cloud,
    digest filtering) and then reverted: it pre-empted what evaluators.md is to decide (project level uses
@@ -220,6 +223,85 @@ vendors):
    points go to, and shows red when there is nowhere to run them.
 7. Run a full nightly flow on a local Ollama (isolated HOME, nothing sent to the cloud): proving that local models alone
    are enough.
+
+## Step 4: the comparison and the switch (11-02)
+
+### What the shadow measured
+
+`bin/librarian-shadow-report.py --days 14` over the nights 10-30 to 11-02 (records in `.state/librarian-shadow/`,
+both versions on the Claude provider: the state points on the `fast` group, index on `standard`):
+
+| Point | Runs (nights) | Valid edit list | Same change-or-not as the agent | Similarity to the agent's file (mean / lowest) | Key marker problems | Cost, completion vs agent |
+|---|---|---|---|---|---|---|
+| librarian-state-edits | 21 (4) | 19/21 (90%) | 19/19 | 0.78 / 0.20 | 0 | $0.175 vs $1.93 |
+| librarian-index-edits | 4 (4) | 4/4 | 4/4 | 0.97 / 0.95 | — (roster block untouched 4/4) | $0.290 vs $0.316 |
+| librarian-todo-format-edits | 0 | — | — | — | — | added 11-02 |
+
+Also checked by hand: every one of the 19 valid STATE.md proposals passes `check-state-todo`; their sizes land within
+about 10% of the agent's file, usually a little smaller (no bloat).
+
+The kinds of disagreement:
+
+- **Invalid edit lists (2)**: two projects, 10-30 and 11-01. Both are an `old` quoting an owner
+  to-do line (the owner tag … the `task-…` key marker) that does not occur verbatim in STATE.md, so the whole list was
+  rejected (`bin/edits.py`: never half applied). The records then kept only 60 characters of the `old`, so the cause
+  (a mistyped character, a line changed by an earlier edit in the same list, an invented line) can't be told; the
+  shadow now records the whole `old` and the closest real line (`edit_old`, `edit_near`).
+- **Low similarity (3 below 0.7)**: two are not disagreements. One (11-02, 0.20) was the first write over
+  the 161-byte placeholder: two independent first drafts, one edit replacing the body each. Another (11-01,
+  0.65) started from 1 KB. The one real divergence (10-30, 0.23): the agent restructured and
+  shortened the file (9.5 → 7.1 KB) while the completion version kept the structure and added (→ 10.5 KB). Similarity
+  over a whole file punishes restructuring, not wrongness.
+- In these 4 nights the agent version had no failures of its own. Earlier in October it did, of a kind the completion
+  shape can't have: nights without structured output (10-08: the model said it had already called the output tool),
+  and the format fix was needed (last on 10-10).
+
+What the numbers do **not** show yet:
+
+- 4 nights is thin, and for index 4 runs.
+- Every run was a night the agent version did change STATE.md: "leave it alone" agreement is untested.
+- Everything went through the Claude provider. This supports switching the **shape**; running on another provider is
+  step 7.
+
+### The switch
+
+`hub.json`:
+
+```json
+"librarian": {"completion": {"state": false, "todo_format": false, "index": true}}
+```
+
+- Per part: `true` = the completion version is in charge (the model returns an edit list, the platform checks it and
+  writes the file; the agent version isn't called and that part's shadow stops); `false` = the agent version;
+  **absent** = the agent version where this machine can run it, otherwise the completion version. So someone with
+  only an API key gets a librarian without setting anything, and this machine is unchanged until the owner sets a part.
+- The agent version stays the fallback until it is removed: setting the part back to `false`. A list that fails the
+  checks is **not** handed to the agent version in the same run: that would hide the very failure rate the switch is
+  decided on. It is that point's declared failure: state = nothing written, the copy restored, the checkpoint not
+  advanced (retried next night); todo-format = the section stays and the end of `todo.md` lists it; index = index.md's
+  notes not updated that night. A project with no STATE.md at all can't be edited into one: the completion version
+  of state fails there every night (first-look normally writes the first STATE.md).
+- Checks before writing: every `old` exactly once; key markers not rewritten (state: a whole line may go when the item
+  is done; todo-format: no marker may go, a format fix never drops an item); index: the roster block unchanged. The rest
+  of the nightly run is the same code as for the agent version (check-state-todo and the format fix, anchor admission,
+  commit and push, review-log, checkpoint, closing handoffs, digest).
+- Runs in charge are still written to the shadow log (`in_charge: true`); the report counts them apart (valid lists,
+  how many changed the file).
+- The order changed to **index → state → todo-format**: index has the cleanest numbers; todo-format had no completion
+  version until 11-02 and the agent version fires rarely (not once in these 4 nights; last on 10-10), so its shadow fills slowly, but its
+  result is fully checked at run time (check-state-todo, every marker kept), so a long shadow matters least there.
+
+### Recommendation (the owner decides)
+
+1. **index: switch now.** Valid 4/4, same decision 4/4, roster untouched 4/4, similarity ≥ 0.95, same cost. Set
+   `librarian.completion.index: true` in the config repo's `hub.json` (its pre-commit runs `agenthub config check`);
+   the librarian reads it the next night.
+2. **state: not yet.** Wait 7 more nights with the new diagnostics. Switch when invalid lists are 0 in those nights,
+   or the keyed-line miss is understood and fixed in the prompt. The gain is large: about 11× cheaper ($0.175 vs $1.93
+   over 4 nights) and no "no structured output" nights.
+3. **todo-format: switch with state, or after a few clean shadow runs** (passes check-state-todo, no marker problems).
+4. Confirm the default for an unset part (completion when this machine can't run the agent version). The other choice is that
+   the librarian stays off for API-key-only users until state's comparison is clean.
 
 ## Out of scope (later)
 
