@@ -13,6 +13,7 @@ Each "should block" check first runs once outside the sandbox: one that already 
 Nothing here starts launchctl or opens an app: test_launch_and_processes stays skipped (a test may not reach this
 machine's launchd session or desktop); the process checks that stay inside the test run are in test_processes.
 """
+import json
 import os
 import pathlib
 import shutil
@@ -78,7 +79,11 @@ class CapProfile(unittest.TestCase):
         (inst["creds"] / "token").write_text("x")
         cfg = {"workspace_root": str(inst["workspace"]), "services_root": str(inst["services"]),
                "bus_dir": str(inst["bus"]), "git_origin": str(inst["git-origin"]), "memory_copies": str(inst["copies"]),
-               "credentials": {"files": [str(inst["creds"] / "token")]}}
+               # the user-level credential folders as every instance has them (hub.example.json), plus a file of the
+               # test's own: without the folders the profile would let `ls ~/.ssh` through and only a HOME with a real
+               # ~/.ssh would notice (a fresh HOME has none, so that check doesn't count there)
+               "credentials": {"dirs": json.loads((ROOT / "hub.example.json").read_text())["credentials"]["dirs"],
+                               "files": [str(inst["creds"] / "token")]}}
         for p in (mock.patch.object(hubconf, "_cfg", cfg), mock.patch.object(hubconf, "STATE", inst["state"]),
                   mock.patch.object(hubconf, "BUS_DIR", inst["bus"]),
                   mock.patch.dict(os.environ, {"AGENT_HUB_SECRETS": str(inst["secrets"])})):
