@@ -354,9 +354,15 @@ class ClaudeSessionsDir(unittest.TestCase):
     def files(self) -> list[str]:
         return sorted(p.name for p in self.dir.iterdir()) if self.dir.is_dir() else []
 
-    def wait(self, steps=(), env=None, start=1000.0, step_s=2.0):
+    # Desktop's CLI as the 11-02 spike saw it: stream-json in and out, no -p
+    DESKTOP_ARGV = ["/Users/u/.claude/remote/ccd-cli/2.1.309-40c3beb4ef2f", "--output-format", "stream-json",
+                    "--verbose", "--input-format", "stream-json", "--permission-mode=auto",
+                    "--session-id=11111111-2222-4333-8444-555555555555"]
+
+    def wait(self, steps=(), env=None, start=1000.0, step_s=2.0, argv=DESKTOP_ARGV):
         """runtime_claude.wait through its real code, with a clock that moves step_s per poll; steps[i] runs at the
-        i-th poll's sleep (then nothing more happens until the waiter ends by itself)."""
+        i-th poll's sleep (then nothing more happens until the waiter ends by itself). The session's process is this
+        one (CLAUDE_PID, alive) unless env says otherwise; its arguments are `argv` (None: unreadable)."""
         t = [start]
         steps = list(steps)
 
@@ -364,7 +370,8 @@ class ClaudeSessionsDir(unittest.TestCase):
             if steps:
                 steps.pop(0)()
             t[0] += step_s
-        out = self.rc.wait(self.raw(), env or {}, clock=lambda: t[0], sleep=sleep, poll=0)
+        env = {"CLAUDE_PID": str(os.getpid()), **(env or {})}
+        out = self.rc.wait(self.raw(), env, clock=lambda: t[0], sleep=sleep, poll=0, argv_of=lambda pid: argv)
         self.clock = t[0]
         return out
 
@@ -465,6 +472,50 @@ class ClaudeWaiter(ClaudeSessionsDir):
             self.request("x")
             env = {"CLAUDE_CODE_ENTRYPOINT": ep} if ep else {}
             self.assertEqual(self.wait(env=env)[0], 2, ep)
+        self.request("x")
+        self.assertEqual(self.wait(argv=["claude", "--resume", self.SID])[0], 2, "a terminal session")
+
+    def test_a_print_run_inside_a_session_does_not_arm(self):
+        """`claude -p` started from inside a session (an agent's Bash) inherits that session's entrypoint, and waits
+        for a background Stop hook to exit (seen 11-02 on 2.1.316): its own arguments decide, not the entrypoint."""
+        self.request("x")
+        for argv in (["claude", "-p", "say hi"], ["claude", "--print", "say hi"], ["claude", "--print=text"],
+                     ["/opt/node", "/x/cli.js", "--model", "m", "-p", "hi"]):
+            for ep in ("claude-desktop", "cli"):
+                self.assertEqual(self.wait(env={"CLAUDE_CODE_ENTRYPOINT": ep}, argv=argv), (0, "", "headless"), argv)
+        self.assertEqual([n for n in self.files() if n.endswith(".waiter")], [], "nothing armed")
+        self.assertEqual(len(self.files()), 1, "and the request is left alone")
+
+    def test_an_unknown_session_process_does_not_arm(self):
+        self.request("x")
+        self.assertEqual(self.wait(argv=None), (0, "", "no-session-process"), "arguments unreadable")
+        self.assertEqual(self.rc.wait(self.raw(), {}, argv_of=lambda pid: self.DESKTOP_ARGV),
+                         (0, "", "no-session-process"), "no CLAUDE_PID")
+        self.assertEqual(self.rc.wait(self.raw(), {"CLAUDE_PID": "x"}), (0, "", "no-session-process"))
+        self.assertEqual(len(self.files()), 1)
+
+    def test_a_process_arguments_are_read_from_the_system(self):
+        import subprocess
+        import time
+        code = "import time; time.sleep(30)"
+        plain = subprocess.Popen([sys.executable, "-c", code])
+        printing = subprocess.Popen([sys.executable, "-c", code, "-p", "say hi"])   # -p among its arguments
+
+        def argv(p):   # once it has exec'd (before that, ps shows the parent's arguments)
+            for _i in range(100):
+                got = self.rc._argv(p.pid) or []
+                if "time.sleep(30)" in " ".join(got):
+                    return got
+                time.sleep(0.05)
+            self.fail(f"no arguments read for {p.pid}")
+        try:
+            self.assertFalse(self.rc._printing(argv(plain)))
+            self.assertTrue(self.rc._printing(argv(printing)))
+        finally:
+            for p in (plain, printing):
+                p.kill()
+                p.wait()
+        self.assertIsNone(self.rc._argv(plain.pid), "a process that is gone")
 
     def test_hub_event_passes_the_wake_on(self):
         import contextlib
@@ -473,8 +524,17 @@ class ClaudeWaiter(ClaudeSessionsDir):
         hub_event.LOG = self.tmp / "hub-event.log"
         self.request("📬 agent-hub: 1 letter from beta (m1). Run agenthub inbox.")
         err = io.StringIO()
-        with contextlib.redirect_stderr(err), mock.patch.dict("os.environ", {}, clear=False):
-            for var in ("HUB_LLM_POINT", "HUBBUS_LEASE", "CLAUDE_CODE_ENTRYPOINT", "CLAUDE_PID"):
+        import subprocess
+        session = subprocess.Popen(["sleep", "30"])   # the session's process, read for real: no -p
+        self.addCleanup(session.wait)
+        self.addCleanup(session.kill)
+        import time
+        for _i in range(100):   # until it has exec'd (before that, ps shows this process's arguments)
+            if "sleep" in " ".join(self.rc._argv(session.pid) or []):
+                break
+            time.sleep(0.05)
+        with contextlib.redirect_stderr(err), mock.patch.dict("os.environ", {"CLAUDE_PID": str(session.pid)}):
+            for var in ("HUB_LLM_POINT", "HUBBUS_LEASE", "CLAUDE_CODE_ENTRYPOINT"):
                 os.environ.pop(var, None)
             self.assertEqual(hub_event.wait("claude", self.raw()), 2)
         self.assertEqual(err.getvalue().strip(), "📬 agent-hub: 1 letter from beta (m1). Run agenthub inbox.")

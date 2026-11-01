@@ -320,6 +320,12 @@ implements it, port by port, saying the rest is unsupported. What the reviews fo
       its own taken files and woke the session about 10 times for one request). A request is taken exactly once.
    5. Desktop runs its own CLI binary (not nvm's `claude`), with `CLAUDE_PID` in the hook environment; nothing here
       looks for the session's process by name.
+   6. (The live end-to-end check, 11-02, CLI 2.1.316.) `claude -p` waits for an asyncRewake Stop hook to exit before it
+      exits, contrary to the docs' "killed at teardown", and a `-p` run started inside another session inherits that
+      session's `CLAUDE_CODE_ENTRYPOINT` (`claude-desktop`, `cli`) rather than getting `sdk-cli`. So whether a session
+      is a `-p` run is read from its own process's arguments (`CLAUDE_PID`), the entrypoint is only a second signal, and
+      a session whose process can't be read arms nothing. The same check showed the wake itself working: a turn about
+      1 s after `wake()`, the request consumed once, a new waiter armed after it, `superseded` for an older one.
 
    As built (details in mailbox-routing.md, "11-02"), and where it differs from the text above:
    - The waiter is `hub-event --runtime claude wait` → `runtime_claude.wait`, the one hub-event entry point that doesn't

@@ -292,8 +292,13 @@ agent while the user was working there. Now:
 - **`runtime_claude.wake(sid, text)`**: writes a request (tmp + rename, mode 600) only while the session's waiter
   heartbeats (10 s); otherwise False, recorded as `message.woken` with `ok: false` ("wake failed" on the status page),
   and the routing goes on as before. A session is wakeable once its first turn has ended.
-- **Not armed**: platform runs (`HUB_LLM_POINT`, `HUBBUS_LEASE`, checked by hub-event) and `-p` / SDK runs
-  (`CLAUDE_CODE_ENTRYPOINT` sdk-cli / sdk-ts / sdk-py).
+- **Not armed**: platform runs (`HUB_LLM_POINT`, `HUBBUS_LEASE`, checked by hub-event); `-p` runs, told from the
+  session process's own arguments (`CLAUDE_PID`'s argv: `-p`, `--print`, `--print=…`); SDK runs
+  (`CLAUDE_CODE_ENTRYPOINT` sdk-cli / sdk-ts / sdk-py, a second signal only: a `claude -p` started inside another
+  session, e.g. from an agent's Bash, inherits that session's `claude-desktop` or `cli`); and a session whose process
+  is unknown or unreadable (fail safe: a missed wake is fine, a hung run isn't). Observed 11-02 on 2.1.316: `claude -p`
+  **waits** for an asyncRewake Stop hook to exit before it exits (the docs say it kills background hooks at teardown),
+  so a waiter armed in a `-p` run hung it for minutes, up to the hook's day.
 - **The notice**: "📬 agent-hub: 1 letter from <project> (<id>). Run agenthub inbox." Claude Code shows a woken hook's
   stderr as `Stop hook blocking error from command …: <stderr>`, so the text names agent-hub.
 - **Seeing failures**: a letter whose wake reached a waiter but that the session didn't take (hook, inbox or ack)

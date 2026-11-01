@@ -229,8 +229,10 @@ def session_process(command: str) -> bool:
 #     before its own timeout.
 # wake(sid, text) writes a request (tmp + rename) only while that session's waiter heartbeats; otherwise False, and
 # dispatch's usual routing goes on. A session is wakeable once its first turn has ended, until it is idle for longer
-# than the hook timeout. Platform runs (HUB_LLM_POINT, HUBBUS_LEASE: checked by hub-event) and -p / SDK runs
-# (CLAUDE_CODE_ENTRYPOINT; -p kills background hooks at teardown) don't arm.
+# than the hook timeout. Not armed: platform runs (HUB_LLM_POINT, HUBBUS_LEASE: checked by hub-event), -p runs (the
+# session process's own arguments; the docs say -p kills background hooks at teardown, but on 2.1.316 (11-02) `claude
+# -p` waited for the waiter to exit, so a waiter there hangs the run), SDK runs (CLAUDE_CODE_ENTRYPOINT, a second signal:
+# a -p run inside another session inherits that session's), and a session whose process can't be read (fail safe).
 # The inbox socket (cross-session-messaging) is not used: its message format is still undocumented (checked 11-01).
 
 WAIT_TIMEOUT_S = 86400       # the Stop hook's timeout (enforced for asyncRewake); the waiter leaves before it
@@ -279,9 +281,7 @@ def wake(sid: str, text: str, now=None) -> bool:
     return True
 
 
-def _alive(pid: int | None) -> bool:
-    if not pid:
-        return True   # not known: the waiter file, its heartbeat and the deadline still end it
+def _alive(pid: int) -> bool:
     try:
         os.kill(pid, 0)
     except ProcessLookupError:
@@ -318,9 +318,31 @@ def _take(key: str, now: float) -> list[str]:
     return out
 
 
-def wait(raw: str, env, *, clock=None, sleep=None, poll: float = WAIT_POLL_S) -> tuple[int, str, str]:
+def _argv(pid: int) -> list[str] | None:
+    """The session process's arguments (None: not readable). Linux: /proc's exact list; elsewhere ps's text, split on
+    spaces (an argument with a space in it comes out in pieces: enough to spot a flag)."""
+    import subprocess
+    try:
+        if os.path.exists(f"/proc/{pid}/cmdline"):
+            with open(f"/proc/{pid}/cmdline", "rb") as fh:
+                return [a.decode(errors="replace") for a in fh.read().split(b"\0") if a] or None
+        r = subprocess.run(["ps", "-o", "args=", "-p", str(pid)], capture_output=True, text=True, timeout=10)
+        return (r.stdout.split() or None) if r.returncode == 0 else None
+    except (OSError, subprocess.SubprocessError):
+        return None
+
+
+def _printing(argv: list[str]) -> bool:
+    """Whether the session runs with -p / --print: such a run waits for an asyncRewake Stop hook to exit before it
+    exits itself (seen 11-02 on 2.1.316, not what the docs say), so a waiter there would hold it for up to a day."""
+    return any(a in ("-p", "--print") or a.startswith("--print=") for a in argv[1:])
+
+
+def wait(raw: str, env, *, clock=None, sleep=None, poll: float = WAIT_POLL_S, argv_of=None) -> tuple[int, str, str]:
     """The Stop hook's waiter (see above): (exit code, stderr, how it ended). Exit 2 with the notices wakes the
-    session; 0 ends quietly."""
+    session; 0 ends quietly. It arms only when the session's process is known (CLAUDE_PID) and isn't a -p run: a
+    `claude -p` started inside another session inherits that session's CLAUDE_CODE_ENTRYPOINT (claude-desktop, cli),
+    so the entrypoint alone doesn't tell. argv_of: how to read a process's arguments (tests)."""
     import secrets
     import time
     import hubconf
@@ -341,6 +363,11 @@ def wait(raw: str, env, *, clock=None, sleep=None, poll: float = WAIT_POLL_S) ->
         pid = int(env.get("CLAUDE_PID") or 0) or None
     except ValueError:
         pid = None
+    argv = (argv_of or _argv)(pid) if pid else None
+    if argv is None:
+        return 0, "", "no-session-process"   # can't tell it isn't -p: a missed wake, never a hung run
+    if _printing(argv):
+        return 0, "", "headless"
     token = f"{os.getpid()}-{secrets.token_hex(8)}"
     waiter.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
     tmp = waiter.with_name(f".{waiter.name}.{token}.tmp")
