@@ -262,7 +262,10 @@ class Golden(unittest.TestCase):
         (self.tmp / "home" / ".claude").mkdir()
         (self.tmp / "home" / ".claude" / "headless-oauth-token").write_text("t\n")
         self.heartbeat(0)
+        # a newer release is out (doctor asks the remote: no record yet), and the checkout moved by hand since upgrade
+        (self.tmp / "state" / "upgrade.json").write_text(json.dumps({"commit": "b" * 40, "version": "v0.1.0"}))
         out.append(self.agenthub("doctor", label="launchd, all fine", sc={
+            "release": {"version": "v0.2.0", "release": "v0.2.0", "newest": "v0.3.0"},
             "sm": "launchd", "launchd": {"local.agent-hub-scheduler": "path = {bin}/scheduler.py",
                                          "local.agent-hub-scheduler-watchdog": "path = {bin}/scheduler-watchdog.py"},
             "plan": {}, "hooks": "githooks", "which": {"agenthub": "/usr/local/bin/agenthub"},
@@ -272,13 +275,18 @@ class Golden(unittest.TestCase):
         self.cfg.pop("owner_side")
         self.valid_cfg(runtime={"default": "none"})
         self.heartbeat(120)
+        # up to date on main past the release; a development checkout is not told it moved
+        (self.tmp / "state" / "upgrade-check.json").unlink()
         out.append(self.agenthub("doctor", label="systemd, runtime none", sc={
+            "release": {"version": "v0.3.0-2-gabc1234", "release": "v0.3.0", "newest": "v0.3.0", "mode": "dev"},
             "sm": "systemd", "systemd": {"local.agent-hub-scheduler": "running", "local.agent-hub-scheduler-watchdog": None},
             "linger": False, "plan": {"services": ["a"]}, "hooks": "githooks", "adapter": "landlock",
             "no_sandbox": "the kernel's Landlock ABI is 3, ports need ≥ 4"}))
         self.valid_cfg(owner_side="assistant", assistant={"project": "helper", "api": "http://127.0.0.1:9"})
-        out.append(self.agenthub("doctor", label="no service manager, unnamed assistant",
-                                 sc={"sm": None, "plan": {}, "hooks": "githooks"}))
+        (self.tmp / "state" / "upgrade-check.json").unlink()   # the remote cannot be reached
+        out.append(self.agenthub("doctor", label="no service manager, unnamed assistant", sc={
+            "sm": None, "plan": {}, "hooks": "githooks",
+            "release": {"version": "v0.3.0", "release": "v0.3.0", "error": "Could not resolve host: example.org"}}))
         self.check("agenthub-doctor", "\n".join(out))
 
     def test_agenthub_modules(self):
@@ -338,6 +346,14 @@ class Golden(unittest.TestCase):
                                  env=fresh, sc={"hooks": "githooks"}))
         out.append(self.agenthub("init", "--home", self.tmp / "inst", *args, "--no-launchd", label="new instance",
                                  env=fresh, sc={"hooks": ""}))
+        # --scheduler-only (a step of agenthub upgrade): the two units and nothing else; under launchd it writes the
+        # plists into the fake HOME, then finds them in place
+        loaded = {"local.agent-hub-scheduler": "path = {bin}/scheduler.py",
+                  "local.agent-hub-scheduler-watchdog": "path = {bin}/scheduler-watchdog.py"}
+        out += [self.agenthub("init", "--scheduler-only", label="launchd, not installed", sc={"sm": "launchd"}),
+                self.agenthub("init", "--scheduler-only", label="launchd, in place", sc={"sm": "launchd", "launchd": loaded}),
+                self.agenthub("init", "--scheduler-only", label="systemd", sc={"sm": "systemd", "systemd": {}, "linger": True}),
+                self.agenthub("init", "--scheduler-only", label="no service manager", sc={"sm": None})]
         # the template's JSON is not a message: keep the line that announces it, not the template itself
         text = re.sub(r"(?m)^\{\n(.*\n)*?\}\n", "<hub.json from hub.example.json>\n", "\n".join(out))
         self.check("agenthub-init", text)
@@ -446,6 +462,17 @@ class Change:
         self.op, self.target, self.detail, self.text = "change", text, "", text
     def line(self):
         return self.text
+
+if "release" in sc:   # the hub checkout's git state and the remote's tags: the scenario's, never this machine's
+    import upgrade
+    rel = sc["release"]
+    upgrade.is_checkout = lambda: True
+    upgrade.describe = lambda: rel["version"]
+    upgrade.nearest_release = lambda rev="HEAD": rel.get("release")
+    upgrade.remote_name = lambda: rel.get("remote", "origin")
+    upgrade.sha = lambda rev: "a" * 40
+    upgrade.local_mode = lambda: (rel.get("mode", "release"), "")
+    upgrade.ls_remote_newest = lambda remote: (rel.get("newest"), rel.get("error"))
 
 import appliers
 if "plan" in sc:

@@ -13,7 +13,13 @@ agent-hub 的單一入口(docs/design/new-user.md 3.4)。薄薄一層分派,不�
                         寫 config/hub.json(問幾個問題,--yes 用預設值),最後寫 <hub>/.hub-home 指過去;建需要的資料夾;
                         問平台的判斷要交給哪家模型(= agenthub llm setup);裝排程器跟看門狗(launchd/ 的樣板;內容一樣就不動);
                         套用 config。已經有 hub.json 就不動它
-  agenthub doctor            一次看完哪裡壞了:平台的 Python、config、登入、排程器、看門狗、背景服務、commit 閘門
+  agenthub doctor            一次看完哪裡壞了:平台的 Python、config、登入、排程器、看門狗、背景服務、commit 閘門,
+                        還有有沒有新的 release
+  agenthub upgrade [--to vX.Y.Z | --main] [--check] [--yes]
+                        把這個 checkout 移到最新的 release(或指定的 tag、remote 的 main),再讓機器跟上:Python 套件、
+                        專案登錄、config apply、排程器、hook、CLI、doctor。先列出 changelog;--check 列完就停
+                        (exit 10 = 有新版)。開發用的 checkout 一律不動(bin/upgrade.py)
+  agenthub init --scheduler-only   只從樣板重裝排程器跟看門狗(upgrade 會跑)
 config:
   agenthub config check | plan | apply [--only <套用者>,...]
                         驗證 config / 會改什麼 / 套用(check → 套用 → 再 plan 要是空的 → 記錄)

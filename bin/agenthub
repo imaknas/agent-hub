@@ -14,7 +14,13 @@ Getting started:
                         platform's decisions go to (= agenthub llm setup); installs the scheduler and watchdog (the launchd/
                         templates; left alone when unchanged); applies the config. With a hub.json already there, leaves it alone
   agenthub doctor            everything that is broken, at a glance: the platform's Python, config, logins, scheduler, watchdog,
-                        background services, commit gate
+                        background services, commit gate, and whether a newer release is out
+  agenthub upgrade [--to vX.Y.Z | --main] [--check] [--yes]
+                        move this checkout to the newest release (or that tag, or the remote's main) and bring the machine
+                        in step: Python packages, registry, config apply, scheduler, hooks, CLI, doctor. Shows the
+                        changelog first; --check stops there (exit 10 = an upgrade is there). Never moves a development
+                        checkout (bin/upgrade.py)
+  agenthub init --scheduler-only   only (re)install the scheduler and watchdog from the templates (upgrade runs it)
 config:
   agenthub config check | plan | apply [--only <applier>,...]
                         validate the config / what would change / apply (check → apply → plan again must be empty → record)
@@ -207,11 +213,14 @@ def render_plist(label: str) -> bytes:
     return (ROOT / "launchd" / f"{label}.plist").read_text().replace("{{hub}}", str(ROOT)).encode()
 
 
-def install_core_plists(dry: bool) -> list[str]:
+def install_core_plists(dry: bool, failed: list[str] | None = None) -> list[str]:
     """Scheduler + watchdog: if the template's content matches what's installed, leave it (no needless scheduler
     reload). Only from the main checkout: units rendered from a linked worktree would run the scheduler from there,
-    which refuses every tick (11-01: an `init --help` in a worktree stopped the live scheduler this way)."""
+    which refuses every tick (11-01: an `init --help` in a worktree stopped the live scheduler this way). The labels
+    whose install failed (or was refused) are added to `failed`."""
+    failed = [] if failed is None else failed
     if hubconf.ROOT != hubconf.MAIN:
+        failed.extend(CORE_PLISTS)
         return [_("⚠️ not installing the scheduler and watchdog from a linked worktree ({root}); run init from the main "
                   "checkout ({main})", root=hubconf.ROOT, main=hubconf.MAIN)]
     sm = hubconf.service_manager()
@@ -230,6 +239,7 @@ def install_core_plists(dry: bool) -> list[str]:
             if not dry:
                 r = systemd_units.install(plist)
                 if r.returncode != 0:
+                    failed.append(label)
                     done.append(_("  ⚠️ systemctl enable failed: {error}", error=r.stderr.strip()[:200]))
         if systemd_units.linger() is False:
             done.append(_("  ⚠️ user units stop after logout: `loginctl enable-linger $USER` (needs sudo)"))
@@ -252,6 +262,7 @@ def install_core_plists(dry: bool) -> list[str]:
         path.write_bytes(want)
         r = subprocess.run(["/bin/launchctl", "bootstrap", f"gui/{os.getuid()}", str(path)], capture_output=True, text=True)
         if r.returncode != 0:
+            failed.append(label)
             done.append(_("  ⚠️ bootstrap failed: {error}", error=r.stderr.strip()[:200]))
     return done
 
@@ -297,7 +308,7 @@ def new_hub_json(args: dict, yes: bool) -> dict:
     return d
 
 
-INIT_FLAGS = ("--yes", "--no-launchd", "--dry-run")
+INIT_FLAGS = ("--yes", "--no-launchd", "--dry-run", "--scheduler-only")
 INIT_OPTIONS = ("--owner", "--timezone", "--workspace", "--modules", "--home", "--llm", "--llm-model", "--llm-base-url")
 
 
@@ -325,6 +336,11 @@ def cmd_init(argv: list[str]) -> int:
     if problem := init_argv_problem(argv):
         print(_("agenthub init: {problem} (nothing was done; see agenthub --help)", problem=problem), file=sys.stderr)
         return 2
+    if "--scheduler-only" in argv:   # a step of agenthub upgrade: the two units init installs, nothing else
+        failed: list[str] = []
+        for line in install_core_plists(False, failed) or [_("✓ the scheduler and watchdog are already installed")]:
+            print(line)
+        return 1 if failed else 0   # no service manager at all is not a failure here: doctor says so
     flags = {a for a in argv if a in INIT_FLAGS}
     args = {k.lstrip("-"): argv[i + 1] for i, k in enumerate(argv[:-1]) if k in INIT_OPTIONS}
     dry, yes = "--dry-run" in flags, "--yes" in flags
@@ -385,6 +401,8 @@ def cmd_init(argv: list[str]) -> int:
         rc = subprocess.run([*hubconf.launch(BIN / "agenthub"), "config", "apply"]).returncode
         if rc != 0:
             return rc
+        import upgrade
+        upgrade.record_in_step()   # this checkout's commit is in step now (agenthub upgrade, doctor)
     print(_("\nNext: agenthub doctor shows what is missing; agenthub onboard ~/workspace/<project> connects the first project"))
     return 0
 
@@ -508,6 +526,10 @@ def cmd_doctor(argv: list[str]) -> int:
     add("ok" if r.returncode == 0 else "bad", _("config: all valid") if r.returncode == 0 else
         _("config: {errors}", errors=r.stderr.strip()[:300]),
         "" if r.returncode == 0 else _("fix hub.json / projects/ as the messages say, then run agenthub config check"))
+
+    import upgrade
+    for level, what, fix in upgrade.doctor_lines():   # the release; network at most once a day (bin/upgrade.py)
+        add(level, what, fix)
 
     side = hubconf.owner_side()
     add("ok", _("owner side: {name} (owner_side: assistant)", name=hubconf.get('assistant.name') or _("assistant"))
@@ -859,6 +881,7 @@ COMMANDS = {
     "jobs": lambda argv: subprocess.run([*hubconf.launch(BIN / "schedulectl"), "list", *argv]).returncode,
     "run": lambda argv: subprocess.run([*hubconf.launch(BIN / "schedulectl"), "run", *argv]).returncode,
     "install-cli": cmd_install_cli,
+    "upgrade": passthrough("upgrade.py"),
     # stdio is the protocol: exec into the server process, no extra layer
     "mcp": lambda argv: os.execv(sys.executable, [sys.executable, str(BIN / "mcp_server.py"), *argv]),
     "owner": lambda argv: subprocess.run([*hubconf.launch(BIN / "owner.py"), *argv]).returncode,
@@ -872,9 +895,8 @@ COMMANDS = {
 def version() -> str:
     """the release this checkout is at: `git describe` against the v* tags (cliff.toml's tag_pattern); an untagged
     commit reads <tag>-<n>-g<sha>, a checkout with no release yet its short sha, a tree outside git `unknown`"""
-    r = subprocess.run(["git", "-C", str(ROOT), "describe", "--tags", "--match", "v[0-9]*", "--always", "--dirty"],
-                       capture_output=True, text=True)
-    return r.stdout.strip() if r.returncode == 0 and r.stdout.strip() else "unknown"
+    import upgrade
+    return upgrade.describe()
 
 
 def main(argv: list[str]) -> int:

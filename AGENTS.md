@@ -79,6 +79,11 @@ agent-hub is meant for anyone, with any coding agent, any LLM, any key.
   rename, status, jobs, run); which provider's model makes the platform's judgments and where the key lives:
   `agenthub llm setup` (init asks too); when something is broken, run `bin/agenthub doctor` first. New machine:
   `bin/setup` → `agenthub init`
+- **Updating an install**: `agenthub upgrade` (`bin/upgrade.py`: moves a checkout at a release or on main to the newest
+  release / the remote's main, then runs the target's own in-step commands; the rule for which checkouts it refuses,
+  the exit codes and the hand-over between versions are in its header). A development checkout (another branch, or
+  commits not on the remote, like the author's main) is refused, never moved. `bin/upgrade.py --steps --from <ref>` is
+  a contract between versions: an older version execs the new one's after moving the checkout; keep it working
 
 - **A project's current state, which services it is bound to, what its STATE.md says**:
   `bin/overview.sh [project name]` (no argument lists all of them)

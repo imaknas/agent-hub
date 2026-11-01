@@ -61,3 +61,31 @@ $ agenthub init --home <TMP>/inst --owner Sam --timezone UTC --workspace <TMP>/w
 判斷點先不設:要用到時會明確失敗、說原因。之後跑 agenthub llm setup
 --no-launchd:不裝排程器、不套用服務
 --- stderr
+
+$ agenthub init --scheduler-only    # launchd, not installed
+[exit 0]
+--- stdout
+local.agent-hub-scheduler:安裝
+local.agent-hub-scheduler-watchdog:安裝
+--- stderr
+
+$ agenthub init --scheduler-only    # launchd, in place
+[exit 0]
+--- stdout
+✓ 排程器、看門狗已經裝好
+--- stderr
+
+$ agenthub init --scheduler-only    # systemd
+[exit 1]
+--- stdout
+local.agent-hub-scheduler:安裝(systemd)
+  ⚠️ systemctl enable 失敗:no user bus
+local.agent-hub-scheduler-watchdog:安裝(systemd)
+  ⚠️ systemctl enable 失敗:no user bus
+--- stderr
+
+$ agenthub init --scheduler-only    # no service manager
+[exit 0]
+--- stdout
+⚠️ 這個系統沒有支援的服務管理器(macOS 的 launchd、Linux 的 systemd user 層級都沒有):排程器、看門狗、專案的長駐服務都不會自己跑;要跑夜間流程就自己排程 `bin/py bin/scheduler.py`(每 15 分鐘)
+--- stderr

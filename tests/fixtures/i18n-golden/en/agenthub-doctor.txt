@@ -56,6 +56,10 @@ $ agenthub doctor    # launchd, all fine
 --- stdout
 ✓ python 3.13 ok
 ✓ config: all valid
+! agent-hub v0.3.0 is out; this checkout is at v0.2.0 (checked <TS>)
+    → agenthub upgrade --check shows what changes; agenthub upgrade installs it
+! the checkout moved to v0.2.0 after agenthub upgrade last brought this machine in step (at v0.1.0): the Python packages, services, scheduler and hooks may be stale
+    → agenthub upgrade
 ✓ owner side: Robin (owner_side: assistant)
 ✓ agenthub is on PATH: /usr/local/bin/agenthub
 ✓ MCP server: agenthub mcp (any agent with MCP can use the mailbox and write notes; registering it in the tool's settings is up to you)
@@ -79,7 +83,7 @@ $ agenthub doctor    # launchd, all fine
 ✓ the scheduler just ticked
 ✓ background services, project settings: match the config
 
-no problems, 1 reminder
+no problems, 3 reminders
 --- stderr
 
 $ agenthub doctor    # systemd, runtime none
@@ -87,6 +91,7 @@ $ agenthub doctor    # systemd, runtime none
 --- stdout
 ✓ python ok
 ✓ config: all valid
+✓ agent-hub v0.3.0-2-gabc1234; the newest release is v0.3.0 (checked <TS>)
 ✓ owner side: built-in (owner_side: builtin; agenthub owner list / done / answer)
 ! agenthub is not on PATH (project sessions cannot reach the mailbox commands)
     → bin/agenthub install-cli
@@ -132,6 +137,9 @@ $ agenthub doctor    # no service manager, unnamed assistant
 --- stdout
 ✓ python ok
 ✓ config: all valid
+✓ agent-hub v0.3.0 (could not check for newer releases at <TS>: Could not resolve host: example.org; doctor tries again after a day)
+! the checkout moved to v0.3.0 after agenthub upgrade last brought this machine in step (at v0.1.0): the Python packages, services, scheduler and hooks may be stale
+    → agenthub upgrade
 ✓ owner side: assistant (owner_side: assistant)
 ! agenthub is not on PATH (project sessions cannot reach the mailbox commands)
     → bin/agenthub install-cli
@@ -164,5 +172,5 @@ $ agenthub doctor    # no service manager, unnamed assistant
     → bin/schedulectl status; see .logs/scheduler-stderr.log
 ✓ background services, project settings: match the config
 
-3 problems, 10 reminders
+3 problems, 11 reminders
 --- stderr

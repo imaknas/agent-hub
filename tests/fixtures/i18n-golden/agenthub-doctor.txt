@@ -56,6 +56,10 @@ $ agenthub doctor    # launchd, all fine
 --- stdout
 ✓ python 3.13 ok
 ✓ config:都合格
+! agent-hub v0.3.0 出了;這個 checkout 在 v0.2.0(<TS> 查的)
+    → agenthub upgrade --check 看會改什麼;agenthub upgrade 裝上
+! 上次 agenthub upgrade 讓這台機器對齊之後(在 v0.1.0),checkout 移到了 v0.2.0:Python 套件、服務、排程器跟 hook 可能是舊的
+    → agenthub upgrade
 ✓ owner 端:Robin(owner_side: assistant)
 ✓ agenthub 在 PATH 上:/usr/local/bin/agenthub
 ✓ MCP 伺服器:agenthub mcp(任何支援 MCP 的 agent 都能收發信箱、寫筆記;登記進工具的設定由你決定)
@@ -79,7 +83,7 @@ $ agenthub doctor    # launchd, all fine
 ✓ 排程器最後一次 tick:0 分鐘前
 ✓ 背景服務、專案設定:跟 config 一致
 
-沒有問題、1 個提醒
+沒有問題、3 個提醒
 --- stderr
 
 $ agenthub doctor    # systemd, runtime none
@@ -87,6 +91,7 @@ $ agenthub doctor    # systemd, runtime none
 --- stdout
 ✓ python ok
 ✓ config:都合格
+✓ agent-hub v0.3.0-2-gabc1234;最新的 release 是 v0.3.0(<TS> 查的)
 ✓ owner 端:內建的(owner_side: builtin;agenthub owner list / done / answer)
 ! agenthub 不在 PATH 上(專案的 session 打不到信箱指令)
     → bin/agenthub install-cli
@@ -132,6 +137,9 @@ $ agenthub doctor    # no service manager, unnamed assistant
 --- stdout
 ✓ python ok
 ✓ config:都合格
+✓ agent-hub v0.3.0(<TS> 查不到有沒有新版:Could not resolve host: example.org;doctor 一天後再試)
+! 上次 agenthub upgrade 讓這台機器對齊之後(在 v0.1.0),checkout 移到了 v0.3.0:Python 套件、服務、排程器跟 hook 可能是舊的
+    → agenthub upgrade
 ✓ owner 端:助理(owner_side: assistant)
 ! agenthub 不在 PATH 上(專案的 session 打不到信箱指令)
     → bin/agenthub install-cli
@@ -164,5 +172,5 @@ $ agenthub doctor    # no service manager, unnamed assistant
     → bin/schedulectl status;看 .logs/scheduler-stderr.log
 ✓ 背景服務、專案設定:跟 config 一致
 
-3 個問題、10 個提醒
+3 個問題、11 個提醒
 --- stderr

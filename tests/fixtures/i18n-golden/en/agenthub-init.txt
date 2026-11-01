@@ -61,3 +61,31 @@ create folder <TMP>/home/.memory-copies
 judgment points stay unset: when needed, they fail plainly and say why. Run agenthub llm setup later
 --no-launchd: not installing the scheduler, not applying services
 --- stderr
+
+$ agenthub init --scheduler-only    # launchd, not installed
+[exit 0]
+--- stdout
+local.agent-hub-scheduler: install
+local.agent-hub-scheduler-watchdog: install
+--- stderr
+
+$ agenthub init --scheduler-only    # launchd, in place
+[exit 0]
+--- stdout
+✓ the scheduler and watchdog are already installed
+--- stderr
+
+$ agenthub init --scheduler-only    # systemd
+[exit 1]
+--- stdout
+local.agent-hub-scheduler: install (systemd)
+  ⚠️ systemctl enable failed: no user bus
+local.agent-hub-scheduler-watchdog: install (systemd)
+  ⚠️ systemctl enable failed: no user bus
+--- stderr
+
+$ agenthub init --scheduler-only    # no service manager
+[exit 0]
+--- stdout
+⚠️ this system has no supported service manager (neither macOS launchd nor the Linux systemd user level): the scheduler, the watchdog and projects' long-running services will not run by themselves; to run the nightly flow, schedule `bin/py bin/scheduler.py` yourself (every 15 minutes)
+--- stderr

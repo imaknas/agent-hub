@@ -58,6 +58,12 @@ Versions follow the commits: `feat` raises the minor version, `fix` and `perf` t
 2. `git tag -a vX.Y.Z -m vX.Y.Z` on that commit, and push the commit and the tag. `agenthub --version` reads the tag.
 3. `gh release create vX.Y.Z --title "agent-hub X.Y.Z" --notes "$(git cliff --latest --strip header)"`.
 
+Users upgrade only to tags (`agenthub upgrade`), so a fix merged on main reaches them only when it is released. Release
+whenever main has user-visible changes (anything `git cliff --unreleased` lists), rather than holding them back. What
+`agenthub upgrade` shows a user before moving is the release's `CHANGELOG.md`, with the breaking entries first, so a
+breaking change needs its `BREAKING CHANGE:` paragraph to say what the user has to do. A release must keep
+`bin/upgrade.py --steps --from <ref>` working: the version a user upgrades from runs it after moving the checkout.
+
 ## License
 
 By contributing you agree that your contribution is licensed under [Apache-2.0](LICENSE), like the rest of the project.

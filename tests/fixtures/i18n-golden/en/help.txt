@@ -16,7 +16,13 @@ Getting started:
                         platform's decisions go to (= agenthub llm setup); installs the scheduler and watchdog (the launchd/
                         templates; left alone when unchanged); applies the config. With a hub.json already there, leaves it alone
   agenthub doctor            everything that is broken, at a glance: the platform's Python, config, logins, scheduler, watchdog,
-                        background services, commit gate
+                        background services, commit gate, and whether a newer release is out
+  agenthub upgrade [--to vX.Y.Z | --main] [--check] [--yes]
+                        move this checkout to the newest release (or that tag, or the remote's main) and bring the machine
+                        in step: Python packages, registry, config apply, scheduler, hooks, CLI, doctor. Shows the
+                        changelog first; --check stops there (exit 10 = an upgrade is there). Never moves a development
+                        checkout (bin/upgrade.py)
+  agenthub init --scheduler-only   only (re)install the scheduler and watchdog from the templates (upgrade runs it)
 config:
   agenthub config check | plan | apply [--only <applier>,...]
                         validate the config / what would change / apply (check → apply → plan again must be empty → record)
