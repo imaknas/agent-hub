@@ -136,5 +136,19 @@
   "Held: {id} ({project} in use by {by})": "先壓著:{id}({project} 有人在用:{by})",
   "An alert could not be sent ({key}, {at}): {text}. Check the channels in hub.json alerts ({channels}); it is tried again next time": "警報發不出去({key},{at}):{text}——確認 hub.json alerts 的管道({channels})還能用;下次會再試",
   "{reason}: nothing scheduled runs until you {how}": "{reason}:所有排程都不會跑,除非你{how}",
-  "{reason}; the scheduler is ticking, so something else runs it (the watchdog does not: nobody is told if it stops)": "{reason};排程器有在跑,是別的東西在叫它(看門狗沒有:排程器停了不會有人知道)"
+  "{reason}; the scheduler is ticking, so something else runs it (the watchdog does not: nobody is told if it stops)": "{reason};排程器有在跑,是別的東西在叫它(看門狗沒有:排程器停了不會有人知道)",
+  "woken": "叫醒",
+  "wake failed": "叫不醒",
+  "hook": "hook 送到",
+  "inbox": "inbox 讀到",
+  "acked": "已認領",
+  "background copy": "背景分支",
+  "agent dispatched": "派了 agent",
+  "held (loop guard)": "停下(防循環)",
+  "waiting": "等待中",
+  " (done)": "(已結案)",
+  "How the requests and questions of the last day went": "最近一天的請求和問題怎麼送的",
+  "Letter": "信",
+  "Sent": "寄出",
+  "Path": "經過"
 }

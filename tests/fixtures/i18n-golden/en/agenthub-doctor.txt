@@ -26,6 +26,7 @@ $ agenthub doctor    # launchd, problems
 ✓ mailbox follow-up (replying with an idle session's context): available
 ✓ channel leasing (also needs the assistant module): available
 ✓ letters seen live in the session, reminders to write notes: available
+· an idle open session is woken when a letter arrives for it: off (the runtime claude has no way to wake an idle session: Claude Code documents only the auth line of a session's inbox socket, not the message format; a letter waits for the session's next hook)
 ✓ platform rules written into the project's rules file: available
 ✓ a sandboxed project can't write what its sessions load hooks and settings from: available
 ✓ memory gaps, the weekly report's transcript statistics: available
@@ -69,6 +70,7 @@ $ agenthub doctor    # launchd, all fine
 ✓ mailbox follow-up (replying with an idle session's context): available
 ✓ channel leasing (also needs the assistant module): available
 ✓ letters seen live in the session, reminders to write notes: available
+· an idle open session is woken when a letter arrives for it: off (the runtime claude has no way to wake an idle session: Claude Code documents only the auth line of a session's inbox socket, not the message format; a letter waits for the session's next hook)
 ✓ platform rules written into the project's rules file: available
 ✓ a sandboxed project can't write what its sessions load hooks and settings from: available
 ✓ memory gaps, the weekly report's transcript statistics: available
@@ -108,6 +110,7 @@ $ agenthub doctor    # systemd, runtime none
     → install a coding agent that supports them, and point hub.json runtime.default at it
 ! letters seen live in the session, reminders to write notes: off (no coding agent is set up: hub.json runtime.default is none)
     → install a coding agent that supports them, and point hub.json runtime.default at it
+· an idle open session is woken when a letter arrives for it: off (no coding agent is set up: hub.json runtime.default is none)
 ! platform rules written into the project's rules file: off (no coding agent is set up: hub.json runtime.default is none)
     → install a coding agent that supports them, and point hub.json runtime.default at it
 ! a sandboxed project can't write what its sessions load hooks and settings from: off (no coding agent is set up: hub.json runtime.default is none)
@@ -156,6 +159,7 @@ $ agenthub doctor    # no service manager, unnamed assistant
     → install a coding agent that supports them, and point hub.json runtime.default at it
 ! letters seen live in the session, reminders to write notes: off (no coding agent is set up: hub.json runtime.default is none)
     → install a coding agent that supports them, and point hub.json runtime.default at it
+· an idle open session is woken when a letter arrives for it: off (no coding agent is set up: hub.json runtime.default is none)
 ! platform rules written into the project's rules file: off (no coding agent is set up: hub.json runtime.default is none)
     → install a coding agent that supports them, and point hub.json runtime.default at it
 ! a sandboxed project can't write what its sessions load hooks and settings from: off (no coding agent is set up: hub.json runtime.default is none)

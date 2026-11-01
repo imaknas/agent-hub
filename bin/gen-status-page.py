@@ -229,6 +229,27 @@ def esc(s: str) -> str:
     return html.escape(s or "")
 
 
+def path_labels() -> dict[str, str]:
+    """hubbus delivery_paths' steps, for people."""
+    return {"woken": _("woken"), "wake-failed": _("wake failed"), "hook": _("hook"), "inbox": _("inbox"),
+            "ack": _("acked"), "resume": _("background copy"), "handler": _("agent dispatched"),
+            "held": _("held (loop guard)")}
+
+
+def letter_paths(letters: list) -> str:
+    """How each request/question of the last day went (docs/design/mailbox-runtimes.md B1): woken / hook / background
+    copy / dispatched, in order."""
+    if not letters:
+        return ""
+    labels = path_labels()
+    rows = "".join(f"<tr><td>{esc(x['id'])}</td><td>{esc(x['to'])}</td><td>{esc(x['ts'][5:16].replace('T', ' '))}</td>"
+                   f"<td>{esc(' → '.join(labels.get(s, s) for s in x.get('path') or []) or _('waiting'))}"
+                   f"{esc(_(' (done)')) if x.get('done') else ''}</td></tr>" for x in letters)
+    return (f"<div class=sub>{esc(_('How the requests and questions of the last day went'))}</div>"
+            f"<table><tr><th>{_('Letter')}</th><th>{_('To')}</th><th>{_('Sent')}</th><th>{_('Path')}</th></tr>"
+            f"{rows}</table>")
+
+
 def model_usage_html(now: datetime.datetime) -> str:
     """Projects' own model calls (agenthub complete) in the last 7 days, from completion's usage log: calls, tokens,
     cost (only what the provider reports or the model's price gives; a subscription login shows none)."""
@@ -465,7 +486,8 @@ def main() -> None:
                      # held for an MCP session using the project (hubbus mcp_sessions), not unclaimed
                      + "".join("<div class=sub>" + esc(_("Held: {id} ({project} in use by {by})", id=h["id"],
                                                          project=h["to"], by=", ".join(h.get("by") or ["mcp"])))
-                               + "</div>" for h in bus.get("held", [])))
+                               + "</div>" for h in bus.get("held", []))
+                     + letter_paths(bus.get("letters") or []))
 
     # worktrees of parallel sessions / the merge gate (bin/worktrees.py, bin/merge-branch)
     wt_html = ""

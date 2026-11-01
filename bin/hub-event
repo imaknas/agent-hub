@@ -117,11 +117,41 @@ def guard(ev, ws):
     return g.decide(ev.target or {}, ev.cwd)
 
 
+_RT = None   # the runtime whose hook this is (handle sets it): wake_address asks it about the hook's environment
+
+
+def wake_address(ev, ws):
+    """Keep this session's wake address (docs/design/mailbox-runtimes.md B1) where only the platform reads it:
+    hubconf.session_address_file, mode 600. Only for a session in a project (the only sessions dispatch wakes), and not
+    for the platform's own runs or leases (they record no presence either)."""
+    fn = getattr(_RT, "wake_address", None)
+    f = hubconf.session_address_file(ev.session)
+    if not callable(fn) or not f or not ws or not project_git.project_at(ws) \
+            or os.environ.get("HUB_LLM_POINT") or os.environ.get("HUBBUS_LEASE"):
+        return None
+    addr = fn(os.environ)
+    if not addr:
+        return wake_address_drop(ev, ws)
+    f.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
+    tmp = f.with_name(f".{f.name}.{os.getpid()}.tmp")
+    fd = os.open(tmp, os.O_WRONLY | os.O_CREAT | os.O_EXCL | getattr(os, "O_NOFOLLOW", 0), 0o600)
+    with os.fdopen(fd, "w") as fh:
+        json.dump(addr, fh)
+    os.replace(tmp, f)
+    return None
+
+
+def wake_address_drop(ev, ws):
+    f = hubconf.session_address_file(ev.session)
+    if f:
+        f.unlink(missing_ok=True)
+
+
 # which handlers run for each event, in order; for the "deny" kind the return value is the reason to block
 HANDLERS = {
     "session_start": [("hub_pull", hub_pull), ("memory_pull", memory_pull), ("local_setup", local_setup),
-                      ("nudge", nudge), ("mail", mail)],
-    "session_end": [("memory_sync", memory_sync)],
+                      ("nudge", nudge), ("mail", mail), ("wake_address", wake_address)],
+    "session_end": [("wake_address_drop", wake_address_drop), ("memory_sync", memory_sync)],
     "pre_compact": [("memory_sync", memory_sync)],
     "prompt": [("mail", mail)],
     "tool_used": [("nudge", nudge), ("mail", mail)],
@@ -158,7 +188,8 @@ def _log(event, project, ran, failed) -> None:
 
 def handle(event: str, raw: str, rt=None) -> str:
     """Run one event and return the native output to print to stdout ("" if none). For main and tests."""
-    rt = rt or runtime_ports.load(ports=("lifecycle",))
+    global _RT
+    rt = _RT = rt or runtime_ports.load(ports=("lifecycle",))
     ev = rt.parse_event(event, raw)
     if ev is None or event not in HANDLERS:
         return ""

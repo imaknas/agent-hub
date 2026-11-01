@@ -26,5 +26,8 @@
  "unattended agent jobs with allow:, and event-triggered agent jobs": "宣告 allow: 的無人值守 agent job、事件觸發的 agent job",
  "map of where sessions load settings and hooks from": "session 載入設定跟 hook 的檔案",
  "a sandboxed project can't write what its sessions load hooks and settings from": "sandbox 專案寫不到它的 session 載入 hook 跟設定的檔案",
- "way to tell which tool servers a run loads": "判斷一次執行會載入哪些工具伺服器"
+ "way to tell which tool servers a run loads": "判斷一次執行會載入哪些工具伺服器",
+ "way to wake an idle session": "叫醒閒置 session 的方法",
+ "an idle open session is woken when a letter arrives for it": "有信來時叫醒開著但閒置的 session",
+ "{label}: {why}": "{label}:{why}"
 }

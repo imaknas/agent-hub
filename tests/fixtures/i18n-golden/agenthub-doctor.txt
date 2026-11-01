@@ -26,6 +26,7 @@ $ agenthub doctor    # launchd, problems
 ✓ 信箱接續(用閒置 session 的 context 回信):可以用
 ✓ 通道租借(另外要助理模組):可以用
 ✓ session 裡即時看到信、提醒寫筆記:可以用
+· 有信來時叫醒開著但閒置的 session:關掉(執行環境 claude 沒有叫醒閒置 session 的方法:Claude Code 的 session 收件 socket 只公開了驗證那一行,沒公開訊息格式;信等 session 下一次 hook 才送到)
 ✓ 平台規則寫進專案的規則檔:可以用
 ✓ sandbox 專案寫不到它的 session 載入 hook 跟設定的檔案:可以用
 ✓ memory 缺口、週報的對話統計:可以用
@@ -69,6 +70,7 @@ $ agenthub doctor    # launchd, all fine
 ✓ 信箱接續(用閒置 session 的 context 回信):可以用
 ✓ 通道租借(另外要助理模組):可以用
 ✓ session 裡即時看到信、提醒寫筆記:可以用
+· 有信來時叫醒開著但閒置的 session:關掉(執行環境 claude 沒有叫醒閒置 session 的方法:Claude Code 的 session 收件 socket 只公開了驗證那一行,沒公開訊息格式;信等 session 下一次 hook 才送到)
 ✓ 平台規則寫進專案的規則檔:可以用
 ✓ sandbox 專案寫不到它的 session 載入 hook 跟設定的檔案:可以用
 ✓ memory 缺口、週報的對話統計:可以用
@@ -108,6 +110,7 @@ $ agenthub doctor    # systemd, runtime none
     → 裝一個有這些能力的 coding agent,hub.json runtime.default 指到它
 ! session 裡即時看到信、提醒寫筆記:關掉(沒有設定 coding agent:hub.json runtime.default 是 none)
     → 裝一個有這些能力的 coding agent,hub.json runtime.default 指到它
+· 有信來時叫醒開著但閒置的 session:關掉(沒有設定 coding agent:hub.json runtime.default 是 none)
 ! 平台規則寫進專案的規則檔:關掉(沒有設定 coding agent:hub.json runtime.default 是 none)
     → 裝一個有這些能力的 coding agent,hub.json runtime.default 指到它
 ! sandbox 專案寫不到它的 session 載入 hook 跟設定的檔案:關掉(沒有設定 coding agent:hub.json runtime.default 是 none)
@@ -156,6 +159,7 @@ $ agenthub doctor    # no service manager, unnamed assistant
     → 裝一個有這些能力的 coding agent,hub.json runtime.default 指到它
 ! session 裡即時看到信、提醒寫筆記:關掉(沒有設定 coding agent:hub.json runtime.default 是 none)
     → 裝一個有這些能力的 coding agent,hub.json runtime.default 指到它
+· 有信來時叫醒開著但閒置的 session:關掉(沒有設定 coding agent:hub.json runtime.default 是 none)
 ! 平台規則寫進專案的規則檔:關掉(沒有設定 coding agent:hub.json runtime.default 是 none)
     → 裝一個有這些能力的 coding agent,hub.json runtime.default 指到它
 ! sandbox 專案寫不到它的 session 載入 hook 跟設定的檔案:關掉(沒有設定 coding agent:hub.json runtime.default 是 none)

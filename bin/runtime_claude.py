@@ -197,6 +197,32 @@ def current_session(env) -> str | None:
     return env.get("CLAUDE_CODE_SESSION_ID") or None
 
 
+# ---------- waking a live session (runtime_ports' wake; docs/design/mailbox-runtimes.md B1) ----------
+# Claude Code binds a per-session inbox socket and exports its path and a per-session token to hooks, SessionStart
+# included (code.claude.com/docs/en/cross-session-messaging, "The session's inbox socket"; env-vars,
+# CLAUDE_CODE_MESSAGING_SOCKET / _TOKEN). The docs give only the connection's first line, {"type":"auth","token":…};
+# the format of a message after it is not documented (checked 11-01). So wake() is not implemented and the port is
+# Unsupported with that reason, rather than reverse-engineered. The address is kept already (wake_address), so wake()
+# is the only piece to add once the format is documented. The other documented wake, an asyncRewake hook, ends at its
+# hook timeout and at its first wake, so it needs a respawn design of its own (left to the owner).
+
+MESSAGING_VARS = {"socket": "CLAUDE_CODE_MESSAGING_SOCKET", "token": "CLAUDE_CODE_MESSAGING_TOKEN"}
+
+
+def wake_address(env) -> dict | None:
+    """The session's inbox socket and token from its hook environment (None: messaging is off in that session)."""
+    out = {k: env.get(v) for k, v in MESSAGING_VARS.items() if env.get(v)}
+    return out if out.get("socket") else None
+
+
+def unsupported(port: str) -> str | None:
+    """Why a port is missing here, for doctor's feature table."""
+    if port == "wake":
+        return _("Claude Code documents only the auth line of a session's inbox socket, not the message format; "
+                 "a letter waits for the session's next hook")
+    return None
+
+
 # ---------- transcripts (runtime_ports' transcripts interface) ----------
 # Claude Code's transcripts are an undocumented internal format (~/.claude/projects/<slug>/<session>.jsonl). This is
 # the only place the platform reads it: parsed into neutral Turn/Action, failing explicitly on an unrecognised format

@@ -149,5 +149,8 @@
  "hubbus: {project} records presence only in itself": "hubbus: {project} 只能記錄自己的在場",
  "hubbus: a presence entry names an MCP server (mcp:<pid>:<start time>) and initialize or tool": "hubbus: 在場記錄要寫明 MCP 伺服器(mcp:<pid>:<啟動時間>),以及 initialize 或 tool",
  "{project}: {id} was held {minutes} {minutes:minute|minutes} while an MCP session used the project; dispatching it now": "{project}:{id} 因為有 MCP session 在用這個專案已經壓了 {minutes} 分鐘,現在分派",
- "Held while an MCP session uses the project (dispatched after {minutes} minutes at most): {items}": "有 MCP session 在用專案,先壓著(最多 {minutes} 分鐘後分派):{items}"
+ "Held while an MCP session uses the project (dispatched after {minutes} minutes at most): {items}": "有 MCP session 在用專案,先壓著(最多 {minutes} 分鐘後分派):{items}",
+ "📬 1 letter from {project}: {id}. Run agenthub inbox.": "📬 {project} 寄來 1 封信:{id}。請跑 agenthub inbox。",
+ "{project}: {id}: woke the live session {session}": "{project}:{id}:叫醒了開著的 session {session}",
+ "{project}: {id}: could not wake the live session {session}{why}": "{project}:{id}:叫不醒開著的 session {session}{why}"
 }

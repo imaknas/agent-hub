@@ -251,6 +251,12 @@ class Json(unittest.TestCase):
         ev["payload"]["type"] = "nope"
         self.assertTrue(contracts.check_json(C / "hubbus.v1.schema.json", ev))
 
+    def test_hubbus_woken(self):
+        """B1 (docs/design/mailbox-runtimes.md): a live session was nudged about a letter, once per letter."""
+        ev = {"seq": 3, "id": "m1:woken", "ts": "2026-11-01T00:00:00+08:00", "type": "message.woken", "source": "p",
+              "to_project": "p", "ref": "m1", "payload": {"v": 1, "session": "S1", "via": "wake", "ok": True}}
+        self.assertEqual(contracts.check_json(C / "hubbus.v1.schema.json", ev), [])
+
     def test_hubbus_record(self):
         ev = {"seq": 2, "id": "rec:acts/0.3:p:r:k", "ts": "2026-10-28T00:00:00+08:00", "type": "record", "source": "p",
               "to_project": "owner", "ref": None, "payload": {"v": 1, "record": {

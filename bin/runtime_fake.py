@@ -37,6 +37,7 @@ def reset() -> None:
     _ran.clear()
     _turns.clear()
     _live.clear()
+    _woken.clear()
     _context.clear()
     _ambient.clear()
 
@@ -108,6 +109,19 @@ def context_size(sid: str) -> int | None:
 
 def current_session(env) -> str | None:
     return env.get(_env_key) or None
+
+
+# ---------- wake (the optional port; docs/design/mailbox-runtimes.md B1) ----------
+
+_woken: list[tuple[str, str]] = []      # (session, notice) each wake handed over
+
+
+def wake(sid: str, text: str) -> bool:
+    """A live session takes the notice; one that has ended doesn't."""
+    if sid not in _live:
+        return False
+    _woken.append((sid, text))
+    return True
 
 
 # ---------- lifecycle (its own format, not Claude's: proves the interface has no Claude shape) ----------

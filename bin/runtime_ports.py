@@ -72,6 +72,16 @@ The current interfaces (the other layers get added one at a time, following the 
     load)
     current_session(env) -> str | None                   which session the current process belongs to (for hubbus
                                                          send to record the sender)
+  wake (optional; docs/design/mailbox-runtimes.md B1): nudge a live session when a letter arrives for it
+    wake(sid, text) -> bool                              ask that session to start a turn with this short notice (never
+                                                         the letter itself: that stays on the bus and the session's hook
+                                                         delivers it); True = handed over, False = it could not be. A
+                                                         runtime without it is Unsupported: letters wait for the next
+                                                         hook as before
+    Outside the port, a runtime may also provide wake_address(env) -> dict | None: what a session's hook environment
+    says about reaching that session, which the platform keeps in secrets_dir()/sessions/<sid>.json (mode 600; in no
+    sandbox, the bus, .state or the backup) for wake to use, and unsupported(port) -> str | None: why it lacks a port
+    (doctor shows it in the feature table instead of only the port's name)
   auth (layer 6, login): the platform says only "which kind of login" (mode: token = a long-lived credential for
   unattended use, subscription = the interactive login, for jobs that need connectors; the names follow the auth field
   of contracts/llm-points.yaml); where the credentials are and what the environment variables are called is the
@@ -156,6 +166,7 @@ def port_labels() -> dict[str, str]:
             "completion": _("completion interface"), "confine": _("confined runs (declared permissions only)"),
             # each reads after "has no …" (doctor, Unsupported reasons)
             "control": _("map of where sessions load settings and hooks from"),
+            "wake": _("way to wake an idle session"),
             "tool_servers": _("way to tell which tool servers a run loads")}
 
 
@@ -170,6 +181,8 @@ def features() -> tuple:
         (_("mailbox follow-up (replying with an idle session's context)"), ("agent", "sessions")),
         (_("channel leasing (also needs the assistant module)"), ("stream", "sessions", "agent", "auth")),
         (_("letters seen live in the session, reminders to write notes"), ("lifecycle",)),
+        # reinforcement only: without it a letter waits for the session's next hook (docs/design/mailbox-runtimes.md)
+        (_("an idle open session is woken when a letter arrives for it"), ("sessions", "wake")),
         (_("platform rules written into the project's rules file"), ("instructions",)),
         (_("a sandboxed project can't write what its sessions load hooks and settings from"), ("control",)),
         (_("memory gaps, the weekly report's transcript statistics"), ("transcripts",)),
@@ -195,10 +208,25 @@ def or_list(items) -> str:
     return _("{items}, or {last}", items=_(", ").join(items[:-1]), last=items[-1])
 
 
+def missing_label(name: str | None, port: str) -> str:
+    """What a runtime lacks, for people: the port's name, followed by the runtime's own reason when it gives one
+    (unsupported(port), e.g. the tool has the feature but doesn't document how to use it)."""
+    label = port_labels().get(port, port)
+    why = getattr(_module(name or default_name()), "unsupported", None)
+    why = why(port) if callable(why) else None
+    return _("{label}: {why}", label=label, why=why) if why else label
+
+
+def optional_features() -> set[str]:
+    """The features that only reinforce (they need an OPTIONAL port): off is said, but is nothing to fix."""
+    return {f for f, need in features() if set(need) & set(OPTIONAL)}
+
+
 def feature_table(name: str | None = None) -> list[tuple[str, bool, str]]:
-    """(feature, usable or not, what's missing): what's missing uses PORT_LABELS' names."""
-    have, labels = capabilities(name), port_labels()
-    return [(f, not (miss := [labels[p] for p in need if p not in have]), or_list(miss)) for f, need in features()]
+    """(feature, usable or not, what's missing): what's missing uses PORT_LABELS' names (missing_label)."""
+    have = capabilities(name)
+    return [(f, not (miss := [missing_label(name, p) for p in need if p not in have]), or_list(miss))
+            for f, need in features()]
 
 
 PORTS = {
@@ -216,7 +244,11 @@ PORTS = {
     # A point that declares them refuses to run on a runtime without it (llm.py)
     "confine": ("platform_settings",),
     "tool_servers": ("ambient_servers", "servers_named"),
+    "wake": ("wake",),
 }
+# Ports a runtime may lack without any platform feature switching off (only reinforcement is lost): load() without
+# ports= doesn't ask for them
+OPTIONAL = ("wake",)
 
 # Neutral "kinds of action": what the agent did in a conversation record, without any runtime's tool names.
 
@@ -400,12 +432,13 @@ def default_name() -> str:
         return DEFAULT
 
 
-def load(name: str | None = None, ports=tuple(PORTS)):
+def load(name: str | None = None, ports=None):
     """Get a runtime's module. A requested interface only partly implemented → MissingFunctions (a bug, not something
     that breaks only when called); entirely absent → Unsupported (lack of capability: the caller says why and switches
     the feature off)."""
     name = name or default_name()
     mod = _module(name)
+    ports = tuple(p for p in PORTS if p not in OPTIONAL) if ports is None else ports
     absent = []
     for p in ports:
         have = [fn for fn in PORTS[p] if callable(getattr(mod, fn, None))]

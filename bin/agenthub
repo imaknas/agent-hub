@@ -614,7 +614,7 @@ def cmd_move_instance(argv: list[str]) -> int:
 # ---------- doctor ----------
 
 def cmd_doctor(argv: list[str]) -> int:
-    results: list[tuple[str, str, str]] = []   # (ok|warn|bad, what, how to fix)
+    results: list[tuple[str, str, str]] = []   # (ok|info|warn|bad, what, how to fix)
 
     def add(level, what, fix=""):
         results.append((level, what, fix))
@@ -649,13 +649,15 @@ def cmd_doctor(argv: list[str]) -> int:
         _("agenthub mcp config prints the snippet to register; how to add it per tool: docs/mcp.md"))
     import runtime_ports
     rname = runtime_ports.default_name()
+    optional = runtime_ports.optional_features()   # off is said, not a reminder: letters still arrive at the next hook
     for feat, ok, miss in runtime_ports.feature_table(rname):
-        add("ok" if ok else "warn", _("{feature}: available", feature=feat) if ok else
+        add("ok" if ok else "info" if feat in optional else "warn", _("{feature}: available", feature=feat) if ok else
             # runtime none is no coding agent at all, not one that lacks a part
             _("{feature}: off (no coding agent is set up: hub.json runtime.default is none)", feature=feat)
             if rname == "none" else
             _("{feature}: off (the runtime {runtime} has no {missing})", feature=feat, runtime=rname, missing=miss),
-            "" if ok else _("install a coding agent that supports them, and point hub.json runtime.default at it"))
+            "" if ok or feat in optional else
+            _("install a coding agent that supports them, and point hub.json runtime.default at it"))
     if runtime_ports.throwaway_only(rname):
         add("warn", _("the runtime {runtime} runs only in the platform's throwaway worktree: agent-shaped judgment points "
                       "other than {points} are refused with that reason", runtime=rname,
@@ -769,7 +771,7 @@ def cmd_doctor(argv: list[str]) -> int:
 
 
 def report(results) -> int:
-    mark = {"ok": "✓", "warn": "!", "bad": "✗"}
+    mark = {"ok": "✓", "info": "·", "warn": "!", "bad": "✗"}   # info: said, counted as neither
     for level, what, fix in results:
         print(f"{mark[level]} {what}" + (f"\n    → {fix}" if fix else ""))
     bad = sum(1 for r in results if r[0] == "bad")

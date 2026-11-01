@@ -220,3 +220,29 @@ agent while the user was working there. Now:
 - **Status**: `hubbus status --json` has `held` (`id`, `to`, `ts`, `by` = the runtimes), and those letters are not in
   `stuck`; the status page shows "held: <id> (<project> in use by …)".
 - MCP rows not seen for 24 hours are pruned with closed letters (bridge).
+
+## 11-01: waking a live session (`docs/design/mailbox-runtimes.md` step 2, B1)
+
+- **The port**: `wake(sid, text) -> bool` in `bin/runtime_ports.py`, its own optional port (`PORTS["wake"]`,
+  `OPTIONAL`), Unsupported by default. A runtime may also give `wake_address(env)` (what a hook's environment says about
+  reaching the session) and `unsupported(port)` (why it lacks one, shown in doctor's feature table).
+- **Dispatch** (`hubbus wake`): when a request/question **not yet delivered** waits for a live session (a conversation
+  to a live `to_session`, or a delegation while a session is active in the project: the live one most recently seen,
+  never an `mcp:` row), the platform calls `wake` once per letter with only a notice ("📬 1 letter from <project>:
+  <id>. Run agenthub inbox."), and records `message.woken` (id `<letter>:woken`, payload `session`, `via: wake`, `ok`,
+  `error` when it raised). The letter stays on the bus; the hook delivers and claims it. Whatever `wake` answers, the
+  wait and the routing after it are unchanged; a runtime that can't wake that session records nothing.
+- **Status**: `hubbus status --json` has `letters`: the requests/questions to projects of the last 24 hours, each with
+  its path (`woken` / `wake-failed`, `hook`, `inbox`, `ack`, `resume`, `handler`, `held`) and `done`; the status page
+  shows them under the mailbox table.
+- **Wake addresses**: the SessionStart hook (`hub-event` handler `wake_address`) keeps what the runtime's
+  `wake_address` returns in `hubconf.session_address_file(sid)` = `secrets_dir()/sessions/<sid>.json`, mode 600 (the
+  folder 700); only for a session in a project, not under `HUB_LLM_POINT` / `HUBBUS_LEASE`. SessionEnd removes it, and
+  the bridge's prune removes those of sessions no longer live (10 minutes' grace). The secrets directory is in every
+  sandbox's `deny_read`; the folder is excluded from the nightly backup (`backup.py`: `--exclude`, `covers()`) and from
+  check-secrets' undeclared scan.
+- **Claude Code**: `wake` is not implemented: its docs give only the inbox socket's auth line, not the message format
+  (see mailbox-runtimes.md step 2). `wake_address` already keeps the socket and token, so `wake` is the only piece to
+  add. Doctor: "an idle open session is woken when a letter arrives for it: off (… Claude Code documents only the auth
+  line …)", as an information line (`·`, counted as neither a problem nor a reminder: a letter still arrives at the
+  next hook).

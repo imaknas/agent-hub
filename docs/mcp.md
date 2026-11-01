@@ -78,3 +78,6 @@ absolute paths: a tool opened from the GUI may not have your PATH).
 - The platform only hears the session when it calls one of these tools: a session that is coding without touching
   the mailbox stops holding anything 30 minutes after its last call. An MCP server on another machine (the remote
   machine) records presence in that machine's bus, which dispatch on the hub machine never reads.
+- An MCP-only session is never woken when a letter arrives (`docs/design/mailbox-runtimes.md` B1 wakes only sessions
+  whose runtime has the `wake` port, through that runtime): it learns of letters from the count at its next agenthub
+  tool call.

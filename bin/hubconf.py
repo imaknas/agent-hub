@@ -155,6 +155,22 @@ def legacy_secrets_dir() -> pathlib.Path:
     return ROOT / ".secrets"
 
 
+_SESSION_FILE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._:-]{0,199}$")
+
+
+def session_addresses_dir() -> pathlib.Path:
+    """Where a live session's wake address is kept (docs/design/mailbox-runtimes.md B1): under the secrets directory,
+    which every sandbox is denied, because whoever holds it can post into that session. Not in the bus or .state
+    (sandboxed sessions read those), not in the backup (an address only works while its session runs), and skipped by
+    check-secrets' scan for undeclared credentials."""
+    return secrets_dir() / "sessions"
+
+
+def session_address_file(session: str) -> pathlib.Path | None:
+    """<session_addresses_dir>/<session>.json, or None when the id isn't a plain file name."""
+    return session_addresses_dir() / f"{session}.json" if _SESSION_FILE.match(session or "") else None
+
+
 def host(role: str) -> str:
     """Machine role -> ssh name; "" = this machine (one machine does everything). For now there is only one role,
     server: the machine running the hub (memory bare repos, scheduler and workspaces are all on it). Scripts on the

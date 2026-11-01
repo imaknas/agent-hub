@@ -108,17 +108,19 @@ def check(project: str, doc: dict, sec: dict, today: datetime.date) -> tuple[lis
 
 def undeclared(project: str, doc: dict, declared: set[pathlib.Path]) -> list[pathlib.Path]:
     """Files under runtime / workspace (within three levels) whose names look like credentials and are not declared. For
-    the platform itself only .secrets/ is looked at."""
+    the platform itself only .secrets/ is looked at, without its sessions' wake addresses (hubconf.session_addresses_dir:
+    the platform's own, written and removed by the session hooks)."""
     d = registry.dirs(doc)
     roots = [hubconf.secrets_dir()] if project == hubconf.hub_project() else \
         [r for r in (d["runtime"], d["workspace"]) if r]
-    found = []
+    found, skip = [], hubconf.session_addresses_dir()
     for root in roots:
         if not root.is_dir():
             continue
         for dirpath, dirnames, filenames in os.walk(root):
             depth = len(pathlib.Path(dirpath).relative_to(root).parts)
-            dirnames[:] = [] if depth >= 3 else [x for x in dirnames if x not in SKIP_DIRS]
+            dirnames[:] = [] if depth >= 3 else [x for x in dirnames if x not in SKIP_DIRS
+                                                 and pathlib.Path(dirpath, x) != skip]
             for fn in filenames:
                 path = pathlib.Path(dirpath) / fn
                 if LOOKS_SECRET.search(fn) and not NOT_SECRET.search(fn) and path.resolve() not in declared:

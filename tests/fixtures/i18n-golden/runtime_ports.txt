@@ -1,5 +1,5 @@
 === port labels
-[('agent', '跑 agent'), ('auth', '登入狀態'), ('completion', 'completion(只回答案)'), ('confine', '受限執行(只照宣告的權限)'), ('control', 'session 載入設定跟 hook 的檔案'), ('instructions', '規則檔'), ('lifecycle', 'session 事件(hook)'), ('sessions', 'session 狀態'), ('stream', '長駐串流 session'), ('tool_servers', '判斷一次執行會載入哪些工具伺服器'), ('transcripts', '對話紀錄')]
+[('agent', '跑 agent'), ('auth', '登入狀態'), ('completion', 'completion(只回答案)'), ('confine', '受限執行(只照宣告的權限)'), ('control', 'session 載入設定跟 hook 的檔案'), ('instructions', '規則檔'), ('lifecycle', 'session 事件(hook)'), ('sessions', 'session 狀態'), ('stream', '長駐串流 session'), ('tool_servers', '判斷一次執行會載入哪些工具伺服器'), ('transcripts', '對話紀錄'), ('wake', '叫醒閒置 session 的方法')]
 === feature (none)
 判斷點(librarian、index、consolidate、週報分析) | False | 跑 agent、登入狀態
 === feature (none)
@@ -13,6 +13,8 @@
 === feature (none)
 session 裡即時看到信、提醒寫筆記 | False | session 事件(hook)
 === feature (none)
+有信來時叫醒開著但閒置的 session | False | session 狀態、叫醒閒置 session 的方法
+=== feature (none)
 平台規則寫進專案的規則檔 | False | 規則檔
 === feature (none)
 sandbox 專案寫不到它的 session 載入 hook 跟設定的檔案 | False | session 載入設定跟 hook 的檔案
@@ -20,8 +22,8 @@ sandbox 專案寫不到它的 session 載入 hook 跟設定的檔案 | False | s
 memory 缺口、週報的對話統計 | False | 對話紀錄
 === unknown runtime
 沒有登記的 runtime:nosuch(有:claude, fake, none, command, acp)
-=== unsupported ('agent', 'lifecycle', 'instructions', 'control', 'transcripts', 'sessions', 'stream', 'auth', 'completion', 'confine', 'tool_servers')
-執行環境 none 沒有跑 agent、session 事件(hook)、規則檔、session 載入設定跟 hook 的檔案、對話紀錄、session 狀態、長駐串流 session、登入狀態、completion(只回答案)、受限執行(只照宣告的權限)、判斷一次執行會載入哪些工具伺服器(hub.json runtime.default;要這個功能就裝一個有的 coding agent)
+=== unsupported ('agent', 'lifecycle', 'instructions', 'control', 'transcripts', 'sessions', 'stream', 'auth', 'completion', 'confine', 'tool_servers', 'wake')
+執行環境 none 沒有跑 agent、session 事件(hook)、規則檔、session 載入設定跟 hook 的檔案、對話紀錄、session 狀態、長駐串流 session、登入狀態、completion(只回答案)、受限執行(只照宣告的權限)、判斷一次執行會載入哪些工具伺服器、叫醒閒置 session 的方法(hub.json runtime.default;要這個功能就裝一個有的 coding agent)
 === unsupported ('completion',)
 執行環境 none 沒有completion(只回答案)(hub.json runtime.default;要這個功能就裝一個有的 coding agent)
 === missing functions (runtime)

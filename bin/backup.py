@@ -20,7 +20,7 @@ What is backed up (what only the hub machine has, and cannot be recovered once l
   - the directories listed in hub.json backup.include (the assistant's data, platform state, secrets, service data,
     Claude Code transcripts)
 Not backed up: transcripts of the work profile (company content), GitHub mirrors, whole workspaces, generated videos,
-venv/cache.
+venv/cache, and live sessions' wake addresses (hubconf.session_addresses_dir: one only works while its session runs).
 On failure: job.failed on the bus and exit 1 (the scheduler records the failure → the status page goes red). The result
 is written to .state/backup/last.json.
 """
@@ -131,6 +131,8 @@ def covers(path: pathlib.Path) -> bool:
     workspace_env_files)."""
     import fnmatch
     path = path.expanduser().resolve()
+    if hubconf.session_addresses_dir().resolve() in (path, *path.parents):   # never backed up (module header)
+        return False
     dbs = [hubconf.bus_db(), *(hubconf.path(d["path"]) for d in CFG.get("sqlite") or [])]
     if any(db and path == db.resolve() for db in dbs):  # SQLite is copied separately with the backup API
         return True
@@ -230,7 +232,7 @@ def cmd_run() -> int:
         paths = [str(p) for p in (hubconf.path(x) for x in CFG.get("include") or []) if p and p.exists()]
         if not any(STAGE.is_relative_to(pathlib.Path(x)) for x in paths):
             paths.insert(0, str(STAGE))
-        args = ["backup", "--tag", "nightly", "--json"]
+        args = ["backup", "--tag", "nightly", "--json", "--exclude", str(hubconf.session_addresses_dir())]
         for x in CFG.get("exclude") or []:
             args += ["--exclude", str(hubconf.path(x)) if x.startswith("~") else x]
         r = restic(*args, *paths, capture=True)

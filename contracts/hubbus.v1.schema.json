@@ -9,7 +9,7 @@
     "seq": {"type": "integer", "minimum": 1},
     "id": {"type": "string", "minLength": 1, "description": "unique id given by the sender; resending the same id = does nothing"},
     "ts": {"type": "string"},
-    "type": {"enum": ["message", "message.delivered", "message.done", "job.failed", "merge.done", "merge.failed", "session.report", "config.applied", "record"]},
+    "type": {"enum": ["message", "message.delivered", "message.woken", "message.done", "job.failed", "merge.done", "merge.failed", "session.report", "config.applied", "record"]},
     "source": {"type": "string", "description": "sender address: a project name, the platform, or owner (or the owner's configured alias)"},
     "to_project": {"type": ["string", "null"], "description": "the recipient address of a message"},
     "ref": {"type": ["string", "null"], "description": "which event this event is about (delivered/done → the letter id; reply → the original letter)"},

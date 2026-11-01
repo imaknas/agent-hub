@@ -8,7 +8,8 @@ version.
    back?
 
 Status: step 1 (A3) implemented on 11-01 (record in `docs/design/mailbox-routing.md`, "11-01: an MCP session holds a
-delegation back"); steps 2 and 3 are design.
+delegation back"); step 2 (B1) implemented on 11-01 with Claude's `wake` Unsupported (record in mailbox-routing.md,
+"11-01: waking a live session"); step 3 is design.
 
 r2 followed two cold reviews: one against the code, one against the tools' documentation. r3 fixes a third review of
 r2: the messaging tokens move to the secrets directory, the hold covers only letters not yet delivered, and presence
@@ -280,6 +281,29 @@ implements it, port by port, saying the rest is unsupported. What the reviews fo
    otherwise send it a letter each time); a malformed one is refused as usual.
 2. **B1**: the `wake` port, its once-per-letter use in dispatch, the delivery column, doctor's row. The Claude socket
    implementation follows if the payload format checks out; otherwise the port ships `Unsupported` with that reason.
+   **Done 11-01, Claude's `wake` Unsupported.** The docs were read again on 11-01
+   (code.claude.com/docs/en/cross-session-messaging, "The session's inbox socket"; code.claude.com/docs/en/env-vars,
+   `CLAUDE_CODE_MESSAGING_SOCKET` / `CLAUDE_CODE_MESSAGING_TOKEN`): they document the socket, the token and the first
+   line `{"type":"auth","token":…}` (optional on macOS/Linux, required on Windows), the 30-second limit for a complete
+   line, and the own-child delivery rule, but not what a message after the auth line looks like. Nothing was
+   reverse-engineered. As built, and where it differs from the text above:
+   - `wake` is a port of its own (`PORTS["wake"] = ("wake",)`), not a function added to `sessions`: a port is all or
+     nothing, and `sessions` with an optional function would make every runtime without it fail to load. It is in
+     `runtime_ports.OPTIONAL`, so `load()` without `ports=` doesn't ask for it.
+   - Doctor's row is an information line (`·`), neither a problem nor a reminder, with the runtime's own reason
+     (`unsupported(port)`, a new optional adapter function) after the port's name. The "may need approval" line waits
+     for the socket `wake` itself.
+   - The delegation's wake goes to the live session most recently seen in the project, one per letter, not to every
+     active session.
+   - Everything around `wake` is built and tested: the SessionStart hook keeps the socket and token
+     (`runtime_claude.wake_address`) in `secrets_dir()/sessions/<sid>.json`, SessionEnd and the bridge's prune remove
+     them, and the backup and check-secrets skip the folder. Once the format is documented, `runtime_claude.wake` is
+     the only piece to add.
+   - The `asyncRewake` fallback is documented (code.claude.com/docs/en/hooks: `asyncRewake: true` "runs in the
+     background and wakes Claude on exit code 2", even when the session is idle), but not built: the docs also say
+     its `timeout` is enforced (600 seconds by default) and a hook process ends when it wakes, so one SessionStart
+     poller gives at most one wake within its timeout. It needs a respawn design of its own (re-armed at the end of each
+     turn, one poller per session), which no review has seen. Left to the owner.
 3. **A1**: `runtime.installed`, runtime-routed calls, hooks carrying their runtime, the presence column, doctor's
    columns.
 4. **Codex adapter**: next version (above).

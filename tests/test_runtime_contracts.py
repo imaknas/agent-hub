@@ -196,6 +196,11 @@ class FakeFixture:
         import runtime_fake
         runtime_fake.set_credential("token", token)
 
+    def start_live(self, sid: str) -> None:
+        """A session of this runtime running now (the wake contract)."""
+        import runtime_fake
+        runtime_fake.start(sid)
+
     def teardown(self):
         import runtime_fake
         runtime_fake.reset()
@@ -425,6 +430,35 @@ class Contract(unittest.TestCase):
             self.assertEqual(m.current_session(env), SID)
             self.assertIsNone(m.current_session({}))
         self.each(check)
+
+
+class WakeContract(unittest.TestCase):
+    """The optional wake port (docs/design/mailbox-runtimes.md B1): a live session takes the notice; one that ended or
+    never existed doesn't, and that is an answer, not an error. A runtime without it says why (doctor)."""
+
+    def test_wake(self):
+        for name in having("wake"):
+            with self.subTest(runtime=name):
+                fx = FIXTURES[name]()
+                with tempfile.TemporaryDirectory() as d:
+                    m, _env = fx.setup(pathlib.Path(d))
+                    try:
+                        runtime_ports.load(name, ports=("wake", "sessions"))
+                        fx.start_live(SID)
+                        self.assertIs(m.wake(SID, "📬 1 letter"), True)
+                        self.assertIs(m.wake("00000000-0000-4000-8000-000000000000", "📬 1 letter"), False)
+                    finally:
+                        fx.teardown()
+
+    def test_without_wake_it_is_unsupported_with_the_runtimes_reason(self):
+        self.assertNotIn("wake", runtime_ports.capabilities("claude"))
+        with self.assertRaises(runtime_ports.Unsupported):
+            runtime_ports.load("claude", ports=("wake",))
+        row = [miss for f, ok, miss in runtime_ports.feature_table("claude") if not ok]
+        self.assertEqual(len(row), 1)
+        self.assertIn(runtime_ports.missing_label("claude", "wake"), row[0])
+        self.assertNotEqual(runtime_ports.missing_label("claude", "wake"), runtime_ports.PORT_LABELS["wake"])
+        self.assertEqual(runtime_ports.missing_label("acp", "wake"), runtime_ports.PORT_LABELS["wake"])
 
 
 class RunContract(unittest.TestCase):

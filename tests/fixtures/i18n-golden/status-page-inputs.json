@@ -5,7 +5,11 @@
   "job_failed_24h": [{"job": "hubbus-bridge", "detail": "bridge timed out"}, {"job": "other", "detail": "ignored"}],
   "corrupt": ["bus.db.corrupt-20261029"],
   "projects": {"alpha": {"open": 2, "undelivered": 1, "oldest": "2026-10-29T08:15:00"},
-               "owner": {"open": 1, "undelivered": 0, "oldest": "2026-10-30T09:00:00"}}
+               "owner": {"open": 1, "undelivered": 0, "oldest": "2026-10-30T09:00:00"}},
+  "letters": [{"id": "m20261030-cd34", "to": "alpha", "ts": "2026-10-30T08:00:00", "path": ["woken", "hook", "ack"], "done": true},
+              {"id": "m20261030-ef56", "to": "alpha", "ts": "2026-10-30T08:10:00", "path": ["wake-failed", "resume"], "done": false},
+              {"id": "m20261030-ab12", "to": "alpha", "ts": "2026-10-30T08:20:00", "path": [], "done": false},
+              {"id": "m20261030-gh78", "to": "beta", "ts": "2026-10-30T08:30:00", "path": ["inbox", "handler", "held"], "done": false}]
  },
  "bus_quiet": {
   "stuck": [],

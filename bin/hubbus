@@ -86,7 +86,9 @@ For hooks / the schedule / other scripts:
                                       sent at its next activity (fork_result).
                                       dispatched letters record message.delivered (via handler|resume|held, the last
                                       = the loop guard, hold()), and hooks no longer treat them as work to do; a
-                                      letter held for an MCP session records nothing
+                                      letter held for an MCP session records nothing. While a letter not yet
+                                      delivered waits for a live session, a runtime with the wake port nudges that
+                                      session once (wake(), message.woken; docs/design/mailbox-runtimes.md B1)
   hubbus thread <id>                  the whole thread this letter is in (oldest first)
   hubbus open-handoffs                handoffs from the personal assistant not closed yet (the librarian applies them
                                       into STATE.md nightly, and marks done only when trustworthy)
@@ -1689,6 +1691,40 @@ def resume(c, r, sid, cwd, rt, ws=None, prompt=None) -> None:
           project=r["to_project"], id=r["id"], session=sid[:8], run=run))
 
 
+def wake(c, rt, r, sid) -> None:
+    """Nudge a live session about letter r (docs/design/mailbox-runtimes.md B1): once per letter (event <id>:woken),
+    only through a runtime with the wake port. Only a notice goes through wake; the letter stays on the bus and the
+    session's hook delivers and claims it. Whatever wake answers, the routing after it is unchanged (the usual wait,
+    then a background copy or an agent)."""
+    import runtime_ports
+    fn, eid = getattr(rt, "wake", None), f"{r['id']}:woken"
+    if not callable(fn) or not sid or c.execute("SELECT 1 FROM events WHERE id=?", (eid,)).fetchone():
+        return
+    text = _("📬 1 letter from {project}: {id}. Run agenthub inbox.", project=r["source"], id=r["id"])
+    try:
+        ok, why = bool(fn(sid, text)), ""
+    except runtime_ports.Unsupported:   # this session's runtime can't be woken: nothing to record
+        return
+    except Exception as e:   # recorded, so it isn't tried again every minute
+        ok, why = False, type(e).__name__
+    c.execute("BEGIN IMMEDIATE")
+    publish(c, eid, "message.woken", r["to_project"], r["to_project"], r["id"],
+            {"session": sid, "via": "wake", "ok": ok, **({"error": why} if why else {})})
+    c.execute("COMMIT")
+    log(_("{project}: {id}: woke the live session {session}", project=r["to_project"], id=r["id"], session=sid[:8])
+        if ok else _("{project}: {id}: could not wake the live session {session}{why}", project=r["to_project"],
+                     id=r["id"], session=sid[:8], why=f" ({why})" if why else ""))
+
+
+def wake_target(c, proj, live) -> str | None:
+    """The session a delegation's wake goes to: the live one most recently active in the project (within
+    CONVERSATION_WAIT_MIN, as active_sessions counts it). An MCP server's row never: nothing behind it to wake."""
+    cutoff = iso(now() - datetime.timedelta(minutes=CONVERSATION_WAIT_MIN))
+    return next((r["session"] for r in c.execute("SELECT session FROM presence WHERE project=? AND seen >= ?"
+                                                 " AND session NOT LIKE 'mcp:%' ORDER BY seen DESC", (proj, cutoff))
+                 if r["session"] in live), None)
+
+
 def hold(c, r) -> None:
     """The platform has already handled too many rounds of this thread: stop handling it, ask the owner."""
     c.execute("BEGIN IMMEDIATE")
@@ -1747,6 +1783,8 @@ def dispatch(c, rt=None) -> int:
             # conversation: a reply to some session (lease sessions aren't resumed; treated as a delegation)
             if to_s and to_s not in leases:
                 if to_s in live and r["ts"] >= wait_cut:
+                    if not r["delivered"]:
+                        wake(c, rt, r, to_s)
                     waiting += 1
                     continue
                 tokens = rt.context_size(to_s)
@@ -1762,6 +1800,8 @@ def dispatch(c, rt=None) -> int:
                 waiting += 1
                 continue
             elif active_sessions(c, proj, live, mcp) and r["ts"] >= wait_cut:  # someone is using the project: theirs first
+                if not r["delivered"]:
+                    wake(c, rt, r, wake_target(c, proj, live))
                 waiting += 1
                 continue
             else:
@@ -2021,6 +2061,34 @@ def prune(c) -> None:
     c.execute("DELETE FROM presence WHERE session LIKE 'mcp:%' AND seen < ?",   # one row per MCP server process
               (iso(now() - datetime.timedelta(hours=MCP_PRUNE_H)),))
     c.execute("COMMIT")
+    prune_wake_addresses()
+
+
+ADDRESS_GRACE_S = 600   # a wake address younger than this is kept even if its session isn't seen live yet
+
+
+def prune_wake_addresses(live=None) -> list[str]:
+    """Remove the wake addresses (hubconf.session_addresses_dir) of sessions no longer running: SessionEnd removes
+    its own, this catches a session that ended without it (killed, crashed). live: the sessions running now (the
+    runtime's live_sessions); a runtime without session state keeps none."""
+    d = hubconf.session_addresses_dir()
+    if not d.is_dir():
+        return []
+    if live is None:
+        import runtime_ports
+        try:
+            live = runtime_ports.load(ports=("sessions",)).live_sessions()
+        except runtime_ports.Unsupported:
+            live = set()
+    gone = []
+    for f in d.glob("*.json"):
+        try:
+            if f.name[:-5] not in live and time.time() - f.lstat().st_mtime > ADDRESS_GRACE_S:
+                f.unlink()
+                gone.append(f.name[:-5])
+        except OSError:
+            pass
+    return gone
 
 
 def check_integrity() -> bool:
@@ -2079,6 +2147,35 @@ def cmd_open_handoffs() -> None:
     print(json.dumps(out, ensure_ascii=False))
 
 
+# how a letter went, for the status page (docs/design/mailbox-runtimes.md B1): a message.delivered's via, or a
+# message.woken
+PATH_OF = {"session-start": "hook", "prompt": "hook", "post-tool": "hook", "inbox": "inbox", "ack": "ack",
+           "resume": "resume", "handler": "handler", "held": "held"}
+PATHS_HOURS = 24
+
+
+def delivery_paths(c) -> list[dict]:
+    """The requests and questions to projects of the last PATHS_HOURS hours, each with the way it went, in order:
+    woken (wake reached a live session; wake-failed when it didn't), hook / inbox (delivered into a session), ack,
+    resume (a background copy of a session), handler (an agent dispatched), held (the loop guard)."""
+    out = []
+    for r in c.execute("SELECT * FROM events WHERE type='message' AND ts >= ? ORDER BY seq",
+                       (iso(now() - datetime.timedelta(hours=PATHS_HOURS)),)).fetchall():
+        if payload(r).get("type") not in ACTIONABLE or r["to_project"] in OWNERS:
+            continue
+        path = []
+        for e in c.execute("SELECT type, payload FROM events WHERE ref=? AND type IN ('message.delivered',"
+                           " 'message.woken') ORDER BY seq", (r["id"],)):
+            pe = json.loads(e["payload"] or "{}")
+            step = ("woken" if pe.get("ok") else "wake-failed") if e["type"] == "message.woken" \
+                else PATH_OF.get(pe.get("via"))
+            if step and step not in path:
+                path.append(step)
+        done = c.execute("SELECT 1 FROM events WHERE type='message.done' AND ref=?", (r["id"],)).fetchone()
+        out.append({"id": r["id"], "to": r["to_project"], "ts": r["ts"], "path": path, "done": bool(done)})
+    return out
+
+
 def cmd_status(as_json: bool) -> None:
     c = db()
     per: dict[str, dict] = {}
@@ -2105,7 +2202,7 @@ def cmd_status(as_json: bool) -> None:
         "SELECT * FROM events WHERE type='job.failed' AND ts > ? ORDER BY seq DESC LIMIT 20",
         (iso(now() - datetime.timedelta(days=1)),))]
     corrupt = sorted(p.name for p in DB.parent.glob("bus.db.corrupt-*") if not p.name.endswith(("-wal", "-shm")))
-    out = {"projects": per, "stuck": stuck, "held": held,
+    out = {"projects": per, "stuck": stuck, "held": held, "letters": delivery_paths(c),
            "to_muninn": {"n": len(items), "oldest": items[0]["ts"] if items else None},
            "job_failed_24h": failed, "corrupt": corrupt}
     if as_json:

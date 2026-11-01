@@ -40,5 +40,6 @@
  "`claude mcp list` failed (exit {code}): {detail}": "`claude mcp list` 失敗(exit {code}):{detail}",
  "cannot read {file}: {err}": "讀不了 {file}:{err}",
  "cannot read {file}: not a JSON object": "讀不了 {file}:不是 JSON 物件",
- "`claude mcp list` does not show {names}, configured for the user: its output may have changed": "`claude mcp list` 沒列出使用者層級設定的 {names}:它的輸出可能改了"
+ "`claude mcp list` does not show {names}, configured for the user: its output may have changed": "`claude mcp list` 沒列出使用者層級設定的 {names}:它的輸出可能改了",
+ "Claude Code documents only the auth line of a session's inbox socket, not the message format; a letter waits for the session's next hook": "Claude Code 的 session 收件 socket 只公開了驗證那一行,沒公開訊息格式;信等 session 下一次 hook 才送到"
 }
