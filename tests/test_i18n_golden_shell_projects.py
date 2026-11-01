@@ -196,6 +196,8 @@ class Golden(unittest.TestCase):
         self.out.append("=== mirror-list.txt\n" + (self.hub / "mirror-list.txt").read_text())
         self.call("not ignored", s, ["--no-remote", ws / "iota"], {"SYNC_NO_EXCLUDE": "1"})
         self.call("registry add fails", s, ["--no-remote", ws / "theta"], {"ONBOARD_REGISTRY_EXTRA": '{"type": 5}'})
+        self.hub_json(runtime={"default": "none"})   # no coding agent: no rules file, no hooks
+        self.call("no coding agent", s, ["--no-remote", ws / "kappa"])
         self.check("shell-onboard-project.txt")
 
     def test_origin_check(self):

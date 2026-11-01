@@ -42,3 +42,11 @@ $ <HUB>/bin/check-state-todo.py <TMP>/copies/beta/STATE.md
 STATE.md: a to-do without an owner tag, or a finished one not removed: `- [ ] 沒有標籤的一行`
 STATE.md: a to-do without an owner tag, or a finished one not removed: `- [ ] 〔誰〕不認得的標籤`
 --- stderr
+
+=== todo.md head, with openclaw-migration-status.md
+<!-- contract: todo-md v2 -->
+# Cross-project to-do
+
+> Generated mechanically by `bin/gen-todo.py` from the `## Tasks` section of each project's STATE.md (3 items);
+> do not edit by hand: to change the content, change the source (each project's memory, from which librarian updates STATE.md;
+> agent-hub's own to-do items are in `openclaw-migration-status.md`).

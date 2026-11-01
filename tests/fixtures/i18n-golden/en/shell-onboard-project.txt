@@ -157,3 +157,23 @@ sync-local-setup (stand-in): theta
 --- stderr
 the registry entry is invalid; not written: type can only be project or idea
 onboard-project: adding to the project registry failed (projects/theta.yaml)
+
+=== no coding agent
+exit 0
+--- stdout
+[1/11] Preconditions OK: kappa (--no-remote, stays local only)
+[2/11] Created the .agent-memory worktree (agent-memory branch, fully separate from the main branch)
+[3/11] Skeleton files in place and committed on the agent-memory branch
+[4/11] .agent-memory/ is excluded in .git/info/exclude (.gitignore untouched)
+sync-local-setup (stand-in): kappa
+[5-6/11] Hooks and the rules-file block are in place (not version-controlled)
+[7/11] No changes to the outer repo, nothing committed
+[8/11] Bare repo created on the hub machine, agent-memory branch pushed
+[9/11] Cloned the librarian's memory copy on the hub machine to ~/.memory-copies/kappa
+[10/11] No external remote, not added to the mirror-backup list
+registry: <TMP>/hub/projects/kappa.yaml
+commit-hub-files (stand-in): register kappa (onboard-project.sh)
+[11/11] Registered in agent-hub's project registry (projects/kappa.yaml); agent-hub committed and pushed
+
+Done: kappa is connected to the agent-hub pipeline.
+--- stderr

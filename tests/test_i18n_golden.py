@@ -129,8 +129,12 @@ class Golden(unittest.TestCase):
         out = self.tmp / "data" / "todo.md"
         log = self.run_(BIN / "gen-todo.py", out)
         bad = self.tmp / "copies" / "beta" / "STATE.md"
-        self.check("todo", log + "\n=== todo.md\n" + (out.read_text() if out.exists() else "(none)\n")
-                   + "\n" + self.run_(BIN / "check-state-todo.py", bad))
+        first = out.read_text() if out.exists() else "(none)\n"
+        # an instance that still keeps the platform's own to-dos in the old migration file
+        (self.tmp / "data" / "openclaw-migration-status.md").write_text("# status\n")
+        self.run_(BIN / "gen-todo.py", out)
+        self.check("todo", log + "\n=== todo.md\n" + first + "\n" + self.run_(BIN / "check-state-todo.py", bad)
+                   + "\n=== todo.md head, with openclaw-migration-status.md\n" + "".join(out.read_text().splitlines(True)[:6]))
 
     # --- mailbox ------------------------------------------------------------------------------------------------
     def test_mailbox(self):

@@ -157,3 +157,23 @@ sync-local-setup (stand-in): theta
 --- stderr
 登錄不合格,不寫入:type 只能是 project 或 idea
 onboard-project: 登記進專案登錄失敗(projects/theta.yaml)
+
+=== no coding agent
+exit 0
+--- stdout
+[1/11] 前置條件檢查通過:kappa(--no-remote,維持純本機)
+[2/11] 已建立 .agent-memory worktree(agent-memory 分支,跟主分支完全隔離)
+[3/11] 骨架檔案就位並已在 agent-memory 分支上 commit
+[4/11] .agent-memory/ 已在 .git/info/exclude 排除(不動 .gitignore)
+sync-local-setup (stand-in): kappa
+[5-6/11] .claude/settings.local.json hook 跟 CLAUDE.local.md 區塊已就位(不進版控)
+[7/11] 外層 repo 沒有任何變更、不 commit
+[8/11] hub 主機上已建 bare repo,agent-memory 分支已推送
+[9/11] hub 主機上已 clone librarian 用的 memory 副本到 ~/.memory-copies/kappa
+[10/11] 沒有外部 remote,跳過 mirror-backup 登記
+登錄:<TMP>/hub/projects/kappa.yaml
+commit-hub-files (stand-in): register kappa (onboard-project.sh)
+[11/11] 已登記進 agent-hub 的專案登錄(projects/kappa.yaml),並 commit+push agent-hub
+
+完成:kappa 已接上 agent-hub 管線。
+--- stderr

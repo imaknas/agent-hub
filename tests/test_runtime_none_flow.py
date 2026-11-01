@@ -61,6 +61,12 @@ class RuntimeNone(unittest.TestCase):
         self.assertIn(i18n.translate("check-memory-gaps", "memory gap check skipped: {reason}", {"reason": ""}, "zh-Hant"),
                       r.stdout)
 
+    def test_agent_md_is_tool_neutral(self):
+        """every project's .agent-memory/AGENT.md is a verbatim copy of templates/AGENT.md, whatever the runtime"""
+        text = (ROOT / "templates" / "AGENT.md").read_text()
+        self.assertIn(".claude/settings.local.json", text)
+        self.assertIn("CLAUDE.local.md", text)
+
     def test_doctor_feature_table(self):
         sys.path.insert(0, str(BIN))
         import runtime_ports
