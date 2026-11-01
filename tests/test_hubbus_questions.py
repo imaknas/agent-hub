@@ -137,11 +137,22 @@ class QuestionRecords(Questions):
         self.m.publish_record(self.c, rec, project, self.owner)
         self.c.execute("UPDATE events SET ts=? WHERE id=?", (ts, self.m.record_event_id(rec)))
 
-    def settle(self, qid, kind="settled", n=1):
+    def settle(self, qid, kind="settled", n=1, **kw):
+        """the owner side's record; a later one supersedes the one before it (core §6)"""
         rec = {"ph": "0.3", "ext": "decisions/0.3", "id": f"{kind[0]}:{qid}:{n}", "type": kind, "origin": "principal",
-               "by": "assistant", "key": qid, "project": "proj", "ts": "2026-10-25T12:00:00Z", "outcome": "decided",
-               "answer": {"text": "use A"}, "terms_rev": 1, "authority": {"kind": "principal", "decider": "person:owner"}}
-        self.m.publish_record(self.c, rec, self.owner, "proj")
+               "by": "assistant", "key": qid, "project": "proj", "ts": f"2026-10-25T12:0{n}:00Z"}
+        if kind == "settled":
+            rec |= {"outcome": "decided", "answer": {"text": "use A"}, "terms_rev": 1,
+                    "authority": {"kind": "principal", "decider": self.m.hubconf.party("principal")}}
+        if n > 1:
+            rec["supersedes"] = [kw.pop("prev", f"s:{qid}:{n - 1}")]
+        self.m.publish_record(self.c, rec | kw, self.owner, "proj")
+
+    def project_record(self, qid, kind, rid, **kw):
+        """the asking project's record (send does these; here one at a time)"""
+        rec = {"ph": "0.3", "ext": "decisions/0.3", "id": rid, "type": kind, "origin": "requester",
+               "by": "project:proj", "key": qid, "project": "proj", "ts": "2026-10-25T11:00:00Z", **kw}
+        self.m.publish_record(self.c, rec, "proj", self.owner)
 
     def test_open_means_not_answered_not_closed_not_a_handover(self):
         self.ask("q-open")
@@ -166,6 +177,59 @@ class QuestionRecords(Questions):
         kinds = [self.m.payload(r)["record"]["type"] for r in self.c.execute(
             "SELECT * FROM events WHERE type='record' ORDER BY seq")]
         self.assertEqual(kinds, ["raised", "claimed", "withdrawn"])
+
+    def test_answered_again_after_a_reopening_is_closed(self):
+        self.ask("q-1")
+        self.settle("q-1")
+        self.settle("q-1", "reopened", 2)
+        self.settle("q-1", "settled", 3, prev="r:q-1:2")
+        self.assertEqual(self.open_ids(), [])
+
+    def test_withdrawn_as_not_needed_is_closed(self):
+        self.ask("q-1")
+        self.project_record("q-1", "withdrawn", "w:q-1:1", reason="not_needed", supersedes=["r:q-1"])
+        self.assertEqual(self.open_ids(), [])
+
+    def test_a_letter_question_is_closed_by_records(self):
+        """asked as a v1 letter before the switch, closed with records under its letter id"""
+        Questions.ask(self, "q-1")
+        Questions.ask(self, "q-2")
+        self.settle("q-1")
+        self.send("--to", "owner", "--type", "done", "--question", "q-2", "--text", "picked B")
+        self.assertEqual(self.open_ids(), [])
+
+    def test_a_letter_answer_then_a_reopening_is_open(self):
+        Questions.ask(self, "q-1")
+        self.m.publish(self.c, "ans-1", "message", self.owner, "proj", "q-1", {"type": "info", "text": "Use A"})
+        self.assertEqual(self.open_ids(), [])
+        self.settle("q-1", "reopened", 2, prev="ans-1")
+        self.assertEqual(self.open_ids(), ["q-1"])
+
+    def test_a_stale_answer_closes(self):
+        """settled against terms_rev 1, terms now at 2: the settlement view's state is settled (stale)"""
+        self.ask("q-1")
+        self.project_record("q-1", "amended", "a:q-1:2", terms={"text": "Which plan, now?"}, terms_rev=2,
+                            supersedes=["r:q-1"])
+        self.settle("q-1")
+        self.assertEqual(self.open_ids(), [])
+
+    # the old reader's own rules where they part from the settlement view (pinned before the move)
+    def test_a_claim_alone_closes(self):
+        self.ask("q-1")
+        self.project_record("q-1", "claimed", "c:q-1:1", origin="agent", by="project:proj", outcome="decided",
+                            evidence={"basis": "answered here"}, answer={"text": "A"})
+        self.assertEqual(self.open_ids(), [])
+
+    def test_withdrawn_then_reopened_is_open(self):
+        self.ask("q-1")
+        self.project_record("q-1", "withdrawn", "w:q-1:1", reason="not_needed", supersedes=["r:q-1"])
+        self.settle("q-1", "reopened", 2, prev="s:q-1:1")
+        self.assertEqual(self.open_ids(), ["q-1"])
+
+    def test_an_invalid_settlement_closes(self):
+        self.ask("q-1")
+        self.settle("q-1", origin="requester")   # only the principal side settles (core R2)
+        self.assertEqual(self.open_ids(), [])
 
 
 if __name__ == "__main__":
