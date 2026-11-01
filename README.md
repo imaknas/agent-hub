@@ -102,8 +102,11 @@ bin/lint                               # ruff, pyflakes rules only
 bin/linux-test                         # the test suite in a Linux container (Docker)
 ```
 
-The commit gate (`git config core.hooksPath githooks`, which `agenthub init` sets) lints the staged tree, then runs every
-test with a throwaway `HOME`. Commit titles follow [Conventional Commits](https://www.conventionalcommits.org/), and release
+Changes go in through the platform's own gate: work in a git worktree and merge with `agenthub merge-branch`. The
+platform installs a `pre-commit` and `commit-msg` hook in the repo's git dir (`agenthub land`, run after every merge, and
+the 15-minute applier); a commit on a branch runs the `lint` tier, a merge the `lint` and `full` tiers (`bin/run-tests`:
+every test in parallel under a throwaway `HOME`), through `agenthub test`. Don't set `core.hooksPath`: the platform unsets
+it so its hooks apply. Commit titles follow [Conventional Commits](https://www.conventionalcommits.org/), and release
 notes are generated from them with [git-cliff](https://git-cliff.org/) (`cliff.toml`).
 
 ## License

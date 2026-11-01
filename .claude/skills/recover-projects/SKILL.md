@@ -23,8 +23,8 @@ ssh -T git@github.com
 
 1. Make sure `~/agent-hub` itself exists and is up to date (`git pull`). If this is a brand-new machine, first clone it
    by hand: `git clone <the hub machine's ssh name>:~/git-origin/agent-hub.git ~/agent-hub`, then build the platform's
-   Python (`~/agent-hub/bin/setup-python`, needs uv first) and install the commit gate
-   (`git -C ~/agent-hub config core.hooksPath githooks`).
+   Python (`~/agent-hub/bin/setup-python`, needs uv first) and install the commit gate (`~/agent-hub/bin/agenthub land`:
+   the platform's hooks go into the repo's git dir; don't set `core.hooksPath`).
    Without the platform's Python, every platform script (including every project's hooks) fails.
 
 2. Run `~/agent-hub/bin/py ~/agent-hub/bin/hubconf.py roster` (the project registry `projects/*.yaml`, one project per
