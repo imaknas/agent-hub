@@ -179,8 +179,8 @@ including 0fe4bda) and it was clean: on the cutover night the registrar sends on
   one can go tomorrow), the HTH 0.1 vendor copy and `tests/test_hth_conformance.py`; Decisions (questions) are still on
   v1, the Agent Hub session does that next.
   Done so far: `librarian.sh`; `knas-tasks.py` on 11-01 (i18n step 7: nothing scheduled or called it any more; the HTH
-  0.1 key and apply vectors now run against `registrar.py`). Left: `v1_compat` (the v1 letters on the bus) and the HTH
-  0.1 copy with its test.
+  0.1 key and apply vectors now run against `registrar.py`); the HTH 0.1 copy with its test went with Acts 0.4 (below).
+  Left: `v1_compat` (the v1 letters on the bus): see "Retiring v1_compat" at the end.
 
 ## Decisions switched over (10-31)
 
@@ -309,3 +309,33 @@ What the principal side does for each value of the setting:
 - `"0.5"`: it receives `acts/0.5` and `decisions/0.5` (0.5 digests are its own business: requesters send none), never
   with `evidence.proof`; ids are unchanged, so records already sent in 0.4 remain the same records. It may still send
   any of the three versions.
+
+## Retiring v1_compat (11-01)
+
+What `v1_compat` still did: owner to-dos that existed only as v1 task letters (sent before there were records, so no
+need record on the bus) counted as bound keys. Their lines were not raised again, a key moved off the owner lines got
+a note, a vanished one a claim (unless v1 had already sent its inferred closure, `done-<key>`), and v1 handoffs not yet
+applied were applied.
+
+Live data on 11-01, read only: 94 open items in 21 projects existed only as v1 letters. 90 have their key on an owner
+line of the first to-do section, 1 on a line relabelled to-be-decided (displaced), and 3 on no line (v1 sent their
+inferred closure). One of the 90 lines was edited after its letter; two carry keys made under the project's former
+name. No v1 handoff was waiting, and no v1-only item was closed. Removing `v1_compat` alone would raise the 90 lines
+again the next night: under the letter's key where the text and the project name are unchanged, and under a new key
+for the other 3. The displaced item would be forgotten, and edits to these lines never reach the assistant as
+amendments.
+
+So the items get need records first, under the keys they have: `registrar.py migrate-v1 (--dry-run | --apply)`.
+For each such item whose key some line mentions, it sends `raised` (`r:<key>`, `terms_rev` 1, `context: migration-v1`,
+the configured send version, under the project's current name) with the text of the owner line carrying the key, or,
+when the key is only on another line, the letter's text. Items no line mentions are not migrated: v1 already closed
+them, or (none so far) they are listed for a person to decide. `--edited amended` would send an edited item as the
+letter's text raised plus the line's text amended (`a:<key>:2`). The ids are stable and an item with a need record is
+skipped, so a rerun sends nothing. STATE.md is not written. The live dry run: 91 `raised`.
+
+The assistant's answer (m11011959-f35b): a `raised` under a key it holds as a v1 task is that same item, from then on
+held by its need record, and its settlement comes back as a record. `raised` with the line's current text is enough
+(it takes the raised text and due), so no `amended`; edited lines keep their old keys; send 0.5.
+
+Order: merge the command, run `migrate-v1 --dry-run`, then `--apply` (the owner), and only then merge the removal of
+`v1_compat`.

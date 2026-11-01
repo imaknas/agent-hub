@@ -44,7 +44,16 @@ Records: reads acts 0.3, 0.4 and 0.5, sends the version hub.json principal_hando
 Transition (v1 not yet retired): task letters v1 sent on the bus and the personal assistant's v1 handoffs count too
 (v1_compat); those keys existed before there were records. When v1 is retired, delete v1_compat along with it.
 
+migrate-v1 (once, before v1_compat goes): gives each open item that exists only as a v1 task letter a need record under
+the key it already has, so that the registrar holds it without v1_compat. An item whose key a line of STATE.md holds
+gets `raised` (id r:<key>, terms_rev 1, context migration-v1) with that line's text; one whose key is only elsewhere in
+the file (displaced) gets the v1 letter's text. An item whose line was edited since its letter gets, with `--edited
+amended`, the letter's text raised and the line's text amended (a:<key>:2) instead. Items no line mentions are not
+migrated: v1 already sent their inferred closure, or (never seen yet) they are listed to be decided by hand. The ids are
+stable and an item that has a need record is skipped, so a rerun sends nothing new. STATE.md is never written.
+
 Usage: registrar.py [--dry-run]
+       registrar.py migrate-v1 (--dry-run | --apply) [--edited raised|amended]
 """
 from __future__ import annotations
 
@@ -429,6 +438,74 @@ def run_project(project: str, path: pathlib.Path, how: str, warned: set[str]) ->
     return ok, sent
 
 
+MIGRATION = "migration-v1"   # the context of what migrate-v1 sends
+EDITED = ("raised", "amended")   # migrate-v1 --edited: how an item whose line was edited since its v1 letter goes out
+
+
+def migration(project: str, text: str, led: Ledger, edited: str = "raised") -> tuple[list[tuple], list[tuple]]:
+    """migrate-v1 for one project: ([(key, its records, "edited" | "displaced" | "")], [(key, why it is not migrated)]).
+    Only open items with no need record on the bus are looked at."""
+    doc, items, skipped = acts_md.Doc(text, READ), [], []
+    seen = doc.mentioned()
+    for key in sorted(k for k in led.v1_posted if k not in led.need and k in led.open()):
+        v1 = norm(led.v1_posted[key])
+        if doc.unclosed is not None:
+            skipped.append((key, _("STATE.md has an unclosed code fence or comment")))
+            continue
+        texts = {norm(e.text) for e in doc.holding(key)}
+        if len(texts) > 1:
+            skipped.append((key, _("the owner lines carrying it have different texts")))
+            continue
+        if not texts and key not in seen:
+            skipped.append((key, _("no line mentions it; v1 already sent its inferred closure") if key in led.v1_claimed
+                            else _("no line mentions it and v1 sent no closure: decide by hand")))
+            continue
+        line = texts.pop() if texts else v1   # displaced: its line is no owner line, the letter's text stands
+        how = "displaced" if not doc.holding(key) else "edited" if line != v1 else ""
+        ctx = {"context": MIGRATION}
+        if how == "edited" and edited == "amended":
+            recs = [record(project, "raised", key, f"r:{key}", terms={"text": v1}, terms_rev=1, **ctx),
+                    record(project, "amended", key, f"a:{key}:2", terms={"text": line}, terms_rev=2,
+                           supersedes=[f"r:{key}"], **ctx)]
+        else:
+            recs = [record(project, "raised", key, f"r:{key}", terms={"text": line}, terms_rev=1, **ctx)]
+        items.append((key, recs, how))
+    return items, skipped
+
+
+def migrate_v1(args: list[str]) -> int:
+    """registrar.py migrate-v1 (--dry-run | --apply) [--edited raised|amended]"""
+    import argparse
+    ap = argparse.ArgumentParser(prog="registrar.py migrate-v1")
+    mode = ap.add_mutually_exclusive_group(required=True)
+    mode.add_argument("--dry-run", action="store_true")
+    mode.add_argument("--apply", action="store_true")
+    ap.add_argument("--edited", choices=EDITED, default="raised")
+    a = ap.parse_args(args)
+    log(_("migrate-v1 ({mode}), bus {bus}", mode="dry-run" if a.dry_run else "apply", bus=hubconf.BUS_DIR / "bus.db"))
+    total = failed = 0
+    for project, path, _how in targets():
+        led = Ledger(project)
+        items, skipped = migration(project, path.read_text(), led, a.edited)
+        for key, why in skipped:
+            log(_("{project}: {key} not migrated: {why}", project=project, key=key, why=why))
+        why = {"edited": _(" (the line was edited since the v1 letter)"),
+               "displaced": _(" (its key is on no owner line: the v1 letter's text)"), "": ""}
+        for _key, recs, how in items:
+            for r in recs:
+                log(_("{project}: {type} {key}{why}: {text}", project=project, type=r["type"], key=r["key"],
+                      why=why[how], text=r["terms"]["text"][:120]))
+        recs = [r for _key, rs, _how in items for r in rs]
+        res ={r["id"]: "dry-run" for r in recs} if a.dry_run else publish(recs)
+        total += sum(1 for r in recs if res.get(r["id"]) in ("accepted", "dry-run"))
+        failed += sum(1 for r in recs if res.get(r["id"]) not in ("accepted", "duplicate", "dry-run"))
+    if a.dry_run:
+        log(_("migrate-v1: {n} {n:record|records} would be sent", n=total))
+    else:
+        log(_("migrate-v1: {n} {n:record|records} sent, {failed} failed", n=total, failed=failed))
+    return 1 if failed else 0
+
+
 def main() -> int:
     try:
         warned = set(json.loads(WARNED.read_text()))
@@ -446,4 +523,4 @@ def main() -> int:
 
 
 if __name__ == "__main__":
-    sys.exit(main())
+    sys.exit(migrate_v1(sys.argv[2:]) if sys.argv[1:2] == ["migrate-v1"] else main())
