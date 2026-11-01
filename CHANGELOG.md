@@ -1,0 +1,163 @@
+# Changelog
+
+What changed in each version, generated from the commit messages (git cliff) when it is tagged; only new features,
+fixes, speed-ups and reverts are listed.
+
+## v0.1.0 (2026-11-01)
+
+### New
+
+- Add onboarded-projects.tsv — central manifest of every onboarded project
+- Add recover-project.sh; move templates/ into agent-hub
+- Harden onboard-project.sh — auto-create everything mechanizable
+- Add services.tsv + recover-service.sh — mirrors onboarded-projects.tsv for launchd services
+- Add overview.sh — live aggregated view of projects+services+memory
+- **merge-branch:** Conventional Commits for commit titles
+- **evals:** Record the librarian's nightly inputs as eval cases
+- **evals:** E2 and E3 harnesses for the translation work
+- **i18n:** Language settings, per-script catalogs, commit_title first
+- **i18n:** Hub_msg and hub_say for shell scripts
+- **i18n:** Plural choices, and module descriptions through a catalog
+- **i18n:** Plural choices in the mailbox, lease and runtime messages
+- **librarian:** English prompts that pass E2 against the Chinese ones
+- **sandbox:** Sandboxed projects' services and jobs run isolated on Linux too
+- **llm:** Projects' own model calls through the platform (agenthub complete)
+- **llm:** Usage rows say how a call is paid; the status page marks subscription cost as not billed
+- **consolidate:** English prompt that passes E2 against the Chinese one
+- **reflect-week:** English prompt that passes E2 against the Chinese one
+- **mailbox-propose:** English prompt that passes E2 against the Chinese one
+- **lease-handover:** English prompt that passes E2 against the Chinese one
+- **evals:** E3 scenarios for the mailbox prompt and the MCP instructions
+- **evals:** E3 reports STATE.md edits in note and memory notes per letter
+- **rules:** English agent rules that pass E3 against the Chinese ones
+- **hubbus:** Questions to the owner go as Decisions records
+- **evals:** E3 scenarios for the branch copies and the lease preamble
+- **hubbus:** English prompts for the background branch copies
+- **mcp:** English tool and parameter descriptions
+- **lease:** English lease instructions with the configured names
+- **contracts:** State-todo.v2 and todo-md.v2
+- **todo:** Readers accept the English to-do tokens
+- **todo:** Writers follow the content language
+- **evals:** E3 owner_todo checks the to-do token set
+- **todo:** The English set is agent-ops-specs' en profile
+- **isolation:** Adapters declare their guarantees, one conformance run checks them
+- **lease:** A handover names the to-dos already waiting instead of raising them again
+- **anchors:** Resolve STATE.md code anchors against the base branch
+- **librarian:** Write code anchors in STATE.md and check them nightly
+- **librarian:** Admit only anchors that resolve when written
+- **scheduler:** Event-triggered jobs
+- **scheduler:** Every run has a time limit
+- **runtime:** An Agent Client Protocol runtime adapter
+- **i18n:** Match another process's text in every catalog language
+- **consolidate:** Hedge lists are per-language data
+- **i18n:** Hub_content for content a shell script writes
+- **reflect-week:** V2, fixed English values; the page in the UI language (**breaking:** weeks written from now on carry "v": 2 and English
+classification values; a reader of v1 (the assistant vendors it) reads the
+fields it knows unchanged, but the three classifications only through v2.)
+- **hub:** Agent-hub works from linked worktrees
+- **registry:** Project v2 schema and its validation, not yet live
+- **tests:** Agenthub test, the test runner and the result store
+- **hooks:** The platform's git hooks follow gate, commit_gate and conventional commits
+- **tests:** Agent-hub switches to the test runner (**breaking:** agent-hub's commit gate is the platform's pre-commit in its
+git dir; githooks/pre-commit, post-commit and commit-msg are gone.)
+- **acts:** The registrar and the to-do readers follow Principal Handoff Acts 0.4
+- **records:** Agent-hub sends Principal Handoff 0.4 records
+- **registry:** Upgrade-files rewrites v1 files as v2; a nightly test job per project
+- **registry:** New entries are written as project v2
+- **templates:** Every project's agents are told how tests run
+- **modules:** Testcontainers removes test containers more than a day old
+- **runtime:** Transcripts carry entry ids, folders, subagents and command calls
+- **agenthub:** --version prints the release tag the checkout is at
+
+### Fixed
+
+- Onboard-project.sh keeps .claude/settings.json from being hidden by the project's own .gitignore
+- Overview.sh also looks for STATE.md in the hub machine's memory-only clone
+- Agent-hub's own SessionEnd hook was still using git-sync-push.sh
+- **test:** The CJK ratchet checked nothing inside the commit gate
+- **evals:** Seal E3's agent runs from the environment's MCP servers
+- **i18n:** A bad language in hub.json is reported, not raised
+- **registry:** Owner tag from settings in the security-field message
+- **i18n:** Messages still print when hub.json does not parse
+- **gen-status-page:** The page's lang attribute follows language.ui
+- **render-services:** A space after the colon of a changed-keys detail in English
+- **merge-branch:** Refuse a project the validated registry does not have
+- **registry:** An index is not rebuilt from another or an empty registry dir
+- **i18n:** A usage docstring's braces are text, not placeholders
+- **sync-all-memory:** No stray "1" in the offline commit log line
+- **onboard-project:** The hub-machine origin check needs a server name and an ssh host
+- **recover-service:** Exit 0 when a service has no recreate notes
+- **contracts-check:** Close the bus connection after reading events
+- **check-secrets:** Say expired N days ago / expires today, not negative days left
+- **i18n:** English wording and plurals in the librarian and consolidate
+- **i18n:** English wording and plurals in backup and the nightly checks
+- **i18n:** English schedules and status page wording
+- **i18n:** English wording and plural choices in agenthub and the platform tools
+- **i18n:** English wording in migrate, idea sandbox, rename and commit-title messages
+- **i18n:** English wording in the project and setup shell scripts
+- **i18n:** English wording in the mailbox, lease, runtime and LLM messages
+- **i18n:** Hubbus names the assistant where a bare noun reads right
+- **consolidate:** Check the to-do block with the platform's Python, not python3 from PATH
+- **i18n:** Hub-runtime's usage through the catalog; English comment in the CLI wrapper
+- **i18n:** Module secrets' rotate text through the catalog
+- **config:** Hub.example.json leaves the assistant's name unset
+- **registry:** A refused rebuild records who tried
+- **sandbox:** A sandboxed project's own services and jobs run sandboxed
+- **memory:** The session-end sync commits only memory/ and STATE.md, in its own checkout
+- **sandbox:** Landlock run test leaves HOME alone; a missing command exits 127
+- **linux:** The 11 golden failures on Linux
+- **librarian:** The to-do format repair keeps every existing tag
+- **evals:** U+9AA8 is not a Simplified-only character
+- **propose:** Changes a hook committed inside the worktree are still adopted
+- **evals:** U+96C7 is not a Simplified-only character
+- **registrar:** Read every to-do section of a file
+- **registrar:** A key on any to-do line counts as present
+- **edits:** Compare protected markers by key
+- **todo:** Report a to-do label without its checkbox
+- **registrar:** Only claim or relink items raised from a line
+- **registrar:** Strike only in the to-do section; a warning is not forever
+- **hubbus:** A task sent again under its key amends it; withdrawals name the need
+- **memory:** Check memory copies out without symlinks
+- **policy:** Own tool caches per repo, other projects' memory unreadable
+- **sandbox:** Run git in a project's repo only as the project
+- **worktrees:** The nightly cleanup names a project it could not read
+- **sandbox:** Bound every project job; no git in a sandboxed repo hourly
+- **anchors:** Ignored build output is not deleted; the stale note keeps statements
+- **anchors:** Submodules resolve; removing an anchor means the sign and its path
+- **evals:** Stale_kept leaves out statements that are only an anchor
+- **evals:** Anchor retention leaves out the anchors the stale note named
+- **librarian:** An edit undone by admission still completes the run
+- **registry:** Paths is a security field
+- **hubconf:** The registry fallback keeps enforce.sandbox
+- **sandbox:** Hooks, upgrades and runners touch a sandboxed repo only as the project
+- **merge:** --project must name the project that owns the repo
+- **sandbox:** Nudge only after a git write; every YAML true counts as sandboxed
+- **scheduler:** Agent event jobs run in the workspace; review round 3
+- **scheduler:** Agent event jobs load only the platform's settings
+- **scheduler:** Confine agent event jobs on every runtime; review round 5
+- **scheduler:** Sandboxed Bash isn't auto-approved in event jobs
+- **hubbus:** Confined runs mail only as and for their own project
+- **hubbus:** A confined run can't pick ids, reply across projects or list others' questions
+- **sandbox:** Find a hook's repo from the .git pointer files, not git
+- **sandbox:** The settings file in a project's folder is never followed or waited on
+- **reflect-week:** V2 values named after v1's words; E2 against main
+- **sandbox:** A sandboxed project can't write what its sessions load hooks from
+- **hubbus:** A sandboxed project's letters go through its own outbox
+- **hubbus:** Outbox only for the project itself, views on delivery, task keys kept
+- **tests:** The runner's runs live in the main checkout, not under .git
+- **tests:** Tiers get a TMPDIR outside every repo and the admin tools on PATH
+- **hubbus:** A project's own task keys leave the registrar's prefix; STATE.md items change only by their line
+- **hubbus:** An assistant record not taken in is never acked past; 0.4 records are taken
+- **i18n:** Translations name the owner and assistant from the settings
+- **memory:** A project's memory remote is called memory, not the hub machine's nickname
+- **hooks:** The gate's refusal names the branch in every language
+- **contracts:** The project schemas name models and metered_models
+- **tests:** The Linux container reaps orphans like a real host
+- **hooks:** Hooks and shipped config name the hub where it is, not ~/agent-hub
+
+### Faster
+
+- **test-gate:** Run the tests in parallel, one process per module
+- **test-gate:** Skip a tree that already passed; run slow modules test by test
+- **tests:** Tiers keep a cache folder; the Landlock plan tests walk their own folder
+- **tests:** Agent-hub's full tier keeps run-tests' durations in its tier cache
