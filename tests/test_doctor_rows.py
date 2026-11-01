@@ -30,6 +30,17 @@ import hubconf  # noqa: E402
 import i18n  # noqa: E402
 import runtime_fake  # noqa: E402
 
+# the assertions read the English texts: pin the UI language (an instance's hub.json, or none at all, may say another)
+_LANG = mock.patch.dict(os.environ, {"AGENT_HUB_LANG_UI": "en", "AGENT_HUB_LANG_CONTENT": "en"})
+
+
+def setUpModule():
+    _LANG.start()
+
+
+def tearDownModule():
+    _LANG.stop()
+
 
 def load_agenthub():
     loader = importlib.machinery.SourceFileLoader("agenthub_doctor_rows", str(BIN / "agenthub"))
