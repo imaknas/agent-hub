@@ -118,15 +118,21 @@ So the move:
 3. copies the database with SQLite's backup API;
 4. **leaves the old database in place**; no timer deletes it.
 
-After that, until v0.9:
-- every scheduler tick sweeps events in the old database that the new one lacks into the new one (`publish` dedups by
-  id);
-- the old file is removed only when nothing holds it open (`lsof`), and v0.9 sweeps it one last time first;
-- from v0.6, `db()` resolves `bus_dir` on every call, so v0.6+ processes follow the move at their next call;
-- until the old file is removed, the sandbox policy denies reads of both bus paths.
+After that:
+- **The old database is never unlinked.** hubbus opens a connection per call, so an old process holds no fd between
+  calls. `lsof` would see nothing, and its next `send` would create a fresh file at the old path.
+- Every scheduler tick, from v0.6 on and through v0.9, sweeps any database at the old path into the new one
+  (`publish` dedups by id). The migration code keeps that sweep forever.
+- At v0.9, after one last sweep, the old file is renamed to a tombstone and the old directory is made read-only. A
+  stale writer then fails loudly instead of writing into a file nobody reads.
+- From v0.6, `db()` resolves `bus_dir` on every call, so v0.6+ processes follow the move at their next call.
+- The sandbox policy denies reads of both bus paths for good.
+- The new `bus_dir` may never be `.state/bus`. `hubconf.bus_db()` in old code treats that as an old location and would
+  move the new bus away.
 
 The migration test keeps an MCP server open across the move and checks that its sends arrive. The code default `.state/bus` is unaffected |
-| config file | `hub.json` | `brunna.json` | the config repo | **not version-fixed**: `hubconf.config_path()` resolves to whichever file exists. Every reader, writer and "is this instance set up" check uses it: `schedulectl set-model`, `agenthub` init/llm/agent, `connect.py`, the callers of `commit-hub-files.sh`, `hub_json_get`. A rolled-back v0.6 therefore keeps writing the file v0.7 renamed. Both existing and different: refused. **Neither existing, in an instance that has a `.hub-home`: refused outright**, never "use the defaults": defaults would silently point the bus at a new empty `.state/bus`, and render-services would tear down services. That holds in every release from v0.6 on, and in v0.9, where an old spelling is no longer accepted in normal use, it names `brunna migrate`. The migration `git mv`s it and commits. The schema `contracts/hub.v1.schema.json` is a contract: per the contract rules, `brunna.v1.schema.json` is added beside it with the same content and both stay until every reader (config-check, tests, goldens) has moved |
+| config file | `hub.json` | `brunna.json` | the config repo | **not version-fixed**: `hubconf.config_path()` resolves to whichever file exists. Every reader, writer and "is this instance set up" check uses it: `schedulectl set-model`, `agenthub` init/llm/agent, `connect.py`, the callers of `commit-hub-files.sh`, `hub_json_get`. A rolled-back v0.6 therefore keeps writing the file v0.7 renamed. Both existing and different: refused. **Neither existing, in an instance that has a `.hub-home`: refused outright** (by a check in the commands, not at
+import, so `upgrade --steps` and `migrate` can always start), never "use the defaults": defaults would silently point the bus at a new empty `.state/bus`, and render-services would tear down services. That holds in every release from v0.6 on, and in v0.9, where an old spelling is no longer accepted in normal use, it names `brunna migrate`. The migration `git mv`s it and commits. The schema `contracts/hub.v1.schema.json` is a contract: per the contract rules, `brunna.v1.schema.json` is added beside it with the same content and both stay until every reader (config-check, tests, goldens) has moved |
 | defaults for new installs | `~/agent-hub`, `~/.agent-hub`, repo URL | `~/brunna`, `~/.brunna`, `imaknas/brunna` | install.sh | install.sh notices an existing `~/agent-hub` install and resumes or upgrades it instead of cloning a second one. An existing checkout and instance folder keep their paths (they are the user's choice of place, recorded in `.hub-home` and the units); `brunna move-checkout` and `move-instance` move them on request |
 | hard-coded names in code | `parse("agent-hub", …)` in `gen-todo.py`, `weekly-reflect.py`, `evals/e3.py`, registry `run:` lines and MCP settings in users' config | through `hub_project()` / `names` | code and the user's config | the ratchet catches the code; the migration rewrites `run:` lines in the platform's own registry entry, and doctor lists users' registry entries and MCP settings that still use old names |
 | MCP server name | `agenthub` | `brunna` | users' agent settings | the upgrade offers re-registration on a terminal yes; uninstall removes both |
@@ -141,10 +147,12 @@ The migration test keeps an MCP server open across the move and checks that its 
    - every reader on `names.all`;
    - the pairwise unit installer;
    - the mailbox on `own_names`;
-   - scheduler adoption, through `names.all`, not `former_names`. v0.6's `hub_project()` is still `agent-hub` and
-     can't know `brunna` as a former name, so this is how a rollback still finds v0.7's keys. From v0.7 on, adopting
-     the `agent-hub/…` keys of an instance that jumps from v0.5 lives in the migration code, which keeps the old
-     spellings;
+   - scheduler adoption at run time, through `names.all`, not `former_names`, and kept in every release (the hub's
+     former name is kept for good). v0.6's `hub_project()` is still `agent-hub` and can't know `brunna` as a former
+     name, so this is how a rollback still finds v0.7's keys and a jump still finds v0.5's;
+   - the old-bus sweep (below), so a rollback to v0.6 keeps sweeping;
+   - render-services pairwise like the core installer: on a rollback it removes `local.brunna.<service>` before it
+     adds the old label, so a fixed port doesn't clash;
    - the test runner finding the hub by `type`;
    - the env rule (refuse a conflict on input, `env_set` for overrides);
    - both lock directories;
@@ -173,11 +181,22 @@ The migration test keeps an MCP server open across the move and checks that its 
 
      `upgrade` runs all of it from its step list. `migrate` is the **first** in-step command, before `registry.py
      check` and `config apply`.
-     - From v0.6 on, the mover hands the scheduler lock across the exec as an inherited fd, so no tick runs new code
-       against an unmigrated instance.
-     - A v0.5 mover can't: it closes the lock right after the checkout move. For that window the rule is that the new
-       code refuses cleanly against an unmigrated instance: no config under the new name is a refusal, never defaults.
-       So ticks, dispatch and hooks do nothing until migrate has run. The migration test covers that window.
+     - From v0.6 on, the mover keeps the scheduler lock across the exec and through the steps, so no tick runs new code
+       against an unmigrated instance:
+       - the fd is made inheritable before `execv`;
+       - its number goes in `BRUNNA_SCHEDULER_LOCK_FD`;
+       - `run_steps` passes it with `pass_fds`;
+       - every lock-taker (the core unit installer, the bus move, the scheduler itself) reuses that fd when the variable
+         is set, instead of opening the lock file again. Opening it again would conflict with the held lock and
+         deadlock.
+     - A v0.5 mover can't: it closes the lock right after the checkout move, then runs the target's `setup-python`
+       (minutes) before migrate. For that window there is a **`.state/names-migrated` marker**:
+       - the last migrate step writes it, and a fresh v0.7+ install writes it at init;
+       - from v0.7 on, the scheduler's tick, dispatch and the hooks do nothing on an instance that has no marker, and
+         say so;
+       - `upgrade --steps`, `migrate` and doctor are exempt, and no check happens at import.
+
+       The migration test covers the window.
      - The unit installer takes the "other" labels from `migrate_names`, which keeps the old spellings forever. So
        even v0.9 removes a v0.5 scheduler's units on a jump.
      - Sessions already open keep old code in memory. Upgrade and doctor say to restart them, since their mailbox tools
