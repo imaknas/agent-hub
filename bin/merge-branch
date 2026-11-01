@@ -10,8 +10,8 @@ Run in the session's own worktree:
   2. `git rebase <main>`: on a conflict, abort, list the conflicting files, record merge.failed, stop.
   2b. Registry `commits: conventional`: every commit title on this branch must pass (bin/commit_title.py); stop if
       one doesn't.
-  3. Run the project registry's `runtime.test` (none: skipped and noted): on failure attach the last 40 lines, record
-     merge.failed, stop.
+  3. Run the affected `merge` tiers through the main checkout's runner (`agenthub test --when merge`; no tests declared:
+     skipped and noted): on failure attach the last 40 lines, record merge.failed, stop.
   4. In the main checkout, `git merge --ff-only <branch>` (stop if uncommitted changes in the main checkout get in the
      way). In the hub's own repo, then `agenthub land` from the merged code (the registry index; a problem is reported,
      the merge stands).
@@ -27,6 +27,7 @@ from __future__ import annotations
 import argparse
 import fcntl
 import json
+import os
 import pathlib
 import subprocess
 import sys
@@ -73,6 +74,8 @@ def main() -> int:
     ap.add_argument("--question", action="append", default=[])
     ap.add_argument("--dry-run", action="store_true")
     a = ap.parse_args()
+    if hubconf.MAIN != hubconf.ROOT:   # a worktree's own copy of the hub: only the main checkout's merge-branch merges
+        os.execv(sys.executable, [sys.executable, str(hubconf.MAIN / "bin" / "merge-branch"), *sys.argv[1:]])
 
     wt = pathlib.Path.cwd()
     owner, main_dir = project_of(wt)
@@ -80,7 +83,7 @@ def main() -> int:
     if not proj or not main_dir:
         sys.exit(_("merge-branch: cannot tell which project's repo this is (add --project)"))
     info = hubconf.projects().get(proj)
-    if not info or "v" not in info:   # not validated (missing, or only roster()'s paths): its tests and commit rules are unknown
+    if not info or info.get("v") != 2:   # not validated (missing, roster()'s paths, an index of older code): its tests and commit rules are unknown
         sys.exit(_("merge-branch: {project} is not in the validated project registry, so its test command and commit "
                    "rules are unknown; nothing was merged. `agenthub config check` rebuilds the registry and says what "
                    "is wrong", project=proj))
@@ -142,19 +145,18 @@ def main() -> int:
                 return fail("commit-titles", _("these commit titles are not Conventional Commits (registry: commits: "
                                                "conventional):\n{titles}\n— fix the titles (e.g. `git rebase --exec` "
                                                "or commit again) and run again", titles="\n".join(bad)))
-        # 3. tests
-        test = (info.get("runtime") or {}).get("test")
-        if test:
-            try:
-                t = subprocess.run([hubconf.login_shell(), "-lc", test], cwd=wt, capture_output=True, text=True, timeout=1800)
-                tail = "\n".join((t.stdout + t.stderr).strip().splitlines()[-40:])
-                report["tests"] = {"cmd": test, "ok": t.returncode == 0, "tail": tail}
-            except subprocess.TimeoutExpired:
-                report["tests"] = {"cmd": test, "ok": False, "tail": _("over 30 minutes")}
+        # 3. tests: the affected merge tiers through the main checkout's runner (a recorded pass for this tree is a
+        # hit; the hub's own declaration is read from the tree under test; docs/design/test-waiting.md B4)
+        if info.get("tests") or proj == hubconf.hub_project():
+            cmd = "agenthub test --when merge"
+            t = subprocess.run([*hubconf.launch(hubconf.MAIN / "bin" / "test-runner.py"), "--when", "merge"], cwd=wt,
+                               capture_output=True, text=True)
+            tail = "\n".join((t.stdout + t.stderr).strip().splitlines()[-40:])
+            report["tests"] = {"cmd": cmd, "ok": t.returncode == 0, "tail": tail}
             if not report["tests"]["ok"]:
-                return fail("tests", _("`{cmd}` failed:\n{tail}", cmd=test, tail=report["tests"]["tail"]))
+                return fail("tests", _("`{cmd}` failed:\n{tail}", cmd=cmd, tail=tail))
         else:
-            report["tests"] = {"cmd": None, "ok": None, "tail": _("the registry entry has no runtime.test; no tests were run")}
+            report["tests"] = {"cmd": None, "ok": None, "tail": _("the registry entry declares no tests; no tests were run")}
         if a.dry_run:
             print(_("(dry-run) would fast-forward {n} {n:commit|commits} of {branch} into {base}; tests: {tests}",
                     n=len(commits), branch=branch, base=base, tests=report["tests"]["ok"]))
@@ -179,7 +181,9 @@ def main() -> int:
                             (land.stdout + land.stderr).strip().splitlines()[-15:])), file=sys.stderr)
         # 5. push (only when the registry says so)
         if info.get("push_on_merge"):
-            p = subprocess.run([str(hubconf.ROOT / "bin" / "git-safe-push.sh")], cwd=main_dir, capture_output=True, text=True)
+            # a commit_gate repo's main moves only through this gate: a diverged origin is reported, never pulled in
+            push = ["git", "push", "-q"] if info.get("commit_gate") else [str(hubconf.ROOT / "bin" / "git-safe-push.sh")]
+            p = subprocess.run(push, cwd=main_dir, capture_output=True, text=True)
             report["pushed"] = p.returncode == 0
             if p.returncode != 0:
                 report["push_error"] = (p.stderr or p.stdout).strip()[-500:]

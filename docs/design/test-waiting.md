@@ -688,7 +688,9 @@ replaces; each step only adds to the ones before it.
       without `merge-branch` (a `git pull`) is brought in line on the next tick. The store's module lands here and
       `test-gate` keeps its own file until 2.3 makes it thin.
    3. (Ahead of it, 11-01: the hook installer for `gate: strict`, `commit_gate` and `commits: conventional`
-      repos, which skips agent-hub until this merge.) **One merge** switching the readers and callers: the read-time upgrade of v1 documents in the live readers (B1);
+      repos, which skips agent-hub until this merge. Left out of it, 11-01: `session.report` v2 and lease-handover v2,
+      which no reader needs for the switch; `test-gate` stays thin for this one merge, as the old `merge-branch` runs
+      it, and goes in the next.) **One merge** switching the readers and callers: the read-time upgrade of v1 documents in the live readers (B1);
       `merge-branch` on the runner, and only the main checkout's `merge-branch` runs (a worktree's copy re-executes
       main's). `merge-branch`'s **landing step for the hub's own repo** (permanent, added in step 2.2 so main's copy
       has it when 2.3 merges): after the fast-forward, still under the merge lock, it starts the merged tree's own code

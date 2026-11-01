@@ -58,6 +58,7 @@ class MergeGate(unittest.TestCase):
                                                                   "registry_dir": "projects"}))
         self.ws = self.tmp / "ws"
         self.env = {**{k: v for k, v in os.environ.items() if not k.startswith("AGENT_HUB_") or k == "AGENT_HUB_PYTHON"},
+                    "AGENT_HUB_ROOT": str(ROOT),   # the tree under test (no lookup of a main checkout from a worktree)
                     "HOME": str(self.tmp / "home"), "AGENT_HUB_CONFIG": str(self.tmp / "config"),
                     "AGENT_HUB_DATA": str(self.tmp / "data"), "AGENT_HUB_SECRETS": str(self.tmp / "secrets"),
                     "AGENT_HUB_STATE": str(self.tmp / "state"), "GIT_AUTHOR_NAME": "t", "GIT_AUTHOR_EMAIL": "t@t", "GIT_COMMITTER_NAME": "t",

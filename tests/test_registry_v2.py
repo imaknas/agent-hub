@@ -1,6 +1,6 @@
 """Project v2 (contracts/project.v2.schema.json, bin/registry.py validate_v2; docs/design/test-waiting.md B1, step
-2.1): tests leave runtime for a top-level tests list with code and inputs. Only the schema and its validation exist
-yet: the live validators keep refusing v2 until the runner and the readers switch over (step 2.3).
+2.1): tests leave runtime for a top-level tests list with code and inputs. Since the switch (step 2.3) the live
+validator reads v2 and upgrades v1 as it reads it.
 
     bin/py -m unittest discover -s tests
 """
@@ -65,8 +65,14 @@ class V2(unittest.TestCase):
         self.assertTrue(any("deploy" in e and "test" in e for e in errs), errs)
         self.assertNotEqual(minischema.errors(SCHEMA, self.doc(runtime={"test": "x"})), [])
 
-    def test_the_live_validator_still_refuses_v2(self):
-        self.assertTrue(any("v" in e and "1" in e for e in registry.validate(self.doc(), "demo")))
+    def test_the_live_validator_reads_v2_and_upgrades_v1(self):
+        self.assertEqual(registry.validate(self.doc(), "demo"), [])
+        v1 = {"v": 1, "name": "demo", "paths": {"workspace": str(self.ws)}, "runtime": {"test": "sh -c true"}}
+        (self.ws / "cfg" / "services" / "demo").mkdir(parents=True, exist_ok=True)
+        self.assertEqual(registry.validate(v1, "demo"), [])
+        self.assertTrue(registry.validate({**v1, "runtime": {"test": "no-such-command-anywhere"}}, "demo"),
+                        "a v1 runtime.test is checked as the full tier it becomes")
+        self.assertTrue(registry.validate({**self.doc(), "v": 3}, "demo"))
         self.assertTrue(any("2" in e for e in registry.validate_v2({**self.doc(), "v": 1}, "demo")))
 
     def test_inputs(self):

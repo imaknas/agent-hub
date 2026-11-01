@@ -785,7 +785,7 @@ def main() -> int:
     # Today's digest: the project-summary section, then ask the model to mark the relations between projects
     # (index.md). The digest is written in sections (hublib.digest_append): each job writes its own, and a rerun
     # replaces only its own
-    run(["git", "pull", "-q"], cwd=HUB, to_log=True)
+    run(["git", "fetch", "-q"], cwd=HUB, to_log=True)   # agent-hub's main moves only through merge-branch (commit_gate): fetch, never pull
     if digest:
         try:
             hublib.digest_append("projects", "".join(digest))

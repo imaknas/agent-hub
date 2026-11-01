@@ -8,7 +8,7 @@ export PATH="/opt/homebrew/bin:/usr/local/bin:$PATH"
 HUB="${AGENT_HUB_ROOT:-$(cd "$(dirname "$0")/.." && pwd)}"
 source "$(dirname "${BASH_SOURCE[0]}")/hubpaths.sh"
 
-cd "$HUB" && git pull -q || true
+cd "$HUB" && git fetch -q || true   # agent-hub's main moves only through merge-branch (commit_gate): fetch, never pull
 out=$("$HUB/bin/py" "$HUB/bin/weekly-reflect.py" --llm "$@") || { hub_say "weekly-reflect.py failed" >&2; exit 1; }
 json=$(echo "$out" | head -1)
 hub_say "wrote {files}" files="$out"

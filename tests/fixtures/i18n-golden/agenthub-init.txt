@@ -4,7 +4,6 @@ $ agenthub init --dry-run --yes --no-launchd    # old layout
 ✓ 已經有 <TMP>/config/hub.json(舊的擺法),不動它
 (dry-run) 建資料夾 <TMP>/fakehub/.logs
 (dry-run) 建資料夾 <TMP>/home/git-origin
-(dry-run) git config core.hooksPath githooks(平台的 commit 閘門)
 --no-launchd:不裝排程器、不套用服務
 --- stderr
 
@@ -59,8 +58,6 @@ $ agenthub init --home <TMP>/inst --owner Sam --timezone UTC --workspace <TMP>/w
 建資料夾 <TMP>/ws2
 建資料夾 <TMP>/home/git-origin
 建資料夾 <TMP>/home/.memory-copies
-git config core.hooksPath githooks(平台的 commit 閘門)
-[git config core.hooksPath githooks]
 判斷點先不設:要用到時會明確失敗、說原因。之後跑 agenthub llm setup
 --no-launchd:不裝排程器、不套用服務
 --- stderr

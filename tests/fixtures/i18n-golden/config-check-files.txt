@@ -5,8 +5,8 @@ $ <HUB>/bin/config-check --bogus
 config pipeline 的 check(docs/design/new-user.md 3.7):一次驗證所有 config 檔。
 
   config-check            驗 working tree 的 config
-  config-check --staged   驗**暫存區**(要 commit 的內容;githooks/pre-commit、config repo 的 githooks/config/pre-commit
-                          呼叫)。暫存區沒有改到 config 檔就直接過。
+  config-check --staged   驗**暫存區**(要 commit 的內容;config repo 的
+                          githooks/config/pre-commit 呼叫;agent-hub 的 lint 層用 --child 跑同樣的檢查)。暫存區沒有改到 config 檔就直接過。
                           共用的 working tree 裡可能有別人改到一半的檔案,所以照 test-gate 的做法把暫存區匯出到暫存目錄,
                           用 AGENT_HUB_ROOT 指過去再驗。
 
@@ -19,7 +19,7 @@ config pipeline 的 check(docs/design/new-user.md 3.7):一次驗證所有 config
   services.tsv       每列欄數跟表頭一樣、label 不重複
   schedule.yaml      讀得進來、job 名稱不重複(切換期間的舊格式)
 
-通過時把這次驗過的 tree 記在 git 目錄的 config-check-passed(githooks/post-commit 用它抓出跳過閘門的 commit)。
+通過時把這次驗過的 tree 記在 git 目錄的 config-check-passed。
 
 
 $ <HUB>/bin/config-check

@@ -1,5 +1,0 @@
-#!/usr/bin/env bash
-# agent-hub commit titles must be Conventional Commits (bin/commit_title.py; the same set of types as the assistant's
-# repo, sharing cliff.toml).
-root="$(git rev-parse --show-toplevel)"
-exec "$root/bin/py" "$root/bin/commit_title.py" --file "$1"

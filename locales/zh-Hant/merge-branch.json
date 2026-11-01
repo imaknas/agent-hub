@@ -10,9 +10,7 @@
  "{branch} is the same as {base}; nothing to merge": "{branch} 跟 {base} 一樣,沒有東西要合併",
  "{sha} {subject}: {why}": "{sha} {subject}:{why}",
  "these commit titles are not Conventional Commits (registry: commits: conventional):\n{titles}\n— fix the titles (e.g. `git rebase --exec` or commit again) and run again": "這些 commit 的標題不是 Conventional Commits(登錄 commits: conventional):\n{titles}\n——改好標題(例:`git rebase --exec` 或重新 commit)再跑一次",
- "over 30 minutes": "超過 30 分鐘",
  "`{cmd}` failed:\n{tail}": "`{cmd}` 失敗:\n{tail}",
- "the registry entry has no runtime.test; no tests were run": "專案登錄沒有 runtime.test,沒有跑測試",
  "(dry-run) would fast-forward {n} {n:commit|commits} of {branch} into {base}; tests: {tests}": "(dry-run)會把 {branch} 的 {n} 個 commit fast-forward 進 {base};測試:{tests}",
  "the main checkout ({path}) is not on {base}": "主 checkout({path})現在不在 {base}",
  "the main checkout cannot fast-forward: {output}": "主 checkout 不能 fast-forward:{output}",
@@ -22,5 +20,6 @@
  "✓ {n} {n:commit|commits} of {branch} merged into {base} (tests: {tests}; {push})": "✓ {branch} 的 {n} 個 commit 已合併進 {base}(測試:{tests};{push})",
  "merge-branch: {project} is not in the validated project registry, so its test command and commit rules are unknown; nothing was merged. `agenthub config check` rebuilds the registry and says what is wrong": "merge-branch:驗證過的專案登錄裡沒有 {project},不知道它的測試指令跟 commit 規則,所以沒有合併。`agenthub config check` 會重建登錄、說哪裡有問題",
  "merge-branch: {project}'s folder is not this repo ({path}); nothing was merged": "merge-branch:{project} 的資料夾不是這個 repo({path});什麼都沒合併",
- "merge-branch: merged, but `agenthub land` reported a problem (the index may not match the merged code until the next tick):\n{tail}": "merge-branch:已合併,但 `agenthub land` 回報了問題(下一個 tick 之前,索引可能跟合併進來的程式不一致):\n{tail}"
+ "merge-branch: merged, but `agenthub land` reported a problem (the index may not match the merged code until the next tick):\n{tail}": "merge-branch:已合併,但 `agenthub land` 回報了問題(下一個 tick 之前,索引可能跟合併進來的程式不一致):\n{tail}",
+ "the registry entry declares no tests; no tests were run": "登錄沒有宣告測試,沒跑測試"
 }

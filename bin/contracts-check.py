@@ -80,9 +80,13 @@ def live(index: dict) -> list[str]:
     # the shared format of the judgment-point registry (the Muninn project checks against it too)
     pts_schema = json.loads((C / "llm-points.v1.schema.json").read_text())
     errs += [f"contracts/llm-points.yaml:{e}" for e in minischema.errors(pts_schema, yaml.safe_load((C / "llm-points.yaml").read_text()))]
-    schema = json.loads((C / "project.v1.schema.json").read_text())
-    for f in sorted(hubconf.registry_dir().glob("*.yaml")):
-        errs += [f"projects/{f.name}:{e}" for e in minischema.errors(schema, yaml.safe_load(f.read_text()))]
+    # each registry file against the contract of its own version (v1 files are upgraded when read, until config apply
+    # rewrites them)
+    schemas = {v: json.loads((C / f"project.v{v}.schema.json").read_text()) for v in (1, 2)}
+    for f in sorted([*hubconf.registry_dir().glob("*.yaml"), hubconf.platform_registry()]):
+        doc = yaml.safe_load(f.read_text())
+        schema = schemas.get(doc.get("v") if isinstance(doc, dict) else None, schemas[2])
+        errs += [f"projects/{f.name}:{e}" for e in minischema.errors(schema, doc)]
     bus = hubconf.bus_db()
     if bus.exists():
         c = sqlite3.connect(bus, timeout=30)

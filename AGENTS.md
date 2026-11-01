@@ -350,8 +350,8 @@ memory tracking and runs nothing long-lived (most projects) needs nothing under 
   reminds to rebuild); only at ≥ 14 days does it remove the worktree (the branch stays); rules in the `bin/worktrees.py`
   header
 - **config pipeline** (`docs/design/new-user.md` 3.7): config = `hub.json`, the registry, `mirror-list.txt`,
-  `services.tsv`, `schedule.yaml`. `agenthub config check` (= `bin/config-check`, run by githooks/pre-commit on the
-  index; `hub.json` against `contracts/hub.v1.schema.json`, unknown keys are rejected), `plan` (what would change,
+  `services.tsv`, `schedule.yaml`. `agenthub config check` (= `bin/config-check`, run by the config repo's pre-commit on
+  the index and by agent-hub's `lint` tier; `hub.json` against `contracts/hub.v1.schema.json`, unknown keys are rejected), `plan` (what would change,
   touches nothing), `apply` (check → apply → plan again must be empty → records `.state/config-applied.json` + bus
   `config.applied`; the status page title shows the config commit in effect). Appliers are registered in
   `bin/appliers.py` (the scheduled job list, render-services, render-project-settings), contract test
@@ -453,19 +453,22 @@ file).
 
 ## Who commits/pushes agent-hub
 
-- **The commit gate** (`git config core.hooksPath githooks`; `agenthub init` sets it, and a new clone needs it too):
-  for a commit that changes code (`bin/` `tests/` `contracts/` `templates/`…), `bin/test-gate` takes the **index** (not
-  the working tree), first runs `bin/lint` (ruff with only the F rules: undefined names, unused imports/variables; rules
-  in `ruff.toml`, ruff installed into the platform's venv by `bin/setup-python`), then runs all tests with the
-  platform's Python and a fake HOME (`bin/run-tests`: one process per module, in parallel, the English goldens too),
-  and lets the commit through only if everything passes and no test wrote into HOME. A commit of only a script's data
-  files does not run it. A commit that skips it with `--no-verify` is recorded by post-commit in
-  `.state/test-gate-bypassed.log`. Behavior visible from outside is pinned with golden files before and after a
-  refactor (e.g. `tests/fixtures/llm-golden.json`); don't rely on comparing by hand
+- **The commit gate and the test system** (docs/design/test-waiting.md): agent-hub's registry entry declares its tests
+  (project v2: `code`, `inputs`, tiers `lint` and `full`) and `commit_gate: true`; the platform's hook installer
+  (`render-project-settings`, also run by `agenthub land` after every merge) puts a `pre-commit` in the repo's git dir.
+  A commit on a branch runs the `lint` tier (`bin/lint`: ruff with only the F rules, rules in `ruff.toml`, ruff in the
+  platform's venv by `bin/setup-python`; and the config check), `merge-branch` the `merge` tiers (`lint` and `full`:
+  all tests through `bin/run-tests`, one process per module, in parallel, the English goldens too, under a fresh HOME
+  that no test may write into). Both go through the main checkout's runner, `agenthub test` (`bin/test-runner.py`):
+  the staged or merged content exported, the entry read from that tree, a recorded pass for the same tree a hit
+  (`bin/tiers.py`, the store in the repo's git common dir), the complete output in a file whose path it prints. A
+  change to files outside `code` runs nothing. Commits on main that didn't come through `merge-branch` are counted on
+  the status page. Behavior visible from outside is pinned with golden files before and after a refactor (e.g.
+  `tests/fixtures/llm-golden.json`); don't rely on comparing by hand
 - **Commit titles follow Conventional Commits** (`<type>[(<scope>)][!]: <description>`, type: feat / fix / perf /
   refactor / test / docs / build / ci / chore / revert; the scope is the area's name, e.g. `fix(hubbus): …`; a breaking
-  change adds `!` and says `BREAKING CHANGE:` in the body). `githooks/commit-msg` rejects malformed titles
-  (`bin/commit_title.py`); release notes are generated from the commits with `cliff.toml` (git-cliff, the same file as
+  change adds `!` and says `BREAKING CHANGE:` in the body). The platform's `commit-msg` hook (every repo with
+  `commits: conventional`) rejects malformed titles (`bin/commit_title.py`); release notes are generated from the commits with `cliff.toml` (git-cliff, the same file as
   the assistant's repo), with no separately maintained CHANGELOG. Other projects: with `commits: conventional` in the
   registry, `merge-branch` checks before merging and the rules file carries the explanation automatically
 - **Manual edits (scripts, docs)**: made only by agent-hub's own sessions on the hub machine, **each in a linked

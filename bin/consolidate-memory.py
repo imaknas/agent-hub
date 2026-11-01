@@ -647,7 +647,7 @@ def main() -> int:
         save_state(state)
 
     if entries:
-        subprocess.run(["git", "pull", "-q"], cwd=HUB, env=GIT_ENV, capture_output=True)
+        subprocess.run(["git", "fetch", "-q"], cwd=HUB, env=GIT_ENV, capture_output=True)   # agent-hub's main moves only through merge-branch (commit_gate): fetch, never pull
         with open(REVIEW_LOG, "a") as f:
             f.writelines(entries)
         c = subprocess.run([str(BIN / "commit-hub-files.sh"), f"consolidate: review-log {TODAY}", "review-log.md"],

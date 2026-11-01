@@ -340,12 +340,8 @@ def cmd_init(argv: list[str]) -> int:
                 d.mkdir(parents=True, exist_ok=True)
     if not dry and hubconf.secrets_dir().exists():
         hubconf.secrets_dir().chmod(0o700)
-    if (ROOT / ".git").exists():
-        cur = subprocess.run(["git", "-C", str(ROOT), "config", "core.hooksPath"], capture_output=True, text=True).stdout.strip()
-        if cur != "githooks":
-            print(_("{dry}git config core.hooksPath githooks (the platform's commit gate)", dry="(dry-run) " if dry else ""))
-            if not dry:
-                subprocess.run(["git", "-C", str(ROOT), "config", "core.hooksPath", "githooks"])
+    # the platform's own commit gate is a git hook the project-settings applier installs in its git dir, as for every
+    # repo with commit_gate (docs/design/test-waiting.md A1): `config apply` below does it
     if created and not dry:
         # a failure doesn't block init: doctor will say judgment points have nowhere to run; agenthub llm setup later
         llm_setup(args, yes)
@@ -600,10 +596,6 @@ def cmd_doctor(argv: list[str]) -> int:
     add("ok" if not left else "warn", _("background services, project settings: match the config") if not left else
         _("background services, project settings: {count} {count:change|changes} not applied yet", count=sum(len(c) for c in left.values())),
         "" if not left else _("agenthub config plan, then agenthub config apply"))
-    if (ROOT / ".git").exists():
-        hp = subprocess.run(["git", "-C", str(ROOT), "config", "core.hooksPath"], capture_output=True, text=True).stdout.strip()
-        add("ok" if hp == "githooks" else "warn", _("commit gate (core.hooksPath): {value}", value=hp or _("not set")),
-            "" if hp == "githooks" else _("agenthub init (or git config core.hooksPath githooks)"))
     return report(results)
 
 
@@ -781,6 +773,15 @@ def cmd_llm(argv: list[str]) -> int:
     return 0
 
 
+def cmd_land(argv: list[str]) -> int:
+    """After a merge of agent-hub (merge-branch runs it from the merged code): the registry index rebuilt by that code,
+    then the hub's own git hooks installed from its entry (the installer decides from the index, so the refresh comes
+    first). Both run whatever the other said; the worse exit code is returned."""
+    rc = subprocess.run([*hubconf.launch(BIN / "registry.py"), "check", *argv]).returncode
+    rc2 = subprocess.run([*hubconf.launch(BIN / "render-project-settings.py"), "--only", hubconf.hub_project()]).returncode
+    return max(rc, rc2)
+
+
 def passthrough(script: str):
     return lambda argv: subprocess.run([*hubconf.launch(BIN / script), *argv]).returncode
 
@@ -832,7 +833,7 @@ COMMANDS = {
     "owner": lambda argv: subprocess.run([*hubconf.launch(BIN / "owner.py"), *argv]).returncode,
     # after a merge of agent-hub, run by merge-branch from the merged tree (docs/design/test-waiting.md step 2.2;
     # step 2.3 adds the hook install): the registry index rebuilt by the code that just landed
-    "land": lambda argv: subprocess.run([*hubconf.launch(BIN / "registry.py"), "check", *argv]).returncode,
+    "land": cmd_land,
     **{name: session_command(name) for name in SESSION_COMMANDS},
 }
 

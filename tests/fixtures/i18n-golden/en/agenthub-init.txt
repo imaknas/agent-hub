@@ -4,7 +4,6 @@ $ agenthub init --dry-run --yes --no-launchd    # old layout
 ✓ <TMP>/config/hub.json already exists (the old layout); leaving it alone
 (dry-run) create folder <TMP>/fakehub/.logs
 (dry-run) create folder <TMP>/home/git-origin
-(dry-run) git config core.hooksPath githooks (the platform's commit gate)
 --no-launchd: not installing the scheduler, not applying services
 --- stderr
 
@@ -59,8 +58,6 @@ create folder <TMP>/fakehub/.logs
 create folder <TMP>/ws2
 create folder <TMP>/home/git-origin
 create folder <TMP>/home/.memory-copies
-git config core.hooksPath githooks (the platform's commit gate)
-[git config core.hooksPath githooks]
 judgment points stay unset: when needed, they fail plainly and say why. Run agenthub llm setup later
 --no-launchd: not installing the scheduler, not applying services
 --- stderr

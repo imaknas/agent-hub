@@ -4,8 +4,8 @@ What kept holding (characterized first): a main checkout reads its pointer and s
 registry's runtime.test after its rebase and leaves main untouched when it fails.
 What a linked worktree of the hub does now: it takes .hub-home, .state and .logs from its main checkout (hubconf and
 hubpaths.sh alike), unless AGENT_HUB_ROOT is explicit; from there registry.refresh writes nothing and the scheduler and
-config apply refuse; run-tests points AGENT_HUB_ROOT at the tree it tests; test-gate passes the instance files listed
-in hub.json tests.config_inputs and fails when a listed one is missing.
+config apply refuse; run-tests points AGENT_HUB_ROOT at the tree it tests. (The instance files tests read, hub.json
+tests.config_inputs, are the runner's: tests/test_test_runner.py.)
 
     bin/py -m unittest discover -s tests
 """
@@ -78,49 +78,6 @@ class MainCheckout(Base):
         r = subprocess.run(["bash", "-c", 'source bin/hubpaths.sh; echo "$HUB_CONFIG"'], cwd=h, env=self.env,
                            capture_output=True, text=True, check=True)
         self.assertEqual(r.stdout.strip(), f"{inst}/config")
-
-
-@unittest.skipUnless((pathlib.Path(PY).parent / "ruff").exists(), "no ruff next to the platform's Python")
-class TestGatePrivateNames(Base):
-    """test-gate passes the private-names list to the tests (test_personal_boundary reads AGENT_HUB_PRIVATE_NAMES)."""
-
-    def gate(self, with_list: bool, listed: bool = True):
-        h = self.hub(files=("hubconf.py", "i18n.py", "gitdirs.py"))
-        for f in ("test-gate", "run-tests", "lint", "py", "hubpaths.sh"):
-            (h / "bin" / f).symlink_to(BIN / f)
-        (h / "ruff.toml").write_text((ROOT / "ruff.toml").read_text())
-        (h / "tests").mkdir()
-        (h / "tests" / "test_probe.py").write_text(
-            "import os\nimport unittest\n\n\nclass T(unittest.TestCase):\n    def test_private(self):\n"
-            "        self.assertEqual(os.environ.get('AGENT_HUB_PRIVATE_NAMES', ''), os.environ.get('EXPECT_PRIVATE', ''))\n")
-        cfg = self.tmp / "config"
-        cfg.mkdir()
-        (cfg / "hub.json").write_text(json.dumps({"tests": {"config_inputs": [
-            {"file": "private-names.txt", "env": "AGENT_HUB_PRIVATE_NAMES"}]}} if listed else {}))
-        expect = ""
-        if with_list:
-            (cfg / "private-names.txt").write_text("secretproj\n")
-            expect = str(cfg / "private-names.txt") if listed else ""
-        self.git(h, "add", "-A")
-        return subprocess.run([str(h / "bin" / "test-gate")], cwd=h, capture_output=True, text=True, timeout=300,
-                              env={**self.env, "AGENT_HUB_CONFIG": str(cfg), "EXPECT_PRIVATE": expect})
-
-    def test_list_present_is_passed_in(self):
-        r = self.gate(with_list=True)
-        self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
-
-    def test_no_list_passes_nothing(self):
-        r = self.gate(with_list=False, listed=False)
-        self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
-
-    def test_listed_but_missing_fails(self):
-        r = self.gate(with_list=False)
-        self.assertEqual(r.returncode, 1, r.stdout + r.stderr)
-        self.assertIn("tests.config_inputs", r.stderr)
-
-    def test_unlisted_file_is_not_passed(self):
-        r = self.gate(with_list=True, listed=False)
-        self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
 
 
 class LinkedWorktree(Base):
@@ -209,7 +166,7 @@ class MergeRunsRuntimeTest(Base):
             (self.tmp / d).mkdir(parents=True)
         (self.tmp / "config" / "hub.json").write_text(json.dumps({
             "bus_dir": str(self.tmp / "bus"), "registry_dir": "projects", "services_root": str(self.tmp / "services")}))
-        self.env.update({"AGENT_HUB_CONFIG": str(self.tmp / "config"), "AGENT_HUB_DATA": str(self.tmp / "data"),
+        self.env.update({"AGENT_HUB_ROOT": str(ROOT), "AGENT_HUB_CONFIG": str(self.tmp / "config"), "AGENT_HUB_DATA": str(self.tmp / "data"),
                          "AGENT_HUB_SECRETS": str(self.tmp / "secrets"), "AGENT_HUB_STATE": str(self.tmp / "state")})
         self.ws = self.tmp / "ws"
         self.git(self.tmp, "init", "-q", "-b", "main", str(self.ws))

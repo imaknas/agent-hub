@@ -47,10 +47,8 @@ $ agenthub doctor    # launchd, problems
     → to be notified, add an alerts section as in hub.example.json
 ! background services, project settings: 2 changes not applied yet
     → agenthub config plan, then agenthub config apply
-! commit gate (core.hooksPath): not set
-    → agenthub init (or git config core.hooksPath githooks)
 
-5 problems, 6 reminders
+5 problems, 5 reminders
 --- stderr
 
 $ agenthub doctor    # launchd, all fine
@@ -80,7 +78,6 @@ $ agenthub doctor    # launchd, all fine
 ✓ sandboxed projects' own services and jobs: run isolated (seatbelt: own-writes-only, isolated-reads, declared-port-only)
 ✓ the scheduler just ticked
 ✓ background services, project settings: match the config
-✓ commit gate (core.hooksPath): githooks
 
 no problems, 1 reminder
 --- stderr
@@ -126,7 +123,6 @@ $ agenthub doctor    # systemd, runtime none
     → bin/schedulectl status; see .logs/scheduler-stderr.log
 ! background services, project settings: 1 change not applied yet
     → agenthub config plan, then agenthub config apply
-✓ commit gate (core.hooksPath): githooks
 
 3 problems, 13 reminders
 --- stderr
@@ -167,7 +163,6 @@ $ agenthub doctor    # no service manager, unnamed assistant
 ✗ the scheduler last ticked 120 minutes ago
     → bin/schedulectl status; see .logs/scheduler-stderr.log
 ✓ background services, project settings: match the config
-✓ commit gate (core.hooksPath): githooks
 
 3 problems, 10 reminders
 --- stderr

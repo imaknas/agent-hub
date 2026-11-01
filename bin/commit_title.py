@@ -8,7 +8,7 @@ minor, fix/perf bump patch, ! bumps major); scope is a part of this repo (free t
 says `BREAKING CHANGE: …` in the body. Titles git makes itself (Merge …, Revert "…") pass; `fixup!`/`squash!` only on
 your own branch, the merge gate refuses them.
 
-Used by: agent-hub's own githooks/commit-msg, and bin/merge-branch before merging a project with `commits: conventional`
+Used by: the platform's commit-msg hook (render-project-settings, repos with `commits: conventional`), and bin/merge-branch before merging a project with `commits: conventional`
 in its registry entry.
 
   commit_title.py --file <COMMIT_EDITMSG>    commit-msg hook: prints the reason and exits 1 when the title is wrong

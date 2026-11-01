@@ -1,129 +1,14 @@
 #!/usr/bin/env bash
-# The commit gate: a commit that touches code passes only if lint (bin/lint: ruff's F rules) is clean and the platform's
-# Python passes every test (called by githooks/pre-commit; can also be run by hand).
-#
-#   test-gate            checks the "index" (what is being committed), not the working tree: the same working tree may
-#                        hold files another session is halfway through changing, and testing those means nothing
-#   test-gate --all      runs regardless of what is staged
-#
-# How it runs: export the index to a temp directory (git checkout-index), point AGENT_HUB_ROOT there, swap HOME for an
-#   empty temp directory, and run with the platform's Python (bin/py, 3.13 minimum). Under the fake HOME the platform's
-#   Python can't be found, so first ask bin/py which one it actually is and pass it in as AGENT_HUB_PYTHON (the
-#   location is still written only in bin/py).
-# Tests may not write real things: HOME is fake, so they can't reach the real ~/workspace, the bus, ~/.claude; any file
-#   added in the fake HOME after the run (empty folders don't count) = a test writes the user's directories, and the
-#   gate fails, listing the files.
-# A commit that only touches data files (registry, index, digest… written by scripts like the librarian or onboard)
-#   doesn't run it: paths outside CODE don't trigger it.
-# On a pass, the tree is recorded in test-gate-passed in the git directory; githooks/post-commit uses it to catch
-#   commits that skipped the gate (--no-verify).
+# The commit gate's old entry point. It is kept for one merge only: the merge that switched agent-hub over
+# (docs/design/test-waiting.md step 2.3) was tested by the merge-branch before it, whose registry entry said
+# `runtime.test: bin/test-gate --all`. It runs agent-hub's declared tiers on what is staged, through the main
+# checkout's runner (agenthub test), and goes in the next merge.
+#   test-gate          the commit tiers on a branch, the merge tiers on main
+#   test-gate --all    the merge tiers
 set -uo pipefail
-
 HUB="$(cd "$(dirname "$0")/.." && pwd)"
 source "$HUB/bin/hubpaths.sh"
-cd "$HUB" || exit 1
-CODE='^(bin|tests|contracts|templates|githooks|launchd|capabilities|agent-jobs)/|^(hub\.json|ruff\.toml)$'
-PLATFORM_PY="$("$HUB/bin/py" -c 'import sys; print(sys.executable)')" || exit 1
-PYTHONS=("$PLATFORM_PY")
-
-if [ "${1:-}" != "--all" ] && ! git diff --cached --name-only | grep -Eq "$CODE"; then
-  exit 0
-fi
-
-# The instance files the tests read (hub.json tests.config_inputs; this deployment's private-names list for
-# tests/test_personal_boundary.py): not in the repo and not findable under the fake HOME, so each is passed in by the
-# variable it names. A listed file that is missing fails the gate instead of letting its test skip; one not listed is
-# not passed, and the test skips (a deployment without a list).
-inputs="$("$HUB/bin/py" "$HUB/bin/hubconf.py" test-config-inputs)" || exit 1
-input_keys=""
-input_env=()
-while IFS=$'\t' read -r var file; do
-  [ -n "$var" ] || continue
-  if [ ! -f "$file" ]; then
-    hub_say "test-gate: {file} is listed in hub.json tests.config_inputs but missing" file="$file" >&2
-    exit 1
-  fi
-  input_keys+=" $(shasum <"$file" | cut -c1-12)"
-  input_env+=("$var=$file")
-done <<<"$inputs"
-
-# A tree that already passed is not run again (a rebase verified, then committed or merged with the same tree; a commit
-# retried after its message was refused). The key adds what the result depends on outside the tree: the platform
-# Python's version and the config inputs. Shared by every worktree of this repo. TEST_GATE_FORCE=1 runs anyway.
-tree="$(git write-tree)" || exit 1
-key="$tree $("$PLATFORM_PY" -c 'import sys; print(sys.version.split()[0])')$input_keys"
-passed_trees="$(git rev-parse --git-common-dir)/test-gate-passed-trees"
-if [ -z "${TEST_GATE_FORCE:-}" ] && grep -qxF "$key" "$passed_trees" 2>/dev/null; then
-  hub_say "test-gate: this exact tree already passed ({tree}); not run again" tree="${tree:0:12}"
-  echo "$tree" >"$(git rev-parse --git-path test-gate-passed)"
-  exit 0
-fi
-
-# Not in /tmp or /var/folders: the capabilities' Seatbelt profile allows writing the temp directories, so with the fake
-# HOME there, the "writes outside the folder" tests couldn't catch anything
-mkdir -p "$HUB/.state/test-gate" "$HUB_STATE/test-gate"
-work="$(mktemp -d "$HUB/.state/test-gate/run.XXXXXX")" || exit 1
-trap 'rm -rf "$work"' EXIT
-mkdir -p "$work/tree" "$work/home/workspace"
-git checkout-index -a --prefix="$work/tree/" || { hub_say "test-gate: exporting the index failed" >&2; exit 1; }
-for kv in ${input_env[@]+"${input_env[@]}"}; do export "$kv"; done
-
-# lint also runs on the exported index (with that copy's bin/lint and ruff.toml); without ruff it doesn't pass either,
-# never silently skipped
-lint_fail=0
-lint_out="$(AGENT_HUB_PYTHON="$PLATFORM_PY" "$work/tree/bin/lint" "$work/tree" 2>&1)" || lint_fail=1
-
-i=0
-for py in "${PYTHONS[@]}"; do
-  # called from a git hook, the environment has GIT_DIR, GIT_INDEX_FILE…: unless cleared, the temp repos the tests
-  # open would operate on this repo
-  ( for v in $(env | sed -n 's/^\(GIT_[A-Z_]*\)=.*/\1/p'); do unset "$v"; done
-    # the exported copy is under agent-hub's .state/: unless blocked, git called by a test in the copy walks up to
-    # agent-hub itself, and since .state is ignored → `git ls-files` returns an empty list and tests that scan files
-    # through it pass without checking anything (how test_personal_boundary missed things on 10-26)
-    export GIT_CEILING_DIRECTORIES="$work"
-    cd "$work/tree" && HOME="$work/home" AGENT_HUB_ROOT="$work/tree" AGENT_HUB_PYTHON="$PLATFORM_PY" PYTHONDONTWRITEBYTECODE=1 \
-      TEST_DURATIONS="$HUB_STATE/test-gate/durations.json" "$py" "$work/tree/bin/run-tests" "$work/tree/tests" \
-      >"$work/out$i" 2>&1 ) &   # in parallel, one process per module (bin/run-tests)
-  i=$((i + 1))
-done
-wait
-
-fail=0
-if [ "$lint_fail" -ne 0 ]; then
-  fail=1
-  hub_say "test-gate: lint failed (bin/lint, ruff's F rules):" >&2
-  echo "$lint_out" | sed "s|$work/tree/||g" >&2
-else
-  hub_say "test-gate: lint OK"
-fi
-i=0
-for py in "${PYTHONS[@]}"; do
-  summary="$(grep -E '^(Ran|OK|FAILED)' "$work/out$i" | tr '\n' ' ')"
-  # the unittest result line (OK / FAILED) itself: what tests print to stdout is flushed only when the process exits
-  # and may come after it, so looking only at the last few lines isn't enough
-  if grep -qE '^OK( \(|$)' "$work/out$i" && ! grep -qE '^FAILED( |$)' "$work/out$i"; then
-    hub_say "test-gate: tests passed ({python}): {summary}" python="$py" summary="$summary"
-  else
-    fail=1
-    hub_say "test-gate: tests failed ({python}): {summary}" python="$py" summary="$summary" >&2
-    grep -E '^(ERROR|FAIL):' "$work/out$i" >&2
-    tail -30 "$work/out$i" >&2
-  fi
-  i=$((i + 1))
-done
-
-leaked="$(cd "$work/home" && find . -type f | sed 's|^\./|~/|')"
-if [ -n "$leaked" ]; then
-  fail=1
-  hub_say "test-gate: tests wrote to the user's home (a real run would write real files):" >&2
-  echo "$leaked" >&2
-fi
-
-if [ "$fail" -ne 0 ]; then
-  hub_say "test-gate: not letting this through. Fix it, then commit; if you only changed data files, do not stage code with them." >&2
-  exit 1
-fi
-echo "$tree" >"$(git rev-parse --git-path test-gate-passed)"
-{ tail -n 199 "$passed_trees" 2>/dev/null; echo "$key"; } >"$passed_trees.new" && mv "$passed_trees.new" "$passed_trees"
-exit 0
+moment=commit
+case "$(git symbolic-ref --short -q HEAD)" in main|master) moment=merge ;; esac
+[ "${1:-}" = "--all" ] && moment=merge
+exec "$HUB_MAIN/bin/py" "$HUB_MAIN/bin/test-runner.py" --index --when "$moment"

@@ -1,19 +1,34 @@
-# Project registry entry (schema v1, see bin/registry.py); edit this file directly
+# Project registry entry (schema v2, see bin/registry.py); edit this file directly
 # background: true = runs in the background without holding up the jobs after it; every job longer than a few minutes
 #   needs it.
 # hubbus-bridge: brings the assistant's handoffs into each project's mailbox, sends letters for the owner and done for
 #   handoffs to the assistant, hands letters nobody picked up for too long to a headless agent, clears those closed more
 #   than 60 days ago. Short, idempotent, zero LLM (only an escalation opens claude -p).
-v: 1
+v: 2
 name: agent-hub
 memory: false
 push_on_merge: false
-commits: conventional          # commit titles (bin/commit_title.py; this repo also has githooks/commit-msg)
-# merge-branch's tests for this repo's own worktrees (docs/design/test-waiting.md A1): its rebase runs no pre-commit and
-# its fast-forward no gate, so the rebased tree is tested here; a rebase that changed nothing is a hit in test-gate's
-# tree store. Replaced by this entry's v2 tiers in step 2.3.
-runtime:
-  test: bin/test-gate --all
+commits: conventional          # commit titles (bin/commit_title.py, through the platform's commit-msg hook)
+# The commit gate (docs/design/test-waiting.md A1): the platform installs its pre-commit in this repo's git dir; a commit
+# on a branch runs the commit tiers, merge-branch (and a commit onto main) the merge tiers, through the main checkout's
+# runner (agenthub test). This entry is read from the tree under test, so a change to the tiers is tested by the tiers
+# it brings.
+commit_gate: true
+code: ["bin/**", "tests/**", "contracts/**", "templates/**", "locales/**", "githooks/**", "launchd/**",
+       "capabilities/**", "agent-jobs/**", "modules/**", "projects/**", "hub.example.json", "ruff.toml"]
+inputs: ["cmd:bin/py -c 'import sys; print(sys.version)'", "config:private-names.txt"]
+tests:
+# lint (ruff's F rules) and the config check of what this repo carries (its registry entry, modules), as
+# config-check --staged checked them
+- tier: lint
+  run: bin/lint . && AGENT_HUB_CONFIG=. AGENT_HUB_STATE="$TMPDIR/config-check" bin/py bin/config-check --child
+  when: [commit, merge, nightly]
+# every test, under the runner's fresh HOME; a test that wrote into it fails the tier (a real run would write real files)
+- tier: full
+  run: >-
+    mkdir -p "$HOME/workspace" && bin/py bin/run-tests tests &&
+    { leaks=$(find "$HOME" -type f); [ -z "$leaks" ] || { echo "tests wrote to HOME:"; echo "$leaks"; exit 1; }; }
+  when: [merge, nightly]
 jobs:
 - name: librarian
   legacy_name: librarian

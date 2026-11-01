@@ -129,6 +129,7 @@ import event_jobs  # noqa: E402
 import hubconf  # noqa: E402
 import i18n  # noqa: E402
 import isolation  # noqa: E402
+import tiers  # noqa: E402
 
 import yaml  # noqa: E402
 
@@ -139,6 +140,9 @@ TOP = {"v", "name", "type", "purpose", "paths", "memory", "privacy", "runtime", 
        "publishes", "provides", "consumes", "services", "jobs", "enforce", "network", "allow_write", "gate", "secrets",
        "models", "metered_models"}
 TOP_V2 = TOP | {"tests", "code", "inputs", "commit_gate"}
+# what the index's documents are: 2 = project v2 (v1 files upgraded as they are read). Readers that need v2 fields
+# (merge-branch) refuse an index of an older format; registry.refresh never overwrites a newer one
+INDEX_FORMAT = 2
 MOMENTS = ("commit", "merge", "nightly", "deploy")
 TIER_KEYS = {"tier", "run", "when", "paths", "jobs"}
 ENV_NAME = re.compile(r"^[A-Z_][A-Z0-9_]*$")
@@ -294,14 +298,17 @@ def platform_owned_changes(new: dict, cur: dict) -> list[str]:
 
 
 def validate(doc, stem: str) -> list[str]:
+    """A registry document as it is read: v2, or v1 upgraded to v2 (tiers.upgrade; the one upgrade function, kept as
+    long as any deployment may hold v1 files)."""
     if not isinstance(doc, dict):
         return [_("not a YAML mapping")]
-    errs = [] if doc.get("v") == 1 else [_("v must be 1 (it is {v!r})", v=doc.get("v"))]
-    return errs + _validate_body(doc, stem, TOP, ("deploy", "test"))
+    if doc.get("v") not in (1, 2):
+        return [_("v must be 1 or 2 (it is {v!r})", v=doc.get("v"))]
+    return validate_v2(tiers.upgrade(doc), stem)
 
 
 def validate_v2(doc, stem: str) -> list[str]:
-    """Project v2 (the header's "schema v2"). Not used by the live validators until test-waiting step 2.3."""
+    """Project v2 (the header's "schema v2")."""
     if not isinstance(doc, dict):
         return [_("not a YAML mapping")]
     errs = [] if doc.get("v") == 2 else [_("v must be 2 (it is {v!r})", v=doc.get("v"))]
@@ -739,6 +746,13 @@ def refresh(only: list[str] | None = None, rebuild: bool = False) -> dict:
         old = json.loads((CACHE / "index.json").read_text())
     except (OSError, ValueError):
         old = {}
+    if live and not rebuild and (old.get("format") or 1) > INDEX_FORMAT:
+        # an index built by newer code (a long-running process with old code refreshing on a request): left alone,
+        # said loudly; after a revert, `registry.py check --rebuild` is the owner's way back
+        why = _("the index was built by newer code (format {have}, this code writes {mine}); not overwritten",
+                have=old.get("format"), mine=INDEX_FORMAT)
+        print(f"registry: {why}", file=sys.stderr)
+        return {**old, "errors": {**(old.get("errors") or {}), "(registry)": [why]}}
     if not rebuild and (why := wrong_registry(old, reg, files)):
         who = record_refusal(why, reg) if live else ""
         print(f"registry: {why}\n  {who}", file=sys.stderr)
@@ -756,6 +770,7 @@ def refresh(only: list[str] | None = None, rebuild: bool = False) -> dict:
             text = f.read_text()
             doc = yaml.safe_load(text)
             errs = validate(doc, stem) + roster_mismatch(doc, text)
+            doc = tiers.upgrade(doc)   # what the index holds is v2, whatever the file says
         except yaml.YAMLError as e:
             doc, errs = None, [_("cannot read the YAML: {error}", error=e)]
         cache = CACHE / f"{stem}.json"
@@ -765,15 +780,15 @@ def refresh(only: list[str] | None = None, rebuild: bool = False) -> dict:
             projects[stem] = doc
         else:
             errors[stem] = errs
-            if cache.exists():  # keep using the last valid version
-                projects[stem] = json.loads(cache.read_text())
+            if cache.exists():  # keep using the last valid version (upgraded too: it may predate v2)
+                projects[stem] = tiers.upgrade(json.loads(cache.read_text()))
     # projects whose registry file was deleted: drop the cache too (deleting the entry = removing the project)
     for c in CACHE.glob("*.json") if live else []:
         if c.name != "index.json" and c.stem not in {f.stem for f in files}:
             c.unlink()
     modules, mod_errors = load_modules()
     errors.update(mod_errors)
-    index = {"v": 1, "generated": datetime.datetime.now().isoformat(timespec="seconds"), "registry_dir": str(reg.resolve()),
+    index = {"v": 1, "format": INDEX_FORMAT, "generated": datetime.datetime.now().isoformat(timespec="seconds"), "registry_dir": str(reg.resolve()),
              "projects": projects, "modules": modules, "errors": errors}
     if (cycles := job_cycles(index)):
         errors["(jobs)"] = [_("after:/before: form a cycle, these jobs would wait for each other forever: {cycle}", cycle=c)

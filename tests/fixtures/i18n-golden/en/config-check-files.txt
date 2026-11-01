@@ -5,8 +5,8 @@ $ <HUB>/bin/config-check --bogus
 The config pipeline's check (docs/design/new-user.md 3.7): validates every config file at once.
 
   config-check            validate the config in the working tree
-  config-check --staged   validate the **index** (what is about to be committed; called by githooks/pre-commit and the config
-                          repo's githooks/config/pre-commit). Passes at once when the index changes no config file.
+  config-check --staged   validate the **index** (what is about to be committed; called by the config repo's
+                          githooks/config/pre-commit; agent-hub's lint tier runs the same check as --child). Passes at once when the index changes no config file.
                           A shared working tree may hold someone else's half-edited files, so, as test-gate does, the index
                           is exported to a temp directory and validated there with AGENT_HUB_ROOT pointing at it.
 
@@ -20,8 +20,7 @@ What it validates:
   services.tsv       every row has as many columns as the header, labels are unique
   schedule.yaml      readable, job names unique (the old format, during the switch)
 
-When it passes, the tree it validated is recorded in the git directory's config-check-passed (githooks/post-commit uses it to
-catch commits that skipped the gate).
+When it passes, the tree it validated is recorded in the git directory's config-check-passed.
 
 
 $ <HUB>/bin/config-check

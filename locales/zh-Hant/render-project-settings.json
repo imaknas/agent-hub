@@ -22,5 +22,6 @@
  "{project}: installed {hook} ({why})": "{project}:裝了 {hook}({why})",
  "{project}: updated {hook} ({why})": "{project}:更新了 {hook}({why})",
  "{project}: the registry no longer wants {hook}; removed it": "{project}:登錄不再要 {hook},拿掉了",
- "not wanted": "不再需要"
+ "not wanted": "不再需要",
+ "{project}: core.hooksPath {path} unset; the platform's hooks go into the git dir": "{project}:取消了 core.hooksPath {path};平台的 hook 改放在 git 目錄"
 }

@@ -6,7 +6,6 @@ $ <HUB>/bin/registry.py check
     type: idea 要寫 purpose(想法本身)
     paths.workspace 必填
 ✗ bad-one
-    v 要是 1(現在是 2)
     name('other')要跟檔名 bad-one 一樣
     未知的欄位 nope
     type 只能是 project 或 idea

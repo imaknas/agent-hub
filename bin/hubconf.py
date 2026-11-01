@@ -648,7 +648,7 @@ def main(argv: list[str]) -> int:
         print({"config": config_dir, "data": data_dir, "secrets": secrets_dir}.get(argv[1], lambda: None)()
               or (STATE if argv[1] == "state" else LOGS))
         return 0
-    if argv == ["test-config-inputs"]:   # <variable>TAB<file>, one per line, for test-gate
+    if argv == ["test-config-inputs"]:   # <variable>TAB<file>, one per line, for shell callers
         for env, f in test_config_inputs():
             print(f"{env}\t{f}")
         return 0

@@ -117,6 +117,23 @@ class Runner(unittest.TestCase):
         r = self.run_()
         self.assertIn("demo/full passed", r.stdout)
 
+    def test_config_inputs(self):
+        """hub.json tests.config_inputs: a listed file is passed in by its variable (and keyed), a listed one that is
+        missing fails the run, an unlisted name counts as absent (the test that needs it skips)."""
+        names = self.tmp / "config" / "private-names.txt"
+        tier = {"tier": "pn", "when": ["merge"], "run": 'test "$AGENT_HUB_PRIVATE_NAMES" = "$WANT"'}
+        self.declare(v=2, inputs=["config:private-names.txt", "env:WANT"], tests=[tier])
+        hub = {"bus_dir": str(self.tmp / "bus"), "registry_dir": "projects"}
+        (self.tmp / "config" / "hub.json").write_text(json.dumps(hub))
+        self.assertEqual(self.run_("--tier", "pn", WANT="").returncode, 0, "unlisted: not passed")
+        hub["tests"] = {"config_inputs": [{"file": "private-names.txt", "env": "AGENT_HUB_PRIVATE_NAMES"}]}
+        (self.tmp / "config" / "hub.json").write_text(json.dumps(hub))
+        r = self.run_("--tier", "pn", WANT=str(names))
+        self.assertEqual(r.returncode, 2, "listed but missing")
+        self.assertIn("tests.config_inputs", r.stderr)
+        names.write_text("secretproj\n")
+        self.assertEqual(self.run_("--tier", "pn", WANT=str(names)).returncode, 0, "listed: passed in")
+
     def test_not_a_registered_repo(self):
         other = self.tmp / "other"
         self.git(self.tmp, "init", "-q", str(other))

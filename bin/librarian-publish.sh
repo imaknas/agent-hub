@@ -12,7 +12,7 @@ HUB="${AGENT_HUB_ROOT:-$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)}"
 source "$(dirname "${BASH_SOURCE[0]}")/hubpaths.sh"
 TODAY=$(date +%Y-%m-%d)
 cd "$HUB" || exit 1
-git pull -q || true
+git fetch -q || true   # agent-hub's main moves only through merge-branch (commit_gate): fetch, never pull
 
 rc=0
 "$HUB/bin/gen-index-roster.sh" || { hub_say "gen-index-roster failed"; rc=1; }

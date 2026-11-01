@@ -335,37 +335,6 @@ class ShellGolden(unittest.TestCase):
         out.append(self.run_(s, AGENT_HUB_ROOT=str(h)))
         self.check("mirror-backup", out)
 
-    @unittest.skipUnless((pathlib.Path(PY).parent / "ruff").exists(), "no ruff next to the platform's Python")
-    def test_test_gate(self):
-        out = []
-        h = self.repo(self.tmp / "gate", {"README": "x\n"})
-        (h / "bin").mkdir()
-        for f in ("test-gate", "run-tests", "lint", "py", "hubpaths.sh", "i18n.py", "hubconf.py"):
-            (h / "bin" / f).symlink_to(BIN / f)
-        (h / "ruff.toml").write_text((ROOT / "ruff.toml").read_text())
-        (h / "tests").mkdir()
-        g = h / "bin" / "test-gate"
-        self.git(h, "add", "-A")
-        self.git(h, "commit", "-q", "-m", "bin")
-        (h / "notes.md").write_text("n\n")
-        self.git(h, "add", "notes.md")
-        out.append(self.run_(g, cwd=h, label="test-gate (data only)"))
-        (h / "tests" / "test_ok.py").write_text("import unittest\n\n\nclass T(unittest.TestCase):\n"
-                                                "    def test_ok(self):\n        pass\n")
-        self.git(h, "add", "tests")
-        out.append(self.run_(g, cwd=h, label="test-gate (passes)"))
-        (h / "tests" / "test_bad.py").write_text(
-            "import os\nimport pathlib\nimport unittest\n\n\nclass T(unittest.TestCase):\n"
-            "    def test_writes_home(self):\n        (pathlib.Path.home() / 'leak.txt').write_text('x')\n\n"
-            "    def test_fails(self):\n        self.fail('boom')\n")
-        self.git(h, "add", "tests")
-        r = self.run_(g, cwd=h, label="test-gate (fails)")
-        # unittest's own tail (tracebacks) is not the gate's text: keep the gate's lines and the summary
-        keep = [l for l in r.splitlines(keepends=True)
-                if l.startswith(("$", "[exit", "---", "test-gate", "~/", "tests/", "Found", "FAIL:", "ERROR:"))]
-        out.append("".join(keep))
-        self.check("test-gate", out)
-
     def test_small_scripts(self):
         """librarian-publish, openclaw-session-backup, git-safe-push, with-lock, weekly-reflect, lease-resume, lint"""
         out = []

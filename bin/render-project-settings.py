@@ -32,6 +32,7 @@ from __future__ import annotations
 
 import json
 import pathlib
+import subprocess
 import sys
 
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
@@ -250,11 +251,19 @@ def gate(name: str, doc: dict, report: bool, quiet: bool = False) -> list[tuple[
     st = st if isinstance(st, dict) else {}
     hp = st.get("hooks_path") if isinstance(st.get("hooks_path"), str) else ""
     texts = st.get("hooks") if isinstance(st.get("hooks"), dict) else {}
+    acts = []
+    if name == hubconf.hub_project() and hp and pathlib.Path(ws, hp).resolve() == (hubconf.MAIN / "githooks").resolve():
+        # the hub's tracked githooks/ from before its gate moved into its git dir (step 2.3): the platform's own, so
+        # replaced, not detected around
+        acts.append(("remove", "core.hooksPath"))
+        if not report:
+            subprocess.run(["git", "-C", str(ws), "config", "--unset", "core.hooksPath"], capture_output=True)
+            say(_("{project}: core.hooksPath {path} unset; the platform's hooks go into the git dir", project=name, path=hp))
+        hp = ""
     if want and hp:
         say(_("{project}: the platform's hooks are not installed (the project uses its own core.hooksPath={path}); "
               "detecting only", project=name, path=hp))
-        return []
-    acts = []
+        return acts
     for hook in HOOKS:
         text = texts.get(hook) if isinstance(texts.get(hook), str) else None
         mine = text is not None and text.startswith("#!/bin/sh\n" + MARK)
@@ -290,11 +299,11 @@ def _changes(index: dict) -> list:
     from appliers import Change
     out = []
     for name, doc in sorted(index["projects"].items()):
-        if name == hubconf.hub_project():
-            continue
         want = wanted_hooks(doc)
         out += [Change(op, f"hook:{name}/{hook}", want.get(hook, ("", _("not wanted")))[1])
                 for op, hook in gate(name, doc, report=True, quiet=True)]
+        if name == hubconf.hub_project():   # the platform's own repo: its hooks only, no sandbox settings
+            continue
         on = bool((doc.get("enforce") or {}).get("sandbox"))
         rec = RENDERED / f"{name}.json"
         if not on:
@@ -321,9 +330,9 @@ def apply(index: dict | None = None) -> list:
     index = index or registry.refresh()
     todo = _changes(index)
     for name, doc in sorted(index["projects"].items()):
+        gate(name, doc, report=False, quiet=True)
         if name == hubconf.hub_project():
             continue
-        gate(name, doc, report=False, quiet=True)
         if (doc.get("enforce") or {}).get("sandbox"):
             write_project(name, doc, index, report=False)
         else:
@@ -358,9 +367,11 @@ def main() -> int:
     index = registry.refresh()
     bad = 0
     for name, doc in sorted(index["projects"].items()):
-        if name == hubconf.hub_project() or (only and name != only):
+        if only and name != only:
             continue
         gate(name, doc, report)
+        if name == hubconf.hub_project():   # the platform's own repo: its hooks only, no sandbox settings
+            continue
         on = bool((doc.get("enforce") or {}).get("sandbox"))
         if not on:
             if report:

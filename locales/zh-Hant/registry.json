@@ -25,7 +25,6 @@
  "enforce.capabilities needs enforce.sandbox: true": "enforce.capabilities 要搭配 enforce.sandbox: true",
  "{key} is a security field that only agent-hub can change ({owner} confirms); this letter changes it": "{key} 是安全欄位,只能由 agent-hub 改(要 {owner} 確認);這封改到了它",
  "not a YAML mapping": "不是一個 YAML mapping",
- "v must be 1 (it is {v!r})": "v 要是 1(現在是 {v!r})",
  "name ({name!r}) must be the same as the file name {stem}": "name({name!r})要跟檔名 {stem} 一樣",
  "unknown field {key}": "未知的欄位 {key}",
  "type can only be project or idea": "type 只能是 project 或 idea",
@@ -138,5 +137,7 @@
  "tests.{tier}: jobs can only be {{max, env}}": "tests.{tier}:jobs 只能有 {{max, env}}",
  "tests.{tier}: jobs.max must be a whole number of at least 1": "tests.{tier}:jobs.max 必須是至少 1 的整數",
  "tests.{tier}: jobs.env must be an environment variable name": "tests.{tier}:jobs.env 必須是環境變數名稱",
- "tests.{tier}: jobs.max needs {{jobs}} in run or jobs.env": "tests.{tier}:jobs.max 需要 run 裡有 {{jobs}},或設 jobs.env"
+ "tests.{tier}: jobs.max needs {{jobs}} in run or jobs.env": "tests.{tier}:jobs.max 需要 run 裡有 {{jobs}},或設 jobs.env",
+ "v must be 1 or 2 (it is {v!r})": "v 必須是 1 或 2(現在是 {v!r})",
+ "the index was built by newer code (format {have}, this code writes {mine}); not overwritten": "索引是較新的程式建的(格式 {have},這份程式寫的是 {mine});不覆蓋"
 }

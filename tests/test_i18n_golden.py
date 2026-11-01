@@ -45,6 +45,7 @@ class Golden(unittest.TestCase):
                     "workspace_root": str(self.tmp / "ws"), "services_root": str(self.tmp / "svc"), "language": LANGUAGE}
         self.write_cfg()
         self.env = {**{k: v for k, v in os.environ.items() if not k.startswith(("AGENT_HUB_", "GIT_")) or k == "AGENT_HUB_PYTHON"},
+                    "AGENT_HUB_ROOT": str(ROOT),   # the tree under test (no lookup of a main checkout from a worktree)
                     "HOME": str(self.tmp / "home"), "AGENT_HUB_CONFIG": str(self.tmp / "config"),
                     "AGENT_HUB_DATA": str(self.tmp / "data"), "AGENT_HUB_SECRETS": str(self.tmp / "secrets"),
                     "AGENT_HUB_STATE": str(self.tmp / "state"), "GIT_CONFIG_GLOBAL": "/dev/null",
@@ -77,6 +78,7 @@ class Golden(unittest.TestCase):
         text = re.sub(r"\bm\d{8}-[0-9a-f]{4}\b", "<ID>", text)
         text = re.sub(r"\b\d{4}-\d{2}-\d{2}[T ]\d{2}:\d{2}(:\d{2})?([+-]\d{2}:\d{2}|Z)?", "<TS>", text)
         text = re.sub(r"\b\d{2}-\d{2} \d{2}:\d{2}\b", "<TS>", text)
+        text = re.sub(r"\b\d{8}-\d{6}-", "<STAMP>-", text)   # agenthub test's output files
         text = re.sub(r"\b[0-9a-f]{7,40}\b", "<SHA>", text)
         return text
 

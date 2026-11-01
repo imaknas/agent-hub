@@ -27,8 +27,9 @@ $ <HUB>/bin/merge-branch
 $ <HUB>/bin/merge-branch
 [exit 1]
 --- stdout
-✗ tests: `false` failed:
-
+✗ tests: `agenthub test --when merge` failed:
+✗ demo/full failed in 0.0s; complete output: <TMP>/ws/demo/.git/worktrees/wt/agent-hub/test-output/<STAMP>-demo-full.log
+$ false
 --- stderr
 
 $ <HUB>/bin/merge-branch
