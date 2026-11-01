@@ -1,0 +1,292 @@
+# The mailbox with more than one coding agent, and next to native session messaging (11-01, r3)
+
+This design answers two questions from the owner. Target: v0.2.0, except the Codex adapter, which comes in the next
+version.
+
+1. A user runs Claude Code and Codex side by side. What does the mailbox do for each?
+2. A user runs only Claude Code, which has its own way for sessions to message each other. Is the mailbox then a step
+   back?
+
+Status: design, nothing implemented.
+
+r2 followed two cold reviews: one against the code, one against the tools' documentation. r3 fixes a third review of
+r2: the messaging tokens move to the secrets directory, the hold covers only letters not yet delivered, and presence
+checks the start time and process as well as the pid. Bare session ids are pinned to one runtime. What r2 changed from
+r1:
+- A3 now works on its own.
+- Presence holds a letter back instead of only delaying it.
+- B1 uses Claude Code's documented inbox socket.
+- B2 (sessions nudging each other) is dropped.
+- A1 keeps today's session ids and routes resume calls per runtime.
+
+## Where things stand (checked against the code and the docs on 11-01)
+
+The platform has one coding agent, `runtime.default` in hub.json (default `claude`). Everything session-shaped goes
+through that runtime's ports in `bin/runtime_ports.py`:
+- `lifecycle`: the hooks that put letters into a session;
+- `instructions`: the rules file;
+- `sessions`: `alive`, `live_sessions`, `context_size`, `current_session`;
+- `transcripts`;
+- `agent`: headless runs and resuming a session in the background;
+- `control` / `confine`: what a sandboxed project's sessions load and how they are confined.
+
+The hook entry points (`hub-event`, `hubbus hook`) load the default runtime's `lifecycle` to parse events and inject
+text. Any agent that speaks MCP can also reach the mailbox through `agenthub mcp` (`docs/mcp.md`).
+
+Routing (`bin/hubbus` `dispatch`, every minute; constants in `hub.json` `mailbox`):
+
+- **A conversation** is a letter with a `to_session`.
+  1. While that session is live (in the default runtime's `live_sessions`), the dispatcher waits `CONVERSATION_WAIT_MIN`
+     (5 minutes, counted from the letter's timestamp) for the session's hook to deliver it.
+  2. Then it resumes the session in the background, if the context is at most `RESUME_MAX_TOKENS` and the project's
+     `DAILY_RUNS` aren't used up.
+  3. Otherwise the letter is handled as a delegation.
+  4. A reply is hidden from the project's other sessions for `REPLY_WAIT_MIN` (30 minutes) while it waits for the
+     session that asked.
+- **A delegation** is a request or question addressed to a project.
+  1. If a `presence` row for the project is fresh (within `CONVERSATION_WAIT_MIN`) and its session is in `live`, the
+     dispatcher waits, again for 5 minutes from the letter's timestamp.
+  2. Then, if a live session was active in the project within `FORK_RECENT_H` (24 hours), the letter is handled in a
+     background fork of that session.
+  3. Otherwise a headless agent handles it. That agent only writes notes and replies; it never changes code.
+- **"Seen" letters.** A letter a hook or an MCP `inbox` call delivered counts as seen. If no ack, reply or done follows
+  within `TAKE_TIMEOUT_MIN` (60 minutes), it is dispatched anyway.
+
+`presence` (session, project, cwd, seen) is written only by the Claude hook. `live` comes from the default runtime
+alone.
+
+### What a Codex session gets today (MCP only)
+
+| | Claude Code session | Codex session (MCP) |
+|---|---|---|
+| Platform rules | Managed block in `CLAUDE.local.md` | Only the MCP server's `instructions` at `initialize` (Codex reads them) |
+| Letters arrive | Pushed by hooks (📬) | Only when the agent calls `inbox` |
+| Replies to the asking session | Yes | No. MCP over stdio has no session id, so replies land in the project mailbox |
+| The platform sees it working | Yes (presence + `alive`) | No |
+| Memory-note nudge after a commit | Hook | None |
+| Memory gaps, weekly statistics | From Claude transcripts | Not counted |
+
+What happens: while the user works in Codex, the platform sees nobody in the project. After 5 minutes it handles a
+request in a background fork of the last Claude session, or with a headless agent. The handler only writes notes and
+replies, but the project's own agent and the platform then answer the same request separately, and the user's Codex
+session never learns of it.
+
+### Claude Code's native session messaging
+
+- **Sessions message each other on the same machine, and an idle receiver is woken.** "When the receiving session is
+  idle, Claude Code starts a new turn with the message" (code.claude.com/docs/en/cross-session-messaging).
+- **There is a documented way in from outside a session**: each session binds a per-session inbox socket, which the docs
+  describe for "a script or hook to post into a session". `CLAUDE_CODE_MESSAGING_SOCKET` and
+  `CLAUDE_CODE_MESSAGING_TOKEN` are set for hooks before any hook runs, SessionStart included. The auth line
+  (`{"type":"auth","token":…}`) is documented. The message payload format is not.
+- **A sender that isn't one of the session's own processes can be held for approval.** If the receiver is in a mode that
+  skips permission prompts, the message waits for a dialog in the terminal, or expires after 5 minutes under `-p`. It
+  goes straight in when the receiver prompts for permissions, or when `crossSessionInbound: accept` applies.
+- **A second documented wake**: an `asyncRewake` hook that exits with code 2 "wakes Claude immediately even when the
+  session is idle".
+- **Reading session state from outside**: `claude agents --json` gives the pid, session id, cwd and busy/waiting/idle
+  status of each session. The docs call it the supported way to do this.
+
+For a Claude-only user the mailbox is worse at exactly one thing: getting a letter into an open session *now*. A letter
+waits for that session's next hook, which comes with the user's next message or a tool run. An idle open session isn't
+woken. After 5 minutes the platform answers from a background copy, and the session the owner is looking at never sees
+it. Native messaging is a better transport. The mailbox is the record and the router: letters addressed to projects,
+durable on the bus, threads, done/drop, dispatch when nobody is there, owner questions only the owner side closes, the
+librarian applying letters at night, and any tool. The fix is for the mailbox to use the native transport (Part B), not
+to choose between them.
+
+## Principles
+
+- The platform guarantees delivery and dispatch. A tool's native feature is reinforcement: if it fails, letters still
+  arrive (later) and are still dispatched.
+- Tool syntax lives only in adapters. Codex specifics go in `runtime_codex.py`, Claude's in `runtime_claude.py`.
+- A missing capability is switched off explicitly with its reason (`Unsupported`, doctor's feature table).
+- Across projects, only letters. `bin/guard.py` keeps sessions from opening sessions in other projects. This design
+  doesn't loosen that: no session is asked to message another project's session.
+
+## Tiers: per-tool code only where it adds, never where it is needed
+
+The owner's concern (11-01): special cases per tool never end. So the design is tiered. Only the top tier is per-tool.
+
+| Tier | Which agents | Per-tool code | What they get |
+|---|---|---|---|
+| 0 | any agent that can run a shell command | none | `agenthub send/inbox/done` |
+| 1 | any MCP-capable agent (Codex, Cursor, Gemini CLI, Antigravity…) | none (MCP is the standard) | tier 0 + the platform's rules (MCP `instructions`) + presence that holds dispatch back (A3) |
+| 2 | tools worth a deep integration | one adapter per tool | letters pushed into the conversation, waking an idle session, replies to the asking session, transcript statistics |
+
+Agents the platform starts go through ACP (`runtime_acp.py`): any ACP agent, no per-tool code.
+
+At tier 1 no letter is lost, and dispatch is held back while the agent is working through agenthub's tools. Tier 2
+adds what tier 1 can't see: a session that is coding and never calls an agenthub tool. Through MCP the platform only
+hears an agent when it calls one of agenthub's tools, so it cannot tell such a session apart from no session. Only a
+hook can. Tier 2 also makes delivery faster.
+A new tool that speaks MCP is fully usable with no code written for it. Tier 2 exists because no cross-tool standard
+covers "push into a live conversation" or "is this conversation alive" yet. MCP and ACP stop at the session boundary,
+and every tool's hooks differ. That is the same gap as the ACP RFD on questions that outlive the session. If a standard
+fills it, tier 2 collapses into one generic adapter.
+
+## A3: MCP sessions hold dispatch back (tier 1; first, stands alone)
+
+1. **The MCP server records presence.** On `initialize` and on every tool call it writes a presence row:
+   - `runtime` = `mcp:<clientInfo.name>`. MCP requires `clientInfo` in `initialize`.
+   - session = `mcp:<server pid>:<start time>`. stdio MCP has no session id, so the server makes one up per process.
+   - cwd, and `seen` = now.
+
+   It does **not** write presence:
+   - under `HUB_LLM_POINT` or `HUBBUS_LEASE` (platform-started agents and leases, the same exemptions `mail_text` uses);
+   - when the project came only from `AGENTHUB_PROJECT` and the server's cwd is not inside that project. One global
+     server in an IDE must not pin a project forever.
+2. **An MCP presence row counts as live by itself**, without asking any runtime, when both hold:
+   - its server process is alive (the pid in the id, checked with `os.kill(pid, 0)`; the MCP server runs on the hub
+     machine);
+   - the process is still the same one: the start time in the id matches the process's start time, so a reused pid
+     doesn't count. A presence entry that came through a sandboxed project's outbox counts only if that pid is an
+     `agenthub mcp` process, checked from its command line;
+   - its `seen` is within `MCP_PRESENCE_MIN` (new, default 30 minutes) of an agenthub tool call. A presence written
+     only at `initialize` counts for `CONVERSATION_WAIT_MIN` (5 minutes), as a Claude session does. Only tool calls
+     extend it, not the open connection, so a session that doesn't use the mailbox stops counting quickly instead of
+     holding letters for half an hour with nobody told.
+
+   `active_sessions` and `recent_session` take these rows as live. That is the one change A3 makes to the dispatcher's
+   input.
+3. **Presence holds a delegation back, not just for 5 minutes.** A delegation **not yet delivered to any session** to
+   a project with a live MCP presence is held while that presence stays live, up to `MCP_HOLD_MAX_MIN` (new, default
+   120 minutes from the letter's timestamp). A letter that was already delivered (a hook or an `inbox` call) is under
+   the 60-minute seen rule (`take_state`, checked first in dispatch) and is never held again. The status page lists
+   held letters as "held: <project> in use", not as unclaimed (`STUCK_HOURS`).
+   Then it is dispatched as today. A Claude presence keeps today's 5 minutes: its hook delivers within them, and the
+   60-minute seen rule takes over. Holding is safe because the MCP session is told about the letter. The server puts
+   the count of open letters in `instructions`, and with A3 it also tells the agent at each agenthub tool call, through
+   the tool result: "📬 N letters, call inbox". A sandboxed project's server counts them from its view, as `unread()`
+   does. Once the agent calls `inbox`, the 60-minute seen rule applies as for any session.
+4. **A synthetic MCP id is never a session to resume or reply to.**
+   - If `current_session()` returns a real session id in the server's process (the server inherits its client's
+     environment, e.g. Claude Code's), that id is used and no synthetic id is made.
+   - An `mcp:` id is never written as `from_session` or `to_session`.
+   - `recent_session` skips `mcp:` rows, since there is nothing to fork.
+5. **Sandboxed projects.** Their MCP server reads a view, not the bus, so presence goes through the project's outbox as
+   a new `presence` operation. The platform's outbox reader checks that it names the outbox's own project, and checks
+   the pid as in 2.
+6. **Where it doesn't reach.** An MCP client on the remote machine (the laptop) runs its own `agenthub mcp`, whose
+   presence never reaches the hub's bus. Behaviour there stays as today, which is safe: nothing is held wrongly.
+
+Codex surfacing MCP server notifications (e.g. `notifications/resources/list_changed`) is not documented, so A3 doesn't
+rely on them. The tool-result notice in step 3 works with any client.
+
+## B1: waking a live session (tier 2; the transport for Claude-only users)
+
+A new optional port, `sessions.wake(sid, text) -> bool` (`Unsupported` by default). Dispatch uses it in two places:
+- **Conversation, session live**: when the letter is first seen.
+- **Delegation, project in use by a live session that has `wake`**: likewise.
+
+In both cases the letter is recorded on the bus as today, then `wake(sid, "📬 1 letter from <project>: <id>. Run
+agenthub inbox.")` is called **once per letter**, recorded as a `message.woken` event (`via: wake`). Then the usual
+wait applies. The session's own hook delivers the letter and claims it.
+
+- The letter itself never travels through `wake`. Only the notice does.
+- If `wake` fails, is held for approval, or is `Unsupported`, today's behaviour is unchanged.
+- The status page's mailbox section shows per letter: woken / hook / background copy / dispatched.
+
+**Claude implementation** (`runtime_claude.wake`):
+- The SessionStart hook runs with `CLAUDE_CODE_MESSAGING_SOCKET` and `CLAUDE_CODE_MESSAGING_TOKEN` set. Hooks run
+  outside the sandbox with the user's authority, so the hook can write platform state. It saves both to
+  `secrets_dir()/sessions/<sid>.json` (mode 600). The secrets directory is in every sandboxed session's `deny_read`.
+  Neither the bus nor `.state` will do: anyone holding a token can post into that session, sandboxed sessions read
+  bus views, and `.state` under the hub root is readable from inside the sandbox. The file is removed at SessionEnd,
+  and stale ones are pruned with the presence rows.
+  `sessions/` is excluded from the nightly backup: a token only works while its session runs, and there is no reason
+  to copy it to the cloud. check-secrets' undeclared-file scan skips the folder.
+- `wake` connects, sends the documented auth line, then the message.
+
+Before building, check:
+- the message payload format, which isn't documented (read the docs again; if there is still no format, ask Anthropic
+  or wait rather than reverse-engineer it);
+- what a receiver in a permission-skipping mode does. The notice may sit in an approval dialog. That is acceptable,
+  because `wake` is reinforcement, but doctor should say "wake may need approval in sessions that skip permission
+  prompts".
+
+The `asyncRewake` hook is the fallback if the socket can't be used. A background hook started at SessionStart polls the
+bus for this session's letters and exits 2 when one arrives. That costs a long-lived process per session, so it comes
+second.
+
+**Why B2 (r1) is dropped.** r1 let a sending session nudge the receiving project's session itself. Reviewers found that
+it gives other projects session ids and cwds, bypasses the outbox's sender checks for sandboxed projects, and loosens
+"across projects, only letters". With B1 the platform does the waking, so B2 is no longer needed. The rules text stays
+as it is.
+
+## A1: more than one runtime the user opens sessions with
+
+`runtime.default` stays as the agent the platform starts (headless dispatch, background resume, agent jobs, leases).
+The new `runtime.installed: [claude, codex, …]` (default `[runtime.default]`; it and `runtime.bare_ids` are added to
+`contracts/hub.v1.schema.json`)
+lists every agent the user opens sessions with.
+
+- **Session ids keep today's form.** A bare id means the runtime recorded once in hub.json as `runtime.bare_ids`
+  (written the first time A1 runs: the `runtime.default` of that moment, `claude` on every existing instance). It
+  doesn't follow later changes to `runtime.default`, so changing the default never reroutes old ids. Every other
+  runtime's ids are written `<runtime>:<id>`, and `mcp:` ids are A3's. Existing bus data, `leases.json` keys, delivered-event ids
+  (`{id}:delivered:{session}`) and presence keys need no migration. One helper, `runtime_of(sid)`, is used at every
+  comparison and call site.
+- **Hooks carry their runtime.** The installed hook command passes `--runtime <name>`. `hub-event` and `hubbus hook`
+  load that runtime's `lifecycle` for `parse_event` / `inject`, not the default's. `install_lifecycle` runs for each
+  installed runtime that has it.
+- **Calls about a session go to that session's runtime.** `context_size`, `resume_args` and `alive` are routed by
+  `runtime_of(sid)`.
+  - Background resume and forks only use sessions whose runtime has the `agent` port.
+  - Otherwise the conversation is handled as a delegation, and `recent_session` skips such sessions.
+  - `live` is the union over installed runtimes, plus A3's MCP rows.
+- **`current_session`**: the nearest ancestor process that belongs to a runtime decides, not the first runtime that
+  answers. Otherwise Codex started inside a Claude session would see the inherited `CLAUDE_CODE_SESSION_ID` and record
+  the wrong session.
+- **Rules files**: one managed block for each installed runtime that has a local rules file. A runtime with none, like
+  Codex (below), gets the rules through its SessionStart hook output or MCP `instructions`. Doctor says which.
+- **Sandboxed projects**: a runtime's hooks are installed only if that runtime has `control` and `confine`, so its hook
+  and config files are in the project's `control_paths` and its sessions are confined. A runtime without them is
+  refused in sandboxed projects with the reason (fail closed). Otherwise a sandboxed session could rewrite its own hooks.
+- **`presence` gets a `runtime` column**, and doctor's feature table gets one column per installed runtime.
+
+About 30 call sites use `runtime_ports.load()` / `default_name()`. Only the session-serving ones change: hooks, the
+sessions ports in dispatch, rules files, transcripts. Headless runs stay on the default runtime.
+
+## Codex adapter (tier 2 example; next version)
+
+Owner, 11-01: after open-sourcing, the agent-hub session writes this adapter's own design, has it cold-reviewed, then
+implements it, port by port, saying the rest is unsupported. What the reviews found so far, for that design:
+
+- **lifecycle**: Codex has hooks (SessionStart, UserPromptSubmit, PostToolUse, Stop and more). `additionalContext`
+  (and stdout for SessionStart/UserPromptSubmit) "is added as extra developer context". Project hooks live in
+  `<repo>/.codex/hooks.json` or `config.toml` and can be kept untracked through `.git/info/exclude`. They load only in a
+  trusted project, and trust is per hook hash, so changing a hook command means the user trusts it again.
+  sync-local-setup must keep the command stable.
+- **instructions**: `AGENTS.override.md` *replaces* `AGENTS.md` (one file per directory), so it can't hold the managed
+  block. Use SessionStart `additionalContext` instead, or MCP `instructions`.
+- **sessions**: hook input has `session_id`, `transcript_path` and `cwd`. `codex agents` has no machine-readable output.
+  The app-server's thread list is experimental.
+- **transcripts**: rollout JSONL under `~/.codex/sessions/`. The docs say the format "isn't a stable interface", and a
+  migration to SQLite thread history exists. Treat it as fragile and keep it optional.
+- **agent / resume**: `codex exec fork <id>` copies a saved session into a new one with no terminal UI, suitable for
+  background resume.
+- **wake**: `codex queue --thread <id> --message <text>` queues a message for an existing session. Whether it starts a
+  turn in an idle session is unknown. `wake_on_agent_messages` is under development.
+
+## Order of work (each step stands on its own)
+
+1. **A3**: MCP presence, holding dispatch back, the tool-result notice. Characterization tests on today's dispatch
+   first.
+2. **B1**: the `wake` port, its once-per-letter use in dispatch, the delivery column, doctor's row. The Claude socket
+   implementation follows if the payload format checks out; otherwise the port ships `Unsupported` with that reason.
+3. **A1**: `runtime.installed`, runtime-routed calls, hooks carrying their runtime, the presence column, doctor's
+   columns.
+4. **Codex adapter**: next version (above).
+
+v0.2.0: steps 1–3. If the release has to be tight, step 1 alone is the floor. It stops dispatch from colliding with
+MCP sessions that use the mailbox. A session that never calls an agenthub tool stays invisible until tier 2.
+
+## Open questions
+
+- `MCP_PRESENCE_MIN` (30) and `MCP_HOLD_MAX_MIN` (120): tune after a week of real use. The status page shows how often a
+  letter was held and then dispatched anyway.
+- With two live sessions of different runtimes in one project, a delegation waits for any of them. The first hook or
+  `inbox` that takes the letter claims it.
+- Should `runtime.default` become per project (a Codex-only project gets Codex dispatch)? Left out here. It changes who
+  the platform starts, not who it serves.
