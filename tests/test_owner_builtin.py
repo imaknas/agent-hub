@@ -126,6 +126,7 @@ class Notify(unittest.TestCase):
         import io
         with contextlib.redirect_stdout(io.StringIO()), mock.patch.object(owner, "SEEN", tmp / "seen.json"), \
              mock.patch.object(owner, "open_items", lambda only=None: list(items)), \
+             mock.patch.object(alert, "configured", lambda: ["ntfy"]), \
              mock.patch.object(alert, "send", lambda text: sent.append(text) or True), \
              mock.patch.object(alert, "clear_failure", lambda k: None), \
              mock.patch.object(alert, "record_failure", lambda k, t: failed.append(k)):
@@ -141,6 +142,27 @@ class Notify(unittest.TestCase):
             with mock.patch.object(alert, "send", lambda text: False):
                 self.assertEqual(owner.notify(), 1)
             self.assertEqual(failed, ["owner-notify"])
+
+    def test_no_channel_at_all(self):
+        """a newcomer without alerts set up"""
+        spec = importlib.util.spec_from_file_location("owner_t2", BIN / "owner.py")
+        owner = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(owner)
+        import alert
+        tmp = pathlib.Path(tempfile.mkdtemp())
+        failed = []
+        items = [{"kind": "task", "project": "p", "key": "k1", "text": "Do A"}]
+        import contextlib
+        import io
+        with contextlib.redirect_stdout(io.StringIO()), contextlib.redirect_stderr(io.StringIO()), \
+             mock.patch.object(owner, "SEEN", tmp / "seen.json"), \
+             mock.patch.object(owner, "open_items", lambda only=None: list(items)), \
+             mock.patch.object(alert, "configured", lambda: []), \
+             mock.patch.object(alert, "send", lambda text: False), \
+             mock.patch.object(alert, "clear_failure", lambda k: None), \
+             mock.patch.object(alert, "record_failure", lambda k, t: failed.append(k)):
+            self.assertEqual(owner.notify(), 1)
+        self.assertEqual(failed, ["owner-notify"])
 
 
 if __name__ == "__main__":

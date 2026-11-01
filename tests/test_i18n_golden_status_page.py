@@ -113,7 +113,9 @@ class StatusPage(unittest.TestCase):
             d.mkdir(parents=True, exist_ok=True)
         cfg = {"language": {"ui": golden_lang.LANG, "content": golden_lang.LANG}, "bus_dir": str(bus)}
         if o["alerts"]:
-            cfg["alerts"] = {"discord": {}}
+            cfg["alerts"] = o["alerts"] if isinstance(o["alerts"], dict) else {"discord": {}}
+        if o.get("backup_module", True):
+            cfg["modules"] = {"backup": True}
         (cfg_dir / "hub.json").write_text(json.dumps(cfg))
         if o["secrets"]:
             for f in ("discord-token", "discord-alert-channel"):
@@ -227,6 +229,16 @@ class StatusPage(unittest.TestCase):
             ("no alerts configured, no scheduler state", quiet_options(alerts=False, tick_age=None)),
             ("alerts set, no discord secrets", quiet_options(secrets=False)),
             ("all clear", quiet_options()),
+            # what `agenthub init` leaves on a machine with no service manager, no alerts and the backup module off,
+            # after check-secrets ran once
+            ("newcomer", quiet_options(sm=None, alerts=False, secrets=False, tick_age=None, backup_age=None,
+                                       verify_age=None, backup_module=False, failures={
+                                           "discord-probe": {"at": iso(-H), "text": "No alert channel is set"},
+                                           "secrets": {"at": iso(-H), "text": "No alert channel"}})),
+            ("newcomer whose scheduler cron runs", quiet_options(sm=None, alerts=False, secrets=False,
+                                                                 backup_module=False)),
+            ("an alert on ntfy could not be sent", quiet_options(alerts={"ntfy": {"topic": "t"}}, secrets=False, failures={
+                "secrets": {"at": iso(-H), "text": "HTTP 500"}})),
         ]
         for name, o in variants:
             pages = self.build(base / name.split(",")[0].replace(" ", "-"), o)

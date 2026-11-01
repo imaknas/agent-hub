@@ -109,3 +109,33 @@ sqlite3.DatabaseError: file is not a database</div>
 <h2 style="font-size:18px;margin-top:28px">Claude job reports</h2>
 <div class=sub>No reports yet</div>
 </main>
+=== newcomer
+<main>
+<h1>Schedule status</h1><div class=sub><a href="digest.html">Digest</a> · <a href="todo.html">To-do</a> · <a href="reflect/">Weekly review</a></div><div class=sub>the hub machine · generated 2026-10-30 10:00 · refreshes every 5 minutes · schedules are defined in the project registry (projects/) and schedule.yaml · config ccccccc</div>
+<div class='alert bad'>⚠️ The scheduler (local.agent-hub-scheduler) is not loaded: nothing scheduled runs. On the hub machine, run schedulectl start</div><div class='alert bad'>⚠️ This system has no supported service manager (neither macOS launchd nor the Linux systemd user level): the scheduler, the watchdog and projects&#x27; long-running services will not run by themselves.</div><div class='alert bad'>⚠️ A Discord alert could not be sent (discord-probe, 2026-10-30T09:00): No alert channel is set. Check that .secrets/discord-token still works; it is tried again next time</div><div class='alert bad'>⚠️ A Discord alert could not be sent (secrets, 2026-10-30T09:00): No alert channel. Check that .secrets/discord-token still works; it is tried again next time</div><div class='alert bad'>⚠️ No successful backup on record yet (.state/backup/last.json)</div><div class='alert bad'>⚠️ No successful restore test on record yet (.state/backup/last-verify.json)</div>
+<table><tr><th>Job</th><th>When</th><th>Last</th><th>Next</th></tr><tr class=''><td><b>alpha/daily</b></td><td>weekly on Mon, Wed, Fri at 08:00</td><td><span class='st ok'>succeeded</span> <span class=sub>10-30 08:00</span></td><td>today (waiting for the next tick, or out of retries)</td></tr></table>
+<h2 style="font-size:18px;margin-top:28px">Project mailboxes</h2><div class=sub>No open letters</div>
+<h2 style="font-size:18px;margin-top:28px">Parallel sessions (worktrees)</h2><div class=sub>No worktrees in progress</div>
+<h2 style="font-size:18px;margin-top:28px">Claude job reports</h2>
+<div class=sub>No reports yet</div>
+</main>
+=== newcomer whose scheduler cron runs
+<main>
+<h1>Schedule status</h1><div class=sub><a href="digest.html">Digest</a> · <a href="todo.html">To-do</a> · <a href="reflect/">Weekly review</a></div><div class=sub>the hub machine · generated 2026-10-30 10:00 · refreshes every 5 minutes · schedules are defined in the project registry (projects/) and schedule.yaml · config ccccccc</div>
+<div class='alert bad'>⚠️ The scheduler (local.agent-hub-scheduler) is not loaded: nothing scheduled runs. On the hub machine, run schedulectl start</div><div class='alert bad'>⚠️ This system has no supported service manager (neither macOS launchd nor the Linux systemd user level): the scheduler, the watchdog and projects&#x27; long-running services will not run by themselves.</div>
+<table><tr><th>Job</th><th>When</th><th>Last</th><th>Next</th></tr><tr class=''><td><b>alpha/daily</b></td><td>weekly on Mon, Wed, Fri at 08:00</td><td><span class='st ok'>succeeded</span> <span class=sub>10-30 08:00</span></td><td>Mon 11/02 08:00</td></tr></table>
+<h2 style="font-size:18px;margin-top:28px">Project mailboxes</h2><div class=sub>No open letters</div>
+<h2 style="font-size:18px;margin-top:28px">Parallel sessions (worktrees)</h2><div class=sub>No worktrees in progress</div>
+<h2 style="font-size:18px;margin-top:28px">Claude job reports</h2>
+<div class=sub>No reports yet</div>
+</main>
+=== an alert on ntfy could not be sent
+<main>
+<h1>Schedule status</h1><div class=sub><a href="digest.html">Digest</a> · <a href="todo.html">To-do</a> · <a href="reflect/">Weekly review</a></div><div class=sub>the hub machine · generated 2026-10-30 10:00 · refreshes every 5 minutes · schedules are defined in the project registry (projects/) and schedule.yaml · config ccccccc</div>
+<div class='alert bad'>⚠️ The scheduler watchdog has no Discord settings (.secrets/discord-token, .secrets/discord-alert-channel): it cannot alert when the scheduler stops</div><div class='alert bad'>⚠️ A Discord alert could not be sent (secrets, 2026-10-30T09:00): HTTP 500. Check that .secrets/discord-token still works; it is tried again next time</div>
+<table><tr><th>Job</th><th>When</th><th>Last</th><th>Next</th></tr><tr class=''><td><b>alpha/daily</b></td><td>weekly on Mon, Wed, Fri at 08:00</td><td><span class='st ok'>succeeded</span> <span class=sub>10-30 08:00</span></td><td>Mon 11/02 08:00</td></tr></table>
+<h2 style="font-size:18px;margin-top:28px">Project mailboxes</h2><div class=sub>No open letters</div>
+<h2 style="font-size:18px;margin-top:28px">Parallel sessions (worktrees)</h2><div class=sub>No worktrees in progress</div>
+<h2 style="font-size:18px;margin-top:28px">Claude job reports</h2>
+<div class=sub>No reports yet</div>
+</main>
