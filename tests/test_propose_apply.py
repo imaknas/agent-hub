@@ -93,7 +93,11 @@ class ProposeApply(unittest.TestCase):
                     "AGENT_HUB_STATE": str(t / "state"), "PROPOSE_TEST_TRIES": str(t / "tries.json"),
                     # bin/py under the fake HOME (git-sync-memory.sh asks project_git.py whose memory this is)
                     "AGENT_HUB_PYTHON": os.environ.get("AGENT_HUB_PYTHON", sys.executable),
-                    "GIT_AUTHOR_NAME": "t", "GIT_AUTHOR_EMAIL": "t@t", "GIT_COMMITTER_NAME": "t", "GIT_COMMITTER_EMAIL": "t@t"}
+                    "GIT_AUTHOR_NAME": "t", "GIT_AUTHOR_EMAIL": "t@t", "GIT_COMMITTER_NAME": "t", "GIT_COMMITTER_EMAIL": "t@t",
+                    # none of the machine's git config: Homebrew's git reads /opt/homebrew/etc/gitconfig, which
+                    # defines filter.lfs where git-lfs is installed, and then the `*.md filter=lfs` a test plants turns
+                    # an untouched README.md into a change (11-01, GitHub's macOS runner)
+                    "GIT_CONFIG_NOSYSTEM": "1", "GIT_CONFIG_GLOBAL": os.devnull}
 
     def run_(self, script, *args, stdin=""):
         return subprocess.run([sys.executable, str(BIN / script), *args], input=stdin, env=self.env, cwd=self.tmp,
