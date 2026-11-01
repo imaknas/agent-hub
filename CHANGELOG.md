@@ -3,6 +3,35 @@
 What changed in each version, generated from the commit messages (git cliff) when it is tagged; only new features,
 fixes, speed-ups and reverts are listed.
 
+## v0.2.0 (2026-11-01)
+
+### New
+
+- **agenthub:** Upgrade to a release in one command
+- **mailbox:** An MCP agent's presence holds back dispatch
+- **agenthub:** Without a model, init leaves the LLM-only modules off
+- **mailbox:** A wake port that nudges a live session once per letter
+- **runtime:** Runtime.installed, session ids per runtime, and calls routed by runtime_of
+
+### Fixed
+
+- **agenthub:** Init acts only on arguments it knows; core services only from the main checkout
+- **jobs:** Connectors jobs no longer die on macOS's bash before running
+- **jobs:** Connectors jobs deny every MCP server they don't use
+- **jobs:** A connectors job's deny also covers MCP resources
+- **registry:** A connectors job needs an allow: list
+- **no-llm:** A judgment point with no model is switched off once, with the reason
+- **status:** Features that are off or not set up no longer turn the status page red
+- **reflect:** The weekly report counts hours in the owner's time zone, and runs without system tzdata
+- **reflect:** The no-transcripts notice goes to stderr, so the wrapper commits the json it wrote
+- **schedule:** Without a service manager a job runs by hand, and the hints are absolute and per OS
+- **todo:** Todo.md points at openclaw-migration-status.md only where that file exists
+- **services:** The memory-sync service takes its default label, without the author's machine name
+- **onboard:** Onboarding says only what it set up, and AGENT.md stops naming Claude Code's files
+- **agenthub:** Init commits the config repo, and says when git has no identity
+- **agenthub:** Doctor and init say plainly what runtime none and an uninstalled scheduler mean
+- **agenthub:** Without a service manager, init and doctor give the absolute scheduler command
+
 ## v0.1.0 (2026-11-01)
 
 ### New
@@ -161,3 +190,4 @@ git dir; githooks/pre-commit, post-commit and commit-msg are gone.)
 - **test-gate:** Skip a tree that already passed; run slow modules test by test
 - **tests:** Tiers keep a cache folder; the Landlock plan tests walk their own folder
 - **tests:** Agent-hub's full tier keeps run-tests' durations in its tier cache
+
