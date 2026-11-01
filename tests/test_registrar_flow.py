@@ -4,7 +4,7 @@ its own memory repo, bus and hub.json; never touches real data.
 The scenario table was locked in against the old task registration (v1 task / done --inferred letters, removed on
 11-01) before bin/registrar.py replaced it (0.3 record events on the bus: hubbus record-publish / records); pa-pd are
 what both did, the rest what only the registrar does (the old one's bugs in pe and pg: the spec's order, relink before
-reconcile, fixes both). v1's letters still on the bus count (registrar.py's v1_compat): pj, pk.
+reconcile, fixes both). Only records count: v1's letters are not read (tests/test_registrar_v1_migration.py).
 
   pa  owner line without a key                    → raised / task sent, line end stamped
   pb  line with a key + closed (done)             → that line deleted, an empty section gets the empty marker, closure
@@ -16,10 +16,6 @@ reconcile, fixes both). v1's letters still on the bus count (registrar.py's v1_c
   pf  line with a key whose text changed          → amended
   pg  line that lost its key, same text as before → the original key restored, no new raised
   ph  need already withdrawn, line deleted too    → no claim
-  pj  an item v1 already sent an inferred         → no claim on the night of the switch
-      closure for (done-<key>)
-  pk  an item sent through v1 before a rename     → recognised, not raised again
-      (pk-old), line still there
   pi  an amended item that lost its key           → the original key restored per the amended text, not a new item
                                                     (when the text was never changed the recomputed key is the same
                                                     anyway, so only an amended text shows whether the key gets
@@ -106,10 +102,6 @@ SCENES = {
     "pf": {"state": state(owner("Book flights, aisle seat") + marker(KF)), "posted": {KF: "Book flights"}},
     "pg": {"state": state(owner("Pay the tax")), "posted": {KG: "Pay the tax"}},
     "ph": {"state": state(agent("Something else")), "posted": {KH: "Reply to the landlord"}, "withdrawn": [KH]},
-    "pj": {"state": state(agent("Something else")), "posted": {key("pj", "Send a registered letter"): "Send a registered letter"},
-           "v1_claimed": [key("pj", "Send a registered letter")]},
-    "pk": {"state": state(owner("Send the parcel") + marker(key("pk-old", "Send the parcel"))),
-           "v1_posted_as": ("pk-old", "Send the parcel")},
     "pi": {"state": state(owner("Book the hotel, breakfast included")), "posted": {KI: "Book the hotel"},
            "amended": {KI: "Book the hotel, breakfast included"}},
     "pl": {"state": state(), "raised_by_project": {"lease-x-1-task-0": "measure the desk"}},
@@ -142,7 +134,6 @@ class Env:
         for d in ("projects", ".state", ".logs", "data"):
             (self.hub / d).mkdir()
         (self.hub / "data" / "openclaw-migration-status.md").write_text(f"# status\n\n{ZH['todo_heading']}\n\n{ZH['todo_none']}\n")
-        (self.hub / ".state" / "project-renames.json").write_text(json.dumps({"pk-old": {"new": "pk", "stage": "done"}}))
         (self.hub / "hub.json").write_text(json.dumps({
             "v": 1, "registry_dir": "projects", "memory_copies": str(tmp / "copies"), "git_origin": str(tmp / "bare"),
             "bus_dir": str(tmp / "bus"),
@@ -199,20 +190,6 @@ class Env:
         for k in s.get("withdrawn", []):
             recs.append(self.rec(p, f"w:{k}", "withdrawn", "requester", f"project:{p}", k, reason="not_needed",
                                  supersedes=[f"r:{k}"], ts="2026-10-21T10:00:00Z"))
-        if s.get("v1_posted_as"):   # a v1 task sent under the old name before the rename
-            old, text = s["v1_posted_as"]
-            c = sqlite3.connect(self.db)
-            c.execute("INSERT INTO events(id, ts, type, source, to_project, ref, payload) VALUES(?,?,?,?,?,?,?)",
-                      (key(old, text), "2026-10-20T10:00:00+08:00", "message", old, OWNER, None,
-                       json.dumps({"v": 1, "type": "task", "text": text}, ensure_ascii=False)))
-            c.commit(); c.close()
-        if s.get("v1_claimed"):   # an inferred closure the old registrar sent in v1
-            c = sqlite3.connect(self.db)
-            for k in s["v1_claimed"]:
-                c.execute("INSERT INTO events(id, ts, type, source, to_project, ref, payload) VALUES(?,?,?,?,?,?,?)",
-                          (f"done-{k}", "2026-10-22T10:00:00+08:00", "message", p, OWNER, None,
-                           json.dumps({"v": 1, "type": "done", "task": k, "inferred": True, "text": "inferred"})))
-            c.commit(); c.close()
         if recs:
             r = self.hubbus("record-publish", "--json", "-", stdin=json.dumps(recs, ensure_ascii=False))
             assert r.returncode == 0, r.stdout + r.stderr
@@ -282,8 +259,6 @@ class RegistrarFlow(unittest.TestCase):
             self.assertEqual(env.outputs("ph"), [])
             self.assertIn(marker(KI), env.state("pi"))
             self.assertEqual(env.outputs("pi"), [])
-            self.assertEqual(env.outputs("pj"), [], "an inferred closure v1 already sent is not sent again")
-            self.assertEqual(env.outputs("pk"), [], "one sent before the rename is recognised")
             self.assertEqual(env.outputs("pl"), [], "an item raised outside the document is never claimed done")
             self.assertEqual(env.state("pn").count(KN), 1, "the line outside the to-do section is kept")
             self.assertIn("## Notes\n\n- [ ] [owner] pay rent", env.state("pn"))

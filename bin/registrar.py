@@ -6,8 +6,7 @@ The document is read and written by bin/acts_md.py (the Acts Markdown binding): 
 file (contracts/state-todo.v2.md, bin/todo_tokens.py); what the registrar writes (a key stamp, a re-added line, the
 empty marker, a missing section's heading) is in the set of the content language, and it touches no other line.
 
-**Bound keys** (spec §2): the keys this registrar raised from lines (its `raised` on the bus, or a v1 task letter, which
-records no sender role). **Known keys** (spec §2 step 3): items a project raised itself (agenthub send --type task, a
+**Bound keys** (spec §2): the keys this registrar raised from lines (its `raised` on the bus). **Known keys** (spec §2 step 3): items a project raised itself (agenthub send --type task, a
 lease handover), never bound. Their need records go out on the bus under the project like the registrar's, and their
 settlements come back to the project, so the registrar holds them all (the deployment's duty in spec §2). Steps 1-5
 leave them alone except striking a line whose text is the item's latest terms after a settlement of theirs; a line
@@ -41,19 +40,11 @@ For each project (the STATE.md of its memory copy, plus the platform's own openc
 
 Records: reads acts 0.3, 0.4 and 0.5, sends the version hub.json principal_handoff.send_version names (bin/ph_wire.py).
 
-Transition (v1 not yet retired): task letters v1 sent on the bus and the personal assistant's v1 handoffs count too
-(v1_compat); those keys existed before there were records. When v1 is retired, delete v1_compat along with it.
-
-migrate-v1 (once, before v1_compat goes): gives each open item that exists only as a v1 task letter a need record under
-the key it already has, so that the registrar holds it without v1_compat. An item whose key a line of STATE.md holds
-gets `raised` (id r:<key>, terms_rev 1, context migration-v1) with that line's text; one whose key is only elsewhere in
-the file (displaced) gets the v1 letter's text. An item whose line was edited since its letter gets, with `--edited
-amended`, the letter's text raised and the line's text amended (a:<key>:2) instead. Items no line mentions are not
-migrated: v1 already sent their inferred closure, or (never seen yet) they are listed to be decided by hand. The ids are
-stable and an item that has a need record is skipped, so a rerun sends nothing new. STATE.md is never written.
+Only records count: v1's task letters and handoffs are not read. The items that existed only as v1 task letters were
+given need records under their keys once, by `registrar.py migrate-v1` (context migration-v1; removed with v1, in git
+history; docs/design/principal-handoff-0.3-migration.md).
 
 Usage: registrar.py [--dry-run]
-       registrar.py migrate-v1 (--dry-run | --apply) [--edited raised|amended]
 """
 from __future__ import annotations
 
@@ -62,7 +53,6 @@ import hashlib
 import json
 import pathlib
 import shlex
-import sqlite3
 import subprocess
 import sys
 
@@ -84,7 +74,6 @@ WARNED = hubconf.STATE / "registrar-warned.json"   # keys already warned about (
 REVIEW_LOG = hubconf.data_file("review-log.md")
 TAG = hubconf.owner_tag()
 REGISTRAR = hubconf.party("registrar")
-OWNERS = sorted(hubconf.owner_addresses())
 READ = acts_md.profiles(TAG)   # both token sets
 REASON = todo_tokens.patterns(TAG).reason   # the review-log's reason line, either set
 DRY = "--dry-run" in sys.argv
@@ -154,7 +143,6 @@ class Ledger:
                 (self.need if rec["type"] in ph_records.NEED else self.settle).setdefault(key, []).append(rec)
                 if rec["type"] == "raised":
                     self.raised_by.setdefault(key, rec.get("by"))
-        self.v1_posted, self.v1_closed, self.v1_pending, self.v1_claimed = v1_compat(project)
 
     def latest_need(self, key: str) -> dict | None:
         """the need record with the latest terms (the highest terms_rev)"""
@@ -164,15 +152,15 @@ class Ledger:
         """(latest terms text, latest terms_rev, current requirement record id)."""
         latest, cur = self.latest_need(key), current(self.need.get(key, []))
         if latest is None:
-            return self.v1_posted.get(key), 1 if key in self.v1_posted else 0, None
+            return None, 0, None
         return latest["terms"]["text"], latest["terms_rev"], cur["id"] if cur else None
 
     def known(self) -> set[str]:
-        return set(self.need) | set(self.v1_posted)
+        return set(self.need)
 
     def settled(self, key: str) -> bool:
         cur = current(self.settle.get(key, []))
-        return (cur is not None and cur["type"] == "settled") or (cur is None and key in self.v1_closed)
+        return cur is not None and cur["type"] == "settled"
 
     def withdrawn(self, key: str) -> bool:
         cur = current(self.need.get(key, []))
@@ -185,7 +173,7 @@ class Ledger:
         return sorted(k for k in self.known() if not self.settled(k) and not self.withdrawn(k))
 
     def bound(self, key: str) -> bool:
-        """Raised from a line of the file: by this registrar, or a v1 task letter (no record of who)."""
+        """Raised from a line of the file by this registrar (an item whose raised is not held counts as its own)."""
         return self.raised_by.get(key, REGISTRAR) == REGISTRAR
 
     def bound_keys(self) -> set[str]:
@@ -204,38 +192,6 @@ class Ledger:
             return None
         need = self.latest_need(key)
         return {"text": text, "terms_rev": rev, **({"terms_digest": ph_wire.terms_digest(need)} if need else {})}
-
-
-def v1_compat(project: str) -> tuple[dict, set, list, set]:
-    """Transition: tasks v1 sent (key -> text), keys for which v1 received a closing handoff, v1 keyed handoffs not yet
-    applied, and keys for which v1 already sent an inferred closure (id done-<key>) -- so the night v2 takes over does
-    not send them again under new ids. Delete when v1 is retired."""
-    db = hubconf.bus_db()
-    if not db.exists():
-        return {}, set(), [], set()
-    # v1 letters sent before a rename count too (e.g. idea-1 -> garden-app)
-    names = [project, *hubconf.former_names(project)]
-    marks, pm = ",".join("?" * len(OWNERS)), ",".join("?" * len(names))
-    c = sqlite3.connect(db, timeout=30)
-    posted = {r[0]: json.loads(r[1]).get("text", "") for r in c.execute(
-        f"SELECT id, payload FROM events WHERE type='message' AND to_project IN ({marks}) AND source IN ({pm})"
-        " AND id LIKE 'task-%'", (*OWNERS, *names))}
-    closed = set()
-    for (pl,) in c.execute(f"SELECT payload FROM events WHERE type='message' AND source IN ({marks})"
-                           f" AND to_project IN ({pm}) AND payload LIKE '%reply_to%'", (*OWNERS, *names)):
-        h = json.loads(pl).get("handoff") or {}
-        if h.get("effect") in ("done", "dropped", "already_done") and h.get("reply_to"):
-            closed.add(h["reply_to"])
-    claimed = {r[0][len("done-"):] for r in c.execute(
-        f"SELECT id FROM events WHERE type='message' AND to_project IN ({marks}) AND source IN ({pm})"
-        " AND id LIKE 'done-task-%'", (*OWNERS, *names))}
-    r = hubbus("open-handoffs")
-    try:
-        pending = [h for h in json.loads(r.stdout or "[]") if h.get("project") in names and h.get("reply_to")
-                   and h.get("effect") in ("done", "dropped", "already_done", "reopened")]
-    except ValueError:
-        pending = []
-    return posted, closed, pending, claimed
 
 
 def publish(recs: list[dict]) -> dict[str, str]:
@@ -332,18 +288,13 @@ def run_project(project: str, path: pathlib.Path, how: str, warned: set[str]) ->
                 if key in bound:
                     log(_("{project}: {key} was settled, but its line was changed since; not struck, the change is "
                           "sent as an amendment", project=project, key=key))
-                    if not led.withdrawn(key) and len(holding) == 1 and key in led.need:
+                    if not led.withdrawn(key) and len(holding) == 1:
                         amends.append((key, holding.pop()))
                 else:
                     log(_("{project}: {key} was settled, but the line carrying it asks something else; not struck "
                           "(the item was raised outside STATE.md)", project=project, key=key))
         log(_("{project}: applied {type} {key}", project=project, type=cur["type"], key=key))
     applied += [e["id"] for e in led.pending]
-    for h in led.v1_pending:
-        rec = {"origin": "principal", "key": h["reply_to"], "type": "reopened" if h["effect"] == "reopened" else
-               "settled", "restore_text": h.get("item") or _c("(a reopened task)")}
-        text, _changed = acts_md.apply(text, rec, READ, W)   # v1 handoffs carry no terms_rev to compare
-        applied.append(h["id"])
     # 2. relink
     text, relinked = acts_md.relink(text, active, READ, W, bound, known)
     for k in relinked:
@@ -371,8 +322,7 @@ def run_project(project: str, path: pathlib.Path, how: str, warned: set[str]) ->
             ok = False
     text = doc.text() if fresh else text
     # 4. amend
-    # a v1 key with no record on the bus has no need record an amendment could supersede (core §6): left as it is
-    found = acts_md.amend(text, {k: t for k, t in active.items() if k in led.need}, READ)
+    found = acts_md.amend(text, active, READ)
     for k in found["warn"]:
         log(_("{project}: {key} is on owner lines with different texts (was the key copied?); no amendment sent",
               project=project, key=k))
@@ -385,7 +335,7 @@ def run_project(project: str, path: pathlib.Path, how: str, warned: set[str]) ->
         ok &= r.get(amends_rec["id"]) in ("accepted", "duplicate", "dry-run")
     # 5. reconcile
     claims, notes = [], []
-    found = acts_md.reconcile(text, {k: t for k, t in active.items() if k not in led.v1_claimed}, READ, bound)
+    found = acts_md.reconcile(text, active, READ, bound)
     # warned once per stretch: a key leaves the list when it no longer looks rewritten (found again, settled, or the
     # similar line gone too, which then gets its claim)
     still = {x["key"] for x in found if x["action"] == "warn"}
@@ -438,74 +388,6 @@ def run_project(project: str, path: pathlib.Path, how: str, warned: set[str]) ->
     return ok, sent
 
 
-MIGRATION = "migration-v1"   # the context of what migrate-v1 sends
-EDITED = ("raised", "amended")   # migrate-v1 --edited: how an item whose line was edited since its v1 letter goes out
-
-
-def migration(project: str, text: str, led: Ledger, edited: str = "raised") -> tuple[list[tuple], list[tuple]]:
-    """migrate-v1 for one project: ([(key, its records, "edited" | "displaced" | "")], [(key, why it is not migrated)]).
-    Only open items with no need record on the bus are looked at."""
-    doc, items, skipped = acts_md.Doc(text, READ), [], []
-    seen = doc.mentioned()
-    for key in sorted(k for k in led.v1_posted if k not in led.need and k in led.open()):
-        v1 = norm(led.v1_posted[key])
-        if doc.unclosed is not None:
-            skipped.append((key, _("STATE.md has an unclosed code fence or comment")))
-            continue
-        texts = {norm(e.text) for e in doc.holding(key)}
-        if len(texts) > 1:
-            skipped.append((key, _("the owner lines carrying it have different texts")))
-            continue
-        if not texts and key not in seen:
-            skipped.append((key, _("no line mentions it; v1 already sent its inferred closure") if key in led.v1_claimed
-                            else _("no line mentions it and v1 sent no closure: decide by hand")))
-            continue
-        line = texts.pop() if texts else v1   # displaced: its line is no owner line, the letter's text stands
-        how = "displaced" if not doc.holding(key) else "edited" if line != v1 else ""
-        ctx = {"context": MIGRATION}
-        if how == "edited" and edited == "amended":
-            recs = [record(project, "raised", key, f"r:{key}", terms={"text": v1}, terms_rev=1, **ctx),
-                    record(project, "amended", key, f"a:{key}:2", terms={"text": line}, terms_rev=2,
-                           supersedes=[f"r:{key}"], **ctx)]
-        else:
-            recs = [record(project, "raised", key, f"r:{key}", terms={"text": line}, terms_rev=1, **ctx)]
-        items.append((key, recs, how))
-    return items, skipped
-
-
-def migrate_v1(args: list[str]) -> int:
-    """registrar.py migrate-v1 (--dry-run | --apply) [--edited raised|amended]"""
-    import argparse
-    ap = argparse.ArgumentParser(prog="registrar.py migrate-v1")
-    mode = ap.add_mutually_exclusive_group(required=True)
-    mode.add_argument("--dry-run", action="store_true")
-    mode.add_argument("--apply", action="store_true")
-    ap.add_argument("--edited", choices=EDITED, default="raised")
-    a = ap.parse_args(args)
-    log(_("migrate-v1 ({mode}), bus {bus}", mode="dry-run" if a.dry_run else "apply", bus=hubconf.BUS_DIR / "bus.db"))
-    total = failed = 0
-    for project, path, _how in targets():
-        led = Ledger(project)
-        items, skipped = migration(project, path.read_text(), led, a.edited)
-        for key, why in skipped:
-            log(_("{project}: {key} not migrated: {why}", project=project, key=key, why=why))
-        why = {"edited": _(" (the line was edited since the v1 letter)"),
-               "displaced": _(" (its key is on no owner line: the v1 letter's text)"), "": ""}
-        for _key, recs, how in items:
-            for r in recs:
-                log(_("{project}: {type} {key}{why}: {text}", project=project, type=r["type"], key=r["key"],
-                      why=why[how], text=r["terms"]["text"][:120]))
-        recs = [r for _key, rs, _how in items for r in rs]
-        res ={r["id"]: "dry-run" for r in recs} if a.dry_run else publish(recs)
-        total += sum(1 for r in recs if res.get(r["id"]) in ("accepted", "dry-run"))
-        failed += sum(1 for r in recs if res.get(r["id"]) not in ("accepted", "duplicate", "dry-run"))
-    if a.dry_run:
-        log(_("migrate-v1: {n} {n:record|records} would be sent", n=total))
-    else:
-        log(_("migrate-v1: {n} {n:record|records} sent, {failed} failed", n=total, failed=failed))
-    return 1 if failed else 0
-
-
 def main() -> int:
     try:
         warned = set(json.loads(WARNED.read_text()))
@@ -523,4 +405,4 @@ def main() -> int:
 
 
 if __name__ == "__main__":
-    sys.exit(migrate_v1(sys.argv[2:]) if sys.argv[1:2] == ["migrate-v1"] else main())
+    sys.exit(main())

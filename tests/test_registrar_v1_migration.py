@@ -1,29 +1,26 @@
-"""Owner to-dos that exist only as v1 task letters (sent before there were records; no need record on the bus): what
-the registrar does with them, and `registrar.py migrate-v1`, which gives each a need record under the key it already
-has. Runs the whole script, with its own memory repos, bus and hub.json (test_registrar_flow's Env); never touches
-real data.
+"""Owner to-dos that existed only as v1 task letters, after v1's retirement: `registrar.py migrate-v1` (removed with v1;
+see docs/design/principal-handoff-0.3-migration.md) gave each one whose key a line mentions a need record under that
+key (context migration-v1). With those records, the registrar does what it did while it still read the v1 letters,
+and sends nothing for the migrated items; the letters themselves are no longer read. Runs the whole script, with its
+own memory repos, bus and hub.json (test_registrar_flow's Env); never touches real data.
 
-  ma  a v1 letter, its line unchanged                 → nothing sent, the line kept         | raised, the line's text
-  mb  a v1 letter, its line edited since              → nothing sent (no need record an     | raised, the line's text
-                                                        amendment could supersede)           (--edited amended: raised
-                                                                                             with the letter's text +
-                                                                                             amended with the line's)
-  mc  a v1 letter sent before a rename (mc-old), the  → nothing sent, the line kept         | raised under mc, the key
-      line still carrying that key                                                            kept
-  md  a v1 letter, its key on a line relabelled tbd   → a note (displaced), no claim        | raised, the letter's text
-  me  a v1 letter, no line, v1 already sent its        → nothing sent                        | not migrated
-      inferred closure (done-<key>)
-  mf  a v1 letter, no line, no closure                 → claimed done                        | not migrated (by hand)
-  mg  a v1 letter that already has a need record       → nothing sent                        | skipped
-                                                        (left: the registrar now; right: migrate-v1)
-After the migration the registrar sends what it sent before it, and nothing for the migrated items.
+  ma  its line unchanged                               → migrated: raised, the line's text  → nothing sent
+  mb  its line edited since the letter                 → migrated: raised, the line's text  → nothing sent
+                                                         (or the letter's text raised + the line's amended)
+  mc  the letter sent before a rename (mc-old), the    → migrated: raised under mc, the     → nothing sent
+      line still carrying that key                       key kept
+  md  its key on a line relabelled tbd                 → migrated: raised, the letter's     → a note (displaced),
+                                                         text                                 no claim
+  me  no line, v1 already sent its inferred closure    → not migrated                       → nothing sent
+  mf  no line, no closure                              → not migrated (decided by hand)     → nothing sent (v1_compat
+                                                                                              claimed it done)
+  mg  already had a need record                        → skipped                            → nothing sent
 
     bin/py -m unittest tests.test_registrar_v1_migration
 """
 import json
 import pathlib
 import sqlite3
-import subprocess
 import sys
 import tempfile
 import unittest
@@ -56,21 +53,22 @@ LETTERS = [("ma", KA, "Renew the passport"), ("mb", KB, "Book the venue"), ("mc-
            ("md", KD, "Pick a printer"), ("me", KE, "Sign the lease"), ("mf", KF, "Return the router"),
            ("mg", KG, "Order the frames")]
 CLAIMED_V1 = [("me", KE)]
-# what each project sends on the first night (and nothing new on the nights after)
-FIRST = {"ma": [], "mb": [], "mc": [], "md": [("note", KD)], "me": [], "mf": [("claim", KF)], "mg": []}
-# what migrate-v1 sends: project -> [(type, key, terms text)]
+# what migrate-v1 sent: project -> [(type, key, terms text)]
 MIGRATED = {"ma": [("raised", KA, "Renew the passport")], "mb": [("raised", KB, "Book the venue for 40 people")],
             "mc": [("raised", KC, "Ship the samples")], "md": [("raised", KD, "Pick a printer")]}
+AMENDED = {**MIGRATED, "mb": [("raised", KB, "Book the venue"), ("amended", KB, "Book the venue for 40 people")]}
+# what the registrar sends after the migration, each night (what it sent with v1_compat, but for mf)
+AFTER = {"ma": [], "mb": [], "mc": [], "md": [("note", KD)], "me": [], "mf": [], "mg": []}
 
 
-def v1_letters(env: Env, letters=LETTERS, claimed=CLAIMED_V1) -> None:
+def v1_letters(env: Env) -> None:
     """the v1 task letters (id = key) and v1's inferred closures (done-<key>), as v1 put them on the bus"""
     c = sqlite3.connect(env.db)
-    for p, k, text in letters:
+    for p, k, text in LETTERS:
         c.execute("INSERT INTO events(id, ts, type, source, to_project, ref, payload) VALUES(?,?,?,?,?,?,?)",
                   (k, "2026-10-22T03:14:20+08:00", "message", p, OWNER, None,
                    json.dumps({"v": 1, "type": "task", "text": text, "context": "migration"}, ensure_ascii=False)))
-    for p, k in claimed:
+    for p, k in CLAIMED_V1:
         c.execute("INSERT INTO events(id, ts, type, source, to_project, ref, payload) VALUES(?,?,?,?,?,?,?)",
                   (f"done-{k}", "2026-10-24T10:00:00+08:00", "message", p, OWNER, None,
                    json.dumps({"v": 1, "type": "done", "task": k, "inferred": True, "text": "inferred"})))
@@ -78,105 +76,58 @@ def v1_letters(env: Env, letters=LETTERS, claimed=CLAIMED_V1) -> None:
     c.close()
 
 
-def make(d: str) -> Env:
+def migrated(env: Env, sent: dict) -> None:
+    """the records migrate-v1 sent (ids r:<key> / a:<key>:2, context migration-v1, in 0.5)"""
+    recs = []
+    for p, items in sent.items():
+        for type_, k, text in items:
+            rec = {"ph": "0.5", "ext": "acts/0.5", "id": f"r:{k}" if type_ == "raised" else f"a:{k}:2", "type": type_,
+                   "origin": "requester", "by": REGISTRAR, "key": k, "project": p, "ts": "2026-11-02T03:00:00Z",
+                   "terms": {"text": text}, "terms_rev": 1 if type_ == "raised" else 2, "context": "migration-v1"}
+            recs.append(rec if type_ == "raised" else {**rec, "supersedes": [f"r:{k}"]})
+    r = env.hubbus("record-publish", "--json", "-", stdin=json.dumps(recs, ensure_ascii=False))
+    assert r.returncode == 0, r.stdout + r.stderr
+
+
+def make(d: str, sent: dict | None) -> Env:
     env = Env(pathlib.Path(d), SCENES)
     (env.hub / ".state" / "project-renames.json").write_text(json.dumps({"mc-old": {"new": "mc", "stage": "done"}}))
-    cfg = json.loads((env.hub / "hub.json").read_text())
-    (env.hub / "hub.json").write_text(json.dumps({**cfg, "principal_handoff": {"send_version": "0.5"}}))
     v1_letters(env)
+    if sent is not None:
+        migrated(env, sent)
     return env
 
 
-def sent(env: Env, p: str) -> list[dict]:
-    """every record this project sent, oldest first"""
-    return [e["record"] for e in json.loads(env.hubbus("records", "--project", p, "--direction", "out").stdout or "[]")]
-
-
-def migrate(env: Env, *args: str) -> subprocess.CompletedProcess:
-    return subprocess.run([str(env.hub / "bin" / "py"), str(env.hub / "bin" / "registrar.py"), "migrate-v1", *args],
-                          cwd=env.hub, env={**env.env, "AGENT_HUB_LANG_UI": "en"}, capture_output=True, text=True,
-                          timeout=300)
-
-
-class V1OnlyItems(unittest.TestCase):
-    def test_what_the_registrar_does_with_them(self):
+class AfterTheMigration(unittest.TestCase):
+    def nights(self, sent: dict):
         with tempfile.TemporaryDirectory() as d:
-            env = make(d)
-            for night in (1, 2):
-                r = env.run()
-                self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
-                self.assertEqual({p: env.outputs(p) for p in SCENES}, FIRST, f"night {night}")
-                for p, s in SCENES.items():
-                    self.assertEqual(env.state(p), s["state"], f"{p}, night {night}: STATE.md untouched")
-
-
-class MigrateV1(unittest.TestCase):
-    def test_needs_dry_run_or_apply(self):
-        with tempfile.TemporaryDirectory() as d:
-            env = make(d)
-            self.assertNotEqual(migrate(env).returncode, 0)
-            self.assertNotEqual(migrate(env, "--dry-run", "--apply").returncode, 0)
-
-    def test_dry_run_sends_nothing(self):
-        with tempfile.TemporaryDirectory() as d:
-            env = make(d)
-            before = {p: sent(env, p) for p in SCENES}
-            r = migrate(env, "--dry-run")
-            self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
-            self.assertEqual({p: sent(env, p) for p in SCENES}, before)
-            out = r.stdout
-            self.assertIn(f"mb: raised {KB} (the line was edited since the v1 letter): Book the venue for 40 people", out)
-            self.assertIn(f"mc: raised {KC}: Ship the samples", out)
-            self.assertIn(f"md: raised {KD} (its key is on no owner line: the v1 letter's text): Pick a printer", out)
-            self.assertIn(f"me: {KE} not migrated: no line mentions it; v1 already sent its inferred closure", out)
-            self.assertIn(f"mf: {KF} not migrated: no line mentions it and v1 sent no closure: decide by hand", out)
-            self.assertNotIn(KG, out, "an item with a need record is not looked at")
-            self.assertIn("migrate-v1: 4 records would be sent", out)
-
-    def check_migrated(self, env, want):
-        for p in SCENES:
-            got = [(r["type"], r["key"], r["terms"]["text"]) for r in sent(env, p) if r.get("context") == "migration-v1"]
-            self.assertEqual(got, want.get(p, []), p)
-            for r in sent(env, p):
-                if r.get("context") == "migration-v1":
-                    self.assertEqual((r["ph"], r["ext"], r["by"], r["origin"], r["project"]),
-                                     ("0.5", "acts/0.5", REGISTRAR, "requester", p))
-
-    def test_apply_once_then_the_registrar(self):
-        with tempfile.TemporaryDirectory() as d:
-            env = make(d)
-            r = migrate(env, "--apply")
-            self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
-            self.assertIn("migrate-v1: 4 records sent, 0 failed", r.stdout)
-            self.check_migrated(env, MIGRATED)
-            ids = {p: [x["id"] for x in sent(env, p)] for p in SCENES}
-            self.assertEqual(ids["ma"], [f"r:{KA}"])
-            r = migrate(env, "--apply")   # a rerun: nothing new
-            self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
-            self.assertIn("migrate-v1: 0 records sent, 0 failed", r.stdout)
-            self.assertEqual({p: [x["id"] for x in sent(env, p)] for p in SCENES}, ids)
+            env = make(d, sent)
             before = {p: env.outputs(p) for p in SCENES}
             for night in (1, 2):
                 r = env.run()
                 self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
                 after = {p: sorted(set(env.outputs(p)) - set(before[p])) for p in SCENES}
-                self.assertEqual(after, FIRST, f"night {night}: what it sent before the migration, nothing more")
+                self.assertEqual(after, AFTER, f"night {night}")
                 for p, s in SCENES.items():
                     self.assertEqual(env.state(p), s["state"], f"{p}, night {night}: STATE.md untouched")
 
-    def test_edited_amended(self):
+    def test_raised(self):
+        self.nights(MIGRATED)
+
+    def test_edited_as_amended(self):
+        self.nights(AMENDED)
+
+    def test_letters_alone_count_for_nothing(self):
+        """without the migration the lines are raised again: the reason migrate-v1 ran before the removal"""
         with tempfile.TemporaryDirectory() as d:
-            env = make(d)
-            r = migrate(env, "--apply", "--edited", "amended")
-            self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
-            self.check_migrated(env, {**MIGRATED, "mb": [("raised", KB, "Book the venue"),
-                                                         ("amended", KB, "Book the venue for 40 people")]})
-            amended = [x for x in sent(env, "mb") if x["type"] == "amended"]
-            self.assertEqual([(x["id"], x["terms_rev"], x["supersedes"]) for x in amended], [(f"a:{KB}:2", 2, [f"r:{KB}"])])
-            before = {p: env.outputs(p) for p in SCENES}
+            env = make(d, None)
             r = env.run()
             self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
-            self.assertEqual({p: sorted(set(env.outputs(p)) - set(before[p])) for p in SCENES}, FIRST)
+            self.assertEqual(env.outputs("ma"), [("raised", KA)], "the same text: the letter's key, raised anew")
+            kb = key("mb", "Book the venue for 40 people")
+            self.assertEqual(env.outputs("mb"), [("raised", kb)], "an edited line: a new key")
+            self.assertIn(marker(kb), env.state("mb"))
+            self.assertEqual(env.outputs("mf"), [])
 
 
 if __name__ == "__main__":

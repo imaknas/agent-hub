@@ -339,3 +339,11 @@ held by its need record, and its settlement comes back as a record. `raised` wit
 
 Order: merge the command, run `migrate-v1 --dry-run`, then `--apply` (the owner), and only then merge the removal of
 `v1_compat`.
+
+**v1_compat removed.** It went after `migrate-v1 --apply`, and `migrate-v1` went with it: the command only reads v1
+letters and has run, and git history keeps it. The registrar now reads only records. A v1 letter on the bus, task or
+handoff, means nothing to it, and the `done-<key>` closures v1 sent no longer hide a key. With the removal applied, a
+simulation ran on a scratch copy of the live bus with the migration's records added: the registrar's dry run sent no
+`raised`, `amended` or `claimed` for the migrated items, and printed what main printed on the live bus.
+`tests/test_registrar_v1_migration.py` holds the cases (unchanged line, edited line, a former name's key, displaced,
+none on a line).

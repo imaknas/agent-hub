@@ -10,7 +10,6 @@
  "registrar updated the STATE.md to-dos by key": "registrar 照 key 更新了 STATE.md 的待辦",
  "registrar: STATE.md was already in this state": "registrar:STATE.md 已經是這個狀態",
  "sent {sent} {sent:record|records}; {failed} {failed:project|projects} had failures": "送出 {sent} 筆 record、{failed} 個專案有失敗",
- "(a reopened task)": "(重開的任務)",
  "Inferred done by the librarian: the item is no longer among STATE.md's to-dos. ": "librarian 推斷已完成:STATE.md 的待辦裡已經沒有這一件。",
  "The run that deleted it: {why}": "刪掉的那次({why})",
  "The review-log does not record which run deleted it": "review-log 沒有記錄是哪一次刪掉的",
@@ -24,16 +23,5 @@
  "Inferred done by the librarian: the to-do's box in STATE.md was ticked.": "librarian 推斷已完成:STATE.md 裡這件待辦被打勾了。",
  "{project}: record {id} ignored: not a valid Principal Handoff record": "{project}: 略過 record {id}:不是有效的 Principal Handoff record",
  "{project}: {key} was settled, but the line carrying it asks something else; not struck (the item was raised outside STATE.md)": "{project}: {key} 已經結案,但帶著它的那一行寫的是別的事;不刪(這件不是從 STATE.md 登錄的)",
- "{project}: warning — line {line} carries {key}, a to-do the project raised itself (its key was copied onto the line); not raised. Delete the line, or delete the key so that the line is raised and replace the old to-do with it": "{project}: 警告——第 {line} 行帶著 {key},那是專案自己登錄的待辦(key 被複製到這一行);不登錄。請刪掉這一行,或拿掉 key 讓這一行登錄成新的待辦、再用它取代舊的",
- "STATE.md has an unclosed code fence or comment": "STATE.md 有沒關上的 code fence 或註解",
- "the owner lines carrying it have different texts": "帶著它的幾行 owner 待辦文字不一樣",
- "no line mentions it; v1 already sent its inferred closure": "沒有任何一行提到它;v1 已經送過推斷的結案",
- "no line mentions it and v1 sent no closure: decide by hand": "沒有任何一行提到它,v1 也沒送過結案:要人決定",
- "migrate-v1 ({mode}), bus {bus}": "migrate-v1({mode}),bus {bus}",
- "{project}: {key} not migrated: {why}": "{project}: {key} 不遷移:{why}",
- "{project}: {type} {key}{why}: {text}": "{project}: {type} {key}{why}:{text}",
- " (its key is on no owner line: the v1 letter's text)": "(key 不在 owner 的待辦行上:用 v1 信的文字)",
- " (the line was edited since the v1 letter)": "(v1 的信寄出後那一行改過)",
- "migrate-v1: {n} {n:record|records} would be sent": "migrate-v1:會送 {n} 筆 record",
- "migrate-v1: {n} {n:record|records} sent, {failed} failed": "migrate-v1:送出 {n} 筆 record、{failed} 筆失敗"
+ "{project}: warning — line {line} carries {key}, a to-do the project raised itself (its key was copied onto the line); not raised. Delete the line, or delete the key so that the line is raised and replace the old to-do with it": "{project}: 警告——第 {line} 行帶著 {key},那是專案自己登錄的待辦(key 被複製到這一行);不登錄。請刪掉這一行,或拿掉 key 讓這一行登錄成新的待辦、再用它取代舊的"
 }
