@@ -3,6 +3,29 @@
 What changed in each version, generated from the commit messages (git cliff) when it is tagged; only new features,
 fixes, speed-ups and reverts are listed.
 
+## v0.5.0 (2026-11-01)
+
+### New
+
+- **uninstall:** Agenthub uninstall takes agent-hub off a machine
+- **wake:** An idle Claude Code session is woken for a letter by an asyncRewake waiter
+- **connect:** A first summary the day a project is connected
+- **sessions:** A forked Claude session counts as live from its hooks' record
+- **test-runner:** A run log of every tier result, hits and callers included
+- **test-waiting:** The waiting report, nightly and on the status page
+- **librarian:** Switch each part to its completion version, shadow the to-do format fix
+
+### Fixed
+
+- **wake:** A claude -p run never arms the waiter, told from its own arguments
+- **schedulectl:** Run without a service manager closes the job's output pipe
+- **ph_records:** A 0.4 record is validated by 0.4's rules, not as its 0.5 form
+- **render-settings:** A platform update to its own hooks is not reported as drift
+- **init:** An answered question isn't listed again, and the agent steps say what a test run found
+- **sessions:** Agent-hub's own sessions record their process too
+- **mailbox:** Mailbox handlers and allow: clock jobs load only the platform's settings
+- **mailbox:** A confined handler can withdraw its own question, and an Edit rule brings Write
+
 ## v0.4.0 (2026-11-01)
 
 ### New
