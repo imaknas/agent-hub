@@ -4,7 +4,7 @@
 # open), the memory/ notes written that day stay in the project's local .agent-memory, where the librarian (which reads
 # the bare repos) can't see them.
 #
-# Runs on the hub machine (local.sync-all-memory-mini), hourly via launchd: the manifest's paths
+# Runs on the hub machine (local.agent-hub.sync-all-memory), hourly via launchd: the manifest's paths
 # (~/workspace/<name>).
 # (The old copy on the laptop, local.sync-all-memory, was removed on 10-29: after every project moved to the hub
 # machine on 10-15 it had nothing to do.)

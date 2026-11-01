@@ -31,7 +31,8 @@ class LabelRename(unittest.TestCase):
         m = load()
         doc = yaml.safe_load((ROOT / "projects" / "agent-hub.yaml").read_text())
         svc = next(s for s in doc["services"] if s["name"] == "sync-all-memory")
-        self.assertEqual(m.label_of("agent-hub", svc), OLD)
+        self.assertEqual(m.label_of("agent-hub", svc), "local.agent-hub.sync-all-memory",
+                         "the default label: no machine name in it")
 
     def test_a_renamed_label_replaces_the_old_one(self):
         m = load()

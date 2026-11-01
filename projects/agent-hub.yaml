@@ -174,7 +174,6 @@ services:
   log: .logs/status-page.log
 # hourly catch-up commit + push of every project's .agent-memory (the safety net for the SessionEnd hook)
 - name: sync-all-memory
-  label: local.sync-all-memory-mini
   cwd: hub
   run: bin/sync-all-memory.sh
   interval_s: 3600

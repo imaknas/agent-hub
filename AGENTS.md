@@ -298,7 +298,7 @@ agent-hub is meant for anyone, with any coding agent, any LLM, any key.
   told about them on its next run for that project (`bin/state_anchors.py`, design in `docs/design/state-anchors.md`;
   zero LLM cost)
 - `bin/sync-all-memory.sh`: hourly, re-runs `git-sync-memory.sh` + the push for every project's `.agent-memory` (the
-  safety net for the hooks; service `local.sync-all-memory-mini`)
+  safety net for the hooks; service `local.agent-hub.sync-all-memory`)
 
 ## Path conventions on the hub machine
 
