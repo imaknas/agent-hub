@@ -52,13 +52,27 @@ def add_worktree(project: str, repo: pathlib.Path, path: pathlib.Path) -> str:
     return r.stdout.decode(errors="replace").strip()
 
 
-def changed(project: str, repo: pathlib.Path, base: str) -> list[tuple[str, bool]]:
+def checkout_sigs(project: str, repo: pathlib.Path, base: str) -> dict:
+    """What the checkout wrote where it is not the blob byte for byte (the project's own filters or line endings),
+    taken before the agent starts: changed() compares those files with this instead of the blob."""
+    try:
+        sigs = project_git.data(project, repo, "checkout-sigs", repo, base, timeout=project_git.BUNDLE_TIMEOUT_S)
+    except project_git.Unavailable as e:
+        raise RuntimeError(str(e)) from None
+    if not isinstance(sigs, dict):
+        raise RuntimeError(f"{project}: checkout-sigs is not a JSON object")
+    return sigs
+
+
+def changed(project: str, repo: pathlib.Path, base: str, sigs: dict) -> list[tuple[str, bool]]:
     """(path relative to the repo, whether it still exists) -- files changed, added (untracked included) or deleted
     since commit `base`, committed or not: a hook of the agent's own runtime may commit inside the worktree (a user-level
-    session-end hook syncing memory notes did, 10-31), and what it committed is still the agent's change. Listed by the
-    project's job (the worktree shares the project's .git config)."""
+    session-end hook syncing memory notes did, 10-31), and what it committed is still the agent's change. Decided by
+    the files' bytes against the base tree (and `sigs`), never through attributes or filters, which the agent and the
+    machine can set (project-git-job.py); listed by the project's job."""
     try:
-        rows = project_git.data(project, repo, "changed", repo, base)
+        rows = project_git.data(project, repo, "changed", repo, base, input=json.dumps(sigs),
+                                timeout=project_git.BUNDLE_TIMEOUT_S)
     except project_git.Unavailable as e:
         raise RuntimeError(str(e)) from None
     return [(p, e is True) for p, e in (x for x in rows if isinstance(x, list) and len(x) == 2) if isinstance(p, str)] \
@@ -75,7 +89,7 @@ def run(project: str, ws: pathlib.Path, point: str, prompt: str, allow: list[str
     closes); the mailbox caller then holds the letters and asks the owner (hold_and_ask)."""
     tmp = pathlib.Path(tempfile.mkdtemp(prefix=f"hub-propose-{project}-"))
     wt, mem = tmp / "ws", ws / ".agent-memory"
-    added, bases = [], {}
+    added, bases, sigs = [], {}, {}
     def failed(why: str) -> dict:
         return {"ok": False, "output": None, "text": None, "applied": [], "refused": [], "error": why}
     try:
@@ -85,6 +99,8 @@ def run(project: str, ws: pathlib.Path, point: str, prompt: str, allow: list[str
             if (mem / ".git").exists():
                 bases[wt / ".agent-memory"] = add_worktree(project, mem, wt / ".agent-memory")
                 added.append((mem, wt / ".agent-memory"))
+            for repo, base in bases.items():   # before the agent touches anything
+                sigs[repo] = checkout_sigs(project, repo, base)
         except RuntimeError as e:
             return failed(_("could not make the throwaway copy: {e}", e=e))
         # the agent itself may not send letters or close them (hubbus honours this variable and the parent process; the
@@ -110,7 +126,7 @@ def run(project: str, ws: pathlib.Path, point: str, prompt: str, allow: list[str
         for repo, prefix in ((wt, ""), *([(wt / ".agent-memory", ".agent-memory/")] if len(added) > 1 else [])):
             take = []
             try:
-                listed = changed(project, repo, bases[repo])
+                listed = changed(project, repo, bases[repo], sigs[repo])
             except RuntimeError as e:
                 return failed(_("could not read the agent's changes: {e}", e=e))
             for path, _exists in listed:

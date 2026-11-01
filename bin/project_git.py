@@ -129,8 +129,9 @@ def run(project: str | None, cwd, argv: list[str], input: str | bytes | None = N
     return Result(why[0] if why else rc, b"".join(got), why[1] if why else err.decode(errors="replace"))
 
 
-def data(project: str | None, cwd, op: str, *args):
-    r = job(project, cwd, op, *args)
+def data(project: str | None, cwd, op: str, *args, **kw):
+    """One op's JSON (run's keywords: input, timeout…); Unavailable when it failed or printed something else."""
+    r = job(project, cwd, op, *args, **kw)
     if r.returncode == EX_SANDBOX:
         raise Unavailable(f"{project}: the sandbox refused ({r.stderr.strip()[-200:]})")
     if r.returncode != 0:

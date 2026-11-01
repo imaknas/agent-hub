@@ -11,6 +11,7 @@ import datetime
 import json
 import os
 import pathlib
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -229,6 +230,40 @@ class ProposeApply(unittest.TestCase):
         self.assertEqual(out["applied"], [])
         self.assertFalse((self.ws / ".agent-memory" / "memory" / ".gitignore").exists())
 
+    def test_an_attribute_the_agent_plants_reports_no_untouched_file(self):
+        """a machine with git-lfs (GitHub's macOS runner, many dev Macs) defines filter.lfs; the `*.md filter=lfs` an
+        agent plants then makes git report untouched *.md files as changed (11-01), and copy-back would write the
+        worktree's copy over the real checkout's. Configured here at repo level, as a project's own .git/config can:
+        still, only the note the agent wrote is applied, and no file whose bytes it left as they were is listed at all.
+        The agent rewrites those files with the same bytes, so git looks at their content whatever the clock says (a
+        file git saw written in the same instant as its index it rehashes anyway; one written earlier it would not)"""
+        for repo in (self.ws, self.ws / ".agent-memory"):   # an lfs-style filter: clean turns the content into a pointer
+            sh("git", "config", "filter.lfs.clean", "sed 's/^/pointer /'", cwd=repo)
+            sh("git", "config", "filter.lfs.smudge", "cat", cwd=repo)
+            sh("git", "config", "filter.lfs.required", "true", cwd=repo)
+        edit = self.ws / ".agent-memory" / "memory" / "README.md"   # the owner's session is writing it meanwhile
+        edit.write_text("notes\n- not committed yet\n")
+        (self.tmp / "agent.py").write_text(
+            "import json, pathlib, re, sys\nprompt = open(sys.argv[1]).read()\n"
+            "mid = re.search(r'- id ([^\\s,]+),', prompt).group(1)\n"
+            "day = re.search(r'memory/(\\d{4}-\\d{2}-\\d{2})\\.md', prompt).group(1)\n"
+            "for d in ('.', '.agent-memory', '.agent-memory/memory'):\n"
+            "    open(f'{d}/.gitattributes', 'w').write('*.md filter=lfs\\n')\n"
+            "for f in ('README.md', '.agent-memory/STATE.md', '.agent-memory/memory/README.md'):\n"
+            "    pathlib.Path(f).write_bytes(pathlib.Path(f).read_bytes())\n"
+            "pathlib.Path(f'.agent-memory/memory/{day}.md').write_text('- a note\\n')\n"
+            "print(json.dumps({'replies': [], 'done': [{'id': mid}], 'ask_owner': [], 'summary': mid}))\n")
+        r = self.run_("hubbus", "send", "--from", "agent-hub", "--to", "demo", "--type", "question", "--text", "hm")
+        mid = r.stdout.strip().split()[-1]
+        r = self.run_("propose_apply.py", "mailbox", "demo", mid)
+        self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
+        out = json.loads(r.stdout.strip().splitlines()[-1])
+        self.assertEqual(out["applied"], [f".agent-memory/memory/{datetime.date.today().isoformat()}.md"], out)
+        self.assertEqual(sorted(out["refused"]), [".agent-memory/.gitattributes", ".agent-memory/memory/.gitattributes",
+                                                  ".gitattributes"], out)
+        self.assertEqual(edit.read_text(), "notes\n- not committed yet\n", "a file the agent did not change is not "
+                         "written over")
+
     def test_failed_agent_changes_nothing(self):
         (self.tmp / "agent.py").write_text("import sys\nopen('README.md','w').write('x')\n"
                                            "open('.agent-memory/memory/2000-01-01.md','w').write('- half done')\n"
@@ -242,6 +277,67 @@ class ProposeApply(unittest.TestCase):
         self.assertFalse((self.ws / ".agent-memory" / "memory" / "2000-01-01.md").exists(),
                          "even an allowed path is not applied from a failed run (the letter is held and the owner asked)")
         self.assertEqual((self.ws / "README.md").read_text(), "the original README\n")
+
+
+class ChangeListing(unittest.TestCase):
+    """project-git-job.py checkout-sigs / changed on their own: bytes decide, whatever git's attributes say"""
+
+    def job(self, op, *args, stdin=None):
+        r = subprocess.run([sys.executable, str(BIN / "project-git-job.py"), op, *map(str, args)], input=stdin,
+                           capture_output=True, text=True, env=self.env)
+        self.assertEqual(r.returncode, 0, r.stderr)
+        return json.loads(r.stdout)
+
+    def setUp(self):
+        t = self.tmp = pathlib.Path(tempfile.mkdtemp()).resolve()
+        self.addCleanup(shutil.rmtree, t, ignore_errors=True)
+        self.env = {**os.environ, "GIT_CONFIG_NOSYSTEM": "1", "GIT_CONFIG_GLOBAL": os.devnull,
+                    "GIT_AUTHOR_NAME": "t", "GIT_AUTHOR_EMAIL": "t@t", "GIT_COMMITTER_NAME": "t",
+                    "GIT_COMMITTER_EMAIL": "t@t"}
+        repo = self.repo = t / "repo"
+        repo.mkdir()
+        g = lambda *a: subprocess.run(["git", *a], cwd=repo, check=True, capture_output=True, env=self.env)  # noqa: E731
+        g("init", "-q", "-b", "main")
+        # the project's own filter and line endings: its checkout is not the blob byte for byte
+        g("config", "filter.mark.smudge", "sed 's/^/smudged /'")
+        g("config", "filter.mark.clean", "sed 's/^smudged //'")
+        (repo / ".gitattributes").write_text("*.mark filter=mark\n*.crlf text eol=crlf\n")
+        (repo / "a.mark").write_text("one\n")
+        (repo / "b.crlf").write_text("two\n")
+        (repo / "plain.txt").write_text("three\n")
+        (repo / "run.sh").write_text("echo\n")
+        (repo / "run.sh").chmod(0o755)
+        (repo / "link").symlink_to("plain.txt")
+        g("add", "-A")
+        g("commit", "-qm", "init")
+        self.base = subprocess.run(["git", "rev-parse", "HEAD"], cwd=repo, capture_output=True, text=True,
+                                   check=True).stdout.strip()
+        self.wt = t / "wt"
+        g("worktree", "add", "-q", "--detach", str(self.wt), "HEAD")
+
+    def changed(self, sigs):
+        return [p for p, _ in self.job("changed", self.wt, self.base, stdin=json.dumps(sigs))]
+
+    def test_untouched_is_unchanged_and_every_kind_of_change_is_listed(self):
+        sigs = self.job("checkout-sigs", self.wt, self.base)
+        self.assertEqual(sorted(sigs), ["a.mark", "b.crlf"], "what the checkout converted is recorded")
+        self.assertEqual(self.changed(sigs), [])
+        for name in ("a.mark", "b.crlf", "plain.txt"):   # rewritten, same bytes
+            (self.wt / name).write_bytes((self.wt / name).read_bytes())
+        (self.wt / ".gitattributes").write_text("* -text -filter\n*.txt filter=mark\n")   # the agent's
+        self.assertEqual(self.changed(sigs), [".gitattributes"])
+        (self.wt / "a.mark").write_text("smudged one, edited\n")
+        (self.wt / "run.sh").chmod(0o644)
+        (self.wt / "link").unlink()
+        (self.wt / "link").symlink_to("a.mark")
+        (self.wt / "plain.txt").unlink()
+        (self.wt / "new.md").write_text("x\n")
+        self.assertEqual(self.changed(sigs), [".gitattributes", "a.mark", "link", "new.md", "plain.txt", "run.sh"])
+
+    def test_stdin_that_is_not_the_snapshot_fails(self):
+        r = subprocess.run([sys.executable, str(BIN / "project-git-job.py"), "changed", self.wt, self.base],
+                           input="[]", capture_output=True, text=True, env=self.env)
+        self.assertNotEqual(r.returncode, 0)
 
 
 if __name__ == "__main__":

@@ -22,7 +22,10 @@ readable. Nothing here decides anything for the platform; the caller treats the 
   remove-dep <worktree> <dep> <marker> <line>
                                           delete a dependency folder (never through a symlink) and append <line> to
                                           <marker> in the worktree's git dir
-  changed <repo> <base>                   JSON [[path, exists]]: changed since <base>, committed or not, untracked too
+  checkout-sigs <repo> <base>             JSON {path: signature}: the files of <base> the checkout did not write as the
+                                          blob byte for byte (taken before the agent starts; usually empty)
+  changed <repo> <base>                   stdin: checkout-sigs' JSON; JSON [[path, exists]]: changed since <base> by
+                                          their bytes, committed or not, untracked too
   copy-back <src> <dst> <rel>…            copy each rel from src to dst (deleted in dst when gone from src); a symlink
                                           in src is refused, not followed; JSON {copied, refused}
   hooks <repo> <hook>…                    JSON {hooks_path, hooks: {name: text, "-> target" for a symlink, or null}}
@@ -45,10 +48,12 @@ readable. Nothing here decides anything for the platform; the caller treats the 
 """
 from __future__ import annotations
 
+import hashlib
 import json
 import os
 import pathlib
 import shutil
+import stat
 import subprocess
 import sys
 import time
@@ -143,9 +148,89 @@ def op_remove_dep(wt: str, dep: str, marker: str, line: str) -> int:
     return 0
 
 
+# What the agent changed in a throwaway worktree is decided by the files' bytes, never by git's view of them: git
+# status and diff run the clean filters and line-ending conversions that attributes name, and a `.gitattributes` the
+# agent writes (`*.md filter=lfs` on a machine whose git config defines filter.lfs, as git-lfs installs do) turns
+# files it never touched into changes, which copy-back would then write over the real checkout's (an uncommitted edit
+# lost). So each file is hashed as it is (a git blob id of its raw bytes, a link's target for a symlink, plus the
+# executable bit) and compared with the base tree's entry (`ls-tree`, which reads objects only); where the checkout
+# itself wrote other bytes than the blob (a project's own filter or line endings), checkout-sigs records what it
+# wrote before the agent starts, and that is the reference instead. Plain git plumbing every supported git has.
+
+def _z(r) -> list[str]:
+    return [os.fsdecode(x) for x in r.stdout.split(b"\0") if x]
+
+
+def _tree(repo: str, base: str) -> tuple[dict[str, str], set[str]]:
+    """(path → the signature the checkout of <base> should have written, the submodules' paths, left out)"""
+    sigs, gitlinks = {}, set()
+    for entry in _z(git(repo, "ls-tree", "-r", "-z", "--full-tree", base, check=True, text=False)):
+        meta, _, path = entry.partition("\t")
+        mode, kind, oid = meta.split(" ")
+        if kind == "blob":
+            sigs[path] = f"l:{oid}" if mode == "120000" else f"f:{oid}:{'x' if mode == '100755' else '-'}"
+        else:
+            gitlinks.add(path)
+    return sigs, gitlinks
+
+
+def _sig(root: str, rel: str, algo: str) -> str | None:
+    """the file as it is: f:<blob id>:<x|->, l:<blob id of the link's target>, other (a folder, a FIFO…), or None when
+    missing or under a folder that is a symlink (then it is not the file git checked out)."""
+    p = pathlib.Path(root)
+    for part in pathlib.PurePath(rel).parts[:-1]:
+        p = p / part
+        if p.is_symlink() or not p.is_dir():
+            return None
+    p = p / pathlib.PurePath(rel).name
+    try:
+        st = os.lstat(p)
+    except OSError:
+        return None
+    h = hashlib.new(algo)
+    if stat.S_ISLNK(st.st_mode):
+        target = os.readlink(os.fsencode(p))
+        h.update(b"blob %d\0" % len(target) + target)
+        return f"l:{h.hexdigest()}"
+    if not stat.S_ISREG(st.st_mode):
+        return "other"
+    with open(p, "rb") as fh:
+        h.update(b"blob %d\0" % os.fstat(fh.fileno()).st_size)
+        while chunk := fh.read(1 << 20):
+            h.update(chunk)
+    return f"f:{h.hexdigest()}:{'x' if st.st_mode & 0o100 else '-'}"
+
+
+def _algo(tree: dict[str, str]) -> str:
+    oid = next(iter(tree.values()), "f:" + "0" * 40).split(":")[1]
+    return "sha256" if len(oid) == 64 else "sha1"
+
+
+def op_checkout_sigs(repo: str, base: str) -> int:
+    """JSON {path: signature} for the files of <base> whose checkout in <repo> is not the blob byte for byte (null when
+    missing); run right after the worktree is made, before anyone works in it. Usually empty."""
+    tree = _tree(repo, base)[0]
+    algo = _algo(tree)
+    return emit({p: s for p, want in tree.items() if (s := _sig(repo, p, algo)) != want})
+
+
 def op_changed(repo: str, base: str) -> int:
-    paths = set(out(repo, "diff", "--name-only", "--no-renames", base, "--").splitlines())
-    paths |= {line[3:].strip().strip('"') for line in out(repo, "status", "--porcelain", "-uall", "--no-renames").splitlines()}
+    """stdin: checkout-sigs' JSON for this worktree. The paths of <base> whose bytes (or link, or executable bit) are no
+    longer what the checkout wrote, and the files that are not in <base> (tracked since, or untracked and not ignored).
+    A git that fails here fails the op: an empty list would read as "the agent changed nothing"."""
+    try:
+        wrote = json.loads(sys.stdin.read())
+    except ValueError:
+        wrote = None
+    if not isinstance(wrote, dict):
+        sys.stderr.write("changed: stdin is not checkout-sigs' JSON\n")
+        return 1
+    tree, gitlinks = _tree(repo, base)
+    algo = _algo(tree)
+    paths = {p for p, want in tree.items() if _sig(repo, p, algo) != wrote.get(p, want)}
+    for listing in (("ls-files", "-z"), ("ls-files", "-z", "--others", "--exclude-standard")):
+        paths |= {p for p in _z(git(repo, *listing, check=True, text=False))
+                  if p not in tree and p not in gitlinks}
     return emit([[p, os.path.lexists(pathlib.Path(repo) / p)] for p in sorted(paths) if p])
 
 
@@ -331,8 +416,8 @@ def op_set_origin(ws: str, url: str, branch: str) -> int:
 
 OPS = {"worktrees": op_worktrees, "ignored": op_ignored, "worktree-add": op_worktree_add,
        "worktree-remove": op_worktree_remove, "branch-delete": op_branch_delete, "remove-dep": op_remove_dep,
-       "changed": op_changed, "copy-back": op_copy_back, "hooks": op_hooks, "hook-write": op_hook_write,
-       "hook-remove": op_hook_remove, "bundle-unpushed": op_bundle_unpushed, "diff-head": op_diff_head,
+       "checkout-sigs": op_checkout_sigs, "changed": op_changed, "copy-back": op_copy_back, "hooks": op_hooks,
+       "hook-write": op_hook_write, "hook-remove": op_hook_remove, "bundle-unpushed": op_bundle_unpushed, "diff-head": op_diff_head,
        "memory-sync": op_memory_sync, "exclude": op_exclude, "save": op_save, "head": op_head,
        "bundle-head": op_bundle_head, "set-origin": op_set_origin}
 
