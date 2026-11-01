@@ -107,6 +107,70 @@ class MixedVersions(unittest.TestCase):
         valid, ignored = ph_records.received([NEED, bad], CFG)
         self.assertEqual(([r["id"] for r in valid], ignored), (["r:k"], [bad]))
 
+    def test_a_record_with_no_rfc_8785_form_is_invalid(self):
+        """core §4: records are I-JSON; one with an unpaired surrogate is ignored, not an exception"""
+        bad = rec(id="r:k", type="raised", terms={"text": "Pay \ud800"}, terms_rev=1)
+        self.assertEqual(ph_records.received([bad], CFG), ([], [bad]))
+
+
+def signed(**kw) -> dict:
+    """a valid 0.4 settlement of NEED"""
+    return settled(terms_digest=ph_wire.terms_digest(NEED, "0.4"), **kw)
+
+
+class Prevailing(unittest.TestCase):
+    """core §10 for the bus, which stores every content it was sent: one record per identity, the greater RFC 8785
+    form of the valid ones, whatever the order"""
+
+    def take(self, records: list[dict]) -> list[dict]:
+        return [records[i] for i in ph_records.prevailing(records, CFG)]
+
+    def test_the_lifecycle_vectors_through_it(self):
+        """what prevails folds to what the spec expects, in the fixtures' order and reversed: it drops nothing a fold
+        needs, and the reused-id cases come out the same both ways"""
+        for ext in ("acts", "decisions"):
+            s = suite(ext, "lifecycle.json")
+            cfg = ph_records.Config(s["principal"])
+            for c in s["cases"]:
+                want = {k: c["expect"][k] for k in ph_records.VIEW}
+                for records in (c["records"], list(reversed(c["records"]))):
+                    with self.subTest(ext=ext, case=c["id"]):
+                        kept = [records[i] for i in ph_records.prevailing(records, cfg)]
+                        self.assertEqual(ph_records.settlement_view(kept, cfg), want)
+
+    def test_the_greater_valid_one_whatever_the_order(self):
+        a, b = signed(note="a"), signed(note="b")
+        self.assertEqual(self.take([NEED, a, b]), [NEED, b])
+        self.assertEqual(self.take([NEED, b, a]), [NEED, b])
+        [x] = ph_records.conflicts([NEED, a, b], CFG)
+        self.assertEqual((x["identity"], x["records"], x["kept"], x["ts_only"]),
+                         (("acts", "p", "principal", "settled", "s1"), [1, 2], 2, False))
+
+    def test_an_invalid_one_never_displaces_or_blocks(self):
+        good, bad = signed(note="a"), signed(note="z", by="person:alex")   # R6
+        self.assertEqual(self.take([NEED, good, bad]), [NEED, good])
+        self.assertEqual(self.take([NEED, bad, good]), [NEED, good])
+        self.assertEqual(ph_records.conflicts([NEED, bad, good], CFG), [])
+        self.assertEqual(self.take([NEED, bad, signed(note="y", by="person:alex")]),
+                         [NEED, bad, signed(note="y", by="person:alex")], "no valid one: all left for the fold")
+
+    def test_one_record_in_two_versions_is_one(self):
+        up = ph_wire.convert(NEED, "0.5", [NEED])
+        self.assertEqual(self.take([NEED, up]), [NEED])
+        self.assertEqual(self.take([up, NEED]), [up], "the same record: the first stands")
+        self.assertEqual(ph_records.conflicts([NEED, up], CFG), [])
+
+    def test_ts_only(self):
+        later = signed(note="a", ts="2026-10-22T10:00:00Z")
+        self.assertEqual(self.take([signed(note="a"), later]), [later])
+        [x] = ph_records.conflicts([signed(note="a"), later], CFG)
+        self.assertTrue(x["ts_only"])
+
+    def test_a_lone_record_is_not_validated(self):
+        """the config is read only when an identity holds two records"""
+        bad = signed(by="person:alex")
+        self.assertEqual(ph_records.prevailing([NEED, bad], None), [0, 1])
+
 
 if __name__ == "__main__":
     unittest.main()

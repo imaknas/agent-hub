@@ -294,10 +294,36 @@ line, 0.5's intent: one project's STATE.md line carries a key its own session ra
 under 0.5 the key is known, so the line is not raised and is warned about. `registrar-warned.json` was untouched and
 gen-todo's output byte-identical.
 
-Not done yet:
+Done on 11-02 (agent-ops-specs m11020135-1418): two records with the same (`ext` name, project, origin, type, id) but
+different content. Until then the bus kept the first (`INSERT OR IGNORE` on the event id), so what a reader computed
+depended on the arrival order. Now:
 
-- Two records with the same (`ext` version, project, id), type and origin but different content: the bus keeps the
-  first, so core §10's "the greater canonical form" is chosen only among those it holds.
+- **The bus stores every content** (`publish_record`): the same record again (the same RFC 8785 form) is a no-op;
+  another content is stored beside the first, under its event id plus `~` and 16 hex digits of the SHA-256 of its RFC
+  8785 form, so each content is stored once whatever the order, and append-only (nothing rewritten). Stored too when it
+  is invalid: validity is the readers' to judge, and they ignore it. Another `ts` is another content as well.
+- **The registrar no longer re-creates a record it sent**: a claim or note is re-created every night until the item is
+  settled (and a raise whose stamp was not committed), and relied on the bus dropping it; now `registrar.publish`
+  skips any (origin, type, id) the project already sent and counts it a duplicate, as the bus used to answer (core
+  §10: a retransmission carries the same record). Otherwise each night would store one more content per open claim.
+- **Prune keeps a reused id whole**: removing the content that prevails (done, closed long ago) would let the other
+  prevail, so a record whose id holds other content too is never pruned.
+- **Readers take the record that prevails** (`ph_records.prevailing`): of an identity's valid records, the one whose RFC
+  8785 serialisation (of its 0.5 form) is greater; equal 0.5 forms are one record sent in two versions, and the first
+  stands. An invalid record never displaces or blocks a valid one; an identity with no valid record keeps all of them
+  for the fold to ignore and name, as before. `hubbus records` (the registrar, the librarian, `need_state`, the built-in
+  owner side), `open_questions`, `question_asked` and the inbox all read through it; `received` (the fold) applies the
+  same rule per item. `done` stays per event: a content that comes to prevail after another was applied is new, and
+  pending.
+- **The conflict is reported on the status page**: `hubbus status --json` lists `record_conflicts` (identities sent with
+  different valid content, not only a different `ts`, whose last arrival is within 14 days, with the event readers
+  take), and the status page shows each as a notice. It is derived from the stored records, not a separate event: the
+  stored second content is itself the evidence, so there is no new event type to version and nothing for prune to miss;
+  a line in hubbus.log at arrival is the trail. Forwarding is unchanged: every stored content goes to the principal side,
+  which applies §10 itself.
+- **JCS**: `ph_wire.canonical` is RFC 8785 in full (numbers as ECMAScript's Number.toString, an error for NaN,
+  infinities and unpaired surrogates), tested against the RFC's section 3.2.2 sample, its UTF-16 member-order example,
+  Appendix B's numbers and the spec's terms-digest vectors.
 
 What the principal side does for each value of the setting:
 

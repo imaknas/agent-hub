@@ -196,6 +196,7 @@ SEEN_VIA = ("session-start", "prompt", "post-tool", "inbox")
 THREAD_MAX_ROUNDS = int(_MB.get("thread_max_rounds", 4))           # max rounds the platform handles in one thread
 DAILY_RUNS = int(_MB.get("daily_runs_per_project", 6))             # max dispatches per project per day
 STUCK_HOURS = 1          # status: sent longer ago than this, no session took it, the platform didn't either
+CONFLICT_DAYS = 14       # status: a record id sent with other content is listed this long after its last arrival
 # a background resume not closed after this long (mailbox-conversation's timeout is 30 minutes) → dispatch as a
 # delegation
 RESUME_TIMEOUT_MIN = 35
@@ -454,6 +455,9 @@ def get_message(c, mid):
 # to_project = owner; from the assistant: source = owner, to_project = project (renamed ones followed to their
 # current name; the record itself is unchanged).
 # Event id = rec:<ext>:<project>:<record id> (core's dedup scope is (ext, project, id)), so a resend is a no-op.
+# One record id sent with different content (core §10, 0.5) is never dropped: each content is stored once, beside the
+# first (publish_record), and readers take the one whose RFC 8785 form is greater (ph_records.prevailing, record_group);
+# `hubbus status` lists such conflicts for the status page (record_conflicts).
 KEY_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$")   # a core 0.3 key
 RECORD_REQUIRED = ("ph", "ext", "id", "type", "origin", "by", "key", "project", "ts")
 
@@ -590,9 +594,11 @@ def question_asked(c, key: str) -> dict | None:
         return _question(r, key, payload(r).get("text"))
     suffix = f":r:{key}"
     for r in c.execute("SELECT * FROM events WHERE type='record' AND id LIKE 'rec:decisions/%' "
-                       "AND substr(id, -length(?)) = ? ORDER BY seq", (suffix, suffix)):
+                       "AND (substr(id, -length(?)) = ? OR instr(id, ?) > 0) ORDER BY seq", (suffix, suffix, suffix + "~")):
         rec = payload(r).get("record") or {}
         if r["to_project"] in OWNERS and rec.get("type") == "raised" and rec.get("key") == key:
+            r = next(iter(prevailing_rows(record_group(c, rec))), r)   # the raised that prevails (core §10)
+            rec = payload(r).get("record") or {}
             return _question(r, key, (rec.get("terms") or {}).get("text"))
     return None
 
@@ -609,29 +615,128 @@ def publish_record(c, rec: dict, source: str, to_project: str, extra: dict | Non
                    ref: str | None = None) -> tuple[str, bool]:
     """extra goes on the event beside the record, never into it: routing (from_session, to_session) and, for an
     answer, the question it answers. A record never displaces one of another type or origin (core §10): when the
-    event id is held by such a record, this one takes an id that also names its origin and type."""
+    event id is held by such a record, this one takes an id that also names its origin and type.
+
+    The same record again (the same RFC 8785 form) is a no-op. The same (ext, project, origin, type, id) with other
+    content is stored too, never dropped (the bus is append-only; readers choose, ph_records.prevailing): under the
+    first one's event id plus `~` and 16 hex digits of the SHA-256 of its RFC 8785 form, so each content is stored
+    once whatever the order. A different ts is a different content too (core §10 keeps the greater, and only spares it
+    the report): a sender retrying sends the record it sent, not a re-created one (registrar.publish)."""
     eid = record_event_id(rec)
     row = c.execute("SELECT payload FROM events WHERE id=? AND type='record'", (eid,)).fetchone()
     if row is not None:
         held = payload(row).get("record") or {}
         if (held.get("origin"), held.get("type")) != (rec.get("origin"), rec.get("type")):
             eid = f"{eid}:{rec.get('origin')}:{rec.get('type')}"
+    same = record_variants(c, eid, rec)
+    if same:
+        mine = record_form(rec)
+        for r in same:
+            if record_form(payload(r).get("record") or {}) == mine:
+                return r["id"], False
+        first = same[0]["id"]
+        eid = f"{first}~{hashlib.sha256(mine.encode()).hexdigest()[:16]}"
+        if publish(c, eid, "record", source, to_project, ref, {"record": rec, **(extra or {})}):
+            log(_("record {id} of {project} ({ext} {type}, origin {origin}) arrived again with other content: kept "
+                  "beside {first} as {eid}; readers take the greater RFC 8785 form (core §10)", id=rec.get("id"),
+                  project=rec.get("project"), ext=rec.get("ext"), type=rec.get("type"), origin=rec.get("origin"),
+                  first=first, eid=eid))
+            return eid, True
+        return eid, False
     return eid, publish(c, eid, "record", source, to_project, ref, {"record": rec, **(extra or {})})
+
+
+def record_form(rec: dict) -> str:
+    """A record's RFC 8785 serialisation; one that has none (not I-JSON: a float, an unpaired surrogate) is told apart
+    by a JSON dump instead, which still compares equal only for equal content."""
+    try:
+        return ph_wire.canonical(rec)
+    except ValueError:
+        return json.dumps(rec, sort_keys=True, ensure_ascii=True, default=repr)
+
+
+def _full_identity(rec: dict) -> tuple:
+    return (rec.get("ext"), rec.get("project"), rec.get("origin"), rec.get("type"), rec.get("id"))
+
+
+def record_variants(c, eid: str, rec: dict) -> list:
+    """The record events stored under event id eid or a variant of it (eid~…) holding a record with rec's (ext,
+    project, origin, type, id), oldest first."""
+    return [r for r in c.execute("SELECT * FROM events WHERE type='record' AND (id=? OR (id>? AND id<?)) ORDER BY seq",
+                                 (eid, eid + "~", eid + "\x7f"))
+            if _full_identity(payload(r).get("record") or {}) == _full_identity(rec)]
+
+
+def record_group(c, rec: dict) -> list:
+    """Every record event holding a record of rec's identity (core §10: ext name, project, origin, type, id), in any
+    version read, oldest first."""
+    name, found = str(rec.get("ext") or "").partition("/")[0], {}
+    for version in dict.fromkeys([*ph_wire.READ, str(rec.get("ext") or "").partition("/")[2]]):
+        base = f"rec:{name}/{version}:{rec.get('project')}:{rec.get('id')}"
+        for eid in (base, f"{base}:{rec.get('origin')}:{rec.get('type')}"):
+            for r in c.execute("SELECT * FROM events WHERE type='record' AND (id=? OR (id>? AND id<?))",
+                               (eid, eid + "~", eid + "\x7f")):
+                if ph_records.identity(payload(r).get("record") or {}) == ph_records.identity(rec):
+                    found[r["id"]] = r
+    return sorted(found.values(), key=lambda r: r["seq"])
+
+
+def prevailing_rows(rows: list) -> list:
+    """Of record events, those whose records readers take (core §10, ph_records.prevailing), in the order given."""
+    if len(rows) < 2:
+        return list(rows)
+    keep = ph_records.prevailing([payload(r).get("record") or {} for r in rows])
+    return [rows[i] for i in keep]
+
+
+def record_losers(c, rows) -> set[str]:
+    """The event ids among rows whose record another record of its identity prevails over (core §10)."""
+    out = set()
+    for r in rows:
+        if r["type"] != "record" or r["id"] in out:
+            continue
+        group = record_group(c, payload(r).get("record") or {})
+        if len(group) > 1:
+            kept = {g["id"] for g in prevailing_rows(group)}
+            out |= {g["id"] for g in group if g["id"] not in kept}
+    return out
+
+
+def record_conflicts(c, since: str | None = None) -> list[dict]:
+    """core §10's report: record ids sent with different valid content (not only a different ts), {project, ext,
+    origin, type, id, events, kept, last}; only those with an event after `since`."""
+    rows = c.execute("SELECT * FROM events WHERE type='record' ORDER BY seq").fetchall()
+    recs = [payload(r).get("record") or {} for r in rows]
+    out = []
+    for x in ph_records.conflicts(recs):
+        if x["ts_only"]:
+            continue
+        evs = [rows[i] for i in x["records"]]
+        last = max(r["ts"] for r in evs)
+        if since and last < since:
+            continue
+        name, project, origin, kind, rid = x["identity"]
+        out.append({"project": project, "ext": name, "origin": origin, "type": kind, "id": rid,
+                    "events": [r["id"] for r in evs], "kept": rows[x["kept"]]["id"], "last": last})
+    return out
 
 
 def records(c, project, ext=None, types=None, pending=False, direction=None) -> list[dict]:
     """This project's records, both directions, oldest first: {id: event id, ts, direction: out (project to the
     assistant) | in (from the assistant), done, record}. The registrar works out the latest terms/terms_rev from the
     out raised/amended ones and knows which keys were withdrawn: the bus is its record. Records filed under a name the
-    project had before a rename are its records too (own_names), each kept as it was sent."""
+    project had before a rename are its records too (own_names), each kept as it was sent. One record id sent with
+    different content gives the record that prevails (core §10, ph_records.prevailing); done is that event's own (a
+    content that prevails after the other was applied is new, and pending)."""
     owners, names = tuple(OWNERS), own_names(project)
     marks, nmarks = ",".join("?" * len(owners)), ",".join("?" * len(names))
     out = []
-    for r in c.execute(f"""SELECT m.*, EXISTS(SELECT 1 FROM events x WHERE x.type='message.done' AND x.ref=m.id) AS done
-                           FROM events m WHERE m.type='record'
-                             AND ((m.to_project IN ({nmarks}) AND m.source IN ({marks}))
-                               OR (m.source IN ({nmarks}) AND m.to_project IN ({marks})))
-                           ORDER BY m.seq""", (*names, *owners, *names, *owners)):
+    rows = c.execute(f"""SELECT m.*, EXISTS(SELECT 1 FROM events x WHERE x.type='message.done' AND x.ref=m.id) AS done
+                         FROM events m WHERE m.type='record'
+                           AND ((m.to_project IN ({nmarks}) AND m.source IN ({marks}))
+                             OR (m.source IN ({nmarks}) AND m.to_project IN ({marks})))
+                         ORDER BY m.seq""", (*names, *owners, *names, *owners)).fetchall()
+    for r in prevailing_rows(rows):
         rec = payload(r).get("record") or {}
         d = "in" if r["to_project"] in names else "out"
         if (ext and rec.get("ext") != ext) or (types and rec.get("type") not in types) or (pending and r["done"]) \
@@ -709,9 +814,10 @@ def inbox(c, project, session=None, only_new=False):
     """Letters to this project not done yet. A reply addressed to a particular session waits for that session a
     while first."""
     cutoff = iso(now() - datetime.timedelta(minutes=REPLY_WAIT_MIN))
-    rows = []
-    for r in c.execute(INBOX_SQL, (project,)).fetchall():
-        if only_new and r["delivered"]:
+    rows, found = [], c.execute(INBOX_SQL, (project,)).fetchall()
+    losers = record_losers(c, found)   # one record id sent with other content: only the one that prevails (core §10)
+    for r in found:
+        if (only_new and r["delivered"]) or r["id"] in losers:
             continue
         to_s = payload(r).get("to_session")
         if to_s and to_s != session and r["ts"] >= cutoff:
@@ -829,8 +935,13 @@ def open_questions(c, project=None) -> list[dict]:
     owners = tuple(OWNERS)
     marks = ",".join("?" * len(owners))
     asked, closed, held, taken = {}, set(), {}, projects()
-    for r in c.execute(f"""SELECT * FROM events WHERE type IN ('message','record')
-                             AND (to_project IN ({marks}) OR source IN ({marks})) ORDER BY seq""", owners + owners):
+    rows = c.execute(f"""SELECT * FROM events WHERE type IN ('message','record')
+                           AND (to_project IN ({marks}) OR source IN ({marks})) ORDER BY seq""", owners + owners).fetchall()
+    # one record id sent with other content: only the one that prevails (core §10)
+    kept = {r["id"] for r in prevailing_rows([r for r in rows if r["type"] == "record"])}
+    for r in rows:
+        if r["type"] == "record" and r["id"] not in kept:
+            continue
         p, to_owner = payload(r), r["to_project"] in OWNERS
         if r["type"] == "message":
             if not to_owner and r["ref"]:
@@ -2117,12 +2228,17 @@ def dispatch_locked(c, pull=False) -> None:
 
 def prune(c) -> None:
     """Remove letters closed more than PRUNE_DAYS ago (with their delivered/done) and older job.failed. Anything the
-    bridge hasn't read yet is left alone."""
+    bridge hasn't read yet is left alone, and so is a record whose id was sent with other content too."""
     cutoff, upto = iso(now() - datetime.timedelta(days=PRUNE_DAYS)), cursor(c, BRIDGE)
     c.execute("BEGIN IMMEDIATE")
     old = [r["ref"] for r in c.execute("SELECT ref FROM events WHERE type='message.done' AND ts < ? AND seq <= ?",
                                        (cutoff, upto))]
     for mid in old:
+        rec = c.execute("SELECT payload FROM events WHERE id=? AND type='record'", (mid,)).fetchone()
+        if rec is not None and len(record_group(c, payload(rec).get("record") or {})) > 1:
+            # one record id sent with other content: every content stays, or removing the one that prevails would
+            # leave the other to prevail (core §10)
+            continue
         # only delete this letter and its delivered/done; letters replying to it (ref also points at it) have their
         # own lifecycle
         c.execute("DELETE FROM events WHERE id=? OR (ref=? AND type IN ('message.delivered', 'message.done'))",
@@ -2269,9 +2385,10 @@ def cmd_status(as_json: bool) -> None:
         "SELECT * FROM events WHERE type='job.failed' AND ts > ? ORDER BY seq DESC LIMIT 20",
         (iso(now() - datetime.timedelta(days=1)),))]
     corrupt = sorted(p.name for p in DB.parent.glob("bus.db.corrupt-*") if not p.name.endswith(("-wal", "-shm")))
+    conflicts = record_conflicts(c, iso(now() - datetime.timedelta(days=CONFLICT_DAYS)))
     out = {"projects": per, "stuck": stuck, "held": held, "letters": delivery_paths(c),
            "to_muninn": {"n": len(items), "oldest": items[0]["ts"] if items else None},
-           "job_failed_24h": failed, "corrupt": corrupt}
+           "job_failed_24h": failed, "corrupt": corrupt, "record_conflicts": conflicts}
     if as_json:
         print(json.dumps(out, ensure_ascii=False))
         return
@@ -2291,6 +2408,10 @@ def cmd_status(as_json: bool) -> None:
         print(_("job.failed {ts} {job}: {detail}", ts=f["ts"][5:16], job=f.get("job"), detail=f.get("detail", "")[:120]))
     if corrupt:
         print(_("Broken bus.db moved aside: {files}", files=", ".join(corrupt)))
+    for x in conflicts:
+        print(_("Record {id} of {project} ({ext} {type}, origin {origin}) was sent with different content ({events}); "
+                "readers take {kept}, the greater RFC 8785 form (core §10)", id=x["id"], project=x["project"],
+                ext=x["ext"], type=x["type"], origin=x["origin"], events=", ".join(x["events"]), kept=x["kept"]))
 
 
 # ---------- the mail commands (the bus, or a sandboxed project's outbox and view) ----------

@@ -11,6 +11,11 @@ the schemas vendored in contracts/vendor/agent-ops-specs/principal-handoff-0.5/.
     settlement_view(records, cfg)  -> {settlement, outcome, answer, authority, stale, state, withdrawn}
                                                            core §6, what a requester computes; state is open, settled or
                                                            (Decisions) withdrawn
+    prevailing(records[, cfg])     -> [index]              core §10 over a store holding every record sent (the bus):
+                                                           one record per identity, the greater RFC 8785 form of the
+                                                           valid ones, whatever the order
+    conflicts(records[, cfg])      -> [{identity, records, kept, ts_only}]   identities sent with different valid
+                                                           content, for the report core §10 asks for
 
 A record in an older version is validated as its 0.5 form. 0.5 only relaxes 0.4 (core §14's change log: module content,
 the terms digest), so this accepts what 0.4 accepts and, beyond it, only Evidence and Criteria content that agent-hub
@@ -260,29 +265,91 @@ def when(r: dict) -> tuple:
 
 # --- what a receiver holds (core §10, §14) ---
 
+def held_form(r, records: list[dict], cfg: Config) -> tuple[dict, str] | None:
+    """A record as a receiver holds it: converted to 0.5 against `records` (core §14), validated, with its RFC 8785
+    serialisation; None when it is not a valid record in a version read. A record that has no serialisation is not
+    I-JSON (core §4), so it is invalid too."""
+    if not isinstance(r, dict) or ph_wire.version_of(r) not in ph_wire.READ:
+        return None
+    source = ph_wire.version_of(r)
+    x = ph_wire.convert(r, ph_wire.LATEST, records)
+    _t, errs = validate(x, cfg)
+    if source == "0.3" and x.get("type") == "settled" and "terms_digest" not in x:
+        errs = [e for e in errs if e != "$: missing terms_digest"]   # 0.3 had none; its need record isn't held
+    if errs:
+        return None
+    try:
+        return x, ph_wire.canonical(x)
+    except ValueError:
+        return None
+
+
 def received(records: list[dict], cfg: Config) -> tuple[list[dict], list[dict]]:
     """The records one receiver holds about one item, in any version it reads, as (valid, ignored): each converted to
     0.5 against all of them (core §14), validated; then one per (origin, type, id): an invalid record never blocks a
     valid one with the same id, an id reused with different valid content keeps the greater canonical form, and a
     record never displaces one of another type (core §10)."""
-    seen: dict[tuple, dict] = {}
+    seen: dict[tuple, tuple[dict, str]] = {}
     ignored = []
     for r in records:
-        if not isinstance(r, dict) or ph_wire.version_of(r) not in ph_wire.READ:
+        held = held_form(r, records, cfg)
+        if held is None:
             ignored.append(r)
             continue
-        source = ph_wire.version_of(r)
-        x = ph_wire.convert(r, ph_wire.LATEST, records)
-        _t, errs = validate(x, cfg)
-        if source == "0.3" and x.get("type") == "settled" and "terms_digest" not in x:
-            errs = [e for e in errs if e != "$: missing terms_digest"]   # 0.3 had none; its need record isn't held
-        if errs:
-            ignored.append(r)
-            continue
+        x, canon = held
         k = (x["origin"], x["type"], x["id"])
-        if k not in seen or ph_wire.canonical(x) > ph_wire.canonical(seen[k]):
-            seen[k] = x
-    return list(seen.values()), ignored
+        if k not in seen or canon > seen[k][1]:
+            seen[k] = held
+    return [x for x, _c in seen.values()], ignored
+
+
+def identity(r: dict) -> tuple:
+    """core §10: what one record id names, (ext name, project, origin, type, id): ids are unique per ext name, project
+    and origin, and a record never displaces one of another type."""
+    return (str(r.get("ext") or "").partition("/")[0], r.get("project"), r.get("origin"), r.get("type"), r.get("id"))
+
+
+def prevailing(records: list[dict], cfg: Config | None = None) -> list[int]:
+    """core §10 for a store that keeps every record it was sent (the bus): the indexes, in order, of the records a
+    reader takes, one per identity when the identity holds a valid record. Of an identity's valid records the one whose
+    RFC 8785 serialisation (of its 0.5 form) is greater, whatever the arrival order; records whose 0.5 forms are equal
+    are the same record (sent again, in another version): the first is taken. An invalid record never displaces or
+    blocks a valid one; an identity with no valid record keeps all of them, for the fold to ignore and name. A lone
+    record is taken as it is, unvalidated, so cfg (default: config()) is read only when an identity has two."""
+    groups: dict[tuple, list[int]] = {}
+    for i, r in enumerate(records):
+        groups.setdefault(identity(r) if isinstance(r, dict) else ("", i), []).append(i)
+    keep = []
+    for idx in groups.values():
+        if len(idx) == 1:
+            keep += idx
+            continue
+        cfg = cfg or config()
+        valid = [(held[1], i) for i in idx if (held := held_form(records[i], records, cfg)) is not None]
+        keep += [max(valid, key=lambda v: v[0])[1]] if valid else idx   # max: the first of equals
+    return sorted(keep)
+
+
+def conflicts(records: list[dict], cfg: Config | None = None) -> list[dict]:
+    """core §10's report: identities sent with different valid content, {identity, records: the indexes of its valid
+    records, kept: the index prevailing() takes, ts_only: they differ only in ts (a record re-created after a crash,
+    which the spec does not ask to report)}."""
+    groups: dict[tuple, list[int]] = {}
+    for i, r in enumerate(records):
+        if isinstance(r, dict):
+            groups.setdefault(identity(r), []).append(i)
+    out = []
+    for key, idx in groups.items():
+        if len(idx) < 2:
+            continue
+        cfg = cfg or config()
+        valid = [(held[1], held[0], i) for i in idx if (held := held_form(records[i], records, cfg)) is not None]
+        if len({c for c, _x, _i in valid}) < 2:
+            continue
+        no_ts = {ph_wire.canonical({k: v for k, v in x.items() if k != "ts"}) for _c, x, _i in valid}
+        out.append({"identity": key, "records": [i for _c, _x, i in valid], "kept": max(valid, key=lambda v: v[0])[2],
+                    "ts_only": len(no_ts) == 1})
+    return out
 
 
 def register(records: list[dict]) -> tuple[dict | None, bool]:

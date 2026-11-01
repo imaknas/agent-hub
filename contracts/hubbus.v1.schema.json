@@ -24,7 +24,7 @@
   "$defs": {
     "record": {
       "type": "object",
-      "description": "one Principal Handoff 0.3 record (written by hubbus record-publish, exchanged with the assistant by bridge v2; event id = rec:<ext>:<project>:<record id>). The record's full format follows the agent-ops-specs core/acts/decisions schemas and is validated before it is written to the bus; here only the envelope is checked",
+      "description": "one Principal Handoff 0.3 record (written by hubbus record-publish, exchanged with the assistant by bridge v2; event id = rec:<ext>:<project>:<record id>; the same record id with other content, core §10, is stored beside it as that event id + ~<16 hex digits of the SHA-256 of its RFC 8785 form>). The record's full format follows the agent-ops-specs core/acts/decisions schemas and is validated before it is written to the bus; here only the envelope is checked",
       "required": ["record"],
       "properties": {
         "v": {"const": 1},

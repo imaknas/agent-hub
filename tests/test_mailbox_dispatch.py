@@ -397,7 +397,8 @@ class Dispatch(unittest.TestCase):
         st = _j.loads(out.getvalue())
         self.assertEqual([s["id"] for s in st["stuck"]], ["q1"])
         # A3 (step 1): held letters are listed apart (none here: no MCP server is running)
-        self.assertEqual(sorted(st), ["corrupt", "held", "job_failed_24h", "letters", "projects", "stuck", "to_muninn"])
+        self.assertEqual(sorted(st), ["corrupt", "held", "job_failed_24h", "letters", "projects",
+                                    "record_conflicts", "stuck", "to_muninn"])
         self.assertEqual(st["held"], [])
 
     # --- hook ---

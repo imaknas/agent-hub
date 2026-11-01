@@ -494,6 +494,13 @@ def main() -> None:
         if bus["corrupt"]:
             alerts.append(("bad", _("bus.db was corrupt; the old file was moved to {files} (letters in it that "
                                     "had not been received are lost)", files=', '.join(bus['corrupt']))))
+        for x in bus.get("record_conflicts") or []:   # core §10: a sender reused a record id for other content
+            alerts.append(("notify", _("Record {id} of {project} ({ext} {type}, origin {origin}) was sent with different "
+                                       "content ({n} versions, last {last}); the bus keeps them all and readers take "
+                                       "{kept}, the greater RFC 8785 form (core §10). The sender should not reuse an id",
+                                       id=x["id"], project=x["project"], ext=x["ext"], type=x["type"],
+                                       origin=x["origin"], n=len(x["events"]), last=x["last"][5:16].replace("T", " "),
+                                       kept=x["kept"])))
         mail_rows = "".join(f"<tr><td>{esc(p)}</td><td>{v['open']}</td><td>{v['undelivered']}</td>"
                             f"<td>{esc(v['oldest'][5:16].replace('T', ' '))}</td></tr>" for p, v in bus["projects"].items())
         mail_html = (f"<h2 style=\"font-size:18px;margin-top:28px\">{_('Project mailboxes')}</h2>"

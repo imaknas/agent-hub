@@ -154,5 +154,7 @@
  "📬 1 letter from {project}: {id}. Run agenthub inbox.": "📬 {project} 寄來 1 封信:{id}。請跑 agenthub inbox。",
  "{project}: {id}: woke the live session {session}": "{project}:{id}:叫醒了開著的 session {session}",
  "{project}: {id}: could not wake the live session {session}{why}": "{project}:{id}:叫不醒開著的 session {session}{why}",
- "whose hook this is (default: hub.json runtime.default)": "這是誰的 hook(預設:hub.json runtime.default)"
+ "whose hook this is (default: hub.json runtime.default)": "這是誰的 hook(預設:hub.json runtime.default)",
+ "record {id} of {project} ({ext} {type}, origin {origin}) arrived again with other content: kept beside {first} as {eid}; readers take the greater RFC 8785 form (core §10)": "{project} 的 record {id}({ext} {type},origin {origin})以不同內容又送來一次:存在 {first} 旁邊,編號 {eid};讀的時候取 RFC 8785 序列化較大的那筆(core §10)",
+ "Record {id} of {project} ({ext} {type}, origin {origin}) was sent with different content ({events}); readers take {kept}, the greater RFC 8785 form (core §10)": "{project} 的 record {id}({ext} {type},origin {origin})同一個 id 送了不同內容({events});讀的時候取 {kept},RFC 8785 序列化較大的那筆(core §10)"
 }
