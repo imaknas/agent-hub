@@ -36,6 +36,8 @@ commit_parsers = [
   { message = "^fix", group = "<!-- 1 -->Fixed" },
   { message = "^perf", group = "<!-- 2 -->Faster" },
   { message = "^revert", group = "<!-- 3 -->Reverted" },
+  # a breaking change of any other type (refactor!, build!…) is listed too: an upgrade has to know about it
+  { message = "^[a-z]+(\\([^)]*\\))?!:", group = "<!-- 4 -->Changed (breaking)" },
   { message = ".*", skip = true },
 ]
 tag_pattern = "v[0-9].*"
