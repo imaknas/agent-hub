@@ -488,11 +488,13 @@ class Live(unittest.TestCase):
         hubconf.get = lambda k, default=None: conf if k == "runtime.acp" else saved(k, default)
         try:
             import runtime_acp
-            ws = pathlib.Path(tempfile.mkdtemp())
+            ws = pathlib.Path(tempfile.mkdtemp(prefix="hub-propose-live-")) / "ws"   # where propose_apply makes its copy
+            ws.mkdir()
             (ws / "secret-word.txt").write_text("periwinkle\n")
             res = runtime_acp.run(runtime_ports.Task(
-                point="live", prompt="Read the file secret-word.txt in the current folder and report the word in it.",
+                point="mailbox-propose", prompt="Read the file secret-word.txt in the current folder and report the word in it.",
                 spec={}, cwd=str(ws), model=os.environ.get("ACP_LIVE_MODEL") or None, timeout_s=600,
+                env={**os.environ, "HUB_THROWAWAY_COPY": str(ws)},
                 output_schema={"type": "object", "properties": {"word": {"type": "string"}}, "required": ["word"]}))
         finally:
             hubconf.get = saved
