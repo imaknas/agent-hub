@@ -75,6 +75,11 @@ def check(root: pathlib.Path) -> list[str]:
                       "default it would run nothing (dispatch needs session state, every other point is refused); keep "
                       "another runtime as the default and pin {name} on {points} (llm.points.<point>.runtime)",
                       name=rdefault, points=", ".join(runtime_ports.THROWAWAY_POINTS)))
+    rcfg = cfg.get("runtime") or {}
+    for name in [*(rcfg.get("installed") or []), *([rcfg["bare_ids"]] if rcfg.get("bare_ids") else [])]:
+        if isinstance(name, str) and name not in runtime_ports.RUNTIMES:
+            errs.append(_("hub.json: runtime.installed / runtime.bare_ids name `{name}`, which is not a registered "
+                          "runtime (have: {have})", name=name, have=", ".join(runtime_ports.RUNTIMES)))
     for name in runtime_ports.RUNTIMES:   # a runtime's own settings (e.g. runtime.acp), checked by its adapter
         check_conf = getattr(runtime_ports._module(name), "config_errors", None)
         if callable(check_conf):

@@ -688,7 +688,8 @@ class ClaudeHooks(unittest.TestCase):
         self.assertNotIn("Stop", out["hooks"], "an event left with only old platform hooks is removed entirely")
         self.assertEqual(out["model"], "x", "other settings untouched")
         for name, matcher, ev in m.HOOK_TABLE:
-            entries = [e for e in out["hooks"][name] if any(f"hub-event {ev}" in h["command"] for h in e["hooks"])]
+            entries = [e for e in out["hooks"][name]
+                       if any(f"hub-event --runtime claude {ev}" in h["command"] for h in e["hooks"])]
             self.assertEqual(len(entries), 1, ev)
             self.assertEqual(entries[0].get("matcher"), matcher)
         again = m.install_hooks(json.loads(json.dumps(out)))

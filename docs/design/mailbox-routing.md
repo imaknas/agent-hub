@@ -246,3 +246,32 @@ agent while the user was working there. Now:
   add. Doctor: "an idle open session is woken when a letter arrives for it: off (… Claude Code documents only the auth
   line …)", as an information line (`·`, counted as neither a problem nor a reminder: a letter still arrives at the
   next hook).
+
+## 11-01: more than one coding agent (`docs/design/mailbox-runtimes.md` step 3, A1)
+
+- **Settings**: hub.json `runtime.installed` (every agent the user opens sessions with; default `[runtime.default]`) and
+  `runtime.bare_ids` (whose session ids stay bare; default `claude`), in `contracts/hub.v1.schema.json`; config check
+  refuses an unregistered name. `runtime.default` stays the agent the platform starts.
+- **Ids**: `runtime_ports.qualify` / `runtime_of`: the bare runtime's ids as they are, every other runtime's
+  `<runtime>:<id>`, `mcp:` ids A3's. Nothing on the bus is migrated.
+- **Hooks**: the installed commands are `hub-event --runtime <name> <event>`; `hub-event` and `hubbus hook [--runtime]`
+  parse with that runtime's lifecycle (none given: `runtime.default`'s, as the hooks written before), record presence
+  with the qualified id and the `runtime` column, and deliver to that id. `hub-event install` installs every installed
+  runtime's hooks.
+- **Dispatch**: `runtime_ports.Sessions` is the sessions port over every installed runtime (live = their union, plus
+  A3's MCP rows), `context_size` / `alive` / `wake` routed by `runtime_of(sid)`. A background resume or fork runs the
+  `mailbox-conversation` point, which runs on `runtime.default`: only that runtime's sessions are resumed or forked
+  (`can_resume`); a conversation to another runtime's idle session is handled as a delegation, and `recent_session`
+  skips such sessions.
+- **current_session**: one installed runtime answers from the environment as before; with several, the nearest
+  ancestor process a runtime claims (`session_process(command)`) decides, and none claiming one is unknown.
+- **Rules files**: `hub-runtime instructions-files` lists each installed runtime's rules file; sync-local-setup writes the
+  managed block into each. `local-ignores` is their union.
+- **Sandboxed projects**: `policy.protect()` is the union of the installed runtimes' control files; render-project-
+  settings installs another runtime's hooks there only if it has `control` and `confine`, and `hub-event` does nothing
+  for a runtime without them in a sandboxed project (logged `refused:<runtime>`).
+- **Doctor**: with more than one installed runtime, each feature row has a cell per runtime, plus each runtime's rules
+  file (or that its sessions get the rules from the MCP server's instructions) and the runtimes refused in sandboxed
+  projects. With one, the output is as before.
+- Still on the default runtime: the transcript statistics (memory gaps, weekly report), headless runs, leases, and the
+  older `hubbus hook` entry points called without `--runtime` (worktree-memory.sh, user-level hooks).

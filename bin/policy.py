@@ -108,12 +108,18 @@ def others_memory(name: str, doc: dict, index: dict) -> list[pathlib.Path]:
 
 
 def protect() -> list[dict]:
+    """The control files of every installed runtime that can name them (docs/design/mailbox-runtimes.md A1): the
+    default runtime's first, as before; a runtime without the control port adds nothing (its hooks are never installed
+    in a sandboxed project)."""
     import runtime_ports
-    try:
-        rt = runtime_ports.load(ports=("control",))
-    except runtime_ports.Unsupported:
-        return []
-    return [{"name": n, "tree": bool(t)} for n, t in rt.control_paths()]
+    out = []
+    for name in dict.fromkeys([runtime_ports.default_name(), *runtime_ports.installed()]):
+        try:
+            rt = runtime_ports.load(name, ports=("control",))
+        except runtime_ports.Unsupported:
+            continue
+        out += [x for x in ({"name": n, "tree": bool(t)} for n, t in rt.control_paths()) if x not in out]
+    return out
 
 
 def cache_env(ws: pathlib.Path | None) -> dict[str, str]:

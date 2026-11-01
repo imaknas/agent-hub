@@ -3,7 +3,10 @@
 The default runtime is set in hub.json.
 
   hub-runtime instructions-file <folder>   the file the platform's managed block goes into (relative to that folder)
-  hub-runtime local-ignores                this runtime's machine-local files, one per line (to add to .git/info/exclude)
+  hub-runtime instructions-files <folder>  the same for every installed runtime with a rules file (hub.json
+                                           runtime.installed), one per line, no repeats: each gets the managed block
+  hub-runtime local-ignores                the installed runtimes' machine-local files, one per line (to add to
+                                           .git/info/exclude)
   hub-runtime has <port>                   exit 0 when the runtime has that interface (runtime_ports.PORTS), 3 when not
 
 The system python3 (3.9) can run it.
@@ -21,9 +24,35 @@ import runtime_ports  # noqa: E402
 _ = i18n.domain(__file__)
 
 
+def installed(argv) -> int:
+    """instructions-files / local-ignores over every installed runtime with a rules file (docs/design/
+    mailbox-runtimes.md A1); none has one: exit code 3, the reason on stderr."""
+    out, why = [], None
+    for name in runtime_ports.installed():
+        try:
+            rt = runtime_ports.load(name, ports=("instructions",))
+        except runtime_ports.Unsupported as e:
+            why = why or e
+            continue
+        if argv[0] == "instructions-files":
+            ws = pathlib.Path(argv[1]).resolve()
+            items = [os.path.relpath(rt.instructions_file(ws), ws)]
+        else:
+            items = rt.local_ignores()
+        out += [x for x in items if x not in out]
+    if why and not out:
+        print(why, file=sys.stderr)
+        return 3
+    if out:
+        print("\n".join(out))
+    return 0
+
+
 def main(argv) -> int:
     if argv[:1] == ["has"] and len(argv) == 2:   # e.g. onboard says only what was really set up
         return 0 if argv[1] in runtime_ports.capabilities() else 3
+    if argv[:1] == ["instructions-files"] and len(argv) == 2 or argv == ["local-ignores"]:
+        return installed(argv)
     try:
         rt = runtime_ports.load(ports=("instructions",))
     # no rules file: exit code 3 (the caller treats it as "unsupported" rather than guessing a default file name)
@@ -33,9 +62,6 @@ def main(argv) -> int:
     if argv[:1] == ["instructions-file"] and len(argv) == 2:
         ws = pathlib.Path(argv[1]).resolve()
         print(os.path.relpath(rt.instructions_file(ws), ws))
-        return 0
-    if argv == ["local-ignores"]:
-        print("\n".join(rt.local_ignores()))
         return 0
     print(_(__doc__), file=sys.stderr)
     return 2

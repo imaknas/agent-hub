@@ -57,12 +57,14 @@ class AtHomeToday(unittest.TestCase):
     def test_hook_commands(self):
         for _name, _matcher, ev in runtime_claude.HOOK_TABLE:
             self.assertEqual(runtime_claude.hook_command(ev),
-                             f"[ -x ~/agent-hub/bin/hub-event ] && {py('~/agent-hub/bin/hub-event')} {ev} || true")
+                             f"[ -x ~/agent-hub/bin/hub-event ] && {py('~/agent-hub/bin/hub-event')} --runtime claude {ev}"
+                             " || true")
 
     def test_installed_hooks(self):
         def entry(ev, matcher=None):
             e = {"hooks": [{"type": "command",
-                            "command": f"[ -x ~/agent-hub/bin/hub-event ] && {py('~/agent-hub/bin/hub-event')} {ev} || true"}]}
+                            "command": f"[ -x ~/agent-hub/bin/hub-event ] && {py('~/agent-hub/bin/hub-event')} "
+                                       f"--runtime claude {ev} || true"}]}
             return {"matcher": matcher, **e} if matcher else e
         self.assertEqual(runtime_claude.install_hooks({}), {"hooks": {
             "SessionStart": [entry("session_start")],
@@ -125,7 +127,7 @@ class Elsewhere(unittest.TestCase):
             (self.hub / "bin" / f).chmod(0o755)
         r = subprocess.run(["/bin/sh", "-c", runtime_claude.hook_command("session_start")], cwd=self.tmp,
                            capture_output=True, text=True, timeout=30)
-        self.assertEqual(r.stdout.strip(), "reached session_start", r.stderr)
+        self.assertEqual(r.stdout.strip(), "reached --runtime claude session_start", r.stderr)
 
     def test_old_and_moved_hooks_are_replaced_not_doubled(self):
         settings = {"hooks": {

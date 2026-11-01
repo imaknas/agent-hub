@@ -267,6 +267,16 @@
           "type": "string",
           "minLength": 1
         },
+        "installed": {
+          "type": "array",
+          "items": {"type": "string", "minLength": 1},
+          "description": "every coding agent the user opens sessions with (docs/design/mailbox-runtimes.md A1): each gets its hooks, its rules-file block, and its sessions are asked about by their runtime. Default [runtime.default]; runtime.default stays the one the platform starts"
+        },
+        "bare_ids": {
+          "type": "string",
+          "minLength": 1,
+          "description": "the runtime whose session ids the bus keeps without a <runtime>: prefix (every other runtime's are written <runtime>:<id>). Default claude, the runtime of every id written before runtime.installed existed; it never follows runtime.default, so changing the default never reroutes an old id"
+        },
         "acp": {
           "type": "object",
           "description": "Agent Client Protocol agents (bin/runtime_acp.py header; docs/design/runtime-acp.md): agent names the entry of agents the acp runtime uses",

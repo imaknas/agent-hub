@@ -779,18 +779,23 @@ def hook_input() -> dict:
 HOOK_EVENTS = {"session-start": "session_start", "prompt": "prompt", "post-tool": "tool_used"}  # old name → event
 
 
-def cmd_hook(event: str) -> None:
+def cmd_hook(event: str, runtime: str | None = None) -> None:
     """The old `hubbus hook <event>` entry point: worktrees' user-level hooks and projects without the new settings
     still call it (it must keep working until the owner changes the user-level settings). The logic is in mail_text;
-    output goes through the runtime's inject, word for word as before."""
+    output goes through the runtime's inject, word for word as before. runtime: whose hook (--runtime; default
+    runtime.default, as these hooks were written): its lifecycle parses the input and formats the output, and the
+    session is recorded in the platform's ids (docs/design/mailbox-runtimes.md A1)."""
     import runtime_ports
-    data = hook_input()
-    text = mail_text(event, data.get("session_id"), data.get("cwd"))
+    name = runtime or runtime_ports.default_name()
+    try:
+        rt = runtime_ports.load(name, ports=("lifecycle",))
+    except runtime_ports.Unsupported:   # a runtime without hooks never gets here; the letters stay in the mailbox
+        return
+    ev = rt.parse_event(HOOK_EVENTS[event], json.dumps(hook_input()))
+    if ev is None:
+        return
+    text = mail_text(event, runtime_ports.qualify(name, ev.session), ev.cwd, runtime=name)
     if text:
-        try:
-            rt = runtime_ports.load(ports=("lifecycle",))
-        except runtime_ports.Unsupported:   # a runtime without hooks never gets here; the letters stay in the mailbox
-            return
         out = rt.inject(HOOK_EVENTS[event], text)
         if out:
             print(out)
@@ -873,11 +878,12 @@ def reconcile_questions(c, now=None) -> list:
 
 def record_presence(c, session: str, project: str, cwd, runtime: str | None = None, via: str | None = None) -> None:
     """This session is in this project, in cwd, now (inside the caller's transaction). The hooks write session,
-    project, cwd and seen; an MCP server's row (mcp:<pid>:<start>) also its runtime and what wrote seen (via)."""
+    project, cwd, seen and the runtime whose hook it was (docs/design/mailbox-runtimes.md A1); an MCP server's row
+    (mcp:<pid>:<start>) also what wrote seen (via)."""
     if via is None:
-        c.execute("INSERT INTO presence(session, project, cwd, seen) VALUES(?,?,?,?) ON CONFLICT(session) DO UPDATE"
-                  " SET project=excluded.project, cwd=excluded.cwd, seen=excluded.seen",
-                  (session, project, str(cwd), iso()))
+        c.execute("INSERT INTO presence(session, project, cwd, seen, runtime) VALUES(?,?,?,?,?) ON CONFLICT(session)"
+                  " DO UPDATE SET project=excluded.project, cwd=excluded.cwd, seen=excluded.seen,"
+                  " runtime=COALESCE(excluded.runtime, presence.runtime)", (session, project, str(cwd), iso(), runtime))
         return
     c.execute("INSERT INTO presence(session, project, cwd, seen, runtime, via) VALUES(?,?,?,?,?,?) ON CONFLICT(session)"
               " DO UPDATE SET project=excluded.project, cwd=excluded.cwd, seen=excluded.seen,"
@@ -904,15 +910,18 @@ def mcp_presence(project: str, session: str, cwd, client, via: str) -> None:
     c = db(timeout=HOOK_TIMEOUT_S)
     try:
         c.execute("BEGIN IMMEDIATE")
-        record_presence(c, session, project, cwd, *((mcp_runtime(client), via) if mcp else ()))
+        import runtime_ports
+        record_presence(c, session, project, cwd,
+                        *((mcp_runtime(client), via) if mcp else (runtime_ports.runtime_of(session)[0],)))
         c.execute("COMMIT")
     finally:
         c.close()
 
 
-def mail_text(event: str, session, cwd) -> str | None:
+def mail_text(event: str, session, cwd, runtime: str | None = None) -> str | None:
     """The platform's logic: record presence, deliver the letters this session should get, return the text to put
-    into the context (None if there's none). event is session-start / prompt / post-tool. Runtime-independent."""
+    into the context (None if there's none). event is session-start / prompt / post-tool. Runtime-independent: session
+    is in the platform's ids (runtime_ports.qualify), runtime the name of the runtime whose hook called (presence)."""
     # no session = no real session is running (onboard/rename also run sync-local-setup.sh with --quiet):
     # do nothing, or letters would be recorded as delivered without any session seeing them
     if not session or not DB.exists():
@@ -941,7 +950,7 @@ def mail_text(event: str, session, cwd) -> str | None:
     c = db(timeout=HOOK_TIMEOUT_S)
     c.execute("BEGIN IMMEDIATE")
     if not os.environ.get("HUBBUS_LEASE"):  # lease sessions don't count as recipients
-        record_presence(c, session, project, cwd)
+        record_presence(c, session, project, cwd, runtime)
     if event == "session-start":
         # session start (including after compaction): deliver all new ones, list one line for each delivered before
         # but not done yet, otherwise they'd be invisible after compaction
@@ -1528,13 +1537,22 @@ def branch_prompt(r, prompt=None) -> str:
     return prompts.render(prompt or RESUME_PROMPT, letter=fmt(r), id=r["id"])
 
 
-def recent_session(c, proj, live) -> str | None:
+def can_resume(rt, sid) -> bool:
+    """Whether a background copy of this session can be started (runtime_ports.Sessions.can_resume: its runtime is
+    the one that runs it, with the agent port). A runtime object without the question (one runtime, as before A1) can
+    resume all of its sessions."""
+    fn = getattr(rt, "can_resume", None)
+    return bool(fn(sid)) if callable(fn) else True
+
+
+def recent_session(c, proj, live, rt=None) -> str | None:
     """The live session with recent activity in this project (within FORK_RECENT_H; lease sessions don't record
-    presence). An MCP server's row is never one: there is no session behind it to fork."""
+    presence) that can be forked. An MCP server's row is never one: there is no session behind it to fork; nor is a
+    session whose runtime can't be resumed in the background (can_resume)."""
     cutoff = iso(now() - datetime.timedelta(hours=FORK_RECENT_H))
     for r in c.execute("SELECT session FROM presence WHERE project=? AND seen >= ? AND session NOT LIKE 'mcp:%'"
                        " ORDER BY seen DESC", (proj, cutoff)):
-        if r["session"] in live:
+        if r["session"] in live and (rt is None or can_resume(rt, r["session"])):
             return r["session"]
     return None
 
@@ -1747,7 +1765,8 @@ def dispatch(c, rt=None) -> int:
     if rt is None:
         import runtime_ports  # the runtime is only reached through the interface (Claude Code is one implementation)
         try:
-            rt = runtime_ports.load(ports=("agent", "sessions"))
+            runtime_ports.load(ports=("agent", "sessions"))   # the runtime the platform starts: as before A1
+            rt = runtime_ports.Sessions()   # the sessions of every installed runtime, each call routed by its id
         except runtime_ports.Unsupported as e:
             # no coding agent (runtime.default: none): no agent dispatched, letters stay in the mailbox for a person
             # (a session opening, or the owner side, sees them); the reason is logged once, not every minute
@@ -1787,7 +1806,7 @@ def dispatch(c, rt=None) -> int:
                         wake(c, rt, r, to_s)
                     waiting += 1
                     continue
-                tokens = rt.context_size(to_s)
+                tokens = rt.context_size(to_s) if can_resume(rt, to_s) else None
                 if tokens is not None and tokens <= RESUME_MAX_TOKENS and runs_today(c, proj) < DAILY_RUNS:
                     resume(c, r, to_s, session_cwd(c, to_s) or ws, rt, ws)
                     continue
@@ -1811,7 +1830,7 @@ def dispatch(c, rt=None) -> int:
                 # delegation: a live session with recent activity in this project → handled in a background fork with
                 # its context (owner's trial since 10-26, m10261706), which can answer about what that session has on
                 # hand; none, context too large, or today's quota used up → headless agent
-                sid = recent_session(c, proj, live)
+                sid = recent_session(c, proj, live, rt)
                 tokens = rt.context_size(sid) if sid else None
                 if tokens is not None and tokens <= RESUME_MAX_TOKENS and runs_today(c, proj) < DAILY_RUNS:
                     resume(c, r, sid, session_cwd(c, sid) or ws, rt, ws, prompt=DELEGATE_PROMPT)
@@ -2076,10 +2095,7 @@ def prune_wake_addresses(live=None) -> list[str]:
         return []
     if live is None:
         import runtime_ports
-        try:
-            live = runtime_ports.load(ports=("sessions",)).live_sessions()
-        except runtime_ports.Unsupported:
-            live = set()
+        live = runtime_ports.Sessions().live_sessions()   # every installed runtime's, in the platform's ids
     gone = []
     for f in d.glob("*.json"):
         try:
@@ -2443,7 +2459,9 @@ def cli() -> None:
     d = sub.add_parser("done")
     d.add_argument("ids", nargs="+")
     d.add_argument("--note")
-    sub.add_parser("hook").add_argument("event", choices=("session-start", "prompt", "post-tool"))
+    hk = sub.add_parser("hook")
+    hk.add_argument("event", choices=("session-start", "prompt", "post-tool"))
+    hk.add_argument("--runtime", help=_("whose hook this is (default: hub.json runtime.default)"))
     sub.add_parser("bridge")
     sub.add_parser("dispatch")
     sub.add_parser("thread").add_argument("id")
@@ -2490,7 +2508,7 @@ def cli() -> None:
                    "yourself is not allowed", how=how))
     if a.cmd == "hook":
         try:
-            cmd_hook(a.event)
+            cmd_hook(a.event, a.runtime)
         except Exception as e:  # a broken hook must not affect the session
             log(_("hook {event} failed: {e!r}", event=a.event, e=e))
         return

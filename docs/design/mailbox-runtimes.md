@@ -9,7 +9,8 @@ version.
 
 Status: step 1 (A3) implemented on 11-01 (record in `docs/design/mailbox-routing.md`, "11-01: an MCP session holds a
 delegation back"); step 2 (B1) implemented on 11-01 with Claude's `wake` Unsupported (record in mailbox-routing.md,
-"11-01: waking a live session"); step 3 is design.
+"11-01: waking a live session"); step 3 (A1) implemented on 11-01 (record in mailbox-routing.md, "11-01: more than one
+coding agent"); step 4 is the next version.
 
 r2 followed two cold reviews: one against the code, one against the tools' documentation. r3 fixes a third review of
 r2: the messaging tokens move to the secrets directory, the hold covers only letters not yet delivered, and presence
@@ -305,7 +306,24 @@ implements it, port by port, saying the rest is unsupported. What the reviews fo
      poller gives at most one wake within its timeout. It needs a respawn design of its own (re-armed at the end of each
      turn, one poller per session), which no review has seen. Left to the owner.
 3. **A1**: `runtime.installed`, runtime-routed calls, hooks carrying their runtime, the presence column, doctor's
-   columns.
+   columns. **Done 11-01.** Characterization tests of a Claude-only machine first (`tests/test_runtime_installed.py`
+   ClaudeOnlyToday, through the real Claude adapter); with `runtime.installed` absent or `[claude]` every golden is
+   unchanged. The only visible difference there: the installed hook command gains `--runtime claude` (each project's
+   hook settings are rewritten once at its next session start, a sandboxed project's by render-project-settings), and
+   hook presence rows now carry `runtime`. As built, and where it differs from the text above:
+   - `runtime.bare_ids` is not written by the platform. Unset it means `claude` (`runtime_ports.DEFAULT`), not "the
+     `runtime.default` of the moment A1 first runs": every bare id on any bus was written by the Claude adapter (the
+     only runtime with hooks before A1), so the two are the same on every existing instance, and the constant needs no
+     first-run write into hub.json (no applier, no commit) and cannot drift with `runtime.default`. Setting it in
+     hub.json still pins it.
+   - Background resume and forks use only sessions of `runtime.default` (when it has the `agent` port), not of any
+     runtime with the port: they run the `mailbox-conversation` point, which runs on `runtime.default` and can't be
+     pinned elsewhere (`RUNTIME_ARG_POINTS`). Resuming another runtime's session comes with that runtime's adapter.
+   - `current_session` with several installed runtimes asks each adapter's new optional `session_process(command)`
+     about the ancestor processes; with one, it reads the environment as before.
+   - Doctor's per-runtime columns appear only with more than one installed runtime.
+   - Not moved: the transcript statistics (memory gaps, weekly report) stay on `runtime.default`, and the older
+     `hubbus hook` entry points without `--runtime` (worktree-memory.sh) parse as `runtime.default`.
 4. **Codex adapter**: next version (above).
 
 v0.2.0: steps 1–3. If the release has to be tight, step 1 alone is the floor. It stops dispatch from colliding with

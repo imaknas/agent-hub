@@ -149,5 +149,15 @@
  "judgment points have nowhere to run: no coding agent is set up (runtime.default: none) and hub.json has no llm.providers": "判斷點沒地方跑:沒有設定 coding agent(runtime.default: none)、hub.json 也沒有 llm.providers",
  "⚠️ no coding agent is set up (runtime.default: none), so runtime has no login to hand judgment points to: they will fail. Pick a provider: agenthub llm setup": "⚠️ 沒有設定 coding agent(runtime.default: none),runtime 沒有登入可以接判斷點:判斷點會失敗。選一家 provider:agenthub llm setup",
  "the scheduler has not ticked yet, and no service manager runs it here (see the scheduler line above)": "排程器還沒 tick 過,這台也沒有服務管理員在跑它(看上面排程器那一行)",
- "⚠️ {reason}; to run the nightly flow, {how}": "⚠️ {reason};要跑夜間流程就{how}"
+ "⚠️ {reason}; to run the nightly flow, {how}": "⚠️ {reason};要跑夜間流程就{how}",
+ "coding agents: {names} (the platform starts {default}; hub.json runtime.installed)": "coding agent:{names}(平台啟動的是 {default};hub.json runtime.installed)",
+ "{feature}: {states}": "{feature}:{states}",
+ "; ": ";",
+ "{runtime} available": "{runtime} 可以用",
+ "{runtime} off (has no {missing})": "{runtime} 關掉(沒有{missing})",
+ "a runtime that is off for a feature only lacks it for its own sessions": "某個 runtime 關掉的功能,只是它自己的 session 沒有",
+ "{runtime}: the platform's rules go into {file}": "{runtime}:平台規則寫進 {file}",
+ "{runtime}: no rules file; its sessions get the platform's rules from the MCP server's instructions (agenthub mcp) or their session-start hook": "{runtime}:沒有規則檔;它的 session 從 MCP server 的 instructions(agenthub mcp)或 session 開始的 hook 拿到平台規則",
+ "{runtime}: its hooks are not installed in sandboxed projects, and a session of it there gets no letters or notes from the platform (it has no {missing})": "{runtime}:沙盒專案不裝它的 hook,它在那裡的 session 收不到平台的信和提醒(它沒有{missing})",
+ "use a runtime with both in sandboxed projects": "沙盒專案用兩個都有的 runtime"
 }

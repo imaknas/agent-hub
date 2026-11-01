@@ -46,14 +46,14 @@ class Policy(Base):
     def test_policy_carries_the_runtimes_list(self):
         import policy
         fake = type("RT", (), {"control_paths": staticmethod(lambda: [(".x/settings", True), (".x", False)])})
-        with mock.patch("runtime_ports.load", lambda ports=(): fake):
+        with mock.patch("runtime_ports.load", lambda name=None, ports=(): fake):
             self.assertEqual(policy.protect(), [{"name": ".x/settings", "tree": True}, {"name": ".x", "tree": False}])
 
     def test_no_control_port_means_none_and_doctor_says_so(self):
         import policy
         import runtime_ports
 
-        def unsupported(ports=()):
+        def unsupported(name=None, ports=()):
             raise runtime_ports.Unsupported("no control port")
         with mock.patch("runtime_ports.load", unsupported):
             self.assertEqual(policy.protect(), [])

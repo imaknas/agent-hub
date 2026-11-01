@@ -2,10 +2,14 @@
 """The platform's event entry point (runtime abstraction layer 3, docs/design/runtime-abstraction.md): each runtime
 wires its native hooks to this.
 
-  hub-event <event>          the event is the platform's own name (runtime_ports.EVENTS); stdin is the runtime's
-                             native hook input
-  hub-event install <folder>  install the hooks in this project (the platform's replaced with new ones, the user's own
-                              kept): called by sync-local-setup
+  hub-event [--runtime <name>] <event>
+                             the event is the platform's own name (runtime_ports.EVENTS); stdin is the runtime's
+                             native hook input. --runtime: whose hook this is (each runtime's installed hooks say;
+                             without it, runtime.default's, as hooks written before docs/design/mailbox-runtimes.md A1).
+                             Its lifecycle parses the input, and the session is recorded in the platform's ids
+                             (runtime_ports.qualify)
+  hub-event install <folder>  install the hooks of every installed runtime with session events in this project (the
+                              platform's replaced with new ones, the user's own kept): called by sync-local-setup
   hub-event as-project <event> <workspace> <command>
                               inside a sandboxed project's sandbox: its handlers that touch its repo (AS_PROJECT),
                               JSON out (called by hub-event itself)
@@ -109,7 +113,7 @@ def nudge(ev, ws):
 def mail(ev, ws):
     hubbus = _load("hubbus_mod", BIN / "hubbus")
     kind = {"session_start": "session-start", "prompt": "prompt", "tool_used": "post-tool"}[ev.event]
-    return hubbus.mail_text(kind, ev.session, ev.cwd)
+    return hubbus.mail_text(kind, ev.session, ev.cwd, runtime=_RT_NAME)
 
 
 def guard(ev, ws):
@@ -118,6 +122,7 @@ def guard(ev, ws):
 
 
 _RT = None   # the runtime whose hook this is (handle sets it): wake_address asks it about the hook's environment
+_RT_NAME = None   # its name: presence records it
 
 
 def wake_address(ev, ws):
@@ -186,16 +191,27 @@ def _log(event, project, ran, failed) -> None:
         pass
 
 
-def handle(event: str, raw: str, rt=None) -> str:
-    """Run one event and return the native output to print to stdout ("" if none). For main and tests."""
-    global _RT
-    rt = _RT = rt or runtime_ports.load(ports=("lifecycle",))
+CAGED_NEEDS = {"control", "confine"}
+
+
+def handle(event: str, raw: str, rt=None, name: str | None = None) -> str:
+    """Run one event and return the native output to print to stdout ("" if none). For main and tests. name: whose
+    hook (--runtime); none = runtime.default."""
+    global _RT, _RT_NAME
+    _RT_NAME = name = name or runtime_ports.default_name()
+    rt = _RT = rt or runtime_ports.load(name, ports=("lifecycle",))
     ev = rt.parse_event(event, raw)
     if ev is None or event not in HANDLERS:
         return ""
+    ev = ev._replace(session=runtime_ports.qualify(name, ev.session))
     ws = _workspace(ev.cwd)
     proj = project_git.project_at(ws) if ws else None
     caged = bool(proj) and isolation.sandboxed(proj[1]) and not os.environ.get("HUB_AS_PROJECT")
+    if caged and not CAGED_NEEDS <= runtime_ports.capabilities(name):
+        # a sandboxed project's sessions run only under a runtime whose control files the platform protects and whose
+        # runs it can confine: its hooks are never installed there, and one found anyway does nothing (fail closed)
+        _log(event, ws.name, [], [f"refused:{name}"])
+        return ""
     inner = _as_project(proj[0], ws, ev) if caged and _needs_project(ev) else {}
     texts, reasons, ran, failed = [], [], [], []
     for name, fn in HANDLERS[event]:
@@ -264,20 +280,35 @@ def as_project(event: str, ws: str, command: str) -> int:
     return 0
 
 
+def install(ws: pathlib.Path) -> int:
+    """The hooks of every installed runtime with session events (runtime_ports.installed). None has them: say why,
+    exit code 3 for "unsupported"."""
+    done, why = 0, None
+    for name in runtime_ports.installed():
+        try:
+            rt = runtime_ports.load(name, ports=("lifecycle",))
+        except runtime_ports.Unsupported as e:
+            why = why or e
+            continue
+        rt.install_lifecycle(ws)
+        done += 1
+    if not done:
+        print(why, file=sys.stderr)
+        return 3
+    return 0
+
+
 def main(argv) -> int:
     if argv[:1] == ["as-project"] and len(argv) == 4:
         return as_project(*argv[1:])
     try:
         if argv[:1] == ["install"] and len(argv) == 2:
-            try:
-                rt = runtime_ports.load(ports=("lifecycle",))
-            except runtime_ports.Unsupported as e:   # no hooks to install: say why; exit code 3 for "unsupported"
-                print(e, file=sys.stderr)
-                return 3
-            rt.install_lifecycle(pathlib.Path(argv[1]).resolve())
-            return 0
+            return install(pathlib.Path(argv[1]).resolve())
+        name = None
+        if argv[:1] == ["--runtime"] and len(argv) == 3:
+            name, argv = argv[1], argv[2:]
         if len(argv) == 1:
-            out = handle(argv[0], _read_stdin())
+            out = handle(argv[0], _read_stdin(), name=name)
             if out:
                 print(out)
     except Exception as e:  # a broken hook must not affect the session

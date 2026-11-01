@@ -27,5 +27,6 @@
  "the platform's session hooks": "平台的 session hook",
  "{project}: its session hooks could not be checked ({why})": "{project}:沒辦法檢查它的 session hook({why})",
  "{project}: would write the platform's session hooks again": "{project}:會重寫平台的 session hook",
- "{project}: the platform's session hooks written again": "{project}:重寫了平台的 session hook"
+ "{project}: the platform's session hooks written again": "{project}:重寫了平台的 session hook",
+ "the platform's session hooks ({runtime})": "平台的 session hook({runtime})"
 }

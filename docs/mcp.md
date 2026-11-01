@@ -25,8 +25,11 @@ this server, the server records presence (`docs/design/mailbox-runtimes.md` A3):
 
 - At `initialize` and at every tool call it writes a presence row for its project: session `mcp:<server pid>:<start
   time>` (stdio MCP has no session id), runtime `mcp:<clientInfo.name>`. If the server's environment carries a session
-  id from the coding agent's runtime (the server inherits its client's environment), that id is used instead. A
-  sandboxed project's server writes it through the project's outbox (operation `presence`).
+  id from the coding agent's runtime (the server inherits its client's environment), that id is used instead, in the
+  platform's form (`<runtime>:<id>` unless it is `runtime.bare_ids`'s; with several runtimes in hub.json
+  `runtime.installed`, the nearest ancestor process a runtime claims decides whose, `docs/design/mailbox-runtimes.md`
+  A1), with that runtime in the row. A sandboxed project's server writes it through the project's outbox (operation
+  `presence`).
 - Dispatch counts that row as the project in use, without asking any runtime, while the server process still runs (its
   pid and start time match, and it is this platform's MCP server) and for `mailbox.mcp_presence_min` (30) minutes
   after the last tool call; a server that was only initialized counts for `mailbox.conversation_wait_min` (5) minutes.

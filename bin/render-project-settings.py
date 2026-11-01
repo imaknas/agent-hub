@@ -326,7 +326,7 @@ def lifecycle(index: dict, apply: bool, only: str | None = None) -> list:
     try:
         rt = runtime_ports.load(ports=("lifecycle",))
     except runtime_ports.Unsupported:   # the runtime has no session events (doctor's feature table says so)
-        return []
+        return other_lifecycles(index, apply, only)
     out = []
     for name, doc in sorted(index["projects"].items()):
         ws = lifecycle_folder(name, doc)
@@ -339,6 +339,48 @@ def lifecycle(index: dict, apply: bool, only: str | None = None) -> list:
                 out.append(Change("update", f"agent-settings:{name}", _("the platform's session hooks")))
         except (OSError, ValueError) as e:   # e.g. its settings aren't valid JSON: left as they are, said
             print(_("{project}: its session hooks could not be checked ({why})", project=name, why=e), file=sys.stderr)
+    return out + other_lifecycles(index, apply, only)
+
+
+CAGED_NEEDS = {"control", "confine"}
+
+
+def other_lifecycles(index: dict, apply: bool, only: str | None = None) -> list:
+    """The session hooks of the installed runtimes other than runtime.default (hub.json runtime.installed;
+    docs/design/mailbox-runtimes.md A1), same rules as lifecycle(). In a sandboxed project only a runtime with control
+    and confine gets them, written by the platform (its hook files are then in the project's protected paths, and its
+    runs can be confined); one without them is refused there, fail closed: never installed, and hub-event does nothing
+    for one found anyway (doctor says which). Claude Code's hooks in a sandboxed project are part of its settings
+    (compose)."""
+    from appliers import Change
+    import runtime_ports
+    out = []
+    for rname in runtime_ports.installed():
+        if rname == runtime_ports.default_name():
+            continue
+        try:
+            rt = runtime_ports.load(rname, ports=("lifecycle",))
+        except runtime_ports.Unsupported:
+            continue
+        caged_ok = CAGED_NEEDS <= runtime_ports.capabilities(rname)
+        for name, doc in sorted(index["projects"].items()):
+            if only and name != only:
+                continue
+            ws = lifecycle_folder(name, doc)
+            if ws is None and (doc.get("enforce") or {}).get("sandbox") and caged_ok and rt is not runtime_claude:
+                w = registry.dirs(doc)["workspace"]
+                ws = w if w and (w / ".agent-memory").is_dir() else None
+            if not ws:
+                continue
+            try:
+                if rt.install_lifecycle(ws, check=True):
+                    if apply:
+                        rt.install_lifecycle(ws)
+                    out.append(Change("update", f"agent-settings:{name}",
+                                      _("the platform's session hooks ({runtime})", runtime=rname)))
+            except (OSError, ValueError) as e:
+                print(_("{project}: its session hooks could not be checked ({why})", project=name, why=e),
+                      file=sys.stderr)
     return out
 
 

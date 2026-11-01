@@ -2,7 +2,8 @@
 # Align an onboarded project's "local-only" setup with agent-hub's current version. Idempotent; never changes or
 # commits any tracked file in the project repo:
 #
-#   1. In the runtime's rules file (`hub-runtime instructions-file`; for Claude Code, CLAUDE.local.md), the block
+#   1. In each installed runtime's rules file (`hub-runtime instructions-files`; for Claude Code, CLAUDE.local.md), the
+#      block
 #      between <!-- agent-hub:begin/end --> is regenerated whole from templates/agent-instructions.md plus the
 #      templates/rules/*.md listed in .agent-memory/RULES (prompts.agent_rules: the names, the content language and
 #      the to-do tokens filled in from hub.json): change the template and every project catches up at its next
@@ -61,16 +62,18 @@ if [ -n "$old_url" ] && [ "${old_url%-memory.git}" != "$old_url" ] && ! git remo
 fi
 
 # --- 1. the rules file's managed block ---
-# Which file it goes to is the runtime's call (runtime_ports' instructions; for Claude Code, CLAUDE.local.md). If it
-# can't be asked, stop; don't guess a default file name: that would hard-code Claude back in.
-# Exit code 3 = this runtime has no rules file (e.g. runtime.default is none): skipped explicitly, the other steps run
-# as usual.
-INSTR=$("$AGENT_HUB/bin/py" "$AGENT_HUB/bin/hub-runtime" instructions-file "$PWD" 2>/dev/null); rc=$?
+# Which file it goes to is the runtime's call (runtime_ports' instructions; for Claude Code, CLAUDE.local.md), one block
+# for each installed runtime that has a rules file (hub.json runtime.installed; docs/design/mailbox-runtimes.md A1). If
+# it can't be asked, stop; don't guess a default file name: that would hard-code Claude back in.
+# Exit code 3 = no installed runtime has a rules file (e.g. runtime.default is none): skipped explicitly, the other
+# steps run as usual.
+INSTRS=$("$AGENT_HUB/bin/py" "$AGENT_HUB/bin/hub-runtime" instructions-files "$PWD" 2>/dev/null); rc=$?
 if [ "$rc" = 3 ]; then
   $QUIET || hub_say "sync-local-setup: this runtime has no rules file (hub.json runtime.default); the managed block is not written"
-elif [ "$rc" != 0 ] || [ -z "$INSTR" ]; then
+elif [ "$rc" != 0 ] || [ -z "$INSTRS" ]; then
   hub_say "sync-local-setup: hub-runtime could not say where the rules file is; the managed block was not updated" >&2; exit 1
 else
+while IFS= read -r INSTR; do
 # If the project lists extra rules in .agent-memory/RULES on the memory branch (one name per line, e.g. engineering),
 # append templates/rules/<name>.md after the block. The list lives on the memory branch: it survives a recover on a
 # new machine; the rule content lives in agent-hub: change it once and every project that lists it catches up.
@@ -119,6 +122,8 @@ while IFS=$'\t' read -r name rule; do
 done <"$missing"
 rm -f "$missing"
 [ "$rc" = 0 ] && { $QUIET || hub_say "sync-local-setup: {file} aligned" file="$INSTR"; }
+done <<<"$INSTRS"
+INSTR=${INSTRS%%$'\n'*}   # the first rules file: the reminder in step 4 names it
 fi
 
 # --- 2. hook ---

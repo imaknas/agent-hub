@@ -197,6 +197,16 @@ def current_session(env) -> str | None:
     return env.get("CLAUDE_CODE_SESSION_ID") or None
 
 
+_SESSION_PROCESS = re.compile(r"(?:^|/)claude(?:\s|$)|/claude-code/|@anthropic-ai/claude-code")
+
+
+def session_process(command: str) -> bool:
+    """Whether a process with this command line is a Claude Code session (runtime_ports.current_session asks, walking
+    up from the current process, only when more than one runtime is installed): the claude executable, or the npm
+    package's entry point."""
+    return bool(_SESSION_PROCESS.search(command or ""))
+
+
 # ---------- waking a live session (runtime_ports' wake; docs/design/mailbox-runtimes.md B1) ----------
 # Claude Code binds a per-session inbox socket and exports its path and a per-session token to hooks, SessionStart
 # included (code.claude.com/docs/en/cross-session-messaging, "The session's inbox socket"; env-vars,
@@ -627,12 +637,17 @@ _HOOK_NAME = {ev: name for name, _matcher, ev in HOOK_TABLE}
 MANAGED = re.compile(r"/bin/hub-event(?=['\s]|$)|/agent-hub/bin/")
 
 
+NAME = "claude"   # this runtime's name in runtime_ports.RUNTIMES: the hooks say whose they are
+
+
 def hook_command(event: str) -> str:
     # as before: if the entry point is missing, quietly do nothing; the exit code is always 0, so the session never
     # shows an error. The hub's location is resolved now (hubconf.hub_bin); after the hub moves, installing again
-    # rewrites it.
+    # rewrites it. --runtime: hub-event parses the input with this runtime's lifecycle and records the session in the
+    # platform's ids (docs/design/mailbox-runtimes.md A1)
     import hubconf
-    return f"[ -x {hubconf.hub_bin('hub-event')} ] && {hubconf.sh_py(hubconf.MAIN / 'bin' / 'hub-event')} {event} || true"
+    return (f"[ -x {hubconf.hub_bin('hub-event')} ] && {hubconf.sh_py(hubconf.MAIN / 'bin' / 'hub-event')} "
+            f"--runtime {NAME} {event} || true")
 
 
 def parse_event(event: str, raw: str):

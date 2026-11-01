@@ -29,5 +29,6 @@
  "way to tell which tool servers a run loads": "判斷一次執行會載入哪些工具伺服器",
  "way to wake an idle session": "叫醒閒置 session 的方法",
  "an idle open session is woken when a letter arrives for it": "有信來時叫醒開著但閒置的 session",
- "{label}: {why}": "{label}:{why}"
+ "{label}: {why}": "{label}:{why}",
+ "session {sid} can't be resumed in the background (its runtime isn't {runtime})": "session {sid} 不能在背景接著跑(它的 runtime 不是 {runtime})"
 }

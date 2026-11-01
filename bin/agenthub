@@ -650,14 +650,18 @@ def cmd_doctor(argv: list[str]) -> int:
     import runtime_ports
     rname = runtime_ports.default_name()
     optional = runtime_ports.optional_features()   # off is said, not a reminder: letters still arrive at the next hook
-    for feat, ok, miss in runtime_ports.feature_table(rname):
-        add("ok" if ok else "info" if feat in optional else "warn", _("{feature}: available", feature=feat) if ok else
-            # runtime none is no coding agent at all, not one that lacks a part
-            _("{feature}: off (no coding agent is set up: hub.json runtime.default is none)", feature=feat)
-            if rname == "none" else
-            _("{feature}: off (the runtime {runtime} has no {missing})", feature=feat, runtime=rname, missing=miss),
-            "" if ok or feat in optional else
-            _("install a coding agent that supports them, and point hub.json runtime.default at it"))
+    installed = runtime_ports.installed()
+    if installed == [rname]:   # one coding agent (runtime.installed unset or only the default): as before A1
+        for feat, ok, miss in runtime_ports.feature_table(rname):
+            add("ok" if ok else "info" if feat in optional else "warn", _("{feature}: available", feature=feat) if ok else
+                # runtime none is no coding agent at all, not one that lacks a part
+                _("{feature}: off (no coding agent is set up: hub.json runtime.default is none)", feature=feat)
+                if rname == "none" else
+                _("{feature}: off (the runtime {runtime} has no {missing})", feature=feat, runtime=rname, missing=miss),
+                "" if ok or feat in optional else
+                _("install a coding agent that supports them, and point hub.json runtime.default at it"))
+    else:
+        doctor_runtimes(add, rname, installed, optional)
     if runtime_ports.throwaway_only(rname):
         add("warn", _("the runtime {runtime} runs only in the platform's throwaway worktree: agent-shaped judgment points "
                       "other than {points} are refused with that reason", runtime=rname,
@@ -768,6 +772,39 @@ def cmd_doctor(argv: list[str]) -> int:
         _("background services, project settings: {count} {count:change|changes} not applied yet", count=sum(len(c) for c in left.values())),
         "" if not left else _("agenthub config plan, then agenthub config apply"))
     return report(results)
+
+
+def doctor_runtimes(add, default: str, installed: list[str], optional: set) -> None:
+    """Doctor with more than one coding agent (hub.json runtime.installed; docs/design/mailbox-runtimes.md A1): a column
+    per runtime in the feature table, each runtime's rules file, and the runtimes refused in sandboxed projects."""
+    import runtime_ports
+    names = list(dict.fromkeys([default, *installed]))
+    tables = {n: runtime_ports.feature_table(n) for n in names}
+    add("ok", _("coding agents: {names} (the platform starts {default}; hub.json runtime.installed)",
+                names=", ".join(installed), default=default))
+    for i, (feat, _ok, _miss) in enumerate(tables[default]):
+        cells = [(n, tables[n][i][1], tables[n][i][2]) for n in names]
+        if all(ok for _n, ok, _m in cells):
+            add("ok", _("{feature}: available", feature=feat))
+            continue
+        states = _("; ").join(_("{runtime} available", runtime=n) if ok else
+                              _("{runtime} off (has no {missing})", runtime=n, missing=miss) for n, ok, miss in cells)
+        add("info" if feat in optional else "warn", _("{feature}: {states}", feature=feat, states=states),
+            "" if feat in optional else _("a runtime that is off for a feature only lacks it for its own sessions"))
+    for n in installed:
+        try:
+            rules = runtime_ports.load(n, ports=("instructions",)).instructions_file(pathlib.Path("."))
+            add("ok", _("{runtime}: the platform's rules go into {file}", runtime=n, file=rules))
+        except runtime_ports.Unsupported:
+            add("info", _("{runtime}: no rules file; its sessions get the platform's rules from the MCP server's "
+                          "instructions (agenthub mcp) or their session-start hook", runtime=n))
+        caps = runtime_ports.capabilities(n)
+        if "lifecycle" in caps and not {"control", "confine"} <= caps:
+            add("warn", _("{runtime}: its hooks are not installed in sandboxed projects, and a session of it there gets "
+                          "no letters or notes from the platform (it has no {missing})", runtime=n,
+                          missing=runtime_ports.or_list(runtime_ports.missing_label(n, p)
+                                                        for p in ("control", "confine") if p not in caps)),
+                _("use a runtime with both in sandboxed projects"))
 
 
 def report(results) -> int:

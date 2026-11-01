@@ -121,6 +121,11 @@ The current interfaces (the other layers get added one at a time, following the 
     relocate(sid, old_cwd, new_cwd) -> bool              the project folder moved (rename, upgrade): make this
                                                          conversation resumable in the new folder too
 
+More than one runtime the user opens sessions with (hub.json runtime.installed; docs/design/mailbox-runtimes.md A1):
+installed(), qualify(name, id) / runtime_of(sid) between a runtime's own session ids and the platform's (bare for
+runtime.bare_ids, <runtime>:<id> otherwise), Sessions (the sessions port over every installed runtime, each call routed
+by the session's runtime), current_session (the nearest ancestor process a runtime claims, when several answer).
+
 Standard library only; the system python3 (3.9) can import it too (hubbus uses that one).
 """
 from __future__ import annotations
@@ -470,12 +475,165 @@ def load_completion(impl: str):
                      have=", ".join([*PROVIDERS, *RUNTIMES])))
 
 
+# ---------- more than one runtime the user opens sessions with (docs/design/mailbox-runtimes.md A1) ----------
+# runtime.default is the agent the platform starts (headless dispatch, background resume, agent jobs, leases).
+# runtime.installed lists every agent the user opens sessions with (default: [runtime.default]). A session id keeps the
+# form its runtime gives it when that runtime is runtime.bare_ids (the platform's ids from before A1: every one written
+# then is Claude Code's, so unset it means DEFAULT, whatever runtime.default says now); any other runtime's ids are
+# written <runtime>:<id>, and mcp:<pid>:<start> are the MCP server's (A3). So nothing on the bus needs migrating, and
+# changing runtime.default never reroutes an old id.
+
+def installed() -> list[str]:
+    """hub.json runtime.installed: the registered runtimes the user opens sessions with, in order, no repeats."""
+    try:
+        import hubconf
+        names = hubconf.get("runtime.installed") or None
+    except Exception:
+        names = None
+    out = []
+    for n in names if isinstance(names, list) else [default_name()]:
+        if isinstance(n, str) and n in RUNTIMES and n not in out:
+            out.append(n)
+    return out or [default_name()]
+
+
+def bare_runtime() -> str:
+    """The runtime whose session ids are written without a prefix (hub.json runtime.bare_ids, else DEFAULT)."""
+    try:
+        import hubconf
+        name = hubconf.get("runtime.bare_ids") or DEFAULT
+    except Exception:
+        name = DEFAULT
+    return name if name in RUNTIMES else DEFAULT
+
+
+def qualify(name: str | None, native: str | None) -> str | None:
+    """A runtime's own session id → the platform's: as it is for the bare runtime, <runtime>:<id> otherwise."""
+    if not native:
+        return native
+    name = name or default_name()
+    return native if name == bare_runtime() else f"{name}:{native}"
+
+
+def runtime_of(sid: str | None) -> tuple[str | None, str | None]:
+    """The platform's session id → (runtime, that runtime's own id). An MCP server's id (mcp:…) and an empty one belong
+    to no runtime: (None, sid)."""
+    if not sid or sid.startswith("mcp:"):
+        return None, sid
+    head, sep, rest = sid.partition(":")
+    if sep and head in RUNTIMES and head != bare_runtime():
+        return head, rest
+    return bare_runtime(), sid
+
+
+class Sessions:
+    """The sessions port over every installed runtime that has it, each call routed by runtime_of(sid): what dispatch
+    asks (live_sessions is their union, in the platform's ids). wake goes to the session's runtime when it has the
+    wake port. Resuming or forking a session in the background runs the mailbox-conversation point, which runs on
+    runtime.default and can't be pinned elsewhere (RUNTIME_ARG_POINTS): only sessions of that runtime, when it has the
+    agent port, can be resumed (can_resume); the others are handled as delegations."""
+
+    def __init__(self, names=None):
+        self.mods = {}
+        for n in names or installed():
+            try:
+                self.mods[n] = load(n, ports=("sessions",))
+            except Unsupported:
+                pass
+
+    def _mod(self, sid):
+        name, native = runtime_of(sid)
+        return self.mods.get(name), native
+
+    def live_sessions(self) -> set[str]:
+        return {qualify(n, s) for n, m in self.mods.items() for s in m.live_sessions()}
+
+    def alive(self, sid) -> bool:
+        m, native = self._mod(sid)
+        return bool(m) and m.alive(native)
+
+    def context_size(self, sid):
+        m, native = self._mod(sid)
+        return m.context_size(native) if m else None
+
+    def can_resume(self, sid) -> bool:
+        name, _native = runtime_of(sid)
+        return name == default_name() and name in self.mods and "agent" in capabilities(name) \
+            and callable(getattr(self.mods[name], "resume_args", None))
+
+    def resume_args(self, sid) -> list[str]:
+        if not self.can_resume(sid):
+            raise Unsupported(_("session {sid} can't be resumed in the background (its runtime isn't {runtime})",
+                                sid=sid, runtime=default_name()))
+        m, native = self._mod(sid)
+        return m.resume_args(native)
+
+    def wake(self, sid, text) -> bool:
+        m, native = self._mod(sid)
+        fn = getattr(m, "wake", None) if m else None
+        if not callable(fn):
+            raise Unsupported(missing_label(runtime_of(sid)[0], "wake") if m else sid)
+        return fn(native, text)
+
+
+def _parent_and_command(pid: int) -> tuple[int | None, str]:
+    """A process's parent pid and command line (/proc on Linux, ps elsewhere); (None, "") when it can't be read."""
+    import subprocess
+    try:
+        if os.path.exists("/proc/self/stat"):
+            with open(f"/proc/{pid}/stat") as fh:
+                ppid = int(fh.read().rsplit(")", 1)[1].split()[1])
+            with open(f"/proc/{pid}/cmdline", "rb") as fh:
+                return ppid, fh.read().replace(b"\0", b" ").decode(errors="replace").strip()
+        r = subprocess.run(["ps", "-o", "ppid=,command=", "-p", str(pid)], capture_output=True, text=True, timeout=10)
+        ppid, _sp, cmd = r.stdout.strip().partition(" ")
+        return (int(ppid), cmd.strip()) if r.returncode == 0 and ppid.isdigit() else (None, "")
+    except (OSError, ValueError, IndexError, subprocess.SubprocessError):
+        return None, ""
+
+
+def ancestors(pid: int | None = None, limit: int = 64):
+    """(pid, command line) of this process's parent, its parent, … up to pid 1 (included: in a container the init
+    can be the parent)."""
+    pid = os.getpid() if pid is None else pid
+    for _i in range(limit):
+        ppid, _cmd = _parent_and_command(pid)
+        if not ppid:
+            return
+        yield ppid, _parent_and_command(ppid)[1]
+        if ppid <= 1:
+            return
+        pid = ppid
+
+
 def current_session(env=None) -> str | None:
-    """Which session the current process belongs to: asks the default runtime (for now, reading the environment
-    variables Claude Code provides).
+    """Which session the current process belongs to, in the platform's ids. With one installed runtime: that runtime
+    answers from the environment, as before A1. With several, each that has session state may find an id in the
+    environment (a session started inside another runtime's session inherits that one's variables), so the nearest
+    ancestor process that one of them claims as its session (its session_process(command)) decides; nobody claiming
+    one = unknown rather than a guess.
     No session interface (runtime_none) = unknown, not an error: mail is sent and presence recorded as usual, just
     without a sending session."""
-    try:
-        return load(ports=("sessions",)).current_session(os.environ if env is None else env)
-    except Unsupported:
-        return None
+    env = os.environ if env is None else env
+    names = installed()
+    if len(names) == 1:
+        try:
+            return qualify(names[0], load(names[0], ports=("sessions",)).current_session(env))
+        except Unsupported:
+            return None
+    found = {}
+    for n in names:
+        try:
+            sid = load(n, ports=("sessions",)).current_session(env)
+        except Unsupported:
+            continue
+        if sid:
+            found[n] = sid
+    if len(found) <= 1:
+        return next((qualify(n, s) for n, s in found.items()), None)
+    for _pid, cmd in ancestors():
+        for n, sid in found.items():
+            claims = getattr(_module(n), "session_process", None)
+            if callable(claims) and claims(cmd):
+                return qualify(n, sid)
+    return None
