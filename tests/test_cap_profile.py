@@ -107,6 +107,12 @@ class CapProfile(unittest.TestCase):
         cls.addClassCleanup(pathlib.Path(cls.sock_path).unlink, missing_ok=True)
         cls.addClassCleanup(cls.srv.close)
         cls.srv.listen(1)
+        # and a TCP port on 127.0.0.1 of its own (not a platform service's: the control run would really connect to it)
+        cls.tcp = socket.socket(socket.AF_INET)
+        cls.tcp.bind(("127.0.0.1", 0))
+        cls.addClassCleanup(cls.tcp.close)
+        cls.tcp.listen(4)
+        cls.tcp_port = cls.tcp.getsockname()[1]
         cls.sleeper = subprocess.Popen(["/bin/sleep", "60"])
         cls.addClassCleanup(cls.sleeper.kill)
         # call the Security framework directly, not through the security program: what is blocked is the Keychain
@@ -163,8 +169,8 @@ class CapProfile(unittest.TestCase):
 
     def test_network(self):
         self.blocked("connect outside", "curl -s -m 8 -o /dev/null https://example.com")
-        port = os.environ.get("LEASE_RUNNER_PORT", "18797")
-        self.blocked("connect to 127.0.0.1", f"curl -s -m 5 -o /dev/null http://127.0.0.1:{port}/")
+        self.blocked("connect to 127.0.0.1", f"/usr/bin/python3 -c \"import socket; "
+                                             f"socket.create_connection(('127.0.0.1', {self.tcp_port}), 5)\"")
         self.blocked("connect to unix socket", f"/usr/bin/python3 -c \"import socket; s=socket.socket(socket.AF_UNIX); "
                                                f"s.connect('{self.sock_path}')\"")
 
