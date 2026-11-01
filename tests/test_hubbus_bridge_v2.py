@@ -173,13 +173,26 @@ class BridgeV2(unittest.TestCase):
         self.assertEqual([b["through"] for b in self.fake.acks() if b["project"] == "proj"][-1], 1)
         self.assertEqual(self.incoming(), ["s:k1"])
 
-    def test_bad_incoming_records_are_skipped(self):
+    def test_bad_incoming_records_are_not_taken_nor_acked(self):
+        """a record not taken in is never acked past: the page comes again (what was taken is deduplicated) until the
+        reason is fixed, instead of being lost (the assistant's m11011416-bcb1)"""
         self.m.pull_records(self.c)
         self.fake.out["proj"] = [raised("forged"), settled("k1", project="other"), {"id": "junk"}, settled("ok")]
         self.m.pull_records(self.c)
         self.assertEqual(self.incoming(), ["s:ok"])
         self.assertEqual(self.incoming("other"), [])
         self.assertTrue(any("forged" in l or "r:forged" in l for l in self.logs))
+        self.assertEqual([b for b in self.fake.acks() if b["project"] == "proj"], [], "nothing acked")
+        self.m.pull_records(self.c)
+        self.assertEqual(self.incoming(), ["s:ok"], "pulled again, taken once")
+        self.assertEqual([q["after"] for q in self.fake.gets() if q["project"] == "proj"][-1], "0")
+
+    def test_a_0_4_record_is_taken(self):
+        self.m.pull_records(self.c)
+        self.fake.out["proj"] = [settled("k1", ph="0.4", ext="acts/0.4", terms_digest="sha-256:" + "0" * 64)]
+        self.m.pull_records(self.c)
+        self.assertEqual(self.incoming(), ["s:k1"])
+        self.assertEqual([b["through"] for b in self.fake.acks() if b["project"] == "proj"], [1])
 
     def test_starting_point_is_only_for_the_switch_on_not_for_later_names(self):
         self.m.pull_records(self.c)   # switch on: starting point

@@ -1251,14 +1251,22 @@ def pull_records(c) -> None:
             log_once(f"records-in-{name}", "")
             page, nxt = data.get("records") or [], int(data.get("cursor") or after)
             c.execute("BEGIN IMMEDIATE")
+            refused = []
             if known:
                 for rec in page:
                     if (errs := incoming_errors(rec, name)):
-                        log(_("record {id!r} from {assistant} for {project} refused: {errors}", assistant=ASSISTANT,
-                              id=(rec or {}).get("id") if isinstance(rec, dict) else rec, project=name,
-                              errors="; ".join(errs)))
+                        refused.append(_("record {id!r} from {assistant} for {project} refused: {errors}",
+                                         assistant=ASSISTANT, id=(rec or {}).get("id") if isinstance(rec, dict) else rec,
+                                         project=name, errors="; ".join(errs)))
                         continue
                     publish_record(c, rec, OWNER_ADDRESS, proj, *answer_routing(c, rec))
+            if refused:
+                # never past a record not taken in: the cursor and the ack stay before this page, so it comes again
+                # (the ones taken are deduplicated) until the reason is fixed, instead of being lost
+                c.execute("COMMIT")
+                log_once(f"records-refused-{name}", "; ".join(refused))
+                break
+            log_once(f"records-refused-{name}", "")
             set_cursor(c, got, nxt)
             if not known:
                 set_cursor(c, acked, nxt)   # starting point: earlier ones came via v1, not acked here
