@@ -805,6 +805,30 @@ def every_minutes(s: str) -> int:
     return int(n) * (60 if unit == "h" else 1)
 
 
+NIGHTLY_AT = "04:00"
+
+
+def nightly_test_jobs(index: dict, taken: set[str]) -> list[dict]:
+    """The nightly run of every project that declares a tier for it (docs/design/test-waiting.md B4): synthesized here,
+    not written into the project's file, so a manifest.update cannot remove the run that overrides flaky passes.
+    `agenthub test --when nightly --force --rev HEAD` in the project's main checkout, as one of its command jobs
+    (sandboxed like the others when the project is)."""
+    out = []
+    for name, doc in sorted(index["projects"].items()):
+        if not any("nightly" in (t.get("when") or []) for t in doc.get("tests") or []):
+            continue
+        full = f"{name}/nightly-tests"
+        cwd = dirs(doc)["workspace"]
+        if full in taken or not cwd:
+            continue
+        argv = [*hubconf.launch(hubconf.ROOT / "bin" / "test-runner.py"), "--when", "nightly", "--force", "--rev", "HEAD"]
+        cmd = (shlex.join(isolation.wrap(name, cwd, argv)) if isolation.sandboxed(doc)
+               else f"cd {shlex.quote(str(cwd))} && {shlex.join(argv)}")
+        out.append({"name": full, "command": cmd, "project": name, "time": NIGHTLY_AT, "background": True,
+                    "timeout_minutes": 180})
+    return out
+
+
 def scheduler_jobs(index: dict, legacy_names: set[str]) -> tuple[list[dict], list[str], dict[str, str]]:
     """Registry → scheduler.py's job dicts. Returns (jobs, the ones not used because their old name is still in
     schedule.yaml, new name → old name)."""
@@ -876,6 +900,7 @@ def scheduler_jobs(index: dict, legacy_names: set[str]) -> tuple[list[dict], lis
             for t in job.get("before") or []:
                 before.setdefault(t if "/" in t else f"{name}/{t}", []).append(full)
             out.append(j)
+    out += nightly_test_jobs(index, {j["name"] for j in out})
     # before: [X] = X's after gets one more entry, me (a module inserts itself into the core flow without the core
     # knowing about it). If X doesn't exist (that module is off), ignore it
     by_name = {j["name"]: j for j in out}
@@ -994,8 +1019,102 @@ def cmd_apply_updates() -> int:
     return 0
 
 
+V1_LINE = re.compile(r"^v:\s*1\s*(#.*)?$")
+RUNTIME_BLOCK = re.compile(r"^runtime:\s*(#.*)?$")
+RUNTIME_FLOW = re.compile(r"^runtime:\s*(\{.*\})\s*(#.*)?$")
+TEST_LINE = re.compile(r"^(\s+)test:\s*(.*?)\s*$")
+
+
+def upgrade_text(text: str) -> str | None:
+    """A v1 registry file rewritten as v2 by editing its text, so its comments and layout stay: `v: 2`, runtime.test
+    taken out of runtime (an emptied runtime stays as {}), a `full` tier added at the end. None when the file is not
+    v1, or when the edited text would not read as exactly tiers.upgrade() of the old one (a form this doesn't know,
+    left for a person)."""
+    try:
+        old = yaml.safe_load(text)
+    except yaml.YAMLError:
+        return None
+    if not isinstance(old, dict) or old.get("v") != 1:
+        return None
+    lines = text.splitlines(keepends=True)
+    out, test, i = [], None, 0
+    while i < len(lines):
+        line = lines[i]
+        if V1_LINE.match(line.rstrip("\n")):
+            out.append(line.replace("1", "2", 1))
+        elif RUNTIME_BLOCK.match(line.rstrip("\n")):
+            block = []
+            i += 1
+            while i < len(lines) and (lines[i].startswith((" ", "\t")) or not lines[i].strip()):
+                block.append(lines[i])
+                i += 1
+            kept = []
+            for b in block:
+                m = TEST_LINE.match(b.rstrip("\n"))
+                if m and test is None:
+                    test = m.group(2)
+                else:
+                    kept.append(b)
+            out.append(line if any(b.strip() for b in kept) else line.replace("runtime:", "runtime: {}", 1))
+            out += kept
+            continue
+        elif (m := RUNTIME_FLOW.match(line.rstrip("\n"))):
+            rt = yaml.safe_load(m.group(1)) or {}
+            if "test" in rt:
+                test = json.dumps(rt.pop("test"))
+                flow = "{" + ", ".join(f"{k}: {json.dumps(v)}" for k, v in rt.items()) + "}"
+                out.append(f"runtime: {flow}" + (f"  {m.group(2)}" if m.group(2) else "") + "\n")
+            else:
+                out.append(line)
+        else:
+            out.append(line)
+        i += 1
+    new = "".join(out)
+    if test is not None:
+        new = new.rstrip("\n") + f"\ntests:\n- tier: full\n  run: {test}\n  when: [merge, nightly, deploy]\n"
+    try:
+        return new if yaml.safe_load(new) == tiers.upgrade(old) else None
+    except yaml.YAMLError:
+        return None
+
+
+def cmd_upgrade_files(apply: bool) -> int:
+    """The registry's v1 files rewritten as v2 (upgrade_text), every one in the registry folder; dry-run unless
+    --apply, which commits them with commit-hub-files.sh. Reading already upgrades v1 (validate, refresh): this only
+    makes the files say what the platform reads."""
+    changed, stuck = [], []
+    for f in sorted(hubconf.registry_dir().glob("*.yaml")):
+        text = f.read_text()
+        try:
+            v = (yaml.safe_load(text) or {}).get("v")
+        except (yaml.YAMLError, AttributeError):
+            v = None
+        if v != 1:
+            continue
+        new = upgrade_text(text)
+        if new is None:
+            stuck.append(f.name)
+            continue
+        changed.append(f)
+        print(_("{file}: v1 → v2{tests}", file=f.name, tests=_(" (runtime.test → a full tier)") if "\ntests:" in new and "tests:" not in text else ""))
+        if apply:
+            f.write_text(new)
+    for name in stuck:
+        print(_("{file}: not rewritten (a form this command does not know; edit it by hand)", file=name), file=sys.stderr)
+    if not changed:
+        print(_("no v1 registry files to rewrite"))
+    elif not apply:
+        print(_("(dry-run; add --apply to rewrite and commit them)"))
+    else:
+        subprocess.run([str(hubconf.ROOT / "bin" / "commit-hub-files.sh"), "registry: files rewritten as project v2",
+                        *[f"projects/{f.name}" for f in changed]], check=False)
+    return 1 if stuck else 0
+
+
 def main() -> int:
     args = sys.argv[1:]
+    if args[:1] == ["upgrade-files"]:
+        return cmd_upgrade_files("--apply" in args)
     if args[:1] == ["add"] and len(args) == 7 and args[5] == "--extra":
         return cmd_add(*args[1:5], extra=args[6])
     if args[:1] == ["add"] and len(args) == 5:

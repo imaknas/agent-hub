@@ -689,7 +689,11 @@ replaces; each step only adds to the ones before it.
       `test-gate` keeps its own file until 2.3 makes it thin.
    3. (Done 11-01, `f7f6d42`, after a rehearsal in a throwaway hub that found three runner bugs first fixed on main
       — `fc22de9`, runs under `.git`; `e224f99`, TMPDIR in the checkout and no `lsof` on PATH; `test-gate` removed
-      right after. Still to do: `config apply` rewriting the registry files as v2, deploy, the nightly job.)
+      right after. Then: `registry.py upgrade-files [--apply]` rewrites v1 files as v2 by editing their text (comments
+      kept, the result checked to read exactly as the upgrade; a command, not part of `config apply`, which would
+      change the config it records as applied); the nightly run as a job `registry.scheduler_jobs` synthesizes for
+      every project with a nightly tier (`<project>/nightly-tests`, 04:00); deploy is muninn's change, requested.
+      Not yet: re-running a failing nightly test once.)
       (Ahead of it, 11-01: the hook installer for `gate: strict`, `commit_gate` and `commits: conventional`
       repos, which skips agent-hub until this merge. Left out of it, 11-01: `session.report` v2 and lease-handover v2,
       which no reader needs for the switch; `test-gate` stays thin for this one merge, as the old `merge-branch` runs

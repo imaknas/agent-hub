@@ -102,5 +102,54 @@ class V2(unittest.TestCase):
         self.assertTrue(any("testz" in e for e in self.errs(testz=[])))
 
 
+class UpgradeFiles(unittest.TestCase):
+    """registry.py upgrade-files: v1 files rewritten as v2 by editing their text (comments stay), only when the result
+    reads exactly as tiers.upgrade() of the old one."""
+
+    def test_block_runtime_with_deploy(self):
+        old = "# kept comment\nv: 1\nname: p\nruntime:\n  deploy: bin/deploy.sh   # deploys\n  test: uv run pytest -q\njobs: []\n"
+        new = registry.upgrade_text(old)
+        self.assertIn("# kept comment", new)
+        self.assertIn("# deploys", new)
+        self.assertTrue(new.startswith("# kept comment\nv: 2\n"))
+        self.assertEqual(registry.yaml.safe_load(new)["tests"][0]["run"], "uv run pytest -q")
+
+    def test_runtime_with_only_test_stays_as_an_empty_mapping(self):
+        new = registry.upgrade_text("v: 1\nname: p\nruntime:\n  test: make test\n")
+        self.assertEqual(registry.yaml.safe_load(new)["runtime"], {})
+
+    def test_flow_runtime(self):
+        new = registry.upgrade_text("v: 1\nname: p\nruntime: {deploy: d.sh, test: 'make check'}\n")
+        doc = registry.yaml.safe_load(new)
+        self.assertEqual((doc["runtime"], doc["tests"][0]["run"]), ({"deploy": "d.sh"}, "make check"))
+
+    def test_no_runtime_changes_only_the_version(self):
+        self.assertEqual(registry.upgrade_text("v: 1\nname: p\n"), "v: 2\nname: p\n")
+
+    def test_not_v1_or_unknown_form(self):
+        self.assertIsNone(registry.upgrade_text("v: 2\nname: p\n"))
+        self.assertIsNone(registry.upgrade_text("v: 1\nname: p\nruntime:\n  test: >-\n    a\n    b\n"),
+                          "a folded value the edit cannot carry over is left for a person")
+
+
+class NightlyJobs(unittest.TestCase):
+    def test_a_project_with_a_nightly_tier_gets_one_job(self):
+        ws = pathlib.Path(tempfile.mkdtemp())
+        try:
+            idx = {"projects": {
+                "a": {"v": 2, "name": "a", "paths": {"workspace": str(ws)},
+                      "tests": [{"tier": "full", "run": "x", "when": ["merge", "nightly"]}]},
+                "b": {"v": 2, "name": "b", "paths": {"workspace": str(ws)},
+                      "tests": [{"tier": "full", "run": "x", "when": ["merge"]}]},
+                "c": {"v": 2, "name": "c", "paths": {"workspace": str(ws)}}}}
+            jobs = registry.nightly_test_jobs(idx, set())
+            self.assertEqual([j["name"] for j in jobs], ["a/nightly-tests"])
+            self.assertIn("--when nightly --force --rev HEAD", jobs[0]["command"])
+            self.assertTrue(jobs[0]["background"])
+            self.assertEqual(registry.nightly_test_jobs(idx, {"a/nightly-tests"}), [], "a job of that name wins")
+        finally:
+            shutil.rmtree(ws, ignore_errors=True)
+
+
 if __name__ == "__main__":
     unittest.main()
