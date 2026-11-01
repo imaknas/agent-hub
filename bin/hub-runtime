@@ -4,6 +4,7 @@ The default runtime is set in hub.json.
 
   hub-runtime instructions-file <folder>   the file the platform's managed block goes into (relative to that folder)
   hub-runtime local-ignores                this runtime's machine-local files, one per line (to add to .git/info/exclude)
+  hub-runtime has <port>                   exit 0 when the runtime has that interface (runtime_ports.PORTS), 3 when not
 
 The system python3 (3.9) can run it.
 """
@@ -21,6 +22,8 @@ _ = i18n.domain(__file__)
 
 
 def main(argv) -> int:
+    if argv[:1] == ["has"] and len(argv) == 2:   # e.g. onboard says only what was really set up
+        return 0 if argv[1] in runtime_ports.capabilities() else 3
     try:
         rt = runtime_ports.load(ports=("instructions",))
     # no rules file: exit code 3 (the caller treats it as "unsupported" rather than guessing a default file name)

@@ -26,8 +26,8 @@ exit 0
 sync-local-setup (stand-in): alpha
 [5-6/11] .claude/settings.local.json hook 跟 CLAUDE.local.md 區塊已就位(不進版控)
 [7/11] 外層 repo 沒有任何變更、不 commit
-[8/11] hub 主機上已建 bare repo,agent-memory 分支已推送
-[9/11] hub 主機上已 clone librarian 用的 memory 副本到 ~/.memory-copies/alpha
+[8/11] 已建 memory bare repo(~/git-origin/alpha-memory.git),agent-memory 分支已推送
+[9/11] 已 clone librarian 用的 memory 副本到 ~/.memory-copies/alpha
 [10/11] 沒有外部 remote,跳過 mirror-backup 登記
 登錄:<TMP>/hub/projects/alpha.yaml
 commit-hub-files (stand-in): register alpha (onboard-project.sh)
@@ -90,8 +90,8 @@ exit 0
 (偵測到本機已完成前面的步驟,但 hub 主機上沒有對應、有實際內容的 bare repo——像是上次被中途打斷,接著從 hub 主機端繼續,不重做已完成的部分)
 [1/11] 前置條件檢查通過:alpha(--no-remote,維持純本機)
 [2-7/11] resume 模式,已在前一次呼叫完成,跳過
-[8/11] hub 主機上已建 bare repo,agent-memory 分支已推送
-[9/11] hub 主機上已 clone librarian 用的 memory 副本到 ~/.memory-copies/alpha
+[8/11] 已建 memory bare repo(~/git-origin/alpha-memory.git),agent-memory 分支已推送
+[9/11] 已 clone librarian 用的 memory 副本到 ~/.memory-copies/alpha
 [10/11] 沒有外部 remote,跳過 mirror-backup 登記
 登錄:<TMP>/hub/projects/alpha.yaml
 commit-hub-files (stand-in): register alpha (onboard-project.sh)
@@ -118,8 +118,8 @@ gh (stand-in): repo create o/zeta --public
 sync-local-setup (stand-in): zeta
 [5-6/11] .claude/settings.local.json hook 跟 CLAUDE.local.md 區塊已就位(不進版控)
 [7/11] 外層 repo 沒有任何變更、不 commit
-[8/11] hub 主機上已建 bare repo,agent-memory 分支已推送
-[9/11] hub 主機上已 clone librarian 用的 memory 副本到 ~/.memory-copies/zeta
+[8/11] 已建 memory bare repo(~/git-origin/zeta-memory.git),agent-memory 分支已推送
+[9/11] 已 clone librarian 用的 memory 副本到 ~/.memory-copies/zeta
 [10/11] 已登記進 mirror-backup 清單
 登錄:<TMP>/hub/projects/zeta.yaml
 [11/11] 已登記進 agent-hub 的專案登錄(projects/zeta.yaml),但 agent-hub 的 commit/push 失敗(見上面的警告)
@@ -151,8 +151,8 @@ exit 1
 sync-local-setup (stand-in): theta
 [5-6/11] .claude/settings.local.json hook 跟 CLAUDE.local.md 區塊已就位(不進版控)
 [7/11] 外層 repo 沒有任何變更、不 commit
-[8/11] hub 主機上已建 bare repo,agent-memory 分支已推送
-[9/11] hub 主機上已 clone librarian 用的 memory 副本到 ~/.memory-copies/theta
+[8/11] 已建 memory bare repo(~/git-origin/theta-memory.git),agent-memory 分支已推送
+[9/11] 已 clone librarian 用的 memory 副本到 ~/.memory-copies/theta
 [10/11] 沒有外部 remote,跳過 mirror-backup 登記
 --- stderr
 登錄不合格,不寫入:type 只能是 project 或 idea
@@ -166,10 +166,10 @@ exit 0
 [3/11] 骨架檔案就位並已在 agent-memory 分支上 commit
 [4/11] .agent-memory/ 已在 .git/info/exclude 排除(不動 .gitignore)
 sync-local-setup (stand-in): kappa
-[5-6/11] .claude/settings.local.json hook 跟 CLAUDE.local.md 區塊已就位(不進版控)
+[5-6/11] 沒有 hook 也沒有規則檔區塊:這個執行環境兩個都沒有(hub.json runtime.default)
 [7/11] 外層 repo 沒有任何變更、不 commit
-[8/11] hub 主機上已建 bare repo,agent-memory 分支已推送
-[9/11] hub 主機上已 clone librarian 用的 memory 副本到 ~/.memory-copies/kappa
+[8/11] 已建 memory bare repo(~/git-origin/kappa-memory.git),agent-memory 分支已推送
+[9/11] 已 clone librarian 用的 memory 副本到 ~/.memory-copies/kappa
 [10/11] 沒有外部 remote,跳過 mirror-backup 登記
 登錄:<TMP>/hub/projects/kappa.yaml
 commit-hub-files (stand-in): register kappa (onboard-project.sh)

@@ -64,8 +64,8 @@ class RuntimeNone(unittest.TestCase):
     def test_agent_md_is_tool_neutral(self):
         """every project's .agent-memory/AGENT.md is a verbatim copy of templates/AGENT.md, whatever the runtime"""
         text = (ROOT / "templates" / "AGENT.md").read_text()
-        self.assertIn(".claude/settings.local.json", text)
-        self.assertIn("CLAUDE.local.md", text)
+        for tool_specific in (".claude", "CLAUDE.local.md", "Claude Code", "SessionStart", "PreCompact"):
+            self.assertNotIn(tool_specific, text)
 
     def test_doctor_feature_table(self):
         sys.path.insert(0, str(BIN))

@@ -6,13 +6,13 @@
 
 ## Sync discipline
 
-- This project's git remote is a bare repo on the hub machine; syncing is handled automatically by the hooks in
-  `.claude/settings.local.json` (local, not version-controlled): SessionStart runs `git pull`; SessionEnd, and
-  compaction partway through a long session (PreCompact), run `git-sync-memory.sh`, which adds only `memory/` and
-  `STATE.md`, never `git add -A`, and pushes after committing. Nothing to do by hand.
-- Don't commit/push by hand, unless you are sure the hooks didn't fire (e.g. you are not working in Claude Code).
-  `sync-all-memory.sh` also runs hourly on the hub machine (and on the remote machine, if there is one) as a catch-up
-  sync, so a session that didn't end normally doesn't leave anything stuck.
+- This project's git remote is a bare repo on the hub machine. Where the coding agent has session hooks, syncing is
+  automatic: the platform installs hooks in the agent's local settings (not version-controlled) that run `git pull`
+  at session start, and `git-sync-memory.sh` at session end and before a long session is compacted; it adds only
+  `memory/` and `STATE.md`, never `git add -A`, and pushes after committing. Nothing to do by hand.
+- Don't commit/push by hand, unless you are sure the hooks didn't fire (e.g. your coding agent has no session hooks).
+  `sync-all-memory.sh` also runs hourly on the hub machine as a catch-up sync, so a session that didn't end normally
+  doesn't leave anything stuck.
 - This AGENT.md is overwritten automatically from agent-hub's template (aligned at every session start); don't edit it
   by hand.
 
@@ -42,7 +42,7 @@
   it into a settled fact. When the outcome is known, write "done… / confirmed…" explicitly in that day's date file, and
   the next tidying updates `reference/` from it.
 - `RULES` (if present): the names of the extra rules this project uses, one per line; their content is in agent-hub's
-  `templates/rules/`, and they are put into CLAUDE.local.md when a session opens. Managed by agent-hub; don't edit it by
+  `templates/rules/`, and they are put into the project's rules file when a session opens. Managed by agent-hub; don't edit it by
   hand.
 - Don't edit `STATE.md` yourself: it is the refined current state maintained by the consolidating agent, rewritten only
   when something substantive changes.

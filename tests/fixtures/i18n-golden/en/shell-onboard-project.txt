@@ -26,8 +26,8 @@ exit 0
 sync-local-setup (stand-in): alpha
 [5-6/11] Hooks and the rules-file block are in place (not version-controlled)
 [7/11] No changes to the outer repo, nothing committed
-[8/11] Bare repo created on the hub machine, agent-memory branch pushed
-[9/11] Cloned the librarian's memory copy on the hub machine to ~/.memory-copies/alpha
+[8/11] Memory bare repo created (~/git-origin/alpha-memory.git), agent-memory branch pushed
+[9/11] Cloned the librarian's memory copy to ~/.memory-copies/alpha
 [10/11] No external remote, not added to the mirror-backup list
 registry: <TMP>/hub/projects/alpha.yaml
 commit-hub-files (stand-in): register alpha (onboard-project.sh)
@@ -90,8 +90,8 @@ exit 0
 (The local steps are done, but the hub machine has no bare repo with content for this project: it looks like the last run was interrupted; continuing with the hub machine's steps, without redoing what is done)
 [1/11] Preconditions OK: alpha (--no-remote, stays local only)
 [2-7/11] Resume mode: done by the previous run, skipped
-[8/11] Bare repo created on the hub machine, agent-memory branch pushed
-[9/11] Cloned the librarian's memory copy on the hub machine to ~/.memory-copies/alpha
+[8/11] Memory bare repo created (~/git-origin/alpha-memory.git), agent-memory branch pushed
+[9/11] Cloned the librarian's memory copy to ~/.memory-copies/alpha
 [10/11] No external remote, not added to the mirror-backup list
 registry: <TMP>/hub/projects/alpha.yaml
 commit-hub-files (stand-in): register alpha (onboard-project.sh)
@@ -118,8 +118,8 @@ gh (stand-in): repo create o/zeta --public
 sync-local-setup (stand-in): zeta
 [5-6/11] Hooks and the rules-file block are in place (not version-controlled)
 [7/11] No changes to the outer repo, nothing committed
-[8/11] Bare repo created on the hub machine, agent-memory branch pushed
-[9/11] Cloned the librarian's memory copy on the hub machine to ~/.memory-copies/zeta
+[8/11] Memory bare repo created (~/git-origin/zeta-memory.git), agent-memory branch pushed
+[9/11] Cloned the librarian's memory copy to ~/.memory-copies/zeta
 [10/11] Added to the mirror-backup list
 registry: <TMP>/hub/projects/zeta.yaml
 [11/11] Registered in agent-hub's project registry (projects/zeta.yaml); committing/pushing agent-hub failed (see the warning)
@@ -151,8 +151,8 @@ exit 1
 sync-local-setup (stand-in): theta
 [5-6/11] Hooks and the rules-file block are in place (not version-controlled)
 [7/11] No changes to the outer repo, nothing committed
-[8/11] Bare repo created on the hub machine, agent-memory branch pushed
-[9/11] Cloned the librarian's memory copy on the hub machine to ~/.memory-copies/theta
+[8/11] Memory bare repo created (~/git-origin/theta-memory.git), agent-memory branch pushed
+[9/11] Cloned the librarian's memory copy to ~/.memory-copies/theta
 [10/11] No external remote, not added to the mirror-backup list
 --- stderr
 the registry entry is invalid; not written: type can only be project or idea
@@ -166,10 +166,10 @@ exit 0
 [3/11] Skeleton files in place and committed on the agent-memory branch
 [4/11] .agent-memory/ is excluded in .git/info/exclude (.gitignore untouched)
 sync-local-setup (stand-in): kappa
-[5-6/11] Hooks and the rules-file block are in place (not version-controlled)
+[5-6/11] No hooks and no rules-file block: this runtime has neither (hub.json runtime.default)
 [7/11] No changes to the outer repo, nothing committed
-[8/11] Bare repo created on the hub machine, agent-memory branch pushed
-[9/11] Cloned the librarian's memory copy on the hub machine to ~/.memory-copies/kappa
+[8/11] Memory bare repo created (~/git-origin/kappa-memory.git), agent-memory branch pushed
+[9/11] Cloned the librarian's memory copy to ~/.memory-copies/kappa
 [10/11] No external remote, not added to the mirror-backup list
 registry: <TMP>/hub/projects/kappa.yaml
 commit-hub-files (stand-in): register kappa (onboard-project.sh)

@@ -195,7 +195,17 @@ if [ "$RESUME" != true ]; then
   # neither goes into the repo (they contain the hub's path and names, which a public repo would leak).
   # Handed to sync-local-setup.sh, the same logic as recover and every SessionStart.
   "$AGENT_HUB/bin/sync-local-setup.sh" .
-  hub_say "[5-6/11] Hooks and the rules-file block are in place (not version-controlled)"
+  # say only what this runtime really has (with no coding agent there is neither; sync-local-setup said why)
+  rt_has() { "$AGENT_HUB/bin/py" "$AGENT_HUB/bin/hub-runtime" has "$1" >/dev/null 2>&1; }
+  if rt_has instructions && rt_has lifecycle; then
+    hub_say "[5-6/11] Hooks and the rules-file block are in place (not version-controlled)"
+  elif rt_has instructions; then
+    hub_say "[5-6/11] The rules-file block is in place (not version-controlled); this runtime has no hooks"
+  elif rt_has lifecycle; then
+    hub_say "[5-6/11] Hooks are in place (not version-controlled); this runtime has no rules file"
+  else
+    hub_say "[5-6/11] No hooks and no rules-file block: this runtime has neither (hub.json runtime.default)"
+  fi
 
   # --- 7. commit nothing to the outer repo ---
   # This used to commit .gitignore (with the tool's name in the message, even); now the local setup is all in
@@ -223,12 +233,20 @@ mini_sh "mkdir -p ~/git-origin && git init --bare -q ~/git-origin/${PROJ_NAME}-m
 # but only agent-memory is ever pushed here, main never exists, HEAD dangles, and the plain git clone in the next
 # step gets nothing. Point HEAD at the right branch explicitly.
 mini_sh "git --git-dir=\"\$HOME/git-origin/${PROJ_NAME}-memory.git\" symbolic-ref HEAD refs/heads/agent-memory"
-hub_say "[8/11] Bare repo created on the hub machine, agent-memory branch pushed"
+if on_mini; then   # this machine is the hub machine: say where, not "on the hub machine"
+  hub_say "[8/11] Memory bare repo created (~/git-origin/{name}-memory.git), agent-memory branch pushed" name="$PROJ_NAME"
+else
+  hub_say "[8/11] Bare repo created on the hub machine, agent-memory branch pushed"
+fi
 
 # --- 9. clone a working copy on the hub machine for the librarian ---
 # without symlinks (core.symlinks=false): the librarian reads its files, and a committed link must not point it elsewhere
 mini_sh "mkdir -p ~/.memory-copies && git clone -q --config core.symlinks=false ~/git-origin/${PROJ_NAME}-memory.git ~/.memory-copies/${PROJ_NAME}"
-hub_say "[9/11] Cloned the librarian's memory copy on the hub machine to ~/.memory-copies/{name}" name="$PROJ_NAME"
+if on_mini; then
+  hub_say "[9/11] Cloned the librarian's memory copy to ~/.memory-copies/{name}" name="$PROJ_NAME"
+else
+  hub_say "[9/11] Cloned the librarian's memory copy on the hub machine to ~/.memory-copies/{name}" name="$PROJ_NAME"
+fi
 
 # --- 10. add to the mirror-backup list only when there's an external origin ---
 if [ -n "$origin_url" ]; then
