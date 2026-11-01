@@ -44,6 +44,8 @@ config:
   agenthub recover <名稱>    = bin/recover-project.sh(新機器 / 資料夾不見了)
   agenthub rename <舊> <新>  = bin/rename-project.sh(先 dry-run,再加 --apply)
   agenthub status [專案]     = bin/overview.sh
+  agenthub first-look <專案>   幫剛接上的專案馬上寫第一份 STATE.md,依它的 README 和歷史
+                        (bin/first-look.py;agenthub connect 會跑)
   agenthub uninstall [--apply] [--purge]
                         把 agent-hub 從這台電腦移除(bin/uninstall.py):先列出來;筆記會留著，除非 --purge
 排程:

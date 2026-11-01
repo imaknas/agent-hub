@@ -591,3 +591,17 @@ Once picked, the text goes in the README's first lines, the GitHub description, 
 - Does the ChatGPT/Codex desktop app run Codex hooks and read AGENTS.md like the CLI? It matters only once the native
   Codex adapter exists. Story 4 works without it, through B5's MCP.
 - Windows: both apps run there, but agent-hub doesn't (no sandbox adapter, no service manager). The README says so.
+
+## After the path (11-02)
+
+- **A first result the day a project is connected.** `agenthub connect` runs `bin/first-look.py` for each project it
+  connects: judgment point `first-look` (completion, so any provider) writes a first STATE.md from the README, the 30
+  most recent commit titles and the top-level files, read through git as the project (`project-git-job.py first-look`;
+  a README that is a link is skipped). Only over onboarding's placeholder with no notes yet; the to-do section must
+  pass the state-todo contract or nothing is written; without a model it says so and sends nothing. It sends README
+  text and commit titles to the configured provider, a kind of input the nightly librarian doesn't send: connect asks
+  once per run (default yes, `--yes` takes it), and `connect_project`'s confirmation names it.
+- **`agenthub uninstall`.** Lists first; `--apply` stops this hub's scheduler, watchdog and generated services and
+  takes the platform's parts out of each project (rules-file block, hooks, sandbox rules, git hooks), each through
+  the code that installed it; MCP registrations and user-level hooks only on a terminal yes; notes stay unless
+  `--purge`.

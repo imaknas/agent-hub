@@ -49,6 +49,8 @@ projects:
   agenthub recover <name>    = bin/recover-project.sh (new machine / the folder is gone)
   agenthub rename <old> <new>  = bin/rename-project.sh (dry-run first, then add --apply)
   agenthub status [project]  = bin/overview.sh
+  agenthub first-look <project>   a newly connected project's first STATE.md now, from its README and history
+                        (bin/first-look.py; agenthub connect runs it)
   agenthub uninstall [--apply] [--purge]
                         take agent-hub off this machine (bin/uninstall.py): lists first; notes stay unless --purge
 scheduling:
@@ -1564,6 +1566,7 @@ COMMANDS = {
     "onboard": passthrough("onboard-project.sh"), "connect": passthrough("connect.py"),
     "recover": passthrough("recover-project.sh"),
     "rename": passthrough("rename-project.sh"), "status": passthrough("overview.sh"),
+    "first-look": passthrough("first-look.py"),
     "uninstall": passthrough("uninstall.py"),
     "jobs": lambda argv: subprocess.run([*hubconf.launch(BIN / "schedulectl"), "list", *argv]).returncode,
     "run": lambda argv: subprocess.run([*hubconf.launch(BIN / "schedulectl"), "run", *argv]).returncode,

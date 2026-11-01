@@ -395,6 +395,25 @@ def op_head(ws: str) -> int:
     return emit({"branch": b.stdout.strip() if b.returncode == 0 else None, "dirty": bool(s.stdout.strip())})
 
 
+README_NAMES = ("README.md", "README", "readme.md", "README.rst", "README.txt", "Readme.md")
+
+
+def op_first_look(ws: str) -> int:
+    """JSON {readme, commits, tree} for a first summary of a newly connected project (bin/first-look.py): read from the
+    committed tree (a README that is a link is a link blob, never what it points to), each capped."""
+    tree = [x for x in out(ws, "ls-tree", "--name-only", "HEAD").splitlines() if x][:120]
+    readme = ""
+    for name in README_NAMES:
+        if name in tree:
+            kind = out(ws, "ls-tree", "HEAD", "--", name).split()
+            if kind and kind[0] == "100644":   # a regular file, not a link (120000) or a submodule
+                readme = out(ws, "show", f"HEAD:{name}")[:12000]
+            break
+    commits = [x for x in out(ws, "log", "-30", "--format=%as %s").splitlines() if x]
+    count = out(ws, "rev-list", "--count", "HEAD").strip()
+    return emit({"readme": readme, "commits": commits, "tree": tree, "commit_count": int(count) if count.isdigit() else 0})
+
+
 def op_bundle_head(ws: str) -> int:
     """stdout: a bundle of the checked-out branch (its whole history)."""
     b = out(ws, "symbolic-ref", "--short", "-q", "HEAD").strip()
@@ -418,7 +437,7 @@ OPS = {"worktrees": op_worktrees, "ignored": op_ignored, "worktree-add": op_work
        "worktree-remove": op_worktree_remove, "branch-delete": op_branch_delete, "remove-dep": op_remove_dep,
        "checkout-sigs": op_checkout_sigs, "changed": op_changed, "copy-back": op_copy_back, "hooks": op_hooks,
        "hook-write": op_hook_write, "hook-remove": op_hook_remove, "bundle-unpushed": op_bundle_unpushed, "diff-head": op_diff_head,
-       "memory-sync": op_memory_sync, "exclude": op_exclude, "save": op_save, "head": op_head,
+       "memory-sync": op_memory_sync, "exclude": op_exclude, "save": op_save, "head": op_head, "first-look": op_first_look,
        "bundle-head": op_bundle_head, "set-origin": op_set_origin}
 
 

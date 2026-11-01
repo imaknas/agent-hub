@@ -209,6 +209,78 @@
   "exit": 0,
   "token_passed": true
  },
+ "first-look/default": {
+  "auth": "token",
+  "cmd": [
+   "claude",
+   "-p",
+   "golden prompt",
+   "--model",
+   "sonnet",
+   "--tools",
+   "",
+   "--output-format",
+   "json",
+   "--json-schema",
+   "{\"type\": \"object\", \"additionalProperties\": false, \"required\": [\"state\", \"summary\"], \"properties\": {\"state\": {\"type\": \"string\", \"description\": \"the whole STATE.md, in the content language named in the prompt\"}, \"summary\": {\"type\": \"string\", \"description\": \"one or two sentences on what this project is and where it stands (in the content language named in the prompt)\"}}}"
+  ],
+  "exit": 0,
+  "token_passed": true
+ },
+ "first-look/model": {
+  "auth": "token",
+  "cmd": [
+   "claude",
+   "-p",
+   "golden prompt",
+   "--model",
+   "golden-model",
+   "--tools",
+   "",
+   "--output-format",
+   "json",
+   "--json-schema",
+   "{\"type\": \"object\", \"additionalProperties\": false, \"required\": [\"state\", \"summary\"], \"properties\": {\"state\": {\"type\": \"string\", \"description\": \"the whole STATE.md, in the content language named in the prompt\"}, \"summary\": {\"type\": \"string\", \"description\": \"one or two sentences on what this project is and where it stands (in the content language named in the prompt)\"}}}"
+  ],
+  "exit": 0,
+  "token_passed": true
+ },
+ "first-look/subscription": {
+  "auth": "subscription",
+  "cmd": [
+   "claude",
+   "-p",
+   "golden prompt",
+   "--model",
+   "sonnet",
+   "--tools",
+   "",
+   "--output-format",
+   "json",
+   "--json-schema",
+   "{\"type\": \"object\", \"additionalProperties\": false, \"required\": [\"state\", \"summary\"], \"properties\": {\"state\": {\"type\": \"string\", \"description\": \"the whole STATE.md, in the content language named in the prompt\"}, \"summary\": {\"type\": \"string\", \"description\": \"one or two sentences on what this project is and where it stands (in the content language named in the prompt)\"}}}"
+  ],
+  "exit": 0,
+  "token_passed": false
+ },
+ "first-look/token": {
+  "auth": "token",
+  "cmd": [
+   "claude",
+   "-p",
+   "golden prompt",
+   "--model",
+   "sonnet",
+   "--tools",
+   "",
+   "--output-format",
+   "json",
+   "--json-schema",
+   "{\"type\": \"object\", \"additionalProperties\": false, \"required\": [\"state\", \"summary\"], \"properties\": {\"state\": {\"type\": \"string\", \"description\": \"the whole STATE.md, in the content language named in the prompt\"}, \"summary\": {\"type\": \"string\", \"description\": \"one or two sentences on what this project is and where it stands (in the content language named in the prompt)\"}}}"
+  ],
+  "exit": 0,
+  "token_passed": true
+ },
  "lease-handover/default": {
   "auth": "token",
   "cmd": [

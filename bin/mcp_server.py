@@ -267,7 +267,9 @@ def outside(name: str, args: dict, client: "Client") -> tuple[bool, str]:
     if (why := connect.refusal(real)):
         return False, why
     answer = client.confirm(_("Connect {path} as an agent-hub project? Its notes are kept in a separate place, a "
-                              "folder without version history gets one, and no GitHub repo is created.", path=real))
+                              "folder without version history gets one, no GitHub repo is created, and a first summary "
+                              "is written from its README and recent commit titles by the AI model that makes "
+                              "agent-hub's decisions.", path=real))
     if answer is False:
         return False, _("the user declined; nothing was done")
     env = {**os.environ, "AGENTHUB_CONNECT_ROOTS": ":".join(map(str, roots))}

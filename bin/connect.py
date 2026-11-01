@@ -204,6 +204,12 @@ def main(argv: list[str]) -> int:
         intent = {"split": True} if split else None
     else:
         intent = None
+    # the first summary sends the README and commit titles to the model behind agent-hub's decisions (newcomer-path.md:
+    # a first result the day a project is connected); asked once for the whole run
+    import llm_ready
+    ready = not dry and llm_ready.unsupported("first-look") is None   # without a model, first-look only says so
+    look = not dry and (not ready or ask(_("Write a first summary of each project now? It sends its README and recent "
+                                           "commit titles to the AI model that makes agent-hub's decisions."), yes, True))
     rc = 0
     for c in candidates:
         if (why := refusal(c)):
@@ -213,7 +219,10 @@ def main(argv: list[str]) -> int:
         explain(c)
         if not ask(_("Connect it?"), yes, True):
             continue
-        rc = connect_one(c, remote, intent, dry) or rc
+        one = connect_one(c, remote, intent, dry)
+        rc = one or rc
+        if one == 0 and not dry and look:
+            subprocess.run([*hubconf.launch(BIN / "first-look.py"), c.name])
     if not dry and rc == 0:
         print(_("Done. Start a new session in each connected folder: hooks and rules load when a session starts."))
     return rc

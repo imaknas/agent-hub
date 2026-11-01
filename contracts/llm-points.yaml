@@ -112,6 +112,16 @@ points:
     output: {format: json, schema: llm/consolidate.schema.json}
     timeout_s: 1200
     on_failure: retry_later # that project is not consolidated this time; tried again 2 days later
+  first-look:
+    caller: bin/first-look.py
+    shape: completion
+    model_group: standard
+    purpose: "a newly connected project's first STATE.md, from its README, recent commit titles and top-level files (read through git as the project), so the owner sees a result the day they connect it, before any notes exist"
+    tools: ""
+    output: {format: json, schema: llm/first-look.schema.json}
+    max_tokens: 6000
+    timeout_s: 600
+    on_failure: say_so      # the placeholder STATE.md stays; the librarian writes it once notes arrive
   reflect-week:
     caller: bin/reflect_llm.py
     shape: completion
