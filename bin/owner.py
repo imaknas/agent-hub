@@ -95,12 +95,16 @@ def settle(key: str, outcome: str, note: str | None) -> int:
             print(_("{key} was withdrawn by {project}; nothing to settle", key=key, project=p), file=sys.stderr)
             return 1
         rev = led.terms(key)[1]
+        need = max((r for r in led.need.get(key, []) if r.get("terms") and r.get("terms_rev", 1) == (rev or 1)),
+                   key=lambda r: (r.get("ts", ""), r.get("id", "")), default=None)
         heads = [r["id"] for r in led.settle.get(key, [])
                  if r["id"] == (reg.current(led.settle.get(key, [])) or {}).get("id")]
         n = len(led.settle.get(key, [])) + 1
         rec = {"ph": ph_wire.SEND, "ext": EXT_ACTS, "id": f"s:{key}:{n}", "type": "settled", "origin": "principal",
                "by": hubconf.party("principal_side"), "key": key, "project": p, "ts": _now(), "outcome": outcome,
                "terms_rev": rev or 1, "authority": {"kind": "principal", "decider": hubconf.party("principal")}}
+        if need:   # core §5.3: what the settlement was made against (a v1 task has no need record to digest)
+            rec["terms_digest"] = ph_wire.terms_digest(need)
         if heads:
             rec["supersedes"] = heads
         if note:
@@ -131,11 +135,14 @@ def answer(qid: str, text: str) -> int:
         print(_("no question with id {id} (`agenthub owner list` shows the open ones)", id=qid), file=sys.stderr)
         return 1
     proj = q["project"]
-    before = [r["record"]["id"] for r in hb.records(c, proj, hb.EXT_DECISIONS, {"settled"}, direction="in")
-              if r["record"].get("key") == qid]
+    before = [r["record"]["id"] for r in hb.records(c, proj, None, {"settled"}, direction="in")
+              if r["record"].get("key") == qid and ph_wire.family(r["record"].get("ext")) == "decisions"]
+    need = hb.need_state(c, proj, qid, "decisions")   # None: a v1 question letter, no need record
     rec = {"ph": ph_wire.SEND, "ext": hb.EXT_DECISIONS, "id": f"s:{qid}:{len(before) + 1}", "type": "settled", "origin": "principal",
            "by": hubconf.party("principal_side"), "key": qid, "project": proj, "ts": _now(), "outcome": "decided",
-           "answer": {"text": text}, "terms_rev": 1, "authority": {"kind": "principal", "decider": hubconf.party("principal")}}
+           "answer": {"text": text}, "terms_rev": need["rev"] if need else 1,
+           "authority": {"kind": "principal", "decider": hubconf.party("principal")},
+           **({"terms_digest": ph_wire.terms_digest(need["record"])} if need else {})}
     if before:
         rec["supersedes"] = before[-1:]   # answered again: the new answer replaces the last one
     c.execute("BEGIN IMMEDIATE")

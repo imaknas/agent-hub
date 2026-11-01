@@ -452,7 +452,8 @@ def task_key(project: str, text: str) -> str:
 
 def need_state(c, project: str, key: str, family: str = "acts") -> dict | None:
     """The need register of one item this project raised (core §6): {terms: the latest terms, rev: their terms_rev,
-    current: the current need record}; None when it was never raised."""
+    record: the need record carrying them, current: the current need record, by: who raised it}; None when it was never
+    raised."""
     recs = [r["record"] for r in records(c, project, None, ("raised", "amended", "withdrawn"), direction="out")
             if r["record"].get("key") == key and ph_wire.family(r["record"].get("ext")) == family]
     with_terms = [r for r in recs if r.get("terms")]
@@ -464,7 +465,7 @@ def need_state(c, project: str, key: str, family: str = "acts") -> dict | None:
     current = max([r for r in recs if r["id"] not in replaced] or recs, key=when)
     raised = min((r for r in recs if r.get("type") == "raised"), key=when, default=None)
     return {"terms": latest["terms"], "rev": latest.get("terms_rev", 1), "current": current,
-            "by": (raised or {}).get("by")}
+            "by": (raised or {}).get("by"), "record": latest}
 
 
 def send_record(c, a, sender: str, mid: str, p: dict) -> str | None:

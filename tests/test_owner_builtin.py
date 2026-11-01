@@ -15,6 +15,9 @@ import tempfile
 import unittest
 from unittest import mock
 
+sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[1] / "bin"))
+import ph_wire  # noqa: E402
+
 ROOT = pathlib.Path(__file__).resolve().parents[1]
 BIN = ROOT / "bin"
 
@@ -65,6 +68,9 @@ class Builtin(unittest.TestCase):
         self.assertEqual((rec["origin"], rec["outcome"], rec["authority"]),
                          ("principal", "done", {"kind": "principal", "decider": "person:alex"}))
         self.assertEqual(rec["by"], "agent-hub:owner-side")
+        need = next(e["record"] for e in self.records() if e["record"]["type"] == "raised")
+        self.assertEqual(rec["terms_digest"], ph_wire.terms_digest(need), "core §5.3: what it was settled against")
+        self.assertEqual((rec["ph"], rec["ext"]), (ph_wire.SEND, ph_wire.ACTS))
         self.assertNotIn("task-agent-hub-0001", self.run_("owner.py", "list").stdout, "once closed, no longer listed")
 
     def test_resettle_supersedes_the_earlier_one(self):
@@ -103,7 +109,8 @@ class Builtin(unittest.TestCase):
         self.test_answer_closes_the_question()
         [ans] = [e for e in self.records() if e["record"]["type"] == "settled"]
         self.assertEqual((ans["record"]["ext"], ans["record"]["answer"], ans["question"]),
-                         ("decisions/0.3", {"text": "Use SQLite"}, "Which cache?"))
+                         (ph_wire.DECISIONS, {"text": "Use SQLite"}, "Which cache?"))
+        self.assertTrue(ans["record"]["terms_digest"].startswith("sha-256:"))
 
 
 class Notify(unittest.TestCase):

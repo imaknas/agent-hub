@@ -14,7 +14,7 @@ $ <HUB>/bin/owner.py list
 $ <HUB>/bin/owner.py done task-demo-0001 --note 續好了
 [exit 0]
 --- stdout
-demo:task-demo-0001 → done (rec:acts/0.3:demo:s:task-demo-0001:1); registrar updates STATE.md by key tonight
+demo:task-demo-0001 → done (rec:acts/0.4:demo:s:task-demo-0001:1); registrar updates STATE.md by key tonight
 --- stderr
 
 $ <HUB>/bin/owner.py done no-such-key

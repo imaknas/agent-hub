@@ -75,7 +75,7 @@ agent-hub's event bus: an append-only event log plus read cursors; project mailb
 
 positional arguments:
   {send,inbox,show,ack,done,hook,bridge,dispatch,thread,open-handoffs,open-questions,reconcile-questions,records,record-publish,publish,status}
-    record-publish      stdin: one 0.3 record or a list; sent to owner (toward the assistant). Prints for each {id:
+    record-publish      stdin: one 0.4 record or a list; sent to owner (toward the assistant). Prints for each {id:
                         record id, event: event id or null, status}
 
 options:

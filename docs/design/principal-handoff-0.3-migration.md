@@ -217,11 +217,12 @@ m11010359-3de9 (reply m11010550-9894). What agent-hub does now:
 
   The conformance fixtures of 0.4 run in the spec's profile and in agent-hub's two-set reading
   (`tests/test_acts_conformance.py`). The 0.3 and HTH 0.1 copies are retired.
-- **Records: read 0.3 and 0.4, send 0.3** (`bin/ph_wire.py`). Before 1.0 each version is its own contract, and the
-  assistant does not take 0.4 records yet. Switching `SEND` also means a `terms_digest` on every `settled` the built-in
-  owner side writes (core §5.3), and `ts` of at most 6 decimal places (already whole seconds). Decisions 0.4
-  (approvals, the terms schema) is not implemented: the reference deployment leaves approvals to the assistant alone
-  (Knas, 11-01), and `owner.py` has no approval command and settles only when no assistant is configured.
+- **Records: read 0.3 and 0.4, send 0.4** (`bin/ph_wire.py`). The assistant took 0.4 the same day and answers each
+  project in the version it last sent (m11011416-bcb1). The bridge also stopped acking a page that held a record it
+  refused, since that record would otherwise be lost. Every `settled` the built-in owner side writes carries a
+  `terms_digest` (core §5.3), checked against the spec's vectors. Decisions 0.4 approvals are not implemented: the
+  reference deployment leaves approvals to the assistant alone (Knas, 11-01), and `owner.py` has no approval command
+  and settles only when no assistant is configured.
 - **The `en` set keeps the profile's default `principal_tag`, `owner`**, whoever the owner is. An English STATE.md then
   reads the same on every instance. The zh-Hant set's tag stays the configured owner tag.
 - **Keys a project assigns itself** (`send --type task` without `--id`) are now `ask-<project>-<hash>`. The registrar's

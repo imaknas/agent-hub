@@ -32,7 +32,7 @@ For each project (the STATE.md of its memory copy, plus the platform's own openc
      commit-hub-files.sh), and only after that succeeds `hubbus done` the applied records; on failure, wait for the
      next night.
 
-Records: reads acts 0.3 and 0.4, sends the version bin/ph_wire.py names (0.3 until the assistant takes 0.4).
+Records: reads acts 0.3 and 0.4, sends the version bin/ph_wire.py names (0.4).
 
 Transition (v1 not yet retired): task letters v1 sent on the bus and the personal assistant's v1 handoffs count too
 (v1_compat); those keys existed before there were records. When v1 is retired, delete v1_compat along with it.

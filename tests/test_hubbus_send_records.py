@@ -65,7 +65,7 @@ class SendRecords(unittest.TestCase):
         self.assertRegex(r["ts"], TS)
         for k in REQUIRED[r["type"]]:
             self.assertIn(k, r)
-        self.assertEqual((r["ph"], r["ext"], r["project"]), ("0.3", "acts/0.3", "proj"))
+        self.assertEqual((r["ph"], r["ext"], r["project"]), (self.m.ph_wire.SEND, self.m.ph_wire.ACTS, "proj"))
         return recs[0][0], r
 
     # --- switch off: same as before ---
@@ -84,7 +84,7 @@ class SendRecords(unittest.TestCase):
                         "--context", "migration", "--new-reason", "last year's was another building")
         eid, r = self.rec()
         self.assertEqual(out, eid)
-        self.assertEqual(eid, "rec:acts/0.3:proj:r:task-proj-0000000001")
+        self.assertEqual(eid, f"rec:{self.m.ph_wire.ACTS}:proj:r:task-proj-0000000001")
         self.assertEqual((r["type"], r["id"], r["key"], r["origin"], r["by"], r["terms_rev"]),
                          ("raised", "r:task-proj-0000000001", "task-proj-0000000001", "requester", "project:proj", 1))
         self.assertEqual(r["terms"], {"text": "Pay the property tax", "due": "2026-11-30"})
@@ -217,7 +217,7 @@ class SendDecisions(unittest.TestCase):
         for _eid, p in self.events("record"):
             r = p["record"]
             self.assertEqual(self.m.record_errors(r), [])
-            self.assertEqual((r["ph"], r["ext"], r["project"]), ("0.3", "decisions/0.3", "proj"))
+            self.assertEqual((r["ph"], r["ext"], r["project"]), (self.m.ph_wire.SEND, self.m.ph_wire.DECISIONS, "proj"))
             for k in DEC_REQUIRED[r["type"]]:
                 self.assertIn(k, r)
             out.append(r)
