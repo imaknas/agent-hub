@@ -516,11 +516,18 @@ doctor line, the schema keys.
 
 ## Live results
 
-Not run yet (11-01). The live test fetches the pinned ACP agent packages with `npx`, and the session that built this
-was not permitted to download and run external code. Nothing about real agents is verified so far: everything above
-is tested against `tests/fixtures/fake_acp_agent.py`, which follows the spec as read here. What a real agent does
-with permission requests (whether it asks for reads, which `rawInput` keys it sends), session modes and model
-options is exactly what the live runs check.
+**11-01, both passed**, run by the owner on the hub machine (the sessions were not allowed to fetch and run the
+packages with `npx`). The task read `secret-word.txt` in the throwaway copy and answered with the schema's
+structured output, with no denials and stop `end_turn`:
+
+| agent | result | time | cost reported |
+|---|---|---|---|
+| `@agentclientprotocol/claude-agent-acp@0.99.1` | ok, `{"word": "periwinkle"}` | 18.1 s | $0.12 |
+| `@agentclientprotocol/codex-acp@2.5.0` (Codex's ChatGPT login) | ok, `{"word":"periwinkle"}` | 16.3 s | none (`cost_usd` null) |
+
+This checks a read-and-answer task end to end through `runtime_acp.py` with two real agents from different vendors.
+It does not yet check write paths, permission requests that need the relay, session modes or model options against a
+real agent; those are still tested only against `tests/fixtures/fake_acp_agent.py`.
 
 To run them on the hub machine (opt-in, never in the gate):
 
