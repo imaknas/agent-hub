@@ -101,7 +101,7 @@ def settle(key: str, outcome: str, note: str | None) -> int:
         n = len(led.settle.get(key, [])) + 1
         rec = {"ph": ph_wire.send_version(), "ext": ph_wire.ext("acts"), "id": f"s:{key}:{n}", "type": "settled",
                "origin": "principal",
-               "by": hubconf.party("principal_side"), "key": key, "project": p, "ts": _now(), "outcome": outcome,
+               "by": hubconf.party("principal_side"), "key": key, "project": led.filed(key), "ts": _now(), "outcome": outcome,
                "terms_rev": rev or 1, "authority": {"kind": "principal", "decider": hubconf.party("principal")}}
         if need:   # core §4: what the settlement was made against (a v1 task has no need record to digest)
             rec["terms_digest"] = ph_wire.terms_digest(need, rec["ph"])
@@ -141,7 +141,7 @@ def answer(qid: str, text: str) -> int:
     version = ph_wire.send_version()
     rec = {"ph": version, "ext": ph_wire.ext("decisions"), "id": f"s:{qid}:{len(before) + 1}", "type": "settled",
            "origin": "principal",
-           "by": hubconf.party("principal_side"), "key": qid, "project": proj, "ts": _now(), "outcome": "decided",
+           "by": hubconf.party("principal_side"), "key": qid, "project": q["filed"], "ts": _now(), "outcome": "decided",
            "answer": {"text": text}, "terms_rev": need["rev"] if need else 1,
            "authority": {"kind": "principal", "decider": hubconf.party("principal")},
            **({"terms_digest": ph_wire.terms_digest(need["record"], version)} if need else {})}

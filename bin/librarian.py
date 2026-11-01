@@ -189,8 +189,9 @@ def load_handoffs() -> list[dict]:
 
 def load_records(proj: str) -> list[dict]:
     """v2 (Principal Handoff 0.3): records sent by the principal side and not yet done become the same kind of input as
-    handoffs -- note, Decisions' settled (an answer or "no answer needed"), same_as. Acts' settled/reopened are applied
-    mechanically by registrar; not touched here."""
+    handoffs -- note, Decisions' settled (an answer or "no answer needed"), same_as (hubbus records: those filed under a
+    name the project had before a rename too). Acts' settled/reopened are applied mechanically by registrar; not
+    touched here."""
     r = run([PY, str(HUB / "bin" / "hubbus"), "records", "--project", proj])
     try:
         events = json.loads(r.stdout) if r.returncode == 0 else []

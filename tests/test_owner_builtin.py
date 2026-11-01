@@ -112,6 +112,44 @@ class Builtin(unittest.TestCase):
                          ("decisions/0.4", {"text": "Use SQLite"}, "Which cache?"))
         self.assertTrue(ans["record"]["terms_digest"].startswith("sha-256:"))
 
+    def renamed(self):
+        """the project was called hub-old before: a to-do and a question it raised under that name, on the bus as they
+        were sent then"""
+        import sqlite3
+        (self.tmp / "state").mkdir()
+        (self.tmp / "state" / "project-renames.json").write_text(json.dumps({"hub-old": {"new": "agent-hub",
+                                                                                         "stage": "done"}}))
+        self.env["AGENT_HUB_STATE"] = str(self.tmp / "state")
+        self.records()   # creates the bus
+        c = sqlite3.connect(self.tmp / "bus" / "bus.db")
+        for ext, rid, key, text in (("acts/0.4", "r:task-hub-old-0001", "task-hub-old-0001", "Renew the lease"),
+                                    ("decisions/0.4", "r:m10200000-0001", "m10200000-0001", "Which host?")):
+            rec = {"ph": "0.4", "ext": ext, "id": rid, "type": "raised", "origin": "requester",
+                   "by": "project:hub-old", "key": key, "project": "hub-old", "ts": "2026-10-20T01:00:00Z",
+                   "terms": {"text": text}, "terms_rev": 1}
+            c.execute("INSERT INTO events(id, ts, type, source, to_project, ref, payload) VALUES(?,?,?,?,?,?,?)",
+                      (f"rec:{ext}:hub-old:{rid}", rec["ts"], "record", "hub-old", "owner", None,
+                       json.dumps({"record": rec})))
+        c.commit()
+        c.close()
+
+    def test_items_raised_under_a_former_name(self):
+        self.renamed()
+        listed = self.run_("owner.py", "list", "--project", "agent-hub").stdout
+        self.assertIn("task-hub-old-0001", listed)
+        self.assertIn("Which host?", listed)
+        r = self.run_("owner.py", "done", "task-hub-old-0001")
+        self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
+        r = self.run_("owner.py", "answer", "m10200000-0001", "The small one")
+        self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
+        settled = [e for e in self.records() if e["record"]["type"] == "settled"]
+        self.assertEqual([(e["direction"], e["record"]["project"], e["record"]["key"]) for e in settled],
+                         [("in", "hub-old", "task-hub-old-0001"), ("in", "hub-old", "m10200000-0001")],
+                         "settled under the name the item was raised under, delivered to the project as it is now")
+        listed = self.run_("owner.py", "list").stdout
+        self.assertNotIn("task-hub-old-0001", listed)
+        self.assertNotIn("Which host?", listed)
+
 
 class Notify(unittest.TestCase):
     def test_only_new_items_and_failures_are_recorded(self):

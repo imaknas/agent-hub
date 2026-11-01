@@ -295,8 +295,6 @@ gen-todo's output byte-identical.
 
 Not done yet:
 
-- Records sent under a project's former name (before a rename) are not read under its new name (`hubbus records`
-  matches the project name), for bound and known keys alike.
 - Two records with the same (`ext` version, project, id), type and origin but different content: the bus keeps the
   first, so core §10's "the greater canonical form" is chosen only among those it holds.
 - hubbus's question views (open questions, inbox) read Decisions records with their own rules, not through
@@ -347,3 +345,25 @@ simulation ran on a scratch copy of the live bus with the migration's records ad
 `raised`, `amended` or `claimed` for the migrated items, and printed what main printed on the live bus.
 `tests/test_registrar_v1_migration.py` holds the cases (unchanged line, edited line, a former name's key, displaced,
 none on a line).
+
+## Renamed projects (11-01)
+
+An item's project field is part of its identity (core §4: ext, project, key), and the assistant keeps the items it was
+sent under the name they were sent under. So records are never rewritten on a rename: each stays on the bus as it was
+sent (its project field, the event's source or recipient), and the readers take the old names in.
+
+- `hubbus records --project P` also lists the records filed under the names P had before (`hubconf.former_names`,
+  finished renames only), each in its direction; a former name another registered project uses now stays that
+  project's. The registrar's ledger, the librarian's `load_records`, `need_state` and `owner.py` read through it.
+- What is sent about such an item keeps its project field: the registrar's `amended`, `claimed` and `note`, a
+  project's `done`/`drop --task` and `--question`, the built-in owner side's `settled`. `record-publish` takes a record
+  whose project is a former name of a registered project and writes the event under the current name. A new item
+  (`raised`) is filed under the current name.
+- A question asked under a former name is the project's question: `open_questions` gives it under the current name
+  (`project`) and the name it was asked under (`filed`), so `--project`, the session-start list, `reconcile-questions`
+  (which writes to the current name) and `owner.py answer` find it.
+
+`tests/test_records_renamed.py` and `tests/test_owner_builtin.py` hold the cases. Before this, a line carrying a key
+raised under a former name was raised again under a new key the next night. On the live bus nothing is filed under a
+former name yet: the one renamed project's items were migrated (`migrate-v1`) under its current name, keys made under
+the former name included.

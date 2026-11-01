@@ -115,7 +115,8 @@ def current(recs: list[dict]) -> dict | None:
 class Ledger:
     """One project's Acts records on the bus, grouped by key: the need register (what this project sent, the
     registrar's and the project's own) and the settlement register (what the principal side sent), each record
-    converted to 0.5, validated and deduplicated (bin/ph_records.py)."""
+    converted to 0.5, validated and deduplicated (bin/ph_records.py). Records filed under a name the project had before
+    a rename are its records too (hubbus records), and what is sent about such an item keeps that name (filed)."""
 
     def __init__(self, project: str):
         r = hubbus("records", "--project", project)
@@ -124,7 +125,8 @@ class Ledger:
         except ValueError:
             raise SystemExit(_("cannot read hubbus records (exit {code}): {stderr}", code=r.returncode,
                                stderr=r.stderr.strip()[-200:]))
-        self.need, self.settle, self.pending, self.raised_by, self.ignored = {}, {}, [], {}, []
+        self.project = project
+        self.need, self.settle, self.pending, self.raised_by, self.ignored, self.filed_as = {}, {}, [], {}, [], {}
         held: dict[str, list[dict]] = {}
         for e in events:
             rec = e["record"]
@@ -143,6 +145,14 @@ class Ledger:
                 (self.need if rec["type"] in ph_records.NEED else self.settle).setdefault(key, []).append(rec)
                 if rec["type"] == "raised":
                     self.raised_by.setdefault(key, rec.get("by"))
+            if key in self.need:   # the project field of the item, from its need records (core §4: ext, project, key)
+                self.filed_as[key] = self.need[key][0]["project"]
+            elif key in self.settle:
+                self.filed_as[key] = self.settle[key][0]["project"]
+
+    def filed(self, key: str) -> str:
+        """the project the item is filed under: the name it was raised under (a name from before a rename too)"""
+        return self.filed_as.get(key, self.project)
 
     def latest_need(self, key: str) -> dict | None:
         """the need record with the latest terms (the highest terms_rev)"""
@@ -328,7 +338,7 @@ def run_project(project: str, path: pathlib.Path, how: str, warned: set[str]) ->
               project=project, key=k))
     for k, new_text in [*amends, *((a["key"], a["text"]) for a in found["amended"])]:
         _old, rev, cur = led.terms(k)
-        amends_rec = record(project, "amended", k, f"a:{k}:{rev + 1}", terms={"text": new_text}, terms_rev=rev + 1,
+        amends_rec = record(led.filed(k), "amended", k, f"a:{k}:{rev + 1}", terms={"text": new_text}, terms_rev=rev + 1,
                             **({"supersedes": [cur]} if cur else {}))
         r = publish([amends_rec])
         sent += r.get(amends_rec["id"]) == "accepted"
@@ -352,7 +362,7 @@ def run_project(project: str, path: pathlib.Path, how: str, warned: set[str]) ->
                   key=k))
         elif act == "displaced":
             line = acts_md.Doc(text, READ).lines[x["line"]].strip()
-            notes.append(record(project, "note", k, f"d:{k}:r{led.reopens(k)}", origin="registrar", about={"key": k},
+            notes.append(record(led.filed(k), "note", k, f"d:{k}:r{led.reopens(k)}", origin="registrar", about={"key": k},
                                 note=_c("The key of this to-do is no longer on an owner line of STATE.md's to-dos (it was "
                                         "relabelled, moved or archived); it is now on line {line}: {text}",
                                         line=x["line"] + 1, text=line[:200])))
@@ -364,7 +374,7 @@ def run_project(project: str, path: pathlib.Path, how: str, warned: set[str]) ->
                 basis = (_c("Inferred done by the librarian: the item is no longer among STATE.md's to-dos. ")
                          + (_c("The run that deleted it: {why}", why=why[:300]) if why else
                             _c("The review-log does not record which run deleted it")))
-            claims.append(record(project, "claimed", k, f"c:{k}:r{led.reopens(k)}", origin="registrar",
+            claims.append(record(led.filed(k), "claimed", k, f"c:{k}:r{led.reopens(k)}", origin="registrar",
                                  outcome="done", evidence={"basis": basis}))
     res = publish(claims + notes)
     for r in notes:

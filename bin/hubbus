@@ -511,6 +511,8 @@ def send_record(c, a, sender: str, mid: str, p: dict) -> str | None:
     rec = {"ph": ph_wire.send_version(), "ext": ph_wire.ext("acts"), "type": kind, "key": key, "project": sender,
            "ts": iso()}
     need = need_state(c, sender, key)
+    if need:   # an item raised under a name this project had before a rename stays filed under it
+        rec["project"] = need["record"]["project"]
     if kind == "raised" and need:
         terms = {"text": " ".join(a.text.split()), **({"due": a.due} if a.due else {})}
         if terms == {k: v for k, v in need["terms"].items() if k in ("text", "due")}:
@@ -547,7 +549,11 @@ def send_decision(c, a, sender: str, mid: str, p: dict) -> str | None:
     is outside 0.3 and the assistant ties it back by handoff_id."""
     if p.get("handoff_id") is not None:
         return None
-    base = {"ph": ph_wire.send_version(), "ext": ph_wire.ext("decisions"), "project": sender, "ts": iso()}
+    need = need_state(c, sender, a.question, "decisions") if a.type != "question" else None
+    # a question asked under a name this project had before a rename stays filed under it
+    filed = need["record"]["project"] if need else \
+        (question_asked(c, a.question) or {}).get("filed", sender) if a.type != "question" else sender
+    base = {"ph": ph_wire.send_version(), "ext": ph_wire.ext("decisions"), "project": filed, "ts": iso()}
     asker = {"origin": "requester", "by": hubconf.party("requester", sender)}
     if a.type == "question":
         if not KEY_RE.match(mid):
@@ -565,7 +571,6 @@ def send_decision(c, a, sender: str, mid: str, p: dict) -> str | None:
     else:
         recs = [base | asker | {"id": f"w:{a.question}:{mid}", "type": "withdrawn", "key": a.question,
                                 "reason": "not_needed", "note": a.text}]
-    need = need_state(c, sender, a.question, "decisions") if a.type != "question" else None
     for r in recs:
         if a.context:
             r["context"] = a.context
@@ -591,9 +596,12 @@ def question_asked(c, key: str) -> dict | None:
     return None
 
 
-def _question(r, key: str, text) -> dict:
-    return {"id": key, "event": r["id"], "project": canon(r["source"]), "ts": r["ts"], "text": text or "",
-            "from_session": payload(r).get("from_session")}
+def _question(r, key: str, text, taken=None) -> dict:
+    """project: the asking project as it is called now; filed: the name it asked under (a record's project field, a
+    letter's sender), which records about the question keep."""
+    filed = (payload(r).get("record") or {}).get("project") or canon(r["source"])
+    return {"id": key, "event": r["id"], "project": now_named(canon(r["source"]), taken), "filed": filed,
+            "ts": r["ts"], "text": text or "", "from_session": payload(r).get("from_session")}
 
 
 def publish_record(c, rec: dict, source: str, to_project: str, extra: dict | None = None,
@@ -613,16 +621,18 @@ def publish_record(c, rec: dict, source: str, to_project: str, extra: dict | Non
 def records(c, project, ext=None, types=None, pending=False, direction=None) -> list[dict]:
     """This project's records, both directions, oldest first: {id: event id, ts, direction: out (project to the
     assistant) | in (from the assistant), done, record}. The registrar works out the latest terms/terms_rev from the
-    out raised/amended ones and knows which keys were withdrawn: the bus is its record."""
-    owners = tuple(OWNERS)
-    marks = ",".join("?" * len(owners))
+    out raised/amended ones and knows which keys were withdrawn: the bus is its record. Records filed under a name the
+    project had before a rename are its records too (own_names), each kept as it was sent."""
+    owners, names = tuple(OWNERS), own_names(project)
+    marks, nmarks = ",".join("?" * len(owners)), ",".join("?" * len(names))
     out = []
     for r in c.execute(f"""SELECT m.*, EXISTS(SELECT 1 FROM events x WHERE x.type='message.done' AND x.ref=m.id) AS done
                            FROM events m WHERE m.type='record'
-                             AND ((m.to_project=? AND m.source IN ({marks})) OR (m.source=? AND m.to_project IN ({marks})))
-                           ORDER BY m.seq""", (project, *owners, project, *owners)):
+                             AND ((m.to_project IN ({nmarks}) AND m.source IN ({marks}))
+                               OR (m.source IN ({nmarks}) AND m.to_project IN ({marks})))
+                           ORDER BY m.seq""", (*names, *owners, *names, *owners)):
         rec = payload(r).get("record") or {}
-        d = "in" if r["to_project"] == project else "out"
+        d = "in" if r["to_project"] in names else "out"
         if (ext and rec.get("ext") != ext) or (types and rec.get("type") not in types) or (pending and r["done"]) \
                 or (direction and d != direction):
             continue
@@ -806,14 +816,14 @@ def cmd_hook(event: str, runtime: str | None = None) -> None:
 
 
 def open_questions(c, project=None) -> list[dict]:
-    """Questions to the owner still open, oldest first: {id (the key --question takes), event, project, ts, text,
-    from_session}. A question is a v1 letter or a Decisions raised record; it is closed by an answer from the owner
+    """Questions to the owner still open, oldest first: {id (the key --question takes), event, project (as it is called
+    now; one asked under a name it had before a rename is its question), filed, ts, text, from_session}. A question is a v1 letter or a Decisions raised record; it is closed by an answer from the owner
     (a v1 letter with ref = the question, or decisions settled), or by the asking project (v1 done/drop --question,
     decisions claimed/withdrawn); reopened opens it again. Questions from discuss-lease handovers (lease-…) are
     managed by the assistant itself (the latest handover wins), not counted here."""
     owners = tuple(OWNERS)
     marks = ",".join("?" * len(owners))
-    asked, closed = {}, set()
+    asked, closed, taken = {}, set(), projects()
     for r in c.execute(f"""SELECT * FROM events WHERE type IN ('message','record')
                              AND (to_project IN ({marks}) OR source IN ({marks})) ORDER BY seq""", owners + owners):
         p, to_owner = payload(r), r["to_project"] in OWNERS
@@ -823,14 +833,14 @@ def open_questions(c, project=None) -> list[dict]:
             elif to_owner and p.get("question"):
                 closed.add(p["question"])            # done/drop --question (v1)
             elif to_owner and p.get("type") == "question":
-                asked.setdefault(r["id"], _question(r, r["id"], p.get("text")))
+                asked.setdefault(r["id"], _question(r, r["id"], p.get("text"), taken))
             continue
         rec = p.get("record") or {}
         if not str(rec.get("ext", "")).startswith("decisions/"):
             continue
         key, kind = rec.get("key"), rec.get("type")
         if to_owner and kind == "raised":
-            asked.setdefault(key, _question(r, key, (rec.get("terms") or {}).get("text")))
+            asked.setdefault(key, _question(r, key, (rec.get("terms") or {}).get("text"), taken))
         elif (to_owner and kind in ("claimed", "withdrawn")) or (not to_owner and kind == "settled"):
             closed.add(key)
         elif not to_owner and kind == "reopened":
@@ -1051,6 +1061,21 @@ def current_name(proj: str) -> str:
         seen.add(proj)
         proj = renames[proj]["new"]
     return proj
+
+
+def own_names(project: str, taken=None) -> list[str]:
+    """This project's name, then the names it had before a rename (hubconf.former_names), but not one another project is
+    registered under now. Records stay filed under the name they were sent under (their project field, the event's
+    source or recipient); a reader of this project's records reads all of these names."""
+    taken = projects() if taken is None else taken
+    return [project, *(o for o in hubconf.former_names(project) if o not in taken)]
+
+
+def now_named(name: str, taken=None) -> str:
+    """The project a name stands for now: itself while a project is registered under it, else what its renames made it
+    (unchanged when it was never renamed)."""
+    taken = projects() if taken is None else taken
+    return name if name in taken else current_name(name)
 
 
 def log_once(key: str, msg: str) -> None:
@@ -2545,11 +2570,13 @@ def cli() -> None:
         c = db()
         data = json.loads(sys.stdin.read() or "null")
         recs = data if isinstance(data, list) else [data]
-        out, bad = [], 0
+        out, bad, taken = [], 0, projects()
         c.execute("BEGIN IMMEDIATE")
         for r in recs:   # one by one: an invalid one doesn't block the others
             errs = record_errors(r)
-            if not errs and not valid_address(r["project"]):
+            # a record about an item filed under a name the project had before a rename keeps that name; the event
+            # goes under the current one
+            if not errs and not valid_address(sender := now_named(r["project"], taken)):
                 errs = [_("unknown project {project}", project=r["project"])]
             if not errs and r.get("origin") == "principal":
                 errs = [_("a record with origin principal can only come from the assistant (the bridge takes it in); "
@@ -2562,7 +2589,7 @@ def cli() -> None:
                 out.append({"id": r.get("id") if isinstance(r, dict) else None, "event": None, "status": "invalid",
                             "errors": errs})
                 continue
-            eid, new = publish_record(c, r, r["project"], OWNER_ADDRESS)
+            eid, new = publish_record(c, r, sender, OWNER_ADDRESS)
             out.append({"id": r["id"], "event": eid, "status": "accepted" if new else "duplicate"})
         c.execute("COMMIT")
         print(json.dumps(out, ensure_ascii=False))
