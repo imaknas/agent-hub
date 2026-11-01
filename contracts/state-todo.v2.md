@@ -8,7 +8,7 @@ version is set by this contract.
 
 v2 = v1 plus a second, English token set. A file in the v1 (zh-Hant) set is a valid v2 file and changes nothing; a file
 in the English set needs a v2 reader. The two sets are the Markdown profiles of agent-ops-specs' Principal Handoff Acts
-0.3 (`acts/profiles.json`): zh-Hant is the `zh-hant` profile with `{owner}` as its `principal_tag`, English is the `en`
+0.4 (`acts/profiles.json`): zh-Hant is the `zh-hant` profile with `{owner}` as its `principal_tag`, English is the `en`
 profile as it is.
 
 ## The two token sets
@@ -39,6 +39,22 @@ the owner is (the configured tag in English brackets is not a known label). `待
   `marker_pattern` (below), and also accept full-width parentheses and colons; in zh-Hant `等` with or without a space
   after it; in English the key is one run of non-space characters. The key is an opaque string (today
   `task-<project>-<10 hex digits>`); when that task is closed, the line is removed by its key.
+
+## How the section is read (Principal Handoff Acts 0.4 §5.2-§5.3)
+
+Readers follow the 0.4 binding; this adds no token and changes no written form, so the version stays:
+
+- Fenced code blocks and HTML comments are not read. A file with one that never closes is a format problem, and the
+  registrar leaves that file alone until it is fixed.
+- Every to-do section is read. A second one is a format problem, and new owner to-dos are registered only from the
+  first.
+- Any other heading inside a section ends a group (`### <label>`).
+- A list line that looks like a to-do but is not a `- [ ]` line is a format problem:
+  - one with a checkbox in another list form (`* [ ]`, `1. [ ]`);
+  - one with a label but no checkbox (`- [owner] …`).
+- Any run of spaces or tabs may follow `- [ ]`.
+- In the English set, a bracket followed by `(` is a Markdown link, not a label.
+- A key whose marker appears anywhere in the file is still present for the registrar.
 
 ## A file that mixes the sets
 

@@ -198,3 +198,44 @@ Questions now go the same way as tasks once `mailbox.records` is on (it is on he
   records: closed by an answer (v1 letter or `settled`) or by the asking project (v1 done/drop or `claimed`/`withdrawn`),
   opened again by `reopened`.
 - The built-in owner side's `owner.py answer` writes decisions `settled` (authority `principal`) like the assistant.
+
+## Acts 0.4 (11-01)
+
+agent-ops-specs published Principal Handoff 0.4 (tag `principal-handoff-0.4`, 81a0486), which answers agent-hub's
+m11010359-3de9 (reply m11010550-9894). What agent-hub does now:
+
+- **The document layer is 0.4.** `bin/acts_md.py` is the Markdown binding, after the spec's reference registrar, but it
+  reads a file in both token sets at once (state-todo v2 allows a mixed file) and writes the content language's set.
+  The registrar and gen-todo read through it. In practice:
+  - the registrar works only on **bound keys**, the ones it raised from a line;
+  - a key whose marker is anywhere in the file is present; if it is off the owner lines it is **displaced** (no claim,
+    one note `d:<key>:r<n>` per open period);
+  - a ticked owner box is claimed done;
+  - new to-dos are raised only from the first to-do section, and every section is read;
+  - fences and HTML comments are not read, and an unclosed one leaves the file alone;
+  - a settlement that is stale, or whose line was edited, strikes nothing.
+
+  The conformance fixtures of 0.4 run in the spec's profile and in agent-hub's two-set reading
+  (`tests/test_acts_conformance.py`). The 0.3 and HTH 0.1 copies are retired.
+- **Records: read 0.3 and 0.4, send 0.3** (`bin/ph_wire.py`). Before 1.0 each version is its own contract, and the
+  assistant does not take 0.4 records yet. Switching `SEND` also means a `terms_digest` on every `settled` the built-in
+  owner side writes (core §5.3), and `ts` of at most 6 decimal places (already whole seconds). Decisions 0.4
+  (approvals, the terms schema) is not implemented: the reference deployment leaves approvals to the assistant alone
+  (Knas, 11-01), and `owner.py` has no approval command and settles only when no assistant is configured.
+- **The `en` set keeps the profile's default `principal_tag`, `owner`**, whoever the owner is. An English STATE.md then
+  reads the same on every instance. The zh-Hant set's tag stays the configured owner tag.
+- **Keys a project assigns itself** (`send --type task` without `--id`) are now `ask-<project>-<hash>`. The registrar's
+  `task-` prefix is its own (acts §6.1). Before this, a project's key could be copied onto a STATE.md line and pass for
+  a bound one.
+- **A STATE.md item changes only through its line**: `send --type task --id <a registrar key>` with other terms is
+  refused (acts §4).
+
+The live dry run of the registrar, main against this branch (both against the real bus and state), differed in two
+places, both 0.4's intent:
+
+- One project's key (the one in `registrar-warned.json`) gets a note where it used to get nothing. The key sits on
+  a to-be-decided line, which makes it displaced.
+- Another project gets a new `raised`. Its line carried a key the project's own session had raised (`task-` prefix,
+  from before the `ask-` change), which an agent then copied onto the line. That key is not bound, so the line is
+  raised under the key derived from its text. The project's own item stays open at the assistant with the same text.
+  The assistant can relate the two (`same_as`), or the owner settles one as `already_done`.
