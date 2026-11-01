@@ -28,7 +28,7 @@ SCOPE = ("bin", "templates", "launchd", "tests", "agent-jobs", "modules")
 # Public docs: what is specific to this deployment goes in the instance directory's config/AGENTS.local.md,
 # known-issues.local.md (cleared 10-29 before open-sourcing; baseline 0).
 # docs/design/ holds dated decision records, where the maintainer's name is normal: not scanned
-PUBLIC_DOCS = ("AGENTS.md", "README.md", "known-issues.md", "docs/mcp.md", "hub.example.json")
+PUBLIC_DOCS = ("AGENTS.md", "README.md", "README.zh-Hant.md", "known-issues.md", "docs/mcp.md", "hub.example.json")
 BASELINE = ROOT / "tests" / "fixtures" / "personal-baseline.json"
 # the words for "project" (zh-Hant and English) that a private name which is also a common word is counted next to
 PROJECT_WORDS = json.loads((ROOT / "tests" / "fixtures" / "personal-boundary.json").read_text())["project_words"]

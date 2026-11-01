@@ -15,7 +15,8 @@ Install (macOS or Linux), then answer a few questions it asks:
 curl -fsSL https://raw.githubusercontent.com/imaknas/agent-hub/main/install.sh | sh
 ```
 
-What it does and what comes next: [Quick start](#quick-start).
+What it does and what comes next: [Quick start](#quick-start). No terminal? Let your AI app do it:
+[Set up through your agent](#set-up-through-your-agent). [Traditional Chinese (zh-Hant)](README.zh-Hant.md)
 
 Your agents write down what they do and learn. Every night agent-hub settles those notes into each project's current
 state, corrects what has changed, and gathers what matters across all your projects, so nothing is lost between
@@ -126,6 +127,34 @@ git checkout "$(git describe --tags --abbrev=0 --match 'v[0-9]*')"   # the newes
 bin/setup                            # check required tools, build the platform Python, put `agenthub` on PATH
 agenthub init                        # the questions (open a new terminal first if agenthub isn't found)
 ```
+
+### Set up through your agent
+
+If you'd rather not use a terminal, paste this into Claude Desktop's Code tab or the Codex app:
+
+> Install agent-hub for me from https://github.com/imaknas/agent-hub. Follow its "Set up through your agent" steps,
+> ask me each question in this chat, and tell me before anything is installed.
+
+While it runs, agent-hub asks you some things directly, never through the chat: a yes/no in a window on your screen
+(installing software, a setting for your user, a folder agents may connect), and a key or token on a page it opens
+in your browser. Answer them there, not in the chat.
+
+**For the agent** (the steps the prompt refers to). Every command ends with one JSON line; `needs_user` means
+something only the user can do: tell them, wait until they say it's done, then run the same command again.
+
+1. Run `curl -fsSL https://raw.githubusercontent.com/imaknas/agent-hub/main/install.sh | sh -s -- --for-agent`. It
+   installs nothing that needs the user's consent itself. Its last line is `{"done": true, "next": "<command>"}`,
+   `{"needs_user": …}` (exit 3) or `{"error": …}`.
+2. Run the `next` command (`… agenthub init --questions`). It lists the questions as JSON, each with an `id`, `text`,
+   `default`, `choices` where there are some, and `via`. Ask the user the `via: chat` ones in the chat, offering the
+   default. Never ask for `via: page` or `via: dialog` ones: agent-hub asks the user those directly.
+3. Write the answers to a file as one JSON object (`{"owner": "…", "agent": "claude", …}`) and run
+   `… agenthub init --questions --answers <file>`: answers can bring new questions (a provider's model). Repeat until
+   it lists no chat question you haven't asked.
+4. Tell the user to watch their screen for agent-hub's windows and pages, then run `… agenthub init --answers <file>`.
+   It waits up to 10 minutes on each window or page, so run it in the background or with a long timeout. The last
+   line is `{"done": …, "needs_user": [...]}`; for anything in `needs_user`, tell the user, then run it again.
+5. Run `… agenthub doctor` and tell the user what it says is missing.
 
 With a model set up (`agenthub llm setup`) and the scheduler running, the next morning there is a digest and a `todo.md`
 in the instance's data directory. Without a model they are not written: the librarian's judgment calls fail and say

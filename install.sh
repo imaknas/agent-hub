@@ -11,6 +11,11 @@
 #
 #   sh -s -- --yes       (after the pipe) answer yes to installing git, e.g. on a machine set up unattended
 #   sh -s -- --no-init   stop after the install; run agenthub init yourself
+#   sh -s -- --for-agent for an AI agent setting agent-hub up for its user (docs/design/newcomer-path.md B3): it never
+#                        asks anything and never installs system software itself; its last line is one JSON object,
+#                        {"done": true, "next": "<command>"}, {"needs_user": "<what the user has to do>"} (exit 3; then
+#                        run the same line again) or {"error": "<why>"} (exit 1). On a Mac without git, Apple's own
+#                        installer window is opened for the user to answer.
 #   AGENT_HUB_DIR    where to clone (default: agent-hub in your home folder)
 #   AGENT_HUB_REPO   what to clone (default: the GitHub repo)
 #   AGENT_HUB_REF    a tag or branch instead of the newest release (e.g. main)
@@ -24,7 +29,23 @@ REPO="${AGENT_HUB_REPO:-https://github.com/imaknas/agent-hub.git}"
 DIR="${AGENT_HUB_DIR:-$HOME/agent-hub}"
 
 say() { printf 'agent-hub install: %s\n' "$*"; }
-die() { say "$*" >&2; exit 1; }
+json_str() { printf '%s' "$1" | sed 's/\\/\\\\/g; s/"/\\"/g'; }
+die() {
+  say "$*" >&2
+  [ -n "${FOR_AGENT:-}" ] && printf '{"error": "%s"}\n' "$(json_str "$*")"
+  exit 1
+}
+# for-agent: something only the user can do; the agent tells them, then runs the same line again
+needs_user() {
+  say "$*"
+  printf '{"needs_user": "%s"}\n' "$(json_str "$*")"
+  exit 3
+}
+# someone may be at this machine's screen (a dialog opened here has someone to answer it)
+has_screen() {
+  if [ "$(uname -s)" = Darwin ]; then [ "$(launchctl managername 2>/dev/null)" = Aqua ]
+  else [ -n "${DISPLAY:-}${WAYLAND_DISPLAY:-}" ]; fi
+}
 
 # a terminal the questions can be asked in: stdin is the script itself when piped, so it has to be /dev/tty
 have_tty() { ( : </dev/tty ) 2>/dev/null; }
@@ -32,6 +53,7 @@ have_tty() { ( : </dev/tty ) 2>/dev/null; }
 # confirm "<question>": yes with --yes; otherwise asked on the terminal (Enter = yes); no terminal = no
 confirm() {
   [ -n "$YES" ] && return 0
+  [ -n "${FOR_AGENT:-}" ] && return 1
   have_tty || return 1
   printf '%s [Y/n] ' "$1" >/dev/tty
   read -r ans </dev/tty || return 1
@@ -40,6 +62,11 @@ confirm() {
 
 need_git_macos() {
   xcode-select -p >/dev/null 2>&1 && return 0   # /usr/bin/git is a stub that is always on PATH: ask xcode-select
+  if [ -n "$FOR_AGENT" ]; then
+    has_screen || needs_user "git needs Apple's command line tools: on this Mac's own screen, run xcode-select --install in Terminal and click Install"
+    xcode-select --install >/dev/null 2>&1 || true
+    needs_user "Apple's installer for the command line tools (git) opened on this Mac's screen: click Install, wait for it to finish, then I'll carry on"
+  fi
   if [ -n "${SSH_CONNECTION:-}" ]; then
     die "git needs Apple's command line tools, and their installer opens a window this SSH session can't show: run xcode-select --install on the machine's own screen (or install them from https://developer.apple.com/download/all/), then paste the line again"
   fi
@@ -63,6 +90,7 @@ need_git_linux() {
   elif command -v pacman >/dev/null 2>&1; then cmd="sudo pacman -S --noconfirm git"
   else die "git is missing; install it with your package manager, then paste the line again"
   fi
+  [ -n "$FOR_AGENT" ] && needs_user "git is missing: run $cmd in a terminal (it asks for your password)"
   confirm "git is missing. Install it now with: $cmd ?" || die "git is needed: $cmd, then paste the line again"
   if have_tty; then sh -c "$cmd" </dev/tty; else sh -c "$cmd"; fi || die "installing git failed: $cmd"
 }
@@ -74,10 +102,12 @@ instance_exists() {
 main() {
   YES="${AGENT_HUB_YES:-}"
   NO_INIT="${AGENT_HUB_NO_INIT:-}"
+  FOR_AGENT=""
   for a in "$@"; do
     case "$a" in
       --yes) YES=1 ;;
       --no-init) NO_INIT=1 ;;
+      --for-agent) FOR_AGENT=1 ;;
       *) die "unknown option: $a (see the top of install.sh)" ;;
     esac
   done
@@ -120,7 +150,10 @@ main() {
 
   "$DIR/bin/setup" || die "bin/setup reported something missing (above); install it, then paste the line again"
 
-  if [ -n "$NO_INIT" ]; then
+  if [ -n "$FOR_AGENT" ]; then
+    say "installed"
+    printf '{"done": true, "next": "%s"}\n' "$(json_str "$DIR/bin/py $DIR/bin/agenthub init --questions")"
+  elif [ -n "$NO_INIT" ]; then
     say "done. Next: agenthub init  (then agenthub doctor)"
   elif have_tty; then
     say "installed. Now a few questions to set it up (agenthub init):"

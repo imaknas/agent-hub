@@ -34,6 +34,8 @@ SPEC = {
     "contracts/reflect-week.v2.schema.json",
     # the i18n design: both token sets side by side and the Simplified-only characters the evals score
     "docs/design/i18n.md",
+    # the README for zh-Hant readers: the prompt they paste into their AI app is Chinese by definition
+    "README.zh-Hant.md",
 }
 
 

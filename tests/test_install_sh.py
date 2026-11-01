@@ -70,6 +70,43 @@ class InstallSh(unittest.TestCase):
         self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
         self.assertIn("Next: agenthub init", r.stdout)
 
+    def test_for_agent_ends_with_one_json_line(self):
+        """B3: never init, never a prompt; the last line says what to run next, or why not."""
+        import json
+        self.fake_hub()
+        r = self.run_install("--for-agent")
+        self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
+        last = json.loads(r.stdout.splitlines()[-1])
+        self.assertTrue(last["done"])
+        self.assertTrue(last["next"].endswith("bin/agenthub init --questions"), last)
+        self.assertNotIn("agenthub-ran", r.stdout)
+        (self.dir / ".hub-home").write_text(str(self.tmp / "instance") + "\n")
+        r = self.run_install("--for-agent")
+        self.assertEqual(r.returncode, 1)
+        self.assertIn("agenthub upgrade", json.loads(r.stdout.splitlines()[-1])["error"])
+
+    def test_for_agent_hands_installing_git_to_the_user(self):
+        """With git missing, --for-agent installs nothing itself: on Linux it names the command for the user (exit 3);
+        a Mac's own installer window only opens where there is a screen."""
+        import json
+        self.fake_hub()
+        stubs = self.tmp / "stubs"
+        stubs.mkdir()
+        for name, body in (("uname", "echo Linux"), ("apt-get", "exit 0"), ("sudo", "touch " + str(self.tmp / "sudo-ran"))):
+            (stubs / name).write_text(f"#!/bin/sh\n{body}\n")
+            (stubs / name).chmod(0o755)
+        # a PATH with sh, sed and the stubs, and no git
+        tools = self.tmp / "tools"
+        tools.mkdir()
+        for name in ("sh", "sed", "printf", "cat", "dirname"):
+            src = shutil.which(name)
+            if src:
+                (tools / name).symlink_to(src)
+        r = self.run_install("--for-agent", "--yes", PATH=f"{stubs}:{tools}")
+        self.assertEqual(r.returncode, 3, r.stdout + r.stderr)
+        self.assertIn("sudo apt-get install -y git", json.loads(r.stdout.splitlines()[-1])["needs_user"])
+        self.assertFalse((self.tmp / "sudo-ran").exists(), "even with --yes, an agent never runs sudo")
+
     def test_another_folder_is_refused(self):
         self.dir.mkdir()
         (self.dir / "notes.txt").write_text("mine")

@@ -552,7 +552,19 @@ Once picked, the text goes in the README's first lines, the GitHub description, 
    elicitation when the client offers it (a decline does nothing), never under a lease, and runs `agenthub connect
    --yes` (never a remote) with `AGENTHUB_CONNECT_ROOTS`, which onboard-project.sh re-checks on the real path before
    it creates anything. The local page and native dialog for roots are B3's.
-6. **B3**: `init --questions/--answers` and `install.sh --for-agent`, then a dry run of story 2 in both apps.
+6. **B3**: `init --questions/--answers` and `install.sh --for-agent`, then a dry run of story 2 in both apps. **Built
+   11-02, the dry run not done yet**: every question init asks goes through `bin/init_dialogue.py` (Terminal, Recorder
+   for `--questions`, Agent for `--answers`), each with a stable id. The answers map to init's own options and are
+   validated strictly (known ids, text, choices); consents and secrets have no id in the file at all, and `--yes`
+   doesn't go with either mode. Consent is `native_yes` (osascript with the question as an argument, zenity,
+   kdialog; No by default, 10 minutes); a secret is `secret_page` (one page per value, random path never printed or
+   logged, Host and Origin checked, one submission, 10 minutes). "Is there a screen" is an Aqua session on macOS,
+   DISPLAY or WAYLAND_DISPLAY on Linux; without one, both come back as `needs_user`. In agent mode the setup token is
+   pasted into the page after the user runs `claude setup-token` in a terminal (the app's own works); init doesn't run
+   it for them. A provider's model is one answer (`llm_model`) for every group, like `--llm-model`. Owner steps left
+   over keep `init-unfinished`, so the same `--answers` carries on. `install.sh --for-agent` never prompts and never
+   runs sudo; on a Mac with a screen it opens Apple's installer window and returns `needs_user`. README has the
+   pasteable prompt and the agent's steps; `README.zh-Hant.md` is new.
 7. **B8**: the wording pass.
 8. **Positioning**: done 11-01 (README, social preview, GitHub description).
 
