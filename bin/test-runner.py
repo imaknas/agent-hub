@@ -5,7 +5,7 @@ job as the project (isolation.wrap). It never touches the branch: no rebase, no 
 
   agenthub test [--tier T]... [--when commit|merge|nightly|deploy] [--force] [--rev R | --index]
 
-  1. Exports what it tests into a run folder under the repo's git common dir (agent-hub/test/): by default the
+  1. Exports what it tests into a run folder of the main checkout (.agent-hub/test/, excluded): by default the
      worktree's content (HEAD plus uncommitted and untracked, through a temporary index), --index what is staged,
      --rev a commit. The exported tree's id is what results are keyed on.
   2. The project's test declaration: project v2 (bin/tiers.py; a v1 entry is upgraded as it is read). The hub's own
@@ -74,6 +74,26 @@ def repo_dirs(cwd: pathlib.Path) -> tuple[pathlib.Path, pathlib.Path, pathlib.Pa
     out = git(cwd, "rev-parse", "--path-format=absolute", "--show-toplevel", "--git-dir", "--git-common-dir")
     top, git_dir, common = (pathlib.Path(x).resolve() for x in out.splitlines())
     return top, git_dir, common
+
+
+def runs_dir(main: pathlib.Path, common: pathlib.Path) -> pathlib.Path:
+    """Where runs export and keep their HOME and TMPDIR: an excluded folder of the main checkout, which every caller can
+    write (a session of the repo; the project's sandbox, whose workspace it is). Not under .git: tests that make git
+    repos or check paths in their temporary folders treat a path through a .git folder as git's own (the step 2.3
+    rehearsal, 11-01); not the system's temporary folder, which sandbox profiles let everything write, so the tests
+    that catch writes outside a folder could not."""
+    d = main / ".agent-hub" / "test"
+    d.mkdir(parents=True, exist_ok=True)
+    exclude = common / "info" / "exclude"
+    try:
+        have = exclude.read_text() if exclude.is_file() else ""
+        if "/.agent-hub/" not in have.splitlines():
+            exclude.parent.mkdir(parents=True, exist_ok=True)
+            with open(exclude, "a") as f:
+                f.write(("" if have.endswith("\n") or not have else "\n") + "/.agent-hub/\n")
+    except OSError:
+        pass
+    return d
 
 
 def project_of(main: pathlib.Path) -> tuple[str, dict]:
@@ -292,8 +312,7 @@ def main(argv: list[str]) -> int:
         top, git_dir, common = repo_dirs(pathlib.Path.cwd())
         main_dir = common.parent if common.name == ".git" else top
         name, doc = project_of(main_dir)
-        (common / "agent-hub" / "test").mkdir(parents=True, exist_ok=True)
-        run = pathlib.Path(tempfile.mkdtemp(prefix="run.", dir=common / "agent-hub" / "test"))
+        run = pathlib.Path(tempfile.mkdtemp(prefix="run.", dir=runs_dir(main_dir, common)))
     except SetupError as e:
         print(f"agenthub test: {e}", file=sys.stderr)
         return 2

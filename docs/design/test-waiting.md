@@ -481,12 +481,13 @@ then kill, so a test server's own shutdown still runs (the leaked containers cam
 children survived; containers are outside the group, so B5's cleanup module stays). It never touches the branch: no
 rebase, no lock.
 
-- **Where:** the export goes under the repo's git common dir (`agent-hub/test/`, beside the tool caches the 11-01 fix
-  put in `agent-hub/cache/`), the one place every caller can
-  write — a session of the repo, and a project's sandbox, which includes its repo's `.git` — and not a temporary
-  directory (test-gate's reason: sandbox profiles allow writing those, so the tests that catch writes outside a folder
-  could not) nor the hub's `.state` (denied to sandboxes). Git is fenced off from the enclosing repo with
-  `GIT_CEILING_DIRECTORIES`, as test-gate does.
+- **Where:** the export goes into an excluded folder of the main checkout (`.agent-hub/test/`, listed in the repo's
+  `info/exclude`), which every caller can write — a session of the repo, and the project's sandbox, whose workspace it
+  is — with the run's HOME and TMPDIR inside it. Not under `.git` (the design's first choice: the step 2.3 rehearsal
+  showed tests that make git repos or check paths in their temporary folders treat any path through a `.git` folder as
+  git's own, and 25 failed), nor a temporary directory (sandbox profiles allow writing those, so the tests that catch
+  writes outside a folder could not), nor the hub's `.state` (denied to sandboxes). Git is fenced off from the
+  enclosing repo with `GIT_CEILING_DIRECTORIES`, as test-gate does.
 - **Environment (r8):** **a fresh environment per run, built from the lockfile into the run's directory, from the
   repo's own tool caches** — the ones the 11-01 sandbox fix already gives every project in its git dir
   (`agent-hub/cache/<tool>`, set through `policy.env`: `UV_CACHE_DIR`, `UV_PYTHON_INSTALL_DIR`, `PIP_CACHE_DIR`,
