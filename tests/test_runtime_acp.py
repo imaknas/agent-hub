@@ -435,6 +435,50 @@ class Routing(unittest.TestCase):
         self.assertEqual(len(runtime_acp.config_errors(unset)), 1, "used but not set up")
 
 
+class ConfigCheckDefault(unittest.TestCase):
+    """bin/config-check refuses runtime.default: acp (it runs only in the platform's throwaway worktree, so as the
+    default it would run nothing) and names the points it can be pinned on; acp pinned on such a point passes. Runs
+    the real script as a child with a config, state and HOME of its own."""
+
+    def check(self, cfg: dict, lang: str):
+        import shutil
+        import subprocess
+        tmp = pathlib.Path(tempfile.mkdtemp()).resolve()
+        self.addCleanup(shutil.rmtree, tmp, ignore_errors=True)
+        for d in ("config", "state", "data", "secrets", "home"):
+            (tmp / d).mkdir()
+        base = {"v": 1, "registry_dir": "projects", "owner": {"address": "owner", "tag": "Alex"}}
+        (tmp / "config" / "hub.json").write_text(json.dumps({**base, **cfg}))
+        env = {**{k: v for k, v in os.environ.items() if not k.startswith("AGENT_HUB_") or k == "AGENT_HUB_PYTHON"},
+               "AGENT_HUB_ROOT": str(ROOT), "AGENT_HUB_CONFIG": str(tmp / "config"), "AGENT_HUB_STATE": str(tmp / "state"),
+               "AGENT_HUB_DATA": str(tmp / "data"), "AGENT_HUB_SECRETS": str(tmp / "secrets"), "HOME": str(tmp / "home"),
+               "AGENT_HUB_LANG_UI": lang}
+        return subprocess.run([sys.executable, str(ROOT / "bin" / "config-check")], cwd=tmp, env=env,
+                              capture_output=True, text=True, timeout=120)
+
+    def test_acp_as_the_default_is_refused(self):
+        import i18n
+        for lang in ("en", "zh-Hant"):
+            with self.subTest(lang=lang):
+                # set up properly, so the refusal is the only problem
+                r = self.check({"runtime": {"default": "acp", "acp": {"agent": "a", "agents": {"a": {"command": ["x"]}}}}},
+                               lang)
+                self.assertEqual(r.returncode, 1, r.stdout + r.stderr)
+                self.assertEqual(len(r.stderr.strip().splitlines()), 1, "the only problem: " + r.stderr)
+                want = i18n.translate("config-check", (
+                    "hub.json: runtime.default `{name}` runs only in the platform's throwaway worktree, so as the "
+                    "default it would run nothing (dispatch needs session state, every other point is refused); keep "
+                    "another runtime as the default and pin {name} on {points} (llm.points.<point>.runtime)"),
+                    {"name": "acp", "points": ", ".join(runtime_ports.THROWAWAY_POINTS)}, lang)
+                self.assertIn(want, r.stderr)
+
+    def test_acp_pinned_on_a_throwaway_point_passes(self):
+        cfg = {"runtime": {"default": "fake", "acp": {"agent": "a", "agents": {"a": {"command": ["x"]}}}},
+               "llm": {"points": {p: {"runtime": "acp"} for p in runtime_ports.THROWAWAY_POINTS}}}
+        r = self.check(cfg, "en")
+        self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
+
+
 class LoginCheck(unittest.TestCase):
     def test_throwaway_only_default_is_not_checked_and_never_alerts(self):
         """login-check is not a confined point, so with runtime.default: acp every request would be refused and
