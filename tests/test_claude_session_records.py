@@ -229,6 +229,16 @@ class HookPath(SecretsDir):
         self.assertEqual(list(self.dir.iterdir()), [])
         self.assertNotIn(B, runtime_claude.live_sessions())
 
+    def test_agent_hubs_own_sessions_are_recorded(self):
+        """The hub is a project to dispatch (hubbus.projects) though the registry index leaves it out: its main checkout
+        and its linked worktrees record like any project's."""
+        self.proj = None
+        for ws in (hubconf.MAIN, hubconf.MAIN / ".claude" / "worktrees" / "w"):
+            self.m._workspace = lambda cwd, ws=ws: ws
+            self.hook("prompt", B)
+            self.assertEqual(runtime_ports.recorded_sessions("claude"), {B}, ws)
+            self.hook("session_end", B)
+
     def test_a_fork_whose_start_carried_the_parents_id(self):
         self.hook("session_start", A, source="fork")
         self.hook("prompt", B)

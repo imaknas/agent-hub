@@ -150,6 +150,15 @@ def wake_address(ev, ws):
     return None
 
 
+def _hub(ws) -> bool:
+    """agent-hub's own folder (its main checkout or a linked worktree of it): a project whose letters dispatch routes
+    like any other (hubbus.projects), though the registry index (project_at) leaves it out."""
+    try:
+        return ws.resolve().is_relative_to(hubconf.MAIN.resolve())
+    except (OSError, RuntimeError):
+        return False
+
+
 def session_record(ev, ws):
     """Record the process this session runs in (runtime_ports.record_session; docs/design/mailbox-runtimes.md B1,
     "forked sessions"), so dispatch counts it live even when its id is on no command line. At the session's start it is
@@ -158,7 +167,7 @@ def session_record(ev, ws):
     nor for a headless one the runtime tells apart (person_session: a -p or SDK run, which a person isn't in).
     Not run as the project: it writes only the secrets directory, which no sandbox can reach."""
     fn = getattr(_RT, "session_pid", None)
-    if not callable(fn) or not ws or platform_run(os.environ) or not project_git.project_at(ws):
+    if not callable(fn) or not ws or platform_run(os.environ) or not (project_git.project_at(ws) or _hub(ws)):
         return None
     pid, person = fn(os.environ), getattr(_RT, "person_session", None)
     if pid:
