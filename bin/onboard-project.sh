@@ -78,7 +78,13 @@ if ! on_mini && ! ssh -o ConnectTimeout=8 -o BatchMode=yes "$MINI_HOST" true 2>/
 fi
 
 mkdir -p "$1"
-PROJ_PATH="$(cd "$1" && pwd)"
+# the real path (-P): a folder given through a symlink is onboarded where it really is (docs/design/newcomer-path.md B6)
+PROJ_PATH="$(cd "$1" && pwd -P)"
+# the folder isn't trusted yet: every git call in it runs with its own hooks and fsmonitor off (B6)
+sgit() { git -c core.hooksPath=/dev/null -c core.fsmonitor= "$@"; }
+# where the memory bare repos live on the hub machine (hub.json git_origin), as a path its shell expands
+GO_REMOTE="$(hub_json_get git_origin)"; GO_REMOTE="${GO_REMOTE:-~/git-origin}"
+GO_SH="${GO_REMOTE/#\~/\$HOME}"
 PROJ_NAME="$(basename "$PROJ_PATH")"
 cd "$PROJ_PATH"
 
@@ -92,20 +98,20 @@ RECOVER_HINT="$(hub_msg "To reconnect an existing project (new machine, folder g
 if awk -F'\t' -v n="$PROJ_NAME" '$1==n{f=1} END{exit !f}' <<<"$ROSTER"; then
   fail "$(hub_msg "'{name}' is already in the project registry (projects/{name}.yaml): it cannot be onboarded again. {hint}" name="$PROJ_NAME" hint="$RECOVER_HINT")"
 fi
-if [ ! -e .agent-memory ] && mini_sh "git --git-dir=\"\$HOME/git-origin/${PROJ_NAME}-memory.git\" show-ref --verify --quiet refs/heads/agent-memory" 2>/dev/null; then
+if [ ! -e .agent-memory ] && mini_sh "git --git-dir=\"$GO_SH/${PROJ_NAME}-memory.git\" show-ref --verify --quiet refs/heads/agent-memory" 2>/dev/null; then
   fail "$(hub_msg "the hub machine already has {name}-memory.git (with agent-memory history): this name was onboarded before. {hint}" name="$PROJ_NAME" hint="$RECOVER_HINT")"
 fi
-if [ -d .git ] && existing_origin=$(git remote get-url origin 2>/dev/null); then
+if [ -d .git ] && existing_origin=$(sgit remote get-url origin 2>/dev/null); then
   same=$(awk -F'\t' -v o="$existing_origin" -v n="$PROJ_NAME" '$3==o && $1!=n{print $1}' <<<"$ROSTER")
   [ -z "$same" ] || fail "$(hub_msg "this repo (origin {origin}) was onboarded as '{name}' (under another folder name). Reconnect it with bin/recover-project.sh {name} [path]; to rename it, use bin/rename-project.sh" origin="$existing_origin" name="$same")"
 fi
 
 # --- 1. precondition checks and automatic fill-in ---
 if [ ! -d .git ]; then
-  git init -q
+  sgit init -q
 fi
 
-origin_url=$(git remote get-url origin 2>/dev/null || true)
+origin_url=$(sgit remote get-url origin 2>/dev/null || true)
 # the hub machine as the ssh host of origin (only when hosts.server is set: an empty name would match every URL), or a
 # memory bare repo path
 on_hub=false
@@ -115,10 +121,10 @@ if [ -n "$MINI_HOST" ]; then
 fi
 $on_hub && fail "$(hub_msg "origin points at the hub machine, which the current design never does: this project is probably left over from the old onboarding; deal with it by hand first")"
 
-if git rev-parse HEAD >/dev/null 2>&1; then
+if sgit rev-parse HEAD >/dev/null 2>&1; then
   # There's commit history: this is the case where the user's real work needs protecting; the working tree must be
   # clean, no guessing, no automatic clearing.
-  [ -z "$(git status --porcelain)" ] || fail "$(hub_msg "the working tree is not clean (uncommitted changes or untracked files): clean it up yourself, then run again")"
+  [ -z "$(sgit status --porcelain)" ] || fail "$(hub_msg "the working tree is not clean (uncommitted changes or untracked files): clean it up yourself, then run again")"
 else
   # A brand-new repo with no commits at all: there's no "work the user isn't ready with" to protect here, so the
   # existing content (possibly empty) is committed as the initial content.
@@ -127,15 +133,15 @@ else
   if [ -z "$(find . -mindepth 1 -not -path './.git' -not -path './.git/*')" ]; then
     printf '# %s\n' "$PROJ_NAME" > README.md
   fi
-  git add -A
-  git commit -q -m "chore: initial commit"
+  sgit add -A
+  sgit commit -q -m "chore: initial commit"
 fi
 
 RESUME=false
 if [ -e .agent-memory ]; then
   # Checking whether the bare repo's directory exists isn't enough: `git init --bare` creates the directory by
   # itself, which doesn't mean the agent-memory branch was ever pushed. Check whether that ref exists.
-  if mini_sh "cd ~/git-origin/${PROJ_NAME}-memory.git 2>/dev/null && git show-ref --verify --quiet refs/heads/agent-memory" 2>/dev/null; then
+  if mini_sh "cd $GO_SH/${PROJ_NAME}-memory.git 2>/dev/null && git show-ref --verify --quiet refs/heads/agent-memory" 2>/dev/null; then
     fail "$(hub_msg ".agent-memory already exists and the hub machine already has its bare repo (agent-memory branch pushed): this project should already be onboarded")"
   fi
   # .agent-memory exists locally, but the hub machine has no matching bare repo with real content: exactly the
@@ -152,10 +158,10 @@ if [ -z "$origin_url" ] && [ "$NO_REMOTE" != true ]; then
   # the account is read from hub.json's github.owner, not hard-coded (CLAUDE.md, "rules for writing new code")
   GH_OWNER=$("$AGENT_HUB/bin/py" "$AGENT_HUB/bin/hubconf.py" get github.owner) || fail "$(hub_msg "hub.json has no github.owner: cannot create the GitHub repo")"
   gh repo create "$GH_OWNER/$PROJ_NAME" $VISIBILITY --source=. --remote=origin
-  git remote set-url origin "git@github.com:${GH_OWNER}/${PROJ_NAME}.git"
-  outer_branch=$(git branch --show-current)
-  git push -u origin "$outer_branch"
-  origin_url=$(git remote get-url origin)
+  sgit remote set-url origin "git@github.com:${GH_OWNER}/${PROJ_NAME}.git"
+  outer_branch=$(sgit branch --show-current)
+  sgit push -u origin "$outer_branch"
+  origin_url=$(sgit remote get-url origin)
 fi
 
 if [ -n "$origin_url" ]; then
@@ -166,7 +172,7 @@ fi
 
 if [ "$RESUME" != true ]; then
   # --- 2. create the orphan worktree ---
-  git worktree add --orphan -b agent-memory .agent-memory -q
+  sgit worktree add --orphan -b agent-memory .agent-memory -q
   hub_say "[2/11] Created the .agent-memory worktree (agent-memory branch, fully separate from the main branch)"
 
   # --- 3. copy the skeleton, commit ---
@@ -180,7 +186,7 @@ if [ "$RESUME" != true ]; then
   # New projects get engineering registered by default since 2026-09-27 and multi-agent-review since 2026-10-27;
   # existing projects were all given them the same day.
   printf 'engineering\nmulti-agent-review\n' > .agent-memory/RULES
-  ( cd .agent-memory && git add -A && git commit -q -m "init: agent-hub memory skeleton (AGENT.md/STATE.md/memory)" )
+  ( cd .agent-memory && sgit add -A && sgit commit -q -m "init: agent-hub memory skeleton (AGENT.md/STATE.md/memory)" )
   hub_say "[3/11] Skeleton files in place and committed on the agent-memory branch"
 
   # --- 4. ignore .agent-memory/ ---
@@ -188,7 +194,7 @@ if [ "$RESUME" != true ]; then
   # `.agent-memory/` should go into the repo (whether it goes public later is undecided).
   # sync-local-setup.sh (steps 5-6, every SessionStart, recover) also makes sure of this.
   "$AGENT_HUB/bin/sync-local-setup.sh" --quiet . >/dev/null
-  git check-ignore -q .agent-memory || fail "$(hub_msg ".agent-memory is not ignored, stopping (otherwise git add -A would add it as an embedded repo)")"
+  sgit check-ignore -q .agent-memory || fail "$(hub_msg ".agent-memory is not ignored, stopping (otherwise git add -A would add it as an embedded repo)")"
   hub_say "[4/11] .agent-memory/ is excluded in .git/info/exclude (.gitignore untouched)"
 
   # --- 5-6. Local-only setup: the hooks (.claude/settings.local.json) and the agent-hub block in CLAUDE.local.md:
@@ -216,32 +222,32 @@ else
 fi
 
 # --- 8. create the bare repo on the hub machine, push the agent-memory branch ---
-mini_sh "mkdir -p ~/git-origin && git init --bare -q ~/git-origin/${PROJ_NAME}-memory.git"
+mini_sh "mkdir -p $GO_SH && git init --bare -q $GO_SH/${PROJ_NAME}-memory.git"
 # Note: the remote branch is deliberately named agent-memory like the local one, not main: a different name makes
 # branch.agent-memory.merge point at refs/heads/main, which works (it's the only ref on the remote anyway) but looks
 # like a misconfiguration, and people (or other agents) easily mistake it for a bug and go digging.
 # remote add isn't idempotent: in resume mode the memory remote may already be set from last time (before the hub
 # machine's steps failed); if it exists, change its URL, only add it if it doesn't.
 ( cd .agent-memory && \
-  if git remote get-url "$MEMORY_REMOTE" >/dev/null 2>&1; then
-    git remote set-url "$MEMORY_REMOTE" "$(mini_memory_url "$PROJ_NAME")"
+  if sgit remote get-url "$MEMORY_REMOTE" >/dev/null 2>&1; then
+    sgit remote set-url "$MEMORY_REMOTE" "$(mini_memory_url "$PROJ_NAME")"
   else
-    git remote add "$MEMORY_REMOTE" "$(mini_memory_url "$PROJ_NAME")"
+    sgit remote add "$MEMORY_REMOTE" "$(mini_memory_url "$PROJ_NAME")"
   fi && \
-  git push -u "$MEMORY_REMOTE" agent-memory:agent-memory -q )
+  sgit push -u "$MEMORY_REMOTE" agent-memory:agent-memory -q )
 # The hub machine's git init.defaultBranch is main, so a new bare repo's HEAD points at refs/heads/main by default;
 # but only agent-memory is ever pushed here, main never exists, HEAD dangles, and the plain git clone in the next
 # step gets nothing. Point HEAD at the right branch explicitly.
-mini_sh "git --git-dir=\"\$HOME/git-origin/${PROJ_NAME}-memory.git\" symbolic-ref HEAD refs/heads/agent-memory"
+mini_sh "git --git-dir=\"$GO_SH/${PROJ_NAME}-memory.git\" symbolic-ref HEAD refs/heads/agent-memory"
 if on_mini; then   # this machine is the hub machine: say where, not "on the hub machine"
-  hub_say "[8/11] Memory bare repo created (~/git-origin/{name}-memory.git), agent-memory branch pushed" name="$PROJ_NAME"
+  hub_say "[8/11] Memory bare repo created ({path}), agent-memory branch pushed" path="$GO_REMOTE/$PROJ_NAME-memory.git"
 else
   hub_say "[8/11] Bare repo created on the hub machine, agent-memory branch pushed"
 fi
 
 # --- 9. clone a working copy on the hub machine for the librarian ---
 # without symlinks (core.symlinks=false): the librarian reads its files, and a committed link must not point it elsewhere
-mini_sh "mkdir -p ~/.memory-copies && git clone -q --config core.symlinks=false ~/git-origin/${PROJ_NAME}-memory.git ~/.memory-copies/${PROJ_NAME}"
+mini_sh "mkdir -p ~/.memory-copies && git clone -q --config core.symlinks=false $GO_SH/${PROJ_NAME}-memory.git ~/.memory-copies/${PROJ_NAME}"
 if on_mini; then
   hub_say "[9/11] Cloned the librarian's memory copy to ~/.memory-copies/{name}" name="$PROJ_NAME"
 else
@@ -265,7 +271,7 @@ manifest_origin="${origin_url:-(native)}"
 # ONBOARD_REGISTRY_EXTRA (JSON): fields the caller wants registered too (create-idea-sandbox.sh's type: idea etc.),
 # in the same commit as the registration, so there's no window of "registered but the fields not filled in yet"
 "$AGENT_HUB/bin/py" "$AGENT_HUB/bin/registry.py" add "$PROJ_NAME" "$PROJ_PATH" "$manifest_origin" \
-    "~/git-origin/${PROJ_NAME}-memory.git" ${ONBOARD_REGISTRY_EXTRA:+--extra "$ONBOARD_REGISTRY_EXTRA"} \
+    "$GO_REMOTE/${PROJ_NAME}-memory.git" ${ONBOARD_REGISTRY_EXTRA:+--extra "$ONBOARD_REGISTRY_EXTRA"} \
   || fail "$(hub_msg "adding to the project registry failed (projects/{name}.yaml)" name="$PROJ_NAME")"
 # Commit+push agent-hub right after registering: it used to only write the file without committing, so the
 # librarian/mirror-backup on the hub machine only saw a new project once someone happened to commit by hand (a

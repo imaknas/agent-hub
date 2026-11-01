@@ -536,7 +536,13 @@ Once picked, the text goes in the README's first lines, the GitHub description, 
    works whether or not setup-token wants typed input. Codex: `codex login status`, else `codex login`. `--agent
    <name>` answers it; on an existing instance it re-runs only this step, offers llm setup, commits hub.json alone
    and applies the config. Nothing is installed or logged in without a yes on the terminal (`--yes` doesn't).
-4. **B6**: `agenthub connect` with layout detection, for the layouts that work today.
+4. **B6**: `agenthub connect` with layout detection, for the layouts that work today. **Done 11-02**: `bin/connect.py`
+   (plain, repo, monorepo by workspace files or two manifests, a folder of repos), refusals on the real path (home
+   and parents, hidden, the hub, the instance, inside a project), the unsaved-changes check with hooks and fsmonitor
+   off, `--no-remote` unless `--remote` with github.owner, `layout_intent` (split / span) in the registry and both
+   project schemas; onboard-project.sh uses `pwd -P`, runs its git in the folder with hooks off (`sgit`), and reads
+   `git_origin`; init ends with "Where are your existing projects?" (`--connect`). The root allowlist and the MCP
+   tool are B5's.
 5. **B5**: user-level MCP registration and the server outside projects.
 6. **B3**: `init --questions/--answers` and `install.sh --for-agent`, then a dry run of story 2 in both apps.
 7. **B8**: the wording pass.

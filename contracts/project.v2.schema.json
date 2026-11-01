@@ -30,6 +30,7 @@
                                         "properties": {"tier": {"enum": ["fast", "standard", "strong"]}}},
                "description": "model calls this project makes through the platform (agenthub complete): point name -> its tier; the platform picks the model"},
     "metered_models": {"type": "boolean", "description": "the owner allows metered (pay-per-use) providers for those calls; a security field only the platform sets"},
+    "layout_intent": {"type": "object", "description": "what the owner said about this project's layout when connecting it, for when projects-and-repos lands: split (a monorepo into its parts) or span (several repos as one project); docs/design/newcomer-path.md B6"},
     "commits": {"enum": ["conventional"], "description": "commit titles follow Conventional Commits, checked by the merge gate; absent = not checked"},
     "mailbox": {"type": "object", "properties": {"escalate": {"type": "boolean"}}},
     "publishes": {"type": "array", "items": {"type": "object", "required": ["kind", "path"]}},

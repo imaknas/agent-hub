@@ -16,7 +16,7 @@ $ agenthub init --dry-run --yes    # instance, launchd
 (dry-run) local.agent-hub-scheduler: install
 (dry-run) local.agent-hub-scheduler-watchdog: install
 
-Next: agenthub doctor shows what is missing; agenthub onboard ~/workspace/<project> connects the first project
+Next: agenthub doctor shows what is missing; agenthub connect <folder> connects existing projects, agenthub onboard ~/workspace/<project> starts a new one
 --- stderr
 
 $ agenthub init --dry-run --yes    # instance, systemd
@@ -29,7 +29,7 @@ $ agenthub init --dry-run --yes    # instance, systemd
 (dry-run) local.agent-hub-scheduler-watchdog: install (systemd)
   ⚠️ user units stop after logout: `loginctl enable-linger $USER` (needs sudo)
 
-Next: agenthub doctor shows what is missing; agenthub onboard ~/workspace/<project> connects the first project
+Next: agenthub doctor shows what is missing; agenthub connect <folder> connects existing projects, agenthub onboard ~/workspace/<project> starts a new one
 --- stderr
 
 $ agenthub init --dry-run --yes    # no service manager
@@ -40,7 +40,7 @@ $ agenthub init --dry-run --yes    # no service manager
 (dry-run) create folder <TMP>/home/git-origin
 ⚠️ this system has no supported service manager (neither macOS launchd nor the Linux systemd user level): the scheduler, the watchdog and projects' long-running services will not run by themselves; to run the nightly flow, schedule `<TMP>/fakehub/bin/py <TMP>/fakehub/bin/scheduler.py` yourself every 15 minutes (for example the crontab line `*/15 * * * * <TMP>/fakehub/bin/py <TMP>/fakehub/bin/scheduler.py`)
 
-Next: agenthub doctor shows what is missing; agenthub onboard ~/workspace/<project> connects the first project
+Next: agenthub doctor shows what is missing; agenthub connect <folder> connects existing projects, agenthub onboard ~/workspace/<project> starts a new one
 --- stderr
 
 $ agenthub init --home <TMP>/inst --owner Sam --timezone UTC --workspace <TMP>/ws2 --modules backup,reflect --yes --llm none --dry-run    # new instance

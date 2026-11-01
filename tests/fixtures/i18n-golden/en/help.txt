@@ -41,6 +41,8 @@ config:
                         move the old layout (everything in the hub root) to an instance directory: copies only, validates the
                         new layout, writes .hub-home last (delete it to go back)
 projects:
+  agenthub connect [<folder>] [--yes] [--remote] [--dry-run]
+                        connect existing folders as projects (bin/connect.py): one repo, a monorepo, or a folder of repos
   agenthub onboard …         = bin/onboard-project.sh (start a new project / connect a folder)
   agenthub recover <name>    = bin/recover-project.sh (new machine / the folder is gone)
   agenthub rename <old> <new>  = bin/rename-project.sh (dry-run first, then add --apply)

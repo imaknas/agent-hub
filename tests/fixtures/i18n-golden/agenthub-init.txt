@@ -16,7 +16,7 @@ $ agenthub init --dry-run --yes    # instance, launchd
 (dry-run) local.agent-hub-scheduler:安裝
 (dry-run) local.agent-hub-scheduler-watchdog:安裝
 
-下一步:bin/hub doctor 看還缺什麼;bin/hub onboard ~/workspace/<專案> 接上第一個專案
+下一步:agenthub doctor 列出還缺什麼;agenthub connect <資料夾> 接上既有的專案,agenthub onboard ~/workspace/<專案> 開新專案
 --- stderr
 
 $ agenthub init --dry-run --yes    # instance, systemd
@@ -29,7 +29,7 @@ $ agenthub init --dry-run --yes    # instance, systemd
 (dry-run) local.agent-hub-scheduler-watchdog:安裝(systemd)
   ⚠️ 登出之後 user unit 會停:`loginctl enable-linger $USER`(要 sudo)
 
-下一步:bin/hub doctor 看還缺什麼;bin/hub onboard ~/workspace/<專案> 接上第一個專案
+下一步:agenthub doctor 列出還缺什麼;agenthub connect <資料夾> 接上既有的專案,agenthub onboard ~/workspace/<專案> 開新專案
 --- stderr
 
 $ agenthub init --dry-run --yes    # no service manager
@@ -40,7 +40,7 @@ $ agenthub init --dry-run --yes    # no service manager
 (dry-run) 建資料夾 <TMP>/home/git-origin
 ⚠️ 這個系統沒有支援的服務管理器(macOS 的 launchd、Linux 的 systemd user 層級都沒有):排程器、看門狗、專案的長駐服務都不會自己跑;要跑夜間流程就自己每 15 分鐘排程 `<TMP>/fakehub/bin/py <TMP>/fakehub/bin/scheduler.py`(例如 crontab 加一行 `*/15 * * * * <TMP>/fakehub/bin/py <TMP>/fakehub/bin/scheduler.py`)
 
-下一步:bin/hub doctor 看還缺什麼;bin/hub onboard ~/workspace/<專案> 接上第一個專案
+下一步:agenthub doctor 列出還缺什麼;agenthub connect <資料夾> 接上既有的專案,agenthub onboard ~/workspace/<專案> 開新專案
 --- stderr
 
 $ agenthub init --home <TMP>/inst --owner Sam --timezone UTC --workspace <TMP>/ws2 --modules backup,reflect --yes --llm none --dry-run    # new instance

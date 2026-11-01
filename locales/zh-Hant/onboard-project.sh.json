@@ -35,6 +35,6 @@
  "[5-6/11] The rules-file block is in place (not version-controlled); this runtime has no hooks": "[5-6/11] 規則檔區塊已就位(不進版控);這個執行環境沒有 hook",
  "[5-6/11] Hooks are in place (not version-controlled); this runtime has no rules file": "[5-6/11] hook 已就位(不進版控);這個執行環境沒有規則檔",
  "[5-6/11] No hooks and no rules-file block: this runtime has neither (hub.json runtime.default)": "[5-6/11] 沒有 hook 也沒有規則檔區塊:這個執行環境兩個都沒有(hub.json runtime.default)",
- "[8/11] Memory bare repo created (~/git-origin/{name}-memory.git), agent-memory branch pushed": "[8/11] 已建 memory bare repo(~/git-origin/{name}-memory.git),agent-memory 分支已推送",
- "[9/11] Cloned the librarian's memory copy to ~/.memory-copies/{name}": "[9/11] 已 clone librarian 用的 memory 副本到 ~/.memory-copies/{name}"
+ "[9/11] Cloned the librarian's memory copy to ~/.memory-copies/{name}": "[9/11] 已 clone librarian 用的 memory 副本到 ~/.memory-copies/{name}",
+ "[8/11] Memory bare repo created ({path}), agent-memory branch pushed": "[8/11] 已建 memory bare repo({path}),agent-memory 分支已推送"
 }

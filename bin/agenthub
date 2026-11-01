@@ -39,6 +39,8 @@ config:
                         move the old layout (everything in the hub root) to an instance directory: copies only, validates the
                         new layout, writes .hub-home last (delete it to go back)
 projects:
+  agenthub connect [<folder>] [--yes] [--remote] [--dry-run]
+                        connect existing folders as projects (bin/connect.py): one repo, a monorepo, or a folder of repos
   agenthub onboard …         = bin/onboard-project.sh (start a new project / connect a folder)
   agenthub recover <name>    = bin/recover-project.sh (new machine / the folder is gone)
   agenthub rename <old> <new>  = bin/rename-project.sh (dry-run first, then add --apply)
@@ -601,7 +603,7 @@ INIT_FLAGS = ("--yes", "--no-launchd", "--dry-run", "--scheduler-only")
 # written when init has made the instance, removed once its later steps are done: a re-run after a Ctrl-C finishes them
 INIT_UNFINISHED = hubconf.STATE / "init-unfinished"
 INIT_OPTIONS = ("--owner", "--timezone", "--workspace", "--modules", "--home", "--llm", "--llm-model", "--llm-base-url",
-                "--lang", "--agent")
+                "--lang", "--agent", "--connect")
 
 
 def parse_lang(value: str) -> tuple[str, str] | None:
@@ -798,7 +800,14 @@ def cmd_init(argv: list[str]) -> int:
             return rc
         import upgrade
         upgrade.record_in_step()   # this checkout's commit is in step now (agenthub upgrade, doctor)
-    print(_("\nNext: agenthub doctor shows what is missing; agenthub onboard ~/workspace/<project> connects the first project"))
+    if created and not dry:
+        # existing projects (docs/design/newcomer-path.md B6): where they are, never the workspace root just made empty
+        folder = args.get("connect") or ("" if yes or not sys.stdin.isatty() else input(
+            _("Where are your existing projects? A folder to connect from (Enter to skip): ")).strip())
+        if folder:
+            subprocess.run([*hubconf.launch(BIN / "connect.py"), folder, *(["--yes"] if yes else [])])
+    print(_("\nNext: agenthub doctor shows what is missing; agenthub connect <folder> connects existing projects, "
+            "agenthub onboard ~/workspace/<project> starts a new one"))
     return status
 
 
@@ -1363,7 +1372,8 @@ def cmd_install_cli(argv: list[str]) -> int:
 COMMANDS = {
     "init": cmd_init, "doctor": cmd_doctor, "config": cmd_config, "modules": cmd_modules, "llm": cmd_llm,
     "move-instance": cmd_move_instance,
-    "onboard": passthrough("onboard-project.sh"), "recover": passthrough("recover-project.sh"),
+    "onboard": passthrough("onboard-project.sh"), "connect": passthrough("connect.py"),
+    "recover": passthrough("recover-project.sh"),
     "rename": passthrough("rename-project.sh"), "status": passthrough("overview.sh"),
     "jobs": lambda argv: subprocess.run([*hubconf.launch(BIN / "schedulectl"), "list", *argv]).returncode,
     "run": lambda argv: subprocess.run([*hubconf.launch(BIN / "schedulectl"), "run", *argv]).returncode,

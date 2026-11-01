@@ -34,6 +34,8 @@ config:
   agenthub move-instance --to <實例目錄> [--apply]
                         舊的擺法(全部在 hub 根目錄)搬到實例目錄:只複製、驗證新擺法、最後才寫 .hub-home(刪掉就退回)
 專案:
+  agenthub connect [<資料夾>] [--yes] [--remote] [--dry-run]
+                        把既有的資料夾接成專案(bin/connect.py):一個 repo、monorepo,或一個裝著好幾個 repo 的資料夾
   agenthub onboard …         = bin/onboard-project.sh(開新專案 / 把資料夾接上來)
   agenthub recover <名稱>    = bin/recover-project.sh(新機器 / 資料夾不見了)
   agenthub rename <舊> <新>  = bin/rename-project.sh(先 dry-run,再加 --apply)

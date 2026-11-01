@@ -141,7 +141,7 @@ _ = i18n.domain(__file__)
 CACHE = hubconf.STATE / "registry"
 TOP = {"v", "name", "type", "purpose", "paths", "memory", "privacy", "runtime", "push_on_merge", "commits", "mailbox",
        "publishes", "provides", "consumes", "services", "jobs", "enforce", "network", "allow_write", "gate", "secrets",
-       "models", "metered_models"}
+       "models", "metered_models", "layout_intent"}
 TOP_V2 = TOP | {"tests", "code", "inputs", "commit_gate"}
 # what the index's documents are: 2 = project v2 (v1 files upgraded as they are read). Readers that need v2 fields
 # (merge-branch) refuse an index of an older format; registry.refresh never overwrites a newer one
@@ -411,6 +411,9 @@ def _validate_body(doc: dict, stem: str, top: set[str], runtime_keys: tuple[str,
         errs.append(_("paths.workspace is required"))
     errs += validate_enforce(doc)
     errs += validate_models(doc)
+    li = doc.get("layout_intent")
+    if li is not None and not (isinstance(li, dict) and (li.get("split") is True or isinstance(li.get("span"), list))):
+        errs.append(_("layout_intent is split: true, or span: a list of projects (docs/design/newcomer-path.md B6)"))
     if doc.get("commits") not in (None, "conventional"):
         errs.append(_("commits can only be conventional (absent = commit titles are not checked)"))
     if doc.get("gate") not in (None, "strict", "detect"):
