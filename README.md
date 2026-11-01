@@ -108,6 +108,7 @@ project's declared tests, and `agenthub merge-branch` to land their branch. The 
 ## Docs
 
 - [`AGENTS.md`](AGENTS.md): the index for anyone, human or agent, working on the platform
+- [`CHANGELOG.md`](CHANGELOG.md): what changed in each version
 - [`docs/design/`](docs/design): design notes, one per part: tool-agnosticism, runtimes (including ACP), LLM providers,
   mailbox routing and the bus sender, sandboxes and capabilities, the test system, event-triggered jobs, code anchors,
   idea sandboxes, i18n, Principal Handoff and new-user setup

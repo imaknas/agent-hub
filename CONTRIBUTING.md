@@ -45,6 +45,15 @@ revert. A breaking change adds `!` and explains itself in a `BREAKING CHANGE:` p
 from these titles with [git-cliff](https://git-cliff.org/) (`cliff.toml`), so the description should say what the
 change makes different for a user.
 
+## Releasing
+
+Versions follow the commits: `feat` raises the minor version, `fix` and `perf` the patch, `!` the major
+(`git cliff --bumped-version` says which). Nothing in `CHANGELOG.md` is written by hand.
+
+1. `git cliff --tag vX.Y.Z -o CHANGELOG.md`, and commit it as `chore(release): vX.Y.Z` (through `agenthub merge-branch`).
+2. `git tag -a vX.Y.Z -m vX.Y.Z` on that commit, and push the commit and the tag. `agenthub --version` reads the tag.
+3. `gh release create vX.Y.Z --title "agent-hub X.Y.Z" --notes "$(git cliff --latest --strip header)"`.
+
 ## License
 
 By contributing you agree that your contribution is licensed under [Apache-2.0](LICENSE), like the rest of the project.

@@ -1,7 +1,15 @@
-# Release notes from Conventional Commits: git cliff --tag vX.Y.Z -o RELEASE_NOTES.md
+# The changelog and each release's notes, from Conventional Commits. When tagging vX.Y.Z:
+#   git cliff --tag vX.Y.Z -o CHANGELOG.md          (committed with the release)
+#   git cliff --latest --strip header               (the GitHub release's notes)
 
 [changelog]
-header = ""
+header = """
+# Changelog
+
+What changed in each version, generated from the commit messages (git cliff) when it is tagged; only new features,
+fixes, speed-ups and reverts are listed.
+
+"""
 body = """
 ## {% if version %}{{ version }} ({{ timestamp | date(format="%Y-%m-%d") }}){% else %}Unreleased{% endif %}
 {% for group, commits in commits | group_by(attribute="group") %}
@@ -16,6 +24,14 @@ trim = true
 [git]
 conventional_commits = true
 filter_unconventional = true
+# Four titles from before the repo was English-only, written here as they read in English (the changelog holds no
+# Chinese text); the two characters are given by code point
+commit_preprocessors = [
+  { pattern = '(?m)^fix: overview\.sh .*STATE\.md$', replace = "fix: overview.sh also looks for STATE.md in the hub machine's memory-only clone" },
+  { pattern = '(?m)^fix: onboard-project\.sh .*\.gitignore.*$', replace = "fix: onboard-project.sh keeps .claude/settings.json from being hidden by the project's own .gitignore" },
+  { pattern = '^fix\(evals\): \x{9AA8} is', replace = "fix(evals): U+9AA8 is" },
+  { pattern = '^fix\(evals\): \x{96C7} is', replace = "fix(evals): U+96C7 is" },
+]
 commit_parsers = [
   { message = "^feat", group = "<!-- 0 -->New" },
   { message = "^fix", group = "<!-- 1 -->Fixed" },

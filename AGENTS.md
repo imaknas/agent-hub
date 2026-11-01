@@ -468,8 +468,9 @@ file).
 - **Commit titles follow Conventional Commits** (`<type>[(<scope>)][!]: <description>`, type: feat / fix / perf /
   refactor / test / docs / build / ci / chore / revert; the scope is the area's name, e.g. `fix(hubbus): …`; a breaking
   change adds `!` and says `BREAKING CHANGE:` in the body). The platform's `commit-msg` hook (every repo with
-  `commits: conventional`) rejects malformed titles (`bin/commit_title.py`); release notes are generated from the commits with `cliff.toml` (git-cliff, the same file as
-  the assistant's repo), with no separately maintained CHANGELOG. Other projects: with `commits: conventional` in the
+  `commits: conventional`) rejects malformed titles (`bin/commit_title.py`); `CHANGELOG.md` and each release's notes are generated from the commits when a version is
+  tagged, with `cliff.toml` (git-cliff, the same flow as the assistant's repo; nothing in it is written by hand; steps in
+  CONTRIBUTING.md, "Releasing"). Other projects: with `commits: conventional` in the
   registry, `merge-branch` checks before merging and the rules file carries the explanation automatically
 - **Manual edits (scripts, docs)**: made only by agent-hub's own sessions on the hub machine, **each in a linked
   worktree of the hub, merged with `agenthub merge-branch`** (docs/design/test-waiting.md A1). The main checkout is the
