@@ -456,7 +456,8 @@ def get_message(c, mid):
 # Bus event type "record", payload {"v": 1, "record": <the 0.3 record as is>}. To the assistant: source = project,
 # to_project = owner; from the assistant: source = owner, to_project = project (renamed ones followed to their
 # current name; the record itself is unchanged).
-# Event id = rec:<ext>:<project>:<record id> (core's dedup scope is (ext, project, id)), so a resend is a no-op.
+# Event id = rec:<ext>:<project>:<record id>, plus :<origin>:<type> when that id is held by a record of another
+# origin or type (core §10: a record is one per (ext name, project, origin, type, id)), so a resend is a no-op.
 # One record id sent with different content (core §10, 0.5) is never dropped: each content is stored once, beside the
 # first (publish_record), and readers take the one whose RFC 8785 form is greater (ph_records.prevailing, record_group);
 # `hubbus status` lists such conflicts for the status page (record_conflicts).
@@ -1390,7 +1391,9 @@ def records_http(method: str, path: str, body=None, query=None) -> tuple[int | N
 def forward_records(c) -> None:
     """Outbound: records to the owner are sent to the assistant in batches. Each status is checked: invalid records
     job.failed, no retry (a resend would be just as invalid); if it can't be sent, the whole batch stays where it is
-    and is resent next time (the assistant dedups by (ext, project, id))."""
+    and is resent next time (the assistant dedups by (ext name, project, origin, type, id), whatever the version, as
+    core §10 asks: the same record again is a duplicate, an id sent with other content keeps the greater RFC 8785
+    form)."""
     # catch up all the way in one go (when the switch is first turned on, the bus already holds thousands of other
     # events)
     while True:
