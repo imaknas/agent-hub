@@ -179,6 +179,16 @@ class Upgrade(unittest.TestCase):
         self.assertEqual(code, 0, res)
         self.assertIs(self.reg()["enforce"]["work"], False)
 
+    def test_a_git_that_cannot_run_is_not_read_as_a_detached_head(self):
+        """A git that fails in the sandbox's repo (git 2.56 under a profile that denied stat'ing the workspace root died
+        on every command, 11-01) is reported as such, never as "no branch checked out" or a clean tree."""
+        git(self.ws, "config", "core.repositoryformatversion", "99")   # every git in this repo now exits 128
+        res, code = self.upgrade()
+        self.assertEqual((code, res["result"]), (1, "failed"), res)
+        self.assertIn(zh("{path}: its git could not be asked ({why})", path=self.ws, why="{why}").split("{why}")[0],
+                      res["detail"])
+        self.assertFalse(self.remote().exists())
+
     def test_invalid_registry_touches_nothing(self):
         before = IDEA + "bogus: 1\n"
         (self.hub / "projects" / "idea-7.yaml").write_text(before)

@@ -299,10 +299,15 @@ def op_save(ws: str, folder: str, name: str) -> int:
 
 
 def op_head(ws: str) -> int:
-    """JSON {branch, dirty}: the checked-out branch (null when detached) and whether tracked files have changes."""
+    """JSON {branch, dirty}: the checked-out branch (null when detached) and whether tracked files have changes. A git
+    that fails (exit 128: it can't read the repo, or the sandbox denied it something) is an error, not a detached HEAD
+    or a clean tree: symbolic-ref -q exits 1 only for a detached HEAD."""
     b = git(ws, "symbolic-ref", "--short", "-q", "HEAD")
-    return emit({"branch": b.stdout.strip() if b.returncode == 0 else None,
-                 "dirty": bool(out(ws, "status", "--porcelain", "--untracked-files=no").strip())})
+    if b.returncode not in (0, 1):
+        sys.stderr.write(f"git symbolic-ref: {b.stderr.strip()[-300:]}\n")
+        return 1
+    s = git(ws, "status", "--porcelain", "--untracked-files=no", check=True)
+    return emit({"branch": b.stdout.strip() if b.returncode == 0 else None, "dirty": bool(s.stdout.strip())})
 
 
 def op_bundle_head(ws: str) -> int:
