@@ -15,6 +15,7 @@ import ph_records  # noqa: E402
 import ph_wire  # noqa: E402
 
 SPEC = ROOT / "contracts" / "vendor" / "agent-ops-specs" / "principal-handoff-0.5"
+V04 = ROOT / "contracts" / "vendor" / "agent-ops-specs" / "principal-handoff-0.4"
 
 
 def suite(ext: str, name: str) -> dict:
@@ -91,6 +92,25 @@ class MixedVersions(unittest.TestCase):
         self.assertFalse(ph_records.settlement_view([NEED, s], CFG)["stale"])
         self.assertEqual(ph_records.settlement_view([s], CFG)["settlement"], "s1", "valid without its need record")
 
+    def test_a_valid_0_4_record_is_held_in_its_0_5_form(self):
+        s = settled(terms_digest=ph_wire.terms_digest(NEED, "0.4"))
+        valid, ignored = ph_records.received([NEED, s], CFG)
+        self.assertEqual((valid, ignored), ([ph_wire.convert(NEED, "0.5", [NEED, s]),
+                                             ph_wire.convert(s, "0.5", [NEED, s])], []))
+        self.assertEqual(valid[1]["terms_digest"], ph_wire.terms_digest(NEED, "0.5"))
+
+    def test_the_0_4_acts_lifecycle_on_the_settlement_view(self):
+        """0.4's lifecycle.json (Acts) folds as 0.4 says, on the settlement view, in the fixtures' order and
+        reversed: valid 0.4 records are kept and converted, invalid ones ignored"""
+        s = json.loads((V04 / "acts" / "lifecycle.json").read_text())
+        self.assertTrue(s["cases"])
+        cfg = ph_records.Config(s["principal"])
+        for c in s["cases"]:
+            want = {k: c["expect"][k] for k in ph_records.VIEW}
+            with self.subTest(case=c["id"]):
+                self.assertEqual(ph_records.settlement_view(c["records"], cfg), want)
+                self.assertEqual(ph_records.settlement_view(list(reversed(c["records"])), cfg), want, "reversed")
+
     def test_the_same_record_in_two_versions_is_held_once(self):
         up = ph_wire.convert(NEED, "0.5", [NEED])
         valid, ignored = ph_records.received([NEED, up], CFG)
@@ -165,6 +185,22 @@ class Prevailing(unittest.TestCase):
         self.assertEqual(self.take([signed(note="a"), later]), [later])
         [x] = ph_records.conflicts([signed(note="a"), later], CFG)
         self.assertTrue(x["ts_only"])
+
+    def test_a_0_4_and_a_0_5_record_of_one_identity(self):
+        """core §10 across versions: the greater RFC 8785 form of the 0.5 forms, whichever version and order"""
+        up = lambda r: ph_wire.convert(r, "0.5", [NEED])   # noqa: E731
+        for old, new, winner in ((signed(note="a"), up(signed(note="b")), "new"),
+                                 (signed(note="z"), up(signed(note="b")), "old")):
+            want = old if winner == "old" else new
+            for records in ([NEED, old, new], [NEED, new, old]):
+                with self.subTest(winner=winner, order=[r["ext"] for r in records]):
+                    self.assertEqual(self.take(records), [NEED, want])
+                    [x] = ph_records.conflicts(records, CFG)
+                    self.assertEqual((x["identity"], records[x["kept"]], x["ts_only"]),
+                                     (("acts", "p", "principal", "settled", "s1"), want, False))
+                    valid, ignored = ph_records.received(records, CFG)
+                    self.assertEqual(([r.get("note") for r in valid if r["type"] == "settled"], ignored),
+                                     ([want["note"]], []))
 
     def test_a_lone_record_is_not_validated(self):
         """the config is read only when an identity holds two records"""
