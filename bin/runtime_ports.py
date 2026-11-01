@@ -47,6 +47,16 @@ The current interfaces (the other layers get added one at a time, following the 
     local_ignores() -> list[str]                         this runtime's local-only files (relative to the project
                                                          folder), to add to .git/info/exclude
                                                          (.agent-memory is the platform's own, not listed here)
+  tool_servers: which of the environment's tool servers a run would load (a judgment point declaring
+  `tool_servers: allowed_only` denies every one its allow list doesn't name; policy.tool_server_denials)
+    ambient_servers(task) -> list[str] | None            the servers this run would load from its environment (the
+                                                         user's, the project's, plugins', the account's connectors), in
+                                                         the runtime's own server ids, found for that run (its folder,
+                                                         its login); None = it loads none of them (only what the
+                                                         platform gives it). Can't tell → ValueError: the run doesn't
+                                                         happen
+    servers_named(task) -> list[str]                     the servers the run's allow list names a tool of (same ids)
+    The servers to deny go back in Task.deny_servers; the runtime denies each one whole.
   control: the files in a project folder the runtime loads settings, hooks and tools from. A sandboxed project's own
   processes must never write them (its sessions would run what it put there, outside its sandbox); the platform
   writes the settings itself
@@ -144,7 +154,8 @@ def port_labels() -> dict[str, str]:
             "transcripts": _("transcripts"), "sessions": _("session state"),
             "stream": _("long-running streaming sessions"), "auth": _("login state"),
             "completion": _("completion interface"), "confine": _("confined runs (declared permissions only)"),
-            "control": _("the files sessions load settings and hooks from")}
+            "control": _("the files sessions load settings and hooks from"),
+            "tool_servers": _("telling which tool servers a run loads")}
 
 
 # Which ports each platform feature needs (doctor's "tool x feature" table; docs/design/tool-agnostic.md principle 3).
@@ -203,6 +214,7 @@ PORTS = {
     # asked; settings: platform: none of the user's, project's or local settings, only the platform's for the project).
     # A point that declares them refuses to run on a runtime without it (llm.py)
     "confine": ("platform_settings",),
+    "tool_servers": ("ambient_servers", "servers_named"),
 }
 
 # Neutral "kinds of action": what the agent did in a conversation record, without any runtime's tool names.
@@ -300,6 +312,8 @@ class Task(NamedTuple):
                              # interface's auth_env)
     extra: tuple = ()        # extra arguments from the caller (e.g. which session a lease handover resumes): to be
                              # replaced by a resume interface
+    deny_servers: tuple = ()  # tool servers this run may not use at all, each one whole (llm.py:
+                              # policy.tool_server_denials over the tool_servers interface)
 
 
 class TaskResult(NamedTuple):

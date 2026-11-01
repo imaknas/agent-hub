@@ -15,5 +15,8 @@
  "{project} has not declared the model call {point} (registry models:)": "{project} 沒有宣告模型呼叫 {point}(登錄 models:)",
  "a project's own declared model call (run by cap-runner)": "專案自己宣告的模型呼叫(由 cap-runner 執行)",
  "cannot read the request: {err}": "讀不到請求:{err}",
- "{provider}/{model} is pay-per-use and the owner has not allowed metered models for {project} (registry metered_models); not sent": "{provider}/{model} 是按用量計費,owner 沒有允許 {project} 用計費模型(登錄 metered_models);沒有送出"
+ "{provider}/{model} is pay-per-use and the owner has not allowed metered models for {project} (registry metered_models); not sent": "{provider}/{model} 是按用量計費,owner 沒有允許 {project} 用計費模型(登錄 metered_models);沒有送出",
+ "{point} did not run: which tool servers it would load could not be told, and it never runs without denying those it doesn't use ({reason})": "{point} 沒有執行:判斷不出它會載入哪些工具伺服器,而沒擋掉用不到的那些,它一律不跑({reason})",
+ "{point} can tell which tool servers it loads again": "{point} 又判斷得出會載入哪些工具伺服器了",
+ "llm.py: the alert was not sent: {error!r}": "llm.py:警報沒送出:{error!r}"
 }

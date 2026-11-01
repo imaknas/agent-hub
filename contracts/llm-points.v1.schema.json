@@ -72,6 +72,7 @@
         "allowed_tools": {"type": "array", "items": {"type": "string"}, "description": "Permission rules that are allowed automatically"},
         "extra_allow_env": {"type": "string", "description": "Extra allow rules the caller adds through this environment variable (a JSON list; adds rules, does not change the mode)"},
         "allow_from_env": {"type": "string", "description": "Unattended: when this environment variable is set, only those rules are allowed and everything else is denied"},
+        "tool_servers": {"enum": ["allowed_only"], "description": "When the run loads the tool servers configured in its environment, deny each one whose tools its allow list doesn't name (found by the runtime for that run; when it can't be told, the run doesn't happen)"},
         "settings": {"enum": ["platform"], "description": "platform = load none of the user's, the project's or local tool settings: only the platform's own for the project named by the project_env variable (its sandbox when enforced, its deny list, the platform's commands), so the declared rules are the whole boundary"},
         "project_env": {"type": "string", "description": "With settings: platform, the environment variable that names the project"},
         "extra_args": {"type": "array", "items": {"type": "string"}},

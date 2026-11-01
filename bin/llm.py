@@ -18,6 +18,10 @@ declared safe default or takes the caller's failure path, recording job.failed o
   llm.py project <project> <point> --request F   a project's own declared model call (cap-runner runs it; see
                   project_call)
 
+A judgment point declaring `tool_servers: allowed_only` (the agent jobs): before it runs, the runtime says which of
+the environment's tool servers this run would load, and every one its allow list doesn't name is denied
+(policy.tool_server_denials); when that can't be told the run doesn't happen: job.failed, an alert, exit 1.
+
 A judgment point declared `shape: completion` → handed to completion.py (the same handling for every provider;
 docs/design/llm-providers.md): if hub.json has an `llm` block, the provider is chosen from it (any key); otherwise it
 goes to runtime.default's completion interface (Claude Code run with its tools off). Agent-shaped points go to the
@@ -188,6 +192,35 @@ def project_call(project: str, point: str, request: pathlib.Path) -> int:
     return 0
 
 
+def deny_unnamed_servers(point: str, task):
+    """A judgment point declaring `tool_servers: allowed_only` (policy.tool_server_denials): ask the runtime which of
+    the environment's tool servers this run would load, and deny every one the run's allow list doesn't name.
+    → (task with deny_servers, None, True); (task, None, False) for a run that loads none of them (sealed); or (task,
+    the reason, False) when it can't be told: the run must not happen then (fail closed: never without the deny)."""
+    import policy
+    import runtime_ports
+    try:
+        rt = runtime_ports.load(point_runtime(point, task.spec), ports=("tool_servers",))
+        loaded = rt.ambient_servers(task)
+        if loaded is None:
+            return task, None, False
+        return task._replace(deny_servers=tuple(policy.tool_server_denials(loaded, rt.servers_named(task)))), None, True
+    except Exception as e:   # whatever goes wrong here, the answer is "can't tell" (a bug included): no run
+        return task, _("{point} did not run: which tool servers it would load could not be told, and it never runs "
+                       "without denying those it doesn't use ({reason})", point=point, reason=e), False
+
+
+def tool_servers_alert(point: str, why: str | None) -> None:
+    """A run refused for this is a safety stop the owner must see (alert.py: once, reminded every 24 hours, one message
+    when it runs again); a broken alert doesn't change the outcome."""
+    try:
+        import alert
+        alert.once(f"tool-servers:{point}", [why] if why else [],
+                   _("{point} can tell which tool servers it loads again", point=point))
+    except Exception as e:
+        print(_("llm.py: the alert was not sent: {error!r}", error=e), file=sys.stderr)
+
+
 def run(a) -> int:
     """The judgment-point layer: read the declaration, build the Task, decide the login, hand over to the runtime
     (runtime_ports' agent interface; Claude Code is just one implementation).
@@ -232,6 +265,17 @@ def run(a) -> int:
     task = runtime_ports.Task(point=a.point, prompt=prompt, spec=spec, cwd=a.cwd or None, model=model,
                               output_schema=schema, timeout_s=spec.get("timeout_s", 1200), env=env,
                               extra=tuple(a.extra or ()))
+    if spec.get("tool_servers") == "allowed_only":
+        task, why, checked = deny_unnamed_servers(a.point, task)
+        real = a.cmd == "run" and not getattr(a, "dry_run", False)   # a dry run only shows, never alerts
+        if why:
+            if real:
+                tool_servers_alert(a.point, why)
+                return fail(a.point, spec, why)
+            print(why, file=sys.stderr)
+            return 2
+        if checked and real:
+            tool_servers_alert(a.point, None)
     if a.cmd == "exec":
         # a long-lived streaming session (e.g. a channel lease). Temporary: layer 1's open_session will replace it
         if not spec.get("stream"):

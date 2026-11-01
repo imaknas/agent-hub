@@ -32,5 +32,13 @@
  "usage limit": "額度",
  "{file} declares hooks": "{file} 宣告了 hook",
  "{file} can't be read as a plain file ({why})": "{file} 不能當一般檔案讀({why})",
- "{file} declares tool servers": "{file} 宣告了工具伺服器"
+ "{file} declares tool servers": "{file} 宣告了工具伺服器",
+ "`claude mcp list` printed no server list: {output}": "`claude mcp list` 沒有印出伺服器清單:{output}",
+ "cannot read this line of `claude mcp list`: {line}": "看不懂 `claude mcp list` 的這一行:{line}",
+ "`claude mcp list` took over {seconds} seconds": "`claude mcp list` 超過 {seconds} 秒",
+ "cannot run `claude mcp list`: {err}": "跑不了 `claude mcp list`:{err}",
+ "`claude mcp list` failed (exit {code}): {detail}": "`claude mcp list` 失敗(exit {code}):{detail}",
+ "cannot read {file}: {err}": "讀不了 {file}:{err}",
+ "cannot read {file}: not a JSON object": "讀不了 {file}:不是 JSON 物件",
+ "`claude mcp list` does not show {names}, configured for the user: its output may have changed": "`claude mcp list` 沒列出使用者層級設定的 {names}:它的輸出可能改了"
 }

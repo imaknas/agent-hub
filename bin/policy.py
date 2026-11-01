@@ -167,6 +167,21 @@ def platform_cli(mail_only: bool = False) -> list[str]:
     return [f"agenthub {c}" for c in (MAIL_SUBCOMMANDS if mail_only else SESSION_SUBCOMMANDS)]
 
 
+# ---------- the environment's tool servers in an unattended run (docs/design/evaluators.md step 0) ----------
+# A judgment point declaring `tool_servers: allowed_only`: when its run loads the tool servers configured in its
+# environment (a registry job's connectors: true needs the account's connectors, so it can't be held to the platform's
+# own servers), every server it would load whose tools its allow list doesn't name is denied, all of its tools.
+# What it would load is found by the runtime for that very run (the user's, the project's, plugins' and the account's
+# servers), never kept by hand: a server added tomorrow is denied tomorrow. When the runtime can't tell, the run
+# doesn't happen (llm.py).
+
+def tool_server_denials(loaded, named) -> list[str]:
+    """loaded: the servers this run would load from its environment; named: the servers its allow list names a tool
+    of (both in the runtime's own server ids) → the servers to deny whole."""
+    named = set(named)
+    return sorted({s for s in loaded if s not in named})
+
+
 def for_project(name: str) -> dict:
     import registry
     index = registry.refresh()

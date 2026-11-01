@@ -38,6 +38,7 @@ def reset() -> None:
     _turns.clear()
     _live.clear()
     _context.clear()
+    _ambient.clear()
 
 
 # ---------- putting data in, for tests ----------
@@ -285,3 +286,23 @@ def platform_settings(project: str):
 
 def health(conf) -> tuple:
     return (not conf.get("fake_unhealthy"), "fake_unhealthy" if conf.get("fake_unhealthy") else "")
+
+
+# ---------- tool servers ----------
+_ambient: dict = {}    # "loaded": list | None, "named": list, "error": str | None
+
+
+def set_ambient(loaded: list | None, named: list | None = None, error: str | None = None) -> None:
+    """What ambient_servers / servers_named answer: loaded None = the run loads none of the environment's servers;
+    error = it can't tell (ValueError)."""
+    _ambient.update({"loaded": loaded, "named": list(named or ()), "error": error})
+
+
+def ambient_servers(task) -> list | None:
+    if _ambient.get("error"):
+        raise ValueError(_ambient["error"])
+    return _ambient.get("loaded")
+
+
+def servers_named(task) -> list:
+    return list(_ambient.get("named") or ())

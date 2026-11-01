@@ -26,6 +26,12 @@ Settings (neutral policy → Claude Code's settings; the policy's fields are in 
                                             the files sessions load settings, hooks and tools from (runtime_ports'
                                             control interface)
                                             into it
+
+Tool servers (runtime_ports' tool_servers interface; docs/design/evaluators.md step 0):
+  ambient_servers(task)  the MCP servers a run without --strict-mcp-config would load: `claude mcp list` for that run
+                         (the only place the account's claude.ai connectors show up) plus the config files; None for a
+                         sealed run; anything it can't read → ValueError, so the run doesn't happen
+  servers_named(task)    the servers its allow rules name; Task.deny_servers becomes --disallowedTools mcp__<id>
 """
 from __future__ import annotations
 
@@ -341,16 +347,10 @@ def _env(task) -> dict:
     return env
 
 
-def _flags(task) -> list:
+def _rules(task) -> tuple:
+    """(permission mode, allow rules, permission prompts) the run gets: the declaration's, the caller's additions, and
+    a registry job's allow list (which makes it unattended)."""
     spec = task.spec
-    try:
-        import hubconf
-        exe = hubconf.tool("claude")  # the scheduler's PATH has no nvm: PATH first, then the platform's (nvm default)
-    except Exception:
-        exe = "claude"
-    cmd = [exe, "-p", task.prompt]
-    if task.model:
-        cmd += ["--model", task.model]
     mode, allowed, prompts = spec.get("permission_mode"), list(spec.get("allowed_tools") or []), spec.get("prompts")
     # the judgment point declares "the platform's mailbox commands": the old hubbus path + the agenthub mail
     # subcommands on PATH
@@ -366,6 +366,16 @@ def _flags(task) -> list:
         # the allow list a registry job declares: unattended = dontAsk, anything not listed is refused without a prompt
         allowed += json.loads(env[spec["allow_from_env"]])
         mode, prompts = "dontAsk", "none"
+    return mode, allowed, prompts
+
+
+def _flags(task) -> list:
+    spec = task.spec
+    cmd = [_exe(), "-p", task.prompt]   # the scheduler's PATH has no nvm: PATH first, then the platform's (nvm default)
+    if task.model:
+        cmd += ["--model", task.model]
+    mode, allowed, prompts = _rules(task)
+    env = os.environ if task.env is None else task.env
     if mode:
         cmd += ["--permission-mode", mode]
     if prompts:
@@ -384,7 +394,139 @@ def _flags(task) -> list:
         cmd += ["--tools", spec["tools"]]
     if allowed:
         cmd += ["--allowedTools", *allowed]
+    if task.deny_servers:
+        # a whole server: `mcp__<id>` with no tool matches every tool it has (deny wins over any allow), and a tool
+        # denied this way isn't even offered to the model
+        cmd += ["--disallowedTools", *(f"mcp__{s}" for s in task.deny_servers)]
     return cmd + list(spec.get("extra_args") or []) + list(task.extra or [])
+
+
+# ---------- the environment's MCP servers (runtime_ports' tool_servers interface) ----------
+# A run without --strict-mcp-config loads every MCP server configured where it runs: the user's (~/.claude.json
+# mcpServers), the folder's (local scope in ~/.claude.json, .mcp.json), plugins', the managed file's, and with the
+# subscription login the account's claude.ai connectors (fetched from the account; nowhere on disk). Turning tools off
+# doesn't stop them loading (10-27 experiment: 265 MCP tools, execute_sql on a production database among them).
+SEAL = "--strict-mcp-config"   # only the servers --mcp-config gives
+MCP_LIST_TIMEOUT_S = 180       # `claude mcp list` health-checks every server (each has its own connect timeout)
+_LISTED = re.compile(r"^(.+?): .* - .+$")   # `<name>: <url or command> - <status>`; names have no ": " in them
+_ANSI = re.compile(r"\x1b\[[0-9;?]*[A-Za-z]")
+
+
+def mcp_id(name: str) -> str:
+    """A server's name → its id in tool names (mcp__<id>__<tool>) and in permission rules: Claude Code turns every
+    character outside [a-zA-Z0-9_-] into _ (`claude.ai Upwork` → claude_ai_Upwork, `plugin:vercel:vercel` →
+    plugin_vercel_vercel)."""
+    return re.sub(r"[^a-zA-Z0-9_-]", "_", name)
+
+
+def _sealed(task) -> bool:
+    return SEAL in [*(task.spec.get("extra_args") or []), *(task.extra or ())]
+
+
+def parse_mcp_list(out: str) -> list[str]:
+    """`claude mcp list`'s output → the server names it lists. Anything not in the shape it has today → ValueError
+    (fail closed: the deny is never computed from a list that was only half read)."""
+    lines = [_ANSI.sub("", line).rstrip() for line in out.splitlines()]
+    if any(line.startswith("No MCP servers configured") for line in lines):
+        return []
+    start = next((i for i, line in enumerate(lines) if line.startswith("Checking MCP server health")), None)
+    if start is None:
+        raise ValueError(_("`claude mcp list` printed no server list: {output}", output=out.strip()[:200]))
+    names, begun = [], False
+    for line in lines[start + 1:]:
+        if not line.strip():
+            if begun:
+                break   # what follows (config diagnostics) isn't the list
+            continue
+        begun = True
+        m = _LISTED.match(line)
+        if not m:
+            raise ValueError(_("cannot read this line of `claude mcp list`: {line}", line=line[:200]))
+        names.append(m.group(1))
+    return names
+
+
+def _listed_servers(task) -> list[str]:
+    """The runtime's own answer, for this run: `claude mcp list` in the run's folder with the run's environment (login,
+    config directory): the only place the account's connectors show up. It health-checks each server (connects and
+    lists its tools, calls none), as the run itself would on starting."""
+    try:
+        r = subprocess.run([_exe(), "mcp", "list"], cwd=task.cwd or None, env=_env(task), capture_output=True,
+                           text=True, timeout=MCP_LIST_TIMEOUT_S, stdin=subprocess.DEVNULL)
+    except subprocess.TimeoutExpired:
+        raise ValueError(_("`claude mcp list` took over {seconds} seconds", seconds=MCP_LIST_TIMEOUT_S)) from None
+    except OSError as e:
+        raise ValueError(_("cannot run `claude mcp list`: {err}", err=e)) from None
+    if r.returncode != 0:
+        raise ValueError(_("`claude mcp list` failed (exit {code}): {detail}", code=r.returncode,
+                           detail=(r.stderr.strip() or r.stdout.strip())[-200:]))
+    return parse_mcp_list(r.stdout)
+
+
+def _json_file(path: pathlib.Path) -> dict:
+    """A config file: missing = empty; present but unreadable or not an object → ValueError."""
+    try:
+        d = json.loads(path.read_text())
+    except FileNotFoundError:
+        return {}
+    except (OSError, ValueError) as e:
+        raise ValueError(_("cannot read {file}: {err}", file=path, err=e)) from None
+    if not isinstance(d, dict):
+        raise ValueError(_("cannot read {file}: not a JSON object", file=path))
+    return d
+
+
+def _names(d) -> list[str]:
+    servers = d.get("mcpServers") if isinstance(d, dict) else None
+    return list(servers) if isinstance(servers, dict) else []
+
+
+MANAGED_MCP = (pathlib.Path("/Library/Application Support/ClaudeCode/managed-mcp.json"),
+               pathlib.Path("/etc/claude-code/managed-mcp.json"))
+
+
+def configured_servers(cwd, env) -> tuple[list[str], list[str]]:
+    """(the user scope's servers, every server named) in the config files: ~/.claude.json (or $CLAUDE_CONFIG_DIR's)
+    mcpServers and every project's local ones (more than this run loads: denying a server that isn't loaded changes
+    nothing), .mcp.json in the run's folder and each folder above it, and the managed file. Plugins' servers and the
+    account's connectors aren't in these files: `claude mcp list` has them."""
+    base = pathlib.Path(env.get("CLAUDE_CONFIG_DIR") or env.get("HOME") or pathlib.Path.home()).expanduser()
+    top = _json_file(base / ".claude.json")
+    user = _names(top)
+    found = list(user)
+    for proj in (top.get("projects") or {}).values():
+        found += _names(proj)
+    here = pathlib.Path(cwd).resolve()
+    for d in (here, *here.parents):
+        found += _names(_json_file(d / ".mcp.json"))
+    for f in MANAGED_MCP:
+        found += _names(_json_file(f))
+    return user, found
+
+
+def ambient_servers(task) -> list[str] | None:
+    """The MCP servers this run would load from its environment, as ids (mcp_id): None when it carries
+    --strict-mcp-config. The union of what `claude mcp list` says for the run and what the config files name; a user
+    server the list doesn't show means its output changed under us → ValueError, as does anything unreadable."""
+    if _sealed(task):
+        return None
+    env = _env(task)
+    user, configured = configured_servers(task.cwd or os.getcwd(), env)
+    listed = _listed_servers(task)
+    if missing := sorted(set(user) - set(listed)):
+        raise ValueError(_("`claude mcp list` does not show {names}, configured for the user: its output may have "
+                           "changed", names=", ".join(missing)))
+    return sorted({mcp_id(n) for n in (*configured, *listed)})
+
+
+def servers_named(task) -> list[str]:
+    """The servers whose tools the run's allow rules name (`mcp__<id>` or `mcp__<id>__<tool>`), as ids."""
+    out = set()
+    for rule in _rules(task)[1]:
+        parts = rule.split("(", 1)[0].split("__")
+        if parts[0] == "mcp" and len(parts) > 1 and parts[1]:
+            out.add(mcp_id(parts[1]))
+    return sorted(out)
 
 
 def describe(task) -> list:

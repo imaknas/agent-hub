@@ -104,7 +104,8 @@ cd "$CWD" || exit 1
 # MCP servers from the environment aren't loaded (the global ones include production databases; turning tools off
 # doesn't block them, 10-27 sealed experiment): --strict-mcp-config.
 # Exception: registry jobs with connectors: true (LLM_AUTH=subscription, e.g. Upwork) need claude.ai connectors,
-# so they can't be blocked
+# so they load the environment's servers; llm.py then denies every server their allow: doesn't name, found for that
+# very run, and doesn't run them at all when it can't tell (the points' tool_servers: allowed_only)
 MCP_ARGS=()
 [ "${LLM_AUTH:-}" = "subscription" ] || MCP_ARGS=(-- --strict-mcp-config)
 # an event-triggered run (AGENT_HUB_EVENTS, docs/design/event-jobs.md): the job's prompt plus the events, as data
@@ -144,7 +145,8 @@ print(f"session_id={d.get('session_id', '')}")
 print(f"notify={'yes' if result.startswith('🔔') else 'no'}")
 print(f"summary={result.splitlines()[0][:200] if result else ''}")
 if d.get("is_error"):
-    print(f"error={d.get('subtype', 'is_error')}")
+    # llm_error: why llm.py refused or failed the run (e.g. it could not tell which tool servers the run would load)
+    print("error=" + " ".join(str(d.get("llm_error") or d.get("subtype", "is_error")).split())[:300])
 PY
 if [ -f "$OUT/.footer" ]; then
   { read -r sid; read -r turns; read -r minutes; } <"$OUT/.footer"

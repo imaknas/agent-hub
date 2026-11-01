@@ -26,6 +26,8 @@ ROOT = pathlib.Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "bin"))
 GOLDEN = ROOT / "tests" / "fixtures" / "llm-golden.json"
 TOKEN_ENV = "CLAUDE_CODE_OAUTH_TOKEN"
+# what a run without the sealing flag would load from the environment (fixture names)
+AMBIENT = ["claude_ai_Example", "fixture-prod-db", "plugin_example_tools"]
 
 try:
     import yaml  # noqa: F401  llm.py needs it
@@ -72,7 +74,11 @@ class Golden(unittest.TestCase):
         env = {k: v for k, v in os.environ.items() if k not in ("LLM_AUTH", TOKEN_ENV)}
         if "LLM_AUTH" in variant:
             env["LLM_AUTH"] = variant["LLM_AUTH"]
-        with mock.patch.dict(os.environ, env, clear=True):
+        # the environment's MCP servers (points declaring tool_servers): a fixed answer, never this machine's
+        import runtime_claude
+        ambient = mock.patch.object(runtime_claude, "ambient_servers",
+                                    lambda task: None if runtime_claude._sealed(task) else list(AMBIENT))
+        with mock.patch.dict(os.environ, env, clear=True), ambient:
             # login is observed at the auth interface: which kind (auth), whether an extra credential variable is passed
             # (token_passed); variable names are not checked
             import runtime_ports

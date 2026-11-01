@@ -32,6 +32,10 @@
 #   only this way).
 #   The caller's LLM_AUTH environment variable takes precedence (a registry job's connectors: true sets
 #   LLM_AUTH=subscription).
+# tool_servers: allowed_only: when the run loads the tool servers configured in its environment (a registry job's
+#   connectors: true; the platform holds every other run of these points to its own servers), each server whose tools
+#   its allow list doesn't name is denied whole. Which servers it would load is found by the runtime for that run
+#   (policy.tool_server_denials, docs/design/evaluators.md step 0); when that can't be told, the run doesn't happen.
 v: 1
 points:
   librarian-state:
@@ -130,6 +134,7 @@ points:
     # (not bypass), listed on the status page. Never bypassPermissions.
     permission_mode: auto
     allow_from_env: AGENT_JOB_ALLOW
+    tool_servers: allowed_only
     timeout_s: 3600
     output: {format: text}
     on_failure: say_so      # the job fails, status page red
@@ -145,6 +150,7 @@ points:
     permission_mode: dontAsk
     prompts: none
     allow_from_env: AGENT_JOB_ALLOW
+    tool_servers: allowed_only
     settings: platform
     project_env: AGENT_JOB_PROJECT
     timeout_s: 3600
@@ -174,6 +180,7 @@ points:
     # {platform_mail}: the platform's commands to read, send and close letters (the runtime turns them into its own
     # rules)
     allowed_tools: ["Edit(./.agent-memory/memory/**)", "{platform_mail}"]
+    tool_servers: allowed_only
     timeout_s: 1800
     output: {format: text}
     on_failure: say_so      # the bridge reports the escalation failure
