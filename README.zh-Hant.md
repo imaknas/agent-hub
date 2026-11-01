@@ -81,7 +81,7 @@ curl -fsSL https://raw.githubusercontent.com/imaknas/agent-hub/main/install.sh |
 
 ## 可以搭配
 
-| | |
+| 項目 | 可以用 |
 |---|---|
 | 你的 AI agent | Claude Code:全部功能。Codex:背景工作和判斷;它的對話透過 agent-hub 的工具(MCP)用信箱。任何有 headless 模式的 CLI agent,或支援 [Agent Client Protocol](https://agentclientprotocol.com/) 的 agent,透過轉接層接上 |
 | agent-hub 做判斷用的模型 | 你的 agent 自己的登入、Anthropic、任何相容 OpenAI 的 API,或本機的 Ollama(`agenthub llm setup`) |
@@ -105,7 +105,7 @@ AI App 幫你安裝 agent-hub 的過程中，有些事會直接問你，不經�
 
 ## 文件(英文)
 
-| | |
+| 內容 | 文件 |
 |---|---|
 | 安裝、需求、會睡眠的電腦、檔案放在哪裡 | [docs/install.md](docs/install.md) |
 | agent-hub 做的每件事 | [docs/features.md](docs/features.md) |

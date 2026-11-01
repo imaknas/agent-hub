@@ -88,7 +88,7 @@ Everything it does, in detail: [docs/features.md](docs/features.md).
 
 ## Works with
 
-| | |
+| What | Options |
 |---|---|
 | Your AI agent | Claude Code: everything. Codex: background work and decisions; its chats reach the mailbox through agent-hub's tools (MCP). Any CLI agent with a headless mode, or one that speaks the [Agent Client Protocol](https://agentclientprotocol.com/), through an adapter |
 | The model behind agent-hub's decisions | Your agent's own login, Anthropic, any OpenAI-compatible API, or a local Ollama (`agenthub llm setup`) |
@@ -136,7 +136,7 @@ say it's done, then run the same command again.
 
 ## Documentation
 
-| | |
+| Topic | Where |
 |---|---|
 | Installing, requirements, machines that sleep, where things are kept | [docs/install.md](docs/install.md) |
 | Everything agent-hub does, in detail | [docs/features.md](docs/features.md) |
