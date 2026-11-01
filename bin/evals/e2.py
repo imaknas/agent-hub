@@ -307,7 +307,7 @@ def snapshot(case: pathlib.Path, arm: str, into: pathlib.Path) -> pathlib.Path:
 def prompt(point: str, case: pathlib.Path, arm: str) -> str:
     if p := plugin(point):
         return p.prompt(case, arm)
-    if arm == "old":
+    if base_arm(arm) == "old":
         return (case / f"prompt.{point}.txt").read_text()
     a = json.loads((case / "args.json").read_text())
     lib = librarian()

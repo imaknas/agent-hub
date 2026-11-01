@@ -106,10 +106,8 @@ class Tag(unittest.TestCase):
         self.main(*run)
         self.assertEqual(len(self.calls), 1, "the second run finds new~t-0/result.json and does not call again")
 
-    @unittest.expectedFailure
     def test_tagged_old_arm_reads_the_recorded_prompt(self):
-        """BUG (reported, not fixed here): prompt() checks `arm == "old"`, not base_arm(arm), so `--arm old --tag T`
-        re-renders with the current code instead of sending the prompt production recorded"""
+        """`--arm old --tag T` sends the prompt production recorded, like `--arm old` (prompt() checks base_arm)"""
         recorded = (self.case / "prompt.librarian-state.txt").read_text()
         recorded = recorded + "<!-- as recorded -->\n"
         (self.case / "prompt.librarian-state.txt").write_text(recorded)
