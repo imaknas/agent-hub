@@ -165,10 +165,11 @@ class SlotsTest(unittest.TestCase):
 
     def test_take_and_release(self):
         s = self.mod.Slots(self.dir)
-        n = len(list(self.dir.glob("slot-*")))
-        self.assertEqual(s.take(2), 2)
+        n = len(list(self.dir.glob("slot-*")))   # one per CPU: 2 on a small CI runner
+        self.assertEqual(s.take(1), 1)
         other = self.mod.Slots(self.dir)
-        self.assertEqual(other.take(n, wait=0.3), n - 2, "only the free ones")
+        # only the free ones; with none free a run still starts with one worker (test_all_held_starts_with_one_worker)
+        self.assertEqual(other.take(n, wait=0.3), max(n - 1, 1), "only the free ones")
         other.release()
         s.release()
 
