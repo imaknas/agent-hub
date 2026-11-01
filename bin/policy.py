@@ -17,6 +17,9 @@ policy(name, doc, index) → {
                       change a package another installs next
   env:                environment for its sessions, services and jobs: the tool caches (uv, pip, npm, corepack) in its
                       own repo's git dir (<workspace>/.git/agent-hub/cache/<tool>), which only it can write
+  protect:            what its sessions load settings, hooks and tools from ([{name, tree}] matched at any depth under
+                      the workspace; the runtime's control port): written by nothing of the project's, only by the
+                      platform. Empty (and doctor says so) when the runtime can't name them
   other_projects:     other projects' workspace/runtime, and every memory repo that isn't its own: other projects'
                       bare repos and memory copies, the mirrors, anything else under git_origin / memory_copies (no
                       reading or writing; Path)
@@ -101,6 +104,15 @@ def others_memory(name: str, doc: dict, index: dict) -> list[pathlib.Path]:
     return res
 
 
+def protect() -> list[dict]:
+    import runtime_ports
+    try:
+        rt = runtime_ports.load(ports=("control",))
+    except runtime_ports.Unsupported:
+        return []
+    return [{"name": n, "tree": bool(t)} for n, t in rt.control_paths()]
+
+
 def cache_env(ws: pathlib.Path | None) -> dict[str, str]:
     return {k: str(ws / ".git" / "agent-hub" / "cache" / v) for k, v in CACHE_ENV.items()} if ws else {}
 
@@ -115,6 +127,7 @@ def policy(name: str, doc: dict, index: dict) -> dict:
         "write": ([tilde(d["runtime"])] if d["runtime"] else []) + [tilde(hubconf.BUS_DIR)]
                  + list(doc.get("allow_write") or []),
         "env": cache_env(d["workspace"]),
+        "protect": protect(),
         "other_projects": others + others_memory(name, doc, index),
         "deny_write": [hubconf.ROOT, hubconf.p("git_origin"), copies, HOME / "Library" / "LaunchAgents"],
         "deny_read": [copies / "*" / "memory", *secret_dirs()],

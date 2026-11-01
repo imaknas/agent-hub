@@ -25,6 +25,7 @@ Drift detection: the actual file differs from what it should be (a session chang
 edited it by hand) -> print it, exit 1 (platform job failed -> status page), and write it back right away.
 
 Usage: render-project-settings.py [--report] [--only <project>]
+       render-project-settings.py --worktree <folder>   (worktree-memory.sh: a sandboxed project's new worktree)
 Also an applier (appliers.py): plan()/apply(), used by `bin/hub config plan/apply`.
 """
 from __future__ import annotations
@@ -74,10 +75,11 @@ def read_settings(doc: dict) -> tuple[dict, str | None]:
         return {}, str(e)
 
 
-def write_settings(doc: dict, content: dict) -> None:
-    """Replaces the file (a link or a FIFO there is replaced, never written through)."""
+def write_settings(doc: dict, content: dict, folder: pathlib.Path | None = None) -> None:
+    """Replaces the file (a link or a FIFO there is replaced, never written through), in the workspace or in another of
+    its session folders (a worktree)."""
     ws = registry.dirs(doc)["workspace"]
-    nofollow.replace(ws, settings_path(doc).relative_to(ws),
+    nofollow.replace(folder or ws, settings_path(doc).relative_to(ws),
                      (json.dumps(content, indent=2, ensure_ascii=False) + "\n").encode())
 
 
@@ -99,12 +101,16 @@ def compose(name: str, doc: dict, index: dict) -> tuple[pathlib.Path, dict, dict
         keep = [r for r in p2.get(key, []) if r not in set(prev.get(key, []))]
         p2[key] = keep + [r for r in mine if r not in keep]
     new["permissions"] = p2
+    # the platform's hooks only: a sandboxed project's own processes can't write this file (policy protect), and a
+    # hook found here that the platform didn't write would run outside its sandbox: it is removed
+    new["hooks"] = runtime_claude.platform_hooks()
     env = desired_env(name, doc, index)
     e2 = {k: v for k, v in (cur.get("env") or {}).items() if k not in set(prev.get("env") or {})}
     e2.update(env)
     if e2:
         new["env"] = e2
-    return path, cur, new, prev, {"sandbox": sandbox, "deny": deny, "allow": allow, "env": env}, unreadable
+    return path, cur, new, prev, {"sandbox": sandbox, "deny": deny, "allow": allow, "env": env,
+                                  "hooks": new["hooks"]}, unreadable
 
 
 def write_project(name: str, doc: dict, index: dict, report: bool) -> list[str]:
@@ -127,17 +133,23 @@ def write_project(name: str, doc: dict, index: dict, report: bool) -> list[str]:
                                example=sorted(missing)[0]))
         if any((cur.get("env") or {}).get(k) != v for k, v in (prev.get("env") or {}).items()):
             drift.append(_("env was changed"))
+    if cur.get("hooks") and cur["hooks"] != record["hooks"]:
+        drift.append(_("hooks the platform didn't write were removed"))
+    ws = registry.dirs(doc)["workspace"]
+    drift += [_("its own files would make its sessions run something the platform didn't put there: {what}",
+                what=what) for what in runtime_claude.foreign_controls(ws)]
     if report:
         print(_("{project}: would write sandbox (allowWrite {write}, denyRead {read}, {domains} {domains:domain|domains}), "
                 "{deny} deny {deny:rule|rules}, {allow} allow {allow:rule|rules} → {path}", project=name,
                 write=len(sandbox["filesystem"]["allowWrite"]), read=len(sandbox["filesystem"]["denyRead"]),
                 domains=len(sandbox["network"]["allowedDomains"]), deny=len(deny), allow=len(allow), path=path))
         return drift
-    if new != cur or drift:
+    for folder in runtime_claude.session_folders(ws):   # the workspace and its worktrees get the same settings
         try:
-            write_settings(doc, new)
+            if folder != ws or new != cur or drift:
+                write_settings(doc, new, folder)
         except OSError as e:   # e.g. the folder it is in is itself a link: nothing written through it
-            return drift + [_("the settings file could not be written ({why})", why=e)]
+            drift.append(_("the settings file could not be written ({why})", why=e))
     RENDERED.mkdir(parents=True, exist_ok=True)
     (RENDERED / f"{name}.json").write_text(json.dumps(record, ensure_ascii=False, indent=1))
     return drift
@@ -286,7 +298,28 @@ def apply(index: dict | None = None) -> list:
     return todo
 
 
+def worktree(folder: str) -> int:
+    """At a worktree session's start (worktree-memory.sh, before anything runs as the project): the platform's settings
+    for a sandboxed project written into that worktree, as a plain file (the project can't write it there itself)."""
+    import isolation
+    import project_git
+    found = project_git.project_at(folder)
+    if not found or not isolation.sandboxed(found[1]):
+        return 0
+    try:
+        index = registry.refresh()
+        c = compose(found[0], index["projects"][found[0]], index)
+        write_settings(found[1], c[2], pathlib.Path(folder))
+    except Exception as e:   # said into the session (worktree-memory.sh prints it): no sandbox settings here
+        print(_("⚠️ This worktree's sandbox settings could not be written ({why}); don't run commands in this session, "
+                "ask the owner to look at it", why=e))
+        return 1
+    return 0
+
+
 def main() -> int:
+    if sys.argv[1:2] == ["--worktree"] and len(sys.argv) == 3:
+        return worktree(sys.argv[2])
     report = "--report" in sys.argv
     only = sys.argv[sys.argv.index("--only") + 1] if "--only" in sys.argv else None
     index = registry.refresh()

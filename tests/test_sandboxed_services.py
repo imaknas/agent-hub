@@ -204,6 +204,7 @@ touch "$RT/a" && echo rt-write
 touch "$WS/a" && echo ws-write
 touch "$BUS/a" && echo bus-write
 touch "$TOP/outside" 2>/dev/null || echo outside-write-blocked
+mkdir -p "$WS/.ctl" && { touch "$WS/.ctl/settings" 2>/dev/null || echo control-blocked; }
 cat "$OTHER/secret" >/dev/null 2>&1 || echo other-blocked
 cat "$CRED" >/dev/null 2>&1 || echo cred-blocked
 cat /etc/hosts >/dev/null && echo system-read
@@ -233,7 +234,8 @@ WORKS = {"rt-write", "ws-write", "bus-write", "system-read", "bind-declared-ok",
 # guarantee (isolation.GUARANTEES) → the probe lines that show it holds
 PROBES = {"own-writes-only": {"outside-write-blocked"}, "isolated-reads": {"other-blocked", "cred-blocked"},
           "declared-port-only": {"bind-other-blocked"}, "unix-sockets-blocked": {"unix-blocked"},
-          "keychain-blocked": {"keychain-blocked"}, "signals-blocked": {"signal-blocked"}}
+          "keychain-blocked": {"keychain-blocked"}, "signals-blocked": {"signal-blocked"},
+          "runtime-files-locked": {"control-blocked"}}
 # guarantees no probe here can show, with why (checked by hand when an adapter declares them)
 UNPROBED = {"localhost-inbound-only": "needs a second address to connect from (macOS checked live 10-31)"}
 
@@ -242,7 +244,8 @@ RUNNER = """
 import importlib.machinery, importlib.util, pathlib, sys, json
 args = json.loads(sys.argv[1])
 sys.path.insert(0, args["bin"])
-import hubconf, landlock, seatbelt
+import hubconf, landlock, policy, seatbelt
+policy.protect = lambda: [{"name": ".ctl/settings", "tree": True}]   # what a runtime's control port would name
 # the fixture lives in the temp area: a writable temp area would hide writes outside and make every path in it readable
 landlock.TMP = []
 seatbelt.TMP = []

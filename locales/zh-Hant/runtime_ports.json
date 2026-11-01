@@ -23,5 +23,7 @@
  "{a} or {b}": "{a}、{b}",
  "{items}, or {last}": "{items}、{last}",
  "confined runs (declared permissions only)": "受限執行(只照宣告的權限)",
- "unattended agent jobs with allow:, and event-triggered agent jobs": "宣告 allow: 的無人值守 agent job、事件觸發的 agent job"
+ "unattended agent jobs with allow:, and event-triggered agent jobs": "宣告 allow: 的無人值守 agent job、事件觸發的 agent job",
+ "the files sessions load settings and hooks from": "session 載入設定跟 hook 的檔案",
+ "a sandboxed project can't write what its sessions load hooks and settings from": "sandbox 專案寫不到它的 session 載入 hook 跟設定的檔案"
 }

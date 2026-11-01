@@ -398,6 +398,7 @@ passing the same run, not by reading its docs. The table below is the prose form
 | inbound only through localhost | yes | **no**: a service can bind `0.0.0.0:<its port>`; Landlock can't see the address and the unit's `IPAddressDeny` is dropped in a user unit. A host firewall is the place for this |
 | outbound domain allowlist (`policy.network`) | no (Seatbelt can't filter by domain) | **no**: needs a network namespace + proxy, i.e. user namespaces, refused above; not cheap, not implemented |
 | signals to the owner's other processes | blocked | only with ABI ≥ 6 (kernel 6.12); on 6.8 a service can signal the owner's processes |
+| what its sessions load settings, hooks and tools from (`policy.protect`, any depth, worktrees included) can't be written | yes (11-01) | **no**: Landlock only allows, and a write right on a folder covers everything under it; the renderer removes hooks the platform didn't write every 15 minutes |
 | programs that need unix sockets of their own (a local database socket, syslog) | allowed | refused (`EACCES`) |
 
 ## 10-31: projects' own model calls (`agenthub complete`)

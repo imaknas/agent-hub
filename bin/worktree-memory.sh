@@ -46,6 +46,9 @@ if [ -z "${HUB_AS_PROJECT:-}" ]; then
   "$HUB/bin/py" "$HUB/bin/project_git.py" sandboxed "$main/.agent-memory"
   case $? in
     0) [ "$event" = end ] && exec "$HUB/bin/py" "$HUB/bin/project_git.py" sync-memory --lock "$main/.agent-memory"
+       # the worktree's settings (its sandbox, the platform's hooks) are the platform's to write: the project can't
+       # write them there itself (the sandbox's protect list), so they are a plain file written here, not a link
+       [ "$event" = start ] && "$HUB/bin/py" "$HUB/bin/render-project-settings.py" --worktree "$top" 2>/dev/null
        printf '%s' "$hook_json" | AGENT_HUB_OFFLINE=1 "$HUB/bin/py" "$HUB/bin/project_git.py" run-as "$top" -- \
          bash "$HUB/bin/worktree-memory.sh" "$event"
        exit 0 ;;

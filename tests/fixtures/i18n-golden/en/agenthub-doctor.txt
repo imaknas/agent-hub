@@ -27,6 +27,7 @@ $ agenthub doctor    # launchd, problems
 ✓ channel leasing (also needs the assistant module): available
 ✓ letters seen live in the session, reminders to write notes: available
 ✓ platform rules written into the project's rules file: available
+✓ a sandboxed project can't write what its sessions load hooks and settings from: available
 ✓ memory gaps, the weekly report's transcript statistics: available
 ✗ agent login (headless token): missing
     → rerun `claude setup-token` and write it to <TMP>/home/.claude/headless-oauth-token
@@ -68,6 +69,7 @@ $ agenthub doctor    # launchd, all fine
 ✓ channel leasing (also needs the assistant module): available
 ✓ letters seen live in the session, reminders to write notes: available
 ✓ platform rules written into the project's rules file: available
+✓ a sandboxed project can't write what its sessions load hooks and settings from: available
 ✓ memory gaps, the weekly report's transcript statistics: available
 ✓ agent login (headless token): present
 ! agent login (~/.claude/.credentials.json): missing
@@ -107,6 +109,8 @@ $ agenthub doctor    # systemd, runtime none
     → install a coding agent that supports them, and point hub.json runtime.default at it
 ! platform rules written into the project's rules file: off (the runtime none has no rules file)
     → install a coding agent that supports them, and point hub.json runtime.default at it
+! a sandboxed project can't write what its sessions load hooks and settings from: off (the runtime none has no the files sessions load settings and hooks from)
+    → install a coding agent that supports them, and point hub.json runtime.default at it
 ! memory gaps, the weekly report's transcript statistics: off (the runtime none has no transcripts)
     → install a coding agent that supports them, and point hub.json runtime.default at it
 ✗ judgment points have nowhere to run: the runtime none has no completion interface and hub.json has no llm.providers
@@ -124,7 +128,7 @@ $ agenthub doctor    # systemd, runtime none
     → agenthub config plan, then agenthub config apply
 ✓ commit gate (core.hooksPath): githooks
 
-3 problems, 12 reminders
+3 problems, 13 reminders
 --- stderr
 
 $ agenthub doctor    # no service manager, unnamed assistant
@@ -151,6 +155,8 @@ $ agenthub doctor    # no service manager, unnamed assistant
     → install a coding agent that supports them, and point hub.json runtime.default at it
 ! platform rules written into the project's rules file: off (the runtime none has no rules file)
     → install a coding agent that supports them, and point hub.json runtime.default at it
+! a sandboxed project can't write what its sessions load hooks and settings from: off (the runtime none has no the files sessions load settings and hooks from)
+    → install a coding agent that supports them, and point hub.json runtime.default at it
 ! memory gaps, the weekly report's transcript statistics: off (the runtime none has no transcripts)
     → install a coding agent that supports them, and point hub.json runtime.default at it
 ✗ judgment points have nowhere to run: the runtime none has no completion interface and hub.json has no llm.providers
@@ -163,5 +169,5 @@ $ agenthub doctor    # no service manager, unnamed assistant
 ✓ background services, project settings: match the config
 ✓ commit gate (core.hooksPath): githooks
 
-3 problems, 9 reminders
+3 problems, 10 reminders
 --- stderr

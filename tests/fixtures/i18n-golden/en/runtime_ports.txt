@@ -1,5 +1,5 @@
 === port labels
-[('agent', 'agent runs'), ('auth', 'login state'), ('completion', 'completion interface'), ('confine', 'confined runs (declared permissions only)'), ('instructions', 'rules file'), ('lifecycle', 'session events (hooks)'), ('sessions', 'session state'), ('stream', 'long-running streaming sessions'), ('transcripts', 'transcripts')]
+[('agent', 'agent runs'), ('auth', 'login state'), ('completion', 'completion interface'), ('confine', 'confined runs (declared permissions only)'), ('control', 'the files sessions load settings and hooks from'), ('instructions', 'rules file'), ('lifecycle', 'session events (hooks)'), ('sessions', 'session state'), ('stream', 'long-running streaming sessions'), ('transcripts', 'transcripts')]
 === feature (none)
 judgment points (librarian, index, consolidate, weekly report analysis) | False | agent runs or login state
 === feature (none)
@@ -15,11 +15,13 @@ letters seen live in the session, reminders to write notes | False | session eve
 === feature (none)
 platform rules written into the project's rules file | False | rules file
 === feature (none)
+a sandboxed project can't write what its sessions load hooks and settings from | False | the files sessions load settings and hooks from
+=== feature (none)
 memory gaps, the weekly report's transcript statistics | False | transcripts
 === unknown runtime
 no registered runtime: nosuch (have: claude, fake, none, command, acp)
-=== unsupported ('agent', 'lifecycle', 'instructions', 'transcripts', 'sessions', 'stream', 'auth', 'completion', 'confine')
-runtime none has no agent runs, session events (hooks), rules file, transcripts, session state, long-running streaming sessions, login state, completion interface, or confined runs (declared permissions only) (hub.json runtime.default; to use this feature, install a coding agent that supports it)
+=== unsupported ('agent', 'lifecycle', 'instructions', 'control', 'transcripts', 'sessions', 'stream', 'auth', 'completion', 'confine')
+runtime none has no agent runs, session events (hooks), rules file, the files sessions load settings and hooks from, transcripts, session state, long-running streaming sessions, login state, completion interface, or confined runs (declared permissions only) (hub.json runtime.default; to use this feature, install a coding agent that supports it)
 === unsupported ('completion',)
 runtime none has no completion interface (hub.json runtime.default; to use this feature, install a coding agent that supports it)
 === missing functions (runtime)

@@ -18,5 +18,8 @@
  "{project}: the gate hooks could not be checked ({why})": "{project}:檢查不了 gate 的 hook({why})",
  "env was changed": "env 被改了",
  "the settings file is not a plain file ({why}); it is replaced": "設定檔不是一般檔案({why});會被換掉",
- "the settings file could not be written ({why})": "設定檔寫不進去({why})"
+ "the settings file could not be written ({why})": "設定檔寫不進去({why})",
+ "hooks the platform didn't write were removed": "移除了不是平台寫的 hook",
+ "its own files would make its sessions run something the platform didn't put there: {what}": "它自己的檔案會讓它的 session 跑平台沒放的東西:{what}",
+ "⚠️ This worktree's sandbox settings could not be written ({why}); don't run commands in this session, ask the owner to look at it": "⚠️ 這個 worktree 的 sandbox 設定寫不進去({why});這個 session 先不要跑指令,請 owner 看一下"
 }

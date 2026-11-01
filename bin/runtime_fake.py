@@ -142,6 +142,20 @@ def install_lifecycle(workspace) -> None:
 
 
 
+# ---------- control (what sessions load settings and hooks from) ----------
+
+def control_paths() -> list:
+    return [(".fake-hooks.json", True)]
+
+
+def session_folders(workspace) -> list:
+    return [pathlib.Path(workspace)]
+
+
+def foreign_controls(workspace) -> list:
+    return []
+
+
 # ---------- instructions ----------
 
 def instructions_file(workspace) -> pathlib.Path:

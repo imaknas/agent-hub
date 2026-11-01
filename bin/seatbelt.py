@@ -55,7 +55,7 @@ def can_sandbox() -> str | None:
 def guarantees() -> set[str]:
     """isolation.py's backend interface: what service_profile enforces (capabilities.md, "What each OS enforces")."""
     return {"own-writes-only", "isolated-reads", "declared-port-only", "localhost-inbound-only", "keychain-blocked",
-            "signals-blocked"}
+            "signals-blocked", "runtime-files-locked"}
 
 
 def exec_service(pol: dict, dirs: list, port: int | None, argv: list[str]):
@@ -93,6 +93,20 @@ def read_denies(pol: dict) -> list[str]:
     return out
 
 
+def protect_denies(pol: dict) -> list[str]:
+    """What its sessions load settings, hooks and tools from (policy protect), at any depth under the workspace (its
+    worktrees included): never written, after the allows (later rules win). A tree entry covers everything below it;
+    the others only the folder entry itself (it can't be moved away, replaced or created)."""
+    import re
+    ws = pol.get("workspace")
+    if not ws or not pol.get("protect"):
+        return []
+    root = re.escape(str(pathlib.Path(ws).resolve()))
+    pats = [f'#"^{root}/(.*/)?{re.escape(c["name"])}' + ('(/|$)"' if c["tree"] else '$"') for c in pol["protect"]]
+    return ["; the files its sessions load settings and hooks from: never written",
+            "(deny file-write* " + " ".join(f"(regex {p})" for p in pats) + ")"]
+
+
 def _isolation(pol: dict, writable: list[pathlib.Path], writable_extra: list[str] = ()) -> list[str]:
     """What both kinds share: writes only to `writable` + the temp area, reads blocked for other projects, platform
     state and credentials (own folders allowed again), Keychain services, other processes, launching outside."""
@@ -102,6 +116,7 @@ def _isolation(pol: dict, writable: list[pathlib.Path], writable_extra: list[str
         '(deny file-write* (subpath "/"))',
         "(allow file-write* " + " ".join([*own, *writable_extra, *[f"(subpath {q(t)})" for t in TMP],
                                           *[f"(literal {q(d)})" for d in DEVICES]]) + ")",
+        *protect_denies(pol),
         "; reads: other projects, services, platform state, credentials, Keychain files; its own folders allowed again",
         "(deny file-read* " + " ".join(read_denies(pol)) + ")",
         "(allow file-read* " + " ".join(own + list(writable_extra)) + ")",

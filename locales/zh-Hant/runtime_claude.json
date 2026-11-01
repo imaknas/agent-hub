@@ -29,5 +29,8 @@
  "used by claude under SSH": "SSH 底下的 claude 用的",
  "over {seconds} {seconds:second|seconds}": "超過 {seconds} 秒",
  "exit {code}: {detail}": "exit {code}:{detail}",
- "usage limit": "額度"
+ "usage limit": "額度",
+ "{file} declares hooks": "{file} 宣告了 hook",
+ "{file} can't be read as a plain file ({why})": "{file} 不能當一般檔案讀({why})",
+ "{file} declares tool servers": "{file} 宣告了工具伺服器"
 }

@@ -22,6 +22,9 @@ Settings (neutral policy → Claude Code's settings; the policy's fields are in 
   lease_settings(pol)    → the content of a lease's `--settings`: the same deny + user-level credentials + blocking
                          `security`
   settings_path(ws), sandbox_rendered(ws)   where the settings file is, whether the OS sandbox really has been written
+  control_paths(), session_folders(ws), foreign_controls(ws), platform_hooks()
+                                            the files sessions load settings, hooks and tools from (runtime_ports'
+                                            control interface)
                                             into it
 """
 from __future__ import annotations
@@ -99,6 +102,11 @@ def settings(pol: dict) -> tuple[dict, list[str], list[str]]:
         deny += [f"Read(/{p}/**)", f"Edit(/{p}/**)"]  # //abs: an absolute path
     deny += [f"Edit({_tilde(p)}/**)" for p in pol["deny_write"]]
     deny += [f"Read({_tilde(p)}/**)" for p in pol["deny_read"]]
+    # the files its sessions load settings and hooks from, at any depth (worktrees included): never written by the
+    # session's file tools (its Bash is kept off them by the sandbox itself)
+    ws = pol.get("workspace")
+    deny += [r for c in pol.get("protect") or [] if c["tree"] and ws
+             for r in (f"Edit(/{ws}/**/{c['name']})", f"Edit(/{ws}/**/{c['name']}/**)")]
     allow = [f"Bash({_tilde(c)} *)" for c in pol["platform_commands"]] + _cli_rules(pol.get("platform_cli") or [])
     sandbox = {
         "enabled": True,
@@ -518,6 +526,59 @@ def install_lifecycle(workspace) -> None:
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text(out)
 
+
+
+# ---------- control files (runtime_ports' control interface) ----------
+# What Claude Code loads settings, hooks and code from inside a project folder (its docs: sandboxing, "protected
+# paths"; hooks, "hook locations"). The session's own sandbox already keeps its Bash off them; the platform's sandbox
+# for a project's services and jobs, and its Edit rules, use this list too (policy.py protect).
+CONTROL = ((".claude", False), (".claude/settings.json", True), (".claude/settings.local.json", True),
+           (".claude/hooks", True), (".claude/skills", True), (".claude/agents", True), (".claude/commands", True),
+           (".mcp.json", True))
+WORKTREES = ".claude/worktrees"
+
+
+def control_paths() -> list[tuple[str, bool]]:
+    return list(CONTROL)
+
+
+def session_folders(workspace) -> list[pathlib.Path]:
+    """The folder and its worktrees (the app makes them under .claude/worktrees): real folders only, no links."""
+    import os
+    ws = pathlib.Path(workspace)
+    out = [ws]
+    try:
+        with os.scandir(ws / WORKTREES) as it:
+            out += [ws / WORKTREES / e.name for e in it if e.is_dir(follow_symlinks=False)]
+    except OSError:
+        pass
+    return out
+
+
+def foreign_controls(workspace) -> list[str]:
+    """Committed hooks or tool servers its sessions would load: the platform can't remove a committed file, so these
+    are only reported (read without following links: nofollow.py)."""
+    import nofollow
+    ws, out = pathlib.Path(workspace), []
+    try:
+        raw = nofollow.read(ws, ".claude/settings.json")
+        doc = json.loads(raw) if raw else {}
+        if isinstance(doc, dict) and doc.get("hooks"):
+            out.append(_("{file} declares hooks", file=".claude/settings.json"))
+    except (OSError, ValueError) as e:
+        out.append(_("{file} can't be read as a plain file ({why})", file=".claude/settings.json", why=e))
+    if os.path.lexists(ws / ".mcp.json"):
+        out.append(_("{file} declares tool servers", file=".mcp.json"))
+    for kind in ("agents", "skills"):
+        for f in sorted((ws / ".claude" / kind).rglob("*.md")) if (ws / ".claude" / kind).is_dir() else []:
+            if not f.is_symlink() and re.search(r"(?m)^hooks:", f.read_text(errors="replace")[:4000]):
+                out.append(_("{file} declares hooks", file=str(f.relative_to(ws))))
+    return out
+
+
+def platform_hooks() -> dict:
+    """The hooks a sandboxed project's settings hold: the platform's only (render-project-settings writes them)."""
+    return install_hooks({})["hooks"]
 
 
 # ---------- rules file (runtime_ports' instructions interface) ----------

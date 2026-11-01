@@ -56,6 +56,70 @@ exit 1
       "Bash(agenthub send:*)"
     ]
   },
+  "hooks": {
+    "SessionStart": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "[ -x ~/agent-hub/bin/hub-event ] && ~/agent-hub/bin/hub-event session_start || true"
+          }
+        ]
+      }
+    ],
+    "SessionEnd": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "[ -x ~/agent-hub/bin/hub-event ] && ~/agent-hub/bin/hub-event session_end || true"
+          }
+        ]
+      }
+    ],
+    "PreCompact": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "[ -x ~/agent-hub/bin/hub-event ] && ~/agent-hub/bin/hub-event pre_compact || true"
+          }
+        ]
+      }
+    ],
+    "UserPromptSubmit": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "[ -x ~/agent-hub/bin/hub-event ] && ~/agent-hub/bin/hub-event prompt || true"
+          }
+        ]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "[ -x ~/agent-hub/bin/hub-event ] && ~/agent-hub/bin/hub-event tool_used || true"
+          }
+        ]
+      }
+    ],
+    "PreToolUse": [
+      {
+        "matcher": "mcp__ccd_session__start_session",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "[ -x ~/agent-hub/bin/hub-event ] && ~/agent-hub/bin/hub-event open_session_attempt || true"
+          }
+        ]
+      }
+    ]
+  },
   "env": {
     "UV_CACHE_DIR": "/cache/uv"
   }
@@ -97,5 +161,69 @@ gamma:gate strict 沒裝(專案用自己的 core.hooksPath=.husky),只偵測
   "permissions": {
     "deny": [],
     "allow": []
+  },
+  "hooks": {
+    "SessionStart": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "[ -x ~/agent-hub/bin/hub-event ] && ~/agent-hub/bin/hub-event session_start || true"
+          }
+        ]
+      }
+    ],
+    "SessionEnd": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "[ -x ~/agent-hub/bin/hub-event ] && ~/agent-hub/bin/hub-event session_end || true"
+          }
+        ]
+      }
+    ],
+    "PreCompact": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "[ -x ~/agent-hub/bin/hub-event ] && ~/agent-hub/bin/hub-event pre_compact || true"
+          }
+        ]
+      }
+    ],
+    "UserPromptSubmit": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "[ -x ~/agent-hub/bin/hub-event ] && ~/agent-hub/bin/hub-event prompt || true"
+          }
+        ]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "[ -x ~/agent-hub/bin/hub-event ] && ~/agent-hub/bin/hub-event tool_used || true"
+          }
+        ]
+      }
+    ],
+    "PreToolUse": [
+      {
+        "matcher": "mcp__ccd_session__start_session",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "[ -x ~/agent-hub/bin/hub-event ] && ~/agent-hub/bin/hub-event open_session_attempt || true"
+          }
+        ]
+      }
+    ]
   }
 }

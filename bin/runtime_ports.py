@@ -39,6 +39,16 @@ The current interfaces (the other layers get added one at a time, following the 
     local_ignores() -> list[str]                         this runtime's local-only files (relative to the project
                                                          folder), to add to .git/info/exclude
                                                          (.agent-memory is the platform's own, not listed here)
+  control: the files in a project folder the runtime loads settings, hooks and tools from. A sandboxed project's own
+  processes must never write them (its sessions would run what it put there, outside its sandbox); the platform
+  writes the settings itself
+    control_paths() -> list[(name, tree)]                names matched at any depth under the project folder; tree:
+                                                         the whole subtree, else only that folder entry itself (so it
+                                                         can't be moved away or replaced)
+    session_folders(workspace) -> list[Path]             where sessions of this project start (the folder, its
+                                                         worktrees): each gets the platform's settings
+    foreign_controls(workspace) -> list[str]             what in the folder would make its sessions run something the
+                                                         platform didn't put there (committed hooks, tool servers)
   sessions (part of layer 1):
     alive(sid) -> bool, live_sessions() -> set[str], context_size(sid) -> int | None (how many tokens resuming would
     load)
@@ -125,7 +135,8 @@ def port_labels() -> dict[str, str]:
     return {"agent": _("agent runs"), "lifecycle": _("session events (hooks)"), "instructions": _("rules file"),
             "transcripts": _("transcripts"), "sessions": _("session state"),
             "stream": _("long-running streaming sessions"), "auth": _("login state"),
-            "completion": _("completion interface"), "confine": _("confined runs (declared permissions only)")}
+            "completion": _("completion interface"), "confine": _("confined runs (declared permissions only)"),
+            "control": _("the files sessions load settings and hooks from")}
 
 
 # Which ports each platform feature needs (doctor's "tool x feature" table; docs/design/tool-agnostic.md principle 3).
@@ -140,6 +151,7 @@ def features() -> tuple:
         (_("channel leasing (also needs the assistant module)"), ("stream", "sessions", "agent", "auth")),
         (_("letters seen live in the session, reminders to write notes"), ("lifecycle",)),
         (_("platform rules written into the project's rules file"), ("instructions",)),
+        (_("a sandboxed project can't write what its sessions load hooks and settings from"), ("control",)),
         (_("memory gaps, the weekly report's transcript statistics"), ("transcripts",)),
     )
 
@@ -173,6 +185,7 @@ PORTS = {
     "agent": ("run", "describe"),
     "lifecycle": ("parse_event", "inject", "deny", "install_lifecycle"),
     "instructions": ("instructions_file", "local_ignores"),
+    "control": ("control_paths", "session_folders", "foreign_controls"),
     "transcripts": ("turns", "last_activity"),
     "sessions": ("alive", "live_sessions", "context_size", "current_session"),
     "stream": ("action", "parse_stream", "classify_exit", "resumable", "resume_command", "relocate"),

@@ -115,7 +115,11 @@ fi
 # --- 2. hook ---
 # installed by the runtime (runtime_ports' lifecycle): every platform hook becomes `hub-event <event>`, the user's own
 # are kept
+# (run as a sandboxed project, HUB_AS_PROJECT: its settings file is the platform's to write, render-project-settings
+# puts the platform's hooks there; the project's own process can't)
+if [ -n "${HUB_AS_PROJECT:-}" ]; then rc=4; else
 "$AGENT_HUB/bin/py" "$AGENT_HUB/bin/hub-event" install "$PWD" 2>/dev/null; rc=$?
+fi
 [ "$rc" = 0 ] && { $QUIET || hub_say "sync-local-setup: hooks aligned"; }
 [ "$rc" = 3 ] && { $QUIET || hub_say "sync-local-setup: this runtime has no session events (hooks), so none were installed"; }
 

@@ -45,6 +45,7 @@ GUARANTEES = {
     "keychain-blocked": "the Keychain and launchd can't be reached",
     "unix-sockets-blocked": "unix-domain sockets can't be created (no D-Bus, no systemd user manager)",
     "signals-blocked": "the owner's other processes can't be signalled",
+    "runtime-files-locked": "what its sessions load settings, hooks and tools from can't be written (policy protect)",
 }
 # what a sandboxed service or job must never get past, whatever the backend
 REQUIRED = ("own-writes-only", "isolated-reads", "declared-port-only")

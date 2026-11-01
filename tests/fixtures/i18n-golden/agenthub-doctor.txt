@@ -27,6 +27,7 @@ $ agenthub doctor    # launchd, problems
 ✓ 通道租借(另外要助理模組):可以用
 ✓ session 裡即時看到信、提醒寫筆記:可以用
 ✓ 平台規則寫進專案的規則檔:可以用
+✓ sandbox 專案寫不到它的 session 載入 hook 跟設定的檔案:可以用
 ✓ memory 缺口、週報的對話統計:可以用
 ✗ agent 登入(headless token):沒有
     → 重跑 `claude setup-token` 寫進 <TMP>/home/.claude/headless-oauth-token
@@ -68,6 +69,7 @@ $ agenthub doctor    # launchd, all fine
 ✓ 通道租借(另外要助理模組):可以用
 ✓ session 裡即時看到信、提醒寫筆記:可以用
 ✓ 平台規則寫進專案的規則檔:可以用
+✓ sandbox 專案寫不到它的 session 載入 hook 跟設定的檔案:可以用
 ✓ memory 缺口、週報的對話統計:可以用
 ✓ agent 登入(headless token):有
 ! agent 登入(~/.claude/.credentials.json):沒有
@@ -107,6 +109,8 @@ $ agenthub doctor    # systemd, runtime none
     → 裝一個有這些能力的 coding agent,hub.json runtime.default 指到它
 ! 平台規則寫進專案的規則檔:關掉(執行環境 none 沒有規則檔)
     → 裝一個有這些能力的 coding agent,hub.json runtime.default 指到它
+! sandbox 專案寫不到它的 session 載入 hook 跟設定的檔案:關掉(執行環境 none 沒有session 載入設定跟 hook 的檔案)
+    → 裝一個有這些能力的 coding agent,hub.json runtime.default 指到它
 ! memory 缺口、週報的對話統計:關掉(執行環境 none 沒有對話紀錄)
     → 裝一個有這些能力的 coding agent,hub.json runtime.default 指到它
 ✗ 判斷點沒地方跑:執行環境 none 沒有 completion 介面、hub.json 也沒有 llm.providers
@@ -124,7 +128,7 @@ $ agenthub doctor    # systemd, runtime none
     → bin/hub config plan,再 bin/hub config apply
 ✓ commit 閘門(core.hooksPath):githooks
 
-3 個問題、12 個提醒
+3 個問題、13 個提醒
 --- stderr
 
 $ agenthub doctor    # no service manager, unnamed assistant
@@ -151,6 +155,8 @@ $ agenthub doctor    # no service manager, unnamed assistant
     → 裝一個有這些能力的 coding agent,hub.json runtime.default 指到它
 ! 平台規則寫進專案的規則檔:關掉(執行環境 none 沒有規則檔)
     → 裝一個有這些能力的 coding agent,hub.json runtime.default 指到它
+! sandbox 專案寫不到它的 session 載入 hook 跟設定的檔案:關掉(執行環境 none 沒有session 載入設定跟 hook 的檔案)
+    → 裝一個有這些能力的 coding agent,hub.json runtime.default 指到它
 ! memory 缺口、週報的對話統計:關掉(執行環境 none 沒有對話紀錄)
     → 裝一個有這些能力的 coding agent,hub.json runtime.default 指到它
 ✗ 判斷點沒地方跑:執行環境 none 沒有 completion 介面、hub.json 也沒有 llm.providers
@@ -163,5 +169,5 @@ $ agenthub doctor    # no service manager, unnamed assistant
 ✓ 背景服務、專案設定:跟 config 一致
 ✓ commit 閘門(core.hooksPath):githooks
 
-3 個問題、9 個提醒
+3 個問題、10 個提醒
 --- stderr
