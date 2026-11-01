@@ -15,7 +15,9 @@ if echo "$files" | grep -Eq "$CONFIG" && [ "$(cat "$(git rev-parse --git-path co
   bypassed+=("bin/config-check")
 fi
 [ ${#bypassed[@]} -eq 0 ] && exit 0
-mkdir -p "$root/.state"
-echo "$(date '+%Y-%m-%dT%H:%M:%S') $(git rev-parse --short HEAD) $(git log -1 --format=%s) (not run: ${bypassed[*]})" >>"$root/.state/test-gate-bypassed.log"
+# the machine's .state, in the main checkout also when this commit is in a linked worktree (bin/hubpaths.sh)
+source "$root/bin/hubpaths.sh"
+mkdir -p "$HUB_STATE"
+echo "$(date '+%Y-%m-%dT%H:%M:%S') $(git rev-parse --short HEAD) $(git log -1 --format=%s) (not run: ${bypassed[*]})" >>"$HUB_STATE/test-gate-bypassed.log"
 echo "post-commit: this commit did not pass the gate (recorded in .state/test-gate-bypassed.log). Please run: ${bypassed[*]}." >&2
 exit 0

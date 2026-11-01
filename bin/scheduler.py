@@ -503,6 +503,9 @@ def event_batch(job: dict, state: dict, now: datetime.datetime, today: str) -> d
 
 
 def main() -> None:
+    if hubconf.worktree_lookup():   # it would run the machine's jobs from a half-edited copy
+        sys.exit(_("scheduler: {root} is a linked worktree of the hub; the scheduler runs only from the main checkout "
+                   "({main})", root=hubconf.ROOT, main=hubconf.MAIN))
     LOG_DIR.mkdir(parents=True, exist_ok=True)
     RUNS_DIR.mkdir(parents=True, exist_ok=True)
     with state_lock(timeout=TICK_LOCK_WAIT) as mine:

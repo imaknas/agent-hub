@@ -51,8 +51,11 @@ def key(item: tuple[str, str | None]) -> str:
 
 
 def env_for(tests: pathlib.Path, lang: str | None) -> dict[str, str]:
+    # the tree under test is the platform the tests see (as test-gate sets it): an explicit root skips hubconf's
+    # lookup of the main checkout, so a run in a linked worktree never reaches the machine's live instance. Only the
+    # root: HOME and STATE would leak into the fake hubs the tests build (docs/design/test-waiting.md A1)
     env = {**os.environ, "PYTHONPATH": os.pathsep.join(filter(None, [str(tests), os.environ.get("PYTHONPATH")])),
-           "AGENT_HUB_TEST_RUNNER": "1"}
+           "AGENT_HUB_TEST_RUNNER": "1", "AGENT_HUB_ROOT": os.environ.get("AGENT_HUB_ROOT") or str(tests.resolve().parent)}
     if lang:
         env["I18N_GOLDEN_LANG"] = lang
     return env

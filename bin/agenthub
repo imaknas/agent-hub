@@ -108,6 +108,10 @@ def cmd_config(argv: list[str]) -> int:
         show(appliers.plan_all(only=only))
         return 0
     if sub == "apply":
+        if hubconf.worktree_lookup():   # it would apply the config to the machine from a half-edited copy
+            print(_("agenthub config apply: {root} is a linked worktree of the hub; apply from the main checkout "
+                    "({main})", root=hubconf.ROOT, main=hubconf.MAIN), file=sys.stderr)
+            return 1
         if subprocess.run(hubconf.launch(BIN / "config-check")).returncode != 0:
             print(_("agenthub config apply: the config is invalid; nothing applied"), file=sys.stderr)
             return 1

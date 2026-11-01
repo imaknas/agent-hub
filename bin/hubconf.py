@@ -16,6 +16,9 @@ New code always takes paths, names and the owner from here; do not hard-code ~/a
     .state and .logs are not in the instance: like the bus (bus_dir) and the platform's Python they are per-machine
     run state and stay in the hub root (the .logs path is written into every service's plist; moving it means
     restarting every service).
+    A linked worktree of the hub (MAIN != ROOT) takes .hub-home, .state and .logs from its main checkout, found
+    through the .git pointer files; its own copy only supplies the code. worktree_lookup() says when that happened,
+    for the scripts that must not rebuild live state from a worktree. An explicit AGENT_HUB_ROOT skips the lookup.
   - The platform's own registry entry (<hub>/projects/agent-hub.yaml) is part of the platform: registry reads it
     wherever registry_dir is
   - Project registry: <registry_dir>/<name>.yaml (YAML edited by people); every tick the scheduler validates it with
@@ -29,6 +32,9 @@ For shell scripts ("$HUB/bin/py" hubconf.py …):
   hubconf.py roster    one line per project name<TAB>workspace<TAB>origin<TAB>memory_bare, no header line;
                        workspace with ~ expanded, (native) when there is no origin, memory_bare prefixed with
                        hub.json's memory_host:
+  hubconf.py test-config-inputs
+                       the instance files tests may read, <variable><TAB><file> per line (hub.json
+                       tests.config_inputs)
 """
 from __future__ import annotations
 
@@ -44,7 +50,22 @@ import i18n  # noqa: E402
 _ = i18n.domain(__file__)
 
 ROOT = pathlib.Path(os.environ.get("AGENT_HUB_ROOT") or pathlib.Path(__file__).resolve().parents[1])
-POINTER = ROOT / ".hub-home"
+
+
+def _main_checkout(root: pathlib.Path) -> pathlib.Path:
+    """The main checkout of the repo whose linked worktree `root` is (read from the .git pointer files, no git
+    subprocess: this module is also imported by the system Python), or `root` itself. A worktree has no .hub-home,
+    .state or .logs of its own; they are the machine's, in the main checkout (docs/design/test-waiting.md A1)."""
+    import gitdirs
+    found = gitdirs.dirs(root)
+    if found and found.top == root.resolve() and found.common.name == ".git":
+        return found.common.parent
+    return root
+
+
+# An explicit AGENT_HUB_ROOT (the commit gate's export, every test) is taken as it is: no lookup
+MAIN = ROOT if os.environ.get("AGENT_HUB_ROOT") else _main_checkout(ROOT)
+POINTER = MAIN / ".hub-home"
 _cfg: dict | None = None
 
 
@@ -185,8 +206,15 @@ def tool(name: str) -> str:
     return shutil.which(name, path=f"{os.environ.get('PATH', '')}:{LAUNCHD_PATH}") or name
 
 # tests use another
-STATE = pathlib.Path(os.environ["AGENT_HUB_STATE"]) if os.environ.get("AGENT_HUB_STATE") else ROOT / ".state"
-LOGS = ROOT / ".logs"
+STATE = pathlib.Path(os.environ["AGENT_HUB_STATE"]) if os.environ.get("AGENT_HUB_STATE") else MAIN / ".state"
+LOGS = MAIN / ".logs"
+
+
+def worktree_lookup() -> bool:
+    """This copy of the platform is a linked worktree that found the machine's live state through the main checkout:
+    scripts that rebuild that state (registry refresh, config apply, the scheduler) must not run from here, where
+    they would build it from a half-edited copy. An explicit AGENT_HUB_STATE (config-check --staged) is not live."""
+    return MAIN != ROOT and not os.environ.get("AGENT_HUB_STATE")
 REGISTRY_INDEX = STATE / "registry" / "index.json"
 
 
@@ -584,6 +612,19 @@ def cwd_users(path: str | pathlib.Path) -> list[str]:
                    if cwd == root or cwd.startswith(root.rstrip("/") + "/")})
 
 
+def test_config_inputs() -> list[tuple[str, pathlib.Path]]:
+    """The instance files tests may read (hub.json tests.config_inputs, docs/design/test-waiting.md A1/B1): (the
+    variable the tests find it in, the file in the config directory). Bare file names only; anything else is skipped.
+    A file listed here that is missing fails the commit gate; one not listed is not passed in, and the test that
+    needs it skips (a deployment without a private-names list)."""
+    out = []
+    for e in (get("tests.config_inputs") or []):
+        f, env = (e or {}).get("file"), (e or {}).get("env")
+        if f and env and "/" not in f and f not in (".", "..") and re.fullmatch(r"[A-Z][A-Z0-9_]*", env):
+            out.append((env, config_dir() / f))
+    return out
+
+
 def hub_project() -> str:
     """The platform's own name in the registry."""
     return "agent-hub"
@@ -607,6 +648,10 @@ def main(argv: list[str]) -> int:
     if len(argv) == 2 and argv[0] == "dir" and argv[1] in ("config", "data", "secrets", "state", "logs"):
         print({"config": config_dir, "data": data_dir, "secrets": secrets_dir}.get(argv[1], lambda: None)()
               or (STATE if argv[1] == "state" else LOGS))
+        return 0
+    if argv == ["test-config-inputs"]:   # <variable>TAB<file>, one per line, for test-gate
+        for env, f in test_config_inputs():
+            print(f"{env}\t{f}")
         return 0
     # processes whose working directory is in this folder (for shell scripts; works without lsof too)
     if len(argv) == 2 and argv[0] == "cwd-users":

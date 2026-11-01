@@ -1,9 +1,11 @@
 """agent-hub's own work in linked worktrees (docs/design/test-waiting.md A1, step 1).
 
-What must keep holding while the platform learns to run from a worktree: a main checkout reads its pointer and state
-from itself; test-gate hands the tests the private-names list when the instance has one and leaves the check to skip
-when it has none; merge-branch runs the registry's runtime.test after its rebase and leaves main untouched when it
-fails.
+What kept holding (characterized first): a main checkout reads its pointer and state from itself; merge-branch runs the
+registry's runtime.test after its rebase and leaves main untouched when it fails.
+What a linked worktree of the hub does now: it takes .hub-home, .state and .logs from its main checkout (hubconf and
+hubpaths.sh alike), unless AGENT_HUB_ROOT is explicit; from there registry.refresh writes nothing and the scheduler and
+config apply refuse; run-tests points AGENT_HUB_ROOT at the tree it tests; test-gate passes the instance files listed
+in hub.json tests.config_inputs and fails when a listed one is missing.
 
     bin/py -m unittest discover -s tests
 """
@@ -82,7 +84,7 @@ class MainCheckout(Base):
 class TestGatePrivateNames(Base):
     """test-gate passes the private-names list to the tests (test_personal_boundary reads AGENT_HUB_PRIVATE_NAMES)."""
 
-    def gate(self, with_list: bool):
+    def gate(self, with_list: bool, listed: bool = True):
         h = self.hub(files=("hubconf.py", "i18n.py", "gitdirs.py"))
         for f in ("test-gate", "run-tests", "lint", "py", "hubpaths.sh"):
             (h / "bin" / f).symlink_to(BIN / f)
@@ -93,11 +95,12 @@ class TestGatePrivateNames(Base):
             "        self.assertEqual(os.environ.get('AGENT_HUB_PRIVATE_NAMES', ''), os.environ.get('EXPECT_PRIVATE', ''))\n")
         cfg = self.tmp / "config"
         cfg.mkdir()
-        (cfg / "hub.json").write_text("{}")
+        (cfg / "hub.json").write_text(json.dumps({"tests": {"config_inputs": [
+            {"file": "private-names.txt", "env": "AGENT_HUB_PRIVATE_NAMES"}]}} if listed else {}))
         expect = ""
         if with_list:
             (cfg / "private-names.txt").write_text("secretproj\n")
-            expect = str(cfg / "private-names.txt")
+            expect = str(cfg / "private-names.txt") if listed else ""
         self.git(h, "add", "-A")
         return subprocess.run([str(h / "bin" / "test-gate")], cwd=h, capture_output=True, text=True, timeout=300,
                               env={**self.env, "AGENT_HUB_CONFIG": str(cfg), "EXPECT_PRIVATE": expect})
@@ -107,7 +110,95 @@ class TestGatePrivateNames(Base):
         self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
 
     def test_no_list_passes_nothing(self):
+        r = self.gate(with_list=False, listed=False)
+        self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
+
+    def test_listed_but_missing_fails(self):
         r = self.gate(with_list=False)
+        self.assertEqual(r.returncode, 1, r.stdout + r.stderr)
+        self.assertIn("tests.config_inputs", r.stderr)
+
+    def test_unlisted_file_is_not_passed(self):
+        r = self.gate(with_list=True, listed=False)
+        self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
+
+
+class LinkedWorktree(Base):
+    def setUp(self):
+        super().setUp()
+        self.main = self.hub()
+        self.inst = self.tmp / "inst"
+        (self.main / ".hub-home").write_text(f"{self.inst}\n")
+        self.wt = self.tmp / "wt"
+        self.git(self.main, "worktree", "add", "-q", "-b", "work", str(self.wt))
+
+    def test_worktree_takes_pointer_and_state_from_the_main_checkout(self):
+        m = self.main
+        self.assertEqual(self.probe(self.wt), {"config": f"{self.inst}/config", "state": f"{m}/.state",
+                                               "logs": f"{m}/.logs", "pointer": f"{m}/.hub-home"})
+
+    def test_hubpaths_in_a_worktree(self):
+        r = subprocess.run(["bash", "-c", 'source bin/hubpaths.sh; echo "$HUB_CONFIG|$HUB_STATE|$HUB_MAIN"'],
+                           cwd=self.wt, env=self.env, capture_output=True, text=True, check=True)
+        self.assertEqual(r.stdout.strip().split("|"), [f"{self.inst}/config", f"{self.main}/.state", str(self.main)])
+
+    def test_explicit_root_skips_the_lookup(self):
+        got = self.probe(self.wt, AGENT_HUB_ROOT=str(self.wt))
+        self.assertEqual((got["state"], got["pointer"]), (f"{self.wt}/.state", f"{self.wt}/.hub-home"))
+
+    def test_lookup_is_reported_unless_state_is_explicit(self):
+        code = "import hubconf; print(hubconf.worktree_lookup())"
+        def run(**env):
+            return subprocess.run([PY, "-c", code], cwd=self.wt / "bin", env={**self.env, **env}, capture_output=True,
+                                  text=True, check=True).stdout.strip()
+        self.assertEqual(run(), "True")
+        self.assertEqual(run(AGENT_HUB_STATE=str(self.tmp / "st")), "False")
+        self.assertEqual(subprocess.run([PY, "-c", code], cwd=self.main / "bin", env=self.env, capture_output=True,
+                                        text=True, check=True).stdout.strip(), "False")
+
+
+class FromAWorktreeNothingLiveIsRebuilt(unittest.TestCase):
+    """In-process with the lookup forced on: refresh validates without writing, the scheduler refuses."""
+
+    def setUp(self):
+        sys.path.insert(0, str(BIN))
+        import hubconf
+        self.hubconf = hubconf
+        self.saved = hubconf.worktree_lookup
+        hubconf.worktree_lookup = lambda: True
+
+    def tearDown(self):
+        self.hubconf.worktree_lookup = self.saved
+
+    def test_refresh_writes_nothing(self):
+        import registry
+        with tempfile.TemporaryDirectory() as d:
+            saved = registry.CACHE
+            registry.CACHE = pathlib.Path(d) / "registry"
+            try:
+                index = registry.refresh()
+            finally:
+                registry.CACHE = saved
+            self.assertIn("projects", index)
+            self.assertFalse((pathlib.Path(d) / "registry").exists())
+
+    def test_scheduler_refuses(self):
+        import scheduler
+        with self.assertRaises(SystemExit) as e:
+            scheduler.main()
+        self.assertIn("linked worktree", str(e.exception.code))
+
+
+class RunTestsRoot(Base):
+    def test_root_is_the_tree_under_test(self):
+        tree = self.tmp / "tree"
+        (tree / "tests").mkdir(parents=True)
+        (tree / "tests" / "test_probe.py").write_text(
+            "import os\nimport unittest\n\n\nclass T(unittest.TestCase):\n    def test_root(self):\n"
+            f"        self.assertEqual(os.environ.get('AGENT_HUB_ROOT'), {str(tree)!r})\n"
+            "        self.assertNotIn('AGENT_HUB_STATE', os.environ)\n")
+        r = subprocess.run([PY, str(BIN / "run-tests"), str(tree / "tests")], env=self.env, capture_output=True,
+                           text=True, timeout=120)
         self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
 
 

@@ -4,11 +4,27 @@
 #   HUB_ROOT     the platform (this repo)    HUB_CONFIG  config (hub.json, registry, mirror-list.txt, services.tsv)
 #   HUB_DATA     data (digest/, reflect/, todo.md, index.md, review-log.md…)    HUB_SECRETS  credentials
 #   HUB_JSON     full path of hub.json; hub_json_get <dotted key> reads one value (prints nothing, non-zero if absent)
+#   HUB_MAIN     the main checkout (HUB_ROOT, or for a linked worktree of the hub the checkout it belongs to: the
+#                machine's .hub-home, .state and .logs are there, as in hubconf)    HUB_STATE   <main>/.state
 # <hub>/.hub-home holds the instance directory → <instance>/{config,data,secrets}; no such file = the old layout
 # (everything in the hub root).
 HUB_ROOT="${AGENT_HUB_ROOT:-$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)}"
+HUB_MAIN="$HUB_ROOT"
+# a linked worktree: .git is a file "gitdir: <dir>", and <dir>/commondir leads to the main checkout's .git (read as
+# plain files, no git; an explicit AGENT_HUB_ROOT is taken as it is)
+if [ -z "${AGENT_HUB_ROOT:-}" ] && [ -f "$HUB_ROOT/.git" ]; then
+  _hp_gd="$(sed -n '1s/^gitdir: *//p' "$HUB_ROOT/.git")"
+  case "$_hp_gd" in /*) ;; *) _hp_gd="$HUB_ROOT/$_hp_gd" ;; esac
+  if [ -f "$_hp_gd/commondir" ]; then
+    _hp_cd="$(head -1 "$_hp_gd/commondir")"
+    case "$_hp_cd" in /*) ;; *) _hp_cd="$_hp_gd/$_hp_cd" ;; esac
+    _hp_cd="$(cd "$_hp_cd" 2>/dev/null && pwd -P)"
+    [ "${_hp_cd##*/}" = .git ] && HUB_MAIN="${_hp_cd%/.git}"
+  fi
+fi
+HUB_STATE="${AGENT_HUB_STATE:-$HUB_MAIN/.state}"
 _hp_home="${AGENT_HUB_HOME:-}"
-[ -n "$_hp_home" ] || { [ -f "$HUB_ROOT/.hub-home" ] && _hp_home="$(head -1 "$HUB_ROOT/.hub-home")"; }
+[ -n "$_hp_home" ] || { [ -f "$HUB_MAIN/.hub-home" ] && _hp_home="$(head -1 "$HUB_MAIN/.hub-home")"; }
 _hp_home="${_hp_home/#\~/$HOME}"
 if [ -n "$_hp_home" ]; then
   HUB_CONFIG="${AGENT_HUB_CONFIG:-$_hp_home/config}"; HUB_DATA="${AGENT_HUB_DATA:-$_hp_home/data}"

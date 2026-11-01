@@ -9,6 +9,11 @@ name: agent-hub
 memory: false
 push_on_merge: false
 commits: conventional          # commit titles (bin/commit_title.py; this repo also has githooks/commit-msg)
+# merge-branch's tests for this repo's own worktrees (docs/design/test-waiting.md A1): its rebase runs no pre-commit and
+# its fast-forward no gate, so the rebased tree is tested here; a rebase that changed nothing is a hit in test-gate's
+# tree store. Replaced by this entry's v2 tiers in step 2.3.
+runtime:
+  test: bin/test-gate --all
 jobs:
 - name: librarian
   legacy_name: librarian

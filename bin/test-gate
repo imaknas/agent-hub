@@ -30,12 +30,28 @@ if [ "${1:-}" != "--all" ] && ! git diff --cached --name-only | grep -Eq "$CODE"
   exit 0
 fi
 
+# The instance files the tests read (hub.json tests.config_inputs; this deployment's private-names list for
+# tests/test_personal_boundary.py): not in the repo and not findable under the fake HOME, so each is passed in by the
+# variable it names. A listed file that is missing fails the gate instead of letting its test skip; one not listed is
+# not passed, and the test skips (a deployment without a list).
+inputs="$("$HUB/bin/py" "$HUB/bin/hubconf.py" test-config-inputs)" || exit 1
+input_keys=""
+input_env=()
+while IFS=$'\t' read -r var file; do
+  [ -n "$var" ] || continue
+  if [ ! -f "$file" ]; then
+    hub_say "test-gate: {file} is listed in hub.json tests.config_inputs but missing" file="$file" >&2
+    exit 1
+  fi
+  input_keys+=" $(shasum <"$file" | cut -c1-12)"
+  input_env+=("$var=$file")
+done <<<"$inputs"
+
 # A tree that already passed is not run again (a rebase verified, then committed or merged with the same tree; a commit
 # retried after its message was refused). The key adds what the result depends on outside the tree: the platform
-# Python's version and the private-names list. Shared by every worktree of this repo. TEST_GATE_FORCE=1 runs anyway.
-private="$("$HUB/bin/py" "$HUB/bin/hubconf.py" dir config 2>/dev/null)/private-names.txt"
+# Python's version and the config inputs. Shared by every worktree of this repo. TEST_GATE_FORCE=1 runs anyway.
 tree="$(git write-tree)" || exit 1
-key="$tree $("$PLATFORM_PY" -c 'import sys; print(sys.version.split()[0])') $([ -f "$private" ] && shasum <"$private" | cut -c1-12)"
+key="$tree $("$PLATFORM_PY" -c 'import sys; print(sys.version.split()[0])')$input_keys"
 passed_trees="$(git rev-parse --git-common-dir)/test-gate-passed-trees"
 if [ -z "${TEST_GATE_FORCE:-}" ] && grep -qxF "$key" "$passed_trees" 2>/dev/null; then
   hub_say "test-gate: this exact tree already passed ({tree}); not run again" tree="${tree:0:12}"
@@ -45,15 +61,12 @@ fi
 
 # Not in /tmp or /var/folders: the capabilities' Seatbelt profile allows writing the temp directories, so with the fake
 # HOME there, the "writes outside the folder" tests couldn't catch anything
-mkdir -p "$HUB/.state/test-gate"
+mkdir -p "$HUB/.state/test-gate" "$HUB_STATE/test-gate"
 work="$(mktemp -d "$HUB/.state/test-gate/run.XXXXXX")" || exit 1
 trap 'rm -rf "$work"' EXIT
 mkdir -p "$work/tree" "$work/home/workspace"
 git checkout-index -a --prefix="$work/tree/" || { hub_say "test-gate: exporting the index failed" >&2; exit 1; }
-# This deployment's list of private project names (the instance's config, not in the repo): it can't be found under
-# the fake HOME, so look up its location here and pass it in
-# (tests/test_personal_boundary.py's test_no_private_project_names; skipped for deployments without a list)
-[ -f "$private" ] && export AGENT_HUB_PRIVATE_NAMES="$private"
+for kv in ${input_env[@]+"${input_env[@]}"}; do export "$kv"; done
 
 # lint also runs on the exported index (with that copy's bin/lint and ruff.toml); without ruff it doesn't pass either,
 # never silently skipped
@@ -70,7 +83,7 @@ for py in "${PYTHONS[@]}"; do
     # through it pass without checking anything (how test_personal_boundary missed things on 10-26)
     export GIT_CEILING_DIRECTORIES="$work"
     cd "$work/tree" && HOME="$work/home" AGENT_HUB_ROOT="$work/tree" AGENT_HUB_PYTHON="$PLATFORM_PY" PYTHONDONTWRITEBYTECODE=1 \
-      TEST_DURATIONS="$HUB/.state/test-gate/durations.json" "$py" "$work/tree/bin/run-tests" "$work/tree/tests" \
+      TEST_DURATIONS="$HUB_STATE/test-gate/durations.json" "$py" "$work/tree/bin/run-tests" "$work/tree/tests" \
       >"$work/out$i" 2>&1 ) &   # in parallel, one process per module (bin/run-tests)
   i=$((i + 1))
 done

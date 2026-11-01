@@ -296,6 +296,22 @@
         }
       }
     },
+    "tests": {
+      "type": "object",
+      "properties": {
+        "config_inputs": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["file", "env"],
+            "properties": {
+              "file": {"type": "string"},
+              "env": {"type": "string"}
+            }
+          }
+        }
+      }
+    },
     "lease": {
       "type": "object",
       "properties": {

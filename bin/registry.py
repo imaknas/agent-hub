@@ -620,8 +620,12 @@ def record_refusal(why: str, reg: pathlib.Path) -> str:
 
 
 def refresh(only: list[str] | None = None, rebuild: bool = False) -> dict:
-    """Validate the whole registry, refresh the cache and index.json, return the index."""
-    CACHE.mkdir(parents=True, exist_ok=True)
+    """Validate the whole registry, refresh the cache and index.json, return the index. From a linked worktree of the
+    hub that found the live state through the main checkout (hubconf.worktree_lookup) it validates and returns the
+    index but writes nothing: the live index is built only by the main checkout's code."""
+    live = not hubconf.worktree_lookup()
+    if live:
+        CACHE.mkdir(parents=True, exist_ok=True)
     reg = hubconf.registry_dir()
     files = sorted(reg.glob("*.yaml")) if reg.is_dir() else []
     try:
@@ -629,7 +633,7 @@ def refresh(only: list[str] | None = None, rebuild: bool = False) -> dict:
     except (OSError, ValueError):
         old = {}
     if not rebuild and (why := wrong_registry(old, reg, files)):
-        who = record_refusal(why, reg)
+        who = record_refusal(why, reg) if live else ""
         print(f"registry: {why}\n  {who}", file=sys.stderr)
         return {**old, "errors": {**(old.get("errors") or {}), "(registry)": [why, who]}}
     # The platform's own registry entry is read wherever registry_dir is, and always from the platform repo: a file
@@ -649,14 +653,15 @@ def refresh(only: list[str] | None = None, rebuild: bool = False) -> dict:
             doc, errs = None, [_("cannot read the YAML: {error}", error=e)]
         cache = CACHE / f"{stem}.json"
         if not errs:
-            cache.write_text(json.dumps(doc, ensure_ascii=False, indent=1, default=str))
+            if live:
+                cache.write_text(json.dumps(doc, ensure_ascii=False, indent=1, default=str))
             projects[stem] = doc
         else:
             errors[stem] = errs
             if cache.exists():  # keep using the last valid version
                 projects[stem] = json.loads(cache.read_text())
     # projects whose registry file was deleted: drop the cache too (deleting the entry = removing the project)
-    for c in CACHE.glob("*.json"):
+    for c in CACHE.glob("*.json") if live else []:
         if c.name != "index.json" and c.stem not in {f.stem for f in files}:
             c.unlink()
     modules, mod_errors = load_modules()
@@ -666,9 +671,10 @@ def refresh(only: list[str] | None = None, rebuild: bool = False) -> dict:
     if (cycles := job_cycles(index)):
         errors["(jobs)"] = [_("after:/before: form a cycle, these jobs would wait for each other forever: {cycle}", cycle=c)
                             for c in cycles]
-    tmp = CACHE / "index.json.tmp"
-    tmp.write_text(json.dumps(index, ensure_ascii=False, indent=1, default=str))
-    tmp.replace(CACHE / "index.json")
+    if live:
+        tmp = CACHE / "index.json.tmp"
+        tmp.write_text(json.dumps(index, ensure_ascii=False, indent=1, default=str))
+        tmp.replace(CACHE / "index.json")
     return index
 
 

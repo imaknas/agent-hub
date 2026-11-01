@@ -6,5 +6,6 @@
  "The scheduled-job alert was not sent: {error!r}": "排程 job 的警報沒發出去:{error!r}",
  "the background run vanished midway (reboot or killed)": "背景執行到一半不見了(重開機、被殺)",
  "job '{name}': the bus can't be read ({error!r}); its events wait": "job '{name}':讀不了 bus({error!r}),它的事件先等著",
- "job '{name}': the bus file was replaced (cursor {cursor}, head now {head}); starting from the head": "job '{name}':bus 檔換過了(游標 {cursor},現在最新 {head});從最新處開始"
+ "job '{name}': the bus file was replaced (cursor {cursor}, head now {head}); starting from the head": "job '{name}':bus 檔換過了(游標 {cursor},現在最新 {head});從最新處開始",
+ "scheduler: {root} is a linked worktree of the hub; the scheduler runs only from the main checkout ({main})": "scheduler:{root} 是 hub 的 linked worktree;排程只從主 checkout 跑({main})"
 }
