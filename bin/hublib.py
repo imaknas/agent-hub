@@ -36,8 +36,11 @@ MINI_WORKSPACE = f"{MINI_HOME}/workspace"
 MEMORY_COPIES = hubconf.p("memory_copies", "~/.memory-copies")
 # working directories that aren't onboarded but show up in transcripts and are worth counting separately (old laptop
 # locations are in legacy-paths.tsv)
+# (the hub's own sessions: its checkout, on the hub machine taken to sit where this machine's does under home, like ~
+# in a workspace below)
 EXTRA_PROJECTS = {
-    "agent-hub": f"{MINI_HOME}/agent-hub",
+    hubconf.hub_project(): (f"{MINI_HOME}/{hubconf.MAIN.relative_to(pathlib.Path.home())}"
+                            if hubconf.MAIN.is_relative_to(pathlib.Path.home()) else str(hubconf.MAIN)),
 }
 
 

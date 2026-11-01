@@ -43,7 +43,7 @@ StreamEvent(type='error', data={'error': 'agent_login', 'detail': "Claude Code (
 === classify_exit crash
 StreamEvent(type='error', data={'error': 'process_crashed', 'detail': 'exit 1: segfault'})
 === resume_command
-('~/agent-hub/bin/lease-resume 0000', 'Paste it in a terminal on the hub machine: it resumes the same conversation (Claude Code). When you are done, go back to the assistant and press "detach" for the handover.')
+('<HUB>/bin/lease-resume 0000', 'Paste it in a terminal on the hub machine: it resumes the same conversation (Claude Code). When you are done, go back to the assistant and press "detach" for the handover.')
 === auth_env token missing
 (None, '<TMP>/home/.claude/headless-oauth-token does not exist (the default is the headless token; to use the subscription login, declare auth: subscription)')
 === credential subscription

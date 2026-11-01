@@ -303,11 +303,10 @@ class Golden(unittest.TestCase):
         slug = str(alpha).replace("/", "-").replace(".", "-")
         (self.home / ".claude" / "projects" / slug / "memory").mkdir(parents=True)
         (self.home / ".claude" / "projects" / slug / "memory" / "MEMORY.md").write_text("m\n")
-        # the librarian's checkpoint for the project, in the hub's state, follows the new name (the hub reached at
-        # ~/agent-hub as well: the layout this was written for)
+        # the librarian's checkpoint for the project, in the hub's state, follows the new name: wherever the hub is
+        # (here not under HOME at all)
         (self.hub / ".state").mkdir(exist_ok=True)
         (self.hub / ".state" / "alpha.sha").write_text("abc\n")
-        (self.home / "agent-hub").symlink_to(self.hub)
         self.call("renamed", s, ["alpha", "beta", "--apply"])
         self.assertEqual(sorted(p.name for p in (self.hub / ".state").glob("*.sha")), ["beta.sha"])
         self.out.append("=== legacy-paths.tsv\n" + (self.hub / "legacy-paths.tsv").read_text())

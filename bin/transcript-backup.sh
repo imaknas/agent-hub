@@ -24,7 +24,7 @@ DEST_HOST="$(hub_server)"   # the machine that runs the hub (hub.json hosts.serv
   exit 0
 }
 DEST_PATH="transcript-backups/claude-personal-projects/"
-LOG_DIR="$HOME/agent-hub/.logs"
+LOG_DIR="$HUB_MAIN/.logs"   # the hub's logs (hubpaths.sh), wherever this machine has it
 mkdir -p "$LOG_DIR"
 LOG="$LOG_DIR/transcript-backup-$(date +%Y-%m-%d).log"
 

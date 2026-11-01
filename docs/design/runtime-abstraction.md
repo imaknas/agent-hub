@@ -13,9 +13,11 @@
 > **Acceptance for every step**: `bin/test-gate` (the commit gate) and the golden files: before refactoring, the
 > externally visible behaviour is fixed as tests (layer 6: `tests/test_check_login.py` compares even the alert
 > wording, and `tests/fixtures/llm-golden.json` was not regenerated).
-> **Two places still using the old entry points** (output identical to before, still working): agent-hub's own
-> `.claude/settings.json` (its session start still has to pull agent-hub's repo, a step `hub-event` does not have), and
-> the user-level worktree hook (U4, which the owner must change personally).
+> **One place still using the old entry points** (output identical to before, still working): the user-level worktree
+> hook (U4, which the owner must change personally). agent-hub's own committed `.claude/settings.json` went on 11-01:
+> its sessions get the same `hub-event` hooks as every project, installed in its local settings by the agent-settings
+> applier, and `hub-event session_start` pulls the hub's main checkout (`hub_pull`). Every hook names the hub where it
+> is when written (`hubconf.hub_bin`); after the hub moves, `agenthub config apply` writes them all again.
 
 ## Goal
 

@@ -33,8 +33,8 @@
 #   4. write .agent-memory/ into the local .git/info/exclude (the committed .gitignore is untouched)
 #   5. merge (not overwrite) the hook settings into the outer .claude/settings.local.json (steps 5-6 are both
 #      handed to sync-local-setup.sh):
-#      deliberately not the shared settings.json: the hook commands contain ~/agent-hub/... paths, and writing them
-#      into a committed file puts a personal tool's name/paths into the repo history
+#      deliberately not the shared settings.json: the hook commands contain the hub's path on this machine, and
+#      writing them into a committed file puts a personal tool's name/paths into the repo history
 #      (happened in 2026-09 in the public sycophancy-eval and the-crucible).
 #      On a machine change, recover-project.sh regenerates this local file.
 #   6. write the agent-hub block into the local CLAUDE.local.md (gitignored; Claude Code loads it together with
@@ -192,7 +192,7 @@ if [ "$RESUME" != true ]; then
   hub_say "[4/11] .agent-memory/ is excluded in .git/info/exclude (.gitignore untouched)"
 
   # --- 5-6. Local-only setup: the hooks (.claude/settings.local.json) and the agent-hub block in CLAUDE.local.md:
-  # neither goes into the repo (they contain ~/agent-hub paths/names, which a public repo would leak).
+  # neither goes into the repo (they contain the hub's path and names, which a public repo would leak).
   # Handed to sync-local-setup.sh, the same logic as recover and every SessionStart.
   "$AGENT_HUB/bin/sync-local-setup.sh" .
   hub_say "[5-6/11] Hooks and the rules-file block are in place (not version-controlled)"

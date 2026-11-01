@@ -76,6 +76,15 @@ def memory_pull(ev, ws):
                        capture_output=True, timeout=60)
 
 
+def hub_pull(ev, ws):
+    """agent-hub's own session in its main checkout: bring the checkout up to date first (what the hub's committed
+    settings did before 11-01, now through the same entry point as every project). Not in a linked worktree of the
+    hub: that branch is the session's own work, with no upstream to pull."""
+    if ws and ws.resolve() == hubconf.MAIN.resolve():
+        subprocess.run([str(BIN / "with-lock.sh"), "git", "pull", "-q"], cwd=ws, capture_output=True, timeout=60,
+                       stdin=subprocess.DEVNULL)
+
+
 def memory_sync(ev, ws):
     if _memory(ws):
         subprocess.run([str(BIN / "with-lock.sh"), str(BIN / "git-sync-memory.sh")], cwd=ws / ".agent-memory",
@@ -110,7 +119,8 @@ def guard(ev, ws):
 
 # which handlers run for each event, in order; for the "deny" kind the return value is the reason to block
 HANDLERS = {
-    "session_start": [("memory_pull", memory_pull), ("local_setup", local_setup), ("nudge", nudge), ("mail", mail)],
+    "session_start": [("hub_pull", hub_pull), ("memory_pull", memory_pull), ("local_setup", local_setup),
+                      ("nudge", nudge), ("mail", mail)],
     "session_end": [("memory_sync", memory_sync)],
     "pre_compact": [("memory_sync", memory_sync)],
     "prompt": [("mail", mail)],

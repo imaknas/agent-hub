@@ -71,7 +71,7 @@ hub_say "[3/5] .agent-memory is on the existing agent-memory branch of {memory_b
 
 # --- 4-5. Local-only setup: the agent-hub block in CLAUDE.local.md, the .claude/settings.local.json hooks, and
 #         making sure both are ignored (if .gitignore doesn't exclude them, they go into .git/info/exclude).
-#         Neither goes into the outer repo: they contain ~/agent-hub paths/names, which some public repos
+#         Neither goes into the outer repo: they contain the hub's path and names, which some public repos
 #         deliberately don't take (see adaptive-iteration). Same script as onboard and every SessionStart.
 "$AGENT_HUB/bin/sync-local-setup.sh" .
 hub_say "[4-5/5] Local setup is aligned (rules-file block / hooks / ignores)"

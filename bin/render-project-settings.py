@@ -301,9 +301,50 @@ def gate(name: str, doc: dict, report: bool, quiet: bool = False) -> list[tuple[
 EXTERNAL = False
 
 
+# ---------- the agent's session hooks (the runtime's lifecycle: `hub-event <event>`) ----------
+# A hook names the hub where it was when it was written (hubconf.hub_bin). A project's are written again at each of its
+# session starts (sync-local-setup → hub-event install), but only while they still reach the hub: once the hub has
+# moved, the old ones quietly do nothing and nothing in a session ever rewrites them. So the applier keeps them too:
+# `agenthub config apply` after a move (the scheduler and the CLI need writing again then anyway) points every one at
+# the hub's new place. The hub's own sessions get theirs only here: its memory isn't a checkout of its own, so the
+# session-start setup that installs a project's skips it. A sandboxed project's are part of its settings above.
+
+def lifecycle_folder(name: str, doc: dict) -> pathlib.Path | None:
+    """Where this registry entry's sessions get the platform's hooks from the applier, or None."""
+    if name == hubconf.hub_project():
+        return hubconf.MAIN
+    if (doc.get("enforce") or {}).get("sandbox"):
+        return None
+    ws = registry.dirs(doc)["workspace"]
+    return ws if ws and (ws / ".agent-memory").is_dir() else None   # onboarded on this machine
+
+
+def lifecycle(index: dict, apply: bool, only: str | None = None) -> list:
+    """The session hooks that are not what installing them now would write: installed when apply; the Changes."""
+    from appliers import Change
+    import runtime_ports
+    try:
+        rt = runtime_ports.load(ports=("lifecycle",))
+    except runtime_ports.Unsupported:   # the runtime has no session events (doctor's feature table says so)
+        return []
+    out = []
+    for name, doc in sorted(index["projects"].items()):
+        ws = lifecycle_folder(name, doc)
+        if not ws or (only and name != only):
+            continue
+        try:
+            if rt.install_lifecycle(ws, check=True):
+                if apply:
+                    rt.install_lifecycle(ws)
+                out.append(Change("update", f"agent-settings:{name}", _("the platform's session hooks")))
+        except (OSError, ValueError) as e:   # e.g. its settings aren't valid JSON: left as they are, said
+            print(_("{project}: its session hooks could not be checked ({why})", project=name, why=e), file=sys.stderr)
+    return out
+
+
 def _changes(index: dict) -> list:
     from appliers import Change
-    out = []
+    out = lifecycle(index, apply=False)
     for name, doc in sorted(index["projects"].items()):
         want = wanted_hooks(doc)
         out += [Change(op, f"hook:{name}/{hook}", want.get(hook, ("", _("not wanted")))[1])
@@ -335,6 +376,7 @@ def plan(index: dict | None = None) -> list:
 def apply(index: dict | None = None) -> list:
     index = index or registry.refresh()
     todo = _changes(index)
+    lifecycle(index, apply=True)
     for name, doc in sorted(index["projects"].items()):
         gate(name, doc, report=False, quiet=True)
         if name == hubconf.hub_project():
@@ -372,6 +414,10 @@ def main() -> int:
     only = sys.argv[sys.argv.index("--only") + 1] if "--only" in sys.argv else None
     index = registry.refresh()
     bad = 0
+    for c in lifecycle(index, apply=not report, only=only):
+        name = c.target.split(":", 1)[1]
+        print(_("{project}: would write the platform's session hooks again", project=name) if report else
+              _("{project}: the platform's session hooks written again", project=name))
     for name, doc in sorted(index["projects"].items()):
         if only and name != only:
             continue

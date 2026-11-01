@@ -526,10 +526,13 @@ class LifecycleContract(unittest.TestCase):
         def check(m, fx, tmp):
             ws = tmp / "ws"
             ws.mkdir()
-            m.install_lifecycle(ws)
+            self.assertTrue(m.install_lifecycle(ws, check=True), "nothing installed yet: installing would change it")
+            self.assertFalse([p for p in ws.rglob("*") if p.is_file()], "check writes nothing")
+            self.assertTrue(m.install_lifecycle(ws))
             snap = {p: p.read_bytes() for p in ws.rglob("*") if p.is_file()}
             self.assertTrue(snap, "installing leaves something behind")
-            m.install_lifecycle(ws)
+            self.assertFalse(m.install_lifecycle(ws, check=True), "installed: nothing left to change")
+            self.assertFalse(m.install_lifecycle(ws))
             self.assertEqual(snap, {p: p.read_bytes() for p in ws.rglob("*") if p.is_file()},
                              "a rerun gives the same result")
         self.each(check)

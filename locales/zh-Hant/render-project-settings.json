@@ -23,5 +23,9 @@
  "{project}: updated {hook} ({why})": "{project}:更新了 {hook}({why})",
  "{project}: the registry no longer wants {hook}; removed it": "{project}:登錄不再要 {hook},拿掉了",
  "not wanted": "不再需要",
- "{project}: core.hooksPath {path} unset; the platform's hooks go into the git dir": "{project}:取消了 core.hooksPath {path};平台的 hook 改放在 git 目錄"
+ "{project}: core.hooksPath {path} unset; the platform's hooks go into the git dir": "{project}:取消了 core.hooksPath {path};平台的 hook 改放在 git 目錄",
+ "the platform's session hooks": "平台的 session hook",
+ "{project}: its session hooks could not be checked ({why})": "{project}:沒辦法檢查它的 session hook({why})",
+ "{project}: would write the platform's session hooks again": "{project}:會重寫平台的 session hook",
+ "{project}: the platform's session hooks written again": "{project}:重寫了平台的 session hook"
 }

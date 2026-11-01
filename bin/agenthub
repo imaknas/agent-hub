@@ -418,7 +418,7 @@ def cmd_move_instance(argv: list[str]) -> int:
     cfg = json.loads(cfg_path.read_text())
     b = cfg.get("backup")
     if isinstance(b, dict):
-        inc = [x for x in b.get("include", []) if os.path.expanduser(x) != str(hubconf.secrets_dir())]
+        inc = [x for x in b.get("include", []) if hubconf.path(x) != hubconf.secrets_dir()]
         b["include"] = inc + [str(home / "config"), str(home / "data"), str(home / "secrets")]
     cfg_path.write_text(json.dumps(cfg, ensure_ascii=False, indent=2) + "\n")
     env = {**os.environ, "AGENT_HUB_HOME": str(home)}

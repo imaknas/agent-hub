@@ -451,14 +451,18 @@ HOOK_TABLE = (
     ("PreToolUse", "mcp__ccd_session__start_session", "open_session_attempt"),  # Desktop's open-session tool
 )
 _HOOK_NAME = {ev: name for name, _matcher, ev in HOOK_TABLE}
-MANAGED = "/agent-hub/bin/"   # a command containing this = a platform-managed hook (the user's own never have it)
+# A platform-managed hook (the user's own never look like these): one calling the platform's entry point, wherever the
+# hub was when it was written (so a hub that moved replaces its old ones instead of adding a second set), or one of the
+# hooks written before the entry point, which all named the hub's scripts under an agent-hub folder.
+MANAGED = re.compile(r"/bin/hub-event(?=['\s]|$)|/agent-hub/bin/")
 
 
 def hook_command(event: str) -> str:
     # as before: if the entry point is missing, quietly do nothing; the exit code is always 0, so the session never
-    # shows an error
+    # shows an error. The hub's location is resolved now (hubconf.hub_bin); after the hub moves, installing again
+    # rewrites it.
     import hubconf
-    return f"[ -x ~/agent-hub/bin/hub-event ] && {hubconf.sh_py('~/agent-hub/bin/hub-event')} {event} || true"
+    return f"[ -x {hubconf.hub_bin('hub-event')} ] && {hubconf.sh_py(hubconf.MAIN / 'bin' / 'hub-event')} {event} || true"
 
 
 def parse_event(event: str, raw: str):
@@ -511,7 +515,7 @@ def install_hooks(settings: dict) -> dict:
     for name in list(hooks):
         kept = []
         for entry in hooks[name]:
-            inner = [h for h in entry.get("hooks", []) if MANAGED not in str(h.get("command", ""))]
+            inner = [h for h in entry.get("hooks", []) if not MANAGED.search(str(h.get("command", "")))]
             if inner:
                 kept.append({**entry, "hooks": inner})
         if kept:
@@ -526,13 +530,15 @@ def install_hooks(settings: dict) -> dict:
     return settings
 
 
-def install_lifecycle(workspace) -> None:
+def install_lifecycle(workspace, check: bool = False) -> bool:
     path = settings_path(workspace)
     settings = json.loads(path.read_text()) if path.exists() else {}
     out = json.dumps(install_hooks(settings), indent=2) + "\n"
-    if not path.exists() or path.read_text() != out:
+    changed = not path.exists() or path.read_text() != out
+    if changed and not check:
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text(out)
+    return changed
 
 
 
@@ -721,7 +727,8 @@ def resumable(sid: str) -> bool:
 
 
 def resume_command(sid: str) -> tuple:
-    return (f"~/agent-hub/bin/lease-resume {sid}",
+    import hubconf
+    return (f"{hubconf.hub_bin('lease-resume')} {sid}",
             _("Paste it in a terminal on the hub machine: it resumes the same conversation (Claude Code). When you are "
               'done, go back to the assistant and press "detach" for the handover.'))
 

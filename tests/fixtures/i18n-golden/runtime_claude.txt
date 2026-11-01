@@ -43,7 +43,7 @@ StreamEvent(type='error', data={'error': 'agent_login', 'detail': '專案 sessio
 === classify_exit crash
 StreamEvent(type='error', data={'error': 'process_crashed', 'detail': 'exit 1:segfault'})
 === resume_command
-('~/agent-hub/bin/lease-resume 0000', '在 hub 主機的終端機貼上:會接回同一段對話(Claude Code)。談完回 Sage 按「收回」做交接。')
+('<HUB>/bin/lease-resume 0000', '在 hub 主機的終端機貼上:會接回同一段對話(Claude Code)。談完回 Sage 按「收回」做交接。')
 === auth_env token missing
 (None, '沒有 <TMP>/home/.claude/headless-oauth-token(預設用 headless token;要用訂閱登入就宣告 auth: subscription)')
 === credential subscription

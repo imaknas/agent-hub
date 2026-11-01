@@ -139,8 +139,12 @@ def deny(event: str, reason: str) -> str:
     return json.dumps({"block": reason}, ensure_ascii=False) if event == "open_session_attempt" else ""
 
 
-def install_lifecycle(workspace) -> None:
-    (pathlib.Path(workspace) / ".fake-hooks.json").write_text(json.dumps(list(EVENTS)))
+def install_lifecycle(workspace, check: bool = False) -> bool:
+    path, want = pathlib.Path(workspace) / ".fake-hooks.json", json.dumps(list(EVENTS))
+    changed = not path.exists() or path.read_text() != want
+    if changed and not check:
+        path.write_text(want)
+    return changed
 
 
 

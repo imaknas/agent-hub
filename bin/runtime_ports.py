@@ -36,8 +36,10 @@ The current interfaces (the other layers get added one at a time, following the 
     inject(event, text) -> str                           text to put into the agent's context → the native output
                                                          format ("" if this event can't take it)
     deny(event, reason) -> str                           block this action → the native output format
-    install_lifecycle(workspace) -> None                 install the hooks in this project (the platform's replaced
-                                                         with new ones, the user's own kept)
+    install_lifecycle(workspace, check=False) -> bool    install the hooks in this project (the platform's replaced
+                                                         with new ones, the user's own kept); whether that changed
+                                                         anything. check=True only says whether it would, writing
+                                                         nothing (an applier's plan)
   instructions (layer 4, rules file): which file the runtime reads that the rules and memory notes go into (the
   content is the platform's, templates/)
     instructions_file(workspace) -> Path                 the file the platform-managed block is written into

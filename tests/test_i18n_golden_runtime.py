@@ -60,7 +60,8 @@ class RuntimeGolden(unittest.TestCase):
         self.out.append(value if isinstance(value, str) else repr(value))
 
     def check(self, name: str) -> None:
-        text = "\n".join(self.out).replace(str(self.tmp), "<TMP>").replace(str(ROOT), "<HUB>")
+        text = "\n".join(self.out).replace(str(self.tmp), "<TMP>").replace(str(hubconf.MAIN), "<HUB>")
+        text = text.replace(str(ROOT), "<HUB>")
         text = text.replace(runtime_claude.slug_for_path(str(self.tmp)), "<TMP-SLUG>") + "\n"
         f = GOLDEN / f"{name}.txt"
         if UPDATE or not f.exists():

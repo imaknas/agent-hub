@@ -9,3 +9,6 @@ __pycache__/
 # This machine's rules file (read by Claude Code; it only references the instance directory's config/AGENTS.local.md),
 # not in version control
 CLAUDE.local.md
+# This machine's agent settings: the platform's session hooks name the hub's path here (written by the agent-settings
+# applier, agenthub config apply), so they are never committed
+.claude/settings.local.json

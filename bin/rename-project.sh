@@ -109,13 +109,20 @@ if [ "$NEW_PATH" != "$OLD_PATH" ]; then
 fi
 
 # --- hub machine ---
+# The librarian's checkpoint (<name>.sha) is in the hub's run state (hubpaths.sh HUB_STATE). From another machine the
+# hub machine's hub is taken to sit where this machine's does under home, the same assumption as the other ~ paths
+# sent there
+case "$HUB_STATE" in
+  "$HOME"/*) on_mini && ckpt=$(printf %q "$HUB_STATE") || ckpt="~/$(printf %q "${HUB_STATE#"$HOME"/}")" ;;
+  *) ckpt=$(printf %q "$HUB_STATE") ;;
+esac
 mini_bash_stdin <<EOF
 set -euo pipefail
 mv ~/git-origin/$OLD-memory.git ~/git-origin/$NEW-memory.git
 mv ~/.memory-copies/$OLD ~/.memory-copies/$NEW
 git -C ~/.memory-copies/$NEW remote set-url origin ~/git-origin/$NEW-memory.git
 git -C ~/.memory-copies/$NEW fetch -q origin
-[ -f ~/agent-hub/.state/$OLD.sha ] && mv ~/agent-hub/.state/$OLD.sha ~/agent-hub/.state/$NEW.sha || true
+[ -f $ckpt/$OLD.sha ] && mv $ckpt/$OLD.sha $ckpt/$NEW.sha || true
 EOF
 # The mirror is renamed only when origin really is a URL. A project without a remote has origin "(native)": it used
 # to be expanded straight into the remote script above, giving `[ -d …/(native).git ]` -> a bash syntax error, after

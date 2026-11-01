@@ -29,7 +29,7 @@ source "$(dirname "$0")/hubpaths.sh"
 SRC_HOST="$(hub_server)"   # the machine that runs the hub (hub.json hosts.server)
 SRC_PATH="~/.openclaw/agents/"
 DEST="$HOME/openclaw-session-backups/agents/"
-LOG_DIR="$HOME/agent-hub/.logs"
+LOG_DIR="$HUB_MAIN/.logs"   # the hub's logs (hubpaths.sh), wherever this machine has it
 mkdir -p "$LOG_DIR" "$DEST"
 LOG="$LOG_DIR/openclaw-session-backup-$(date +%Y-%m-%d).log"
 

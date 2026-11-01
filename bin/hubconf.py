@@ -1,8 +1,11 @@
 """The single entry point for platform settings and the project registry (standard library only; the platform's
 Python is bin/py, 3.13 at least).
 
-New code always takes paths, names and the owner from here; do not hard-code ~/agent-hub, ~/services or project names.
-  - hub root: the parent of the bin/ this file is in; the environment variable AGENT_HUB_ROOT can override it
+New code always takes paths, names and the owner from here; do not hard-code the hub's own location, ~/services or
+project names.
+  - hub root: the parent of the bin/ this file is in; the environment variable AGENT_HUB_ROOT can override it. What
+    the platform writes for later (hook commands and the like) names it through hub_bin()/sh_py(), at the moment it
+    is written
   - settings: <config>/hub.json (instance directory, see below)
   - instance directory (docs/design/new-user.md 3.1): the user's own things in three parts -- config (hub.json,
     registry, schedule.yaml…; the config repo), data (digest, todo, review-log, reflect…; not in git, relies on
@@ -42,6 +45,7 @@ import json
 import os
 import pathlib
 import re
+import shlex
 import sys
 
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
@@ -113,12 +117,14 @@ def config() -> dict:
 
 def path(value: str | None, base: pathlib.Path | None = None) -> pathlib.Path | None:
     """Expand ~; a relative path is taken from base (by default the config directory hub.json is in; in the old layout
-    that is the hub root). `.secrets/<name>` always means the platform's secrets directory (secrets_dir()), wherever
-    hub.json is."""
+    that is the hub root). `.secrets` / `.secrets/<name>` always mean the platform's secrets directory (secrets_dir()),
+    and `.state` / `.state/<name>` the hub's run state (STATE, in the main checkout), wherever hub.json is."""
     if not value:
         return None
-    if base is None and value.startswith(".secrets/"):
-        return secrets_dir() / value[len(".secrets/"):]
+    if base is None:
+        for mark, where in ((".secrets", secrets_dir), (".state", lambda: STATE)):
+            if value == mark or value.startswith(mark + "/"):
+                return where() / value[len(mark) + 1:]
     p = pathlib.Path(os.path.expanduser(value))
     return p if p.is_absolute() else (base or config_dir()) / p
 
@@ -530,13 +536,42 @@ def launch(script: pathlib.Path | str) -> list[str]:
     return [sys.executable, str(script)] if is_platform_python(script) else [str(script)]
 
 
-def sh_py(path_expr: str) -> str:
+_SH_PLAIN = re.compile(r"[A-Za-z0-9._/+@%=:,-]+")
+
+
+def sh_path(p: pathlib.Path | str) -> str:
+    """A path as the platform writes it into a shell string it installs for later (hook commands and the like):
+    `~/<rest>` when it is under the home folder and needs no quoting (the form every hook was written in so far, so
+    such a machine's installed text stays the same, character for character), else the absolute path, quoted when it
+    has to be."""
+    p = pathlib.Path(p)
+    try:
+        rest = str(p.relative_to(pathlib.Path.home()))
+    except ValueError:
+        rest = ""
+    if rest not in ("", ".") and _SH_PLAIN.fullmatch(rest):
+        return f"~/{rest}"
+    return shlex.quote(str(p))
+
+
+def hub_bin(name: str) -> str:
+    """One of the hub's programs, written into a shell string that runs later (a hook): the main checkout's bin/ (a
+    linked worktree's copy goes away with the worktree), resolved now. A hook names the hub's real location at the
+    moment it is written; after the hub moves, the installers write it again (sync-local-setup at a project's session
+    start, `agenthub config apply` for the hub's own sessions and every onboarded project)."""
+    return sh_path(MAIN / "bin" / name)
+
+
+def sh_py(script: pathlib.Path | str) -> str:
     """A platform Python script written into a shell string (hook commands and the like): on macOS it is called directly
     as before (output identical to before, character for character); on other systems the py from the same folder is
-    put in front. path_expr is the path as written in shell (e.g. ~/agent-hub/bin/hubbus)."""
+    put in front. script is the script's path (written with sh_path), or a path already written as shell."""
+    if isinstance(script, pathlib.PurePath):
+        expr = sh_path(script)
+        return expr if sys.platform == "darwin" else f"{sh_path(script.parent / 'py')} {expr}"
     if sys.platform == "darwin":
-        return path_expr
-    return f"{path_expr.rsplit('/', 1)[0]}/py {path_expr}"
+        return script
+    return f"{script.rsplit('/', 1)[0]}/py {script}"
 
 
 def login_shell() -> str:
