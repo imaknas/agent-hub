@@ -119,7 +119,9 @@ if [ -n "${AGENT_HUB_EVENTS:-}" ]; then
   fi
   rm -f "$OUT/.$stamp.prompt.err"
 fi
-"$HUB/bin/py" "$HUB/bin/llm.py" run "${AGENT_JOB_POINT:-agent-job}" --prompt-file "$RUN_PROMPT" "${MCP_ARGS[@]}" >"$raw" 2>"$raw.err"
+# ${a[@]+"${a[@]}"}: bash < 4.4 (macOS's /bin/bash, which the background run uses) takes an empty array for an unbound
+# variable under set -u, and a connectors job died right here, its status left at running (10-27 to 11-01)
+"$HUB/bin/py" "$HUB/bin/llm.py" run "${AGENT_JOB_POINT:-agent-job}" --prompt-file "$RUN_PROMPT" ${MCP_ARGS[@]+"${MCP_ARGS[@]}"} >"$raw" 2>"$raw.err"
 rc=$?
 [ "$RUN_PROMPT" = "$PROMPT" ] || rm -f "$RUN_PROMPT"
 

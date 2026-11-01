@@ -20,12 +20,9 @@ import unittest
 ROOT = pathlib.Path(__file__).resolve().parents[1]
 BIN = ROOT / "bin"
 PY = os.environ.get("AGENT_HUB_PYTHON") or sys.executable
+# bash < 4.4 (macOS) takes an empty array under `set -u` for an unbound variable: a connectors job (no sealing argument)
+# used to die at the llm.py line with its status left at "running"
 BASH = "/bin/bash"
-_v = subprocess.run([BASH, "-c", "echo ${BASH_VERSINFO[0]}.${BASH_VERSINFO[1]}"], capture_output=True, text=True).stdout
-OLD_BASH = tuple(int(x) for x in _v.strip().split(".")) < (4, 4)
-# Found while pinning this: on bash < 4.4 an empty array under `set -u` is an unbound variable, so a connectors job
-# (no sealing argument) dies at the llm.py line and its status stays "running"
-crashes_on_old_bash = unittest.expectedFailure if OLD_BASH else (lambda f: f)
 
 RECORDER = """import json, os, sys
 rec = {"argv": sys.argv[1:], "env": {k: os.environ.get(k) for k in
@@ -84,7 +81,6 @@ class RunAgentJobArgs(unittest.TestCase):
         self.assertEqual(rec["argv"][-2:], ["--", "--strict-mcp-config"])
         self.assertEqual(rec["env"]["LLM_AUTH"], "token")
 
-    @crashes_on_old_bash
     def test_connectors_job_gets_no_extra_arguments(self):
         rec = self.run_job("job-a", str(self.tmp / "ws"), LLM_AUTH="subscription")
         self.assertEqual(rec["argv"], ["run", "agent-job", "--prompt-file", str(self.prompt)])
@@ -97,7 +93,6 @@ class RunAgentJobArgs(unittest.TestCase):
         self.assertEqual(rec["argv"][-2:], ["--", "--strict-mcp-config"])
         self.assertEqual(rec["env"]["AGENT_JOB_ALLOW"], allow)
 
-    @crashes_on_old_bash
     def test_the_runtime_credential_variable_is_not_inherited(self):
         rec = self.run_job("job-a", str(self.tmp / "ws"), LLM_AUTH="subscription")
         self.assertIsNone(rec["env"]["CLAUDE_CODE_OAUTH_TOKEN"])
