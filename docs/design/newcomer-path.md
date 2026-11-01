@@ -231,8 +231,8 @@ and zh-Hant):
 and a key typed into the chat reaches the model provider. Both break platform rules: credentials live only in files
 outside version control and are never shown, and user-level settings change only on the owner's direct confirmation.
 Answers and keys travel separately:
-- `--questions` marks each question `"via": "chat"`, `"via": "page"` or `"via": "dialog"`. API keys and the
-  setup-token step (B4) are `page`. Consent is `dialog`: the yes to user-level registration (B5), installing system
+- `--questions` marks each question `"via": "chat"`, `"via": "page"` or `"via": "dialog"`. API keys are `page`.
+  The Claude setup token is neither: agent-hub never receives it (B4, "Credential"). Consent is `dialog`: the yes to user-level registration (B5), installing system
   software (B2), and the project roots (B5's allowlist).
 - For those, init starts a one-time local page on 127.0.0.1, at a random port with a random path, and **opens it in
   the user's browser itself** (`open` on macOS, `xdg-open` on Linux). It never prints the path. The agent gets only
@@ -240,7 +240,7 @@ Answers and keys travel separately:
   minutes.
   - The URL is never printed to init's output or written to files. It does pass as an argument to `open` /
     `xdg-open` and the browser, so a same-user process can read it with `ps` and race the user to submit.
-  - That is why the page carries **only secrets** (keys, the setup token). An agent that submits a key itself gains
+  - That is why the page carries **only secrets** (API keys). An agent that submits a key itself gains
     nothing it didn't have.
   - **Consent** is asked in a native dialog that init shows itself: `osascript -e 'display dialog …'` on macOS, `zenity`
     or `kdialog` on Linux, init's own terminal prompt otherwise. It covers the yes to user-level MCP registration (B5)
@@ -283,17 +283,19 @@ Which AI agent should agent-hub use for its own work (nightly tidy-up, the mailb
 - The platform's copy comes from nvm (the rule above). Claude Desktop's built-in copy doesn't count.
 - If `claude` from nvm is missing, init offers the steps (install nvm, then node, then `npm i -g` the CLI) and runs them
   on yes. All are user-level, nothing needs sudo. In story 2 the agent runs them for the user.
-- **Credential.** init runs `claude setup-token` and writes the token to the platform's token file (mode 600). That is
-  the documented route for unattended runs, and the owner's 10-24 decision.
+- **Credential.** The token from `claude setup-token` is the documented route for unattended runs, and the owner's
+  10-24 decision. **agent-hub never receives, writes or shows it** (decided 11-02): Claude Code's legal and compliance
+  page says developers "may not collect, store, or intermediate Claude.ai credentials or session tokens". init tells
+  the owner to run `claude setup-token` and save the token themselves with one line in their own shell
+  (`(umask 077; read -rs t && printf '%s\n' "$t" > ~/.claude/headless-oauth-token)`), then checks with one real
+  request. The platform still reads that file to start `claude -p` for scheduled work, as a shell profile would; the
+  docs don't say whether that counts as intermediating. Removing it entirely means the owner's shell or Claude's
+  settings `env` (which turns off claude.ai connectors in their own sessions too) or an API key billed separately.
+  The subscription login (`/login`) was ruled out: it expires too often for unattended work.
   - setup-token needs a Pro, Max, Ultra, Team or Enterprise plan. Without one, init says so and offers an API key
     through `agenthub llm setup` instead.
   - **Check:** init makes one real request with that token, the same check as `check-claude-login`. It never asks the
     user to "press Enter when logged in".
-  - init runs `claude setup-token` as its own subprocess and captures stdout. The token goes straight into the file
-    and is never echoed. When an agent ran init, the agent sees only init's output, never the token.
-  - **To verify before building:** whether `claude setup-token` can complete without typed input when started from
-    init (it opens a browser). If it needs typed input, the local page (B3) runs it in a terminal the page shows, or
-    offers the API-key route there.
 
 **Codex:**
 - Its preset (the command template, model names, how to check a login) lives in `modules/codex.yaml`. AGENTS.md
@@ -531,9 +533,8 @@ Once picked, the text goes in the README's first lines, the GitHub description, 
 3. **B4**: the agent step, the credential step, the Codex preset, `init --agent`. **Done 11-02**: init asks which
    agent the platform runs (offered from `install_info()` in runtime adapters and `runtime_preset` in modules:
    `runtime_claude`, `modules/codex.yaml`), offers the nvm-based install on a yes, and sets hub.json `runtime`;
-   once hub.json exists, the credential step runs. Claude: `claude setup-token` runs in the terminal and its token
-   is pasted into a hidden prompt, written mode 600 and checked with one real request (llm.py `login-check`), so it
-   works whether or not setup-token wants typed input. Codex: `codex login status`, else `codex login`. `--agent
+   once hub.json exists, the credential step runs. Claude: the owner makes and saves the token in their own shell (since
+   11-02; at first init took it in a hidden prompt), and init checks it with one real request (llm.py `login-check`). Codex: `codex login status`, else `codex login`. `--agent
    <name>` answers it; on an existing instance it re-runs only this step, offers llm setup, commits hub.json alone
    and applies the config. Nothing is installed or logged in without a yes on the terminal (`--yes` doesn't).
 4. **B6**: `agenthub connect` with layout detection, for the layouts that work today. **Done 11-02**: `bin/connect.py`
@@ -559,9 +560,8 @@ Once picked, the text goes in the README's first lines, the GitHub description, 
    doesn't go with either mode. Consent is `native_yes` (osascript with the question as an argument, zenity,
    kdialog; No by default, 10 minutes); a secret is `secret_page` (one page per value, random path never printed or
    logged, Host and Origin checked, one submission, 10 minutes). "Is there a screen" is an Aqua session on macOS,
-   DISPLAY or WAYLAND_DISPLAY on Linux; without one, both come back as `needs_user`. In agent mode the setup token is
-   pasted into the page after the user runs `claude setup-token` in a terminal (the app's own works); init doesn't run
-   it for them. A provider's model is one answer (`llm_model`) for every group, like `--llm-model`. Owner steps left
+   DISPLAY or WAYLAND_DISPLAY on Linux; without one, both come back as `needs_user`. The Claude setup token never goes through
+   init (B4, "Credential"): the agent gets it as `needs_user`. A provider's model is one answer (`llm_model`) for every group, like `--llm-model`. Owner steps left
    over keep `init-unfinished`, so the same `--answers` carries on. `install.sh --for-agent` never prompts and never
    runs sudo; on a Mac with a screen it opens Apple's installer window and returns `needs_user`. README has the
    pasteable prompt and the agent's steps; `README.zh-Hant.md` is new.
@@ -587,8 +587,6 @@ Once picked, the text goes in the README's first lines, the GitHub description, 
 
 ## Open questions
 
-- Can `claude setup-token` finish without typed input when started by init (B4)? If not, the local page shows a
-  terminal for it.
 - Do Claude Desktop and the Codex app support MCP elicitation? Without it, B5 relies on the root allowlist alone.
 - Does the ChatGPT/Codex desktop app run Codex hooks and read AGENTS.md like the CLI? It matters only once the native
   Codex adapter exists. Story 4 works without it, through B5's MCP.

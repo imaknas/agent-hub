@@ -47,7 +47,7 @@ class ForAgent(unittest.TestCase):
         for qid in ("language", "owner", "workspace", "modules", "llm_model"):
             self.assertEqual(qs[qid]["via"], "chat", qid)
         self.assertNotIn("agent", qs, "answered: not asked again")
-        for qid, via in (("install_agent", "dialog"), ("agent_token", "page"), ("register_mcp", "dialog"),
+        for qid, via in (("install_agent", "dialog"), ("agent_token", "user"), ("register_mcp", "dialog"),
                          ("llm_key", "page"), ("connect_root", "dialog")):
             self.assertEqual(qs[qid]["via"], via, qid)
             self.assertNotIn("default", qs[qid], "the owner answers it directly, the agent has nothing to fill in")

@@ -8,7 +8,7 @@
  "Personal assistant: question reconciliation, channel leases": "個人助理:問題對帳、通道租借",
  "Platform-run capabilities (cap-runner): sandboxed projects borrow a capability with agenthub cap-run --cap": "平台代跑(cap-runner):sandbox 裡的專案用 hub-run --cap 借能力",
  "issue a new application key in the Backblaze console and write it into .secrets/b2-env": "Backblaze 後台重發 application key,寫進 .secrets/b2-env",
- "run claude setup-token and write the new token into ~/.claude/headless-oauth-token (chmod 600)": "跑 claude setup-token,把新的 token 寫進 ~/.claude/headless-oauth-token(chmod 600)",
  "Nightly: removes Docker containers labelled org.testcontainers that are more than a day old": "每晚:移除標了 org.testcontainers、超過一天的 Docker 容器",
- "background work and agent-hub's decisions through Codex; your Codex chats reach the mailbox by asking agent-hub's tools (no letters shown in the chat by themselves yet)": "背景工作和 agent-hub 的判斷交給 Codex;你的 Codex 對話要透過 agent-hub 的工具去看信箱(信還不會自己出現在對話裡)"
+ "background work and agent-hub's decisions through Codex; your Codex chats reach the mailbox by asking agent-hub's tools (no letters shown in the chat by themselves yet)": "背景工作和 agent-hub 的判斷交給 Codex;你的 Codex 對話要透過 agent-hub 的工具去看信箱(信還不會自己出現在對話裡)",
+ "run claude setup-token, then save the new token yourself: (umask 077; read -rs t && printf '%s\\n' \"$t\" > ~/.claude/headless-oauth-token) and paste it": "執行 claude setup-token,再自己把新的 token 存起來:(umask 077; read -rs t && printf '%s\\n' \"$t\" > ~/.claude/headless-oauth-token),然後貼上 token"
 }

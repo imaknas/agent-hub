@@ -27,4 +27,4 @@ secrets:
   warn_days: 30
   backup: false
   why: "made by claude setup-token (llm.py's default credential); if lost, run it again for a new one: no backup needed"
-  rotate: "run claude setup-token and write the new token into ~/.claude/headless-oauth-token (chmod 600)"
+  rotate: "run claude setup-token, then save the new token yourself: (umask 077; read -rs t && printf '%s\\n' \"$t\" > ~/.claude/headless-oauth-token) and paste it"

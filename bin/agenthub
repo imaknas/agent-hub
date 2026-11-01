@@ -409,41 +409,33 @@ def agent_login_check() -> str | None:
 
 
 def agent_credential(choice: str, presets: dict[str, dict]) -> None:
-    """The chosen agent's credential for unattended runs. A pasted token goes straight into its file (never shown,
-    mode 600); a tool's own login is run in the terminal. Without a terminal, only what to do is printed."""
+    """The chosen agent's credential for unattended runs. agent-hub never receives, writes or shows one: a token the
+    tool prints is made and saved by the owner, in their own shell, where the tool's terms want it; a tool's own login
+    runs in the terminal. init then checks the agent answers, with one real request."""
     if choice == "none":
         return
     info = presets[choice]
     cred = info.get("credential") or {}
     if not agent_found(info) and UI().acts:   # nothing to log in to yet: install_agent said how to install it
         return
-    if cred.get("kind") == "pasted-token":
+    if cred.get("kind") == "own-token":
         f = pathlib.Path(os.path.expanduser(cred["file"]))
         if not f.exists():
-            cmd = " ".join(cred["command"])
-            print(_("{label} runs unattended with a long-lived token from `{command}` (needs {needs}).",
-                    label=info["label"], command=cmd, needs=cred.get("needs", "")))
-            if UI().terminal:
-                if not UI().consent("agent_token_command", _("Run `{command}` now?", command=cmd)):
-                    print(_("Later: run `{command}`, then agenthub init --agent {name} to paste the token", command=cmd,
-                            name=choice))
-                    return
-                subprocess.run(cred["command"], env=agent_env())
-                token = UI().secret("agent_token", _("Paste the token it printed (it isn't shown): "))
-            else:   # the token is printed where only the owner sees it, then pasted into init directly (B3)
-                token = UI().secret("agent_token", _("{label}'s token: run `{command}` in a terminal (the app's own "
-                                                     "terminal works), then paste the token it prints",
-                                                     label=info["label"], command=cmd))
-            if not UI().acts:
+            UI().needs_user("agent_token", _(
+                "{label} runs agent-hub's background work with a one-year token that you make and save yourself "
+                "(agent-hub never sees it; needs {needs}). In a terminal (the app's own terminal works): run `{command}` "
+                "and sign in, then run `{store}` and paste the token it printed. Then: agenthub init --agent {name}",
+                label=info["label"], needs=cred.get("needs", ""), command=" ".join(cred["command"]),
+                store=cred["store"], name=choice))
+            if not (UI().acts and UI().terminal and UI().consent("agent_token_saved", _("Saved it? Check that {label} "
+                                                                                     "answers now?",
+                                                                                     label=info["label"]))):
                 return
-            if not token:
-                print(_("No token pasted; nothing written. Later: agenthub init --agent {name}", name=choice))
+            if not f.exists():
+                print(_("{file} isn't there yet. Later: agenthub init --agent {name}", file=f, name=choice))
                 return
-            f.parent.mkdir(parents=True, exist_ok=True)
-            f.touch(mode=0o600)
-            f.chmod(0o600)
-            f.write_text(token + "\n")
-            print(_("✓ token written to {file}", file=f))
+        if not UI().acts:
+            return
         if (why := agent_login_check()):
             print(_("⚠️ {label} did not answer with that login: {reason}", label=info["label"], reason=why[:300]))
         else:

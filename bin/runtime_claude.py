@@ -966,7 +966,10 @@ def install_info() -> dict:
             "install": ['[ -s "$HOME/.nvm/nvm.sh" ] || curl -fsSL https://raw.githubusercontent.com/nvm-sh/nvm/v0.40.3/install.sh | bash',
                         '. "$HOME/.nvm/nvm.sh" && nvm install --lts && nvm alias default "lts/*" '
                         '&& npm install -g @anthropic-ai/claude-code'],
-            "credential": {"kind": "pasted-token", "command": ["claude", "setup-token"], "file": str(_token_file()),
+            # made and saved by the owner in their own shell: agent-hub never receives or writes the token (Claude
+            # Code's terms: a third-party tool may not collect, store or intermediate Claude.ai credentials)
+            "credential": {"kind": "own-token", "command": ["claude", "setup-token"], "file": str(_token_file()),
+                           "store": "(umask 077; read -rs t && printf '%s\\n' \"$t\" > ~/.claude/headless-oauth-token)",
                            "needs": _("a Claude Pro, Max, Ultra, Team or Enterprise plan")},
             # user scope: ~/.claude.json, which the Desktop app's Code tab reads too
             "mcp_register": ["claude", "mcp", "add", "--scope", "user", "agenthub", "--", "{agenthub}", "mcp"],
