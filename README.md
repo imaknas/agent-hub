@@ -9,10 +9,15 @@
 
 **Many projects, run by AI agents. Each one remembers, and you decide.**
 
-Install (macOS or Linux), then answer a few questions:
+Install (macOS or Linux):
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/imaknas/agent-hub/main/install.sh | sh
+```
+
+When it finishes, open a new terminal and answer a few questions:
+
+```bash
 agenthub init
 ```
 
