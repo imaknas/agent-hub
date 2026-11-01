@@ -917,7 +917,7 @@ def tilde(p: str) -> str:
 
 def new_doc(name: str, workspace: str, origin: str, memory_bare: str) -> dict:
     """The default registry entry at onboarding."""
-    return {"v": 1, "name": name,
+    return {"v": 2, "name": name,
             "paths": {"workspace": tilde(workspace), "memory_bare": tilde(memory_bare), "origin": origin},
             "memory": True, "privacy": {"reflection": "include"}, "push_on_merge": False,
             "mailbox": {"escalate": True},
@@ -925,7 +925,7 @@ def new_doc(name: str, workspace: str, origin: str, memory_bare: str) -> dict:
 
 
 def header() -> str:
-    return "# " + _("Project registry (schema v1, see bin/registry.py)") + "\n"
+    return "# " + _("Project registry (schema v2, see bin/registry.py)") + "\n"
 
 
 def cmd_add(name: str, workspace: str, origin: str, memory_bare: str, extra: str | None = None) -> int:

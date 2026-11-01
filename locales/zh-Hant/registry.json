@@ -70,7 +70,6 @@
  "cannot read the YAML: {error}": "YAML 讀不了:{error}",
  "paths must be written in block format, one key per line (`paths:`, then `workspace: …` indented on the next line): the reader that does not use YAML got {got}, YAML has {want}": "paths 要寫成一行一個 key 的區塊格式(`paths:` 下一行縮排 `workspace: …`):不用 YAML 的讀法讀到 {got},YAML 是 {want}",
  "after:/before: form a cycle, these jobs would wait for each other forever: {cycle}": "after:/before: 繞了一圈,這幾個 job 會永遠互等:{cycle}",
- "Project registry (schema v1, see bin/registry.py)": "專案登錄(schema v1,見 bin/registry.py)",
  "{name} is already in the registry ({file}); not overwriting": "{name} 已經在登錄裡({file}),不覆蓋",
  "the registry entry is invalid; not written: {errors}": "登錄不合格,不寫入:{errors}",
  "registry: {file}": "登錄:{file}",
@@ -144,5 +143,6 @@
  " (runtime.test → a full tier)": "(runtime.test → full 測試層)",
  "{file}: not rewritten (a form this command does not know; edit it by hand)": "{file}:沒改寫(這個指令不認得的寫法;請手動改)",
  "no v1 registry files to rewrite": "沒有要改寫的 v1 登錄檔",
- "(dry-run; add --apply to rewrite and commit them)": "(dry-run;加 --apply 改寫並 commit)"
+ "(dry-run; add --apply to rewrite and commit them)": "(dry-run;加 --apply 改寫並 commit)",
+ "Project registry (schema v2, see bin/registry.py)": "專案登錄(schema v2,見 bin/registry.py)"
 }
