@@ -218,7 +218,7 @@ cat "$CRED" >/dev/null 2>&1 || echo cred-blocked
 cat /etc/hosts >/dev/null && echo system-read
 kill -0 "$OUTSIDE_PID" 2>/dev/null || echo signal-blocked
 /usr/bin/security list-keychains >/dev/null 2>&1 || echo keychain-blocked
-python3 - <<'PY'
+"$PY" - <<'PY'
 import socket
 def bind(port):
     s = socket.socket()
@@ -299,7 +299,8 @@ class Conformance(unittest.TestCase):
                              "other": {"name": "other", "paths": {"workspace": str(other)}}}}
         # no runtime in the fixture (it would be under services_root): the workspace stands in for it
         env = {**os.environ, "RT": str(ws), "WS": str(ws), "BUS": str(bus), "TOP": str(tmp), "OTHER": str(other),
-               "CRED": str(cred), "PORT": str(port), "OUTSIDE_PID": str(outside.pid)}
+               "CRED": str(cred), "PORT": str(port), "OUTSIDE_PID": str(outside.pid),
+               "PY": sys.executable}   # the platform's Python: never rely on a python3 on PATH (AGENTS.md)
         r = subprocess.run([sys.executable, "-c", RUNNER, __import__("json").dumps(args)], capture_output=True,
                            text=True, env=env)
         got = set(r.stdout.split())
