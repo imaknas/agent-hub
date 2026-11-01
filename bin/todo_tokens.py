@@ -3,8 +3,8 @@ docs/design/i18n.md "Machine formats").
 
 The to-do block of a project's STATE.md, todo.md and the review-log label the registrar reads back are machine formats:
 other scripts and the owner's assistant parse them. Each has a zh-Hant set (the v1 contracts) and an English one. The
-STATE.md sets are agent-ops-specs' Principal Handoff Acts 0.4 profiles (acts/profiles.json): `zh-hant`, whose
-principal_tag is the configured owner tag, and `en`, whose principal_tag is left at the profile's default `owner`
+STATE.md sets are agent-ops-specs' Principal Handoff Acts Markdown profiles (profiles.json, the same in 0.4 and 0.5):
+`zh-hant`, whose principal_tag is the configured owner tag, and `en`, whose principal_tag is left at the profile's default `owner`
 whoever the owner is (so an English STATE.md reads the same on every instance). bin/acts_md.py builds the profiles
 from these sets and reads the binding.
 **Readers accept both sets whatever the settings** (patterns() below); **writers emit one set**: the STATE.md block in

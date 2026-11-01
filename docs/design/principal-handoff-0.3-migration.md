@@ -240,3 +240,72 @@ places, both 0.4's intent:
   from before the `ask-` change), which an agent then copied onto the line. That key is not bound, so the line is
   raised under the key derived from its text. The project's own item stays open at the assistant with the same text.
   The assistant can relate the two (`same_as`), or the owner settles one as `already_done`.
+
+## 0.5 (11-01)
+
+agent-ops-specs published Principal Handoff 0.5 (tag `principal-handoff-0.5`, 20912e3, release-2026-11-01b), a
+restructuring release: verifiable evidence moves to the Evidence module and approvals to the Criteria module, the Acts
+Markdown binding becomes a document of its own (`acts-markdown/SPEC.md`; 0.4's Acts §4-§7 are its §2-§5), and the
+terms digest no longer covers the extension's version. Its request to agent-hub is m11011606-30dd (with the section
+map in m11011633-caf3 and m11011639-c3b2). agent-hub is a requester and the Acts registrar; it records no approvals.
+What agent-hub does now:
+
+- **Reads 0.3, 0.4 and 0.5; sends what hub.json `principal_handoff.send_version` says** (`"0.4"` or `"0.5"`, default
+  `"0.4"`; `contracts/hub.v1.schema.json`, config-check). Core §14 configures the version per role, project and
+  extension; one principal side serves every project here, so one value covers all of them and both extensions. Send,
+  the registrar and the built-in owner side make their records in that version. A record made in a newer version
+  than the setting (made before the setting went back) is converted down when the bridge sends it.
+- **Mixed versions (core §14).** Records are kept as they were sent, and converted to 0.5 each time they are folded
+  (`bin/ph_wire.py` `convert`, the spec's `core/conformance/convert.json` vectors): `ph` and `ext` change, `id` is kept,
+  `evidence.proof` is removed, and a settlement's `terms_digest` becomes the 0.5 digest of the held need record whose
+  digest in the source version equals it (kept when none does: the settlement is then stale). A 0.3 settlement, which
+  has no digest, gets that of its need record at its terms_rev (the 0.3 to 0.4 step); without one held it is valid and
+  never stale by digest. A 0.3 or 0.4 record is validated as its 0.5 form: 0.5 only relaxes 0.4 (core §14's change
+  log), so the difference is Evidence and Criteria content, which agent-hub ignores either way.
+- **The terms digest** covers `acts` / `decisions`, not `acts/0.5` (core §4). `ph_wire.terms_digest(need, version)`
+  computes it as a version defines it. The built-in owner side's settlements carry the digest of the version they are
+  sent in, over the need record converted to it (in 0.4 it was computed over a 0.3 need record's own `ext`).
+- **A conforming requester (core §12).** `bin/ph_records.py` validates records against the spec's 0.5 schemas (vendored)
+  and rules, deduplicates them by (origin, type, id), so that a record never displaces one of another type (core
+  §10), and folds each item's settlement view. The registrar's ledger is this fold: ts compare as instants, invalid
+  records are ignored and named in its log, and a settlement made on other terms at the same terms_rev is stale and
+  strikes nothing. Acts' and Decisions' `records.json` pass in full and `lifecycle.json` on the settlement view
+  (`tests/test_ph_records.py`). On the bus, a record whose event id (`rec:<ext>:<project>:<id>`) is already held by a
+  record of another type or origin is kept under that id plus `:<origin>:<type>`.
+- **Known keys (Acts Markdown §2 step 3).** A key the registrar holds a need record for but did not raise from a line:
+  an item the project raised itself (send, a lease handover). Those need records go out on the bus under the project,
+  and their settlements come back to the project, so the registrar holds them all, as the binding requires of the
+  deployment. A line carrying a known key is not raised, relinked or restamped, and is warned about every night until
+  an agent deletes the line or its key; a settlement of a known key strikes only lines whose text is the item's
+  latest terms; a reopening re-adds a line only for a bound key. The 0.5 binding fixtures run with `known` and
+  `bound` (`tests/test_acts_conformance.py`, 0.4's still too).
+- **Evidence and proofs.** agent-hub implements neither Evidence nor Criteria. Its claims and notes carry no verifiable
+  entries, and a received record's module content is never a reason to ignore it. `record-publish` refuses a record
+  carrying `evidence.proof`, which 0.5 senders never emit.
+- The mapping tables above hold for 0.5 with `ph` and `ext` changed.
+
+The fixtures (core, acts, decisions, acts-markdown, JSON only) are vendored byte-identical, in the tag's layout, in
+`contracts/vendor/agent-ops-specs/principal-handoff-0.5/`; 0.4's stay while 0.4 is sent and received.
+
+The live dry run of the registrar, main against this branch (both against the real bus and `.state`), differed in one
+line, 0.5's intent: one project's STATE.md line carries a key its own session raised (`task-` prefix, from before the
+`ask-` change; the case in 0.4's section above). Under 0.4 it was raised again under the key derived from its text;
+under 0.5 the key is known, so the line is not raised and is warned about. `registrar-warned.json` was untouched and
+gen-todo's output byte-identical.
+
+Not done yet:
+
+- Records sent under a project's former name (before a rename) are not read under its new name (`hubbus records`
+  matches the project name), for bound and known keys alike.
+- Two records with the same (`ext` version, project, id), type and origin but different content: the bus keeps the
+  first, so core §10's "the greater canonical form" is chosen only among those it holds.
+- hubbus's question views (open questions, inbox) read Decisions records with their own rules, not through
+  `ph_records`' settlement view.
+
+What the principal side does for each value of the setting:
+
+- `"0.4"`: it receives `acts/0.4` and `decisions/0.4` from every project, and may keep sending 0.3, 0.4 or 0.5 to any of
+  them: agent-hub reads all three. A 0.4 settlement's `terms_digest` is 0.4's (over `acts/0.4`).
+- `"0.5"`: it receives `acts/0.5` and `decisions/0.5` (0.5 digests are its own business: requesters send none), never
+  with `evidence.proof`; ids are unchanged, so records already sent in 0.4 remain the same records. It may still send
+  any of the three versions.
