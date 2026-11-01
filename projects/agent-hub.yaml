@@ -103,7 +103,8 @@ jobs:
   cwd: hub
 # the waiting report (docs/design/test-waiting.md B7): the last 7 days of agent sessions' waiting on tests (transcripts,
 # through the runtime's port) and the test runner's run logs (read as each project) → <data>/test-waiting/<day>.json,
-# shown on the status page; zero LLM. After the nightly test runs (04:00), which it counts
+# shown on the status page; zero LLM. Its window ends at that day's midnight, so a night's 04:00 test runs are in the
+# next night's report
 - name: test-waiting
   at: 04:45
   background: true
