@@ -52,7 +52,8 @@ agent-hub is meant for anyone, with any coding agent, any LLM, any key.
 - Never put personal data in code, tests or public docs (`tests/test_personal_boundary.py` checks mechanically); what is
   specific to this deployment goes in the instance directory's `config/AGENTS.local.md`. **Not a single private project
   name may appear in the platform repo** (examples use generic names); the list is in the instance's
-  `config/private-names.txt`, and the commit gate passes it in for the check (a deployment without the list skips it).
+  `config/private-names.txt`, listed in hub.json `tests.config_inputs`, and the commit gate passes it in for the check
+  (a deployment that lists none skips it; a listed file that is missing fails the gate).
 - **Python 3.13 minimum, always the platform's Python `bin/py`**: a uv-managed venv (3.13 + PyYAML; on a new machine run
   `bin/setup-python`, `--check` only verifies). A script's first line is
   `#!/bin/sh -c exec${IFS}"${0%/*}/py"${IFS}"$0"${IFS}"$@"` (macOS only); shell scripts, services and registry `run:`
@@ -463,11 +464,16 @@ file).
   (`bin/commit_title.py`); release notes are generated from the commits with `cliff.toml` (git-cliff, the same file as
   the assistant's repo), with no separately maintained CHANGELOG. Other projects: with `commits: conventional` in the
   registry, `merge-branch` checks before merging and the rules file carries the explanation automatically
-- **Manual edits (scripts, docs)**: made only by a dedicated session opened in the hub checkout on the hub machine,
-  which is responsible for commit+push. A session of another project that finds a problem in agent-hub only reports it
-  (`agenthub send --to agent-hub`, or tells the user) and does not change it directly: with two sessions changing the
-  same working tree, each commit picks up the other's half-finished files. In a shared working tree always use
-  `git commit -- <paths>`, never `git add -A`
+- **Manual edits (scripts, docs)**: made only by agent-hub's own sessions on the hub machine, **each in a linked
+  worktree of the hub, merged with `agenthub merge-branch`** (docs/design/test-waiting.md A1). The main checkout is the
+  running platform (the scheduler, services and hooks execute its files), so it holds only merged, tested commits and
+  no session edits in it. In a worktree the platform's code is the branch's, while `.hub-home`, `.state` and `.logs`
+  are the main checkout's (`hubconf`, `hubpaths.sh`); from there the scheduler and `agenthub config apply` refuse and
+  `registry.refresh` writes nothing. Branch commits run the full commit gate; `merge-branch` runs it again on the
+  rebased tree (agent-hub's `runtime.test`; a rebase that changed nothing is a hit); push only when the owner says.
+  A session of another project that finds a problem in agent-hub only reports it (`agenthub send --to agent-hub`, or
+  tells the user) and does not change it directly. Commit only your own paths (`git commit -- <paths>`), never
+  `git add -A`
 - **Version-controlled files written by scripts** (the config repo's `projects/<name>.yaml`
   (onboard/rename/manifest.update), `mirror-list.txt`, `schedule.yaml`, `hub.json` (schedulectl set-model)): the script
   that writes them commits only those files itself with `bin/commit-hub-files.sh`, so `onboard-project.sh` is safe to

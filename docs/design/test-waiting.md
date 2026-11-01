@@ -648,7 +648,8 @@ replaces; each step only adds to the ones before it.
    today (`projects-and-repos.md` section 9): the platform's git in project repos (`project_git.py`), per-repo tool
    caches, memory reads, `paths` as a security field, hooks. Still open there, outside this design: the letter sender
    (`bus-sender.md`), runtime settings files a sandboxed job can write, the scheduler's per-job timeout.
-1. **A1, in the shared checkout, small:** characterization tests for everything step 2 changes (`test-gate`,
+1. **A1, in the shared checkout, small** (done 11-01: characterization tests `266b42d`, the change `17d38ee`; this
+   rule in AGENTS.md merged from a worktree with `merge-branch`): characterization tests for everything step 2 changes (`test-gate`,
    `post-commit`, `merge-branch`, registry validation of `runtime`, `hubconf`'s layout); then A1 prerequisite 1 (a
    linked worktree finds the main checkout's instance and state; explicit overrides; `bin/run-tests` setting only
    `AGENT_HUB_ROOT`; `tests.config_inputs`; agent-hub's `runtime.test`; hooks unchanged). Then every agent-hub session
