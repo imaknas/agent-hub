@@ -318,6 +318,41 @@ class RegistrarFlow(unittest.TestCase):
             self.assertEqual(notes, {want["note"]})
 
 
+# Lines carrying the key of an item the project raised outside the document (send, a lease handover): the key is
+# not bound, and the registrar holds the item's need record.
+#
+#   qa  an owner line carrying such a key            → raised under the key derived from its text, restamped
+#   qb  such a key settled, the line's text differs  → the line deleted
+#   qc  such a key settled, the line's text the same → the line deleted
+#   qd  such a key reopened, no line carries it      → a line added from restore_text, then raised as a new item
+KQA, KQB, KQC, KQD = "ask-qa-0000000001", "ask-qb-0000000002", "ask-qc-0000000003", "ask-qd-0000000004"
+KNOWN_SCENES = {
+    "qa": {"state": state(owner("Measure the desk") + marker(KQA)), "raised_by_project": {KQA: "Measure the desk"}},
+    "qb": {"state": state(owner("Call the bank about the card") + marker(KQB), agent("Other")),
+           "raised_by_project": {KQB: "Call the bank"}, "settle": [("s-qb", KQB, "done", "Call the bank")]},
+    "qc": {"state": state(owner("Water the plants") + marker(KQC), agent("Other")),
+           "raised_by_project": {KQC: "Water the plants"}, "settle": [("s-qc", KQC, "done", "Water the plants")]},
+    "qd": {"state": state(agent("Other")), "raised_by_project": {KQD: "Pick up the keys"},
+           "settle": [("s-qd", KQD, "reopened", "Pick up the keys")]},
+}
+
+
+class RegistrarKnownKeys(unittest.TestCase):
+    def test_keys_raised_outside_the_document(self):
+        with tempfile.TemporaryDirectory() as d:
+            env = Env(pathlib.Path(d), KNOWN_SCENES)
+            r = env.run()
+            self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
+            kqa = key("qa", "Measure the desk")
+            self.assertEqual(env.outputs("qa"), [("raised", kqa)])
+            self.assertIn(owner("Measure the desk") + marker(kqa), env.state("qa"))
+            self.assertNotIn("Call the bank", env.state("qb"))
+            self.assertNotIn("Water the plants", env.state("qc"))
+            kqd = key("qd", "Pick up the keys")
+            self.assertIn(owner("Pick up the keys") + marker(kqd), env.state("qd"))
+            self.assertEqual(env.outputs("qd"), [("raised", kqd)], "the re-added line is then raised as a new item")
+
+
 # An English-content instance (contracts/state-todo.v2.md): the same steps, the English token set written; pm is an
 # English instance with an older zh-Hant line, which keeps its tag and gets the English stamp.
 EN = todo_tokens.tokens("en")
