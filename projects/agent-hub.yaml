@@ -47,7 +47,6 @@ jobs:
 - name: registrar
   # moved back from the assistant module to the core on 10-29: runs whether the owner side is the assistant or the
   # built-in one (tool-agnostic.md)
-  legacy_name: assistant/knas-tasks
   at: 03:00
   after:
   - librarian

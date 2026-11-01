@@ -1,8 +1,8 @@
 {
  "gen-index-roster: the project registry is empty ({dir})": "gen-index-roster: 專案登錄是空的({dir})",
- "| Project | Path (hub machine) |": "| 專案 | 路徑(mini) |",
- "Idea sandboxes (projects the assistant opens to explore ideas, registered as {type}):": "想法沙盒(Muninn 替想法開的探討用專案,登錄 {type}):",
- "| Idea | Path (hub machine) |": "| 想法 | 路徑(mini) |",
+ "| Project | Path (hub machine) |": "| 專案 | 路徑(hub 主機) |",
+ "Idea sandboxes (projects the assistant opens to explore ideas, registered as {type}):": "想法沙盒({assistant} 替想法開的探討用專案,登錄 {type}):",
+ "| Idea | Path (hub machine) |": "| 想法 | 路徑(hub 主機) |",
  "## Project roster": "## 專案名冊",
  "gen-index-roster: the roster is unchanged": "gen-index-roster: 名冊沒有變化",
  "gen-index-roster: roster updated ({n} {n:project|projects})": "gen-index-roster: 名冊已更新({n} 個專案)",

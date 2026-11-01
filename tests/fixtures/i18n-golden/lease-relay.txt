@@ -1,17 +1,17 @@
 === deny discuss
-這是唯讀的深談(discuss)租約,不能用 NotebookEdit。需要改東西就寫進交接,讓 Knas 決定。
+這是唯讀的深談(discuss)租約,不能用 NotebookEdit。需要改東西就寫進交接,讓 Alex 決定。
 === deny work
-這個租約不能用 NotebookEdit(可以讀、改這個資料夾裡的檔案、問過 Knas 才能跑指令)。
+這個租約不能用 NotebookEdit(可以讀、改這個資料夾裡的檔案、問過 Alex 才能跑指令)。
 === question no answer
-Knas 現在沒有回答這個問題。用一般文字問他,不要再用提問工具重試。
+Alex 現在沒有回答這個問題。用一般文字問他,不要再用提問工具重試。
 === web deny
-Knas 拒絕了這個網址。不要重試同一個網址;需要的話用文字跟 Knas 說明為什麼要讀它。
+Alex 拒絕了這個網址。不要重試同一個網址;需要的話用文字跟 Alex 說明為什麼要讀它。
 === command deny
-Knas 拒絕了這個指令。不要重試同一個指令;用文字跟他說明。
+Alex 拒絕了這個指令。不要重試同一個指令;用文字跟他說明。
 === action deny
-Knas 拒絕了這個動作。不要重試同一個動作;用文字跟他說明。
+Alex 拒絕了這個動作。不要重試同一個動作;用文字跟他說明。
 === web None
-沒有人核准這個網址(5 分鐘內沒回)。不要重試同一個網址;需要的話用文字跟 Knas 說明為什麼要讀它。
+沒有人核准這個網址(5 分鐘內沒回)。不要重試同一個網址;需要的話用文字跟 Alex 說明為什麼要讀它。
 === command None
 沒有人核准這個指令(5 分鐘內沒回)。不要重試同一個指令;用文字跟他說明。
 === action None
@@ -23,9 +23,9 @@ Knas 拒絕了這個動作。不要重試同一個動作;用文字跟他說明�
 === handle_call crash
 {"behavior": "deny", "message": "權限轉接出錯(RuntimeError('boom')),先不要用這個工具。"}
 === show_file shown
-已經給 Knas 看了:r.png(image/png,9 bytes)。 False
+已經給 Alex 看了:r.png(image/png,9 bytes)。 False
 === show_file no runner
-沒送出去:連不到平台(runner),先用文字跟 Knas 說檔案在哪。 True
+沒送出去:連不到平台(runner),先用文字跟 Alex 說檔案在哪。 True
 === show_file refused
 沒送出去:why True
 === show_file error only

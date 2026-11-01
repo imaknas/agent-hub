@@ -293,7 +293,7 @@ has them too, and before open source that is a leak just the same); the rules ar
 names, machine names, the home directory paths of the two machines, account names (the actual patterns are in the
 test).
 - In programs (strings, identifiers) an occurrence fails, with exceptions in an allowlist (e.g. `hubbus` accepting the
-  `knas` alias is part of the protocol, but the value should be read from `owner.aliases`, so the allowlist should soon
+  owner's old alias is part of the protocol, but the value should be read from `owner.aliases`, so the allowlist should soon
   be empty).
 - Decision records in comments ("decided by the owner on 10-24", written with the name) first get a baseline of the
   current state: the count per file **may only go down**. Rewriting them as "the owner decided" or moving them into

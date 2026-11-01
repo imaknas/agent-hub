@@ -68,7 +68,7 @@ rename-project: 連不到 <TMP>/remotes/nope.git
 exit 1
 --- stdout
 --- stderr
-rename-project: mini 上舊的 bare repo 不在,或新名稱的路徑已經存在
+rename-project: hub 主機上舊的 bare repo 不在,或新名稱的路徑已經存在
 
 === dry-run
 exit 0
@@ -79,7 +79,7 @@ rename-project: alpha → beta
                           origin (native) → (native)
                           memory ~/git-origin/alpha-memory.git → ~/git-origin/beta-memory.git
   mirror-list.txt         (native) → (native)
-  mini                    mv ~/git-origin/alpha-memory.git → beta-memory.git
+  hub 主機                    mv ~/git-origin/alpha-memory.git → beta-memory.git
                           mv ~/.memory-copies/alpha → ~/.memory-copies/beta(origin 指向新 bare repo)
                           mv .state/alpha.sha → beta.sha
                           mirrors/(native).git → (native).git(如果名稱有變)
@@ -97,7 +97,7 @@ rename-project: zeta → zeta2
                           origin git@github.com:o/zeta.git → <TMP>/remotes/o/zeta2.git
                           memory ~/git-origin/zeta-memory.git → ~/git-origin/zeta2-memory.git
   mirror-list.txt         git@github.com:o/zeta.git → <TMP>/remotes/o/zeta2.git
-  mini                    mv ~/git-origin/zeta-memory.git → zeta2-memory.git
+  hub 主機                    mv ~/git-origin/zeta-memory.git → zeta2-memory.git
                           mv ~/.memory-copies/zeta → ~/.memory-copies/zeta2(origin 指向新 bare repo)
                           mv .state/zeta.sha → zeta2.sha
                           mirrors/zeta.git → zeta2.git(如果名稱有變)
@@ -115,7 +115,7 @@ rename-project: alpha → beta
                           origin (native) → (native)
                           memory ~/git-origin/alpha-memory.git → ~/git-origin/beta-memory.git
   mirror-list.txt         (native) → (native)
-  mini                    mv ~/git-origin/alpha-memory.git → beta-memory.git
+  hub 主機                    mv ~/git-origin/alpha-memory.git → beta-memory.git
                           mv ~/.memory-copies/alpha → ~/.memory-copies/beta(origin 指向新 bare repo)
                           mv .state/alpha.sha → beta.sha
                           mirrors/(native).git → (native).git(如果名稱有變)
@@ -133,13 +133,13 @@ rename-project: alpha → beta
                           origin (native) → (native)
                           memory ~/git-origin/alpha-memory.git → ~/git-origin/beta-memory.git
   mirror-list.txt         (native) → (native)
-  mini                    mv ~/git-origin/alpha-memory.git → beta-memory.git
+  hub 主機                    mv ~/git-origin/alpha-memory.git → beta-memory.git
                           mv ~/.memory-copies/alpha → ~/.memory-copies/beta(origin 指向新 bare repo)
                           mv .state/alpha.sha → beta.sha
                           mirrors/(native).git → (native).git(如果名稱有變)
   本機                    remote mini → <TMP>/home/git-origin/beta-memory.git
                           mv <TMP>/home/workspace/alpha → <TMP>/home/workspace/beta + git worktree repair
-[mini] bare repo / ~/.memory-copies / checkpoint / mirror 已改名
+[hub 主機] bare repo / ~/.memory-copies / checkpoint / mirror 已改名
 [本機] auto memory 帶到新路徑(<TMP>/home/.claude)
 注意:這個專案如果有專案範圍的 MCP server(claude mcp list),設定是跟著舊路徑存的,要在新資料夾重新加
 [本機] remote / 資料夾 / worktree 已更新

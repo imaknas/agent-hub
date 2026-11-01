@@ -1,5 +1,5 @@
 === work_ready
-demo 沒有開 work 模式(登錄的 enforce.work;要 Knas 同意才加)
+demo 沒有開 work 模式(登錄的 enforce.work;要 Alex 同意才加)
 === start_proc not resumable
 [["state", {"state": "running", "pid": 4242, "resumed": false, "detail": "之前的對話紀錄已經不在(還沒說過話,或保留期限過了),從新的對話開始"}]]
 === check_attachments
@@ -63,7 +63,7 @@ demo 有深談正在回答、等回覆、在終端機或正在收回
 === http bad mode
 400 {"v": 2, "error": "bad_request", "detail": "mode 只能是 discuss 或 work"}
 === http work not allowed
-400 {"v": 2, "error": "work_not_allowed", "detail": "demo 沒有開 work 模式(登錄的 enforce.work;要 Knas 同意才加)"}
+400 {"v": 2, "error": "work_not_allowed", "detail": "demo 沒有開 work 模式(登錄的 enforce.work;要 Alex 同意才加)"}
 === http file 404
 404 {"v": 2, "error": "not_found", "detail": "沒有這個檔案(或已經過了保留期限)"}
 === http sandbox bad name
@@ -73,7 +73,7 @@ demo 有深談正在回答、等回覆、在終端機或正在收回
 === http upgrade bad rename
 400 {"v": 2, "error": "bad_request", "detail": "rename 要是字串"}
 === http mode busy
-409 {"v": 2, "error": "busy", "detail": "正在回答或等 Knas 回覆,等這一輪結束再切換"}
+409 {"v": 2, "error": "busy", "detail": "正在回答或等 Alex 回覆,等這一輪結束再切換"}
 === http rename busy
 409 {"v": 2, "error": "busy", "detail": "demo 有深談正在回答、等回覆、在終端機或正在收回,等它停下來再改名"}
 === http upgrade busy

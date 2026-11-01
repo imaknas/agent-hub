@@ -283,5 +283,17 @@ class RuntimeGolden(unittest.TestCase):
         self.check("llm")
 
 
+_unpin = None
+
+
+def setUpModule():
+    global _unpin
+    _unpin = golden_lang.pin_names()
+
+
+def tearDownModule():
+    _unpin()
+
+
 if __name__ == "__main__":
     unittest.main()

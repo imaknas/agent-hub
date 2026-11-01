@@ -1,6 +1,6 @@
 {
  "sync-local-setup: {dir} has no .agent-memory, not an onboarded project; skipping": "sync-local-setup: {dir} 沒有 .agent-memory,不是 onboard 過的專案,跳過",
- "⚠️ This project has moved to the hub machine ({target}, moved from the laptop on {date}). This is the old copy kept on the laptop as a backup;\ndo not work here: ask the user to close this session and open the folder on the hub machine over SSH ({server}) from their coding agent instead.": "⚠️ 這個專案已經搬到 mini({target},{date} 搬的)。這裡是 MBP 上留著當備份的舊副本,\n不要在這裡做事:請告訴使用者關掉這個 session,改用 Claude Desktop 透過 SSH({server})開 mini 上的那個資料夾。",
+ "⚠️ This project has moved to the hub machine ({target}, moved from the laptop on {date}). This is the old copy kept on the laptop as a backup;\ndo not work here: ask the user to close this session and open the folder on the hub machine over SSH ({server}) from their coding agent instead.": "⚠️ 這個專案已經搬到 hub 主機({target},{date} 搬的)。這裡是 筆電 上留著當備份的舊副本,\n不要在這裡做事:請告訴使用者關掉這個 session,改用 Claude Desktop 透過 SSH({server})開 hub 主機上的那個資料夾。",
  "sync-local-setup: this runtime has no rules file (hub.json runtime.default); the managed block is not written": "sync-local-setup: 這個執行環境沒有規則檔(hub.json runtime.default),受管區塊不寫",
  "sync-local-setup: hub-runtime could not say where the rules file is; the managed block was not updated": "sync-local-setup: hub-runtime 問不到規則檔要寫到哪,受管區塊沒有更新",
  "sync-local-setup: RULES lists {name}, but {rule} is not there": "sync-local-setup: RULES 登記了 {name},但找不到 {rule}",

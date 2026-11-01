@@ -14,7 +14,9 @@ Code holds the English text (the msgid). Each script is its own domain with its 
 Lookup: the catalog of `hubconf.lang_ui()`; a missing entry (or language en) gives the msgid itself. With keyword
 arguments the result is `str.format`ted, so placeholders are `{name}` (literal braces then `{{ }}`); without them the
 text is returned as is. Translations keep exactly the msgid's placeholders (tests/test_i18n_catalog.py), except plural
-choices, which a language without plural forms (zh-Hant) leaves out.
+choices, which a language without plural forms (zh-Hant) leaves out, and NAMES: where the English says "the owner" or
+"the assistant", a translation may write {owner} / {assistant} instead, filled with the configured names (hub.json
+owner.tag, assistant.name), so no catalog carries a person's name.
 
 Plurals: `{n:problem|problems}` is the first form when n == 1, else the second; it prints no number, so the count is
 written next to it: `_("{n} {n:problem|problems} found", n=n)`. A verb that agrees goes into the choice too:
@@ -79,9 +81,31 @@ class _Formatter(string.Formatter):
 _format = _Formatter().format
 
 
+# placeholders a translation may add although its msgid doesn't have them: the configured names
+NAMES = ("owner", "assistant")
+
+
+def names(text: str, kw: dict) -> dict[str, str]:
+    """The NAMES this text uses that the caller didn't pass, with their configured values."""
+    want = [n for n in NAMES if n not in kw and "{" + n + "}" in text]
+    if not want:
+        return {}
+    if str(ROOT / "bin") not in sys.path:
+        sys.path.insert(0, str(ROOT / "bin"))
+    import hubconf
+    get = {"owner": hubconf.owner_tag, "assistant": hubconf.assistant_name}
+    return {n: get[n]() for n in want}
+
+
 def translate(name: str, msgid: str, kw: dict, language: str | None = None) -> str:
     text = catalog(name, language or lang()).get(msgid, msgid)
-    return _format(text, **kw) if kw else text
+    extra = names(text, kw)
+    if kw:
+        return _format(text, **extra, **kw)
+    # unformatted text keeps its other braces (a usage text's JSON examples): only the names are filled in
+    for n, v in extra.items():
+        text = text.replace("{" + n + "}", v)
+    return text
 
 
 def languages() -> list[str]:

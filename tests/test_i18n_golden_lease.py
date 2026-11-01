@@ -418,5 +418,17 @@ class Mcp(Golden):
         self.check("mcp_server", dump(out, t).replace(sys.executable, "<PY>"))
 
 
+_unpin = None
+
+
+def setUpModule():
+    global _unpin
+    _unpin = golden_lang.pin_names()
+
+
+def tearDownModule():
+    _unpin()
+
+
 if __name__ == "__main__":
     sys.exit(unittest.main())

@@ -7,8 +7,8 @@ sync-local-setup: <TMP>/ws/plain 沒有 .agent-memory,不是 onboard 過的專�
 $ sync-local-setup.sh --quiet <TMP>/ws/moved
 [exit 0]
 --- stdout
-⚠️ 這個專案已經搬到 mini(mini:~/workspace/moved,<DATE> 搬的)。這裡是 MBP 上留著當備份的舊副本,
-不要在這裡做事:請告訴使用者關掉這個 session,改用 Claude Desktop 透過 SSH(hubhost)開 mini 上的那個資料夾。
+⚠️ 這個專案已經搬到 hub 主機(mini:~/workspace/moved,<DATE> 搬的)。這裡是 筆電 上留著當備份的舊副本,
+不要在這裡做事:請告訴使用者關掉這個 session,改用 Claude Desktop 透過 SSH(hubhost)開 hub 主機上的那個資料夾。
 --- stderr
 
 $ sync-local-setup.sh <TMP>/ws/proj

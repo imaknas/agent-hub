@@ -113,7 +113,7 @@ can only be replaced by a new record.
   ack marks the corresponding handoff delivered (it disappears from `muninn handoffs`): while both transports coexist,
   whoever acks first takes it; send the ack only once agent-hub has written it durably. When switching from v1, start
   from the cursor read the first time, not from 0.
-- **Principal identifier**: `person:knas`, Muninn itself is `muninn`; agent-hub's hub.json must use the same.
+- **Principal identifier**: `person:<owner>`, Muninn itself is `muninn`; agent-hub's hub.json must use the same.
 - **Behaviour change (in effect)**: v1's `drop --task`, like v2 acts `withdrawn`, no longer settles it directly when
   only this project wanted it; the owner is asked instead.
 - **What phase 3 (agent-hub) has to do**: the bridge switches to v2 (sending records, pull + ack, cursor from the first
@@ -132,7 +132,7 @@ implemented as the Acts registrar, and the bridge only moving things.
 The interface on the bus (internal to agent-hub; both sides write to this):
 
 - New event type `record`: `payload = {"v": 1, "record": <0.3 record>}`. Going to Muninn, `to_project` = the owner
-  address (`knas`); coming from Muninn, `to_project` = the record's `project`, `source` = the owner address. Event id =
+  address (an alias from `owner.aliases`); coming from Muninn, `to_project` = the record's `project`, `source` = the owner address. Event id =
   `rec:<ext>:<project>:<record id>`, so a resend is a no-op (core §10's deduplication scope).
 - Query: `hubbus records --project P [--ext acts/0.3] [--type settled,reopened] [--pending]` prints a JSON array
   (replacing `open-handoffs` for the registrar); `--pending` = those this project has not `hubbus done` yet. After
@@ -150,7 +150,7 @@ Split of work (proposal):
 | Part | Who |
 |---|---|
 | `bin/hubbus`: `record` event, `records` query, `send` translated into records, how inbox shows records, bridge v2 | the Agent Hub session (hubbus is its) |
-| `hub.json` gets `principal` (`person:knas`), `contracts/hub.v1.schema.json` | this session |
+| `hub.json` gets `principal` (`person:<owner>`), `contracts/hub.v1.schema.json` | this session |
 | `knas-tasks.py` → Acts registrar (relink, raise, amend, reconcile→claim, withdrawn without claim, `r:`/`a:`/`c:` ids, terms_rev) | this session |
 | librarian: settlements applied mechanically by the registrar; notes and Decisions settled judged by the model (prompt changes) | this session (after switching to librarian.py) |
 | agent-instructions: `drop --task` = no longer needed, Muninn will ask the owner; explanation of Decisions replies | this session |
@@ -221,7 +221,7 @@ m11010359-3de9 (reply m11010550-9894). What agent-hub does now:
   project in the version it last sent (m11011416-bcb1). The bridge also stopped acking a page that held a record it
   refused, since that record would otherwise be lost. Every `settled` the built-in owner side writes carries a
   `terms_digest` (core §5.3), checked against the spec's vectors. Decisions 0.4 approvals are not implemented: the
-  reference deployment leaves approvals to the assistant alone (Knas, 11-01), and `owner.py` has no approval command
+  reference deployment leaves approvals to the assistant alone (the owner, 11-01), and `owner.py` has no approval command
   and settles only when no assistant is configured.
 - **The `en` set keeps the profile's default `principal_tag`, `owner`**, whoever the owner is. An English STATE.md then
   reads the same on every instance. The zh-Hant set's tag stays the configured owner tag.

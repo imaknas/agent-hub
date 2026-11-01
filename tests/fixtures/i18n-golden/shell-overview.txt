@@ -32,7 +32,7 @@ origin:(native)
 (沒有登記任何服務)
 
 -- STATE.md --
-(讀自 mini 的 memory-only clone:<TMP>/copies/gamma/STATE.md)
+(讀自 hub 主機的 memory-only clone:<TMP>/copies/gamma/STATE.md)
 # gamma copy
 
 --- stderr

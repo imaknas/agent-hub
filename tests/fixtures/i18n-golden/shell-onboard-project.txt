@@ -14,7 +14,7 @@ onboard-project: 未知參數:--bogus
 exit 1
 --- stdout
 --- stderr
-onboard-project: 連不上 mini(hubbox)。這支腳本會在 mini 上建 bare repo,連不上就不做任何事——等 mini 恢復連線再重跑,這次呼叫沒有任何副作用。
+onboard-project: 連不上 hub 主機(hubbox)。這支腳本會在 hub 主機上建 bare repo,連不上就不做任何事——等 hub 主機恢復連線再重跑,這次呼叫沒有任何副作用。
 
 === new folder, --no-remote
 exit 0
@@ -26,8 +26,8 @@ exit 0
 sync-local-setup (stand-in): alpha
 [5-6/11] .claude/settings.local.json hook 跟 CLAUDE.local.md 區塊已就位(不進版控)
 [7/11] 外層 repo 沒有任何變更、不 commit
-[8/11] mini 上已建 bare repo,agent-memory 分支已推送
-[9/11] mini 上已 clone librarian 用的 memory 副本到 ~/.memory-copies/alpha
+[8/11] hub 主機上已建 bare repo,agent-memory 分支已推送
+[9/11] hub 主機上已 clone librarian 用的 memory 副本到 ~/.memory-copies/alpha
 [10/11] 沒有外部 remote,跳過 mirror-backup 登記
 登錄:<TMP>/hub/projects/alpha.yaml
 commit-hub-files (stand-in): register alpha (onboard-project.sh)
@@ -52,7 +52,7 @@ onboard-project: 'alpha' 已經登記在專案登錄(projects/alpha.yaml)——�
 exit 1
 --- stdout
 --- stderr
-onboard-project: mini 上已經有 gamma-memory.git(含 agent-memory 歷史)——這個名稱 onboard 過了。要把既有專案接回來(新機器、資料夾不見、重新 clone)請用 bin/recover-project.sh gamma [路徑]
+onboard-project: hub 主機上已經有 gamma-memory.git(含 agent-memory 歷史)——這個名稱 onboard 過了。要把既有專案接回來(新機器、資料夾不見、重新 clone)請用 bin/recover-project.sh gamma [路徑]
 
 === origin onboarded under another name
 exit 1
@@ -64,7 +64,7 @@ onboard-project: 這個 repo(origin <TMP>/remotes/o/proj.git)已經以 'proj' �
 exit 1
 --- stdout
 --- stderr
-onboard-project: origin 目前指向 mini,這不該發生在新設計裡——這個專案可能是舊版 onboarding 遺留的,需要先手動處理
+onboard-project: origin 目前指向 hub 主機,這不該發生在新設計裡——這個專案可能是舊版 onboarding 遺留的,需要先手動處理
 
 === dirty working tree
 exit 1
@@ -82,16 +82,16 @@ onboard-project: agent-memory 分支已經存在(但 .agent-memory worktree 不�
 exit 1
 --- stdout
 --- stderr
-onboard-project: .agent-memory 已經存在,而且 mini 上也已經有對應的 bare repo(agent-memory 分支已推送)——這個專案應該已經 onboard 過了
+onboard-project: .agent-memory 已經存在,而且 hub 主機上也已經有對應的 bare repo(agent-memory 分支已推送)——這個專案應該已經 onboard 過了
 
 === resume after an interrupted run
 exit 0
 --- stdout
-(偵測到本機已完成前面的步驟,但 mini 上沒有對應、有實際內容的 bare repo——像是上次被中途打斷,接著從 mini 端繼續,不重做已完成的部分)
+(偵測到本機已完成前面的步驟,但 hub 主機上沒有對應、有實際內容的 bare repo——像是上次被中途打斷,接著從 hub 主機端繼續,不重做已完成的部分)
 [1/11] 前置條件檢查通過:alpha(--no-remote,維持純本機)
 [2-7/11] resume 模式,已在前一次呼叫完成,跳過
-[8/11] mini 上已建 bare repo,agent-memory 分支已推送
-[9/11] mini 上已 clone librarian 用的 memory 副本到 ~/.memory-copies/alpha
+[8/11] hub 主機上已建 bare repo,agent-memory 分支已推送
+[9/11] hub 主機上已 clone librarian 用的 memory 副本到 ~/.memory-copies/alpha
 [10/11] 沒有外部 remote,跳過 mirror-backup 登記
 登錄:<TMP>/hub/projects/alpha.yaml
 commit-hub-files (stand-in): register alpha (onboard-project.sh)
@@ -118,8 +118,8 @@ gh (stand-in): repo create o/zeta --public
 sync-local-setup (stand-in): zeta
 [5-6/11] .claude/settings.local.json hook 跟 CLAUDE.local.md 區塊已就位(不進版控)
 [7/11] 外層 repo 沒有任何變更、不 commit
-[8/11] mini 上已建 bare repo,agent-memory 分支已推送
-[9/11] mini 上已 clone librarian 用的 memory 副本到 ~/.memory-copies/zeta
+[8/11] hub 主機上已建 bare repo,agent-memory 分支已推送
+[9/11] hub 主機上已 clone librarian 用的 memory 副本到 ~/.memory-copies/zeta
 [10/11] 已登記進 mirror-backup 清單
 登錄:<TMP>/hub/projects/zeta.yaml
 [11/11] 已登記進 agent-hub 的專案登錄(projects/zeta.yaml),但 agent-hub 的 commit/push 失敗(見上面的警告)
@@ -151,8 +151,8 @@ exit 1
 sync-local-setup (stand-in): theta
 [5-6/11] .claude/settings.local.json hook 跟 CLAUDE.local.md 區塊已就位(不進版控)
 [7/11] 外層 repo 沒有任何變更、不 commit
-[8/11] mini 上已建 bare repo,agent-memory 分支已推送
-[9/11] mini 上已 clone librarian 用的 memory 副本到 ~/.memory-copies/theta
+[8/11] hub 主機上已建 bare repo,agent-memory 分支已推送
+[9/11] hub 主機上已 clone librarian 用的 memory 副本到 ~/.memory-copies/theta
 [10/11] 沒有外部 remote,跳過 mirror-backup 登記
 --- stderr
 登錄不合格,不寫入:type 只能是 project 或 idea

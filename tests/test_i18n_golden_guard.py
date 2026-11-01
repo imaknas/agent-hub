@@ -55,5 +55,17 @@ class Golden(unittest.TestCase):
         self.assertEqual(text, f.read_text())
 
 
+_unpin = None
+
+
+def setUpModule():
+    global _unpin
+    _unpin = golden_lang.pin_names()
+
+
+def tearDownModule():
+    _unpin()
+
+
 if __name__ == "__main__":
     sys.exit(unittest.main())

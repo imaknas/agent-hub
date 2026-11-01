@@ -318,7 +318,7 @@ def owner_address() -> str:
 
 
 def owner_addresses() -> set[str]:
-    """The owner's address and aliases (old letters use knas; both are accepted)."""
+    """The owner's address and its aliases from hub.json (old letters may use an alias; all are accepted)."""
     return {owner_address(), *get("owner.aliases", [])}
 
 

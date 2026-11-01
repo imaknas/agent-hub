@@ -338,7 +338,7 @@ class Dispatch(unittest.TestCase):
         self.assertEqual(self.handled, [])
         self.assertIn("t-next", self.m.claimed(self.c, ["t-next"]))
         q = self.c.execute("SELECT * FROM events WHERE id='t-next:loop'").fetchone()
-        self.assertEqual(q["to_project"], self.m.KNAS)
+        self.assertEqual(q["to_project"], self.m.OWNER_ADDRESS)
 
     # --- hook ---
     def test_hook_does_not_hand_claimed_letter_to_session(self):

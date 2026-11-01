@@ -38,6 +38,11 @@ def placeholders(text: str) -> set[str]:
     return {f for f, _spec, _conv in fields(text)}
 
 
+def added_names(msgid: str) -> set[tuple[str, str, None]]:
+    """i18n.NAMES a translation may use where its msgid says "the owner" / "the assistant"."""
+    return {(n, "", None) for n in i18n.NAMES if n not in placeholders(msgid)}
+
+
 def sources():
     for f in sorted((ROOT / "bin").rglob("*")):
         if not f.is_file() or "__pycache__" in f.parts or f.name == "i18n.py":
@@ -176,7 +181,7 @@ class Catalogs(unittest.TestCase):
                     cat = i18n.catalog(dom, lang)
                     if msgid not in cat:
                         problems.append(f"{where}: no {lang} entry for {msgid[:60]!r}")
-                    elif fields(cat[msgid]) != fields(msgid):
+                    elif fields(cat[msgid]) - added_names(msgid) != fields(msgid):
                         problems.append(f"{where}: {lang} placeholders differ for {msgid[:60]!r}")
         for f, text in shell_sources():
             rel, used = f.relative_to(ROOT), seen.setdefault(f.name, set())
@@ -194,7 +199,7 @@ class Catalogs(unittest.TestCase):
                     cat = i18n.catalog(f.name, lang)
                     if msgid not in cat:
                         problems.append(f"{where}: no {lang} entry for {msgid[:60]!r}")
-                    elif fields(cat[msgid]) != fields(msgid):
+                    elif fields(cat[msgid]) - added_names(msgid) != fields(msgid):
                         problems.append(f"{where}: {lang} placeholders differ for {msgid[:60]!r}")
         for f in sorted((ROOT / "templates").glob("*.html")):
             rel, used = f.relative_to(ROOT), seen.setdefault(f.name, set())
@@ -212,7 +217,7 @@ class Catalogs(unittest.TestCase):
                     cat = i18n.catalog(f.name, lang)
                     if msgid not in cat:
                         problems.append(f"{where}: no {lang} entry for {msgid[:60]!r}")
-                    elif fields(cat[msgid]) != fields(msgid):
+                    elif fields(cat[msgid]) - added_names(msgid) != fields(msgid):
                         problems.append(f"{where}: {lang} placeholders differ for {msgid[:60]!r}")
         # module descriptions (modules/*.yaml `description:`, shown by `agenthub modules`): domain "modules"
         used = seen.setdefault("modules", set())

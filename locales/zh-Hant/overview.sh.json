@@ -3,6 +3,6 @@
  "(no services registered)": "(沒有登記任何服務)",
  "Project: {name}\nPath: {path}\norigin: {origin}": "專案:{name}\n路徑:{path}\norigin:{origin}",
  "(launchctl status cannot be checked on this machine, or it is not managed by launchd)": "(這台機器上無法查 launchctl 狀態,或不是用 launchd 管理)",
- "(read from the hub machine's memory-only clone: {file})": "(讀自 mini 的 memory-only clone:{file})",
+ "(read from the hub machine's memory-only clone: {file})": "(讀自 hub 主機的 memory-only clone:{file})",
  "(no STATE.md readable on this machine: tried {state} and {copy}, neither exists)": "(這台機器上讀不到 STATE.md——試過 {state} 跟 {copy},都不存在)"
 }

@@ -32,7 +32,7 @@ $ agenthub doctor    # launchd, problems
 ✗ agent 登入(headless token):沒有
     → 重跑 `claude setup-token` 寫進 <TMP>/home/.claude/headless-oauth-token
 ! agent 登入(~/.claude/.credentials.json):沒有
-    → 在 mini 的終端機跑一次 claude 讓它更新,或重新 /login
+    → 在 hub 主機的終端機跑一次 claude 讓它更新,或重新 /login
 ✗ LLM provider anthropic:沒有 key:<TMP>/secrets/anthropic-api-key 不在(bin/hub llm set-key 寫進去)
     → 看 hub.json llm.providers;key 用 bin/hub llm set-key <provider>
 ✓ 判斷點的模型分組:fast→(沒設),standard→anthropic,strong→(沒設)
@@ -71,7 +71,7 @@ $ agenthub doctor    # launchd, all fine
 ✓ memory 缺口、週報的對話統計:可以用
 ✓ agent 登入(headless token):有
 ! agent 登入(~/.claude/.credentials.json):沒有
-    → 在 mini 的終端機跑一次 claude 讓它更新,或重新 /login
+    → 在 hub 主機的終端機跑一次 claude 讓它更新,或重新 /login
 ✓ 判斷點交給執行環境 claude(沒有 llm.providers;schedulectl models 看每個點的模型)
 ✓ 排程器(local.agent-hub-scheduler):已載入
 ✓ 看門狗(local.agent-hub-scheduler-watchdog):已載入

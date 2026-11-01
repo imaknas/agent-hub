@@ -23,5 +23,5 @@ $ sync-all-memory.sh
 --- stderr
 
 --- log
-[<T>] 連不到 mini,這輪只在本機 commit、不 push
-[<T>] alpha: 已 commit(連不到 mini,先不 push) 新的 memory
+[<T>] 連不到 hub 主機,這輪只在本機 commit、不 push
+[<T>] alpha: 已 commit(連不到 hub 主機,先不 push) 新的 memory

@@ -43,15 +43,15 @@ StreamEvent(type='error', data={'error': 'agent_login', 'detail': '專案 sessio
 === classify_exit crash
 StreamEvent(type='error', data={'error': 'process_crashed', 'detail': 'exit 1:segfault'})
 === resume_command
-('~/agent-hub/bin/lease-resume 0000', '在 mini 的終端機貼上:會接回同一段對話(Claude Code)。談完回 Muninn 按「收回」做交接。')
+('~/agent-hub/bin/lease-resume 0000', '在 hub 主機的終端機貼上:會接回同一段對話(Claude Code)。談完回 Sage 按「收回」做交接。')
 === auth_env token missing
 (None, '沒有 <TMP>/home/.claude/headless-oauth-token(預設用 headless token;要用訂閱登入就宣告 auth: subscription)')
 === credential subscription
-('訂閱登入(launchd)', 'claude 的訂閱登入', '在 mini 上登入(`claude` → /login)', None, None, None)
+('訂閱登入(launchd)', 'claude 的訂閱登入', '在 hub 主機上登入(`claude` → /login)', None, None, None)
 === credential token
 ('headless token', 'headless token', '重跑 `claude setup-token` 寫進 <TMP>/home/.claude/headless-oauth-token', '一年', None, None)
 === credential None
-('.credentials.json(SSH 用)', '~/.claude/.credentials.json', '在 mini 的終端機跑一次 claude 讓它更新,或重新 /login', None, 'SSH 底下的 claude 用的', '.credentials.json:沒有 refreshTokenExpiresAt,略過到期檢查')
+('.credentials.json(SSH 用)', '~/.claude/.credentials.json', '在 hub 主機的終端機跑一次 claude 讓它更新,或重新 /login', None, 'SSH 底下的 claude 用的', '.credentials.json:沒有 refreshTokenExpiresAt,略過到期檢查')
 === complete: timeout
 (False, 'error', '超過 30 秒')
 === complete: not found

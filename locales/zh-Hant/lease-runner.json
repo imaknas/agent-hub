@@ -1,5 +1,5 @@
 {
- "{project} has no work mode (enforce.work in its registry entry; added only with the owner's consent)": "{project} 沒有開 work 模式(登錄的 enforce.work;要 Knas 同意才加)",
+ "{project} has no work mode (enforce.work in its registry entry; added only with the owner's consent)": "{project} 沒有開 work 模式(登錄的 enforce.work;要 {owner} 同意才加)",
  "The earlier conversation is gone (nothing was said yet, or it is past retention); starting a new conversation": "之前的對話紀錄已經不在(還沒說過話,或保留期限過了),從新的對話開始",
  "attachments must be a list of at most {n}": "attachments 要是最多 {n} 個的 list",
  "each attachment needs name, media_type, data (base64)": "每個附件要有 name、media_type、data(base64)",
@@ -33,7 +33,7 @@
  "body is not JSON": "body 不是 JSON",
  "client_msg_id is required, and at least one of text or attachments": "client_msg_id 必填;text 跟 attachments 至少要有一個",
  "mode must be discuss or work": "mode 只能是 discuss 或 work",
- "answering or waiting for the owner's reply; switch after this turn": "正在回答或等 Knas 回覆,等這一輪結束再切換",
+ "answering or waiting for the owner's reply; switch after this turn": "正在回答或等 {owner} 回覆,等這一輪結束再切換",
  "name and purpose must be strings": "name、purpose 要是字串",
  "to must be the new name": "to 要是新名稱",
  "{why}; rename once it stops": "{why},等它停下來再改名",

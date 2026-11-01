@@ -1,5 +1,5 @@
 {
- "used by the connector jobs and the assistant": "Upwork job、Muninn 用的",
+ "used by the connector jobs and the assistant": "connector job、{assistant} 用的",
  "used by all scheduled jobs and leases": "所有排程跟租借用的",
  "all scheduled jobs and leases will fail": "所有排程跟租借都會失敗",
  "every call with this login will fail": "這種登入的呼叫都會失敗",

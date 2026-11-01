@@ -42,12 +42,12 @@ class Questions(unittest.TestCase):
         hp.start()
         self.addCleanup(hp.stop)
         self.c = m.db()
-        self.knas = m.KNAS
+        self.owner = m.OWNER_ADDRESS
 
     def ask(self, qid, project="proj", days_ago=5, text="Which plan should we use?", kind="question"):
         ts = (NOW - datetime.timedelta(days=days_ago)).isoformat().replace("+00:00", "Z")
         self.c.execute("INSERT INTO events(id, ts, type, source, to_project, ref, payload) VALUES(?,?,?,?,?,?,?)",
-                       (qid, ts, "message", project, self.knas, None, json.dumps({"type": kind, "text": text})))
+                       (qid, ts, "message", project, self.owner, None, json.dumps({"type": kind, "text": text})))
 
     def open_ids(self, project=None):
         return [r["id"] for r in self.m.open_questions(self.c, project)]
@@ -61,7 +61,7 @@ class Questions(unittest.TestCase):
     def test_open_means_not_answered_not_closed_not_a_handover(self):
         self.ask("q-open")
         self.ask("q-answered")
-        self.m.publish(self.c, "ans-1", "message", self.knas, "proj", "q-answered", {"type": "info", "text": "Use A"})
+        self.m.publish(self.c, "ans-1", "message", self.owner, "proj", "q-answered", {"type": "info", "text": "Use A"})
         self.ask("lease-abc-q-0")          # a question from a discussion handover: the assistant handles it
         self.ask("p-1", kind="progress")   # not a question
         self.ask("q-other", project="other")
@@ -134,14 +134,14 @@ class QuestionRecords(Questions):
         ts = (NOW - datetime.timedelta(days=days_ago)).isoformat().replace("+00:00", "Z")
         rec = {"ph": "0.3", "ext": "decisions/0.3", "id": f"r:{qid}", "type": "raised", "origin": "requester",
                "by": f"project:{project}", "key": qid, "project": project, "ts": ts, "terms": {"text": text}, "terms_rev": 1}
-        self.m.publish_record(self.c, rec, project, self.knas)
+        self.m.publish_record(self.c, rec, project, self.owner)
         self.c.execute("UPDATE events SET ts=? WHERE id=?", (ts, self.m.record_event_id(rec)))
 
     def settle(self, qid, kind="settled", n=1):
         rec = {"ph": "0.3", "ext": "decisions/0.3", "id": f"{kind[0]}:{qid}:{n}", "type": kind, "origin": "principal",
                "by": "assistant", "key": qid, "project": "proj", "ts": "2026-10-25T12:00:00Z", "outcome": "decided",
                "answer": {"text": "use A"}, "terms_rev": 1, "authority": {"kind": "principal", "decider": "person:owner"}}
-        self.m.publish_record(self.c, rec, self.knas, "proj")
+        self.m.publish_record(self.c, rec, self.owner, "proj")
 
     def test_open_means_not_answered_not_closed_not_a_handover(self):
         self.ask("q-open")

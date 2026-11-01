@@ -4,7 +4,7 @@ $ <HUB>/bin/gen-todo.py <TMP>/data/todo.md
 todo.md: 3 項,3 個格式問題
   格式問題:beta:待辦沒標負責人或已完成未移除 `- [ ] 沒有標籤的一行`
   格式問題:beta:待辦沒標負責人或已完成未移除 `- [ ] 〔誰〕不認得的標籤`
-  格式問題:gamma:mini 上沒有 STATE.md
+  格式問題:gamma:hub 主機上沒有 STATE.md
 --- stderr
 
 === todo.md
@@ -34,7 +34,7 @@ todo.md: 3 項,3 個格式問題
 
 - beta:待辦沒標負責人或已完成未移除 `- [ ] 沒有標籤的一行`
 - beta:待辦沒標負責人或已完成未移除 `- [ ] 〔誰〕不認得的標籤`
-- gamma:mini 上沒有 STATE.md
+- gamma:hub 主機上沒有 STATE.md
 
 $ <HUB>/bin/check-state-todo.py <TMP>/copies/beta/STATE.md
 [exit 1]

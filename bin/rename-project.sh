@@ -16,7 +16,7 @@
 #   - neither the new path nor the new path on the hub machine exists yet
 #
 # Claude sessions open in that project must be closed first: once the folder moves, their working directory is gone.
-# With --apply, if any process still has its working directory in the old folder, it refuses outright (when ordal
+# With --apply, if any process still has its working directory in the old folder, it refuses outright (when a project
 # was renamed on 2026-09-27 this was not blocked, and an open session had its working directory moved away).
 #
 # Usage: rename-project.sh <old> <new> [--path <new local path>] [--origin <new URL>] [--apply]

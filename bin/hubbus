@@ -15,7 +15,7 @@ accepted by the owner on 2026-10-21).
   cursors(consumer, seq)
 Event types (to add one, have a reader first):
   message            a letter. to_project = the recipient address (a project name, agent-hub, or owner = into the
-                     personal assistant; the old alias knas is accepted too)
+                     personal assistant; old aliases in hub.json owner.aliases are accepted too)
                      payload: type(request|question|info|progress|done|handoff), text,
                               from_session (the sending session, only a hint), to_session (a reply first waits for
                               the asking session),
@@ -147,9 +147,8 @@ ASSISTANT_HOME = ASSISTANT_CLI.parents[2] if ASSISTANT_CLI else None   # <runtim
 ASSISTANT_API = hubconf.get("assistant.api")
 INGEST_TOKEN = hubconf.p("assistant.ingest_token")
 LOG = hubconf.BUS_LOG
-# the owner's address: new letters use owner, the old knas is still accepted (hub.json's owner.address/aliases)
+# the owner's address: new letters use owner, old aliases are still accepted (hub.json's owner.address/aliases)
 OWNER_ADDRESS = hubconf.owner_address()
-KNAS = OWNER_ADDRESS   # old name; new code uses OWNER_ADDRESS
 OWNERS = hubconf.owner_addresses()
 TYPES = ("request", "question", "info", "progress", "done", "task", "drop", "manifest.update")
 # manifest.update: a project sends its full registry YAML to the platform (--to agent-hub); registry.py apply-updates
@@ -160,7 +159,7 @@ OWNER_ALIAS = hubconf.owner_alias()                 # the address agents mail th
 # id prefix of letters taken in from handoffs (the bus already holds this format: can't change, or a resend would be
 # taken twice)
 HANDOFF_ID_PREFIX = "muninn-handoff-"
-KNAS_ONLY = ("task", "drop")   # the assistant's task registry: things only the owner can do, sent only to the owner
+OWNER_ONLY = ("task", "drop")   # the assistant's task registry: things only the owner can do, sent only to the owner
 # type sent to the owner → type the assistant receives. request = asks the owner to go do something = a task; only
 # ones he's to answer in words are question
 TO_MUNINN = {"request": "task", "task": "task", "question": "question", "info": "progress",
@@ -333,7 +332,7 @@ def projects() -> dict[str, pathlib.Path]:
 
 
 def canon(addr: str) -> str:
-    return KNAS if addr in OWNERS else addr
+    return OWNER_ADDRESS if addr in OWNERS else addr
 
 
 def outboxed(project: str | None) -> bool:
@@ -1080,7 +1079,7 @@ def publish_handoff(c, h: dict, known) -> str | None:
         p["reply_to"] = h["reply_to"]
         if orig is not None and payload(orig).get("from_session"):
             p["to_session"] = payload(orig)["from_session"]
-    if publish(c, f"{HANDOFF_ID_PREFIX}{hid}", "message", KNAS, proj, h.get("reply_to"), p):
+    if publish(c, f"{HANDOFF_ID_PREFIX}{hid}", "message", OWNER_ADDRESS, proj, h.get("reply_to"), p):
         log(_("handoff #{id} from {assistant} → {project}", assistant=ASSISTANT, id=hid, project=proj))
     return proj
 
@@ -1568,7 +1567,7 @@ def hold(c, r) -> None:
     c.execute("BEGIN IMMEDIATE")
     claim(c, [r], "held")
     text = payload(r).get("text", "")
-    publish(c, f"{r['id']}:loop", "message", hubconf.hub_project(), KNAS, r["id"],
+    publish(c, f"{r['id']}:loop", "message", hubconf.hub_project(), OWNER_ADDRESS, r["id"],
             {"type": "question", "text": _(
                 "The platform has already handled {rounds} rounds of the thread between {a} and {b}; going on may be "
                 "the two answering each other without end, so it stops here. Latest letter ({id}): {text}\n"
@@ -2008,12 +2007,12 @@ def send_letter(c, a, sender: str, session, here, boxed: bool = False, mid: str 
         refuse(_("hubbus: there is no address {to} (project names are in the project registry, {hub}, or {owners})",
                  to=a.to, hub=hubconf.hub_project(), owners="/".join(sorted(OWNERS))))
     p = {"type": a.type, "text": a.text, "from_session": session}
-    if a.type in KNAS_ONLY and a.to != KNAS:
+    if a.type in OWNER_ONLY and a.to != OWNER_ADDRESS:
         refuse(_("hubbus: {type} can only be sent to {alias}", type=a.type, alias=OWNER_ALIAS))
     if a.type == "drop" and not (a.task or a.question):
         refuse(_("hubbus: drop needs --task <key> or --question <id> (which task/question is no longer needed)"))
     if a.question:
-        if a.task or a.to != KNAS or a.type not in ("done", "drop"):
+        if a.task or a.to != OWNER_ADDRESS or a.type not in ("done", "drop"):
             refuse(_("hubbus: --question is only for a done/drop sent to {alias} (not together with --task)",
                      alias=OWNER_ALIAS))
         q = question_asked(c, a.question)
@@ -2263,7 +2262,7 @@ def cli() -> None:
                 out.append({"id": r.get("id") if isinstance(r, dict) else None, "event": None, "status": "invalid",
                             "errors": errs})
                 continue
-            eid, new = publish_record(c, r, r["project"], KNAS)
+            eid, new = publish_record(c, r, r["project"], OWNER_ADDRESS)
             out.append({"id": r["id"], "event": eid, "status": "accepted" if new else "duplicate"})
         c.execute("COMMIT")
         print(json.dumps(out, ensure_ascii=False))
