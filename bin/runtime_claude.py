@@ -955,6 +955,22 @@ def _creds_file() -> pathlib.Path:
     return pathlib.Path.home() / ".claude" / ".credentials.json"
 
 
+def install_info() -> dict:
+    """What `agenthub init`'s agent step needs to offer Claude Code (docs/design/newcomer-path.md B4): how to find it,
+    how to install it (through nvm only: the platform's one copy, kept current by update-claude), its credential for
+    unattended runs, and the settings that make it the platform's agent. The steps are shell lines run on the owner's
+    yes, user level only."""
+    return {"label": "Claude Code",
+            "gives": _("everything: session hooks, the mailbox in your sessions, background work"),
+            "find": "claude",
+            "install": ['[ -s "$HOME/.nvm/nvm.sh" ] || curl -fsSL https://raw.githubusercontent.com/nvm-sh/nvm/v0.40.3/install.sh | bash',
+                        '. "$HOME/.nvm/nvm.sh" && nvm install --lts && nvm alias default "lts/*" '
+                        '&& npm install -g @anthropic-ai/claude-code'],
+            "credential": {"kind": "pasted-token", "command": ["claude", "setup-token"], "file": str(_token_file()),
+                           "needs": _("a Claude Pro, Max, Ultra, Team or Enterprise plan")},
+            "settings": {"runtime": {"default": "claude"}, "modules": {"claude": True}}}
+
+
 def clean_env(env) -> dict:
     return {k: v for k, v in env.items() if k != TOKEN_VAR}
 

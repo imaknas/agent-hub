@@ -528,7 +528,14 @@ Once picked, the text goes in the README's first lines, the GitHub description, 
    period` (scheduler `missed_day`, registry, on for weekly-reflect and backup-verify), retention after a missed Sunday
    (`backup.retention_due`), the watchdog on every alert channel with a resume grace on Linux, the status page asking
    the same channel rules, doctor's sleep row (`pmset -g` sleep, or a battery on Linux), the README table.
-3. **B4**: the agent step, the credential step, the Codex preset, `init --agent`.
+3. **B4**: the agent step, the credential step, the Codex preset, `init --agent`. **Done 11-02**: init asks which
+   agent the platform runs (offered from `install_info()` in runtime adapters and `runtime_preset` in modules:
+   `runtime_claude`, `modules/codex.yaml`), offers the nvm-based install on a yes, and sets hub.json `runtime`;
+   once hub.json exists, the credential step runs. Claude: `claude setup-token` runs in the terminal and its token
+   is pasted into a hidden prompt, written mode 600 and checked with one real request (llm.py `login-check`), so it
+   works whether or not setup-token wants typed input. Codex: `codex login status`, else `codex login`. `--agent
+   <name>` answers it; on an existing instance it re-runs only this step, offers llm setup, commits hub.json alone
+   and applies the config. Nothing is installed or logged in without a yes on the terminal (`--yes` doesn't).
 4. **B6**: `agenthub connect` with layout detection, for the layouts that work today.
 5. **B5**: user-level MCP registration and the server outside projects.
 6. **B3**: `init --questions/--answers` and `install.sh --for-agent`, then a dry run of story 2 in both apps.

@@ -4,6 +4,7 @@ $ agenthub modules
   assistant    個人助理:問題對帳、通道租借
 ✓ backup       每晚加密雲端備份 + 每月還原測試
   claude       Claude Code 的登入檢查、更新、headless token 到期提醒
+  codex        用 Codex 跑 agent 工作和判斷;你的 session 只能透過 MCP 用信箱
   consolidate  每晚把超過 14 天的 memory 日期檔整理進 reference/(在 librarian 之前)(要有 LLM:agenthub llm setup)
   mirror       每晚更新 mirror-list.txt 裡每個 repo 的 --mirror clone
   owner        內建的 owner 端:新的待辦、問題通知(結案、回答用 agenthub owner)
@@ -18,7 +19,7 @@ $ agenthub modules enable no-such-module
 [exit 1]
 --- stdout
 --- stderr
-hub modules:沒有模組 no-such-module(modules/ 底下有:assistant, backup, claude, consolidate, mirror, owner, reflect, sandbox, testcontainers)
+hub modules:沒有模組 no-such-module(modules/ 底下有:assistant, backup, claude, codex, consolidate, mirror, owner, reflect, sandbox, testcontainers)
 
 $ agenthub modules enable mirror
 [exit 0]

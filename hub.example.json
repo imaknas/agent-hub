@@ -151,6 +151,7 @@
     "assistant": false,
     "owner": true,
     "claude": false,
+    "codex": false,
     "sandbox": false,
     "testcontainers": false
   }

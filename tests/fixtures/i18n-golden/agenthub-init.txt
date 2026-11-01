@@ -58,8 +58,9 @@ $ agenthub init --home <TMP>/inst --owner Sam --timezone UTC --workspace <TMP>/w
 建資料夾 <TMP>/ws2
 建資料夾 <TMP>/home/git-origin
 建資料夾 <TMP>/home/.memory-copies
+Claude Code 在背景跑時用 `claude setup-token` 產生的長效 token(需要 Claude Pro、Max、Ultra、Team 或 Enterprise 方案)。
+之後:執行 `claude setup-token`,再跑 agenthub init --agent claude 貼上 token
 判斷點先不設:要用到時會明確失敗、說原因。之後跑 agenthub llm setup
-⚠️ 開著但沒有模型:reflect。這些模組只做判斷點的工作,agenthub llm setup 之前它們的 job 都會失敗(或關掉:agenthub modules disable <名稱>)
 ✓ config 已 commit:<TMP>/inst/config 是 git repo,第一個 commit 就是現在的 config
 --no-launchd:不裝排程器、不套用服務
 --- stderr
@@ -68,8 +69,9 @@ $ agenthub init --home <TMP>/inst-nogit --owner Sam --timezone UTC --workspace <
 [exit 1]
 --- stdout
 ✓ 實例目錄 <TMP>/inst-nogit(owner Sam、模組 reflect, backup)
+Claude Code 在背景跑時用 `claude setup-token` 產生的長效 token(需要 Claude Pro、Max、Ultra、Team 或 Enterprise 方案)。
+之後:執行 `claude setup-token`,再跑 agenthub init --agent claude 貼上 token
 判斷點先不設:要用到時會明確失敗、說原因。之後跑 agenthub llm setup
-⚠️ 開著但沒有模型:reflect。這些模組只做判斷點的工作,agenthub llm setup 之前它們的 job 都會失敗(或關掉:agenthub modules disable <名稱>)
 ⚠️ 沒有裝 git:<TMP>/inst-nogit/config 不是 git repo,config 的改動不會留下紀錄,onboard 也沒辦法 commit 專案登錄。裝好 git 再跑一次 agenthub init(它會把現在的 config commit 起來)
 --no-launchd:不裝排程器、不套用服務
 --- stderr
@@ -78,8 +80,9 @@ $ agenthub init --home <TMP>/inst-anon --owner Sam --timezone UTC --workspace <T
 [exit 0]
 --- stdout
 ✓ 實例目錄 <TMP>/inst-anon(owner Sam、模組 reflect, backup)
+Claude Code 在背景跑時用 `claude setup-token` 產生的長效 token(需要 Claude Pro、Max、Ultra、Team 或 Enterprise 方案)。
+之後:執行 `claude setup-token`,再跑 agenthub init --agent claude 貼上 token
 判斷點先不設:要用到時會明確失敗、說原因。之後跑 agenthub llm setup
-⚠️ 開著但沒有模型:reflect。這些模組只做判斷點的工作,agenthub llm setup 之前它們的 job 都會失敗(或關掉:agenthub modules disable <名稱>)
 ⚠️ 這台機器的 git 沒有身分(沒設 user.name, user.email),所以 config repo <TMP>/inst-anon/config 用「Sam <owner@agent-hub.invalid>」commit,只設在那個 repo。要用你自己的:git config --global user.name "你的名字"; git config --global user.email you@example.com;再 git -C <TMP>/inst-anon/config config --remove-section user
 ✓ config 已 commit:<TMP>/inst-anon/config 是 git repo,第一個 commit 就是現在的 config
 --no-launchd:不裝排程器、不套用服務
@@ -89,7 +92,9 @@ $ agenthub init --home <TMP>/inst-defaults --owner Sam --timezone UTC --workspac
 [exit 0]
 --- stdout
 先不開:consolidate, reflect。這些模組只做判斷點的工作,而判斷點還沒有模型可用;agenthub llm setup 之後再用 agenthub modules enable <名稱> 打開
-✓ 實例目錄 <TMP>/inst-defaults(owner Sam、模組 owner)
+✓ 實例目錄 <TMP>/inst-defaults(owner Sam、模組 owner, claude)
+Claude Code 在背景跑時用 `claude setup-token` 產生的長效 token(需要 Claude Pro、Max、Ultra、Team 或 Enterprise 方案)。
+之後:執行 `claude setup-token`,再跑 agenthub init --agent claude 貼上 token
 判斷點先不設:要用到時會明確失敗、說原因。之後跑 agenthub llm setup
 ✓ config 已 commit:<TMP>/inst-defaults/config 是 git repo,第一個 commit 就是現在的 config
 --no-launchd:不裝排程器、不套用服務

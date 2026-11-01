@@ -1,0 +1,27 @@
+# Codex as the platform's agent (docs/design/newcomer-path.md B4): agent runs and judgment calls go through the Codex
+# CLI with a command template (bin/runtime_command.py). Codex sessions reach the mailbox through MCP only (docs/mcp.md);
+# its own adapter (session hooks, waking sessions) is the next version's work (docs/design/mailbox-runtimes.md).
+# `agenthub init` offers it in its agent step and turns this module on when it is picked.
+v: 1
+name: codex
+type: module
+description: "agent runs and judgment calls through Codex; your sessions reach the mailbox through MCP only"
+runtime_preset:
+  label: Codex
+  find: codex
+  install:
+  - '[ -s "$HOME/.nvm/nvm.sh" ] || curl -fsSL https://raw.githubusercontent.com/nvm-sh/nvm/v0.40.3/install.sh | bash'
+  - '. "$HOME/.nvm/nvm.sh" && nvm install --lts && nvm alias default "lts/*" && npm install -g @openai/codex'
+  credential:
+    kind: tool-login
+    command: [codex, login]
+    status: [codex, login, status]
+  settings:
+    runtime:
+      default: command
+      command:
+        run: [codex, exec, --sandbox, workspace-write, --skip-git-repo-check, --ephemeral, --color, never,
+              -o, "{output_file}", "-"]
+        output_file: true
+    modules:
+      codex: true

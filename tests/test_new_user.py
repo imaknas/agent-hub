@@ -50,7 +50,8 @@ class NewUser(unittest.TestCase):
         (self.hub / "projects").mkdir()
         shutil.copy(ROOT / "projects" / "agent-hub.yaml", self.hub / "projects")
         shutil.copy(ROOT / "hub.example.json", self.hub)
-        env = {k: v for k, v in os.environ.items() if not k.startswith(("GIT_", "AGENT_HUB"))}
+        # NVM_DIR too: the agent step looks for agents under nvm's node, and the fake HOME has none
+        env = {k: v for k, v in os.environ.items() if not k.startswith(("GIT_", "AGENT_HUB", "NVM_"))}
         self.env = {**env, "HOME": str(self.home), "AGENT_HUB_ROOT": str(self.hub),
                     "AGENT_HUB_PYTHON": sys.executable, "PATH": "/usr/bin:/bin:/usr/sbin:/sbin", "AGENT_HUB_LANG_UI": "zh-Hant",
                     # the fake HOME has no git identity: do not let commit rely on git guessing (macOS can guess, a
@@ -274,6 +275,33 @@ class NewUser(unittest.TestCase):
         self.assertIn(i18n.translate("agenthub", "an earlier agenthub init stopped before it finished; carrying on "
                                      "with what it didn't do", {}, "zh-Hant"), r.stdout)
         self.assertFalse(marker.exists())
+
+    def test_init_agent_none_and_codex(self):
+        r = self.hub_cmd("init", "--yes", "--no-launchd", "--owner", "Alex", "--llm", "none", "--agent", "none")
+        self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
+        self.assertEqual(self.cfg_json()["runtime"]["default"], "none")
+
+    def test_init_agent_codex_writes_its_preset(self):
+        r = self.hub_cmd("init", "--yes", "--no-launchd", "--owner", "Alex", "--llm", "none", "--agent", "codex")
+        self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
+        d = self.cfg_json()
+        self.assertEqual(d["runtime"]["default"], "command")
+        self.assertEqual(d["runtime"]["command"]["run"][:2], ["codex", "exec"])
+        self.assertTrue(d["modules"]["codex"])
+        self.assertFalse(d["modules"]["claude"])
+
+    def test_init_agent_on_an_existing_instance(self):
+        subprocess.run(["git", "init", "-q", str(self.hub)], env=self.env, check=True)
+        self.hub_cmd("init", "--yes", "--no-launchd", "--owner", "Alex", "--llm", "none", "--agent", "none")
+        r = self.hub_cmd("init", "--yes", "--agent", "codex")
+        d = self.cfg_json()
+        self.assertEqual((d["runtime"]["default"], d["modules"]["codex"]), ("command", True), r.stdout + r.stderr)
+        self.assertEqual(self.git_cfg("status", "--porcelain", "--", "hub.json").stdout, "", "committed")
+
+    def test_init_refuses_an_unknown_agent(self):
+        r = self.hub_cmd("init", "--yes", "--no-launchd", "--agent", "nosuch")
+        self.assertEqual(r.returncode, 2)
+        self.assertFalse((self.home / ".agent-hub").exists(), "nothing was done")
 
     def test_init_refuses_an_unknown_language(self):
         r = self.hub_cmd("init", "--yes", "--no-launchd", "--lang", "fr")

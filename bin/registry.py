@@ -602,6 +602,7 @@ def validate_runs(doc: dict, stem: str, d: dict) -> list[str]:
 
 MODULES_DIR = hubconf.ROOT / "modules"
 MODULE_TOP = {"v", "name", "type", "description", "requires_config", "needs_llm", "jobs", "services", "secrets",
+              "runtime_preset",
               "consumes"}
 
 
@@ -609,6 +610,13 @@ def validate_module(doc, stem: str) -> list[str]:
     if not isinstance(doc, dict):
         return [_("not a YAML mapping")]
     errs = [_("unknown field {key}", key=k) for k in doc if k not in MODULE_TOP]
+    rp = doc.get("runtime_preset")
+    if rp is not None:
+        if (not isinstance(rp, dict) or not isinstance(rp.get("label"), str) or not isinstance(rp.get("find"), str)
+                or not isinstance((rp.get("settings") or {}).get("runtime"), dict)
+                or not all(isinstance(x, str) for x in rp.get("install") or [])):
+            errs.append(_("runtime_preset needs label, find, settings.runtime and install as a list of lines "
+                          "(docs/design/newcomer-path.md B4)"))
     if doc.get("v") != 1:
         errs.append(_("v must be 1"))
     if doc.get("name") != stem:

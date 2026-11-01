@@ -293,6 +293,199 @@ def install_core_plists(dry: bool, failed: list[str] | None = None) -> list[str]
     return done
 
 
+# ---------- the platform's agent (docs/design/newcomer-path.md B4) ----------
+
+def agent_presets() -> dict[str, dict]:
+    """The agents init can offer, in order: each runtime adapter with install_info(), then each module with a
+    runtime_preset. name → {label, gives, find, install, credential, settings}. Tool specifics live there, not here."""
+    import importlib
+    import yaml
+    out: dict[str, dict] = {}
+    for f in sorted(BIN.glob("runtime_*.py")):
+        name = f.stem[len("runtime_"):]
+        if name in ("ports", "fake", "none"):
+            continue
+        try:
+            mod = importlib.import_module(f.stem)
+        except Exception:   # an adapter that can't load is simply not offered
+            continue
+        if hasattr(mod, "install_info"):
+            out[name] = mod.install_info()
+    for f in sorted((ROOT / "modules").glob("*.yaml")):
+        doc = yaml.safe_load(f.read_text()) or {}
+        if isinstance(doc.get("runtime_preset"), dict):
+            info = dict(doc["runtime_preset"])
+            info["gives"] = i18n.translate("modules", doc.get("description") or "", {})
+            out[f.stem] = info
+    return out
+
+
+def agent_found(info: dict) -> pathlib.Path | None:
+    """The tool's command: under nvm's default node (the platform's copy), else on PATH."""
+    import shutil
+    nb = hubconf.nvm_bin()
+    if nb and (nb / info["find"]).exists():
+        return nb / info["find"]
+    w = shutil.which(info["find"])
+    return pathlib.Path(w) if w else None
+
+
+def agent_env() -> dict:
+    """The environment for the tools' own commands: nvm's default node first on PATH."""
+    nb = hubconf.nvm_bin()
+    return {**os.environ, "PATH": f"{nb}:{os.environ.get('PATH', '')}"} if nb else dict(os.environ)
+
+
+def choose_agent(args: dict, yes: bool, presets: dict[str, dict]) -> str:
+    """init's agent question: which agent the platform runs for its own work. --agent answers it; without a terminal
+    (or --yes) the first one found, else none."""
+    if args.get("agent"):
+        return args["agent"]
+    found = [n for n, info in presets.items() if agent_found(info)]
+    default = found[0] if found else "none"
+    if yes or not sys.stdin.isatty():
+        return default
+    names = [*presets, "none"]
+    print(_("Which AI agent should agent-hub use for its own work (nightly tidy-up, the mailbox)?"))
+    for i, n in enumerate(names, 1):
+        if n == "none":
+            print("  " + _("{i}. None for now: memory, schedules and the mailbox work; agent features stay off", i=i))
+        else:
+            info = presets[n]
+            state = _("installed") if agent_found(info) else _("not installed")
+            print(f"  {i}. {info['label']}: {info['gives']} ({state})")
+    while True:
+        a = input(f"[{names.index(default) + 1}]: ").strip()
+        if not a:
+            return default
+        if a.isdigit() and 1 <= int(a) <= len(names):
+            return names[int(a) - 1]
+
+
+def apply_agent(d: dict, choice: str, presets: dict[str, dict]) -> None:
+    """Make choice the platform's agent in hub.json d: its settings merged in, the other presets' modules off."""
+    for n, info in presets.items():
+        for m in (info.get("settings") or {}).get("modules") or {}:
+            d.setdefault("modules", {})[m] = False
+    if choice == "none":
+        d["runtime"] = {**(d.get("runtime") or {}), "default": "none"}
+        return
+    s = presets[choice].get("settings") or {}
+    d["runtime"] = {**(d.get("runtime") or {}), **(s.get("runtime") or {})}
+    for m, on in (s.get("modules") or {}).items():
+        d.setdefault("modules", {})[m] = on
+
+
+def confirm(question: str, yes: bool) -> bool:
+    """A yes/no asked on the terminal (Enter = yes); no terminal = no, --yes = no as well: init never installs or logs
+    in on its own."""
+    if yes or not sys.stdin.isatty():
+        return False
+    return input(f"{question} [Y/n] ").strip().lower() in ("", "y", "yes")
+
+
+def install_agent(choice: str, presets: dict[str, dict], yes: bool) -> bool:
+    """Offer to install the chosen agent (user level, the preset's lines), only on the owner's yes. Whether it is there
+    afterwards."""
+    if choice == "none":
+        return True
+    info = presets[choice]
+    if agent_found(info):
+        return True
+    print(_("{label} is not installed. Installing it runs:", label=info["label"]))
+    for line in info.get("install") or []:
+        print(f"    {line}")
+    if not confirm(_("Install it now?"), yes):
+        print(_("Not installed. Later: run those lines, then agenthub init --agent {name}", name=choice))
+        return False
+    for line in info.get("install") or []:
+        if subprocess.run(["/bin/bash", "-c", line], env=agent_env()).returncode != 0:
+            print(_("this step failed: {line}", line=line))
+            return False
+    hubconf.nvm_bin.cache_clear() if hasattr(hubconf.nvm_bin, "cache_clear") else None
+    ok = agent_found(info) is not None
+    print(_("✓ {label} installed", label=info["label"]) if ok else
+          _("{label} still isn't found; open a new terminal and run agenthub init --agent {name}",
+            label=info["label"], name=choice))
+    return ok
+
+
+def agent_login_check() -> str | None:
+    """One real request through the platform's own path (llm.py's login-check point): None when it answers."""
+    r = subprocess.run([*hubconf.launch(BIN / "llm.py"), "run", "login-check"], input="Reply with just: ok",
+                       capture_output=True, text=True, timeout=180)
+    try:
+        out = json.loads(r.stdout.strip().splitlines()[-1])
+    except (ValueError, IndexError):
+        return (r.stderr.strip() or r.stdout.strip())[-300:] or _("no answer")
+    return out.get("llm_error") or (out.get("result") if out.get("is_error") else None)
+
+
+def agent_credential(choice: str, presets: dict[str, dict], yes: bool) -> None:
+    """The chosen agent's credential for unattended runs. A pasted token goes straight into its file (never shown,
+    mode 600); a tool's own login is run in the terminal. Without a terminal, only what to do is printed."""
+    if choice == "none":
+        return
+    info = presets[choice]
+    cred = info.get("credential") or {}
+    if not agent_found(info):   # nothing to log in to yet: install_agent said how to install it
+        return
+    if cred.get("kind") == "pasted-token":
+        f = pathlib.Path(os.path.expanduser(cred["file"]))
+        if not f.exists():
+            cmd = " ".join(cred["command"])
+            print(_("{label} runs unattended with a long-lived token from `{command}` (needs {needs}).",
+                    label=info["label"], command=cmd, needs=cred.get("needs", "")))
+            if not confirm(_("Run `{command}` now?", command=cmd), yes):
+                print(_("Later: run `{command}`, then agenthub init --agent {name} to paste the token", command=cmd,
+                        name=choice))
+                return
+            subprocess.run(cred["command"], env=agent_env())
+            import getpass
+            token = getpass.getpass(_("Paste the token it printed (it isn't shown): ")).strip()
+            if not token:
+                print(_("No token pasted; nothing written. Later: agenthub init --agent {name}", name=choice))
+                return
+            f.parent.mkdir(parents=True, exist_ok=True)
+            f.touch(mode=0o600)
+            f.chmod(0o600)
+            f.write_text(token + "\n")
+            print(_("✓ token written to {file}", file=f))
+        if (why := agent_login_check()):
+            print(_("⚠️ {label} did not answer with that login: {reason}", label=info["label"], reason=why[:300]))
+        else:
+            print(_("✓ {label} answers", label=info["label"]))
+    elif cred.get("kind") == "tool-login":
+        if subprocess.run(cred["status"], env=agent_env(), capture_output=True).returncode == 0:
+            print(_("✓ {label} is logged in", label=info["label"]))
+            return
+        cmd = " ".join(cred["command"])
+        if not confirm(_("{label} is not logged in. Run `{command}` now?", label=info["label"], command=cmd), yes):
+            print(_("Later: run `{command}`", command=cmd))
+            return
+        subprocess.run(cred["command"], env=agent_env())
+
+
+def set_agent(choice: str, args: dict, yes: bool) -> int:
+    """init --agent <name> on an existing instance: only the agent step (settings, install, credential), then the
+    judgment-point setup offered again; hub.json committed alone and the config applied."""
+    presets = agent_presets()
+    d = read_hub_json()
+    apply_agent(d, choice, presets)
+    write_hub_json(d)
+    hubconf._cfg = None
+    print(_("✓ the platform's agent: {name}", name=presets[choice]["label"] if choice in presets else choice))
+    install_agent(choice, presets, yes)
+    agent_credential(choice, presets, yes)
+    if choice != "none" and confirm(_("Set up who makes the platform's judgment calls now (agenthub llm setup)?"), yes):
+        llm_setup(args, yes)
+    rc = subprocess.run([str(BIN / "commit-hub-files.sh"), f"chore(config): the platform's agent is {choice}",
+                         "hub.json"]).returncode
+    if rc != 0:
+        print(_("warning: {file} was written, but the commit/push failed; it needs a manual fix", file="hub.json"))
+    return subprocess.run([*hubconf.launch(BIN / "agenthub"), "config", "apply"]).returncode or (1 if rc else 0)
+
+
 def new_hub_json(args: dict, yes: bool) -> dict:
     d = json.loads((ROOT / "hub.example.json").read_text())
     try:
@@ -306,14 +499,15 @@ def new_hub_json(args: dict, yes: bool) -> dict:
     import shutil
     # defaults follow what this machine has (docs/design/tool-agnostic.md): its maintenance module only with Claude
     # Code; without an assistant, the built-in owner side
-    if "claude" in d["modules"]:
-        d["modules"]["claude"] = bool(shutil.which("claude"))
+    presets = agent_presets()
+    choice = choose_agent(args, yes, presets)
+    apply_agent(d, choice, presets)
+    if choice != "none":
+        install_agent(choice, presets, yes)
+    args["_agent"] = choice   # the credential step runs once hub.json is written (cmd_init)
     if "owner" in d["modules"]:
         # the template's assistant section is a placeholder (its api is filled in): what counts is the module
         d["modules"]["owner"] = not d["modules"].get("assistant")
-    if (d.get("runtime") or {}).get("default", "claude") == "claude" and not shutil.which("claude"):
-        # no coding agent: agent features explicitly off (doctor's feature table says so)
-        d["runtime"] = {"default": "none"}
     # with no model for judgment points after llm setup (asked later), the modules that only do judgment-point work
     # are off by default
     if not llm_expected(args, yes, (d.get("runtime") or {}).get("default", "claude")):
@@ -407,7 +601,7 @@ INIT_FLAGS = ("--yes", "--no-launchd", "--dry-run", "--scheduler-only")
 # written when init has made the instance, removed once its later steps are done: a re-run after a Ctrl-C finishes them
 INIT_UNFINISHED = hubconf.STATE / "init-unfinished"
 INIT_OPTIONS = ("--owner", "--timezone", "--workspace", "--modules", "--home", "--llm", "--llm-model", "--llm-base-url",
-                "--lang")
+                "--lang", "--agent")
 
 
 def parse_lang(value: str) -> tuple[str, str] | None:
@@ -519,6 +713,12 @@ def cmd_init(argv: list[str]) -> int:
         return 2
     if args.get("lang") and hubconf.config_file("hub.json").exists():
         return set_language(*parse_lang(args["lang"]))   # an existing instance: only the language
+    if args.get("agent") and args["agent"] not in (*agent_presets(), "none"):
+        print(_("agenthub init: --agent takes {agents} (nothing was done)",
+                agents=", ".join([*agent_presets(), "none"])), file=sys.stderr)
+        return 2
+    if args.get("agent") and hubconf.config_file("hub.json").exists():
+        return set_agent(args["agent"], args, yes)   # an existing instance: only the agent step
     created = False
     legacy = hubconf.instance_home() is None and hubconf.config_file("hub.json").exists()
     if legacy:
@@ -572,6 +772,8 @@ def cmd_init(argv: list[str]) -> int:
     # repo with commit_gate (docs/design/test-waiting.md A1): `config apply` below does it
     if created and not dry:
         # a failure doesn't block init: doctor will say judgment points have nowhere to run; agenthub llm setup later
+        if args.get("_agent"):
+            agent_credential(args["_agent"], agent_presets(), yes)
         llm_setup(args, yes)
         INIT_UNFINISHED.unlink(missing_ok=True)
         on = [m for m in llm_modules() if (hubconf.get("modules") or {}).get(m) is True]
