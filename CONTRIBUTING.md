@@ -41,6 +41,13 @@ CI runs `bin/lint`, `bin/linux-test` and a gitleaks scan on every pull request.
 assumes the instance's language fails in one of them: a test that checks text in one language sets that language
 itself (`AGENT_HUB_LANG_UI` / `AGENT_HUB_LANG_CONTENT`).
 
+## How changes reach main
+
+Contributions come as pull requests: fork, branch, open a PR. A PR merges only when every CI job passes (lint, the
+Linux and macOS test suites, the installer, the secret scan). The maintainer works in git worktrees and lands changes
+with `agenthub merge-branch`, which runs the full suite before it moves main, then pushes main directly; CI runs again
+on the push. Nobody can force-push or delete main.
+
 ## Commits
 
 Commit titles follow [Conventional Commits](https://www.conventionalcommits.org/):
