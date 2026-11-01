@@ -113,6 +113,22 @@ class Records(unittest.TestCase):
         self.assertFalse(self.m.publish_record(self.c, note, self.owner, "proj")[1], "and a resend is still a no-op")
         self.assertEqual(self.c.execute("SELECT COUNT(*) FROM events WHERE type='record'").fetchone()[0], 2)
 
+    def test_same_identity_other_content_first_one_wins(self):
+        """characterization, before core §10's rule (0.5): a second record with the same (ext, project, origin, type,
+        id) and other content is dropped, so what is held depends on the arrival order"""
+        a1, b1 = {**settled("k1", "s:k1:1"), "note": "a"}, {**settled("k1", "s:k1:1"), "note": "b"}
+        a2, b2 = {**settled("k2", "s:k2:1"), "note": "a"}, {**settled("k2", "s:k2:1"), "note": "b"}
+        for first, second in ((a1, b1), (b2, a2)):
+            eid, new = self.m.publish_record(self.c, first, self.owner, "proj")
+            self.assertTrue(new)
+            self.assertEqual(self.m.publish_record(self.c, second, self.owner, "proj"), (eid, False))
+        self.assertEqual(self.c.execute("SELECT COUNT(*) FROM events WHERE type='record'").fetchone()[0], 2)
+        out = json.loads(self.cli("records", "--project", "proj"))
+        self.assertEqual([(o["record"]["key"], o["record"]["note"]) for o in out], [("k1", "a"), ("k2", "b")])
+        mine = [{**raised("k3"), "note": "a"}, {**raised("k3"), "note": "b"}]
+        res = json.loads(self.cli("record-publish", "--json", "-", stdin=json.dumps(mine)))
+        self.assertEqual([r["status"] for r in res], ["accepted", "duplicate"])
+
     def test_record_publish_reads_0_5_and_refuses_a_proof(self):
         """0.5 records go out; evidence.proof is reserved, senders never emit it (core §5.2)"""
         r05 = {**raised("k5"), "ph": "0.5", "ext": "acts/0.5"}
