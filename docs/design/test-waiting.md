@@ -3,7 +3,7 @@
 > agent-hub session · 2026-10-31, r14 2026-11-01. Owner's observation: in the projects being worked on now, the bottleneck is not the
 > agents' output but waiting for tests; the owner wants everything besides model input/output at its theoretical minimum.
 > This doc measures first, then proposes changes. **Partly built: section 7 marks each step done as it lands (steps
-> 0, 1, 2.1–2.3 and 2.5 by 11-01); the rest is design.** Owner's rule for building it:
+> 0, 1, 2.1–2.3 and 2.5 by 11-01, step 4 on 11-02); the rest is design.** Owner's rule for building it:
 > **the final architecture first, no workarounds.**
 >
 > History: r2 split the changes into **A. agent-hub itself**, **B. the platform's test system** and **C. each
@@ -594,6 +594,47 @@ the owner actually waited on a session that was waiting on tests. Its first repo
 it (section 2.1 is the baseline for the steps before). Its first use, before any e2e tier is declared `when: merge`:
 classify the agents' e2e runs as safety runs (followed by `merge-branch`) or inner-loop work (followed by an edit).
 
+**As built (11-02, `bin/test-waiting-report.py`, zero LLM).** Two sources, one report:
+
+- **Transcripts**, through the port only: every project's folders and worktrees, subagents kept apart and never added
+  to the top-level numbers. A session belongs to the project whose workspace holds its first folder (`project_at`).
+  Entries counted once by id, tool calls once by id. A command's wait is call → the entry returning its result, capped
+  at 20 minutes; **a call started in the background is counted as such and never as waiting** (section 1 could not
+  tell). Classification in this order: deploy (`deploy.sh`), merge (`merge-branch`), commit (`git commit`, only in a
+  repo with `commit_gate`), runner (`agenthub test`), a declared tier (the command contains the tier's `run`, `{jobs}`
+  any count), then the patterns for undeclared commands, e2e and targeted. Agent time is section 1's gaps (each capped
+  at 20 minutes) ended by an assistant entry (the model) or a tool result; gaps a person's message or anything else
+  (a notification, a system entry) ends are not counted.
+- **The runner's run log** (`tiers.RunLog`, `agent-hub/test-runs.jsonl` beside the store in the repo's git common
+  dir): every tier of every invocation, **hits included**, with its seconds, the seconds from the invocation's start
+  to that result, the moment, the source (worktree, index, revision), a short tree id and **the caller**: `merge-branch`
+  names itself (`AGENTHUB_TEST_CALLER`), `--index` is the commit gate, `--when nightly`/`deploy` those callers, the
+  rest a session's own run. Measurement only: the store's records and `passed()` are untouched, so a hit never
+  extends a pass's 30 days. The platform reads it only through a `project_git` job (`test-runs`, as the project, the
+  file opened without following links); a log that cannot be read is reported as such, never as zero.
+  `merge-branch` also puts the test step's seconds into its `session.report`.
+- **Output**: the platform job `agent-hub/test-waiting` (04:45, after the nightly test runs) writes the 7 days ending
+  that midnight (the owner's clock) to `<data>/test-waiting/<day>.json`: per project, agent/model/test minutes, test
+  minutes by kind, background runs, the owner's wait, subagents' test minutes by kind, the e2e split; per tier runs,
+  hits, failures, median and p90 seconds; per caller invocations, all-hit invocations, failures, median and p90
+  seconds to the result. The status page shows the newest file (per project: agent time, waiting on tests with its
+  share, the owner's wait, merge → result median, hits of tier runs); the script prints the full text, `--json` the
+  report without writing. **Only counts and durations are written** — no command text, no paths — since the status
+  page is readable from other machines.
+
+Choices the design left open, taken conservatively:
+
+- **"The owner waited"** is a proxy: a top-level wait inside a turn the owner answered within 5 minutes of the turn's
+  last entry (they were watching it end). It overcounts an owner who answers quickly after doing something else.
+- **Attribution by `project_at`, not the resolver**: step 4 says "on the resolver", which is not built yet
+  (`projects-and-repos.md` steps 1–3). Every repo has one project today, so the answer is the same; attribution and
+  the tier lookup move onto the resolver in step 5 without changing what the run log records.
+- **A separate run log, not hit records in the store**: the store's meaning stays as B3 defines it.
+- **Rolling 7-day files, not ISO weeks**: the decision in step 7 needs "a week of data" from whenever the run log
+  started; the transcript half covers the full window from the first night.
+- Section 1's other inflators stay: a permission prompt's wait counts as the command's, polling loops on background
+  tests count as other tools, and parallel test calls of one session are summed, not merged.
+
 ### B8. Asynchronous merge (merge queue) — on the numbers
 
 `merge-branch` returns after the quick checks; a worker runs the tests, fast-forwards on green, reports on the bus. Its
@@ -730,7 +771,13 @@ replaces; each step only adds to the ones before it.
 3. **`projects-and-repos.md` steps 1–3**, in worktrees: characterization tests, the resolver and registry, the callers
    (backup and deployment per repo already here).
 4. **B7**, the waiting report, on the resolver; its first report is the baseline for what follows, and its e2e
-   classification decides each project's e2e `when`.
+   classification decides each project's e2e `when`. (Done 11-02, ahead of step 3, on `project_at` (B7 "As built"):
+   the runner's run log with hits and callers, the `test-runs` op, `bin/test-waiting-report.py` and its nightly job
+   `agent-hub/test-waiting`, the status page section. The first report (11-02, transcripts only: 7 days of sessions,
+   no run log yet) is the baseline. After a week, for step 7, per project: (a) the merge-branch and commit-gate
+   minutes against the agents' own test minutes and the owner's wait — what B8 could hide; (b) the hits of each tier
+   — whether A2's commit-time selection would save anything a recorded pass does not already; (c) merge → result
+   median and p90 — B8's bound; (d) the e2e safety/inner-loop split, which sets each project's e2e `when`.)
 5. **On the resolver:** `affected()` and the cache key extended to scopes and `depends_on` (rule 5); A3's `@en` tier;
    B6's remaining rules.
 6. **`projects-and-repos.md` steps 5–8:** memory, runtime capabilities, onboarding, the end-to-end monorepo.
