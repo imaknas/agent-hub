@@ -1,0 +1,13 @@
+{
+ "type": "object",
+ "description": "the completion version of librarian-todo-format: the model has no tools and returns a list of edits that fix only the format of STATE.md's to-do section, which the platform applies (bin/edits.py) and checks again with check-state-todo",
+ "properties": {
+  "edits": {
+   "type": "array",
+   "description": "applied in order; each old must be a passage that occurs exactly once in the current STATE.md (newlines included), and new is the text that replaces it (an empty string deletes it)",
+   "items": {"type": "object", "properties": {"old": {"type": "string"}, "new": {"type": "string"}}, "required": ["old", "new"]}
+  },
+  "reason": {"type": "string", "description": "what was wrong and what the edits change, for a person spot-checking later; in the content language named in the prompt"}
+ },
+ "required": ["edits", "reason"]
+}

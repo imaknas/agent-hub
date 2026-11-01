@@ -210,7 +210,7 @@ To change one: schedulectl set-model <point|state|index|consolidate> <model|defa
 === set-model state
 [exit None]
 warning: hub.json was written, but the commit/push failed; it needs a manual fix
-hub.json llm.points: librarian-state, librarian-todo-format, librarian-state-edits → m-x
+hub.json llm.points: librarian-state, librarian-todo-format, librarian-state-edits, librarian-todo-format-edits → m-x
 === hub.json
 {
   "v": 1,
@@ -224,6 +224,9 @@ hub.json llm.points: librarian-state, librarian-todo-format, librarian-state-edi
       },
       "librarian-state-edits": {
         "model": "m-x"
+      },
+      "librarian-todo-format-edits": {
+        "model": "m-x"
       }
     }
   }
@@ -231,7 +234,7 @@ hub.json llm.points: librarian-state, librarian-todo-format, librarian-state-edi
 === set-model state default
 [exit None]
 warning: hub.json was written, but the commit/push failed; it needs a manual fix
-hub.json llm.points: librarian-state, librarian-todo-format, librarian-state-edits → default
+hub.json llm.points: librarian-state, librarian-todo-format, librarian-state-edits, librarian-todo-format-edits → default
 === set-model one point
 [exit None]
 warning: hub.json was written, but the commit/push failed; it needs a manual fix

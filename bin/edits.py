@@ -21,7 +21,8 @@ import i18n   # its callers have bin/ on sys.path; the catalog is read only when
 _ = i18n.domain(__file__)
 
 class EditError(Exception):
-    pass
+    old: str | None = None
+    text: str | None = None
 
 
 def apply(text: str, edits: list) -> str:
@@ -35,8 +36,10 @@ def apply(text: str, edits: list) -> str:
             raise EditError(_("edit {index} has an empty old", index=i + 1))
         n = out.count(old)
         if n != 1:
-            raise EditError(_("edit {index}: old occurs {count} times (it must occur exactly once): {old!r}", index=i + 1,
-                              count=n, old=old[:60]))
+            err = EditError(_("edit {index}: old occurs {count} times (it must occur exactly once): {old!r}",
+                              index=i + 1, count=n, old=old[:60]))
+            err.old, err.text = old, out   # the whole old and the text it was looked for in, to diagnose a miss
+            raise err
         out = out.replace(old, new, 1)
     return out
 

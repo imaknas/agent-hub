@@ -54,7 +54,8 @@ LABEL = "local.agent-hub-scheduler"
 PLIST = Path.home() / "Library/LaunchAgents" / f"{LABEL}.plist"
 # set-model shorthands → judgment points (the ones models.env's STATE_MODEL / INDEX_MODEL / CONSOLIDATE_MODEL used
 # to set)
-MODEL_ALIASES = {"state": ["librarian-state", "librarian-todo-format", "librarian-state-edits"],
+MODEL_ALIASES = {"state": ["librarian-state", "librarian-todo-format", "librarian-state-edits",
+                           "librarian-todo-format-edits"],
                  "index": ["librarian-index", "librarian-index-edits", "reflect-week"],
                  "consolidate": ["consolidate"]}
 

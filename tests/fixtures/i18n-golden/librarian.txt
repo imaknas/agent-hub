@@ -46,6 +46,7 @@ rec:r1 done
 [<T>] pdang: STATE.md 引用了不存在的檔案: memory/reference/gone.md
 [<T>] pdang: call cost $0.01 (model: 工具預設)
 [<T>] pdang: STATE.md 待辦段落格式不對,請模型只修格式:STATE.md:待辦沒標負責人或已完成未移除 `- [ ] 沒標負責人的一件事` 
+[<T>] pdang: 影子(completion 版)修格式:過檢查=True(agent 版=True),相似度 1.0
 [<T>] pdang: 待辦段落格式已修正
 [<T>] pdang: 警告——agent 回報 state_updated=false,但實際檔案變化=true(以實際檔案為準)
 [<T>] pdang: 影子提議的待辦段落格式不對:STATE.md:待辦沒標負責人或已完成未移除 `- [ ] 沒標負責人的一件事` 
@@ -943,6 +944,51 @@ rest of the file.
 
 The current problems:
 STATE.md:待辦沒標負責人或已完成未移除 `- [ ] 沒標負責人的一件事`
+=== prompt librarian-todo-format-edits @ hub
+You fix only the format of the `## 待辦` section of a project's STATE.md. You have no tools: the whole file is
+below, and your answer can only be one JSON object (its format is set by the system). You do not change files directly;
+you return a list of edits, which the platform applies to STATE.md in order and then checks again.
+
+Do not change anything else, nor the content of the to-dos. Keep the tag each item already has (an item you move into
+the section keeps its tag); only an item without a tag gets one.
+
+The correct format (one item per line; with no to-dos write `- (無)`; STATE.md must have this section):
+  `- [ ] 〔Alex〕…` (only Alex can do it: accounts, passwords, payments, a decision or an answer that is
+  Alex's to give, things Alex has to buy or do personally)
+  `- [ ] 〔agent〕…` (an agent can do it directly)
+  `- [ ] 〔待定〕…` (blocked until something still open is settled, other than a decision that is Alex's: an
+  item waiting on Alex's decision is 〔Alex〕)
+
+If STATE.md has to-do-like lists elsewhere (for example "open questions", "needs Alex to decide", "can be done by
+an agent", "next steps", "not done yet"), **move** those items into `## 待辦` (marking who is responsible) and
+delete the original section; write `- (無)` only when the whole STATE.md truly has no to-dos. Schedules and facts
+about finished work are not to-dos: leave them where they are. Anything you write is in Traditional Chinese (zh-Hant), like the
+rest of the file.
+
+The current problems:
+STATE.md:待辦沒標負責人或已完成未移除 `- [ ] 沒標負責人的一件事`
+
+## The current STATE.md (complete)
+<<<STATE
+# STATE
+
+現況,見 memory/reference/gone.md。
+
+這個專案的背景說明。這個專案的背景說明。這個專案的背景說明。這個專案的背景說明。這個專案的背景說明。這個專案的背景說明。這個專案的背景說明。這個專案的背景說明。這個專案的背景說明。這個專案的背景說明。這個專案的背景說明。這個專案的背景說明。這個專案的背景說明。這個專案的背景說明。這個專案的背景說明。這個專案的背景說明。這個專案的背景說明。這個專案的背景說明。這個專案的背景說明。這個專案的背景說明。這個專案的背景說明。這個專案的背景說明。這個專案的背景說明。這個專案的背景說明。這個專案的背景說明。這個專案的背景說明。這個專案的背景說明。這個專案的背景說明。這個專案的背景說明。這個專案的背景說明。這個專案的背景說明。這個專案的背景說明。這個專案的背景說明。這個專案的背景說明。這個專案的背景說明。這個專案的背景說明。這個專案的背景說明。這個專案的背景說明。這個專案的背景說明。這個專案的背景說明。
+
+## 待辦
+- [ ] 〔agent〕做一件事
+- [ ] 沒標負責人的一件事
+
+STATE>>>
+
+The format of the edit list:
+- edits are {"old", "new"} pairs applied in order: old must be a passage of the **current STATE.md that occurs exactly
+  once** (verbatim, newlines included; if it is so short that it occurs several times, take a few more characters), and
+  new is the text that replaces it (an empty string deletes the passage). Do not return the whole STATE.md.
+- The `(等 Alex:task-…)` marker at the end of a 〔Alex〕 line must stay on that item, unchanged: a format fix never
+  removes an item, so every such marker is still there afterwards.
+- reason is written in Traditional Chinese (zh-Hant).
 === prompt librarian-state-edits @ hub
 You are the cross-project integration agent (the librarian), responsible for the STATE.md of project pdang. You
 have no tools: everything you need is below, and your answer can only be one JSON object (its format is set by the

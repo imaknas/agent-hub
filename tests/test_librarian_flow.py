@@ -77,10 +77,16 @@ elif point == "librarian-state-edits":   # shadow: touches no file, only returns
     proj = re.search(r"the STATE.md of project (\S+)\. You", prompt).group(1)
     heading = os.environ["LIB_TEST_HEADING"]
     old = os.environ["LIB_TEST_MISS"] if proj == "p1" else heading
+    live = os.environ.get("LIB_TEST_LIVE")   # in charge: p0 is worth a digest entry, so index.md runs too
     res(structured_output={"state_updated": True, "edits": [{"old": old, "new": f"<!-- shadow {proj} -->\n{heading}"}],
-                           "worth_digesting": False, "summary": "", "reason": f"shadow {proj}"})
+                           "worth_digesting": bool(live) and proj == "p0", "summary": f"summary {proj}" if live else "",
+                           "reason": f"shadow {proj}"})
+elif point == "librarian-todo-format-edits":
+    res(structured_output={"edits": [{"old": os.environ["LIB_TEST_UNTAGGED"], "new": os.environ["LIB_TEST_TAGGED"]}],
+                           "reason": "format"})
 elif point == "librarian-index-edits":
-    res(structured_output={"index_updated": False, "edits": [], "relations_found": "none"})
+    e = [{"old": "# index\n", "new": "# index\n<!-- index edits -->\n"}] if os.environ.get("LIB_TEST_LIVE") else []
+    res(structured_output={"index_updated": bool(e), "edits": e, "relations_found": "none"})
 '''
 
 # must be bigger than a placeholder (check-state-todo skips small placeholder files, gen-todo.PLACEHOLDER_MAX_BYTES)
@@ -324,6 +330,22 @@ class LibrarianFlow(unittest.TestCase):
             self.assertNotIn("read ./AGENT.md", prompt,
                              "the completion version has no tools: the content is given directly")
 
+    def test_shadow_of_the_format_fix(self):
+        """librarian-todo-format-edits runs on the same malformed STATE.md the agent version was given; its proposal
+        is checked with check-state-todo and kept in the shadow dir, the real file is the agent version's"""
+        with tempfile.TemporaryDirectory() as d:
+            env = Env(pathlib.Path(d))
+            self.assertEqual(env.run("librarian.py").returncode, 0)
+            recs = [json.loads(x) for x in (env.hub / ".state" / "librarian-shadow" / f"{TODAY}.jsonl").read_text().splitlines()]
+            todo = [r for r in recs if r["point"] == "librarian-todo-format-edits"]
+            self.assertEqual([r["project"] for r in todo], ["pdang"])
+            self.assertTrue(todo[0]["ok"])
+            self.assertTrue(todo[0]["passes"])
+            self.assertTrue(todo[0]["agent_passes"])
+            self.assertEqual(todo[0]["marker_problems"], [])
+            prompt = next(c["prompt"] for c in env.calls() if c["point"] == "librarian-todo-format-edits")
+            self.assertIn(F["untagged"], prompt, "the malformed STATE.md is in the prompt")
+
     @unittest.skipUnless(len(IMPLS) == 2, "only one implementation left")
     def test_implementations_send_the_same_prompts(self):
         got = {}
@@ -335,6 +357,67 @@ class LibrarianFlow(unittest.TestCase):
                 import re
                 got[impl] = [{**c, "prompt": re.sub(r"\b[0-9a-f]{7,40}\b", "<sha>", c["prompt"])} for c in env.calls()]
         self.assertEqual(got["librarian.sh"], got["librarian.py"])
+
+
+class InCharge(unittest.TestCase):
+    """hub.json librarian.completion (llm-providers.md step 4): a switched part calls only its completion version and
+    the platform writes what the checked edit list says; an invalid list is that run's failure, never half written."""
+
+    def env(self, d, settings=None, extra=None):
+        env = Env(pathlib.Path(d))
+        (env.hub / "contracts").symlink_to(ROOT / "contracts")   # which shape each point has (llm_ready)
+        f = env.hub / "hub.json"
+        conf = {**json.loads(f.read_text()), **(extra or {})}
+        if settings is not None:
+            conf["librarian"] = {"completion": settings}
+        f.write_text(json.dumps(conf))
+        env.env["LIB_TEST_LIVE"] = "1"
+        r = env.run("librarian.py")
+        self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
+        return env, (env.hub / ".logs" / f"librarian-{TODAY}.log").read_text()
+
+    def check_in_charge(self, env, log):
+        points = {c["point"] for c in env.calls()}
+        self.assertEqual(points, {"librarian-state-edits", "librarian-todo-format-edits", "librarian-index-edits"})
+        p0 = env.tmp / "copies" / "p0"
+        self.assertIn("<!-- shadow p0 -->", (p0 / "STATE.md").read_text())
+        self.assertEqual(env.subjects("p0")[0], "librarian: update STATE.md")
+        self.assertTrue(env.ckpt_at_head("p0"))
+        self.assertIn(f"## {TODAY} · p0", (env.hub / "review-log.md").read_text())
+        # p1's edit list does not match: nothing written, the checkpoint stays for the next night
+        self.assertNotIn("<!-- shadow", (env.tmp / "copies" / "p1" / "STATE.md").read_text())
+        self.assertFalse(env.ckpt_at_head("p1"))
+        self.assertIn(zh("the edit list is invalid: {error}", error=""), log)
+        # the format fix by edit list
+        st = (env.tmp / "copies" / "pdang" / "STATE.md").read_text()
+        self.assertNotIn("- [ ] " + F["untagged"] + "\n", st)
+        self.assertIn(zh("{project}: to-do section format fixed", project="pdang"), log)
+        self.assertIn("<!-- index edits -->", (env.hub / "index.md").read_text())
+        recs = [json.loads(x) for x in (env.hub / ".state" / "librarian-shadow" / f"{TODAY}.jsonl").read_text().splitlines()]
+        self.assertTrue(recs and all(r.get("in_charge") for r in recs), "no comparisons while in charge")
+
+    def test_switched_on(self):
+        with tempfile.TemporaryDirectory() as d:
+            env, log = self.env(d, {"state": True, "todo_format": True, "index": True})
+            self.check_in_charge(env, log)
+            self.assertIn(zh("completion version in charge: {points}", points="librarian-state-edits, "
+                             "librarian-todo-format-edits, librarian-index-edits"), log)
+
+    def test_only_an_api_key(self):
+        """no coding agent, an API provider: the completion versions take over without a setting"""
+        with tempfile.TemporaryDirectory() as d:
+            env, log = self.env(d, extra={"runtime": {"default": "none"},
+                                          "llm": {"providers": {"local": {"impl": "ollama"}}}})
+            self.check_in_charge(env, log)
+
+    def test_one_part_at_a_time(self):
+        with tempfile.TemporaryDirectory() as d:
+            env, _log = self.env(d, {"index": True})
+            points = {c["point"] for c in env.calls()}
+            self.assertIn("librarian-state", points)
+            self.assertIn("librarian-state-edits", points, "state is still compared")
+            self.assertNotIn("librarian-index", points)
+            self.assertIn("<!-- index edits -->", (env.hub / "index.md").read_text())
 
 
 class NoModel(unittest.TestCase):

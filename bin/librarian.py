@@ -20,6 +20,10 @@ Robustness decisions (carried over):
    and is left for a person).
 5. The model may touch only ./STATE.md (enforced by permission rules); if it touches other files they are moved to
    quarantine and the checkpoint does not advance (second line of defence).
+6. Each part (state, todo-format, index) can be handed to its completion version on its own (hub.json
+   librarian.completion; see PARTS): the model then has no tools and returns an edit list, the platform checks it
+   (bin/edits.py: each old exactly once, key markers kept, the roster block untouched) and writes the file. Until a
+   part is switched its completion version runs in shadow mode (docs/design/llm-providers.md step 4).
 
 Usage: librarian.py (log written to .logs/librarian-<date>.log; also printed to the screen when run in a terminal)
 """
@@ -63,15 +67,34 @@ OWNER = hubconf.get("owner.tag") or "owner"            # how the prompt names th
 ASSISTANT = hubconf.assistant_name()
 CONTENT_LANG = hubconf.lang_content()                 # the language the model writes STATE.md and index.md in
 # Shadow mode (docs/design/llm-providers.md step 4): the completion version (librarian-state-edits,
-# librarian-index-edits) runs every night alongside today's agent version; only the comparison of its proposal with
-# the actual result is recorded in .state/librarian-shadow/, no real file is written. Switch over once the comparison
-# is good enough, then remove this.
+# librarian-index-edits, librarian-todo-format-edits) runs every night alongside today's agent version; only the
+# comparison of its proposal with the actual result is recorded in .state/librarian-shadow/, no real file is written.
+# Switch over once the comparison is good enough, then remove this.
 SHADOW = True
 SHADOW_DIR = STATE_DIR / "librarian-shadow"
+# The switch, one part at a time: part -> (agent version, completion version). hub.json librarian.completion.<part>:
+# true = the completion version is in charge (the model returns an edit list, the platform checks it and writes; the
+# agent version is not called and that part's shadow stops), false = the agent version, absent = the agent version
+# where this machine can run it, otherwise the completion version (someone with only an API key still gets a
+# librarian). The agent version stays the fallback until it is removed: setting the part back to false. An edit list
+# that fails the checks is never written and never handed to the agent version in the same run: it is that point's
+# failure (state: checkpoint not advanced; todo-format and index: left as they are), so the numbers stay visible.
+PARTS = {"state": ("librarian-state", "librarian-state-edits"),
+         "todo_format": ("librarian-todo-format", "librarian-todo-format-edits"),
+         "index": ("librarian-index", "librarian-index-edits")}
+COMPLETION = {part: False for part in PARTS}   # decided once per run in main()
 # registrar's key marker in either token set (without the end-of-line anchor)
 KEY_MARK = todo_tokens.patterns(OWNER).key_mark
 total_cost = 0.0
 cost_added = False   # the shell version printed $0 when there was no cost at all, %.6f only when there was
+
+
+def completion_in_charge(part: str) -> bool:
+    agent, completion = PARTS[part]
+    on = ((hubconf.get("librarian") or {}).get("completion") or {}).get(part)
+    if isinstance(on, bool):
+        return on
+    return llm_ready.unsupported(agent) is not None and llm_ready.unsupported(completion) is None
 
 
 def used_model(obj) -> str:
@@ -271,6 +294,10 @@ def index_prompt() -> str:
     return render("librarian-index")
 
 
+def todo_edits_prompt(problems: str, before: str) -> str:
+    return render("librarian-todo-format-edits", problems=problems, before=before)
+
+
 # ---------- shadow mode: the completion version ----------
 
 def _state_rules() -> str:
@@ -302,6 +329,20 @@ def _shadow_write(rec: dict, name: str | None = None, text: str | None = None) -
         f.write(json.dumps(rec, ensure_ascii=False) + "\n")
 
 
+def _now() -> str:
+    return datetime.datetime.now().astimezone().isoformat(timespec="seconds")
+
+
+def _miss(e: edits.EditError) -> dict:
+    """An old that did not match: the whole of it and the closest line of the text, so a report can tell a mistyped
+    character from an invented passage."""
+    if e.old is None or e.text is None:
+        return {}
+    first = next((l for l in e.old.splitlines() if l.strip()), e.old)
+    near = difflib.get_close_matches(first, e.text.splitlines(), n=1, cutoff=0.5)
+    return {"edit_old": e.old[:600], "edit_near": near[0] if near else None}
+
+
 def _shadow_call(point: str, prompt: str) -> tuple[dict | None, dict]:
     rc, obj, _text = llm(point, prompt, None)
     so = (obj or {}).get("structured_output") if rc == 0 else None
@@ -317,12 +358,11 @@ def shadow_state(proj: str, d: pathlib.Path, before: str, after: str, agent_chan
                  memory_section: str, h_note: str, d_note: str) -> None:
     """Compare the completion version's proposal for the same input with the STATE.md the agent version actually wrote.
     Records only; writes no real file."""
-    if not SHADOW:
+    if not SHADOW or COMPLETION["state"]:
         return
     try:
         so, meta = _shadow_call("librarian-state-edits", state_edits_prompt(proj, d, before, memory_section, h_note, d_note))
-        rec = {"ts": datetime.datetime.now().astimezone().isoformat(timespec="seconds"), "point": "librarian-state-edits",
-               "project": proj, "agent_changed": agent_changed, **meta}
+        rec = {"ts": _now(), "point": "librarian-state-edits", "project": proj, "agent_changed": agent_changed, **meta}
         if so is None:
             rec["ok"] = False
             _shadow_write(rec)
@@ -332,7 +372,7 @@ def shadow_state(proj: str, d: pathlib.Path, before: str, after: str, agent_chan
         try:
             proposed = edits.apply(before, so.get("edits") or [])
         except edits.EditError as e:
-            rec["edit_error"] = str(e)
+            rec.update(edit_error=str(e), **_miss(e))
         shadow_changed = bool(so.get("state_updated")) and proposed is not None and proposed != before
         rec.update(ok=proposed is not None, shadow_changed=shadow_changed, same_decision=shadow_changed == agent_changed,
                    edits=len(so.get("edits") or []), reason=str(so.get("reason") or "")[:400])
@@ -370,12 +410,11 @@ ROSTER = re.compile(r"<!-- roster:begin -->.*?<!-- roster:end -->", re.S)
 
 
 def shadow_index(before: str, after: str, digest_text: str) -> None:
-    if not SHADOW:
+    if not SHADOW or COMPLETION["index"]:
         return
     try:
         so, meta = _shadow_call("librarian-index-edits", index_edits_prompt(before, digest_text))
-        rec = {"ts": datetime.datetime.now().astimezone().isoformat(timespec="seconds"), "point": "librarian-index-edits",
-               "agent_changed": before != after, **meta}
+        rec = {"ts": _now(), "point": "librarian-index-edits", "agent_changed": before != after, **meta}
         if so is None:
             rec["ok"] = False
             _shadow_write(rec)
@@ -386,7 +425,7 @@ def shadow_index(before: str, after: str, digest_text: str) -> None:
         try:
             proposed = edits.apply(before, so.get("edits") or [])
         except edits.EditError as e:
-            rec["edit_error"] = str(e)
+            rec.update(edit_error=str(e), **_miss(e))
         if proposed is not None:
             rec["roster_untouched"] = ROSTER.findall(before) == ROSTER.findall(proposed)
             rec["similarity"] = round(difflib.SequenceMatcher(None, proposed, after).ratio(), 3)
@@ -398,6 +437,133 @@ def shadow_index(before: str, after: str, digest_text: str) -> None:
     except Exception as e:
         log(_("{project}: shadow mode failed: {error_type}: {error}", project="index.md", error_type=type(e).__name__,
               error=e))
+
+
+def todo_check(path: pathlib.Path) -> subprocess.CompletedProcess:
+    return run([PY, str(HUB / "bin" / "check-state-todo.py"), str(path)])
+
+
+def shadow_todo(proj: str, malformed: str, fixed: str, problems: str) -> None:
+    """The completion version of the format fix on the same malformed STATE.md the agent version was given: whether its
+    proposal passes check-state-todo, keeps every key marker, and how close it is to the agent version's fix."""
+    if not SHADOW or COMPLETION["todo_format"]:
+        return
+    try:
+        so, meta = _shadow_call("librarian-todo-format-edits", todo_edits_prompt(problems, malformed))
+        rec = {"ts": _now(), "point": "librarian-todo-format-edits", "project": proj, **meta}
+        day = SHADOW_DIR / TODAY
+        day.mkdir(parents=True, exist_ok=True)
+        agent_file = day / f"{proj}.todo-agent.STATE.md"
+        agent_file.write_text(fixed)
+        rec["agent_passes"] = todo_check(agent_file).returncode == 0
+        if so is None:
+            rec["ok"] = False
+            _shadow_write(rec)
+            log(_("{project}: shadow (completion version) has no result: {error}", project=proj, error=meta.get("error")))
+            return
+        proposed = None
+        try:
+            proposed = edits.apply(malformed, so.get("edits") or [])
+        except edits.EditError as e:
+            rec.update(edit_error=str(e), **_miss(e))
+        rec.update(ok=proposed is not None, edits=len(so.get("edits") or []), reason=str(so.get("reason") or "")[:400])
+        if proposed is not None:
+            name = f"{proj}.todo.STATE.md"
+            (day / name).write_text(proposed)
+            rec.update(passes=todo_check(day / name).returncode == 0,
+                       marker_problems=edits.check_markers(malformed, proposed, KEY_MARK, removable=False),
+                       identical_to_agent=proposed == fixed,
+                       similarity=round(difflib.SequenceMatcher(None, proposed, fixed).ratio(), 3))
+        _shadow_write(rec)
+        log(_("{project}: shadow (completion version) of the format fix: passes the check={shadow} (agent version={agent})",
+              project=proj, shadow=rec.get("passes", False), agent=rec["agent_passes"])
+            + (_(", similarity {similarity}", similarity=rec["similarity"]) if "similarity" in rec else "")
+            + (_(", edit list invalid: {error}", error=rec["edit_error"]) if "edit_error" in rec else "")
+            + (_(", marker problems: {n}", n=len(rec["marker_problems"])) if rec.get("marker_problems") else ""))
+    except Exception as e:   # a broken shadow does not affect the real run
+        log(_("{project}: shadow mode failed: {error_type}: {error}", project=proj, error_type=type(e).__name__, error=e))
+
+
+# ---------- the completion versions in charge (hub.json librarian.completion) ----------
+
+def _edits_call(point: str, prompt: str, before: str, rec: dict, removable: bool = True,
+                check=None) -> tuple[int, dict | None, str, str | None]:
+    """Call a completion point and apply its edit list to `before`, recording the run in the shadow log (in_charge,
+    so the report counts it apart from the comparisons). Returns (exit, llm.py's object, raw text, the new text); the
+    new text is None when the list fails a check (that object then carries llm_error)."""
+    rc, obj, text = llm(point, prompt, None)
+    so = (obj or {}).get("structured_output") if rc == 0 else None
+    rec.update(ts=_now(), point=point, in_charge=True, cost_usd=(obj or {}).get("total_cost_usd"),
+               model=(obj or {}).get("model"), provider=(obj or {}).get("provider"))
+    if not isinstance(so, dict):
+        rec.update(ok=False, error=(obj or {}).get("llm_error") or f"exit {rc}")
+        _shadow_write(rec)
+        return rc, obj, text, None
+    error = None
+    try:
+        proposed = edits.apply(before, so.get("edits") or [])
+    except edits.EditError as e:
+        proposed, error = None, str(e)
+        rec.update(**_miss(e))
+    if proposed is not None:
+        problems = edits.check_markers(before, proposed, KEY_MARK, removable=removable)
+        problems += check(before, proposed) if check else []
+        if problems:
+            proposed, error = None, "; ".join(problems)
+    rec.update(ok=proposed is not None, edits=len(so.get("edits") or []), changed=proposed not in (None, before))
+    if error:
+        rec["edit_error"] = error
+        obj = {**obj, "llm_error": _("the edit list is invalid: {error}", error=error)}
+    _shadow_write(rec)
+    return rc, obj, text, proposed
+
+
+def state_by_edits(proj: str, d: pathlib.Path, before: str, memory_section: str, h_note: str,
+                   d_note: str) -> tuple[int, dict | None, str]:
+    """librarian-state-edits in charge: returns what llm("librarian-state") would (the same structured_output fields),
+    having written STATE.md itself, so the rest of process() is unchanged. A list that fails the checks is a failed
+    call: nothing written, the checkpoint not advanced."""
+    rc, obj, text, proposed = _edits_call("librarian-state-edits",
+                                          state_edits_prompt(proj, d, before, memory_section, h_note, d_note), before,
+                                          {"project": proj})
+    if proposed is None:
+        return (rc or 1) if (obj or {}).get("llm_error") else rc, obj, text
+    if obj["structured_output"].get("state_updated") and proposed != before:
+        (d / "STATE.md").write_text(proposed)
+    return rc, obj, text
+
+
+def todo_by_edits(proj: str, d: pathlib.Path, problems: str) -> None:
+    """librarian-todo-format-edits in charge: a format fix may move and tag items, never drop one (every key marker
+    stays)."""
+    st = d / "STATE.md"
+    before = st.read_text(errors="replace")
+    _rc, obj, _text, proposed = _edits_call("librarian-todo-format-edits", todo_edits_prompt(problems, before), before,
+                                            {"project": proj}, removable=False)
+    add_cost(obj)
+    if proposed is None:
+        log(_("{project}: the format fix was not applied: {error}", project=proj,
+              error=(obj or {}).get("llm_error") or "?"))
+    elif proposed != before:
+        st.write_text(proposed)
+
+
+def _roster_kept(before: str, proposed: str) -> list[str]:
+    return [] if ROSTER.findall(before) == ROSTER.findall(proposed) else [_("the edits touch the roster block")]
+
+
+def index_by_edits(index_file: pathlib.Path, before: str, digest_text: str) -> tuple[int, dict | None, str]:
+    """librarian-index-edits in charge: edits outside the roster block only, written by the platform."""
+    rc, obj, text, proposed = _edits_call("librarian-index-edits", index_edits_prompt(before, digest_text), before, {},
+                                          check=_roster_kept)
+    if proposed is None:
+        if (obj or {}).get("llm_error"):
+            log(_("index.md: not updated: {error}", error=obj["llm_error"]))
+            return rc or 1, obj, text
+        return rc, obj, text
+    if proposed != before:
+        index_file.write_text(proposed)
+    return rc, obj, text
 
 
 # ---------- eval cases (docs/design/i18n.md E2) ----------
@@ -490,8 +656,13 @@ def repair_state_todo(proj: str, d: pathlib.Path) -> None:
     problems = r.stdout.rstrip("\n")
     log(_("{project}: the STATE.md to-do section is malformed, asking the model to fix only the format: {problems}",
           project=proj, problems=head_spaced(problems, 3)))
-    _rc, obj, _text = llm("librarian-todo-format", todo_fix_prompt(problems), d)
-    add_cost(obj)
+    if COMPLETION["todo_format"]:
+        todo_by_edits(proj, d, problems)
+    else:
+        malformed = (d / "STATE.md").read_text(errors="replace")
+        _rc, obj, _text = llm("librarian-todo-format", todo_fix_prompt(problems), d)
+        add_cost(obj)
+        shadow_todo(proj, malformed, (d / "STATE.md").read_text(errors="replace"), problems)
     r = run(check)
     if r.returncode == 0:
         log(_("{project}: to-do section format fixed", project=proj))
@@ -654,7 +825,10 @@ def process(proj: str, d: pathlib.Path, handoffs: list[dict], digest: list[str])
     case = record_state_case(proj, d, pre, before, {"changed": changed, "diff": diff, "truncated": truncated,
                                                      "handoffs": mine, "dangling": dangling, "anchors": anchors},
                              {"memory_section": memory_section, "h_note": h_note, "d_note": d_note})
-    rc, obj, text = llm("librarian-state", state_prompt(proj, memory_section, h_note, d_note), d)
+    if COMPLETION["state"]:
+        rc, obj, text = state_by_edits(proj, d, before, memory_section, h_note, d_note)
+    else:
+        rc, obj, text = llm("librarian-state", state_prompt(proj, memory_section, h_note, d_note), d)
     if rc != 0 or not text:
         # The call itself failed: it may have stopped halfway, so nothing is kept. Restore the copy to a clean state
         # rather than leave it for the next night
@@ -773,9 +947,13 @@ def main() -> int:
     LOG_DIR.mkdir(parents=True, exist_ok=True)
     copies = hubconf.p("memory_copies", "~/.memory-copies")
     log("=== librarian run start ===")
+    COMPLETION.update({part: completion_in_charge(part) for part in PARTS})
+    if any(COMPLETION.values()):
+        log(_("completion version in charge: {points}",
+              points=", ".join(PARTS[part][1] for part, on in COMPLETION.items() if on)))
     # no model to call (e.g. no coding agent): the feature is off, said once; the notes wait for a model, the
     # checkpoints stay where they are
-    if (off := llm_ready.unsupported("librarian-state")):
+    if (off := llm_ready.unsupported(PARTS["state"][COMPLETION["state"]])):
         log(_("the librarian is off: {reason}. STATE.md and index.md are not updated; the memory notes wait until a "
               "model is set up (nothing is lost)", reason=off))
         hublib.digest_append("projects", "")
@@ -804,8 +982,12 @@ def main() -> int:
         index_file = hubconf.data_file("index.md")
         index_before = index_file.read_text(errors="replace") if index_file.exists() else ""
         digest_now = hublib.digest_path()
-        icase = record_index_case(index_before, digest_now.read_text(errors="replace") if digest_now.exists() else "")
-        rc, obj, text = llm("librarian-index", index_prompt(), hubconf.data_dir())
+        digest_text = digest_now.read_text(errors="replace") if digest_now.exists() else "".join(digest)
+        icase = record_index_case(index_before, digest_text)
+        if COMPLETION["index"]:
+            rc, obj, text = index_by_edits(index_file, index_before, digest_text)
+        else:
+            rc, obj, text = llm("librarian-index", index_prompt(), hubconf.data_dir())
         if rc == 0 and text:
             if (cost := add_cost(obj)):
                 log(f"index.md: call cost ${cost} (model: {used_model(obj)})")

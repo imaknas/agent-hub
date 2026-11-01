@@ -833,6 +833,70 @@
   "exit": 0,
   "token_passed": true
  },
+ "librarian-todo-format-edits/default": {
+  "auth": "token",
+  "cmd": [
+   "claude",
+   "-p",
+   "golden prompt",
+   "--model",
+   "haiku",
+   "--output-format",
+   "json",
+   "--json-schema",
+   "{\"type\": \"object\", \"description\": \"the completion version of librarian-todo-format: the model has no tools and returns a list of edits that fix only the format of STATE.md's to-do section, which the platform applies (bin/edits.py) and checks again with check-state-todo\", \"properties\": {\"edits\": {\"type\": \"array\", \"description\": \"applied in order; each old must be a passage that occurs exactly once in the current STATE.md (newlines included), and new is the text that replaces it (an empty string deletes it)\", \"items\": {\"type\": \"object\", \"properties\": {\"old\": {\"type\": \"string\"}, \"new\": {\"type\": \"string\"}}, \"required\": [\"old\", \"new\"]}}, \"reason\": {\"type\": \"string\", \"description\": \"what was wrong and what the edits change, for a person spot-checking later; in the content language named in the prompt\"}}, \"required\": [\"edits\", \"reason\"]}"
+  ],
+  "exit": 0,
+  "token_passed": true
+ },
+ "librarian-todo-format-edits/model": {
+  "auth": "token",
+  "cmd": [
+   "claude",
+   "-p",
+   "golden prompt",
+   "--model",
+   "golden-model",
+   "--output-format",
+   "json",
+   "--json-schema",
+   "{\"type\": \"object\", \"description\": \"the completion version of librarian-todo-format: the model has no tools and returns a list of edits that fix only the format of STATE.md's to-do section, which the platform applies (bin/edits.py) and checks again with check-state-todo\", \"properties\": {\"edits\": {\"type\": \"array\", \"description\": \"applied in order; each old must be a passage that occurs exactly once in the current STATE.md (newlines included), and new is the text that replaces it (an empty string deletes it)\", \"items\": {\"type\": \"object\", \"properties\": {\"old\": {\"type\": \"string\"}, \"new\": {\"type\": \"string\"}}, \"required\": [\"old\", \"new\"]}}, \"reason\": {\"type\": \"string\", \"description\": \"what was wrong and what the edits change, for a person spot-checking later; in the content language named in the prompt\"}}, \"required\": [\"edits\", \"reason\"]}"
+  ],
+  "exit": 0,
+  "token_passed": true
+ },
+ "librarian-todo-format-edits/subscription": {
+  "auth": "subscription",
+  "cmd": [
+   "claude",
+   "-p",
+   "golden prompt",
+   "--model",
+   "haiku",
+   "--output-format",
+   "json",
+   "--json-schema",
+   "{\"type\": \"object\", \"description\": \"the completion version of librarian-todo-format: the model has no tools and returns a list of edits that fix only the format of STATE.md's to-do section, which the platform applies (bin/edits.py) and checks again with check-state-todo\", \"properties\": {\"edits\": {\"type\": \"array\", \"description\": \"applied in order; each old must be a passage that occurs exactly once in the current STATE.md (newlines included), and new is the text that replaces it (an empty string deletes it)\", \"items\": {\"type\": \"object\", \"properties\": {\"old\": {\"type\": \"string\"}, \"new\": {\"type\": \"string\"}}, \"required\": [\"old\", \"new\"]}}, \"reason\": {\"type\": \"string\", \"description\": \"what was wrong and what the edits change, for a person spot-checking later; in the content language named in the prompt\"}}, \"required\": [\"edits\", \"reason\"]}"
+  ],
+  "exit": 0,
+  "token_passed": false
+ },
+ "librarian-todo-format-edits/token": {
+  "auth": "token",
+  "cmd": [
+   "claude",
+   "-p",
+   "golden prompt",
+   "--model",
+   "haiku",
+   "--output-format",
+   "json",
+   "--json-schema",
+   "{\"type\": \"object\", \"description\": \"the completion version of librarian-todo-format: the model has no tools and returns a list of edits that fix only the format of STATE.md's to-do section, which the platform applies (bin/edits.py) and checks again with check-state-todo\", \"properties\": {\"edits\": {\"type\": \"array\", \"description\": \"applied in order; each old must be a passage that occurs exactly once in the current STATE.md (newlines included), and new is the text that replaces it (an empty string deletes it)\", \"items\": {\"type\": \"object\", \"properties\": {\"old\": {\"type\": \"string\"}, \"new\": {\"type\": \"string\"}}, \"required\": [\"old\", \"new\"]}}, \"reason\": {\"type\": \"string\", \"description\": \"what was wrong and what the edits change, for a person spot-checking later; in the content language named in the prompt\"}}, \"required\": [\"edits\", \"reason\"]}"
+  ],
+  "exit": 0,
+  "token_passed": true
+ },
  "librarian-todo-format/default": {
   "auth": "token",
   "cmd": [

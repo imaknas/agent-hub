@@ -8,7 +8,9 @@ Reads .state/librarian-shadow/<date>.jsonl (written nightly by librarian.py) and
 runs, whether there was a result, whether the edit list was valid, the share agreeing with the agent version on "change
 or not", how similar the written content is to the agent version's, how many times the key markers went wrong, and cost.
 Disagreements are listed one by one (project, date, both sides' decisions, the completion version's reason); the full
-proposals are in .state/librarian-shadow/<date>/.
+proposals are in .state/librarian-shadow/<date>/. For the format fix (librarian-todo-format-edits) it counts how often
+each side's result passes check-state-todo. Runs where the completion version was in charge (hub.json
+librarian.completion) have nothing to compare with and are counted apart: valid edit lists, how many changed the file.
 """
 from __future__ import annotations
 
@@ -39,7 +41,20 @@ def main() -> int:
         print(_("no shadow records in the last {days} {days:day|days} ({dir})", days=a.days, dir=DIR))
         return 1
     for point in sorted({r["point"] for r in recs}):
-        rs = [r for r in recs if r["point"] == point]
+        live = [r for r in recs if r["point"] == point and r.get("in_charge")]
+        rs = [r for r in recs if r["point"] == point and not r.get("in_charge")]
+        if live:
+            print(_("== {point} in charge: {n} {n:run|runs}, cost ${cost:.3f}", point=point, n=len(live),
+                    cost=sum(r.get("cost_usd") or 0 for r in live)))
+            print("  " + _("valid edit list {valid}; changed the file {changed}",
+                           valid=f"{sum(1 for r in live if r.get('ok'))}/{len(live)}",
+                           changed=sum(1 for r in live if r.get("changed"))))
+            for r in live:
+                if not r.get("ok"):
+                    print("  - " + _("invalid {day} {project}: {error}", day=r["_day"], project=r.get("project", ""),
+                                     error=(r.get("edit_error") or r.get("error") or "")[:160]))
+        if not rs:
+            continue
         ok = [r for r in rs if r.get("ok")]
         sims = [r["similarity"] for r in ok if "similarity" in r]
         cost = sum(r.get("cost_usd") or 0 for r in rs)
@@ -49,8 +64,13 @@ def main() -> int:
         print("  " + _("got a result, valid edit list  {valid}; invalid {invalid}, no result {none}",
                        valid=pct(len(ok), len(rs)), invalid=sum(1 for r in rs if "edit_error" in r),
                        none=sum(1 for r in rs if "edit_error" not in r and not r.get("ok"))))
-        print("  " + _("same change-or-not as the agent version {same}",
-                       same=pct(sum(1 for r in ok if r.get("same_decision")), len(ok))))
+        if point.endswith("todo-format-edits"):
+            print("  " + _("passes check-state-todo: completion version {shadow}, agent version {agent}",
+                           shadow=pct(sum(1 for r in ok if r.get("passes")), len(ok)),
+                           agent=pct(sum(1 for r in rs if r.get("agent_passes")), len(rs))))
+        else:
+            print("  " + _("same change-or-not as the agent version {same}",
+                           same=pct(sum(1 for r in ok if r.get("same_decision")), len(ok))))
         if sims:
             print("  " + _("similarity to the agent version  mean {mean:.2f}, lowest {low:.2f}; identical {n}",
                            mean=sum(sims) / len(sims), low=min(sims), n=sum(1 for r in ok if r.get("identical_to_agent"))))
@@ -61,7 +81,7 @@ def main() -> int:
         if point.endswith("index-edits"):
             print("  " + _("roster block untouched {n}", n=pct(sum(1 for r in ok if r.get("roster_untouched")), len(ok))))
         for r in rs:
-            if r.get("ok") and not r.get("same_decision"):
+            if r.get("ok") and "same_decision" in r and not r["same_decision"]:
                 print("  - " + _("disagrees {day} {project}: completion version change={shadow}, agent version={agent}. "
                                  "Reason: {reason}", day=r["_day"], project=r.get("project", ""),
                                  shadow=r.get("shadow_changed"), agent=r.get("agent_changed"),

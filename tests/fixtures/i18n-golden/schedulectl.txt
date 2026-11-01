@@ -196,7 +196,7 @@ p-refused                ?                ⚠️ no key for provider x
 === set-model state
 [exit None]
 警告:hub.json 已寫入,但 commit/push 失敗,需要手動處理
-hub.json llm.points:librarian-state、librarian-todo-format、librarian-state-edits → m-x
+hub.json llm.points:librarian-state、librarian-todo-format、librarian-state-edits、librarian-todo-format-edits → m-x
 === hub.json
 {
   "v": 1,
@@ -210,6 +210,9 @@ hub.json llm.points:librarian-state、librarian-todo-format、librarian-state-ed
       },
       "librarian-state-edits": {
         "model": "m-x"
+      },
+      "librarian-todo-format-edits": {
+        "model": "m-x"
       }
     }
   }
@@ -217,7 +220,7 @@ hub.json llm.points:librarian-state、librarian-todo-format、librarian-state-ed
 === set-model state default
 [exit None]
 警告:hub.json 已寫入,但 commit/push 失敗,需要手動處理
-hub.json llm.points:librarian-state、librarian-todo-format、librarian-state-edits → default
+hub.json llm.points:librarian-state、librarian-todo-format、librarian-state-edits、librarian-todo-format-edits → default
 === set-model one point
 [exit None]
 警告:hub.json 已寫入,但 commit/push 失敗,需要手動處理

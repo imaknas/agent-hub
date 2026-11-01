@@ -242,6 +242,23 @@
         }
       }
     },
+    "librarian": {
+      "type": "object",
+      "description": "docs/design/llm-providers.md step 4: which parts of the nightly librarian run as completion (the model returns an edit list, the platform checks and writes it) instead of the agent version. Per part: true = completion in charge, false = the agent version, absent = the agent version where this machine can run it, otherwise completion. The owner switches a part from the shadow report (bin/librarian-shadow-report.py)",
+      "additionalProperties": false,
+      "properties": {
+        "_comment": {"type": "string"},
+        "completion": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "state": {"type": "boolean"},
+            "todo_format": {"type": "boolean"},
+            "index": {"type": "boolean"}
+          }
+        }
+      }
+    },
     "mailbox": {
       "type": "object",
       "properties": {

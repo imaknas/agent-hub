@@ -7,5 +7,8 @@
   "key marker problems {n} {n:time|times}: ": "key 標記有問題 {n} 次:",
   "roster block untouched {n}": "名冊區塊沒被動 {n}",
   "disagrees {day} {project}: completion version change={shadow}, agent version={agent}. Reason: {reason}": "不一致 {day} {project}:completion 版要改={shadow},agent 版={agent}。理由:{reason}",
-  "invalid {day} {project}: {error}": "不合規 {day} {project}:{error}"
+  "invalid {day} {project}: {error}": "不合規 {day} {project}:{error}",
+  "== {point} in charge: {n} {n:run|runs}, cost ${cost:.3f}": "== {point} 負責中:{n} 次,成本 ${cost:.3f}",
+  "valid edit list {valid}; changed the file {changed}": "編輯清單合規 {valid};改了檔案 {changed} 次",
+  "passes check-state-todo: completion version {shadow}, agent version {agent}": "過 check-state-todo:completion 版 {shadow},agent 版 {agent}"
 }

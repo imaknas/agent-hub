@@ -31,5 +31,11 @@
   "{project}: STATE.md has stale code anchors: {anchors}": "{project}:STATE.md 有過時的程式碼錨點:{anchors}",
   "{project}: anchors that do not resolve on the project's main were turned back into plain code: {anchors}": "{project}:在專案 main 上找不到的錨點改回一般程式碼:{anchors}",
   "{project}: admission undid the model's only edit (anchors that do not resolve)": "{project}:模型唯一的修改是找不到的錨點,收錄時已全部改回",
-  "the librarian is off: {reason}. STATE.md and index.md are not updated; the memory notes wait until a model is set up (nothing is lost)": "librarian 停用:{reason}。STATE.md 跟 index.md 不更新;memory 筆記留著,等設好模型再處理(不會遺失)"
+  "the librarian is off: {reason}. STATE.md and index.md are not updated; the memory notes wait until a model is set up (nothing is lost)": "librarian 停用:{reason}。STATE.md 跟 index.md 不更新;memory 筆記留著,等設好模型再處理(不會遺失)",
+  "{project}: shadow (completion version) of the format fix: passes the check={shadow} (agent version={agent})": "{project}: 影子(completion 版)修格式:過檢查={shadow}(agent 版={agent})",
+  "{project}: the format fix was not applied: {error}": "{project}: 格式修正沒有套用:{error}",
+  "the edit list is invalid: {error}": "編輯清單不合規:{error}",
+  "the edits touch the roster block": "編輯動到了名冊區塊",
+  "index.md: not updated: {error}": "index.md: 沒有更新:{error}",
+  "completion version in charge: {points}": "由 completion 版負責:{points}"
 }
