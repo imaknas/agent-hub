@@ -68,7 +68,7 @@ def ratchet_files() -> list[pathlib.Path]:
         paths = [ROOT / p for p in out.split("\0") if p]
     except (OSError, subprocess.CalledProcessError):
         paths = []
-    if not paths:  # the test-gate's exported copy is not a git repo
+    if not paths:  # the test runner's exported copy is not a git repo
         paths = [p for d in RATCHET_SCOPE for p in ((ROOT / d).rglob("*") if (ROOT / d).is_dir() else [ROOT / d])]
     return sorted(p for p in paths if p.is_file() and "__pycache__" not in p.parts
                   and str(p.relative_to(ROOT)) not in RATCHET_EXEMPT)

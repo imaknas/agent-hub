@@ -687,7 +687,10 @@ replaces; each step only adds to the ones before it.
       page red), and the regular applier also owns the hub's hooks with drift detection, so a deployment updated
       without `merge-branch` (a `git pull`) is brought in line on the next tick. The store's module lands here and
       `test-gate` keeps its own file until 2.3 makes it thin.
-   3. (Ahead of it, 11-01: the hook installer for `gate: strict`, `commit_gate` and `commits: conventional`
+   3. (Done 11-01, `f7f6d42`, after a rehearsal in a throwaway hub that found three runner bugs first fixed on main
+      — `fc22de9`, runs under `.git`; `e224f99`, TMPDIR in the checkout and no `lsof` on PATH; `test-gate` removed
+      right after. Still to do: `config apply` rewriting the registry files as v2, deploy, the nightly job.)
+      (Ahead of it, 11-01: the hook installer for `gate: strict`, `commit_gate` and `commits: conventional`
       repos, which skips agent-hub until this merge. Left out of it, 11-01: `session.report` v2 and lease-handover v2,
       which no reader needs for the switch; `test-gate` stays thin for this one merge, as the old `merge-branch` runs
       it, and goes in the next.) **One merge** switching the readers and callers: the read-time upgrade of v1 documents in the live readers (B1);

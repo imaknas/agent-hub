@@ -11,7 +11,7 @@ its tests (the floor becomes the slowest single test). The E1 goldens' second pa
 (tests/test_i18n_golden_en.py) becomes one more item per golden module (I18N_GOLDEN_LANG=en), so it is spread over the
 pool too instead of being one long item.
 
-The output ends like unittest's own (bin/test-gate reads it): `Ran <n> tests in <s>s`, then `OK` / `OK (skipped=k)` or
+The output ends like unittest's own (people and agents read it): `Ran <n> tests in <s>s`, then `OK` / `OK (skipped=k)` or
 `FAILED (failures=…, errors=…, skipped=…)`; before it, the full output of every module that failed (its `FAIL:` /
 `ERROR:` blocks at the start of a line). Exit 1 when any module failed.
 
@@ -51,7 +51,7 @@ def key(item: tuple[str, str | None]) -> str:
 
 
 def env_for(tests: pathlib.Path, lang: str | None) -> dict[str, str]:
-    # the tree under test is the platform the tests see (as test-gate sets it): an explicit root skips hubconf's
+    # the tree under test is the platform the tests see (as the test runner's export is): an explicit root skips hubconf's
     # lookup of the main checkout, so a run in a linked worktree never reaches the machine's live instance. Only the
     # root: HOME and STATE would leak into the fake hubs the tests build (docs/design/test-waiting.md A1)
     env = {**os.environ, "PYTHONPATH": os.pathsep.join(filter(None, [str(tests), os.environ.get("PYTHONPATH")])),

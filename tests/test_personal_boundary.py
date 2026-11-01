@@ -62,7 +62,7 @@ def files() -> list[pathlib.Path]:
         paths = [ROOT / p for p in out.split("\0") if p]
     except (OSError, subprocess.CalledProcessError):
         paths = []
-    # not in git, or git found another repo further up and returned an empty list (the test-gate's exported copy once
+    # not in git, or git found another repo further up and returned an empty list (the test runner's exported copy once
     # did this, and the ratchet passed having scanned nothing)
     if not paths:
         paths = [p for d in SCOPE for p in (ROOT / d).rglob("*") if p.is_file()] + [ROOT / f for f in PUBLIC_DOCS]

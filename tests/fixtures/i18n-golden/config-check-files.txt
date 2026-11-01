@@ -7,7 +7,7 @@ config pipeline 的 check(docs/design/new-user.md 3.7):一次驗證所有 config
   config-check            驗 working tree 的 config
   config-check --staged   驗**暫存區**(要 commit 的內容;config repo 的
                           githooks/config/pre-commit 呼叫;agent-hub 的 lint 層用 --child 跑同樣的檢查)。暫存區沒有改到 config 檔就直接過。
-                          共用的 working tree 裡可能有別人改到一半的檔案,所以照 test-gate 的做法把暫存區匯出到暫存目錄,
+                          共用的 working tree 裡可能有別人改到一半的檔案,所以照測試執行器的做法把暫存區匯出到暫存目錄,
                           用 AGENT_HUB_ROOT 指過去再驗。
 
 驗什麼:

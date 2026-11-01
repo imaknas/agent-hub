@@ -3,7 +3,8 @@
 # imports/variables…), no formatting.
 # The rules are in ruff.toml at the repo root (editors read that one too); ruff is installed in the platform's venv
 # (bin/setup-python, pinned version).
-# The commit gate (bin/test-gate) runs it on the copy exported from the index; it can also be run by hand.
+# agent-hub's lint tier (projects/agent-hub.yaml, run by agenthub test) runs it on an exported tree; it can also be
+# run by hand.
 #   lint [dir]      default: the hub root; problems exit 1, no ruff exit 2 (says to run bin/setup-python)
 # Scripts without an extension (first line is bin/py's shebang or python) aren't recognized by ruff on its own; they are
 # listed here and handed to it too.

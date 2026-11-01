@@ -1,4 +1,4 @@
-"""bin/run-tests: the parallel runner the commit gate uses. Its summary must read like unittest's (bin/test-gate parses
+"""bin/run-tests: the parallel runner the commit gate uses. Its summary must read like unittest's (people and agents read
 it) and every kind of failure must fail the run.
 
     bin/py -m unittest tests.test_run_tests
@@ -48,7 +48,7 @@ class RunTests(unittest.TestCase):
         self.assertEqual(r.stdout.count("-" * 70), 3, "one under each FAIL/ERROR header and the final one, as unittest "
                                                       "prints them; not each module's own one before its Ran line")
         self.assertEqual(len([l for l in r.stdout.splitlines() if l.startswith(("OK", "FAILED"))]), 1,
-                         "only the overall result line starts with OK/FAILED (bin/test-gate greps for them)")
+                         "only the overall result line starts with OK/FAILED (people and agents look for them)")
 
     def test_a_slow_module_runs_test_by_test(self):
         """a module slower than TEST_SPLIT_S last time: each of its tests is its own item; its total is still recorded"""
