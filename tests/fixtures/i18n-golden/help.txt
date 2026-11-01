@@ -20,6 +20,10 @@ agent-hub 的單一入口(docs/design/new-user.md 3.4)。薄薄一層分派,不�
                         專案登錄、config apply、排程器、hook、CLI、doctor。先列出 changelog;--check 列完就停
                         (exit 10 = 有新版)。開發用的 checkout 一律不動(bin/upgrade.py)
   agenthub init --scheduler-only   只從樣板重裝排程器跟看門狗(upgrade 會跑)
+  agenthub init --questions [--answers <檔案>] | --answers <檔案>
+                        給在對話裡幫你設定 agent-hub 的 AI agent 用(README 的「Set up through your agent」):先把問題
+                        印成 JSON;再套用答案,最後一行是一個 JSON。同意與金鑰一律直接問你(螢幕上的視窗、瀏覽器裡的頁面),
+                        不從檔案拿
 config:
   agenthub config check | plan | apply [--only <套用者>,...]
                         驗證 config / 會改什麼 / 套用(check → 套用 → 再 plan 要是空的 → 記錄)

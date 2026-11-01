@@ -21,6 +21,10 @@ Getting started:
                         changelog first; --check stops there (exit 10 = an upgrade is there). Never moves a development
                         checkout (bin/upgrade.py)
   agenthub init --scheduler-only   only (re)install the scheduler and watchdog from the templates (upgrade runs it)
+  agenthub init --questions [--answers <file>] | --answers <file>
+                        for an AI agent setting agent-hub up in its chat (README, "Set up through your agent"): the
+                        questions as JSON; then the answers applied, ending with one JSON line. Consents and keys are
+                        asked of you directly (a window on your screen, a page in your browser), never taken from the file
 config:
   agenthub config check | plan | apply [--only <applier>,...]
                         validate the config / what would change / apply (check → apply → plan again must be empty → record)
@@ -751,6 +755,8 @@ def answers_problem(a) -> str | None:
             return _("{id} is not a question init --answers takes (see init --questions)", id=k)
         if not isinstance(v, str):
             return _("the answer to {id} must be text", id=k)
+        if v.startswith("-"):   # it becomes the value of init's option: never an option itself
+            return _("the answer to {id} can't start with -", id=k)
     choices = {"language": [*hubconf.LANGUAGES, "split"], "language_ui": list(hubconf.LANGUAGES),
                "language_content": list(hubconf.LANGUAGES), "agent": [*agent_presets(), "none"], "llm": list(LLM_CHOICES)}
     for k, allowed in choices.items():
@@ -1386,6 +1392,11 @@ def llm_setup(args: dict) -> int:
             print(_("judgment points go to the runtime {runtime} (its own login; models follow its group table, see "
                     "schedulectl models)", runtime=rt))
         return 0
+    if not interactive and not args.get("llm-model"):   # stop before a key is asked for nothing
+        print(_("When running non-interactively, give the model with --llm-model <name> (or run agenthub llm setup "
+                "interactively later)"),
+              file=sys.stderr)
+        return 1
     mod = runtime_ports.load_completion(choice)
     conf = {"impl": choice}
     base = args.get("llm-base-url") or UI().ask("llm_base_url", _("address (Ollama)") if choice == "ollama" else
@@ -1408,11 +1419,6 @@ def llm_setup(args: dict) -> int:
     names = mod.list_models(probe) if (probe.get("_key") or choice == "ollama") else []
     if args.get("llm-model"):
         picked = {g: args["llm-model"] for g in completion.GROUPS}
-    elif not interactive:
-        print(_("When running non-interactively, give the model with --llm-model <name> (or run agenthub llm setup "
-                "interactively later)"),
-              file=sys.stderr)
-        return 1
     else:
         if names:
             print(_("{choice} has these models:", choice=choice))

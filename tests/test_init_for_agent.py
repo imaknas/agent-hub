@@ -67,7 +67,7 @@ class ForAgent(unittest.TestCase):
 
     def test_the_file_cannot_consent_or_carry_secrets(self):
         for bad in ({"register_mcp": "yes"}, {"connect_root": "yes"}, {"agent_token": "x"}, {"llm_key": "x"},
-                    {"agent": "someone"}, {"owner": 5}):
+                    {"agent": "someone"}, {"owner": 5}, {"owner": "--dry-run"}, {"owner": "--scheduler-only"}):
             with self.subTest(bad=bad):
                 r = self.hub_cmd("init", "--answers", self.answers(**bad), "--no-launchd")
                 self.assertEqual(r.returncode, 2, r.stdout)
