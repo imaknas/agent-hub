@@ -116,8 +116,16 @@ agenthub doctor                      # everything that is missing or broken, eac
 ```
 
 ```bash
-agenthub onboard ~/workspace/my-app  # connect a project (--no-remote: don't create a GitHub repo)
+agenthub connect ~/code             # connect existing folders as projects: one, a monorepo, or a folder of repos
 ```
+
+```bash
+agenthub onboard ~/workspace/my-app  # start a new project (--no-remote: don't create a GitHub repo)
+```
+
+Then open your AI agent in the project's folder (`cd ~/workspace/my-app`, then `claude` or `codex`): it picks up the
+project's setup when the session starts. How everything is doing, without a terminal: the status page at
+http://localhost:18790.
 
 Read the installer first if you like: [`install.sh`](install.sh). The same by hand:
 
@@ -154,7 +162,8 @@ something only the user can do: tell them, wait until they say it's done, then r
 4. Tell the user to watch their screen for agent-hub's windows and pages, then run `… agenthub init --answers <file>`.
    It waits up to 10 minutes on each window or page, so run it in the background or with a long timeout. The last
    line is `{"done": …, "needs_user": [...]}`; for anything in `needs_user`, tell the user, then run it again.
-5. Run `… agenthub doctor` and tell the user what it says is missing.
+5. Run `… agenthub doctor` and tell the user what it says is missing. Afterwards the user sees how things are at
+   http://localhost:18790, and in any chat can ask to connect a folder or what's waiting for them.
 
 With a model set up (`agenthub llm setup`) and the scheduler running, the next morning there is a digest and a `todo.md`
 in the instance's data directory. Without a model they are not written: the librarian's judgment calls fail and say

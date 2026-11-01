@@ -5,7 +5,7 @@
 v: 1
 name: codex
 type: module
-description: "agent runs and judgment calls through Codex; your sessions reach the mailbox through MCP only"
+description: "background work and agent-hub's decisions through Codex; your Codex chats reach the mailbox by asking agent-hub's tools (no letters shown in the chat by themselves yet)"
 runtime_preset:
   label: Codex
   find: codex

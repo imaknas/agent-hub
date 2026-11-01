@@ -112,8 +112,8 @@ class Setup(unittest.TestCase):
         self.hub("llm", "setup", "--llm", "ollama", "--llm-base-url", self.base, "--llm-model", "local-a", "--yes")
         r = self.hub("llm", "setup", "--llm", "runtime", "--yes")
         self.assertEqual(r.returncode, 0)
-        self.assertIn(T("⚠️ no coding agent is set up (runtime.default: none), so runtime has no login to hand judgment "
-                        "points to: they will fail. Pick a provider: agenthub llm setup"), r.stdout,
+        self.assertIn(T("⚠️ no AI agent is set up, so there is no agent login to make agent-hub's decisions with: they "
+                        "will fail. Pick a provider: agenthub llm setup"), r.stdout,
                       "runtime none, picking runtime: says plainly that judgment points will fail")
         self.assertEqual(self.hub_json()["llm"], {"points": {"consolidate": {"model": "pinned"}}})
 

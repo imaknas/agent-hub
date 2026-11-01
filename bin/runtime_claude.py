@@ -961,7 +961,7 @@ def install_info() -> dict:
     unattended runs, and the settings that make it the platform's agent. The steps are shell lines run on the owner's
     yes, user level only."""
     return {"label": "Claude Code",
-            "gives": _("everything: session hooks, the mailbox in your sessions, background work"),
+            "gives": _("everything: letters and note reminders inside your chats, and work in the background"),
             "find": "claude",
             "install": ['[ -s "$HOME/.nvm/nvm.sh" ] || curl -fsSL https://raw.githubusercontent.com/nvm-sh/nvm/v0.40.3/install.sh | bash',
                         '. "$HOME/.nvm/nvm.sh" && nvm install --lts && nvm alias default "lts/*" '

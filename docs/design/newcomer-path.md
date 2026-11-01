@@ -565,7 +565,14 @@ Once picked, the text goes in the README's first lines, the GitHub description, 
    over keep `init-unfinished`, so the same `--answers` carries on. `install.sh --for-agent` never prompts and never
    runs sudo; on a Mac with a screen it opens Apple's installer window and returns `needs_user`. README has the
    pasteable prompt and the agent's steps; `README.zh-Hant.md` is new.
-7. **B8**: the wording pass.
+7. **B8**: the wording pass. **Done 11-02**: init's questions and results, the llm step, the agent menu's texts, the
+   MCP registration question and connect's refusals say "agent-hub's folder", "agent-hub's decisions", "AI agent",
+   "version history" and "optional features" instead of instance directory, judgment points, runtime, git repo and
+   modules. doctor without any AI agent shows one row (what still works, and `agenthub init --agent …`) instead of
+   ten feature rows that each said `hub.json runtime.default is none`. README's quick start shows `agenthub connect`
+   for existing folders, the first session, and the status page; the agent steps end with it. The
+   `new-or-onboard-project` skill no longer carries this deployment's history or paths, and uses `agenthub connect`
+   for existing folders. Rows and messages for an already configured setup keep their exact terms.
 8. **Positioning**: done 11-01 (README, social preview, GitHub description).
 
 **Files touched:**

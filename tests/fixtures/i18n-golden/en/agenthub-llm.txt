@@ -19,13 +19,13 @@ no option bogus (choices: runtime, anthropic, openai, ollama, none)
 $ agenthub llm setup --llm none --yes
 [exit 0]
 --- stdout
-judgment points stay unset: when needed, they fail plainly and say why. Run agenthub llm setup later
+agent-hub's decisions stay off for now: whatever needs one fails plainly and says why. Run agenthub llm setup later
 --- stderr
 
 $ agenthub llm setup --llm runtime --yes    # runtime none
 [exit 0]
 --- stdout
-⚠️ no coding agent is set up (runtime.default: none), so runtime has no login to hand judgment points to: they will fail. Pick a provider: agenthub llm setup
+⚠️ no AI agent is set up, so there is no agent login to make agent-hub's decisions with: they will fail. Pick a provider: agenthub llm setup
 --- stderr
 
 $ agenthub llm setup --llm openai --yes
@@ -37,7 +37,7 @@ When running non-interactively, give the model with --llm-model <name> (or run a
 $ agenthub llm setup --llm anthropic --llm-model m1 --yes
 [exit 1]
 --- stdout
-hub.json llm: judgment points go to anthropic (fast=m1, standard=m1, strong=m1); ⚠️ not usable yet: no key: <TMP>/secrets/anthropic-api-key does not exist (`agenthub llm set-key` writes it)
+agent-hub's decisions go to anthropic (fast=m1, standard=m1, strong=m1); ⚠️ not usable yet: no key: <TMP>/secrets/anthropic-api-key does not exist (`agenthub llm set-key` writes it)
 remember to commit hub.json (config as code). Agent work (mailbox handling and the like) needs a coding agent; see the feature table in agenthub doctor
 --- stderr
 
@@ -62,5 +62,5 @@ llm.providers.anthropic.key is not {"secret": file name} (a key from an environm
 $ agenthub llm setup --llm runtime --yes    # runtime claude
 [exit 0]
 --- stdout
-judgment points go to the runtime claude (its own login; models follow its group table, see schedulectl models)
+agent-hub's decisions go through claude's own login (the model for each: schedulectl models)
 --- stderr

@@ -480,8 +480,9 @@ def offer_mcp_registration(presets: dict[str, dict]) -> None:
     if not tools:
         return
     labels = ", ".join(info["label"] for _n, info in tools)
-    if not UI().consent("register_mcp", _("Let your AI apps ({tools}) use agent-hub in every folder? This registers "
-                                          "agent-hub's MCP server for your user.", tools=labels)):
+    if not UI().consent("register_mcp", _("Let your AI apps ({tools}) use agent-hub in every folder? This adds "
+                                          "agent-hub to their tools for your user account (as an MCP server).",
+                                          tools=labels)):
         print(_("Not registered. Later: agenthub init --register-mcp"))
         return
     for _n, info in tools:
@@ -543,10 +544,11 @@ def new_hub_json(args: dict) -> dict:
         for k in held:
             d["modules"][k] = False
         if held and not args.get("modules"):
-            print(_("left off: {modules}. These modules only do judgment-point work, and no model is set up for that; "
-                    "after agenthub llm setup, turn them on with agenthub modules enable <name>", modules=", ".join(held)))
+            print(_("left off: {modules}. They only work with an AI model making agent-hub's decisions, and none is set "
+                    "up yet; after agenthub llm setup, turn them on with agenthub modules enable <name>",
+                    modules=", ".join(held)))
     default_on = ",".join(k for k in shipped if d["modules"][k] is True)
-    picked = args.get("modules") or UI().ask("modules", _("which modules to turn on (available: {modules})",
+    picked = args.get("modules") or UI().ask("modules", _("which optional features to turn on (available: {modules})",
                                                            modules=', '.join(shipped)), default_on)
     want = {m.strip() for m in picked.split(",") if m.strip()}
     for k in shipped:
@@ -608,9 +610,9 @@ def config_repo_first_commit(cfgdir: pathlib.Path, owner: str) -> tuple[bool, li
     a lock in the hub checkout's git dir, and pushes; this is the first commit of everything in config/, as
     move-instance makes it."""
     if not shutil.which("git"):
-        return False, [_("⚠️ git is not installed: {dir} is not a git repo, so config changes are not recorded and "
-                         "onboarding cannot commit the registry. Install git, then run agenthub init again (it commits "
-                         "the config as it is)", dir=cfgdir)]
+        return False, [_("⚠️ git is not installed: {dir} keeps no version history, so settings changes are not recorded "
+                         "and connecting projects can't record them. Install git, then run agenthub init again (it "
+                         "records the settings as they are)", dir=cfgdir)]
     if not (cfgdir / ".git").exists():
         subprocess.run(["git", "init", "-q", str(cfgdir)], capture_output=True)
         subprocess.run(["git", "-C", str(cfgdir), "config", "core.hooksPath", str(ROOT / "githooks" / "config")])
@@ -709,7 +711,7 @@ def init_argv_problem(argv: list[str]) -> str | None:
 
 def instance_home_answer(args: dict) -> pathlib.Path:
     return pathlib.Path(os.path.expanduser(args.get("home") or os.environ.get("AGENT_HUB_HOME") or UI().ask(
-        "home", _("instance directory (your config, data and credentials live here)"), "~/.agent-hub")))
+        "home", _("where agent-hub keeps your settings, data and keys"), "~/.agent-hub")))
 
 
 def connect_existing(args: dict, yes: bool) -> None:
@@ -916,7 +918,7 @@ def cmd_init(argv: list[str], transport=None) -> int:
         INIT_UNFINISHED.parent.mkdir(parents=True, exist_ok=True)
         INIT_UNFINISHED.write_text("llm-setup\n")
         created = True
-        print(_("✓ instance directory {home} (owner {owner}, modules {modules})", home=home,
+        print(_("✓ agent-hub's folder: {home} (you: {owner}; on: {modules})", home=home,
                 owner=d['owner']['tag'], modules=', '.join(k for k, v in d['modules'].items() if v is True)))
     if dry and not hubconf.config_file("hub.json").exists():
         return 0
@@ -1129,12 +1131,13 @@ def cmd_doctor(argv: list[str]) -> int:
     rname = runtime_ports.default_name()
     optional = runtime_ports.optional_features()   # off is said, not a reminder: letters still arrive at the next hook
     installed = runtime_ports.installed()
-    if installed == [rname]:   # one coding agent (runtime.installed unset or only the default): as before A1
+    if rname == "none":   # no AI agent at all: one plain row, not one per feature (newcomer-path.md B8)
+        add("warn", _("AI agent features are off: no AI agent is set up for agent-hub to run. Notes, schedules and the "
+                      "mailbox work without one"),
+            _("set one up: agenthub init --agent {names}", names="|".join(agent_presets())))
+    elif installed == [rname]:   # one coding agent (runtime.installed unset or only the default): as before A1
         for feat, ok, miss in runtime_ports.feature_table(rname):
             add("ok" if ok else "info" if feat in optional else "warn", _("{feature}: available", feature=feat) if ok else
-                # runtime none is no coding agent at all, not one that lacks a part
-                _("{feature}: off (no coding agent is set up: hub.json runtime.default is none)", feature=feat)
-                if rname == "none" else
                 _("{feature}: off (the runtime {runtime} has no {missing})", feature=feat, runtime=rname, missing=miss),
                 "" if ok or feat in optional else
                 _("install a coding agent that supports them, and point hub.json runtime.default at it"))
@@ -1183,8 +1186,8 @@ def cmd_doctor(argv: list[str]) -> int:
             add("ok", _("judgment points go to the runtime {runtime} (no llm.providers; schedulectl models shows each point's "
                        "model)", runtime=rt))
         else:
-            add("bad", _("judgment points have nowhere to run: no coding agent is set up (runtime.default: none) and "
-                         "hub.json has no llm.providers") if rt == "none" else
+            add("bad", _("agent-hub's decisions (nightly notes, weekly report) have nowhere to run: no AI agent and no "
+                         "model provider is set up") if rt == "none" else
                 _("judgment points have nowhere to run: the runtime {runtime} has no completion interface and hub.json "
                   "has no llm.providers", runtime=rt),
                 _("agenthub llm setup (pick one: an API key or a local Ollama)"))
@@ -1347,12 +1350,13 @@ def llm_setup(args: dict) -> int:
     interactive = UI().can_ask
     rt = args.get("_runtime") or runtime_ports.default_name()
     choice = args.get("llm") or UI().ask("llm",
-        _("who handles the platform's decisions (nightly notes, weekly report)? runtime = your coding agent's own "
-          "login ({runtime}), anthropic, openai (or a compatible API), ollama (local), none = not now", runtime=rt)
+        _("which AI model makes agent-hub's decisions (nightly notes, weekly report)? runtime = through your AI "
+          "agent's own login ({runtime}), anthropic, openai (or a compatible API), ollama (on this machine), none = not "
+          "now", runtime=rt)
         if "completion" in runtime_ports.capabilities(rt) else
         # nothing to offer as runtime: no coding agent (none), or one without a completion interface
-        _("who handles the platform's decisions (nightly notes, weekly report)? anthropic, openai (or a compatible "
-          "API), ollama (local), none = not now"),
+        _("which AI model makes agent-hub's decisions (nightly notes, weekly report)? anthropic, openai (or a "
+          "compatible API), ollama (on this machine), none = not now"),
         default_llm_choice(rt))
     if choice not in LLM_CHOICES:
         print(_("no option {choice} (choices: {choices})", choice=choice, choices=', '.join(LLM_CHOICES)), file=sys.stderr)
@@ -1366,8 +1370,8 @@ def llm_setup(args: dict) -> int:
                 UI().secret("llm_key", _("{choice} API key", choice=choice))
         return 0
     if not interactive and not args.get("llm") and choice not in ("runtime", "none") and not args.get("llm-model"):
-        print(_("{choice} is available here, but a model cannot be picked non-interactively: judgment points stay unset; "
-                "run agenthub llm setup later", choice=choice))
+        print(_("{choice} is available here, but its model can only be picked when you're asked: agent-hub's decisions "
+                "stay off for now; run agenthub llm setup later", choice=choice))
         return 0
     d = read_hub_json()
     if choice in ("runtime", "none"):
@@ -1381,16 +1385,17 @@ def llm_setup(args: dict) -> int:
         write_hub_json(d)
         hubconf._cfg = None
         if choice == "none":
-            print(_("judgment points stay unset: when needed, they fail plainly and say why. Run agenthub llm setup later"))
+            print(_("agent-hub's decisions stay off for now: whatever needs one fails plainly and says why. Run agenthub "
+                    "llm setup later"))
         elif rt == "none":
-            print(_("⚠️ no coding agent is set up (runtime.default: none), so runtime has no login to hand judgment "
-                    "points to: they will fail. Pick a provider: agenthub llm setup"))
+            print(_("⚠️ no AI agent is set up, so there is no agent login to make agent-hub's decisions with: they will "
+                    "fail. Pick a provider: agenthub llm setup"))
         elif "completion" not in runtime_ports.capabilities(rt):
-            print(_("⚠️ the runtime {runtime} has no completion interface: judgment points will fail. Pick another provider: "
-                    "agenthub llm setup", runtime=rt))
+            print(_("⚠️ {runtime} can't make agent-hub's decisions (it has no completion interface): they will fail. "
+                    "Pick another provider: agenthub llm setup", runtime=rt))
         else:
-            print(_("judgment points go to the runtime {runtime} (its own login; models follow its group table, see "
-                    "schedulectl models)", runtime=rt))
+            print(_("agent-hub's decisions go through {runtime}'s own login (the model for each: schedulectl models)",
+                    runtime=rt))
         return 0
     if not interactive and not args.get("llm-model"):   # stop before a key is asked for nothing
         print(_("When running non-interactively, give the model with --llm-model <name> (or run agenthub llm setup "
@@ -1447,7 +1452,7 @@ def llm_setup(args: dict) -> int:
     write_hub_json(d)
     hubconf._cfg = None
     ok, why = next(((o, w) for n, o, w in completion.health_all() if n == choice), (False, _("not checked")))
-    print(_("hub.json llm: judgment points go to {choice} ({models}); {status}", choice=choice,
+    print(_("agent-hub's decisions go to {choice} ({models}); {status}", choice=choice,
             models=', '.join(f'{g}={conf['models'][g]}' for g in completion.GROUPS),
             status=_("reachable") if ok else _("⚠️ not usable yet: {reason}", reason=why)))
     print(_("remember to commit hub.json (config as code). Agent work (mailbox handling and the like) needs a coding agent; "

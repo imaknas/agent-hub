@@ -101,26 +101,9 @@ $ agenthub doctor    # systemd, runtime none
     → bin/agenthub install-cli
 ✓ MCP 伺服器:agenthub mcp(任何支援 MCP 的 agent 都能收發信箱、寫筆記;它在某個專案工作時,平台會先壓著寄給那個專案的請求、不派 agent,最多 120 分鐘;登記進工具的設定由你決定)
     → agenthub mcp config 印出要登記的那段;各工具怎麼加:docs/mcp.md
-! 判斷點(librarian、index、consolidate、週報分析):關掉(沒有設定 coding agent:hub.json runtime.default 是 none)
-    → 裝一個有這些能力的 coding agent,hub.json runtime.default 指到它
-! 信箱交辦(沒人收的信由平台派 agent):關掉(沒有設定 coding agent:hub.json runtime.default 是 none)
-    → 裝一個有這些能力的 coding agent,hub.json runtime.default 指到它
-! 宣告 allow: 的無人值守 agent job、事件觸發的 agent job:關掉(沒有設定 coding agent:hub.json runtime.default 是 none)
-    → 裝一個有這些能力的 coding agent,hub.json runtime.default 指到它
-! 信箱接續(用閒置 session 的 context 回信):關掉(沒有設定 coding agent:hub.json runtime.default 是 none)
-    → 裝一個有這些能力的 coding agent,hub.json runtime.default 指到它
-! 通道租借(另外要助理模組):關掉(沒有設定 coding agent:hub.json runtime.default 是 none)
-    → 裝一個有這些能力的 coding agent,hub.json runtime.default 指到它
-! session 裡即時看到信、提醒寫筆記:關掉(沒有設定 coding agent:hub.json runtime.default 是 none)
-    → 裝一個有這些能力的 coding agent,hub.json runtime.default 指到它
-· 有信來時叫醒開著但閒置的 session:關掉(沒有設定 coding agent:hub.json runtime.default 是 none)
-! 平台規則寫進專案的規則檔:關掉(沒有設定 coding agent:hub.json runtime.default 是 none)
-    → 裝一個有這些能力的 coding agent,hub.json runtime.default 指到它
-! sandbox 專案寫不到它的 session 載入 hook 跟設定的檔案:關掉(沒有設定 coding agent:hub.json runtime.default 是 none)
-    → 裝一個有這些能力的 coding agent,hub.json runtime.default 指到它
-! memory 缺口、週報的對話統計:關掉(沒有設定 coding agent:hub.json runtime.default 是 none)
-    → 裝一個有這些能力的 coding agent,hub.json runtime.default 指到它
-✗ 判斷點沒地方跑:沒有設定 coding agent(runtime.default: none)、hub.json 也沒有 llm.providers
+! AI agent 相關功能關著:還沒設定讓 agent-hub 使用的 AI agent。筆記、排程和信箱不需要它也能用
+    → 設定一個:agenthub init --agent claude|codex
+✗ agent-hub 的判斷(每晚整理筆記、週報)沒有地方可以跑:沒有設定 AI agent,也沒有設定模型 provider
     → agenthub llm setup(選一家:API key 或本機 Ollama)
 ✓ 排程器(local.agent-hub-scheduler.timer):已啟用
 ✗ 看門狗(local.agent-hub-scheduler-watchdog.timer):沒有裝
@@ -134,7 +117,7 @@ $ agenthub doctor    # systemd, runtime none
 ! 背景服務、專案設定:有 1 項還沒套用
     → bin/hub config plan,再 bin/hub config apply
 
-3 個問題、13 個提醒
+3 個問題、5 個提醒
 --- stderr
 
 $ agenthub doctor    # no service manager, unnamed assistant
@@ -151,26 +134,9 @@ $ agenthub doctor    # no service manager, unnamed assistant
     → bin/agenthub install-cli
 ✓ MCP 伺服器:agenthub mcp(任何支援 MCP 的 agent 都能收發信箱、寫筆記;它在某個專案工作時,平台會先壓著寄給那個專案的請求、不派 agent,最多 120 分鐘;登記進工具的設定由你決定)
     → agenthub mcp config 印出要登記的那段;各工具怎麼加:docs/mcp.md
-! 判斷點(librarian、index、consolidate、週報分析):關掉(沒有設定 coding agent:hub.json runtime.default 是 none)
-    → 裝一個有這些能力的 coding agent,hub.json runtime.default 指到它
-! 信箱交辦(沒人收的信由平台派 agent):關掉(沒有設定 coding agent:hub.json runtime.default 是 none)
-    → 裝一個有這些能力的 coding agent,hub.json runtime.default 指到它
-! 宣告 allow: 的無人值守 agent job、事件觸發的 agent job:關掉(沒有設定 coding agent:hub.json runtime.default 是 none)
-    → 裝一個有這些能力的 coding agent,hub.json runtime.default 指到它
-! 信箱接續(用閒置 session 的 context 回信):關掉(沒有設定 coding agent:hub.json runtime.default 是 none)
-    → 裝一個有這些能力的 coding agent,hub.json runtime.default 指到它
-! 通道租借(另外要助理模組):關掉(沒有設定 coding agent:hub.json runtime.default 是 none)
-    → 裝一個有這些能力的 coding agent,hub.json runtime.default 指到它
-! session 裡即時看到信、提醒寫筆記:關掉(沒有設定 coding agent:hub.json runtime.default 是 none)
-    → 裝一個有這些能力的 coding agent,hub.json runtime.default 指到它
-· 有信來時叫醒開著但閒置的 session:關掉(沒有設定 coding agent:hub.json runtime.default 是 none)
-! 平台規則寫進專案的規則檔:關掉(沒有設定 coding agent:hub.json runtime.default 是 none)
-    → 裝一個有這些能力的 coding agent,hub.json runtime.default 指到它
-! sandbox 專案寫不到它的 session 載入 hook 跟設定的檔案:關掉(沒有設定 coding agent:hub.json runtime.default 是 none)
-    → 裝一個有這些能力的 coding agent,hub.json runtime.default 指到它
-! memory 缺口、週報的對話統計:關掉(沒有設定 coding agent:hub.json runtime.default 是 none)
-    → 裝一個有這些能力的 coding agent,hub.json runtime.default 指到它
-✗ 判斷點沒地方跑:沒有設定 coding agent(runtime.default: none)、hub.json 也沒有 llm.providers
+! AI agent 相關功能關著:還沒設定讓 agent-hub 使用的 AI agent。筆記、排程和信箱不需要它也能用
+    → 設定一個:agenthub init --agent claude|codex
+✗ agent-hub 的判斷(每晚整理筆記、週報)沒有地方可以跑:沒有設定 AI agent,也沒有設定模型 provider
     → agenthub llm setup(選一家:API key 或本機 Ollama)
 ✗ 排程器、看門狗:這個系統沒有支援的服務管理器(macOS 的 launchd、Linux 的 systemd user 層級都沒有):排程器、看門狗、專案的長駐服務都不會自己跑
     → 自己每 15 分鐘排程 `<TMP>/fakehub/bin/py <TMP>/fakehub/bin/scheduler.py`(例如 crontab 加一行 `*/15 * * * * <TMP>/fakehub/bin/py <TMP>/fakehub/bin/scheduler.py`)
@@ -178,5 +144,5 @@ $ agenthub doctor    # no service manager, unnamed assistant
 ! 排程器還沒 tick 過,這台也沒有服務管理員在跑它(看上面排程器那一行)
 ✓ 背景服務、專案設定:跟 config 一致
 
-2 個問題、12 個提醒
+2 個問題、4 個提醒
 --- stderr

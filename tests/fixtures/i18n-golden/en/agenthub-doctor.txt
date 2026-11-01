@@ -101,26 +101,9 @@ $ agenthub doctor    # systemd, runtime none
     → bin/agenthub install-cli
 ✓ MCP server: agenthub mcp (any agent with MCP can use the mailbox and write notes; while it works in a project, the platform holds requests to that project instead of dispatching an agent, for up to 120 minutes; registering it in the tool's settings is up to you)
     → agenthub mcp config prints the snippet to register; how to add it per tool: docs/mcp.md
-! judgment points (librarian, index, consolidate, weekly report analysis): off (no coding agent is set up: hub.json runtime.default is none)
-    → install a coding agent that supports them, and point hub.json runtime.default at it
-! mailbox tasks (the platform sends an agent for letters nobody picked up): off (no coding agent is set up: hub.json runtime.default is none)
-    → install a coding agent that supports them, and point hub.json runtime.default at it
-! unattended agent jobs with allow:, and event-triggered agent jobs: off (no coding agent is set up: hub.json runtime.default is none)
-    → install a coding agent that supports them, and point hub.json runtime.default at it
-! mailbox follow-up (replying with an idle session's context): off (no coding agent is set up: hub.json runtime.default is none)
-    → install a coding agent that supports them, and point hub.json runtime.default at it
-! channel leasing (also needs the assistant module): off (no coding agent is set up: hub.json runtime.default is none)
-    → install a coding agent that supports them, and point hub.json runtime.default at it
-! letters seen live in the session, reminders to write notes: off (no coding agent is set up: hub.json runtime.default is none)
-    → install a coding agent that supports them, and point hub.json runtime.default at it
-· an idle open session is woken when a letter arrives for it: off (no coding agent is set up: hub.json runtime.default is none)
-! platform rules written into the project's rules file: off (no coding agent is set up: hub.json runtime.default is none)
-    → install a coding agent that supports them, and point hub.json runtime.default at it
-! a sandboxed project can't write what its sessions load hooks and settings from: off (no coding agent is set up: hub.json runtime.default is none)
-    → install a coding agent that supports them, and point hub.json runtime.default at it
-! memory gaps, the weekly report's transcript statistics: off (no coding agent is set up: hub.json runtime.default is none)
-    → install a coding agent that supports them, and point hub.json runtime.default at it
-✗ judgment points have nowhere to run: no coding agent is set up (runtime.default: none) and hub.json has no llm.providers
+! AI agent features are off: no AI agent is set up for agent-hub to run. Notes, schedules and the mailbox work without one
+    → set one up: agenthub init --agent claude|codex
+✗ agent-hub's decisions (nightly notes, weekly report) have nowhere to run: no AI agent and no model provider is set up
     → agenthub llm setup (pick one: an API key or a local Ollama)
 ✓ scheduler (local.agent-hub-scheduler.timer): enabled
 ✗ watchdog (local.agent-hub-scheduler-watchdog.timer): not installed
@@ -134,7 +117,7 @@ $ agenthub doctor    # systemd, runtime none
 ! background services, project settings: 1 change not applied yet
     → agenthub config plan, then agenthub config apply
 
-3 problems, 13 reminders
+3 problems, 5 reminders
 --- stderr
 
 $ agenthub doctor    # no service manager, unnamed assistant
@@ -151,26 +134,9 @@ $ agenthub doctor    # no service manager, unnamed assistant
     → bin/agenthub install-cli
 ✓ MCP server: agenthub mcp (any agent with MCP can use the mailbox and write notes; while it works in a project, the platform holds requests to that project instead of dispatching an agent, for up to 120 minutes; registering it in the tool's settings is up to you)
     → agenthub mcp config prints the snippet to register; how to add it per tool: docs/mcp.md
-! judgment points (librarian, index, consolidate, weekly report analysis): off (no coding agent is set up: hub.json runtime.default is none)
-    → install a coding agent that supports them, and point hub.json runtime.default at it
-! mailbox tasks (the platform sends an agent for letters nobody picked up): off (no coding agent is set up: hub.json runtime.default is none)
-    → install a coding agent that supports them, and point hub.json runtime.default at it
-! unattended agent jobs with allow:, and event-triggered agent jobs: off (no coding agent is set up: hub.json runtime.default is none)
-    → install a coding agent that supports them, and point hub.json runtime.default at it
-! mailbox follow-up (replying with an idle session's context): off (no coding agent is set up: hub.json runtime.default is none)
-    → install a coding agent that supports them, and point hub.json runtime.default at it
-! channel leasing (also needs the assistant module): off (no coding agent is set up: hub.json runtime.default is none)
-    → install a coding agent that supports them, and point hub.json runtime.default at it
-! letters seen live in the session, reminders to write notes: off (no coding agent is set up: hub.json runtime.default is none)
-    → install a coding agent that supports them, and point hub.json runtime.default at it
-· an idle open session is woken when a letter arrives for it: off (no coding agent is set up: hub.json runtime.default is none)
-! platform rules written into the project's rules file: off (no coding agent is set up: hub.json runtime.default is none)
-    → install a coding agent that supports them, and point hub.json runtime.default at it
-! a sandboxed project can't write what its sessions load hooks and settings from: off (no coding agent is set up: hub.json runtime.default is none)
-    → install a coding agent that supports them, and point hub.json runtime.default at it
-! memory gaps, the weekly report's transcript statistics: off (no coding agent is set up: hub.json runtime.default is none)
-    → install a coding agent that supports them, and point hub.json runtime.default at it
-✗ judgment points have nowhere to run: no coding agent is set up (runtime.default: none) and hub.json has no llm.providers
+! AI agent features are off: no AI agent is set up for agent-hub to run. Notes, schedules and the mailbox work without one
+    → set one up: agenthub init --agent claude|codex
+✗ agent-hub's decisions (nightly notes, weekly report) have nowhere to run: no AI agent and no model provider is set up
     → agenthub llm setup (pick one: an API key or a local Ollama)
 ✗ scheduler, watchdog: this system has no supported service manager (neither macOS launchd nor the Linux systemd user level): the scheduler, the watchdog and projects' long-running services will not run by themselves
     → schedule `<TMP>/fakehub/bin/py <TMP>/fakehub/bin/scheduler.py` yourself every 15 minutes (for example the crontab line `*/15 * * * * <TMP>/fakehub/bin/py <TMP>/fakehub/bin/scheduler.py`)
@@ -178,5 +144,5 @@ $ agenthub doctor    # no service manager, unnamed assistant
 ! the scheduler has not ticked yet, and no service manager runs it here (see the scheduler line above)
 ✓ background services, project settings: match the config
 
-2 problems, 12 reminders
+2 problems, 4 reminders
 --- stderr

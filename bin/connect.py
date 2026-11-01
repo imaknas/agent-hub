@@ -84,7 +84,7 @@ def refusal(p: pathlib.Path, root: bool = False) -> str | None:
         return _("{path} is your home folder or contains it; name the folder of one project (or of several)", path=p)
     if any(part.startswith(".") for part in p.relative_to(p.anchor).parts):
         return _("{path} is a hidden folder", path=p)
-    for what, where in ((_("the hub"), hubconf.MAIN), (_("the instance directory"), hubconf.instance_home())):
+    for what, where in ((_("the hub"), hubconf.MAIN), (_("agent-hub's own settings folder"), hubconf.instance_home())):
         if where and (p == where.resolve() or p.is_relative_to(where.resolve())
                       or (not root and where.resolve().is_relative_to(p))):
             return _("{path} is or holds {what}", path=p, what=what)
