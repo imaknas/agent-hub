@@ -445,8 +445,9 @@ def record_errors(rec) -> list[str]:
 
 
 def task_key(project: str, text: str) -> str:
-    """The Acts spec's example way of making keys (acts §7.2; the registrar uses the same): same text, same task."""
-    return f"task-{project}-{hashlib.sha1(' '.join(text.split()).encode()).hexdigest()[:10]}"
+    """The key of a task a project sends without one: same text, same task. Never the registrar's `task-` prefix
+    (acts 0.4 §6.1): a key a project assigns outside STATE.md must not pass for one the registrar raised from a line."""
+    return f"ask-{project}-{hashlib.sha1(' '.join(text.split()).encode()).hexdigest()[:10]}"
 
 
 def need_state(c, project: str, key: str, family: str = "acts") -> dict | None:
@@ -461,7 +462,9 @@ def need_state(c, project: str, key: str, family: str = "acts") -> dict | None:
     latest = max(with_terms, key=lambda r: (r.get("terms_rev", 1), *when(r)))
     replaced = {s for r in recs for s in r.get("supersedes", [])}
     current = max([r for r in recs if r["id"] not in replaced] or recs, key=when)
-    return {"terms": latest["terms"], "rev": latest.get("terms_rev", 1), "current": current}
+    raised = min((r for r in recs if r.get("type") == "raised"), key=when, default=None)
+    return {"terms": latest["terms"], "rev": latest.get("terms_rev", 1), "current": current,
+            "by": (raised or {}).get("by")}
 
 
 def send_record(c, a, sender: str, mid: str, p: dict) -> str | None:
@@ -483,6 +486,9 @@ def send_record(c, a, sender: str, mid: str, p: dict) -> str | None:
         terms = {"text": " ".join(a.text.split()), **({"due": a.due} if a.due else {})}
         if terms == {k: v for k, v in need["terms"].items() if k in ("text", "due")}:
             return record_event_id(need["current"])
+        if need["by"] == hubconf.party("registrar"):   # acts 0.4 §4: a STATE.md item changes only through its line
+            refuse(_("hubbus: {key} is a to-do in STATE.md; change its line there (the registrar sends the change)",
+                     key=key))
         rec |= {"type": "amended", "id": f"a:{key}:{need['rev'] + 1}", "origin": "requester",
                 "by": hubconf.party("requester", sender), "terms": terms, "terms_rev": need["rev"] + 1,
                 "supersedes": [need["current"]["id"]]}

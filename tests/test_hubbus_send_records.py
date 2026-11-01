@@ -13,7 +13,6 @@ is outside 0.3). info / progress stay v1.
 import importlib.machinery
 import importlib.util
 import io
-import json
 import pathlib
 import re
 import sys
@@ -24,10 +23,6 @@ from unittest import mock
 
 ROOT = pathlib.Path(__file__).resolve().parents[1]
 TS = re.compile(r"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d+)?(Z|[+-]\d{2}:\d{2})$")
-# vectors from acts/0.3 conformance/keys.json (the spec's example key method; the registrar uses the same one), read
-# from the vendored copy: every case, the non-ASCII ones included
-KEY_VECTORS = [(c["project"], c["text"], c["key"]) for c in json.loads(
-    (ROOT / "contracts" / "vendor" / "agent-ops-specs" / "principal-handoff-0.4" / "acts" / "keys.json").read_text())["cases"]]
 # what every kind of record must have (core + the acts schema's required)
 REQUIRED = {"raised": ("terms", "terms_rev"), "claimed": ("outcome", "evidence"), "withdrawn": ("reason",)}
 
@@ -123,16 +118,28 @@ class SendRecords(unittest.TestCase):
         w = self.events("record")[-1][1]["record"]
         self.assertEqual((w["type"], w["supersedes"]), ("withdrawn", ["r:task-proj-0000000001"]))
 
-    def test_task_without_key_uses_the_registrar_recipe(self):
-        # the vectors this test used to list inline are all still there (544fefce49: a CJK text)
-        self.assertLessEqual({"task-demo-c3d8af57d4", "task-demo-67ed67cd37", "task-demo-544fefce49"},
-                             {key for _, _, key in KEY_VECTORS})
-        for project, text, key in KEY_VECTORS:
-            self.assertEqual(self.m.task_key(project, text), key)
+    def test_task_without_key_is_not_the_registrars(self):
+        """same text, same key, but never the registrar's `task-` prefix (acts 0.4 §6.1)"""
+        self.assertEqual(self.m.task_key("proj", "  café-résumé "), self.m.task_key("proj", "café-résumé"))
         self.send("--type", "task", "--text", "  café-résumé ")
         _, r = self.rec()
         self.assertEqual(r["key"], self.m.task_key("proj", "café-résumé"))
+        self.assertTrue(r["key"].startswith("ask-proj-"))
         self.assertEqual(r["terms"], {"text": "café-résumé"})
+
+    def test_a_state_md_item_is_not_amended_from_a_session(self):
+        """acts 0.4 §4: a key the registrar raised from a STATE.md line changes only through that line"""
+        k = "task-proj-0123456789"
+        r = self.m.hubconf.party("registrar")
+        self.m.publish_record(self.c, {"ph": "0.3", "ext": "acts/0.3", "id": f"r:{k}", "type": "raised",
+                                       "origin": "requester", "by": r, "key": k, "project": "proj",
+                                       "ts": "2026-11-01T00:00:00Z", "terms": {"text": "renew"}, "terms_rev": 1},
+                              "proj", self.owner)
+        with self.assertRaises((SystemExit, self.m.Refused)):
+            self.send("--type", "task", "--id", k, "--text", "renew for two years")
+        self.assertEqual(len(self.events("record")), 1)
+        self.send("--type", "task", "--id", k, "--text", "renew")   # the same terms: nothing new, no refusal
+        self.assertEqual(len(self.events("record")), 1)
 
     def test_request_to_owner_raises_too(self):
         self.send("--type", "request", "--text", "Sign the contract for me")

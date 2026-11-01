@@ -144,5 +144,6 @@
  "{project}: refused {name} from its outbox: {why}": "{project}:拒收寄件匣裡的 {name}:{why}",
  "A file in {project}'s outbox was not sent and has been deleted ({name}): {why}": "{project} 寄件匣裡有一個檔案沒有送出,已經刪掉({name}):{why}",
  "{project}: cannot write its mailbox view: {e}": "{project}:寫不進它的信箱檢視:{e}",
- "ph is {ph!r}, must be one of {versions}": "ph 是 {ph!r},要是 {versions} 其中之一"
+ "ph is {ph!r}, must be one of {versions}": "ph 是 {ph!r},要是 {versions} 其中之一",
+ "hubbus: {key} is a to-do in STATE.md; change its line there (the registrar sends the change)": "hubbus: {key} 是 STATE.md 裡的待辦;到 STATE.md 改那一行(registrar 會把改動送出)"
 }
