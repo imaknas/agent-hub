@@ -53,6 +53,7 @@ class Server(unittest.TestCase):
                     "AGENT_HUB_SECRETS": str(t / "secrets"), "AGENT_HUB_STATE": str(t / "state"),
                     "AGENT_HUB_LANG_UI": "zh-Hant",   # the assertions below are the zh-Hant texts (docs/design/i18n.md)
                     "GIT_AUTHOR_NAME": "t", "GIT_AUTHOR_EMAIL": "t@t", "GIT_COMMITTER_NAME": "t", "GIT_COMMITTER_EMAIL": "t@t"}
+        self.env.pop("CLAUDE_CODE_SESSION_ID", None)   # the session running these tests is not the server's client
 
     def hubbus(self, *args):
         r = subprocess.run([sys.executable, str(BIN / "hubbus"), *args], env=self.env, cwd=self.tmp, capture_output=True,
@@ -137,6 +138,24 @@ class Server(unittest.TestCase):
                          "close in your output; the platform sends them for you. Do not use this server",
                          point="mailbox-propose"), res[0][1])
         self.assertFalse(self.events("message"), "nothing sent")
+
+    def test_no_presence_no_notice_and_no_sending_session(self):
+        """What the server does today besides the mailbox commands (characterization, pinned before
+        docs/design/mailbox-runtimes.md step 1): it records no presence, a tool result is only the command's output,
+        and a letter it sends names no sending session."""
+        self.hubbus("send", "--from", "other", "--to", "demo", "--type", "request", "--text", "please look")
+        _, res = self.session([("send", {"to": "other", "type": "info", "text": "hello"}),
+                               ("note", {"text": "an entry"})])
+        self.assertEqual([e for e, _ in res], [False, False], res)
+        self.assertFalse(any("📬" in text for _, text in res), res)
+        import sqlite3
+        c = sqlite3.connect(self.tmp / "bus" / "bus.db")
+        try:
+            self.assertEqual(c.execute("SELECT COUNT(*) FROM presence").fetchone()[0], 0)
+        finally:
+            c.close()
+        sent = [json.loads(p) for s, _, _, p in self.events("message") if s == "demo"]
+        self.assertEqual([p.get("from_session") for p in sent], [None])
 
     def test_unknown_methods_get_an_empty_result_and_notifications_none(self):
         msgs = [{"jsonrpc": "2.0", "id": 5, "method": "ping"}, {"jsonrpc": "2.0", "method": "notifications/initialized"}]

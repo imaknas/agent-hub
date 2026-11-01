@@ -340,6 +340,54 @@ class Dispatch(unittest.TestCase):
         q = self.c.execute("SELECT * FROM events WHERE id='t-next:loop'").fetchone()
         self.assertEqual(q["to_project"], self.m.OWNER_ADDRESS)
 
+    # --- what dispatch does today with presence it can't see and with MCP-shaped ids (characterization, pinned
+    # before docs/design/mailbox-runtimes.md step 1, A3: MCP presence holding dispatch back) ---
+    def test_presence_the_runtime_does_not_report_holds_nothing(self):
+        self.seen("mcp:123:456")   # fresh, but no runtime reports it live
+        self.send("m1", "proj", "request")
+        self.assertEqual(self.dispatch(), 0)
+        self.assertEqual(self.handled, [("proj", ["m1"])])
+
+    def test_seen_letter_past_the_timeout_is_dispatched_while_the_project_is_in_use(self):
+        self.rt.live.add("S1")
+        self.seen("S1")
+        self.send("m1", "proj", "request", minutes_ago=90)
+        self.seen_by_session("m1", minutes_ago=self.m.TAKE_TIMEOUT_MIN + 5)
+        self.dispatch()
+        self.assertEqual(self.handled, [("proj", ["m1"])])
+
+    def test_recent_session_takes_any_live_presence(self):
+        self.rt.live.add("mcp:123:456")
+        self.rt.tokens["mcp:123:456"] = 1_000
+        self.seen("mcp:123:456", minutes_ago=40)
+        self.send("m1", "proj", "request")
+        self.dispatch()
+        self.assertEqual(self.resumed, [("m1", "mcp:123:456")])
+
+    def test_outbox_session_is_any_presence_of_the_project(self):
+        self.seen("mcp:123:456")
+        self.assertEqual(self.m.own_session(self.c, "proj", "mcp:123:456"), "mcp:123:456")
+        self.assertIsNone(self.m.own_session(self.c, "other", "mcp:123:456"))
+
+    def test_outbox_has_no_presence_operation(self):
+        with self.assertRaises(self.m.Refused):
+            self.m.take(self.c, "proj", {"v": 1, "op": "presence", "session": "mcp:123:456"})
+
+    def test_status_lists_an_unclaimed_letter_as_stuck_while_the_project_is_in_use(self):
+        import io
+        import json as _j
+        from contextlib import redirect_stdout
+        self.rt.live.add("S1")
+        self.seen("S1")
+        self.seen("mcp:123:456")
+        self.send("q1", "proj", "question", minutes_ago=90)
+        self.m.db = lambda *a, **k: self.c
+        with redirect_stdout(io.StringIO()) as out:
+            self.m.cmd_status(True)
+        st = _j.loads(out.getvalue())
+        self.assertEqual([s["id"] for s in st["stuck"]], ["q1"])
+        self.assertEqual(sorted(st), ["corrupt", "job_failed_24h", "projects", "stuck", "to_muninn"])
+
     # --- hook ---
     def test_hook_does_not_hand_claimed_letter_to_session(self):
         self.send("m1", "proj", "request")
