@@ -78,7 +78,8 @@ schema v1 (contracts/project.v1.md has the full description):
       place, so the scheduler sees its outcome. legacy_name is refused
     after: [job] (same project) or [project/job]
     connectors: true (agent jobs only): needs claude.ai connectors (Upwork etc.) → uses the subscription login, not
-      the default headless token (tools in allow with mcp__claude_ai_ but this not set: invalid)
+      the default headless token (tools in allow with mcp__claude_ai_ but this not set: invalid). Such a run loads the
+      machine's tool servers; every one whose tools allow doesn't name is denied for it (tool_servers: allowed_only)
     legacy_name: the old name in schedule.yaml: while the old name is still in schedule.yaml this job isn't used
                  (during the switch the old one wins; delete that entry from schedule.yaml to switch over; the state
                  moves over from the old name too)

@@ -68,6 +68,12 @@
   anyway); use `--permission-mode dontAsk --allowedTools "Edit(./STATE.md)"` instead (`Edit(...)` covers Write/Edit).
   Better still: have the model only return an answer and let the platform write the file (a completion judgment point).
 
+- **An empty bash array under `set -u` is an unbound variable on bash < 4.4**, and macOS's `/bin/bash` is 3.2: a
+  script that passes optional arguments as `"${args[@]}"` dies there when the array is empty, while the same script
+  passes on a newer bash in a terminal. `run-agent-job.sh`'s background run re-executes itself with `/bin/bash`, so a
+  connectors job (no sealing argument) died at the llm.py line every day and left its status at "running", which
+  nothing reports. Write `${args[@]+"${args[@]}"}`, and test shell scripts with `/bin/bash`
+  (`tests/test_run_agent_job_args.py`).
 - **awk reading an "exclusion list" file with `NR==FNR` filters out all the data when the list is an empty file**: with
   no line read from the empty file, `NR==FNR` holds for every line of the second input and `next` eats them all; the
   roster in index.md was once committed empty because of this. Read the list with `getline` in `BEGIN` instead; tests
@@ -202,6 +208,18 @@
 - **Under dontAsk, tool names must be exactly right**: claude.ai connector tools are called
   `mcp__claude_ai_<name>__<name>__<tool>` (one extra segment). A wrong name means everything is refused, and the report
   says "blocked by permissions".
+- **Turning MCP tools off doesn't stop their servers**: neither `--tools ""` nor deny rules keep a server from being
+  started and connected; a deny on the whole server (`mcp__<server>`) only keeps its tools from being offered or
+  called. Only `--strict-mcp-config` keeps them from loading. A connectors job (it needs the account's claude.ai
+  connectors, which strict MCP drops too) therefore starts every server configured on the machine, a production
+  database's included, and is held back by the deny the platform computes for each run (`tool_servers:
+  allowed_only`, docs/design/evaluators.md step 0). The built-in MCP resource tools (`ListMcpResourcesTool`,
+  `ReadMcpResourceTool`, `ReadMcpResourceDirTool`) reach any connected server's resources by name past those rules,
+  so they are denied too.
+- **The account's claude.ai connectors are on no disk**: they are fetched from the account at start-up (only with the
+  subscription login). `~/.claude.json` `claudeAiMcpEverConnected` is history, not configuration. `claude mcp list`
+  run in the job's folder with the job's login is the one place that lists them (along with plugins' servers, project
+  and local ones); it health-checks each server while doing so.
 - **At user level, deny sessions using Edit on `~/workspace/**/.claude/settings.local.json`** (the recommended setting):
   to change a project's settings, change its registry entry and let render-project-settings write them; platform
   scripts don't write with the Edit tool and are not affected.
