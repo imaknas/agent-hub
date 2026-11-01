@@ -2,12 +2,14 @@
 and Decisions 0.5 §3): validation, deduplication and each item's settlement view.
 
 Follows the spec's reference (reference/ph_core.py and schema_subset.py, Apache-2.0). Records are validated against
-the schemas vendored in contracts/vendor/agent-ops-specs/principal-handoff-0.5/.
+the schemas vendored in contracts/vendor/agent-ops-specs/principal-handoff-0.5/ and -0.4/.
 
     cfg = ph_records.config()                      # the configured principal (core R6), from hub.json
-    validate(record, cfg)          -> (schema, [errors])   a 0.5 record; an empty list means valid
-    received(records, cfg)         -> (valid, ignored)     records of one item in any version read, converted to 0.5
-                                                           (ph_wire.convert), validated and deduplicated (core §10)
+    validate(record, cfg)          -> (schema, [errors])   a 0.5 or 0.4 record by its own version's rules; an empty
+                                                           list means valid
+    received(records, cfg)         -> (valid, ignored)     records of one item in any version read, each validated as
+                                                           below, held in its 0.5 form (ph_wire.convert) and
+                                                           deduplicated (core §10)
     settlement_view(records, cfg)  -> {settlement, outcome, answer, authority, stale, state, withdrawn}
                                                            core §6, what a requester computes; state is open, settled or
                                                            (Decisions) withdrawn
@@ -17,10 +19,16 @@ the schemas vendored in contracts/vendor/agent-ops-specs/principal-handoff-0.5/.
     conflicts(records[, cfg])      -> [{identity, records, kept, ts_only}]   identities sent with different valid
                                                            content, for the report core §10 asks for
 
-A record in an older version is validated as its 0.5 form. 0.5 only relaxes 0.4 (core §14's change log: module content,
-the terms digest), so this accepts what 0.4 accepts and, beyond it, only Evidence and Criteria content that agent-hub
-ignores anyway. A 0.3 settlement carries no terms digest and gets one only when its need record is held: without it,
-it is valid and is never stale by digest.
+Each record is validated by the rules of the version it was sent in, as core §14 has a party that reads N−1 and N do:
+a 0.4 record under 0.4's rules and schemas, as it was sent, and ignored if it is invalid there, so that every receiver
+computes the same state from the same records, malformed ones included. 0.5 relaxed 0.4 (core §14's change log), so a
+0.4 record can be invalid in 0.4 and its 0.5 form valid (malformed Evidence or Criteria content, an approval under
+Acts): it is ignored. A valid one is kept as sent and converted to 0.5 at each fold; its 0.5 form is not validated
+again, and core §10's tie-break compares the 0.5 forms of the records valid in their own version.
+
+0.3 is two versions back, and the spec defines conversion and validation for N−1 only (0.6 is to say so). agent-hub
+keeps its own reading of 0.3: a 0.3 record is validated as its 0.5 form, except that a 0.3 settlement carries no terms
+digest and gets one only when its need record is held: without it, it is valid and is never stale by digest.
 """
 from __future__ import annotations
 
@@ -34,7 +42,9 @@ from dataclasses import dataclass
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
 import ph_wire  # noqa: E402
 
-SPEC = pathlib.Path(__file__).resolve().parents[1] / "contracts" / "vendor" / "agent-ops-specs" / "principal-handoff-0.5"
+VENDOR = pathlib.Path(__file__).resolve().parents[1] / "contracts" / "vendor" / "agent-ops-specs"
+SPEC = VENDOR / "principal-handoff-0.5"
+SPEC_04 = VENDOR / "principal-handoff-0.4"   # its schemas, for records in 0.4 (core §14: N−1 by N−1's rules)
 RECORD_SCHEMA = SPEC / "core" / "schemas" / "record.schema.json"
 
 NEED = ("raised", "amended", "withdrawn")
@@ -116,9 +126,12 @@ def schema_errors(instance, schema: dict, base: pathlib.Path, path: str = "$") -
 # --- validity (core §4, §5, §7; the extensions' §3) ---
 
 def validate(r: dict, cfg: Config) -> tuple[str | None, list[str]]:
-    """A 0.5 record -> (the schema it validates against, the rules it breaks)."""
+    """A record -> (the schema it validates against, the rules it breaks), by the rules of the version it names: 0.4's
+    for a 0.4 record (core §14), 0.5's for any other."""
     if not isinstance(r, dict):
         return None, ["not an object"]
+    if ph_wire.version_of(r) == "0.4":
+        return _validate_04(r, cfg)
     name, t = str(r.get("ext") or "").partition("/")[0], r.get("type")
     if name not in MODULES:
         return None, [f"no extension {r.get('ext')!r}"]
@@ -194,14 +207,16 @@ def _bounded(v) -> bool:
     return False
 
 
-def _relation(r: dict) -> list[str]:
+def _relation(r: dict, version: str = "0.5") -> list[str]:
+    """core §7; in 0.4 a uri target carried nothing else"""
     out, rel = [], r.get("relation") or {}
     want = RELATION_ORIGIN.get(rel.get("kind"))
     if want and r.get("origin") != want:
         out.append(f"{rel.get('kind')} is emitted by {want}")
     tg = rel.get("target") or {}
     item = all(k in tg for k in ("ext", "project", "key"))
-    if item == ("uri" in tg) or (not item and tg.keys() & {"ext", "project", "key"}):
+    other = tg.keys() - {"uri"} if version == "0.4" else tg.keys() & {"ext", "project", "key"}
+    if item == ("uri" in tg) or (not item and other):
         out.append("relation target must be an item {ext, project, key} or a {uri}")
     if r.get("origin") == "principal" and item and tg["project"] != r.get("project"):
         out.append("the principal side names another project's item only by uri")
@@ -236,6 +251,150 @@ def _authority(r: dict, cfg: Config) -> list[str]:
     return out
 
 
+# --- 0.4's validity (core 0.4 §4, §5, §7; Acts and Decisions 0.4 §3) ---
+# Core §14: a party that reads N−1 validates a record in N−1 under N−1 and ignores it if it is invalid there, so that
+# every receiver computes the same state from the same records, malformed ones included. 0.5 relaxed 0.4 (its change
+# log): 0.4 still holds the Evidence rules (§5.2, V1), approvals (§5.3) and Decisions' criteria. After the spec's 0.4
+# reference (reference/ph_core.py, ph_acts.py, ph_decisions.py at tag principal-handoff-0.4, Apache-2.0), against the
+# 0.4 schemas vendored in SPEC_04.
+
+APPROVAL = "approval:"   # core 0.4 §5.3: authority.under naming an approval record of the same item
+OWNER_04 = {**OWNER, "approved": {"principal"}}
+
+
+def _validate_04(r: dict, cfg: Config) -> tuple[str | None, list[str]]:
+    name, t = str(r.get("ext") or "").partition("/")[0], r.get("type")
+    if name not in WITHDRAWN_STATE:
+        return None, [f"no extension {r.get('ext')!r}"]
+    schemas = SPEC_04 / name / "schemas"
+    path = schemas / f"{t}.schema.json"
+    if t not in TYPES + ("approved",) or not path.exists():
+        return None, ["no schema for this type"]
+    errs = schema_errors(r, _schema(path), path.parent)
+    if not _bounded(r):
+        errs.append("numbers are integers within 2^53 - 1")
+    ev = r.get("evidence") if isinstance(r.get("evidence"), dict) else {}
+    times = [r.get("ts")] + [v.get("at") for v in ev.get("verified") or [] if isinstance(v, dict)]
+    if any(isinstance(x, str) and instant(x) is None for x in times):
+        errs.append("a time that is not an RFC 3339 date-time")
+    terms = r.get("terms") if isinstance(r.get("terms"), dict) else {}
+    due = terms.get("due")
+    if isinstance(due, str) and re.fullmatch(r"[0-9]{4}-[0-9]{2}-[0-9]{2}", due):
+        try:
+            datetime.date.fromisoformat(due)
+        except ValueError:
+            errs.append("terms.due is not a calendar date")
+    if t in OWNER_04 and r.get("origin") not in OWNER_04[t]:
+        errs.append(f"origin {r.get('origin')!r} may not emit {t}")
+    if r.get("by") == cfg.principal:
+        errs.append("the principal identifier cannot emit records")
+    rev = r.get("terms_rev")
+    if t == "amended" and isinstance(rev, int) and rev < 2:
+        errs.append("amended terms_rev must be at least 2")
+    if t not in ("raised", "amended") and isinstance(rev, int) and rev < 1:
+        errs.append(f"{t} terms_rev must be at least 1")
+    if t == "claimed" and r.get("origin") == "principal":
+        errs.append("the principal side settles; it does not claim")
+    if t == "related":
+        errs += _relation(r, "0.4")
+    if t == "settled":
+        errs += _authority(r, cfg)
+        a = r.get("authority") if isinstance(r.get("authority"), dict) else {}
+        under = a.get("under") if isinstance(a.get("under"), str) else ""   # the schema names any other
+        if under.startswith(APPROVAL) and a.get("kind") != "delegated":
+            errs.append("a settlement under an approval is delegated")
+        if under.startswith(APPROVAL) and not (schemas / "approved.schema.json").exists():
+            errs.append("this extension has no approvals")
+        if under == APPROVAL:
+            errs.append("approval: names no record")
+    if t == "approved":
+        errs += _approval_04(r, cfg)
+    if r.get("adopts") and (t != "settled" or (r.get("authority") or {}).get("kind") not in ("confirmed", "attested")):
+        errs.append("adopts only on confirmed or attested settlements")
+    errs += _evidence_04(r)
+    if name == "acts" and isinstance(terms.get("text"), str) and ("\n" in terms["text"] or "\r" in terms["text"]):
+        errs.append("terms.text is a single line")   # Acts 0.4 §3
+    if name == "decisions":
+        errs += _decisions_04(r)
+    if t == "note" and len((r.get("about") or {}).keys() & {"key", "quote"}) != 1:
+        errs.append("about has exactly one of key and quote")
+    if t == "note" and "key" in (r.get("about") or {}) and r["about"]["key"] != r.get("key"):
+        errs.append("a note about a key carries that key")
+    return t, errs
+
+
+def _approval_04(r: dict, cfg: Config) -> list[str]:
+    """core 0.4 §5.3: an approval in force comes from a person; a retraction only narrows."""
+    ap = r.get("approval") or {}
+    if not ap.get("active", True):
+        out = [] if r.get("supersedes") else ["a retraction lists the approval it retracts in supersedes"]
+        return out + (["terms_digest only on a grant"] if "terms_digest" in ap else [])
+    out = ["a grant needs terms_rev"] if "terms_rev" not in r else []
+    out += ["a grant needs approval.terms_digest"] if "terms_digest" not in ap else []
+    a = r.get("authority")
+    if not isinstance(a, dict):
+        return out + ["an approval needs authority"]
+    out += _authority(r, cfg)
+    if a.get("kind") not in ("principal", "confirmed"):
+        out.append("an approval comes from the principal: kind principal or confirmed")
+    if "presented" not in (r.get("evidence") or {}):
+        out.append("an approval needs evidence.presented")
+    return out
+
+
+def _evidence_04(r: dict) -> list[str]:
+    """core 0.4 §5.2: verifiable entries and verification results."""
+    ev, t, out = r.get("evidence") or {}, r.get("type"), []
+    if not isinstance(ev, dict):
+        return out
+    entries = ev.get("verifiable")
+    if isinstance(entries, list):
+        if t not in ("claimed", "note", "settled"):
+            out.append("verifiable only on claims, notes and settlements")
+        if "terms_rev" not in r:
+            out.append("a record with verifiable entries carries terms_rev")
+        ids = [x.get("id") for x in entries if isinstance(x, dict)]
+        if len(ids) != len(set(ids)):
+            out.append("verifiable entry ids are unique within the record")
+        if any(isinstance(x, dict) and ("proof" in x) == ("proof_ref" in x) for x in entries):
+            out.append("a verifiable entry carries exactly one of proof and proof_ref")
+    if "verified" in ev and not (t == "settled" or (t == "note" and r.get("origin") == "principal")):
+        out.append("verified only on settlements and principal-side notes")
+    return out
+
+
+def _decisions_04(r: dict) -> list[str]:
+    """Decisions 0.4 §2.1 and §3: the rules its schemas cannot state."""
+    t, out = r.get("type"), []
+    if t == "settled" and r.get("outcome") == "decided" and "answer" not in r:
+        out.append("decided needs answer")
+    if t in ("raised", "amended") and isinstance(r.get("terms"), dict):
+        terms = r["terms"]
+        ids = [o.get("id") for o in terms.get("options") or [] if isinstance(o, dict)]
+        if len(ids) != len(set(ids)):
+            out.append("option ids are unique within the terms")
+        c = terms.get("criteria")
+        if isinstance(c, dict):
+            checks = [x for x in c.get("checks") or [] if isinstance(x, dict)]
+            cids = [x.get("id") for x in checks]
+            if not cids:
+                out.append("criteria need at least one check")
+            if len(cids) != len(set(cids)):
+                out.append("check ids are unique within the criteria")
+            if any(not x.get("trust") for x in checks):
+                out.append("every check names at least one trust root")
+            option = (c.get("answer") or {}).get("option")
+            if option is not None and option not in {o.get("id") for o in terms.get("options") or []}:
+                out.append("criteria.answer.option must be one of the options")
+    if t == "settled" and str((r.get("authority") or {}).get("under", "")).startswith(APPROVAL):
+        verified = (r.get("evidence") or {}).get("verified") or []
+        if r.get("outcome") != "decided":
+            out.append("a settlement under an approval records the approved answer")
+        if not verified or any(v.get("result") != "valid" for v in verified if isinstance(v, dict)):
+            out.append("a settlement under an approval carries only valid verification results")
+    return out
+
+
 TS = re.compile(r"([0-9]{4})-([0-9]{2})-([0-9]{2})[Tt]([0-9]{2}):([0-9]{2}):([0-9]{2})(?:\.([0-9]{1,6}))?"
                 r"(?:([Zz])|([+-])([0-9]{2}):([0-9]{2}))")
 
@@ -266,18 +425,25 @@ def when(r: dict) -> tuple:
 # --- what a receiver holds (core §10, §14) ---
 
 def held_form(r, records: list[dict], cfg: Config) -> tuple[dict, str] | None:
-    """A record as a receiver holds it: converted to 0.5 against `records` (core §14), validated, with its RFC 8785
-    serialisation; None when it is not a valid record in a version read. A record that has no serialisation is not
-    I-JSON (core §4), so it is invalid too."""
+    """A record as a receiver holds it: its 0.5 form, converted against `records` (core §14), with that form's RFC 8785
+    serialisation; None when it is not a valid record in a version read. A 0.5 record is validated by 0.5's rules, a 0.4
+    record as it was sent by 0.4's (core §14: N−1 under N−1; its 0.5 form is not validated again), a 0.3 record as its
+    0.5 form (the spec defines conversion from N−1 only; 0.3 is agent-hub's own reading, see the header). A record that
+    has no serialisation is not I-JSON (core §4), so it is invalid too."""
     if not isinstance(r, dict) or ph_wire.version_of(r) not in ph_wire.READ:
         return None
     source = ph_wire.version_of(r)
+    if source == "0.4":
+        _t, errs = validate(r, cfg)
+        if errs:
+            return None
     x = ph_wire.convert(r, ph_wire.LATEST, records)
-    _t, errs = validate(x, cfg)
-    if source == "0.3" and x.get("type") == "settled" and "terms_digest" not in x:
-        errs = [e for e in errs if e != "$: missing terms_digest"]   # 0.3 had none; its need record isn't held
-    if errs:
-        return None
+    if source != "0.4":
+        _t, errs = validate(x, cfg)
+        if source == "0.3" and x.get("type") == "settled" and "terms_digest" not in x:
+            errs = [e for e in errs if e != "$: missing terms_digest"]   # 0.3 had none; its need record isn't held
+        if errs:
+            return None
     try:
         return x, ph_wire.canonical(x)
     except ValueError:
@@ -285,8 +451,9 @@ def held_form(r, records: list[dict], cfg: Config) -> tuple[dict, str] | None:
 
 
 def received(records: list[dict], cfg: Config) -> tuple[list[dict], list[dict]]:
-    """The records one receiver holds about one item, in any version it reads, as (valid, ignored): each converted to
-    0.5 against all of them (core §14), validated; then one per (origin, type, id): an invalid record never blocks a
+    """The records one receiver holds about one item, in any version it reads, as (valid, ignored): each validated by
+    its own version's rules and held in its 0.5 form, converted against all of them (held_form, core §14); then one per
+    (origin, type, id): an invalid record never blocks a
     valid one with the same id, an id reused with different valid content keeps the greater canonical form, and a
     record never displaces one of another type (core §10)."""
     seen: dict[tuple, tuple[dict, str]] = {}
@@ -311,8 +478,9 @@ def identity(r: dict) -> tuple:
 
 def prevailing(records: list[dict], cfg: Config | None = None) -> list[int]:
     """core §10 for a store that keeps every record it was sent (the bus): the indexes, in order, of the records a
-    reader takes, one per identity when the identity holds a valid record. Of an identity's valid records the one whose
-    RFC 8785 serialisation (of its 0.5 form) is greater, whatever the arrival order; records whose 0.5 forms are equal
+    reader takes, one per identity when the identity holds a valid record. Of an identity's valid records (each valid
+    by its own version's rules, held_form) the one whose RFC 8785 serialisation (of its 0.5 form) is greater, whatever
+    the arrival order; records whose 0.5 forms are equal
     are the same record (sent again, in another version): the first is taken. An invalid record never displaces or
     blocks a valid one; an identity with no valid record keeps all of them, for the fold to ignore and name. A lone
     record is taken as it is, unvalidated, so cfg (default: config()) is read only when an identity has two."""

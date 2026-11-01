@@ -1,6 +1,7 @@
 """bin/ph_records.py, agent-hub as a conforming requester (core §12, Acts and Decisions 0.5 §7.1): the spec's
 records.json in full, and lifecycle.json compared on the settlement view (settlement, outcome, answer, authority,
-stale, state, withdrawn), in the fixtures' order and reversed (contracts/vendor/agent-ops-specs/principal-handoff-0.5/).
+stale, state, withdrawn), in the fixtures' order and reversed (contracts/vendor/agent-ops-specs/principal-handoff-0.5/);
+0.4's records.json by 0.4's rules (core §14: a record in N−1 is validated under N−1).
 
     bin/py -m unittest tests.test_ph_records
 """
@@ -57,6 +58,20 @@ class Conformance(unittest.TestCase):
     def test_decisions_lifecycle_settlement_view(self):
         self.lifecycle("decisions")
 
+    def test_0_4_records_by_0_4_rules(self):
+        """core §14: a record in 0.4 is validated by 0.4's rules, so 0.4's records.json holds in full"""
+        for ext in ("acts", "decisions"):
+            s = json.loads((V04 / ext / "records.json").read_text())
+            self.assertTrue(s["cases"])
+            for c in s["cases"]:
+                with self.subTest(ext=ext, case=c["id"]):
+                    cfg = ph_records.Config(s["principal"], c.get("principal_type", s.get("principal_type")) == "legal")
+                    name, errs = ph_records.validate(c["record"], cfg)
+                    if c["valid"]:
+                        self.assertEqual((name, errs), (c["schema"], []))
+                    else:
+                        self.assertTrue(errs, f"expected invalid, validated against {name}")
+
 
 def rec(**kw) -> dict:
     return {"ph": "0.4", "ext": "acts/0.4", "origin": "requester", "by": "registrar", "key": "k",
@@ -110,6 +125,25 @@ class MixedVersions(unittest.TestCase):
             with self.subTest(case=c["id"]):
                 self.assertEqual(ph_records.settlement_view(c["records"], cfg), want)
                 self.assertEqual(ph_records.settlement_view(list(reversed(c["records"])), cfg), want, "reversed")
+
+    def test_a_0_4_record_invalid_in_0_4_is_ignored_though_valid_in_0_5(self):
+        """core §14: validated under 0.4, not as its 0.5 form, so every receiver ignores what 0.4 makes invalid: here
+        Evidence and Criteria content, which 0.5 moved to modules and no longer checks"""
+        neither = {"verifiable": [{"id": "e1", "format": "x", "statement": "paid"}]}   # 0.4 V1: proof or proof_ref
+        bad_settled = signed(evidence=neither)
+        dq = rec(ext="decisions/0.4", id="r:q", key="q", type="raised", terms_rev=1,
+                 terms={"text": "Which?", "criteria": {"subject": {"uri": "u", "digest": "sha-256:" + "0" * 64},
+                                                           "checks": [], "answer": {"text": "a"}}})   # 0.4: one check
+        for bad, held in ((bad_settled, [NEED, bad_settled]), (dq, [dq])):
+            with self.subTest(type=bad["type"]):
+                self.assertTrue(ph_records.validate(bad, CFG)[1], "invalid in 0.4")
+                self.assertEqual(ph_records.validate(ph_wire.convert(bad, "0.5", held), CFG), (bad["type"], []),
+                                 "its 0.5 form is valid")
+                valid, ignored = ph_records.received(held, CFG)
+                self.assertEqual(ignored, [bad])
+                self.assertNotIn(bad["id"], [r["id"] for r in valid])
+        view = ph_records.settlement_view([NEED, bad_settled], CFG)
+        self.assertEqual((view["settlement"], view["state"]), (None, "open"))
 
     def test_the_same_record_in_two_versions_is_held_once(self):
         up = ph_wire.convert(NEED, "0.5", [NEED])
@@ -201,6 +235,18 @@ class Prevailing(unittest.TestCase):
                     valid, ignored = ph_records.received(records, CFG)
                     self.assertEqual(([r.get("note") for r in valid if r["type"] == "settled"], ignored),
                                      ([want["note"]], []))
+
+    def test_a_0_4_record_invalid_in_0_4_never_displaces_a_valid_one(self):
+        """core §10 over 0.4 validity: the invalid one's 0.5 form would be greater, yet the valid one is taken"""
+        good = signed(note="a")
+        bad = signed(note="z", by="zz", evidence={"verifiable": [{"id": "e1", "format": "x", "statement": "paid"}]})
+        self.assertGreater(ph_wire.canonical(ph_wire.convert(bad, "0.5", [NEED])),
+                           ph_wire.canonical(ph_wire.convert(good, "0.5", [NEED])))
+        for records in ([NEED, good, bad], [NEED, bad, good]):
+            with self.subTest(first=records[1]["note"]):
+                self.assertEqual(self.take(records), [NEED, good])
+                self.assertEqual(ph_records.conflicts(records, CFG), [])
+                self.assertEqual(ph_records.settlement_view(records, CFG)["settlement"], "s1")
 
     def test_a_lone_record_is_not_validated(self):
         """the config is read only when an identity holds two records"""

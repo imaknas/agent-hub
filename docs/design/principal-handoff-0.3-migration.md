@@ -261,13 +261,13 @@ What agent-hub does now:
   `evidence.proof` is removed, and a settlement's `terms_digest` becomes the 0.5 digest of the held need record whose
   digest in the source version equals it (kept when none does: the settlement is then stale). A 0.3 settlement, which
   has no digest, gets that of its need record at its terms_rev (the 0.3 to 0.4 step); without one held it is valid and
-  never stale by digest. A 0.3 or 0.4 record is validated as its 0.5 form: 0.5 only relaxes 0.4 (core §14's change
-  log), so the difference is Evidence and Criteria content, which agent-hub ignores either way.
+  never stale by digest. A 0.4 record is validated by 0.4's rules, as it was sent (since 11-02, "0.4 records by 0.4's
+  rules" below); a 0.3 record as its 0.5 form.
 - **The terms digest** covers `acts` / `decisions`, not `acts/0.5` (core §4). `ph_wire.terms_digest(need, version)`
   computes it as a version defines it. The built-in owner side's settlements carry the digest of the version they are
   sent in, over the need record converted to it (in 0.4 it was computed over a 0.3 need record's own `ext`).
-- **A conforming requester (core §12).** `bin/ph_records.py` validates records against the spec's 0.5 schemas (vendored)
-  and rules, deduplicates them by (origin, type, id), so that a record never displaces one of another type (core
+- **A conforming requester (core §12).** `bin/ph_records.py` validates each record against the schemas (vendored) and
+  rules of its own version (a 0.3 record as its 0.5 form), deduplicates them by (origin, type, id), so that a record never displaces one of another type (core
   §10), and folds each item's settlement view. The registrar's ledger is this fold: ts compare as instants, invalid
   records are ignored and named in its log, and a settlement made on other terms at the same terms_rev is stale and
   strikes nothing. Acts' and Decisions' `records.json` pass in full and `lifecycle.json` on the settlement view
@@ -281,12 +281,14 @@ What agent-hub does now:
   latest terms; a reopening re-adds a line only for a bound key. The 0.5 binding fixtures run with `known` and
   `bound` (`tests/test_acts_conformance.py`, 0.4's still too).
 - **Evidence and proofs.** agent-hub implements neither Evidence nor Criteria. Its claims and notes carry no verifiable
-  entries, and a received record's module content is never a reason to ignore it. `record-publish` refuses a record
+  entries, and a received 0.5 record's module content is never a reason to ignore it (a 0.4 record's Evidence and
+  Criteria content is checked by 0.4's rules, below). `record-publish` refuses a record
   carrying `evidence.proof`, which 0.5 senders never emit.
 - The mapping tables above hold for 0.5 with `ph` and `ext` changed.
 
 The fixtures (core, acts, decisions, acts-markdown, JSON only) are vendored byte-identical, in the tag's layout, in
-`contracts/vendor/agent-ops-specs/principal-handoff-0.5/`; 0.4's stay while 0.4 is sent and received.
+`contracts/vendor/agent-ops-specs/principal-handoff-0.5/`; 0.4's binding fixtures, and since 11-02 its schemas and
+`records.json`, stay while 0.4 is sent and received.
 
 The live dry run of the registrar, main against this branch (both against the real bus and `.state`), differed in one
 line, 0.5's intent: one project's STATE.md line carries a key its own session raised (`task-` prefix, from before the
@@ -332,6 +334,31 @@ What the principal side does for each value of the setting:
 - `"0.5"`: it receives `acts/0.5` and `decisions/0.5` (0.5 digests are its own business: requesters send none), never
   with `evidence.proof`; ids are unchanged, so records already sent in 0.4 remain the same records. It may still send
   any of the three versions.
+
+## 0.4 records by 0.4's rules (11-02)
+
+agent-hub reported two deviations from core §14 to agent-ops-specs (m11011943-fc6b). The owner decided on 11-02
+(m11020321-e666):
+
+- **(1) is not relaxed.** agent-hub validated a 0.4 record as its 0.5 form. Core §14 says a party that reads N−1 and N
+  validates a record in N−1 under N−1, ignores it if it is invalid there, keeps a valid one as it was sent and converts
+  it to N at each fold, so that every receiver computes the same state from the same records, malformed ones
+  included. Now `ph_records.validate` checks a 0.4 record against the 0.4 schemas (vendored from tag
+  `principal-handoff-0.4`, `contracts/vendor/agent-ops-specs/principal-handoff-0.4/{core,acts,decisions}/schemas/`)
+  and 0.4's rules, after the spec's 0.4 reference: Evidence's V1 rules on `evidence.verifiable` and `verified`, a time
+  in `verified[].at`, approvals (`approved`, a settlement under `approval:`), Decisions' criteria, and a `uri` relation
+  target that carries nothing else. Its 0.5 form is not validated again. Core §10's tie-break still compares the RFC
+  8785 forms of the 0.5 forms, over the records valid in their own version, so a 0.4 record invalid in 0.4 never
+  displaces a valid one even when its 0.5 form is greater. 0.4's `acts/records.json` and `decisions/records.json`
+  pass in full, and 0.4's Acts `lifecycle.json` on the settlement view (`tests/test_ph_records.py`).
+- **(2) stays** (which digest a 0.3 settlement gets from several need records at its terms_rev): 0.6 will say that
+  conversion other than from N−1 is outside the spec. agent-hub keeps its reading of 0.3, which is two versions back:
+  a 0.3 record is validated as its 0.5 form, with no `terms_digest` required on a 0.3 settlement.
+
+Live, read only: the bus held 173 records, one of them in 0.4 (a Decisions `raised` from agent-ops-specs), valid by
+0.4's rules. Every record's held form was the same with main's code and this one; the registrar's dry run,
+`open-questions --json` (all projects and each one), every project's `hubbus records` and `record_conflicts` printed
+the same bytes, against a copy of the live bus, config and `.state`.
 
 ## Retiring v1_compat (11-01)
 
