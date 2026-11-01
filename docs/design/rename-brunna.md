@@ -105,15 +105,27 @@ Before it moves anything, the project's settings are rendered for v0.7, and v0.6
 Locks are transient and are **never moved**: moving a held lock would let its holder's release remove another writer's lock. During the window, writers take **both** lock directories in a fixed order, each with its own stale-lock break.
 
 Outbox files moved between dispatch's read and its delete can be sent twice. The bus dedups on the file's id (`INSERT OR IGNORE`), and a test pins that |
-| per-machine paths | the venv `~/.local/share/agent-hub/python`, `~/git-origin/agent-hub.git` (the checkout's origin), this machine's `bus_dir` setting | `~/.local/share/brunna/python`, `~/git-origin/brunna.git`, a new `bus_dir` | the machine | the venv: `setup-python` builds the new one and `bin/py` falls back to the old until removed. The origin: the bare repo is renamed and the checkout's remote URL updated. The bus moves only when the config names an `agent-hub` path. That is most installs, since `hub.example.json` sets one. Many processes write the bus and re-read `bus_dir` on every call: hooks, the bridge, merge-branch, scheduler publishes, lease-runner, `send`. So the move:
+| per-machine paths | the venv `~/.local/share/agent-hub/python`, `~/git-origin/agent-hub.git` (the checkout's origin), this machine's `bus_dir` setting | `~/.local/share/brunna/python`, `~/git-origin/brunna.git`, a new `bus_dir` | the machine | the venv: `setup-python` builds the new one, and `bin/py` falls back to the old. **The old venv is never removed during an upgrade run**: the moving release's `upgrade.py` execs the target's steps with its own `sys.executable`. So from v0.6, `--steps` first re-execs itself through the target's own `bin/py`. `brunna migrate --cleanup` removes the old venv after doctor confirms nothing runs from it; v0.9's doctor reminds. The origin: the bare repo is renamed and the checkout's remote URL updated. The bus moves only when the config names an `agent-hub` path. That is most installs, since `hub.example.json` sets one. Many processes write the bus:
+- short-lived ones (hooks, `send`, merge-branch) read `bus_dir` when they start;
+- long-lived ones read it once at import (`hubconf.BUS_DIR`, hubbus's `DB`) and keep writing the old path until they
+  restart, running whatever code they started with, v0.5 included: an open session's MCP server, a running
+  librarian, the bridge.
+
+So the move:
 
 1. holds the scheduler lock and stops dispatch and lease-runner;
 2. **rewrites the setting first**, so every new writer goes to the new path;
 3. copies the database with SQLite's backup API;
-4. after a grace period, copies across any event in the old database that the new one lacks (`publish` dedups by id);
-5. deletes the old file.
+4. **leaves the old database in place**; no timer deletes it.
 
-Until it is deleted, the sandbox policy denies reads of both bus paths. The code default `.state/bus` is unaffected |
+After that, until v0.9:
+- every scheduler tick sweeps events in the old database that the new one lacks into the new one (`publish` dedups by
+  id);
+- the old file is removed only when nothing holds it open (`lsof`), and v0.9 sweeps it one last time first;
+- from v0.6, `db()` resolves `bus_dir` on every call, so v0.6+ processes follow the move at their next call;
+- until the old file is removed, the sandbox policy denies reads of both bus paths.
+
+The migration test keeps an MCP server open across the move and checks that its sends arrive. The code default `.state/bus` is unaffected |
 | config file | `hub.json` | `brunna.json` | the config repo | **not version-fixed**: `hubconf.config_path()` resolves to whichever file exists. Every reader, writer and "is this instance set up" check uses it: `schedulectl set-model`, `agenthub` init/llm/agent, `connect.py`, the callers of `commit-hub-files.sh`, `hub_json_get`. A rolled-back v0.6 therefore keeps writing the file v0.7 renamed. Both existing and different: refused. **Neither existing, in an instance that has a `.hub-home`: refused outright**, never "use the defaults": defaults would silently point the bus at a new empty `.state/bus`, and render-services would tear down services. That holds in every release from v0.6 on, and in v0.9, where an old spelling is no longer accepted in normal use, it names `brunna migrate`. The migration `git mv`s it and commits. The schema `contracts/hub.v1.schema.json` is a contract: per the contract rules, `brunna.v1.schema.json` is added beside it with the same content and both stay until every reader (config-check, tests, goldens) has moved |
 | defaults for new installs | `~/agent-hub`, `~/.agent-hub`, repo URL | `~/brunna`, `~/.brunna`, `imaknas/brunna` | install.sh | install.sh notices an existing `~/agent-hub` install and resumes or upgrades it instead of cloning a second one. An existing checkout and instance folder keep their paths (they are the user's choice of place, recorded in `.hub-home` and the units); `brunna move-checkout` and `move-instance` move them on request |
 | hard-coded names in code | `parse("agent-hub", …)` in `gen-todo.py`, `weekly-reflect.py`, `evals/e3.py`, registry `run:` lines and MCP settings in users' config | through `hub_project()` / `names` | code and the user's config | the ratchet catches the code; the migration rewrites `run:` lines in the platform's own registry entry, and doctor lists users' registry entries and MCP settings that still use old names |
@@ -129,7 +141,10 @@ Until it is deleted, the sandbox policy denies reads of both bus paths. The code
    - every reader on `names.all`;
    - the pairwise unit installer;
    - the mailbox on `own_names`;
-   - scheduler adoption;
+   - scheduler adoption, through `names.all`, not `former_names`. v0.6's `hub_project()` is still `agent-hub` and
+     can't know `brunna` as a former name, so this is how a rollback still finds v0.7's keys. From v0.7 on, adopting
+     the `agent-hub/…` keys of an instance that jumps from v0.5 lives in the migration code, which keeps the old
+     spellings;
    - the test runner finding the hub by `type`;
    - the env rule (refuse a conflict on input, `env_set` for overrides);
    - both lock directories;
@@ -151,14 +166,26 @@ Until it is deleted, the sandbox policy denies reads of both bus paths. The code
      2. config file;
      3. per-machine paths (venv, origin, bus);
      4. **every** project's per-repo paths and markers, eagerly (not waiting for a session start);
-     5. the platform's own `run:` lines;
-     6. the MCP re-registration offer (terminal only).
+     5. the MCP re-registration offer (terminal only).
+
+     The platform's own registry entry, with its `run:` lines, is in the repo. It changes in the v0.7 commit itself,
+     not at migrate time, because rewriting a tracked file would dirty the checkout.
 
      `upgrade` runs all of it from its step list. `migrate` is the **first** in-step command, before `registry.py
-     check` and `config apply`, and upgrade keeps the scheduler lock across the checkout move and the migration, so no
-     tick runs new code against an unmigrated instance. On the owner's machine code arrives by `merge-branch` → `land`, and
-     there `land` runs only steps 1, 2 and 4, the ones that must follow the code at once. It prints that steps 3, 5 and
-     6 wait for `brunna migrate`, and doctor keeps saying so until they have run.
+     check` and `config apply`.
+     - From v0.6 on, the mover hands the scheduler lock across the exec as an inherited fd, so no tick runs new code
+       against an unmigrated instance.
+     - A v0.5 mover can't: it closes the lock right after the checkout move. For that window the rule is that the new
+       code refuses cleanly against an unmigrated instance: no config under the new name is a refusal, never defaults.
+       So ticks, dispatch and hooks do nothing until migrate has run. The migration test covers that window.
+     - The unit installer takes the "other" labels from `migrate_names`, which keeps the old spellings forever. So
+       even v0.9 removes a v0.5 scheduler's units on a jump.
+     - Sessions already open keep old code in memory. Upgrade and doctor say to restart them, since their mailbox tools
+       may fail until then.
+
+     On the owner's machine, code arrives by `merge-branch` → `land`. There, `land` runs only steps 1, 2 and 4, the
+     ones that must follow the code at once. It prints that steps 3 and 5 wait for `brunna migrate`, and doctor keeps
+     saying so until they have run.
    - `upgrade.py` refuses `--to` anything older than v0.6.0, and its go-back advice names v0.6.0.
    - The migration steps stay in every later release's step list, so a jump from v0.5 or v0.6 straight to a later
      version works.
