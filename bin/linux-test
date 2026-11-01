@@ -7,6 +7,7 @@
 # Expected: 0 failures; tests that only make sense on macOS are skipped.
 set -euo pipefail
 hub="$(cd "$(dirname "$0")/.." && pwd)"
+# --init: an init reaps orphans as on a real host (python as PID 1 would leave killed children as zombies)
 # colima / Docker Desktop mount only the home directory into the VM by default: copy under home, not /tmp
 work="${AGENT_HUB_LINUX_TEST_DIR:-$HOME/.cache/agent-hub-linux}"
 rm -rf "$work/src" && mkdir -p "$work/src"
@@ -14,7 +15,7 @@ rm -rf "$work/src" && mkdir -p "$work/src"
   | (cd "$hub" && COPYFILE_DISABLE=1 tar -cf - -T -) | tar -xf - -C "$work/src"   # no macOS ._ files
 docker build -q -t agent-hub-linux-test -f "$hub/tests/linux/Dockerfile" "$hub/tests/linux" >/dev/null
 args=("$@"); [ ${#args[@]} -gt 0 ] || args=(discover -s tests)
-docker run --rm -v "$work/src:/src:ro" -e AGENT_HUB_PYTHON=/usr/local/bin/python3 \
+docker run --rm --init -v "$work/src:/src:ro" -e AGENT_HUB_PYTHON=/usr/local/bin/python3 \
   -e GIT_AUTHOR_NAME=t -e GIT_AUTHOR_EMAIL=t@t -e GIT_COMMITTER_NAME=t -e GIT_COMMITTER_EMAIL=t@t agent-hub-linux-test sh -c '
   cp -r /src /tmp/hub && cd /tmp/hub && git init -q -b main && git add -A && git commit -qm linux-test &&
   exec /usr/local/bin/python3 -m unittest "$@"' _ "${args[@]}"
