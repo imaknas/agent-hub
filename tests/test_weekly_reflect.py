@@ -32,6 +32,30 @@ def load():
     return m
 
 
+class TimeZone(unittest.TestCase):
+    """The hours are counted in the owner's time zone (hub.json owner.timezone)."""
+
+    def test_the_owners_zone(self):
+        import hubconf
+        from unittest import mock
+        with mock.patch.object(hubconf, "_cfg", {"owner": {"timezone": "America/New_York"}}):
+            m = load()
+        self.assertEqual(str(m.TZ), "Asia/Taipei")
+
+    def test_no_time_zone_data(self):
+        """a bare Ubuntu has no tzdata package"""
+        import hubconf
+        import zoneinfo
+        from unittest import mock
+
+        def missing(key):
+            raise zoneinfo.ZoneInfoNotFoundError(f"No time zone found with key {key}")
+        with mock.patch.object(hubconf, "_cfg", {"owner": {"timezone": "America/New_York"}}), \
+                mock.patch.object(zoneinfo, "ZoneInfo", missing):
+            with self.assertRaises(zoneinfo.ZoneInfoNotFoundError):
+                load()
+
+
 class Scan(unittest.TestCase):
     def setUp(self):
         runtime_fake.reset()
