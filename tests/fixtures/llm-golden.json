@@ -35,6 +35,9 @@
    "mcp__claude_ai_Example",
    "mcp__fixture-prod-db",
    "mcp__plugin_example_tools",
+   "ListMcpResourcesTool",
+   "ReadMcpResourceTool",
+   "ReadMcpResourceDirTool",
    "--output-format",
    "json"
   ],
@@ -55,6 +58,9 @@
    "mcp__claude_ai_Example",
    "mcp__fixture-prod-db",
    "mcp__plugin_example_tools",
+   "ListMcpResourcesTool",
+   "ReadMcpResourceTool",
+   "ReadMcpResourceDirTool",
    "--output-format",
    "json"
   ],
@@ -73,6 +79,9 @@
    "mcp__claude_ai_Example",
    "mcp__fixture-prod-db",
    "mcp__plugin_example_tools",
+   "ListMcpResourcesTool",
+   "ReadMcpResourceTool",
+   "ReadMcpResourceDirTool",
    "--output-format",
    "json"
   ],
@@ -91,6 +100,9 @@
    "mcp__claude_ai_Example",
    "mcp__fixture-prod-db",
    "mcp__plugin_example_tools",
+   "ListMcpResourcesTool",
+   "ReadMcpResourceTool",
+   "ReadMcpResourceDirTool",
    "--output-format",
    "json"
   ],
@@ -1086,6 +1098,9 @@
    "mcp__claude_ai_Example",
    "mcp__fixture-prod-db",
    "mcp__plugin_example_tools",
+   "ListMcpResourcesTool",
+   "ReadMcpResourceTool",
+   "ReadMcpResourceDirTool",
    "--output-format",
    "json"
   ],
@@ -1127,6 +1142,9 @@
    "mcp__claude_ai_Example",
    "mcp__fixture-prod-db",
    "mcp__plugin_example_tools",
+   "ListMcpResourcesTool",
+   "ReadMcpResourceTool",
+   "ReadMcpResourceDirTool",
    "--output-format",
    "json"
   ],
@@ -1166,6 +1184,9 @@
    "mcp__claude_ai_Example",
    "mcp__fixture-prod-db",
    "mcp__plugin_example_tools",
+   "ListMcpResourcesTool",
+   "ReadMcpResourceTool",
+   "ReadMcpResourceDirTool",
    "--output-format",
    "json"
   ],
@@ -1205,6 +1226,9 @@
    "mcp__claude_ai_Example",
    "mcp__fixture-prod-db",
    "mcp__plugin_example_tools",
+   "ListMcpResourcesTool",
+   "ReadMcpResourceTool",
+   "ReadMcpResourceDirTool",
    "--output-format",
    "json"
   ],

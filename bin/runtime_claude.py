@@ -396,8 +396,9 @@ def _flags(task) -> list:
         cmd += ["--allowedTools", *allowed]
     if task.deny_servers:
         # a whole server: `mcp__<id>` with no tool matches every tool it has (deny wins over any allow), and a tool
-        # denied this way isn't even offered to the model
-        cmd += ["--disallowedTools", *(f"mcp__{s}" for s in task.deny_servers)]
+        # denied this way isn't even offered to the model (live probe 11-01). The built-in resource tools reach any
+        # connected server's resources by name, past those rules: off too
+        cmd += ["--disallowedTools", *(f"mcp__{s}" for s in task.deny_servers), *MCP_RESOURCE_TOOLS]
     return cmd + list(spec.get("extra_args") or []) + list(task.extra or [])
 
 
@@ -407,6 +408,7 @@ def _flags(task) -> list:
 # subscription login the account's claude.ai connectors (fetched from the account; nowhere on disk). Turning tools off
 # doesn't stop them loading (10-27 experiment: 265 MCP tools, execute_sql on a production database among them).
 SEAL = "--strict-mcp-config"   # only the servers --mcp-config gives
+MCP_RESOURCE_TOOLS = ("ListMcpResourcesTool", "ReadMcpResourceTool", "ReadMcpResourceDirTool")
 MCP_LIST_TIMEOUT_S = 180       # `claude mcp list` health-checks every server (each has its own connect timeout)
 _LISTED = re.compile(r"^(.+?): .* - .+$")   # `<name>: <url or command> - <status>`; names have no ": " in them
 _ANSI = re.compile(r"\x1b\[[0-9;?]*[A-Za-z]")

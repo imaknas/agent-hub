@@ -225,6 +225,8 @@ class Flags(Fixture):
             deny_servers=("fixture-prod-db", "plugin_example_tools")))
         i = cmd.index("--disallowedTools")
         self.assertEqual(cmd[i + 1:i + 3], ["mcp__fixture-prod-db", "mcp__plugin_example_tools"])
+        # the built-in resource tools would reach a denied server's resources by name
+        self.assertEqual(set(cmd[i + 3:i + 6]), set(runtime_claude.MCP_RESOURCE_TOOLS))
         self.assertEqual(cmd[cmd.index("--allowedTools") + 1], "mcp__claude_ai_Jobs__x")
 
     def test_nothing_to_deny_adds_nothing(self):
