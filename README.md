@@ -109,6 +109,8 @@ every test in parallel under a throwaway `HOME`), through `agenthub test`. Don't
 it so its hooks apply. Commit titles follow [Conventional Commits](https://www.conventionalcommits.org/), and release
 notes are generated from them with [git-cliff](https://git-cliff.org/) (`cliff.toml`).
 
+How to contribute: [CONTRIBUTING.md](CONTRIBUTING.md). Security reports: [SECURITY.md](SECURITY.md).
+
 ## License
 
 [Apache-2.0](LICENSE). This covers the contracts in `contracts/`, including copies vendored into other repos. There is no
