@@ -69,10 +69,15 @@ else keeps the direct path.
   layer closes it: the session sandbox (`denyRead`, no `allowWrite`), Seatbelt and Landlock (both deny it and used to
   allow it again only through `policy.write`). The conformance probe in `tests/test_sandboxed_services.py` checks that
   the bus can be neither written nor read under this machine's adapter.
-- **Writing.** `hubbus send/ack/done/publish` run in such a project's folder (or naming it from outside any project)
-  write one JSON file per command into `<workspace>/.git/agent-hub/outbox/` (`{"v": 1, "op", …}`, renamed into place
-  whole) after the same checks `send` makes, run against the project's view. The client picks the letter id in a shape
-  no other writer uses (`m<MMDDhhmm>-<12 hex>`), so a project can't take an id another writer will use. `publish` is
+- **Writing.** `hubbus send/ack/done/publish` run in such a project's folder, naming no other sender (`--from`,
+  `--source`, `--project` absent or the project itself), write one JSON file per command into
+  `<workspace>/.git/agent-hub/outbox/` (`{"v": 1, "op", …}`, renamed into place whole, never through a link) after the
+  same checks `send` makes, run against the project's view. A command naming another sender goes to the bus as
+  before: the platform's own processes also run in project folders (a job's `llm.py` publishing `job.failed`) and
+  have the user's authority, while inside the sandbox the bus file isn't there to write; what a project can send as is
+  decided by the sandbox, not by this routing. The client picks the letter id in a shape no other writer uses
+  (`m<MMDDhhmm>-<12 hex>`), so a project can't take an id another writer will use; with records on, a task's key stays
+  its text's (`task_key`), never that id. `publish` is
   only `merge.done`/`merge.failed`/`session.report` (what `merge-branch` publishes from a session), source and
   recipient the project itself; the platform keeps them under `outbox:<project>:<id>`. The MCP server does the same:
   it runs `hubbus` in the project's folder.
@@ -88,7 +93,8 @@ else keeps the direct path.
   the letters and records to or from it, with their delivered/done events, other projects' session ids left out; it
   is replaced with `nofollow.replace` only when it changed. In the project's folder `inbox/show/thread/open-questions`
   load it into an in-memory copy of the bus's tables and run the usual code on it; `inbox` doesn't mark anything
-  delivered there (the hooks do).
+  delivered there (the hooks do). The hooks also write the view whenever they deliver letters into such a session, so
+  a reply, `ack` or `done` made right away finds the letter.
 - **Hooks.** Mail delivery stays outside the sandbox with the user's authority, reading and writing only the bus
   (presence, delivery); it is not one of `hub-event`'s `AS_PROJECT` handlers, which could not reach the bus. Its
   project is the one whose folder the session is in by path: `hubbus.project_of` no longer follows a sandboxed
@@ -97,7 +103,8 @@ else keeps the direct path.
 - **Tests.** `tests/test_bus_sender.py`: the attacks (a `manifest.update` claiming another project through `send
   --from`, through a forged outbox file and straight into the SQLite file under the real Seatbelt profile; reading
   another project's letters through the CLI, the hooks and the file) failed on the code before; then the outbox, the
-  view, refusals, links, FIFOs, forged sessions, ids, `merge-branch`'s events, the MCP server and the unsandboxed path.
+  view, refusals, links, FIFOs, forged sessions, ids, task keys, `merge-branch`'s events, the MCP server, platform
+  processes in a project's folder and the unsandboxed path.
 
 Left as it was: a sandboxed project's `.git/agent-hub/outbox` can be written by anything that runs as the project, so
 the narrowing of a confined run (`AGENT_HUB_CONFINED`) and of an agent the platform sends letters for

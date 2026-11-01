@@ -260,9 +260,7 @@ def view_db(project: str) -> sqlite3.Connection:
     c.executescript(SCHEMA)
     ws = hubconf.workspace(project)
     try:
-        data = json.loads((ws / VIEW).read_bytes()) if ws else {}
-    except FileNotFoundError:
-        data = {}
+        data = json.loads(nofollow.read(ws, VIEW, VIEW_CAP) or b"{}") if ws else {}
     except (OSError, ValueError) as e:
         refuse(_("hubbus: cannot read {project}'s mailbox view ({e}); the platform writes it again within a minute",
                  project=project, e=e))
@@ -880,6 +878,7 @@ def mail_text(event: str, session, cwd) -> str | None:
         old = [r for r in rows if r["delivered"]]
         mark_delivered(c, new, session, "session-start")
         c.execute("COMMIT")
+        hook_view(c, project)
         note = questions_note(c, project)
         if rows:
             parts = [header(len(rows), project), *(fmt(r) for r in new)]
@@ -907,6 +906,8 @@ def mail_text(event: str, session, cwd) -> str | None:
             merged[r["id"]] = summary
     mark_delivered(c, handled, session, event)
     c.execute("COMMIT")
+    if rows or handled:
+        hook_view(c, project)
     if handled:
         rows = rows + handled
     if rows:
@@ -1700,10 +1701,10 @@ def take(c, proj: str, entry) -> None:
             refuse(_("hubbus: a letter id from an outbox has the form m<MMDDhhmm>-<12 hex digits>"))
         if entry.get("type") not in TYPES or not entry.get("to") or not entry.get("text"):
             refuse(_("hubbus: a letter needs to, text and a type of {types}", types="/".join(TYPES)))
-        a = argparse.Namespace(cmd="send", sender=proj, id=entry["id"],
+        a = argparse.Namespace(cmd="send", sender=proj, id=None,
                                **{k: entry.get(k) for k in SEND_FIELDS if k != "inferred"},
                                inferred=entry.get("inferred") is True)
-        send_letter(c, a, proj, session, proj, boxed=True)
+        send_letter(c, a, proj, session, proj, boxed=True, mid=entry["id"])
     elif op in ("ack", "done"):
         ids = entry.get("ids")
         if not isinstance(ids, list) or not 0 < len(ids) <= 50 or not all(isinstance(i, str) for i in ids):
@@ -1763,22 +1764,33 @@ def view(c, proj: str) -> dict:
 
 
 def write_views(c) -> None:
-    """Each sandboxed project's view into its folder, only when it changed; replaced, never written through a link."""
     for proj, ws in projects().items():
-        if not outboxed(proj) or not ws.is_dir():
-            continue
-        data = json.dumps(view(c, proj), ensure_ascii=False, sort_keys=True).encode()
-        try:
-            cur = nofollow.read(ws, VIEW, VIEW_CAP)
-        except OSError:
-            cur = None
-        if cur == data:
-            continue
-        try:
-            nofollow.replace(ws, VIEW, data)
-            log_once(f"view-{proj}", "")
-        except OSError as e:
-            log_once(f"view-{proj}", _("{project}: cannot write its mailbox view: {e}", project=proj, e=e))
+        if outboxed(proj) and ws.is_dir():
+            write_view(c, proj, ws)
+
+
+def write_view(c, proj: str, ws: pathlib.Path) -> None:
+    """A sandboxed project's view into its folder, only when it changed; replaced, never written through a link."""
+    data = json.dumps(view(c, proj), ensure_ascii=False, sort_keys=True).encode()
+    try:
+        cur = nofollow.read(ws, VIEW, VIEW_CAP)
+    except OSError:
+        cur = None
+    if cur == data:
+        return
+    try:
+        nofollow.replace(ws, VIEW, data)
+        log_once(f"view-{proj}", "")
+    except OSError as e:
+        log_once(f"view-{proj}", _("{project}: cannot write its mailbox view: {e}", project=proj, e=e))
+
+
+def hook_view(c, project: str) -> None:
+    """The hooks just delivered letters into a sandboxed project's session: its view gets them now, so a reply, ack or
+    done the session makes right away finds them (dispatch writes it only once a minute)."""
+    ws = hubconf.workspace(project)
+    if outboxed(project) and ws and ws.is_dir():
+        write_view(c, project, ws)
 
 
 def mailbox_step(c, step) -> None:
@@ -1943,12 +1955,15 @@ MAIL_COMMANDS = ("send", "inbox", "show", "thread", "ack", "done", "open-questio
 
 
 def mail_box(a, here) -> str | None:
-    """The project whose outbox and view this command uses, or None (the bus). A sandboxed project's command never
-    touches the bus: run in its folder, or outside any project naming it (--from/--project/--source)."""
-    if outboxed(here):
-        return here
+    """The project whose outbox and view this command uses, or None (the bus): run in a sandboxed project's folder,
+    naming no one else (--from/--project/--source absent or that project). A command that names another sender goes
+    to the bus as before: with the user's authority (the platform's own processes run in project folders too, e.g. a
+    job's llm.py publishing job.failed) it works, inside the sandbox the bus file is not there to write. What a
+    project can send as is decided by the sandbox, never by this choice."""
+    if not outboxed(here):
+        return None
     named = getattr(a, "sender", None) or getattr(a, "project", None) or getattr(a, "source", None)
-    return named if not here and outboxed(named) else None
+    return here if named in (None, here) else None
 
 
 def outbox_id() -> str:
@@ -1956,22 +1971,20 @@ def outbox_id() -> str:
 
 
 def outbox_put(project: str, entry: dict) -> None:
-    """One file in the project's outbox, renamed into place whole (the platform skips names starting with a dot)."""
-    d = hubconf.workspace(project) / OUTBOX
-    d.mkdir(parents=True, exist_ok=True)
-    name = f"{time.time_ns()}-{secrets.token_hex(4)}.json"
-    tmp = d / f".{name}"
-    tmp.write_text(json.dumps({"v": 1, **entry}, ensure_ascii=False))
-    tmp.rename(d / name)
+    """One file in the project's outbox, renamed into place whole (the platform skips the temporary name, which starts
+    with a dot); no link in the project's folder followed, whoever runs this."""
+    nofollow.replace(hubconf.workspace(project), f"{OUTBOX}/{time.time_ns()}-{secrets.token_hex(4)}.json",
+                     json.dumps({"v": 1, **entry}, ensure_ascii=False).encode())
 
 
 def queued(project: str) -> None:
     print(_("(in {project}'s outbox: the platform sends it within a minute)", project=project), file=sys.stderr)
 
 
-def send_letter(c, a, sender: str, session, here, boxed: bool = False) -> str:
+def send_letter(c, a, sender: str, session, here, boxed: bool = False, mid: str | None = None) -> str:
     """send's checks and write, for the CLI and for a letter taken from a sandboxed project's outbox (boxed: sender =
-    that project, never a name in the file; a reply only in its own threads). Returns the id to print."""
+    that project, never a name in the file; a reply only in its own threads). mid: the letter id (else --id, else a
+    new one); --id stays what it is to a task, its key. Returns the id to print."""
     a.to = canon(a.to)
     if not sender or not valid_address(sender) or sender in OWNERS:
         refuse(_("hubbus: cannot tell which project the sender is (outside a project folder add --from <project>)"))
@@ -2004,7 +2017,7 @@ def send_letter(c, a, sender: str, session, here, boxed: bool = False) -> str:
             p["to_session"] = payload(orig)["from_session"]
         if payload(orig).get("handoff_id") is not None:
             p["handoff_id"] = payload(orig)["handoff_id"]
-    mid = a.id or new_id()
+    mid = mid or a.id or new_id()
     if RECORDS and a.to == OWNER_ADDRESS:
         if a.inferred:
             refuse(_("hubbus: an inferred claim is sent by registrar itself (hubbus record-publish); send does not "
@@ -2029,7 +2042,7 @@ def mail_command(a) -> None:
     if a.cmd == "publish":
         pl = json.loads(a.payload)
         if box:
-            if a.type not in OUTBOX_PUBLISH or a.source != box or (a.to or box) != box or a.ref:
+            if a.type not in OUTBOX_PUBLISH or (a.to or box) != box or a.ref:
                 refuse(_("hubbus: {project} publishes only its own {types} (source and recipient itself, no ref)",
                          project=box, types="/".join(OUTBOX_PUBLISH)))
             if a.id and not EVENT_ID.match(a.id):
@@ -2038,24 +2051,22 @@ def mail_command(a) -> None:
             return queued(box)
         publish(c, a.id or f"e{now():%m%d%H%M%S}-{secrets.token_hex(3)}", a.type, a.source, a.to, a.ref, pl)
     elif a.cmd == "send":
+        mid = None
         if box:
-            if a.sender and a.sender != box:
-                refuse(_("hubbus: {project} sends only as itself (no --from {sender})", project=box, sender=a.sender))
+            # the letter id is picked here; --id only as such an id (a task's key from an outbox is its text's)
             if a.id and not OUTBOX_ID.match(a.id):
                 refuse(_("hubbus: a letter id from an outbox has the form m<MMDDhhmm>-<12 hex digits>"))
-            a.id = a.id or outbox_id()
-        out = send_letter(c, a, a.sender or here, session, here, boxed=bool(box))
+            mid, a.id = a.id or outbox_id(), None
+        out = send_letter(c, a, a.sender or here, session, here, boxed=bool(box), mid=mid)
         if box:
-            outbox_put(box, {"op": "send", "id": a.id, "session": session, **{k: getattr(a, k) for k in SEND_FIELDS}})
+            outbox_put(box, {"op": "send", "id": mid, "session": session, **{k: getattr(a, k) for k in SEND_FIELDS}})
             queued(box)
-            out = a.id
+            out = mid
         print(out)
     elif a.cmd == "inbox":
         project = a.project or here
         if not project:
             refuse(_("hubbus: not in a project folder, add --project <name>"))
-        if box and project != box:
-            refuse(_("hubbus: {project} reads only its own mailbox", project=box))
         rows = inbox(c, project, session)
         for r in rows:
             print(fmt(r))
@@ -2081,8 +2092,6 @@ def mail_command(a) -> None:
         if os.environ.get("AGENT_HUB_CONFINED"):   # only its own project's questions
             project = here
         if box:
-            if project and project != box:
-                refuse(_("hubbus: {project} reads only its own mailbox", project=box))
             project = box
         rows = open_questions(c, project)
         if a.json:

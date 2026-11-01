@@ -82,6 +82,21 @@ class Fixture(unittest.TestCase):
     def dispatch(self):
         self.hubbus("dispatch")
 
+    def in_sandbox(self, *args, project="box"):
+        """hubbus run as the project under its real Seatbelt profile (what its services and jobs get; its sessions'
+        sandbox closes the same paths)."""
+        return subprocess.run([seatbelt.SANDBOX_EXEC, "-p", self.profile(project), sys.executable, str(BIN / "hubbus"),
+                               *args], env=self.env, cwd=self.ws[project], capture_output=True, text=True, timeout=60)
+
+    def profile(self, name):
+        """The real Seatbelt profile of a sandboxed project's service, for this scratch instance."""
+        import policy
+        with mock.patch.object(hubconf, "BUS_DIR", self.tmp / "bus"), \
+                mock.patch.object(hubconf, "projects", lambda: self.docs), \
+                mock.patch.object(seatbelt, "TMP", []):   # the fixture is in the temp area
+            pol = policy.policy(name, self.docs[name], {"projects": self.docs})
+            return seatbelt.service_profile(pol, [self.ws[name]])
+
     def rows(self, where="1", args=()):
         db = self.tmp / "bus" / "bus.db"
         if not db.exists():
@@ -106,6 +121,9 @@ class Fixture(unittest.TestCase):
     def letter_to(self, project, text, frm="agent-hub", typ="info"):
         self.hubbus("send", "--from", frm, "--to", project, "--type", typ, "--text", text)
 
+    def letter_id(self, out: str) -> str:
+        return out.strip().splitlines()[-1]
+
     def refusals(self, project="box"):
         return [json.loads(r["payload"])["text"] for r in self.rows("type='message' AND to_project=? AND source=?",
                                                                     (project, "agent-hub"))
@@ -115,9 +133,11 @@ class Fixture(unittest.TestCase):
 class Attacks(Fixture):
     """Each of these succeeded before the outbox (11-01)."""
 
+    @unittest.skipUnless(seatbelt.can_sandbox() is None, "needs Seatbelt")
     def test_send_from_another_project_never_lands_as_it(self):
-        r = self.hubbus("send", "--from", "open", "--to", "agent-hub", "--type", "manifest.update", "--text", MANIFEST,
-                        cwd=self.ws["box"], check=False)
+        self.letter_to("box", "a bus exists")
+        r = self.in_sandbox("send", "--from", "open", "--to", "agent-hub", "--type", "manifest.update", "--text",
+                            MANIFEST)
         self.dispatch()
         self.assertEqual(self.rows("source='open'"), [], r.stdout + r.stderr)
 
@@ -130,10 +150,13 @@ class Attacks(Fixture):
         self.assertEqual([r["source"] for r in got], ["box"])
         self.assertFalse(any(self.outbox().iterdir()), "a moved letter is deleted from the outbox")
 
+    @unittest.skipUnless(seatbelt.can_sandbox() is None, "needs Seatbelt")
     def test_cli_does_not_read_another_projects_mailbox(self):
         self.letter_to("open", "the open project's secret plan")
-        r = self.hubbus("inbox", "--project", "open", cwd=self.ws["box"], check=False)
-        self.assertNotIn("secret plan", r.stdout + r.stderr)
+        self.dispatch()
+        for args in (("inbox", "--project", "open"), ("open-questions", "--project", "open"), ("inbox",)):
+            r = self.in_sandbox(*args)
+            self.assertNotIn("secret plan", r.stdout + r.stderr, args)
 
     def test_hook_delivery_does_not_follow_a_planted_gitdir(self):
         """A session hook runs outside the sandbox; the session's folder says `gitdir: <other project's .git>`."""
@@ -167,20 +190,7 @@ class Attacks(Fixture):
         self.assertNotIn("secret plan", r.stdout)
         self.assertEqual(self.rows("id='forged'"), [], r.stdout + r.stderr)
 
-    def profile(self, name):
-        """The real Seatbelt profile of a sandboxed project's service, for this scratch instance."""
-        import policy
-        with mock.patch.object(hubconf, "BUS_DIR", self.tmp / "bus"), \
-                mock.patch.object(hubconf, "projects", lambda: self.docs), \
-                mock.patch.object(seatbelt, "TMP", []):   # the fixture is in the temp area
-            pol = policy.policy(name, self.docs[name], {"projects": self.docs})
-            return seatbelt.service_profile(pol, [self.ws[name]])
-
-
 class Outbox(Fixture):
-    def letter_id(self, out: str) -> str:
-        return out.strip().splitlines()[-1]
-
     def test_a_sandboxed_send_waits_in_the_outbox_then_goes_out_as_the_project(self):
         r = self.hubbus("send", "--to", "open", "--type", "request", "--text", "please look", cwd=self.ws["box"])
         mid = self.letter_id(r.stdout)
@@ -209,8 +219,6 @@ class Outbox(Fixture):
         self.assertIn("for box", r.stdout)
         self.assertNotIn("secret plan", r.stdout)
         self.assertFalse((self.tmp / "bus").exists(), "reading the view created the bus")
-        r = self.hubbus("inbox", "--project", "open", cwd=self.ws["box"], check=False)
-        self.assertNotEqual(r.returncode, 0)
 
     def test_reply_ack_and_done_from_the_sandbox(self):
         r = self.hubbus("send", "--to", "box", "--type", "request", "--text", "ping", cwd=self.ws["open"])
@@ -293,9 +301,6 @@ class Outbox(Fixture):
         r = self.hubbus("publish", "job.failed", "--source", "box", "--to", "box", "--payload", "{}",
                         cwd=self.ws["box"], check=False)
         self.assertNotEqual(r.returncode, 0)
-        r = self.hubbus("publish", "merge.done", "--source", "open", "--to", "open", "--payload", "{}",
-                        cwd=self.ws["box"], check=False)
-        self.assertNotEqual(r.returncode, 0)
         self.drop({"v": 1, "op": "publish", "type": "config.applied", "id": "x", "payload": {}}, name="z.json")
         self.dispatch()
         got = [(r["id"], r["type"], r["source"], r["to_project"]) for r in self.rows("type!='message'")]
@@ -321,13 +326,9 @@ class Outbox(Fixture):
         needs it."""
         self.hubbus("send", "--to", "box", "--type", "info", "--text", "for box", cwd=self.ws["open"])
         self.dispatch()
-        profile = Attacks.profile(self, "box")
-        r = subprocess.run([seatbelt.SANDBOX_EXEC, "-p", profile, sys.executable, str(BIN / "hubbus"), "send", "--to",
-                            "open", "--type", "info", "--text", "from inside"], env=self.env, cwd=self.ws["box"],
-                           capture_output=True, text=True, timeout=60)
+        r = self.in_sandbox("send", "--to", "open", "--type", "info", "--text", "from inside")
         self.assertEqual(r.returncode, 0, r.stderr)
-        r2 = subprocess.run([seatbelt.SANDBOX_EXEC, "-p", profile, sys.executable, str(BIN / "hubbus"), "inbox"],
-                            env=self.env, cwd=self.ws["box"], capture_output=True, text=True, timeout=60)
+        r2 = self.in_sandbox("inbox")
         self.assertIn("for box", r2.stdout, r2.stderr)
         self.dispatch()
         self.assertEqual([r["source"] for r in self.rows("type='message' AND to_project='open'")], ["box"])
@@ -366,3 +367,50 @@ class Policy(Fixture):
         self.assertIn(bus, sandbox["filesystem"]["denyRead"])
         self.assertNotIn(bus, sandbox["filesystem"]["allowWrite"])
         self.assertIn(bus, opn["write"], "nothing changes for a project that isn't sandboxed")
+
+
+class Routing(Fixture):
+    def test_platform_processes_in_a_project_folder_still_reach_the_bus(self):
+        """A job's llm.py runs in the project's folder and publishes job.failed as itself: not the project's outbox."""
+        self.hubbus("publish", "job.failed", "--source", "llm", "--payload", json.dumps({"job": "llm:x"}),
+                    cwd=self.ws["box"])
+        self.hubbus("send", "--from", "agent-hub", "--to", "box", "--type", "info", "--text", "from the platform",
+                    cwd=self.ws["box"])
+        self.assertEqual([(r["type"], r["source"]) for r in self.rows()],
+                         [("job.failed", "llm"), ("message", "agent-hub")])
+        self.assertFalse(self.outbox().exists())
+
+    def test_a_letter_the_hook_delivered_can_be_answered_at_once(self):
+        """The hook delivers from the bus; the view is written right there, not only at the next dispatch."""
+        req = self.letter_id(self.hubbus("send", "--to", "box", "--type", "request", "--text", "ping",
+                                         cwd=self.ws["open"]).stdout)
+        m = load_hubbus()
+        m.DB = self.tmp / "bus" / "bus.db"
+        with mock.patch.object(m.hubconf, "projects", lambda: self.docs):
+            self.assertIn("ping", m.mail_text("prompt", "s1", str(self.ws["box"])) or "")
+        self.hubbus("send", "--to", "open", "--type", "done", "--reply-to", req, "--text", "pong", cwd=self.ws["box"])
+        self.hubbus("done", req, cwd=self.ws["box"])
+
+    def test_the_outbox_is_never_written_through_a_link(self):
+        """Whoever runs it (a user's terminal in the folder has the user's authority)."""
+        elsewhere = self.tmp / "elsewhere"
+        elsewhere.mkdir()
+        (self.ws["box"] / ".git" / "agent-hub").mkdir(parents=True)
+        self.outbox().symlink_to(elsewhere)
+        r = self.hubbus("send", "--to", "open", "--type", "info", "--text", "x", cwd=self.ws["box"], check=False)
+        self.assertNotEqual(r.returncode, 0)
+        self.assertEqual(list(elsewhere.iterdir()), [])
+
+    def test_a_task_from_an_outbox_keeps_its_texts_key(self):
+        """With records on, a task's key is its text's (task_key): the letter id the outbox picks is not a key."""
+        cfg = json.loads((self.tmp / "config" / "hub.json").read_text())
+        cfg["mailbox"] = {"records": True}
+        (self.tmp / "config" / "hub.json").write_text(json.dumps(cfg))
+        self.hubbus("send", "--to", "owner", "--type", "task", "--text", "renew the token", cwd=self.ws["box"])
+        self.hubbus("send", "--to", "owner", "--type", "task", "--text", "renew  the token", cwd=self.ws["box"])
+        self.dispatch()
+        m = load_hubbus()
+        recs = [json.loads(r["payload"])["record"] for r in self.rows("type='record'")]
+        self.assertEqual([(r["type"], r["key"], r["project"]) for r in recs],
+                         [("raised", m.task_key("box", "renew the token"), "box")])
+        self.assertEqual(self.refusals(), [])
