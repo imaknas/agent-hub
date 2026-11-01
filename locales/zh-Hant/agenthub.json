@@ -7,7 +7,6 @@
  "agenthub modules: no module {name} (modules/ has: {available})": "hub modules:沒有模組 {name}(modules/ 底下有:{available})",
  "remember to commit hub.json (config as code).": "記得 commit hub.json(config as code)。",
  "{question} [{default}]: ": "{question} [{default}]:",
- "⚠️ {reason}; to run the nightly flow, schedule `bin/py bin/scheduler.py` yourself (every 15 minutes)": "⚠️ {reason};要跑夜間流程就自己排程 `bin/py bin/scheduler.py`(每 15 分鐘)",
  "{dry}{label}: {action} (systemd)": "{dry}{label}:{action}(systemd)",
  "install": "安裝",
  "update": "更新",
@@ -71,7 +70,6 @@
  "judgment points have nowhere to run: the runtime {runtime} has no completion interface and hub.json has no llm.providers": "判斷點沒地方跑:執行環境 {runtime} 沒有 completion 介面、hub.json 也沒有 llm.providers",
  "agenthub llm setup (pick one: an API key or a local Ollama)": "agenthub llm setup(選一家:API key 或本機 Ollama)",
  "scheduler, watchdog: {reason}": "排程器、看門狗:{reason}",
- "schedule `bin/py bin/scheduler.py` yourself (every 15 minutes)": "自己排程 `bin/py bin/scheduler.py`(每 15 分鐘)",
  "scheduler": "排程器",
  "watchdog": "看門狗",
  "{what} ({label}.timer): enabled": "{what}({label}.timer):已啟用",
@@ -150,5 +148,6 @@
  "{feature}: off (no coding agent is set up: hub.json runtime.default is none)": "{feature}:關掉(沒有設定 coding agent:hub.json runtime.default 是 none)",
  "judgment points have nowhere to run: no coding agent is set up (runtime.default: none) and hub.json has no llm.providers": "判斷點沒地方跑:沒有設定 coding agent(runtime.default: none)、hub.json 也沒有 llm.providers",
  "⚠️ no coding agent is set up (runtime.default: none), so runtime has no login to hand judgment points to: they will fail. Pick a provider: agenthub llm setup": "⚠️ 沒有設定 coding agent(runtime.default: none),runtime 沒有登入可以接判斷點:判斷點會失敗。選一家 provider:agenthub llm setup",
- "the scheduler has not ticked yet, and no service manager runs it here (see the scheduler line above)": "排程器還沒 tick 過,這台也沒有服務管理員在跑它(看上面排程器那一行)"
+ "the scheduler has not ticked yet, and no service manager runs it here (see the scheduler line above)": "排程器還沒 tick 過,這台也沒有服務管理員在跑它(看上面排程器那一行)",
+ "⚠️ {reason}; to run the nightly flow, {how}": "⚠️ {reason};要跑夜間流程就{how}"
 }

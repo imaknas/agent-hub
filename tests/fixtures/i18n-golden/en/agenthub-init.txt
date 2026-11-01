@@ -38,7 +38,7 @@ $ agenthub init --dry-run --yes    # no service manager
 ✓ <TMP>/config/hub.json already exists (the old layout); leaving it alone
 (dry-run) create folder <TMP>/fakehub/.logs
 (dry-run) create folder <TMP>/home/git-origin
-⚠️ this system has no supported service manager (neither macOS launchd nor the Linux systemd user level): the scheduler, the watchdog and projects' long-running services will not run by themselves; to run the nightly flow, schedule `bin/py bin/scheduler.py` yourself (every 15 minutes)
+⚠️ this system has no supported service manager (neither macOS launchd nor the Linux systemd user level): the scheduler, the watchdog and projects' long-running services will not run by themselves; to run the nightly flow, schedule `<TMP>/fakehub/bin/py <TMP>/fakehub/bin/scheduler.py` yourself every 15 minutes (for example the crontab line `*/15 * * * * <TMP>/fakehub/bin/py <TMP>/fakehub/bin/scheduler.py`)
 
 Next: agenthub doctor shows what is missing; agenthub onboard ~/workspace/<project> connects the first project
 --- stderr
@@ -120,5 +120,5 @@ local.agent-hub-scheduler-watchdog: install (systemd)
 $ agenthub init --scheduler-only    # no service manager
 [exit 0]
 --- stdout
-⚠️ this system has no supported service manager (neither macOS launchd nor the Linux systemd user level): the scheduler, the watchdog and projects' long-running services will not run by themselves; to run the nightly flow, schedule `bin/py bin/scheduler.py` yourself (every 15 minutes)
+⚠️ this system has no supported service manager (neither macOS launchd nor the Linux systemd user level): the scheduler, the watchdog and projects' long-running services will not run by themselves; to run the nightly flow, schedule `<TMP>/fakehub/bin/py <TMP>/fakehub/bin/scheduler.py` yourself every 15 minutes (for example the crontab line `*/15 * * * * <TMP>/fakehub/bin/py <TMP>/fakehub/bin/scheduler.py`)
 --- stderr

@@ -38,7 +38,7 @@ $ agenthub init --dry-run --yes    # no service manager
 ✓ 已經有 <TMP>/config/hub.json(舊的擺法),不動它
 (dry-run) 建資料夾 <TMP>/fakehub/.logs
 (dry-run) 建資料夾 <TMP>/home/git-origin
-⚠️ 這個系統沒有支援的服務管理器(macOS 的 launchd、Linux 的 systemd user 層級都沒有):排程器、看門狗、專案的長駐服務都不會自己跑;要跑夜間流程就自己排程 `bin/py bin/scheduler.py`(每 15 分鐘)
+⚠️ 這個系統沒有支援的服務管理器(macOS 的 launchd、Linux 的 systemd user 層級都沒有):排程器、看門狗、專案的長駐服務都不會自己跑;要跑夜間流程就自己每 15 分鐘排程 `<TMP>/fakehub/bin/py <TMP>/fakehub/bin/scheduler.py`(例如 crontab 加一行 `*/15 * * * * <TMP>/fakehub/bin/py <TMP>/fakehub/bin/scheduler.py`)
 
 下一步:bin/hub doctor 看還缺什麼;bin/hub onboard ~/workspace/<專案> 接上第一個專案
 --- stderr
@@ -120,5 +120,5 @@ local.agent-hub-scheduler-watchdog:安裝(systemd)
 $ agenthub init --scheduler-only    # no service manager
 [exit 0]
 --- stdout
-⚠️ 這個系統沒有支援的服務管理器(macOS 的 launchd、Linux 的 systemd user 層級都沒有):排程器、看門狗、專案的長駐服務都不會自己跑;要跑夜間流程就自己排程 `bin/py bin/scheduler.py`(每 15 分鐘)
+⚠️ 這個系統沒有支援的服務管理器(macOS 的 launchd、Linux 的 systemd user 層級都沒有):排程器、看門狗、專案的長駐服務都不會自己跑;要跑夜間流程就自己每 15 分鐘排程 `<TMP>/fakehub/bin/py <TMP>/fakehub/bin/scheduler.py`(例如 crontab 加一行 `*/15 * * * * <TMP>/fakehub/bin/py <TMP>/fakehub/bin/scheduler.py`)
 --- stderr

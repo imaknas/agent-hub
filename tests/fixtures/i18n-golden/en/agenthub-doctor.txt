@@ -165,7 +165,7 @@ $ agenthub doctor    # no service manager, unnamed assistant
 ✗ judgment points have nowhere to run: no coding agent is set up (runtime.default: none) and hub.json has no llm.providers
     → agenthub llm setup (pick one: an API key or a local Ollama)
 ✗ scheduler, watchdog: this system has no supported service manager (neither macOS launchd nor the Linux systemd user level): the scheduler, the watchdog and projects' long-running services will not run by themselves
-    → schedule `bin/py bin/scheduler.py` yourself (every 15 minutes)
+    → schedule `<TMP>/fakehub/bin/py <TMP>/fakehub/bin/scheduler.py` yourself every 15 minutes (for example the crontab line `*/15 * * * * <TMP>/fakehub/bin/py <TMP>/fakehub/bin/scheduler.py`)
 ✓ sandboxed projects' own services and jobs: run isolated (seatbelt: own-writes-only, isolated-reads, declared-port-only)
 ! the scheduler has not ticked yet, and no service manager runs it here (see the scheduler line above)
 ✓ background services, project settings: match the config

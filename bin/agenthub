@@ -251,8 +251,8 @@ def install_core_plists(dry: bool, failed: list[str] | None = None) -> list[str]
                   "checkout ({main})", root=hubconf.ROOT, main=hubconf.MAIN)]
     sm = hubconf.service_manager()
     if sm is None:
-        return [_("⚠️ {reason}; to run the nightly flow, schedule `bin/py bin/scheduler.py` yourself (every 15 minutes)",
-                  reason=hubconf.no_service_manager())]
+        return [_("⚠️ {reason}; to run the nightly flow, {how}", reason=hubconf.no_service_manager(),
+                  how=hubconf.manual_scheduler())]
     if sm == "systemd":   # the same launchd/ templates turned into user units (bin/systemd_units.py)
         import systemd_units
         done = []
@@ -709,7 +709,7 @@ def cmd_doctor(argv: list[str]) -> int:
     scheduled = False   # whether a service manager runs this hub's scheduler (said again at the heartbeat below)
     if hubconf.service_manager() is None:
         add("bad", _("scheduler, watchdog: {reason}", reason=hubconf.no_service_manager()),
-            _("schedule `bin/py bin/scheduler.py` yourself (every 15 minutes)"))
+            hubconf.manual_scheduler())
     elif hubconf.service_manager() == "systemd":
         import systemd_units
         for label, what in (("local.agent-hub-scheduler", _("scheduler")), ("local.agent-hub-scheduler-watchdog", _("watchdog"))):

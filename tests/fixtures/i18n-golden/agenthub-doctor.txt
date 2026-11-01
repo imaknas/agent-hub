@@ -165,7 +165,7 @@ $ agenthub doctor    # no service manager, unnamed assistant
 ✗ 判斷點沒地方跑:沒有設定 coding agent(runtime.default: none)、hub.json 也沒有 llm.providers
     → agenthub llm setup(選一家:API key 或本機 Ollama)
 ✗ 排程器、看門狗:這個系統沒有支援的服務管理器(macOS 的 launchd、Linux 的 systemd user 層級都沒有):排程器、看門狗、專案的長駐服務都不會自己跑
-    → 自己排程 `bin/py bin/scheduler.py`(每 15 分鐘)
+    → 自己每 15 分鐘排程 `<TMP>/fakehub/bin/py <TMP>/fakehub/bin/scheduler.py`(例如 crontab 加一行 `*/15 * * * * <TMP>/fakehub/bin/py <TMP>/fakehub/bin/scheduler.py`)
 ✓ 開了 sandbox 的專案自己的服務跟 job:隔離執行(seatbelt: own-writes-only, isolated-reads, declared-port-only)
 ! 排程器還沒 tick 過,這台也沒有服務管理員在跑它(看上面排程器那一行)
 ✓ 背景服務、專案設定:跟 config 一致
