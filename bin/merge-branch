@@ -13,7 +13,8 @@ Run in the session's own worktree:
   3. Run the project registry's `runtime.test` (none: skipped and noted): on failure attach the last 40 lines, record
      merge.failed, stop.
   4. In the main checkout, `git merge --ff-only <branch>` (stop if uncommitted changes in the main checkout get in the
-     way).
+     way). In the hub's own repo, then `agenthub land` from the merged code (the registry index; a problem is reported,
+     the merge stands).
   5. **Push only when the registry has `push_on_merge: true`** (no push by default: some repos are public, and
      merging ≠ publishing).
   6. Record merge.done and session.report on the bus (branch, commits, files, tests, questions, pushed or not);
@@ -165,6 +166,17 @@ def main() -> int:
         if r.returncode != 0:
             return fail("main", _("the main checkout cannot fast-forward: {output}", output=(r.stderr or r.stdout).strip()))
         report["merged"] = True
+        # 4b. the hub's own repo: what landed is the running platform. Its own code, started fresh from the main
+        # checkout (not in this process, which imported the old modules), rebuilds what must match it, still under
+        # the lock: `agenthub land` (docs/design/test-waiting.md step 2.2: the registry index; 2.3 adds the hooks)
+        if proj == hubconf.hub_project():
+            land = subprocess.run([*hubconf.launch(main_dir / "bin" / "agenthub"), "land"], cwd=main_dir,
+                                  capture_output=True, text=True)
+            report["landed"] = land.returncode == 0
+            if land.returncode != 0:
+                print(_("merge-branch: merged, but `agenthub land` reported a problem (the index may not match the "
+                        "merged code until the next tick):\n{tail}", tail="\n".join(
+                            (land.stdout + land.stderr).strip().splitlines()[-15:])), file=sys.stderr)
         # 5. push (only when the registry says so)
         if info.get("push_on_merge"):
             p = subprocess.run([str(hubconf.ROOT / "bin" / "git-safe-push.sh")], cwd=main_dir, capture_output=True, text=True)

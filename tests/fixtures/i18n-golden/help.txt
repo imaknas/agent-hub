@@ -35,12 +35,17 @@ config:
 排程:
   agenthub jobs              = schedulectl list
   agenthub run <job>         = schedulectl run(現在就跑一次)
+  agenthub land              agent-hub 合併之後:用合併進來的程式重建專案登錄的索引(merge-branch 會跑;不是
+                        session 指令)
 owner(你本人;不是專案 session 的指令):
   agenthub owner list | done/drop/already-done <key> | answer <問題 id> "回答"
                         = bin/owner.py:內建的 owner 端(hub.json owner_side: builtin;有助理的話只能 list)
 專案的 session 用的(規則檔裡寫的就是這些;權限規則只放行這幾個,不放行上面的管理指令):
   agenthub send | inbox | show | ack | done | thread | open-questions …   = 專案信箱(bin/hubbus 同名的子指令)
   agenthub merge-branch …    = bin/merge-branch(平行 session 的合併閘門)
+  agenthub test [--tier T] [--when M] [--force] [--rev R | --index]
+                        = bin/test-runner.py:在匯出的 tree 跑專案宣告的測試層,記錄過的通過直接沿用
+                        (docs/design/test-waiting.md B4)
   agenthub cap-run --cap <能力> -- <指令…>   = bin/hub-run(平台代跑 sandbox 擋住的程式)
   agenthub complete <呼叫點> [--schema F] < 提示       = bin/hub-run --complete(專案在登錄 models: 宣告的模型呼叫,
                                                        由平台代跑)

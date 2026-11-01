@@ -29,7 +29,7 @@ policy(name, doc, index) → {
   credentials:        user-level credential directories (Path); credential_files: credential files (Path); the
                       locations are in hub.json's credentials
   read:               platform paths readable although platform state is blocked: the registry index the platform CLI
-                      (agenthub send, complete, cap-run) reads (Path)
+                      (agenthub send, complete, cap-run) reads, and the worker slots agenthub test locks (Path)
   network:            domains that may be reached (platform defaults + the registry's network)
   local_bind:         may listen on 127.0.0.1 (to test its own server before declaring it a service; 10-31 owner
                       confirmed in the agent-hub session)
@@ -133,7 +133,8 @@ def policy(name: str, doc: dict, index: dict) -> dict:
         "deny_read": [copies / "*" / "memory", *secret_dirs()],
         "credentials": [hubconf.path(x) for x in hubconf.get("credentials.dirs", [])],
         "credential_files": [hubconf.path(x) for x in hubconf.get("credentials.files", [])],
-        "read": [hubconf.STATE / "registry"],
+        # the registry index; the machine's worker slots (bin/test-runner.py: locked read-only, created by the platform)
+        "read": [hubconf.STATE / "registry", hubconf.STATE / "test-slots"],
         "network": DOMAINS + list(doc.get("network") or []),
         "local_bind": True,
         "platform_commands": [hubconf.ROOT / "bin" / "hubbus", hubconf.ROOT / "bin" / "merge-branch"],
@@ -146,7 +147,7 @@ def policy(name: str, doc: dict, index: dict) -> dict:
 # SESSION_COMMANDS): permissions let only these subcommands through, not agenthub's admin commands (config apply,
 # onboard…)
 MAIL_SUBCOMMANDS = ("send", "inbox", "show", "ack", "done", "thread", "open-questions")
-SESSION_SUBCOMMANDS = (*MAIL_SUBCOMMANDS, "merge-branch", "cap-run", "complete")
+SESSION_SUBCOMMANDS = (*MAIL_SUBCOMMANDS, "merge-branch", "test", "cap-run", "complete")
 
 
 def platform_cli(mail_only: bool = False) -> list[str]:

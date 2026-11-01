@@ -661,7 +661,9 @@ replaces; each step only adds to the ones before it.
       `deploy`) and its validation, unit-tested only: the live validators (`apply-updates`, the config repo's
       pre-commit, `registry.refresh`) keep refusing v2 until 2.3, so no v2 file can land while the old `merge-branch`
       would read it as untested.
-   2. B3, B4 and B5's slots: the cache module (`test-gate`'s store becomes it), the runner (export of worktree, index or
+   2. (built 11-01: `bin/tiers.py`, `bin/test-runner.py` as `agenthub test`, `agenthub land` and `merge-branch`'s
+      landing step, the slots in every sandbox's read set; still to do here: the one-off run of each registered
+      project's upgraded tiers as its project) B3, B4 and B5's slots: the cache module (`test-gate`'s store becomes it), the runner (export of worktree, index or
       revision; per-run environments for uv and npm; the fixed tier environment; worker slots; complete-output file;
       process-group stop), `agenthub test` (also a session command), `affected()` answering with today's one project
       per repo, `is_code()` (which `affected()` needs), and B1's upgrade function, used here only by the runner, so
