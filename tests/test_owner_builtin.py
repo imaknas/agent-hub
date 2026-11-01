@@ -161,8 +161,9 @@ class Notify(unittest.TestCase):
              mock.patch.object(alert, "send", lambda text: False), \
              mock.patch.object(alert, "clear_failure", lambda k: None), \
              mock.patch.object(alert, "record_failure", lambda k, t: failed.append(k)):
-            self.assertEqual(owner.notify(), 1)
-        self.assertEqual(failed, ["owner-notify"])
+            self.assertEqual(owner.notify(), 0)
+        self.assertEqual(failed, [], "nothing to send on is not a failed send")
+        self.assertFalse((tmp / "seen.json").exists(), "the items stay new for a channel set up later")
 
 
 if __name__ == "__main__":

@@ -16,8 +16,8 @@ The registry holds only names, locations and expiry, **never values**; this scri
   - undeclared: files in each project's runtime / workspace (and the platform's .secrets/) whose names look like
     credentials but are not declared are only listed as a reminder (not a problem, content not read) -- either
     declare them or confirm they are not credentials
-On problems: Discord (once per set, once more on recovery), exit 1 (the scheduler records a failure, the status page
-turns red).
+On problems: the alert channels (once per set, once more on recovery), exit 1 (the scheduler records a failure, the
+status page turns red). No alert channel at all is printed as a reminder, not a problem.
 
 Usage: check-secrets.py [project...]
 """
@@ -172,9 +172,9 @@ def main(argv: list[str]) -> int:
         if alert.probe():
             alert.clear_failure("discord-probe")
         elif not alert.configured():
-            alert.record_failure("discord-probe", _("No alert channel is set (hub.json alerts: discord / ntfy / email / "
-                                                    "macos); no platform alert can be sent"))
-            problems.append(_("No alert channel — set one in hub.json alerts (ntfy is the simplest: a phone app, no account)"))
+            # not set up is not broken: a reminder, not a failing job (the status page shows the same reminder)
+            print(_("Reminder: no alert channel is set, so nothing tells you when something breaks — set one in hub.json "
+                    "alerts (ntfy is the simplest: a phone app, no account)"))
         else:
             alert.record_failure("discord-probe", _("The Discord bot token does not work (GET /users/@me failed); no "
                                                     "platform alert can be sent"))

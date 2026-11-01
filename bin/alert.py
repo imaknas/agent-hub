@@ -17,7 +17,9 @@ does not import this (it must still be able to send when the scheduler and the p
                                                check-secrets calls it daily)
 
 A failure to send does not pass silently (2026-10-24): recorded in .state/alerts-failed.json, the status page turns
-red, and it is tried again next time; cleared once a send succeeds.
+red, and it is tried again next time; cleared once a send succeeds. With no channel set up at all there is nothing that
+failed: nothing is recorded, and the status page shows one setup reminder instead (docs/design/new-user.md 2: a feature
+that is off does not turn the page red).
 """
 from __future__ import annotations
 
@@ -144,6 +146,8 @@ def _save(path, data: dict) -> None:
 
 
 def record_failure(key: str, text: str) -> None:
+    if not configured():   # no channel: not a failed send (the setup reminder covers it)
+        return
     failed = _load(FAILED)
     failed[key] = {"at": datetime.datetime.now().isoformat(timespec="seconds"), "text": text.splitlines()[0][:200]}
     _save(FAILED, failed)
@@ -156,8 +160,9 @@ def clear_failure(key: str) -> None:
 
 
 def failures() -> dict:
-    """Alerts that could not be sent and have not been resent successfully yet (for the status page)."""
-    return _load(FAILED)
+    """Alerts that could not be sent and have not been resent successfully yet (for the status page). With no channel
+    set up, none: what was recorded before applied to channels that are gone."""
+    return _load(FAILED) if configured() else {}
 
 
 def once(key: str, problems: list[str], ok_text: str) -> None:

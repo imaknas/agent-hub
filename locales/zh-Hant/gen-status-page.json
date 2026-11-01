@@ -134,5 +134,6 @@
   "Event job {name} has had events waiting since {since:%m/%d %H:%M} (schedulectl events {name})": "事件 job {name} 從 {since:%m/%d %H:%M} 起有事件一直在等(schedulectl events {name})",
   "last run: {n} {n:event|events}, {at}": "上次:{n} 個事件,{at}",
   "{n} {n:event|events} held back today by the loop chain (schedulectl events {name})": "今天有 {n} 個事件被迴圈鏈擋下(schedulectl events {name})",
-  "Held: {id} ({project} in use by {by})": "先壓著:{id}({project} 有人在用:{by})"
+  "Held: {id} ({project} in use by {by})": "先壓著:{id}({project} 有人在用:{by})",
+  "An alert could not be sent ({key}, {at}): {text}. Check the channels in hub.json alerts ({channels}); it is tried again next time": "警報發不出去({key},{at}):{text}——確認 hub.json alerts 的管道({channels})還能用;下次會再試"
 }

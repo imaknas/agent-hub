@@ -173,10 +173,12 @@ class StatusPage(unittest.TestCase):
             def f(*a, **k):
                 raise e
             return f
+        channels = list(o["alerts"]) if isinstance(o["alerts"], dict) else ["discord"] if o["alerts"] else []
         mods = {
             "scheduler": fake("scheduler", all_jobs=lambda: (o["jobs"], {"errors": o["reg_errors"]})),
+            # as bin/alert.py: with no channel set up there are no failed sends (tests/test_alert_channels.py)
             "alert": fake("alert", failures=raises(RuntimeError("alerts file unreadable")) if o["failures"] is None
-                          else lambda: o["failures"]),
+                          else lambda: o["failures"] if channels else {}, configured=lambda: channels),
             "appliers": fake("appliers", config_commit=raises(RuntimeError("no config repo")) if o["commit"] is None
                              else lambda: o["commit"], applied_path=lambda: applied),
             "worktrees": fake("worktrees", overview=raises(RuntimeError("overview broke")) if o["worktrees"] is None

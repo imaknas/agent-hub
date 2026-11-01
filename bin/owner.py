@@ -164,6 +164,11 @@ def notify() -> int:
     except (OSError, ValueError):
         seen = set()
     new = [it for it in items if (it.get("key") or it.get("id")) not in seen]
+    if new and not alert.configured():
+        # nothing to send on (not a failure): they stay new, so a channel set up later still gets them
+        print(_("owner side: {open} open, {new} new; no alert channel is set (hub.json alerts), so they wait in "
+                "`agenthub owner list`", open=len(items), new=len(new)))
+        return 0
     if new:
         lines = [_("{owner}, {new} new {new:item is|items are} waiting for you ({total} in all; `agenthub owner list`):",
                    owner=hubconf.owner_tag(), new=len(new), total=len(items))]

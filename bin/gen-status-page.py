@@ -307,21 +307,29 @@ def main() -> None:
         alerts.append(("bad", _("The scheduler watchdog (local.agent-hub-scheduler-watchdog) is not loaded: nobody is told "
                                 "when the scheduler stops. On the hub machine, run "
                                 "bin/recover-service.sh local.agent-hub-scheduler-watchdog")))
-    elif not hubconf.get("alerts"):
-        alerts.append(("notify", _("No alerts set up (hub.json has no alerts): a stopped scheduler or a dead service only "
-                                   "shows on this page and in the log; nobody is notified")))
-    elif not all((hubconf.secrets_dir() / f).exists() for f in ("discord-token", "discord-alert-channel")):
+    elif hubconf.get("alerts") and not all((hubconf.secrets_dir() / f).exists()
+                                           for f in ("discord-token", "discord-alert-channel")):
         alerts.append(("bad", _("The scheduler watchdog has no Discord settings (.secrets/discord-token, .secrets/discord-alert-channel): "
                                 "it cannot alert when the scheduler stops")))
 
+    # no alert channel at all: one setup reminder, not red (a feature that is off does not turn the page red)
+    if not hubconf.get("alerts"):
+        alerts.append(("notify", _("No alerts set up (hub.json has no alerts): a stopped scheduler or a dead service only "
+                                   "shows on this page and in the log; nobody is notified")))
     # alerts that could not be sent (recorded by bin/alert.py; Discord token invalid, network down…): must not pass
     # silently
     try:
         import alert
+        channels = alert.configured()
         for key, f in sorted(alert.failures().items()):
-            alerts.append(("bad", _("A Discord alert could not be sent ({key}, {at}): {text}. Check that .secrets/discord-token "
-                                    "still works; it is tried again next time",
-                                    key=key, at=f.get('at', '')[:16], text=f.get('text', ''))))
+            if "discord" in channels:
+                alerts.append(("bad", _("A Discord alert could not be sent ({key}, {at}): {text}. Check that .secrets/"
+                                        "discord-token still works; it is tried again next time",
+                                        key=key, at=f.get('at', '')[:16], text=f.get('text', ''))))
+            else:
+                alerts.append(("bad", _("An alert could not be sent ({key}, {at}): {text}. Check the channels in hub.json "
+                                        "alerts ({channels}); it is tried again next time", key=key,
+                                        at=f.get('at', '')[:16], text=f.get('text', ''), channels=_(", ").join(channels))))
     except Exception as e:  # the status page must not crash because of this
         alerts.append(("bad", _("Cannot read the alert state: {e}", e=e)))
 
@@ -401,9 +409,12 @@ def main() -> None:
                     for i, r in enumerate(reps))
                 report_blocks.append(f"<section><h3>{esc(name)}</h3>{items}</section>")
 
-    # encrypted cloud backup (bin/backup.py): red when the last success or the last restore test is too long ago
+    # encrypted cloud backup (bin/backup.py): red when the last success or the last restore test is too long ago; only
+    # when the backup module is on (a feature that is off does not turn the page red)
     bdir = HUB / ".state" / "backup"
-    for fname, limit_h, what in (("last.json", 36, _("backup")), ("last-verify.json", 40 * 24, _("restore test"))):
+    backup_on = (hubconf.get("modules") or {}).get("backup") is True
+    for fname, limit_h, what in (("last.json", 36, _("backup")), ("last-verify.json", 40 * 24, _("restore test"))) \
+            if backup_on else ():
         f = bdir / fname
         try:
             at = datetime.datetime.fromisoformat(json.loads(f.read_text())["at"]).replace(tzinfo=None)

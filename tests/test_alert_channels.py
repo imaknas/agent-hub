@@ -41,9 +41,12 @@ class Channels(unittest.TestCase):
         self.assertIn("k", self.failed())
 
     def test_no_channel_set_up(self):
+        """nothing was there to send on: not a failed send (the status page shows a setup reminder instead)"""
+        (self.tmp / "FAILED.json").write_text(json.dumps({"old": {"at": "2026-10-01T00:00:00", "text": "x"}}))
         with mock.patch.dict(self.m.CHANNELS, {"ntfy": (lambda text: False, lambda: False)}, clear=True):
             self.m.once("k", ["broken"], "fine again")
-        self.assertIn("k", self.failed())
+            self.assertNotIn("k", self.failed())
+            self.assertEqual(self.m.failures(), {}, "records from channels that are gone do not count")
 
 
 if __name__ == "__main__":
