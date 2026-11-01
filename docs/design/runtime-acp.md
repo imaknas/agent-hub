@@ -516,7 +516,7 @@ doctor line, the schema keys.
 
 ## Live results
 
-**11-01, both passed**, run by the owner on the hub machine (the sessions were not allowed to fetch and run the
+**11-01, both passed**, run by the owner on the hub machine over SSH (the sessions were not allowed to fetch and run the
 packages with `npx`). The task read `secret-word.txt` in the throwaway copy and answered with the schema's
 structured output, with no denials and stop `end_turn`:
 
@@ -536,5 +536,6 @@ ACP_LIVE=1 ACP_LIVE_COMMAND='["npx","-y","@agentclientprotocol/codex-acp@2.5.0"]
 ACP_LIVE=1 ACP_LIVE_COMMAND='["npx","-y","@agentclientprotocol/claude-agent-acp@0.99.1"]' bin/py -m unittest tests.test_runtime_acp.Live
 ```
 
-The first uses Codex's own ChatGPT login; the second needs a Claude login readable where it runs (under SSH the
-Keychain is not, so a login error there is a result to record, not a bug in the adapter). Record here what passed.
+The first uses Codex's own ChatGPT login; the second needs a Claude login readable where it runs. The 11-01 run was
+over SSH and claude-agent-acp still found its login, so the Keychain worry did not apply there; a login error
+elsewhere is still a result to record, not a bug in the adapter. Record here what passed.
