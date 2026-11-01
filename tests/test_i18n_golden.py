@@ -79,6 +79,8 @@ class Golden(unittest.TestCase):
         text = re.sub(r"\b\d{4}-\d{2}-\d{2}[T ]\d{2}:\d{2}(:\d{2})?([+-]\d{2}:\d{2}|Z)?", "<TS>", text)
         text = re.sub(r"\b\d{2}-\d{2} \d{2}:\d{2}\b", "<TS>", text)
         text = re.sub(r"\b\d{8}-\d{6}-", "<STAMP>-", text)   # agenthub test's output files
+        # agenthub test's tier duration ("in 0.1s" and its translations): wall clock, not behaviour (it flaked 0.0 vs 0.1)
+        text = re.sub(r"(?<=in )\d+\.\d+(?=s;)|\d+\.\d+(?= \u79d2)", "<SECS>", text)
         text = re.sub(r"\b[0-9a-f]{7,40}\b", "<SHA>", text)
         return text
 
