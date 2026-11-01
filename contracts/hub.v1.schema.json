@@ -227,7 +227,9 @@
     "mailbox": {
       "type": "object",
       "properties": {
-        "handler": {"enum": ["agent", "propose"], "description": "how a request nobody picks up is dispatched: agent = the runtime's agent handles it directly (needs the tool's permissions; only Claude Code for now); propose = any agent runs in a throwaway worktree, the platform adopts only the memory notes and sends the letters for it (bin/propose_apply.py). Default agent"}
+        "handler": {"enum": ["agent", "propose"], "description": "how a request nobody picks up is dispatched: agent = the runtime's agent handles it directly (needs the tool's permissions; only Claude Code for now); propose = any agent runs in a throwaway worktree, the platform adopts only the memory notes and sends the letters for it (bin/propose_apply.py). Default agent"},
+        "mcp_presence_min": {"type": "integer", "minimum": 1, "description": "minutes a session using the mailbox only through the platform's MCP server counts as using its project after its last agenthub tool call (docs/design/mailbox-runtimes.md A3). Default 30"},
+        "mcp_hold_max_min": {"type": "integer", "minimum": 1, "description": "while such a session uses the project, a request/question to it not yet delivered to any session is held at most this many minutes from the letter's time, then dispatched as usual. Default 120"}
       }
     },
     "credentials": {

@@ -84,8 +84,9 @@ For hooks / the schedule / other scripts:
                                       headless agent dispatched (notes capability). agent-hub's letters too. When the
                                       fork is done, the original session gets the fork's last reply and the letters it
                                       sent at its next activity (fork_result).
-                                      dispatched letters record message.delivered (via handler|resume|held), and
-                                      hooks no longer treat them as work to do
+                                      dispatched letters record message.delivered (via handler|resume|held, the last
+                                      = the loop guard, hold()), and hooks no longer treat them as work to do; a
+                                      letter held for an MCP session records nothing
   hubbus thread <id>                  the whole thread this letter is in (oldest first)
   hubbus open-handoffs                handoffs from the personal assistant not closed yet (the librarian applies them
                                       into STATE.md nightly, and marks done only when trustworthy)
@@ -1394,7 +1395,8 @@ def reject(c, ev, err) -> None:
 
 
 def claimed(c, ids) -> set[str]:
-    """Letters the platform has already taken on (dispatched someone / resumed in the background / held)."""
+    """Letters the platform has already taken on (dispatched someone / resumed in the background / held by the loop
+    guard, hold(); a letter held for an MCP session is not taken: that hold writes nothing)."""
     if not ids:
         return set()
     q = ",".join("?" * len(ids))
