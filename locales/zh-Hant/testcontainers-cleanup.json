@@ -1,0 +1,6 @@
+{
+ "docker is not installed; nothing to clean": "沒裝 docker,沒有要清的",
+ "docker is not answering ({error}); nothing to clean": "docker 沒回應({error}),沒有要清的",
+ "docker rm failed: {error}": "docker rm 失敗:{error}",
+ "removed {removed} of {found} test {found:container|containers} (more than a day old)": "{found} 個測試容器裡移除了 {removed} 個(超過一天的)"
+}

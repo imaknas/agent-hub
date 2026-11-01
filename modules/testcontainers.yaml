@@ -1,0 +1,11 @@
+# Test containers left behind by suites whose test server was killed before its own cleanup ran (the testcontainers
+# library's reaper does not always start, e.g. under Colima): those more than a day old are removed every night, before
+# the projects' nightly test runs (04:00). docs/design/test-waiting.md B5. Off unless hub.json modules.testcontainers.
+v: 1
+name: testcontainers
+type: module
+description: "Nightly: removes Docker containers labelled org.testcontainers that are more than a day old"
+jobs:
+- name: cleanup
+  at: "03:45"
+  run: bin/py bin/testcontainers-cleanup.py
