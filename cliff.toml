@@ -8,7 +8,6 @@ header = """
 
 What changed in each version, generated from the commit messages (git cliff) when it is tagged; only new features,
 fixes, speed-ups and reverts are listed.
-
 """
 body = """
 ## {% if version %}{{ version }} ({{ timestamp | date(format="%Y-%m-%d") }}){% else %}Unreleased{% endif %}
@@ -19,7 +18,7 @@ body = """
 {%- endfor %}
 {% endfor %}
 """
-trim = true
+trim = false   # trim would also take the blank line between versions
 
 [git]
 conventional_commits = true
