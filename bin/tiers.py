@@ -21,6 +21,12 @@ tests are, which of them a change needs, and whether a run already happened. Sta
     .record(key, project, tier, ok, moment, output)
     .passed(key) → bool                  a pass not older than MAX_AGE_DAYS, unless the latest nightly run of the key
                                          failed (a flaky pass does not stay green for merges and deploys)
+  RunLog(common_dir)                     the waiting report's measurements (test-waiting.md B7), beside the store
+                                         (agent-hub/test-runs.jsonl): one line per tier per invocation, hits included,
+                                         with how long it took. Measurement only: what counts as a pass is the store's
+                                         alone, so a hit written here never extends a recorded pass's life.
+    .record(**fields)                    {at, run, project, tier, moment, caller, source, result: hit|pass|fail,
+                                         secs (the tier), total (from the invocation's start to this result), tree}
 
 The store is read and written by whoever runs the tests, as itself: a session's runner, or a project's own job. The
 platform never opens it directly (test-waiting B4); it reads results through a project_git job.
@@ -104,40 +110,61 @@ def _open(path: pathlib.Path, flags: int) -> int:
     return fd
 
 
+def read_jsonl(path: pathlib.Path) -> list[dict]:
+    try:
+        fd = _open(path, os.O_RDONLY)
+    except OSError:
+        return []
+    with os.fdopen(fd, encoding="utf-8", errors="replace") as f:
+        out = []
+        for line in f:
+            try:
+                o = json.loads(line)
+            except ValueError:
+                continue
+            if isinstance(o, dict):
+                out.append(o)
+        return out
+
+
+def append_jsonl(path: pathlib.Path, entry: dict) -> None:
+    """One line appended (the file kept to KEEP_LINES: past it, the newer half stays)."""
+    path.parent.mkdir(parents=True, exist_ok=True)
+    fd = _open(path, os.O_WRONLY | os.O_APPEND | os.O_CREAT)
+    with os.fdopen(fd, "a", encoding="utf-8") as f:
+        f.write(json.dumps(entry, ensure_ascii=False) + "\n")
+    recs = read_jsonl(path)
+    if len(recs) > KEEP_LINES:
+        tmp = path.with_suffix(".tmp")
+        tmp.write_text("".join(json.dumps(r, ensure_ascii=False) + "\n" for r in recs[-KEEP_LINES // 2:]))
+        tmp.replace(path)
+
+
+def now_iso() -> str:
+    return datetime.datetime.now().astimezone().isoformat(timespec="seconds")
+
+
+class RunLog:
+    def __init__(self, common_dir: pathlib.Path):
+        self.path = pathlib.Path(common_dir) / "agent-hub" / "test-runs.jsonl"
+
+    def record(self, **fields) -> None:
+        append_jsonl(self.path, {"at": now_iso(), **fields})
+
+    def records(self) -> list[dict]:
+        return read_jsonl(self.path)
+
+
 class Store:
     def __init__(self, common_dir: pathlib.Path):
         self.path = pathlib.Path(common_dir) / "agent-hub" / "test-results.jsonl"
 
     def records(self) -> list[dict]:
-        try:
-            fd = _open(self.path, os.O_RDONLY)
-        except OSError:
-            return []
-        with os.fdopen(fd, encoding="utf-8", errors="replace") as f:
-            out = []
-            for line in f:
-                try:
-                    out.append(json.loads(line))
-                except ValueError:
-                    continue
-            return out
+        return read_jsonl(self.path)
 
     def record(self, key_: str, project: str, tier: str, ok: bool, moment: str, output: str = "") -> None:
-        self.path.parent.mkdir(parents=True, exist_ok=True)
-        entry = {"key": key_, "project": project, "tier": tier, "ok": ok, "moment": moment, "output": output,
-                 "at": datetime.datetime.now().astimezone().isoformat(timespec="seconds")}
-        fd = _open(self.path, os.O_WRONLY | os.O_APPEND | os.O_CREAT)
-        with os.fdopen(fd, "a", encoding="utf-8") as f:
-            f.write(json.dumps(entry, ensure_ascii=False) + "\n")
-        self._trim()
-
-    def _trim(self) -> None:
-        recs = self.records()
-        if len(recs) <= KEEP_LINES:
-            return
-        tmp = self.path.with_suffix(".tmp")
-        tmp.write_text("".join(json.dumps(r, ensure_ascii=False) + "\n" for r in recs[-KEEP_LINES // 2:]))
-        tmp.replace(self.path)
+        append_jsonl(self.path, {"key": key_, "project": project, "tier": tier, "ok": ok, "moment": moment,
+                                 "output": output, "at": now_iso()})
 
     def passed(self, key_: str, now: datetime.datetime | None = None) -> bool:
         mine = [r for r in self.records() if r.get("key") == key_]

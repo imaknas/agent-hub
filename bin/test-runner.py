@@ -22,6 +22,10 @@ job as the project (isolation.wrap). It never touches the branch: no rebase, no 
      inputs; nothing else from the caller), worker slots from the machine's budget, the command in its own process
      group (stopped with TERM, a grace period, then KILL), its complete output in the worktree's git dir
      (agent-hub/test-output/), the result recorded.
+  5. Every tier's outcome, hits included, goes into the repo's run log (tiers.RunLog, beside the store) with its
+     seconds and the time since this invocation started, and who called: merge-branch says so in
+     AGENTHUB_TEST_CALLER; otherwise --index is the commit gate, --when nightly/deploy those callers, the rest a
+     session's own run. The waiting report (bin/test-waiting-report.py, test-waiting.md B7) reads it.
   Exit 0 when every selected tier passed (or was a hit), 1 when one failed, 2 when the tests could not be set up.
 
 Worker slots (B5): one lock file per slot in <state>/test-slots, opened read-only without following links and
@@ -60,6 +64,18 @@ TIMEOUT = 1800
 GRACE = 10
 SLOT_WAIT = 60
 KEEP_OUTPUTS = 50
+
+
+CALLERS = ("merge-branch",)   # the callers that name themselves in AGENTHUB_TEST_CALLER
+
+
+def caller(a) -> str:
+    named = os.environ.get("AGENTHUB_TEST_CALLER", "")
+    if named in CALLERS:
+        return named
+    if a.index:
+        return "commit-gate"
+    return a.when if a.when in ("nightly", "deploy") else "session"
 
 
 class SetupError(Exception):
@@ -312,6 +328,14 @@ def tail(path: pathlib.Path, n: int = 30) -> str:
     return "\n".join(path.read_text(errors="replace").splitlines()[-n:])
 
 
+def note(runlog: tiers.RunLog, measured: dict, project: str, tier: str, result: str, secs: float,
+         started: float) -> None:
+    """A measurement, never a reason to fail the run (the result itself is in the store)."""
+    with contextlib.suppress(OSError):
+        runlog.record(**measured, project=project, tier=tier, result=result, secs=secs,
+                      total=round(time.monotonic() - started, 1))
+
+
 def main(argv: list[str]) -> int:
     ap = argparse.ArgumentParser(prog="agenthub test")
     ap.add_argument("--tier", action="append", default=[])
@@ -321,6 +345,7 @@ def main(argv: list[str]) -> int:
     src.add_argument("--rev")
     src.add_argument("--index", action="store_true")
     a = ap.parse_args(argv)
+    started = time.monotonic()
     try:
         top, git_dir, common = repo_dirs(pathlib.Path.cwd())
         main_dir = common.parent if common.name == ".git" else top
@@ -357,6 +382,9 @@ def main(argv: list[str]) -> int:
         env, identity = base_env(main_dir, run, name == hubconf.hub_project())
         values, extra = inputs(decl, tree, env)
         store = tiers.Store(common)
+        runlog = tiers.RunLog(common)
+        measured = {"run": f"{stamp}-{os.getpid()}", "moment": a.when, "caller": caller(a),
+                    "source": "rev" if a.rev else "index" if a.index else "worktree", "tree": tree_id[:12]}
         slots = Slots(hubconf.STATE / "test-slots")
         built = None
         for project, tier in chosen:
@@ -364,6 +392,7 @@ def main(argv: list[str]) -> int:
             label = f"{project}/{tier['tier']}"
             if not a.force and store.passed(k):
                 print(_("✓ {tier}: this tree already passed ({key})", tier=label, key=k[:12]))
+                note(runlog, measured, project, tier["tier"], "hit", 0.0, started)
                 continue
             out = outdir / f"{stamp}-{project}-{tier['tier']}.log"
             t0 = time.monotonic()
@@ -378,6 +407,7 @@ def main(argv: list[str]) -> int:
                     ok = False
             secs = round(time.monotonic() - t0, 1)
             store.record(k, project, tier["tier"], ok, a.when, str(out))
+            note(runlog, measured, project, tier["tier"], "pass" if ok else "fail", secs, started)
             if ok:
                 print(_("✓ {tier} passed in {secs}s; output: {path}", tier=label, secs=secs, path=out))
             else:

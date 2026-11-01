@@ -72,6 +72,27 @@ class Runner(unittest.TestCase):
         self.assertEqual(self.git(self.ws, "status", "--porcelain", "--untracked-files=all"), "?? new.txt",
                          "the run folder is not an untracked file")
 
+    def test_run_log_records_runs_and_hits_with_their_caller(self):
+        """B7's measurements: every tier per invocation, hits included, beside the store; a hit leaves the store as
+        it was (a pass's age is the store's alone)."""
+        self.declare(v=2, tests=[{"tier": "full", "run": "sh check.sh", "when": ["merge", "commit"]}])
+        self.assertEqual(self.run_("--tier", "full", AGENTHUB_TEST_CALLER="merge-branch").returncode, 0)
+        store = self.ws / ".git" / "agent-hub" / "test-results.jsonl"
+        before = store.read_text()
+        self.assertEqual(self.run_("--tier", "full").returncode, 0)
+        self.assertEqual(store.read_text(), before, "a hit writes nothing to the store")
+        self.git(self.ws, "add", "-A")
+        (self.ws / "ok").unlink()
+        self.git(self.ws, "add", "-A")
+        self.assertEqual(self.run_("--index", "--tier", "full", AGENTHUB_TEST_CALLER="anything else").returncode, 1)
+        log = [json.loads(x) for x in (self.ws / ".git" / "agent-hub" / "test-runs.jsonl").read_text().splitlines()]
+        self.assertEqual([(r["result"], r["caller"], r["source"]) for r in log],
+                         [("pass", "merge-branch", "worktree"), ("hit", "session", "worktree"),
+                          ("fail", "commit-gate", "index")])
+        self.assertEqual({r["project"] + "/" + r["tier"] for r in log}, {"demo/full"})
+        self.assertTrue(all(r["total"] >= r["secs"] >= 0 and r["run"] and r["tree"] for r in log))
+        self.assertEqual(len({r["run"] for r in log}), 3)
+
     def test_failure_keeps_the_complete_output(self):
         self.declare(v=2, tests=[{"tier": "full", "run": "echo first-line; i=0; while [ $i -lt 100 ]; do echo $i; "
                                                          "i=$((i+1)); done; exit 3", "when": ["merge"]}])
