@@ -55,7 +55,7 @@ Not on main, but not stale either (waiting on a merge, or not in git):
 <!-- state-anchors:begin -->
 ## STATE.md statements whose code is gone (mechanical check)
 
-STATE.md marks these statements with a code anchor that no longer resolves on the project's main branch: the statement is probably out of date. The librarian is told on its next run for the project; a project session can fix it sooner.
+STATE.md marks these statements with a code anchor that no longer resolves on the project's main branch: the statement is probably out of date. The librarian is off on this machine (no model), so a project session has to fix it.
 
 - [ ] **alpha**: ⚓`src/job.py#retry_later` the name is gone from the file (STATE.md line 5: "The nightly job runs in ⚓`src/job.py#run_job`; retries in ⚓`src/job.py#retry_later`.")
 - [ ] **alpha**: ⚓`src/old.py` renamed to `src/settings.py` in 083dad4a (STATE.md line 6: "Settings are read by ⚓`src/old.py`, the exporter is ⚓`src/gone.py`, and the cache in ⚓`data/` is ne…")

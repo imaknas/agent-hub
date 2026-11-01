@@ -60,5 +60,6 @@
   "{project}: the proposed review-log entry is in {file}": "{project}: 提議的 review-log 條目在 {file}",
   "committed and pushed": "已 commit+push",
   "commit/push failed: {output}": "commit/push 失敗:{output}",
-  "=== consolidate end ({n} failed) ===": "=== consolidate end(失敗 {n} 個)==="
+  "=== consolidate end ({n} failed) ===": "=== consolidate end(失敗 {n} 個)===",
+  "consolidation is off: {reason}. The date files stay as they are until a model is set up": "回頭清理停用:{reason}。日期檔保持原樣,等設好模型再整理"
 }

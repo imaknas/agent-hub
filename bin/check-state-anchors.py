@@ -135,10 +135,15 @@ def write_todo_block(todo: pathlib.Path, stale: list[str]) -> None:
     s = re.sub(r"\n*<!-- state-anchors:begin -->.*?<!-- state-anchors:end -->\n?", "\n", todo.read_text(),
                flags=re.S).rstrip() + "\n"
     if stale:
-        s += ("\n<!-- state-anchors:begin -->\n## " + heading() + _(" (mechanical check)") + "\n\n"
-              + _("STATE.md marks these statements with a code anchor that no longer resolves on the project's main "
-                  "branch: the statement is probably out of date. The librarian is told on its next run for the "
-                  "project; a project session can fix it sooner.") + "\n\n"
+        import llm_ready
+        # the librarian only hears of it when it can run (no model: it is off, so only a session can fix it)
+        why = _("STATE.md marks these statements with a code anchor that no longer resolves on the project's main "
+                "branch: the statement is probably out of date. The librarian is told on its next run for the "
+                "project; a project session can fix it sooner.") if not llm_ready.unsupported("librarian-state") else \
+            _("STATE.md marks these statements with a code anchor that no longer resolves on the project's main "
+              "branch: the statement is probably out of date. The librarian is off on this machine (no model), so a "
+              "project session has to fix it.")
+        s += ("\n<!-- state-anchors:begin -->\n## " + heading() + _(" (mechanical check)") + "\n\n" + why + "\n\n"
               + "\n".join(stale) + "\n<!-- state-anchors:end -->\n")
     todo.write_text(s)
 

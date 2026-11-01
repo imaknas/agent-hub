@@ -41,6 +41,7 @@ import edits  # noqa: E402
 import hubconf  # noqa: E402
 import hublib  # noqa: E402
 import i18n  # noqa: E402
+import llm_ready  # noqa: E402
 import prompts  # noqa: E402
 import state_anchors  # noqa: E402
 import todo_tokens  # noqa: E402
@@ -658,8 +659,8 @@ def process(proj: str, d: pathlib.Path, handoffs: list[dict], digest: list[str])
         # rather than leave it for the next night
         run(["git", "-C", str(d), "checkout", "-q", "--", "."])
         run(["git", "-C", str(d), "clean", "-fdq"])
-        log(_("{project}: claude invocation failed (exit {rc}); the copy is restored and the checkpoint not advanced",
-              project=proj, rc=rc))
+        log(_("{project}: the model call failed ({error}); the copy is restored and the checkpoint not advanced",
+              project=proj, error=(obj or {}).get("llm_error") or f"exit {rc}"))
         return
     if (cost := add_cost(obj)):
         log(f"{proj}: call cost ${cost} (model: {used_model(obj)})")
@@ -771,6 +772,14 @@ def main() -> int:
     LOG_DIR.mkdir(parents=True, exist_ok=True)
     copies = hubconf.p("memory_copies", "~/.memory-copies")
     log("=== librarian run start ===")
+    # no model to call (e.g. no coding agent): the feature is off, said once; the notes wait for a model, the
+    # checkpoints stay where they are
+    if (off := llm_ready.unsupported("librarian-state")):
+        log(_("the librarian is off: {reason}. STATE.md and index.md are not updated; the memory notes wait until a "
+              "model is set up (nothing is lost)", reason=off))
+        hublib.digest_append("projects", "")
+        log("=== librarian run end (total cost today: $0) ===")
+        return 0
     # quarantine only keeps evidence; cleared automatically after 14 days
     cutoff = datetime.datetime.now().timestamp() - 14 * 86400
     for q in (STATE_DIR / "stray").glob("*") if (STATE_DIR / "stray").is_dir() else []:

@@ -242,7 +242,11 @@ def run_model(prompt: str, repo: pathlib.Path, model: str) -> tuple[dict | None,
     except subprocess.TimeoutExpired:
         return None, _("over {minutes} minutes", minutes=CALL_TIMEOUT // 60)
     if r.returncode != 0 or not r.stdout.strip():
-        return None, _("exit {rc}: {stderr}", rc=r.returncode, stderr=r.stderr.strip()[-500:])
+        try:   # llm.py's own failure says why in its JSON (llm_error), not on stderr
+            why = json.loads(r.stdout).get("llm_error") or ""
+        except (ValueError, AttributeError):
+            why = ""
+        return None, _("exit {rc}: {stderr}", rc=r.returncode, stderr=(why or r.stderr.strip())[-500:])
     try:
         return json.loads(r.stdout), ""
     except ValueError:
@@ -610,6 +614,11 @@ def main() -> int:
                     status=s.get("skip") or _("due ({n} this time)", n=len(s["batch"]))))
         return 0
 
+    import llm_ready
+    if (off := llm_ready.unsupported("consolidate")):
+        # no model to call (e.g. no coding agent): the feature is off, said once; the date files stay as they are
+        log(_("consolidation is off: {reason}. The date files stay as they are until a model is set up", reason=off))
+        return 0
     import llm
     model = llm.model_for("consolidate")   # computed only there, platform-wide (hub.json llm.points can override)
     due = [s for s in cands if not s.get("skip")]

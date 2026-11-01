@@ -1,5 +1,6 @@
 {
  "the tool's default": "工具預設",
  "no activity to analyze this week": "這週沒有活動可分析",
- "the model call failed (exit {code}); the statistics are not affected": "模型呼叫失敗(exit {code}),統計部分不受影響"
+ "the model call failed (exit {code}); the statistics are not affected": "模型呼叫失敗(exit {code}),統計部分不受影響",
+ "the analysis is off: {reason}; the statistics are not affected": "分析停用:{reason},統計部分不受影響"
 }

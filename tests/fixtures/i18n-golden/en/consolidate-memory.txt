@@ -343,7 +343,7 @@ exit 0
 exit 0
 
 === no coding agent
-exit 1
+exit 0
 
 === log file
 [<T>] === consolidate start (dry-run, 1 due, at most 3 this time) ===
@@ -372,10 +372,7 @@ exit 1
 [<T>] review-log.md commit/push failed: nothing to push
 
 [<T>] === consolidate end (0 failed) ===
-[<T>] === consolidate start (1 due, at most 3 this time) ===
-[<T>] alpha: consolidating 4 date files (75 bytes, memory/2026-09-02-topic.md … memory/2026-09-05.md), 0 left for next time; model test-model
-[<T>] alpha: the model call failed (exit 1: ); giving up, the copy is untouched
-[<T>] === consolidate end (1 failed) ===
+[<T>] consolidation is off: runtime none has no agent runs (hub.json runtime.default; to use this feature, install a coding agent that supports it). The date files stay as they are until a model is set up
 
 === review-log.md
 ## 2026-10-15 · eta · consolidation
@@ -479,9 +476,6 @@ index <sha>..<sha>
 
 === state.json
 {
- "alpha": {
-  "last_try": "2026-10-15"
- },
  "delta": {
   "last_ok": "2026-10-01",
   "last_try": "2026-10-14"

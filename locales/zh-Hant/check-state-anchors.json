@@ -26,5 +26,6 @@
   "a memory file, not code": "是 memory 檔,不是程式碼",
   "on disk but not in git; anchors are for tracked code": "在磁碟上但不在 git 裡——錨點只標 git 追蹤的程式碼",
   "renamed to `{path}` in {commit}": "在 {commit} 改名成 `{path}`",
-  "; stale in: {names}": ";過時的在:{names}"
+  "; stale in: {names}": ";過時的在:{names}",
+  "STATE.md marks these statements with a code anchor that no longer resolves on the project's main branch: the statement is probably out of date. The librarian is off on this machine (no model), so a project session has to fix it.": "STATE.md 用程式碼錨點標記的這些敘述,在專案的 main 上已經找不到——敘述大概過時了。這台機器的 librarian 停用中(沒有模型),要由專案的 session 來改。"
 }

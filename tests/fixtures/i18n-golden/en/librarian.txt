@@ -1220,23 +1220,23 @@ INDEX>>>
 [<T>] --- p0 ---
 [<T>] p0: changed memory files: memory/2026-10-27.md 
 [<T>] p0: assistant handoffs #101
-[<T>] p0: claude invocation failed (exit 1); the copy is restored and the checkpoint not advanced
+[<T>] p0: the model call failed (exit 1); the copy is restored and the checkpoint not advanced
 [<T>] --- p1 ---
 [<T>] p1: changed memory files: memory/2026-10-27.md 
-[<T>] p1: claude invocation failed (exit 1); the copy is restored and the checkpoint not advanced
+[<T>] p1: the model call failed (exit 1); the copy is restored and the checkpoint not advanced
 [<T>] --- p2 ---
 [<T>] p2: changed memory files: memory/2026-10-27.md 
-[<T>] p2: claude invocation failed (exit 1); the copy is restored and the checkpoint not advanced
+[<T>] p2: the model call failed (exit 1); the copy is restored and the checkpoint not advanced
 [<T>] --- p3 ---
 [<T>] p3: changed memory files: memory/2026-10-27.md 
-[<T>] p3: claude invocation failed (exit 1); the copy is restored and the checkpoint not advanced
+[<T>] p3: the model call failed (exit 1); the copy is restored and the checkpoint not advanced
 [<T>] --- pdang ---
 [<T>] pdang: changed memory files: memory/2026-10-27.md 
 [<T>] pdang: STATE.md refers to files that do not exist: memory/reference/gone.md
-[<T>] pdang: claude invocation failed (exit 1); the copy is restored and the checkpoint not advanced
+[<T>] pdang: the model call failed (exit 1); the copy is restored and the checkpoint not advanced
 [<T>] --- phand ---
 [<T>] phand: assistant handoffs #102
-[<T>] phand: claude invocation failed (exit 1); the copy is restored and the checkpoint not advanced
+[<T>] phand: the model call failed (exit 1); the copy is restored and the checkpoint not advanced
 [<T>] --- pidle ---
 [<T>] pidle: no new commits, skip
 fatal: not a git repository (or any of the parent directories): .git

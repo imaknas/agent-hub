@@ -55,7 +55,7 @@ STATE.md 用程式碼錨點標記的這些敘述,在專案的 main 上已經找�
 <!-- state-anchors:begin -->
 ## STATE.md 裡程式碼已經不在的敘述(機械檢查)
 
-STATE.md 用程式碼錨點標記的這些敘述,在專案的 main 上已經找不到——敘述大概過時了。librarian 下次整理這個專案時會收到提醒;專案的 session 也可以先改。
+STATE.md 用程式碼錨點標記的這些敘述,在專案的 main 上已經找不到——敘述大概過時了。這台機器的 librarian 停用中(沒有模型),要由專案的 session 來改。
 
 - [ ] **alpha**:⚓`src/job.py#retry_later` 檔案裡已經沒有這個名稱(STATE.md 第 5 行:「The nightly job runs in ⚓`src/job.py#run_job`; retries in ⚓`src/job.py#retry_later`.」)
 - [ ] **alpha**:⚓`src/old.py` 在 083dad4a 改名成 `src/settings.py`(STATE.md 第 6 行:「Settings are read by ⚓`src/old.py`, the exporter is ⚓`src/gone.py`, and the cache in ⚓`data/` is ne…」)

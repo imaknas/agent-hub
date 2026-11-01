@@ -122,6 +122,10 @@ def analyze(stats: dict) -> dict:
     meta = {"model": llm.model_for("reflect-week") or _("the tool's default"), "source": "stats", "excluded": sorted(EXCLUDED or [])}
     if not stats["totals"]["prompts"]:
         return {"error": _("no activity to analyze this week"), "meta": meta}
+    import llm_ready
+    if (off := llm_ready.unsupported("reflect-week")):
+        # no model to call: the analysis is off and the report says why (the statistics are still there)
+        return {"error": _("the analysis is off: {reason}; the statistics are not affected", reason=off), "meta": meta}
     d = muninn_digests(stats["week"])
     if d and d["sessions"]:
         meta.update(source="stats+digests", digests=len(d["sessions"]), withheld=d.get("withheld", 0),

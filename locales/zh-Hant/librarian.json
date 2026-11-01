@@ -16,7 +16,7 @@
   "{project}: warning: the model touched files other than STATE.md, moved to {dir}: {files}": "{project}: 警告——模型動了 STATE.md 以外的檔案,已搬到 {dir}:{files}",
   "{project}: assistant handoffs {nums}": "{project}: 助理的轉交 {nums}",
   "{project}: STATE.md refers to files that do not exist:{files}": "{project}: STATE.md 引用了不存在的檔案:{files}",
-  "{project}: claude invocation failed (exit {rc}); the copy is restored and the checkpoint not advanced": "{project}: claude invocation failed (exit {rc}), 已還原副本,checkpoint 不推進",
+  "{project}: the model call failed ({error}); the copy is restored and the checkpoint not advanced": "{project}: 模型呼叫失敗({error}),已還原副本,checkpoint 不推進",
   "{project}: no structured_output (subtype={subtype}, turns={turns}; the model last said: {said}); going by the actual file changes": "{project}: 沒有拿到 structured_output(subtype={subtype} turns={turns} 模型最後說:{said}),仍以實際檔案變化為準",
   "{project}: warning: the agent reported state_updated={reported}, but the actual file change={actually} (going by the actual files)": "{project}: 警告——agent 回報 state_updated={reported},但實際檔案變化={actually}(以實際檔案為準)",
   "(the agent gave no reason)": "(agent 未提供理由)",
@@ -30,5 +30,6 @@
   "digest {date}: write failed": "digest {date} 寫入失敗",
   "{project}: STATE.md has stale code anchors: {anchors}": "{project}:STATE.md 有過時的程式碼錨點:{anchors}",
   "{project}: anchors that do not resolve on the project's main were turned back into plain code: {anchors}": "{project}:在專案 main 上找不到的錨點改回一般程式碼:{anchors}",
-  "{project}: admission undid the model's only edit (anchors that do not resolve)": "{project}:模型唯一的修改是找不到的錨點,收錄時已全部改回"
+  "{project}: admission undid the model's only edit (anchors that do not resolve)": "{project}:模型唯一的修改是找不到的錨點,收錄時已全部改回",
+  "the librarian is off: {reason}. STATE.md and index.md are not updated; the memory notes wait until a model is set up (nothing is lost)": "librarian 停用:{reason}。STATE.md 跟 index.md 不更新;memory 筆記留著,等設好模型再處理(不會遺失)"
 }

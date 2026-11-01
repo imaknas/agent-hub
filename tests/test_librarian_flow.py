@@ -358,24 +358,31 @@ class NoModel(unittest.TestCase):
         return (env.hub / ".logs" / f"librarian-{TODAY}.log").read_text()
 
     def test_no_coding_agent(self):
+        """switched off once, with the reason; no call, nothing touched, the notes wait"""
         with tempfile.TemporaryDirectory() as d:
             env = self.env(d, runtime="none")
             before = self.checkpoints(env)
             log = self.run_(env)
-            failed = "{project}: claude invocation failed (exit {rc}); the copy is restored and the checkpoint not advanced"
+            self.assertEqual(env.calls(), [], "no model to call: nothing is attempted")
+            off = zh("the librarian is off: {reason}. STATE.md and index.md are not updated; the memory notes wait until "
+                     "a model is set up (nothing is lost)", reason="<R>").split("<R>")
+            self.assertEqual(log.count(off[0]), 1, log)
+            reason = i18n.translate("runtime_ports", "runtime {name} has no {missing} (hub.json runtime.default; to use "
+                                    "this feature, install a coding agent that supports it)",
+                                    {"name": "none", "missing": "<M>"}, "zh-Hant").split("<M>")[0]
+            self.assertIn(off[0] + reason, log, "the reason is the runtime's own")
+            self.assertNotIn("claude", log)
             for p in MODES:
-                self.assertIn(zh(failed, project=p, rc=1), log)
+                self.assertNotIn(f"--- {p} ---", log, "no per-project lines")
             self.assertEqual(self.checkpoints(env), before, "the notes wait for a model")
-            self.assertIn("nothing to digest today", log)
 
     def test_a_failed_call_says_why(self):
         with tempfile.TemporaryDirectory() as d:
             env = self.env(d)
             log = self.run_(env)
-            failed = "{project}: claude invocation failed (exit {rc}); the copy is restored and the checkpoint not advanced"
-            self.assertIn(zh(failed, project="p0", rc=1), log)
-            self.assertNotIn("the stand-in's reason", log)
-
+            failed = "{project}: the model call failed ({error}); the copy is restored and the checkpoint not advanced"
+            self.assertIn(zh(failed, project="p0", error="the stand-in's reason"), log)
+            self.assertNotIn("claude", log)
 
 if __name__ == "__main__":
     unittest.main()

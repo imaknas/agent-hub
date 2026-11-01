@@ -1220,23 +1220,23 @@ INDEX>>>
 [<T>] --- p0 ---
 [<T>] p0: changed memory files: memory/2026-10-27.md 
 [<T>] p0: 助理的轉交 #101
-[<T>] p0: claude invocation failed (exit 1), 已還原副本,checkpoint 不推進
+[<T>] p0: 模型呼叫失敗(exit 1),已還原副本,checkpoint 不推進
 [<T>] --- p1 ---
 [<T>] p1: changed memory files: memory/2026-10-27.md 
-[<T>] p1: claude invocation failed (exit 1), 已還原副本,checkpoint 不推進
+[<T>] p1: 模型呼叫失敗(exit 1),已還原副本,checkpoint 不推進
 [<T>] --- p2 ---
 [<T>] p2: changed memory files: memory/2026-10-27.md 
-[<T>] p2: claude invocation failed (exit 1), 已還原副本,checkpoint 不推進
+[<T>] p2: 模型呼叫失敗(exit 1),已還原副本,checkpoint 不推進
 [<T>] --- p3 ---
 [<T>] p3: changed memory files: memory/2026-10-27.md 
-[<T>] p3: claude invocation failed (exit 1), 已還原副本,checkpoint 不推進
+[<T>] p3: 模型呼叫失敗(exit 1),已還原副本,checkpoint 不推進
 [<T>] --- pdang ---
 [<T>] pdang: changed memory files: memory/2026-10-27.md 
 [<T>] pdang: STATE.md 引用了不存在的檔案: memory/reference/gone.md
-[<T>] pdang: claude invocation failed (exit 1), 已還原副本,checkpoint 不推進
+[<T>] pdang: 模型呼叫失敗(exit 1),已還原副本,checkpoint 不推進
 [<T>] --- phand ---
 [<T>] phand: 助理的轉交 #102
-[<T>] phand: claude invocation failed (exit 1), 已還原副本,checkpoint 不推進
+[<T>] phand: 模型呼叫失敗(exit 1),已還原副本,checkpoint 不推進
 [<T>] --- pidle ---
 [<T>] pidle: no new commits, skip
 fatal: not a git repository (or any of the parent directories): .git
