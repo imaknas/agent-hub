@@ -83,6 +83,7 @@ class Doctor(unittest.TestCase):
             mock.patch.object(isolation, "adapter", lambda: ("seatbelt", None)),
             mock.patch.object(isolation, "guarantees", lambda: list(isolation.REQUIRED)),
             mock.patch.object(self.ah, "report", lambda results: rows.extend(results) or 0),
+            mock.patch.object(self.ah, "machine_sleeps", lambda: None),   # pmset / batteries: the machine's, not here
         ]
         for p in patches:
             p.start()
