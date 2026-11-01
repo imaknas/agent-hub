@@ -14,14 +14,20 @@ commits: conventional          # commit titles (bin/commit_title.py, through the
 # runner (agenthub test). This entry is read from the tree under test, so a change to the tiers is tested by the tiers
 # it brings.
 commit_gate: true
-code: ["bin/**", "tests/**", "contracts/**", "templates/**", "locales/**", "githooks/**", "launchd/**",
-       "capabilities/**", "agent-jobs/**", "modules/**", "projects/**", "hub.example.json", "ruff.toml"]
+# every tracked file is some test's input: the static tier's checks read the whole repo (README and docs included)
+code: ["**"]
 inputs: ["cmd:bin/py -c 'import sys; print(sys.version)'", "config:private-names.txt"]
 tests:
 # lint (ruff's F rules) and the config check of what this repo carries (its registry entry, modules), as
 # config-check --staged checked them
 - tier: lint
   run: bin/lint . && AGENT_HUB_CONFIG=. AGENT_HUB_STATE="$TMPDIR/config-check" bin/py bin/config-check --child
+  when: [commit, merge, nightly]
+  paths: &platform ["bin/**", "tests/**", "contracts/**", "templates/**", "locales/**", "githooks/**", "launchd/**", "capabilities/**", "agent-jobs/**", "modules/**", "projects/**", "hub.example.json", "ruff.toml"]
+# the checks that read every tracked file (personal names, CJK, hard-coded hub paths, runtime syntax): any change,
+# a README or docs one included, runs them; a few seconds
+- tier: static
+  run: bin/py -m unittest tests.test_personal_boundary tests.test_i18n_static tests.test_hub_location tests.test_runtime_boundary
   when: [commit, merge, nightly]
 # every test, under the runner's fresh HOME; a test that wrote into it fails the tier (a real run would write real files).
 # run-tests keeps each module's duration in the tier's cache folder, to start the slow ones first and split them
@@ -30,6 +36,7 @@ tests:
     mkdir -p "$HOME/workspace" && TEST_DURATIONS="$AGENTHUB_TIER_CACHE/durations.json" bin/py bin/run-tests tests &&
     { leaks=$(find "$HOME" -type f); [ -z "$leaks" ] || { echo "tests wrote to HOME:"; echo "$leaks"; exit 1; }; }
   when: [merge, nightly]
+  paths: *platform
 jobs:
 - name: librarian
   legacy_name: librarian
