@@ -40,6 +40,19 @@ report, merged it if needed), archive it** (archive_session); don't leave it idl
 its worktree, and the platform can't tell whether it is finished or {{owner}} is still using it. If its result isn't
 checked yet, or {{owner}} still wants to continue in it, don't archive it yet.
 
+## Tests
+
+- While you work, run the tests that touch what you changed (one module, one file, `-k`), not the whole suite.
+- For the whole check, `agenthub test`: it runs this project's declared test tiers (the registry's `tests`) on an
+  exported copy of your worktree, uncommitted changes included, in a fresh environment; a tree that already passed is
+  not run again. On a failure it prints the tail and the path of a file with the complete output: read that file
+  rather than running again to see more.
+- The tiers declared for `merge` are run by `agenthub merge-branch` after its rebase, so there is no need to run them
+  yourself just before merging. Write your memory note and your report before you call it, not after: it blocks
+  while the tests run.
+- A project with no declared tests has none run at merge. Declaring them is a registry change (`manifest.update`,
+  below): `tests: [{tier, run, when, paths?, jobs?}]`, `code`, `inputs` (docs/design/test-waiting.md B1 in agent-hub).
+
 ## Cross-project changes, the project mailbox
 
 This session commits/pushes only this project. When you find that another project (including agent-hub itself) needs a
