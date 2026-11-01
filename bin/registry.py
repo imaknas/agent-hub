@@ -560,6 +560,9 @@ def validate_runs(doc: dict, stem: str, d: dict) -> list[str]:
             errs.append(_("job {name}: allow must be a list of permission rule strings", name=n))
         if "connectors" in job and not isinstance(job["connectors"], bool):
             errs.append(_("job {name}: connectors must be true/false", name=n))
+        if job.get("connectors") is True and not job.get("allow"):
+            errs.append(_("job {name}: connectors: true needs an allow: list (its run denies every MCP server the list "
+                          "doesn't name, so without one it could use no connector)", name=n))
         if any(str(x).startswith("mcp__claude_ai_") for x in job.get("allow") or []) and not job.get("connectors"):
             errs.append(_("job {name}: allow has claude.ai connector tools; add connectors: true (the default headless token "
                            "loads no connectors)", name=n))

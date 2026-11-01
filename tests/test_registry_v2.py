@@ -111,6 +111,14 @@ class V2(unittest.TestCase):
     def test_unknown_top_level_field(self):
         self.assertTrue(any("testz" in e for e in self.errs(testz=[])))
 
+    def test_connectors_job_needs_an_allow_list(self):
+        """its run denies every MCP server the allow list doesn't name: without one it could use nothing"""
+        job = {"name": "check", "kind": "agent", "prompt": "p.md", "at": "09:00", "connectors": True}
+        ok = job | {"allow": ["mcp__claude_ai_Example__read"]}
+        without, with_ = (registry.validate(self.doc(jobs=[j]), "demo") for j in (job, ok))
+        self.assertEqual(len(set(without) - set(with_)), 1, without)   # exactly one more error without the list
+        self.assertTrue(set(with_) <= set(without), with_)
+
 
 class UpgradeFiles(unittest.TestCase):
     """registry.py upgrade-files: v1 files rewritten as v2 by editing their text (comments stay), only when the result
