@@ -15,7 +15,8 @@ job as the project (isolation.wrap). It never touches the branch: no rebase, no 
      base with main (nightly, deploy and --rev without a merge moment: every tier of the moment).
   4. Per tier: its key (tiers.key); a recorded pass in the repo's store is a hit (--force runs anyway). Otherwise a
      fresh environment (uv sync --frozen / npm ci from the repo's own tool caches, policy.cache_env), a fixed tier
-     environment (the platform's PATH, a fresh HOME and TMPDIR, the cache variables, declared env: and config:
+     environment (the platform's PATH and the system's admin tools, a fresh HOME in the run folder and TMPDIR in
+     the system's temporary folder, the cache variables, declared env: and config:
      inputs; nothing else from the caller), worker slots from the machine's budget, the command in its own process
      group (stopped with TERM, a grace period, then KILL), its complete output in the worktree's git dir
      (agent-hub/test-output/), the result recorded.
@@ -28,6 +29,7 @@ starts with the slots it holds, or with one worker and none.
 from __future__ import annotations
 
 import argparse
+import contextlib
 import datetime
 import fcntl
 import hashlib
@@ -145,13 +147,19 @@ def declaration(name: str, doc: dict, tree: pathlib.Path, run: pathlib.Path) -> 
 def base_env(main: pathlib.Path, run: pathlib.Path, hub: bool) -> tuple[dict, dict]:
     """The fixed tier environment, and the part of it a result depends on (for the key)."""
     uv = shutil.which("uv", path=f"{os.environ.get('PATH', '')}:{hubconf.LAUNCHD_PATH}")
-    path = ":".join([*([str(pathlib.Path(uv).parent)] if uv else []), hubconf.LAUNCHD_PATH])
+    # the system's admin tools too (lsof, which hubconf.cwd_users asks): without it a "who is in this folder" check
+    # takes its fallback and answers differently (the step 2.3 rehearsal)
+    path = ":".join([*([str(pathlib.Path(uv).parent)] if uv else []), hubconf.LAUNCHD_PATH, "/usr/sbin", "/sbin"])
     caches = policy.cache_env(main)
     caches["PLAYWRIGHT_BROWSERS_PATH"] = str(main / ".git" / "agent-hub" / "cache" / "playwright")
     (run / "home").mkdir()
-    (run / "tmp").mkdir()
+    # TMPDIR outside every repo: tests make git repos there and some strip GIT_* (GIT_CEILING_DIRECTORIES too) from
+    # what they start, so a temporary folder inside the checkout made git find the enclosing repo (the rehearsal);
+    # removed with the run (main's finally)
+    tmp = tempfile.mkdtemp(prefix="agenthub-test.")
+    (run / "tmpdir").write_text(tmp)
     env = {"PATH": path, "LANG": os.environ.get("LANG") or "en_US.UTF-8", "HOME": str(run / "home"),
-           "TMPDIR": str(run / "tmp"), "GIT_CEILING_DIRECTORIES": str(run), "PYTHONDONTWRITEBYTECODE": "1", **caches}
+           "TMPDIR": tmp, "GIT_CEILING_DIRECTORIES": str(run), "PYTHONDONTWRITEBYTECODE": "1", **caches}
     if hub:
         env["AGENT_HUB_PYTHON"] = sys.executable
     return env, {"PATH": path, "runner": str(RUNNER_VERSION)}
@@ -377,6 +385,8 @@ def main(argv: list[str]) -> int:
         print(f"agenthub test: {e}", file=sys.stderr)
         return 2
     finally:
+        with contextlib.suppress(OSError):
+            shutil.rmtree((run / "tmpdir").read_text(), ignore_errors=True)
         shutil.rmtree(run, ignore_errors=True)
 
 

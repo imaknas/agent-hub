@@ -512,7 +512,9 @@ rebase, no lock.
   `_STATE` or `_CONFIG`, so a tier's own tests choose their roots; locale; the
   platform's variables; the run environment's `bin`) plus its declared `env:`
   inputs; nothing else from the caller, so a session's `PYTEST_ADDOPTS` or `SKIP_E2E` cannot turn a pass into a false
-  one; `GIT_*` cleared; `HOME` and `TMPDIR` fresh folders inside the run's directory.
+  one; `GIT_*` cleared; a fresh `HOME` inside the run's directory and a fresh `TMPDIR` in the system's temporary
+  folder (inside the checkout, git found the enclosing repo for tests that strip `GIT_*`: the step 2.3 rehearsal);
+  `PATH` includes the system's admin tools (`lsof`).
 
 **Authority (r7).** Everything a run evaluates — the git export (clean filters and fsmonitor come from the repo's own
 config), the `inputs`, the tier — runs with the authority of the project it tests, never more:
