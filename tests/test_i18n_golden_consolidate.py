@@ -231,6 +231,13 @@ class Consolidate(unittest.TestCase):
             with mock.patch.object(sys, "argv", ["consolidate-memory.py", "--project", "theta"]):
                 ret, printed = self.capture(m.main)
             out.append(("commit failed", f"exit {ret}\n{printed}"))
+        # --- main without a coding agent (runtime.default none): what run_model returns when llm.py cannot call one
+        with mock.patch.dict(sys.modules, {"llm": llm}), \
+                mock.patch.object(m.hubconf, "_cfg", {**m.hubconf._cfg, "runtime": {"default": "none"}}), \
+                mock.patch.object(m, "run_model", side_effect=lambda p, repo, mdl: (None, "exit 1: ")), \
+                mock.patch.object(sys, "argv", ["consolidate-memory.py", "--project", "alpha"]):
+            ret, printed = self.capture(m.main)
+        out.append(("no coding agent", f"exit {ret}\n{printed}"))
         out.append(("log file", (m.LOG_DIR / f"consolidate-memory-{DAY}.log").read_text()))
         out.append(("review-log.md", m.REVIEW_LOG.read_text()))
         out.append(("state.json", json.dumps(m.load_state(), indent=1, sort_keys=True)))

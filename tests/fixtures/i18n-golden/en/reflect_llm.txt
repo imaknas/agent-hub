@@ -2,3 +2,5 @@
 {"error": "no activity to analyze this week", "meta": {"model": "the tool's default", "source": "stats", "excluded": []}}
 === model call failed
 {"error": "the model call failed (exit 3); the statistics are not affected", "meta": {"model": "the tool's default", "source": "stats", "excluded": []}}
+=== no model at all
+{"error": "the model call failed (exit 1); the statistics are not affected", "meta": {"model": "the tool's default", "source": "stats", "excluded": []}}

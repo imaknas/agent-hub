@@ -99,12 +99,20 @@ class Golden(unittest.TestCase):
         import reflect_llm as m
         fake_llm = types.SimpleNamespace(model_for=lambda point: None)   # EXCLUDED None: no session digests asked for
         out = []
+        import hubconf
+        # what llm.py prints when no model can be reached (runtime none, no hub.json llm section)
+        none = json.dumps({"type": "result", "is_error": True, "structured_output": None, "llm_point": "reflect-week",
+                           "llm_error": "runtime none has no completion interface"})
         with mock.patch.dict(os.environ, ZH), mock.patch.dict(sys.modules, {"llm": fake_llm}), \
-                mock.patch.object(m, "EXCLUDED", None):
+                mock.patch.object(m, "EXCLUDED", None), mock.patch.object(hubconf, "_cfg", {}):
             out.append(("no activity", m.analyze({"week": "2026-W40", "totals": {"prompts": 0}})))
             with mock.patch.object(m, "stats_brief", return_value="STATS"), \
                     mock.patch.object(m.subprocess, "run", return_value=subprocess.CompletedProcess([], 3, "oops", "")):
                 out.append(("model call failed", m.analyze({"week": "2026-W40", "totals": {"prompts": 5}})))
+            with mock.patch.object(m, "stats_brief", return_value="STATS"), \
+                    mock.patch.object(hubconf, "_cfg", {"runtime": {"default": "none"}}), \
+                    mock.patch.object(m.subprocess, "run", return_value=subprocess.CompletedProcess([], 1, none, "")):
+                out.append(("no model at all", m.analyze({"week": "2026-W40", "totals": {"prompts": 5}})))
         self.compare("reflect_llm.txt", "\n".join(f"=== {k}\n{json.dumps(v, ensure_ascii=False)}" for k, v in out) + "\n")
 
 

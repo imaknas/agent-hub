@@ -115,13 +115,18 @@ class Golden(unittest.TestCase):
             roster = {"alpha": {"workspace": str(d_ / "ws-alpha")}, "beta": {}, "gamma": {"workspace": str(d_)},
                       "delta": {"workspace": str(d_)}}
             import hublib
+            # the instance's own hub.json must not decide what the to-do block says
             with mock.patch.object(m.hubconf, "roster", return_value=roster), \
                     mock.patch.object(m.hubconf, "p", return_value=copies), \
+                    mock.patch.object(m.hubconf, "_cfg", {}), \
                     mock.patch.object(m.hubconf, "owner_tag", return_value="Alex"):
                 out.append(("stale", capture(m.main, [])))
                 out.append(("stale --apply", capture(m.main, ["--apply"])))
                 out.append(("todo.md", todo.read_text()))
                 out.append(("digest", hublib.digest_path().read_text()))
+                with mock.patch.object(m.hubconf, "_cfg", {"runtime": {"default": "none"}}):
+                    capture(m.main, ["--apply"])
+                out.append(("todo.md without a coding agent", todo.read_text()))
                 (copies / "alpha" / "STATE.md").write_text("- The nightly job runs in ⚓`src/job.py#run_job`.\n")
                 out.append(("none stale --apply", capture(m.main, ["--apply", "--project", "alpha"])))
                 out.append(("todo.md", todo.read_text()))

@@ -49,6 +49,10 @@ import json, os, pathlib, sys
 point = sys.argv[2]; prompt = sys.stdin.read(); cwd = pathlib.Path.cwd(); env = pathlib.Path(os.environ["LIB_TEST_ENV"])
 with open(env / "llm-calls.jsonl", "a") as f:
     f.write(json.dumps({"point": point, "cwd": cwd.name, "prompt": prompt.replace(str(env), "<ENV>")}, ensure_ascii=False) + "\n")
+if os.environ.get("LIB_TEST_FAIL"):   # what the real llm.py prints when the call cannot be made
+    print(json.dumps({"type": "result", "is_error": True, "structured_output": None, "llm_point": point,
+                      "llm_error": os.environ["LIB_TEST_FAIL"]}))
+    sys.exit(1)
 def res(**k):
     print(json.dumps({"type": "result", "is_error": False, "result": "stub", "total_cost_usd": 0.01, "num_turns": 1,
                       "subtype": "success", **k}, ensure_ascii=False))
@@ -331,6 +335,46 @@ class LibrarianFlow(unittest.TestCase):
                 import re
                 got[impl] = [{**c, "prompt": re.sub(r"\b[0-9a-f]{7,40}\b", "<sha>", c["prompt"])} for c in env.calls()]
         self.assertEqual(got["librarian.sh"], got["librarian.py"])
+
+
+class NoModel(unittest.TestCase):
+    """The model cannot be called: a newcomer without a coding agent (runtime.default: none), or a call that fails."""
+
+    def env(self, d, runtime=None):
+        env = Env(pathlib.Path(d))
+        if runtime:
+            f = env.hub / "hub.json"
+            f.write_text(json.dumps({**json.loads(f.read_text()), "runtime": {"default": runtime}}))
+        env.env["LIB_TEST_FAIL"] = "the stand-in's reason"
+        return env
+
+    @staticmethod
+    def checkpoints(env):
+        return {f.name: f.read_text() for f in (env.hub / ".state").glob("*.sha")}
+
+    def run_(self, env):
+        r = env.run("librarian.py")
+        self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
+        return (env.hub / ".logs" / f"librarian-{TODAY}.log").read_text()
+
+    def test_no_coding_agent(self):
+        with tempfile.TemporaryDirectory() as d:
+            env = self.env(d, runtime="none")
+            before = self.checkpoints(env)
+            log = self.run_(env)
+            failed = "{project}: claude invocation failed (exit {rc}); the copy is restored and the checkpoint not advanced"
+            for p in MODES:
+                self.assertIn(zh(failed, project=p, rc=1), log)
+            self.assertEqual(self.checkpoints(env), before, "the notes wait for a model")
+            self.assertIn("nothing to digest today", log)
+
+    def test_a_failed_call_says_why(self):
+        with tempfile.TemporaryDirectory() as d:
+            env = self.env(d)
+            log = self.run_(env)
+            failed = "{project}: claude invocation failed (exit {rc}); the copy is restored and the checkpoint not advanced"
+            self.assertIn(zh(failed, project="p0", rc=1), log)
+            self.assertNotIn("the stand-in's reason", log)
 
 
 if __name__ == "__main__":

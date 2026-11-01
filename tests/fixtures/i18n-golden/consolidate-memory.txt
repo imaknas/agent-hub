@@ -341,6 +341,9 @@ exit 0
 === commit failed
 exit 0
 
+=== no coding agent
+exit 1
+
 === log file
 [<T>] === consolidate start(dry-run, 到期 1 個,這次最多 3 個)===
 [<T>] alpha: 整理 4 個日期檔(75 bytes,memory/2026-09-02-topic.md … memory/2026-09-05.md),還有 0 個留到下次;模型 test-model
@@ -368,6 +371,10 @@ exit 0
 [<T>] review-log.md commit/push 失敗:nothing to push
 
 [<T>] === consolidate end(失敗 0 個)===
+[<T>] === consolidate start(到期 1 個,這次最多 3 個)===
+[<T>] alpha: 整理 4 個日期檔(75 bytes,memory/2026-09-02-topic.md … memory/2026-09-05.md),還有 0 個留到下次;模型 test-model
+[<T>] alpha: 模型呼叫失敗(exit 1: ),放棄,副本沒動
+[<T>] === consolidate end(失敗 1 個)===
 
 === review-log.md
 ## 2026-10-15 · eta · 回頭清理
@@ -471,6 +478,9 @@ index <sha>..<sha>
 
 === state.json
 {
+ "alpha": {
+  "last_try": "2026-10-15"
+ },
  "delta": {
   "last_ok": "2026-10-01",
   "last_try": "2026-10-14"
