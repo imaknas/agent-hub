@@ -24,7 +24,8 @@ coding agent's own login. When a capability is missing, it is switched off expli
   per-project background services declared in the registry and rendered to launchd or systemd units.
 - **Mailbox.** Letters between projects and to the owner; the recipient is a project, not a session. Unclaimed requests are
   dispatched by the platform: to an idle session's context, or to a headless agent in a throwaway worktree. The mailbox is
-  also an MCP server (`agenthub mcp`) for agents without hook support.
+  also an MCP server (`agenthub mcp`) for agents without hook support; while such an agent works in a project, the
+  platform holds requests to that project instead of dispatching another agent (up to two hours, [`docs/mcp.md`](docs/mcp.md)).
 - **The owner's to-dos, by an open protocol.** What only you can do (a `STATE.md` to-do line tagged with your name) is
   registered with your personal assistant or the built-in owner inbox and kept in step both ways, following
   [Principal Handoff](https://doi.org/10.5281/zenodo.23852711), a published spec with conformance tests.
@@ -45,8 +46,9 @@ coding agent's own login. When a capability is missing, it is switched off expli
   the code is still there, so a stale statement gets flagged instead of trusted.
 - **Status page.** Failed jobs, reports that need attention, and upcoming runs, served on `127.0.0.1:18790`.
 - **Optional modules:** encrypted cloud backup (restic), GitHub mirrors, weekly activity reflection, memory consolidation,
-  a sandbox capability runner, Claude Code upkeep (update and login checks), a built-in owner inbox, and an external
-  personal-assistant bridge.
+  a sandbox capability runner, Claude Code upkeep (update and login checks), a built-in owner inbox, an external
+  personal-assistant bridge, and nightly removal of leftover test containers (testcontainers). `agenthub modules` lists
+  them; the reflection and consolidation modules need a model (below).
 
 ## Requirements
 
@@ -55,9 +57,16 @@ coding agent's own login. When a capability is missing, it is switched off expli
   sandbox blocks, uses Seatbelt, so it is macOS only.
 - `git`, `jq` and [`uv`](https://docs.astral.sh/uv/). `uv` builds the platform's own Python 3.13 venv, so platform scripts
   don't depend on whichever `python3` is on PATH.
+- **A model for the platform's judgment calls**, for the core payoff: the nightly digest, the upkeep of each `STATE.md`,
+  and the items in `todo.md` (which are read from the to-do sections the model keeps in `STATE.md`) are all written by
+  a model. It can be your coding agent's own login, an Anthropic or OpenAI-compatible API key, or a local Ollama; pick
+  one with `agenthub llm setup` (`agenthub init` asks). Without one, the platform still runs: project memory folders,
+  the mailbox, the scheduler and its jobs, the status page and the project registry all work, judgment calls fail and
+  say why, and init leaves the modules that only do model work (consolidation, reflection) off.
 - Optional:
-  - a coding agent, such as [Claude Code](https://claude.com/claude-code) or any headless CLI agent. Without one, set
-    `runtime.default: none`; agent features are then off, and everything else works.
+  - a coding agent, such as [Claude Code](https://claude.com/claude-code) or any headless CLI agent. Without one, init
+    sets `runtime.default: none`: agent features (dispatching agents to mailbox requests, session hooks) are then off,
+    and `agenthub doctor` lists each one.
   - `gh`, to create GitHub repos on onboarding;
   - `restic`, for the backup module;
   - an alert channel: Discord, ntfy, email or macOS notifications;
@@ -74,7 +83,26 @@ agenthub doctor                      # everything that is missing or broken, eac
 agenthub onboard ~/workspace/my-app  # connect a project (--no-remote: don't create a GitHub repo)
 ```
 
-The next morning there is a digest and a `todo.md` in the instance's data directory.
+With a model set up (`agenthub llm setup`) and the scheduler running, the next morning there is a digest and a `todo.md`
+in the instance's data directory. Without a model they are not written: the librarian's judgment calls fail and say
+why, and `agenthub doctor` reports that judgment points have nowhere to run until you set one up.
+
+### Without launchd or systemd
+
+`agenthub init` installs the scheduler (a tick every 15 minutes) and its watchdog as launchd agents on macOS or systemd
+user units on Linux, then applies the config, which installs the platform's background services (the status page,
+mailbox dispatch, memory sync). `agenthub init --no-launchd` does neither: use it in a container or on a machine you are
+only trying the platform on. A system with neither launchd nor a systemd user session (many containers, WSL without
+systemd) ends up the same way, and init and `agenthub doctor` say so.
+
+Then nothing runs by itself. Run a single job now with `agenthub run <job>` (`agenthub jobs` lists them), or schedule
+the scheduler's tick yourself, every 15 minutes, with cron or similar: `<hub>/bin/py <hub>/bin/scheduler.py`.
+`agenthub doctor` shows what is not running.
+
+The status page is a static page. Every scheduler tick rewrites it as `.state/status/index.html` in the hub folder, and
+the `local.status-page` service only serves that folder on `127.0.0.1:18790`. Without the service, open that file in a
+browser, or serve the folder yourself: `bin/py -m http.server 18790 --bind 127.0.0.1 --directory .state/status` in the
+hub folder. Without the scheduler, `bin/py bin/gen-status-page.py` writes it once.
 
 ## Where things live
 
