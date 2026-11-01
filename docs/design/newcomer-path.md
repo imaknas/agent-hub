@@ -543,7 +543,15 @@ Once picked, the text goes in the README's first lines, the GitHub description, 
    project schemas; onboard-project.sh uses `pwd -P`, runs its git in the folder with hooks off (`sgit`), and reads
    `git_origin`; init ends with "Where are your existing projects?" (`--connect`). The root allowlist and the MCP
    tool are B5's.
-5. **B5**: user-level MCP registration and the server outside projects.
+5. **B5**: user-level MCP registration and the server outside projects. **Done 11-02**: init offers registration
+   after the credential step (`--register-mcp` on an existing instance), only on a yes on the terminal (`--yes` and
+   no terminal register nothing); each tool's command is the adapter's or module's `mcp_register`. Roots are hub.json
+   `connect.roots` (plus `workspace_root`), added by `agenthub connect --add-root` or init's existing-projects answer.
+   Outside a project the server lists `status` and `connect_project`; `connect_project` checks `in_roots` (absolute,
+   no symlink on the path, existing, strictly inside a root) and `connect`'s refusals, asks the user through MCP
+   elicitation when the client offers it (a decline does nothing), never under a lease, and runs `agenthub connect
+   --yes` (never a remote) with `AGENTHUB_CONNECT_ROOTS`, which onboard-project.sh re-checks on the real path before
+   it creates anything. The local page and native dialog for roots are B3's.
 6. **B3**: `init --questions/--answers` and `install.sh --for-agent`, then a dry run of story 2 in both apps.
 7. **B8**: the wording pass.
 8. **Positioning**: done 11-01 (README, social preview, GitHub description).

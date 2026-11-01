@@ -20,6 +20,14 @@
     "workspace_root": {
       "type": "string"
     },
+    "connect": {
+      "type": "object",
+      "description": "docs/design/newcomer-path.md B5/B6: the folders the owner named as holding projects; connecting a folder from an agent session (the MCP server's connect_project) is allowed only strictly inside one of them or workspace_root",
+      "additionalProperties": false,
+      "properties": {
+        "roots": {"type": "array", "items": {"type": "string"}}
+      }
+    },
     "memory_copies": {
       "type": "string"
     },

@@ -15,6 +15,10 @@ hub.json has github.owner. The connecting itself is bin/onboard-project.sh.
 
 Refused: the home folder and its parents, hidden folders, the hub, the instance directory, anything inside a project
 that is already connected. The folder is resolved to its real path first.
+
+  agenthub connect --add-root <folder>   add a folder to hub.json connect.roots: the places from which an agent session
+                                         may connect a folder (the MCP server's connect_project, B5). Only the owner
+                                         adds roots, here or in init; an agent can't.
 """
 from __future__ import annotations
 
@@ -92,6 +96,45 @@ def refusal(p: pathlib.Path) -> str | None:
     return None
 
 
+def in_roots(given: pathlib.Path, roots: list[pathlib.Path]) -> str | None:
+    """For a connect asked from an agent session (B5): why the folder is outside what the owner allowed, or None.
+    It must exist, have no symlink anywhere along the path given, and its real path must be strictly inside a root."""
+    p = pathlib.Path(os.path.expanduser(str(given)))
+    if not p.is_absolute():
+        return _("{path} is not an absolute path", path=given)
+    for part in [p, *p.parents]:
+        if part.is_symlink():
+            return _("{path} goes through a symlink ({link}); name the real folder", path=given, link=part)
+    if not p.is_dir():
+        return _("{path} is not an existing folder", path=given)
+    real = p.resolve()
+    if not any(real != r and real.is_relative_to(r) for r in roots):
+        return _("{path} is not inside a folder you named for projects ({roots}); add one with agenthub connect "
+                 "--add-root <folder>", path=real, roots=", ".join(map(str, roots)) or _("none"))
+    return None
+
+
+def add_root(folder: str) -> int:
+    p = pathlib.Path(os.path.expanduser(folder)).resolve()
+    if (why := refusal(p)) and not p.is_dir():
+        print(_("agenthub connect: {reason}; nothing was done", reason=why), file=sys.stderr)
+        return 2
+    home = pathlib.Path.home().resolve()
+    if p == home or home.is_relative_to(p):
+        print(_("agenthub connect: {path} is your home folder or contains it; name the folder that holds your projects",
+                path=p), file=sys.stderr)
+        return 2
+    f = hubconf.config_file("hub.json")
+    d = json.loads(f.read_text())
+    roots = (d.setdefault("connect", {})).setdefault("roots", [])
+    if str(p) not in roots:
+        roots.append(str(p))
+        f.write_text(json.dumps(d, ensure_ascii=False, indent=2) + "\n")
+        subprocess.run([str(BIN / "commit-hub-files.sh"), "chore(config): a folder for projects", "hub.json"])
+    print(_("✓ projects may be connected from inside {path}", path=p))
+    return 0
+
+
 def ask(question: str, yes: bool, default: bool) -> bool:
     if yes or not sys.stdin.isatty():
         return default
@@ -125,6 +168,11 @@ def connect_one(p: pathlib.Path, remote: bool, intent: dict | None, dry: bool) -
 
 
 def main(argv: list[str]) -> int:
+    if argv[:1] == ["--add-root"]:
+        if len(argv) != 2:
+            print(_("agenthub connect --add-root takes one folder"), file=sys.stderr)
+            return 2
+        return add_root(argv[1])
     flags = {a for a in argv if a.startswith("--")}
     unknown = flags - {"--yes", "--remote", "--dry-run", "--help", "-h"}
     if unknown or {"--help", "-h"} & flags:

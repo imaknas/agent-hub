@@ -968,6 +968,8 @@ def install_info() -> dict:
                         '&& npm install -g @anthropic-ai/claude-code'],
             "credential": {"kind": "pasted-token", "command": ["claude", "setup-token"], "file": str(_token_file()),
                            "needs": _("a Claude Pro, Max, Ultra, Team or Enterprise plan")},
+            # user scope: ~/.claude.json, which the Desktop app's Code tab reads too
+            "mcp_register": ["claude", "mcp", "add", "--scope", "user", "agenthub", "--", "{agenthub}", "mcp"],
             "settings": {"runtime": {"default": "claude"}, "modules": {"claude": True}}}
 
 

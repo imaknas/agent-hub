@@ -25,7 +25,8 @@ This is work the platform started (mailbox-propose): write the letters to send a
   hello
 (demo: 1 open letter)
 === instructions unknown
-P=(unrecognized) U=⚠️ why T=60
+P=(unrecognized) U=⚠️ why
+Outside a project, the tools here are status (what agent-hub has) and connect_project: when the user asks to connect this folder to agent-hub, call it with the folder's absolute path. T=60
 === instructions 2 unread
 P=demo U=📬 2 letters are still open; look with inbox first. T=60
 === instructions 1 unread

@@ -156,7 +156,9 @@ def notice(project: str | None, name: str) -> str:
 def instructions(project: str | None, why: str) -> str:
     text = INSTRUCTIONS.read_text()
     if not project:
-        return prompts.fill(text, project=_("(unrecognized)"), unread=f"⚠️ {why}", take_timeout=60)
+        return prompts.fill(text, project=_("(unrecognized)"), take_timeout=60, unread=f"⚠️ {why}\n" + _(
+            "Outside a project, the tools here are status (what agent-hub has) and connect_project: when the user asks "
+            "to connect this folder to agent-hub, call it with the folder's absolute path."))
     hb = _hubbus()
     try:
         n = unread(project)
@@ -203,6 +205,74 @@ TOOLS = [
 ]
 
 
+# outside every registered project (docs/design/newcomer-path.md B5): what agent-hub is, and connecting the folder
+TOOLS_OUTSIDE = [
+    {"name": "status", "description": "Whether agent-hub is installed here, which projects it has, and where new ones "
+                                      "may be connected from.",
+     "inputSchema": {"type": "object", "properties": {}}},
+    {"name": "connect_project", "description": "Connect an existing folder as an agent-hub project (its notes, schedules "
+                                               "and mailbox), when the user asks for it. Only a folder inside one the "
+                                               "owner named for projects; no GitHub repo is created.",
+     "inputSchema": {"type": "object", "required": ["path"], "properties": {
+         "path": _str("the folder's absolute path")}}},
+]
+
+
+class Client:
+    """What the client said at initialize, and a way to ask its user directly (MCP elicitation) where it can."""
+
+    def __init__(self):
+        self.elicitation, self.next_id = False, 0
+
+    def confirm(self, message: str) -> bool | None:
+        """Ask the user through the client, bypassing the model: True / False, or None when the client can't ask."""
+        if not self.elicitation:
+            return None
+        self.next_id += 1
+        rid = f"agenthub-elicit-{self.next_id}"
+        send({"jsonrpc": "2.0", "id": rid, "method": "elicitation/create", "params": {
+            "message": message, "requestedSchema": {"type": "object", "required": ["connect"], "properties": {
+                "connect": {"type": "boolean", "title": _("Connect it")}}}}})
+        for line in sys.stdin:   # the client's answer; anything else that arrives meanwhile is set aside
+            try:
+                msg = json.loads(line)
+            except ValueError:
+                continue
+            if msg.get("id") == rid and "method" not in msg:
+                res = msg.get("result") or {}
+                return res.get("action") == "accept" and (res.get("content") or {}).get("connect") is True
+        return False
+
+
+def outside(name: str, args: dict, client: "Client") -> tuple[bool, str]:
+    if name == "status":
+        names = sorted(hubconf.projects() or {})
+        return True, _("agent-hub is installed. Projects: {names}. Folders may be connected from inside: {roots}.",
+                       names=", ".join(names) or _("none yet"),
+                       roots=", ".join(map(str, hubconf.project_roots())) or _("nowhere yet"))
+    if name != "connect_project":
+        return False, _("this folder is not an agent-hub project: only status and connect_project work here")
+    if os.environ.get("HUBBUS_LEASE"):
+        return False, _("a lease session can't connect folders")
+    import connect
+    roots = hubconf.project_roots()
+    if (why := connect.in_roots(pathlib.Path(str(args["path"])), roots)):
+        return False, why
+    real = pathlib.Path(os.path.expanduser(str(args["path"]))).resolve()
+    if (why := connect.refusal(real)):
+        return False, why
+    answer = client.confirm(_("Connect {path} as an agent-hub project? Its notes are kept in a separate place, a "
+                              "folder without version history gets one, and no GitHub repo is created.", path=real))
+    if answer is False:
+        return False, _("the user declined; nothing was done")
+    env = {**os.environ, "AGENTHUB_CONNECT_ROOTS": ":".join(map(str, roots))}
+    r = subprocess.run([sys.executable, str(BIN / "connect.py"), str(real), "--yes"], capture_output=True, text=True,
+                       timeout=600, env=env)
+    out = (r.stdout + ("\n" + r.stderr if r.stderr.strip() else "")).strip()
+    tail = "" if answer else "\n" + _("Tell the user what was connected: this client can't ask them directly.")
+    return r.returncode == 0, out + tail
+
+
 def hubbus_cli(project: str, *args: str) -> tuple[bool, str]:
     # a sandboxed project's commands run in its folder, where hubbus takes its outbox and view instead of the bus
     cwd = hubconf.workspace(project) if _hubbus().outboxed(project) else os.getcwd()
@@ -226,11 +296,13 @@ def write_note(project: str, text: str) -> tuple[bool, str]:
     return True, _("written to memory/{file} of {project} (the platform syncs it)", project=project, file=f.name)
 
 
-def call(project: str | None, why: str, name: str, args: dict) -> tuple[bool, str]:
+def call(project: str | None, why: str, name: str, args: dict, client: "Client | None" = None) -> tuple[bool, str]:
     if os.environ.get("HUB_LLM_POINT"):
         return False, _("This is work the platform started ({point}): write the letters to send and what to close in "
                         "your output; the platform sends them for you. Do not use this server", point=os.environ["HUB_LLM_POINT"])
     if not project:
+        if name in ("status", "connect_project") and not os.environ.get("AGENTHUB_PROJECT"):
+            return outside(name, args, client or Client())
         return False, why
     if name == "inbox":
         try:
@@ -266,6 +338,7 @@ def serve() -> int:
     project, why = resolve_project()
     log(_("project: {project}", project=project or _("(unrecognized)")))
     presence = Presence(project)
+    client = Client()
     for line in sys.stdin:
         try:
             msg = json.loads(line)
@@ -274,17 +347,20 @@ def serve() -> int:
         mid, method = msg.get("id"), msg.get("method")
         if method == "initialize":
             presence.touch("initialize", ((msg.get("params") or {}).get("clientInfo") or {}).get("name"))
+            client.elicitation = "elicitation" in (((msg.get("params") or {}).get("capabilities")) or {})
             send({"jsonrpc": "2.0", "id": mid, "result": {
                 "protocolVersion": (msg.get("params") or {}).get("protocolVersion") or PROTOCOL,
                 "capabilities": {"tools": {}}, "serverInfo": {"name": "agenthub", "version": "1"},
                 "instructions": instructions(project, why)}})
         elif method == "tools/list":
-            send({"jsonrpc": "2.0", "id": mid, "result": {"tools": TOOLS}})
+            # outside every project: what agent-hub is, and connecting the folder (B5); a server named to a project
+            # by AGENTHUB_PROJECT keeps the project tools
+            send({"jsonrpc": "2.0", "id": mid, "result": {"tools": TOOLS if project else TOOLS_OUTSIDE}})
         elif method == "tools/call":
             params = msg.get("params") or {}
             presence.touch("tool")
             try:
-                ok, text = call(project, why, params.get("name", ""), params.get("arguments") or {})
+                ok, text = call(project, why, params.get("name", ""), params.get("arguments") or {}, client)
             except (KeyError, TypeError) as e:
                 ok, text = False, _("wrong arguments: {e}", e=e)
             except Exception as e:

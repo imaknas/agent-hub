@@ -22,6 +22,23 @@ loader.exec_module(ah)
 
 
 class Presets(unittest.TestCase):
+    def test_mcp_registration_needs_the_owners_yes(self):
+        """B5: a user-level change, so --yes or no terminal registers nothing; a yes runs each tool's command with the
+        agenthub command put in."""
+        from unittest import mock
+        presets = {"x": {"label": "X", "find": ["x"], "mcp_register": ["x", "mcp", "add", "{agenthub}", "mcp"]}}
+        with mock.patch.object(ah, "agent_found", lambda info: True), \
+             mock.patch.object(ah.subprocess, "run") as run, mock.patch.object(ah, "agenthub_command",
+                                                                               lambda: ["/hub/bin/agenthub"]):
+            for yes, tty in ((True, True), (False, False)):
+                with mock.patch.object(ah.sys.stdin, "isatty", lambda: tty), mock.patch("builtins.input", lambda q: "y"):
+                    ah.offer_mcp_registration(presets, yes)
+            run.assert_not_called()
+            run.return_value.returncode = 0
+            with mock.patch.object(ah.sys.stdin, "isatty", lambda: True), mock.patch("builtins.input", lambda q: ""):
+                ah.offer_mcp_registration(presets, False)
+            self.assertEqual(run.call_args.args[0], ["x", "mcp", "add", "/hub/bin/agenthub", "mcp"])
+
     def test_offered_agents(self):
         presets = ah.agent_presets()
         self.assertEqual(list(presets)[:2], ["claude", "codex"], "adapters first, then modules")

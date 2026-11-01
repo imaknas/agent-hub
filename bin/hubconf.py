@@ -289,6 +289,20 @@ def bus_db() -> pathlib.Path:
 LANGUAGES = ("en", "zh-Hant")
 
 
+def project_roots() -> list[pathlib.Path]:
+    """The folders the owner named as holding projects (hub.json connect.roots) plus workspace_root, as real paths:
+    the only places a folder may be connected from an agent session (docs/design/newcomer-path.md B5)."""
+    raw = [*(get("connect.roots") or []), get("workspace_root") or "~/workspace"]
+    out = []
+    for r in raw:
+        p = pathlib.Path(os.path.expanduser(str(r)))
+        if p.is_dir():
+            p = p.resolve()
+            if p not in out:
+                out.append(p)
+    return out
+
+
 def language_of(tag: str) -> str:
     """A locale or language tag (zh_TW.UTF-8, zh-Hant-TW, en_US, de) → one of LANGUAGES. Traditional Chinese (Hant, or
     Taiwan / Hong Kong / Macau) is zh-Hant; Simplified Chinese and everything else is en until it has a catalog."""

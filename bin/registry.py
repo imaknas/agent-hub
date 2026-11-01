@@ -617,7 +617,8 @@ def validate_module(doc, stem: str) -> list[str]:
     if rp is not None:
         if (not isinstance(rp, dict) or not isinstance(rp.get("label"), str) or not isinstance(rp.get("find"), str)
                 or not isinstance((rp.get("settings") or {}).get("runtime"), dict)
-                or not all(isinstance(x, str) for x in rp.get("install") or [])):
+                or not all(isinstance(x, str) for x in rp.get("install") or [])
+                or not all(isinstance(x, str) for x in rp.get("mcp_register") or [])):
             errs.append(_("runtime_preset needs label, find, settings.runtime and install as a list of lines "
                           "(docs/design/newcomer-path.md B4)"))
     if doc.get("v") != 1:

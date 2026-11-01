@@ -113,6 +113,20 @@ class Connect(unittest.TestCase):
         self.assertIn(str(app), out)
         self.assertFalse(any("onboard-project.sh" in " ".join(map(str, c.args[0])) for c in run.call_args_list))
 
+    def test_in_roots(self):
+        """B5: what an agent may ask to connect: an existing folder strictly inside a root, named without symlinks."""
+        inside = self.code / "app"
+        inside.mkdir()
+        (self.home / "private").mkdir()
+        (self.code / "link").symlink_to(self.home / "private")
+        roots = [self.code]
+        self.assertIsNone(connect.in_roots(inside, roots))
+        for given in (self.code, self.home / "private", self.code / "link", self.code / "missing",
+                      pathlib.Path("code/app")):
+            with self.subTest(given=given):
+                self.assertIsNotNone(connect.in_roots(given, roots))
+        self.assertIsNotNone(connect.in_roots(inside, []), "no roots: nothing is inside")
+
     def test_untrusted_git_runs_without_hooks(self):
         app = repo(self.code / "app")
         hook = app / ".git" / "hooks" / "fsmonitor"

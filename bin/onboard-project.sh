@@ -77,6 +77,16 @@ if ! on_mini && ! ssh -o ConnectTimeout=8 -o BatchMode=yes "$MINI_HOST" true 2>/
   fail "$(hub_msg "cannot reach the hub machine ({host}). This script creates a bare repo there, so it stopped before doing anything (this run had no side effects): run it again once the hub machine is reachable." host="$MINI_HOST")"
 fi
 
+# asked from an agent session (the MCP server's connect_project, docs/design/newcomer-path.md B5): the folder must already
+# exist and, on its real path, be strictly inside a root the owner named; checked again here, where it is used, so a
+# folder swapped for a symlink after the caller's check is still refused
+if [ -n "${AGENTHUB_CONNECT_ROOTS:-}" ]; then
+  [ -d "$1" ] || fail "$(hub_msg "{path} is not an existing folder" path="$1")"
+  _real="$(cd "$1" && pwd -P)"; _inside=false
+  IFS=: read -r -a _roots <<<"$AGENTHUB_CONNECT_ROOTS"
+  for _r in "${_roots[@]}"; do case "$_real" in "$_r"/?*) _inside=true ;; esac; done
+  $_inside || fail "$(hub_msg "{path} is not inside a folder the owner named for projects" path="$_real")"
+fi
 mkdir -p "$1"
 # the real path (-P): a folder given through a symlink is onboarded where it really is (docs/design/newcomer-path.md B6)
 PROJ_PATH="$(cd "$1" && pwd -P)"

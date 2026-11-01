@@ -468,6 +468,31 @@ def agent_credential(choice: str, presets: dict[str, dict], yes: bool) -> None:
         subprocess.run(cred["command"], env=agent_env())
 
 
+def agenthub_command() -> list[str]:
+    """How a tool should start this hub's agenthub (absolute: an app started from the GUI may not have PATH)."""
+    cli = pathlib.Path.home() / ".local" / "bin" / "agenthub"
+    return [str(cli)] if cli.exists() else [str(BIN / "py"), str(BIN / "agenthub")]
+
+
+def offer_mcp_registration(presets: dict[str, dict], yes: bool) -> None:
+    """docs/design/newcomer-path.md B5: register agent-hub's MCP server at user level in each installed tool that has a
+    registration command, so a session in any folder (the desktop apps' too) knows agent-hub is there. A user-level
+    change, so only on the owner's own yes on the terminal (AGENTS.md); never with --yes or without a terminal."""
+    tools = [(n, info) for n, info in presets.items() if info.get("mcp_register") and agent_found(info)]
+    if not tools:
+        return
+    labels = ", ".join(info["label"] for _n, info in tools)
+    if not confirm(_("Let your AI apps ({tools}) use agent-hub in every folder? This registers agent-hub's MCP server "
+                     "for your user.", tools=labels), yes):
+        print(_("Not registered. Later: agenthub init --register-mcp"))
+        return
+    for _n, info in tools:
+        argv = [x for a in info["mcp_register"] for x in (agenthub_command() if a == "{agenthub}" else [a])]
+        r = subprocess.run(argv, env=agent_env(), capture_output=True, text=True)
+        print(_("✓ registered in {tool}", tool=info["label"]) if r.returncode == 0 else
+              _("registering in {tool} failed: {error}", tool=info["label"], error=(r.stderr or r.stdout).strip()[:200]))
+
+
 def set_agent(choice: str, args: dict, yes: bool) -> int:
     """init --agent <name> on an existing instance: only the agent step (settings, install, credential), then the
     judgment-point setup offered again; hub.json committed alone and the config applied."""
@@ -599,7 +624,7 @@ def config_repo_first_commit(cfgdir: pathlib.Path, owner: str) -> tuple[bool, li
                             dir=cfgdir)]
 
 
-INIT_FLAGS = ("--yes", "--no-launchd", "--dry-run", "--scheduler-only")
+INIT_FLAGS = ("--yes", "--no-launchd", "--dry-run", "--scheduler-only", "--register-mcp")
 # written when init has made the instance, removed once its later steps are done: a re-run after a Ctrl-C finishes them
 INIT_UNFINISHED = hubconf.STATE / "init-unfinished"
 INIT_OPTIONS = ("--owner", "--timezone", "--workspace", "--modules", "--home", "--llm", "--llm-model", "--llm-base-url",
@@ -721,6 +746,9 @@ def cmd_init(argv: list[str]) -> int:
         return 2
     if args.get("agent") and hubconf.config_file("hub.json").exists():
         return set_agent(args["agent"], args, yes)   # an existing instance: only the agent step
+    if "--register-mcp" in flags and hubconf.config_file("hub.json").exists():
+        offer_mcp_registration(agent_presets(), yes)   # an existing instance: only this step
+        return 0
     created = False
     legacy = hubconf.instance_home() is None and hubconf.config_file("hub.json").exists()
     if legacy:
@@ -776,6 +804,7 @@ def cmd_init(argv: list[str]) -> int:
         # a failure doesn't block init: doctor will say judgment points have nowhere to run; agenthub llm setup later
         if args.get("_agent"):
             agent_credential(args["_agent"], agent_presets(), yes)
+        offer_mcp_registration(agent_presets(), yes)
         llm_setup(args, yes)
         INIT_UNFINISHED.unlink(missing_ok=True)
         on = [m for m in llm_modules() if (hubconf.get("modules") or {}).get(m) is True]
@@ -805,6 +834,8 @@ def cmd_init(argv: list[str]) -> int:
         folder = args.get("connect") or ("" if yes or not sys.stdin.isatty() else input(
             _("Where are your existing projects? A folder to connect from (Enter to skip): ")).strip())
         if folder:
+            # the owner named it: it becomes a root agent sessions may connect folders from (B5), then it is connected
+            subprocess.run([*hubconf.launch(BIN / "connect.py"), "--add-root", folder])
             subprocess.run([*hubconf.launch(BIN / "connect.py"), folder, *(["--yes"] if yes else [])])
     print(_("\nNext: agenthub doctor shows what is missing; agenthub connect <folder> connects existing projects, "
             "agenthub onboard ~/workspace/<project> starts a new one"))

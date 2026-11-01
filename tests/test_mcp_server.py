@@ -61,10 +61,13 @@ class Server(unittest.TestCase):
         self.assertEqual(r.returncode, 0, r.stderr)
         return r.stdout
 
-    def session(self, calls, cwd=None, env=None):
+    PROJECT_TOOLS = {"inbox", "show", "thread", "send", "ack", "done", "ask_owner", "note"}
+
+    def session(self, calls, cwd=None, env=None, tools=None, caps=None):
         """initialize + a series of tools/call; returns (initialize's result, [(isError, text) per call])."""
         msgs = [{"jsonrpc": "2.0", "id": 0, "method": "initialize",
-                 "params": {"protocolVersion": "2025-06-18", "capabilities": {}, "clientInfo": {"name": "t", "version": "0"}}},
+                 "params": {"protocolVersion": "2025-06-18", "capabilities": caps or {},
+                            "clientInfo": {"name": "t", "version": "0"}}},
                 {"jsonrpc": "2.0", "method": "notifications/initialized"},
                 {"jsonrpc": "2.0", "id": 1, "method": "tools/list"}]
         msgs += [{"jsonrpc": "2.0", "id": 10 + i, "method": "tools/call", "params": {"name": n, "arguments": a}}
@@ -73,8 +76,7 @@ class Server(unittest.TestCase):
                            env={**self.env, **(env or {})}, cwd=cwd or self.ws, capture_output=True, text=True, timeout=120)
         out = {m["id"]: m for m in map(json.loads, r.stdout.splitlines())}
         self.assertEqual(len(out), 2 + len(calls), r.stdout + r.stderr)
-        self.assertEqual({t["name"] for t in out[1]["result"]["tools"]},
-                         {"inbox", "show", "thread", "send", "ack", "done", "ask_owner", "note"})
+        self.assertEqual({t["name"] for t in out[1]["result"]["tools"]}, tools or self.PROJECT_TOOLS)
         res = [(out[10 + i]["result"]["isError"], out[10 + i]["result"]["content"][0]["text"]) for i in range(len(calls))]
         return out[0]["result"], res
 
@@ -127,9 +129,65 @@ class Server(unittest.TestCase):
         init, res = self.session([("inbox", {})], cwd=self.tmp, env={"AGENTHUB_PROJECT": "demo"})
         self.assertIn("demo", init["instructions"])
         self.assertFalse(res[0][0])
-        init, res = self.session([("inbox", {})], cwd=self.tmp)
-        self.assertTrue(res[0][0], "project not recognised: every tool returns an error")
+        init, res = self.session([("inbox", {})], cwd=self.tmp, tools={"status", "connect_project"})
+        self.assertTrue(res[0][0], "project not recognised: the project tools return an error")
         self.assertIn("AGENTHUB_PROJECT", res[0][1])
+
+    # ---- outside every project (docs/design/newcomer-path.md B5) ----
+    def test_outside_a_project_status_and_connect(self):
+        code = self.tmp / "code"
+        (code / "notes").mkdir(parents=True)
+        (code / "notes" / "a.md").write_text("x")
+        cfg = json.loads((self.tmp / "config" / "hub.json").read_text())
+        cfg["connect"] = {"roots": [str(code)]}
+        (self.tmp / "config" / "hub.json").write_text(json.dumps(cfg))
+        (self.tmp / "home" / "secret").mkdir()
+        (code / "link").symlink_to(self.tmp / "home" / "secret")
+        outside = {"status", "connect_project"}
+        init, res = self.session([("status", {}), ("connect_project", {"path": str(self.tmp / "home" / "secret")}),
+                                  ("connect_project", {"path": str(code / "link")}),
+                                  ("connect_project", {"path": str(code)}),
+                                  ("connect_project", {"path": "relative/dir"})],
+                                 cwd=self.tmp, tools=outside)
+        self.assertIn("connect_project", init["instructions"])
+        self.assertFalse(res[0][0])
+        self.assertIn("demo", res[0][1])
+        self.assertIn(str(code), res[0][1], "status names the roots")
+        for err, _text in res[1:]:
+            self.assertTrue(err, "outside the roots, through a symlink, the root itself, or relative: refused")
+        self.assertFalse((self.tmp / "home" / "secret" / ".git").exists())
+
+    def test_connect_project_passes_the_roots_on_and_asks_the_user_where_it_can(self):
+        code = self.tmp / "code"
+        (code / "notes").mkdir(parents=True)
+        cfg = json.loads((self.tmp / "config" / "hub.json").read_text())
+        cfg["connect"] = {"roots": [str(code)]}
+        (self.tmp / "config" / "hub.json").write_text(json.dumps(cfg))
+        # elicitation offered: the client's answer is the line after the request; it declines, so nothing runs
+        msgs = [{"jsonrpc": "2.0", "id": 0, "method": "initialize", "params": {
+                    "protocolVersion": "2025-06-18", "capabilities": {"elicitation": {}},
+                    "clientInfo": {"name": "t", "version": "0"}}},
+                {"jsonrpc": "2.0", "id": 1, "method": "tools/call", "params": {
+                    "name": "connect_project", "arguments": {"path": str(code / "notes")}}},
+                {"jsonrpc": "2.0", "id": "agenthub-elicit-1", "result": {"action": "decline"}}]
+        r = subprocess.run([sys.executable, str(BIN / "mcp_server.py")], input="".join(json.dumps(m) + "\n" for m in msgs),
+                           env=self.env, cwd=self.tmp, capture_output=True, text=True, timeout=120)
+        out = [json.loads(x) for x in r.stdout.splitlines()]
+        self.assertEqual(out[1]["method"], "elicitation/create", r.stdout)
+        self.assertIn(str(code / "notes"), out[1]["params"]["message"])
+        self.assertTrue(out[2]["result"]["isError"])
+        self.assertFalse((code / "notes" / ".git").exists(), "declined: nothing was done")
+
+    def test_onboard_rechecks_the_roots_on_its_real_path(self):
+        code = self.tmp / "code"
+        code.mkdir()
+        other = self.tmp / "elsewhere"
+        other.mkdir()
+        r = subprocess.run(["bash", str(BIN / "onboard-project.sh"), "--no-remote", str(other)],
+                           env={**self.env, "AGENTHUB_CONNECT_ROOTS": str(code)}, capture_output=True, text=True,
+                           timeout=60)
+        self.assertNotEqual(r.returncode, 0)
+        self.assertFalse((other / ".git").exists(), "refused before anything")
 
     def test_platform_launched_agents_are_refused(self):
         _, res = self.session([("send", {"to": "other", "type": "info", "text": "x"})], env={"HUB_LLM_POINT": "mailbox-propose"})

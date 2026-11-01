@@ -16,6 +16,8 @@ runtime_preset:
     kind: tool-login
     command: [codex, login]
     status: [codex, login, status]
+  # global in ~/.codex/config.toml, shared with the Codex (ChatGPT) desktop app
+  mcp_register: [codex, mcp, add, agenthub, --, "{agenthub}", mcp]
   settings:
     runtime:
       default: command

@@ -17,5 +17,15 @@
  "\nHow to add it in each tool: docs/mcp.md. For a tool not started in the project folder, add AGENTHUB_PROJECT=<project name> to its env.": "\n各工具怎麼加:docs/mcp.md。不在專案資料夾裡啟動的工具,在 env 加 AGENTHUB_PROJECT=<專案名稱>。",
  "presence not recorded: the working directory {cwd} is not in {project} (named by AGENTHUB_PROJECT), so dispatch is not held for this server": "不記錄在場:工作目錄 {cwd} 不在 {project}(AGENTHUB_PROJECT 指定的)裡,所以平台分派不會為這個伺服器等",
  "presence not recorded: cannot read this process's start time, so dispatch is not held for this server": "不記錄在場:讀不到這個程序的啟動時間,所以平台分派不會為這個伺服器等",
- "cannot record presence: {e!r}": "記錄在場失敗:{e!r}"
+ "cannot record presence: {e!r}": "記錄在場失敗:{e!r}",
+ "Connect {path} as an agent-hub project? Its notes are kept in a separate place, a folder without version history gets one, and no GitHub repo is created.": "要把 {path} 接成 agent-hub 的專案嗎?它的筆記會放在另一個地方;沒有版本紀錄的資料夾會幫它建一個;不會建 GitHub repo。",
+ "agent-hub is installed. Projects: {names}. Folders may be connected from inside: {roots}.": "agent-hub 已安裝。專案:{names}。可以從這些資料夾裡面接上新專案:{roots}。",
+ "this folder is not an agent-hub project: only status and connect_project work here": "這個資料夾不是 agent-hub 的專案:這裡只能用 status 和 connect_project",
+ "a lease session can't connect folders": "租約 session 不能接上資料夾",
+ "the user declined; nothing was done": "使用者拒絕了;什麼都沒做",
+ "Tell the user what was connected: this client can't ask them directly.": "請告訴使用者接上了什麼:這個用戶端沒辦法直接問他。",
+ "Outside a project, the tools here are status (what agent-hub has) and connect_project: when the user asks to connect this folder to agent-hub, call it with the folder's absolute path.": "在專案外面,這裡的工具是 status(agent-hub 有什麼)和 connect_project:使用者要把這個資料夾接上 agent-hub 時,用資料夾的絕對路徑呼叫它。",
+ "none yet": "還沒有",
+ "nowhere yet": "還沒有",
+ "Connect it": "接上"
 }

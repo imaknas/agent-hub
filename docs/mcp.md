@@ -49,12 +49,22 @@ this server, the server records presence (`docs/design/mailbox-runtimes.md` A3):
 
 The registered project the working directory belongs to (a git worktree or `.agent-memory` counts as the main
 project). If the tool does not start the MCP server inside the project folder, add `AGENTHUB_PROJECT=<project name>` to
-the env in its settings. When the project cannot be recognised, every tool returns an error saying how to set it.
+the env in its settings. When the project cannot be recognised, the project tools return an error saying how to set it,
+and the server offers two others instead:
+
+- `status`: the connected projects and the folders you named for projects;
+- `connect_project(path)`: connects a folder, the same as `agenthub connect <folder> --yes`, but only an existing
+  folder strictly inside one of those folders (hub.json `connect.roots`, plus `workspace_root`), named without
+  symlinks. Add a folder with `agenthub connect --add-root <folder>`. It asks you first when the tool supports MCP
+  elicitation, and never creates a GitHub repo.
 
 ## Registering
 
-The platform does not change your tool's settings for you. `agenthub mcp config` prints the snippet to use (with
-absolute paths: a tool opened from the GUI may not have your PATH).
+`agenthub init` offers to register it for your user in the tools it finds (Claude Code, Codex), so a session in any
+folder, the desktop apps' too, can reach it; it does so only on your yes at the terminal. Later:
+`agenthub init --register-mcp`. Otherwise the platform does not change your tool's settings for you:
+`agenthub mcp config` prints the snippet to use (with absolute paths: a tool opened from the GUI may not have your
+PATH).
 
 - **Codex CLI**: `codex mcp add agenthub -- ~/.local/bin/agenthub mcp`
 - **Antigravity CLI**: `agy mcp add agenthub ~/.local/bin/agenthub mcp`
