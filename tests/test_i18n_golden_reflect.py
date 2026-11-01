@@ -22,7 +22,7 @@ import sys
 import tempfile
 import types
 import unittest
-from contextlib import redirect_stdout
+from contextlib import redirect_stderr, redirect_stdout
 from unittest import mock
 
 ROOT = pathlib.Path(__file__).resolve().parents[1]
@@ -65,14 +65,16 @@ class Golden(unittest.TestCase):
         m = importlib.util.module_from_spec(spec)
         spec.loader.exec_module(m)
         tmp = pathlib.Path(tempfile.mkdtemp())
-        o = io.StringIO()
-        with mock.patch.dict(os.environ, ZH), mock.patch.object(m, "OUT", tmp), \
+        o, e = io.StringIO(), io.StringIO()
+        with mock.patch.dict(os.environ, ZH), mock.patch.object(m, "OUT", tmp), redirect_stderr(e), \
                 mock.patch.object(m.runtime_ports, "load", side_effect=m.runtime_ports.Unsupported("no transcripts here")), \
                 mock.patch.object(m, "build_stats", return_value={}), \
                 mock.patch.object(m, "build_html", return_value=tmp / "index.html"), \
                 mock.patch.object(sys, "argv", ["weekly-reflect.py", "--week", "2026-W40"]), redirect_stdout(o):
             m.main()
-        out.append(("no transcripts", o.getvalue().replace(str(tmp), "<TMP>")))
+        # bin/weekly-reflect.sh takes stdout's first line as the json written
+        out.append(("no transcripts: stdout", o.getvalue().replace(str(tmp), "<TMP>")))
+        out.append(("no transcripts: stderr", e.getvalue()))
         self.compare("weekly-reflect.txt", "\n".join(f"=== {k}\n{v}" for k, v in out))
 
     @unittest.skipUnless(node(), "no node")

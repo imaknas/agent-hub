@@ -8,7 +8,9 @@ options:
   --llm        add the analysis the model writes
   --html-only  only rebuild index.html from the existing json
 
-=== no transcripts
+=== no transcripts: stdout
 no conversation statistics in the weekly report: no transcripts here
 <TMP>/2026-W40.json
 <TMP>/index.html
+
+=== no transcripts: stderr
