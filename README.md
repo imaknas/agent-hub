@@ -7,19 +7,21 @@
 
 # agent-hub
 
-A personal, cross-project platform for coding agents. Each project gets its own memory: notes the agent writes, plus a
-curated `STATE.md`. Every night the platform consolidates that memory, writes a cross-project digest and to-do list, and
-runs your scheduled jobs and background services. Projects (and you) talk to each other through a mailbox.
+**Many projects, run by AI agents. Each one remembers, and you decide.**
 
-It is **tool-agnostic**: the platform defines its own interfaces, and Claude Code is one implementation of them, not a
-requirement. Any CLI agent with a headless mode can be plugged in through a command template (tested with Codex and
-Antigravity), any agent that speaks the [Agent Client Protocol](https://agentclientprotocol.com/) through the ACP
-adapter, and the platform's own judgment calls can go to Anthropic, any OpenAI-compatible API, a local Ollama, or the
-coding agent's own login. When a capability is missing, it is switched off explicitly and `agenthub doctor` says why.
+Your agents write down what they do and learn. Every night agent-hub settles those notes into each project's current
+state, corrects what has changed, and gathers what matters across all your projects, so nothing is lost between
+sessions or tools. What only you can decide comes back to you.
 
-> **Status.** Built for, and run every day by, one person on one always-on Mac mini. It is single-user by design. An instance
-> picks the language the platform shows you and the language its agents and models write in (`language.ui` and
-> `language.content` in `hub.json`: `en` or `zh-Hant`). Agents working in this repo read [`AGENTS.md`](AGENTS.md).
+Underneath is the operations layer that keeps this running on a machine you own: a scheduler and its watchdog, each
+project's background services, sandboxes, a mailbox between projects, credential checks and encrypted backups.
+
+> **Status.** Run every day on an always-on Mac mini, on macOS and Linux. Today one installation has one decider (you).
+> The agent features need an AI agent the platform can run: Claude Code gives everything, other agents a subset (below).
+> The nightly judgment calls need a model. An always-on machine is recommended, not required: a machine that sleeps
+> runs its daily jobs when it wakes. An instance picks the language the platform shows you and the language its agents
+> and models write in (`language.ui` and `language.content` in `hub.json`: `en` or `zh-Hant`). Agents working in this
+> repo read [`AGENTS.md`](AGENTS.md).
 
 ## What you get
 
@@ -56,6 +58,11 @@ coding agent's own login. When a capability is missing, it is switched off expli
   a sandbox capability runner, Claude Code upkeep (update and login checks), a built-in owner inbox, an external
   personal-assistant bridge, and nightly removal of leftover test containers (testcontainers). `agenthub modules` lists
   them; the reflection and consolidation modules need a model (below).
+- **Any agent, any model.** The platform defines its own interfaces; Claude Code is one implementation of them, not a
+  requirement. Any CLI agent with a headless mode can be plugged in through a command template (tested with Codex and
+  Antigravity), any agent that speaks the [Agent Client Protocol](https://agentclientprotocol.com/) through the ACP
+  adapter, and the platform's own judgment calls can go to Anthropic, any OpenAI-compatible API, a local Ollama, or the
+  coding agent's own login. When a capability is missing, it is switched off explicitly and `agenthub doctor` says why.
 
 ## Requirements
 

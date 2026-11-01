@@ -394,7 +394,18 @@ Then, in a chat opened in the project's folder, say "connect this project to age
   connects.
 - The user then starts a new chat in that folder: hooks and rules files load at session start.
 
-## Positioning (drafts; the owner picks)
+## Positioning (decided 11-01)
+
+**The owner picked a revised draft 1 (11-01), with cross-project memory first: settling and updating memory across
+projects is why agent-hub exists.** Now in the README, the social preview and (on the owner's OK) the GitHub
+description:
+> **Many projects, run by AI agents. Each one remembers, and you decide.**
+> Your agents write down what they do and learn. Every night agent-hub settles those notes into each project's current
+> state, corrects what has changed, and gathers what matters across all your projects, so nothing is lost between
+> sessions or tools. What only you can decide comes back to you.
+
+The drafts it was chosen from:
+
 
 **The owner, 11-01:**
 - for anyone running many projects with AI agents, not only engineers;
