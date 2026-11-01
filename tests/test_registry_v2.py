@@ -55,6 +55,16 @@ class V2(unittest.TestCase):
         self.assertEqual(self.errs(), [])
         self.assertEqual(minischema.errors(SCHEMA, self.doc()), [])
 
+    def test_schemas_name_every_field_the_registry_takes(self):
+        """the contract and the code accept the same top-level fields: the nightly contract check validates real
+        registry files against the schema, so a field only the code knows fails there (models, 11-01)"""
+        v1 = json.loads((ROOT / "contracts" / "project.v1.schema.json").read_text())
+        self.assertEqual(set(v1["properties"]), registry.TOP)
+        self.assertEqual(set(SCHEMA["properties"]), registry.TOP_V2)
+        doc = self.doc() | {"models": {"summarize": {"tier": "fast"}}, "metered_models": False}
+        self.assertEqual(minischema.errors(SCHEMA, doc), [])
+        self.assertNotEqual(minischema.errors(SCHEMA, doc | {"models": {"summarize": {"tier": "huge"}}}), [])
+
     def test_commit_tier_needs_the_commit_gate(self):
         lint = {"tier": "lint", "run": "sh -c true", "when": ["commit", "merge"]}
         self.assertTrue(any("commit_gate" in e for e in self.errs(tests=[lint])))
