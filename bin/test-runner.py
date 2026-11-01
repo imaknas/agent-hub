@@ -16,7 +16,9 @@ job as the project (isolation.wrap). It never touches the branch: no rebase, no 
   4. Per tier: its key (tiers.key); a recorded pass in the repo's store is a hit (--force runs anyway). Otherwise a
      fresh environment (uv sync --frozen / npm ci from the repo's own tool caches, policy.cache_env), a fixed tier
      environment (the platform's PATH and the system's admin tools, a fresh HOME in the run folder and TMPDIR in
-     the system's temporary folder, the cache variables, declared env: and config:
+     the system's temporary folder, the cache variables, AGENTHUB_TIER_CACHE (a folder of the tier's own that
+     outlives runs, for scheduling data such as test durations: not part of the key, it must not change results),
+     declared env: and config:
      inputs; nothing else from the caller), worker slots from the machine's budget, the command in its own process
      group (stopped with TERM, a grace period, then KILL), its complete output in the worktree's git dir
      (agent-hub/test-output/), the result recorded.
@@ -276,13 +278,16 @@ def stop(p: subprocess.Popen) -> None:
             time.sleep(0.2)
 
 
-def run_tier(tier: dict, tree: pathlib.Path, env: dict, slots: Slots, log) -> bool:
+def run_tier(tier: dict, tree: pathlib.Path, env: dict, slots: Slots, log, cache: pathlib.Path | None = None) -> bool:
     decl = tier.get("jobs") or {}
     parallel = "{jobs}" in tier["run"] or decl.get("env")
     cpus = os.cpu_count() or 4
     n = slots.take(min(decl.get("max") or cpus, cpus) if parallel else 1)
     try:
         env = dict(env)
+        if cache:   # the tier's own folder that outlives the run: scheduling data only (e.g. how long each module took)
+            cache.mkdir(parents=True, exist_ok=True)
+            env["AGENTHUB_TIER_CACHE"] = str(cache)
         if decl.get("env"):
             env[decl["env"]] = str(n)
         cmd = tier["run"].replace("{jobs}", str(n))
@@ -366,7 +371,8 @@ def main(argv: list[str]) -> int:
                 try:
                     if built is None:
                         built = environment(tree, run, {**env, **extra}, log)
-                    ok = run_tier(tier, tree, built, slots, log)
+                    ok = run_tier(tier, tree, built, slots, log,
+                                  common / "agent-hub" / "tier-cache" / f"{project}-{tier['tier']}")
                 except SetupError as e:
                     log.write(f"{e}\n".encode())
                     ok = False

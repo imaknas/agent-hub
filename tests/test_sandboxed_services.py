@@ -162,6 +162,13 @@ class LandlockPlan(Fixture):
                 "deny_read": [str(self.tmp / "copies" / "*" / "memory")], "credentials": [self.tmp / "home" / ".ssh"],
                 "credential_files": [cred]}
 
+    def walk_here(self):
+        """plan() walks the real filesystem from /, through every folder that holds a denied path: here, the system's
+        temporary folder (240,000 entries on the owner's machine on 11-01, 35 s a test). What it decides is the same
+        from the test's own folder."""
+        orig = landlock.read_roots
+        return mock.patch.object(landlock, "read_roots", lambda deny, root=None: orig(deny, self.tmp))
+
     def plan(self):
         home = self.tmp / "home"
         for d in (home / ".ssh", home / ".config", self.tmp / "copies" / "a" / "memory", self.tmp / "other"):
@@ -172,7 +179,7 @@ class LandlockPlan(Fixture):
         (self.tmp / "copies" / "a" / "STATE.md").write_text("x")
         with mock.patch.object(landlock.hubconf, "p", lambda k, d=None: None), \
                 mock.patch.object(landlock.hubconf, "STATE", self.tmp / "state"), \
-                mock.patch.object(landlock.hubconf, "BUS_DIR", self.tmp / "bus"):
+                mock.patch.object(landlock.hubconf, "BUS_DIR", self.tmp / "bus"), self.walk_here():
             deny = landlock.denied(self.pol(self.tmp / "other", home / ".netrc"))
             return landlock.read_roots(deny, self.tmp), landlock.plan(self.pol(self.tmp / "other", home / ".netrc"),
                                                                      [self.rt, self.ws], 18123)
@@ -192,7 +199,7 @@ class LandlockPlan(Fixture):
         self.assertIn(self.tmp / "bus", pl["write"])
 
     def test_no_port_no_bind_rule(self):
-        with mock.patch.object(landlock.hubconf, "p", lambda k, d=None: None):
+        with mock.patch.object(landlock.hubconf, "p", lambda k, d=None: None), self.walk_here():
             pl = landlock.plan(self.pol(self.tmp / "other", self.tmp / "cred"), [self.ws])
         self.assertEqual(pl["bind"], [])
 

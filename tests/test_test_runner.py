@@ -88,6 +88,13 @@ class Runner(unittest.TestCase):
         r = self.run_("--tier", "env", CALLER_HOME=self.env["HOME"], LEAKED="x", WANTED="yes")
         self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
 
+    def test_a_tier_cache_outlives_the_run(self):
+        self.declare(v=2, tests=[{"tier": "c", "when": ["merge"], "run":
+                                  'n=$(cat "$AGENTHUB_TIER_CACHE/n" 2>/dev/null || echo 0); echo $((n+1)) > "$AGENTHUB_TIER_CACHE/n"'}])
+        self.run_("--tier", "c")
+        self.run_("--tier", "c", "--force")
+        self.assertEqual((self.ws / ".git" / "agent-hub" / "tier-cache" / "demo-c" / "n").read_text().strip(), "2")
+
     def test_rev_and_index(self):
         self.declare(v=2, tests=[{"tier": "full", "run": "test -f staged", "when": ["merge"]}])
         (self.ws / "staged").write_text("")
