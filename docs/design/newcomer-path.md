@@ -1,4 +1,4 @@
-# The newcomer's path: four user stories (11-01, r5)
+# The newcomer's path: four user stories (11-01, r6)
 
 Owner, 11-01: more and more people, not only engineers, will run many projects at once with AI agents, and agent-hub
 is for them. The lowest bar should be "paste one line" or, for someone who never opens a terminal, "paste one sentence
@@ -6,6 +6,8 @@ to your agent". This design covers four user stories, the building blocks they n
 and what a user without an always-on machine gets.
 
 Status: design, nothing implemented. To be scheduled by the release session.
+r6: B0, the language is the first question (owner, 11-01). Since 11-01 the agent-hub session owns UX and builds this
+design; the release session cuts releases.
 r5: the threat model is stated; consent goes through a native dialog, not the page; onboard re-checks the allowlist.
 r4: the local page is opened by init itself and its address never reaches the agent; connect resolves real paths and
 refuses symlinks; onboarding's own git calls run with the folder's hooks off.
@@ -99,6 +101,72 @@ From then on the user just talks to their agent.
 
 ## Building blocks
 
+### B0. The language comes first
+
+Today the platform speaks English and Traditional Chinese: `language.ui` sets what it shows the owner, and
+`language.content` sets what agents and models write. But init never asks. It leaves `language` unset (en), and until
+hub.json exists everything is English, init's questions included. A Chinese-speaking newcomer gets English throughout
+and never learns that the choice exists.
+
+**No translated text outside the catalogs.** `tests/test_i18n_static.py` rejects CJK in tracked files outside
+`locales/`, fixtures and specs. `docs/design/i18n.md` has the scripts that run before the platform's Python print
+English. So:
+- install.sh and bin/setup stay English. They are a few lines before init, and that's honest: the platform's own
+  language starts at init. B1's handover makes the switch immediate.
+- init's first question is built from the catalog, not from literals. The English msgid and the zh-Hant catalog's
+  translation (`i18n.translate(…, language="zh-Hant")`) are printed side by side. The language names come the same
+  way, so `bin/agenthub` holds no Chinese.
+- The README's zh-Hant paste text for story 2 (B3) lives in a translated README file (`README.zh-Hant.md`) added to the
+  test's `SPEC` set with a comment ("translated docs"), in the same commit as the file, since the test requires listed
+  files to exist.
+
+**The default comes from the system.**
+- One function in hubconf, `system_language()`, used by init. It maps to `zh-Hant` for `zh_TW`, `zh_HK`, `zh_MO` and
+  any `zh-Hant*`; everything else maps to `en`. Simplified Chinese maps to `en` and says so in one line until a zh-Hans
+  catalog exists.
+- **macOS:** `AppleLanguages` first (`defaults read -g AppleLanguages`, a plist array parsed with `plistlib` from
+  `defaults export -g -`), because `LANG` there follows the Region setting, not the preferred language.
+- **Elsewhere:** `LC_ALL`, then `LC_MESSAGES`, then `LANG`.
+- A table test covers the mapping.
+
+**init's first question is the language**, asked before the instance directory, in both languages at once:
+- the default is `system_language()`;
+- choices: English, Traditional Chinese, and "a different language for notes than for the interface", which asks the
+  second one;
+- every later question is asked in the chosen language, because init sets `AGENT_HUB_LANG_UI` for its own process once
+  the answer is in. `_lang` reads the environment on every call, catalogs are cached per language, and child processes
+  (llm setup, `config apply`) inherit it;
+- the answer goes into `language.ui` and `language.content`.
+
+**Flags and agent mode.**
+- `--lang <ui>[,<content>]` answers it without asking, for `--yes` and CI. Without it, `--yes` takes
+  `system_language()`.
+- In agent mode (B3), the agent first calls `--questions` and gets only the language question (`"via": "chat"`). The
+  agent asks it in the language the user is chatting in. Then it calls `--questions --lang <answer>` and gets the rest
+  in that language.
+
+**Changing later.** `agenthub init --lang <ui>[,<content>]` on an existing instance changes only the language and
+returns early, before init's re-run path (units, `config apply`). It:
+- writes hub.json;
+- commits that one file with `bin/commit-hub-files.sh`, as `schedulectl set-model` does;
+- prints which long-running processes keep the old language until they restart (lease-runner, an open MCP server).
+
+Short-lived commands, the status page, alerts and the watchdog read `language.ui` on every run and need nothing.
+
+**What switching the content language does to existing files.**
+- Written notes and STATE.md text stay as they are.
+- The to-do section keeps its existing heading. Readers already take both token sets (`bin/todo_tokens.py`), but two
+  to-do sections in one file count as a format problem (i18n.md), so the librarian must not add a second heading. New
+  lines are written in the new set under the existing heading, which the contract allows.
+- The librarian's prompt is told this, and an e2 eval run checks it before the switch ships.
+- Doctor's first row names both languages and the command to change them.
+
+**Tests:**
+- `system_language()`'s table;
+- a golden of init's language question in both languages;
+- `init --lang` on an existing instance (only hub.json changes, one commit);
+- the existing goldens are unaffected, since they pin the language.
+
 ### B1. install.sh goes on into init
 
 - The whole script is a function called on the last line, so a cut-off download runs nothing.
@@ -117,7 +185,8 @@ From then on the user just talks to their agent.
 - **init itself:**
   - It writes hub.json only after every question is answered, or records which steps are unfinished. A re-run then asks
     the unfinished ones (llm setup included) instead of skipping them because hub.json exists.
-  - `INIT_FLAGS` gains `--agent` (B4) and `--connect` (B6).
+  - `INIT_FLAGS` / `INIT_OPTIONS` gain `--agent` (B4), `--connect` (B6), `--lang` (B0), and `--questions` /
+    `--answers` (B3); otherwise `init_argv_problem` rejects them.
 
 ### B2. Fewer prerequisites, and asked before installing
 
@@ -440,14 +509,15 @@ Once picked, the text goes in the README's first lines, the GitHub description, 
 
 ## Order of work
 
-1. **B7**: README table, the scheduler's period catch-up, the Linux watchdog, doctor's row.
-2. **B1 + B2**: install.sh into init, resumable init, jq, xcode-select.
+0. **B0**: the language question. It is first because every later message depends on it.
+1. **B1 + B2**: install.sh goes on into init (pulled forward 11-01: it is what a newcomer notices first).
+2. **B7**: README table, the scheduler's period catch-up, the Linux watchdog, doctor's row.
 3. **B4**: the agent step, the credential step, the Codex preset, `init --agent`.
 4. **B6**: `agenthub connect` with layout detection, for the layouts that work today.
 5. **B5**: user-level MCP registration and the server outside projects.
 6. **B3**: `init --questions/--answers` and `install.sh --for-agent`, then a dry run of story 2 in both apps.
 7. **B8**: the wording pass.
-8. **Positioning**: once the owner picks.
+8. **Positioning**: done 11-01 (README, social preview, GitHub description).
 
 **Files touched:**
 - install.sh, bin/setup, bin/hubpaths.sh;
