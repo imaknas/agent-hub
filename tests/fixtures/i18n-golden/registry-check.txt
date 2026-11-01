@@ -1,7 +1,7 @@
 $ <HUB>/bin/registry.py check
 [exit 1]
 --- stdout
-✓ agent-hub:13 個 job、3 個 service
+✓ agent-hub:14 個 job、3 個 service
 ✗ bad-idea
     type: idea 要寫 purpose(想法本身)
     paths.workspace 必填
