@@ -311,7 +311,7 @@ class Declared(unittest.TestCase):
     def test_the_agent_job_points_declare_it(self):
         import yaml as y
         points = y.safe_load((ROOT / "contracts" / "llm-points.yaml").read_text())["points"]
-        for name in ("agent-job", "agent-job-event", "mailbox-escalation"):
+        for name in ("agent-job", "agent-job-confined", "agent-job-event", "mailbox-escalation"):
             self.assertEqual(points[name].get("tool_servers"), "allowed_only", name)
 
     def test_policy_is_a_set_difference(self):

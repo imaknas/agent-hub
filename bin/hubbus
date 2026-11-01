@@ -1742,8 +1742,8 @@ CONFINED_TYPES = ("manifest.update", "task", "drop")
 
 
 def confined_refusal(a, here) -> str | None:
-    """A confined run (AGENT_HUB_CONFINED, set by llm.py for settings: platform points, i.e. event-triggered agent jobs
-    that anyone who can write the bus can start) uses the mail commands only as its own project, for its own letters:
+    """A confined run (AGENT_HUB_CONFINED, set by llm.py for settings: platform points: event-triggered agent jobs and
+    the mailbox handlers, which anyone who can write the bus can start, and clock jobs that declare allow:) uses the mail commands only as its own project, for its own letters:
     no other sender, no registry rewrite (manifest.update), no owner to-dos, no other project's mailbox."""
     if not os.environ.get("AGENT_HUB_CONFINED"):
         return None
@@ -1818,7 +1818,8 @@ def run_handler(c, proj, ws, rows) -> None:
     prompt.parent.mkdir(parents=True, exist_ok=True)
     prompt.write_text(prompts.render("mailbox") + "\n")
     res = subprocess.run([str(HUB / "bin" / "run-agent-job.sh"), f"mailbox-{proj}", str(ws), str(prompt)],
-                         capture_output=True, text=True, env={**chain_env(rows), "AGENT_JOB_POINT": "mailbox-escalation"})
+                         capture_output=True, text=True,
+                         env={**chain_env(rows), "AGENT_JOB_POINT": "mailbox-escalation", "MAILBOX_PROJECT": proj})
     log(_("{project}: dispatched a headless agent for {n} {n:letter|letters} ({ids}, {run})", project=proj, n=len(rows),
           ids=", ".join(r["id"] for r in rows), run=run)
         if res.returncode == 0 else
@@ -1852,7 +1853,7 @@ def resume(c, r, sid, cwd, rt, ws=None, prompt=None) -> None:
             p = subprocess.Popen([sys.executable, str(HUB / "bin" / "llm.py"), "run", "mailbox-conversation",
                                   "--cwd", str(cwd), "--", *rt.resume_args(sid)],
                                  stdin=subprocess.PIPE, stdout=fh, stderr=subprocess.STDOUT, cwd=str(cwd), text=True,
-                                 start_new_session=True, env=chain_env([r]))
+                                 start_new_session=True, env={**chain_env([r]), "MAILBOX_PROJECT": r["to_project"]})
             p.stdin.write(text)
             p.stdin.close()
     except OSError as e:

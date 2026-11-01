@@ -19,11 +19,12 @@
 # an hour, and it mustn't hold up the upload jobs behind it that have to run on time. Success/failure is recorded in
 # status.json, not the scheduler's log.
 #
-# When the workdir is an onboarded project, that project's hooks also fire in this claude -p run (see the similar
-# comment in librarian.sh): SessionEnd commits+pushes the .agent-memory notes, which is exactly what we want (notes the
-# job writes go into memory automatically); the job may only append notes, never touch the project's code.
-# Not for event-triggered agent jobs (judgment point agent-job-event): they load only the platform's settings, so no
-# project hooks run; their notes are committed by the hourly sync-all-memory.
+# Judgment points: a job that declares allow: (AGENT_JOB_ALLOW) runs under agent-job-confined, event-triggered ones
+# under agent-job-event, mailbox requests under mailbox-escalation (AGENT_JOB_POINT): all three load only the
+# platform's settings for the project (docs/design/event-jobs.md 3.2), so neither the project's saved permissions nor
+# its hooks apply, and the notes they write are committed by the hourly sync-all-memory. Only a job without allow:
+# (agent-job, auto mode, flagged on the status page) still runs with the project's settings and hooks: when the
+# workdir is an onboarded project its SessionEnd commits+pushes the .agent-memory notes.
 #
 # Uses the claude.ai subscription login (the hub machine's keychain; readable under launchd, not under SSH);
 # llm.py decides the credentials: the headless token by default; registry jobs that set connectors: true (claude.ai
@@ -98,9 +99,14 @@ raw="$OUT/.$stamp.json"
 status running "started_at=$(date -Iseconds)" "report=" "session_id=" "error=" "cwd=$CWD"
 
 cd "$CWD" || exit 1
-# judgment point agent-job (permission mode etc. declared in contracts/llm-points.yaml)
-# AGENT_JOB_POINT: mailbox escalation uses mailbox-escalation (a fixed allow); AGENT_JOB_ALLOW: the allow a registry
-# job declares
+# judgment point (permission mode etc. declared in contracts/llm-points.yaml): AGENT_JOB_POINT when the caller names
+# one (mailbox-escalation, agent-job-event); else a job that declares allow: (AGENT_JOB_ALLOW) is confined to it and
+# the platform's settings (agent-job-confined, the project in AGENT_JOB_PROJECT), one that doesn't is agent-job
+POINT="${AGENT_JOB_POINT:-}"
+if [ -z "$POINT" ] || [ "$POINT" = "agent-job" ]; then
+  POINT=agent-job
+  [ -z "${AGENT_JOB_ALLOW:-}" ] || POINT=agent-job-confined
+fi
 # MCP servers from the environment aren't loaded (the global ones include production databases; turning tools off
 # doesn't block them, 10-27 sealed experiment): --strict-mcp-config.
 # Exception: registry jobs with connectors: true (LLM_AUTH=subscription, e.g. Upwork) need claude.ai connectors,
@@ -122,7 +128,7 @@ if [ -n "${AGENT_HUB_EVENTS:-}" ]; then
 fi
 # ${a[@]+"${a[@]}"}: bash < 4.4 (macOS's /bin/bash, which the background run uses) takes an empty array for an unbound
 # variable under set -u, and a connectors job died right here, its status left at running (10-27 to 11-01)
-"$HUB/bin/py" "$HUB/bin/llm.py" run "${AGENT_JOB_POINT:-agent-job}" --prompt-file "$RUN_PROMPT" ${MCP_ARGS[@]+"${MCP_ARGS[@]}"} >"$raw" 2>"$raw.err"
+"$HUB/bin/py" "$HUB/bin/llm.py" run "$POINT" --prompt-file "$RUN_PROMPT" ${MCP_ARGS[@]+"${MCP_ARGS[@]}"} >"$raw" 2>"$raw.err"
 rc=$?
 [ "$RUN_PROMPT" = "$PROMPT" ] || rm -f "$RUN_PROMPT"
 

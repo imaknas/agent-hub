@@ -163,9 +163,10 @@ The trust model (1: the bus is a peer log) decides what an event job may do with
   and closes only its own project's letters (no `--id`, no reply to another project's letter, only its own open
   questions), and refuses `publish`, `record-publish` and the relays. **Through a letter** the run can cause only what
   any bus writer can cause with one letter: a request to its own project is handed by the mailbox to a handler
-  (`mailbox-escalation`, or a fork of a recent session), and today that handler loads the project's accumulated
-  permissions (and, in a sandboxed project, auto-approved sandboxed Bash): the same gap this section closes for event
-  jobs, still open for the handlers (section 11). Event jobs add nothing to it, since the letter needs no event job. An `allow:` that
+  (`mailbox-escalation`, or a fork of a recent session under `mailbox-conversation`), and since 11-02 those handlers
+  are confined the same way (`settings: platform`, `docs/design/mailbox-routing.md` "11-02"), so the letter reaches
+  nothing beyond the mail commands and memory notes. Clock agent jobs that declare `allow:` run confined too
+  (`agent-job-confined`). An `allow:` that
   names an interpreter (`Bash(python3:*)`) grants arbitrary code within the sandbox, by definition, including
   reading the run's environment. Still loaded: managed (admin) settings, which are the machine owner's, and the project's
   rules file (`CLAUDE.md`), which is instructions, not permissions. MCP servers stay off (`run-agent-job.sh` passes
@@ -360,10 +361,10 @@ The page reads the bus through `event_jobs`, the same functions the scheduler us
 - Authenticated bus writes (3.2). Until then, any process that can write the bus can also send a `manifest.update`
   in another project's name, and `registry.py apply-updates` applies changed `run` fields (jobs, services) without the
   owner; event jobs are kept out of that path (3.2), but sessions and other agents are not. Both belong to that task.
-- Confining the mailbox handlers and clock agent jobs the way event jobs are (`settings: platform` for
-  `mailbox-escalation`, `mailbox-conversation` and `agent-job` with `allow:`; `autoAllowBashIfSandboxed: false` in the
-  settings `render-project-settings` writes). Until then a request letter, from anyone who can write the bus, reaches a
-  handler with the project's accumulated permissions (3.2).
+- ~~Confining the mailbox handlers and clock agent jobs the way event jobs are.~~ Done 11-02: `mailbox-escalation`,
+  `mailbox-conversation` and clock jobs with `allow:` (`agent-job-confined`) are `settings: platform`; per point in
+  `docs/design/mailbox-routing.md` "11-02". `autoAllowBashIfSandboxed: false` is in the platform settings those runs
+  load; the settings `render-project-settings` writes for people's own sessions keep the default (a person is there).
 - Waking the scheduler on publish.
 
 ## 12. Files

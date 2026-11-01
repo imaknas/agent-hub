@@ -93,6 +93,13 @@ class RunAgentJobArgs(unittest.TestCase):
         self.assertEqual(rec["argv"][-2:], ["--", "--strict-mcp-config"])
         self.assertEqual(rec["env"]["AGENT_JOB_ALLOW"], allow)
 
+    def test_a_job_with_allow_runs_confined(self):
+        allow = json.dumps(["Read(./x/**)"])
+        for point in ({}, {"AGENT_JOB_POINT": "agent-job"}):   # named or not, agent-job never takes an allow list
+            rec = self.run_job("job-a", str(self.tmp / "ws"), AGENT_JOB_ALLOW=allow, **point)
+            self.assertEqual(rec["argv"][:2], ["run", "agent-job-confined"])
+            self.assertEqual(rec["env"]["AGENT_JOB_ALLOW"], allow)
+
     def test_the_runtime_credential_variable_is_not_inherited(self):
         rec = self.run_job("job-a", str(self.tmp / "ws"), LLM_AUTH="subscription")
         self.assertIsNone(rec["env"]["CLAUDE_CODE_OAUTH_TOKEN"])

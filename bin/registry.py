@@ -79,6 +79,10 @@ schema v1 (contracts/project.v1.md has the full description):
       max_attempts_per_day defaults to 12; an agent event job always runs as the scheduler's background job, in
       place, so the scheduler sees its outcome. legacy_name is refused
     after: [job] (same project) or [project/job]
+    allow: [rules] (agent jobs only): the job's permission rules, its whole boundary: it runs unattended (dontAsk)
+      under judgment point agent-job-confined (agent-job-event when triggered), which loads only the platform's
+      settings for the project, never the project's saved permissions, the user's or its hooks. Without allow: an
+      agent job runs in auto mode with the project's settings (flagged on the status page)
     connectors: true (agent jobs only): needs claude.ai connectors (Upwork etc.) → uses the subscription login, not
       the default headless token (tools in allow with mcp__claude_ai_ but this not set: invalid). Such a run loads the
       machine's tool servers; every one whose tools allow doesn't name is denied for it (tool_servers: allowed_only)
@@ -878,9 +882,11 @@ def scheduler_jobs(index: dict, legacy_names: set[str]) -> tuple[list[dict], lis
                 agent_name = job.get("legacy_name") or f"{name}-{job['name']}"
                 cmd = (f"{shlex.quote(str(hubconf.ROOT / 'bin' / 'run-agent-job.sh'))} {shlex.quote(agent_name)} "
                        f"{shlex.quote(str(cwd))} {shlex.quote(str(prompt))}")
-                # unattended permissions: only these allowed (llm.py's agent-job judgment point switches to dontAsk)
+                # unattended permissions: only these rules and the platform's settings for the project (run-agent-job.sh
+                # runs it under judgment point agent-job-confined; docs/design/event-jobs.md 3.2)
                 if job.get("allow"):
-                    cmd = f"AGENT_JOB_ALLOW={shlex.quote(json.dumps(job['allow'], ensure_ascii=False))} {cmd}"
+                    cmd = (f"AGENT_JOB_ALLOW={shlex.quote(json.dumps(job['allow'], ensure_ascii=False))} "
+                           f"AGENT_JOB_PROJECT={shlex.quote(name)} {cmd}")
                 # needs claude.ai connectors: use the subscription login, not the default headless token
                 if job.get("connectors"):
                     cmd = f"LLM_AUTH=subscription {cmd}"
@@ -916,8 +922,7 @@ def scheduler_jobs(index: dict, legacy_names: set[str]) -> tuple[list[dict], lis
                 if job.get("kind") == "agent":
                     # the scheduler owns the detachment so it sees the run's real outcome (event-jobs.md section 2);
                     # judgment point agent-job-event: only allow: and the platform's settings apply (section 3.2)
-                    j["command"] = (f"RUN_AGENT_JOB_FOREGROUND=1 AGENT_JOB_POINT=agent-job-event "
-                                    f"AGENT_JOB_PROJECT={shlex.quote(name)} {j['command']}")
+                    j["command"] = f"RUN_AGENT_JOB_FOREGROUND=1 AGENT_JOB_POINT=agent-job-event {j['command']}"
                     j["background"] = True
             if "timeout" in job:
                 j["timeout_minutes"] = every_minutes(str(job["timeout"]))

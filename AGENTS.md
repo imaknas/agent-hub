@@ -150,7 +150,9 @@ agent-hub is meant for anyone, with any coding agent, any LLM, any key.
   branch (it can answer about what it has in hand); only when there is no such session is a headless agent dispatched
   (`templates/prompts/mailbox.md`: it only writes notes/replies/asks the owner, never changes code; with
   `mailbox.handler: propose` it runs in a throwaway worktree instead and the platform sends for it,
-  `bin/propose_apply.py`). agent-hub's own letters work the same way.
+  `bin/propose_apply.py`). agent-hub's own letters work the same way. Anyone who can write the bus can start these
+  handlers, so the background branch and the headless agent load only the platform's settings for the project, never
+  its saved permissions (`settings: platform`, as event agent jobs; per point in mailbox-routing.md "11-02").
   When the branch is done, the original session receives the branch's reply and the letters it sent on its next
   activity. Only request/question is handled; info is a notice.
   A dispatched letter is recorded as "the platform is handling it", so an open session does not redo it; at most 4

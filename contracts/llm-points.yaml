@@ -147,13 +147,31 @@ points:
     caller: bin/run-agent-job.sh
     shape: agent
     model_group: default
-    purpose: "scheduled Claude jobs (kind: agent in the project registry); the prompt is the job's own"
-    # Unattended: a job that declares allow: in the registry → dontAsk + --permission-prompts none + only those rules
-    # (anything not listed is refused, it never hangs on a prompt); one that doesn't declare it stays on auto for now
-    # (not bypass), listed on the status page. Never bypassPermissions.
+    purpose: "scheduled Claude jobs (kind: agent in the project registry, or schedule.yaml) that declare no allow:; the
+      prompt is the job's own"
+    # A job that declares allow: never runs here: run-agent-job.sh sends it to agent-job-confined. One that doesn't
+    # stays on auto for now (not bypass), with the project's saved settings, listed on the status page. Never
+    # bypassPermissions.
     permission_mode: auto
+    tool_servers: allowed_only
+    timeout_s: 3600
+    output: {format: text}
+    on_failure: say_so      # the job fails, status page red
+  agent-job-confined:
+    caller: bin/run-agent-job.sh (clock registry agent jobs that declare allow:; docs/design/event-jobs.md section 3.2)
+    shape: agent
+    model_group: default
+    purpose: "a scheduled agent job that declares allow: in the registry: the job's allow: rules and the platform's own
+      settings for the project are its whole boundary, as for agent-job-event"
+    # The same confinement as agent-job-event: dontAsk + only those rules; settings: platform = the project's
+    # accumulated tool permissions and the user's are not loaded, nor the project's hooks (its notes are committed by
+    # the hourly memory sync).
+    permission_mode: dontAsk
+    prompts: none
     allow_from_env: AGENT_JOB_ALLOW
     tool_servers: allowed_only
+    settings: platform
+    project_env: AGENT_JOB_PROJECT
     timeout_s: 3600
     output: {format: text}
     on_failure: say_so      # the job fails, status page red
@@ -193,13 +211,19 @@ points:
     shape: agent
     model_group: default
     purpose: "a request in a project mailbox nobody picked up (nobody is using the project, or it waited a few minutes): open a headless session in that project that only writes memory notes, replies, asks the owner"
+    # Anyone who can write the bus can start it with their text: confined like agent-job-event (docs/design/
+    # mailbox-routing.md, "11-02"). settings: platform = none of the project's saved permissions, the user's or the
+    # project's hooks; dontAsk, so the rules below are the whole boundary. Bash only because the mail is a command:
+    # the platform settings and the rules allow nothing but `agenthub` mail subcommands (no raw hubbus).
     permission_mode: dontAsk
     prompts: none
     tools: Read,Edit,Write,Glob,Grep,Bash
     # {platform_mail}: the platform's commands to read, send and close letters (the runtime turns them into its own
-    # rules)
+    # rules); Write is covered by the Edit rule (a new day's note file)
     allowed_tools: ["Edit(./.agent-memory/memory/**)", "{platform_mail}"]
     tool_servers: allowed_only
+    settings: platform
+    project_env: MAILBOX_PROJECT
     timeout_s: 1800
     output: {format: text}
     on_failure: say_so      # the bridge reports the escalation failure
@@ -223,14 +247,17 @@ points:
     shape: agent
     model_group: standard
     purpose: "a reply in a conversation reaches an idle session: continue in the background with its context (a branched copy, the original session untouched), only writing notes, replies, asking the owner"
-    # Same permissions as mailbox-escalation; the original session's permission mode is not carried over (it may be
-    # acceptEdits/auto, which can't be used as is with nobody watching)
+    # Same confinement as mailbox-escalation (settings: platform, dontAsk, Bash only for the mail subcommands); the
+    # original session's permission mode and saved permissions are not carried over (it may be acceptEdits/auto, with
+    # rules a person approved while watching)
     permission_mode: dontAsk
     prompts: none
     tools: Read,Edit,Write,Glob,Grep,Bash
     # {platform_mail}: the platform's commands to read, send and close letters (the runtime turns them into its own
     # rules)
     allowed_tools: ["Edit(./.agent-memory/memory/**)", "{platform_mail}"]
+    settings: platform
+    project_env: MAILBOX_PROJECT
     # don't load the project's MCP servers (e.g. the project's production database); the background copy doesn't need
     # them
     extra_args: ["--strict-mcp-config"]

@@ -433,7 +433,8 @@ class PlatformSettings(unittest.TestCase):
             {"name": "a", "trigger": {"events": ["merge.done"]}, "kind": "agent", "allow": ["Read"]}]}}}
         with mock.patch.object(registry.isolation, "sandboxed", lambda doc: False):
             cmd = registry.scheduler_jobs(index, set())[0][0]["command"]
-        self.assertTrue(cmd.startswith("RUN_AGENT_JOB_FOREGROUND=1 AGENT_JOB_POINT=agent-job-event AGENT_JOB_PROJECT=p "))
+        self.assertTrue(cmd.startswith("RUN_AGENT_JOB_FOREGROUND=1 AGENT_JOB_POINT=agent-job-event AGENT_JOB_ALLOW="))
+        self.assertIn(" AGENT_JOB_PROJECT=p ", cmd)
 
 
 class ConfinedMail(unittest.TestCase):

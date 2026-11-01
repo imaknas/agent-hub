@@ -307,3 +307,48 @@ agent while the user was working there. Now:
   is recorded.
 - **Socket token**: no longer kept. `runtime_claude.wake_address` is gone: the waiter needs no token, and an unused
   credential for posting into a session isn't worth holding. The generic address handler stays for other runtimes.
+
+## 11-02: the handlers are confined (`docs/design/event-jobs.md` 3.2, section 11)
+
+**The gap.** A request or question to a project, from anyone who can write the bus, starts a handler there. Until
+now the handlers loaded the project's saved settings: every allow rule a person had approved in that project's
+sessions (`Bash(npm:*)`, `Bash(git push:*)`…), the user's, the project's hooks, and in a sandboxed project the CLI's
+default `autoAllowBashIfSandboxed: true`. `dontAsk` refuses what no rule allows, but those rules were part of the
+allow set, so the letter's author reached the project with everything ever approved there. Event agent jobs were
+closed against this already (`agent-job-event`, `settings: platform`); this applies the same pattern to the rest.
+
+**The pattern** (`contracts/llm-points.yaml`, `runtime_claude._flags` / `platform_settings`): `settings: platform` and
+`project_env` name the project; the runtime loads no user, project or local settings file, only one the platform
+writes from the policy (the sandbox when the registry enforces it, with `autoAllowBashIfSandboxed: false`; the deny
+list; the mail subcommands). `dontAsk` + `prompts: none`, so the point's rules plus those are the whole boundary. A
+point that declares `tools` gets exactly those; one that doesn't (an `allow:` job) gets reading, Bash for the mail
+commands and the tools its rules use. A runtime without the `confine` port refuses such a point with the reason; it is
+never run unconfined. `llm.py` sets `AGENT_HUB_CONFINED`, so `hubbus` acts only as and for the run's own project.
+For Claude Code: `--restricted --settings <platform file> --tools <…>` (2.1.316). `--restricted` also confines the
+file tools to the working directories, checked where a path resolves: a worktree's `.agent-memory` is a link to the
+main checkout's, so for a `./` rule whose fixed part resolves outside the folder the runtime adds that directory
+(`--add-dir`) and the same rule on the resolved path (live probe 11-02: without it the write is refused; with it the
+note is written and nothing else under `.agent-memory` is).
+
+| point | started by | what it needs | declared |
+|---|---|---|---|
+| `mailbox-escalation` | `hubbus dispatch` → `run-agent-job.sh` (`MAILBOX_PROJECT`) | read the project, write `.agent-memory/memory/`, read/send/close its letters, ask the owner | `settings: platform`; tools `Read,Edit,Write,Glob,Grep,Bash`; rules `Edit(./.agent-memory/memory/**)` + the `agenthub` mail subcommands (Write is covered by the Edit rule: a new day's file) |
+| `mailbox-conversation` | `hubbus dispatch` resume / fork of a recent session (`MAILBOX_PROJECT`); the prompts `mailbox-resume.md` and `mailbox-delegate.md` both run here | the same, with the session's context; the session's own mode and saved permissions are not carried over | the same |
+| `mailbox-propose` | `propose_apply.py` (`mailbox.handler: propose`) | read the project, propose notes and letters | unchanged: no Bash, `--strict-mcp-config`, a throwaway worktree, the platform adopts only `.agent-memory/memory/**` and sends only replies to the letters it was given, owner questions and their closes. Its guarantee is the platform's, not the tool's settings, so any runtime can run it; it is deliberately not `settings: platform` (that needs the `confine` port) |
+| `agent-job-confined` (new) | `run-agent-job.sh` for a registry clock job with `allow:` (`AGENT_JOB_PROJECT`, set by `registry.py`) | the job's `allow:` | as `agent-job-event`; `agent-job` no longer takes an allow list, so a job with one never runs on the unconfined point, whatever `AGENT_JOB_POINT` says |
+| `agent-job` | `run-agent-job.sh` for a job without `allow:` | whatever its prompt asks | unchanged: `auto`, the project's settings and hooks; listed on the status page. Not reachable through the bus (its prompt is the owner's file) |
+
+**Bash.** It stays in the two mail handlers only because the mail is a command (`agenthub send/inbox/done…`): the
+platform settings allow nothing else, the rules name nothing else (the raw `hubbus` path, still in the rules of
+unconfined runs, is dropped for confined ones), and `dontAsk` refuses the rest. Taking it out entirely means giving
+confined runs the mail through the platform's MCP server (`agenthub mcp` has inbox/thread/send/done/ask_owner/note),
+which today refuses every platform-started run (`HUB_LLM_POINT`); proposed separately.
+
+**What no longer happens for these runs**: the project's hooks (SessionStart delivery, SessionEnd's memory commit):
+the prompt says to run `agenthub inbox` first, and their notes are committed by the hourly `sync-all-memory`, as for
+event jobs.
+
+Tests: `tests/test_handler_confinement.py` (no saved project rule reaches the command or the settings file; Bash rules
+are only the mail subcommands; declared tools without Bash give none; no project → refused; a runtime without
+`confine` refuses; the linked `.agent-memory`; dispatch and the registry name the project);
+`tests/test_run_agent_job_args.py` (a job with `allow:` runs on `agent-job-confined`).

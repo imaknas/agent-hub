@@ -561,6 +561,7 @@ def last_activity(path) -> datetime.datetime | None:
 # extra_args / allow_from_env / extra_allow_env in the judgment point declaration (Task.spec) are Claude-specific and
 # read here for now, until layer 2's neutral policy is settled.
 
+import itertools  # noqa: E402
 import os  # noqa: E402
 
 from runtime_ports import TaskResult  # noqa: E402
@@ -593,7 +594,9 @@ def _rules(task) -> tuple:
         import policy
         i = allowed.index("{platform_mail}")
         hub_bin = pathlib.Path(__file__).resolve().parent
-        allowed[i:i + 1] = [f"Bash({_tilde(hub_bin / 'hubbus')} *)", *_cli_rules(policy.platform_cli(mail_only=True))]
+        # a confined run gets only the mail subcommands (its platform settings allow the same), never raw hubbus
+        raw = [] if spec.get("settings") == "platform" else [f"Bash({_tilde(hub_bin / 'hubbus')} *)"]
+        allowed[i:i + 1] = [*raw, *_cli_rules(policy.platform_cli(mail_only=True))]
     env = os.environ if task.env is None else task.env
     if spec.get("extra_allow_env") and env.get(spec["extra_allow_env"]):
         allowed += json.loads(env[spec["extra_allow_env"]])  # adds rules only, doesn't change the permission mode
@@ -602,6 +605,33 @@ def _rules(task) -> tuple:
         allowed += json.loads(env[spec["allow_from_env"]])
         mode, prompts = "dontAsk", "none"
     return mode, allowed, prompts
+
+
+_GLOB = re.compile(r"[*?\[{]")
+
+
+def _linked_rules(allowed, cwd) -> tuple[list[str], list[str]]:
+    """--restricted confines the file tools to the working directories, and it checks a path where it resolves: a
+    worktree's .agent-memory is a link to the main checkout's (worktree-memory.sh), so a `./.agent-memory/…` rule
+    matches nothing there (live probe 11-02, 2.1.316). For each `./` rule whose fixed part resolves outside the
+    folder: that directory as an extra working directory, and the same rule on the resolved path → (dirs, rules)."""
+    base = pathlib.Path(cwd or os.getcwd()).resolve()
+    dirs, rules = [], []
+    for r in allowed:
+        m = re.fullmatch(r"(\w+)\(\./(.+)\)", r)
+        if not m:
+            continue
+        parts = m.group(2).split("/")
+        fixed = list(itertools.takewhile(lambda p: not _GLOB.search(p), parts))
+        real = base.joinpath(*fixed).resolve() if fixed else base
+        if real == base or base in real.parents:
+            continue
+        top = base.joinpath(fixed[0]).resolve()
+        if str(top) not in dirs:
+            dirs.append(str(top))
+        rules.append(f"{m.group(1)}(/{real}/{'/'.join(parts[len(fixed):])})" if len(fixed) < len(parts)
+                     else f"{m.group(1)}(/{real})")
+    return dirs, rules
 
 
 def _flags(task) -> list:
@@ -622,9 +652,17 @@ def _flags(task) -> list:
         if not project:
             raise ValueError(f"judgment point {task.point}: settings: platform needs the project in "
                              f"${spec.get('project_env')}")
-        # built-in tools only (MCP tools aren't named in --tools)
-        tools = {"Read", "Glob", "Grep", "Bash"} | {r.split("(", 1)[0] for r in allowed if not r.startswith("mcp__")}
+        # built-in tools only (MCP tools aren't named in --tools): the point's own list when it declares one (a mailbox
+        # handler), else reading, Bash for the mail commands, and the tools the rules use (an allow: job)
+        if "tools" in spec:
+            tools = {t for t in spec["tools"].split(",") if t}
+        else:
+            tools = {"Read", "Glob", "Grep", "Bash"} | {r.split("(", 1)[0] for r in allowed if not r.startswith("mcp__")}
         cmd += ["--restricted", "--settings", str(platform_settings(project)), "--tools", ",".join(sorted(tools))]
+        dirs, extra = _linked_rules(allowed, task.cwd)
+        allowed += extra
+        for d in dirs:
+            cmd += ["--add-dir", d]
     elif "tools" in spec:
         cmd += ["--tools", spec["tools"]]
     if allowed:
