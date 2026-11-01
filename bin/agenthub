@@ -426,9 +426,10 @@ def agent_credential(choice: str, presets: dict[str, dict]) -> None:
         f = pathlib.Path(os.path.expanduser(cred["file"]))
         if not f.exists():
             UI().needs_user("agent_token", _(
-                "{label} runs agent-hub's background work with a one-year token that you make and save yourself "
-                "(agent-hub never sees it; needs {needs}). In a terminal (the app's own terminal works): run `{command}` "
-                "and sign in, then run `{store}` and paste the token it printed. Then: agenthub init --agent {name}",
+                "{label} runs agent-hub's background work with a one-year token that you make and save yourself; "
+                "agent-hub never sees it (needs {needs}). In a terminal on this computer (an AI app's own terminal "
+                "works too):\n  1. {command}\n     sign in when it asks; it prints the token\n  2. {store}\n     paste "
+                "the token, then Enter (nothing shows while you paste)\nThen: agenthub init --agent {name}",
                 label=info["label"], needs=cred.get("needs", ""), command=" ".join(cred["command"]),
                 store=cred["store"], name=choice))
             if not (UI().acts and UI().terminal and UI().consent("agent_token_saved", _("Saved it? Check that {label} "

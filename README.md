@@ -54,7 +54,8 @@ By hand, requirements, machines that sleep and where things are kept: [docs/inst
 2. Open your agent in a project's folder (`claude` or `codex`). It picks up the project's setup when the session
    starts, and writes notes as it works.
 3. `agenthub doctor` says what is still missing, each with how to fix it. The status page at http://localhost:18790
-   shows how everything is doing, no terminal needed.
+   shows how everything is doing, no terminal needed
+   ([from another computer](docs/install.md#the-status-page-from-another-computer)).
 
 The next morning, the digest and the to-do list are waiting:
 

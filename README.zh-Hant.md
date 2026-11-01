@@ -51,7 +51,7 @@ curl -fsSL https://raw.githubusercontent.com/imaknas/agent-hub/main/install.sh |
 
 2. 在專案資料夾裡打開你的 agent(`claude` 或 `codex`)。session 開始時它會載入這個專案的設定，邊做事邊寫筆記。
 3. `agenthub doctor` 會列出還缺什麼，每項都附上怎麼補。狀態頁 http://localhost:18790 讓你不開終端機也能看到
-   一切是否正常。
+   一切是否正常([從別台電腦看](docs/install.md#the-status-page-from-another-computer))。
 
 隔天早上，摘要和待辦清單已經在等你:
 

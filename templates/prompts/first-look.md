@@ -5,7 +5,8 @@ where it stands, and what is still open. Its agents read it at the start of ever
 a morning digest.
 
 Write only what the material supports. Don't invent features, plans or problems; where something is unclear, say so
-in a short "Open questions" line rather than guessing. Keep it short: a title line, two to five short sections, then
+in a short line of open questions rather than guessing. Headings, like everything else, are in
+{{content_language}}. Keep it short: a title line, two to five short sections, then
 the to-do section. To-dos come only from what the material states as unfinished (a TODO list in the README, a commit
 saying "WIP" or "part 1", a roadmap); with none, write the empty marker.
 

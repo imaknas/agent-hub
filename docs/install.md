@@ -33,6 +33,23 @@ With a model set up (`agenthub llm setup`) and the scheduler running, the next m
 in the instance's data directory. Without a model they are not written: the librarian's judgment calls fail and say
 why, and `agenthub doctor` reports that judgment points have nowhere to run until you set one up.
 
+## Claude Code's token
+
+agent-hub runs Claude Code for its background work (the nightly tidy-up, agents sent to letters) with a one-year token
+that you make and keep yourself: Claude Code's terms don't let another program collect or store it, so agent-hub never
+sees it. `agenthub init` shows these two steps when the token isn't there yet. In a terminal on the computer that runs
+agent-hub (an AI app's own terminal works too):
+
+1. `claude setup-token`: sign in when it asks; it prints the token.
+2. Save it, pasting the token and pressing Enter (nothing shows while you paste):
+
+   ```bash
+   (umask 077; read -rs t && printf '%s\n' "$t" > ~/.claude/headless-oauth-token)
+   ```
+
+Then `agenthub init --agent claude` checks that Claude Code answers with it. A year later, `agenthub doctor` and an
+alert say it is about to expire; do the same two steps again.
+
 ## Requirements
 
 - macOS (launchd) or Linux (systemd user units). Project sandboxes use Seatbelt on macOS and Landlock on Linux (a
@@ -88,6 +105,24 @@ The status page is a static page. Every scheduler tick rewrites it as `.state/st
 the `local.status-page` service only serves that folder on `127.0.0.1:18790`. Without the service, open that file in a
 browser, or serve the folder yourself: `bin/py -m http.server 18790 --bind 127.0.0.1 --directory .state/status` in the
 hub folder. Without the scheduler, `bin/py bin/gen-status-page.py` writes it once.
+
+## The status page from another computer
+
+The status page listens only on the machine that runs agent-hub (`127.0.0.1:18790`). From another computer, either
+forward it over SSH and open http://localhost:18790 there:
+
+```bash
+ssh -N -L 18790:127.0.0.1:18790 <the hub machine>
+```
+
+or, with [Tailscale](https://tailscale.com/) on both, share it on your tailnet only, from the hub machine:
+
+```bash
+tailscale serve --bg 18790
+```
+
+and open the HTTPS address `tailscale serve status` prints. Don't expose it to the internet: it shows your projects'
+names and recent activity.
 
 ## Where things live
 
