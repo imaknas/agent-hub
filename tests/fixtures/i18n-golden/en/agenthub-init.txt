@@ -59,6 +59,7 @@ create folder <TMP>/ws2
 create folder <TMP>/home/git-origin
 create folder <TMP>/home/.memory-copies
 judgment points stay unset: when needed, they fail plainly and say why. Run agenthub llm setup later
+⚠️ on without a model: reflect. These modules only do judgment-point work, so their jobs fail until agenthub llm setup (or turn one off: agenthub modules disable <name>)
 ✓ config committed: <TMP>/inst/config is a git repo, and its first commit is the config as it is now
 --no-launchd: not installing the scheduler, not applying services
 --- stderr
@@ -68,6 +69,7 @@ $ agenthub init --home <TMP>/inst-nogit --owner Sam --timezone UTC --workspace <
 --- stdout
 ✓ instance directory <TMP>/inst-nogit (owner Sam, modules reflect, backup)
 judgment points stay unset: when needed, they fail plainly and say why. Run agenthub llm setup later
+⚠️ on without a model: reflect. These modules only do judgment-point work, so their jobs fail until agenthub llm setup (or turn one off: agenthub modules disable <name>)
 ⚠️ git is not installed: <TMP>/inst-nogit/config is not a git repo, so config changes are not recorded and onboarding cannot commit the registry. Install git, then run agenthub init again (it commits the config as it is)
 --no-launchd: not installing the scheduler, not applying services
 --- stderr
@@ -77,8 +79,19 @@ $ agenthub init --home <TMP>/inst-anon --owner Sam --timezone UTC --workspace <T
 --- stdout
 ✓ instance directory <TMP>/inst-anon (owner Sam, modules reflect, backup)
 judgment points stay unset: when needed, they fail plainly and say why. Run agenthub llm setup later
+⚠️ on without a model: reflect. These modules only do judgment-point work, so their jobs fail until agenthub llm setup (or turn one off: agenthub modules disable <name>)
 ⚠️ git has no identity on this machine (user.name, user.email not set), so the config repo <TMP>/inst-anon/config commits as "Sam <owner@agent-hub.invalid>", set in that repo only. To commit as yourself: git config --global user.name "Your Name"; git config --global user.email you@example.com; then git -C <TMP>/inst-anon/config config --remove-section user
 ✓ config committed: <TMP>/inst-anon/config is a git repo, and its first commit is the config as it is now
+--no-launchd: not installing the scheduler, not applying services
+--- stderr
+
+$ agenthub init --home <TMP>/inst-defaults --owner Sam --timezone UTC --workspace <TMP>/ws2 --yes --llm none --no-launchd    # default modules, no model
+[exit 0]
+--- stdout
+left off: consolidate, reflect. These modules only do judgment-point work, and no model is set up for that; after agenthub llm setup, turn them on with agenthub modules enable <name>
+✓ instance directory <TMP>/inst-defaults (owner Sam, modules owner)
+judgment points stay unset: when needed, they fail plainly and say why. Run agenthub llm setup later
+✓ config committed: <TMP>/inst-defaults/config is a git repo, and its first commit is the config as it is now
 --no-launchd: not installing the scheduler, not applying services
 --- stderr
 

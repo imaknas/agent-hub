@@ -172,6 +172,29 @@ def write_hub_json(d: dict) -> None:
     hubconf.config_file("hub.json").write_text(json.dumps(d, ensure_ascii=False, indent=2) + "\n")
 
 
+def llm_modules() -> list[str]:
+    """The modules whose work is judgment points (needs_llm: true in modules/<name>.yaml): without a model for those
+    they do nothing useful, and their jobs fail."""
+    import yaml
+    return sorted(f.stem for f in (ROOT / "modules").glob("*.yaml")
+                  if (yaml.safe_load(f.read_text()) or {}).get("needs_llm") is True)
+
+
+def judgment_points_can_run() -> bool:
+    """an LLM provider in hub.json, or a runtime with a completion interface (doctor checks the same)"""
+    import completion
+    import runtime_ports
+    return bool(completion.settings()) or "completion" in runtime_ports.capabilities(runtime_ports.default_name())
+
+
+def llm_modules_warning(names: list[str]) -> str | None:
+    """the line for LLM-only modules that are on while judgment points have nowhere to run"""
+    if not names or judgment_points_can_run():
+        return None
+    return _("⚠️ on without a model: {modules}. These modules only do judgment-point work, so their jobs fail until "
+             "agenthub llm setup (or turn one off: agenthub modules disable <name>)", modules=", ".join(names))
+
+
 def cmd_modules(argv: list[str]) -> int:
     import registry
     import yaml
@@ -180,7 +203,8 @@ def cmd_modules(argv: list[str]) -> int:
         for f in sorted(registry.MODULES_DIR.glob("*.yaml")):
             doc = yaml.safe_load(f.read_text()) or {}
             desc = i18n.translate("modules", doc.get("description") or "", {})   # catalog: locales/<lang>/modules.json
-            print(f"{'✓' if f.stem in on else ' '} {f.stem:12} {desc}")
+            needs = _(" (needs an LLM: agenthub llm setup)") if doc.get("needs_llm") is True else ""
+            print(f"{'✓' if f.stem in on else ' '} {f.stem:12} {desc}{needs}")
         print(_("\nSwitch: agenthub modules enable|disable <name> (changes modules in hub.json, then applies)"))
         return 0
     if len(argv) != 2 or argv[0] not in ("enable", "disable"):
@@ -195,6 +219,8 @@ def cmd_modules(argv: list[str]) -> int:
     d.setdefault("modules", {})[name] = argv[0] == "enable"
     write_hub_json(d)
     print(f"hub.json:modules.{name} = {str(argv[0] == 'enable').lower()}")
+    if argv[0] == "enable" and name in llm_modules() and (warning := llm_modules_warning([name])):
+        print(warning)
     rc = subprocess.run([*hubconf.launch(BIN / "agenthub"), "config", "apply"]).returncode
     print(_("remember to commit hub.json (config as code)."))
     return rc
@@ -283,10 +309,20 @@ def new_hub_json(args: dict, yes: bool) -> dict:
     if "claude" in d["modules"]:
         d["modules"]["claude"] = bool(shutil.which("claude"))
     if "owner" in d["modules"]:
-        d["modules"]["owner"] = not (d.get("assistant") or {}).get("api")
+        # the template's assistant section is a placeholder (its api is filled in): what counts is the module
+        d["modules"]["owner"] = not d["modules"].get("assistant")
     if (d.get("runtime") or {}).get("default", "claude") == "claude" and not shutil.which("claude"):
         # no coding agent: agent features explicitly off (doctor's feature table says so)
         d["runtime"] = {"default": "none"}
+    # with no model for judgment points after llm setup (asked later), the modules that only do judgment-point work
+    # are off by default
+    if not llm_expected(args, yes, (d.get("runtime") or {}).get("default", "claude")):
+        held = [k for k in shipped if d["modules"][k] is True and k in llm_modules()]
+        for k in held:
+            d["modules"][k] = False
+        if held and not args.get("modules"):
+            print(_("left off: {modules}. These modules only do judgment-point work, and no model is set up for that; "
+                    "after agenthub llm setup, turn them on with agenthub modules enable <name>", modules=", ".join(held)))
     default_on = ",".join(k for k in shipped if d["modules"][k] is True)
     picked = args.get("modules") or ask(_("which modules to turn on (available: {modules})", modules=', '.join(shipped)), default_on, yes)
     want = {m.strip() for m in picked.split(",") if m.strip()}
@@ -448,6 +484,9 @@ def cmd_init(argv: list[str]) -> int:
     if created and not dry:
         # a failure doesn't block init: doctor will say judgment points have nowhere to run; agenthub llm setup later
         llm_setup(args, yes)
+        on = [m for m in llm_modules() if (hubconf.get("modules") or {}).get(m) is True]
+        if warning := llm_modules_warning(on):   # turned on by hand, or llm setup ended with no model after all
+            print(warning)
     status = 0
     if not dry and not legacy:
         # after llm setup, which writes hub.json too; an instance whose config repo has no commit yet (init made none
@@ -747,14 +786,27 @@ def write_secret(name: str, value: str) -> pathlib.Path:
     return f
 
 
-def default_llm_choice() -> str:
+def default_llm_choice(runtime: str | None = None) -> str:
     """Based on what this machine has: a coding agent with a completion interface → its own login; otherwise local
-    Ollama models → Ollama; neither = leave unset for now."""
+    Ollama models → Ollama; neither = leave unset for now. `runtime`: the one a hub.json not written yet will name."""
     import provider_ollama
     import runtime_ports
-    if "completion" in runtime_ports.capabilities(runtime_ports.default_name()):
+    if "completion" in runtime_ports.capabilities(runtime or runtime_ports.default_name()):
         return "runtime"
     return "ollama" if provider_ollama.list_models({}) else "none"
+
+
+def llm_expected(args: dict, yes: bool, runtime: str) -> bool:
+    """Whether init's llm setup, asked after the modules, will give judgment points somewhere to run, as llm_setup
+    decides: none; the runtime's own login only with a completion interface; a provider only with a model, which a
+    run without questions gets only from --llm-model."""
+    import runtime_ports
+    choice = args.get("llm") or default_llm_choice(runtime)
+    if choice == "none":
+        return False
+    if choice == "runtime":
+        return "completion" in runtime_ports.capabilities(runtime)
+    return bool(args.get("llm-model")) or (not yes and sys.stdin.isatty())
 
 
 def llm_setup(args: dict, yes: bool) -> int:

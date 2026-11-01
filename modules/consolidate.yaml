@@ -7,6 +7,7 @@ v: 1
 name: consolidate
 type: module
 description: "Nightly: folds memory date files older than 14 days into reference/ (before the librarian)"
+needs_llm: true   # its one step is the consolidate judgment point
 jobs:
 - name: consolidate-memory
   legacy_name: agent-hub/consolidate-memory

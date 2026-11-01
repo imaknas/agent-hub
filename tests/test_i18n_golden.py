@@ -359,6 +359,13 @@ class Golden(unittest.TestCase):
                 **{f"GIT_{w}_{k}": None for w in ("AUTHOR", "COMMITTER") for k in ("NAME", "EMAIL")}}
         out.append(self.agenthub("init", "--home", self.tmp / "inst-anon", *args, "--no-launchd", label="git, no identity",
                                  env=anon, sc={"hooks": "", "which": {"git": "/usr/bin/git"}}))
+        # modules left to their defaults with no model: the ones that only do judgment-point work stay off, and init
+        # says so (the explicit backup,reflect above stays as asked, with a warning)
+        (self.fake_hub() / ".hub-home").unlink()
+        defaults = [a for a in args if a not in ("--modules", "backup,reflect")]
+        out.append(self.agenthub("init", "--home", self.tmp / "inst-defaults", *defaults, "--no-launchd",
+                                 label="default modules, no model", env=fresh,
+                                 sc={"hooks": "", "which": {"git": "/usr/bin/git"}}))
         # --scheduler-only (a step of agenthub upgrade): the two units and nothing else; under launchd it writes the
         # plists into the fake HOME, then finds them in place
         loaded = {"local.agent-hub-scheduler": "path = {bin}/scheduler.py",

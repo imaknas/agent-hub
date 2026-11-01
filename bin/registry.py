@@ -597,7 +597,8 @@ def validate_runs(doc: dict, stem: str, d: dict) -> list[str]:
 # moves over and others' after: still match.
 
 MODULES_DIR = hubconf.ROOT / "modules"
-MODULE_TOP = {"v", "name", "type", "description", "requires_config", "jobs", "services", "secrets", "consumes"}
+MODULE_TOP = {"v", "name", "type", "description", "requires_config", "needs_llm", "jobs", "services", "secrets",
+              "consumes"}
 
 
 def validate_module(doc, stem: str) -> list[str]:
@@ -617,6 +618,10 @@ def validate_module(doc, stem: str) -> list[str]:
         errs.append(_("requires_config must be a list of hub.json keys"))
     else:
         errs += [_("{key} must be set in hub.json first", key=k) for k in req if hubconf.get(k) in (None, "", {}, [])]
+    # needs_llm: true = the module's work is judgment points, so it does nothing useful without a model for them
+    # (agenthub init leaves it off then; agenthub modules says so)
+    if not isinstance(doc.get("needs_llm", False), bool):
+        errs.append(_("needs_llm must be true or false"))
     for key in ("jobs", "services"):
         for x in doc.get(key) or []:
             if isinstance(x, dict) and x.get("cwd", "hub") != "hub":

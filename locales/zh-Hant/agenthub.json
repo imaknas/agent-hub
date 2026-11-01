@@ -142,5 +142,8 @@
  "agenthub init: {problem} (nothing was done; see agenthub --help)": "agenthub init:{problem}(什麼都沒做;用法看 agenthub --help)",
  "⚠️ git has no identity on this machine ({keys} not set), so the config repo {dir} commits as \"{name} <{email}>\", set in that repo only. To commit as yourself: git config --global user.name \"Your Name\"; git config --global user.email you@example.com; then git -C {dir} config --remove-section user": "⚠️ 這台機器的 git 沒有身分(沒設 {keys}),所以 config repo {dir} 用「{name} <{email}>」commit,只設在那個 repo。要用你自己的:git config --global user.name \"你的名字\"; git config --global user.email you@example.com;再 git -C {dir} config --remove-section user",
  "⚠️ git is not installed: {dir} is not a git repo, so config changes are not recorded and onboarding cannot commit the registry. Install git, then run agenthub init again (it commits the config as it is)": "⚠️ 沒有裝 git:{dir} 不是 git repo,config 的改動不會留下紀錄,onboard 也沒辦法 commit 專案登錄。裝好 git 再跑一次 agenthub init(它會把現在的 config commit 起來)",
- "✓ config committed: {dir} is a git repo, and its first commit is the config as it is now": "✓ config 已 commit:{dir} 是 git repo,第一個 commit 就是現在的 config"
+ "✓ config committed: {dir} is a git repo, and its first commit is the config as it is now": "✓ config 已 commit:{dir} 是 git repo,第一個 commit 就是現在的 config",
+ "⚠️ on without a model: {modules}. These modules only do judgment-point work, so their jobs fail until agenthub llm setup (or turn one off: agenthub modules disable <name>)": "⚠️ 開著但沒有模型:{modules}。這些模組只做判斷點的工作,agenthub llm setup 之前它們的 job 都會失敗(或關掉:agenthub modules disable <名稱>)",
+ " (needs an LLM: agenthub llm setup)": "(要有 LLM:agenthub llm setup)",
+ "left off: {modules}. These modules only do judgment-point work, and no model is set up for that; after agenthub llm setup, turn them on with agenthub modules enable <name>": "先不開:{modules}。這些模組只做判斷點的工作,而判斷點還沒有模型可用;agenthub llm setup 之後再用 agenthub modules enable <名稱> 打開"
 }

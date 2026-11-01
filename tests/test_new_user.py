@@ -88,12 +88,39 @@ class NewUser(unittest.TestCase):
 
         r = self.hub_cmd("config", "plan")
         self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
-        self.assertIn("job:consolidate/consolidate-memory", r.stdout, "the template enables consolidate by default")
+        # no coding agent, no Ollama, no --llm: the modules that only do judgment-point work stay off
+        self.assertNotIn("job:consolidate/", r.stdout, "no model for judgment points: consolidate is not on by default")
+        self.assertNotIn("job:reflect/", r.stdout, "no model for judgment points: reflect is not on by default")
+        self.assertIn("job:owner/notify", r.stdout, "modules that need no model keep their defaults")
         self.assertNotIn("job:assistant/", r.stdout, "without the assistant enabled there are no assistant jobs")
 
         r = self.hub_cmd("doctor")
         self.assertNotIn("Traceback", r.stdout + r.stderr)
         self.assertRegex(r.stdout, scheduler_not_running(), "this hub's scheduler is not installed, and doctor must say so")
+
+    def test_llm_only_modules_follow_the_llm(self):
+        """consolidate and reflect only do judgment-point work: on by default when a model is set up, off (and said
+        so) when none is; asked for by name with no model, they stay on with a warning"""
+        def modules():
+            import json
+            return json.loads((self.home / ".agent-hub" / "config" / "hub.json").read_text())["modules"]
+        base = ("init", "--yes", "--no-launchd", "--owner", "Alex", "--workspace", str(self.home / "workspace"))
+        r = self.hub_cmd(*base, "--llm", "anthropic", "--llm-model", "m1")
+        self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
+        self.assertTrue(modules()["consolidate"] and modules()["reflect"], r.stdout)
+        for f in (self.home / ".agent-hub", self.hub / ".hub-home"):
+            shutil.rmtree(f) if f.is_dir() else f.unlink()
+        r = self.hub_cmd(*base, "--llm", "none")
+        self.assertFalse(modules()["consolidate"] or modules()["reflect"], r.stdout)
+        self.assertTrue(modules()["owner"])
+        self.assertIn("consolidate, reflect", r.stdout, "init says which modules it left off")
+        self.assertIn("agenthub modules enable", r.stdout)
+        for f in (self.home / ".agent-hub", self.hub / ".hub-home"):
+            shutil.rmtree(f) if f.is_dir() else f.unlink()
+        r = self.hub_cmd(*base, "--llm", "none", "--modules", "consolidate,owner")
+        self.assertTrue(modules()["consolidate"], "an explicit choice is kept")
+        self.assertIn("consolidate", r.stdout)
+        self.assertIn("agenthub llm setup", r.stdout)
 
     def test_config_repo_gate_rejects_bad_config(self):
         self.hub_cmd("init", "--yes", "--no-launchd", "--owner", "Alex")

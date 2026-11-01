@@ -4,6 +4,9 @@ v: 1
 name: reflect
 type: module
 description: "Every Monday: the previous week's cross-project review (reflect/)"
+# the job always asks the reflect-week judgment point for the analysis, and the statistics come from transcripts,
+# which only a coding agent has
+needs_llm: true
 jobs:
 - name: weekly-reflect
   legacy_name: agent-hub/weekly-reflect
