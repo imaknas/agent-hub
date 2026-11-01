@@ -202,7 +202,8 @@ class LandlockPlan(Fixture):
 PROBE = """
 touch "$RT/a" && echo rt-write
 touch "$WS/a" && echo ws-write
-touch "$BUS/a" && echo bus-write
+touch "$BUS/a" 2>/dev/null || echo bus-write-blocked
+ls "$BUS" >/dev/null 2>&1 || echo bus-read-blocked
 touch "$TOP/outside" 2>/dev/null || echo outside-write-blocked
 mkdir -p "$WS/.ctl" && { touch "$WS/.ctl/settings" 2>/dev/null || echo control-blocked; }
 cat "$OTHER/secret" >/dev/null 2>&1 || echo other-blocked
@@ -230,9 +231,10 @@ a, b = socket.socketpair(); print("socketpair-ok")
 PY
 """
 # what a sandboxed service must still be able to do, whatever the adapter
-WORKS = {"rt-write", "ws-write", "bus-write", "system-read", "bind-declared-ok", "socketpair-ok"}
+WORKS = {"rt-write", "ws-write", "system-read", "bind-declared-ok", "socketpair-ok"}
 # guarantee (isolation.GUARANTEES) → the probe lines that show it holds
-PROBES = {"own-writes-only": {"outside-write-blocked"}, "isolated-reads": {"other-blocked", "cred-blocked"},
+PROBES = {"own-writes-only": {"outside-write-blocked", "bus-write-blocked"},
+          "isolated-reads": {"other-blocked", "cred-blocked", "bus-read-blocked"},
           "declared-port-only": {"bind-other-blocked"}, "unix-sockets-blocked": {"unix-blocked"},
           "keychain-blocked": {"keychain-blocked"}, "signals-blocked": {"signal-blocked"},
           "runtime-files-locked": {"control-blocked"}}

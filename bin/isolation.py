@@ -38,7 +38,7 @@ ADAPTERS = {"darwin": "seatbelt", "linux": "landlock"}
 
 # every guarantee an adapter may declare; the names are the rows of capabilities.md's "What each OS enforces" table
 GUARANTEES = {
-    "own-writes-only": "writes only to its own folders, the bus, tool caches and the temp area",
+    "own-writes-only": "writes only to its own folders, tool caches and the temp area (not the bus)",
     "isolated-reads": "other projects, platform state and credentials can't be read",
     "declared-port-only": "only the port the service declares can be bound",
     "localhost-inbound-only": "connections are accepted only through localhost",

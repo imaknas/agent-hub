@@ -12,9 +12,11 @@ No runtime syntax or paths allowed here (checked by tests/test_runtime_boundary.
 
 policy(name, doc, index) → {
   workspace:          the project folder (Path or None)
-  write:              what may be written beyond the platform defaults (its own runtime, the bus directory, the
-                      registry's allow_write; strings starting with ~). Not the shared tool caches: one project could
-                      change a package another installs next
+  write:              what may be written beyond the platform defaults (its own runtime, the registry's
+                      allow_write; strings starting with ~). Not the shared tool caches: one project could change a
+                      package another installs next. The bus directory only when the project's mail doesn't go through
+                      its outbox (mail_outbox; docs/design/bus-sender.md): a sandboxed project's letters do, so the
+                      bus is in no sandbox
   env:                environment for its sessions, services and jobs: the tool caches (uv, pip, npm, corepack) in its
                       own repo's git dir (<workspace>/.git/agent-hub/cache/<tool>), which only it can write
   protect:            what its sessions load settings, hooks and tools from ([{name, tree}] matched at any depth under
@@ -25,7 +27,8 @@ policy(name, doc, index) → {
                       reading or writing; Path)
   deny_write:         the platform's places (hub, bare repos, memory copies, LaunchAgents; Path)
   deny_read:          the raw notes in the memory copies (glob), the platform's secrets (Path; during the move both the
-                      old and new locations are blocked)
+                      old and new locations are blocked), the bus directory (a project whose mail goes through its
+                      outbox reads its own letters from the view the platform writes into its folder)
   credentials:        user-level credential directories (Path); credential_files: credential files (Path); the
                       locations are in hub.json's credentials
   read:               platform paths readable although platform state is blocked: the registry index the platform CLI
@@ -117,20 +120,28 @@ def cache_env(ws: pathlib.Path | None) -> dict[str, str]:
     return {k: str(ws / ".git" / "agent-hub" / "cache" / v) for k, v in CACHE_ENV.items()} if ws else {}
 
 
+def mail_outbox(doc: dict | None) -> bool:
+    """Whether a project's letters go through its outbox instead of the bus (docs/design/bus-sender.md): its sessions
+    are sandboxed (enforce.sandbox, as render-project-settings decides it; the services-only exemption doesn't change
+    it), so the bus file is in none of its sandboxes and the platform takes its letters from its own folder."""
+    return bool(doc) and (doc.get("enforce") or {}).get("sandbox") is True
+
+
 def policy(name: str, doc: dict, index: dict) -> dict:
     import registry
     d = registry.dirs(doc)
+    outbox = mail_outbox(doc)
     others = [p for n, ps in project_paths(index).items() if n != name for p in ps]
     copies = hubconf.p("memory_copies", "~/.memory-copies")
     return {
         "workspace": d["workspace"],
-        "write": ([tilde(d["runtime"])] if d["runtime"] else []) + [tilde(hubconf.BUS_DIR)]
+        "write": ([tilde(d["runtime"])] if d["runtime"] else []) + ([] if outbox else [tilde(hubconf.BUS_DIR)])
                  + list(doc.get("allow_write") or []),
         "env": cache_env(d["workspace"]),
         "protect": protect(),
         "other_projects": others + others_memory(name, doc, index),
         "deny_write": [hubconf.ROOT, hubconf.p("git_origin"), copies, HOME / "Library" / "LaunchAgents"],
-        "deny_read": [copies / "*" / "memory", *secret_dirs()],
+        "deny_read": [copies / "*" / "memory", *secret_dirs(), *([hubconf.BUS_DIR] if outbox else [])],
         "credentials": [hubconf.path(x) for x in hubconf.get("credentials.dirs", [])],
         "credential_files": [hubconf.path(x) for x in hubconf.get("credentials.files", [])],
         # the registry index; the machine's worker slots (bin/test-runner.py: locked read-only, created by the platform)

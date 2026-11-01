@@ -10,7 +10,8 @@ Tools: inbox, show, thread, send, ack, done (same names and meanings as `agenthu
 (ask the owner), note (written into this project's memory notes). Everything is handed to bin/hubbus (the same
 implementation); the server only decides which project: environment variable AGENTHUB_PROJECT > working directory
 (hubbus.project_of: worktrees and .agent-memory count as the main project). Project not recognised -> every tool
-returns an error saying how to set it.
+returns an error saying how to set it. A sandboxed project's mail goes through its outbox and view, as hubbus does
+in its folder (docs/design/bus-sender.md).
 
 The `instructions` returned by `initialize` carry the platform's rules (templates/mcp-instructions.md) and the number
 of letters still open -- the rules reach any tool that supports MCP without changing any file in the project.
@@ -75,7 +76,7 @@ def resolve_project() -> tuple[str | None, str]:
 
 def unread(project: str) -> int:
     hb = _hubbus()
-    c = hb.db()
+    c = hb.mail_db(project)   # a sandboxed project's own view: the bus is in none of its sandboxes
     try:
         return len(hb.inbox(c, project))
     finally:
@@ -133,8 +134,10 @@ TOOLS = [
 
 
 def hubbus_cli(project: str, *args: str) -> tuple[bool, str]:
+    # a sandboxed project's commands run in its folder, where hubbus takes its outbox and view instead of the bus
+    cwd = hubconf.workspace(project) if _hubbus().outboxed(project) else os.getcwd()
     r = subprocess.run([sys.executable, str(BIN / "hubbus"), *args], capture_output=True, text=True, timeout=60,
-                       cwd=os.getcwd())
+                       cwd=cwd)
     out = (r.stdout + ("\n" + r.stderr if r.stderr.strip() else "")).strip()
     return r.returncode == 0, out or (_("done") if r.returncode == 0 else f"exit {r.returncode}")
 

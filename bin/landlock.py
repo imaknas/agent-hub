@@ -12,11 +12,11 @@ containerized execution and ignoring") as well as SocketBindAllow/Deny and IPAdd
 manager) and starts the service anyway. Landlock needs neither and works the same for services and scheduler jobs.
 
 What it enforces:
-  write    only its own runtime/workspace, policy.write (bus, tool caches, allow_write), the temp areas and a few
-           devices
+  write    only its own runtime/workspace, policy.write (allow_write), the temp areas and a few devices; not the bus
+           (its letters go through its outbox: docs/design/bus-sender.md)
   read     everything except: workspace_root and services_root (own folders allowed again), other projects, platform
-           state and the bus directory (the bus allowed again through policy.write), policy.deny_read (the memory
-           copies' raw notes, the platform's secrets), credentials (directories and files). Landlock only allows, it
+           state and the bus directory, policy.deny_read (the memory copies' raw notes, the platform's secrets),
+           credentials (directories and files). Landlock only allows, it
            can't carve a hole in an allowed tree, so a denied path is cut out by allowing its siblings at every level
            instead (the walk below); anything created later next to a denied path is not readable (fail closed)
   network  bind: only expose.local_port (TCP; Landlock ABI ≥ 4 = kernel 6.7); outbound open, like macOS (no domain
@@ -267,12 +267,8 @@ def restrict(p: dict) -> None:
 def exec_service(pol: dict, dirs: list, port: int | None, argv: list[str]):
     """Restrict this process and exec argv (looked up on PATH). Raises OSError when the sandbox can't be applied
     (nothing was run); a command that can't start under it exits 127."""
-    # a rule needs the path to exist (an fd is opened): create a missing writable folder whose parent exists (the bus,
-    # ~/.npm), not whole trees that belong to another OS (~/Library/Caches/… on Linux); the bus always
-    try:
-        hubconf.BUS_DIR.mkdir(parents=True, exist_ok=True)
-    except OSError:
-        pass
+    # a rule needs the path to exist (an fd is opened): create a missing writable folder whose parent exists, not
+    # whole trees that belong to another OS (~/Library/Caches/… on Linux)
     for w in pol["write"]:
         w = hubconf.path(w)
         if not w.exists() and w.parent.is_dir():

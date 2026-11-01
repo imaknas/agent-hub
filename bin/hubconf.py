@@ -218,9 +218,8 @@ def worktree_lookup() -> bool:
 REGISTRY_INDEX = STATE / "registry" / "index.json"
 
 
-# The event bus has its own directory (hub.json bus_dir): the stage-two sandbox opens writes only to this directory
-# (a session sending a letter and a hook receiving one both write). Not under the hub directory: the projects'
-# permission rules deny writes to ~/agent-hub/**, and deny overrides the sandbox's allowWrite.
+# The event bus has its own directory (hub.json bus_dir), in no project's sandbox: a sandboxed project's letters go
+# through its outbox (docs/design/bus-sender.md), and the hooks that deliver letters run outside the sandbox.
 BUS_DIR = p("bus_dir", ".state/bus")
 BUS_LOG = BUS_DIR / "hubbus.log"
 _OLD_BUS = [STATE / "bus" / "bus.db", STATE / "bus.db"]  # where it used to be (searched in order)

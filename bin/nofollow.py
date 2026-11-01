@@ -9,7 +9,11 @@ workspace) is opened normally: its parent is not the project's to change. Standa
 
   read(base, rel, cap) → bytes | None        None: the file or a folder on the way is missing
   replace(base, rel, data)                   creates missing folders
-Both raise OSError for a link, a FIFO or anything else that isn't a regular file / folder, and for a file over cap.
+  entries(base, rel) → [name] | None         the names in a folder (None: missing); what each is isn't looked at
+  remove(base, rel)                          unlink one entry (a link is removed, never what it points to); missing
+                                             is fine
+All raise OSError for a link, a FIFO or anything else that isn't a regular file / folder on the way (read: the file
+itself too), and read for a file over cap.
 """
 from __future__ import annotations
 
@@ -94,5 +98,30 @@ def replace(base, rel, data: bytes) -> None:
         except OSError:
             pass
         raise
+    finally:
+        os.close(d)
+
+
+def entries(base, rel) -> list[str] | None:
+    try:
+        d = _folder(base, _parts(rel), create=False)
+    except FileNotFoundError:
+        return None
+    try:
+        return os.listdir(d)
+    finally:
+        os.close(d)
+
+
+def remove(base, rel) -> None:
+    parts = _parts(rel)
+    try:
+        d = _folder(base, parts[:-1], create=False)
+    except FileNotFoundError:
+        return
+    try:
+        os.unlink(parts[-1], dir_fd=d)
+    except FileNotFoundError:
+        pass
     finally:
         os.close(d)

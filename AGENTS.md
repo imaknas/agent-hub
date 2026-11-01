@@ -132,7 +132,10 @@ agent-hub is meant for anyone, with any coding agent, any LLM, any key.
   encrypted backup takes it separately with the SQLite backup API), and the mailbox is a projection of it. Project
   sessions use `agenthub send/inbox/done` (described in `templates/agent-instructions.md`); letters reach a session
   through hooks at session start, when the user sends a message and after a tool runs (runtimes with hooks), or are read
-  with the MCP server's `inbox`. `hubbus-bridge` (every 15 minutes) brings the assistant's handoffs into the mailboxes
+  with the MCP server's `inbox`. **A sandboxed project's mail never touches the bus** (it is in none of its sandboxes):
+  its commands write into its own outbox (`<workspace>/.git/agent-hub/outbox/`) and read the view of its own letters
+  (`.git/agent-hub/inbox.json`); `hubbus dispatch` sends each outbox file as that project (a sender named in the file
+  is never read) and writes the views back (design `docs/design/bus-sender.md`). `hubbus-bridge` (every 15 minutes) brings the assistant's handoffs into the mailboxes
   and sends letters for the owner and done for handoffs to the assistant. **A request/question nobody picks up is
   handled by the platform** (`hubbus dispatch`, service `local.agent-hub-mailbox-dispatch`, every minute; design in
   `docs/design/mailbox-routing.md`): for a reply to a session's conversation, if that session is open its hook gets 5
@@ -222,7 +225,8 @@ agent-hub is meant for anyone, with any coding agent, any LLM, any key.
   the oldest waiting events in `AGENT_HUB_EVENTS` (agent jobs: appended to the prompt as data), and only a success
   moves the cursor. Every scheduled run gets `AGENT_HUB_JOB` and the causal chain (`AGENT_HUB_JOB_CHAIN` /
   `_DEPTH`), which hubbus stamps on what it publishes, so a job never triggers itself. Bus events are their writers'
-  claims (any project can write the bus): the platform's event jobs are never agents, and a project's agent event job
+  claims (any unsandboxed project can write the bus; a sandboxed one only its own merge events, through its outbox):
+  the platform's event jobs are never agents, and a project's agent event job
   must declare `allow:` and runs under judgment point `agent-job-event`, which loads only the platform's settings for
   the project (so `allow:` is its whole boundary). `schedulectl events <job>` shows what waits and why, `schedulectl skip <job>` drops a batch
   that keeps failing. Logic in `bin/event_jobs.py`, design in `docs/design/event-jobs.md`
@@ -355,7 +359,7 @@ memory tracking and runs nothing long-lived (most projects) needs nothing under 
   effect right away, run `agenthub config apply`
 - **Phase-two enforcement**: for a project whose registry entry has `enforce: {sandbox: true}`,
   `bin/render-project-settings.py` (platform job, every 15 minutes) writes the sandbox (may write only its own
-  project/runtime/bus/cache, cannot read other projects, network allowlist) and deny rules into its tool settings
+  project/runtime/cache, cannot read other projects or the bus, network allowlist) and deny rules into its tool settings
   (Claude Code: `.claude/settings.local.json`); if they are changed it writes them back and the status page shows red;
   when `enforce` is turned off it removes them. `--report` shows what it would write for each project. What to write is
   computed by `bin/policy.py` (the neutral policy, no runtime syntax allowed, checked by

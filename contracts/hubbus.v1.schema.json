@@ -63,7 +63,8 @@
         "new_reason": {"type": "string"},
         "inferred": {"type": "boolean"},
         "effect": {"type": ["string", "null"]},
-        "handoff": {"type": "object"}
+        "handoff": {"type": "object"},
+        "outbox_refused": {"type": "string", "description": "a notice from agent-hub: this file in the project's outbox was refused and deleted (docs/design/bus-sender.md)"}
       }
     }
   }

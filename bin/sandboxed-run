@@ -3,7 +3,7 @@
 macOS seatbelt.service_profile, Linux landlock.py): render-services puts it in front of the service's command, the
 scheduler in front of the job's. A project with enforce.sandbox gets its services and jobs through manifest.update
 without the owner's approval, so they must not run with more than the project's sessions have (no credentials, no
-other projects, no platform state; writes only to its own folders and the bus; its tool caches are its own, in its
+other projects, no platform state or bus; writes only to its own folders (its letters go into its outbox); its tool caches are its own, in its
 repo's git dir: policy.py env).
 Design: docs/design/capabilities.md.
 

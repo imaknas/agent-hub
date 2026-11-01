@@ -49,7 +49,7 @@ class Policy(unittest.TestCase):
 
     def test_tool_caches_are_per_repo(self):
         a, b = self.pol("a"), self.pol("b")
-        self.assertEqual(set(a["write"]) & set(b["write"]), {self.policy.tilde(hubconf.BUS_DIR)})
+        self.assertEqual(set(a["write"]) & set(b["write"]), set())   # not even the bus (docs/design/bus-sender.md)
         self.assertFalse([w for w in a["write"] if "cache" in w or ".npm" in w], a["write"])
         for v in a["env"].values():
             self.assertTrue(pathlib.Path(v).is_relative_to(self.tmp / "ws" / "a" / ".git"), v)

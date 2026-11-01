@@ -1,7 +1,7 @@
 # Who sent a letter: the bus sender a sandboxed project can't forge
 
-Status: proposal (11-01), for the owner's decision. Found by the fifth blind review of `projects-and-repos.md` (section 9,
-"Holes that exist today"); the other holes on that list are closed in code, this one needs a decision first.
+Status: built (11-01), option A (the owner's choice, 11-01); how it was built is in "As built" at the end. Found by
+the fifth blind review of `projects-and-repos.md` (section 9, "Holes that exist today").
 
 ## The problem
 
@@ -54,9 +54,52 @@ adds a service every send depends on, a port each runtime's network allowlist mu
 Rejected: the file stays writable and readable, so letters can still be deleted, rewritten or read across projects,
 and every consumer has to verify.
 
-## Decisions needed from the owner
+## Decisions (owner, 11-01)
 
-1. A (outbox, recommended) or B (broker)?
-2. Until it lands, sandboxed projects keep a writable bus: is that acceptable for the current sandboxed projects (idea
-   sandboxes), or should `manifest.update` from them be held for the owner's approval in the meantime? (A hold is a
-   stopgap, so it is only offered, not built.)
+1. A, the per-project outbox.
+2. No interim hold on `manifest.update`: A was built instead.
+
+## As built (11-01)
+
+Which projects: those whose sessions are sandboxed, `enforce.sandbox: true` (`policy.mail_outbox`; the
+services-only `service_sandbox_exempt` doesn't change it, since their sessions are sandboxed all the same). Everything
+else keeps the direct path.
+
+- **Policy.** For those projects `policy.write` no longer has the bus directory and `policy.deny_read` has it, so every
+  layer closes it: the session sandbox (`denyRead`, no `allowWrite`), Seatbelt and Landlock (both deny it and used to
+  allow it again only through `policy.write`). The conformance probe in `tests/test_sandboxed_services.py` checks that
+  the bus can be neither written nor read under this machine's adapter.
+- **Writing.** `hubbus send/ack/done/publish` run in such a project's folder (or naming it from outside any project)
+  write one JSON file per command into `<workspace>/.git/agent-hub/outbox/` (`{"v": 1, "op", …}`, renamed into place
+  whole) after the same checks `send` makes, run against the project's view. The client picks the letter id in a shape
+  no other writer uses (`m<MMDDhhmm>-<12 hex>`), so a project can't take an id another writer will use. `publish` is
+  only `merge.done`/`merge.failed`/`session.report` (what `merge-branch` publishes from a session), source and
+  recipient the project itself; the platform keeps them under `outbox:<project>:<id>`. The MCP server does the same:
+  it runs `hubbus` in the project's folder.
+- **Taking them in.** `hubbus dispatch` (every minute) first reads each outbox with `nofollow` (no link followed, no
+  FIFO waited on, at most 512 KiB, at most 100 files a run, oldest name first) and applies each file in one
+  transaction as the outbox's project: `send` through the same function as the CLI, with the sender forced to the
+  project; a reply only in its own threads; `ack`/`done` only of letters addressed to it; a `session` only when the
+  hooks saw that session in this project (`presence`; it decides which session a reply resumes in). A sender named in
+  the file is never read. The file is then deleted; one that is malformed or refused is rolled back, reported to the
+  project in an `info` letter from agent-hub (`outbox_refused` in its payload, which reaches its sessions through the
+  hooks), and deleted too. A busy bus leaves the file for the next run.
+- **Reading.** After dispatching, the same run writes each project's view, `<workspace>/.git/agent-hub/inbox.json`:
+  the letters and records to or from it, with their delivered/done events, other projects' session ids left out; it
+  is replaced with `nofollow.replace` only when it changed. In the project's folder `inbox/show/thread/open-questions`
+  load it into an in-memory copy of the bus's tables and run the usual code on it; `inbox` doesn't mark anything
+  delivered there (the hooks do).
+- **Hooks.** Mail delivery stays outside the sandbox with the user's authority, reading and writing only the bus
+  (presence, delivery); it is not one of `hub-event`'s `AS_PROJECT` handlers, which could not reach the bus. Its
+  project is the one whose folder the session is in by path: `hubbus.project_of` no longer follows a sandboxed
+  project's `.git` pointer files, where a `gitdir:` naming another project's repo used to deliver that project's mail
+  (found while building this).
+- **Tests.** `tests/test_bus_sender.py`: the attacks (a `manifest.update` claiming another project through `send
+  --from`, through a forged outbox file and straight into the SQLite file under the real Seatbelt profile; reading
+  another project's letters through the CLI, the hooks and the file) failed on the code before; then the outbox, the
+  view, refusals, links, FIFOs, forged sessions, ids, `merge-branch`'s events, the MCP server and the unsandboxed path.
+
+Left as it was: a sandboxed project's `.git/agent-hub/outbox` can be written by anything that runs as the project, so
+the narrowing of a confined run (`AGENT_HUB_CONFINED`) and of an agent the platform sends letters for
+(`propose_apply.py`) stay checks in the client, as they were while the bus was writable; what changed is that nothing
+can send as another project. Letters from a sandboxed project arrive within a minute instead of at once.

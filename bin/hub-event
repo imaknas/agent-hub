@@ -122,6 +122,8 @@ DENY_HANDLERS = {"guard"}
 # in its repo or read files it can plant run as the project (`hub-event as-project`, through sandboxed-run) and hand
 # back their text as JSON; its memory sync is the platform's bundle path (project_git.sync_memory). Design:
 # docs/design/projects-and-repos.md section 4.
+# mail is not one of them: it reads and writes only the bus (presence, delivery), which no sandbox can reach, and
+# reads nothing from the project's folder (a sandboxed project's folder is its by path: hubbus.project_of).
 AS_PROJECT = {"memory_pull", "local_setup", "nudge"}
 
 

@@ -34,6 +34,15 @@ A letter's state is a projection, never modified in place: inbox = messages to X
 
 Addresses are projects (names in the project registry projects/*.yaml, agent-hub) and owner, never sessions.
 
+A sandboxed project's mail (enforce.sandbox: policy.mail_outbox; design docs/design/bus-sender.md) never touches the
+bus, which is in none of its sandboxes: send/ack/done/publish write one JSON file per letter into its own outbox
+(<workspace>/.git/agent-hub/outbox/, which only it can write; the letter id is picked here, OUTBOX_ID), and
+inbox/show/thread/open-questions read the view of its own letters (<workspace>/.git/agent-hub/inbox.json). The mailbox
+service (dispatch, every minute) moves each outbox file into the bus with source = the outbox's project (a sender named
+in the file is never read), checked like the command it stands for, then deletes it; a file it refuses is reported to
+the project in a letter and deleted too. It writes each view back after dispatching. The session hooks deliver mail
+outside the sandbox, from the bus, to the project the folder belongs to by path.
+
 Usage (in a project directory; the sender defaults to the current directory's project):
   hubbus send --to <project|owner> --type <request|question|info|progress|done> --text "…" [--reply-to <id>]
   hubbus send --to owner --type task --text "…" [--due YYYY-MM-DD] [--context …] [--new-reason …] [--id …]
@@ -60,7 +69,8 @@ For hooks / the schedule / other scripts:
                                       letters, letters to the owner and dones for handoffs → the personal assistant,
                                       dispatch (same as dispatch), prune letters closed more than 60 days ago
   hubbus dispatch                     the platform handles letters nobody took (launchd, every minute; design
-                                      docs/design/mailbox-routing.md):
+                                      docs/design/mailbox-routing.md); first it takes the sandboxed projects'
+                                      outboxes in, last it writes their mailbox views:
                                       conversation (a request/question replying to some session) → if that session
                                       is open, wait CONVERSATION_WAIT minutes for its hook, then resume it in the
                                       background (when the context isn't large) or treat it as a delegation;
@@ -121,12 +131,15 @@ import event_jobs  # noqa: E402  the causal chain of scheduled runs (docs/design
 import gitdirs  # noqa: E402  where a folder's repo is, read without starting git
 import hubconf  # noqa: E402  paths, the owner address, the project registry all come from the platform settings
 import i18n  # noqa: E402
+import nofollow  # noqa: E402  a project's outbox and view, read and written without following its links
+import policy  # noqa: E402  whose mail goes through an outbox (mail_outbox)
 import prompts  # noqa: E402  the platform's templates and prompt texts, filled with the configured names
 
 _ = i18n.domain(__file__)
 
 HUB = hubconf.ROOT
-DB = hubconf.bus_db()
+# only a path here: a sandboxed project's command never reaches the bus directory (db() moves an old bus.db here)
+DB = hubconf.BUS_DIR / "bus.db"
 AGENT_JOBS = hubconf.STATE / "agent-jobs"
 ASSISTANT_CLI = hubconf.p("assistant.cli")
 ASSISTANT_HOME = ASSISTANT_CLI.parents[2] if ASSISTANT_CLI else None   # <runtime>/.venv/bin/muninn → <runtime>
@@ -186,6 +199,28 @@ PRUNE_DAYS = 60
 # the item the assistant answers 400 to is retried this long, and skipped only if still refused (records job.failed)
 POISON_HOURS = 24
 HOOK_TIMEOUT_S = 2
+# a sandboxed project's outbox and mailbox view, relative to its workspace (docs/design/bus-sender.md)
+OUTBOX = ".git/agent-hub/outbox"
+VIEW = ".git/agent-hub/inbox.json"
+OUTBOX_CAP = 512 << 10    # one outbox file (a manifest.update carries a whole registry entry)
+OUTBOX_RUN = 100          # files taken from one outbox per run; the rest wait for the next minute
+VIEW_CAP = 32 << 20
+# the id a project picks for its letter: a shape no other writer uses, so it can't take an id another writer will use
+OUTBOX_ID = re.compile(r"^m\d{8}-[0-9a-f]{12}$")
+# the events a sandboxed project publishes besides letters (merge-branch, run in its session); their ids are kept under
+# outbox:<project>:
+OUTBOX_PUBLISH = ("merge.done", "merge.failed", "session.report")
+EVENT_ID = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._:-]{0,199}$")
+SEND_FIELDS = ("to", "type", "text", "reply_to", "task", "question", "due", "context", "new_reason", "inferred")
+
+
+class Refused(Exception):
+    """A command refused, with the reason for whoever ran it: the CLI exits with it, the outbox import reports it to
+    the project."""
+
+
+def refuse(msg: str):
+    raise Refused(msg)
 
 
 def now() -> datetime.datetime:
@@ -203,12 +238,46 @@ def log(msg: str) -> None:
 
 
 def db(timeout: float = 30) -> sqlite3.Connection:
+    if DB == hubconf.BUS_DIR / "bus.db":
+        hubconf.bus_db()   # moves it here from where it used to be
     DB.parent.mkdir(parents=True, exist_ok=True)
     c = sqlite3.connect(DB, timeout=timeout, isolation_level=None)
     c.row_factory = sqlite3.Row
     c.execute(f"PRAGMA busy_timeout={int(timeout * 1000)}")
     c.execute("PRAGMA journal_mode=WAL")
-    c.executescript("""
+    c.executescript(SCHEMA)
+    if not c.execute("SELECT 1 FROM meta WHERE key='generation'").fetchone():   # a read first: readers take no write lock
+        c.execute("INSERT OR IGNORE INTO meta(key, value) VALUES('generation', ?)", (secrets.token_hex(8),))
+    return c
+
+
+def view_db(project: str) -> sqlite3.Connection:
+    """A sandboxed project's own mailbox, from the view the platform writes into its folder: an in-memory database
+    with the bus's tables, so every reader (inbox, thread, open_questions, the checks send makes) works on it
+    unchanged. Missing (the platform hasn't written it yet): empty."""
+    c = sqlite3.connect(":memory:", isolation_level=None)
+    c.row_factory = sqlite3.Row
+    c.executescript(SCHEMA)
+    ws = hubconf.workspace(project)
+    try:
+        data = json.loads((ws / VIEW).read_bytes()) if ws else {}
+    except FileNotFoundError:
+        data = {}
+    except (OSError, ValueError) as e:
+        refuse(_("hubbus: cannot read {project}'s mailbox view ({e}); the platform writes it again within a minute",
+                 project=project, e=e))
+    for e in data.get("events") or []:
+        c.execute("INSERT OR IGNORE INTO events(seq, id, ts, type, source, to_project, ref, payload)"
+                  " VALUES(:seq, :id, :ts, :type, :source, :to_project, :ref, :payload)", e)
+    return c
+
+
+def mail_db(project: str | None) -> sqlite3.Connection:
+    """Where this project's mail is read: its view when it goes through an outbox, else the bus."""
+    return view_db(project) if outboxed(project) else db()
+
+
+SCHEMA = """
     CREATE TABLE IF NOT EXISTS events(
       seq INTEGER PRIMARY KEY AUTOINCREMENT, id TEXT UNIQUE NOT NULL, ts TEXT NOT NULL,
       type TEXT NOT NULL, source TEXT NOT NULL, to_project TEXT, ref TEXT,
@@ -222,10 +291,7 @@ def db(timeout: float = 30) -> sqlite3.Connection:
     -- meta.generation: a random id fixed when this file is created; a reader's cursor (event jobs) is only valid for
     -- the generation it was taken in (a corrupt file moved aside starts a new one, seq from 1 again)
     CREATE TABLE IF NOT EXISTS meta(key TEXT PRIMARY KEY, value TEXT NOT NULL);
-    """)
-    if not c.execute("SELECT 1 FROM meta WHERE key='generation'").fetchone():   # a read first: readers take no write lock
-        c.execute("INSERT OR IGNORE INTO meta(key, value) VALUES('generation', ?)", (secrets.token_hex(8),))
-    return c
+    """
 
 
 def publish(c, eid, etype, source, to_project=None, ref=None, payload=None) -> bool:
@@ -271,16 +337,30 @@ def canon(addr: str) -> str:
     return KNAS if addr in OWNERS else addr
 
 
+def outboxed(project: str | None) -> bool:
+    """Whether this project's mail goes through its outbox (policy.mail_outbox: its sessions are sandboxed)."""
+    return bool(project) and policy.mail_outbox(hubconf.projects().get(project))
+
+
 def project_of(cwd: pathlib.Path) -> str | None:
-    """Which project cwd belongs to: git's main checkout (worktrees and .agent-memory count as the main project),
-    then path-prefix matching. The main checkout is read from the .git pointer files (gitdirs), not asked of git: a
-    hook runs this as the user, and the repo's config can hang even rev-parse."""
+    """Which project cwd belongs to: a sandboxed project's folder by path alone; otherwise git's main checkout
+    (worktrees and .agent-memory count as the main project), then path-prefix matching. The main checkout is read from
+    the .git pointer files (gitdirs), not asked of git: a hook runs this as the user, and the repo's config can hang
+    even rev-parse. In a sandboxed project's folder those pointer files are the project's to write: a `gitdir:` naming
+    another project's repo would make its session that project's (its mail delivered, its presence recorded)."""
     paths = {}
     for name, p in projects().items():
         try:
             paths[p.resolve()] = name
         except OSError:
             pass
+    try:
+        here = cwd.resolve()
+    except OSError:
+        return None
+    for p in (here, *here.parents):
+        if p in paths and outboxed(paths[p]):
+            return paths[p]
     found = gitdirs.dirs(cwd)
     candidates = [found.common.parent] if found else []
     candidates.append(cwd.resolve())
@@ -397,7 +477,7 @@ def send_record(c, a, sender: str, mid: str, p: dict) -> str | None:
         return None
     key = (a.id or task_key(sender, a.text)) if kind == "raised" else a.task
     if not KEY_RE.match(key):
-        sys.exit(_("hubbus: {key!r} is not a valid task key", key=key))
+        refuse(_("hubbus: {key!r} is not a valid task key", key=key))
     rec = {"ph": "0.3", "ext": "acts/0.3", "type": kind, "key": key, "project": sender, "ts": iso()}
     need = need_state(c, sender, key)
     if kind == "raised" and need:
@@ -440,7 +520,7 @@ def send_decision(c, a, sender: str, mid: str, p: dict) -> str | None:
     asker = {"origin": "requester", "by": hubconf.party("requester", sender)}
     if a.type == "question":
         if not KEY_RE.match(mid):
-            sys.exit(_("hubbus: {key!r} is not a valid question id", key=mid))
+            refuse(_("hubbus: {key!r} is not a valid question id", key=mid))
         rec = base | asker | {"id": f"r:{mid}", "type": "raised", "key": mid,
                               "terms": {"text": a.text, **({"due": a.due} if a.due else {})}, "terms_rev": 1}
         recs = [rec]
@@ -561,7 +641,7 @@ def get_event(c, eid):
 def must_message(c, mid):
     r = get_message(c, mid)
     if r is None:
-        sys.exit(_("hubbus: no letter {mid}", mid=mid))
+        refuse(_("hubbus: no letter {mid}", mid=mid))
     return r
 
 
@@ -1364,10 +1444,13 @@ def confined_refusal(a, here) -> str | None:
     return None
 
 
-def confined_letter(r, here) -> None:
-    """A confined run touches only letters to or from its own project (show, thread, ack, done)."""
+def confined_letter(r, here, boxed: bool = False) -> None:
+    """A confined run touches only letters to or from its own project (show, thread, ack, done); so does a sandboxed
+    project's letter (boxed), whose reply carries the original's handoff and session."""
+    if boxed and here not in (r["to_project"], r["source"]):
+        refuse(_("hubbus: {id} is not a letter to or from {project}", id=r["id"], project=here))
     if os.environ.get("AGENT_HUB_CONFINED") and here not in (r["to_project"], r["source"]):
-        sys.exit(_("hubbus: a confined run reads only its own project's letters"))
+        refuse(_("hubbus: a confined run reads only its own project's letters"))
 
 
 def chain_env(rows) -> dict:
@@ -1549,6 +1632,164 @@ def dispatch(c, rt=None) -> int:
     return waiting
 
 
+# ---------- sandboxed projects' outboxes and views (docs/design/bus-sender.md) ----------
+
+def take_outboxes(c) -> None:
+    """Every sandboxed project's outbox → the bus, sent by that project. Each file is read without following a link or
+    waiting on a FIFO, at most OUTBOX_CAP, oldest name first, checked like the command it stands for with the outbox's
+    project as the sender (a sender named in the file is never read), and deleted once it is in; one that is
+    malformed or refused is never applied: it is reported to the project in a letter and deleted too. A bus that is
+    busy leaves the file for the next run."""
+    for proj, ws in projects().items():
+        if not outboxed(proj) or not ws.is_dir():
+            continue
+        try:
+            names = nofollow.entries(ws, OUTBOX) or []
+        except OSError as e:
+            log_once(f"outbox-{proj}", _("{project}: cannot read its outbox: {e}", project=proj, e=e))
+            continue
+        for name in sorted(n for n in names if not n.startswith("."))[:OUTBOX_RUN]:
+            rel = f"{OUTBOX}/{name}"
+            try:
+                raw = nofollow.read(ws, rel, OUTBOX_CAP)
+                if raw is None:
+                    continue
+                entry = json.loads(raw)
+                c.execute("BEGIN IMMEDIATE")
+                try:
+                    take(c, proj, entry)
+                except BaseException:
+                    c.execute("ROLLBACK")
+                    raise
+                c.execute("COMMIT")
+            except sqlite3.Error:
+                raise
+            except (OSError, ValueError, TypeError, Refused) as e:
+                outbox_refused(c, proj, name, str(e) or type(e).__name__)
+            try:
+                nofollow.remove(ws, rel)
+            except OSError as e:
+                log_once(f"outbox-{proj}-{name}", _("{project}: cannot delete {name} from its outbox: {e}",
+                                                      project=proj, name=name, e=e))
+
+
+def own_session(c, project: str, session) -> str | None:
+    """A session id named in an outbox file, only when the hooks saw that session in this project (presence is
+    written outside the sandbox): a reply to it is resumed in that session, so another project's must never pass."""
+    if not isinstance(session, str):
+        return None
+    r = c.execute("SELECT project FROM presence WHERE session=?", (session,)).fetchone()
+    return session if r and r["project"] == project else None
+
+
+def _strings(entry: dict, keys) -> None:
+    for k in keys:
+        if entry.get(k) is not None and not isinstance(entry[k], str):
+            refuse(_("hubbus: {key} must be text", key=k))
+
+
+def take(c, proj: str, entry) -> None:
+    """One outbox entry into the bus (inside the caller's transaction): send, ack, done or publish, as proj."""
+    if not isinstance(entry, dict) or entry.get("v") != 1:
+        refuse(_("hubbus: not an outbox entry (an object with v 1)"))
+    session = own_session(c, proj, entry.get("session"))
+    op = entry.get("op")
+    if op == "send":
+        _strings(entry, ("id", *(k for k in SEND_FIELDS if k != "inferred")))
+        if not OUTBOX_ID.match(entry.get("id") or ""):
+            refuse(_("hubbus: a letter id from an outbox has the form m<MMDDhhmm>-<12 hex digits>"))
+        if entry.get("type") not in TYPES or not entry.get("to") or not entry.get("text"):
+            refuse(_("hubbus: a letter needs to, text and a type of {types}", types="/".join(TYPES)))
+        a = argparse.Namespace(cmd="send", sender=proj, id=entry["id"],
+                               **{k: entry.get(k) for k in SEND_FIELDS if k != "inferred"},
+                               inferred=entry.get("inferred") is True)
+        send_letter(c, a, proj, session, proj, boxed=True)
+    elif op in ("ack", "done"):
+        ids = entry.get("ids")
+        if not isinstance(ids, list) or not 0 < len(ids) <= 50 or not all(isinstance(i, str) for i in ids):
+            refuse(_("hubbus: ids must be a list of 1 to 50 letter ids"))
+        _strings(entry, ("note",))
+        for i in ids:
+            r = get_event(c, i) if op == "done" else get_message(c, i)
+            if r is None or r["to_project"] != proj:
+                refuse(_("hubbus: {id} is not a letter to {project}", id=i, project=proj))
+            if op == "ack":
+                publish(c, f"{i}:ack:{session or 'outbox'}", "message.delivered", proj, proj, i,
+                        {"session": session, "via": "ack"})
+            else:
+                publish(c, f"{i}:done", "message.done", proj, proj, i,
+                        {"note": entry.get("note") or _("handled"), "session": session})
+    elif op == "publish":
+        if entry.get("type") not in OUTBOX_PUBLISH or not isinstance(entry.get("id"), str) \
+                or not EVENT_ID.match(entry["id"]) or not isinstance(entry.get("payload"), dict):
+            refuse(_("hubbus: a published event needs an id and a payload, and a type of {types}",
+                     types="/".join(OUTBOX_PUBLISH)))
+        publish(c, f"outbox:{proj}:{entry['id']}", entry["type"], proj, proj, None, entry["payload"])
+    else:
+        refuse(_("hubbus: unknown outbox operation {op!r}", op=op))
+
+
+def outbox_refused(c, proj: str, name: str, why: str) -> None:
+    """Tell the project a file in its outbox was not sent (a letter its sessions get through the hooks), once."""
+    why = why[:300]
+    log(_("{project}: refused {name} from its outbox: {why}", project=proj, name=name, why=why))
+    publish(c, f"outbox-refused-{proj}-{hashlib.sha1(name.encode()).hexdigest()[:12]}", "message",
+            hubconf.hub_project(), proj, None,
+            {"type": "info", "outbox_refused": name,
+             "text": _("A file in {project}'s outbox was not sent and has been deleted ({name}): {why}",
+                       project=proj, name=name, why=why)})
+
+
+VIEW_SQL = """
+SELECT * FROM events WHERE (type IN ('message','record') AND (to_project=:p OR source=:p))
+   OR (type IN ('message.delivered','message.done') AND ref IN
+       (SELECT id FROM events WHERE type IN ('message','record') AND (to_project=:p OR source=:p)))
+ORDER BY seq"""
+
+
+def view(c, proj: str) -> dict:
+    """A sandboxed project's mailbox: the letters and records to or from it, with what happened to them. Other
+    projects' session ids are left out (only a hint to them, and a way in to anyone who could name one)."""
+    events = []
+    for r in c.execute(VIEW_SQL, {"p": proj}):
+        p = payload(r)
+        if r["source"] != proj:
+            p.pop("from_session", None)
+            p.pop("session", None)
+        if r["to_project"] != proj:
+            p.pop("to_session", None)
+        events.append({**dict(r), "payload": json.dumps(p, ensure_ascii=False)})
+    return {"v": 1, "project": proj, "events": events}
+
+
+def write_views(c) -> None:
+    """Each sandboxed project's view into its folder, only when it changed; replaced, never written through a link."""
+    for proj, ws in projects().items():
+        if not outboxed(proj) or not ws.is_dir():
+            continue
+        data = json.dumps(view(c, proj), ensure_ascii=False, sort_keys=True).encode()
+        try:
+            cur = nofollow.read(ws, VIEW, VIEW_CAP)
+        except OSError:
+            cur = None
+        if cur == data:
+            continue
+        try:
+            nofollow.replace(ws, VIEW, data)
+            log_once(f"view-{proj}", "")
+        except OSError as e:
+            log_once(f"view-{proj}", _("{project}: cannot write its mailbox view: {e}", project=proj, e=e))
+
+
+def mailbox_step(c, step) -> None:
+    try:
+        step(c)
+    except Exception as e:
+        if c.in_transaction:
+            c.execute("ROLLBACK")
+        log(_("dispatch {step} failed: {e!r}", step=step.__name__, e=e))
+
+
 def dispatch_locked(c, pull=False) -> None:
     """The bridge dispatches too: it takes the same lock as launchd's every-minute run, and skips if it can't get it
     (so the two never dispatch at the same time)."""
@@ -1558,6 +1799,7 @@ def dispatch_locked(c, pull=False) -> None:
             fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
         except OSError:
             return
+        mailbox_step(c, take_outboxes)   # before dispatching: a request from a sandboxed project is handled this run
         # also pull handoffs every minute (0.2 s): questions the assistant asks for the owner (asks) needn't wait for
         # the bridge's 15 minutes
         if pull and hubconf.owner_side() == "assistant":
@@ -1577,7 +1819,10 @@ def dispatch_locked(c, pull=False) -> None:
                         if c.in_transaction:
                             c.execute("ROLLBACK")
                         log(_("dispatch {step} failed: {e!r}", step=step.__name__, e=e))
-        dispatch(c)
+        try:
+            dispatch(c)
+        finally:
+            mailbox_step(c, write_views)   # after: the view shows what dispatch claimed
 
 
 def prune(c) -> None:
@@ -1692,9 +1937,200 @@ def cmd_status(as_json: bool) -> None:
         print(_("Broken bus.db moved aside: {files}", files=", ".join(corrupt)))
 
 
+# ---------- the mail commands (the bus, or a sandboxed project's outbox and view) ----------
+
+MAIL_COMMANDS = ("send", "inbox", "show", "thread", "ack", "done", "open-questions", "publish")
+
+
+def mail_box(a, here) -> str | None:
+    """The project whose outbox and view this command uses, or None (the bus). A sandboxed project's command never
+    touches the bus: run in its folder, or outside any project naming it (--from/--project/--source)."""
+    if outboxed(here):
+        return here
+    named = getattr(a, "sender", None) or getattr(a, "project", None) or getattr(a, "source", None)
+    return named if not here and outboxed(named) else None
+
+
+def outbox_id() -> str:
+    return f"m{now():%m%d%H%M}-{secrets.token_hex(6)}"
+
+
+def outbox_put(project: str, entry: dict) -> None:
+    """One file in the project's outbox, renamed into place whole (the platform skips names starting with a dot)."""
+    d = hubconf.workspace(project) / OUTBOX
+    d.mkdir(parents=True, exist_ok=True)
+    name = f"{time.time_ns()}-{secrets.token_hex(4)}.json"
+    tmp = d / f".{name}"
+    tmp.write_text(json.dumps({"v": 1, **entry}, ensure_ascii=False))
+    tmp.rename(d / name)
+
+
+def queued(project: str) -> None:
+    print(_("(in {project}'s outbox: the platform sends it within a minute)", project=project), file=sys.stderr)
+
+
+def send_letter(c, a, sender: str, session, here, boxed: bool = False) -> str:
+    """send's checks and write, for the CLI and for a letter taken from a sandboxed project's outbox (boxed: sender =
+    that project, never a name in the file; a reply only in its own threads). Returns the id to print."""
+    a.to = canon(a.to)
+    if not sender or not valid_address(sender) or sender in OWNERS:
+        refuse(_("hubbus: cannot tell which project the sender is (outside a project folder add --from <project>)"))
+    if not valid_address(a.to):
+        refuse(_("hubbus: there is no address {to} (project names are in the project registry, {hub}, or {owners})",
+                 to=a.to, hub=hubconf.hub_project(), owners="/".join(sorted(OWNERS))))
+    p = {"type": a.type, "text": a.text, "from_session": session}
+    if a.type in KNAS_ONLY and a.to != KNAS:
+        refuse(_("hubbus: {type} can only be sent to {alias}", type=a.type, alias=OWNER_ALIAS))
+    if a.type == "drop" and not (a.task or a.question):
+        refuse(_("hubbus: drop needs --task <key> or --question <id> (which task/question is no longer needed)"))
+    if a.question:
+        if a.task or a.to != KNAS or a.type not in ("done", "drop"):
+            refuse(_("hubbus: --question is only for a done/drop sent to {alias} (not together with --task)",
+                     alias=OWNER_ALIAS))
+        q = question_asked(c, a.question)
+        if q is None or q["project"] != sender:
+            refuse(_("hubbus: {question} is not a question {sender} asked {owner}", question=a.question,
+                     sender=sender, owner=OWNER))
+    if a.inferred and not (a.type in ("done", "drop") and a.task):
+        refuse(_("hubbus: --inferred is only for a done/drop with --task"))
+    for k in TASK_FIELDS:
+        if getattr(a, k):
+            p[k] = getattr(a, k)
+    if a.reply_to:
+        orig = must_message(c, a.reply_to)
+        confined_letter(orig, here, boxed)   # a reply carries the original's handoff and session
+        p["reply_to"] = a.reply_to
+        if canon(orig["source"]) == a.to and payload(orig).get("from_session"):
+            p["to_session"] = payload(orig)["from_session"]
+        if payload(orig).get("handoff_id") is not None:
+            p["handoff_id"] = payload(orig)["handoff_id"]
+    mid = a.id or new_id()
+    if RECORDS and a.to == OWNER_ADDRESS:
+        if a.inferred:
+            refuse(_("hubbus: an inferred claim is sent by registrar itself (hubbus record-publish); send does not "
+                     "translate it"))
+        if (eid := send_record(c, a, sender, mid, p)):
+            return eid
+    publish(c, mid, "message", sender, a.to, a.reply_to, p)  # already sent with the same id: nothing happens
+    return mid
+
+
+def mail_command(a) -> None:
+    """send / inbox / show / thread / ack / done / open-questions / publish. For a sandboxed project the reads come
+    from its view and the writes go into its outbox, after the same checks against the view that the platform makes
+    against the bus when it takes them in."""
+    import runtime_ports  # the sending session: ask the runtime (currently an environment variable Claude Code sets)
+    session = runtime_ports.current_session()
+    here = project_of(pathlib.Path.cwd())
+    box = mail_box(a, here)
+    if box:
+        here = box
+    c = view_db(box) if box else db()
+    if a.cmd == "publish":
+        pl = json.loads(a.payload)
+        if box:
+            if a.type not in OUTBOX_PUBLISH or a.source != box or (a.to or box) != box or a.ref:
+                refuse(_("hubbus: {project} publishes only its own {types} (source and recipient itself, no ref)",
+                         project=box, types="/".join(OUTBOX_PUBLISH)))
+            if a.id and not EVENT_ID.match(a.id):
+                refuse(_("hubbus: {id!r} is not a valid event id", id=a.id))
+            outbox_put(box, {"op": "publish", "type": a.type, "id": a.id or outbox_id(), "payload": pl})
+            return queued(box)
+        publish(c, a.id or f"e{now():%m%d%H%M%S}-{secrets.token_hex(3)}", a.type, a.source, a.to, a.ref, pl)
+    elif a.cmd == "send":
+        if box:
+            if a.sender and a.sender != box:
+                refuse(_("hubbus: {project} sends only as itself (no --from {sender})", project=box, sender=a.sender))
+            if a.id and not OUTBOX_ID.match(a.id):
+                refuse(_("hubbus: a letter id from an outbox has the form m<MMDDhhmm>-<12 hex digits>"))
+            a.id = a.id or outbox_id()
+        out = send_letter(c, a, a.sender or here, session, here, boxed=bool(box))
+        if box:
+            outbox_put(box, {"op": "send", "id": a.id, "session": session, **{k: getattr(a, k) for k in SEND_FIELDS}})
+            queued(box)
+            out = a.id
+        print(out)
+    elif a.cmd == "inbox":
+        project = a.project or here
+        if not project:
+            refuse(_("hubbus: not in a project folder, add --project <name>"))
+        if box and project != box:
+            refuse(_("hubbus: {project} reads only its own mailbox", project=box))
+        rows = inbox(c, project, session)
+        for r in rows:
+            print(fmt(r))
+        print(_("({project}: {n} open {n:letter|letters})", project=project, n=len(rows)) if rows else
+              _("{project}'s mailbox is empty", project=project))
+        if project == here and not box:   # a sandboxed session's letters are marked delivered by its hooks
+            c.execute("BEGIN IMMEDIATE")
+            mark_delivered(c, [r for r in rows if not r["delivered"]], session, "inbox")
+            c.execute("COMMIT")
+    elif a.cmd == "show":
+        r = must_message(c, a.id)
+        confined_letter(r, here)
+        print(fmt(r))
+        for e in c.execute("SELECT * FROM events WHERE ref=? ORDER BY seq", (a.id,)):
+            print(f"  {e['ts'][5:16]} {e['type']} {e['payload']}")
+    elif a.cmd == "thread":
+        r = must_message(c, a.id)
+        confined_letter(r, here)
+        for r in thread_chain(c, r):
+            print(fmt(r))
+    elif a.cmd == "open-questions":
+        project = canon(a.project) if a.project else None
+        if os.environ.get("AGENT_HUB_CONFINED"):   # only its own project's questions
+            project = here
+        if box:
+            if project and project != box:
+                refuse(_("hubbus: {project} reads only its own mailbox", project=box))
+            project = box
+        rows = open_questions(c, project)
+        if a.json:
+            print(json.dumps([{k: q[k] for k in ("id", "project", "ts", "text")} for q in rows], ensure_ascii=False))
+        else:
+            for q in rows:
+                print(f"[{q['id']}] {q['project']} {q['ts'][:16]} {q['text'][:100]}")
+    elif box:   # ack, done: only letters to this project
+        for i in a.ids:
+            r = get_event(c, i) if a.cmd == "done" else get_message(c, i)
+            if r is None or r["to_project"] != box:
+                refuse(_("hubbus: {id} is not a letter to {project}", id=i, project=box))
+        outbox_put(box, {"op": a.cmd, "ids": a.ids, "session": session,
+                         **({"note": a.note} if a.cmd == "done" and a.note else {})})
+        queued(box)
+        if a.cmd == "done":
+            for i in a.ids:
+                print(f"{i} done")
+    elif a.cmd == "ack":
+        c.execute("BEGIN IMMEDIATE")
+        # ack = "I've taken it on": recorded separately from the hook's delivery (they used to share an id, so after a
+        # hook delivery an ack recorded nothing)
+        for i in a.ids:
+            r = must_message(c, i)
+            confined_letter(r, here)
+            publish(c, f"{r['id']}:ack:{session or 'cli'}", "message.delivered", r["to_project"], r["to_project"], r["id"],
+                    {"session": session, "via": "ack"})
+        c.execute("COMMIT")
+    elif a.cmd == "done":
+        for i in a.ids:
+            # a letter or a record (once the registrar has applied a record, it's done too)
+            r = get_event(c, i) or must_message(c, i)
+            confined_letter(r, here)
+            publish(c, f"{i}:done", "message.done", here or r["to_project"], r["to_project"], i,
+                    {"note": a.note or _("handled"), "session": session})
+            print(f"{i} done")
+
+
 # ---------- CLI ----------
 
 def main() -> None:
+    try:
+        cli()
+    except Refused as e:
+        sys.exit(str(e))
+
+
+def cli() -> None:
     ap = argparse.ArgumentParser(prog="hubbus", description=_(
         "agent-hub's event bus: an append-only event log plus read cursors; project mailboxes are its projection."))
     sub = ap.add_subparsers(dest="cmd", required=True)
@@ -1774,29 +2210,10 @@ def main() -> None:
         return cmd_bridge()
     if a.cmd == "dispatch":
         # launchd, every minute (local.agent-hub-mailbox-dispatch); only one at a time (the bridge uses the same
-        # lock)
-        if DB.exists():
+        # lock). Without a bus yet, only when a sandboxed project's outbox may have its first letter
+        if DB.exists() or any(outboxed(p) for p in projects()):
             check_integrity()
             dispatch_locked(db(), pull=True)
-        return
-    if a.cmd == "thread":
-        c = db()
-        r = must_message(c, a.id)
-        confined_letter(r, project_of(pathlib.Path.cwd()))
-        for r in thread_chain(c, r):
-            print(fmt(r))
-        return
-    if a.cmd == "open-questions":
-        c = db()
-        project = canon(a.project) if a.project else None
-        if os.environ.get("AGENT_HUB_CONFINED"):   # only its own project's questions
-            project = project_of(pathlib.Path.cwd())
-        rows = open_questions(c, project)
-        if a.json:
-            print(json.dumps([{k: q[k] for k in ("id", "project", "ts", "text")} for q in rows], ensure_ascii=False))
-        else:
-            for q in rows:
-                print(f"[{q['id']}] {q['project']} {q['ts'][:16]} {q['text'][:100]}")
         return
     if a.cmd == "records":
         c = db()
@@ -1840,94 +2257,8 @@ def main() -> None:
     if a.cmd == "status":
         return cmd_status(a.json)
 
-    c = db()
-    import runtime_ports  # the sending session: ask the runtime (currently an environment variable Claude Code sets)
-    session = runtime_ports.current_session()
-    here = project_of(pathlib.Path.cwd())
-    if a.cmd == "publish":
-        publish(c, a.id or f"e{now():%m%d%H%M%S}-{secrets.token_hex(3)}", a.type, a.source, a.to, a.ref,
-                json.loads(a.payload))
-    elif a.cmd == "send":
-        sender = a.sender or here
-        a.to = canon(a.to)
-        if not sender or not valid_address(sender) or sender in OWNERS:
-            sys.exit(_("hubbus: cannot tell which project the sender is (outside a project folder add --from <project>)"))
-        if not valid_address(a.to):
-            sys.exit(_("hubbus: there is no address {to} (project names are in the project registry, {hub}, or {owners})",
-                       to=a.to, hub=hubconf.hub_project(), owners="/".join(sorted(OWNERS))))
-        p = {"type": a.type, "text": a.text, "from_session": session}
-        if a.type in KNAS_ONLY and a.to != KNAS:
-            sys.exit(_("hubbus: {type} can only be sent to {alias}", type=a.type, alias=OWNER_ALIAS))
-        if a.type == "drop" and not (a.task or a.question):
-            sys.exit(_("hubbus: drop needs --task <key> or --question <id> (which task/question is no longer needed)"))
-        if a.question:
-            if a.task or a.to != KNAS or a.type not in ("done", "drop"):
-                sys.exit(_("hubbus: --question is only for a done/drop sent to {alias} (not together with --task)",
-                           alias=OWNER_ALIAS))
-            q = question_asked(c, a.question)
-            if q is None or q["project"] != sender:
-                sys.exit(_("hubbus: {question} is not a question {sender} asked {owner}", question=a.question,
-                           sender=sender, owner=OWNER))
-        if a.inferred and not (a.type in ("done", "drop") and a.task):
-            sys.exit(_("hubbus: --inferred is only for a done/drop with --task"))
-        for k in TASK_FIELDS:
-            if getattr(a, k):
-                p[k] = getattr(a, k)
-        if a.reply_to:
-            orig = must_message(c, a.reply_to)
-            confined_letter(orig, here)   # a reply carries the original's handoff and session
-            p["reply_to"] = a.reply_to
-            if canon(orig["source"]) == a.to and payload(orig).get("from_session"):
-                p["to_session"] = payload(orig)["from_session"]
-            if payload(orig).get("handoff_id") is not None:
-                p["handoff_id"] = payload(orig)["handoff_id"]
-        mid = a.id or new_id()
-        if RECORDS and a.to == OWNER_ADDRESS:
-            if a.inferred:
-                sys.exit(_("hubbus: an inferred claim is sent by registrar itself (hubbus record-publish); send does "
-                           "not translate it"))
-            if (eid := send_record(c, a, sender, mid, p)):
-                print(eid)
-                return
-        publish(c, mid, "message", sender, a.to, a.reply_to, p)  # already sent with the same id: nothing happens
-        print(mid)
-    elif a.cmd == "inbox":
-        project = a.project or here
-        if not project:
-            sys.exit(_("hubbus: not in a project folder, add --project <name>"))
-        rows = inbox(c, project, session)
-        for r in rows:
-            print(fmt(r))
-        print(_("({project}: {n} open {n:letter|letters})", project=project, n=len(rows)) if rows else
-              _("{project}'s mailbox is empty", project=project))
-        if project == here:
-            c.execute("BEGIN IMMEDIATE")
-            mark_delivered(c, [r for r in rows if not r["delivered"]], session, "inbox")
-            c.execute("COMMIT")
-    elif a.cmd == "show":
-        r = must_message(c, a.id)
-        confined_letter(r, here)
-        print(fmt(r))
-        for e in c.execute("SELECT * FROM events WHERE ref=? ORDER BY seq", (a.id,)):
-            print(f"  {e['ts'][5:16]} {e['type']} {e['payload']}")
-    elif a.cmd == "ack":
-        c.execute("BEGIN IMMEDIATE")
-        # ack = "I've taken it on": recorded separately from the hook's delivery (they used to share an id, so after a
-        # hook delivery an ack recorded nothing)
-        for i in a.ids:
-            r = must_message(c, i)
-            confined_letter(r, here)
-            publish(c, f"{r['id']}:ack:{session or 'cli'}", "message.delivered", r["to_project"], r["to_project"], r["id"],
-                    {"session": session, "via": "ack"})
-        c.execute("COMMIT")
-    elif a.cmd == "done":
-        for i in a.ids:
-            # a letter or a record (once the registrar has applied a record, it's done too)
-            r = get_event(c, i) or must_message(c, i)
-            confined_letter(r, here)
-            publish(c, f"{i}:done", "message.done", here or r["to_project"], r["to_project"], i,
-                    {"note": a.note or _("handled"), "session": session})
-            print(f"{i} done")
+    if a.cmd in MAIL_COMMANDS:
+        return mail_command(a)
 
 
 if __name__ == "__main__":

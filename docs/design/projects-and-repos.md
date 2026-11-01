@@ -606,7 +606,7 @@ sandbox fix landed (section 8), and r9 decides the open points.
   adapters denying writes to the runtime's settings paths inside the workspace (a neutral list from `runtime_ports`).
 
 Earlier, found by rounds 4 and 5, for a separate change rather than a step of this design (which inherits the
-fixes). Closed on 11-01 except the sender, which waits for the owner (`bus-sender.md`):
+fixes). All closed on 11-01 (the sender last, with the owner's choice of a per-project outbox: `bus-sender.md`):
 
 - The status page, worktree cleanup, memory-gaps and weekly statistics, backup, `propose_apply.py` and the hourly
   memory sync run git unsandboxed in project repos whose config a sandboxed project controls (code execution as the
@@ -617,7 +617,8 @@ fixes). Closed on 11-01 except the sender, which waits for the owner (`bus-sende
 - A sandboxed project can read other projects' memory: their bare repos (`git_origin` is only write-denied) and their
   memory copies outside `memory/` (STATE.md, `.git`).
 - A letter's sender is chosen freely (`hubbus send --from`) and the bus is writable in every sandbox, so a
-  `manifest.update` can claim another project.
+  `manifest.update` can claim another project. Closed 11-01: the bus is in no sandbox; a sandboxed project's letters
+  go into its own outbox and the platform sends them as that project (`bus-sender.md`).
 - The librarian reads memory copies' files through symlinks a project can commit.
 - The hook installer writes through a symlink a project planted in `.git/hooks`.
 

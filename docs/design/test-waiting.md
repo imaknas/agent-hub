@@ -425,9 +425,10 @@ tests:
   authority than the project's own (B4), and because the fields that set that authority (`enforce`, `network`,
   `allow_write`, `paths`, later `scopes`) are platform-owned. A project without a sandbox (or held back by `service_sandbox_exempt`) has the user's authority by
   definition, so there is no boundary for it to cross. It assumes a
-  `manifest.update` comes from the project it names; today a letter's sender is chosen freely (`hubbus send --from`)
-  and the bus file is writable in every sandbox — a gap that predates this design and applies to every
-  `manifest.update` field, so it is fixed in the bus (`bus-sender.md`, waiting for the owner).
+  `manifest.update` comes from the project it names; until 11-01 a letter's sender was chosen freely (`hubbus send
+  --from`) and the bus file was writable in every sandbox — a gap that predated this design and applied to every
+  `manifest.update` field, so it was fixed in the bus (`bus-sender.md`: a sandboxed project's letters go through its
+  outbox, sent by the platform as that project).
 
 ### B2. Which tests a change needs: `affected(repo, base, head, moment)`
 

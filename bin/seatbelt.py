@@ -3,7 +3,8 @@
   profile(pol, cap)                      cap-runner's run jobs (+ capabilities/<name>.sb), described below
   service_profile(pol, dirs, port)       a sandboxed project's own services and command jobs (bin/sandboxed-run,
                                          through isolation.py; landlock.py is the Linux counterpart):
-                                         its folders, the bus and caches writable, outbound network open, only the
+                                         its folders and caches writable (not the bus: its letters go through its
+                                         outbox, docs/design/bus-sender.md), outbound network open, only the
                                          declared port listening
 
 Not through any agent: a second layer can't be applied inside the runtime's sandbox (tested 10-25:
@@ -155,8 +156,8 @@ def profile(pol: dict, cap: str) -> str:
 
 def service_profile(pol: dict, dirs: list[pathlib.Path], port: int | None = None) -> str:
     """A sandboxed project's own service or command job (bin/sandboxed-run): like a session of that project, not like
-    cap-run. dirs = its runtime and workspace (read and write); the bus directory and tool caches in policy.write
-    may be written too (agenthub send works, dependencies install). Network: outbound is open: Seatbelt can't filter
+    cap-run. dirs = its runtime and workspace (read and write); policy.write may be written too. The bus directory
+    is neither readable nor writable: agenthub send writes into the project's outbox (docs/design/bus-sender.md). Network: outbound is open: Seatbelt can't filter
     by domain, so the project's network list is not enforced at this layer (what this layer guarantees is the files,
     Keychain and processes); listening only on the port the service declares in expose.local_port, and only
     connections through localhost are accepted (not from the LAN or the tailnet directly: tailscale serve)."""

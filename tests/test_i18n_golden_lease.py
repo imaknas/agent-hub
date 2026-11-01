@@ -399,13 +399,13 @@ class Mcp(Golden):
         tpl.write_text("P={{project}} U={{unread}} T={{take_timeout}}")
         with mock.patch.object(m, "INSTRUCTIONS", tpl):
             out.append(("instructions unknown", m.instructions(None, "why")))
-            for name, hb in [("2 unread", types.SimpleNamespace(TAKE_TIMEOUT_MIN=60, db=lambda: types.SimpleNamespace(
+            for name, hb in [("2 unread", types.SimpleNamespace(TAKE_TIMEOUT_MIN=60, mail_db=lambda p: types.SimpleNamespace(
                                  close=lambda: None), inbox=lambda c, p: [1, 2])),
-                             ("1 unread", types.SimpleNamespace(TAKE_TIMEOUT_MIN=60, db=lambda: types.SimpleNamespace(
+                             ("1 unread", types.SimpleNamespace(TAKE_TIMEOUT_MIN=60, mail_db=lambda p: types.SimpleNamespace(
                                  close=lambda: None), inbox=lambda c, p: [1])),
-                             ("0 unread", types.SimpleNamespace(TAKE_TIMEOUT_MIN=60, db=lambda: types.SimpleNamespace(
+                             ("0 unread", types.SimpleNamespace(TAKE_TIMEOUT_MIN=60, mail_db=lambda p: types.SimpleNamespace(
                                  close=lambda: None), inbox=lambda c, p: [])),
-                             ("mailbox error", types.SimpleNamespace(TAKE_TIMEOUT_MIN=60, db=mock.Mock(
+                             ("mailbox error", types.SimpleNamespace(TAKE_TIMEOUT_MIN=60, mail_db=mock.Mock(
                                  side_effect=OSError("locked"))))]:
                 with mock.patch.object(m, "_hubbus", lambda: hb):
                     out.append((f"instructions {name}", m.instructions("demo", "")))
