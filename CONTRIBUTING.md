@@ -37,7 +37,8 @@ bin/linux-test       # the same suite in a Linux container (Docker)
 
 CI runs `bin/lint`, `bin/linux-test` and a gitleaks scan on every pull request.
 
-`bin/run-tests` runs the suite as a zh-Hant instance and `bin/linux-test` (CI) as an English one, so a test that
+`bin/run-tests` runs the suite as a zh-Hant instance, and CI runs it as an English one on macOS and on Linux
+(`bin/linux-test`), so a test that
 assumes the instance's language fails in one of them: a test that checks text in one language sets that language
 itself (`AGENT_HUB_LANG_UI` / `AGENT_HUB_LANG_CONTENT`).
 

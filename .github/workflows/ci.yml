@@ -1,5 +1,5 @@
 # The checks a contribution must pass: lint; the whole test suite on Linux as an English instance (bin/linux-test) and
-# on macOS as a zh-Hant one (bin/run-tests, the platform's own gate: Seatbelt, launchd and Keychain paths run only
+# on macOS as an English one (bin/run-tests, the platform's own gate, which runs as zh-Hant locally: Seatbelt, launchd and Keychain paths run only
 # there); the one-line installer from this checkout through `agenthub init`; and a secret scan of the full history.
 name: ci
 on:
@@ -32,7 +32,12 @@ jobs:
       - uses: actions/checkout@v4
       - uses: astral-sh/setup-uv@v5
       - run: bin/setup-python
+      # an English instance here: the local gate (bin/run-tests) is the zh-Hant one on macOS, linux-test the English one
+      # on Linux, so a test assuming either language fails somewhere
       - run: bin/run-tests
+        env:
+          AGENT_HUB_LANG_UI: en
+          AGENT_HUB_LANG_CONTENT: en
   install:
     runs-on: ubuntu-latest
     steps:
