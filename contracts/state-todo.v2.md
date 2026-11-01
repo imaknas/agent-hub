@@ -7,9 +7,9 @@ This file is rewritten by a model, so **it carries no version marker** (a model 
 version is set by this contract.
 
 v2 = v1 plus a second, English token set. A file in the v1 (zh-Hant) set is a valid v2 file and changes nothing; a file
-in the English set needs a v2 reader. The two sets are the Markdown profiles of agent-ops-specs' Principal Handoff Acts
-0.4 (`acts/profiles.json`): zh-Hant is the `zh-hant` profile with `{owner}` as its `principal_tag`, English is the `en`
-profile as it is.
+in the English set needs a v2 reader. The two sets are the profiles of agent-ops-specs' Principal Handoff Acts Markdown
+binding 0.5 (§3.1, `acts-markdown/conformance/profiles.json`): zh-Hant is the `zh-hant` profile with `{owner}` as its
+`principal_tag`, English is the `en` profile as it is.
 
 ## The two token sets
 
@@ -40,9 +40,10 @@ the owner is (the configured tag in English brackets is not a known label). `待
   after it; in English the key is one run of non-space characters. The key is an opaque string (today
   `task-<project>-<10 hex digits>`); when that task is closed, the line is removed by its key.
 
-## How the section is read (Principal Handoff Acts 0.4 §5.2-§5.3)
+## How the section is read (Principal Handoff Acts Markdown binding 0.5 §3.2-§3.3)
 
-Readers follow the 0.4 binding; this adds no token and changes no written form, so the version stays:
+Readers follow the 0.5 binding (Acts 0.4 §5.2-§5.3 before it moved; no rule changed); this adds no token and changes
+no written form, so the version stays:
 
 - Fenced code blocks and HTML comments are not read. A file with one that never closes is a format problem, and the
   registrar leaves that file alone until it is fixed.

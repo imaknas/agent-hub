@@ -58,8 +58,8 @@ def content_heading() -> str:
 
 
 def parse(source: str, text: str, items: dict, problems: list) -> None:
-    """One file's to-dos by role into items, its format problems into problems (acts 0.4 §5.2-§5.3, bin/acts_md.py:
-    both token sets; fenced code and HTML comments are not read)."""
+    """One file's to-dos by role into items, its format problems into problems (acts-markdown 0.5 §3.2-§3.3,
+    bin/acts_md.py: both token sets; fenced code and HTML comments are not read)."""
     d = acts_md.Doc(text, READ)
     if d.unclosed is not None:
         problems.append(_("{source}: a code fence or HTML comment opened on line {line} is never closed; the registrar "
