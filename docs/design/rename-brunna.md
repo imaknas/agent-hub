@@ -91,7 +91,7 @@ scripts that run before the platform's Python exists: `install.sh` and `bin/py` 
 | rules-file markers | `<!-- agent-hub:begin/end -->` | `<!-- brunna:begin/end -->` | every project's rules file | sync-local-setup, uninstall and prompts read both; each project's next session start rewrites the block with `current` |
 | git-hook marker | `# agent-hub:gate` | `# brunna:gate` | every repo's managed hooks | render-project-settings recognises both as its own and rewrites with `current` at the next apply |
 | leak check | `~/agent-hub`, `.agent-hub` | both pairs | `sync-local-setup.sh` | checks both |
-| the platform's project name | `agent-hub` | `brunna` | `projects/agent-hub.yaml` (in the repo), `hub_project()`, bus addresses, scheduler job names `agent-hub/<job>` (14 jobs, 3 services), module `before:`/`after:`/`legacy_name`, Muninn's letters | `hub_project()` = `current`; `former_names` includes the pair constant. Everywhere a project's name is matched, the mailbox matches `own_names`: inbox, the dispatch queries, `apply-updates`, `records()`. `valid_address` accepts former names and `send_letter` routes them to the current one. The scheduler adopts every state suffix (`name`, `.last_ok`, `.attempts`, cursors) from former names **newest-wins**, as `adopt_cursor` does, then drops the other key. A background librarian finishing after the switch, or a rollback to v0.6, then can't run a daily job twice. It also resolves `after:`/`before:` through former names. Modules' `legacy_name: agent-hub/…` values are past state keys and are left as they are. Event jobs match on `own_names`, and chain loop detection compares through the pairs. The hub's entry gets `type: platform`, added to the validator and the project contract in v0.6, and every `stem == hub_project()` check and the test runner find it by that type. So the commit that renames the yaml passes the gate |
+| the platform's project name | `agent-hub` | `brunna` | `projects/agent-hub.yaml` (in the repo), `hub_project()`, bus addresses, scheduler job names `agent-hub/<job>` (14 jobs, 3 services), module `before:`/`after:`/`legacy_name`, Muninn's letters | `hub_project()` = `current`. For the hub, `former_names`, `own_names` and hubbus's `current_name` use the table **in both directions** (`names.all` minus current) in every release from v0.6, so a v0.6 reached by rollback still sees letters and records filed under `brunna`. Everywhere a project's name is matched, the mailbox matches `own_names`: inbox, the dispatch queries, `apply-updates`, `records()`. `valid_address` accepts former names and `send_letter` routes them to the current one. The scheduler adopts every state suffix (`name`, `.last_ok`, `.attempts`, cursors) and `scheduler-failing.json` entries from former names **newest-wins**, as `adopt_cursor` does, then drops the other key. A background librarian finishing after the switch, or a rollback to v0.6, then can't run a daily job twice. It also resolves `after:`/`before:` through former names. Modules' `legacy_name: agent-hub/…` values are past state keys and are left as they are. Event jobs match on `own_names`, and chain loop detection compares through the pairs. The hub's entry gets `type: platform`, added to the validator and the project contract in v0.6, and every `stem == hub_project()` check and the test runner find it by that type. So the commit that renames the yaml passes the gate |
 | Principal Handoff party ids | `agent-hub:registrar`, `agent-hub:owner-side` | `brunna:registrar`, `brunna:owner-side` | records on the wire, Muninn's register | a class of its own in `names.py`, not derived from `hub_project()`. Today's `party()` builds ids from `hub_project()`, so without that they would flip by themselves at v0.7. The same holds for the requester id `project:agent-hub` and the records' `project` field. Every exact match accepts either spelling, forever (history): the registrar's `bound()` and hubbus's `need["by"] == party("registrar")`. New records carry `current`. **The switch waits for Muninn**: it must accept a party-id change for the same registrar first. Agent-hub asks by letter with v0.6, covering party ids, the requester id, the project field and the optional rekey. Until Muninn confirms, this class's `current` stays old |
 | per-repo paths | `.git/agent-hub/` (outbox, `inbox.json`, cache, test output, tier cache), `test-*.jsonl`, `refs/agent-hub/*`, the `agent-hub-op.lock` dir, the `agent-hub-deps-pruned` and `agent-hub-migrated-to-mini` markers | `.git/brunna/…`, `refs/brunna/*`, `brunna-op.lock`, … | every project's repo and worktrees readers take both. A migration op in `project-git-job.py` runs as each project, sandboxed when the project is:
 - it walks the common git dir and every `.git/worktrees/*`;
@@ -114,18 +114,23 @@ Outbox files moved between dispatch's read and its delete can be sent twice. The
 So the move:
 
 1. holds the scheduler lock and stops dispatch and lease-runner;
-2. **rewrites the setting first**, so every new writer goes to the new path;
-3. copies the database with SQLite's backup API;
-4. **leaves the old database in place**; no timer deletes it.
+2. copies the old database with SQLite's backup API to `bus.db.tmp` in the new directory, then renames it into place.
+   The copy keeps the old `meta.generation`, so event-job cursors stay valid;
+3. **then** rewrites the setting, so every new writer goes to the new path;
+4. sweeps the old database once at once. Whatever was written there between the copy and the rewrite is caught by
+   this sweep;
+5. **leaves the old database in place**; nothing deletes it.
 
 After that:
 - **The old database is never unlinked.** hubbus opens a connection per call, so an old process holds no fd between
   calls. `lsof` would see nothing, and its next `send` would create a fresh file at the old path.
-- Every scheduler tick, from v0.6 on and through v0.9, sweeps any database at the old path into the new one
-  (`publish` dedups by id). The migration code keeps that sweep forever.
+- Every scheduler tick, from v0.6 on and through v0.9, sweeps any database at the old path into the new one. The
+  sweep copies `events` rows verbatim with `INSERT OR IGNORE` on the id. It never goes through `publish()`, which
+  would restamp the time and the tick's chain. The migration code keeps that sweep forever.
 - At v0.9, after one last sweep, the old file is renamed to a tombstone and the old directory is made read-only. A
   stale writer then fails loudly instead of writing into a file nobody reads.
-- From v0.6, `db()` resolves `bus_dir` on every call, so v0.6+ processes follow the move at their next call.
+- From v0.6, `db()` and every other user of the bus path (the scheduler's `first_sight`, `hubconf.BUS_DIR`'s callers)
+  resolve `bus_dir` on every call, so v0.6+ processes follow the move at their next call.
 - The sandbox policy denies reads of both bus paths for good.
 - The new `bus_dir` may never be `.state/bus`. `hubconf.bus_db()` in old code treats that as an old location and would
   move the new bus away.
@@ -188,10 +193,18 @@ import, so `upgrade --steps` and `migrate` can always start), never "use the def
        - `run_steps` passes it with `pass_fds`;
        - every lock-taker (the core unit installer, the bus move, the scheduler itself) reuses that fd when the variable
          is set, instead of opening the lock file again. Opening it again would conflict with the held lock and
-         deadlock.
+         deadlock;
+       - every intermediate process passes the fd on, and a lock-taker checks with `fstat` that the fd is the lock
+         file's, refusing otherwise;
+       - the mover touches the scheduler's heartbeat while it holds the lock, so a long `setup-python` and per-repo
+         pass don't trip the watchdog.
      - A v0.5 mover can't: it closes the lock right after the checkout move, then runs the target's `setup-python`
        (minutes) before migrate. For that window there is a **`.state/names-migrated` marker**:
-       - the last migrate step writes it, and a fresh v0.7+ install writes it at init;
+       - it records the release that wrote it, and is written once step 4 (every project) has completed. Steps 3 and
+         5 can wait and don't gate ticking. `land` writes it after its three steps, and a fresh v0.7+ install writes
+         it at init;
+       - the gate compares the release, so a marker left by v0.7 before a rollback to v0.6 doesn't let v0.9 run before
+         its own migrate. v0.6's steps also remove it;
        - from v0.7 on, the scheduler's tick, dispatch and the hooks do nothing on an instance that has no marker, and
          say so;
        - `upgrade --steps`, `migrate` and doctor are exempt, and no check happens at import.
@@ -217,7 +230,8 @@ import, so `upgrade --steps` and `migrate` can always start), never "use the def
    release since v0.7 does. This also works for a jump from v0.5, whose `upgrade.py` moves the checkout and then runs
    the target's steps, and stops with what to rerun only if a step fails. The migration code itself always recognises
    old spellings, so a late project can be migrated at any time.
-   - Dropped: the `agenthub` forwarder and permission rules, the old env vars, the old markers, the old labels, the old
+   - Dropped: the `agenthub` permission rules (the `~/.local/bin/agenthub` wrapper stays, execing `bin/brunna`, until
+     doctor sees no MCP registration naming it: those change only on a terminal yes), the old env vars, the old markers, the old labels, the old
      lock directory, `hub.json` as a name, the venv fallback.
    - Kept for good: reading history (party ids and the hub's former name in records and letters) and the reserved
      name.
