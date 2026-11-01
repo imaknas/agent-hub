@@ -8,7 +8,9 @@ the schemas vendored in contracts/vendor/agent-ops-specs/principal-handoff-0.5/.
     validate(record, cfg)          -> (schema, [errors])   a 0.5 record; an empty list means valid
     received(records, cfg)         -> (valid, ignored)     records of one item in any version read, converted to 0.5
                                                            (ph_wire.convert), validated and deduplicated (core §10)
-    settlement_view(records, cfg)  -> {settlement, outcome, answer, authority, stale}   core §6, what a requester computes
+    settlement_view(records, cfg)  -> {settlement, outcome, answer, authority, stale, state, withdrawn}
+                                                           core §6, what a requester computes; state is open, settled or
+                                                           (Decisions) withdrawn
 
 A record in an older version is validated as its 0.5 form. 0.5 only relaxes 0.4 (core §14's change log: module content,
 the terms digest), so this accepts what 0.4 accepts and, beyond it, only Evidence and Criteria content that agent-hub
@@ -36,7 +38,10 @@ TYPES = NEED + SETTLEMENT + ("claimed", "related", "note")   # core §4
 OWNER = {"raised": {"requester"}, "amended": {"requester"}, "withdrawn": {"requester"},
          "settled": {"principal"}, "reopened": {"principal"}}   # R1, R2
 RELATION_ORIGIN = {"same_as": "principal", "derived_from": "requester", "replaced_by": "requester"}   # core §7
-VIEW = ("settlement", "outcome", "answer", "authority", "stale")   # the settlement view (core §6)
+VIEW = ("settlement", "outcome", "answer", "authority", "stale", "state", "withdrawn")   # the settlement view (core §6)
+# what a withdrawn need leaves an item that is not settled: each extension's policy (core §6; acts §2: an act stays open
+# for the principal side to settle, decisions §2: a withdrawn decision is no longer presented)
+WITHDRAWN_STATE = {"acts": "open", "decisions": "withdrawn"}
 # module record types each extension's table lists (core §11), with the origins that may emit them; agent-hub
 # implements no module, so it checks these records against the core alone and acts on none of them
 MODULES = {"acts": {}, "decisions": {"approved": {"principal"}}}
@@ -315,7 +320,9 @@ def latest_terms(valid: list[dict]) -> dict | None:
 
 def settlement_view(records: list[dict], cfg: Config) -> dict:
     """core §6 and §12: what a requester computes for one item, from the need records and the principal side's
-    records (records in any version read)."""
+    records (records in any version read). state: settled while the current settlement is a settled record (a stale one
+    too: stale says it was made on earlier terms), otherwise withdrawn when the current need record is a withdrawal and
+    the extension stops presenting such an item (Decisions), otherwise open (a claim changes nothing, core R3)."""
     valid, _ignored = received([r for r in records if isinstance(r, dict) and r.get("type") in NEED + SETTLEMENT], cfg)
     need, _c = register([r for r in valid if r["type"] in NEED])
     settle, _c = register([r for r in valid if r["type"] in SETTLEMENT])
@@ -324,8 +331,12 @@ def settlement_view(records: list[dict], cfg: Config) -> dict:
     stale = bool(settled and (settled["terms_rev"] < terms_rev or (
         need is not None and need["type"] != "withdrawn" and need["terms_rev"] == settled["terms_rev"]
         and "terms_digest" in settled and ph_wire.terms_digest(need) != settled["terms_digest"])))
+    withdrawn = bool(need and need["type"] == "withdrawn")
+    family = next((ph_wire.family(r["ext"]) for r in valid), "")
     return {"settlement": settle["id"] if settle else None,
             "outcome": settled["outcome"] if settled else None,
             "answer": settled.get("answer") if settled else None,
             "authority": settled["authority"]["kind"] if settled else None,
-            "stale": stale}
+            "stale": stale,
+            "state": "settled" if settled else WITHDRAWN_STATE.get(family, "open") if withdrawn else "open",
+            "withdrawn": withdrawn}

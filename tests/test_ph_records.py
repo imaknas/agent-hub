@@ -1,6 +1,6 @@
 """bin/ph_records.py, agent-hub as a conforming requester (core §12, Acts and Decisions 0.5 §7.1): the spec's
 records.json in full, and lifecycle.json compared on the settlement view (settlement, outcome, answer, authority,
-stale), in the fixtures' order and reversed (contracts/vendor/agent-ops-specs/principal-handoff-0.5/).
+stale, state, withdrawn), in the fixtures' order and reversed (contracts/vendor/agent-ops-specs/principal-handoff-0.5/).
 
     bin/py -m unittest tests.test_ph_records
 """
@@ -79,7 +79,7 @@ class MixedVersions(unittest.TestCase):
         s = settled(terms_digest=ph_wire.terms_digest(NEED, "0.4"))
         self.assertEqual(ph_records.settlement_view([NEED, s], CFG),
                          {"settlement": "s1", "outcome": "done", "answer": None, "authority": "principal",
-                          "stale": False})
+                          "stale": False, "state": "settled", "withdrawn": False})
 
     def test_a_0_4_settlement_on_other_terms_is_stale(self):
         other = {**NEED, "terms": {"text": "Pay twice"}}

@@ -139,12 +139,16 @@ def answer(qid: str, text: str) -> int:
               if r["record"].get("key") == qid and ph_wire.family(r["record"].get("ext")) == "decisions"]
     need = hb.need_state(c, proj, qid, "decisions")   # None: a v1 question letter, no need record
     version = ph_wire.send_version()
+    # core §4: what it was settled against. A v1 letter's question has no need record: its terms are the letter's text,
+    # as the raised it stands for (a 0.4 or 0.5 settlement without a digest is not a valid record)
+    asked = need["record"] if need else {"ext": ph_wire.ext("decisions"), "project": q["filed"], "key": qid,
+                                         "terms_rev": 1, "terms": {"text": q["text"]}}
     rec = {"ph": version, "ext": ph_wire.ext("decisions"), "id": f"s:{qid}:{len(before) + 1}", "type": "settled",
            "origin": "principal",
            "by": hubconf.party("principal_side"), "key": qid, "project": q["filed"], "ts": _now(), "outcome": "decided",
            "answer": {"text": text}, "terms_rev": need["rev"] if need else 1,
            "authority": {"kind": "principal", "decider": hubconf.party("principal")},
-           **({"terms_digest": ph_wire.terms_digest(need["record"], version)} if need else {})}
+           "terms_digest": ph_wire.terms_digest(asked, version)}
     if before:
         rec["supersedes"] = before[-1:]   # answered again: the new answer replaces the last one
     c.execute("BEGIN IMMEDIATE")

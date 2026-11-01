@@ -297,8 +297,6 @@ Not done yet:
 
 - Two records with the same (`ext` version, project, id), type and origin but different content: the bus keeps the
   first, so core §10's "the greater canonical form" is chosen only among those it holds.
-- hubbus's question views (open questions, inbox) read Decisions records with their own rules, not through
-  `ph_records`' settlement view.
 
 What the principal side does for each value of the setting:
 
@@ -367,3 +365,21 @@ sent (its project field, the event's source or recipient), and the readers take 
 raised under a former name was raised again under a new key the next night. On the live bus nothing is filed under a
 former name yet: the one renamed project's items were migrated (`migrate-v1`) under its current name, keys made under
 the former name included.
+
+## Question views on the settlement view (11-01)
+
+Whether a question to the owner is open is computed one way: `open_questions` (session start ❓, `open-questions`,
+`reconcile-questions`, `owner.py list`) folds each question's Decisions records with `ph_records.settlement_view`,
+which now also gives the item's `state` and `withdrawn` as the spec's `lifecycle.json` pins them (both extensions'
+cases pass). A question with records is closed once settled (a stale answer too: its state is settled) or withdrawn by
+the asking project (done/drop `--question`; decisions §2), and open again when a reopening is the current settlement.
+Letters (v1) still close a question by an answer or done/drop `--question`, unless a reopening is its current
+settlement. The inbox only shows records as they came (`fmt_record`); it computes no question state.
+
+Where the old rules parted from the view (the tests pinned them first): a claim alone no longer closes (core R3; send
+always pairs it with a withdrawal), a reopening does not undo the asking project's withdrawal, and an invalid record is
+ignored. The live bus has none of these: its seven Decisions keys are three open raised and four closed by claim +
+withdrawal, and `open-questions --json` and every project's inbox printed the same with main's code and this one.
+
+`owner.py answer` on a v1 letter's question (no need record) now carries the terms digest of the letter's question as
+the raised it stands for: a 0.4 or 0.5 settlement without one is not a valid record, and the view ignored it.

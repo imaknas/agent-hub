@@ -139,6 +139,7 @@ import gitdirs  # noqa: E402  where a folder's repo is, read without starting gi
 import hubconf  # noqa: E402  paths, the owner address, the project registry all come from the platform settings
 import i18n  # noqa: E402
 import nofollow  # noqa: E402  a project's outbox and view, read and written without following its links
+import ph_records  # noqa: E402  how a requester reads records: each item's settlement view (core §6)
 import ph_wire  # noqa: E402  the Principal Handoff version records are read and sent in
 import policy  # noqa: E402  whose mail goes through an outbox (mail_outbox)
 import prompts  # noqa: E402  the platform's templates and prompt texts, filled with the configured names
@@ -817,13 +818,17 @@ def cmd_hook(event: str, runtime: str | None = None) -> None:
 
 def open_questions(c, project=None) -> list[dict]:
     """Questions to the owner still open, oldest first: {id (the key --question takes), event, project (as it is called
-    now; one asked under a name it had before a rename is its question), filed, ts, text, from_session}. A question is a v1 letter or a Decisions raised record; it is closed by an answer from the owner
-    (a v1 letter with ref = the question, or decisions settled), or by the asking project (v1 done/drop --question,
-    decisions claimed/withdrawn); reopened opens it again. Questions from discuss-lease handovers (lease-…) are
-    managed by the assistant itself (the latest handover wins), not counted here."""
+    now; one asked under a name it had before a rename is its question), filed, ts, text, from_session}. A question is
+    a v1 letter or a Decisions raised record. A question with Decisions records is open or closed as its settlement
+    view says (ph_records, core §6): closed once settled (the owner's answer, also one made on earlier terms) or
+    withdrawn by the asking project (done/drop --question; a withdrawn decision is no longer presented, decisions §2),
+    open again when a reopening is the current settlement; a claim alone changes nothing (core R3) and an invalid record
+    is ignored. Closed by letters (v1: an answer with ref = the question, done/drop --question) unless a reopening is
+    its current settlement. Questions from discuss-lease handovers (lease-…) are managed by the assistant itself (the
+    latest handover wins), not counted here."""
     owners = tuple(OWNERS)
     marks = ",".join("?" * len(owners))
-    asked, closed, taken = {}, set(), projects()
+    asked, closed, held, taken = {}, set(), {}, projects()
     for r in c.execute(f"""SELECT * FROM events WHERE type IN ('message','record')
                              AND (to_project IN ({marks}) OR source IN ({marks})) ORDER BY seq""", owners + owners):
         p, to_owner = payload(r), r["to_project"] in OWNERS
@@ -836,17 +841,24 @@ def open_questions(c, project=None) -> list[dict]:
                 asked.setdefault(r["id"], _question(r, r["id"], p.get("text"), taken))
             continue
         rec = p.get("record") or {}
-        if not str(rec.get("ext", "")).startswith("decisions/"):
+        if ph_wire.family(rec.get("ext")) != "decisions":
             continue
-        key, kind = rec.get("key"), rec.get("type")
-        if to_owner and kind == "raised":
-            asked.setdefault(key, _question(r, key, (rec.get("terms") or {}).get("text"), taken))
-        elif (to_owner and kind in ("claimed", "withdrawn")) or (not to_owner and kind == "settled"):
-            closed.add(key)
-        elif not to_owner and kind == "reopened":
-            closed.discard(key)
-    return [q for q in asked.values() if not q["id"].startswith("lease-") and q["id"] not in closed
-            and (project is None or q["project"] == project)]
+        held.setdefault(rec.get("key"), []).append(rec)
+        if to_owner and rec.get("type") == "raised":
+            asked.setdefault(rec.get("key"), _question(r, rec.get("key"), (rec.get("terms") or {}).get("text"), taken))
+    cfg = ph_records.config()
+
+    def still_open(key) -> bool:
+        if key in held:
+            view = ph_records.settlement_view(held[key], cfg)
+            if view["state"] != "open":
+                return False
+            if view["settlement"] is not None:   # a reopening is the current settlement
+                return True
+        return key not in closed
+
+    return [q for q in asked.values() if not q["id"].startswith("lease-") and (project is None or q["project"] == project)
+            and still_open(q["id"])]
 
 
 def questions_note(c, project) -> str | None:

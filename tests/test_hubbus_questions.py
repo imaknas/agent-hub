@@ -121,8 +121,9 @@ class Questions(unittest.TestCase):
 
 
 class QuestionRecords(Questions):
-    """The same readers over Decisions records (mailbox.records on): asked as raised, closed by the asking project's
-    claimed/withdrawn or the owner's settled, opened again by reopened."""
+    """The same readers over Decisions records (mailbox.records on): asked as raised, open or closed as the settlement
+    view says (bin/ph_records.py, core §6): closed by the owner's settled or the asking project's withdrawal, opened
+    again by reopened."""
 
     def setUp(self):
         super().setUp()
@@ -213,23 +214,25 @@ class QuestionRecords(Questions):
         self.settle("q-1")
         self.assertEqual(self.open_ids(), [])
 
-    # the old reader's own rules where they part from the settlement view (pinned before the move)
-    def test_a_claim_alone_closes(self):
+    # where the reader's old rules parted from the settlement view: the view decides now
+    def test_a_claim_alone_changes_nothing(self):
+        """core R3 (send pairs its claim with a withdrawal, which closes)"""
         self.ask("q-1")
         self.project_record("q-1", "claimed", "c:q-1:1", origin="agent", by="project:proj", outcome="decided",
                             evidence={"basis": "answered here"}, answer={"text": "A"})
-        self.assertEqual(self.open_ids(), [])
+        self.assertEqual(self.open_ids(), ["q-1"])
 
-    def test_withdrawn_then_reopened_is_open(self):
+    def test_withdrawn_then_reopened_stays_closed(self):
+        """a reopening takes back a settlement, not the asking project's withdrawal (decisions §2)"""
         self.ask("q-1")
         self.project_record("q-1", "withdrawn", "w:q-1:1", reason="not_needed", supersedes=["r:q-1"])
         self.settle("q-1", "reopened", 2, prev="s:q-1:1")
-        self.assertEqual(self.open_ids(), ["q-1"])
+        self.assertEqual(self.open_ids(), [])
 
-    def test_an_invalid_settlement_closes(self):
+    def test_an_invalid_settlement_is_ignored(self):
         self.ask("q-1")
         self.settle("q-1", origin="requester")   # only the principal side settles (core R2)
-        self.assertEqual(self.open_ids(), [])
+        self.assertEqual(self.open_ids(), ["q-1"])
 
 
 if __name__ == "__main__":
