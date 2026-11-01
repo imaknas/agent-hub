@@ -70,7 +70,7 @@ class Golden(unittest.TestCase):
         self.addCleanup(env.stop)
 
     def normalize(self, text: str) -> str:
-        for p, tag in ((self.tmp, "<TMP>"), (hubconf.ROOT, "<HUB>"), (ROOT, "<HUB>")):
+        for p, tag in ((self.tmp, "<TMP>"), (hubconf.ROOT, "<HUB>"), (ROOT, "<HUB>"), (hubconf.MAIN, "<HUB>")):
             text = text.replace(str(p), tag)
         text = re.sub(r"\b\d{4}-\d{2}-\d{2}[T ]\d{2}:\d{2}(:\d{2})?", "<TS>", text)
         text = re.sub(r"\b\d{4}-\d{2}-\d{2}\b", "<DATE>", text)
@@ -98,7 +98,15 @@ class Golden(unittest.TestCase):
         def run(cmd, **kw):
             calls.append(cmd)
             return CP(cmd, 1 if "commit-hub-files" in str(cmd[0]) else 0, "", "")
-        fake_sp = types.SimpleNamespace(run=run, check_output=lambda *a, **k: b"501\n")
+        class Popen:   # a job run in the foreground (no service manager): its output, then exit 3
+            def __init__(self, cmd, **kw):
+                calls.append(cmd)
+                self.stdout = iter(["job says hi\n", "job done\n"])
+
+            def wait(self):
+                return 3
+        fake_sp = types.SimpleNamespace(run=run, Popen=Popen, PIPE=subprocess.PIPE, STDOUT=subprocess.STDOUT,
+                                        check_output=lambda *a, **k: b"501\n")
         jobs = [
             {"name": "nightly", "time": "03:00", "command": "echo nightly"},
             {"name": "weekly", "time": "07:00", "days_of_week": ["mon", "thu"], "enabled": False, "command": "echo w"},

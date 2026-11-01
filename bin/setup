@@ -23,15 +23,31 @@ need() {  # need <command> <required|optional> <what it is for> <how to install>
   fi
 }
 
+os=$(uname -s)
+# how this system installs a package (only to word the hints; nothing is installed)
+if [ "$os" = Darwin ]; then pm="brew install"
+elif command -v apt-get >/dev/null 2>&1; then pm="sudo apt-get install"
+elif command -v dnf >/dev/null 2>&1; then pm="sudo dnf install"
+elif command -v pacman >/dev/null 2>&1; then pm="sudo pacman -S"
+else pm=""; fi
+inst() { if [ -n "$pm" ]; then echo "$pm $1"; else echo "install $1 with your package manager"; fi; }
+
 echo "agent-hub: checking the commands it needs"
-[ "$(uname -s)" = Darwin ] || echo "  ⚠️ not macOS: the platform runs, but scheduling and background services are not wired up yet (service managers other than launchd come later; doctor says so)"
-need git     required "version control, memory sync"                "macOS: xcode-select --install"
-need jq      required "the librarian reads JSON"                    "brew install jq"
+if [ "$os" != Darwin ]; then
+  # the same test hubconf.service_manager() makes
+  if command -v systemctl >/dev/null 2>&1 && systemctl --user show-environment >/dev/null 2>&1; then
+    echo "  ✓ systemd  user level: the scheduler, its watchdog and projects' services run as user units (agenthub init installs them)"
+  else
+    echo "  ⚠️ no service manager (no systemd user level, e.g. a container): nothing runs by itself. agenthub init prints the command to schedule yourself; agenthub run <job> runs one job now"
+  fi
+fi
+need git     required "version control, memory sync"                "$([ "$os" = Darwin ] && echo "xcode-select --install" || inst git)"
+need jq      required "the librarian reads JSON"                    "$(inst jq)"
 need uv      required "builds the platform's Python (bin/setup-python)" "https://docs.astral.sh/uv/"
-[ "$(uname -s)" = Darwin ] && need plutil required "shell scripts read hub.json" "built into macOS"   # other systems use jq
+[ "$os" = Darwin ] && need plutil required "shell scripts read hub.json" "built into macOS"   # other systems use jq
 need claude  optional "coding agent (Claude Code; without it set hub.json runtime.default to none and the agent features are off)" "https://claude.com/claude-code, then log in to claude once"
-need gh      optional "creates the GitHub repo when onboarding"     "brew install gh && gh auth login"
-need restic  optional "cloud backup (backup module)"                "brew install restic"
+need gh      optional "creates the GitHub repo when onboarding"     "$(inst gh), then gh auth login"
+need restic  optional "cloud backup (backup module)"                "$(inst restic)"
 
 [ "$missing" = 0 ] || { echo "Install what is marked ✗ first, then run bin/setup again"; exit 1; }
 if [ -n "$check_only" ]; then

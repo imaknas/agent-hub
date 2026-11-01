@@ -15,6 +15,7 @@ Usage:
   schedulectl run <name>          run a job once now (like Claude Desktop's "Run now") and record it as run today, so the
                                   schedule does not run it again that day (which matters for LLM jobs). Runs through launchd
                                   in the user's desktop session: under SSH the keychain can't be read and claude is logged out.
+                                  With no service manager (a container) it runs right here, in the foreground.
                                   An event job runs with no events and its cursor stays: a manual run is a test. While a
                                   tick is running a job in the foreground it waits 30 seconds, then gives up
   schedulectl events <name>       an event job's cursor and the events waiting for it (and the ones the loop chain holds
@@ -248,6 +249,8 @@ def cmd_run(name):
     # the start fails, so the day's scheduled run isn't lost
     prev = _mark_ran_today(name)
     try:
+        if hubconf.service_manager() is None:
+            return run_here(name, job, env)
         start(name, job, env)
     except BaseException as e:
         try:
@@ -258,10 +261,32 @@ def cmd_run(name):
         raise
 
 
+def job_log(name):
+    return HUB / ".logs" / f"{name.replace('/', '__')}-{datetime.date.today().isoformat()}.log"
+
+
+def run_here(name, job, env) -> int:
+    """No service manager (a container, macOS with --no-launchd): run the job in this terminal, the way the scheduler
+    would (its login shell, its environment), showing the output and appending it to the job's log too. Returns the
+    job's exit code."""
+    log = job_log(name)
+    log.parent.mkdir(parents=True, exist_ok=True)
+    print(_("Running {name} here (no service manager); its output also goes to {log}", name=name, log=log), flush=True)
+    with open(log, "a") as f:
+        p = subprocess.Popen([hubconf.login_shell(), "-lc", job["command"]], stdout=subprocess.PIPE,
+                             stderr=subprocess.STDOUT, text=True, env={**os.environ, **env})
+        for line in p.stdout:
+            sys.stdout.write(line)
+            f.write(line)
+        code = p.wait()
+    print(_("{name} finished (exit {code}); today's schedule won't run it again", name=name, code=code))
+    return code
+
+
 def start(name, job, env):
     uid = subprocess.check_output(["id", "-u"]).decode().strip()
     label = f"local.agent-hub-run-now.{name.replace('/', '.')}"
-    log = HUB / ".logs" / f"{name.replace('/', '__')}-{datetime.date.today().isoformat()}.log"
+    log = job_log(name)
     if hubconf.service_manager() == "systemd":   # a one-off user unit (cleans itself up when done)
         subprocess.run(["systemctl", "--user", "reset-failed", f"{label}.service"], capture_output=True)
         subprocess.run(["systemd-run", "--user", "--collect", f"--unit={label}",
@@ -413,8 +438,9 @@ def main():
         sys.exit(1)
 
     cmd, rest = args[0], args[1:]
-    if cmd in ("status", "run", "stop", "start") and hubconf.service_manager() is None:
-        print(_("schedulectl {cmd}: {reason}", cmd=cmd, reason=hubconf.no_service_manager()))
+    if cmd in ("status", "stop", "start") and hubconf.service_manager() is None:
+        print(_("schedulectl {cmd}: {reason}; {how}", cmd=cmd, reason=hubconf.no_service_manager(),
+                how=hubconf.manual_scheduler()))
         sys.exit(2)
     if cmd == "list":
         cmd_list()
@@ -427,7 +453,7 @@ def main():
     elif cmd == "logs":
         cmd_logs(*rest)
     elif cmd == "run" and rest:
-        cmd_run(rest[0])
+        sys.exit(cmd_run(rest[0]) or 0)
     elif cmd == "events" and rest:
         cmd_events(rest[0])
     elif cmd == "skip" and rest:

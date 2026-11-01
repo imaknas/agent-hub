@@ -53,7 +53,6 @@
   "The scheduler's last tick was {tick:%m/%d %H:%M}, over 40 minutes ago": "排程器最後一次 tick 是 {tick:%m/%d %H:%M},超過 40 分鐘沒動靜",
   "The scheduler's state file is missing": "找不到排程器的狀態檔",
   "The scheduler watchdog (local.agent-hub-scheduler-watchdog.timer) is not scheduled: nobody is told when the scheduler stops. Run agenthub init": "排程器看門狗(local.agent-hub-scheduler-watchdog.timer)沒有在排:排程器停了不會有人通知。跑 agenthub init",
-  "{text}.": "{text}。",
   "The scheduler watchdog (local.agent-hub-scheduler-watchdog) is not loaded: nobody is told when the scheduler stops. On the hub machine, run bin/recover-service.sh local.agent-hub-scheduler-watchdog": "排程器看門狗(local.agent-hub-scheduler-watchdog)沒有載入:排程器停了不會有人通知。在 hub 主機上跑 bin/recover-service.sh local.agent-hub-scheduler-watchdog",
   "No alerts set up (hub.json has no alerts): a stopped scheduler or a dead service only shows on this page and in the log; nobody is notified": "沒設定警報(hub.json 沒有 alerts):排程器停了、服務掛了只會寫在這頁跟 log,不會通知你",
   "The scheduler watchdog has no Discord settings (.secrets/discord-token, .secrets/discord-alert-channel): it cannot alert when the scheduler stops": "排程器看門狗沒設定 Discord(.secrets/discord-token、.secrets/discord-alert-channel),排程器停了發不出警報",
@@ -135,5 +134,7 @@
   "last run: {n} {n:event|events}, {at}": "上次:{n} 個事件,{at}",
   "{n} {n:event|events} held back today by the loop chain (schedulectl events {name})": "今天有 {n} 個事件被迴圈鏈擋下(schedulectl events {name})",
   "Held: {id} ({project} in use by {by})": "先壓著:{id}({project} 有人在用:{by})",
-  "An alert could not be sent ({key}, {at}): {text}. Check the channels in hub.json alerts ({channels}); it is tried again next time": "警報發不出去({key},{at}):{text}——確認 hub.json alerts 的管道({channels})還能用;下次會再試"
+  "An alert could not be sent ({key}, {at}): {text}. Check the channels in hub.json alerts ({channels}); it is tried again next time": "警報發不出去({key},{at}):{text}——確認 hub.json alerts 的管道({channels})還能用;下次會再試",
+  "{reason}: nothing scheduled runs until you {how}": "{reason}:所有排程都不會跑,除非你{how}",
+  "{reason}; the scheduler is ticking, so something else runs it (the watchdog does not: nobody is told if it stops)": "{reason};排程器有在跑,是別的東西在叫它(看門狗沒有:排程器停了不會有人知道)"
 }

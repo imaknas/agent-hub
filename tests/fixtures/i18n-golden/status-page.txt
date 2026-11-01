@@ -68,7 +68,7 @@ sqlite3.DatabaseError: file is not a database</div>
 === no service manager, config apply left gaps
 <main>
 <h1>排程狀態</h1><div class=sub><a href="digest.html">digest</a> · <a href="todo.html">待辦</a> · <a href="reflect/">每週回顧</a></div><div class=sub>hub 主機 · 產生於 2026-10-30 10:00 · 每 5 分鐘自動重新整理 · 排程定義在專案登錄(projects/)跟 schedule.yaml · config ccccccc</div>
-<div class='alert bad'>⚠️ 排程器(local.agent-hub-scheduler)沒有載入,所有排程都停了。在 hub 主機上跑 schedulectl start</div><div class='alert bad'>⚠️ 這個系統沒有支援的服務管理器(macOS 的 launchd、Linux 的 systemd user 層級都沒有):排程器、看門狗、專案的長駐服務都不會自己跑。</div><div class='alert bad'>⚠️ 上一次 hub config apply 套用完還有沒對齊的(2026-10-30T09:00):bin/hub config plan 看是哪些</div>
+<div class='alert notify'>🔔 這個系統沒有支援的服務管理器(macOS 的 launchd、Linux 的 systemd user 層級都沒有):排程器、看門狗、專案的長駐服務都不會自己跑;排程器有在跑,是別的東西在叫它(看門狗沒有:排程器停了不會有人知道)</div><div class='alert bad'>⚠️ 上一次 hub config apply 套用完還有沒對齊的(2026-10-30T09:00):bin/hub config plan 看是哪些</div>
 <table><tr><th>Job</th><th>時間</th><th>上次</th><th>下次</th></tr><tr class=''><td><b>alpha/daily</b></td><td>每週一三五 08:00</td><td><span class='st ok'>成功</span> <span class=sub>10-30 08:00</span></td><td>11/02(週一) 08:00</td></tr></table>
 <h2 style="font-size:18px;margin-top:28px">專案信箱</h2><div class=sub>沒有沒結案的信</div>
 <h2 style="font-size:18px;margin-top:28px">平行 session(worktree)</h2><div class=sub>沒有進行中的 worktree</div>
@@ -112,7 +112,7 @@ sqlite3.DatabaseError: file is not a database</div>
 === newcomer
 <main>
 <h1>排程狀態</h1><div class=sub><a href="digest.html">digest</a> · <a href="todo.html">待辦</a> · <a href="reflect/">每週回顧</a></div><div class=sub>hub 主機 · 產生於 2026-10-30 10:00 · 每 5 分鐘自動重新整理 · 排程定義在專案登錄(projects/)跟 schedule.yaml · config ccccccc</div>
-<div class='alert bad'>⚠️ 排程器(local.agent-hub-scheduler)沒有載入,所有排程都停了。在 hub 主機上跑 schedulectl start</div><div class='alert bad'>⚠️ 這個系統沒有支援的服務管理器(macOS 的 launchd、Linux 的 systemd user 層級都沒有):排程器、看門狗、專案的長駐服務都不會自己跑。</div><div class='alert notify'>🔔 沒設定警報(hub.json 沒有 alerts):排程器停了、服務掛了只會寫在這頁跟 log,不會通知你</div>
+<div class='alert bad'>⚠️ 這個系統沒有支援的服務管理器(macOS 的 launchd、Linux 的 systemd user 層級都沒有):排程器、看門狗、專案的長駐服務都不會自己跑:所有排程都不會跑,除非你自己每 15 分鐘排程 `<TMP>/hub/bin/py <TMP>/hub/bin/scheduler.py`(例如 crontab 加一行 `*/15 * * * * <TMP>/hub/bin/py <TMP>/hub/bin/scheduler.py`)</div><div class='alert notify'>🔔 沒設定警報(hub.json 沒有 alerts):排程器停了、服務掛了只會寫在這頁跟 log,不會通知你</div>
 <table><tr><th>Job</th><th>時間</th><th>上次</th><th>下次</th></tr><tr class=''><td><b>alpha/daily</b></td><td>每週一三五 08:00</td><td><span class='st ok'>成功</span> <span class=sub>10-30 08:00</span></td><td>今天(等下一個 tick 或已達重試上限)</td></tr></table>
 <h2 style="font-size:18px;margin-top:28px">專案信箱</h2><div class=sub>沒有沒結案的信</div>
 <h2 style="font-size:18px;margin-top:28px">平行 session(worktree)</h2><div class=sub>沒有進行中的 worktree</div>
@@ -122,7 +122,7 @@ sqlite3.DatabaseError: file is not a database</div>
 === newcomer whose scheduler cron runs
 <main>
 <h1>排程狀態</h1><div class=sub><a href="digest.html">digest</a> · <a href="todo.html">待辦</a> · <a href="reflect/">每週回顧</a></div><div class=sub>hub 主機 · 產生於 2026-10-30 10:00 · 每 5 分鐘自動重新整理 · 排程定義在專案登錄(projects/)跟 schedule.yaml · config ccccccc</div>
-<div class='alert bad'>⚠️ 排程器(local.agent-hub-scheduler)沒有載入,所有排程都停了。在 hub 主機上跑 schedulectl start</div><div class='alert bad'>⚠️ 這個系統沒有支援的服務管理器(macOS 的 launchd、Linux 的 systemd user 層級都沒有):排程器、看門狗、專案的長駐服務都不會自己跑。</div><div class='alert notify'>🔔 沒設定警報(hub.json 沒有 alerts):排程器停了、服務掛了只會寫在這頁跟 log,不會通知你</div>
+<div class='alert notify'>🔔 這個系統沒有支援的服務管理器(macOS 的 launchd、Linux 的 systemd user 層級都沒有):排程器、看門狗、專案的長駐服務都不會自己跑;排程器有在跑,是別的東西在叫它(看門狗沒有:排程器停了不會有人知道)</div><div class='alert notify'>🔔 沒設定警報(hub.json 沒有 alerts):排程器停了、服務掛了只會寫在這頁跟 log,不會通知你</div>
 <table><tr><th>Job</th><th>時間</th><th>上次</th><th>下次</th></tr><tr class=''><td><b>alpha/daily</b></td><td>每週一三五 08:00</td><td><span class='st ok'>成功</span> <span class=sub>10-30 08:00</span></td><td>11/02(週一) 08:00</td></tr></table>
 <h2 style="font-size:18px;margin-top:28px">專案信箱</h2><div class=sub>沒有沒結案的信</div>
 <h2 style="font-size:18px;margin-top:28px">平行 session(worktree)</h2><div class=sub>沒有進行中的 worktree</div>

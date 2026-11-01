@@ -629,6 +629,14 @@ def no_service_manager() -> str:
              "scheduler, the watchdog and projects' long-running services will not run by themselves")
 
 
+def manual_scheduler() -> str:
+    """Where there is no service manager: what to schedule by hand so the nightly flow runs -- the scheduler's tick as
+    one absolute, copy-pasteable command (the main checkout's: the scheduler does not run from a worktree)."""
+    command = f"{shlex.quote(str(MAIN / 'bin' / 'py'))} {shlex.quote(str(MAIN / 'bin' / 'scheduler.py'))}"
+    return _("schedule `{command}` yourself every 15 minutes (for example the crontab line `*/15 * * * * {command}`)",
+             command=command)
+
+
 def process_cwds() -> list[tuple[int, str, str]]:
     """(pid, program name, working directory): every process's working directory. lsof when there is one (macOS
     always has it); otherwise read /proc (Linux often has no lsof); neither = empty (the caller says it could not

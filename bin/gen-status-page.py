@@ -280,28 +280,36 @@ def main() -> None:
     alive = scheduler_alive()
 
     alerts, rows, report_blocks = [], [], []
-    if not alive:
+    sm = hubconf.service_manager()
+    # scheduler.py writes its log only when a job runs, but saves its state file on every tick -- use that file's
+    # mtime to tell whether the scheduler is still running (going by the log raises false alarms in night hours with
+    # no jobs)
+    tick = datetime.datetime.fromtimestamp(STATE.stat().st_mtime) if STATE.exists() else None
+    stale = tick is None or now - tick > datetime.timedelta(minutes=40)
+    if sm is None:
+        # nothing to load it into: one line, red only while nothing runs it (a cron line that ticks is fine)
+        if stale:
+            t = _("{reason}: nothing scheduled runs until you {how}", reason=hubconf.no_service_manager(),
+                  how=hubconf.manual_scheduler())
+        else:
+            t = _("{reason}; the scheduler is ticking, so something else runs it (the watchdog does not: nobody is told "
+                  "if it stops)", reason=hubconf.no_service_manager())
+        alerts.append(("bad" if stale else "notify", t[:1].upper() + t[1:]))   # starts upper-case (a no-op on CJK)
+    elif not alive:
         alerts.append(("bad", _("The scheduler (local.agent-hub-scheduler) is not loaded: nothing scheduled runs. "
                                 "On the hub machine, run schedulectl start")))
-    else:
-        # scheduler.py writes its log only when a job runs, but saves its state file on every tick -- use that file's
-        # mtime to tell whether the scheduler is still running (going by the log raises false alarms in night hours
-        # with no jobs)
-        tick = datetime.datetime.fromtimestamp(STATE.stat().st_mtime) if STATE.exists() else None
-        if tick is None or now - tick > datetime.timedelta(minutes=40):
-            alerts.append(("bad", _("The scheduler's last tick was {tick:%m/%d %H:%M}, over 40 minutes ago", tick=tick) if tick
-                           else _("The scheduler's state file is missing")))
+    elif stale:
+        alerts.append(("bad", _("The scheduler's last tick was {tick:%m/%d %H:%M}, over 40 minutes ago", tick=tick) if tick
+                       else _("The scheduler's state file is missing")))
 
     # The scheduler's watchdog (scheduler-watchdog.py, a separate launchd job): this page is produced by the scheduler
     # itself, so it stops updating when the scheduler stops -- the one that actually raises the alarm is the watchdog,
-    # so when it is not on watch, this page has to say so
-    sm = hubconf.service_manager()
+    # so when it is not on watch, this page has to say so (with no service manager, the line above already does)
     if sm == "systemd" and __import__("systemd_units").state("local.agent-hub-scheduler-watchdog") != "running":
         alerts.append(("bad", _("The scheduler watchdog (local.agent-hub-scheduler-watchdog.timer) is not scheduled: "
                                 "nobody is told when the scheduler stops. Run agenthub init")))
     elif sm is None:
-        t = _("{text}.", text=hubconf.no_service_manager())
-        alerts.append(("bad", t[:1].upper() + t[1:]))   # an alert line starts upper-case (a no-op on CJK)
+        pass
     elif sm == "launchd" and subprocess.run(["launchctl", "print", f"gui/{os.getuid()}/local.agent-hub-scheduler-watchdog"],
                                             capture_output=True).returncode != 0:
         alerts.append(("bad", _("The scheduler watchdog (local.agent-hub-scheduler-watchdog) is not loaded: nobody is told "

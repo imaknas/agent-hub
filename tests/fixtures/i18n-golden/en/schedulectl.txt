@@ -16,6 +16,7 @@ Usage:
   schedulectl run <name>          run a job once now (like Claude Desktop's "Run now") and record it as run today, so the
                                   schedule does not run it again that day (which matters for LLM jobs). Runs through launchd
                                   in the user's desktop session: under SSH the keychain can't be read and claude is logged out.
+                                  With no service manager (a container) it runs right here, in the foreground.
                                   An event job runs with no events and its cursor stays: a manual run is a test. While a
                                   tick is running a job in the foreground it waits 30 seconds, then gives up
   schedulectl events <name>       an event job's cursor and the events waiting for it (and the ones the loop chain holds
@@ -48,6 +49,7 @@ Usage:
   schedulectl run <name>          run a job once now (like Claude Desktop's "Run now") and record it as run today, so the
                                   schedule does not run it again that day (which matters for LLM jobs). Runs through launchd
                                   in the user's desktop session: under SSH the keychain can't be read and claude is logged out.
+                                  With no service manager (a container) it runs right here, in the foreground.
                                   An event job runs with no events and its cursor stays: a manual run is a test. While a
                                   tick is running a job in the foreground it waits 30 seconds, then gives up
   schedulectl events <name>       an event job's cursor and the events waiting for it (and the ones the loop chain holds
@@ -161,23 +163,27 @@ Scheduler stopped (schedule.yaml unchanged; start brings it back)
 Scheduler started
 === status without a service manager
 [exit 2]
-schedulectl status: this system has no supported service manager (neither macOS launchd nor the Linux systemd user level): the scheduler, the watchdog and projects' long-running services will not run by themselves
+schedulectl status: this system has no supported service manager (neither macOS launchd nor the Linux systemd user level): the scheduler, the watchdog and projects' long-running services will not run by themselves; schedule `<HUB>/bin/py <HUB>/bin/scheduler.py` yourself every 15 minutes (for example the crontab line `*/15 * * * * <HUB>/bin/py <HUB>/bin/scheduler.py`)
 === run without a service manager
-[exit 2]
-schedulectl run: this system has no supported service manager (neither macOS launchd nor the Linux systemd user level): the scheduler, the watchdog and projects' long-running services will not run by themselves
+[exit 3]
+Running nightly here (no service manager); its output also goes to <TMP>/hub/.logs/nightly-<DATE>.log
+job says hi
+job done
+nightly finished (exit 3); today's schedule won't run it again
 === stop without a service manager
 [exit 2]
-schedulectl stop: this system has no supported service manager (neither macOS launchd nor the Linux systemd user level): the scheduler, the watchdog and projects' long-running services will not run by themselves
+schedulectl stop: this system has no supported service manager (neither macOS launchd nor the Linux systemd user level): the scheduler, the watchdog and projects' long-running services will not run by themselves; schedule `<HUB>/bin/py <HUB>/bin/scheduler.py` yourself every 15 minutes (for example the crontab line `*/15 * * * * <HUB>/bin/py <HUB>/bin/scheduler.py`)
 === start without a service manager
 [exit 2]
-schedulectl start: this system has no supported service manager (neither macOS launchd nor the Linux systemd user level): the scheduler, the watchdog and projects' long-running services will not run by themselves
+schedulectl start: this system has no supported service manager (neither macOS launchd nor the Linux systemd user level): the scheduler, the watchdog and projects' long-running services will not run by themselves; schedule `<HUB>/bin/py <HUB>/bin/scheduler.py` yourself every 15 minutes (for example the crontab line `*/15 * * * * <HUB>/bin/py <HUB>/bin/scheduler.py`)
 === run unknown
 [exit Neither schedule.yaml nor the project registry has 'nosuch']
 === run (systemd)
-[exit None]
+[exit 0]
 Started demo/job; its output goes to <TMP>/hub/.logs/demo__job-<DATE>.log (today's schedule won't run it again)
 === last-run state
 {
+  "nightly": "<DATE>",
   "demo/job": "<DATE>"
 }
 === models, no providers

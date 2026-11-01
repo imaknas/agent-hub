@@ -47,16 +47,25 @@ class SetupHints(unittest.TestCase):
         out = self.setup("Darwin", "brew")
         self.assertIn("brew install gh", out)
         self.assertIn("brew install restic", out)
+        self.assertNotIn("service manager", out, "launchd is always there")
 
     def test_linux_without_systemd(self):
+        """a container: says nothing runs by itself, and how to install with apt"""
         out = self.setup("Linux", "apt-get")
-        self.assertIn("service managers other than launchd come later", out)
-        self.assertIn("brew install gh", out)
+        self.assertIn("no service manager", out)
+        self.assertNotIn("come later", out)
+        self.assertIn("sudo apt-get install gh, then gh auth login", out)
+        self.assertIn("sudo apt-get install restic", out)
+        self.assertNotIn("brew", out)
 
     def test_linux_with_systemd(self):
-        out = self.setup("Linux", "apt-get", systemd=True)
-        self.assertIn("service managers other than launchd come later", out)
+        out = self.setup("Linux", "dnf", systemd=True)
+        self.assertIn("✓ systemd", out)
+        self.assertIn("sudo dnf install gh", out)
 
+    def test_linux_unknown_package_manager(self):
+        out = self.setup("Linux")
+        self.assertIn("install gh with your package manager", out)
 
 if __name__ == "__main__":
     unittest.main()
