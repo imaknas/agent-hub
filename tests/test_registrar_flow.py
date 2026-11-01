@@ -275,9 +275,14 @@ class RegistrarFlow(unittest.TestCase):
     def test_second_run_sends_nothing_new(self):
         def check(env, log):
             first = {p: env.outputs(p) for p in env.scenes}
+            stored = sqlite3.connect(env.db).execute("SELECT COUNT(*) FROM events WHERE type='record'").fetchone()
             r = env.run()
             self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
             self.assertEqual({p: env.outputs(p) for p in env.scenes}, first)
+            # the claims and notes the run re-creates are not sent again: the bus would keep a re-created one (another
+            # ts is another content, core §10)
+            self.assertEqual(sqlite3.connect(env.db).execute(
+                "SELECT COUNT(*) FROM events WHERE type='record'").fetchone(), stored)
         self.each(check)
 
     def test_messages_zh_hant(self):

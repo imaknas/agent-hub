@@ -127,11 +127,14 @@ class Ledger:
                                stderr=r.stderr.strip()[-200:]))
         self.project = project
         self.need, self.settle, self.pending, self.raised_by, self.ignored, self.filed_as = {}, {}, [], {}, [], {}
+        self.sent: set[tuple] = set()   # (origin, type, id) of every Acts record this project has sent
         held: dict[str, list[dict]] = {}
         for e in events:
             rec = e["record"]
             if ph_wire.family(rec.get("ext")) != "acts":   # every version read
                 continue
+            if e["direction"] == "out":
+                self.sent.add((rec.get("origin"), rec.get("type"), rec.get("id")))
             if (e["direction"] == "out" and rec.get("type") in ph_records.NEED) or \
                     (e["direction"] == "in" and rec.get("type") in ph_records.SETTLEMENT):
                 held.setdefault(str(rec.get("key")), []).append(rec)
@@ -204,14 +207,19 @@ class Ledger:
         return {"text": text, "terms_rev": rev, **({"terms_digest": ph_wire.terms_digest(need)} if need else {})}
 
 
-def publish(recs: list[dict]) -> dict[str, str]:
-    """Send; returns {record id: status}."""
+def publish(recs: list[dict], sent=frozenset()) -> dict[str, str]:
+    """Send; returns {record id: status}. A record whose id was already sent (Ledger.sent: a claim or note re-created
+    each night until the item is settled, a raise whose stamp did not get committed) is not sent again: core §10, an
+    id names one record and a retransmission carries it unchanged, and this one would differ at least in ts. It is a
+    duplicate, as the bus answered when it kept the first of an id."""
+    already = {r["id"]: "duplicate" for r in recs if (r["origin"], r["type"], r["id"]) in sent}
+    recs = [r for r in recs if r["id"] not in already]
     if not recs:
-        return {}
+        return already
     if DRY:
         for rec in recs:
             log(_("(dry-run) would send {type} {key}", type=rec["type"], key=rec["key"]))
-        return {rec["id"]: "dry-run" for rec in recs}
+        return already | {rec["id"]: "dry-run" for rec in recs}
     r = hubbus("record-publish", "--json", "-", stdin=json.dumps(recs, ensure_ascii=False))
     try:
         res = {x["id"]: x["status"] for x in json.loads(r.stdout or "[]")}   # each {id: record id, event, status}
@@ -222,7 +230,7 @@ def publish(recs: list[dict]) -> dict[str, str]:
         if st not in ("accepted", "duplicate"):
             log(_("{project}: {type} {key} could not be sent ({status}): {stderr}", project=rec["project"],
                   type=rec["type"], key=rec["key"], status=st, stderr=r.stderr.strip()[-160:]))
-    return res
+    return already | res
 
 
 def record(project: str, type_: str, key: str, rid: str, **kw) -> dict:
@@ -323,7 +331,7 @@ def run_project(project: str, path: pathlib.Path, how: str, warned: set[str]) ->
               "goes on after a key)", project=project, line=i + 1, text=line[:80]))
     fresh = [(e, record(project, "raised", e["key"], f"r:{e['key']}", terms={"text": e["text"]}, terms_rev=1))
              for e in events]
-    res = publish([r for _e, r in fresh])
+    res = publish([r for _e, r in fresh], led.sent)
     for e, r in fresh:
         if res.get(r["id"]) in ("accepted", "duplicate", "dry-run"):
             sent += res.get(r["id"]) == "accepted"
@@ -340,7 +348,7 @@ def run_project(project: str, path: pathlib.Path, how: str, warned: set[str]) ->
         _old, rev, cur = led.terms(k)
         amends_rec = record(led.filed(k), "amended", k, f"a:{k}:{rev + 1}", terms={"text": new_text}, terms_rev=rev + 1,
                             **({"supersedes": [cur]} if cur else {}))
-        r = publish([amends_rec])
+        r = publish([amends_rec], led.sent)
         sent += r.get(amends_rec["id"]) == "accepted"
         ok &= r.get(amends_rec["id"]) in ("accepted", "duplicate", "dry-run")
     # 5. reconcile
@@ -376,7 +384,7 @@ def run_project(project: str, path: pathlib.Path, how: str, warned: set[str]) ->
                             _c("The review-log does not record which run deleted it")))
             claims.append(record(led.filed(k), "claimed", k, f"c:{k}:r{led.reopens(k)}", origin="registrar",
                                  outcome="done", evidence={"basis": basis}))
-    res = publish(claims + notes)
+    res = publish(claims + notes, led.sent)
     for r in notes:
         if res.get(r["id"]) == "accepted":
             log(_("{project}: {key} moved off the owner lines (relabelled, moved or archived); no claim, a note sent",
