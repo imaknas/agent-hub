@@ -1,159 +1,176 @@
 # Renaming agent-hub to brunna
 
-Status: design, 11-02; revised after a cold review the same day. Nothing built. Decided by the owner on 11-02: the
-name changes, and the new name is **brunna** (from Old Norse *brunnr*, a well: every project's notes run into one well
-that is tended each night).
+Status: design, 11-02. Revised twice after cold reviews. On 11-02 the owner widened the scope from "the names users see"
+to every name the platform writes, as a test of how well the platform migrates itself. Nothing built.
+
+The owner decided the rename on 11-02, and the new name is **brunna**: from Old Norse *brunnr*, a well. Every
+project's notes run into one well, and it is tended each night.
 
 ## Why
 
 "agent-hub" and "agenthub" are crowded:
 
 - A live US trademark, AGENTHUB, is registered in class 42 (Reg. 7707945).
-- Andrej Karpathy's AgentHub (March 2026), an agent-coordination hub built on git and a message board, owns the
-  search results.
+- Andrej Karpathy's AgentHub (March 2026), an agent-coordination hub built on git and a message board, owns the search
+  results.
 - At least one local hub, NicolasHubner/agenthub, lets Claude Code, Codex and Cursor talk to each other, which overlaps
   directly with the mailbox.
-- Several unrelated agent-hub repos.
-
-The name is unsearchable and easy to confuse with those projects. The repo has been public for only a few days, so
-renaming costs least now.
+- Several unrelated repos are named agent-hub.
 
 brunna was screened on 11-02:
+
 - PyPI, npm, Homebrew and crates.io have no package by that name.
 - brunna.dev is unregistered; brunna.com is parked for sale.
 - No software product uses the name; web results are a person's name and a small Swedish town.
-- No trademark appeared in a web search. A formal search (USPTO, EUIPO, TIPO) has not been done and is the owner's
-  call before any commercial use.
+- No trademark appeared in a web search. A formal search (USPTO, EUIPO, TIPO) has not been done, and before any
+  commercial use that is the owner's call.
 
-## What changes, and what must keep working
+## Scope
 
-Four kinds of occurrence, handled differently:
+Every name the platform writes that carries the product's name changes. There are four exceptions.
 
-1. **Text** (docs, messages, comments, catalog entries, the logo): replaced. No compatibility needed.
-2. **Names the user meets or types** (the CLI, env vars, unit labels, rules-file markers, the MCP name, the platform's
-   project name, its job names): the new name is written from the switch on, and the old one is still **read** for a
-   stated period. The table below lists them.
-3. **Frozen identifiers**: names written into repos, protocols or per-machine files that nobody reads as the product's
-   name. They **keep the old spelling for good**, like `hub.json`. Renaming them would cost a migration each and buy
-   nothing. The second table lists them, so an implementer leaves them alone.
-4. **Recorded history**: never rewritten. This covers bus events, Principal Handoff records, task keys such as
-   `task-agent-hub-…` in STATE.md lines, git history and digests.
+- **History is never rewritten.** This covers:
+  - bus events (an append-only log);
+  - git history;
+  - Principal Handoff records already sent;
+  - published documents (the Zenodo record);
+  - digests and review logs.
 
-### Renamed, with the old name still read
+  History stays readable through the name pairs below, which never expire for reading.
+- **`hub.json`** becomes `brunna.json`. The internal module names `hubconf`, `hubbus`, `hub-event` and `hub-run` say
+  "hub", not "agent-hub", so they are out of scope.
+- **Old names are reserved.** No project may be registered as `agent-hub`; registry validation refuses it. Otherwise a
+  new project could take letters addressed to the old name.
+- **Reading keeps working.** A name pair stops being *written* in its old spelling at the switch. The old spelling of
+  every reader-facing pair (CLI, env vars, markers) stops being *accepted* only after the deprecation window.
 
-| Name | Where it lives | New | Compatibility |
-|---|---|---|---|
-| CLI `agenthub` | users' PATH (`~/.local/bin/agenthub`), rules files, docs, habits, other agents' prompts | `brunna` | `bin/agenthub` stays as a forwarder (as `bin/hub` does today); `install-cli` writes both wrappers. `upgrade.py` finds the wrapper by either name and either `WRAPPER_MARK`, so an existing install gets `brunna` |
-| repo `imaknas/agent-hub` | clones, install.sh URL, README links, Muninn's README | `imaknas/brunna` | GitHub redirects the old URL and old clones keep fetching; install.sh's default repo URL changes |
-| default checkout folder `~/agent-hub` | install.sh | `~/brunna` for new installs | an existing checkout is never moved by the rename (hooks and units already follow a move through `config apply`) |
-| default instance folder `~/.agent-hub` | `.hub-home` points to it | `~/.brunna` for new installs | existing instances keep their folder: `.hub-home` names it explicitly |
-| env vars `AGENT_HUB_*` (ROOT, HOME, CONFIG, STATE, DATA, SECRETS, LANG_UI, LANG_CONTENT, PYTHON, EVENTS, JOB, JOB_CHAIN, PRIVATE_NAMES…) and `AGENTHUB_*` (`AGENTHUB_PROJECT`, which users set in their MCP settings; `AGENTHUB_TIER_CACHE` in registry `run:` lines; `AGENTHUB_CONNECT_ROOTS`) | services, units, tests, users' shells and MCP settings, child processes | `BRUNNA_*` | one helper in hubconf reads `BRUNNA_X`, then `AGENT_HUB_X` / `AGENTHUB_X`; every read moves onto it (a ratchet test forbids new direct reads); the platform sets both spellings for child processes |
-| launchd labels / systemd units `local.agent-hub-scheduler`, `…-watchdog`, `local.agent-hub.<service>` | `~/Library/LaunchAgents`, `~/.config/systemd/user` | `local.brunna-scheduler`, `local.brunna-scheduler-watchdog`, `local.brunna.<service>` | the swap is done by `init --scheduler-only`, which upgrade already runs: it loads the new unit, then unloads and removes the old one, holding the scheduler's lock so a tick in progress isn't killed. It only touches an old unit that is this hub's, the same ownership check uninstall uses. Project services need nothing extra: render-services removes the labels it recorded and no longer wants, and adds the new ones. Every reader of the labels knows both until the old names are dropped: the watchdog's `diagnose()`, doctor, uninstall, the status page, `schedulectl`, `recover-service.sh` |
-| rules-file markers `<!-- agent-hub:begin/end -->` | every project's `CLAUDE.local.md` (and other runtimes' rules files) | `<!-- brunna:begin/end -->` | sync-local-setup and uninstall recognise both; the first sync after the switch rewrites the block with the new markers |
-| MCP server name `agenthub` | users' `~/.claude.json`, `~/.codex/config.toml` | `brunna` | the upgrade offers to re-register under the new name, which needs a terminal yes as registration does; `agenthub mcp` and `brunna mcp` start the same server; uninstall removes both names |
-| the platform's own project name `agent-hub` | `projects/agent-hub.yaml` (in the repo), `hubconf.hub_project()`, bus addresses (`--to agent-hub`), Muninn's letters, the agent rules | `brunna` | in code: the constant changes and the yaml is `git mv`'d. The upgrade step records the rename the way every project rename is recorded: `.state/project-renames.json` gets `{"agent-hub": {"new": "brunna", "stage": "done"}}`. `hubconf.former_names` then carries it to the places that already read it: hubbus `own_names`/`now_named`, the registry, event-job cursors, the scheduler's cursor adoption. No `rename-project.sh`: it refuses the platform, and the platform has no memory repo to move. `~/git-origin/agent-hub.git`, the checkout's own origin, is not touched |
-| scheduler job names `agent-hub/<job>` (17 jobs) | the scheduler's state (`name`, `.last_ok`, `.attempts`), users' and modules' `after:`/`before:` (`modules/consolidate.yaml`, `modules/assistant.yaml` and the owner's registry name `agent-hub/librarian`) | `brunna/<job>` | the scheduler adopts every state suffix of a job from its former names, so no daily job runs twice on upgrade day; `after:`/`before:` resolve through former names. Today an unknown dependency is skipped silently, which is how a missed name would go unnoticed. The two modules name `{hub}/librarian` through the hub's project name instead of the literal |
+## The mechanism: one table of name pairs, in code
 
-### Frozen: the old spelling stays
+`bin/names.py` (standard library only), with a shell twin in `bin/hubpaths.sh` that reads the same table through
+`bin/py`, holds every pair as data: class, old spelling, new spelling. The shell twin has a fallback copy for the
+scripts that run before the platform's Python exists: `install.sh` and `bin/py` itself.
 
-These are names written into repos, protocols and per-machine paths. Nobody reads them as the product's name, and
-changing any of them would split readers from writers.
+- **Writers** use `names.current(cls)`. It is fixed by the code's version, never by a state file. A release before the
+  switch writes the old spelling; the switch release writes the new one. So no ordering between "the code moved" and "a
+  migration ran" can make a writer and a reader disagree.
+- **Readers** use `names.all(cls)`: both spellings, in every release from v0.6 on, in both directions. A v0.6 that is
+  rolled back to still reads what v0.7 wrote.
+- **The hub's own former name is a constant in this table**, not a `.state/project-renames.json` entry.
+  `hubconf.former_names`/`current_name` consult the table first, so the hub's rename needs no state and no migration
+  step to take effect. Other projects' renames keep using the state file as today.
+- **A test (`tests/test_name_pairs.py`) fails if code outside `names.py` spells either side of a pair as a literal.**
+  There are a few listed exceptions: the pair table, its fallback copy, and fixtures. This ratchet is how "every name"
+  stays true as the code changes.
 
-- **Principal Handoff party ids** `agent-hub:registrar` and `agent-hub:owner-side` (`hubconf.party`). They are
-  protocol identities on the wire. The registrar counts a task as bound only when its `by` is the registrar's id, so a
-  new id would orphan every existing task: relink, amend, reconcile and claim-done would stop. `hubconf.party` keeps
-  the old prefix as a constant, separate from `hub_project()`. Muninn is told they don't change.
-- **Per-repo names**:
-  - `.git/agent-hub/` (outbox, `inbox.json`, cache, test output, tier cache);
-  - the `test-*.jsonl` logs;
-  - `refs/agent-hub/*`;
-  - the `agent-hub-op.lock` directory (`with-lock.sh` and `project-git-job.py` must agree on it, or they stop locking
-    each other out);
-  - the `agent-hub-deps-pruned` marker.
-- **Per-machine paths**:
-  - the platform's venv `~/.local/share/agent-hub/python` (`bin/py`'s fallback: renaming it breaks every install);
-  - the bus default `~/.local/state/agent-hub-bus`;
-  - `~/git-origin/agent-hub.git`.
-- **Exclude entries** such as `.agent-hub/` in the test runner's exclude list.
-- **`hub.json`**, and the internal module names `hubconf`, `hubbus`, `hub-event`, `hub-run`.
+## The pairs
 
-A test lists these and fails if one is renamed by accident.
+| Class | Old | New | Where | How readers take both / the migration |
+|---|---|---|---|---|
+| product name in text | agent-hub | brunna | docs, messages, catalog, logo, README ("formerly agent-hub" for a while) | text only |
+| CLI | `agenthub` | `brunna` | PATH wrapper, rules files, permission rules, prompts | both commands exist (one forwards); `install-cli` writes both wrappers; `upgrade.py` finds a wrapper by either name and either mark; the permission rules (`policy.platform_cli`, the runtime's allow rules) allow both spellings until the deprecation window ends |
+| env vars | `AGENT_HUB_*`, `AGENTHUB_*` | `BRUNNA_*` | services, units, tests, MCP settings (`AGENTHUB_PROJECT`), registry `run:` lines, shell scripts | `names.env(X)` and its shell twin: one spelling set → that one; both set and different → the command refuses and says which (no silent precedence); the platform never exports both. Tests and `cap-runner.py` strip both prefixes |
+| unit labels | `local.agent-hub-scheduler`, `…-watchdog`, `local.agent-hub-mailbox-dispatch`, `local.agent-hub.<service>` (incl. `lease-runner`, `cap-runner`), `local.agent-hub-run-now.*` | `local.brunna-…` | launchd / systemd user units | the core installer is pairwise: install `current`, then unload and remove the *other* spelling's unit when it is this hub's (`ours()`), holding the scheduler's lock (it waits up to a tick's length, else fails and says rerun). render-services removes a relabelled service *before* adding its new label, so a fixed port (lease-runner's) never clashes |
+| rules-file markers | `<!-- agent-hub:begin/end -->` | `<!-- brunna:begin/end -->` | every project's rules file | sync-local-setup, uninstall and prompts read both; each project's next session start rewrites the block with `current` |
+| git-hook marker | `# agent-hub:gate` | `# brunna:gate` | every repo's managed hooks | render-project-settings recognises both as its own and rewrites with `current` at the next apply |
+| leak check | `~/agent-hub`, `.agent-hub` | both pairs | `sync-local-setup.sh` | checks both |
+| the platform's project name | `agent-hub` | `brunna` | `projects/agent-hub.yaml` (in the repo), `hub_project()`, bus addresses, scheduler job names `agent-hub/<job>` (14 jobs, 3 services), module `before:`/`after:`/`legacy_name`, Muninn's letters | `hub_project()` = `current`; `former_names` includes the pair constant. Everywhere a project's name is matched, the mailbox matches `own_names`: inbox, the dispatch queries, `apply-updates`, `records()`. `valid_address` accepts former names and `send_letter` routes them to the current one. The scheduler adopts every state suffix (`name`, `.last_ok`, `.attempts`, cursors) from former names, and resolves `after:`/`before:` through them. The test runner finds the hub's entry in the tree by `type`, not by name, so the commit that renames the yaml passes the gate |
+| Principal Handoff party ids | `agent-hub:registrar`, `agent-hub:owner-side` | `brunna:registrar`, `brunna:owner-side` | records on the wire, Muninn's register | the registrar counts a task as its own when the raiser is its id in **either** spelling, forever (history). New records carry `current`. **The switch of party ids waits for Muninn**: Muninn must accept a party id change for the same registrar before agent-hub sends one, and agent-hub asks by letter at step 1. Until Muninn confirms, this pair's `current` stays old |
+| task keys | `task-agent-hub-…` | `task-brunna-…` | STATE.md lines, Muninn's register | a migration through the Principal Handoff **relink** operation (the registrar already implements it): each open key is relinked to a new key and STATE.md lines follow. Closed keys stay in history |
+| per-repo paths | `.git/agent-hub/` (outbox, `inbox.json`, cache, test output, tier cache), `test-*.jsonl`, `refs/agent-hub/*`, the `agent-hub-op.lock` dir, the `agent-hub-deps-pruned` and `agent-hub-migrated-to-mini` markers | `.git/brunna/…`, `refs/brunna/*`, `brunna-op.lock`, … | every project's repo and worktrees | readers take both; a migration op in `project-git-job.py`, run as each project, moves the directory and renames the refs (atomic per item, idempotent). Lock: during the window, writers take **both** lock directories, in a fixed order, so old and new code still exclude each other |
+| per-machine paths | the venv `~/.local/share/agent-hub/python`, `~/git-origin/agent-hub.git` (the checkout's origin), this machine's `bus_dir` setting | `~/.local/share/brunna/python`, `~/git-origin/brunna.git`, a new `bus_dir` | the machine | the venv: `setup-python` builds the new one and `bin/py` falls back to the old until removed. The origin: the bare repo is renamed and the checkout's remote URL updated. The bus is moved only when `hub.json` names an `agent-hub` path: dispatch is stopped, the database copied with SQLite's backup API, the setting rewritten, dispatch restarted. The code default `.state/bus` is unaffected |
+| config file | `hub.json`, `contracts/hub.v1.schema.json` | `brunna.json`, `brunna.v1.schema.json` | the config repo | hubconf reads whichever exists (refuses if both exist and differ); the migration `git mv`s it in the config repo and commits; schema loaded by either name |
+| defaults for new installs | `~/agent-hub`, `~/.agent-hub`, repo URL | `~/brunna`, `~/.brunna`, `imaknas/brunna` | install.sh | install.sh notices an existing `~/agent-hub` install and resumes or upgrades it instead of cloning a second one |
+| MCP server name | `agenthub` | `brunna` | users' agent settings | the upgrade offers re-registration on a terminal yes; uninstall removes both |
+| repo | `imaknas/agent-hub` | `imaknas/brunna` | GitHub | renamed by the owner; GitHub redirects |
 
-## Steps
+## Releases
 
-Each step is its own branch, with the full suite green, landed by `merge-branch`.
+1. **v0.6.0: both spellings everywhere, `current` = old for every class.**
+   This release changes nothing visible. It is the release a rollback lands on, so it must read anything v0.7 or later
+   writes:
+   - `names.py` and its shell twin, the ratchet test;
+   - every reader on `names.all`;
+   - the pairwise unit installer;
+   - the mailbox on `own_names`;
+   - scheduler adoption;
+   - the test runner finding the hub by `type`;
+   - the env rule (refuse on conflict, never export both);
+   - both lock directories;
+   - `bin/brunna`;
+   - permission rules for both commands;
+   - the reserved name;
+   - the migration ops, built but not run.
 
-1. **Compatibility layer (v0.6.0, no visible change).** Released on its own, so that any version a user might roll
-   back to already reads both names. A rollback from the switch to v0.5 would otherwise put the old units back while
-   the new ones still run: two schedulers.
-   - The env-var helper; every read of `AGENT_HUB_*` and `AGENTHUB_*` moved onto it; the ratchet test.
-   - Both rules-file markers in sync-local-setup and uninstall.
-   - Both MCP names in uninstall.
-   - Both unit labels in the watchdog, doctor, uninstall, the status page, `schedulectl` and `recover-service.sh`.
-   - hubbus `valid_address` accepts former names and routes them with `now_named`. Today `send_letter` canonicalises
-     only the recipient, so a letter to a renamed project is refused; that is already a bug for any project rename.
-   - The scheduler: job state and `after:`/`before:` adopt through former names.
-   - `hubconf.party` decoupled from `hub_project()`.
-   - The frozen-names test.
-   - `bin/brunna` added, with `bin/agenthub` as the forwarder; `install-cli` writes both; `upgrade.py` finds either
-     wrapper.
-   - Hard-coded `"agent-hub"` literals in `weekly-reflect.py`, `gen-todo.py` and `evals/e3.py` go through
-     `hub_project()`.
-   - `sync-local-setup.sh`'s leak check learns `brunna` and `.brunna`.
-2. **The switch (v0.7.0, `BREAKING CHANGE:` notes, though old names keep working).**
-   - Text everywhere: README ("formerly agent-hub" for a while), docs, catalog, messages, the logo wordmark, the
-     social preview.
-   - install.sh defaults: repo URL, `~/brunna`, `~/.brunna`.
-   - `hub_project()` becomes `brunna` and the yaml is renamed.
-   - `init --scheduler-only` swaps the units.
-   - The migration step (idempotent, and kept in later releases' step lists, so a jump straight from v0.5 works):
-     - writes the project-renames entry;
-     - lets the unit swap run;
-     - offers MCP re-registration at the terminal.
-
-     Markers are rewritten at each project's next session start.
-3. **Outside the repo**, in the owner's hands or by letter:
+   The letter to Muninn asking it to accept a party-id change goes out with this release.
+2. **v0.7.0: the switch.**
+   - `current` = new for every class, except party ids if Muninn hasn't confirmed.
+   - Text everywhere, install.sh defaults.
+   - The migration steps run from upgrade's step list and from `land`. `land` matters because the owner's machine
+     receives code through `merge-branch` → `land`, not `upgrade`. Each step is idempotent and resumable, and
+     `doctor` verifies its result:
+     1. units;
+     2. config file;
+     3. per-machine paths;
+     4. each project's per-repo paths and markers (at its next session start, or by an explicit `brunna migrate
+        --projects` run);
+     5. task-key relink;
+     6. MCP re-registration offer.
+   - `upgrade.py` refuses `--to` anything older than v0.6.0, and its go-back advice names v0.6.0.
+   - The migration steps stay in every later release's step list, so a jump from v0.5 or v0.6 straight to a later
+     version works.
+3. **Party ids switch** (in v0.7.0 if Muninn has confirmed by then, otherwise a v0.7.x).
+4. **Outside the repo**, in the owner's hands or by letter:
    - rename the GitHub repo, then update the description and social preview;
-   - write to Muninn:
-     - its README link;
-     - its `handoff-version` example that names agent-hub;
-     - that the party ids stay as they are;
-     - that letters to `agent-hub` keep arriving;
-   - write to the other projects that mention agent-hub (the Principal Handoff spec repo, the owner's site);
-   - the Zenodo record of Principal Handoff names agent-hub only as an implementation, and that stays historical.
-4. **Dropping the old names (v0.9.0), two minor releases after the switch.** The CHANGELOG of the switch announces it.
-   - Dropped: the `agenthub` forwarder, the old env-var reads, the old markers, the old-label checks.
-   - Kept for good: the former-name entry (it is how history and old letters resolve) and every frozen identifier.
+   - tell Muninn about its README link and its `handoff-version` example;
+   - tell the other projects that mention agent-hub: the Principal Handoff spec repo and the owner's site.
+5. **v0.9.0: old spellings no longer accepted.**
+   - Dropped: the `agenthub` forwarder and permission rules, the old env vars, the old markers, the old labels, the old
+     lock directory, `hub.json` as a name, the venv fallback.
+   - Kept for good: reading history (party ids and the hub's former name in records and letters) and the reserved
+     name.
 
-## This machine
+## Proving it: the migration test
 
-The owner's instance migrates by `brunna upgrade` like any other.
+A test builds a **v0.5 instance** in a fake HOME and upgrades it. The instance is what `install.sh` + `init` + a
+connected project + a sandboxed project produce at tag v0.5.0, and it holds:
 
-- The checkout stays at `~/agent-hub` unless the owner chooses to move it.
-- `.hub-home` keeps pointing at `~/.agent-hub`.
-- `init --scheduler-only` swaps the scheduler's units.
-- The old `agenthub` keeps working in every open session until the next session start, which loads rules naming
-  `brunna`.
+- open letters to `agent-hub`;
+- a task raised by the registrar with a key in a STATE.md line;
+- scheduler state from today;
+- a running fake scheduler unit;
+- a lease service on a port.
 
-Muninn's lease-runner client, the bus and the memory repos keep working throughout: through former names, and through
-the frozen ids.
+It is upgraded along two paths:
+
+- v0.5 → v0.6 → v0.7 → v0.9, one release at a time;
+- v0.5 → v0.9 in one jump.
+
+After each path, the result is compared with a fresh v0.9 install plus the same data:
+
+- no daily job ran twice;
+- every open letter reached the hub;
+- the task is still bound, under its relinked key;
+- exactly one scheduler unit is loaded;
+- no file or path in the old spelling remains outside history;
+- `doctor` is clean.
+
+The test also checks a rollback, v0.7 → v0.6, with the same checks against v0.6. Where a step needs launchd or
+systemd, stand-ins are used (no real unit is touched), as in the uninstall tests.
+
+The owner's machine is the last and real run, after the test passes: `brunna upgrade`, then `doctor`, then a night of
+jobs checked on the status page.
 
 ## Risks
 
-- **A unit swap that leaves no scheduler, or two.** The new unit is loaded first, and the old one is removed in the
-  same run, under the scheduler's lock. A failed load leaves the old unit in place and is reported. The scheduler's
-  lock already makes a second tick refuse. A rollback to v0.6 reads both labels, so it doesn't leave two running.
-- **Daily jobs running twice on upgrade day.** Prevented by adopting job state through former names. A test runs a
-  tick before and after the rename on the same day and checks no job runs twice.
-- **Letters addressed to `agent-hub`.** Covered by `valid_address` and `now_named`. A test sends one after the rename
-  and checks the hub receives it.
-- **The registrar's tasks.** Covered by the frozen party ids. A test checks that a task raised before the rename is
-  still bound after it.
-- **A project session started before the switch** keeps old rules naming `agenthub` until its next start. The
-  forwarder covers it.
-- **Search and links.** GitHub redirects the repo, and the README says "formerly agent-hub".
+- **Two schedulers, or none.** The pairwise installer and the version-fixed `current` mean that at any moment exactly
+  one spelling is written, and the other's unit is removed under the lock. Checked by the migration test's rollback.
+- **Muninn.** Party ids and task keys touch Muninn's register. Both changes wait for its confirmation, and the relink
+  uses an operation the protocol already defines.
+- **A project nobody opens.** Its per-repo paths and markers migrate at its next session start; until then readers
+  take both. `brunna migrate --projects` does them all at once. `doctor` lists projects still on old paths.
+- **Search and links.** GitHub redirects; the README says "formerly agent-hub".
 
 ## Open
 
-- Whether to rename the internal `hub*` modules later (not needed for the rename).
 - The formal trademark search, before any commercial use (the owner's).
+- Muninn's answer on party-id changes.
