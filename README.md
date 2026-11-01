@@ -120,15 +120,17 @@ say it's done, then run the same command again.
 1. Run `curl -fsSL https://raw.githubusercontent.com/imaknas/agent-hub/main/install.sh | sh -s -- --for-agent`. It
    installs nothing that needs the user's consent itself. Its last line is `{"done": true, "next": "<command>"}`,
    `{"needs_user": …}` (exit 3) or `{"error": …}`.
-2. Run the `next` command (`… agenthub init --questions`). It lists the questions as JSON, each with an `id`, `text`,
+2. Run the `next` command (`… agenthub init --questions`). Keep using that full path for `agenthub` in the steps below:
+   it may not be on PATH until a new shell. It lists the questions as JSON, each with an `id`, `text`,
    `default`, `choices` where there are some, and `via`. Ask the user the `via: chat` ones in the chat, offering the
    default. Never ask for `via: page`, `via: dialog` or `via: user` ones: agent-hub asks the user those directly, or
    tells them what to do.
 3. Write the answers to a file as one JSON object (`{"owner": "…", "agent": "claude", …}`) and run
    `… agenthub init --questions --answers <file>`: answers can bring new questions (a provider's model). Repeat until
-   it lists no chat question you haven't asked.
+   it lists no chat question (an answered one, `""` for skip included, isn't listed again).
 4. Tell the user to watch their screen for agent-hub's windows and pages, then run `… agenthub init --answers <file>`.
-   It waits up to 10 minutes on each window or page, so run it in the background or with a long timeout. The last
+   On a machine with a screen it waits up to 10 minutes on each window or page, so run it in the background or with a
+   long timeout; without a screen (SSH, a container) it doesn't wait and hands them back. The last
    line is `{"done": …, "needs_user": [...]}`; for anything in `needs_user`, tell the user, then run it again.
 5. Run `… agenthub doctor` and tell the user what it says is missing. Afterwards the user sees how things are at
    http://localhost:18790, and in any chat can ask to connect a folder or what's waiting for them.

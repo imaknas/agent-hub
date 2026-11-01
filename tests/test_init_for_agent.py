@@ -47,6 +47,8 @@ class ForAgent(unittest.TestCase):
         for qid in ("language", "owner", "workspace", "modules", "llm_model"):
             self.assertEqual(qs[qid]["via"], "chat", qid)
         self.assertNotIn("agent", qs, "answered: not asked again")
+        r = self.hub_cmd("init", "--questions", "--answers", self.answers(connect=""))
+        self.assertNotIn("connect", {q["id"] for q in json.loads(r.stdout)["questions"]}, "\"\" is an answer (skip)")
         for qid, via in (("install_agent", "dialog"), ("agent_token", "user"), ("register_mcp", "dialog"),
                          ("llm_key", "page"), ("connect_root", "dialog")):
             self.assertEqual(qs[qid]["via"], via, qid)

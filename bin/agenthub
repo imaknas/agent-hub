@@ -778,7 +778,8 @@ def init_questions(args: dict) -> list[dict]:
     through the same steps with nothing done."""
     import contextlib
     import io
-    rec = init_dialogue.Recorder({k: v for k, v in (args.pop("_answers", {}) or {}).items()})
+    answers = dict(args.pop("_answers", {}) or {})
+    rec = init_dialogue.Recorder(answers)
     init_dialogue.use(rec)
     presets = agent_presets()
     saved = {k: os.environ.get(k) for k in ("AGENT_HUB_LANG_UI", "AGENT_HUB_LANG_CONTENT")}
@@ -803,7 +804,8 @@ def init_questions(args: dict) -> list[dict]:
                 os.environ.pop(k, None)
             else:
                 os.environ[k] = v
-    return rec.questions
+    # a chat question the file answers is done, even with "" (skip): only what is left is listed
+    return [q for q in rec.questions if not (q["via"] == "chat" and q["id"] in answers)]
 
 
 def init_for_agent(flags: set, args: dict, argv: list[str]) -> int:
