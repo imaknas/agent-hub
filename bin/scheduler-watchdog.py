@@ -29,6 +29,7 @@ import os
 import pathlib
 import subprocess
 import sys
+import time
 
 # same as hubconf.ROOT
 HUB = pathlib.Path(os.environ.get("AGENT_HUB_ROOT") or pathlib.Path(__file__).resolve().parents[1])
@@ -80,6 +81,7 @@ LOG = HUB / ".logs" / "scheduler-watchdog.log"
 TOKEN = SECRETS_DIR / "discord-token"
 CHANNEL = SECRETS_DIR / "discord-alert-channel"
 LABEL = "local.agent-hub-scheduler"
+RESUME_GRACE_MIN = 20  # after a resume (Linux): the scheduler's 15-minute timer gets one full interval and a margin
 STALE_MIN = 35  # a tick every 15 minutes; two missed ticks plus a few minutes of drift
 REMIND_H = 6
 
@@ -135,30 +137,141 @@ def diagnose():
     return "\n".join(lines)
 
 
-def send(text):
-    """Return whether it was sent. curl is built into the system, no Homebrew needed."""
+def hub_alerts() -> dict | None:
+    """hub.json's alerts section; None when hub.json can't be read."""
     try:
-        token, channel = TOKEN.read_text().strip(), CHANNEL.read_text().strip()
+        return json.loads((CONFIG_DIR / "hub.json").read_text()).get("alerts") or {}
+    except (OSError, ValueError):
+        return None
+
+
+def conf_path(value: str) -> pathlib.Path:
+    """hubconf.path's rules, kept here: .secrets/<name> is the secrets directory, ~ expands, relative is the config
+    directory."""
+    if value == ".secrets" or value.startswith(".secrets/"):
+        return SECRETS_DIR / value[len(".secrets") + 1:]
+    p = pathlib.Path(os.path.expanduser(value))
+    return p if p.is_absolute() else CONFIG_DIR / p
+
+
+def curl(*args, data=None) -> str:
+    """curl is built into the system, no Homebrew needed. Returns the HTTP status ("" when curl itself fails)."""
+    r = subprocess.run(["/usr/bin/curl", "-sS", "-m", "20", "-o", "/dev/null", "-w", "%{http_code}", *args],
+                       input=data, capture_output=True, text=True)
+    return r.stdout.strip()
+
+
+def send_discord(conf, text) -> bool:
+    try:
+        token = conf_path(conf.get("discord_token_file") or ".secrets/discord-token").read_text().strip()
+        channel = conf_path(conf.get("discord_channel_file") or ".secrets/discord-alert-channel").read_text().strip()
     except OSError:
-        log(_("failed: {token} or {channel} is not set up; alerts cannot be sent", token=TOKEN, channel=CHANNEL))
         return False
-    r = subprocess.run(
-        ["/usr/bin/curl", "-sS", "-m", "20", "-o", "/dev/null", "-w", "%{http_code}",
-         "-H", f"Authorization: Bot {token}", "-H", "Content-Type: application/json",
-         "--data-binary", "@-", f"https://discord.com/api/v10/channels/{channel}/messages"],
-        input=json.dumps({"content": text[:1990]}), capture_output=True, text=True)
-    if r.stdout.strip() != "200":
-        log(_("Discord send failed: HTTP {code} {err}", code=r.stdout.strip() or "-", err=r.stderr.strip()[:200]))
+    return curl("-H", f"Authorization: Bot {token}", "-H", "Content-Type: application/json", "--data-binary", "@-",
+                f"https://discord.com/api/v10/channels/{channel}/messages",
+                data=json.dumps({"content": text[:1990]})) == "200"
+
+
+def send_ntfy(conf, text) -> bool:
+    n = conf.get("ntfy") or {}
+    headers = ["-H", "Title: agent-hub"]
+    if n.get("token_file"):
+        try:
+            headers += ["-H", f"Authorization: Bearer {conf_path(n['token_file']).read_text().strip()}"]
+        except OSError:
+            return False
+    return curl(*headers, "--data-binary", "@-", f"{(n.get('base_url') or 'https://ntfy.sh').rstrip('/')}/{n['topic']}",
+                data=text[:4000]) == "200"
+
+
+def send_email(conf, text) -> bool:
+    import smtplib
+    from email.message import EmailMessage
+    e = conf.get("email") or {}
+    msg = EmailMessage()
+    msg["Subject"] = "agent-hub: " + (text.splitlines()[0][:80] if text else "")
+    msg["From"], msg["To"] = e.get("from") or e.get("user") or "agent-hub", e["to"]
+    msg.set_content(text)
+    try:
+        password = conf_path(e["password_file"]).read_text().strip() if e.get("password_file") else None
+        cls = smtplib.SMTP_SSL if e.get("ssl") else smtplib.SMTP
+        with cls(e["host"], int(e.get("port") or (465 if e.get("ssl") else 587)), timeout=20) as s:
+            if not e.get("ssl"):
+                s.starttls()
+            if e.get("user") and password:
+                s.login(e["user"], password)
+            s.send_message(msg)
+        return True
+    except (OSError, smtplib.SMTPException):
         return False
-    return True
+
+
+def send_macos(conf, text) -> bool:
+    script = f"display notification {json.dumps(text[:200])} with title \"agent-hub\""
+    return subprocess.run(["/usr/bin/osascript", "-e", script], capture_output=True).returncode == 0
+
+
+def channels(conf) -> list[tuple[str, object]]:
+    """The channels hub.json alerts sets up (the same ones as bin/alert.py, which this deliberately doesn't import:
+    it must still send when the platform's Python is broken). Discord with no files configured falls back to the
+    secrets directory's default names, as before."""
+    out = []
+    if (conf_path(conf.get("discord_token_file") or ".secrets/discord-token").exists()
+            and conf_path(conf.get("discord_channel_file") or ".secrets/discord-alert-channel").exists()):
+        out.append(("discord", send_discord))
+    if (conf.get("ntfy") or {}).get("topic"):
+        out.append(("ntfy", send_ntfy))
+    if (conf.get("email") or {}).get("host") and (conf.get("email") or {}).get("to"):
+        out.append(("email", send_email))
+    if conf.get("macos") and sys.platform == "darwin":
+        out.append(("macos", send_macos))
+    return out
+
+
+def send(text):
+    """Send on every channel set up. True when at least one went out: the point is that someone hears; each failure is
+    logged."""
+    conf = hub_alerts() or {}
+    sent = False
+    for name, fn in channels(conf):
+        if fn(conf, text):
+            sent = True
+        else:
+            log(_("{channel} send failed", channel=name))
+    if not sent:
+        log(_("failed: no alert channel could send"))
+    return sent
 
 
 def alerts_configured() -> bool:
-    import json
-    try:
-        return bool(json.loads((CONFIG_DIR / "hub.json").read_text()).get("alerts"))
-    except (OSError, ValueError):
-        return True  # hub.json unreadable: as before, only Discord counts as watching
+    a = hub_alerts()
+    return True if a is None else bool(a)   # hub.json unreadable: keep watching with whatever channel there is
+
+
+def resumed(st: dict, now: datetime.datetime) -> None:
+    """Linux: systemd timers resume their remaining time after a suspend, so this check can run before the scheduler's
+    first tick after waking. The gap between CLOCK_BOOTTIME (counts suspended time) and CLOCK_MONOTONIC (doesn't) grows
+    by the time spent asleep: when it grew since the last check, record the resume. macOS has no CLOCK_BOOTTIME; there
+    launchd fires missed intervals on wake, so nothing is needed."""
+    boottime = getattr(time, "CLOCK_BOOTTIME", None)
+    if boottime is None:
+        return
+    gap = time.clock_gettime(boottime) - time.clock_gettime(time.CLOCK_MONOTONIC)
+    if st.get("sleep_gap") is not None and gap - st["sleep_gap"] > 60:
+        st["resumed_at"] = now.isoformat(timespec="seconds")
+    st["sleep_gap"] = gap
+
+
+def in_resume_grace(st: dict, tick, now: datetime.datetime) -> bool:
+    """Right after a resume, until the scheduler has ticked or RESUME_GRACE_MIN have passed: no alarm."""
+    r = st.get("resumed_at")
+    if not r:
+        return False
+    at = datetime.datetime.fromisoformat(r)
+    if (tick is not None and tick >= at) or now - at >= datetime.timedelta(minutes=RESUME_GRACE_MIN):
+        st.pop("resumed_at", None)
+        return False
+    return True
 
 
 def main():
@@ -177,15 +290,16 @@ def main():
                   "stopped", tick=tick) if tick else
                 _("no alerts set up (hub.json has no alerts), only logging: the scheduler has never ticked"))
         return 0
-    if not (TOKEN.exists() and CHANNEL.exists()):
-        # printed to launchd's stderr log every 5 minutes, exit 1; the status page also flags "watchdog not set up"
-        print(_("scheduler-watchdog: {token} / {channel} not set up; no alert can be sent if the scheduler stops",
-                token=TOKEN, channel=CHANNEL), file=sys.stderr)
+    if not channels(hub_alerts() or {}):
+        # printed to the service's stderr log every 5 minutes, exit 1; the status page also flags "watchdog not set up"
+        print(_("scheduler-watchdog: hub.json alerts has no channel this watchdog can send on (Discord, ntfy, email, "
+                "macOS); no alert can be sent if the scheduler stops"), file=sys.stderr)
         return 1
 
     now = datetime.datetime.now()
     st = json.loads(WATCH_STATE.read_text()) if WATCH_STATE.exists() else {}
     tick = last_tick()
+    resumed(st, now)
     age_min = (now - tick).total_seconds() / 60 if tick else None
     stale = age_min is None or age_min > STALE_MIN
     when = f"{tick:%m-%d %H:%M}" if tick else _("never")
@@ -198,6 +312,8 @@ def main():
                 st = {}
         else:
             st = {}
+    elif in_resume_grace(st, tick, now):
+        log(_("the machine just woke up; waiting for the scheduler's first tick before judging it"))
     else:
         st["stale_checks"] = st.get("stale_checks", 0) + 1
         st.setdefault("since", when)

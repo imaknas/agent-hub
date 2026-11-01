@@ -146,5 +146,6 @@
  "(dry-run; add --apply to rewrite and commit them)": "(dry-run;加 --apply 改寫並 commit)",
  "Project registry (schema v2, see bin/registry.py)": "專案登錄(schema v2,見 bin/registry.py)",
  "job {name}: connectors: true needs an allow: list (its run denies every MCP server the list doesn't name, so without one it could use no connector)": "job {name}:connectors: true 要有 allow: 清單(執行時會擋掉清單沒列到的每個 MCP server,沒有清單就一個 connector 都用不了)",
- "needs_llm must be true or false": "needs_llm 要是 true 或 false"
+ "needs_llm must be true or false": "needs_llm 要是 true 或 false",
+ "job {name}: catch_up can only be period, on a job with at": "job {name}:catch_up 只能是 period,而且只能用在有 at 的 job"
 }

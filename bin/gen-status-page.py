@@ -57,6 +57,24 @@ def prune_line() -> str:
             + "</div>")
 
 
+def watchdog_channels() -> list[str]:
+    """The channels the scheduler watchdog can send on, by the same rules as its channels() (it imports nothing of the
+    platform, so the rules are kept in both places; tests/test_watchdog_channels.py checks the watchdog's side)."""
+    a = hubconf.get("alerts") or {}
+    out = []
+    def file(key: str, default: str) -> pathlib.Path:
+        return hubconf.path(a[key]) if a.get(key) else hubconf.secrets_dir() / default
+    if file("discord_token_file", "discord-token").exists() and file("discord_channel_file", "discord-alert-channel").exists():
+        out.append("discord")
+    if (a.get("ntfy") or {}).get("topic"):
+        out.append("ntfy")
+    if (a.get("email") or {}).get("host") and (a.get("email") or {}).get("to"):
+        out.append("email")
+    if a.get("macos") and sys.platform == "darwin":
+        out.append("macos")
+    return out
+
+
 def runs_on(job: dict, d: datetime.date) -> bool:
     """The same filters as scheduler.py's runs_today()."""
     if "days_of_week" in job and WEEKDAYS[d.weekday()] not in job["days_of_week"]:
@@ -336,10 +354,9 @@ def main() -> None:
         alerts.append(("bad", _("The scheduler watchdog (local.agent-hub-scheduler-watchdog) is not loaded: nobody is told "
                                 "when the scheduler stops. On the hub machine, run "
                                 "bin/recover-service.sh local.agent-hub-scheduler-watchdog")))
-    elif hubconf.get("alerts") and not all((hubconf.secrets_dir() / f).exists()
-                                           for f in ("discord-token", "discord-alert-channel")):
-        alerts.append(("bad", _("The scheduler watchdog has no Discord settings (.secrets/discord-token, .secrets/discord-alert-channel): "
-                                "it cannot alert when the scheduler stops")))
+    elif hubconf.get("alerts") and not watchdog_channels():
+        alerts.append(("bad", _("The scheduler watchdog has no alert channel it can send on (Discord, ntfy, email or macOS "
+                                "notifications in hub.json alerts): it cannot alert when the scheduler stops")))
 
     # no alert channel at all: one setup reminder, not red (a feature that is off does not turn the page red)
     if not hubconf.get("alerts"):

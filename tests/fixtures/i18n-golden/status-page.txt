@@ -92,7 +92,7 @@ sqlite3.DatabaseError: file is not a database</div>
 === alerts set, no discord secrets
 <main>
 <h1>排程狀態</h1><div class=sub><a href="digest.html">digest</a> · <a href="todo.html">待辦</a> · <a href="reflect/">每週回顧</a></div><div class=sub>hub 主機 · 產生於 2026-10-30 10:00 · 每 5 分鐘自動重新整理 · 排程定義在專案登錄(projects/)跟 schedule.yaml · config ccccccc</div>
-<div class='alert bad'>⚠️ 排程器看門狗沒設定 Discord(.secrets/discord-token、.secrets/discord-alert-channel),排程器停了發不出警報</div>
+<div class='alert bad'>⚠️ 排程器的看門狗沒有能用的警報管道(hub.json alerts 裡的 Discord、ntfy、email 或 macOS 通知):排程器停了它也發不出警報</div>
 <table><tr><th>Job</th><th>時間</th><th>上次</th><th>下次</th></tr><tr class=''><td><b>alpha/daily</b></td><td>每週一三五 08:00</td><td><span class='st ok'>成功</span> <span class=sub>10-30 08:00</span></td><td>11/02(週一) 08:00</td></tr></table>
 <h2 style="font-size:18px;margin-top:28px">專案信箱</h2><div class=sub>沒有沒結案的信</div>
 <h2 style="font-size:18px;margin-top:28px">平行 session(worktree)</h2><div class=sub>沒有進行中的 worktree</div>
@@ -132,7 +132,7 @@ sqlite3.DatabaseError: file is not a database</div>
 === an alert on ntfy could not be sent
 <main>
 <h1>排程狀態</h1><div class=sub><a href="digest.html">digest</a> · <a href="todo.html">待辦</a> · <a href="reflect/">每週回顧</a></div><div class=sub>hub 主機 · 產生於 2026-10-30 10:00 · 每 5 分鐘自動重新整理 · 排程定義在專案登錄(projects/)跟 schedule.yaml · config ccccccc</div>
-<div class='alert bad'>⚠️ 排程器看門狗沒設定 Discord(.secrets/discord-token、.secrets/discord-alert-channel),排程器停了發不出警報</div><div class='alert bad'>⚠️ 警報發不出去(secrets,2026-10-30T09:00):HTTP 500——確認 hub.json alerts 的管道(ntfy)還能用;下次會再試</div>
+<div class='alert bad'>⚠️ 警報發不出去(secrets,2026-10-30T09:00):HTTP 500——確認 hub.json alerts 的管道(ntfy)還能用;下次會再試</div>
 <table><tr><th>Job</th><th>時間</th><th>上次</th><th>下次</th></tr><tr class=''><td><b>alpha/daily</b></td><td>每週一三五 08:00</td><td><span class='st ok'>成功</span> <span class=sub>10-30 08:00</span></td><td>11/02(週一) 08:00</td></tr></table>
 <h2 style="font-size:18px;margin-top:28px">專案信箱</h2><div class=sub>沒有沒結案的信</div>
 <h2 style="font-size:18px;margin-top:28px">平行 session(worktree)</h2><div class=sub>沒有進行中的 worktree</div>

@@ -171,5 +171,8 @@
  "agenthub init: --lang takes {languages}, or two of them as <interface>,<notes> (nothing was done)": "agenthub init:--lang 只接受 {languages},或用 <介面>,<筆記> 給兩個(什麼都沒做)",
  "language: interface {ui}, notes and project state {content} (change: agenthub init --lang <interface>[,<notes>])": "語言:介面 {ui},筆記和專案狀態 {content}(要改:agenthub init --lang <介面>[,<筆記>])",
  "warning: {file} was written, but the commit/push failed; it needs a manual fix": "警告:{file} 已寫入,但 commit/push 失敗,需要手動處理",
- "an earlier agenthub init stopped before it finished; carrying on with what it didn't do": "上一次的 agenthub init 沒有跑完;接著做它還沒做的部分"
+ "an earlier agenthub init stopped before it finished; carrying on with what it didn't do": "上一次的 agenthub init 沒有跑完;接著做它還沒做的部分",
+ "this machine sleeps ({why}): daily jobs run when it wakes, background services are offline and letters wait while it sleeps (README: a machine that sleeps)": "這台機器會睡眠({why}):每天的工作會在醒來後補跑;睡眠期間背景服務離線、信件等著(README:機器會睡眠)",
+ "system sleep after {minutes} min": "閒置 {minutes} 分鐘後系統睡眠",
+ "it has a battery": "有電池"
 }

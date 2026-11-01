@@ -61,7 +61,9 @@ schema v1 (contracts/project.v1.md has the full description):
   gate: strict                    the merge gate enforced: main in the main checkout can't be committed to directly
                                   (only via merge-branch); by default it only detects
   jobs:      [{name, at | every | trigger, run | (kind: agent + prompt), cwd?, days?, days_of_month?, months?,
-               until?, between?, background?, after?, max_attempts_per_day?, timeout?, legacy_name?}]
+               until?, between?, background?, after?, max_attempts_per_day?, timeout?, legacy_name?, catch_up?}]
+    catch_up: period (a job with at and day filters): when the machine was asleep or off on the scheduled day, the
+      job runs at the first tick after it wakes instead of skipping to the next scheduled day (newcomer-path.md B7)
     timeout: 45m / 2h: the run is stopped (its whole process group) past this; without it the scheduler's default
     every: 15m / 1h; cwd: runtime (default, when there's a runtime) | workspace | hub | state (agent jobs only: runs
       in its own state directory, without loading the project's settings/MCP)
@@ -150,7 +152,7 @@ ENV_NAME = re.compile(r"^[A-Z_][A-Z0-9_]*$")
 SECRET = {"name", "path", "env_key", "expires", "max_age_days", "warn_days", "backup", "why", "rotate"}
 JOB = {"name", "at", "every", "trigger", "run", "kind", "prompt", "cwd", "days", "days_of_month", "months", "until",
        "between", "background", "after", "before", "max_attempts_per_day", "timeout", "legacy_name", "allow",
-       "connectors"}
+       "connectors", "catch_up"}
 TRIGGER = {"events", "projects", "sources", "where", "debounce"}
 # the mailbox's own work and bookkeeping (inbox records, delivery and closing written by dispatch, which relays others'
 # letters without a chain): no event job reacts to them (event-jobs.md 3.5)
@@ -545,6 +547,8 @@ def validate_runs(doc: dict, stem: str, d: dict) -> list[str]:
             errs.append(_("job {name}: every must look like 15m / 1h", name=n))
         if "timeout" in job and not EVERY.match(str(job["timeout"])):
             errs.append(_("job {name}: timeout must look like 45m / 2h", name=n))
+        if "catch_up" in job and (job["catch_up"] != "period" or "at" not in job):
+            errs.append(_("job {name}: catch_up can only be period, on a job with at", name=n))
         if set(job.get("days") or []) - DAYS:
             errs.append(_("job {name}: days can only be {days}", name=n, days=sorted(DAYS)))
         cwd_key = job.get("cwd") or default_cwd(doc)
@@ -881,7 +885,7 @@ def scheduler_jobs(index: dict, legacy_names: set[str]) -> tuple[list[dict], lis
                 j["every_minutes"] = every_minutes(str(job["every"]))
             for src, dst in (("days", "days_of_week"), ("days_of_month", "days_of_month"), ("months", "months"),
                              ("until", "end_date"), ("between", "between"), ("background", "background"),
-                             ("max_attempts_per_day", "max_attempts_per_day")):
+                             ("max_attempts_per_day", "max_attempts_per_day"), ("catch_up", "catch_up")):
                 if src in job:
                     j[dst] = job[src]
             if "trigger" in job:

@@ -366,16 +366,38 @@ def spawn_background(name: str, command: str, job_log_path: pathlib.Path,
 WEEKDAYS = ["mon", "tue", "wed", "thu", "fri", "sat", "sun"]
 
 
-def runs_today(job: dict, now: datetime.datetime) -> bool:
-    if "days_of_week" in job and WEEKDAYS[now.weekday()] not in job["days_of_week"]:
+def scheduled_on(job: dict, d: datetime.date) -> bool:
+    """The day filters alone (days_of_week, days_of_month, months)."""
+    if "days_of_week" in job and WEEKDAYS[d.weekday()] not in job["days_of_week"]:
         return False
-    if "days_of_month" in job and now.day not in job["days_of_month"]:
+    if "days_of_month" in job and d.day not in job["days_of_month"]:
         return False
-    if "months" in job and now.month not in job["months"]:
-        return False
-    if "end_date" in job and now.date() > datetime.date.fromisoformat(str(job["end_date"])):
+    if "months" in job and d.month not in job["months"]:
         return False
     return True
+
+
+CATCH_UP_DAYS = 62   # how far back catch_up: period looks for the day a job missed (covers a monthly job)
+
+
+def missed_day(job: dict, now: datetime.datetime, state: dict | None) -> datetime.date | None:
+    """catch_up: period (docs/design/newcomer-path.md B7): the last scheduled day before today, when the job hasn't run
+    on or since it (the machine was asleep or off that day). A weekly or monthly job then runs at the first tick after
+    waking instead of skipping its whole period. None: no catch-up (not opted in, or it ran)."""
+    if job.get("catch_up") != "period" or state is None or "time" not in job:
+        return None
+    last = state.get(job["name"]) or ""
+    for back in range(1, CATCH_UP_DAYS + 1):
+        d = now.date() - datetime.timedelta(days=back)
+        if scheduled_on(job, d):
+            return d if last < d.isoformat() else None
+    return None
+
+
+def runs_today(job: dict, now: datetime.datetime, state: dict | None = None) -> bool:
+    if "end_date" in job and now.date() > datetime.date.fromisoformat(str(job["end_date"])):
+        return False
+    return scheduled_on(job, now.date()) or missed_day(job, now, state) is not None
 
 
 def hhmm(now: datetime.datetime, s: str) -> datetime.datetime:
@@ -392,13 +414,13 @@ def waiting_on(job: dict, by_name: dict[str, dict], state: dict, running: set[st
         if d is None and dep in ALIAS:
             dep = ALIAS[dep]
             d = by_name.get(dep)
-        if d is None or not d.get("enabled", True) or not runs_today(d, now):
+        if d is None or not d.get("enabled", True) or not runs_today(d, now, state):
             continue
         if dep in running:
             return dep
         if "every_minutes" in d or "trigger" in d:  # interval and event jobs have no "done for today"; wait only for this
             continue                               # run to finish
-        if now < hhmm(now, d["time"]):
+        if now < hhmm(now, d["time"]) and not (not scheduled_on(d, now.date()) and missed_day(d, now, state)):
             return dep
         if state.get(dep) == today:
             continue
@@ -421,6 +443,8 @@ def is_due(job: dict, state: dict, now: datetime.datetime, today: str) -> bool:
         # one minute's grace: launchd's tick drifts by a few seconds, or every_minutes: 15 would become 30
         return last is None or now - datetime.datetime.fromisoformat(last) >= \
             datetime.timedelta(minutes=job["every_minutes"] - 1)
+    if not scheduled_on(job, now.date()) and missed_day(job, now, state):   # catching up: due now, whatever the time
+        return state.get(name) != today
     return now >= hhmm(now, job["time"]) and state.get(name) != today
 
 
@@ -548,7 +572,7 @@ def tick() -> None:
         name = job["name"]
         if "trigger" in job:
             first_sight(job, state)
-        if not job.get("enabled", True) or not runs_today(job, now) or name in running:
+        if not job.get("enabled", True) or not runs_today(job, now, state) or name in running:
             continue
 
         batch = None

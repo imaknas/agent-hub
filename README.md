@@ -131,6 +131,23 @@ With a model set up (`agenthub llm setup`) and the scheduler running, the next m
 in the instance's data directory. Without a model they are not written: the librarian's judgment calls fail and say
 why, and `agenthub doctor` reports that judgment points have nowhere to run until you set one up.
 
+### A machine that sleeps
+
+An always-on machine is recommended, not required. On a laptop, or a desktop set to sleep, agent-hub catches up when
+it wakes; `agenthub doctor` says when it sees a machine that sleeps.
+
+| While the machine sleeps | What happens |
+|---|---|
+| Daily jobs (tidy-up, digest, to-dos, backup) | Run when it wakes, the same day |
+| Weekly and monthly jobs (weekly reflection, backup check) | Run at the first tick after waking, if their day was missed |
+| Backup retention (Sundays) | Applied at the first backup after a missed Sunday |
+| Mailbox dispatch | Paused; letters wait |
+| Background services (bots, webhooks, viewers) | Offline: the one real difference |
+| Reaching sessions from a phone or the assistant | Unavailable |
+| Event-triggered jobs | Handled after waking |
+
+The watchdog doesn't raise a false alarm on waking (on Linux it waits for the scheduler's first tick after a resume).
+
 ### Without launchd or systemd
 
 `agenthub init` installs the scheduler (a tick every 15 minutes) and its watchdog as launchd agents on macOS or systemd

@@ -136,6 +136,22 @@ class ClockJobs(unittest.TestCase):
         self.t.tick(jobs, DAY)
         self.assertEqual(self.t.commands(), ["echo fri", "echo ends"])
 
+    def test_catch_up_runs_a_missed_weekly_or_monthly_job_after_waking(self):
+        # DAY is Friday 10-30, 12:00. Monday 10-26 and the 1st of October passed with no run (asleep or off)
+        jobs = [{"name": "mon", "time": "07:00", "days_of_week": ["mon"], "catch_up": "period", "command": "echo mon"},
+                {"name": "first", "time": "06:30", "days_of_month": [1], "catch_up": "period", "command": "echo first"},
+                {"name": "plain-mon", "time": "07:00", "days_of_week": ["mon"], "command": "echo plain"}]
+        self.t.tick(jobs, DAY.replace(hour=0, minute=15))   # the first tick after waking, before any job's own hour
+        self.assertEqual(self.t.commands(), ["echo mon", "echo first"], "opted in: run now; not opted in: skipped")
+        self.t.tick(jobs, DAY.replace(hour=13))
+        self.assertEqual(self.t.commands(), ["echo mon", "echo first"], "caught up once, not again")
+
+    def test_catch_up_does_nothing_when_the_job_ran(self):
+        jobs = [{"name": "mon", "time": "07:00", "days_of_week": ["mon"], "catch_up": "period", "command": "echo mon"}]
+        self.t.m.STATE_FILE.write_text(json.dumps({"mon": "2026-10-26"}))   # ran on Monday
+        self.t.tick(jobs, DAY)
+        self.assertEqual(self.t.commands(), [])
+
     def test_job_env_carries_safe_push(self):
         self.t.tick([{"name": "a", "time": "06:00", "command": "echo a"}], DAY)
         self.assertTrue(self.t.ran[0]["env"]["SAFE_PUSH"].endswith("git-safe-push.sh"))

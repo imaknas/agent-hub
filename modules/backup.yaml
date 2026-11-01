@@ -16,6 +16,7 @@ jobs:
   legacy_name: agent-hub/backup-verify
   at: "06:30"
   days_of_month: [1]
+  catch_up: period   # asleep or off that day: runs when the machine wakes
   after: [backup]
   background: true
   max_attempts_per_day: 1

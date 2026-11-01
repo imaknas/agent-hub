@@ -703,6 +703,21 @@ def cmd_move_instance(argv: list[str]) -> int:
 
 # ---------- doctor ----------
 
+def machine_sleeps(pmset: str | None = None, batteries: list | None = None) -> str | None:
+    """Why this machine counts as one that sleeps (docs/design/newcomer-path.md B7), or None. macOS: pmset's system
+    sleep setting is not 0 (desktops set to sleep included). Linux: a battery."""
+    import re
+    if sys.platform == "darwin":
+        if pmset is None:
+            r = subprocess.run(["/usr/bin/pmset", "-g"], capture_output=True, text=True)
+            pmset = r.stdout if r.returncode == 0 else ""
+        m = re.search(r"^\s*sleep\s+(\d+)", pmset, re.M)
+        return _("system sleep after {minutes} min", minutes=m.group(1)) if m and m.group(1) != "0" else None
+    if batteries is None:
+        batteries = list(pathlib.Path("/sys/class/power_supply").glob("BAT*"))
+    return _("it has a battery") if batteries else None
+
+
 def cmd_doctor(argv: list[str]) -> int:
     results: list[tuple[str, str, str]] = []   # (ok|info|warn|bad, what, how to fix)
 
@@ -721,6 +736,9 @@ def cmd_doctor(argv: list[str]) -> int:
         "" if r.returncode == 0 else _("fix hub.json / projects/ as the messages say, then run agenthub config check"))
     add("ok", _("language: interface {ui}, notes and project state {content} (change: agenthub init --lang "
                 "<interface>[,<notes>])", ui=hubconf.lang_ui(), content=hubconf.lang_content()))
+    if (why := machine_sleeps()):
+        add("info", _("this machine sleeps ({why}): daily jobs run when it wakes, background services are offline and "
+                      "letters wait while it sleeps (README: a machine that sleeps)", why=why))
 
     import upgrade
     for level, what, fix in upgrade.doctor_lines():   # the release; network at most once a day (bin/upgrade.py)

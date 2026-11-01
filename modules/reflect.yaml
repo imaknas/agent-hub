@@ -12,5 +12,6 @@ jobs:
   legacy_name: agent-hub/weekly-reflect
   at: "07:00"
   days: [mon]
+  catch_up: period   # asleep or off that day: runs when the machine wakes
   max_attempts_per_day: 2
   run: bin/weekly-reflect.sh

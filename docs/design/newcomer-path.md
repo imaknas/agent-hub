@@ -524,7 +524,10 @@ Once picked, the text goes in the README's first lines, the GitHub description, 
    package manager on Linux), carries on after a half-done install, and runs init on /dev/tty; init finishes an
    unfinished llm setup on a re-run (`.state/init-unfinished`); hubpaths reads hub.json with bin/py, so jq is
    optional; bin/setup's macOS hints name Homebrew only when it is there. `--for-agent` is B3's.
-2. **B7**: README table, the scheduler's period catch-up, the Linux watchdog, doctor's row.
+2. **B7**: README table, the scheduler's period catch-up, the Linux watchdog, doctor's row. **Done 11-01**: `catch_up:
+   period` (scheduler `missed_day`, registry, on for weekly-reflect and backup-verify), retention after a missed Sunday
+   (`backup.retention_due`), the watchdog on every alert channel with a resume grace on Linux, the status page asking
+   the same channel rules, doctor's sleep row (`pmset -g` sleep, or a battery on Linux), the README table.
 3. **B4**: the agent step, the credential step, the Codex preset, `init --agent`.
 4. **B6**: `agenthub connect` with layout detection, for the layouts that work today.
 5. **B5**: user-level MCP registration and the server outside projects.

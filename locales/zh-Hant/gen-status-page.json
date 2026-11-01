@@ -55,7 +55,6 @@
   "The scheduler watchdog (local.agent-hub-scheduler-watchdog.timer) is not scheduled: nobody is told when the scheduler stops. Run agenthub init": "排程器看門狗(local.agent-hub-scheduler-watchdog.timer)沒有在排:排程器停了不會有人通知。跑 agenthub init",
   "The scheduler watchdog (local.agent-hub-scheduler-watchdog) is not loaded: nobody is told when the scheduler stops. On the hub machine, run bin/recover-service.sh local.agent-hub-scheduler-watchdog": "排程器看門狗(local.agent-hub-scheduler-watchdog)沒有載入:排程器停了不會有人通知。在 hub 主機上跑 bin/recover-service.sh local.agent-hub-scheduler-watchdog",
   "No alerts set up (hub.json has no alerts): a stopped scheduler or a dead service only shows on this page and in the log; nobody is notified": "沒設定警報(hub.json 沒有 alerts):排程器停了、服務掛了只會寫在這頁跟 log,不會通知你",
-  "The scheduler watchdog has no Discord settings (.secrets/discord-token, .secrets/discord-alert-channel): it cannot alert when the scheduler stops": "排程器看門狗沒設定 Discord(.secrets/discord-token、.secrets/discord-alert-channel),排程器停了發不出警報",
   "A Discord alert could not be sent ({key}, {at}): {text}. Check that .secrets/discord-token still works; it is tried again next time": "Discord 警報發不出去({key},{at}):{text}——確認 .secrets/discord-token 還能用;下次會再試",
   "Cannot read the alert state: {e}": "讀不到警報狀態:{e}",
   "These Claude jobs have not declared allow: in the registry (so unattended they run in auto mode, not dontAsk): {jobs}": "這些 Claude job 還沒在登錄宣告 allow:(無人值守時用 auto,不是 dontAsk):{jobs}",
@@ -150,5 +149,6 @@
   "How the requests and questions of the last day went": "最近一天的請求和問題怎麼送的",
   "Letter": "信",
   "Sent": "寄出",
-  "Path": "經過"
+  "Path": "經過",
+  "The scheduler watchdog has no alert channel it can send on (Discord, ntfy, email or macOS notifications in hub.json alerts): it cannot alert when the scheduler stops": "排程器的看門狗沒有能用的警報管道(hub.json alerts 裡的 Discord、ntfy、email 或 macOS 通知):排程器停了它也發不出警報"
 }

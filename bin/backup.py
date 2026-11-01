@@ -237,10 +237,12 @@ def cmd_run() -> int:
             args += ["--exclude", str(hubconf.path(x)) if x.startswith("~") else x]
         r = restic(*args, *paths, capture=True)
         summary = next((json.loads(l) for l in r.stdout.splitlines() if '"message_type":"summary"' in l), {})
-        if now().weekday() == 6:  # apply the retention rules on Sundays
+        if retention_due(now().date(), last_retention()):   # Sundays, or the first backup after a missed one
             k = CFG.get("keep") or {}
             restic("forget", "--prune", "--keep-daily", str(k.get("daily", 14)), "--keep-weekly", str(k.get("weekly", 8)),
                    "--keep-monthly", str(k.get("monthly", 12)), capture=True)
+            OUT.mkdir(parents=True, exist_ok=True)
+            retention_file().write_text(now().date().isoformat() + "\n")
         restic("check", capture=True)
         OUT.mkdir(parents=True, exist_ok=True)
         (OUT / "last.json").write_text(json.dumps({
@@ -252,6 +254,26 @@ def cmd_run() -> int:
         return 0
     except Exception as e:
         return fail("run", repr(e))
+
+
+def retention_file() -> pathlib.Path:
+    """The day the retention rules last ran (retention_due); under OUT, read when called (tests move OUT)."""
+    return OUT / "last-retention"
+
+
+def last_retention() -> datetime.date | None:
+    try:
+        return datetime.date.fromisoformat(retention_file().read_text().strip())
+    except (OSError, ValueError):
+        return None
+
+
+def retention_due(today: datetime.date, last: datetime.date | None) -> bool:
+    """The retention rules run on Sundays. A machine that slept through Sunday applies them at its next backup
+    instead of waiting a week (docs/design/newcomer-path.md B7): due when the last run is a week old or unknown."""
+    if last == today:
+        return False
+    return today.weekday() == 6 or last is None or (today - last).days >= 7
 
 
 def cmd_verify() -> int:

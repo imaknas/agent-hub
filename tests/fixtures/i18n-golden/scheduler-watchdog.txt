@@ -50,12 +50,13 @@ exit 0; printed:
 [2026-10-30 17:00:00] 沒設定警報(hub.json 沒有 alerts),只記錄:排程器最後 tick 從來沒有,停了
 
 === no secrets
-exit 1; printed: scheduler-watchdog: 沒有設定 <TMP>/no-secrets/secrets/discord-token / <TMP>/no-secrets/secrets/discord-alert-channel,排程器停了也發不出警報
+exit 1; printed: scheduler-watchdog:hub.json 的 alerts 沒有看門狗能用的管道(Discord、ntfy、email、macOS);排程器停了也發不出警報
 === log
 [2026-10-30 10:00:00] 排程器停了 120 分鐘,已通知
 [2026-10-30 17:00:00] 排程器停了 540 分鐘,已通知
 [2026-10-30 17:00:00] 恢復,已通知
 [2026-10-30 17:00:00] 排程器停了 很久,已通知
-[2026-10-30 17:00:00] Discord 送出失敗:HTTP 500 boom
-[2026-10-30 17:00:00] 失敗:沒有設定 <TMP>/secrets/discord-token 或 <TMP>/secrets/discord-alert-channel,警報發不出去
+[2026-10-30 17:00:00] discord 送出失敗
+[2026-10-30 17:00:00] 失敗:沒有任何警報管道送得出去
+[2026-10-30 17:00:00] 失敗:沒有任何警報管道送得出去
 
