@@ -158,6 +158,47 @@ class NewUser(unittest.TestCase):
         self.assertEqual(len(out), 1)
         self.assertIn(str(mod.hubconf.ROOT), out[0])
 
+    def git_cfg(self, *args, env=None):
+        return subprocess.run(["git", "-C", str(self.home / ".agent-hub" / "config"), *args], env=env or self.env,
+                              capture_output=True, text=True)
+
+    def assert_onboard_commits(self, env):
+        """the config repo holds init's commit and nothing uncommitted, and onboard's registry commit lands on it (it
+        once failed: the repo had no commit and hub.json untracked, so the pre-commit check found no hub.json)"""
+        self.assertEqual(self.git_cfg("status", "--porcelain", env=env).stdout, "", "init leaves the config repo clean")
+        self.assertIn("hub.json", self.git_cfg("ls-files", env=env).stdout.split())
+        # a newcomer's hub is a clone: commit-hub-files.sh takes its lock in the hub checkout's git dir
+        subprocess.run(["git", "init", "-q", str(self.hub)], env=env, check=True)
+        ws = self.home / "workspace" / "demo"
+        r = subprocess.run([sys.executable, str(self.hub / "bin" / "agenthub"), "onboard", "--no-remote", str(ws)],
+                           env=env, capture_output=True, text=True, timeout=120, cwd=self.hub)
+        self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
+        self.assertIn("projects/demo.yaml", self.git_cfg("log", "--name-only", "--format=", env=env).stdout.split(),
+                      r.stdout + r.stderr)
+        self.assertEqual(self.git_cfg("status", "--porcelain", "--", "projects", env=env).stdout, "")
+
+    def test_onboard_after_init_commits_the_registry(self):
+        r = self.hub_cmd("init", "--yes", "--no-launchd", "--owner", "Alex", "--llm", "none",
+                         "--workspace", str(self.home / "workspace"))
+        self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
+        self.assertEqual(self.git_cfg("config", "--local", "user.email").stdout, "",
+                         "with an identity of its own, git commits as the user: none is set in the repo")
+        self.assert_onboard_commits(self.env)
+
+    def test_init_without_a_git_identity(self):
+        """a fresh container has no user.email: init says so, gives the config repo an identity of its own (only there)
+        and commits; onboard's commit then works too"""
+        env = {k: v for k, v in self.env.items() if not k.startswith("GIT_") and k != "EMAIL"}
+        env.update(GIT_CONFIG_NOSYSTEM="1", GIT_CONFIG_GLOBAL=os.devnull)
+        r = subprocess.run([sys.executable, str(self.hub / "bin" / "agenthub"), "init", "--yes", "--no-launchd",
+                            "--owner", "Alex", "--llm", "none", "--workspace", str(self.home / "workspace")],
+                           env=env, capture_output=True, text=True, timeout=120, cwd=self.hub)
+        self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
+        self.assertIn("user.email", r.stdout, "init says git has no identity, and how to set yours")
+        self.assertEqual(self.git_cfg("config", "--local", "user.name", env=env).stdout.strip(), "Alex")
+        self.assertTrue(self.git_cfg("config", "--local", "user.email", env=env).stdout.strip())
+        self.assert_onboard_commits(env)
+
     def test_init_never_overwrites_hub_json(self):
         (self.hub / "hub.json").write_text('{"v": 1, "registry_dir": "projects", "owner": {"address": "owner", "tag": "Keep"}}\n')
         r = self.hub_cmd("init", "--yes", "--no-launchd", "--owner", "Other")

@@ -53,12 +53,32 @@ $ agenthub init --home <TMP>/inst --owner Sam --timezone UTC --workspace <TMP>/w
 $ agenthub init --home <TMP>/inst --owner Sam --timezone UTC --workspace <TMP>/ws2 --modules backup,reflect --yes --llm none --no-launchd    # new instance
 [exit 0]
 --- stdout
-✓ instance directory <TMP>/inst (config is a git repo; owner Sam, modules reflect, backup)
+✓ instance directory <TMP>/inst (owner Sam, modules reflect, backup)
 create folder <TMP>/fakehub/.logs
 create folder <TMP>/ws2
 create folder <TMP>/home/git-origin
 create folder <TMP>/home/.memory-copies
 judgment points stay unset: when needed, they fail plainly and say why. Run agenthub llm setup later
+✓ config committed: <TMP>/inst/config is a git repo, and its first commit is the config as it is now
+--no-launchd: not installing the scheduler, not applying services
+--- stderr
+
+$ agenthub init --home <TMP>/inst-nogit --owner Sam --timezone UTC --workspace <TMP>/ws2 --modules backup,reflect --yes --llm none --no-launchd    # no git
+[exit 1]
+--- stdout
+✓ instance directory <TMP>/inst-nogit (owner Sam, modules reflect, backup)
+judgment points stay unset: when needed, they fail plainly and say why. Run agenthub llm setup later
+⚠️ git is not installed: <TMP>/inst-nogit/config is not a git repo, so config changes are not recorded and onboarding cannot commit the registry. Install git, then run agenthub init again (it commits the config as it is)
+--no-launchd: not installing the scheduler, not applying services
+--- stderr
+
+$ agenthub init --home <TMP>/inst-anon --owner Sam --timezone UTC --workspace <TMP>/ws2 --modules backup,reflect --yes --llm none --no-launchd    # git, no identity
+[exit 0]
+--- stdout
+✓ instance directory <TMP>/inst-anon (owner Sam, modules reflect, backup)
+judgment points stay unset: when needed, they fail plainly and say why. Run agenthub llm setup later
+⚠️ git has no identity on this machine (user.name, user.email not set), so the config repo <TMP>/inst-anon/config commits as "Sam <owner@agent-hub.invalid>", set in that repo only. To commit as yourself: git config --global user.name "Your Name"; git config --global user.email you@example.com; then git -C <TMP>/inst-anon/config config --remove-section user
+✓ config committed: <TMP>/inst-anon/config is a git repo, and its first commit is the config as it is now
 --no-launchd: not installing the scheduler, not applying services
 --- stderr
 

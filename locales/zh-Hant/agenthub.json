@@ -24,7 +24,7 @@
  "✓ {path} already exists; leaving it alone (to change it, edit it, then run agenthub config apply)": "✓ 已經有 {path},不動它(要改就直接編輯,再 hub config apply)",
  "instance directory (your config, data and credentials live here)": "實例目錄(你的 config、data、憑證放這裡)",
  "(dry-run) would create the instance directory {home}/{{config,data,secrets}}, write config/hub.json, write {pointer}:\n": "(dry-run) 會建實例目錄 {home}/{{config,data,secrets}}、寫 config/hub.json、寫 {pointer}:\n",
- "✓ instance directory {home} (config is a git repo; owner {owner}, modules {modules})": "✓ 實例目錄 {home}(config 是 git repo;owner {owner}、模組 {modules})",
+ "✓ instance directory {home} (owner {owner}, modules {modules})": "✓ 實例目錄 {home}(owner {owner}、模組 {modules})",
  "{dry}create folder {path}": "{dry}建資料夾 {path}",
  "--no-launchd: not installing the scheduler, not applying services": "--no-launchd:不裝排程器、不套用服務",
  "✓ the scheduler and watchdog are already installed": "✓ 排程器、看門狗已經裝好",
@@ -139,5 +139,8 @@
  "⚠️ not installing the scheduler and watchdog from a linked worktree ({root}); run init from the main checkout ({main})": "⚠️ 不從 linked worktree({root})安裝排程器跟看門狗;init 要在主 checkout({main})跑",
  "{option} needs a value": "{option} 要接一個值",
  "unknown argument: {arg}": "不認得的參數:{arg}",
- "agenthub init: {problem} (nothing was done; see agenthub --help)": "agenthub init:{problem}(什麼都沒做;用法看 agenthub --help)"
+ "agenthub init: {problem} (nothing was done; see agenthub --help)": "agenthub init:{problem}(什麼都沒做;用法看 agenthub --help)",
+ "⚠️ git has no identity on this machine ({keys} not set), so the config repo {dir} commits as \"{name} <{email}>\", set in that repo only. To commit as yourself: git config --global user.name \"Your Name\"; git config --global user.email you@example.com; then git -C {dir} config --remove-section user": "⚠️ 這台機器的 git 沒有身分(沒設 {keys}),所以 config repo {dir} 用「{name} <{email}>」commit,只設在那個 repo。要用你自己的:git config --global user.name \"你的名字\"; git config --global user.email you@example.com;再 git -C {dir} config --remove-section user",
+ "⚠️ git is not installed: {dir} is not a git repo, so config changes are not recorded and onboarding cannot commit the registry. Install git, then run agenthub init again (it commits the config as it is)": "⚠️ 沒有裝 git:{dir} 不是 git repo,config 的改動不會留下紀錄,onboard 也沒辦法 commit 專案登錄。裝好 git 再跑一次 agenthub init(它會把現在的 config commit 起來)",
+ "✓ config committed: {dir} is a git repo, and its first commit is the config as it is now": "✓ config 已 commit:{dir} 是 git repo,第一個 commit 就是現在的 config"
 }

@@ -348,8 +348,17 @@ class Golden(unittest.TestCase):
                 "--yes", "--llm", "none")
         out.append(self.agenthub("init", "--home", self.tmp / "inst", *args, "--dry-run", label="new instance",
                                  env=fresh, sc={"hooks": "githooks"}))
+        # git is there (the config repo is made and committed for real, in the temp instance); without it init says so
         out.append(self.agenthub("init", "--home", self.tmp / "inst", *args, "--no-launchd", label="new instance",
+                                 env=fresh, sc={"hooks": "", "which": {"git": "/usr/bin/git"}}))
+        (self.fake_hub() / ".hub-home").unlink()
+        out.append(self.agenthub("init", "--home", self.tmp / "inst-nogit", *args, "--no-launchd", label="no git",
                                  env=fresh, sc={"hooks": ""}))
+        (self.fake_hub() / ".hub-home").unlink()
+        anon = {**fresh, "GIT_CONFIG_NOSYSTEM": "1", "EMAIL": None,
+                **{f"GIT_{w}_{k}": None for w in ("AUTHOR", "COMMITTER") for k in ("NAME", "EMAIL")}}
+        out.append(self.agenthub("init", "--home", self.tmp / "inst-anon", *args, "--no-launchd", label="git, no identity",
+                                 env=anon, sc={"hooks": "", "which": {"git": "/usr/bin/git"}}))
         # --scheduler-only (a step of agenthub upgrade): the two units and nothing else; under launchd it writes the
         # plists into the fake HOME, then finds them in place
         loaded = {"local.agent-hub-scheduler": "path = {bin}/scheduler.py",

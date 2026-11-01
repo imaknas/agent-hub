@@ -308,6 +308,65 @@ def new_hub_json(args: dict, yes: bool) -> dict:
     return d
 
 
+# ---------- the config repo (config as code: config/ is its own git repo) ----------
+
+# the email the config repo commits with when git has none (a reserved domain: never anyone's real address)
+FALLBACK_EMAIL = "owner@agent-hub.invalid"
+
+
+def git_out(repo: pathlib.Path, *args: str) -> str:
+    return subprocess.run(["git", "-C", str(repo), *args], capture_output=True, text=True).stdout.strip()
+
+
+def config_repo_identity(repo: pathlib.Path, owner: str) -> str | None:
+    """git needs a name and an email to commit. Given ones (git config at any level, GIT_AUTHOR_*/GIT_COMMITTER_* in
+    the environment) are used as they are. Otherwise git guesses from the login and host name: in a fresh container it
+    cannot, so every commit fails, and on macOS it commits as user@host.local. Then what is missing is set in this repo
+    only (the user-level git config is the user's to change), and the returned line says so and how to use their
+    own."""
+    given = all(subprocess.run(["git", "-C", str(repo), "-c", "user.useConfigOnly=true", "var", v],
+                               capture_output=True).returncode == 0 for v in ("GIT_AUTHOR_IDENT", "GIT_COMMITTER_IDENT"))
+    if given:
+        return None
+    fallback = {"user.name": owner or getpass.getuser(), "user.email": FALLBACK_EMAIL}
+    missing = [k for k in fallback if not git_out(repo, "config", "--get", k)]
+    for k in missing:
+        subprocess.run(["git", "-C", str(repo), "config", k, fallback[k]])
+    return _("⚠️ git has no identity on this machine ({keys} not set), so the config repo {dir} commits as "
+             "\"{name} <{email}>\", set in that repo only. To commit as yourself: git config --global user.name "
+             "\"Your Name\"; git config --global user.email you@example.com; then git -C {dir} config --remove-section user",
+             keys=", ".join(missing), dir=repo, name=git_out(repo, "config", "user.name"),
+             email=git_out(repo, "config", "user.email"))
+
+
+def config_repo_first_commit(cfgdir: pathlib.Path, owner: str) -> tuple[bool, list[str]]:
+    """Config as code: config/ is its own git repo, behind the config gate (githooks/config), and its first commit is
+    the config as it is (later changes are committed by whoever writes them, with commit-hub-files.sh). Without that
+    commit the next one fails: onboard's registry commit runs the gate, which exports the index, and the index has no
+    hub.json. A repo that already has a commit is left alone. Returns (ok, lines to print).
+
+    Plain git rather than commit-hub-files.sh: that one commits named paths in a repo that already has history, under
+    a lock in the hub checkout's git dir, and pushes; this is the first commit of everything in config/, as
+    move-instance makes it."""
+    if not shutil.which("git"):
+        return False, [_("⚠️ git is not installed: {dir} is not a git repo, so config changes are not recorded and "
+                         "onboarding cannot commit the registry. Install git, then run agenthub init again (it commits "
+                         "the config as it is)", dir=cfgdir)]
+    if not (cfgdir / ".git").exists():
+        subprocess.run(["git", "init", "-q", str(cfgdir)], capture_output=True)
+        subprocess.run(["git", "-C", str(cfgdir), "config", "core.hooksPath", str(ROOT / "githooks" / "config")])
+    if subprocess.run(["git", "-C", str(cfgdir), "rev-parse", "-q", "--verify", "HEAD"], capture_output=True).returncode == 0:
+        return True, []
+    lines = [note] if (note := config_repo_identity(cfgdir, owner)) else []
+    subprocess.run(["git", "-C", str(cfgdir), "add", "-A"], capture_output=True)
+    r = subprocess.run(["git", "-C", str(cfgdir), "commit", "-q", "-m", "config: first commit (agenthub init)"],
+                       capture_output=True, text=True)
+    if r.returncode != 0:
+        return False, lines + [_("the config repo's first commit failed: {error}", error=(r.stdout + r.stderr).strip()[:400])]
+    return True, lines + [_("✓ config committed: {dir} is a git repo, and its first commit is the config as it is now",
+                            dir=cfgdir)]
+
+
 INIT_FLAGS = ("--yes", "--no-launchd", "--dry-run", "--scheduler-only")
 INIT_OPTIONS = ("--owner", "--timezone", "--workspace", "--modules", "--home", "--llm", "--llm-model", "--llm-base-url")
 
@@ -367,13 +426,10 @@ def cmd_init(argv: list[str]) -> int:
             (home / sub).mkdir(parents=True, exist_ok=True)
         (home / "secrets").chmod(0o700)
         (home / "config" / "hub.json").write_text(json.dumps(d, ensure_ascii=False, indent=2) + "\n")
-        if shutil.which("git") and not (home / "config" / ".git").exists():  # config as code: config is its own repo
-            subprocess.run(["git", "init", "-q", str(home / "config")])
-            subprocess.run(["git", "-C", str(home / "config"), "config", "core.hooksPath", str(ROOT / "githooks" / "config")])
         hubconf.POINTER.write_text(str(home) + "\n")   # written last: once it exists, the platform uses this instance
         hubconf._cfg = None
         created = True
-        print(_("✓ instance directory {home} (config is a git repo; owner {owner}, modules {modules})", home=home,
+        print(_("✓ instance directory {home} (owner {owner}, modules {modules})", home=home,
                 owner=d['owner']['tag'], modules=', '.join(k for k, v in d['modules'].items() if v is True)))
     if dry and not hubconf.config_file("hub.json").exists():
         return 0
@@ -392,9 +448,17 @@ def cmd_init(argv: list[str]) -> int:
     if created and not dry:
         # a failure doesn't block init: doctor will say judgment points have nowhere to run; agenthub llm setup later
         llm_setup(args, yes)
+    status = 0
+    if not dry and not legacy:
+        # after llm setup, which writes hub.json too; an instance whose config repo has no commit yet (init made none
+        # before v0.2.0) gets it here as well
+        ok, lines = config_repo_first_commit(hubconf.config_dir(), hubconf.owner_tag())
+        for line in lines:
+            print(line)
+        status = 0 if ok else 1
     if "--no-launchd" in flags:
         print(_("--no-launchd: not installing the scheduler, not applying services"))
-        return 0
+        return status
     for line in install_core_plists(dry) or [_("✓ the scheduler and watchdog are already installed")]:
         print(line)
     if not dry:
@@ -404,7 +468,7 @@ def cmd_init(argv: list[str]) -> int:
         import upgrade
         upgrade.record_in_step()   # this checkout's commit is in step now (agenthub upgrade, doctor)
     print(_("\nNext: agenthub doctor shows what is missing; agenthub onboard ~/workspace/<project> connects the first project"))
-    return 0
+    return status
 
 
 # ---------- move-instance (the old layout → an instance directory, docs/design/new-user.md step 6) ----------
