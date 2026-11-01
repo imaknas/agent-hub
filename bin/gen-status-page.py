@@ -310,6 +310,46 @@ def model_usage_html(now: datetime.datetime) -> str:
             f"<th>{_('Cost')}</th></tr>{rows}</table>")
 
 
+def waiting_html() -> str:
+    """The newest waiting report (bin/test-waiting-report.py, test-waiting.md B7): per project, how long agents waited on
+    tests, how much of it the owner sat through, and the runner's time to a merge's result and its hits. Nothing before
+    the first report."""
+    files = sorted(hubconf.data_file("test-waiting").glob("*.json"))
+    try:
+        rep = json.loads(files[-1].read_text()) if files else None
+    except (OSError, ValueError):
+        rep = None
+    if not isinstance(rep, dict) or not isinstance(rep.get("projects"), dict):
+        return ""
+    rows = []
+    for name, p in sorted(rep["projects"].items()):
+        s, r = p.get("sessions") or {}, p.get("runner") or {}
+        tests = s.get("tests_min") or 0
+        if not tests and not r.get("tiers") and "unavailable" not in r:
+            continue
+        agent = s.get("agent_min") or 0
+        share = f" ({round(100 * tests / agent)}%)" if agent else ""
+        merge = (r.get("callers") or {}).get("merge-branch") or {}
+        runs = sum(t.get("runs", 0) for t in (r.get("tiers") or {}).values())
+        hits = sum(t.get("hits", 0) for t in (r.get("tiers") or {}).values())
+        runner_txt = (_("could not be read") if "unavailable" in r else
+                      _("{hits} of {runs} tier runs were hits", hits=hits, runs=runs) if runs else "—")
+        median = merge.get("median_s")
+        rows.append(f"<tr><td>{esc(name)}</td><td>{esc(_('{min} min', min=agent))}</td>"
+                    f"<td>{esc(_('{min} min', min=tests) + share)}</td>"
+                    f"<td>{esc(_('{min} min', min=s.get('owner_waited_min') or 0))}</td>"
+                    f"<td>{esc(_('{secs} s', secs=median) if median is not None else '—')}</td>"
+                    f"<td>{esc(runner_txt)}</td></tr>")
+    if not rows:
+        return ""
+    return (f"<h2 style=\"font-size:18px;margin-top:28px\">"
+            f"{esc(_('Waiting on tests ({days} days to {end})', days=rep.get('days'), end=str(rep.get('to', ''))[:10]))}</h2>"
+            f"<table><tr><th>{_('Project')}</th><th>{_('Agent time')}</th><th>{_('Waiting on tests')}</th>"
+            f"<th>{_('The owner waited')}</th><th>{_('Merge to result (median)')}</th><th>{_('Recorded passes')}</th></tr>"
+            f"{''.join(rows)}</table><div class=sub style='margin-top:8px'>"
+            f"{_('Details: bin/test-waiting-report.py (docs/design/test-waiting.md B7)')}</div>")
+
+
 def main() -> None:
     import hubconf  # imported further down too: put first so the whole function sees it
     now = datetime.datetime.now()
@@ -561,6 +601,10 @@ def main() -> None:
         wt_html = f"<div class=sub>{_('Worktree overview failed: {e}', e=esc(repr(e)))}</div>"
 
     usage_html = model_usage_html(now)
+    try:
+        waiting = waiting_html()
+    except Exception as e:  # a broken report does not affect the rest of the page
+        waiting = f"<div class=sub>{_('Waiting report failed: {e}', e=esc(repr(e)))}</div>"
 
     alert_html = "".join(f"<div class='alert {c}'>{'🔔' if c == 'notify' else '⚠️'} {esc(t)}</div>"
                          for c, t in alerts) or f"<div class='alert good'>✅ {_('Nothing needs attention')}</div>"
@@ -590,7 +634,7 @@ summary{{cursor:pointer;color:var(--mut)}} pre{{white-space:pre-wrap;word-break:
 {alert_html}
 <table><tr><th>{_('Job')}</th><th>{_('When')}</th><th>{_('Last')}</th><th>{_('Next')}</th></tr>{''.join(rows)}</table>
 {mail_html}
-{wt_html}{usage_html}
+{wt_html}{waiting}{usage_html}
 <h2 style="font-size:18px;margin-top:28px">{_('Claude job reports')}</h2>
 {''.join(report_blocks) or f"<div class=sub>{_('No reports yet')}</div>"}
 </main></body></html>"""

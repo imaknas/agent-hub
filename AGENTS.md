@@ -298,6 +298,9 @@ agent-hub is meant for anyone, with any coding agent, any LLM, any key.
   is gone from the project's main branch are listed in a fixed block of `todo.md` and in the digest; the librarian is
   told about them on its next run for that project (`bin/state_anchors.py`, design in `docs/design/state-anchors.md`;
   zero LLM cost)
+- `bin/test-waiting-report.py`: platform job `agent-hub/test-waiting` (nightly at 04:45): where agent sessions waited on
+  tests in the last 7 days, per project (transcripts through the port; the test runner's run logs, read as each
+  project) → `test-waiting/<day>.json` in data and a status page section (docs/design/test-waiting.md B7; zero LLM)
 - `bin/sync-all-memory.sh`: hourly, re-runs `git-sync-memory.sh` + the push for every project's `.agent-memory` (the
   safety net for the hooks; service `local.agent-hub.sync-all-memory`)
 

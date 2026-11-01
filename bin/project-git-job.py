@@ -41,6 +41,8 @@ readable. Nothing here decides anything for the platform; the caller treats the 
   head <ws>                               JSON {branch, dirty}
   bundle-head <ws>                        stdout: a bundle of the checked-out branch
   set-origin <ws> <url> <branch>          origin = url, the branch tracking it
+  test-runs <repo> <since>                JSON [run log lines at or after <since> (ISO time)]: the test runner's
+                                          measurements in the repo's git common dir (tiers.RunLog), newest MAX_RUNS
   memory-sync <memdir> <bare> <branch> [--lock]
                                           commit memory/ and STATE.md, merge what <bare>'s <branch> has, then stdout: a
                                           bundle of HEAD that <bare> lacks (empty: nothing to push); --lock takes
@@ -48,6 +50,7 @@ readable. Nothing here decides anything for the platform; the caller treats the 
 """
 from __future__ import annotations
 
+import datetime
 import hashlib
 import json
 import os
@@ -433,7 +436,34 @@ def op_set_origin(ws: str, url: str, branch: str) -> int:
     return 0
 
 
-OPS = {"worktrees": op_worktrees, "ignored": op_ignored, "worktree-add": op_worktree_add,
+MAX_RUNS = 5000
+
+
+def op_test_runs(repo: str, since: str) -> int:
+    """Read here, as the project: the git dir is the project's to write (a link or a FIFO in the file's place is
+    refused by the reader, never followed)."""
+    common = out(repo, "rev-parse", "--path-format=absolute", "--git-common-dir").strip()
+    if not common:
+        sys.stderr.write("not a git repo\n")
+        return 1
+    sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
+    import tiers
+    try:
+        cut = datetime.datetime.fromisoformat(since)
+    except ValueError:
+        sys.stderr.write(f"since: not an ISO time: {since}\n")
+        return 2
+    keep = []
+    for r in tiers.RunLog(pathlib.Path(common)).records():
+        try:
+            if datetime.datetime.fromisoformat(str(r.get("at"))) >= cut:
+                keep.append(r)
+        except (ValueError, TypeError):
+            continue
+    return emit(keep[-MAX_RUNS:])
+
+
+OPS = {"test-runs": op_test_runs, "worktrees": op_worktrees, "ignored": op_ignored, "worktree-add": op_worktree_add,
        "worktree-remove": op_worktree_remove, "branch-delete": op_branch_delete, "remove-dep": op_remove_dep,
        "checkout-sigs": op_checkout_sigs, "changed": op_changed, "copy-back": op_copy_back, "hooks": op_hooks,
        "hook-write": op_hook_write, "hook-remove": op_hook_remove, "bundle-unpushed": op_bundle_unpushed, "diff-head": op_diff_head,
