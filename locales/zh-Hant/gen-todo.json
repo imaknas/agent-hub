@@ -13,5 +13,6 @@
  "todo.md: {total} {total:item|items}": "todo.md: {total} 項",
  ", {n} format {n:problem|problems}": ",{n} 個格式問題",
  "  format problem: {problem}": "  格式問題:{problem}",
- "{source}: a code fence or HTML comment opened on line {line} is never closed; the registrar leaves the file alone until it is": "{source}: 第 {line} 行開的 code fence 或 HTML 註解沒有關上;關上之前 registrar 不動這個檔案"
+ "{source}: a code fence or HTML comment opened on line {line} is never closed; the registrar leaves the file alone until it is": "{source}: 第 {line} 行開的 code fence 或 HTML 註解沒有關上;關上之前 registrar 不動這個檔案",
+ "do not edit by hand: to change the content, change the source (each project's memory, from which librarian updates STATE.md).": "不要手動改——要改內容,改來源(各專案的 memory,librarian 會更新 STATE.md)。"
 }

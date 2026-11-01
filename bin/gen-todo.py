@@ -113,9 +113,12 @@ def main() -> None:
         # generated, see git log)
         "> " + _("Generated mechanically by `bin/gen-todo.py` from the `{heading}` section of each project's STATE.md "
                  "({total} {total:item|items});", heading=content_heading(), total=total),
-        "> " + _("do not edit by hand: to change the content, change the source (each project's memory, from which "
-                 "librarian updates STATE.md;"),
-        "> " + _("agent-hub's own to-do items are in `openclaw-migration-status.md`)."), "",
+        # an instance that still keeps the platform's own to-dos in the old migration file (read above) is told where
+        *(["> " + _("do not edit by hand: to change the content, change the source (each project's memory, from which "
+                    "librarian updates STATE.md;"),
+            "> " + _("agent-hub's own to-do items are in `openclaw-migration-status.md`).")] if MIGRATION.exists() else
+          ["> " + _("do not edit by hand: to change the content, change the source (each project's memory, from which "
+                    "librarian updates STATE.md).")]), "",
     ]
     # the Muninn project uses these three headings to tell whose to-do it is (the mapping is in its data/config.yaml
     # external_todo_owners); changing a heading means changing it there too
