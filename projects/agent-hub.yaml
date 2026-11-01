@@ -23,10 +23,11 @@ tests:
 - tier: lint
   run: bin/lint . && AGENT_HUB_CONFIG=. AGENT_HUB_STATE="$TMPDIR/config-check" bin/py bin/config-check --child
   when: [commit, merge, nightly]
-# every test, under the runner's fresh HOME; a test that wrote into it fails the tier (a real run would write real files)
+# every test, under the runner's fresh HOME; a test that wrote into it fails the tier (a real run would write real files).
+# run-tests keeps each module's duration in the tier's cache folder, to start the slow ones first and split them
 - tier: full
   run: >-
-    mkdir -p "$HOME/workspace" && bin/py bin/run-tests tests &&
+    mkdir -p "$HOME/workspace" && TEST_DURATIONS="$AGENTHUB_TIER_CACHE/durations.json" bin/py bin/run-tests tests &&
     { leaks=$(find "$HOME" -type f); [ -z "$leaks" ] || { echo "tests wrote to HOME:"; echo "$leaks"; exit 1; }; }
   when: [merge, nightly]
 jobs:
