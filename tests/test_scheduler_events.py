@@ -386,7 +386,7 @@ class PlatformSettings(unittest.TestCase):
         env2 = {**env, "AGENT_JOB_ALLOW": json.dumps(["mcp__claude_ai_x__y", "Edit(./a/**)"])}
         with mock.patch.object(runtime_claude, "platform_settings", lambda p: pathlib.Path(f"/s/{p}.json")):
             cmd = runtime_claude._flags(task._replace(env=env2))
-        self.assertEqual(cmd[cmd.index("--tools") + 1], "Bash,Edit,Glob,Grep,Read")   # no MCP names in --tools
+        self.assertEqual(cmd[cmd.index("--tools") + 1], "Bash,Edit,Glob,Grep,Read,Write")   # no MCP names in --tools
         with self.assertRaises(ValueError):   # no project: never a run with whatever settings happen to load
             runtime_claude._flags(task._replace(env={"AGENT_JOB_ALLOW": "[]"}))
 
@@ -452,14 +452,21 @@ class ConfinedMail(unittest.TestCase):
         self.addCleanup(p.stop)
 
     def refused(self, **a):
-        return self.hb.confined_refusal(types.SimpleNamespace(**{"sender": None, "task": None, "project": None, **a}), "p")
+        return self.hb.confined_refusal(types.SimpleNamespace(**{"sender": None, "task": None, "project": None,
+                                                                 "question": None, **a}), "p")
 
     def test_refusals(self):
         self.assertIsNone(self.refused(cmd="send", type="info"))
         self.assertIsNone(self.refused(cmd="send", type="question"))
         self.assertIsNone(self.refused(cmd="inbox"))
         self.assertIsNone(self.refused(cmd="send", type="info", sender="p"))
-        for a in ({"cmd": "send", "type": "info", "sender": "q"},
+        # withdrawing its own question (send checks the question is the project's): the mailbox handler's answer to
+        # reconcile-questions
+        self.assertIsNone(self.refused(cmd="send", type="drop", question="m1"))
+        self.assertIsNone(self.refused(cmd="send", type="done", question="m1"))
+        for a in ({"cmd": "send", "type": "drop"}, {"cmd": "send", "type": "drop", "task": "k1"},
+                  {"cmd": "send", "type": "drop", "task": "k1", "question": "m1"},
+                  {"cmd": "send", "type": "info", "sender": "q"},
                   {"cmd": "send", "type": "manifest.update"},
                   {"cmd": "send", "type": "task"},
                   {"cmd": "send", "type": "done", "task": "k1"},

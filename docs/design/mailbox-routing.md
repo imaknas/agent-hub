@@ -322,8 +322,11 @@ closed against this already (`agent-job-event`, `settings: platform`); this appl
 writes from the policy (the sandbox when the registry enforces it, with `autoAllowBashIfSandboxed: false`; the deny
 list; the mail subcommands). `dontAsk` + `prompts: none`, so the point's rules plus those are the whole boundary. A
 point that declares `tools` gets exactly those; one that doesn't (an `allow:` job) gets reading, Bash for the mail
-commands and the tools its rules use. A runtime without the `confine` port refuses such a point with the reason; it is
-never run unconfined. `llm.py` sets `AGENT_HUB_CONFINED`, so `hubbus` acts only as and for the run's own project.
+commands and the tools its rules use, plus Write when a rule names Edit (Claude Code's Edit rules govern every
+file-writing tool; a job that rewrites its state file needs Write, live probe 11-02). A runtime without the `confine` port refuses such a point with the reason; it is
+never run unconfined. `llm.py` sets `AGENT_HUB_CONFINED`, so `hubbus` acts only as and for the run's own project; `drop --question` is let
+through (withdrawing a question the project asked the owner, which `send` already checks is its own: the handler's
+answer to reconcile-questions), `drop` of an owner's to-do (`--task`) is not.
 For Claude Code: `--restricted --settings <platform file> --tools <…>` (2.1.316). `--restricted` also confines the
 file tools to the working directories, checked where a path resolves: a worktree's `.agent-memory` is a link to the
 main checkout's, so for a `./` rule whose fixed part resolves outside the folder the runtime adds that directory

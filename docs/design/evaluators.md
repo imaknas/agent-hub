@@ -99,7 +99,8 @@ step 0 and switched when they are next changed; until then classes R/C get no se
 **The connectors jobs' production database** (**done**, v0.2.0: b5c4836, 734eec9): they cannot use strict-mcp, so
 permission rules deny the MCP servers in the environment instead, allowing only the servers whose tools their registry
 declares.
-- *Neutral*: the points `agent-job`, `agent-job-event`, `mailbox-escalation` declare `tool_servers: allowed_only`.
+- *Neutral*: the points `agent-job`, `agent-job-confined`, `agent-job-event`, `mailbox-escalation` declare
+  `tool_servers: allowed_only`.
   llm.py asks the runtime (interface `tool_servers`: `ambient_servers(task)`, `servers_named(task)`) which of the
   environment's servers this run would load, `policy.tool_server_denials` keeps those the allow list doesn't name, and
   they go to the runtime in `Task.deny_servers`. A sealed run (`ambient_servers` → None) denies nothing, so the

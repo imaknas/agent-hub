@@ -658,6 +658,9 @@ def _flags(task) -> list:
             tools = {t for t in spec["tools"].split(",") if t}
         else:
             tools = {"Read", "Glob", "Grep", "Bash"} | {r.split("(", 1)[0] for r in allowed if not r.startswith("mcp__")}
+            # an Edit rule governs every file-writing tool: a new file (or a whole one rewritten) needs Write
+            if "Edit" in tools:
+                tools.add("Write")
         cmd += ["--restricted", "--settings", str(platform_settings(project)), "--tools", ",".join(sorted(tools))]
         dirs, extra = _linked_rules(allowed, task.cwd)
         allowed += extra

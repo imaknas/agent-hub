@@ -1752,7 +1752,10 @@ def confined_refusal(a, here) -> str | None:
     if getattr(a, "id", None) and a.cmd == "send":
         # ids are idempotency keys: a chosen one could take an id another writer will use (<id>:done)
         return _("hubbus: a confined run can't choose a letter id (--id)")
-    if a.cmd == "send" and (a.type in CONFINED_TYPES or getattr(a, "task", None)):
+    # drop --question withdraws a question this project asked (send checks it is its own): the mailbox handler's
+    # answer to reconcile-questions; drop of an owner's to-do (--task) stays refused
+    own_question = getattr(a, "type", None) == "drop" and getattr(a, "question", None)
+    if a.cmd == "send" and ((a.type in CONFINED_TYPES and not own_question) or getattr(a, "task", None)):
         return _("hubbus: a confined run can't send {type} (registry changes and the owner's to-dos need a person)",
                  type=a.type)
     if a.cmd in ("inbox", "open-questions") and getattr(a, "project", None) and a.project != here:
