@@ -65,6 +65,18 @@ class RunTests(unittest.TestCase):
         self.assertIn("test_slow.S.test_1", recorded)
         self.assertIn("test_slow", recorded, "the module's own total, to split it again next time")
 
+    def test_runs_as_a_zh_hant_instance_unless_told(self):
+        """the gate is the zh-Hant side of the language check (CI's plain unittest the English one)"""
+        self.module("test_l", "class L(unittest.TestCase):\n    def test_1(self):\n"
+                              "        assert os.environ['AGENT_HUB_LANG_UI'] == os.environ['WANT'], os.environ['AGENT_HUB_LANG_UI']\n"
+                              "        assert os.environ['AGENT_HUB_LANG_CONTENT'] == os.environ['WANT']\n")
+        env = {k: v for k, v in os.environ.items() if not k.startswith("AGENT_HUB_LANG_")}
+        r = subprocess.run([sys.executable, str(RUNNER), str(self.tmp)], capture_output=True, text=True, timeout=120,
+                           env={**env, "TEST_JOBS": "1", "WANT": "zh-Hant"})
+        self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
+        r = self.run_(WANT="en", AGENT_HUB_LANG_UI="en", AGENT_HUB_LANG_CONTENT="en")
+        self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
+
     def test_golden_modules_also_run_on_english(self):
         body = "class G(unittest.TestCase):\n    def test_lang(self): print(os.environ.get('I18N_GOLDEN_LANG'))\n"
         self.module("test_i18n_golden_x", body)

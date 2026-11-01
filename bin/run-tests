@@ -56,6 +56,10 @@ def env_for(tests: pathlib.Path, lang: str | None) -> dict[str, str]:
     # root: HOME and STATE would leak into the fake hubs the tests build (docs/design/test-waiting.md A1)
     env = {**os.environ, "PYTHONPATH": os.pathsep.join(filter(None, [str(tests), os.environ.get("PYTHONPATH")])),
            "AGENT_HUB_TEST_RUNNER": "1", "AGENT_HUB_ROOT": os.environ.get("AGENT_HUB_ROOT") or str(tests.resolve().parent)}
+    # the gate runs as a zh-Hant instance and CI (bin/linux-test: plain unittest, a bare HOME) as an English one, so a
+    # test that assumes either language fails in one of them without running anything twice; a caller's own setting wins
+    env.setdefault("AGENT_HUB_LANG_UI", "zh-Hant")
+    env.setdefault("AGENT_HUB_LANG_CONTENT", "zh-Hant")
     if lang:
         env["I18N_GOLDEN_LANG"] = lang
     return env
