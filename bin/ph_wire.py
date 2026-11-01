@@ -55,16 +55,68 @@ def family(ext_value: object) -> str:
 
 
 def canonical(value) -> str:
-    """RFC 8785 (JCS) for what records hold: objects with string members, strings, integers, booleans, null.
-    Members sorted by their UTF-16 code units, as the RFC orders them."""
+    """RFC 8785 (JCS) serialisation of a parsed JSON value: no whitespace, object members sorted by the UTF-16 code
+    units of their names (§3.2.3), strings escaped as ECMAScript's JSON.stringify does (§3.2.2.2: \\b \\f \\n \\r \\t \\"
+    \\\\ in short form, other controls as \\u00xx, everything else as is), numbers as ECMAScript's Number.toString
+    (§3.2.2.3). ValueError for what has no serialisation: NaN, infinities, unpaired surrogates (§3.2.2.2: not I-JSON),
+    member names that are not strings. Records hold integers only (core §4); floats are here because the RFC is."""
     if isinstance(value, dict):
-        items = sorted(value.items(), key=lambda kv: kv[0].encode("utf-16-be"))
+        if not all(isinstance(k, str) for k in value):
+            raise ValueError("member names are strings")
+        items = sorted(value.items(), key=lambda kv: _utf16(kv[0]))
         return "{" + ",".join(f"{canonical(k)}:{canonical(v)}" for k, v in items) + "}"
-    if isinstance(value, list):
+    if isinstance(value, (list, tuple)):
         return "[" + ",".join(canonical(v) for v in value) + "]"
+    if isinstance(value, str):
+        _utf16(value)
+        return json.dumps(value, ensure_ascii=False)
+    if value is None or isinstance(value, bool):
+        return json.dumps(value)
+    if isinstance(value, int):
+        # an I-JSON number is an IEEE 754 double: an integer beyond 2^53 is the double it parses to
+        return str(value) if abs(value) <= 2 ** 53 else _number(_double(value))
     if isinstance(value, float):
-        raise ValueError("records hold integers only (core §4)")
-    return json.dumps(value, ensure_ascii=False)
+        return _number(value)
+    raise ValueError(f"no JSON serialisation for {type(value).__name__}")
+
+
+def _utf16(s: str) -> bytes:
+    try:
+        return s.encode("utf-16-be")
+    except UnicodeEncodeError:
+        raise ValueError("unpaired surrogate (not I-JSON)") from None
+
+
+def _double(n: int) -> float:
+    try:
+        return float(n)
+    except OverflowError:
+        raise ValueError("number out of the range of an IEEE 754 double") from None
+
+
+def _number(x: float) -> str:
+    """ECMAScript Number::toString(x) (ECMA-262 7.1.12.1) for a finite double: the shortest digits that round-trip
+    (Python's repr gives the same), placed by the exponent n where x = 0.d1d2...dk * 10^n."""
+    if x != x or x in (float("inf"), float("-inf")):
+        raise ValueError("NaN and infinities have no JSON serialisation")
+    if x == 0:
+        return "0"   # -0 too
+    if x < 0:
+        return "-" + _number(-x)
+    mantissa, _e, exp = repr(x).partition("e")
+    whole, _dot, frac = mantissa.partition(".")
+    digits = (whole + frac).lstrip("0")
+    n = len(digits) + int(exp or 0) - len(frac)
+    digits = digits.rstrip("0")
+    k = len(digits)
+    if k <= n <= 21:
+        return digits + "0" * (n - k)
+    if 0 < n <= 21:
+        return digits[:n] + "." + digits[n:]
+    if -6 < n <= 0:
+        return "0." + "0" * -n + digits
+    sign = "+" if n - 1 >= 0 else "-"
+    return (digits[0] + ("." + digits[1:] if k > 1 else "")) + "e" + sign + str(abs(n - 1))
 
 
 def digest_input(need: dict, version: str = LATEST) -> dict:
