@@ -75,12 +75,21 @@ coding agent's own login. When a capability is missing, it is switched off expli
 ## Quick start
 
 ```bash
-git clone <this repo URL> agent-hub && cd agent-hub   # any folder; hooks name it where it is
-git checkout "$(git describe --tags --abbrev=0 --match 'v[0-9]*')"   # the newest release (stay on main to follow development)
-bin/setup                            # check required tools, build the platform Python, put `agenthub` on PATH
+curl -fsSL https://raw.githubusercontent.com/imaknas/agent-hub/main/install.sh | sh
 agenthub init                        # owner name, timezone, workspace, modules, which LLM makes judgment calls
 agenthub doctor                      # everything that is missing or broken, each with how to fix it
 agenthub onboard ~/workspace/my-app  # connect a project (--no-remote: don't create a GitHub repo)
+```
+
+The installer clones the repo into `agent-hub` in your home folder (`AGENT_HUB_DIR` to choose another), checks out the
+newest release, installs [uv](https://docs.astral.sh/uv/) if it is missing, and runs `bin/setup`. It installs nothing
+that needs `sudo`: `bin/setup` names anything else that is missing (for example `jq`) with the command to install it.
+Read it first if you like: [`install.sh`](install.sh). The same by hand:
+
+```bash
+git clone <this repo URL> agent-hub && cd agent-hub   # any folder; hooks name it where it is
+git checkout "$(git describe --tags --abbrev=0 --match 'v[0-9]*')"   # the newest release (stay on main to follow development)
+bin/setup                            # check required tools, build the platform Python, put `agenthub` on PATH
 ```
 
 With a model set up (`agenthub llm setup`) and the scheduler running, the next morning there is a digest and a `todo.md`

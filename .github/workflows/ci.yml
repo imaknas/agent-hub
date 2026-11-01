@@ -1,5 +1,6 @@
-# The checks a contribution must pass, the same ones the platform's own gate runs: lint, the whole test suite on Linux
-# (bin/linux-test, the release check), and a secret scan of the full history.
+# The checks a contribution must pass: lint; the whole test suite on Linux as an English instance (bin/linux-test) and
+# on macOS as a zh-Hant one (bin/run-tests, the platform's own gate: Seatbelt, launchd and Keychain paths run only
+# there); the one-line installer from this checkout through `agenthub init`; and a secret scan of the full history.
 name: ci
 on:
   push:
@@ -20,6 +21,24 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - run: bin/linux-test
+  test-macos:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+      - run: bin/setup-python
+      - run: bin/run-tests
+  install:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - run: AGENT_HUB_REPO="$PWD" AGENT_HUB_REF="$GITHUB_SHA" AGENT_HUB_DIR="$RUNNER_TEMP/agent-hub" sh install.sh
+      - run: |
+          export PATH="$HOME/.local/bin:$PATH"
+          agenthub --version
+          agenthub init --yes --no-launchd --home "$RUNNER_TEMP/instance"
   secrets:
     runs-on: ubuntu-latest
     steps:

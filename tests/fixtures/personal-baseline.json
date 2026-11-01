@@ -29,7 +29,7 @@
   "tests/test_new_user.py": 3
  },
  "secrets-path": {},
- "public-docs": {},
+ "public-docs": {"README.md": 1},
  "instance-path": {
   "bin/config-check": 5
  }
