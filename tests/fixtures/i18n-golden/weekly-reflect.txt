@@ -9,8 +9,8 @@ options:
   --html-only  只用現有 json 重建 index.html
 
 === no transcripts: stdout
-週報:沒有對話的統計——no transcripts here
 <TMP>/2026-W40.json
 <TMP>/index.html
 
 === no transcripts: stderr
+週報:沒有對話的統計——no transcripts here

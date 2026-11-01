@@ -234,7 +234,8 @@ def main() -> None:
         stats = build_stats(label, start, end, scan(start, end) if not unsupported else {"this": Week(), "prev": Week()})
         if unsupported:
             stats["unsupported"] = unsupported
-            print(_("no conversation statistics in the weekly report: {reason}", reason=unsupported))
+            # on stderr: stdout is the paths written (weekly-reflect.sh commits its first line)
+            print(_("no conversation statistics in the weekly report: {reason}", reason=unsupported), file=sys.stderr)
         elif args.llm:
             import reflect_llm
             stats["analysis"] = reflect_llm.analyze(stats)

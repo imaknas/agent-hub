@@ -9,8 +9,8 @@ options:
   --html-only  only rebuild index.html from the existing json
 
 === no transcripts: stdout
-no conversation statistics in the weekly report: no transcripts here
 <TMP>/2026-W40.json
 <TMP>/index.html
 
 === no transcripts: stderr
+no conversation statistics in the weekly report: no transcripts here
