@@ -1,5 +1,5 @@
-"""The Markdown binding of Principal Handoff Acts 0.4 (agent-ops-specs acts/SPEC.md §4-§6): reading a project's
-STATE.md to-do sections and the registrar's document steps. Follows the spec's reference registrar
+"""The Acts Markdown binding of Principal Handoff 0.5 (agent-ops-specs acts-markdown/SPEC.md §2-§4): reading a
+project's STATE.md to-do sections and the registrar's document steps. Follows the spec's reference registrar
 (specs/principal-handoff/reference/ph_acts.py, Apache-2.0), with one difference: a document is read in several
 profiles at once. agent-hub's readers accept both token sets in one file (contracts/state-todo.v2.md: an English
 instance may hold an older zh-Hant section, a line may carry one set's label and the other's marker), so every reading
@@ -8,14 +8,17 @@ takes a tuple of profiles, and the writer's profile (the content language) is th
     profiles = acts_md.profiles(owner_tag)         # both sets (bin/todo_tokens.py), for reading
     writer = acts_md.profile(lang, owner_tag)      # the content language's, for writing
     parse(doc, profiles)                           -> {"sections", "tasks", "problems", "unclosed"}
-    relink(doc, active, profiles, writer, bound)   -> (doc, [key])                     step 2
-    register(doc, project, profiles, writer, bound, derive) -> (doc, [{key, text}], [line])   step 3
+    relink(doc, active, profiles, writer, bound, known)   -> (doc, [key])              step 2
+    register(doc, project, profiles, writer, bound, derive, known) -> (doc, [{key, text}], [line])   step 3
     amend(doc, latest, profiles)                   -> {"amended": [{key, text}], "warn": [key]}   step 4
-    apply(doc, record, profiles, writer, latest)   -> (doc, changed)                   step 1, one record
+    apply(doc, record, profiles, writer, latest, bound)   -> (doc, changed)            step 1, one record
     reconcile(doc, active, profiles, bound)        -> [{key, action, line?}]           step 5
 
-`bound`: the keys the registrar raised from lines of this document (spec §4); None means every key passed is bound.
-`active` / `latest` map active bound keys to their latest terms text (apply: {text, terms_rev, terms_digest?}).
+`bound`: the keys the registrar raised from lines of this document (spec §2); None means every key passed is bound.
+`known`: keys outside the binding the registrar holds need records for (an item the project raised itself, spec §2
+step 3): a line carrying one is neither raised nor relinked, and reported.
+`active` / `latest` map active bound keys to their latest terms text (apply: {text, terms_rev, terms_digest?} of a bound
+or known key).
 Documents are strings; line numbers are 0-based. Standard library only, no platform imports but todo_tokens.
 """
 from __future__ import annotations
@@ -69,7 +72,7 @@ class Profile:
 
     @property
     def _links(self) -> bool:
-        """§5.3: with [ and ] as brackets, a bracketed span followed by ( is a Markdown link, not a label."""
+        """§3.3: with [ and ] as brackets, a bracketed span followed by ( is a Markdown link, not a label."""
         return (self.label_open, self.label_close) == ("[", "]")
 
     @property
@@ -163,7 +166,7 @@ def _join(lines: list[str], eol: str = "\n") -> str:
 
 
 def _ignored(lines: list[str]) -> tuple[set[int], int | None]:
-    """§5.2: lines in fenced code blocks and HTML comment blocks, found in one pass from the top, and the line where
+    """§3.2: lines in fenced code blocks and HTML comment blocks, found in one pass from the top, and the line where
     an unclosed block opens (the document is then incomplete)."""
     out: set[int] = set()
     i = 0
@@ -280,7 +283,7 @@ class Doc:
         return rest.strip()
 
     def text_of(self, line: str) -> str:
-        """§5.5.2: the line without list marker, checkbox, label and key marker."""
+        """§3.5.2: the line without list marker, checkbox, label and key marker."""
         rest = re.sub(rf"^{LIST}(?:\[[ xX]\][ \t]*)?", "", line.rstrip())
         for rx in self.rx:
             if (m := rx.label_at.match(rest)):
@@ -292,11 +295,11 @@ class Doc:
         return [e for e in self.entries if e.kind == "task"]
 
     def holding(self, key: str) -> list[Line]:
-        """§4: principal task lines of the first tasks section that carry the key."""
+        """§2: principal task lines of the first tasks section that carry the key."""
         return [e for e in self.tasks() if e.section == 0 and e.owner == "principal" and e.key == key]
 
     def mentioned(self) -> dict[str, int]:
-        """§4: every key some line mentions (anywhere in the document) -> the first line that does."""
+        """§2: every key some line mentions (anywhere in the document) -> the first line that does."""
         out: dict[str, int] = {}
         for i, line in enumerate(self.lines):
             for rx in self.rx:
@@ -327,15 +330,17 @@ def _unbound(key: str | None, bound: set | None) -> bool:
 
 
 def relink(doc: str, active: dict, ps: tuple[Profile, ...], writer: Profile,
-           bound: set | None = None) -> tuple[str, list[str]]:
+           bound: set | None = None, known: set = frozenset()) -> tuple[str, list[str]]:
     """Step 2. Of the active bound keys no line mentions, a key whose latest text equals exactly one unkeyed (or
-    wrongly keyed) principal line of the first section, that line's text no other such key, gets that line back."""
+    wrongly keyed, but not known) principal line of the first section, that line's text no other such key, gets that
+    line back."""
     d = Doc(doc, ps)
     if d.unclosed is not None:
         return doc, []
     seen = d.mentioned()
     vanished = {k: norm(t) for k, t in active.items() if (bound is None or k in bound) and k not in seen}
-    lines = [e for e in d.tasks() if e.section == 0 and e.owner == "principal" and _unbound(e.key, bound)]
+    lines = [e for e in d.tasks() if e.section == 0 and e.owner == "principal" and _unbound(e.key, bound)
+             and e.key not in known]
     done = []
     for e in lines:
         keys = [k for k, t in vanished.items() if t == norm(e.text)]
@@ -347,16 +352,20 @@ def relink(doc: str, active: dict, ps: tuple[Profile, ...], writer: Profile,
 
 
 def register(doc: str, project: str, ps: tuple[Profile, ...], writer: Profile, bound: set | None,
-             derive) -> tuple[str, list[dict], list[int]]:
-    """Step 3: every principal line of the first section that carries no key, or an unbound one -> (the stamped
-    document, the items to raise [{key, text, line}] in order, the lines not raised and reported). A real run sends each
-    `raised` before writing its stamp; the caller does that with the lines returned."""
+             derive, known: set = frozenset()) -> tuple[str, list[dict], list[int]]:
+    """Step 3: every principal line of the first section that carries no key, or one neither bound nor known -> (the
+    stamped document, the items to raise [{key, text, line}] in order, the lines not raised and reported). A line
+    carrying a known key is reported, never raised or restamped. A real run sends each `raised` before writing its
+    stamp; the caller does that with the lines returned."""
     d = Doc(doc, ps)
     if d.unclosed is not None:
         return doc, [], []
     events, reported, seen = [], [], set()
     for e in d.tasks():
         if e.section != 0 or e.owner != "principal" or not _unbound(e.key, bound):
+            continue
+        if e.key is not None and e.key in known:
+            reported.append(e.i)   # an item raised outside the binding, its marker copied onto the line
             continue
         key = derive(project, e.text)
         if any(rx.mention.search(e.text) for rx in d.rx) or (bound is not None and key in bound) \
@@ -400,9 +409,10 @@ def stale(record: dict, latest: dict | None) -> bool:
 
 
 def apply(doc: str, record: dict, ps: tuple[Profile, ...], writer: Profile,
-          latest: dict | None = None) -> tuple[str, bool]:
+          latest: dict | None = None, bound: set | None = None) -> tuple[str, bool]:
     """Step 1, one record: only the principal side's settled (strike) and reopened (re-add) change the document. A
-    settlement that is stale against `latest`, or whose holding lines were edited away from it, strikes nothing."""
+    settlement that is stale against `latest`, or whose holding lines were edited away from it, strikes nothing. Only a
+    bound key is re-added after a reopening (bound None: the key is bound)."""
     if record.get("origin") != "principal" or record.get("type") not in ("settled", "reopened"):
         return doc, False
     d = Doc(doc, ps)
@@ -424,8 +434,8 @@ def apply(doc: str, record: dict, ps: tuple[Profile, ...], writer: Profile,
             if not any(kept[i].strip() for i in range(start, end)):
                 kept.insert(start, writer.placeholder)
         return _join(kept, d.eol), True
-    if d.holding(key):
-        return doc, False   # reopened, and the line is still there
+    if d.holding(key) or (bound is not None and key not in bound):
+        return doc, False   # reopened, and the line is still there; or a key the registrar did not raise
     text = latest["text"] if latest is not None else record.get("restore_text")
     if text is None:
         return doc, False

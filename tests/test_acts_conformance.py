@@ -1,12 +1,13 @@
-"""agent-hub runs the Principal Handoff Acts 0.4 conformance data of the Markdown binding (agent-ops-specs, source in
-contracts/vendor/agent-ops-specs/principal-handoff-0.4/acts/SOURCE) against bin/acts_md.py, the reader and document
-steps bin/registrar.py and bin/gen-todo.py use.
+"""agent-hub runs the conformance data of the Acts Markdown binding (agent-ops-specs) against bin/acts_md.py, the
+reader and document steps bin/registrar.py and bin/gen-todo.py use: 0.5's (acts-markdown/conformance, source in
+contracts/vendor/agent-ops-specs/principal-handoff-0.5/SOURCE), and 0.4's (principal-handoff-0.4/acts/SOURCE), whose
+rules 0.5 keeps for every key that is bound (0.5 adds known keys).
 
 Every case runs twice: in the case's own profile alone, built from the spec's profiles.json (what the spec tests), and
 in agent-hub's reading, both token sets at once with the content language's set writing (what runs here). For the
 second, a zh-hant case's `Owner` is replaced with this instance's owner tag, and an en case runs only where its
 principal_tag is the en profile's default `owner` (agent-hub's en set keeps the default, bin/todo_tokens.py).
-records.json and lifecycle.json are the principal side's and the record layer's; agent-hub does not run them.
+Acts' records.json and lifecycle.json are the record layer's: tests/test_ph_records.py runs them.
 
     bin/py -m unittest discover -s tests
 """
@@ -17,7 +18,9 @@ import sys
 import unittest
 
 ROOT = pathlib.Path(__file__).resolve().parents[1]
-FIX = ROOT / "contracts" / "vendor" / "agent-ops-specs" / "principal-handoff-0.4" / "acts"
+VENDOR = ROOT / "contracts" / "vendor" / "agent-ops-specs"
+FIXTURES = {"0.5": VENDOR / "principal-handoff-0.5" / "acts-markdown" / "conformance",
+            "0.4": VENDOR / "principal-handoff-0.4" / "acts"}
 sys.path.insert(0, str(ROOT / "bin"))
 import acts_md  # noqa: E402
 import todo_tokens  # noqa: E402
@@ -26,12 +29,13 @@ spec = importlib.util.spec_from_file_location("registrar_conf", ROOT / "bin" / "
 registrar = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(registrar)
 TAG = registrar.TAG
-SPEC = json.loads((FIX / "profiles.json").read_text())["profiles"]
+SPEC = json.loads((FIXTURES["0.5"] / "profiles.json").read_text())["profiles"]
 LANG = {"zh-hant": "zh-Hant", "en": "en"}
 
 
-def cases(file: str) -> list[dict]:
-    return json.loads((FIX / file).read_text())["cases"]
+def cases(file: str) -> list[tuple[str, dict]]:
+    """(version, case) of both versions' fixtures"""
+    return [(v, c) for v, d in FIXTURES.items() for c in json.loads((d / file).read_text())["cases"]]
 
 
 def doc(lines: list[str]) -> str:
@@ -45,6 +49,11 @@ def nonblank(text: str) -> list[str]:
 
 def bound(c: dict) -> set | None:
     return set(c["bound"]) if "bound" in c else None
+
+
+def known(c: dict) -> set:
+    """keys outside the binding whose need records the registrar holds (0.5, step 3)"""
+    return set(c.get("known", []))
 
 
 def own(x, tag: str):
@@ -76,6 +85,9 @@ def readings(c: dict):
 
 
 class Profiles(unittest.TestCase):
+    def test_the_profiles_did_not_change(self):
+        self.assertEqual(SPEC, json.loads((FIXTURES["0.4"] / "profiles.json").read_text())["profiles"])
+
     def test_agent_hubs_sets_are_the_spec_profiles(self):
         self.assertEqual(acts_md.profile("zh-Hant", "Owner"), acts_md.Profile.from_json(SPEC["zh-hant"]))
         self.assertEqual(acts_md.profile("zh-Hant", "Alex"),
@@ -87,10 +99,10 @@ class Profiles(unittest.TestCase):
 class Binding(unittest.TestCase):
     def each(self, file: str, check) -> None:
         n = 0
-        for c in cases(file):
+        for version, c in cases(file):
             for name, tr, ps, writer in readings(c):
                 n += 1
-                with self.subTest(case=c["id"], reading=name):
+                with self.subTest(version=version, case=c["id"], reading=name):
                     check(c, tr, ps, writer)
         self.assertTrue(n)
 
@@ -100,25 +112,25 @@ class Binding(unittest.TestCase):
         self.each("parse.json", check)
 
     def test_keys(self):
-        for c in cases("keys.json"):
-            with self.subTest(case=c["id"]):
+        for version, c in cases("keys.json"):
+            with self.subTest(version=version, case=c["id"]):
                 self.assertEqual(registrar.task_key(c["project"], c["text"]), c["key"])
 
     def test_register(self):
         def check(c, tr, ps, writer):
             out, raised, reported = acts_md.register(doc(tr(c["document"])), c["project"], ps, writer, bound(c),
-                                                     registrar.task_key)
+                                                     registrar.task_key, known(c))
             self.assertEqual([{"key": r["key"], "text": r["text"]} for r in raised], tr(c["expect"]["raised"]))
             self.assertEqual(reported, c["expect"]["reported"])
             self.assertEqual(nonblank(out), nonblank(doc(tr(c["expect"]["document"]))))
             b = None if bound(c) is None else bound(c) | {r["key"] for r in raised}
-            self.assertEqual(acts_md.register(out, c["project"], ps, writer, b, registrar.task_key)[:2], (out, []),
-                             "idempotent")
+            self.assertEqual(acts_md.register(out, c["project"], ps, writer, b, registrar.task_key, known(c))[:2],
+                             (out, []), "idempotent")
         self.each("register.json", check)
 
     def test_relink(self):
         def check(c, tr, ps, writer):
-            out, relinked = acts_md.relink(doc(tr(c["document"])), tr(c["active"]), ps, writer, bound(c))
+            out, relinked = acts_md.relink(doc(tr(c["document"])), tr(c["active"]), ps, writer, bound(c), known(c))
             self.assertEqual(relinked, c["expect"]["relinked"])
             self.assertEqual(nonblank(out), nonblank(doc(tr(c["expect"]["document"]))))
         self.each("relink.json", check)
@@ -130,7 +142,8 @@ class Binding(unittest.TestCase):
 
     def test_apply(self):
         def check(c, tr, ps, writer):
-            out, changed = acts_md.apply(doc(tr(c["document"])), tr(c["record"]), ps, writer, tr(c.get("latest")))
+            out, changed = acts_md.apply(doc(tr(c["document"])), tr(c["record"]), ps, writer, tr(c.get("latest")),
+                                         bound(c))
             self.assertEqual(changed, c["expect"]["changed"])
             self.assertEqual(nonblank(out), nonblank(doc(tr(c["expect"]["document"]))))
         self.each("apply.json", check)

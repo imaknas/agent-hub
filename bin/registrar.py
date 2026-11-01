@@ -1,23 +1,30 @@
 #!/bin/sh -c exec${IFS}"${0%/*}/py"${IFS}"$0"${IFS}"$@"
-"""The Principal Handoff Acts registrar (agent-ops-specs acts/SPEC.md §4, 0.4): the things in each project's STATE.md
-to-do section that only the owner can do <-> records on the bus (a nightly job after the librarian, zero LLM).
+"""The Principal Handoff Acts registrar (agent-ops-specs acts-markdown/SPEC.md §2, 0.5): the things in each project's
+STATE.md to-do section that only the owner can do <-> records on the bus (a nightly job after the librarian, zero LLM).
 
-The document is read and written by bin/acts_md.py (the 0.4 Markdown binding): either token set, also mixed in one
+The document is read and written by bin/acts_md.py (the Acts Markdown binding): either token set, also mixed in one
 file (contracts/state-todo.v2.md, bin/todo_tokens.py); what the registrar writes (a key stamp, a re-added line, the
 empty marker, a missing section's heading) is in the set of the content language, and it touches no other line.
 
-**Bound keys** (spec §4): the keys this registrar raised from lines (its `raised` on the bus, or a v1 task letter, which
-records no sender role). Items a project raised itself (agenthub send --type task, a lease handover) are never bound:
-steps 1-5 leave them alone except striking a line after a settlement of theirs.
+**Bound keys** (spec §2): the keys this registrar raised from lines (its `raised` on the bus, or a v1 task letter, which
+records no sender role). **Known keys** (spec §2 step 3): items a project raised itself (agenthub send --type task, a
+lease handover), never bound. Their need records go out on the bus under the project like the registrar's, and their
+settlements come back to the project, so the registrar holds them all (the deployment's duty in spec §2). Steps 1-5
+leave them alone except striking a line whose text is the item's latest terms after a settlement of theirs; a line
+carrying one is not raised, relinked or restamped, and is warned about every night until an agent fixes it.
+
+**A requester** (core §12): the records of each item, in whatever version they came (0.3, 0.4, 0.5), are converted to
+0.5, validated, deduplicated and folded by bin/ph_records.py; invalid ones are ignored and named in the log.
 
 For each project (the STATE.md of its memory copy, plus the platform's own openclaw-migration-status.md):
   0. Read: a document with an unclosed code fence or HTML comment is left alone (nothing sent, nothing written).
   1. Apply settled / reopened records from the principal side not yet done (hubbus records --direction in --pending):
-     settled -> strike the owner lines carrying the key, unless the settlement is stale against the latest terms or
-     the line was edited since (then the amendment is sent and nothing is struck); reopened -> re-add the line in the
-     first section from the latest terms (restore_text only without them). note and related are the librarian's.
-  2. Relink: an active bound key no line mentions, whose latest text equals exactly one keyless (or wrongly keyed)
-     owner line of the first section -> that line gets the key back instead of being raised.
+     settled -> strike the owner lines carrying the key, unless the settlement is stale against the latest terms (the
+     terms digest included) or the line was edited since (then, for a bound key, the amendment is sent; nothing is
+     struck); reopened of a bound key -> re-add the line in the first section from the latest terms (restore_text only
+     without them). note and related are the librarian's.
+  2. Relink: an active bound key no line mentions, whose latest text equals exactly one keyless (or wrongly keyed, not
+     known) owner line of the first section -> that line gets the key back instead of being raised.
   3. Raise: the remaining such lines of the first section -> key task-<project>-<sha1(normalised text)[:10]>,
      `raised` (id r:<key>) with the normalised text, stamped only after the bus accepts it. Lines in later sections are
      not raised (an archive is not a new request); a text that repeats a bound key is not raised and is warned about.
@@ -54,6 +61,7 @@ sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
 import acts_md  # noqa: E402
 import hubconf  # noqa: E402
 import i18n  # noqa: E402
+import ph_records  # noqa: E402
 import ph_wire  # noqa: E402
 import todo_tokens  # noqa: E402
 
@@ -100,21 +108,16 @@ def hubbus(*args: str, stdin: str | None = None) -> subprocess.CompletedProcess:
 
 # --- records on the bus ---
 
-def _when(r: dict) -> tuple:
-    return (r.get("ts", ""), r.get("id", ""))
-
-
 def current(recs: list[dict]) -> dict | None:
-    """core §6: the newest of those no other record supersedes (equal ts: compare id)."""
-    if not recs:
-        return None
-    replaced = {s for r in recs for s in r.get("supersedes", [])}
-    heads = [r for r in recs if r["id"] not in replaced] or recs
-    return max(heads, key=_when)
+    """core §6: of one register's (valid, 0.5) records, the latest of those no other supersedes (equal ts: the greater
+    id)."""
+    return ph_records.register(recs)[0]
 
 
 class Ledger:
-    """One project's Acts records on the bus, grouped by key."""
+    """One project's Acts records on the bus, grouped by key: the need register (what this project sent, the
+    registrar's and the project's own) and the settlement register (what the principal side sent), each record
+    converted to 0.5, validated and deduplicated (bin/ph_records.py)."""
 
     def __init__(self, project: str):
         r = hubbus("records", "--project", project)
@@ -123,30 +126,37 @@ class Ledger:
         except ValueError:
             raise SystemExit(_("cannot read hubbus records (exit {code}): {stderr}", code=r.returncode,
                                stderr=r.stderr.strip()[-200:]))
-        self.need, self.settle, self.pending, self.raised_by = {}, {}, [], {}
+        self.need, self.settle, self.pending, self.raised_by, self.ignored = {}, {}, [], {}, []
+        held: dict[str, list[dict]] = {}
         for e in events:
             rec = e["record"]
             if ph_wire.family(rec.get("ext")) != "acts":   # every version read
                 continue
-            if e["direction"] == "out" and rec["type"] in ("raised", "amended", "withdrawn"):
-                self.need.setdefault(rec["key"], []).append(rec)
-                if rec["type"] == "raised":
-                    self.raised_by.setdefault(rec["key"], rec.get("by"))
-            elif e["direction"] == "in" and rec["type"] in ("settled", "reopened"):
-                self.settle.setdefault(rec["key"], []).append(rec)
-                if not e["done"]:
+            if (e["direction"] == "out" and rec.get("type") in ph_records.NEED) or \
+                    (e["direction"] == "in" and rec.get("type") in ph_records.SETTLEMENT):
+                held.setdefault(str(rec.get("key")), []).append(rec)
+                if e["direction"] == "in" and not e["done"]:
                     self.pending.append(e)
+        cfg = ph_records.config()
+        for key, recs in held.items():
+            valid, ignored = ph_records.received(recs, cfg)
+            self.ignored += ignored
+            for rec in sorted(valid, key=ph_records.when):
+                (self.need if rec["type"] in ph_records.NEED else self.settle).setdefault(key, []).append(rec)
+                if rec["type"] == "raised":
+                    self.raised_by.setdefault(key, rec.get("by"))
         self.v1_posted, self.v1_closed, self.v1_pending, self.v1_claimed = v1_compat(project)
+
+    def latest_need(self, key: str) -> dict | None:
+        """the need record with the latest terms (the highest terms_rev)"""
+        return ph_records.latest_terms(self.need.get(key, []))
 
     def terms(self, key: str) -> tuple[str | None, int, str | None]:
         """(latest terms text, latest terms_rev, current requirement record id)."""
-        recs = self.need.get(key, [])
-        with_terms = [r for r in recs if r["type"] in ("raised", "amended")]
-        latest = max(with_terms, key=lambda r: (r.get("terms_rev", 0), *_when(r))) if with_terms else None
-        cur = current(recs)
+        latest, cur = self.latest_need(key), current(self.need.get(key, []))
         if latest is None:
             return self.v1_posted.get(key), 1 if key in self.v1_posted else 0, None
-        return latest["terms"]["text"], latest.get("terms_rev", 1), cur["id"] if cur else None
+        return latest["terms"]["text"], latest["terms_rev"], cur["id"] if cur else None
 
     def known(self) -> set[str]:
         return set(self.need) | set(self.v1_posted)
@@ -170,14 +180,21 @@ class Ledger:
         return self.raised_by.get(key, REGISTRAR) == REGISTRAR
 
     def bound_keys(self) -> set[str]:
-        """spec §4's bound keys"""
+        """spec §2's bound keys"""
         return {k for k in self.known() if self.bound(k)}
 
+    def known_keys(self) -> set[str]:
+        """spec §2 step 3's known keys: not bound, a need record held (an item the project raised itself)"""
+        return {k for k in self.need if not self.bound(k)}
+
     def latest(self, key: str) -> dict | None:
-        """the latest terms of a bound key as the binding compares them ({text, terms_rev}); None for a key not bound
-        or with no terms held"""
+        """the latest terms of a bound or known key as the binding compares them ({text, terms_rev, terms_digest}, the
+        digest as 0.5 computes it); None for a key with no terms held"""
         text, rev, _cur = self.terms(key)
-        return {"text": text, "terms_rev": rev} if self.bound(key) and text is not None else None
+        if text is None:
+            return None
+        need = self.latest_need(key)
+        return {"text": text, "terms_rev": rev, **({"terms_digest": ph_wire.terms_digest(need)} if need else {})}
 
 
 def v1_compat(project: str) -> tuple[dict, set, list, set]:
@@ -288,20 +305,29 @@ def run_project(project: str, path: pathlib.Path, how: str, warned: set[str]) ->
               "fixed", project=project, line=at + 1))
         return True, 0
     before, ok, sent = text, True, 0
-    bound = led.bound_keys()
+    bound, known = led.bound_keys(), led.known_keys()
+    for r in led.ignored:
+        log(_("{project}: record {id} ignored: not a valid Principal Handoff record", project=project,
+              id=r.get("id") if isinstance(r, dict) else r))
     active = {k: led.terms(k)[0] or "" for k in led.open() if k in bound}
     # 1. apply
     applied, amends = [], []
-    for key in sorted({e["record"]["key"] for e in led.pending}):
-        cur = current(led.settle[key])
-        text, changed = acts_md.apply(text, cur, READ, W, led.latest(key))
-        if not changed and cur["type"] == "settled" and key in bound:
+    for key in sorted({str(e["record"].get("key")) for e in led.pending}):
+        cur = current(led.settle.get(key, []))
+        if cur is None:   # only invalid records: consumed, nothing applied
+            continue
+        text, changed = acts_md.apply(text, cur, READ, W, led.latest(key), bound)
+        if not changed and cur["type"] == "settled" and (key in bound or key in known):
             holding = {norm(e.text) for e in acts_md.Doc(text, READ).holding(key)}
             if holding and holding != {norm(led.terms(key)[0] or "")}:
-                log(_("{project}: {key} was settled, but its line was changed since; not struck, the change is sent as "
-                      "an amendment", project=project, key=key))
-                if not led.withdrawn(key) and len(holding) == 1 and key in led.need:
-                    amends.append((key, holding.pop()))
+                if key in bound:
+                    log(_("{project}: {key} was settled, but its line was changed since; not struck, the change is "
+                          "sent as an amendment", project=project, key=key))
+                    if not led.withdrawn(key) and len(holding) == 1 and key in led.need:
+                        amends.append((key, holding.pop()))
+                else:
+                    log(_("{project}: {key} was settled, but the line carrying it asks something else; not struck "
+                          "(the item was raised outside STATE.md)", project=project, key=key))
         log(_("{project}: applied {type} {key}", project=project, type=cur["type"], key=key))
     applied += [e["id"] for e in led.pending]
     for h in led.v1_pending:
@@ -310,14 +336,19 @@ def run_project(project: str, path: pathlib.Path, how: str, warned: set[str]) ->
         text, _changed = acts_md.apply(text, rec, READ, W)   # v1 handoffs carry no terms_rev to compare
         applied.append(h["id"])
     # 2. relink
-    text, relinked = acts_md.relink(text, active, READ, W, bound)
+    text, relinked = acts_md.relink(text, active, READ, W, bound, known)
     for k in relinked:
         log(_("{project}: restored key {key} (the key at the end of the line had been removed)", project=project, key=k))
     # 3. raise
-    _stamped, events, reported = acts_md.register(text, project, READ, W, bound, task_key)
+    _stamped, events, reported = acts_md.register(text, project, READ, W, bound, task_key, known)
     doc = acts_md.Doc(text, READ)
     for i in reported:
-        line = doc.lines[i].strip()
+        line, k = doc.lines[i].strip(), doc.carries(i)
+        if k in known:   # spec §2 step 3: warned every night until an agent fixes the line
+            log(_("{project}: warning — line {line} carries {key}, a to-do the project raised itself (its key was "
+                  "copied onto the line); not raised. Delete the line, or delete the key so that the line is raised "
+                  "and replace the old to-do with it", project=project, line=i + 1, key=k))
+            continue
         log(_("{project}: not raised, line {line}: `{text}` (its text repeats a to-do already raised, appears twice, or "
               "goes on after a key)", project=project, line=i + 1, text=line[:80]))
     fresh = [(e, record(project, "raised", e["key"], f"r:{e['key']}", terms={"text": e["text"]}, terms_rev=1))

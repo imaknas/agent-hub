@@ -21,5 +21,8 @@
  "{project}: an owner line still carries {key}, which is already settled or withdrawn": "{project}: 有一行 owner 待辦還帶著 {key},但它已經結案或撤回了",
  "{project}: {key} moved off the owner lines (relabelled, moved or archived); no claim, a note sent": "{project}: {key} 已經不在 owner 的待辦行上(改了標籤、搬走或封存),不送 claim,送了一則 note",
  "The key of this to-do is no longer on an owner line of STATE.md's to-dos (it was relabelled, moved or archived); it is now on line {line}: {text}": "這件待辦的 key 已經不在 STATE.md 待辦裡 owner 的行上(改了標籤、搬走或封存),現在在第 {line} 行:{text}",
- "Inferred done by the librarian: the to-do's box in STATE.md was ticked.": "librarian 推斷已完成:STATE.md 裡這件待辦被打勾了。"
+ "Inferred done by the librarian: the to-do's box in STATE.md was ticked.": "librarian 推斷已完成:STATE.md 裡這件待辦被打勾了。",
+ "{project}: record {id} ignored: not a valid Principal Handoff record": "{project}: 略過 record {id}:不是有效的 Principal Handoff record",
+ "{project}: {key} was settled, but the line carrying it asks something else; not struck (the item was raised outside STATE.md)": "{project}: {key} 已經結案,但帶著它的那一行寫的是別的事;不刪(這件不是從 STATE.md 登錄的)",
+ "{project}: warning — line {line} carries {key}, a to-do the project raised itself (its key was copied onto the line); not raised. Delete the line, or delete the key so that the line is raised and replace the old to-do with it": "{project}: 警告——第 {line} 行帶著 {key},那是專案自己登錄的待辦(key 被複製到這一行);不登錄。請刪掉這一行,或拿掉 key 讓這一行登錄成新的待辦、再用它取代舊的"
 }

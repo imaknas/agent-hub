@@ -34,7 +34,8 @@ reconcile, fixes both). v1's letters still on the bus count (registrar.py's v1_c
   pv  the key on a line relabelled agent          → a note (displaced), no claim
   ps  an owner line in a second to-do section     → not raised (only the first section is)
   pu  an unclosed code fence                      → nothing sent, nothing written
-  px  as pb, the settlement in 0.4 (acts/0.4)     → applied the same
+  px  as pb, the settlement in 0.4 (acts/0.4),    → applied the same
+      its 0.4 terms digest that of the need record
 
     bin/py -m unittest discover -s tests
 """
@@ -50,6 +51,7 @@ import unittest
 
 ROOT = pathlib.Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "bin"))
+import ph_wire  # noqa: E402
 import todo_tokens  # noqa: E402
 
 TAG, OWNER, PRINCIPAL, SIDE = "Alex", "owner", "person:alex", "helper"
@@ -84,7 +86,14 @@ KB, KC, KD, KE = key("pb", "Pay the domain"), key("pc", "Sign the contract"), ke
 KF, KG, KH, KI = key("pf", "Book flights"), key("pg", "Pay the tax"), key("ph", "Reply to the landlord"), key("pi", "Book the hotel")
 KN, KW = key("pn", "pay rent"), key("pw", "renew insurance")
 KT, KV, KX = key("pt", "File the report"), key("pv", "Choose a host"), key("px", "Pay the dues")
-V04 = {"ph": "0.4", "ext": "acts/0.4", "terms_digest": "sha-256:" + "0" * 64}   # a settlement the assistant sends in 0.4
+
+
+def v04(p: str, k: str, text: str) -> dict:
+    """a settlement the assistant sends in 0.4: its terms digest, as 0.4 computes it, of the need record it was made on"""
+    need = {"ext": "acts/0.3", "project": p, "key": k, "terms_rev": 1, "terms": {"text": text}}
+    return {"ph": "0.4", "ext": "acts/0.4", "terms_digest": ph_wire.terms_digest(need, "0.4")}
+
+
 EKN = f" (waiting on owner: {KN})"
 SCENES = {
     "pa": {"state": state(owner("Renew the domain"), agent("Add retries"))},
@@ -113,7 +122,7 @@ SCENES = {
     "ps": {"state": state(agent("Something")) + f"\n{ZH['todo_heading']}\n\n" + owner("Archived ask") + "\n"},
     "pu": {"state": state(owner("Before the fence"), "```", owner("In the fence"))},
     "px": {"state": state(owner("Pay the dues") + marker(KX), agent("Other")), "posted": {KX: "Pay the dues"},
-           "settle": [("s-px", KX, "done", "Pay the dues")], "v04": True},
+           "settle": [("s-px", KX, "done", "Pay the dues")], "v04": "Pay the dues"},
 }
 
 
@@ -215,7 +224,7 @@ class Env:
             else:
                 settles.append(self.rec(p, hid, "settled", "principal", SIDE, k, outcome=effect, terms_rev=1,
                                         authority={"kind": "principal", "decider": PRINCIPAL}, ts="2026-10-26T10:00:00Z",
-                                        **(V04 if s.get("v04") else {})))
+                                        **(v04(p, k, s["v04"]) if s.get("v04") else {})))
         if settles:   # from the principal side: written directly as record events on the bus (what bridge does inbound)
             c = sqlite3.connect(self.db)
             for r in settles:
@@ -318,14 +327,17 @@ class RegistrarFlow(unittest.TestCase):
             self.assertEqual(notes, {want["note"]})
 
 
-# Lines carrying the key of an item the project raised outside the document (send, a lease handover): the key is
-# not bound, and the registrar holds the item's need record.
+# Acts Markdown 0.5 (spec §2 step 3): lines carrying the key of an item the project raised outside the document (send,
+# a lease handover). Such a key is known: not bound, the registrar holds the item's need record.
 #
-#   qa  an owner line carrying such a key            → raised under the key derived from its text, restamped
-#   qb  such a key settled, the line's text differs  → the line deleted
-#   qc  such a key settled, the line's text the same → the line deleted
-#   qd  such a key reopened, no line carries it      → a line added from restore_text, then raised as a new item
+#   qa  an owner line carrying a known key           → not raised, not restamped; warned about every night
+#   qb  a known key settled, the line's text differs → not struck, reported
+#   qc  a known key settled, the line's text equal   → the line deleted
+#   qd  a known key reopened, no line carries it     → no line added (only a bound key is re-added)
+#   qe  a 0.4 settlement whose terms digest is that  → stale (core §6, the digest converted to 0.5): not struck
+#       of other terms at the same terms_rev
 KQA, KQB, KQC, KQD = "ask-qa-0000000001", "ask-qb-0000000002", "ask-qc-0000000003", "ask-qd-0000000004"
+KQE = key("qe", "Pay the fee")
 KNOWN_SCENES = {
     "qa": {"state": state(owner("Measure the desk") + marker(KQA)), "raised_by_project": {KQA: "Measure the desk"}},
     "qb": {"state": state(owner("Call the bank about the card") + marker(KQB), agent("Other")),
@@ -334,6 +346,8 @@ KNOWN_SCENES = {
            "raised_by_project": {KQC: "Water the plants"}, "settle": [("s-qc", KQC, "done", "Water the plants")]},
     "qd": {"state": state(agent("Other")), "raised_by_project": {KQD: "Pick up the keys"},
            "settle": [("s-qd", KQD, "reopened", "Pick up the keys")]},
+    "qe": {"state": state(owner("Pay the fee") + marker(KQE), agent("Other")), "posted": {KQE: "Pay the fee"},
+           "settle": [("s-qe", KQE, "done", "Pay the fee")], "v04": "Pay the fee, twice"},
 }
 
 
@@ -341,16 +355,23 @@ class RegistrarKnownKeys(unittest.TestCase):
     def test_keys_raised_outside_the_document(self):
         with tempfile.TemporaryDirectory() as d:
             env = Env(pathlib.Path(d), KNOWN_SCENES)
+            env.env["AGENT_HUB_LANG_UI"] = "en"   # the log lines below are English
             r = env.run()
             self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
-            kqa = key("qa", "Measure the desk")
-            self.assertEqual(env.outputs("qa"), [("raised", kqa)])
-            self.assertIn(owner("Measure the desk") + marker(kqa), env.state("qa"))
-            self.assertNotIn("Call the bank", env.state("qb"))
+            log = r.stdout + r.stderr
+            self.assertEqual(env.outputs("qa"), [], "a known key's line is not raised")
+            self.assertEqual(env.state("qa"), KNOWN_SCENES["qa"]["state"], "nor restamped")
+            self.assertIn(f"qa: warning — line 9 carries {KQA}", log)
+            self.assertIn(owner("Call the bank about the card") + marker(KQB), env.state("qb"), "a line asking else: kept")
+            self.assertIn(f"qb: {KQB} was settled, but the line carrying it asks something else", log)
             self.assertNotIn("Water the plants", env.state("qc"))
-            kqd = key("qd", "Pick up the keys")
-            self.assertIn(owner("Pick up the keys") + marker(kqd), env.state("qd"))
-            self.assertEqual(env.outputs("qd"), [("raised", kqd)], "the re-added line is then raised as a new item")
+            self.assertEqual(env.state("qd"), KNOWN_SCENES["qd"]["state"], "a key not raised from a line: not re-added")
+            self.assertEqual(env.outputs("qd"), [])
+            self.assertIn("Pay the fee", env.state("qe"), "a stale settlement strikes nothing")
+            r = env.run()   # warned again the next night, nothing else
+            self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
+            self.assertIn(f"qa: warning — line 9 carries {KQA}", r.stdout + r.stderr)
+            self.assertEqual(env.outputs("qa"), [])
 
 
 # An English-content instance (contracts/state-todo.v2.md): the same steps, the English token set written; pm is an
