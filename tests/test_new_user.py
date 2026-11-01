@@ -130,6 +130,34 @@ class NewUser(unittest.TestCase):
         r = self.hub_cmd("move-instance", "--to", str(self.tmp / "again"), "--apply")
         self.assertNotEqual(r.returncode, 0, "once moved, not moved again")
 
+    def test_init_acts_only_on_arguments_it_knows(self):
+        """`init --help` once ran a real init (11-01); help, a typo or a missing value must write nothing"""
+        for args, rc in ((["--help"], 0), (["-h"], 0), (["--yes", "--bogus"], 2), (["--yes", "--owner"], 2)):
+            r = self.hub_cmd("init", *args)
+            self.assertEqual(r.returncode, rc, (args, r.stdout + r.stderr))
+            self.assertFalse((self.home / ".agent-hub").exists(), args)
+            self.assertFalse((self.hub / ".hub-home").exists(), args)
+            self.assertFalse((self.hub / "hub.json").exists(), args)
+        self.assertIn("agenthub init", self.hub_cmd("init", "--help").stdout)
+
+    def test_core_services_only_from_the_main_checkout(self):
+        """units rendered from a linked worktree would run the scheduler from there, and it refuses every tick"""
+        import importlib.machinery
+        import importlib.util
+        loader = importlib.machinery.SourceFileLoader("agenthub_cli", str(ROOT / "bin" / "agenthub"))
+        spec = importlib.util.spec_from_loader("agenthub_cli", loader)
+        mod = importlib.util.module_from_spec(spec)
+        loader.exec_module(mod)
+        saved, run = mod.hubconf.MAIN, mod.subprocess.run
+        try:
+            mod.hubconf.MAIN = mod.hubconf.ROOT.parent / "elsewhere"
+            mod.subprocess.run = lambda *a, **k: self.fail(f"ran {a[0]}")
+            out = mod.install_core_plists(dry=False)
+        finally:
+            mod.hubconf.MAIN, mod.subprocess.run = saved, run
+        self.assertEqual(len(out), 1)
+        self.assertIn(str(mod.hubconf.ROOT), out[0])
+
     def test_init_never_overwrites_hub_json(self):
         (self.hub / "hub.json").write_text('{"v": 1, "registry_dir": "projects", "owner": {"address": "owner", "tag": "Keep"}}\n')
         r = self.hub_cmd("init", "--yes", "--no-launchd", "--owner", "Other")

@@ -209,7 +209,11 @@ def render_plist(label: str) -> bytes:
 
 def install_core_plists(dry: bool) -> list[str]:
     """Scheduler + watchdog: if the template's content matches what's installed, leave it (no needless scheduler
-    reload)."""
+    reload). Only from the main checkout: units rendered from a linked worktree would run the scheduler from there,
+    which refuses every tick (11-01: an `init --help` in a worktree stopped the live scheduler this way)."""
+    if hubconf.ROOT != hubconf.MAIN:
+        return [_("⚠️ not installing the scheduler and watchdog from a linked worktree ({root}); run init from the main "
+                  "checkout ({main})", root=hubconf.ROOT, main=hubconf.MAIN)]
     sm = hubconf.service_manager()
     if sm is None:
         return [_("⚠️ {reason}; to run the nightly flow, schedule `bin/py bin/scheduler.py` yourself (every 15 minutes)",
@@ -293,10 +297,36 @@ def new_hub_json(args: dict, yes: bool) -> dict:
     return d
 
 
+INIT_FLAGS = ("--yes", "--no-launchd", "--dry-run")
+INIT_OPTIONS = ("--owner", "--timezone", "--workspace", "--modules", "--home", "--llm", "--llm-model", "--llm-base-url")
+
+
+def init_argv_problem(argv: list[str]) -> str | None:
+    """init writes the instance and installs services, so it acts only on arguments it knows: anything else (a typo,
+    --help) stops it before it writes anything."""
+    i = 0
+    while i < len(argv):
+        a = argv[i]
+        if a in INIT_OPTIONS:
+            if i + 1 >= len(argv):
+                return _("{option} needs a value", option=a)
+            i += 2
+        elif a in INIT_FLAGS:
+            i += 1
+        else:
+            return _("unknown argument: {arg}", arg=a)
+    return None
+
+
 def cmd_init(argv: list[str]) -> int:
-    flags = {a for a in argv if a in ("--yes", "--no-launchd", "--dry-run")}
-    args = {k.lstrip("-"): argv[i + 1] for i, k in enumerate(argv[:-1])
-            if k in ("--owner", "--timezone", "--workspace", "--modules", "--home", "--llm", "--llm-model", "--llm-base-url")}
+    if any(a in ("-h", "--help") for a in argv):
+        print(_(__doc__))
+        return 0
+    if problem := init_argv_problem(argv):
+        print(_("agenthub init: {problem} (nothing was done; see agenthub --help)", problem=problem), file=sys.stderr)
+        return 2
+    flags = {a for a in argv if a in INIT_FLAGS}
+    args = {k.lstrip("-"): argv[i + 1] for i, k in enumerate(argv[:-1]) if k in INIT_OPTIONS}
     dry, yes = "--dry-run" in flags, "--yes" in flags
     created = False
     legacy = hubconf.instance_home() is None and hubconf.config_file("hub.json").exists()
