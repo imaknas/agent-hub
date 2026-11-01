@@ -272,9 +272,8 @@ def run_here(name, job, env) -> int:
     log = job_log(name)
     log.parent.mkdir(parents=True, exist_ok=True)
     print(_("Running {name} here (no service manager); its output also goes to {log}", name=name, log=log), flush=True)
-    with open(log, "a") as f:
-        p = subprocess.Popen([hubconf.login_shell(), "-lc", job["command"]], stdout=subprocess.PIPE,
-                             stderr=subprocess.STDOUT, text=True, env={**os.environ, **env})
+    with open(log, "a") as f, subprocess.Popen([hubconf.login_shell(), "-lc", job["command"]], stdout=subprocess.PIPE,
+                                               stderr=subprocess.STDOUT, text=True, env={**os.environ, **env}) as p:
         for line in p.stdout:
             sys.stdout.write(line)
             f.write(line)

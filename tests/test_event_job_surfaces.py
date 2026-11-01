@@ -344,6 +344,29 @@ class Schedulectl(WithBus):
         self.assertEqual(self.state(), before)
 
 
+class RunHere(unittest.TestCase):
+    """schedulectl run without a service manager runs the job in this terminal: the output reaches both the terminal and
+    the job's log, and the child's pipe is closed when it ends (no ResourceWarning)."""
+
+    def test_output_and_no_unclosed_pipe(self):
+        import gc
+        import warnings
+        m = load("schedulectl_run_here", ROOT / "bin" / "schedulectl")
+        with tempfile.TemporaryDirectory() as d:
+            log = pathlib.Path(d) / "job.log"
+            out = io.StringIO()
+            with mock.patch.object(m, "job_log", lambda name: log), \
+                    mock.patch.object(m.hubconf, "login_shell", lambda: "/bin/sh"), \
+                    contextlib.redirect_stdout(out), warnings.catch_warnings(record=True) as caught:
+                warnings.simplefilter("always", ResourceWarning)
+                code = m.run_here("p/job", {"command": "echo hi"}, {})
+                gc.collect()
+            self.assertEqual(code, 0)
+            self.assertIn("hi\n", out.getvalue())
+            self.assertEqual(log.read_text(), "hi\n")
+            self.assertEqual([w for w in caught if issubclass(w.category, ResourceWarning)], [])
+
+
 # ---------- the scheduler applier (bin/applier_scheduler.py) ----------
 
 class ApplierTrigger(unittest.TestCase):

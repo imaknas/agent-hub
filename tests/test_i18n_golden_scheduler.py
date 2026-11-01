@@ -105,6 +105,12 @@ class Golden(unittest.TestCase):
 
             def wait(self):
                 return 3
+
+            def __enter__(self):
+                return self
+
+            def __exit__(self, *exc):
+                return False
         fake_sp = types.SimpleNamespace(run=run, Popen=Popen, PIPE=subprocess.PIPE, STDOUT=subprocess.STDOUT,
                                         check_output=lambda *a, **k: b"501\n")
         jobs = [
