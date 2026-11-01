@@ -64,9 +64,9 @@ bare_rel="${memory_bare_repo#*:~/}"
 if [ "$bare_rel" != "$memory_bare_repo" ] && git -C "$HOME/$bare_rel" rev-parse --is-bare-repository >/dev/null 2>&1; then
   memory_bare_repo="$HOME/$bare_rel"
 fi
-git remote add mini "$memory_bare_repo"
-git fetch -q mini agent-memory
-git worktree add -b agent-memory .agent-memory mini/agent-memory -q
+git remote add "$MEMORY_REMOTE" "$memory_bare_repo"
+git fetch -q "$MEMORY_REMOTE" agent-memory
+git worktree add -b agent-memory .agent-memory "$MEMORY_REMOTE/agent-memory" -q
 hub_say "[3/5] .agent-memory is on the existing agent-memory branch of {memory_bare} (full history, not a new branch)" memory_bare="$memory_bare_repo"
 
 # --- 4-5. Local-only setup: the agent-hub block in CLAUDE.local.md, the .claude/settings.local.json hooks, and

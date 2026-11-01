@@ -44,6 +44,9 @@ hub_json_get() {
       "$HUB_JSON" 2>/dev/null
   fi
 }
+# The name of a project's git remote for its memory bare repo on the hub machine (the .agent-memory branch's upstream).
+# Older checkouts called it mini; sync-local-setup.sh renames those.
+MEMORY_REMOTE=memory
 # The machine that runs the hub (hosts.server; the old key memory_host); empty = one machine does everything
 hub_server() { hub_json_get hosts.server || hub_json_get memory_host; }
 # Owner-facing text in the UI language (docs/design/i18n.md): hub_msg "<English msgid>" [name=value …] prints it without

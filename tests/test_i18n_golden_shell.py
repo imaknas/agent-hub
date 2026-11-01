@@ -68,6 +68,9 @@ class ShellGolden(unittest.TestCase):
     def git(self, cwd, *args):
         subprocess.run(["git", *args], cwd=cwd, env=self.env, check=True, capture_output=True)
 
+    def git_out(self, cwd, *args) -> str:
+        return subprocess.run(["git", *args], cwd=cwd, env=self.env, check=True, capture_output=True, text=True).stdout
+
     def repo(self, path, files=None) -> pathlib.Path:
         path = pathlib.Path(path)
         path.mkdir(parents=True, exist_ok=True)
@@ -170,6 +173,23 @@ class ShellGolden(unittest.TestCase):
         self.bare_remote(self.repo(q / ".agent-memory", {"AGENT.md": "old\n"}), "clean-memory")
         out.append(self.run_(s, q))
         out.append(self.run_(s, "--quiet", q))
+        # an older checkout whose memory remote is still called mini: renamed, upstream kept; a mini remote that is
+        # not a memory bare repo, or with the new name taken, is left alone
+        old = self.repo(self.tmp / "ws" / "old")
+        (old / ".agent-memory").mkdir()
+        bare = self.tmp / "remotes" / "old-memory.git"
+        self.git(self.tmp, "init", "-q", "--bare", "-b", "main", str(bare))
+        self.git(old, "remote", "add", "mini", str(bare))
+        self.git(old, "push", "-q", "-u", "mini", "main")
+        out.append(self.run_(s, old))
+        remotes = self.git_out(old, "remote").split()
+        self.assertEqual(remotes, ["memory"])
+        self.assertEqual(self.git_out(old, "config", "branch.main.remote").strip(), "memory")
+        other = self.repo(self.tmp / "ws" / "other")
+        (other / ".agent-memory").mkdir()
+        self.git(other, "remote", "add", "mini", str(self.tmp / "remotes" / "something.git"))
+        self.run_(s, "--quiet", other)
+        self.assertEqual(self.git_out(other, "remote").split(), ["mini"])
         # a runtime without a rules file or session events
         self.cfg["runtime"] = {"default": "none"}
         self.write_cfg()

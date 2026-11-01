@@ -83,7 +83,7 @@ rename-project: alpha → beta
                           mv ~/.memory-copies/alpha → ~/.memory-copies/beta(origin 指向新 bare repo)
                           mv .state/alpha.sha → beta.sha
                           mirrors/(native).git → (native).git(如果名稱有變)
-  本機                    remote mini → <TMP>/home/git-origin/beta-memory.git
+  本機                    remote memory → <TMP>/home/git-origin/beta-memory.git
                           mv <TMP>/home/workspace/alpha → <TMP>/home/workspace/beta + git worktree repair
 (dry-run,加 --apply 才會執行)
 --- stderr
@@ -101,7 +101,7 @@ rename-project: zeta → zeta2
                           mv ~/.memory-copies/zeta → ~/.memory-copies/zeta2(origin 指向新 bare repo)
                           mv .state/zeta.sha → zeta2.sha
                           mirrors/zeta.git → zeta2.git(如果名稱有變)
-  本機                    remote mini → <TMP>/home/git-origin/zeta2-memory.git
+  本機                    remote memory → <TMP>/home/git-origin/zeta2-memory.git
                           本機資料夾不搬
 (dry-run,加 --apply 才會執行)
 --- stderr
@@ -119,7 +119,7 @@ rename-project: alpha → beta
                           mv ~/.memory-copies/alpha → ~/.memory-copies/beta(origin 指向新 bare repo)
                           mv .state/alpha.sha → beta.sha
                           mirrors/(native).git → (native).git(如果名稱有變)
-  本機                    remote mini → <TMP>/home/git-origin/beta-memory.git
+  本機                    remote memory → <TMP>/home/git-origin/beta-memory.git
                           mv <TMP>/home/workspace/alpha → <TMP>/home/workspace/beta + git worktree repair
 --- stderr
 rename-project: 還有程序的工作目錄在 <TMP>/home/workspace/alpha:claude(4242) ——先關掉那個專案的 Claude session / 終端機分頁再跑
@@ -137,7 +137,7 @@ rename-project: alpha → beta
                           mv ~/.memory-copies/alpha → ~/.memory-copies/beta(origin 指向新 bare repo)
                           mv .state/alpha.sha → beta.sha
                           mirrors/(native).git → (native).git(如果名稱有變)
-  本機                    remote mini → <TMP>/home/git-origin/beta-memory.git
+  本機                    remote memory → <TMP>/home/git-origin/beta-memory.git
                           mv <TMP>/home/workspace/alpha → <TMP>/home/workspace/beta + git worktree repair
 [hub 主機] bare repo / ~/.memory-copies / checkpoint / mirror 已改名
 [本機] auto memory 帶到新路徑(<TMP>/home/.claude)

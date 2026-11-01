@@ -210,15 +210,15 @@ mini_sh "mkdir -p ~/git-origin && git init --bare -q ~/git-origin/${PROJ_NAME}-m
 # Note: the remote branch is deliberately named agent-memory like the local one, not main: a different name makes
 # branch.agent-memory.merge point at refs/heads/main, which works (it's the only ref on the remote anyway) but looks
 # like a misconfiguration, and people (or other agents) easily mistake it for a bug and go digging.
-# remote add isn't idempotent: in resume mode the mini remote may already be set from last time (before the hub
+# remote add isn't idempotent: in resume mode the memory remote may already be set from last time (before the hub
 # machine's steps failed); if it exists, change its URL, only add it if it doesn't.
 ( cd .agent-memory && \
-  if git remote get-url mini >/dev/null 2>&1; then
-    git remote set-url mini "$(mini_memory_url "$PROJ_NAME")"
+  if git remote get-url "$MEMORY_REMOTE" >/dev/null 2>&1; then
+    git remote set-url "$MEMORY_REMOTE" "$(mini_memory_url "$PROJ_NAME")"
   else
-    git remote add mini "$(mini_memory_url "$PROJ_NAME")"
+    git remote add "$MEMORY_REMOTE" "$(mini_memory_url "$PROJ_NAME")"
   fi && \
-  git push -u mini agent-memory:agent-memory -q )
+  git push -u "$MEMORY_REMOTE" agent-memory:agent-memory -q )
 # The hub machine's git init.defaultBranch is main, so a new bare repo's HEAD points at refs/heads/main by default;
 # but only agent-memory is ever pushed here, main never exists, HEAD dangles, and the plain git clone in the next
 # step gets nothing. Point HEAD at the right branch explicitly.

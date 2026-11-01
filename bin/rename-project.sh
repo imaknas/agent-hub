@@ -58,7 +58,7 @@ fi
 [ -d "$OLD_PATH/.agent-memory" ] || fail "$(hub_msg "{path}/.agent-memory does not exist" path="$OLD_PATH")"
 [ -z "$(git -C "$OLD_PATH" status --porcelain --untracked-files=no)" ] || fail "$(hub_msg "{path} has uncommitted changes to tracked files; deal with them first" path="$OLD_PATH")"
 [ -z "$(git -C "$OLD_PATH/.agent-memory" status --porcelain)" ] || fail "$(hub_msg ".agent-memory has uncommitted changes; sync it first")"
-git -C "$OLD_PATH/.agent-memory" fetch -q mini
+git -C "$OLD_PATH/.agent-memory" fetch -q "$MEMORY_REMOTE"
 [ "$(git -C "$OLD_PATH/.agent-memory" rev-list --count @{u}..HEAD)" = 0 ] || fail "$(hub_msg ".agent-memory has commits that are not pushed")"
 [ "$NEW_PATH" = "$OLD_PATH" ] || [ ! -e "$NEW_PATH" ] || fail "$(hub_msg "{path} already exists" path="$NEW_PATH")"
 
@@ -72,7 +72,7 @@ OLD_MIRROR_NAME=$(basename "$OLD_ORIGIN" .git); NEW_MIRROR_NAME=$(basename "$NEW
 mini_sh "[ -d ~/git-origin/$OLD-memory.git ] && [ ! -e ~/git-origin/$NEW-memory.git ] && [ ! -e ~/.memory-copies/$NEW ]" \
   || fail "$(hub_msg "on the hub machine, the old bare repo is missing or a path with the new name already exists")"
 
-# remote=mini: the name of the git remote (a token)
+# remote: the name of the git remote (a token)
 if [ "$NEW_PATH" != "$OLD_PATH" ]; then folder="mv $OLD_PATH → $NEW_PATH + git worktree repair"
 else folder="$(hub_msg "the local folder stays where it is")"; fi
 hub_say "rename-project: {old} → {new}
@@ -88,7 +88,7 @@ hub_say "rename-project: {old} → {new}
   this machine            remote {remote} → {url}
                           {folder}" \
   old="$OLD" new="$NEW" old_path="$OLD_PATH" new_path="$NEW_PATH" old_origin="$OLD_ORIGIN" new_origin="$NEW_ORIGIN" \
-  old_mirror="$OLD_MIRROR_NAME" new_mirror="$NEW_MIRROR_NAME" remote=mini url="$(mini_memory_url "$NEW")" folder="$folder"
+  old_mirror="$OLD_MIRROR_NAME" new_mirror="$NEW_MIRROR_NAME" remote="$MEMORY_REMOTE" url="$(mini_memory_url "$NEW")" folder="$folder"
 $APPLY || { hub_say "(dry-run; add --apply to carry it out)"; exit 0; }
 
 if [ "$NEW_PATH" != "$OLD_PATH" ]; then
@@ -108,7 +108,7 @@ if [ "$NEW_PATH" != "$OLD_PATH" ]; then
   [ -z "$users" ] || { hub_say "rename-project: processes still have their working directory in {path}: {users}(close that project's agent sessions / terminal tabs first, then run again)" path="$OLD_PATH" users="$users" >&2; exit 75; }
 fi
 
-# --- mini ---
+# --- hub machine ---
 mini_bash_stdin <<EOF
 set -euo pipefail
 mv ~/git-origin/$OLD-memory.git ~/git-origin/$NEW-memory.git
@@ -133,13 +133,13 @@ fi
 hub_say "[hub machine] bare repo / ~/.memory-copies / checkpoint / mirror renamed"
 
 # --- local ---
-git -C "$OLD_PATH" remote set-url mini "$(mini_memory_url "$NEW")"
+git -C "$OLD_PATH" remote set-url "$MEMORY_REMOTE" "$(mini_memory_url "$NEW")"
 if [ "$NEW_PATH" != "$OLD_PATH" ]; then
   mkdir -p "$(dirname "$NEW_PATH")"
   mv "$OLD_PATH" "$NEW_PATH"
   git -C "$NEW_PATH" worktree repair "$NEW_PATH/.agent-memory"
 fi
-git -C "$NEW_PATH/.agent-memory" fetch -q mini
+git -C "$NEW_PATH/.agent-memory" fetch -q "$MEMORY_REMOTE"
 [ "$(git -C "$NEW_PATH/.agent-memory" rev-parse HEAD)" = "$(git -C "$NEW_PATH/.agent-memory" rev-parse @{u})" ] \
   || fail "$(hub_msg "after the move, .agent-memory does not match the hub machine; stopping for a manual check")"
 "$HUB/bin/sync-local-setup.sh" --quiet "$NEW_PATH" >/dev/null || true

@@ -121,10 +121,10 @@ class Base(unittest.TestCase):
         git(self.tmp, "init", "-q", "-b", "agent-memory", str(seed))
         commit(seed, "memory/.gitkeep", "", "init: memory skeleton")
         git(seed, "push", "-q", str(bare), "agent-memory")
-        git(r, "remote", "add", "mini", str(bare))
-        git(r, "fetch", "-q", "mini")
-        git(r, "worktree", "add", "-q", "-b", "agent-memory", str(r / ".agent-memory"), "mini/agent-memory")
-        git(r / ".agent-memory", "branch", "-q", "--set-upstream-to=mini/agent-memory")
+        git(r, "remote", "add", "memory", str(bare))
+        git(r, "fetch", "-q", "memory")
+        git(r, "worktree", "add", "-q", "-b", "agent-memory", str(r / ".agent-memory"), "memory/agent-memory")
+        git(r / ".agent-memory", "branch", "-q", "--set-upstream-to=memory/agent-memory")
         self.docs[name]["paths"]["memory_bare"] = str(bare)
         return r, bare
 

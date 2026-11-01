@@ -51,6 +51,15 @@ do not work here: ask the user to close this session and open the folder on the 
   exit 0
 fi
 
+# --- 0b. the memory remote's name: older checkouts called it mini (the hub machine's nickname) ---
+# Renamed only when it is unmistakably the memory bare repo (URL ends in -memory.git) and the new name is free; git
+# moves the agent-memory branch's upstream with it.
+old_url=$(git remote get-url mini 2>/dev/null) || old_url=""
+if [ -n "$old_url" ] && [ "${old_url%-memory.git}" != "$old_url" ] && ! git remote get-url "$MEMORY_REMOTE" >/dev/null 2>&1; then
+  git remote rename mini "$MEMORY_REMOTE" \
+    && { $QUIET || hub_say "sync-local-setup: the memory remote is now called {name} (it was mini)" name="$MEMORY_REMOTE"; }
+fi
+
 # --- 1. the rules file's managed block ---
 # Which file it goes to is the runtime's call (runtime_ports' instructions; for Claude Code, CLAUDE.local.md). If it
 # can't be asked, stop; don't guess a default file name: that would hard-code Claude back in.
