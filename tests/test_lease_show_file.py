@@ -176,7 +176,7 @@ class Take(unittest.TestCase):
         for name, text in (("service-account.json", '{"type": "service_account", "private_key": "x"}'),
                            ("notes.md", "-----BEGIN OPENSSH PRIVATE KEY-----\nabc"),
                            ("env.txt", "ANTHROPIC=sk-ant-api03-abcdefghijklmnop"),
-                           ("gh.txt", "ghp_" + "a" * 36), ("aws.csv", "id,AKIAABCDEFGHIJKLMNOP")):
+                           ("gh.txt", "ghp_" + "a" * 36), ("aws.csv", "id,AKIA" + "ABCDEFGHIJKLMNOP")):
             (self.ws / name).write_text(text)
             self.assertIn(T(SECRET_TEXT, path=name), self.refused(name), name)
         (self.ws / "plain.md").write_text("# Room size\nwidth 3.2 m, café corner")
