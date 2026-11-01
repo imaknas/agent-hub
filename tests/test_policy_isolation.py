@@ -70,6 +70,18 @@ class Policy(unittest.TestCase):
             for p in protected:
                 self.assertFalse(p.is_relative_to(w) or w.is_relative_to(p), f"{w} can write {p}")
 
+    def test_sessions_may_listen_locally(self):
+        """10-31 (docs/design/capabilities.md): a sandboxed project's sessions may bind 127.0.0.1, to test a server
+        before declaring it a service: policy.local_bind, which the Claude adapter writes as allowLocalBinding."""
+        import runtime_claude
+        pol = self.pol("a")
+        self.assertIs(pol["local_bind"], True)
+        sandbox, _deny, _allow = runtime_claude.settings(pol)
+        self.assertIs(sandbox["network"]["allowLocalBinding"], True)
+        self.assertEqual(sandbox["network"]["allowedDomains"], pol["network"])
+        for off in ({**pol, "local_bind": False}, {k: v for k, v in pol.items() if k != "local_bind"}):
+            self.assertIs(runtime_claude.settings(off)[0]["network"]["allowLocalBinding"], False)
+
 
 class RegistryFallback(unittest.TestCase):
     """Without the registry index (a new machine, a failed refresh), hubconf.projects() reads the files line by line:
