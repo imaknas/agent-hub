@@ -3,6 +3,35 @@
 What changed in each version, generated from the commit messages (git cliff) when it is tagged; only new features,
 fixes, speed-ups and reverts are listed.
 
+## v0.4.0 (2026-11-01)
+
+### New
+
+- **init:** The language is the first question
+- **install:** One line installs and goes on into init
+- **scheduler:** A machine that sleeps catches up
+- **init:** Init asks which AI agent the platform runs, and sets up its login
+- **connect:** Agenthub connect brings existing folders in as projects
+- **mcp:** Every session can reach agent-hub, and connect folders the owner named
+- **ph_wire:** Canonical() is RFC 8785 in full
+- **init:** An agent can drive init, and the owner still answers consents and secrets
+- **install:** Install.sh --for-agent, and the README steps an agent follows
+- **ux:** Plain words for what a newcomer reads
+
+### Fixed
+
+- **tests:** The README's personal-name baseline counts the install line's repo URL
+- **records:** Read a renamed project's records filed under its former names
+- **hubbus:** Question views read Decisions records through the settlement view
+- **alert:** Every channel is tried when one fails
+- **evals:** A tagged old arm sends the recorded prompt
+- **propose:** The change listing compares bytes, so a planted attribute can't make it copy back an untouched file
+- **mcp:** Connect_project's happy path is pinned, and add_root refuses what it should
+- **registrar:** A record id already sent is not re-created and sent again
+- **hubbus:** A record id sent with other content is kept; the greater RFC 8785 form prevails
+- **init:** An answer can't be an option, and no key page opens without a model
+- **init:** Agent-hub never receives or writes the Claude setup token
+
 ## v0.3.0 (2026-11-01)
 
 ### New
