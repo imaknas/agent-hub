@@ -61,7 +61,8 @@ class InitQuestion(unittest.TestCase):
                 redirect_stdout(io.StringIO()) as out:
             if not env_ui:
                 self.m.os.environ.pop("AGENT_HUB_LANG_UI", None)
-            return self.m.choose_language({}, False), out.getvalue()
+            self.m.init_dialogue.use(self.m.init_dialogue.Terminal(False))
+            return self.m.choose_language({}), out.getvalue()
 
     def test_shown_in_both_languages(self):
         import i18n
@@ -77,7 +78,7 @@ class InitQuestion(unittest.TestCase):
         self.assertEqual(self.ask([""], env_ui="zh-Hant")[0], ("zh-Hant", "zh-Hant"))
 
     def test_lang_flag(self):
-        self.assertEqual(self.m.choose_language({"lang": "en,zh-Hant"}, True), ("en", "zh-Hant"))
+        self.assertEqual(self.m.choose_language({"lang": "en,zh-Hant"}), ("en", "zh-Hant"))
         self.assertIsNone(self.m.parse_lang("fr"))
         self.assertIsNone(self.m.parse_lang("en,zh-Hant,en"))
 

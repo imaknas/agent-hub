@@ -88,6 +88,7 @@ BIN = pathlib.Path(__file__).resolve().parent
 sys.path.insert(0, str(BIN))
 import hubconf  # noqa: E402
 import i18n  # noqa: E402
+import init_dialogue  # noqa: E402
 
 _ = i18n.domain(__file__)
 
@@ -230,11 +231,10 @@ def cmd_modules(argv: list[str]) -> int:
 
 # ---------- init ----------
 
-def ask(question: str, default: str, yes: bool) -> str:
-    if yes or not sys.stdin.isatty():
-        return default
-    a = input(_("{question} [{default}]: ", question=question, default=default)).strip()
-    return a or default
+def UI():
+    """The transport init's questions go through (bin/init_dialogue.py): the terminal, an agent's answers, or the list of
+    questions for an agent."""
+    return init_dialogue.ui()
 
 
 def render_plist(label: str) -> bytes:
@@ -338,30 +338,18 @@ def agent_env() -> dict:
     return {**os.environ, "PATH": f"{nb}:{os.environ.get('PATH', '')}"} if nb else dict(os.environ)
 
 
-def choose_agent(args: dict, yes: bool, presets: dict[str, dict]) -> str:
+def choose_agent(args: dict, presets: dict[str, dict]) -> str:
     """init's agent question: which agent the platform runs for its own work. --agent answers it; without a terminal
     (or --yes) the first one found, else none."""
     if args.get("agent"):
         return args["agent"]
     found = [n for n, info in presets.items() if agent_found(info)]
     default = found[0] if found else "none"
-    if yes or not sys.stdin.isatty():
-        return default
-    names = [*presets, "none"]
-    print(_("Which AI agent should agent-hub use for its own work (nightly tidy-up, the mailbox)?"))
-    for i, n in enumerate(names, 1):
-        if n == "none":
-            print("  " + _("{i}. None for now: memory, schedules and the mailbox work; agent features stay off", i=i))
-        else:
-            info = presets[n]
-            state = _("installed") if agent_found(info) else _("not installed")
-            print(f"  {i}. {info['label']}: {info['gives']} ({state})")
-    while True:
-        a = input(f"[{names.index(default) + 1}]: ").strip()
-        if not a:
-            return default
-        if a.isdigit() and 1 <= int(a) <= len(names):
-            return names[int(a) - 1]
+    options = [(n, f"{info['label']}: {info['gives']} ("
+                   + (_("installed") if agent_found(info) else _("not installed")) + ")") for n, info in presets.items()]
+    options.append(("none", _("None for now: memory, schedules and the mailbox work; agent features stay off")))
+    return UI().menu("agent", _("Which AI agent should agent-hub use for its own work (nightly tidy-up, the mailbox)?"),
+                     options, default)
 
 
 def apply_agent(d: dict, choice: str, presets: dict[str, dict]) -> None:
@@ -378,15 +366,7 @@ def apply_agent(d: dict, choice: str, presets: dict[str, dict]) -> None:
         d.setdefault("modules", {})[m] = on
 
 
-def confirm(question: str, yes: bool) -> bool:
-    """A yes/no asked on the terminal (Enter = yes); no terminal = no, --yes = no as well: init never installs or logs
-    in on its own."""
-    if yes or not sys.stdin.isatty():
-        return False
-    return input(f"{question} [Y/n] ").strip().lower() in ("", "y", "yes")
-
-
-def install_agent(choice: str, presets: dict[str, dict], yes: bool) -> bool:
+def install_agent(choice: str, presets: dict[str, dict]) -> bool:
     """Offer to install the chosen agent (user level, the preset's lines), only on the owner's yes. Whether it is there
     afterwards."""
     if choice == "none":
@@ -397,7 +377,7 @@ def install_agent(choice: str, presets: dict[str, dict], yes: bool) -> bool:
     print(_("{label} is not installed. Installing it runs:", label=info["label"]))
     for line in info.get("install") or []:
         print(f"    {line}")
-    if not confirm(_("Install it now?"), yes):
+    if not UI().consent("install_agent", _("Install it now?")):
         print(_("Not installed. Later: run those lines, then agenthub init --agent {name}", name=choice))
         return False
     for line in info.get("install") or []:
@@ -423,7 +403,7 @@ def agent_login_check() -> str | None:
     return out.get("llm_error") or (out.get("result") if out.get("is_error") else None)
 
 
-def agent_credential(choice: str, presets: dict[str, dict], yes: bool) -> None:
+def agent_credential(choice: str, presets: dict[str, dict]) -> None:
     """The chosen agent's credential for unattended runs. A pasted token goes straight into its file (never shown,
     mode 600); a tool's own login is run in the terminal. Without a terminal, only what to do is printed."""
     if choice == "none":
@@ -438,13 +418,12 @@ def agent_credential(choice: str, presets: dict[str, dict], yes: bool) -> None:
             cmd = " ".join(cred["command"])
             print(_("{label} runs unattended with a long-lived token from `{command}` (needs {needs}).",
                     label=info["label"], command=cmd, needs=cred.get("needs", "")))
-            if not confirm(_("Run `{command}` now?", command=cmd), yes):
+            if not UI().consent("agent_token_command", _("Run `{command}` now?", command=cmd)):
                 print(_("Later: run `{command}`, then agenthub init --agent {name} to paste the token", command=cmd,
                         name=choice))
                 return
             subprocess.run(cred["command"], env=agent_env())
-            import getpass
-            token = getpass.getpass(_("Paste the token it printed (it isn't shown): ")).strip()
+            token = UI().secret("agent_token", _("Paste the token it printed (it isn't shown): "))
             if not token:
                 print(_("No token pasted; nothing written. Later: agenthub init --agent {name}", name=choice))
                 return
@@ -462,7 +441,8 @@ def agent_credential(choice: str, presets: dict[str, dict], yes: bool) -> None:
             print(_("✓ {label} is logged in", label=info["label"]))
             return
         cmd = " ".join(cred["command"])
-        if not confirm(_("{label} is not logged in. Run `{command}` now?", label=info["label"], command=cmd), yes):
+        if not UI().consent("agent_login", _("{label} is not logged in. Run `{command}` now?", label=info["label"],
+                                               command=cmd)):
             print(_("Later: run `{command}`", command=cmd))
             return
         subprocess.run(cred["command"], env=agent_env())
@@ -474,7 +454,7 @@ def agenthub_command() -> list[str]:
     return [str(cli)] if cli.exists() else [str(BIN / "py"), str(BIN / "agenthub")]
 
 
-def offer_mcp_registration(presets: dict[str, dict], yes: bool) -> None:
+def offer_mcp_registration(presets: dict[str, dict]) -> None:
     """docs/design/newcomer-path.md B5: register agent-hub's MCP server at user level in each installed tool that has a
     registration command, so a session in any folder (the desktop apps' too) knows agent-hub is there. A user-level
     change, so only on the owner's own yes on the terminal (AGENTS.md); never with --yes or without a terminal."""
@@ -482,8 +462,8 @@ def offer_mcp_registration(presets: dict[str, dict], yes: bool) -> None:
     if not tools:
         return
     labels = ", ".join(info["label"] for _n, info in tools)
-    if not confirm(_("Let your AI apps ({tools}) use agent-hub in every folder? This registers agent-hub's MCP server "
-                     "for your user.", tools=labels), yes):
+    if not UI().consent("register_mcp", _("Let your AI apps ({tools}) use agent-hub in every folder? This registers "
+                                          "agent-hub's MCP server for your user.", tools=labels)):
         print(_("Not registered. Later: agenthub init --register-mcp"))
         return
     for _n, info in tools:
@@ -493,7 +473,7 @@ def offer_mcp_registration(presets: dict[str, dict], yes: bool) -> None:
               _("registering in {tool} failed: {error}", tool=info["label"], error=(r.stderr or r.stdout).strip()[:200]))
 
 
-def set_agent(choice: str, args: dict, yes: bool) -> int:
+def set_agent(choice: str, args: dict) -> int:
     """init --agent <name> on an existing instance: only the agent step (settings, install, credential), then the
     judgment-point setup offered again; hub.json committed alone and the config applied."""
     presets = agent_presets()
@@ -502,10 +482,11 @@ def set_agent(choice: str, args: dict, yes: bool) -> int:
     write_hub_json(d)
     hubconf._cfg = None
     print(_("✓ the platform's agent: {name}", name=presets[choice]["label"] if choice in presets else choice))
-    install_agent(choice, presets, yes)
-    agent_credential(choice, presets, yes)
-    if choice != "none" and confirm(_("Set up who makes the platform's judgment calls now (agenthub llm setup)?"), yes):
-        llm_setup(args, yes)
+    install_agent(choice, presets)
+    agent_credential(choice, presets)
+    if choice != "none" and UI().consent("llm_now", _("Set up who makes the platform's judgment calls now (agenthub llm "
+                                                      "setup)?")):
+        llm_setup(args)
     rc = subprocess.run([str(BIN / "commit-hub-files.sh"), f"chore(config): the platform's agent is {choice}",
                          "hub.json"]).returncode
     if rc != 0:
@@ -513,31 +494,33 @@ def set_agent(choice: str, args: dict, yes: bool) -> int:
     return subprocess.run([*hubconf.launch(BIN / "agenthub"), "config", "apply"]).returncode or (1 if rc else 0)
 
 
-def new_hub_json(args: dict, yes: bool) -> dict:
+def new_hub_json(args: dict) -> dict:
     d = json.loads((ROOT / "hub.example.json").read_text())
     try:
         default_tz = os.path.realpath("/etc/localtime").split("zoneinfo/")[1]
     except IndexError:
         default_tz = "UTC"
-    d["owner"]["tag"] = args.get("owner") or ask(_("your name (in the owner to-do tag, and what agents call you)"), getpass.getuser(), yes)
-    d["owner"]["timezone"] = args.get("timezone") or ask(_("time zone"), default_tz, yes)
-    d["workspace_root"] = args.get("workspace") or ask(_("where projects live"), d.get("workspace_root", "~/workspace"), yes)
+    d["owner"]["tag"] = args.get("owner") or UI().ask("owner", _("your name (in the owner to-do tag, and what agents call you)"),
+                                                      getpass.getuser())
+    d["owner"]["timezone"] = args.get("timezone") or UI().ask("timezone", _("time zone"), default_tz)
+    d["workspace_root"] = args.get("workspace") or UI().ask("workspace", _("where projects live"),
+                                                            d.get("workspace_root", "~/workspace"))
     shipped = [k for k, v in d.get("modules", {}).items() if not k.startswith("_")]
     import shutil
     # defaults follow what this machine has (docs/design/tool-agnostic.md): its maintenance module only with Claude
     # Code; without an assistant, the built-in owner side
     presets = agent_presets()
-    choice = choose_agent(args, yes, presets)
+    choice = choose_agent(args, presets)
     apply_agent(d, choice, presets)
     if choice != "none":
-        install_agent(choice, presets, yes)
+        install_agent(choice, presets)
     args["_agent"] = choice   # the credential step runs once hub.json is written (cmd_init)
     if "owner" in d["modules"]:
         # the template's assistant section is a placeholder (its api is filled in): what counts is the module
         d["modules"]["owner"] = not d["modules"].get("assistant")
     # with no model for judgment points after llm setup (asked later), the modules that only do judgment-point work
     # are off by default
-    if not llm_expected(args, yes, (d.get("runtime") or {}).get("default", "claude")):
+    if not llm_expected(args, (d.get("runtime") or {}).get("default", "claude")):
         held = [k for k in shipped if d["modules"][k] is True and k in llm_modules()]
         for k in held:
             d["modules"][k] = False
@@ -545,7 +528,8 @@ def new_hub_json(args: dict, yes: bool) -> dict:
             print(_("left off: {modules}. These modules only do judgment-point work, and no model is set up for that; "
                     "after agenthub llm setup, turn them on with agenthub modules enable <name>", modules=", ".join(held)))
     default_on = ",".join(k for k in shipped if d["modules"][k] is True)
-    picked = args.get("modules") or ask(_("which modules to turn on (available: {modules})", modules=', '.join(shipped)), default_on, yes)
+    picked = args.get("modules") or UI().ask("modules", _("which modules to turn on (available: {modules})",
+                                                           modules=', '.join(shipped)), default_on)
     want = {m.strip() for m in picked.split(",") if m.strip()}
     for k in shipped:
         d["modules"][k] = k in want
@@ -645,21 +629,12 @@ def both(variants: list[str]) -> str:
     return " / ".join(variants)
 
 
-def ask_one_language(question: str, default: str) -> str:
+def ask_one_language(qid: str, question: str, default: str) -> str:
     names = {"en": "English", "zh-Hant": both(_.variants("Traditional Chinese"))}
-    codes = list(hubconf.LANGUAGES)
-    print(question)
-    for i, code in enumerate(codes, 1):
-        print(f"  {i}. {names[code]}")
-    while True:
-        a = input(f"[{codes.index(default) + 1}]: ").strip()
-        if not a:
-            return default
-        if a.isdigit() and 1 <= int(a) <= len(codes):
-            return codes[int(a) - 1]
+    return UI().menu(qid, question, [(code, names[code]) for code in hubconf.LANGUAGES], default)
 
 
-def choose_language(args: dict, yes: bool) -> tuple[str, str] | None:
+def choose_language(args: dict) -> tuple[str, str] | None:
     """init's first question (docs/design/newcomer-path.md B0): (ui, content). The default is the environment's
     AGENT_HUB_LANG_UI, else the system's language. Asked in every language at once, since none is chosen yet."""
     if args.get("lang"):
@@ -667,22 +642,17 @@ def choose_language(args: dict, yes: bool) -> tuple[str, str] | None:
     env_ui = os.environ.get("AGENT_HUB_LANG_UI")
     default = env_ui if env_ui in hubconf.LANGUAGES else hubconf.system_language()
     env_content = os.environ.get("AGENT_HUB_LANG_CONTENT")
-    if yes or not sys.stdin.isatty():
+    if not UI().can_ask:
         return default, env_content if env_content in hubconf.LANGUAGES else default
     if hubconf.is_simplified_chinese(hubconf.system_tag()):
-        print(both(_.variants("Simplified Chinese has no translation yet, so English is the default.")))
-    print(both(_.variants("Language")))
-    print("  1. English")
-    print(f"  2. {both(_.variants("Traditional Chinese"))}")
-    print(f"  3. {both(_.variants("A different language for notes than for the interface"))}")
-    choice = ""
-    while choice not in ("1", "2", "3"):
-        choice = input(f"[{2 if default == 'zh-Hant' else 1}]: ").strip() or ("2" if default == "zh-Hant" else "1")
-    if choice != "3":
-        lang = "en" if choice == "1" else "zh-Hant"
-        return lang, lang
-    ui = ask_one_language(both(_.variants("Interface language")), default)
-    return ui, ask_one_language(both(_.variants("Notes and project state")), ui)
+        UI().say(both(_.variants("Simplified Chinese has no translation yet, so English is the default.")))
+    choice = UI().menu("language", both(_.variants("Language")), [
+        ("en", "English"), ("zh-Hant", both(_.variants("Traditional Chinese"))),
+        ("split", both(_.variants("A different language for notes than for the interface")))], default)
+    if choice != "split":
+        return choice, choice
+    ui = ask_one_language("language_ui", both(_.variants("Interface language")), default)
+    return ui, ask_one_language("language_content", both(_.variants("Notes and project state")), ui)
 
 
 def set_language(ui: str, content: str) -> int:
@@ -734,6 +704,7 @@ def cmd_init(argv: list[str]) -> int:
     flags = {a for a in argv if a in INIT_FLAGS}
     args = {k.lstrip("-"): argv[i + 1] for i, k in enumerate(argv[:-1]) if k in INIT_OPTIONS}
     dry, yes = "--dry-run" in flags, "--yes" in flags
+    init_dialogue.use(init_dialogue.Terminal(yes))
     if args.get("lang") and not parse_lang(args["lang"]):
         print(_("agenthub init: --lang takes {languages}, or two of them as <interface>,<notes> (nothing was done)",
                 languages=", ".join(hubconf.LANGUAGES)), file=sys.stderr)
@@ -745,9 +716,9 @@ def cmd_init(argv: list[str]) -> int:
                 agents=", ".join([*agent_presets(), "none"])), file=sys.stderr)
         return 2
     if args.get("agent") and hubconf.config_file("hub.json").exists():
-        return set_agent(args["agent"], args, yes)   # an existing instance: only the agent step
+        return set_agent(args["agent"], args)   # an existing instance: only the agent step
     if "--register-mcp" in flags and hubconf.config_file("hub.json").exists():
-        offer_mcp_registration(agent_presets(), yes)   # an existing instance: only this step
+        offer_mcp_registration(agent_presets())   # an existing instance: only this step
         return 0
     created = False
     legacy = hubconf.instance_home() is None and hubconf.config_file("hub.json").exists()
@@ -762,12 +733,12 @@ def cmd_init(argv: list[str]) -> int:
             print(_("an earlier agenthub init stopped before it finished; carrying on with what it didn't do"))
             created = True
     else:
-        ui, content = choose_language(args, yes)
+        ui, content = choose_language(args)
         os.environ["AGENT_HUB_LANG_UI"], os.environ["AGENT_HUB_LANG_CONTENT"] = ui, content   # every later question
         home = pathlib.Path(os.path.expanduser(args.get("home") or os.environ.get("AGENT_HUB_HOME")
-                                               or ask(_("instance directory (your config, data and credentials live here)"),
-                                                       "~/.agent-hub", yes)))
-        d = new_hub_json(args, yes)
+                                               or UI().ask("home", _("instance directory (your config, data and "
+                                                                     "credentials live here)"), "~/.agent-hub")))
+        d = new_hub_json(args)
         d["registry_dir"] = "projects"   # relative to config/
         d["language"] = {**(d.get("language") or {}), "ui": ui, "content": content}
         if dry:
@@ -803,9 +774,9 @@ def cmd_init(argv: list[str]) -> int:
     if created and not dry:
         # a failure doesn't block init: doctor will say judgment points have nowhere to run; agenthub llm setup later
         if args.get("_agent"):
-            agent_credential(args["_agent"], agent_presets(), yes)
-        offer_mcp_registration(agent_presets(), yes)
-        llm_setup(args, yes)
+            agent_credential(args["_agent"], agent_presets())
+        offer_mcp_registration(agent_presets())
+        llm_setup(args)
         INIT_UNFINISHED.unlink(missing_ok=True)
         on = [m for m in llm_modules() if (hubconf.get("modules") or {}).get(m) is True]
         if warning := llm_modules_warning(on):   # turned on by hand, or llm setup ended with no model after all
@@ -831,8 +802,8 @@ def cmd_init(argv: list[str]) -> int:
         upgrade.record_in_step()   # this checkout's commit is in step now (agenthub upgrade, doctor)
     if created and not dry:
         # existing projects (docs/design/newcomer-path.md B6): where they are, never the workspace root just made empty
-        folder = args.get("connect") or ("" if yes or not sys.stdin.isatty() else input(
-            _("Where are your existing projects? A folder to connect from (Enter to skip): ")).strip())
+        folder = args.get("connect") or UI().ask("connect", _("Where are your existing projects? A folder to connect "
+                                                               "from (Enter to skip)"), "")
         if folder:
             # the owner named it: it becomes a root agent sessions may connect folders from (B5), then it is connected
             subprocess.run([*hubconf.launch(BIN / "connect.py"), "--add-root", folder])
@@ -1200,7 +1171,7 @@ def default_llm_choice(runtime: str | None = None) -> str:
     return "ollama" if provider_ollama.list_models({}) else "none"
 
 
-def llm_expected(args: dict, yes: bool, runtime: str) -> bool:
+def llm_expected(args: dict, runtime: str) -> bool:
     """Whether init's llm setup, asked after the modules, will give judgment points somewhere to run, as llm_setup
     decides: none; the runtime's own login only with a completion interface; a provider only with a model, which a
     run without questions gets only from --llm-model."""
@@ -1210,24 +1181,24 @@ def llm_expected(args: dict, yes: bool, runtime: str) -> bool:
         return False
     if choice == "runtime":
         return "completion" in runtime_ports.capabilities(runtime)
-    return bool(args.get("llm-model")) or (not yes and sys.stdin.isatty())
+    return bool(args.get("llm-model")) or UI().can_ask
 
 
-def llm_setup(args: dict, yes: bool) -> int:
+def llm_setup(args: dict) -> int:
     """Who handles judgment points (nightly note tidying, the weekly report): writes hub.json's llm section; the key
     isn't shown and goes into the secrets directory; the model is chosen from that provider's actual list."""
     import completion
     import runtime_ports
-    interactive = not yes and sys.stdin.isatty()
+    interactive = UI().can_ask
     rt = runtime_ports.default_name()
-    choice = args.get("llm") or ask(
+    choice = args.get("llm") or UI().ask("llm",
         _("who handles the platform's decisions (nightly notes, weekly report)? runtime = your coding agent's own "
           "login ({runtime}), anthropic, openai (or a compatible API), ollama (local), none = not now", runtime=rt)
         if "completion" in runtime_ports.capabilities(rt) else
         # nothing to offer as runtime: no coding agent (none), or one without a completion interface
         _("who handles the platform's decisions (nightly notes, weekly report)? anthropic, openai (or a compatible "
           "API), ollama (local), none = not now"),
-        default_llm_choice(), yes)
+        default_llm_choice())
     if choice not in LLM_CHOICES:
         print(_("no option {choice} (choices: {choices})", choice=choice, choices=', '.join(LLM_CHOICES)), file=sys.stderr)
         return 2
@@ -1260,8 +1231,8 @@ def llm_setup(args: dict, yes: bool) -> int:
         return 0
     mod = runtime_ports.load_completion(choice)
     conf = {"impl": choice}
-    base = args.get("llm-base-url") or ask(_("address (Ollama)") if choice == "ollama" else
-                                           _("address (change it for a compatible service)"), mod.DEFAULT_BASE, yes)
+    base = args.get("llm-base-url") or UI().ask("llm_base_url", _("address (Ollama)") if choice == "ollama" else
+                                                _("address (change it for a compatible service)"), mod.DEFAULT_BASE)
     if choice == "ollama":
         conf.update(base_url=base, location="local")
     else:
@@ -1269,9 +1240,9 @@ def llm_setup(args: dict, yes: bool) -> int:
             conf["base_url"] = base
         conf["key"] = {"secret": f"{choice}-api-key"}
         if interactive:
-            value = getpass.getpass(_("{choice} API key (not shown; Enter alone = later with agenthub llm set-key {choice}): ",
-                                      choice=choice))
-            if value.strip():
+            value = UI().secret("llm_key", _("{choice} API key (not shown; Enter alone = later with agenthub llm set-key "
+                                             "{choice}): ", choice=choice))
+            if value:
                 print(_("written to {path} (600)", path=write_secret(conf['key']['secret'], value)))
     probe = dict(conf)
     try:
@@ -1294,15 +1265,15 @@ def llm_setup(args: dict, yes: bool) -> int:
         else:
             print(_("cannot list the models (no key yet, or not reachable); type a name"))
 
-        def pick(question: str, default: str) -> str:
-            a = ask(question, default, yes)
+        def pick(qid: str, question: str, default: str) -> str:
+            a = UI().ask(qid, question, default)
             return names[int(a) - 1] if a.isdigit() and 1 <= int(a) <= len(names) else a
-        std = pick(_("standard (ordinary decisions: nightly tidy-up, weekly report): which one (number or name)"), "")
+        std = pick("llm_model_standard", _("standard (ordinary decisions: nightly tidy-up, weekly report): which one (number or name)"), "")
         if not std:
             print(_("no model picked; hub.json unchanged"), file=sys.stderr)
             return 1
-        picked = {"standard": std, "fast": pick(_("fast (simple, high-volume decisions)"), std),
-                  "strong": pick(_("strong (the hardest: consolidation)"), std)}
+        picked = {"standard": std, "fast": pick("llm_model_fast", _("fast (simple, high-volume decisions)"), std),
+                  "strong": pick("llm_model_strong", _("strong (the hardest: consolidation)"), std)}
     conf["models"] = {g: picked[g] for g in completion.GROUPS}
     llm = d.setdefault("llm", {})
     llm.setdefault("providers", {})[choice] = conf
@@ -1328,7 +1299,8 @@ def cmd_llm(argv: list[str]) -> int:
         return subprocess.run([sys.executable, str(BIN / "llm.py"), "health"]).returncode
     if argv[:1] == ["setup"]:
         opts = {k.lstrip("-"): argv[i + 1] for i, k in enumerate(argv[:-1]) if k in ("--llm", "--llm-model", "--llm-base-url")}
-        return llm_setup(opts, "--yes" in argv)
+        init_dialogue.use(init_dialogue.Terminal("--yes" in argv))
+        return llm_setup(opts)
     if argv[:1] != ["set-key"] or len(argv) != 2:
         print(_("usage: agenthub llm setup | set-key <provider> (key from stdin) | health"), file=sys.stderr)
         return 2

@@ -32,11 +32,13 @@ class Presets(unittest.TestCase):
                                                                                lambda: ["/hub/bin/agenthub"]):
             for yes, tty in ((True, True), (False, False)):
                 with mock.patch.object(ah.sys.stdin, "isatty", lambda: tty), mock.patch("builtins.input", lambda q: "y"):
-                    ah.offer_mcp_registration(presets, yes)
+                    ah.init_dialogue.use(ah.init_dialogue.Terminal(yes))
+                    ah.offer_mcp_registration(presets)
             run.assert_not_called()
             run.return_value.returncode = 0
             with mock.patch.object(ah.sys.stdin, "isatty", lambda: True), mock.patch("builtins.input", lambda q: ""):
-                ah.offer_mcp_registration(presets, False)
+                ah.init_dialogue.use(ah.init_dialogue.Terminal(False))
+                ah.offer_mcp_registration(presets)
             self.assertEqual(run.call_args.args[0], ["x", "mcp", "add", "/hub/bin/agenthub", "mcp"])
 
     def test_offered_agents(self):
@@ -65,7 +67,8 @@ class Presets(unittest.TestCase):
         self.assertTrue(registry.validate_module(bad, "codex"))
 
     def test_init_never_installs_or_logs_in_without_a_yes(self):
-        self.assertFalse(ah.confirm("anything?", True), "--yes does not mean installing for the user")
+        self.assertFalse(ah.init_dialogue.Terminal(yes=True).consent("x", "anything?"),
+                         "--yes does not mean installing for the user")
 
 
 if __name__ == "__main__":
