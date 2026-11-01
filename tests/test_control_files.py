@@ -120,6 +120,23 @@ class PlatformWritesTheSettings(Base):
         self.assertEqual(written["hooks"], runtime_claude.platform_hooks())
         self.assertTrue(any("hook" in d for d in drift), drift)
 
+    def test_a_new_platform_hook_set_is_not_drift(self):
+        """A platform update that changes its own hooks (e.g. a new Stop entry) rewrites them without calling it drift:
+        the file holds what the platform wrote last time. A hook someone else added still is."""
+        f = self.ws / ".claude" / "settings.local.json"
+        self.rps.write_project("proj", self.doc, self.index, report=False)
+        old = runtime_claude.platform_hooks()
+        newer = {**old, "Stop": [{"hooks": [{"type": "command", "command": "~/agent-hub/bin/hub-event wait"}]}]}
+        with mock.patch.object(runtime_claude, "platform_hooks", lambda: newer):
+            drift = self.rps.write_project("proj", self.doc, self.index, report=False)
+            self.assertEqual(json.loads(f.read_text())["hooks"], newer)
+            self.assertFalse(any("hook" in d for d in drift), drift)
+            written = json.loads(f.read_text())
+            written["hooks"]["Stop"].append({"hooks": [{"type": "command", "command": "evil"}]})
+            f.write_text(json.dumps(written))
+            drift = self.rps.write_project("proj", self.doc, self.index, report=False)
+            self.assertTrue(any("hook" in d for d in drift), drift)
+
     def test_every_worktree_gets_a_plain_copy(self):
         w = self.ws / ".claude" / "worktrees" / "w" / ".claude" / "settings.local.json"
         w.symlink_to(self.tmp / "elsewhere.json")

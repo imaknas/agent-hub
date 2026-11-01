@@ -134,7 +134,8 @@ def write_project(name: str, doc: dict, index: dict, report: bool) -> list[str]:
                                example=sorted(missing)[0]))
         if any((cur.get("env") or {}).get(k) != v for k, v in (prev.get("env") or {}).items()):
             drift.append(_("env was changed"))
-    if cur.get("hooks") and cur["hooks"] != record["hooks"]:
+    # what the platform wrote last time (prev) is not drift either: a platform update that changes its own hooks
+    if cur.get("hooks") and cur["hooks"] not in (record["hooks"], prev.get("hooks")):
         drift.append(_("hooks the platform didn't write were removed"))
     ws = registry.dirs(doc)["workspace"]
     drift += [_("its own files would make its sessions run something the platform didn't put there: {what}",
