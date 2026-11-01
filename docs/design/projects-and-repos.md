@@ -477,6 +477,12 @@ scheduled in `test-waiting.md` section 7.
   claim is "adds no path by which a project exceeds its sandbox" (the sandbox's own soundness is that fix's scope),
   step 1 and step 2.3 are settled by running them in a throwaway hub, and round 7 reviews the result.
 - Open, outside this change: whether idea sandboxes become folder-only projects.
+- Open, to judge against this design (from runtime-acp.md, "Rebase onto main"): three properties the mailbox-propose
+  copy had before `project_git.py`'s copy back replaced it, which `op_copy_back` does not have: a memory note a session
+  also changed since the base is overwritten (no three-way merge); only the source file is checked for a link, not the
+  destination's parent folders (it runs as the project, so a sandboxed project's own rules bound it); the agent's copy
+  is a linked worktree sharing the project's `.git`, not an independent clone. The pre-squash branch that had them is
+  deleted (11-01); the code is in its history only by these notes.
 
 ## 9. Blind reviews: findings and what each changed
 
