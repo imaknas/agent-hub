@@ -25,7 +25,7 @@ $ agenthub llm setup --llm none --yes
 $ agenthub llm setup --llm runtime --yes    # runtime none
 [exit 0]
 --- stdout
-⚠️ 執行環境 none 沒有 completion 介面:判斷點會失敗。換一家 provider:agenthub llm setup
+⚠️ 沒有設定 coding agent(runtime.default: none),runtime 沒有登入可以接判斷點:判斷點會失敗。選一家 provider:agenthub llm setup
 --- stderr
 
 $ agenthub llm setup --llm openai --yes

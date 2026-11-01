@@ -642,13 +642,18 @@ def cmd_doctor(argv: list[str]) -> int:
     add("ok" if cli else "warn", _("agenthub is on PATH: {path}", path=cli) if cli else
         _("agenthub is not on PATH (project sessions cannot reach the mailbox commands)"),
         "" if cli else "bin/agenthub install-cli")
-    add("ok", _("MCP server: agenthub mcp (any agent with MCP can use the mailbox and write notes; registering it in "
-              "the tool's settings is up to you)"),
+    hold = int(((hubconf.get("mailbox") or {}).get("mcp_hold_max_min", 120)))   # hubbus MCP_HOLD_MAX_MIN
+    add("ok", _("MCP server: agenthub mcp (any agent with MCP can use the mailbox and write notes; while it works in a "
+                "project, the platform holds requests to that project instead of dispatching an agent, for up to "
+                "{minutes} minutes; registering it in the tool's settings is up to you)", minutes=hold),
         _("agenthub mcp config prints the snippet to register; how to add it per tool: docs/mcp.md"))
     import runtime_ports
     rname = runtime_ports.default_name()
     for feat, ok, miss in runtime_ports.feature_table(rname):
         add("ok" if ok else "warn", _("{feature}: available", feature=feat) if ok else
+            # runtime none is no coding agent at all, not one that lacks a part
+            _("{feature}: off (no coding agent is set up: hub.json runtime.default is none)", feature=feat)
+            if rname == "none" else
             _("{feature}: off (the runtime {runtime} has no {missing})", feature=feat, runtime=rname, missing=miss),
             "" if ok else _("install a coding agent that supports them, and point hub.json runtime.default at it"))
     if runtime_ports.throwaway_only(rname):
@@ -694,11 +699,14 @@ def cmd_doctor(argv: list[str]) -> int:
             add("ok", _("judgment points go to the runtime {runtime} (no llm.providers; schedulectl models shows each point's "
                        "model)", runtime=rt))
         else:
-            add("bad", _("judgment points have nowhere to run: the runtime {runtime} has no completion interface and hub.json "
-                         "has no llm.providers", runtime=rt),
+            add("bad", _("judgment points have nowhere to run: no coding agent is set up (runtime.default: none) and "
+                         "hub.json has no llm.providers") if rt == "none" else
+                _("judgment points have nowhere to run: the runtime {runtime} has no completion interface and hub.json "
+                  "has no llm.providers", runtime=rt),
                 _("agenthub llm setup (pick one: an API key or a local Ollama)"))
 
     uid = os.getuid()
+    scheduled = False   # whether a service manager runs this hub's scheduler (said again at the heartbeat below)
     if hubconf.service_manager() is None:
         add("bad", _("scheduler, watchdog: {reason}", reason=hubconf.no_service_manager()),
             _("schedule `bin/py bin/scheduler.py` yourself (every 15 minutes)"))
@@ -706,6 +714,7 @@ def cmd_doctor(argv: list[str]) -> int:
         import systemd_units
         for label, what in (("local.agent-hub-scheduler", _("scheduler")), ("local.agent-hub-scheduler-watchdog", _("watchdog"))):
             st = systemd_units.state(label)
+            scheduled = scheduled or (label == "local.agent-hub-scheduler" and st == "running")
             add("ok" if st == "running" else "bad", _("{what} ({label}.timer): enabled", what=what, label=label)
                 if st == "running" else _("{what} ({label}.timer): not installed", what=what, label=label) if st is None
                 else _("{what} ({label}.timer): installed but not scheduled", what=what, label=label),
@@ -721,6 +730,7 @@ def cmd_doctor(argv: list[str]) -> int:
             add("bad", _("{what} ({label}): the loaded one belongs to a different hub, not {bin}", what=what, label=label, bin=BIN),
                 _("agenthub init (replaces it with this one)"))
         else:
+            scheduled = scheduled or label == "local.agent-hub-scheduler"
             add("ok", _("{what} ({label}): loaded", what=what, label=label))
     import isolation
     why = isolation.can_sandbox()
@@ -740,9 +750,12 @@ def cmd_doctor(argv: list[str]) -> int:
         add("ok" if age <= 35 else "bad", _("the scheduler just ticked") if shown == "0" else
             _("the scheduler last ticked {age:.0f} {age:minute|minutes} ago", age=float(shown)),
             "" if age <= 35 else _("bin/schedulectl status; see .logs/scheduler-stderr.log"))
-    else:
+    elif scheduled:
         add("warn", _("the scheduler has not ticked yet"),
             _("it ticks within 15 minutes of installing; if it still hasn't ticked, see .logs/scheduler-stderr.log"))
+    else:   # not installed (init --no-launchd, no service manager) or not loaded: no tick is coming by itself
+        add("warn", _("the scheduler has not ticked yet, and no service manager runs it here (see the scheduler line "
+                      "above)"))
     if not hubconf.get("alerts"):
         add("warn", _("no alerts set up: a stopped scheduler or a dead service only shows on the status page and in the logs"),
             _("to be notified, add an alerts section as in hub.example.json"))
@@ -817,8 +830,12 @@ def llm_setup(args: dict, yes: bool) -> int:
     interactive = not yes and sys.stdin.isatty()
     rt = runtime_ports.default_name()
     choice = args.get("llm") or ask(
-        _("who handles the platform's decisions (nightly notes, weekly report)? runtime = the coding agent's ({runtime}) "
-          "own login, anthropic, openai (or a compatible API), ollama (local), none = not now", runtime=rt),
+        _("who handles the platform's decisions (nightly notes, weekly report)? runtime = your coding agent's own "
+          "login ({runtime}), anthropic, openai (or a compatible API), ollama (local), none = not now", runtime=rt)
+        if "completion" in runtime_ports.capabilities(rt) else
+        # nothing to offer as runtime: no coding agent (none), or one without a completion interface
+        _("who handles the platform's decisions (nightly notes, weekly report)? anthropic, openai (or a compatible "
+          "API), ollama (local), none = not now"),
         default_llm_choice(), yes)
     if choice not in LLM_CHOICES:
         print(_("no option {choice} (choices: {choices})", choice=choice, choices=', '.join(LLM_CHOICES)), file=sys.stderr)
@@ -840,6 +857,9 @@ def llm_setup(args: dict, yes: bool) -> int:
         hubconf._cfg = None
         if choice == "none":
             print(_("judgment points stay unset: when needed, they fail plainly and say why. Run agenthub llm setup later"))
+        elif rt == "none":
+            print(_("⚠️ no coding agent is set up (runtime.default: none), so runtime has no login to hand judgment "
+                    "points to: they will fail. Pick a provider: agenthub llm setup"))
         elif "completion" not in runtime_ports.capabilities(rt):
             print(_("⚠️ the runtime {runtime} has no completion interface: judgment points will fail. Pick another provider: "
                     "agenthub llm setup", runtime=rt))

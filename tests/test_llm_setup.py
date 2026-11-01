@@ -112,8 +112,8 @@ class Setup(unittest.TestCase):
         self.hub("llm", "setup", "--llm", "ollama", "--llm-base-url", self.base, "--llm-model", "local-a", "--yes")
         r = self.hub("llm", "setup", "--llm", "runtime", "--yes")
         self.assertEqual(r.returncode, 0)
-        self.assertIn(T("⚠️ the runtime {runtime} has no completion interface: judgment points will fail. Pick another "
-                        "provider: agenthub llm setup", runtime="none"), r.stdout,
+        self.assertIn(T("⚠️ no coding agent is set up (runtime.default: none), so runtime has no login to hand judgment "
+                        "points to: they will fail. Pick a provider: agenthub llm setup"), r.stdout,
                       "runtime none, picking runtime: says plainly that judgment points will fail")
         self.assertEqual(self.hub_json()["llm"], {"points": {"consolidate": {"model": "pinned"}}})
 

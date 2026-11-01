@@ -288,6 +288,7 @@ class Golden(unittest.TestCase):
             "no_sandbox": "the kernel's Landlock ABI is 3, ports need ≥ 4"}))
         self.valid_cfg(owner_side="assistant", assistant={"project": "helper", "api": "http://127.0.0.1:9"})
         (self.tmp / "state" / "upgrade-check.json").unlink()   # the remote cannot be reached
+        self.heartbeat(None)   # nothing runs the scheduler here: doctor must not say it ticks soon
         out.append(self.agenthub("doctor", label="no service manager, unnamed assistant", sc={
             "sm": None, "plan": {}, "hooks": "githooks",
             "release": {"version": "v0.3.0", "release": "v0.3.0", "error": "Could not resolve host: example.org"}}))

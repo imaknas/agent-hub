@@ -25,7 +25,7 @@ judgment points stay unset: when needed, they fail plainly and say why. Run agen
 $ agenthub llm setup --llm runtime --yes    # runtime none
 [exit 0]
 --- stdout
-⚠️ the runtime none has no completion interface: judgment points will fail. Pick another provider: agenthub llm setup
+⚠️ no coding agent is set up (runtime.default: none), so runtime has no login to hand judgment points to: they will fail. Pick a provider: agenthub llm setup
 --- stderr
 
 $ agenthub llm setup --llm openai --yes

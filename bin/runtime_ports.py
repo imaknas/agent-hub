@@ -154,8 +154,9 @@ def port_labels() -> dict[str, str]:
             "transcripts": _("transcripts"), "sessions": _("session state"),
             "stream": _("long-running streaming sessions"), "auth": _("login state"),
             "completion": _("completion interface"), "confine": _("confined runs (declared permissions only)"),
-            "control": _("the files sessions load settings and hooks from"),
-            "tool_servers": _("telling which tool servers a run loads")}
+            # each reads after "has no …" (doctor, Unsupported reasons)
+            "control": _("map of where sessions load settings and hooks from"),
+            "tool_servers": _("way to tell which tool servers a run loads")}
 
 
 # Which ports each platform feature needs (doctor's "tool x feature" table; docs/design/tool-agnostic.md principle 3).
