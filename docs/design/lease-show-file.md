@@ -44,7 +44,9 @@ The session calls the platform's **"show the user" tool** `show_file(path, summa
    extension, **and the start of the content is checked too** (magic bytes for png/jpg/gif/webp/pdf/glb; txt/md/json/csv
    must be UTF-8). Renaming the extension does not get through. **No svg or html** (the assistant is a web page, and
    these two can carry code).
-3. **Size**: each file ≤ 20 MB; at most 50 files and 200 MB in total per lease (so the disk does not fill up).
+3. **Size**: each file ≤ 20 MB; at most 100 files and 500 MB in total per lease within the last 24 hours (a lease
+   is resumed for days, so a lifetime cap stopped one mid-evening, `ab58bc5`); the 30-day retention below bounds the
+   disk.
 4. **Nothing that looks like a credential**: file names like `.env*`, `*.pem`, `*.key`, `*secret*`, `*token*`,
    `credentials*`, or paths declared in the project registry's `secrets:`, are always refused (even if the extension is
    on the allow list, e.g. `secrets.json`).
@@ -59,7 +61,7 @@ The session calls the platform's **"show the user" tool** `show_file(path, summa
     matter: what is sent is the copy taken at check time.
   - The assistant wants "still there when reopened": if the session later changes or deletes the file, the lease
     still shows the image as it was then.
-- After the lease is detached the files are kept 30 days (the runner cleans up once a day), about as long as the
+- Each file is kept 30 days from when it was shown (the runner cleans up once an hour), about as long as the
   conversation log.
 
 ## Contract (v2)
@@ -97,7 +99,7 @@ Idea sandboxes are `privacy: stats_only` (content is not sent to cloud models). 
 **A. Use a platform tool `show_file`** (proposed), not a command, no detection in replies.
 **B. Copy after the check, then send** (proposed), kept 30 days.
 **C. Types from the assistant's list, check the start of the content, no svg/html; 20 MB per file, 50 files / 200 MB
-per lease** (proposed).
+per lease** (proposed; changed the same day to 100 files / 500 MB within 24 hours, `ab58bc5`).
 **D. Never send credential-like file names or secrets declared in the registry** (proposed).
 **E. No allow to press** (proposed): it is a file of his own project, shown to him; every time is recorded in the
 events.

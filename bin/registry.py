@@ -85,8 +85,8 @@ schema v1 (contracts/project.v1.md has the full description):
                  moves over from the old name too)
 
 schema v2 (contracts/project.v2.schema.json; docs/design/test-waiting.md B1): v1's fields, except that tests leave
-runtime. validate_v2() checks it; the live validators keep refusing v2 until the runner and the readers switch over
-(test-waiting step 2.3).
+runtime. validate_v2() checks it; validate() reads both, a v1 file upgraded to v2 as it is read (tiers.upgrade),
+since the runner and the readers switched over (test-waiting step 2.3).
   runtime: {deploy}         only deployment is left (present = has <services_root>/<name>, as in v1)
   code: [glob]              the changed files that count as this project's code, relative to its folder; absent =
                             every file

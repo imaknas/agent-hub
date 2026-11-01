@@ -375,7 +375,7 @@ doctor line, the schema keys.
   (timeout kills the group), a model via a grouped config option. Plus: a working directory not marked by
   propose_apply is refused before the agent starts, also when it is the process's own; `extra` is refused;
   `llm.points.<point>.runtime` routing and its config checks; `runtime.acp` checks; a configured `mode` set before
-  the prompt (or refused); propose_apply's copy sharing no git settings while the real repository moves on. The fake checks what it
+  the prompt (or refused). The fake checks what it
   receives (absolute cwd, no client capabilities, `allow_once` chosen) and fails loudly otherwise.
 - **Contract**: an `AcpFixture` in `tests/test_runtime_contracts.py` runs the agent and auth contracts.
 - **Live, opt-in** (`ACP_LIVE=1`, never in the gate): one small read-and-answer task with structured output against

@@ -2,7 +2,8 @@
 
 > agent-hub session · 2026-10-31, r14 2026-11-01. Owner's observation: in the projects being worked on now, the bottleneck is not the
 > agents' output but waiting for tests; the owner wants everything besides model input/output at its theoretical minimum.
-> This doc measures first, then proposes changes. **Nothing here is implemented yet.** Owner's rule for building it:
+> This doc measures first, then proposes changes. **Partly built: section 7 marks each step done as it lands (steps
+> 0, 1, 2.1–2.3 and 2.5 by 11-01); the rest is design.** Owner's rule for building it:
 > **the final architecture first, no workarounds.**
 >
 > History: r2 split the changes into **A. agent-hub itself**, **B. the platform's test system** and **C. each
@@ -646,10 +647,11 @@ exist.
 **Decided 10-31 (owner): the final architecture first, no workarounds.** Nothing is built in a form a later step
 replaces; each step only adds to the ones before it.
 
-0. **Before anything here (done 11-01, except what waits for the owner):** the separate fix of the holes that exist
+0. **Before anything here (done 11-01):** the separate fix of the holes that exist
    today (`projects-and-repos.md` section 9): the platform's git in project repos (`project_git.py`), per-repo tool
-   caches, memory reads, `paths` as a security field, hooks. Still open there, outside this design: the letter sender
-   (`bus-sender.md`), runtime settings files a sandboxed job can write, the scheduler's per-job timeout.
+   caches, memory reads, `paths` as a security field, hooks. The three left open there, outside this design, were
+   closed the same day: the letter sender (`bus-sender.md`, `09ea908` and `27dbd55`), runtime settings files a
+   sandboxed job can write (`deceb60`), the scheduler's per-job timeout (`3be4c96`).
 1. **A1, in the shared checkout, small** (done 11-01: characterization tests `266b42d`, the change `17d38ee`; this
    rule in AGENTS.md merged from a worktree with `merge-branch`): characterization tests for everything step 2 changes (`test-gate`,
    `post-commit`, `merge-branch`, registry validation of `runtime`, `hubconf`'s layout); then A1 prerequisite 1 (a

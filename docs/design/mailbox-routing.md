@@ -111,8 +111,9 @@ latest; for faster, ask the assistant to run `hubbus bridge` once right after qu
 
 - Agents: no new rules. CLAUDE.md only changes "unclaimed for 12 hours gets escalated" to "after sending, the platform
   handles it; no need to wait for the other side to be open".
-- The owner: only gets questions in the assistant that really need his decision; the handling record is on the status
-  page.
+- The owner: only gets questions in the assistant that really need his decision; the status page shows, under the
+  mailbox table, how each request and question of the last day went (woken, hook, background copy, agent dispatched,
+  held; done or not).
 
 ## Decisions for you to make
 
@@ -131,7 +132,9 @@ latest; for faster, ask the assistant to run `hubbus bridge` once right after qu
 ## Out of scope this time
 
 - A letter already delivered into some session that never handles it (no done) has no follow-up today, and this change
-  does not handle that either; the status page lists letters "delivered over a day ago and not closed".
+  does not handle that either. The status page flags only letters no session took (unclaimed for over an hour); one
+  delivered and left open shows only in its project's row of the mailbox table (open letters, how many not yet in a
+  session, the oldest).
 
 ## Steps
 

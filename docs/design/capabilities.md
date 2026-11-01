@@ -276,7 +276,7 @@ design**, not confirmed together with this one; it starts after this one is done
 ## 10-25 implementation and verification
 
 Commits: `2568776` (policy.py, Claude settings translation moved into runtime_claude) → `c3583ea` (registry
-capabilities, locking security fields) → `61ff364` (seatbelt.py) → `92b2898` (cap-runner, hub-run) → `5416817`
+capabilities, locking security fields) → `61ff364` (seatbelt.py) → `92b2898` (cap-runner, hub-run) → `c6eb20f`
 (default gpu, idea-1, prompt) → `fa95f4a` (start failures must answer, known-issues).
 
 - **Behaviour unchanged**: before and after the move, the Claude settings computed for 24 projects and the lease's
@@ -356,7 +356,8 @@ registered project is sandboxed and nothing can isolate it).
   unsandboxed without failing. The units render-services writes carry no sandboxing directives; the enforcement is
   `sandboxed-run` in `ExecStart`, the same as on macOS.
 - **Landlock: ABI 4** (TCP bind/connect rules, kernel ≥ 6.7). Its syscalls and a nested seccomp filter are allowed in
-  the plain Docker container, so `bin/linux-test` runs the real check (`tests.test_sandboxed_services.LandlockRun`).
+  the plain Docker container, so `bin/linux-test` runs the real check (`tests.test_sandboxed_services.Conformance`,
+  with the Landlock adapter).
 
 ### The Linux adapter: `bin/landlock.py`
 

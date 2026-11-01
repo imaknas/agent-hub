@@ -178,9 +178,10 @@ including 0fe4bda) and it was clean: on the cutover night the registrar sends on
 - After a week side by side (around 11-03): remove `knas-tasks.py`, the registrar's `v1_compat`, `librarian.sh` (this
   one can go tomorrow), the HTH 0.1 vendor copy and `tests/test_hth_conformance.py`; Decisions (questions) are still on
   v1, the Agent Hub session does that next.
-  Done so far: `librarian.sh`; `knas-tasks.py` on 11-01 (i18n step 7: nothing scheduled or called it any more; the HTH
-  0.1 key and apply vectors now run against `registrar.py`); the HTH 0.1 copy with its test went with Acts 0.4 (below).
-  Left: `v1_compat` (the v1 letters on the bus): see "Retiring v1_compat" at the end.
+  Done: `librarian.sh`; `knas-tasks.py` on 11-01 (i18n step 7: nothing scheduled or called it any more; the HTH 0.1
+  key and apply vectors then ran against `registrar.py`); the HTH 0.1 copy, its vectors and its test went with Acts
+  0.4 (below, `6843dbb`); `v1_compat` (the v1 letters on the bus) on 11-01, `becb3a9`: see "Retiring v1_compat" at
+  the end.
 
 ## Decisions switched over (10-31)
 

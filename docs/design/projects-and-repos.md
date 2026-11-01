@@ -3,7 +3,9 @@
 > agent-hub session · 2026-10-31, r13 2026-11-01. Owner's ask: a general architecture in which "one project = one git repo" is only
 > one case, so that a monorepo holding many projects, a project spread over several repos, and a project with no repo
 > at all follow from the same logic, not from special cases. Owner's rule for building it: **the final architecture
-> first, no workarounds** — nothing built in a form a later step replaces. **Design only; nothing is implemented.**
+> first, no workarounds** — nothing built in a form a later step replaces. **The model itself (section 7, steps 1–8)
+> is not implemented yet**; step 0 (agent-hub works in worktrees) and section 4's "Platform git in project repos"
+> (`project_git.py`, by the separate 11-01 fix) are.
 > The tests that build on this model are in `test-waiting.md` (its section 4, "the test system").
 >
 > History: r1 the model. r2 after a first blind review (four reviewers). r3 after a second blind review (three
@@ -605,11 +607,15 @@ sandbox fix landed (section 8), and r9 decides the open points.
   timeout; `merge-branch --project X` runs another project's tests. Closed 11-01: deletion, copy-back and those
   writes run as the project, every project job has a timeout and an output cap, `--project` must own the repo;
   `upgrade-idea.py` (which pushed from the sandbox's repo with the user's GitHub credentials) pushes from a bare repo
-  the platform fills from the project's bundle. Still open: the scheduler has no per-job timeout.
-- Open (found 11-01): a sandboxed project's service or command job may write its whole workspace, including the
+  the platform fills from the project's bundle. The scheduler's per-job timeout, open then, closed 11-01 (`3be4c96`):
+  every run has a time limit, its process group stopped past it.
+- Found 11-01: a sandboxed project's service or command job may write its whole workspace, including the
   runtime's local settings file (`.claude/settings.local.json`), and `render-project-settings.py` keeps hook entries
-  it didn't write: a job can add a hook that the next session opened there runs as the user. Closing it means the
-  adapters denying writes to the runtime's settings paths inside the workspace (a neutral list from `runtime_ports`).
+  it didn't write: a job can add a hook that the next session opened there runs as the user. Closed 11-01
+  (`deceb60`): the runtime names the files it loads settings and hooks from (`runtime_ports`), Seatbelt denies writing
+  them anywhere under the workspace, and the platform writes a sandboxed project's settings itself, removing hooks it
+  didn't write. Landlock cannot carve them out of a writable folder and does not declare that guarantee (doctor shows
+  it).
 
 Earlier, found by rounds 4 and 5, for a separate change rather than a step of this design (which inherits the
 fixes). All closed on 11-01 (the sender last, with the owner's choice of a per-project outbox: `bus-sender.md`):
