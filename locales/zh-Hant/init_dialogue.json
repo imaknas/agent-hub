@@ -1,3 +1,15 @@
 {
- "{question} [{default}]: ": "{question} [{default}]:"
+ "{question} [{default}]: ": "{question} [{default}]:",
+ "A page from agent-hub opened in your browser for: {prompt}": "agent-hub 在你的瀏覽器開了一個頁面,請在那裡輸入:{prompt}",
+ "Answered: {answer}": "已回答:{answer}",
+ "Asking in a dialog on this machine's screen: {question}": "在這台電腦的螢幕上跳出對話框詢問:{question}",
+ "It goes straight to agent-hub on this machine, not to your AI chat. This page works once.": "這會直接交給這台電腦上的 agent-hub,不會經過你的 AI 對話。這個頁面只能用一次。",
+ "Nothing was entered.": "沒有輸入任何東西。",
+ "Received (not shown).": "收到了(不顯示內容)。",
+ "Run agenthub init in a terminal on this machine to answer: {question}": "在這台電腦的終端機執行 agenthub init 來回答:{question}",
+ "Run agenthub init in a terminal on this machine to enter it: {prompt}": "在這台電腦的終端機執行 agenthub init 來輸入:{prompt}",
+ "Save": "儲存",
+ "Saved. You can close this page and go back to your chat.": "已儲存。可以關掉這個頁面,回到你的對話。",
+ "no": "否",
+ "yes": "是"
 }
