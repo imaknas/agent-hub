@@ -214,7 +214,9 @@ class NewUser(unittest.TestCase):
 
     def test_init_without_a_git_identity(self):
         """a fresh container has no user.email: init says so, gives the config repo an identity of its own (only there)
-        and commits; onboard's commit then works too"""
+        and commits; the platform's later commits there (commit-hub-files.sh, as onboard's registry step) work too.
+        Onboard as a whole is not run here: it also commits in the user's own project, which needs their identity and
+        where git says so itself"""
         env = {k: v for k, v in self.env.items() if not k.startswith("GIT_") and k != "EMAIL"}
         env.update(GIT_CONFIG_NOSYSTEM="1", GIT_CONFIG_GLOBAL=os.devnull)
         r = subprocess.run([sys.executable, str(self.hub / "bin" / "agenthub"), "init", "--yes", "--no-launchd",
@@ -224,7 +226,14 @@ class NewUser(unittest.TestCase):
         self.assertIn("user.email", r.stdout, "init says git has no identity, and how to set yours")
         self.assertEqual(self.git_cfg("config", "--local", "user.name", env=env).stdout.strip(), "Alex")
         self.assertTrue(self.git_cfg("config", "--local", "user.email", env=env).stdout.strip())
-        self.assert_onboard_commits(env)
+        self.assertEqual(self.git_cfg("status", "--porcelain", env=env).stdout, "", "init leaves the config repo clean")
+        subprocess.run(["git", "init", "-q", str(self.hub)], env=env, check=True)   # a clone, as a newcomer's hub is
+        hub_json = self.home / ".agent-hub" / "config" / "hub.json"
+        hub_json.write_text(hub_json.read_text().replace('"tag": "Alex"', '"tag": "Alexa"'))
+        r = subprocess.run([str(self.hub / "bin" / "commit-hub-files.sh"), "owner renamed", "hub.json"], env=env,
+                           capture_output=True, text=True, timeout=120, cwd=self.hub)
+        self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
+        self.assertEqual(len(self.git_cfg("log", "--format=%s", env=env).stdout.splitlines()), 2)
 
     def test_init_never_overwrites_hub_json(self):
         (self.hub / "hub.json").write_text('{"v": 1, "registry_dir": "projects", "owner": {"address": "owner", "tag": "Keep"}}\n')
