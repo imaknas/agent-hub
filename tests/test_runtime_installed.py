@@ -276,8 +276,10 @@ class Routed(WithHalf):
                 s.resume_args("fake:F1")
             self.assertTrue(s.wake("fake:F1", "📬"))
             self.assertEqual(runtime_fake._woken, [(FAKE_SID, "📬")])
+            with tempfile.TemporaryDirectory() as d, mock.patch.object(hubconf, "secrets_dir", lambda: pathlib.Path(d)):
+                self.assertFalse(s.wake(SID, "📬"))   # Claude's wake, routed to it: no waiter armed for SID
             with self.assertRaises(runtime_ports.Unsupported):
-                s.wake(SID, "📬")
+                s.wake("half:x", "📬")
 
 
 class RoutedDispatch(Bus):

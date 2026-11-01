@@ -270,7 +270,10 @@ class Golden(unittest.TestCase):
         self.heartbeat(0)
         # a newer release is out (doctor asks the remote: no record yet), and the checkout moved by hand since upgrade
         (self.tmp / "state" / "upgrade.json").write_text(json.dumps({"commit": "b" * 40, "version": "v0.1.0"}))
+        # ... except that two letters woke a session that then didn't take them (hubbus wake-misses)
         out.append(self.agenthub("doctor", label="launchd, all fine", sc={
+            "wake_misses": [{"id": "m20261101-ab12", "to": "alpha", "ts": "2026-11-01T08:00:00+08:00", "days": 7},
+                            {"id": "m20261101-cd34", "to": "beta", "ts": "2026-11-01T09:00:00+08:00", "days": 7}],
             "release": {"version": "v0.2.0", "release": "v0.2.0", "newest": "v0.3.0"},
             "sm": "launchd", "launchd": {"local.agent-hub-scheduler": "path = {bin}/scheduler.py",
                                          "local.agent-hub-scheduler-watchdog": "path = {bin}/scheduler-watchdog.py"},
@@ -469,6 +472,8 @@ def run(cmd, *a, **k):
         return done(c, sc.get("apply_rc", 0))
     if any(x.endswith("hubbus") for x in c) and "publish" in c:
         return done(c, sc.get("bus_rc", 1), "", "bus is down\n")
+    if any(x.endswith("hubbus") for x in c) and "wake-misses" in c:
+        return done(c, 0, json.dumps(sc.get("wake_misses", [])))
     return real_run(cmd, *a, **k)
 
 subprocess.run = run

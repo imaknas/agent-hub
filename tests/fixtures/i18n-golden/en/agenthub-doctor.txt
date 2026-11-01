@@ -27,7 +27,7 @@ $ agenthub doctor    # launchd, problems
 ✓ mailbox follow-up (replying with an idle session's context): available
 ✓ channel leasing (also needs the assistant module): available
 ✓ letters seen live in the session, reminders to write notes: available
-· an idle open session is woken when a letter arrives for it: off (the runtime claude has no way to wake an idle session: Claude Code documents only the auth line of a session's inbox socket, not the message format; a letter waits for the session's next hook)
+✓ an idle open session is woken when a letter arrives for it: available (a session can be woken once its first turn has ended)
 ✓ platform rules written into the project's rules file: available
 ✓ a sandboxed project can't write what its sessions load hooks and settings from: available
 ✓ memory gaps, the weekly report's transcript statistics: available
@@ -72,10 +72,12 @@ $ agenthub doctor    # launchd, all fine
 ✓ mailbox follow-up (replying with an idle session's context): available
 ✓ channel leasing (also needs the assistant module): available
 ✓ letters seen live in the session, reminders to write notes: available
-· an idle open session is woken when a letter arrives for it: off (the runtime claude has no way to wake an idle session: Claude Code documents only the auth line of a session's inbox socket, not the message format; a letter waits for the session's next hook)
+✓ an idle open session is woken when a letter arrives for it: available (a session can be woken once its first turn has ended)
 ✓ platform rules written into the project's rules file: available
 ✓ a sandboxed project can't write what its sessions load hooks and settings from: available
 ✓ memory gaps, the weekly report's transcript statistics: available
+! 2 letters in the last 7 days woke a session that then didn't take them (the latest: <ID> to beta); the coding agent may have changed how it handles the wake
+    → the status page's mailbox section shows each letter's path; hub-event.log has each waiter's end
 ✓ agent login (headless token): present
 ! agent login (~/.claude/.credentials.json): missing
     → run claude once in a terminal on the hub machine so it refreshes, or /login again
@@ -86,7 +88,7 @@ $ agenthub doctor    # launchd, all fine
 ✓ the scheduler just ticked
 ✓ background services, project settings: match the config
 
-no problems, 3 reminders
+no problems, 4 reminders
 --- stderr
 
 $ agenthub doctor    # systemd, runtime none

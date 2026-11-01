@@ -249,14 +249,15 @@ def esc(s: str) -> str:
 
 def path_labels() -> dict[str, str]:
     """hubbus delivery_paths' steps, for people."""
-    return {"woken": _("woken"), "wake-failed": _("wake failed"), "hook": _("hook"), "inbox": _("inbox"),
+    return {"woken": _("woken"), "woken-missed": _("woken, not picked up"), "wake-failed": _("wake failed"),
+            "hook": _("hook"), "inbox": _("inbox"),
             "ack": _("acked"), "resume": _("background copy"), "handler": _("agent dispatched"),
             "held": _("held (loop guard)")}
 
 
 def letter_paths(letters: list) -> str:
-    """How each request/question of the last day went (docs/design/mailbox-runtimes.md B1): woken / hook / background
-    copy / dispatched, in order."""
+    """How each request/question of the last day went (docs/design/mailbox-runtimes.md B1): woken (or woken, not picked
+    up: the woken session didn't take it in time) / hook / background copy / dispatched, in order."""
     if not letters:
         return ""
     labels = path_labels()

@@ -61,7 +61,7 @@ class ClaudeFixture:
 
     def setup(self, tmp: pathlib.Path):
         import runtime_claude as m
-        self.m, self._roots, self._projects = m, m.transcript_roots, m.PROJECTS
+        self.m, self._roots, self._projects, self._tmp = m, m.transcript_roots, m.PROJECTS, tmp
         root = tmp / "projects"
         m.transcript_roots = lambda: (root,)
         m.PROJECTS = root
@@ -149,8 +149,21 @@ class ClaudeFixture:
         if token:
             (tmp / ".claude" / "headless-oauth-token").write_text("contract-token\n")
 
+    def start_live(self, sid: str) -> None:
+        """A live session to wake: its waiter heartbeats (runtime_claude.wait records it), in a temp secrets folder."""
+        import hubconf
+        from unittest import mock
+        self._secrets = mock.patch.object(hubconf, "secrets_dir", lambda: self._tmp / "secrets")
+        self._secrets.start()
+        f = hubconf.session_file(sid, "waiter")
+        f.parent.mkdir(parents=True, exist_ok=True)
+        f.write_text("1-test")
+
     def teardown(self):
         self.m.transcript_roots, self.m.PROJECTS = self._roots, self._projects
+        if getattr(self, "_secrets", None):
+            self._secrets.stop()
+            self._secrets = None
         if getattr(self, "_path", None):
             os.environ["PATH"] = self._path
         if getattr(self, "_home", None):
@@ -451,14 +464,24 @@ class WakeContract(unittest.TestCase):
                         fx.teardown()
 
     def test_without_wake_it_is_unsupported_with_the_runtimes_reason(self):
-        self.assertNotIn("wake", runtime_ports.capabilities("claude"))
+        self.assertNotIn("wake", runtime_ports.capabilities("acp"))
         with self.assertRaises(runtime_ports.Unsupported):
-            runtime_ports.load("claude", ports=("wake",))
-        row = [miss for f, ok, miss in runtime_ports.feature_table("claude") if not ok]
-        self.assertEqual(len(row), 1)
-        self.assertIn(runtime_ports.missing_label("claude", "wake"), row[0])
-        self.assertNotEqual(runtime_ports.missing_label("claude", "wake"), runtime_ports.PORT_LABELS["wake"])
+            runtime_ports.load("acp", ports=("wake",))
         self.assertEqual(runtime_ports.missing_label("acp", "wake"), runtime_ports.PORT_LABELS["wake"])
+        [row] = [miss for f, ok, miss in runtime_ports.feature_table("acp") if not ok and f in runtime_ports.optional_features()]
+        self.assertIn(runtime_ports.PORT_LABELS["wake"], row)
+
+    def test_a_runtime_with_wake_says_what_to_know_about_it(self):
+        self.assertIn("wake", runtime_ports.capabilities("claude"))
+        self.assertTrue(all(ok for _f, ok, _m in runtime_ports.feature_table("claude")))
+        [feat] = runtime_ports.optional_features()
+        self.assertEqual(runtime_ports.feature_notes("claude"), {feat: runtime_claude_note("wake")})
+        self.assertEqual(runtime_ports.feature_notes("acp"), {})
+
+
+def runtime_claude_note(port):
+    import runtime_claude
+    return runtime_claude.note(port)
 
 
 class RunContract(unittest.TestCase):
@@ -678,14 +701,15 @@ class ClaudeHooks(unittest.TestCase):
                              {"hooks": [{"type": "command", "command": "echo mine"}]}],
             "PostToolUse": [{"matcher": "Bash", "hooks": [{"type": "command", "command": "~/agent-hub/bin/memory-nudge.py --post-tool"},
                                                             {"type": "command", "command": "my-linter"}]}],
-            "Stop": [{"hooks": [{"type": "command", "command": "~/agent-hub/bin/old-thing"}]}]}}
+            "Notification": [{"hooks": [{"type": "command", "command": "~/agent-hub/bin/old-thing"}]}]}}
         out = m.install_hooks(json.loads(json.dumps(settings)))
         cmds = [h["command"] for es in out["hooks"].values() for e in es for h in e["hooks"]]
         self.assertIn("echo mine", cmds)
         self.assertIn("my-linter", cmds)
         self.assertFalse([c for c in cmds if "agent-hub/bin/" in c and "hub-event" not in c],
                          "old platform hooks are removed")
-        self.assertNotIn("Stop", out["hooks"], "an event left with only old platform hooks is removed entirely")
+        self.assertNotIn("Notification", out["hooks"], "an event left with only old platform hooks is removed entirely")
+        self.assertEqual(out["hooks"]["Stop"], [{"hooks": [m.wait_hook()]}], "one waiter, the platform's")
         self.assertEqual(out["model"], "x", "other settings untouched")
         for name, matcher, ev in m.HOOK_TABLE:
             entries = [e for e in out["hooks"][name]

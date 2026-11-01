@@ -19,6 +19,8 @@
 #   start also delivers the project mailbox's letters that aren't closed yet into the context
 #   prompt (UserPromptSubmit) deliver new letters from the project mailbox into the context (a user-level hook,
 #          installed only with the owner's approval: U4)
+#   wait   (Stop, run in the background) hand over to `hub-event wait`, the waiter that wakes the idle session when a
+#          letter comes (docs/design/mailbox-runtimes.md B1); its exit code is the wake
 # The symlink points at the same .agent-memory, and with-lock uses the same git dir, so it doesn't collide with the
 # main checkout. Deleting the worktree only deletes the symlink, never the main checkout's memory.
 set -uo pipefail
@@ -33,6 +35,10 @@ IFS=$'\t' read -r top git_dir common < <("$HUB/bin/py" "$HUB/bin/gitdirs.py" "$P
 [ "$git_dir" = "$common" ] && exit 0          # main checkout: the project's own hooks handle it
 main=$(dirname "$common")                      # <main checkout>/.git → <main checkout>
 [ -d "$main/.agent-memory" ] || exit 0         # not an onboarded project
+# wait (Stop, in the background): the runtime's waiter that wakes an idle session for a letter
+# (docs/design/mailbox-runtimes.md B1). Handed over before stdin is read, never as the project (it reads only the
+# platform's sessions folder, which no sandbox reaches), its exit code passed on
+[ "$event" = wait ] && exec "$HUB/bin/py" "$HUB/bin/hub-event" wait
 cd "$top" || exit 0
 # the hook JSON (stdin) can be read only once, and both memory-nudge and hubbus need it
 hook_json=""

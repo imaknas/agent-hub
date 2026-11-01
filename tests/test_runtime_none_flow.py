@@ -72,10 +72,9 @@ class RuntimeNone(unittest.TestCase):
         import runtime_ports
         rows = runtime_ports.feature_table("none")
         self.assertTrue(rows and all(not ok and miss for _, ok, miss in rows))
-        # every feature but waking an idle session (the optional wake port; docs/design/mailbox-runtimes.md B1),
-        # which says why it is off
+        # every feature, waking an idle session included (the optional wake port; docs/design/mailbox-runtimes.md B1)
         off = [miss for _, ok, miss in runtime_ports.feature_table("claude") if not ok]
-        self.assertEqual(off, [runtime_ports.missing_label("claude", "wake")])
+        self.assertEqual(off, [])
 
 
 if __name__ == "__main__":

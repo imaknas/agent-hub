@@ -8,6 +8,10 @@ wires its native hooks to this.
                              without it, runtime.default's, as hooks written before docs/design/mailbox-runtimes.md A1).
                              Its lifecycle parses the input, and the session is recorded in the platform's ids
                              (runtime_ports.qualify)
+  hub-event [--runtime <name>] wait
+                              the runtime's waiter for a wake (its wait(); docs/design/mailbox-runtimes.md B1): runs
+                              in the background until a wake request for the session comes, then exits with the code
+                              that wakes it (the one exception to "always exit 0" below)
   hub-event install <folder>  install the hooks of every installed runtime with session events in this project (the
                               platform's replaced with new ones, the user's own kept): called by sync-local-setup
   hub-event as-project <event> <workspace> <command>
@@ -131,8 +135,7 @@ def wake_address(ev, ws):
     for the platform's own runs or leases (they record no presence either)."""
     fn = getattr(_RT, "wake_address", None)
     f = hubconf.session_address_file(ev.session)
-    if not callable(fn) or not f or not ws or not project_git.project_at(ws) \
-            or os.environ.get("HUB_LLM_POINT") or os.environ.get("HUBBUS_LEASE"):
+    if not callable(fn) or not f or not ws or not project_git.project_at(ws) or platform_run(os.environ):
         return None
     addr = fn(os.environ)
     if not addr:
@@ -147,9 +150,38 @@ def wake_address(ev, ws):
 
 
 def wake_address_drop(ev, ws):
-    f = hubconf.session_address_file(ev.session)
-    if f:
+    """The session ended: its address, its waiter's record (the waiter sees it gone and exits) and any wake request
+    left for it go."""
+    for f in hubconf.session_files(ev.session):
         f.unlink(missing_ok=True)
+
+
+def platform_run(env) -> bool:
+    """A run the platform started (a judgment point, an agent job, a lease): it records no presence, keeps no wake
+    address and arms no waiter."""
+    return bool(env.get("HUB_LLM_POINT") or env.get("HUBBUS_LEASE"))
+
+
+def wait(name: str | None, raw: str) -> int:
+    """`hub-event [--runtime <name>] wait`: the runtime's waiter for a wake (docs/design/mailbox-runtimes.md B1), the
+    one entry point that doesn't always exit 0: it returns the waiter's exit code (the runtime's way of waking the
+    session) and prints its text to stderr. A runtime without the wake port, or a platform run, exits 0 at once."""
+    name = name or runtime_ports.default_name()
+    if platform_run(os.environ):
+        return 0
+    try:
+        rt = runtime_ports.load(name, ports=("wake",))
+    except runtime_ports.Unsupported:
+        return 0
+    fn = getattr(rt, "wait", None)
+    if not callable(fn):
+        return 0
+    code, text, how = fn(raw, os.environ)
+    if how != "no-session":   # each waiter's end, headless runs included (they arm none)
+        _log("wait", None, [how], [])
+    if text:
+        print(text, file=sys.stderr)
+    return code
 
 
 # which handlers run for each event, in order; for the "deny" kind the return value is the reason to block
@@ -301,6 +333,12 @@ def install(ws: pathlib.Path) -> int:
 def main(argv) -> int:
     if argv[:1] == ["as-project"] and len(argv) == 4:
         return as_project(*argv[1:])
+    if argv[-1:] == ["wait"] and (len(argv) == 1 or (len(argv) == 3 and argv[0] == "--runtime")):
+        try:
+            return wait(argv[1] if len(argv) == 3 else None, _read_stdin())
+        except Exception as e:   # a broken waiter ends quietly: the session never sees an error from it
+            _log("wait", None, [], [f"hub-event:{type(e).__name__}"])
+            return 0
     try:
         if argv[:1] == ["install"] and len(argv) == 2:
             return install(pathlib.Path(argv[1]).resolve())

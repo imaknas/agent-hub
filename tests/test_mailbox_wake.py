@@ -4,13 +4,21 @@ once-per-letter use of it, the delivery path the status page shows, and where a 
 The characterization part (CharacterizeDispatch, CharacterizeSecrets) pins what dispatch, the backup and check-secrets
 do today for a runtime without `wake`; it was committed before the port existed and must keep passing unchanged.
 
-A temporary bus; the runtime is a fake (tests.test_mailbox_dispatch's), no agent is started, no socket is touched.
+Claude's wake (ClaudeWaiter, ClaudeWake, ClaudeDispatch, ClaudeSessionFiles, WokenNotPickedUp): the asyncRewake Stop
+waiter through its real code (runtime_claude.wait, hub-event wait) with a clock it is handed and a temporary secrets
+folder; the request is taken exactly once, the newest waiter wins, it ends with its session and before its timeout,
+headless runs arm none; wake() only for a live waiter; the hook as installed; "woken, not picked up" from the bus. The
+characterization of Claude's wake as Unsupported (eaa6c64) was replaced by these when the waiter was built.
+
+A temporary bus; the runtime is a fake (tests.test_mailbox_dispatch's) or the real Claude adapter, no agent or Claude
+session is started, no socket is touched.
 
     bin/py -m unittest tests.test_mailbox_wake
 """
 import importlib.machinery
 import importlib.util
 import json
+import os
 import pathlib
 import sys
 import tempfile
@@ -106,31 +114,6 @@ class CharacterizeSecrets(unittest.TestCase):
         hub = hubconf.hub_project()
         self.assertEqual(cs.undeclared(hub, {"name": hub, "paths": {"workspace": str(self.tmp)}}, set()),
                          [self.secrets / "api-token"])
-
-
-class CharacterizeClaudeWake(Harness):
-    """Claude's wake before the asyncRewake waiter (docs/design/mailbox-runtimes.md B1), through the real adapter:
-    Unsupported, so dispatch records nothing and routes as usual; doctor's row is off; no Stop hook is installed."""
-
-    def test_the_claude_sessions_port_cannot_wake(self):
-        import runtime_ports
-        with self.assertRaises(runtime_ports.Unsupported):
-            runtime_ports.Sessions(["claude"]).wake("S1", "x")
-
-    def test_dispatch_through_the_claude_adapter_records_no_wake(self):
-        import runtime_ports
-        self.send("m1", "proj", "request")
-        self.m.wake(self.c, runtime_ports.Sessions(["claude"]), self.m.get_message(self.c, "m1"), "S1")
-        self.assertEqual(self.types(), {"message"})
-
-    def test_doctors_wake_row_is_off(self):
-        import runtime_ports
-        [row] = [r for r in runtime_ports.feature_table("claude") if r[0] in runtime_ports.optional_features()]
-        self.assertFalse(row[1])
-
-    def test_no_stop_hook_is_installed(self):
-        import runtime_claude
-        self.assertNotIn("Stop", runtime_claude.install_hooks({})["hooks"])
 
 
 class WakingRuntime(tmd.FakeRuntime):
@@ -352,19 +335,336 @@ class WakeAddresses(unittest.TestCase):
         self.assertTrue(any(self.dir.is_relative_to(d) for d in policy.secret_dirs()))
 
 
-class ClaudeAddress(unittest.TestCase):
-    def test_the_inbox_socket_and_token_from_the_hook_environment(self):
-        import runtime_claude
-        self.assertEqual(runtime_claude.wake_address({"CLAUDE_CODE_MESSAGING_SOCKET": "/tmp/cc-socks-1/x",
-                                                      "CLAUDE_CODE_MESSAGING_TOKEN": "t"}),
-                         {"socket": "/tmp/cc-socks-1/x", "token": "t"})
-        self.assertEqual(runtime_claude.wake_address({"CLAUDE_CODE_MESSAGING_SOCKET": "/s"}), {"socket": "/s"})
-        self.assertIsNone(runtime_claude.wake_address({"CLAUDE_CODE_MESSAGING_TOKEN": "t"}))
+class ClaudeSessionsDir(unittest.TestCase):
+    """A temporary secrets directory for Claude's waiter and wake requests (never the real one)."""
+    SID = "11111111-2222-4333-8444-555555555555"
 
-    def test_no_wake_until_the_message_format_is_documented(self):
+    def setUp(self):
+        self.tmp = pathlib.Path(tempfile.mkdtemp()).resolve()
+        p = mock.patch.object(hubconf, "secrets_dir", lambda: self.tmp / "secrets")
+        p.start()
+        self.addCleanup(p.stop)
         import runtime_claude
-        self.assertFalse(hasattr(runtime_claude, "wake"))
-        self.assertTrue(runtime_claude.unsupported("wake"))
+        self.rc = runtime_claude
+        self.dir = hubconf.session_addresses_dir()
+
+    def raw(self, sid=None) -> str:
+        return json.dumps({"session_id": sid or self.SID, "cwd": str(self.tmp), "hook_event_name": "Stop"})
+
+    def files(self) -> list[str]:
+        return sorted(p.name for p in self.dir.iterdir()) if self.dir.is_dir() else []
+
+    def wait(self, steps=(), env=None, start=1000.0, step_s=2.0):
+        """runtime_claude.wait through its real code, with a clock that moves step_s per poll; steps[i] runs at the
+        i-th poll's sleep (then nothing more happens until the waiter ends by itself)."""
+        t = [start]
+        steps = list(steps)
+
+        def sleep(_s):
+            if steps:
+                steps.pop(0)()
+            t[0] += step_s
+        out = self.rc.wait(self.raw(), env or {}, clock=lambda: t[0], sleep=sleep, poll=0)
+        self.clock = t[0]
+        return out
+
+    def waiter_file(self):
+        return hubconf.session_file(self.SID, "waiter")
+
+    def request(self, text, age_s=0):
+        """A wake request as wake() leaves it, written straight (wake() itself needs a live waiter)."""
+        import os
+        import time
+        f = hubconf.session_file(self.SID, f"wake-{len(self.files())}x")
+        f.parent.mkdir(parents=True, exist_ok=True)
+        f.write_text(text)
+        if age_s:
+            t = time.time() - age_s
+            os.utime(f, (t, t))
+        return f
+
+
+class ClaudeWaiter(ClaudeSessionsDir):
+    """The Stop hook's waiter (runtime_claude.wait; docs/design/mailbox-runtimes.md B1)."""
+
+    def test_a_request_wakes_once_with_exit_2_and_the_text_on_stderr(self):
+        code, text, how = self.wait([lambda: self.assertTrue(self.rc.wake(self.SID, "📬 agent-hub: 1 letter (m1)"))])
+        self.assertEqual((code, text, how), (2, "📬 agent-hub: 1 letter (m1)", "woke"))
+        self.assertEqual(self.files(), [], "the request taken, the waiter's record gone with it")
+
+    def test_a_request_is_never_seen_twice_including_by_a_rearmed_waiter(self):
+        self.request("one")
+        self.request("two")
+        self.assertEqual(self.wait()[:2], (2, "one\ntwo"), "every request waiting is shown in one wake")
+        # the next Stop arms a new waiter: nothing left for it, so it waits out its time quietly
+        self.assertEqual(self.wait(step_s=self.rc.WAIT_TIMEOUT_S / 3), (0, "", "deadline"))
+        self.assertEqual(self.files(), [])
+
+    def test_a_request_taken_by_another_waiter_is_not_taken_again(self):
+        self.request("one")
+        self.assertEqual(self.rc._take(self.SID, 0), ["one"])
+        self.assertEqual(self.rc._take(self.SID, 0), [])
+
+    def test_a_stale_request_is_dropped_unshown(self):
+        self.request("old", age_s=self.rc.REQUEST_TTL_S + 60)
+        self.assertEqual(self.wait(step_s=self.rc.WAIT_TIMEOUT_S / 3), (0, "", "deadline"))
+        self.assertEqual(self.files(), [])
+
+    def test_the_newest_waiter_wins(self):
+        def newer_arms():
+            self.waiter_file().write_text("999-newer")
+        self.assertEqual(self.wait([newer_arms]), (0, "", "superseded"))
+        self.assertEqual(self.waiter_file().read_text(), "999-newer", "the older one leaves the newer's record alone")
+        self.assertTrue(self.rc.wake(self.SID, "x"), "the newer one is the live one")
+
+    def test_it_ends_when_its_session_ends(self):
+        hub_event = load_file("hub_event_wait", ROOT / "bin" / "hub-event")
+        import runtime_ports
+
+        def session_end():
+            self.request("left for it")
+            hub_event.wake_address_drop(runtime_ports.HubEvent("session_end", self.SID, str(self.tmp)), None)
+        self.assertEqual(self.wait([session_end]), (0, "", "ended"))
+        self.assertEqual(self.files(), [], "its end took the waiter's record and the request")
+
+    def test_it_ends_when_its_address_file_is_gone(self):
+        self.assertEqual(self.wait([lambda: self.waiter_file().unlink()]), (0, "", "ended"))
+
+    def test_it_ends_when_the_session_process_is_gone(self):
+        import subprocess
+        p = subprocess.Popen(["true"])
+        p.wait()
+        self.assertEqual(self.wait(env={"CLAUDE_PID": str(p.pid)}), (0, "", "session-gone"))
+        self.assertEqual(self.files(), [])
+
+    def test_it_ends_before_its_hook_timeout(self):
+        self.assertEqual(self.wait(start=0, step_s=self.rc.WAIT_MARGIN_S / 2), (0, "", "deadline"))
+        self.assertLess(self.clock, self.rc.WAIT_TIMEOUT_S)
+        self.assertGreaterEqual(self.clock, self.rc.WAIT_TIMEOUT_S - self.rc.WAIT_MARGIN_S)
+
+    def test_headless_runs_do_not_arm(self):
+        for ep in ("sdk-cli", "sdk-ts", "sdk-py"):
+            self.assertEqual(self.wait(env={"CLAUDE_CODE_ENTRYPOINT": ep}), (0, "", "headless"))
+        self.assertEqual(self.files(), [])
+        hub_event = load_file("hub_event_wait2", ROOT / "bin" / "hub-event")
+        hub_event.LOG = self.tmp / "hub-event.log"
+        self.request("for a session")
+        for var in ("HUB_LLM_POINT", "HUBBUS_LEASE"):
+            with mock.patch.dict("os.environ", {var: "1"}):
+                self.assertEqual(hub_event.wait("claude", self.raw()), 0)
+        with mock.patch.dict("os.environ", {"CLAUDE_CODE_ENTRYPOINT": "sdk-cli"}):
+            for var in ("HUB_LLM_POINT", "HUBBUS_LEASE"):
+                os.environ.pop(var, None)
+            self.assertEqual(hub_event.wait("claude", self.raw()), 0)
+        self.assertNotIn(f"{self.SID}.waiter", self.files(), "a platform run arms nothing")
+        self.assertEqual(len(self.files()), 1, "and takes nothing")
+        self.assertIn("wait - ran=headless", hub_event.LOG.read_text(), "a -p run's waiter is logged as such")
+
+    def test_desktop_and_the_terminal_arm(self):
+        for ep in ("claude-desktop", "cli", None):
+            self.request("x")
+            env = {"CLAUDE_CODE_ENTRYPOINT": ep} if ep else {}
+            self.assertEqual(self.wait(env=env)[0], 2, ep)
+
+    def test_hub_event_passes_the_wake_on(self):
+        import contextlib
+        import io
+        hub_event = load_file("hub_event_wait3", ROOT / "bin" / "hub-event")
+        hub_event.LOG = self.tmp / "hub-event.log"
+        self.request("📬 agent-hub: 1 letter from beta (m1). Run agenthub inbox.")
+        err = io.StringIO()
+        with contextlib.redirect_stderr(err), mock.patch.dict("os.environ", {}, clear=False):
+            for var in ("HUB_LLM_POINT", "HUBBUS_LEASE", "CLAUDE_CODE_ENTRYPOINT", "CLAUDE_PID"):
+                os.environ.pop(var, None)
+            self.assertEqual(hub_event.wait("claude", self.raw()), 2)
+        self.assertEqual(err.getvalue().strip(), "📬 agent-hub: 1 letter from beta (m1). Run agenthub inbox.")
+        self.assertIn("wait - ran=woke", hub_event.LOG.read_text())
+
+
+class ClaudeWake(ClaudeSessionsDir):
+    """runtime_claude.wake: a request only for a live waiter."""
+
+    def test_true_only_with_a_live_waiter(self):
+        import os
+        import time
+        self.assertFalse(self.rc.wake(self.SID, "x"), "no waiter: the session isn't wakeable (before its first turn)")
+        self.assertEqual(self.files(), [])
+        f = self.waiter_file()
+        f.parent.mkdir(parents=True)
+        f.write_text("1-a")
+        self.assertTrue(self.rc.wake(self.SID, "📬"))
+        [req] = [n for n in self.files() if ".wake-" in n]
+        self.assertEqual((self.dir / req).read_text(), "📬")
+        self.assertEqual((self.dir / req).stat().st_mode & 0o777, 0o600)
+        old = time.time() - self.rc.WAITER_FRESH_S - 5
+        os.utime(f, (old, old))
+        self.assertFalse(self.rc.wake(self.SID, "x"), "a waiter whose heartbeat stopped is gone")
+        self.assertFalse(self.rc.wake("../x", "x"))
+
+    def test_the_port_through_the_sessions_router(self):
+        import runtime_ports
+        self.assertIn("wake", runtime_ports.capabilities("claude"))
+        self.assertFalse(runtime_ports.Sessions(["claude"]).wake(self.SID, "x"))
+        self.assertFalse(hasattr(self.rc, "wake_address"), "no socket token is kept: the waiter needs none")
+        self.assertIsNone(self.rc.unsupported("wake"))
+        self.assertTrue(self.rc.note("wake"))
+
+    def test_the_stop_hook_runs_in_the_background_with_a_days_timeout_and_nothing_waits_on_session_start(self):
+        hooks = self.rc.install_hooks({})["hooks"]
+        self.assertEqual(hooks["Stop"], [{"hooks": [self.rc.wait_hook()]}])
+        h = self.rc.wait_hook()
+        self.assertEqual((h["asyncRewake"], h["timeout"]), (True, 86400))
+        self.assertNotIn("|| true", h["command"], "a wake's exit code 2 must not be swallowed")
+        for name, entries in hooks.items():
+            for e in entries:
+                for x in e["hooks"]:
+                    if name != "Stop":
+                        self.assertFalse(x.get("asyncRewake") or x["command"].endswith(" wait; exit 0"), name)
+
+    def test_the_hook_command_passes_the_exit_code_on_and_is_quiet_without_the_hub(self):
+        import subprocess
+        hub = self.tmp / "hub"
+        (hub / "bin").mkdir(parents=True)
+        with mock.patch.object(hubconf, "MAIN", hub):
+            cmd = self.rc.wait_command()
+            r = subprocess.run(["/bin/sh", "-c", cmd], capture_output=True, text=True, timeout=30)
+            self.assertEqual(r.returncode, 0, "no hub-event: nothing, quietly")
+            (hub / "bin" / "hub-event").write_text('#!/bin/sh\necho "woke $*" >&2\nexit 2\n')
+            (hub / "bin" / "py").write_text('#!/bin/sh\nexec /bin/sh "$@"\n')   # Linux: py in front
+            for f in ("hub-event", "py"):
+                (hub / "bin" / f).chmod(0o755)
+            r = subprocess.run(["/bin/sh", "-c", cmd], capture_output=True, text=True, timeout=30)
+        self.assertEqual((r.returncode, r.stderr.strip()), (2, "woke --runtime claude wait"))
+
+
+class ClaudeDispatch(Harness):
+    """Dispatch's wake through the real Claude adapter: a request for the session's live waiter, or not reached."""
+    SID = ClaudeSessionsDir.SID
+
+    def setUp(self):
+        super().setUp()
+        p = mock.patch.object(hubconf, "secrets_dir", lambda: self.tmp / "secrets")
+        p.start()
+        self.addCleanup(p.stop)
+
+    def test_dispatch_wakes_through_the_real_adapter(self):
+        import runtime_ports
+        rt = runtime_ports.Sessions(["claude"])
+        self.send("m1", "proj", "request", src="beta")
+        self.m.wake(self.c, rt, self.m.get_message(self.c, "m1"), self.SID)   # no waiter yet: not reached
+        f = hubconf.session_file(self.SID, "waiter")
+        f.parent.mkdir(parents=True)
+        f.write_text("1-a")
+        self.send("m2", "proj", "request", src="beta")
+        self.m.wake(self.c, rt, self.m.get_message(self.c, "m2"), self.SID)
+        oks = [(r["id"], json.loads(r["payload"])["ok"]) for r in
+               self.c.execute("SELECT id, payload FROM events WHERE type='message.woken' ORDER BY seq")]
+        self.assertEqual(oks, [("m1:woken", False), ("m2:woken", True)])
+        [req] = [p for p in f.parent.iterdir() if ".wake-" in p.name]
+        self.assertEqual(req.read_text(), self.m._("📬 agent-hub: 1 letter from {project} ({id}). Run agenthub inbox.",
+                                                   project="beta", id="m2"))
+
+
+class ClaudeSessionFiles(ClaudeSessionsDir):
+    """What the sessions folder keeps, and for how long."""
+
+    def test_waiters_requests_and_dot_files_are_pruned_by_age_not_by_live_sessions(self):
+        import os
+        import time
+        hb = tmd.load_hubbus()
+        self.dir.mkdir(parents=True)
+        names = ["fresh.waiter", "stale.waiter", "stale.wake-a1", "fresh.wake-b2", ".stale.wake-c3.taken",
+                 "live.json", "gone.json"]
+        for n in names:
+            (self.dir / n).write_text("x")
+        old = time.time() - 3600
+        for n in ("stale.waiter", "stale.wake-a1", ".stale.wake-c3.taken", "live.json", "gone.json"):
+            os.utime(self.dir / n, (old, old))
+        self.assertEqual(sorted(hb.prune_wake_addresses(live={"live"})), ["gone", "stale"])
+        self.assertEqual(self.files(), ["fresh.waiter", "fresh.wake-b2", "live.json"])
+
+    def test_a_sessions_files_and_only_its_own(self):
+        self.dir.mkdir(parents=True)
+        for n in ("s1.json", "s1.waiter", "s1.wake-ab", "s10.waiter", ".s1.wake-cd.taken", "codex:s1.json"):
+            (self.dir / n).write_text("x")
+        self.assertEqual(sorted(p.name for p in hubconf.session_files("s1")), ["s1.json", "s1.waiter", "s1.wake-ab"])
+        self.assertEqual(hubconf.session_of_file("codex:s1.json"), "codex:s1")
+        self.assertIsNone(hubconf.session_of_file(".s1.wake-cd.taken"))
+        self.assertIsNone(hubconf.session_file("s1", "../x"))
+
+
+class WokenNotPickedUp(Harness):
+    """A wake that reached a session's waiter, after which that session didn't take the letter in time: shown per
+    letter (woken-missed), listed for doctor (hubbus wake-misses). Computed from the bus events alone."""
+
+    def woke(self, mid, minutes_ago, ok=True):
+        self.c.execute("BEGIN IMMEDIATE")
+        self.m.publish(self.c, f"{mid}:woken", "message.woken", "proj", "proj", mid,
+                       {"session": "S1", "via": "wake", "ok": ok})
+        self.c.execute("COMMIT")
+        self.age(f"{mid}:woken", minutes_ago)
+
+    def age(self, eid, minutes_ago):
+        self.c.execute("UPDATE events SET ts=? WHERE id=?", (self.ts(minutes_ago), eid))
+
+    def delivered(self, mid, minutes_ago, via="post-tool"):
+        self.c.execute("BEGIN IMMEDIATE")
+        self.m.mark_delivered(self.c, [self.m.get_message(self.c, mid)], "S1", via)
+        self.c.execute("COMMIT")
+        self.c.execute("UPDATE events SET ts=? WHERE type='message.delivered' AND ref=?", (self.ts(minutes_ago), mid))
+
+    def ts(self, minutes_ago):
+        import datetime
+        return (datetime.datetime.now().astimezone() - datetime.timedelta(minutes=minutes_ago)).isoformat(timespec="seconds")
+
+    def paths(self):
+        return {x["id"]: x["path"] for x in self.m.delivery_paths(self.c)}
+
+    def test_taken_in_time_is_woken(self):
+        self.send("m1", "proj", "request", minutes_ago=20)
+        self.woke("m1", 20)
+        self.delivered("m1", 19, via="inbox")
+        self.assertEqual(self.paths()["m1"], ["woken", "inbox"])
+        self.assertEqual(self.m.wake_misses(self.c), [])
+
+    def test_not_taken_in_time_is_woken_missed(self):
+        self.send("m1", "proj", "request", minutes_ago=30)
+        self.woke("m1", 30)
+        self.c.execute("BEGIN IMMEDIATE")
+        self.m.mark_delivered(self.c, [self.m.get_message(self.c, "m1")], "S9", "resume")   # a background copy later
+        self.c.execute("COMMIT")
+        self.send("m2", "proj", "request", minutes_ago=40)
+        self.woke("m2", 40)
+        self.delivered("m2", 20, via="prompt")   # the owner came back 20 minutes after the wake: too late
+        self.assertEqual(self.paths(), {"m1": ["woken-missed", "resume"], "m2": ["woken-missed", "hook"]})
+        self.assertEqual([x["id"] for x in self.m.wake_misses(self.c)], ["m1", "m2"])
+
+    def test_still_within_the_time_is_just_woken(self):
+        self.send("m1", "proj", "request", minutes_ago=1)
+        self.woke("m1", 1)
+        self.assertEqual(self.paths()["m1"], ["woken"])
+        self.assertEqual(self.m.wake_misses(self.c), [])
+
+    def test_a_wake_that_failed_is_no_miss(self):
+        self.send("m1", "proj", "request", minutes_ago=30)
+        self.woke("m1", 30, ok=False)
+        self.assertEqual(self.paths()["m1"], ["wake-failed"])
+        self.assertEqual(self.m.wake_misses(self.c), [])
+
+    def test_the_command_reads_the_bus_and_without_one_says_none(self):
+        import contextlib
+        import io
+        self.send("m1", "proj", "request", minutes_ago=30)
+        self.woke("m1", 30)
+        out = io.StringIO()
+        with mock.patch.object(self.m, "db", lambda *a, **k: self.c), contextlib.redirect_stdout(out):
+            self.m.cmd_wake_misses(True)
+        [x] = json.loads(out.getvalue())
+        self.assertEqual((x["id"], x["to"], x["days"]), ("m1", "proj", self.m.WAKE_MISS_DAYS))
+        out = io.StringIO()
+        with mock.patch.object(self.m, "DB", self.tmp / "none.db"), contextlib.redirect_stdout(out):
+            self.m.cmd_wake_misses(True)
+        self.assertEqual(json.loads(out.getvalue()), [])
 
 
 if __name__ == "__main__":

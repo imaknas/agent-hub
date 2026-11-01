@@ -27,7 +27,7 @@ $ agenthub doctor    # launchd, problems
 ✓ 信箱接續(用閒置 session 的 context 回信):可以用
 ✓ 通道租借(另外要助理模組):可以用
 ✓ session 裡即時看到信、提醒寫筆記:可以用
-· 有信來時叫醒開著但閒置的 session:關掉(執行環境 claude 沒有叫醒閒置 session 的方法:Claude Code 的 session 收件 socket 只公開了驗證那一行,沒公開訊息格式;信等 session 下一次 hook 才送到)
+✓ 有信來時叫醒開著但閒置的 session:可以用(session 跑完第一輪之後才叫得醒)
 ✓ 平台規則寫進專案的規則檔:可以用
 ✓ sandbox 專案寫不到它的 session 載入 hook 跟設定的檔案:可以用
 ✓ memory 缺口、週報的對話統計:可以用
@@ -72,10 +72,12 @@ $ agenthub doctor    # launchd, all fine
 ✓ 信箱接續(用閒置 session 的 context 回信):可以用
 ✓ 通道租借(另外要助理模組):可以用
 ✓ session 裡即時看到信、提醒寫筆記:可以用
-· 有信來時叫醒開著但閒置的 session:關掉(執行環境 claude 沒有叫醒閒置 session 的方法:Claude Code 的 session 收件 socket 只公開了驗證那一行,沒公開訊息格式;信等 session 下一次 hook 才送到)
+✓ 有信來時叫醒開著但閒置的 session:可以用(session 跑完第一輪之後才叫得醒)
 ✓ 平台規則寫進專案的規則檔:可以用
 ✓ sandbox 專案寫不到它的 session 載入 hook 跟設定的檔案:可以用
 ✓ memory 缺口、週報的對話統計:可以用
+! 最近 7 天有 2 封信叫醒了 session,那個 session 卻沒接(最近一封:<ID>,給 beta);coding agent 處理叫醒的方式可能變了
+    → 狀態頁的信箱區列出每封信怎麼走的;hub-event.log 記著每個等待程序怎麼結束
 ✓ agent 登入(headless token):有
 ! agent 登入(~/.claude/.credentials.json):沒有
     → 在 hub 主機的終端機跑一次 claude 讓它更新,或重新 /login
@@ -86,7 +88,7 @@ $ agenthub doctor    # launchd, all fine
 ✓ 排程器最後一次 tick:0 分鐘前
 ✓ 背景服務、專案設定:跟 config 一致
 
-沒有問題、3 個提醒
+沒有問題、4 個提醒
 --- stderr
 
 $ agenthub doctor    # systemd, runtime none

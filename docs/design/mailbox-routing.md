@@ -278,3 +278,27 @@ agent while the user was working there. Now:
   projects. With one, the output is as before.
 - Still on the default runtime: the transcript statistics (memory gaps, weekly report), headless runs, leases, and the
   older `hubbus hook` entry points called without `--runtime` (worktree-memory.sh, user-level hooks).
+
+## 11-02: Claude Code's wake, an asyncRewake waiter (`docs/design/mailbox-runtimes.md` step 2, B1 as built)
+
+- **The waiter**: every Stop arms one, `hub-event --runtime claude wait` → `runtime_claude.wait` (an `asyncRewake: true`
+  hook, `timeout: 86400`, its command `[ -x …/hub-event ] && exec … wait; exit 0`: no `|| true`, which would turn the
+  wake's 2 into 0). It records itself in `secrets_dir()/sessions/<sid>.waiter` (newest wins: an older one that finds
+  another's token there exits 0), heartbeats that file each poll (2 s), and takes each `<sid>.wake-<nonce>` request by
+  renaming it to a dot name no lookup matches, then unlinking it: one request wakes once. It prints the notices to
+  stderr and exits 2; it exits 0 when its record is gone (SessionEnd removes all of a session's files there, the
+  bridge's prune removes a record whose heartbeat stopped), when `CLAUDE_PID` is gone, and a minute before its timeout.
+  No bus access in the loop.
+- **`runtime_claude.wake(sid, text)`**: writes a request (tmp + rename, mode 600) only while the session's waiter
+  heartbeats (10 s); otherwise False, recorded as `message.woken` with `ok: false` ("wake failed" on the status page),
+  and the routing goes on as before. A session is wakeable once its first turn has ended.
+- **Not armed**: platform runs (`HUB_LLM_POINT`, `HUBBUS_LEASE`, checked by hub-event) and `-p` / SDK runs
+  (`CLAUDE_CODE_ENTRYPOINT` sdk-cli / sdk-ts / sdk-py).
+- **The notice**: "📬 agent-hub: 1 letter from <project> (<id>). Run agenthub inbox." Claude Code shows a woken hook's
+  stderr as `Stop hook blocking error from command …: <stderr>`, so the text names agent-hub.
+- **Seeing failures**: a letter whose wake reached a waiter but that the session didn't take (hook, inbox or ack)
+  within `CONVERSATION_WAIT_MIN` shows `woken, not picked up` (`woken-missed`) on the status page; `hubbus wake-misses`
+  lists those of the last 7 days, and doctor reminds when there are 2 or more. Computed from the bus events; nothing new
+  is recorded.
+- **Socket token**: no longer kept. `runtime_claude.wake_address` is gone: the waiter needs no token, and an unused
+  credential for posting into a session isn't worth holding. The generic address handler stays for other runtimes.

@@ -94,6 +94,8 @@ For hooks / the schedule / other scripts:
                                       into STATE.md nightly, and marks done only when trustworthy)
   hubbus publish <type> --source S [--to P] [--ref ID] [--payload JSON] [--id ID]
   hubbus status [--json]
+  hubbus wake-misses [--json]         letters of the last WAKE_MISS_DAYS days whose wake reached a session that then
+                                      didn't take them within WAKE_PICKUP_MIN (doctor reminds when they repeat)
 
 The personal assistant's interface (defined on the Muninn side; a change there means changing both sides):
   in:  `muninn handoffs --json` (handoffs waiting to be sent); `--delivered <ids>` only after they're committed
@@ -1880,7 +1882,8 @@ def wake(c, rt, r, sid) -> None:
     fn, eid = getattr(rt, "wake", None), f"{r['id']}:woken"
     if not callable(fn) or not sid or c.execute("SELECT 1 FROM events WHERE id=?", (eid,)).fetchone():
         return
-    text = _("📬 1 letter from {project}: {id}. Run agenthub inbox.", project=r["source"], id=r["id"])
+    # the session may see it out of context (Claude Code shows it as a Stop hook's "blocking error"): it says whose it is
+    text = _("📬 agent-hub: 1 letter from {project} ({id}). Run agenthub inbox.", project=r["source"], id=r["id"])
     try:
         ok, why = bool(fn(sid, text)), ""
     except runtime_ports.Unsupported:   # this session's runtime can't be woken: nothing to record
@@ -2254,21 +2257,29 @@ ADDRESS_GRACE_S = 600   # a wake address younger than this is kept even if its s
 
 
 def prune_wake_addresses(live=None) -> list[str]:
-    """Remove the wake addresses (hubconf.session_addresses_dir) of sessions no longer running: SessionEnd removes
-    its own, this catches a session that ended without it (killed, crashed). live: the sessions running now (the
-    runtime's live_sessions); a runtime without session state keeps none."""
+    """Remove what hubconf.session_addresses_dir holds for sessions that are gone: SessionEnd removes its own session's
+    files, this catches a session that ended without it (killed, crashed). An address (<session>.json) goes when its
+    session no longer runs (live: the sessions running now, the runtime's live_sessions; a runtime without session
+    state keeps none). A waiter's record goes when its heartbeat stopped, and a wake request or a dot file (one being
+    written or taken) when it is old: neither is judged by live, which misses some sessions (a forked one's id is not on
+    its command line). Returns the sessions whose files went."""
     d = hubconf.session_addresses_dir()
     if not d.is_dir():
         return []
-    if live is None:
+    if live is None and any(d.glob("*.json")):
         import runtime_ports
         live = runtime_ports.Sessions().live_sessions()   # every installed runtime's, in the platform's ids
     gone = []
-    for f in d.glob("*.json"):
+    for f in d.iterdir():
         try:
-            if f.name[:-5] not in live and time.time() - f.lstat().st_mtime > ADDRESS_GRACE_S:
-                f.unlink()
-                gone.append(f.name[:-5])
+            if time.time() - f.lstat().st_mtime <= ADDRESS_GRACE_S:
+                continue
+            session = hubconf.session_of_file(f.name)
+            if f.name.endswith(".json") and session in (live or set()):
+                continue
+            f.unlink()
+            if session and session not in gone:
+                gone.append(session)
         except OSError:
             pass
     return gone
@@ -2335,28 +2346,66 @@ def cmd_open_handoffs() -> None:
 PATH_OF = {"session-start": "hook", "prompt": "hook", "post-tool": "hook", "inbox": "inbox", "ack": "ack",
            "resume": "resume", "handler": "handler", "held": "held"}
 PATHS_HOURS = 24
+PICKED_UP = {"hook", "inbox", "ack"}   # the letter went into a session
+WAKE_PICKUP_MIN = CONVERSATION_WAIT_MIN   # a woken session that hasn't taken the letter by then: woken-missed
+WAKE_MISS_DAYS = 7
+
+
+def letter_path(c, r) -> list[str]:
+    """How letter r went, in order: woken (wake reached a live session; woken-missed when that session then didn't
+    take it within WAKE_PICKUP_MIN; wake-failed when wake didn't reach it), hook / inbox (delivered into a session),
+    ack, resume (a background copy of a session), handler (an agent dispatched), held (the loop guard)."""
+    path, woken = [], None
+    for e in c.execute("SELECT type, ts, payload FROM events WHERE ref=? AND type IN ('message.delivered',"
+                       " 'message.woken') ORDER BY seq", (r["id"],)):
+        pe = json.loads(e["payload"] or "{}")
+        step = ("woken" if pe.get("ok") else "wake-failed") if e["type"] == "message.woken" \
+            else PATH_OF.get(pe.get("via"))
+        if step == "woken":
+            woken = e["ts"]
+        elif woken and step in PICKED_UP and \
+                datetime.datetime.fromisoformat(e["ts"]) <= datetime.datetime.fromisoformat(woken) + \
+                datetime.timedelta(minutes=WAKE_PICKUP_MIN):
+            woken = None   # taken in time
+        if step and step not in path:
+            path.append(step)
+    if woken and now() > datetime.datetime.fromisoformat(woken) + datetime.timedelta(minutes=WAKE_PICKUP_MIN):
+        path[path.index("woken")] = "woken-missed"
+    return path
 
 
 def delivery_paths(c) -> list[dict]:
-    """The requests and questions to projects of the last PATHS_HOURS hours, each with the way it went, in order:
-    woken (wake reached a live session; wake-failed when it didn't), hook / inbox (delivered into a session), ack,
-    resume (a background copy of a session), handler (an agent dispatched), held (the loop guard)."""
+    """The requests and questions to projects of the last PATHS_HOURS hours, each with the way it went (letter_path)."""
     out = []
     for r in c.execute("SELECT * FROM events WHERE type='message' AND ts >= ? ORDER BY seq",
                        (iso(now() - datetime.timedelta(hours=PATHS_HOURS)),)).fetchall():
         if payload(r).get("type") not in ACTIONABLE or r["to_project"] in OWNERS:
             continue
-        path = []
-        for e in c.execute("SELECT type, payload FROM events WHERE ref=? AND type IN ('message.delivered',"
-                           " 'message.woken') ORDER BY seq", (r["id"],)):
-            pe = json.loads(e["payload"] or "{}")
-            step = ("woken" if pe.get("ok") else "wake-failed") if e["type"] == "message.woken" \
-                else PATH_OF.get(pe.get("via"))
-            if step and step not in path:
-                path.append(step)
         done = c.execute("SELECT 1 FROM events WHERE type='message.done' AND ref=?", (r["id"],)).fetchone()
-        out.append({"id": r["id"], "to": r["to_project"], "ts": r["ts"], "path": path, "done": bool(done)})
+        out.append({"id": r["id"], "to": r["to_project"], "ts": r["ts"], "path": letter_path(c, r), "done": bool(done)})
     return out
+
+
+def wake_misses(c, days: int = WAKE_MISS_DAYS) -> list[dict]:
+    """The letters of the last `days` days whose wake reached a session that then didn't take them (woken-missed),
+    oldest first: doctor reminds when they repeat. Computed from the bus events, nothing recorded for it."""
+    out = []
+    for r in c.execute("SELECT m.* FROM events m WHERE m.type='message' AND EXISTS (SELECT 1 FROM events w WHERE"
+                       " w.type='message.woken' AND w.ref=m.id AND w.ts >= ?) ORDER BY m.seq",
+                       (iso(now() - datetime.timedelta(days=days)),)).fetchall():
+        if "woken-missed" in letter_path(c, r):
+            out.append({"id": r["id"], "to": r["to_project"], "ts": r["ts"], "days": days})
+    return out
+
+
+def cmd_wake_misses(as_json: bool) -> None:
+    """`hubbus wake-misses [--json]`: wake_misses; no bus yet, none."""
+    misses = wake_misses(db()) if DB.exists() else []
+    if as_json:
+        print(json.dumps(misses, ensure_ascii=False))
+        return
+    for x in misses:
+        print(f"{x['ts'][:16].replace('T', ' ')}  {x['id']}  {x['to']}")
 
 
 def cmd_status(as_json: bool) -> None:
@@ -2666,6 +2715,7 @@ def cli() -> None:
     pb.add_argument("--payload", default="{}")
     pb.add_argument("--id")
     sub.add_parser("status").add_argument("--json", action="store_true")
+    sub.add_parser("wake-misses").add_argument("--json", action="store_true")
     a = ap.parse_args()
     if a.cmd in RELAYS:
         # these carry other parties' events (owner answers, dispatch claims, the assistant's records): they are not the
@@ -2740,6 +2790,8 @@ def cli() -> None:
         return cmd_open_handoffs()
     if a.cmd == "status":
         return cmd_status(a.json)
+    if a.cmd == "wake-misses":
+        return cmd_wake_misses(a.json)
 
     if a.cmd in MAIL_COMMANDS:
         return mail_command(a)

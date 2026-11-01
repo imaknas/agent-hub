@@ -84,12 +84,12 @@ $ <HUB>/bin/hubbus --help
 [exit 0]
 --- stdout
 usage: hubbus [-h]
-              {send,inbox,show,ack,done,hook,bridge,dispatch,thread,open-handoffs,open-questions,reconcile-questions,records,record-publish,publish,status} ...
+              {send,inbox,show,ack,done,hook,bridge,dispatch,thread,open-handoffs,open-questions,reconcile-questions,records,record-publish,publish,status,wake-misses} ...
 
 agent-hub's event bus: an append-only event log plus read cursors; project mailboxes are its projection.
 
 positional arguments:
-  {send,inbox,show,ack,done,hook,bridge,dispatch,thread,open-handoffs,open-questions,reconcile-questions,records,record-publish,publish,status}
+  {send,inbox,show,ack,done,hook,bridge,dispatch,thread,open-handoffs,open-questions,reconcile-questions,records,record-publish,publish,status,wake-misses}
     record-publish      stdin: one 0.4 record or a list; sent to owner (toward the assistant). Prints for each {id:
                         record id, event: event id or null, status}
 

@@ -73,6 +73,10 @@ class AtHomeToday(unittest.TestCase):
             "UserPromptSubmit": [entry("prompt")],
             "PostToolUse": [entry("tool_used", "Bash")],
             "PreToolUse": [entry("open_session_attempt", "mcp__ccd_session__start_session")],
+            # the wake waiter: in the background, its exit code passed on (no `|| true`), a day's timeout
+            "Stop": [{"hooks": [{"type": "command", "command": "[ -x ~/agent-hub/bin/hub-event ] && exec "
+                                 f"{py('~/agent-hub/bin/hub-event')} --runtime claude wait; exit 0",
+                                 "asyncRewake": True, "timeout": 86400}]}],
         }})
 
     def test_worktree_hooks(self):
@@ -84,6 +88,8 @@ class AtHomeToday(unittest.TestCase):
             ("PreCompact", None, f"{wt} end || true"),
             ("PostToolUse", "Bash", f"{wt} nudge || true"),
             ("UserPromptSubmit", None, f"{wt} prompt || true"),
+            ("Stop", None, "[ -x ~/agent-hub/bin/worktree-memory.sh ] && exec ~/agent-hub/bin/worktree-memory.sh wait; "
+                           "exit 0"),
         ))
 
     def test_resume_command(self):
@@ -139,7 +145,7 @@ class Elsewhere(unittest.TestCase):
         out = runtime_claude.install_hooks(settings)
         cmds = [h["command"] for es in out["hooks"].values() for e in es for h in e["hooks"]]
         self.assertEqual(sorted(cmds), sorted([runtime_claude.hook_command(ev) for _n, _m, ev in runtime_claude.HOOK_TABLE]
-                                              + ["echo mine"]))
+                                              + [runtime_claude.wait_command(), "echo mine"]))
         self.assertEqual(runtime_claude.install_hooks(json.loads(json.dumps(out))), out, "a rerun changes nothing")
 
     def test_worktree_hooks_replace_an_earlier_location(self):
@@ -158,7 +164,9 @@ class Elsewhere(unittest.TestCase):
         self.assertEqual(d["model"], "x")
         self.assertIn("echo mine", cmds)
         self.assertFalse([c for c in cmds if "agent-hub/" in c], cmds)
-        self.assertEqual(len([c for c in cmds if "worktree-memory.sh" in c]), 5, cmds)
+        self.assertEqual(len([c for c in cmds if "worktree-memory.sh" in c]), 6, cmds)
+        [stop] = [h for e in d["hooks"]["Stop"] for h in e["hooks"]]
+        self.assertEqual((stop["asyncRewake"], stop["timeout"]), (True, runtime_claude.WAIT_TIMEOUT_S))
 
     def test_backup_placeholders(self):
         with mock.patch.object(hubconf, "STATE", self.hub / ".state"):
@@ -227,7 +235,8 @@ class HubsOwnSessions(unittest.TestCase):
             cmds = [h["command"] for es in json.loads((ws / ".claude" / "settings.local.json").read_text())["hooks"].values()
                     for e in es for h in e["hooks"]]
             self.assertEqual(sorted(c for c in cmds if c != "echo mine"),
-                             sorted(runtime_claude.hook_command(ev) for _n, _m, ev in runtime_claude.HOOK_TABLE))
+                             sorted([runtime_claude.hook_command(ev) for _n, _m, ev in runtime_claude.HOOK_TABLE]
+                                    + [runtime_claude.wait_command()]))
         self.assertIn("echo mine", (on / ".claude" / "settings.local.json").read_text())
 
 

@@ -11,6 +11,7 @@
                "owner": {"open": 1, "undelivered": 0, "oldest": "2026-10-30T09:00:00"}},
   "letters": [{"id": "m20261030-cd34", "to": "alpha", "ts": "2026-10-30T08:00:00", "path": ["woken", "hook", "ack"], "done": true},
               {"id": "m20261030-ef56", "to": "alpha", "ts": "2026-10-30T08:10:00", "path": ["wake-failed", "resume"], "done": false},
+              {"id": "m20261030-ij90", "to": "alpha", "ts": "2026-10-30T08:15:00", "path": ["woken-missed", "resume"], "done": false},
               {"id": "m20261030-ab12", "to": "alpha", "ts": "2026-10-30T08:20:00", "path": [], "done": false},
               {"id": "m20261030-gh78", "to": "beta", "ts": "2026-10-30T08:30:00", "path": ["inbox", "handler", "held"], "done": false}]
  },

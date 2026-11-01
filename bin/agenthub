@@ -1130,13 +1130,17 @@ def cmd_doctor(argv: list[str]) -> int:
                       "mailbox work without one"),
             _("set one up: agenthub init --agent {names}", names="|".join(agent_presets())))
     elif installed == [rname]:   # one coding agent (runtime.installed unset or only the default): as before A1
+        notes = runtime_ports.feature_notes(rname)
         for feat, ok, miss in runtime_ports.feature_table(rname):
-            add("ok" if ok else "info" if feat in optional else "warn", _("{feature}: available", feature=feat) if ok else
+            add("ok" if ok else "info" if feat in optional else "warn",
+                (_("{feature}: available ({note})", feature=feat, note=notes[feat]) if feat in notes
+                 else _("{feature}: available", feature=feat)) if ok else
                 _("{feature}: off (the runtime {runtime} has no {missing})", feature=feat, runtime=rname, missing=miss),
                 "" if ok or feat in optional else
                 _("install a coding agent that supports them, and point hub.json runtime.default at it"))
     else:
         doctor_runtimes(add, rname, installed, optional)
+    doctor_wake_misses(add)
     if runtime_ports.throwaway_only(rname):
         add("warn", _("the runtime {runtime} runs only in the platform's throwaway worktree: agent-shaped judgment points "
                       "other than {points} are refused with that reason", runtime=rname,
@@ -1249,18 +1253,39 @@ def cmd_doctor(argv: list[str]) -> int:
     return report(results)
 
 
+WAKE_MISS_REMIND = 2   # letters in hubbus' window (WAKE_MISS_DAYS) whose wake reached a session that didn't take them
+
+
+def doctor_wake_misses(add) -> None:
+    """A wake that reached a session's waiter, after which that session didn't take the letter (hubbus wake-misses):
+    said once it repeats, so a change in how the coding agent handles the wake shows the next day instead of failing
+    silently (docs/design/mailbox-runtimes.md B1). The bus unreadable: nothing said here (the status page says it)."""
+    r = subprocess.run(hubconf.launch(BIN / "hubbus") + ["wake-misses", "--json"], capture_output=True, text=True)
+    try:
+        misses = json.loads(r.stdout) if r.returncode == 0 else []
+    except ValueError:
+        misses = []
+    if len(misses) >= WAKE_MISS_REMIND:
+        add("warn", _("{n} {n:letter|letters} in the last {days} days woke a session that then didn't take {n:it|them} "
+                      "(the latest: {id} to {to}); the coding agent may have changed how it handles the wake",
+                      n=len(misses), days=misses[0]["days"], id=misses[-1]["id"], to=misses[-1]["to"]),
+            _("the status page's mailbox section shows each letter's path; hub-event.log has each waiter's end"))
+
+
 def doctor_runtimes(add, default: str, installed: list[str], optional: set) -> None:
     """Doctor with more than one coding agent (hub.json runtime.installed; docs/design/mailbox-runtimes.md A1): a column
     per runtime in the feature table, each runtime's rules file, and the runtimes refused in sandboxed projects."""
     import runtime_ports
     names = list(dict.fromkeys([default, *installed]))
     tables = {n: runtime_ports.feature_table(n) for n in names}
+    notes = runtime_ports.feature_notes(default)
     add("ok", _("coding agents: {names} (the platform starts {default}; hub.json runtime.installed)",
                 names=", ".join(installed), default=default))
     for i, (feat, _ok, _miss) in enumerate(tables[default]):
         cells = [(n, tables[n][i][1], tables[n][i][2]) for n in names]
         if all(ok for _n, ok, _m in cells):
-            add("ok", _("{feature}: available", feature=feat))
+            add("ok", _("{feature}: available ({note})", feature=feat, note=notes[feat]) if feat in notes
+                else _("{feature}: available", feature=feat))
             continue
         states = _("; ").join(_("{runtime} available", runtime=n) if ok else
                               _("{runtime} off (has no {missing})", runtime=n, missing=miss) for n, ok, miss in cells)

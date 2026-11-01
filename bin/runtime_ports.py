@@ -83,8 +83,10 @@ The current interfaces (the other layers get added one at a time, following the 
                                                          hook as before
     Outside the port, a runtime may also provide wake_address(env) -> dict | None: what a session's hook environment
     says about reaching that session, which the platform keeps in secrets_dir()/sessions/<sid>.json (mode 600; in no
-    sandbox, the bus, .state or the backup) for wake to use, and unsupported(port) -> str | None: why it lacks a port
-    (doctor shows it in the feature table instead of only the port's name)
+    sandbox, the bus, .state or the backup) for wake to use; wait(raw, env) -> (exit code, stderr, how): a hook that
+    waits for a wake (`hub-event wait`; its files go in the same folder, hubconf.session_file); unsupported(port) ->
+    str | None: why it lacks a port (doctor shows it in the feature table instead of only the port's name); and
+    note(port) -> str | None: what to know about a port it has (doctor shows it after "available")
   auth (layer 6, login): the platform says only "which kind of login" (mode: token = a long-lived credential for
   unattended use, subscription = the interactive login, for jobs that need connectors; the names follow the auth field
   of contracts/llm-points.yaml); where the credentials are and what the environment variables are called is the
@@ -223,6 +225,17 @@ def missing_label(name: str | None, port: str) -> str:
     why = getattr(_module(name or default_name()), "unsupported", None)
     why = why(port) if callable(why) else None
     return _("{label}: {why}", label=label, why=why) if why else label
+
+
+def feature_notes(name: str | None = None) -> dict[str, str]:
+    """{feature: what to know} for the features this runtime has, from its note(port) for the ports they need."""
+    fn = getattr(_module(name or default_name()), "note", None)
+    have, out = capabilities(name), {}
+    for feat, need in features():
+        notes = [n for p in need if p in have and callable(fn) and (n := fn(p))]
+        if notes and set(need) <= have:
+            out[feat] = _(", ").join(notes)
+    return out
 
 
 def optional_features() -> set[str]:

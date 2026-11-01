@@ -25,7 +25,8 @@ Usage: merge-hook-settings.py <path to .claude/settings.local.json>
        merge-hook-settings.py --worktree <user-level settings.json>
          (hub machine: ~/.claude/settings.json; laptop: ~/.claude-personal/settings.json, not the work ~/.claude)
          installs worktree-memory.sh's hooks: a git worktree has no project local settings, so only user-level hooks
-         fire. In the main checkout that script does nothing, so it doesn't duplicate the project's hooks.
+         fire. In the main checkout that script does nothing, so it doesn't duplicate the project's hooks. Its Stop hook
+         is the wake waiter (docs/design/mailbox-runtimes.md B1).
 """
 import json
 import sys
@@ -43,7 +44,18 @@ WORKTREE_HOOKS = (
     ("PreCompact", None, f"{WT} end || true"),
     ("PostToolUse", "Bash", f"{WT} nudge || true"),
     ("UserPromptSubmit", None, f"{WT} prompt || true"),
+    # the waiter that wakes an idle session for a letter (runtime_claude.wait_hook): run in the background, its exit
+    # code passed on (exec, no `|| true`); worktree-memory.sh hands it to hub-event in a linked worktree only
+    ("Stop", None, f"[ -x {hubconf.hub_bin(WT_SCRIPT)} ] && exec {hubconf.hub_bin(WT_SCRIPT)} wait; exit 0"),
 )
+
+
+def hook_fields(command: str) -> dict:
+    """The fields a worktree hook entry carries besides its command: the waiter's are the project hooks' own."""
+    if command.endswith(" wait; exit 0"):
+        import runtime_claude
+        return {k: v for k, v in runtime_claude.wait_hook().items() if k not in ("type", "command")}
+    return {}
 
 
 def has_command(entries, command):
@@ -91,7 +103,7 @@ def main():
     for event, matcher, command in WORKTREE_HOOKS:
         entries = hooks.setdefault(event, [])
         if not has_command(entries, command):
-            entry = {"hooks": [{"type": "command", "command": command}]}
+            entry = {"hooks": [{"type": "command", "command": command, **hook_fields(command)}]}
             if matcher:
                 entry = {"matcher": matcher, **entry}
             entries.append(entry)

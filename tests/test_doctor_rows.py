@@ -71,6 +71,8 @@ class Doctor(unittest.TestCase):
         c = [str(x) for x in cmd]
         if c[0].endswith("setup-python") or any(x.endswith("config-check") for x in c):
             return subprocess.CompletedProcess(c, 0, "ok\n", "")
+        if any(x.endswith("hubbus") for x in c) and "wake-misses" in c:   # the bus: none of these tests' business
+            return subprocess.CompletedProcess(c, 0, "[]", "")
         self.unexpected.append(c)
         return subprocess.CompletedProcess(c, 1, "", "not in this test\n")
 

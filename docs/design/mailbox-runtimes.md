@@ -9,7 +9,8 @@ version.
 
 Status: step 1 (A3) implemented on 11-01 (record in `docs/design/mailbox-routing.md`, "11-01: an MCP session holds a
 delegation back"); step 2 (B1) implemented on 11-01 with Claude's `wake` Unsupported (record in mailbox-routing.md,
-"11-01: waking a live session"); step 3 (A1) implemented on 11-01 (record in mailbox-routing.md, "11-01: more than one
+"11-01: waking a live session"), and Claude's `wake` built on 11-02 as an asyncRewake waiter (record in
+mailbox-routing.md, "11-02: Claude Code's wake"); step 3 (A1) implemented on 11-01 (record in mailbox-routing.md, "11-01: more than one
 coding agent"); step 4 is the next version.
 
 r2 followed two cold reviews: one against the code, one against the tools' documentation. r3 fixes a third review of
@@ -210,7 +211,7 @@ Before building, check:
 
 The `asyncRewake` hook is the fallback if the socket can't be used. A background hook started at SessionStart polls the
 bus for this session's letters and exits 2 when one arrives. That costs a long-lived process per session, so it comes
-second.
+second. (As built on 11-02, the fallback is what Claude uses, armed on Stop rather than SessionStart: step 2 below.)
 
 **Why B2 (r1) is dropped.** r1 let a sending session nudge the receiving project's session itself. Reviewers found that
 it gives other projects session ids and cwds, bypasses the outbox's sender checks for sandboxed projects, and loosens
@@ -305,6 +306,45 @@ implements it, port by port, saying the rest is unsupported. What the reviews fo
      its `timeout` is enforced (600 seconds by default) and a hook process ends when it wakes, so one SessionStart
      poller gives at most one wake within its timeout. It needs a respawn design of its own (re-armed at the end of each
      turn, one poller per session), which no review has seen. Left to the owner.
+
+   **Claude's `wake` built 11-02, as an asyncRewake waiter re-armed at every Stop.** A live spike that day (Claude
+   Desktop, its bundled CLI 2.1.309, a throwaway folder) settled what the docs left open:
+   1. A Stop hook with `asyncRewake: true` that exits 2 wakes an idle session about 1 s later and starts a turn. Its
+      stderr reaches Claude as a system reminder reading `Stop hook blocking error from command "Stop": <stderr>`, so
+      the notice names agent-hub and says what to run.
+   2. A large timeout holds: with `timeout: 86400`, a waiter armed at 02:06:42 still woke the session at 02:18:39.
+   3. A waiter on SessionStart blocks the session's first reply (Desktop waits for SessionStart hooks; 15 minutes in the
+      spike). So it is armed only on Stop, at every turn's end, and a new session is wakeable only once its first turn
+      has ended.
+   4. Each Stop arms a new waiter, so a request any waiter can see again becomes a wake loop (the spike's glob matched
+      its own taken files and woke the session about 10 times for one request). A request is taken exactly once.
+   5. Desktop runs its own CLI binary (not nvm's `claude`), with `CLAUDE_PID` in the hook environment; nothing here
+      looks for the session's process by name.
+
+   As built (details in mailbox-routing.md, "11-02"), and where it differs from the text above:
+   - The waiter is `hub-event --runtime claude wait` → `runtime_claude.wait`, the one hub-event entry point that doesn't
+     always exit 0. Its files are in `secrets_dir()/sessions/` beside the addresses: `<sid>.waiter` (newest wins,
+     heartbeat by mtime) and `<sid>.wake-<nonce>` requests, taken by an atomic rename to a dot name. It reads no bus:
+     the request file is the only signal. It doesn't poll the bus as the text above says; `wake()` writes the request.
+   - `wake()` is True only while the session's waiter heartbeats; False otherwise, recorded as `ok: false`.
+   - The waiter's liveness is its heartbeat, not `live_sessions()`: a Desktop session started with `--resume=<id>
+     --fork-session` runs under a new id that is not on its command line, so `live_sessions()` would miss it and prune
+     its record. Dispatch
+     itself still asks `live_sessions()` before it wakes (`to_s in live`, `wake_target`), so such a session is not
+     woken; that gap is the sessions port's, not the waiter's.
+   - The socket token is no longer kept (`runtime_claude.wake_address` removed): the waiter needs none.
+   - "Woken, not picked up" (the session didn't take the letter within `CONVERSATION_WAIT_MIN` of the wake) is a step on
+     the status page, and doctor reminds when it happens twice in 7 days (`hubbus wake-misses`), so a change in how
+     Claude Code handles the wake shows the next day.
+   - Hooks: each project's at its next session start (sync-local-setup → `hub-event install`), a sandboxed project's by
+     render-project-settings (`platform_hooks()`). A worktree session gets the project's hooks only once its
+     `.claude/settings.local.json` link exists (worktree-memory.sh `start`); for its first session the user-level
+     worktree hooks carry a Stop waiter too (`merge-hook-settings.py --worktree`, `worktree-memory.sh wait`), which,
+     like every user-level change, is installed only when the owner says so.
+
+   Left: whether Claude Code picks up hooks from a settings file that appears mid-session (the worktree link); whether
+   a woken session in a permission-skipping mode behaves the same; dispatch's `live_sessions()` missing forked sessions;
+   a session idle longer than the timeout (a day) isn't wakeable until its next turn.
 3. **A1**: `runtime.installed`, runtime-routed calls, hooks carrying their runtime, the presence column, doctor's
    columns. **Done 11-01.** Characterization tests of a Claude-only machine first (`tests/test_runtime_installed.py`
    ClaudeOnlyToday, through the real Claude adapter); with `runtime.installed` absent or `[claude]` every golden is

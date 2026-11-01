@@ -1,8 +1,8 @@
 """The runtime adapter (Claude Code): the only place the platform learns about Claude Code's sessions and settings
 format.
 
-Switching tools, or Claude Code shipping an official way to "wake an open session", changes only this file; hubbus and
-the projects' agents don't need to change. Design: docs/design/mailbox-routing.md (sessions),
+Switching tools, or Claude Code changing how an open session is woken, changes only this file; hubbus and the projects'
+agents don't need to change. Design: docs/design/mailbox-routing.md (sessions),
 docs/design/capabilities.md (settings). Standard library only; the system python3 (3.9) can import it too, which is why
 this doesn't import registry/policy and only takes the dict policy.policy() computed.
 
@@ -14,6 +14,10 @@ this doesn't import registry/policy and only takes the dict policy.policy() comp
   resume_args(sid)       the claude arguments for resuming in the background: --resume <sid> --fork-session (tested
                          10-24: the fork carries the full context, gets a new id, and the original transcript is left
                          completely untouched: an open session isn't affected)
+  wake(sid, text)        wake an idle open session for a letter: a request for the session's waiter, an asyncRewake
+                         Stop hook (`hub-event --runtime claude wait` → wait()) that exits 2 with the notice; True only
+                         while a waiter heartbeats. Details in the "waking a live session" section below
+                         (docs/design/mailbox-runtimes.md B1)
 
 Settings (neutral policy → Claude Code's settings; the policy's fields are in policy.py):
   settings(pol)          → (sandbox, deny, allow): the platform-managed part of the project's
@@ -208,28 +212,174 @@ def session_process(command: str) -> bool:
 
 
 # ---------- waking a live session (runtime_ports' wake; docs/design/mailbox-runtimes.md B1) ----------
-# Claude Code binds a per-session inbox socket and exports its path and a per-session token to hooks, SessionStart
-# included (code.claude.com/docs/en/cross-session-messaging, "The session's inbox socket"; env-vars,
-# CLAUDE_CODE_MESSAGING_SOCKET / _TOKEN). The docs give only the connection's first line, {"type":"auth","token":…};
-# the format of a message after it is not documented (checked 11-01). So wake() is not implemented and the port is
-# Unsupported with that reason, rather than reverse-engineered. The address is kept already (wake_address), so wake()
-# is the only piece to add once the format is documented. The other documented wake, an asyncRewake hook, ends at its
-# hook timeout and at its first wake, so it needs a respawn design of its own (left to the owner).
+# Through an asyncRewake hook (code.claude.com/docs/en/hooks, "Run hooks in the background"): a hook run in the
+# background that exits 2 wakes Claude even when the session is idle, its stderr shown to Claude as a system reminder
+# (it reads "Stop hook blocking error from command …: <stderr>", so the text says what it is). Its timeout is enforced.
+# Live spike 11-02 (Desktop, CLI 2.1.309): the wake comes about 1 s after the exit; a timeout of 86400 holds (a waiter
+# armed for 12 minutes still woke); a waiter on SessionStart holds the session's first reply until it ends, so it is
+# armed only on Stop; a request matched again after it was taken woke the session ~10 times for one letter.
+#
+# So: every Stop (the end of every turn) arms one waiter, `hub-event --runtime claude wait` (wait() below), which
+#   - records itself in <sessions>/<session>.waiter (hubconf.session_file; the secrets directory, in no sandbox), the
+#     newest winning: an older one that finds another's token there, or no file (SessionEnd, prune), exits 0;
+#   - heartbeats that file every poll (its mtime), which is how wake() tells a live waiter from a dead one;
+#   - takes each <session>.wake-<nonce> request by renaming it to a dot name no lookup matches (rename is atomic: of
+#     two waiters only one gets it), then unlinks it, prints the notices to stderr and exits 2: each request wakes once;
+#   - exits 0 when the session's process (CLAUDE_PID, the session's own CLI: Desktop's is not nvm's) is gone, and
+#     before its own timeout.
+# wake(sid, text) writes a request (tmp + rename) only while that session's waiter heartbeats; otherwise False, and
+# dispatch's usual routing goes on. A session is wakeable once its first turn has ended, until it is idle for longer
+# than the hook timeout. Platform runs (HUB_LLM_POINT, HUBBUS_LEASE: checked by hub-event) and -p / SDK runs
+# (CLAUDE_CODE_ENTRYPOINT; -p kills background hooks at teardown) don't arm.
+# The inbox socket (cross-session-messaging) is not used: its message format is still undocumented (checked 11-01).
 
-MESSAGING_VARS = {"socket": "CLAUDE_CODE_MESSAGING_SOCKET", "token": "CLAUDE_CODE_MESSAGING_TOKEN"}
+WAIT_TIMEOUT_S = 86400       # the Stop hook's timeout (enforced for asyncRewake); the waiter leaves before it
+WAIT_MARGIN_S = 60
+WAIT_POLL_S = 2.0
+WAITER_FRESH_S = 10          # a waiter whose heartbeat is older is taken as gone
+REQUEST_TTL_S = 600          # a request no waiter took within this is dropped unshown (its letter is routed by then)
+HEADLESS_ENTRYPOINTS = {"sdk-cli", "sdk-ts", "sdk-py"}   # -p (the CLI turns "cli" into sdk-cli), Agent SDK programs
 
 
-def wake_address(env) -> dict | None:
-    """The session's inbox socket and token from its hook environment (None: messaging is off in that session)."""
-    out = {k: env.get(v) for k, v in MESSAGING_VARS.items() if env.get(v)}
-    return out if out.get("socket") else None
+def note(port: str) -> str | None:
+    """What to know about a port this runtime has, for doctor's feature table."""
+    if port == "wake":
+        return _("a session can be woken once its first turn has ended")
+    return None
+
+
+def _session_key(sid: str) -> str:
+    import runtime_ports
+    return runtime_ports.qualify(NAME, sid)
+
+
+def _fresh(path, now: float) -> bool:
+    try:
+        return now - path.stat().st_mtime <= WAITER_FRESH_S
+    except OSError:
+        return False
+
+
+def wake(sid: str, text: str, now=None) -> bool:
+    """Leave a wake request for this session's waiter: True when a live one will take it."""
+    import secrets
+    import time
+    import hubconf
+    key = _session_key(sid)
+    waiter = hubconf.session_file(key, "waiter")
+    if not waiter or not _fresh(waiter, time.time() if now is None else now):
+        return False
+    nonce = secrets.token_hex(8)
+    dest = hubconf.session_file(key, f"wake-{nonce}")
+    tmp = dest.with_name(f".{dest.name}.tmp")
+    fd = os.open(tmp, os.O_WRONLY | os.O_CREAT | os.O_EXCL | getattr(os, "O_NOFOLLOW", 0), 0o600)
+    with os.fdopen(fd, "w") as fh:
+        fh.write(text)
+    os.replace(tmp, dest)
+    return True
+
+
+def _alive(pid: int | None) -> bool:
+    if not pid:
+        return True   # not known: the waiter file, its heartbeat and the deadline still end it
+    try:
+        os.kill(pid, 0)
+    except ProcessLookupError:
+        return False
+    except OSError:
+        pass   # someone else's process: it exists
+    return True
+
+
+def _take(key: str, now: float) -> list[str]:
+    """Every wake request for this session, each taken once: renamed to a dot name first (a rename is atomic; a
+    request another waiter took is gone), then read and unlinked. One past REQUEST_TTL_S is taken and dropped."""
+    import hubconf
+    d, prefix, out = hubconf.session_addresses_dir(), f"{key}.wake-", []
+    try:
+        with os.scandir(d) as it:
+            names = sorted(e.name for e in it if e.name.startswith(prefix))
+    except OSError:
+        return []
+    for name in names:
+        taken = d / f".{name}.taken"
+        try:
+            os.rename(d / name, taken)
+        except OSError:
+            continue
+        try:
+            stale = now - taken.stat().st_mtime > REQUEST_TTL_S
+            text = taken.read_text(errors="replace").strip()
+        except OSError:
+            stale, text = True, ""
+        taken.unlink(missing_ok=True)
+        if text and not stale:
+            out.append(text)
+    return out
+
+
+def wait(raw: str, env, *, clock=None, sleep=None, poll: float = WAIT_POLL_S) -> tuple[int, str, str]:
+    """The Stop hook's waiter (see above): (exit code, stderr, how it ended). Exit 2 with the notices wakes the
+    session; 0 ends quietly."""
+    import secrets
+    import time
+    import hubconf
+    clock, sleep = clock or time.time, sleep or time.sleep
+    try:
+        sid = (json.loads(raw or "{}") or {}).get("session_id")
+    except (ValueError, AttributeError):
+        sid = None
+    if not sid or not isinstance(sid, str):
+        return 0, "", "no-session"
+    if env.get("CLAUDE_CODE_ENTRYPOINT") in HEADLESS_ENTRYPOINTS:
+        return 0, "", "headless"
+    key = _session_key(sid)
+    waiter = hubconf.session_file(key, "waiter")
+    if not waiter:
+        return 0, "", "no-session"
+    try:
+        pid = int(env.get("CLAUDE_PID") or 0) or None
+    except ValueError:
+        pid = None
+    token = f"{os.getpid()}-{secrets.token_hex(8)}"
+    waiter.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
+    tmp = waiter.with_name(f".{waiter.name}.{token}.tmp")
+    fd = os.open(tmp, os.O_WRONLY | os.O_CREAT | os.O_EXCL | getattr(os, "O_NOFOLLOW", 0), 0o600)
+    with os.fdopen(fd, "w") as fh:
+        fh.write(token)
+    os.replace(tmp, waiter)   # newest wins
+
+    def leave(code, text, why):
+        try:
+            if waiter.read_text() == token:
+                waiter.unlink()
+        except OSError:
+            pass
+        return code, text, why
+
+    deadline = clock() + WAIT_TIMEOUT_S - WAIT_MARGIN_S
+    while True:
+        try:
+            if waiter.read_text() != token:
+                return 0, "", "superseded"
+        except OSError:
+            return 0, "", "ended"
+        if not _alive(pid):
+            return leave(0, "", "session-gone")
+        texts = _take(key, time.time())   # request ages are file times
+        if texts:
+            return leave(2, "\n".join(texts), "woke")
+        if clock() >= deadline:
+            return leave(0, "", "deadline")
+        try:
+            os.utime(waiter)   # the heartbeat wake() looks at
+        except OSError:
+            return 0, "", "ended"
+        sleep(poll)
 
 
 def unsupported(port: str) -> str | None:
-    """Why a port is missing here, for doctor's feature table."""
-    if port == "wake":
-        return _("Claude Code documents only the auth line of a session's inbox socket, not the message format; "
-                 "a letter waits for the session's next hook")
+    """Why a port is missing here, for doctor's feature table (none is, today)."""
     return None
 
 
@@ -650,6 +800,23 @@ def hook_command(event: str) -> str:
             f"--runtime {NAME} {event} || true")
 
 
+# The waiter (wait() above): a Stop hook run in the background that may wake the session (asyncRewake), with a timeout
+# long enough to wait through an idle day. Never on SessionStart: the session's first reply would wait for it. Its
+# command passes the waiter's exit code on (exec; no `|| true`, which would turn the wake's 2 into 0), and is silent
+# when the entry point is missing.
+WAIT_HOOK = "Stop"
+
+
+def wait_command() -> str:
+    import hubconf
+    return (f"[ -x {hubconf.hub_bin('hub-event')} ] && exec {hubconf.sh_py(hubconf.MAIN / 'bin' / 'hub-event')} "
+            f"--runtime {NAME} wait; exit 0")
+
+
+def wait_hook() -> dict:
+    return {"type": "command", "command": wait_command(), "asyncRewake": True, "timeout": WAIT_TIMEOUT_S}
+
+
 def parse_event(event: str, raw: str):
     try:
         data = json.loads(raw or "{}")
@@ -710,14 +877,15 @@ def _strip_hooks(settings: dict, ours) -> dict:
 
 
 def install_hooks(settings: dict) -> dict:
-    """Platform-managed hooks (MANAGED in the command) are replaced as a set by HOOK_TABLE's hub-event; the user's own
-    stay; rerunning gives the same result."""
+    """Platform-managed hooks (MANAGED in the command) are replaced as a set by HOOK_TABLE's hub-event and the Stop
+    waiter (wait_hook); the user's own stay; rerunning gives the same result."""
     hooks = _strip_hooks(settings, MANAGED.search)["hooks"]
     for name, matcher, event in HOOK_TABLE:
         entry = {"hooks": [{"type": "command", "command": hook_command(event)}]}
         if matcher:
             entry = {"matcher": matcher, **entry}
         hooks.setdefault(name, []).append(entry)
+    hooks.setdefault(WAIT_HOOK, []).append({"hooks": [wait_hook()]})
     return settings
 
 

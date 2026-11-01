@@ -41,8 +41,8 @@
  "cannot read {file}: {err}": "讀不了 {file}:{err}",
  "cannot read {file}: not a JSON object": "讀不了 {file}:不是 JSON 物件",
  "`claude mcp list` does not show {names}, configured for the user: its output may have changed": "`claude mcp list` 沒列出使用者層級設定的 {names}:它的輸出可能改了",
- "Claude Code documents only the auth line of a session's inbox socket, not the message format; a letter waits for the session's next hook": "Claude Code 的 session 收件 socket 只公開了驗證那一行,沒公開訊息格式;信等 session 下一次 hook 才送到",
  "a Claude Pro, Max, Ultra, Team or Enterprise plan": "Claude Pro、Max、Ultra、Team 或 Enterprise 方案",
  "everything: letters and note reminders inside your chats, and work in the background": "全部:對話中直接收到信和寫筆記的提醒,還有背景工作",
- "the worktree hooks in {file}": "{file} 裡的 worktree hook"
+ "the worktree hooks in {file}": "{file} 裡的 worktree hook",
+ "a session can be woken once its first turn has ended": "session 跑完第一輪之後才叫得醒"
 }

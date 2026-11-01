@@ -151,5 +151,6 @@
   "Sent": "寄出",
   "Path": "經過",
   "The scheduler watchdog has no alert channel it can send on (Discord, ntfy, email or macOS notifications in hub.json alerts): it cannot alert when the scheduler stops": "排程器的看門狗沒有能用的警報管道(hub.json alerts 裡的 Discord、ntfy、email 或 macOS 通知):排程器停了它也發不出警報",
-  "Record {id} of {project} ({ext} {type}, origin {origin}) was sent with different content ({n} versions, last {last}); the bus keeps them all and readers take {kept}, the greater RFC 8785 form (core §10). The sender should not reuse an id": "{project} 的 record {id}({ext} {type},origin {origin})同一個 id 送了不同內容({n} 個版本,最後一次 {last});bus 全部留著,讀的時候取 {kept},RFC 8785 序列化較大的那筆(core §10)。送的那方不該重用 id"
+  "Record {id} of {project} ({ext} {type}, origin {origin}) was sent with different content ({n} versions, last {last}); the bus keeps them all and readers take {kept}, the greater RFC 8785 form (core §10). The sender should not reuse an id": "{project} 的 record {id}({ext} {type},origin {origin})同一個 id 送了不同內容({n} 個版本,最後一次 {last});bus 全部留著,讀的時候取 {kept},RFC 8785 序列化較大的那筆(core §10)。送的那方不該重用 id",
+  "woken, not picked up": "叫醒了但沒接"
 }

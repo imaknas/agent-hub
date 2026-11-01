@@ -215,5 +215,8 @@
  "agent-hub's decisions (nightly notes, weekly report) have nowhere to run: no AI agent and no model provider is set up": "agent-hub 的判斷(每晚整理筆記、週報)沒有地方可以跑:沒有設定 AI agent,也沒有設定模型 provider",
  "Saved it? Check that {label} answers now?": "存好了嗎?現在檢查 {label} 能不能回應?",
  "{label} runs agent-hub's background work with a one-year token that you make and save yourself (agent-hub never sees it; needs {needs}). In a terminal (the app's own terminal works): run `{command}` and sign in, then run `{store}` and paste the token it printed. Then: agenthub init --agent {name}": "{label} 用一個一年期的 token 跑 agent-hub 的背景工作，這個 token 由你自己產生、自己存(agent-hub 不會經手;需要 {needs})。在終端機(App 內建的終端機也可以):執行 `{command}` 並登入，再執行 `{store}`,貼上它印出的 token。之後:agenthub init --agent {name}",
- "{file} isn't there yet. Later: agenthub init --agent {name}": "{file} 還不存在。之後:agenthub init --agent {name}"
+ "{file} isn't there yet. Later: agenthub init --agent {name}": "{file} 還不存在。之後:agenthub init --agent {name}",
+ "{feature}: available ({note})": "{feature}:可以用({note})",
+ "{n} {n:letter|letters} in the last {days} days woke a session that then didn't take {n:it|them} (the latest: {id} to {to}); the coding agent may have changed how it handles the wake": "最近 {days} 天有 {n} 封信叫醒了 session,那個 session 卻沒接(最近一封:{id},給 {to});coding agent 處理叫醒的方式可能變了",
+ "the status page's mailbox section shows each letter's path; hub-event.log has each waiter's end": "狀態頁的信箱區列出每封信怎麼走的;hub-event.log 記著每個等待程序怎麼結束"
 }

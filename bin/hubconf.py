@@ -168,7 +168,35 @@ def session_addresses_dir() -> pathlib.Path:
 
 def session_address_file(session: str) -> pathlib.Path | None:
     """<session_addresses_dir>/<session>.json, or None when the id isn't a plain file name."""
-    return session_addresses_dir() / f"{session}.json" if _SESSION_FILE.match(session or "") else None
+    return session_file(session, "json")
+
+
+# A session's files there: <session>.json (an address a runtime keeps), <session>.waiter (the runtime's process waiting
+# to wake it), <session>.wake-<nonce> (a wake request for it). Dot files are a writer's or a claimer's in passing.
+_SESSION_SUFFIX = re.compile(r"^(?:json|waiter|wake-[A-Za-z0-9_]{1,64})$")
+_SESSION_OF = re.compile(r"^(?P<session>[A-Za-z0-9][A-Za-z0-9._:-]{0,199})\.(?:json|waiter|wake-[A-Za-z0-9_]{1,64})$")
+
+
+def session_file(session: str, suffix: str) -> pathlib.Path | None:
+    """<session_addresses_dir>/<session>.<suffix>, or None when either isn't a plain file name."""
+    ok = _SESSION_FILE.match(session or "") and _SESSION_SUFFIX.match(suffix or "")
+    return session_addresses_dir() / f"{session}.{suffix}" if ok else None
+
+
+def session_of_file(name: str) -> str | None:
+    """Whose file this is in session_addresses_dir (None: a dot file, or not one of a session's)."""
+    m = _SESSION_OF.match(name or "")
+    return m["session"] if m else None
+
+
+def session_files(session: str) -> list[pathlib.Path]:
+    """Every file of this session there (its address, waiter, wake requests): what its end removes."""
+    d = session_addresses_dir()
+    try:
+        with os.scandir(d) as it:
+            return [d / e.name for e in it if session_of_file(e.name) == session]
+    except OSError:
+        return []
 
 
 def host(role: str) -> str:

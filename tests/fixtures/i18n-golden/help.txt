@@ -74,12 +74,12 @@ $ <HUB>/bin/hubbus --help
 [exit 0]
 --- stdout
 usage: hubbus [-h]
-              {send,inbox,show,ack,done,hook,bridge,dispatch,thread,open-handoffs,open-questions,reconcile-questions,records,record-publish,publish,status} ...
+              {send,inbox,show,ack,done,hook,bridge,dispatch,thread,open-handoffs,open-questions,reconcile-questions,records,record-publish,publish,status,wake-misses} ...
 
 agent-hub 的事件匯流排:只 append 的事件 log + 讀取游標,專案信箱是它的投影。
 
 positional arguments:
-  {send,inbox,show,ack,done,hook,bridge,dispatch,thread,open-handoffs,open-questions,reconcile-questions,records,record-publish,publish,status}
+  {send,inbox,show,ack,done,hook,bridge,dispatch,thread,open-handoffs,open-questions,reconcile-questions,records,record-publish,publish,status,wake-misses}
     record-publish      stdin:一個 0.4 record 或陣列;寄給 owner(往助理)。輸出每筆 {id: record id, event: 事件 id 或 null, status}
 
 options:
