@@ -102,6 +102,37 @@ class Records(unittest.TestCase):
         only_in = json.loads(self.cli("records", "--project", "proj", "--direction", "in"))
         self.assertEqual([o["record"]["type"] for o in only_in], ["settled"])
 
+    def test_a_record_never_displaces_one_of_another_type(self):
+        """core §10 (0.5): the same id on another type or origin is a record of its own, kept beside the first"""
+        first = self.m.publish_record(self.c, settled(), self.owner, "proj")
+        note = {**settled(), "type": "note", "about": {"key": "abc123"}, "note": "x"}
+        for k in ("outcome", "terms_rev", "authority"):
+            del note[k]
+        eid, new = self.m.publish_record(self.c, note, self.owner, "proj")
+        self.assertEqual((eid, new), (f"{first[0]}:principal:note", True))
+        self.assertFalse(self.m.publish_record(self.c, note, self.owner, "proj")[1], "and a resend is still a no-op")
+        self.assertEqual(self.c.execute("SELECT COUNT(*) FROM events WHERE type='record'").fetchone()[0], 2)
+
+    def test_record_publish_reads_0_5_and_refuses_a_proof(self):
+        """0.5 records go out; evidence.proof is reserved, senders never emit it (core §5.2)"""
+        r05 = {**raised("k5"), "ph": "0.5", "ext": "acts/0.5"}
+        claim = {**raised("k6"), "ph": "0.5", "ext": "acts/0.5", "id": "c:k6:1", "type": "claimed", "origin": "agent",
+                 "outcome": "done", "evidence": {"basis": "paid", "proof": "eyJ..c2ln"}}
+        with mock.patch.object(sys, "argv", ["hubbus", "record-publish", "--json", "-"]), \
+                mock.patch.object(sys, "stdin", io.StringIO(json.dumps([r05, claim]))), \
+                redirect_stdout(io.StringIO()) as out, self.assertRaises(SystemExit):
+            self.m.main()
+        self.assertEqual([r["status"] for r in json.loads(out.getvalue())], ["accepted", "invalid"])
+
+    def test_outgoing_converts_down_to_the_send_version(self):
+        """core §14: a record made in 0.5 goes to a principal side that speaks 0.4 as 0.4"""
+        r05 = {**raised("k5"), "ph": "0.5", "ext": "acts/0.5"}
+        with mock.patch.object(self.m.ph_wire.hubconf, "get", return_value=None):
+            self.assertEqual((self.m.outgoing(r05)["ph"], self.m.outgoing(r05)["ext"]), ("0.4", "acts/0.4"))
+            self.assertEqual(self.m.outgoing(raised())["ext"], "acts/0.3", "older ones go as they are")
+        with mock.patch.object(self.m.ph_wire.hubconf, "get", return_value="0.5"):
+            self.assertEqual(self.m.outgoing(r05), r05)
+
     def test_inbox_shows_who_decided(self):
         self.m.publish_record(self.c, settled(), self.owner, "proj")
         text = self.cli("inbox", "--project", "proj")

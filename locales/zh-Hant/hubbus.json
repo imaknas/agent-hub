@@ -103,6 +103,7 @@
  "hook {event} failed: {e!r}": "hook {event} 失敗:{e!r}",
  "unknown project {project}": "不認得的專案 {project}",
  "a record with origin principal can only come from the assistant (the bridge takes it in); projects cannot send one": "origin principal 的 record 只能從助理那邊來(bridge 收),專案這邊不能寄",
+ "evidence.proof is reserved for the principal's own proof; senders do not emit it (core §5.2)": "evidence.proof 保留給 principal 自己的證明;寄件方不送(core §5.2)",
  "asked whether {n} {n:question is|questions are} still needed": "問了 {n} 題還要不要",
  ": {ids}": ":{ids}",
  "hubbus: cannot tell which project the sender is (outside a project folder add --from <project>)": "hubbus: 不知道寄件人是哪個專案(不在專案目錄裡就加 --from <專案>)",

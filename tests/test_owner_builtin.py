@@ -69,8 +69,8 @@ class Builtin(unittest.TestCase):
                          ("principal", "done", {"kind": "principal", "decider": "person:alex"}))
         self.assertEqual(rec["by"], "agent-hub:owner-side")
         need = next(e["record"] for e in self.records() if e["record"]["type"] == "raised")
-        self.assertEqual(rec["terms_digest"], ph_wire.terms_digest(need), "core §5.3: what it was settled against")
-        self.assertEqual((rec["ph"], rec["ext"]), (ph_wire.SEND, ph_wire.ACTS))
+        self.assertEqual(rec["terms_digest"], ph_wire.terms_digest(need, "0.4"), "core §4: what it was settled against, as 0.4 digests it")
+        self.assertEqual((rec["ph"], rec["ext"]), ("0.4", "acts/0.4"), "hub.json principal_handoff.send_version, 0.4 when not set")
         self.assertNotIn("task-agent-hub-0001", self.run_("owner.py", "list").stdout, "once closed, no longer listed")
 
     def test_resettle_supersedes_the_earlier_one(self):
@@ -109,7 +109,7 @@ class Builtin(unittest.TestCase):
         self.test_answer_closes_the_question()
         [ans] = [e for e in self.records() if e["record"]["type"] == "settled"]
         self.assertEqual((ans["record"]["ext"], ans["record"]["answer"], ans["question"]),
-                         (ph_wire.DECISIONS, {"text": "Use SQLite"}, "Which cache?"))
+                         ("decisions/0.4", {"text": "Use SQLite"}, "Which cache?"))
         self.assertTrue(ans["record"]["terms_digest"].startswith("sha-256:"))
 
 

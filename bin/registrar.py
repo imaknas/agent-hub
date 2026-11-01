@@ -32,7 +32,7 @@ For each project (the STATE.md of its memory copy, plus the platform's own openc
      commit-hub-files.sh), and only after that succeeds `hubbus done` the applied records; on failure, wait for the
      next night.
 
-Records: reads acts 0.3 and 0.4, sends the version bin/ph_wire.py names (0.4).
+Records: reads acts 0.3, 0.4 and 0.5, sends the version hub.json principal_handoff.send_version names (bin/ph_wire.py).
 
 Transition (v1 not yet retired): task letters v1 sent on the bus and the personal assistant's v1 handoffs count too
 (v1_compat); those keys existed before there were records. When v1 is retired, delete v1_compat along with it.
@@ -126,7 +126,7 @@ class Ledger:
         self.need, self.settle, self.pending, self.raised_by = {}, {}, [], {}
         for e in events:
             rec = e["record"]
-            if ph_wire.family(rec.get("ext")) != "acts":   # 0.3 and 0.4 alike
+            if ph_wire.family(rec.get("ext")) != "acts":   # every version read
                 continue
             if e["direction"] == "out" and rec["type"] in ("raised", "amended", "withdrawn"):
                 self.need.setdefault(rec["key"], []).append(rec)
@@ -234,8 +234,8 @@ def publish(recs: list[dict]) -> dict[str, str]:
 
 
 def record(project: str, type_: str, key: str, rid: str, **kw) -> dict:
-    return {"ph": ph_wire.SEND, "ext": ph_wire.ACTS, "id": rid, "type": type_, "origin": kw.pop("origin", "requester"),
-            "by": REGISTRAR, "key": key, "project": project, "ts": now(), **kw}
+    return {"ph": ph_wire.send_version(), "ext": ph_wire.ext("acts"), "id": rid, "type": type_,
+            "origin": kw.pop("origin", "requester"), "by": REGISTRAR, "key": key, "project": project, "ts": now(), **kw}
 
 
 def removal_reason(key: str) -> str | None:

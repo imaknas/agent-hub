@@ -508,7 +508,8 @@ def send_record(c, a, sender: str, mid: str, p: dict) -> str | None:
     key = (a.id or task_key(sender, a.text)) if kind == "raised" else a.task
     if not KEY_RE.match(key):
         refuse(_("hubbus: {key!r} is not a valid task key", key=key))
-    rec = {"ph": ph_wire.SEND, "ext": ph_wire.ACTS, "type": kind, "key": key, "project": sender, "ts": iso()}
+    rec = {"ph": ph_wire.send_version(), "ext": ph_wire.ext("acts"), "type": kind, "key": key, "project": sender,
+           "ts": iso()}
     need = need_state(c, sender, key)
     if kind == "raised" and need:
         terms = {"text": " ".join(a.text.split()), **({"due": a.due} if a.due else {})}
@@ -539,9 +540,6 @@ def send_record(c, a, sender: str, mid: str, p: dict) -> str | None:
     return publish_record(c, rec, sender, OWNER_ADDRESS)[0]
 
 
-EXT_DECISIONS = ph_wire.DECISIONS
-
-
 def send_decision(c, a, sender: str, mid: str, p: dict) -> str | None:
     """A question to the owner and how it ends, as Decisions records: question → raised (key = the letter id, the one
     --question names later; the assistant keeps it under that id), done --question → claimed with the answer, then
@@ -549,7 +547,7 @@ def send_decision(c, a, sender: str, mid: str, p: dict) -> str | None:
     is outside 0.3 and the assistant ties it back by handoff_id."""
     if p.get("handoff_id") is not None:
         return None
-    base = {"ph": ph_wire.SEND, "ext": EXT_DECISIONS, "project": sender, "ts": iso()}
+    base = {"ph": ph_wire.send_version(), "ext": ph_wire.ext("decisions"), "project": sender, "ts": iso()}
     asker = {"origin": "requester", "by": hubconf.party("requester", sender)}
     if a.type == "question":
         if not KEY_RE.match(mid):
@@ -601,8 +599,14 @@ def _question(r, key: str, text) -> dict:
 def publish_record(c, rec: dict, source: str, to_project: str, extra: dict | None = None,
                    ref: str | None = None) -> tuple[str, bool]:
     """extra goes on the event beside the record, never into it: routing (from_session, to_session) and, for an
-    answer, the question it answers."""
+    answer, the question it answers. A record never displaces one of another type or origin (core §10): when the
+    event id is held by such a record, this one takes an id that also names its origin and type."""
     eid = record_event_id(rec)
+    row = c.execute("SELECT payload FROM events WHERE id=? AND type='record'", (eid,)).fetchone()
+    if row is not None:
+        held = payload(row).get("record") or {}
+        if (held.get("origin"), held.get("type")) != (rec.get("origin"), rec.get("type")):
+            eid = f"{eid}:{rec.get('origin')}:{rec.get('type')}"
     return eid, publish(c, eid, "record", source, to_project, ref, {"record": rec, **(extra or {})})
 
 
@@ -1246,7 +1250,8 @@ def forward_records(c) -> None:
             return
         recs = [ev for ev in evs if ev["type"] == "record" and ev["to_project"] in OWNERS]
         if recs:
-            code, data, err = records_http("POST", "/api/records", {"records": [payload(ev)["record"] for ev in recs]})
+            code, data, err = records_http("POST", "/api/records", {"records": [outgoing(payload(ev)["record"])
+                                                                                for ev in recs]})
             if code != 200 or not isinstance(data, dict):
                 log_once("records-out", _("records could not be sent to {assistant} ({err}); {n} to resend next time",
                                           assistant=ASSISTANT, err=err or code, n=len(recs)))
@@ -1262,6 +1267,15 @@ def forward_records(c) -> None:
                           ext=payload(ev)["record"].get("ext"), id=ev["id"]))
             log(_("sent {n} {n:record|records} to {assistant}", assistant=ASSISTANT, n=len(recs)))
         set_cursor(c, RECORDS_OUT, evs[-1]["seq"])
+
+
+def outgoing(rec: dict) -> dict:
+    """A record as the principal side reads it: one made in a version newer than the one it is sent in (made before
+    hub.json principal_handoff.send_version went back) is converted down (core §14). Requesters' records carry no
+    terms digest, so no other record is needed to convert them."""
+    send, version = ph_wire.send_version(), ph_wire.version_of(rec)
+    newer = version in ph_wire.READ and ph_wire.READ.index(version) > ph_wire.READ.index(send)
+    return ph_wire.convert(rec, send, []) if newer else rec
 
 
 def ev_rec_id(ev) -> str:
@@ -2476,10 +2490,11 @@ def cli() -> None:
     rq.add_argument("--type", help=_("comma-separated, e.g. settled,reopened"))
     rq.add_argument("--pending", action="store_true", help=_("only the ones not done yet"))
     rq.add_argument("--direction", choices=("in", "out"))
-    # {ph} is there so the text goes through format() and {{…}} prints as braces
+    # {ph} is there so the text goes through format() and {{…}} prints as braces; read without ph_wire.send_version()
+    # so that a bad setting does not stop every command at parsing (config-check reports it)
     rp = sub.add_parser("record-publish", help=_("stdin: one {ph} record or a list; sent to owner (toward the assistant). "
                                                  "Prints for each {{id: record id, event: event id or null, status}}",
-                                                 ph=ph_wire.SEND))
+                                                 ph=hubconf.get("principal_handoff.send_version") or ph_wire.DEFAULT_SEND))
     rp.add_argument("--json", default="-", help=_("only - (stdin) is supported"))
     pb = sub.add_parser("publish")
     # letters have their own command (and records record-publish); config.applied = which config version bin/hub
@@ -2539,6 +2554,9 @@ def cli() -> None:
             if not errs and r.get("origin") == "principal":
                 errs = [_("a record with origin principal can only come from the assistant (the bridge takes it in); "
                           "projects cannot send one")]
+            if not errs and isinstance(r.get("evidence"), dict) and "proof" in r["evidence"]:
+                errs = [_("evidence.proof is reserved for the principal's own proof; senders do not emit it (core "
+                          "§5.2)")]
             if errs:
                 bad += 1
                 out.append({"id": r.get("id") if isinstance(r, dict) else None, "event": None, "status": "invalid",

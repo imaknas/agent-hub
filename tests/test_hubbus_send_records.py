@@ -65,7 +65,7 @@ class SendRecords(unittest.TestCase):
         self.assertRegex(r["ts"], TS)
         for k in REQUIRED[r["type"]]:
             self.assertIn(k, r)
-        self.assertEqual((r["ph"], r["ext"], r["project"]), (self.m.ph_wire.SEND, self.m.ph_wire.ACTS, "proj"))
+        self.assertEqual((r["ph"], r["ext"], r["project"]), ("0.4", "acts/0.4", "proj"))
         return recs[0][0], r
 
     # --- switch off: same as before ---
@@ -84,7 +84,7 @@ class SendRecords(unittest.TestCase):
                         "--context", "migration", "--new-reason", "last year's was another building")
         eid, r = self.rec()
         self.assertEqual(out, eid)
-        self.assertEqual(eid, f"rec:{self.m.ph_wire.ACTS}:proj:r:task-proj-0000000001")
+        self.assertEqual(eid, "rec:acts/0.4:proj:r:task-proj-0000000001")
         self.assertEqual((r["type"], r["id"], r["key"], r["origin"], r["by"], r["terms_rev"]),
                          ("raised", "r:task-proj-0000000001", "task-proj-0000000001", "requester", "project:proj", 1))
         self.assertEqual(r["terms"], {"text": "Pay the property tax", "due": "2026-11-30"})
@@ -217,7 +217,7 @@ class SendDecisions(unittest.TestCase):
         for _eid, p in self.events("record"):
             r = p["record"]
             self.assertEqual(self.m.record_errors(r), [])
-            self.assertEqual((r["ph"], r["ext"], r["project"]), (self.m.ph_wire.SEND, self.m.ph_wire.DECISIONS, "proj"))
+            self.assertEqual((r["ph"], r["ext"], r["project"]), ("0.4", "decisions/0.4", "proj"))
             for k in DEC_REQUIRED[r["type"]]:
                 self.assertIn(k, r)
             out.append(r)
@@ -272,6 +272,19 @@ class SendDecisions(unittest.TestCase):
         self.assertEqual(self.events("record"), [])
         [(_mid, p)] = [e for e in self.events("message") if e[0] != "h-asks"]
         self.assertEqual((p["type"], p["handoff_id"]), ("question", 72))
+
+
+class SendVersion(unittest.TestCase):
+    """hub.json principal_handoff.send_version decides the version of what send makes (core §14)"""
+    setUp, send, events = SendRecords.setUp, SendRecords.send, SendRecords.events
+
+    def test_0_5(self):
+        with mock.patch.object(self.m.ph_wire, "send_version", return_value="0.5"):
+            self.send("--type", "task", "--id", "ask-proj-0000000001", "--text", "Pay the property tax")
+            self.send("--type", "question", "--id", "m1031-q1", "--text", "Which one?")
+        recs = [p["record"] for _eid, p in self.events("record")]
+        self.assertEqual([(r["ph"], r["ext"]) for r in recs], [("0.5", "acts/0.5"), ("0.5", "decisions/0.5")])
+        self.assertEqual([self.m.record_errors(r) for r in recs], [[], []])
 
 
 if __name__ == "__main__":
