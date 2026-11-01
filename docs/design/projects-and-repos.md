@@ -387,7 +387,7 @@ landing step (`agenthub land`, test-waiting section 7).
 
 **Commit gate and git hooks.** `gate: strict` (a main-protection hook the platform already installs) is repo-level and
 installed in the repo's `.git/hooks` once per repo. The test commit gate is opt-in per repo (`commit_gate`,
-test-waiting A1: a `pre-commit` and a `reference-transaction` hook, installed like `gate: strict`'s and never under a
+test-waiting A1: a `pre-commit` hook, installed like `gate: strict`'s and never under a
 repo's own `core.hooksPath`); without it the platform installs no test hooks, and `merge-branch` is the gate. Every
 `commits: conventional` repo also gets the platform's `commit-msg`. "The platform opens no project-writable file"
 means: never by plain path. Where it must (the pointer reader of 2.4 reading `.git`, `commondir`, `gitdir` and the

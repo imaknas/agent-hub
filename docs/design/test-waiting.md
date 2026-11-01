@@ -292,14 +292,12 @@ merged, tested commits. It also removes the class of incidents where one session
    **Main moves only to a tree that passed (decided after round 6):** the check is `merge-branch`'s own, before it
    fast-forwards: it refuses unless every affected `merge` tier has a recorded pass for the rebased tree, and a refusal
    applies nothing. A move of main by any other path (a hand `merge --ff-only`, `cherry-pick`, `--no-verify`) is
-   **detected, not blocked**: a `reference-transaction` hook in its `committed` state compares the new value with the
-   record `merge-branch` writes before it fast-forwards (and consumes after it, so a stale record from a failed
-   fast-forward cannot hide a later hand move; the hook matches `refs/heads/<main>` in shell before starting anything,
-   since it fires for every ref), logs a move with no such record (in the repo's store, read by
-   the platform only through a `project_git` job, B4), and the status page shows red. Blocking it there would leave the main checkout half-applied (tested in round 6: a refused fast-forward kept
-   the ref but left the new files in the working tree and index), which for agent-hub means untested files live in
-   the running platform. This replaces `githooks/post-commit`'s bypass log; it only reports when main's value changes
-   to a different commit (`pack-refs` and same-value updates are not reported). It is an accident guard, not a security
+   **detected, not blocked**, by what the status page already counts for every repo, agent-hub included: commits on
+   main that no `merge.done` on the bus names (`worktrees.ungated_main_commits`). (Built 11-01 instead of the
+   `reference-transaction` detector the design had: the same fact was already detected, and a second mechanism was not
+   wanted.) Blocking such a move would leave the main checkout half-applied (tested in round 6: a refused fast-forward
+   kept the ref but left the new files in the working tree and index), which for agent-hub means untested files live in
+   the running platform. This replaces `githooks/post-commit`'s bypass log. It is an accident guard, not a security
    boundary (any session can set `core.hooksPath`; `git-sync-memory.sh` does). In a `commit_gate` repo nothing else
    moves main: `git-safe-push.sh` (whose `pull --no-rebase` becomes a fetch) and the pulls in the hub checkout
    (`librarian.py`, `consolidate-memory.py`, `librarian-publish.sh`, `weekly-reflect.sh`) only fetch, and commits
@@ -307,7 +305,7 @@ merged, tested commits. It also removes the class of incidents where one session
 3. **The commit gate is opted into in the registry** (a repo-level `commit_gate: true`, among v2's fields; in a one-repo
    project's own file, in a repo file once a repo has several projects), not implicitly through the repo's own
    `core.hooksPath`. It means: the platform installs its `pre-commit` (the `commit` tiers, or the `merge` tiers on main)
-   and `reference-transaction` hooks into the repo's git dir the way it installs `gate: strict`'s hooks
+   into the repo's git dir the way it installs `gate: strict`'s hooks
    (`pre-commit`, `pre-merge-commit`), not under a repo's own `core.hooksPath` (reported instead, as `gate: strict` is
    today). **agent-hub gets no exception:** in step 2.3 its gate moves from the tracked `githooks/` into its git dir
    like every other repo's, its `core.hooksPath` is unset, and `agenthub init` and doctor change with it (both expect
@@ -538,8 +536,8 @@ Callers:
 - **`merge-branch`** (in the session): after its rebase, the affected `merge` tiers through the runner; after a no-op
   rebase the tree is unchanged and the agent's own `agenthub test` result is a hit (209 of muninn's 227 merges).
 - **Commit gate** (repos with `commit_gate`, `--index`): the `commit` tiers of a branch commit; a commit onto main runs
-  the merge tiers. Main is kept on tested trees by `merge-branch`'s own check; the `reference-transaction` hook only
-  reports other moves of main (A1).
+  the merge tiers. Main is kept on tested trees by `merge-branch`'s own check; other moves of main are counted on
+  the status page (A1).
 - **Deploy:** the deploy script runs `agenthub test --when deploy`, which covers **every** deploy tier for HEAD's key —
   a lookup when the merge already ran it, a run otherwise (a commit made directly on main is not deployed untested). It
   runs in the main checkout, where deploy scripts run today (AGENTS.md: from the development copy) and where the store
@@ -685,7 +683,8 @@ replaces; each step only adds to the ones before it.
       page red), and the regular applier also owns the hub's hooks with drift detection, so a deployment updated
       without `merge-branch` (a `git pull`) is brought in line on the next tick. The store's module lands here and
       `test-gate` keeps its own file until 2.3 makes it thin.
-   3. **One merge** switching the readers and callers: the read-time upgrade of v1 documents in the live readers (B1);
+   3. (Ahead of it, 11-01: the hook installer for `gate: strict`, `commit_gate` and `commits: conventional`
+      repos, which skips agent-hub until this merge.) **One merge** switching the readers and callers: the read-time upgrade of v1 documents in the live readers (B1);
       `merge-branch` on the runner, and only the main checkout's `merge-branch` runs (a worktree's copy re-executes
       main's). `merge-branch`'s **landing step for the hub's own repo** (permanent, added in step 2.2 so main's copy
       has it when 2.3 merges): after the fast-forward, still under the merge lock, it starts the merged tree's own code
@@ -694,10 +693,10 @@ replaces; each step only adds to the ones before it.
       the hook installer for the hub repo only; `land` is not a session command — so every merge of agent-hub leaves its hooks and the index matching the code it
       landed; agent-hub's entry rewritten by hand as v2 with
       the `lint` and `full` tiers taken out of `test-gate` (its step-1 `runtime` removed); `test-gate` thin; A1
-      prerequisites 2–3 (commit tiers by where a commit lands, the `reference-transaction` check, `commit_gate`, the
+      prerequisites 2–3 (commit tiers by where a commit lands, `commit_gate`, the
       shared `pre-commit`, fetch-only pulls); `session.report` v2 and lease-handover v2 beside v1. **Its landing** (the
-      step above, run by main's 2.2 `merge-branch`): the hook installer installs agent-hub's `pre-commit`, `commit-msg`
-      and `reference-transaction` into its git dir and unsets `core.hooksPath` (the installer treats the hub's own
+      step above, run by main's 2.2 `merge-branch`): the hook installer installs agent-hub's `pre-commit` and
+      `commit-msg` into its git dir and unsets `core.hooksPath` (the installer treats the hub's own
       legacy `githooks` value as its own to replace; today it skips the hub and calls any set `core.hooksPath`
       foreign); every `commits: conventional` repo gets the same platform `commit-msg`, not only agent-hub. The
       tracked `githooks/pre-commit`, `post-commit` and `commit-msg` go in the same merge; `githooks/config/` stays (the

@@ -8,7 +8,7 @@
 alpha: would write sandbox (allowWrite 2, denyRead 1, 3 domains), 2 deny rules, 1 allow rule → <TMP>/ws/alpha/.claude/settings.local.json
 beta: .git/hooks/pre-commit is already the project's own hook; not overwriting it (the gate only detects)
 beta: would write sandbox (allowWrite 2, denyRead 1, 3 domains), 2 deny rules, 1 allow rule → <TMP>/ws/beta/.claude/settings.local.json
-gamma: gate strict not installed (the project uses its own core.hooksPath=.husky); detecting only
+gamma: the platform's hooks are not installed (the project uses its own core.hooksPath=.husky); detecting only
 gamma: would write sandbox (allowWrite 2, denyRead 1, 3 domains), 2 deny rules, 1 allow rule → <TMP>/ws/gamma/.claude/settings.local.json
 === write
 [exit 0]
@@ -16,7 +16,7 @@ alpha: installed pre-commit (gate strict)
 alpha: installed pre-merge-commit (gate strict)
 beta: .git/hooks/pre-commit is already the project's own hook; not overwriting it (the gate only detects)
 beta: installed pre-merge-commit (gate strict)
-gamma: gate strict not installed (the project uses its own core.hooksPath=.husky); detecting only
+gamma: the platform's hooks are not installed (the project uses its own core.hooksPath=.husky); detecting only
 === alpha pre-commit
 #!/bin/sh
 # agent-hub:gate (managed; registry gate: strict)
@@ -82,28 +82,28 @@ alpha: would write sandbox (allowWrite 2, denyRead 1, 3 domains), 2 deny rules, 
 ⚠️ alpha's settings drifted (report mode: not written back): sandbox was changed; permissions.deny is missing 1 rule (e.g. Read(/other/**))
 beta: .git/hooks/pre-commit is already the project's own hook; not overwriting it (the gate only detects)
 beta: would write sandbox (allowWrite 2, denyRead 1, 3 domains), 2 deny rules, 1 allow rule → <TMP>/ws/beta/.claude/settings.local.json
-gamma: gate strict not installed (the project uses its own core.hooksPath=.husky); detecting only
+gamma: the platform's hooks are not installed (the project uses its own core.hooksPath=.husky); detecting only
 gamma: would write sandbox (allowWrite 2, denyRead 1, 3 domains), 2 deny rules, 1 allow rule → <TMP>/ws/gamma/.claude/settings.local.json
 === write, drift
 [exit 1]
 ⚠️ alpha's settings drifted (written back): sandbox was changed; permissions.deny is missing 1 rule (e.g. Read(/other/**))
 beta: .git/hooks/pre-commit is already the project's own hook; not overwriting it (the gate only detects)
-gamma: gate strict not installed (the project uses its own core.hooksPath=.husky); detecting only
+gamma: the platform's hooks are not installed (the project uses its own core.hooksPath=.husky); detecting only
 === plan, policy changed
 ~ agent-settings:alpha  permission rules, record
 === only alpha
 [exit 0]
 === plan, enforce and gate off
-- hook:alpha/pre-commit  gate strict
-- hook:alpha/pre-merge-commit  gate strict
+- hook:alpha/pre-commit  not wanted
+- hook:alpha/pre-merge-commit  not wanted
 - agent-settings:alpha  enforce is off: remove the platform's sandbox/rules
 === enforce and gate off
 [exit 0]
-alpha: gate is off, removed pre-commit
-alpha: gate is off, removed pre-merge-commit
+alpha: the registry no longer wants pre-commit; removed it
+alpha: the registry no longer wants pre-merge-commit; removed it
 alpha: enforce is off, removed the platform's sandbox/rules
 beta: .git/hooks/pre-commit is already the project's own hook; not overwriting it (the gate only detects)
-gamma: gate strict not installed (the project uses its own core.hooksPath=.husky); detecting only
+gamma: the platform's hooks are not installed (the project uses its own core.hooksPath=.husky); detecting only
 === alpha settings
 {
   "permissions": {

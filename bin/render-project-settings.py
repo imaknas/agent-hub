@@ -196,55 +196,86 @@ def gate_hook() -> str:
         "and finish with agenthub merge-branch.") + '" >&2\nexit 1\n'
 
 
+MARK = "# agent-hub:gate"   # every hook the platform writes starts with it; others are the project's own
+HOOKS = ("pre-commit", "pre-merge-commit", "commit-msg")
+
+
+def wanted_hooks(doc: dict) -> dict[str, tuple[str, str]]:
+    """hook -> (its text, which registry field wants it). gate: strict refuses commits on main; commit_gate runs the
+    commit tiers on a branch and the merge tiers on main through the main checkout's runner (gate code from main,
+    docs/design/test-waiting.md A1); commits: conventional checks commit titles. One pre-commit serves gate and
+    commit_gate (strict wins on main: no commit there at all)."""
+    import shlex
+    strict, cg = doc.get("gate") == "strict", doc.get("commit_gate") is True
+    py, hub = shlex.quote(str(hubconf.MAIN / "bin" / "py")), hubconf.MAIN / "bin"
+    out = {}
+    if strict and not cg:
+        out["pre-commit"] = ("#!/bin/sh\n" + gate_hook(), "gate strict")
+    elif cg:
+        refuse = ('  main|master) [ -n "$MERGE_GATE" ] || { echo "' + _(
+            "This project has the merge gate on (gate: strict): no direct commits to $b. Work in your own worktree/branch "
+            "and finish with agenthub merge-branch.") + '" >&2; exit 1; } ;;\n') if strict else "  main|master) moment=merge ;;\n"
+        out["pre-commit"] = ("#!/bin/sh\n" + MARK + " (managed; registry commit_gate)\n"
+                             "# a commit on a branch runs the commit tiers, one onto main the merge tiers\n"
+                             "b=$(git symbolic-ref --short -q HEAD)\nmoment=commit\ncase \"$b\" in\n" + refuse +
+                             "esac\nexec " + py + " " + shlex.quote(str(hub / "test-runner.py")) +
+                             ' --index --when "$moment"\n', "commit_gate")
+    if strict:
+        out["pre-merge-commit"] = ("#!/bin/sh\n" + gate_hook(), "gate strict")
+    if doc.get("commits") == "conventional":
+        out["commit-msg"] = ("#!/bin/sh\n" + MARK + " (managed; registry commits: conventional)\nexec " + py + " " +
+                             shlex.quote(str(hub / "commit_title.py")) + ' --file "$1"\n', "commits: conventional")
+    return out
+
+
 def gate(name: str, doc: dict, report: bool, quiet: bool = False) -> list[tuple[str, str]]:
-    """Registry gate: strict -> install pre-commit / pre-merge-commit; turned off -> remove them (only those carrying
-    the platform's marker). A project with its own core.hooksPath (e.g. husky) gets nothing installed, only
-    detection. Returns what would be done (report) / was done: (add|update|remove, hook)."""
+    """The platform's git hooks for a repo (wanted_hooks): installed when its registry entry wants them, updated when
+    their text changed, removed when it no longer does (only those carrying the platform's marker). A project with
+    its own core.hooksPath (e.g. husky) gets nothing installed, only detection. Returns what would be done (report) /
+    was done: (add|update|remove, hook)."""
     import project_git
     say = (lambda *_args: None) if quiet else print
     ws = registry.dirs(doc)["workspace"]
     if not ws or not (ws / ".git").is_dir():
         return []
-    want = doc.get("gate") == "strict"
+    want = wanted_hooks(doc)
     # the repo's .git is the project's: what is there is read, and the hooks written, by its own job (a symlink
     # planted in .git/hooks then reaches only what the project can write itself; the job replaces it rather than
     # writing through it)
-    hooks = ("pre-commit", "pre-merge-commit")
     try:
-        st = project_git.data(name, ws, "hooks", ws, *hooks)
+        st = project_git.data(name, ws, "hooks", ws, *HOOKS)
     except project_git.Unavailable as e:
         say(_("{project}: the gate hooks could not be checked ({why})", project=name, why=e))
         return []
     st = st if isinstance(st, dict) else {}
     hp = st.get("hooks_path") if isinstance(st.get("hooks_path"), str) else ""
     texts = st.get("hooks") if isinstance(st.get("hooks"), dict) else {}
+    if want and hp:
+        say(_("{project}: the platform's hooks are not installed (the project uses its own core.hooksPath={path}); "
+              "detecting only", project=name, path=hp))
+        return []
     acts = []
-    for hook in hooks:
+    for hook in HOOKS:
         text = texts.get(hook) if isinstance(texts.get(hook), str) else None
-        mine = GATE_MARK in (text or "")
-        if want and hp:
-            say(_("{project}: gate strict not installed (the project uses its own core.hooksPath={path}); detecting only",
-                  project=name, path=hp))
-            return acts
-        if want and not mine:
-            if text is not None:
+        mine = text is not None and text.startswith("#!/bin/sh\n" + MARK)
+        if hook in want:
+            body, why = want[hook]
+            if text is not None and not mine:
                 say(_("{project}: .git/hooks/{hook} is already the project's own hook; not overwriting it (the gate only "
                       "detects)", project=name, hook=hook))
                 continue
-            acts.append(("add", hook))
+            if text == body:
+                continue
+            acts.append(("update" if mine else "add", hook))
             if not report:
-                project_git.job(name, ws, "hook-write", ws, hook, input="#!/bin/sh\n" + gate_hook())
-                say(_("{project}: installed {hook} (gate strict)", project=name, hook=hook))
-        elif want and text != "#!/bin/sh\n" + gate_hook():   # the platform's hook from an older version (or language)
-            acts.append(("update", hook))
-            if not report:
-                project_git.job(name, ws, "hook-write", ws, hook, input="#!/bin/sh\n" + gate_hook())
-                say(_("{project}: updated {hook} (gate strict)", project=name, hook=hook))
-        elif not want and mine:
+                project_git.job(name, ws, "hook-write", ws, hook, input=body)
+                say((_("{project}: updated {hook} ({why})", project=name, hook=hook, why=why) if mine else
+                     _("{project}: installed {hook} ({why})", project=name, hook=hook, why=why)))
+        elif mine:
             acts.append(("remove", hook))
             if not report:
                 project_git.job(name, ws, "hook-remove", ws, hook)
-                say(_("{project}: gate is off, removed {hook}", project=name, hook=hook))
+                say(_("{project}: the registry no longer wants {hook}; removed it", project=name, hook=hook))
     return acts
 
 
@@ -261,7 +292,9 @@ def _changes(index: dict) -> list:
     for name, doc in sorted(index["projects"].items()):
         if name == hubconf.hub_project():
             continue
-        out += [Change(op, f"hook:{name}/{hook}", "gate strict") for op, hook in gate(name, doc, report=True, quiet=True)]
+        want = wanted_hooks(doc)
+        out += [Change(op, f"hook:{name}/{hook}", want.get(hook, ("", _("not wanted")))[1])
+                for op, hook in gate(name, doc, report=True, quiet=True)]
         on = bool((doc.get("enforce") or {}).get("sandbox"))
         rec = RENDERED / f"{name}.json"
         if not on:

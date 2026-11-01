@@ -8,7 +8,7 @@
 alpha:會寫 sandbox(allowWrite 2、denyRead 1、網域 3)、deny 2 條、allow 1 條 → <TMP>/ws/alpha/.claude/settings.local.json
 beta:.git/hooks/pre-commit 已經有專案自己的 hook,不覆蓋(gate 只偵測)
 beta:會寫 sandbox(allowWrite 2、denyRead 1、網域 3)、deny 2 條、allow 1 條 → <TMP>/ws/beta/.claude/settings.local.json
-gamma:gate strict 沒裝(專案用自己的 core.hooksPath=.husky),只偵測
+gamma:平台的 hook 沒裝(專案用自己的 core.hooksPath=.husky),只偵測
 gamma:會寫 sandbox(allowWrite 2、denyRead 1、網域 3)、deny 2 條、allow 1 條 → <TMP>/ws/gamma/.claude/settings.local.json
 === write
 [exit 0]
@@ -16,7 +16,7 @@ alpha:裝了 pre-commit(gate strict)
 alpha:裝了 pre-merge-commit(gate strict)
 beta:.git/hooks/pre-commit 已經有專案自己的 hook,不覆蓋(gate 只偵測)
 beta:裝了 pre-merge-commit(gate strict)
-gamma:gate strict 沒裝(專案用自己的 core.hooksPath=.husky),只偵測
+gamma:平台的 hook 沒裝(專案用自己的 core.hooksPath=.husky),只偵測
 === alpha pre-commit
 #!/bin/sh
 # agent-hub:gate (managed; registry gate: strict)
@@ -82,28 +82,28 @@ alpha:會寫 sandbox(allowWrite 2、denyRead 1、網域 3)、deny 2 條、allow 
 ⚠️ alpha 的設定偏移(已(report 模式不)寫回):sandbox 被改過; permissions.deny 少了 1 條(例:Read(/other/**))
 beta:.git/hooks/pre-commit 已經有專案自己的 hook,不覆蓋(gate 只偵測)
 beta:會寫 sandbox(allowWrite 2、denyRead 1、網域 3)、deny 2 條、allow 1 條 → <TMP>/ws/beta/.claude/settings.local.json
-gamma:gate strict 沒裝(專案用自己的 core.hooksPath=.husky),只偵測
+gamma:平台的 hook 沒裝(專案用自己的 core.hooksPath=.husky),只偵測
 gamma:會寫 sandbox(allowWrite 2、denyRead 1、網域 3)、deny 2 條、allow 1 條 → <TMP>/ws/gamma/.claude/settings.local.json
 === write, drift
 [exit 1]
 ⚠️ alpha 的設定偏移(已寫回):sandbox 被改過; permissions.deny 少了 1 條(例:Read(/other/**))
 beta:.git/hooks/pre-commit 已經有專案自己的 hook,不覆蓋(gate 只偵測)
-gamma:gate strict 沒裝(專案用自己的 core.hooksPath=.husky),只偵測
+gamma:平台的 hook 沒裝(專案用自己的 core.hooksPath=.husky),只偵測
 === plan, policy changed
 ~ agent-settings:alpha  權限規則、紀錄
 === only alpha
 [exit 0]
 === plan, enforce and gate off
-- hook:alpha/pre-commit  gate strict
-- hook:alpha/pre-merge-commit  gate strict
+- hook:alpha/pre-commit  不再需要
+- hook:alpha/pre-merge-commit  不再需要
 - agent-settings:alpha  enforce 關了:拿掉平台的 sandbox/規則
 === enforce and gate off
 [exit 0]
-alpha:gate 關了,拿掉 pre-commit
-alpha:gate 關了,拿掉 pre-merge-commit
+alpha:登錄不再要 pre-commit,拿掉了
+alpha:登錄不再要 pre-merge-commit,拿掉了
 alpha:enforce 關了,已拿掉平台的 sandbox/規則
 beta:.git/hooks/pre-commit 已經有專案自己的 hook,不覆蓋(gate 只偵測)
-gamma:gate strict 沒裝(專案用自己的 core.hooksPath=.husky),只偵測
+gamma:平台的 hook 沒裝(專案用自己的 core.hooksPath=.husky),只偵測
 === alpha settings
 {
   "permissions": {
