@@ -62,6 +62,7 @@ for project sessions (these are what the rules files name; the permission rules 
                         (= bin/mcp_server.py)
   agenthub mcp config        print the snippet to register in the tool's MCP settings (the platform does not change your
                         tool's settings for you; docs/mcp.md)
+  agenthub --version         the platform's version: the release tag this checkout is at (git describe)
 
 --- stderr
 

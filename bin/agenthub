@@ -60,6 +60,7 @@ for project sessions (these are what the rules files name; the permission rules 
                         (= bin/mcp_server.py)
   agenthub mcp config        print the snippet to register in the tool's MCP settings (the platform does not change your
                         tool's settings for you; docs/mcp.md)
+  agenthub --version         the platform's version: the release tag this checkout is at (git describe)
 """
 from __future__ import annotations
 
@@ -838,7 +839,18 @@ COMMANDS = {
 }
 
 
+def version() -> str:
+    """the release this checkout is at: `git describe` against the v* tags (cliff.toml's tag_pattern); an untagged
+    commit reads <tag>-<n>-g<sha>, a checkout with no release yet its short sha, a tree outside git `unknown`"""
+    r = subprocess.run(["git", "-C", str(ROOT), "describe", "--tags", "--match", "v[0-9]*", "--always", "--dirty"],
+                       capture_output=True, text=True)
+    return r.stdout.strip() if r.returncode == 0 and r.stdout.strip() else "unknown"
+
+
 def main(argv: list[str]) -> int:
+    if argv[:1] == ["--version"]:
+        print(f"agenthub {version()}")
+        return 0
     if not argv or argv[0] in ("-h", "--help", "help") or argv[0] not in COMMANDS:
         print(_(__doc__))
         return 0 if not argv or argv[0] in ("-h", "--help", "help") else 2
