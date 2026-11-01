@@ -361,7 +361,9 @@ One flow, reached through `agenthub connect` (the new user-facing name for onboa
 2. **What each candidate is**, found by reading the files. The folder isn't trusted yet, so every git call the
    connect flow makes in it runs with the folder's hooks and fsmonitor off (`-c core.hooksPath=/dev/null -c
    core.fsmonitor=`). That covers the unsaved-changes check and `onboard-project.sh`'s own calls (`remote get-url`,
-   `rev-parse HEAD`, `status --porcelain`, `init`, `add`, `commit`), which today run with the folder's config:
+   `rev-parse HEAD`, `status --porcelain`, `init`, `add`, `commit`), which today run with the folder's config.
+   `onboard-project.sh` also hard-codes `~/git-origin` in `mini_sh` and in the registry line. It reads hub.json
+   `git_origin` instead (`hubpaths.sh`), from the release session's newcomer test, 11-01:
    - a plain folder with no repo;
    - one repo, which the flow then checks for monorepo signs (`pnpm-workspace.yaml`, `lerna.json`, `go.work`, a Cargo
      `[workspace]`, several package manifests one level down);
@@ -419,6 +421,13 @@ they opt in, so nothing changes for them silently. Characterization tests on `ru
 - The clock constant is read with `getattr(time, "CLOCK_BOOTTIME", None)`. It is missing on macOS, where launchd fires
   missed intervals on wake, so the check is Linux-only.
 - It keeps using the system python3 and the standard library.
+
+**Watchdog channels** (from the release session's newcomer test, 11-01): the watchdog sends only to Discord. A
+newcomer who sets up ntfy or email, as check-secrets suggests, sees "watchdog has no Discord settings" in red. The
+watchdog sends through whichever channels hub.json `alerts` configures that it can reach with the standard library: an
+HTTP POST for Discord and ntfy, `smtplib` for email, `osascript` for a macOS notification. It stays under the system
+python3, with no platform imports, so it reads hub.json and the secrets files itself. The status page is red only when
+no channel at all is set.
 
 **Doctor:** an info row (not a warning) when the machine sleeps. On macOS it reads `pmset -g` for a sleep setting other
 than 0, which covers desktops set to sleep. On Linux it checks for a battery or a suspend target. The row lists the
