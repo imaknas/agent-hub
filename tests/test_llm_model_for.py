@@ -47,8 +47,11 @@ class ModelFor(unittest.TestCase):
             hubconf._cfg = None
             try:
                 llm = load_llm()
+                # agent-job as run-agent-job.sh runs every job but a connectors one: sealed to the platform's MCP
+                # config (an unsealed run first lists the servers it would load, which needs the runtime installed)
+                extra = ["--strict-mcp-config"] if point == "agent-job" else []
                 a = argparse.Namespace(cmd="run", point=point, cwd=None, model=cli, prompt_file=str(self.prompt),
-                                       dry_run=True, extra=[])
+                                       dry_run=True, extra=extra)
                 out = io.StringIO()
                 with contextlib.redirect_stdout(out):
                     llm.run(a)
