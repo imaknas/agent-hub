@@ -518,8 +518,12 @@ Once picked, the text goes in the README's first lines, the GitHub description, 
 
 ## Order of work
 
-0. **B0**: the language question. It is first because every later message depends on it.
-1. **B1 + B2**: install.sh goes on into init (pulled forward 11-01: it is what a newcomer notices first).
+0. **B0**: the language question. It is first because every later message depends on it. **Done 11-01** (9f1a99b).
+1. **B1 + B2**: install.sh goes on into init (pulled forward 11-01: it is what a newcomer notices first). **Done
+   11-01**: install.sh is one function, asks before installing git (xcode-select on macOS, refused over SSH; the
+   package manager on Linux), carries on after a half-done install, and runs init on /dev/tty; init finishes an
+   unfinished llm setup on a re-run (`.state/init-unfinished`); hubpaths reads hub.json with bin/py, so jq is
+   optional; bin/setup's macOS hints name Homebrew only when it is there. `--for-agent` is B3's.
 2. **B7**: README table, the scheduler's period catch-up, the Linux watchdog, doctor's row.
 3. **B4**: the agent step, the credential step, the Codex preset, `init --agent`.
 4. **B6**: `agenthub connect` with layout detection, for the layouts that work today.

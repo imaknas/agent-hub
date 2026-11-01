@@ -263,6 +263,18 @@ class NewUser(unittest.TestCase):
         self.assertEqual(len(self.git_cfg("log", "--format=%s").stdout.splitlines()), commits + 1)
         self.assertEqual(self.git_cfg("status", "--porcelain", "--", "hub.json").stdout, "")
 
+    def test_init_carries_on_after_stopping_midway(self):
+        r = self.hub_cmd("init", "--yes", "--no-launchd", "--owner", "Alex", "--llm", "none")
+        self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
+        marker = self.hub / ".state" / "init-unfinished"
+        self.assertFalse(marker.exists(), "a finished init leaves no marker")
+        marker.write_text("llm-setup\n")   # as if Ctrl-C hit between writing hub.json and llm setup
+        r = self.hub_cmd("init", "--yes", "--no-launchd", "--llm", "none")
+        self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
+        self.assertIn(i18n.translate("agenthub", "an earlier agenthub init stopped before it finished; carrying on "
+                                     "with what it didn't do", {}, "zh-Hant"), r.stdout)
+        self.assertFalse(marker.exists())
+
     def test_init_refuses_an_unknown_language(self):
         r = self.hub_cmd("init", "--yes", "--no-launchd", "--lang", "fr")
         self.assertEqual(r.returncode, 2)

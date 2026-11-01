@@ -170,5 +170,6 @@
  "Commands use it from now on; long-running processes (lease-runner, an open MCP server) after they restart.": "之後的指令就會用新語言;長駐的程序(lease-runner、開著的 MCP 伺服器)要重新啟動後才會換。",
  "agenthub init: --lang takes {languages}, or two of them as <interface>,<notes> (nothing was done)": "agenthub init:--lang 只接受 {languages},或用 <介面>,<筆記> 給兩個(什麼都沒做)",
  "language: interface {ui}, notes and project state {content} (change: agenthub init --lang <interface>[,<notes>])": "語言:介面 {ui},筆記和專案狀態 {content}(要改:agenthub init --lang <介面>[,<筆記>])",
- "warning: {file} was written, but the commit/push failed; it needs a manual fix": "警告:{file} 已寫入,但 commit/push 失敗,需要手動處理"
+ "warning: {file} was written, but the commit/push failed; it needs a manual fix": "警告:{file} 已寫入,但 commit/push 失敗,需要手動處理",
+ "an earlier agenthub init stopped before it finished; carrying on with what it didn't do": "上一次的 agenthub init 沒有跑完;接著做它還沒做的部分"
 }

@@ -34,15 +34,42 @@ else
   HUB_SECRETS="${AGENT_HUB_SECRETS:-$HUB_ROOT/.secrets}"
 fi
 HUB_JSON="$HUB_CONFIG/hub.json"
-# macOS uses the built-in plutil; other systems jq (bin/setup requires it). Either way: no such value (or not a single
-# value) → print nothing, return non-zero
+# macOS uses the built-in plutil; elsewhere the platform's Python (bin/py), and jq only where that can't run (the remote
+# machine before bin/setup-python): so the hub machine never needs jq. Either way: no such value (or not a single value)
+# → print nothing, return non-zero. The Python reader prints what jq -r would: strings as they are, numbers as JSON,
+# true/false.
+_HP_JSON_GET='import json, sys
+try:
+    v = json.load(open(sys.argv[1]))
+except (OSError, ValueError):
+    sys.exit(3)
+for k in sys.argv[2].split("."):
+    if not isinstance(v, dict) or k not in v:
+        sys.exit(3)
+    v = v[k]
+if isinstance(v, bool):
+    print(str(v).lower())
+elif isinstance(v, (int, float)):
+    print(json.dumps(v))
+elif isinstance(v, str):
+    print(v)
+else:
+    sys.exit(3)'
 hub_json_get() {
   if command -v plutil >/dev/null 2>&1; then
     plutil -extract "$1" raw -o - "$HUB_JSON" 2>/dev/null
-  else
-    jq -er --arg k "$1" 'getpath($k | split(".")) | select(type == "string" or type == "number" or type == "boolean")' \
-      "$HUB_JSON" 2>/dev/null
+    return
   fi
+  local out rc
+  out=$("$_hp_bin/py" -c "$_HP_JSON_GET" "$HUB_JSON" "$1" 2>/dev/null); rc=$?
+  case $rc in
+    0) printf '%s\n' "$out"; return 0 ;;
+    3) return 1 ;;   # read fine, no such single value
+  esac
+  # the platform's Python can't run here: jq, if there is one
+  command -v jq >/dev/null 2>&1 || return 1
+  jq -er --arg k "$1" 'getpath($k | split(".")) | select(type == "string" or type == "number" or type == "boolean")' \
+    "$HUB_JSON" 2>/dev/null
 }
 # The name of a project's git remote for its memory bare repo on the hub machine (the .agent-memory branch's upstream).
 # Older checkouts called it mini; sync-local-setup.sh renames those.

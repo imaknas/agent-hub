@@ -25,12 +25,12 @@ need() {  # need <command> <required|optional> <what it is for> <how to install>
 
 os=$(uname -s)
 # how this system installs a package (only to word the hints; nothing is installed)
-if [ "$os" = Darwin ]; then pm="brew install"
+if [ "$os" = Darwin ]; then pm="brew install"; command -v brew >/dev/null 2>&1 || pm_note=" (with Homebrew, https://brew.sh; or MacPorts)"
 elif command -v apt-get >/dev/null 2>&1; then pm="sudo apt-get install"
 elif command -v dnf >/dev/null 2>&1; then pm="sudo dnf install"
 elif command -v pacman >/dev/null 2>&1; then pm="sudo pacman -S"
 else pm=""; fi
-inst() { if [ -n "$pm" ]; then echo "$pm $1"; else echo "install $1 with your package manager"; fi; }
+inst() { if [ -n "$pm" ]; then echo "$pm $1${pm_note:-}"; else echo "install $1 with your package manager"; fi; }
 
 echo "agent-hub: checking the commands it needs"
 if [ "$os" != Darwin ]; then
@@ -42,7 +42,7 @@ if [ "$os" != Darwin ]; then
   fi
 fi
 need git     required "version control, memory sync"                "$([ "$os" = Darwin ] && echo "xcode-select --install" || inst git)"
-need jq      required "the librarian reads JSON"                    "$(inst jq)"
+need jq      optional "reads hub.json in shell scripts where the platform's Python can't run (the remote machine)" "$(inst jq)"
 need uv      required "builds the platform's Python (bin/setup-python)" "https://docs.astral.sh/uv/"
 [ "$os" = Darwin ] && need plutil required "shell scripts read hub.json" "built into macOS"   # other systems use jq
 need claude  optional "coding agent (Claude Code; without it set hub.json runtime.default to none and the agent features are off)" "https://claude.com/claude-code, then log in to claude once"

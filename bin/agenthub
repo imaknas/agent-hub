@@ -404,6 +404,8 @@ def config_repo_first_commit(cfgdir: pathlib.Path, owner: str) -> tuple[bool, li
 
 
 INIT_FLAGS = ("--yes", "--no-launchd", "--dry-run", "--scheduler-only")
+# written when init has made the instance, removed once its later steps are done: a re-run after a Ctrl-C finishes them
+INIT_UNFINISHED = hubconf.STATE / "init-unfinished"
 INIT_OPTIONS = ("--owner", "--timezone", "--workspace", "--modules", "--home", "--llm", "--llm-model", "--llm-base-url",
                 "--lang")
 
@@ -526,6 +528,9 @@ def cmd_init(argv: list[str]) -> int:
     elif hubconf.config_file("hub.json").exists():
         print(_("✓ {path} already exists; leaving it alone (to change it, edit it, then run agenthub config apply)",
                 path=hubconf.config_file('hub.json')))
+        if INIT_UNFINISHED.exists() and not dry:   # an earlier init stopped after writing hub.json: finish its steps
+            print(_("an earlier agenthub init stopped before it finished; carrying on with what it didn't do"))
+            created = True
     else:
         ui, content = choose_language(args, yes)
         os.environ["AGENT_HUB_LANG_UI"], os.environ["AGENT_HUB_LANG_CONTENT"] = ui, content   # every later question
@@ -545,6 +550,9 @@ def cmd_init(argv: list[str]) -> int:
         (home / "config" / "hub.json").write_text(json.dumps(d, ensure_ascii=False, indent=2) + "\n")
         hubconf.POINTER.write_text(str(home) + "\n")   # written last: once it exists, the platform uses this instance
         hubconf._cfg = None
+        # until the steps after hub.json are done (llm setup), a re-run of init carries on instead of skipping them
+        INIT_UNFINISHED.parent.mkdir(parents=True, exist_ok=True)
+        INIT_UNFINISHED.write_text("llm-setup\n")
         created = True
         print(_("✓ instance directory {home} (owner {owner}, modules {modules})", home=home,
                 owner=d['owner']['tag'], modules=', '.join(k for k, v in d['modules'].items() if v is True)))
@@ -565,6 +573,7 @@ def cmd_init(argv: list[str]) -> int:
     if created and not dry:
         # a failure doesn't block init: doctor will say judgment points have nowhere to run; agenthub llm setup later
         llm_setup(args, yes)
+        INIT_UNFINISHED.unlink(missing_ok=True)
         on = [m for m in llm_modules() if (hubconf.get("modules") or {}).get(m) is True]
         if warning := llm_modules_warning(on):   # turned on by hand, or llm setup ended with no model after all
             print(warning)

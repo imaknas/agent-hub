@@ -9,16 +9,10 @@
 
 **Many projects, run by AI agents. Each one remembers, and you decide.**
 
-Install (macOS or Linux):
+Install (macOS or Linux), then answer a few questions it asks:
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/imaknas/agent-hub/main/install.sh | sh
-```
-
-When it finishes, open a new terminal and answer a few questions:
-
-```bash
-agenthub init
 ```
 
 What it does and what comes next: [Quick start](#quick-start).
@@ -104,20 +98,33 @@ project's background services, sandboxes, a mailbox between projects, credential
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/imaknas/agent-hub/main/install.sh | sh
-agenthub init                        # owner name, timezone, workspace, modules, which LLM makes judgment calls
-agenthub doctor                      # everything that is missing or broken, each with how to fix it
-agenthub onboard ~/workspace/my-app  # connect a project (--no-remote: don't create a GitHub repo)
 ```
 
 The installer clones the repo into `agent-hub` in your home folder (`AGENT_HUB_DIR` to choose another), checks out the
-newest release, installs [uv](https://docs.astral.sh/uv/) if it is missing, and runs `bin/setup`. It installs nothing
-that needs `sudo`: `bin/setup` names anything else that is missing (for example `jq`) with the command to install it.
-Read it first if you like: [`install.sh`](install.sh). The same by hand:
+newest release, installs [uv](https://docs.astral.sh/uv/) if it is missing, runs `bin/setup`, and goes straight on
+into `agenthub init`, whose first question is the language. git is the one thing it may install, and it asks first
+(on macOS, Apple's command line tools; on Linux, your package manager with your own `sudo` password). `bin/setup`
+names anything else that is missing with the command to install it. Pasting the line again after an install that
+stopped halfway carries on from where it stopped. Without a terminal (CI, a container) it stops after the install;
+`curl … | sh -s -- --no-init` does the same on purpose.
+
+Then:
+
+```bash
+agenthub doctor                      # everything that is missing or broken, each with how to fix it
+```
+
+```bash
+agenthub onboard ~/workspace/my-app  # connect a project (--no-remote: don't create a GitHub repo)
+```
+
+Read the installer first if you like: [`install.sh`](install.sh). The same by hand:
 
 ```bash
 git clone <this repo URL> agent-hub && cd agent-hub   # any folder; hooks name it where it is
 git checkout "$(git describe --tags --abbrev=0 --match 'v[0-9]*')"   # the newest release (stay on main to follow development)
 bin/setup                            # check required tools, build the platform Python, put `agenthub` on PATH
+agenthub init                        # the questions (open a new terminal first if agenthub isn't found)
 ```
 
 With a model set up (`agenthub llm setup`) and the scheduler running, the next morning there is a digest and a `todo.md`
