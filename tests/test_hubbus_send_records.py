@@ -27,7 +27,7 @@ TS = re.compile(r"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d+)?(Z|[+-]\d{2}:\d{2}
 # vectors from acts/0.3 conformance/keys.json (the spec's example key method; the registrar uses the same one), read
 # from the vendored copy: every case, the non-ASCII ones included
 KEY_VECTORS = [(c["project"], c["text"], c["key"]) for c in json.loads(
-    (ROOT / "contracts" / "vendor" / "agent-ops-specs" / "principal-handoff-0.3" / "acts" / "keys.json").read_text())["cases"]]
+    (ROOT / "contracts" / "vendor" / "agent-ops-specs" / "principal-handoff-0.4" / "acts" / "keys.json").read_text())["cases"]]
 # what every kind of record must have (core + the acts schema's required)
 REQUIRED = {"raised": ("terms", "terms_rev"), "claimed": ("outcome", "evidence"), "withdrawn": ("reason",)}
 

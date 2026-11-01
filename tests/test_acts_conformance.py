@@ -1,151 +1,144 @@
-"""agent-hub runs the Principal Handoff Acts 0.3 conformance test data (agent-ops-specs, source in
-contracts/vendor/.../SOURCE): proves that bin/registrar.py (the registry's steps) and bin/gen-todo.py (classifying the
-to-do section) meet the spec.
+"""agent-hub runs the Principal Handoff Acts 0.4 conformance data of the Markdown binding (agent-ops-specs, source in
+contracts/vendor/agent-ops-specs/principal-handoff-0.4/acts/SOURCE) against bin/acts_md.py, the reader and document
+steps bin/registrar.py and bin/gen-todo.py use.
 
-Runs both profiles, each with the content language that writes it: zh-hant (this instance's token set) and en (the
-English set is the spec's en profile, so its vectors run as they are). The zh-hant data's owner tag is `Owner`; per the
-conformance/README rules it is replaced with this machine's configured owner.tag before comparing.
-parse's full classification (agent, to be decided, format problems) is in gen-todo; the registrar handles only the
-owner's lines.
+Every case runs twice: in the case's own profile alone, built from the spec's profiles.json (what the spec tests), and
+in agent-hub's reading, both token sets at once with the content language's set writing (what runs here). For the
+second, a zh-hant case's `Owner` is replaced with this instance's owner tag, and an en case runs only where its
+principal_tag is the en profile's default `owner` (agent-hub's en set keeps the default, bin/todo_tokens.py).
+records.json and lifecycle.json are the principal side's and the record layer's; agent-hub does not run them.
 
     bin/py -m unittest discover -s tests
 """
 import importlib.util
 import json
-import os
 import pathlib
 import sys
 import unittest
-from unittest import mock
 
 ROOT = pathlib.Path(__file__).resolve().parents[1]
-FIX = ROOT / "contracts" / "vendor" / "agent-ops-specs" / "principal-handoff-0.3" / "acts"
+FIX = ROOT / "contracts" / "vendor" / "agent-ops-specs" / "principal-handoff-0.4" / "acts"
 sys.path.insert(0, str(ROOT / "bin"))
+import acts_md  # noqa: E402
 import todo_tokens  # noqa: E402
 
-
-def load(name: str, file: str):
-    spec = importlib.util.spec_from_file_location(name, ROOT / "bin" / file)
-    m = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(m)
-    return m
-
-
-registrar = load("registrar", "registrar.py")
-gen_todo = load("gen_todo", "gen-todo.py")
+spec = importlib.util.spec_from_file_location("registrar_conf", ROOT / "bin" / "registrar.py")
+registrar = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(registrar)
 TAG = registrar.TAG
-# the zh-hant key marker's word before the owner tag (the marker without its opening parenthesis, up to the tag)
-LEAD = todo_tokens.tokens("zh-Hant")["key_marker"].split("{owner}")[0][1:]
+SPEC = json.loads((FIX / "profiles.json").read_text())["profiles"]
+LANG = {"zh-hant": "zh-Hant", "en": "en"}
 
 
-def cases(file: str, profile: str = "zh-hant"):
-    return [c for c in json.loads((FIX / file).read_text())["cases"] if c.get("profile", "zh-hant") == profile]
+def cases(file: str) -> list[dict]:
+    return json.loads((FIX / file).read_text())["cases"]
 
 
-def own(x):
-    """Replace the test data's owner tag `Owner` with this machine's owner.tag (in tags and key markers, including the
-    marker form without the space)."""
+def doc(lines: list[str]) -> str:
+    return "\n".join(lines) + "\n"
+
+
+def nonblank(text: str) -> list[str]:
+    """acts §9: documents compare as their non-blank lines, trailing whitespace removed."""
+    return [l.rstrip() for l in text.split("\n") if l.strip()]
+
+
+def bound(c: dict) -> set | None:
+    return set(c["bound"]) if "bound" in c else None
+
+
+def own(x, tag: str):
+    """the zh-hant data's tag `Owner` -> tag, in labels and markers"""
     if isinstance(x, str):
-        for a, b in ((todo_tokens.bracket("zh-Hant", "Owner"), todo_tokens.bracket("zh-Hant", TAG)),
-                     (LEAD + "Owner", LEAD + TAG), (LEAD.rstrip() + "Owner", LEAD.rstrip() + TAG)):
+        zh = todo_tokens.tokens("zh-Hant")
+        lead = zh["key_marker"].split("{owner}")[0][1:]
+        for a, b in ((todo_tokens.bracket("zh-Hant", "Owner"), todo_tokens.bracket("zh-Hant", tag)),
+                     (lead + "Owner", lead + tag), (lead.rstrip() + "Owner", lead.rstrip() + tag)):
             x = x.replace(a, b)
         return x
     if isinstance(x, list):
-        return [own(v) for v in x]
+        return [own(v, tag) for v in x]
     if isinstance(x, dict):
-        return {k: own(v) for k, v in x.items()}
+        return {k: own(v, tag) for k, v in x.items()}
     return x
 
 
-def nonblank(lines):
-    """acts §9.2: compare non-empty lines, trailing whitespace stripped."""
-    return [l.rstrip() for l in lines if l.strip()]
+def readings(c: dict):
+    """(name, translate, reading profiles, writer) for the case: the spec's profile alone, then agent-hub's"""
+    p = acts_md.Profile.from_json(SPEC[c["profile"]], **(c.get("parameters") or {}))
+    yield "spec", (lambda x: x), (p,), p
+    params = {**SPEC[c["profile"]].get("parameters", {}), **(c.get("parameters") or {})}
+    if c["profile"] == "zh-hant":
+        if params["principal_tag"] == "Owner":
+            yield "agent-hub", (lambda x: own(x, TAG)), acts_md.profiles(TAG), acts_md.profile("zh-Hant", TAG)
+    elif params["principal_tag"] == "owner":
+        yield "agent-hub", (lambda x: x), acts_md.profiles(TAG), acts_md.profile("en", TAG)
 
 
-ASSIGNEE = {"owner": "principal", "agent": "agent", "tbd": "undecided"}   # gen-todo's roles -> the spec's assignees
+class Profiles(unittest.TestCase):
+    def test_agent_hubs_sets_are_the_spec_profiles(self):
+        self.assertEqual(acts_md.profile("zh-Hant", "Owner"), acts_md.Profile.from_json(SPEC["zh-hant"]))
+        self.assertEqual(acts_md.profile("zh-Hant", "Alex"),
+                         acts_md.Profile.from_json(SPEC["zh-hant"], principal_tag="Alex"))
+        self.assertEqual(acts_md.profile("en", "Alex"), acts_md.Profile.from_json(SPEC["en"]),
+                         "the en set keeps the default principal_tag, whatever the owner tag")
 
 
-def as_is(x):
-    return x
-
-
-# profile in the data -> (the parameter substitution, the content language whose writer produces it); the en profile
-# has no parameter: its vectors run as they are
-PROFILES = {"zh-hant": (own, "zh-Hant"), "en": (as_is, "en")}
-
-
-class Acts(unittest.TestCase):
+class Binding(unittest.TestCase):
     def each(self, file: str, check) -> None:
-        """every case of both profiles: check(case, its translation), under the content language that writes it"""
         n = 0
-        for profile, (tr, lang) in PROFILES.items():
-            for c in cases(file, profile):
+        for c in cases(file):
+            for name, tr, ps, writer in readings(c):
                 n += 1
-                with self.subTest(case=c["id"]), mock.patch.dict(os.environ, {"AGENT_HUB_LANG_CONTENT": lang}):
-                    check(c, tr)
+                with self.subTest(case=c["id"], reading=name):
+                    check(c, tr, ps, writer)
         self.assertTrue(n)
 
     def test_parse(self):
-        def check(c, own):
-            text = "\n".join(own(c["document"])) + "\n"
-            exp = c["expect"]
-            self.assertEqual(gen_todo.todo_sections(text) != [], exp["section"])
-            items = {o: [] for o in gen_todo.OWNERS}
-            problems: list = []
-            gen_todo.parse("demo", text, items, problems)
-            got = []
-            for owner, rows in items.items():
-                for _, t in rows:
-                    m = registrar.KEY.search(t)
-                    got.append((ASSIGNEE[owner], (t[:m.start()] if m else t).strip(), m.group(1) if m else None))
-            want = [(t["assignee"], own(t["text"]), t["key"]) for t in exp["tasks"]]
-            self.assertEqual(sorted(got), sorted(want))
-            self.assertEqual(len(problems) - (not exp["section"]), len(exp["problems"]), "no section is one problem here")
-            # the owner lines the registrar sees match the spec
-            mine = [(t["text"], t["key"]) for t in registrar.owner_lines(own(c["document"]))]
-            self.assertEqual(sorted(mine), sorted((own(t["text"]), t["key"]) for t in exp["tasks"]
-                                                  if t["assignee"] == "principal"))
+        def check(c, tr, ps, writer):
+            self.assertEqual(acts_md.parse(doc(tr(c["document"])), ps), tr(c["expect"]))
         self.each("parse.json", check)
 
     def test_keys(self):
-        for c in json.loads((FIX / "keys.json").read_text())["cases"]:
+        for c in cases("keys.json"):
             with self.subTest(case=c["id"]):
                 self.assertEqual(registrar.task_key(c["project"], c["text"]), c["key"])
 
     def test_register(self):
-        def check(c, own):
-            lines = own(c["document"])
-            raised = []
-            for i, k, text in registrar.candidates(lines, c["project"]):
-                raised.append({"key": k, "text": text})
-                lines[i] = lines[i].rstrip() + registrar.stamp(k)
-            self.assertEqual(raised, own(c["expect"]["raised"]))
-            self.assertEqual(nonblank(lines), nonblank(own(c["expect"]["document"])))
-            self.assertEqual(registrar.candidates(lines, c["project"]), [], "not sent a second time")
+        def check(c, tr, ps, writer):
+            out, raised, reported = acts_md.register(doc(tr(c["document"])), c["project"], ps, writer, bound(c),
+                                                     registrar.task_key)
+            self.assertEqual([{"key": r["key"], "text": r["text"]} for r in raised], tr(c["expect"]["raised"]))
+            self.assertEqual(reported, c["expect"]["reported"])
+            self.assertEqual(nonblank(out), nonblank(doc(tr(c["expect"]["document"]))))
+            b = None if bound(c) is None else bound(c) | {r["key"] for r in raised}
+            self.assertEqual(acts_md.register(out, c["project"], ps, writer, b, registrar.task_key)[:2], (out, []),
+                             "idempotent")
         self.each("register.json", check)
 
     def test_relink(self):
-        def check(c, own):
-            lines = own(c["document"])
-            self.assertEqual(registrar.relink(lines, own(c["vanished"])), c["expect"]["relinked"])
-            self.assertEqual(nonblank(lines), nonblank(own(c["expect"]["document"])))
+        def check(c, tr, ps, writer):
+            out, relinked = acts_md.relink(doc(tr(c["document"])), tr(c["active"]), ps, writer, bound(c))
+            self.assertEqual(relinked, c["expect"]["relinked"])
+            self.assertEqual(nonblank(out), nonblank(doc(tr(c["expect"]["document"]))))
         self.each("relink.json", check)
 
     def test_amend(self):
-        def check(c, own):
-            self.assertEqual(registrar.amendments(own(c["document"]), own(c["latest"])), own(c["expect"]))
+        def check(c, tr, ps, writer):
+            self.assertEqual(acts_md.amend(doc(tr(c["document"])), tr(c["latest"]), ps), tr(c["expect"]))
         self.each("amend.json", check)
 
     def test_apply(self):
-        def check(c, own):
-            lines = own(c["document"])
-            self.assertEqual(registrar.apply(lines, own(c["record"])), c["expect"]["changed"])
-            self.assertEqual(nonblank(lines), nonblank(own(c["expect"]["document"])))
+        def check(c, tr, ps, writer):
+            out, changed = acts_md.apply(doc(tr(c["document"])), tr(c["record"]), ps, writer, tr(c.get("latest")))
+            self.assertEqual(changed, c["expect"]["changed"])
+            self.assertEqual(nonblank(out), nonblank(doc(tr(c["expect"]["document"]))))
         self.each("apply.json", check)
 
     def test_reconcile(self):
-        def check(c, own):
-            self.assertEqual(registrar.reconcile(own(c["document"]), own(c["open"])), c["expect"])
+        def check(c, tr, ps, writer):
+            got = acts_md.reconcile(doc(tr(c["document"])), tr(c["open"]), ps, bound(c))
+            self.assertEqual([{"key": x["key"], "action": x["action"]} for x in got], c["expect"])
         self.each("reconcile.json", check)
 
 

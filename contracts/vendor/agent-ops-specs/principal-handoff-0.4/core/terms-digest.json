@@ -1,0 +1,185 @@
+{
+  "suite": "core/0.4",
+  "description": "Terms digest (core §5.3): need record -> the RFC 8785 serialisation of {ext, project, key, terms_rev, terms} and its SHA-256 digest.",
+  "cases": [
+    {
+      "id": "ascii",
+      "record": {
+        "ph": "0.4",
+        "ext": "acts/0.4",
+        "id": "r:task-demo-aaaaaaaaaa",
+        "type": "raised",
+        "origin": "requester",
+        "by": "agent:demo",
+        "key": "task-demo-aaaaaaaaaa",
+        "project": "demo",
+        "ts": "2026-10-27T09:00:00Z",
+        "terms": {
+          "text": "Renew the domain",
+          "due": "2026-11-01"
+        },
+        "terms_rev": 1
+      },
+      "canonical": "{\"ext\":\"acts/0.4\",\"key\":\"task-demo-aaaaaaaaaa\",\"project\":\"demo\",\"terms\":{\"due\":\"2026-11-01\",\"text\":\"Renew the domain\"},\"terms_rev\":1}",
+      "digest": "sha-256:6269a5adfa0224668c6f163f0fc8c69836075276219f14421200317bada9d16b"
+    },
+    {
+      "id": "member-order-does-not-matter",
+      "record": {
+        "ph": "0.4",
+        "ext": "acts/0.4",
+        "id": "r:task-demo-aaaaaaaaaa",
+        "type": "raised",
+        "origin": "requester",
+        "by": "agent:demo",
+        "key": "task-demo-aaaaaaaaaa",
+        "project": "demo",
+        "ts": "2026-10-27T09:00:00Z",
+        "terms": {
+          "due": "2026-11-01",
+          "text": "Renew the domain"
+        },
+        "terms_rev": 1
+      },
+      "canonical": "{\"ext\":\"acts/0.4\",\"key\":\"task-demo-aaaaaaaaaa\",\"project\":\"demo\",\"terms\":{\"due\":\"2026-11-01\",\"text\":\"Renew the domain\"},\"terms_rev\":1}",
+      "digest": "sha-256:6269a5adfa0224668c6f163f0fc8c69836075276219f14421200317bada9d16b"
+    },
+    {
+      "id": "non-ascii",
+      "record": {
+        "ph": "0.4",
+        "ext": "acts/0.4",
+        "id": "r:task-demo-aaaaaaaaaa",
+        "type": "raised",
+        "origin": "requester",
+        "by": "agent:demo",
+        "key": "task-demo-aaaaaaaaaa",
+        "project": "demo",
+        "ts": "2026-10-27T09:00:00Z",
+        "terms": {
+          "text": "續約網域(兩年)"
+        },
+        "terms_rev": 1
+      },
+      "canonical": "{\"ext\":\"acts/0.4\",\"key\":\"task-demo-aaaaaaaaaa\",\"project\":\"demo\",\"terms\":{\"text\":\"續約網域(兩年)\"},\"terms_rev\":1}",
+      "digest": "sha-256:5d44bf790083b5a87603174113f80664d79ef86cc07b2a608a75a9580ae59ee5"
+    },
+    {
+      "id": "escapes",
+      "record": {
+        "ph": "0.4",
+        "ext": "decisions/0.4",
+        "id": "a:q-demo-1:2",
+        "type": "amended",
+        "origin": "requester",
+        "by": "agent:demo",
+        "key": "q-demo-1",
+        "project": "demo",
+        "ts": "2026-10-27T09:00:00Z",
+        "terms": {
+          "text": "Line one\nline \"two\"\t\\ \u001f end  é 😀"
+        },
+        "terms_rev": 2
+      },
+      "canonical": "{\"ext\":\"decisions/0.4\",\"key\":\"q-demo-1\",\"project\":\"demo\",\"terms\":{\"text\":\"Line one\\nline \\\"two\\\"\\t\\\\ \\u001f end  é 😀\"},\"terms_rev\":2}",
+      "digest": "sha-256:a456a8a9d5822b436bb094cd669b8453d8598466f54096723824a608b50d8f6e"
+    },
+    {
+      "id": "decision-with-criteria",
+      "record": {
+        "ph": "0.4",
+        "ext": "decisions/0.4",
+        "id": "r:q-demo-7",
+        "type": "raised",
+        "origin": "requester",
+        "by": "agent:demo",
+        "key": "q-demo-7",
+        "project": "demo",
+        "ts": "2026-10-27T09:00:00Z",
+        "terms": {
+          "text": "Merge the export feature (branch feature-export)?",
+          "options": [
+            {
+              "id": "merge",
+              "label": "Merge"
+            },
+            {
+              "id": "hold",
+              "label": "Hold"
+            }
+          ],
+          "criteria": {
+            "subject": {
+              "uri": "git:demo@refs/heads/feature-export",
+              "digest": "sha-256:3333333333333333333333333333333333333333333333333333333333333333"
+            },
+            "checks": [
+              {
+                "id": "tests",
+                "text": "The test suite passes",
+                "format": "in-toto",
+                "implementation": {
+                  "uri": "git:demo@ci/test.yml",
+                  "digest": "sha-256:4444444444444444444444444444444444444444444444444444444444444444"
+                },
+                "trust": [
+                  "sigstore:ci"
+                ]
+              }
+            ],
+            "answer": {
+              "text": "Merge the export feature",
+              "option": "merge"
+            }
+          }
+        },
+        "terms_rev": 1
+      },
+      "canonical": "{\"ext\":\"decisions/0.4\",\"key\":\"q-demo-7\",\"project\":\"demo\",\"terms\":{\"criteria\":{\"answer\":{\"option\":\"merge\",\"text\":\"Merge the export feature\"},\"checks\":[{\"format\":\"in-toto\",\"id\":\"tests\",\"implementation\":{\"digest\":\"sha-256:4444444444444444444444444444444444444444444444444444444444444444\",\"uri\":\"git:demo@ci/test.yml\"},\"text\":\"The test suite passes\",\"trust\":[\"sigstore:ci\"]}],\"subject\":{\"digest\":\"sha-256:3333333333333333333333333333333333333333333333333333333333333333\",\"uri\":\"git:demo@refs/heads/feature-export\"}},\"options\":[{\"id\":\"merge\",\"label\":\"Merge\"},{\"id\":\"hold\",\"label\":\"Hold\"}],\"text\":\"Merge the export feature (branch feature-export)?\"},\"terms_rev\":1}",
+      "digest": "sha-256:0ddc05afae970d6368fde3a446de98d6fb47577fc71185de0310f79d57d59a77"
+    },
+    {
+      "id": "unrecognised-member-with-integer",
+      "record": {
+        "ph": "0.4",
+        "ext": "acts/0.4",
+        "id": "r:task-demo-aaaaaaaaaa",
+        "type": "raised",
+        "origin": "requester",
+        "by": "agent:demo",
+        "key": "task-demo-aaaaaaaaaa",
+        "project": "demo",
+        "ts": "2026-10-27T09:00:00Z",
+        "terms": {
+          "text": "Pay the invoice",
+          "x_amount": 5000
+        },
+        "terms_rev": 1
+      },
+      "canonical": "{\"ext\":\"acts/0.4\",\"key\":\"task-demo-aaaaaaaaaa\",\"project\":\"demo\",\"terms\":{\"text\":\"Pay the invoice\",\"x_amount\":5000},\"terms_rev\":1}",
+      "digest": "sha-256:00e0c083dc29e411cc904bdaeed038f9d6e7e2c7203330005b73c40a3790409e"
+    },
+    {
+      "id": "member-names-beyond-the-bmp",
+      "record": {
+        "ph": "0.4",
+        "ext": "acts/0.4",
+        "id": "r:task-demo-aaaaaaaaaa",
+        "type": "raised",
+        "origin": "requester",
+        "by": "agent:demo",
+        "key": "task-demo-aaaaaaaaaa",
+        "project": "demo",
+        "ts": "2026-10-27T09:00:00Z",
+        "terms": {
+          "text": "Pay",
+          "x_": "private use",
+          "x_😀": "emoji"
+        },
+        "terms_rev": 1
+      },
+      "canonical": "{\"ext\":\"acts/0.4\",\"key\":\"task-demo-aaaaaaaaaa\",\"project\":\"demo\",\"terms\":{\"text\":\"Pay\",\"x_😀\":\"emoji\",\"x_\":\"private use\"},\"terms_rev\":1}",
+      "digest": "sha-256:1655cd6309f57678ae4d2041fad212d868dab515d5919782cebed945e98a1c4e"
+    }
+  ]
+}

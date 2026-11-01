@@ -1,0 +1,2 @@
+Vendored from agent-ops-specs (https://github.com/imaknas/agent-ops-specs, specs/principal-handoff/acts/conformance/ and core/conformance/terms-digest.json) at tag principal-handoff-0.4 (commit 81a0486, DOI 10.5281/zenodo.23852711).
+agent-hub runs the binding cases (parse, keys, relink, register, amend, apply, reconcile) of both profiles against bin/acts_md.py in tests/test_acts_conformance.py.

@@ -35,10 +35,11 @@ BIN = pathlib.Path(__file__).resolve().parent
 sys.path.insert(0, str(BIN))
 import hubconf  # noqa: E402
 import i18n  # noqa: E402
+import ph_wire  # noqa: E402
 
 _ = i18n.domain(__file__)
 
-EXT_ACTS = "acts/0.3"
+EXT_ACTS = ph_wire.ACTS
 OUTCOMES = {"done": "done", "drop": "dropped", "already-done": "already_done"}
 SEEN = hubconf.STATE / "owner-notified.json"
 
@@ -97,7 +98,7 @@ def settle(key: str, outcome: str, note: str | None) -> int:
         heads = [r["id"] for r in led.settle.get(key, [])
                  if r["id"] == (reg.current(led.settle.get(key, [])) or {}).get("id")]
         n = len(led.settle.get(key, [])) + 1
-        rec = {"ph": "0.3", "ext": EXT_ACTS, "id": f"s:{key}:{n}", "type": "settled", "origin": "principal",
+        rec = {"ph": ph_wire.SEND, "ext": EXT_ACTS, "id": f"s:{key}:{n}", "type": "settled", "origin": "principal",
                "by": hubconf.party("principal_side"), "key": key, "project": p, "ts": _now(), "outcome": outcome,
                "terms_rev": rev or 1, "authority": {"kind": "principal", "decider": hubconf.party("principal")}}
         if heads:
@@ -132,7 +133,7 @@ def answer(qid: str, text: str) -> int:
     proj = q["project"]
     before = [r["record"]["id"] for r in hb.records(c, proj, hb.EXT_DECISIONS, {"settled"}, direction="in")
               if r["record"].get("key") == qid]
-    rec = {"ph": "0.3", "ext": hb.EXT_DECISIONS, "id": f"s:{qid}:{len(before) + 1}", "type": "settled", "origin": "principal",
+    rec = {"ph": ph_wire.SEND, "ext": hb.EXT_DECISIONS, "id": f"s:{qid}:{len(before) + 1}", "type": "settled", "origin": "principal",
            "by": hubconf.party("principal_side"), "key": qid, "project": proj, "ts": _now(), "outcome": "decided",
            "answer": {"text": text}, "terms_rev": 1, "authority": {"kind": "principal", "decider": hubconf.party("principal")}}
     if before:

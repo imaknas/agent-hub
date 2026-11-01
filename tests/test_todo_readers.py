@@ -1,5 +1,5 @@
 """The readers of STATE.md's to-do block and of the review-log reason label, function by function (contracts
-state-todo / todo-md): gen-todo.py's parse, registrar.py's owner lines, keys, strike / re-add / re-link and
+state-todo / todo-md): gen-todo.py's parse, registrar.py's reading (bin/acts_md.py: owner lines, keys, strike / re-add / re-link) and
 removal_reason, librarian.py's key marker as edits.py checks it, contracts.check_state_todo. The flows around them are
 tests/test_registrar_flow.py, tests/test_librarian_flow.py and the E1 goldens; this pins the line-level rules.
 The zh-Hant tokens come from the code's own token set; their other accepted spellings from
@@ -17,6 +17,7 @@ from unittest import mock
 
 ROOT = pathlib.Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "bin"))
+import acts_md  # noqa: E402
 import contracts  # noqa: E402
 import edits  # noqa: E402
 import hubconf  # noqa: E402
@@ -118,6 +119,33 @@ def content(lang: str):
     return mock.patch.dict("os.environ", {"AGENT_HUB_LANG_CONTENT": lang})
 
 
+def owner_lines(text: str) -> list[tuple[str, str | None]]:
+    """the owner's task lines the registrar reads (acts_md, both sets): (text, key)"""
+    return [(e.text, e.key) for e in acts_md.Doc(text, registrar.READ).tasks() if e.owner == "principal"]
+
+
+def strike(text: str, key: str) -> tuple[str, bool]:
+    return acts_md.apply(text, {"origin": "principal", "type": "settled", "key": key}, registrar.READ,
+                         registrar.writer())
+
+
+def readd(text: str, key: str, restore: str) -> tuple[str, bool]:
+    return acts_md.apply(text, {"origin": "principal", "type": "reopened", "key": key, "restore_text": restore},
+                         registrar.READ, registrar.writer())
+
+
+def relink(text: str, active: dict) -> tuple[str, list[str]]:
+    return acts_md.relink(text, active, registrar.READ, registrar.writer())
+
+
+def reconcile(text: str, active: dict) -> list[dict]:
+    return [{"key": x["key"], "action": x["action"]} for x in acts_md.reconcile(text, active, registrar.READ)]
+
+
+def stamp(key: str) -> str:
+    return registrar.writer().render_marker(key)
+
+
 class Registrar(unittest.TestCase):
     def setUp(self):
         p = content("zh-Hant")   # this instance's setting: what the registrar writes is the zh-Hant set
@@ -125,61 +153,59 @@ class Registrar(unittest.TestCase):
         self.addCleanup(p.stop)
 
     def test_owner_lines_and_keys(self):
-        lines = state(item(TAG, "renew the domain" + mark("task-p-1")),
-                      item(TAG, "sign" + mark("task-p-2", form="full_width_marker")),
-                      item(TAG, "pay"), item("agent", "write tests"), f"### {tag(TAG)}", "- [ ] grouped").splitlines()
-        got = [(t["text"], t["key"]) for t in registrar.owner_lines(lines)]
-        self.assertEqual(got, [("renew the domain", "task-p-1"), ("sign", "task-p-2"), ("pay", None), ("grouped", None)])
-        self.assertEqual(registrar.line_texts(lines), ["renew the domain", "sign", "pay", "write tests", "grouped"])
+        text = state(item(TAG, "renew the domain" + mark("task-p-1")),
+                     item(TAG, "sign" + mark("task-p-2", form="full_width_marker")),
+                     item(TAG, "pay"), item("agent", "write tests"), f"### {tag(TAG)}", "- [ ] grouped")
+        self.assertEqual(owner_lines(text),
+                         [("renew the domain", "task-p-1"), ("sign", "task-p-2"), ("pay", None), ("grouped", None)])
 
     def test_stamp(self):
-        self.assertEqual(registrar.stamp("task-p-1"), mark("task-p-1"))
+        self.assertEqual(stamp("task-p-1"), mark("task-p-1"))
 
-    def test_key_on_a_retagged_line_is_present(self):
-        """an owner item re-tagged (here tbd, then agent) that kept its key is not vanished: no claim, no warning,
-        not stamped back elsewhere (live case: a tbd line carrying the owner's key)"""
+    def test_key_on_a_retagged_line_is_displaced(self):
+        """an owner item re-tagged (here tbd, then agent) that kept its key is not vanished: no claim, not stamped
+        back elsewhere, reported as displaced (acts 0.4 §4 step 5: a note, no claim; live case: a tbd line carrying the
+        owner's key)"""
         for t in (TBD, "agent"):
             with self.subTest(tag=t):
-                lines = state(item(t, "decide later" + mark("task-p-1")), item(TAG, "something else")).splitlines()
-                self.assertEqual(registrar.present_keys(lines), {"task-p-1"})
-                self.assertEqual(registrar.reconcile(lines, {"task-p-1": "an unrelated text"}), [])
-                self.assertEqual([t["key"] for t in registrar.owner_lines(lines)], [None], "still not an owner line")
+                text = state(item(t, "decide later" + mark("task-p-1")), item(TAG, "something else"))
+                self.assertEqual(reconcile(text, {"task-p-1": "an unrelated text"}),
+                                 [{"key": "task-p-1", "action": "displaced"}])
+                self.assertEqual(relink(text, {"task-p-1": "something else"}), (text, []))
+                self.assertEqual(owner_lines(text), [("something else", None)], "still not an owner line")
 
     def test_strike_leaves_empty_marker(self):
-        lines = state(item(TAG, "renew the domain" + mark("task-p-1"))).splitlines()
-        self.assertTrue(registrar.strike(lines, "task-p-1"))
-        self.assertIn(NONE, lines)
-        self.assertNotIn("renew the domain", "\n".join(lines))
-        self.assertFalse(registrar.strike(lines, "task-p-1"))
+        text, changed = strike(state(item(TAG, "renew the domain" + mark("task-p-1"))), "task-p-1")
+        self.assertTrue(changed)
+        self.assertIn(NONE, text.splitlines())
+        self.assertNotIn("renew the domain", text)
+        self.assertFalse(strike(text, "task-p-1")[1])
 
     def test_strike_keeps_other_lines(self):
-        lines = state(item(TAG, "renew the domain" + mark("task-p-1")), item("agent", "write tests")).splitlines()
-        registrar.strike(lines, "task-p-1")
-        self.assertNotIn(NONE, lines)
-        self.assertIn(item("agent", "write tests"), lines)
+        text, _ = strike(state(item(TAG, "renew the domain" + mark("task-p-1")), item("agent", "write tests")), "task-p-1")
+        self.assertNotIn(NONE, text.splitlines())
+        self.assertIn(item("agent", "write tests"), text.splitlines())
 
     def test_readd_replaces_empty_marker(self):
-        lines = state(NONE).splitlines()
-        self.assertTrue(registrar.readd(lines, "task-p-1", "sign"))
-        self.assertIn(item(TAG, "sign" + mark("task-p-1")), lines)
-        self.assertNotIn(NONE, lines)
-        self.assertFalse(registrar.readd(lines, "task-p-1", "sign"), "already there")
+        text, changed = readd(state(NONE), "task-p-1", "sign")
+        self.assertTrue(changed)
+        self.assertIn(item(TAG, "sign" + mark("task-p-1")), text.splitlines())
+        self.assertNotIn(NONE, text.splitlines())
+        self.assertFalse(readd(text, "task-p-1", "sign")[1], "already there")
 
     def test_readd_appends_after_the_last_item(self):
-        lines = state(item("agent", "write tests")).splitlines()
-        registrar.readd(lines, "task-p-1", "sign")
+        lines = readd(state(item("agent", "write tests")), "task-p-1", "sign")[0].splitlines()
         i = lines.index(item("agent", "write tests"))
         self.assertEqual(lines[i + 1], item(TAG, "sign" + mark("task-p-1")))
 
     def test_readd_creates_the_section(self):
-        lines = "# STATE\n\n## Now\n\nAbout.".splitlines()
-        registrar.readd(lines, "task-p-1", "sign")
+        lines = readd("# STATE\n\n## Now\n\nAbout.\n", "task-p-1", "sign")[0].splitlines()
         self.assertEqual(lines[-3:], [HEAD, "", item(TAG, "sign" + mark("task-p-1"))])
 
     def test_relink(self):
-        lines = state(item(TAG, "sign  the contract")).splitlines()
-        self.assertEqual(registrar.relink(lines, {"task-p-9": "sign the contract"}), ["task-p-9"])
-        self.assertIn(item(TAG, "sign  the contract" + mark("task-p-9")), lines)
+        text, done = relink(state(item(TAG, "sign  the contract")), {"task-p-9": "sign the contract"})
+        self.assertEqual(done, ["task-p-9"])
+        self.assertIn(item(TAG, "sign  the contract" + mark("task-p-9")), text.splitlines())
 
     def test_removal_reason(self):
         label = FX["reason_label"]
@@ -309,60 +335,58 @@ class EnglishRegistrar(unittest.TestCase):
         self.addCleanup(p.stop)
 
     def test_writes_the_english_set(self):
-        self.assertEqual(registrar.stamp("task-p-1"), en_mark("task-p-1"))
-        lines = state(en_item(TAG, "renew" + en_mark("task-p-1")), heading=EN["todo_heading"]).splitlines()
-        registrar.strike(lines, "task-p-1")
-        self.assertIn(EN["todo_none"], lines)
-        registrar.readd(lines, "task-p-2", "sign")
-        self.assertIn(en_item(TAG, "sign" + en_mark("task-p-2")), lines)
-        self.assertNotIn(EN["todo_none"], lines)
-        lines = "# STATE\n\n## Now\n\nAbout.".splitlines()
-        registrar.readd(lines, "task-p-3", "pay")
+        self.assertEqual(stamp("task-p-1"), en_mark("task-p-1"))
+        text, _ = strike(state(en_item(TAG, "renew" + en_mark("task-p-1")), heading=EN["todo_heading"]), "task-p-1")
+        self.assertIn(EN["todo_none"], text.splitlines())
+        text, _ = readd(text, "task-p-2", "sign")
+        self.assertIn(en_item(TAG, "sign" + en_mark("task-p-2")), text.splitlines())
+        self.assertNotIn(EN["todo_none"], text.splitlines())
+        lines = readd("# STATE\n\n## Now\n\nAbout.\n", "task-p-3", "pay")[0].splitlines()
         self.assertEqual(lines[-3:], [EN["todo_heading"], "", en_item(TAG, "pay" + en_mark("task-p-3"))])
 
     def test_mixed_file_only_what_it_writes_changes(self):
         """an English instance with an older zh-Hant section: the stamp is English, the zh line's tag and the heading
         stay as they are"""
-        lines = state(item(TAG, "old line"), item("agent", "b")).splitlines()
-        self.assertEqual(registrar.relink(lines, {"task-p-9": "old line"}), ["task-p-9"])
-        self.assertIn(item(TAG, "old line") + en_mark("task-p-9"), lines)
-        self.assertIn(HEAD, lines)
-        self.assertEqual([t["key"] for t in registrar.owner_lines(lines)], ["task-p-9"], "read back")
-        registrar.strike(lines, "task-p-9")
-        registrar.strike(lines, "nothing")
-        self.assertIn(item("agent", "b"), lines)
+        text, done = relink(state(item(TAG, "old line"), item("agent", "b")), {"task-p-9": "old line"})
+        self.assertEqual(done, ["task-p-9"])
+        self.assertIn(item(TAG, "old line") + en_mark("task-p-9"), text.splitlines())
+        self.assertIn(HEAD, text.splitlines())
+        self.assertEqual(owner_lines(text), [("old line", "task-p-9")], "read back")
+        text, _ = strike(text, "task-p-9")
+        self.assertFalse(strike(text, "nothing")[1])
+        self.assertIn(item("agent", "b"), text.splitlines())
 
     def test_two_sections_no_key_vanishes(self):
         """a zh-Hant section and an English one in the same file (a format problem gen-todo reports): the registrar
-        sees the keys of both, so nothing is claimed done; a strike empties only its own section"""
+        sees the keys of both, so nothing is claimed done (one in the second section is displaced: acts 0.4 reads only
+        the first section's lines as holding); a strike works in every section and empties only its own"""
         text = state(item(TAG, "old" + mark("task-p-1"))) + "\n" + EN["todo_heading"] + "\n\n" + \
             en_item(TAG, "new" + en_mark("task-p-2")) + "\n" + en_item("agent", "a") + "\n"
-        lines = text.splitlines()
-        self.assertEqual([t["key"] for t in registrar.owner_lines(lines)], ["task-p-1", "task-p-2"])
-        self.assertEqual(registrar.reconcile(lines, {"task-p-1": "old", "task-p-2": "new"}), [])
-        registrar.strike(lines, "task-p-2")
-        self.assertNotIn(EN["todo_none"], lines, "the English section still has a line")
-        registrar.strike(lines, "task-p-1")
-        self.assertEqual(lines.count(EN["todo_none"]), 1, "the emptied zh-Hant section gets this writer's marker")
+        self.assertEqual(owner_lines(text), [("old", "task-p-1"), ("new", "task-p-2")])
+        self.assertEqual(reconcile(text, {"task-p-1": "old", "task-p-2": "new"}),
+                         [{"key": "task-p-2", "action": "displaced"}])
+        text, _ = strike(text, "task-p-2")
+        self.assertNotIn(EN["todo_none"], text.splitlines(), "the English section still has a line")
+        text, _ = strike(text, "task-p-1")
+        self.assertEqual(text.splitlines().count(EN["todo_none"]), 1, "the emptied zh-Hant section gets this writer's marker")
 
     def test_owner_lines(self):
-        lines = state(en_item(TAG, "renew the domain" + en_mark("task-p-1")), en_item(TAG, "pay"),
-                      item(TAG, "zh line" + mark("task-p-2")), en_item("agent", "write tests"),
-                      "### [owner]", "- [ ] grouped", heading=EN["todo_heading"]).splitlines()
-        got = [(t["text"], t["key"]) for t in registrar.owner_lines(lines)]
-        self.assertEqual(got, [("renew the domain", "task-p-1"), ("pay", None), ("zh line", "task-p-2"), ("grouped", None)])
-        self.assertEqual(registrar.line_texts(lines), ["renew the domain", "pay", "zh line", "write tests", "grouped"])
+        text = state(en_item(TAG, "renew the domain" + en_mark("task-p-1")), en_item(TAG, "pay"),
+                     item(TAG, "zh line" + mark("task-p-2")), en_item("agent", "write tests"),
+                     "### [owner]", "- [ ] grouped", heading=EN["todo_heading"])
+        self.assertEqual(owner_lines(text),
+                         [("renew the domain", "task-p-1"), ("pay", None), ("zh line", "task-p-2"), ("grouped", None)])
 
     def test_strike_by_key_in_either_set(self):
         for marker in (en_mark("task-p-1"), mark("task-p-1")):
             with self.subTest(marker=marker):
-                lines = state(en_item(TAG, "renew" + marker), en_item("agent", "a"), heading=EN["todo_heading"]).splitlines()
-                self.assertTrue(registrar.strike(lines, "task-p-1"))
-                self.assertNotIn("renew", "\n".join(lines))
+                text, changed = strike(state(en_item(TAG, "renew" + marker), en_item("agent", "a"),
+                                             heading=EN["todo_heading"]), "task-p-1")
+                self.assertTrue(changed)
+                self.assertNotIn("renew", text)
 
     def test_readd_knows_the_english_empty_marker_and_heading(self):
-        lines = state(EN["todo_none"], heading=EN["todo_heading"]).splitlines()
-        registrar.readd(lines, "task-p-1", "sign")
+        lines = readd(state(EN["todo_none"], heading=EN["todo_heading"]), "task-p-1", "sign")[0].splitlines()
         self.assertNotIn(EN["todo_none"], lines)
         self.assertEqual(lines.count(EN["todo_heading"]), 1)
         self.assertNotIn(HEAD, lines, "no second section")

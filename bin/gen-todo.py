@@ -30,6 +30,7 @@ import sys
 
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
 import hubconf  # noqa: E402
+import acts_md  # noqa: E402
 import i18n  # noqa: E402
 import todo_tokens  # noqa: E402
 
@@ -43,6 +44,7 @@ PROJECTS = hubconf.p("memory_copies", "~/.memory-copies")
 
 TAG, ASSISTANT = hubconf.owner_tag(), hubconf.assistant_name()   # the owner's name in to-do tags (hub.json owner.tag)
 P = todo_tokens.patterns(TAG)
+READ = acts_md.profiles(TAG)
 OWNERS = todo_tokens.ROLES   # items are collected by role: owner, tbd, agent
 # After the registrar sends the owner's to-dos to the assistant, the end of the line gets stamped with the key marker
 # (P.key). For the owner's to-dos with a key the assistant is the authority, and todo.md no longer lists them (only
@@ -55,44 +57,31 @@ def content_heading() -> str:
     return todo_tokens.tokens(hubconf.lang_content())["todo_heading"]
 
 
-def todo_sections(text: str) -> list[list[str]]:
-    """The non-empty lines of each to-do section (either heading); [] if there is none."""
-    lines = text.splitlines()
-    return [[l.rstrip() for l in lines[a:b] if l.strip() and not l.lstrip().startswith(">")]
-            for a, b in P.section(lines)]
-
-
 def parse(source: str, text: str, items: dict, problems: list) -> None:
-    sections = todo_sections(text)
-    if not sections:
+    """One file's to-dos by role into items, its format problems into problems (acts 0.4 §5.2-§5.3, bin/acts_md.py:
+    both token sets; fenced code and HTML comments are not read)."""
+    d = acts_md.Doc(text, READ)
+    if d.unclosed is not None:
+        problems.append(_("{source}: a code fence or HTML comment opened on line {line} is never closed; the registrar "
+                          "leaves the file alone until it is", source=source, line=d.unclosed + 1))
+    if not d.sections:
         problems.append(_("{source}: no `{heading}` section", source=source, heading=content_heading()))
         return
-    if len(sections) > 1:
-        # both are read (nothing dropped), but the file must get one section back
-        problems.append(_("{source}: {n} to-do sections; there must be one", source=source, n=len(sections)))
-    for lines in sections:
-        group = None  # the other accepted form: `- [ ] …` without a label under an owner subheading (`### [owner]`)
-        for line in lines:
-            if P.is_none(line):
-                continue
-            h = P.group.match(line)
-            if h:
-                group = P.role(h)
-                continue
-            m = P.item.match(line)
-            if m and P.role(m):
-                items[P.role(m)].append((source, m.group("text").strip()))
-                continue
-            bare = P.bare.match(line)
-            if bare and group:
-                items[group].append((source, bare.group("text").strip()))
-            elif bare or P.tag_start.match(line) or line.startswith(("- [x]", "- [X]")):
-                # looks like a to-do but has no (known) owner tag, or is checked off and still there: must be shown,
-                # never silently dropped
-                problems.append(_("{source}: a to-do without an owner tag, or a finished one not removed: `{line}`", source=source, line=line[:60]))
-            elif P.no_box.match(line):
-                problems.append(_("{source}: a to-do without its `- [ ]` checkbox: `{line}`", source=source, line=line[:60]))
-            # other lines (explanatory text, "see reference" links, continuation lines) aren't to-dos; skipped
+    if len(d.sections) > 1:
+        # all are read (nothing dropped), but the file must get one section back; new owner to-dos are registered only
+        # from the first
+        problems.append(_("{source}: {n} to-do sections; there must be one", source=source, n=len(d.sections)))
+    for e in d.tasks():
+        items[acts_md.ROLE[e.owner]].append((source, d.body_of(e.i)))
+    for e in d.entries:
+        line = d.lines[e.i].strip()
+        if e.kind == "tasklike":
+            problems.append(_("{source}: a to-do without its `- [ ]` checkbox: `{line}`", source=source, line=line[:60]))
+        elif e.kind == "malformed":
+            # looks like a to-do but has no (known) owner tag, or is checked off and still there: must be shown,
+            # never silently dropped
+            problems.append(_("{source}: a to-do without an owner tag, or a finished one not removed: `{line}`",
+                              source=source, line=line[:60]))
 
 
 def main() -> None:

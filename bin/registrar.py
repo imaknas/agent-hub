@@ -1,36 +1,38 @@
 #!/bin/sh -c exec${IFS}"${0%/*}/py"${IFS}"$0"${IFS}"$@"
-"""The Principal Handoff Acts 0.3 registrar: the things in each project's STATE.md to-do section that only the owner
-can do <-> 0.3 records on the bus (spec acts/SPEC.md §4; a nightly job after the librarian, zero LLM). Replaces the old
-task registration.
+"""The Principal Handoff Acts registrar (agent-ops-specs acts/SPEC.md §4, 0.4): the things in each project's STATE.md
+to-do section that only the owner can do <-> records on the bus (a nightly job after the librarian, zero LLM).
 
-The section is read in either token set (contracts/state-todo.v2.md, bin/todo_tokens.py), also mixed in one file;
-what the registrar writes (the key stamp, a re-added line, the empty marker, a missing section's heading) is in the
-set of the content language, and it touches no other line.
+The document is read and written by bin/acts_md.py (the 0.4 Markdown binding): either token set, also mixed in one
+file (contracts/state-todo.v2.md, bin/todo_tokens.py); what the registrar writes (a key stamp, a re-added line, the
+empty marker, a missing section's heading) is in the set of the content language, and it touches no other line.
 
-For each project (the STATE.md of its memory copy, plus the platform's own openclaw-migration-status.md), in the
-spec's order:
-  1. Apply: settled / reopened records from the principal side not yet done (hubbus records --direction in --pending).
-     The item's closure is settled -> delete the line carrying this key (an emptied section gets the empty marker); reopened
-     -> if the line is not there, add it back with restore_text. note and related do not belong here; they are left
-     to the librarian's judgment.
-  2. Restore keys: for an item this registrar raised from a line, not closed, not withdrawn and whose key is not in
-     the file, if a keyless owner line's text is identical to its latest terms (after normalisation) -> stamp the
-     original key back (an agent dropped the end of the line while rewriting it) rather than treat it as a new item.
-  3. Send: remaining keyless owner lines -> key = task-<project>-<sha1(normalised text)[:10]>; first send raised
-     (id r:<key>), and stamp only after accepted/duplicate comes back; if it cannot be sent, no stamp, retry the next
-     night (same id; resending is a no-op).
-  4. Amend: a keyed line whose text differs from the latest terms -> amended (id a:<key>:<rev>, terms_rev +1,
-     supersedes the current requirement record).
-  5. Reconcile: items this registrar raised from a line, not closed, not withdrawn and whose key still cannot be
-     found: a very similar line exists -> send nothing, warn once (and again only after the key has been found or
-     the similar line has gone too); otherwise send a claimed (outcome done, evidence.basis is the reason from the
-     review-log entry that deleted the line; id c:<key>:r<times reopened>). A withdrawn item whose line was deleted is
-     not claimed.
-  Steps 2 and 5 leave out items a project raised itself (agenthub send --type task, a lease handover): they never had
-  a line in the file, so not finding one says nothing about them.
+**Bound keys** (spec §4): the keys this registrar raised from lines (its `raised` on the bus, or a v1 task letter, which
+records no sender role). Items a project raised itself (agenthub send --type task, a lease handover) are never bound:
+steps 1-5 leave them alone except striking a line after a settlement of theirs.
+
+For each project (the STATE.md of its memory copy, plus the platform's own openclaw-migration-status.md):
+  0. Read: a document with an unclosed code fence or HTML comment is left alone (nothing sent, nothing written).
+  1. Apply settled / reopened records from the principal side not yet done (hubbus records --direction in --pending):
+     settled -> strike the owner lines carrying the key, unless the settlement is stale against the latest terms or
+     the line was edited since (then the amendment is sent and nothing is struck); reopened -> re-add the line in the
+     first section from the latest terms (restore_text only without them). note and related are the librarian's.
+  2. Relink: an active bound key no line mentions, whose latest text equals exactly one keyless (or wrongly keyed)
+     owner line of the first section -> that line gets the key back instead of being raised.
+  3. Raise: the remaining such lines of the first section -> key task-<project>-<sha1(normalised text)[:10]>,
+     `raised` (id r:<key>) with the normalised text, stamped only after the bus accepts it. Lines in later sections are
+     not raised (an archive is not a new request); a text that repeats a bound key is not raised and is warned about.
+  4. Amend: an active bound key whose lines in the first section all have one text other than the latest terms ->
+     `amended` (id a:<key>:<rev>, terms_rev + 1, superseding the current need record); lines that disagree: warned.
+  5. Reconcile active bound keys with no line in the first section: a ticked owner box carries it -> claimed done;
+     its marker is still somewhere (displaced: relabelled, moved, archived) -> no claim, a note once per open period
+     (id d:<key>:r<n>) saying where; vanished but a very similar line exists -> warn once (again only after it was
+     found, or that line has gone too); vanished -> claimed done (evidence.basis: the review-log entry that deleted
+     the line). Claim ids c:<key>:r<times reopened>. A withdrawn item gets no claim.
   6. If anything changed, commit + push (memory copies through git-safe-push; the platform's file through
      commit-hub-files.sh), and only after that succeeds `hubbus done` the applied records; on failure, wait for the
      next night.
+
+Records: reads acts 0.3 and 0.4, sends the version bin/ph_wire.py names (0.3 until the assistant takes 0.4).
 
 Transition (v1 not yet retired): task letters v1 sent on the bus and the personal assistant's v1 handoffs count too
 (v1_compat); those keys existed before there were records. When v1 is retired, delete v1_compat along with it.
@@ -40,7 +42,6 @@ Usage: registrar.py [--dry-run]
 from __future__ import annotations
 
 import datetime
-import difflib
 import hashlib
 import json
 import pathlib
@@ -50,8 +51,10 @@ import subprocess
 import sys
 
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
+import acts_md  # noqa: E402
 import hubconf  # noqa: E402
 import i18n  # noqa: E402
+import ph_wire  # noqa: E402
 import todo_tokens  # noqa: E402
 
 _ = i18n.domain(__file__)
@@ -62,16 +65,17 @@ COPIES = hubconf.p("memory_copies")
 HUBBUS = [sys.executable, str(HUB / "bin" / "hubbus")]
 WARNED = hubconf.STATE / "registrar-warned.json"   # keys already warned about (very similar lines): warn only once
 REVIEW_LOG = hubconf.data_file("review-log.md")
-SIMILAR = 0.6   # reconcile: this similar to some line counts as a rewrite (left to the
-                # implementation, spec §4 step 5)
-EXT = "acts/0.3"
 TAG = hubconf.owner_tag()
 REGISTRAR = hubconf.party("registrar")
 OWNERS = sorted(hubconf.owner_addresses())
-# both token sets (the profiles' marker_pattern: half-/full-width parentheses and colons; at the end of the line)
-P = todo_tokens.patterns(TAG)
-KEY = P.key
+READ = acts_md.profiles(TAG)   # both token sets
+REASON = todo_tokens.patterns(TAG).reason   # the review-log's reason line, either set
 DRY = "--dry-run" in sys.argv
+
+
+def writer() -> acts_md.Profile:
+    """the content language's set: what the registrar writes"""
+    return acts_md.profile(hubconf.lang_content(), TAG)
 
 
 def log(msg: str) -> None:
@@ -90,141 +94,8 @@ def task_key(project: str, text: str) -> str:
     return f"task-{project}-{hashlib.sha1(norm(text).encode()).hexdigest()[:10]}"
 
 
-def stamp(key: str) -> str:
-    return todo_tokens.stamp(hubconf.lang_content(), TAG, key)
-
-
 def hubbus(*args: str, stdin: str | None = None) -> subprocess.CompletedProcess:
     return subprocess.run([*HUBBUS, *args], input=stdin, capture_output=True, text=True, timeout=60)
-
-
-# --- the file ---
-
-def todo_bounds(lines: list[str]) -> tuple[int, int] | None:
-    """the first to-do section (either heading): where a re-added line goes"""
-    s = P.section(lines)
-    return s[0] if s else None
-
-
-def owner_lines(lines: list[str]) -> list[dict]:
-    """The owner's lines in the to-do section(s): {i, text (key marker removed), key}. A file with two sections (one per
-    token set: a format problem gen-todo reports) is read in full, so no key in the second one counts as vanished."""
-    out = []
-    for b in P.section(lines):
-        group = None
-        for i in range(*b):
-            l = lines[i].rstrip()
-            if m := P.group.match(l):
-                group = P.role(m)
-                continue
-            m = P.item.match(l)
-            m = m if m and P.role(m) == "owner" else (P.bare.match(l) if group == "owner" else None)
-            if m:
-                body = m.group("text")
-                k = KEY.search(body)
-                out.append({"i": i, "text": (body[:k.start()] if k else body).strip(),
-                            "key": k.group("key") if k else None})
-    return out
-
-
-def line_texts(lines: list[str]) -> list[str]:
-    """The text of every to-do line in the section(s) (tags and key markers removed), for reconciling by similarity."""
-    out = []
-    for b in P.section(lines):
-        for i in range(*b):
-            l = lines[i].rstrip()
-            m = P.labelled.match(l) or P.bare.match(l)
-            if m:
-                out.append(norm(KEY.sub("", m.group("text"))))
-    return out
-
-
-def present_keys(lines: list[str]) -> set[str]:
-    """Every key on a line of the to-do section(s), whatever the line's tag: an owner item re-tagged (e.g. to tbd) that
-    kept its key is still there, not vanished (never claimed done, never stamped back elsewhere)."""
-    return {k.group("key") for b in P.section(lines) for i in range(*b) if (k := KEY.search(lines[i].rstrip()))}
-
-
-def strike(lines: list[str], key: str) -> bool:
-    """Delete the lines of the to-do section(s) carrying this key (spec §5.5.2; a line elsewhere in the file is not
-    the registrar's)."""
-    sections = P.section(lines)
-    hits = [i for a, b in sections for i in range(a, b)
-            if (m := KEY.search(lines[i].rstrip())) and m.group("key") == key]
-    touched = {j for j, (a, b) in enumerate(sections) if any(a <= h < b for h in hits)}
-    for i in reversed(hits):
-        del lines[i]
-    # a section this emptied gets the empty marker (from the last one, so the earlier positions stay right)
-    for j in sorted(touched, reverse=True):
-        a, b = P.section(lines)[j]
-        if not any(lines[i].strip() for i in range(a, b)):
-            lines.insert(a, todo_tokens.tokens(hubconf.lang_content())["todo_none"])
-    return bool(hits)
-
-
-def readd(lines: list[str], key: str, text: str) -> bool:
-    if any((m := KEY.search(l.rstrip())) and m.group("key") == key for l in lines):
-        return False
-    new = todo_tokens.item(hubconf.lang_content(), "owner", TAG, norm(text)) + stamp(key)
-    b = todo_bounds(lines)
-    if b is None:
-        lines += ["", todo_tokens.tokens(hubconf.lang_content())["todo_heading"], "", new]
-        return True
-    body = [i for i in range(*b) if lines[i].strip()]
-    if len(body) == 1 and P.is_none(lines[body[0]]):
-        lines[body[0]] = new
-    else:
-        lines.insert((body[-1] + 1) if body else b[0], new)
-    return True
-
-
-def apply(lines: list[str], rec: dict) -> bool:
-    """Step 1, one record: only the principal side's settled (delete) and reopened with restore_text (add back) change
-    the file."""
-    if rec.get("origin") != "principal":
-        return False
-    if rec.get("type") == "settled":
-        return strike(lines, rec["key"])
-    if rec.get("type") == "reopened" and rec.get("restore_text"):
-        return readd(lines, rec["key"], rec["restore_text"])
-    return False
-
-
-def relink(lines: list[str], vanished: dict[str, str]) -> list[str]:
-    """Step 2. vanished: keys sent, not closed, not withdrawn and not found in the file -> latest terms text. A keyless
-    owner line with identical text (after normalisation) gets that key stamped back; returns the restored keys."""
-    by_text, done = {norm(t): k for k, t in sorted(vanished.items())}, []
-    for t in owner_lines(lines):
-        k = by_text.pop(norm(t["text"]), None) if t["key"] is None else None
-        if k:
-            lines[t["i"]] = lines[t["i"]].rstrip() + stamp(k)
-            done.append(k)
-    return done
-
-
-def candidates(lines: list[str], project: str) -> list[tuple[int, str, str]]:
-    """Step 3: keyless owner lines -> (line number, key, text). Stamping waits until raised has been sent."""
-    return [(t["i"], task_key(project, t["text"]), t["text"]) for t in owner_lines(lines) if t["key"] is None]
-
-
-def amendments(lines: list[str], latest: dict[str, str]) -> list[dict]:
-    """Step 4. latest: keys still open -> latest terms text. Keyed lines whose text differs: [{key, text}]."""
-    return [{"key": t["key"], "text": t["text"]} for t in owner_lines(lines)
-            if t["key"] in latest and norm(t["text"]) != norm(latest[t["key"]])]
-
-
-def reconcile(lines: list[str], open_keys: dict[str, str]) -> list[dict]:
-    """Step 5. open_keys: keys sent, not closed, not withdrawn -> latest terms text. Those not found in the file: a very
-    similar line exists -> warn, otherwise claim."""
-    present = present_keys(lines)
-    texts, out = line_texts(lines), []
-    for k, text in sorted(open_keys.items()):
-        if k in present:
-            continue
-        a = norm(text)
-        similar = any(a == t or difflib.SequenceMatcher(None, a, t).ratio() >= SIMILAR for t in texts)
-        out.append({"key": k, "action": "warn" if similar else "claim"})
-    return out
 
 
 # --- records on the bus ---
@@ -246,7 +117,7 @@ class Ledger:
     """One project's Acts records on the bus, grouped by key."""
 
     def __init__(self, project: str):
-        r = hubbus("records", "--project", project, "--ext", EXT)
+        r = hubbus("records", "--project", project)
         try:
             events = json.loads(r.stdout or "[]")
         except ValueError:
@@ -255,6 +126,8 @@ class Ledger:
         self.need, self.settle, self.pending, self.raised_by = {}, {}, [], {}
         for e in events:
             rec = e["record"]
+            if ph_wire.family(rec.get("ext")) != "acts":   # 0.3 and 0.4 alike
+                continue
             if e["direction"] == "out" and rec["type"] in ("raised", "amended", "withdrawn"):
                 self.need.setdefault(rec["key"], []).append(rec)
                 if rec["type"] == "raised":
@@ -295,6 +168,16 @@ class Ledger:
     def bound(self, key: str) -> bool:
         """Raised from a line of the file: by this registrar, or a v1 task letter (no record of who)."""
         return self.raised_by.get(key, REGISTRAR) == REGISTRAR
+
+    def bound_keys(self) -> set[str]:
+        """spec §4's bound keys"""
+        return {k for k in self.known() if self.bound(k)}
+
+    def latest(self, key: str) -> dict | None:
+        """the latest terms of a bound key as the binding compares them ({text, terms_rev}); None for a key not bound
+        or with no terms held"""
+        text, rev, _cur = self.terms(key)
+        return {"text": text, "terms_rev": rev} if self.bound(key) and text is not None else None
 
 
 def v1_compat(project: str) -> tuple[dict, set, list, set]:
@@ -351,7 +234,7 @@ def publish(recs: list[dict]) -> dict[str, str]:
 
 
 def record(project: str, type_: str, key: str, rid: str, **kw) -> dict:
-    return {"ph": "0.3", "ext": EXT, "id": rid, "type": type_, "origin": kw.pop("origin", "requester"),
+    return {"ph": ph_wire.SEND, "ext": ph_wire.ACTS, "id": rid, "type": type_, "origin": kw.pop("origin", "requester"),
             "by": REGISTRAR, "key": key, "project": project, "ts": now(), **kw}
 
 
@@ -363,7 +246,7 @@ def removal_reason(key: str) -> str | None:
     for line in REVIEW_LOG.read_text().splitlines():
         if line.startswith("## "):
             head, why = line[3:].strip(), None
-        elif m := P.reason.match(line):   # the librarian's reason line, either set
+        elif m := REASON.match(line):   # the librarian's reason line, either set
             why = line[m.end():].strip()
         elif line.startswith("-") and not line.startswith("---") and key in line:
             found = f"{head}:{why}" if why else head
@@ -398,85 +281,114 @@ def commit(project: str, path: pathlib.Path, how: str, msg: str) -> bool:
 
 def run_project(project: str, path: pathlib.Path, how: str, warned: set[str]) -> tuple[bool, int]:
     """Returns (all went well, number of records sent)."""
-    led, lines = Ledger(project), path.read_text().splitlines()
-    changed, ok, sent = False, True, 0
+    led, text, W = Ledger(project), path.read_text(), writer()
+    # 0. read
+    if (at := acts_md.parse(text, READ)["unclosed"]) is not None:
+        log(_("{project}: STATE.md has an unclosed code fence or comment (from line {line}); left alone until it is "
+              "fixed", project=project, line=at + 1))
+        return True, 0
+    before, ok, sent = text, True, 0
+    bound = led.bound_keys()
+    active = {k: led.terms(k)[0] or "" for k in led.open() if k in bound}
     # 1. apply
-    applied = []
+    applied, amends = [], []
     for key in sorted({e["record"]["key"] for e in led.pending}):
         cur = current(led.settle[key])
-        if cur["type"] == "settled":
-            changed |= strike(lines, key)
-        elif cur.get("restore_text"):
-            changed |= readd(lines, key, cur["restore_text"])
+        text, changed = acts_md.apply(text, cur, READ, W, led.latest(key))
+        if not changed and cur["type"] == "settled" and key in bound:
+            holding = {norm(e.text) for e in acts_md.Doc(text, READ).holding(key)}
+            if holding and holding != {norm(led.terms(key)[0] or "")}:
+                log(_("{project}: {key} was settled, but its line was changed since; not struck, the change is sent as "
+                      "an amendment", project=project, key=key))
+                if not led.withdrawn(key) and len(holding) == 1 and key in led.need:
+                    amends.append((key, holding.pop()))
         log(_("{project}: applied {type} {key}", project=project, type=cur["type"], key=key))
     applied += [e["id"] for e in led.pending]
     for h in led.v1_pending:
-        changed |= strike(lines, h["reply_to"]) if h["effect"] != "reopened" else \
-            readd(lines, h["reply_to"], h.get("item") or _c("(a reopened task)"))
+        rec = {"origin": "principal", "key": h["reply_to"], "type": "reopened" if h["effect"] == "reopened" else
+               "settled", "restore_text": h.get("item") or _c("(a reopened task)")}
+        text, _changed = acts_md.apply(text, rec, READ, W)   # v1 handoffs carry no terms_rev to compare
         applied.append(h["id"])
-    # 2. restore keys
-    present = present_keys(lines)
-    for k in relink(lines, {k: led.terms(k)[0] or "" for k in led.open() if k not in present and led.bound(k)}):
-        changed = True
+    # 2. relink
+    text, relinked = acts_md.relink(text, active, READ, W, bound)
+    for k in relinked:
         log(_("{project}: restored key {key} (the key at the end of the line had been removed)", project=project, key=k))
-    # 3. send
-    fresh = []
-    for i, k, text in candidates(lines, project):
-        if led.settled(k):
-            log(_("{project}: warning — {key} has the same text as one already settled; raising it again counts as "
-                  "a duplicate (acts spec §11)", project=project, key=k))
-        fresh.append((i, k, record(project, "raised", k, f"r:{k}", terms={"text": norm(text)}, terms_rev=1)))
-    for t in owner_lines(lines):
-        if t["key"] and t["key"] not in led.known():   # transition: has a key but no record on the bus (sent long ago)
-            fresh.append((None, t["key"], record(project, "raised", t["key"], f"r:{t['key']}",
-                                                 terms={"text": norm(t["text"])}, terms_rev=1, context="migration-v1")))
-    res = publish([r for _i, _k, r in fresh])
-    for i, k, r in fresh:
+    # 3. raise
+    _stamped, events, reported = acts_md.register(text, project, READ, W, bound, task_key)
+    doc = acts_md.Doc(text, READ)
+    for i in reported:
+        line = doc.lines[i].strip()
+        log(_("{project}: not raised, line {line}: `{text}` (its text repeats a to-do already raised, appears twice, or "
+              "goes on after a key)", project=project, line=i + 1, text=line[:80]))
+    fresh = [(e, record(project, "raised", e["key"], f"r:{e['key']}", terms={"text": e["text"]}, terms_rev=1))
+             for e in events]
+    res = publish([r for _e, r in fresh])
+    for e, r in fresh:
         if res.get(r["id"]) in ("accepted", "duplicate", "dry-run"):
             sent += res.get(r["id"]) == "accepted"
-            if i is not None and not DRY:
-                lines[i] = lines[i].rstrip() + stamp(k)
-                changed = True
+            doc.stamp(e["line"], e["key"], W)
         else:
             ok = False
+    text = doc.text() if fresh else text
     # 4. amend
-    amends = []
-    for a in amendments(lines, {k: led.terms(k)[0] for k in led.open() if k in led.need}):
-        k, (_text, rev, cur) = a["key"], led.terms(a["key"])
-        amends.append(record(project, "amended", k, f"a:{k}:{rev + 1}", terms={"text": norm(a["text"])},
-                             terms_rev=rev + 1, **({"supersedes": [cur]} if cur else {})))
-    res = publish(amends)
-    sent += sum(1 for r in amends if res.get(r["id"]) == "accepted")
-    ok &= all(res.get(r["id"]) in ("accepted", "duplicate", "dry-run") for r in amends)
+    # a v1 key with no record on the bus has no need record an amendment could supersede (core §6): left as it is
+    found = acts_md.amend(text, {k: t for k, t in active.items() if k in led.need}, READ)
+    for k in found["warn"]:
+        log(_("{project}: {key} is on owner lines with different texts (was the key copied?); no amendment sent",
+              project=project, key=k))
+    for k, new_text in [*amends, *((a["key"], a["text"]) for a in found["amended"])]:
+        _old, rev, cur = led.terms(k)
+        amends_rec = record(project, "amended", k, f"a:{k}:{rev + 1}", terms={"text": new_text}, terms_rev=rev + 1,
+                            **({"supersedes": [cur]} if cur else {}))
+        r = publish([amends_rec])
+        sent += r.get(amends_rec["id"]) == "accepted"
+        ok &= r.get(amends_rec["id"]) in ("accepted", "duplicate", "dry-run")
     # 5. reconcile
-    claims = []
-    found = reconcile(lines, {k: led.terms(k)[0] or "" for k in led.open() if k not in led.v1_claimed and led.bound(k)})
+    claims, notes = [], []
+    found = acts_md.reconcile(text, {k: t for k, t in active.items() if k not in led.v1_claimed}, READ, bound)
     # warned once per stretch: a key leaves the list when it no longer looks rewritten (found again, settled, or the
     # similar line gone too, which then gets its claim)
     still = {x["key"] for x in found if x["action"] == "warn"}
     warned.difference_update(k for k in led.known() if k not in still)
     for x in found:
-        k = x["key"]
-        if x["action"] == "warn":
+        k, act = x["key"], x["action"]
+        if act == "warn":
             if k not in warned:
                 log(_("{project}: warning — {key} is not settled and its key is gone, but a very similar line exists "
                       "(the line end dropped in a rewrite?); no claim sent", project=project, key=k))
                 warned.add(k)
-            continue
-        why = removal_reason(k)
-        basis = (_c("Inferred done by the librarian: the item is no longer among STATE.md's to-dos. ")
-                 + (_c("The run that deleted it: {why}", why=why[:300]) if why else
-                    _c("The review-log does not record which run deleted it")))
-        claims.append(record(project, "claimed", k, f"c:{k}:r{led.reopens(k)}", origin="registrar", outcome="done",
-                             evidence={"basis": basis}))
-    res = publish(claims)
-    sent += sum(1 for r in claims if res.get(r["id"]) == "accepted")
-    ok &= all(res.get(r["id"]) in ("accepted", "duplicate", "dry-run") for r in claims)
+        elif act == "closed":
+            log(_("{project}: an owner line still carries {key}, which is already settled or withdrawn", project=project,
+                  key=k))
+        elif act == "displaced":
+            line = acts_md.Doc(text, READ).lines[x["line"]].strip()
+            notes.append(record(project, "note", k, f"d:{k}:r{led.reopens(k)}", origin="registrar", about={"key": k},
+                                note=_c("The key of this to-do is no longer on an owner line of STATE.md's to-dos (it was "
+                                        "relabelled, moved or archived); it is now on line {line}: {text}",
+                                        line=x["line"] + 1, text=line[:200])))
+        else:
+            if act == "ticked":
+                basis = _c("Inferred done by the librarian: the to-do's box in STATE.md was ticked.")
+            else:
+                why = removal_reason(k)
+                basis = (_c("Inferred done by the librarian: the item is no longer among STATE.md's to-dos. ")
+                         + (_c("The run that deleted it: {why}", why=why[:300]) if why else
+                            _c("The review-log does not record which run deleted it")))
+            claims.append(record(project, "claimed", k, f"c:{k}:r{led.reopens(k)}", origin="registrar",
+                                 outcome="done", evidence={"basis": basis}))
+    res = publish(claims + notes)
+    for r in notes:
+        if res.get(r["id"]) == "accepted":
+            log(_("{project}: {key} moved off the owner lines (relabelled, moved or archived); no claim, a note sent",
+                  project=project, key=r["key"]))
+    sent += sum(1 for r in claims + notes if res.get(r["id"]) == "accepted")
+    ok &= all(res.get(r["id"]) in ("accepted", "duplicate", "dry-run") for r in claims + notes)
     # 6. write the file, commit, only then done
+    changed = text != before
     if DRY:
         return ok, sent
     if changed:
-        path.write_text("\n".join(lines) + "\n")
+        path.write_text(text)
         if not commit(project, path, how, _("registrar: owner to-dos in step with {assistant}",
                                             assistant=hubconf.assistant_name())):
             return False, sent

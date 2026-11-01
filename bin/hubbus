@@ -132,6 +132,7 @@ import gitdirs  # noqa: E402  where a folder's repo is, read without starting gi
 import hubconf  # noqa: E402  paths, the owner address, the project registry all come from the platform settings
 import i18n  # noqa: E402
 import nofollow  # noqa: E402  a project's outbox and view, read and written without following its links
+import ph_wire  # noqa: E402  the Principal Handoff version records are read and sent in
 import policy  # noqa: E402  whose mail goes through an outbox (mail_outbox)
 import prompts  # noqa: E402  the platform's templates and prompt texts, filled with the configured names
 
@@ -438,8 +439,8 @@ def record_errors(rec) -> list[str]:
     if not isinstance(rec, dict):
         return [_("not a JSON object")]
     errs = [_("missing {k}", k=k) for k in RECORD_REQUIRED if not rec.get(k)]
-    if rec.get("ph") and rec["ph"] != "0.3":
-        errs.append(_("ph is {ph!r}, must be 0.3", ph=rec["ph"]))
+    if rec.get("ph") and rec["ph"] not in ph_wire.READ:
+        errs.append(_("ph is {ph!r}, must be one of {versions}", ph=rec["ph"], versions=", ".join(ph_wire.READ)))
     return errs
 
 
@@ -448,11 +449,11 @@ def task_key(project: str, text: str) -> str:
     return f"task-{project}-{hashlib.sha1(' '.join(text.split()).encode()).hexdigest()[:10]}"
 
 
-def need_state(c, project: str, key: str, ext: str = "acts/0.3") -> dict | None:
+def need_state(c, project: str, key: str, family: str = "acts") -> dict | None:
     """The need register of one item this project raised (core §6): {terms: the latest terms, rev: their terms_rev,
     current: the current need record}; None when it was never raised."""
-    recs = [r["record"] for r in records(c, project, ext, ("raised", "amended", "withdrawn"), direction="out")
-            if r["record"].get("key") == key]
+    recs = [r["record"] for r in records(c, project, None, ("raised", "amended", "withdrawn"), direction="out")
+            if r["record"].get("key") == key and ph_wire.family(r["record"].get("ext")) == family]
     with_terms = [r for r in recs if r.get("terms")]
     if not with_terms:
         return None
@@ -476,7 +477,7 @@ def send_record(c, a, sender: str, mid: str, p: dict) -> str | None:
     key = (a.id or task_key(sender, a.text)) if kind == "raised" else a.task
     if not KEY_RE.match(key):
         refuse(_("hubbus: {key!r} is not a valid task key", key=key))
-    rec = {"ph": "0.3", "ext": "acts/0.3", "type": kind, "key": key, "project": sender, "ts": iso()}
+    rec = {"ph": ph_wire.SEND, "ext": ph_wire.ACTS, "type": kind, "key": key, "project": sender, "ts": iso()}
     need = need_state(c, sender, key)
     if kind == "raised" and need:
         terms = {"text": " ".join(a.text.split()), **({"due": a.due} if a.due else {})}
@@ -504,7 +505,7 @@ def send_record(c, a, sender: str, mid: str, p: dict) -> str | None:
     return publish_record(c, rec, sender, OWNER_ADDRESS)[0]
 
 
-EXT_DECISIONS = "decisions/0.3"
+EXT_DECISIONS = ph_wire.DECISIONS
 
 
 def send_decision(c, a, sender: str, mid: str, p: dict) -> str | None:
@@ -514,7 +515,7 @@ def send_decision(c, a, sender: str, mid: str, p: dict) -> str | None:
     is outside 0.3 and the assistant ties it back by handoff_id."""
     if p.get("handoff_id") is not None:
         return None
-    base = {"ph": "0.3", "ext": EXT_DECISIONS, "project": sender, "ts": iso()}
+    base = {"ph": ph_wire.SEND, "ext": EXT_DECISIONS, "project": sender, "ts": iso()}
     asker = {"origin": "requester", "by": hubconf.party("requester", sender)}
     if a.type == "question":
         if not KEY_RE.match(mid):
@@ -532,7 +533,7 @@ def send_decision(c, a, sender: str, mid: str, p: dict) -> str | None:
     else:
         recs = [base | asker | {"id": f"w:{a.question}:{mid}", "type": "withdrawn", "key": a.question,
                                 "reason": "not_needed", "note": a.text}]
-    need = need_state(c, sender, a.question, EXT_DECISIONS) if a.type != "question" else None
+    need = need_state(c, sender, a.question, "decisions") if a.type != "question" else None
     for r in recs:
         if a.context:
             r["context"] = a.context
@@ -2182,7 +2183,7 @@ def cli() -> None:
     # {ph} is there so the text goes through format() and {{…}} prints as braces
     rp = sub.add_parser("record-publish", help=_("stdin: one {ph} record or a list; sent to owner (toward the assistant). "
                                                  "Prints for each {{id: record id, event: event id or null, status}}",
-                                                 ph="0.3"))
+                                                 ph=ph_wire.SEND))
     rp.add_argument("--json", default="-", help=_("only - (stdin) is supported"))
     pb = sub.add_parser("publish")
     # letters have their own command (and records record-publish); config.applied = which config version bin/hub

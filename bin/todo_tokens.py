@@ -3,8 +3,10 @@ docs/design/i18n.md "Machine formats").
 
 The to-do block of a project's STATE.md, todo.md and the review-log label the registrar reads back are machine formats:
 other scripts and the owner's assistant parse them. Each has a zh-Hant set (the v1 contracts) and an English one. The
-STATE.md sets are agent-ops-specs' Principal Handoff Acts 0.3 profiles (acts/profiles.json): `zh-hant`, whose
-principal tag is the configured owner tag, and `en`, whose owner label is the literal word `owner`.
+STATE.md sets are agent-ops-specs' Principal Handoff Acts 0.4 profiles (acts/profiles.json): `zh-hant`, whose
+principal_tag is the configured owner tag, and `en`, whose principal_tag is left at the profile's default `owner`
+whoever the owner is (so an English STATE.md reads the same on every instance). bin/acts_md.py builds the profiles
+from these sets and reads the binding.
 **Readers accept both sets whatever the settings** (patterns() below); **writers emit one set**: the STATE.md block in
 `language.content`, todo.md's headings and the review-log label in `language.ui` (the caller picks the language and
 passes it in; this module reads no settings). Standard library only, no platform imports: gen-todo.py, registrar.py,
@@ -31,6 +33,8 @@ SETS = {
         # STATE.md's to-do block (state-todo v1; the acts profile zh-hant): the owner's label is the configured tag
         "todo_heading": "## 待辦", "tag": "〔{}〕", "tag_join": "", "owner_label": None, "tbd": "待定",
         "todo_none": "- (無)", "key_marker": "(等 {owner}:{key})", "key_join": "",
+        # the profile's marker_pattern ({owner} regex-escaped; group 1 the key)
+        "key_pattern": r"[(（]等 ?{owner}[:：]\s*([^()（）]+?)\s*[)）]\s*$",
         # todo.md (todo-md v1): the three owner sections in order owner, tbd, agent, and a section's empty line
         "todo_md_headings": ("## 只有 {owner} 能做", "## 待定(需要先做決定)", "## agent 可以做"),
         "todo_md_none": "(無)", "todo_md_version": 1,
@@ -41,6 +45,7 @@ SETS = {
         # the acts profile en: the owner's label is the word `owner`, whoever the owner is
         "todo_heading": "## Tasks", "tag": "[{}]", "tag_join": " ", "owner_label": "owner", "tbd": "undecided",
         "todo_none": "- (none)", "key_marker": "(waiting on owner: {key})", "key_join": " ",
+        "key_pattern": r"\(waiting on owner:\s*([^\s()]+)\s*\)\s*$",
         "todo_md_headings": ("## Only the owner can do", "## To be decided (a decision comes first)",
                              "## An agent can do"),
         "todo_md_none": "(none)", "todo_md_version": 2,

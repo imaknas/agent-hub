@@ -9,7 +9,10 @@
   "pg: 補回 key {kg}(行尾的 key 被拿掉了)",
   "pi: 補回 key {ki}(行尾的 key 被拿掉了)",
   "pn: 套用 settled {kn}",
-  "送出 5 筆 record、0 個專案有失敗"
+  "pu: STATE.md 有沒關上的 code fence 或註解(從第 10 行起),修好之前不動它",
+  "pv: {kv} 已經不在 owner 的待辦行上(改了標籤、搬走或封存),不送 claim,送了一則 note",
+  "px: 套用 settled {kx}",
+  "送出 7 筆 record、0 個專案有失敗"
  ],
  "commit": "registrar: owner 的待辦對齊 個人助理",
  "note": "registrar 照 key 更新了 STATE.md 的待辦"

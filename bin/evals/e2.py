@@ -449,7 +449,7 @@ def todo_items(text: str) -> set[tuple[str, str]] | None:
     global _gen_todo
     _gen_todo = _gen_todo or _load("gen_todo_e2", "gen-todo.py")
     items, problems = {o: [] for o in _gen_todo.OWNERS}, []   # by role, so either token set compares
-    if not _gen_todo.todo_sections(text):
+    if not _gen_todo.acts_md.Doc(text, _gen_todo.READ).sections:
         return None
     _gen_todo.parse("x", text, items, problems)
     return {(o, _gen_todo.P.key.sub("", t).strip()) for o, lst in items.items() for _, t in lst}

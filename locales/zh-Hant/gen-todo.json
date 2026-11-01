@@ -12,5 +12,6 @@
  "Format problems (these projects' to-do items were not collected)": "格式問題(這些專案的待辦沒被收進來)",
  "todo.md: {total} {total:item|items}": "todo.md: {total} 項",
  ", {n} format {n:problem|problems}": ",{n} 個格式問題",
- "  format problem: {problem}": "  格式問題:{problem}"
+ "  format problem: {problem}": "  格式問題:{problem}",
+ "{source}: a code fence or HTML comment opened on line {line} is never closed; the registrar leaves the file alone until it is": "{source}: 第 {line} 行開的 code fence 或 HTML 註解沒有關上;關上之前 registrar 不動這個檔案"
 }

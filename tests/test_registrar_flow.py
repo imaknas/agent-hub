@@ -30,6 +30,11 @@ reconcile, fixes both). v1's letters still on the bus count (registrar.py's v1_c
       outside the to-do section
   pw  warned about before (a very similar line),  → the claim is sent now: a warning holds only while the similar
       that similar line gone too                    line is there
+  pt  a ticked owner box carrying the key         → claimed done (acts 0.4 §4 step 5)
+  pv  the key on a line relabelled agent          → a note (displaced), no claim
+  ps  an owner line in a second to-do section     → not raised (only the first section is)
+  pu  an unclosed code fence                      → nothing sent, nothing written
+  px  as pb, the settlement in 0.4 (acts/0.4)     → applied the same
 
     bin/py -m unittest discover -s tests
 """
@@ -78,6 +83,8 @@ def state(*todo: str) -> str:
 KB, KC, KD, KE = key("pb", "Pay the domain"), key("pc", "Sign the contract"), key("pd", "Buy parts"), key("pe", "Renew the insurance")
 KF, KG, KH, KI = key("pf", "Book flights"), key("pg", "Pay the tax"), key("ph", "Reply to the landlord"), key("pi", "Book the hotel")
 KN, KW = key("pn", "pay rent"), key("pw", "renew insurance")
+KT, KV, KX = key("pt", "File the report"), key("pv", "Choose a host"), key("px", "Pay the dues")
+V04 = {"ph": "0.4", "ext": "acts/0.4", "terms_digest": "sha-256:" + "0" * 64}   # a settlement the assistant sends in 0.4
 EKN = f" (waiting on owner: {KN})"
 SCENES = {
     "pa": {"state": state(owner("Renew the domain"), agent("Add retries"))},
@@ -100,6 +107,13 @@ SCENES = {
     "pn": {"state": f"# STATE\n\n## Notes\n\n- [ ] [owner] pay rent{EKN}\n\n## Tasks\n\n- [ ] [owner] pay rent{EKN}\n",
            "posted": {KN: "pay rent"}, "settle": [("s-pn", KN, "done", "pay rent")]},
     "pw": {"state": state(), "posted": {KW: "renew insurance"}, "warned": [KW]},
+    "pt": {"state": state(owner("File the report").replace("- [ ]", "- [x]", 1) + marker(KT)),
+           "posted": {KT: "File the report"}},
+    "pv": {"state": state(agent("Choose a host") + marker(KV)), "posted": {KV: "Choose a host"}},
+    "ps": {"state": state(agent("Something")) + f"\n{ZH['todo_heading']}\n\n" + owner("Archived ask") + "\n"},
+    "pu": {"state": state(owner("Before the fence"), "```", owner("In the fence"))},
+    "px": {"state": state(owner("Pay the dues") + marker(KX), agent("Other")), "posted": {KX: "Pay the dues"},
+           "settle": [("s-px", KX, "done", "Pay the dues")], "v04": True},
 }
 
 
@@ -200,7 +214,8 @@ class Env:
                                         restore_text=text, ts="2026-10-26T10:00:00Z"))
             else:
                 settles.append(self.rec(p, hid, "settled", "principal", SIDE, k, outcome=effect, terms_rev=1,
-                                        authority={"kind": "principal", "decider": PRINCIPAL}, ts="2026-10-26T10:00:00Z"))
+                                        authority={"kind": "principal", "decider": PRINCIPAL}, ts="2026-10-26T10:00:00Z",
+                                        **(V04 if s.get("v04") else {})))
         if settles:   # from the principal side: written directly as record events on the bus (what bridge does inbound)
             c = sqlite3.connect(self.db)
             for r in settles:
@@ -216,7 +231,7 @@ class Env:
             rec = e["record"]
             if rec["ts"] < "2026-10-27" or rec["type"] == "withdrawn":
                 continue
-            kind = {"raised": "raised", "amended": "amended", "claimed": "claim"}.get(rec["type"])
+            kind = {"raised": "raised", "amended": "amended", "claimed": "claim", "note": "note"}.get(rec["type"])
             if kind:
                 out.append((kind, rec["key"]))
         return sorted(out)
@@ -264,6 +279,13 @@ class RegistrarFlow(unittest.TestCase):
             self.assertEqual(env.state("pn").count(KN), 1, "the line outside the to-do section is kept")
             self.assertIn("## Notes\n\n- [ ] [owner] pay rent", env.state("pn"))
             self.assertEqual(env.outputs("pw"), [("claim", KW)], "a warning holds only while the similar line is")
+            self.assertEqual(env.outputs("pt"), [("claim", KT)], "a ticked owner box: claimed done")
+            self.assertEqual(env.outputs("pv"), [("note", KV)], "relabelled, the key kept: a note, no claim")
+            self.assertEqual(env.outputs("ps"), [], "a later section is not raised")
+            self.assertEqual(env.outputs("pu"), [], "an unclosed fence: nothing sent")
+            self.assertNotIn("waiting", env.state("pu"))
+            self.assertEqual(env.state("pu"), SCENES["pu"]["state"], "nor written")
+            self.assertNotIn("Pay the dues", env.state("px"), "a 0.4 settlement is applied too")
         self.each(check)
 
     def test_second_run_sends_nothing_new(self):
@@ -278,7 +300,7 @@ class RegistrarFlow(unittest.TestCase):
         """what registrar.py writes for people (log, the memory commit title, the note on done letters) stays
         byte-identical on a zh-Hant instance; expected text in tests/fixtures/registrar-messages.zh-Hant.json"""
         want = json.loads((ROOT / "tests" / "fixtures" / "registrar-messages.zh-Hant.json").read_text())
-        keys = {"ka": key("pa", want["pa_text"]), "kb": KB, "kc": KC, "ke": KE, "kg": KG, "ki": KI, "kn": KN}
+        keys = {"ka": key("pa", want["pa_text"]), "kb": KB, "kc": KC, "ke": KE, "kg": KG, "ki": KI, "kn": KN, "kv": KV, "kx": KX}
         with tempfile.TemporaryDirectory() as d:
             env = Env(pathlib.Path(d))
             env.env["AGENT_HUB_LANG_UI"] = "zh-Hant"

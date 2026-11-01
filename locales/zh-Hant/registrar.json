@@ -5,7 +5,6 @@
  "{project}: commit/push failed (left for tomorrow night): {output}": "{project}: commit/push 失敗,留到隔晚:{output}",
  "{project}: applied {type} {key}": "{project}: 套用 {type} {key}",
  "{project}: restored key {key} (the key at the end of the line had been removed)": "{project}: 補回 key {key}(行尾的 key 被拿掉了)",
- "{project}: warning — {key} has the same text as one already settled; raising it again counts as a duplicate (acts spec §11)": "{project}: 警告——{key} 的文字跟已經結案的一件一樣,重新宣告會被當成重複(規範 acts §11)",
  "{project}: warning — {key} is not settled and its key is gone, but a very similar line exists (the line end dropped in a rewrite?); no claim sent": "{project}: 警告——{key} 還沒結案,找不到 key 但有很像的行(改寫時拿掉了行尾?),不送 claim",
  "registrar: owner to-dos in step with {assistant}": "registrar: owner 的待辦對齊 {assistant}",
  "registrar updated the STATE.md to-dos by key": "registrar 照 key 更新了 STATE.md 的待辦",
@@ -14,5 +13,13 @@
  "(a reopened task)": "(重開的任務)",
  "Inferred done by the librarian: the item is no longer among STATE.md's to-dos. ": "librarian 推斷已完成:STATE.md 的待辦裡已經沒有這一件。",
  "The run that deleted it: {why}": "刪掉的那次({why})",
- "The review-log does not record which run deleted it": "review-log 沒有記錄是哪一次刪掉的"
+ "The review-log does not record which run deleted it": "review-log 沒有記錄是哪一次刪掉的",
+ "{project}: STATE.md has an unclosed code fence or comment (from line {line}); left alone until it is fixed": "{project}: STATE.md 有沒關上的 code fence 或註解(從第 {line} 行起),修好之前不動它",
+ "{project}: {key} was settled, but its line was changed since; not struck, the change is sent as an amendment": "{project}: {key} 已經結案,但那一行後來改過了;不刪,把改動當成修改送出",
+ "{project}: not raised, line {line}: `{text}` (its text repeats a to-do already raised, appears twice, or goes on after a key)": "{project}: 第 {line} 行沒有登錄:`{text}`(文字跟已經登錄過的待辦一樣、出現兩次,或 key 後面還有字)",
+ "{project}: {key} is on owner lines with different texts (was the key copied?); no amendment sent": "{project}: {key} 掛在文字不同的幾行 owner 待辦上(key 被複製了?),不送修改",
+ "{project}: an owner line still carries {key}, which is already settled or withdrawn": "{project}: 有一行 owner 待辦還帶著 {key},但它已經結案或撤回了",
+ "{project}: {key} moved off the owner lines (relabelled, moved or archived); no claim, a note sent": "{project}: {key} 已經不在 owner 的待辦行上(改了標籤、搬走或封存),不送 claim,送了一則 note",
+ "The key of this to-do is no longer on an owner line of STATE.md's to-dos (it was relabelled, moved or archived); it is now on line {line}: {text}": "這件待辦的 key 已經不在 STATE.md 待辦裡 owner 的行上(改了標籤、搬走或封存),現在在第 {line} 行:{text}",
+ "Inferred done by the librarian: the to-do's box in STATE.md was ticked.": "librarian 推斷已完成:STATE.md 裡這件待辦被打勾了。"
 }

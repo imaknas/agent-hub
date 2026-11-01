@@ -3,7 +3,6 @@
  "parent process": "上層程序",
  "not a JSON object": "不是 JSON 物件",
  "missing {k}": "缺 {k}",
- "ph is {ph!r}, must be 0.3": "ph 是 {ph!r},要 0.3",
  "hubbus: {key!r} is not a valid task key": "hubbus: {key!r} 不是合格的任務 key",
  "task": "任務",
  "question": "問題",
@@ -144,5 +143,6 @@
  "hubbus: unknown outbox operation {op!r}": "hubbus: 不認得的寄件匣操作 {op!r}",
  "{project}: refused {name} from its outbox: {why}": "{project}:拒收寄件匣裡的 {name}:{why}",
  "A file in {project}'s outbox was not sent and has been deleted ({name}): {why}": "{project} 寄件匣裡有一個檔案沒有送出,已經刪掉({name}):{why}",
- "{project}: cannot write its mailbox view: {e}": "{project}:寫不進它的信箱檢視:{e}"
+ "{project}: cannot write its mailbox view: {e}": "{project}:寫不進它的信箱檢視:{e}",
+ "ph is {ph!r}, must be one of {versions}": "ph 是 {ph!r},要是 {versions} 其中之一"
 }
