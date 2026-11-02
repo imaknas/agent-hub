@@ -191,7 +191,7 @@ def _mine() -> set[str]:
 def _changes(want: dict, keep: set[str], only: str | None = None) -> list[tuple]:
     """(Change, the plist's current content, the plist to write); for remove the last two are None."""
     from appliers import Change
-    out = []
+    out, uid = [], os.getuid()
     systemd = hubconf.service_manager() == "systemd"
     if systemd:
         import systemd_units
@@ -209,6 +209,10 @@ def _changes(want: dict, keep: set[str], only: str | None = None) -> list[tuple]
         path = AGENTS / f"{label}.plist"
         cur = plistlib.loads(path.read_bytes()) if path.exists() else None
         if cur == plist:
+            # the file is right but the service manager isn't running it (11-02: unloaded by something else for 14
+            # hours while every check said "matches"): loading it again is the same change as writing it
+            if running(uid, label) is None:
+                out.append((Change("update", f"service:{label}", proj + ":" + _(" not loaded")), cur, plist))
             continue
         keys = [] if cur is None else sorted(k for k in set(cur) | set(plist) if cur.get(k) != plist.get(k))
         out.append((Change("add" if cur is None else "update", f"service:{label}",

@@ -42,9 +42,11 @@ local.demo.worker(demo):新增
 ⚠️ local.demo.worker(demo):keepalive 的服務沒在跑(state = not running)
 === again
 [exit 1]
-services:都跟登錄一致
+local.demo.failboot(demo):更新
+    ⚠️ bootstrap 失敗:Bootstrap failed: 5: Input/output error
+local.demo.ghost(demo):更新
 ⚠️ local.demo.broken(demo):找不到 `no-such-cmd-golden`(PATH=/usr/bin:/bin)——plist 不動,沒有就不建
-⚠️ local.demo.failboot(demo):launchd 沒有載入
+⚠️ local.demo.failboot(demo):bootstrap 失敗:Bootstrap failed: 5: Input/output error
 ⚠️ local.demo.ghost(demo):launchd 沒有載入
 ⚠️ local.demo.worker(demo):keepalive 的服務沒在跑(state = not running)
 === only one label, dry-run
@@ -53,7 +55,7 @@ services:都跟登錄一致
 ⚠️ local.demo.broken(demo):找不到 `no-such-cmd-golden`(PATH=/usr/bin:/bin)——plist 不動,沒有就不建
 === alert.once
 ('render-services', ['local.demo.broken(demo):找不到 `no-such-cmd-golden`(PATH=/usr/bin:/bin)——plist 不動,沒有就不建', 'local.demo.failboot(demo):bootstrap 失敗:Bootstrap failed: 5: Input/output error', 'local.demo.ghost(demo):launchd 沒有載入', 'local.demo.worker(demo):keepalive 的服務沒在跑(state = not running)'], '背景服務都恢復正常了(render-services)')
-('render-services', ['local.demo.broken(demo):找不到 `no-such-cmd-golden`(PATH=/usr/bin:/bin)——plist 不動,沒有就不建', 'local.demo.failboot(demo):launchd 沒有載入', 'local.demo.ghost(demo):launchd 沒有載入', 'local.demo.worker(demo):keepalive 的服務沒在跑(state = not running)'], '背景服務都恢復正常了(render-services)')
+('render-services', ['local.demo.broken(demo):找不到 `no-such-cmd-golden`(PATH=/usr/bin:/bin)——plist 不動,沒有就不建', 'local.demo.failboot(demo):bootstrap 失敗:Bootstrap failed: 5: Input/output error', 'local.demo.ghost(demo):launchd 沒有載入', 'local.demo.worker(demo):keepalive 的服務沒在跑(state = not running)'], '背景服務都恢復正常了(render-services)')
 === rendered
 ["local.demo.broken", "local.demo.failboot", "local.demo.ghost", "local.demo.once", "local.demo.web", "local.demo.worker"]
 === systemd plan
