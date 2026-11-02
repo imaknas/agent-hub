@@ -199,7 +199,10 @@ The owner's machine is the last, real run.
   job variables.
 - **`land`'s `install-cli`** finds the existing wrapper the way `upgrade.py` does, so it never leaves a second one.
 - **`recover-service.sh` and `services.tsv`.** Template paths there resolve both spellings, and `services.tsv` joins
-  the table.
+  the table. Done in v0.6 (11-02): a row is found by either label, its location may start with either name, a template
+  filed under the other spelling is used, and the unit gets the label the row names (services.tsv is the owner's file:
+  the platform never rewrites it). `consumes: from:` naming the platform in either spelling finds the `type: platform`
+  entry.
 - **The ratchet is defined per class and only for code.** Docs, locales and `CHANGELOG.md` name the product freely,
   and `hub.json` is a resolved file name.
 - ~~No going back below v0.6 once a new spelling exists.~~ Not needed: resolve creates the current spelling, so v0.6
