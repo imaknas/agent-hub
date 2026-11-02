@@ -102,7 +102,8 @@ def managed_block(arm: str) -> str:
     """what sync-local-setup.sh writes into the instructions file (prompts.agent_rules on the arm's templates)"""
     body, missing = prompts.agent_rules(list(RULES), read=lambda rel: template(rel, arm), lang=lang_of(arm))
     assert not missing, missing
-    return f"<!-- agent-hub:begin -->\n{body}\n<!-- agent-hub:end -->\n"
+    begin, end = names.block()
+    return f"{begin}\n{body}\n{end}\n"
 
 
 def old_tree(run_dir: pathlib.Path) -> pathlib.Path:

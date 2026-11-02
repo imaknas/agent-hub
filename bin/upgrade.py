@@ -58,6 +58,7 @@ BIN = pathlib.Path(__file__).resolve().parent
 if str(BIN) not in sys.path:
     sys.path.insert(0, str(BIN))
 import hubconf  # noqa: E402
+import names  # noqa: E402
 import i18n  # noqa: E402
 
 _ = i18n.domain(__file__)
@@ -319,16 +320,20 @@ def py_step(*argv) -> list[str]:
 
 
 def cli_wrapper() -> pathlib.Path | None:
-    """The agenthub on PATH when it is install-cli's wrapper (never someone else's program of that name)."""
-    w = shutil.which("agenthub")
-    if not w:
-        return None
-    try:
-        with open(w, "rb") as f:
-            head = f.read(1024).decode(errors="ignore")
-    except OSError:
-        return None
-    return pathlib.Path(w) if WRAPPER_MARK in head else None
+    """The CLI on PATH, under either name (docs/design/rename-brunna.md), when it is install-cli's wrapper (never
+    someone else's program of that name)."""
+    for name in names.all("cli"):
+        w = shutil.which(name)
+        if not w:
+            continue
+        try:
+            with open(w, "rb") as f:
+                head = f.read(1024).decode(errors="ignore")
+        except OSError:
+            continue
+        if WRAPPER_MARK in head:
+            return pathlib.Path(w)
+    return None
 
 
 def step_list(with_scheduler: bool) -> list[tuple[str, list[str]]]:

@@ -171,7 +171,8 @@ SESSION_SUBCOMMANDS = (*MAIL_SUBCOMMANDS, "merge-branch", "test", "cap-run", "co
 def platform_cli(mail_only: bool = False) -> list[str]:
     """mail_only: a mailbox agent dispatched by the platform can only read, send and close letters (no merging, no
     platform-run commands)."""
-    return [f"agenthub {c}" for c in (MAIL_SUBCOMMANDS if mail_only else SESSION_SUBCOMMANDS)]
+    # both names of the CLI (docs/design/rename-brunna.md): rules files written by either release name one of them
+    return [f"{cli} {c}" for cli in names.all("cli") for c in (MAIL_SUBCOMMANDS if mail_only else SESSION_SUBCOMMANDS)]
 
 
 # ---------- the environment's tool servers in an unattended run (docs/design/evaluators.md step 0) ----------

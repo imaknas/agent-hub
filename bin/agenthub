@@ -1551,19 +1551,21 @@ def session_command(name: str):
 
 
 def cmd_install_cli(argv: list[str]) -> int:
-    """~/.local/bin/agenthub: a two-line wrapper script (not a symlink: agenthub's first line finds the platform's
-    Python from the folder it is in)."""
+    """~/.local/bin/agenthub and ~/.local/bin/brunna (the name the platform is moving to, docs/design/rename-brunna.md):
+    two-line wrapper scripts (not symlinks: the CLI's first line finds the platform's Python from the folder it is in),
+    both running the current CLI."""
     d = pathlib.Path(os.path.expanduser(argv[argv.index("--dir") + 1] if "--dir" in argv else "~/.local/bin"))
     d.mkdir(parents=True, exist_ok=True)
-    f = d / "agenthub"
     body = (f'#!/bin/sh\n# the agent-hub CLI (written by agenthub install-cli; run it again after moving the hub)\n'
-            f'exec "{BIN / "py"}" "{BIN / "agenthub"}" "$@"\n')
-    if f.exists() and f.read_text() == body:
-        print(_("✓ {path} is up to date", path=f))
-    else:
-        f.write_text(body)
-        f.chmod(0o755)
-        print(_("wrote {path}", path=f))
+            f'exec "{BIN / "py"}" "{BIN / names.current("cli")}" "$@"\n')
+    for name in names.all("cli"):
+        f = d / name
+        if f.exists() and f.read_text() == body:
+            print(_("✓ {path} is up to date", path=f))
+        else:
+            f.write_text(body)
+            f.chmod(0o755)
+            print(_("wrote {path}", path=f))
     on_path = str(d) in os.environ.get("PATH", "").split(":")
     if not on_path:
         print(_('⚠️ {dir} is not on PATH: add it to your shell setup (e.g. export PATH="{dir}:$PATH") so sessions can '

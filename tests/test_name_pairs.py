@@ -86,6 +86,36 @@ class Table(unittest.TestCase):
         self.assertEqual(names.env_strip({"AGENT_HUB_X": 1, "AGENTHUB_Y": 2, "BRUNNA_Z": 3, "HOME": 4}), {"HOME": 4})
 
 
+class Markers(unittest.TestCase):
+    def test_put_block_takes_either_spelling(self):
+        cur_b, cur_e = names.block()
+        old_b, old_e = names.block(names.other("marker"))
+        self.assertEqual(names.put_block("", "x"), f"{cur_b}\nx\n{cur_e}\n")
+        mine = "my line\n\n"
+        self.assertEqual(names.put_block(mine + f"{old_b}\nold\n{old_e}\n", "x"), mine + f"{cur_b}\nx\n{cur_e}\n",
+                         "a block in the other spelling is rewritten in the current one")
+        both = f"{cur_b}\na\n{cur_e}\n{old_b}\nb\n{old_e}\n"
+        self.assertEqual(names.put_block(both, "x").count(":begin -->"), 1, "never two blocks")
+
+    def test_uninstall_strips_either(self):
+        import importlib.util
+        spec = importlib.util.spec_from_file_location("uninstall_n", ROOT / "bin" / "uninstall.py")
+        un = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(un)
+        f = pathlib.Path(tempfile.mkdtemp()) / "CLAUDE.local.md"
+        old_b, old_e = names.block(names.other("marker"))
+        f.write_text(f"mine\n{old_b}\nx\n{old_e}\n")
+        self.assertTrue(un.strip_block(f, True))
+        self.assertEqual(f.read_text(), "mine\n")
+
+    def test_gate_hooks_in_either_spelling_are_the_platforms(self):
+        import importlib.util
+        spec = importlib.util.spec_from_file_location("rps_n", ROOT / "bin" / "render-project-settings.py")
+        rps = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(rps)
+        self.assertEqual(set(rps.MARKS), {names.gate_mark(s) for s in names.PAIRS["marker"]})
+
+
 class ConfigPath(unittest.TestCase):
     def run_py(self, cfg: pathlib.Path, code: str) -> str:
         env = names.env_strip(__import__("os").environ)

@@ -81,35 +81,29 @@ while IFS= read -r INSTR; do
 # not $(…): bash 3.2 misparses a heredoc inside a command substitution
 missing=$(mktemp) || exit 1
 "$AGENT_HUB/bin/py" - "$AGENT_HUB/bin" "$INSTR" .agent-memory/RULES <<'PY' >"$missing"
-import re, sys
+import sys
 from pathlib import Path
 sys.path.insert(0, sys.argv[1])
 import hubconf
+import names
 import prompts
 
-BEGIN, END = "<!-- agent-hub:begin -->", "<!-- agent-hub:end -->"
-
 path, rules_file = Path(sys.argv[2]), Path(sys.argv[3])
-names = rules_file.read_text().split() if rules_file.exists() else []
+listed = rules_file.read_text().split() if rules_file.exists() else []
 # rules decided by the registry (not via RULES): commits: conventional → the merge gate checks titles, so the rules
 # file must carry the explanation
 here = Path.cwd().resolve()
 proj = next((d for n, d in hubconf.projects().items()
              if (ws := hubconf.workspace(n)) and ws.resolve() == here), {})
-if proj.get("commits") == "conventional" and "conventional-commits" not in names:
-    names.append("conventional-commits")
-body, absent = prompts.agent_rules(names)   # the template minus its title, the listed rules, filled
+if proj.get("commits") == "conventional" and "conventional-commits" not in listed:
+    listed.append("conventional-commits")
+body, absent = prompts.agent_rules(listed)   # the template minus its title, the listed rules, filled
 for name in absent:
     print(f"{name}\t{hubconf.ROOT / 'templates' / 'rules' / f'{name}.md'}")
-block = f"{BEGIN}\n{body}\n{END}\n"
 old = path.read_text() if path.exists() else ""
-
-if BEGIN in old and END in old:
-    new = re.sub(re.escape(BEGIN) + r".*?" + re.escape(END) + r"\n?", lambda _: block, old, count=1, flags=re.S)
-else:
-    # no block yet: it goes after what the file has (the pre-block pointer of 09-25 is gone from every project)
-    rest = old.strip("\n")
-    new = (rest + "\n\n" if rest else "") + block
+# the block in either spelling becomes the current one (docs/design/rename-brunna.md); none yet: it goes after what the
+# file has
+new = names.put_block(old, body)
 
 if new != old:
     tmp = path.with_name(path.name + ".tmp")

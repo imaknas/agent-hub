@@ -118,7 +118,7 @@ class Flags(unittest.TestCase):
                 self.assertLessEqual(tools, set(points()[point]["tools"].split(",")))
                 bash = [r for r in allowed(cmd) if r.startswith("Bash(")]
                 self.assertTrue(bash)
-                self.assertTrue(all(r.startswith("Bash(agenthub ") for r in bash), bash)   # no raw hubbus
+                self.assertTrue(all(r.startswith(("Bash(agenthub ", "Bash(brunna ")) for r in bash), bash)   # no raw hubbus
                 self.assertNotIn("Bash", [r for r in allowed(cmd)])
                 others = [r for r in allowed(cmd) if not r.startswith("Bash(")]
                 self.assertEqual(others, ["Edit(./.agent-memory/memory/**)"])
@@ -183,7 +183,7 @@ class PlatformSettingsFile(unittest.TestCase):
             d = json.loads(runtime_claude.platform_settings("p").read_text())
         allow = d["permissions"]["allow"]
         self.assertFalse(set(SAVED) & set(allow))
-        self.assertTrue(allow and all(r.startswith("Bash(agenthub ") for r in allow), allow)
+        self.assertTrue(allow and all(r.startswith(("Bash(agenthub ", "Bash(brunna ")) for r in allow), allow)
         self.assertIs(d["sandbox"]["autoAllowBashIfSandboxed"], False)
 
 

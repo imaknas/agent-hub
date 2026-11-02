@@ -2,6 +2,7 @@ $ agenthub install-cli --dir <TMP>/cli
 [exit 1]
 --- stdout
 wrote <TMP>/cli/agenthub
+wrote <TMP>/cli/brunna
 ⚠️ <TMP>/cli is not on PATH: add it to your shell setup (e.g. export PATH="<TMP>/cli:$PATH") so sessions can reach agenthub
 --- stderr
 
@@ -9,6 +10,7 @@ $ agenthub install-cli --dir <TMP>/cli
 [exit 1]
 --- stdout
 ✓ <TMP>/cli/agenthub is up to date
+✓ <TMP>/cli/brunna is up to date
 ⚠️ <TMP>/cli is not on PATH: add it to your shell setup (e.g. export PATH="<TMP>/cli:$PATH") so sessions can reach agenthub
 --- stderr
 
@@ -16,4 +18,5 @@ $ agenthub install-cli --dir <TMP>/cli
 [exit 0]
 --- stdout
 ✓ <TMP>/cli/agenthub is up to date
+✓ <TMP>/cli/brunna is up to date
 --- stderr

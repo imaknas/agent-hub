@@ -44,10 +44,7 @@
   "bin/uninstall.py": 2
  },
  "marker": {
-  "bin/evals/e3.py": 2,
   "bin/prompts.py": 1,
-  "bin/render-project-settings.py": 2,
-  "bin/sync-local-setup.sh": 4,
-  "bin/uninstall.py": 2
+  "bin/sync-local-setup.sh": 2
  }
 }

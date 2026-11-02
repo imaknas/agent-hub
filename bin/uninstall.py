@@ -30,12 +30,13 @@ import sys
 BIN = pathlib.Path(__file__).resolve().parent
 sys.path.insert(0, str(BIN))
 import hubconf  # noqa: E402
+import names  # noqa: E402
 import i18n  # noqa: E402
 import init_dialogue  # noqa: E402
 
 _ = i18n.domain(__file__)
 CORE = ("local.agent-hub-scheduler", "local.agent-hub-scheduler-watchdog")
-BEGIN, END = "<!-- agent-hub:begin -->", "<!-- agent-hub:end -->"
+BLOCKS = [names.block(s) for s in names.all("marker")]   # either spelling (docs/design/rename-brunna.md)
 
 
 def _load(script: str):
@@ -78,12 +79,15 @@ def strip_block(path: pathlib.Path, apply: bool) -> bool:
     """The platform's managed block out of a rules file; a file left empty goes. A link is left alone."""
     if not path.is_file() or path.is_symlink():
         return False
-    text = path.read_text()
-    a, b = text.find(BEGIN), text.find(END)
-    if a < 0 or b < a:
+    text = rest = path.read_text()
+    for begin, end in BLOCKS:
+        a, b = rest.find(begin), rest.find(end)
+        if 0 <= a < b:
+            rest = rest[:a].rstrip("\n") + "\n" + rest[b + len(end):].lstrip("\n")
+    if rest == text:
         return False
     if apply:
-        rest = (text[:a].rstrip("\n") + "\n" + text[b + len(END):].lstrip("\n")).strip("\n")
+        rest = rest.strip("\n")
         if rest.strip():
             path.write_text(rest + "\n")
         else:

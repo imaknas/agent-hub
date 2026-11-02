@@ -98,6 +98,35 @@ def resolve_both(base, cls: str, fmt: str = "{}") -> list[pathlib.Path]:
     return [base / fmt.format(n) for n in (current(cls), other(cls)) if os.path.lexists(base / fmt.format(n))]
 
 
+# ---------- markers ----------
+
+def block(spelling: str | None = None) -> tuple[str, str]:
+    """The begin/end lines of the platform's block in a rules file, in one spelling (the current one by default)."""
+    s = spelling or current("marker")
+    return f"<!-- {s}:begin -->", f"<!-- {s}:end -->"
+
+
+def put_block(text: str, body: str) -> str:
+    """text with the platform's block (in either spelling) replaced by one in the current spelling around body; a
+    second block in the other spelling goes; with none, the block is appended."""
+    import re
+    begin, end = block()
+    new_block = f"{begin}\n{body}\n{end}\n"
+    found = [(b, e) for b, e in map(block, all("marker")) if b in text and e in text]
+    if not found:
+        rest = text.strip("\n")
+        return (rest + "\n\n" if rest else "") + new_block
+    for i, (b, e) in enumerate(found):
+        text = re.sub(re.escape(b) + r".*?" + re.escape(e) + r"\n?", (lambda _m: new_block) if i == 0 else "", text,
+                      count=1, flags=re.S)
+    return text
+
+
+def gate_mark(spelling: str | None = None) -> str:
+    """The first comment line of every git hook the platform writes."""
+    return f"# {spelling or current('marker')}:gate"
+
+
 # ---------- environment variables ----------
 
 def env_old(x: str) -> str:

@@ -1,0 +1,4 @@
+#!/bin/sh
+# The new name (docs/design/rename-brunna.md): agent-hub is becoming brunna. Until the switch release the platform's CLI
+# is agenthub and this only forwards to it; from the switch on the roles swap.
+exec "${0%/*}/py" "${0%/*}/agenthub" "$@"

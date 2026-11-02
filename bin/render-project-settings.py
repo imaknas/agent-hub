@@ -37,6 +37,7 @@ import sys
 
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
 import hubconf  # noqa: E402
+import names  # noqa: E402
 import i18n  # noqa: E402
 import nofollow  # noqa: E402
 import policy  # noqa: E402
@@ -182,7 +183,7 @@ def unapply(name: str, doc: dict) -> None:
     print(_("{project}: enforce is off, removed the platform's sandbox/rules", project=name))
 
 
-GATE_MARK = "# agent-hub:gate (managed; registry gate: strict)"
+GATE_MARK = names.gate_mark() + " (managed; registry gate: strict)"
 GATE_HOOK_HEAD = GATE_MARK + """
 # No direct commit or merge commit on main/master in the main checkout; merge-branch fast-forwards, which does not run this hook.
 b=$(git symbolic-ref --short -q HEAD)
@@ -204,7 +205,8 @@ def gate_hook() -> str:
         "worktree/branch and finish with agenthub merge-branch.", branch=BRANCH) + '" >&2\nexit 1\n'
 
 
-MARK = "# agent-hub:gate"   # every hook the platform writes starts with it; others are the project's own
+MARK = names.gate_mark()   # every hook the platform writes starts with it; others are the project's own
+MARKS = tuple(names.gate_mark(s) for s in names.all("marker"))   # either spelling is the platform's
 HOOKS = ("pre-commit", "pre-merge-commit", "commit-msg")
 
 
@@ -273,7 +275,7 @@ def gate(name: str, doc: dict, report: bool, quiet: bool = False, remove_all: bo
         return acts
     for hook in HOOKS:
         text = texts.get(hook) if isinstance(texts.get(hook), str) else None
-        mine = text is not None and text.startswith("#!/bin/sh\n" + MARK)
+        mine = text is not None and any(text.startswith("#!/bin/sh\n" + m) for m in MARKS)
         if hook in want:
             body, why = want[hook]
             if text is not None and not mine:
