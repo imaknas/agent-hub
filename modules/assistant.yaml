@@ -20,7 +20,7 @@ jobs:
 services:
 # channel leases (bin/lease-runner.py): 127.0.0.1:18797, Bearer token in .secrets/runner-token
 - name: lease-runner
-  label: local.agent-hub.lease-runner
+  label: local.brunna.lease-runner
   run: bin/py bin/lease-runner.py
   keepalive: true
   throttle_s: 10

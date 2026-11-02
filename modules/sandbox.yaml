@@ -9,7 +9,7 @@ description: "Platform-run capabilities (cap-runner): sandboxed projects borrow 
 services:
 # bin/cap-runner.py: runs the requests hub-run drops off under the platform's Seatbelt profile
 - name: cap-runner
-  label: local.agent-hub.cap-runner
+  label: local.brunna.cap-runner
   run: bin/py bin/cap-runner.py
   keepalive: true
   throttle_s: 10

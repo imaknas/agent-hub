@@ -177,7 +177,7 @@ services:
 # requests/questions nobody picks up are handled by the platform (hubbus dispatch, every minute;
 # docs/design/mailbox-routing.md)
 - name: mailbox-dispatch
-  label: local.agent-hub-mailbox-dispatch
+  label: local.brunna-mailbox-dispatch
   cwd: hub
   run: bin/py bin/hubbus dispatch
   interval_s: 60
