@@ -3,6 +3,21 @@
 What changed in each version, generated from the commit messages (git cliff) when it is tagged; only new features,
 fixes, speed-ups and reverts are listed.
 
+## v0.7.0 (2026-11-02)
+
+### New
+
+- **names:** The switch: the platform writes brunna
+- **names:** The platform's own services take the new label too
+- **i18n:** Messages name brunna, and the settings file as the instance has it
+- **templates:** Project rules, prompts and setup name brunna
+- **install:** A new install is ~/brunna from imaknas/brunna; upgrade stops at v0.6.0
+
+### Fixed
+
+- **names:** Presence, the handler guard, the run folder and the leak check read both spellings
+- **names:** --version and the test runner's errors name brunna
+
 ## v0.6.1 (2026-11-02)
 
 ### Fixed
