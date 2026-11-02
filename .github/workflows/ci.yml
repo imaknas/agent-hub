@@ -44,7 +44,7 @@ jobs:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
-      - run: AGENT_HUB_REPO="$PWD" AGENT_HUB_REF="$GITHUB_SHA" AGENT_HUB_DIR="$RUNNER_TEMP/agent-hub" sh install.sh
+      - run: BRUNNA_REPO="$PWD" BRUNNA_REF="$GITHUB_SHA" BRUNNA_DIR="$RUNNER_TEMP/brunna" sh install.sh
       - run: |
           export PATH="$HOME/.local/bin:$PATH"
           agenthub --version
