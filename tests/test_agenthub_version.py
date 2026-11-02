@@ -36,7 +36,7 @@ class Version(unittest.TestCase):
         return r.stdout.strip()
 
     def test_outside_git_unknown(self):
-        self.assertEqual(self.version(), "agenthub unknown")
+        self.assertEqual(self.version(), "brunna unknown")
 
     def test_untagged_then_tagged(self):
         self.git("init", "-q", "-b", "main")
@@ -44,11 +44,11 @@ class Version(unittest.TestCase):
         self.git("commit", "-q", "-m", "chore: a")
         sha = subprocess.run(["git", "-C", str(self.hub), "rev-parse", "--short", "HEAD"], env=self.env,
                              capture_output=True, text=True).stdout.strip()
-        self.assertEqual(self.version(), f"agenthub {sha}")
+        self.assertEqual(self.version(), f"brunna {sha}")
         self.git("tag", "not-a-release")
-        self.assertEqual(self.version(), f"agenthub {sha}", "only v* tags are releases")
+        self.assertEqual(self.version(), f"brunna {sha}", "only v* tags are releases")
         self.git("tag", "v0.1.0")
-        self.assertEqual(self.version(), "agenthub v0.1.0")
+        self.assertEqual(self.version(), "brunna v0.1.0")
 
 
 if __name__ == "__main__":

@@ -359,7 +359,7 @@ def main(argv: list[str]) -> int:
         name, doc = project_of(main_dir)
         run = pathlib.Path(tempfile.mkdtemp(prefix="run.", dir=runs_dir(main_dir, common)))
     except SetupError as e:
-        print(f"agenthub test: {e}", file=sys.stderr)
+        print(f"{names.current('cli')} test: {e}", file=sys.stderr)
         return 2
     outdir = names.repo_dir(git_dir) / "test-output"
     outdir.mkdir(parents=True, exist_ok=True)
@@ -425,7 +425,7 @@ def main(argv: list[str]) -> int:
             old.unlink(missing_ok=True)
         return 1 if failed else 0
     except SetupError as e:
-        print(f"agenthub test: {e}", file=sys.stderr)
+        print(f"{names.current('cli')} test: {e}", file=sys.stderr)
         return 2
     finally:
         with contextlib.suppress(OSError):
