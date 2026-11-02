@@ -103,15 +103,16 @@ def runs_dir(main: pathlib.Path, common: pathlib.Path) -> pathlib.Path:
     repos or check paths in their temporary folders treat a path through a .git folder as git's own (the step 2.3
     rehearsal, 11-01); not the system's temporary folder, which sandbox profiles let everything write, so the tests
     that catch writes outside a folder could not."""
-    d = main / ".agent-hub" / "test"
+    top = names.resolve(main, "product", ".{}")   # .brunna; a checkout that has .agent-hub keeps it
+    d = top / "test"
     d.mkdir(parents=True, exist_ok=True)
     exclude = common / "info" / "exclude"
     try:
         have = exclude.read_text() if exclude.is_file() else ""
-        if "/.agent-hub/" not in have.splitlines():
+        if f"/{top.name}/" not in have.splitlines():
             exclude.parent.mkdir(parents=True, exist_ok=True)
             with open(exclude, "a") as f:
-                f.write(("" if have.endswith("\n") or not have else "\n") + "/.agent-hub/\n")
+                f.write(("" if have.endswith("\n") or not have else "\n") + f"/{top.name}/\n")
     except OSError:
         pass
     return d

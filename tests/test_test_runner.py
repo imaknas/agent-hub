@@ -69,8 +69,8 @@ class Runner(unittest.TestCase):
         (self.ws / "new.txt").write_text("uncommitted")
         r = self.run_("--when", "nightly")
         self.assertIn("demo/full passed", r.stdout, "an uncommitted change is a new tree")
-        self.assertEqual(list((self.ws / ".agent-hub" / "test").iterdir()), [], "run folders are removed")
-        self.assertIn("/.agent-hub/", (self.ws / ".git" / "info" / "exclude").read_text().splitlines())
+        self.assertEqual(list((names.resolve(self.ws, "product", ".{}") / "test").iterdir()), [], "run folders are removed")
+        self.assertIn("/.brunna/", (self.ws / ".git" / "info" / "exclude").read_text().splitlines())
         self.assertEqual(self.git(self.ws, "status", "--porcelain", "--untracked-files=all"), "?? new.txt",
                          "the run folder is not an untracked file")
 

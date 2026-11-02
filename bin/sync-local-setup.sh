@@ -178,7 +178,7 @@ done
 # instance or the workspace appears in committed content (naming agent-hub is fine since 10-27). This part deliberately prints with --quiet too: the SessionStart
 # hook's stdout goes into the session context, so every session start hands the list of things to fix to the
 # project's own session, without relying on anyone remembering to check. No violation, nothing printed.
-leak_re='~/agent-hub/|/Users/[A-Za-z0-9._-]+/(agent-hub|workspace|\.agent-hub|services|git-origin)'
+leak_re='~/(agent-hub|brunna)/|/Users/[A-Za-z0-9._-]+/(agent-hub|brunna|workspace|\.agent-hub|\.brunna|services|git-origin)'
 leaks=$(git grep -l -I -E "$leak_re" HEAD -- . 2>/dev/null | sed 's#^HEAD:##' | head -10)
 if [ -n "$leaks" ]; then
   hub_say "⚠️ Files committed in this repo contain this machine's paths (the repo may become public, and local paths must not be committed; naming agent-hub is fine):

@@ -24,7 +24,7 @@ sync-local-setup: .claude/settings.local.json 已加進 .git/info/exclude
   - README
 請在這個專案裡處理:維運需要的資訊搬到 CLAUDE.local.md(agent-hub:begin/end 區塊之外,不進版控),
 committed 檔案裡改成不寫本機路徑的寫法或刪掉,然後 commit。細節可用:
-git grep -n -E '~/agent-hub/|/Users/[A-Za-z0-9._-]+/(agent-hub|workspace|\.agent-hub|services|git-origin)'
+git grep -n -E '~/(agent-hub|brunna)/|/Users/[A-Za-z0-9._-]+/(agent-hub|brunna|workspace|\.agent-hub|\.brunna|services|git-origin)'
 --- stderr
 sync-local-setup: RULES 登記了 no-such-rule,但找不到 <HUB>/templates/rules/no-such-rule.md
 

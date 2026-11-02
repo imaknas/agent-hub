@@ -24,7 +24,7 @@ sync-local-setup: .claude/settings.local.json added to .git/info/exclude
   - README
 Please handle it in this project: move what is needed to operate it into CLAUDE.local.md (outside the agent-hub:begin/end block, not version-controlled),
 and in committed files write it without local paths or delete it, then commit. For details:
-git grep -n -E '~/agent-hub/|/Users/[A-Za-z0-9._-]+/(agent-hub|workspace|\.agent-hub|services|git-origin)'
+git grep -n -E '~/(agent-hub|brunna)/|/Users/[A-Za-z0-9._-]+/(agent-hub|brunna|workspace|\.agent-hub|\.brunna|services|git-origin)'
 --- stderr
 sync-local-setup: RULES lists no-such-rule, but <HUB>/templates/rules/no-such-rule.md is not there
 
