@@ -69,16 +69,17 @@ A test (`tests/test_name_pairs.py`) does two things:
 |---|---|---|---|
 | product name in text | agent-hub | brunna | text: README ("formerly agent-hub" for a while), docs, messages, catalog, logo, social preview |
 | CLI | `agenthub` | `brunna` | both: both commands exist and one forwards. `install-cli` writes `brunna` on a fresh install, and on an existing one also keeps `agenthub`. `upgrade.py` finds a wrapper by either name and either mark. Permission rules (`policy.platform_cli`, the runtime's allow rules) allow both |
-| env vars | `AGENT_HUB_*`, `AGENTHUB_*` | `BRUNNA_*` | both: `names.env(X)` reads either; different values for both spellings are refused. Variables the platform hands to child processes and project jobs (`EVENTS`, `JOB`, `JOB_CHAIN`, `JOB_DEPTH`, paths) are exported in **both** spellings, because project code reads them by their documented names (event-jobs.md). Overrides go through `names.env_set()`, which sets every spelling, so an override never conflicts with an inherited one. Tests and `cap-runner.py` strip both prefixes |
+| env vars | `AGENT_HUB_*`, `AGENTHUB_*` | `BRUNNA_*` | both, with a fixed precedence. The platform exports `BRUNNA_*`. The project-facing job variables (`EVENTS`, `JOB`, `JOB_CHAIN`, `JOB_DEPTH`) are exported in both spellings with the same value, because project code reads them by their documented names (event-jobs.md); they are never overridden. `names.env(X)` reads the **old spelling when it is set, else the new one**. Any override still written in the old spelling, in a shell line, a `run:` line or a user's script, is therefore an explicit override and wins over the inherited `BRUNNA_*`. A new user who overrides with `BRUNNA_X` has no old spelling set, so theirs is used. When both are set and differ, it logs which one it used and never refuses. The platform's own code overrides through `names.env_set()`, which sets every spelling. The ratchet flags a single-spelling assignment in the repo. Tests and `cap-runner.py` strip both prefixes |
 | unit labels | `local.agent-hub-scheduler`, `…-watchdog`, `local.agent-hub-mailbox-dispatch`, `local.agent-hub.<service>` (incl. lease-runner, cap-runner), `local.agent-hub-run-now.*` | `local.brunna-…` | both, pairwise installer: install the new label, then remove the other spelling's unit when it is this hub's (`ours()`). render-services removes a relabelled service before adding the new label, so a fixed port doesn't clash. A rollback to v0.6 does the reverse with the same code. Two schedulers can't tick at once: the scheduler's lock is per checkout, whatever the label |
 | rules-file markers | `<!-- agent-hub:begin/end -->` | `<!-- brunna:begin/end -->` | both: sync-local-setup, uninstall and prompts read both; each project's next session start rewrites its block in the new spelling. A project nobody opens keeps the old marker, which is still read |
 | git-hook marker | `# agent-hub:gate` | `# brunna:gate` | both: render-project-settings recognises both as its own and rewrites at the next apply |
 | leak check | `~/agent-hub`, `.agent-hub` | `~/brunna`, `.brunna` | `sync-local-setup.sh` checks both |
 | the platform's project name | `agent-hub` | `brunna` | both: `hub_project()` returns `brunna`; the yaml is renamed in the commit; the entry gets `type: platform` (added to the validator and the project contract in v0.6), and the test runner and every `stem == hub_project()` check find it by type. For the hub, `former_names`, `own_names` and hubbus's `current_name` use the table in both directions (all spellings but the current one), from v0.6 on. That covers `valid_address`, `send_letter`, the inbox, the dispatch queries, `apply-updates`, `records()` and event-job matching, so letters to either name reach the hub in any release from v0.6. Both names are reserved for other projects from v0.6. If a user project named `brunna` exists, the switch refuses and says how to rename it |
-| scheduler job names | `agent-hub/<job>` | `brunna/<job>` | both: the scheduler adopts state (`name`, `.last_ok`, `.attempts`, cursors, `scheduler-failing.json` entries) at run time from the other spelling, newest-wins as `adopt_cursor` does, then drops the other key. This is in every release from v0.6, so a daily job never runs twice, on upgrade, rollback or jump. `after:`/`before:` resolve through both. Modules' `legacy_name: agent-hub/…` values are past keys and stay |
+| scheduler job names | `agent-hub/<job>` | `brunna/<job>` | both: the scheduler adopts state (`name`, `.last_ok`, `.attempts`, cursors, `scheduler-failing.json` entries, and alert state keyed by job name, so an open alert still gets its recovery message) at run time from the other spelling, newest-wins as `adopt_cursor` does, then drops the other key. This is in every release from v0.6, so a daily job never runs twice, on upgrade, rollback or jump. `after:`/`before:` resolve through both. Modules' `legacy_name: agent-hub/…` values are past keys and stay |
 | Principal Handoff party ids | `agent-hub:registrar`, `agent-hub:owner-side`, requester `project:agent-hub`, the records' `project` field | `brunna:…` | gated: a class of its own in the table, not derived from `hub_project()`. Readers accept both spellings for good (history), including `bound()` and hubbus's `need["by"]` check. Writers switch only after Muninn agrees, asked by letter with v0.6 |
 | task keys | `task-agent-hub-…` | `task-brunna-…` | history: open keys stay (opaque ids, filed under the name they were raised with). New keys follow the project name |
-| per-repo paths | `.git/agent-hub/` (outbox, `inbox.json`, cache, test output, tier cache, run logs), `refs/agent-hub/*`, the `agent-hub-op.lock` directory, the `agent-hub-deps-pruned` and `agent-hub-migrated-to-mini` markers | `.git/brunna/…`, … | resolve: a project connected after the switch gets `brunna`; an existing project keeps `agent-hub`. hubbus, dispatch, the test runner, policy (the sandbox's writable cache paths) and worktrees resolve per repo. The lock directory resolves the same way for every writer of the same repo, so they always agree |
+| per-repo paths | `.git/agent-hub/` (outbox, `inbox.json`, cache, test output, tier cache, run logs), `refs/agent-hub/*`, the `agent-hub-deps-pruned` and `agent-hub-migrated-to-mini` markers | `.git/brunna/…`, … | resolve: a project connected after the switch gets `brunna`; an existing project keeps `agent-hub`. hubbus, dispatch, the test runner, policy (the sandbox's writable cache paths) and worktrees resolve per repo. These all persist, so "whichever exists" is stable. From v0.6 on, resolve creates the **new** spelling when neither exists, in both v0.6 and v0.7 |
+| per-repo lock | the `agent-hub-op.lock` directory | **none: fixed for good** | a mkdir lock that exists only while it is held, so "whichever exists" can't decide it, and old and new code must use the same name to exclude each other. It keeps its name in every release. It lives inside `.git` for seconds at a time, and is listed as an exception in the fresh-install test |
 | platform venv | `~/.local/share/agent-hub/python` | `~/.local/share/brunna/python` | resolve: `bin/py` and `setup-python` use whichever exists; a fresh install builds the new one |
 | bus directory | `hub.json` `bus_dir` = `~/.local/state/agent-hub-bus` | `~/.local/state/brunna-bus` | resolve: it is a setting. `hub.example.json` gives new installs the new path; existing instances keep theirs. Nothing moves |
 | config file | `hub.json` | `brunna.json` | resolve: `hubconf.config_path()` everywhere (readers, writers, "is this instance set up" checks, `commit-hub-files.sh` callers, `hub_json_get`). `init` writes `brunna.json` on a fresh install. The schema gets `brunna.v1.schema.json` beside `hub.v1.schema.json` (same content, both kept per the contract rules) |
@@ -108,10 +109,18 @@ What stays named agent-hub, on purpose:
 These are paths that running processes and old code use. They can be moved later, one at a time, with their own
 commands if ever wanted, and none of that is part of this rename.
 
-On the owner's machine the switch arrives by `merge-branch` → `land`, which needs nothing new:
-1. `config apply` re-renders the units (pairwise) and services;
-2. the next session start of each project rewrites its rules block;
-3. upgrade's MCP offer is available as `brunna init --register-mcp`.
+On the owner's machine, code arrives by `merge-branch` → `land`, not `upgrade`. Today `land` runs only `registry.py
+check` and the hub's own settings. From v0.6 on, `land` also runs, after every merge:
+
+- `install-cli`, which writes the `brunna` wrapper and keeps `agenthub`;
+- `init --scheduler-only`, the pairwise core-unit installer: the scheduler and watchdog aren't installed by
+  `config apply`;
+- `config apply`, which re-renders the services pairwise.
+
+Each is idempotent and leaves an unchanged thing alone, so an ordinary merge costs a few file comparisons. Because the
+wrapper exists from v0.6, a rules block that names `brunna` (written from v0.7) always finds it.
+
+The MCP re-registration is offered as `brunna init --register-mcp`.
 
 ## Releases
 
@@ -127,11 +136,13 @@ On the owner's machine the switch arrives by `merge-branch` → `land`, which ne
    - The inline copies and the ratchet.
    - `bin/brunna`.
    - Permission rules for both commands.
+   - `land` running `install-cli`, `init --scheduler-only` and `config apply`.
 
    The letter to Muninn about party ids goes with it.
 2. **v0.7.0: the switch.** Writers use the new spelling: labels, markers, the project name, job names, the CLI, fresh
    installs' paths and files. Text everywhere, install.sh defaults, the new logo. Party ids too, if Muninn has agreed.
-   `upgrade.py` refuses `--to` anything older than v0.6.0.
+   `upgrade.py` refuses `--to` anything older than v0.6.0. When a jump came from older than v0.6, its go-back advice
+   names v0.6.0, not the from-ref: v0.5 can't read job state already adopted under `brunna/…`.
 3. **Outside the repo** (the owner, or by letter):
    - rename the GitHub repo, then update the description and social preview;
    - Muninn: its README link and its `handoff-version` example;
@@ -165,8 +176,14 @@ After each path:
 - the CLI works by both names;
 - `doctor` is clean.
 
-A second test does a **fresh v0.7 install** and checks that no file, path, unit, marker or message outside the
-documented exceptions (history, `hubconf`-style module names) contains `agent-hub` or `agenthub`. That is the owner's
+A second test does a **fresh v0.7 install** and checks that no file, path, unit, marker or message contains
+`agent-hub` or `agenthub`, outside the documented exceptions:
+- history;
+- `hubconf`-style module names;
+- the per-repo lock while held.
+
+State keyed by the hub's name that resets on the switch: the tier cache (`{project}-{tier}`) and agent-job state
+folders. Both are caches. The test checks they rebuild. That is the owner's
 goal, as a test.
 
 The owner's machine is the last, real run.
