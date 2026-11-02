@@ -150,6 +150,65 @@ class HubNames(unittest.TestCase):
         errs = registry.validate_v2(doc, names.other("project"))
         self.assertTrue(any(names.other("project") in e for e in errs), errs)
 
+    def test_contracts_from_either_name_are_the_platforms(self):
+        """A consumes: from: names the platform in either spelling; its entry is found by type, whatever its stem."""
+        import importlib.util
+        import shutil
+        spec = importlib.util.spec_from_file_location("contracts_check_n", ROOT / "bin" / "contracts-check.py")
+        cc = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(cc)
+        schema = "contracts/hubbus.v1.schema.json"
+        ws = pathlib.Path(tempfile.mkdtemp()).resolve()
+        (ws / "contracts").mkdir()
+        shutil.copy(ROOT / schema, ws / schema)
+        platform = {"name": "whatever-stem", "type": "platform",
+                    "provides": [{"contract": "hubbus", "v": 1, "schema": schema}]}
+        for producer in names.all("project"):
+            with self.subTest(producer=producer):
+                app = {"name": "app", "paths": {"workspace": str(ws)},
+                       "consumes": [{"contract": "hubbus", "v": 1, "copy": schema, "from": producer}]}
+                self.assertEqual(cc.cross_copies({"projects": {"whatever-stem": platform, "app": app}}), [])
+
+    def test_unit_labels_in_either_spelling(self):
+        old, new = names.all("unit")
+        self.assertEqual(names.unit_spellings(f"{old}-scheduler"), [f"{old}-scheduler", f"{new}-scheduler"])
+        self.assertEqual(names.unit_spellings(f"{new}.lease-runner"), [f"{new}.lease-runner", f"{old}.lease-runner"])
+        self.assertEqual(names.unit_spellings("local.web"), ["local.web"])
+        self.assertEqual(names.unit_spellings(f"{old}x"), [f"{old}x"])
+
+    def test_recover_service_takes_either_spelling(self):
+        """services.tsv is written by a person: its label, its location's agent-hub/ or brunna/, and a template filed
+        under the other spelling all resolve; the unit carries the label services.tsv names."""
+        import os
+        old, new = names.all("unit")
+        p_old, p_new = names.all("product")
+        tmp = pathlib.Path(tempfile.mkdtemp()).resolve()
+        hub, home, stub = tmp / "hub", tmp / "home", tmp / "stub"
+        for d in (hub / "bin", hub / "launchd", home / "Library" / "LaunchAgents", stub):
+            d.mkdir(parents=True)
+        for f in ("recover-service.sh", "hubpaths.sh", "i18n.sh", "py"):
+            if (ROOT / "bin" / f).exists():
+                (hub / "bin" / f).symlink_to(ROOT / "bin" / f)
+        (hub / "launchd" / f"{old}-scheduler.plist").write_text(
+            f"<plist><string>{old}-scheduler</string><string>{{{{hub}}}}/bin</string></plist>\n")
+        (stub / "launchctl").write_text("#!/bin/sh\nexit 0\n")
+        (stub / "launchctl").chmod(0o755)
+        rows = [(f"{old}-scheduler", "-", p_old, f"{p_old}/launchd/{old}-scheduler.plist", "ticks", ""),
+                (f"{new}-scheduler-x", "-", p_new, f"{p_new}/launchd/{new}-scheduler.plist", "ticks too", "")]
+        (hub / "services.tsv").write_text("".join("\t".join(r) + "\n" for r in rows))
+        env = {k: v for k, v in os.environ.items() if not k.startswith(("AGENT_HUB", "AGENTHUB", "BRUNNA"))}
+        env.update(HOME=str(home), PATH=f"{stub}:/usr/bin:/bin", AGENT_HUB_ROOT=str(hub), AGENT_HUB_CONFIG=str(hub),
+                   AGENT_HUB_LANG_UI="en")
+        agents = home / "Library" / "LaunchAgents"
+        for asked, written in ((f"{new}-scheduler", f"{old}-scheduler"), (f"{old}-scheduler-x", f"{new}-scheduler-x")):
+            with self.subTest(asked=asked):
+                r = subprocess.run(["bash", str(hub / "bin" / "recover-service.sh"), asked], env=env,
+                                   capture_output=True, text=True, timeout=60)
+                self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
+                plist = (agents / f"{written}.plist").read_text()
+                self.assertIn(f"<string>{written}</string>", plist)
+                self.assertIn(f"{hub}/bin", plist)
+
     def test_the_test_runner_finds_the_platform_entry_by_type(self):
         """The commit that renames the platform's entry is tested by a runner that still calls it by the old name."""
         import importlib.util
@@ -257,7 +316,8 @@ class InlineCopies(unittest.TestCase):
         return m.group(1).split()
 
     def test_shell_copies(self):
-        for rel, cls in (("bin/hubpaths.sh", "config_file"), ("bin/py", "share_dir"), ("bin/setup-python", "share_dir")):
+        for rel, cls in (("bin/hubpaths.sh", "config_file"), ("bin/hubpaths.sh", "product"), ("bin/hubpaths.sh", "unit"),
+                         ("bin/py", "share_dir"), ("bin/setup-python", "share_dir")):
             with self.subTest(rel=rel):
                 self.assertEqual(self.shell_copy(rel, cls), list(names.all(cls)))
 

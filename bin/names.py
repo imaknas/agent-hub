@@ -108,6 +108,15 @@ def unit_label(suffix: str, spelling: str | None = None) -> str:
     return f"{spelling or current('unit')}{suffix}"
 
 
+def unit_spellings(label: str) -> list[str]:
+    """label and, when it is one of the platform's, the same label in the other spelling."""
+    out = [label]
+    for a, b in (all("unit"), all("unit")[::-1]):
+        if label.startswith((a + "-", a + ".")):
+            out.append(b + label[len(a):])
+    return out
+
+
 # ---------- markers ----------
 
 def block(spelling: str | None = None) -> tuple[str, str]:

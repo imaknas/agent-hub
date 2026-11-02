@@ -58,6 +58,7 @@ import alert  # noqa: E402
 import hubconf  # noqa: E402
 import i18n  # noqa: E402
 import isolation  # noqa: E402
+import names  # noqa: E402
 import registry  # noqa: E402
 
 _ = i18n.domain(__file__)
@@ -289,6 +290,9 @@ def main() -> int:
     index = registry.refresh()
     uid = os.getuid()
     want, problems, keep, keepalive = _desired(index)
+    if only:
+        # either spelling of a platform label (recover-service passes the one services.tsv names)
+        only = next((s for s in names.unit_spellings(only) if s in want), only)
     todo = _changes(want, keep, only)
     changed = 0
     for ch, cur, plist in todo:

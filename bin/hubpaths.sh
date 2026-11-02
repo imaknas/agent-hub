@@ -40,6 +40,10 @@ HUB_JSON="$HUB_CONFIG/${NAMES_config_file%% *}"
 for _hp_n in $NAMES_config_file; do
   [ -e "$HUB_CONFIG/$_hp_n" ] && { HUB_JSON="$HUB_CONFIG/$_hp_n"; break; }
 done
+# the platform's own name and its unit labels' prefix, in both spellings (copies too, compared the same way): for
+# scripts that read names a person wrote down, such as services.tsv
+NAMES_product="agent-hub brunna"
+NAMES_unit="local.agent-hub local.brunna"
 # macOS uses the built-in plutil; elsewhere the platform's Python (bin/py), and jq only where that can't run (the remote
 # machine before bin/setup-python): so the hub machine never needs jq. Either way: no such value (or not a single value)
 # → print nothing, return non-zero. The Python reader prints what jq -r would: strings as they are, numbers as JSON,

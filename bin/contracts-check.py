@@ -24,6 +24,7 @@ sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
 import contracts  # noqa: E402
 import hubconf  # noqa: E402
 import i18n  # noqa: E402
+import names  # noqa: E402
 import registry  # noqa: E402
 
 import yaml  # noqa: E402
@@ -47,7 +48,13 @@ def cross_copies(index: dict) -> list[str]:
     for name, doc in [*index["projects"].items(), *(index.get("modules") or {}).items()]:
         for cons in doc.get("consumes") or []:
             producer = cons.get("from") or hubconf.hub_project()
-            pdoc = index["projects"].get(producer)
+            if producer in names.all("project"):
+                # the platform under either of its names: its entry is the one of type platform, whatever its stem
+                producer = hubconf.hub_project()
+                pdoc = next((d for d in index["projects"].values() if d.get("type") == "platform"),
+                            index["projects"].get(producer))
+            else:
+                pdoc = index["projects"].get(producer)
             provs = [p for p in (pdoc or {}).get("provides") or [] if p["contract"] == cons["contract"]]
             # while two versions coexist the same contract has two provides: look for the same version first, else take
             # the first one (the version mismatch is reported below)
@@ -60,7 +67,7 @@ def cross_copies(index: dict) -> list[str]:
                 errs.append(_("{name} reads {contract} v{v}, {producer} is now at v{current} "
                               "(the producer keeps both versions until the consumer has switched)", name=name,
                               contract=cons['contract'], v=cons.get('v'), producer=producer, current=prov.get('v')))
-            orig, copy = ws(index, producer) / prov["schema"], ws(index, name) / cons["copy"]
+            orig, copy = registry.dirs(pdoc)["workspace"] / prov["schema"], ws(index, name) / cons["copy"]
             if not orig.exists() or not copy.exists():
                 errs.append(_("{contract}: the {which} is missing ({path})", contract=cons['contract'],
                               which=_("original") if not orig.exists() else _("copy"),
