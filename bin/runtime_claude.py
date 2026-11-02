@@ -366,7 +366,7 @@ def person_session(pid: int, env) -> bool:
 def wait(raw: str, env, *, clock=None, sleep=None, poll: float = WAIT_POLL_S, argv_of=None) -> tuple[int, str, str]:
     """The Stop hook's waiter (see above): (exit code, stderr, how it ended). Exit 2 with the notices wakes the
     session; 0 ends quietly. It arms only when the session's process is known (CLAUDE_PID) and isn't a -p run: a
-    `claude -p` started inside another session inherits that session's CLAUDE_CODE_ENTRYPOINT (claude-desktop, cli),
+    print-mode claude (-p) started inside another session inherits that session's CLAUDE_CODE_ENTRYPOINT (claude-desktop, cli),
     so the entrypoint alone doesn't tell. argv_of: how to read a process's arguments (tests)."""
     import secrets
     import time
