@@ -1,5 +1,5 @@
 #!/bin/sh -c exec${IFS}"${0%/*}/py"${IFS}"$0"${IFS}"$@"
-"""Whether claude's logins still work (platform job agent-hub/claude-login, hourly). Broken or about to expire:
+"""Whether claude's logins still work (platform job brunna/claude-login, hourly). Broken or about to expire:
 Discord.
 
 claude has three sets of credentials on the hub machine, each of which can break (the owner, 2026-10-24: the

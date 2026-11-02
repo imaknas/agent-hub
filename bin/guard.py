@@ -47,7 +47,7 @@ def decide(target: dict, cwd) -> str | None:
     proj, root = own_project(pathlib.Path(cwd or os.getcwd()))
     if not proj:
         return None
-    how = _("To ask another project for something, send a letter: agenthub send --to <project> --type request "
+    how = _("To ask another project for something, send a letter: brunna send --to <project> --type request "
             "--text \"…\"; or ask the owner to open a session in that project themselves.")
     where = target.get("elsewhere") or {}
     if where.get("kind") == "repository":

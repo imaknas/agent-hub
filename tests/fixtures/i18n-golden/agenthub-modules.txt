@@ -4,11 +4,11 @@ $ agenthub modules
   assistant    個人助理:問題對帳、通道租借
 ✓ backup       每晚加密雲端備份 + 每月還原測試
   claude       Claude Code 的登入檢查、更新、headless token 到期提醒
-  codex        背景工作和 agent-hub 的判斷交給 Codex;你的 Codex 對話要透過 agent-hub 的工具去看信箱(信還不會自己出現在對話裡)
-  consolidate  每晚把超過 14 天的 memory 日期檔整理進 reference/(在 librarian 之前)(要有 LLM:agenthub llm setup)
+  codex        背景工作和 brunna 的判斷交給 Codex;你的 Codex 對話要透過 brunna 的工具去看信箱(信還不會自己出現在對話裡)
+  consolidate  每晚把超過 14 天的 memory 日期檔整理進 reference/(在 librarian 之前)(要有 LLM:brunna llm setup)
   mirror       每晚更新 mirror-list.txt 裡每個 repo 的 --mirror clone
-  owner        內建的 owner 端:新的待辦、問題通知(結案、回答用 agenthub owner)
-✓ reflect      每週一產生上一週的跨專案回顧(reflect/)(要有 LLM:agenthub llm setup)
+  owner        內建的 owner 端:新的待辦、問題通知(結案、回答用 brunna owner)
+✓ reflect      每週一產生上一週的跨專案回顧(reflect/)(要有 LLM:brunna llm setup)
   sandbox      平台代跑(cap-runner):sandbox 裡的專案用 hub-run --cap 借能力
   testcontainers 每晚:移除標了 org.testcontainers、超過一天的 Docker 容器
 

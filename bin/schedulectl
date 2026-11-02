@@ -25,9 +25,9 @@ Usage:
   schedulectl stop                stop the scheduler completely (launchctl bootout; schedule.yaml untouched)
   schedulectl start               start the scheduler again (launchctl bootstrap)
   schedulectl models              the model each judgment point actually uses, and where that comes from (llm.model_for
-                                  and hub.json's llm section)
+                                  and {settings}'s llm section)
   schedulectl set-model <point|state|index|consolidate> <model|default>
-                                  write into hub.json llm.points (default = drop the pin and go back to the group's
+                                  write into {settings} llm.points (default = drop the pin and go back to the group's
                                   default); state = the single-project STATE.md points, index = the cross-project index.md
                                   and the weekly report, consolidate = the cleanup pass
 """
@@ -429,7 +429,7 @@ def cmd_set_model(which, model):
         d.pop("llm")
     f.write_text(json.dumps(d, ensure_ascii=False, indent=2) + "\n")
     commit_hub_file(f, f"schedulectl: {which} → {model}")
-    print(_("hub.json llm.points: {points} → {model}", points=_(", ").join(targets), model=model))
+    print(_("{settings} llm.points: {points} → {model}", points=_(", ").join(targets), model=model))
 
 
 def main():

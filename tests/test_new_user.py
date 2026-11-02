@@ -110,13 +110,13 @@ class NewUser(unittest.TestCase):
         self.assertFalse(modules()["consolidate"] or modules()["reflect"], r.stdout)
         self.assertTrue(modules()["owner"])
         self.assertIn("consolidate, reflect", r.stdout, "init says which modules it left off")
-        self.assertIn("agenthub modules enable", r.stdout)
+        self.assertIn("brunna modules enable", r.stdout)
         for f in (self.home / ".brunna", self.hub / ".hub-home"):
             shutil.rmtree(f) if f.is_dir() else f.unlink()
         r = self.hub_cmd(*base, "--llm", "none", "--modules", "consolidate,owner")
         self.assertTrue(modules()["consolidate"], "an explicit choice is kept")
         self.assertIn("consolidate", r.stdout)
-        self.assertIn("agenthub llm setup", r.stdout)
+        self.assertIn("brunna llm setup", r.stdout)
 
     def test_config_repo_gate_rejects_bad_config(self):
         self.hub_cmd("init", "--yes", "--no-launchd", "--owner", "Alex")
@@ -161,7 +161,7 @@ class NewUser(unittest.TestCase):
             self.assertFalse((self.home / ".brunna").exists(), args)
             self.assertFalse((self.hub / ".hub-home").exists(), args)
             self.assertFalse((self.hub / "hub.json").exists(), args)
-        self.assertIn("agenthub init", self.hub_cmd("init", "--help").stdout)
+        self.assertIn("brunna init", self.hub_cmd("init", "--help").stdout)
 
     def test_core_services_only_from_the_main_checkout(self):
         """units rendered from a linked worktree would run the scheduler from there, and it refuses every tick"""
@@ -267,7 +267,7 @@ class NewUser(unittest.TestCase):
         marker.write_text("llm-setup\n")   # as if Ctrl-C hit between writing hub.json and llm setup
         r = self.hub_cmd("init", "--yes", "--no-launchd", "--llm", "none")
         self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
-        self.assertIn(i18n.translate("agenthub", "an earlier agenthub init stopped before it finished; carrying on "
+        self.assertIn(i18n.translate("agenthub", "an earlier brunna init stopped before it finished; carrying on "
                                      "with what it didn't do", {}, "zh-Hant"), r.stdout)
         self.assertFalse(marker.exists())
 

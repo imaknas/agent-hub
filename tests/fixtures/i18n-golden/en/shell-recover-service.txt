@@ -49,12 +49,12 @@ Note: check logs
 exit 1
 --- stdout
 --- stderr
-recover-service: <TMP>/hub/launchd/local.gone.plist does not exist: is agent-hub itself behind (not pulled)?
+recover-service: <TMP>/hub/launchd/local.gone.plist does not exist: is brunna itself behind (not pulled)?
 
 === someone else's service
 exit 0
 --- stdout
-'homebrew.mxcl.x' is not a service agent-hub manages (owner: Homebrew); it cannot be rebuilt automatically.
+'homebrew.mxcl.x' is not a service brunna manages (owner: Homebrew); it cannot be rebuilt automatically.
 Purpose: a db
 How to rebuild: brew services start x
 --- stderr

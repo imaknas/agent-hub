@@ -43,6 +43,12 @@ def added_names(msgid: str) -> set[tuple[str, str, None]]:
     return {(n, "", None) for n in i18n.NAMES if n not in placeholders(msgid)}
 
 
+def passed(msgid: str) -> set:
+    """The placeholders a caller passes: all of the msgid's but {settings}, which i18n fills itself (the settings
+    file's name as the instance has it)."""
+    return placeholders(msgid) - {"settings"}
+
+
 def sources():
     for f in sorted((ROOT / "bin").rglob("*")):
         if not f.is_file() or "__pycache__" in f.parts or f.name == "i18n.py":
@@ -174,7 +180,8 @@ class Catalogs(unittest.TestCase):
                 if CJK.search(msgid):
                     problems.append(f"{where}: msgid is not English: {msgid[:50]}")
                 # _(__doc__) without keywords is returned unformatted: braces in a usage text (JSON examples) are text
-                if kws is not None and kws != placeholders(msgid) and (kws or placeholders(msgid)) \
+                # {settings} may also be passed (config-check names the file it checks)
+                if kws is not None and kws - {"settings"} != passed(msgid) and (kws or passed(msgid)) \
                         and not (not kws and msgid == messages_doc(text)):
                     problems.append(f"{where}: passes {sorted(kws)}, msgid has {sorted(placeholders(msgid))}")
                 for lang in LANGS:
@@ -193,7 +200,7 @@ class Catalogs(unittest.TestCase):
                 used.add(msgid)
                 if CJK.search(msgid):
                     problems.append(f"{where}: msgid is not English: {msgid[:50]}")
-                if names != placeholders(msgid):
+                if names != passed(msgid):
                     problems.append(f"{where}: passes {sorted(names)}, msgid has {sorted(placeholders(msgid))}")
                 for lang in LANGS:
                     cat = i18n.catalog(f.name, lang)
@@ -211,7 +218,7 @@ class Catalogs(unittest.TestCase):
                 used.add(msgid)
                 if CJK.search(msgid):
                     problems.append(f"{where}: msgid is not English: {msgid[:50]}")
-                if names != placeholders(msgid):
+                if names != passed(msgid):
                     problems.append(f"{where}: passes {sorted(names)}, msgid has {sorted(placeholders(msgid))}")
                 for lang in LANGS:
                     cat = i18n.catalog(f.name, lang)

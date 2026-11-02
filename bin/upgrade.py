@@ -1,7 +1,7 @@
 #!/bin/sh -c exec${IFS}"${0%/*}/py"${IFS}"$0"${IFS}"$@"
-"""`agenthub upgrade`: move the hub checkout to a release (or the remote's main) and bring this machine in step with it.
+"""`brunna upgrade`: move the hub checkout to a release (or the remote's main) and bring this machine in step with it.
 
-    agenthub upgrade [--to <tag> | --main] [--check] [--yes]
+    brunna upgrade [--to <tag> | --main] [--check] [--yes]
 
 Which checkouts it moves. The way HEAD sits is the channel the checkout follows; nothing else is recorded:
   - detached HEAD (a clone checked out at a release tag): follows releases. Default target: the newest release tag
@@ -20,11 +20,11 @@ fast-forward) while holding the scheduler's lock, so no tick starts halfway (a t
 run the target's bin/setup-python → hand over to the target's own step list (below).
 
 The in-step commands, each from the target's files, in this order; the first that fails stops the rest and says how to
-go back (`agenthub upgrade --to <previous>`, which runs the same steps on the old code):
-  registry.py check · agenthub config apply · agenthub init --scheduler-only · agenthub land ·
-  agenthub install-cli --dir <where the wrapper is> (only when the agenthub on PATH is install-cli's wrapper) ·
-  agenthub doctor (the report: its problems are shown, they do not fail the upgrade)
-When they all pass, .state/upgrade.json records the commit they ran for (agenthub init writes it too, for a fresh
+go back (`brunna upgrade --to <previous>`, which runs the same steps on the old code):
+  registry.py check · brunna config apply · brunna init --scheduler-only · brunna land ·
+  brunna install-cli --dir <where the wrapper is> (only when the brunna on PATH is install-cli's wrapper) ·
+  brunna doctor (the report: its problems are shown, they do not fail the upgrade)
+When they all pass, .state/upgrade.json records the commit they ran for (brunna init writes it too, for a fresh
 install). The checkout already at the target with no such record for it (a manual `git pull` or checkout) gets
 setup-python and the steps without a move; going back then means to the commit that record last named.
 
@@ -33,7 +33,7 @@ bin/setup-python, this process execs the target's `bin/upgrade.py --steps --from
 to: a release tag, a commit, or `main`. The target runs its own step list. A target without bin/upgrade.py (v0.1.0)
 gets this version's list, run from the target's files, without the scheduler step (its init has no --scheduler-only).
 
-Exit codes: 0 done, or nothing to do · 10 (--check) `agenthub upgrade` would move the checkout · 1 the fetch, the move
+Exit codes: 0 done, or nothing to do · 10 (--check) `brunna upgrade` would move the checkout · 1 the fetch, the move
 or a step failed · 2 usage · 3 refused: not a checkout to move (says why and what to do) · 4 not confirmed.
 
 doctor: doctor_lines() says which release this is and whether a newer one is known, from .state/upgrade-check.json
@@ -71,10 +71,10 @@ RELEASE = re.compile(r"^v(\d+)\.(\d+)\.(\d+)(?:-([0-9A-Za-z.-]+))?$")
 SECTION = re.compile(r"^## (v\d+\.\d+\.\d+\S*)")
 SHOWN_TYPES = re.compile(r"^(feat|fix|perf|revert)(\([^)]*\))?!?: ")   # what cliff.toml lists
 BREAKING_TITLE = re.compile(r"^[a-z]+(\([^)]*\))?!: ")
-WRAPPER_MARK = "written by agenthub install-cli"
+WRAPPER_MARKS = tuple(f"written by {n} install-cli" for n in names.all("cli"))   # either name wrote it
 WRAPPER_EXEC = re.compile(r'^exec "[^"\n]*/bin/py" "[^"\n]*/bin/(?:agenthub|brunna)" "\$@"$', re.M)
 
-USAGE_TEXT = """usage: agenthub upgrade [--to <tag> | --main] [--check] [--yes]
+USAGE_TEXT = """usage: brunna upgrade [--to <tag> | --main] [--check] [--yes]
   (no option)   the newest release; a checkout on main follows main instead
   --to <tag>    that release (going back, too); a commit id also works
   --main        the remote's main, for following development
@@ -292,7 +292,7 @@ def changes(target: str) -> tuple[bool, list[tuple[str, str]], list[tuple[str, b
 
 def show_changes(current: str, label: str, target: str) -> None:
     forward, secs, titles = changes(target)
-    print(_("agent-hub {current} → {target}", current=current, target=label))
+    print(_("brunna {current} → {target}", current=current, target=label))
     breaking = [(t, b) for t, s in secs for b in bullets(s) if "**breaking:**" in b] + \
                [(_("not released yet"), t) for t, br in titles if br]
     if breaking:
@@ -334,7 +334,7 @@ def cli_wrapper() -> pathlib.Path | None:
             continue
         # the mark, or the wrapper's exec line itself: a wrapper written before the mark was in English (or in another
         # interface language) has only the line
-        if WRAPPER_MARK in head or WRAPPER_EXEC.search(head):
+        if any(m in head for m in WRAPPER_MARKS) or WRAPPER_EXEC.search(head):
             return pathlib.Path(w)
     return None
 
@@ -353,7 +353,8 @@ def step_list(with_scheduler: bool) -> list[tuple[str, list[str]]]:
 
 
 def go_back(ref: str) -> str:
-    return "agenthub upgrade --main" if ref == "main" else f"agenthub upgrade --to {ref}"
+    cli = names.current("cli")   # a new install has only this one
+    return f"{cli} upgrade --main" if ref == "main" else f"{cli} upgrade --to {ref}"
 
 
 def here_ref() -> str:
@@ -367,13 +368,13 @@ def failed(name: str, rc: int, back: str | None, manual: bool = False) -> int:
     print("\n" + _("✗ step {name} failed (exit {rc}); the steps after it did not run. The checkout is at {version} now.",
                    name=name, rc=rc, version=describe()), file=sys.stderr)
     if back is None:   # nothing moved, and this machine has no record of an earlier version in step
-        print(_("  Fix what it says, then run agenthub upgrade again (it reruns the steps)"), file=sys.stderr)
+        print(_("  Fix what it says, then run brunna upgrade again (it reruns the steps)"), file=sys.stderr)
     elif manual:   # the target has no upgrade command: back by hand first
         how = f"git -C {ROOT} checkout main" if back == "main" else f"git -C {ROOT} checkout --detach {back}"
-        print(_("  Fix what it says (this release has no agenthub upgrade to rerun the steps), or go back: {checkout}, "
+        print(_("  Fix what it says (this release has no brunna upgrade to rerun the steps), or go back: {checkout}, "
                 "then {upgrade}", checkout=how, upgrade=go_back(back)), file=sys.stderr)
     else:
-        print(_("  Fix what it says, then run agenthub upgrade again (it reruns the steps), or go back: {how}",
+        print(_("  Fix what it says, then run brunna upgrade again (it reruns the steps), or go back: {how}",
                 how=go_back(back)), file=sys.stderr)
     return FAILED
 
@@ -388,7 +389,7 @@ def run_steps(back: str | None, with_scheduler: bool = True, manual_back: bool =
     record_in_step()
     print("\n→ doctor", flush=True)
     rc = subprocess.run(py_step(ROOT / "bin" / "agenthub", "doctor"), cwd=ROOT).returncode
-    print("\n" + _("✓ agent-hub is at {version}", version=describe())
+    print("\n" + _("✓ brunna is at {version}", version=describe())
           + ("" if rc == 0 else _(" (doctor found problems, above; the upgrade itself is done)")))
     return 0
 
@@ -396,7 +397,7 @@ def run_steps(back: str | None, with_scheduler: bool = True, manual_back: bool =
 # ---------- the command ----------
 
 def refuse(why: str, what: str) -> int:
-    print(_("agenthub upgrade: refused, nothing changed: {why}", why=why), file=sys.stderr)
+    print(_("brunna upgrade: refused, nothing changed: {why}", why=why), file=sys.stderr)
     print("  " + what, file=sys.stderr)
     return REFUSED
 
@@ -456,7 +457,7 @@ def main(argv: list[str]) -> int:
     if a["steps"]:   # the hand-over from the version that moved the checkout (see the header)
         return run_steps(a["from"])
     if not is_checkout():
-        print(_("agenthub upgrade: {root} is not a git checkout, so there is nothing to upgrade from (install by git "
+        print(_("brunna upgrade: {root} is not a git checkout, so there is nothing to upgrade from (install by git "
                 "clone; see README.md)", root=ROOT), file=sys.stderr)
         return FAILED
 
@@ -467,7 +468,7 @@ def main(argv: list[str]) -> int:
     b = branch()
     if b and b != "main":
         return refuse(_("HEAD is on the branch {branch}: a development checkout", branch=b),
-                      _("update it with git yourself; agenthub upgrade moves only a checkout at a release or on main"))
+                      _("update it with git yourself; brunna upgrade moves only a checkout at a release or on main"))
     if out("status", "--porcelain", "--untracked-files=no"):
         return refuse(_("tracked files have uncommitted changes"),
                       _("commit them on a branch, or drop them (git -C {root} stash), then run it again", root=ROOT))
@@ -480,14 +481,14 @@ def main(argv: list[str]) -> int:
     print(_("fetching from {remote} …", remote=remote), flush=True)
     r = git("fetch", "--quiet", "--tags", remote, f"+refs/heads/main:refs/remotes/{remote}/main")
     if r.returncode != 0:
-        print(_("agenthub upgrade: the fetch from {remote} failed: {error}", remote=remote,
+        print(_("brunna upgrade: the fetch from {remote} failed: {error}", remote=remote,
                 error=r.stderr.strip()[-400:]), file=sys.stderr)
         return FAILED
     n = local_commits("HEAD", remote)
     if n:
         return refuse(_("{n} {n:commit|commits} here {n:is|are} on no branch of {remote} and no release tag: a development "
                         "checkout", n=n, remote=remote),
-                      _("push them or move them to a branch; agenthub upgrade never moves a checkout with work of its own"))
+                      _("push them or move them to a branch; brunna upgrade never moves a checkout with work of its own"))
     tags = (out("tag", "--list", "v[0-9]*") or "").split()
     latest = newest(tags)
     record_check(remote, latest, None)
@@ -499,19 +500,19 @@ def main(argv: list[str]) -> int:
         elif sha(a["to"]) and re.fullmatch(r"[0-9a-f]{7,40}", a["to"]):
             kind, target, label = "commit", sha(a["to"]), a["to"]
         else:
-            print(_("agenthub upgrade: {remote} has no release {tag} (releases: {tags})", remote=remote, tag=a["to"],
+            print(_("brunna upgrade: {remote} has no release {tag} (releases: {tags})", remote=remote, tag=a["to"],
                     tags=", ".join(sorted((t for t in tags if version_key(t)), key=version_key)) or "-"),
                   file=sys.stderr)
             return USAGE
     elif a["main"] or b == "main":
         kind, target, label = "main", f"{remote}/main", f"{remote}/main"
         if not a["main"]:
-            print(_("this checkout is on main, so it follows main (to follow releases instead: agenthub upgrade --to "
+            print(_("this checkout is on main, so it follows main (to follow releases instead: brunna upgrade --to "
                     "{tag})", tag=latest or "<tag>"))
     elif latest:
         kind, target, label = "tag", latest, latest
     else:
-        print(_("agenthub upgrade: {remote} has no release yet; agenthub upgrade --main follows its main",
+        print(_("brunna upgrade: {remote} has no release yet; brunna upgrade --main follows its main",
                 remote=remote), file=sys.stderr)
         return FAILED
     if kind == "main" and b != "main" and git("rev-parse", "--verify", "--quiet", "refs/heads/main").returncode == 0 \
@@ -528,10 +529,10 @@ def main(argv: list[str]) -> int:
 
     # 3. what changes
     if same:
-        print(_("agent-hub {version} is up to date ({target})", version=current, target=label))
+        print(_("brunna {version} is up to date ({target})", version=current, target=label))
         if pending:
             print(_("the in-step commands have not run for this commit on this machine (a git pull or checkout by "
-                    "hand?): agenthub upgrade runs them"))
+                    "hand?): brunna upgrade runs them"))
         if a["check"]:
             return 0
         if not pending:
@@ -542,7 +543,7 @@ def main(argv: list[str]) -> int:
         return bring_in_step(rec.get("ref") if rec.get("commit") else None, moved=False)
     show_changes(current, label, target)
     if a["check"]:
-        print("\n" + _("agenthub upgrade{opt} installs it", opt=f" --to {a['to']}" if a["to"] else
+        print("\n" + _("brunna upgrade{opt} installs it", opt=f" --to {a['to']}" if a["to"] else
                        " --main" if a["main"] else ""))
         return AVAILABLE
     if not confirm(_("move this checkout from {current} to {target}?", current=current, target=label), a["yes"]):
@@ -551,7 +552,7 @@ def main(argv: list[str]) -> int:
     # 4. move the checkout, holding the scheduler's lock so no tick starts halfway
     fd = scheduler_lock()
     if fd is None:
-        return refuse(_("a scheduler tick is running right now"), _("run agenthub upgrade again in a minute or two"))
+        return refuse(_("a scheduler tick is running right now"), _("run brunna upgrade again in a minute or two"))
     try:
         if kind == "main" and b == "main":
             r = git("merge", "--ff-only", "--quiet", target)
@@ -564,7 +565,7 @@ def main(argv: list[str]) -> int:
     finally:
         os.close(fd)
     if r.returncode != 0:
-        print(_("agenthub upgrade: moving the checkout failed, it stays at {version}: {error}", version=current,
+        print(_("brunna upgrade: moving the checkout failed, it stays at {version}: {error}", version=current,
                 error=r.stderr.strip()[-400:]), file=sys.stderr)
         return FAILED
     print("\n" + _("✓ the checkout is at {version}", version=describe()))
@@ -632,24 +633,24 @@ def doctor_lines() -> list[tuple[str, str, str]]:
     latest = (rec or {}).get("newest")
     when = (rec or {}).get("checked", "")[:16].replace("T", " ")
     if not remote:
-        lines.append(("ok", _("agent-hub {version} (no remote: not checked for newer releases)", version=version), ""))
+        lines.append(("ok", _("brunna {version} (no remote: not checked for newer releases)", version=version), ""))
     elif latest and (version_key(rel) is None or version_key(latest) > version_key(rel)):
-        lines.append(("warn", _("agent-hub {latest} is out; this checkout is at {version} (checked {when})",
+        lines.append(("warn", _("brunna {latest} is out; this checkout is at {version} (checked {when})",
                                 latest=latest, version=version, when=when),
-                      _("agenthub upgrade --check shows what changes; agenthub upgrade installs it")))
+                      _("brunna upgrade --check shows what changes; brunna upgrade installs it")))
     elif latest:
-        lines.append(("ok", _("agent-hub {version}; the newest release is {latest} (checked {when})", version=version,
+        lines.append(("ok", _("brunna {version}; the newest release is {latest} (checked {when})", version=version,
                               latest=latest, when=when), ""))
     else:
-        lines.append(("ok", _("agent-hub {version} (could not check for newer releases at {when}: {error}; doctor tries "
+        lines.append(("ok", _("brunna {version} (could not check for newer releases at {when}: {error}; doctor tries "
                               "again after a day)", version=version, when=when,
                               error=(rec or {}).get("error") or _("no release tags")), ""))
     done = read_json(steps_file())
     if done and done.get("commit") and done["commit"] != sha("HEAD") and local_mode()[0] != "dev":
-        lines.append(("warn", _("the checkout moved to {version} after agenthub upgrade last brought this machine in step "
+        lines.append(("warn", _("the checkout moved to {version} after brunna upgrade last brought this machine in step "
                                 "(at {old}): the Python packages, services, scheduler and hooks may be stale",
                                 version=version, old=done.get("version") or done["commit"][:12]),
-                      "agenthub upgrade"))
+                      f"{names.current('cli')} upgrade"))
     return lines
 
 

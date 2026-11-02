@@ -1,7 +1,7 @@
 """The Acts Markdown binding of Principal Handoff 0.5 (agent-ops-specs acts-markdown/SPEC.md §2-§4): reading a
 project's STATE.md to-do sections and the registrar's document steps. Follows the spec's reference registrar
 (specs/principal-handoff/reference/ph_acts.py, Apache-2.0), with one difference: a document is read in several
-profiles at once. agent-hub's readers accept both token sets in one file (contracts/state-todo.v2.md: an English
+profiles at once. brunna's readers accept both token sets in one file (contracts/state-todo.v2.md: an English
 instance may hold an older zh-Hant section, a line may carry one set's label and the other's marker), so every reading
 takes a tuple of profiles, and the writer's profile (the content language) is the one used for what is written.
 

@@ -48,4 +48,4 @@ STATE.md: a to-do without an owner tag, or a finished one not removed: `- [ ] ã€
 
 > Generated mechanically by `bin/gen-todo.py` from the `## Tasks` section of each project's STATE.md (3 items);
 > do not edit by hand: to change the content, change the source (each project's memory, from which librarian updates STATE.md;
-> agent-hub's own to-do items are in `openclaw-migration-status.md`).
+> brunna's own to-do items are in `openclaw-migration-status.md`).

@@ -17,12 +17,12 @@ tests are, which of them a change needs, and whether a run already happened. Sta
                                          depends_on extend it, projects-and-repos.md); base=None = every tier
   key(tree, tier, inputs, env) → str     what a result depends on: the tested tree, the declared run and jobs.max (not
                                          the worker count), the inputs' values, the tier environment, KEY_FORMAT
-  Store(common_dir)                      one store per repo, in its git common dir (agent-hub/test-results.jsonl):
+  Store(common_dir)                      one store per repo, in its git common dir (brunna/test-results.jsonl):
     .record(key, project, tier, ok, moment, output)
     .passed(key) → bool                  a pass not older than MAX_AGE_DAYS, unless the latest nightly run of the key
                                          failed (a flaky pass does not stay green for merges and deploys)
   RunLog(common_dir)                     the waiting report's measurements (test-waiting.md B7), beside the store
-                                         (agent-hub/test-runs.jsonl): one line per tier per invocation, hits included,
+                                         (brunna/test-runs.jsonl): one line per tier per invocation, hits included,
                                          with how long it took. Measurement only: what counts as a pass is the store's
                                          alone, so a hit written here never extends a recorded pass's life.
     .record(**fields)                    {at, run, project, tier, moment, caller, source, result: hit|pass|fail,

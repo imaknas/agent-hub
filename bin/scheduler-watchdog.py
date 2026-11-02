@@ -5,7 +5,7 @@ scheduler.py is the only trigger for the librarian, weekly-reflect, mirror-backu
 stops nothing gets called: the assistant's web server is a separate launchd job, so the PWA still opens, it just
 stops updating. So this script deliberately depends neither on the scheduler nor on the assistant:
 
-- its own launchd job (local.agent-hub-scheduler-watchdog, every 5 minutes)
+- its own launchd job (local.brunna-scheduler-watchdog, every 5 minutes)
 - the system's /usr/bin/python3, standard library only: if the platform's Python (bin/py) breaks and stops the
   scheduler, this one keeps going
 - notifications go through Discord REST (bot token, curl), not through the assistant
@@ -81,6 +81,8 @@ class i18n:
 
         def _(msgid, **kw):
             text = cat.get(msgid, msgid)
+            if "{settings}" in text:   # the settings file's name as this instance has it (bin/i18n.py NAMES)
+                kw = {"settings": SETTINGS.name, **kw}
             return text.format(**kw) if kw else text
         return _
 
@@ -193,7 +195,7 @@ def send_discord(conf, text) -> bool:
 
 def send_ntfy(conf, text) -> bool:
     n = conf.get("ntfy") or {}
-    headers = ["-H", "Title: agent-hub"]
+    headers = ["-H", "Title: brunna"]
     if n.get("token_file"):
         try:
             headers += ["-H", f"Authorization: Bearer {conf_path(n['token_file']).read_text().strip()}"]
@@ -208,8 +210,8 @@ def send_email(conf, text) -> bool:
     from email.message import EmailMessage
     e = conf.get("email") or {}
     msg = EmailMessage()
-    msg["Subject"] = "agent-hub: " + (text.splitlines()[0][:80] if text else "")
-    msg["From"], msg["To"] = e.get("from") or e.get("user") or "agent-hub", e["to"]
+    msg["Subject"] = "brunna: " + (text.splitlines()[0][:80] if text else "")
+    msg["From"], msg["To"] = e.get("from") or e.get("user") or "brunna", e["to"]
     msg.set_content(text)
     try:
         password = conf_path(e["password_file"]).read_text().strip() if e.get("password_file") else None
@@ -226,7 +228,7 @@ def send_email(conf, text) -> bool:
 
 
 def send_macos(conf, text) -> bool:
-    script = f"display notification {json.dumps(text[:200])} with title \"agent-hub\""
+    script = f"display notification {json.dumps(text[:200])} with title \"brunna\""
     return subprocess.run(["/usr/bin/osascript", "-e", script], capture_output=True).returncode == 0
 
 
@@ -295,7 +297,7 @@ def in_resume_grace(st: dict, tick, now: datetime.datetime) -> bool:
 
 def main():
     if sys.argv[1:] == ["--test"]:
-        ok = send(_("🧪 agent-hub scheduler watchdog test message (settings are correct)") + "\n" + diagnose())
+        ok = send(_("🧪 brunna scheduler watchdog test message (settings are correct)") + "\n" + diagnose())
         print(_("sent") if ok else _("could not send, see {log}", log=LOG))
         return 0 if ok else 1
 
@@ -305,13 +307,13 @@ def main():
         tick = last_tick()
         stale = tick is None or (datetime.datetime.now() - tick).total_seconds() / 60 > STALE_MIN
         if stale:
-            log(_("no alerts set up (hub.json has no alerts), only logging: the scheduler's last tick was {tick}; it has "
+            log(_("no alerts set up ({settings} has no alerts), only logging: the scheduler's last tick was {tick}; it has "
                   "stopped", tick=tick) if tick else
-                _("no alerts set up (hub.json has no alerts), only logging: the scheduler has never ticked"))
+                _("no alerts set up ({settings} has no alerts), only logging: the scheduler has never ticked"))
         return 0
     if not channels(hub_alerts() or {}):
         # printed to the service's stderr log every 5 minutes, exit 1; the status page also flags "watchdog not set up"
-        print(_("scheduler-watchdog: hub.json alerts has no channel this watchdog can send on (Discord, ntfy, email, "
+        print(_("scheduler-watchdog: {settings} alerts has no channel this watchdog can send on (Discord, ntfy, email, "
                 "macOS); no alert can be sent if the scheduler stops"), file=sys.stderr)
         return 1
 
@@ -325,7 +327,7 @@ def main():
 
     if not stale:
         if st.get("alerting"):
-            if send(_("✅ The agent-hub scheduler is back (last tick {when}; it had been stopped since about {since})",
+            if send(_("✅ The brunna scheduler is back (last tick {when}; it had been stopped since about {since})",
                       when=when, since=st.get("since", "?"))):
                 log(_("recovered, notified"))
                 st = {}
@@ -342,10 +344,10 @@ def main():
         if due:
             age = _("{minutes:.0f} minutes", minutes=age_min) if age_min is not None else _("a long time")
             prefix = "🚨" if not st.get("alerting") else _("⏰ Still down:")
-            text = (_("{prefix} The agent-hub scheduler has not ticked for {age} (last tick {when}). The librarian, "
+            text = (_("{prefix} The brunna scheduler has not ticked for {age} (last tick {when}). The librarian, "
                       "the assistant's jobs, reflect and the upload jobs have all stopped.", prefix=prefix, age=age, when=when)
                     if tick else
-                    _("{prefix} The agent-hub scheduler has not ticked for {age} (no tick recorded). The librarian, "
+                    _("{prefix} The brunna scheduler has not ticked for {age} (no tick recorded). The librarian, "
                       "the assistant's jobs, reflect and the upload jobs have all stopped.", prefix=prefix, age=age)) \
                 + "\n" + diagnose()
             if send(text):

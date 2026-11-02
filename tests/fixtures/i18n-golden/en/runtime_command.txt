@@ -1,7 +1,7 @@
 === health: no template
-(False, 'hub.json runtime.command.run is not set (the command template)')
+(False, 'brunna.json runtime.command.run is not set (the command template)')
 === run: no template
-hub.json runtime.command.run is not set (the command template)
+brunna.json runtime.command.run is not set (the command template)
 === health: not found
 (False, '/nonexistent/agent-cli not found')
 === run: not found

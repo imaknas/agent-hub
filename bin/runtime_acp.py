@@ -1,7 +1,7 @@
 """Any coding agent that speaks the Agent Client Protocol (ACP, agentclientprotocol.com, stable protocol version 1):
 the platform is the ACP client. Design: docs/design/runtime-acp.md.
 
-hub.json:
+{settings}:
   "runtime": {"acp": {"agent": "<name>",                      which entry below the acp runtime uses
                       "agents": {"<name>": {
                           "command": ["npx", "-y", "<acp agent package>@<version>", ...],   argv, no shell;
@@ -47,6 +47,7 @@ import time
 
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
 import i18n  # noqa: E402
+import names  # noqa: E402
 from runtime_ports import Credential, TaskResult  # noqa: E402
 
 _ = i18n.domain(__file__)
@@ -73,7 +74,7 @@ def _conf() -> dict:
     name = c.get("agent")
     agent = (c.get("agents") or {}).get(name) if name else None
     if not agent or not agent.get("command"):
-        raise RuntimeError(_("hub.json runtime.acp is not set up (runtime.acp.agent must name an entry of "
+        raise RuntimeError(_("{settings} runtime.acp is not set up (runtime.acp.agent must name an entry of "
                              "runtime.acp.agents with a command)"))
     return {"name": name, **agent}
 
@@ -376,13 +377,13 @@ def _set_mode(c, sid: str, new: dict, mode: str, turn) -> str:
         turn.observe(res.get("configOptions"))
         return ""
     if any(isinstance(o, dict) and o.get("category") == "mode" for o in new.get("configOptions") or []):
-        return _("this agent offers no mode {mode} (hub.json runtime.acp mode)", mode=mode)   # options are exclusive
+        return _("this agent offers no mode {mode} ({settings} runtime.acp mode)", mode=mode)   # options are exclusive
     modes = new.get("modes") if isinstance(new.get("modes"), dict) else {}
     if mode in [m.get("id") for m in modes.get("availableModes") or [] if isinstance(m, dict)]:
         c.request("session/set_mode", {"sessionId": sid, "modeId": mode})
         turn.observe(mode_id=mode)
         return ""
-    return _("this agent offers no mode {mode} (hub.json runtime.acp mode)", mode=mode)
+    return _("this agent offers no mode {mode} ({settings} runtime.acp mode)", mode=mode)
 
 
 def _model_option(new: dict, model: str) -> str | None:
@@ -460,7 +461,7 @@ def _run(task, conf: dict, cwd: str) -> TaskResult:
                                  else (None, {"code": METHOD_NOT_FOUND, "message": "Method not found"}))
     try:
         init = c.request("initialize", {"protocolVersion": PROTOCOL_VERSION, "clientCapabilities": {},
-                                        "clientInfo": {"name": "agent-hub", "version": "1"}})
+                                        "clientInfo": {"name": names.current("product"), "version": "1"}})
         if init.get("protocolVersion") != PROTOCOL_VERSION:
             return TaskResult(False, error=_("the agent speaks ACP protocol version {theirs}; this adapter speaks {ours}",
                                              theirs=init.get("protocolVersion"), ours=PROTOCOL_VERSION))
@@ -583,7 +584,7 @@ def auth_env(mode: str, env) -> tuple:
     f = hubconf.secrets_dir() / cred.get("file", "")
     value = _key(f) if cred.get("file") else ""
     if not value:
-        return None, _("the ACP agent's key file {path} is missing or empty (hub.json runtime.acp credential)", path=f)
+        return None, _("the ACP agent's key file {path} is missing or empty ({settings} runtime.acp credential)", path=f)
     out[cred["env"]] = value
     return out, ""
 
@@ -619,7 +620,7 @@ def warnings(cfg: dict) -> list:
                     _("set runtime.acp.agents.<agent>.mode to a mode that asks before running commands")))
     if "mailbox-propose" in pins and (cfg.get("mailbox") or {}).get("handler") != "propose":
         out.append((_("mailbox-propose is pinned to acp, but mailbox.handler is not propose, so it never runs"),
-                    _("set hub.json mailbox.handler to propose")))
+                    _("set {settings} mailbox.handler to propose")))
     return out
 
 
@@ -631,7 +632,7 @@ def config_errors(cfg: dict) -> list:
         used = (cfg.get("runtime") or {}).get("default") == "acp" or any(
             isinstance(pin, dict) and pin.get("runtime") == "acp"
             for pin in ((cfg.get("llm") or {}).get("points") or {}).values())
-        return [_("the acp runtime is used but hub.json runtime.acp is not set up")] if used else []
+        return [_("the acp runtime is used but {settings} runtime.acp is not set up")] if used else []
     errs, agents = [], acp.get("agents") or {}
     if acp.get("agent") not in agents:
         errs.append(_("runtime.acp.agent `{name}` is not an entry of runtime.acp.agents (have: {have})",

@@ -3,16 +3,16 @@
 
   config-check            validate the config in the working tree
   config-check --staged   validate the **index** (what is about to be committed; called by the config repo's
-                          githooks/config/pre-commit; agent-hub's lint tier runs the same check as --child). Passes at once when the index changes no config file.
+                          githooks/config/pre-commit; brunna's lint tier runs the same check as --child). Passes at once when the index changes no config file.
                           A shared working tree may hold someone else's half-edited files, so, as the test runner does, the index
                           is exported to a temp directory and validated there with AGENT_HUB_ROOT pointing at it.
 
 What it validates:
-  hub.json           contracts/hub.v1.schema.json (minischema) + unknown top-level keys (except explanation keys starting
+  {settings}           contracts/hub.v1.schema.json (minischema) + unknown top-level keys (except explanation keys starting
                      with _): a mistyped key (e.g. "assitant") is not silently ignored
   projects/          registry.refresh()'s validation (schema, duplicate names, after: pointing at jobs that exist, run
                      resolvable…)
-  models.env         must not exist (since 10-29 model settings live in hub.json llm.points)
+  models.env         must not exist (since 10-29 model settings live in {settings} llm.points)
   mirror-list.txt    one git remote per line
   services.tsv       every row has as many columns as the header, labels are unique
   schedule.yaml      readable, job names unique (the old format, during the switch)
@@ -36,7 +36,7 @@ import names  # noqa: E402
 
 _ = i18n.domain(__file__)
 CONFIG = re.compile(r"^(hub\.json|brunna\.json|models\.env|mirror-list\.txt|services\.tsv|schedule\.yaml|projects/)")
-UNREADABLE = "hub.json: cannot read it ({error})"
+UNREADABLE = "{settings}: cannot read it ({error})"
 FAILED = "config-check: ✗ {error}"
 
 
@@ -60,39 +60,40 @@ def check(root: pathlib.Path) -> list[str]:
     try:
         cfg = json.loads(hub.read_text())
     except (OSError, ValueError) as e:
-        return [_(UNREADABLE, error=e)]
+        return [_(UNREADABLE, settings=hub.name, error=e)]
     schema = json.loads((BIN.parent / "contracts" / "hub.v1.schema.json").read_text())
-    errs += [_("hub.json: {error}", error=e) for e in minischema.errors(schema, cfg)]
+    errs += [_("{settings}: {error}", settings=hub.name, error=e) for e in minischema.errors(schema, cfg)]
     known = set(schema["properties"])
     for k in cfg:
         if not k.startswith("_") and k not in known:
             near = [x for x in sorted(known) if _close(k, x)]
-            errs.append(_("hub.json: unknown key `{key}`{hint}; to add one, put it in contracts/hub.v1.schema.json first",
+            errs.append(_("{settings}: unknown key `{key}`{hint}; to add one, put it in contracts/hub.v1.schema.json first", settings=hub.name,
                           key=k, hint=_(" (did you mean {keys}?)", keys=', '.join(near)) if near else ""))
 
     import runtime_ports
     rdefault = (cfg.get("runtime") or {}).get("default")
     if rdefault and rdefault not in runtime_ports.RUNTIMES:
-        errs.append(_("hub.json: runtime.default `{name}` is not a registered runtime (have: {have})", name=rdefault,
+        errs.append(_("{settings}: runtime.default `{name}` is not a registered runtime (have: {have})", name=rdefault,
                       have=", ".join(runtime_ports.RUNTIMES)))
     elif rdefault and runtime_ports.throwaway_only(rdefault):
-        errs.append(_("hub.json: runtime.default `{name}` runs only in the platform's throwaway worktree, so as the "
+        errs.append(_("{settings}: runtime.default `{name}` runs only in the platform's throwaway worktree, so as the "
                       "default it would run nothing (dispatch needs session state, every other point is refused); keep "
                       "another runtime as the default and pin {name} on {points} (llm.points.<point>.runtime)",
-                      name=rdefault, points=", ".join(runtime_ports.THROWAWAY_POINTS)))
+                      settings=hub.name, name=rdefault, points=", ".join(runtime_ports.THROWAWAY_POINTS)))
     rcfg = cfg.get("runtime") or {}
     for name in [*(rcfg.get("installed") or []), *([rcfg["bare_ids"]] if rcfg.get("bare_ids") else [])]:
         if isinstance(name, str) and name not in runtime_ports.RUNTIMES:
-            errs.append(_("hub.json: runtime.installed / runtime.bare_ids name `{name}`, which is not a registered "
-                          "runtime (have: {have})", name=name, have=", ".join(runtime_ports.RUNTIMES)))
+            errs.append(_("{settings}: runtime.installed / runtime.bare_ids name `{name}`, which is not a registered "
+                          "runtime (have: {have})", settings=hub.name, name=name,
+                          have=", ".join(runtime_ports.RUNTIMES)))
     for name in runtime_ports.RUNTIMES:   # a runtime's own settings (e.g. runtime.acp), checked by its adapter
         check_conf = getattr(runtime_ports._module(name), "config_errors", None)
         if callable(check_conf):
-            errs += [_("hub.json: {error}", error=e) for e in check_conf(cfg)]
+            errs += [_("{settings}: {error}", settings=hub.name, error=e) for e in check_conf(cfg)]
 
     if "llm" in cfg:
         import completion
-        errs += [_("hub.json: llm: {error}", error=e) for e in completion.config_errors(cfg["llm"])]
+        errs += [_("{settings}: llm: {error}", settings=hub.name, error=e) for e in completion.config_errors(cfg["llm"])]
 
     import registry
     index = registry.refresh()
@@ -104,7 +105,7 @@ def check(root: pathlib.Path) -> list[str]:
 
     # since 10-29 model settings live only in hub.json (llm.model_for); nobody reads this file any more
     if (root / "models.env").exists():
-        errs.append(_("models.env: no longer used; model settings moved into hub.json llm.points (schedulectl set-model "
+        errs.append(_("models.env: no longer used; model settings moved into {settings} llm.points (schedulectl set-model "
                       "state|index|consolidate <model>; a value equal to the group default need not be written), then delete "
                       "models.env"))
 

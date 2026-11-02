@@ -2,14 +2,14 @@ $ agenthub install-cli --dir <TMP>/cli
 [exit 1]
 --- stdout
 寫了 <TMP>/cli/brunna
-⚠️ <TMP>/cli 不在 PATH 上:加進 shell 的設定(例:export PATH="<TMP>/cli:$PATH"),session 才打得到 agenthub
+⚠️ <TMP>/cli 不在 PATH 上:加進 shell 的設定(例:export PATH="<TMP>/cli:$PATH"),session 才打得到 brunna
 --- stderr
 
 $ agenthub install-cli --dir <TMP>/cli
 [exit 1]
 --- stdout
 ✓ <TMP>/cli/brunna 已經是最新的
-⚠️ <TMP>/cli 不在 PATH 上:加進 shell 的設定(例:export PATH="<TMP>/cli:$PATH"),session 才打得到 agenthub
+⚠️ <TMP>/cli 不在 PATH 上:加進 shell 的設定(例:export PATH="<TMP>/cli:$PATH"),session 才打得到 brunna
 --- stderr
 
 $ agenthub install-cli --dir <TMP>/cli

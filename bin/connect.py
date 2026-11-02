@@ -1,5 +1,5 @@
 #!/bin/sh -c exec${IFS}"${0%/*}/py"${IFS}"$0"${IFS}"$@"
-"""Connect existing folders as projects (docs/design/newcomer-path.md B6): `agenthub connect [<folder>] [--yes]
+"""Connect existing folders as projects (docs/design/newcomer-path.md B6): `brunna connect [<folder>] [--yes]
 [--remote] [--dry-run]`.
 
 The user names a folder. What it holds is found by reading files, and the only git call made in it (the
@@ -11,12 +11,12 @@ unsaved-changes check) runs with its hooks and fsmonitor off, because the folder
                                     (layout_intent: {span: [...]}) for the same
 It never connects a part of a monorepo as a repo of its own. Before each one it says, in plain words, what connecting
 does; a repo with unsaved changes is skipped until they're saved. No GitHub repo is created unless --remote is given and
-hub.json has github.owner. The connecting itself is bin/onboard-project.sh.
+{settings} has github.owner. The connecting itself is bin/onboard-project.sh.
 
 Refused: the home folder and its parents, hidden folders, the hub, the instance directory, anything inside a project
 that is already connected. The folder is resolved to its real path first.
 
-  agenthub connect --add-root <folder>   add a folder to hub.json connect.roots: the places from which an agent session
+  brunna connect --add-root <folder>   add a folder to {settings} connect.roots: the places from which an agent session
                                          may connect a folder (the MCP server's connect_project, B5). Only the owner
                                          adds roots, here or in init; an agent can't.
 """
@@ -84,7 +84,7 @@ def refusal(p: pathlib.Path, root: bool = False) -> str | None:
         return _("{path} is your home folder or contains it; name the folder of one project (or of several)", path=p)
     if any(part.startswith(".") for part in p.relative_to(p.anchor).parts):
         return _("{path} is a hidden folder", path=p)
-    for what, where in ((_("the hub"), hubconf.MAIN), (_("agent-hub's own settings folder"), hubconf.instance_home())):
+    for what, where in ((_("the hub"), hubconf.MAIN), (_("brunna's own settings folder"), hubconf.instance_home())):
         if where and (p == where.resolve() or p.is_relative_to(where.resolve())
                       or (not root and where.resolve().is_relative_to(p))):
             return _("{path} is or holds {what}", path=p, what=what)
@@ -111,7 +111,7 @@ def in_roots(given: pathlib.Path, roots: list[pathlib.Path]) -> str | None:
         return _("{path} is not an existing folder", path=given)
     real = p.resolve()
     if not any(real != r and real.is_relative_to(r) for r in roots):
-        return _("{path} is not inside a folder you named for projects ({roots}); add one with agenthub connect "
+        return _("{path} is not inside a folder you named for projects ({roots}); add one with brunna connect "
                  "--add-root <folder>", path=real, roots=", ".join(map(str, roots)) or _("none"))
     return None
 
@@ -120,11 +120,11 @@ def add_root(folder: str) -> int:
     p = pathlib.Path(os.path.expanduser(folder)).resolve()
     home = pathlib.Path.home().resolve()
     if p == home or home.is_relative_to(p):
-        print(_("agenthub connect: {path} is your home folder or contains it; name the folder that holds your projects",
+        print(_("brunna connect: {path} is your home folder or contains it; name the folder that holds your projects",
                 path=p), file=sys.stderr)
         return 2
     if (why := refusal(p, root=True)):
-        print(_("agenthub connect: {reason}; nothing was done", reason=why), file=sys.stderr)
+        print(_("brunna connect: {reason}; nothing was done", reason=why), file=sys.stderr)
         return 2
     f = hubconf.config_path()
     d = json.loads(f.read_text())
@@ -146,14 +146,14 @@ def ask(question: str, yes: bool, default: bool) -> bool:
 
 def explain(p: pathlib.Path) -> None:
     print(_("Connecting {path}:", path=p))
-    print("  " + _("agent-hub keeps this project's notes in a separate place, so your files don't change"))
+    print("  " + _("brunna keeps this project's notes in a separate place, so your files don't change"))
     if not is_repo(p):
         print("  " + _("this folder has no version history yet: it gets one, with a first save of what is in it now"))
 
 
 def connect_one(p: pathlib.Path, remote: bool, intent: dict | None, dry: bool) -> int:
     if is_repo(p) and sgit(p, "status", "--porcelain").stdout.strip():
-        print(_("Skipped {path}: it has unsaved changes. Save (commit) them, then run agenthub connect again.", path=p))
+        print(_("Skipped {path}: it has unsaved changes. Save (commit) them, then run brunna connect again.", path=p))
         return 1
     argv = [str(BIN / "onboard-project.sh")]
     if not (remote and hubconf.get("github.owner")):
@@ -172,7 +172,7 @@ def connect_one(p: pathlib.Path, remote: bool, intent: dict | None, dry: bool) -
 def main(argv: list[str]) -> int:
     if argv[:1] == ["--add-root"]:
         if len(argv) != 2:
-            print(_("agenthub connect --add-root takes one folder"), file=sys.stderr)
+            print(_("brunna connect --add-root takes one folder"), file=sys.stderr)
             return 2
         return add_root(argv[1])
     flags = {a for a in argv if a.startswith("--")}
@@ -182,24 +182,24 @@ def main(argv: list[str]) -> int:
         return 2 if unknown else 0
     args = [a for a in argv if not a.startswith("--")]
     if len(args) > 1:
-        print(_("agenthub connect takes one folder"), file=sys.stderr)
+        print(_("brunna connect takes one folder"), file=sys.stderr)
         return 2
     yes, remote, dry = "--yes" in flags, "--remote" in flags, "--dry-run" in flags
     folder = pathlib.Path(os.path.expanduser(args[0] if args else ".")).resolve()
     if (why := refusal(folder)):
-        print(_("agenthub connect: {reason}; nothing was done", reason=why), file=sys.stderr)
+        print(_("brunna connect: {reason}; nothing was done", reason=why), file=sys.stderr)
         return 2
     kind, candidates = layout(folder)
     if kind == "repos":
         names = [c.name for c in candidates]
         print(_("{path} holds {n} {n:repo|repos}: {names}. Each becomes a project of its own.", path=folder,
                 n=len(names), names=", ".join(names)))
-        together = ask(_("Do they belong together as one project? (Recorded now, carried out once agent-hub supports "
+        together = ask(_("Do they belong together as one project? (Recorded now, carried out once brunna supports "
                          "a project spanning several repos.)"), yes, False)
         intent = {"span": names} if together else None
     elif kind == "monorepo":
         print(_("{path} holds several parts (a monorepo). It becomes one project now.", path=folder))
-        split = ask(_("Split it into its parts as separate projects later? (Recorded now, carried out once agent-hub "
+        split = ask(_("Split it into its parts as separate projects later? (Recorded now, carried out once brunna "
                       "supports that.)"), yes, False)
         intent = {"split": True} if split else None
     else:
@@ -209,7 +209,7 @@ def main(argv: list[str]) -> int:
     import llm_ready
     ready = not dry and llm_ready.unsupported("first-look") is None   # without a model, first-look only says so
     look = not dry and (not ready or ask(_("Write a first summary of each project now? It sends its README and recent "
-                                           "commit titles to the AI model that makes agent-hub's decisions."), yes, True))
+                                           "commit titles to the AI model that makes brunna's decisions."), yes, True))
     rc = 0
     for c in candidates:
         if (why := refusal(c)):

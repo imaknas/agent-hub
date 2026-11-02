@@ -9,7 +9,7 @@
 === dry-run, not installed
 (True, '(dry-run) claude not installed → 2.1.5 (node v22.1.0)')
 === current version fails
-(False, 'still on 2.1.4 (latest 2.1.5): the current version already fails a request, not updating (a login or network problem, see agent-hub/claude-login): Login expired')
+(False, 'still on 2.1.4 (latest 2.1.5): the current version already fails a request, not updating (a login or network problem, see brunna/claude-login): Login expired')
 === installed
 (True, 'claude 2.1.4 → 2.1.5 (node v22.1.0), the request test passed')
 === installed, none before

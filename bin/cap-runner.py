@@ -2,7 +2,7 @@
 """Platform-run commands: a project puts a request in its own folder; this service (not inside any sandbox) checks it
 and only then runs it under the platform's Seatbelt profile.
 
-Design: docs/design/capabilities.md. Service `local.agent-hub.cap-runner` (in agent-hub's registry services,
+Design: docs/design/capabilities.md. Service `local.brunna.cap-runner` (in brunna's registry services,
 KeepAlive; render-services alerts when it isn't running). The client is bin/hub-run.
 
 Why run it for them: a second sandbox can't be nested inside the runtime's sandbox, and the runtime's own sandbox
@@ -21,13 +21,13 @@ state.json: {state: queued|running|done|rejected|lost, reason?, exit?, timed_out
 Serves projects whose registry entry has enforce.sandbox: true and declares enforce.capabilities (idea sandboxes
 get gpu by default, and keep it after being upgraded into a real project), and, for model calls, projects that declare
 models: (sandboxed or not; their workspace and runtime folders are both scanned, so a service or job can call too).
-A model call ({"v": 1, "id", "kind": "complete", "point", "prompt", "schema"?}, from `agenthub complete`): the point
+A model call ({"v": 1, "id", "kind": "complete", "point", "prompt", "schema"?}, from `brunna complete`): the point
 must be in models:; it runs `llm.py project <project> <point>` outside any sandbox (the platform's credentials), which
 checks the provider (metered only with the owner's metered_models) before sending. stdout = llm.py's JSON. Checks (failing one → rejected + reason):
   .hub-run/, requests/ and jobs/ must not be symlinks (everything goes through O_NOFOLLOW directory fds, so results
   can't be redirected into another project); the request is a regular file, ≤ 64 KB, within 10 minutes; id is a
   plain file name; cap is one this project declares; argv is a list of strings;
-  cwd, resolved to its real path, is inside the project folder; timeout_s ≤ hub.json cap_runner.max_timeout_s.
+  cwd, resolved to its real path, is inside the project folder; timeout_s ≤ {settings} cap_runner.max_timeout_s.
 The profile is computed fresh every time (seatbelt.py) and put in .state/cap-runner/<project>/<id>.sb: a place the
 session can't write.
 argv is exec'd directly (`sandbox-exec -f <profile> <argv>`), no shell string in between; the environment gets only

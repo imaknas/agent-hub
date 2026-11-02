@@ -1,3 +1,3 @@
 {
-  "runtime {name} has no completion interface, and hub.json has no llm section (set one up with agenthub llm setup)": "執行環境 {name} 沒有 completion 介面,hub.json 也沒有 llm 區塊(用 agenthub llm setup 設一家)"
+ "runtime {name} has no completion interface, and {settings} has no llm section (set one up with brunna llm setup)": "執行環境 {name} 沒有 completion 介面,{settings} 也沒有 llm 區塊(用 brunna llm setup 設一家)"
 }

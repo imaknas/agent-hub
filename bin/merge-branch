@@ -10,10 +10,10 @@ Run in the session's own worktree:
   2. `git rebase <main>`: on a conflict, abort, list the conflicting files, record merge.failed, stop.
   2b. Registry `commits: conventional`: every commit title on this branch must pass (bin/commit_title.py); stop if
       one doesn't.
-  3. Run the affected `merge` tiers through the main checkout's runner (`agenthub test --when merge`; no tests declared:
+  3. Run the affected `merge` tiers through the main checkout's runner (`brunna test --when merge`; no tests declared:
      skipped and noted): on failure attach the last 40 lines, record merge.failed, stop.
   4. In the main checkout, `git merge --ff-only <branch>` (stop if uncommitted changes in the main checkout get in the
-     way). In the hub's own repo, then `agenthub land` from the merged code (the registry index; a problem is reported,
+     way). In the hub's own repo, then `brunna land` from the merged code (the registry index; a problem is reported,
      the merge stands).
   5. **Push only when the registry has `push_on_merge: true`** (no push by default: some repos are public, and
      merging ≠ publishing).
@@ -87,7 +87,7 @@ def main() -> int:
     info = hubconf.projects().get(proj)
     if not info or info.get("v") != 2:   # not validated (missing, roster()'s paths, an index of older code): its tests and commit rules are unknown
         sys.exit(_("merge-branch: {project} is not in the validated project registry, so its test command and commit "
-                   "rules are unknown; nothing was merged. `agenthub config check` rebuilds the registry and says what "
+                   "rules are unknown; nothing was merged. `brunna config check` rebuilds the registry and says what "
                    "is wrong", project=proj))
     # whose tests and commit rules apply is the repo's, never the caller's choice: --project only names it, and must
     # name the project whose workspace this repo is (round 6: naming one without tests merged untested)
@@ -150,7 +150,7 @@ def main() -> int:
         # 3. tests: the affected merge tiers through the main checkout's runner (a recorded pass for this tree is a
         # hit; the hub's own declaration is read from the tree under test; docs/design/test-waiting.md B4)
         if info.get("tests") or proj == hubconf.hub_project():
-            cmd = "agenthub test --when merge"
+            cmd = f"{names.current('cli')} test --when merge"
             t0 = time.monotonic()
             # the runner's run log counts this as the merge's run, not the agent's own (the waiting report, B7)
             t = subprocess.run([*hubconf.launch(hubconf.MAIN / "bin" / "test-runner.py"), "--when", "merge"], cwd=wt,
@@ -181,7 +181,7 @@ def main() -> int:
                                   capture_output=True, text=True)
             report["landed"] = land.returncode == 0
             if land.returncode != 0:
-                print(_("merge-branch: merged, but `agenthub land` reported a problem (the index may not match the "
+                print(_("merge-branch: merged, but `brunna land` reported a problem (the index may not match the "
                         "merged code until the next tick):\n{tail}", tail="\n".join(
                             (land.stdout + land.stderr).strip().splitlines()[-15:])), file=sys.stderr)
         # 5. push (only when the registry says so)

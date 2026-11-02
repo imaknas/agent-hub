@@ -1,4 +1,4 @@
-"""agenthub llm setup (init calls it too): pick a provider, write the key into secrets (600, never printed), pick the
+"""brunna llm setup (init calls it too): pick a provider, write the key into secrets (600, never printed), pick the
 models from that provider's actual list, write hub.json llm.
 
 Isolated config/secrets; the providers are local fake APIs (OpenAI-compatible, Ollama); nothing is sent out.
@@ -112,8 +112,8 @@ class Setup(unittest.TestCase):
         self.hub("llm", "setup", "--llm", "ollama", "--llm-base-url", self.base, "--llm-model", "local-a", "--yes")
         r = self.hub("llm", "setup", "--llm", "runtime", "--yes")
         self.assertEqual(r.returncode, 0)
-        self.assertIn(T("⚠️ no AI agent is set up, so there is no agent login to make agent-hub's decisions with: they "
-                        "will fail. Pick a provider: agenthub llm setup"), r.stdout,
+        self.assertIn(T("⚠️ no AI agent is set up, so there is no agent login to make brunna's decisions with: they "
+                        "will fail. Pick a provider: brunna llm setup"), r.stdout,
                       "runtime none, picking runtime: says plainly that judgment points will fail")
         self.assertEqual(self.hub_json()["llm"], {"points": {"consolidate": {"model": "pinned"}}})
 

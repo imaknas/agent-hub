@@ -85,7 +85,7 @@ class Validate(unittest.TestCase):
     def test_shipped_modules_are_valid(self):
         import yaml
         # a requires_config key this test's settings do not have is fine: the fixed part before the key
-        unset = i18n.translate("registry", "{key} must be set in hub.json first", {"key": "{key}"},
+        unset = i18n.translate("registry", "{key} must be set in {settings} first", {"key": "{key}"},
                                "zh-Hant").split("{key}")[0]
         self.assertTrue(unset)
         for f in sorted((ROOT / "modules").glob("*.yaml")):

@@ -3,8 +3,8 @@
 its own copy, not depending on other repos); this one does what only the platform can:
 
   ① copy == original: every `consumes` in the project registry (copy path, from which project) is compared with the
-     original that project `provides`, in both directions (agent-hub's vendor copies ↔ others' originals; others'
-     vendored agent-hub contracts ↔ agent-hub's originals)
+     original that project `provides`, in both directions (brunna's vendor copies ↔ others' originals; others'
+     vendored brunna contracts ↔ brunna's originals)
   ③ real data follows the contracts: todo.md, every registry file, recent bus events, the latest week's reflect json,
      the owner's assistant's current `handoffs --json` output
 

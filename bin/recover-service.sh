@@ -65,7 +65,7 @@ case "$kind" in
       tmpl_label=$(other_label "$tmpl_label")
       plist_path="$(dirname "$plist_path")/$tmpl_label.plist"
     fi
-    [ -f "$plist_path" ] || fail "$(hub_msg "{path} does not exist: is agent-hub itself behind (not pulled)?" path="$plist_path")"
+    [ -f "$plist_path" ] || fail "$(hub_msg "{path} does not exist: is brunna itself behind (not pulled)?" path="$plist_path")"
     # what's under launchd/ is a template: {{hub}} becomes this machine's hub location, and the template's own label
     # the one services.tsv names (with sed: the remote machine may not have the platform's Python)
     sed -e "s#{{hub}}#$AGENT_HUB#g" -e "s#<string>${tmpl_label//./\\.}</string>#<string>$LABEL</string>#" \
@@ -76,7 +76,7 @@ case "$kind" in
     if [ -n "$recreate_notes" ]; then hub_say "Note: {notes}" notes="$recreate_notes"; fi
     ;;
   *)
-    hub_say "'{label}' is not a service agent-hub manages (owner: {owner}); it cannot be rebuilt automatically." label="$LABEL" owner="$owner"
+    hub_say "'{label}' is not a service brunna manages (owner: {owner}); it cannot be rebuilt automatically." label="$LABEL" owner="$owner"
     hub_say "Purpose: {purpose}" purpose="$purpose"
     hub_say "How to rebuild: {notes}" notes="$recreate_notes"
     ;;

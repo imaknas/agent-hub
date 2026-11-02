@@ -22,7 +22,7 @@ exit 0
   1. 不改名
   2. gh repo create o/idea-7 --private + push,origin = <TMP>/a/remotes/o/idea-7.git
   3. 登錄 projects/idea-7.yaml:type: project、paths.origin: <TMP>/a/remotes/o/idea-7.git(purpose/enforce/privacy 留著)
-  4. mirror-list.txt 加上 origin、重生 index.md、commit agent-hub
+  4. mirror-list.txt 加上 origin、重生 index.md、commit brunna
 (dry-run,加 --apply 執行)
 --- stderr
 
@@ -38,7 +38,7 @@ exit 0
   1. 改名 idea-7 → garden(rename-project.sh)
   2. gh repo create o/garden --public + push,origin = <TMP>/a/remotes/o/garden.git
   3. 登錄 projects/garden.yaml:type: project、paths.origin: <TMP>/a/remotes/o/garden.git(purpose/enforce/privacy 留著)
-  4. mirror-list.txt 加上 origin、重生 index.md、commit agent-hub
+  4. mirror-list.txt 加上 origin、重生 index.md、commit brunna
 (dry-run,加 --apply 執行)
 --- stderr
 
@@ -60,7 +60,7 @@ exit 0
   1. 不改名
   2. GitHub 上的 o/idea-7 是上次建的:只 push,origin = <TMP>/a/remotes/o/idea-7.git
   3. 登錄 projects/idea-7.yaml:type: project、paths.origin: <TMP>/a/remotes/o/idea-7.git(purpose/enforce/privacy 留著)
-  4. mirror-list.txt 加上 origin、重生 index.md、commit agent-hub
+  4. mirror-list.txt 加上 origin、重生 index.md、commit brunna
 (dry-run,加 --apply 執行)
 --- stderr
 
@@ -82,7 +82,7 @@ exit 1
   1. 不改名
   2. gh repo create o/idea-7 --private + push,origin = <TMP>/a/remotes/o/idea-7.git
   3. 登錄 projects/idea-7.yaml:type: project、paths.origin: <TMP>/a/remotes/o/idea-7.git(purpose/enforce/privacy 留著)
-  4. mirror-list.txt 加上 origin、重生 index.md、commit agent-hub
+  4. mirror-list.txt 加上 origin、重生 index.md、commit brunna
 --- stderr
 upgrade-idea: gh repo create 失敗:HTTP 502: bad gateway
 
@@ -92,7 +92,7 @@ exit 1
   1. 改名 idea-7 → garden(rename-project.sh)
   2. gh repo create o/garden --private + push,origin = <TMP>/a/remotes/o/garden.git
   3. 登錄 projects/garden.yaml:type: project、paths.origin: <TMP>/a/remotes/o/garden.git(purpose/enforce/privacy 留著)
-  4. mirror-list.txt 加上 origin、重生 index.md、commit agent-hub
+  4. mirror-list.txt 加上 origin、重生 index.md、commit brunna
 --- stderr
 rename-project: folder is busy
 upgrade-idea: rename-project.sh 失敗,停在這裡(還沒建 GitHub repo)
@@ -103,7 +103,7 @@ exit 0
   1. 不改名
   2. gh repo create o/idea-7 --private + push,origin = <TMP>/a/remotes/o/idea-7.git
   3. 登錄 projects/idea-7.yaml:type: project、paths.origin: <TMP>/a/remotes/o/idea-7.git(purpose/enforce/privacy 留著)
-  4. mirror-list.txt 加上 origin、重生 index.md、commit agent-hub
+  4. mirror-list.txt 加上 origin、重生 index.md、commit brunna
 完成:idea-7 已升級成正式專案 idea-7(<TMP>/a/remotes/o/idea-7.git)
 --- stderr
 
@@ -137,7 +137,7 @@ exit 1
   1. 改名 idea-7 → garden(rename-project.sh)
   2. gh repo create o/garden --private + push,origin = <TMP>/b/remotes/o/garden.git
   3. 登錄 projects/garden.yaml:type: project、paths.origin: <TMP>/b/remotes/o/garden.git(purpose/enforce/privacy 留著)
-  4. mirror-list.txt 加上 origin、重生 index.md、commit agent-hub
+  4. mirror-list.txt 加上 origin、重生 index.md、commit brunna
 --- stderr
 upgrade-idea: gh repo create 失敗:HTTP 502: bad gateway
 
@@ -153,7 +153,7 @@ exit 0
   1. 已經改名成 garden
   2. gh repo create o/garden --private + push,origin = <TMP>/b/remotes/o/garden.git
   3. 登錄 projects/garden.yaml:type: project、paths.origin: <TMP>/b/remotes/o/garden.git(purpose/enforce/privacy 留著)
-  4. mirror-list.txt 加上 origin、重生 index.md、commit agent-hub
+  4. mirror-list.txt 加上 origin、重生 index.md、commit brunna
 (dry-run,加 --apply 執行)
 --- stderr
 
@@ -169,6 +169,6 @@ exit 1
   1. 改名 idea-7 → garden(rename-project.sh)
   2. gh repo create o/garden --private + push,origin = <TMP>/d/remotes/o/garden.git
   3. 登錄 projects/garden.yaml:type: project、paths.origin: <TMP>/d/remotes/o/garden.git(purpose/enforce/privacy 留著)
-  4. mirror-list.txt 加上 origin、重生 index.md、commit agent-hub
+  4. mirror-list.txt 加上 origin、重生 index.md、commit brunna
 --- stderr
 upgrade-idea: 登錄不合格:未知的欄位 bogus(GitHub repo 已經建好;修好登錄再叫一次會接著做)

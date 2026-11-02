@@ -1,7 +1,7 @@
 """Provider compatible with OpenAI Chat Completions (completion interface; docs/design/llm-providers.md).
 
 One implementation covers OpenAI, OpenRouter, Gemini's compatible endpoint, DeepSeek, LM Studio, vLLM…: the provider
-in hub.json sets `base_url` (default https://api.openai.com/v1). Settings:
+in {settings} sets `base_url` (default https://api.openai.com/v1). Settings:
   max_tokens_field   default max_tokens; OpenAI's reasoning models need max_completion_tokens
   structured         false = don't send response_format, write the schema into the prompt instead (when the endpoint
                      doesn't support it; if unset, it also switches automatically on a 400)

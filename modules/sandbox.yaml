@@ -5,7 +5,7 @@
 v: 1
 name: sandbox
 type: module
-description: "Platform-run capabilities (cap-runner): sandboxed projects borrow a capability with agenthub cap-run --cap"
+description: "Platform-run capabilities (cap-runner): sandboxed projects borrow a capability with brunna cap-run --cap"
 services:
 # bin/cap-runner.py: runs the requests hub-run drops off under the platform's Seatbelt profile
 - name: cap-runner

@@ -8,7 +8,7 @@ recover-project: usage: recover-project.sh <name> [target path]
 exit 1
 --- stdout
 --- stderr
-recover-project: <TMP>/hub/nowhere not found: first make sure agent-hub itself is cloned
+recover-project: <TMP>/hub/nowhere not found: first make sure brunna itself is cloned
 
 === not in the registry
 exit 1

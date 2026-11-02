@@ -31,9 +31,9 @@ sync-local-setup (stand-in): alpha
 [10/11] No external remote, not added to the mirror-backup list
 registry: <TMP>/hub/projects/alpha.yaml
 commit-hub-files (stand-in): register alpha (onboard-project.sh)
-[11/11] Registered in agent-hub's project registry (projects/alpha.yaml); agent-hub committed and pushed
+[11/11] Registered in brunna's project registry (projects/alpha.yaml); brunna committed and pushed
 
-Done: alpha is connected to the agent-hub pipeline.
+Done: alpha is connected to the brunna pipeline.
 --- stderr
 
 === alpha's STATE.md
@@ -95,9 +95,9 @@ exit 0
 [10/11] No external remote, not added to the mirror-backup list
 registry: <TMP>/hub/projects/alpha.yaml
 commit-hub-files (stand-in): register alpha (onboard-project.sh)
-[11/11] Registered in agent-hub's project registry (projects/alpha.yaml); agent-hub committed and pushed
+[11/11] Registered in brunna's project registry (projects/alpha.yaml); brunna committed and pushed
 
-Done: alpha is connected to the agent-hub pipeline.
+Done: alpha is connected to the brunna pipeline.
 --- stderr
 
 === no github.owner
@@ -122,12 +122,12 @@ sync-local-setup (stand-in): zeta
 [9/11] Cloned the librarian's memory copy to ~/.memory-copies/zeta
 [10/11] Added to the mirror-backup list
 registry: <TMP>/hub/projects/zeta.yaml
-[11/11] Registered in agent-hub's project registry (projects/zeta.yaml); committing/pushing agent-hub failed (see the warning)
+[11/11] Registered in brunna's project registry (projects/zeta.yaml); committing/pushing brunna failed (see the warning)
 
-Done: zeta is connected to the agent-hub pipeline.
+Done: zeta is connected to the brunna pipeline.
 --- stderr
 commit-hub-files (stand-in): push failed
-Warning: committing/pushing agent-hub's registry files failed; do it by hand (the registration itself is written)
+Warning: committing/pushing brunna's registry files failed; do it by hand (the registration itself is written)
 
 === mirror-list.txt
 git@github.com:o/zeta.git
@@ -173,7 +173,7 @@ sync-local-setup (stand-in): kappa
 [10/11] No external remote, not added to the mirror-backup list
 registry: <TMP>/hub/projects/kappa.yaml
 commit-hub-files (stand-in): register kappa (onboard-project.sh)
-[11/11] Registered in agent-hub's project registry (projects/kappa.yaml); agent-hub committed and pushed
+[11/11] Registered in brunna's project registry (projects/kappa.yaml); brunna committed and pushed
 
-Done: kappa is connected to the agent-hub pipeline.
+Done: kappa is connected to the brunna pipeline.
 --- stderr

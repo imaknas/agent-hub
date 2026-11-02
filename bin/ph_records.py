@@ -1,10 +1,10 @@
-"""Principal Handoff records as agent-hub, a requester, reads them (agent-ops-specs core §4-§7, §10, §12 and §14; Acts
+"""Principal Handoff records as brunna, a requester, reads them (agent-ops-specs core §4-§7, §10, §12 and §14; Acts
 and Decisions 0.5 §3): validation, deduplication and each item's settlement view.
 
 Follows the spec's reference (reference/ph_core.py and schema_subset.py, Apache-2.0). Records are validated against
 the schemas vendored in contracts/vendor/agent-ops-specs/principal-handoff-0.5/ and -0.4/.
 
-    cfg = ph_records.config()                      # the configured principal (core R6), from hub.json
+    cfg = ph_records.config()                      # the configured principal (core R6), from {settings}
     validate(record, cfg)          -> (schema, [errors])   a 0.5 or 0.4 record by its own version's rules; an empty
                                                            list means valid
     received(records, cfg)         -> (valid, ignored)     records of one item in any version read, each validated as
@@ -26,7 +26,7 @@ computes the same state from the same records, malformed ones included. 0.5 rela
 Acts): it is ignored. A valid one is kept as sent and converted to 0.5 at each fold; its 0.5 form is not validated
 again, and core §10's tie-break compares the 0.5 forms of the records valid in their own version.
 
-0.3 is two versions back, and the spec defines conversion and validation for N−1 only (0.6 is to say so). agent-hub
+0.3 is two versions back, and the spec defines conversion and validation for N−1 only (0.6 is to say so). brunna
 keeps its own reading of 0.3: a 0.3 record is validated as its 0.5 form, except that a 0.3 settlement carries no terms
 digest and gets one only when its need record is held: without it, it is valid and is never stale by digest.
 """

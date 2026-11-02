@@ -7,7 +7,7 @@ key 要寫成 {"secret": 檔名} 或 {"env": 變數名}
 === read_key: empty
 沒有 key:<TMP>/secrets/empty 是空的
 === resolve: no llm
-hub.json 沒有 llm 區塊
+brunna.json 沒有 llm 區塊
 === resolve: no use
 llm.use 沒有寫 strong 要交給哪一家
 === resolve: no provider

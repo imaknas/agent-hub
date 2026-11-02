@@ -6,7 +6,7 @@ The document is read and written by bin/acts_md.py (the Acts Markdown binding): 
 file (contracts/state-todo.v2.md, bin/todo_tokens.py); what the registrar writes (a key stamp, a re-added line, the
 empty marker, a missing section's heading) is in the set of the content language, and it touches no other line.
 
-**Bound keys** (spec §2): the keys this registrar raised from lines (its `raised` on the bus). **Known keys** (spec §2 step 3): items a project raised itself (agenthub send --type task, a
+**Bound keys** (spec §2): the keys this registrar raised from lines (its `raised` on the bus). **Known keys** (spec §2 step 3): items a project raised itself (brunna send --type task, a
 lease handover), never bound. Their need records go out on the bus under the project like the registrar's, and their
 settlements come back to the project, so the registrar holds them all (the deployment's duty in spec §2). Steps 1-5
 leave them alone except striking a line whose text is the item's latest terms after a settlement of theirs; a line
@@ -38,7 +38,7 @@ For each project (the STATE.md of its memory copy, plus the platform's own openc
      commit-hub-files.sh), and only after that succeeds `hubbus done` the applied records; on failure, wait for the
      next night.
 
-Records: reads acts 0.3, 0.4 and 0.5, sends the version hub.json principal_handoff.send_version names (bin/ph_wire.py).
+Records: reads acts 0.3, 0.4 and 0.5, sends the version {settings} principal_handoff.send_version names (bin/ph_wire.py).
 
 Only records count: v1's task letters and handoffs are not read. The items that existed only as v1 task letters were
 given need records under their keys once, by `registrar.py migrate-v1` (context migration-v1; removed with v1, in git

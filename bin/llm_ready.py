@@ -5,8 +5,8 @@ the reason, instead of failing on every item it would have handled).
   llm_ready.unsupported(point) -> str | None    None: it can be called (a call may still fail: no login, no key, a
                                                 network error; those are real failures). Otherwise the reason it is off
 
-What counts as "can be called" follows bin/llm.py's dispatch: a `shape: completion` point needs hub.json's llm section
-(providers) or a runtime with the completion interface; any other point needs a runtime with agent runs (hub.json
+What counts as "can be called" follows bin/llm.py's dispatch: a `shape: completion` point needs {settings}'s llm section
+(providers) or a runtime with the completion interface; any other point needs a runtime with agent runs ({settings}
 `llm.points.<point>.runtime` > the declaration's `runtime` > runtime.default). It reads the declaration itself rather
 than importing llm.py (llm.py is a script; tests stand it in).
 """
@@ -40,8 +40,8 @@ def unsupported(point: str) -> str | None:
     if spec.get("shape") == "completion":
         if completion.settings() or "completion" in runtime_ports.capabilities(name):
             return None
-        return _("runtime {name} has no completion interface, and hub.json has no llm section (set one up with "
-                 "agenthub llm setup)", name=name)
+        return _("runtime {name} has no completion interface, and {settings} has no llm section (set one up with "
+                 "brunna llm setup)", name=name)
     try:
         runtime_ports.load(name, ports=("agent",))
     except runtime_ports.Unsupported as e:

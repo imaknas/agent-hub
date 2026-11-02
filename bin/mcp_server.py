@@ -2,11 +2,11 @@
 """The platform's MCP server (stdio): any coding agent that supports MCP can read and send project mail and write
 memory notes (docs/design/tool-agnostic.md section 4).
 
-  agenthub mcp            run it (stdin/stdout carry MCP JSON-RPC, one message per line; logs go only to stderr)
-  agenthub mcp config     print the snippet to register in the tool's MCP settings (the platform does not change the
+  brunna mcp            run it (stdin/stdout carry MCP JSON-RPC, one message per line; logs go only to stderr)
+  brunna mcp config     print the snippet to register in the tool's MCP settings (the platform does not change the
                           tool's settings for you)
 
-Tools: inbox, show, thread, send, ack, done (same names and meanings as `agenthub`'s mailbox commands) + ask_owner
+Tools: inbox, show, thread, send, ack, done (same names and meanings as `brunna`'s mailbox commands) + ask_owner
 (ask the owner), note (written into this project's memory notes). Everything is handed to bin/hubbus (the same
 implementation); the server only decides which project: environment variable AGENTHUB_PROJECT > working directory
 (hubbus.project_of: worktrees and .agent-memory count as the main project). Project not recognised -> every tool
@@ -55,7 +55,7 @@ TYPES = ["request", "question", "info", "progress", "done"]
 
 
 def log(msg: str) -> None:
-    print(f"agenthub mcp: {msg}", file=sys.stderr, flush=True)
+    print(f"{names.current('cli')} mcp: {msg}", file=sys.stderr, flush=True)
 
 
 def _hubbus():
@@ -158,8 +158,8 @@ def instructions(project: str | None, why: str) -> str:
     text = INSTRUCTIONS.read_text()
     if not project:
         return prompts.fill(text, project=_("(unrecognized)"), take_timeout=60, unread=f"⚠️ {why}\n" + _(
-            "Outside a project, the tools here are status (what agent-hub has) and connect_project: when the user asks "
-            "to connect this folder to agent-hub, call it with the folder's absolute path."))
+            "Outside a project, the tools here are status (what brunna has) and connect_project: when the user asks "
+            "to connect this folder to brunna, call it with the folder's absolute path."))
     hb = _hubbus()
     try:
         n = unread(project)
@@ -208,10 +208,10 @@ TOOLS = [
 
 # outside every registered project (docs/design/newcomer-path.md B5): what agent-hub is, and connecting the folder
 TOOLS_OUTSIDE = [
-    {"name": "status", "description": "Whether agent-hub is installed here, which projects it has, and where new ones "
+    {"name": "status", "description": "Whether brunna is installed here, which projects it has, and where new ones "
                                       "may be connected from.",
      "inputSchema": {"type": "object", "properties": {}}},
-    {"name": "connect_project", "description": "Connect an existing folder as an agent-hub project (its notes, schedules "
+    {"name": "connect_project", "description": "Connect an existing folder as a brunna project (its notes, schedules "
                                                "and mailbox), when the user asks for it. Only a folder inside one the "
                                                "owner named for projects; no GitHub repo is created.",
      "inputSchema": {"type": "object", "required": ["path"], "properties": {
@@ -253,11 +253,11 @@ class Client:
 def outside(name: str, args: dict, client: "Client") -> tuple[bool, str]:
     if name == "status":
         known = sorted(hubconf.projects() or {})
-        return True, _("agent-hub is installed. Projects: {names}. Folders may be connected from inside: {roots}.",
+        return True, _("brunna is installed. Projects: {names}. Folders may be connected from inside: {roots}.",
                        names=", ".join(known) or _("none yet"),
                        roots=", ".join(map(str, hubconf.project_roots())) or _("nowhere yet"))
     if name != "connect_project":
-        return False, _("this folder is not an agent-hub project: only status and connect_project work here")
+        return False, _("this folder is not an brunna project: only status and connect_project work here")
     if os.environ.get("HUBBUS_LEASE"):
         return False, _("a lease session can't connect folders")
     import connect
@@ -267,10 +267,10 @@ def outside(name: str, args: dict, client: "Client") -> tuple[bool, str]:
     real = pathlib.Path(os.path.expanduser(str(args["path"]))).resolve()
     if (why := connect.refusal(real)):
         return False, why
-    answer = client.confirm(_("Connect {path} as an agent-hub project? Its notes are kept in a separate place, a "
+    answer = client.confirm(_("Connect {path} as an brunna project? Its notes are kept in a separate place, a "
                               "folder without version history gets one, no GitHub repo is created, and a first summary "
                               "is written from its README and recent commit titles by the AI model that makes "
-                              "agent-hub's decisions.", path=real))
+                              "brunna's decisions.", path=real))
     if answer is False:
         return False, _("the user declined; nothing was done")
     env = dict(os.environ)

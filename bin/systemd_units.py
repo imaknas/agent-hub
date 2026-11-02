@@ -59,7 +59,7 @@ def files(plist: dict) -> dict[str, str]:
     out = {f"{label}.service": "\n".join(lines) + "\n"}
     if timer:
         out[f"{label}.timer"] = "\n".join([
-            "[Unit]", "Description=" + _("agent-hub {label} (every {secs} s)", label=label, secs=int(plist['StartInterval'])),
+            "[Unit]", "Description=" + _("brunna {label} (every {secs} s)", label=label, secs=int(plist['StartInterval'])),
             "",
             "[Timer]", "OnActiveSec=1" if plist.get("RunAtLoad") else f"OnActiveSec={int(plist['StartInterval'])}",
             f"OnUnitActiveSec={int(plist['StartInterval'])}", "AccuracySec=1", "",

@@ -1247,7 +1247,7 @@ def classify_exit(code, stderr_tail: str) -> StreamEvent:
     if is_login_error(stderr_tail):  # the same login check as llm.py's (layer 6)
         return StreamEvent("error", {"error": "agent_login", "detail": _(
             "Claude Code (used by project sessions) is not logged in, or its credentials have expired (the platform's "
-            "agent-hub/claude-login sends an alert). {raw}", raw=raw)})
+            "brunna/claude-login sends an alert). {raw}", raw=raw)})
     return StreamEvent("error", {"error": "process_crashed", "detail": raw})
 
 

@@ -1,5 +1,5 @@
 === stderr
-agenthub mcp: 專案:demo
+brunna mcp: 專案:demo
 
 === inbox (empty)
 demo 的信箱是空的
@@ -12,7 +12,7 @@ demo 的信箱是空的
 === note without memory
 nowhere 沒有 memory 資料夾(.agent-memory);這個專案沒有接上 memory 追蹤
 === stderr unknown project
-agenthub mcp: 專案:(認不出來)
+brunna mcp: 專案:(認不出來)
 
 === unknown project
 工作目錄 <TMP> 不在任何登錄過的專案裡:在專案資料夾裡啟動這個伺服器,或在工具的 MCP 設定給環境變數 AGENTHUB_PROJECT=<專案名稱>
@@ -26,7 +26,7 @@ agenthub mcp: 專案:(認不出來)
 (demo:1 封沒結案)
 === instructions unknown
 P=(認不出來) U=⚠️ why
-在專案外面,這裡的工具是 status(agent-hub 有什麼)和 connect_project:使用者要把這個資料夾接上 agent-hub 時,用資料夾的絕對路徑呼叫它。 T=60
+在專案外面,這裡的工具是 status(brunna 有什麼)和 connect_project:使用者要把這個資料夾接上 brunna 時,用資料夾的絕對路徑呼叫它。 T=60
 === instructions 2 unread
 P=demo U=📬 現在有 2 封還沒結案的信,先用 inbox 看。 T=60
 === instructions 1 unread

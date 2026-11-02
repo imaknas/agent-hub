@@ -1,74 +1,74 @@
 $ <HUB>/bin/agenthub --help
 [exit 0]
 --- stdout
-agent-hub 的單一入口(docs/design/new-user.md 3.4)。薄薄一層分派,不重寫既有腳本。
+brunna 的單一入口(docs/design/new-user.md 3.4)。薄薄一層分派,不重寫既有腳本。
 
-名稱是 `agenthub`(2026-10-29:`hub` 跟 GitHub 舊的 hub CLI 撞名;`bin/hub` 留著轉過來)。`agenthub install-cli` 在
-~/.local/bin 放一個轉過來的小腳本,任何 coding agent 的 session 都能直接打 `agenthub …`,規則檔裡不用寫本機路徑。
+名稱是 `brunna`(2026-10-29:`hub` 跟 GitHub 舊的 hub CLI 撞名;`bin/hub` 留著轉過來)。`brunna install-cli` 在
+~/.local/bin 放一個轉過來的小腳本,任何 coding agent 的 session 都能直接打 `brunna …`,規則檔裡不用寫本機路徑。
 
 開始用:
-  agenthub init [--home <實例目錄>] [--owner <名字>] [--timezone <時區>] [--workspace <資料夾>] [--modules a,b] [--yes]
+  brunna init [--home <實例目錄>] [--owner <名字>] [--timezone <時區>] [--workspace <資料夾>] [--modules a,b] [--yes]
            [--llm runtime|anthropic|openai|ollama|none] [--llm-model <名稱>] [--llm-base-url <網址>] [--no-launchd] [--dry-run]
-                        沒有 hub.json 就建實例目錄(預設 ~/.agent-hub:config/ 是 git repo、data/、secrets/),照 hub.example.json
+                        沒有 hub.json 就建實例目錄(預設 ~/.brunna:config/ 是 git repo、data/、secrets/),照 hub.example.json
                         寫 config/hub.json(問幾個問題,--yes 用預設值),最後寫 <hub>/.hub-home 指過去;建需要的資料夾;
-                        問平台的判斷要交給哪家模型(= agenthub llm setup);裝排程器跟看門狗(launchd/ 的樣板;內容一樣就不動);
+                        問平台的判斷要交給哪家模型(= brunna llm setup);裝排程器跟看門狗(launchd/ 的樣板;內容一樣就不動);
                         套用 config。已經有 hub.json 就不動它
-  agenthub doctor            一次看完哪裡壞了:平台的 Python、config、登入、排程器、看門狗、背景服務、commit 閘門,
+  brunna doctor            一次看完哪裡壞了:平台的 Python、config、登入、排程器、看門狗、背景服務、commit 閘門,
                         還有有沒有新的 release
-  agenthub upgrade [--to vX.Y.Z | --main] [--check] [--yes]
+  brunna upgrade [--to vX.Y.Z | --main] [--check] [--yes]
                         把這個 checkout 移到最新的 release(或指定的 tag、remote 的 main),再讓機器跟上:Python 套件、
                         專案登錄、config apply、排程器、hook、CLI、doctor。先列出 changelog;--check 列完就停
                         (exit 10 = 有新版)。開發用的 checkout 一律不動(bin/upgrade.py)
-  agenthub init --scheduler-only   只從樣板重裝排程器跟看門狗(upgrade 會跑)
-  agenthub init --questions [--answers <檔案>] | --answers <檔案>
-                        給在對話裡幫你設定 agent-hub 的 AI agent 用(README 的「Set up through your agent」):先把問題
+  brunna init --scheduler-only   只從樣板重裝排程器跟看門狗(upgrade 會跑)
+  brunna init --questions [--answers <檔案>] | --answers <檔案>
+                        給在對話裡幫你設定 brunna 的 AI agent 用(README 的「Set up through your agent」):先把問題
                         印成 JSON;再套用答案,最後一行是一個 JSON。同意與金鑰一律直接問你(螢幕上的視窗、瀏覽器裡的頁面),
                         不從檔案拿
 config:
-  agenthub config check | plan | apply [--only <套用者>,...]
+  brunna config check | plan | apply [--only <套用者>,...]
                         驗證 config / 會改什麼 / 套用(check → 套用 → 再 plan 要是空的 → 記錄)
-  agenthub llm setup [--llm …] [--llm-model …] [--llm-base-url …]
+  brunna llm setup [--llm …] [--llm-model …] [--llm-base-url …]
                         平台的判斷(每晚整理、週報)交給誰:coding agent 自己的登入、Anthropic / OpenAI(或相容的)API key、
                         本機 Ollama;key 不顯示、寫進 secrets 目錄;模型從那家實際有的清單選(平台不猜名稱)
-  agenthub llm set-key <provider>   把 hub.json llm.providers.<provider> 的 API key 從 stdin 寫進平台的 secrets 目錄(chmod 600;
+  brunna llm set-key <provider>   把 hub.json llm.providers.<provider> 的 API key 從 stdin 寫進平台的 secrets 目錄(chmod 600;
                         不從參數讀,不會留在 shell 歷史)
-  agenthub llm health        每一家 provider 能不能用(= bin/llm.py health)
-  agenthub modules [enable|disable <名稱>]
+  brunna llm health        每一家 provider 能不能用(= bin/llm.py health)
+  brunna modules [enable|disable <名稱>]
                         有哪些可以不開的功能、開了哪些;開關會改 hub.json 再套用(hub.json 記得 commit)
-  agenthub move-instance --to <實例目錄> [--apply]
+  brunna move-instance --to <實例目錄> [--apply]
                         舊的擺法(全部在 hub 根目錄)搬到實例目錄:只複製、驗證新擺法、最後才寫 .hub-home(刪掉就退回)
 專案:
-  agenthub connect [<資料夾>] [--yes] [--remote] [--dry-run]
+  brunna connect [<資料夾>] [--yes] [--remote] [--dry-run]
                         把既有的資料夾接成專案(bin/connect.py):一個 repo、monorepo,或一個裝著好幾個 repo 的資料夾
-  agenthub onboard …         = bin/onboard-project.sh(開新專案 / 把資料夾接上來)
-  agenthub recover <名稱>    = bin/recover-project.sh(新機器 / 資料夾不見了)
-  agenthub rename <舊> <新>  = bin/rename-project.sh(先 dry-run,再加 --apply)
-  agenthub status [專案]     = bin/overview.sh
-  agenthub first-look <專案>   幫剛接上的專案馬上寫第一份 STATE.md,依它的 README 和歷史
-                        (bin/first-look.py;agenthub connect 會跑)
-  agenthub uninstall [--apply] [--purge]
-                        把 agent-hub 從這台電腦移除(bin/uninstall.py):先列出來;筆記會留著，除非 --purge
+  brunna onboard …         = bin/onboard-project.sh(開新專案 / 把資料夾接上來)
+  brunna recover <名稱>    = bin/recover-project.sh(新機器 / 資料夾不見了)
+  brunna rename <舊> <新>  = bin/rename-project.sh(先 dry-run,再加 --apply)
+  brunna status [專案]     = bin/overview.sh
+  brunna first-look <專案>   幫剛接上的專案馬上寫第一份 STATE.md,依它的 README 和歷史
+                        (bin/first-look.py;brunna connect 會跑)
+  brunna uninstall [--apply] [--purge]
+                        把 brunna 從這台電腦移除(bin/uninstall.py):先列出來;筆記會留著，除非 --purge
 排程:
-  agenthub jobs              = schedulectl list
-  agenthub run <job>         = schedulectl run(現在就跑一次)
-  agenthub land              agent-hub 合併之後:用合併進來的程式重建專案登錄的索引(merge-branch 會跑;不是
+  brunna jobs              = schedulectl list
+  brunna run <job>         = schedulectl run(現在就跑一次)
+  brunna land              brunna 合併之後:用合併進來的程式重建專案登錄的索引(merge-branch 會跑;不是
                         session 指令)
 owner(你本人;不是專案 session 的指令):
-  agenthub owner list | done/drop/already-done <key> | answer <問題 id> "回答"
+  brunna owner list | done/drop/already-done <key> | answer <問題 id> "回答"
                         = bin/owner.py:內建的 owner 端(hub.json owner_side: builtin;有助理的話只能 list)
 專案的 session 用的(規則檔裡寫的就是這些;權限規則只放行這幾個,不放行上面的管理指令):
-  agenthub send | inbox | show | ack | done | thread | open-questions …   = 專案信箱(bin/hubbus 同名的子指令)
-  agenthub merge-branch …    = bin/merge-branch(平行 session 的合併閘門)
-  agenthub test [--tier T] [--when M] [--force] [--rev R | --index]
+  brunna send | inbox | show | ack | done | thread | open-questions …   = 專案信箱(bin/hubbus 同名的子指令)
+  brunna merge-branch …    = bin/merge-branch(平行 session 的合併閘門)
+  brunna test [--tier T] [--when M] [--force] [--rev R | --index]
                         = bin/test-runner.py:在匯出的 tree 跑專案宣告的測試層,記錄過的通過直接沿用
                         (docs/design/test-waiting.md B4)
-  agenthub cap-run --cap <能力> -- <指令…>   = bin/hub-run(平台代跑 sandbox 擋住的程式)
-  agenthub complete <呼叫點> [--schema F] < 提示       = bin/hub-run --complete(專案在登錄 models: 宣告的模型呼叫,
+  brunna cap-run --cap <能力> -- <指令…>   = bin/hub-run(平台代跑 sandbox 擋住的程式)
+  brunna complete <呼叫點> [--schema F] < 提示       = bin/hub-run --complete(專案在登錄 models: 宣告的模型呼叫,
                                                        由平台代跑)
-  agenthub install-cli [--dir <資料夾>]   在 <資料夾>(預設 ~/.local/bin)放 agenthub 的轉接腳本(要在 PATH 上)
-  agenthub mcp               平台的 MCP 伺服器(stdio):任何支援 MCP 的 coding agent 都能收發信箱、寫筆記(= bin/mcp_server.py)
-  agenthub mcp config        印出要登記進工具 MCP 設定的那一段(平台不替你改工具的設定;docs/mcp.md)
-  agenthub --version         平台的版本:這個 checkout 所在的 release tag(git describe)
+  brunna install-cli [--dir <資料夾>]   在 <資料夾>(預設 ~/.local/bin)放 brunna 的轉接腳本(要在 PATH 上)
+  brunna mcp               平台的 MCP 伺服器(stdio):任何支援 MCP 的 coding agent 都能收發信箱、寫筆記(= bin/mcp_server.py)
+  brunna mcp config        印出要登記進工具 MCP 設定的那一段(平台不替你改工具的設定;docs/mcp.md)
+  brunna --version         平台的版本:這個 checkout 所在的 release tag(git describe)
 
 --- stderr
 
@@ -78,7 +78,7 @@ $ <HUB>/bin/hubbus --help
 usage: hubbus [-h]
               {send,inbox,show,ack,done,hook,bridge,dispatch,thread,open-handoffs,open-questions,reconcile-questions,records,record-publish,publish,status,wake-misses} ...
 
-agent-hub 的事件匯流排:只 append 的事件 log + 讀取游標,專案信箱是它的投影。
+brunna 的事件匯流排:只 append 的事件 log + 讀取游標,專案信箱是它的投影。
 
 positional arguments:
   {send,inbox,show,ack,done,hook,bridge,dispatch,thread,open-handoffs,open-questions,reconcile-questions,records,record-publish,publish,status,wake-misses}

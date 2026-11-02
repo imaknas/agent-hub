@@ -17,7 +17,7 @@
  ", ": "、",
  "no registered runtime: {name} (have: {have})": "沒有登記的 runtime:{name}(有:{have})",
  "runtime {name} ({module}) is missing: {missing}": "runtime {name}({module})缺少:{missing}",
- "runtime {name} has no {missing} (hub.json runtime.default; to use this feature, install a coding agent that supports it)": "執行環境 {name} 沒有{missing}(hub.json runtime.default;要這個功能就裝一個有的 coding agent)",
+ "runtime {name} has no {missing} ({settings} runtime.default; to use this feature, install a coding agent that supports it)": "執行環境 {name} 沒有{missing}({settings} runtime.default;要這個功能就裝一個有的 coding agent)",
  "provider {impl} is missing: {missing}": "provider {impl} 缺少:{missing}",
  "no such completion implementation: {impl} (have: {have})": "沒有這個 completion 實作:{impl}(有:{have})",
  "{a} or {b}": "{a}、{b}",

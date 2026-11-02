@@ -372,7 +372,7 @@ exit 0
 [<T>] review-log.md commit/push failed: nothing to push
 
 [<T>] === consolidate end (0 failed) ===
-[<T>] consolidation is off: runtime none has no agent runs (hub.json runtime.default; to use this feature, install a coding agent that supports it). The date files stay as they are until a model is set up
+[<T>] consolidation is off: runtime none has no agent runs (brunna.json runtime.default; to use this feature, install a coding agent that supports it). The date files stay as they are until a model is set up
 
 === review-log.md
 ## 2026-10-15 · eta · consolidation

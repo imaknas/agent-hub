@@ -39,7 +39,7 @@ False
 === stream result
 [('error', {'error': 'rate_limit', 'detail': 'usage limit reached'}), ('turn_end', {'cost': None, 'num_turns': None, 'duration_ms': None, 'is_error': True})]
 === classify_exit login
-StreamEvent(type='error', data={'error': 'agent_login', 'detail': '專案 session 用的 Claude Code 沒登入或憑證過期(平台的 agent-hub/claude-login 會發警報)。exit 1:Login expired'})
+StreamEvent(type='error', data={'error': 'agent_login', 'detail': '專案 session 用的 Claude Code 沒登入或憑證過期(平台的 brunna/claude-login 會發警報)。exit 1:Login expired'})
 === classify_exit crash
 StreamEvent(type='error', data={'error': 'process_crashed', 'detail': 'exit 1:segfault'})
 === resume_command

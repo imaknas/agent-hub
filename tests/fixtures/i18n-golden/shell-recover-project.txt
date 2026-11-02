@@ -8,7 +8,7 @@ recover-project: 用法: recover-project.sh <name> [目標路徑]
 exit 1
 --- stdout
 --- stderr
-recover-project: 找不到 <TMP>/hub/nowhere——先確認 agent-hub 本身已經 clone 好
+recover-project: 找不到 <TMP>/hub/nowhere——先確認 brunna 本身已經 clone 好
 
 === not in the registry
 exit 1

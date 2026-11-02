@@ -3,4 +3,4 @@
 === model call failed
 {"error": "the model call failed (exit 3); the statistics are not affected", "meta": {"model": "the tool's default", "source": "stats", "excluded": []}}
 === no model at all
-{"error": "the analysis is off: runtime none has no completion interface, and hub.json has no llm section (set one up with agenthub llm setup); the statistics are not affected", "meta": {"model": "the tool's default", "source": "stats", "excluded": []}}
+{"error": "the analysis is off: runtime none has no completion interface, and brunna.json has no llm section (set one up with brunna llm setup); the statistics are not affected", "meta": {"model": "the tool's default", "source": "stats", "excluded": []}}

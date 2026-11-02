@@ -15,8 +15,9 @@ Lookup: the catalog of `hubconf.lang_ui()`; a missing entry (or language en) giv
 arguments the result is `str.format`ted, so placeholders are `{name}` (literal braces then `{{ }}`); without them the
 text is returned as is. Translations keep exactly the msgid's placeholders (tests/test_i18n_catalog.py), except plural
 choices, which a language without plural forms (zh-Hant) leaves out, and NAMES: where the English says "the owner" or
-"the assistant", a translation may write {owner} / {assistant} instead, filled with the configured names (hub.json
-owner.tag, assistant.name), so no catalog carries a person's name.
+"the assistant", a translation may write {owner} / {assistant} instead, filled with the configured names (the
+settings' owner.tag, assistant.name), so no catalog carries a person's name. {settings} is the settings file's name as
+this instance has it (brunna.json, or {settings} on an install from before the rename), in any message.
 
 Plurals: `{n:problem|problems}` is the first form when n == 1, else the second; it prints no number, so the count is
 written next to it: `_("{n} {n:problem|problems} found", n=n)`. A verb that agrees goes into the choice too:
@@ -81,8 +82,9 @@ class _Formatter(string.Formatter):
 _format = _Formatter().format
 
 
-# placeholders a translation may add although its msgid doesn't have them: the configured names
-NAMES = ("owner", "assistant")
+# placeholders a translation may add although its msgid doesn't have them: the configured names, and the settings
+# file's name (hubconf.config_path: whichever spelling this instance has)
+NAMES = ("owner", "assistant", "settings")
 
 
 def names(text: str, kw: dict) -> dict[str, str]:
@@ -92,8 +94,13 @@ def names(text: str, kw: dict) -> dict[str, str]:
         return {}
     if str(ROOT / "bin") not in sys.path:
         sys.path.insert(0, str(ROOT / "bin"))
-    import hubconf
-    get = {"owner": hubconf.owner_tag, "assistant": hubconf.assistant_name}
+    try:
+        import hubconf
+    except Exception:   # the settings file can't be read (config-check reports exactly that): its name by this release
+        import names as table
+        return {n: table.current("config_file") if n == "settings" else "" for n in want}
+    get = {"owner": hubconf.owner_tag, "assistant": hubconf.assistant_name,
+           "settings": lambda: hubconf.config_path().name}
     return {n: get[n]() for n in want}
 
 

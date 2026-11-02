@@ -1,4 +1,4 @@
-"""Send alerts / notifications (hub.json alerts). There can be several channels; whichever are set up get the message
+"""Send alerts / notifications ({settings} alerts). There can be several channels; whichever are set up get the message
 (docs/design/tool-agnostic.md: not tied to Discord):
   discord   discord_token_file + discord_channel_file (files with the bot token and channel id, in the secrets
             directory, not in version control)
@@ -28,6 +28,7 @@ import json
 import subprocess
 
 import hubconf
+import names  # noqa: E402
 import i18n
 
 _ = i18n.domain(__file__)
@@ -66,7 +67,7 @@ def _ntfy(text: str) -> bool:
     conf = hubconf.get("alerts.ntfy") or {}
     if not conf.get("topic"):
         return False
-    headers = ["-H", "Title: agent-hub"]
+    headers = ["-H", f"Title: {names.current('product')}"]
     if conf.get("token_file"):
         try:
             headers += ["-H", f"Authorization: Bearer {hubconf.path(conf['token_file']).read_text().strip()}"]
@@ -83,8 +84,8 @@ def _email(text: str) -> bool:
     if not conf.get("host") or not conf.get("to"):
         return False
     msg = EmailMessage()
-    msg["Subject"] = "agent-hub:" + text.splitlines()[0][:80] if text else "agent-hub"
-    msg["From"], msg["To"] = conf.get("from") or conf.get("user") or "agent-hub", conf["to"]
+    msg["Subject"] = f"{names.current('product')}:" + text.splitlines()[0][:80] if text else names.current("product")
+    msg["From"], msg["To"] = conf.get("from") or conf.get("user") or names.current("product"), conf["to"]
     msg.set_content(text)
     try:
         password = hubconf.path(conf["password_file"]).read_text().strip() if conf.get("password_file") else None
@@ -103,7 +104,7 @@ def _email(text: str) -> bool:
 def _macos(text: str) -> bool:
     if not hubconf.get("alerts.macos"):
         return False
-    script = f"display notification {json.dumps(text[:200])} with title \"agent-hub\""
+    script = f"display notification {json.dumps(text[:200])} with title \"{names.current('product')}\""
     return subprocess.run(["/usr/bin/osascript", "-e", script], capture_output=True).returncode == 0
 
 

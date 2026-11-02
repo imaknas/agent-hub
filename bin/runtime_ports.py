@@ -41,7 +41,7 @@ The current interfaces (the other layers get added one at a time, following the 
                                                          anything. check=True only says whether it would, writing
                                                          nothing (an applier's plan)
     remove_lifecycle(workspace, check=False) -> bool     optional: the platform's hooks out of this project, the
-                                                         user's own kept (agenthub uninstall); whether that changed
+                                                         user's own kept (brunna uninstall); whether that changed
                                                          anything. Without it, uninstall says the hooks stay
   instructions (layer 4, rules file): which file the runtime reads that the rules and memory notes go into (the
   content is the platform's, templates/)
@@ -107,7 +107,7 @@ The current interfaces (the other layers get added one at a time, following the 
                                                          to deal with it) or something else (timeout, quota…)
   completion (a judgment point's "answer only"; docs/design/llm-providers.md): the model has no tools and touches no
   files
-    complete(req: CompletionRequest, conf: dict) -> CompletionResult   conf = this provider's settings in hub.json
+    complete(req: CompletionRequest, conf: dict) -> CompletionResult   conf = this provider's settings in {settings}
                                                         llm.providers (the key is read by completion.py and put in
                                                         conf["_key"]; implementations don't look for credentials)
     health(conf) -> (ok, reason)                         the smallest check (preferably one that spends no tokens, e.g.
@@ -130,7 +130,7 @@ The current interfaces (the other layers get added one at a time, following the 
     relocate(sid, old_cwd, new_cwd) -> bool              the project folder moved (rename, upgrade): make this
                                                          conversation resumable in the new folder too
 
-More than one runtime the user opens sessions with (hub.json runtime.installed; docs/design/mailbox-runtimes.md A1):
+More than one runtime the user opens sessions with ({settings} runtime.installed; docs/design/mailbox-runtimes.md A1):
 installed(), qualify(name, id) / runtime_of(sid) between a runtime's own session ids and the platform's (bare for
 runtime.bare_ids, <runtime>:<id> otherwise), Sessions (the sessions port over every installed runtime, each call routed
 by the session's runtime), current_session (the nearest ancestor process a runtime claims, when several answer).
@@ -475,7 +475,7 @@ def load(name: str | None = None, ports=None):
                                      missing=", ".join(missing)))
     if absent:
         labels = port_labels()
-        raise Unsupported(_("runtime {name} has no {missing} (hub.json runtime.default; to use this feature, install a "
+        raise Unsupported(_("runtime {name} has no {missing} ({settings} runtime.default; to use this feature, install a "
                             "coding agent that supports it)", name=name, missing=or_list(labels.get(p, p) for p in absent)))
     return mod
 

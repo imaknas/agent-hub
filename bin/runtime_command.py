@@ -1,7 +1,7 @@
 """Any CLI agent with a headless mode: plug it in by writing a command template in the settings, no code needed
 (docs/design/tool-agnostic.md principle 4).
 
-hub.json:
+{settings}:
   "runtime": {"default": "command",
               "command": {"run": ["agy", "--add-dir", ".", "--mode", "accept-edits", "--model", "{model}", "-p", "{prompt}"],
                                                    the command template (list)
@@ -10,7 +10,7 @@ hub.json:
                           "output_file": false,    true = the template has {output_file}, read that file afterwards
                                                    (e.g. codex exec --output-last-message)
                           "env": {"X": "y"}}}      extra environment variables (no key values here; keys come from
-                                                   the tool's own login or hub.json llm)
+                                                   the tool's own login or {settings} llm)
   Template placeholders: {prompt} (the whole prompt as one argument: for tools that do not read stdin), {prompt_file}
   (path of a temporary file holding the prompt), {output_file}, {cwd} (absolute path of the working directory: for
   confining the tool's reads and writes to the throwaway worktree), {model} (no model: the whole argument is
@@ -56,7 +56,7 @@ def _conf() -> dict:
     import hubconf
     c = hubconf.get("runtime.command") or {}
     if not c.get("run"):
-        raise RuntimeError(_("hub.json runtime.command.run is not set (the command template)"))
+        raise RuntimeError(_("{settings} runtime.command.run is not set (the command template)"))
     return c
 
 

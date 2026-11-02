@@ -7,7 +7,7 @@ sessions; this report fills that gap. Output:
   reflect/index.html      the report page for all weeks (data embedded in the page, templates/reflect.html as layout)
 
 Statistics are all computed mechanically, zero LLM: per-project messages/sessions/active days/commits/memory notes
-(compared with last week), the work distribution by weekday × hour (in the owner's time zone, hub.json owner.timezone),
+(compared with last week), the work distribution by weekday × hour (in the owner's time zone, {settings} owner.timezone),
 the late-night share, the longest continuous stretch, the daily stopping time, how work was delegated (subagents,
 cross-session messages, skills), projects started/stopped. The analysis section: see reflect_llm.py.
 
@@ -31,6 +31,7 @@ import sys
 
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
 import hubconf  # noqa: E402
+import names  # noqa: E402
 import hublib  # noqa: E402
 import i18n  # noqa: E402
 import runtime_ports  # noqa: E402  conversation records only through the interface (Claude Code is one implementation)
@@ -73,7 +74,7 @@ def mirror_for(name: str) -> pathlib.Path:
     origin = hubconf.roster().get(name, {}).get("origin") or ""
     if origin.endswith(".git"):
         return MIRRORS / pathlib.Path(origin).name
-    if name == "agent-hub":
+    if name in names.all("project"):   # the platform itself, under either name
         return hubconf.p("git_origin", "~/git-origin") / "agent-hub.git"
     return MIRRORS / f"{name}.git"
 

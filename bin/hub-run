@@ -5,7 +5,7 @@
   hub-run --wait <id>          reattach to a job still running (or finished), print its output, exit with its exit code
   hub-run --complete <point> [--schema F] < prompt
                                a model call the project declares (registry models: {point: {tier}}); the platform
-                               runs it with its own credentials (agenthub complete). stdout = the JSON result
+                               runs it with its own credentials (brunna complete). stdout = the JSON result
                                ({structured_output, result, …}); exit 1 = refused or failed, the reason in llm_error
 
 Run in the project folder (or below it). This only writes the request into its own project's `.hub-run/requests/`; the
@@ -124,7 +124,7 @@ def follow(ws: pathlib.Path, job_id: str, pickup: bool) -> int:
                 except FileNotFoundError:
                     continue  # just got picked up
                 say(_("the platform's run service is not running (nobody picked the request up in {secs:g} s), so the "
-                      "request was withdrawn. Tell the user that agent-hub's cap-runner service is not running", secs=PICKUP_S))
+                      "request was withdrawn. Tell the user that brunna's cap-runner service is not running", secs=PICKUP_S))
                 return 125
             time.sleep(0.3)
             continue
@@ -138,7 +138,7 @@ def follow(ws: pathlib.Path, job_id: str, pickup: bool) -> int:
             for t in tails:
                 t.pump()
             if st.get("timed_out"):
-                say(_("timed out; the job was stopped (use --timeout for longer; the limit is hub.json "
+                say(_("timed out; the job was stopped (use --timeout for longer; the limit is {settings} "
                       "cap_runner.max_timeout_s)"))
             return int(st.get("exit", 1))
         if state == "rejected":
@@ -154,7 +154,7 @@ def main() -> int:
     ap = argparse.ArgumentParser(prog="hub-run",
                                  description=_("Run a program that needs a capability under the platform's profile"))
     ap.add_argument("--cap", help=_("capability name (one of the registry entry's enforce.capabilities)"))
-    ap.add_argument("--timeout", type=int, help=_("seconds (default and limit: hub.json cap_runner)"))
+    ap.add_argument("--timeout", type=int, help=_("seconds (default and limit: {settings} cap_runner)"))
     ap.add_argument("--wait", metavar="ID", help=_("reattach to a job"))
     ap.add_argument("--complete", metavar="POINT",
                     help=_("a model call this project declares (registry models:): prompt on stdin, JSON result on stdout"))

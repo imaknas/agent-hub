@@ -18,8 +18,8 @@
  "not pushed": "沒有 push",
  " (push_on_merge is false)": "(push_on_merge 是 false)",
  "✓ {n} {n:commit|commits} of {branch} merged into {base} (tests: {tests}; {push})": "✓ {branch} 的 {n} 個 commit 已合併進 {base}(測試:{tests};{push})",
- "merge-branch: {project} is not in the validated project registry, so its test command and commit rules are unknown; nothing was merged. `agenthub config check` rebuilds the registry and says what is wrong": "merge-branch:驗證過的專案登錄裡沒有 {project},不知道它的測試指令跟 commit 規則,所以沒有合併。`agenthub config check` 會重建登錄、說哪裡有問題",
+ "merge-branch: {project} is not in the validated project registry, so its test command and commit rules are unknown; nothing was merged. `brunna config check` rebuilds the registry and says what is wrong": "merge-branch:驗證過的專案登錄裡沒有 {project},不知道它的測試指令跟 commit 規則,所以沒有合併。`brunna config check` 會重建登錄、說哪裡有問題",
  "merge-branch: {project}'s folder is not this repo ({path}); nothing was merged": "merge-branch:{project} 的資料夾不是這個 repo({path});什麼都沒合併",
- "merge-branch: merged, but `agenthub land` reported a problem (the index may not match the merged code until the next tick):\n{tail}": "merge-branch:已合併,但 `agenthub land` 回報了問題(下一個 tick 之前,索引可能跟合併進來的程式不一致):\n{tail}",
+ "merge-branch: merged, but `brunna land` reported a problem (the index may not match the merged code until the next tick):\n{tail}": "merge-branch:已合併,但 `brunna land` 回報了問題(下一個 tick 之前,索引可能跟合併進來的程式不一致):\n{tail}",
  "the registry entry declares no tests; no tests were run": "登錄沒有宣告測試,沒跑測試"
 }

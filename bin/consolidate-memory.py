@@ -11,7 +11,7 @@ What it does for each project:
 2. Clone a clean memory repo (from the bare repo) into a temporary directory; the model works only there --
    ~/.memory-copies is not touched at all until the push succeeds, and on failure the whole thing is thrown away,
    so nothing is left half-changed.
-3. The model (judgment point consolidate's model_group: strong; hub.json llm.points.consolidate.model can change it)
+3. The model (judgment point consolidate's model_group: strong; {settings} llm.points.consolidate.model can change it)
    may write only ./memory/reference/** and ./STATE.md (--permission-mode dontAsk + --allowedTools; the prompt does
    not stop haiku from changing other files); no Bash, so it cannot delete files. Through structured output it reports
    where each date file went, what it did not keep, and which statements it corrected (every correction must quote

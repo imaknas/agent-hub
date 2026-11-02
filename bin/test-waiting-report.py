@@ -10,7 +10,7 @@ Two sources:
                 its call to the entry returning its result, capped at CAP_MIN minutes; a call started in the
                 background is counted as such, never as waiting. A command is classified by what it runs, in this
                 order: deploy (a deploy.sh), merge (merge-branch), commit (git commit, in a repo with commit_gate),
-                runner (agenthub test), a declared tier (the command contains the tier's run text), then patterns
+                runner (brunna test), a declared tier (the command contains the tier's run text), then patterns
                 for undeclared commands: e2e, targeted. Agent time is section 1's: the gaps between a top-level
                 session's consecutive entries, each capped at CAP_MIN, except a gap a person's message ends; the
                 model's share is the gaps an assistant entry ends (gaps other entries end -- notifications, system
@@ -18,7 +18,7 @@ Two sources:
                 "The owner waited" (a proxy): a top-level wait inside a turn the owner answered within OWNER_MIN
                 minutes of its last entry, i.e. the owner was watching that turn end.
                 Each e2e run is followed to the next edit or gate in its session: a gate first (merge-branch,
-                a commit, agenthub test, a deploy) makes it a safety run, an edit first inner-loop work.
+                a commit, brunna test, a deploy) makes it a safety run, an edit first inner-loop work.
   run log       the runner's own measurements (tiers.RunLog: every tier per invocation, hits included, seconds, who
                 called), read as each project through a project_git job (test-runs), since the file sits in the
                 project-writable git dir. A project whose log can't be read is said so, never shown as zero.
@@ -29,7 +29,7 @@ Only counts and durations are written: no command text, no paths (the status pag
     the N days (default 7) ending at the start of --end (default today, the owner's clock): written to
     <data>/test-waiting/<end>.json and summarized; --json prints the report and writes nothing.
 
-The status page shows the newest file (bin/gen-status-page.py); the nightly job agent-hub/test-waiting writes it.
+The status page shows the newest file (bin/gen-status-page.py); the nightly job brunna/test-waiting writes it.
 """
 from __future__ import annotations
 
@@ -62,7 +62,7 @@ GATES = ("deploy", "merge", "commit", "runner")
 DEPLOY = re.compile(r"(^|[\s;&|/])deploy\.sh\b")
 MERGE = re.compile(r"\bmerge-branch\b")
 COMMIT = re.compile(r"\bgit(\s+-C\s+\S+)?\s+commit\b")
-RUNNER = re.compile(r"\bagenthub\s+test\b|test-runner\.py")
+RUNNER = re.compile(r"\b(?:agenthub|brunna)\s+test\b|test-runner\.py")
 E2E = re.compile(r"playwright|\s-m\s+['\"]?e2e\b|test:e2e|\be2e\b")
 TARGETED = re.compile(r"\bpytest\b|\bunittest\b|run-tests|\bnpm\s+(run\s+)?test\b|\bvitest\b|\bjest\b|\bgo\s+test\b|"
                       r"\bcargo\s+test\b")
@@ -329,7 +329,7 @@ def kind_label(kind: str) -> str:
     if kind.startswith("tier:"):
         return _("tier {name}", name=kind[5:])
     return {"deploy": _("deploy script"), "merge": _("merge-branch"), "commit": _("commit gate"),
-            "runner": _("agenthub test"), "e2e": _("e2e (undeclared)"),
+            "runner": _("brunna test"), "e2e": _("e2e (undeclared)"),
             "targeted": _("targeted (undeclared)")}.get(kind, kind)
 
 

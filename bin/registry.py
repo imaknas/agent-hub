@@ -1,5 +1,5 @@
 #!/bin/sh -c exec${IFS}"${0%/*}/py"${IFS}"$0"${IFS}"$@"
-"""The project registry: <registry_dir>/<name>.yaml (one file per project, directory set in hub.json) → validation →
+"""The project registry: <registry_dir>/<name>.yaml (one file per project, directory set in {settings}) → validation →
 JSON cache.
 
 The platform's code holds no project names: a project's jobs, services, privacy labels and paths are all in the
@@ -32,7 +32,7 @@ schema v1 (contracts/project.v1.md has the full description):
   services:  [{name, run, label?, keepalive?, throttle_s?, env?, cwd?, expose?}]
   enforce: {sandbox: false, capabilities: [], work: false}
                                   phase two: sandbox true = render-project-settings.py writes the sandbox +
-                                  permission rules; capabilities = platform capabilities (hub.json capabilities,
+                                  permission rules; capabilities = platform capabilities ({settings} capabilities,
                                   e.g. gpu), needs sandbox: true; inside the sandbox, hub-run --cap <capability> runs
                                   things through the platform (docs/design/capabilities.md);
                                   work = a discuss lease may make changes in work mode (writing files inside the
@@ -40,8 +40,8 @@ schema v1 (contracts/project.v1.md has the full description):
                                   The record of the owner's explicit authorization (10-25): written when an idea
                                   sandbox is created, carried over on upgrade; other projects add it only with the
                                   owner's consent
-  models: {<point>: {tier}}       model calls this project makes through the platform (agenthub complete; tier fast |
-                                  standard | strong, hub.json decides the model). Undeclared points are refused
+  models: {<point>: {tier}}       model calls this project makes through the platform (brunna complete; tier fast |
+                                  standard | strong, {settings} decides the model). Undeclared points are refused
   metered_models: true            the owner allows metered (pay-per-use) providers for those calls; without it a call
                                   that would go to one is refused (llm.py project)
   network: [domains]              what the sandbox needs to reach beyond the platform defaults
@@ -49,7 +49,7 @@ schema v1 (contracts/project.v1.md has the full description):
     type, enforce, network, allow_write, privacy, metered_models and paths are security fields: a manifest.update a project
     sends that changes them is rejected whole (a project can't switch off its own sandbox, widen its scope or add
     capabilities);
-    to change them, ask the agent-hub session (the owner confirms)
+    to change them, ask the brunna session (the owner confirms)
   secrets:   [{name, path, env_key?, expires? | max_age_days?, warn_days?, backup?, why?, rotate?}]
                                   the credentials this project uses: only name, location and expiry, **never the
                                   value** (check-secrets.py checks daily that they exist, are backed up, and aren't
@@ -97,7 +97,7 @@ since the runner and the readers switched over (test-waiting step 2.3).
   code: [glob]              the changed files that count as this project's code, relative to its folder; absent =
                             every file
   inputs: [kind:value]      what changes results without being code: file:<path in the repo outside the project's
-                            folders> | config:<file name listed in hub.json tests.config_inputs> | env:<NAME> |
+                            folders> | config:<file name listed in {settings} tests.config_inputs> | env:<NAME> |
                             cmd:<command whose output counts>
   tests: [{tier, run, when, paths?, jobs?}]
                             tier: a name, unique; run: the command, run in an exported tree ({jobs} = the worker
@@ -299,7 +299,7 @@ PLATFORM_OWNED = ("type", "enforce", "network", "allow_write", "privacy", "meter
 
 def platform_owned_changes(new: dict, cur: dict) -> list[str]:
     """Security fields manifest.update can't change: list them when they differ from the current registry entry."""
-    return [_("{key} is a security field that only agent-hub can change ({owner} confirms); this letter changes it", key=k,
+    return [_("{key} is a security field that only brunna can change ({owner} confirms); this letter changes it", key=k,
               owner=hubconf.owner_tag())
             for k in PLATFORM_OWNED
             if new.get(k) != cur.get(k)]
@@ -643,9 +643,9 @@ def validate_module(doc, stem: str) -> list[str]:
         errs.append(_("description is required"))
     req = doc.get("requires_config") or []
     if not isinstance(req, list):
-        errs.append(_("requires_config must be a list of hub.json keys"))
+        errs.append(_("requires_config must be a list of {settings} keys"))
     else:
-        errs += [_("{key} must be set in hub.json first", key=k) for k in req if hubconf.get(k) in (None, "", {}, [])]
+        errs += [_("{key} must be set in {settings} first", key=k) for k in req if hubconf.get(k) in (None, "", {}, [])]
     # needs_llm: true = the module's work is judgment points, so it does nothing useful without a model for them
     # (agenthub init leaves it off then; agenthub modules says so)
     if not isinstance(doc.get("needs_llm", False), bool):
@@ -678,7 +678,7 @@ def load_modules() -> tuple[dict, dict]:
     for name in enabled_modules():
         f = MODULES_DIR / f"{name}.yaml"
         if not f.exists():
-            errors[f"module:{name}"] = [_("hub.json enables module {name}, but there is no modules/{name}.yaml", name=name)]
+            errors[f"module:{name}"] = [_("{settings} enables module {name}, but there is no modules/{name}.yaml", name=name)]
             continue
         try:
             doc = yaml.safe_load(f.read_text())

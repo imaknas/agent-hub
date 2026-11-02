@@ -24,7 +24,7 @@ source "$(dirname "${BASH_SOURCE[0]}")/hubpaths.sh"
 [ -n "${AGENT_HUB:-}" ] && HUB_DATA="$HUB"   # when AGENT_HUB points at another data directory (tests), use it
 INDEX="$HUB_DATA/index.md"
 
-[ -f "$INDEX" ] || printf '# agent-hub index\n' > "$INDEX"
+[ -f "$INDEX" ] || printf '# brunna index\n' > "$INDEX"
 
 block=$(mktemp); out=$(mktemp); rows=$(mktemp); ideas=$(mktemp)
 trap 'rm -f "$block" "$out" "$rows" "$ideas"' EXIT

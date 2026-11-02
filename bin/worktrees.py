@@ -8,7 +8,7 @@ the same file (to know early about a collision, without declaring paths up front
 Also the number of recent commits made directly on main without the merge gate (merge-branch): information only, never
 blocking.
 
-Automatic cleanup (auto_prune, run nightly by the platform job agent-hub/prune-worktrees; since 2026-10-24): only
+Automatic cleanup (auto_prune, run nightly by the platform job brunna/prune-worktrees; since 2026-10-24): only
 touches "merged and clean" worktrees.
   Idle days = whichever is more recent of the branch's last commit and that worktree's session transcript
   (~/.claude/projects/<slug>/*.jsonl): looking only at commits would count "chatting yesterday, no commit for three
@@ -16,7 +16,7 @@ touches "merged and clean" worktrees.
   Level 1 (idle ≥ 2 days): only deletes dependencies that can be rebuilt: `.venv` (with uv.lock or pyproject.toml
     next to it), `node_modules` (with a lock file next to it; without a lock file it's not deleted, since a reinstall
     isn't guaranteed identical). Folder, branch and files all stay, and the session can still be resumed;
-    the marker is written in that worktree's git directory (.git/worktrees/<name>/agent-hub-deps-pruned, which
+    the marker is written in that worktree's git directory (.git/worktrees/<name>/brunna-deps-pruned, which
     doesn't make the worktree dirty), and worktree-memory.sh reminds how to rebuild when a session starts. One muninn
     worktree is about 190 MB, 90% of it .venv.
   Level 2 (idle ≥ 14 days, and no process has its cwd inside): `git worktree remove` (without --force), **the branch

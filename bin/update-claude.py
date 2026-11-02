@@ -101,7 +101,7 @@ def update(dry: bool) -> tuple[bool, str]:
                        node=bin_dir.parent.name)
     if old and (err := smoke()):
         return False, _("still on {old} (latest {latest}): the current version already fails a request, not updating "
-                         "(a login or network problem, see agent-hub/claude-login): {error}", old=old, latest=latest,
+                         "(a login or network problem, see brunna/claude-login): {error}", old=old, latest=latest,
                          error=err[-200:])
     r = run(str(npm), "install", "-g", f"{PKG}@{latest}", "--no-audit", "--no-fund")
     new = version(claude) if r.returncode == 0 else None

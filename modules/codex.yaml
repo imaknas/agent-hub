@@ -5,7 +5,7 @@
 v: 1
 name: codex
 type: module
-description: "background work and agent-hub's decisions through Codex; your Codex chats reach the mailbox by asking agent-hub's tools (no letters shown in the chat by themselves yet)"
+description: "background work and brunna's decisions through Codex; your Codex chats reach the mailbox by asking brunna's tools (no letters shown in the chat by themselves yet)"
 runtime_preset:
   label: Codex
   find: codex

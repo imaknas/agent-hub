@@ -1,5 +1,5 @@
 #!/bin/sh -c exec${IFS}"${0%/*}/py"${IFS}"$0"${IFS}"$@"
-"""Take agent-hub off this machine: `agenthub uninstall [--apply] [--purge] [--yes]`.
+"""Take brunna off this machine: `brunna uninstall [--apply] [--purge] [--yes]`.
 
 Without --apply it only lists what it would do. Each part is undone by the code that put it there (render-services,
 render-project-settings, the runtime adapters); this only runs them in order:
@@ -7,9 +7,9 @@ render-project-settings, the runtime adapters); this only runs them in order:
   2. the background services render-services generated (and only those: services.tsv entries it doesn't own stay)
   3. in each connected project: the platform's block in the rules file, its hooks in the agent's settings, the sandbox
      and rules it wrote, its git hooks (through project_git, as the project). The project's code is never touched
-  4. user level, only on the owner's own yes at the terminal (--yes doesn't count): agent-hub's MCP server registered
+  4. user level, only on the owner's own yes at the terminal (--yes doesn't count): brunna's MCP server registered
      with each AI app, and the runtime's user-level hooks for this hub
-  5. the `agenthub` command it put on PATH
+  5. the `brunna` command it put on PATH
 Notes stay: the instance directory (settings, data, keys), the memory repos, each project's .agent-memory, and the bus.
 --purge removes those too (notes can't be brought back). Never removed: the projects' code, nvm, node, the AI agents,
 uv, git. The hub folder itself is removed last, by you: the command is printed at the end.
@@ -115,15 +115,15 @@ def project_parts(name: str, doc: dict, apply: bool, purge: bool) -> list[str]:
             rt = runtime_ports.load(rname, ports=("lifecycle",))
             remove = getattr(rt, "remove_lifecycle", None)
             if remove is None:
-                done.append(_("{runtime}'s hooks for agent-hub stay: it can't remove them; remove them by hand",
+                done.append(_("{runtime}'s hooks for brunna stay: it can't remove them; remove them by hand",
                               runtime=rname))
             elif remove(ws, check=not apply):
-                done.append(_("{runtime}'s hooks for agent-hub", runtime=rname))
+                done.append(_("{runtime}'s hooks for brunna", runtime=rname))
         except runtime_ports.Unsupported:
             pass
     rps = _load("render-project-settings")
     if (rps.RENDERED / f"{name}.json").exists():
-        done.append(_("the sandbox and rules agent-hub wrote"))
+        done.append(_("the sandbox and rules brunna wrote"))
         if apply:
             rps.unapply(name, doc)
     for _op, hook in rps.gate(name, doc, report=not apply, quiet=True, remove_all=True):
@@ -154,12 +154,17 @@ def purge_paths() -> list[pathlib.Path]:
     return out
 
 
-def cli_wrapper() -> pathlib.Path | None:
-    f = pathlib.Path.home() / ".local" / "bin" / "agenthub"
-    try:
-        return f if f.is_file() and not f.is_symlink() and str(hubconf.MAIN / "bin" / "agenthub") in f.read_text() else None
-    except OSError:
-        return None
+def cli_wrappers() -> list[pathlib.Path]:
+    """install-cli's wrappers of this hub, under either name (the one from before the rename too)."""
+    out = []
+    for name in names.all("cli"):
+        f = pathlib.Path.home() / ".local" / "bin" / name
+        try:
+            if f.is_file() and not f.is_symlink() and str(hubconf.MAIN / "bin" / "agenthub") in f.read_text():
+                out.append(f)
+        except OSError:
+            pass
+    return out
 
 
 def mcp_tools() -> tuple[list[tuple[str, list[list[str]]]], object]:
@@ -181,7 +186,7 @@ def main(argv: list[str]) -> int:
         return 2 if unknown else 0
     apply, purge, yes = "--apply" in flags, "--purge" in flags, "--yes" in flags
     if apply and hubconf.ROOT != hubconf.MAIN:
-        print(_("agenthub uninstall: run it from the hub's main checkout ({main}), not a linked worktree; nothing was "
+        print(_("brunna uninstall: run it from the hub's main checkout ({main}), not a linked worktree; nothing was "
                 "done", main=hubconf.MAIN), file=sys.stderr)
         return 2
     import runtime_ports
@@ -194,10 +199,10 @@ def main(argv: list[str]) -> int:
     user = [label for label, _cmd in tools]
     runtime_user = [line for name in runtime_ports.installed()
                     for line in (getattr(runtime_ports._module(name), "user_cleanup", lambda apply: [])(False))]
-    wrapper = cli_wrapper()
+    wrappers = cli_wrappers()
     data = purge_paths() if purge else []
 
-    print(_("agenthub uninstall {what}:", what=_("removes") if apply else _("would remove (nothing is done without "
+    print(_("brunna uninstall {what}:", what=_("removes") if apply else _("would remove (nothing is done without "
                                                                               "--apply)")))
     for label, _undo in core:
         print("  " + _("service {label}", label=label))
@@ -207,10 +212,10 @@ def main(argv: list[str]) -> int:
         for part in parts:
             print("  " + _("{project}: {part}", project=name, part=part))
     for label in user:
-        print("  " + _("agent-hub in {tool}'s tools (asked first)", tool=label))
+        print("  " + _("brunna in {tool}'s tools (asked first)", tool=label))
     for line in runtime_user:
         print("  " + _("{what} (asked first)", what=line))
-    if wrapper:
+    for wrapper in wrappers:
         print("  " + str(wrapper))
     for p in data:
         print("  " + _("{path} (notes and data: can't be brought back)", path=p))
@@ -228,7 +233,7 @@ def main(argv: list[str]) -> int:
     upgrade = _load("upgrade")
     fd = upgrade.scheduler_lock()
     if fd is None:
-        print(_("agenthub uninstall: a scheduler tick is running; try again in a minute (nothing was done)"),
+        print(_("brunna uninstall: a scheduler tick is running; try again in a minute (nothing was done)"),
               file=sys.stderr)
         return 1
     try:
@@ -243,7 +248,7 @@ def main(argv: list[str]) -> int:
         # user level: the owner's own yes at the terminal, each time; --yes doesn't stand in for it (AGENTS.md)
         term = init_dialogue.Terminal()
         for label, cmds in tools:
-            if term.consent("mcp_unregister", _("Remove agent-hub from {tool}'s tools (a setting for your user)?",
+            if term.consent("mcp_unregister", _("Remove brunna from {tool}'s tools (a setting for your user)?",
                                                  tool=label)):
                 # one registration under either name; the other name's command finds nothing to remove
                 runs = [subprocess.run(cmd, env=agent_env(), capture_output=True, text=True) for cmd in cmds]
@@ -258,7 +263,7 @@ def main(argv: list[str]) -> int:
                                                                     what="; ".join(fn(False)))):
                 for line in fn(True):
                     print(_("✓ {what} removed", what=line))
-        if wrapper:
+        for wrapper in wrappers:
             wrapper.unlink(missing_ok=True)
             print(_("✓ {path} removed", path=wrapper))
         for p in data:

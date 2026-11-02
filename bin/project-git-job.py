@@ -335,7 +335,7 @@ def memory_sync(memdir: str, bare: str, branch: str) -> int:
     files = out(memdir, "diff", "--cached", "--name-only", "--", "memory/", "STATE.md").split("\n")
     files = [f for f in files if f]
     if files:
-        git(memdir, "commit", "-q", "-m", "agent-hub: sync memory/STATE.md", "--", *files, env=NO_HOOKS, check=True)
+        git(memdir, "commit", "-q", "-m", "brunna: sync memory/STATE.md", "--", *files, env=NO_HOOKS, check=True)
     up = out(memdir, "rev-parse", "--abbrev-ref", "--symbolic-full-name", "@{u}").strip()
     track = f"refs/remotes/{up}" if up and "/" in up else names.repo_ref("memory-remote")
     git(memdir, "fetch", "-q", bare, f"+refs/heads/{branch}:{track}", env=NO_HOOKS, check=True)

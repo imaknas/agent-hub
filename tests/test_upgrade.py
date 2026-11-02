@@ -1,4 +1,4 @@
-"""`agenthub upgrade` (bin/upgrade.py): a user clone moves between releases and main, refuses an unsafe tree, shows the
+"""`brunna upgrade` (bin/upgrade.py): a user clone moves between releases and main, refuses an unsafe tree, shows the
 changelog, and brings the machine in step by running the target's own commands, in order.
 
 The repo under test is built here: a bare "origin" with releases v0.0.1 (older than the upgrade command), v0.1.0 and
@@ -138,7 +138,7 @@ class Upgrade(unittest.TestCase):
     def test_check_reports_the_newest_release_and_moves_nothing(self):
         r = self.upgrade("--check")
         self.assertEqual(r.returncode, 10, r.stdout + r.stderr)
-        self.assertIn("agent-hub v0.1.0 → v0.2.0", r.stdout)
+        self.assertIn("brunna v0.1.0 → v0.2.0", r.stdout)
         self.assertIn("## v0.2.0 (2026-11-01)", r.stdout)
         self.assertIn("- **mailbox:** A fix", r.stdout)
         self.assertNotIn("## v0.1.0", r.stdout, "only what comes after this checkout's release")
@@ -159,7 +159,7 @@ class Upgrade(unittest.TestCase):
                          self.git(self.user, "rev-parse", "HEAD"))
         r = self.upgrade("--check")
         self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
-        self.assertIn("agent-hub v0.2.0 is up to date (v0.2.0)", r.stdout)
+        self.assertIn("brunna v0.2.0 is up to date (v0.2.0)", r.stdout)
         r = self.upgrade("--yes")
         self.assertEqual((r.returncode, self.ran()), (0, []), "nothing to do: nothing runs")
 
@@ -210,7 +210,7 @@ class Upgrade(unittest.TestCase):
         self.ran()
         r = self.upgrade("--to", "v0.1.0", "--check")
         self.assertEqual(r.returncode, 10, r.stdout + r.stderr)
-        self.assertIn("agent-hub v0.2.0 → v0.1.0", r.stdout)
+        self.assertIn("brunna v0.2.0 → v0.1.0", r.stdout)
         self.assertIn("Going back undoes these changes", r.stdout)
         self.assertIn("## v0.2.0 (2026-11-01)", r.stdout)
         self.assertIn("⚠️ Breaking changes this undoes", r.stdout)
@@ -231,7 +231,7 @@ class Upgrade(unittest.TestCase):
     def test_main_follows_main(self):
         r = self.upgrade("--main", "--check")
         self.assertEqual(r.returncode, 10, r.stdout + r.stderr)
-        self.assertIn("agent-hub v0.1.0 → origin/main", r.stdout)
+        self.assertIn("brunna v0.1.0 → origin/main", r.stdout)
         self.assertIn("## v0.2.0", r.stdout)
         unreleased = r.stdout.split("Not released yet (on origin/main):")[1]
         self.assertIn("- feat(scheduler)!: drop the old flag  ⚠️", unreleased)
@@ -261,12 +261,12 @@ class Upgrade(unittest.TestCase):
         self.assertEqual(r.returncode, 1, r.stdout + r.stderr)
         self.assertEqual(self.ran(), self.steps("v0.2.0")[:3])
         self.assertIn("step config apply failed (exit 1)", r.stderr)
-        self.assertIn("agenthub upgrade --to v0.1.0", r.stderr)
+        self.assertIn("brunna upgrade --to v0.1.0", r.stderr)
         self.assertFalse((self.state / "upgrade.json").exists(), "not in step: not recorded")
         r = self.upgrade("--yes", env={"UPGRADE_FAIL": "v0.2.0 agenthub config apply"})   # still failing: no move
         self.assertEqual(r.returncode, 1, r.stdout + r.stderr)
         self.assertEqual(self.ran(), self.steps("v0.2.0")[:3])
-        self.assertIn("run agenthub upgrade again (it reruns the steps)", r.stderr)
+        self.assertIn("run brunna upgrade again (it reruns the steps)", r.stderr)
         self.assertNotIn("go back", r.stderr, "no record of an earlier version in step on this machine")
         r = self.upgrade("--yes")   # fixed: run again, the checkout is already there, the steps run
         self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
@@ -282,7 +282,7 @@ class Upgrade(unittest.TestCase):
         self.ran()
         r = self.upgrade("--yes", env=fail)
         self.assertEqual(r.returncode, 1, r.stdout + r.stderr)
-        self.assertIn("go back: agenthub upgrade --to v0.1.0", r.stderr)
+        self.assertIn("go back: brunna upgrade --to v0.1.0", r.stderr)
 
     def test_a_checkout_moved_by_hand_gets_its_steps(self):
         self.git(self.user, "checkout", "-q", "--detach", "v0.2.0")
@@ -305,7 +305,7 @@ class Upgrade(unittest.TestCase):
         self.assertNotIn("v0.3.0", self.git(self.user, "tag"))
         r = self.upgrade("--check")
         self.assertEqual(r.returncode, 10, r.stdout + r.stderr)
-        self.assertIn("agent-hub v0.1.0 → v0.3.0", r.stdout)
+        self.assertIn("brunna v0.1.0 → v0.3.0", r.stdout)
         self.assertIn("## v0.3.0", r.stdout)
         self.assertIn("## v0.2.0", r.stdout)
         r = self.upgrade("--yes")
@@ -340,7 +340,7 @@ class Upgrade(unittest.TestCase):
             return json.loads(r.stdout)
         first = lines()
         self.assertEqual(first[0][0], "warn")
-        self.assertIn("agent-hub v0.2.0 is out; this checkout is at v0.1.0", first[0][1])
+        self.assertIn("brunna v0.2.0 is out; this checkout is at v0.1.0", first[0][1])
         self.origin.rename(self.tmp / "gone.git")   # within a day the record answers: no network
         self.assertEqual(lines(), first)
         rec = json.loads((self.state / "upgrade-check.json").read_text())

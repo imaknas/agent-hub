@@ -4,22 +4,22 @@ $ agenthub modules
   assistant    Personal assistant: question reconciliation, channel leases
 ✓ backup       Nightly encrypted cloud backup + monthly restore test
   claude       Claude Code login check, updates, headless token expiry reminders
-  codex        background work and agent-hub's decisions through Codex; your Codex chats reach the mailbox by asking agent-hub's tools (no letters shown in the chat by themselves yet)
-  consolidate  Nightly: folds memory date files older than 14 days into reference/ (before the librarian) (needs an LLM: agenthub llm setup)
+  codex        background work and brunna's decisions through Codex; your Codex chats reach the mailbox by asking brunna's tools (no letters shown in the chat by themselves yet)
+  consolidate  Nightly: folds memory date files older than 14 days into reference/ (before the librarian) (needs an LLM: brunna llm setup)
   mirror       Nightly: updates the --mirror clone of every repo in mirror-list.txt
-  owner        Built-in owner side: notices of new to-dos and questions (close and answer with agenthub owner)
-✓ reflect      Every Monday: the previous week's cross-project review (reflect/) (needs an LLM: agenthub llm setup)
-  sandbox      Platform-run capabilities (cap-runner): sandboxed projects borrow a capability with agenthub cap-run --cap
+  owner        Built-in owner side: notices of new to-dos and questions (close and answer with brunna owner)
+✓ reflect      Every Monday: the previous week's cross-project review (reflect/) (needs an LLM: brunna llm setup)
+  sandbox      Platform-run capabilities (cap-runner): sandboxed projects borrow a capability with brunna cap-run --cap
   testcontainers Nightly: removes Docker containers labelled org.testcontainers that are more than a day old
 
-Switch: agenthub modules enable|disable <name> (changes modules in hub.json, then applies)
+Switch: brunna modules enable|disable <name> (changes modules in hub.json, then applies)
 --- stderr
 
 $ agenthub modules enable no-such-module
 [exit 1]
 --- stdout
 --- stderr
-agenthub modules: no module no-such-module (modules/ has: assistant, backup, claude, codex, consolidate, mirror, owner, reflect, sandbox, testcontainers)
+brunna modules: no module no-such-module (modules/ has: assistant, backup, claude, codex, consolidate, mirror, owner, reflect, sandbox, testcontainers)
 
 $ agenthub modules enable mirror
 [exit 0]

@@ -84,7 +84,7 @@ class FirstLook(unittest.TestCase):
     def test_no_model_writes_nothing(self):
         rc, out, calls = self.run_main(ready=False)
         self.assertEqual(rc, 0)
-        self.assertIn("agenthub llm setup", out)
+        self.assertIn("brunna llm setup", out)
         self.assertEqual(calls, [])
         self.assertEqual(self.state(), PLACEHOLDER)
 

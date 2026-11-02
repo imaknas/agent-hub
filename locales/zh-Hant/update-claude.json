@@ -7,7 +7,7 @@
  "claude {old} (node {node}): already the latest": "claude {old}(node {node}):已經是最新版",
  "(dry-run) claude {old} → {latest} (node {node})": "(dry-run) claude {old} → {latest}(node {node})",
  "not installed": "沒有安裝",
- "still on {old} (latest {latest}): the current version already fails a request, not updating (a login or network problem, see agent-hub/claude-login): {error}": "還在 {old}(最新 {latest}):現在的版本就打不通請求,先不更新(登入或網路的問題,看 agent-hub/claude-login):{error}",
+ "still on {old} (latest {latest}): the current version already fails a request, not updating (a login or network problem, see brunna/claude-login): {error}": "還在 {old}(最新 {latest}):現在的版本就打不通請求,先不更新(登入或網路的問題,看 brunna/claude-login):{error}",
  "claude {old} → {new} (node {node}), the request test passed": "claude {old} → {new}(node {node}),請求測試通過",
  "{latest} would not install ({detail}); ": "{latest} 裝不起來({detail}),",
  "{old} is back in place": "已裝回 {old}",

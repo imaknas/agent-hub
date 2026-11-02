@@ -32,7 +32,7 @@ fail() { echo "recover-project: $1" >&2; exit 1; }
 [ $# -ge 1 ] || fail "$(hub_msg "usage: recover-project.sh <name> [target path]")"
 NAME="$1"
 
-[ -d "$REGISTRY" ] || fail "$(hub_msg "{path} not found: first make sure agent-hub itself is cloned" path="$REGISTRY")"
+[ -d "$REGISTRY" ] || fail "$(hub_msg "{path} not found: first make sure brunna itself is cloned" path="$REGISTRY")"
 
 row=$("$AGENT_HUB/bin/py" "$AGENT_HUB/bin/hubconf.py" roster | awk -F'\t' -v n="$NAME" '$1==n{print; found=1} END{exit !found}') \
   || fail "$(hub_msg "'{name}' is not in the project registry ({path}): check the spelling, or the project was never registered" name="$NAME" path="$REGISTRY")"

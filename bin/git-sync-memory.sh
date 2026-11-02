@@ -40,7 +40,7 @@ files=()
 while IFS= read -r f; do files+=("$f"); done < <(git diff --cached --name-only -- memory/ STATE.md)
 [ ${#files[@]} -eq 0 ] && exit 0
 
-git commit -q -m "agent-hub: sync memory/STATE.md" -- "${files[@]}"
+git commit -q -m "brunna: sync memory/STATE.md" -- "${files[@]}"
 # when the hub machine cannot be reached (the caller has checked), commit locally only; a later round with a
 # connection pushes it
 [ -n "${AGENT_HUB_OFFLINE:-}" ] && exit 0

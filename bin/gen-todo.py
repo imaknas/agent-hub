@@ -1,7 +1,7 @@
 #!/bin/sh -c exec${IFS}"${0%/*}/py"${IFS}"$0"${IFS}"$@"
 """Mechanically generate the cross-project todo.md from the to-do section of each project's STATE.md. No LLM.
 
-Source format (contracts/state-todo.v2.md; the librarian writes STATE.md this way, agent-hub's own to-dos are in
+Source format (contracts/state-todo.v2.md; the librarian writes STATE.md this way, brunna's own to-dos are in
 openclaw-migration-status.md), in either token set (bin/todo_tokens.py), shown here in the English one:
 
     ## Tasks
@@ -19,7 +19,7 @@ Same input, same output: todo.md only changes when some project's to-dos really 
 problems" at the end of the file, not silently dropped. todo.md (contracts/todo-md.v2.md) is written in the UI
 language's heading set.
 
-Runs on the hub machine (platform job agent-hub/todo, reads */STATE.md of the memory copies).
+Runs on the hub machine (platform job brunna/todo, reads */STATE.md of the memory copies).
 Usage: gen-todo.py [output todo.md path] (default: todo.md in the data directory, hubconf.data_file)
 Exit code: 0 normally; format problems don't count as failure (they're written to the file and stdout).
 """
@@ -100,7 +100,7 @@ def main() -> None:
             continue
         parse(name, state.read_text(), items, problems)
     if MIGRATION.exists():
-        parse("agent-hub", MIGRATION.read_text(), items, problems)
+        parse(hubconf.hub_project(), MIGRATION.read_text(), items, problems)
 
     in_assistant = [r for r in items["owner"] if P.key.search(r[1])]
     items["owner"] = [r for r in items["owner"] if not P.key.search(r[1])]
@@ -116,7 +116,7 @@ def main() -> None:
         # an instance that still keeps the platform's own to-dos in the old migration file (read above) is told where
         *(["> " + _("do not edit by hand: to change the content, change the source (each project's memory, from which "
                     "librarian updates STATE.md;"),
-            "> " + _("agent-hub's own to-do items are in `openclaw-migration-status.md`).")] if MIGRATION.exists() else
+            "> " + _("brunna's own to-do items are in `openclaw-migration-status.md`).")] if MIGRATION.exists() else
           ["> " + _("do not edit by hand: to change the content, change the source (each project's memory, from which "
                     "librarian updates STATE.md).")]), "",
     ]

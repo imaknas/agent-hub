@@ -3,7 +3,7 @@
  "permissions.{key} is missing {n} {n:rule|rules} (e.g. {example})": "permissions.{key} 少了 {n} 條(例:{example})",
  "{project}: would write sandbox (allowWrite {write}, denyRead {read}, {domains} {domains:domain|domains}), {deny} deny {deny:rule|rules}, {allow} allow {allow:rule|rules} → {path}": "{project}:會寫 sandbox(allowWrite {write}、denyRead {read}、網域 {domains})、deny {deny} 條、allow {allow} 條 → {path}",
  "{project}: enforce is off, removed the platform's sandbox/rules": "{project}:enforce 關了,已拿掉平台的 sandbox/規則",
- "This project has the merge gate on (gate: strict): no direct commits to {branch}. Work in your own worktree/branch and finish with agenthub merge-branch.": "這個專案開了合併閘門(gate: strict):不能直接 commit 到 {branch}。在自己的 worktree/branch 做,完成用 agenthub merge-branch。",
+ "This project has the merge gate on (gate: strict): no direct commits to {branch}. Work in your own worktree/branch and finish with brunna merge-branch.": "這個專案開了合併閘門(gate: strict):不能直接 commit 到 {branch}。在自己的 worktree/branch 做,完成用 brunna merge-branch。",
  "{project}: .git/hooks/{hook} is already the project's own hook; not overwriting it (the gate only detects)": "{project}:.git/hooks/{hook} 已經有專案自己的 hook,不覆蓋(gate 只偵測)",
  "enforce is off: remove the platform's sandbox/rules": "enforce 關了:拿掉平台的 sandbox/規則",
  "permission rules": "權限規則",

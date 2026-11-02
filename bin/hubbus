@@ -1,5 +1,5 @@
 #!/bin/sh -c exec${IFS}"${0%/*}/py"${IFS}"$0"${IFS}"$@"
-"""agent-hub's event bus: an append-only event log + read cursors; the project mailboxes are a projection of it.
+"""brunna's event bus: an append-only event log + read cursors; the project mailboxes are a projection of it.
 
 Why: communication across projects (and with the owner) can't depend on a session still being alive: sessions left
 for a while can't see each other. Nothing here is a long-running subscriber (the schedule runs every 15 minutes and
@@ -14,8 +14,8 @@ accepted by the owner on 2026-10-21).
          to_project, ref, payload JSON)
   cursors(consumer, seq)
 Event types (to add one, have a reader first):
-  message            a letter. to_project = the recipient address (a project name, agent-hub, or owner = into the
-                     personal assistant; old aliases in hub.json owner.aliases are accepted too)
+  message            a letter. to_project = the recipient address (a project name, brunna, or owner = into the
+                     personal assistant; old aliases in {settings} owner.aliases are accepted too)
                      payload: type(request|question|info|progress|done|handoff), text,
                               from_session (the sending session, only a hint), to_session (a reply first waits for
                               the asking session),
@@ -24,7 +24,7 @@ Event types (to add one, have a reader first):
   message.done       ref = the letter's id; the receiving project has handled it (payload: note)
   job.failed         a scheduled job failed (payload: job, exit, detail; to_project = the job's project for registry
                      jobs)
-  merge.done / merge.failed / session.report (merge-branch, lease runner), config.applied (agenthub config apply),
+  merge.done / merge.failed / session.report (merge-branch, lease runner), config.applied (brunna config apply),
   record (Principal Handoff records): the full list is the type enum of contracts/hubbus.v1.schema.json
 Any payload may carry chain and depth (docs/design/event-jobs.md section 7): publish() adds AGENT_HUB_JOB_CHAIN /
 AGENT_HUB_JOB_DEPTH, the causal chain of the scheduled run writing it, so event-triggered jobs don't trigger themselves; bridge/dispatch/reconcile-questions
@@ -32,12 +32,12 @@ carry others' events and drop it, and dispatch hands each letter's chain to the 
 meta(generation): a random id fixed when the file is created; a reader's cursor (event jobs) is only valid within it.
 A letter's state is a projection, never modified in place: inbox = messages to X that no done event points at yet.
 
-Addresses are projects (names in the project registry projects/*.yaml, agent-hub) and owner, never sessions.
+Addresses are projects (names in the project registry projects/*.yaml, brunna) and owner, never sessions.
 
 A sandboxed project's mail (enforce.sandbox: policy.mail_outbox; design docs/design/bus-sender.md) never touches the
 bus, which is in none of its sandboxes: send/ack/done/publish write one JSON file per letter into its own outbox
-(<workspace>/.git/agent-hub/outbox/, which only it can write; the letter id is picked here, OUTBOX_ID), and
-inbox/show/thread/open-questions read the view of its own letters (<workspace>/.git/agent-hub/inbox.json). The mailbox
+(<workspace>/.git/brunna/outbox/, which only it can write; the letter id is picked here, OUTBOX_ID), and
+inbox/show/thread/open-questions read the view of its own letters (<workspace>/.git/brunna/inbox.json). The mailbox
 service (dispatch, every minute) moves each outbox file into the bus with source = the outbox's project (a sender named
 in the file is never read), checked like the command it stands for, then deletes it; a file it refuses is reported to
 the project in a letter and deleted too. It writes each view back after dispatching. The session hooks deliver mail
@@ -81,7 +81,7 @@ For hooks / the schedule / other scripts:
                                       wait CONVERSATION_WAIT minutes as for a conversation; then a live
                                       session with activity in this project within FORK_RECENT_H handles it in a
                                       background fork with its context (trial since 10-26); only without one is a
-                                      headless agent dispatched (notes capability). agent-hub's letters too. When the
+                                      headless agent dispatched (notes capability). brunna's letters too. When the
                                       fork is done, the original session gets the fork's last reply and the letters it
                                       sent at its next activity (fork_result).
                                       dispatched letters record message.delivered (via handler|resume|held, the last
@@ -107,7 +107,7 @@ The personal assistant's interface (defined on the Muninn side; a change there m
        data/secrets/ingest_token. {"messages":[{id=event id, project, type=question|progress|done, text,
        handoff_id?}]}; id is the idempotency key, so resending is safe; 400 = one item in the batch is invalid and
        the whole batch is rejected.
-  v2 (Principal Handoff 0.3 records, the assistant's contracts/records.v2.md; used only with hub.json
+  v2 (Principal Handoff 0.3 records, the assistant's contracts/records.v2.md; used only with {settings}
       mailbox.records on, off by default):
       send's task/request to the owner → acts raised, done --task → claimed, drop --task → withdrawn (not needed);
       question → decisions raised (key = the letter id), done --question → claimed with the answer + withdrawn
@@ -789,7 +789,7 @@ def fmt_record(r, long=True) -> str:
     if rec.get("note"):
         lines.append(rec["note"])
     if family == "decisions" and kind == "settled":
-        lines.append(_("Carry on with it, then `agenthub done {id}`; without a done, librarian applies it to STATE.md "
+        lines.append(_("Carry on with it, then `brunna done {id}`; without a done, librarian applies it to STATE.md "
                        "tonight.", id=r["id"]))
     elif kind in ("settled", "reopened", "related"):
         lines.append(_("(librarian updates the to-dos in STATE.md from it tonight; during the day it is for reference only)"))
@@ -898,9 +898,9 @@ def header(n, p: str) -> str:
 
 
 def footer() -> str:
-    return _("Done with one: `agenthub done <id>` (--note optional); to reply or ask: "
-             "`agenthub send --to <sender> --reply-to <id> --type <question|info|done> --text \"…\"`. "
-             "To handle it, but not now: `agenthub ack <id>` (claim it first; a request/question with no ack, reply or "
+    return _("Done with one: `brunna done <id>` (--note optional); to reply or ask: "
+             "`brunna send --to <sender> --reply-to <id> --type <question|info|done> --text \"…\"`. "
+             "To handle it, but not now: `brunna ack <id>` (claim it first; a request/question with no ack, reply or "
              "done is given to someone else by the platform after {minutes} minutes). Leave what has nothing to do with "
              "the current work.", minutes=TAKE_TIMEOUT_MIN)
 
@@ -999,7 +999,7 @@ def questions_note(c, project) -> str | None:
         return None
     lines = [_("❓ Questions this project asked {owner} that have no answer yet ({n}). If {owner} already answered them "
                "in a session, or they are no longer needed, close them (so {assistant} stops waiting for an answer): "
-               '`agenthub send --to {alias} --type done --question <id> --text "how it was resolved"` (`--type drop` '
+               '`brunna send --to {alias} --type done --question <id> --text "how it was resolved"` (`--type drop` '
                "when no longer needed). Leave the ones still to ask.",
                owner=OWNER, n=len(qs), assistant=ASSISTANT, alias=OWNER_ALIAS)]
     lines += [f"- [{q['id']}] {q['ts'][5:16].replace('T', ' ')} {q['text'][:120]}" for q in qs[-5:]]
@@ -1021,7 +1021,7 @@ def reconcile_questions(c, now=None) -> list:
         text = _("The question this project asked {owner} on {date} is still open ({assistant} keeps it under "
                  "\"waiting for you\"):\n  [{id}] {text}\nIf it is resolved ({owner} answered it in a session of this "
                  "project, or it is no longer needed), send "
-                 "`agenthub send --to {alias} --type done --question {id} --text \"how it was resolved\"` (--type drop "
+                 "`brunna send --to {alias} --type done --question {id} --text \"how it was resolved\"` (--type drop "
                  "when no longer needed) and {assistant} closes it. If {owner} still has to answer, send nothing and just "
                  "mark this letter done. If you cannot tell, leave it and mark this letter done too.",
                  date=r["ts"][:10], owner=OWNER, assistant=ASSISTANT, id=r["id"], text=r["text"][:300],
@@ -1173,7 +1173,7 @@ def handoff_text(h: dict) -> str:
         return (_("{owner} answered the question this project asked.\nQuestion: {item}\nAnswer: {fact}",
                   owner=OWNER, item=h.get("item", ""), fact=h.get("fact", ""))
                 + ("\n" + _("{owner}'s words: {quote}", owner=OWNER, quote=h["quote"]) if h.get("quote") else "")
-                + "\n" + _("Carry on with the answer, then `agenthub done <id>` (tells {assistant} that it is closed). "
+                + "\n" + _("Carry on with the answer, then `brunna done <id>` (tells {assistant} that it is closed). "
                            "Without a done, librarian applies the answer to STATE.md tonight and closes it.",
                            assistant=ASSISTANT))
     lines = [_("{owner} told {assistant} something about this project ({effect}):", owner=OWNER, assistant=ASSISTANT,
@@ -1248,9 +1248,9 @@ def asks_text(h: dict) -> str:
     return (_("{owner} asks this project through {assistant} and is waiting for the answer:\n{fact}",
               owner=OWNER, assistant=ASSISTANT, fact=h.get("fact", ""))
             + ("\n" + _("{owner}'s words: {quote}", owner=OWNER, quote=h["quote"]) if h.get("quote") else "")
-            + "\n" + _("Reply: `agenthub send --to {alias} --reply-to <this letter's id> --type info --text \"the "
+            + "\n" + _("Reply: `brunna send --to {alias} --reply-to <this letter's id> --type info --text \"the "
                        'answer"`. Always add --reply-to: the answer and every later addition are each passed on to '
-                       "{owner} as written. After answering, `agenthub done <id>`; with only a done and no reply, "
+                       "{owner} as written. After answering, `brunna done <id>`; with only a done and no reply, "
                        "{assistant} reports that this project closed the question without an answer.",
                        alias=OWNER_ALIAS, owner=OWNER, assistant=ASSISTANT))
 
@@ -1906,7 +1906,7 @@ def wake(c, rt, r, sid) -> None:
     if not callable(fn) or not sid or c.execute("SELECT 1 FROM events WHERE id=?", (eid,)).fetchone():
         return
     # the session may see it out of context (Claude Code shows it as a Stop hook's "blocking error"): it says whose it is
-    text = _("📬 agent-hub: 1 letter from {project} ({id}). Run agenthub inbox.", project=r["source"], id=r["id"])
+    text = _("📬 brunna: 1 letter from {project} ({id}). Run brunna inbox.", project=r["source"], id=r["id"])
     try:
         ok, why = bool(fn(sid, text)), ""
     except runtime_ports.Unsupported:   # this session's runtime can't be woken: nothing to record
@@ -2698,7 +2698,7 @@ def main() -> None:
 
 def cli() -> None:
     ap = argparse.ArgumentParser(prog="hubbus", description=_(
-        "agent-hub's event bus: an append-only event log plus read cursors; project mailboxes are its projection."))
+        "brunna's event bus: an append-only event log plus read cursors; project mailboxes are its projection."))
     sub = ap.add_subparsers(dest="cmd", required=True)
     s = sub.add_parser("send")
     s.add_argument("--to", required=True)
@@ -2723,7 +2723,7 @@ def cli() -> None:
     d.add_argument("--note")
     hk = sub.add_parser("hook")
     hk.add_argument("event", choices=("session-start", "prompt", "post-tool"))
-    hk.add_argument("--runtime", help=_("whose hook this is (default: hub.json runtime.default)"))
+    hk.add_argument("--runtime", help=_("whose hook this is (default: {settings} runtime.default)"))
     sub.add_parser("bridge")
     sub.add_parser("dispatch")
     sub.add_parser("thread").add_argument("id")

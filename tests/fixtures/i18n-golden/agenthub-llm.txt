@@ -2,7 +2,7 @@ $ agenthub llm
 [exit 2]
 --- stdout
 --- stderr
-用法:agenthub llm setup | set-key <provider>(key 從 stdin)| health
+用法:brunna llm setup | set-key <provider>(key 從 stdin)| health
 
 $ agenthub llm set-key nosuch
 [exit 2]
@@ -19,26 +19,26 @@ $ agenthub llm setup --llm bogus --yes
 $ agenthub llm setup --llm none --yes
 [exit 0]
 --- stdout
-agent-hub 的判斷先關著:需要判斷的地方會直接失敗並說明原因。之後跑 agenthub llm setup
+brunna 的判斷先關著:需要判斷的地方會直接失敗並說明原因。之後跑 brunna llm setup
 --- stderr
 
 $ agenthub llm setup --llm runtime --yes    # runtime none
 [exit 0]
 --- stdout
-⚠️ 沒有設定 AI agent,就沒有 agent 的登入可以拿來做 agent-hub 的判斷:判斷會失敗。選一個 provider:agenthub llm setup
+⚠️ 沒有設定 AI agent,就沒有 agent 的登入可以拿來做 brunna 的判斷:判斷會失敗。選一個 provider:brunna llm setup
 --- stderr
 
 $ agenthub llm setup --llm openai --yes
 [exit 1]
 --- stdout
 --- stderr
-非互動模式要用 --llm-model <名稱> 指定模型(或之後互動跑 agenthub llm setup)
+非互動模式要用 --llm-model <名稱> 指定模型(或之後互動跑 brunna llm setup)
 
 $ agenthub llm setup --llm anthropic --llm-model m1 --yes
 [exit 1]
 --- stdout
-agent-hub 的判斷交給 anthropic(fast=m1, standard=m1, strong=m1);⚠️ 還不能用:沒有 key:<TMP>/secrets/anthropic-api-key 不在(bin/hub llm set-key 寫進去)
-記得 commit hub.json(config as code)。agent 的工作(信箱代辦等)要 coding agent,看 agenthub doctor 的功能表
+brunna 的判斷交給 anthropic(fast=m1, standard=m1, strong=m1);⚠️ 還不能用:沒有 key:<TMP>/secrets/anthropic-api-key 不在(bin/hub llm set-key 寫進去)
+記得 commit hub.json(config as code)。agent 的工作(信箱代辦等)要 coding agent,看 brunna doctor 的功能表
 --- stderr
 
 $ agenthub llm set-key anthropic
@@ -50,7 +50,7 @@ $ agenthub llm set-key anthropic
 $ agenthub llm set-key anthropic
 [exit 0]
 --- stdout
-寫進 <TMP>/secrets/anthropic-api-key(600)。檢查:agenthub llm health
+寫進 <TMP>/secrets/anthropic-api-key(600)。檢查:brunna llm health
 --- stderr
 
 $ agenthub llm set-key anthropic    # key from env
@@ -62,5 +62,5 @@ llm.providers.anthropic.key 不是 {"secret": 檔名}(用環境變數的不用�
 $ agenthub llm setup --llm runtime --yes    # runtime claude
 [exit 0]
 --- stdout
-agent-hub 的判斷透過 claude 自己的登入來做(各自用哪個模型:schedulectl models)
+brunna 的判斷透過 claude 自己的登入來做(各自用哪個模型:schedulectl models)
 --- stderr

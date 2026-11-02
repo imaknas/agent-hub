@@ -14,7 +14,7 @@ the values passed in:
   owner, owner_alias, assistant     the configured names: the owner's tag, the address agents mail the owner at
                                     (hubconf.owner_alias), the assistant's name; or the ones passed in (an eval pins
                                     them)
-  content_language                  the language the model or agent writes in: hub.json language.content, or lang=
+  content_language                  the language the model or agent writes in: {settings} language.content, or lang=
   todo_heading, tag_owner, tag_agent, tag_tbd, todo_none, key_marker, key_pattern
                                     the to-do block's tokens in the content language's set (contracts/state-todo.v2.md,
                                     bin/todo_tokens.py; every reader accepts both sets). key_marker is a line's marker

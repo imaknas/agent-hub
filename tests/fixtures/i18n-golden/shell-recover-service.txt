@@ -49,12 +49,12 @@ launchctl (stand-in): bootstrap
 exit 1
 --- stdout
 --- stderr
-recover-service: <TMP>/hub/launchd/local.gone.plist 不存在——agent-hub 本身是不是還沒 pull 到最新?
+recover-service: <TMP>/hub/launchd/local.gone.plist 不存在——brunna 本身是不是還沒 pull 到最新?
 
 === someone else's service
 exit 0
 --- stdout
-'homebrew.mxcl.x' 不是 agent-hub 管轄的服務(owner: Homebrew),無法自動重建。
+'homebrew.mxcl.x' 不是 brunna 管轄的服務(owner: Homebrew),無法自動重建。
 用途:a db
 怎麼重建:brew services start x
 --- stderr

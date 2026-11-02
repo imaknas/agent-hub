@@ -1,11 +1,11 @@
 {
- "no key: {file} does not exist (`agenthub llm set-key` writes it)": "沒有 key:{file} 不在(bin/hub llm set-key 寫進去)",
+ "no key: {file} does not exist (`brunna llm set-key` writes it)": "沒有 key:{file} 不在(bin/hub llm set-key 寫進去)",
  "no key: {file} is empty": "沒有 key:{file} 是空的",
  "no key: environment variable {var} is not set (the scheduler runs under launchd and does not see the shell's settings; a secret is more reliable)": "沒有 key:環境變數 {var} 沒有設(排程跑在 launchd 底下,讀不到 shell 的設定——用 secret 比較可靠)",
  "key must be {{\"secret\": {file}}} or {{\"env\": {var}}}": "key 要寫成 {{\"secret\": {file}}} 或 {{\"env\": {var}}}",
  "file name": "檔名",
  "variable name": "變數名",
- "hub.json has no llm section": "hub.json 沒有 llm 區塊",
+ "{settings} has no llm section": "{settings} 沒有 llm 區塊",
  "llm.use does not say which provider serves the {group} group": "llm.use 沒有寫 {group} 要交給哪一家",
  "llm.providers has no {name}": "llm.providers 沒有 {name}",
  "llm.providers.{name}.models has no {group}": "llm.providers.{name}.models 沒有 {group}",

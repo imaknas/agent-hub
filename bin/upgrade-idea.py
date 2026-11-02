@@ -219,7 +219,7 @@ def main(argv: list[str]) -> int:
     branch, dirty = checked_out(proj, ws)
     if dirty:
         fail(_("{path} has uncommitted changes to tracked files; deal with them first", path=ws), "dirty")
-    owner = hubconf.get("github.owner") or fail(_("hub.json has no github.owner"))
+    owner = hubconf.get("github.owner") or fail(_("{settings} has no github.owner"))
     url = remote_url(owner, final)
     errs = registry.validate(upgraded_doc(doc, final, url), final)
     if errs:
@@ -245,7 +245,7 @@ def main(argv: list[str]) -> int:
              f"gh repo create {owner}/{final} --{'public' if public else 'private'} + push") + _(", origin = {url}", url=url),
             _("registry projects/{name}.yaml: type: project, paths.origin: {url} (purpose/enforce/privacy kept)",
               name=final, url=url),
-            _("add origin to mirror-list.txt, regenerate index.md, commit agent-hub")]
+            _("add origin to mirror-list.txt, regenerate index.md, commit brunna")]
     if not JSON:
         print("\n".join(f"  {i}. {p}" for i, p in enumerate(plan, 1)))
     if not apply:

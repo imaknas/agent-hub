@@ -4,7 +4,7 @@ $ agenthub doctor    # no hub.json
 ✗ no venv
     → bin/setup
 ✗ no hub.json
-    → agenthub init
+    → brunna init
 
 2 problems
 --- stderr
@@ -14,13 +14,13 @@ $ agenthub doctor    # launchd, problems
 --- stdout
 ✓ python ok
 ✗ config: config-check: ✗ hub.json: unknown key `unknown_key`; to add one, put it in contracts/hub.v1.schema.json first
-    → fix hub.json / projects/ as the messages say, then run agenthub config check
-✓ language: interface en, notes and project state en (change: agenthub init --lang <interface>[,<notes>])
-✓ owner side: built-in (owner_side: builtin; agenthub owner list / done / answer)
-! agenthub is not on PATH (project sessions cannot reach the mailbox commands)
-    → bin/agenthub install-cli
-✓ MCP server: agenthub mcp (any agent with MCP can use the mailbox and write notes; while it works in a project, the platform holds requests to that project instead of dispatching an agent, for up to 120 minutes; registering it in the tool's settings is up to you)
-    → agenthub mcp config prints the snippet to register; how to add it per tool: docs/mcp.md
+    → fix hub.json / projects/ as the messages say, then run brunna config check
+✓ language: interface en, notes and project state en (change: brunna init --lang <interface>[,<notes>])
+✓ owner side: built-in (owner_side: builtin; brunna owner list / done / answer)
+! brunna is not on PATH (project sessions cannot reach the mailbox commands)
+    → bin/brunna install-cli
+✓ MCP server: brunna mcp (any agent with MCP can use the mailbox and write notes; while it works in a project, the platform holds requests to that project instead of dispatching an agent, for up to 120 minutes; registering it in the tool's settings is up to you)
+    → brunna mcp config prints the snippet to register; how to add it per tool: docs/mcp.md
 ✓ judgment points (librarian, index, consolidate, weekly report analysis): available
 ✓ mailbox tasks (the platform sends an agent for letters nobody picked up): available
 ✓ unattended agent jobs with allow:, and event-triggered agent jobs: available
@@ -35,19 +35,19 @@ $ agenthub doctor    # launchd, problems
     → rerun `claude setup-token` and write it to <TMP>/home/.claude/headless-oauth-token
 ! agent login (~/.claude/.credentials.json): missing
     → run claude once in a terminal on the hub machine so it refreshes, or /login again
-✗ LLM provider anthropic: no key: <TMP>/secrets/anthropic-api-key does not exist (`agenthub llm set-key` writes it)
-    → see hub.json llm.providers; set the key with agenthub llm set-key <provider>
+✗ LLM provider anthropic: no key: <TMP>/secrets/anthropic-api-key does not exist (`brunna llm set-key` writes it)
+    → see hub.json llm.providers; set the key with brunna llm set-key <provider>
 ✓ model groups of the judgment points: fast→(not set), standard→anthropic, strong→(not set)
 ✗ scheduler (local.brunna-scheduler): not loaded
-    → agenthub init
+    → brunna init
 ✗ watchdog (local.brunna-scheduler-watchdog): the loaded one belongs to a different hub, not <HUB>/bin
-    → agenthub init (replaces it with this one)
+    → brunna init (replaces it with this one)
 ✓ sandboxed projects' own services and jobs: run isolated (seatbelt: own-writes-only, isolated-reads, declared-port-only)
 ! the scheduler has not ticked yet, and no service manager runs it here (see the scheduler line above)
 ! no alerts set up: a stopped scheduler or a dead service only shows on the status page and in the logs
     → to be notified, add an alerts section as in hub.example.json
 ! background services, project settings: 2 changes not applied yet
-    → agenthub config plan, then agenthub config apply
+    → brunna config plan, then brunna config apply
 
 5 problems, 5 reminders
 --- stderr
@@ -57,15 +57,15 @@ $ agenthub doctor    # launchd, all fine
 --- stdout
 ✓ python 3.13 ok
 ✓ config: all valid
-✓ language: interface en, notes and project state en (change: agenthub init --lang <interface>[,<notes>])
-! agent-hub v0.3.0 is out; this checkout is at v0.2.0 (checked <TS>)
-    → agenthub upgrade --check shows what changes; agenthub upgrade installs it
-! the checkout moved to v0.2.0 after agenthub upgrade last brought this machine in step (at v0.1.0): the Python packages, services, scheduler and hooks may be stale
-    → agenthub upgrade
+✓ language: interface en, notes and project state en (change: brunna init --lang <interface>[,<notes>])
+! brunna v0.3.0 is out; this checkout is at v0.2.0 (checked <TS>)
+    → brunna upgrade --check shows what changes; brunna upgrade installs it
+! the checkout moved to v0.2.0 after brunna upgrade last brought this machine in step (at v0.1.0): the Python packages, services, scheduler and hooks may be stale
+    → brunna upgrade
 ✓ owner side: Robin (owner_side: assistant)
-✓ agenthub is on PATH: /usr/local/bin/agenthub
-✓ MCP server: agenthub mcp (any agent with MCP can use the mailbox and write notes; while it works in a project, the platform holds requests to that project instead of dispatching an agent, for up to 120 minutes; registering it in the tool's settings is up to you)
-    → agenthub mcp config prints the snippet to register; how to add it per tool: docs/mcp.md
+✓ brunna is on PATH: /usr/local/bin/agenthub
+✓ MCP server: brunna mcp (any agent with MCP can use the mailbox and write notes; while it works in a project, the platform holds requests to that project instead of dispatching an agent, for up to 120 minutes; registering it in the tool's settings is up to you)
+    → brunna mcp config prints the snippet to register; how to add it per tool: docs/mcp.md
 ✓ judgment points (librarian, index, consolidate, weekly report analysis): available
 ✓ mailbox tasks (the platform sends an agent for letters nobody picked up): available
 ✓ unattended agent jobs with allow:, and event-triggered agent jobs: available
@@ -96,20 +96,20 @@ $ agenthub doctor    # systemd, runtime none
 --- stdout
 ✓ python ok
 ✓ config: all valid
-✓ language: interface en, notes and project state en (change: agenthub init --lang <interface>[,<notes>])
-✓ agent-hub v0.3.0-2-gabc1234; the newest release is v0.3.0 (checked <TS>)
-✓ owner side: built-in (owner_side: builtin; agenthub owner list / done / answer)
-! agenthub is not on PATH (project sessions cannot reach the mailbox commands)
-    → bin/agenthub install-cli
-✓ MCP server: agenthub mcp (any agent with MCP can use the mailbox and write notes; while it works in a project, the platform holds requests to that project instead of dispatching an agent, for up to 120 minutes; registering it in the tool's settings is up to you)
-    → agenthub mcp config prints the snippet to register; how to add it per tool: docs/mcp.md
-! AI agent features are off: no AI agent is set up for agent-hub to run. Notes, schedules and the mailbox work without one
-    → set one up: agenthub init --agent claude|codex
-✗ agent-hub's decisions (nightly notes, weekly report) have nowhere to run: no AI agent and no model provider is set up
-    → agenthub llm setup (pick one: an API key or a local Ollama)
+✓ language: interface en, notes and project state en (change: brunna init --lang <interface>[,<notes>])
+✓ brunna v0.3.0-2-gabc1234; the newest release is v0.3.0 (checked <TS>)
+✓ owner side: built-in (owner_side: builtin; brunna owner list / done / answer)
+! brunna is not on PATH (project sessions cannot reach the mailbox commands)
+    → bin/brunna install-cli
+✓ MCP server: brunna mcp (any agent with MCP can use the mailbox and write notes; while it works in a project, the platform holds requests to that project instead of dispatching an agent, for up to 120 minutes; registering it in the tool's settings is up to you)
+    → brunna mcp config prints the snippet to register; how to add it per tool: docs/mcp.md
+! AI agent features are off: no AI agent is set up for brunna to run. Notes, schedules and the mailbox work without one
+    → set one up: brunna init --agent claude|codex
+✗ brunna's decisions (nightly notes, weekly report) have nowhere to run: no AI agent and no model provider is set up
+    → brunna llm setup (pick one: an API key or a local Ollama)
 ✓ scheduler (local.brunna-scheduler.timer): enabled
 ✗ watchdog (local.brunna-scheduler-watchdog.timer): not installed
-    → agenthub init
+    → brunna init
 ! the scheduler and services stop after logout (systemd linger is off)
     → sudo loginctl enable-linger $USER
 ! sandboxed projects' own services and jobs: off, they are not run (the kernel's Landlock ABI is 3, ports need ≥ 4)
@@ -117,7 +117,7 @@ $ agenthub doctor    # systemd, runtime none
 ✗ the scheduler last ticked 120 minutes ago
     → bin/schedulectl status; see .logs/scheduler-stderr.log
 ! background services, project settings: 1 change not applied yet
-    → agenthub config plan, then agenthub config apply
+    → brunna config plan, then brunna config apply
 
 3 problems, 5 reminders
 --- stderr
@@ -127,19 +127,19 @@ $ agenthub doctor    # no service manager, unnamed assistant
 --- stdout
 ✓ python ok
 ✓ config: all valid
-✓ language: interface en, notes and project state en (change: agenthub init --lang <interface>[,<notes>])
-✓ agent-hub v0.3.0 (could not check for newer releases at <TS>: Could not resolve host: example.org; doctor tries again after a day)
-! the checkout moved to v0.3.0 after agenthub upgrade last brought this machine in step (at v0.1.0): the Python packages, services, scheduler and hooks may be stale
-    → agenthub upgrade
+✓ language: interface en, notes and project state en (change: brunna init --lang <interface>[,<notes>])
+✓ brunna v0.3.0 (could not check for newer releases at <TS>: Could not resolve host: example.org; doctor tries again after a day)
+! the checkout moved to v0.3.0 after brunna upgrade last brought this machine in step (at v0.1.0): the Python packages, services, scheduler and hooks may be stale
+    → brunna upgrade
 ✓ owner side: assistant (owner_side: assistant)
-! agenthub is not on PATH (project sessions cannot reach the mailbox commands)
-    → bin/agenthub install-cli
-✓ MCP server: agenthub mcp (any agent with MCP can use the mailbox and write notes; while it works in a project, the platform holds requests to that project instead of dispatching an agent, for up to 120 minutes; registering it in the tool's settings is up to you)
-    → agenthub mcp config prints the snippet to register; how to add it per tool: docs/mcp.md
-! AI agent features are off: no AI agent is set up for agent-hub to run. Notes, schedules and the mailbox work without one
-    → set one up: agenthub init --agent claude|codex
-✗ agent-hub's decisions (nightly notes, weekly report) have nowhere to run: no AI agent and no model provider is set up
-    → agenthub llm setup (pick one: an API key or a local Ollama)
+! brunna is not on PATH (project sessions cannot reach the mailbox commands)
+    → bin/brunna install-cli
+✓ MCP server: brunna mcp (any agent with MCP can use the mailbox and write notes; while it works in a project, the platform holds requests to that project instead of dispatching an agent, for up to 120 minutes; registering it in the tool's settings is up to you)
+    → brunna mcp config prints the snippet to register; how to add it per tool: docs/mcp.md
+! AI agent features are off: no AI agent is set up for brunna to run. Notes, schedules and the mailbox work without one
+    → set one up: brunna init --agent claude|codex
+✗ brunna's decisions (nightly notes, weekly report) have nowhere to run: no AI agent and no model provider is set up
+    → brunna llm setup (pick one: an API key or a local Ollama)
 ✗ scheduler, watchdog: HOME (<TMP>/home) is not this account's home directory: the platform leaves the account's background services alone (installing one from here would replace the account's real one)
     → schedule `<TMP>/fakehub/bin/py <TMP>/fakehub/bin/scheduler.py` yourself every 15 minutes (for example the crontab line `*/15 * * * * <TMP>/fakehub/bin/py <TMP>/fakehub/bin/scheduler.py`)
 ✓ sandboxed projects' own services and jobs: run isolated (seatbelt: own-writes-only, isolated-reads, declared-port-only)

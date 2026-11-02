@@ -72,9 +72,9 @@ class Asks(unittest.TestCase):
         self.assertIn("How far is the shop-app import?", p["text"])
         # the reply must carry --reply-to; since 10-27 the assistant relays every one back to the original conversation
         # (m10291432)
-        self.assertIn(zh("Reply: `agenthub send --to {alias} --reply-to <this letter's id> --type info --text \"the "
+        self.assertIn(zh("Reply: `brunna send --to {alias} --reply-to <this letter's id> --type info --text \"the "
                          'answer"`. Always add --reply-to: the answer and every later addition are each passed on to '
-                         "{owner} as written. After answering, `agenthub done <id>`; with only a done and no reply, "
+                         "{owner} as written. After answering, `brunna done <id>`; with only a done and no reply, "
                          "{assistant} reports that this project closed the question without an answer.",
                          alias=self.m.OWNER_ALIAS, owner=self.m.OWNER, assistant=self.m.ASSISTANT), p["text"])
         self.assertNotIn(RETIRED, p["text"])

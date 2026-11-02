@@ -12,7 +12,7 @@ exit 2
 - 上限:hub.json 的 ideas.limit(預設 20)個 type: idea 的專案。
 - onboard 失敗:清掉這次建的資料夾、bare repo、memory 副本、還沒 commit 的登錄檔(事前都確認過不存在),
   再回 create_failed。
-同時只跑一個(鎖在 <state>/idea-sandbox.lock):onboard 會 commit agent-hub。
+同時只跑一個(鎖在 <state>/idea-sandbox.lock):onboard 會 commit brunna。
 
 
 === bad name
@@ -88,7 +88,7 @@ exit 0
 
 > a 3D model of the room
 
-深談的結論、決定、待辦記在 memory(`.agent-memory/`);要變成正式專案時用 agent-hub 的 `bin/upgrade-idea.py`。
+深談的結論、決定、待辦記在 memory(`.agent-memory/`);要變成正式專案時用 brunna 的 `bin/upgrade-idea.py`。
 
 === too many
 exit 1

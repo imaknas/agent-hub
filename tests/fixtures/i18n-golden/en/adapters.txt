@@ -4,7 +4,7 @@
 no choices in the response (HTTP 200)
 === systemd timer
 [Unit]
-Description=agent-hub local.x.tick (every 900 s)
+Description=brunna local.x.tick (every 900 s)
 
 [Timer]
 OnActiveSec=1

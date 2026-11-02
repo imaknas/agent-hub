@@ -9,7 +9,7 @@ runs, whether there was a result, whether the edit list was valid, the share agr
 or not", how similar the written content is to the agent version's, how many times the key markers went wrong, and cost.
 Disagreements are listed one by one (project, date, both sides' decisions, the completion version's reason); the full
 proposals are in .state/librarian-shadow/<date>/. For the format fix (librarian-todo-format-edits) it counts how often
-each side's result passes check-state-todo. Runs where the completion version was in charge (hub.json
+each side's result passes check-state-todo. Runs where the completion version was in charge ({settings}
 librarian.completion) have nothing to compare with and are counted apart: valid edit lists, how many changed the file.
 """
 from __future__ import annotations

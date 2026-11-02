@@ -1,5 +1,5 @@
 #!/bin/sh -c exec${IFS}"${0%/*}/py"${IFS}"$0"${IFS}"$@"
-"""A newly connected project's first STATE.md, written right away: `agenthub first-look <project>`.
+"""A newly connected project's first STATE.md, written right away: `brunna first-look <project>`.
 
 The nightly librarian writes STATE.md from the notes a project's agents keep, so a project connected today would show
 nothing until its agents have written some and the night has passed. This writes a first one now, from what the
@@ -9,7 +9,7 @@ point first-look (contracts/llm-points.yaml) and answers with the whole STATE.md
 section against the state-todo contract and writes it, then syncs the memory branch the usual way (git-sync-memory.sh).
 
 Only for a project whose STATE.md is still onboarding's placeholder and that has no notes yet: an existing state is
-never replaced. With no model for agent-hub's decisions, it says so and does nothing. bin/connect.py runs it after
+never replaced. With no model for brunna's decisions, it says so and does nothing. bin/connect.py runs it after
 connecting each project.
 
 Usage: first-look.py <project>        (exit 0 written or nothing to do, 1 failed, 2 bad usage)
@@ -78,7 +78,7 @@ def main(argv: list[str]) -> int:
     import llm_ready
     if (off := llm_ready.unsupported(POINT)):
         print(_("{project}: no first summary yet ({reason}). It comes with the nightly tidy-up once a model is set up "
-                "(agenthub llm setup).", project=name, reason=off))
+                "(brunna llm setup).", project=name, reason=off))
         return 0
     import project_git
     try:

@@ -118,7 +118,7 @@ class Adapters(unittest.TestCase):
         self.cfg["alerts"]["ntfy"] = {"topic": "hub-alerts"}
         self.assertTrue(self.m.send("y" * 5000))
         (argv, kw), = self.calls
-        self.assertEqual(argv, CURL + ["-H", "Title: agent-hub", "--data-binary", "@-", "https://ntfy.sh/hub-alerts"])
+        self.assertEqual(argv, CURL + ["-H", "Title: brunna", "--data-binary", "@-", "https://ntfy.sh/hub-alerts"])
         self.assertEqual(kw["input"], "y" * 4000)
 
     def test_ntfy_own_server_and_token(self):
@@ -126,7 +126,7 @@ class Adapters(unittest.TestCase):
                                       "token_file": self.secret("ntfy", "tk_1")}
         self.assertTrue(self.m.send("hello"))
         (argv, kw), = self.calls
-        self.assertEqual(argv, CURL + ["-H", "Title: agent-hub", "-H", "Authorization: Bearer tk_1", "--data-binary", "@-",
+        self.assertEqual(argv, CURL + ["-H", "Title: brunna", "-H", "Authorization: Bearer tk_1", "--data-binary", "@-",
                                        "https://push.example.org/t"])
 
     def test_ntfy_token_file_missing_fails_without_sending(self):
@@ -190,7 +190,7 @@ class Adapters(unittest.TestCase):
         self.assertTrue(self.m.send("⚠️ disk full\nsecond line"))
         self.assertEqual(log, [("connect", "plain", "smtp.example.org", 587, 20), ("starttls",),
                                ("login", "bot@example.org", "s3cret"),
-                               ("send", "agent-hub:⚠️ disk full", "bot@example.org", "me@example.org",
+                               ("send", "brunna:⚠️ disk full", "bot@example.org", "me@example.org",
                                 "⚠️ disk full\nsecond line\n"), ("close",)])
         self.assertEqual(self.calls, [], "email does not go through curl")
 
@@ -202,14 +202,14 @@ class Adapters(unittest.TestCase):
         self.assertNotIn(("starttls",), log)
         self.assertFalse([e for e in log if e[0] == "login"], "a user without a password file: no login")
         send = next(e for e in log if e[0] == "send")
-        self.assertEqual(send[1:4], ("agent-hub:" + "a" * 80, "hub@example.org", "me@x"))
+        self.assertEqual(send[1:4], ("brunna:" + "a" * 80, "hub@example.org", "me@x"))
 
     def test_email_explicit_port(self):
         log = self.smtp()
         self.cfg["alerts"]["email"] = {"host": "h", "port": "2525", "to": "me@x"}
         self.assertTrue(self.m.send("x"))
         self.assertEqual(log[0], ("connect", "plain", "h", 2525, 20))
-        self.assertEqual(next(e for e in log if e[0] == "send")[2], "agent-hub", "From falls back to agent-hub")
+        self.assertEqual(next(e for e in log if e[0] == "send")[2], "brunna", "From falls back to the product name")
 
     def test_email_failures(self):
         for fail in ("connect", "login"):
@@ -239,7 +239,7 @@ class Adapters(unittest.TestCase):
         self.assertTrue(self.m.send('say "hi"' + "z" * 300))
         (argv, kw), = self.calls
         text = 'say "hi"' + "z" * 192
-        self.assertEqual(argv, ["/usr/bin/osascript", "-e", f'display notification {json.dumps(text)} with title "agent-hub"'])
+        self.assertEqual(argv, ["/usr/bin/osascript", "-e", f'display notification {json.dumps(text)} with title "brunna"'])
         self.code = "1"
         self.assertFalse(self.m.send("x"))
 

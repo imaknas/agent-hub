@@ -166,7 +166,7 @@ fi
 
 if [ -z "$origin_url" ] && [ "$NO_REMOTE" != true ]; then
   # the account is read from hub.json's github.owner, not hard-coded (CLAUDE.md, "rules for writing new code")
-  GH_OWNER=$("$AGENT_HUB/bin/py" "$AGENT_HUB/bin/hubconf.py" get github.owner) || fail "$(hub_msg "hub.json has no github.owner: cannot create the GitHub repo")"
+  GH_OWNER=$("$AGENT_HUB/bin/py" "$AGENT_HUB/bin/hubconf.py" get github.owner) || fail "$(hub_msg "{settings} has no github.owner: cannot create the GitHub repo")"
   gh repo create "$GH_OWNER/$PROJ_NAME" $VISIBILITY --source=. --remote=origin
   sgit remote set-url origin "git@github.com:${GH_OWNER}/${PROJ_NAME}.git"
   outer_branch=$(sgit branch --show-current)
@@ -196,7 +196,7 @@ if [ "$RESUME" != true ]; then
   # New projects get engineering registered by default since 2026-09-27 and multi-agent-review since 2026-10-27;
   # existing projects were all given them the same day.
   printf 'engineering\nmulti-agent-review\n' > .agent-memory/RULES
-  ( cd .agent-memory && sgit add -A && sgit commit -q -m "init: agent-hub memory skeleton (AGENT.md/STATE.md/memory)" )
+  ( cd .agent-memory && sgit add -A && sgit commit -q -m "init: brunna memory skeleton (AGENT.md/STATE.md/memory)" )
   hub_say "[3/11] Skeleton files in place and committed on the agent-memory branch"
 
   # --- 4. ignore .agent-memory/ ---
@@ -220,7 +220,7 @@ if [ "$RESUME" != true ]; then
   elif rt_has lifecycle; then
     hub_say "[5-6/11] Hooks are in place (not version-controlled); this runtime has no rules file"
   else
-    hub_say "[5-6/11] No hooks and no rules-file block: this runtime has neither (hub.json runtime.default)"
+    hub_say "[5-6/11] No hooks and no rules-file block: this runtime has neither ({settings} runtime.default)"
   fi
 
   # --- 7. commit nothing to the outer repo ---
@@ -290,11 +290,11 @@ manifest_origin="${origin_url:-(native)}"
 "$AGENT_HUB/bin/gen-index-roster.sh"
 if "$AGENT_HUB/bin/commit-hub-files.sh" "register $PROJ_NAME (onboard-project.sh)" \
     "projects/$PROJ_NAME.yaml" mirror-list.txt index.md; then
-  hub_say "[11/11] Registered in agent-hub's project registry (projects/{name}.yaml); agent-hub committed and pushed" name="$PROJ_NAME"
+  hub_say "[11/11] Registered in brunna's project registry (projects/{name}.yaml); brunna committed and pushed" name="$PROJ_NAME"
 else
-  hub_say "Warning: committing/pushing agent-hub's registry files failed; do it by hand (the registration itself is written)" >&2
-  hub_say "[11/11] Registered in agent-hub's project registry (projects/{name}.yaml); committing/pushing agent-hub failed (see the warning)" name="$PROJ_NAME"
+  hub_say "Warning: committing/pushing brunna's registry files failed; do it by hand (the registration itself is written)" >&2
+  hub_say "[11/11] Registered in brunna's project registry (projects/{name}.yaml); committing/pushing brunna failed (see the warning)" name="$PROJ_NAME"
 fi
 
 echo
-hub_say "Done: {name} is connected to the agent-hub pipeline." name="$PROJ_NAME"
+hub_say "Done: {name} is connected to the brunna pipeline." name="$PROJ_NAME"

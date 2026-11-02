@@ -31,9 +31,9 @@ sync-local-setup (stand-in): alpha
 [10/11] 沒有外部 remote,跳過 mirror-backup 登記
 登錄:<TMP>/hub/projects/alpha.yaml
 commit-hub-files (stand-in): register alpha (onboard-project.sh)
-[11/11] 已登記進 agent-hub 的專案登錄(projects/alpha.yaml),並 commit+push agent-hub
+[11/11] 已登記進 brunna 的專案登錄(projects/alpha.yaml),並 commit+push brunna
 
-完成:alpha 已接上 agent-hub 管線。
+完成:alpha 已接上 brunna 管線。
 --- stderr
 
 === alpha's STATE.md
@@ -95,9 +95,9 @@ exit 0
 [10/11] 沒有外部 remote,跳過 mirror-backup 登記
 登錄:<TMP>/hub/projects/alpha.yaml
 commit-hub-files (stand-in): register alpha (onboard-project.sh)
-[11/11] 已登記進 agent-hub 的專案登錄(projects/alpha.yaml),並 commit+push agent-hub
+[11/11] 已登記進 brunna 的專案登錄(projects/alpha.yaml),並 commit+push brunna
 
-完成:alpha 已接上 agent-hub 管線。
+完成:alpha 已接上 brunna 管線。
 --- stderr
 
 === no github.owner
@@ -122,12 +122,12 @@ sync-local-setup (stand-in): zeta
 [9/11] 已 clone librarian 用的 memory 副本到 ~/.memory-copies/zeta
 [10/11] 已登記進 mirror-backup 清單
 登錄:<TMP>/hub/projects/zeta.yaml
-[11/11] 已登記進 agent-hub 的專案登錄(projects/zeta.yaml),但 agent-hub 的 commit/push 失敗(見上面的警告)
+[11/11] 已登記進 brunna 的專案登錄(projects/zeta.yaml),但 brunna 的 commit/push 失敗(見上面的警告)
 
-完成:zeta 已接上 agent-hub 管線。
+完成:zeta 已接上 brunna 管線。
 --- stderr
 commit-hub-files (stand-in): push failed
-警告:agent-hub 登記檔 commit/push 失敗,請手動處理(登記內容本身已寫入)
+警告:brunna 登記檔 commit/push 失敗,請手動處理(登記內容本身已寫入)
 
 === mirror-list.txt
 git@github.com:o/zeta.git
@@ -173,7 +173,7 @@ sync-local-setup (stand-in): kappa
 [10/11] 沒有外部 remote,跳過 mirror-backup 登記
 登錄:<TMP>/hub/projects/kappa.yaml
 commit-hub-files (stand-in): register kappa (onboard-project.sh)
-[11/11] 已登記進 agent-hub 的專案登錄(projects/kappa.yaml),並 commit+push agent-hub
+[11/11] 已登記進 brunna 的專案登錄(projects/kappa.yaml),並 commit+push brunna
 
-完成:kappa 已接上 agent-hub 管線。
+完成:kappa 已接上 brunna 管線。
 --- stderr

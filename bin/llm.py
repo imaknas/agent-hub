@@ -1,5 +1,5 @@
 #!/bin/sh -c exec${IFS}"${0%/*}/py"${IFS}"$0"${IFS}"$@"
-"""The only place in agent-hub that calls `claude -p`. Every call must be a judgment point declared in
+"""The only place in brunna that calls `claude -p`. Every call must be a judgment point declared in
 contracts/llm-points.yaml: flags (model, permission mode, tools, allowedTools) are added as declared, the output is
 validated against the declared schema, and when the model can't be used or the output is invalid, it returns the
 declared safe default or takes the caller's failure path, recording job.failed on the bus.
@@ -14,7 +14,7 @@ declared safe default or takes the caller's failure path, recording job.failed o
         contracts/llm-points.v1.schema.json
   llm.py run <point> --dry-run ...         only prints the command it would run (a JSON list), doesn't call the model
   llm.py lint     lists the `claude -p` calls in bin/ that bypass this (for contracts-check)
-  llm.py health   whether each provider in hub.json's llm can be used
+  llm.py health   whether each provider in {settings}'s llm can be used
   llm.py project <project> <point> --request F   a project's own declared model call (cap-runner runs it; see
                   project_call)
 
@@ -23,7 +23,7 @@ the environment's tool servers this run would load, and every one its allow list
 (policy.tool_server_denials); when that can't be told the run doesn't happen: job.failed, an alert, exit 1.
 
 A judgment point declared `shape: completion` → handed to completion.py (the same handling for every provider;
-docs/design/llm-providers.md): if hub.json has an `llm` block, the provider is chosen from it (any key); otherwise it
+docs/design/llm-providers.md): if {settings} has an `llm` block, the provider is chosen from it (any key); otherwise it
 goes to runtime.default's completion interface (Claude Code run with its tools off). Agent-shaped points go to the
 agent interface as before.
 
@@ -32,7 +32,7 @@ setup-token`, one year, the same under launchd and SSH, only one thing to replac
 `auth: subscription`, or callers setting LLM_AUTH=subscription (a registry job's `connectors: true`), use the
 subscription login (keychain / .credentials.json): claude.ai connectors (Upwork etc.) load only with the subscription
 login. Wanting the token but having no token file fails (no silent switch to the subscription login;
-agent-hub/claude-login raises an alert too).
+brunna/claude-login raises an alert too).
 """
 from __future__ import annotations
 
@@ -139,7 +139,7 @@ def run_completion(a, spec: dict, prompt: str, model: str | None) -> int:
     if not completion.settings():
         name = point_runtime(a.point, spec) or runtime_ports.default_name()
         if "completion" not in runtime_ports.capabilities(name):
-            return fail(a.point, spec, _("runtime {name} has no completion interface, and hub.json has no llm section "
+            return fail(a.point, spec, _("runtime {name} has no completion interface, and {settings} has no llm section "
                                          "(set up an LLM provider)", name=name))
         target = completion.runtime_target(name, model, auth_mode(spec))
     try:
@@ -179,7 +179,7 @@ def project_call(project: str, point: str, request: pathlib.Path) -> int:
         else:
             rt = runtime_ports.default_name()
             if "completion" not in runtime_ports.capabilities(rt):
-                return fail(name, spec, _("runtime {name} has no completion interface, and hub.json has no llm "
+                return fail(name, spec, _("runtime {name} has no completion interface, and {settings} has no llm "
                                           "section (set up an LLM provider)", name=rt))
             target = completion.runtime_target(rt, model_for(name, spec), auth_mode(spec))
         if completion.metered(target) and doc.get("metered_models") is not True:
@@ -361,7 +361,7 @@ def main() -> int:
     pc.add_argument("point")
     pc.add_argument("--request", required=True)
     sub.add_parser("lint")
-    sub.add_parser("health", help=_("whether each provider in hub.json llm works (key, connection, model there)"))
+    sub.add_parser("health", help=_("whether each provider in {settings} llm works (key, connection, model there)"))
     a = ap.parse_args()
     if a.cmd == "exec" and a.cwd:
         os.chdir(a.cwd)

@@ -69,7 +69,7 @@ fi
 # steps run as usual.
 INSTRS=$("$AGENT_HUB/bin/py" "$AGENT_HUB/bin/hub-runtime" instructions-files "$PWD" 2>/dev/null); rc=$?
 if [ "$rc" = 3 ]; then
-  $QUIET || hub_say "sync-local-setup: this runtime has no rules file (hub.json runtime.default); the managed block is not written"
+  $QUIET || hub_say "sync-local-setup: this runtime has no rules file ({settings} runtime.default); the managed block is not written"
 elif [ "$rc" != 0 ] || [ -z "$INSTRS" ]; then
   hub_say "sync-local-setup: hub-runtime could not say where the rules file is; the managed block was not updated" >&2; exit 1
 else
@@ -144,7 +144,7 @@ if ! git -C .agent-memory show HEAD:AGENT.md 2>/dev/null | cmp -s "$AGENT_HUB/te
     && export GIT_CONFIG_COUNT=1 GIT_CONFIG_KEY_0=core.hooksPath GIT_CONFIG_VALUE_0=/dev/null \
     && cp "$AGENT_HUB/templates/AGENT.md" AGENT.md \
     && "$AGENT_HUB/bin/with-lock.sh" sh -c \
-         'git commit -q -m "agent-hub: sync AGENT.md from template" -- AGENT.md \
+         'git commit -q -m "brunna: sync AGENT.md from template" -- AGENT.md \
           && { [ -n "${AGENT_HUB_OFFLINE:-${BRUNNA_OFFLINE:-}}" ] || "$0/bin/git-safe-push.sh"; }' "$AGENT_HUB" ) >/dev/null 2>&1 \
     && { $QUIET || hub_say "sync-local-setup: AGENT.md aligned with the template and pushed"; } \
     || { $QUIET || hub_say "sync-local-setup: ⚠️ AGENT.md updated, but the commit/push failed; the next session start tries again"; }
@@ -181,9 +181,9 @@ done
 leak_re='~/(agent-hub|brunna)/|/Users/[A-Za-z0-9._-]+/(agent-hub|brunna|workspace|\.agent-hub|\.brunna|services|git-origin)'
 leaks=$(git grep -l -I -E "$leak_re" HEAD -- . 2>/dev/null | sed 's#^HEAD:##' | head -10)
 if [ -n "$leaks" ]; then
-  hub_say "⚠️ Files committed in this repo contain this machine's paths (the repo may become public, and local paths must not be committed; naming agent-hub is fine):
+  hub_say "⚠️ Files committed in this repo contain this machine's paths (the repo may become public, and local paths must not be committed; naming brunna is fine):
 {files}
-Please handle it in this project: move what is needed to operate it into {file} (outside the agent-hub:begin/end block, not version-controlled),
+Please handle it in this project: move what is needed to operate it into {file} (outside the brunna:begin/end block, not version-controlled),
 and in committed files write it without local paths or delete it, then commit. For details:
 {command}" files="$(echo "$leaks" | sed 's/^/  - /')" file="$INSTR" command="git grep -n -E '$leak_re'"
 fi

@@ -1,5 +1,5 @@
 === read_key: missing secret
-no key: <TMP>/secrets/k does not exist (`agenthub llm set-key` writes it)
+no key: <TMP>/secrets/k does not exist (`brunna llm set-key` writes it)
 === read_key: missing env
 no key: environment variable GOLDEN_NO_KEY is not set (the scheduler runs under launchd and does not see the shell's settings; a secret is more reliable)
 === read_key: bad shape
@@ -7,7 +7,7 @@ key must be {"secret": file name} or {"env": variable name}
 === read_key: empty
 no key: <TMP>/secrets/empty is empty
 === resolve: no llm
-hub.json has no llm section
+brunna.json has no llm section
 === resolve: no use
 llm.use does not say which provider serves the strong group
 === resolve: no provider
@@ -32,7 +32,7 @@ The previous answer was not valid ($: missing answer). This time reply with one 
 === run: budget
 today's model spending has reached the budget (llm.budget.daily_usd $5); not sending this one
 === health_all
-[('f', True, ''), ('k', False, 'no key: <TMP>/secrets/nokey does not exist (`agenthub llm set-key` writes it)'), ('x', False, "'no such completion implementation: nosuch (have: anthropic, openai, ollama, claude, fake, none, command, acp)'")]
+[('f', True, ''), ('k', False, 'no key: <TMP>/secrets/nokey does not exist (`brunna llm set-key` writes it)'), ('x', False, "'no such completion implementation: nosuch (have: anthropic, openai, ollama, claude, fake, none, command, acp)'")]
 === config_errors
 providers.a.key.secret looks like a key value: the value goes in the secrets directory ({"secret": file name}) or an environment variable ({"env": name})
 providers.a.models.huge: the group can only be fast / standard / strong

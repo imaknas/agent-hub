@@ -39,7 +39,7 @@ False
 === stream result
 [('error', {'error': 'rate_limit', 'detail': 'usage limit reached'}), ('turn_end', {'cost': None, 'num_turns': None, 'duration_ms': None, 'is_error': True})]
 === classify_exit login
-StreamEvent(type='error', data={'error': 'agent_login', 'detail': "Claude Code (used by project sessions) is not logged in, or its credentials have expired (the platform's agent-hub/claude-login sends an alert). exit 1: Login expired"})
+StreamEvent(type='error', data={'error': 'agent_login', 'detail': "Claude Code (used by project sessions) is not logged in, or its credentials have expired (the platform's brunna/claude-login sends an alert). exit 1: Login expired"})
 === classify_exit crash
 StreamEvent(type='error', data={'error': 'process_crashed', 'detail': 'exit 1: segfault'})
 === resume_command

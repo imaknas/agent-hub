@@ -22,7 +22,7 @@ def zh(msgid, **kw):
     return i18n.translate("guard", msgid, kw, "zh-Hant")
 
 
-HOW = zh("To ask another project for something, send a letter: agenthub send --to <project> --type request "
+HOW = zh("To ask another project for something, send a letter: brunna send --to <project> --type request "
          "--text \"…\"; or ask the owner to open a session in that project themselves.")
 
 

@@ -22,7 +22,7 @@ backup cannot connect, conversations there are counted only by the next check af
 
 Usage: check-memory-gaps.py [--window-hours 72] [--threshold 10] [--apply]
 Output: one markdown line per project when there are gaps, nothing at all otherwise.
---apply (platform job agent-hub/memory-gaps, nightly after todo): the result is written into todo.md's fixed block
+--apply (platform job brunna/memory-gaps, nightly after todo): the result is written into todo.md's fixed block
   and the memory-gaps section of today's digest (both removed when there are no gaps), and only a one-line summary
   is printed -- printed whatever the result, so "0 gaps" can be told apart from "did not run at all".
   todo.md is regenerated as a whole by gen-todo.py, so this job has to be scheduled after todo.

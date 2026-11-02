@@ -1,5 +1,5 @@
 #!/bin/sh -c exec${IFS}"${0%/*}/py"${IFS}"$0"${IFS}"$@"
-"""Encrypted cloud backup (restic → Backblaze B2). Settings in hub.json's backup.
+"""Encrypted cloud backup (restic → Backblaze B2). Settings in {settings}'s backup.
 
   backup.py run       nightly (platform job): stage consistent copies → restic backup → apply the retention rules on
                       Sundays → restic check
@@ -12,12 +12,12 @@
 What is backed up (what only the hub machine has, and cannot be recovered once lost):
   - SQLite (the bus's bus.db, the databases in backup.sqlite): copied with the backup API first, so the db/WAL being
     written is never touched
-  - the bare repos under ~/git-origin (memory branches, agent-hub itself, projects without a GitHub remote):
+  - the bare repos under ~/git-origin (memory branches, brunna itself, projects without a GitHub remote):
     git bundle --all
   - what each project workspace has not pushed: commits not on any remote as a bundle, uncommitted changes as a diff
     (both made by the project's own job, project_git.py; where its sandbox refuses, the manifest lists it as skipped),
     .env* (up to three levels deep, e.g. backend/.env)
-  - the directories listed in hub.json backup.include (the assistant's data, platform state, secrets, service data,
+  - the directories listed in {settings} backup.include (the assistant's data, platform state, secrets, service data,
     Claude Code transcripts)
 Not backed up: transcripts of the work profile (company content), GitHub mirrors, whole workspaces, generated videos,
 venv/cache, and live sessions' wake addresses (hubconf.session_addresses_dir: one only works while its session runs).

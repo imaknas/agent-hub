@@ -1,9 +1,9 @@
 #!/bin/sh -c exec${IFS}"${0%/*}/py"${IFS}"$0"${IFS}"$@"
 """Whether the secrets declared in the registry (secrets: in projects/<p>.yaml) exist, are backed up, and are close to
-expiring (platform job agent-hub/secrets, daily).
+expiring (platform job brunna/secrets, daily).
 
 Who owns which secrets (decided by the owner on 2026-10-24): machine-level ones (claude, Discord, B2, the backup
-password…) are the platform's, declared in agent-hub's registry entry; keys for a project's own services are the
+password…) are the platform's, declared in brunna's registry entry; keys for a project's own services are the
 project's, declared in its own registry entry (manifest.update); issuing new ones at the external service, revoking
 and replacing them is done by the owner.
 The registry holds only names, locations and expiry, **never values**; this script neither reads nor prints values:
@@ -79,7 +79,7 @@ def check(project: str, doc: dict, sec: dict, today: datetime.date) -> tuple[lis
     if sec.get("env_key") and path.is_file() and not has_key(path, sec["env_key"]):
         probs.append(_("{name}: {path} has no {key} (or it is empty)", name=name, path=path, key=sec["env_key"]))
     if sec.get("backup", True) and not backup.covers(path):
-        probs.append(_("{name} is not backed up ({path}) — add it to hub.json backup.include, or write backup: false + why "
+        probs.append(_("{name} is not backed up ({path}) — add it to {settings} backup.include, or write backup: false + why "
                        "in the registry", name=name, path=path))
     exp = None
     if sec.get("expires"):
@@ -143,7 +143,7 @@ def main(argv: list[str]) -> int:
         # to the registry
         import completion
         llm_keys = [{"name": f"llm-{n}-key", "path": str(hubconf.secrets_dir() / p["key"]["secret"]),
-                     "why": _("API key of hub.json llm.providers.{name}", name=n)}
+                     "why": _("API key of {settings} llm.providers.{name}", name=n)}
                     for n, p in (((completion.settings() or {}).get("providers")) or {}).items()
                     if isinstance(p, dict) and isinstance(p.get("key"), dict) and p["key"].get("secret")]
         # the alert channel's credentials (only when hub.json alerts sets up Discord): the platform's too, no need to
@@ -175,7 +175,7 @@ def main(argv: list[str]) -> int:
             alert.clear_failure("discord-probe")
         elif not alert.configured():
             # not set up is not broken: a reminder, not a failing job (the status page shows the same reminder)
-            print(_("Reminder: no alert channel is set, so nothing tells you when something breaks — set one in hub.json "
+            print(_("Reminder: no alert channel is set, so nothing tells you when something breaks — set one in {settings} "
                     "alerts (ntfy is the simplest: a phone app, no account)"))
         else:
             alert.record_failure("discord-probe", _("The Discord bot token does not work (GET /users/@me failed); no "

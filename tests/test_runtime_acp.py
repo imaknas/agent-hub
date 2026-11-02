@@ -466,10 +466,11 @@ class ConfigCheckDefault(unittest.TestCase):
                 self.assertEqual(r.returncode, 1, r.stdout + r.stderr)
                 self.assertEqual(len(r.stderr.strip().splitlines()), 1, "the only problem: " + r.stderr)
                 want = i18n.translate("config-check", (
-                    "hub.json: runtime.default `{name}` runs only in the platform's throwaway worktree, so as the "
+                    "{settings}: runtime.default `{name}` runs only in the platform's throwaway worktree, so as the "
                     "default it would run nothing (dispatch needs session state, every other point is refused); keep "
                     "another runtime as the default and pin {name} on {points} (llm.points.<point>.runtime)"),
-                    {"name": "acp", "points": ", ".join(runtime_ports.THROWAWAY_POINTS)}, lang)
+                    {"settings": "hub.json", "name": "acp",   # the file this test writes
+                     "points": ", ".join(runtime_ports.THROWAWAY_POINTS)}, lang)
                 self.assertIn(want, r.stderr)
 
     def test_acp_pinned_on_a_throwaway_point_passes(self):

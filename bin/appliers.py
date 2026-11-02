@@ -1,4 +1,4 @@
-"""Config appliers (docs/design/new-user.md 3.7): the programs that turn config (project registry, hub.json…) into
+"""Config appliers (docs/design/new-user.md 3.7): the programs that turn config (project registry, {settings}…) into
 actual state on the machine.
 
 An applier = a module providing:

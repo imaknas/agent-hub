@@ -377,7 +377,7 @@ def main() -> None:
                   "if it stops)", reason=hubconf.no_service_manager())
         alerts.append(("bad" if stale else "notify", t[:1].upper() + t[1:]))   # starts upper-case (a no-op on CJK)
     elif not alive:
-        alerts.append(("bad", _("The scheduler (local.agent-hub-scheduler) is not loaded: nothing scheduled runs. "
+        alerts.append(("bad", _("The scheduler (local.brunna-scheduler) is not loaded: nothing scheduled runs. "
                                 "On the hub machine, run schedulectl start")))
     elif stale:
         alerts.append(("bad", _("The scheduler's last tick was {tick:%m/%d %H:%M}, over 40 minutes ago", tick=tick) if tick
@@ -387,22 +387,22 @@ def main() -> None:
     # itself, so it stops updating when the scheduler stops -- the one that actually raises the alarm is the watchdog,
     # so when it is not on watch, this page has to say so (with no service manager, the line above already does)
     if sm == "systemd" and __import__("systemd_units").state(names.unit_label("-scheduler-watchdog")) != "running":
-        alerts.append(("bad", _("The scheduler watchdog (local.agent-hub-scheduler-watchdog.timer) is not scheduled: "
-                                "nobody is told when the scheduler stops. Run agenthub init")))
+        alerts.append(("bad", _("The scheduler watchdog (local.brunna-scheduler-watchdog.timer) is not scheduled: "
+                                "nobody is told when the scheduler stops. Run brunna init")))
     elif sm is None:
         pass
     elif sm == "launchd" and subprocess.run(["launchctl", "print", f"gui/{os.getuid()}/{names.unit_label('-scheduler-watchdog')}"],
                                             capture_output=True).returncode != 0:
-        alerts.append(("bad", _("The scheduler watchdog (local.agent-hub-scheduler-watchdog) is not loaded: nobody is told "
+        alerts.append(("bad", _("The scheduler watchdog (local.brunna-scheduler-watchdog) is not loaded: nobody is told "
                                 "when the scheduler stops. On the hub machine, run "
-                                "bin/recover-service.sh local.agent-hub-scheduler-watchdog")))
+                                "bin/recover-service.sh local.brunna-scheduler-watchdog")))
     elif hubconf.get("alerts") and not watchdog_channels():
         alerts.append(("bad", _("The scheduler watchdog has no alert channel it can send on (Discord, ntfy, email or macOS "
-                                "notifications in hub.json alerts): it cannot alert when the scheduler stops")))
+                                "notifications in {settings} alerts): it cannot alert when the scheduler stops")))
 
     # no alert channel at all: one setup reminder, not red (a feature that is off does not turn the page red)
     if not hubconf.get("alerts"):
-        alerts.append(("notify", _("No alerts set up (hub.json has no alerts): a stopped scheduler or a dead service only "
+        alerts.append(("notify", _("No alerts set up ({settings} has no alerts): a stopped scheduler or a dead service only "
                                    "shows on this page and in the log; nobody is notified")))
     # alerts that could not be sent (recorded by bin/alert.py; Discord token invalid, network down…): must not pass
     # silently
@@ -415,7 +415,7 @@ def main() -> None:
                                         "discord-token still works; it is tried again next time",
                                         key=key, at=f.get('at', '')[:16], text=f.get('text', ''))))
             else:
-                alerts.append(("bad", _("An alert could not be sent ({key}, {at}): {text}. Check the channels in hub.json "
+                alerts.append(("bad", _("An alert could not be sent ({key}, {at}): {text}. Check the channels in {settings} "
                                         "alerts ({channels}); it is tried again next time", key=key,
                                         at=f.get('at', '')[:16], text=f.get('text', ''), channels=_(", ").join(channels))))
     except Exception as e:  # the status page must not crash because of this
@@ -437,12 +437,12 @@ def main() -> None:
         rec = json.loads(appliers.applied_path().read_text()) if appliers.applied_path().exists() else None
         config_note = f" · config {rec['commit'][:7]}" if rec else ""
         if rec and not rec.get("ok", True):
-            alerts.append(("bad", _("The last agenthub config apply left differences from the config ({at}): agenthub config "
+            alerts.append(("bad", _("The last brunna config apply left differences from the config ({at}): brunna config "
                                     "plan shows which", at=rec.get('at', '')[:16])))
         elif rec and rec["commit"] != cur:
-            alerts.append(("notify", _("The config has changed but has not been applied (agenthub config apply; applied: {applied}; "
+            alerts.append(("notify", _("The config has changed but has not been applied (brunna config apply; applied: {applied}; "
                                        "now: {current}{dirty}). The 15-minute jobs catch up services and project settings, "
-                                       "but only agenthub config apply records it", applied=rec['commit'][:7],
+                                       "but only brunna config apply records it", applied=rec['commit'][:7],
                                        current=cur[:7], dirty=_(" + uncommitted changes") if cur.endswith('+dirty') else '')))
     except Exception as e:
         alerts.append(("bad", _("Cannot read the config apply record: {e}", e=e)))

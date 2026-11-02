@@ -4,16 +4,16 @@ project with the old and the new rules, and checking what it did.
 
 Each run builds a small project (git repo, `.agent-memory/` with AGENT.md, STATE.md and a note, the platform's managed
 block in the runtime's instructions file) and runs the owner's request through bin/llm.py as the `agent-job` point (the
-default permission mode of an unattended agent job). The agent uses the real `agenthub`, but the run has its own copy of
+default permission mode of an unattended agent job). The agent uses the real `brunna`, but the run has its own copy of
 the config (the project registered there, the assistant's API pointed nowhere) and its own bus, so nothing is
-delivered; the checks read that bus. (A fake `agenthub` first on PATH does not work: the agent's shell rebuilds PATH from
+delivered; the checks read that bus. (A fake `brunna` first on PATH does not work: the agent's shell rebuilds PATH from
 the login profile.) Scenario inputs are per content language in `locales/<lang>.e3.json`.
 
 Two scenarios reach other templates the way production does:
   mailbox  templates/prompts/mailbox.md: letters in the project's mailbox, claimed for the platform the way `hubbus
            dispatch` claims them, and the rendered prompt run as the `mailbox-escalation` point (its permission mode,
            its tools), as run-agent-job.sh runs it for hubbus
-  mcp      templates/mcp-instructions.md: no rules file in the project, only the platform's MCP server (`agenthub mcp`
+  mcp      templates/mcp-instructions.md: no rules file in the project, only the platform's MCP server (`brunna mcp`
            = bin/mcp_server.py of the arm's tree, the run's config) given to the agent with --mcp-config; asked to
            check the mail
 

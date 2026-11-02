@@ -14,7 +14,7 @@ but not in git: data, output, a cache) are listed apart in the digest and are no
 
 Usage: check-state-anchors.py [--project P] [--apply]
 Output: one markdown line per stale anchor, nothing at all otherwise.
---apply (platform job agent-hub/state-anchors, nightly after the librarian and todo): the stale anchors go into
+--apply (platform job brunna/state-anchors, nightly after the librarian and todo): the stale anchors go into
   todo.md's fixed block (removed when there are none), stale, pending and not-checked into the state-anchors section
   of today's digest, and only a one-line summary is printed -- whatever the result, so "0 stale" can be told apart
   from "did not run at all". todo.md is regenerated as a whole by gen-todo.py, so this job runs after todo.

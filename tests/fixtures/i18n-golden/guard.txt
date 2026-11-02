@@ -12,12 +12,12 @@ exit 2
 
 
 === other cwd
-proj 的 session 不能在 <TMP>/other 開 session(那不是這個專案)。跨專案的事請寄信:agenthub send --to <專案> --type request --text "…";或請 Alex 自己到那個專案開 session。
+proj 的 session 不能在 <TMP>/other 開 session(那不是這個專案)。跨專案的事請寄信:brunna send --to <專案> --type request --text "…";或請 Alex 自己到那個專案開 session。
 === repository
-proj 的 session 不能在別的 repository(o/r)開 session。跨專案的事請寄信:agenthub send --to <專案> --type request --text "…";或請 Alex 自己到那個專案開 session。
+proj 的 session 不能在別的 repository(o/r)開 session。跨專案的事請寄信:brunna send --to <專案> --type request --text "…";或請 Alex 自己到那個專案開 session。
 === machine
-proj 的 session 不能到別台機器開 session。跨專案的事請寄信:agenthub send --to <專案> --type request --text "…";或請 Alex 自己到那個專案開 session。
+proj 的 session 不能到別台機器開 session。跨專案的事請寄信:brunna send --to <專案> --type request --text "…";或請 Alex 自己到那個專案開 session。
 === unknown place
-proj 的 session 用 preset 開 session 時看不出是不是同一個專案;同一個專案就不要給 preset/cwd。跨專案的事請寄信:agenthub send --to <專案> --type request --text "…";或請 Alex 自己到那個專案開 session。
+proj 的 session 用 preset 開 session 時看不出是不是同一個專案;同一個專案就不要給 preset/cwd。跨專案的事請寄信:brunna send --to <專案> --type request --text "…";或請 Alex 自己到那個專案開 session。
 === same project
 None

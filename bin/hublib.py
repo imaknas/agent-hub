@@ -1,4 +1,4 @@
-"""Judgments shared by several agent-hub scripts: which transcript entries are messages a real person typed, which
+"""Judgments shared by several brunna scripts: which transcript entries are messages a real person typed, which
 project a transcript folder maps to, which commits count as project work. Kept in one place so that one change keeps
 every script in step.
 

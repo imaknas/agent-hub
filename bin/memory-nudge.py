@@ -16,7 +16,7 @@ Two modes (both run in the project root):
 "Behind" = since the latest note (the mtime of the files under .agent-memory/memory/; memory syncs only hourly, so
 commits aren't used) or since the moment of onboarding, commits that represent project work haven't been recorded:
 2 or more have piled up, or the earliest is over 30 minutes old. If every commit gets recorded you're never bothered.
-Commits produced automatically by schedules and commits touching only files agent-hub manages don't count.
+Commits produced automatically by schedules and commits touching only files brunna manages don't count.
 In every other case, no output and exit code 0; nothing is ever blocked.
 """
 from __future__ import annotations  # the system python3 (3.9, the one hooks use) must be able to import this too

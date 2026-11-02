@@ -1,6 +1,6 @@
 {
  "usage: recover-project.sh <name> [target path]": "用法: recover-project.sh <name> [目標路徑]",
- "{path} not found: first make sure agent-hub itself is cloned": "找不到 {path}——先確認 agent-hub 本身已經 clone 好",
+ "{path} not found: first make sure brunna itself is cloned": "找不到 {path}——先確認 brunna 本身已經 clone 好",
  "'{name}' is not in the project registry ({path}): check the spelling, or the project was never registered": "專案登錄({path})裡找不到 '{name}'——確認名稱拼對了,或這個專案本來就沒登記過",
  "'{name}' was a native project (no external GitHub remote).\nSo its code was never backed up anywhere but the original machine: the registry entry only has\nmemory_bare_repo ({memory_bare}), which is the history of memory tracking, not code.\nIf the original machine's disk is still there, rescue the code from it first, then decide by hand how to attach\n{memory_bare}; this script will not guess at code.": "'{name}' 當初是 native 專案(沒有外部 GitHub remote)。\n這代表真實程式碼從來沒有備份在這台機器以外的地方——manifest 裡只有\nmemory_bare_repo({memory_bare}),那只是 memory 追蹤的歷史,不是程式碼。\n如果原本那台機器的磁碟還在,先從那裡把程式碼救出來,再手動決定怎麼接上\n{memory_bare};這支腳本不會用猜的方式生成程式碼。",
  "{path} already exists, not overwriting: sort it out by hand, then run again": "{path} 已經存在,不覆蓋——確認清楚後手動處理再重跑",

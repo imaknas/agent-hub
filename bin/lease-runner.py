@@ -22,7 +22,7 @@ API:
   POST /v1/leases/<id>/terminal       L3: stop the process, return {command, hint} (the runtime's resume_command)
   POST /v1/leases/<id>/detach         {v, reason} → 202; the handover runs in the background, the result comes as
                                       events
-  GET  /v1/leases, GET /v1/status, GET /v1/policy (the domains that can't get allow_session, hub.json
+  GET  /v1/leases, GET /v1/status, GET /v1/policy (the domains that can't get allow_session, {settings}
                                       lease.no_session_domains)
   POST /v1/leases/<id>/mode           {v, mode: discuss|work} → 200; 409 busy while answering; work only for idea
                                       sandboxes (see work_ready)

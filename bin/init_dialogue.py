@@ -152,7 +152,7 @@ def native_yes(question: str, wait: int = WAIT) -> bool | None:
     """Ask yes/no in the desktop's own dialog: True, False, or None when no dialog could be shown or nobody answered
     in time. "No" is the default button. The question goes in as an argument, never into the script's text."""
     if sys.platform == "darwin":
-        script = ["on run argv", "activate", 'display dialog (item 1 of argv) with title "agent-hub" buttons {"No", '
+        script = ["on run argv", "activate", 'display dialog (item 1 of argv) with title "brunna" buttons {"No", '
                   f'"Yes"}} default button "No" cancel button "No" giving up after {wait}', "end run"]
         argv = ["osascript", *[x for line in script for x in ("-e", line)], "--", question]
         try:
@@ -163,10 +163,10 @@ def native_yes(question: str, wait: int = WAIT) -> bool | None:
             return False if "-128" in r.stderr else None   # -128: the No (cancel) button
         return None if "gave up:true" in r.stdout else "button returned:Yes" in r.stdout
     if shutil.which("zenity"):
-        argv = ["zenity", "--question", "--title=agent-hub", f"--text={question}", f"--timeout={wait}",
+        argv = ["zenity", "--question", "--title=brunna", f"--text={question}", f"--timeout={wait}",
                 "--default-cancel", "--no-markup"]
     elif shutil.which("kdialog"):
-        argv = ["kdialog", "--title", "agent-hub", "--yesno", question]
+        argv = ["kdialog", "--title", "brunna", "--yesno", question]
     else:
         return None
     try:
@@ -177,9 +177,9 @@ def native_yes(question: str, wait: int = WAIT) -> bool | None:
 
 
 PAGE = """<!doctype html><meta charset="utf-8"><meta name="viewport" content="width=device-width">
-<title>agent-hub</title><style>body{{font:16px system-ui;max-width:36em;margin:3em auto;padding:0 1em}}
+<title>brunna</title><style>body{{font:16px system-ui;max-width:36em;margin:3em auto;padding:0 1em}}
 input{{font:inherit;width:100%;padding:.4em;margin:.6em 0}}button{{font:inherit;padding:.4em 1.2em}}</style>
-<h1>agent-hub</h1><form method="post" action="{action}"><label>{prompt}<input type="password" name="value"
+<h1>brunna</h1><form method="post" action="{action}"><label>{prompt}<input type="password" name="value"
 autocomplete="off" autofocus required></label><button>{save}</button></form><p>{note}</p>"""
 
 
@@ -213,7 +213,7 @@ def secret_page(prompt: str, wait: int = WAIT) -> str | None:
             if not self.ours() or got:
                 return self.reply(404, "")
             self.reply(200, PAGE.format(action=path, prompt=html.escape(prompt), save=html.escape(_("Save")),
-                                        note=html.escape(_("It goes straight to agent-hub on this machine, not to "
+                                        note=html.escape(_("It goes straight to brunna on this machine, not to "
                                                            "your AI chat. This page works once."))))
 
         def do_POST(self):
@@ -267,19 +267,19 @@ class Agent(Terminal):
             if answer is not None:
                 print(_("Answered: {answer}", answer=_("yes") if answer else _("no")))
                 return answer
-        self.needs_user(qid, _("Run agenthub init in a terminal on this machine to answer: {question}",
+        self.needs_user(qid, _("Run brunna init in a terminal on this machine to answer: {question}",
                                question=question))
         return False
 
     def secret(self, qid: str, prompt: str) -> str | None:
         """A key or token typed by the owner into a page agent-hub opens in their browser, never into the chat."""
         if has_screen():
-            print(_("A page from agent-hub opened in your browser for: {prompt}", prompt=prompt), flush=True)
+            print(_("A page from brunna opened in your browser for: {prompt}", prompt=prompt), flush=True)
             value = secret_page(prompt)
             if value:
                 print(_("Received (not shown)."))
                 return value
-        self.needs_user(qid, _("Run agenthub init in a terminal on this machine to enter it: {prompt}", prompt=prompt))
+        self.needs_user(qid, _("Run brunna init in a terminal on this machine to enter it: {prompt}", prompt=prompt))
         return None
 
 

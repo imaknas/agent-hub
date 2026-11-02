@@ -1,7 +1,7 @@
 """Completion for judgment points (answer only): which provider, which model, where the key is, and the same handling
 every provider goes through. docs/design/llm-providers.md.
 
-hub.json's `llm` block (no such block = the current behaviour: judgment points go to runtime.default's agent interface
+{settings}'s `llm` block (no such block = the current behaviour: judgment points go to runtime.default's agent interface
 as before, and this module takes no part):
 
   "llm": {
@@ -94,7 +94,7 @@ def read_key(conf: dict) -> str | None:
         try:
             v = f.read_text().strip()
         except OSError:
-            raise Refused(_("no key: {file} does not exist (`agenthub llm set-key` writes it)", file=f))
+            raise Refused(_("no key: {file} does not exist (`brunna llm set-key` writes it)", file=f))
         if not v:
             raise Refused(_("no key: {file} is empty", file=f))
         return v
@@ -113,7 +113,7 @@ def resolve(point: str, spec: dict) -> dict:
     llm.use[model_group] names."""
     s = settings()
     if not s:
-        raise Refused(_("hub.json has no llm section"))
+        raise Refused(_("{settings} has no llm section"))
     providers = s["providers"]
     group = spec.get("model_group") or DEFAULT_GROUP
     pin = (s.get("points") or {}).get(point) or {}

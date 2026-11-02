@@ -3,7 +3,7 @@
 
   prune-worktrees [--project P]          only list what can be deleted (for people)
   prune-worktrees [--project P] --yes    really delete, branch included (a person has checked no session is open in it)
-  prune-worktrees --auto [--dry-run]     the nightly automatic cleanup (platform job agent-hub/prune-worktrees):
+  prune-worktrees --auto [--dry-run]     the nightly automatic cleanup (platform job brunna/prune-worktrees):
                                          idle ≥ 2 days: only delete dependencies that can be rebuilt (.venv etc.,
                                          the folder stays);
                                          idle ≥ 14 days, no process inside, and every ignored file can be rebuilt:

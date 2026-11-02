@@ -14,7 +14,7 @@ Output: the last line is one JSON object (lease-runner's POST /v1/sandboxes turn
 - Limit: hub.json's ideas.limit (default 20) projects of type: idea.
 - onboard fails: removes the folder, bare repo, memory copy and the uncommitted registry file made this time (all
   checked beforehand not to exist), then returns create_failed.
-Only one runs at a time (lock in <state>/idea-sandbox.lock) because onboarding commits to agent-hub.
+Only one runs at a time (lock in <state>/idea-sandbox.lock) because onboarding commits to brunna.
 
 
 === bad name
@@ -90,7 +90,7 @@ A project for exploring an idea (an idea sandbox), opened by the assistant for t
 
 > a 3D model of the room
 
-Conclusions, decisions and to-dos from discuss leases go in memory (`.agent-memory/`); to turn it into a real project, use agent-hub's `bin/upgrade-idea.py`.
+Conclusions, decisions and to-dos from discuss leases go in memory (`.agent-memory/`); to turn it into a real project, use brunna's `bin/upgrade-idea.py`.
 
 === too many
 exit 1

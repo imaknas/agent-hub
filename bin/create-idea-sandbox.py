@@ -7,7 +7,7 @@ code the idea has from the start (e.g. room-3d; decided by the owner on 2026-10-
 existing ones still work): lowercase letters, digits and -, not clashing with the registry, a folder or a memory repo.
 Whether a project is an idea sandbox depends only on the registry's type: idea, not on the name. The registry also gets
 the purpose, `enforce: {sandbox: true, work: true}` (the real write block; work = a lease may be a work lease and make
-changes, which idea sandboxes allow by default, 10-25 the owner) + the default capabilities (default_for in hub.json
+changes, which idea sandboxes allow by default, 10-25 the owner) + the default capabilities (default_for in {settings}
 capabilities, e.g. gpu; docs/design/capabilities.md), `privacy: {reflection: stats_only}`, in the same commit as the
 registration (onboard's ONBOARD_REGISTRY_EXTRA).
 
@@ -20,10 +20,10 @@ Output: the last line is one JSON object (lease-runner's POST /v1/sandboxes turn
   not open a second one).
 - Clash: same name but a different purpose, the name of a project, or the folder/bare repo/memory copy already exists
   → exists.
-- Limit: hub.json's ideas.limit (default 20) projects of type: idea.
+- Limit: {settings}'s ideas.limit (default 20) projects of type: idea.
 - onboard fails: removes the folder, bare repo, memory copy and the uncommitted registry file made this time (all
   checked beforehand not to exist), then returns create_failed.
-Only one runs at a time (lock in <state>/idea-sandbox.lock) because onboarding commits to agent-hub.
+Only one runs at a time (lock in <state>/idea-sandbox.lock) because onboarding commits to brunna.
 """
 from __future__ import annotations
 
@@ -114,7 +114,7 @@ def create(name: str, purpose: str) -> int:
     (ws / "README.md").write_text(_(
         "# {name}\n\nA project for exploring an idea (an idea sandbox), opened by the assistant for this idea:\n\n"
         "> {purpose}\n\nConclusions, decisions and to-dos from discuss leases go in memory (`.agent-memory/`); "
-        "to turn it into a real project, use agent-hub's `bin/upgrade-idea.py`.\n", name=name, purpose=purpose))
+        "to turn it into a real project, use brunna's `bin/upgrade-idea.py`.\n", name=name, purpose=purpose))
     extra = {"type": "idea", "purpose": purpose, "enforce": {"sandbox": True, "capabilities": default_capabilities(), "work": True},
              "privacy": {"reflection": "stats_only"}}
     env = {**os.environ, "ONBOARD_REGISTRY_EXTRA": json.dumps(extra, ensure_ascii=False)}

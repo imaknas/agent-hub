@@ -311,7 +311,7 @@ class Coexistence(unittest.TestCase):
         self.assertEqual(self.letters(), {})
         text = self.m.fmt(ev)
         self.assertIn("Which one?", text)
-        self.assertIn(f"agenthub done {ev['id']}", text)
+        self.assertIn(f"brunna done {ev['id']}", text)
         self.assertEqual(self.m.open_questions(self.c), [])
         self.m.import_handoffs(self.c)      # v1 lists the same answer: not taken
         self.assertNotIn(f"{self.m.HANDOFF_ID_PREFIX}73", self.letters())

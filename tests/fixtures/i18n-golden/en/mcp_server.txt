@@ -1,5 +1,5 @@
 === stderr
-agenthub mcp: project: demo
+brunna mcp: project: demo
 
 === inbox (empty)
 demo's mailbox is empty
@@ -12,7 +12,7 @@ wrong arguments: 'id'
 === note without memory
 nowhere has no memory folder (.agent-memory); this project is not set up for memory tracking
 === stderr unknown project
-agenthub mcp: project: (unrecognized)
+brunna mcp: project: (unrecognized)
 
 === unknown project
 the working directory <TMP> is not inside any registered project: start this server in the project folder, or set the environment variable AGENTHUB_PROJECT=<project name> in the tool's MCP settings
@@ -26,7 +26,7 @@ This is work the platform started (mailbox-propose): write the letters to send a
 (demo: 1 open letter)
 === instructions unknown
 P=(unrecognized) U=⚠️ why
-Outside a project, the tools here are status (what agent-hub has) and connect_project: when the user asks to connect this folder to agent-hub, call it with the folder's absolute path. T=60
+Outside a project, the tools here are status (what brunna has) and connect_project: when the user asks to connect this folder to brunna, call it with the folder's absolute path. T=60
 === instructions 2 unread
 P=demo U=📬 2 letters are still open; look with inbox first. T=60
 === instructions 1 unread

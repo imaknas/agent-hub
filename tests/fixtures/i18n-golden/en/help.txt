@@ -1,84 +1,84 @@
 $ <HUB>/bin/agenthub --help
 [exit 0]
 --- stdout
-agent-hub's single entry point (docs/design/new-user.md 3.4). A thin dispatch layer; it does not rewrite the existing scripts.
+brunna's single entry point (docs/design/new-user.md 3.4). A thin dispatch layer; it does not rewrite the existing scripts.
 
-The name is `agenthub` (2026-10-29: `hub` clashed with GitHub's old hub CLI; `bin/hub` stays and forwards here). `agenthub install-cli`
-puts a small forwarding script in ~/.local/bin, so any coding agent's session can type `agenthub …` directly and the rules
+The name is `brunna` (2026-10-29: `hub` clashed with GitHub's old hub CLI; `bin/hub` stays and forwards here). `brunna install-cli`
+puts a small forwarding script in ~/.local/bin, so any coding agent's session can type `brunna …` directly and the rules
 files need no local paths.
 
 Getting started:
-  agenthub init [--home <instance dir>] [--owner <name>] [--timezone <tz>] [--workspace <folder>] [--modules a,b] [--yes]
+  brunna init [--home <instance dir>] [--owner <name>] [--timezone <tz>] [--workspace <folder>] [--modules a,b] [--yes]
            [--llm runtime|anthropic|openai|ollama|none] [--llm-model <name>] [--llm-base-url <url>] [--no-launchd] [--dry-run]
-                        with no hub.json, creates the instance directory (default ~/.agent-hub: config/ is a git repo, data/,
+                        with no hub.json, creates the instance directory (default ~/.brunna: config/ is a git repo, data/,
                         secrets/), writes config/hub.json from hub.example.json (asks a few questions; --yes takes the defaults),
                         and last writes <hub>/.hub-home pointing there; creates the folders it needs; asks which model the
-                        platform's decisions go to (= agenthub llm setup); installs the scheduler and watchdog (the launchd/
+                        platform's decisions go to (= brunna llm setup); installs the scheduler and watchdog (the launchd/
                         templates; left alone when unchanged); applies the config. With a hub.json already there, leaves it alone
-  agenthub doctor            everything that is broken, at a glance: the platform's Python, config, logins, scheduler, watchdog,
+  brunna doctor            everything that is broken, at a glance: the platform's Python, config, logins, scheduler, watchdog,
                         background services, commit gate, and whether a newer release is out
-  agenthub upgrade [--to vX.Y.Z | --main] [--check] [--yes]
+  brunna upgrade [--to vX.Y.Z | --main] [--check] [--yes]
                         move this checkout to the newest release (or that tag, or the remote's main) and bring the machine
                         in step: Python packages, registry, config apply, scheduler, hooks, CLI, doctor. Shows the
                         changelog first; --check stops there (exit 10 = an upgrade is there). Never moves a development
                         checkout (bin/upgrade.py)
-  agenthub init --scheduler-only   only (re)install the scheduler and watchdog from the templates (upgrade runs it)
-  agenthub init --questions [--answers <file>] | --answers <file>
-                        for an AI agent setting agent-hub up in its chat (README, "Set up through your agent"): the
+  brunna init --scheduler-only   only (re)install the scheduler and watchdog from the templates (upgrade runs it)
+  brunna init --questions [--answers <file>] | --answers <file>
+                        for an AI agent setting brunna up in its chat (README, "Set up through your agent"): the
                         questions as JSON; then the answers applied, ending with one JSON line. Consents and keys are
                         asked of you directly (a window on your screen, a page in your browser), never taken from the file
 config:
-  agenthub config check | plan | apply [--only <applier>,...]
+  brunna config check | plan | apply [--only <applier>,...]
                         validate the config / what would change / apply (check → apply → plan again must be empty → record)
-  agenthub llm setup [--llm …] [--llm-model …] [--llm-base-url …]
+  brunna llm setup [--llm …] [--llm-model …] [--llm-base-url …]
                         who handles the platform's decisions (nightly tidy-up, weekly report): the coding agent's own login,
                         an Anthropic / OpenAI (or compatible) API key, a local Ollama; the key is not shown and goes into the
                         secrets directory; the model is picked from the list that provider actually has (the platform does not
                         guess names)
-  agenthub llm set-key <provider>   write the API key of hub.json llm.providers.<provider> from stdin into the platform's
+  brunna llm set-key <provider>   write the API key of hub.json llm.providers.<provider> from stdin into the platform's
                         secrets directory (chmod 600; not read from arguments, so it stays out of the shell history)
-  agenthub llm health        whether each provider works (= bin/llm.py health)
-  agenthub modules [enable|disable <name>]
+  brunna llm health        whether each provider works (= bin/llm.py health)
+  brunna modules [enable|disable <name>]
                         which optional features exist and which are on; switching changes hub.json and applies it (remember
                         to commit hub.json)
-  agenthub move-instance --to <instance dir> [--apply]
+  brunna move-instance --to <instance dir> [--apply]
                         move the old layout (everything in the hub root) to an instance directory: copies only, validates the
                         new layout, writes .hub-home last (delete it to go back)
 projects:
-  agenthub connect [<folder>] [--yes] [--remote] [--dry-run]
+  brunna connect [<folder>] [--yes] [--remote] [--dry-run]
                         connect existing folders as projects (bin/connect.py): one repo, a monorepo, or a folder of repos
-  agenthub onboard …         = bin/onboard-project.sh (start a new project / connect a folder)
-  agenthub recover <name>    = bin/recover-project.sh (new machine / the folder is gone)
-  agenthub rename <old> <new>  = bin/rename-project.sh (dry-run first, then add --apply)
-  agenthub status [project]  = bin/overview.sh
-  agenthub first-look <project>   a newly connected project's first STATE.md now, from its README and history
-                        (bin/first-look.py; agenthub connect runs it)
-  agenthub uninstall [--apply] [--purge]
-                        take agent-hub off this machine (bin/uninstall.py): lists first; notes stay unless --purge
+  brunna onboard …         = bin/onboard-project.sh (start a new project / connect a folder)
+  brunna recover <name>    = bin/recover-project.sh (new machine / the folder is gone)
+  brunna rename <old> <new>  = bin/rename-project.sh (dry-run first, then add --apply)
+  brunna status [project]  = bin/overview.sh
+  brunna first-look <project>   a newly connected project's first STATE.md now, from its README and history
+                        (bin/first-look.py; brunna connect runs it)
+  brunna uninstall [--apply] [--purge]
+                        take brunna off this machine (bin/uninstall.py): lists first; notes stay unless --purge
 scheduling:
-  agenthub jobs              = schedulectl list
-  agenthub run <job>         = schedulectl run (run it once now)
-  agenthub land              after a merge of agent-hub: rebuild the registry index from the merged code (run by
+  brunna jobs              = schedulectl list
+  brunna run <job>         = schedulectl run (run it once now)
+  brunna land              after a merge of brunna: rebuild the registry index from the merged code (run by
                         merge-branch; not a session command)
 owner (you; not commands for project sessions):
-  agenthub owner list | done/drop/already-done <key> | answer <question id> "answer"
+  brunna owner list | done/drop/already-done <key> | answer <question id> "answer"
                         = bin/owner.py: the built-in owner side (hub.json owner_side: builtin; with an assistant, list only)
 for project sessions (these are what the rules files name; the permission rules allow only these, not the admin commands above):
-  agenthub send | inbox | show | ack | done | thread | open-questions …   = the project mailbox (bin/hubbus subcommands of the
+  brunna send | inbox | show | ack | done | thread | open-questions …   = the project mailbox (bin/hubbus subcommands of the
                         same name)
-  agenthub merge-branch …    = bin/merge-branch (the merge gate for parallel sessions)
-  agenthub test [--tier T] [--when M] [--force] [--rev R | --index]
+  brunna merge-branch …    = bin/merge-branch (the merge gate for parallel sessions)
+  brunna test [--tier T] [--when M] [--force] [--rev R | --index]
                         = bin/test-runner.py: the project's declared test tiers in an exported tree, a recorded pass
                         is a hit (docs/design/test-waiting.md B4)
-  agenthub cap-run --cap <capability> -- <command…>   = bin/hub-run (the platform runs a program the sandbox blocks)
-  agenthub complete <point> [--schema F] < prompt    = bin/hub-run --complete (a model call the project declares in
+  brunna cap-run --cap <capability> -- <command…>   = bin/hub-run (the platform runs a program the sandbox blocks)
+  brunna complete <point> [--schema F] < prompt    = bin/hub-run --complete (a model call the project declares in
                                                        its registry models:, run by the platform)
-  agenthub install-cli [--dir <folder>]   put agenthub's forwarding script in <folder> (default ~/.local/bin; must be on PATH)
-  agenthub mcp               the platform's MCP server (stdio): any coding agent with MCP can use the mailbox and write notes
+  brunna install-cli [--dir <folder>]   put brunna's forwarding script in <folder> (default ~/.local/bin; must be on PATH)
+  brunna mcp               the platform's MCP server (stdio): any coding agent with MCP can use the mailbox and write notes
                         (= bin/mcp_server.py)
-  agenthub mcp config        print the snippet to register in the tool's MCP settings (the platform does not change your
+  brunna mcp config        print the snippet to register in the tool's MCP settings (the platform does not change your
                         tool's settings for you; docs/mcp.md)
-  agenthub --version         the platform's version: the release tag this checkout is at (git describe)
+  brunna --version         the platform's version: the release tag this checkout is at (git describe)
 
 --- stderr
 
@@ -88,7 +88,7 @@ $ <HUB>/bin/hubbus --help
 usage: hubbus [-h]
               {send,inbox,show,ack,done,hook,bridge,dispatch,thread,open-handoffs,open-questions,reconcile-questions,records,record-publish,publish,status,wake-misses} ...
 
-agent-hub's event bus: an append-only event log plus read cursors; project mailboxes are its projection.
+brunna's event bus: an append-only event log plus read cursors; project mailboxes are its projection.
 
 positional arguments:
   {send,inbox,show,ack,done,hook,bridge,dispatch,thread,open-handoffs,open-questions,reconcile-questions,records,record-publish,publish,status,wake-misses}

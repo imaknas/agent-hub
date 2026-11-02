@@ -1,9 +1,9 @@
 #!/bin/sh -c exec${IFS}"${0%/*}/py"${IFS}"$0"${IFS}"$@"
 """A small command for shell scripts to ask about the runtime (runtime abstraction, docs/design/runtime-abstraction.md).
-The default runtime is set in hub.json.
+The default runtime is set in {settings}.
 
   hub-runtime instructions-file <folder>   the file the platform's managed block goes into (relative to that folder)
-  hub-runtime instructions-files <folder>  the same for every installed runtime with a rules file (hub.json
+  hub-runtime instructions-files <folder>  the same for every installed runtime with a rules file ({settings}
                                            runtime.installed), one per line, no repeats: each gets the managed block
   hub-runtime local-ignores                the installed runtimes' machine-local files, one per line (to add to
                                            .git/info/exclude)

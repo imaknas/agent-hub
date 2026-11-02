@@ -6,8 +6,8 @@ project names.
   - hub root: the parent of the bin/ this file is in; the environment variable AGENT_HUB_ROOT can override it. What
     the platform writes for later (hook commands and the like) names it through hub_bin()/sh_py(), at the moment it
     is written
-  - settings: <config>/hub.json (instance directory, see below)
-  - instance directory (docs/design/new-user.md 3.1): the user's own things in three parts -- config (hub.json,
+  - settings: <config>/{settings} (instance directory, see below)
+  - instance directory (docs/design/new-user.md 3.1): the user's own things in three parts -- config ({settings},
     registry, schedule.yaml…; the config repo), data (digest, todo, review-log, reflect…; not in git, relies on
     backup), secrets. Where they are is decided by **one pointer file**: <hub>/.hub-home holds the instance
     directory's path -> <instance>/config, <instance>/data, <instance>/secrets; no such file = the old layout (all
@@ -22,7 +22,7 @@ project names.
     A linked worktree of the hub (MAIN != ROOT) takes .hub-home, .state and .logs from its main checkout, found
     through the .git pointer files; its own copy only supplies the code. worktree_lookup() says when that happened,
     for the scripts that must not rebuild live state from a worktree. An explicit AGENT_HUB_ROOT skips the lookup.
-  - The platform's own registry entry (<hub>/projects/agent-hub.yaml) is part of the platform: registry reads it
+  - The platform's own registry entry (<hub>/projects/brunna.yaml) is part of the platform: registry reads it
     wherever registry_dir is
   - Project registry: <registry_dir>/<name>.yaml (YAML edited by people); every tick the scheduler validates it with
     registry.py and writes <hub>/.state/registry/index.json -- this module reads that JSON (no PyYAML needed); if it
@@ -31,12 +31,12 @@ project names.
 
 For shell scripts ("$HUB/bin/py" hubconf.py …):
   hubconf.py ideas     names of idea sandboxes (registry type: idea), one per line
-  hubconf.py get <key> a single value from hub.json (dot-separated, e.g. github.owner), for shell scripts
+  hubconf.py get <key> a single value from {settings} (dot-separated, e.g. github.owner), for shell scripts
   hubconf.py roster    one line per project name<TAB>workspace<TAB>origin<TAB>memory_bare, no header line;
                        workspace with ~ expanded, (native) when there is no origin, memory_bare prefixed with
-                       hub.json's memory_host:
+                       {settings}'s memory_host:
   hubconf.py test-config-inputs
-                       the instance files tests may read, <variable><TAB><file> per line (hub.json
+                       the instance files tests may read, <variable><TAB><file> per line ({settings}
                        tests.config_inputs)
 """
 from __future__ import annotations
@@ -462,7 +462,7 @@ def tz():
         try:
             return zoneinfo.ZoneInfo(name)
         except (zoneinfo.ZoneInfoNotFoundError, ValueError) as e:
-            print(_("time zone {name} (hub.json owner.timezone) not found ({error}); using this machine's local time "
+            print(_("time zone {name} ({settings} owner.timezone) not found ({error}); using this machine's local time "
                     "instead. Without the system's tzdata, rerun bin/setup-python (it installs the Python tzdata "
                     "package)", name=name, error=e), file=sys.stderr)
     return datetime.datetime.now().astimezone().tzinfo

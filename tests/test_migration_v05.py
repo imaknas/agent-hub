@@ -8,6 +8,7 @@ tag is not there (the gate's exported tree, a shallow clone).
 """
 import os
 import pathlib
+import re
 import shutil
 import subprocess
 import sys
@@ -105,7 +106,9 @@ class FromV05(unittest.TestCase):
         assert "Traceback" not in r.stdout + r.stderr, r.stdout + r.stderr
         # the service manager's lines are left out: v0.5.0 read the account's real launchd from a fake HOME, which
         # this code no longer does (hubconf.home_is_the_accounts)
-        return sorted(line.strip().replace(str(root), "<hub>") for line in r.stdout.splitlines()
+        # the product's and the CLI's names are the release's own (v0.7 says brunna for both): what is found is compared
+        same = lambda s: re.sub(r"agent-hub|agenthub|brunna", "<name>", s)   # noqa: E731
+        return sorted(same(line.strip().replace(str(root), "<hub>")) for line in r.stdout.splitlines()
                       if line.startswith(("✗", "!")) and not line.startswith(SERVICE_MANAGER_LINES))
 
     def test_doctor_finds_what_v05_found(self):

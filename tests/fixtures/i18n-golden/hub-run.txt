@@ -12,7 +12,7 @@ positional arguments:
 options:
   -h, --help         show this help message and exit
   --cap CAP          能力名稱(專案登錄 enforce.capabilities 有的)
-  --timeout TIMEOUT  秒(預設跟上限看 hub.json cap_runner)
+  --timeout TIMEOUT  秒(預設跟上限看 brunna.json cap_runner)
   --wait ID          接回一個工作
   --complete POINT   這個專案宣告的模型呼叫(登錄 models:):提示從 stdin 進,JSON 結果從 stdout 出
   --schema FILE      跟 --complete 一起用:回答必須符合的 JSON schema
@@ -42,7 +42,7 @@ exit 125
 --- stdout
 --- stderr
 hub-run: 工作 20261031-120000-abcdef(能力 gpu);這次呼叫被中斷的話,工作照跑,用 `hub-run --wait 20261031-120000-abcdef` 接回
-hub-run: 平台的代跑服務沒在跑(30 秒沒人接手),請求已撤回;請告訴使用者(agent-hub 的 cap-runner)
+hub-run: 平台的代跑服務沒在跑(30 秒沒人接手),請求已撤回;請告訴使用者(brunna 的 cap-runner)
 === queued, then done
 exit 3
 --- stdout
@@ -54,7 +54,7 @@ exit 124
 partial out
 --- stderr
 partial err
-hub-run: 逾時,工作被停掉了(要更久用 --timeout,上限看 hub.json cap_runner.max_timeout_s)
+hub-run: 逾時,工作被停掉了(要更久用 --timeout,上限看 brunna.json cap_runner.max_timeout_s)
 === rejected
 exit 126
 --- stdout

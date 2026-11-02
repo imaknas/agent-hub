@@ -6,7 +6,7 @@ What to write: policy.py computes the neutral policy, runtime_claude.settings() 
 format; this script only writes the file, records, and detects drift.
 
 Written only for projects registered with `enforce: {sandbox: true}`; for other projects it only computes what it
-would write (--report). Not applied to the platform itself (agent-hub).
+would write (--report). Not applied to the platform itself (brunna).
 What is written:
   sandbox (the whole key is managed by the platform): enabled, failIfUnavailable, allowUnsandboxedCommands: false,
     filesystem.allowWrite (its own runtime, the bus directory, the registry's allow_write),
@@ -202,7 +202,7 @@ def gate_hook() -> str:
     """the hook's text; the line it prints when it refuses a commit is a message ({branch} is filled in by the shell)"""
     return GATE_HOOK_HEAD + 'echo "' + _(
         "This project has the merge gate on (gate: strict): no direct commits to {branch}. Work in your own "
-        "worktree/branch and finish with agenthub merge-branch.", branch=BRANCH) + '" >&2\nexit 1\n'
+        "worktree/branch and finish with brunna merge-branch.", branch=BRANCH) + '" >&2\nexit 1\n'
 
 
 MARK = names.gate_mark()   # every hook the platform writes starts with it; others are the project's own
@@ -224,7 +224,7 @@ def wanted_hooks(doc: dict) -> dict[str, tuple[str, str]]:
     elif cg:
         refuse = ('  main|master) [ -n "$MERGE_GATE" ] || { echo "' + _(
             "This project has the merge gate on (gate: strict): no direct commits to {branch}. Work in your own "
-            "worktree/branch and finish with agenthub merge-branch.", branch=BRANCH) + '" >&2; exit 1; } ;;\n') if strict else "  main|master) moment=merge ;;\n"
+            "worktree/branch and finish with brunna merge-branch.", branch=BRANCH) + '" >&2; exit 1; } ;;\n') if strict else "  main|master) moment=merge ;;\n"
         out["pre-commit"] = ("#!/bin/sh\n" + MARK + " (managed; registry commit_gate)\n"
                              "# a commit on a branch runs the commit tiers, one onto main the merge tiers\n"
                              "b=$(git symbolic-ref --short -q HEAD)\nmoment=commit\ncase \"$b\" in\n" + refuse +

@@ -1,7 +1,7 @@
 """The provider for a local Ollama (completion interface; docs/design/llm-providers.md).
 
 Uses the **native API** (/api/chat), not its OpenAI-compatible endpoint: the compatible endpoint cannot set num_ctx,
-so a prompt longer than the default context is silently cut from the front. The model's context is in hub.json
+so a prompt longer than the default context is silently cut from the front. The model's context is in {settings}
 ({name, context} in provider.models) and num_ctx is set from it here; the length check before sending is in
 completion.py. Thinking models (qwen3…) have thinking turned off (think: false); completion.py strips any remaining
 <think>.

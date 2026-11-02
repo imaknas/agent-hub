@@ -371,7 +371,7 @@ exit 0
 [<T>] review-log.md commit/push 失敗:nothing to push
 
 [<T>] === consolidate end(失敗 0 個)===
-[<T>] 回頭清理停用:執行環境 none 沒有跑 agent(hub.json runtime.default;要這個功能就裝一個有的 coding agent)。日期檔保持原樣,等設好模型再整理
+[<T>] 回頭清理停用:執行環境 none 沒有跑 agent(brunna.json runtime.default;要這個功能就裝一個有的 coding agent)。日期檔保持原樣,等設好模型再整理
 
 === review-log.md
 ## 2026-10-15 · eta · 回頭清理

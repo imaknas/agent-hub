@@ -20,9 +20,9 @@ sync-local-setup: ⚠️ AGENT.md 已更新但 commit/push 失敗,下次開 sess
 sync-local-setup: .agent-memory/ 已加進 .git/info/exclude
 sync-local-setup: ⚠️ CLAUDE.local.md 已經被這個 repo 追蹤(commit 過),ignore 無效——請該專案的 session 處理
 sync-local-setup: .claude/settings.local.json 已加進 .git/info/exclude
-⚠️ 這個 repo 已 commit 的檔案寫了這台機器的路徑(repo 之後可能公開,本機路徑不能進 commit;只提 agent-hub 的名稱沒關係):
+⚠️ 這個 repo 已 commit 的檔案寫了這台機器的路徑(repo 之後可能公開,本機路徑不能進 commit;只提 brunna 的名稱沒關係):
   - README
-請在這個專案裡處理:維運需要的資訊搬到 CLAUDE.local.md(agent-hub:begin/end 區塊之外,不進版控),
+請在這個專案裡處理:維運需要的資訊搬到 CLAUDE.local.md(brunna:begin/end 區塊之外,不進版控),
 committed 檔案裡改成不寫本機路徑的寫法或刪掉,然後 commit。細節可用:
 git grep -n -E '~/(agent-hub|brunna)/|/Users/[A-Za-z0-9._-]+/(agent-hub|brunna|workspace|\.agent-hub|\.brunna|services|git-origin)'
 --- stderr

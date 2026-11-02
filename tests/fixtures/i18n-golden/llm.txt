@@ -7,7 +7,7 @@ positional arguments:
   {run,exec,project,lint,health}
     exec                長駐串流 session:照宣告組旗標後 exec 成 claude(stdin/stdout 是 stream-json)
     project             專案自己宣告的模型呼叫(由 cap-runner 執行)
-    health              hub.json llm 的每一家 provider 能不能用(key、連線、模型在不在)
+    health              brunna.json llm 的每一家 provider 能不能用(key、連線、模型在不在)
 
 options:
   -h, --help            show this help message and exit
@@ -68,13 +68,13 @@ llm.py:lease-session 這個執行環境不支援長駐的串流 session
 $ llm.py run reflect-week    # no completion
 [exit 1]
 --- stdout
-{"type": "result", "is_error": true, "structured_output": null, "llm_point": "reflect-week", "llm_error": "執行環境 none 沒有 completion 介面,hub.json 也沒有 llm 區塊(設一家 LLM provider)"}
+{"type": "result", "is_error": true, "structured_output": null, "llm_point": "reflect-week", "llm_error": "執行環境 none 沒有 completion 介面,brunna.json 也沒有 llm 區塊(設一家 LLM provider)"}
 --- stderr
 
 $ llm.py run agent-job    # no agent
 [exit 1]
 --- stdout
-{"type": "result", "is_error": true, "structured_output": null, "llm_point": "agent-job", "llm_error": "執行環境 none 沒有跑 agent(hub.json runtime.default;要這個功能就裝一個有的 coding agent)"}
+{"type": "result", "is_error": true, "structured_output": null, "llm_point": "agent-job", "llm_error": "執行環境 none 沒有跑 agent(brunna.json runtime.default;要這個功能就裝一個有的 coding agent)"}
 --- stderr
 
 $ llm.py run agent-job    # token missing

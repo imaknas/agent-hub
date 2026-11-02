@@ -4,7 +4,7 @@ $ agenthub config apply    # config invalid
 --- stderr
 config-check: ✗ hub.json: $: missing v
 config-check: ✗ hub.json: $.owner: missing address
-agenthub config apply: the config is invalid; nothing applied
+brunna config apply: the config is invalid; nothing applied
 
 $ agenthub config plan
 [exit 0]
@@ -26,8 +26,8 @@ config-check: the config is all valid
 services        install x
 services        reload y
 --- stderr
-agenthub config apply: ⚠️ still differs from the config after applying:
-agenthub config apply: recording on the bus failed (.state/config-applied.json was written): bus is down
+brunna config apply: ⚠️ still differs from the config after applying:
+brunna config apply: recording on the bus failed (.state/config-applied.json was written): bus is down
 
 $ agenthub config apply    # applied, nothing left
 [exit 0]

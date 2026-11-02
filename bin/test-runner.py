@@ -1,16 +1,16 @@
 #!/bin/sh -c exec${IFS}"${0%/*}/py"${IFS}"$0"${IFS}"$@"
-"""agenthub test: the platform's test runner (docs/design/test-waiting.md B4). Run in a checkout of a registered
+"""brunna test: the platform's test runner (docs/design/test-waiting.md B4). Run in a checkout of a registered
 project's repo (its main checkout or a linked worktree), as whoever runs it: a session runs it as itself, a platform
 job as the project (isolation.wrap). It never touches the branch: no rebase, no lock.
 
-  agenthub test [--tier T]... [--when commit|merge|nightly|deploy] [--force] [--rev R | --index]
+  brunna test [--tier T]... [--when commit|merge|nightly|deploy] [--force] [--rev R | --index]
 
-  1. Exports what it tests into a run folder of the main checkout (.agent-hub/test/, excluded): by default the
+  1. Exports what it tests into a run folder of the main checkout (.brunna/test/, excluded): by default the
      worktree's content (HEAD plus uncommitted and untracked, through a temporary index), --index what is staged,
      --rev a commit. The exported tree's id is what results are keyed on.
   2. The project's test declaration: project v2 (bin/tiers.py; a v1 entry is upgraded as it is read). The hub's own
      entry is read from the exported tree, validated in a child whose AGENT_HUB_ROOT is the export, so the merge that
-     changes agent-hub's tiers is tested by the tiers it brings.
+     changes brunna's tiers is tested by the tiers it brings.
   3. Which tiers: --tier names them; otherwise tiers.affected() for the moment (default merge), against the merge
      base with main (nightly, deploy and --rev without a merge moment: every tier of the moment).
   4. Per tier: its key (tiers.key); a recorded pass in the repo's store is a hit (--force runs anyway). Otherwise a
@@ -21,7 +21,7 @@ job as the project (isolation.wrap). It never touches the branch: no rebase, no 
      declared env: and config:
      inputs; nothing else from the caller), worker slots from the machine's budget, the command in its own process
      group (stopped with TERM, a grace period, then KILL), its complete output in the worktree's git dir
-     (agent-hub/test-output/), the result recorded.
+     (brunna/test-output/), the result recorded.
   5. Every tier's outcome, hits included, goes into the repo's run log (tiers.RunLog, beside the store) with its
      seconds and the time since this invocation started, and who called: merge-branch says so in
      AGENTHUB_TEST_CALLER; otherwise --index is the commit gate, --when nightly/deploy those callers, the rest a
@@ -205,7 +205,7 @@ def inputs(doc: dict, tree: pathlib.Path, env: dict) -> tuple[list[list[str]], d
             else:
                 var, f = listed[value]
                 if not f.is_file():
-                    raise SetupError(_("{file} is listed in hub.json tests.config_inputs but missing", file=f))
+                    raise SetupError(_("{file} is listed in {settings} tests.config_inputs but missing", file=f))
                 digest = hashlib.sha256(f.read_bytes()).hexdigest()
                 extra[var] = str(f)
         elif kind == "env":
@@ -344,7 +344,7 @@ def note(runlog: tiers.RunLog, measured: dict, project: str, tier: str, result: 
 
 
 def main(argv: list[str]) -> int:
-    ap = argparse.ArgumentParser(prog="agenthub test")
+    ap = argparse.ArgumentParser(prog=f"{names.current('cli')} test")
     ap.add_argument("--tier", action="append", default=[])
     ap.add_argument("--when", choices=tiers.MOMENTS, default="merge")
     ap.add_argument("--force", action="store_true")
@@ -383,7 +383,7 @@ def main(argv: list[str]) -> int:
                     base = git(top, "merge-base", main_branch, a.rev or "HEAD")
             chosen = tiers.affected(top, base, tree_id, a.when, {name: decl})
         if not chosen:
-            print(_("agenthub test: nothing to run for {project} ({when}): no declared tier is affected",
+            print(_("brunna test: nothing to run for {project} ({when}): no declared tier is affected",
                     project=name, when=a.when))
             return 0
         env, identity = base_env(main_dir, run, name == hubconf.hub_project())

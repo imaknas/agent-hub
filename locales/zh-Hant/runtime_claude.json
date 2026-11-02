@@ -15,7 +15,7 @@
  "showing you {path}": "給你看 {path}",
  "question: {questions}": "提問:{questions}",
  "turn limit reached; detaching the lease": "回合上限到了,收回",
- "Claude Code (used by project sessions) is not logged in, or its credentials have expired (the platform's agent-hub/claude-login sends an alert). {raw}": "專案 session 用的 Claude Code 沒登入或憑證過期(平台的 agent-hub/claude-login 會發警報)。{raw}",
+ "Claude Code (used by project sessions) is not logged in, or its credentials have expired (the platform's brunna/claude-login sends an alert). {raw}": "專案 session 用的 Claude Code 沒登入或憑證過期(平台的 brunna/claude-login 會發警報)。{raw}",
  "Paste it in a terminal on the hub machine: it resumes the same conversation (Claude Code). When you are done, go back to the assistant and press \"detach\" for the handover.": "在 hub 主機的終端機貼上:會接回同一段對話(Claude Code)。談完回 {assistant} 按「收回」做交接。",
  "{file} does not exist (the default is the headless token; to use the subscription login, declare auth: subscription)": "沒有 {file}(預設用 headless token;要用訂閱登入就宣告 auth: subscription)",
  "subscription login (launchd)": "訂閱登入(launchd)",

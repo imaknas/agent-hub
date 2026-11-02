@@ -48,4 +48,4 @@ STATE.md:待辦沒標負責人或已完成未移除 `- [ ] 〔誰〕不認得的
 
 > 由 `bin/gen-todo.py` 從各專案 STATE.md 的 `## 待辦` 段落機械產生(共 3 項),
 > 不要手動改——要改內容,改來源(各專案的 memory,librarian 會更新 STATE.md;
-> agent-hub 自己的待辦在 `openclaw-migration-status.md`)。
+> brunna 自己的待辦在 `openclaw-migration-status.md`)。

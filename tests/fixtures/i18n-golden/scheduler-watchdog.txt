@@ -31,18 +31,18 @@ last line
 === --test printed
 已送出
 === sent
-🚨 agent-hub 排程器已經 120 分鐘 沒有 tick(最後 10-30 08:00)。librarian、助理的 job、reflect、上傳 job 都停了。
+🚨 brunna 排程器已經 120 分鐘 沒有 tick(最後 10-30 08:00)。librarian、助理的 job、reflect、上傳 job 都停了。
 <diag>
 ---
-⏰ 還沒好: agent-hub 排程器已經 540 分鐘 沒有 tick(最後 10-30 08:00)。librarian、助理的 job、reflect、上傳 job 都停了。
+⏰ 還沒好: brunna 排程器已經 540 分鐘 沒有 tick(最後 10-30 08:00)。librarian、助理的 job、reflect、上傳 job 都停了。
 <diag>
 ---
-✅ agent-hub 排程器恢復了(最後 tick 10-30 17:00;停了大約從 10-30 08:00 開始)
+✅ brunna 排程器恢復了(最後 tick 10-30 17:00;停了大約從 10-30 08:00 開始)
 ---
-🚨 agent-hub 排程器已經 很久 沒有 tick(最後 從來沒有)。librarian、助理的 job、reflect、上傳 job 都停了。
+🚨 brunna 排程器已經 很久 沒有 tick(最後 從來沒有)。librarian、助理的 job、reflect、上傳 job 都停了。
 <diag>
 ---
-🧪 agent-hub 排程器看門狗測試訊息(設定正確)
+🧪 brunna 排程器看門狗測試訊息(設定正確)
 <diag>
 === no alerts
 exit 0; printed: 

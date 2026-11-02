@@ -18,7 +18,7 @@ policy(name, doc, index) → {
                       its outbox (mail_outbox; docs/design/bus-sender.md): a sandboxed project's letters do, so the
                       bus is in no sandbox
   env:                environment for its sessions, services and jobs: the tool caches (uv, pip, npm, corepack) in its
-                      own repo's git dir (<workspace>/.git/agent-hub/cache/<tool>), which only it can write
+                      own repo's git dir (<workspace>/.git/brunna/cache/<tool>), which only it can write
   protect:            what its sessions load settings, hooks and tools from ([{name, tree}] matched at any depth under
                       the workspace; the runtime's control port): written by nothing of the project's, only by the
                       platform. Empty (and doctor says so) when the runtime can't name them
@@ -30,15 +30,15 @@ policy(name, doc, index) → {
                       old and new locations are blocked), the bus directory (a project whose mail goes through its
                       outbox reads its own letters from the view the platform writes into its folder)
   credentials:        user-level credential directories (Path); credential_files: credential files (Path); the
-                      locations are in hub.json's credentials
+                      locations are in {settings}'s credentials
   read:               platform paths readable although platform state is blocked: the registry index the platform CLI
-                      (agenthub send, complete, cap-run) reads, and the worker slots agenthub test locks (Path)
+                      (brunna send, complete, cap-run) reads, and the worker slots brunna test locks (Path)
   network:            domains that may be reached (platform defaults + the registry's network)
   local_bind:         may listen on 127.0.0.1 (to test its own server before declaring it a service; 10-31 owner
-                      confirmed in the agent-hub session)
+                      confirmed in the brunna session)
   platform_commands:  the only channel across the boundary (mailbox CLI, merge gate; Path: the old form, removed once
                       the rules files use platform_cli)
-  platform_cli:       the same channels as agenthub subcommands on PATH (strings, e.g. "agenthub send")
+  platform_cli:       the same channels as brunna subcommands on PATH (strings, e.g. "brunna send")
   capabilities:       the registry's enforce.capabilities
 }
 """

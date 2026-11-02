@@ -7,7 +7,7 @@
 v: 1
 name: owner
 type: module
-description: "Built-in owner side: notices of new to-dos and questions (close and answer with agenthub owner)"
+description: "Built-in owner side: notices of new to-dos and questions (close and answer with brunna owner)"
 jobs:
 - name: notify
   every: 1h

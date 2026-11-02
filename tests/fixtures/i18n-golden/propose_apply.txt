@@ -10,7 +10,7 @@ agent 提議,平台套用(docs/design/tool-agnostic.md「核心」):平台啟動
 hubbus 子指令(send、done、ack…)一律被擋(hubbus.platform_mails:這裡設的環境變數,或祖先程序是這支)。
 這套保證不靠工具的權限設定,在沒有沙盒的系統(Linux)上一樣成立。
 
-  propose_apply.py mailbox <專案> <信 id>…     信箱交辦(hub.json mailbox.handler: propose 時由 hubbus dispatch 叫)
+  propose_apply.py mailbox <專案> <信 id>…     信箱交辦(brunna.json mailbox.handler: propose 時由 hubbus dispatch 叫)
 
   run(project, ws, point, prompt, allow)        給其他程式用:回 {ok, output, applied, refused, error}
 

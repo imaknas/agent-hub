@@ -451,7 +451,7 @@ class NoModel(unittest.TestCase):
             off = zh("the librarian is off: {reason}. STATE.md and index.md are not updated; the memory notes wait until "
                      "a model is set up (nothing is lost)", reason="<R>").split("<R>")
             self.assertEqual(log.count(off[0]), 1, log)
-            reason = i18n.translate("runtime_ports", "runtime {name} has no {missing} (hub.json runtime.default; to use "
+            reason = i18n.translate("runtime_ports", "runtime {name} has no {missing} ({settings} runtime.default; to use "
                                     "this feature, install a coding agent that supports it)",
                                     {"name": "none", "missing": "<M>"}, "zh-Hant").split("<M>")[0]
             self.assertIn(off[0] + reason, log, "the reason is the runtime's own")

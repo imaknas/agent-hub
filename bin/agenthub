@@ -1,82 +1,82 @@
 #!/bin/sh -c exec${IFS}"${0%/*}/py"${IFS}"$0"${IFS}"$@"
-"""agent-hub's single entry point (docs/design/new-user.md 3.4). A thin dispatch layer; it does not rewrite the existing scripts.
+"""brunna's single entry point (docs/design/new-user.md 3.4). A thin dispatch layer; it does not rewrite the existing scripts.
 
-The name is `agenthub` (2026-10-29: `hub` clashed with GitHub's old hub CLI; `bin/hub` stays and forwards here). `agenthub install-cli`
-puts a small forwarding script in ~/.local/bin, so any coding agent's session can type `agenthub …` directly and the rules
+The name is `brunna` (2026-10-29: `hub` clashed with GitHub's old hub CLI; `bin/hub` stays and forwards here). `brunna install-cli`
+puts a small forwarding script in ~/.local/bin, so any coding agent's session can type `brunna …` directly and the rules
 files need no local paths.
 
 Getting started:
-  agenthub init [--home <instance dir>] [--owner <name>] [--timezone <tz>] [--workspace <folder>] [--modules a,b] [--yes]
+  brunna init [--home <instance dir>] [--owner <name>] [--timezone <tz>] [--workspace <folder>] [--modules a,b] [--yes]
            [--llm runtime|anthropic|openai|ollama|none] [--llm-model <name>] [--llm-base-url <url>] [--no-launchd] [--dry-run]
-                        with no hub.json, creates the instance directory (default ~/.agent-hub: config/ is a git repo, data/,
-                        secrets/), writes config/hub.json from hub.example.json (asks a few questions; --yes takes the defaults),
+                        with no {settings}, creates the instance directory (default ~/.brunna: config/ is a git repo, data/,
+                        secrets/), writes config/{settings} from hub.example.json (asks a few questions; --yes takes the defaults),
                         and last writes <hub>/.hub-home pointing there; creates the folders it needs; asks which model the
-                        platform's decisions go to (= agenthub llm setup); installs the scheduler and watchdog (the launchd/
-                        templates; left alone when unchanged); applies the config. With a hub.json already there, leaves it alone
-  agenthub doctor            everything that is broken, at a glance: the platform's Python, config, logins, scheduler, watchdog,
+                        platform's decisions go to (= brunna llm setup); installs the scheduler and watchdog (the launchd/
+                        templates; left alone when unchanged); applies the config. With a {settings} already there, leaves it alone
+  brunna doctor            everything that is broken, at a glance: the platform's Python, config, logins, scheduler, watchdog,
                         background services, commit gate, and whether a newer release is out
-  agenthub upgrade [--to vX.Y.Z | --main] [--check] [--yes]
+  brunna upgrade [--to vX.Y.Z | --main] [--check] [--yes]
                         move this checkout to the newest release (or that tag, or the remote's main) and bring the machine
                         in step: Python packages, registry, config apply, scheduler, hooks, CLI, doctor. Shows the
                         changelog first; --check stops there (exit 10 = an upgrade is there). Never moves a development
                         checkout (bin/upgrade.py)
-  agenthub init --scheduler-only   only (re)install the scheduler and watchdog from the templates (upgrade runs it)
-  agenthub init --questions [--answers <file>] | --answers <file>
-                        for an AI agent setting agent-hub up in its chat (README, "Set up through your agent"): the
+  brunna init --scheduler-only   only (re)install the scheduler and watchdog from the templates (upgrade runs it)
+  brunna init --questions [--answers <file>] | --answers <file>
+                        for an AI agent setting brunna up in its chat (README, "Set up through your agent"): the
                         questions as JSON; then the answers applied, ending with one JSON line. Consents and keys are
                         asked of you directly (a window on your screen, a page in your browser), never taken from the file
 config:
-  agenthub config check | plan | apply [--only <applier>,...]
+  brunna config check | plan | apply [--only <applier>,...]
                         validate the config / what would change / apply (check → apply → plan again must be empty → record)
-  agenthub llm setup [--llm …] [--llm-model …] [--llm-base-url …]
+  brunna llm setup [--llm …] [--llm-model …] [--llm-base-url …]
                         who handles the platform's decisions (nightly tidy-up, weekly report): the coding agent's own login,
                         an Anthropic / OpenAI (or compatible) API key, a local Ollama; the key is not shown and goes into the
                         secrets directory; the model is picked from the list that provider actually has (the platform does not
                         guess names)
-  agenthub llm set-key <provider>   write the API key of hub.json llm.providers.<provider> from stdin into the platform's
+  brunna llm set-key <provider>   write the API key of {settings} llm.providers.<provider> from stdin into the platform's
                         secrets directory (chmod 600; not read from arguments, so it stays out of the shell history)
-  agenthub llm health        whether each provider works (= bin/llm.py health)
-  agenthub modules [enable|disable <name>]
-                        which optional features exist and which are on; switching changes hub.json and applies it (remember
-                        to commit hub.json)
-  agenthub move-instance --to <instance dir> [--apply]
+  brunna llm health        whether each provider works (= bin/llm.py health)
+  brunna modules [enable|disable <name>]
+                        which optional features exist and which are on; switching changes {settings} and applies it (remember
+                        to commit {settings})
+  brunna move-instance --to <instance dir> [--apply]
                         move the old layout (everything in the hub root) to an instance directory: copies only, validates the
                         new layout, writes .hub-home last (delete it to go back)
 projects:
-  agenthub connect [<folder>] [--yes] [--remote] [--dry-run]
+  brunna connect [<folder>] [--yes] [--remote] [--dry-run]
                         connect existing folders as projects (bin/connect.py): one repo, a monorepo, or a folder of repos
-  agenthub onboard …         = bin/onboard-project.sh (start a new project / connect a folder)
-  agenthub recover <name>    = bin/recover-project.sh (new machine / the folder is gone)
-  agenthub rename <old> <new>  = bin/rename-project.sh (dry-run first, then add --apply)
-  agenthub status [project]  = bin/overview.sh
-  agenthub first-look <project>   a newly connected project's first STATE.md now, from its README and history
-                        (bin/first-look.py; agenthub connect runs it)
-  agenthub uninstall [--apply] [--purge]
-                        take agent-hub off this machine (bin/uninstall.py): lists first; notes stay unless --purge
+  brunna onboard …         = bin/onboard-project.sh (start a new project / connect a folder)
+  brunna recover <name>    = bin/recover-project.sh (new machine / the folder is gone)
+  brunna rename <old> <new>  = bin/rename-project.sh (dry-run first, then add --apply)
+  brunna status [project]  = bin/overview.sh
+  brunna first-look <project>   a newly connected project's first STATE.md now, from its README and history
+                        (bin/first-look.py; brunna connect runs it)
+  brunna uninstall [--apply] [--purge]
+                        take brunna off this machine (bin/uninstall.py): lists first; notes stay unless --purge
 scheduling:
-  agenthub jobs              = schedulectl list
-  agenthub run <job>         = schedulectl run (run it once now)
-  agenthub land              after a merge of agent-hub: rebuild the registry index from the merged code (run by
+  brunna jobs              = schedulectl list
+  brunna run <job>         = schedulectl run (run it once now)
+  brunna land              after a merge of brunna: rebuild the registry index from the merged code (run by
                         merge-branch; not a session command)
 owner (you; not commands for project sessions):
-  agenthub owner list | done/drop/already-done <key> | answer <question id> "answer"
-                        = bin/owner.py: the built-in owner side (hub.json owner_side: builtin; with an assistant, list only)
+  brunna owner list | done/drop/already-done <key> | answer <question id> "answer"
+                        = bin/owner.py: the built-in owner side ({settings} owner_side: builtin; with an assistant, list only)
 for project sessions (these are what the rules files name; the permission rules allow only these, not the admin commands above):
-  agenthub send | inbox | show | ack | done | thread | open-questions …   = the project mailbox (bin/hubbus subcommands of the
+  brunna send | inbox | show | ack | done | thread | open-questions …   = the project mailbox (bin/hubbus subcommands of the
                         same name)
-  agenthub merge-branch …    = bin/merge-branch (the merge gate for parallel sessions)
-  agenthub test [--tier T] [--when M] [--force] [--rev R | --index]
+  brunna merge-branch …    = bin/merge-branch (the merge gate for parallel sessions)
+  brunna test [--tier T] [--when M] [--force] [--rev R | --index]
                         = bin/test-runner.py: the project's declared test tiers in an exported tree, a recorded pass
                         is a hit (docs/design/test-waiting.md B4)
-  agenthub cap-run --cap <capability> -- <command…>   = bin/hub-run (the platform runs a program the sandbox blocks)
-  agenthub complete <point> [--schema F] < prompt    = bin/hub-run --complete (a model call the project declares in
+  brunna cap-run --cap <capability> -- <command…>   = bin/hub-run (the platform runs a program the sandbox blocks)
+  brunna complete <point> [--schema F] < prompt    = bin/hub-run --complete (a model call the project declares in
                                                        its registry models:, run by the platform)
-  agenthub install-cli [--dir <folder>]   put agenthub's forwarding script in <folder> (default ~/.local/bin; must be on PATH)
-  agenthub mcp               the platform's MCP server (stdio): any coding agent with MCP can use the mailbox and write notes
+  brunna install-cli [--dir <folder>]   put brunna's forwarding script in <folder> (default ~/.local/bin; must be on PATH)
+  brunna mcp               the platform's MCP server (stdio): any coding agent with MCP can use the mailbox and write notes
                         (= bin/mcp_server.py)
-  agenthub mcp config        print the snippet to register in the tool's MCP settings (the platform does not change your
+  brunna mcp config        print the snippet to register in the tool's MCP settings (the platform does not change your
                         tool's settings for you; docs/mcp.md)
-  agenthub --version         the platform's version: the release tag this checkout is at (git describe)
+  brunna --version         the platform's version: the release tag this checkout is at (git describe)
 """
 from __future__ import annotations
 
@@ -133,17 +133,17 @@ def cmd_config(argv: list[str]) -> int:
         return 0
     if sub == "apply":
         if hubconf.worktree_lookup():   # it would apply the config to the machine from a half-edited copy
-            print(_("agenthub config apply: {root} is a linked worktree of the hub; apply from the main checkout "
+            print(_("brunna config apply: {root} is a linked worktree of the hub; apply from the main checkout "
                     "({main})", root=hubconf.ROOT, main=hubconf.MAIN), file=sys.stderr)
             return 1
         if subprocess.run(hubconf.launch(BIN / "config-check")).returncode != 0:
-            print(_("agenthub config apply: the config is invalid; nothing applied"), file=sys.stderr)
+            print(_("brunna config apply: the config is invalid; nothing applied"), file=sys.stderr)
             return 1
         done = appliers.apply_all(only=only)
         show(done)
         left = {n: c for n, c in appliers.plan_all(only=only).items() if c}
         if left:  # verify: a plan after applying should be empty
-            print(_("agenthub config apply: ⚠️ still differs from the config after applying:"), file=sys.stderr)
+            print(_("brunna config apply: ⚠️ still differs from the config after applying:"), file=sys.stderr)
             show(left)
         record(done, ok=not left)
         return 1 if left else 0
@@ -170,7 +170,7 @@ def record(done: dict, ok: bool) -> None:
     r = subprocess.run([str(BIN / "py"), str(BIN / "hubbus"), "publish", "config.applied", "--source", hubconf.hub_project(),
                         "--payload", json.dumps(payload, ensure_ascii=False), "--id", eid], capture_output=True, text=True)
     if r.returncode != 0:
-        print(_("agenthub config apply: recording on the bus failed (.state/config-applied.json was written): {error}",
+        print(_("brunna config apply: recording on the bus failed (.state/config-applied.json was written): {error}",
                 error=r.stderr.strip()[:200]), file=sys.stderr)
 
 
@@ -204,7 +204,7 @@ def llm_modules_warning(names: list[str]) -> str | None:
     if not names or judgment_points_can_run():
         return None
     return _("⚠️ on without a model: {modules}. These modules only do judgment-point work, so their jobs fail until "
-             "agenthub llm setup (or turn one off: agenthub modules disable <name>)", modules=", ".join(names))
+             "brunna llm setup (or turn one off: brunna modules disable <name>)", modules=", ".join(names))
 
 
 def cmd_modules(argv: list[str]) -> int:
@@ -215,16 +215,16 @@ def cmd_modules(argv: list[str]) -> int:
         for f in sorted(registry.MODULES_DIR.glob("*.yaml")):
             doc = yaml.safe_load(f.read_text()) or {}
             desc = i18n.translate("modules", doc.get("description") or "", {})   # catalog: locales/<lang>/modules.json
-            needs = _(" (needs an LLM: agenthub llm setup)") if doc.get("needs_llm") is True else ""
+            needs = _(" (needs an LLM: brunna llm setup)") if doc.get("needs_llm") is True else ""
             print(f"{'✓' if f.stem in on else ' '} {f.stem:12} {desc}{needs}")
-        print(_("\nSwitch: agenthub modules enable|disable <name> (changes modules in hub.json, then applies)"))
+        print(_("\nSwitch: brunna modules enable|disable <name> (changes modules in {settings}, then applies)"))
         return 0
     if len(argv) != 2 or argv[0] not in ("enable", "disable"):
         print(_(__doc__), file=sys.stderr)
         return 2
     name = argv[1]
     if not (registry.MODULES_DIR / f"{name}.yaml").exists():
-        print(_("agenthub modules: no module {name} (modules/ has: {available})", name=name,
+        print(_("brunna modules: no module {name} (modules/ has: {available})", name=name,
                 available=', '.join(sorted(p.stem for p in registry.MODULES_DIR.glob('*.yaml')))), file=sys.stderr)
         return 1
     d = read_hub_json()
@@ -234,7 +234,7 @@ def cmd_modules(argv: list[str]) -> int:
     if argv[0] == "enable" and name in llm_modules() and (warning := llm_modules_warning([name])):
         print(warning)
     rc = subprocess.run([*hubconf.launch(BIN / "agenthub"), "config", "apply"]).returncode
-    print(_("remember to commit hub.json (config as code)."))
+    print(_("remember to commit {settings} (config as code)."))
     return rc
 
 
@@ -407,7 +407,7 @@ def choose_agent(args: dict, presets: dict[str, dict]) -> str:
     options = [(n, f"{info['label']}: {info['gives']} ("
                    + (_("installed") if agent_found(info) else _("not installed")) + ")") for n, info in presets.items()]
     options.append(("none", _("None for now: memory, schedules and the mailbox work; agent features stay off")))
-    return UI().menu("agent", _("Which AI agent should agent-hub use for its own work (nightly tidy-up, the mailbox)?"),
+    return UI().menu("agent", _("Which AI agent should brunna use for its own work (nightly tidy-up, the mailbox)?"),
                      options, default)
 
 
@@ -438,7 +438,7 @@ def install_agent(choice: str, presets: dict[str, dict]) -> bool:
         print(f"    {line}")
     if not UI().consent("install_agent", _("Install {label} now? It runs: {lines}", label=info["label"],
                                            lines="; ".join(info.get("install") or []))):
-        print(_("Not installed. Later: run those lines, then agenthub init --agent {name}", name=choice))
+        print(_("Not installed. Later: run those lines, then brunna init --agent {name}", name=choice))
         return False
     for line in info.get("install") or []:
         if subprocess.run(["/bin/bash", "-c", line], env=agent_env()).returncode != 0:
@@ -447,7 +447,7 @@ def install_agent(choice: str, presets: dict[str, dict]) -> bool:
     hubconf.nvm_bin.cache_clear() if hasattr(hubconf.nvm_bin, "cache_clear") else None
     ok = agent_found(info) is not None
     print(_("✓ {label} installed", label=info["label"]) if ok else
-          _("{label} still isn't found; open a new terminal and run agenthub init --agent {name}",
+          _("{label} still isn't found; open a new terminal and run brunna init --agent {name}",
             label=info["label"], name=choice))
     return ok
 
@@ -477,10 +477,10 @@ def agent_credential(choice: str, presets: dict[str, dict]) -> None:
         f = pathlib.Path(os.path.expanduser(cred["file"]))
         if not f.exists():
             UI().needs_user("agent_token", _(
-                "{label} runs agent-hub's background work with a one-year token that you make and save yourself; "
-                "agent-hub never sees it (needs {needs}). In a terminal on this computer (an AI app's own terminal "
+                "{label} runs brunna's background work with a one-year token that you make and save yourself; "
+                "brunna never sees it (needs {needs}). In a terminal on this computer (an AI app's own terminal "
                 "works too):\n  1. {command}\n     sign in when it asks; it prints the token\n  2. {store}\n     paste "
-                "the token, then Enter (nothing shows while you paste)\nThen: agenthub init --agent {name}",
+                "the token, then Enter (nothing shows while you paste)\nThen: brunna init --agent {name}",
                 label=info["label"], needs=cred.get("needs", ""), command=" ".join(cred["command"]),
                 store=cred["store"], name=choice))
             if not (UI().acts and UI().terminal and UI().consent("agent_token_saved", _("Saved it? Check that {label} "
@@ -488,7 +488,7 @@ def agent_credential(choice: str, presets: dict[str, dict]) -> None:
                                                                                      label=info["label"]))):
                 return
             if not f.exists():
-                print(_("{file} isn't there yet. Later: agenthub init --agent {name}", file=f, name=choice))
+                print(_("{file} isn't there yet. Later: brunna init --agent {name}", file=f, name=choice))
                 return
         if not UI().acts:
             return
@@ -536,10 +536,10 @@ def offer_mcp_registration(presets: dict[str, dict]) -> None:
     if not tools:
         return
     labels = ", ".join(info["label"] for _n, info in tools)
-    if not UI().consent("register_mcp", _("Let your AI apps ({tools}) use agent-hub in every folder? This adds "
-                                          "agent-hub to their tools for your user account (as an MCP server).",
+    if not UI().consent("register_mcp", _("Let your AI apps ({tools}) use brunna in every folder? This adds "
+                                          "brunna to their tools for your user account (as an MCP server).",
                                           tools=labels)):
-        print(_("Not registered. Later: agenthub init --register-mcp"))
+        print(_("Not registered. Later: brunna init --register-mcp"))
         return
     for _n, info in tools:
         argv = mcp_argv(info["mcp_register"])
@@ -559,7 +559,7 @@ def set_agent(choice: str, args: dict) -> int:
     print(_("✓ the platform's agent: {name}", name=presets[choice]["label"] if choice in presets else choice))
     install_agent(choice, presets)
     agent_credential(choice, presets)
-    if choice != "none" and UI().consent("llm_now", _("Set up who makes the platform's judgment calls now (agenthub llm "
+    if choice != "none" and UI().consent("llm_now", _("Set up who makes the platform's judgment calls now (brunna llm "
                                                       "setup)?")):
         llm_setup(args)
     cfg = hubconf.config_path().name
@@ -601,8 +601,8 @@ def new_hub_json(args: dict) -> dict:
         for k in held:
             d["modules"][k] = False
         if held and not args.get("modules"):
-            print(_("left off: {modules}. They only work with an AI model making agent-hub's decisions, and none is set "
-                    "up yet; after agenthub llm setup, turn them on with agenthub modules enable <name>",
+            print(_("left off: {modules}. They only work with an AI model making brunna's decisions, and none is set "
+                    "up yet; after brunna llm setup, turn them on with brunna modules enable <name>",
                     modules=", ".join(held)))
     default_on = ",".join(k for k in shipped if d["modules"][k] is True)
     picked = args.get("modules") or UI().ask("modules", _("which optional features to turn on (available: {modules})",
@@ -629,7 +629,7 @@ def new_hub_json(args: dict) -> dict:
 # ---------- the config repo (config as code: config/ is its own git repo) ----------
 
 # the email the config repo commits with when git has none (a reserved domain: never anyone's real address)
-FALLBACK_EMAIL = "owner@agent-hub.invalid"
+FALLBACK_EMAIL = f"owner@{names.current('product')}.invalid"
 
 
 def git_out(repo: pathlib.Path, *args: str) -> str:
@@ -668,7 +668,7 @@ def config_repo_first_commit(cfgdir: pathlib.Path, owner: str) -> tuple[bool, li
     move-instance makes it."""
     if not shutil.which("git"):
         return False, [_("⚠️ git is not installed: {dir} keeps no version history, so settings changes are not recorded "
-                         "and connecting projects can't record them. Install git, then run agenthub init again (it "
+                         "and connecting projects can't record them. Install git, then run brunna init again (it "
                          "records the settings as they are)", dir=cfgdir)]
     if not (cfgdir / ".git").exists():
         subprocess.run(["git", "init", "-q", str(cfgdir)], capture_output=True)
@@ -677,7 +677,7 @@ def config_repo_first_commit(cfgdir: pathlib.Path, owner: str) -> tuple[bool, li
         return True, []
     lines = [note] if (note := config_repo_identity(cfgdir, owner)) else []
     subprocess.run(["git", "-C", str(cfgdir), "add", "-A"], capture_output=True)
-    r = subprocess.run(["git", "-C", str(cfgdir), "commit", "-q", "-m", "config: first commit (agenthub init)"],
+    r = subprocess.run(["git", "-C", str(cfgdir), "commit", "-q", "-m", f"config: first commit ({names.current('cli')} init)"],
                        capture_output=True, text=True)
     if r.returncode != 0:
         return False, lines + [_("the config repo's first commit failed: {error}", error=(r.stdout + r.stderr).strip()[:400])]
@@ -769,7 +769,7 @@ def init_argv_problem(argv: list[str]) -> str | None:
 
 def instance_home_answer(args: dict) -> pathlib.Path:
     return pathlib.Path(os.path.expanduser(args.get("home") or names.env("HOME") or UI().ask(
-        "home", _("where agent-hub keeps your settings, data and keys"), default_home())))
+        "home", _("where brunna keeps your settings, data and keys"), default_home())))
 
 
 def default_home() -> str:
@@ -787,7 +787,7 @@ def connect_existing(args: dict, yes: bool) -> None:
     if not folder:
         return
     if not UI().terminal and not UI().consent("connect_root", _("Let AI sessions connect folders inside {folder} to "
-                                                                "agent-hub, and connect it now?", folder=folder)):
+                                                                "brunna, and connect it now?", folder=folder)):
         return
     if not UI().acts:
         return
@@ -897,14 +897,14 @@ def init_for_agent(flags: set, args: dict, argv: list[str]) -> int:
     opts = answers_args(answers)
     exists = hubconf.config_path().exists()
     if exists and not INIT_UNFINISHED.exists():
-        emit({"error": _("agent-hub is already set up here"), "next": "agenthub doctor"})
+        emit({"error": _("brunna is already set up here"), "next": f"{names.current('cli')} doctor"})
         return 1
     if exists:   # carrying on an init that stopped: only its later steps take answers
         opts = {k: v for k, v in opts.items() if k in ("llm", "llm-model", "llm-base-url", "connect")}
     if "--questions" in flags:
         emit({"questions": init_questions({**opts, "_answers": answers}),
               "next": _("ask the owner the chat questions, write the answers to a file as one JSON object (each id and its answer), run "
-                        "agenthub init --questions --answers <file> for any that follow from them, then agenthub "
+                        "brunna init --questions --answers <file> for any that follow from them, then brunna "
                         "init --answers <file>. Questions via page or dialog are answered by the owner directly when "
                         "init runs; never ask for them in the chat.")})
         return 0
@@ -924,7 +924,7 @@ def cmd_init(argv: list[str], transport=None) -> int:
         print(_(__doc__))
         return 0
     if problem := init_argv_problem(argv):
-        print(_("agenthub init: {problem} (nothing was done; see agenthub --help)", problem=problem), file=sys.stderr)
+        print(_("brunna init: {problem} (nothing was done; see brunna --help)", problem=problem), file=sys.stderr)
         return 2
     if "--scheduler-only" in argv:   # a step of agenthub upgrade: the two units init installs, nothing else
         failed: list[str] = []
@@ -938,13 +938,13 @@ def cmd_init(argv: list[str], transport=None) -> int:
         return init_for_agent(flags, args, argv)
     init_dialogue.use(transport or init_dialogue.Terminal(yes))
     if args.get("lang") and not parse_lang(args["lang"]):
-        print(_("agenthub init: --lang takes {languages}, or two of them as <interface>,<notes> (nothing was done)",
+        print(_("brunna init: --lang takes {languages}, or two of them as <interface>,<notes> (nothing was done)",
                 languages=", ".join(hubconf.LANGUAGES)), file=sys.stderr)
         return 2
     if args.get("lang") and hubconf.config_path().exists():
         return set_language(*parse_lang(args["lang"]))   # an existing instance: only the language
     if args.get("agent") and args["agent"] not in (*agent_presets(), "none"):
-        print(_("agenthub init: --agent takes {agents} (nothing was done)",
+        print(_("brunna init: --agent takes {agents} (nothing was done)",
                 agents=", ".join([*agent_presets(), "none"])), file=sys.stderr)
         return 2
     if args.get("agent") and hubconf.config_path().exists():
@@ -959,10 +959,10 @@ def cmd_init(argv: list[str], transport=None) -> int:
         # (docs/design/new-user.md step 6)
         print(_("✓ {path} already exists (the old layout); leaving it alone", path=hubconf.config_file('hub.json')))
     elif hubconf.config_path().exists():
-        print(_("✓ {path} already exists; leaving it alone (to change it, edit it, then run agenthub config apply)",
+        print(_("✓ {path} already exists; leaving it alone (to change it, edit it, then run brunna config apply)",
                 path=hubconf.config_file('hub.json')))
         if INIT_UNFINISHED.exists() and not dry:   # an earlier init stopped after writing hub.json: finish its steps
-            print(_("an earlier agenthub init stopped before it finished; carrying on with what it didn't do"))
+            print(_("an earlier brunna init stopped before it finished; carrying on with what it didn't do"))
             created = True
     else:
         ui, content = choose_language(args)
@@ -973,7 +973,7 @@ def cmd_init(argv: list[str], transport=None) -> int:
         d["registry_dir"] = "projects"   # relative to config/
         d["language"] = {**(d.get("language") or {}), "ui": ui, "content": content}
         if dry:
-            print(_("(dry-run) would create the instance directory {home}/{{config,data,secrets}}, write config/hub.json, "
+            print(_("(dry-run) would create the instance directory {home}/{{config,data,secrets}}, write config/{settings}, "
                     "write {pointer}:\n", home=home, pointer=hubconf.POINTER) + json.dumps(d, ensure_ascii=False, indent=2))
             return 0
         for sub in ("config/projects", "data", "secrets"):
@@ -986,7 +986,7 @@ def cmd_init(argv: list[str], transport=None) -> int:
         INIT_UNFINISHED.parent.mkdir(parents=True, exist_ok=True)
         INIT_UNFINISHED.write_text("llm-setup\n")
         created = True
-        print(_("✓ agent-hub's folder: {home} (you: {owner}; on: {modules})", home=home,
+        print(_("✓ brunna's folder: {home} (you: {owner}; on: {modules})", home=home,
                 owner=d['owner']['tag'], modules=', '.join(k for k, v in d['modules'].items() if v is True)))
     if dry and not hubconf.config_path().exists():
         return 0
@@ -1033,8 +1033,8 @@ def cmd_init(argv: list[str], transport=None) -> int:
         upgrade.record_in_step()   # this checkout's commit is in step now (agenthub upgrade, doctor)
     if created and not dry:
         connect_existing(args, yes)
-    print(_("\nNext: agenthub doctor shows what is missing; agenthub connect <folder> connects existing projects, "
-            "agenthub onboard ~/workspace/<project> starts a new one"))
+    print(_("\nNext: brunna doctor shows what is missing; brunna connect <folder> connects existing projects, "
+            "brunna onboard ~/workspace/<project> starts a new one"))
     return status
 
 
@@ -1062,7 +1062,7 @@ def cmd_move_instance(argv: list[str]) -> int:
     """hub move-instance --to <instance directory> [--apply]: copy (the source isn't deleted), verify the new layout,
     write <hub>/.hub-home last."""
     if "--to" not in argv:
-        print(_("usage: agenthub move-instance --to <instance directory> [--apply] (without --apply it only lists what it would "
+        print(_("usage: brunna move-instance --to <instance directory> [--apply] (without --apply it only lists what it would "
                 "do)"),
               file=sys.stderr)
         return 2
@@ -1135,8 +1135,8 @@ def cmd_move_instance(argv: list[str]) -> int:
     subprocess.run([*hubconf.launch(BIN / "registry.py"), "check", "--rebuild"], capture_output=True, text=True)
     print(_("\n✓ wrote {pointer}. The old files in the hub are still there (not deleted). Next steps (by hand):",
             pointer=hubconf.POINTER))
-    print(_("  1. agenthub config plan shows what would change (the secrets path in projects' sandbox settings changes); "
-            "if it looks right, run agenthub config apply"))
+    print(_("  1. brunna config plan shows what would change (the secrets path in projects' sandbox settings changes); "
+            "if it looks right, run brunna config apply"))
     print(_("  2. restart the long-running services that read paths (lease-runner, cap-runner)"))
     print(_("  3. only after the nightly flow and the backups (restore check) are fine, git rm those files from the platform repo"))
     return 0
@@ -1169,13 +1169,13 @@ def cmd_doctor(argv: list[str]) -> int:
     add("ok" if r.returncode == 0 else "bad", (r.stdout.strip() or r.stderr.strip())[:160] or _("the platform's Python"),
         "" if r.returncode == 0 else "bin/setup")
     if not hubconf.config_path().exists():
-        add("bad", _("no hub.json"), _("agenthub init"))
+        add("bad", _("no hub.json"), _("brunna init"))
         return report(results)
     r = subprocess.run(hubconf.launch(BIN / "config-check"), capture_output=True, text=True)
     add("ok" if r.returncode == 0 else "bad", _("config: all valid") if r.returncode == 0 else
         _("config: {errors}", errors=r.stderr.strip()[:300]),
-        "" if r.returncode == 0 else _("fix hub.json / projects/ as the messages say, then run agenthub config check"))
-    add("ok", _("language: interface {ui}, notes and project state {content} (change: agenthub init --lang "
+        "" if r.returncode == 0 else _("fix {settings} / projects/ as the messages say, then run brunna config check"))
+    add("ok", _("language: interface {ui}, notes and project state {content} (change: brunna init --lang "
                 "<interface>[,<notes>])", ui=hubconf.lang_ui(), content=hubconf.lang_content()))
     if (why := machine_sleeps()):
         add("info", _("this machine sleeps ({why}): daily jobs run when it wakes, background services are offline and "
@@ -1187,25 +1187,25 @@ def cmd_doctor(argv: list[str]) -> int:
 
     side = hubconf.owner_side()
     add("ok", _("owner side: {name} (owner_side: assistant)", name=hubconf.get('assistant.name') or _("assistant"))
-        if side == "assistant" else _("owner side: built-in (owner_side: builtin; agenthub owner list / done / answer)"))
+        if side == "assistant" else _("owner side: built-in (owner_side: builtin; brunna owner list / done / answer)"))
     import shutil
     cli = shutil.which(names.current("cli")) or shutil.which(names.other("cli"))
-    add("ok" if cli else "warn", _("agenthub is on PATH: {path}", path=cli) if cli else
-        _("agenthub is not on PATH (project sessions cannot reach the mailbox commands)"),
-        "" if cli else "bin/agenthub install-cli")
+    add("ok" if cli else "warn", _("brunna is on PATH: {path}", path=cli) if cli else
+        _("brunna is not on PATH (project sessions cannot reach the mailbox commands)"),
+        "" if cli else f"bin/{names.current('cli')} install-cli")
     hold = int(((hubconf.get("mailbox") or {}).get("mcp_hold_max_min", 120)))   # hubbus MCP_HOLD_MAX_MIN
-    add("ok", _("MCP server: agenthub mcp (any agent with MCP can use the mailbox and write notes; while it works in a "
+    add("ok", _("MCP server: brunna mcp (any agent with MCP can use the mailbox and write notes; while it works in a "
                 "project, the platform holds requests to that project instead of dispatching an agent, for up to "
                 "{minutes} minutes; registering it in the tool's settings is up to you)", minutes=hold),
-        _("agenthub mcp config prints the snippet to register; how to add it per tool: docs/mcp.md"))
+        _("brunna mcp config prints the snippet to register; how to add it per tool: docs/mcp.md"))
     import runtime_ports
     rname = runtime_ports.default_name()
     optional = runtime_ports.optional_features()   # off is said, not a reminder: letters still arrive at the next hook
     installed = runtime_ports.installed()
     if rname == "none":   # no AI agent at all: one plain row, not one per feature (newcomer-path.md B8)
-        add("warn", _("AI agent features are off: no AI agent is set up for agent-hub to run. Notes, schedules and the "
+        add("warn", _("AI agent features are off: no AI agent is set up for brunna to run. Notes, schedules and the "
                       "mailbox work without one"),
-            _("set one up: agenthub init --agent {names}", names="|".join(agent_presets())))
+            _("set one up: brunna init --agent {names}", names="|".join(agent_presets())))
     elif installed == [rname]:   # one coding agent (runtime.installed unset or only the default): as before A1
         notes = runtime_ports.feature_notes(rname)
         for feat, ok, miss in runtime_ports.feature_table(rname):
@@ -1214,7 +1214,7 @@ def cmd_doctor(argv: list[str]) -> int:
                  else _("{feature}: available", feature=feat)) if ok else
                 _("{feature}: off (the runtime {runtime} has no {missing})", feature=feat, runtime=rname, missing=miss),
                 "" if ok or feat in optional else
-                _("install a coding agent that supports them, and point hub.json runtime.default at it"))
+                _("install a coding agent that supports them, and point {settings} runtime.default at it"))
     else:
         doctor_runtimes(add, rname, installed, optional)
     doctor_wake_misses(add)
@@ -1223,7 +1223,7 @@ def cmd_doctor(argv: list[str]) -> int:
                       "other than {points} are refused with that reason", runtime=rname,
                       points=", ".join(runtime_ports.THROWAWAY_POINTS)),
             _("keep a runtime with session state as runtime.default and put {runtime} on single points "
-              "(hub.json llm.points.<point>.runtime)", runtime=rname))
+              "({settings} llm.points.<point>.runtime)", runtime=rname))
     hub_cfg = {"runtime": hubconf.get("runtime") or {}, "llm": hubconf.get("llm") or {},
                "mailbox": hubconf.get("mailbox") or {}}
     for name in runtime_ports.RUNTIMES:   # a runtime's own "allowed but weak" settings
@@ -1245,13 +1245,13 @@ def cmd_doctor(argv: list[str]) -> int:
         except runtime_ports.Unsupported:
             pass   # no agent login to check: the feature table above already said which features are off
         except Exception as e:
-            add("bad", _("cannot read the agent's login state: {error}", error=e), _("agenthub config check"))
+            add("bad", _("cannot read the agent's login state: {error}", error=e), _("brunna config check"))
     import completion
     if completion.settings():
         for name, ok, why in completion.health_all():
             add("ok" if ok else "bad", _("LLM provider {name}: available", name=name) if ok else
                 _("LLM provider {name}: {reason}", name=name, reason=why),
-                "" if ok else _("see hub.json llm.providers; set the key with agenthub llm set-key <provider>"))
+                "" if ok else _("see {settings} llm.providers; set the key with brunna llm set-key <provider>"))
         s = completion.settings()
         add("ok", _("model groups of the judgment points: {groups}",
                     groups=_(", ").join(f"{g}→{s['use'].get(g, _('(not set)'))}" for g in completion.GROUPS)))
@@ -1261,11 +1261,11 @@ def cmd_doctor(argv: list[str]) -> int:
             add("ok", _("judgment points go to the runtime {runtime} (no llm.providers; schedulectl models shows each point's "
                        "model)", runtime=rt))
         else:
-            add("bad", _("agent-hub's decisions (nightly notes, weekly report) have nowhere to run: no AI agent and no "
+            add("bad", _("brunna's decisions (nightly notes, weekly report) have nowhere to run: no AI agent and no "
                          "model provider is set up") if rt == "none" else
-                _("judgment points have nowhere to run: the runtime {runtime} has no completion interface and hub.json "
+                _("judgment points have nowhere to run: the runtime {runtime} has no completion interface and {settings} "
                   "has no llm.providers", runtime=rt),
-                _("agenthub llm setup (pick one: an API key or a local Ollama)"))
+                _("brunna llm setup (pick one: an API key or a local Ollama)"))
 
     uid = os.getuid()
     scheduled = False   # whether a service manager runs this hub's scheduler (said again at the heartbeat below)
@@ -1280,17 +1280,17 @@ def cmd_doctor(argv: list[str]) -> int:
             add("ok" if st == "running" else "bad", _("{what} ({label}.timer): enabled", what=what, label=label)
                 if st == "running" else _("{what} ({label}.timer): not installed", what=what, label=label) if st is None
                 else _("{what} ({label}.timer): installed but not scheduled", what=what, label=label),
-                "" if st == "running" else "agenthub init")
+                "" if st == "running" else f"{names.current('cli')} init")
         if systemd_units.linger() is False:
             add("warn", _("the scheduler and services stop after logout (systemd linger is off)"), "sudo loginctl enable-linger $USER")
     for label, what in (() if hubconf.service_manager() != "launchd" else
                         tuple(zip(CORE_PLISTS, (_("scheduler"), _("watchdog"))))):
         r = subprocess.run(["/bin/launchctl", "print", f"gui/{uid}/{label}"], capture_output=True, text=True)
         if r.returncode != 0:
-            add("bad", _("{what} ({label}): not loaded", what=what, label=label), _("agenthub init"))
+            add("bad", _("{what} ({label}): not loaded", what=what, label=label), _("brunna init"))
         elif str(BIN) not in r.stdout:  # what's loaded for this user is another hub's (e.g. another clone)
             add("bad", _("{what} ({label}): the loaded one belongs to a different hub, not {bin}", what=what, label=label, bin=BIN),
-                _("agenthub init (replaces it with this one)"))
+                _("brunna init (replaces it with this one)"))
         else:
             scheduled = scheduled or label == CORE_PLISTS[0]
             add("ok", _("{what} ({label}): loaded", what=what, label=label))
@@ -1326,7 +1326,7 @@ def cmd_doctor(argv: list[str]) -> int:
     left = {n: c for n, c in appliers.plan_all().items() if c and n != "scheduler"}
     add("ok" if not left else "warn", _("background services, project settings: match the config") if not left else
         _("background services, project settings: {count} {count:change|changes} not applied yet", count=sum(len(c) for c in left.values())),
-        "" if not left else _("agenthub config plan, then agenthub config apply"))
+        "" if not left else _("brunna config plan, then brunna config apply"))
     return report(results)
 
 
@@ -1356,7 +1356,7 @@ def doctor_runtimes(add, default: str, installed: list[str], optional: set) -> N
     names = list(dict.fromkeys([default, *installed]))
     tables = {n: runtime_ports.feature_table(n) for n in names}
     notes = runtime_ports.feature_notes(default)
-    add("ok", _("coding agents: {names} (the platform starts {default}; hub.json runtime.installed)",
+    add("ok", _("coding agents: {names} (the platform starts {default}; {settings} runtime.installed)",
                 names=", ".join(installed), default=default))
     for i, (feat, _ok, _miss) in enumerate(tables[default]):
         cells = [(n, tables[n][i][1], tables[n][i][2]) for n in names]
@@ -1374,7 +1374,7 @@ def doctor_runtimes(add, default: str, installed: list[str], optional: set) -> N
             add("ok", _("{runtime}: the platform's rules go into {file}", runtime=n, file=rules))
         except runtime_ports.Unsupported:
             add("info", _("{runtime}: no rules file; its sessions get the platform's rules from the MCP server's "
-                          "instructions (agenthub mcp) or their session-start hook", runtime=n))
+                          "instructions (brunna mcp) or their session-start hook", runtime=n))
         caps = runtime_ports.capabilities(n)
         if "lifecycle" in caps and not {"control", "confine"} <= caps:
             add("warn", _("{runtime}: its hooks are not installed in sandboxed projects, and a session of it there gets "
@@ -1446,12 +1446,12 @@ def llm_setup(args: dict) -> int:
     interactive = UI().can_ask
     rt = args.get("_runtime") or runtime_ports.default_name()
     choice = args.get("llm") or UI().ask("llm",
-        _("which AI model makes agent-hub's decisions (nightly notes, weekly report)? runtime = through your AI "
+        _("which AI model makes brunna's decisions (nightly notes, weekly report)? runtime = through your AI "
           "agent's own login ({runtime}), anthropic, openai (or a compatible API), ollama (on this machine), none = not "
           "now", runtime=rt)
         if "completion" in runtime_ports.capabilities(rt) else
         # nothing to offer as runtime: no coding agent (none), or one without a completion interface
-        _("which AI model makes agent-hub's decisions (nightly notes, weekly report)? anthropic, openai (or a "
+        _("which AI model makes brunna's decisions (nightly notes, weekly report)? anthropic, openai (or a "
           "compatible API), ollama (on this machine), none = not now"),
         default_llm_choice(rt))
     if choice not in LLM_CHOICES:
@@ -1460,14 +1460,14 @@ def llm_setup(args: dict) -> int:
     if not UI().acts:   # init --questions: what an agent relays for a provider, then nothing is written
         if choice not in ("runtime", "none"):
             UI().ask("llm_base_url", _("address (change it for a compatible service)"), "")
-            UI().ask("llm_model", _("the model's name, used for every kind of decision (see agenthub llm setup to pick "
+            UI().ask("llm_model", _("the model's name, used for every kind of decision (see brunna llm setup to pick "
                                     "per kind)"), "")
             if choice != "ollama":
                 UI().secret("llm_key", _("{choice} API key", choice=choice))
         return 0
     if not interactive and not args.get("llm") and choice not in ("runtime", "none") and not args.get("llm-model"):
-        print(_("{choice} is available here, but its model can only be picked when you're asked: agent-hub's decisions "
-                "stay off for now; run agenthub llm setup later", choice=choice))
+        print(_("{choice} is available here, but its model can only be picked when you're asked: brunna's decisions "
+                "stay off for now; run brunna llm setup later", choice=choice))
         return 0
     d = read_hub_json()
     if choice in ("runtime", "none"):
@@ -1481,20 +1481,20 @@ def llm_setup(args: dict) -> int:
         write_hub_json(d)
         hubconf._cfg = None
         if choice == "none":
-            print(_("agent-hub's decisions stay off for now: whatever needs one fails plainly and says why. Run agenthub "
+            print(_("brunna's decisions stay off for now: whatever needs one fails plainly and says why. Run brunna "
                     "llm setup later"))
         elif rt == "none":
-            print(_("⚠️ no AI agent is set up, so there is no agent login to make agent-hub's decisions with: they will "
-                    "fail. Pick a provider: agenthub llm setup"))
+            print(_("⚠️ no AI agent is set up, so there is no agent login to make brunna's decisions with: they will "
+                    "fail. Pick a provider: brunna llm setup"))
         elif "completion" not in runtime_ports.capabilities(rt):
-            print(_("⚠️ {runtime} can't make agent-hub's decisions (it has no completion interface): they will fail. "
-                    "Pick another provider: agenthub llm setup", runtime=rt))
+            print(_("⚠️ {runtime} can't make brunna's decisions (it has no completion interface): they will fail. "
+                    "Pick another provider: brunna llm setup", runtime=rt))
         else:
-            print(_("agent-hub's decisions go through {runtime}'s own login (the model for each: schedulectl models)",
+            print(_("brunna's decisions go through {runtime}'s own login (the model for each: schedulectl models)",
                     runtime=rt))
         return 0
     if not interactive and not args.get("llm-model"):   # stop before a key is asked for nothing
-        print(_("When running non-interactively, give the model with --llm-model <name> (or run agenthub llm setup "
+        print(_("When running non-interactively, give the model with --llm-model <name> (or run brunna llm setup "
                 "interactively later)"),
               file=sys.stderr)
         return 1
@@ -1508,7 +1508,7 @@ def llm_setup(args: dict) -> int:
         if base != mod.DEFAULT_BASE:
             conf["base_url"] = base
         conf["key"] = {"secret": f"{choice}-api-key"}
-        value = UI().secret("llm_key", _("{choice} API key (not shown; Enter alone = later with agenthub llm set-key "
+        value = UI().secret("llm_key", _("{choice} API key (not shown; Enter alone = later with brunna llm set-key "
                                          "{choice}): ", choice=choice))
         if value:
             print(_("written to {path} (600)", path=write_secret(conf['key']['secret'], value)))
@@ -1533,7 +1533,7 @@ def llm_setup(args: dict) -> int:
             return names[int(a) - 1] if a.isdigit() and 1 <= int(a) <= len(names) else a
         std = pick("llm_model_standard", _("standard (ordinary decisions: nightly tidy-up, weekly report): which one (number or name)"), "")
         if not std:
-            print(_("no model picked; hub.json unchanged"), file=sys.stderr)
+            print(_("no model picked; {settings} unchanged"), file=sys.stderr)
             return 1
         picked = {"standard": std, "fast": pick("llm_model_fast", _("fast (simple, high-volume decisions)"), std),
                   "strong": pick("llm_model_strong", _("strong (the hardest: consolidation)"), std)}
@@ -1543,16 +1543,16 @@ def llm_setup(args: dict) -> int:
     llm["use"] = {g: choice for g in completion.GROUPS}
     errs = completion.config_errors(llm)
     if errs:
-        print(_("invalid settings; hub.json unchanged:\n  {errors}", errors="\n  ".join(errs)), file=sys.stderr)
+        print(_("invalid settings; {settings} unchanged:\n  {errors}", errors="\n  ".join(errs)), file=sys.stderr)
         return 1
     write_hub_json(d)
     hubconf._cfg = None
     ok, why = next(((o, w) for n, o, w in completion.health_all() if n == choice), (False, _("not checked")))
-    print(_("agent-hub's decisions go to {choice} ({models}); {status}", choice=choice,
+    print(_("brunna's decisions go to {choice} ({models}); {status}", choice=choice,
             models=', '.join(f'{g}={conf['models'][g]}' for g in completion.GROUPS),
             status=_("reachable") if ok else _("⚠️ not usable yet: {reason}", reason=why)))
-    print(_("remember to commit hub.json (config as code). Agent work (mailbox handling and the like) needs a coding agent; "
-            "see the feature table in agenthub doctor"))
+    print(_("remember to commit {settings} (config as code). Agent work (mailbox handling and the like) needs a coding agent; "
+            "see the feature table in brunna doctor"))
     return 0 if ok else 1
 
 
@@ -1565,11 +1565,11 @@ def cmd_llm(argv: list[str]) -> int:
         init_dialogue.use(init_dialogue.Terminal("--yes" in argv))
         return llm_setup(opts)
     if argv[:1] != ["set-key"] or len(argv) != 2:
-        print(_("usage: agenthub llm setup | set-key <provider> (key from stdin) | health"), file=sys.stderr)
+        print(_("usage: brunna llm setup | set-key <provider> (key from stdin) | health"), file=sys.stderr)
         return 2
     conf = ((completion.settings() or {}).get("providers") or {}).get(argv[1])
     if not conf:
-        print(_("hub.json llm.providers has no {provider}", provider=argv[1]), file=sys.stderr)
+        print(_("{settings} llm.providers has no {provider}", provider=argv[1]), file=sys.stderr)
         return 2
     k = conf.get("key") or {}
     if not k.get("secret"):
@@ -1584,7 +1584,7 @@ def cmd_llm(argv: list[str]) -> int:
     if not value.strip():
         print(_("no key read; nothing written"), file=sys.stderr)
         return 1
-    print(_("written to {path} (600). Check: agenthub llm health", path=write_secret(k['secret'], value)))
+    print(_("written to {path} (600). Check: brunna llm health", path=write_secret(k['secret'], value)))
     return 0
 
 
@@ -1646,7 +1646,7 @@ def cmd_install_cli(argv: list[str]) -> int:
     on_path = str(d) in os.environ.get("PATH", "").split(":")
     if not on_path:
         print(_('⚠️ {dir} is not on PATH: add it to your shell setup (e.g. export PATH="{dir}:$PATH") so sessions can '
-                'reach agenthub', dir=d))
+                'reach brunna', dir=d))
     return 0 if on_path else 1
 
 

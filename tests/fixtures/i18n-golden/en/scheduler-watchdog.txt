@@ -31,18 +31,18 @@ last line
 === --test printed
 sent
 === sent
-🚨 The agent-hub scheduler has not ticked for 120 minutes (last tick 10-30 08:00). The librarian, the assistant's jobs, reflect and the upload jobs have all stopped.
+🚨 The brunna scheduler has not ticked for 120 minutes (last tick 10-30 08:00). The librarian, the assistant's jobs, reflect and the upload jobs have all stopped.
 <diag>
 ---
-⏰ Still down: The agent-hub scheduler has not ticked for 540 minutes (last tick 10-30 08:00). The librarian, the assistant's jobs, reflect and the upload jobs have all stopped.
+⏰ Still down: The brunna scheduler has not ticked for 540 minutes (last tick 10-30 08:00). The librarian, the assistant's jobs, reflect and the upload jobs have all stopped.
 <diag>
 ---
-✅ The agent-hub scheduler is back (last tick 10-30 17:00; it had been stopped since about 10-30 08:00)
+✅ The brunna scheduler is back (last tick 10-30 17:00; it had been stopped since about 10-30 08:00)
 ---
-🚨 The agent-hub scheduler has not ticked for a long time (no tick recorded). The librarian, the assistant's jobs, reflect and the upload jobs have all stopped.
+🚨 The brunna scheduler has not ticked for a long time (no tick recorded). The librarian, the assistant's jobs, reflect and the upload jobs have all stopped.
 <diag>
 ---
-🧪 agent-hub scheduler watchdog test message (settings are correct)
+🧪 brunna scheduler watchdog test message (settings are correct)
 <diag>
 === no alerts
 exit 0; printed: 

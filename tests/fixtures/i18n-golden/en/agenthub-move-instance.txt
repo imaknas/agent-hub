@@ -2,7 +2,7 @@ $ agenthub move-instance
 [exit 2]
 --- stdout
 --- stderr
-usage: agenthub move-instance --to <instance directory> [--apply] (without --apply it only lists what it would do)
+usage: brunna move-instance --to <instance directory> [--apply] (without --apply it only lists what it would do)
 
 $ agenthub move-instance --to <TMP>/x
 [exit 1]
@@ -46,7 +46,7 @@ copy <TMP>/secrets/k → <TMP>/new2/secrets/k
 config-check: the config is all valid
 
 ✓ wrote <TMP>/fakehub/.hub-home. The old files in the hub are still there (not deleted). Next steps (by hand):
-  1. agenthub config plan shows what would change (the secrets path in projects' sandbox settings changes); if it looks right, run agenthub config apply
+  1. brunna config plan shows what would change (the secrets path in projects' sandbox settings changes); if it looks right, run brunna config apply
   2. restart the long-running services that read paths (lease-runner, cap-runner)
   3. only after the nightly flow and the backups (restore check) are fine, git rm those files from the platform repo
 --- stderr

@@ -1,7 +1,7 @@
-"""Which Principal Handoff version agent-hub's records are in, and the conversion between versions
+"""Which Principal Handoff version brunna's records are in, and the conversion between versions
 (agent-ops-specs specs/principal-handoff, core §4 and §14).
 
-agent-hub reads 0.3, 0.4 and 0.5 records. What it sends to the principal side is a setting, hub.json
+brunna reads 0.3, 0.4 and 0.5 records. What it sends to the principal side is a setting, {settings}
 `principal_handoff.send_version` ("0.4" or "0.5", default "0.4"): before 1.0 every version is its own contract, and the
 version is configured per role, project and extension (core §14). One principal side serves every project here, so
 one value covers every project and both extensions; it moves to 0.5 once the principal side accepts 0.5.

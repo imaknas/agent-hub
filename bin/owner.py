@@ -2,7 +2,7 @@
 """The built-in minimal owner side: the principal side of Principal Handoff 0.3 (docs/design/tool-agnostic.md,
 "the owner side can be swapped").
 
-For people without a personal assistant: hub.json `owner_side: builtin` (the default when there is no assistant.api).
+For people without a personal assistant: {settings} `owner_side: builtin` (the default when there is no assistant.api).
 It and the assistant are two implementations of the same interface: the registrar (requester side) still writes
 the owner's to-dos as `raised` records and applies the `settled` ones it gets back, without knowing who's on the
 other side.
@@ -14,7 +14,7 @@ other side.
   owner.py answer <question id> "answer"      answer a question a project asked (goes back to the asking project; the
                                               librarian / that session applies it)
   owner.py notify                             send a notification when there are new to-dos or questions (the channels
-                                              in hub.json alerts); used by a scheduled job
+                                              in {settings} alerts); used by a scheduled job
 
 Only the owner runs closing and answering (this is not a command for project sessions: the permission rules only let
 the mailbox commands through, not this one). When the owner side is the assistant this script can only list: closing
@@ -122,7 +122,7 @@ def settle(key: str, outcome: str, note: str | None) -> int:
         print(_("{project}:{key} → {outcome} ({event}{again}); registrar updates STATE.md by key tonight",
                 project=p, key=key, outcome=outcome, event=eid, again="" if new else _(", sent before")))
         return 0
-    print(_("no to-do with key {key} (`agenthub owner list` shows the open ones)", key=key), file=sys.stderr)
+    print(_("no to-do with key {key} (`brunna owner list` shows the open ones)", key=key), file=sys.stderr)
     return 1
 
 
@@ -133,7 +133,7 @@ def answer(qid: str, text: str) -> int:
     c = hb.db()
     q = hb.question_asked(c, qid)
     if q is None:
-        print(_("no question with id {id} (`agenthub owner list` shows the open ones)", id=qid), file=sys.stderr)
+        print(_("no question with id {id} (`brunna owner list` shows the open ones)", id=qid), file=sys.stderr)
         return 1
     proj = q["project"]
     before = [r["record"]["id"] for r in hb.records(c, proj, None, {"settled"}, direction="in")
@@ -173,11 +173,11 @@ def notify() -> int:
     new = [it for it in items if (it.get("key") or it.get("id")) not in seen]
     if new and not alert.configured():
         # nothing to send on (not a failure): they stay new, so a channel set up later still gets them
-        print(_("owner side: {open} open, {new} new; no alert channel is set (hub.json alerts), so they wait in "
-                "`agenthub owner list`", open=len(items), new=len(new)))
+        print(_("owner side: {open} open, {new} new; no alert channel is set ({settings} alerts), so they wait in "
+                "`brunna owner list`", open=len(items), new=len(new)))
         return 0
     if new:
-        lines = [_("{owner}, {new} new {new:item is|items are} waiting for you ({total} in all; `agenthub owner list`):",
+        lines = [_("{owner}, {new} new {new:item is|items are} waiting for you ({total} in all; `brunna owner list`):",
                    owner=hubconf.owner_tag(), new=len(new), total=len(items))]
         lines += [_("- {mark} {project}: {text}", mark="❓" if it["kind"] == "question" else "☐", project=it["project"],
                     text=it["text"][:120]) for it in new[:20]]
@@ -185,7 +185,7 @@ def notify() -> int:
             alert.clear_failure("owner-notify")
         else:
             alert.record_failure("owner-notify", _("the owner's to-do notification could not be sent "
-                                                   "(no working channel in hub.json alerts?)"))
+                                                   "(no working channel in {settings} alerts?)"))
             print(_("the notification could not be sent"), file=sys.stderr)
             return 1
     SEEN.parent.mkdir(parents=True, exist_ok=True)
@@ -215,7 +215,7 @@ def main(argv: list[str]) -> int:
         print(_("({n} open)", n=len(items)))
         return 0
     if hubconf.owner_side() != "builtin":
-        print(_("the owner side is {assistant} (hub.json owner_side: assistant): settle and answer there; "
+        print(_("the owner side is {assistant} ({settings} owner_side: assistant): settle and answer there; "
                 "here you can only list (two principal sides would conflict)",
                 assistant=hubconf.get("assistant.name") or _("the assistant")), file=sys.stderr)
         return 2

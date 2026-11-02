@@ -6,7 +6,7 @@
  "hubconf.py get: {key} is not set or not a single value": "hubconf.py get:{key} 沒有設定或不是單一值",
  "hubconf.py path: {key} is not set": "hubconf.py path:{key} 沒有設定",
  "usage: hubconf.py roster | ideas | get <key> | path <key> | host server | dir config|data|secrets|state|logs": "用法:hubconf.py roster | ideas | get <key> | path <key> | host server | dir config|data|secrets|state|logs",
- "time zone {name} (hub.json owner.timezone) not found ({error}); using this machine's local time instead. Without the system's tzdata, rerun bin/setup-python (it installs the Python tzdata package)": "找不到時區 {name}(hub.json owner.timezone;{error}),改用這台機器的本地時間。系統沒有 tzdata 的話,重跑 bin/setup-python(會裝 Python 的 tzdata 套件)",
+ "time zone {name} ({settings} owner.timezone) not found ({error}); using this machine's local time instead. Without the system's tzdata, rerun bin/setup-python (it installs the Python tzdata package)": "找不到時區 {name}({settings} owner.timezone;{error}),改用這台機器的本地時間。系統沒有 tzdata 的話,重跑 bin/setup-python(會裝 Python 的 tzdata 套件)",
  "schedule `{command}` yourself every 15 minutes (for example the crontab line `*/15 * * * * {command}`)": "自己每 15 分鐘排程 `{command}`(例如 crontab 加一行 `*/15 * * * * {command}`)",
  "HOME ({home}) is not this account's home directory: the platform leaves the account's background services alone (installing one from here would replace the account's real one)": "HOME({home})不是這個帳號的家目錄:平台不碰這個帳號的背景服務(從這裡安裝,會換掉帳號裡真正在跑的那一個)"
 }

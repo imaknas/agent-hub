@@ -3,4 +3,4 @@
 === model call failed
 {"error": "模型呼叫失敗(exit 3),統計部分不受影響", "meta": {"model": "工具預設", "source": "stats", "excluded": []}}
 === no model at all
-{"error": "分析停用:執行環境 none 沒有 completion 介面,hub.json 也沒有 llm 區塊(用 agenthub llm setup 設一家),統計部分不受影響", "meta": {"model": "工具預設", "source": "stats", "excluded": []}}
+{"error": "分析停用:執行環境 none 沒有 completion 介面,brunna.json 也沒有 llm 區塊(用 brunna llm setup 設一家),統計部分不受影響", "meta": {"model": "工具預設", "source": "stats", "excluded": []}}

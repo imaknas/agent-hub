@@ -15,7 +15,7 @@ refused when the agent runs them itself (hubbus.platform_mails: the environment 
 an ancestor process). The guarantee does not rely on the tool's permission settings and holds on systems without a
 sandbox (Linux) too.
 
-  propose_apply.py mailbox <project> <letter id>…  a mailbox assignment (called by hubbus dispatch when hub.json has
+  propose_apply.py mailbox <project> <letter id>…  a mailbox assignment (called by hubbus dispatch when brunna.json has
                                                    mailbox.handler: propose)
 
   run(project, ws, point, prompt, allow)        for other code: returns {ok, output, applied, refused, error}

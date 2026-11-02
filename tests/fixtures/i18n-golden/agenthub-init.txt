@@ -16,7 +16,7 @@ $ agenthub init --dry-run --yes    # instance, launchd
 (dry-run) local.brunna-scheduler:安裝
 (dry-run) local.brunna-scheduler-watchdog:安裝
 
-下一步:agenthub doctor 列出還缺什麼;agenthub connect <資料夾> 接上既有的專案,agenthub onboard ~/workspace/<專案> 開新專案
+下一步:brunna doctor 列出還缺什麼;brunna connect <資料夾> 接上既有的專案,brunna onboard ~/workspace/<專案> 開新專案
 --- stderr
 
 $ agenthub init --dry-run --yes    # instance, systemd
@@ -29,7 +29,7 @@ $ agenthub init --dry-run --yes    # instance, systemd
 (dry-run) local.brunna-scheduler-watchdog:安裝(systemd)
   ⚠️ 登出之後 user unit 會停:`loginctl enable-linger $USER`(要 sudo)
 
-下一步:agenthub doctor 列出還缺什麼;agenthub connect <資料夾> 接上既有的專案,agenthub onboard ~/workspace/<專案> 開新專案
+下一步:brunna doctor 列出還缺什麼;brunna connect <資料夾> 接上既有的專案,brunna onboard ~/workspace/<專案> 開新專案
 --- stderr
 
 $ agenthub init --dry-run --yes    # no service manager
@@ -40,26 +40,26 @@ $ agenthub init --dry-run --yes    # no service manager
 (dry-run) 建資料夾 <TMP>/home/git-origin
 ⚠️ HOME(<TMP>/home)不是這個帳號的家目錄:平台不碰這個帳號的背景服務(從這裡安裝,會換掉帳號裡真正在跑的那一個);要跑夜間流程就自己每 15 分鐘排程 `<TMP>/fakehub/bin/py <TMP>/fakehub/bin/scheduler.py`(例如 crontab 加一行 `*/15 * * * * <TMP>/fakehub/bin/py <TMP>/fakehub/bin/scheduler.py`)
 
-下一步:agenthub doctor 列出還缺什麼;agenthub connect <資料夾> 接上既有的專案,agenthub onboard ~/workspace/<專案> 開新專案
+下一步:brunna doctor 列出還缺什麼;brunna connect <資料夾> 接上既有的專案,brunna onboard ~/workspace/<專案> 開新專案
 --- stderr
 
 $ agenthub init --home <TMP>/inst --owner Sam --timezone UTC --workspace <TMP>/ws2 --modules backup,reflect --yes --llm none --dry-run    # new instance
 [exit 0]
 --- stdout
-(dry-run) 會建實例目錄 <TMP>/inst/{config,data,secrets}、寫 config/hub.json、寫 <TMP>/fakehub/.hub-home:
+(dry-run) 會建實例目錄 <TMP>/inst/{config,data,secrets}、寫 config/brunna.json、寫 <TMP>/fakehub/.hub-home:
 <hub.json from hub.example.json>
 --- stderr
 
 $ agenthub init --home <TMP>/inst --owner Sam --timezone UTC --workspace <TMP>/ws2 --modules backup,reflect --yes --llm none --no-launchd    # new instance
 [exit 0]
 --- stdout
-✓ agent-hub 的資料夾:<TMP>/inst(你:Sam;打開的功能:reflect, backup)
+✓ brunna 的資料夾:<TMP>/inst(你:Sam;打開的功能:reflect, backup)
 建資料夾 <TMP>/fakehub/.logs
 建資料夾 <TMP>/ws2
 建資料夾 <TMP>/home/git-origin
 建資料夾 <TMP>/home/.memory-copies
-agent-hub 的判斷先關著:需要判斷的地方會直接失敗並說明原因。之後跑 agenthub llm setup
-⚠️ 開著但沒有模型:reflect。這些模組只做判斷點的工作,agenthub llm setup 之前它們的 job 都會失敗(或關掉:agenthub modules disable <名稱>)
+brunna 的判斷先關著:需要判斷的地方會直接失敗並說明原因。之後跑 brunna llm setup
+⚠️ 開著但沒有模型:reflect。這些模組只做判斷點的工作,brunna llm setup 之前它們的 job 都會失敗(或關掉:brunna modules disable <名稱>)
 ✓ config 已 commit:<TMP>/inst/config 是 git repo,第一個 commit 就是現在的 config
 --no-launchd:不裝排程器、不套用服務
 --- stderr
@@ -67,20 +67,20 @@ agent-hub 的判斷先關著:需要判斷的地方會直接失敗並說明原因
 $ agenthub init --home <TMP>/inst-nogit --owner Sam --timezone UTC --workspace <TMP>/ws2 --modules backup,reflect --yes --llm none --no-launchd    # no git
 [exit 1]
 --- stdout
-✓ agent-hub 的資料夾:<TMP>/inst-nogit(你:Sam;打開的功能:reflect, backup)
-agent-hub 的判斷先關著:需要判斷的地方會直接失敗並說明原因。之後跑 agenthub llm setup
-⚠️ 開著但沒有模型:reflect。這些模組只做判斷點的工作,agenthub llm setup 之前它們的 job 都會失敗(或關掉:agenthub modules disable <名稱>)
-⚠️ 沒有安裝 git:<TMP>/inst-nogit/config 沒有版本歷史,設定的變更不會被記下來,接上專案也記不下來。裝好 git 後再跑一次 agenthub init(它會把目前的設定記下來)
+✓ brunna 的資料夾:<TMP>/inst-nogit(你:Sam;打開的功能:reflect, backup)
+brunna 的判斷先關著:需要判斷的地方會直接失敗並說明原因。之後跑 brunna llm setup
+⚠️ 開著但沒有模型:reflect。這些模組只做判斷點的工作,brunna llm setup 之前它們的 job 都會失敗(或關掉:brunna modules disable <名稱>)
+⚠️ 沒有安裝 git:<TMP>/inst-nogit/config 沒有版本歷史,設定的變更不會被記下來,接上專案也記不下來。裝好 git 後再跑一次 brunna init(它會把目前的設定記下來)
 --no-launchd:不裝排程器、不套用服務
 --- stderr
 
 $ agenthub init --home <TMP>/inst-anon --owner Sam --timezone UTC --workspace <TMP>/ws2 --modules backup,reflect --yes --llm none --no-launchd    # git, no identity
 [exit 0]
 --- stdout
-✓ agent-hub 的資料夾:<TMP>/inst-anon(你:Sam;打開的功能:reflect, backup)
-agent-hub 的判斷先關著:需要判斷的地方會直接失敗並說明原因。之後跑 agenthub llm setup
-⚠️ 開著但沒有模型:reflect。這些模組只做判斷點的工作,agenthub llm setup 之前它們的 job 都會失敗(或關掉:agenthub modules disable <名稱>)
-⚠️ 這台機器的 git 沒有身分(沒設 user.name, user.email),所以 config repo <TMP>/inst-anon/config 用「Sam <owner@agent-hub.invalid>」commit,只設在那個 repo。要用你自己的:git config --global user.name "你的名字"; git config --global user.email you@example.com;再 git -C <TMP>/inst-anon/config config --remove-section user
+✓ brunna 的資料夾:<TMP>/inst-anon(你:Sam;打開的功能:reflect, backup)
+brunna 的判斷先關著:需要判斷的地方會直接失敗並說明原因。之後跑 brunna llm setup
+⚠️ 開著但沒有模型:reflect。這些模組只做判斷點的工作,brunna llm setup 之前它們的 job 都會失敗(或關掉:brunna modules disable <名稱>)
+⚠️ 這台機器的 git 沒有身分(沒設 user.name, user.email),所以 config repo <TMP>/inst-anon/config 用「Sam <owner@brunna.invalid>」commit,只設在那個 repo。要用你自己的:git config --global user.name "你的名字"; git config --global user.email you@example.com;再 git -C <TMP>/inst-anon/config config --remove-section user
 ✓ config 已 commit:<TMP>/inst-anon/config 是 git repo,第一個 commit 就是現在的 config
 --no-launchd:不裝排程器、不套用服務
 --- stderr
@@ -88,9 +88,9 @@ agent-hub 的判斷先關著:需要判斷的地方會直接失敗並說明原因
 $ agenthub init --home <TMP>/inst-defaults --owner Sam --timezone UTC --workspace <TMP>/ws2 --yes --llm none --no-launchd    # default modules, no model
 [exit 0]
 --- stdout
-先關著:consolidate, reflect。它們要有 AI 模型幫 agent-hub 做判斷才能用,現在還沒設定;設定好 agenthub llm setup 之後,用 agenthub modules enable <名稱> 打開
-✓ agent-hub 的資料夾:<TMP>/inst-defaults(你:Sam;打開的功能:owner)
-agent-hub 的判斷先關著:需要判斷的地方會直接失敗並說明原因。之後跑 agenthub llm setup
+先關著:consolidate, reflect。它們要有 AI 模型幫 brunna 做判斷才能用,現在還沒設定;設定好 brunna llm setup 之後,用 brunna modules enable <名稱> 打開
+✓ brunna 的資料夾:<TMP>/inst-defaults(你:Sam;打開的功能:owner)
+brunna 的判斷先關著:需要判斷的地方會直接失敗並說明原因。之後跑 brunna llm setup
 ✓ config 已 commit:<TMP>/inst-defaults/config 是 git repo,第一個 commit 就是現在的 config
 --no-launchd:不裝排程器、不套用服務
 --- stderr

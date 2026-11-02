@@ -5,8 +5,8 @@
  "Rebuilt from {source}: {label}": "已照 {source} 重建:{label}",
  "Purpose: {purpose}": "用途:{purpose}",
  "Note: {notes}": "注意:{notes}",
- "{path} does not exist: is agent-hub itself behind (not pulled)?": "{path} 不存在——agent-hub 本身是不是還沒 pull 到最新?",
+ "{path} does not exist: is brunna itself behind (not pulled)?": "{path} 不存在——brunna 本身是不是還沒 pull 到最新?",
  "Rebuilt and started: {label}": "已重建並啟動:{label}",
- "'{label}' is not a service agent-hub manages (owner: {owner}); it cannot be rebuilt automatically.": "'{label}' 不是 agent-hub 管轄的服務(owner: {owner}),無法自動重建。",
+ "'{label}' is not a service brunna manages (owner: {owner}); it cannot be rebuilt automatically.": "'{label}' 不是 brunna 管轄的服務(owner: {owner}),無法自動重建。",
  "How to rebuild: {notes}": "怎麼重建:{notes}"
 }

@@ -1,8 +1,8 @@
-"""After a merge of agent-hub: `agenthub land` (bin/agenthub cmd_land) and merge-branch's landing step (step 4b), plus
+"""After a merge of agent-hub: `brunna land` (bin/brunna cmd_land) and merge-branch's landing step (step 4b), plus
 merge-branch refusing a registry entry that is not v2 (docs/design/test-waiting.md steps 2.2/2.3).
 
 cmd_land runs in-process with subprocess.run replaced (it is never started for real here); the landing step runs
-merge-branch against a fake hub checkout (a git repo whose bin/agenthub is a stand-in that records how it was called),
+merge-branch against a fake hub checkout (a git repo whose bin/brunna is a stand-in that records how it was called),
 with its own config, state, registry index and bus.
 
     bin/py -m unittest discover -s tests
@@ -136,7 +136,7 @@ class Base(unittest.TestCase):
 
 
 class MergeLanding(Base):
-    """merge-branch in the hub's own repo: after the fast-forward, `<main checkout>/bin/agenthub land` from the main
+    """merge-branch in the hub's own repo: after the fast-forward, `<main checkout>/bin/brunna land` from the main
     checkout; its outcome is recorded in the report (`landed`), and a failure is reported without undoing the merge."""
 
     def setUp(self):
@@ -188,7 +188,7 @@ class MergeLanding(Base):
         self.assertEqual(self.git(self.hub, "log", "--format=%s", "-1"), "feat: b", "the merge stands")
         self.assertEqual(len(self.calls()), 1)
         self.assertIn("stub-land-said-this", r.stderr, "land's own output tail is shown")
-        self.assertIn("agenthub land", r.stderr)
+        self.assertIn("brunna land", r.stderr)
         self.assertIs(self.events("session.report")[0]["landed"], False)
         self.assertEqual(len(self.events("merge.done")), 1)
 
@@ -230,7 +230,7 @@ class MergeRefusesOldIndex(Base):
                            timeout=120)
         self.assertEqual(r.returncode, 1, r.stdout + r.stderr)
         want = i18n.translate("merge-branch", "merge-branch: {project} is not in the validated project registry, so "
-                              "its test command and commit rules are unknown; nothing was merged. `agenthub config "
+                              "its test command and commit rules are unknown; nothing was merged. `brunna config "
                               "check` rebuilds the registry and says what is wrong", {"project": "demo"}, "zh-Hant")
         self.assertIn(want, r.stderr)
         self.assertEqual(self.git(self.ws, "log", "--format=%s", "-1"), "chore: initial commit", "main untouched")

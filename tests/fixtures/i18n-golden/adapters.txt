@@ -4,7 +4,7 @@
 回應沒有 choices(HTTP 200)
 === systemd timer
 [Unit]
-Description=agent-hub local.x.tick(每 900 秒)
+Description=brunna local.x.tick(每 900 秒)
 
 [Timer]
 OnActiveSec=1

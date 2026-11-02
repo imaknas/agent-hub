@@ -147,7 +147,7 @@ class Wake(Harness):
         self.assertEqual(self.dispatch(), 1)
         self.assertEqual([s for s, _t in self.rt.woken], ["S1"])
         self.assertIn("m1", self.rt.woken[0][1])
-        self.assertIn("agenthub inbox", self.rt.woken[0][1])
+        self.assertIn("brunna inbox", self.rt.woken[0][1])
         self.assertEqual(self.woken_events(), [("m1:woken", {"session": "S1", "via": "wake", "ok": True})])
         self.assertEqual((self.handled, self.resumed), ([], []))
 
@@ -413,8 +413,8 @@ class ClaudeWaiter(ClaudeSessionsDir):
     """The Stop hook's waiter (runtime_claude.wait; docs/design/mailbox-runtimes.md B1)."""
 
     def test_a_request_wakes_once_with_exit_2_and_the_text_on_stderr(self):
-        code, text, how = self.wait([lambda: self.assertTrue(self.rc.wake(self.SID, "📬 agent-hub: 1 letter (m1)"))])
-        self.assertEqual((code, text, how), (2, "📬 agent-hub: 1 letter (m1)", "woke"))
+        code, text, how = self.wait([lambda: self.assertTrue(self.rc.wake(self.SID, "📬 brunna: 1 letter (m1)"))])
+        self.assertEqual((code, text, how), (2, "📬 brunna: 1 letter (m1)", "woke"))
         self.assertEqual(self.files(), [], "the request taken, the waiter's record gone with it")
 
     def test_a_request_is_never_seen_twice_including_by_a_rearmed_waiter(self):
@@ -540,7 +540,7 @@ class ClaudeWaiter(ClaudeSessionsDir):
         import io
         hub_event = load_file("hub_event_wait3", ROOT / "bin" / "hub-event")
         hub_event.LOG = self.tmp / "hub-event.log"
-        self.request("📬 agent-hub: 1 letter from beta (m1). Run agenthub inbox.")
+        self.request("📬 brunna: 1 letter from beta (m1). Run brunna inbox.")
         err = io.StringIO()
         import subprocess
         session = subprocess.Popen(["sleep", "30"])   # the session's process, read for real: no -p
@@ -555,7 +555,7 @@ class ClaudeWaiter(ClaudeSessionsDir):
             for var in ("HUB_LLM_POINT", "HUBBUS_LEASE", "CLAUDE_CODE_ENTRYPOINT"):
                 os.environ.pop(var, None)
             self.assertEqual(hub_event.wait("claude", self.raw()), 2)
-        self.assertEqual(err.getvalue().strip(), "📬 agent-hub: 1 letter from beta (m1). Run agenthub inbox.")
+        self.assertEqual(err.getvalue().strip(), "📬 brunna: 1 letter from beta (m1). Run brunna inbox.")
         self.assertIn("wait - ran=woke", hub_event.LOG.read_text())
 
 
@@ -639,7 +639,7 @@ class ClaudeDispatch(Harness):
                self.c.execute("SELECT id, payload FROM events WHERE type='message.woken' ORDER BY seq")]
         self.assertEqual(oks, [("m1:woken", False), ("m2:woken", True)])
         [req] = [p for p in f.parent.iterdir() if ".wake-" in p.name]
-        self.assertEqual(req.read_text(), self.m._("📬 agent-hub: 1 letter from {project} ({id}). Run agenthub inbox.",
+        self.assertEqual(req.read_text(), self.m._("📬 brunna: 1 letter from {project} ({id}). Run brunna inbox.",
                                                    project="beta", id="m2"))
 
 

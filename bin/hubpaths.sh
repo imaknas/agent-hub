@@ -99,6 +99,7 @@ _hub_msg() {
     printf '%s' "$out"; return 0
   fi
   for kv in "$@"; do id="$(_hp_replace "$id" "{${kv%%=*}}" "${kv#*=}")"; done
+  id="$(_hp_replace "$id" "{settings}" "${HUB_JSON##*/}")"   # the settings file's name (bin/i18n.py NAMES)
   id="$(_hp_replace "$id" "{{" "{")"; _hp_replace "$id" "}}" "}"
 }
 # literal replace-all: ${s//pat/rep} treats rep differently in bash 3.2 (quotes kept) and 5.2 (& is the match)

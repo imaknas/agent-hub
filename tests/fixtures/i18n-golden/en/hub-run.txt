@@ -12,7 +12,7 @@ positional arguments:
 options:
   -h, --help         show this help message and exit
   --cap CAP          capability name (one of the registry entry's enforce.capabilities)
-  --timeout TIMEOUT  seconds (default and limit: hub.json cap_runner)
+  --timeout TIMEOUT  seconds (default and limit: brunna.json cap_runner)
   --wait ID          reattach to a job
   --complete POINT   a model call this project declares (registry models:): prompt on stdin, JSON
                      result on stdout
@@ -43,7 +43,7 @@ exit 125
 --- stdout
 --- stderr
 hub-run: job 20261031-120000-abcdef (capability gpu); if this call is interrupted, the job keeps running: reattach with `hub-run --wait 20261031-120000-abcdef`
-hub-run: the platform's run service is not running (nobody picked the request up in 30 s), so the request was withdrawn. Tell the user that agent-hub's cap-runner service is not running
+hub-run: the platform's run service is not running (nobody picked the request up in 30 s), so the request was withdrawn. Tell the user that brunna's cap-runner service is not running
 === queued, then done
 exit 3
 --- stdout
@@ -55,7 +55,7 @@ exit 124
 partial out
 --- stderr
 partial err
-hub-run: timed out; the job was stopped (use --timeout for longer; the limit is hub.json cap_runner.max_timeout_s)
+hub-run: timed out; the job was stopped (use --timeout for longer; the limit is brunna.json cap_runner.max_timeout_s)
 === rejected
 exit 126
 --- stdout
