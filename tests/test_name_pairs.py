@@ -307,6 +307,37 @@ class ConfigPath(unittest.TestCase):
         self.assertEqual(run(), f"{cfg}/brunna.json|B")
 
 
+class LettersUnderTheOtherName(unittest.TestCase):
+    """A letter addressed to the platform's other spelling (sent by a release on the other side of the rename, before
+    an upgrade or a rollback) is in the platform's mailbox, and a session can ask for it by either name."""
+
+    def test_in_the_mailbox(self):
+        import os
+        tmp = pathlib.Path(tempfile.mkdtemp()).resolve()
+        for d in ("home", "config/projects", "data", "secrets", "bus", "state"):
+            (tmp / d).mkdir(parents=True)
+        (tmp / "config" / "hub.json").write_text(json.dumps({"owner": {"tag": "Alex"}, "bus_dir": str(tmp / "bus"),
+                                                              "registry_dir": "projects"}))
+        env = {**names.env_strip(os.environ), "HOME": str(tmp / "home"), "AGENT_HUB_CONFIG": str(tmp / "config"),
+               "AGENT_HUB_DATA": str(tmp / "data"), "AGENT_HUB_SECRETS": str(tmp / "secrets"),
+               "AGENT_HUB_STATE": str(tmp / "state"), "AGENT_HUB_LANG_UI": "en"}
+        def hubbus(*a):
+            return subprocess.run([sys.executable, str(ROOT / "bin" / "hubbus"), *a], env=env, capture_output=True,
+                                  text=True, timeout=60)
+        hubbus("inbox", "--project", names.current("project"))   # creates the bus
+        import sqlite3
+        c = sqlite3.connect(tmp / "bus" / "bus.db")
+        c.execute("INSERT INTO events(id, ts, type, source, to_project, ref, payload) VALUES(?,?,?,?,?,?,?)",
+                  ("m11020000-0001", "2026-11-02T00:00:00+08:00", "message", "app", names.other("project"), None,
+                   json.dumps({"v": 1, "type": "request", "text": "sent before the switch"})))
+        c.commit()
+        c.close()
+        for asked in names.all("project"):
+            with self.subTest(asked=asked):
+                r = hubbus("inbox", "--project", asked)
+                self.assertIn("m11020000-0001", r.stdout, r.stdout + r.stderr)
+
+
 class InlineCopies(unittest.TestCase):
     """The places that can't import bin/names.py carry copies of the pairs they use, current spelling first."""
 

@@ -66,6 +66,7 @@ def open_items(only: str | None = None) -> list[dict]:
     """[{kind: task, project, key, text} | {kind: question, project, id, text}]"""
     reg = _registrar()
     out = []
+    only = _hubbus().now_named(only) if only else None   # a name it had before a rename: the same project
     for p in projects():
         if only and p != only:
             continue

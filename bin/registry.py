@@ -733,15 +733,19 @@ def wrong_registry(old: dict, reg: pathlib.Path, files: list[pathlib.Path]) -> s
     otherwise rebuild it from its own registry and drop every project (10-30, between 11:49 and 11:53, nobody could
     send). So an index that has projects is only rebuilt from the registry dir it was built from, and never from an
     empty one; `registry.py check --rebuild` is for when that really changed."""
-    if not any(n != hubconf.hub_project() for n in old.get("projects") or {}):
+    # the platform's own entry isn't a user project, under either name (an index written by a later release lists it
+    # as brunna, one from before type: platform without the type)
+    users = [n for n, d in (old.get("projects") or {}).items()
+             if n not in names.all("project") and (d or {}).get("type") != "platform"]
+    if not users:
         return None
     if old.get("registry_dir") not in (None, str(reg.resolve())):
         return _("the registry index was built from {old} and this process sees {dir}; not rebuilt (another config "
                  "reaching this hub's state?). If the registry really moved: registry.py check --rebuild",
                  old=old["registry_dir"], dir=reg)
-    if not [f for f in files if f.stem != hubconf.hub_project()]:
+    if not [f for f in files if f.stem not in names.all("project")]:
         return _("{dir} has no project files, but the registry index lists {n} {n:project|projects}; not rebuilt. If they really "
-                 "were all removed: registry.py check --rebuild", dir=reg, n=len(old["projects"]))
+                 "were all removed: registry.py check --rebuild", dir=reg, n=len(users))
     return None
 
 

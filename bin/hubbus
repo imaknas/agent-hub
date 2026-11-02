@@ -817,16 +817,23 @@ def is_done(c, mid) -> bool:
 INBOX_SQL = """
 SELECT m.*, EXISTS(SELECT 1 FROM events d WHERE d.type='message.delivered' AND d.ref=m.id) AS delivered
 FROM events m
-WHERE m.type IN ('message','record') AND m.to_project=?
+WHERE m.type IN ('message','record') AND m.to_project IN ({marks})
   AND NOT EXISTS(SELECT 1 FROM events x WHERE x.type='message.done' AND x.ref=m.id)
 ORDER BY m.seq"""
+
+
+def addressed_to(c, project: str) -> list:
+    """The letters and records still open for this project under any of its names: one sent to a name it had before
+    a rename (the platform's other spelling included) is still its own."""
+    mine = own_names(project)
+    return c.execute(INBOX_SQL.format(marks=",".join("?" * len(mine))), mine).fetchall()
 
 
 def inbox(c, project, session=None, only_new=False):
     """Letters to this project not done yet. A reply addressed to a particular session waits for that session a
     while first."""
     cutoff = iso(now() - datetime.timedelta(minutes=REPLY_WAIT_MIN))
-    rows, found = [], c.execute(INBOX_SQL, (project,)).fetchall()
+    rows, found = [], addressed_to(c, project)
     losers = record_losers(c, found)   # one record id sent with other content: only the one that prevails (core §10)
     for r in found:
         if (only_new and r["delivered"]) or r["id"] in losers:
@@ -1197,7 +1204,8 @@ def current_name(proj: str) -> str:
     while proj in renames and proj not in seen and (renames[proj] or {}).get("stage") == "done":
         seen.add(proj)
         proj = renames[proj]["new"]
-    return proj
+    # a rename that ended at the platform's other spelling ended at the platform
+    return hubconf.hub_project() if proj in names.all("project") else proj
 
 
 def own_names(project: str, taken=None) -> list[str]:
@@ -1205,6 +1213,7 @@ def own_names(project: str, taken=None) -> list[str]:
     registered under now. Records stay filed under the name they were sent under (their project field, the event's
     source or recipient); a reader of this project's records reads all of these names."""
     taken = projects() if taken is None else taken
+    project = now_named(project, taken)   # asked by a name it had before: the same project
     return [project, *(o for o in hubconf.former_names(project) if o not in taken)]
 
 
@@ -1620,9 +1629,10 @@ def platform_rounds(c, chain) -> int:
 
 
 def runs_today(c, proj) -> int:
+    mine = own_names(proj)
     return c.execute("SELECT COUNT(DISTINCT json_extract(payload,'$.run')) FROM events WHERE type='message.delivered'"
-                     " AND to_project=? AND ts >= ? AND json_extract(payload,'$.via') IN ('handler','resume')",
-                     (proj, iso()[:10])).fetchone()[0]
+                     f" AND to_project IN ({','.join('?' * len(mine))}) AND ts >= ?"
+                     " AND json_extract(payload,'$.via') IN ('handler','resume')", (*mine, iso()[:10])).fetchone()[0]
 
 
 def lease_ids() -> set[str]:
@@ -1674,8 +1684,9 @@ def mcp_sessions(c, proj) -> list:
     t = now()
     tool_cut = iso(t - datetime.timedelta(minutes=MCP_PRESENCE_MIN))
     init_cut = iso(t - datetime.timedelta(minutes=CONVERSATION_WAIT_MIN))
-    rows = c.execute("SELECT session, runtime, via, seen FROM presence WHERE project=? AND session LIKE 'mcp:%'"
-                     " AND seen >= ? ORDER BY seen DESC", (proj, min(tool_cut, init_cut))).fetchall()
+    mine = own_names(proj)   # a session recorded under a name the project had before is still using it
+    rows = c.execute(f"SELECT session, runtime, via, seen FROM presence WHERE project IN ({','.join('?' * len(mine))})"
+                     " AND session LIKE 'mcp:%' AND seen >= ? ORDER BY seen DESC", (*mine, min(tool_cut, init_cut))).fetchall()
     return [r for r in rows if r["seen"] >= (tool_cut if r["via"] == "tool" else init_cut) and mcp_process(r["session"])]
 
 
@@ -1683,8 +1694,9 @@ def active_sessions(c, proj, live, mcp=None) -> list[str]:
     """Sessions using this project now: one the runtime reports live with a hook within CONVERSATION_WAIT_MIN, and
     the MCP sessions (mcp_sessions; mcp: already computed)."""
     cutoff = iso(now() - datetime.timedelta(minutes=CONVERSATION_WAIT_MIN))
-    return [r["session"] for r in c.execute("SELECT session FROM presence WHERE project=? AND seen >= ?"
-                                            " AND session NOT LIKE 'mcp:%'", (proj, cutoff))
+    mine = own_names(proj)
+    return [r["session"] for r in c.execute(f"SELECT session FROM presence WHERE project IN ({','.join('?' * len(mine))})"
+                                            " AND seen >= ? AND session NOT LIKE 'mcp:%'", (*mine, cutoff))
             if r["session"] in live] + [r["session"] for r in (mcp_sessions(c, proj) if mcp is None else mcp)]
 
 
@@ -1716,8 +1728,9 @@ def recent_session(c, proj, live, rt=None) -> str | None:
     presence) that can be forked. An MCP server's row is never one: there is no session behind it to fork; nor is a
     session whose runtime can't be resumed in the background (can_resume)."""
     cutoff = iso(now() - datetime.timedelta(hours=FORK_RECENT_H))
-    for r in c.execute("SELECT session FROM presence WHERE project=? AND seen >= ? AND session NOT LIKE 'mcp:%'"
-                       " ORDER BY seen DESC", (proj, cutoff)):
+    mine = own_names(proj)
+    for r in c.execute(f"SELECT session FROM presence WHERE project IN ({','.join('?' * len(mine))}) AND seen >= ?"
+                       " AND session NOT LIKE 'mcp:%' ORDER BY seen DESC", (*mine, cutoff)):
         if r["session"] in live and (rt is None or can_resume(rt, r["session"])):
             return r["session"]
     return None
@@ -1769,7 +1782,7 @@ def confined_refusal(a, here) -> str | None:
     if a.cmd == "send" and ((a.type in CONFINED_TYPES and not own_question) or getattr(a, "task", None)):
         return _("hubbus: a confined run can't send {type} (registry changes and the owner's to-dos need a person)",
                  type=a.type)
-    if a.cmd in ("inbox", "open-questions") and getattr(a, "project", None) and a.project != here:
+    if a.cmd in ("inbox", "open-questions") and getattr(a, "project", None) and now_named(a.project) != here:
         return _("hubbus: a confined run reads only its own project's mailbox")
     if a.cmd in ("publish", "record-publish", "bridge", "dispatch", "reconcile-questions"):
         return _("hubbus: a confined run can't use {cmd}", cmd=a.cmd)
@@ -1802,12 +1815,13 @@ def chain_env(rows) -> dict:
 def run_handler(c, proj, ws, rows) -> None:
     """Delegation: dispatch a headless agent in that project (templates/prompts/mailbox.md, filled by prompts.render;
     judgment point mailbox-escalation)."""
-    st = AGENT_JOBS / f"mailbox-{proj}" / "status.json"
-    try:
-        if json.loads(st.read_text()).get("state") == "running":
-            return  # one at a time per project; these letters are dispatched next round
-    except (OSError, ValueError):
-        pass
+    # one at a time per project, whichever of its names a handler still running was started under
+    for name in own_names(proj):
+        try:
+            if json.loads((AGENT_JOBS / f"mailbox-{name}" / "status.json").read_text()).get("state") == "running":
+                return  # these letters are dispatched next round
+        except (OSError, ValueError):
+            pass
     if runs_today(c, proj) >= DAILY_RUNS:
         log(_("{project}: already dispatched {max} {max:time|times} today; {n} {n:letter waits|letters wait} (visible "
               "on the status page)",
@@ -1846,12 +1860,13 @@ def stale_resumes(c, proj) -> list:
     """Letters resumed in the background, not closed after RESUME_TIMEOUT_MIN and not re-dispatched yet (a failed
     resume mustn't leave a letter stuck)."""
     cutoff = iso(now() - datetime.timedelta(minutes=RESUME_TIMEOUT_MIN))
-    return c.execute("""SELECT m.* FROM events m JOIN events d ON d.ref=m.id AND d.type='message.delivered'
+    mine = own_names(proj)
+    return c.execute(f"""SELECT m.* FROM events m JOIN events d ON d.ref=m.id AND d.type='message.delivered'
         AND json_extract(d.payload,'$.via')='resume' AND d.ts < ?
-        WHERE m.type='message' AND m.to_project=?
+        WHERE m.type='message' AND m.to_project IN ({','.join('?' * len(mine))})
           AND NOT EXISTS(SELECT 1 FROM events x WHERE x.type='message.done' AND x.ref=m.id)
           AND NOT EXISTS(SELECT 1 FROM events h WHERE h.type='message.delivered' AND h.ref=m.id
-                         AND json_extract(h.payload,'$.via') IN ('handler','held'))""", (cutoff, proj)).fetchall()
+                         AND json_extract(h.payload,'$.via') IN ('handler','held'))""", (cutoff, *mine)).fetchall()
 
 
 def resume(c, r, sid, cwd, rt, ws=None, prompt=None) -> None:
@@ -1911,8 +1926,10 @@ def wake_target(c, proj, live) -> str | None:
     """The session a delegation's wake goes to: the live one most recently active in the project (within
     CONVERSATION_WAIT_MIN, as active_sessions counts it). An MCP server's row never: nothing behind it to wake."""
     cutoff = iso(now() - datetime.timedelta(minutes=CONVERSATION_WAIT_MIN))
-    return next((r["session"] for r in c.execute("SELECT session FROM presence WHERE project=? AND seen >= ?"
-                                                 " AND session NOT LIKE 'mcp:%' ORDER BY seen DESC", (proj, cutoff))
+    mine = own_names(proj)
+    return next((r["session"] for r in c.execute(f"SELECT session FROM presence WHERE project IN "
+                                                 f"({','.join('?' * len(mine))}) AND seen >= ?"
+                                                 " AND session NOT LIKE 'mcp:%' ORDER BY seen DESC", (*mine, cutoff))
                  if r["session"] in live), None)
 
 
@@ -1955,7 +1972,7 @@ def dispatch(c, rt=None) -> int:
         if not ws.is_dir():
             continue
         delegate, mcp = [], None   # mcp: the project's MCP sessions, looked up once, only when a letter needs it
-        for r in c.execute(INBOX_SQL, (proj,)).fetchall():
+        for r in addressed_to(c, proj):
             p = payload(r)
             if p.get("type") not in ACTIONABLE:
                 # a notice answering a session (info, done, progress): nothing to handle, but the session that asked
@@ -2604,7 +2621,7 @@ def mail_command(a) -> None:
             out = mid
         print(out)
     elif a.cmd == "inbox":
-        project = a.project or here
+        project = now_named(a.project) if a.project else here
         if not project:
             refuse(_("hubbus: not in a project folder, add --project <name>"))
         rows = inbox(c, project, session)

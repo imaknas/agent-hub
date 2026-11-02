@@ -526,7 +526,9 @@ def former_names(project: str) -> list[str]:
             seen.add(name)
             name = renames[name]["new"]
         return name
-    return hub + sorted(old for old in renames if old != project and now(old) == project and old not in hub)
+    # a rename that ended at the platform's other spelling ended at the platform
+    mine = {project, *hub}
+    return hub + sorted(old for old in renames if old not in mine and now(old) in mine)
 
 
 def principal_is_legal_person() -> bool:
