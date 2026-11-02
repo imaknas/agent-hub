@@ -2,11 +2,13 @@
 
 The v0.5.0 tree is taken from the repo's own tag (`git archive`), its `agenthub init` builds an instance in a fake HOME
 and its hubbus leaves a letter there; then this code reads the same instance: the letter, a letter to the new name, the
-settings file, the CLI wrappers, and doctor finds exactly what v0.5.0's doctor finds. Skipped where the tag is not there
-(the gate's exported tree, a shallow clone).
+settings file, the CLI wrappers, and doctor finds exactly what v0.5.0's doctor finds. Both run as plain copies, not git
+checkouts, so neither looks for newer releases (no network; the answer would differ by checkout). Skipped where the
+tag is not there (the gate's exported tree, a shallow clone).
 """
 import os
 import pathlib
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -34,6 +36,13 @@ class FromV05(unittest.TestCase):
         cls.old.mkdir()
         archive = subprocess.run(["git", "-C", str(ROOT), "archive", TAG], capture_output=True, check=True, timeout=120)
         subprocess.run(["tar", "-x", "-C", str(cls.old)], input=archive.stdout, check=True, timeout=120)
+        cls.new = tmp / "new"
+        listed = subprocess.run(["git", "-C", str(ROOT), "ls-files", "-z"], capture_output=True, check=True, timeout=60)
+        for rel in filter(None, listed.stdout.decode().split("\0")):
+            src, dst = ROOT / rel, cls.new / rel
+            if os.path.lexists(src):
+                dst.parent.mkdir(parents=True, exist_ok=True)
+                shutil.copy2(src, dst, follow_symlinks=False)
         (tmp / "home").mkdir()
         cls.inst = tmp / "inst"
         cls.base = {k: v for k, v in os.environ.items()
@@ -66,21 +75,21 @@ class FromV05(unittest.TestCase):
         self.assertFalse((self.inst / "config" / "brunna.json").exists())
 
     def test_letters_old_and_to_the_new_name_reach_the_same_inbox(self):
-        r = self.run_as(ROOT, "hubbus", "send", "--to", "brunna", "--from", "agent-hub", "--type", "request",
+        r = self.run_as(self.new, "hubbus", "send", "--to", "brunna", "--from", "agent-hub", "--type", "request",
                         "--text", "addressed to the new name")
         self.assertEqual(r.returncode, 0, r.stderr)
         new_letter = r.stdout.strip().split()[-1]
-        r = self.run_as(ROOT, "hubbus", "inbox", "--project", "agent-hub")
+        r = self.run_as(self.new, "hubbus", "inbox", "--project", "agent-hub")
         self.assertEqual(r.returncode, 0, r.stderr)
         self.assertIn(self.old_letter, r.stdout)
         self.assertIn(new_letter, r.stdout)
 
     def test_config_reads(self):
-        r = self.run_as(ROOT, "agenthub", "config", "check")
+        r = self.run_as(self.new, "agenthub", "config", "check")
         self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
 
     def test_cli_wrappers_for_both_names(self):
-        r = self.run_as(ROOT, "agenthub", "install-cli", "--dir", self.tmp / "cli")
+        r = self.run_as(self.new, "agenthub", "install-cli", "--dir", self.tmp / "cli")
         self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
         self.assertEqual(sorted(p.name for p in (self.tmp / "cli").iterdir()), ["agenthub", "brunna"])
 
@@ -90,7 +99,7 @@ class FromV05(unittest.TestCase):
             self.assertNotIn("Traceback", r.stdout + r.stderr)
             return sorted(line.strip().replace(str(root), "<hub>") for line in r.stdout.splitlines()
                           if line.startswith(("✗", "!")))
-        self.assertEqual(findings(ROOT), findings(self.old))
+        self.assertEqual(findings(self.new), findings(self.old))
 
 
 if __name__ == "__main__":
