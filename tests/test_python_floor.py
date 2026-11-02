@@ -113,6 +113,13 @@ class Floor(unittest.TestCase):
                             "bad = sorted(m for m in mods if m != '__future__' and importlib.util.find_spec(m) is None);"
                             "print(','.join(bad))", str(wd)], capture_output=True, text=True, timeout=60)
         self.assertEqual((r.returncode, r.stdout.strip()), (0, ""), r.stderr)
+        # and it loads: compiling isn't enough (11-01 to 11-02 it crashed for 17 hours on a `dict | None` return
+        # annotation, which the system 3.9 evaluates when the function is defined)
+        r = subprocess.run(["/usr/bin/" + "python3", "-c",
+                            "import importlib.util, sys; s = importlib.util.spec_from_file_location('w', sys.argv[1]);"
+                            "m = importlib.util.module_from_spec(s); s.loader.exec_module(m); print('loaded')", str(wd)],
+                           capture_output=True, text=True, timeout=60)
+        self.assertEqual(r.stdout.strip(), "loaded", r.stderr[-600:])
 
 
 if __name__ == "__main__":

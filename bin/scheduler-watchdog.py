@@ -23,6 +23,8 @@ Without them it fails loudly in the log (exit 1), rather than pretend to be watc
 Usage: scheduler-watchdog.py          check once (for launchd)
        scheduler-watchdog.py --test   post a test message, to confirm the token/channel settings are right
 """
+from __future__ import annotations   # the system python3 (3.9 on macOS) runs this: no 3.10 syntax at run time
+
 import datetime
 import json
 import os
