@@ -484,7 +484,7 @@ class ConfinedMail(unittest.TestCase):
     def test_reply_and_open_questions_stay_in_the_project(self):
         src = (ROOT / "bin" / "hubbus").read_text()
         self.assertIn("orig = must_message(c, a.reply_to)\n        confined_letter(orig, here, boxed)", src)
-        self.assertIn('if os.environ.get("AGENT_HUB_CONFINED"):   # only its own project\'s questions', src)
+        self.assertIn('if names.env("CONFINED"):   # only its own project\'s questions', src)
 
     def test_llm_marks_confined_runs(self):
         src = (ROOT / "bin" / "llm.py").read_text()

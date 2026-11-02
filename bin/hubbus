@@ -139,6 +139,7 @@ sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
 import event_jobs  # noqa: E402  the causal chain of scheduled runs (docs/design/event-jobs.md section 7)
 import gitdirs  # noqa: E402  where a folder's repo is, read without starting git
 import hubconf  # noqa: E402  paths, the owner address, the project registry all come from the platform settings
+import names  # noqa: E402
 import i18n  # noqa: E402
 import nofollow  # noqa: E402  a project's outbox and view, read and written without following its links
 import ph_records  # noqa: E402  how a requester reads records: each item's settlement view (core §6)
@@ -1745,7 +1746,7 @@ def confined_refusal(a, here) -> str | None:
     """A confined run (AGENT_HUB_CONFINED, set by llm.py for settings: platform points: event-triggered agent jobs and
     the mailbox handlers, which anyone who can write the bus can start, and clock jobs that declare allow:) uses the mail commands only as its own project, for its own letters:
     no other sender, no registry rewrite (manifest.update), no owner to-dos, no other project's mailbox."""
-    if not os.environ.get("AGENT_HUB_CONFINED"):
+    if not names.env("CONFINED"):
         return None
     if getattr(a, "sender", None) and a.sender != here:
         return _("hubbus: a confined run sends only as its own project (no --from)")
@@ -1770,7 +1771,7 @@ def confined_letter(r, here, boxed: bool = False) -> None:
     project's letter (boxed), whose reply carries the original's handoff and session."""
     if boxed and here not in (r["to_project"], r["source"]):
         refuse(_("hubbus: {id} is not a letter to or from {project}", id=r["id"], project=here))
-    if os.environ.get("AGENT_HUB_CONFINED") and here not in (r["to_project"], r["source"]):
+    if names.env("CONFINED") and here not in (r["to_project"], r["source"]):
         refuse(_("hubbus: a confined run reads only its own project's letters"))
 
 
@@ -1779,10 +1780,12 @@ def chain_env(rows) -> dict:
     publishes stays in that chain although it isn't the run's child process (event-jobs.md section 7)."""
     evs = [{"payload": payload(r)} for r in rows]
     chain = event_jobs.run_chain("", evs)[:-1]
-    env = {k: v for k, v in os.environ.items() if k not in (event_jobs.CHAIN_ENV, event_jobs.DEPTH_ENV)}
+    env = dict(os.environ)
+    names.env_unset(env, event_jobs.CHAIN_VAR)
+    names.env_unset(env, event_jobs.DEPTH_VAR)
     if chain:
-        env[event_jobs.CHAIN_ENV] = json.dumps(chain, ensure_ascii=False)
-        env[event_jobs.DEPTH_ENV] = str(max(event_jobs.depth_of(e) for e in evs))
+        names.env_set(env, event_jobs.CHAIN_VAR, json.dumps(chain, ensure_ascii=False))
+        names.env_set(env, event_jobs.DEPTH_VAR, str(max(event_jobs.depth_of(e) for e in evs)))
     return env
 
 
@@ -2607,7 +2610,7 @@ def mail_command(a) -> None:
             print(fmt(r))
     elif a.cmd == "open-questions":
         project = canon(a.project) if a.project else None
-        if os.environ.get("AGENT_HUB_CONFINED"):   # only its own project's questions
+        if names.env("CONFINED"):   # only its own project's questions
             project = here
         if box:
             project = box
@@ -2722,9 +2725,9 @@ def cli() -> None:
     if a.cmd in RELAYS:
         # these carry other parties' events (owner answers, dispatch claims, the assistant's records): they are not the
         # scheduled run's own doing, so they don't take the run's chain; dispatch passes each letter's chain on itself
-        os.environ.pop(event_jobs.CHAIN_ENV, None)
-        os.environ.pop(event_jobs.DEPTH_ENV, None)
-    if os.environ.get("AGENT_HUB_CONFINED") and (why := confined_refusal(a, project_of(pathlib.Path.cwd()))):
+        names.env_unset(os.environ, event_jobs.CHAIN_VAR)
+        names.env_unset(os.environ, event_jobs.DEPTH_VAR)
+    if names.env("CONFINED") and (why := confined_refusal(a, project_of(pathlib.Path.cwd()))):
         sys.exit(why)
 
     if a.cmd in WRITES and (how := platform_mails()):

@@ -42,6 +42,7 @@ import time
 BIN = pathlib.Path(__file__).resolve().parent
 sys.path.insert(0, str(BIN))
 import hubconf  # noqa: E402
+import names  # noqa: E402
 import i18n  # noqa: E402
 import prompts  # noqa: E402
 
@@ -67,8 +68,8 @@ def _hubbus():
 
 def resolve_project() -> tuple[str | None, str]:
     """(project, the reason shown to people when it cannot be recognised)."""
-    if os.environ.get("AGENTHUB_PROJECT"):
-        return os.environ["AGENTHUB_PROJECT"], ""
+    if names.env("PROJECT"):
+        return names.env("PROJECT"), ""
     try:
         name = _hubbus().project_of(pathlib.Path.cwd())
     except Exception as e:   # initialize must still answer when the platform settings are broken
@@ -104,7 +105,7 @@ class Presence:
         if not project or os.environ.get("HUB_LLM_POINT") or os.environ.get("HUBBUS_LEASE"):
             return
         self.hb = _hubbus()
-        named = os.environ.get("AGENTHUB_PROJECT")
+        named = names.env("PROJECT")
         if named:
             try:
                 here = self.hb.project_of(pathlib.Path.cwd())
@@ -251,9 +252,9 @@ class Client:
 
 def outside(name: str, args: dict, client: "Client") -> tuple[bool, str]:
     if name == "status":
-        names = sorted(hubconf.projects() or {})
+        known = sorted(hubconf.projects() or {})
         return True, _("agent-hub is installed. Projects: {names}. Folders may be connected from inside: {roots}.",
-                       names=", ".join(names) or _("none yet"),
+                       names=", ".join(known) or _("none yet"),
                        roots=", ".join(map(str, hubconf.project_roots())) or _("nowhere yet"))
     if name != "connect_project":
         return False, _("this folder is not an agent-hub project: only status and connect_project work here")
@@ -272,7 +273,8 @@ def outside(name: str, args: dict, client: "Client") -> tuple[bool, str]:
                               "agent-hub's decisions.", path=real))
     if answer is False:
         return False, _("the user declined; nothing was done")
-    env = {**os.environ, "AGENTHUB_CONNECT_ROOTS": ":".join(map(str, roots))}
+    env = dict(os.environ)
+    names.env_set(env, "CONNECT_ROOTS", ":".join(map(str, roots)))
     r = subprocess.run([sys.executable, str(BIN / "connect.py"), str(real), "--yes"], capture_output=True, text=True,
                        timeout=600, env=env)
     out = (r.stdout + ("\n" + r.stderr if r.stderr.strip() else "")).strip()
@@ -308,7 +310,7 @@ def call(project: str | None, why: str, name: str, args: dict, client: "Client |
         return False, _("This is work the platform started ({point}): write the letters to send and what to close in "
                         "your output; the platform sends them for you. Do not use this server", point=os.environ["HUB_LLM_POINT"])
     if not project:
-        if name in ("status", "connect_project") and not os.environ.get("AGENTHUB_PROJECT"):
+        if name in ("status", "connect_project") and not names.env("PROJECT"):
             return outside(name, args, client or Client())
         return False, why
     if name == "inbox":

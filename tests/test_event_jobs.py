@@ -142,7 +142,9 @@ class Batch(unittest.TestCase):
 
     def test_run_env(self):
         env = ej.run_env("p/a", ["x", "p/a"], 2, None)
-        self.assertEqual(env, {"AGENT_HUB_JOB": "p/a", "AGENT_HUB_JOB_CHAIN": '["x", "p/a"]', "AGENT_HUB_JOB_DEPTH": "2"})
+        # project code reads these by their documented names: written in both spellings (docs/design/rename-brunna.md)
+        self.assertEqual(env, {p + k: v for p in ("AGENT_HUB_", "BRUNNA_")
+                               for k, v in (("JOB", "p/a"), ("JOB_CHAIN", '["x", "p/a"]'), ("JOB_DEPTH", "2"))})
         self.assertEqual(json.loads(ej.run_env("p/a", ["p/a"], 1, [])["AGENT_HUB_EVENTS"]), {"events": []})
         self.assertEqual(ej.chain_from_env({"AGENT_HUB_JOB_CHAIN": '["a", 3]'}), ["a"])
         self.assertEqual(ej.chain_from_env({"AGENT_HUB_JOB_CHAIN": "nonsense"}), [])

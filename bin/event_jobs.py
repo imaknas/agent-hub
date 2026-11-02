@@ -24,6 +24,7 @@ import sys
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
 import hubconf  # noqa: E402
 import i18n  # noqa: E402
+import names  # noqa: E402
 
 _ = i18n.domain(__file__)
 
@@ -31,10 +32,9 @@ MAX_DEPTH = 4            # a root run plus three event-triggered generations
 DEFAULT_CAP = 12         # max_attempts_per_day when an event job sets none
 ENV_LIMIT = 64 * 1024    # AGENT_HUB_EVENTS stays under this many bytes (oldest events first; the rest wait)
 QUIET_CEILING = 4        # with debounce d, the oldest pending event waits at most QUIET_CEILING × d
-CHAIN_ENV = "AGENT_HUB_JOB_CHAIN"
-DEPTH_ENV = "AGENT_HUB_JOB_DEPTH"
-JOB_ENV = "AGENT_HUB_JOB"
-EVENTS_ENV = "AGENT_HUB_EVENTS"
+# the variables a scheduled run gets, by their name in bin/names.py (each is written in both spellings: project code
+# reads them by their documented names)
+CHAIN_VAR, DEPTH_VAR, JOB_VAR, EVENTS_VAR = "JOB_CHAIN", "JOB_DEPTH", "JOB", "EVENTS"
 
 
 def belongs(ev: dict) -> str | None:
@@ -208,22 +208,25 @@ def run_depth(events: list[dict]) -> int:
 
 def run_env(name: str, chain: list[str], depth: int, events: list[dict] | None) -> dict[str, str]:
     """The variables every scheduled run gets; AGENT_HUB_EVENTS only for event jobs (None = not an event job)."""
-    env = {JOB_ENV: name, CHAIN_ENV: json.dumps(chain, ensure_ascii=False), DEPTH_ENV: str(depth)}
+    env: dict[str, str] = {}
+    names.env_set(env, JOB_VAR, name)
+    names.env_set(env, CHAIN_VAR, json.dumps(chain, ensure_ascii=False))
+    names.env_set(env, DEPTH_VAR, str(depth))
     if events is not None:
-        env[EVENTS_ENV] = batch_env(events)
+        names.env_set(env, EVENTS_VAR, batch_env(events))
     return env
 
 
 def depth_from_env(environ) -> int:
     try:
-        return max(int(environ.get(DEPTH_ENV) or 0), 0)
+        return max(int(names.env(DEPTH_VAR, environ=environ) or 0), 0)
     except ValueError:
         return 0
 
 
 def chain_from_env(environ) -> list[str]:
     try:
-        c = json.loads(environ.get(CHAIN_ENV) or "[]")
+        c = json.loads(names.env(CHAIN_VAR, environ=environ) or "[]")
     except ValueError:
         return []
     return [x for x in c if isinstance(x, str)] if isinstance(c, list) else []
@@ -289,12 +292,12 @@ def prompt_with_events(prompt: str, environ) -> str:
     """The job's prompt, followed by the event batch (templates/prompts/event-batch.md) when the run has one.
     Raises ValueError on a batch that can't be read: the run must fail, not go on without its events.
     The events sit between delimiters with a random token, so a payload can't fake their end."""
-    raw = environ.get(EVENTS_ENV)
+    raw = names.env(EVENTS_VAR, environ=environ)
     if not raw:
         return prompt
     events = json.loads(raw).get("events")
     if not isinstance(events, list):
-        raise ValueError(f"{EVENTS_ENV} has no event list")
+        raise ValueError(f"{names.env_names(EVENTS_VAR)[0]} has no event list")
     import prompts
     import secrets
     mark = f"events-{secrets.token_hex(6)}"

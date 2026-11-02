@@ -74,6 +74,7 @@ import yaml
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
 import event_jobs  # noqa: E402
 import hubconf  # noqa: E402
+import names  # noqa: E402
 import i18n  # noqa: E402
 
 _ = i18n.domain(__file__)
@@ -233,8 +234,9 @@ def job_failed(name: str, code: int, detail: str = "", project: str | None = Non
     job can't trigger itself through its own failure (event-jobs.md section 7)."""
     mark_job(name, True, detail or f"exit {code}")
     to = ["--to", project] if project else []
-    env = {**os.environ, event_jobs.CHAIN_ENV: json.dumps(chain or [name], ensure_ascii=False),
-           event_jobs.DEPTH_ENV: str(depth)}
+    env = dict(os.environ)
+    names.env_set(env, event_jobs.CHAIN_VAR, json.dumps(chain or [name], ensure_ascii=False))
+    names.env_set(env, event_jobs.DEPTH_VAR, str(depth))
     subprocess.run([sys.executable, str(HUB / "bin" / "hubbus"), "publish", "job.failed", "--source", "scheduler", *to,
                     "--payload", json.dumps({"job": name, "exit": code, "detail": detail}, ensure_ascii=False)],
                    capture_output=True, timeout=30, env=env)
