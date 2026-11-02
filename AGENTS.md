@@ -154,7 +154,7 @@ agent-hub is meant for anyone, with any coding agent, any LLM, any key.
   handlers, so the background branch and the headless agent load only the platform's settings for the project, never
   its saved permissions (`settings: platform`, as event agent jobs; per point in mailbox-routing.md "11-02").
   When the branch is done, the original session receives the branch's reply and the letters it sent on its next
-  activity. Only request/question is handled; info is a notice.
+  activity. Only request/question is handled; info is a notice (one that replies to a live session wakes it, nothing more).
   A dispatched letter is recorded as "the platform is handling it", so an open session does not redo it; at most 4
   rounds per thread and 6 dispatches per project per day (hub.json `mailbox`). Everything specific to Claude Code is
   only in `bin/runtime_claude.py`. Handoffs do not go through this.

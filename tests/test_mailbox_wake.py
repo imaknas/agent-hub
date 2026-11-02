@@ -161,6 +161,24 @@ class Wake(Harness):
         self.assertEqual([s for s, _t in self.rt.woken], ["S2"])
         self.assertEqual(self.handled, [])
 
+    def test_a_notice_replying_to_a_live_session_wakes_it_once_and_nothing_else(self):
+        self.rt.live.add("S1")
+        self.send("m1", "proj", "info", to_session="S1")
+        self.send("m2", "proj", "done", to_session="S1")
+        self.assertEqual(self.dispatch(), 0)   # nothing waits on a notice
+        self.dispatch()
+        self.assertEqual(sorted(t.split("(")[1].split(")")[0] for _s, t in self.rt.woken), ["m1", "m2"])
+        self.assertEqual((self.handled, self.resumed), ([], []))
+
+    def test_a_notice_is_not_woken_for_when_unaddressed_old_or_its_session_gone(self):
+        self.rt.live.add("S1")
+        self.seen("S1")
+        self.send("m1", "proj", "info")                                   # to the project, no session asked
+        self.send("m2", "proj", "info", to_session="S1", minutes_ago=30)  # older than the wait: the hook has it
+        self.send("m3", "proj", "info", to_session="S9")                  # that session isn't running
+        self.dispatch()
+        self.assertEqual(self.rt.woken, [])
+
     def test_the_letter_never_travels_through_wake(self):
         self.rt.live.add("S1")
         self.seen("S1")

@@ -88,7 +88,9 @@ For hooks / the schedule / other scripts:
                                       = the loop guard, hold()), and hooks no longer treat them as work to do; a
                                       letter held for an MCP session records nothing. While a letter not yet
                                       delivered waits for a live session, a runtime with the wake port nudges that
-                                      session once (wake(), message.woken; docs/design/mailbox-runtimes.md B1)
+                                      session once (wake(), message.woken; docs/design/mailbox-runtimes.md B1); a
+                                      notice (info, done…) replying to a live session wakes it too, and that is all
+                                      dispatch does with a notice
   hubbus thread <id>                  the whole thread this letter is in (oldest first)
   hubbus open-handoffs                handoffs from the personal assistant not closed yet (the librarian applies them
                                       into STATE.md nightly, and marks done only when trustworthy)
@@ -1956,6 +1958,11 @@ def dispatch(c, rt=None) -> int:
         for r in c.execute(INBOX_SQL, (proj,)).fetchall():
             p = payload(r)
             if p.get("type") not in ACTIONABLE:
+                # a notice answering a session (info, done, progress): nothing to handle, but the session that asked
+                # hears of it now, not at its next prompt (11-02: an info reply sat unseen while its session idled)
+                to_s = p.get("to_session")
+                if to_s and not r["delivered"] and to_s in live and to_s not in leases and r["ts"] >= wait_cut:
+                    wake(c, rt, r, to_s)
                 continue
             if r["delivered"]:
                 st = take_state(c, r["id"], r["to_project"])
