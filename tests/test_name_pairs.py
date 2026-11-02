@@ -31,8 +31,13 @@ EXEMPT = {"bin/names.py"}
 
 
 def files() -> list[str]:
-    out = subprocess.run(["git", "-C", str(ROOT), "ls-files", "-z", "--", "bin"], capture_output=True, check=True)
-    return sorted(f for f in out.stdout.decode().split("\0") if f and f not in EXEMPT and (ROOT / f).is_file())
+    """bin/'s tracked files; in an exported tree (the gate's: no git) every file under bin/."""
+    out = subprocess.run(["git", "-C", str(ROOT), "ls-files", "-z", "--", "bin"], capture_output=True)
+    if out.returncode == 0:
+        paths = [f for f in out.stdout.decode().split("\0") if f]
+    else:
+        paths = [str(p.relative_to(ROOT)) for p in (ROOT / "bin").rglob("*") if "__pycache__" not in p.parts]
+    return sorted(f for f in paths if f not in EXEMPT and (ROOT / f).is_file())
 
 
 def counts() -> dict[str, dict[str, int]]:
