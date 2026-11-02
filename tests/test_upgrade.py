@@ -88,7 +88,7 @@ class Upgrade(unittest.TestCase):
             (b / name).write_text(PY_STANDIN.format(mark=mark, name=name))
         (b / "setup-python").write_text(SH_STANDIN.format(mark=mark, name="setup-python"))
         (b / "setup-python").chmod(0o755)
-        for name in ("upgrade.py", "hubconf.py", "i18n.py"):
+        for name in ("upgrade.py", "hubconf.py", "i18n.py", "names.py"):
             if upgrade:
                 shutil.copy(ROOT / "bin" / name, b / name)
             else:

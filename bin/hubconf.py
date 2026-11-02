@@ -50,10 +50,11 @@ import sys
 
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
 import i18n  # noqa: E402
+import names  # noqa: E402
 
 _ = i18n.domain(__file__)
 
-ROOT = pathlib.Path(os.environ.get("AGENT_HUB_ROOT") or pathlib.Path(__file__).resolve().parents[1])
+ROOT = pathlib.Path(names.env("ROOT") or pathlib.Path(__file__).resolve().parents[1])
 
 
 def _main_checkout(root: pathlib.Path) -> pathlib.Path:
@@ -68,35 +69,35 @@ def _main_checkout(root: pathlib.Path) -> pathlib.Path:
 
 
 # An explicit AGENT_HUB_ROOT (the commit gate's export, every test) is taken as it is: no lookup
-MAIN = ROOT if os.environ.get("AGENT_HUB_ROOT") else _main_checkout(ROOT)
+MAIN = ROOT if names.env("ROOT") else _main_checkout(ROOT)
 POINTER = MAIN / ".hub-home"
 _cfg: dict | None = None
 
 
 def instance_home() -> pathlib.Path | None:
     """The instance directory; None = the old layout (everything in the hub root)."""
-    v = os.environ.get("AGENT_HUB_HOME")
+    v = names.env("HOME")
     if not v and POINTER.is_file():
         v = POINTER.read_text().strip()
     return pathlib.Path(os.path.expanduser(v)) if v else None
 
 
-def _part(env: str, sub: str, legacy: pathlib.Path) -> pathlib.Path:
-    if os.environ.get(env):
-        return pathlib.Path(os.path.expanduser(os.environ[env]))
+def _part(var: str, sub: str, legacy: pathlib.Path) -> pathlib.Path:
+    if (v := names.env(var)):
+        return pathlib.Path(os.path.expanduser(v))
     home = instance_home()
     return home / sub if home else legacy
 
 
 def config_dir() -> pathlib.Path:
     """Where config lives (hub.json, registry, mirror-list.txt, services.tsv, schedule.yaml)."""
-    return _part("AGENT_HUB_CONFIG", "config", ROOT)
+    return _part("CONFIG", "config", ROOT)
 
 
 def data_dir() -> pathlib.Path:
     """Where data lives (digest/, reflect/, todo.md, index.md, review-log.md, openclaw-migration-status.md,
     legacy-paths.tsv)."""
-    return _part("AGENT_HUB_DATA", "data", ROOT)
+    return _part("DATA", "data", ROOT)
 
 
 def config_file(name: str) -> pathlib.Path:
@@ -146,7 +147,7 @@ def p(key: str, default: str | None = None) -> pathlib.Path | None:
 def secrets_dir() -> pathlib.Path:
     """The platform's secrets directory (not in version control, backed up encrypted every night). Code always takes it
     from here instead of building the path itself."""
-    return _part("AGENT_HUB_SECRETS", "secrets", legacy_secrets_dir())
+    return _part("SECRETS", "secrets", legacy_secrets_dir())
 
 
 def legacy_secrets_dir() -> pathlib.Path:
@@ -258,7 +259,7 @@ def tool(name: str) -> str:
     return shutil.which(name, path=f"{os.environ.get('PATH', '')}:{LAUNCHD_PATH}") or name
 
 # tests use another
-STATE = pathlib.Path(os.environ["AGENT_HUB_STATE"]) if os.environ.get("AGENT_HUB_STATE") else MAIN / ".state"
+STATE = pathlib.Path(names.env("STATE")) if names.env("STATE") else MAIN / ".state"
 LOGS = MAIN / ".logs"
 
 
@@ -266,7 +267,7 @@ def worktree_lookup() -> bool:
     """This copy of the platform is a linked worktree that found the machine's live state through the main checkout:
     scripts that rebuild that state (registry refresh, config apply, the scheduler) must not run from here, where
     they would build it from a half-edited copy. An explicit AGENT_HUB_STATE (config-check --staged) is not live."""
-    return MAIN != ROOT and not os.environ.get("AGENT_HUB_STATE")
+    return MAIN != ROOT and not names.env("STATE")
 REGISTRY_INDEX = STATE / "registry" / "index.json"
 
 
@@ -380,23 +381,23 @@ def system_language(env=None, apple: list[str] | None = None) -> str:
 def lang_ui() -> str:
     """The language the platform shows the owner (CLI output, status page, alerts, headings): hub.json `language.ui`,
     or AGENT_HUB_LANG_UI. Default en (docs/design/i18n.md)."""
-    return _lang("AGENT_HUB_LANG_UI", "language.ui")
+    return _lang("LANG_UI", "language.ui")
 
 
 def lang_content() -> str:
     """The language models and agents write in (STATE.md, notes, digests, letters): hub.json `language.content`, or
     AGENT_HUB_LANG_CONTENT. Default en."""
-    return _lang("AGENT_HUB_LANG_CONTENT", "language.content")
+    return _lang("LANG_CONTENT", "language.content")
 
 
-def _lang(env: str, key: str) -> str:
+def _lang(var: str, key: str) -> str:
     """A wrong value in the environment is an error, not a quiet fallback to en (a test that sets zh-hant would otherwise
     pass in English). A wrong value in hub.json gives en: config-check reports it, and must not crash on it while it
     formats its own messages."""
-    v = os.environ.get(env)
+    v = names.env(var)
     if v:
         if v not in LANGUAGES:
-            raise ValueError(f"{env}={v!r}: the languages are {', '.join(LANGUAGES)}")
+            raise ValueError(f"{names.env_names(var)[0]}={v!r}: the languages are {', '.join(LANGUAGES)}")
         return v
     v = get(key)
     return v if v in LANGUAGES else "en"
@@ -405,7 +406,7 @@ def _lang(env: str, key: str) -> str:
 def evals_dir() -> pathlib.Path | None:
     """Where eval cases and runs live (docs/design/evaluators.md, i18n.md): hub.json `evals_dir`, or AGENT_HUB_EVALS.
     None = not set up, nothing is recorded. Created 0700; keep it out of git and out of the backup."""
-    d = pathlib.Path(os.environ["AGENT_HUB_EVALS"]) if os.environ.get("AGENT_HUB_EVALS") else p("evals_dir")
+    d = pathlib.Path(names.env("EVALS")) if names.env("EVALS") else p("evals_dir")
     if d is None:
         return None
     d.mkdir(parents=True, exist_ok=True, mode=0o700)

@@ -31,7 +31,6 @@ keeps an instance on zh-Hant byte-identical (tests/test_i18n_golden.py).
 from __future__ import annotations
 
 import json
-import os
 import pathlib
 import string
 import sys
@@ -49,7 +48,8 @@ def lang() -> str:
     try:
         import hubconf
     except (OSError, ValueError):
-        return os.environ.get("AGENT_HUB_LANG_UI") or "en"
+        import names
+        return names.env("LANG_UI") or "en"
     return hubconf.lang_ui()
 
 

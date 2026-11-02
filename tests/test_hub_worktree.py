@@ -42,7 +42,7 @@ class Base(unittest.TestCase):
         self.assertEqual(r.returncode, 0, r.stderr)
         return r.stdout
 
-    def hub(self, files=("hubconf.py", "i18n.py", "hubpaths.sh", "gitdirs.py")) -> pathlib.Path:
+    def hub(self, files=("hubconf.py", "i18n.py", "names.py", "hubpaths.sh", "gitdirs.py")) -> pathlib.Path:
         """A hub checkout: a git repo with copies of the platform's files (copies, not links: hubconf takes its root
         from its own resolved location)."""
         h = self.tmp / "hub"
