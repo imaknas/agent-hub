@@ -27,7 +27,7 @@
 # Usage: sync-local-setup.sh [--quiet] [project path, default the current directory]
 set -uo pipefail
 
-AGENT_HUB="${AGENT_HUB_ROOT:-$(cd "$(dirname "$0")/.." && pwd)}"
+AGENT_HUB="${AGENT_HUB_ROOT:-${BRUNNA_ROOT:-$(cd "$(dirname "$0")/.." && pwd)}}"
 source "$(dirname "${BASH_SOURCE[0]}")/hubpaths.sh"
 QUIET=false
 [ "${1:-}" = "--quiet" ] && { QUIET=true; shift; }
@@ -145,7 +145,7 @@ if ! git -C .agent-memory show HEAD:AGENT.md 2>/dev/null | cmp -s "$AGENT_HUB/te
     && cp "$AGENT_HUB/templates/AGENT.md" AGENT.md \
     && "$AGENT_HUB/bin/with-lock.sh" sh -c \
          'git commit -q -m "agent-hub: sync AGENT.md from template" -- AGENT.md \
-          && { [ -n "${AGENT_HUB_OFFLINE:-}" ] || "$0/bin/git-safe-push.sh"; }' "$AGENT_HUB" ) >/dev/null 2>&1 \
+          && { [ -n "${AGENT_HUB_OFFLINE:-${BRUNNA_OFFLINE:-}}" ] || "$0/bin/git-safe-push.sh"; }' "$AGENT_HUB" ) >/dev/null 2>&1 \
     && { $QUIET || hub_say "sync-local-setup: AGENT.md aligned with the template and pushed"; } \
     || { $QUIET || hub_say "sync-local-setup: ⚠️ AGENT.md updated, but the commit/push failed; the next session start tries again"; }
 fi

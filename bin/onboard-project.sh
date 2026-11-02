@@ -49,7 +49,7 @@
 #       onboarded here", independent of any single project's own repo content
 set -euo pipefail
 
-AGENT_HUB="${AGENT_HUB_ROOT:-$(cd "$(dirname "$0")/.." && pwd)}"
+AGENT_HUB="${AGENT_HUB_ROOT:-${BRUNNA_ROOT:-$(cd "$(dirname "$0")/.." && pwd)}}"
 # when running on the hub machine (the norm since 2026-10-15: new projects open in the hub machine's
 # ~/workspace/<name>) the hub machine's steps run locally
 . "$AGENT_HUB/bin/minilib.sh"
@@ -80,10 +80,10 @@ fi
 # asked from an agent session (the MCP server's connect_project, docs/design/newcomer-path.md B5): the folder must already
 # exist and, on its real path, be strictly inside a root the owner named; checked again here, where it is used, so a
 # folder swapped for a symlink after the caller's check is still refused
-if [ -n "${AGENTHUB_CONNECT_ROOTS:-}" ]; then
+if [ -n "${AGENTHUB_CONNECT_ROOTS:-${BRUNNA_CONNECT_ROOTS:-}}" ]; then
   [ -d "$1" ] || fail "$(hub_msg "{path} is not an existing folder" path="$1")"
   _real="$(cd "$1" && pwd -P)"; _inside=false
-  IFS=: read -r -a _roots <<<"$AGENTHUB_CONNECT_ROOTS"
+  IFS=: read -r -a _roots <<<"${AGENTHUB_CONNECT_ROOTS:-${BRUNNA_CONNECT_ROOTS:-}}"
   for _r in "${_roots[@]}"; do case "$_real" in "$_r"/?*) _inside=true ;; esac; done
   $_inside || fail "$(hub_msg "{path} is not inside a folder the owner named for projects" path="$_real")"
 fi

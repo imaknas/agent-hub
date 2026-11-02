@@ -9,7 +9,7 @@
 #
 # Next step: agenthub init (setup puts agenthub on the PATH with install-cli)
 set -uo pipefail
-HUB="${AGENT_HUB_ROOT:-$(cd "$(dirname "$0")/.." && pwd)}"
+HUB="${AGENT_HUB_ROOT:-${BRUNNA_ROOT:-$(cd "$(dirname "$0")/.." && pwd)}}"
 check_only=""; [ "${1:-}" = "--check" ] && check_only=1
 
 missing=0

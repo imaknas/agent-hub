@@ -32,7 +32,7 @@
 # connectors don't load.
 set -uo pipefail
 
-HUB="${AGENT_HUB_ROOT:-$(cd "$(dirname "$0")/.." && pwd)}"
+HUB="${AGENT_HUB_ROOT:-${BRUNNA_ROOT:-$(cd "$(dirname "$0")/.." && pwd)}}"
 source "$(dirname "${BASH_SOURCE[0]}")/hubpaths.sh"
 NAME="${1:?$(hub_msg "usage: run-agent-job.sh <name> [workdir] [prompt name]")}"
 PROMPT="$HUB/agent-jobs/${3:-$NAME}.md"
@@ -116,7 +116,7 @@ MCP_ARGS=()
 [ "${LLM_AUTH:-}" = "subscription" ] || MCP_ARGS=(-- --strict-mcp-config)
 # an event-triggered run (AGENT_HUB_EVENTS, docs/design/event-jobs.md): the job's prompt plus the events, as data
 RUN_PROMPT="$PROMPT"
-if [ -n "${AGENT_HUB_EVENTS:-}" ]; then
+if [ -n "${AGENT_HUB_EVENTS:-${BRUNNA_EVENTS:-}}" ]; then
   RUN_PROMPT="$OUT/.$stamp.prompt.md"
   if ! "$HUB/bin/py" "$HUB/bin/event_jobs.py" prompt "$PROMPT" "$RUN_PROMPT" 2>"$OUT/.$stamp.prompt.err"; then
     # never run without the events it was started for: that would consume them unseen

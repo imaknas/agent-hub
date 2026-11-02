@@ -47,6 +47,11 @@ def counts() -> dict[str, dict[str, int]]:
             text = (ROOT / f).read_text()
         except UnicodeDecodeError:
             continue
+        # a shell read in both spellings, ${AGENT_HUB_X:-${BRUNNA_X:-…}}, is the sanctioned form where bin/names.py
+        # can't be imported: its new spelling isn't counted again
+        text = re.sub(r"(:?-)\$\{BRUNNA_", r"\1${", text)
+        # an inline copy of the table (NAMES = … / NAMES_<class>=…) is compared with it by InlineCopies instead
+        text = re.sub(r"(?m)^\s*NAMES(?:_\w+)?\s*=.*$", "", text)
         for cls, rx in CLASSES.items():
             if (n := len(rx.findall(text))):
                 out[cls][f] = n
@@ -231,6 +236,38 @@ class ConfigPath(unittest.TestCase):
                                 "AGENT_HUB_LANG_UI": "en"}, capture_output=True, text=True)
         self.assertNotEqual(r.returncode, 0)
         self.assertIn("both hub.json and brunna.json exist", r.stdout + r.stderr)
+
+    def test_shell_finds_whichever_exists(self):
+        cfg = pathlib.Path(tempfile.mkdtemp())
+        env = {**names.env_strip(__import__("os").environ), "BRUNNA_CONFIG": str(cfg)}
+        sh = f'source "{ROOT}/bin/hubpaths.sh"; printf "%s|" "$HUB_JSON"; hub_json_get owner.tag'
+        def run():
+            return subprocess.run(["bash", "-c", sh], env=env, capture_output=True, text=True).stdout.strip()
+        self.assertEqual(run(), f"{cfg}/hub.json|", "neither: this release's name; a new-spelling variable is read")
+        (cfg / "brunna.json").write_text('{"owner": {"tag": "B"}}')
+        self.assertEqual(run(), f"{cfg}/brunna.json|B")
+
+
+class InlineCopies(unittest.TestCase):
+    """The places that can't import bin/names.py carry copies of the pairs they use, current spelling first."""
+
+    def shell_copy(self, rel: str, cls: str) -> list[str]:
+        m = re.search(rf'^NAMES_{cls}="([^"]*)"$', (ROOT / rel).read_text(), re.M)
+        self.assertIsNotNone(m, f"{rel} has no NAMES_{cls}")
+        return m.group(1).split()
+
+    def test_shell_copies(self):
+        for rel, cls in (("bin/hubpaths.sh", "config_file"), ("bin/py", "share_dir"), ("bin/setup-python", "share_dir")):
+            with self.subTest(rel=rel):
+                self.assertEqual(self.shell_copy(rel, cls), list(names.all(cls)))
+
+    def test_watchdog_copy(self):
+        import ast
+        tree = ast.parse((ROOT / "bin" / "scheduler-watchdog.py").read_text())
+        node = next(n for n in tree.body if isinstance(n, ast.Assign) and getattr(n.targets[0], "id", "") == "NAMES")
+        for cls, pair in ast.literal_eval(node.value).items():
+            with self.subTest(cls=cls):
+                self.assertEqual(tuple(pair), names.all(cls))
 
 
 class Ratchet(unittest.TestCase):

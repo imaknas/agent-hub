@@ -25,7 +25,7 @@
 # main checkout. Deleting the worktree only deletes the symlink, never the main checkout's memory.
 set -uo pipefail
 
-HUB="${AGENT_HUB_ROOT:-$(cd "$(dirname "$0")/.." && pwd)}"
+HUB="${AGENT_HUB_ROOT:-${BRUNNA_ROOT:-$(cd "$(dirname "$0")/.." && pwd)}}"
 source "$(dirname "${BASH_SOURCE[0]}")/hubpaths.sh"
 event="${1:-}"
 

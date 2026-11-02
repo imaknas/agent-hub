@@ -31,22 +31,33 @@ import subprocess
 import sys
 import time
 
+# a copy of the pairs this script uses from bin/names.py (current spelling first): it imports no platform module, so it
+# can't read the table; tests/test_name_pairs.py compares this copy with it
+NAMES = {"config_file": ("hub.json", "brunna.json"), "unit": ("local.agent-hub", "local.brunna")}
+
+
+def env(x: str) -> str:
+    """names.env: the old spelling when set (an outside override), else the new one."""
+    return os.environ.get(f"AGENT_HUB_{x}") or os.environ.get(f"BRUNNA_{x}") or ""
+
+
 # same as hubconf.ROOT
-HUB = pathlib.Path(os.environ.get("AGENT_HUB_ROOT") or pathlib.Path(__file__).resolve().parents[1])
+HUB = pathlib.Path(env("ROOT") or pathlib.Path(__file__).resolve().parents[1])
 
 
 def _instance(sub: str, legacy: pathlib.Path) -> pathlib.Path:
     """The instance directory's layout (same rules as hubconf, docs/design/new-user.md 3.1). Deliberately imports no
     platform module: this must still run when the platform is broken (checked by tests/test_python_floor.py)."""
-    env = {"config": "AGENT_HUB_CONFIG", "secrets": "AGENT_HUB_SECRETS"}[sub]
-    if os.environ.get(env):
-        return pathlib.Path(os.path.expanduser(os.environ[env]))
-    home = os.environ.get("AGENT_HUB_HOME") or ((HUB / ".hub-home").read_text().strip()
-                                                if (HUB / ".hub-home").is_file() else "")
+    if (v := env({"config": "CONFIG", "secrets": "SECRETS"}[sub])):
+        return pathlib.Path(os.path.expanduser(v))
+    home = env("HOME") or ((HUB / ".hub-home").read_text().strip() if (HUB / ".hub-home").is_file() else "")
     return pathlib.Path(os.path.expanduser(home)) / sub if home else legacy
 
 
 CONFIG_DIR, SECRETS_DIR = _instance("config", HUB), _instance("secrets", HUB / ".secrets")
+# the settings file, hub.json or brunna.json: whichever exists (hubconf.config_path)
+SETTINGS = next((CONFIG_DIR / n for n in NAMES["config_file"] if (CONFIG_DIR / n).exists()),
+                CONFIG_DIR / NAMES["config_file"][0])
 
 
 class i18n:
@@ -54,10 +65,10 @@ class i18n:
     locales/<hub.json language.ui>/scheduler-watchdog.json for the translation"""
     @staticmethod
     def domain(file):
-        lang = os.environ.get("AGENT_HUB_LANG_UI") or ""
+        lang = env("LANG_UI")
         if not lang:
             try:
-                lang = (json.loads((CONFIG_DIR / "hub.json").read_text()).get("language") or {}).get("ui") or "en"
+                lang = (json.loads(SETTINGS.read_text()).get("language") or {}).get("ui") or "en"
             except (OSError, ValueError):
                 lang = "en"
         try:
@@ -80,7 +91,7 @@ SCHED_LOG = HUB / ".logs" / "scheduler.log"
 LOG = HUB / ".logs" / "scheduler-watchdog.log"
 TOKEN = SECRETS_DIR / "discord-token"
 CHANNEL = SECRETS_DIR / "discord-alert-channel"
-LABEL = "local.agent-hub-scheduler"
+LABEL = NAMES["unit"][0] + "-scheduler"
 RESUME_GRACE_MIN = 20  # after a resume (Linux): the scheduler's 15-minute timer gets one full interval and a margin
 STALE_MIN = 35  # a tick every 15 minutes; two missed ticks plus a few minutes of drift
 REMIND_H = 6
@@ -140,7 +151,7 @@ def diagnose():
 def hub_alerts() -> dict | None:
     """hub.json's alerts section; None when hub.json can't be read."""
     try:
-        return json.loads((CONFIG_DIR / "hub.json").read_text()).get("alerts") or {}
+        return json.loads(SETTINGS.read_text()).get("alerts") or {}
     except (OSError, ValueError):
         return None
 

@@ -25,8 +25,8 @@
 # The whole script is one function called on its last line, so a download cut off midway runs nothing.
 set -eu
 
-REPO="${AGENT_HUB_REPO:-https://github.com/imaknas/agent-hub.git}"
-DIR="${AGENT_HUB_DIR:-$HOME/agent-hub}"
+REPO="${AGENT_HUB_REPO:-${BRUNNA_REPO:-https://github.com/imaknas/agent-hub.git}}"
+DIR="${AGENT_HUB_DIR:-${BRUNNA_DIR:-$HOME/agent-hub}}"
 
 say() { printf 'agent-hub install: %s\n' "$*"; }
 json_str() { printf '%s' "$1" | sed 's/\\/\\\\/g; s/"/\\"/g'; }
@@ -100,8 +100,8 @@ instance_exists() {
 }
 
 main() {
-  YES="${AGENT_HUB_YES:-}"
-  NO_INIT="${AGENT_HUB_NO_INIT:-}"
+  YES="${AGENT_HUB_YES:-${BRUNNA_YES:-}}"
+  NO_INIT="${AGENT_HUB_NO_INIT:-${BRUNNA_NO_INIT:-}}"
   FOR_AGENT=""
   for a in "$@"; do
     case "$a" in
@@ -135,8 +135,8 @@ main() {
   if [ -z "$resume" ]; then
     say "cloning $REPO into $DIR"
     git clone -q "$REPO" "$DIR"
-    if [ -n "${AGENT_HUB_REF:-}" ]; then
-      ref="$AGENT_HUB_REF"
+    if [ -n "${AGENT_HUB_REF:-${BRUNNA_REF:-}}" ]; then
+      ref="${AGENT_HUB_REF:-${BRUNNA_REF:-}}"
     else
       ref="$(git -C "$DIR" tag -l 'v[0-9]*' --sort=-v:refname | head -n 1)"
     fi

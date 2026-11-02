@@ -9,8 +9,17 @@ MIN="3.13"
 # pyyaml: the only third-party package platform scripts import; ruff: bin/lint (commit gate), not imported;
 # tzdata: the IANA time zones for zoneinfo where the system has none (a bare Ubuntu/Debian; hubconf.tz)
 PKGS="pyyaml==6.0.3 ruff==0.14.0 tzdata==2025.2"
-dir="${AGENT_HUB_PYTHON:+$(dirname "$(dirname "$AGENT_HUB_PYTHON")")}"
-dir="${dir:-$HOME/.local/share/agent-hub/python}"
+_py_env="${AGENT_HUB_PYTHON:-${BRUNNA_PYTHON:-}}"
+dir="${_py_env:+$(dirname "$(dirname "$_py_env")")}"
+# the environment's folder: whichever spelling exists, this release's when neither does (a copy of bin/names.py's
+# share_dir pair, current first; tests/test_name_pairs.py compares it, and bin/py looks the same way)
+NAMES_share_dir="agent-hub brunna"
+if [ -z "$dir" ]; then
+  for _n in $NAMES_share_dir; do
+    [ -d "$HOME/.local/share/$_n/python" ] && { dir="$HOME/.local/share/$_n/python"; break; }
+  done
+  dir="${dir:-$HOME/.local/share/${NAMES_share_dir%% *}/python}"
+fi
 py="$dir/bin/python3"
 
 check() {

@@ -8,11 +8,11 @@
 #                machine's .hub-home, .state and .logs are there, as in hubconf)    HUB_STATE   <main>/.state
 # <hub>/.hub-home holds the instance directory → <instance>/{config,data,secrets}; no such file = the old layout
 # (everything in the hub root).
-HUB_ROOT="${AGENT_HUB_ROOT:-$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)}"
+HUB_ROOT="${AGENT_HUB_ROOT:-${BRUNNA_ROOT:-$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)}}"
 HUB_MAIN="$HUB_ROOT"
 # a linked worktree: .git is a file "gitdir: <dir>", and <dir>/commondir leads to the main checkout's .git (read as
 # plain files, no git; an explicit AGENT_HUB_ROOT is taken as it is)
-if [ -z "${AGENT_HUB_ROOT:-}" ] && [ -f "$HUB_ROOT/.git" ]; then
+if [ -z "${AGENT_HUB_ROOT:-${BRUNNA_ROOT:-}}" ] && [ -f "$HUB_ROOT/.git" ]; then
   _hp_gd="$(sed -n '1s/^gitdir: *//p' "$HUB_ROOT/.git")"
   case "$_hp_gd" in /*) ;; *) _hp_gd="$HUB_ROOT/$_hp_gd" ;; esac
   if [ -f "$_hp_gd/commondir" ]; then
@@ -22,18 +22,24 @@ if [ -z "${AGENT_HUB_ROOT:-}" ] && [ -f "$HUB_ROOT/.git" ]; then
     [ "${_hp_cd##*/}" = .git ] && HUB_MAIN="${_hp_cd%/.git}"
   fi
 fi
-HUB_STATE="${AGENT_HUB_STATE:-$HUB_MAIN/.state}"
-_hp_home="${AGENT_HUB_HOME:-}"
+HUB_STATE="${AGENT_HUB_STATE:-${BRUNNA_STATE:-$HUB_MAIN/.state}}"
+_hp_home="${AGENT_HUB_HOME:-${BRUNNA_HOME:-}}"
 [ -n "$_hp_home" ] || { [ -f "$HUB_MAIN/.hub-home" ] && _hp_home="$(head -1 "$HUB_MAIN/.hub-home")"; }
 _hp_home="${_hp_home/#\~/$HOME}"
 if [ -n "$_hp_home" ]; then
-  HUB_CONFIG="${AGENT_HUB_CONFIG:-$_hp_home/config}"; HUB_DATA="${AGENT_HUB_DATA:-$_hp_home/data}"
-  HUB_SECRETS="${AGENT_HUB_SECRETS:-$_hp_home/secrets}"
+  HUB_CONFIG="${AGENT_HUB_CONFIG:-${BRUNNA_CONFIG:-$_hp_home/config}}"; HUB_DATA="${AGENT_HUB_DATA:-${BRUNNA_DATA:-$_hp_home/data}}"
+  HUB_SECRETS="${AGENT_HUB_SECRETS:-${BRUNNA_SECRETS:-$_hp_home/secrets}}"
 else
-  HUB_CONFIG="${AGENT_HUB_CONFIG:-$HUB_ROOT}"; HUB_DATA="${AGENT_HUB_DATA:-$HUB_ROOT}"
-  HUB_SECRETS="${AGENT_HUB_SECRETS:-$HUB_ROOT/.secrets}"
+  HUB_CONFIG="${AGENT_HUB_CONFIG:-${BRUNNA_CONFIG:-$HUB_ROOT}}"; HUB_DATA="${AGENT_HUB_DATA:-${BRUNNA_DATA:-$HUB_ROOT}}"
+  HUB_SECRETS="${AGENT_HUB_SECRETS:-${BRUNNA_SECRETS:-$HUB_ROOT/.secrets}}"
 fi
-HUB_JSON="$HUB_CONFIG/hub.json"
+# the settings file: whichever spelling exists, this release's when neither does (a copy of bin/names.py's
+# config_file pair, current first; tests/test_name_pairs.py compares it)
+NAMES_config_file="hub.json brunna.json"
+HUB_JSON="$HUB_CONFIG/${NAMES_config_file%% *}"
+for _hp_n in $NAMES_config_file; do
+  [ -e "$HUB_CONFIG/$_hp_n" ] && { HUB_JSON="$HUB_CONFIG/$_hp_n"; break; }
+done
 # macOS uses the built-in plutil; elsewhere the platform's Python (bin/py), and jq only where that can't run (the remote
 # machine before bin/setup-python): so the hub machine never needs jq. Either way: no such value (or not a single value)
 # → print nothing, return non-zero. The Python reader prints what jq -r would: strings as they are, numbers as JSON,

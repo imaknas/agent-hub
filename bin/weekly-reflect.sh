@@ -5,7 +5,7 @@
 # (subscription quota). Details in bin/weekly-reflect.py, bin/reflect_llm.py, templates/reflect.html.
 set -uo pipefail
 export PATH="/opt/homebrew/bin:/usr/local/bin:$PATH"
-HUB="${AGENT_HUB_ROOT:-$(cd "$(dirname "$0")/.." && pwd)}"
+HUB="${AGENT_HUB_ROOT:-${BRUNNA_ROOT:-$(cd "$(dirname "$0")/.." && pwd)}}"
 source "$(dirname "${BASH_SOURCE[0]}")/hubpaths.sh"
 
 cd "$HUB" && git fetch -q || true   # agent-hub's main moves only through merge-branch (commit_gate): fetch, never pull

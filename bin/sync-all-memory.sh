@@ -14,7 +14,7 @@
 # the commits that haven't gone out yet (e.g. the last push failed, or sync-local-setup.sh's AGENT.md commit).
 set -uo pipefail
 
-HUB="${AGENT_HUB_ROOT:-$(cd "$(dirname "$0")/.." && pwd)}"
+HUB="${AGENT_HUB_ROOT:-${BRUNNA_ROOT:-$(cd "$(dirname "$0")/.." && pwd)}}"
 source "$(dirname "${BASH_SOURCE[0]}")/hubpaths.sh"
 SERVER="$(hub_server)"   # the machine that runs the hub (hub.json hosts.server); empty = this one
 LOG_DIR="$HUB/.logs"

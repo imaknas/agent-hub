@@ -18,7 +18,7 @@
 # caller (librarian.sh / onboard-project.sh) commits.
 set -euo pipefail
 
-HUB="${AGENT_HUB:-${AGENT_HUB_ROOT:-$(cd "$(dirname "$0")/.." && pwd)}}"   # default = the hub this script is in
+HUB="${AGENT_HUB:-${AGENT_HUB_ROOT:-${BRUNNA_ROOT:-$(cd "$(dirname "$0")/.." && pwd)}}}"   # default = the hub this script is in
 PY="$(dirname "$0")/py"   # the platform's Python goes with this script (AGENT_HUB may point at another data directory)
 source "$(dirname "${BASH_SOURCE[0]}")/hubpaths.sh"
 [ -n "${AGENT_HUB:-}" ] && HUB_DATA="$HUB"   # when AGENT_HUB points at another data directory (tests), use it

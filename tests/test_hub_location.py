@@ -248,7 +248,7 @@ ALLOWED = {
     "bin/migrate-to-mini.py": (re.compile(r""), "runs on the remote machine, for the layout it moves from"),
     "bin/sync-local-setup.sh": (re.compile(r"^leak_re=|this machine's paths \("),
                                 "the leak detector looks for exactly this text in projects' committed files"),
-    "install.sh": (re.compile(r'^DIR="\$\{AGENT_HUB_DIR:-\$HOME/agent-hub\}"$'),
+    "install.sh": (re.compile(r'^DIR="\$\{AGENT_HUB_DIR:-\$\{BRUNNA_DIR:-\$HOME/agent-hub\}\}"$'),
                    "the one-line installer's default clone folder (AGENT_HUB_DIR overrides it); nothing reads it later"),
 }
 
