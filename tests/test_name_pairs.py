@@ -183,6 +183,29 @@ class SchedulerState(unittest.TestCase):
         self.assertEqual(json.loads(failing.read_text()), {f"{hub}/librarian": {"since": "x"}})
 
 
+class Wrapper(unittest.TestCase):
+    def test_an_older_wrapper_is_still_found(self):
+        """install-cli's wrapper from before its mark was in English: found by its exec line, under either name."""
+        import os
+        from unittest import mock
+        sys.path.insert(0, str(ROOT / "bin"))
+        import upgrade
+        d = pathlib.Path(tempfile.mkdtemp())
+        for name in names.all("cli"):
+            with self.subTest(name=name):
+                for f in d.iterdir():
+                    f.unlink()
+                w = d / name
+                w.write_text('#!/bin/sh\n# an older comment\nexec "/h/bin/py" "/h/bin/agenthub" "$@"\n')
+                w.chmod(0o755)
+                with mock.patch.dict(os.environ, {"PATH": str(d)}):
+                    self.assertEqual(upgrade.cli_wrapper(), w)
+        (d / names.all("cli")[0]).write_text("#!/bin/sh\nexec something-else\n")
+        (d / names.all("cli")[1]).unlink(missing_ok=True)
+        with mock.patch.dict(os.environ, {"PATH": str(d)}):
+            self.assertIsNone(upgrade.cli_wrapper(), "someone else's program of that name")
+
+
 class ConfigPath(unittest.TestCase):
     def run_py(self, cfg: pathlib.Path, code: str) -> str:
         env = names.env_strip(__import__("os").environ)

@@ -72,6 +72,7 @@ SECTION = re.compile(r"^## (v\d+\.\d+\.\d+\S*)")
 SHOWN_TYPES = re.compile(r"^(feat|fix|perf|revert)(\([^)]*\))?!?: ")   # what cliff.toml lists
 BREAKING_TITLE = re.compile(r"^[a-z]+(\([^)]*\))?!: ")
 WRAPPER_MARK = "written by agenthub install-cli"
+WRAPPER_EXEC = re.compile(r'^exec "[^"\n]*/bin/py" "[^"\n]*/bin/(?:agenthub|brunna)" "\$@"$', re.M)
 
 USAGE_TEXT = """usage: agenthub upgrade [--to <tag> | --main] [--check] [--yes]
   (no option)   the newest release; a checkout on main follows main instead
@@ -331,7 +332,9 @@ def cli_wrapper() -> pathlib.Path | None:
                 head = f.read(1024).decode(errors="ignore")
         except OSError:
             continue
-        if WRAPPER_MARK in head:
+        # the mark, or the wrapper's exec line itself: a wrapper written before the mark was in English (or in another
+        # interface language) has only the line
+        if WRAPPER_MARK in head or WRAPPER_EXEC.search(head):
             return pathlib.Path(w)
     return None
 
