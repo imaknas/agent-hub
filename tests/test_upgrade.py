@@ -369,5 +369,29 @@ class Excerpt(unittest.TestCase):
         self.assertLess(upgrade.version_key("v1.0.0-rc.1"), upgrade.version_key("v1.0.0"))
 
 
+
+class OldestBack(unittest.TestCase):
+    """Nothing older than v0.6.0 reads what the rename to brunna writes (docs/design/rename-brunna.md): upgrade refuses
+    going back there, and the advice after a jump from there names v0.6.0."""
+
+    def test_too_old_and_the_go_back_advice(self):
+        import upgrade
+        from unittest import mock
+        shas = {"v0.6.0": "c6", "v0.5.0": "c5", "v0.7.0": "c7", "abc1234": "cx", "def5678": "cy"}
+        before = {"cx"}   # abc1234 comes before v0.6.0, def5678 after
+        def git(*args):
+            return subprocess.CompletedProcess(args, 0 if args[0] == "merge-base" and args[2] in before else 1)
+        with mock.patch.object(upgrade, "sha", shas.get), mock.patch.object(upgrade, "git", git):
+            self.assertTrue(upgrade.too_old("v0.5.0"))
+            self.assertFalse(upgrade.too_old("v0.6.0"))
+            self.assertFalse(upgrade.too_old("v0.7.0"))
+            self.assertTrue(upgrade.too_old("abc1234"))
+            self.assertFalse(upgrade.too_old("def5678"))
+            self.assertTrue(upgrade.go_back("v0.5.0").endswith("upgrade --to v0.6.0"))
+            self.assertTrue(upgrade.go_back("v0.7.0").endswith("upgrade --to v0.7.0"))
+            self.assertTrue(upgrade.go_back("main").endswith("upgrade --main"))
+        with mock.patch.object(upgrade, "sha", lambda r: None if r == "v0.6.0" else "c"), mock.patch.object(upgrade, "git", git):
+            self.assertFalse(upgrade.too_old("v0.1.0"), "a repo without v0.6.0 (a test's) has nothing to refuse")
+
 if __name__ == "__main__":
     unittest.main()

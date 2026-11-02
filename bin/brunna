@@ -1,4 +1,5 @@
 #!/bin/sh
-# The new name (docs/design/rename-brunna.md): agent-hub is becoming brunna. Until the switch release the platform's CLI
-# is agenthub and this only forwards to it; from the switch on the roles swap.
+# The platform's command (docs/design/rename-brunna.md). The implementation stays in bin/agenthub, under its name from
+# before the rename: install-cli's wrappers, bin/py and the scripts that start each other run that file, and an older
+# wrapper names it; this only forwards.
 exec "${0%/*}/py" "${0%/*}/agenthub" "$@"

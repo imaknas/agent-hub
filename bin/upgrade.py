@@ -352,7 +352,25 @@ def step_list(with_scheduler: bool) -> list[tuple[str, list[str]]]:
     return steps
 
 
+# the oldest release this one can go back to: everything older can't read what the rename to brunna writes (job state
+# under brunna/…, brunna.json, the new labels; docs/design/rename-brunna.md); v0.6.0 reads both spellings
+OLDEST_BACK = "v0.6.0"
+
+
+def too_old(ref: str) -> bool:
+    """A release before OLDEST_BACK, or a commit that comes before it (in a repo that has OLDEST_BACK)."""
+    if not sha(OLDEST_BACK):
+        return False
+    if version_key(ref):
+        return version_key(ref) < version_key(OLDEST_BACK)
+    c = sha(ref)
+    return bool(c) and c != sha(OLDEST_BACK) and git("merge-base", "--is-ancestor", c, OLDEST_BACK).returncode == 0
+
+
 def go_back(ref: str) -> str:
+    """How to go back to ref; one older than OLDEST_BACK (an upgrade that jumped from there) goes back to that."""
+    if ref != "main" and too_old(ref):
+        ref = OLDEST_BACK
     cli = names.current("cli")   # a new install has only this one
     return f"{cli} upgrade --main" if ref == "main" else f"{cli} upgrade --to {ref}"
 
@@ -515,6 +533,10 @@ def main(argv: list[str]) -> int:
         print(_("brunna upgrade: {remote} has no release yet; brunna upgrade --main follows its main",
                 remote=remote), file=sys.stderr)
         return FAILED
+    if a["to"] and too_old(target):
+        return refuse(_("{ref} is older than {oldest}, which can't read what this version has written (it was renamed "
+                        "to brunna in v0.7)", ref=a["to"], oldest=OLDEST_BACK),
+                      _("the oldest release to go back to is {oldest}: brunna upgrade --to {oldest}", oldest=OLDEST_BACK))
     if kind == "main" and b != "main" and git("rev-parse", "--verify", "--quiet", "refs/heads/main").returncode == 0 \
             and local_commits("main", remote):
         return refuse(_("the local branch main has commits that are not on {remote}", remote=remote),

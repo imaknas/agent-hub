@@ -51,5 +51,7 @@
  "brunna {version}; the newest release is {latest} (checked {when})": "brunna {version};最新的 release 是 {latest}({when} 查的)",
  "brunna {version} (could not check for newer releases at {when}: {error}; doctor tries again after a day)": "brunna {version}({when} 查不到有沒有新版:{error};doctor 一天後再試)",
  "{question} [y/N] ": "{question} [y/N] ",
- "no release tags": "沒有 release tag"
+ "no release tags": "沒有 release tag",
+ "{ref} is older than {oldest}, which can't read what this version has written (it was renamed to brunna in v0.7)": "{ref} 比 {oldest} 舊,讀不懂這個版本寫下的東西(v0.7 改名成 brunna)",
+ "the oldest release to go back to is {oldest}: brunna upgrade --to {oldest}": "最舊能回到 {oldest}:brunna upgrade --to {oldest}"
 }

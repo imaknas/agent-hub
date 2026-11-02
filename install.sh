@@ -1,34 +1,38 @@
 #!/bin/sh
-# Install agent-hub in one line:
-#   curl -fsSL https://raw.githubusercontent.com/imaknas/agent-hub/main/install.sh | sh
+# Install brunna in one line:
+#   curl -fsSL https://raw.githubusercontent.com/imaknas/brunna/main/install.sh | sh
 # Clones the repo, checks out the newest release, installs uv if it is missing (astral's own installer: user level, no
-# sudo), runs bin/setup (the platform's Python and the `agenthub` command), and then goes straight on into
-# `agenthub init` when there is a terminal to answer its questions in (docs/design/newcomer-path.md B1, B2).
+# sudo), runs bin/setup (the platform's Python and the `brunna` command), and then goes straight on into
+# `brunna init` when there is a terminal to answer its questions in (docs/design/newcomer-path.md B1, B2).
 #
 # git is the one thing it may have to install. It asks first (on macOS, Apple's command line tools; on Linux, the
 # package manager with your own sudo password) and installs nothing else that needs sudo; bin/setup names anything else
 # that is missing, with the command to run.
 #
 #   sh -s -- --yes       (after the pipe) answer yes to installing git, e.g. on a machine set up unattended
-#   sh -s -- --no-init   stop after the install; run agenthub init yourself
-#   sh -s -- --for-agent for an AI agent setting agent-hub up for its user (docs/design/newcomer-path.md B3): it never
+#   sh -s -- --no-init   stop after the install; run brunna init yourself
+#   sh -s -- --for-agent for an AI agent setting brunna up for its user (docs/design/newcomer-path.md B3): it never
 #                        asks anything and never installs system software itself; its last line is one JSON object,
 #                        {"done": true, "next": "<command>"}, {"needs_user": "<what the user has to do>"} (exit 3; then
 #                        run the same line again) or {"error": "<why>"} (exit 1). On a Mac without git, Apple's own
 #                        installer window is opened for the user to answer.
-#   AGENT_HUB_DIR    where to clone (default: agent-hub in your home folder)
-#   AGENT_HUB_REPO   what to clone (default: the GitHub repo)
-#   AGENT_HUB_REF    a tag or branch instead of the newest release (e.g. main)
-#   AGENT_HUB_YES=1, AGENT_HUB_NO_INIT=1   the same as the flags
+#   BRUNNA_DIR    where to clone (default: brunna in your home folder, or the hub already there under its name before v0.7)
+#   BRUNNA_REPO   what to clone (default: the GitHub repo)
+#   BRUNNA_REF    a tag or branch instead of the newest release (e.g. main)
+#   BRUNNA_YES=1, BRUNNA_NO_INIT=1   the same as the flags
 #
 # Pasting the line again after an install that stopped halfway (no instance yet) carries on from where it stopped.
 # The whole script is one function called on its last line, so a download cut off midway runs nothing.
 set -eu
 
-REPO="${AGENT_HUB_REPO:-${BRUNNA_REPO:-https://github.com/imaknas/agent-hub.git}}"
-DIR="${AGENT_HUB_DIR:-${BRUNNA_DIR:-$HOME/agent-hub}}"
+REPO="${AGENT_HUB_REPO:-${BRUNNA_REPO:-https://github.com/imaknas/brunna.git}}"
+# brunna in the home folder; a machine that already has the hub under its name before v0.7 (agent-hub) is found
+# there instead of getting a second checkout
+DEFAULT_DIR="$HOME/brunna"
+[ ! -e "$DEFAULT_DIR" ] && [ -f "$HOME/agent-hub/bin/agenthub" ] && DEFAULT_DIR="$HOME/agent-hub"
+DIR="${AGENT_HUB_DIR:-${BRUNNA_DIR:-$DEFAULT_DIR}}"
 
-say() { printf 'agent-hub install: %s\n' "$*"; }
+say() { printf 'brunna install: %s\n' "$*"; }
 json_str() { printf '%s' "$1" | sed 's/\\/\\\\/g; s/"/\\"/g'; }
 die() {
   say "$*" >&2
@@ -96,7 +100,7 @@ need_git_linux() {
 }
 
 instance_exists() {
-  [ -f "$DIR/.hub-home" ] || [ -f "$DIR/hub.json" ]
+  [ -f "$DIR/.hub-home" ] || [ -f "$DIR/hub.json" ] || [ -f "$DIR/brunna.json" ]
 }
 
 main() {
@@ -117,11 +121,11 @@ main() {
   resume=""
   if [ -e "$DIR" ]; then
     if [ -f "$DIR/bin/agenthub" ] && git -C "$DIR" rev-parse --git-dir >/dev/null 2>&1; then
-      instance_exists && die "$DIR already holds a set-up agent-hub; update it with: agenthub upgrade"
-      say "$DIR holds agent-hub but it isn't set up yet; carrying on from there"
+      instance_exists && die "$DIR already holds a set-up brunna; update it with: brunna upgrade"
+      say "$DIR holds brunna but it isn't set up yet; carrying on from there"
       resume=1
     else
-      die "$DIR already exists and is not agent-hub; set AGENT_HUB_DIR to another folder"
+      die "$DIR already exists and is not brunna; set BRUNNA_DIR to another folder"
     fi
   fi
 
@@ -152,19 +156,19 @@ main() {
 
   if [ -n "$FOR_AGENT" ]; then
     say "installed"
-    printf '{"done": true, "next": "%s"}\n' "$(json_str "$DIR/bin/py $DIR/bin/agenthub init --questions")"
+    printf '{"done": true, "next": "%s"}\n' "$(json_str "$DIR/bin/brunna init --questions")"
   elif [ -n "$NO_INIT" ]; then
-    say "done. Next: agenthub init  (then agenthub doctor)"
+    say "done. Next: brunna init  (then brunna doctor)"
   elif have_tty; then
-    say "installed. Now a few questions to set it up (agenthub init):"
+    say "installed. Now a few questions to set it up (brunna init):"
     # by full path: a fresh shell may not have ~/.local/bin on PATH yet, and install-cli may have failed
     if "$DIR/bin/py" "$DIR/bin/agenthub" init </dev/tty; then
-      say "done. agenthub doctor shows anything still missing. Open a new terminal if 'agenthub' is not found."
+      say "done. brunna doctor shows anything still missing. Open a new terminal if 'brunna' is not found."
     else
-      say "init stopped before it finished; run it again with: agenthub init  (it carries on where it stopped)"
+      say "init stopped before it finished; run it again with: brunna init  (it carries on where it stopped)"
     fi
   else
-    say "done. No terminal here to answer questions in; next: agenthub init  (then agenthub doctor). If agenthub is not found, open a new shell or add ~/.local/bin to PATH."
+    say "done. No terminal here to answer questions in; next: brunna init  (then brunna doctor). If brunna is not found, open a new shell or add ~/.local/bin to PATH."
   fi
 }
 

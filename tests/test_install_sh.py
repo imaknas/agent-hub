@@ -42,6 +42,18 @@ class InstallSh(unittest.TestCase):
         return subprocess.run(["sh", str(ROOT / "install.sh"), *args], env=e, capture_output=True, text=True,
                               stdin=subprocess.DEVNULL, start_new_session=True, timeout=60)
 
+    def test_the_default_folder(self):
+        """~/brunna for a new install; a machine with the hub at ~/agent-hub (its name before v0.7) is found there."""
+        def where(**env):
+            e = {"PATH": os.environ["PATH"], "HOME": str(self.home), "BRUNNA_REPO": str(self.tmp / "nowhere"), **env}
+            r = subprocess.run(["sh", str(ROOT / "install.sh"), "--no-init"], env=e, capture_output=True, text=True,
+                               stdin=subprocess.DEVNULL, start_new_session=True, timeout=60)
+            return r.stdout + r.stderr
+        self.assertIn(f"cloning {self.tmp / 'nowhere'} into {self.home / 'brunna'}", where())
+        self.dir = self.home / "agent-hub"
+        self.fake_hub()
+        self.assertIn(f"{self.home / 'agent-hub'} holds brunna but it isn't set up yet", where())
+
     def test_unknown_option(self):
         r = self.run_install("--bogus")
         self.assertNotEqual(r.returncode, 0)
@@ -52,7 +64,7 @@ class InstallSh(unittest.TestCase):
         (self.dir / ".hub-home").write_text(str(self.tmp / "instance") + "\n")
         r = self.run_install()
         self.assertNotEqual(r.returncode, 0)
-        self.assertIn("agenthub upgrade", r.stderr)
+        self.assertIn("brunna upgrade", r.stderr)
         self.assertNotIn("setup-ran", r.stdout)
 
     def test_a_half_done_install_carries_on(self):
@@ -62,13 +74,13 @@ class InstallSh(unittest.TestCase):
         self.assertIn("carrying on", r.stdout)
         self.assertIn("setup-ran", r.stdout)
         self.assertNotIn("agenthub-ran", r.stdout, "no terminal: init is not started")
-        self.assertIn("next: agenthub init", r.stdout)
+        self.assertIn("next: brunna init", r.stdout)
 
     def test_no_init_flag(self):
         self.fake_hub()
         r = self.run_install("--no-init")
         self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
-        self.assertIn("Next: agenthub init", r.stdout)
+        self.assertIn("Next: brunna init", r.stdout)
 
     def test_for_agent_ends_with_one_json_line(self):
         """B3: never init, never a prompt; the last line says what to run next, or why not."""
@@ -78,12 +90,12 @@ class InstallSh(unittest.TestCase):
         self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
         last = json.loads(r.stdout.splitlines()[-1])
         self.assertTrue(last["done"])
-        self.assertTrue(last["next"].endswith("bin/agenthub init --questions"), last)
+        self.assertTrue(last["next"].endswith("bin/brunna init --questions"), last)
         self.assertNotIn("agenthub-ran", r.stdout)
         (self.dir / ".hub-home").write_text(str(self.tmp / "instance") + "\n")
         r = self.run_install("--for-agent")
         self.assertEqual(r.returncode, 1)
-        self.assertIn("agenthub upgrade", json.loads(r.stdout.splitlines()[-1])["error"])
+        self.assertIn("brunna upgrade", json.loads(r.stdout.splitlines()[-1])["error"])
 
     def test_for_agent_hands_installing_git_to_the_user(self):
         """With git missing, --for-agent installs nothing itself: on Linux it names the command for the user (exit 3);
@@ -112,7 +124,7 @@ class InstallSh(unittest.TestCase):
         (self.dir / "notes.txt").write_text("mine")
         r = self.run_install()
         self.assertNotEqual(r.returncode, 0)
-        self.assertIn("is not agent-hub", r.stderr)
+        self.assertIn("is not brunna", r.stderr)
 
     def test_a_cut_off_download_runs_nothing(self):
         text = (ROOT / "install.sh").read_text()
