@@ -181,7 +181,7 @@ def base_env(main: pathlib.Path, run: pathlib.Path, hub: bool) -> tuple[dict, di
     # TMPDIR outside every repo: tests make git repos there and some strip GIT_* (GIT_CEILING_DIRECTORIES too) from
     # what they start, so a temporary folder inside the checkout made git find the enclosing repo (the rehearsal);
     # removed with the run (main's finally)
-    tmp = tempfile.mkdtemp(prefix="agenthub-test.")
+    tmp = tempfile.mkdtemp(prefix=f"{names.current('cli')}-test.")
     (run / "tmpdir").write_text(tmp)
     env = {"PATH": path, "LANG": os.environ.get("LANG") or "en_US.UTF-8", "HOME": str(run / "home"),
            "TMPDIR": tmp, "GIT_CEILING_DIRECTORIES": str(run), "PYTHONDONTWRITEBYTECODE": "1", **caches}

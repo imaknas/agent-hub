@@ -71,7 +71,8 @@ class FreshInstall(unittest.TestCase):
         self.assertEqual(r.returncode, 0, r.stdout + r.stderr)   # the wrapper runs the CLI
 
         found = []
-        for what, text in self.said:
+        tmp = str(self.tmp)   # where the test itself runs (a runner's folder may be named anything)
+        for what, text in [(w, s.replace(tmp, "<tmp>")) for w, s in self.said]:
             found += [f"printed by `{what}`: {line.strip()[:160]}" for line in text.splitlines()
                       if OLD.search(ALLOWED.sub("", line))]
         for p in sorted(self.home.rglob("*")):
@@ -85,7 +86,7 @@ class FreshInstall(unittest.TestCase):
                     text = p.read_text()
                 except (UnicodeDecodeError, OSError):
                     continue   # git objects and the bus database
-                found += [f"~/{rel}: {line.strip()[:160]}" for line in text.splitlines()
+                found += [f"~/{rel}: {line.strip()[:160]}" for line in text.replace(tmp, "<tmp>").splitlines()
                           if OLD.search(ALLOWED.sub("", line))]
         self.assertEqual(found, [], "a new install shows the old name")
 
