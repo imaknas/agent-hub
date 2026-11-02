@@ -1,7 +1,7 @@
 # Renaming agent-hub to brunna
 
 Status: design, 11-02. Nothing built yet. This is the fourth version: it was rewritten from scratch after seven
-cold-review rounds of the earlier versions.
+cold-review rounds of the earlier versions, then reviewed three more times; the last round found nothing blocking.
 
 Decided by the owner on 11-02:
 
@@ -189,6 +189,24 @@ one-at-a-time guard, so they are read through both names, like job state. That i
 goal, as a test.
 
 The owner's machine is the last, real run.
+
+## To settle while building (from the last review, none blocking)
+
+- **Unit swap.** `init --scheduler-only` takes `scheduler.lock` around the swap, waiting up to `TICK_LOCK_WAIT`, so
+  `land` never boots out a scheduler mid-tick.
+- **`AGENTHUB_TIER_CACHE`.** Project `run:` lines use it, so it is exported in both spellings from v0.6, like the four
+  job variables.
+- **`land`'s `install-cli`** finds the existing wrapper the way `upgrade.py` does, so it never leaves a second one.
+- **`recover-service.sh` and `services.tsv`.** Template paths there resolve both spellings, and `services.tsv` joins
+  the table.
+- **The ratchet is defined per class and only for code.** Docs, locales and `CHANGELOG.md` name the product freely,
+  and `hub.json` is a resolved file name.
+- **No going back below v0.6** once a new spelling exists. v0.6 creates new spellings when neither exists, so from v0.6
+  `upgrade --to` anything older is refused if any new spelling is present.
+- **The index keys the hub by `type: platform`**, never by stem. A user project named `brunna` keeps
+  `projects/brunna.yaml` and its stem; the hub's entry is the one under the repo's `projects/`.
+- **Run-now units** (`local.*-run-now.*`) are recognised in both spellings but never swept by the pairwise remover:
+  that would kill a `schedulectl run` still going.
 
 ## Open
 
