@@ -445,7 +445,8 @@ def platform_mails() -> str | None:
 
 
 def valid_address(a: str) -> bool:
-    return a in OWNERS or a in projects()
+    """An owner address, a registered project, or a name one had before a rename (routed to it by send_letter)."""
+    return a in OWNERS or a in projects() or now_named(a) in projects()
 
 
 # ---------- letters (the projection of message) ----------
@@ -531,7 +532,7 @@ def send_record(c, a, sender: str, mid: str, p: dict) -> str | None:
         terms = {"text": " ".join(a.text.split()), **({"due": a.due} if a.due else {})}
         if terms == {k: v for k, v in need["terms"].items() if k in ("text", "due")}:
             return record_event_id(need["current"])
-        if need["by"] == hubconf.party("registrar"):   # acts 0.4 §4: a STATE.md item changes only through its line
+        if need["by"] in hubconf.party_ids("registrar"):   # acts 0.4 §4: a STATE.md item changes only through its line
             refuse(_("hubbus: {key} is a to-do in STATE.md; change its line there (the registrar sends the change)",
                      key=key))
         rec |= {"type": "amended", "id": f"a:{key}:{need['rev'] + 1}", "origin": "requester",
@@ -1183,7 +1184,9 @@ def handoff_text(h: dict) -> str:
 def current_name(proj: str) -> str:
     """What a renamed project is called now (followed all the way through .state/project-renames.json; unchanged if
     never renamed). The assistant's handoffs may still use the old name (e.g. after idea-1 was upgraded and renamed to
-    garden-app, handoffs still came addressed to idea-1)."""
+    garden-app, handoffs still came addressed to idea-1). Either spelling of the platform's own name is the platform."""
+    if proj in names.all("project"):
+        return hubconf.hub_project()
     try:
         renames = json.loads((hubconf.STATE / "project-renames.json").read_text())
     except (OSError, ValueError):
@@ -2512,6 +2515,8 @@ def send_letter(c, a, sender: str, session, here, boxed: bool = False, mid: str 
     that project, never a name in the file; a reply only in its own threads). mid: the letter id (else --id, else a
     new one); --id stays what it is to a task, its key. Returns the id to print."""
     a.to = canon(a.to)
+    if a.to not in OWNERS:
+        a.to = now_named(a.to)   # a former name reaches the project it is now (docs/design/rename-brunna.md)
     if not sender or not valid_address(sender) or sender in OWNERS:
         refuse(_("hubbus: cannot tell which project the sender is (outside a project folder add --from <project>)"))
     if not valid_address(a.to):

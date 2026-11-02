@@ -487,25 +487,38 @@ def party(role: str, project: str | None = None) -> str:
         return get("owner.principal_id") or f"person:{owner_address()}"
     if role == "principal_side":
         if owner_side() == "builtin":
-            return f"{hub_project()}:owner-side"
+            return f"{names.current('party')}:owner-side"
         return get("assistant.party_id") or get("assistant.project") or "assistant"
     if role in ("requester", "agent"):
         if not project:
             raise ValueError(_("party({role}) needs a project", role=repr(role)))
-        return f"project:{project}"
+        # the platform's own project speaks under its party name, which switches only with the party ids
+        return f"project:{names.current('party') if project in names.all('project') else project}"
     if role == "registrar":
-        return f"{hub_project()}:registrar"
+        return f"{names.current('party')}:registrar"
     raise ValueError(_("unknown role {role}", role=repr(role)))
+
+
+def party_ids(role: str) -> set[str]:
+    """Every spelling of the platform's own party id for this role (registrar, principal_side when built in): records
+    written under either are the platform's, for good (docs/design/rename-brunna.md)."""
+    if role == "registrar":
+        return {f"{s}:registrar" for s in names.PAIRS["party"]}
+    if role == "principal_side" and owner_side() == "builtin":
+        return {f"{s}:owner-side" for s in names.PAIRS["party"]}
+    return {party(role)}
 
 
 def former_names(project: str) -> list[str]:
     """The names this project had before being renamed (from .state/project-renames.json, counting only finished
     renames, stage done). Old letters on the bus and records the assistant sends may still use an old name (e.g.
-    idea-1 upgraded and renamed to garden-app)."""
+    idea-1 upgraded and renamed to garden-app). The platform's own other spelling (agent-hub / brunna) counts in both
+    directions, from the name table, so a release on either side of the rename reads the other's letters and records."""
+    hub = [names.other("project")] if project == hub_project() else []
     try:
         renames = json.loads((STATE / "project-renames.json").read_text())
     except (OSError, ValueError):
-        return []
+        return hub
 
     def now(name: str) -> str:
         seen = set()
@@ -513,7 +526,7 @@ def former_names(project: str) -> list[str]:
             seen.add(name)
             name = renames[name]["new"]
         return name
-    return sorted(old for old in renames if old != project and now(old) == project)
+    return hub + sorted(old for old in renames if old != project and now(old) == project and old not in hub)
 
 
 def principal_is_legal_person() -> bool:
@@ -804,8 +817,8 @@ def test_config_inputs() -> list[tuple[str, pathlib.Path]]:
 
 
 def hub_project() -> str:
-    """The platform's own name in the registry."""
-    return "agent-hub"
+    """The platform's own name in the registry (bin/names.py: agent-hub until the switch to brunna)."""
+    return names.current("project")
 
 
 def main(argv: list[str]) -> int:

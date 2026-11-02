@@ -8,7 +8,7 @@ $ <HUB>/bin/registry.py check
 ✗ bad-one
     name('other')要跟檔名 bad-one 一樣
     未知的欄位 nope
-    type 只能是 project 或 idea
+    type 只能是 project、idea 或 platform
     paths.workspace 必填
     commits 只能是 conventional(沒寫 = 不檢查 commit 標題)
     gate 只能是 strict 或 detect(預設)

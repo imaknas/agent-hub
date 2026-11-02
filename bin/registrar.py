@@ -74,6 +74,7 @@ WARNED = hubconf.STATE / "registrar-warned.json"   # keys already warned about (
 REVIEW_LOG = hubconf.data_file("review-log.md")
 TAG = hubconf.owner_tag()
 REGISTRAR = hubconf.party("registrar")
+REGISTRARS = hubconf.party_ids("registrar")   # either spelling raised it (docs/design/rename-brunna.md)
 READ = acts_md.profiles(TAG)   # both token sets
 REASON = todo_tokens.patterns(TAG).reason   # the review-log's reason line, either set
 DRY = "--dry-run" in sys.argv
@@ -187,7 +188,7 @@ class Ledger:
 
     def bound(self, key: str) -> bool:
         """Raised from a line of the file by this registrar (an item whose raised is not held counts as its own)."""
-        return self.raised_by.get(key, REGISTRAR) == REGISTRAR
+        return self.raised_by.get(key, REGISTRAR) in REGISTRARS
 
     def bound_keys(self) -> set[str]:
         """spec §2's bound keys"""

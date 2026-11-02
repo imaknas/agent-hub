@@ -155,7 +155,7 @@ sync-local-setup (stand-in): theta
 [9/11] 已 clone librarian 用的 memory 副本到 ~/.memory-copies/theta
 [10/11] 沒有外部 remote,跳過 mirror-backup 登記
 --- stderr
-登錄不合格,不寫入:type 只能是 project 或 idea
+登錄不合格,不寫入:type 只能是 project、idea 或 platform
 onboard-project: 登記進專案登錄失敗(projects/theta.yaml)
 
 === no coding agent

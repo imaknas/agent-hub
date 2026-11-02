@@ -116,6 +116,53 @@ class Markers(unittest.TestCase):
         self.assertEqual(set(rps.MARKS), {names.gate_mark(s) for s in names.PAIRS["marker"]})
 
 
+class HubNames(unittest.TestCase):
+    def test_party_ids_in_either_spelling_are_the_platforms(self):
+        import hubconf
+        self.assertEqual(hubconf.party_ids("registrar"), {"agent-hub:registrar", "brunna:registrar"})
+        self.assertEqual(hubconf.party("registrar"), f"{names.current('party')}:registrar")
+        self.assertEqual(hubconf.party("requester", names.other("project")), f"project:{names.current('party')}")
+
+    def test_letters_to_either_name_reach_the_platform(self):
+        import importlib.machinery
+        import importlib.util
+        from unittest import mock
+        loader = importlib.machinery.SourceFileLoader("hubbus_n", str(ROOT / "bin" / "hubbus"))
+        spec = importlib.util.spec_from_loader("hubbus_n", loader)
+        hb = importlib.util.module_from_spec(spec)
+        loader.exec_module(hb)
+        hub = names.current("project")
+        with mock.patch.object(hb, "projects", lambda: {hub: {}, "app": {}}):
+            for addr in names.all("project"):
+                self.assertTrue(hb.valid_address(addr), addr)
+                self.assertEqual(hb.now_named(addr), hub)
+            self.assertFalse(hb.valid_address("nobody"))
+            self.assertIn(names.other("project"), hb.own_names(hub))
+
+    def test_both_names_are_reserved(self):
+        import registry
+        doc = {"v": 2, "name": names.other("project"), "paths": {"workspace": "/tmp/x"}}
+        errs = registry.validate_v2(doc, names.other("project"))
+        self.assertTrue(any(names.other("project") in e for e in errs), errs)
+
+    def test_the_test_runner_finds_the_platform_entry_by_type(self):
+        """The commit that renames the platform's entry is tested by a runner that still calls it by the old name."""
+        import importlib.util
+        spec = importlib.util.spec_from_file_location("test_runner_n", ROOT / "bin" / "test-runner.py")
+        tr = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(tr)
+        tree = pathlib.Path(tempfile.mkdtemp())
+        (tree / "projects").mkdir()
+        (tree / "bin").symlink_to(ROOT / "bin")   # what the entry's run: lines name
+        entry = (ROOT / "projects" / "agent-hub.yaml").read_text().replace(
+            "name: agent-hub\n", f"name: {names.new('project')}\n")
+        if "\ntype: platform\n" not in entry:
+            entry = entry.replace(f"name: {names.new('project')}\n", f"name: {names.new('project')}\ntype: platform\n")
+        (tree / "projects" / f"{names.new('project')}.yaml").write_text(entry)
+        doc = tr.declaration(names.old("project"), {}, tree, tree / "run")
+        self.assertIn("tests", doc)
+
+
 class ConfigPath(unittest.TestCase):
     def run_py(self, cfg: pathlib.Path, code: str) -> str:
         env = names.env_strip(__import__("os").environ)

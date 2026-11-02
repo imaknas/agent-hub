@@ -27,7 +27,6 @@
  "not a YAML mapping": "不是一個 YAML mapping",
  "name ({name!r}) must be the same as the file name {stem}": "name({name!r})要跟檔名 {stem} 一樣",
  "unknown field {key}": "未知的欄位 {key}",
- "type can only be project or idea": "type 只能是 project 或 idea",
  "purpose must be a non-empty string": "purpose 要是非空字串",
  "type: idea needs a purpose (the idea itself)": "type: idea 要寫 purpose(想法本身)",
  "paths.workspace is required": "paths.workspace 必填",
@@ -149,5 +148,8 @@
  "needs_llm must be true or false": "needs_llm 要是 true 或 false",
  "job {name}: catch_up can only be period, on a job with at": "job {name}:catch_up 只能是 period,而且只能用在有 at 的 job",
  "runtime_preset needs label, find, settings.runtime and install as a list of lines (docs/design/newcomer-path.md B4)": "runtime_preset 需要 label、find、settings.runtime,以及一行一行的 install(docs/design/newcomer-path.md B4)",
- "layout_intent is split: true, or span: a list of projects (docs/design/newcomer-path.md B6)": "layout_intent 只能是 split: true,或 span: 專案清單(docs/design/newcomer-path.md B6)"
+ "layout_intent is split: true, or span: a list of projects (docs/design/newcomer-path.md B6)": "layout_intent 只能是 split: true,或 span: 專案清單(docs/design/newcomer-path.md B6)",
+ "type can only be project, idea or platform": "type 只能是 project、idea 或 platform",
+ "type: platform is the platform's own entry only": "type: platform 只能用在平台自己的登錄",
+ "{name} is reserved for the platform itself; pick another name": "{name} 保留給平台自己用;請換一個名字"
 }

@@ -134,6 +134,7 @@ import sys
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
 import event_jobs  # noqa: E402
 import hubconf  # noqa: E402
+import names  # noqa: E402
 import i18n  # noqa: E402
 import isolation  # noqa: E402
 import tiers  # noqa: E402
@@ -172,7 +173,7 @@ MODEL_POINT = re.compile(r"^[a-z0-9][a-z0-9-]{0,47}$")
 def dirs(doc: dict) -> dict[str, pathlib.Path | None]:
     """This project's runtime / workspace / hub directories."""
     name = doc.get("name", "")
-    if name == hubconf.hub_project() or doc.get("type") == "module":
+    if name == hubconf.hub_project() or doc.get("type") in ("module", "platform"):
         return {"runtime": hubconf.ROOT, "workspace": hubconf.ROOT, "hub": hubconf.ROOT}
     ws = hubconf.path((doc.get("paths") or {}).get("workspace"))
     rt = hubconf.p("services_root") / name if doc.get("runtime") is not None else None
@@ -403,13 +404,19 @@ def _validate_body(doc: dict, stem: str, top: set[str], runtime_keys: tuple[str,
     if doc.get("name") != stem:
         errs.append(_("name ({name!r}) must be the same as the file name {stem}", name=doc.get("name"), stem=stem))
     errs += [_("unknown field {key}", key=k) for k in doc if k not in top]
-    if doc.get("type", "project") not in ("project", "idea"):
-        errs.append(_("type can only be project or idea"))
+    if doc.get("type", "project") not in ("project", "idea", "platform"):
+        errs.append(_("type can only be project, idea or platform"))
+    if doc.get("type") == "platform" and stem not in names.all("project"):
+        errs.append(_("type: platform is the platform's own entry only"))
+    if stem in names.all("project") and doc.get("type") != "platform" and stem != hubconf.hub_project():
+        # both of the platform's names are kept for it (docs/design/rename-brunna.md): a project under either would
+        # take letters addressed to the platform
+        errs.append(_("{name} is reserved for the platform itself; pick another name", name=stem))
     if doc.get("purpose") is not None and (not isinstance(doc["purpose"], str) or not doc["purpose"].strip()):
         errs.append(_("purpose must be a non-empty string"))
     if doc.get("type") == "idea" and not doc.get("purpose"):
         errs.append(_("type: idea needs a purpose (the idea itself)"))
-    is_hub = stem == hubconf.hub_project()
+    is_hub = stem == hubconf.hub_project() or doc.get("type") == "platform"
     paths = doc.get("paths") or {}
     if not is_hub and not paths.get("workspace"):
         errs.append(_("paths.workspace is required"))
@@ -456,7 +463,7 @@ def bus_event_types() -> list[str]:
 
 def platform_doc(doc: dict, stem: str) -> bool:
     """The platform project and modules may react to other projects' events; an ordinary project only to its own."""
-    return stem == hubconf.hub_project() or doc.get("type") == "module"
+    return stem == hubconf.hub_project() or doc.get("type") in ("module", "platform")
 
 
 def validate_trigger(job: dict, doc: dict, stem: str) -> list[str]:

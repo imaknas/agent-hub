@@ -145,9 +145,15 @@ def export(top: pathlib.Path, source: str, rev: str | None, run: pathlib.Path) -
 
 
 def declaration(name: str, doc: dict, tree: pathlib.Path, run: pathlib.Path) -> dict:
-    if name != hubconf.hub_project():
+    if name not in names.all("project"):
         return tiers.upgrade(doc)
+    # the tree's own platform entry, found by type, not by name: the commit that renames it (agent-hub → brunna,
+    # docs/design/rename-brunna.md) is tested by a runner that still calls the platform by its old name
     entry = tree / "projects" / f"{name}.yaml"
+    for cand in sorted((tree / "projects").glob("*.yaml")):
+        if cand.stem in names.all("project") and "\ntype: platform\n" in "\n" + cand.read_text():
+            entry, name = cand, cand.stem
+            break
     code = ("import json, sys, yaml, registry, tiers\n"
             "doc = tiers.upgrade(yaml.safe_load(open(sys.argv[1], encoding='utf-8')))\n"
             "print(json.dumps({'doc': doc, 'errors': registry.validate_v2(doc, sys.argv[2])}, default=str))\n")

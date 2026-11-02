@@ -8,7 +8,7 @@ $ <HUB>/bin/registry.py check
 ✗ bad-one
     name ('other') must be the same as the file name bad-one
     unknown field nope
-    type can only be project or idea
+    type can only be project, idea or platform
     paths.workspace is required
     commits can only be conventional (absent = commit titles are not checked)
     gate can only be strict or detect (the default)
