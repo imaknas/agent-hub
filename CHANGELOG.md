@@ -3,6 +3,12 @@
 What changed in each version, generated from the commit messages (git cliff) when it is tagged; only new features,
 fixes, speed-ups and reverts are listed.
 
+## v0.5.1 (2026-11-02)
+
+### Fixed
+
+- **watchdog:** It loads on the system python3 again
+
 ## v0.5.0 (2026-11-01)
 
 ### New
