@@ -67,7 +67,7 @@ class Fixture(unittest.TestCase):
                "language": {"ui": "en", "content": "en"}}
         (t / "config" / "hub.json").write_text(json.dumps(cfg))
         self.env = {**{k: v for k, v in os.environ.items() if not k.startswith(("BRUNNA_", "AGENT_HUB_", "AGENTHUB_", "HUB_"))
-                       or k == "AGENT_HUB_PYTHON"}, **GIT_ENV,
+                       or k in ("AGENT_HUB_PYTHON", "BRUNNA_PYTHON")}, **GIT_ENV,
                     "HOME": str(t / "home"), "AGENT_HUB_CONFIG": str(t / "config"), "AGENT_HUB_DATA": str(t / "data"),
                     "AGENT_HUB_SECRETS": str(t / "secrets"), "AGENT_HUB_STATE": str(t / "state"),
                     "AGENT_HUB_LANG_UI": "en"}

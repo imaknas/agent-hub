@@ -449,7 +449,7 @@ class ConfigCheckDefault(unittest.TestCase):
             (tmp / d).mkdir()
         base = {"v": 1, "registry_dir": "projects", "owner": {"address": "owner", "tag": "Alex"}}
         (tmp / "config" / "hub.json").write_text(json.dumps({**base, **cfg}))
-        env = {**{k: v for k, v in os.environ.items() if not k.startswith(("AGENT_HUB_", "BRUNNA_")) or k == "AGENT_HUB_PYTHON"},
+        env = {**{k: v for k, v in os.environ.items() if not k.startswith(("AGENT_HUB_", "BRUNNA_")) or k in ("AGENT_HUB_PYTHON", "BRUNNA_PYTHON")},
                "AGENT_HUB_ROOT": str(ROOT), "AGENT_HUB_CONFIG": str(tmp / "config"), "AGENT_HUB_STATE": str(tmp / "state"),
                "AGENT_HUB_DATA": str(tmp / "data"), "AGENT_HUB_SECRETS": str(tmp / "secrets"), "HOME": str(tmp / "home"),
                "AGENT_HUB_LANG_UI": lang}

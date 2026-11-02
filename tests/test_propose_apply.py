@@ -88,7 +88,7 @@ class ProposeApply(unittest.TestCase):
         doc = {"v": 1, "name": "demo", "paths": {"workspace": str(ws), "memory_bare": str(bare), "origin": None},
                "memory": True, "privacy": {"reflection": "include"}, "push_on_merge": False}
         (t / "config" / "projects" / "demo.yaml").write_text(yaml.safe_dump(doc, allow_unicode=True))
-        self.env = {**{k: v for k, v in os.environ.items() if not k.startswith(("AGENT_HUB_", "BRUNNA_")) or k == "AGENT_HUB_PYTHON"},
+        self.env = {**{k: v for k, v in os.environ.items() if not k.startswith(("AGENT_HUB_", "BRUNNA_")) or k in ("AGENT_HUB_PYTHON", "BRUNNA_PYTHON")},
                     "HOME": str(t / "home"), "AGENT_HUB_CONFIG": str(t / "config"),
                     "AGENT_HUB_DATA": str(t / "data"), "AGENT_HUB_SECRETS": str(t / "secrets"),
                     "AGENT_HUB_STATE": str(t / "state"), "PROPOSE_TEST_TRIES": str(t / "tries.json"),

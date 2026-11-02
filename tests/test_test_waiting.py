@@ -23,7 +23,7 @@ sys.path.insert(0, str(ROOT / "bin"))
 import runtime_fake  # noqa: E402
 from runtime_ports import Action, Turn  # noqa: E402
 
-PY = os.environ.get("AGENT_HUB_PYTHON") or sys.executable
+PY = os.environ.get("AGENT_HUB_PYTHON") or os.environ.get("BRUNNA_PYTHON") or sys.executable
 UTC = datetime.timezone.utc
 T0 = datetime.datetime(2026, 11, 1, 10, tzinfo=UTC)
 

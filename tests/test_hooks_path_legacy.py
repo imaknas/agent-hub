@@ -18,7 +18,7 @@ import unittest
 
 ROOT = pathlib.Path(__file__).resolve().parents[1]
 BIN = ROOT / "bin"
-PY = os.environ.get("AGENT_HUB_PYTHON") or sys.executable
+PY = os.environ.get("AGENT_HUB_PYTHON") or os.environ.get("BRUNNA_PYTHON") or sys.executable
 sys.path.insert(0, str(BIN))
 import i18n  # noqa: E402
 

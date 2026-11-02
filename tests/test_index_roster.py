@@ -29,7 +29,7 @@ class IndexRoster(unittest.TestCase):
                 (hub / "projects" / f"{name}.yaml").write_text(text)
             (hub / "index.md").write_text("# index\n\n## Other\n")
             subprocess.run([str(ROOT / "bin" / "gen-index-roster.sh")], env={"AGENT_HUB": str(hub), "PATH": "/usr/bin:/bin",
-                                **{k: os.environ[k] for k in ("HOME", "AGENT_HUB_PYTHON") if k in os.environ}},
+                                **{k: os.environ[k] for k in ("HOME", "AGENT_HUB_PYTHON", "BRUNNA_PYTHON") if k in os.environ}},
                            check=True, capture_output=True)
             text = (hub / "index.md").read_text()
         block = text.split("<!-- roster:begin")[1].split("<!-- roster:end")[0]

@@ -18,7 +18,7 @@ ROOT = pathlib.Path(__file__).resolve().parents[1]
 RUNNER = ROOT / "bin" / "test-runner.py"
 sys.path.insert(0, str(ROOT / "bin"))
 import names  # noqa: E402
-PY = os.environ.get("AGENT_HUB_PYTHON") or sys.executable
+PY = os.environ.get("AGENT_HUB_PYTHON") or os.environ.get("BRUNNA_PYTHON") or sys.executable
 
 
 class Runner(unittest.TestCase):

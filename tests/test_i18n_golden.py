@@ -46,7 +46,7 @@ class Golden(unittest.TestCase):
         self.write_cfg()
         # NVM_*: the agent step looks for agents under nvm's node; the fake HOME has none, nor should the machine's
         self.env = {**{k: v for k, v in os.environ.items()
-                       if not k.startswith(("BRUNNA_", "AGENT_HUB_", "GIT_", "NVM_")) or k == "AGENT_HUB_PYTHON"},
+                       if not k.startswith(("BRUNNA_", "AGENT_HUB_", "GIT_", "NVM_")) or k in ("AGENT_HUB_PYTHON", "BRUNNA_PYTHON")},
                     "AGENT_HUB_ROOT": str(ROOT),   # the tree under test (no lookup of a main checkout from a worktree)
                     "HOME": str(self.tmp / "home"), "AGENT_HUB_CONFIG": str(self.tmp / "config"),
                     "AGENT_HUB_DATA": str(self.tmp / "data"), "AGENT_HUB_SECRETS": str(self.tmp / "secrets"),

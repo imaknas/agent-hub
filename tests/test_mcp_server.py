@@ -48,7 +48,7 @@ class Server(unittest.TestCase):
             doc = {"v": 1, "name": name, "paths": {"workspace": str(path)}, "memory": True}
             (t / "config" / "projects" / f"{name}.yaml").write_text(yaml.safe_dump(doc))
         self.env = {**{k: v for k, v in os.environ.items() if not k.startswith(("BRUNNA_", "AGENT_HUB_", "AGENTHUB_", "HUB_"))
-                       or k == "AGENT_HUB_PYTHON"},
+                       or k in ("AGENT_HUB_PYTHON", "BRUNNA_PYTHON")},
                     "HOME": str(t / "home"), "AGENT_HUB_CONFIG": str(t / "config"), "AGENT_HUB_DATA": str(t / "data"),
                     "AGENT_HUB_SECRETS": str(t / "secrets"), "AGENT_HUB_STATE": str(t / "state"),
                     "AGENT_HUB_LANG_UI": "zh-Hant",   # the assertions below are the zh-Hant texts (docs/design/i18n.md)

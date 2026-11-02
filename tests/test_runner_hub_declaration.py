@@ -18,7 +18,7 @@ import unittest
 
 ROOT = pathlib.Path(__file__).resolve().parents[1]
 RUNNER = ROOT / "bin" / "test-runner.py"
-PY = os.environ.get("AGENT_HUB_PYTHON") or sys.executable
+PY = os.environ.get("AGENT_HUB_PYTHON") or os.environ.get("BRUNNA_PYTHON") or sys.executable
 
 MAIN_ENTRY = """v: 2
 name: brunna

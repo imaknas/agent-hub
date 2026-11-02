@@ -19,7 +19,7 @@ import unittest
 
 ROOT = pathlib.Path(__file__).resolve().parents[1]
 BIN = ROOT / "bin"
-PY = os.environ.get("AGENT_HUB_PYTHON") or sys.executable
+PY = os.environ.get("AGENT_HUB_PYTHON") or os.environ.get("BRUNNA_PYTHON") or sys.executable
 # bash < 4.4 (macOS) takes an empty array under `set -u` for an unbound variable: a connectors job (no sealing argument)
 # used to die at the llm.py line with its status left at "running"
 BASH = "/bin/bash"

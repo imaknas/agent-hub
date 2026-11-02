@@ -20,7 +20,7 @@ import unittest
 
 ROOT = pathlib.Path(__file__).resolve().parents[1]
 BIN = ROOT / "bin"
-PY = os.environ.get("AGENT_HUB_PYTHON") or sys.executable
+PY = os.environ.get("AGENT_HUB_PYTHON") or os.environ.get("BRUNNA_PYTHON") or sys.executable
 PROBE = ("import hubconf as h, json; print(json.dumps({'config': str(h.config_dir()), 'state': str(h.STATE), "
          "'logs': str(h.LOGS), 'pointer': str(h.POINTER)}))")
 
