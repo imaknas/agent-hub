@@ -6,6 +6,7 @@
 #   than 60 days ago. Short, idempotent, zero LLM (only an escalation opens claude -p).
 v: 2
 name: agent-hub
+type: platform
 memory: false
 push_on_merge: false
 commits: conventional          # commit titles (bin/commit_title.py, through the platform's commit-msg hook)
