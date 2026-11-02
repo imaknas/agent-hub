@@ -140,7 +140,7 @@ $ agenthub doctor    # no service manager, unnamed assistant
     → 設定一個:agenthub init --agent claude|codex
 ✗ agent-hub 的判斷(每晚整理筆記、週報)沒有地方可以跑:沒有設定 AI agent,也沒有設定模型 provider
     → agenthub llm setup(選一家:API key 或本機 Ollama)
-✗ 排程器、看門狗:這個系統沒有支援的服務管理器(macOS 的 launchd、Linux 的 systemd user 層級都沒有):排程器、看門狗、專案的長駐服務都不會自己跑
+✗ 排程器、看門狗:HOME(<TMP>/home)不是這個帳號的家目錄:平台不碰這個帳號的背景服務(從這裡安裝,會換掉帳號裡真正在跑的那一個)
     → 自己每 15 分鐘排程 `<TMP>/fakehub/bin/py <TMP>/fakehub/bin/scheduler.py`(例如 crontab 加一行 `*/15 * * * * <TMP>/fakehub/bin/py <TMP>/fakehub/bin/scheduler.py`)
 ✓ 開了 sandbox 的專案自己的服務跟 job:隔離執行(seatbelt: own-writes-only, isolated-reads, declared-port-only)
 ! 排程器還沒 tick 過,這台也沒有服務管理員在跑它(看上面排程器那一行)

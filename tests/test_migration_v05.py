@@ -16,6 +16,7 @@ import unittest
 
 ROOT = pathlib.Path(__file__).resolve().parents[1]
 TAG = "v0.5.0"
+SERVICE_MANAGER_LINES = ("✗ scheduler", "✗ watchdog", "! background services")
 
 
 def _has_tag():
@@ -97,8 +98,10 @@ class FromV05(unittest.TestCase):
         def findings(root):
             r = self.run_as(root, "agenthub", "doctor")
             self.assertNotIn("Traceback", r.stdout + r.stderr)
+            # the service manager's lines are left out: v0.5.0 read the account's real launchd from a fake HOME, which
+            # this code no longer does (hubconf.home_is_the_accounts)
             return sorted(line.strip().replace(str(root), "<hub>") for line in r.stdout.splitlines()
-                          if line.startswith(("✗", "!")))
+                          if line.startswith(("✗", "!")) and not line.startswith(SERVICE_MANAGER_LINES))
         self.assertEqual(findings(self.new), findings(self.old))
 
 

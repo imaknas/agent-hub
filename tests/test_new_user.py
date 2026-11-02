@@ -24,20 +24,14 @@ import i18n  # noqa: E402
 
 
 def scheduler_not_running() -> str:
-    """doctor's zh-Hant line for this hub's scheduler when it is not running: not loaded, a different hub's, no service
-    manager at all, or (systemd) not installed"""
+    """doctor's zh-Hant line for this hub's scheduler here: the tests' HOME is never the account's, so the platform
+    leaves the account's service manager alone and says why (hubconf.home_is_the_accounts)"""
     def zh(domain, msgid, **kw):
         return i18n.translate(domain, msgid, kw, "zh-Hant")
-    what, label = zh("agenthub", "scheduler"), "local.agent-hub-scheduler"
-    lines = [zh("agenthub", "{what} ({label}): not loaded", what=what, label=label),
-             zh("agenthub", "{what} ({label}): the loaded one belongs to a different hub, not {bin}", what=what,
-                label=label, bin="{bin}").split("{bin}")[0],
-             zh("agenthub", "scheduler, watchdog: {reason}", reason=zh(
-                 "hubconf", "this system has no supported service manager (neither macOS launchd nor the Linux systemd "
-                 "user level): the scheduler, the watchdog and projects' long-running services will not run by "
-                 "themselves")),
-             zh("agenthub", "{what} ({label}.timer): not installed", what=what, label=label)]
-    return "✗ (?:" + "|".join(map(re.escape, lines)) + ")"
+    reason = zh("hubconf", "HOME ({home}) is not this account's home directory: the platform leaves the account's "
+                "background services alone (installing one from here would replace the account's real one)",
+                home="{home}").split("{home}")[0]
+    return "✗ " + re.escape(zh("agenthub", "scheduler, watchdog: {reason}", reason=reason))
 
 
 class NewUser(unittest.TestCase):
@@ -293,7 +287,7 @@ class NewUser(unittest.TestCase):
     def test_init_agent_on_an_existing_instance(self):
         subprocess.run(["git", "init", "-q", str(self.hub)], env=self.env, check=True)
         self.hub_cmd("init", "--yes", "--no-launchd", "--owner", "Alex", "--llm", "none", "--agent", "none")
-        r = self.hub_cmd("init", "--yes", "--agent", "codex")
+        r = self.hub_cmd("init", "--yes", "--no-launchd", "--agent", "codex")
         d = self.cfg_json()
         self.assertEqual((d["runtime"]["default"], d["modules"]["codex"]), ("command", True), r.stdout + r.stderr)
         self.assertEqual(self.git_cfg("status", "--porcelain", "--", "hub.json").stdout, "", "committed")

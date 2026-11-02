@@ -735,13 +735,28 @@ def login_shell() -> str:
 _SERVICE_MANAGER: list = []
 
 
+def home_is_the_accounts() -> bool:
+    """HOME is this account's own home directory. A service manager loads units from the account's home only, but
+    acts on the account whatever HOME says: with another HOME (a test's, a sandbox's) installing or reloading a unit
+    would stop the account's real one and load a file nothing keeps (11-02: a test's init unloaded the mailbox
+    dispatch for 14 hours)."""
+    import pwd
+    try:
+        return pathlib.Path.home().resolve() == pathlib.Path(pwd.getpwuid(os.getuid()).pw_dir).resolve()
+    except (KeyError, OSError, RuntimeError):
+        return True   # no account record to compare with: as before
+
+
 def service_manager() -> str | None:
     """Which service manager this machine uses for the scheduler, the watchdog and projects' long-running services:
     macOS = launchd; Linux with a systemd user level (`systemctl --user` works) = systemd (bin/systemd_units.py).
     Neither (e.g. a container) = None: install, status and reload all say plainly "this system has no service
-    manager" instead of pretending it is running."""
+    manager" instead of pretending it is running. None as well when HOME is not the account's (home_is_the_accounts):
+    the platform then never touches the account's units."""
     if not _SERVICE_MANAGER:
-        if sys.platform == "darwin":
+        if not home_is_the_accounts():
+            _SERVICE_MANAGER.append(None)
+        elif sys.platform == "darwin":
             _SERVICE_MANAGER.append("launchd")
         else:
             import subprocess
@@ -756,6 +771,9 @@ def service_manager() -> str | None:
 
 def no_service_manager() -> str:
     """Why nothing runs by itself on this system (service_manager() is None)."""
+    if not home_is_the_accounts():
+        return _("HOME ({home}) is not this account's home directory: the platform leaves the account's background "
+                 "services alone (installing one from here would replace the account's real one)", home=pathlib.Path.home())
     return _("this system has no supported service manager (neither macOS launchd nor the Linux systemd user level): the "
              "scheduler, the watchdog and projects' long-running services will not run by themselves")
 

@@ -140,7 +140,7 @@ $ agenthub doctor    # no service manager, unnamed assistant
     → set one up: agenthub init --agent claude|codex
 ✗ agent-hub's decisions (nightly notes, weekly report) have nowhere to run: no AI agent and no model provider is set up
     → agenthub llm setup (pick one: an API key or a local Ollama)
-✗ scheduler, watchdog: this system has no supported service manager (neither macOS launchd nor the Linux systemd user level): the scheduler, the watchdog and projects' long-running services will not run by themselves
+✗ scheduler, watchdog: HOME (<TMP>/home) is not this account's home directory: the platform leaves the account's background services alone (installing one from here would replace the account's real one)
     → schedule `<TMP>/fakehub/bin/py <TMP>/fakehub/bin/scheduler.py` yourself every 15 minutes (for example the crontab line `*/15 * * * * <TMP>/fakehub/bin/py <TMP>/fakehub/bin/scheduler.py`)
 ✓ sandboxed projects' own services and jobs: run isolated (seatbelt: own-writes-only, isolated-reads, declared-port-only)
 ! the scheduler has not ticked yet, and no service manager runs it here (see the scheduler line above)
