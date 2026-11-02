@@ -144,6 +144,13 @@ The MCP re-registration is offered as `brunna init --register-mcp`.
    installs' paths and files. Text everywhere, install.sh defaults, the new logo. Party ids too, if Muninn has agreed.
    `upgrade.py` refuses `--to` anything older than v0.6.0. When a jump came from older than v0.6, its go-back advice
    names v0.6.0, not the from-ref: v0.5 can't read job state already adopted under `brunna/…`.
+   Built 11-02 on the branch v07-switch, in five parts (the switch; messages, templates and docs; install.sh and
+   upgrade; the proofs; the logo). Muninn agreed to the party ids on 11-02 (items already filed under agent-hub keep
+   that project on every later record, which the registrar and hubbus already did), so they switch with the rest.
+   Messages name the settings file through `{settings}`, filled with the instance's own file name.
+2b. **v0.6.1: the rollback target.** The proofs found that v0.6.0's mailbox reads only its own name, so after going
+   back every letter sent to brunna was out of sight. v0.6.1 is v0.6.0 with that fix (branch v0.6-fixes); upgrade's
+   oldest way back is v0.6.1.
 3. **Outside the repo** (the owner, or by letter):
    - rename the GitHub repo, then update the description and social preview;
    - Muninn: its README link and its `handoff-version` example;
