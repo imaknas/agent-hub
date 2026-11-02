@@ -430,7 +430,7 @@ def check(scenario: str, out: pathlib.Path, lang: str = "zh-Hant") -> dict:
         add_language(r, "sent", "\n".join([added] + [str((e["payload"]["record"].get("terms") or {}).get("text"))
                                                       for e in tasks]))
     elif scenario == "ask_hub":
-        to_hub = [e for e in sends if e["to"] == "agent-hub"]
+        to_hub = [e for e in sends if e["to"] in names.all("project")]   # the platform under either name
         r["sent_to_hub"] = bool(to_hub)
         r["actionable_type"] = any(e["payload"].get("type") in ("request", "question") for e in to_hub)
         r["has_fact"] = any(all(x in text(e) for x in expect) for e in to_hub)

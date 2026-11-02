@@ -226,7 +226,7 @@ class Dispatch(unittest.TestCase):
         for name in (self.m.RESUME_PROMPT, self.m.DELEGATE_PROMPT):
             text = self.m.branch_prompt(r, name)
             self.assertIn("set {x} and {{owner}}", text)
-            self.assertIn("agenthub done m1", text)
+            self.assertIn("brunna done m1", text)
             self.assertIn("not inside a script together with other commands", text)
             self.assertNotIn("{{", text.replace("{{owner}}", ""))
         self.assertIn("--reply-to m1", self.m.branch_prompt(r, self.m.DELEGATE_PROMPT))

@@ -5,10 +5,10 @@ this session now, so the platform is continuing it in the background with your c
 {{letter}}
 
 Handle the letter in the context of the work you were doing. This background copy may only read files, write memory
-notes (.agent-memory/memory/) and use `agenthub` to reply, ask {{owner}} or close letters. Anything that changes the
+notes (.agent-memory/memory/) and use `brunna` to reply, ask {{owner}} or close letters. Anything that changes the
 code or settings, needs {{owner}}'s judgment, or is irreversible or external: don't do it. Write it in a memory note,
-and if needed ask {{owner}} with `agenthub send --to {{owner_alias}} --type question`. Run each `agenthub` command as a
+and if needed ask {{owner}} with `brunna send --to {{owner_alias}} --type question`. Run each `brunna` command as a
 command of its own, not inside a script together with other commands: only the platform's commands themselves are
-allowed here. When you are done, run `agenthub done {{id}}`.
+allowed here. When you are done, run `brunna done {{id}}`.
 Write the notes, the letters and the final reply in {{content_language}}. The final reply is one line: how the letter
 was handled.

@@ -32,13 +32,13 @@ elif command -v pacman >/dev/null 2>&1; then pm="sudo pacman -S"
 else pm=""; fi
 inst() { if [ -n "$pm" ]; then echo "$pm $1${pm_note:-}"; else echo "install $1 with your package manager"; fi; }
 
-echo "agent-hub: checking the commands it needs"
+echo "brunna: checking the commands it needs"
 if [ "$os" != Darwin ]; then
   # the same test hubconf.service_manager() makes
   if command -v systemctl >/dev/null 2>&1 && systemctl --user show-environment >/dev/null 2>&1; then
-    echo "  ✓ systemd  user level: the scheduler, its watchdog and projects' services run as user units (agenthub init installs them)"
+    echo "  ✓ systemd  user level: the scheduler, its watchdog and projects' services run as user units (brunna init installs them)"
   else
-    echo "  ⚠️ no service manager (no systemd user level, e.g. a container): nothing runs by itself. agenthub init prints the command to schedule yourself; agenthub run <job> runs one job now"
+    echo "  ⚠️ no service manager (no systemd user level, e.g. a container): nothing runs by itself. brunna init prints the command to schedule yourself; brunna run <job> runs one job now"
   fi
 fi
 need git     required "version control, memory sync"                "$([ "$os" = Darwin ] && echo "xcode-select --install" || inst git)"
@@ -55,5 +55,5 @@ if [ -n "$check_only" ]; then
   exit $?
 fi
 "$HUB/bin/setup-python" || exit 1
-"$HUB/bin/py" "$HUB/bin/agenthub" install-cli || echo "  (agenthub is not on the PATH: use bin/py bin/agenthub … from now on)"
-echo "Next step: agenthub init"
+"$HUB/bin/py" "$HUB/bin/agenthub" install-cli || echo "  (brunna is not on the PATH: use bin/brunna … from now on)"
+echo "Next step: brunna init"

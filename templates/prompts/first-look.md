@@ -1,4 +1,4 @@
-You are writing the first STATE.md for the project "{{project}}", which was just connected to agent-hub. Its agents
+You are writing the first STATE.md for the project "{{project}}", which was just connected to brunna. Its agents
 haven't written any notes yet, so all you have is what is in the repository below: its README, its most recent commit
 titles and its top-level files. STATE.md is the project's distilled current state: what it is, what it is made of,
 where it stands, and what is still open. Its agents read it at the start of every session, and its owner reads it in
