@@ -78,7 +78,7 @@
     ]
   },
   "capabilities": {
-    "_comment": "The platform's list of capabilities (docs/design/capabilities.md): a project registry's enforce.capabilities accepts only names listed here, each capability with a profile fragment capabilities/<name>.sb. default_for: written into the registry automatically when that kind of project is created (create-idea-sandbox.py); risk: high ones are never added automatically, an agent-hub session changes the registry after the owner agrees",
+    "_comment": "The platform's list of capabilities (docs/design/capabilities.md): a project registry's enforce.capabilities accepts only names listed here, each capability with a profile fragment capabilities/<name>.sb. default_for: written into the registry automatically when that kind of project is created (create-idea-sandbox.py); risk: high ones are never added automatically, an brunna session changes the registry after the owner agrees",
     "gpu": {
       "risk": "low",
       "default_for": [

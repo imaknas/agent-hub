@@ -51,6 +51,6 @@ the rest where it is:
 - **MCP:** a registration under `agenthub` keeps working through the old command. `brunna init --register-mcp`
   registers the new name.
 
-Going back is to v0.6.0 or later (`brunna upgrade --to v0.6.0`): v0.6 reads everything v0.7 writes. Older releases
+Going back is to v0.6.1 or later (`brunna upgrade --to v0.6.1`): it reads everything v0.7 writes. Older releases
 can't, so `upgrade` refuses them.
 

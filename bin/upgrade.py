@@ -72,7 +72,8 @@ SECTION = re.compile(r"^## (v\d+\.\d+\.\d+\S*)")
 SHOWN_TYPES = re.compile(r"^(feat|fix|perf|revert)(\([^)]*\))?!?: ")   # what cliff.toml lists
 BREAKING_TITLE = re.compile(r"^[a-z]+(\([^)]*\))?!: ")
 WRAPPER_MARKS = tuple(f"written by {n} install-cli" for n in names.all("cli"))   # either name wrote it
-WRAPPER_EXEC = re.compile(r'^exec "[^"\n]*/bin/py" "[^"\n]*/bin/(?:agenthub|brunna)" "\$@"$', re.M)
+# install-cli's exec line: through bin/py to bin/agenthub (until v0.7), or bin/brunna directly
+WRAPPER_EXEC = re.compile(r'^exec (?:"[^"\n]*/bin/py" "[^"\n]*/bin/(?:agenthub|brunna)"|"[^"\n]*/bin/brunna") "\$@"$', re.M)
 
 USAGE_TEXT = """usage: brunna upgrade [--to <tag> | --main] [--check] [--yes]
   (no option)   the newest release; a checkout on main follows main instead
@@ -353,8 +354,9 @@ def step_list(with_scheduler: bool) -> list[tuple[str, list[str]]]:
 
 
 # the oldest release this one can go back to: everything older can't read what the rename to brunna writes (job state
-# under brunna/…, brunna.json, the new labels; docs/design/rename-brunna.md); v0.6.0 reads both spellings
-OLDEST_BACK = "v0.6.0"
+# under brunna/…, brunna.json, the new labels, letters to brunna; docs/design/rename-brunna.md). v0.6.0 reads the
+# spellings but not letters addressed to the new name; v0.6.1 does
+OLDEST_BACK = "v0.6.1"
 
 
 def too_old(ref: str) -> bool:

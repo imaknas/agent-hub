@@ -1624,15 +1624,15 @@ def session_command(name: str):
 
 
 def cmd_install_cli(argv: list[str]) -> int:
-    """~/.local/bin/brunna: a two-line wrapper script (not a symlink: the CLI's first line finds the platform's Python
-    from the folder it is in) running this hub's CLI. A wrapper under the other name (agenthub, from before the rename,
+    """~/.local/bin/brunna: a two-line wrapper script (not a symlink: the CLI finds the platform's Python from the folder
+    it is in) running this hub's CLI. A wrapper under the other name (agenthub, from before the rename,
     docs/design/rename-brunna.md) is kept and rewritten the same way, so what a project's rules or an older setup call
     keeps working; a new install gets only the new name."""
     d = pathlib.Path(os.path.expanduser(argv[argv.index("--dir") + 1] if "--dir" in argv else "~/.local/bin"))
     d.mkdir(parents=True, exist_ok=True)
-    # the implementation is bin/agenthub under either name (bin/brunna forwards to it in shell, so bin/py can't run it)
+    # bin/brunna: the shell forwarder to the implementation (bin/agenthub), run directly; bin/py could not run it
     body = (f'#!/bin/sh\n# the {names.current("product")} CLI (written by {names.current("cli")} install-cli; run it again '
-            f'after moving the hub)\nexec "{BIN / "py"}" "{BIN / "agenthub"}" "$@"\n')
+            f'after moving the hub)\nexec "{BIN / names.current("cli")}" "$@"\n')
     for name in names.all("cli"):
         f = d / name
         if name != names.current("cli") and not f.exists():

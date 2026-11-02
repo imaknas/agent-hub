@@ -160,7 +160,8 @@ def cli_wrappers() -> list[pathlib.Path]:
     for name in names.all("cli"):
         f = pathlib.Path.home() / ".local" / "bin" / name
         try:
-            if f.is_file() and not f.is_symlink() and str(hubconf.MAIN / "bin" / "agenthub") in f.read_text():
+            if f.is_file() and not f.is_symlink() and any(str(hubconf.MAIN / "bin" / n) in f.read_text()
+                                                           for n in ("agenthub", "brunna")):
                 out.append(f)
         except OSError:
             pass
