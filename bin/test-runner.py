@@ -169,7 +169,7 @@ def base_env(main: pathlib.Path, run: pathlib.Path, hub: bool) -> tuple[dict, di
     # takes its fallback and answers differently (the step 2.3 rehearsal)
     path = ":".join([*([str(pathlib.Path(uv).parent)] if uv else []), hubconf.LAUNCHD_PATH, "/usr/sbin", "/sbin"])
     caches = policy.cache_env(main)
-    caches["PLAYWRIGHT_BROWSERS_PATH"] = str(main / ".git" / "agent-hub" / "cache" / "playwright")
+    caches["PLAYWRIGHT_BROWSERS_PATH"] = str(names.repo_dir(main / ".git") / "cache" / "playwright")
     (run / "home").mkdir()
     # TMPDIR outside every repo: tests make git repos there and some strip GIT_* (GIT_CEILING_DIRECTORIES too) from
     # what they start, so a temporary folder inside the checkout made git find the enclosing repo (the rehearsal);
@@ -354,7 +354,7 @@ def main(argv: list[str]) -> int:
     except SetupError as e:
         print(f"agenthub test: {e}", file=sys.stderr)
         return 2
-    outdir = git_dir / "agent-hub" / "test-output"
+    outdir = names.repo_dir(git_dir) / "test-output"
     outdir.mkdir(parents=True, exist_ok=True)
     stamp = datetime.datetime.now().strftime("%Y%m%d-%H%M%S")
     failed = False
@@ -401,7 +401,7 @@ def main(argv: list[str]) -> int:
                     if built is None:
                         built = environment(tree, run, {**env, **extra}, log)
                     ok = run_tier(tier, tree, built, slots, log,
-                                  common / "agent-hub" / "tier-cache" / f"{project}-{tier['tier']}")
+                                  names.repo_dir(common) / "tier-cache" / f"{project}-{tier['tier']}")
                 except SetupError as e:
                     log.write(f"{e}\n".encode())
                     ok = False

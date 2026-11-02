@@ -46,6 +46,7 @@ from typing import NamedTuple
 BIN = pathlib.Path(__file__).resolve().parent
 sys.path.insert(0, str(BIN))
 import hubconf  # noqa: E402
+import names  # noqa: E402
 import isolation  # noqa: E402
 import policy  # noqa: E402
 
@@ -55,7 +56,7 @@ MAX_BUNDLE = 4 << 30        # a bundle of unpushed work or memory
 TIMEOUT_S = 120
 BUNDLE_TIMEOUT_S = 1800
 TIMED_OUT, TOO_BIG = 124, 125
-INCOMING = "refs/agent-hub/incoming"
+INCOMING = names.repo_ref("incoming")
 NOT_SANDBOXED = 3
 EX_SANDBOX = 78   # sandboxed-run refused (no sandbox on this machine): the work is not done, never done unsandboxed
 

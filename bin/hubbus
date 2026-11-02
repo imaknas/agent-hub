@@ -224,8 +224,13 @@ PRUNE_DAYS = 60
 POISON_HOURS = 24
 HOOK_TIMEOUT_S = 2
 # a sandboxed project's outbox and mailbox view, relative to its workspace (docs/design/bus-sender.md)
-OUTBOX = ".git/agent-hub/outbox"
-VIEW = ".git/agent-hub/inbox.json"
+def outbox_rel(ws) -> str:
+    """A sandboxed project's outbox, relative to its workspace (.git/agent-hub/ or .git/brunna/, whichever exists)."""
+    return f".git/{names.repo_dir(pathlib.Path(ws) / '.git').name}/outbox"
+
+
+def view_rel(ws) -> str:
+    return f".git/{names.repo_dir(pathlib.Path(ws) / '.git').name}/inbox.json"
 OUTBOX_CAP = 512 << 10    # one outbox file (a manifest.update carries a whole registry entry)
 OUTBOX_RUN = 100          # files taken from one outbox per run; the rest wait for the next minute
 VIEW_CAP = 32 << 20
@@ -291,7 +296,7 @@ def view_db(project: str) -> sqlite3.Connection:
     c.executescript(SCHEMA)
     ws = hubconf.workspace(project)
     try:
-        data = json.loads(nofollow.read(ws, VIEW, VIEW_CAP) or b"{}") if ws else {}
+        data = json.loads(nofollow.read(ws, view_rel(ws), VIEW_CAP) or b"{}") if ws else {}
     except (OSError, ValueError) as e:
         refuse(_("hubbus: cannot read {project}'s mailbox view ({e}); the platform writes it again within a minute",
                  project=project, e=e))
@@ -2019,12 +2024,13 @@ def take_outboxes(c) -> None:
         if not outboxed(proj) or not ws.is_dir():
             continue
         try:
-            names = nofollow.entries(ws, OUTBOX) or []
+            box = outbox_rel(ws)
+            files = nofollow.entries(ws, box) or []
         except OSError as e:
             log_once(f"outbox-{proj}", _("{project}: cannot read its outbox: {e}", project=proj, e=e))
             continue
-        for name in sorted(n for n in names if not n.startswith("."))[:OUTBOX_RUN]:
-            rel = f"{OUTBOX}/{name}"
+        for name in sorted(n for n in files if not n.startswith("."))[:OUTBOX_RUN]:
+            rel = f"{box}/{name}"
             try:
                 raw = nofollow.read(ws, rel, OUTBOX_CAP)
                 if raw is None:
@@ -2163,13 +2169,13 @@ def write_view(c, proj: str, ws: pathlib.Path) -> None:
     """A sandboxed project's view into its folder, only when it changed; replaced, never written through a link."""
     data = json.dumps(view(c, proj), ensure_ascii=False, sort_keys=True).encode()
     try:
-        cur = nofollow.read(ws, VIEW, VIEW_CAP)
+        cur = nofollow.read(ws, view_rel(ws), VIEW_CAP)
     except OSError:
         cur = None
     if cur == data:
         return
     try:
-        nofollow.replace(ws, VIEW, data)
+        nofollow.replace(ws, view_rel(ws), data)
         log_once(f"view-{proj}", "")
     except OSError as e:
         log_once(f"view-{proj}", _("{project}: cannot write its mailbox view: {e}", project=proj, e=e))
@@ -2492,7 +2498,8 @@ def outbox_id() -> str:
 def outbox_put(project: str, entry: dict) -> None:
     """One file in the project's outbox, renamed into place whole (the platform skips the temporary name, which starts
     with a dot); no link in the project's folder followed, whoever runs this."""
-    nofollow.replace(hubconf.workspace(project), f"{OUTBOX}/{time.time_ns()}-{secrets.token_hex(4)}.json",
+    ws = hubconf.workspace(project)
+    nofollow.replace(ws, f"{outbox_rel(ws)}/{time.time_ns()}-{secrets.token_hex(4)}.json",
                      json.dumps({"v": 1, **entry}, ensure_ascii=False).encode())
 
 

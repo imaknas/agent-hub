@@ -61,6 +61,9 @@ import subprocess
 import sys
 import time
 
+sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
+import names  # noqa: E402  (standard library only, like this file)
+
 # memory notes are not project code: the project's own git hooks don't run on them (git-sync-memory.sh says why)
 NO_HOOKS = {"GIT_CONFIG_COUNT": "1", "GIT_CONFIG_KEY_0": "core.hooksPath", "GIT_CONFIG_VALUE_0": "/dev/null"}
 MEMORY_PATHS = ("memory", "STATE.md")
@@ -334,7 +337,7 @@ def memory_sync(memdir: str, bare: str, branch: str) -> int:
     if files:
         git(memdir, "commit", "-q", "-m", "agent-hub: sync memory/STATE.md", "--", *files, env=NO_HOOKS, check=True)
     up = out(memdir, "rev-parse", "--abbrev-ref", "--symbolic-full-name", "@{u}").strip()
-    track = f"refs/remotes/{up}" if up and "/" in up else "refs/agent-hub/memory-remote"
+    track = f"refs/remotes/{up}" if up and "/" in up else names.repo_ref("memory-remote")
     git(memdir, "fetch", "-q", bare, f"+refs/heads/{branch}:{track}", env=NO_HOOKS, check=True)
     head, remote = out(memdir, "rev-parse", "HEAD").strip(), out(memdir, "rev-parse", track).strip()
     if git(memdir, "merge-base", "--is-ancestor", remote, head).returncode != 0:

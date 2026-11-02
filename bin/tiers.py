@@ -39,8 +39,12 @@ import hashlib
 import json
 import os
 import pathlib
+import sys
 import stat
 import subprocess
+
+sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
+import names  # noqa: E402  (standard library only, like this file)
 
 KEY_FORMAT = 1           # bump when what a recorded result means changes (not on every platform commit)
 MOMENTS = ("commit", "merge", "nightly", "deploy")
@@ -146,7 +150,7 @@ def now_iso() -> str:
 
 class RunLog:
     def __init__(self, common_dir: pathlib.Path):
-        self.path = pathlib.Path(common_dir) / "agent-hub" / "test-runs.jsonl"
+        self.path = names.repo_dir(common_dir) / "test-runs.jsonl"
 
     def record(self, **fields) -> None:
         append_jsonl(self.path, {"at": now_iso(), **fields})
@@ -157,7 +161,7 @@ class RunLog:
 
 class Store:
     def __init__(self, common_dir: pathlib.Path):
-        self.path = pathlib.Path(common_dir) / "agent-hub" / "test-results.jsonl"
+        self.path = names.repo_dir(common_dir) / "test-results.jsonl"
 
     def records(self) -> list[dict]:
         return read_jsonl(self.path)

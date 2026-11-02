@@ -49,6 +49,7 @@ import sys
 
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
 import hubconf  # noqa: E402
+import names  # noqa: E402
 # registry needs PyYAML: imported only when computing the path policy; approvals() uses only the standard library
 # (so lease-relay can import this without yaml)
 
@@ -123,7 +124,7 @@ def protect() -> list[dict]:
 
 
 def cache_env(ws: pathlib.Path | None) -> dict[str, str]:
-    return {k: str(ws / ".git" / "agent-hub" / "cache" / v) for k, v in CACHE_ENV.items()} if ws else {}
+    return {k: str(names.repo_dir(ws / ".git") / "cache" / v) for k, v in CACHE_ENV.items()} if ws else {}
 
 
 def mail_outbox(doc: dict | None) -> bool:

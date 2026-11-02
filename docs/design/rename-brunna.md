@@ -44,7 +44,8 @@ that a running process might be using.
 Every name the platform writes goes through **one table of name pairs** (`bin/names.py`): class, old spelling, new
 spelling. Three ways to use it, chosen per class:
 
-- **resolve**, for paths and files: use whichever spelling **exists**; when neither does, create the new one.
+- **resolve**, for paths and files: use whichever spelling **exists**; when neither does, create the one this release
+  writes (`current`: old in v0.6, new from v0.7). So no release creates a name the release before it can't read.
   - A fresh install therefore has only new spellings.
   - An existing instance keeps using what it has, so nothing moves under a running process.
   - Both spellings existing and differing is refused, never guessed.
@@ -78,7 +79,7 @@ A test (`tests/test_name_pairs.py`) does two things:
 | scheduler job names | `agent-hub/<job>` | `brunna/<job>` | both: the scheduler adopts state (`name`, `.last_ok`, `.attempts`, cursors, `scheduler-failing.json` entries, and alert state keyed by job name, so an open alert still gets its recovery message) at run time from the other spelling, newest-wins as `adopt_cursor` does, then drops the other key. This is in every release from v0.6, so a daily job never runs twice, on upgrade, rollback or jump. `after:`/`before:` resolve through both. Modules' `legacy_name: agent-hub/…` values are past keys and stay |
 | Principal Handoff party ids | `agent-hub:registrar`, `agent-hub:owner-side`, requester `project:agent-hub`, the records' `project` field | `brunna:…` | gated: a class of its own in the table, not derived from `hub_project()`. Readers accept both spellings for good (history), including `bound()` and hubbus's `need["by"]` check. Writers switch only after Muninn agrees, asked by letter with v0.6 |
 | task keys | `task-agent-hub-…` | `task-brunna-…` | history: open keys stay (opaque ids, filed under the name they were raised with). New keys follow the project name |
-| per-repo paths | `.git/agent-hub/` (outbox, `inbox.json`, cache, test output, tier cache, run logs), `refs/agent-hub/*`, the `agent-hub-deps-pruned` and `agent-hub-migrated-to-mini` markers | `.git/brunna/…`, … | resolve: a project connected after the switch gets `brunna`; an existing project keeps `agent-hub`. hubbus, dispatch, the test runner, policy (the sandbox's writable cache paths, at render time) and worktrees resolve per repo. These all persist, so "whichever exists" is stable. From v0.6 on, resolve creates the **new** spelling when neither exists, in both v0.6 and v0.7. Both directories present: resolve takes the one holding an outbox or `inbox.json`. One holding only cache is a stray left by a session with old settings; doctor deletes it, since caches rebuild |
+| per-repo paths | `.git/agent-hub/` (outbox, `inbox.json`, cache, test output, tier cache, run logs), `refs/agent-hub/*`, the `agent-hub-deps-pruned` and `agent-hub-migrated-to-mini` markers | `.git/brunna/…`, … | resolve: a project connected after the switch gets `brunna`; an existing project keeps `agent-hub`. hubbus, dispatch, the test runner, policy (the sandbox's writable cache paths, at render time) and worktrees resolve per repo. These all persist, so "whichever exists" is stable. When neither exists, resolve creates the current spelling (old in v0.6, new from v0.7), so v0.6 leaves nothing v0.5 can't read. Both directories present: resolve takes the one holding an outbox or `inbox.json`. One holding only cache is a stray left by a session with old settings; doctor deletes it, since caches rebuild |
 | per-repo lock | the `agent-hub-op.lock` directory | **none: fixed for good** | a mkdir lock that exists only while it is held, so "whichever exists" can't decide it, and old and new code must use the same name to exclude each other. It keeps its name in every release. It lives inside `.git` for seconds at a time, and is listed as an exception in the fresh-install test |
 | platform venv | `~/.local/share/agent-hub/python` | `~/.local/share/brunna/python` | resolve: `bin/py` and `setup-python` use whichever exists; a fresh install builds the new one |
 | bus directory | `hub.json` `bus_dir` = `~/.local/state/agent-hub-bus` | `~/.local/state/brunna-bus` | resolve: it is a setting. `hub.example.json` gives new installs the new path; existing instances keep theirs. Nothing moves |
@@ -201,8 +202,8 @@ The owner's machine is the last, real run.
   the table.
 - **The ratchet is defined per class and only for code.** Docs, locales and `CHANGELOG.md` name the product freely,
   and `hub.json` is a resolved file name.
-- **No going back below v0.6** once a new spelling exists. v0.6 creates new spellings when neither exists, so from v0.6
-  `upgrade --to` anything older is refused if any new spelling is present.
+- ~~No going back below v0.6 once a new spelling exists.~~ Not needed: resolve creates the current spelling, so v0.6
+  creates only old ones (decided while building, 11-02).
 - **The index keys the hub by `type: platform`**, never by stem. A user project named `brunna` keeps
   `projects/brunna.yaml` and its stem; the hub's entry is the one under the repo's `projects/`.
 - **Run-now units** (`local.*-run-now.*`) are recognised in both spellings but never swept by the pairwise remover:

@@ -63,7 +63,7 @@ class Table(unittest.TestCase):
 
     def test_resolve(self):
         base = pathlib.Path(tempfile.mkdtemp())
-        self.assertEqual(names.resolve(base, "repo_dir").name, "brunna", "neither exists: the new one")
+        self.assertEqual(names.resolve(base, "repo_dir").name, "agent-hub", "neither exists: the current one (old, before the switch)")
         (base / "agent-hub").mkdir()
         self.assertEqual(names.resolve(base, "repo_dir").name, "agent-hub", "an existing one is used as it is")
         (base / "brunna").mkdir()
