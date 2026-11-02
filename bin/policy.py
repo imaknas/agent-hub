@@ -134,6 +134,28 @@ def mail_outbox(doc: dict | None) -> bool:
     return bool(doc) and (doc.get("enforce") or {}).get("sandbox") is True
 
 
+def write_except(deny_write: list, keep: pathlib.Path) -> list[pathlib.Path]:
+    """deny_write with one directory left writable (an unattended job's own state folder, its run's working directory):
+    a runtime's deny can't be narrowed by an allow, so a denied place that holds keep is replaced by what sits beside the
+    path down to keep, level by level (11-02: the whole hub denied a job writing its own state file). Only entries that
+    exist are listed; anything else under the hub stays outside the job's allow rules."""
+    import os
+    keep, out = pathlib.Path(keep).resolve(), []
+    for d in map(pathlib.Path, deny_write):
+        base = d.resolve()
+        if base not in keep.parents:
+            out.append(d)
+            continue
+        cur = base
+        for part in keep.relative_to(base).parts:
+            try:
+                out += [cur / e for e in sorted(os.listdir(cur)) if e != part]
+            except OSError:
+                pass
+            cur = cur / part
+    return out
+
+
 def policy(name: str, doc: dict, index: dict) -> dict:
     import registry
     d = registry.dirs(doc)

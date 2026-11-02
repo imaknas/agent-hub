@@ -53,7 +53,7 @@ def flags(point: str, cwd, env: dict) -> list:
     import runtime_claude
     import runtime_ports
     task = runtime_ports.Task(point, "x", points()[point], cwd=str(cwd), env=env)
-    with mock.patch.object(runtime_claude, "platform_settings", lambda p: pathlib.Path(f"/platform/{p}.json")):
+    with mock.patch.object(runtime_claude, "platform_settings", lambda p, keep=None: pathlib.Path(f"/platform/{p}.json")):
         return runtime_claude._flags(task)
 
 
@@ -129,7 +129,7 @@ class Flags(unittest.TestCase):
         spec = {"settings": "platform", "project_env": "P", "permission_mode": "dontAsk", "tools": "Read,Edit",
                 "allowed_tools": ["Edit(./notes/**)"]}
         task = runtime_ports.Task("synthetic", "x", spec, cwd=str(self.ws), env={"P": "p"})
-        with mock.patch.object(runtime_claude, "platform_settings", lambda p: pathlib.Path("/platform/p.json")):
+        with mock.patch.object(runtime_claude, "platform_settings", lambda p, keep=None: pathlib.Path("/platform/p.json")):
             cmd = runtime_claude._flags(task)
         self.assertEqual(cmd[cmd.index("--tools") + 1], "Edit,Read")
 
@@ -185,6 +185,63 @@ class PlatformSettingsFile(unittest.TestCase):
         self.assertFalse(set(SAVED) & set(allow))
         self.assertTrue(allow and all(r.startswith(("Bash(agenthub ", "Bash(brunna ")) for r in allow), allow)
         self.assertIs(d["sandbox"]["autoAllowBashIfSandboxed"], False)
+
+
+@unittest.skipIf(yaml is None, "needs PyYAML")
+class JobStateFolder(unittest.TestCase):
+    """An unattended job writes its own state folder under the hub, which the platform's deny list covers whole: that
+    one folder is carved out (a runtime's deny wins over any allow; 11-02 the Upwork job couldn't save its state).
+    Live probe 11-02 (2.1.316): the job's folder took the Write, .settings/ was denied, a new file at the hub's top
+    was outside --restricted's working directory."""
+
+    def setUp(self):
+        self.hub = pathlib.Path(tempfile.mkdtemp()).resolve()
+        self.addCleanup(shutil.rmtree, self.hub, True)
+        self.state = self.hub / ".state"
+        self.job = self.state / "agent-jobs" / "p-check"
+        for d in (self.hub / "bin", self.state / "agent-jobs" / ".settings", self.state / "agent-jobs" / "other", self.job):
+            d.mkdir(parents=True)
+        (self.hub / ".hub-home").write_text("x")
+        (self.state / "scheduler-state.json").write_text("{}")
+
+    def test_only_its_own_folder_with_a_rule_writing_it(self):
+        import runtime_claude
+        with mock.patch.object(hubconf, "STATE", self.state):
+            rule = "Edit(" + str(self.job).replace(str(pathlib.Path.home()), "~", 1) + "/**)" \
+                if str(self.job).startswith(str(pathlib.Path.home())) else f"Edit(/{self.job}/**)"
+            self.assertEqual(runtime_claude.own_state_dir([rule, "ToolSearch"], self.job), self.job)
+            self.assertEqual(runtime_claude.own_state_dir(["Edit(./**)"], self.job), self.job)
+            self.assertIsNone(runtime_claude.own_state_dir(["Read(./**)", "ToolSearch"], self.job), "no rule writes it")
+            self.assertIsNone(runtime_claude.own_state_dir(["Edit(./**)"], self.state / "agent-jobs" / ".settings"))
+            self.assertIsNone(runtime_claude.own_state_dir(["Edit(./**)"], self.hub / "bin"), "not a job's folder")
+
+    def test_the_deny_list_keeps_everything_but_that_folder(self):
+        import policy
+        carved = policy.write_except([self.hub, pathlib.Path("/elsewhere")], self.job)
+        self.assertNotIn(self.job, carved)
+        self.assertFalse(any(self.job == c or c in self.job.parents for c in carved), carved)
+        for kept_denied in (self.hub / "bin", self.hub / ".hub-home", self.state / "scheduler-state.json",
+                            self.state / "agent-jobs" / ".settings", self.state / "agent-jobs" / "other",
+                            pathlib.Path("/elsewhere")):
+            self.assertIn(kept_denied, carved)
+
+    def test_the_settings_file_is_the_jobs_own(self):
+        import runtime_claude
+        pol = {"other_projects": [], "deny_write": [self.hub], "deny_read": [], "platform_commands": [],
+               "platform_cli": ["agenthub send"], "write": [], "network": [], "credential_files": [],
+               "credentials": [], "workspace": str(self.hub)}
+        doc = {"name": "p", "paths": {"workspace": str(self.hub)}}
+        with mock.patch("policy.policy", lambda name, d, i: pol), mock.patch.object(hubconf, "STATE", self.state), \
+                mock.patch("registry.refresh", lambda: {"projects": {"p": doc}}):
+            whole, own = runtime_claude.platform_settings("p"), runtime_claude.platform_settings("p", self.job)
+        self.assertNotEqual(whole, own)
+        deny_whole = json.loads(whole.read_text())["permissions"]["deny"]
+        deny_own = json.loads(own.read_text())["permissions"]["deny"]
+        tilde = runtime_claude._tilde
+        self.assertIn(f"Edit({tilde(self.hub)}/**)", deny_whole)
+        self.assertNotIn(f"Edit({tilde(self.hub)}/**)", deny_own)
+        self.assertIn(f"Edit({tilde(self.state / 'agent-jobs' / '.settings')}/**)", deny_own)
+        self.assertIn(f"Edit({tilde(self.hub / '.hub-home')})", deny_own)
 
 
 @unittest.skipIf(yaml is None, "needs PyYAML")

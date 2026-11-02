@@ -161,10 +161,12 @@ def lease_settings(pol: dict) -> dict:
     return {"permissions": {"deny": deny}}
 
 
-def platform_settings(project: str) -> pathlib.Path:
+def platform_settings(project: str, keep: pathlib.Path | None = None) -> pathlib.Path:
     """A judgment point with settings: platform: the only settings file the run loads (with --restricted, Claude Code
     reads none of the user's, project's or local files): the project's sandbox when it's enforced, the deny list and
-    the platform's commands, all from the policy, never from what is rendered in the workspace."""
+    the platform's commands, all from the policy, never from what is rendered in the workspace. keep: an unattended
+    job's own state folder that its allow rules write (own_state_dir), left out of the deny list; one file per such
+    job."""
     import hubconf
     import policy
     import registry
@@ -172,15 +174,21 @@ def platform_settings(project: str) -> pathlib.Path:
     doc = index["projects"][project]
     pol = policy.policy(project, doc, index)
     sandbox = settings(pol)[0]
+    if keep:
+        carved = policy.write_except(pol["deny_write"], keep)
+        pol = {**pol, "deny_write": carved}
     # only the mail commands (read, send, close letters): not raw hubbus, merging or running code through the platform
     allow = _cli_rules(policy.platform_cli(mail_only=True))
-    out = {"permissions": {"deny": lease_settings(pol)["permissions"]["deny"], "allow": allow}}
+    deny = lease_settings(pol)["permissions"]["deny"]
+    if keep:   # a file beside the path (not only a folder's contents)
+        deny += [f"Edit({_tilde(x)})" for x in carved if not x.is_dir()]
+    out = {"permissions": {"deny": deny, "allow": allow}}
     # the registry's enforce.sandbox, as render-project-settings decides it (not the services-only exemption)
     if (doc.get("enforce") or {}).get("sandbox") is True:
         # autoAllowBashIfSandboxed defaults to true: a sandboxed Bash command would be approved before allow: is
         # consulted, so allow: would stop being the boundary exactly in the sandboxed projects
         out["sandbox"] = {**sandbox, "autoAllowBashIfSandboxed": False}
-    p = hubconf.STATE / "agent-jobs" / ".settings" / f"{project}.json"
+    p = hubconf.STATE / "agent-jobs" / ".settings" / (f"{project}--{keep.name}.json" if keep else f"{project}.json")
     p.parent.mkdir(parents=True, exist_ok=True)
     tmp = p.with_name(f".{p.name}.{os.getpid()}")
     tmp.write_text(json.dumps(out, ensure_ascii=False))
@@ -610,6 +618,37 @@ def _rules(task) -> tuple:
 _GLOB = re.compile(r"[*?\[{]")
 
 
+WRITE_TOOLS = ("Edit", "Write", "MultiEdit", "NotebookEdit")
+
+
+def own_state_dir(allowed, cwd) -> pathlib.Path | None:
+    """The run's working directory when it is an unattended job's own state folder (<state>/agent-jobs/<job>, never the
+    platform's .settings) and one of its allow rules writes into it: the folder platform_settings leaves writable."""
+    import hubconf
+    if not cwd:
+        return None
+    base = pathlib.Path(cwd).resolve()
+    jobs = (hubconf.STATE / "agent-jobs").resolve()
+    if base.parent != jobs or base.name.startswith("."):
+        return None
+    home = pathlib.Path.home()
+    for r in allowed:
+        m = re.fullmatch(r"(\w+)\((.+)\)", r)
+        if not m or m.group(1) not in WRITE_TOOLS:
+            continue
+        path = m.group(2)
+        root = (home if path.startswith("~/") else pathlib.Path("/") if path.startswith("//")
+                else base if not path.startswith("/") else None)
+        if root is None:   # /x is relative to the settings file: not a state folder rule
+            continue
+        parts = path.lstrip("~").lstrip("/").removeprefix("./").split("/")
+        fixed = list(itertools.takewhile(lambda p: not _GLOB.search(p), parts))
+        target = root.joinpath(*fixed).resolve()
+        if target == base or base in target.parents:
+            return base
+    return None
+
+
 def _linked_rules(allowed, cwd) -> tuple[list[str], list[str]]:
     """--restricted confines the file tools to the working directories, and it checks a path where it resolves: a
     worktree's .agent-memory is a link to the main checkout's (worktree-memory.sh), so a `./.agent-memory/…` rule
@@ -661,7 +700,8 @@ def _flags(task) -> list:
             # an Edit rule governs every file-writing tool: a new file (or a whole one rewritten) needs Write
             if "Edit" in tools:
                 tools.add("Write")
-        cmd += ["--restricted", "--settings", str(platform_settings(project)), "--tools", ",".join(sorted(tools))]
+        cmd += ["--restricted", "--settings", str(platform_settings(project, own_state_dir(allowed, task.cwd))),
+                "--tools", ",".join(sorted(tools))]
         dirs, extra = _linked_rules(allowed, task.cwd)
         allowed += extra
         for d in dirs:
