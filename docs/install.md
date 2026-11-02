@@ -1,16 +1,16 @@
-# Installing agent-hub
+# Installing brunna
 
 The one line from the [README](../README.md):
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/imaknas/agent-hub/main/install.sh | sh
+curl -fsSL https://raw.githubusercontent.com/imaknas/brunna/main/install.sh | sh
 ```
 
 ## What the installer does
 
-The installer clones the repo into `agent-hub` in your home folder (`AGENT_HUB_DIR` to choose another), checks out the
+The installer clones the repo into `brunna` in your home folder (`BRUNNA_DIR` to choose another), checks out the
 newest release, installs [uv](https://docs.astral.sh/uv/) if it is missing, runs `bin/setup`, and goes straight on
-into `agenthub init`, whose first question is the language. git is the one thing it may install, and it asks first
+into `brunna init`, whose first question is the language. git is the one thing it may install, and it asks first
 (on macOS, Apple's command line tools; on Linux, your package manager with your own `sudo` password). `bin/setup`
 names anything else that is missing with the command to install it. Pasting the line again after an install that
 stopped halfway carries on from where it stopped. Without a terminal (CI, a container) it stops after the install;
@@ -23,22 +23,22 @@ After that, the README's [Getting started](../README.md#getting-started) takes o
 Read the installer first if you like: [`install.sh`](../install.sh). The same by hand:
 
 ```bash
-git clone <this repo URL> agent-hub && cd agent-hub   # any folder; hooks name it where it is
+git clone <this repo URL> brunna && cd brunna   # any folder; hooks name it where it is
 git checkout "$(git describe --tags --abbrev=0 --match 'v[0-9]*')"   # the newest release (stay on main to follow development)
-bin/setup                            # check required tools, build the platform Python, put `agenthub` on PATH
-agenthub init                        # the questions (open a new terminal first if agenthub isn't found)
+bin/setup                            # check required tools, build the platform Python, put `brunna` on PATH
+brunna init                        # the questions (open a new terminal first if brunna isn't found)
 ```
 
-With a model set up (`agenthub llm setup`) and the scheduler running, the next morning there is a digest and a `todo.md`
+With a model set up (`brunna llm setup`) and the scheduler running, the next morning there is a digest and a `todo.md`
 in the instance's data directory. Without a model they are not written: the librarian's judgment calls fail and say
-why, and `agenthub doctor` reports that judgment points have nowhere to run until you set one up.
+why, and `brunna doctor` reports that judgment points have nowhere to run until you set one up.
 
 ## Claude Code's token
 
-agent-hub runs Claude Code for its background work (the nightly tidy-up, agents sent to letters) with a one-year token
-that you make and keep yourself: Claude Code's terms don't let another program collect or store it, so agent-hub never
-sees it. `agenthub init` shows these two steps when the token isn't there yet. In a terminal on the computer that runs
-agent-hub (an AI app's own terminal works too):
+brunna runs Claude Code for its background work (the nightly tidy-up, agents sent to letters) with a one-year token
+that you make and keep yourself: Claude Code's terms don't let another program collect or store it, so brunna never
+sees it. `brunna init` shows these two steps when the token isn't there yet. In a terminal on the computer that runs
+brunna (an AI app's own terminal works too):
 
 1. `claude setup-token`: sign in when it asks; it prints the token.
 2. Save it, pasting the token and pressing Enter (nothing shows while you paste):
@@ -47,7 +47,7 @@ agent-hub (an AI app's own terminal works too):
    (umask 077; read -rs t && printf '%s\n' "$t" > ~/.claude/headless-oauth-token)
    ```
 
-Then `agenthub init --agent claude` checks that Claude Code answers with it. A year later, `agenthub doctor` and an
+Then `brunna init --agent claude` checks that Claude Code answers with it. A year later, `brunna doctor` and an
 alert say it is about to expire; do the same two steps again.
 
 ## Requirements
@@ -60,13 +60,13 @@ alert say it is about to expire; do the same two steps again.
 - **A model for the platform's judgment calls**, for the core payoff: the nightly digest, the upkeep of each `STATE.md`,
   and the items in `todo.md` (which are read from the to-do sections the model keeps in `STATE.md`) are all written by
   a model. It can be your coding agent's own login, an Anthropic or OpenAI-compatible API key, or a local Ollama; pick
-  one with `agenthub llm setup` (`agenthub init` asks). Without one, the platform still runs: project memory folders,
+  one with `brunna llm setup` (`brunna init` asks). Without one, the platform still runs: project memory folders,
   the mailbox, the scheduler and its jobs, the status page and the project registry all work, judgment calls fail and
   say why, and init leaves the modules that only do model work (consolidation, reflection) off.
 - Optional:
   - a coding agent, such as [Claude Code](https://claude.com/claude-code) or any headless CLI agent. Without one, init
     sets `runtime.default: none`: agent features (dispatching agents to mailbox requests, session hooks) are then off,
-    and `agenthub doctor` lists each one.
+    and `brunna doctor` lists each one.
   - `gh`, to create GitHub repos on onboarding;
   - `restic`, for the backup module;
   - an alert channel: Discord, ntfy, email or macOS notifications;
@@ -74,8 +74,8 @@ alert say it is about to expire; do the same two steps again.
 
 ## A machine that sleeps
 
-An always-on machine is recommended, not required. On a laptop, or a desktop set to sleep, agent-hub catches up when
-it wakes; `agenthub doctor` says when it sees a machine that sleeps.
+An always-on machine is recommended, not required. On a laptop, or a desktop set to sleep, brunna catches up when
+it wakes; `brunna doctor` says when it sees a machine that sleeps.
 
 | While the machine sleeps | What happens |
 |---|---|
@@ -91,15 +91,15 @@ The watchdog doesn't raise a false alarm on waking (on Linux it waits for the sc
 
 ## Without launchd or systemd
 
-`agenthub init` installs the scheduler (a tick every 15 minutes) and its watchdog as launchd agents on macOS or systemd
+`brunna init` installs the scheduler (a tick every 15 minutes) and its watchdog as launchd agents on macOS or systemd
 user units on Linux, then applies the config, which installs the platform's background services (the status page,
-mailbox dispatch, memory sync). `agenthub init --no-launchd` does neither: use it in a container or on a machine you are
+mailbox dispatch, memory sync). `brunna init --no-launchd` does neither: use it in a container or on a machine you are
 only trying the platform on. A system with neither launchd nor a systemd user session (many containers, WSL without
-systemd) ends up the same way, and init and `agenthub doctor` say so.
+systemd) ends up the same way, and init and `brunna doctor` say so.
 
-Then nothing runs by itself. Run a single job now with `agenthub run <job>` (`agenthub jobs` lists them), or schedule
+Then nothing runs by itself. Run a single job now with `brunna run <job>` (`brunna jobs` lists them), or schedule
 the scheduler's tick yourself, every 15 minutes, with cron or similar: `<hub>/bin/py <hub>/bin/scheduler.py`.
-`agenthub doctor` shows what is not running.
+`brunna doctor` shows what is not running.
 
 The status page is a static page. Every scheduler tick rewrites it as `.state/status/index.html` in the hub folder, and
 the `local.status-page` service only serves that folder on `127.0.0.1:18790`. Without the service, open that file in a
@@ -108,7 +108,7 @@ hub folder. Without the scheduler, `bin/py bin/gen-status-page.py` writes it onc
 
 ## The status page from another computer
 
-The status page listens only on the machine that runs agent-hub (`127.0.0.1:18790`). From another computer, either
+The status page listens only on the machine that runs brunna (`127.0.0.1:18790`). From another computer, either
 forward it over SSH and open http://localhost:18790 there:
 
 ```bash
@@ -126,29 +126,29 @@ names and recent activity.
 
 ## Where things live
 
-The repo holds no user data. `agenthub init` creates an **instance directory**, `~/.agent-hub` by default, and
+The repo holds no user data. `brunna init` creates an **instance directory**, `~/.brunna` by default, and
 `<repo>/.hub-home` points to it:
 
 | | What | Notes |
 |---|---|---|
-| `config/` | `hub.json`, the project registry (`projects/<name>.yaml`), `schedule.yaml` | A local git repo. `agenthub config check / plan / apply` |
+| `config/` | `brunna.json`, the project registry (`projects/<name>.yaml`), `schedule.yaml` | A local git repo. `brunna config check / plan / apply` |
 | `data/` | digests, `todo.md`, review log, weekly reflections | Generated; not in git |
 | `secrets/` | API keys, tokens, backup password | Never printed; the registry records names and locations only |
 
 Projects live wherever you choose, `~/workspace/<name>` by default. Their memory bare repos and the librarian's read-only
-copies sit beside them; the paths are set in `hub.json`.
+copies sit beside them; the paths are set in `brunna.json`.
 
 ## Uninstalling
 
 ```bash
-agenthub uninstall              # lists what it would remove; nothing changes
-agenthub uninstall --apply      # removes it
+brunna uninstall              # lists what it would remove; nothing changes
+brunna uninstall --apply      # removes it
 ```
 
 It stops this hub's scheduler, watchdog and the background services it generated, and takes the platform's parts out
 of each connected project: the block in the rules file, the hooks in the agent's settings, the sandbox rules and the
 git hooks it wrote. Your own lines and hooks next to them stay, and the projects' code is never touched. It asks, at
-the terminal, before removing agent-hub from your AI apps' tools (a setting for your user). Your notes stay: the
-settings folder (`~/.agent-hub`), the memory repos and each project's `.agent-memory`. `--purge` removes those too,
+the terminal, before removing brunna from your AI apps' tools (a setting for your user). Your notes stay: the
+settings folder (`~/.brunna`), the memory repos and each project's `.agent-memory`. `--purge` removes those too,
 and they can't be brought back. nvm, node, the AI agents, uv and git stay. The last step is yours: it prints the
 `rm -rf` for the hub folder.

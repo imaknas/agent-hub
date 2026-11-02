@@ -1,6 +1,6 @@
 # The platform's MCP server: the project mailbox for any coding agent
 
-`agenthub mcp` is a stdio MCP server (`bin/mcp_server.py`). Register it with the coding agent you use, and the sessions
+`brunna mcp` is a stdio MCP server (`bin/mcp_server.py`). Register it with the coding agent you use, and the sessions
 that agent opens in a project folder can:
 
 | Tool | What it does |
@@ -13,7 +13,7 @@ that agent opens in a project folder can:
 | `ask_owner` | Ask the owner something they have to decide |
 | `note` | Add an entry to this project's memory note for today |
 
-It is the same implementation as the command line `agenthub inbox|show|thread|send|ack|done` (`bin/hubbus`). On
+It is the same implementation as the command line `brunna inbox|show|thread|send|ack|done` (`bin/hubbus`). On
 `initialize` the server puts the platform's rules and the number of letters not yet closed into `instructions`: the
 rules reach the agent without changing any file in the project.
 
@@ -26,7 +26,7 @@ this server, the server records presence (`docs/design/mailbox-runtimes.md` A3):
 - At `initialize` and at every tool call it writes a presence row for its project: session `mcp:<server pid>:<start
   time>` (stdio MCP has no session id), runtime `mcp:<clientInfo.name>`. If the server's environment carries a session
   id from the coding agent's runtime (the server inherits its client's environment), that id is used instead, in the
-  platform's form (`<runtime>:<id>` unless it is `runtime.bare_ids`'s; with several runtimes in hub.json
+  platform's form (`<runtime>:<id>` unless it is `runtime.bare_ids`'s; with several runtimes in brunna.json
   `runtime.installed`, the nearest ancestor process a runtime claims decides whose, `docs/design/mailbox-runtimes.md`
   A1), with that runtime in the row. A sandboxed project's server writes it through the project's outbox (operation
   `presence`).
@@ -40,7 +40,7 @@ this server, the server records presence (`docs/design/mailbox-runtimes.md` A3):
 - So the session knows, every tool result except `inbox`'s ends with "📬 N letters are still open; look with inbox
   first" when there are open letters (a sandboxed project's count comes from its mailbox view).
 - No presence is recorded for agents the platform starts (`HUB_LLM_POINT`), lease sessions (`HUBBUS_LEASE`), or a
-  server whose project comes from `AGENTHUB_PROJECT` while its working directory is outside that project (one global
+  server whose project comes from `BRUNNA_PROJECT` while its working directory is outside that project (one global
   server in a tool must not keep a project in use for good).
 - The `mcp:` id is never a sending session: a reply goes to the project's mailbox, and no background copy is made
   from it.
@@ -48,29 +48,29 @@ this server, the server records presence (`docs/design/mailbox-runtimes.md` A3):
 ## Which project
 
 The registered project the working directory belongs to (a git worktree or `.agent-memory` counts as the main
-project). If the tool does not start the MCP server inside the project folder, add `AGENTHUB_PROJECT=<project name>` to
+project). If the tool does not start the MCP server inside the project folder, add `BRUNNA_PROJECT=<project name>` to
 the env in its settings. When the project cannot be recognised, the project tools return an error saying how to set it,
 and the server offers two others instead:
 
 - `status`: the connected projects and the folders you named for projects;
-- `connect_project(path)`: connects a folder, the same as `agenthub connect <folder> --yes`, but only an existing
-  folder strictly inside one of those folders (hub.json `connect.roots`, plus `workspace_root`), named without
-  symlinks. Add a folder with `agenthub connect --add-root <folder>`. It asks you first when the tool supports MCP
+- `connect_project(path)`: connects a folder, the same as `brunna connect <folder> --yes`, but only an existing
+  folder strictly inside one of those folders (brunna.json `connect.roots`, plus `workspace_root`), named without
+  symlinks. Add a folder with `brunna connect --add-root <folder>`. It asks you first when the tool supports MCP
   elicitation, and never creates a GitHub repo.
 
 ## Registering
 
-`agenthub init` offers to register it for your user in the tools it finds (Claude Code, Codex), so a session in any
+`brunna init` offers to register it for your user in the tools it finds (Claude Code, Codex), so a session in any
 folder, the desktop apps' too, can reach it; it does so only on your yes at the terminal. Later:
-`agenthub init --register-mcp`. Otherwise the platform does not change your tool's settings for you:
-`agenthub mcp config` prints the snippet to use (with absolute paths: a tool opened from the GUI may not have your
+`brunna init --register-mcp`. Otherwise the platform does not change your tool's settings for you:
+`brunna mcp config` prints the snippet to use (with absolute paths: a tool opened from the GUI may not have your
 PATH).
 
-- **Codex CLI**: `codex mcp add agenthub -- ~/.local/bin/agenthub mcp`
-- **Antigravity CLI**: `agy mcp add agenthub ~/.local/bin/agenthub mcp`
+- **Codex CLI**: `codex mcp add brunna -- ~/.local/bin/brunna mcp`
+- **Antigravity CLI**: `agy mcp add brunna ~/.local/bin/brunna mcp`
 - **Claude Code**: the platform already delivers letters into the session with hooks, so there is no need to register;
-  if you want to, `claude mcp add agenthub -- ~/.local/bin/agenthub mcp`
-- **Other tools that support MCP** (Cursor, Gemini CLI…): put the snippet `agenthub mcp config` prints into its MCP
+  if you want to, `claude mcp add brunna -- ~/.local/bin/brunna mcp`
+- **Other tools that support MCP** (Cursor, Gemini CLI…): put the snippet `brunna mcp config` prints into its MCP
   settings, in that tool's format
 
 ## Known limitations
@@ -92,5 +92,5 @@ PATH).
   the mailbox stops holding anything 30 minutes after its last call. An MCP server on another machine (the remote
   machine) records presence in that machine's bus, which dispatch on the hub machine never reads.
 - An MCP-only session is never woken when a letter arrives (`docs/design/mailbox-runtimes.md` B1 wakes only sessions
-  whose runtime has the `wake` port, through that runtime): it learns of letters from the count at its next agenthub
+  whose runtime has the `wake` port, through that runtime): it learns of letters from the count at its next brunna
   tool call.

@@ -1,16 +1,16 @@
 # Everyday commands
 
 ```bash
-agenthub status [project]       # project state, services, STATE.md
-agenthub config plan            # what a config change would do; `agenthub config apply` applies it
-agenthub modules                # optional features; `agenthub modules enable <name>`
-agenthub llm setup              # which provider/model the platform's judgment calls use
-agenthub jobs                   # all scheduled jobs; `agenthub run <job>` runs one now
-agenthub recover <project>      # new machine or lost folder (never re-onboard an onboarded project)
-agenthub rename <old> <new>     # dry-run first, then --apply
-agenthub --version              # the release this checkout is at
-agenthub upgrade --check        # is there a newer release, and what changes; `agenthub upgrade` installs it
+brunna status [project]       # project state, services, STATE.md
+brunna config plan            # what a config change would do; `brunna config apply` applies it
+brunna modules                # optional features; `brunna modules enable <name>`
+brunna llm setup              # which provider/model the platform's judgment calls use
+brunna jobs                   # all scheduled jobs; `brunna run <job>` runs one now
+brunna recover <project>      # new machine or lost folder (never re-onboard an onboarded project)
+brunna rename <old> <new>     # dry-run first, then --apply
+brunna --version              # the release this checkout is at
+brunna upgrade --check        # is there a newer release, and what changes; `brunna upgrade` installs it
 ```
 
-Inside a project session, agents use `agenthub send / inbox / done …` for the mailbox, `agenthub test` to run the
-project's declared tests, and `agenthub merge-branch` to land their branch. The rules they follow are written into each project's instructions file from `templates/`.
+Inside a project session, agents use `brunna send / inbox / done …` for the mailbox, `brunna test` to run the
+project's declared tests, and `brunna merge-branch` to land their branch. The rules they follow are written into each project's instructions file from `templates/`.
