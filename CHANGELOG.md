@@ -3,6 +3,29 @@
 What changed in each version, generated from the commit messages (git cliff) when it is tagged; only new features,
 fixes, speed-ups and reverts are listed.
 
+## v0.6.0 (2026-11-02)
+
+### New
+
+- **names:** One table of old and new names, and hubconf reads env vars through it
+- **names:** The settings file is hub.json or brunna.json, whichever exists
+- **names:** The platform's folder in each repo is .git/agent-hub or .git/brunna, whichever exists
+- **names:** Rules-file blocks, hook marks and the CLI are recognised in both spellings
+- **names:** The platform answers to either name, and its party ids are their own class
+- **registry:** The platform's own entry is type: platform
+- **names:** Job state, core units and services carry over between the platform's two names
+- **names:** The shell side and the watchdog read both spellings
+- **names:** Services.tsv, recover-service and contracts consumes take either platform name
+- **hubbus:** A notice replying to a live session wakes it
+
+### Fixed
+
+- **upgrade:** An install-cli wrapper is recognised by its exec line too
+- **watchdog:** It loads on the system python3 again
+- **llm:** A docstring that names print-mode claude no longer trips the call lint
+- **hubconf:** A HOME that isn't the account's has no service manager
+- **render-services:** A generated unit that isn't loaded is loaded again
+
 ## v0.5.0 (2026-11-01)
 
 ### New
