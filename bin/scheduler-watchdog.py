@@ -35,7 +35,7 @@ import time
 
 # a copy of the pairs this script uses from bin/names.py (current spelling first): it imports no platform module, so it
 # can't read the table; tests/test_name_pairs.py compares this copy with it
-NAMES = {"config_file": ("hub.json", "brunna.json"), "unit": ("local.agent-hub", "local.brunna")}
+NAMES = {"config_file": ("brunna.json", "hub.json"), "unit": ("local.brunna", "local.agent-hub")}
 
 
 def env(x: str) -> str:
@@ -93,7 +93,7 @@ SCHED_LOG = HUB / ".logs" / "scheduler.log"
 LOG = HUB / ".logs" / "scheduler-watchdog.log"
 TOKEN = SECRETS_DIR / "discord-token"
 CHANNEL = SECRETS_DIR / "discord-alert-channel"
-LABEL = NAMES["unit"][0] + "-scheduler"
+LABELS = [u + "-scheduler" for u in NAMES["unit"]]   # this release's first; an instance not switched yet has the other
 RESUME_GRACE_MIN = 20  # after a resume (Linux): the scheduler's 15-minute timer gets one full interval and a margin
 STALE_MIN = 35  # a tick every 15 minutes; two missed ticks plus a few minutes of drift
 REMIND_H = 6
@@ -117,20 +117,26 @@ def last_tick():
 
 def diagnose():
     uid = os.getuid()
+    label = LABELS[0]
     # Linux: the scheduler is a systemd user timer (bin/systemd_units.py; this script deliberately imports no platform
     # module)
     if sys.platform != "darwin":
-        r = subprocess.run(["systemctl", "--user", "status", "--no-pager", f"{LABEL}.timer"], capture_output=True, text=True)
-        lines = [_("`systemctl --user status {label}.timer`:\n```\n{out}\n```", label=LABEL,
+        r = subprocess.run(["systemctl", "--user", "status", "--no-pager", f"{label}.timer"], capture_output=True, text=True)
+        lines = [_("`systemctl --user status {label}.timer`:\n```\n{out}\n```", label=label,
                    out=(r.stdout or r.stderr).strip()[:600]),
-                 _("restart: `systemctl --user restart {label}.timer`", label=LABEL)]
+                 _("restart: `systemctl --user restart {label}.timer`", label=label)]
         if SCHED_LOG.exists():
             tail = SCHED_LOG.read_text(errors="replace").splitlines()[-3:]
             lines.append(_("last lines of scheduler.log:\n```\n{tail}\n```", tail="\n".join(x[:180] for x in tail)))
         return "\n".join(lines)
-    r = subprocess.run(["/bin/launchctl", "print", f"gui/{uid}/{LABEL}"], capture_output=True, text=True)
+    for label in LABELS:   # the one launchd has, else this release's
+        r = subprocess.run(["/bin/launchctl", "print", f"gui/{uid}/{label}"], capture_output=True, text=True)
+        if r.returncode == 0:
+            break
+    else:
+        label = LABELS[0]
     if r.returncode != 0:
-        lines = [_("{label} is not in launchd (booted out?) → `schedulectl start`", label=LABEL)]
+        lines = [_("{label} is not in launchd (booted out?) → `schedulectl start`", label=label)]
     else:
         info = {}
         for l in r.stdout.splitlines():  # the first one is the job's own (endpoints etc. have states further down)
@@ -143,7 +149,7 @@ def diagnose():
         stuck = [l.strip() for l in ps.splitlines() if "bin/scheduler.py" in l and "watchdog" not in l]
         if stuck:
             lines.append(_("scheduler.py is still running (stuck in a job?): {proc}", proc=stuck[0][:120]))
-        lines.append(_("restart: `launchctl kickstart -k gui/{uid}/{label}`", uid=uid, label=LABEL))
+        lines.append(_("restart: `launchctl kickstart -k gui/{uid}/{label}`", uid=uid, label=label))
     if SCHED_LOG.exists():
         tail = SCHED_LOG.read_text(errors="replace").splitlines()[-3:]
         lines.append(_("last lines of scheduler.log:\n```\n{tail}\n```", tail="\n".join(t[:180] for t in tail)))

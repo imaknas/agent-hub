@@ -26,9 +26,9 @@ class Presets(unittest.TestCase):
         """B5: a user-level change, so --yes or no terminal registers nothing; a yes runs each tool's command with the
         agenthub command put in."""
         from unittest import mock
-        presets = {"x": {"label": "X", "find": ["x"], "mcp_register": ["x", "mcp", "add", "{agenthub}", "mcp"]}}
+        presets = {"x": {"label": "X", "find": ["x"], "mcp_register": ["x", "mcp", "add", "{server}", "{cli}", "mcp"]}}
         with mock.patch.object(ah, "agent_found", lambda info: True), \
-             mock.patch.object(ah.subprocess, "run") as run, mock.patch.object(ah, "agenthub_command",
+             mock.patch.object(ah.subprocess, "run") as run, mock.patch.object(ah, "cli_command",
                                                                                lambda: ["/hub/bin/agenthub"]):
             for yes, tty in ((True, True), (False, False)):
                 with mock.patch.object(ah.sys.stdin, "isatty", lambda: tty), mock.patch("builtins.input", lambda q: "y"):
@@ -39,7 +39,7 @@ class Presets(unittest.TestCase):
             with mock.patch.object(ah.sys.stdin, "isatty", lambda: True), mock.patch("builtins.input", lambda q: ""):
                 ah.init_dialogue.use(ah.init_dialogue.Terminal(False))
                 ah.offer_mcp_registration(presets)
-            self.assertEqual(run.call_args.args[0], ["x", "mcp", "add", "/hub/bin/agenthub", "mcp"])
+            self.assertEqual(run.call_args.args[0], ["x", "mcp", "add", "brunna", "/hub/bin/agenthub", "mcp"])
 
     def test_offered_agents(self):
         presets = ah.agent_presets()

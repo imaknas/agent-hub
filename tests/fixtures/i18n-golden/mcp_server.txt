@@ -42,7 +42,7 @@ P=demo U=(讀不到信箱:locked) T=60
 
 {
   "mcpServers": {
-    "agenthub": {
+    "brunna": {
       "command": "<ROOT>/bin/py",
       "args": [
         "<ROOT>/bin/agenthub",

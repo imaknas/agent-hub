@@ -364,7 +364,7 @@ class Mcp(Golden):
         for name, path in (("demo", ws), ("bare", t / "ws" / "bare")):
             doc = {"v": 1, "name": name, "paths": {"workspace": str(path)}, "memory": True}
             (t / "config" / "projects" / f"{name}.yaml").write_text(yaml.safe_dump(doc))
-        env = {**{k: v for k, v in os.environ.items() if not k.startswith(("AGENT_HUB_", "AGENTHUB_", "HUB_"))
+        env = {**{k: v for k, v in os.environ.items() if not k.startswith(("BRUNNA_", "AGENT_HUB_", "AGENTHUB_", "HUB_"))
                   or k == "AGENT_HUB_PYTHON"},
                "HOME": str(t / "home"), "AGENT_HUB_CONFIG": str(t / "config"), "AGENT_HUB_DATA": str(t / "data"),
                "AGENT_HUB_SECRETS": str(t / "secrets"), "AGENT_HUB_STATE": str(t / "state"), **ZH}

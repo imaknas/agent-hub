@@ -85,7 +85,7 @@ WORKTREES = {
 
 def full_options() -> dict:
     """the busy instance: something in every section"""
-    return dict(sm="launchd", launchctl={"local.agent-hub-scheduler": 0, "local.agent-hub-scheduler-watchdog": 113},
+    return dict(sm="launchd", launchctl={"local.brunna-scheduler": 0, "local.brunna-scheduler-watchdog": 113},
                 alerts=True, secrets=True, tick_age=2 * H, jobs=JOBS, reg_errors={"gamma": [f"e{i}" for i in range(1, 6)]},
                 failures={"discord": {"at": iso(-H), "text": "HTTP 401"}}, applied={"commit": "a" * 40, "at": iso(-D), "ok": True},
                 commit="b" * 40 + "+dirty", backup_age=48 * H, verify_age=None, bus=INPUTS["bus_busy"], worktrees=WORKTREES,
@@ -95,7 +95,7 @@ def full_options() -> dict:
 
 def quiet_options(**over) -> dict:
     """nothing to do: every check passes"""
-    o = dict(sm="launchd", launchctl={"local.agent-hub-scheduler": 0, "local.agent-hub-scheduler-watchdog": 0},
+    o = dict(sm="launchd", launchctl={"local.brunna-scheduler": 0, "local.brunna-scheduler-watchdog": 0},
              alerts=True, secrets=True, tick_age=datetime.timedelta(minutes=5), jobs=[JOBS[0]], reg_errors={},
              failures={}, applied={"commit": "c" * 40, "at": iso(-D), "ok": True}, commit="c" * 40, backup_age=H,
              verify_age=D, bus=INPUTS["bus_quiet"], worktrees={}, prune=None, merge_failed=False, agent=False,

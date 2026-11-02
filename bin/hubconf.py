@@ -434,7 +434,7 @@ def registry_dir() -> pathlib.Path:
 def platform_registry() -> pathlib.Path:
     """The platform's own registry entry (core jobs, services, secret declarations, contracts): part of the platform,
     in the platform repo, not in the user's registry_dir."""
-    return ROOT / "projects" / f"{hub_project()}.yaml"
+    return names.resolve(ROOT / "projects", "project", "{}.yaml")   # whichever spelling the tree has
 
 
 def owner_address() -> str:

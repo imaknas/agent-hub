@@ -3,7 +3,7 @@ test declaration is read from the exported tree, and validated in a child proces
 so a merge that changes agent-hub's tiers is tested by the tiers it brings, not by the main checkout's entry or the
 registry index.
 
-The hub here is a fake checkout (AGENT_HUB_ROOT) with only projects/agent-hub.yaml; the runner is the real one.
+The hub here is a fake checkout (AGENT_HUB_ROOT) with only projects/brunna.yaml; the runner is the real one.
 
     bin/py -m unittest discover -s tests
 """
@@ -21,7 +21,8 @@ RUNNER = ROOT / "bin" / "test-runner.py"
 PY = os.environ.get("AGENT_HUB_PYTHON") or sys.executable
 
 MAIN_ENTRY = """v: 2
-name: agent-hub
+name: brunna
+type: platform
 tests:
 - tier: old
   run: 'false'
@@ -29,7 +30,8 @@ tests:
 """
 # the tier's command is a script that exists only in the tested tree: validating it needs AGENT_HUB_ROOT = the export
 NEW_ENTRY = """v: 2
-name: agent-hub
+name: brunna
+type: platform
 tests:
 - tier: fresh
   run: checks/ok.sh
@@ -45,7 +47,7 @@ class HubDeclaration(unittest.TestCase):
         (self.tmp / "config" / "hub.json").write_text(json.dumps({"bus_dir": str(self.tmp / "bus"),
                                                                   "registry_dir": "projects"}))
         self.hub = self.tmp / "hub"
-        self.env = {**{k: v for k, v in os.environ.items() if not k.startswith(("AGENT_HUB_", "GIT_"))},
+        self.env = {**{k: v for k, v in os.environ.items() if not k.startswith(("BRUNNA_", "AGENT_HUB_", "GIT_"))},
                     "AGENT_HUB_PYTHON": PY, "HOME": str(self.tmp / "home"), "GIT_CONFIG_GLOBAL": "/dev/null",
                     "AGENT_HUB_ROOT": str(self.hub), "AGENT_HUB_CONFIG": str(self.tmp / "config"),
                     "AGENT_HUB_STATE": str(self.tmp / "state"), "AGENT_HUB_DATA": str(self.tmp / "data"),
@@ -54,7 +56,7 @@ class HubDeclaration(unittest.TestCase):
                     "GIT_COMMITTER_EMAIL": "t@t"}
         self.git(self.tmp, "init", "-q", "-b", "main", str(self.hub))
         (self.hub / "projects").mkdir()
-        (self.hub / "projects" / "agent-hub.yaml").write_text(MAIN_ENTRY)
+        (self.hub / "projects" / "brunna.yaml").write_text(MAIN_ENTRY)
         self.git(self.hub, "add", "-A")
         self.git(self.hub, "commit", "-q", "-m", "chore: hub")
         # the index says what the main checkout says (a stale entry): the runner must not use it for the hub
@@ -76,7 +78,7 @@ class HubDeclaration(unittest.TestCase):
                               text=True, timeout=120)
 
     def bring_new_tiers(self):
-        (self.wt / "projects" / "agent-hub.yaml").write_text(NEW_ENTRY)
+        (self.wt / "projects" / "brunna.yaml").write_text(NEW_ENTRY)
         (self.wt / "checks").mkdir()
         (self.wt / "checks" / "ok.sh").write_text("#!/bin/sh\nexit 0\n")
         (self.wt / "checks" / "ok.sh").chmod(0o755)
@@ -85,14 +87,14 @@ class HubDeclaration(unittest.TestCase):
         self.bring_new_tiers()   # uncommitted: the default export is the worktree's content
         r = self.run_("--when", "merge")
         self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
-        self.assertIn("agent-hub/fresh", r.stdout)
-        self.assertNotIn("agent-hub/old", r.stdout + r.stderr)
+        self.assertIn("brunna/fresh", r.stdout)
+        self.assertNotIn("brunna/old", r.stdout + r.stderr)
 
     def test_main_checkout_runs_its_own(self):
         """the control: the same runner in the main checkout reads main's entry (its failing tier)"""
         r = self.run_("--tier", "old", cwd=self.hub)
         self.assertEqual(r.returncode, 1, r.stdout + r.stderr)
-        self.assertIn("agent-hub/old", r.stdout)
+        self.assertIn("brunna/old", r.stdout)
 
     def test_rev_reads_that_commit(self):
         self.bring_new_tiers()
@@ -103,11 +105,11 @@ class HubDeclaration(unittest.TestCase):
         self.assertEqual(r.returncode, 2, "main's tree has no such tier")
 
     def test_an_invalid_entry_in_the_tree_stops_the_run(self):
-        (self.wt / "projects" / "agent-hub.yaml").write_text(NEW_ENTRY.replace("tier: fresh", "tier: Not Valid"))
+        (self.wt / "projects" / "brunna.yaml").write_text(NEW_ENTRY.replace("tier: fresh", "tier: Not Valid"))
         r = self.run_("--when", "merge")
         self.assertEqual(r.returncode, 2, r.stdout + r.stderr)
-        self.assertIn("projects/agent-hub.yaml", r.stderr)
-        self.assertNotIn("agent-hub/old", r.stdout, "no fallback to the main checkout's or the index's tiers")
+        self.assertIn("projects/brunna.yaml", r.stderr)
+        self.assertNotIn("brunna/old", r.stdout, "no fallback to the main checkout's or the index's tiers")
 
     def test_a_script_only_the_tree_has_is_validated_against_the_tree(self):
         """the run: path resolves against the export (the child's AGENT_HUB_ROOT), so a tier whose script the change
@@ -119,10 +121,10 @@ class HubDeclaration(unittest.TestCase):
         self.assertIn("checks/ok.sh", r.stderr)
 
     def test_a_v1_entry_in_the_tree_is_upgraded(self):
-        (self.wt / "projects" / "agent-hub.yaml").write_text("v: 1\nname: agent-hub\nruntime:\n  test: 'true'\n")
+        (self.wt / "projects" / "brunna.yaml").write_text("v: 1\nname: brunna\ntype: platform\nruntime:\n  test: 'true'\n")
         r = self.run_("--when", "merge")
         self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
-        self.assertIn("agent-hub/full", r.stdout)
+        self.assertIn("brunna/full", r.stdout)
 
 
 if __name__ == "__main__":

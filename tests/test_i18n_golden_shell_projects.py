@@ -105,7 +105,7 @@ class Golden(unittest.TestCase):
             "[user]\n\tname = t\n\temail = t@t\n[init]\n\tdefaultBranch = main\n[advice]\n\tdetachedHead = false\n"
             f'[url "{self.remotes}/"]\n\tpushInsteadOf = git@github.com:\n')
         self.hub_json()
-        env = {k: v for k, v in os.environ.items() if not k.startswith(("AGENT_HUB_", "GIT_"))}
+        env = {k: v for k, v in os.environ.items() if not k.startswith(("BRUNNA_", "AGENT_HUB_", "GIT_"))}
         self.env = {**env, "HOME": str(self.home), "AGENT_HUB_ROOT": str(self.hub), "AGENT_HUB_PYTHON": sys.executable,
                     "AGENT_HUB_LANG_UI": golden_lang.LANG, "PATH": f"{fakebin}:{os.environ['PATH']}", "LC_ALL": "C",
                     "GIT_CONFIG_NOSYSTEM": "1", "FAKE_REMOTES": str(self.remotes)}

@@ -68,9 +68,9 @@ class RunTests(unittest.TestCase):
     def test_runs_as_a_zh_hant_instance_unless_told(self):
         """the gate is the zh-Hant side of the language check (CI's plain unittest the English one)"""
         self.module("test_l", "class L(unittest.TestCase):\n    def test_1(self):\n"
-                              "        assert os.environ['AGENT_HUB_LANG_UI'] == os.environ['WANT'], os.environ['AGENT_HUB_LANG_UI']\n"
-                              "        assert os.environ['AGENT_HUB_LANG_CONTENT'] == os.environ['WANT']\n")
-        env = {k: v for k, v in os.environ.items() if not k.startswith("AGENT_HUB_LANG_")}
+                              "        assert os.environ['BRUNNA_LANG_UI'] == os.environ['WANT'], os.environ['BRUNNA_LANG_UI']\n"
+                              "        assert os.environ['BRUNNA_LANG_CONTENT'] == os.environ['WANT']\n")
+        env = {k: v for k, v in os.environ.items() if not k.startswith(("AGENT_HUB_LANG_", "BRUNNA_LANG_"))}
         r = subprocess.run([sys.executable, str(RUNNER), str(self.tmp)], capture_output=True, text=True, timeout=120,
                            env={**env, "TEST_JOBS": "1", "WANT": "zh-Hant"})
         self.assertEqual(r.returncode, 0, r.stdout + r.stderr)

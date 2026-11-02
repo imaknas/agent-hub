@@ -47,7 +47,7 @@ class FromV05(unittest.TestCase):
         (tmp / "home").mkdir()
         cls.inst = tmp / "inst"
         cls.base = {k: v for k, v in os.environ.items()
-                    if not k.startswith(("AGENT_HUB", "AGENTHUB", "BRUNNA", "GIT_", "NVM_"))}
+                    if not k.startswith(("BRUNNA_", "AGENT_HUB", "AGENTHUB", "BRUNNA", "GIT_", "NVM_"))}
         cls.base.update(HOME=str(tmp / "home"), PATH=f"{tmp / 'cli'}:/usr/bin:/bin", AGENT_HUB_PYTHON=sys.executable,
                         AGENT_HUB_LANG_UI="en", GIT_AUTHOR_NAME="t", GIT_AUTHOR_EMAIL="t@t", GIT_COMMITTER_NAME="t",
                         GIT_COMMITTER_EMAIL="t@t")
@@ -58,6 +58,8 @@ class FromV05(unittest.TestCase):
                        "--text", "written by v0.5")
         assert r.returncode == 0, r.stdout + r.stderr
         cls.old_letter = r.stdout.strip().split()[-1]
+        cls.old_findings = cls.findings(cls.old)
+        cls.new_findings = cls.findings(cls.new)   # before the other tests add letters and wrappers
 
     @classmethod
     def tearDownClass(cls):
@@ -90,20 +92,26 @@ class FromV05(unittest.TestCase):
         self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
 
     def test_cli_wrappers_for_both_names(self):
+        # the wrapper v0.5 wrote is kept (and rewritten), and the new name is added
+        r = self.run_as(self.old, "agenthub", "install-cli", "--dir", self.tmp / "cli")
+        self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
         r = self.run_as(self.new, "agenthub", "install-cli", "--dir", self.tmp / "cli")
         self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
         self.assertEqual(sorted(p.name for p in (self.tmp / "cli").iterdir()), ["agenthub", "brunna"])
 
-    def test_doctor_finds_what_v05_found(self):
-        def findings(root):
-            r = self.run_as(root, "agenthub", "doctor")
-            self.assertNotIn("Traceback", r.stdout + r.stderr)
-            # the service manager's lines are left out: v0.5.0 read the account's real launchd from a fake HOME, which
-            # this code no longer does (hubconf.home_is_the_accounts)
-            return sorted(line.strip().replace(str(root), "<hub>") for line in r.stdout.splitlines()
-                          if line.startswith(("✗", "!")) and not line.startswith(SERVICE_MANAGER_LINES))
-        self.assertEqual(findings(self.new), findings(self.old))
+    @classmethod
+    def findings(cls, root):
+        r = cls.run_as(root, "agenthub", "doctor")
+        assert "Traceback" not in r.stdout + r.stderr, r.stdout + r.stderr
+        # the service manager's lines are left out: v0.5.0 read the account's real launchd from a fake HOME, which
+        # this code no longer does (hubconf.home_is_the_accounts)
+        return sorted(line.strip().replace(str(root), "<hub>") for line in r.stdout.splitlines()
+                      if line.startswith(("✗", "!")) and not line.startswith(SERVICE_MANAGER_LINES))
 
+    def test_doctor_finds_what_v05_found(self):
+        # v0.5.0's own view of its instance, taken before this code touched it (v0.5 can't read what this code writes:
+        # going back below v0.6 isn't supported)
+        self.assertEqual(self.new_findings, self.old_findings)
 
 if __name__ == "__main__":
     unittest.main()

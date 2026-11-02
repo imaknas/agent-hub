@@ -29,7 +29,7 @@ class Base(unittest.TestCase):
     def setUp(self):
         self.tmp = pathlib.Path(tempfile.mkdtemp()).resolve()
         (self.tmp / "home").mkdir()
-        self.env = {**{k: v for k, v in os.environ.items() if not k.startswith(("AGENT_HUB_", "GIT_"))},
+        self.env = {**{k: v for k, v in os.environ.items() if not k.startswith(("BRUNNA_", "AGENT_HUB_", "GIT_"))},
                     "AGENT_HUB_PYTHON": PY, "HOME": str(self.tmp / "home"), "GIT_CONFIG_GLOBAL": "/dev/null",
                     "GIT_AUTHOR_NAME": "t", "GIT_AUTHOR_EMAIL": "t@t", "GIT_COMMITTER_NAME": "t",
                     "GIT_COMMITTER_EMAIL": "t@t"}
@@ -152,7 +152,7 @@ class RunTestsRoot(Base):
         (tree / "tests").mkdir(parents=True)
         (tree / "tests" / "test_probe.py").write_text(
             "import os\nimport unittest\n\n\nclass T(unittest.TestCase):\n    def test_root(self):\n"
-            f"        self.assertEqual(os.environ.get('AGENT_HUB_ROOT'), {str(tree)!r})\n"
+            f"        self.assertEqual(os.environ.get('BRUNNA_ROOT'), {str(tree)!r})\n"
             "        self.assertNotIn('AGENT_HUB_STATE', os.environ)\n")
         r = subprocess.run([PY, str(BIN / "run-tests"), str(tree / "tests")], env=self.env, capture_output=True,
                            text=True, timeout=120)

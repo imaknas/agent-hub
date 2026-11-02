@@ -16,6 +16,8 @@ import unittest
 
 ROOT = pathlib.Path(__file__).resolve().parents[1]
 RUNNER = ROOT / "bin" / "test-runner.py"
+sys.path.insert(0, str(ROOT / "bin"))
+import names  # noqa: E402
 PY = os.environ.get("AGENT_HUB_PYTHON") or sys.executable
 
 
@@ -26,7 +28,7 @@ class Runner(unittest.TestCase):
             (self.tmp / d).mkdir(parents=True)
         (self.tmp / "config" / "hub.json").write_text(json.dumps({"bus_dir": str(self.tmp / "bus"),
                                                                   "registry_dir": "projects"}))
-        self.env = {**{k: v for k, v in os.environ.items() if not k.startswith(("AGENT_HUB_", "GIT_"))},
+        self.env = {**{k: v for k, v in os.environ.items() if not k.startswith(("BRUNNA_", "AGENT_HUB_", "GIT_"))},
                     "AGENT_HUB_PYTHON": PY, "HOME": str(self.tmp / "home"), "GIT_CONFIG_GLOBAL": "/dev/null",
                     "AGENT_HUB_CONFIG": str(self.tmp / "config"), "AGENT_HUB_STATE": str(self.tmp / "state"),
                     "AGENT_HUB_DATA": str(self.tmp / "data"), "AGENT_HUB_SECRETS": str(self.tmp / "secrets"),
@@ -77,7 +79,7 @@ class Runner(unittest.TestCase):
         it was (a pass's age is the store's alone)."""
         self.declare(v=2, tests=[{"tier": "full", "run": "sh check.sh", "when": ["merge", "commit"]}])
         self.assertEqual(self.run_("--tier", "full", AGENTHUB_TEST_CALLER="merge-branch").returncode, 0)
-        store = self.ws / ".git" / "agent-hub" / "test-results.jsonl"
+        store = names.repo_dir(self.ws / ".git") / "test-results.jsonl"
         before = store.read_text()
         self.assertEqual(self.run_("--tier", "full").returncode, 0)
         self.assertEqual(store.read_text(), before, "a hit writes nothing to the store")
@@ -85,7 +87,7 @@ class Runner(unittest.TestCase):
         (self.ws / "ok").unlink()
         self.git(self.ws, "add", "-A")
         self.assertEqual(self.run_("--index", "--tier", "full", AGENTHUB_TEST_CALLER="anything else").returncode, 1)
-        log = [json.loads(x) for x in (self.ws / ".git" / "agent-hub" / "test-runs.jsonl").read_text().splitlines()]
+        log = [json.loads(x) for x in (names.repo_dir(self.ws / ".git") / "test-runs.jsonl").read_text().splitlines()]
         self.assertEqual([(r["result"], r["caller"], r["source"]) for r in log],
                          [("pass", "merge-branch", "worktree"), ("hit", "session", "worktree"),
                           ("fail", "commit-gate", "index")])
@@ -114,7 +116,7 @@ class Runner(unittest.TestCase):
                                   'n=$(cat "$AGENTHUB_TIER_CACHE/n" 2>/dev/null || echo 0); echo $((n+1)) > "$AGENTHUB_TIER_CACHE/n"'}])
         self.run_("--tier", "c")
         self.run_("--tier", "c", "--force")
-        self.assertEqual((self.ws / ".git" / "agent-hub" / "tier-cache" / "demo-c" / "n").read_text().strip(), "2")
+        self.assertEqual((names.repo_dir(self.ws / ".git") / "tier-cache" / "demo-c" / "n").read_text().strip(), "2")
 
     def test_rev_and_index(self):
         self.declare(v=2, tests=[{"tier": "full", "run": "test -f staged", "when": ["merge"]}])

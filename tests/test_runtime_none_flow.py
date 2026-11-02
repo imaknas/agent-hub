@@ -26,7 +26,7 @@ class RuntimeNone(unittest.TestCase):
         (self.tmp / "config" / "hub.json").write_text(json.dumps({
             "runtime": {"default": "none"}, "bus_dir": str(self.tmp / "bus"), "registry_dir": "projects"}))
         (self.tmp / "config" / "projects").mkdir()
-        self.env = {**{k: v for k, v in os.environ.items() if not k.startswith("AGENT_HUB_") or k == "AGENT_HUB_PYTHON"},
+        self.env = {**{k: v for k, v in os.environ.items() if not k.startswith(("AGENT_HUB_", "BRUNNA_")) or k == "AGENT_HUB_PYTHON"},
                     "HOME": str(self.tmp / "home"), "AGENT_HUB_CONFIG": str(self.tmp / "config"),
                     "AGENT_HUB_DATA": str(self.tmp / "data"), "AGENT_HUB_SECRETS": str(self.tmp / "secrets")}
 

@@ -37,6 +37,7 @@ import sys
 
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
 import hubconf  # noqa: E402
+import names  # noqa: E402
 import i18n  # noqa: E402
 
 _ = i18n.domain(__file__)
@@ -121,7 +122,7 @@ def main(argv: list[str]) -> int:
                "characters): {name!r}", name=new), "bad_name")
     if new == old:
         fail(_("the new name is the same as the old one"), "bad_name")
-    if old == hubconf.hub_project() or new == hubconf.hub_project():
+    if {old, new} & set(names.all("project")):   # the platform under either of its names
         fail(_("the platform itself cannot be renamed"), "bad_name")
     taken = [str(p) for p in (hubconf.registry_dir() / f"{new}.yaml", hubconf.p("workspace_root", "~/workspace") / new,
                               hubconf.p("services_root", "~/services") / new,

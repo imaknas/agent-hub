@@ -13,7 +13,7 @@ _py_env="${AGENT_HUB_PYTHON:-${BRUNNA_PYTHON:-}}"
 dir="${_py_env:+$(dirname "$(dirname "$_py_env")")}"
 # the environment's folder: whichever spelling exists, this release's when neither does (a copy of bin/names.py's
 # share_dir pair, current first; tests/test_name_pairs.py compares it, and bin/py looks the same way)
-NAMES_share_dir="agent-hub brunna"
+NAMES_share_dir="brunna agent-hub"
 if [ -z "$dir" ]; then
   for _n in $NAMES_share_dir; do
     [ -d "$HOME/.local/share/$_n/python" ] && { dir="$HOME/.local/share/$_n/python"; break; }

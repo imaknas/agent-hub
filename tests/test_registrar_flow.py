@@ -47,6 +47,7 @@ import unittest
 
 ROOT = pathlib.Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "bin"))
+import names  # noqa: E402
 import ph_wire  # noqa: E402
 import todo_tokens  # noqa: E402
 
@@ -139,8 +140,8 @@ class Env:
             "bus_dir": str(tmp / "bus"),
             "owner": {"address": OWNER, "aliases": ["alex"], "tag": TAG, "principal_id": PRINCIPAL},
             "assistant": {"project": SIDE, "api": "http://127.0.0.1:9/x", "party_id": SIDE}}))
-        e = {k: v for k, v in os.environ.items() if not k.startswith(("GIT_", "AGENT_HUB_HOME", "AGENT_HUB_CONFIG",
-                                                                     "AGENT_HUB_DATA", "AGENT_HUB_SECRETS"))}
+        e = {k: v for k, v in os.environ.items() if not k.startswith(("GIT_", *(n for x in ("HOME", "CONFIG", "DATA", "SECRETS")
+                                                                          for n in names.env_names(x))))}
         # the content language the scenarios' STATE.md files are written in (SCENES: zh-Hant)
         self.env = {**e, "AGENT_HUB_ROOT": str(self.hub), "AGENT_HUB_DATA": str(self.hub / "data"),
                     "AGENT_HUB_LANG_CONTENT": lang,

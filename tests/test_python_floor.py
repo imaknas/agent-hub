@@ -22,7 +22,7 @@ EXEMPT = {"bin/scheduler-watchdog.py", "bin/migrate-to-mini.py", "launchd/local.
 # which cuts off a discussion in progress; render-services does not yet wait for the service to go idle. When no
 # discussion is running, change the registry line to `bin/py bin/lease-runner.py`, then delete this entry.
 TEMPORARY: set = set()  # no exceptions left since lease-runner moved to bin/py on 10-25
-SCANNED = ["bin", "launchd", "tests", "githooks", "agent-jobs", "templates", "projects/agent-hub.yaml", "schedule.yaml"]
+SCANNED = ["bin", "launchd", "tests", "githooks", "agent-jobs", "templates", "projects/brunna.yaml", "schedule.yaml"]
 
 
 def files():

@@ -22,13 +22,13 @@ PY = os.environ.get("AGENT_HUB_PYTHON") or sys.executable
 sys.path.insert(0, str(BIN))
 import i18n  # noqa: E402
 
-DOC = {"v": 2, "name": "agent-hub", "commit_gate": True, "commits": "conventional"}
+DOC = {"v": 2, "name": "brunna", "commit_gate": True, "commits": "conventional"}
 GATE = ("import importlib.machinery, importlib.util, json, sys\n"
         "sys.path.insert(0, sys.argv[1])\n"
         "loader = importlib.machinery.SourceFileLoader('rps', sys.argv[1] + '/render-project-settings.py')\n"
         "mod = importlib.util.module_from_spec(importlib.util.spec_from_loader('rps', loader))\n"
         "loader.exec_module(mod)\n"
-        "acts = mod.gate('agent-hub', json.loads(sys.argv[2]), sys.argv[3] == 'report')\n"
+        "acts = mod.gate('brunna', json.loads(sys.argv[2]), sys.argv[3] == 'report')\n"
         "print(json.dumps({'acts': acts, 'mark': mod.MARK}))\n")
 
 
@@ -40,7 +40,7 @@ class LegacyHooksPath(unittest.TestCase):
         (self.tmp / "config" / "hub.json").write_text(json.dumps({"bus_dir": str(self.tmp / "bus"),
                                                                   "registry_dir": "projects"}))
         self.hub = self.tmp / "hub"
-        self.env = {**{k: v for k, v in os.environ.items() if not k.startswith(("AGENT_HUB_", "GIT_"))},
+        self.env = {**{k: v for k, v in os.environ.items() if not k.startswith(("BRUNNA_", "AGENT_HUB_", "GIT_"))},
                     "AGENT_HUB_PYTHON": PY, "HOME": str(self.tmp / "home"), "GIT_CONFIG_GLOBAL": "/dev/null",
                     "AGENT_HUB_ROOT": str(self.hub), "AGENT_HUB_CONFIG": str(self.tmp / "config"),
                     "AGENT_HUB_STATE": str(self.tmp / "state"), "AGENT_HUB_DATA": str(self.tmp / "data"),
@@ -81,7 +81,7 @@ class LegacyHooksPath(unittest.TestCase):
         for h in ("pre-commit", "commit-msg"):
             self.assertTrue(self.hook(h).read_text().startswith("#!/bin/sh\n" + mark), h)
         self.assertIn(i18n.translate("render-project-settings", "{project}: core.hooksPath {path} unset; the platform's "
-                                     "hooks go into the git dir", {"project": "agent-hub", "path": "githooks"},
+                                     "hooks go into the git dir", {"project": "brunna", "path": "githooks"},
                                      "zh-Hant"), said)
         self.assertEqual(self.gate()[0], [], "a second run has nothing to do")
 
@@ -107,11 +107,11 @@ class LegacyHooksPath(unittest.TestCase):
         self.assertFalse(self.hook("pre-commit").exists())
         self.assertIn(i18n.translate("render-project-settings", "{project}: the platform's hooks are not installed (the "
                                      "project uses its own core.hooksPath={path}); detecting only",
-                                     {"project": "agent-hub", "path": ".husky"}, "zh-Hant"), said)
+                                     {"project": "brunna", "path": ".husky"}, "zh-Hant"), said)
 
     def test_legacy_path_unset_even_when_no_hook_is_wanted(self):
         self.hooks_path("githooks")
-        acts, _said, _mark = self.gate(doc={"v": 2, "name": "agent-hub"})
+        acts, _said, _mark = self.gate(doc={"v": 2, "name": "brunna"})
         self.assertEqual(acts, [("remove", "core.hooksPath")])
         self.assertEqual(self.hooks_path(), "")
         self.assertFalse(self.hook("pre-commit").exists())

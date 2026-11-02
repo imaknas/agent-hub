@@ -60,7 +60,8 @@ def counts() -> dict[str, dict[str, int]]:
 
 class Table(unittest.TestCase):
     def test_spellings(self):
-        self.assertFalse(names.SWITCHED, "v0.6 reads both and writes the old spellings")
+        self.assertTrue(names.SWITCHED, "v0.7 writes the new spellings (and reads both)")
+        self.assertTrue(names.PARTY_SWITCHED, "party ids too: the owner's assistant agreed (11-02)")
         for cls in names.PAIRS:
             with self.subTest(cls=cls):
                 self.assertEqual(set(names.all(cls)), set(names.PAIRS[cls]))
@@ -68,10 +69,10 @@ class Table(unittest.TestCase):
 
     def test_resolve(self):
         base = pathlib.Path(tempfile.mkdtemp())
-        self.assertEqual(names.resolve(base, "repo_dir").name, "agent-hub", "neither exists: the current one (old, before the switch)")
-        (base / "agent-hub").mkdir()
-        self.assertEqual(names.resolve(base, "repo_dir").name, "agent-hub", "an existing one is used as it is")
-        (base / "brunna").mkdir()
+        self.assertEqual(names.resolve(base, "repo_dir").name, names.current("repo_dir"), "neither exists: the current one")
+        (base / names.other("repo_dir")).mkdir()
+        self.assertEqual(names.resolve(base, "repo_dir").name, names.other("repo_dir"), "an existing one is used as it is")
+        (base / names.current("repo_dir")).mkdir()
         self.assertEqual(len(names.resolve_both(base, "repo_dir")), 2)
 
     def test_env(self):
@@ -82,7 +83,7 @@ class Table(unittest.TestCase):
                          "an old spelling is an explicit override")
         e = {"BRUNNA_STATE": "stale"}
         names.env_set(e, "STATE", "x")
-        self.assertEqual(e, {"AGENT_HUB_STATE": "x"}, "v0.6 writes the old spelling and removes the other")
+        self.assertEqual(e, {"BRUNNA_STATE": "x"}, "the current spelling written, the other removed")
         e = {}
         names.env_set(e, "JOB_CHAIN", "c")
         self.assertEqual(e, {"AGENT_HUB_JOB_CHAIN": "c", "BRUNNA_JOB_CHAIN": "c"}, "documented ones in both")
@@ -196,7 +197,7 @@ class HubNames(unittest.TestCase):
         rows = [(f"{old}-scheduler", "-", p_old, f"{p_old}/launchd/{old}-scheduler.plist", "ticks", ""),
                 (f"{new}-scheduler-x", "-", p_new, f"{p_new}/launchd/{new}-scheduler.plist", "ticks too", "")]
         (hub / "services.tsv").write_text("".join("\t".join(r) + "\n" for r in rows))
-        env = {k: v for k, v in os.environ.items() if not k.startswith(("AGENT_HUB", "AGENTHUB", "BRUNNA"))}
+        env = {k: v for k, v in os.environ.items() if not k.startswith(("BRUNNA_", "AGENT_HUB", "AGENTHUB", "BRUNNA"))}
         env.update(HOME=str(home), PATH=f"{stub}:/usr/bin:/bin", AGENT_HUB_ROOT=str(hub), AGENT_HUB_CONFIG=str(hub),
                    AGENT_HUB_LANG_UI="en")
         agents = home / "Library" / "LaunchAgents"
@@ -218,7 +219,7 @@ class HubNames(unittest.TestCase):
         tree = pathlib.Path(tempfile.mkdtemp())
         (tree / "projects").mkdir()
         (tree / "bin").symlink_to(ROOT / "bin")   # what the entry's run: lines name
-        entry = (ROOT / "projects" / "agent-hub.yaml").read_text().replace(
+        entry = names.resolve(ROOT / "projects", "project", "{}.yaml").read_text().replace(
             "name: agent-hub\n", f"name: {names.new('project')}\n")
         if "\ntype: platform\n" not in entry:
             entry = entry.replace(f"name: {names.new('project')}\n", f"name: {names.new('project')}\ntype: platform\n")
@@ -282,29 +283,31 @@ class ConfigPath(unittest.TestCase):
 
     def test_whichever_exists(self):
         cfg = pathlib.Path(tempfile.mkdtemp())
+        cur, oth = names.current("config_file"), names.other("config_file")
         read = "import hubconf; print(hubconf.config_path().name, hubconf.get('owner.tag'), hubconf.config_conflict())"
-        self.assertEqual(self.run_py(cfg, read), "hub.json None None", "neither: this release's own name")
-        (cfg / "brunna.json").write_text('{"owner": {"tag": "B"}}')
-        self.assertEqual(self.run_py(cfg, read), "brunna.json B None", "a renamed instance is read as it is")
-        (cfg / "hub.json").write_text('{"owner": {"tag": "H"}}')
+        self.assertEqual(self.run_py(cfg, read), f"{cur} None None", "neither: this release's own name")
+        (cfg / oth).write_text('{"owner": {"tag": "O"}}')
+        self.assertEqual(self.run_py(cfg, read), f"{oth} O None", "an instance under the other name is read as it is")
+        (cfg / cur).write_text('{"owner": {"tag": "C"}}')
         out = self.run_py(cfg, read).split(" ", 2)
-        self.assertEqual(out[:2], ["hub.json", "H"])
-        self.assertIn("brunna.json", out[2], "both: reported, not guessed")
+        self.assertEqual(out[:2], [cur, "C"])
+        self.assertIn(oth, out[2], "both: reported, not guessed")
         r = subprocess.run([sys.executable, str(ROOT / "bin" / "config-check")],
                            env={**names.env_set(names.env_strip(__import__("os").environ), "CONFIG", str(cfg)),
                                 "AGENT_HUB_LANG_UI": "en"}, capture_output=True, text=True)
         self.assertNotEqual(r.returncode, 0)
-        self.assertIn("both hub.json and brunna.json exist", r.stdout + r.stderr)
+        self.assertIn(f"both {cur} and {oth} exist", r.stdout + r.stderr)
 
     def test_shell_finds_whichever_exists(self):
         cfg = pathlib.Path(tempfile.mkdtemp())
+        cur, oth = names.current("config_file"), names.other("config_file")
         env = {**names.env_strip(__import__("os").environ), "BRUNNA_CONFIG": str(cfg)}
         sh = f'source "{ROOT}/bin/hubpaths.sh"; printf "%s|" "$HUB_JSON"; hub_json_get owner.tag'
         def run():
             return subprocess.run(["bash", "-c", sh], env=env, capture_output=True, text=True).stdout.strip()
-        self.assertEqual(run(), f"{cfg}/hub.json|", "neither: this release's name; a new-spelling variable is read")
-        (cfg / "brunna.json").write_text('{"owner": {"tag": "B"}}')
-        self.assertEqual(run(), f"{cfg}/brunna.json|B")
+        self.assertEqual(run(), f"{cfg}/{cur}|", "neither: this release's name; a new-spelling variable is read")
+        (cfg / oth).write_text('{"owner": {"tag": "O"}}')
+        self.assertEqual(run(), f"{cfg}/{oth}|O")
 
 
 class LettersUnderTheOtherName(unittest.TestCase):

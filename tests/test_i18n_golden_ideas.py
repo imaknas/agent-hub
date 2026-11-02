@@ -98,7 +98,7 @@ def git(cwd, *args):
 
 
 def base_env() -> dict:
-    env = {k: v for k, v in os.environ.items() if not k.startswith(("GIT_", "AGENT_HUB_"))}
+    env = {k: v for k, v in os.environ.items() if not k.startswith(("GIT_", "BRUNNA_", "AGENT_HUB_"))}
     env["AGENT_HUB_LANG_UI"] = golden_lang.LANG
     return env
 

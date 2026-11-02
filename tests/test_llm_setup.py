@@ -69,7 +69,7 @@ class Setup(unittest.TestCase):
         self.cfg = {"owner": {"name": "alex", "tag": "Alex"}, "registry_dir": "projects", "runtime": {"default": "none"},
                     "llm": {"points": {"consolidate": {"model": "pinned"}}}}
         (self.tmp / "config" / "hub.json").write_text(json.dumps(self.cfg))
-        self.env = {**{k: v for k, v in os.environ.items() if not k.startswith("AGENT_HUB_") or k == "AGENT_HUB_PYTHON"},
+        self.env = {**{k: v for k, v in os.environ.items() if not k.startswith(("AGENT_HUB_", "BRUNNA_")) or k == "AGENT_HUB_PYTHON"},
                     "HOME": str(self.tmp / "home"), "AGENT_HUB_CONFIG": str(self.tmp / "config"),
                     "AGENT_HUB_DATA": str(self.tmp / "data"), "AGENT_HUB_SECRETS": str(self.tmp / "secrets"),
                     "AGENT_HUB_STATE": str(self.tmp / "state"), "AGENT_HUB_LANG_UI": "zh-Hant"}

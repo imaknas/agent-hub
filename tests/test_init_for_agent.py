@@ -54,14 +54,14 @@ class ForAgent(unittest.TestCase):
             self.assertEqual(qs[qid]["via"], via, qid)
             self.assertNotIn("default", qs[qid], "the owner answers it directly, the agent has nothing to fill in")
         self.assertFalse((self.hub / ".hub-home").exists())
-        self.assertFalse((self.home / ".agent-hub").exists())
+        self.assertFalse((self.home / ".brunna").exists())
 
     def test_answers_apply_and_end_with_one_json_line(self):
         r = self.hub_cmd("init", "--answers", self.answers(owner="Alex", workspace=str(self.home / "ws"), agent="none",
                                                            llm="none", language="en"), "--no-launchd")
         self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
         self.assertEqual(json.loads(r.stdout.splitlines()[-1]), {"done": True, "exit": 0, "needs_user": []})
-        cfg = json.loads((self.home / ".agent-hub" / "config" / "hub.json").read_text())
+        cfg = json.loads((self.home / ".brunna" / "config" / "brunna.json").read_text())
         self.assertEqual((cfg["owner"]["tag"], cfg["language"]["ui"]), ("Alex", "en"))
         r = self.hub_cmd("init", "--questions")
         self.assertEqual(r.returncode, 1)

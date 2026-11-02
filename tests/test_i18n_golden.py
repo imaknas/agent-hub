@@ -46,7 +46,7 @@ class Golden(unittest.TestCase):
         self.write_cfg()
         # NVM_*: the agent step looks for agents under nvm's node; the fake HOME has none, nor should the machine's
         self.env = {**{k: v for k, v in os.environ.items()
-                       if not k.startswith(("AGENT_HUB_", "GIT_", "NVM_")) or k == "AGENT_HUB_PYTHON"},
+                       if not k.startswith(("BRUNNA_", "AGENT_HUB_", "GIT_", "NVM_")) or k == "AGENT_HUB_PYTHON"},
                     "AGENT_HUB_ROOT": str(ROOT),   # the tree under test (no lookup of a main checkout from a worktree)
                     "HOME": str(self.tmp / "home"), "AGENT_HUB_CONFIG": str(self.tmp / "config"),
                     "AGENT_HUB_DATA": str(self.tmp / "data"), "AGENT_HUB_SECRETS": str(self.tmp / "secrets"),
@@ -259,7 +259,7 @@ class Golden(unittest.TestCase):
                            "use": {"standard": "anthropic"}}
         self.write_cfg()
         out.append(self.agenthub("doctor", label="launchd, problems", sc={
-            "sm": "launchd", "launchd": {"local.agent-hub-scheduler-watchdog": "path = /elsewhere/bin/x"},
+            "sm": "launchd", "launchd": {"local.brunna-scheduler-watchdog": "path = /elsewhere/bin/x"},
             "plan": {"services": ["a", "b"], "scheduler": ["c"]}, "hooks": ""}))
         # launchd; everything in order; an assistant; claude with its token
         del self.cfg["llm"], self.cfg["unknown_key"]
@@ -275,8 +275,8 @@ class Golden(unittest.TestCase):
             "wake_misses": [{"id": "m20261101-ab12", "to": "alpha", "ts": "2026-11-01T08:00:00+08:00", "days": 7},
                             {"id": "m20261101-cd34", "to": "beta", "ts": "2026-11-01T09:00:00+08:00", "days": 7}],
             "release": {"version": "v0.2.0", "release": "v0.2.0", "newest": "v0.3.0"},
-            "sm": "launchd", "launchd": {"local.agent-hub-scheduler": "path = {bin}/scheduler.py",
-                                         "local.agent-hub-scheduler-watchdog": "path = {bin}/scheduler-watchdog.py"},
+            "sm": "launchd", "launchd": {"local.brunna-scheduler": "path = {bin}/scheduler.py",
+                                         "local.brunna-scheduler-watchdog": "path = {bin}/scheduler-watchdog.py"},
             "plan": {}, "hooks": "githooks", "which": {"agenthub": "/usr/local/bin/agenthub"},
             "python": [0, "python 3.13 ok\n", ""]}))
         # systemd; no coding agent; an old heartbeat
@@ -288,7 +288,7 @@ class Golden(unittest.TestCase):
         (self.tmp / "state" / "upgrade-check.json").unlink()
         out.append(self.agenthub("doctor", label="systemd, runtime none", sc={
             "release": {"version": "v0.3.0-2-gabc1234", "release": "v0.3.0", "newest": "v0.3.0", "mode": "dev"},
-            "sm": "systemd", "systemd": {"local.agent-hub-scheduler": "running", "local.agent-hub-scheduler-watchdog": None},
+            "sm": "systemd", "systemd": {"local.brunna-scheduler": "running", "local.brunna-scheduler-watchdog": None},
             "linger": False, "plan": {"services": ["a"]}, "hooks": "githooks", "adapter": "landlock",
             "no_sandbox": "the kernel's Landlock ABI is 3, ports need ≥ 4"}))
         self.valid_cfg(owner_side="assistant", assistant={"project": "helper", "api": "http://127.0.0.1:9"})
@@ -374,8 +374,8 @@ class Golden(unittest.TestCase):
                                  sc={"hooks": "", "which": {"git": "/usr/bin/git"}}))
         # --scheduler-only (a step of agenthub upgrade): the two units and nothing else; under launchd it writes the
         # plists into the fake HOME, then finds them in place
-        loaded = {"local.agent-hub-scheduler": "path = {bin}/scheduler.py",
-                  "local.agent-hub-scheduler-watchdog": "path = {bin}/scheduler-watchdog.py"}
+        loaded = {"local.brunna-scheduler": "path = {bin}/scheduler.py",
+                  "local.brunna-scheduler-watchdog": "path = {bin}/scheduler-watchdog.py"}
         out += [self.agenthub("init", "--scheduler-only", label="launchd, not installed", sc={"sm": "launchd"}),
                 self.agenthub("init", "--scheduler-only", label="launchd, in place", sc={"sm": "launchd", "launchd": loaded}),
                 self.agenthub("init", "--scheduler-only", label="systemd", sc={"sm": "systemd", "systemd": {}, "linger": True}),

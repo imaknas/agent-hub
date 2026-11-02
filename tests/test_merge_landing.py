@@ -86,7 +86,8 @@ sys.exit(int(os.environ.get("LAND_RC", "0")))
 """
 
 HUB_ENTRY = """v: 2
-name: agent-hub
+name: brunna
+type: platform
 commits: conventional
 tests:
 - tier: quick
@@ -102,7 +103,7 @@ class Base(unittest.TestCase):
             (self.tmp / d).mkdir(parents=True)
         (self.tmp / "config" / "hub.json").write_text(json.dumps({"bus_dir": str(self.tmp / "bus"),
                                                                   "registry_dir": "projects"}))
-        self.env = {**{k: v for k, v in os.environ.items() if not k.startswith(("AGENT_HUB_", "GIT_"))},
+        self.env = {**{k: v for k, v in os.environ.items() if not k.startswith(("BRUNNA_", "AGENT_HUB_", "GIT_"))},
                     "AGENT_HUB_PYTHON": PY, "HOME": str(self.tmp / "home"),
                     "AGENT_HUB_CONFIG": str(self.tmp / "config"), "AGENT_HUB_DATA": str(self.tmp / "data"),
                     "AGENT_HUB_SECRETS": str(self.tmp / "secrets"), "AGENT_HUB_STATE": str(self.tmp / "state"),
@@ -143,7 +144,7 @@ class MergeLanding(Base):
         self.hub = self.tmp / "hub"
         self.git(self.tmp, "init", "-q", "-b", "main", str(self.hub))
         (self.hub / "projects").mkdir()
-        (self.hub / "projects" / "agent-hub.yaml").write_text(HUB_ENTRY)
+        (self.hub / "projects" / "brunna.yaml").write_text(HUB_ENTRY)
         (self.hub / ".gitignore").write_text("/bin/\n")
         self.git(self.hub, "add", "-A")
         self.git(self.hub, "commit", "-q", "-m", "chore: hub")
@@ -156,7 +157,7 @@ class MergeLanding(Base):
         (self.hub / "bin" / "agenthub").write_text(STUB)
         self.log = self.tmp / "land.jsonl"
         self.env.update(AGENT_HUB_ROOT=str(self.hub), LAND_LOG=str(self.log))
-        self.index({"agent-hub": {"v": 2, "name": "agent-hub", "commits": "conventional",
+        self.index({"brunna": {"v": 2, "name": "brunna", "type": "platform", "commits": "conventional",
                                   "tests": [{"tier": "quick", "run": "true", "when": ["merge"]}]}})
         self.wt = self.tmp / "wt"
         self.git(self.hub, "worktree", "add", "-q", "-b", "feature", str(self.wt))
@@ -192,8 +193,8 @@ class MergeLanding(Base):
         self.assertEqual(len(self.events("merge.done")), 1)
 
     def test_no_land_when_tests_fail(self):
-        self.index({"agent-hub": {"v": 2, "name": "agent-hub"}})
-        (self.wt / "projects" / "agent-hub.yaml").write_text(HUB_ENTRY.replace("run: 'true'", "run: 'false'"))
+        self.index({"brunna": {"v": 2, "name": "brunna", "type": "platform"}})
+        (self.wt / "projects" / "brunna.yaml").write_text(HUB_ENTRY.replace("run: 'true'", "run: 'false'"))
         self.git(self.wt, "commit", "-q", "-am", "test: a failing tier")
         r = self.merge()
         self.assertEqual(r.returncode, 1, r.stdout + r.stderr)

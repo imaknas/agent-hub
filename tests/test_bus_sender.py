@@ -27,6 +27,7 @@ ROOT = pathlib.Path(__file__).resolve().parents[1]
 BIN = ROOT / "bin"
 sys.path.insert(0, str(BIN))
 import hubconf  # noqa: E402
+import names  # noqa: E402
 import seatbelt  # noqa: E402
 
 GIT_ENV = {"GIT_CONFIG_GLOBAL": "/dev/null", "GIT_AUTHOR_NAME": "t", "GIT_AUTHOR_EMAIL": "t@t",
@@ -65,7 +66,7 @@ class Fixture(unittest.TestCase):
                "registry_dir": "projects", "workspace_root": str(t / "ws"), "runtime": {"default": "none"},
                "language": {"ui": "en", "content": "en"}}
         (t / "config" / "hub.json").write_text(json.dumps(cfg))
-        self.env = {**{k: v for k, v in os.environ.items() if not k.startswith(("AGENT_HUB_", "AGENTHUB_", "HUB_"))
+        self.env = {**{k: v for k, v in os.environ.items() if not k.startswith(("BRUNNA_", "AGENT_HUB_", "AGENTHUB_", "HUB_"))
                        or k == "AGENT_HUB_PYTHON"}, **GIT_ENV,
                     "HOME": str(t / "home"), "AGENT_HUB_CONFIG": str(t / "config"), "AGENT_HUB_DATA": str(t / "data"),
                     "AGENT_HUB_SECRETS": str(t / "secrets"), "AGENT_HUB_STATE": str(t / "state"),
@@ -109,7 +110,7 @@ class Fixture(unittest.TestCase):
             c.close()
 
     def outbox(self, name="box") -> pathlib.Path:
-        return self.ws[name] / ".git" / "agent-hub" / "outbox"
+        return names.repo_dir(self.ws[name] / ".git") / "outbox"
 
     def drop(self, body, name="m11011200-0123456789ab.json", project="box"):
         """What a sandboxed project can always do: write any file into its own outbox."""
@@ -126,7 +127,7 @@ class Fixture(unittest.TestCase):
 
     def refusals(self, project="box"):
         return [json.loads(r["payload"])["text"] for r in self.rows("type='message' AND to_project=? AND source=?",
-                                                                    (project, "agent-hub"))
+                                                                    (project, "brunna"))
                 if json.loads(r["payload"]).get("outbox_refused")]
 
 
@@ -146,7 +147,7 @@ class Attacks(Fixture):
                    "sender": "open", "to": "agent-hub", "type": "manifest.update", "text": MANIFEST})
         self.dispatch()
         self.assertEqual(self.rows("source='open'"), [])
-        got = self.rows("type='message' AND to_project='agent-hub'")
+        got = self.rows("type='message' AND to_project='brunna'")
         self.assertEqual([r["source"] for r in got], ["box"])
         self.assertFalse(any(self.outbox().iterdir()), "a moved letter is deleted from the outbox")
 
@@ -212,7 +213,7 @@ class Outbox(Fixture):
         self.hubbus("send", "--to", "box", "--type", "request", "--text", "for box", cwd=self.ws["open"])
         self.letter_to("open", "the open project's secret plan")
         self.dispatch()
-        view = json.loads((self.ws["box"] / ".git" / "agent-hub" / "inbox.json").read_text())
+        view = json.loads((names.repo_dir(self.ws["box"] / ".git") / "inbox.json").read_text())
         self.assertEqual({e["to_project"] for e in view["events"]}, {"box"})
         shutil.move(self.tmp / "bus", self.tmp / "bus-away")   # the sandbox has no bus: reading never needs it
         r = self.hubbus("inbox", cwd=self.ws["box"])
@@ -439,7 +440,7 @@ class Routing(Fixture):
         """Whoever runs it (a user's terminal in the folder has the user's authority)."""
         elsewhere = self.tmp / "elsewhere"
         elsewhere.mkdir()
-        (self.ws["box"] / ".git" / "agent-hub").mkdir(parents=True)
+        names.repo_dir(self.ws["box"] / ".git").mkdir(parents=True)
         self.outbox().symlink_to(elsewhere)
         r = self.hubbus("send", "--to", "open", "--type", "info", "--text", "x", cwd=self.ws["box"], check=False)
         self.assertNotEqual(r.returncode, 0)

@@ -471,7 +471,7 @@ class SyncLocalSetup(unittest.TestCase):
         (p / ".agent-memory").mkdir()
         out = self.run_(BIN / "sync-local-setup.sh", p)
         for f in ("CLAUDE.local.md", ".fake-instructions.md"):
-            self.assertIn("<!-- agent-hub:begin -->", (p / f).read_text(), out)
+            self.assertIn("<!-- brunna:begin -->", (p / f).read_text(), out)
             self.assertIn(f, out)
         self.assertTrue((p / ".fake-hooks.json").exists(), out)
         exclude = (p / ".git" / "info" / "exclude").read_text()

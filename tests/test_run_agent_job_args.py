@@ -56,7 +56,7 @@ class RunAgentJobArgs(unittest.TestCase):
         (self.tmp / "config" / "hub.json").write_text(json.dumps({"owner": {"name": "alex", "tag": "Alex"}}))
         self.record = self.tmp / "record.json"
         self.env = {**{k: v for k, v in os.environ.items()
-                       if not k.startswith(("AGENT_HUB_", "LLM_AUTH", "AGENT_JOB_", "CLAUDE_CODE_OAUTH"))},
+                       if not k.startswith(("BRUNNA_", "AGENT_HUB_", "LLM_AUTH", "AGENT_JOB_", "CLAUDE_CODE_OAUTH"))},
                     "AGENT_HUB_PYTHON": PY, "AGENT_HUB_ROOT": str(self.hub), "HOME": str(self.tmp / "home"),
                     "AGENT_HUB_CONFIG": str(self.tmp / "config"), "AGENT_HUB_DATA": str(self.tmp / "data"),
                     "AGENT_HUB_SECRETS": str(self.tmp / "secrets"), "AGENT_HUB_STATE": str(self.tmp / "state"),

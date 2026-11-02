@@ -1,4 +1,4 @@
-"""Renaming a platform service's label (projects/agent-hub.yaml): render-services must bring up the new label and take
+"""Renaming a platform service's label (projects/brunna.yaml): render-services must bring up the new label and take
 down the old one it generated, leaving nothing behind. Plans only: nothing is loaded, launchd is never asked.
 
     bin/py -m unittest tests.test_service_label_rename
@@ -29,7 +29,7 @@ def load():
 class LabelRename(unittest.TestCase):
     def test_the_platforms_memory_sync_label(self):
         m = load()
-        doc = yaml.safe_load((ROOT / "projects" / "agent-hub.yaml").read_text())
+        doc = yaml.safe_load((ROOT / "projects" / "brunna.yaml").read_text())
         svc = next(s for s in doc["services"] if s["name"] == "sync-all-memory")
         self.assertEqual(m.label_of("agent-hub", svc), "local.agent-hub.sync-all-memory",
                          "the default label: no machine name in it")

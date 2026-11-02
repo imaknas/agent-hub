@@ -30,7 +30,7 @@ class Builtin(unittest.TestCase):
         self.cfg = {"owner": {"name": "alex", "tag": "Alex", "principal_id": "person:alex"}, "owner_side": "builtin",
                     "bus_dir": str(self.tmp / "bus"), "registry_dir": "projects"}
         self.write_cfg()
-        self.env = {**{k: v for k, v in os.environ.items() if not k.startswith("AGENT_HUB_") or k == "AGENT_HUB_PYTHON"},
+        self.env = {**{k: v for k, v in os.environ.items() if not k.startswith(("AGENT_HUB_", "BRUNNA_")) or k == "AGENT_HUB_PYTHON"},
                     "HOME": str(self.tmp / "home"), "AGENT_HUB_CONFIG": str(self.tmp / "config"),
                     "AGENT_HUB_DATA": str(self.tmp / "data"), "AGENT_HUB_SECRETS": str(self.tmp / "secrets")}
 
@@ -67,7 +67,7 @@ class Builtin(unittest.TestCase):
                          "from the owner side: the same direction as what the assistant sends")
         self.assertEqual((rec["origin"], rec["outcome"], rec["authority"]),
                          ("principal", "done", {"kind": "principal", "decider": "person:alex"}))
-        self.assertEqual(rec["by"], "agent-hub:owner-side")
+        self.assertEqual(rec["by"], "brunna:owner-side", "a new record carries the switched party id")
         need = next(e["record"] for e in self.records() if e["record"]["type"] == "raised")
         self.assertEqual(rec["terms_digest"], ph_wire.terms_digest(need, "0.4"), "core §4: what it was settled against, as 0.4 digests it")
         self.assertEqual((rec["ph"], rec["ext"]), ("0.4", "acts/0.4"), "hub.json principal_handoff.send_version, 0.4 when not set")

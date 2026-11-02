@@ -52,7 +52,7 @@ class ShellGolden(unittest.TestCase):
                     "memory_copies": str(self.tmp / "copies"), "workspace_root": str(self.tmp / "ws"),
                     "git_origin": str(self.tmp / "origin"), "language": {"ui": golden_lang.LANG, "content": golden_lang.LANG}}
         self.write_cfg()
-        self.env = {**{k: v for k, v in os.environ.items() if not k.startswith(("AGENT_HUB_", "GIT_"))},
+        self.env = {**{k: v for k, v in os.environ.items() if not k.startswith(("BRUNNA_", "AGENT_HUB_", "GIT_"))},
                     "AGENT_HUB_PYTHON": PY, "HOME": str(self.tmp / "home"), "AGENT_HUB_CONFIG": str(self.tmp / "config"),
                     "AGENT_HUB_DATA": str(self.tmp / "data"), "AGENT_HUB_SECRETS": str(self.tmp / "secrets"),
                     "AGENT_HUB_STATE": str(self.tmp / "state"), "AGENT_HUB_LANG_UI": golden_lang.LANG,

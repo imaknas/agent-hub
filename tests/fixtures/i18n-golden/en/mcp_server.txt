@@ -42,7 +42,7 @@ Register this stdio MCP server in your coding agent (start it in the project fol
 
 {
   "mcpServers": {
-    "agenthub": {
+    "brunna": {
       "command": "<ROOT>/bin/py",
       "args": [
         "<ROOT>/bin/agenthub",

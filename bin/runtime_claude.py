@@ -1318,8 +1318,8 @@ def install_info() -> dict:
                            "store": "(umask 077; read -rs t && printf '%s\\n' \"$t\" > ~/.claude/headless-oauth-token)",
                            "needs": _("a Claude Pro, Max, Ultra, Team or Enterprise plan")},
             # user scope: ~/.claude.json, which the Desktop app's Code tab reads too
-            "mcp_register": ["claude", "mcp", "add", "--scope", "user", "agenthub", "--", "{agenthub}", "mcp"],
-            "mcp_unregister": ["claude", "mcp", "remove", "--scope", "user", "agenthub"],
+            "mcp_register": ["claude", "mcp", "add", "--scope", "user", "{server}", "--", "{cli}", "mcp"],
+            "mcp_unregister": ["claude", "mcp", "remove", "--scope", "user", "{server}"],
             "settings": {"runtime": {"default": "claude"}, "modules": {"claude": True}}}
 
 

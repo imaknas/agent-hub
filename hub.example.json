@@ -28,11 +28,11 @@
     "discord_token_file": ".secrets/discord-token",
     "discord_channel_file": ".secrets/discord-alert-channel"
   },
-  "bus_dir": "~/.local/state/agent-hub-bus",
+  "bus_dir": "~/.local/state/brunna-bus",
   "_bus_dir_comment": "The event bus (bus.db, hubbus.log). Deliberately outside the hub directory: sandboxed projects deny writes to the hub directory, and a deny overrides the sandbox's allowWrite (tested in the 2026-10-22 pilot)",
   "backup": {
     "_comment": "Optional: nightly encrypted backup (restic). The password is in .secrets/backup-password (keep another copy in your password manager), the B2 key in .secrets/b2-env. Without it, delete the whole section",
-    "repo": "b2:<your-bucket>:agent-hub",
+    "repo": "b2:<your-bucket>:brunna",
     "sqlite": [],
     "bare_repos": "~/git-origin",
     "_include_comment": "Directories to back up. .state is the hub's run state and .secrets the platform's secrets directory, wherever the hub and the instance directory are (hubconf.path)",

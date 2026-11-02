@@ -27,7 +27,7 @@ class Uninstall(unittest.TestCase):
     def connected(self) -> pathlib.Path:
         r = self.hub_cmd("init", "--yes", "--no-launchd", "--owner", "Alex", "--workspace", str(self.home / "ws"))
         self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
-        cfg = self.home / ".agent-hub" / "config" / "hub.json"
+        cfg = self.home / ".brunna" / "config" / "brunna.json"
         d = json.loads(cfg.read_text())
         d["runtime"] = {"default": "claude"}   # a runtime with a rules file and hooks; its binary isn't needed
         cfg.write_text(json.dumps(d))
@@ -61,13 +61,13 @@ class Uninstall(unittest.TestCase):
         self.assertEqual(s, {"hooks": {"Stop": [{"hooks": [{"type": "command", "command": "say done"}]}]}})
         self.assertEqual((app / "a.txt").read_text(), "mine\n")
         self.assertTrue((app / ".agent-memory" / "STATE.md").exists(), "notes stay")
-        self.assertTrue((self.home / ".agent-hub" / "config" / "hub.json").exists(), "settings stay")
+        self.assertTrue((self.home / ".brunna" / "config" / "brunna.json").exists(), "settings stay")
         self.assertIn("rm -rf", r.stdout)
 
         r = self.hub_cmd("uninstall", "--apply", "--yes", "--purge")
         self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
         self.assertFalse((app / ".agent-memory").exists())
-        self.assertFalse((self.home / ".agent-hub").exists())
+        self.assertFalse((self.home / ".brunna").exists())
         self.assertFalse((self.home / "git-origin" / "app-memory.git").exists())
         self.assertEqual((app / "a.txt").read_text(), "mine\n", "the project's own files are never touched")
         branches = subprocess.run(["git", "-C", str(app), "branch", "--list", "agent-memory"], capture_output=True,
@@ -78,7 +78,7 @@ class Uninstall(unittest.TestCase):
         self.connected()
         r = self.hub_cmd("uninstall", "--apply")   # no terminal and no --yes: nothing
         self.assertEqual(r.returncode, 1)
-        self.assertIn("agent-hub:begin", (self.home / "ws" / "app" / "CLAUDE.local.md").read_text())
+        self.assertIn("brunna:begin", (self.home / "ws" / "app" / "CLAUDE.local.md").read_text())
 
 
 class Parts(unittest.TestCase):

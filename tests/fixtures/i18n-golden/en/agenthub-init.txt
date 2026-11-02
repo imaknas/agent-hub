@@ -13,8 +13,8 @@ $ agenthub init --dry-run --yes    # instance, launchd
 ✓ <TMP>/config/hub.json already exists; leaving it alone (to change it, edit it, then run agenthub config apply)
 (dry-run) create folder <TMP>/fakehub/.logs
 (dry-run) create folder <TMP>/home/git-origin
-(dry-run) local.agent-hub-scheduler: install
-(dry-run) local.agent-hub-scheduler-watchdog: install
+(dry-run) local.brunna-scheduler: install
+(dry-run) local.brunna-scheduler-watchdog: install
 
 Next: agenthub doctor shows what is missing; agenthub connect <folder> connects existing projects, agenthub onboard ~/workspace/<project> starts a new one
 --- stderr
@@ -25,8 +25,8 @@ $ agenthub init --dry-run --yes    # instance, systemd
 ✓ <TMP>/config/hub.json already exists; leaving it alone (to change it, edit it, then run agenthub config apply)
 (dry-run) create folder <TMP>/fakehub/.logs
 (dry-run) create folder <TMP>/home/git-origin
-(dry-run) local.agent-hub-scheduler: install (systemd)
-(dry-run) local.agent-hub-scheduler-watchdog: install (systemd)
+(dry-run) local.brunna-scheduler: install (systemd)
+(dry-run) local.brunna-scheduler-watchdog: install (systemd)
   ⚠️ user units stop after logout: `loginctl enable-linger $USER` (needs sudo)
 
 Next: agenthub doctor shows what is missing; agenthub connect <folder> connects existing projects, agenthub onboard ~/workspace/<project> starts a new one
@@ -98,8 +98,8 @@ agent-hub's decisions stay off for now: whatever needs one fails plainly and say
 $ agenthub init --scheduler-only    # launchd, not installed
 [exit 0]
 --- stdout
-local.agent-hub-scheduler: install
-local.agent-hub-scheduler-watchdog: install
+local.brunna-scheduler: install
+local.brunna-scheduler-watchdog: install
 --- stderr
 
 $ agenthub init --scheduler-only    # launchd, in place
@@ -111,9 +111,9 @@ $ agenthub init --scheduler-only    # launchd, in place
 $ agenthub init --scheduler-only    # systemd
 [exit 1]
 --- stdout
-local.agent-hub-scheduler: install (systemd)
+local.brunna-scheduler: install (systemd)
   ⚠️ systemctl enable failed: no user bus
-local.agent-hub-scheduler-watchdog: install (systemd)
+local.brunna-scheduler-watchdog: install (systemd)
   ⚠️ systemctl enable failed: no user bus
 --- stderr
 

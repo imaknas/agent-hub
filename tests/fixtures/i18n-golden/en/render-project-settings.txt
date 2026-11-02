@@ -19,7 +19,7 @@ beta: installed pre-merge-commit (gate strict)
 gamma: the platform's hooks are not installed (the project uses its own core.hooksPath=.husky); detecting only
 === alpha pre-commit
 #!/bin/sh
-# agent-hub:gate (managed; registry gate: strict)
+# brunna:gate (managed; registry gate: strict)
 # No direct commit or merge commit on main/master in the main checkout; merge-branch fast-forwards, which does not run this hook.
 b=$(git symbolic-ref --short -q HEAD)
 case "$b" in main|master) ;; *) exit 0 ;; esac

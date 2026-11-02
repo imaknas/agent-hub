@@ -13,8 +13,8 @@ $ agenthub init --dry-run --yes    # instance, launchd
 ✓ 已經有 <TMP>/config/hub.json,不動它(要改就直接編輯,再 hub config apply)
 (dry-run) 建資料夾 <TMP>/fakehub/.logs
 (dry-run) 建資料夾 <TMP>/home/git-origin
-(dry-run) local.agent-hub-scheduler:安裝
-(dry-run) local.agent-hub-scheduler-watchdog:安裝
+(dry-run) local.brunna-scheduler:安裝
+(dry-run) local.brunna-scheduler-watchdog:安裝
 
 下一步:agenthub doctor 列出還缺什麼;agenthub connect <資料夾> 接上既有的專案,agenthub onboard ~/workspace/<專案> 開新專案
 --- stderr
@@ -25,8 +25,8 @@ $ agenthub init --dry-run --yes    # instance, systemd
 ✓ 已經有 <TMP>/config/hub.json,不動它(要改就直接編輯,再 hub config apply)
 (dry-run) 建資料夾 <TMP>/fakehub/.logs
 (dry-run) 建資料夾 <TMP>/home/git-origin
-(dry-run) local.agent-hub-scheduler:安裝(systemd)
-(dry-run) local.agent-hub-scheduler-watchdog:安裝(systemd)
+(dry-run) local.brunna-scheduler:安裝(systemd)
+(dry-run) local.brunna-scheduler-watchdog:安裝(systemd)
   ⚠️ 登出之後 user unit 會停:`loginctl enable-linger $USER`(要 sudo)
 
 下一步:agenthub doctor 列出還缺什麼;agenthub connect <資料夾> 接上既有的專案,agenthub onboard ~/workspace/<專案> 開新專案
@@ -98,8 +98,8 @@ agent-hub 的判斷先關著:需要判斷的地方會直接失敗並說明原因
 $ agenthub init --scheduler-only    # launchd, not installed
 [exit 0]
 --- stdout
-local.agent-hub-scheduler:安裝
-local.agent-hub-scheduler-watchdog:安裝
+local.brunna-scheduler:安裝
+local.brunna-scheduler-watchdog:安裝
 --- stderr
 
 $ agenthub init --scheduler-only    # launchd, in place
@@ -111,9 +111,9 @@ $ agenthub init --scheduler-only    # launchd, in place
 $ agenthub init --scheduler-only    # systemd
 [exit 1]
 --- stdout
-local.agent-hub-scheduler:安裝(systemd)
+local.brunna-scheduler:安裝(systemd)
   ⚠️ systemctl enable 失敗:no user bus
-local.agent-hub-scheduler-watchdog:安裝(systemd)
+local.brunna-scheduler-watchdog:安裝(systemd)
   ⚠️ systemctl enable 失敗:no user bus
 --- stderr
 

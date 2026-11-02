@@ -30,6 +30,7 @@ import unittest
 ROOT = pathlib.Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "bin"))
 import i18n  # noqa: E402
+import names  # noqa: E402
 import todo_tokens  # noqa: E402
 
 # a zh-Hant instance: the memory repos' content (tests/fixtures/librarian-flow.zh-Hant.json) and STATE.md's to-do tokens
@@ -118,8 +119,8 @@ class Env:
             "v": 1, "registry_dir": "projects", "memory_copies": str(tmp / "copies"), "git_origin": str(tmp / "bare"),
             "bus_dir": str(tmp / "bus"), "evals_dir": str(tmp / "evals"), "owner": {"address": "owner", "aliases": ["alex"], "tag": "Alex"},
             "assistant": {"project": "helper", "api": "http://127.0.0.1:9/x", "name": "Hugin"}}))
-        e = {k: v for k, v in os.environ.items() if not k.startswith(("GIT_", "AGENT_HUB_HOME", "AGENT_HUB_CONFIG",
-                                                                     "AGENT_HUB_DATA", "AGENT_HUB_SECRETS"))}
+        e = {k: v for k, v in os.environ.items() if not k.startswith(("GIT_", *(n for x in ("HOME", "CONFIG", "DATA", "SECRETS")
+                                                                          for n in names.env_names(x))))}
         # the log and review-log lines asserted below are the zh-Hant catalog's (docs/design/i18n.md), the STATE.md
         # files zh-Hant content
         self.env = {**e, "AGENT_HUB_ROOT": str(self.hub), "AGENT_HUB_LANG_UI": "zh-Hant", "AGENT_HUB_LANG_CONTENT": "zh-Hant",

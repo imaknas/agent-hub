@@ -19,7 +19,7 @@ beta:裝了 pre-merge-commit(gate strict)
 gamma:平台的 hook 沒裝(專案用自己的 core.hooksPath=.husky),只偵測
 === alpha pre-commit
 #!/bin/sh
-# agent-hub:gate (managed; registry gate: strict)
+# brunna:gate (managed; registry gate: strict)
 # No direct commit or merge commit on main/master in the main checkout; merge-branch fast-forwards, which does not run this hook.
 b=$(git symbolic-ref --short -q HEAD)
 case "$b" in main|master) ;; *) exit 0 ;; esac

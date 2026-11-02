@@ -59,8 +59,9 @@ class InitQuestion(unittest.TestCase):
                 mock.patch.dict(self.m.os.environ, env, clear=False), \
                 mock.patch.object(self.m.hubconf, "system_tag", lambda *a: "en_US.UTF-8"), \
                 redirect_stdout(io.StringIO()) as out:
-            if not env_ui:
-                self.m.os.environ.pop("AGENT_HUB_LANG_UI", None)
+            if not env_ui:   # the run's own setting (either spelling) would answer the question
+                for n in ("AGENT_HUB_LANG_UI", "BRUNNA_LANG_UI"):
+                    self.m.os.environ.pop(n, None)
             self.m.init_dialogue.use(self.m.init_dialogue.Terminal(False))
             return self.m.choose_language({}), out.getvalue()
 

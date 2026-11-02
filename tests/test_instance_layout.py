@@ -16,8 +16,10 @@ import tempfile
 import unittest
 
 ROOT = pathlib.Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(ROOT / "bin"))
+import names  # noqa: E402
 PROBE = ("import hubconf as h, json; print(json.dumps({k: str(v) for k, v in {'config': h.config_dir(), 'data': h.data_dir(), "
-         "'secrets': h.secrets_dir(), 'state': h.STATE, 'logs': h.LOGS, 'hub_json': h.config_file('hub.json'), "
+         "'secrets': h.secrets_dir(), 'state': h.STATE, 'logs': h.LOGS, 'hub_json': h.config_path(), "
          "'registry': h.registry_dir(), 'alert': h.path('.secrets/discord-token')}.items()}))")
 
 
@@ -32,7 +34,7 @@ class Layout(unittest.TestCase):
         shutil.rmtree(self.hub, ignore_errors=True)
 
     def env(self, **extra):
-        e = {k: v for k, v in os.environ.items() if not k.startswith("AGENT_HUB")}
+        e = {k: v for k, v in os.environ.items() if not k.startswith(("AGENT_HUB", "BRUNNA_"))}
         return {**e, "AGENT_HUB_ROOT": str(self.hub), **extra}
 
     def py(self, **extra) -> dict:
@@ -49,7 +51,7 @@ class Layout(unittest.TestCase):
     def test_no_pointer_is_todays_layout(self):
         h = str(self.hub)
         want = {"config": h, "data": h, "secrets": f"{h}/.secrets", "state": f"{h}/.state", "logs": f"{h}/.logs",
-                "hub_json": f"{h}/hub.json", "registry": f"{h}/projects", "alert": f"{h}/.secrets/discord-token"}
+                "hub_json": f"{h}/{names.current('config_file')}", "registry": f"{h}/projects", "alert": f"{h}/.secrets/discord-token"}
         self.assertEqual(self.py(), want)
         self.assertEqual(self.sh(), {k: want[k] for k in ("config", "data", "secrets", "hub_json")})
 
@@ -58,7 +60,7 @@ class Layout(unittest.TestCase):
         (self.hub / ".hub-home").write_text(f"{inst}\n")
         h = str(self.hub)
         want = {"config": f"{inst}/config", "data": f"{inst}/data", "secrets": f"{inst}/secrets", "state": f"{h}/.state",
-                "logs": f"{h}/.logs", "hub_json": f"{inst}/config/hub.json", "registry": f"{inst}/config/projects",
+                "logs": f"{h}/.logs", "hub_json": f"{inst}/config/{names.current('config_file')}", "registry": f"{inst}/config/projects",
                 "alert": f"{inst}/secrets/discord-token"}
         self.assertEqual(self.py(), want)
         self.assertEqual(self.sh(), {k: want[k] for k in ("config", "data", "secrets", "hub_json")})

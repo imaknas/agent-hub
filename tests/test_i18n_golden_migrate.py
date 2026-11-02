@@ -122,7 +122,7 @@ class Golden(unittest.TestCase):
             "memory_copies": "~/.memory-copies", "services_root": "~/services", "hosts": {"server": "hubbox"},
             "github": {"owner": "o"}, "language": {"ui": golden_lang.LANG, "content": golden_lang.LANG}}))
         (self.hub / "legacy-paths.tsv").write_text("name\tpath\tnote\n")
-        env = {k: v for k, v in os.environ.items() if not k.startswith(("AGENT_HUB_", "GIT_"))}
+        env = {k: v for k, v in os.environ.items() if not k.startswith(("BRUNNA_", "AGENT_HUB_", "GIT_"))}
         self.env = {**env, "HOME": str(self.home), "AGENT_HUB_ROOT": str(self.hub), "AGENT_HUB_LANG_UI": golden_lang.LANG,
                     "PATH": f"{t / 'fakebin'}:{os.environ['PATH']}", "REMOTE_BIN": str(t / "remotebin"),
                     "FAKE_REMOTES": str(self.remotes), "GIT_CONFIG_NOSYSTEM": "1", "GIT_CEILING_DIRECTORIES": str(t),

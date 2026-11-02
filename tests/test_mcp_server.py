@@ -47,7 +47,7 @@ class Server(unittest.TestCase):
             path.mkdir(parents=True, exist_ok=True)
             doc = {"v": 1, "name": name, "paths": {"workspace": str(path)}, "memory": True}
             (t / "config" / "projects" / f"{name}.yaml").write_text(yaml.safe_dump(doc))
-        self.env = {**{k: v for k, v in os.environ.items() if not k.startswith(("AGENT_HUB_", "AGENTHUB_", "HUB_"))
+        self.env = {**{k: v for k, v in os.environ.items() if not k.startswith(("BRUNNA_", "AGENT_HUB_", "AGENTHUB_", "HUB_"))
                        or k == "AGENT_HUB_PYTHON"},
                     "HOME": str(t / "home"), "AGENT_HUB_CONFIG": str(t / "config"), "AGENT_HUB_DATA": str(t / "data"),
                     "AGENT_HUB_SECRETS": str(t / "secrets"), "AGENT_HUB_STATE": str(t / "state"),
@@ -200,7 +200,7 @@ class Server(unittest.TestCase):
         self.assertTrue(ok, text)
         argv, env = run.call_args.args[0], run.call_args.kwargs["env"]
         self.assertEqual(argv[1:], [str(BIN / "connect.py"), str((code / "notes").resolve()), "--yes"])
-        self.assertEqual(env["AGENTHUB_CONNECT_ROOTS"], str(code.resolve()))
+        self.assertEqual(env["BRUNNA_CONNECT_ROOTS"], str(code.resolve()))
 
     def test_onboard_rechecks_the_roots_on_its_real_path(self):
         code = self.tmp / "code"

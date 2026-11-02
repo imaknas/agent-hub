@@ -38,9 +38,9 @@ $ agenthub doctor    # launchd, problems
 ✗ LLM provider anthropic:沒有 key:<TMP>/secrets/anthropic-api-key 不在(bin/hub llm set-key 寫進去)
     → 看 hub.json llm.providers;key 用 bin/hub llm set-key <provider>
 ✓ 判斷點的模型分組:fast→(沒設),standard→anthropic,strong→(沒設)
-✗ 排程器(local.agent-hub-scheduler):沒有載入
+✗ 排程器(local.brunna-scheduler):沒有載入
     → bin/hub init
-✗ 看門狗(local.agent-hub-scheduler-watchdog):載入的不是這份 hub(<HUB>/bin)
+✗ 看門狗(local.brunna-scheduler-watchdog):載入的不是這份 hub(<HUB>/bin)
     → bin/hub init(會換成這份的)
 ✓ 開了 sandbox 的專案自己的服務跟 job:隔離執行(seatbelt: own-writes-only, isolated-reads, declared-port-only)
 ! 排程器還沒 tick 過,這台也沒有服務管理員在跑它(看上面排程器那一行)
@@ -82,8 +82,8 @@ $ agenthub doctor    # launchd, all fine
 ! agent 登入(~/.claude/.credentials.json):沒有
     → 在 hub 主機的終端機跑一次 claude 讓它更新,或重新 /login
 ✓ 判斷點交給執行環境 claude(沒有 llm.providers;schedulectl models 看每個點的模型)
-✓ 排程器(local.agent-hub-scheduler):已載入
-✓ 看門狗(local.agent-hub-scheduler-watchdog):已載入
+✓ 排程器(local.brunna-scheduler):已載入
+✓ 看門狗(local.brunna-scheduler-watchdog):已載入
 ✓ 開了 sandbox 的專案自己的服務跟 job:隔離執行(seatbelt: own-writes-only, isolated-reads, declared-port-only)
 ✓ 排程器最後一次 tick:0 分鐘前
 ✓ 背景服務、專案設定:跟 config 一致
@@ -107,8 +107,8 @@ $ agenthub doctor    # systemd, runtime none
     → 設定一個:agenthub init --agent claude|codex
 ✗ agent-hub 的判斷(每晚整理筆記、週報)沒有地方可以跑:沒有設定 AI agent,也沒有設定模型 provider
     → agenthub llm setup(選一家:API key 或本機 Ollama)
-✓ 排程器(local.agent-hub-scheduler.timer):已啟用
-✗ 看門狗(local.agent-hub-scheduler-watchdog.timer):沒有裝
+✓ 排程器(local.brunna-scheduler.timer):已啟用
+✗ 看門狗(local.brunna-scheduler-watchdog.timer):沒有裝
     → agenthub init
 ! 登出之後排程器、服務會停(systemd 的 linger 沒開)
     → sudo loginctl enable-linger $USER

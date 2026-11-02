@@ -1,7 +1,6 @@
 $ <HUB>/bin/registry.py check
 [exit 1]
 --- stdout
-✓ agent-hub:14 個 job、3 個 service
 ✗ bad-idea
     type: idea 要寫 purpose(想法本身)
     paths.workspace 必填
@@ -13,5 +12,6 @@ $ <HUB>/bin/registry.py check
     commits 只能是 conventional(沒寫 = 不檢查 commit 標題)
     gate 只能是 strict 或 detect(預設)
     privacy.reflection 只能是 include / stats_only / exclude
+✓ brunna:14 個 job、3 個 service
 ✓ ok-proj:0 個 job、0 個 service
 --- stderr

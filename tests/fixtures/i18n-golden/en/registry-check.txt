@@ -1,7 +1,6 @@
 $ <HUB>/bin/registry.py check
 [exit 1]
 --- stdout
-✓ agent-hub: 14 jobs, 3 services
 ✗ bad-idea
     type: idea needs a purpose (the idea itself)
     paths.workspace is required
@@ -13,5 +12,6 @@ $ <HUB>/bin/registry.py check
     commits can only be conventional (absent = commit titles are not checked)
     gate can only be strict or detect (the default)
     privacy.reflection can only be include / stats_only / exclude
+✓ brunna: 14 jobs, 3 services
 ✓ ok-proj: 0 jobs, 0 services
 --- stderr

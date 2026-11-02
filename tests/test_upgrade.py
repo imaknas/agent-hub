@@ -52,7 +52,7 @@ class Upgrade(unittest.TestCase):
         w = self.wrapper_dir / "agenthub"
         w.write_text("#!/bin/sh\n# the agent-hub CLI (written by agenthub install-cli; run it again after moving the hub)\n")
         w.chmod(0o755)
-        self.env = {**{k: v for k, v in os.environ.items() if not k.startswith(("GIT_", "AGENT_HUB_", "UPGRADE_"))},
+        self.env = {**{k: v for k, v in os.environ.items() if not k.startswith(("GIT_", "BRUNNA_", "AGENT_HUB_", "UPGRADE_"))},
                     "HOME": str(self.home), "GIT_CONFIG_GLOBAL": "/dev/null", "GIT_CONFIG_NOSYSTEM": "1",
                     "GIT_AUTHOR_NAME": "t", "GIT_AUTHOR_EMAIL": "t@t", "GIT_COMMITTER_NAME": "t",
                     "GIT_COMMITTER_EMAIL": "t@t", "PATH": f"{self.wrapper_dir}:/usr/bin:/bin",

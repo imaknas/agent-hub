@@ -21,9 +21,9 @@ import os
 import pathlib
 
 # the switch release sets this: from then on writers use the new spelling
-SWITCHED = False
+SWITCHED = True
 # Principal Handoff party ids switch separately, once the owner's assistant has agreed (the design's "gated" class)
-PARTY_SWITCHED = False
+PARTY_SWITCHED = True
 
 PAIRS = {
     "product": ("agent-hub", "brunna"),         # the name in text

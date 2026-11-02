@@ -1,7 +1,7 @@
 === diagnose launchd up
 launchd:state=running pid=123 last exit=0
 scheduler.py 還在跑(卡在某個 job?):99 01:00 python3 bin/scheduler.py
-重啟:`launchctl kickstart -k gui/501/local.agent-hub-scheduler`
+重啟:`launchctl kickstart -k gui/501/local.brunna-scheduler`
 scheduler.log 最後幾行:
 ```
 a
@@ -9,7 +9,7 @@ b
 last line
 ```
 === diagnose launchd missing
-launchd 裡沒有 local.agent-hub-scheduler(被 bootout 了?)→ `schedulectl start`
+launchd 裡沒有 local.brunna-scheduler(被 bootout 了?)→ `schedulectl start`
 scheduler.log 最後幾行:
 ```
 a
@@ -17,11 +17,11 @@ b
 last line
 ```
 === diagnose linux
-`systemctl --user status local.agent-hub-scheduler.timer`:
+`systemctl --user status local.brunna-scheduler.timer`:
 ```
 active
 ```
-重啟:`systemctl --user restart local.agent-hub-scheduler.timer`
+重啟:`systemctl --user restart local.brunna-scheduler.timer`
 scheduler.log 最後幾行:
 ```
 a

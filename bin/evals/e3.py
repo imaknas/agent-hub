@@ -267,7 +267,7 @@ def mcp_config(path: pathlib.Path, arm: str, run_dir: pathlib.Path, renv: dict) 
         if (v := names.env(var, environ=renv)):
             names.env_set(env, var, v)
     names.env_set(env, "PROJECT", PROJECT)
-    path.write_text(json.dumps({"mcpServers": {"agenthub": {
+    path.write_text(json.dumps({"mcpServers": {names.current("cli"): {
         "command": str(BIN / "py"), "args": [str(tree / "bin" / "mcp_server.py")], "env": env}}}, indent=1))
     return path
 

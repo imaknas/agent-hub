@@ -34,7 +34,7 @@ class Guard(unittest.TestCase):
         (self.tmp / config / "projects" / f"{name}.yaml").write_text(f"v: 1\nname: {name}\npaths:\n  workspace: {ws}\n")
 
     def check(self, config, *args):
-        env = {**{k: v for k, v in os.environ.items() if not k.startswith("AGENT_HUB_") or k == "AGENT_HUB_PYTHON"},
+        env = {**{k: v for k, v in os.environ.items() if not k.startswith(("AGENT_HUB_", "BRUNNA_")) or k == "AGENT_HUB_PYTHON"},
                "HOME": str(self.tmp / "home"), "AGENT_HUB_CONFIG": str(self.tmp / config),
                "AGENT_HUB_STATE": str(self.state), "AGENT_HUB_LANG_UI": "en"}
         return subprocess.run([sys.executable, str(BIN / "registry.py"), "check", *args], env=env,
@@ -44,7 +44,7 @@ class Guard(unittest.TestCase):
         return json.loads((self.state / "registry" / "index.json").read_text())
 
     def users(self):
-        return sorted(n for n in self.index()["projects"] if n != "agent-hub")
+        return sorted(n for n, d in self.index()["projects"].items() if d.get("type") != "platform")
 
     def test_another_config_does_not_replace_the_index(self):
         self.assertEqual(self.check("a").returncode, 0)
@@ -97,7 +97,7 @@ class Guard(unittest.TestCase):
         repo = self.tmp / "a"
         git = {"GIT_CONFIG_GLOBAL": "/dev/null", "GIT_AUTHOR_NAME": "t", "GIT_AUTHOR_EMAIL": "t@t",
                "GIT_COMMITTER_NAME": "t", "GIT_COMMITTER_EMAIL": "t@t"}
-        env = {**{k: v for k, v in os.environ.items() if not k.startswith(("AGENT_HUB_", "GIT_")) or k == "AGENT_HUB_PYTHON"},
+        env = {**{k: v for k, v in os.environ.items() if not k.startswith(("BRUNNA_", "AGENT_HUB_", "GIT_")) or k == "AGENT_HUB_PYTHON"},
                **git, "HOME": str(self.tmp / "home"), "AGENT_HUB_CONFIG": str(repo), "AGENT_HUB_STATE": str(self.state),
                "AGENT_HUB_LANG_UI": "en", "AGENT_HUB_PYTHON": sys.executable}   # the child runs bin/py; HOME is empty
         subprocess.run(["git", "init", "-q", str(repo)], env=env, check=True)

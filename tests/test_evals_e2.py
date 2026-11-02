@@ -227,7 +227,7 @@ class E3(unittest.TestCase):
             proj = pathlib.Path(d) / "rates"
             e3.build(proj, "new", "note")
             rules = e3.runtime_ports.load().instructions_file(proj).read_text()
-            self.assertTrue(rules.startswith("<!-- agent-hub:begin -->"))
+            self.assertTrue(rules.startswith("<!-- brunna:begin -->"))
             self.assertNotIn("{{owner}}", rules, "names are filled in")
             for f in (".agent-memory/AGENT.md", ".agent-memory/STATE.md", "README.md"):
                 self.assertTrue((proj / f).exists(), f)
@@ -237,7 +237,7 @@ class E3(unittest.TestCase):
     @unittest.skipUnless(subprocess.run(["git", "-C", str(ROOT), "cat-file", "-e", f"{e3.OLD_REF}^{{commit}}"],
                                         capture_output=True).returncode == 0, "no git history (the commit gate's copy)")
     def test_old_arm_is_the_pinned_templates(self):
-        self.assertIn("agent-hub:begin", e3.managed_block("old"))
+        self.assertIn("brunna:begin", e3.managed_block("old"))
 
     def test_agent_is_sealed_from_mcp(self):
         """the command E3 runs must carry the flag that keeps the environment's MCP servers out (same as run-agent-job.sh)"""
@@ -338,10 +338,10 @@ class E3(unittest.TestCase):
             self.assertFalse(e3.runtime_ports.load().instructions_file(proj).exists(), "no rules file: MCP only")
             cfg = json.loads(e3.mcp_config(pathlib.Path(d) / "mcp.json", "new", pathlib.Path(d),
                                            {"AGENT_HUB_CONFIG": "/c", "AGENT_HUB_STATE": "/s"}).read_text())
-        server = cfg["mcpServers"]["agenthub"]
-        self.assertEqual(list(cfg["mcpServers"]), ["agenthub"])
+        server = cfg["mcpServers"]["brunna"]
+        self.assertEqual(list(cfg["mcpServers"]), ["brunna"])
         self.assertTrue(server["args"][0].endswith("bin/mcp_server.py"))
-        self.assertEqual((server["env"]["AGENT_HUB_CONFIG"], server["env"]["AGENTHUB_PROJECT"]), ("/c", "rates"))
+        self.assertEqual((server["env"]["BRUNNA_CONFIG"], server["env"]["BRUNNA_PROJECT"]), ("/c", "rates"))
 
 
 if __name__ == "__main__":

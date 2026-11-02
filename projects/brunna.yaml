@@ -5,7 +5,7 @@
 #   handoffs to the assistant, hands letters nobody picked up for too long to a headless agent, clears those closed more
 #   than 60 days ago. Short, idempotent, zero LLM (only an escalation opens claude -p).
 v: 2
-name: agent-hub
+name: brunna
 type: platform
 memory: false
 push_on_merge: false

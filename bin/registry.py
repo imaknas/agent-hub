@@ -733,8 +733,8 @@ def wrong_registry(old: dict, reg: pathlib.Path, files: list[pathlib.Path]) -> s
     otherwise rebuild it from its own registry and drop every project (10-30, between 11:49 and 11:53, nobody could
     send). So an index that has projects is only rebuilt from the registry dir it was built from, and never from an
     empty one; `registry.py check --rebuild` is for when that really changed."""
-    # the platform's own entry isn't a user project, under either name (an index written by a later release lists it
-    # as brunna, one from before type: platform without the type)
+    # the platform's own entry isn't a user project, under either name (an index from before the rename lists it as
+    # agent-hub, one from before type: platform without the type)
     users = [n for n, d in (old.get("projects") or {}).items()
              if n not in names.all("project") and (d or {}).get("type") != "platform"]
     if not users:

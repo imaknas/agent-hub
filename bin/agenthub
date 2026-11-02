@@ -512,10 +512,18 @@ def agent_credential(choice: str, presets: dict[str, dict]) -> None:
         subprocess.run(cred["command"], env=agent_env())
 
 
-def agenthub_command() -> list[str]:
-    """How a tool should start this hub's agenthub (absolute: an app started from the GUI may not have PATH)."""
-    cli = pathlib.Path.home() / ".local" / "bin" / "agenthub"
+def cli_command() -> list[str]:
+    """How a tool should start this hub's CLI (absolute: an app started from the GUI may not have PATH): the wrapper
+    install-cli wrote, under either name, else the script itself."""
+    cli = names.resolve(pathlib.Path.home() / ".local" / "bin", "cli")
     return [str(cli)] if cli.exists() else [str(BIN / "py"), str(BIN / "agenthub")]
+
+
+def mcp_argv(template: list[str], server: str | None = None) -> list[str]:
+    """A registration command from an adapter's or module's template: {server} = the MCP server's name (this release's
+    unless given), {cli} = how to start the CLI."""
+    server = server or names.current("cli")
+    return [y for a in template for y in (cli_command() if a == "{cli}" else [a.replace("{server}", server)])]
 
 
 def offer_mcp_registration(presets: dict[str, dict]) -> None:
@@ -534,7 +542,7 @@ def offer_mcp_registration(presets: dict[str, dict]) -> None:
         print(_("Not registered. Later: agenthub init --register-mcp"))
         return
     for _n, info in tools:
-        argv = [x for a in info["mcp_register"] for x in (agenthub_command() if a == "{agenthub}" else [a])]
+        argv = mcp_argv(info["mcp_register"])
         r = subprocess.run(argv, env=agent_env(), capture_output=True, text=True)
         print(_("✓ registered in {tool}", tool=info["label"]) if r.returncode == 0 else
               _("registering in {tool} failed: {error}", tool=info["label"], error=(r.stderr or r.stdout).strip()[:200]))
@@ -761,7 +769,13 @@ def init_argv_problem(argv: list[str]) -> str | None:
 
 def instance_home_answer(args: dict) -> pathlib.Path:
     return pathlib.Path(os.path.expanduser(args.get("home") or names.env("HOME") or UI().ask(
-        "home", _("where agent-hub keeps your settings, data and keys"), "~/.agent-hub")))
+        "home", _("where agent-hub keeps your settings, data and keys"), default_home())))
+
+
+def default_home() -> str:
+    """~/.brunna for a new install; an instance directory already at the other spelling is the one offered."""
+    p = names.resolve(pathlib.Path.home(), "product", ".{}")
+    return "~/" + p.name
 
 
 def connect_existing(args: dict, yes: bool) -> None:
@@ -1175,7 +1189,7 @@ def cmd_doctor(argv: list[str]) -> int:
     add("ok", _("owner side: {name} (owner_side: assistant)", name=hubconf.get('assistant.name') or _("assistant"))
         if side == "assistant" else _("owner side: built-in (owner_side: builtin; agenthub owner list / done / answer)"))
     import shutil
-    cli = shutil.which("agenthub")
+    cli = shutil.which(names.current("cli")) or shutil.which(names.other("cli"))
     add("ok" if cli else "warn", _("agenthub is on PATH: {path}", path=cli) if cli else
         _("agenthub is not on PATH (project sessions cannot reach the mailbox commands)"),
         "" if cli else "bin/agenthub install-cli")
@@ -1610,15 +1624,19 @@ def session_command(name: str):
 
 
 def cmd_install_cli(argv: list[str]) -> int:
-    """~/.local/bin/agenthub and ~/.local/bin/brunna (the name the platform is moving to, docs/design/rename-brunna.md):
-    two-line wrapper scripts (not symlinks: the CLI's first line finds the platform's Python from the folder it is in),
-    both running the current CLI."""
+    """~/.local/bin/brunna: a two-line wrapper script (not a symlink: the CLI's first line finds the platform's Python
+    from the folder it is in) running this hub's CLI. A wrapper under the other name (agenthub, from before the rename,
+    docs/design/rename-brunna.md) is kept and rewritten the same way, so what a project's rules or an older setup call
+    keeps working; a new install gets only the new name."""
     d = pathlib.Path(os.path.expanduser(argv[argv.index("--dir") + 1] if "--dir" in argv else "~/.local/bin"))
     d.mkdir(parents=True, exist_ok=True)
-    body = (f'#!/bin/sh\n# the agent-hub CLI (written by agenthub install-cli; run it again after moving the hub)\n'
-            f'exec "{BIN / "py"}" "{BIN / names.current("cli")}" "$@"\n')
+    # the implementation is bin/agenthub under either name (bin/brunna forwards to it in shell, so bin/py can't run it)
+    body = (f'#!/bin/sh\n# the {names.current("product")} CLI (written by {names.current("cli")} install-cli; run it again '
+            f'after moving the hub)\nexec "{BIN / "py"}" "{BIN / "agenthub"}" "$@"\n')
     for name in names.all("cli"):
         f = d / name
+        if name != names.current("cli") and not f.exists():
+            continue
         if f.exists() and f.read_text() == body:
             print(_("✓ {path} is up to date", path=f))
         else:

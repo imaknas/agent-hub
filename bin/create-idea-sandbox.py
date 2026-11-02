@@ -38,6 +38,7 @@ import sys
 
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
 import hubconf  # noqa: E402
+import names  # noqa: E402
 import i18n  # noqa: E402
 
 _ = i18n.domain(__file__)
@@ -77,7 +78,7 @@ def create(name: str, purpose: str) -> int:
         return out("bad_name", 1, detail=_(
             "The name may only use lowercase letters, digits and - (not at the start or end, at most 40 characters); "
             "got {name!r}", name=name))
-    if name == hubconf.hub_project():
+    if name in names.all("project"):   # the platform under either of its names
         return out("exists", 1, detail=_("{name} is the platform's own name", name=name))
     purpose = " ".join(purpose.split())
     if not purpose:

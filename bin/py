@@ -13,7 +13,7 @@
 # platform's Python is broken, so it uses the system's built-in python3).
 # the environment's folder under ~/.local/share: whichever spelling exists, this release's when neither does (a copy of
 # bin/names.py's share_dir pair, current first; tests/test_name_pairs.py compares it)
-NAMES_share_dir="agent-hub brunna"
+NAMES_share_dir="brunna agent-hub"
 py="${AGENT_HUB_PYTHON:-${BRUNNA_PYTHON:-}}"
 if [ -z "$py" ]; then
   for _n in $NAMES_share_dir; do

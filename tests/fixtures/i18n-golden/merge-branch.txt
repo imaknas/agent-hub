@@ -28,7 +28,7 @@ $ <HUB>/bin/merge-branch
 [exit 1]
 --- stdout
 ✗ tests:`agenthub test --when merge` 失敗:
-✗ demo/full 沒過,<SECS> 秒;完整輸出:<TMP>/ws/demo/.git/worktrees/wt/agent-hub/test-output/<STAMP>-demo-full.log
+✗ demo/full 沒過,<SECS> 秒;完整輸出:<TMP>/ws/demo/.git/worktrees/wt/brunna/test-output/<STAMP>-demo-full.log
 $ false
 --- stderr
 

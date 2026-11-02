@@ -3,7 +3,7 @@ fake HOME; `hub init --yes --no-launchd` can write hub.json and create the folde
 plan` and `hub doctor` run (doctor reports problems like "the scheduler is not loaded" but must not crash), and the
 generated settings contain no personal names. Never touches launchd or calls a model.
 
-The platform's own registry entry (projects/agent-hub.yaml) still lives in the user's registry folder, so a copy is
+The platform's own registry entry (projects/brunna.yaml) still lives in the user's registry folder, so a copy is
 made as usual; step 6 is to move it back into the platform.
 
     bin/py -m unittest discover -s tests
@@ -21,6 +21,7 @@ ROOT = pathlib.Path(__file__).resolve().parents[1]
 PERSONAL = re.compile(r"knas|muninn|imaknas", re.I)
 sys.path.insert(0, str(ROOT / "bin"))
 import i18n  # noqa: E402
+import names  # noqa: E402
 
 
 def scheduler_not_running() -> str:
@@ -42,10 +43,10 @@ class NewUser(unittest.TestCase):
         for d in ("bin", "contracts", "templates", "modules", "launchd", "capabilities", "githooks", "locales"):
             shutil.copytree(ROOT / d, self.hub / d, ignore=shutil.ignore_patterns("__pycache__"))
         (self.hub / "projects").mkdir()
-        shutil.copy(ROOT / "projects" / "agent-hub.yaml", self.hub / "projects")
+        shutil.copy(names.resolve(ROOT / "projects", "project", "{}.yaml"), self.hub / "projects")
         shutil.copy(ROOT / "hub.example.json", self.hub)
         # NVM_DIR too: the agent step looks for agents under nvm's node, and the fake HOME has none
-        env = {k: v for k, v in os.environ.items() if not k.startswith(("GIT_", "AGENT_HUB", "NVM_"))}
+        env = {k: v for k, v in os.environ.items() if not k.startswith(("GIT_", "BRUNNA_", "AGENT_HUB", "NVM_"))}
         self.env = {**env, "HOME": str(self.home), "AGENT_HUB_ROOT": str(self.hub),
                     "AGENT_HUB_PYTHON": sys.executable, "PATH": "/usr/bin:/bin:/usr/sbin:/sbin", "AGENT_HUB_LANG_UI": "zh-Hant",
                     # the fake HOME has no git identity: do not let commit rely on git guessing (macOS can guess, a
@@ -64,10 +65,10 @@ class NewUser(unittest.TestCase):
                          "--workspace", str(self.home / "workspace"))
         self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
         # a new user starts with the new layout: instance directory config/ + data/ + secrets/
-        inst = self.home / ".agent-hub"
+        inst = self.home / ".brunna"
         self.assertEqual((self.hub / ".hub-home").read_text().strip(), str(inst))
         self.assertFalse((self.hub / "hub.json").exists(), "no user hub.json in the platform repo")
-        cfg = (inst / "config" / "hub.json").read_text()
+        cfg = (inst / "config" / "brunna.json").read_text()
         self.assertIn('"tag": "Alex"', cfg)
         self.assertEqual(PERSONAL.findall(cfg), [], "a new user's hub.json must not contain someone else's name")
         for d in (inst / "config" / "projects", inst / "data", inst / "secrets", self.hub / ".state", self.home / "workspace"):
@@ -98,19 +99,19 @@ class NewUser(unittest.TestCase):
         so) when none is; asked for by name with no model, they stay on with a warning"""
         def modules():
             import json
-            return json.loads((self.home / ".agent-hub" / "config" / "hub.json").read_text())["modules"]
+            return json.loads((self.home / ".brunna" / "config" / "brunna.json").read_text())["modules"]
         base = ("init", "--yes", "--no-launchd", "--owner", "Alex", "--workspace", str(self.home / "workspace"))
         r = self.hub_cmd(*base, "--llm", "anthropic", "--llm-model", "m1")
         self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
         self.assertTrue(modules()["consolidate"] and modules()["reflect"], r.stdout)
-        for f in (self.home / ".agent-hub", self.hub / ".hub-home"):
+        for f in (self.home / ".brunna", self.hub / ".hub-home"):
             shutil.rmtree(f) if f.is_dir() else f.unlink()
         r = self.hub_cmd(*base, "--llm", "none")
         self.assertFalse(modules()["consolidate"] or modules()["reflect"], r.stdout)
         self.assertTrue(modules()["owner"])
         self.assertIn("consolidate, reflect", r.stdout, "init says which modules it left off")
         self.assertIn("agenthub modules enable", r.stdout)
-        for f in (self.home / ".agent-hub", self.hub / ".hub-home"):
+        for f in (self.home / ".brunna", self.hub / ".hub-home"):
             shutil.rmtree(f) if f.is_dir() else f.unlink()
         r = self.hub_cmd(*base, "--llm", "none", "--modules", "consolidate,owner")
         self.assertTrue(modules()["consolidate"], "an explicit choice is kept")
@@ -119,8 +120,8 @@ class NewUser(unittest.TestCase):
 
     def test_config_repo_gate_rejects_bad_config(self):
         self.hub_cmd("init", "--yes", "--no-launchd", "--owner", "Alex")
-        cfg = self.home / ".agent-hub" / "config"
-        (cfg / "hub.json").write_text((cfg / "hub.json").read_text().replace('"modules"', '"modulez"'))
+        cfg = self.home / ".brunna" / "config"
+        (cfg / "brunna.json").write_text((cfg / "brunna.json").read_text().replace('"modules"', '"modulez"'))
         git = ["git", "-C", str(cfg), "-c", "user.name=t", "-c", "user.email=t@t"]
         subprocess.run([*git, "add", "-A"], env=self.env, check=True, capture_output=True)
         r = subprocess.run([*git, "commit", "-q", "-m", "x"], env=self.env, capture_output=True, text=True)
@@ -147,7 +148,7 @@ class NewUser(unittest.TestCase):
                         "the source is not deleted")
         log = subprocess.run(["git", "-C", str(inst / "config"), "log", "--oneline"], capture_output=True, text=True)
         self.assertIn("config moved", log.stdout)
-        self.assertFalse((inst / "config" / "projects" / "agent-hub.yaml").exists(),
+        self.assertFalse(any((inst / "config" / "projects" / f"{n}.yaml").exists() for n in names.all("project")),
                          "the platform's own registry entry stays in the platform")
         r = self.hub_cmd("move-instance", "--to", str(self.tmp / "again"), "--apply")
         self.assertNotEqual(r.returncode, 0, "once moved, not moved again")
@@ -157,7 +158,7 @@ class NewUser(unittest.TestCase):
         for args, rc in ((["--help"], 0), (["-h"], 0), (["--yes", "--bogus"], 2), (["--yes", "--owner"], 2)):
             r = self.hub_cmd("init", *args)
             self.assertEqual(r.returncode, rc, (args, r.stdout + r.stderr))
-            self.assertFalse((self.home / ".agent-hub").exists(), args)
+            self.assertFalse((self.home / ".brunna").exists(), args)
             self.assertFalse((self.hub / ".hub-home").exists(), args)
             self.assertFalse((self.hub / "hub.json").exists(), args)
         self.assertIn("agenthub init", self.hub_cmd("init", "--help").stdout)
@@ -181,14 +182,14 @@ class NewUser(unittest.TestCase):
         self.assertIn(str(mod.hubconf.ROOT), out[0])
 
     def git_cfg(self, *args, env=None):
-        return subprocess.run(["git", "-C", str(self.home / ".agent-hub" / "config"), *args], env=env or self.env,
+        return subprocess.run(["git", "-C", str(self.home / ".brunna" / "config"), *args], env=env or self.env,
                               capture_output=True, text=True)
 
     def assert_onboard_commits(self, env):
         """the config repo holds init's commit and nothing uncommitted, and onboard's registry commit lands on it (it
         once failed: the repo had no commit and hub.json untracked, so the pre-commit check found no hub.json)"""
         self.assertEqual(self.git_cfg("status", "--porcelain", env=env).stdout, "", "init leaves the config repo clean")
-        self.assertIn("hub.json", self.git_cfg("ls-files", env=env).stdout.split())
+        self.assertIn("brunna.json", self.git_cfg("ls-files", env=env).stdout.split())
         # a newcomer's hub is a clone: commit-hub-files.sh takes its lock in the hub checkout's git dir
         subprocess.run(["git", "init", "-q", str(self.hub)], env=env, check=True)
         ws = self.home / "workspace" / "demo"
@@ -223,16 +224,16 @@ class NewUser(unittest.TestCase):
         self.assertTrue(self.git_cfg("config", "--local", "user.email", env=env).stdout.strip())
         self.assertEqual(self.git_cfg("status", "--porcelain", env=env).stdout, "", "init leaves the config repo clean")
         subprocess.run(["git", "init", "-q", str(self.hub)], env=env, check=True)   # a clone, as a newcomer's hub is
-        hub_json = self.home / ".agent-hub" / "config" / "hub.json"
+        hub_json = self.home / ".brunna" / "config" / "brunna.json"
         hub_json.write_text(hub_json.read_text().replace('"tag": "Alex"', '"tag": "Alexa"'))
-        r = subprocess.run([str(self.hub / "bin" / "commit-hub-files.sh"), "owner renamed", "hub.json"], env=env,
+        r = subprocess.run([str(self.hub / "bin" / "commit-hub-files.sh"), "owner renamed", "brunna.json"], env=env,
                            capture_output=True, text=True, timeout=120, cwd=self.hub)
         self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
         self.assertEqual(len(self.git_cfg("log", "--format=%s", env=env).stdout.splitlines()), 2)
 
     def cfg_json(self):
         import json
-        return json.loads((self.home / ".agent-hub" / "config" / "hub.json").read_text())
+        return json.loads((self.home / ".brunna" / "config" / "brunna.json").read_text())
 
     def test_init_writes_the_language(self):
         r = self.hub_cmd("init", "--yes", "--no-launchd", "--owner", "Alex", "--llm", "none", "--lang", "en,zh-Hant")
@@ -256,7 +257,7 @@ class NewUser(unittest.TestCase):
         before.pop("language")
         self.assertEqual(after, before, "nothing but the language changed")
         self.assertEqual(len(self.git_cfg("log", "--format=%s").stdout.splitlines()), commits + 1)
-        self.assertEqual(self.git_cfg("status", "--porcelain", "--", "hub.json").stdout, "")
+        self.assertEqual(self.git_cfg("status", "--porcelain", "--", "brunna.json").stdout, "")
 
     def test_init_carries_on_after_stopping_midway(self):
         r = self.hub_cmd("init", "--yes", "--no-launchd", "--owner", "Alex", "--llm", "none")
@@ -290,17 +291,17 @@ class NewUser(unittest.TestCase):
         r = self.hub_cmd("init", "--yes", "--no-launchd", "--agent", "codex")
         d = self.cfg_json()
         self.assertEqual((d["runtime"]["default"], d["modules"]["codex"]), ("command", True), r.stdout + r.stderr)
-        self.assertEqual(self.git_cfg("status", "--porcelain", "--", "hub.json").stdout, "", "committed")
+        self.assertEqual(self.git_cfg("status", "--porcelain", "--", "brunna.json").stdout, "", "committed")
 
     def test_init_refuses_an_unknown_agent(self):
         r = self.hub_cmd("init", "--yes", "--no-launchd", "--agent", "nosuch")
         self.assertEqual(r.returncode, 2)
-        self.assertFalse((self.home / ".agent-hub").exists(), "nothing was done")
+        self.assertFalse((self.home / ".brunna").exists(), "nothing was done")
 
     def test_init_refuses_an_unknown_language(self):
         r = self.hub_cmd("init", "--yes", "--no-launchd", "--lang", "fr")
         self.assertEqual(r.returncode, 2)
-        self.assertFalse((self.home / ".agent-hub").exists(), "nothing was done")
+        self.assertFalse((self.home / ".brunna").exists(), "nothing was done")
 
     def test_init_never_overwrites_hub_json(self):
         (self.hub / "hub.json").write_text('{"v": 1, "registry_dir": "projects", "owner": {"address": "owner", "tag": "Keep"}}\n')

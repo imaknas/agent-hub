@@ -359,7 +359,7 @@ def serve() -> int:
             client.elicitation = "elicitation" in (((msg.get("params") or {}).get("capabilities")) or {})
             send({"jsonrpc": "2.0", "id": mid, "result": {
                 "protocolVersion": (msg.get("params") or {}).get("protocolVersion") or PROTOCOL,
-                "capabilities": {"tools": {}}, "serverInfo": {"name": "agenthub", "version": "1"},
+                "capabilities": {"tools": {}}, "serverInfo": {"name": names.current("cli"), "version": "1"},
                 "instructions": instructions(project, why)}})
         elif method == "tools/list":
             # outside every project: what agent-hub is, and connecting the folder (B5); a server named to a project
@@ -382,12 +382,12 @@ def serve() -> int:
 
 
 def config() -> int:
-    cli = pathlib.Path.home() / ".local" / "bin" / "agenthub"
+    cli = names.resolve(pathlib.Path.home() / ".local" / "bin", "cli")
     entry = ({"command": str(cli), "args": ["mcp"]} if cli.exists()
              else {"command": str(BIN / "py"), "args": [str(BIN / "agenthub"), "mcp"]})
     print(_("Register this stdio MCP server in your coding agent (start it in the project folder; a tool opened from the "
             "GUI may not have your PATH, hence the absolute paths):\n"))
-    print(json.dumps({"mcpServers": {"agenthub": entry}}, indent=2))
+    print(json.dumps({"mcpServers": {names.current("cli"): entry}}, indent=2))
     print(_("\nHow to add it in each tool: docs/mcp.md. For a tool not started in the project folder, add "
             "AGENTHUB_PROJECT=<project name> to its env."))
     return 0

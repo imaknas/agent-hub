@@ -162,14 +162,15 @@ def cli_wrapper() -> pathlib.Path | None:
         return None
 
 
-def mcp_tools() -> tuple[list[tuple[str, list[str]]], object]:
-    """(label, unregister command) for each AI app that has one and is installed, and the environment to run it in."""
+def mcp_tools() -> tuple[list[tuple[str, list[list[str]]]], object]:
+    """(label, unregister commands) for each AI app that has one and is installed, and the environment to run it in."""
     spec = importlib.util.spec_from_loader("agenthub_cli", importlib.machinery.SourceFileLoader("agenthub_cli",
                                                                                                 str(BIN / "agenthub")))
     ah = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(ah)
-    return [(info["label"], info["mcp_unregister"]) for info in ah.agent_presets().values()
-            if info.get("mcp_unregister") and ah.agent_found(info)], ah.agent_env
+    # a registration under either of the platform's names (one made before the rename keeps the old one)
+    return [(info["label"], [ah.mcp_argv(info["mcp_unregister"], server) for server in names.all("cli")])
+            for info in ah.agent_presets().values() if info.get("mcp_unregister") and ah.agent_found(info)], ah.agent_env
 
 
 def main(argv: list[str]) -> int:
@@ -241,14 +242,16 @@ def main(argv: list[str]) -> int:
                 print(_("✓ {project}: {part}", project=name, part=part))
         # user level: the owner's own yes at the terminal, each time; --yes doesn't stand in for it (AGENTS.md)
         term = init_dialogue.Terminal()
-        for label, cmd in tools:
+        for label, cmds in tools:
             if term.consent("mcp_unregister", _("Remove agent-hub from {tool}'s tools (a setting for your user)?",
                                                  tool=label)):
-                r = subprocess.run(cmd, env=agent_env(), capture_output=True, text=True)
+                # one registration under either name; the other name's command finds nothing to remove
+                runs = [subprocess.run(cmd, env=agent_env(), capture_output=True, text=True) for cmd in cmds]
+                r = next((x for x in runs if x.returncode == 0), runs[0])
                 print(_("✓ removed from {tool}", tool=label) if r.returncode == 0 else
                       _("{tool}: {error}", tool=label, error=(r.stderr or r.stdout).strip()[:200]))
             else:
-                print(_("Left in {tool}: remove it later with {command}", tool=label, command=" ".join(cmd)))
+                print(_("Left in {tool}: remove it later with {command}", tool=label, command=" ".join(cmds[0])))
         for name in runtime_ports.installed():
             fn = getattr(runtime_ports._module(name), "user_cleanup", None)
             if fn and fn(False) and term.consent("user_cleanup", _("Remove {what} (a setting for your user)?",

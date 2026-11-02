@@ -38,7 +38,7 @@ class Watchdog(unittest.TestCase):
             (tmp / "secrets" / "discord-token").write_text("t")
             (tmp / "secrets" / "discord-alert-channel").write_text("c")
         env = {"AGENT_HUB_ROOT": str(tmp / "hub"), "AGENT_HUB_CONFIG": str(tmp / "config"),
-               "AGENT_HUB_SECRETS": str(tmp / "secrets"), "AGENT_HUB_LANG_UI": ""}
+               "AGENT_HUB_SECRETS": str(tmp / "secrets"), "AGENT_HUB_LANG_UI": "", "BRUNNA_LANG_UI": ""}
         with mock.patch.dict(os.environ, env):
             spec = importlib.util.spec_from_file_location("watchdog_golden", ROOT / "bin" / "scheduler-watchdog.py")
             mod = importlib.util.module_from_spec(spec)
