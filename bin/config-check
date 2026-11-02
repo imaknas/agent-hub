@@ -32,6 +32,7 @@ import tempfile
 BIN = pathlib.Path(__file__).resolve().parent
 sys.path.insert(0, str(BIN))
 import i18n  # noqa: E402
+import names  # noqa: E402
 
 _ = i18n.domain(__file__)
 CONFIG = re.compile(r"^(hub\.json|models\.env|mirror-list\.txt|services\.tsv|schedule\.yaml|projects/)")
@@ -154,7 +155,7 @@ def git(*args: str) -> str:
 
 def main(argv: list[str]) -> int:
     if argv == ["--child"]:  # --staged's child process: AGENT_HUB_CONFIG already points at the exported index
-        errs = check(pathlib.Path(os.environ["AGENT_HUB_CONFIG"]))
+        errs = check(pathlib.Path(names.env("CONFIG")))
     elif argv == ["--staged"]:
         if not any(CONFIG.match(p) for p in git("diff", "--cached", "--name-only").splitlines()):
             return 0
@@ -165,7 +166,8 @@ def main(argv: list[str]) -> int:
             env = {k: v for k, v in os.environ.items() if not k.startswith("GIT_")}
             # this script checks the exported config
             r = subprocess.run([str(BIN / "py"), str(pathlib.Path(__file__).resolve()), "--child"],
-                               env={**env, "AGENT_HUB_CONFIG": d, "AGENT_HUB_STATE": state}, capture_output=True, text=True)
+                               env=names.env_set(names.env_set(env, "CONFIG", d), "STATE", state), capture_output=True,
+                               text=True)
         sys.stdout.write(r.stdout)
         sys.stderr.write(r.stderr)
         if r.returncode == 0:

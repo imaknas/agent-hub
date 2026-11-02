@@ -51,6 +51,7 @@ BIN = pathlib.Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(BIN))
 import edits  # noqa: E402
 import hubconf  # noqa: E402
+import names  # noqa: E402
 import state_anchors  # noqa: E402
 import todo_tokens  # noqa: E402
 
@@ -344,8 +345,11 @@ def run_env(run_dir: pathlib.Path) -> dict:
         if isinstance(hub.get("assistant"), dict) and hub["assistant"].get("api"):
             hub["assistant"]["api"] = "http://127.0.0.1:9/eval-disabled"   # belt and braces: only the bridge posts there
         (cfg / HUB_JSON).write_text(json.dumps(hub, ensure_ascii=False, indent=2))
-    return {**os.environ, "AGENT_HUB_CONFIG": str(cfg), "AGENT_HUB_STATE": str(run_dir / "state"),
-            "AGENT_HUB_DATA": str(hubconf.data_dir()), "AGENT_HUB_SECRETS": str(hubconf.secrets_dir())}
+    env = dict(os.environ)
+    for var, value in (("CONFIG", cfg), ("STATE", run_dir / "state"), ("DATA", hubconf.data_dir()),
+                       ("SECRETS", hubconf.secrets_dir())):
+        names.env_set(env, var, str(value))
+    return env
 
 
 def one(point: str, case: pathlib.Path, arm: str, i: int, run_dir: pathlib.Path, env: dict) -> dict:

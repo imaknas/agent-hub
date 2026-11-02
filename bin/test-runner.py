@@ -53,6 +53,7 @@ import time
 BIN = pathlib.Path(__file__).resolve().parent
 sys.path.insert(0, str(BIN))
 import hubconf  # noqa: E402
+import names  # noqa: E402
 import i18n  # noqa: E402
 import policy  # noqa: E402
 import tiers  # noqa: E402
@@ -70,7 +71,7 @@ CALLERS = ("merge-branch",)   # the callers that name themselves in AGENTHUB_TES
 
 
 def caller(a) -> str:
-    named = os.environ.get("AGENTHUB_TEST_CALLER", "")
+    named = names.env("TEST_CALLER", "")
     if named in CALLERS:
         return named
     if a.index:
@@ -150,8 +151,7 @@ def declaration(name: str, doc: dict, tree: pathlib.Path, run: pathlib.Path) -> 
     code = ("import json, sys, yaml, registry, tiers\n"
             "doc = tiers.upgrade(yaml.safe_load(open(sys.argv[1], encoding='utf-8')))\n"
             "print(json.dumps({'doc': doc, 'errors': registry.validate_v2(doc, sys.argv[2])}, default=str))\n")
-    env = {**os.environ, "AGENT_HUB_ROOT": str(tree), "AGENT_HUB_STATE": str(run / "state"),
-           "PYTHONPATH": str(BIN)}
+    env = names.env_set(names.env_set({**os.environ, "PYTHONPATH": str(BIN)}, "ROOT", str(tree)), "STATE", str(run / "state"))
     r = subprocess.run([sys.executable, "-c", code, str(entry), name], env=env, capture_output=True, text=True)
     if r.returncode != 0:
         raise SetupError(_("reading {path}: {output}", path=entry, output=(r.stderr or r.stdout).strip()[-800:]))
@@ -179,7 +179,7 @@ def base_env(main: pathlib.Path, run: pathlib.Path, hub: bool) -> tuple[dict, di
     env = {"PATH": path, "LANG": os.environ.get("LANG") or "en_US.UTF-8", "HOME": str(run / "home"),
            "TMPDIR": tmp, "GIT_CEILING_DIRECTORIES": str(run), "PYTHONDONTWRITEBYTECODE": "1", **caches}
     if hub:
-        env["AGENT_HUB_PYTHON"] = sys.executable
+        names.env_set(env, "PYTHON", sys.executable)
     return env, {"PATH": path, "runner": str(RUNNER_VERSION)}
 
 
@@ -303,7 +303,7 @@ def run_tier(tier: dict, tree: pathlib.Path, env: dict, slots: Slots, log, cache
         env = dict(env)
         if cache:   # the tier's own folder that outlives the run: scheduling data only (e.g. how long each module took)
             cache.mkdir(parents=True, exist_ok=True)
-            env["AGENTHUB_TIER_CACHE"] = str(cache)
+            names.env_set(env, "TIER_CACHE", str(cache))
         if decl.get("env"):
             env[decl["env"]] = str(n)
         cmd = tier["run"].replace("{jobs}", str(n))

@@ -107,20 +107,23 @@ def env(x: str, default: str | None = None, environ=None) -> str | None:
     return environ.get(n, default)
 
 
-def env_set(environ, x: str, value: str) -> None:
-    """Set X for a child: the current spelling written, the other removed (both written for DOCUMENTED ones)."""
+def env_set(environ, x: str, value: str):
+    """Set X for a child: the current spelling written, the other removed (both written for DOCUMENTED ones). Returns
+    environ, so `env=names.env_set(dict(os.environ), "STATE", d)` reads as one step."""
     o, n = env_names(x)
     if x in DOCUMENTED:
         environ[o] = environ[n] = value
-        return
+        return environ
     keep, drop = (n, o) if SWITCHED else (o, n)
     environ[keep] = value
     environ.pop(drop, None)
+    return environ
 
 
-def env_unset(environ, x: str) -> None:
+def env_unset(environ, x: str):
     for name in env_names(x):
         environ.pop(name, None)
+    return environ
 
 
 def env_strip(environ) -> dict:

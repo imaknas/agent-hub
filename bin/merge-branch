@@ -36,6 +36,7 @@ import time
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
 import commit_title  # noqa: E402
 import hubconf  # noqa: E402
+import names  # noqa: E402
 import i18n  # noqa: E402
 
 _ = i18n.domain(__file__)
@@ -153,7 +154,7 @@ def main() -> int:
             t0 = time.monotonic()
             # the runner's run log counts this as the merge's run, not the agent's own (the waiting report, B7)
             t = subprocess.run([*hubconf.launch(hubconf.MAIN / "bin" / "test-runner.py"), "--when", "merge"], cwd=wt,
-                               capture_output=True, text=True, env={**os.environ, "AGENTHUB_TEST_CALLER": "merge-branch"})
+                               capture_output=True, text=True, env=names.env_set(dict(os.environ), "TEST_CALLER", "merge-branch"))
             tail = "\n".join((t.stdout + t.stderr).strip().splitlines()[-40:])
             report["tests"] = {"cmd": cmd, "ok": t.returncode == 0, "tail": tail,
                                "secs": round(time.monotonic() - t0, 1)}

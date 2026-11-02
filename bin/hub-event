@@ -44,6 +44,7 @@ import sys
 BIN = pathlib.Path(__file__).resolve().parent
 sys.path.insert(0, str(BIN))
 import hubconf  # noqa: E402
+import names  # noqa: E402
 import isolation  # noqa: E402
 import project_git  # noqa: E402
 import runtime_ports  # noqa: E402
@@ -311,7 +312,7 @@ def _as_project(project: str, ws: pathlib.Path, ev) -> dict:
     {"": {error}} when it didn't run (e.g. the sandbox refused)."""
     argv = [*hubconf.launch(BIN / "hub-event"), "as-project", ev.event, str(ws), ev.command or ""]
     # its AGENT.md commit is pushed by the memory sync's bundle, not from inside (the sandbox can't write the bare repo)
-    r = project_git.run(project, ws, argv, timeout=110, env={"HUB_AS_PROJECT": "1", "AGENT_HUB_OFFLINE": "1"})
+    r = project_git.run(project, ws, argv, timeout=110, env=names.env_set({"HUB_AS_PROJECT": "1"}, "OFFLINE", "1"))
     try:
         out = json.loads(r.stdout) if r.returncode == 0 else None
     except ValueError:

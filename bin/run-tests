@@ -32,6 +32,9 @@ import sys
 import threading
 import time
 
+sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
+import names  # noqa: E402
+
 RAN = re.compile(r"^Ran (\d+) tests? in ([\d.]+)s$", re.M)
 RESULT = re.compile(r"^(OK|FAILED)(?: \((.*)\))?$", re.M)
 GOLDEN_EN = "test_i18n_golden_en"
@@ -54,12 +57,13 @@ def env_for(tests: pathlib.Path, lang: str | None) -> dict[str, str]:
     # the tree under test is the platform the tests see (as the test runner's export is): an explicit root skips hubconf's
     # lookup of the main checkout, so a run in a linked worktree never reaches the machine's live instance. Only the
     # root: HOME and STATE would leak into the fake hubs the tests build (docs/design/test-waiting.md A1)
-    env = {**os.environ, "PYTHONPATH": os.pathsep.join(filter(None, [str(tests), os.environ.get("PYTHONPATH")])),
-           "AGENT_HUB_TEST_RUNNER": "1", "AGENT_HUB_ROOT": os.environ.get("AGENT_HUB_ROOT") or str(tests.resolve().parent)}
+    env = {**os.environ, "PYTHONPATH": os.pathsep.join(filter(None, [str(tests), os.environ.get("PYTHONPATH")]))}
+    names.env_set(env, "TEST_RUNNER", "1")
+    names.env_set(env, "ROOT", names.env("ROOT") or str(tests.resolve().parent))
     # the gate runs as a zh-Hant instance and CI (bin/linux-test: plain unittest, a bare HOME) as an English one, so a
     # test that assumes either language fails in one of them without running anything twice; a caller's own setting wins
-    env.setdefault("AGENT_HUB_LANG_UI", "zh-Hant")
-    env.setdefault("AGENT_HUB_LANG_CONTENT", "zh-Hant")
+    for var in ("LANG_UI", "LANG_CONTENT"):
+        names.env_set(env, var, names.env(var, environ=env) or "zh-Hant")
     if lang:
         env["I18N_GOLDEN_LANG"] = lang
     return env

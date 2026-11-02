@@ -61,6 +61,7 @@ sys.path.insert(0, str(BIN / "evals"))
 import commit_title  # noqa: E402
 import e2  # noqa: E402
 import hubconf  # noqa: E402
+import names  # noqa: E402
 import prompts  # noqa: E402
 import runtime_ports  # noqa: E402
 import todo_tokens  # noqa: E402
@@ -258,10 +259,13 @@ def render_as(tree: pathlib.Path, kind: str, renv: dict, **args) -> str:
 
 def mcp_config(path: pathlib.Path, arm: str, run_dir: pathlib.Path, renv: dict) -> pathlib.Path:
     tree = old_tree(run_dir) if arm == "old" else BIN.parent
-    keys = ("AGENT_HUB_CONFIG", "AGENT_HUB_STATE", "AGENT_HUB_DATA", "AGENT_HUB_SECRETS", "AGENT_HUB_HOME")
     # HUB_LLM_POINT emptied: the server refuses agents the platform starts (their letters go out through the
     # platform), and this one stands for a session the owner opened; llm.py is only how the eval runs it headless
-    env = {k: renv[k] for k in keys if renv.get(k)} | {"AGENTHUB_PROJECT": PROJECT, "HUB_LLM_POINT": ""}
+    env = {"HUB_LLM_POINT": ""}
+    for var in ("CONFIG", "STATE", "DATA", "SECRETS", "HOME"):
+        if (v := names.env(var, environ=renv)):
+            names.env_set(env, var, v)
+    names.env_set(env, "PROJECT", PROJECT)
     path.write_text(json.dumps({"mcpServers": {"agenthub": {
         "command": str(BIN / "py"), "args": [str(tree / "bin" / "mcp_server.py")], "env": env}}}, indent=1))
     return path
@@ -282,7 +286,7 @@ def one(scenario: str, arm: str, i: int, run_dir: pathlib.Path, env: dict) -> di
         build(proj, arm, scenario)
         # this run's own config and bus: the throwaway project and the letter's sender are registered only there
         cfg = out / "config"
-        shutil.copytree(env["AGENT_HUB_CONFIG"], cfg)
+        shutil.copytree(names.env("CONFIG", environ=env), cfg)
         hub = json.loads((cfg / e2.HUB_JSON).read_text())
         hub["bus_dir"] = str(out / "bus")
         if arm == "new-en":
@@ -291,7 +295,7 @@ def one(scenario: str, arm: str, i: int, run_dir: pathlib.Path, env: dict) -> di
         register(cfg, PROJECT, proj, "commits: conventional\n")
         (tmp / SENDER).mkdir()
         register(cfg, SENDER, tmp / SENDER)
-        renv = {**env, **GIT_ENV, "AGENT_HUB_CONFIG": str(cfg), "AGENT_HUB_STATE": str(out / "state")}
+        renv = names.env_set(names.env_set({**env, **GIT_ENV}, "CONFIG", str(cfg)), "STATE", str(out / "state"))
         hb = [str(BIN / "py"), str(BIN / "hubbus")]
         subprocess.run([str(BIN / "py"), str(BIN / "registry.py"), "check"], env=renv, capture_output=True, check=True)
         letters: dict[str, str] = {}

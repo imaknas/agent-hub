@@ -46,6 +46,7 @@ import sys
 
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
 import hubconf  # noqa: E402
+import names  # noqa: E402
 import i18n  # noqa: E402
 import minischema  # noqa: E402
 
@@ -257,7 +258,7 @@ def run(a) -> int:
     env["HUB_LLM_POINT"] = a.point
     if spec.get("settings") == "platform":
         # a confined run (docs/design/event-jobs.md 3.2): the mail commands act only as and for its own project
-        env["AGENT_HUB_CONFINED"] = "1"
+        names.env_set(env, "CONFINED", "1")
     # agents the platform starts can reach `agenthub …` (the rules file and mailbox prompt name only the command, not
     # where the hub is installed)
     env["PATH"] = f"{hubconf.ROOT / 'bin'}:{env.get('PATH', '')}".rstrip(":")

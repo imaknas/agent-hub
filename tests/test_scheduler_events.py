@@ -489,4 +489,4 @@ class ConfinedMail(unittest.TestCase):
     def test_llm_marks_confined_runs(self):
         src = (ROOT / "bin" / "llm.py").read_text()
         self.assertIn('if spec.get("settings") == "platform":\n        # a confined run', src)
-        self.assertIn('env["AGENT_HUB_CONFINED"] = "1"', src)
+        self.assertIn('names.env_set(env, "CONFINED", "1")', src)

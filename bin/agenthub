@@ -95,6 +95,7 @@ import tempfile
 BIN = pathlib.Path(__file__).resolve().parent
 sys.path.insert(0, str(BIN))
 import hubconf  # noqa: E402
+import names  # noqa: E402
 import i18n  # noqa: E402
 import init_dialogue  # noqa: E402
 
@@ -656,9 +657,9 @@ def choose_language(args: dict) -> tuple[str, str] | None:
     AGENT_HUB_LANG_UI, else the system's language. Asked in every language at once, since none is chosen yet."""
     if args.get("lang"):
         return parse_lang(args["lang"])
-    env_ui = os.environ.get("AGENT_HUB_LANG_UI")
+    env_ui = names.env("LANG_UI")
     default = env_ui if env_ui in hubconf.LANGUAGES else hubconf.system_language()
-    env_content = os.environ.get("AGENT_HUB_LANG_CONTENT")
+    env_content = names.env("LANG_CONTENT")
     if not UI().can_ask:
         return default, env_content if env_content in hubconf.LANGUAGES else default
     if hubconf.is_simplified_chinese(hubconf.system_tag()):
@@ -679,7 +680,7 @@ def set_language(ui: str, content: str) -> int:
     d["language"] = {**(d.get("language") or {}), "ui": ui, "content": content}
     write_hub_json(d)
     hubconf._cfg = None
-    os.environ["AGENT_HUB_LANG_UI"] = ui
+    names.env_set(os.environ, "LANG_UI", ui)
     print(_("✓ language: interface {ui}, notes and project state {content}", ui=ui, content=content))
     rc = subprocess.run([str(BIN / "commit-hub-files.sh"), f"chore(config): language {ui}, content {content}",
                          "hub.json"]).returncode
@@ -707,7 +708,7 @@ def init_argv_problem(argv: list[str]) -> str | None:
 
 
 def instance_home_answer(args: dict) -> pathlib.Path:
-    return pathlib.Path(os.path.expanduser(args.get("home") or os.environ.get("AGENT_HUB_HOME") or UI().ask(
+    return pathlib.Path(os.path.expanduser(args.get("home") or names.env("HOME") or UI().ask(
         "home", _("where agent-hub keeps your settings, data and keys"), "~/.agent-hub")))
 
 
@@ -782,14 +783,15 @@ def init_questions(args: dict) -> list[dict]:
     rec = init_dialogue.Recorder(answers)
     init_dialogue.use(rec)
     presets = agent_presets()
-    saved = {k: os.environ.get(k) for k in ("AGENT_HUB_LANG_UI", "AGENT_HUB_LANG_CONTENT")}
+    saved = {k: os.environ.get(k) for x in ("LANG_UI", "LANG_CONTENT") for k in names.env_names(x)}
     try:
         with contextlib.redirect_stdout(io.StringIO()):
             if hubconf.config_file("hub.json").exists():
                 choice = current_agent(read_hub_json(), presets)
             else:
                 ui, content = choose_language(args)
-                os.environ["AGENT_HUB_LANG_UI"], os.environ["AGENT_HUB_LANG_CONTENT"] = ui, content
+                names.env_set(os.environ, "LANG_UI", ui)
+                names.env_set(os.environ, "LANG_CONTENT", content)
                 instance_home_answer(args)
                 d = new_hub_json(args)
                 choice = args["_agent"]
@@ -898,7 +900,8 @@ def cmd_init(argv: list[str], transport=None) -> int:
             created = True
     else:
         ui, content = choose_language(args)
-        os.environ["AGENT_HUB_LANG_UI"], os.environ["AGENT_HUB_LANG_CONTENT"] = ui, content   # every later question
+        names.env_set(os.environ, "LANG_UI", ui)   # every later question
+        names.env_set(os.environ, "LANG_CONTENT", content)
         home = instance_home_answer(args)
         d = new_hub_json(args)
         d["registry_dir"] = "projects"   # relative to config/
@@ -999,7 +1002,7 @@ def cmd_move_instance(argv: list[str]) -> int:
         return 2
     home = pathlib.Path(os.path.expanduser(argv[argv.index("--to") + 1])).resolve()
     apply = "--apply" in argv
-    if hubconf.POINTER.exists() or os.environ.get("AGENT_HUB_HOME"):
+    if hubconf.POINTER.exists() or names.env("HOME"):
         print(_("already in the instance-directory layout ({home}); nothing to move", home=hubconf.instance_home()), file=sys.stderr)
         return 1
     if not hubconf.config_file("hub.json").exists():
@@ -1031,11 +1034,14 @@ def cmd_move_instance(argv: list[str]) -> int:
         inc = [x for x in b.get("include", []) if hubconf.path(x) != hubconf.secrets_dir()]
         b["include"] = inc + [str(home / "config"), str(home / "data"), str(home / "secrets")]
     cfg_path.write_text(json.dumps(cfg, ensure_ascii=False, indent=2) + "\n")
-    env = {**os.environ, "AGENT_HUB_HOME": str(home)}
+    env = dict(os.environ)
+    names.env_set(env, "HOME", str(home))
     # verify the new layout (the pointer file isn't written yet: point there with AGENT_HUB_HOME)
     # in a state of its own: the real registry index is rebuilt from the new place once the pointer is written
     check_state = tempfile.mkdtemp()
-    r = subprocess.run(hubconf.launch(BIN / "config-check"), env={**env, "AGENT_HUB_STATE": check_state},
+    check_env = dict(env)
+    names.env_set(check_env, "STATE", check_state)
+    r = subprocess.run(hubconf.launch(BIN / "config-check"), env=check_env,
                        capture_output=True, text=True)
     shutil.rmtree(check_state, ignore_errors=True)
     print(r.stdout.strip() or r.stderr.strip())
