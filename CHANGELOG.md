@@ -3,6 +3,13 @@
 What changed in each version, generated from the commit messages (git cliff) when it is tagged; only new features,
 fixes, speed-ups and reverts are listed.
 
+## v0.6.1 (2026-11-02)
+
+### Fixed
+
+- **confine:** An unattended job can write its own state folder
+- **hubbus:** Letters to the platform's other name stay in its mailbox
+
 ## v0.6.0 (2026-11-02)
 
 ### New
