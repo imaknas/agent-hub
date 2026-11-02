@@ -68,6 +68,11 @@ class Golden(unittest.TestCase):
         env = mock.patch.dict(os.environ, ZH)
         env.start()
         self.addCleanup(env.stop)
+        # where a scene has no service manager, it is a system without one: its reason, not the one this test's own
+        # HOME would give (hubconf.home_is_the_accounts)
+        home = mock.patch.object(hubconf, "home_is_the_accounts", lambda: True)
+        home.start()
+        self.addCleanup(home.stop)
 
     def normalize(self, text: str) -> str:
         for p, tag in ((self.tmp, "<TMP>"), (hubconf.ROOT, "<HUB>"), (ROOT, "<HUB>"), (hubconf.MAIN, "<HUB>")):
