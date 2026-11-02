@@ -24,6 +24,7 @@ import subprocess
 
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
 import hubconf  # noqa: E402
+import names  # noqa: E402
 import i18n  # noqa: E402
 
 _ = i18n.domain(__file__)
@@ -226,10 +227,10 @@ def scheduler_runs() -> tuple[dict, datetime.datetime | None]:
 def scheduler_alive() -> bool:
     if hubconf.service_manager() == "systemd":
         import systemd_units
-        return systemd_units.state("local.agent-hub-scheduler") == "running"
+        return systemd_units.state(names.unit_label("-scheduler")) == "running"
     if hubconf.service_manager() != "launchd":
         return False   # no service manager (the alert below says so)
-    r = subprocess.run(["launchctl", "print", f"gui/{os.getuid()}/local.agent-hub-scheduler"],
+    r = subprocess.run(["launchctl", "print", f"gui/{os.getuid()}/{names.unit_label('-scheduler')}"],
                        capture_output=True, text=True)
     return r.returncode == 0
 
@@ -385,12 +386,12 @@ def main() -> None:
     # The scheduler's watchdog (scheduler-watchdog.py, a separate launchd job): this page is produced by the scheduler
     # itself, so it stops updating when the scheduler stops -- the one that actually raises the alarm is the watchdog,
     # so when it is not on watch, this page has to say so (with no service manager, the line above already does)
-    if sm == "systemd" and __import__("systemd_units").state("local.agent-hub-scheduler-watchdog") != "running":
+    if sm == "systemd" and __import__("systemd_units").state(names.unit_label("-scheduler-watchdog")) != "running":
         alerts.append(("bad", _("The scheduler watchdog (local.agent-hub-scheduler-watchdog.timer) is not scheduled: "
                                 "nobody is told when the scheduler stops. Run agenthub init")))
     elif sm is None:
         pass
-    elif sm == "launchd" and subprocess.run(["launchctl", "print", f"gui/{os.getuid()}/local.agent-hub-scheduler-watchdog"],
+    elif sm == "launchd" and subprocess.run(["launchctl", "print", f"gui/{os.getuid()}/{names.unit_label('-scheduler-watchdog')}"],
                                             capture_output=True).returncode != 0:
         alerts.append(("bad", _("The scheduler watchdog (local.agent-hub-scheduler-watchdog) is not loaded: nobody is told "
                                 "when the scheduler stops. On the hub machine, run "

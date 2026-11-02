@@ -2,14 +2,15 @@
 [exit 0]
 services: this system has no supported service manager (neither macOS launchd nor the Linux systemd user level): the scheduler, the watchdog and projects' long-running services will not run by themselves
 === plan
+- service:local.demo.old  no longer in the registry
 + service:local.demo.failboot  demo
 + service:local.demo.ghost  demo
 ~ service:local.demo.once  demo: changed ProgramArguments, StandardErrorPath, StandardOutPath, StartInterval, WorkingDirectory
 + service:local.demo.web  demo
 + service:local.demo.worker  demo
-- service:local.demo.old  no longer in the registry
 === dry-run
 [exit 1]
+(dry-run) local.demo.old: no longer in the registry, unloading
 (dry-run) local.demo.failboot (demo): add
 (dry-run) local.demo.ghost (demo): add
 (dry-run) local.demo.once (demo): update
@@ -20,10 +21,10 @@ services: this system has no supported service manager (neither macOS launchd no
     WorkingDirectory: None → '<TMP>/ws'
 (dry-run) local.demo.web (demo): add
 (dry-run) local.demo.worker (demo): add
-(dry-run) local.demo.old: no longer in the registry, unloading
 ⚠️ local.demo.broken (demo): `no-such-cmd-golden` not found (PATH=/usr/bin:/bin); the plist is left as it is (and not created if it is missing)
 === apply
 [exit 1]
+local.demo.old: no longer in the registry, unloading
 local.demo.failboot (demo): add
     ⚠️ bootstrap failed: Bootstrap failed: 5: Input/output error
 local.demo.ghost (demo): add
@@ -35,7 +36,6 @@ local.demo.once (demo): update
     WorkingDirectory: None → '<TMP>/ws'
 local.demo.web (demo): add
 local.demo.worker (demo): add
-local.demo.old: no longer in the registry, unloading
 ⚠️ local.demo.broken (demo): `no-such-cmd-golden` not found (PATH=/usr/bin:/bin); the plist is left as it is (and not created if it is missing)
 ⚠️ local.demo.failboot (demo): bootstrap failed: Bootstrap failed: 5: Input/output error
 ⚠️ local.demo.ghost (demo): not loaded in launchd

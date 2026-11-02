@@ -98,6 +98,16 @@ def resolve_both(base, cls: str, fmt: str = "{}") -> list[pathlib.Path]:
     return [base / fmt.format(n) for n in (current(cls), other(cls)) if os.path.lexists(base / fmt.format(n))]
 
 
+# ---------- unit labels ----------
+
+CORE_UNITS = ("-scheduler", "-scheduler-watchdog")
+
+
+def unit_label(suffix: str, spelling: str | None = None) -> str:
+    """A launchd / systemd label: local.agent-hub<suffix> or local.brunna<suffix> (the current one by default)."""
+    return f"{spelling or current('unit')}{suffix}"
+
+
 # ---------- markers ----------
 
 def block(spelling: str | None = None) -> tuple[str, str]:

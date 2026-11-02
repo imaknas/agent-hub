@@ -163,6 +163,26 @@ class HubNames(unittest.TestCase):
         self.assertIn("tests", doc)
 
 
+class SchedulerState(unittest.TestCase):
+    def test_daily_state_moves_to_the_current_name_newest_wins(self):
+        import importlib.util
+        from unittest import mock
+        spec = importlib.util.spec_from_file_location("scheduler_n", ROOT / "bin" / "scheduler.py")
+        sch = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(sch)
+        hub, other = names.current("project"), names.other("project")
+        state = {f"{other}/librarian": "2026-11-02", f"{other}/librarian.attempts": {"date": "2026-11-02", "count": 1},
+                 f"{hub}/librarian": "2026-11-01"}
+        failing = pathlib.Path(tempfile.mkdtemp()) / "failing.json"
+        failing.write_text(json.dumps({f"{other}/librarian": {"since": "x"}}))
+        with mock.patch.object(sch, "FAILING_FILE", failing):
+            sch.adopt_state({"name": f"{hub}/librarian", "project": hub}, state)
+        self.assertEqual(state, {f"{hub}/librarian": "2026-11-02",
+                                 f"{hub}/librarian.attempts": {"date": "2026-11-02", "count": 1}},
+                         "ran today under the other name: it doesn't run again")
+        self.assertEqual(json.loads(failing.read_text()), {f"{hub}/librarian": {"since": "x"}})
+
+
 class ConfigPath(unittest.TestCase):
     def run_py(self, cfg: pathlib.Path, code: str) -> str:
         env = names.env_strip(__import__("os").environ)

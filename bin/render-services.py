@@ -215,7 +215,9 @@ def _changes(want: dict, keep: set[str], only: str | None = None) -> list[tuple]
     for label in sorted(_mine() - set(want)):
         if not only or label == only:
             out.append((Change("remove", f"service:{label}", _("no longer in the registry")), None, None))
-    return out
+    # removals first: a service whose label changed (the rename, docs/design/rename-brunna.md) frees its port before
+    # the new label binds it
+    return sorted(out, key=lambda c: c[0].op != "remove")
 
 
 def _apply_one(uid: int, ch, plist: dict | None, problems: list[str]) -> None:

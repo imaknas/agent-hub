@@ -106,7 +106,7 @@ ROOT = hubconf.ROOT   # the same one as hubconf's (AGENT_HUB_ROOT can override i
 AGENTS = pathlib.Path.home() / "Library" / "LaunchAgents"
 # the scheduler and the watchdog don't go through render-services (it's a job the scheduler runs; a broken scheduler
 # is exactly what the watchdog reports); init installs them from the templates
-CORE_PLISTS = ("local.agent-hub-scheduler", "local.agent-hub-scheduler-watchdog")
+CORE_PLISTS = tuple(names.unit_label(s) for s in names.CORE_UNITS)
 
 
 # ---------- config ----------
@@ -247,7 +247,57 @@ def UI():
 
 
 def render_plist(label: str) -> bytes:
-    return (ROOT / "launchd" / f"{label}.plist").read_text().replace("{{hub}}", str(ROOT)).encode()
+    """A core unit from its template in launchd/, which keeps the template's own name; the label inside is the one
+    asked for (either spelling of the rename, docs/design/rename-brunna.md)."""
+    for s in names.all("unit"):
+        if label.startswith(s):
+            suffix = label[len(s):]
+            break
+    else:
+        suffix = label
+    old = names.unit_label(suffix, names.old("unit"))
+    text = (ROOT / "launchd" / f"{old}.plist").read_text().replace(f"<string>{old}</string>", f"<string>{label}</string>")
+    return text.replace("{{hub}}", str(ROOT)).encode()
+
+
+def remove_other_core_units(dry: bool) -> list[str]:
+    """The pairwise half of the core install: the other spelling's scheduler and watchdog (left by a release on the
+    other side of the rename) are removed once this release's are in, and only when they run this hub. Under the
+    scheduler's lock, so no tick is cut off midway; a held lock leaves them for the next run."""
+    other = [names.unit_label(s, names.other("unit")) for s in names.CORE_UNITS]
+    mine = str(BIN)
+    found = []
+    sm = hubconf.service_manager()
+    for label in other:
+        if sm == "systemd":
+            import systemd_units
+            units = systemd_units.installed(label)
+            if units and any(mine in t for t in units.values()):
+                found.append(label)
+        elif sm == "launchd":
+            path = AGENTS / f"{label}.plist"
+            try:
+                if mine in " ".join(map(str, plistlib.loads(path.read_bytes()).get("ProgramArguments") or [])):
+                    found.append(label)
+            except (OSError, ValueError, plistlib.InvalidFileException):
+                pass
+    if not found or dry:
+        return [_("(dry-run) {label}: remove (the other name's unit)", label=label) for label in found] if dry else []
+    import upgrade
+    fd = upgrade.scheduler_lock()
+    if fd is None:
+        return [_("{label}: a scheduler tick is running; it is removed at the next run", label=label) for label in found]
+    try:
+        for label in found:
+            if sm == "systemd":
+                import systemd_units
+                systemd_units.remove(label)
+            else:
+                subprocess.run(["/bin/launchctl", "bootout", f"gui/{os.getuid()}/{label}"], capture_output=True)
+                (AGENTS / f"{label}.plist").unlink(missing_ok=True)
+    finally:
+        os.close(fd)
+    return [_("{label}: removed (the other name's unit)", label=label) for label in found]
 
 
 def install_core_plists(dry: bool, failed: list[str] | None = None) -> list[str]:
@@ -280,7 +330,7 @@ def install_core_plists(dry: bool, failed: list[str] | None = None) -> list[str]
                     done.append(_("  ⚠️ systemctl enable failed: {error}", error=r.stderr.strip()[:200]))
         if systemd_units.linger() is False:
             done.append(_("  ⚠️ user units stop after logout: `loginctl enable-linger $USER` (needs sudo)"))
-        return done
+        return done + (remove_other_core_units(dry) if not failed else [])
     done = []
     for label in CORE_PLISTS:
         want = render_plist(label)
@@ -301,7 +351,7 @@ def install_core_plists(dry: bool, failed: list[str] | None = None) -> list[str]
         if r.returncode != 0:
             failed.append(label)
             done.append(_("  ⚠️ bootstrap failed: {error}", error=r.stderr.strip()[:200]))
-    return done
+    return done + (remove_other_core_units(dry) if not failed else [])
 
 
 # ---------- the platform's agent (docs/design/newcomer-path.md B4) ----------
@@ -1210,9 +1260,9 @@ def cmd_doctor(argv: list[str]) -> int:
             hubconf.manual_scheduler())
     elif hubconf.service_manager() == "systemd":
         import systemd_units
-        for label, what in (("local.agent-hub-scheduler", _("scheduler")), ("local.agent-hub-scheduler-watchdog", _("watchdog"))):
+        for label, what in zip(CORE_PLISTS, (_("scheduler"), _("watchdog"))):
             st = systemd_units.state(label)
-            scheduled = scheduled or (label == "local.agent-hub-scheduler" and st == "running")
+            scheduled = scheduled or (label == CORE_PLISTS[0] and st == "running")
             add("ok" if st == "running" else "bad", _("{what} ({label}.timer): enabled", what=what, label=label)
                 if st == "running" else _("{what} ({label}.timer): not installed", what=what, label=label) if st is None
                 else _("{what} ({label}.timer): installed but not scheduled", what=what, label=label),
@@ -1220,7 +1270,7 @@ def cmd_doctor(argv: list[str]) -> int:
         if systemd_units.linger() is False:
             add("warn", _("the scheduler and services stop after logout (systemd linger is off)"), "sudo loginctl enable-linger $USER")
     for label, what in (() if hubconf.service_manager() != "launchd" else
-                        (("local.agent-hub-scheduler", _("scheduler")), ("local.agent-hub-scheduler-watchdog", _("watchdog")))):
+                        tuple(zip(CORE_PLISTS, (_("scheduler"), _("watchdog"))))):
         r = subprocess.run(["/bin/launchctl", "print", f"gui/{uid}/{label}"], capture_output=True, text=True)
         if r.returncode != 0:
             add("bad", _("{what} ({label}): not loaded", what=what, label=label), _("agenthub init"))
@@ -1228,7 +1278,7 @@ def cmd_doctor(argv: list[str]) -> int:
             add("bad", _("{what} ({label}): the loaded one belongs to a different hub, not {bin}", what=what, label=label, bin=BIN),
                 _("agenthub init (replaces it with this one)"))
         else:
-            scheduled = scheduled or label == "local.agent-hub-scheduler"
+            scheduled = scheduled or label == CORE_PLISTS[0]
             add("ok", _("{what} ({label}): loaded", what=what, label=label))
     import isolation
     why = isolation.can_sandbox()
@@ -1527,10 +1577,19 @@ def cmd_llm(argv: list[str]) -> int:
 def cmd_land(argv: list[str]) -> int:
     """After a merge of agent-hub (merge-branch runs it from the merged code): the registry index rebuilt by that code,
     then the hub's own git hooks installed from its entry (the installer decides from the index, so the refresh comes
-    first). Both run whatever the other said; the worse exit code is returned."""
-    rc = subprocess.run([*hubconf.launch(BIN / "registry.py"), "check", *argv]).returncode
-    rc2 = subprocess.run([*hubconf.launch(BIN / "render-project-settings.py"), "--only", hubconf.hub_project()]).returncode
-    return max(rc, rc2)
+    first). Then what has to follow the code at once on a machine that takes its code by merging rather than by
+    `upgrade` (docs/design/rename-brunna.md): the CLI wrappers (where install-cli put them; none written where there
+    were none), the scheduler and watchdog (pairwise: the other spelling's units go), and the config applied (services
+    re-rendered). Each leaves an unchanged thing alone. All run whatever the others said; the worst exit code is
+    returned."""
+    import upgrade
+    steps = [[*hubconf.launch(BIN / "registry.py"), "check", *argv],
+             [*hubconf.launch(BIN / "render-project-settings.py"), "--only", hubconf.hub_project()]]
+    if (w := upgrade.cli_wrapper()):
+        steps.append([*hubconf.launch(BIN / "agenthub"), "install-cli", "--dir", str(w.parent)])
+    steps += [[*hubconf.launch(BIN / "agenthub"), "init", "--scheduler-only"],
+              [*hubconf.launch(BIN / "agenthub"), "config", "apply"]]
+    return max(subprocess.run(s).returncode for s in steps)
 
 
 def passthrough(script: str):

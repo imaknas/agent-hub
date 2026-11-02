@@ -416,6 +416,11 @@ def waiting_on(job: dict, by_name: dict[str, dict], state: dict, running: set[st
         if d is None and dep in ALIAS:
             dep = ALIAS[dep]
             d = by_name.get(dep)
+        if d is None and "/" in dep:   # a project's former name, the platform's other spelling included
+            proj, short = dep.split("/", 1)
+            for now_name in {hubconf.hub_project()} if proj in names.all("project") else set():
+                if (d := by_name.get(f"{now_name}/{short}")):
+                    dep = f"{now_name}/{short}"
         if d is None or not d.get("enabled", True) or not runs_today(d, now, state):
             continue
         if dep in running:
@@ -478,6 +483,34 @@ def adopt_cursor(job: dict, state: dict) -> None:
         elif gen == state.get(f"{name}.event_gen"):
             # a background run under the old name may finish after the copy: its advance must still count
             state[f"{name}.event_seq"] = max(state[f"{name}.event_seq"], seq)
+
+
+def adopt_state(job: dict, state: dict) -> None:
+    """A renamed project's job takes the daily state its old names left (the platform's own rename agent-hub ↔ brunna
+    counts both ways, hubconf.former_names), newest wins, and the old keys go: a daily job never runs twice because its
+    project changed name, on an upgrade, a rollback or a jump (docs/design/rename-brunna.md). Its failing record moves
+    too, so an open alert still gets its recovery message."""
+    project, short, name = job.get("project"), job["name"].split("/", 1)[-1], job["name"]
+    for old in hubconf.former_names(project) if project else []:
+        was = f"{old}/{short}"
+        if was == name:
+            continue
+        if was in state:
+            state[name] = max(state.get(name) or "", state.pop(was))
+        if f"{was}.last_ok" in state:
+            state[f"{name}.last_ok"] = max(state.get(f"{name}.last_ok") or "", state.pop(f"{was}.last_ok"))
+        if f"{was}.attempts" in state:
+            a, b = state.pop(f"{was}.attempts") or {}, state.get(f"{name}.attempts") or {}
+            if (a.get("date") or "", a.get("count", 0)) > (b.get("date") or "", b.get("count", 0)):
+                state[f"{name}.attempts"] = a
+        try:
+            failing = json.loads(FAILING_FILE.read_text()) if FAILING_FILE.exists() else {}
+            if was in failing:
+                failing.setdefault(name, failing[was])
+                del failing[was]
+                FAILING_FILE.write_text(json.dumps(failing, ensure_ascii=False, indent=1))
+        except (OSError, ValueError):
+            pass
 
 
 def first_sight(job: dict, state: dict) -> None:
@@ -566,6 +599,7 @@ def tick() -> None:
         short = job["name"].split("/", 1)[-1]
         if job.get("project") and any(f"{old}/{short}" in running for old in hubconf.former_names(job["project"])):
             running.add(job["name"])
+        adopt_state(job, state)
     save_state(state)
     for f in merged:
         f.unlink(missing_ok=True)

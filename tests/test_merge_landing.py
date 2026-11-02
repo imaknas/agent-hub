@@ -49,24 +49,28 @@ class CmdLand(unittest.TestCase):
             calls.append([str(x) for x in cmd])
             return subprocess.CompletedProcess(cmd, codes[len(calls) - 1])
 
-        with mock.patch.object(self.mod.subprocess, "run", fake_run):
+        import upgrade
+        with mock.patch.object(self.mod.subprocess, "run", fake_run), mock.patch.object(upgrade, "cli_wrapper",
+                                                                                        lambda: None):
             rc = self.mod.main(["land", *argv])
         return rc, calls
 
     def test_order_and_arguments(self):
-        rc, calls = self.land([0, 0], ["--rebuild"])
+        rc, calls = self.land([0, 0, 0, 0], ["--rebuild"])
         self.assertEqual(rc, 0)
-        self.assertEqual(len(calls), 2)
+        self.assertEqual(len(calls), 4)
         self.assertEqual(calls[0][-3:], [str(BIN / "registry.py"), "check", "--rebuild"])
         self.assertEqual(calls[1][-3:], [str(BIN / "render-project-settings.py"), "--only",
                                          self.mod.hubconf.hub_project()])
         self.assertEqual(calls[0][0], calls[1][0], "both with the platform's Python (hubconf.launch)")
+        # what a machine that takes its code by merging needs at once (docs/design/rename-brunna.md)
+        self.assertEqual([c[-2:] for c in calls[2:]], [["init", "--scheduler-only"], ["config", "apply"]])
 
     def test_both_run_and_the_worse_code_wins(self):
-        for codes, want in (([1, 0], 1), ([0, 2], 2), ([3, 1], 3)):
+        for codes, want in (([1, 0, 0, 0], 1), ([0, 2, 0, 0], 2), ([3, 1, 0, 0], 3), ([0, 0, 0, 4], 4)):
             with self.subTest(codes=codes):
                 rc, calls = self.land(codes)
-                self.assertEqual(len(calls), 2, "the hooks are installed even when the check failed")
+                self.assertEqual(len(calls), 4, "every step runs even when one failed")
                 self.assertEqual(rc, want)
 
     def test_is_a_command(self):

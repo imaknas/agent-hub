@@ -43,6 +43,7 @@ import yaml
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import event_jobs  # noqa: E402
 import hubconf  # noqa: E402
+import names  # noqa: E402
 import i18n  # noqa: E402
 
 _ = i18n.domain(__file__)
@@ -50,7 +51,7 @@ _ = i18n.domain(__file__)
 HUB = hubconf.ROOT
 SCHEDULE = hubconf.config_file("schedule.yaml")
 LOG_DIR = HUB / ".logs"
-LABEL = "local.agent-hub-scheduler"
+LABEL = names.unit_label("-scheduler")
 PLIST = Path.home() / "Library/LaunchAgents" / f"{LABEL}.plist"
 # set-model shorthands → judgment points (the ones models.env's STATE_MODEL / INDEX_MODEL / CONSOLIDATE_MODEL used
 # to set)
@@ -285,7 +286,7 @@ def run_here(name, job, env) -> int:
 
 def start(name, job, env):
     uid = subprocess.check_output(["id", "-u"]).decode().strip()
-    label = f"local.agent-hub-run-now.{name.replace('/', '.')}"
+    label = names.unit_label(f"-run-now.{name.replace('/', '.')}")
     log = job_log(name)
     if hubconf.service_manager() == "systemd":   # a one-off user unit (cleans itself up when done)
         subprocess.run(["systemctl", "--user", "reset-failed", f"{label}.service"], capture_output=True)

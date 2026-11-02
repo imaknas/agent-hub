@@ -44,7 +44,8 @@ class LabelRename(unittest.TestCase):
         with mock.patch.object(m, "AGENTS", tmp), mock.patch.object(m, "RENDERED", tmp / "rendered.json"), \
                 mock.patch.object(m.hubconf, "service_manager", lambda: "launchd"):
             changes = [(c.op, c.target) for c, _cur, _plist in m._changes({new: ("agent-hub", plist)}, set())]
-        self.assertEqual(changes, [("add", f"service:{new}"), ("remove", f"service:{OLD}")])
+        # removals first, so a fixed port is free before the new label binds it (docs/design/rename-brunna.md)
+        self.assertEqual(changes, [("remove", f"service:{OLD}"), ("add", f"service:{new}")])
 
 
 if __name__ == "__main__":

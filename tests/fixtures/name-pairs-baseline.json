@@ -34,14 +34,11 @@
   "bin/worktree-memory.sh": 2
  },
  "unit": {
-  "bin/agenthub": 8,
   "bin/cap-runner.py": 1,
-  "bin/gen-status-page.py": 8,
+  "bin/gen-status-page.py": 4,
   "bin/hubbus": 1,
-  "bin/schedulectl": 2,
   "bin/scheduler-watchdog.py": 2,
-  "bin/sync-all-memory.sh": 1,
-  "bin/uninstall.py": 2
+  "bin/sync-all-memory.sh": 1
  },
  "marker": {
   "bin/prompts.py": 1,

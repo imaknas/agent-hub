@@ -35,7 +35,7 @@ import i18n  # noqa: E402
 import init_dialogue  # noqa: E402
 
 _ = i18n.domain(__file__)
-CORE = ("local.agent-hub-scheduler", "local.agent-hub-scheduler-watchdog")
+CORE = tuple(names.unit_label(s, sp) for sp in names.all("unit") for s in names.CORE_UNITS)
 BLOCKS = [names.block(s) for s in names.all("marker")]   # either spelling (docs/design/rename-brunna.md)
 
 
