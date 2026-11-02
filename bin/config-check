@@ -35,7 +35,7 @@ import i18n  # noqa: E402
 import names  # noqa: E402
 
 _ = i18n.domain(__file__)
-CONFIG = re.compile(r"^(hub\.json|models\.env|mirror-list\.txt|services\.tsv|schedule\.yaml|projects/)")
+CONFIG = re.compile(r"^(hub\.json|brunna\.json|models\.env|mirror-list\.txt|services\.tsv|schedule\.yaml|projects/)")
 UNREADABLE = "hub.json: cannot read it ({error})"
 FAILED = "config-check: ✗ {error}"
 
@@ -48,7 +48,11 @@ def check(root: pathlib.Path) -> list[str]:
     import minischema
     errs: list[str] = []
 
-    hub = root / "hub.json"
+    hub = names.resolve(root, "config_file")
+    if len(both := names.resolve_both(root, "config_file")) > 1:
+        # one would drift from the other: which one counts is never guessed (docs/design/rename-brunna.md)
+        errs.append(_("both {first} and {second} exist; keep one (they are the same settings under two names)",
+                      first=both[0].name, second=both[1].name))
     if not hub.exists() and (root / "bin" / "agenthub").exists():
         # the platform repo's index: since 10-29 the platform repo holds no user config -- check the example; registry
         # validation still checks the platform's registry entry and modules
@@ -129,8 +133,8 @@ def check(root: pathlib.Path) -> list[str]:
         import yaml
         try:
             jobs = (yaml.safe_load(sy.read_text()) or {}).get("jobs") or []
-            names = [j.get("name") for j in jobs]
-            errs += [_("schedule.yaml: job `{name}` repeated", name=n) for n in sorted({n for n in names if names.count(n) > 1})]
+            job_names = [j.get("name") for j in jobs]
+            errs += [_("schedule.yaml: job `{name}` repeated", name=n) for n in sorted({n for n in job_names if job_names.count(n) > 1})]
         except yaml.YAMLError as e:
             errs.append(_("schedule.yaml: cannot read it ({error})", error=e))
     return errs

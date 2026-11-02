@@ -138,7 +138,7 @@ class Connect(unittest.TestCase):
         (self.tmp / "hub" / "bin").mkdir(parents=True)
         repo(self.code / "inside")
         self.projects = {"inside": {"paths": {"workspace": str(self.code / "inside")}}}
-        with mock.patch.object(connect.hubconf, "config_file", lambda name: self.tmp / "instance" / "config" / name), \
+        with mock.patch.object(connect.hubconf, "config_path", lambda: self.tmp / "instance" / "config" / "hub.json"), \
              mock.patch.object(connect.subprocess, "run") as run:
             for folder in (self.home, self.home / ".ssh", self.tmp / "hub", self.tmp / "hub" / "bin",
                            self.code / "inside", self.code / "missing"):

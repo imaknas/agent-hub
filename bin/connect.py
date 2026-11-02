@@ -126,13 +126,13 @@ def add_root(folder: str) -> int:
     if (why := refusal(p, root=True)):
         print(_("agenthub connect: {reason}; nothing was done", reason=why), file=sys.stderr)
         return 2
-    f = hubconf.config_file("hub.json")
+    f = hubconf.config_path()
     d = json.loads(f.read_text())
     roots = (d.setdefault("connect", {})).setdefault("roots", [])
     if str(p) not in roots:
         roots.append(str(p))
         f.write_text(json.dumps(d, ensure_ascii=False, indent=2) + "\n")
-        subprocess.run([str(BIN / "commit-hub-files.sh"), "chore(config): a folder for projects", "hub.json"])
+        subprocess.run([str(BIN / "commit-hub-files.sh"), "chore(config): a folder for projects", f.name])
     print(_("✓ projects may be connected from inside {path}", path=p))
     return 0
 

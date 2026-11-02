@@ -177,11 +177,11 @@ def record(done: dict, ok: bool) -> None:
 # ---------- modules ----------
 
 def read_hub_json() -> dict:
-    return json.loads(hubconf.config_file("hub.json").read_text())
+    return json.loads(hubconf.config_path().read_text())
 
 
 def write_hub_json(d: dict) -> None:
-    hubconf.config_file("hub.json").write_text(json.dumps(d, ensure_ascii=False, indent=2) + "\n")
+    hubconf.config_path().write_text(json.dumps(d, ensure_ascii=False, indent=2) + "\n")
 
 
 def llm_modules() -> list[str]:
@@ -504,10 +504,11 @@ def set_agent(choice: str, args: dict) -> int:
     if choice != "none" and UI().consent("llm_now", _("Set up who makes the platform's judgment calls now (agenthub llm "
                                                       "setup)?")):
         llm_setup(args)
+    cfg = hubconf.config_path().name
     rc = subprocess.run([str(BIN / "commit-hub-files.sh"), f"chore(config): the platform's agent is {choice}",
-                         "hub.json"]).returncode
+                         cfg]).returncode
     if rc != 0:
-        print(_("warning: {file} was written, but the commit/push failed; it needs a manual fix", file="hub.json"))
+        print(_("warning: {file} was written, but the commit/push failed; it needs a manual fix", file=cfg))
     return subprocess.run([*hubconf.launch(BIN / "agenthub"), "config", "apply"]).returncode or (1 if rc else 0)
 
 
@@ -682,10 +683,11 @@ def set_language(ui: str, content: str) -> int:
     hubconf._cfg = None
     names.env_set(os.environ, "LANG_UI", ui)
     print(_("✓ language: interface {ui}, notes and project state {content}", ui=ui, content=content))
+    cfg = hubconf.config_path().name
     rc = subprocess.run([str(BIN / "commit-hub-files.sh"), f"chore(config): language {ui}, content {content}",
-                         "hub.json"]).returncode
+                         cfg]).returncode
     if rc != 0:
-        print(_("warning: {file} was written, but the commit/push failed; it needs a manual fix", file="hub.json"))
+        print(_("warning: {file} was written, but the commit/push failed; it needs a manual fix", file=cfg))
     print(_("Commands use it from now on; long-running processes (lease-runner, an open MCP server) after they restart."))
     return 0 if rc == 0 else 1
 
@@ -786,7 +788,7 @@ def init_questions(args: dict) -> list[dict]:
     saved = {k: os.environ.get(k) for x in ("LANG_UI", "LANG_CONTENT") for k in names.env_names(x)}
     try:
         with contextlib.redirect_stdout(io.StringIO()):
-            if hubconf.config_file("hub.json").exists():
+            if hubconf.config_path().exists():
                 choice = current_agent(read_hub_json(), presets)
             else:
                 ui, content = choose_language(args)
@@ -829,7 +831,7 @@ def init_for_agent(flags: set, args: dict, argv: list[str]) -> int:
         emit({"error": problem})
         return 2
     opts = answers_args(answers)
-    exists = hubconf.config_file("hub.json").exists()
+    exists = hubconf.config_path().exists()
     if exists and not INIT_UNFINISHED.exists():
         emit({"error": _("agent-hub is already set up here"), "next": "agenthub doctor"})
         return 1
@@ -845,7 +847,7 @@ def init_for_agent(flags: set, args: dict, argv: list[str]) -> int:
     agent = init_dialogue.Agent()
     rest = [x for k, v in opts.items() for x in (f"--{k}", v)] + [a for a in argv if a in ("--no-launchd", "--dry-run")]
     rc = cmd_init(rest, agent)
-    if agent.needs and hubconf.config_file("hub.json").exists():
+    if agent.needs and hubconf.config_path().exists():
         # what is left for the owner: the same --answers carries on with only those steps once they're done
         INIT_UNFINISHED.parent.mkdir(parents=True, exist_ok=True)
         INIT_UNFINISHED.write_text("owner-steps\n")
@@ -875,24 +877,24 @@ def cmd_init(argv: list[str], transport=None) -> int:
         print(_("agenthub init: --lang takes {languages}, or two of them as <interface>,<notes> (nothing was done)",
                 languages=", ".join(hubconf.LANGUAGES)), file=sys.stderr)
         return 2
-    if args.get("lang") and hubconf.config_file("hub.json").exists():
+    if args.get("lang") and hubconf.config_path().exists():
         return set_language(*parse_lang(args["lang"]))   # an existing instance: only the language
     if args.get("agent") and args["agent"] not in (*agent_presets(), "none"):
         print(_("agenthub init: --agent takes {agents} (nothing was done)",
                 agents=", ".join([*agent_presets(), "none"])), file=sys.stderr)
         return 2
-    if args.get("agent") and hubconf.config_file("hub.json").exists():
+    if args.get("agent") and hubconf.config_path().exists():
         return set_agent(args["agent"], args)   # an existing instance: only the agent step
-    if "--register-mcp" in flags and hubconf.config_file("hub.json").exists():
+    if "--register-mcp" in flags and hubconf.config_path().exists():
         offer_mcp_registration(agent_presets())   # an existing instance: only this step
         return 0
     created = False
-    legacy = hubconf.instance_home() is None and hubconf.config_file("hub.json").exists()
+    legacy = hubconf.instance_home() is None and hubconf.config_path().exists()
     if legacy:
         # the old layout (hub.json in the hub root, as before the move): left alone; the move is a separate step
         # (docs/design/new-user.md step 6)
         print(_("✓ {path} already exists (the old layout); leaving it alone", path=hubconf.config_file('hub.json')))
-    elif hubconf.config_file("hub.json").exists():
+    elif hubconf.config_path().exists():
         print(_("✓ {path} already exists; leaving it alone (to change it, edit it, then run agenthub config apply)",
                 path=hubconf.config_file('hub.json')))
         if INIT_UNFINISHED.exists() and not dry:   # an earlier init stopped after writing hub.json: finish its steps
@@ -913,7 +915,7 @@ def cmd_init(argv: list[str], transport=None) -> int:
         for sub in ("config/projects", "data", "secrets"):
             (home / sub).mkdir(parents=True, exist_ok=True)
         (home / "secrets").chmod(0o700)
-        (home / "config" / "hub.json").write_text(json.dumps(d, ensure_ascii=False, indent=2) + "\n")
+        (home / "config" / names.current("config_file")).write_text(json.dumps(d, ensure_ascii=False, indent=2) + "\n")
         hubconf.POINTER.write_text(str(home) + "\n")   # written last: once it exists, the platform uses this instance
         hubconf._cfg = None
         # until the steps after hub.json are done (llm setup), a re-run of init carries on instead of skipping them
@@ -922,7 +924,7 @@ def cmd_init(argv: list[str], transport=None) -> int:
         created = True
         print(_("✓ agent-hub's folder: {home} (you: {owner}; on: {modules})", home=home,
                 owner=d['owner']['tag'], modules=', '.join(k for k, v in d['modules'].items() if v is True)))
-    if dry and not hubconf.config_file("hub.json").exists():
+    if dry and not hubconf.config_path().exists():
         return 0
     dirs = [hubconf.registry_dir(), hubconf.STATE, hubconf.LOGS, hubconf.secrets_dir(), hubconf.data_dir(),
             hubconf.p("workspace_root", "~/workspace"), hubconf.p("git_origin", "~/git-origin"),
@@ -974,7 +976,7 @@ def cmd_init(argv: list[str], transport=None) -> int:
 
 # ---------- move-instance (the old layout → an instance directory, docs/design/new-user.md step 6) ----------
 
-CONFIG_FILES = ["hub.json", "models.env", "mirror-list.txt", "services.tsv", "schedule.yaml"]
+CONFIG_FILES = [*names.all("config_file"), "models.env", "mirror-list.txt", "services.tsv", "schedule.yaml"]
 DATA_FILES = ["digest", "reflect", "todo.md", "index.md", "review-log.md", "openclaw-migration-status.md", "legacy-paths.tsv"]
 
 
@@ -1005,7 +1007,7 @@ def cmd_move_instance(argv: list[str]) -> int:
     if hubconf.POINTER.exists() or names.env("HOME"):
         print(_("already in the instance-directory layout ({home}); nothing to move", home=hubconf.instance_home()), file=sys.stderr)
         return 1
-    if not hubconf.config_file("hub.json").exists():
+    if not hubconf.config_path().exists():
         print(_("no hub.json: nothing to move"), file=sys.stderr)
         return 1
     if home.exists() and any(home.iterdir()):
@@ -1027,7 +1029,7 @@ def cmd_move_instance(argv: list[str]) -> int:
     (home / "secrets").chmod(0o700)
     # backup scope: the old .secrets becomes the new secrets; config/ and data/ are added (once out of git, the backup
     # is their only copy)
-    cfg_path = home / "config" / "hub.json"
+    cfg_path = names.resolve(home / "config", "config_file")
     cfg = json.loads(cfg_path.read_text())
     b = cfg.get("backup")
     if isinstance(b, dict):
@@ -1102,7 +1104,7 @@ def cmd_doctor(argv: list[str]) -> int:
     r = subprocess.run([str(BIN / "setup-python"), "--check"], capture_output=True, text=True)
     add("ok" if r.returncode == 0 else "bad", (r.stdout.strip() or r.stderr.strip())[:160] or _("the platform's Python"),
         "" if r.returncode == 0 else "bin/setup")
-    if not hubconf.config_file("hub.json").exists():
+    if not hubconf.config_path().exists():
         add("bad", _("no hub.json"), _("agenthub init"))
         return report(results)
     r = subprocess.run(hubconf.launch(BIN / "config-check"), capture_output=True, text=True)

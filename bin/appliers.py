@@ -30,6 +30,7 @@ BIN = pathlib.Path(__file__).resolve().parent
 if str(BIN) not in sys.path:
     sys.path.insert(0, str(BIN))
 import i18n  # noqa: E402
+import names  # noqa: E402
 
 _ = i18n.domain(__file__)
 
@@ -81,7 +82,7 @@ def load(name: str):
 
 # config files (new-user.md 3.0): these are what git tracks; after step 6 moves them to the config repo, hubconf points
 # there
-CONFIG_PATHS = ["hub.json", "mirror-list.txt", "services.tsv", "schedule.yaml", "projects"]
+CONFIG_PATHS = [*names.all("config_file"), "mirror-list.txt", "services.tsv", "schedule.yaml", "projects"]
 
 
 def applied_path() -> pathlib.Path:

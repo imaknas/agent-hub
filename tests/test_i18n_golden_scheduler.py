@@ -149,6 +149,7 @@ class Golden(unittest.TestCase):
                 out.append((label, call(m.main)))
         with mock.patch.object(m, "subprocess", fake_sp), mock.patch.object(m, "all_jobs", lambda: jobs), \
                 mock.patch.object(hubconf, "config_file", lambda n: hub / "config" / n), \
+                mock.patch.object(hubconf, "config_path", lambda: hub / "config" / "hub.json"), \
                 mock.patch.object(llm, "points", lambda: points), \
                 mock.patch.object(llm, "model_for", lambda name, spec=None: {"p-plain": "m-strong", "p-pinned": "m-pin"}
                                   .get(name)):

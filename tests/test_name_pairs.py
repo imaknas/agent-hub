@@ -86,6 +86,33 @@ class Table(unittest.TestCase):
         self.assertEqual(names.env_strip({"AGENT_HUB_X": 1, "AGENTHUB_Y": 2, "BRUNNA_Z": 3, "HOME": 4}), {"HOME": 4})
 
 
+class ConfigPath(unittest.TestCase):
+    def run_py(self, cfg: pathlib.Path, code: str) -> str:
+        env = names.env_strip(__import__("os").environ)
+        names.env_set(env, "CONFIG", str(cfg))
+        names.env_set(env, "STATE", str(cfg / ".state"))
+        r = subprocess.run([sys.executable, "-c", code], env={**env, "PYTHONPATH": str(ROOT / "bin")},
+                           capture_output=True, text=True)
+        self.assertEqual(r.returncode, 0, r.stderr)
+        return r.stdout.strip()
+
+    def test_whichever_exists(self):
+        cfg = pathlib.Path(tempfile.mkdtemp())
+        read = "import hubconf; print(hubconf.config_path().name, hubconf.get('owner.tag'), hubconf.config_conflict())"
+        self.assertEqual(self.run_py(cfg, read), "hub.json None None", "neither: this release's own name")
+        (cfg / "brunna.json").write_text('{"owner": {"tag": "B"}}')
+        self.assertEqual(self.run_py(cfg, read), "brunna.json B None", "a renamed instance is read as it is")
+        (cfg / "hub.json").write_text('{"owner": {"tag": "H"}}')
+        out = self.run_py(cfg, read).split(" ", 2)
+        self.assertEqual(out[:2], ["hub.json", "H"])
+        self.assertIn("brunna.json", out[2], "both: reported, not guessed")
+        r = subprocess.run([sys.executable, str(ROOT / "bin" / "config-check")],
+                           env={**names.env_set(names.env_strip(__import__("os").environ), "CONFIG", str(cfg)),
+                                "AGENT_HUB_LANG_UI": "en"}, capture_output=True, text=True)
+        self.assertNotEqual(r.returncode, 0)
+        self.assertIn("both hub.json and brunna.json exist", r.stdout + r.stderr)
+
+
 class Ratchet(unittest.TestCase):
     def test_literals_only_go_down(self):
         base = json.loads(BASELINE.read_text())

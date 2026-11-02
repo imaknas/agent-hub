@@ -68,7 +68,7 @@ ROSTER = re.compile(r"<!-- roster:begin.*?<!-- roster:end -->", re.S)
 INDEX_MD, DIGEST_DIR = "index.md", "digest"   # the layout of an index run's temp data dir (what the agent sees)
 RATE_LIMIT = re.compile(r"rate.?limit|usage limit|429|overloaded", re.I)
 
-HUB_JSON = hubconf.config_file("hub.json").name   # the file name, inside a run's config copy
+HUB_JSON = hubconf.config_path().name   # the file name, inside a run's config copy
 
 
 def plugin(point: str):

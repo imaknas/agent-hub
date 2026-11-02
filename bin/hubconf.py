@@ -104,6 +104,19 @@ def config_file(name: str) -> pathlib.Path:
     return config_dir() / name
 
 
+def config_path() -> pathlib.Path:
+    """The instance's settings file, hub.json or brunna.json, whichever exists (docs/design/rename-brunna.md): every
+    reader, writer and "is this instance set up" check goes through here, so a release that renamed it and one that
+    didn't agree. Both present: config_conflict() says so (doctor, config-check)."""
+    return names.resolve(config_dir(), "config_file")
+
+
+def config_conflict() -> str | None:
+    """Both spellings of the settings file present (they would drift apart), or None."""
+    both = names.resolve_both(config_dir(), "config_file")
+    return " and ".join(str(p) for p in both) if len(both) > 1 else None
+
+
 def data_file(name: str) -> pathlib.Path:
     return data_dir() / name
 
@@ -111,7 +124,7 @@ def data_file(name: str) -> pathlib.Path:
 def config() -> dict:
     global _cfg
     if _cfg is None:
-        p = config_file("hub.json")
+        p = config_path()
         _cfg = json.loads(p.read_text()) if p.exists() else {}
     return _cfg
 

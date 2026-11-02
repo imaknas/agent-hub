@@ -70,15 +70,21 @@ def all(cls: str) -> tuple[str, str]:  # noqa: A001 (the table's word for "every
     return current(cls), other(cls)
 
 
+# what resolve creates when neither spelling exists: the new one, except where the old one is still what this release
+# writes (the config file is written by init; before the switch it keeps today's name)
+FRESH_CURRENT = {"config_file"}
+
+
 def resolve(base, cls: str, fmt: str = "{}") -> pathlib.Path:
-    """base / fmt.format(spelling) for the spelling that exists; neither → the new one. Both existing is the caller's
-    to decide (resolve_both): a file pair that differs is refused there, never guessed here."""
+    """base / fmt.format(spelling) for the spelling that exists (the current one when both do); neither → the new one
+    (the current one for FRESH_CURRENT classes). Both existing is reported by resolve_both's callers (doctor,
+    config-check), never decided by guessing here."""
     base = pathlib.Path(base)
     for name in (current(cls), other(cls)):
         p = base / fmt.format(name)
         if os.path.lexists(p):
             return p
-    return base / fmt.format(new(cls))
+    return base / fmt.format(current(cls) if cls in FRESH_CURRENT else new(cls))
 
 
 def resolve_both(base, cls: str, fmt: str = "{}") -> list[pathlib.Path]:

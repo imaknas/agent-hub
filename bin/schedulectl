@@ -412,7 +412,7 @@ def cmd_set_model(which, model):
         print(_("'{which}' is neither a judgment point nor one of {aliases} (the points: schedulectl models)", which=which,
                 aliases=_(", ").join(MODEL_ALIASES)))
         sys.exit(1)
-    f = hubconf.config_file("hub.json")
+    f = hubconf.config_path()
     d = json.loads(f.read_text())
     pins = d.setdefault("llm", {}).setdefault("points", {})
     for t in targets:
