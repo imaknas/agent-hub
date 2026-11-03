@@ -249,7 +249,7 @@ def esc(s: str) -> str:
 
 
 def hue(project: str) -> int:
-    """Each project keeps one of six colors, the same one the herdr panel gives it (mods/brunna/main.js hue())."""
+    """Each project keeps one of six colors, the same one the herdr panel gives it (herdr/brunna/mods/brunna/main.js hue())."""
     h = 0
     for c in project or "":
         h = (h * 31 + ord(c)) & 0xFFFFFFFF
@@ -273,7 +273,7 @@ def ago(at: str, now: datetime.datetime) -> str:
             else _("{n}d", n=m // (24 * 60)))
 
 
-# the platform's mark (mods/brunna/mark.svg), drawn in the text color
+# the platform's mark (herdr/brunna/mods/brunna/mark.svg), drawn in the text color
 MARK = ('<svg class=mark viewBox="0 0 256 256" aria-hidden="true"><g stroke="currentColor" stroke-width="14" '
         'stroke-linecap="round"><line x1="128" y1="69.5" x2="128" y2="103.5"/><line x1="195.5" y1="186.5" x2="166.1" '
         'y2="169.5"/><line x1="60.5" y1="186.5" x2="89.9" y2="169.5"/></g><g fill="currentColor"><circle cx="128" '
@@ -720,7 +720,7 @@ GLANCE = hubconf.STATE / "status" / "glance.json"   # bin/glance.py reads it the
 FOLD = 6   # problems / notices shown before the rest folds away
 SHOW = 8   # items listed under "Needs you", as the herdr panel; the rest are on the to-do page
 
-# the look of the herdr panel (mods/brunna/main.js): a header with the health pill, number tiles, cards of two-line
+# the look of the herdr panel (herdr/brunna/mods/brunna/main.js): a header with the health pill, number tiles, cards of two-line
 # rows, one color per project (c1..c6, the panel's ansi1..6)
 STATUS_CSS = """
 :root{--bg:#f6f6f3;--surface:#fff;--raised:#f1f0ec;--fg:#1f1f1c;--mut:#62625c;--dim:#8e8d86;--line:#e4e3de;

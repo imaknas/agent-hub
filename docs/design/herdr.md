@@ -34,10 +34,12 @@ From its own guide for agents (`herdr-app/defaults/AGENTS.md`) and herdr-core's 
   `on` being one of herdr's machines), call herdr-core (`hc(args)`), `fetch`, show markdown (`TextView.markdown`),
   post a toast (`notify({ title, body, level, action })`), refresh on a timer (`cx.timer.every(ms, …)`) or when a folder
   changes (`watchFolder(dir)`), and read the agents and their state (`agents()`).
-- **Sharing**: a public GitHub repo with the topic `herdr-mod`, each mod in `mods/<name>/` with a `RECIPE.md` (the
-  brief an agent builds the mod from) and a `preview.png`; it appears on herdr.dev's Mods page within an hour, unreviewed.
-  The repo must not have a `layouts/` folder. A user installs one by giving their agent a single line. On 11-03 the
-  community list has no mod yet.
+- **Sharing**: a public GitHub repo with the topic `herdr-mod`. What is shared is a folder laid out like a herdr home:
+  `RECIPE.md` (the brief an agent builds the mod from) and `preview.png` at its top, the mod in its `mods/<name>/` (a
+  layout adds `layouts/<name>.json`). The folder is the repo's root or one level down (e.g. `herdr/pulse`); a recipe
+  inside `mods/<name>/` is not found and the repo is skipped. It appears on herdr.dev's Mods page within the hour after
+  GitHub's topic search sees it, unreviewed. A user installs one by giving their agent a single line. On 11-03 the list
+  has about 240 mods (a first look had read the page's placeholder 0 for the count).
 - **herdr-core** (`hc`): `hc run [--bg] [--name] [--on MACHINE] CMD`, `hc ls`, `hc read --lines N NAME`,
   `hc send NAME TEXT`, `hc wait`, `hc schema` (the socket API as OpenRPC, with streams and events).
 - **OSC 7501**: a program in a herdr terminal reports its own state (`state=working|blocked|idle|done`, `app=…`) with an
@@ -83,12 +85,14 @@ they were written in. `brunna glance` without `--json` prints the same in a few 
 
 ### The mod, in this repo
 
-herdr lists a mod from any public repo tagged `herdr-mod` with the mod at `mods/<name>/` and no `layouts/` folder. It
-lives here, as fzf keeps its Vim plugin in its own repo: the point is reach, and herdr's Mods page then leads straight
-to brunna. AGENTS.md says what `mods/` is (clients for other apps, not `modules/`), and that a client reads only
-neutral output; `tests/test_mods.py` checks the folder. Decided 11-03 by the owner after weighing a separate repo.
+herdr lists a mod from any public repo tagged `herdr-mod` that has a shared folder as above. It lives here, in
+`herdr/brunna/` (`RECIPE.md`, `preview.png`, `mods/brunna/`), as Pulse keeps its mod in `herdr/pulse/` of the Pulse
+app's repo: the point is reach, and herdr's Mods page then leads straight to brunna. The first try put the recipe in
+`mods/brunna/` at the repo root, and herdr's index skipped the repo (11-03). AGENTS.md says what `herdr/` is (a client
+for another app) and that a client reads only neutral output; `tests/test_mods.py` checks the folder. Decided 11-03 by
+the owner after weighing a separate repo.
 
-- `mods/brunna/main.js`: a right-hand panel (`mod.json` `{"place": "right", "size": 320}`) that runs `glance --json`
+- `herdr/brunna/mods/brunna/main.js`: a right-hand panel (`mod.json` `{"place": "right", "size": 320}`) that runs `glance --json`
   every 60 seconds (`cx.timer.every`) and renders it as markdown: what needs the owner first, then mail, then health; a
   line per item, the project in front; the age of the alerts (`as_of`) shown.
 - A toast (`notify`) when an item id not seen in the previous glance needs the owner, at most one per minute, its
