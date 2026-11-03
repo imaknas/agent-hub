@@ -9,7 +9,6 @@ hub config replaced, so nothing calls a model.
     I18N_GOLDEN_UPDATE=1 bin/py -m unittest tests.test_i18n_golden_runtime     # regenerate (only before a conversion)
 """
 import contextlib
-import datetime
 import gc
 import io
 import json
@@ -116,15 +115,15 @@ class RuntimeGolden(unittest.TestCase):
         (ws / ".claude" / "settings.local.json").write_text(json.dumps({"sandbox": {"enabled": False}}))
         self.say("sandbox: not enabled", rc.sandbox_rendered(ws))
 
-        root = self.tmp / "transcripts"
-        d = root / rc.slug_for_path(str(ws))
-        d.mkdir(parents=True)
-        (d / "s1.jsonl").write_text("".join(json.dumps({"type": "weird", "n": i}) + "\n" for i in range(5)))
-        with mock.patch.object(rc, "transcript_roots", lambda: (root,)):
-            try:
-                list(rc.turns([str(ws)], datetime.datetime(2000, 1, 1, tzinfo=datetime.timezone.utc)))
-            except rc.TranscriptFormatError as e:
-                self.say("transcript format", str(e))
+        import sessions
+        import sessions_claude
+        f = self.tmp / "transcripts" / rc.slug_for_path(str(ws)) / "s1.jsonl"
+        f.parent.mkdir(parents=True)
+        f.write_text("".join(json.dumps({"type": "weird", "n": i}) + "\n" for i in range(5)))
+        try:
+            list(sessions_claude.records(f))
+        except sessions.SessionFormatError as e:
+            self.say("transcript format", str(e))
 
         task = Task(point="p", prompt="hi", spec={}, timeout_s=1200, env={"PATH": "/usr/bin"})
         cases = (("timeout", subprocess.TimeoutExpired("claude", 1)), ("not found", FileNotFoundError()),

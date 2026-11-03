@@ -1,5 +1,5 @@
 === port labels
-[('agent', 'agent runs'), ('auth', 'login state'), ('completion', 'completion interface'), ('confine', 'confined runs (declared permissions only)'), ('control', 'map of where sessions load settings and hooks from'), ('instructions', 'rules file'), ('lifecycle', 'session events (hooks)'), ('sessions', 'session state'), ('stream', 'long-running streaming sessions'), ('tool_servers', 'way to tell which tool servers a run loads'), ('transcripts', 'transcripts'), ('wake', 'way to wake an idle session')]
+[('agent', 'agent runs'), ('auth', 'login state'), ('completion', 'completion interface'), ('confine', 'confined runs (declared permissions only)'), ('control', 'map of where sessions load settings and hooks from'), ('instructions', 'rules file'), ('lifecycle', 'session events (hooks)'), ('sessions', 'session state'), ('stream', 'long-running streaming sessions'), ('tool_servers', 'way to tell which tool servers a run loads'), ('wake', 'way to wake an idle session')]
 === feature (none)
 judgment points (librarian, index, consolidate, weekly report analysis) | False | agent runs or login state
 === feature (none)
@@ -18,14 +18,12 @@ an idle open session is woken when a letter arrives for it | False | session sta
 platform rules written into the project's rules file | False | rules file
 === feature (none)
 a sandboxed project can't write what its sessions load hooks and settings from | False | map of where sessions load settings and hooks from
-=== feature (none)
-memory gaps, the weekly report's transcript statistics | False | transcripts
 === unknown runtime
 no registered runtime: nosuch (have: claude, fake, none, command, acp)
-=== unsupported ('agent', 'lifecycle', 'instructions', 'control', 'transcripts', 'sessions', 'stream', 'auth', 'completion', 'confine', 'tool_servers', 'wake')
-runtime none has no agent runs, session events (hooks), rules file, map of where sessions load settings and hooks from, transcripts, session state, long-running streaming sessions, login state, completion interface, confined runs (declared permissions only), way to tell which tool servers a run loads, or way to wake an idle session (brunna.json runtime.default; to use this feature, install a coding agent that supports it)
+=== unsupported ('agent', 'lifecycle', 'instructions', 'control', 'sessions', 'stream', 'auth', 'completion', 'confine', 'tool_servers', 'wake')
+runtime none has no agent runs, session events (hooks), rules file, map of where sessions load settings and hooks from, session state, long-running streaming sessions, login state, completion interface, confined runs (declared permissions only), way to tell which tool servers a run loads, or way to wake an idle session (hub.json runtime.default; to use this feature, install a coding agent that supports it)
 === unsupported ('completion',)
-runtime none has no completion interface (brunna.json runtime.default; to use this feature, install a coding agent that supports it)
+runtime none has no completion interface (hub.json runtime.default; to use this feature, install a coding agent that supports it)
 === missing functions (runtime)
 runtime half (golden_half_runtime) is missing: agent.describe
 === missing functions (provider)

@@ -276,8 +276,9 @@ agent while the user was working there. Now:
 - **Doctor**: with more than one installed runtime, each feature row has a cell per runtime, plus each runtime's rules
   file (or that its sessions get the rules from the MCP server's instructions) and the runtimes refused in sandboxed
   projects. With one, the output is as before.
-- Still on the default runtime: the transcript statistics (memory gaps, weekly report), headless runs, leases, and the
-  older `hubbus hook` entry points called without `--runtime` (worktree-memory.sh, user-level hooks).
+- Still on the default runtime: headless runs, leases, and the
+  older `hubbus hook` entry points called without `--runtime` (worktree-memory.sh, user-level hooks). (The session
+  statistics, memory gaps and the weekly review, no longer depend on any runtime since 11-03: `bin/sessions.py`.)
 
 ## 11-02: Claude Code's wake, an asyncRewake waiter (`docs/design/mailbox-runtimes.md` step 2, B1 as built)
 

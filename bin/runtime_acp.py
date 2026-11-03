@@ -27,7 +27,7 @@ That copy contains the work in the repository and what the platform applies; wri
 shell are contained only by the agent's own mode or sandbox (the optional `mode` below is set and checked). A Task asking to continue an earlier conversation (extra) is refused too. The agent's own MCP servers
 are its own: the session gets none from the platform, but `mcpServers` adds, it does not block; an agent's flag for
 "no configured MCP servers" goes into its command.
-Everything else (long-running sessions, session state, completion, hooks, rules file, transcripts) is absent: the
+Everything else (long-running sessions, session state, completion, hooks, rules file) is absent: the
 platform switches those features off with the reason (runtime_ports.Unsupported). Fork is unstable in ACP and not used.
 Standard library.
 """

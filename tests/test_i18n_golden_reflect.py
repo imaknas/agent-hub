@@ -67,7 +67,7 @@ class Golden(unittest.TestCase):
         tmp = pathlib.Path(tempfile.mkdtemp())
         o, e = io.StringIO(), io.StringIO()
         with mock.patch.dict(os.environ, ZH), mock.patch.object(m, "OUT", tmp), redirect_stderr(e), \
-                mock.patch.object(m.runtime_ports, "load", side_effect=m.runtime_ports.Unsupported("no transcripts here")), \
+                mock.patch.object(m.sessions, "require", side_effect=m.sessions.NoSessions("no session records here")), \
                 mock.patch.object(m, "build_stats", return_value={}), \
                 mock.patch.object(m, "build_html", return_value=tmp / "index.html"), \
                 mock.patch.object(sys, "argv", ["weekly-reflect.py", "--week", "2026-W40"]), redirect_stdout(o):

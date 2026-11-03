@@ -3,23 +3,21 @@
 Two uses:
 1. Prove the interface doesn't leak Claude Code's shape: Claude and this one must both pass the same contract tests
    (tests/test_runtime_contracts.py).
-2. A test double for the platform's other programs: it really remembers state (transcripts, which sessions are alive,
+2. A test double for the platform's other programs: it really remembers state (which sessions are alive,
    how big the context is), not just whether it was called.
 
-Everything lives in memory; tests clear it with reset() and put data in with add_turn / start / end / set_context.
+Everything lives in memory; tests clear it with reset() and put data in with start / end / set_context.
 Standard library.
 """
 from __future__ import annotations
 
-import datetime
 import pathlib
 
 import i18n
-from runtime_ports import TaskResult, Turn
+from runtime_ports import TaskResult
 
 _ = i18n.domain(__file__)
 
-_turns: list[tuple[str, Turn, bool]] = []   # (working dir, Turn, whether in a worktree under it)
 _replies: dict[str, TaskResult] = {}     # judgment point → the result to return
 _ran: list = []                          # Tasks run (tests check what it received)
 _live: set[str] = set()
@@ -35,7 +33,6 @@ def reset() -> None:
     _completions.clear()
     _asked.clear()
     _ran.clear()
-    _turns.clear()
     _live.clear()
     _woken.clear()
     _context.clear()
@@ -43,10 +40,6 @@ def reset() -> None:
 
 
 # ---------- putting data in, for tests ----------
-
-def add_turn(path: str, turn: Turn, worktree: bool = False) -> None:
-    """worktree=True: this turn was said by a session in a worktree the runtime opened under path."""
-    _turns.append((str(pathlib.Path(path)), turn, worktree))
 
 
 def start(sid: str) -> None:
@@ -75,22 +68,6 @@ def run(task) -> TaskResult:
 
 def describe(task) -> list:
     return ["fake", task.point]
-
-
-# ---------- transcripts ----------
-
-def turns(paths, since: datetime.datetime, until: datetime.datetime | None = None, worktrees: bool = False,
-          subagents: bool = False):
-    want = {str(pathlib.Path(p)) for p in paths}
-    for path, t, wt in sorted(_turns, key=lambda x: x[1].ts):
-        if (path in want and (worktrees or not wt) and (subagents or not t.subagent) and t.ts >= since
-                and (until is None or t.ts < until)):
-            yield t
-
-
-def last_activity(path) -> datetime.datetime | None:
-    ts = [t.ts for p, t, wt in _turns if p == str(pathlib.Path(path)) and not wt]
-    return max(ts) if ts else None
 
 
 # ---------- sessions ----------

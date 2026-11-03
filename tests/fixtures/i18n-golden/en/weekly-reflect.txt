@@ -13,4 +13,4 @@ options:
 <TMP>/index.html
 
 === no transcripts: stderr
-no conversation statistics in the weekly report: no transcripts here
+no conversation statistics in the weekly report: no session records here

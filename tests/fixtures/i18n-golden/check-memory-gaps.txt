@@ -1,10 +1,10 @@
 === unsupported
 exit None
-memory 缺口檢查:不檢查——the runtime keeps no transcripts
+memory 缺口檢查:不檢查——no session records here
 
 === unsupported --apply
 exit None
-memory 缺口檢查:不檢查——the runtime keeps no transcripts
+memory 缺口檢查:不檢查——no session records here
 
 === digest
 # Digest <TODAY>
@@ -12,7 +12,7 @@ memory 缺口檢查:不檢查——the runtime keeps no transcripts
 <!-- digest:memory-gaps:begin -->
 ## memory 沒在記的專案
 
-memory 缺口檢查:不檢查——the runtime keeps no transcripts
+memory 缺口檢查:不檢查——no session records here
 <!-- digest:memory-gaps:end -->
 
 === gaps

@@ -130,7 +130,14 @@
     },
     "unsupported": {
       "type": "string",
-      "description": "This runtime has no transcripts: conversation statistics (messages, daily rhythm, how work was handed off) were not computed or sent for analysis; the value is the reason"
+      "description": "No session records were found: conversation statistics (messages, daily rhythm, how work was handed off) were not computed or sent for analysis; the value is the reason"
+    },
+    "sources": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "description": "The session sources the statistics were read from (e.g. claude-code, codex, import); empty with unsupported"
     }
   },
   "x-v1-values": {

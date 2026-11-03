@@ -1203,6 +1203,15 @@ def cmd_doctor(argv: list[str]) -> int:
                 "project, the platform holds requests to that project instead of dispatching an agent, for up to "
                 "{minutes} minutes; registering it in the tool's settings is up to you)", minutes=hold),
         _("brunna mcp config prints the snippet to register; how to add it per tool: docs/mcp.md"))
+    import sessions   # the owner's sessions, whichever agent made them: not a runtime feature
+    feat = _("memory gaps, the weekly review's statistics, the waiting report")
+    try:
+        found = sessions.require()
+        add("ok", _("{feature}: reading sessions from {sources}", feature=feat, sources=", ".join(found)))
+    except sessions.NoSessions as e:
+        add("info", _("{feature}: off ({reason})", feature=feat, reason=e),
+            _("they start once a coding agent has sessions on this machine, or files in the contract's format are put "
+              "in {folder} (contracts/session-record.v1.schema.json)", folder=hubconf.data_dir() / sessions.IMPORT))
     import runtime_ports
     rname = runtime_ports.default_name()
     optional = runtime_ports.optional_features()   # off is said, not a reminder: letters still arrive at the next hook

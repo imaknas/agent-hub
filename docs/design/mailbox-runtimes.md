@@ -398,8 +398,9 @@ implements it, port by port, saying the rest is unsupported. What the reviews fo
    - `current_session` with several installed runtimes asks each adapter's new optional `session_process(command)`
      about the ancestor processes; with one, it reads the environment as before.
    - Doctor's per-runtime columns appear only with more than one installed runtime.
-   - Not moved: the transcript statistics (memory gaps, weekly report) stay on `runtime.default`, and the older
-     `hubbus hook` entry points without `--runtime` (worktree-memory.sh) parse as `runtime.default`.
+   - Not moved: the older
+     `hubbus hook` entry points without `--runtime` (worktree-memory.sh) parse as `runtime.default`. (The transcript
+     statistics moved off runtimes entirely on 11-03: `bin/sessions.py` reads every agent's sessions.)
 4. **Codex adapter**: next version (above).
 
 v0.2.0: steps 1–3. If the release has to be tight, step 1 alone is the floor. It stops dispatch from colliding with

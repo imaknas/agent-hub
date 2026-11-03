@@ -30,6 +30,13 @@
   the provider, holds the keys and records the cost.
 - **Code anchors in `STATE.md`.** The librarian links statements to the code they describe and checks every night that
   the code is still there, so a stale statement gets flagged instead of trusted.
+- **Weekly review, from your sessions.** Every Monday, statistics of how you worked across projects (messages,
+  sessions, daily rhythm, how work was handed off) and one model call on those numbers, never on the conversations.
+  The numbers come from the sessions on the machine, whichever agent made them: Claude Code's and Codex's session files
+  are read where they are, and any other tool or script can drop files in the neutral format
+  ([`contracts/session-record.v1.schema.json`](../contracts/session-record.v1.schema.json)) into
+  `<data>/sessions-import/`. The page's footer names the sources it read; the memory-gap check and the waiting report
+  use the same sources, and `brunna doctor` says which it found.
 - **Status page.** Failed jobs, reports that need attention, and upcoming runs, served on `127.0.0.1:18790`.
 - **Optional modules:** encrypted cloud backup (restic), GitHub mirrors, weekly activity reflection, memory consolidation,
   a sandbox capability runner, Claude Code upkeep (update and login checks), a built-in owner inbox, an external

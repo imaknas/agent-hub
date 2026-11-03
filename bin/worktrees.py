@@ -150,11 +150,8 @@ def _cwds_in_use() -> list[str]:
 
 
 def _transcript_age_days(path: str) -> float | None:
-    import runtime_ports  # conversation records only through the interface (Claude Code is one implementation)
-    try:
-        last = runtime_ports.load(ports=("transcripts",)).last_activity(path)
-    except runtime_ports.Unsupported:   # no conversation records: look only at the folder's own time
-        return None
+    import sessions  # the sessions on this machine, whichever agent made them (none: only the folder's own time)
+    last = sessions.last_activity(path)
     return round((time.time() - last.timestamp()) / 86400, 1) if last else None
 
 

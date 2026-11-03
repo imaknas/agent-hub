@@ -21,6 +21,8 @@ $ agenthub doctor    # launchd, problems
     → bin/brunna install-cli
 ✓ MCP 伺服器:brunna mcp(任何支援 MCP 的 agent 都能收發信箱、寫筆記;它在某個專案工作時,平台會先壓著寄給那個專案的請求、不派 agent,最多 120 分鐘;登記進工具的設定由你決定)
     → brunna mcp config 印出要登記的那段;各工具怎麼加:docs/mcp.md
+· memory 缺口、週報的統計、等待報告:關閉(這台機器上沒有任何 session 紀錄(找過:Claude Code(~/.claude/projects)、Codex(~/.codex/sessions)、匯入資料夾))
+    → 這台機器上有 coding agent 的 session、或把合約格式的檔案放進 <TMP>/data/sessions-import(contracts/session-record.v1.schema.json)之後就會開始
 ✓ 判斷點(librarian、index、consolidate、週報分析):可以用
 ✓ 信箱交辦(沒人收的信由平台派 agent):可以用
 ✓ 宣告 allow: 的無人值守 agent job、事件觸發的 agent job:可以用
@@ -30,7 +32,6 @@ $ agenthub doctor    # launchd, problems
 ✓ 有信來時叫醒開著但閒置的 session:可以用(session 跑完第一輪之後才叫得醒)
 ✓ 平台規則寫進專案的規則檔:可以用
 ✓ sandbox 專案寫不到它的 session 載入 hook 跟設定的檔案:可以用
-✓ memory 缺口、週報的對話統計:可以用
 ✗ agent 登入(headless token):沒有
     → 重跑 `claude setup-token` 寫進 <TMP>/home/.claude/headless-oauth-token
 ! agent 登入(~/.claude/.credentials.json):沒有
@@ -66,6 +67,8 @@ $ agenthub doctor    # launchd, all fine
 ✓ brunna 在 PATH 上:/usr/local/bin/agenthub
 ✓ MCP 伺服器:brunna mcp(任何支援 MCP 的 agent 都能收發信箱、寫筆記;它在某個專案工作時,平台會先壓著寄給那個專案的請求、不派 agent,最多 120 分鐘;登記進工具的設定由你決定)
     → brunna mcp config 印出要登記的那段;各工具怎麼加:docs/mcp.md
+· memory 缺口、週報的統計、等待報告:關閉(這台機器上沒有任何 session 紀錄(找過:Claude Code(~/.claude/projects)、Codex(~/.codex/sessions)、匯入資料夾))
+    → 這台機器上有 coding agent 的 session、或把合約格式的檔案放進 <TMP>/data/sessions-import(contracts/session-record.v1.schema.json)之後就會開始
 ✓ 判斷點(librarian、index、consolidate、週報分析):可以用
 ✓ 信箱交辦(沒人收的信由平台派 agent):可以用
 ✓ 宣告 allow: 的無人值守 agent job、事件觸發的 agent job:可以用
@@ -75,7 +78,6 @@ $ agenthub doctor    # launchd, all fine
 ✓ 有信來時叫醒開著但閒置的 session:可以用(session 跑完第一輪之後才叫得醒)
 ✓ 平台規則寫進專案的規則檔:可以用
 ✓ sandbox 專案寫不到它的 session 載入 hook 跟設定的檔案:可以用
-✓ memory 缺口、週報的對話統計:可以用
 ! 最近 7 天有 2 封信叫醒了 session,那個 session 卻沒接(最近一封:<ID>,給 beta);coding agent 處理叫醒的方式可能變了
     → 狀態頁的信箱區列出每封信怎麼走的;hub-event.log 記著每個等待程序怎麼結束
 ✓ agent 登入(headless token):有
@@ -103,6 +105,8 @@ $ agenthub doctor    # systemd, runtime none
     → bin/brunna install-cli
 ✓ MCP 伺服器:brunna mcp(任何支援 MCP 的 agent 都能收發信箱、寫筆記;它在某個專案工作時,平台會先壓著寄給那個專案的請求、不派 agent,最多 120 分鐘;登記進工具的設定由你決定)
     → brunna mcp config 印出要登記的那段;各工具怎麼加:docs/mcp.md
+· memory 缺口、週報的統計、等待報告:關閉(這台機器上沒有任何 session 紀錄(找過:Claude Code(~/.claude/projects)、Codex(~/.codex/sessions)、匯入資料夾))
+    → 這台機器上有 coding agent 的 session、或把合約格式的檔案放進 <TMP>/data/sessions-import(contracts/session-record.v1.schema.json)之後就會開始
 ! AI agent 相關功能關著:還沒設定讓 brunna 使用的 AI agent。筆記、排程和信箱不需要它也能用
     → 設定一個:brunna init --agent claude|codex
 ✗ brunna 的判斷(每晚整理筆記、週報)沒有地方可以跑:沒有設定 AI agent,也沒有設定模型 provider
@@ -136,6 +140,8 @@ $ agenthub doctor    # no service manager, unnamed assistant
     → bin/brunna install-cli
 ✓ MCP 伺服器:brunna mcp(任何支援 MCP 的 agent 都能收發信箱、寫筆記;它在某個專案工作時,平台會先壓著寄給那個專案的請求、不派 agent,最多 120 分鐘;登記進工具的設定由你決定)
     → brunna mcp config 印出要登記的那段;各工具怎麼加:docs/mcp.md
+· memory 缺口、週報的統計、等待報告:關閉(這台機器上沒有任何 session 紀錄(找過:Claude Code(~/.claude/projects)、Codex(~/.codex/sessions)、匯入資料夾))
+    → 這台機器上有 coding agent 的 session、或把合約格式的檔案放進 <TMP>/data/sessions-import(contracts/session-record.v1.schema.json)之後就會開始
 ! AI agent 相關功能關著:還沒設定讓 brunna 使用的 AI agent。筆記、排程和信箱不需要它也能用
     → 設定一個:brunna init --agent claude|codex
 ✗ brunna 的判斷(每晚整理筆記、週報)沒有地方可以跑:沒有設定 AI agent,也沒有設定模型 provider

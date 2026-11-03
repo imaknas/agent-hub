@@ -505,7 +505,7 @@ class Capabilities(unittest.TestCase):
         self.assertEqual(runtime_ports.capabilities("acp"), {"agent", "auth"})
 
     def test_everything_else_is_unsupported_with_a_reason(self):
-        for port in ("stream", "sessions", "completion", "lifecycle", "instructions", "transcripts"):
+        for port in ("stream", "sessions", "completion", "lifecycle", "instructions"):
             with self.subTest(port=port), self.assertRaises(runtime_ports.Unsupported) as cm:
                 runtime_ports.load("acp", ports=(port,))
             self.assertIn(runtime_ports.PORT_LABELS[port], str(cm.exception))

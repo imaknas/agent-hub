@@ -20,8 +20,9 @@ from unittest import mock
 
 ROOT = pathlib.Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "bin"))
-import runtime_fake  # noqa: E402
-from runtime_ports import Action, Turn  # noqa: E402
+import sessions  # noqa: E402
+from runtime_ports import Action  # noqa: E402
+from sessions import Turn  # noqa: E402
 
 PY = os.environ.get("AGENT_HUB_PYTHON") or os.environ.get("BRUNNA_PYTHON") or sys.executable
 UTC = datetime.timezone.utc
@@ -131,14 +132,18 @@ class Sessions(unittest.TestCase):
 
 
 class Scan(unittest.TestCase):
-    """Through the transcripts port (a fake runtime): copies counted once, a session attributed to one project."""
+    """From the session sources (here the import folder): copies counted once, a session attributed to one project."""
 
     def setUp(self):
-        runtime_fake.reset()
-        self.addCleanup(runtime_fake.reset)
         self.m = load("twr_scan", "test-waiting-report.py")
-        for mod, name, fake in ((self.m.runtime_ports, "load", lambda *a, **k: runtime_fake),
-                                (self.m.hublib, "project_paths", lambda: {"proj": ["/w/proj"]}),
+        tmp = pathlib.Path(tempfile.mkdtemp())
+        self.addCleanup(shutil.rmtree, tmp, True)
+        self.drop = tmp / "data" / sessions.IMPORT
+        self.drop.mkdir(parents=True)
+        ctx = sessions.only(home=tmp / "home", data=tmp / "data")
+        ctx.__enter__()
+        self.addCleanup(ctx.__exit__, None, None, None)
+        for mod, name, fake in ((self.m.hublib, "project_paths", lambda: {"proj": ["/w/proj"]}),
                                 (self.m.hubconf, "projects", lambda: {"proj": DOC}),
                                 (self.m.project_git, "project_at", lambda d: ("proj", DOC) if d else None)):
             self.addCleanup(setattr, mod, name, getattr(mod, name))
@@ -147,8 +152,9 @@ class Scan(unittest.TestCase):
     def test_copies_counted_once(self):
         turns = [Turn(at(1), "s", "assistant", actions=(run("c1", "pytest x"),), id="u1", folder="/w/proj"),
                  Turn(at(3), "s", "other", results=("c1",), id="u2", folder="/w/proj")]
-        for t in turns + turns:                                         # a resumed session's copy
-            runtime_fake.add_turn("/w/proj", t)
+        with open(self.drop / "s.jsonl", "w") as fh:
+            for t in turns + turns:                                     # a resumed session's copy
+                fh.write(json.dumps(sessions.to_record(t)) + "\n")
         out = self.m.scan(at(0), at(60))
         self.assertEqual(out["proj"]["by_kind"], {"targeted": {"min": 2.0, "runs": 1}})
         self.assertEqual(out["proj"]["sessions"], 1)

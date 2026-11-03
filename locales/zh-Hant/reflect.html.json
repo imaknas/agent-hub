@@ -52,5 +52,8 @@
  "; {n} more {n:session has|sessions have} no summary": ";還有 {n} 個 session 沒有摘要",
  "The analysis was written by {model} from the statistics above and {digests} session {digests:summary|summaries} written by {assistant}'s local model; it is the model's reading, and the conversations' text is not sent to a cloud model. {withheld} work-related {withheld:session|sessions} and {excluded} count only in the statistics{undigested}.": "分析由 {model} 根據上面的統計與 {digests} 則 {assistant} 本機模型寫的 session 摘要撰寫,是模型的解讀;對話原文不送雲端模型。工作相關的 {withheld} 個 session、{excluded} 只算在統計裡{undigested}。",
  "Data: the coding agent's sessions on this machine. Only the messages you actually sent count.": "資料:這台機器上 coding agent 的 session。訊息只算你實際送出的。",
- "brunna weekly review · {start} – {end}": "brunna 每週回顧 · {start} – {end}"
+ "brunna weekly review · {start} – {end}": "brunna 每週回顧 · {start} – {end}",
+ "the import folder": "匯入資料夾",
+ "Data: sessions on this machine from {sources}. Only the messages you actually sent count. Times are in {zone}.": "資料:這台機器上來自 {sources} 的 session。訊息只算你實際送出的。時間為 {zone}。",
+ "Data: sessions on this machine from {sources}. Only the messages you actually sent count.": "資料:這台機器上來自 {sources} 的 session。訊息只算你實際送出的。"
 }

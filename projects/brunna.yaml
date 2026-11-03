@@ -156,6 +156,8 @@ provides:
 - {contract: lease-runner, v: 2, schema: contracts/lease-runner.v2.schema.json}
 - {contract: lease-handover, v: 1, schema: contracts/lease-handover.v1.schema.json}
 - {contract: hubbus, v: 1, schema: contracts/hubbus.v1.schema.json}
+# the owner's sessions with any coding agent, one entry per line, no message text (bin/sessions.py)
+- {contract: session-record, v: 1, schema: contracts/session-record.v1.schema.json}
 # what needs the owner and the platform's health in one look, for status bars and other clients (docs/design/herdr.md)
 - {contract: glance, v: 1, schema: contracts/glance.v1.schema.json}
 # v2 = v1 + the English token set; v1 stays until every reader (the assistant) reads v2

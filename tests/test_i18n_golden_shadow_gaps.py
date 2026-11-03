@@ -89,18 +89,16 @@ class Golden(unittest.TestCase):
             todo.write_text("# todo\n\n- [ ] x\n")
             import hublib
 
-            def unsupported(**kw):
-                raise m.runtime_ports.Unsupported("the runtime keeps no transcripts")
-            with mock.patch.object(m.runtime_ports, "load", side_effect=unsupported):
+            with mock.patch.object(m.sessions, "require", side_effect=m.sessions.NoSessions("no session records here")):
                 out.append(("unsupported", capture(m.main, [])))
                 out.append(("unsupported --apply", capture(m.main, ["--apply"])))
                 out.append(("digest", hublib.digest_path().read_text()))
             msgs = {"a": 12, "b": 40, "c": 3, "d": 15}
             notes = {"ws-a": 0, "ws-b": 0, "ws-d": 2}
-            with mock.patch.object(m.runtime_ports, "load"), \
+            with mock.patch.object(m.sessions, "require"), \
                     mock.patch.object(m.hubconf, "roster", return_value={k: {"workspace": f"ws-{k}"} for k in msgs}), \
                     mock.patch.object(m.hublib, "project_paths", return_value={k: [k] for k in (*msgs, "unregistered")}), \
-                    mock.patch.object(m, "human_messages_since", side_effect=lambda paths, since: msgs[paths[0]]), \
+                    mock.patch.object(m, "human_messages_since", side_effect=lambda projects, since: msgs), \
                     mock.patch.object(m, "notes_repo", side_effect=lambda name: f"ws-{name}"), \
                     mock.patch.object(m, "note_commits_since", side_effect=lambda ws, since: notes[ws]):
                 out.append(("gaps", capture(m.main, [])))

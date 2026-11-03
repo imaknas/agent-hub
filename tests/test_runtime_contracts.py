@@ -20,6 +20,7 @@ import unittest
 ROOT = pathlib.Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "bin"))
 import runtime_ports  # noqa: E402
+from sessions import Turn  # noqa: E402  the scenario's entries (Claude's fixture writes them as transcripts)
 
 UTC = datetime.timezone.utc
 T0 = datetime.datetime(2026, 10, 20, 9, 0, tzinfo=UTC)
@@ -30,22 +31,22 @@ SID2 = "bbbbbbbb-2222-4222-8222-222222222222"   # another project's session (a r
 # Scenario: one human message, one system injection (not human), one assistant turn that calls a subagent, a skill,
 # runs a command (not collaboration), one tool result; one human message in another project
 SCENARIO = [
-    (WS, runtime_ports.Turn(T0, SID, "human", "regarde les tests, s'il te plaît", id="e1", folder=WS)),
-    (WS, runtime_ports.Turn(T0 + datetime.timedelta(minutes=1), SID, "other", id="e2", folder=WS)),
-    (WS, runtime_ports.Turn(T0 + datetime.timedelta(minutes=2), SID, "assistant", "",
+    (WS, Turn(T0, SID, "human", "regarde les tests, s'il te plaît", id="e1", folder=WS)),
+    (WS, Turn(T0 + datetime.timedelta(minutes=1), SID, "other", id="e2", folder=WS)),
+    (WS, Turn(T0 + datetime.timedelta(minutes=2), SID, "assistant", "",
                             (runtime_ports.Action("other", "", "subagent"), runtime_ports.Action("other", "dataviz", "skill"),
                              runtime_ports.Action("run_command", call="call-1", command="ls")), id="e3", folder=WS)),
-    (WS, runtime_ports.Turn(T0 + datetime.timedelta(minutes=3), SID, "other", id="e4", folder=WS, results=("call-1",))),
-    ("/Users/someone/workspace/other", runtime_ports.Turn(T0, SID2, "human", "l'autre projet")),
+    (WS, Turn(T0 + datetime.timedelta(minutes=3), SID, "other", id="e4", folder=WS, results=("call-1",))),
+    ("/Users/someone/workspace/other", Turn(T0, SID2, "human", "l'autre projet")),
 ]
 # an entry of a subagent the session started: counts only with turns(subagents=True)
-SUBAGENT_SCENARIO = [(WS, runtime_ports.Turn(T0 + datetime.timedelta(minutes=4), SID, "assistant", "",
+SUBAGENT_SCENARIO = [(WS, Turn(T0 + datetime.timedelta(minutes=4), SID, "assistant", "",
                                              (runtime_ports.Action("run_command", call="call-2", command="pytest -q"),),
                                              id="s1", folder=WS, subagent=True))]
 # one human message from a session in a worktree the runtime opened under the same project: counts only with
 # turns(worktrees=True)
 SID3 = "cccccccc-3333-4333-8333-333333333333"
-WORKTREE_SCENARIO = [(WS, runtime_ports.Turn(T0 + datetime.timedelta(seconds=30), SID3, "human", "un message du worktree"))]
+WORKTREE_SCENARIO = [(WS, Turn(T0 + datetime.timedelta(seconds=30), SID3, "human", "un message du worktree"))]
 
 
 # three scenarios for "run once": completed normally, a result but not completed normally (e.g. turn limit), failed
@@ -61,9 +62,8 @@ class ClaudeFixture:
 
     def setup(self, tmp: pathlib.Path):
         import runtime_claude as m
-        self.m, self._roots, self._projects, self._tmp = m, m.transcript_roots, m.PROJECTS, tmp
+        self.m, self._projects, self._tmp = m, m.PROJECTS, tmp
         root = tmp / "projects"
-        m.transcript_roots = lambda: (root,)
         m.PROJECTS = root
         for path, t in SCENARIO + SUBAGENT_SCENARIO + [(p + "/.claude/worktrees/wt1", t) for p, t in WORKTREE_SCENARIO]:
             d = root / m.slug_for_path(path)
@@ -160,7 +160,7 @@ class ClaudeFixture:
         f.write_text("1-test")
 
     def teardown(self):
-        self.m.transcript_roots, self.m.PROJECTS = self._roots, self._projects
+        self.m.PROJECTS = self._projects
         if getattr(self, "_secrets", None):
             self._secrets.stop()
             self._secrets = None
@@ -174,12 +174,6 @@ class FakeFixture:
     def setup(self, tmp: pathlib.Path):
         import runtime_fake as m
         m.reset()
-        for path, t in SCENARIO:
-            m.add_turn(path, t)
-        for path, t in WORKTREE_SCENARIO:
-            m.add_turn(path, t, worktree=True)
-        for path, t in SUBAGENT_SCENARIO:
-            m.add_turn(path, t)
         m.set_context(SID, 1010)
         return m, {"FAKE_RUNTIME_SESSION": SID}
 
@@ -303,7 +297,7 @@ class Registry(unittest.TestCase):
 
     def test_load_rejects_incomplete_module(self):
         bad = types.ModuleType("runtime_broken")
-        bad.turns = lambda *a: iter(())
+        bad.parse_event = lambda *a: None
         sys.modules["runtime_broken"] = bad
         runtime_ports.RUNTIMES["broken"] = "runtime_broken"
         try:
@@ -336,12 +330,12 @@ class NoneRuntime(unittest.TestCase):
 
     def test_partial_port_is_still_a_bug(self):
         bad = types.ModuleType("runtime_half")
-        bad.turns = lambda *a: iter(())   # only half of transcripts
+        bad.parse_event = lambda *a: None   # only part of lifecycle
         sys.modules["runtime_half"] = bad
         runtime_ports.RUNTIMES["half"] = "runtime_half"
         try:
             with self.assertRaises(runtime_ports.MissingFunctions):
-                runtime_ports.load("half", ports=("transcripts",))
+                runtime_ports.load("half", ports=("lifecycle",))
             with self.assertRaises(runtime_ports.Unsupported):
                 runtime_ports.load("half", ports=("agent",))
         finally:
@@ -361,78 +355,18 @@ class Contract(unittest.TestCase):
     """Every implementation runs these (subTest marks which one)."""
 
     def each(self, check):
-        """For each implementation with transcripts: put the scenario in → check the interface mechanically → run
+        """For each implementation with session state: put the scenario in → check the interface mechanically → run
             check(m, env) → clean up. A failure names the implementation."""
-        for name in having("transcripts"):
+        for name in having("sessions"):
             with self.subTest(runtime=name):
                 fx = FIXTURES[name]()
                 with tempfile.TemporaryDirectory() as d:
                     m, env = fx.setup(pathlib.Path(d))
                     try:
-                        runtime_ports.load(name, ports=("transcripts", "sessions"))
+                        runtime_ports.load(name, ports=("sessions",))
                         check(m, env)
                     finally:
                         fx.teardown()
-
-    def test_turns_roles_text_actions(self):
-        def check(m, env):
-            ts = sorted(m.turns([WS], T0 - datetime.timedelta(hours=1)), key=lambda t: t.ts)
-            self.assertEqual([t.role for t in ts], ["human", "other", "assistant", "other"])
-            self.assertEqual(ts[0].text, "regarde les tests, s'il te plaît")
-            self.assertEqual(ts[0].session, SID)
-            self.assertEqual([(a.kind, a.collab, a.detail) for a in ts[2].actions],
-                             [("other", "subagent", ""), ("other", "skill", "dataviz"), ("run_command", None, "")])
-            self.assertTrue(all(t.ts.tzinfo is not None for t in ts), "timestamps carry a time zone")
-        self.each(check)
-
-    def test_entry_ids_folders_and_calls(self):
-        """What the waiting report needs (docs/design/test-waiting.md B7): ids to count copied entries once, the
-        session's folder, a command's text and its call id, and the entry that returned its result."""
-        def check(m, env):
-            ts = sorted(m.turns([WS], T0 - datetime.timedelta(hours=1)), key=lambda t: t.ts)
-            self.assertEqual([t.id for t in ts], ["e1", "e2", "e3", "e4"])
-            self.assertTrue(all(t.folder == WS for t in ts))
-            run = ts[2].actions[2]
-            self.assertEqual((run.call, run.command, run.background), ("call-1", "ls", False))
-            self.assertEqual(ts[3].results, ("call-1",))
-            self.assertFalse(any(t.subagent for t in ts), "subagents only when asked")
-        self.each(check)
-
-    def test_subagents(self):
-        def check(m, env):
-            subs = [t for t in m.turns([WS], T0 - datetime.timedelta(hours=1), subagents=True) if t.subagent]
-            self.assertEqual([(t.id, t.session, t.actions[0].command) for t in subs], [("s1", SID, "pytest -q")])
-        self.each(check)
-
-    def test_time_window(self):
-        def check(m, env):
-            mid = T0 + datetime.timedelta(minutes=2)
-            self.assertEqual(len(list(m.turns([WS], mid))), 2)
-            self.assertEqual(len(list(m.turns([WS], T0 - datetime.timedelta(hours=1), mid))), 2)
-        self.each(check)
-
-    def test_paths_are_separate(self):
-        def check(m, env):
-            humans = [t.text for t in m.turns(["/Users/someone/workspace/other"], T0 - datetime.timedelta(hours=1))]
-            self.assertEqual(humans, ["l'autre projet"])
-            self.assertEqual(list(m.turns(["/Users/someone/workspace/none"], T0 - datetime.timedelta(hours=1))), [])
-        self.each(check)
-
-    def test_worktree_sessions_only_when_asked(self):
-        def check(m, env):
-            def humans(**kw):
-                return {t.text for t in m.turns([WS], T0 - datetime.timedelta(hours=1), **kw) if t.role == "human"}
-            self.assertEqual(humans(), {"regarde les tests, s'il te plaît"})
-            self.assertEqual(humans(worktrees=True), {"regarde les tests, s'il te plaît", "un message du worktree"})
-            self.assertEqual({t.text for t in m.turns(["/Users/someone/workspace/other"], T0 - datetime.timedelta(hours=1),
-                                                      worktrees=True) if t.role == "human"}, {"l'autre projet"})
-        self.each(check)
-
-    def test_last_activity(self):
-        def check(m, env):
-            self.assertIsNotNone(m.last_activity(WS))
-            self.assertIsNone(m.last_activity("/Users/someone/workspace/none"))
-        self.each(check)
 
     def test_sessions(self):
         def check(m, env):
@@ -726,26 +660,6 @@ class ClaudeHooks(unittest.TestCase):
         self.assertEqual(json.loads(m.inject("tool_used", "hi"))["hookSpecificOutput"]["hookEventName"], "PostToolUse")
         d = json.loads(m.deny("open_session_attempt", "no"))["hookSpecificOutput"]
         self.assertEqual((d["hookEventName"], d["permissionDecision"], d["permissionDecisionReason"]), ("PreToolUse", "deny", "no"))
-
-
-class ClaudeOnly(unittest.TestCase):
-    """The Claude implementation's own concern: a transcript format it does not recognise fails explicitly, never
-    silently miscounts."""
-
-    def test_unrecognised_format_fails_loudly(self):
-        import runtime_claude as m
-        saved = m.transcript_roots
-        with tempfile.TemporaryDirectory() as d:
-            root = pathlib.Path(d)
-            sub = root / m.slug_for_path(WS)
-            sub.mkdir(parents=True)
-            (sub / "x.jsonl").write_text("".join(json.dumps({"kind": "message", "at": i}) + "\n" for i in range(6)))
-            m.transcript_roots = lambda: (root,)
-            try:
-                with self.assertRaises(m.TranscriptFormatError):
-                    list(m.turns([WS], T0 - datetime.timedelta(days=3650)))
-            finally:
-                m.transcript_roots = saved
 
 
 class CommandTemplate(unittest.TestCase):

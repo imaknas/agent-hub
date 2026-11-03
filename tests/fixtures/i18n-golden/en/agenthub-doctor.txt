@@ -21,6 +21,8 @@ $ agenthub doctor    # launchd, problems
     → bin/brunna install-cli
 ✓ MCP server: brunna mcp (any agent with MCP can use the mailbox and write notes; while it works in a project, the platform holds requests to that project instead of dispatching an agent, for up to 120 minutes; registering it in the tool's settings is up to you)
     → brunna mcp config prints the snippet to register; how to add it per tool: docs/mcp.md
+· memory gaps, the weekly review's statistics, the waiting report: off (no session records on this machine (looked for Claude Code (~/.claude/projects), Codex (~/.codex/sessions), the import folder))
+    → they start once a coding agent has sessions on this machine, or files in the contract's format are put in <TMP>/data/sessions-import (contracts/session-record.v1.schema.json)
 ✓ judgment points (librarian, index, consolidate, weekly report analysis): available
 ✓ mailbox tasks (the platform sends an agent for letters nobody picked up): available
 ✓ unattended agent jobs with allow:, and event-triggered agent jobs: available
@@ -30,7 +32,6 @@ $ agenthub doctor    # launchd, problems
 ✓ an idle open session is woken when a letter arrives for it: available (a session can be woken once its first turn has ended)
 ✓ platform rules written into the project's rules file: available
 ✓ a sandboxed project can't write what its sessions load hooks and settings from: available
-✓ memory gaps, the weekly report's transcript statistics: available
 ✗ agent login (headless token): missing
     → rerun `claude setup-token` and write it to <TMP>/home/.claude/headless-oauth-token
 ! agent login (~/.claude/.credentials.json): missing
@@ -66,6 +67,8 @@ $ agenthub doctor    # launchd, all fine
 ✓ brunna is on PATH: /usr/local/bin/agenthub
 ✓ MCP server: brunna mcp (any agent with MCP can use the mailbox and write notes; while it works in a project, the platform holds requests to that project instead of dispatching an agent, for up to 120 minutes; registering it in the tool's settings is up to you)
     → brunna mcp config prints the snippet to register; how to add it per tool: docs/mcp.md
+· memory gaps, the weekly review's statistics, the waiting report: off (no session records on this machine (looked for Claude Code (~/.claude/projects), Codex (~/.codex/sessions), the import folder))
+    → they start once a coding agent has sessions on this machine, or files in the contract's format are put in <TMP>/data/sessions-import (contracts/session-record.v1.schema.json)
 ✓ judgment points (librarian, index, consolidate, weekly report analysis): available
 ✓ mailbox tasks (the platform sends an agent for letters nobody picked up): available
 ✓ unattended agent jobs with allow:, and event-triggered agent jobs: available
@@ -75,7 +78,6 @@ $ agenthub doctor    # launchd, all fine
 ✓ an idle open session is woken when a letter arrives for it: available (a session can be woken once its first turn has ended)
 ✓ platform rules written into the project's rules file: available
 ✓ a sandboxed project can't write what its sessions load hooks and settings from: available
-✓ memory gaps, the weekly report's transcript statistics: available
 ! 2 letters in the last 7 days woke a session that then didn't take them (the latest: <ID> to beta); the coding agent may have changed how it handles the wake
     → the status page's mailbox section shows each letter's path; hub-event.log has each waiter's end
 ✓ agent login (headless token): present
@@ -103,6 +105,8 @@ $ agenthub doctor    # systemd, runtime none
     → bin/brunna install-cli
 ✓ MCP server: brunna mcp (any agent with MCP can use the mailbox and write notes; while it works in a project, the platform holds requests to that project instead of dispatching an agent, for up to 120 minutes; registering it in the tool's settings is up to you)
     → brunna mcp config prints the snippet to register; how to add it per tool: docs/mcp.md
+· memory gaps, the weekly review's statistics, the waiting report: off (no session records on this machine (looked for Claude Code (~/.claude/projects), Codex (~/.codex/sessions), the import folder))
+    → they start once a coding agent has sessions on this machine, or files in the contract's format are put in <TMP>/data/sessions-import (contracts/session-record.v1.schema.json)
 ! AI agent features are off: no AI agent is set up for brunna to run. Notes, schedules and the mailbox work without one
     → set one up: brunna init --agent claude|codex
 ✗ brunna's decisions (nightly notes, weekly report) have nowhere to run: no AI agent and no model provider is set up
@@ -136,6 +140,8 @@ $ agenthub doctor    # no service manager, unnamed assistant
     → bin/brunna install-cli
 ✓ MCP server: brunna mcp (any agent with MCP can use the mailbox and write notes; while it works in a project, the platform holds requests to that project instead of dispatching an agent, for up to 120 minutes; registering it in the tool's settings is up to you)
     → brunna mcp config prints the snippet to register; how to add it per tool: docs/mcp.md
+· memory gaps, the weekly review's statistics, the waiting report: off (no session records on this machine (looked for Claude Code (~/.claude/projects), Codex (~/.codex/sessions), the import folder))
+    → they start once a coding agent has sessions on this machine, or files in the contract's format are put in <TMP>/data/sessions-import (contracts/session-record.v1.schema.json)
 ! AI agent features are off: no AI agent is set up for brunna to run. Notes, schedules and the mailbox work without one
     → set one up: brunna init --agent claude|codex
 ✗ brunna's decisions (nightly notes, weekly report) have nowhere to run: no AI agent and no model provider is set up

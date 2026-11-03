@@ -15,7 +15,9 @@ import unittest
 ROOT = pathlib.Path(__file__).resolve().parents[1]
 BIN = ROOT / "bin"
 NEUTRAL = ["policy.py", "seatbelt.py", "landlock.py", "isolation.py", "sandboxed-run", "cap-runner.py", "hub-run",
-           "appliers.py", "applier_scheduler.py", "config-check", "hub"]
+           "appliers.py", "applier_scheduler.py", "config-check", "hub",
+           # the session reader and its callers: they read every tool's sessions through sessions_<tool>.py only
+           "sessions.py", "weekly-reflect.py", "check-memory-gaps.py", "test-waiting-report.py"]
 PATTERNS = [
     (re.compile(r"(?<![\w])\.claude\b"), "Claude's settings/credentials directory"),
     (re.compile(r"\b(Read|Edit|Write|MultiEdit|NotebookEdit|Bash|WebFetch|WebSearch|Glob|Grep)\("),
@@ -57,6 +59,9 @@ RATCHET_SCOPE = ("bin", "modules", "agent-jobs", "contracts/llm-points.yaml")
 RATCHET_EXEMPT = {"bin/runtime_claude.py",   # the translation lives only here
                   "modules/claude.yaml"}    # Claude Code-only upkeep (login check, update, token):
                   # someone not using Claude leaves this module off
+# session sources: each is the one place that reads its tool's session files (bin/sessions.py); the neutral reader
+# itself, bin/sessions.py, is in NEUTRAL above
+RATCHET_EXEMPT_GLOBS = ("bin/sessions_*.py",)
 RATCHET = PATTERNS + [(re.compile(r"\b(haiku|sonnet|opus)\b", re.I), "Claude's model names")]
 RUNTIME_BASELINE = ROOT / "tests" / "fixtures" / "runtime-baseline.json"
 
@@ -71,7 +76,8 @@ def ratchet_files() -> list[pathlib.Path]:
     if not paths:  # the test runner's exported copy is not a git repo
         paths = [p for d in RATCHET_SCOPE for p in ((ROOT / d).rglob("*") if (ROOT / d).is_dir() else [ROOT / d])]
     return sorted(p for p in paths if p.is_file() and "__pycache__" not in p.parts
-                  and str(p.relative_to(ROOT)) not in RATCHET_EXEMPT)
+                  and str(p.relative_to(ROOT)) not in RATCHET_EXEMPT
+                  and not any(p.relative_to(ROOT).match(g) for g in RATCHET_EXEMPT_GLOBS))
 
 
 def ratchet_counts() -> dict[str, int]:
@@ -89,6 +95,11 @@ def ratchet_counts() -> dict[str, int]:
 class TestRuntimeRatchet(unittest.TestCase):
     def test_scans_something(self):
         self.assertGreater(len(ratchet_files()), 50)
+
+    def test_session_sources_are_the_only_exempt_pattern(self):
+        names = {str(p.relative_to(ROOT)) for p in ratchet_files()}
+        self.assertIn("bin/sessions.py", names, "the neutral reader is scanned")
+        self.assertNotIn("bin/sessions_claude.py", names)
 
     def test_counts_only_go_down(self):
         base = json.loads(RUNTIME_BASELINE.read_text())

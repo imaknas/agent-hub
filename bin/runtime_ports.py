@@ -7,18 +7,8 @@ to load it if any is missing; the contract tests (tests/test_runtime_contracts.p
 RUNTIMES automatically, so a third implementation can't be added without going through the contract tests.
 
 The current interfaces (the other layers get added one at a time, following the design doc's steps):
-  transcripts (layer 5): read conversation records in a neutral format
-    turns(paths, since, until=None, worktrees=False, subagents=False) -> Iterator[Turn]
-                                                        every entry of a project (its working directories, maybe
-                                                        several) within the time range; worktrees=True also counts
-                                                        sessions in worktrees the runtime opened under those working
-                                                        directories; subagents=True also the subagents those sessions
-                                                        started (Turn.subagent). Each entry carries its own id (a
-                                                        branched or resumed session copies earlier entries: count an id
-                                                        once), the folder it ran in, and the tool calls it started
-                                                        (Action.call, .command) or returned results for (Turn.results),
-                                                        so a call's duration is the time between the two
-    last_activity(path) -> datetime | None              when this working directory last had a conversation
+  (layer 5, reading conversation records, is no runtime's: the owner's sessions are read from whatever agent made
+  them, bin/sessions.py with its sessions_<tool>.py sources)
   agent (layer 1, a single run):
     run(task: Task) -> TaskResult                       run a judgment point once (prompt, working directory, model,
                                                         output schema, timeout)
@@ -175,7 +165,7 @@ def throwaway_only(name: str | None = None) -> bool:
 # when read (module __getattr__), so they follow the UI language of the moment.
 def port_labels() -> dict[str, str]:
     return {"agent": _("agent runs"), "lifecycle": _("session events (hooks)"), "instructions": _("rules file"),
-            "transcripts": _("transcripts"), "sessions": _("session state"),
+            "sessions": _("session state"),
             "stream": _("long-running streaming sessions"), "auth": _("login state"),
             "completion": _("completion interface"), "confine": _("confined runs (declared permissions only)"),
             # each reads after "has no …" (doctor, Unsupported reasons)
@@ -199,7 +189,6 @@ def features() -> tuple:
         (_("an idle open session is woken when a letter arrives for it"), ("sessions", "wake")),
         (_("platform rules written into the project's rules file"), ("instructions",)),
         (_("a sandboxed project can't write what its sessions load hooks and settings from"), ("control",)),
-        (_("memory gaps, the weekly report's transcript statistics"), ("transcripts",)),
     )
 
 
@@ -259,7 +248,6 @@ PORTS = {
     "lifecycle": ("parse_event", "inject", "deny", "install_lifecycle"),
     "instructions": ("instructions_file", "local_ignores"),
     "control": ("control_paths", "session_folders", "foreign_controls"),
-    "transcripts": ("turns", "last_activity"),
     "sessions": ("alive", "live_sessions", "context_size", "current_session"),
     "stream": ("action", "parse_stream", "classify_exit", "resumable", "resume_command", "relocate"),
     "auth": ("auth_env", "clean_env", "credentials", "is_login_error"),
@@ -294,7 +282,7 @@ class HubEvent(NamedTuple):
 
 
 # Effects of actions (docs/design/lease-contract-neutral.md): the only set in the whole platform: lease events,
-# permissions (approvals), judgment point declarations and transcript statistics all use it rather than naming things
+# permissions (approvals), judgment point declarations and session statistics all use it rather than naming things
 # their own way. Each runtime's action() translates which tool counts as which.
 KINDS = ("read", "search", "ask_user", "open_web", "write_file", "run_command", "other")
 # Collaboration kinds (a different dimension from effects): handing off to a subagent, running a workflow, messaging
@@ -307,7 +295,7 @@ class Action(NamedTuple):
                          # command, other)
     detail: str = ""     # the skill name (when collab is skill); never any runtime's tool name
     collab: str | None = None   # one of COLLABS, or None
-    call: str = ""       # the call's id: the entry that returns its result names it in Turn.results
+    call: str = ""       # the call's id: the entry that returns its result names it in sessions.Turn.results
     command: str = ""    # for run_command, the command text
     background: bool = False    # started without waiting for it
 
@@ -323,19 +311,6 @@ class StreamEvent(NamedTuple):
     starting with `_` are internal signals for the runner (e.g. `_detach`) and are never sent out."""
     type: str
     data: dict
-
-
-class Turn(NamedTuple):
-    ts: datetime.datetime    # aware, UTC
-    session: str
-    role: str                # "human" (what the user actually sent) | "assistant" | "other" (tool results, system
-                             # messages, messages from other sessions…)
-    text: str = ""           # for role == human, what they typed
-    actions: tuple = ()      # for role == assistant, which Actions this entry did
-    id: str = ""             # the entry's own id ("" when the runtime has none)
-    folder: str = ""         # the working folder the session was in at this entry
-    subagent: bool = False   # an entry of a subagent the session started
-    results: tuple = ()      # the call ids (Action.call) whose results this entry returns
 
 
 class Credential(NamedTuple):

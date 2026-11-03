@@ -70,6 +70,10 @@ that kind relies on Claude's settings today (render-project-settings), unchanged
 4. **New tools can be connected without writing code**, but honestly: a zero-code adapter can only do completion and
    "run once in a throwaway worktree".
 5. The platform's own settings use only neutral vocabulary (ratchet, 1186f65).
+6. **Data the owner produced is read from where it is, not from the runtime** (11-03): the owner's sessions with any
+   coding agent are read through `bin/sessions.py` from every source present on the machine (`sessions_<tool>.py`
+   adapters, plus an import folder in the neutral format, `contracts/session-record.v1`), so which agent the platform
+   runs its jobs with doesn't decide whether the weekly review has data. The runtime's old transcript port is gone.
 6. What the platform can derive does not rely on agents reporting it.
 
 ## Where the platform touches tools

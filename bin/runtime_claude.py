@@ -440,128 +440,16 @@ def unsupported(port: str) -> str | None:
     return None
 
 
-# ---------- transcripts (runtime_ports' transcripts interface) ----------
-# Claude Code's transcripts are an undocumented internal format (~/.claude/projects/<slug>/<session>.jsonl). This is
-# the only place the platform reads it: parsed into neutral Turn/Action, failing explicitly on an unrecognised format
-# (TranscriptFormatError) rather than letting statistics go silently wrong.
+# ---------- where Claude Code stores a session ----------
+# Reading sessions for statistics is not a runtime's job: bin/sessions_claude.py reads these files whatever the
+# platform's runtime is. Here only what the runtime needs to resume or move its own sessions.
 
 import datetime  # noqa: E402
-
-from runtime_ports import Action, Turn  # noqa: E402
-
-
-class TranscriptFormatError(Exception):
-    pass
-
-
-def _mini_home() -> str:
-    try:
-        import hubconf
-        return hubconf.get("hosts.mini_home", str(pathlib.Path.home()))
-    except Exception:
-        return str(pathlib.Path.home())
-
-
-def transcript_roots() -> tuple:
-    """Where to read: what the laptop backs up hourly (the personal profile) + the hub machine's local sessions.
-    **Do not** add the work profile's backup (~/transcript-backups/claude-work-projects): weekly-reflect sends the
-    message text read from here to a cloud model, and work conversations may only be processed locally (see
-    known-issues)."""
-    return (pathlib.Path.home() / "transcript-backups" / "claude-personal-projects",
-            pathlib.Path(_mini_home()) / ".claude" / "projects",
-            # the personal profile when run by hand on the remote machine
-            pathlib.Path.home() / ".claude-personal" / "projects")
 
 
 def slug_for_path(path: str) -> str:
     """The folder name Claude Code stores transcripts under: / and . in the path replaced by -."""
     return path.replace("/", "-").replace(".", "-")
-
-
-def _is_human_prompt(entry: dict) -> bool:
-    """Count only messages the user actually sent. Excluded: those from other sessions, background task notifications,
-    slash command output, compaction summaries, hook injections, etc. (they are type=user in the transcript too)."""
-    if entry.get("type") != "user" or entry.get("isMeta") or entry.get("isCompactSummary"):
-        return False
-    if not isinstance(entry.get("message", {}).get("content"), str):
-        return False  # tool results
-    origin = entry.get("origin")
-    return isinstance(origin, dict) and origin.get("kind") == "human"
-
-
-def _action(block: dict) -> Action:
-    """One tool call in a transcript → a neutral Action (kind is KINDS, collab the collaboration kind). There's only
-    one translation table: action().
-    detail holds only skill names: Claude's tool names don't leak into the neutral format."""
-    name, inp = block.get("name", ""), block.get("input") or {}
-    kind, collab, _target, _summary = action(name, inp)
-    return Action(kind, str(inp.get("skill", "?")) if collab == "skill" else "", collab, str(block.get("id") or ""),
-                  str(inp.get("command") or "") if kind == "run_command" else "", bool(inp.get("run_in_background")))
-
-
-def _parse_ts(ts: str) -> datetime.datetime:
-    return datetime.datetime.fromisoformat(ts.replace("Z", "+00:00"))
-
-
-_KNOWN = {"user", "assistant", "system", "summary", "attachment", "progress", "queue-operation", "file-history-snapshot"}
-
-
-def _turn(o: dict, fallback_sid: str) -> Turn | None:
-    ts = o.get("timestamp")
-    if not ts:
-        return None
-    sid = o.get("sessionId") or fallback_sid
-    common = {"id": str(o.get("uuid") or ""), "folder": str(o.get("cwd") or ""), "subagent": bool(o.get("isSidechain"))}
-    if _is_human_prompt(o):
-        return Turn(_parse_ts(ts), sid, "human", o["message"]["content"], **common)
-    content = (o.get("message") or {}).get("content")
-    content = content if isinstance(content, list) else []
-    if o.get("type") == "assistant":
-        acts = tuple(_action(c) for c in content if isinstance(c, dict) and c.get("type") == "tool_use")
-        return Turn(_parse_ts(ts), sid, "assistant", "", acts, **common)
-    done = tuple(str(c.get("tool_use_id")) for c in content if isinstance(c, dict) and c.get("type") == "tool_result"
-                 and c.get("tool_use_id"))
-    return Turn(_parse_ts(ts), sid, "other", results=done, **common)
-
-
-def _transcript_dirs(root: pathlib.Path, path: str, worktrees: bool) -> list:
-    """This working directory's transcript folders; worktrees=True adds the sessions Claude Code opened in
-    <path>/.claude/worktrees/<name> (folder name <slug>--claude-worktrees-<name>)."""
-    slug = slug_for_path(str(path))
-    return [root / slug, *(sorted(root.glob(slug + "--claude-worktrees-*")) if worktrees else ())]
-
-
-def turns(paths, since: datetime.datetime, until: datetime.datetime | None = None, worktrees: bool = False,
-          subagents: bool = False):
-    # a session's subagents are in <session>/subagents/*.jsonl beside it
-    globs = ("*.jsonl", "*/subagents/*.jsonl") if subagents else ("*.jsonl",)
-    for root, path in ((r, p) for r in transcript_roots() for p in paths):
-        for f in (f for d in _transcript_dirs(root, path, worktrees) for g in globs for f in d.glob(g)):
-            if datetime.datetime.fromtimestamp(f.stat().st_mtime, datetime.timezone.utc) < since:
-                continue  # not written to since before the range started
-            parsed = recognised = 0
-            with f.open(errors="replace") as fh:
-                for line in fh:
-                    try:
-                        o = json.loads(line)
-                    except ValueError:
-                        continue
-                    parsed += 1
-                    if not isinstance(o, dict) or o.get("type") not in _KNOWN:
-                        continue
-                    recognised += 1
-                    t = _turn(o, f.stem)
-                    if t and t.ts >= since and (until is None or t.ts < until):
-                        yield t
-            if parsed >= 5 and recognised == 0:
-                raise TranscriptFormatError(_("{file}: {n} {n:record|records}, none in a known format (did Claude Code "
-                                              "change its transcript format?)", file=f, n=parsed))
-
-
-def last_activity(path) -> datetime.datetime | None:
-    ts = [f.stat().st_mtime for root in transcript_roots()
-          for f in (root / slug_for_path(str(path))).glob("*.jsonl")]
-    return datetime.datetime.fromtimestamp(max(ts), datetime.timezone.utc) if ts else None
 
 
 # ---------- a single run (runtime_ports' agent interface) ----------
@@ -1141,9 +1029,6 @@ def local_ignores() -> list:
 
 from runtime_ports import StreamEvent  # noqa: E402
 
-_TOOL_KIND = {"Read": "read", "Glob": "search", "Grep": "search", "WebSearch": "search", "WebFetch": "open_web",
-              "Edit": "write_file", "Write": "write_file", "MultiEdit": "write_file", "NotebookEdit": "write_file",
-              "Bash": "run_command", "AskUserQuestion": "ask_user"}
 _TARGET_KEYS = ("file_path", "notebook_path", "url", "command", "pattern", "query", "path")
 _QUOTA_STATUS = {"allowed": "ok", "allowed_warning": "warning", "rejected": "exhausted"}
 RELAY_SERVER = "lease_relay"                      # the name in the settings of the lease's MCP server (lease-relay.py)
@@ -1167,10 +1052,9 @@ def _questions(inp: dict) -> str:
 def action(tool: str, inp: dict | None) -> tuple:
     """Claude's tool → (kind, collab, target, summary). target is for judging (path, URL, command), summary a sentence
     for people."""
+    import sessions_claude   # the one table of Claude's tools, shared with the session source
     inp = inp or {}
-    kind = _TOOL_KIND.get(tool, "other")
-    collab = {"Agent": "subagent", "Task": "subagent", "Workflow": "workflow", "Skill": "skill"}.get(tool) or (
-        "peer_message" if tool == "SendMessage" or tool.endswith("send_message") else None)
+    kind, collab = sessions_claude.kind_of(tool)
     target = next((str(inp[k]) for k in _TARGET_KEYS if inp.get(k)), "")
     if tool == SHOW_FILE_TOOL:  # the platform's "show the user" tool (the lease's MCP): read a file to show them
         return "read", None, str(inp.get("path", "")), _("showing you {path}", path=inp.get("path", "")).strip()

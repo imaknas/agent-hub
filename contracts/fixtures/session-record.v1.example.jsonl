@@ -1,0 +1,6 @@
+{"v": 1, "ts": "2026-10-20T10:00:00Z", "session": "s-1", "role": "human", "id": "e1", "folder": "/home/ada/work/garden"}
+{"v": 1, "ts": "2026-10-20T10:00:05Z", "session": "s-1", "role": "other", "id": "e2", "folder": "/home/ada/work/garden"}
+{"v": 1, "ts": "2026-10-20T10:01:00Z", "session": "s-1", "role": "assistant", "id": "e3", "folder": "/home/ada/work/garden", "actions": [{"kind": "other", "collab": "subagent"}, {"kind": "other", "collab": "skill", "detail": "charts"}, {"kind": "run_command", "call": "c1", "command": "make test"}]}
+{"v": 1, "ts": "2026-10-20T10:01:30+08:00", "session": "s-1", "role": "assistant", "id": "e4", "folder": "/home/ada/work/garden", "subagent": true, "actions": [{"kind": "run_command", "call": "c2", "command": "make lint", "background": true}]}
+{"v": 1, "ts": "2026-10-20T10:04:00Z", "session": "s-1", "role": "other", "id": "e5", "folder": "/home/ada/work/garden", "results": ["c1"]}
+{"v": 1, "ts": "2026-10-21T08:30:00-04:00", "session": "s-2", "role": "human", "folder": "/home/ada/work/garden/.worktrees/try"}

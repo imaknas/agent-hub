@@ -27,7 +27,7 @@
   stderr gives the reason.
 
 Only two interfaces are provided: agent (one run) and completion. Nothing else (resume, streaming, hooks,
-transcripts, login status) -- the platform turns those features off explicitly via Unsupported. So "one run" should
+login status) -- the platform turns those features off explicitly via Unsupported. So "one run" should
 only be used in the platform's throwaway worktree (bin/propose_apply.py): the platform cannot control such a tool's
 permissions, and the guarantee comes from "it cannot touch the real checkout, and the platform applies only allowed
 paths".

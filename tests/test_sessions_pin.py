@@ -124,13 +124,8 @@ def claude_home(tmp: pathlib.Path) -> pathlib.Path:
 
 def sources_at(home: pathlib.Path, data: pathlib.Path | None = None):
     """Read the session sources under this home only (and this import folder)."""
-    import contextlib
-    import runtime_claude
-    import runtime_ports
-    stack = contextlib.ExitStack()
-    stack.enter_context(mock.patch.object(runtime_claude, "transcript_roots", lambda: (home / ".claude" / "projects",)))
-    stack.enter_context(mock.patch.object(runtime_ports, "load", lambda *a, **k: runtime_claude))
-    return stack
+    import sessions
+    return sessions.only(home=home, data=data or home / "no-import")
 
 
 PROJECTS = {"alpha": [ALPHA], "beta": [BETA]}
@@ -154,7 +149,7 @@ def features(home: pathlib.Path, data: pathlib.Path | None = None) -> dict:
                              "times": sorted(t.astimezone(UTC).isoformat() for t in w.times),
                              "agents": w.agents, "workflows": w.workflows, "peer": w.peer_msgs,
                              "skills": dict(sorted(w.skills.items()))} for k, w in weeks.items()}
-        out["memory_gaps"] = {n: mg.human_messages_since(p, START) for n, p in PROJECTS.items()}
+        out["memory_gaps"] = dict(mg.human_messages_since(PROJECTS, START))
         out["waiting"] = tw.scan(START, END)
     return json.loads(json.dumps(out, sort_keys=True, default=str))
 

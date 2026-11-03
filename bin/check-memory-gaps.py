@@ -16,8 +16,9 @@ platform runs no git: docs/design/projects-and-repos.md section 4), and the plat
 do not count: consolidate folding old date files into reference/, what the librarian writes, the onboarding skeleton
 (init:), merges during sync -- they all touch memory/, and counting them would hide an agent that wrote nothing.
 
-Runs on the hub machine (after the librarian); transcripts are read from the runtime's transcript_roots (the hub
-machine's own, plus those backed up from the remote machine by transcript-backup.sh). While the remote machine's
+Runs on the hub machine (after the librarian); sessions are read from every session source on the machine
+(bin/sessions.py, whichever agent made them; Claude Code's include those backed up from the remote machine by
+transcript-backup.sh). While the remote machine's
 backup cannot connect, conversations there are counted only by the next check after it recovers.
 
 Usage: check-memory-gaps.py [--window-hours 72] [--threshold 10] [--apply]
@@ -28,6 +29,7 @@ Output: one markdown line per project when there are gaps, nothing at all otherw
   todo.md is regenerated as a whole by gen-todo.py, so this job has to be scheduled after todo.
 """
 import argparse
+import collections
 import datetime
 import pathlib
 import re
@@ -38,7 +40,7 @@ sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
 import hubconf  # noqa: E402
 import hublib  # noqa: E402
 import i18n  # noqa: E402
-import runtime_ports  # noqa: E402  transcripts are read only through the interface (Claude Code is one implementation)
+import sessions  # noqa: E402  the owner's sessions, from whatever agent made them
 
 _ = i18n.domain(__file__)
 
@@ -46,11 +48,10 @@ _ = i18n.domain(__file__)
 PLATFORM_SUBJECTS = ("^init:", "^consolidate", "^librarian")
 
 
-def human_messages_since(paths: list[str], since: datetime.datetime) -> int:
-    """Count only messages the owner actually sent (before 2026-10-03, messages from other sessions and background
-    notifications were counted too)."""
-    rt = runtime_ports.load(ports=("transcripts",))
-    return sum(1 for t in rt.turns(paths, since, worktrees=True) if t.role == "human")
+def human_messages_since(projects: dict[str, list[str]], since: datetime.datetime) -> collections.Counter:
+    """Per project, only the messages the owner actually sent (before 2026-10-03, messages from other sessions and
+    background notifications were counted too)."""
+    return collections.Counter(name for name, t in sessions.turns(projects, since, worktrees=True) if t.role == "human")
 
 
 def notes_repo(name: str) -> pathlib.Path | None:
@@ -83,9 +84,10 @@ def main() -> None:
     since = datetime.datetime.now(datetime.timezone.utc) - datetime.timedelta(hours=args.window_hours)
 
     try:
-        runtime_ports.load(ports=("transcripts",))
-    except runtime_ports.Unsupported as e:
-        # this check needs "there are conversations": without transcripts it explicitly does not check (not "no gaps")
+        sessions.require()
+    except sessions.NoSessions as e:
+        # this check needs "there are conversations": without any session records it explicitly does not check (not
+        # "no gaps")
         msg = _("memory gap check skipped: {reason}", reason=e)
         print(msg)
         if args.apply:
@@ -94,10 +96,12 @@ def main() -> None:
         return
     roster = hubconf.roster()
     gaps = []
-    for name, paths in hublib.project_paths().items():
+    projects = hublib.project_paths()
+    counts = human_messages_since(projects, since)
+    for name in projects:
         if name not in roster or not roster[name].get("workspace"):
             continue  # the platform itself and projects without a workspace have no memory
-        msgs = human_messages_since(paths, since)
+        msgs = counts[name]
         if msgs < args.threshold:
             continue
         commits = note_commits_since(notes_repo(name), since)

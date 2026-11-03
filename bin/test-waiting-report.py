@@ -2,8 +2,8 @@
 """The waiting report (docs/design/test-waiting.md B7): where agent sessions wait on tests, per project. Zero LLM.
 
 Two sources:
-  transcripts   through the runtime's transcript port (runtime_ports, never a runtime's own format): every session in
-                every project's folders and worktrees, subagents kept apart. A session belongs to the project whose
+  sessions      every session source on the machine (bin/sessions.py, never a tool's own format, whichever agent
+                made them): every session in every project's folders and worktrees, subagents kept apart. A session belongs to the project whose
                 workspace holds its first folder (project_git.project_at; projects-and-repos' resolver replaces it at
                 its step 3, without changing what is counted). Entries are counted once by their id and tool calls
                 once by theirs (a branched or resumed session copies its history). A command's wait is the time from
@@ -49,7 +49,7 @@ import hubconf  # noqa: E402
 import hublib  # noqa: E402
 import i18n  # noqa: E402
 import project_git  # noqa: E402
-import runtime_ports  # noqa: E402
+import sessions  # noqa: E402
 import tiers  # noqa: E402
 
 _ = i18n.domain(__file__)
@@ -193,22 +193,21 @@ def session(tally: Tally, turns: list, doc: dict, declared: list, subagent: bool
 
 
 def scan(start: datetime.datetime, end: datetime.datetime) -> dict[str, dict]:
-    rt = runtime_ports.load(ports=("transcripts",))
     docs = hubconf.projects()
     utc = datetime.timezone.utc
     seen: set = set()
     by_session: dict[tuple, list] = collections.defaultdict(list)
     owner_of: dict[str, str] = {}
-    for name, paths in hublib.project_paths().items():
-        for t in rt.turns(paths, start.astimezone(utc), end.astimezone(utc), worktrees=True, subagents=True):
-            if t.id:
-                if t.id in seen:
-                    continue
-                seen.add(t.id)
-            if t.session not in owner_of:
-                found = project_git.project_at(t.folder) if t.folder else None
-                owner_of[t.session] = found[0] if found else name
-            by_session[(t.session, t.subagent)].append(t)
+    for name, t in sessions.turns(hublib.project_paths(), start.astimezone(utc), end.astimezone(utc), worktrees=True,
+                                  subagents=True):
+        if t.id:
+            if t.id in seen:
+                continue
+            seen.add(t.id)
+        if t.session not in owner_of:
+            found = project_git.project_at(t.folder) if t.folder else None
+            owner_of[t.session] = found[0] if found else name
+        by_session[(t.session, t.subagent)].append(t)
     tallies: dict[str, Tally] = collections.defaultdict(Tally)
     calls_seen: set = set()
     declared = {n: tier_patterns(d) for n, d in docs.items()}
@@ -306,13 +305,14 @@ def report(days: int, end_day: datetime.date) -> dict:
     tz = hubconf.tz()
     end = datetime.datetime.combine(end_day, datetime.time(), tz)
     start = end - datetime.timedelta(days=days)
-    sessions = scan(start, end)
+    sessions.require()   # no session records anywhere: the report is off (NoSessions), never all zeros
+    found = scan(start, end)
     runs = runner(start, end)
     return {"v": VERSION, "from": start.isoformat(), "to": end.isoformat(), "days": days,
             "generated": datetime.datetime.now(tz).isoformat(timespec="seconds"),
             "rules": {"cap_min": CAP_MIN, "owner_min": OWNER_MIN},
-            "projects": {n: {"sessions": sessions.get(n), "runner": runs.get(n)}
-                         for n in sorted(set(sessions) | set(runs))}}
+            "projects": {n: {"sessions": found.get(n), "runner": runs.get(n)}
+                         for n in sorted(set(found) | set(runs))}}
 
 
 def latest() -> dict | None:
@@ -384,9 +384,9 @@ def main(argv: list[str]) -> int:
     end = a.end or datetime.datetime.now(hubconf.tz()).date()
     try:
         rep = report(a.days, end)
-    except runtime_ports.Unsupported as e:
-        # the feature is off where the runtime keeps no transcripts, said and not a failure (as memory-gaps)
-        print(_("waiting report: the runtime has no transcripts ({why}); not written", why=e), file=sys.stderr)
+    except sessions.NoSessions as e:
+        # the feature is off where there are no session records at all, said and not a failure (as memory-gaps)
+        print(_("waiting report: not written: {why}", why=e), file=sys.stderr)
         return 0
     if a.json:
         print(json.dumps(rep, ensure_ascii=False, indent=1))

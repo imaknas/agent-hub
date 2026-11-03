@@ -13,4 +13,4 @@ options:
 <TMP>/index.html
 
 === no transcripts: stderr
-週報:沒有對話的統計——no transcripts here
+週報:沒有對話的統計——no session records here

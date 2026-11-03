@@ -1,8 +1,5 @@
 #!/bin/sh -c exec${IFS}"${0%/*}/py"${IFS}"$0"${IFS}"$@"
-"""Weekly cross-project activity analysis (like claude.ai's Reflect, but looking at the Claude Code side).
-
-claude.ai's Reflect reads only claude.ai's chat history and Memory and can't see Claude Code
-sessions; this report fills that gap. Output:
+"""Weekly cross-project activity analysis: how the owner worked with coding agents across projects. Output:
   reflect/YYYY-Www.json   this week's statistics + analysis (with --llm)
   reflect/index.html      the report page for all weeks (data embedded in the page, templates/reflect.html as layout)
 
@@ -11,8 +8,9 @@ Statistics are all computed mechanically, zero LLM: per-project messages/session
 the late-night share, the longest continuous stretch, the daily stopping time, how work was delegated (subagents,
 cross-session messages, skills), projects started/stopped. The analysis section: see reflect_llm.py.
 
-Data: the runtime's transcript_roots (sessions local to the hub machine, plus those from the remote machine backed up
-by transcript-backup.sh, personal profile only: the work profile is deliberately not read), ~/git-origin/mirrors
+Data: every session source on this machine (bin/sessions.py: Claude Code's and Codex's session files, the import
+folder; whichever agent made them, not which one the platform runs; Claude Code's include the remote machine's backed
+up by transcript-backup.sh, personal profile only: the work profile is deliberately not read), ~/git-origin/mirrors
 (updated daily at 04:00), the memory copies in ~/.memory-copies/<name>.
 
 Usage: weekly-reflect.py [--week 2026-W40] [--llm]
@@ -34,7 +32,7 @@ import hubconf  # noqa: E402
 import names  # noqa: E402
 import hublib  # noqa: E402
 import i18n  # noqa: E402
-import runtime_ports  # noqa: E402  conversation records only through the interface (Claude Code is one implementation)
+import sessions  # noqa: E402  the owner's sessions, from whatever agent made them (never one tool's format)
 
 _ = i18n.domain(__file__)
 TZ = hubconf.tz()   # the owner's clock (hub.json owner.timezone)
@@ -92,25 +90,24 @@ class Week:
 def scan(start: datetime.datetime, end: datetime.datetime) -> dict[str, Week]:
     prev_start = start - datetime.timedelta(days=7)
     weeks = {"this": Week(), "prev": Week()}
-    rt = runtime_ports.load(ports=("transcripts",))
-    for name, paths in hublib.project_paths().items():
-        for t in rt.turns(paths, prev_start.astimezone(datetime.timezone.utc), end.astimezone(datetime.timezone.utc)):
-            w = weeks["this" if t.ts >= start else "prev"]
-            if t.role == "human":
-                local = t.ts.astimezone(TZ)
-                w.prompts[name] += 1
-                w.sessions[name].add(t.session)
-                w.days[name].add(local.date())
-                w.times.append(local)
-            for a in t.actions:  # neutral collaboration kinds (runtime_ports.COLLABS); knows no runtime's tool names
-                if a.collab == "subagent":
-                    w.agents += 1
-                elif a.collab == "workflow":
-                    w.workflows += 1
-                elif a.collab == "peer_message":
-                    w.peer_msgs += 1
-                elif a.collab == "skill":
-                    w.skills[a.detail] += 1
+    for name, t in sessions.turns(hublib.project_paths(), prev_start.astimezone(datetime.timezone.utc),
+                                  end.astimezone(datetime.timezone.utc)):
+        w = weeks["this" if t.ts >= start else "prev"]
+        if t.role == "human":
+            local = t.ts.astimezone(TZ)
+            w.prompts[name] += 1
+            w.sessions[name].add(t.session)
+            w.days[name].add(local.date())
+            w.times.append(local)
+        for a in t.actions:  # neutral collaboration kinds (runtime_ports.COLLABS); knows no tool's names
+            if a.collab == "subagent":
+                w.agents += 1
+            elif a.collab == "workflow":
+                w.workflows += 1
+            elif a.collab == "peer_message":
+                w.peer_msgs += 1
+            elif a.collab == "skill":
+                w.skills[a.detail] += 1
     return weeks
 
 
@@ -227,12 +224,13 @@ def main() -> None:
     if not args.html_only:
         start, end, label = week_bounds(args.week)
         try:
-            runtime_ports.load(ports=("transcripts",))
-            unsupported = None
-        # no conversation records: say so explicitly rather than send the model empty statistics as "nothing done this week"
-        except runtime_ports.Unsupported as e:
-            unsupported = str(e)
+            read, unsupported = sessions.require(), None
+        # no session records anywhere: say so explicitly rather than send the model empty statistics as "nothing done
+        # this week"
+        except sessions.NoSessions as e:
+            read, unsupported = [], str(e)
         stats = build_stats(label, start, end, scan(start, end) if not unsupported else {"this": Week(), "prev": Week()})
+        stats["sources"] = read   # which session sources were read (the page's footer names them)
         if unsupported:
             stats["unsupported"] = unsupported
             # on stderr: stdout is the paths written (weekly-reflect.sh commits its first line)

@@ -33,8 +33,8 @@ brunna is meant for anyone, with any coding agent, any LLM, any key.
   throwaway worktree and the platform applies only the allowed paths. A tool's native features (permission settings,
   hooks) are only reinforcement: removing them does not affect correctness. A session the user opens themselves has only
   the tool's native protection; there the platform advises and does not guarantee.
-- **Tool syntax lives only in adapters**: `runtime_<name>.py`, `provider_<name>.py`, `modules/<tool>.yaml`. Everywhere
-  else the platform uses only neutral terms (the `runtime_ports` interfaces, paths, commands, tiers, event names).
+- **Tool syntax lives only in adapters**: `runtime_<name>.py`, `provider_<name>.py`, `sessions_<tool>.py` (reading one
+  tool's session files), `modules/<tool>.yaml`. Everywhere else the platform uses only neutral terms (the `runtime_ports` interfaces, paths, commands, tiers, event names).
 - **When a capability is missing, turn the feature off explicitly and say why** (`runtime_ports.Unsupported`, doctor's
   feature table); never run on with empty data.
 - Mechanical checks (the commit gate runs them): `tests/test_runtime_boundary.py` (Claude syntax and model names may
@@ -278,6 +278,12 @@ brunna is meant for anyone, with any coding agent, any LLM, any key.
   delegated) use zero LLM; "themes and observations on working with AI" is one model call a week, **sending only the
   statistics, never conversation text to the cloud**; for a project whose registry `privacy.reflection` is not include,
   not even a summary is sent
+- `bin/sessions.py`: **the owner's sessions, whichever agent made them** (contract `contracts/session-record.v1`): the
+  weekly review, memory gaps, the waiting report and a worktree's last activity read every session source found on
+  the machine, never the platform's runtime (`runtime.default: none` still has them). Sources: `sessions_claude.py`
+  (Claude Code), `sessions_codex.py` (Codex), and the import folder `<data>/sessions-import/*.jsonl` for any other
+  tool or script, already in the contract's format. No source with any files = the features say they are off; a
+  tool's format it doesn't recognise fails loudly. The neutral entries carry no message text
 - `bin/evals/`: evals for prompt and rule changes (docs/design/i18n.md). `e2.py` freezes judgment-point inputs (the
   librarian records each night's into `hubconf.evals_dir()`), runs prompt versions through `llm.py` and scores them;
   `e3.py` runs the project rules in a throwaway project. Runs use their own config copy and bus
@@ -304,7 +310,7 @@ brunna is meant for anyone, with any coding agent, any LLM, any key.
   told about them on its next run for that project (`bin/state_anchors.py`, design in `docs/design/state-anchors.md`;
   zero LLM cost)
 - `bin/test-waiting-report.py`: platform job `brunna/test-waiting` (nightly at 04:45): where agent sessions waited on
-  tests in the last 7 days, per project (transcripts through the port; the test runner's run logs, read as each
+  tests in the last 7 days, per project (sessions from `bin/sessions.py`; the test runner's run logs, read as each
   project) → `test-waiting/<day>.json` in data and a status page section (docs/design/test-waiting.md B7; zero LLM)
 - `bin/sync-all-memory.sh`: hourly, re-runs `git-sync-memory.sh` + the push for every project's `.agent-memory` (the
   safety net for the hooks; service `local.brunna.sync-all-memory`)
