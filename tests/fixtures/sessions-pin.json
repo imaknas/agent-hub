@@ -1,0 +1,121 @@
+{
+ "memory_gaps": {
+  "alpha": 5,
+  "beta": 2
+ },
+ "waiting": {
+  "alpha": {
+   "agent_min": 13.5,
+   "background_runs": 1,
+   "by_kind": {
+    "commit": {
+     "min": 1.0,
+     "runs": 1
+    },
+    "e2e": {
+     "min": 3.0,
+     "runs": 1
+    },
+    "merge": {
+     "min": 3.0,
+     "runs": 1
+    }
+   },
+   "e2e": {
+    "inner": 1,
+    "other": 0,
+    "safety": 0
+   },
+   "model_min": 4.5,
+   "owner_waited_min": 7.0,
+   "sessions": 2,
+   "subagents": {
+    "by_kind": {
+     "runner": {
+      "min": 3.0,
+      "runs": 1
+     }
+    },
+    "tests_min": 3.0
+   },
+   "tests_min": 7.0
+  },
+  "beta": {
+   "agent_min": 1.0,
+   "background_runs": 0,
+   "by_kind": {},
+   "e2e": {
+    "inner": 0,
+    "other": 0,
+    "safety": 0
+   },
+   "model_min": 1.0,
+   "owner_waited_min": 0.0,
+   "sessions": 1,
+   "subagents": {
+    "by_kind": {},
+    "tests_min": 0.0
+   },
+   "tests_min": 0.0
+  }
+ },
+ "weekly": {
+  "prev": {
+   "agents": 1,
+   "days": {
+    "alpha": [
+     "2026-10-16"
+    ]
+   },
+   "peer": 0,
+   "prompts": {
+    "alpha": 1
+   },
+   "sessions": {
+    "alpha": [
+     "P"
+    ]
+   },
+   "skills": {},
+   "times": [
+    "2026-10-16T09:00:00+00:00"
+   ],
+   "workflows": 0
+  },
+  "this": {
+   "agents": 2,
+   "days": {
+    "alpha": [
+     "2026-10-20"
+    ],
+    "beta": [
+     "2026-10-22"
+    ]
+   },
+   "peer": 1,
+   "prompts": {
+    "alpha": 3,
+    "beta": 2
+   },
+   "sessions": {
+    "alpha": [
+     "A"
+    ],
+    "beta": [
+     "C"
+    ]
+   },
+   "skills": {
+    "dataviz": 2
+   },
+   "times": [
+    "2026-10-20T10:00:00+00:00",
+    "2026-10-20T10:00:00+00:00",
+    "2026-10-20T10:09:00+00:00",
+    "2026-10-22T14:00:00+00:00",
+    "2026-10-22T14:30:00+00:00"
+   ],
+   "workflows": 1
+  }
+ }
+}
