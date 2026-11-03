@@ -11,7 +11,9 @@ your own branch, the merge gate refuses them.
 Used by: the platform's commit-msg hook (render-project-settings, repos with `commits: conventional`), and bin/merge-branch before merging a project with `commits: conventional`
 in its registry entry.
 
-  commit_title.py --file <COMMIT_EDITMSG>    commit-msg hook: prints the reason and exits 1 when the title is wrong
+  commit_title.py --file <COMMIT_EDITMSG>    commit-msg hook: prints the reason and exits 1 when the title is wrong, or,
+                                             in the platform's own repo, when the message names a private project
+                                             (bin/private_names.py)
   commit_title.py <title>                    check one line
 """
 from __future__ import annotations
@@ -61,10 +63,33 @@ def title_of(message: str) -> str:
     return ""
 
 
+def platform_repo() -> bool:
+    """The commit is in the platform's own repo (its main checkout or a linked worktree of it), whose history is public."""
+    import subprocess
+    import hubconf
+    r = subprocess.run(["git", "rev-parse", "--path-format=absolute", "--git-common-dir"], capture_output=True, text=True)
+    try:
+        return r.returncode == 0 and pathlib.Path(r.stdout.strip()).resolve() == (hubconf.MAIN / ".git").resolve()
+    except Exception:
+        return False
+
+
+def private_in(message: str) -> list[str]:
+    """the private project names the message mentions, when it is a commit in the platform's own repo"""
+    import private_names
+    text = "\n".join(line for line in message.splitlines() if not line.startswith("#"))
+    return private_names.found(text) if platform_repo() else []
+
+
 def main(argv: list[str]) -> int:
     if argv[:1] == ["--file"] and len(argv) == 2:
         with open(argv[1], encoding="utf-8") as f:
-            title = title_of(f.read())
+            message = f.read()
+        title = title_of(message)
+        if (named := private_in(message)):
+            print(_("commit message: it names a private project ({names}); the platform's history is public: say "
+                    "\"a project\" instead", names=", ".join(named)), file=sys.stderr)
+            return 1
     elif len(argv) == 1:
         title = argv[0]
     else:

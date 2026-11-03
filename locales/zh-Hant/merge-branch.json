@@ -21,5 +21,7 @@
  "merge-branch: {project} is not in the validated project registry, so its test command and commit rules are unknown; nothing was merged. `brunna config check` rebuilds the registry and says what is wrong": "merge-branch:驗證過的專案登錄裡沒有 {project},不知道它的測試指令跟 commit 規則,所以沒有合併。`brunna config check` 會重建登錄、說哪裡有問題",
  "merge-branch: {project}'s folder is not this repo ({path}); nothing was merged": "merge-branch:{project} 的資料夾不是這個 repo({path});什麼都沒合併",
  "merge-branch: merged, but `brunna land` reported a problem (the index may not match the merged code until the next tick):\n{tail}": "merge-branch:已合併,但 `brunna land` 回報了問題(下一個 tick 之前,索引可能跟合併進來的程式不一致):\n{tail}",
- "the registry entry declares no tests; no tests were run": "登錄沒有宣告測試,沒跑測試"
+ "the registry entry declares no tests; no tests were run": "登錄沒有宣告測試,沒跑測試",
+ "{sha} {subject}: {names}": "{sha} {subject}:{names}",
+ "these commit messages name a private project, and the platform's history is public:\n{commits}\n— reword them (say \"a project\") and run again": "這些 commit 訊息提到了私人專案,而平台的歷史是公開的:\n{commits}\n——改寫訊息(改說「一個專案」)後再跑一次"
 }

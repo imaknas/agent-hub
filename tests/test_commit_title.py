@@ -12,6 +12,7 @@ import subprocess
 import sys
 import tempfile
 import unittest
+from unittest import mock
 
 ROOT = pathlib.Path(__file__).resolve().parents[1]
 BIN = ROOT / "bin"
@@ -47,6 +48,36 @@ class Title(unittest.TestCase):
         bad = subprocess.run([sys.executable, str(BIN / "commit_title.py"), "x"], capture_output=True, text=True)
         self.assertEqual((ok.returncode, bad.returncode), (0, 1))
         self.assertIn("Conventional Commits", bad.stderr)
+
+
+class PrivateNames(unittest.TestCase):
+    """In the platform's own repo (public history) a commit message may not name a private project: the commit-msg
+    hook refuses it (bin/private_names.py's rules, as the boundary test applies them to files)."""
+
+    def setUp(self):
+        self.tmp = pathlib.Path(tempfile.mkdtemp())
+        self.addCleanup(lambda: __import__("shutil").rmtree(self.tmp, ignore_errors=True))
+        names = self.tmp / "private-names.txt"
+        names.write_text("# private projects\nsecret-garden\nledger~\n")
+        patch = mock.patch.dict(os.environ, {"AGENT_HUB_PRIVATE_NAMES": str(names)})
+        patch.start()
+        self.addCleanup(patch.stop)
+
+    def check(self, message, platform=True):
+        f = self.tmp / "COMMIT_EDITMSG"
+        f.write_text(message)
+        with mock.patch.object(commit_title, "platform_repo", return_value=platform):
+            return commit_title.main(["--file", str(f)])
+
+    def test_a_private_name_is_refused_in_the_platform_repo(self):
+        self.assertEqual(self.check("fix: x\n\nseen in secret-garden last week\n"), 1)
+        self.assertEqual(self.check("fix: x\n\nthe ledger project grew\n"), 1, "a common-word name next to 'project'")
+
+    def test_plain_words_comments_and_other_repos_pass(self):
+        self.assertEqual(self.check("fix: x\n\nseen in one project last week\n"), 0)
+        self.assertEqual(self.check("fix: balance the ledger\n"), 0, "a common word alone is not the name")
+        self.assertEqual(self.check("fix: x\n# On branch secret-garden\n"), 0, "git's comment lines are not the message")
+        self.assertEqual(self.check("fix: x\n\nseen in secret-garden\n", platform=False), 0, "only the platform's repo")
 
 
 class MergeGate(unittest.TestCase):

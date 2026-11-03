@@ -23,6 +23,7 @@ import unittest
 
 ROOT = pathlib.Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "bin"))
+import private_names  # noqa: E402
 import todo_tokens  # noqa: E402
 SCOPE = ("bin", "templates", "launchd", "tests", "agent-jobs", "modules", "mods")
 # Public docs: what is specific to this deployment goes in the instance directory's config/AGENTS.local.md,
@@ -87,37 +88,13 @@ def counts() -> dict[str, dict[str, int]]:
 
 
 def private_names_file() -> pathlib.Path | None:
-    """This deployment's list of private project names (in the instance's config, never in the platform repo). The
-    commit gate runs with a fake HOME, so it passes the location in AGENT_HUB_PRIVATE_NAMES; without the list (e.g.
-    someone else's clone) this check is skipped."""
-    import os
-    env = os.environ.get("AGENT_HUB_PRIVATE_NAMES")
-    if env:
-        return pathlib.Path(env)
-    try:
-        sys.path.insert(0, str(ROOT / "bin"))
-        import hubconf
-        f = hubconf.config_file("private-names.txt")
-        return f if f.exists() else None
-    except Exception:
-        return None
+    """This deployment's list of private project names (bin/private_names.py)."""
+    return private_names.names_file()
 
 
 def private_name_patterns(text: str) -> list[tuple[str, re.Pattern]]:
-    """Each line of the list: a name; a trailing ~ = the name is also a common word, counted only in a path, a registry
-    file name, or next to a word for "project" (PROJECT_WORDS)."""
-    out = []
-    for line in text.splitlines():
-        line = line.split("#", 1)[0].strip()
-        if not line:
-            continue
-        name, common = line.rstrip("~").strip(), line.endswith("~")
-        n = re.escape(name)
-        w = "|".join(re.escape(x) for x in PROJECT_WORDS)
-        pat = (rf"(?:~/|(?:workspace|projects|services|memory-copies|git-origin)/){n}(?![\w-])|(?<![\w-]){n}\.yaml|(?<![\w-]){n}\s*(?:{w})"
-               rf"|(?:{w})\s+{n}(?![\w-])") if common else rf"(?<![\w]){n}(?![\w])"
-        out.append((name, re.compile(pat, re.I)))
-    return out
+    """Each line of the list (bin/private_names.py)."""
+    return private_names.patterns(text, PROJECT_WORDS)
 
 
 def private_name_hits(names_text: str) -> list[str]:

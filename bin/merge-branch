@@ -10,6 +10,8 @@ Run in the session's own worktree:
   2. `git rebase <main>`: on a conflict, abort, list the conflicting files, record merge.failed, stop.
   2b. Registry `commits: conventional`: every commit title on this branch must pass (bin/commit_title.py); stop if
       one doesn't.
+  2c. The platform's own repo: no commit message names a private project (bin/private_names.py), hooks
+      skipped or not; stop if one does.
   3. Run the affected `merge` tiers through the main checkout's runner (`brunna test --when merge`; no tests declared:
      skipped and noted): on failure attach the last 40 lines, record merge.failed, stop.
   4. In the main checkout, `git merge --ff-only <branch>` (stop if uncommitted changes in the main checkout get in the
@@ -147,6 +149,17 @@ def main() -> int:
                 return fail("commit-titles", _("these commit titles are not Conventional Commits (registry: commits: "
                                                "conventional):\n{titles}\n— fix the titles (e.g. `git rebase --exec` "
                                                "or commit again) and run again", titles="\n".join(bad)))
+        # 2c. the platform's own history is public: no commit message names a private project (bin/private_names.py),
+        # whatever a commit's hooks did (--no-verify, an amend)
+        if proj == hubconf.hub_project():
+            import private_names
+            named = [_("{sha} {subject}: {names}", sha=c["sha"], subject=c["subject"], names=", ".join(found))
+                     for c in commits
+                     if (found := private_names.found(git(wt, "log", "-1", "--format=%B", c["sha"]).stdout))]
+            if named:
+                return fail("private-names", _("these commit messages name a private project, and the platform's "
+                                               "history is public:\n{commits}\n— reword them (say \"a project\") and "
+                                               "run again", commits="\n".join(named)))
         # 3. tests: the affected merge tiers through the main checkout's runner (a recorded pass for this tree is a
         # hit; the hub's own declaration is read from the tree under test; docs/design/test-waiting.md B4)
         if info.get("tests") or proj == hubconf.hub_project():
