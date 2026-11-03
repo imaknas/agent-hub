@@ -63,7 +63,8 @@ def projects() -> list[str]:
 
 
 def open_items(only: str | None = None) -> list[dict]:
-    """[{kind: task, project, key, text} | {kind: question, project, id, text}]"""
+    """[{kind: task, project, key, text, since} | {kind: question, project, id, text, since}]: since is when it was
+    raised (the first need record's ts; the question's ts)."""
     reg = _registrar()
     out = []
     only = _hubbus().now_named(only) if only else None   # a name it had before a rename: the same project
@@ -73,11 +74,12 @@ def open_items(only: str | None = None) -> list[dict]:
         led = reg.Ledger(p)
         for k in led.open():
             text = led.terms(k)[0]
-            out.append({"kind": "task", "project": p, "key": k, "text": text or ""})
+            since = min((r.get("ts") or "" for r in led.need.get(k) or []), default="")
+            out.append({"kind": "task", "project": p, "key": k, "text": text or "", "since": since})
     hb = _hubbus()
     c = hb.db()
     for q in hb.open_questions(c, only):
-        out.append({"kind": "question", "project": q["project"], "id": q["id"], "text": q["text"]})
+        out.append({"kind": "question", "project": q["project"], "id": q["id"], "text": q["text"], "since": q.get("ts") or ""})
     return out
 
 

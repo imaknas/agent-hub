@@ -1,0 +1,193 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "glance.v1",
+  "title": "brunna glance --json",
+  "description": "What needs the owner and whether the platform is healthy, in one look (bin/glance.py, docs/design/herdr.md). For status bars and other clients, which read only this. needs_you and health come from the status page's last tick (health.as_of); mail, scheduler and jobs_failed are live. An instance that isn't set up is {v: 1, set_up: false} and nothing else. Texts: alerts in the interface language, needs_you texts in the content language they were written in.",
+  "type": "object",
+  "required": [
+    "v",
+    "set_up"
+  ],
+  "properties": {
+    "v": {
+      "const": 1
+    },
+    "set_up": {
+      "type": "boolean"
+    },
+    "at": {
+      "type": "string"
+    },
+    "instance": {
+      "type": "string"
+    },
+    "needs_you": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "kind",
+          "project",
+          "id",
+          "text",
+          "since"
+        ],
+        "properties": {
+          "kind": {
+            "enum": [
+              "todo",
+              "question"
+            ]
+          },
+          "project": {
+            "type": "string"
+          },
+          "id": {
+            "type": "string"
+          },
+          "text": {
+            "type": "string"
+          },
+          "since": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "needs_you_error": {
+      "type": "string"
+    },
+    "mail": {
+      "type": "object",
+      "required": [
+        "total",
+        "projects"
+      ],
+      "properties": {
+        "total": {
+          "type": "integer"
+        },
+        "projects": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": [
+              "project",
+              "open",
+              "oldest"
+            ],
+            "properties": {
+              "project": {
+                "type": "string"
+              },
+              "open": {
+                "type": "integer"
+              },
+              "oldest": {
+                "type": "string"
+              }
+            }
+          }
+        }
+      }
+    },
+    "health": {
+      "type": "object",
+      "required": [
+        "state",
+        "alerts",
+        "as_of"
+      ],
+      "properties": {
+        "state": {
+          "enum": [
+            "ok",
+            "problem",
+            "unknown"
+          ]
+        },
+        "alerts": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": [
+              "level",
+              "text"
+            ],
+            "properties": {
+              "level": {
+                "enum": [
+                  "bad",
+                  "notify"
+                ]
+              },
+              "text": {
+                "type": "string"
+              }
+            }
+          }
+        },
+        "as_of": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      }
+    },
+    "scheduler": {
+      "type": "object",
+      "required": [
+        "last_tick",
+        "alive"
+      ],
+      "properties": {
+        "last_tick": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "alive": {
+          "type": "boolean"
+        }
+      }
+    },
+    "jobs_failed": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "job",
+          "since"
+        ],
+        "properties": {
+          "job": {
+            "type": "string"
+          },
+          "since": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "status_page": {
+      "type": "object",
+      "required": [
+        "url",
+        "local_to"
+      ],
+      "properties": {
+        "url": {
+          "type": "string"
+        },
+        "local_to": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      }
+    }
+  }
+}

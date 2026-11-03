@@ -1,0 +1,10 @@
+{
+ "brunna is not set up here (brunna init)": "這台還沒有設定 brunna(brunna init)",
+ "Needs you: {n}": "要你處理:{n}",
+ "Mail: {n} open": "信箱:{n} 封沒結案",
+ "The scheduler has not ticked since {at}": "排程器從 {at} 之後就沒有 tick",
+ "Health: ok": "狀態:正常",
+ "Health: problems": "狀態:有問題",
+ "Health: not known yet (the status page has not run)": "狀態:還不知道(狀態頁還沒跑過)",
+ "brunna glance [--json]: what needs the owner and whether the platform is healthy, in one look (docs/design/herdr.md,\ncontract contracts/glance.v1.schema.json). For status bars and other clients: the herdr mod (mods/brunna/), an iTerm2\nstatus bar component, a menu-bar script.\n\nIt reads and takes no write lock:\n- the status page's last tick (.state/status/glance.json, written by gen-status-page.py): the alerts and the owner's\n  open items, up to one tick old (their time is in as_of);\n- live: the open letters per project (the bus opened read-only; every project, whatever folder this runs in), the\n  scheduler's heartbeat and its failing jobs.\nAn instance that isn't set up gives {\"v\": 1, \"set_up\": false} and exit 0, touching nothing (opening the bus would make\none). Exit 0 whenever it could answer; problems are in the answer, not the exit code.\n": "brunna glance [--json]:一眼看到要你處理的事、平台是否正常(docs/design/herdr.md,契約\ncontracts/glance.v1.schema.json)。給狀態列和其他用戶端用:herdr mod(mods/brunna/)、iTerm2 的狀態列元件、選單列腳本。\n\n只讀,不拿寫入鎖:\n- 狀態頁上一次 tick 的結果(.state/status/glance.json,gen-status-page.py 寫的):警示和要你處理的事,最多晚一次 tick\n  (時間在 as_of);\n- 即時的:各專案沒結案的信(唯讀開 bus;不管在哪個資料夾跑都看全部專案)、排程器的心跳和失敗中的 job。\n還沒設定的實例回 {\"v\": 1, \"set_up\": false},exit 0,什麼都不碰(開 bus 會建出一個)。能回答就 exit 0;問題寫在回答裡,\n不靠 exit code。\n"
+}

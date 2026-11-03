@@ -643,7 +643,30 @@ summary{{cursor:pointer;color:var(--mut)}} pre{{white-space:pre-wrap;word-break:
     tmp = OUT.with_suffix(".tmp")
     tmp.write_text(page)
     tmp.replace(OUT)
+    write_glance(now, alerts)
     write_reading_pages(now)
+
+
+GLANCE = hubconf.STATE / "status" / "glance.json"   # bin/glance.py reads it there
+
+
+def write_glance(now: datetime.datetime, alerts: list) -> None:
+    """The part of this tick `brunna glance` reads (bin/glance.py, docs/design/herdr.md): the alerts the page just
+    showed, from this same list so the two never disagree, and the owner's open items (owner.open_items, which folds
+    them from the bus records: too slow for every glance, cheap once a tick). Replaced whole, never half-written."""
+    data = {"v": 1, "as_of": now.astimezone().isoformat(timespec="seconds"),
+            "alerts": [{"level": level, "text": text} for level, text in alerts]}
+    try:
+        import owner
+        data["needs_you"] = [{"kind": "todo" if x["kind"] == "task" else "question", "project": x["project"],
+                              "id": x.get("key") or x.get("id"), "text": x["text"], "since": x.get("since") or ""}
+                             for x in owner.open_items()]
+    except Exception as e:   # the page is written either way; glance says the items couldn't be read
+        data["needs_you"], data["needs_you_error"] = [], repr(e)[:300]
+    GLANCE.parent.mkdir(parents=True, exist_ok=True)
+    tmp = GLANCE.with_name(f".{GLANCE.name}.{os.getpid()}")
+    tmp.write_text(json.dumps(data, ensure_ascii=False, indent=1))
+    tmp.replace(GLANCE)
 
 
 # ---------- three pages for people: digest, to-do, weekly review (new-user.md section 7, question 7: once data is

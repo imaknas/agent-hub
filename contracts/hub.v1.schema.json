@@ -295,6 +295,11 @@
     "cap_runner": {
       "type": "object"
     },
+    "status_page": {
+      "type": "object",
+      "properties": {"url": {"type": "string"}},
+      "description": "where the status page is reached from other machines (a tailnet or VPN URL); brunna glance reports it, and without it the page counts as local to the hub machine"
+    },
     "runtime": {
       "type": "object",
       "properties": {

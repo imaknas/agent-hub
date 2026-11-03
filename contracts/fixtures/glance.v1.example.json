@@ -1,0 +1,56 @@
+{
+ "v": 1,
+ "set_up": true,
+ "at": "2026-11-03T15:14:00+08:00",
+ "instance": "/home/alex/.brunna",
+ "needs_you": [
+  {
+   "kind": "question",
+   "project": "garden-app",
+   "id": "m11030900-ab12",
+   "text": "Which host for the demo?",
+   "since": "2026-11-03T09:00:00+08:00"
+  },
+  {
+   "kind": "todo",
+   "project": "garden-app",
+   "id": "task-garden-app-0001",
+   "text": "Renew the domain",
+   "since": "2026-11-01T01:00:00Z"
+  }
+ ],
+ "mail": {
+  "total": 2,
+  "projects": [
+   {
+    "project": "garden-app",
+    "open": 2,
+    "oldest": "2026-11-02T10:00:00+08:00"
+   }
+  ]
+ },
+ "health": {
+  "state": "problem",
+  "alerts": [
+   {
+    "level": "bad",
+    "text": "garden-app/nightly failed on its last run (exit 1)"
+   }
+  ],
+  "as_of": "2026-11-03T15:00:00+08:00"
+ },
+ "scheduler": {
+  "last_tick": "2026-11-03T15:00:02+08:00",
+  "alive": true
+ },
+ "jobs_failed": [
+  {
+   "job": "garden-app/nightly",
+   "since": "2026-11-03T03:00:10"
+  }
+ ],
+ "status_page": {
+  "url": "http://127.0.0.1:18790/",
+  "local_to": "hub"
+ }
+}
