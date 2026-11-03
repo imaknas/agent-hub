@@ -76,7 +76,8 @@ class LegacyHooksPath(unittest.TestCase):
     def test_legacy_path_is_unset_and_hooks_go_into_the_git_dir(self):
         self.hooks_path("githooks")
         acts, said, mark = self.gate()
-        self.assertEqual(acts, [("remove", "core.hooksPath"), ("add", "pre-commit"), ("add", "commit-msg")])
+        self.assertEqual(acts, [("remove", "core.hooksPath"), ("add", "pre-commit"), ("add", "commit-msg"),
+                                ("add", "pre-push")])   # pre-push: the platform's own repo
         self.assertEqual(self.hooks_path(), "", "unset")
         for h in ("pre-commit", "commit-msg"):
             self.assertTrue(self.hook(h).read_text().startswith("#!/bin/sh\n" + mark), h)
@@ -94,7 +95,8 @@ class LegacyHooksPath(unittest.TestCase):
     def test_report_mode_only_says_so(self):
         self.hooks_path("githooks")
         acts, said, _mark = self.gate("report")
-        self.assertEqual(acts, [("remove", "core.hooksPath"), ("add", "pre-commit"), ("add", "commit-msg")])
+        self.assertEqual(acts, [("remove", "core.hooksPath"), ("add", "pre-commit"), ("add", "commit-msg"),
+                                ("add", "pre-push")])   # pre-push: the platform's own repo
         self.assertEqual(self.hooks_path(), "githooks", "report mode changes nothing")
         self.assertFalse(self.hook("pre-commit").exists())
         self.assertEqual(said, "")
@@ -112,7 +114,7 @@ class LegacyHooksPath(unittest.TestCase):
     def test_legacy_path_unset_even_when_no_hook_is_wanted(self):
         self.hooks_path("githooks")
         acts, _said, _mark = self.gate(doc={"v": 2, "name": "brunna"})
-        self.assertEqual(acts, [("remove", "core.hooksPath")])
+        self.assertEqual(acts, [("remove", "core.hooksPath"), ("add", "pre-push")])   # the platform's own repo
         self.assertEqual(self.hooks_path(), "")
         self.assertFalse(self.hook("pre-commit").exists())
 
