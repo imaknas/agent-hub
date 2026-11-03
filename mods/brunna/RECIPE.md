@@ -11,13 +11,17 @@ nightly work is healthy, refreshed once a minute, with a toast when something ne
 One panel on the right, 320 px wide, on the theme's `surface` background, 12 px padding, 13 px text in the theme's
 `foreground`. It is one scrollable markdown text, top to bottom:
 
-- **Needs you · N**: the owner's open items (to-dos and questions from every project), newest first, at most 8 lines
-  `- **project** text` (text cut at 120 characters); when there are more, a line `… N more (brunna owner list)`.
-- **Mail · N open**: one line per project with open letters, `- project count`.
-- A health line: `✅ brunna is healthy`, `⚠️ brunna has problems` or `brunna: status not known yet`, then up to 5 of
-  the problems (`bad` alerts) and, when the scheduler has stopped, `the scheduler has not ticked since …`.
+- A heading (`###`) **Needs you · N**: the owner's open items (to-dos and questions from every project), newest
+  first, at most 8 lines `- project · text` (text cut at 120 characters); when there are more, a line
+  `… N more (brunna owner list)`.
+- A heading **Mail · N open**: one line per project with open letters, `- project · count`.
+- A heading for health: `✅ brunna is healthy`, `⚠️ brunna has problems` or `brunna: status not known yet`, then up
+  to 5 of the problems (`bad` alerts) and, when the scheduler has stopped, `the scheduler has not ticked since …`.
 - `Status page`, a link, when the page can be opened from this computer.
-- `updated HH:MM` in italics, and the last error when a refresh failed.
+- `updated HH:MM`, and the last error when a refresh failed.
+
+Project names, item texts, alerts and errors are escaped: they show as written, never as markdown (a `~` in a
+to-do is not strikethrough).
 
 Before the first answer it shows `brunna…` in the theme's `muted` color. Without brunna it says how to install it;
 on an instance that isn't set up, to run `brunna init`.
@@ -57,6 +61,8 @@ on an instance that isn't set up, to run `brunna init`.
   says `<mod>:<command>`. Follow the guide.
 - Alerts and owner items come from brunna's last scheduler tick (up to 15 minutes old; `health.as_of`); mail is live.
 - Item texts are in the language the projects write their notes in.
+- TextView shows `**bold**` and `_italics_` as plain text: structure comes from `###` headings and the ` · `
+  separators.
 
 ## Done when
 

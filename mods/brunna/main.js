@@ -10,6 +10,9 @@ const EVERY = 60000;          // glance is cheap, but what it shows changes slow
 const SHOW = 8;               // items listed under "Needs you" (newest first)
 const TOAST_GAP = 60000;      // at most one toast a minute
 
+// Item texts are the projects' own words, shown as plain text: a `~` or `*` in them is not markdown.
+const esc = (s) => String(s).replace(/[\\`*_~\[\]<>#|]/g, "\\$&");
+
 export default class Brunna extends View {
   init(_props, cx) {
     this.g = null;
@@ -79,28 +82,28 @@ export default class Brunna extends View {
 
   markdown() {
     if (this.error && !this.g) {
-      return `**brunna**\n\nCan't reach brunna: ${this.error}\n\nInstall it from [github.com/imaknas/brunna](https://github.com/imaknas/brunna), or set the mod's \`cli\` / \`machine\` props.`;
+      return `### brunna\n\nCan't reach brunna: ${esc(this.error)}\n\nInstall it from [github.com/imaknas/brunna](https://github.com/imaknas/brunna), or set the mod's \`cli\` / \`machine\` props.`;
     }
     const g = this.g;
-    if (!g.set_up) return "**brunna**\n\nInstalled but not set up yet: run `brunna init`.";
+    if (!g.set_up) return "### brunna\n\nInstalled but not set up yet: run `brunna init`.";
     const out = [];
     const need = [...(g.needs_you ?? [])].sort((a, b) => (b.since ?? "").localeCompare(a.since ?? ""));
-    out.push(`**Needs you · ${need.length}**`);
-    for (const x of need.slice(0, SHOW)) out.push(`- **${x.project}** ${x.text.replace(/\s+/g, " ").slice(0, 120)}`);
+    out.push(`### Needs you · ${need.length}`);
+    for (const x of need.slice(0, SHOW)) out.push(`- **${esc(x.project)}** · ${esc(x.text.replace(/\s+/g, " ").slice(0, 120))}`);
     if (need.length > SHOW) out.push(`- … ${need.length - SHOW} more (\`brunna owner list\`)`);
     const mail = g.mail ?? { total: 0, projects: [] };
-    out.push("", `**Mail · ${mail.total} open**`);
-    for (const p of mail.projects) out.push(`- ${p.project} ${p.open}`);
+    out.push("", `### Mail · ${mail.total} open`);
+    for (const p of mail.projects) out.push(`- ${esc(p.project)} · ${p.open}`);
     const h = g.health ?? { state: "unknown", alerts: [] };
     const head = { ok: "✅ brunna is healthy", problem: "⚠️ brunna has problems", unknown: "brunna: status not known yet" };
-    out.push("", `**${head[h.state] ?? head.unknown}**`);
-    for (const a of (h.alerts ?? []).filter((a) => a.level === "bad").slice(0, 5)) out.push(`- ${a.text.slice(0, 160)}`);
+    out.push("", `### ${head[h.state] ?? head.unknown}`);
+    for (const a of (h.alerts ?? []).filter((a) => a.level === "bad").slice(0, 5)) out.push(`- ${esc(a.text.slice(0, 160))}`);
     if (g.scheduler && !g.scheduler.alive) out.push(`- the scheduler has not ticked since ${g.scheduler.last_tick ?? "-"}`);
     const page = g.status_page;
     // a page local to the hub machine opens only when the hub is this computer
     if (page && (!page.local_to || !(props() ?? {}).machine)) out.push("", `[Status page](${page.url})`);
     const at = this.at ? this.at.toTimeString().slice(0, 5) : "";
-    out.push("", `_updated ${at}${this.error ? ` · last try failed: ${this.error}` : ""}_`);
+    out.push("", `_updated ${at}${this.error ? ` · last try failed: ${esc(this.error)}` : ""}_`);
     return out.join("\n");
   }
 
