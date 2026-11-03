@@ -38,5 +38,6 @@
  "[9/11] Cloned the librarian's memory copy to ~/.memory-copies/{name}": "[9/11] 已 clone librarian 用的 memory 副本到 ~/.memory-copies/{name}",
  "[8/11] Memory bare repo created ({path}), agent-memory branch pushed": "[8/11] 已建 memory bare repo({path}),agent-memory 分支已推送",
  "{path} is not an existing folder": "{path} 不是已存在的資料夾",
- "{path} is not inside a folder the owner named for projects": "{path} 不在主人指定放專案的資料夾裡"
+ "{path} is not inside a folder the owner named for projects": "{path} 不在主人指定放專案的資料夾裡",
+ "Note: brunna config apply did not finish cleanly; run it to see why": "注意:brunna config apply 沒有順利跑完;自己跑一次看原因"
 }

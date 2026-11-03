@@ -295,6 +295,12 @@ else
   hub_say "Warning: committing/pushing brunna's registry files failed; do it by hand (the registration itself is written)" >&2
   hub_say "[11/11] Registered in brunna's project registry (projects/{name}.yaml); committing/pushing brunna failed (see the warning)" name="$PROJ_NAME"
 fi
+# The registration changed the config: apply it now and record that, or the status page keeps saying the config changed
+# but was not applied until someone runs brunna config apply (found on a clean macOS, 11-03). A linked worktree of the
+# hub refuses to apply; that is fine here, the main checkout's jobs catch up.
+if ! "$AGENT_HUB/bin/py" "$AGENT_HUB/bin/agenthub" config apply >/dev/null 2>&1; then
+  hub_say "Note: brunna config apply did not finish cleanly; run it to see why" >&2
+fi
 
 echo
 hub_say "Done: {name} is connected to the brunna pipeline." name="$PROJ_NAME"

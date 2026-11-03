@@ -385,8 +385,9 @@ def main(argv: list[str]) -> int:
     try:
         rep = report(a.days, end)
     except runtime_ports.Unsupported as e:
+        # the feature is off where the runtime keeps no transcripts, said and not a failure (as memory-gaps)
         print(_("waiting report: the runtime has no transcripts ({why}); not written", why=e), file=sys.stderr)
-        return 1
+        return 0
     if a.json:
         print(json.dumps(rep, ensure_ascii=False, indent=1))
         return 0

@@ -11,6 +11,7 @@ import shutil
 import sys
 import tempfile
 import unittest
+from unittest import mock
 
 ROOT = pathlib.Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "bin"))
@@ -165,6 +166,23 @@ class NightlyJobs(unittest.TestCase):
             self.assertIn("--when nightly --force --rev HEAD", jobs[0]["command"])
             self.assertTrue(jobs[0]["background"])
             self.assertEqual(registry.nightly_test_jobs(idx, {"a/nightly-tests"}), [], "a job of that name wins")
+        finally:
+            shutil.rmtree(ws, ignore_errors=True)
+
+    def test_the_platform_tests_itself_only_where_it_is_developed(self):
+        """An install at a release tag runs no nightly suite of the platform (the release was tested; found on a clean
+        macOS, 11-03); a checkout on main or a branch, where the platform is developed, does."""
+        ws = pathlib.Path(tempfile.mkdtemp())
+        try:
+            hub = hubconf.hub_project()
+            idx = {"projects": {name: {"v": 2, "name": name, "paths": {"workspace": str(ws)},
+                                       "tests": [{"tier": "full", "run": "x", "when": ["nightly"]}]}
+                                for name in (hub, "a")}}
+            with mock.patch.object(registry, "follows_releases", return_value=True):
+                self.assertEqual([j["name"] for j in registry.nightly_test_jobs(idx, set())], ["a/nightly-tests"])
+            with mock.patch.object(registry, "follows_releases", return_value=False):
+                self.assertEqual(sorted(j["name"] for j in registry.nightly_test_jobs(idx, set())),
+                                 sorted(["a/nightly-tests", f"{hub}/nightly-tests"]))
         finally:
             shutil.rmtree(ws, ignore_errors=True)
 
