@@ -1,6 +1,7 @@
 # The checks a contribution must pass: lint; the whole test suite on Linux as an English instance (bin/linux-test) and
 # on macOS as an English one (bin/run-tests, the platform's own gate, which runs as zh-Hant locally: Seatbelt, launchd and Keychain paths run only
-# there); the one-line installer from this checkout through `brunna init`; and a secret scan of the full history.
+# there); the one-line installer from this checkout and a newcomer's first minutes after it, on Linux and macOS
+# (tests/fresh-install.sh); and a secret scan of the full history.
 name: ci
 on:
   push:
@@ -38,8 +39,14 @@ jobs:
         env:
           AGENT_HUB_LANG_UI: en
           AGENT_HUB_LANG_CONTENT: en
+  # a newcomer's first minutes on a clean machine, on both systems: install, init, connect two projects, mail, the
+  # status page and glance (tests/fresh-install.sh)
   install:
-    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -48,8 +55,8 @@ jobs:
       - run: |
           export PATH="$HOME/.local/bin:$PATH"
           brunna --version
-          brunna init --yes --no-launchd --home "$RUNNER_TEMP/instance"
           ! command -v agenthub   # a new install has only the new command
+          BRUNNA_DIR="$RUNNER_TEMP/brunna" INIT_ARGS=--no-launchd sh "$RUNNER_TEMP/brunna/tests/fresh-install.sh"
   secrets:
     runs-on: ubuntu-latest
     steps:
