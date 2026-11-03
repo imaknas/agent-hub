@@ -3,6 +3,16 @@
 What changed in each version, generated from the commit messages (git cliff) when it is tagged; only new features,
 fixes, speed-ups and reverts are listed.
 
+## v0.9.0 (2026-11-03)
+
+### New
+
+- **state:** Brunna state history and restore
+
+### Fixed
+
+- **state:** The description is a module-level string, as the catalog check reads
+
 ## v0.8.2 (2026-11-03)
 
 ### Fixed
