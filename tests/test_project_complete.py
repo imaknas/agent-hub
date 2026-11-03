@@ -10,6 +10,7 @@ import io
 import json
 import os
 import pathlib
+import re
 import shutil
 import sys
 import tempfile
@@ -115,7 +116,7 @@ class StatusPage(unittest.TestCase):
             {"ts": ts, "project": "c", "cost_usd": None, "billing": "local"}]) + "\n")
         with mock.patch.object(completion, "USAGE", usage), mock.patch.dict(os.environ, {"AGENT_HUB_LANG_UI": "en"}):
             html = page.model_usage_html(now)
-        rows = {r.split("</td>")[0].split("<td>")[-1]: r for r in html.split("<tr>")[2:]}
+        rows = {re.sub(r"<[^>]+>", "", r.split("</td>")[0]): r for r in html.split("<tr>")[2:]}   # the project, without its dot
         self.assertIn("≈$0.75 (subscription, not billed)", rows["a"])
         self.assertIn("$1.00", rows["b"])
         self.assertNotIn("not billed", rows["b"])
