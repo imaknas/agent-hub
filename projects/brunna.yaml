@@ -24,7 +24,7 @@ tests:
 - tier: lint
   run: bin/lint . && AGENT_HUB_CONFIG=. AGENT_HUB_STATE="$TMPDIR/config-check" bin/py bin/config-check --child
   when: [commit, merge, nightly]
-  paths: &platform ["bin/**", "tests/**", "contracts/**", "templates/**", "locales/**", "githooks/**", "launchd/**", "capabilities/**", "agent-jobs/**", "modules/**", "herdr/**", "projects/**", "hub.example.json", "ruff.toml"]
+  paths: &platform ["bin/**", "tests/**", "contracts/**", "templates/**", "locales/**", "githooks/**", "launchd/**", "capabilities/**", "agent-jobs/**", "modules/**", "integrations/**", "projects/**", "hub.example.json", "ruff.toml"]
 # the checks that read every tracked file (personal names, CJK, hard-coded hub paths, runtime syntax): any change,
 # a README or docs one included, runs them; a few seconds
 - tier: static

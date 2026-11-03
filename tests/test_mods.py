@@ -1,5 +1,5 @@
-"""herdr/: a client for another app (AGENTS.md, docs/design/herdr.md), laid out as the app requires, reading only the
-platform's neutral output. herdr shares a folder laid out like a herdr home: RECIPE.md and preview.png at its top, the
+"""integrations/: clients for other apps, one folder per app (AGENTS.md, docs/design/herdr.md), each laid out as its app
+requires and reading only the platform's neutral output. herdr shares a folder laid out like a herdr home: RECIPE.md and preview.png at its top, the
 mod in its mods/<name>/ (a recipe inside mods/<name>/ is not found, and herdr's index skips the repo). The mod imports
 only herdr's own modules, runs no program but brunna (and sh, for its fallback to ~/.local/bin), and its recipe has the
 sections herdr's guide asks for.
@@ -14,7 +14,7 @@ import subprocess
 import unittest
 
 ROOT = pathlib.Path(__file__).resolve().parents[1]
-SHARED = ROOT / "herdr" / "brunna"       # the folder herdr.dev lists
+SHARED = ROOT / "integrations" / "herdr"  # the folder herdr.dev lists
 MOD = SHARED / "mods" / "brunna"
 HERDR_MODULES = {"gpui-kit", "gpui-base", "herdr"}
 RECIPE_SECTIONS = ["## What you see", "## How it behaves", "## Built from", "## Watch out", "## Done when"]
@@ -29,7 +29,7 @@ class HerdrMod(unittest.TestCase):
             self.assertTrue((SHARED / name).is_file(), f"{name} goes at the shared folder's top, beside mods/")
             self.assertFalse((MOD / name).exists(), f"{name} inside mods/brunna/ is not where herdr's index looks")
         self.assertFalse((SHARED / "layouts").exists(), "a mod's shared folder has no layouts/: that would make it a layout")
-        self.assertFalse((ROOT / "mods").exists(), "the mod lives in herdr/brunna/, not at the repo root")
+        self.assertFalse((ROOT / "mods").exists(), "the mod lives in integrations/herdr/, not at the repo root")
 
     def test_reads_only_neutral_output(self):
         js = (MOD / "main.js").read_text()

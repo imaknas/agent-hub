@@ -11,7 +11,7 @@ notes and state, the nightly settling, the mailbox between projects, and what on
   agents left, and whether brunna is healthy, with a toast when something new needs you. To add it, tell your agent in
   herdr:
 
-  > Add the herdr mod from github.com/imaknas/brunna (herdr/brunna).
+  > Add the herdr mod from github.com/imaknas/brunna (integrations/herdr).
 
   It runs `brunna glance --json` once a minute and nothing else. If brunna runs on another computer (a hub machine you
   reach over SSH), set the mod's `machine` prop to that herdr machine; if `brunna` isn't on the app's PATH, set `cli` to

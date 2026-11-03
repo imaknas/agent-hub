@@ -1,6 +1,6 @@
 #!/bin/sh -c exec${IFS}"${0%/*}/py"${IFS}"$0"${IFS}"$@"
 """brunna glance [--json]: what needs the owner and whether the platform is healthy, in one look (docs/design/herdr.md,
-contract contracts/glance.v1.schema.json). For status bars and other clients: the herdr mod (herdr/brunna/), an iTerm2
+contract contracts/glance.v1.schema.json). For status bars and other clients: the herdr mod (integrations/herdr/), an iTerm2
 status bar component, a menu-bar script.
 
 It reads and takes no write lock:

@@ -400,12 +400,13 @@ memory tracking and runs nothing long-lived (most projects) needs nothing under 
   validates the examples, and `bin/contracts-check.py` (nightly at 01:30) compares the copies with the originals and
   validates real data. Adding a field keeps the version; renaming/changing a meaning bumps it, with both versions side
   by side until the readers have switched
-- `herdr/`: **a client for another app** (docs/design/herdr.md), named for the app, not to be confused with
-  `modules/`. It is laid out as the app requires: herdr shares a folder like a herdr home, so `herdr/brunna/` holds
-  `RECIPE.md` and `preview.png` with the mod in `herdr/brunna/mods/brunna/` (`main.js`, `mod.json`, its images); the
-  repo carries herdr's topic `herdr-mod`. A client reads only the platform's neutral output (`brunna glance --json`, the
+- `integrations/`: **clients for other apps** (docs/design/herdr.md), one folder per app, named for it, not to be
+  confused with `modules/`. Each is laid out as its app requires: herdr shares a folder like a herdr home, so
+  `integrations/herdr/` holds `RECIPE.md` and `preview.png` with the mod in `integrations/herdr/mods/brunna/`
+  (`main.js`, `mod.json`, its images; herdr finds it only one level down, so it stays exactly there), and the repo
+  carries herdr's topic `herdr-mod`. A client reads only the platform's neutral output (`brunna glance --json`, the
   glance.v1 contract) and runs only the `brunna` command; it never reads the bus, the instance or a project directly.
-  `tests/test_mods.py` checks it
+  `tests/test_mods.py` checks them
 - `modules/`: **features that can stay off** (docs/design/new-user.md 3.2): `<name>.yaml` in the same
   jobs/services/secrets/consumes format as the registry (`type: module`, cwd always hub), adopted only with `brunna.json`
   `modules.<name>: true`; their jobs are called `<module>/<job>` in the schedule. Current: assistant

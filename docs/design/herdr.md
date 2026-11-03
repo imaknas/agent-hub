@@ -86,13 +86,15 @@ they were written in. `brunna glance` without `--json` prints the same in a few 
 ### The mod, in this repo
 
 herdr lists a mod from any public repo tagged `herdr-mod` that has a shared folder as above. It lives here, in
-`herdr/brunna/` (`RECIPE.md`, `preview.png`, `mods/brunna/`), as Pulse keeps its mod in `herdr/pulse/` of the Pulse
-app's repo: the point is reach, and herdr's Mods page then leads straight to brunna. The first try put the recipe in
-`mods/brunna/` at the repo root, and herdr's index skipped the repo (11-03). AGENTS.md says what `herdr/` is (a client
-for another app) and that a client reads only neutral output; `tests/test_mods.py` checks the folder. Decided 11-03 by
-the owner after weighing a separate repo.
+`integrations/herdr/` (`RECIPE.md`, `preview.png`, `mods/brunna/`), as Pulse keeps its mod in `herdr/pulse/` of the
+Pulse app's repo and hq-deck in `integrations/herdr/`: the point is reach, and herdr's Mods page then leads straight to
+brunna. `integrations/` holds one folder per app, so other clients (an iTerm2 status bar component, a menu-bar script)
+go beside it without crowding the repo's root; herdr looks only one level down, so the mod's folder can't go deeper.
+The first try put the recipe in `mods/brunna/` at the repo root, and herdr's index skipped the repo (11-03). AGENTS.md
+says what `integrations/` is and that a client reads only neutral output; `tests/test_mods.py` checks the folder.
+Decided 11-03 by the owner after weighing a separate repo, and `integrations/` over a folder per app at the root.
 
-- `herdr/brunna/mods/brunna/main.js`: a right-hand panel (`mod.json` `{"place": "right", "size": 320}`) that runs `glance --json`
+- `integrations/herdr/mods/brunna/main.js`: a right-hand panel (`mod.json` `{"place": "right", "size": 320}`) that runs `glance --json`
   every 60 seconds (`cx.timer.every`) and renders it as markdown: what needs the owner first, then mail, then health; a
   line per item, the project in front; the age of the alerts (`as_of`) shown.
 - A toast (`notify`) when an item id not seen in the previous glance needs the owner, at most one per minute, its

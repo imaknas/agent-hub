@@ -44,7 +44,7 @@ config:
   brunna recover <名稱>    = bin/recover-project.sh(新機器 / 資料夾不見了)
   brunna rename <舊> <新>  = bin/rename-project.sh(先 dry-run,再加 --apply)
   brunna status [專案]     = bin/overview.sh
-  brunna glance [--json]   一眼看到要你處理的事、平台是否正常(bin/glance.py;給狀態列用:herdr/brunna/ 的 herdr
+  brunna glance [--json]   一眼看到要你處理的事、平台是否正常(bin/glance.py;給狀態列用:integrations/herdr/ 的 herdr
                           mod、iTerm2、選單列腳本)
   brunna first-look <專案>   幫剛接上的專案馬上寫第一份 STATE.md,依它的 README 和歷史
                         (bin/first-look.py;brunna connect 會跑)
