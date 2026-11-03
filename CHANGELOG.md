@@ -3,6 +3,13 @@
 What changed in each version, generated from the commit messages (git cliff) when it is tagged; only new features,
 fixes, speed-ups and reverts are listed.
 
+## v0.8.2 (2026-11-03)
+
+### Fixed
+
+- A fresh install starts healthy
+- **onboard:** Apply the config quietly after registering
+
 ## v0.8.1 (2026-11-03)
 
 ### Fixed
