@@ -84,7 +84,8 @@ The next morning, the digest and the to-do list are waiting:
 ## What it does
 
 - **Projects that remember.** Notes live beside each project, apart from its code, and each project keeps a current
-  state that is corrected as things change.
+  state that is corrected as things change. Every night's version is kept: if one gets it wrong, `brunna state
+  restore` puts back an earlier day's.
 - **One morning view.** A digest of what happened across all projects, and one to-do list: what only you can do, what
   needs a decision first, what an agent can pick up.
 - **You decide.** What only you can settle goes to you (or to your personal assistant, through the open

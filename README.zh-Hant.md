@@ -80,6 +80,7 @@ curl -fsSL https://raw.githubusercontent.com/imaknas/brunna/main/install.sh | sh
 ## 它做什麼
 
 - **記得自己的專案。** 筆記放在每個專案旁邊，跟程式碼分開;每個專案都有一份目前狀態，事情變了就跟著修正。
+  每晚的版本都留著:哪天整理錯了,`brunna state restore` 可以拿回之前某一天的。
 - **早上一眼看完。** 所有專案發生了什麼的摘要，加上一份待辦：只有你能做的、要先決定的、agent 可以接手的。
 - **你來決定。** 只有你能拍板的事會交給你(或透過開放的 [Principal Handoff](https://doi.org/10.5281/zenodo.23852711)
   協定交給你的個人助理),你回答後再送回專案。
