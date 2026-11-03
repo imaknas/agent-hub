@@ -4,12 +4,12 @@
 The list is the instance's config/private-names.txt, never in the repo: one name per line, `#` comments; a trailing `~`
 marks a name that is also a common word, counted only in a path, a registry file name, or next to a word for "project"
 (tests/fixtures/personal-boundary.json project_words). A deployment without the list (someone else's clone) checks
-nothing. The commit gate runs under a fake HOME and passes the list's location in AGENT_HUB_PRIVATE_NAMES.
+nothing. The commit gate runs under a fake HOME and passes the list's location in the PRIVATE_NAMES variable
+(names.env).
 """
 from __future__ import annotations
 
 import json
-import os
 import pathlib
 import re
 
@@ -18,7 +18,8 @@ WORDS = ROOT / "tests" / "fixtures" / "personal-boundary.json"
 
 
 def names_file() -> pathlib.Path | None:
-    env = os.environ.get("AGENT_HUB_PRIVATE_NAMES")
+    import names
+    env = names.env("PRIVATE_NAMES")
     if env:
         return pathlib.Path(env)
     try:
