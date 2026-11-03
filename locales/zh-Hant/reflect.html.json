@@ -24,7 +24,6 @@
  "Quiet this week: {list}": "這週沒動:{list}",
  "No conversation statistics: {reason}": "沒有對話的統計:{reason}",
  "This week has only statistics; no analysis was made.": "這一週只有統計,沒有產生分析。",
- "Claude Code weekly review · {start} – {end}": "Claude Code 每週回顧 · {start} – {end}",
  "Week": "週次",
  "{week} activity statistics": "{week} 活動統計",
  "messages": "則訊息",
@@ -52,5 +51,6 @@
  "{agents} {agents:subagent|subagents} this week (last week {agents_prev}), {peer} {peer:message|messages} between sessions (last week {peer_prev}).": "這週開了 {agents} 次 subagent(上週 {agents_prev})、session 之間傳了 {peer} 次訊息(上週 {peer_prev})。",
  "; {n} more {n:session has|sessions have} no summary": ";還有 {n} 個 session 沒有摘要",
  "The analysis was written by {model} from the statistics above and {digests} session {digests:summary|summaries} written by {assistant}'s local model; it is the model's reading, and the conversations' text is not sent to a cloud model. {withheld} work-related {withheld:session|sessions} and {excluded} count only in the statistics{undigested}.": "分析由 {model} 根據上面的統計與 {digests} 則 {assistant} 本機模型寫的 session 摘要撰寫,是模型的解讀;對話原文不送雲端模型。工作相關的 {withheld} 個 session、{excluded} 只算在統計裡{undigested}。",
- "Data: the coding agent's sessions on this machine. Only the messages you actually sent count.": "資料:這台機器上 coding agent 的 session。訊息只算你實際送出的。"
+ "Data: the coding agent's sessions on this machine. Only the messages you actually sent count.": "資料:這台機器上 coding agent 的 session。訊息只算你實際送出的。",
+ "brunna weekly review · {start} – {end}": "brunna 每週回顧 · {start} – {end}"
 }

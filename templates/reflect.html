@@ -238,7 +238,7 @@ function render(w) {
     : (w.analysis?.error || t("This week has only statistics; no analysis was made."));
   let h = `
   <div class="top">
-    <span class="eyebrow">${t("Claude Code weekly review · {start} – {end}", { start: esc(w.start), end: esc(w.end) })}</span>
+    <span class="eyebrow">${t("brunna weekly review · {start} – {end}", { start: esc(w.start), end: esc(w.end) })}</span>
     ${WEEKS.length > 1 ? `<label><span class="eyebrow" style="margin-right:8px">${t("Week")}</span><select id="week">${opts}</select></label>` : ""}
   </div>
   <div class="hero">
