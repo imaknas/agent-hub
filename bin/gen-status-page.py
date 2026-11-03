@@ -53,7 +53,7 @@ def prune_line() -> str:
              _("{mb} MB freed", mb=r.get('freed_mb', 0))]
     if r.get("skipped"):
         parts.append(_("{n} skipped (files that may not be rebuildable)", n=len(r['skipped'])))
-    return ("<div class=sub style='margin-top:8px'>"
+    return ("<div class='sub gap'>"
             + _("Worktree auto-cleanup ({at}): {parts}", at=esc(str(r.get('at', ''))[:16]), parts=_(", ").join(parts))
             + "</div>")
 
@@ -248,6 +248,40 @@ def esc(s: str) -> str:
     return html.escape(s or "")
 
 
+def hue(project: str) -> int:
+    """Each project keeps one of six colors, the same one the herdr panel gives it (mods/brunna/main.js hue())."""
+    h = 0
+    for c in project or "":
+        h = (h * 31 + ord(c)) & 0xFFFFFFFF
+    return h % 6 + 1
+
+
+def proj_html(project: str) -> str:
+    return f"<span class=proj><i class='dot c{hue(project)}'></i>{esc(project)}</span>"
+
+
+def ago(at: str, now: datetime.datetime) -> str:
+    """How long ago, the way the herdr panel says it (now, 5m, 3h, 2d); '' when the time can't be read."""
+    try:
+        t = datetime.datetime.fromisoformat(at)
+    except (TypeError, ValueError):
+        return ""
+    if t.tzinfo:
+        t = t.astimezone().replace(tzinfo=None)
+    m = max(0, int((now - t).total_seconds() // 60))
+    return (_("now") if m < 1 else _("{n}m", n=m) if m < 60 else _("{n}h", n=m // 60) if m < 24 * 60
+            else _("{n}d", n=m // (24 * 60)))
+
+
+# the platform's mark (mods/brunna/mark.svg), drawn in the text color
+MARK = ('<svg class=mark viewBox="0 0 256 256" aria-hidden="true"><g stroke="currentColor" stroke-width="14" '
+        'stroke-linecap="round"><line x1="128" y1="69.5" x2="128" y2="103.5"/><line x1="195.5" y1="186.5" x2="166.1" '
+        'y2="169.5"/><line x1="60.5" y1="186.5" x2="89.9" y2="169.5"/></g><g fill="currentColor"><circle cx="128" '
+        'cy="69.5" r="22"/><circle cx="195.5" cy="186.5" r="22"/><circle cx="60.5" cy="186.5" r="22"/><circle cx="128" '
+        'cy="147.5" r="26"/></g><circle cx="128" cy="147.5" r="44" fill="none" stroke="currentColor" stroke-width="14"/>'
+        '</svg>')
+
+
 def path_labels() -> dict[str, str]:
     """hubbus delivery_paths' steps, for people."""
     return {"woken": _("woken"), "woken-missed": _("woken, not picked up"), "wake-failed": _("wake failed"),
@@ -262,12 +296,12 @@ def letter_paths(letters: list) -> str:
     if not letters:
         return ""
     labels = path_labels()
-    rows = "".join(f"<tr><td>{esc(x['id'])}</td><td>{esc(x['to'])}</td><td>{esc(x['ts'][5:16].replace('T', ' '))}</td>"
+    rows = "".join(f"<tr><td>{esc(x['id'])}</td><td>{proj_html(x['to'])}</td><td>{esc(x['ts'][5:16].replace('T', ' '))}</td>"
                    f"<td>{esc(' → '.join(labels.get(s, s) for s in x.get('path') or []) or _('waiting'))}"
                    f"{esc(_(' (done)')) if x.get('done') else ''}</td></tr>" for x in letters)
     return (f"<div class=sub>{esc(_('How the requests and questions of the last day went'))}</div>"
-            f"<table><tr><th>{_('Letter')}</th><th>{_('To')}</th><th>{_('Sent')}</th><th>{_('Path')}</th></tr>"
-            f"{rows}</table>")
+            f"<div class=tbl><table><tr><th>{_('Letter')}</th><th>{_('To')}</th><th>{_('Sent')}</th><th>{_('Path')}</th></tr>"
+            f"{rows}</table></div>")
 
 
 def model_usage_html(now: datetime.datetime) -> str:
@@ -304,11 +338,11 @@ def model_usage_html(now: datetime.datetime) -> str:
         if v["estimate"] is not None:
             parts.append(_("≈${amount} (subscription, not billed)", amount="%.2f" % v["estimate"]))
         return esc(" + ".join(parts)) if parts else "—"
-    rows = "".join(f"<tr><td>{esc(p)}</td><td>{v['calls']}</td><td>{v['today']}</td><td>{v['tokens']:,}</td>"
+    rows = "".join(f"<tr><td>{proj_html(p)}</td><td>{v['calls']}</td><td>{v['today']}</td><td>{v['tokens']:,}</td>"
                    f"<td>{cost(v)}</td></tr>" for p, v in sorted(per.items()))
-    return (f"<h2 style=\"font-size:18px;margin-top:28px\">{_('Model calls by project (7 days)')}</h2>"
-            f"<table><tr><th>{_('Project')}</th><th>{_('Calls')}</th><th>{_('Today')}</th><th>{_('Tokens')}</th>"
-            f"<th>{_('Cost')}</th></tr>{rows}</table>")
+    return (f"<h2>{_('Model calls by project (7 days)')}</h2>"
+            f"<div class=tbl><table><tr><th>{_('Project')}</th><th>{_('Calls')}</th><th>{_('Today')}</th><th>{_('Tokens')}</th>"
+            f"<th>{_('Cost')}</th></tr>{rows}</table></div>")
 
 
 def waiting_html() -> str:
@@ -336,18 +370,18 @@ def waiting_html() -> str:
         runner_txt = (_("could not be read") if "unavailable" in r else
                       _("{hits} of {runs} tier runs were hits", hits=hits, runs=runs) if runs else "—")
         median = merge.get("median_s")
-        rows.append(f"<tr><td>{esc(name)}</td><td>{esc(_('{min} min', min=agent))}</td>"
+        rows.append(f"<tr><td>{proj_html(name)}</td><td>{esc(_('{min} min', min=agent))}</td>"
                     f"<td>{esc(_('{min} min', min=tests) + share)}</td>"
                     f"<td>{esc(_('{min} min', min=s.get('owner_waited_min') or 0))}</td>"
                     f"<td>{esc(_('{secs} s', secs=median) if median is not None else '—')}</td>"
                     f"<td>{esc(runner_txt)}</td></tr>")
     if not rows:
         return ""
-    return (f"<h2 style=\"font-size:18px;margin-top:28px\">"
+    return (f"<h2>"
             f"{esc(_('Waiting on tests ({days} days to {end})', days=rep.get('days'), end=str(rep.get('to', ''))[:10]))}</h2>"
-            f"<table><tr><th>{_('Project')}</th><th>{_('Agent time')}</th><th>{_('Waiting on tests')}</th>"
+            f"<div class=tbl><table><tr><th>{_('Project')}</th><th>{_('Agent time')}</th><th>{_('Waiting on tests')}</th>"
             f"<th>{_('The owner waited')}</th><th>{_('Merge to result (median)')}</th><th>{_('Recorded passes')}</th></tr>"
-            f"{''.join(rows)}</table><div class=sub style='margin-top:8px'>"
+            f"{''.join(rows)}</table></div><div class='sub gap'>"
             f"{_('Details: bin/test-waiting-report.py (docs/design/test-waiting.md B7)')}</div>")
 
 
@@ -481,13 +515,14 @@ def main() -> None:
             detail = "; ".join(x for x in [detail, *event_detail(job, state, now, alerts)] if x)
         cls = {"ok": "ok", "running": "run"}.get(result, "bad" if result.startswith("failed") else "")
         label = {"ok": _("succeeded"), "running": _("running"), "failed": _("failed")}.get(result.split(" ")[0], result or "—")
+        dot = f"<i class='dot c{hue(name.split('/')[0])}'></i>" if "/" in name else "<i class='dot none'></i>"
         rows.append(
-            f"<tr class='{'off' if not job.get('enabled', True) else ''}'>"
-            f"<td><b>{esc(name)}</b>{' <span class=tag>Claude</span>' if is_agent else ''}"
+            f"<tr class='job{' off' if not job.get('enabled', True) else ''}'>"
+            f"<td class=name>{dot}<b>{esc(name)}</b>{' <span class=tag>Claude</span>' if is_agent else ''}"
             f"{'<div class=sub>' + esc(detail) + '</div>' if detail else ''}</td>"
-            f"<td>{esc(describe_when(job))}</td>"
-            f"<td><span class='st {cls}'>{esc(label)}</span> <span class=sub>{esc(last)}</span></td>"
-            f"<td>{esc(next_run(job, state, now))}</td></tr>")
+            f"<td class=when>{esc(describe_when(job))}</td>"
+            f"<td class=last><span class='st {cls}'>{esc(label)}</span> <span class=sub>{esc(last)}</span></td>"
+            f"<td class=next data-l='{esc(_('Next'))}'>{esc(next_run(job, state, now))}</td></tr>")
         if is_agent:
             reps = agent_reports(aname)
             if reps:
@@ -495,7 +530,7 @@ def main() -> None:
                     f"<details{' open' if i == 0 else ''}><summary>{esc(r.stem)}</summary>"
                     f"<pre>{esc(r.read_text(errors='replace'))}</pre></details>"
                     for i, r in enumerate(reps))
-                report_blocks.append(f"<section><h3>{esc(name)}</h3>{items}</section>")
+                report_blocks.append(f"<section class=report><h3>{dot}{esc(name)}</h3>{items}</section>")
 
     # encrypted cloud backup (bin/backup.py): red when the last success or the last restore test is too long ago; only
     # when the backup module is on (a feature that is off does not turn the page red)
@@ -543,11 +578,11 @@ def main() -> None:
                                        id=x["id"], project=x["project"], ext=x["ext"], type=x["type"],
                                        origin=x["origin"], n=len(x["events"]), last=x["last"][5:16].replace("T", " "),
                                        kept=x["kept"])))
-        mail_rows = "".join(f"<tr><td>{esc(p)}</td><td>{v['open']}</td><td>{v['undelivered']}</td>"
+        mail_rows = "".join(f"<tr><td>{proj_html(p)}</td><td>{v['open']}</td><td>{v['undelivered']}</td>"
                             f"<td>{esc(v['oldest'][5:16].replace('T', ' '))}</td></tr>" for p, v in bus["projects"].items())
-        mail_html = (f"<h2 style=\"font-size:18px;margin-top:28px\">{_('Project mailboxes')}</h2>"
-                     + (f"<table><tr><th>{_('To')}</th><th>{_('Open')}</th><th>{_('Not yet in a session')}</th>"
-                        f"<th>{_('Oldest')}</th></tr>{mail_rows}</table>"
+        mail_html = (f"<h2>{_('Project mailboxes')}</h2>"
+                     + (f"<div class=tbl><table><tr><th>{_('To')}</th><th>{_('Open')}</th><th>{_('Not yet in a session')}</th>"
+                        f"<th>{_('Oldest')}</th></tr>{mail_rows}</table></div>"
                         if mail_rows else f"<div class=sub>{_('No open letters')}</div>")
                      # held for an MCP session using the project (hubbus mcp_sessions), not unclaimed
                      + "".join("<div class=sub>" + esc(_("Held: {id} ({project} in use by {by})", id=h["id"],
@@ -570,7 +605,7 @@ def main() -> None:
                                            else _(", has uncommitted changes")) if w["merged"] \
                     else _("in progress, {n} {n:file|files} changed", n=len(w['files']))
                 hot = any(f in info["overlaps"] for f in w["files"]) and not w["merged"]
-                wt_rows.append(f"<tr><td>{esc(proj)}</td><td>{esc(w['branch'])}</td><td>{age_text(w['age_days'])}</td>"
+                wt_rows.append(f"<tr><td>{proj_html(proj)}</td><td>{esc(w['branch'])}</td><td>{age_text(w['age_days'])}</td>"
                                f"<td{' class=\'st bad\'' if hot else ''}>{esc(state_txt)}"
                                f"{_(' (another branch changes the same file)') if hot else ''}</td></tr>")
             for f, bs in info["overlaps"].items():
@@ -580,11 +615,11 @@ def main() -> None:
                                _("{project}: {n} unmerged branches all change {file} ({branches}); the ones merged later "
                                  "will conflict on rebase", project=proj, n=len(bs), file=f, branches=', '.join(bs))))
         ungated = {p: i["ungated_main_7d"] for p, i in ov.items() if i["ungated_main_7d"]}
-        wt_html = (f"<h2 style=\"font-size:18px;margin-top:28px\">{_('Parallel sessions (worktrees)')}</h2>"
-                   + (f"<table><tr><th>{_('Project')}</th><th>{_('Branch')}</th><th>{_('Last commit')}</th><th>{_('State')}</th></tr>"
-                      f"{''.join(wt_rows)}</table>"
+        wt_html = (f"<h2>{_('Parallel sessions (worktrees)')}</h2>"
+                   + (f"<div class=tbl><table><tr><th>{_('Project')}</th><th>{_('Branch')}</th><th>{_('Last commit')}</th><th>{_('State')}</th></tr>"
+                      f"{''.join(wt_rows)}</table></div>"
                       if wt_rows else f"<div class=sub>{_('No worktrees in progress')}</div>")
-                   + ("<div class=sub style='margin-top:8px'>"
+                   + ("<div class='sub gap'>"
                       + _("Committed straight to main in the last 7 days (not through merge-branch): {list}",
                           list=_(", ").join(f"{esc(p)} {n}" for p, n in sorted(ungated.items()))) + "</div>" if ungated else "")
                    + prune_line())
@@ -607,62 +642,197 @@ def main() -> None:
     except Exception as e:  # a broken report does not affect the rest of the page
         waiting = f"<div class=sub>{_('Waiting report failed: {e}', e=esc(repr(e)))}</div>"
 
-    alert_html = "".join(f"<div class='alert {c}'>{'🔔' if c == 'notify' else '⚠️'} {esc(t)}</div>"
-                         for c, t in alerts) or f"<div class='alert good'>✅ {_('Nothing needs attention')}</div>"
+    needs, needs_error = needs_you()
+    problems = [t for c, t in alerts if c == "bad"]
+    notices = [t for c, t in alerts if c == "notify"]
+    sched_ok = not stale and (sm is None or alive)
+    mail_projects = (bus or {}).get("projects") or {}
+    letters = sum(v.get("open", 0) for v in mail_projects.values())
+
+    def tile(n, label: str, cls: str = "") -> str:
+        return f"<div class='tile {cls}'><b>{esc(str(n))}</b><span>{esc(label)}</span></div>"
+    pill = (f"<span class='pill ok'><i class=dot></i>{_('Healthy')}</span>" if not problems else
+            f"<span class='pill bad'><i class=dot></i>{esc(_('{n} {n:problem|problems}', n=len(problems)))}</span>")
+    tiles = (tile(len(needs), _("need you"), "hot" if needs else "")
+             + tile(letters, _("letter open") if letters == 1 else _("letters open"))
+             + tile(len(problems), _("problem") if len(problems) == 1 else _("problems"), "hot" if problems else "")
+             + tile(f"{tick:%H:%M}" if tick else "—", _("scheduler ticking") if sched_ok else _("scheduler stopped"),
+                    "" if sched_ok else "hot"))
+
+    need_rows = "".join(
+        f"<li class=item title='{esc(x['text'])}'><span class='kind {x['kind']}'>{'?' if x['kind'] == 'question' else ''}"
+        f"</span><div class=body><div class=l1>{proj_html(x['project'])}<span class=ago>{esc(ago(x['since'], now))}"
+        f"</span></div><div class=l2>{esc(x['text'])}</div></div></li>" for x in needs[:SHOW])
+    more = (f"<a class=more href='todo.html'>{esc(_('{n} more on the to-do page', n=len(needs) - SHOW))}</a>"
+            if len(needs) > SHOW else "")
+    needs_card = (f"<section class=card><h2>{_('Needs you')}<span class=sub>{_('newest first')}</span></h2>"
+                  + (f"<ul class=list>{need_rows}</ul>{more}" if needs else
+                     f"<div class=empty><i class='dot good'></i>{_('Nothing needs you right now.')}</div>")
+                  + (f"<div class=sub>{esc(_('What needs you could not be read: {e}', e=needs_error))}</div>"
+                     if needs_error else "") + "</section>")
+    mail_list = "".join(f"<li class=mail>{proj_html(p)}<span class=ago>{esc(ago(v.get('oldest', ''), now))}</span>"
+                        f"<span class=badge>{v.get('open', 0)}</span></li>" for p, v in mail_projects.items())
+    mail_card = (f"<section class=card><h2>{_('Mail')}<span class=sub>{_('open letters by project')}</span></h2>"
+                 + (f"<ul class=list>{mail_list}</ul>" if mail_list else
+                    f"<div class=empty><i class='dot good'></i>{_('No open letters')}</div>") + "</section>")
+
+    def alert_list(items: list[str], cls: str) -> str:
+        """the first few; a long list folds the rest away so the jobs stay in reach"""
+        def ul(xs):
+            return f"<ul class='alerts {cls}'>" + "".join(f"<li><i class=dot></i><span>{esc(t)}</span></li>"
+                                                          for t in xs) + "</ul>"
+        rest = items[FOLD:] if len(items) > FOLD + 1 else []
+        return ul(items[:len(items) - len(rest)]) + (
+            f"<details class=rest><summary>{esc(_('{n} more', n=len(rest)))}</summary>{ul(rest)}</details>" if rest else "")
+    alert_html = ((f"<section class='card wide'><h2>{_('Problems')}<span class=sub>{len(problems)}</span></h2>"
+                   f"{alert_list(problems, 'bad')}</section>" if problems else "")
+                  + (f"<section class='card wide'><h2>{_('Worth a look')}<span class=sub>{len(notices)}</span></h2>"
+                     f"{alert_list(notices, 'notify')}</section>" if notices else "")
+                  or f"<section class='card wide'><div class=empty><i class='dot good'></i>"
+                     f"{_('Nothing needs attention')}</div></section>")
     generated = _("the hub machine · generated {now:%Y-%m-%d %H:%M} · refreshes every 5 minutes · schedules are defined "
                   "in the project registry (projects/) and schedule.yaml", now=now)
     page = f"""<!doctype html><html lang="{hubconf.lang_ui()}"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1"><meta http-equiv="refresh" content="300">
-<title>{_('Schedule status')}</title><style>
-:root{{--bg:#fafaf9;--fg:#1c1917;--mut:#78716c;--line:#e7e5e4;--card:#fff;--ok:#15803d;--bad:#b91c1c;--run:#1d4ed8;--warn:#fef3c7}}
-@media (prefers-color-scheme:dark){{:root{{--bg:#1c1917;--fg:#f5f5f4;--mut:#a8a29e;--line:#44403c;--card:#292524;--ok:#4ade80;--bad:#f87171;--run:#93c5fd;--warn:#422006}}}}
-body{{margin:0;background:var(--bg);color:var(--fg);font:15px/1.5 -apple-system,"PingFang TC",sans-serif}}
-main{{max-width:1000px;margin:0 auto;padding:20px 16px 60px}}
-h1{{font-size:22px;margin:0 0 4px}} .sub{{color:var(--mut);font-size:13px}}
-.alert{{padding:10px 14px;border-radius:8px;margin:8px 0;background:var(--card);border:1px solid var(--line)}}
-.alert.bad{{border-color:var(--bad)}} .alert.notify{{background:var(--warn)}}
-table{{width:100%;border-collapse:collapse;background:var(--card);border-radius:8px;overflow:hidden;margin-top:16px}}
-td,th{{padding:8px 10px;border-bottom:1px solid var(--line);text-align:left;vertical-align:top}}
-th{{font-size:13px;color:var(--mut);font-weight:500}} tr.off{{opacity:.45}}
-.st.ok{{color:var(--ok)}} .st.bad{{color:var(--bad);font-weight:600}} .st.run{{color:var(--run)}}
-.tag{{font-size:11px;border:1px solid var(--line);border-radius:4px;padding:0 4px;color:var(--mut)}}
-section{{margin-top:24px}} h3{{font-size:16px;margin:0 0 6px}}
-details{{background:var(--card);border:1px solid var(--line);border-radius:8px;margin:6px 0;padding:6px 12px}}
-summary{{cursor:pointer;color:var(--mut)}} pre{{white-space:pre-wrap;word-break:break-word;font:14px/1.55 -apple-system,"PingFang TC",sans-serif}}
-@media (max-width:640px){{td:nth-child(2),th:nth-child(2){{display:none}}}}
-</style></head><body><main>
-<h1>{_('Schedule status')}</h1><div class=sub><a href="digest.html">{_('Digest')}</a> · <a href="todo.html">{_('To-do')}</a> · <a href="reflect/">{_('Weekly review')}</a></div><div class=sub>{generated}{config_note}</div>
-{alert_html}
-<table><tr><th>{_('Job')}</th><th>{_('When')}</th><th>{_('Last')}</th><th>{_('Next')}</th></tr>{''.join(rows)}</table>
+<title>{_('Schedule status')}</title><style>{STATUS_CSS}</style></head><body><main>
+<header class=top><div class=brand>{MARK}<div><div class=name>brunna</div><h1>{_('Schedule status')}</h1></div></div>{pill}</header>
+<nav class=links><a href="digest.html">{_('Digest')}</a> · <a href="todo.html">{_('To-do')}</a> · <a href="reflect/">{_('Weekly review')}</a></nav>
+<div class=tiles>{tiles}</div>
+<div class=grid>{needs_card}{mail_card}{alert_html}</div>
+<h2>{_('Scheduled jobs')}<span class=sub>{len(jobs)}</span></h2>
+<div class=tbl><table class=jobs><thead><tr><th>{_('Job')}</th><th>{_('When')}</th><th>{_('Last')}</th><th>{_('Next')}</th></tr></thead>
+<tbody>{''.join(rows)}</tbody></table></div>
 {mail_html}
 {wt_html}{waiting}{usage_html}
-<h2 style="font-size:18px;margin-top:28px">{_('Claude job reports')}</h2>
+<h2>{_('Claude job reports')}</h2>
 {''.join(report_blocks) or f"<div class=sub>{_('No reports yet')}</div>"}
+<footer class=sub>{generated}{config_note}</footer>
 </main></body></html>"""
     OUT.parent.mkdir(parents=True, exist_ok=True)
     tmp = OUT.with_suffix(".tmp")
     tmp.write_text(page)
     tmp.replace(OUT)
-    write_glance(now, alerts)
+    write_glance(now, alerts, (needs, needs_error))
     write_reading_pages(now)
 
 
 GLANCE = hubconf.STATE / "status" / "glance.json"   # bin/glance.py reads it there
+FOLD = 6   # problems / notices shown before the rest folds away
+SHOW = 8   # items listed under "Needs you", as the herdr panel; the rest are on the to-do page
+
+# the look of the herdr panel (mods/brunna/main.js): a header with the health pill, number tiles, cards of two-line
+# rows, one color per project (c1..c6, the panel's ansi1..6)
+STATUS_CSS = """
+:root{--bg:#f6f6f3;--surface:#fff;--raised:#f1f0ec;--fg:#1f1f1c;--mut:#62625c;--dim:#8e8d86;--line:#e4e3de;
+--acc:#3a66d0;--ok:#2e9a58;--bad:#d1435b;--warn:#b97f10;--hover:#f3f2ee;
+--c1:#d1435b;--c2:#2e9a58;--c3:#c08a12;--c4:#3a66d0;--c5:#9255c9;--c6:#1497a8}
+@media (prefers-color-scheme:dark){:root{--bg:#16171a;--surface:#1e1f23;--raised:#26272c;--fg:#e8e8ea;--mut:#a5a5ab;
+--dim:#74747b;--line:#303137;--acc:#7aa2f7;--ok:#6cc58a;--bad:#f0707f;--warn:#e3b45a;--hover:#24252a;
+--c1:#f0707f;--c2:#6cc58a;--c3:#e3b45a;--c4:#7aa2f7;--c5:#bb9af7;--c6:#5fc6d4}}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--fg);font:14px/1.5 -apple-system,BlinkMacSystemFont,"PingFang TC",
+"Segoe UI",sans-serif;-webkit-font-smoothing:antialiased}
+main{max-width:1040px;margin:0 auto;padding:24px 16px 56px}
+a{color:var(--acc);text-decoration:none} a:hover{text-decoration:underline}
+.sub{color:var(--dim);font-size:12.5px;font-weight:400}
+.top{display:flex;align-items:center;gap:12px}
+.brand{display:flex;align-items:center;gap:12px;flex:1;min-width:0}
+.mark{width:34px;height:34px;color:var(--acc);flex:none}
+.name{font-size:12px;color:var(--dim);letter-spacing:.02em}
+h1{font-size:21px;line-height:1.2;margin:0;font-weight:650}
+.pill{display:inline-flex;align-items:center;gap:7px;height:28px;padding:0 12px;border-radius:14px;
+background:var(--surface);border:1px solid var(--line);font-size:13px;color:var(--mut);white-space:nowrap}
+.dot{display:inline-block;width:7px;height:7px;border-radius:50%;flex:none;background:var(--dim)}
+.pill.ok .dot,.dot.good{background:var(--ok)} .pill.bad .dot{background:var(--bad)} .pill.bad{color:var(--bad)}
+.dot.c1{background:var(--c1)}.dot.c2{background:var(--c2)}.dot.c3{background:var(--c3)}
+.dot.c4{background:var(--c4)}.dot.c5{background:var(--c5)}.dot.c6{background:var(--c6)}.dot.none{background:transparent}
+.links{margin:10px 0 18px;color:var(--dim);font-size:13px}
+.tiles{display:grid;grid-template-columns:repeat(4,1fr);gap:10px}
+.tile{background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:12px 14px;min-width:0}
+.tile b{display:block;font-size:26px;line-height:32px;font-weight:600;font-variant-numeric:tabular-nums}
+.tile span{display:block;font-size:12px;color:var(--dim);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.tile.hot b{color:var(--bad)}
+.grid{display:grid;grid-template-columns:3fr 2fr;gap:12px;margin-top:12px;align-items:start}
+.card{background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:6px 8px 8px;min-width:0}
+.card.wide{grid-column:1/-1}
+h2{display:flex;align-items:baseline;gap:8px;font-size:12.5px;font-weight:600;color:var(--mut);margin:30px 2px 8px;
+text-transform:uppercase;letter-spacing:.04em}
+.card h2{margin:8px 8px 4px}
+.list,.alerts{list-style:none;margin:0;padding:0}
+.item{display:flex;gap:10px;padding:8px;border-radius:8px} .item:hover,.mail:hover{background:var(--hover)}
+.kind{width:16px;height:16px;margin-top:1px;flex:none;border-radius:4px;border:1.5px solid var(--dim)}
+.kind.question{border-radius:50%;border-color:var(--bad);color:var(--bad);font-size:10px;font-weight:700;
+display:flex;align-items:center;justify-content:center}
+.body{flex:1;min-width:0}
+.l1{display:flex;align-items:center;gap:6px;font-size:12px;color:var(--mut)}
+.l2{font-size:13.5px;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+.proj{display:inline-flex;align-items:center;gap:6px;min-width:0;font-weight:500}
+.ago{margin-left:auto;font-size:12px;color:var(--dim);white-space:nowrap}
+.mail{display:flex;align-items:center;gap:8px;padding:7px 8px;border-radius:8px}
+.badge{min-width:22px;height:20px;padding:0 7px;border-radius:10px;background:var(--raised);border:1px solid var(--line);
+font-size:12px;font-weight:600;display:inline-flex;align-items:center;justify-content:center}
+.more{display:block;padding:6px 8px;font-size:12.5px}
+.empty{display:flex;align-items:center;gap:8px;margin:6px 8px;padding:10px;border-radius:8px;background:var(--raised);
+color:var(--mut)}
+.alerts li{display:flex;gap:10px;padding:7px 8px;font-size:13px;line-height:1.5;color:var(--fg)}
+.alerts .dot{margin-top:7px} .alerts.bad .dot{background:var(--bad)} .alerts.notify .dot{background:var(--warn)}
+.alerts li span{min-width:0;overflow-wrap:anywhere}
+.tbl{background:var(--surface);border:1px solid var(--line);border-radius:12px;overflow-x:auto;margin-top:8px}
+table{width:100%;border-collapse:collapse}
+td,th{padding:9px 12px;border-bottom:1px solid var(--line);text-align:left;vertical-align:top}
+tr:last-child td{border-bottom:0}
+th{font-size:12px;color:var(--dim);font-weight:500;background:var(--raised)}
+td .proj .dot,td.name .dot{margin-right:2px}
+td.name b{font-weight:600;color:var(--fg)} td.last,td.next{white-space:nowrap} td.name .dot{margin-right:8px;position:relative;top:-1px} td.when{color:var(--mut)}
+tr.off{opacity:.45}
+.st{font-weight:500} .st.ok{color:var(--ok)} .st.bad{color:var(--bad);font-weight:600} .st.run{color:var(--acc)}
+.tag{font-size:11px;border:1px solid var(--line);border-radius:5px;padding:0 5px;margin-left:6px;color:var(--mut);
+background:var(--raised)}
+.gap{margin-top:8px}
+.report{margin-top:12px} h3{display:flex;align-items:center;gap:8px;font-size:14px;margin:0 2px 6px}
+details{background:var(--surface);border:1px solid var(--line);border-radius:10px;margin:6px 0;padding:8px 14px}
+summary{cursor:pointer;color:var(--mut);font-size:13px}
+pre{white-space:pre-wrap;word-break:break-word;font:13.5px/1.6 -apple-system,"PingFang TC",sans-serif;margin:8px 0 2px}
+footer{margin-top:32px;text-align:center}
+.rest{background:none;border:0;margin:0;padding:2px 8px 4px}
+.rest summary{font-size:12.5px;color:var(--acc)}
+@media (max-width:720px){
+.tiles{grid-template-columns:repeat(2,1fr)} .grid{grid-template-columns:1fr}
+table.jobs thead{display:none}
+table.jobs tr.job{display:grid;grid-template-columns:1fr auto;gap:2px 12px;padding:10px 12px;
+border-bottom:1px solid var(--line)}
+table.jobs tr.job:last-child{border-bottom:0}
+table.jobs td{border:0;padding:0}
+td.name{grid-column:1;grid-row:1} td.last{grid-column:2;grid-row:1;text-align:right;white-space:nowrap}
+td.when{grid-column:1;grid-row:2;font-size:12.5px} td.next{grid-column:2;grid-row:2;text-align:right;font-size:12.5px;
+color:var(--mut)}
+td.next::before{content:attr(data-l) " ";color:var(--dim)}
+}
+"""
 
 
-def write_glance(now: datetime.datetime, alerts: list) -> None:
-    """The part of this tick `brunna glance` reads (bin/glance.py, docs/design/herdr.md): the alerts the page just
-    showed, from this same list so the two never disagree, and the owner's open items (owner.open_items, which folds
-    them from the bus records: too slow for every glance, cheap once a tick). Replaced whole, never half-written."""
-    data = {"v": 1, "as_of": now.astimezone().isoformat(timespec="seconds"),
-            "alerts": [{"level": level, "text": text} for level, text in alerts]}
+def needs_you() -> tuple[list[dict], str]:
+    """The owner's open items (owner.open_items, which folds them from the bus records: too slow for every glance,
+    cheap once a tick), in the glance.v1 form, and why they couldn't be read ('' when they could)."""
     try:
         import owner
-        data["needs_you"] = [{"kind": "todo" if x["kind"] == "task" else "question", "project": x["project"],
-                              "id": x.get("key") or x.get("id"), "text": x["text"], "since": x.get("since") or ""}
-                             for x in owner.open_items()]
+        return [{"kind": "todo" if x["kind"] == "task" else "question", "project": x["project"],
+                 "id": x.get("key") or x.get("id"), "text": x["text"], "since": x.get("since") or ""}
+                for x in owner.open_items()], ""
     except Exception as e:   # the page is written either way; glance says the items couldn't be read
-        data["needs_you"], data["needs_you_error"] = [], repr(e)[:300]
+        return [], repr(e)[:300]
+
+
+def write_glance(now: datetime.datetime, alerts: list, needs: tuple[list[dict], str] | None = None) -> None:
+    """The part of this tick `brunna glance` reads (bin/glance.py, docs/design/herdr.md): the alerts the page just
+    showed, from this same list so the two never disagree, and the owner's open items (needs_you(), passed in when the
+    page already read them). Replaced whole, never half-written."""
+    data = {"v": 1, "as_of": now.astimezone().isoformat(timespec="seconds"),
+            "alerts": [{"level": level, "text": text} for level, text in alerts]}
+    items, error = needs if needs is not None else needs_you()
+    data["needs_you"] = items
+    if error:
+        data["needs_you_error"] = error
     GLANCE.parent.mkdir(parents=True, exist_ok=True)
     tmp = GLANCE.with_name(f".{GLANCE.name}.{os.getpid()}")
     tmp.write_text(json.dumps(data, ensure_ascii=False, indent=1))
