@@ -42,6 +42,8 @@ panel shows the mark (32 px) centered with one line: "Can't reach brunna" with t
   needs you` with the item's text, or `brunna: N new things need you`; never on the first load, at most one a minute.
 - Clicking an item shows its whole text (wrapped); clicking again cuts it back to one line.
 - "Status page ↗" opens the page in the browser (`cx.open_url`). ↻ runs `brunna.refresh`.
+- A refresh you ask for (↻ or `brunna.refresh`) shows: ↻ turns `accent` and the footer says "Refreshing…" for at
+  least half a second, then "✓ Up to date" (`ansi2`) for two seconds. The minute timer's refreshes don't.
 - The command `brunna.refresh` (bind it in `keys.json`, e.g. `"global": { "ctrl-alt-b": "brunna.refresh" }`) refreshes
   at once.
 

@@ -10,6 +10,8 @@ const EVERY = 60000;          // glance is cheap, but what it shows changes slow
 const SHOW = 8;               // items listed under "Needs you" (newest first)
 const TOAST_GAP = 60000;      // at most one toast a minute
 const MARK = "mods/brunna/mark.svg";
+const SHOWN = 2000;           // how long "Up to date" stays after a refresh you asked for
+const AT_LEAST = 500;         // a refresh you asked for shows for at least this long, so a fast one is still seen
 
 // How long ago, the way herdr's agents list says it.
 function ago(iso, now = Date.now()) {
@@ -44,7 +46,7 @@ export default class Brunna extends View {
     cx.spawn(async (cx) => {
       for (;;) {
         const c = await nextCommand();
-        if (c === "refresh") this.refresh(cx);
+        if (c === "refresh") this.refresh(cx, true);
       }
     });
   }
@@ -68,9 +70,16 @@ export default class Brunna extends View {
     throw last;
   }
 
-  refresh(cx) {
+  // asked: a refresh someone asked for (↻ or brunna.refresh) says so while it runs and when it is done; the timer's
+  // don't, or the footer would flash every minute.
+  refresh(cx, asked = false) {
     const on = (props() ?? {}).machine ?? null;
     cx.spawn(async (cx) => {
+      const start = Date.now();
+      if (asked) {
+        this.busy = true;
+        cx.notify();
+      }
       try {
         const g = await this.run(on);
         this.toast(g);
@@ -79,8 +88,15 @@ export default class Brunna extends View {
       } catch (e) {
         this.error = String(e?.message ?? e);
       }
+      if (asked) await cx.sleep(Math.max(0, AT_LEAST - (Date.now() - start)));
       this.at = new Date();
+      this.busy = false;
+      this.done = asked && !this.error ? Date.now() : 0;
       cx.notify();
+      if (this.done) {
+        await cx.sleep(SHOWN);
+        cx.notify();
+      }
     });
   }
 
@@ -119,7 +135,7 @@ export default class Brunna extends View {
       .child(h_flex().h(22).px(8).gap(6).items_center().rounded(11).bg(t.raised).border(1).border_color(t.border)
         .child(dot(color)).child(div().text_size(11.5).text_color(t.muted).child(label)))
       .child(h_flex().id("brunna-refresh").w(22).h(22).flex_none().rounded(6).items_center().justify_center()
-        .text_color(t.dim).cursor_pointer().hover((s) => s.bg(t.hover).text_color(t.foreground))
+        .text_color(this.busy ? t.accent : t.dim).cursor_pointer().hover((s) => s.bg(t.hover).text_color(t.foreground))
         .tooltip("Refresh now").on_click(() => run("brunna.refresh")).child("↻"));
   }
 
@@ -214,8 +230,10 @@ export default class Brunna extends View {
         .child(dot(s.alive ? t.ansi2 ?? t.done : t.blocked, 6))
         .child(div().truncate().tooltip("brunna's scheduler").child(s.alive ? `tick ${ago(s.last_tick)} ago` : `stopped ${ago(s.last_tick)} ago`)))
       .child(div().flex_1())
-      .when(Boolean(this.error), (el) => el.child(div().text_color(t.blocked).tooltip(this.error).child("refresh failed")))
-      .when(!this.error, (el) => el.child(div().child(at)))
+      .child(this.busy ? div().text_color(t.accent).child("Refreshing…")
+        : this.error ? div().id("brunna-failed").text_color(t.blocked).tooltip(this.error).child("refresh failed")
+        : Date.now() - (this.done ?? 0) < SHOWN ? div().text_color(t.ansi2 ?? t.done).child("✓ Up to date")
+        : div().child(at))
       .when(Boolean(page), (el) => el.child(div().id("brunna-page").text_color(t.accent).cursor_pointer()
         .hover((s) => s.text_color(t.foreground)).tooltip(page)
         .on_click((_e, cx) => cx.open_url(page)).child("Status page ↗")));
