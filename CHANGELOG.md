@@ -3,6 +3,28 @@
 What changed in each version, generated from the commit messages (git cliff) when it is tagged; only new features,
 fixes, speed-ups and reverts are listed.
 
+## v0.10.0 (2026-11-03)
+
+### New
+
+- **sessions:** Read the owner's sessions from every agent, not from the runtime
+- **gate:** The platform's commit messages never name a private project
+
+### Fixed
+
+- **reflect:** The weekly page declares UTF-8 and a viewport
+- **reflect:** The weekly review is brunna's, not one tool's
+- **sessions:** Count each entry once across sources and copies
+- **sessions:** A worktree's last activity counts sessions that moved into it
+- **sessions:** What a cold review found in the session sources
+- **gate:** Read the private-names location through names.env
+- **gate:** The private-name check holds on every path to the public history
+- **state:** A restore is all or nothing, and says what it can't do yet
+
+### Reverted
+
+- Keep the README lean; restore is in docs/commands.md and docs/features.md
+
 ## v0.9.0 (2026-11-03)
 
 ### New
