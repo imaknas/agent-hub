@@ -157,6 +157,14 @@ class ClaudeSource(Temp):
         self.assertEqual({a.detail for t in got for a in t.actions if a.collab == "skill"}, {"dataviz"})
         self.assertTrue(any(t.subagent for t in got))
 
+    def test_the_same_session_in_two_places_counts_once(self):
+        """The remote machine's backup holds the hub machine's sessions too (as ssh-<id> folders): each entry once."""
+        pin.claude_home(self.home)
+        once = pin.features(self.home, self.data)
+        backup = self.home / "transcript-backups" / "claude-personal-projects" / "ssh-1234"
+        pin.write_tree(backup, {"A.jsonl": pin.claude_tree()["-w-alpha/A.jsonl"]})
+        self.assertEqual(pin.features(self.home, self.data), once)
+
     def test_last_activity(self):
         pin.claude_home(self.home)
         with self.reading():
@@ -299,7 +307,7 @@ class Nothing(Temp):
         with self.reading():
             self.assertEqual(sessions.require(), ["claude-code", "codex", "import"])
         got = pin.features(self.home, self.data)
-        self.assertEqual(got["weekly"]["this"]["prompts"], {"alpha": 3 + 2, "beta": 2 + 1 + 1})
+        self.assertEqual(got["weekly"]["this"]["prompts"], {"alpha": 2 + 2, "beta": 2 + 1 + 1})
 
 
 if __name__ == "__main__":

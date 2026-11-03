@@ -1,6 +1,6 @@
 {
  "memory_gaps": {
-  "alpha": 5,
+  "alpha": 4,
   "beta": 2
  },
  "waiting": {
@@ -83,7 +83,7 @@
    "workflows": 0
   },
   "this": {
-   "agents": 2,
+   "agents": 1,
    "days": {
     "alpha": [
      "2026-10-20"
@@ -94,7 +94,7 @@
    },
    "peer": 1,
    "prompts": {
-    "alpha": 3,
+    "alpha": 2,
     "beta": 2
    },
    "sessions": {
@@ -106,10 +106,9 @@
     ]
    },
    "skills": {
-    "dataviz": 2
+    "dataviz": 1
    },
    "times": [
-    "2026-10-20T10:00:00+00:00",
     "2026-10-20T10:00:00+00:00",
     "2026-10-20T10:09:00+00:00",
     "2026-10-22T14:00:00+00:00",

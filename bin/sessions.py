@@ -14,7 +14,9 @@ its jobs with says nothing about where the owner's work is. Each source turns on
         every entry of every session that belongs to a project, within the time range. A session belongs to the
         folder of its first entry that names one: to a project when that folder is one of the project's paths, and,
         with worktrees=True, also when it lies inside one (a worktree, a subfolder); when several projects' paths hold
-        it, the deepest wins. subagents=True also yields subagent entries (Turn.subagent).
+        it, the deepest wins. subagents=True also yields subagent entries (Turn.subagent). An entry id is yielded
+        once: a resumed session's copied history, or the same session read from two places (a backup of the remote
+        machine's sessions holds the hub machine's too), counts once.
   last_activity(path) -> datetime | None     when a session in this folder last wrote
   present() -> [(source name, files)]        the sources with any files on this machine
   require() -> list[str]                     present()'s names; raises NoSessions (the reason, where it looked)
@@ -215,6 +217,7 @@ def _owner(folder: str, projects: dict[str, list[str]], worktrees: bool) -> str 
 def turns(projects: dict[str, list[str]], since: datetime.datetime, until: datetime.datetime | None = None,
           worktrees: bool = False, subagents: bool = False):
     """(project, Turn) for every entry of the projects' sessions in [since, until); see the module header."""
+    seen: set[str] = set()
     for src, files in _files():
         for f in files:
             try:
@@ -240,6 +243,10 @@ def turns(projects: dict[str, list[str]], since: datetime.datetime, until: datet
                 if owner is None:
                     continue
                 for x in (*held, t):
+                    if x.id:
+                        if x.id in seen:
+                            continue
+                        seen.add(x.id)
                     if (subagents or not x.subagent) and x.ts >= since and (until is None or x.ts < until):
                         yield owner, x
 
