@@ -23,5 +23,6 @@
  "merge-branch: merged, but `brunna land` reported a problem (the index may not match the merged code until the next tick):\n{tail}": "merge-branch:已合併,但 `brunna land` 回報了問題(下一個 tick 之前,索引可能跟合併進來的程式不一致):\n{tail}",
  "the registry entry declares no tests; no tests were run": "登錄沒有宣告測試,沒跑測試",
  "{sha} {subject}: {names}": "{sha} {subject}:{names}",
- "these commit messages name a private project, and the platform's history is public:\n{commits}\n— reword them (say \"a project\") and run again": "這些 commit 訊息提到了私人專案,而平台的歷史是公開的:\n{commits}\n——改寫訊息(改說「一個專案」)後再跑一次"
+ "these commit messages name a private project, and the platform's history is public:\n{commits}\n— reword them (say \"a project\"): the last commit with `git commit --amend -m …`, an earlier one by rebuilding the branch from its parent with `git cherry-pick` and an amend; then run again": "這些 commit 訊息提到了私人專案,而平台的歷史是公開的:\n{commits}\n——改寫訊息(改說「一個專案」):最後一個 commit 用 `git commit --amend -m …`,較早的就從它的上一個 commit 用 `git cherry-pick` 重建 branch 再 amend;然後再跑一次",
+ "the private-names list can't be read ({error}); fix it and run again": "私人專案名單讀不到({error});修好再跑一次"
 }

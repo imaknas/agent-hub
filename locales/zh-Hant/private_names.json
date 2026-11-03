@@ -1,0 +1,5 @@
+{
+ "pre-push: these messages name a private project, and the platform's history is public:": "pre-push:這些訊息提到了私人專案,而平台的歷史是公開的:",
+ "Reword them (say \"a project\") before pushing; nothing pushed.": "推之前先改寫(改說「一個專案」);什麼都沒推。",
+ "pre-push: the private-names list can't be read ({error}); nothing pushed": "pre-push:私人專案名單讀不到({error});什麼都沒推"
+}

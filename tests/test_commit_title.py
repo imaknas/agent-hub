@@ -79,6 +79,51 @@ class PrivateNames(unittest.TestCase):
         self.assertEqual(self.check("fix: x\n# On branch secret-garden\n"), 0, "git's comment lines are not the message")
         self.assertEqual(self.check("fix: x\n\nseen in secret-garden\n", platform=False), 0, "only the platform's repo")
 
+    def test_next_to_chinese_or_underscore_still_counts(self):
+        self.assertEqual(self.check("fix: x\n\n\u4fee\u597dsecret-garden\u7684\u554f\u984c\n"), 1)  # Chinese around it
+        self.assertEqual(self.check("fix: x\n\nsecret-garden_v2\n"), 1)
+        self.assertEqual(self.check("fix: x\n\nmysecret-gardens\n"), 0, "part of a longer word is another word")
+
+    def test_verbose_diff_and_blank_names_are_not_matched(self):
+        msg = "fix: drop a name\n# Please enter the commit message\n# ------------------------ >8 ------------------------\n-secret-garden\n"
+        self.assertEqual(self.check(msg), 0, "the diff under git commit -v's scissors line is not the message")
+        (self.tmp / "private-names.txt").write_text("~\n  \nsecret-garden\n")
+        self.assertEqual(self.check("fix: projects/x.yaml\n"), 0, "a line with no name matches nothing")
+
+    def test_an_unreadable_list_refuses(self):
+        (self.tmp / "private-names.txt").unlink()
+        self.assertEqual(self.check("fix: x\n"), 1, "a named list that is missing is an error, not an empty list")
+
+    def test_pre_push_reads_what_is_published(self):
+        """cherry-pick, --no-verify and tag annotations skip the commit-msg hook: the pre-push check reads every pushed
+        commit's and annotated tag's message."""
+        bare, repo = self.tmp / "remote.git", self.tmp / "repo"
+        env = {**os.environ, "GIT_AUTHOR_NAME": "t", "GIT_AUTHOR_EMAIL": "t@t", "GIT_COMMITTER_NAME": "t",
+               "GIT_COMMITTER_EMAIL": "t@t", "GIT_CONFIG_GLOBAL": "/dev/null"}
+        run = lambda *a, cwd=repo: subprocess.run(["git", *a], cwd=cwd, env=env, capture_output=True, text=True, check=True).stdout.strip()
+        run("init", "-q", "--bare", "-b", "main", str(bare), cwd=self.tmp)
+        run("init", "-q", "-b", "main", str(repo), cwd=self.tmp)
+        run("remote", "add", "origin", str(bare))
+        run("commit", "-q", "--allow-empty", "-m", "chore: start")
+        run("push", "-q", "origin", "main")
+        base = run("rev-parse", "HEAD")
+
+        def pre_push(lines):
+            return subprocess.run([sys.executable, str(BIN / "private_names.py"), "--pre-push", "origin", str(bare)],
+                                  cwd=repo, env=env, input="\n".join(lines) + "\n", capture_output=True, text=True)
+        run("commit", "-q", "--allow-empty", "--no-verify", "-m", "fix: x\n\nthe secret-garden numbers")
+        head = run("rev-parse", "HEAD")
+        r = pre_push([f"refs/heads/main {head} refs/heads/main {base}"])
+        self.assertEqual(r.returncode, 1, r.stdout + r.stderr)
+        self.assertIn(head[:9], r.stderr)
+        run("reset", "-q", "--hard", base)
+        run("commit", "-q", "--allow-empty", "-m", "fix: x")
+        run("tag", "-a", "v9", "-m", "release notes for secret-garden")
+        tag, head = run("rev-parse", "v9"), run("rev-parse", "HEAD")
+        self.assertEqual(pre_push([f"refs/heads/main {head} refs/heads/main {base}"]).returncode, 0, "a clean commit")
+        self.assertEqual(pre_push([f"refs/tags/v9 {tag} refs/tags/v9 {'0' * 40}"]).returncode, 1, "an annotated tag")
+        self.assertEqual(pre_push([f"(delete) {'0' * 40} refs/heads/old {base}"]).returncode, 0, "a deletion sends nothing")
+
 
 class MergeGate(unittest.TestCase):
     def setUp(self):

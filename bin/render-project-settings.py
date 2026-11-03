@@ -207,13 +207,14 @@ def gate_hook() -> str:
 
 MARK = names.gate_mark()   # every hook the platform writes starts with it; others are the project's own
 MARKS = tuple(names.gate_mark(s) for s in names.all("marker"))   # either spelling is the platform's
-HOOKS = ("pre-commit", "pre-merge-commit", "commit-msg")
+HOOKS = ("pre-commit", "pre-merge-commit", "commit-msg", "pre-push")
 
 
 def wanted_hooks(doc: dict) -> dict[str, tuple[str, str]]:
     """hook -> (its text, which registry field wants it). gate: strict refuses commits on main; commit_gate runs the
     commit tiers on a branch and the merge tiers on main through the main checkout's runner (gate code from main,
-    docs/design/test-waiting.md A1); commits: conventional checks commit titles. One pre-commit serves gate and
+    docs/design/test-waiting.md A1); commits: conventional checks commit titles; the platform's own repo gets a
+    pre-push check of the messages it publishes. One pre-commit serves gate and
     commit_gate (strict wins on main: no commit there at all)."""
     import shlex
     strict, cg = doc.get("gate") == "strict", doc.get("commit_gate") is True
@@ -232,6 +233,11 @@ def wanted_hooks(doc: dict) -> dict[str, tuple[str, str]]:
                              ' --index --when "$moment"\n', "commit_gate")
     if strict:
         out["pre-merge-commit"] = ("#!/bin/sh\n" + gate_hook(), "gate strict")
+    if doc.get("name") == hubconf.hub_project():
+        # the platform's history is public: no pushed commit or tag message names a private project, however it was
+        # made (cherry-pick, revert, --no-verify skip the commit-msg hook; bin/private_names.py)
+        out["pre-push"] = ("#!/bin/sh\n" + MARK + " (managed; the platform's own repo)\nexec " + py + " " +
+                           shlex.quote(str(hub / "private_names.py")) + ' --pre-push "$@"\n', "the platform's own repo")
     if doc.get("commits") == "conventional":
         out["commit-msg"] = ("#!/bin/sh\n" + MARK + " (managed; registry commits: conventional)\nexec " + py + " " +
                              shlex.quote(str(hub / "commit_title.py")) + ' --file "$1"\n', "commits: conventional")

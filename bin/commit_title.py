@@ -63,12 +63,16 @@ def title_of(message: str) -> str:
     return ""
 
 
+SCISSORS = "# ------------------------ >8 ------------------------"
+
+
 def platform_repo() -> bool:
     """The commit is in the platform's own repo (its main checkout or a linked worktree of it), whose history is public."""
     import subprocess
-    import hubconf
-    r = subprocess.run(["git", "rev-parse", "--path-format=absolute", "--git-common-dir"], capture_output=True, text=True)
-    try:
+    try:   # never in the way of another project's commit
+        import hubconf
+        r = subprocess.run(["git", "rev-parse", "--path-format=absolute", "--git-common-dir"], capture_output=True,
+                           text=True)
         return r.returncode == 0 and pathlib.Path(r.stdout.strip()).resolve() == (hubconf.MAIN / ".git").resolve()
     except Exception:
         return False
@@ -77,6 +81,9 @@ def platform_repo() -> bool:
 def private_in(message: str) -> list[str]:
     """the private project names the message mentions, when it is a commit in the platform's own repo"""
     import private_names
+    # git's comment lines and, with `git commit -v`, the diff under the scissors line are not the message (the pre-push
+    # check reads the messages as they were committed, whatever was stripped)
+    message = message.split(SCISSORS, 1)[0]
     text = "\n".join(line for line in message.splitlines() if not line.startswith("#"))
     return private_names.found(text) if platform_repo() else []
 
@@ -86,7 +93,14 @@ def main(argv: list[str]) -> int:
         with open(argv[1], encoding="utf-8") as f:
             message = f.read()
         title = title_of(message)
-        if (named := private_in(message)):
+        import private_names
+        try:
+            named = private_in(message)
+        except private_names.ListError as e:
+            print(_("commit message: the private-names list can't be read ({error}); fix it, then commit", error=e),
+                  file=sys.stderr)
+            return 1
+        if named:
             print(_("commit message: it names a private project ({names}); the platform's history is public: say "
                     "\"a project\" instead", names=", ".join(named)), file=sys.stderr)
             return 1

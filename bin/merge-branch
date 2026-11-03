@@ -153,13 +153,19 @@ def main() -> int:
         # whatever a commit's hooks did (--no-verify, an amend)
         if proj == hubconf.hub_project():
             import private_names
-            named = [_("{sha} {subject}: {names}", sha=c["sha"], subject=c["subject"], names=", ".join(found))
-                     for c in commits
-                     if (found := private_names.found(git(wt, "log", "-1", "--format=%B", c["sha"]).stdout))]
+            try:
+                named = [_("{sha} {subject}: {names}", sha=c["sha"], subject=c["subject"], names=", ".join(found))
+                         for c in commits
+                         if (found := private_names.found(git(wt, "log", "-1", "--format=%B", c["sha"]).stdout))]
+            except private_names.ListError as e:
+                return fail("private-names", _("the private-names list can't be read ({error}); fix it and run again",
+                                               error=e))
             if named:
                 return fail("private-names", _("these commit messages name a private project, and the platform's "
-                                               "history is public:\n{commits}\n— reword them (say \"a project\") and "
-                                               "run again", commits="\n".join(named)))
+                                               "history is public:\n{commits}\n— reword them (say \"a project\"): the "
+                                               "last commit with `git commit --amend -m …`, an earlier one by "
+                                               "rebuilding the branch from its parent with `git cherry-pick` and an "
+                                               "amend; then run again", commits="\n".join(named)))
         # 3. tests: the affected merge tiers through the main checkout's runner (a recorded pass for this tree is a
         # hit; the hub's own declaration is read from the tree under test; docs/design/test-waiting.md B4)
         if info.get("tests") or proj == hubconf.hub_project():
