@@ -48,6 +48,9 @@ config:
                           mod、iTerm2、選單列腳本)
   brunna first-look <專案>   幫剛接上的專案馬上寫第一份 STATE.md,依它的 README 和歷史
                         (bin/first-look.py;brunna connect 會跑)
+  brunna state history <專案> | restore <專案> <日期|commit> [--apply]
+                        專案 STATE.md 的歷次版本，以及把某一天的版本拿回來(新的 commit);你的待辦 key 維持現在的樣子
+                        (bin/state.py)
   brunna uninstall [--apply] [--purge]
                         把 brunna 從這台電腦移除(bin/uninstall.py):先列出來;筆記會留著，除非 --purge
 排程:

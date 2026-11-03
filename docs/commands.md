@@ -2,6 +2,7 @@
 
 ```bash
 brunna status [project]       # project state, services, STATE.md
+brunna state history <project>   # every night's STATE.md; `brunna state restore <project> <date>` brings one back
 brunna config plan            # what a config change would do; `brunna config apply` applies it
 brunna modules                # optional features; `brunna modules enable <name>`
 brunna llm setup              # which provider/model the platform's judgment calls use
@@ -14,3 +15,20 @@ brunna upgrade --check        # is there a newer release, and what changes; `bru
 
 Inside a project session, agents use `brunna send / inbox / done …` for the mailbox, `brunna test` to run the
 project's declared tests, and `brunna merge-branch` to land their branch. The rules they follow are written into each project's instructions file from `templates/`.
+
+## When a night's STATE.md went wrong
+
+The librarian rewrites each project's `STATE.md` every night with a model. A model can get it wrong, and the same notes
+read again would not give back the version you had: every night's version is a commit on the project's memory branch,
+so you go back instead.
+
+```bash
+brunna state history garden-app                  # who changed STATE.md when (the librarian, a session, a restore)
+brunna state restore garden-app 2026-11-01       # the difference to how it was at the end of that day; nothing changes
+brunna state restore garden-app 2026-11-01 --apply
+```
+
+`--apply` writes that version back as a new commit (history is never rewritten) and logs it in `review-log.md`. Your
+to-do items keep their keys exactly as they are now: one you closed since is not brought back, one added since stays.
+The librarian then folds the notes written since that day into the restored file on its next run; `--keep-checkpoint`
+skips that.

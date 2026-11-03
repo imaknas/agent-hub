@@ -1,0 +1,21 @@
+{
+ "librarian": "librarian",
+ "restore": "還原",
+ "a session": "session",
+ "{project}: STATE.md, newest first (the librarian has read the notes up to {ck})": "{project}:STATE.md,新的在前(librarian 讀到的筆記到 {ck})",
+ "Bring one back: brunna state restore {project} <date or commit>  (shows the difference first)": "要拿回某一版:brunna state restore {project} <日期或 commit>(會先顯示差異)",
+ "{project}: STATE.md is back to {sha} ({date}), commit {new}": "{project}:STATE.md 已回到 {sha}({date}),commit {new}",
+ "no memory copy for {project} (run this on the hub machine; projects: brunna status)": "沒有 {project} 的 memory 副本(請在 hub 機器上跑;有哪些專案:brunna status)",
+ "{project}: could not bring the memory copy up to date (git pull); nothing changed": "{project}:memory 副本更新不了(git pull),什麼都沒改",
+ "{project}: no STATE.md version at {ref}": "{project}:{ref} 沒有 STATE.md 的版本",
+ "{project}: STATE.md is already as it was at {sha} ({date})": "{project}:STATE.md 已經跟 {sha}({date})一樣",
+ "kept, added since: {key}": "保留,之後才加的:{key}",
+ "not brought back, closed since: {key}": "不拿回,之後已結案:{key}",
+ "Nothing changed. Add --apply to bring this version back (as a new commit; history stays).": "什麼都沒改。加上 --apply 才會拿回這一版(做成新的 commit;歷史不動)。",
+ "the push to the memory repo failed; the hourly memory sync tries again": "推到 memory repo 失敗;每小時的 memory 同步會再試",
+ "The librarian folds the notes written since {date} into it on its next run.": "librarian 下次跑的時候,會把 {date} 之後寫的筆記整理進去。",
+ "{project}: the commit {sha} has no STATE.md": "{project}:commit {sha} 裡沒有 STATE.md",
+ "nothing yet": "還沒讀過",
+ "restored to {sha} ({date}) with brunna state restore": "用 brunna state restore 還原到 {sha}({date})",
+ "A project's STATE.md over time, and bringing an earlier one back (`brunna state`).": "專案 STATE.md 的歷次版本，以及把較早的版本拿回來(`brunna state`)。"
+}

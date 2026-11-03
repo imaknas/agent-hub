@@ -87,6 +87,9 @@ brunna is meant for anyone, with any coding agent, any LLM, any key.
 
 - **A project's current state, which services it is bound to, what its STATE.md says**:
   `bin/overview.sh [project name]` (no argument lists all of them)
+- **A night's STATE.md got it wrong**: `brunna state history <project>`, then `brunna state restore <project>
+  <date|commit> [--apply]` (`bin/state.py`: a new commit in the platform's memory copy, the owner's to-do keys kept as
+  they are now, the librarian's checkpoint back to that day; never rebuilt from the notes)
 - **Which projects have been onboarded**: the project registry (`projects/<name>.yaml` in config; `paths.workspace` is
   its location on the hub machine; `bin/hubconf.py roster` lists one project per line with name/path/origin/memory bare
   repo, which is how shell scripts read it)

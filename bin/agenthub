@@ -53,6 +53,9 @@ projects:
                           for status bars: the herdr mod in integrations/herdr/, iTerm2, menu-bar scripts)
   brunna first-look <project>   a newly connected project's first STATE.md now, from its README and history
                         (bin/first-look.py; brunna connect runs it)
+  brunna state history <project> | restore <project> <date|commit> [--apply]
+                        a project's STATE.md over time, and bringing an earlier day's back as a new commit; the owner's
+                        to-do keys stay as they are now (bin/state.py)
   brunna uninstall [--apply] [--purge]
                         take brunna off this machine (bin/uninstall.py): lists first; notes stay unless --purge
 scheduling:
@@ -1659,6 +1662,7 @@ COMMANDS = {
     "recover": passthrough("recover-project.sh"),
     "rename": passthrough("rename-project.sh"), "status": passthrough("overview.sh"),
     "first-look": passthrough("first-look.py"),
+    "state": passthrough("state.py"),
     "glance": passthrough("glance.py"),
     "uninstall": passthrough("uninstall.py"),
     "jobs": lambda argv: subprocess.run([*hubconf.launch(BIN / "schedulectl"), "list", *argv]).returncode,

@@ -4,6 +4,8 @@
   memory sync never touches your real code. Session hooks commit only `memory/` and `STATE.md`.
 - **Nightly librarian.** It reads new notes, updates each `STATE.md` (including a fixed-format to-do section), and writes a
   cross-project `digest/<date>.md` and `todo.md`. Older notes are folded into reference files (consolidate module).
+  Every night's `STATE.md` is a commit: `brunna state restore` brings back an earlier day's when a night got it
+  wrong, your to-do keys untouched ([`docs/commands.md`](commands.md)).
 - **Scheduler and services.** A 15-minute scheduler for every job, a watchdog that alerts when the scheduler stops, and
   per-project background services declared in the registry and rendered to launchd or systemd units.
 - **Mailbox.** Letters between projects and to the owner; the recipient is a project, not a session. Unclaimed requests are
