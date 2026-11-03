@@ -3,6 +3,13 @@
 What changed in each version, generated from the commit messages (git cliff) when it is tagged; only new features,
 fixes, speed-ups and reverts are listed.
 
+## v0.8.1 (2026-11-03)
+
+### Fixed
+
+- **mods:** Share the herdr mod as herdr lists it, in herdr/brunna
+- **registry:** A project is known as soon as it is added
+
 ## v0.8.0 (2026-11-03)
 
 ### New
