@@ -13,7 +13,7 @@
  "properties": {
   "headline": {
    "type": "string",
-   "description": "the most important thing this week in one sentence, ≤ 30 characters (in the content language named in the prompt)"
+   "description": "the week in one line, ≤ 30 characters: an image or turn of phrase for what mattered most, a little poetic but true to this week's facts, no numbers (in the content language named in the prompt)"
   },
   "summary": {
    "type": "string",

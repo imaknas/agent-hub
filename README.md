@@ -36,6 +36,13 @@ first, the mail your agents left each other, and whether the nightly work ran (m
   <img src="assets/readme/status-page.png" alt="brunna's status page: 4 things need you, 3 letters open, 0 problems, the scheduler ticking; the open questions and to-dos from several projects, newest first, and the open mail per project" width="100%">
 </picture>
 
+And every Monday, how your week went:
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="assets/readme/weekly-review-dark.png">
+  <img src="assets/readme/weekly-review.png" alt="brunna's weekly review: a one-line headline for the week, the week's numbers, the patterns it saw with evidence and a suggestion for each, and a weekday-by-hour map of when you worked" width="100%">
+</picture>
+
 ## Install
 
 **With a terminal** (macOS or Linux). It installs brunna, then asks a few questions, the first one being the
