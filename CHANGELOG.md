@@ -3,6 +3,20 @@
 What changed in each version, generated from the commit messages (git cliff) when it is tagged; only new features,
 fixes, speed-ups and reverts are listed.
 
+## v0.8.0 (2026-11-03)
+
+### New
+
+- **glance:** Brunna glance, what needs you and the platform's health in one look
+- **mods:** A herdr mod that shows brunna glance beside your agents
+- **mods:** The brunna panel drawn with herdr's own elements
+- **mods:** The brunna panel shows a refresh you asked for
+- **status-page:** A designed overview in the herdr panel's look
+
+### Fixed
+
+- **mods:** The brunna panel shows item texts as written, with headings herdr renders
+
 ## v0.7.0 (2026-11-02)
 
 ### New
