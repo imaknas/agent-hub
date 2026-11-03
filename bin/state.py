@@ -41,6 +41,7 @@ _ = i18n.domain(__file__)
 SAFE_PUSH = hubconf.ROOT / "bin" / "git-safe-push.sh"
 DATE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
 RESTORE_SUBJECT = "brunna: restore STATE.md"
+DESCRIPTION = "A project's STATE.md over time, and bringing an earlier one back (`brunna state`)."
 
 
 def refuse(msg: str) -> int:
@@ -205,7 +206,7 @@ def restore(project: str, ref: str, apply: bool, keep_checkpoint: bool) -> int:
 
 
 def main(argv: list[str]) -> int:
-    ap = argparse.ArgumentParser(prog="brunna state", description=_(__doc__.split("\n\n")[0]))
+    ap = argparse.ArgumentParser(prog="brunna state", description=_(DESCRIPTION))
     sub = ap.add_subparsers(dest="cmd", required=True)
     h = sub.add_parser("history")
     h.add_argument("project")
