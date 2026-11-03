@@ -987,6 +987,9 @@ def cmd_add(name: str, workspace: str, origin: str, memory_bare: str, extra: str
     f.parent.mkdir(parents=True, exist_ok=True)
     f.write_text(header() + yaml.safe_dump(doc, allow_unicode=True, sort_keys=False, width=200))
     print(_("registry: {file}", file=f))
+    # known at once, not at the scheduler's next tick (which may not run yet on a new machine): the commands run right
+    # after connecting (first-look, send in the new folder) read the index
+    refresh()
     return 0
 
 
