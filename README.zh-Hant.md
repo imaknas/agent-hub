@@ -112,6 +112,7 @@ AI App 幫你安裝 brunna 的過程中，有些事會直接問你，不經過�
 |---|---|
 | 安裝、需求、會睡眠的電腦、檔案放在哪裡、移除 | [docs/install.md](docs/install.md) |
 | brunna 做的每件事 | [docs/features.md](docs/features.md) |
+| 搭配 herdr 使用,以及給其他工具用的狀態摘要(`brunna glance`) | [docs/herdr.md](docs/herdr.md)(英文) |
 | 日常指令 | [docs/commands.md](docs/commands.md) |
 | 更新與退回 | [docs/upgrading.md](docs/upgrading.md) |
 | 給任何 agent 用的信箱(MCP) | [docs/mcp.md](docs/mcp.md) |

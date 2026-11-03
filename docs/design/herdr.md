@@ -1,6 +1,6 @@
 # brunna and herdr
 
-Status: design, 11-03. Nothing built yet.
+Status: design, 11-03. Phase 1 built 11-03 (glance, the mod); its real run in herdr's app is open.
 
 ## Why
 
@@ -81,13 +81,12 @@ opens its own localhost).
 Alert texts are in the interface language, as the status page's are; letter and to-do texts are in the content language
 they were written in. `brunna glance` without `--json` prints the same in a few lines for a terminal.
 
-### The mod, in a repo of its own
+### The mod, in this repo
 
-herdr lists a mod from a public repo tagged `herdr-mod` with the mod at `mods/<name>/` and no `layouts/` folder. It
-goes in a separate public repo (proposed: `imaknas/brunna-herdr`), not in this one: AGENTS.md keeps tool syntax in the
-platform's adapters (`runtime_*`, `provider_*`, `modules/<tool>.yaml`), a `mods/` folder here would sit beside
-`modules/` (opt-in features, unrelated), and herdr's sharing rules would bind the platform repo. The mod's repo
-depends on nothing but the `glance` contract; its README leads to brunna.
+herdr lists a mod from any public repo tagged `herdr-mod` with the mod at `mods/<name>/` and no `layouts/` folder. It
+lives here, as fzf keeps its Vim plugin in its own repo: the point is reach, and herdr's Mods page then leads straight
+to brunna. AGENTS.md says what `mods/` is (clients for other apps, not `modules/`), and that a client reads only
+neutral output; `tests/test_mods.py` checks the folder. Decided 11-03 by the owner after weighing a separate repo.
 
 - `mods/brunna/main.js`: a right-hand panel (`mod.json` `{"place": "right", "size": 320}`) that runs `glance --json`
   every 60 seconds (`cx.timer.every`) and renders it as markdown: what needs the owner first, then mail, then health; a
@@ -95,11 +94,11 @@ depends on nothing but the `glance` contract; its README leads to brunna.
 - A toast (`notify`) when an item id not seen in the previous glance needs the owner, at most one per minute, its
   action opening the status page when the URL is reachable from this machine. (brunna's own `owner notify` already
   sends new items to the owner's alert channels; the toast is only this window's echo of the same.)
-- `keys.json` binds `brunna.refresh` and `brunna.open-status` to the mod's commands (`nextCommand()`).
+- No `keys.json` is shipped (keys are the person's; the recipe shows how to bind `brunna.refresh`, the one command).
 - Where brunna runs: two props. `cli`, the absolute path of the CLI (default `~/.local/bin/brunna`, install-cli's
   wrapper: an app started from the GUI, or herdr's remote `exec`, usually doesn't have `~/.local/bin` on its PATH);
-  `machine`, a herdr machine name passed as `exec`'s `on` when the hub is another computer. When the CLI isn't there,
-  the panel says how to install brunna and stops polling.
+  `machine`, a herdr machine name passed as `exec`'s `on` when the hub is another computer. Without `cli` it tries
+  `brunna` on PATH, then `$HOME/.local/bin/brunna`. When neither is there, the panel says how to install brunna.
 - `RECIPE.md` (the brief) and `preview.png` (a screenshot of the panel) beside it, as herdr's sharing rules ask.
 
 The mod reads `glance` and nothing else: no bus, no files, no herdr API beyond drawing, the timer, `exec` and `notify`.
@@ -107,9 +106,9 @@ The platform owns its data and its meaning (tool neutrality); the mod is a thin 
 
 ### Publishing
 
-The mod's repo gets the GitHub topic `herdr-mod` (the owner's decision, an outward step). This repo's README gets a
-line "works with herdr" linking `docs/herdr.md`, which says: brunna's tools work inside herdr as they are; the mod and
-where it is; the glance command for other status bars.
+This repo gets the GitHub topic `herdr-mod` (the owner's decision, an outward step), once the mod has run once and
+`preview.png` is a real screenshot. The README links `docs/herdr.md`: brunna's tools work inside herdr as they are; the
+mod; the glance command for other status bars.
 
 ## Phase 2, later and only on demand: herdr as a session host
 
@@ -141,18 +140,18 @@ exposed. Not before someone uses brunna with herdr.
   a stuck letter, a failed job, a stopped scheduler); the not-set-up case leaves no bus behind; run from a sandboxed
   project's folder it still shows every project; the status page and glance.json carry the same alerts (one function);
   glance takes no write lock (a test holds the bus's write lock and glance still answers).
-- The mod (in its own repo): a check that `mod.json` / `keys.json` are valid and `main.js` uses only the documented
-  API names; then one real run: herdr's app on a Mac, the mod installed from `RECIPE.md` by an agent, a screenshot for
+- The mod: `tests/test_mods.py` checks `mod.json`, that `main.js` imports only `gpui-kit`, `gpui-base` and `herdr`
+  and runs no program but `brunna` (and `sh` for its fallback), and that `RECIPE.md` has herdr's sections; then one
+  real run: herdr's app on a Mac, the mod installed from `RECIPE.md` by an agent, a screenshot for
   `preview.png`. herdr's app is a desktop app, so this run can't happen in CI; the owner decides where.
 - Compatibility: herdr-core (Linux) in the test container, a Claude Code session in a pane inside a connected project:
   the hooks fire, the rules block loads, a letter reaches the session. Recorded in `docs/herdr.md`.
 
 ## Open
 
-- The mod's repo: its name (`imaknas/brunna-herdr` proposed) and creating it (the owner's: a new public repo).
 - Where the mod's one real run happens (herdr's app on the owner's Mac, removed afterwards, or another Mac).
-- Adding the `herdr-mod` topic to the mod's repo (the owner's, when the mod has run once).
+- Adding the `herdr-mod` topic to this repo (the owner's, when the mod has run once).
 
 Review (11-03, one cold round): the per-minute cost of the status page's alert collection (now per tick, read from a
 file), `hc send` reaching a shell (now: a known runtime in front, no letter-derived field), the folder narrowing
-hubbus's view, the status page URL off the hub machine, PATH in GUI apps, and the mod's place (now its own repo).
+hubbus's view, the status page URL off the hub machine, PATH in GUI apps, and the mod's place (a separate repo was weighed; it stays here for reach).
