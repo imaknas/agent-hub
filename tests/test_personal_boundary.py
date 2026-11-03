@@ -24,7 +24,7 @@ import unittest
 ROOT = pathlib.Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "bin"))
 import todo_tokens  # noqa: E402
-SCOPE = ("bin", "templates", "launchd", "tests", "agent-jobs", "modules")
+SCOPE = ("bin", "templates", "launchd", "tests", "agent-jobs", "modules", "mods")
 # Public docs: what is specific to this deployment goes in the instance directory's config/AGENTS.local.md,
 # known-issues.local.md (cleared 10-29 before open-sourcing; baseline 0).
 # docs/design/ holds dated decision records, where the maintainer's name is normal: not scanned
