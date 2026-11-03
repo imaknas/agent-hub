@@ -14,8 +14,13 @@ rebuilding from the notes (a rebuild would be another model's reading, not the v
         memory bare repo (history is never rewritten; a project session gets it on its next pull), with an entry in
         review-log.md. The owner's to-do keys stay exactly as they are now: a keyed line closed since is not brought
         back, one added since is kept, a kept one has today's wording (the keys belong to the registrar and the owner
-        side; contracts/state-todo.v2.md). The librarian's checkpoint goes back to that day, so its next run folds the
-        notes written since into the restored file; --keep-checkpoint leaves it where it is.
+        side; contracts/state-todo.v2.md). The librarian's checkpoint goes back to that day (never forward: a checkpoint
+        already behind it means notes not read yet), so its next run folds the notes written since into the restored
+        file; --keep-checkpoint leaves it where it is, for when those notes are what it misread. All or nothing: a
+        commit or push that fails is undone, and the checkpoint and the log are untouched. Assistant handoffs the
+        librarian applied since that day are not applied again.
+        Known limits, being reworked: it takes no lock against the nightly jobs (run it outside the night), and a key
+        written on two lines, or an owner line that had no key yet in the restored version, isn't handled exactly.
 
 Works in the platform's own memory copy (memory_copies/<project>), never in the project's folder, so a sandboxed
 project is handled the same way. Run it on the hub machine. Exit 0 done (or nothing to do), 1 refused.
@@ -56,6 +61,15 @@ def git(copy: pathlib.Path, *args: str, check: bool = True) -> str:
     return r.stdout
 
 
+def no_copy(project: str) -> int:
+    """Why there is no memory copy to work in: no such project, the platform itself, or not on the hub machine."""
+    if project == hubconf.hub_project():
+        return refuse(_("brunna itself keeps no STATE.md; give one of your projects"))
+    if project not in hubconf.projects():
+        return refuse(_("there is no project {project}", project=project))
+    return refuse(_("{project} has no memory copy here: run this on the hub machine", project=project))
+
+
 def copy_of(project: str) -> pathlib.Path | None:
     d = hubconf.p("memory_copies", "~/.memory-copies") / project
     return d if (d / ".git").exists() else None
@@ -78,8 +92,7 @@ def who(subject: str) -> str:
 def history(project: str, limit: int) -> int:
     copy = copy_of(project)
     if not copy:
-        return refuse(_("no memory copy for {project} (run this on the hub machine; projects: brunna status)",
-                        project=project))
+        return no_copy(project)
     hublib.pull_copy(copy, capture_output=True)
     rows = git(copy, "log", f"-{limit}", "--format=@%H%x09%cI%x09%s", "--numstat", "--", "STATE.md")
     ck = checkpoint(project).read_text().strip() if checkpoint(project).exists() else ""
@@ -103,7 +116,9 @@ def history(project: str, limit: int) -> int:
 def resolve(copy: pathlib.Path, ref: str) -> str | None:
     """The commit whose STATE.md is wanted: for a date the last change on or before that day's end, else the commit."""
     if DATE.match(ref):
-        return git(copy, "log", "-1", "--format=%H", f"--before={ref} 23:59:59", "--", "STATE.md").strip() or None
+        day = datetime.date.fromisoformat(ref)   # ValueError for a date that doesn't exist; main() says so
+        end = datetime.datetime.combine(day, datetime.time(23, 59, 59), hubconf.tz())   # the owner's day
+        return git(copy, "log", "-1", "--format=%H", f"--before={end.isoformat()}", "--", "STATE.md").strip() or None
     r = subprocess.run(["git", "-C", str(copy), "rev-parse", "--verify", "-q", f"{ref}^{{commit}}"],
                        capture_output=True, text=True)
     return r.stdout.strip() or None
@@ -152,8 +167,7 @@ def keep_keys(target: str, current: str, owner: str) -> tuple[str, list[str], li
 def restore(project: str, ref: str, apply: bool, keep_checkpoint: bool) -> int:
     copy = copy_of(project)
     if not copy:
-        return refuse(_("no memory copy for {project} (run this on the hub machine; projects: brunna status)",
-                        project=project))
+        return no_copy(project)
     if hublib.pull_copy(copy, capture_output=True).returncode != 0:
         return refuse(_("{project}: could not bring the memory copy up to date (git pull); nothing changed",
                         project=project))
@@ -180,13 +194,29 @@ def restore(project: str, ref: str, apply: bool, keep_checkpoint: bool) -> int:
     if not apply:
         print(_("Nothing changed. Add --apply to bring this version back (as a new commit; history stays)."))
         return 0
+    # all or nothing: the copy is the librarian's, and a half-done restore (a commit that didn't go out, a merge left
+    # open) would make it skip the project every night. Only once the push is done do the checkpoint and the log move.
+    before = git(copy, "rev-parse", "HEAD").strip()
     (copy / "STATE.md").write_text(text)
-    git(copy, "add", "STATE.md")
-    git(copy, "commit", "-q", "-m", f"{RESTORE_SUBJECT} to {sha[:7]} ({when})")
-    pushed = subprocess.run([str(SAFE_PUSH)], cwd=copy, capture_output=True, text=True).returncode == 0
+    try:
+        git(copy, "add", "STATE.md")
+        git(copy, "commit", "-q", "-m", f"{RESTORE_SUBJECT} to {sha[:7]} ({when})")
+        push = subprocess.run([str(SAFE_PUSH)], cwd=copy, capture_output=True, text=True)
+        if push.returncode != 0:
+            raise RuntimeError(((push.stderr or push.stdout).strip().splitlines() or ["git-safe-push failed"])[-1])
+    except RuntimeError as e:
+        if (copy / ".git" / "MERGE_HEAD").exists():
+            git(copy, "merge", "--abort", check=False)
+        git(copy, "reset", "-q", "--hard", before, check=False)
+        return refuse(_("{project}: the restore could not be committed and pushed ({error}); nothing changed",
+                        project=project, error=e))
     new = git(copy, "rev-parse", "HEAD").strip()
-    if not keep_checkpoint:
-        checkpoint(project).parent.mkdir(parents=True, exist_ok=True)
+    # back to that day, never forward: a checkpoint behind it means notes the librarian hasn't read yet
+    ck = checkpoint(project).read_text().strip() if checkpoint(project).exists() else ""
+    behind = bool(ck) and subprocess.run(["git", "-C", str(copy), "merge-base", "--is-ancestor", sha, ck],
+                                         capture_output=True).returncode == 0
+    moved = not keep_checkpoint and behind and ck != sha
+    if moved:
         checkpoint(project).write_text(sha + "\n")
     label = todo_tokens.tokens(hubconf.lang_ui())["reason_label"]
     today = datetime.datetime.now(hubconf.tz()).date().isoformat()
@@ -198,28 +228,40 @@ def restore(project: str, ref: str, apply: bool, keep_checkpoint: bool) -> int:
                 + f"\n\n```diff\n{diff}\n```\n\n---\n\n")
     print(_("{project}: STATE.md is back to {sha} ({date}), commit {new}", project=project, sha=sha[:7], date=when,
             new=new[:7]))
-    if not pushed:
-        print(_("the push to the memory repo failed; the hourly memory sync tries again"), file=sys.stderr)
-    if not keep_checkpoint:
-        print(_("The librarian folds the notes written since {date} into it on its next run.", date=when))
+    if moved:
+        print(_("The librarian folds the notes written since {date} into it on its next run (--keep-checkpoint "
+                "skips that, when those notes are what it misread).", date=when))
     return 0
+
+
+def positive(text: str) -> int:
+    n = int(text)
+    if n < 1:
+        raise argparse.ArgumentTypeError(_("a whole number of 1 or more"))
+    return n
 
 
 def main(argv: list[str]) -> int:
     ap = argparse.ArgumentParser(prog="brunna state", description=_(DESCRIPTION))
-    sub = ap.add_subparsers(dest="cmd", required=True)
-    h = sub.add_parser("history")
-    h.add_argument("project")
-    h.add_argument("--limit", type=int, default=30)
-    r = sub.add_parser("restore")
-    r.add_argument("project")
-    r.add_argument("ref")
-    r.add_argument("--apply", action="store_true")
-    r.add_argument("--keep-checkpoint", action="store_true")
+    sub = ap.add_subparsers(dest="command", metavar="history | restore", required=True)
+    h = sub.add_parser("history", help=_("who changed a project's STATE.md when, newest first"))
+    h.add_argument("project", help=_("the project's name"))
+    h.add_argument("--limit", type=positive, default=30, help=_("how many changes to list (default 30)"))
+    r = sub.add_parser("restore", help=_("bring back STATE.md as it was on a day or at a commit"))
+    r.add_argument("project", help=_("the project's name"))
+    r.add_argument("ref", metavar="date|commit", help=_("YYYY-MM-DD (the end of that day, your time zone) or a commit "
+                                                        "from history"))
+    r.add_argument("--apply", action="store_true", help=_("write it back as a new commit; without it nothing changes"))
+    r.add_argument("--keep-checkpoint", action="store_true",
+                   help=_("don't have the librarian read the notes since that day again (when those notes are what it "
+                          "misread)"))
     a = ap.parse_args(argv)
-    if a.cmd == "history":
+    if a.command == "history":
         return history(a.project, a.limit)
-    return restore(a.project, a.ref, a.apply, a.keep_checkpoint)
+    try:
+        return restore(a.project, a.ref, a.apply, a.keep_checkpoint)
+    except ValueError:
+        return refuse(_("{ref} is not a date (YYYY-MM-DD) that exists", ref=a.ref))
 
 
 if __name__ == "__main__":

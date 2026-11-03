@@ -130,6 +130,31 @@ class StateRestore(unittest.TestCase):
         self.assertEqual(r.returncode, 1)
         self.assertEqual((self.copy / "STATE.md").read_text(), DAY2)
 
+    def test_a_failed_push_changes_nothing(self):
+        """the copy is the librarian's: a restore that can't go out is undone whole, checkpoint and log untouched"""
+        self.git("-C", str(self.copy), "remote", "set-url", "origin", str(self.tmp / "gone.git"))
+        r = self.state_py("restore", "garden-app", "2026-10-01", "--apply")
+        self.assertEqual(r.returncode, 1, r.stdout + r.stderr)
+        self.assertIn("nothing changed", r.stderr)
+        self.assertEqual(self.git("-C", str(self.copy), "rev-parse", "HEAD"), self.day2)
+        self.assertEqual((self.copy / "STATE.md").read_text(), DAY2)
+        self.assertEqual(self.git("-C", str(self.copy), "status", "--porcelain"), "")
+        self.assertEqual((self.state / "garden-app.sha").read_text().strip(), self.day2)
+        self.assertFalse((self.data / "review-log.md").exists())
+
+    def test_a_date_that_does_not_exist(self):
+        r = self.state_py("restore", "garden-app", "2026-02-31")
+        self.assertEqual(r.returncode, 1)
+        self.assertIn("2026-02-31", r.stderr)
+
+    def test_the_checkpoint_never_moves_forward(self):
+        """a librarian that fell behind has notes to read: restoring a later version doesn't skip them"""
+        (self.state / "garden-app.sha").write_text(self.day1 + "\n")
+        later = self.git("-C", str(self.copy), "rev-parse", f"{self.day2}~1")   # day 1's notes, after the checkpoint
+        r = self.state_py("restore", "garden-app", later[:7], "--apply")
+        self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
+        self.assertEqual((self.state / "garden-app.sha").read_text().strip(), self.day1)
+
     def test_an_unknown_project(self):
         r = self.state_py("history", "nope")
         self.assertEqual(r.returncode, 1)

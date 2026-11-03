@@ -28,7 +28,8 @@ brunna state restore garden-app 2026-11-01       # the difference to how it was 
 brunna state restore garden-app 2026-11-01 --apply
 ```
 
-`--apply` writes that version back as a new commit (history is never rewritten) and logs it in `review-log.md`. Your
-to-do items keep their keys exactly as they are now: one you closed since is not brought back, one added since stays.
-The librarian then folds the notes written since that day into the restored file on its next run; `--keep-checkpoint`
-skips that.
+`--apply` writes that version back as a new commit (history is never rewritten) and logs it in `review-log.md`; if
+the commit or the push fails, nothing changes. Your to-do items keep their keys exactly as they are now: one you closed
+since is not brought back, one added since stays. The librarian then folds the notes written since that day into the
+restored file on its next run; add `--keep-checkpoint` when those notes are what it misread. Run it on the hub machine,
+outside the nightly jobs.

@@ -492,6 +492,9 @@ file).
   change to files outside `code` runs nothing. Commits on main that didn't come through `merge-branch` are counted on
   the status page. Behavior visible from outside is pinned with golden files before and after a refactor (e.g.
   `tests/fixtures/llm-golden.json`); don't rely on comparing by hand
+- **The platform's history is public**: no commit or tag message may name a private project (the instance's
+  `private-names.txt`, `bin/private_names.py`): the commit-msg hook refuses one, `merge-branch` checks again, and the
+  platform repo's pre-push hook reads every message it would publish (cherry-pick, revert and `--no-verify` included)
 - **Commit titles follow Conventional Commits** (`<type>[(<scope>)][!]: <description>`, type: feat / fix / perf /
   refactor / test / docs / build / ci / chore / revert; the scope is the area's name, e.g. `fix(hubbus): …`; a breaking
   change adds `!` and says `BREAKING CHANGE:` in the body). The platform's `commit-msg` hook (every repo with
