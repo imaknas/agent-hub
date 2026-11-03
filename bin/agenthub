@@ -1207,7 +1207,7 @@ def cmd_doctor(argv: list[str]) -> int:
     feat = _("memory gaps, the weekly review's statistics, the waiting report")
     try:
         found = sessions.require()
-        add("ok", _("{feature}: reading sessions from {sources}", feature=feat, sources=", ".join(found)))
+        add("ok", _("{feature}: reading sessions from {sources}", feature=feat, sources=_(", ").join(found)))
     except sessions.NoSessions as e:
         add("info", _("{feature}: off ({reason})", feature=feat, reason=e),
             _("they start once a coding agent has sessions on this machine, or files in the contract's format are put "

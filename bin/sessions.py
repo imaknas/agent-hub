@@ -8,14 +8,15 @@ its jobs with says nothing about where the owner's work is. Each source turns on
   SOURCES          sessions_<tool>.py adapters: Claude Code (sessions_claude), Codex (sessions_codex). The only
                    places that know a tool's files; a source whose files aren't on this machine contributes nothing
   the import folder  <data>/sessions-import/*.jsonl: files already in the contract's format, dropped there by any tool
-                   or script, read like any source (invalid lines are said on stderr and skipped)
+                   or script, read like any source (invalid lines, or a file with none valid, are said on stderr and
+                   skipped: a drop never stops the other sources' statistics)
 
   turns(projects, since, until=None, worktrees=False, subagents=False) -> Iterator[(project, Turn)]
         every entry of every session that belongs to a project, within the time range. A session belongs to the
         folder of its first entry that names one: to a project when that folder is one of the project's paths, and,
         with worktrees=True, also when it lies inside one (a worktree, a subfolder); when several projects' paths hold
         it, the deepest wins. subagents=True also yields subagent entries (Turn.subagent). An entry id is yielded
-        once: a resumed session's copied history, or the same session read from two places (a backup of the remote
+        once per source: a resumed session's copied history, or the same session read from two places (a backup of the remote
         machine's sessions holds the hub machine's too), counts once.
   last_activity(path) -> datetime | None     when an entry was last written in this folder
   present() -> [(source name, files)]        the sources with any files on this machine
@@ -121,15 +122,19 @@ class ImportFolder:
                     o = json.loads(line)
                 except ValueError:
                     o = None
-                if not isinstance(o, dict) or minischema.errors(schema, o):
+                try:   # the schema checks a time's shape, not that it exists (2026-02-30): from_record checks that
+                    t = from_record(o) if isinstance(o, dict) and not minischema.errors(schema, o) else None
+                except ValueError:
+                    t = None
+                if t is None:
                     bad += 1
                     continue
                 good += 1
-                yield from_record(o)
-        if bad and not good:
-            raise SessionFormatError(_("{file}: {n} {n:line|lines}, none a session record (contracts/"
-                                       "session-record.v1.schema.json)", file=file, n=bad))
-        if bad:
+                yield t
+        if bad and not good:   # a drop the reader can't read (e.g. written for a later version): said, not fatal
+            print(_("{file}: {n} {n:line|lines}, none a session record (contracts/session-record.v1.schema.json); "
+                    "skipped", file=file, n=bad), file=sys.stderr)
+        elif bad:
             print(_("{file}: skipped {n} {n:line|lines} that {n:is not a|are not} session {n:record|records}",
                     file=file, n=bad), file=sys.stderr)
 
@@ -217,7 +222,7 @@ def _owner(folder: str, projects: dict[str, list[str]], worktrees: bool) -> str 
 def turns(projects: dict[str, list[str]], since: datetime.datetime, until: datetime.datetime | None = None,
           worktrees: bool = False, subagents: bool = False):
     """(project, Turn) for every entry of the projects' sessions in [since, until); see the module header."""
-    seen: set[str] = set()
+    seen: set[tuple[str, str]] = set()
     for src, files in _files():
         for f in files:
             try:
@@ -244,9 +249,9 @@ def turns(projects: dict[str, list[str]], since: datetime.datetime, until: datet
                     continue
                 for x in (*held, t):
                     if x.id:
-                        if x.id in seen:
+                        if (src.NAME, x.id) in seen:
                             continue
-                        seen.add(x.id)
+                        seen.add((src.NAME, x.id))
                     if (subagents or not x.subagent) and x.ts >= since and (until is None or x.ts < until):
                         yield owner, x
 
@@ -281,10 +286,13 @@ def _activity() -> dict[str, datetime.datetime]:
             if m < recent and hint is not None:
                 continue
             at: dict[str, str] = {}   # an entry that names no folder is where its session last was
-            for t in src.records(f):
-                if t.folder:
-                    at[t.session] = t.folder.rstrip("/")
-                note(at.get(t.session, ""), min(t.ts, m))
+            try:
+                for t in src.records(f):
+                    if t.folder:
+                        at[t.session] = t.folder.rstrip("/")
+                    note(at.get(t.session, ""), min(t.ts, m))
+            except SessionFormatError as e:   # worktree cleanup keeps the file's time for its start folder (as before)
+                print(e, file=sys.stderr)
     _index[key] = out
     return out
 

@@ -91,17 +91,34 @@ class ImportFolder(Temp):
 
     def test_invalid_lines_are_said_and_skipped(self):
         good = {"v": 1, "ts": "2026-10-20T10:00:00Z", "session": "s", "role": "human", "folder": "/w/x"}
-        self.drop("a.jsonl", [good, "not json", {**good, "role": "person"}])
+        self.drop("a.jsonl", [good, "not json", {**good, "role": "person"}, {**good, "ts": "2026-02-30T10:00:00Z"}])
         err = io.StringIO()
         with self.reading(), redirect_stderr(err):
             got = list(sessions.turns({"x": ["/w/x"]}, datetime.datetime(2026, 1, 1, tzinfo=UTC)))
         self.assertEqual([(n, t.role) for n, t in got], [("x", "human")])
-        self.assertIn("2", err.getvalue())
+        self.assertIn("3", err.getvalue())
 
-    def test_a_file_with_no_record_fails_loudly(self):
-        self.drop("bad.jsonl", ["{}", '{"kind": "message"}'])
-        with self.reading(), self.assertRaises(sessions.SessionFormatError):
-            list(sessions.turns({"x": ["/w/x"]}, datetime.datetime(2026, 1, 1, tzinfo=UTC)))
+    def test_a_file_with_no_record_is_said_and_skipped(self):
+        """A drop the reader can't read (here a later version's) never stops the other files' statistics."""
+        self.drop("later.jsonl", [{"v": 2, "ts": "2026-10-20T10:00:00Z", "session": "s", "role": "human"}])
+        self.drop("ok.jsonl", [{"v": 1, "ts": "2026-10-20T10:00:00Z", "session": "s", "role": "human",
+                                "folder": "/w/x"}])
+        err = io.StringIO()
+        with self.reading(), redirect_stderr(err):
+            got = list(sessions.turns({"x": ["/w/x"]}, datetime.datetime(2026, 1, 1, tzinfo=UTC)))
+            self.assertIsNotNone(sessions.last_activity("/w/x"))
+        self.assertEqual(len(got), 1)
+        self.assertIn("later.jsonl", err.getvalue())
+
+    def test_ids_are_per_source(self):
+        """The same id from two tools is two entries; the same id twice from one source is one (a copy)."""
+        rec = {"v": 1, "ts": "2026-10-20T10:00:00Z", "session": "s", "role": "human", "folder": "/w/alpha", "id": "a1"}
+        self.drop("a.jsonl", [rec, rec])
+        pin.claude_home(self.home)   # its entry a1 is a different entry
+        with self.reading():
+            got = [t for _n, t in sessions.turns({"alpha": ["/w/alpha"]}, datetime.datetime(2026, 1, 1, tzinfo=UTC))
+                   if t.id == "a1"]
+        self.assertEqual(len(got), 2)
 
     def test_last_activity_from_the_entries(self):
         recs = [{"v": 1, "ts": "2026-10-20T10:00:00Z", "session": "a", "role": "human", "folder": "/w/x"},
@@ -147,6 +164,20 @@ class ClaudeSource(Temp):
             self.assertEqual(sessions.present(), [("claude-code", 6)])
             self.assertEqual(sessions.require(), ["claude-code"])
 
+    def test_the_remote_machines_own_profile_is_never_read(self):
+        """On the remote machine ~/.claude is the work profile: only the hub machine's home (hosts.mini_home), the
+        personal profile's backup and ~/.claude-personal are read."""
+        from unittest import mock
+        laptop, hub = self.tmp / "laptop", self.tmp / "hub"
+        for p in (laptop / ".claude" / "projects", laptop / "transcript-backups" / "claude-personal-projects",
+                  laptop / ".claude-personal" / "projects", hub / ".claude" / "projects"):
+            p.mkdir(parents=True)
+        with mock.patch.object(sessions_claude, "_mini_home", lambda: str(hub)):
+            got = sessions_claude.roots(laptop, True)
+        self.assertEqual(sorted(got), sorted([hub / ".claude" / "projects",
+                                              laptop / "transcript-backups" / "claude-personal-projects",
+                                              laptop / ".claude-personal" / "projects"]))
+
     def test_no_text_and_neutral_actions(self):
         pin.claude_home(self.home)
         with self.reading():
@@ -184,6 +215,45 @@ class ClaudeSource(Temp):
             self.assertIsNotNone(sessions.last_activity(wt2))
             self.assertIsNotNone(sessions.last_activity(pin.ALPHA))
             self.assertIsNone(sessions.last_activity(pin.ALPHA + "/.claude/worktrees/none"))
+
+    def test_typed_messages_with_an_image_or_an_attached_block(self):
+        f = self.tmp / "x.jsonl"
+        base = {"type": "user", "timestamp": "2026-10-20T18:00:00+08:00", "sessionId": "s", "cwd": pin.ALPHA,
+                "origin": {"kind": "human"}}
+        lines = [{**base, "uuid": "1", "message": {"content": [{"type": "image"}, {"type": "text", "text": "x"}]}},
+                 {**base, "uuid": "2", "message": {"content": [{"type": "text", "text": "<note/>"},
+                                                               {"type": "text", "text": "go"}]}},
+                 {**base, "uuid": "3", "message": {"content": [{"type": "tool_result", "tool_use_id": "c"}]}}]
+        f.write_text("".join(json.dumps(x) + "\n" for x in lines))
+        got = list(sessions_claude.records(f))
+        self.assertEqual([t.role for t in got], ["human", "human", "other"])
+        self.assertEqual(got[0].ts, datetime.datetime(2026, 10, 20, 10, tzinfo=UTC), "times are UTC")
+        self.assertIs(got[0].ts.tzinfo, UTC)
+
+    def test_a_malformed_entry_is_skipped_not_the_run(self):
+        f = self.tmp / "x.jsonl"
+        good = pin.human(pin.at(1, 9), "S", "g1", pin.ALPHA)
+        bad = [{"type": ["user"]}, {**good, "uuid": "b1", "message": None}, {**good, "uuid": "b2", "timestamp": 5},
+               pin.assistant(pin.at(1, 9, 1), "S", "b3", pin.ALPHA, {"type": "tool_use", "name": None, "input": "x"})]
+        f.write_text("".join(json.dumps(x) + "\n" for x in [*bad, good]))
+        got = list(sessions_claude.records(f))
+        self.assertIn("g1", [t.id for t in got])
+        self.assertNotIn("b2", [t.id for t in got])
+
+    def test_the_platforms_show_file_tool_reads(self):
+        import runtime_claude
+        self.assertEqual(sessions_claude.SHOW_FILE_TOOL, runtime_claude.SHOW_FILE_TOOL)
+        self.assertEqual(sessions_claude.kind_of(runtime_claude.SHOW_FILE_TOOL), ("read", None))
+
+    def test_worktree_cleanup_survives_a_file_it_cannot_read(self):
+        pin.claude_home(self.home)
+        d = self.home / ".claude" / "projects" / "-w-elsewhere"
+        d.mkdir(parents=True)
+        (d / "x.jsonl").write_text("".join(json.dumps({"kind": "message", "at": i, "cwd": "/w/elsewhere"}) + "\n"
+                                           for i in range(6)))
+        with self.reading(), redirect_stderr(io.StringIO()):
+            self.assertIsNotNone(sessions.last_activity(pin.ALPHA))
+            self.assertIsNotNone(sessions.last_activity("/w/elsewhere"), "its file's time, as before")
 
     def test_unrecognised_format_fails_loudly(self):
         d = self.home / ".claude" / "projects" / "-w-alpha"
@@ -282,6 +352,25 @@ class CodexSource(Temp):
             got = list(sessions_codex.records(f))
             self.assertNotIn("human", [t.role for t in got], sid)
             self.assertTrue(all(t.subagent is sub for t in got), sid)
+
+    def test_a_message_written_both_ways_counts_once(self):
+        """A version that writes the typed message as user_message and item_completed/UserMessage: one message."""
+        recs = codex_session("d1", pin.ALPHA, 1)
+        recs.insert(6, cx(pin.at(1, 9, 1), "event_msg", {"type": "user_message", "message": "run the tests"}))
+        f = self.tmp / "rollout-d1.jsonl"
+        f.write_text("".join(json.dumps(r) + "\n" for r in recs))
+        self.assertEqual([t.role for t in sessions_codex.records(f)].count("human"), 1)
+
+    def test_a_malformed_entry_is_skipped_not_the_run(self):
+        recs = codex_session("d2", pin.ALPHA, 1)
+        recs[1:1] = [{"timestamp": pin.at(1, 9), "type": ["x"], "payload": {}},
+                     cx("garbage", "response_item", {"type": "message", "role": "assistant", "id": "bad"}),
+                     cx(pin.at(1, 9), "response_item", {"type": "local_shell_call", "call_id": "z", "action": "ls"})]
+        f = self.tmp / "rollout-d2.jsonl"
+        f.write_text("".join(json.dumps(r) + "\n" for r in recs))
+        got = list(sessions_codex.records(f))
+        self.assertEqual([t.role for t in got].count("human"), 1)
+        self.assertNotIn("bad", [t.id for t in got])
 
     def test_codex_only_machine(self):
         """No Claude Code, no import folder: the features still have real numbers."""

@@ -35,7 +35,7 @@
     },
     "id": {
       "type": "string",
-      "description": "The entry's own id, when the tool has one"
+      "description": "The entry's own id, when the tool has one. An id names one entry: never reuse one for another entry, in this or any other session (a UUID, or the session's id plus a counter); a copy of an entry keeps its id"
     },
     "folder": {
       "type": "string",

@@ -29,8 +29,13 @@ TOOL_KIND = {"Read": "read", "Glob": "search", "Grep": "search", "WebSearch": "s
 _COLLAB = {"Agent": "subagent", "Task": "subagent", "Workflow": "workflow", "Skill": "skill"}
 
 
+SHOW_FILE_TOOL = "mcp__lease_relay__show_file"   # the platform's "show the user a file" tool (runtime_claude's)
+
+
 def kind_of(tool: str) -> tuple[str, str | None]:
     """Claude's tool name → (kind, collab)."""
+    if tool == SHOW_FILE_TOOL:
+        return "read", None
     collab = _COLLAB.get(tool) or ("peer_message" if tool == "SendMessage" or tool.endswith("send_message") else None)
     return TOOL_KIND.get(tool, "other"), collab
 
@@ -48,14 +53,14 @@ def _mini_home() -> str:
 
 
 def roots(home: pathlib.Path, real: bool) -> list[pathlib.Path]:
-    """Where to read: the hub machine's local sessions, what the laptop backs up hourly (the personal profile), and
-    the personal profile when run by hand on the remote machine.
-    **Do not** add the work profile's backup (~/transcript-backups/claude-work-projects): work conversations may only
-    be processed locally (see known-issues)."""
-    out = [home / ".claude" / "projects", home / "transcript-backups" / "claude-personal-projects",
+    """Where to read: the hub machine's local sessions (<hosts.mini_home>/.claude), what the laptop backs up hourly
+    (the personal profile), and the personal profile when run by hand on the remote machine.
+    **Never** the home's own ~/.claude when it isn't the hub machine's (on the remote machine that is the work profile),
+    nor the work profile's backup (~/transcript-backups/claude-work-projects): work conversations may only be
+    processed locally (see known-issues). A test's home (real=False) stands in for the hub machine's."""
+    mini = pathlib.Path(_mini_home()) if real else home
+    out = [mini / ".claude" / "projects", home / "transcript-backups" / "claude-personal-projects",
            home / ".claude-personal" / "projects"]
-    if real:
-        out.append(pathlib.Path(_mini_home()) / ".claude" / "projects")
     seen, uniq = set(), []
     for r in out:
         if r.is_dir() and (k := r.resolve()) not in seen:
@@ -89,22 +94,28 @@ def _is_human_prompt(entry: dict) -> bool:
     slash command output, compaction summaries, hook injections, etc. (they are type=user in the transcript too)."""
     if entry.get("type") != "user" or entry.get("isMeta") or entry.get("isCompactSummary"):
         return False
-    if not isinstance(entry.get("message", {}).get("content"), str):
-        return False  # tool results
+    content = (entry.get("message") or {}).get("content") if isinstance(entry.get("message"), dict) else None
+    if isinstance(content, list):   # a typed message with an image or a block the tool attached to it
+        kinds = {b.get("type") for b in content if isinstance(b, dict)}
+        if "tool_result" in kinds or not kinds & {"text", "image"}:
+            return False  # tool results
+    elif not isinstance(content, str):
+        return False
     origin = entry.get("origin")
     return isinstance(origin, dict) and origin.get("kind") == "human"
 
 
 def _action(block: dict) -> Action:
     """One tool call → a neutral Action. detail holds only skill names: Claude's tool names don't leak out."""
-    inp = block.get("input") or {}
-    kind, collab = kind_of(block.get("name", ""))
+    inp = block.get("input") if isinstance(block.get("input"), dict) else {}
+    kind, collab = kind_of(str(block.get("name") or ""))
     return Action(kind, str(inp.get("skill", "?")) if collab == "skill" else "", collab, str(block.get("id") or ""),
                   str(inp.get("command") or "") if kind == "run_command" else "", bool(inp.get("run_in_background")))
 
 
 def _parse_ts(ts: str) -> datetime.datetime:
-    return datetime.datetime.fromisoformat(ts.replace("Z", "+00:00"))
+    t = datetime.datetime.fromisoformat(ts.replace("Z", "+00:00"))
+    return (t if t.tzinfo else t.replace(tzinfo=datetime.timezone.utc)).astimezone(datetime.timezone.utc)
 
 
 _KNOWN = {"user", "assistant", "system", "summary", "attachment", "progress", "queue-operation", "file-history-snapshot"}
@@ -137,10 +148,14 @@ def records(file: pathlib.Path):
             except ValueError:
                 continue
             parsed += 1
-            if not isinstance(o, dict) or o.get("type") not in _KNOWN:
+            if not isinstance(o, dict) or not isinstance(o.get("type"), str) or o["type"] not in _KNOWN:
                 continue
             recognised += 1
-            if t := _turn(o, file.stem):
+            try:
+                t = _turn(o, file.stem)
+            except (TypeError, ValueError, AttributeError):
+                continue   # one malformed entry (a field of the wrong shape) is skipped, not the whole run
+            if t:
                 yield t
     if parsed >= 5 and recognised == 0:
         raise SessionFormatError(_("{file}: {n} {n:record|records}, none in a known format (did Claude Code change "

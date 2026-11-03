@@ -104,12 +104,50 @@ def _ts(s: str) -> datetime.datetime:
     return datetime.datetime.fromisoformat(s.replace("Z", "+00:00")).astimezone(datetime.timezone.utc)
 
 
+def _entry(o: dict, sid: str, cwd: str, sub: bool, person: bool, new_style: bool) -> tuple[Turn | None, str]:
+    """One line → (its Turn or None, the session's folder after it)."""
+    p, ts = o.get("payload"), o.get("timestamp")
+    if not isinstance(p, dict) or not ts:
+        return None, cwd
+    if o["type"] == "turn_context" and p.get("cwd"):
+        return None, str(p["cwd"])
+    common = {"folder": cwd, "subagent": sub}
+    if o["type"] == "event_msg":
+        item = p.get("item") if p.get("type") == "item_completed" else None
+        typed = (isinstance(item, dict) and item.get("type") == "UserMessage") or (
+            p.get("type") == "user_message" and not new_style)
+        if person and typed:
+            return Turn(_ts(ts), sid, "human", id=str((item or {}).get("id") or ""), **common), cwd
+        return None, cwd
+    if o["type"] != "response_item":
+        return None, cwd
+    kind = p.get("type")
+    if kind == "message" and p.get("role") == "assistant":
+        return Turn(_ts(ts), sid, "assistant", id=str(p.get("id") or ""), **common), cwd
+    if kind in CALLS:
+        name = str(p.get("name") or ("web_search" if kind == "web_search_call" else "shell"))
+        k, collab = TOOLS.get(name, ("other", None))
+        call = str(p.get("call_id") or p.get("id") or "")
+        act = Action(k, "", collab, call, _command(name, p) if k == "run_command" else "")
+        return Turn(_ts(ts), sid, "assistant", "", (act,), str(p.get("id") or ""), **common), cwd
+    if kind in OUTPUTS and p.get("call_id"):
+        return Turn(_ts(ts), sid, "other", id=str(p.get("id") or ""), results=(str(p["call_id"]),), **common), cwd
+    if kind == "message":
+        return Turn(_ts(ts), sid, "other", id=str(p.get("id") or ""), **common), cwd
+    return None, cwd
+
+
 def records(file: pathlib.Path):
     meta = _meta(file) or {}
     sid = str(meta.get("id") or meta.get("session_id") or file.stem)
     cwd = str(meta.get("cwd") or "")
     sub = _is_subagent(meta)
     person = not sub and str(meta.get("originator") or "") not in NOT_A_PERSON | _platform_names()
+    try:   # newer versions write a typed message as item_completed/UserMessage; then user_message (older) isn't counted
+        raw = file.read_text(errors="replace")
+    except OSError:
+        return
+    new_style = '"UserMessage"' in raw
     parsed = recognised = 0
     with file.open(errors="replace") as fh:
         for line in fh:
@@ -118,37 +156,15 @@ def records(file: pathlib.Path):
             except ValueError:
                 continue
             parsed += 1
-            if not isinstance(o, dict) or o.get("type") not in _KNOWN:
+            if not isinstance(o, dict) or not isinstance(o.get("type"), str) or o["type"] not in _KNOWN:
                 continue
             recognised += 1
-            p, ts = o.get("payload"), o.get("timestamp")
-            if not isinstance(p, dict) or not ts:
-                continue
-            if o["type"] == "turn_context" and p.get("cwd"):
-                cwd = str(p["cwd"])
-                continue
-            common = {"folder": cwd, "subagent": sub}
-            if o["type"] == "event_msg":
-                item = p.get("item") if p.get("type") == "item_completed" else None
-                if person and ((isinstance(item, dict) and item.get("type") == "UserMessage")
-                               or p.get("type") == "user_message"):
-                    yield Turn(_ts(ts), sid, "human", id=str((item or {}).get("id") or ""), **common)
-                continue
-            if o["type"] != "response_item":
-                continue
-            kind = p.get("type")
-            if kind == "message" and p.get("role") == "assistant":
-                yield Turn(_ts(ts), sid, "assistant", id=str(p.get("id") or ""), **common)
-            elif kind in CALLS:
-                name = str(p.get("name") or ("web_search" if kind == "web_search_call" else "shell"))
-                k, collab = TOOLS.get(name, ("other", None))
-                call = str(p.get("call_id") or p.get("id") or "")
-                act = Action(k, "", collab, call, _command(name, p) if k == "run_command" else "")
-                yield Turn(_ts(ts), sid, "assistant", "", (act,), str(p.get("id") or ""), **common)
-            elif kind in OUTPUTS and p.get("call_id"):
-                yield Turn(_ts(ts), sid, "other", id=str(p.get("id") or ""), results=(str(p["call_id"]),), **common)
-            elif kind == "message":
-                yield Turn(_ts(ts), sid, "other", id=str(p.get("id") or ""), **common)
+            try:
+                t, cwd = _entry(o, sid, cwd, sub, person, new_style)
+            except (TypeError, ValueError, AttributeError):
+                continue   # one malformed entry is skipped, not the whole run
+            if t:
+                yield t
     if parsed >= 5 and recognised == 0:
         raise SessionFormatError(_("{file}: {n} {n:record|records}, none in a known format (did Codex change its "
                                    "session format?)", file=file, n=parsed))
