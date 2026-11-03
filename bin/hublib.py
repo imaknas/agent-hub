@@ -2,8 +2,8 @@
 project a transcript folder maps to, which commits count as project work. Kept in one place so that one change keeps
 every script in step.
 
-Reading conversation records isn't here: it goes through runtime_ports (layer 5, transcripts); the Claude Code format
-is only in runtime_claude.py.
+Reading conversation records isn't here: it goes through bin/sessions.py (every agent's sessions on the machine); a
+tool's own format is only in its sessions_<tool>.py.
 
 Users: check-memory-gaps.py, memory-nudge.py, weekly-reflect.py.
 """

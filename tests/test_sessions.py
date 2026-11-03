@@ -172,6 +172,19 @@ class ClaudeSource(Temp):
             self.assertIsNotNone(sessions.last_activity(pin.WT))
             self.assertIsNone(sessions.last_activity("/w/none"))
 
+    def test_last_activity_of_a_worktree_a_session_moved_into(self):
+        """Started at the project's root, then entered a worktree (its file moves to the worktree's folder): the
+        worktree had activity, which worktree cleanup must see."""
+        f = self.home / ".claude" / "projects" / "-w-alpha--claude-worktrees-wt2" / "M.jsonl"
+        f.parent.mkdir(parents=True)
+        wt2 = pin.ALPHA + "/.claude/worktrees/wt2"
+        f.write_text("".join(json.dumps(r) + "\n" for r in (pin.human(pin.at(1, 9), "M", "m1", pin.ALPHA),
+                                                              pin.human(pin.at(1, 10), "M", "m2", wt2))))
+        with self.reading():
+            self.assertIsNotNone(sessions.last_activity(wt2))
+            self.assertIsNotNone(sessions.last_activity(pin.ALPHA))
+            self.assertIsNone(sessions.last_activity(pin.ALPHA + "/.claude/worktrees/none"))
+
     def test_unrecognised_format_fails_loudly(self):
         d = self.home / ".claude" / "projects" / "-w-alpha"
         d.mkdir(parents=True)

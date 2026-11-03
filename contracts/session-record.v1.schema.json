@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "session-record.v1",
   "title": "One entry of a coding agent's session (a line of a .jsonl file)",
-  "description": "A tool-neutral record of one entry of a session with a coding agent: who it came from, when, in which folder, and which tool calls it started or returned results for. One JSON object per line; a file may hold any number of sessions. It carries no message text: what a person typed and what the agent answered never travel in this format. Entries of a branched or resumed session that repeat earlier ones keep the earlier entry's id, so a reader counts an id once. A call's duration is the time from the entry whose action names it (actions[].call) to the entry that lists it in results.",
+  "description": "A tool-neutral record of one entry of a session with a coding agent: who it came from, when, in which folder, and which tool calls it started or returned results for. One JSON object per line; a file may hold any number of sessions. It carries no message text (a text field is invalid): what a person typed and what the agent answered never travel in this format. A reader ignores fields it doesn't know (a later v1 may add some). Entries of a branched or resumed session that repeat earlier ones keep the earlier entry's id, so a reader counts an id once. A call's duration is the time from the entry whose action names it (actions[].call) to the entry that lists it in results.",
   "type": "object",
   "required": [
     "v",
@@ -10,8 +10,8 @@
     "session",
     "role"
   ],
-  "additionalProperties": false,
   "properties": {
+    "text": false,
     "v": {
       "const": 1
     },
@@ -53,7 +53,6 @@
         "required": [
           "kind"
         ],
-        "additionalProperties": false,
         "properties": {
           "kind": {
             "enum": [

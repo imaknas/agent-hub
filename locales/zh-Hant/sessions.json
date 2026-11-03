@@ -2,6 +2,6 @@
  "the import folder": "匯入資料夾",
  "{file}: {n} {n:line|lines}, none a session record (contracts/session-record.v1.schema.json)": "{file}:{n} 行,沒有一行是 session 紀錄(contracts/session-record.v1.schema.json)",
  "{file}: skipped {n} {n:line|lines} that {n:is not a|are not} session {n:record|records}": "{file}:跳過 {n} 行不是 session 紀錄的內容",
- "no session records on this machine (looked for {places})": "這台機器上沒有任何 session 紀錄(找過:{places})",
- ", ": "、"
+ ", ": "、",
+ "no session records on this machine; looked for {places}": "這台機器上沒有任何 session 紀錄;找過:{places}"
 }

@@ -17,7 +17,7 @@ its jobs with says nothing about where the owner's work is. Each source turns on
         it, the deepest wins. subagents=True also yields subagent entries (Turn.subagent). An entry id is yielded
         once: a resumed session's copied history, or the same session read from two places (a backup of the remote
         machine's sessions holds the hub machine's too), counts once.
-  last_activity(path) -> datetime | None     when a session in this folder last wrote
+  last_activity(path) -> datetime | None     when an entry was last written in this folder
   present() -> [(source name, files)]        the sources with any files on this machine
   require() -> list[str]                     present()'s names; raises NoSessions (the reason, where it looked)
                                              when no source has any files: the features say they are off, never
@@ -193,7 +193,7 @@ def places() -> list[str]:
 def require() -> list[str]:
     have = present()
     if not have:
-        raise NoSessions(_("no session records on this machine (looked for {places})",
+        raise NoSessions(_("no session records on this machine; looked for {places}",
                            places=_(", ").join(places())))
     return [n for n, _n in have]
 
@@ -251,20 +251,45 @@ def turns(projects: dict[str, list[str]], since: datetime.datetime, until: datet
                         yield owner, x
 
 
-def last_activity(path) -> datetime.datetime | None:
-    """When a session started in this folder last wrote (its file's time)."""
-    path = str(path).rstrip("/")
-    seen = []
+RECENT_DAYS = 30   # last_activity reads every entry of the files written this recently; older ones by start folder
+_index: dict = {}
+
+
+def _activity() -> dict[str, datetime.datetime]:
+    """{folder: when an entry was last written in it}, built once per process (and per only() context): files written
+    in the last RECENT_DAYS are read entry by entry, so a session that moved into a folder counts there; older files
+    count for the folder they started in, at their file's time."""
+    key = (_HOME, _DATA)
+    if key in _index:
+        return _index[key]
+    out: dict[str, datetime.datetime] = {}
+
+    def note(folder: str, ts: datetime.datetime) -> None:
+        if folder and (folder not in out or ts > out[folder]):
+            out[folder] = ts
+
+    recent = datetime.datetime.now(datetime.timezone.utc) - datetime.timedelta(days=RECENT_DAYS)
     for src, files in _files():
         for f in files:
+            try:
+                m = _mtime(f)
+            except OSError:
+                continue
             hint = src.folder(f)
-            if hint == path:
-                seen.append(_mtime(f))
-            elif hint is None:   # several sessions in one file: the entries' own times
-                first: dict[str, str] = {}
-                for t in src.records(f):
-                    if t.folder:
-                        first.setdefault(t.session, t.folder)
-                    if first.get(t.session) == path:
-                        seen.append(t.ts)
-    return max(seen) if seen else None
+            if hint:
+                note(hint.rstrip("/"), m)
+            if m < recent and hint is not None:
+                continue
+            at: dict[str, str] = {}   # an entry that names no folder is where its session last was
+            for t in src.records(f):
+                if t.folder:
+                    at[t.session] = t.folder.rstrip("/")
+                note(at.get(t.session, ""), min(t.ts, m))
+    _index[key] = out
+    return out
+
+
+def last_activity(path) -> datetime.datetime | None:
+    """When an entry was last written in this folder, by any session: one that started elsewhere and moved here (a
+    worktree it entered) counts too."""
+    return _activity().get(str(path).rstrip("/"))
