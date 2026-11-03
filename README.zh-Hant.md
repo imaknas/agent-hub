@@ -27,6 +27,14 @@ brunna 在 v0.7 以前叫 agent-hub。之前裝的會保留原本的資料夾,�
   <img src="assets/readme/loop.zh-Hant.svg" alt="agent 記下工作，每晚由 brunna 整理，只有你能決定的事回到你手上，你的回答讓工作接著做下去" width="100%">
 </picture>
 
+實際畫面:你自己電腦上的狀態頁。各專案要你回答的問題、要你做的事，新的在前;agent 之間互寄、還沒結的信;
+每晚的工作有沒有跑(專案是虛構的)。
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="assets/readme/status-page.zh-Hant-dark.png">
+  <img src="assets/readme/status-page.zh-Hant.png" alt="brunna 的狀態頁:4 件等你處理、3 封信未結、0 個問題、排程器正常;幾個專案要你回答的問題和待辦，新的在前，以及各專案未結的信" width="100%">
+</picture>
+
 ## 安裝
 
 **會用終端機**(macOS 或 Linux):貼這一行，裝好後它會問你幾個問題，第一題是語言:

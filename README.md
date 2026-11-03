@@ -28,6 +28,14 @@ brunna was called agent-hub until v0.7. An install from before keeps its folders
   <img src="assets/readme/loop.svg" alt="Your agents note their work; every night brunna settles it; what only you can decide comes back to you; your answer carries the work on" width="100%">
 </picture>
 
+What you see: the status page on your own machine, with every project's open questions and to-dos for you, newest
+first, the mail your agents left each other, and whether the nightly work ran (made-up projects).
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="assets/readme/status-page-dark.png">
+  <img src="assets/readme/status-page.png" alt="brunna's status page: 4 things need you, 3 letters open, 0 problems, the scheduler ticking; the open questions and to-dos from several projects, newest first, and the open mail per project" width="100%">
+</picture>
+
 ## Install
 
 **With a terminal** (macOS or Linux). It installs brunna, then asks a few questions, the first one being the
