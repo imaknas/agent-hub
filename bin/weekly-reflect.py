@@ -15,6 +15,7 @@ up by transcript-backup.sh, personal profile only: the work profile is deliberat
 
 Usage: weekly-reflect.py [--week 2026-W40] [--llm]
   --week omitted = the last full week (Monday to Sunday, the owner's time zone). Prints the path of the json written.
+  Without --llm a week's analysis already written is kept (the statistics are rebuilt); --llm writes a new one.
 """
 from __future__ import annotations  # the system python3 (3.9) must be able to import this too
 
@@ -239,6 +240,17 @@ def main() -> None:
             import reflect_llm
             stats["analysis"] = reflect_llm.analyze(stats)
         path = OUT / f"{label}.json"
+        # without --llm the analysis already written for this week stays: it can't be had back without paying for it
+        # again, and a re-run (new statistics, a fixed page) shouldn't cost it
+        if "analysis" not in stats and path.exists():
+            try:
+                kept = json.loads(path.read_text()).get("analysis")
+            except (OSError, ValueError):
+                kept = None
+            if kept:
+                stats["analysis"] = kept
+                print(_("kept {week}'s analysis as it was; --llm writes a new one from these statistics", week=label),
+                      file=sys.stderr)
         path.write_text(json.dumps(stats, ensure_ascii=False, indent=1))
         print(path)
     print(build_html())

@@ -156,3 +156,31 @@ class Versions(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class Rerun(unittest.TestCase):
+    """Re-running a week without --llm rebuilds its statistics but keeps the analysis the model wrote: it used to be
+    dropped, and a week's analysis can't be had back without paying for it again (11-03, a verification run did that
+    to a real week)."""
+
+    def run_week(self, out, llm=False):
+        from unittest import mock
+        m = load()
+        argv = ["weekly-reflect.py", "--week", "2026-W43"] + (["--llm"] if llm else [])
+        with mock.patch.object(m, "OUT", out), mock.patch.object(m, "build_html", return_value=""), \
+                mock.patch.object(m.sessions, "require", side_effect=m.sessions.NoSessions("no sessions here")), \
+                mock.patch.object(sys, "argv", argv):
+            m.main()
+        return json.loads((out / "2026-W43.json").read_text())
+
+    def test_the_analysis_is_kept(self):
+        with tempfile.TemporaryDirectory() as d:
+            out = pathlib.Path(d)
+            analysis = {"headline": "kept", "summary": "the model's reading"}
+            (out / "2026-W43.json").write_text(json.dumps({"v": 2, "week": "2026-W43", "analysis": analysis}))
+            week = self.run_week(out)
+            self.assertEqual(week["analysis"], analysis)
+
+    def test_a_week_without_one_gets_none(self):
+        with tempfile.TemporaryDirectory() as d:
+            self.assertNotIn("analysis", self.run_week(pathlib.Path(d)))
