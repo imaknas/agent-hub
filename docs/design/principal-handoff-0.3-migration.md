@@ -437,3 +437,8 @@ withdrawal, and `open-questions --json` and every project's inbox printed the sa
 
 `owner.py answer` on a v1 letter's question (no need record) now carries the terms digest of the letter's question as
 the raised it stands for: a 0.4 or 0.5 settlement without one is not a valid record, and the view ignored it.
+
+## 0.6 (11-06)
+
+brunna reads 0.6 and folds in it; `send_version` "0.6" waits for `principal_side_reads`. What changed, the suites, the
+open readings and the transition report: [principal-handoff-0.6-upgrade.md](principal-handoff-0.6-upgrade.md).
