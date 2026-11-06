@@ -1,5 +1,6 @@
-"""bin/ph_wire.py: the versions agent-hub reads and sends, the terms digest of 0.4 and of 0.5 (core §4), and the
-conversion between 0.4 and 0.5 (core §14), against the spec's vectors (contracts/vendor/agent-ops-specs/).
+"""bin/ph_wire.py: the versions brunna reads and sends and the guard on sending 0.6, the terms digest of 0.4 and since
+0.5 (core §4), the strict reading of a record's text, and the conversion between versions (core §14), against the
+spec's vectors (contracts/vendor/agent-ops-specs/: 0.6.1's terms-digest and convert cases, 0.5's and 0.4's).
 
     bin/py -m unittest tests.test_ph_wire
 """
@@ -19,6 +20,7 @@ import ph_wire  # noqa: E402
 VENDOR = ROOT / "contracts" / "vendor" / "agent-ops-specs"
 V04 = VENDOR / "principal-handoff-0.4" / "core" / "terms-digest.json"
 V05 = VENDOR / "principal-handoff-0.5" / "core" / "conformance"
+V06 = VENDOR / "principal-handoff-0.6.1" / "core" / "conformance"
 
 
 class JCS(unittest.TestCase):
@@ -92,28 +94,52 @@ class TermsDigest(unittest.TestCase):
                 self.assertEqual(ph_wire.canonical(ph_wire.digest_input(c["record"], version)), c["canonical"])
                 self.assertEqual(ph_wire.terms_digest(c["record"], version), c["digest"])
 
-    def test_vectors_0_5(self):
+    def test_vectors_0_6(self):
         """core §4: over the extension's name without its version"""
+        self.check(V06 / "terms-digest.json", "0.6")
+
+    def test_vectors_0_5(self):
         self.check(V05 / "terms-digest.json", "0.5")
 
     def test_vectors_0_4(self):
         """0.4's digest, which 0.4 settlements carry and conversion compares with"""
         self.check(V04, "0.4")
 
-    def test_default_is_0_5(self):
+    def test_default_is_0_6_the_same_as_0_5(self):
         need = {"ext": "acts/0.5", "project": "p", "key": "k", "terms_rev": 1, "terms": {"text": "x"}}
-        self.assertEqual(ph_wire.terms_digest(need), ph_wire.terms_digest(need, "0.5"))
+        self.assertEqual(ph_wire.terms_digest(need), ph_wire.terms_digest(need, "0.6"))
+        self.assertEqual(ph_wire.terms_digest(need, "0.6"), ph_wire.terms_digest(need, "0.5"))
         self.assertNotEqual(ph_wire.terms_digest(need, "0.4"), ph_wire.terms_digest(need, "0.5"))
 
 
 class Convert(unittest.TestCase):
-    def test_vectors(self):
-        """core §14 (convert.json); the Criteria cases are for parties that implement Criteria, which agent-hub does not"""
+    def test_vectors_0_6(self):
+        """core 0.6 §14 (0.6.1's convert.json cases): from the record alone; the Criteria cases are for parties that
+        implement Criteria, which brunna does not. Its held cases: tests/test_ph_records.py"""
+        cases = [c for c in json.loads((V06 / "convert.json").read_text())["cases"] if c.get("module") != "criteria"]
+        self.assertEqual(len(cases), 28)
+        for c in cases:
+            with self.subTest(case=c["id"]):
+                self.assertEqual(ph_wire.convert(c["record"], c["to"]), c["expect"])
+
+    def test_vectors_0_5(self):
+        """core 0.5 §14 (0.5's convert.json): 0.4 <-> 0.5, given the records held"""
         cases = [c for c in json.loads((V05 / "convert.json").read_text())["cases"] if c.get("module") != "criteria"]
         self.assertTrue(cases)
         for c in cases:
             with self.subTest(case=c["id"]):
                 self.assertEqual(ph_wire.convert(c["record"], c["to"], c["held"]), c["expect"])
+
+    def test_0_4_and_0_6_go_through_0_5(self):
+        """one version at a time: a 0.4 settlement's digest becomes that of its need record, both ways"""
+        need = {"ph": "0.4", "ext": "acts/0.4", "id": "r:k", "type": "raised", "origin": "requester", "by": "x",
+                "key": "k", "project": "p", "ts": "2026-10-20T10:00:00Z", "terms": {"text": "Pay"}, "terms_rev": 1}
+        s = {**need, "id": "s1", "type": "settled", "origin": "principal", "outcome": "done",
+             "terms_digest": ph_wire.terms_digest(need, "0.4"), "evidence": {"proof": "x"}}
+        up = ph_wire.convert(s, "0.6", [need])
+        self.assertEqual((up["ph"], up["ext"], up["terms_digest"], "evidence" in up),
+                         ("0.6", "acts/0.6", ph_wire.terms_digest(need, "0.6"), False))
+        self.assertEqual(ph_wire.convert(up, "0.4", [need])["terms_digest"], s["terms_digest"])
 
     def test_a_0_3_settlement_gets_the_digest_of_its_need_record(self):
         """Acts 0.5 §6: 0.3 to 0.4 adds terms_digest over the need record at the settlement's terms_rev"""
@@ -140,17 +166,50 @@ class Versions(unittest.TestCase):
         self.assertEqual(ph_wire.family("acts/0.2"), "")
         self.assertEqual(ph_wire.family(None), "")
 
+    def settings(self, cfg: dict):
+        return mock.patch.object(ph_wire.hubconf, "get", side_effect=lambda k, d=None: ph_wire._get(cfg, k) or d)
+
     def test_send_version(self):
         """hub.json principal_handoff.send_version, 0.4 until set"""
-        with mock.patch.object(ph_wire.hubconf, "get", return_value=None):
+        assistant = {"assistant": {"api": "http://127.0.0.1:1"}}
+        with self.settings(assistant):
             self.assertEqual(ph_wire.send_version(), "0.4")
             self.assertEqual((ph_wire.ext("acts"), ph_wire.ext("decisions")), ("acts/0.4", "decisions/0.4"))
-        with mock.patch.object(ph_wire.hubconf, "get", return_value="0.5"):
+        with self.settings({**assistant, "principal_handoff": {"send_version": "0.5"}}):
             self.assertEqual((ph_wire.ext("acts"), ph_wire.ext("decisions")), ("acts/0.5", "decisions/0.5"))
-        with mock.patch.object(ph_wire.hubconf, "get", return_value="0.3"):
+        with self.settings({**assistant, "principal_handoff": {"send_version": "0.3"}}):
             with self.assertRaises(SystemExit):
                 ph_wire.send_version()
         self.assertLessEqual(set(ph_wire.SENDS), set(ph_wire.READ))
+
+    def test_0_6_waits_for_the_principal_side(self):
+        """core 0.6 §14: never a party that speaks 0.6 alone with one that speaks 0.5 alone; 0.6 is sent only once the
+        principal side is confirmed to read it (principal_handoff.principal_side_reads), or when the principal side is
+        the built-in owner side, which reads what brunna reads"""
+        six = {"send_version": "0.6"}
+        for cfg, ok in (({"assistant": {"api": "x"}, "principal_handoff": six}, False),
+                        ({"assistant": {"api": "x"}, "principal_handoff": {**six, "principal_side_reads": ["0.5"]}}, False),
+                        ({"assistant": {"api": "x"}, "principal_handoff": {**six, "principal_side_reads": ["0.5", "0.6"]}},
+                         True),
+                        ({"owner_side": "builtin", "principal_handoff": six}, True),
+                        ({"principal_handoff": six}, True),   # no assistant: the built-in owner side
+                        ({"owner_side": "assistant", "assistant": {"api": "x"},
+                          "principal_handoff": {"send_version": "0.5", "principal_side_reads": ["0.6"]}}, False)):
+            with self.subTest(cfg=cfg), self.settings(cfg):
+                if ok:
+                    self.assertEqual(ph_wire.send_version(), cfg["principal_handoff"]["send_version"])
+                else:
+                    with self.assertRaises(SystemExit) as e:
+                        ph_wire.send_version()
+                    self.assertIn("principal_side_reads", str(e.exception))
+                self.assertEqual(ph_wire.config_errors(cfg) == [], ok)
+
+    def check(self, hub: dict) -> subprocess.CompletedProcess:
+        with tempfile.TemporaryDirectory() as tmp:
+            pathlib.Path(tmp, "hub.json").write_text(json.dumps(hub))
+            return subprocess.run([sys.executable, str(ROOT / "bin" / "config-check")], cwd=tmp, capture_output=True,
+                                  text=True, env={**os.environ, "AGENT_HUB_ROOT": str(ROOT), "AGENT_HUB_CONFIG": tmp,
+                                                  "AGENT_HUB_LANG_UI": "en"})
 
     def test_the_schema_and_config_check_know_the_setting(self):
         import minischema
@@ -158,15 +217,43 @@ class Versions(unittest.TestCase):
         base = minischema.errors(schema, {})
         for v in ph_wire.SENDS:
             self.assertEqual(minischema.errors(schema, {"principal_handoff": {"send_version": v}}), base)
-        for bad in ({"send_version": "0.3"}, {"send_version": 0.5}, {"send_versoin": "0.5"}):
+        self.assertEqual(minischema.errors(schema, {"principal_handoff": {"principal_side_reads": ["0.5", "0.6"]}}), base)
+        for bad in ({"send_version": "0.3"}, {"send_version": 0.5}, {"send_versoin": "0.5"},
+                    {"principal_side_reads": "0.6"}, {"principal_side_reads": []}, {"principal_side_reads": ["0.7"]}):
             self.assertNotEqual(minischema.errors(schema, {"principal_handoff": bad}), base, bad)
-        with tempfile.TemporaryDirectory() as tmp:
-            pathlib.Path(tmp, "hub.json").write_text(json.dumps({"principal_handoff": {"send_version": "0.6"}}))
-            r = subprocess.run([sys.executable, str(ROOT / "bin" / "config-check")], cwd=tmp, capture_output=True,
-                               text=True, env={**os.environ, "AGENT_HUB_ROOT": str(ROOT), "AGENT_HUB_CONFIG": tmp,
-                                               "AGENT_HUB_LANG_UI": "en"})
-            self.assertNotEqual(r.returncode, 0)
-            self.assertIn("send_version", r.stdout + r.stderr)
+        assistant = {"assistant": {"api": "http://127.0.0.1:1", "project": "helper"}}
+        r = self.check({**assistant, "principal_handoff": {"send_version": "0.6"}})
+        self.assertNotEqual(r.returncode, 0)
+        self.assertIn("principal_side_reads", r.stdout + r.stderr)
+        r = self.check({**assistant, "principal_handoff": {"send_version": "0.6", "principal_side_reads": ["0.5", "0.6"]}})
+        self.assertNotIn("principal_handoff", r.stdout + r.stderr)
+        self.assertNotIn("send_version", r.stdout + r.stderr)
+
+
+class Strict(unittest.TestCase):
+    """core §4: a record is I-JSON (the reading raw.json tests through tests/test_ph_records.py)"""
+
+    def test_a_member_named_twice_marks_that_object_only(self):
+        page = ph_wire.loads('{"records": [{"id": "a", "id": "b"}, {"id": "c"}]}')
+        self.assertIsInstance(page["records"][0], ph_wire.Duplicated)
+        self.assertEqual(ph_wire.ijson_errors(page["records"][0]), ["$: a member name appears twice"])
+        self.assertEqual(ph_wire.ijson_errors(page["records"][1]), [])
+        self.assertEqual(page["records"][0], {"id": "b"})
+
+    def test_what_is_not_i_json(self):
+        self.assertTrue(ph_wire.ijson_errors(ph_wire.loads('{"a": "\\ud83d"}')))
+        self.assertTrue(ph_wire.ijson_errors(ph_wire.loads('{"a": 1.0}')))
+        self.assertEqual(ph_wire.ijson_errors(ph_wire.loads('{"a": "\\ud83d\\ude00", "b": 9007199254740991}')), [])
+        for text in ('{"a": NaN}', '{"a": Infinity}'):
+            with self.subTest(text=text), self.assertRaises(ValueError):
+                ph_wire.loads(text)
+
+    def test_parse(self):
+        self.assertEqual(ph_wire.parse('{"a": 1}'), ({"a": 1}, []))
+        self.assertEqual(ph_wire.parse('{"a": 1.5}'), ({"a": 1.5}, []), "numbers are validation's to judge")
+        for text in ('[]', 'null', '{"a": 1, "a": 2}', '{"a": "\\udead"}', '{} {}'):
+            with self.subTest(text=text):
+                self.assertEqual(ph_wire.parse(text)[0], None)
 
 
 if __name__ == "__main__":

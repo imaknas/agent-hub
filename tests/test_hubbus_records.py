@@ -125,6 +125,19 @@ class Records(unittest.TestCase):
             self.m.main()
         self.assertEqual([r["status"] for r in json.loads(out.getvalue())], ["accepted", "invalid"])
 
+    def test_record_publish_reads_0_6_and_refuses_a_member_named_twice(self):
+        """core §4: the text is read strictly, record by record; a 0.6 record goes out (converted down to what the
+        principal side reads, outgoing)"""
+        r06 = json.dumps({**raised("k7"), "ph": "0.6", "ext": "acts/0.6"})
+        dup = json.dumps(raised("k8"))[:-1] + ', "key": "k9"}'
+        with mock.patch.object(sys, "argv", ["hubbus", "record-publish", "--json", "-"]), \
+                mock.patch.object(sys, "stdin", io.StringIO(f"[{r06}, {dup}]")), \
+                redirect_stdout(io.StringIO()) as out, self.assertRaises(SystemExit):
+            self.m.main()
+        res = json.loads(out.getvalue())
+        self.assertEqual([r["status"] for r in res], ["accepted", "invalid"])
+        self.assertIn("I-JSON", res[1]["errors"][0])
+
     def test_outgoing_converts_down_to_the_send_version(self):
         """core §14: a record made in 0.5 goes to a principal side that speaks 0.4 as 0.4"""
         r05 = {**raised("k5"), "ph": "0.5", "ext": "acts/0.5"}

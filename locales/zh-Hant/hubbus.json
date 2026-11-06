@@ -156,5 +156,9 @@
  "{project}: {id}: could not wake the live session {session}{why}": "{project}:{id}:叫不醒開著的 session {session}{why}",
  "whose hook this is (default: {settings} runtime.default)": "這是誰的 hook(預設:{settings} runtime.default)",
  "record {id} of {project} ({ext} {type}, origin {origin}) arrived again with other content: kept beside {first} as {eid}; readers take the greater RFC 8785 form (core §10)": "{project} 的 record {id}({ext} {type},origin {origin})以不同內容又送來一次:存在 {first} 旁邊,編號 {eid};讀的時候取 RFC 8785 序列化較大的那筆(core §10)",
- "Record {id} of {project} ({ext} {type}, origin {origin}) was sent with different content ({events}); readers take {kept}, the greater RFC 8785 form (core §10)": "{project} 的 record {id}({ext} {type},origin {origin})同一個 id 送了不同內容({events});讀的時候取 {kept},RFC 8785 序列化較大的那筆(core §10)"
+ "Record {id} of {project} ({ext} {type}, origin {origin}) was sent with different content ({events}); readers take {kept}, the greater RFC 8785 form (core §10)": "{project} 的 record {id}({ext} {type},origin {origin})同一個 id 送了不同內容({events});讀的時候取 {kept},RFC 8785 序列化較大的那筆(core §10)",
+ "a member name appears twice (not I-JSON, core §4)": "有成員名稱出現兩次(不是 I-JSON,core §4)",
+ "{ext} is a version brunna does not read: kept, not acted on": "{ext} 是 brunna 不讀的版本:留著,不據以行動",
+ "it has no form in {version}, the version {assistant} reads": "它在 {version}({assistant}讀的版本)沒有對應的形式",
+ "{assistant} does not read {version} ({n} {n:record|records}: {ids}); the batch is kept and sent again. Set principal_handoff.send_version back to a version {assistant} reads": "{assistant}不讀 {version}({n} 筆 record:{ids});這批留著、下次重送。請把 principal_handoff.send_version 改回{assistant}讀得懂的版本"
 }

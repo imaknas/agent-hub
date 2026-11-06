@@ -141,8 +141,14 @@
       "additionalProperties": false,
       "properties": {
         "send_version": {
-          "enum": ["0.4", "0.5"],
-          "description": "the Principal Handoff version of the records this deployment sends to the principal side (Acts and Decisions, every project; core §14 configures it per role, project and extension, and one principal side serves every project here). Records in 0.3, 0.4 and 0.5 are read whatever it says. Default 0.4; set 0.5 once the principal side confirms it accepts 0.5"
+          "enum": ["0.4", "0.5", "0.6"],
+          "description": "the Principal Handoff version of the records this deployment sends to the principal side (Acts and Decisions, every project; core §14 configures it per role, project and extension, and one principal side serves every project here). Records in 0.3 to 0.6 are read, and folded in 0.6, whatever it says. Default 0.4. It must be one of principal_side_reads (config-check refuses another)"
+        },
+        "principal_side_reads": {
+          "type": "array",
+          "items": {"enum": ["0.4", "0.5", "0.6"]},
+          "minItems": 1,
+          "description": "the versions the principal side is confirmed to read (core §14: a party's version is configured, not seen on the wire; never pair a party that speaks 0.6 alone with one that speaks 0.5 alone). Not set: [\"0.4\", \"0.5\"]. Switching to 0.6 is one edit, once the principal side's release says it reads 0.6: send_version \"0.6\" and principal_side_reads [\"0.5\", \"0.6\"]. Ignored with owner_side builtin, which reads every version brunna reads"
         }
       }
     },

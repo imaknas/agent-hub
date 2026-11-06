@@ -91,6 +91,9 @@ def check(root: pathlib.Path) -> list[str]:
         if callable(check_conf):
             errs += [_("{settings}: {error}", settings=hub.name, error=e) for e in check_conf(cfg)]
 
+    import ph_wire   # principal_handoff: send only a version the principal side is confirmed to read (core §14)
+    errs += [_("{settings}: {error}", settings=hub.name, error=e) for e in ph_wire.config_errors(cfg)]
+
     if "llm" in cfg:
         import completion
         errs += [_("{settings}: llm: {error}", settings=hub.name, error=e) for e in completion.config_errors(cfg["llm"])]

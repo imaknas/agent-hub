@@ -1,7 +1,8 @@
 """agent-hub runs the conformance data of the Acts Markdown binding (agent-ops-specs) against bin/acts_md.py, the
-reader and document steps bin/registrar.py and bin/gen-todo.py use: 0.5's (acts-markdown/conformance, source in
-contracts/vendor/agent-ops-specs/principal-handoff-0.5/SOURCE), and 0.4's (principal-handoff-0.4/acts/SOURCE), whose
-rules 0.5 keeps for every key that is bound (0.5 adds known keys).
+reader and document steps bin/registrar.py and bin/gen-todo.py use: 0.6.1's (acts-markdown/conformance, source in
+contracts/vendor/agent-ops-specs/principal-handoff-0.6.1/SOURCE), 0.5's (principal-handoff-0.5/SOURCE), and 0.4's
+(principal-handoff-0.4/acts/SOURCE), whose rules 0.5 and 0.6 keep for every key that is bound (0.5 adds known keys; 0.6
+changes no rule of the binding, acts-markdown §6).
 
 Every case runs twice: in the case's own profile alone, built from the spec's profiles.json (what the spec tests), and
 in agent-hub's reading, both token sets at once with the content language's set writing (what runs here). For the
@@ -19,7 +20,8 @@ import unittest
 
 ROOT = pathlib.Path(__file__).resolve().parents[1]
 VENDOR = ROOT / "contracts" / "vendor" / "agent-ops-specs"
-FIXTURES = {"0.5": VENDOR / "principal-handoff-0.5" / "acts-markdown" / "conformance",
+FIXTURES = {"0.6.1": VENDOR / "principal-handoff-0.6.1" / "acts-markdown" / "conformance",
+            "0.5": VENDOR / "principal-handoff-0.5" / "acts-markdown" / "conformance",
             "0.4": VENDOR / "principal-handoff-0.4" / "acts"}
 sys.path.insert(0, str(ROOT / "bin"))
 import acts_md  # noqa: E402
@@ -29,7 +31,7 @@ spec = importlib.util.spec_from_file_location("registrar_conf", ROOT / "bin" / "
 registrar = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(registrar)
 TAG = registrar.TAG
-SPEC = json.loads((FIXTURES["0.5"] / "profiles.json").read_text())["profiles"]
+SPEC = json.loads((FIXTURES["0.6.1"] / "profiles.json").read_text())["profiles"]
 LANG = {"zh-hant": "zh-Hant", "en": "en"}
 
 
@@ -86,7 +88,8 @@ def readings(c: dict):
 
 class Profiles(unittest.TestCase):
     def test_the_profiles_did_not_change(self):
-        self.assertEqual(SPEC, json.loads((FIXTURES["0.4"] / "profiles.json").read_text())["profiles"])
+        for v in ("0.5", "0.4"):
+            self.assertEqual(SPEC, json.loads((FIXTURES[v] / "profiles.json").read_text())["profiles"], v)
 
     def test_agent_hubs_sets_are_the_spec_profiles(self):
         self.assertEqual(acts_md.profile("zh-Hant", "Owner"), acts_md.Profile.from_json(SPEC["zh-hant"]))

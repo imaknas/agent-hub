@@ -478,12 +478,16 @@ def record_event_id(rec: dict) -> str:
     return f"rec:{rec['ext']}:{rec['project']}:{rec['id']}"
 
 
-def record_errors(rec) -> list[str]:
-    """Only checks core's required fields and the version (full schema validation is the receiver's job)."""
+def record_errors(rec, outgoing: bool = True) -> list[str]:
+    """Only checks core's required fields, that it is I-JSON as far as the bus can keep it (a member named twice cannot
+    be stored as it came), and, for what is sent, the version (full schema validation is the receiver's job). What comes
+    in, in a version brunna does not read, is kept and not acted on (core 0.6 §4, §6: ph_wire.family is '' for it)."""
     if not isinstance(rec, dict):
         return [_("not a JSON object")]
     errs = [_("missing {k}", k=k) for k in RECORD_REQUIRED if not rec.get(k)]
-    if rec.get("ph") and rec["ph"] not in ph_wire.READ:
+    if any(e.endswith("a member name appears twice") for e in ph_wire.ijson_errors(rec)):
+        errs.append(_("a member name appears twice (not I-JSON, core §4)"))
+    if outgoing and rec.get("ph") and rec["ph"] not in ph_wire.READ:
         errs.append(_("ph is {ph!r}, must be one of {versions}", ph=rec["ph"], versions=", ".join(ph_wire.READ)))
     return errs
 
@@ -768,6 +772,9 @@ def fmt_record(r, long=True) -> str:
     what = {"acts": _("task"), "decisions": _("question")}.get(family, family)
     head = _("[{id}] from {source} ({tags}, {ts})", id=r["id"], source=r["source"], tags=f"{family} {kind}",
              ts=r["ts"][5:16].replace("T", " "))
+    if not ph_records.implemented(rec):   # core §4: kept, never acted on, so nothing here asks anyone to act on it
+        text = _("{ext} is a version brunna does not read: kept, not acted on", ext=rec.get("ext", "?"))
+        return _("- {head}: {text}", head=head, text=text) if not long else f"- {head}\n  {text}"
     lines = []
     if family == "decisions" and payload(r).get("question"):
         lines.append(_("Question: {text}", text=payload(r)["question"]))
@@ -1401,7 +1408,8 @@ def records_http(method: str, path: str, body=None, query=None) -> tuple[int | N
                                  headers={"Authorization": f"Bearer {token}", "Content-Type": "application/json"})
     try:
         with urllib.request.urlopen(req, timeout=20) as resp:
-            return resp.status, json.loads(resp.read() or b"{}"), None
+            # read as core §4 reads a record: a member named twice marks that one record (ph_wire.Duplicated)
+            return resp.status, ph_wire.loads(resp.read() or b"{}"), None
     except urllib.error.HTTPError as e:
         return e.code, None, f"HTTP {e.code}"
     except (urllib.error.URLError, OSError, ValueError) as e:
@@ -1422,30 +1430,49 @@ def forward_records(c) -> None:
         if not evs:
             return
         recs = [ev for ev in evs if ev["type"] == "record" and ev["to_project"] in OWNERS]
-        if recs:
-            code, data, err = records_http("POST", "/api/records", {"records": [outgoing(payload(ev)["record"])
-                                                                                for ev in recs]})
+        out = [(ev, outgoing(payload(ev)["record"])) for ev in recs]
+        for ev, rec in out:
+            if rec is None:   # core §14 item 4 forbids making one; should one be on the bus, it is not sent
+                reject(c, ev, _("it has no form in {version}, the version {assistant} reads", assistant=ASSISTANT,
+                                version=ph_wire.send_version()))
+        out = [(ev, rec) for ev, rec in out if rec is not None]
+        if out:
+            code, data, err = records_http("POST", "/api/records", {"records": [rec for _ev, rec in out]})
             if code != 200 or not isinstance(data, dict):
                 log_once("records-out", _("records could not be sent to {assistant} ({err}); {n} to resend next time",
-                                          assistant=ASSISTANT, err=err or code, n=len(recs)))
+                                          assistant=ASSISTANT, err=err or code, n=len(out)))
                 return
             log_once("records-out", "")
-            by_id = {ev_rec_id(ev): ev for ev in recs}
+            by_id = {rec["id"]: (ev, rec) for ev, rec in out}
+            unread = []
             for res in data.get("results") or []:
-                ev = by_id.get(res.get("id"))
+                ev, rec = by_id.get(res.get("id"), (None, None))
                 if ev is not None and res.get("status") == "invalid":
                     reject(c, ev, "; ".join(map(str, res.get("errors") or [])) or "invalid")
+                elif ev is not None and res.get("status") == "unsupported" and rec.get("ext") in (
+                        ph_wire.ext("acts"), ph_wire.ext("decisions")):
+                    unread.append(rec["id"])
                 elif ev is not None and res.get("status") == "unsupported":
                     log(_("{ext} is not supported by {assistant}: {id} accepted but not handled", assistant=ASSISTANT,
-                          ext=payload(ev)["record"].get("ext"), id=ev["id"]))
-            log(_("sent {n} {n:record|records} to {assistant}", assistant=ASSISTANT, n=len(recs)))
+                          ext=rec.get("ext"), id=ev["id"]))
+            if unread:
+                # the version brunna sends is one the assistant does not read (principal_handoff.principal_side_reads
+                # was confirmed too early): nothing of this batch is let go; it is sent again, the accepted ones as
+                # duplicates, until send_version names a version it reads (ph_wire, core §14)
+                log_once("records-out", _("{assistant} does not read {version} ({n} {n:record|records}: {ids}); the "
+                                          "batch is kept and sent again. Set principal_handoff.send_version back to a "
+                                          "version {assistant} reads", assistant=ASSISTANT,
+                                          version=ph_wire.send_version(), n=len(unread), ids=" ".join(unread[:5])))
+                return
+            log(_("sent {n} {n:record|records} to {assistant}", assistant=ASSISTANT, n=len(out)))
         set_cursor(c, RECORDS_OUT, evs[-1]["seq"])
 
 
-def outgoing(rec: dict) -> dict:
+def outgoing(rec: dict) -> dict | None:
     """A record as the principal side reads it: one made in a version newer than the one it is sent in (made before
-    hub.json principal_handoff.send_version went back) is converted down (core §14). Requesters' records carry no
-    terms digest, so no other record is needed to convert them."""
+    hub.json principal_handoff.send_version went back, or by a project in 0.6 while it is 0.5) is converted down (core
+    §14); None when it has no form there. Requesters' records carry no terms digest, so no other record is needed to
+    convert them."""
     send, version = ph_wire.send_version(), ph_wire.version_of(rec)
     newer = version in ph_wire.READ and ph_wire.READ.index(version) > ph_wire.READ.index(send)
     return ph_wire.convert(rec, send, []) if newer else rec
@@ -1471,7 +1498,7 @@ def pull_names() -> dict[str, str]:
 
 
 def incoming_errors(rec, asked: str) -> list[str]:
-    errs = record_errors(rec)
+    errs = record_errors(rec, outgoing=False)
     if not errs and rec.get("project") != asked:
         errs = [_("project is {project}, but {asked} was pulled", project=rec.get("project"), asked=asked)]
     if not errs and rec.get("origin") != "principal":
@@ -1482,7 +1509,7 @@ def incoming_errors(rec, asked: str) -> list[str]:
 def answer_routing(c, rec: dict) -> tuple[dict | None, str | None]:
     """For a Decisions record from the owner: back to the session that asked (as v1 answers did), with the question
     beside it; ref = the question's event, so the thread holds together."""
-    if not str(rec.get("ext", "")).startswith("decisions/"):
+    if ph_wire.family(rec.get("ext")) != "decisions":   # a version brunna does not read is not acted on (core §4)
         return None, None
     q = question_asked(c, rec.get("key") or "")
     if q is None:
@@ -2792,7 +2819,7 @@ def cli() -> None:
         return
     if a.cmd == "record-publish":
         c = db()
-        data = json.loads(sys.stdin.read() or "null")
+        data = ph_wire.loads(sys.stdin.read() or "null")   # a member named twice marks that record (core §4)
         recs = data if isinstance(data, list) else [data]
         out, bad, taken = [], 0, projects()
         c.execute("BEGIN IMMEDIATE")

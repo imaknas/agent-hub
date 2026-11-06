@@ -12,8 +12,9 @@ settlements come back to the project, so the registrar holds them all (the deplo
 leave them alone except striking a line whose text is the item's latest terms after a settlement of theirs; a line
 carrying one is not raised, relinked or restamped, and is warned about every night until an agent fixes it.
 
-**A requester** (core §12): the records of each item, in whatever version they came (0.3, 0.4, 0.5), are converted to
-0.5, validated, deduplicated and folded by bin/ph_records.py; invalid ones are ignored and named in the log.
+**A requester** (core §12): the records of each item, in whatever version they came (0.3 to 0.6), are validated by
+their own version's rules, held in their 0.6 form, deduplicated and folded by bin/ph_records.py; invalid ones are
+ignored and named in the log, and those of a version brunna does not read are left alone.
 
 For each project (the STATE.md of its memory copy, plus the platform's own openclaw-migration-status.md):
   0. Read: a document with an unclosed code fence or HTML comment is left alone (nothing sent, nothing written).
@@ -38,7 +39,7 @@ For each project (the STATE.md of its memory copy, plus the platform's own openc
      commit-hub-files.sh), and only after that succeeds `hubbus done` the applied records; on failure, wait for the
      next night.
 
-Records: reads acts 0.3, 0.4 and 0.5, sends the version {settings} principal_handoff.send_version names (bin/ph_wire.py).
+Records: reads acts 0.3 to 0.6, sends the version {settings} principal_handoff.send_version names (bin/ph_wire.py).
 
 Only records count: v1's task letters and handoffs are not read. The items that existed only as v1 task letters were
 given need records under their keys once, by `registrar.py migrate-v1` (context migration-v1; removed with v1, in git
@@ -108,7 +109,7 @@ def hubbus(*args: str, stdin: str | None = None) -> subprocess.CompletedProcess:
 # --- records on the bus ---
 
 def current(recs: list[dict]) -> dict | None:
-    """core §6: of one register's (valid, 0.5) records, the latest of those no other supersedes (equal ts: the greater
+    """core §6: of one register's (held, 0.6) records, the latest of those no other supersedes (equal ts: the greater
     id)."""
     return ph_records.register(recs)[0]
 
@@ -116,7 +117,7 @@ def current(recs: list[dict]) -> dict | None:
 class Ledger:
     """One project's Acts records on the bus, grouped by key: the need register (what this project sent, the
     registrar's and the project's own) and the settlement register (what the principal side sent), each record
-    converted to 0.5, validated and deduplicated (bin/ph_records.py). Records filed under a name the project had before
+    held in its 0.6 form, validated and deduplicated (bin/ph_records.py). Records filed under a name the project had before
     a rename are its records too (hubbus records), and what is sent about such an item keeps that name (filed)."""
 
     def __init__(self, project: str):

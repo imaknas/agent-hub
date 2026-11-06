@@ -49,7 +49,7 @@ class FakeAssistant:
 
     def __init__(self, test):
         self.t, self.calls, self.out, self.down, self.ack_down = test, [], {}, False, False
-        self.received, self.invalid = [], set()
+        self.received, self.invalid, self.unsupported = [], set(), set()
 
     def __call__(self, method, path, body=None, query=None):
         self.calls.append((method, path, body, query))
@@ -59,6 +59,7 @@ class FakeAssistant:
             self.received += body["records"]
             return 200, {"ok": True, "results": [
                 {"id": r["id"], "status": "invalid", "errors": ["bad"]} if r["id"] in self.invalid
+                else {"id": r["id"], "status": "unsupported"} if r["id"] in self.unsupported
                 else {"id": r["id"], "status": "accepted"} for r in body["records"]]}, None
         if method == "GET" and path == "/api/records":
             recs = self.out.get(query["project"], [])
@@ -194,13 +195,46 @@ class BridgeV2(unittest.TestCase):
         self.assertEqual(self.incoming(), ["s:k1"])
         self.assertEqual([b["through"] for b in self.fake.acks() if b["project"] == "proj"], [1])
 
-    def test_a_record_of_a_version_not_read_is_refused(self):
-        """before 0.6: a record in a version brunna does not read is refused, and the page comes again"""
+    def test_a_record_of_a_version_not_read_is_kept_and_not_acted_on(self):
+        """core 0.6 §4, §6: a record in a version brunna does not implement is taken in and kept (until 0.6 it was
+        refused, and the page came again), so that it is held once brunna implements it; nothing acts on it"""
         self.m.pull_records(self.c)
-        self.fake.out["proj"] = [settled("k1", ph="0.9", ext="acts/0.9", terms_digest="sha-256:" + "0" * 64)]
+        later = settled("k1", ph="0.9", ext="acts/0.9", terms_digest="sha-256:" + "0" * 64)
+        self.fake.out["proj"] = [later]
+        self.m.pull_records(self.c)
+        self.assertEqual(self.incoming(), ["s:k1"])
+        self.assertEqual([b["through"] for b in self.fake.acks() if b["project"] == "proj"], [1])
+        [ev] = self.c.execute("SELECT * FROM events WHERE type='record'").fetchall()
+        self.assertEqual(self.m.payload(ev)["record"], later, "kept as it came")
+        self.assertEqual(self.m.fmt(ev).splitlines()[1].strip(),
+                         self.m._("{ext} is a version brunna does not read: kept, not acted on", ext="acts/0.9"))
+
+    def test_a_record_naming_a_member_twice_is_refused(self):
+        """core §4: not I-JSON, and the bus could not keep it as it came"""
+        self.m.pull_records(self.c)
+        dup = self.m.ph_wire.loads(json.dumps(settled("k1"))[:-1] + ', "outcome": "dropped"}')
+        self.assertIsInstance(dup, self.m.ph_wire.Duplicated)
+        self.fake.out["proj"] = [dup]
         self.m.pull_records(self.c)
         self.assertEqual(self.incoming(), [])
-        self.assertEqual([b for b in self.fake.acks() if b["project"] == "proj"], [])
+        self.assertTrue(any("I-JSON" in l for l in self.logs))
+
+    def test_a_version_the_assistant_does_not_read_keeps_the_batch(self):
+        """the backstop for principal_side_reads confirmed too early: `unsupported` for a record in the version
+        brunna sends lets nothing go; the batch is sent again until send_version names a version it reads"""
+        self.m.publish_record(self.c, {**raised("k1"), "ph": "0.6", "ext": "acts/0.6"}, "proj", self.owner)
+        self.fake.unsupported = {"r:k1"}
+        with mock.patch.object(self.m.ph_wire, "send_version", return_value="0.6"):
+            self.m.forward_records(self.c)
+            self.m.forward_records(self.c)
+        self.assertEqual([r["id"] for r in self.fake.received], ["r:k1", "r:k1"])
+        self.assertTrue(any("0.6" in l and "r:k1" in l and "send_version" in l for l in self.logs))
+        self.fake.unsupported = set()
+        with mock.patch.object(self.m.ph_wire, "send_version", return_value="0.5"):   # the owner set 0.5 back
+            self.m.forward_records(self.c)
+            self.m.forward_records(self.c)
+        self.assertEqual([(r["id"], r["ext"]) for r in self.fake.received],
+                         [("r:k1", "acts/0.6")] * 2 + [("r:k1", "acts/0.5")], "sent once more, converted down")
 
     def test_starting_point_is_only_for_the_switch_on_not_for_later_names(self):
         self.m.pull_records(self.c)   # switch on: starting point

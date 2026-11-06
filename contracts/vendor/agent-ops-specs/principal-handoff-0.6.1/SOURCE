@@ -3,5 +3,5 @@ brunna runs, as a requester, the Acts registrar and a converting party (tests/te
 - acts-markdown/conformance: every binding case (parse, keys, register, relink, amend, apply, reconcile), in both profiles;
 - acts/ and decisions/conformance/records.json in full; lifecycle.json compared on the settlement view (settlement, outcome, answer, authority, stale); relations.json in full;
 - core/conformance/terms-digest.json, raw.json, and convert.json: its cases (the Criteria ones excepted: brunna does not implement Criteria) and its held cases.
-Cases brunna's reading of the text decides otherwise are listed, with the reason, in tests/test_ph_records.py (XFAIL) and docs/design/principal-handoff-0.6-upgrade.md.
+Every case passes; none is recorded as an expected failure (docs/design/principal-handoff-0.6-upgrade.md).
 bin/ph_records.py validates 0.6 records against the schemas here.
