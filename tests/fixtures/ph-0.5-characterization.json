@@ -1,0 +1,4848 @@
+{
+ "lifecycle": {
+  "0.4/acts/approved-ignored-in-acts": {
+   "order": {
+    "held": [
+     [
+      "requester",
+      "raised",
+      "r:task-demo-aaaaaaaaaa"
+     ]
+    ],
+    "ignored": [
+     "ap1"
+    ],
+    "view": {
+     "answer": null,
+     "authority": null,
+     "outcome": null,
+     "settlement": null,
+     "stale": false,
+     "state": "open",
+     "withdrawn": false
+    }
+   },
+   "reversed": {
+    "held": [
+     [
+      "requester",
+      "raised",
+      "r:task-demo-aaaaaaaaaa"
+     ]
+    ],
+    "ignored": [
+     "ap1"
+    ],
+    "view": {
+     "answer": null,
+     "authority": null,
+     "outcome": null,
+     "settlement": null,
+     "stale": false,
+     "state": "open",
+     "withdrawn": false
+    }
+   }
+  },
+  "0.4/acts/attested-from-verified-claim": {
+   "order": {
+    "held": [
+     [
+      "agent",
+      "claimed",
+      "c1"
+     ],
+     [
+      "principal",
+      "settled",
+      "s1"
+     ],
+     [
+      "requester",
+      "raised",
+      "r:task-demo-aaaaaaaaaa"
+     ]
+    ],
+    "ignored": [],
+    "view": {
+     "answer": null,
+     "authority": "attested",
+     "outcome": "done",
+     "settlement": "s1",
+     "stale": false,
+     "state": "settled",
+     "withdrawn": false
+    }
+   },
+   "reversed": {
+    "held": [
+     [
+      "agent",
+      "claimed",
+      "c1"
+     ],
+     [
+      "principal",
+      "settled",
+      "s1"
+     ],
+     [
+      "requester",
+      "raised",
+      "r:task-demo-aaaaaaaaaa"
+     ]
+    ],
+    "ignored": [],
+    "view": {
+     "answer": null,
+     "authority": "attested",
+     "outcome": "done",
+     "settlement": "s1",
+     "stale": false,
+     "state": "settled",
+     "withdrawn": false
+    }
+   }
+  },
+  "0.4/acts/claim-changes-nothing": {
+   "order": {
+    "held": [
+     [
+      "agent",
+      "claimed",
+      "c1"
+     ],
+     [
+      "requester",
+      "raised",
+      "r1"
+     ]
+    ],
+    "ignored": [],
+    "view": {
+     "answer": null,
+     "authority": null,
+     "outcome": null,
+     "settlement": null,
+     "stale": false,
+     "state": "open",
+     "withdrawn": false
+    }
+   },
+   "reversed": {
+    "held": [
+     [
+      "agent",
+      "claimed",
+      "c1"
+     ],
+     [
+      "requester",
+      "raised",
+      "r1"
+     ]
+    ],
+    "ignored": [],
+    "view": {
+     "answer": null,
+     "authority": null,
+     "outcome": null,
+     "settlement": null,
+     "stale": false,
+     "state": "open",
+     "withdrawn": false
+    }
+   }
+  },
+  "0.4/acts/cycle": {
+   "order": {
+    "held": [
+     [
+      "principal",
+      "settled",
+      "y1"
+     ],
+     [
+      "principal",
+      "settled",
+      "y2"
+     ],
+     [
+      "requester",
+      "raised",
+      "r1"
+     ]
+    ],
+    "ignored": [],
+    "view": {
+     "answer": null,
+     "authority": "principal",
+     "outcome": "dropped",
+     "settlement": "y2",
+     "stale": false,
+     "state": "settled",
+     "withdrawn": false
+    }
+   },
+   "reversed": {
+    "held": [
+     [
+      "principal",
+      "settled",
+      "y1"
+     ],
+     [
+      "principal",
+      "settled",
+      "y2"
+     ],
+     [
+      "requester",
+      "raised",
+      "r1"
+     ]
+    ],
+    "ignored": [],
+    "view": {
+     "answer": null,
+     "authority": "principal",
+     "outcome": "dropped",
+     "settlement": "y2",
+     "stale": false,
+     "state": "settled",
+     "withdrawn": false
+    }
+   }
+  },
+  "0.4/acts/delegated": {
+   "order": {
+    "held": [
+     [
+      "principal",
+      "settled",
+      "d1"
+     ],
+     [
+      "requester",
+      "raised",
+      "r1"
+     ]
+    ],
+    "ignored": [],
+    "view": {
+     "answer": null,
+     "authority": "delegated",
+     "outcome": "done",
+     "settlement": "d1",
+     "stale": false,
+     "state": "settled",
+     "withdrawn": false
+    }
+   },
+   "reversed": {
+    "held": [
+     [
+      "principal",
+      "settled",
+      "d1"
+     ],
+     [
+      "requester",
+      "raised",
+      "r1"
+     ]
+    ],
+    "ignored": [],
+    "view": {
+     "answer": null,
+     "authority": "delegated",
+     "outcome": "done",
+     "settlement": "d1",
+     "stale": false,
+     "state": "settled",
+     "withdrawn": false
+    }
+   }
+  },
+  "0.4/acts/duplicate": {
+   "order": {
+    "held": [
+     [
+      "principal",
+      "settled",
+      "s1"
+     ],
+     [
+      "requester",
+      "raised",
+      "r1"
+     ]
+    ],
+    "ignored": [],
+    "view": {
+     "answer": null,
+     "authority": "principal",
+     "outcome": "done",
+     "settlement": "s1",
+     "stale": false,
+     "state": "settled",
+     "withdrawn": false
+    }
+   },
+   "reversed": {
+    "held": [
+     [
+      "principal",
+      "settled",
+      "s1"
+     ],
+     [
+      "requester",
+      "raised",
+      "r1"
+     ]
+    ],
+    "ignored": [],
+    "view": {
+     "answer": null,
+     "authority": "principal",
+     "outcome": "done",
+     "settlement": "s1",
+     "stale": false,
+     "state": "settled",
+     "withdrawn": false
+    }
+   }
+  },
+  "0.4/acts/fork": {
+   "order": {
+    "held": [
+     [
+      "principal",
+      "settled",
+      "b1"
+     ],
+     [
+      "principal",
+      "settled",
+      "s1"
+     ],
+     [
+      "requester",
+      "raised",
+      "r1"
+     ]
+    ],
+    "ignored": [],
+    "view": {
+     "answer": null,
+     "authority": "principal",
+     "outcome": "dropped",
+     "settlement": "b1",
+     "stale": false,
+     "state": "settled",
+     "withdrawn": false
+    }
+   },
+   "reversed": {
+    "held": [
+     [
+      "principal",
+      "settled",
+      "b1"
+     ],
+     [
+      "principal",
+      "settled",
+      "s1"
+     ],
+     [
+      "requester",
+      "raised",
+      "r1"
+     ]
+    ],
+    "ignored": [],
+    "view": {
+     "answer": null,
+     "authority": "principal",
+     "outcome": "dropped",
+     "settlement": "b1",
+     "stale": false,
+     "state": "settled",
+     "withdrawn": false
+    }
+   }
+  },
+  "0.4/acts/invalid-then-valid-same-id": {
+   "order": {
+    "held": [
+     [
+      "principal",
+      "settled",
+      "s1"
+     ],
+     [
+      "requester",
+      "raised",
+      "r1"
+     ]
+    ],
+    "ignored": [
+     "s1"
+    ],
+    "view": {
+     "answer": null,
+     "authority": "principal",
+     "outcome": "done",
+     "settlement": "s1",
+     "stale": false,
+     "state": "settled",
+     "withdrawn": false
+    }
+   },
+   "reversed": {
+    "held": [
+     [
+      "principal",
+      "settled",
+      "s1"
+     ],
+     [
+      "requester",
+      "raised",
+      "r1"
+     ]
+    ],
+    "ignored": [
+     "s1"
+    ],
+    "view": {
+     "answer": null,
+     "authority": "principal",
+     "outcome": "done",
+     "settlement": "s1",
+     "stale": false,
+     "state": "settled",
+     "withdrawn": false
+    }
+   }
+  },
+  "0.4/acts/open": {
+   "order": {
+    "held": [
+     [
+      "requester",
+      "raised",
+      "r1"
+     ]
+    ],
+    "ignored": [],
+    "view": {
+     "answer": null,
+     "authority": null,
+     "outcome": null,
+     "settlement": null,
+     "stale": false,
+     "state": "open",
+     "withdrawn": false
+    }
+   },
+   "reversed": {
+    "held": [
+     [
+      "requester",
+      "raised",
+      "r1"
+     ]
+    ],
+    "ignored": [],
+    "view": {
+     "answer": null,
+     "authority": null,
+     "outcome": null,
+     "settlement": null,
+     "stale": false,
+     "state": "open",
+     "withdrawn": false
+    }
+   }
+  },
+  "0.4/acts/reopened": {
+   "order": {
+    "held": [
+     [
+      "principal",
+      "reopened",
+      "o1"
+     ],
+     [
+      "principal",
+      "settled",
+      "s1"
+     ],
+     [
+      "requester",
+      "raised",
+      "r1"
+     ]
+    ],
+    "ignored": [],
+    "view": {
+     "answer": null,
+     "authority": null,
+     "outcome": null,
+     "settlement": "o1",
+     "stale": false,
+     "state": "open",
+     "withdrawn": false
+    }
+   },
+   "reversed": {
+    "held": [
+     [
+      "principal",
+      "reopened",
+      "o1"
+     ],
+     [
+      "principal",
+      "settled",
+      "s1"
+     ],
+     [
+      "requester",
+      "raised",
+      "r1"
+     ]
+    ],
+    "ignored": [],
+    "view": {
+     "answer": null,
+     "authority": null,
+     "outcome": null,
+     "settlement": "o1",
+     "stale": false,
+     "state": "open",
+     "withdrawn": false
+    }
+   }
+  },
+  "0.4/acts/requester-cannot-settle": {
+   "order": {
+    "held": [
+     [
+      "requester",
+      "raised",
+      "r1"
+     ]
+    ],
+    "ignored": [
+     "x1"
+    ],
+    "view": {
+     "answer": null,
+     "authority": null,
+     "outcome": null,
+     "settlement": null,
+     "stale": false,
+     "state": "open",
+     "withdrawn": false
+    }
+   },
+   "reversed": {
+    "held": [
+     [
+      "requester",
+      "raised",
+      "r1"
+     ]
+    ],
+    "ignored": [
+     "x1"
+    ],
+    "view": {
+     "answer": null,
+     "authority": null,
+     "outcome": null,
+     "settlement": null,
+     "stale": false,
+     "state": "open",
+     "withdrawn": false
+    }
+   }
+  },
+  "0.4/acts/reused-id": {
+   "order": {
+    "held": [
+     [
+      "principal",
+      "settled",
+      "s1"
+     ],
+     [
+      "requester",
+      "raised",
+      "r1"
+     ]
+    ],
+    "ignored": [],
+    "view": {
+     "answer": null,
+     "authority": "principal",
+     "outcome": "done",
+     "settlement": "s1",
+     "stale": false,
+     "state": "settled",
+     "withdrawn": false
+    }
+   },
+   "reversed": {
+    "held": [
+     [
+      "principal",
+      "settled",
+      "s1"
+     ],
+     [
+      "requester",
+      "raised",
+      "r1"
+     ]
+    ],
+    "ignored": [],
+    "view": {
+     "answer": null,
+     "authority": "principal",
+     "outcome": "done",
+     "settlement": "s1",
+     "stale": false,
+     "state": "settled",
+     "withdrawn": false
+    }
+   }
+  },
+  "0.4/acts/settled": {
+   "order": {
+    "held": [
+     [
+      "principal",
+      "settled",
+      "s1"
+     ],
+     [
+      "requester",
+      "raised",
+      "r1"
+     ]
+    ],
+    "ignored": [],
+    "view": {
+     "answer": null,
+     "authority": "principal",
+     "outcome": "done",
+     "settlement": "s1",
+     "stale": false,
+     "state": "settled",
+     "withdrawn": false
+    }
+   },
+   "reversed": {
+    "held": [
+     [
+      "principal",
+      "settled",
+      "s1"
+     ],
+     [
+      "requester",
+      "raised",
+      "r1"
+     ]
+    ],
+    "ignored": [],
+    "view": {
+     "answer": null,
+     "authority": "principal",
+     "outcome": "done",
+     "settlement": "s1",
+     "stale": false,
+     "state": "settled",
+     "withdrawn": false
+    }
+   }
+  },
+  "0.4/acts/settled-after-withdrawal": {
+   "order": {
+    "held": [
+     [
+      "principal",
+      "settled",
+      "s1"
+     ],
+     [
+      "requester",
+      "raised",
+      "r1"
+     ],
+     [
+      "requester",
+      "withdrawn",
+      "w1"
+     ]
+    ],
+    "ignored": [],
+    "view": {
+     "answer": null,
+     "authority": "principal",
+     "outcome": "done",
+     "settlement": "s1",
+     "stale": false,
+     "state": "settled",
+     "withdrawn": true
+    }
+   },
+   "reversed": {
+    "held": [
+     [
+      "principal",
+      "settled",
+      "s1"
+     ],
+     [
+      "requester",
+      "raised",
+      "r1"
+     ],
+     [
+      "requester",
+      "withdrawn",
+      "w1"
+     ]
+    ],
+    "ignored": [],
+    "view": {
+     "answer": null,
+     "authority": "principal",
+     "outcome": "done",
+     "settlement": "s1",
+     "stale": false,
+     "state": "settled",
+     "withdrawn": true
+    }
+   }
+  },
+  "0.4/acts/settlement-before-raise": {
+   "order": {
+    "held": [
+     [
+      "principal",
+      "settled",
+      "s1"
+     ]
+    ],
+    "ignored": [],
+    "view": {
+     "answer": null,
+     "authority": "principal",
+     "outcome": "done",
+     "settlement": "s1",
+     "stale": false,
+     "state": "settled",
+     "withdrawn": false
+    }
+   },
+   "reversed": {
+    "held": [
+     [
+      "principal",
+      "settled",
+      "s1"
+     ]
+    ],
+    "ignored": [],
+    "view": {
+     "answer": null,
+     "authority": "principal",
+     "outcome": "done",
+     "settlement": "s1",
+     "stale": false,
+     "state": "settled",
+     "withdrawn": false
+    }
+   }
+  },
+  "0.4/acts/stale": {
+   "order": {
+    "held": [
+     [
+      "principal",
+      "settled",
+      "s1"
+     ],
+     [
+      "requester",
+      "amended",
+      "a1"
+     ],
+     [
+      "requester",
+      "raised",
+      "r1"
+     ]
+    ],
+    "ignored": [],
+    "view": {
+     "answer": null,
+     "authority": "principal",
+     "outcome": "done",
+     "settlement": "s1",
+     "stale": true,
+     "state": "settled",
+     "withdrawn": false
+    }
+   },
+   "reversed": {
+    "held": [
+     [
+      "principal",
+      "settled",
+      "s1"
+     ],
+     [
+      "requester",
+      "amended",
+      "a1"
+     ],
+     [
+      "requester",
+      "raised",
+      "r1"
+     ]
+    ],
+    "ignored": [],
+    "view": {
+     "answer": null,
+     "authority": "principal",
+     "outcome": "done",
+     "settlement": "s1",
+     "stale": true,
+     "state": "settled",
+     "withdrawn": false
+    }
+   }
+  },
+  "0.4/acts/superseded": {
+   "order": {
+    "held": [
+     [
+      "principal",
+      "settled",
+      "s1"
+     ],
+     [
+      "principal",
+      "settled",
+      "s2"
+     ],
+     [
+      "requester",
+      "raised",
+      "r1"
+     ]
+    ],
+    "ignored": [],
+    "view": {
+     "answer": null,
+     "authority": "principal",
+     "outcome": "dropped",
+     "settlement": "s2",
+     "stale": false,
+     "state": "settled",
+     "withdrawn": false
+    }
+   },
+   "reversed": {
+    "held": [
+     [
+      "principal",
+      "settled",
+      "s1"
+     ],
+     [
+      "principal",
+      "settled",
+      "s2"
+     ],
+     [
+      "requester",
+      "raised",
+      "r1"
+     ]
+    ],
+    "ignored": [],
+    "view": {
+     "answer": null,
+     "authority": "principal",
+     "outcome": "dropped",
+     "settlement": "s2",
+     "stale": false,
+     "state": "settled",
+     "withdrawn": false
+    }
+   }
+  },
+  "0.4/acts/superseded-out-of-order": {
+   "order": {
+    "held": [
+     [
+      "principal",
+      "settled",
+      "s1"
+     ],
+     [
+      "principal",
+      "settled",
+      "s2"
+     ],
+     [
+      "requester",
+      "raised",
+      "r1"
+     ]
+    ],
+    "ignored": [],
+    "view": {
+     "answer": null,
+     "authority": "principal",
+     "outcome": "dropped",
+     "settlement": "s2",
+     "stale": false,
+     "state": "settled",
+     "withdrawn": false
+    }
+   },
+   "reversed": {
+    "held": [
+     [
+      "principal",
+      "settled",
+      "s1"
+     ],
+     [
+      "principal",
+      "settled",
+      "s2"
+     ],
+     [
+      "requester",
+      "raised",
+      "r1"
+     ]
+    ],
+    "ignored": [],
+    "view": {
+     "answer": null,
+     "authority": "principal",
+     "outcome": "dropped",
+     "settlement": "s2",
+     "stale": false,
+     "state": "settled",
+     "withdrawn": false
+    }
+   }
+  },
+  "0.4/acts/tie-broken-by-id": {
+   "order": {
+    "held": [
+     [
+      "principal",
+      "settled",
+      "b2"
+     ],
+     [
+      "principal",
+      "settled",
+      "s1"
+     ],
+     [
+      "requester",
+      "raised",
+      "r1"
+     ]
+    ],
+    "ignored": [],
+    "view": {
+     "answer": null,
+     "authority": "principal",
+     "outcome": "done",
+     "settlement": "s1",
+     "stale": false,
+     "state": "settled",
+     "withdrawn": false
+    }
+   },
+   "reversed": {
+    "held": [
+     [
+      "principal",
+      "settled",
+      "b2"
+     ],
+     [
+      "principal",
+      "settled",
+      "s1"
+     ],
+     [
+      "requester",
+      "raised",
+      "r1"
+     ]
+    ],
+    "ignored": [],
+    "view": {
+     "answer": null,
+     "authority": "principal",
+     "outcome": "done",
+     "settlement": "s1",
+     "stale": false,
+     "state": "settled",
+     "withdrawn": false
+    }
+   }
+  },
+  "0.4/acts/withdrawn-open": {
+   "order": {
+    "held": [
+     [
+      "requester",
+      "raised",
+      "r1"
+     ],
+     [
+      "requester",
+      "withdrawn",
+      "w1"
+     ]
+    ],
+    "ignored": [],
+    "view": {
+     "answer": null,
+     "authority": null,
+     "outcome": null,
+     "settlement": null,
+     "stale": false,
+     "state": "open",
+     "withdrawn": true
+    }
+   },
+   "reversed": {
+    "held": [
+     [
+      "requester",
+      "raised",
+      "r1"
+     ],
+     [
+      "requester",
+      "withdrawn",
+      "w1"
+     ]
+    ],
+    "ignored": [],
+    "view": {
+     "answer": null,
+     "authority": null,
+     "outcome": null,
+     "settlement": null,
+     "stale": false,
+     "state": "open",
+     "withdrawn": true
+    }
+   }
+  },
+  "0.4/acts/withdrawn-replaced-stays-open": {
+   "order": {
+    "held": [
+     [
+      "requester",
+      "raised",
+      "r:task-demo-aaaaaaaaaa"
+     ],
+     [
+      "requester",
+      "related",
+      "l9"
+     ],
+     [
+      "requester",
+      "withdrawn",
+      "w2"
+     ]
+    ],
+    "ignored": [],
+    "view": {
+     "answer": null,
+     "authority": null,
+     "outcome": null,
+     "settlement": null,
+     "stale": false,
+     "state": "open",
+     "withdrawn": true
+    }
+   },
+   "reversed": {
+    "held": [
+     [
+      "requester",
+      "raised",
+      "r:task-demo-aaaaaaaaaa"
+     ],
+     [
+      "requester",
+      "related",
+      "l9"
+     ],
+     [
+      "requester",
+      "withdrawn",
+      "w2"
+     ]
+    ],
+    "ignored": [],
+    "view": {
+     "answer": null,
+     "authority": null,
+     "outcome": null,
+     "settlement": null,
+     "stale": false,
+     "state": "open",
+     "withdrawn": true
+    }
+   }
+  },
+  "0.5/acts/approved-ignored-in-acts": {
+   "order": {
+    "held": [
+     [
+      "requester",
+      "raised",
+      "r:task-demo-aaaaaaaaaa"
+     ]
+    ],
+    "ignored": [
+     "ap1"
+    ],
+    "view": {
+     "answer": null,
+     "authority": null,
+     "outcome": null,
+     "settlement": null,
+     "stale": false,
+     "state": "open",
+     "withdrawn": false
+    }
+   },
+   "reversed": {
+    "held": [
+     [
+      "requester",
+      "raised",
+      "r:task-demo-aaaaaaaaaa"
+     ]
+    ],
+    "ignored": [
+     "ap1"
+    ],
+    "view": {
+     "answer": null,
+     "authority": null,
+     "outcome": null,
+     "settlement": null,
+     "stale": false,
+     "state": "open",
+     "withdrawn": false
+    }
+   }
+  },
+  "0.5/acts/attested-from-verified-claim": {
+   "order": {
+    "held": [
+     [
+      "agent",
+      "claimed",
+      "c1"
+     ],
+     [
+      "principal",
+      "settled",
+      "s1"
+     ],
+     [
+      "requester",
+      "raised",
+      "r:task-demo-aaaaaaaaaa"
+     ]
+    ],
+    "ignored": [],
+    "view": {
+     "answer": null,
+     "authority": "attested",
+     "outcome": "done",
+     "settlement": "s1",
+     "stale": false,
+     "state": "settled",
+     "withdrawn": false
+    }
+   },
+   "reversed": {
+    "held": [
+     [
+      "agent",
+      "claimed",
+      "c1"
+     ],
+     [
+      "principal",
+      "settled",
+      "s1"
+     ],
+     [
+      "requester",
+      "raised",
+      "r:task-demo-aaaaaaaaaa"
+     ]
+    ],
+    "ignored": [],
+    "view": {
+     "answer": null,
+     "authority": "attested",
+     "outcome": "done",
+     "settlement": "s1",
+     "stale": false,
+     "state": "settled",
+     "withdrawn": false
+    }
+   }
+  },
+  "0.5/acts/claim-changes-nothing": {
+   "order": {
+    "held": [
+     [
+      "agent",
+      "claimed",
+      "c1"
+     ],
+     [
+      "requester",
+      "raised",
+      "r1"
+     ]
+    ],
+    "ignored": [],
+    "view": {
+     "answer": null,
+     "authority": null,
+     "outcome": null,
+     "settlement": null,
+     "stale": false,
+     "state": "open",
+     "withdrawn": false
+    }
+   },
+   "reversed": {
+    "held": [
+     [
+      "agent",
+      "claimed",
+      "c1"
+     ],
+     [
+      "requester",
+      "raised",
+      "r1"
+     ]
+    ],
+    "ignored": [],
+    "view": {
+     "answer": null,
+     "authority": null,
+     "outcome": null,
+     "settlement": null,
+     "stale": false,
+     "state": "open",
+     "withdrawn": false
+    }
+   }
+  },
+  "0.5/acts/cycle": {
+   "order": {
+    "held": [
+     [
+      "principal",
+      "settled",
+      "y1"
+     ],
+     [
+      "principal",
+      "settled",
+      "y2"
+     ],
+     [
+      "requester",
+      "raised",
+      "r1"
+     ]
+    ],
+    "ignored": [],
+    "view": {
+     "answer": null,
+     "authority": "principal",
+     "outcome": "dropped",
+     "settlement": "y2",
+     "stale": false,
+     "state": "settled",
+     "withdrawn": false
+    }
+   },
+   "reversed": {
+    "held": [
+     [
+      "principal",
+      "settled",
+      "y1"
+     ],
+     [
+      "principal",
+      "settled",
+      "y2"
+     ],
+     [
+      "requester",
+      "raised",
+      "r1"
+     ]
+    ],
+    "ignored": [],
+    "view": {
+     "answer": null,
+     "authority": "principal",
+     "outcome": "dropped",
+     "settlement": "y2",
+     "stale": false,
+     "state": "settled",
+     "withdrawn": false
+    }
+   }
+  },
+  "0.5/acts/delegated": {
+   "order": {
+    "held": [
+     [
+      "principal",
+      "settled",
+      "d1"
+     ],
+     [
+      "requester",
+      "raised",
+      "r1"
+     ]
+    ],
+    "ignored": [],
+    "view": {
+     "answer": null,
+     "authority": "delegated",
+     "outcome": "done",
+     "settlement": "d1",
+     "stale": false,
+     "state": "settled",
+     "withdrawn": false
+    }
+   },
+   "reversed": {
+    "held": [
+     [
+      "principal",
+      "settled",
+      "d1"
+     ],
+     [
+      "requester",
+      "raised",
+      "r1"
+     ]
+    ],
+    "ignored": [],
+    "view": {
+     "answer": null,
+     "authority": "delegated",
+     "outcome": "done",
+     "settlement": "d1",
+     "stale": false,
+     "state": "settled",
+     "withdrawn": false
+    }
+   }
+  },
+  "0.5/acts/duplicate": {
+   "order": {
+    "held": [
+     [
+      "principal",
+      "settled",
+      "s1"
+     ],
+     [
+      "requester",
+      "raised",
+      "r1"
+     ]
+    ],
+    "ignored": [],
+    "view": {
+     "answer": null,
+     "authority": "principal",
+     "outcome": "done",
+     "settlement": "s1",
+     "stale": false,
+     "state": "settled",
+     "withdrawn": false
+    }
+   },
+   "reversed": {
+    "held": [
+     [
+      "principal",
+      "settled",
+      "s1"
+     ],
+     [
+      "requester",
+      "raised",
+      "r1"
+     ]
+    ],
+    "ignored": [],
+    "view": {
+     "answer": null,
+     "authority": "principal",
+     "outcome": "done",
+     "settlement": "s1",
+     "stale": false,
+     "state": "settled",
+     "withdrawn": false
+    }
+   }
+  },
+  "0.5/acts/fork": {
+   "order": {
+    "held": [
+     [
+      "principal",
+      "settled",
+      "b1"
+     ],
+     [
+      "principal",
+      "settled",
+      "s1"
+     ],
+     [
+      "requester",
+      "raised",
+      "r1"
+     ]
+    ],
+    "ignored": [],
+    "view": {
+     "answer": null,
+     "authority": "principal",
+     "outcome": "dropped",
+     "settlement": "b1",
+     "stale": false,
+     "state": "settled",
+     "withdrawn": false
+    }
+   },
+   "reversed": {
+    "held": [
+     [
+      "principal",
+      "settled",
+      "b1"
+     ],
+     [
+      "principal",
+      "settled",
+      "s1"
+     ],
+     [
+      "requester",
+      "raised",
+      "r1"
+     ]
+    ],
+    "ignored": [],
+    "view": {
+     "answer": null,
+     "authority": "principal",
+     "outcome": "dropped",
+     "settlement": "b1",
+     "stale": false,
+     "state": "settled",
+     "withdrawn": false
+    }
+   }
+  },
+  "0.5/acts/ids-scoped-by-origin": {
+   "order": {
+    "held": [
+     [
+      "agent",
+      "claimed",
+      "r1"
+     ],
+     [
+      "requester",
+      "raised",
+      "r1"
+     ]
+    ],
+    "ignored": [],
+    "view": {
+     "answer": null,
+     "authority": null,
+     "outcome": null,
+     "settlement": null,
+     "stale": false,
+     "state": "open",
+     "withdrawn": false
+    }
+   },
+   "reversed": {
+    "held": [
+     [
+      "agent",
+      "claimed",
+      "r1"
+     ],
+     [
+      "requester",
+      "raised",
+      "r1"
+     ]
+    ],
+    "ignored": [],
+    "view": {
+     "answer": null,
+     "authority": null,
+     "outcome": null,
+     "settlement": null,
+     "stale": false,
+     "state": "open",
+     "withdrawn": false
+    }
+   }
+  },
+  "0.5/acts/invalid-then-valid-same-id": {
+   "order": {
+    "held": [
+     [
+      "principal",
+      "settled",
+      "s1"
+     ],
+     [
+      "requester",
+      "raised",
+      "r1"
+     ]
+    ],
+    "ignored": [
+     "s1"
+    ],
+    "view": {
+     "answer": null,
+     "authority": "principal",
+     "outcome": "done",
+     "settlement": "s1",
+     "stale": false,
+     "state": "settled",
+     "withdrawn": false
+    }
+   },
+   "reversed": {
+    "held": [
+     [
+      "principal",
+      "settled",
+      "s1"
+     ],
+     [
+      "requester",
+      "raised",
+      "r1"
+     ]
+    ],
+    "ignored": [
+     "s1"
+    ],
+    "view": {
+     "answer": null,
+     "authority": "principal",
+     "outcome": "done",
+     "settlement": "s1",
+     "stale": false,
+     "state": "settled",
+     "withdrawn": false
+    }
+   }
+  },
+  "0.5/acts/open": {
+   "order": {
+    "held": [
+     [
+      "requester",
+      "raised",
+      "r1"
+     ]
+    ],
+    "ignored": [],
+    "view": {
+     "answer": null,
+     "authority": null,
+     "outcome": null,
+     "settlement": null,
+     "stale": false,
+     "state": "open",
+     "withdrawn": false
+    }
+   },
+   "reversed": {
+    "held": [
+     [
+      "requester",
+      "raised",
+      "r1"
+     ]
+    ],
+    "ignored": [],
+    "view": {
+     "answer": null,
+     "authority": null,
+     "outcome": null,
+     "settlement": null,
+     "stale": false,
+     "state": "open",
+     "withdrawn": false
+    }
+   }
+  },
+  "0.5/acts/reopened": {
+   "order": {
+    "held": [
+     [
+      "principal",
+      "reopened",
+      "o1"
+     ],
+     [
+      "principal",
+      "settled",
+      "s1"
+     ],
+     [
+      "requester",
+      "raised",
+      "r1"
+     ]
+    ],
+    "ignored": [],
+    "view": {
+     "answer": null,
+     "authority": null,
+     "outcome": null,
+     "settlement": "o1",
+     "stale": false,
+     "state": "open",
+     "withdrawn": false
+    }
+   },
+   "reversed": {
+    "held": [
+     [
+      "principal",
+      "reopened",
+      "o1"
+     ],
+     [
+      "principal",
+      "settled",
+      "s1"
+     ],
+     [
+      "requester",
+      "raised",
+      "r1"
+     ]
+    ],
+    "ignored": [],
+    "view": {
+     "answer": null,
+     "authority": null,
+     "outcome": null,
+     "settlement": "o1",
+     "stale": false,
+     "state": "open",
+     "withdrawn": false
+    }
+   }
+  },
+  "0.5/acts/requester-cannot-settle": {
+   "order": {
+    "held": [
+     [
+      "requester",
+      "raised",
+      "r1"
+     ]
+    ],
+    "ignored": [
+     "x1"
+    ],
+    "view": {
+     "answer": null,
+     "authority": null,
+     "outcome": null,
+     "settlement": null,
+     "stale": false,
+     "state": "open",
+     "withdrawn": false
+    }
+   },
+   "reversed": {
+    "held": [
+     [
+      "requester",
+      "raised",
+      "r1"
+     ]
+    ],
+    "ignored": [
+     "x1"
+    ],
+    "view": {
+     "answer": null,
+     "authority": null,
+     "outcome": null,
+     "settlement": null,
+     "stale": false,
+     "state": "open",
+     "withdrawn": false
+    }
+   }
+  },
+  "0.5/acts/reused-id": {
+   "order": {
+    "held": [
+     [
+      "principal",
+      "settled",
+      "s1"
+     ],
+     [
+      "requester",
+      "raised",
+      "r1"
+     ]
+    ],
+    "ignored": [],
+    "view": {
+     "answer": null,
+     "authority": "principal",
+     "outcome": "done",
+     "settlement": "s1",
+     "stale": false,
+     "state": "settled",
+     "withdrawn": false
+    }
+   },
+   "reversed": {
+    "held": [
+     [
+      "principal",
+      "settled",
+      "s1"
+     ],
+     [
+      "requester",
+      "raised",
+      "r1"
+     ]
+    ],
+    "ignored": [],
+    "view": {
+     "answer": null,
+     "authority": "principal",
+     "outcome": "done",
+     "settlement": "s1",
+     "stale": false,
+     "state": "settled",
+     "withdrawn": false
+    }
+   }
+  },
+  "0.5/acts/settled": {
+   "order": {
+    "held": [
+     [
+      "principal",
+      "settled",
+      "s1"
+     ],
+     [
+      "requester",
+      "raised",
+      "r1"
+     ]
+    ],
+    "ignored": [],
+    "view": {
+     "answer": null,
+     "authority": "principal",
+     "outcome": "done",
+     "settlement": "s1",
+     "stale": false,
+     "state": "settled",
+     "withdrawn": false
+    }
+   },
+   "reversed": {
+    "held": [
+     [
+      "principal",
+      "settled",
+      "s1"
+     ],
+     [
+      "requester",
+      "raised",
+      "r1"
+     ]
+    ],
+    "ignored": [],
+    "view": {
+     "answer": null,
+     "authority": "principal",
+     "outcome": "done",
+     "settlement": "s1",
+     "stale": false,
+     "state": "settled",
+     "withdrawn": false
+    }
+   }
+  },
+  "0.5/acts/settled-after-withdrawal": {
+   "order": {
+    "held": [
+     [
+      "principal",
+      "settled",
+      "s1"
+     ],
+     [
+      "requester",
+      "raised",
+      "r1"
+     ],
+     [
+      "requester",
+      "withdrawn",
+      "w1"
+     ]
+    ],
+    "ignored": [],
+    "view": {
+     "answer": null,
+     "authority": "principal",
+     "outcome": "done",
+     "settlement": "s1",
+     "stale": false,
+     "state": "settled",
+     "withdrawn": true
+    }
+   },
+   "reversed": {
+    "held": [
+     [
+      "principal",
+      "settled",
+      "s1"
+     ],
+     [
+      "requester",
+      "raised",
+      "r1"
+     ],
+     [
+      "requester",
+      "withdrawn",
+      "w1"
+     ]
+    ],
+    "ignored": [],
+    "view": {
+     "answer": null,
+     "authority": "principal",
+     "outcome": "done",
+     "settlement": "s1",
+     "stale": false,
+     "state": "settled",
+     "withdrawn": true
+    }
+   }
+  },
+  "0.5/acts/settlement-before-raise": {
+   "order": {
+    "held": [
+     [
+      "principal",
+      "settled",
+      "s1"
+     ]
+    ],
+    "ignored": [],
+    "view": {
+     "answer": null,
+     "authority": "principal",
+     "outcome": "done",
+     "settlement": "s1",
+     "stale": false,
+     "state": "settled",
+     "withdrawn": false
+    }
+   },
+   "reversed": {
+    "held": [
+     [
+      "principal",
+      "settled",
+      "s1"
+     ]
+    ],
+    "ignored": [],
+    "view": {
+     "answer": null,
+     "authority": "principal",
+     "outcome": "done",
+     "settlement": "s1",
+     "stale": false,
+     "state": "settled",
+     "withdrawn": false
+    }
+   }
+  },
+  "0.5/acts/settlement-on-other-terms-is-stale": {
+   "order": {
+    "held": [
+     [
+      "principal",
+      "settled",
+      "s:other"
+     ],
+     [
+      "requester",
+      "raised",
+      "r1"
+     ]
+    ],
+    "ignored": [],
+    "view": {
+     "answer": null,
+     "authority": "principal",
+     "outcome": "done",
+     "settlement": "s:other",
+     "stale": true,
+     "state": "settled",
+     "withdrawn": false
+    }
+   },
+   "reversed": {
+    "held": [
+     [
+      "principal",
+      "settled",
+      "s:other"
+     ],
+     [
+      "requester",
+      "raised",
+      "r1"
+     ]
+    ],
+    "ignored": [],
+    "view": {
+     "answer": null,
+     "authority": "principal",
+     "outcome": "done",
+     "settlement": "s:other",
+     "stale": true,
+     "state": "settled",
+     "withdrawn": false
+    }
+   }
+  },
+  "0.5/acts/stale": {
+   "order": {
+    "held": [
+     [
+      "principal",
+      "settled",
+      "s1"
+     ],
+     [
+      "requester",
+      "amended",
+      "a1"
+     ],
+     [
+      "requester",
+      "raised",
+      "r1"
+     ]
+    ],
+    "ignored": [],
+    "view": {
+     "answer": null,
+     "authority": "principal",
+     "outcome": "done",
+     "settlement": "s1",
+     "stale": true,
+     "state": "settled",
+     "withdrawn": false
+    }
+   },
+   "reversed": {
+    "held": [
+     [
+      "principal",
+      "settled",
+      "s1"
+     ],
+     [
+      "requester",
+      "amended",
+      "a1"
+     ],
+     [
+      "requester",
+      "raised",
+      "r1"
+     ]
+    ],
+    "ignored": [],
+    "view": {
+     "answer": null,
+     "authority": "principal",
+     "outcome": "done",
+     "settlement": "s1",
+     "stale": true,
+     "state": "settled",
+     "withdrawn": false
+    }
+   }
+  },
+  "0.5/acts/superseded": {
+   "order": {
+    "held": [
+     [
+      "principal",
+      "settled",
+      "s1"
+     ],
+     [
+      "principal",
+      "settled",
+      "s2"
+     ],
+     [
+      "requester",
+      "raised",
+      "r1"
+     ]
+    ],
+    "ignored": [],
+    "view": {
+     "answer": null,
+     "authority": "principal",
+     "outcome": "dropped",
+     "settlement": "s2",
+     "stale": false,
+     "state": "settled",
+     "withdrawn": false
+    }
+   },
+   "reversed": {
+    "held": [
+     [
+      "principal",
+      "settled",
+      "s1"
+     ],
+     [
+      "principal",
+      "settled",
+      "s2"
+     ],
+     [
+      "requester",
+      "raised",
+      "r1"
+     ]
+    ],
+    "ignored": [],
+    "view": {
+     "answer": null,
+     "authority": "principal",
+     "outcome": "dropped",
+     "settlement": "s2",
+     "stale": false,
+     "state": "settled",
+     "withdrawn": false
+    }
+   }
+  },
+  "0.5/acts/superseded-out-of-order": {
+   "order": {
+    "held": [
+     [
+      "principal",
+      "settled",
+      "s1"
+     ],
+     [
+      "principal",
+      "settled",
+      "s2"
+     ],
+     [
+      "requester",
+      "raised",
+      "r1"
+     ]
+    ],
+    "ignored": [],
+    "view": {
+     "answer": null,
+     "authority": "principal",
+     "outcome": "dropped",
+     "settlement": "s2",
+     "stale": false,
+     "state": "settled",
+     "withdrawn": false
+    }
+   },
+   "reversed": {
+    "held": [
+     [
+      "principal",
+      "settled",
+      "s1"
+     ],
+     [
+      "principal",
+      "settled",
+      "s2"
+     ],
+     [
+      "requester",
+      "raised",
+      "r1"
+     ]
+    ],
+    "ignored": [],
+    "view": {
+     "answer": null,
+     "authority": "principal",
+     "outcome": "dropped",
+     "settlement": "s2",
+     "stale": false,
+     "state": "settled",
+     "withdrawn": false
+    }
+   }
+  },
+  "0.5/acts/tie-broken-by-id": {
+   "order": {
+    "held": [
+     [
+      "principal",
+      "settled",
+      "b2"
+     ],
+     [
+      "principal",
+      "settled",
+      "s1"
+     ],
+     [
+      "requester",
+      "raised",
+      "r1"
+     ]
+    ],
+    "ignored": [],
+    "view": {
+     "answer": null,
+     "authority": "principal",
+     "outcome": "done",
+     "settlement": "s1",
+     "stale": false,
+     "state": "settled",
+     "withdrawn": false
+    }
+   },
+   "reversed": {
+    "held": [
+     [
+      "principal",
+      "settled",
+      "b2"
+     ],
+     [
+      "principal",
+      "settled",
+      "s1"
+     ],
+     [
+      "requester",
+      "raised",
+      "r1"
+     ]
+    ],
+    "ignored": [],
+    "view": {
+     "answer": null,
+     "authority": "principal",
+     "outcome": "done",
+     "settlement": "s1",
+     "stale": false,
+     "state": "settled",
+     "withdrawn": false
+    }
+   }
+  },
+  "0.5/acts/withdrawn-open": {
+   "order": {
+    "held": [
+     [
+      "requester",
+      "raised",
+      "r1"
+     ],
+     [
+      "requester",
+      "withdrawn",
+      "w1"
+     ]
+    ],
+    "ignored": [],
+    "view": {
+     "answer": null,
+     "authority": null,
+     "outcome": null,
+     "settlement": null,
+     "stale": false,
+     "state": "open",
+     "withdrawn": true
+    }
+   },
+   "reversed": {
+    "held": [
+     [
+      "requester",
+      "raised",
+      "r1"
+     ],
+     [
+      "requester",
+      "withdrawn",
+      "w1"
+     ]
+    ],
+    "ignored": [],
+    "view": {
+     "answer": null,
+     "authority": null,
+     "outcome": null,
+     "settlement": null,
+     "stale": false,
+     "state": "open",
+     "withdrawn": true
+    }
+   }
+  },
+  "0.5/acts/withdrawn-replaced-stays-open": {
+   "order": {
+    "held": [
+     [
+      "requester",
+      "raised",
+      "r:task-demo-aaaaaaaaaa"
+     ],
+     [
+      "requester",
+      "related",
+      "l9"
+     ],
+     [
+      "requester",
+      "withdrawn",
+      "w2"
+     ]
+    ],
+    "ignored": [],
+    "view": {
+     "answer": null,
+     "authority": null,
+     "outcome": null,
+     "settlement": null,
+     "stale": false,
+     "state": "open",
+     "withdrawn": true
+    }
+   },
+   "reversed": {
+    "held": [
+     [
+      "requester",
+      "raised",
+      "r:task-demo-aaaaaaaaaa"
+     ],
+     [
+      "requester",
+      "related",
+      "l9"
+     ],
+     [
+      "requester",
+      "withdrawn",
+      "w2"
+     ]
+    ],
+    "ignored": [],
+    "view": {
+     "answer": null,
+     "authority": null,
+     "outcome": null,
+     "settlement": null,
+     "stale": false,
+     "state": "open",
+     "withdrawn": true
+    }
+   }
+  },
+  "0.5/decisions/answer-option-not-an-option": {
+   "order": {
+    "held": [
+     [
+      "principal",
+      "settled",
+      "s-opt"
+     ],
+     [
+      "requester",
+      "raised",
+      "r1"
+     ]
+    ],
+    "ignored": [],
+    "view": {
+     "answer": {
+      "option": "mysql",
+      "text": "Use MySQL"
+     },
+     "authority": "principal",
+     "outcome": "decided",
+     "settlement": "s-opt",
+     "stale": false,
+     "state": "settled",
+     "withdrawn": false
+    }
+   },
+   "reversed": {
+    "held": [
+     [
+      "principal",
+      "settled",
+      "s-opt"
+     ],
+     [
+      "requester",
+      "raised",
+      "r1"
+     ]
+    ],
+    "ignored": [],
+    "view": {
+     "answer": {
+      "option": "mysql",
+      "text": "Use MySQL"
+     },
+     "authority": "principal",
+     "outcome": "decided",
+     "settlement": "s-opt",
+     "stale": false,
+     "state": "settled",
+     "withdrawn": false
+    }
+   }
+  },
+  "0.5/decisions/claim-changes-nothing": {
+   "order": {
+    "held": [
+     [
+      "agent",
+      "claimed",
+      "c1"
+     ],
+     [
+      "requester",
+      "raised",
+      "r1"
+     ]
+    ],
+    "ignored": [],
+    "view": {
+     "answer": null,
+     "authority": null,
+     "outcome": null,
+     "settlement": null,
+     "stale": false,
+     "state": "open",
+     "withdrawn": false
+    }
+   },
+   "reversed": {
+    "held": [
+     [
+      "agent",
+      "claimed",
+      "c1"
+     ],
+     [
+      "requester",
+      "raised",
+      "r1"
+     ]
+    ],
+    "ignored": [],
+    "view": {
+     "answer": null,
+     "authority": null,
+     "outcome": null,
+     "settlement": null,
+     "stale": false,
+     "state": "open",
+     "withdrawn": false
+    }
+   }
+  },
+  "0.5/decisions/cycle": {
+   "order": {
+    "held": [
+     [
+      "principal",
+      "settled",
+      "y1"
+     ],
+     [
+      "principal",
+      "settled",
+      "y2"
+     ],
+     [
+      "requester",
+      "raised",
+      "r1"
+     ]
+    ],
+    "ignored": [],
+    "view": {
+     "answer": {
+      "option": "pg",
+      "text": "Postgres"
+     },
+     "authority": "principal",
+     "outcome": "decided",
+     "settlement": "y2",
+     "stale": false,
+     "state": "settled",
+     "withdrawn": false
+    }
+   },
+   "reversed": {
+    "held": [
+     [
+      "principal",
+      "settled",
+      "y1"
+     ],
+     [
+      "principal",
+      "settled",
+      "y2"
+     ],
+     [
+      "requester",
+      "raised",
+      "r1"
+     ]
+    ],
+    "ignored": [],
+    "view": {
+     "answer": {
+      "option": "pg",
+      "text": "Postgres"
+     },
+     "authority": "principal",
+     "outcome": "decided",
+     "settlement": "y2",
+     "stale": false,
+     "state": "settled",
+     "withdrawn": false
+    }
+   }
+  },
+  "0.5/decisions/delegated": {
+   "order": {
+    "held": [
+     [
+      "principal",
+      "settled",
+      "d1"
+     ],
+     [
+      "requester",
+      "raised",
+      "r1"
+     ]
+    ],
+    "ignored": [],
+    "view": {
+     "answer": {
+      "option": "sqlite",
+      "text": "SQLite"
+     },
+     "authority": "delegated",
+     "outcome": "decided",
+     "settlement": "d1",
+     "stale": false,
+     "state": "settled",
+     "withdrawn": false
+    }
+   },
+   "reversed": {
+    "held": [
+     [
+      "principal",
+      "settled",
+      "d1"
+     ],
+     [
+      "requester",
+      "raised",
+      "r1"
+     ]
+    ],
+    "ignored": [],
+    "view": {
+     "answer": {
+      "option": "sqlite",
+      "text": "SQLite"
+     },
+     "authority": "delegated",
+     "outcome": "decided",
+     "settlement": "d1",
+     "stale": false,
+     "state": "settled",
+     "withdrawn": false
+    }
+   }
+  },
+  "0.5/decisions/duplicate": {
+   "order": {
+    "held": [
+     [
+      "principal",
+      "settled",
+      "s1"
+     ],
+     [
+      "requester",
+      "raised",
+      "r1"
+     ]
+    ],
+    "ignored": [],
+    "view": {
+     "answer": {
+      "option": "sqlite",
+      "text": "SQLite"
+     },
+     "authority": "principal",
+     "outcome": "decided",
+     "settlement": "s1",
+     "stale": false,
+     "state": "settled",
+     "withdrawn": false
+    }
+   },
+   "reversed": {
+    "held": [
+     [
+      "principal",
+      "settled",
+      "s1"
+     ],
+     [
+      "requester",
+      "raised",
+      "r1"
+     ]
+    ],
+    "ignored": [],
+    "view": {
+     "answer": {
+      "option": "sqlite",
+      "text": "SQLite"
+     },
+     "authority": "principal",
+     "outcome": "decided",
+     "settlement": "s1",
+     "stale": false,
+     "state": "settled",
+     "withdrawn": false
+    }
+   }
+  },
+  "0.5/decisions/fork": {
+   "order": {
+    "held": [
+     [
+      "principal",
+      "settled",
+      "b1"
+     ],
+     [
+      "principal",
+      "settled",
+      "s1"
+     ],
+     [
+      "requester",
+      "raised",
+      "r1"
+     ]
+    ],
+    "ignored": [],
+    "view": {
+     "answer": {
+      "option": "pg",
+      "text": "Postgres after all"
+     },
+     "authority": "principal",
+     "outcome": "decided",
+     "settlement": "b1",
+     "stale": false,
+     "state": "settled",
+     "withdrawn": false
+    }
+   },
+   "reversed": {
+    "held": [
+     [
+      "principal",
+      "settled",
+      "b1"
+     ],
+     [
+      "principal",
+      "settled",
+      "s1"
+     ],
+     [
+      "requester",
+      "raised",
+      "r1"
+     ]
+    ],
+    "ignored": [],
+    "view": {
+     "answer": {
+      "option": "pg",
+      "text": "Postgres after all"
+     },
+     "authority": "principal",
+     "outcome": "decided",
+     "settlement": "b1",
+     "stale": false,
+     "state": "settled",
+     "withdrawn": false
+    }
+   }
+  },
+  "0.5/decisions/ids-scoped-by-origin": {
+   "order": {
+    "held": [
+     [
+      "agent",
+      "claimed",
+      "r:q-demo-7"
+     ],
+     [
+      "requester",
+      "raised",
+      "r:q-demo-7"
+     ]
+    ],
+    "ignored": [],
+    "view": {
+     "answer": null,
+     "authority": null,
+     "outcome": null,
+     "settlement": null,
+     "stale": false,
+     "state": "open",
+     "withdrawn": false
+    }
+   },
+   "reversed": {
+    "held": [
+     [
+      "agent",
+      "claimed",
+      "r:q-demo-7"
+     ],
+     [
+      "requester",
+      "raised",
+      "r:q-demo-7"
+     ]
+    ],
+    "ignored": [],
+    "view": {
+     "answer": null,
+     "authority": null,
+     "outcome": null,
+     "settlement": null,
+     "stale": false,
+     "state": "open",
+     "withdrawn": false
+    }
+   }
+  },
+  "0.5/decisions/invalid-then-valid-same-id": {
+   "order": {
+    "held": [
+     [
+      "principal",
+      "settled",
+      "s1"
+     ],
+     [
+      "requester",
+      "raised",
+      "r1"
+     ]
+    ],
+    "ignored": [
+     "s1"
+    ],
+    "view": {
+     "answer": {
+      "option": "sqlite",
+      "text": "SQLite"
+     },
+     "authority": "principal",
+     "outcome": "decided",
+     "settlement": "s1",
+     "stale": false,
+     "state": "settled",
+     "withdrawn": false
+    }
+   },
+   "reversed": {
+    "held": [
+     [
+      "principal",
+      "settled",
+      "s1"
+     ],
+     [
+      "requester",
+      "raised",
+      "r1"
+     ]
+    ],
+    "ignored": [
+     "s1"
+    ],
+    "view": {
+     "answer": {
+      "option": "sqlite",
+      "text": "SQLite"
+     },
+     "authority": "principal",
+     "outcome": "decided",
+     "settlement": "s1",
+     "stale": false,
+     "state": "settled",
+     "withdrawn": false
+    }
+   }
+  },
+  "0.5/decisions/open": {
+   "order": {
+    "held": [
+     [
+      "requester",
+      "raised",
+      "r1"
+     ]
+    ],
+    "ignored": [],
+    "view": {
+     "answer": null,
+     "authority": null,
+     "outcome": null,
+     "settlement": null,
+     "stale": false,
+     "state": "open",
+     "withdrawn": false
+    }
+   },
+   "reversed": {
+    "held": [
+     [
+      "requester",
+      "raised",
+      "r1"
+     ]
+    ],
+    "ignored": [],
+    "view": {
+     "answer": null,
+     "authority": null,
+     "outcome": null,
+     "settlement": null,
+     "stale": false,
+     "state": "open",
+     "withdrawn": false
+    }
+   }
+  },
+  "0.5/decisions/reopened": {
+   "order": {
+    "held": [
+     [
+      "principal",
+      "reopened",
+      "o1"
+     ],
+     [
+      "principal",
+      "settled",
+      "s1"
+     ],
+     [
+      "requester",
+      "raised",
+      "r1"
+     ]
+    ],
+    "ignored": [],
+    "view": {
+     "answer": null,
+     "authority": null,
+     "outcome": null,
+     "settlement": "o1",
+     "stale": false,
+     "state": "open",
+     "withdrawn": false
+    }
+   },
+   "reversed": {
+    "held": [
+     [
+      "principal",
+      "reopened",
+      "o1"
+     ],
+     [
+      "principal",
+      "settled",
+      "s1"
+     ],
+     [
+      "requester",
+      "raised",
+      "r1"
+     ]
+    ],
+    "ignored": [],
+    "view": {
+     "answer": null,
+     "authority": null,
+     "outcome": null,
+     "settlement": "o1",
+     "stale": false,
+     "state": "open",
+     "withdrawn": false
+    }
+   }
+  },
+  "0.5/decisions/requester-cannot-settle": {
+   "order": {
+    "held": [
+     [
+      "requester",
+      "raised",
+      "r1"
+     ]
+    ],
+    "ignored": [
+     "x1"
+    ],
+    "view": {
+     "answer": null,
+     "authority": null,
+     "outcome": null,
+     "settlement": null,
+     "stale": false,
+     "state": "open",
+     "withdrawn": false
+    }
+   },
+   "reversed": {
+    "held": [
+     [
+      "requester",
+      "raised",
+      "r1"
+     ]
+    ],
+    "ignored": [
+     "x1"
+    ],
+    "view": {
+     "answer": null,
+     "authority": null,
+     "outcome": null,
+     "settlement": null,
+     "stale": false,
+     "state": "open",
+     "withdrawn": false
+    }
+   }
+  },
+  "0.5/decisions/reused-id": {
+   "order": {
+    "held": [
+     [
+      "principal",
+      "settled",
+      "s1"
+     ],
+     [
+      "requester",
+      "raised",
+      "r1"
+     ]
+    ],
+    "ignored": [],
+    "view": {
+     "answer": {
+      "option": "sqlite",
+      "text": "SQLite"
+     },
+     "authority": "principal",
+     "outcome": "decided",
+     "settlement": "s1",
+     "stale": false,
+     "state": "settled",
+     "withdrawn": false
+    }
+   },
+   "reversed": {
+    "held": [
+     [
+      "principal",
+      "settled",
+      "s1"
+     ],
+     [
+      "requester",
+      "raised",
+      "r1"
+     ]
+    ],
+    "ignored": [],
+    "view": {
+     "answer": {
+      "option": "sqlite",
+      "text": "SQLite"
+     },
+     "authority": "principal",
+     "outcome": "decided",
+     "settlement": "s1",
+     "stale": false,
+     "state": "settled",
+     "withdrawn": false
+    }
+   }
+  },
+  "0.5/decisions/same-id-other-type-displaces-nothing": {
+   "order": {
+    "held": [
+     [
+      "requester",
+      "note",
+      "x1"
+     ],
+     [
+      "requester",
+      "raised",
+      "r1"
+     ],
+     [
+      "requester",
+      "withdrawn",
+      "x1"
+     ]
+    ],
+    "ignored": [],
+    "view": {
+     "answer": null,
+     "authority": null,
+     "outcome": null,
+     "settlement": null,
+     "stale": false,
+     "state": "withdrawn",
+     "withdrawn": true
+    }
+   },
+   "reversed": {
+    "held": [
+     [
+      "requester",
+      "note",
+      "x1"
+     ],
+     [
+      "requester",
+      "raised",
+      "r1"
+     ],
+     [
+      "requester",
+      "withdrawn",
+      "x1"
+     ]
+    ],
+    "ignored": [],
+    "view": {
+     "answer": null,
+     "authority": null,
+     "outcome": null,
+     "settlement": null,
+     "stale": false,
+     "state": "withdrawn",
+     "withdrawn": true
+    }
+   }
+  },
+  "0.5/decisions/self-superseding-record": {
+   "order": {
+    "held": [
+     [
+      "principal",
+      "settled",
+      "s0"
+     ],
+     [
+      "principal",
+      "settled",
+      "s1"
+     ],
+     [
+      "requester",
+      "raised",
+      "r1"
+     ]
+    ],
+    "ignored": [],
+    "view": {
+     "answer": {
+      "text": "No"
+     },
+     "authority": "principal",
+     "outcome": "decided",
+     "settlement": "s1",
+     "stale": false,
+     "state": "settled",
+     "withdrawn": false
+    }
+   },
+   "reversed": {
+    "held": [
+     [
+      "principal",
+      "settled",
+      "s0"
+     ],
+     [
+      "principal",
+      "settled",
+      "s1"
+     ],
+     [
+      "requester",
+      "raised",
+      "r1"
+     ]
+    ],
+    "ignored": [],
+    "view": {
+     "answer": {
+      "text": "No"
+     },
+     "authority": "principal",
+     "outcome": "decided",
+     "settlement": "s1",
+     "stale": false,
+     "state": "settled",
+     "withdrawn": false
+    }
+   }
+  },
+  "0.5/decisions/settled": {
+   "order": {
+    "held": [
+     [
+      "principal",
+      "settled",
+      "s1"
+     ],
+     [
+      "requester",
+      "raised",
+      "r1"
+     ]
+    ],
+    "ignored": [],
+    "view": {
+     "answer": {
+      "option": "sqlite",
+      "text": "SQLite"
+     },
+     "authority": "principal",
+     "outcome": "decided",
+     "settlement": "s1",
+     "stale": false,
+     "state": "settled",
+     "withdrawn": false
+    }
+   },
+   "reversed": {
+    "held": [
+     [
+      "principal",
+      "settled",
+      "s1"
+     ],
+     [
+      "requester",
+      "raised",
+      "r1"
+     ]
+    ],
+    "ignored": [],
+    "view": {
+     "answer": {
+      "option": "sqlite",
+      "text": "SQLite"
+     },
+     "authority": "principal",
+     "outcome": "decided",
+     "settlement": "s1",
+     "stale": false,
+     "state": "settled",
+     "withdrawn": false
+    }
+   }
+  },
+  "0.5/decisions/settled-after-withdrawal": {
+   "order": {
+    "held": [
+     [
+      "principal",
+      "settled",
+      "s1"
+     ],
+     [
+      "requester",
+      "raised",
+      "r1"
+     ],
+     [
+      "requester",
+      "withdrawn",
+      "w1"
+     ]
+    ],
+    "ignored": [],
+    "view": {
+     "answer": {
+      "option": "sqlite",
+      "text": "SQLite"
+     },
+     "authority": "principal",
+     "outcome": "decided",
+     "settlement": "s1",
+     "stale": false,
+     "state": "settled",
+     "withdrawn": true
+    }
+   },
+   "reversed": {
+    "held": [
+     [
+      "principal",
+      "settled",
+      "s1"
+     ],
+     [
+      "requester",
+      "raised",
+      "r1"
+     ],
+     [
+      "requester",
+      "withdrawn",
+      "w1"
+     ]
+    ],
+    "ignored": [],
+    "view": {
+     "answer": {
+      "option": "sqlite",
+      "text": "SQLite"
+     },
+     "authority": "principal",
+     "outcome": "decided",
+     "settlement": "s1",
+     "stale": false,
+     "state": "settled",
+     "withdrawn": true
+    }
+   }
+  },
+  "0.5/decisions/settlement-before-raise": {
+   "order": {
+    "held": [
+     [
+      "principal",
+      "settled",
+      "s1"
+     ]
+    ],
+    "ignored": [],
+    "view": {
+     "answer": {
+      "option": "sqlite",
+      "text": "SQLite"
+     },
+     "authority": "principal",
+     "outcome": "decided",
+     "settlement": "s1",
+     "stale": false,
+     "state": "settled",
+     "withdrawn": false
+    }
+   },
+   "reversed": {
+    "held": [
+     [
+      "principal",
+      "settled",
+      "s1"
+     ]
+    ],
+    "ignored": [],
+    "view": {
+     "answer": {
+      "option": "sqlite",
+      "text": "SQLite"
+     },
+     "authority": "principal",
+     "outcome": "decided",
+     "settlement": "s1",
+     "stale": false,
+     "state": "settled",
+     "withdrawn": false
+    }
+   }
+  },
+  "0.5/decisions/settlement-on-other-terms-is-stale": {
+   "order": {
+    "held": [
+     [
+      "principal",
+      "settled",
+      "s:other"
+     ],
+     [
+      "requester",
+      "raised",
+      "r:q-demo-7"
+     ]
+    ],
+    "ignored": [],
+    "view": {
+     "answer": {
+      "text": "Hold"
+     },
+     "authority": "principal",
+     "outcome": "decided",
+     "settlement": "s:other",
+     "stale": true,
+     "state": "settled",
+     "withdrawn": false
+    }
+   },
+   "reversed": {
+    "held": [
+     [
+      "principal",
+      "settled",
+      "s:other"
+     ],
+     [
+      "requester",
+      "raised",
+      "r:q-demo-7"
+     ]
+    ],
+    "ignored": [],
+    "view": {
+     "answer": {
+      "text": "Hold"
+     },
+     "authority": "principal",
+     "outcome": "decided",
+     "settlement": "s:other",
+     "stale": true,
+     "state": "settled",
+     "withdrawn": false
+    }
+   }
+  },
+  "0.5/decisions/stale": {
+   "order": {
+    "held": [
+     [
+      "principal",
+      "settled",
+      "s1"
+     ],
+     [
+      "requester",
+      "amended",
+      "a1"
+     ],
+     [
+      "requester",
+      "raised",
+      "r1"
+     ]
+    ],
+    "ignored": [],
+    "view": {
+     "answer": {
+      "option": "sqlite",
+      "text": "SQLite"
+     },
+     "authority": "principal",
+     "outcome": "decided",
+     "settlement": "s1",
+     "stale": true,
+     "state": "settled",
+     "withdrawn": false
+    }
+   },
+   "reversed": {
+    "held": [
+     [
+      "principal",
+      "settled",
+      "s1"
+     ],
+     [
+      "requester",
+      "amended",
+      "a1"
+     ],
+     [
+      "requester",
+      "raised",
+      "r1"
+     ]
+    ],
+    "ignored": [],
+    "view": {
+     "answer": {
+      "option": "sqlite",
+      "text": "SQLite"
+     },
+     "authority": "principal",
+     "outcome": "decided",
+     "settlement": "s1",
+     "stale": true,
+     "state": "settled",
+     "withdrawn": false
+    }
+   }
+  },
+  "0.5/decisions/superseded": {
+   "order": {
+    "held": [
+     [
+      "principal",
+      "settled",
+      "s1"
+     ],
+     [
+      "principal",
+      "settled",
+      "s2"
+     ],
+     [
+      "requester",
+      "raised",
+      "r1"
+     ]
+    ],
+    "ignored": [],
+    "view": {
+     "answer": {
+      "option": "pg",
+      "text": "Postgres after all"
+     },
+     "authority": "principal",
+     "outcome": "decided",
+     "settlement": "s2",
+     "stale": false,
+     "state": "settled",
+     "withdrawn": false
+    }
+   },
+   "reversed": {
+    "held": [
+     [
+      "principal",
+      "settled",
+      "s1"
+     ],
+     [
+      "principal",
+      "settled",
+      "s2"
+     ],
+     [
+      "requester",
+      "raised",
+      "r1"
+     ]
+    ],
+    "ignored": [],
+    "view": {
+     "answer": {
+      "option": "pg",
+      "text": "Postgres after all"
+     },
+     "authority": "principal",
+     "outcome": "decided",
+     "settlement": "s2",
+     "stale": false,
+     "state": "settled",
+     "withdrawn": false
+    }
+   }
+  },
+  "0.5/decisions/superseded-out-of-order": {
+   "order": {
+    "held": [
+     [
+      "principal",
+      "settled",
+      "s1"
+     ],
+     [
+      "principal",
+      "settled",
+      "s2"
+     ],
+     [
+      "requester",
+      "raised",
+      "r1"
+     ]
+    ],
+    "ignored": [],
+    "view": {
+     "answer": {
+      "option": "pg",
+      "text": "Postgres after all"
+     },
+     "authority": "principal",
+     "outcome": "decided",
+     "settlement": "s2",
+     "stale": false,
+     "state": "settled",
+     "withdrawn": false
+    }
+   },
+   "reversed": {
+    "held": [
+     [
+      "principal",
+      "settled",
+      "s1"
+     ],
+     [
+      "principal",
+      "settled",
+      "s2"
+     ],
+     [
+      "requester",
+      "raised",
+      "r1"
+     ]
+    ],
+    "ignored": [],
+    "view": {
+     "answer": {
+      "option": "pg",
+      "text": "Postgres after all"
+     },
+     "authority": "principal",
+     "outcome": "decided",
+     "settlement": "s2",
+     "stale": false,
+     "state": "settled",
+     "withdrawn": false
+    }
+   }
+  },
+  "0.5/decisions/tie-broken-by-id": {
+   "order": {
+    "held": [
+     [
+      "principal",
+      "settled",
+      "b2"
+     ],
+     [
+      "principal",
+      "settled",
+      "s1"
+     ],
+     [
+      "requester",
+      "raised",
+      "r1"
+     ]
+    ],
+    "ignored": [],
+    "view": {
+     "answer": {
+      "option": "sqlite",
+      "text": "SQLite"
+     },
+     "authority": "principal",
+     "outcome": "decided",
+     "settlement": "s1",
+     "stale": false,
+     "state": "settled",
+     "withdrawn": false
+    }
+   },
+   "reversed": {
+    "held": [
+     [
+      "principal",
+      "settled",
+      "b2"
+     ],
+     [
+      "principal",
+      "settled",
+      "s1"
+     ],
+     [
+      "requester",
+      "raised",
+      "r1"
+     ]
+    ],
+    "ignored": [],
+    "view": {
+     "answer": {
+      "option": "sqlite",
+      "text": "SQLite"
+     },
+     "authority": "principal",
+     "outcome": "decided",
+     "settlement": "s1",
+     "stale": false,
+     "state": "settled",
+     "withdrawn": false
+    }
+   }
+  },
+  "0.5/decisions/withdrawn-open": {
+   "order": {
+    "held": [
+     [
+      "requester",
+      "raised",
+      "r1"
+     ],
+     [
+      "requester",
+      "withdrawn",
+      "w1"
+     ]
+    ],
+    "ignored": [],
+    "view": {
+     "answer": null,
+     "authority": null,
+     "outcome": null,
+     "settlement": null,
+     "stale": false,
+     "state": "withdrawn",
+     "withdrawn": true
+    }
+   },
+   "reversed": {
+    "held": [
+     [
+      "requester",
+      "raised",
+      "r1"
+     ],
+     [
+      "requester",
+      "withdrawn",
+      "w1"
+     ]
+    ],
+    "ignored": [],
+    "view": {
+     "answer": null,
+     "authority": null,
+     "outcome": null,
+     "settlement": null,
+     "stale": false,
+     "state": "withdrawn",
+     "withdrawn": true
+    }
+   }
+  },
+  "0.5/decisions/withdrawn-replaced": {
+   "order": {
+    "held": [
+     [
+      "requester",
+      "raised",
+      "r:q-demo-7"
+     ],
+     [
+      "requester",
+      "withdrawn",
+      "w3"
+     ]
+    ],
+    "ignored": [],
+    "view": {
+     "answer": null,
+     "authority": null,
+     "outcome": null,
+     "settlement": null,
+     "stale": false,
+     "state": "withdrawn",
+     "withdrawn": true
+    }
+   },
+   "reversed": {
+    "held": [
+     [
+      "requester",
+      "raised",
+      "r:q-demo-7"
+     ],
+     [
+      "requester",
+      "withdrawn",
+      "w3"
+     ]
+    ],
+    "ignored": [],
+    "view": {
+     "answer": null,
+     "authority": null,
+     "outcome": null,
+     "settlement": null,
+     "stale": false,
+     "state": "withdrawn",
+     "withdrawn": true
+    }
+   }
+  }
+ },
+ "records": {
+  "0.4/acts/adopts-on-attested": [
+   "settled",
+   true
+  ],
+  "0.4/acts/adopts-on-principal-kind": [
+   "settled",
+   false
+  ],
+  "0.4/acts/amended": [
+   "amended",
+   true
+  ],
+  "0.4/acts/amended-rev-1": [
+   "amended",
+   false
+  ],
+  "0.4/acts/approved-not-in-acts": [
+   null,
+   false
+  ],
+  "0.4/acts/attested-by-principal": [
+   "settled",
+   false
+  ],
+  "0.4/acts/chain-not-rooted": [
+   "settled",
+   false
+  ],
+  "0.4/acts/claimed-by-agent": [
+   "claimed",
+   true
+  ],
+  "0.4/acts/claimed-by-principal-side": [
+   "claimed",
+   false
+  ],
+  "0.4/acts/claimed-verifiable": [
+   "claimed",
+   true
+  ],
+  "0.4/acts/claimed-verifiable-bad-digest": [
+   "claimed",
+   false
+  ],
+  "0.4/acts/claimed-verifiable-both-proof-forms": [
+   "claimed",
+   false
+  ],
+  "0.4/acts/claimed-verifiable-duplicate-ids": [
+   "claimed",
+   false
+  ],
+  "0.4/acts/claimed-verifiable-without-proof": [
+   "claimed",
+   false
+  ],
+  "0.4/acts/claimed-verifiable-without-terms-rev": [
+   "claimed",
+   false
+  ],
+  "0.4/acts/claimed-with-verified": [
+   "claimed",
+   false
+  ],
+  "0.4/acts/claimed-without-basis": [
+   "claimed",
+   false
+  ],
+  "0.4/acts/derived-from-by-principal": [
+   "related",
+   false
+  ],
+  "0.4/acts/derived-from-uri": [
+   "related",
+   true
+  ],
+  "0.4/acts/due-not-a-date": [
+   "raised",
+   false
+  ],
+  "0.4/acts/emitted-by-principal-identifier": [
+   "settled",
+   false
+  ],
+  "0.4/acts/id-with-trailing-newline": [
+   "raised",
+   false
+  ],
+  "0.4/acts/legal-principal-with-representative": [
+   "settled",
+   true
+  ],
+  "0.4/acts/legal-principal-without-representative": [
+   "settled",
+   false
+  ],
+  "0.4/acts/note-about-key-and-quote": [
+   "note",
+   false
+  ],
+  "0.4/acts/note-key-mismatch": [
+   "note",
+   false
+  ],
+  "0.4/acts/note-principal-verified": [
+   "note",
+   true
+  ],
+  "0.4/acts/note-quote": [
+   "note",
+   true
+  ],
+  "0.4/acts/note-requester-verified": [
+   "note",
+   false
+  ],
+  "0.4/acts/note-unknown-origin": [
+   "note",
+   false
+  ],
+  "0.4/acts/note-without-about": [
+   "note",
+   false
+  ],
+  "0.4/acts/raised": [
+   "raised",
+   true
+  ],
+  "0.4/acts/raised-by-principal-side": [
+   "raised",
+   false
+  ],
+  "0.4/acts/raised-with-verifiable": [
+   "raised",
+   false
+  ],
+  "0.4/acts/raised-without-terms": [
+   "raised",
+   false
+  ],
+  "0.4/acts/relation-target-empty": [
+   "related",
+   false
+  ],
+  "0.4/acts/relation-target-mixed": [
+   "related",
+   false
+  ],
+  "0.4/acts/reopened": [
+   "reopened",
+   true
+  ],
+  "0.4/acts/reopened-without-restore-text": [
+   "reopened",
+   false
+  ],
+  "0.4/acts/reopened-without-supersedes": [
+   "reopened",
+   false
+  ],
+  "0.4/acts/replaced-by": [
+   "related",
+   true
+  ],
+  "0.4/acts/replaced-by-from-principal": [
+   "related",
+   false
+  ],
+  "0.4/acts/replaced-by-itself": [
+   "related",
+   false
+  ],
+  "0.4/acts/replaced-by-other-project": [
+   "related",
+   false
+  ],
+  "0.4/acts/replaced-by-uri": [
+   "related",
+   false
+  ],
+  "0.4/acts/same-as-by-principal": [
+   "related",
+   true
+  ],
+  "0.4/acts/same-as-by-requester": [
+   "related",
+   false
+  ],
+  "0.4/acts/same-as-other-project-by-key": [
+   "related",
+   false
+  ],
+  "0.4/acts/settled-attested": [
+   "settled",
+   true
+  ],
+  "0.4/acts/settled-attested-verified": [
+   "settled",
+   true
+  ],
+  "0.4/acts/settled-attested-without-basis": [
+   "settled",
+   false
+  ],
+  "0.4/acts/settled-by-requester": [
+   "settled",
+   false
+  ],
+  "0.4/acts/settled-confirmed": [
+   "settled",
+   true
+  ],
+  "0.4/acts/settled-confirmed-without-proposal": [
+   "settled",
+   false
+  ],
+  "0.4/acts/settled-delegated": [
+   "settled",
+   true
+  ],
+  "0.4/acts/settled-delegated-as-principal": [
+   "settled",
+   false
+  ],
+  "0.4/acts/settled-delegated-without-mandate": [
+   "settled",
+   false
+  ],
+  "0.4/acts/settled-principal": [
+   "settled",
+   true
+  ],
+  "0.4/acts/settled-principal-wrong-decider": [
+   "settled",
+   false
+  ],
+  "0.4/acts/settled-rev-0": [
+   "settled",
+   false
+  ],
+  "0.4/acts/settled-under-approval-in-acts": [
+   "settled",
+   false
+  ],
+  "0.4/acts/settled-unknown-outcome": [
+   "settled",
+   false
+  ],
+  "0.4/acts/settled-verified-bad-result": [
+   "settled",
+   false
+  ],
+  "0.4/acts/settled-verified-without-entry": [
+   "settled",
+   false
+  ],
+  "0.4/acts/settled-without-terms-rev": [
+   "settled",
+   false
+  ],
+  "0.4/acts/terms-number-fraction": [
+   "raised",
+   false
+  ],
+  "0.4/acts/terms-rev-written-as-fraction": [
+   "raised",
+   false
+  ],
+  "0.4/acts/terms-text-multiline": [
+   "raised",
+   false
+  ],
+  "0.4/acts/ts-leap-second": [
+   "raised",
+   true
+  ],
+  "0.4/acts/ts-not-a-date": [
+   "raised",
+   false
+  ],
+  "0.4/acts/ts-offset": [
+   "raised",
+   true
+  ],
+  "0.4/acts/withdrawn": [
+   "withdrawn",
+   true
+  ],
+  "0.4/acts/withdrawn-bad-reason": [
+   "withdrawn",
+   false
+  ],
+  "0.4/acts/withdrawn-replaced": [
+   "withdrawn",
+   true
+  ],
+  "0.4/acts/wrong-core-version": [
+   "settled",
+   false
+  ],
+  "0.4/acts/wrong-extension": [
+   null,
+   false
+  ],
+  "0.4/decisions/adopts-on-attested": [
+   "settled",
+   true
+  ],
+  "0.4/decisions/adopts-on-principal-kind": [
+   "settled",
+   false
+  ],
+  "0.4/decisions/amended": [
+   "amended",
+   true
+  ],
+  "0.4/decisions/amended-rev-1": [
+   "amended",
+   false
+  ],
+  "0.4/decisions/amended-with-criteria": [
+   "amended",
+   true
+  ],
+  "0.4/decisions/approval-retracted": [
+   "approved",
+   true
+  ],
+  "0.4/decisions/approval-retracted-with-digest": [
+   "approved",
+   false
+  ],
+  "0.4/decisions/approval-retracted-without-supersedes": [
+   "approved",
+   false
+  ],
+  "0.4/decisions/approved": [
+   "approved",
+   true
+  ],
+  "0.4/decisions/approved-adopting-a-claim": [
+   "approved",
+   false
+  ],
+  "0.4/decisions/approved-attested": [
+   "approved",
+   false
+  ],
+  "0.4/decisions/approved-bad-digest": [
+   "approved",
+   false
+  ],
+  "0.4/decisions/approved-by-requester": [
+   "approved",
+   false
+  ],
+  "0.4/decisions/approved-confirmed": [
+   "approved",
+   true
+  ],
+  "0.4/decisions/approved-confirmed-without-proposal": [
+   "approved",
+   false
+  ],
+  "0.4/decisions/approved-delegated": [
+   "approved",
+   false
+  ],
+  "0.4/decisions/approved-grant-without-digest": [
+   "approved",
+   false
+  ],
+  "0.4/decisions/approved-legal-principal-without-representative": [
+   "approved",
+   false
+  ],
+  "0.4/decisions/approved-without-authority": [
+   "approved",
+   false
+  ],
+  "0.4/decisions/approved-without-presented": [
+   "approved",
+   false
+  ],
+  "0.4/decisions/approved-without-terms-rev": [
+   "approved",
+   false
+  ],
+  "0.4/decisions/attested-by-principal": [
+   "settled",
+   false
+  ],
+  "0.4/decisions/chain-not-rooted": [
+   "settled",
+   false
+  ],
+  "0.4/decisions/claimed-by-agent": [
+   "claimed",
+   true
+  ],
+  "0.4/decisions/claimed-by-principal-side": [
+   "claimed",
+   false
+  ],
+  "0.4/decisions/claimed-without-basis": [
+   "claimed",
+   false
+  ],
+  "0.4/decisions/criteria-answer-not-an-option": [
+   "raised",
+   false
+  ],
+  "0.4/decisions/criteria-check-without-implementation": [
+   "raised",
+   false
+  ],
+  "0.4/decisions/criteria-check-without-trust": [
+   "raised",
+   false
+  ],
+  "0.4/decisions/criteria-duplicate-check-ids": [
+   "raised",
+   false
+  ],
+  "0.4/decisions/criteria-without-checks": [
+   "raised",
+   false
+  ],
+  "0.4/decisions/criteria-without-subject": [
+   "raised",
+   false
+  ],
+  "0.4/decisions/decided-without-answer": [
+   "settled",
+   false
+  ],
+  "0.4/decisions/derived-from-by-principal": [
+   "related",
+   false
+  ],
+  "0.4/decisions/derived-from-uri": [
+   "related",
+   true
+  ],
+  "0.4/decisions/dismissed": [
+   "settled",
+   true
+  ],
+  "0.4/decisions/emitted-by-principal-identifier": [
+   "settled",
+   false
+  ],
+  "0.4/decisions/legal-principal-with-representative": [
+   "settled",
+   true
+  ],
+  "0.4/decisions/legal-principal-without-representative": [
+   "settled",
+   false
+  ],
+  "0.4/decisions/note-key-mismatch": [
+   "note",
+   false
+  ],
+  "0.4/decisions/note-principal-failed-verification": [
+   "note",
+   true
+  ],
+  "0.4/decisions/note-quote": [
+   "note",
+   true
+  ],
+  "0.4/decisions/note-without-about": [
+   "note",
+   false
+  ],
+  "0.4/decisions/options-duplicate-ids": [
+   "raised",
+   false
+  ],
+  "0.4/decisions/raised": [
+   "raised",
+   true
+  ],
+  "0.4/decisions/raised-by-principal-side": [
+   "raised",
+   false
+  ],
+  "0.4/decisions/raised-with-criteria": [
+   "raised",
+   true
+  ],
+  "0.4/decisions/raised-without-terms": [
+   "raised",
+   false
+  ],
+  "0.4/decisions/relation-target-empty": [
+   "related",
+   false
+  ],
+  "0.4/decisions/relation-target-mixed": [
+   "related",
+   false
+  ],
+  "0.4/decisions/reopened": [
+   "reopened",
+   true
+  ],
+  "0.4/decisions/reopened-without-supersedes": [
+   "reopened",
+   false
+  ],
+  "0.4/decisions/replaced-by": [
+   "related",
+   true
+  ],
+  "0.4/decisions/same-as-by-principal": [
+   "related",
+   true
+  ],
+  "0.4/decisions/same-as-by-requester": [
+   "related",
+   false
+  ],
+  "0.4/decisions/same-as-other-project-by-key": [
+   "related",
+   false
+  ],
+  "0.4/decisions/settled-attested": [
+   "settled",
+   true
+  ],
+  "0.4/decisions/settled-attested-without-basis": [
+   "settled",
+   false
+  ],
+  "0.4/decisions/settled-by-requester": [
+   "settled",
+   false
+  ],
+  "0.4/decisions/settled-confirmed": [
+   "settled",
+   true
+  ],
+  "0.4/decisions/settled-confirmed-without-proposal": [
+   "settled",
+   false
+  ],
+  "0.4/decisions/settled-delegated": [
+   "settled",
+   true
+  ],
+  "0.4/decisions/settled-delegated-as-principal": [
+   "settled",
+   false
+  ],
+  "0.4/decisions/settled-delegated-without-mandate": [
+   "settled",
+   false
+  ],
+  "0.4/decisions/settled-principal": [
+   "settled",
+   true
+  ],
+  "0.4/decisions/settled-principal-wrong-decider": [
+   "settled",
+   false
+  ],
+  "0.4/decisions/settled-rev-0": [
+   "settled",
+   false
+  ],
+  "0.4/decisions/settled-under-approval": [
+   "settled",
+   true
+  ],
+  "0.4/decisions/settled-under-approval-attested": [
+   "settled",
+   false
+  ],
+  "0.4/decisions/settled-under-approval-dismissed": [
+   "settled",
+   false
+  ],
+  "0.4/decisions/settled-under-approval-invalid-result": [
+   "settled",
+   false
+  ],
+  "0.4/decisions/settled-under-approval-unsupported-result": [
+   "settled",
+   false
+  ],
+  "0.4/decisions/settled-under-approval-without-verified": [
+   "settled",
+   false
+  ],
+  "0.4/decisions/settled-under-empty-approval": [
+   "settled",
+   false
+  ],
+  "0.4/decisions/settled-without-terms-digest": [
+   "settled",
+   false
+  ],
+  "0.4/decisions/settled-without-terms-rev": [
+   "settled",
+   false
+  ],
+  "0.4/decisions/submission": [
+   "note",
+   true
+  ],
+  "0.4/decisions/submission-without-terms-rev": [
+   "note",
+   false
+  ],
+  "0.4/decisions/terms-with-fraction": [
+   "raised",
+   false
+  ],
+  "0.4/decisions/terms-with-huge-integer": [
+   "raised",
+   false
+  ],
+  "0.4/decisions/terms-with-safe-integer": [
+   "raised",
+   true
+  ],
+  "0.4/decisions/ts-seven-fractional-digits": [
+   "raised",
+   false
+  ],
+  "0.4/decisions/withdrawn": [
+   "withdrawn",
+   true
+  ],
+  "0.4/decisions/withdrawn-bad-reason": [
+   "withdrawn",
+   false
+  ],
+  "0.4/decisions/withdrawn-replaced": [
+   "withdrawn",
+   true
+  ],
+  "0.4/decisions/wrong-core-version": [
+   "settled",
+   false
+  ],
+  "0.4/decisions/wrong-extension": [
+   null,
+   false
+  ],
+  "0.5/acts/adopts-on-attested": [
+   "settled",
+   true
+  ],
+  "0.5/acts/adopts-on-principal-kind": [
+   "settled",
+   false
+  ],
+  "0.5/acts/amended": [
+   "amended",
+   true
+  ],
+  "0.5/acts/amended-rev-1": [
+   "amended",
+   false
+  ],
+  "0.5/acts/approved-not-in-acts": [
+   null,
+   false
+  ],
+  "0.5/acts/attested-by-principal": [
+   "settled",
+   false
+  ],
+  "0.5/acts/chain-not-rooted": [
+   "settled",
+   false
+  ],
+  "0.5/acts/claimed-by-agent": [
+   "claimed",
+   true
+  ],
+  "0.5/acts/claimed-by-principal-side": [
+   "claimed",
+   false
+  ],
+  "0.5/acts/claimed-verifiable": [
+   "claimed",
+   true
+  ],
+  "0.5/acts/claimed-without-basis": [
+   "claimed",
+   false
+  ],
+  "0.5/acts/derived-from-by-principal": [
+   "related",
+   false
+  ],
+  "0.5/acts/derived-from-uri": [
+   "related",
+   true
+  ],
+  "0.5/acts/due-not-a-date": [
+   "raised",
+   false
+  ],
+  "0.5/acts/emitted-by-principal-identifier": [
+   "settled",
+   false
+  ],
+  "0.5/acts/id-with-trailing-newline": [
+   "raised",
+   false
+  ],
+  "0.5/acts/legal-principal-with-representative": [
+   "settled",
+   true
+  ],
+  "0.5/acts/legal-principal-without-representative": [
+   "settled",
+   false
+  ],
+  "0.5/acts/note-about-key-and-quote": [
+   "note",
+   false
+  ],
+  "0.5/acts/note-key-mismatch": [
+   "note",
+   false
+  ],
+  "0.5/acts/note-quote": [
+   "note",
+   true
+  ],
+  "0.5/acts/note-unknown-origin": [
+   "note",
+   false
+  ],
+  "0.5/acts/note-without-about": [
+   "note",
+   false
+  ],
+  "0.5/acts/raised": [
+   "raised",
+   true
+  ],
+  "0.5/acts/raised-by-principal-side": [
+   "raised",
+   false
+  ],
+  "0.5/acts/raised-without-terms": [
+   "raised",
+   false
+  ],
+  "0.5/acts/relation-target-empty": [
+   "related",
+   false
+  ],
+  "0.5/acts/relation-target-mixed": [
+   "related",
+   false
+  ],
+  "0.5/acts/reopened": [
+   "reopened",
+   true
+  ],
+  "0.5/acts/reopened-without-restore-text": [
+   "reopened",
+   false
+  ],
+  "0.5/acts/reopened-without-supersedes": [
+   "reopened",
+   false
+  ],
+  "0.5/acts/replaced-by": [
+   "related",
+   true
+  ],
+  "0.5/acts/replaced-by-from-principal": [
+   "related",
+   false
+  ],
+  "0.5/acts/replaced-by-itself": [
+   "related",
+   false
+  ],
+  "0.5/acts/replaced-by-other-project": [
+   "related",
+   false
+  ],
+  "0.5/acts/replaced-by-uri": [
+   "related",
+   false
+  ],
+  "0.5/acts/same-as-by-principal": [
+   "related",
+   true
+  ],
+  "0.5/acts/same-as-by-requester": [
+   "related",
+   false
+  ],
+  "0.5/acts/same-as-other-project-by-key": [
+   "related",
+   false
+  ],
+  "0.5/acts/settled-attested": [
+   "settled",
+   true
+  ],
+  "0.5/acts/settled-attested-without-basis": [
+   "settled",
+   false
+  ],
+  "0.5/acts/settled-by-requester": [
+   "settled",
+   false
+  ],
+  "0.5/acts/settled-confirmed": [
+   "settled",
+   true
+  ],
+  "0.5/acts/settled-confirmed-without-proposal": [
+   "settled",
+   false
+  ],
+  "0.5/acts/settled-delegated": [
+   "settled",
+   true
+  ],
+  "0.5/acts/settled-delegated-as-principal": [
+   "settled",
+   false
+  ],
+  "0.5/acts/settled-delegated-without-mandate": [
+   "settled",
+   false
+  ],
+  "0.5/acts/settled-principal": [
+   "settled",
+   true
+  ],
+  "0.5/acts/settled-principal-wrong-decider": [
+   "settled",
+   false
+  ],
+  "0.5/acts/settled-rev-0": [
+   "settled",
+   false
+  ],
+  "0.5/acts/settled-under-approval-in-acts": [
+   "settled",
+   true
+  ],
+  "0.5/acts/settled-unknown-outcome": [
+   "settled",
+   false
+  ],
+  "0.5/acts/settled-without-terms-rev": [
+   "settled",
+   false
+  ],
+  "0.5/acts/terms-number-fraction": [
+   "raised",
+   false
+  ],
+  "0.5/acts/terms-rev-written-as-fraction": [
+   "raised",
+   false
+  ],
+  "0.5/acts/terms-text-multiline": [
+   "raised",
+   false
+  ],
+  "0.5/acts/ts-leap-second": [
+   "raised",
+   true
+  ],
+  "0.5/acts/ts-not-a-date": [
+   "raised",
+   false
+  ],
+  "0.5/acts/ts-offset": [
+   "raised",
+   true
+  ],
+  "0.5/acts/withdrawn": [
+   "withdrawn",
+   true
+  ],
+  "0.5/acts/withdrawn-bad-reason": [
+   "withdrawn",
+   false
+  ],
+  "0.5/acts/withdrawn-replaced": [
+   "withdrawn",
+   true
+  ],
+  "0.5/acts/wrong-core-version": [
+   "settled",
+   false
+  ],
+  "0.5/acts/wrong-extension": [
+   null,
+   false
+  ],
+  "0.5/decisions/adopts-on-attested": [
+   "settled",
+   true
+  ],
+  "0.5/decisions/adopts-on-principal-kind": [
+   "settled",
+   false
+  ],
+  "0.5/decisions/amended": [
+   "amended",
+   true
+  ],
+  "0.5/decisions/amended-rev-1": [
+   "amended",
+   false
+  ],
+  "0.5/decisions/attested-by-principal": [
+   "settled",
+   false
+  ],
+  "0.5/decisions/chain-not-rooted": [
+   "settled",
+   false
+  ],
+  "0.5/decisions/claimed-by-agent": [
+   "claimed",
+   true
+  ],
+  "0.5/decisions/claimed-by-principal-side": [
+   "claimed",
+   false
+  ],
+  "0.5/decisions/claimed-without-basis": [
+   "claimed",
+   false
+  ],
+  "0.5/decisions/decided-without-answer": [
+   "settled",
+   false
+  ],
+  "0.5/decisions/derived-from-by-principal": [
+   "related",
+   false
+  ],
+  "0.5/decisions/derived-from-uri": [
+   "related",
+   true
+  ],
+  "0.5/decisions/dismissed": [
+   "settled",
+   true
+  ],
+  "0.5/decisions/emitted-by-principal-identifier": [
+   "settled",
+   false
+  ],
+  "0.5/decisions/id-with-byte-order-mark": [
+   "note",
+   false
+  ],
+  "0.5/decisions/legal-principal-with-representative": [
+   "settled",
+   true
+  ],
+  "0.5/decisions/legal-principal-without-representative": [
+   "settled",
+   false
+  ],
+  "0.5/decisions/note-about-key-and-quote": [
+   "note",
+   false
+  ],
+  "0.5/decisions/note-key-mismatch": [
+   "note",
+   false
+  ],
+  "0.5/decisions/note-quote": [
+   "note",
+   true
+  ],
+  "0.5/decisions/note-without-about": [
+   "note",
+   false
+  ],
+  "0.5/decisions/options-duplicate-ids": [
+   "raised",
+   false
+  ],
+  "0.5/decisions/raised": [
+   "raised",
+   true
+  ],
+  "0.5/decisions/raised-by-principal-side": [
+   "raised",
+   false
+  ],
+  "0.5/decisions/raised-without-terms": [
+   "raised",
+   false
+  ],
+  "0.5/decisions/relation-target-empty": [
+   "related",
+   false
+  ],
+  "0.5/decisions/relation-target-mixed": [
+   "related",
+   false
+  ],
+  "0.5/decisions/reopened": [
+   "reopened",
+   true
+  ],
+  "0.5/decisions/reopened-without-supersedes": [
+   "reopened",
+   false
+  ],
+  "0.5/decisions/replaced-by": [
+   "related",
+   true
+  ],
+  "0.5/decisions/same-as-by-principal": [
+   "related",
+   true
+  ],
+  "0.5/decisions/same-as-by-requester": [
+   "related",
+   false
+  ],
+  "0.5/decisions/same-as-other-project-by-key": [
+   "related",
+   false
+  ],
+  "0.5/decisions/settled-attested": [
+   "settled",
+   true
+  ],
+  "0.5/decisions/settled-attested-without-basis": [
+   "settled",
+   false
+  ],
+  "0.5/decisions/settled-by-requester": [
+   "settled",
+   false
+  ],
+  "0.5/decisions/settled-confirmed": [
+   "settled",
+   true
+  ],
+  "0.5/decisions/settled-confirmed-without-proposal": [
+   "settled",
+   false
+  ],
+  "0.5/decisions/settled-delegated": [
+   "settled",
+   true
+  ],
+  "0.5/decisions/settled-delegated-as-principal": [
+   "settled",
+   false
+  ],
+  "0.5/decisions/settled-delegated-without-mandate": [
+   "settled",
+   false
+  ],
+  "0.5/decisions/settled-principal": [
+   "settled",
+   true
+  ],
+  "0.5/decisions/settled-principal-wrong-decider": [
+   "settled",
+   false
+  ],
+  "0.5/decisions/settled-rev-0": [
+   "settled",
+   false
+  ],
+  "0.5/decisions/settled-without-terms-digest": [
+   "settled",
+   false
+  ],
+  "0.5/decisions/settled-without-terms-rev": [
+   "settled",
+   false
+  ],
+  "0.5/decisions/terms-with-fraction": [
+   "raised",
+   false
+  ],
+  "0.5/decisions/terms-with-huge-integer": [
+   "raised",
+   false
+  ],
+  "0.5/decisions/terms-with-safe-integer": [
+   "raised",
+   true
+  ],
+  "0.5/decisions/ts-seven-fractional-digits": [
+   "raised",
+   false
+  ],
+  "0.5/decisions/withdrawn": [
+   "withdrawn",
+   true
+  ],
+  "0.5/decisions/withdrawn-bad-reason": [
+   "withdrawn",
+   false
+  ],
+  "0.5/decisions/withdrawn-replaced": [
+   "withdrawn",
+   true
+  ],
+  "0.5/decisions/wrong-core-version": [
+   "settled",
+   false
+  ],
+  "0.5/decisions/wrong-extension": [
+   null,
+   false
+  ]
+ }
+}

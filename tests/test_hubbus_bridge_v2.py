@@ -194,6 +194,14 @@ class BridgeV2(unittest.TestCase):
         self.assertEqual(self.incoming(), ["s:k1"])
         self.assertEqual([b["through"] for b in self.fake.acks() if b["project"] == "proj"], [1])
 
+    def test_a_record_of_a_version_not_read_is_refused(self):
+        """before 0.6: a record in a version brunna does not read is refused, and the page comes again"""
+        self.m.pull_records(self.c)
+        self.fake.out["proj"] = [settled("k1", ph="0.9", ext="acts/0.9", terms_digest="sha-256:" + "0" * 64)]
+        self.m.pull_records(self.c)
+        self.assertEqual(self.incoming(), [])
+        self.assertEqual([b for b in self.fake.acks() if b["project"] == "proj"], [])
+
     def test_starting_point_is_only_for_the_switch_on_not_for_later_names(self):
         self.m.pull_records(self.c)   # switch on: starting point
         # newbie: a project onboarded later
