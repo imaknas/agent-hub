@@ -1,0 +1,31 @@
+{
+  "description": "Principal Handoff Acts 0.6 Markdown profiles. {principal_tag} is a profile parameter; the value under `parameters` is the one the fixtures use. marker_pattern is a regular expression (Python/PCRE/ECMAScript-compatible subset) whose group 1 is the key, searched against a whole task line; parameters substituted into it are regex-escaped.",
+  "profiles": {
+    "en": {
+      "title": "Default English profile",
+   "parameters": {
+    "principal_tag": "owner"
+   },
+      "heading": "## Tasks",
+      "label_open": "[",
+      "label_close": "]",
+      "label_separator": " ",
+      "labels": {"principal": "{principal_tag}", "agent": "agent", "undecided": "undecided"},
+      "placeholder": "- (none)",
+      "marker_render": " (waiting on {principal_tag}: {key})",
+      "marker_pattern": "\\(waiting on {principal_tag}:\\s*([^\\s()]+)\\s*\\)\\s*$"
+    },
+    "zh-hant": {
+      "title": "Traditional Chinese profile used by the reference deployment",
+      "parameters": {"principal_tag": "Owner"},
+      "heading": "## 待辦",
+      "label_open": "〔",
+      "label_close": "〕",
+      "label_separator": "",
+      "labels": {"principal": "{principal_tag}", "agent": "agent", "undecided": "待定"},
+      "placeholder": "- (無)",
+      "marker_render": "(等 {principal_tag}:{key})",
+      "marker_pattern": "[(（]等 ?{principal_tag}[:：]\\s*([^()（）]+?)\\s*[)）]\\s*$"
+    }
+  }
+}

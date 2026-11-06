@@ -1,0 +1,5201 @@
+{
+  "suite": "acts/0.6",
+  "principal": "p:owner",
+  "description": "Records one receiver holds for one act -> its state (core §6; a withdrawn act stays open, acts §2).",
+  "cases": [
+    {
+      "id": "open",
+      "spec": "core §6",
+      "records": [
+        {
+          "ph": "0.6",
+          "ext": "acts/0.6",
+          "id": "r1",
+          "type": "raised",
+          "origin": "requester",
+          "by": "agent:demo",
+          "key": "task-demo-aaaaaaaaaa",
+          "project": "demo",
+          "ts": "2026-10-27T09:00:00Z",
+          "terms": {
+            "text": "Renew the domain"
+          },
+          "terms_rev": 1
+        }
+      ],
+      "expect": {
+        "state": "open",
+        "outcome": null,
+        "settlement": null,
+        "authority": null,
+        "answer": null,
+        "stale": false,
+        "withdrawn": false,
+        "terms_rev": 1,
+        "conflict": false,
+        "claims": [],
+        "ignored": []
+      }
+    },
+    {
+      "id": "settled",
+      "spec": "core §6",
+      "records": [
+        {
+          "ph": "0.6",
+          "ext": "acts/0.6",
+          "id": "r1",
+          "type": "raised",
+          "origin": "requester",
+          "by": "agent:demo",
+          "key": "task-demo-aaaaaaaaaa",
+          "project": "demo",
+          "ts": "2026-10-27T09:00:00Z",
+          "terms": {
+            "text": "Renew the domain"
+          },
+          "terms_rev": 1
+        },
+        {
+          "ph": "0.6",
+          "ext": "acts/0.6",
+          "id": "s1",
+          "type": "settled",
+          "origin": "principal",
+          "by": "ps:assistant",
+          "key": "task-demo-aaaaaaaaaa",
+          "project": "demo",
+          "ts": "2026-10-28T08:00:00Z",
+          "outcome": "done",
+          "terms_rev": 1,
+          "terms_digest": "sha-256:822c2dd81bb89e7b23b00bbcc0fab64bf83b0d1994f541ff45467f984ef11f2a",
+          "authority": {
+            "kind": "principal",
+            "decider": "p:owner"
+          }
+        }
+      ],
+      "expect": {
+        "state": "settled",
+        "outcome": "done",
+        "settlement": "s1",
+        "authority": "principal",
+        "answer": null,
+        "stale": false,
+        "withdrawn": false,
+        "terms_rev": 1,
+        "conflict": false,
+        "claims": [],
+        "ignored": []
+      }
+    },
+    {
+      "id": "duplicate",
+      "spec": "core §10: an id counts once",
+      "records": [
+        {
+          "ph": "0.6",
+          "ext": "acts/0.6",
+          "id": "r1",
+          "type": "raised",
+          "origin": "requester",
+          "by": "agent:demo",
+          "key": "task-demo-aaaaaaaaaa",
+          "project": "demo",
+          "ts": "2026-10-27T09:00:00Z",
+          "terms": {
+            "text": "Renew the domain"
+          },
+          "terms_rev": 1
+        },
+        {
+          "ph": "0.6",
+          "ext": "acts/0.6",
+          "id": "s1",
+          "type": "settled",
+          "origin": "principal",
+          "by": "ps:assistant",
+          "key": "task-demo-aaaaaaaaaa",
+          "project": "demo",
+          "ts": "2026-10-28T08:00:00Z",
+          "outcome": "done",
+          "terms_rev": 1,
+          "terms_digest": "sha-256:822c2dd81bb89e7b23b00bbcc0fab64bf83b0d1994f541ff45467f984ef11f2a",
+          "authority": {
+            "kind": "principal",
+            "decider": "p:owner"
+          }
+        },
+        {
+          "ph": "0.6",
+          "ext": "acts/0.6",
+          "id": "s1",
+          "type": "settled",
+          "origin": "principal",
+          "by": "ps:assistant",
+          "key": "task-demo-aaaaaaaaaa",
+          "project": "demo",
+          "ts": "2026-10-28T08:00:00Z",
+          "outcome": "done",
+          "terms_rev": 1,
+          "terms_digest": "sha-256:822c2dd81bb89e7b23b00bbcc0fab64bf83b0d1994f541ff45467f984ef11f2a",
+          "authority": {
+            "kind": "principal",
+            "decider": "p:owner"
+          }
+        }
+      ],
+      "expect": {
+        "state": "settled",
+        "outcome": "done",
+        "settlement": "s1",
+        "authority": "principal",
+        "answer": null,
+        "stale": false,
+        "withdrawn": false,
+        "terms_rev": 1,
+        "conflict": false,
+        "claims": [],
+        "ignored": []
+      }
+    },
+    {
+      "id": "superseded",
+      "spec": "core §6: the superseding settlement is current",
+      "records": [
+        {
+          "ph": "0.6",
+          "ext": "acts/0.6",
+          "id": "r1",
+          "type": "raised",
+          "origin": "requester",
+          "by": "agent:demo",
+          "key": "task-demo-aaaaaaaaaa",
+          "project": "demo",
+          "ts": "2026-10-27T09:00:00Z",
+          "terms": {
+            "text": "Renew the domain"
+          },
+          "terms_rev": 1
+        },
+        {
+          "ph": "0.6",
+          "ext": "acts/0.6",
+          "id": "s1",
+          "type": "settled",
+          "origin": "principal",
+          "by": "ps:assistant",
+          "key": "task-demo-aaaaaaaaaa",
+          "project": "demo",
+          "ts": "2026-10-28T08:00:00Z",
+          "outcome": "done",
+          "terms_rev": 1,
+          "terms_digest": "sha-256:822c2dd81bb89e7b23b00bbcc0fab64bf83b0d1994f541ff45467f984ef11f2a",
+          "authority": {
+            "kind": "principal",
+            "decider": "p:owner"
+          }
+        },
+        {
+          "ph": "0.6",
+          "ext": "acts/0.6",
+          "id": "s2",
+          "type": "settled",
+          "origin": "principal",
+          "by": "ps:assistant",
+          "key": "task-demo-aaaaaaaaaa",
+          "project": "demo",
+          "ts": "2026-10-29T08:00:00Z",
+          "outcome": "dropped",
+          "terms_rev": 1,
+          "terms_digest": "sha-256:822c2dd81bb89e7b23b00bbcc0fab64bf83b0d1994f541ff45467f984ef11f2a",
+          "authority": {
+            "kind": "principal",
+            "decider": "p:owner"
+          },
+          "supersedes": [
+            "s1"
+          ]
+        }
+      ],
+      "expect": {
+        "state": "settled",
+        "outcome": "dropped",
+        "settlement": "s2",
+        "authority": "principal",
+        "answer": null,
+        "stale": false,
+        "withdrawn": false,
+        "terms_rev": 1,
+        "conflict": false,
+        "claims": [],
+        "ignored": []
+      }
+    },
+    {
+      "id": "superseded-out-of-order",
+      "spec": "core §6: supersedes, not arrival",
+      "records": [
+        {
+          "ph": "0.6",
+          "ext": "acts/0.6",
+          "id": "s2",
+          "type": "settled",
+          "origin": "principal",
+          "by": "ps:assistant",
+          "key": "task-demo-aaaaaaaaaa",
+          "project": "demo",
+          "ts": "2026-10-29T08:00:00Z",
+          "outcome": "dropped",
+          "terms_rev": 1,
+          "terms_digest": "sha-256:822c2dd81bb89e7b23b00bbcc0fab64bf83b0d1994f541ff45467f984ef11f2a",
+          "authority": {
+            "kind": "principal",
+            "decider": "p:owner"
+          },
+          "supersedes": [
+            "s1"
+          ]
+        },
+        {
+          "ph": "0.6",
+          "ext": "acts/0.6",
+          "id": "r1",
+          "type": "raised",
+          "origin": "requester",
+          "by": "agent:demo",
+          "key": "task-demo-aaaaaaaaaa",
+          "project": "demo",
+          "ts": "2026-10-27T09:00:00Z",
+          "terms": {
+            "text": "Renew the domain"
+          },
+          "terms_rev": 1
+        },
+        {
+          "ph": "0.6",
+          "ext": "acts/0.6",
+          "id": "s1",
+          "type": "settled",
+          "origin": "principal",
+          "by": "ps:assistant",
+          "key": "task-demo-aaaaaaaaaa",
+          "project": "demo",
+          "ts": "2026-10-28T08:00:00Z",
+          "outcome": "done",
+          "terms_rev": 1,
+          "terms_digest": "sha-256:822c2dd81bb89e7b23b00bbcc0fab64bf83b0d1994f541ff45467f984ef11f2a",
+          "authority": {
+            "kind": "principal",
+            "decider": "p:owner"
+          }
+        }
+      ],
+      "expect": {
+        "state": "settled",
+        "outcome": "dropped",
+        "settlement": "s2",
+        "authority": "principal",
+        "answer": null,
+        "stale": false,
+        "withdrawn": false,
+        "terms_rev": 1,
+        "conflict": false,
+        "claims": [],
+        "ignored": []
+      }
+    },
+    {
+      "id": "fork",
+      "spec": "core §6: two heads, later ts current, conflict",
+      "records": [
+        {
+          "ph": "0.6",
+          "ext": "acts/0.6",
+          "id": "r1",
+          "type": "raised",
+          "origin": "requester",
+          "by": "agent:demo",
+          "key": "task-demo-aaaaaaaaaa",
+          "project": "demo",
+          "ts": "2026-10-27T09:00:00Z",
+          "terms": {
+            "text": "Renew the domain"
+          },
+          "terms_rev": 1
+        },
+        {
+          "ph": "0.6",
+          "ext": "acts/0.6",
+          "id": "s1",
+          "type": "settled",
+          "origin": "principal",
+          "by": "ps:assistant",
+          "key": "task-demo-aaaaaaaaaa",
+          "project": "demo",
+          "ts": "2026-10-28T08:00:00Z",
+          "outcome": "done",
+          "terms_rev": 1,
+          "terms_digest": "sha-256:822c2dd81bb89e7b23b00bbcc0fab64bf83b0d1994f541ff45467f984ef11f2a",
+          "authority": {
+            "kind": "principal",
+            "decider": "p:owner"
+          }
+        },
+        {
+          "ph": "0.6",
+          "ext": "acts/0.6",
+          "id": "b1",
+          "type": "settled",
+          "origin": "principal",
+          "by": "ps:assistant",
+          "key": "task-demo-aaaaaaaaaa",
+          "project": "demo",
+          "ts": "2026-10-28T09:00:00Z",
+          "outcome": "dropped",
+          "terms_rev": 1,
+          "terms_digest": "sha-256:822c2dd81bb89e7b23b00bbcc0fab64bf83b0d1994f541ff45467f984ef11f2a",
+          "authority": {
+            "kind": "principal",
+            "decider": "p:owner"
+          }
+        }
+      ],
+      "expect": {
+        "state": "settled",
+        "outcome": "dropped",
+        "settlement": "b1",
+        "authority": "principal",
+        "answer": null,
+        "stale": false,
+        "withdrawn": false,
+        "terms_rev": 1,
+        "conflict": true,
+        "claims": [],
+        "ignored": []
+      }
+    },
+    {
+      "id": "reopened",
+      "spec": "core §6: reopened settlement leaves the need deciding",
+      "records": [
+        {
+          "ph": "0.6",
+          "ext": "acts/0.6",
+          "id": "r1",
+          "type": "raised",
+          "origin": "requester",
+          "by": "agent:demo",
+          "key": "task-demo-aaaaaaaaaa",
+          "project": "demo",
+          "ts": "2026-10-27T09:00:00Z",
+          "terms": {
+            "text": "Renew the domain"
+          },
+          "terms_rev": 1
+        },
+        {
+          "ph": "0.6",
+          "ext": "acts/0.6",
+          "id": "s1",
+          "type": "settled",
+          "origin": "principal",
+          "by": "ps:assistant",
+          "key": "task-demo-aaaaaaaaaa",
+          "project": "demo",
+          "ts": "2026-10-28T08:00:00Z",
+          "outcome": "done",
+          "terms_rev": 1,
+          "terms_digest": "sha-256:822c2dd81bb89e7b23b00bbcc0fab64bf83b0d1994f541ff45467f984ef11f2a",
+          "authority": {
+            "kind": "principal",
+            "decider": "p:owner"
+          }
+        },
+        {
+          "ph": "0.6",
+          "ext": "acts/0.6",
+          "id": "o1",
+          "type": "reopened",
+          "origin": "principal",
+          "by": "ps:assistant",
+          "key": "task-demo-aaaaaaaaaa",
+          "project": "demo",
+          "ts": "2026-10-29T08:00:00Z",
+          "supersedes": [
+            "s1"
+          ],
+          "restore_text": "Renew the domain"
+        }
+      ],
+      "expect": {
+        "state": "open",
+        "outcome": null,
+        "settlement": "o1",
+        "authority": null,
+        "answer": null,
+        "stale": false,
+        "withdrawn": false,
+        "terms_rev": 1,
+        "conflict": false,
+        "claims": [],
+        "ignored": []
+      }
+    },
+    {
+      "id": "withdrawn-open",
+      "spec": "core §6 and the extension's policy (open)",
+      "records": [
+        {
+          "ph": "0.6",
+          "ext": "acts/0.6",
+          "id": "r1",
+          "type": "raised",
+          "origin": "requester",
+          "by": "agent:demo",
+          "key": "task-demo-aaaaaaaaaa",
+          "project": "demo",
+          "ts": "2026-10-27T09:00:00Z",
+          "terms": {
+            "text": "Renew the domain"
+          },
+          "terms_rev": 1
+        },
+        {
+          "ph": "0.6",
+          "ext": "acts/0.6",
+          "id": "w1",
+          "type": "withdrawn",
+          "origin": "requester",
+          "by": "agent:demo",
+          "key": "task-demo-aaaaaaaaaa",
+          "project": "demo",
+          "ts": "2026-10-27T13:00:00Z",
+          "reason": "not_needed",
+          "supersedes": [
+            "r1"
+          ]
+        }
+      ],
+      "expect": {
+        "state": "open",
+        "outcome": null,
+        "settlement": null,
+        "authority": null,
+        "answer": null,
+        "stale": false,
+        "withdrawn": true,
+        "terms_rev": 1,
+        "conflict": false,
+        "claims": [],
+        "ignored": []
+      }
+    },
+    {
+      "id": "settled-after-withdrawal",
+      "spec": "core §2: a withdrawal settles nothing, a settlement stands",
+      "records": [
+        {
+          "ph": "0.6",
+          "ext": "acts/0.6",
+          "id": "r1",
+          "type": "raised",
+          "origin": "requester",
+          "by": "agent:demo",
+          "key": "task-demo-aaaaaaaaaa",
+          "project": "demo",
+          "ts": "2026-10-27T09:00:00Z",
+          "terms": {
+            "text": "Renew the domain"
+          },
+          "terms_rev": 1
+        },
+        {
+          "ph": "0.6",
+          "ext": "acts/0.6",
+          "id": "w1",
+          "type": "withdrawn",
+          "origin": "requester",
+          "by": "agent:demo",
+          "key": "task-demo-aaaaaaaaaa",
+          "project": "demo",
+          "ts": "2026-10-27T13:00:00Z",
+          "reason": "not_needed",
+          "supersedes": [
+            "r1"
+          ]
+        },
+        {
+          "ph": "0.6",
+          "ext": "acts/0.6",
+          "id": "s1",
+          "type": "settled",
+          "origin": "principal",
+          "by": "ps:assistant",
+          "key": "task-demo-aaaaaaaaaa",
+          "project": "demo",
+          "ts": "2026-10-28T08:00:00Z",
+          "outcome": "done",
+          "terms_rev": 1,
+          "terms_digest": "sha-256:822c2dd81bb89e7b23b00bbcc0fab64bf83b0d1994f541ff45467f984ef11f2a",
+          "authority": {
+            "kind": "principal",
+            "decider": "p:owner"
+          }
+        }
+      ],
+      "expect": {
+        "state": "settled",
+        "outcome": "done",
+        "settlement": "s1",
+        "authority": "principal",
+        "answer": null,
+        "stale": false,
+        "withdrawn": true,
+        "terms_rev": 1,
+        "conflict": false,
+        "claims": [],
+        "ignored": []
+      }
+    },
+    {
+      "id": "stale",
+      "spec": "core §6: settled against terms_rev 1, terms now at 2",
+      "records": [
+        {
+          "ph": "0.6",
+          "ext": "acts/0.6",
+          "id": "r1",
+          "type": "raised",
+          "origin": "requester",
+          "by": "agent:demo",
+          "key": "task-demo-aaaaaaaaaa",
+          "project": "demo",
+          "ts": "2026-10-27T09:00:00Z",
+          "terms": {
+            "text": "Renew the domain"
+          },
+          "terms_rev": 1
+        },
+        {
+          "ph": "0.6",
+          "ext": "acts/0.6",
+          "id": "a1",
+          "type": "amended",
+          "origin": "requester",
+          "by": "agent:demo",
+          "key": "task-demo-aaaaaaaaaa",
+          "project": "demo",
+          "ts": "2026-10-27T12:00:00Z",
+          "terms": {
+            "text": "Renew the domain (revised)"
+          },
+          "terms_rev": 2,
+          "supersedes": [
+            "r1"
+          ]
+        },
+        {
+          "ph": "0.6",
+          "ext": "acts/0.6",
+          "id": "s1",
+          "type": "settled",
+          "origin": "principal",
+          "by": "ps:assistant",
+          "key": "task-demo-aaaaaaaaaa",
+          "project": "demo",
+          "ts": "2026-10-28T08:00:00Z",
+          "outcome": "done",
+          "terms_rev": 1,
+          "terms_digest": "sha-256:822c2dd81bb89e7b23b00bbcc0fab64bf83b0d1994f541ff45467f984ef11f2a",
+          "authority": {
+            "kind": "principal",
+            "decider": "p:owner"
+          }
+        }
+      ],
+      "expect": {
+        "state": "settled",
+        "outcome": "done",
+        "settlement": "s1",
+        "authority": "principal",
+        "answer": null,
+        "stale": true,
+        "withdrawn": false,
+        "terms_rev": 2,
+        "conflict": false,
+        "claims": [],
+        "ignored": []
+      }
+    },
+    {
+      "id": "claim-changes-nothing",
+      "spec": "core R3",
+      "records": [
+        {
+          "ph": "0.6",
+          "ext": "acts/0.6",
+          "id": "r1",
+          "type": "raised",
+          "origin": "requester",
+          "by": "agent:demo",
+          "key": "task-demo-aaaaaaaaaa",
+          "project": "demo",
+          "ts": "2026-10-27T09:00:00Z",
+          "terms": {
+            "text": "Renew the domain"
+          },
+          "terms_rev": 1
+        },
+        {
+          "ph": "0.6",
+          "ext": "acts/0.6",
+          "id": "c1",
+          "type": "claimed",
+          "origin": "agent",
+          "by": "agent:other",
+          "key": "task-demo-aaaaaaaaaa",
+          "project": "demo",
+          "ts": "2026-10-27T15:00:00Z",
+          "outcome": "done",
+          "evidence": {
+            "basis": "said in session"
+          }
+        }
+      ],
+      "expect": {
+        "state": "open",
+        "outcome": null,
+        "settlement": null,
+        "authority": null,
+        "answer": null,
+        "stale": false,
+        "withdrawn": false,
+        "terms_rev": 1,
+        "conflict": false,
+        "claims": [
+          "c1"
+        ],
+        "ignored": []
+      }
+    },
+    {
+      "id": "requester-cannot-settle",
+      "spec": "core R2, §10: an invalid record is ignored",
+      "records": [
+        {
+          "ph": "0.6",
+          "ext": "acts/0.6",
+          "id": "r1",
+          "type": "raised",
+          "origin": "requester",
+          "by": "agent:demo",
+          "key": "task-demo-aaaaaaaaaa",
+          "project": "demo",
+          "ts": "2026-10-27T09:00:00Z",
+          "terms": {
+            "text": "Renew the domain"
+          },
+          "terms_rev": 1
+        },
+        {
+          "ph": "0.6",
+          "ext": "acts/0.6",
+          "id": "x1",
+          "type": "settled",
+          "origin": "requester",
+          "by": "agent:demo",
+          "key": "task-demo-aaaaaaaaaa",
+          "project": "demo",
+          "ts": "2026-10-28T08:00:00Z",
+          "outcome": "done",
+          "terms_rev": 1,
+          "terms_digest": "sha-256:822c2dd81bb89e7b23b00bbcc0fab64bf83b0d1994f541ff45467f984ef11f2a",
+          "authority": {
+            "kind": "principal",
+            "decider": "p:owner"
+          }
+        }
+      ],
+      "expect": {
+        "state": "open",
+        "outcome": null,
+        "settlement": null,
+        "authority": null,
+        "answer": null,
+        "stale": false,
+        "withdrawn": false,
+        "terms_rev": 1,
+        "conflict": false,
+        "claims": [],
+        "ignored": [
+          "x1"
+        ]
+      }
+    },
+    {
+      "id": "delegated",
+      "spec": "core §5",
+      "records": [
+        {
+          "ph": "0.6",
+          "ext": "acts/0.6",
+          "id": "r1",
+          "type": "raised",
+          "origin": "requester",
+          "by": "agent:demo",
+          "key": "task-demo-aaaaaaaaaa",
+          "project": "demo",
+          "ts": "2026-10-27T09:00:00Z",
+          "terms": {
+            "text": "Renew the domain"
+          },
+          "terms_rev": 1
+        },
+        {
+          "ph": "0.6",
+          "ext": "acts/0.6",
+          "id": "d1",
+          "type": "settled",
+          "origin": "principal",
+          "by": "ps:assistant",
+          "key": "task-demo-aaaaaaaaaa",
+          "project": "demo",
+          "ts": "2026-10-28T08:00:00Z",
+          "outcome": "done",
+          "terms_rev": 1,
+          "terms_digest": "sha-256:822c2dd81bb89e7b23b00bbcc0fab64bf83b0d1994f541ff45467f984ef11f2a",
+          "authority": {
+            "kind": "delegated",
+            "decider": "ps:assistant",
+            "under": "standing:prefs",
+            "chain": [
+              "p:owner",
+              "ps:assistant"
+            ]
+          }
+        }
+      ],
+      "expect": {
+        "state": "settled",
+        "outcome": "done",
+        "settlement": "d1",
+        "authority": "delegated",
+        "answer": null,
+        "stale": false,
+        "withdrawn": false,
+        "terms_rev": 1,
+        "conflict": false,
+        "claims": [],
+        "ignored": []
+      }
+    },
+    {
+      "id": "settlement-before-raise",
+      "spec": "core §10: ordering not guaranteed",
+      "records": [
+        {
+          "ph": "0.6",
+          "ext": "acts/0.6",
+          "id": "s1",
+          "type": "settled",
+          "origin": "principal",
+          "by": "ps:assistant",
+          "key": "task-demo-aaaaaaaaaa",
+          "project": "demo",
+          "ts": "2026-10-28T08:00:00Z",
+          "outcome": "done",
+          "terms_rev": 1,
+          "terms_digest": "sha-256:0000000000000000000000000000000000000000000000000000000000000000",
+          "authority": {
+            "kind": "principal",
+            "decider": "p:owner"
+          }
+        }
+      ],
+      "expect": {
+        "state": "settled",
+        "outcome": "done",
+        "settlement": "s1",
+        "authority": "principal",
+        "answer": null,
+        "stale": false,
+        "withdrawn": false,
+        "terms_rev": 0,
+        "conflict": false,
+        "claims": [],
+        "ignored": []
+      }
+    },
+    {
+      "id": "tie-broken-by-id",
+      "spec": "core §6: equal ts, the greater id is current; two heads are a conflict",
+      "records": [
+        {
+          "ph": "0.6",
+          "ext": "acts/0.6",
+          "id": "r1",
+          "type": "raised",
+          "origin": "requester",
+          "by": "agent:demo",
+          "key": "task-demo-aaaaaaaaaa",
+          "project": "demo",
+          "ts": "2026-10-27T09:00:00Z",
+          "terms": {
+            "text": "Renew the domain"
+          },
+          "terms_rev": 1
+        },
+        {
+          "ph": "0.6",
+          "ext": "acts/0.6",
+          "id": "s1",
+          "type": "settled",
+          "origin": "principal",
+          "by": "ps:assistant",
+          "key": "task-demo-aaaaaaaaaa",
+          "project": "demo",
+          "ts": "2026-10-28T08:00:00Z",
+          "outcome": "done",
+          "terms_rev": 1,
+          "terms_digest": "sha-256:822c2dd81bb89e7b23b00bbcc0fab64bf83b0d1994f541ff45467f984ef11f2a",
+          "authority": {
+            "kind": "principal",
+            "decider": "p:owner"
+          }
+        },
+        {
+          "ph": "0.6",
+          "ext": "acts/0.6",
+          "id": "b2",
+          "type": "settled",
+          "origin": "principal",
+          "by": "ps:assistant",
+          "key": "task-demo-aaaaaaaaaa",
+          "project": "demo",
+          "ts": "2026-10-28T08:00:00Z",
+          "outcome": "dropped",
+          "terms_rev": 1,
+          "terms_digest": "sha-256:822c2dd81bb89e7b23b00bbcc0fab64bf83b0d1994f541ff45467f984ef11f2a",
+          "authority": {
+            "kind": "principal",
+            "decider": "p:owner"
+          }
+        }
+      ],
+      "expect": {
+        "state": "settled",
+        "outcome": "done",
+        "settlement": "s1",
+        "authority": "principal",
+        "answer": null,
+        "stale": false,
+        "withdrawn": false,
+        "terms_rev": 1,
+        "conflict": true,
+        "claims": [],
+        "ignored": []
+      }
+    },
+    {
+      "id": "cycle",
+      "spec": "core §6: no head, latest ts among all, conflict",
+      "records": [
+        {
+          "ph": "0.6",
+          "ext": "acts/0.6",
+          "id": "r1",
+          "type": "raised",
+          "origin": "requester",
+          "by": "agent:demo",
+          "key": "task-demo-aaaaaaaaaa",
+          "project": "demo",
+          "ts": "2026-10-27T09:00:00Z",
+          "terms": {
+            "text": "Renew the domain"
+          },
+          "terms_rev": 1
+        },
+        {
+          "ph": "0.6",
+          "ext": "acts/0.6",
+          "id": "y1",
+          "type": "settled",
+          "origin": "principal",
+          "by": "ps:assistant",
+          "key": "task-demo-aaaaaaaaaa",
+          "project": "demo",
+          "ts": "2026-10-28T08:00:00Z",
+          "outcome": "done",
+          "terms_rev": 1,
+          "terms_digest": "sha-256:822c2dd81bb89e7b23b00bbcc0fab64bf83b0d1994f541ff45467f984ef11f2a",
+          "authority": {
+            "kind": "principal",
+            "decider": "p:owner"
+          },
+          "supersedes": [
+            "y2"
+          ]
+        },
+        {
+          "ph": "0.6",
+          "ext": "acts/0.6",
+          "id": "y2",
+          "type": "settled",
+          "origin": "principal",
+          "by": "ps:assistant",
+          "key": "task-demo-aaaaaaaaaa",
+          "project": "demo",
+          "ts": "2026-10-29T08:00:00Z",
+          "outcome": "dropped",
+          "terms_rev": 1,
+          "terms_digest": "sha-256:822c2dd81bb89e7b23b00bbcc0fab64bf83b0d1994f541ff45467f984ef11f2a",
+          "authority": {
+            "kind": "principal",
+            "decider": "p:owner"
+          },
+          "supersedes": [
+            "y1"
+          ]
+        }
+      ],
+      "expect": {
+        "state": "settled",
+        "outcome": "dropped",
+        "settlement": "y2",
+        "authority": "principal",
+        "answer": null,
+        "stale": false,
+        "withdrawn": false,
+        "terms_rev": 1,
+        "conflict": true,
+        "claims": [],
+        "ignored": []
+      }
+    },
+    {
+      "id": "invalid-then-valid-same-id",
+      "spec": "core §10: an invalid record does not block a valid one with the same id",
+      "records": [
+        {
+          "ph": "0.6",
+          "ext": "acts/0.6",
+          "id": "r1",
+          "type": "raised",
+          "origin": "requester",
+          "by": "agent:demo",
+          "key": "task-demo-aaaaaaaaaa",
+          "project": "demo",
+          "ts": "2026-10-27T09:00:00Z",
+          "terms": {
+            "text": "Renew the domain"
+          },
+          "terms_rev": 1
+        },
+        {
+          "ph": "0.6",
+          "ext": "acts/0.6",
+          "id": "s1",
+          "type": "settled",
+          "origin": "requester",
+          "by": "ps:assistant",
+          "key": "task-demo-aaaaaaaaaa",
+          "project": "demo",
+          "ts": "2026-10-28T08:00:00Z",
+          "outcome": "done",
+          "terms_rev": 1,
+          "terms_digest": "sha-256:822c2dd81bb89e7b23b00bbcc0fab64bf83b0d1994f541ff45467f984ef11f2a",
+          "authority": {
+            "kind": "principal",
+            "decider": "p:owner"
+          }
+        },
+        {
+          "ph": "0.6",
+          "ext": "acts/0.6",
+          "id": "s1",
+          "type": "settled",
+          "origin": "principal",
+          "by": "ps:assistant",
+          "key": "task-demo-aaaaaaaaaa",
+          "project": "demo",
+          "ts": "2026-10-28T08:00:00Z",
+          "outcome": "done",
+          "terms_rev": 1,
+          "terms_digest": "sha-256:822c2dd81bb89e7b23b00bbcc0fab64bf83b0d1994f541ff45467f984ef11f2a",
+          "authority": {
+            "kind": "principal",
+            "decider": "p:owner"
+          }
+        }
+      ],
+      "expect": {
+        "state": "settled",
+        "outcome": "done",
+        "settlement": "s1",
+        "authority": "principal",
+        "answer": null,
+        "stale": false,
+        "withdrawn": false,
+        "terms_rev": 1,
+        "conflict": false,
+        "claims": [],
+        "ignored": []
+      }
+    },
+    {
+      "id": "reused-id",
+      "spec": "core §10: an id reused with different valid content keeps the greater canonical form",
+      "records": [
+        {
+          "ph": "0.6",
+          "ext": "acts/0.6",
+          "id": "r1",
+          "type": "raised",
+          "origin": "requester",
+          "by": "agent:demo",
+          "key": "task-demo-aaaaaaaaaa",
+          "project": "demo",
+          "ts": "2026-10-27T09:00:00Z",
+          "terms": {
+            "text": "Renew the domain"
+          },
+          "terms_rev": 1
+        },
+        {
+          "ph": "0.6",
+          "ext": "acts/0.6",
+          "id": "s1",
+          "type": "settled",
+          "origin": "principal",
+          "by": "ps:assistant",
+          "key": "task-demo-aaaaaaaaaa",
+          "project": "demo",
+          "ts": "2026-10-28T08:00:00Z",
+          "outcome": "done",
+          "terms_rev": 1,
+          "terms_digest": "sha-256:822c2dd81bb89e7b23b00bbcc0fab64bf83b0d1994f541ff45467f984ef11f2a",
+          "authority": {
+            "kind": "principal",
+            "decider": "p:owner"
+          },
+          "note": "a"
+        },
+        {
+          "ph": "0.6",
+          "ext": "acts/0.6",
+          "id": "s1",
+          "type": "settled",
+          "origin": "principal",
+          "by": "ps:assistant",
+          "key": "task-demo-aaaaaaaaaa",
+          "project": "demo",
+          "ts": "2026-10-28T08:00:00Z",
+          "outcome": "done",
+          "terms_rev": 1,
+          "terms_digest": "sha-256:822c2dd81bb89e7b23b00bbcc0fab64bf83b0d1994f541ff45467f984ef11f2a",
+          "authority": {
+            "kind": "principal",
+            "decider": "p:owner"
+          },
+          "note": "b"
+        }
+      ],
+      "expect": {
+        "state": "settled",
+        "outcome": "done",
+        "settlement": "s1",
+        "authority": "principal",
+        "answer": null,
+        "stale": false,
+        "withdrawn": false,
+        "terms_rev": 1,
+        "conflict": false,
+        "claims": [],
+        "ignored": []
+      }
+    },
+    {
+      "id": "withdrawn-replaced-stays-open",
+      "spec": "core §6, acts §2",
+      "records": [
+        {
+          "ph": "0.6",
+          "ext": "acts/0.6",
+          "id": "r:task-demo-aaaaaaaaaa",
+          "type": "raised",
+          "origin": "requester",
+          "by": "agent:demo",
+          "key": "task-demo-aaaaaaaaaa",
+          "project": "demo",
+          "ts": "2026-10-27T09:00:00Z",
+          "terms": {
+            "text": "Pay the invoice"
+          },
+          "terms_rev": 1
+        },
+        {
+          "ph": "0.6",
+          "ext": "acts/0.6",
+          "id": "w2",
+          "type": "withdrawn",
+          "origin": "requester",
+          "by": "agent:demo",
+          "key": "task-demo-aaaaaaaaaa",
+          "project": "demo",
+          "ts": "2026-10-27T12:00:00Z",
+          "reason": "replaced",
+          "supersedes": [
+            "r:task-demo-aaaaaaaaaa"
+          ]
+        },
+        {
+          "ph": "0.6",
+          "ext": "acts/0.6",
+          "id": "l9",
+          "type": "related",
+          "origin": "requester",
+          "by": "agent:demo",
+          "key": "task-demo-aaaaaaaaaa",
+          "project": "demo",
+          "ts": "2026-10-27T09:00:00Z",
+          "relation": {
+            "kind": "replaced_by",
+            "target": {
+              "ext": "acts",
+              "project": "demo",
+              "key": "task-demo-bbbbbbbbbb"
+            },
+            "active": true
+          }
+        }
+      ],
+      "expect": {
+        "state": "open",
+        "outcome": null,
+        "settlement": null,
+        "authority": null,
+        "answer": null,
+        "stale": false,
+        "withdrawn": true,
+        "terms_rev": 1,
+        "conflict": false,
+        "claims": [],
+        "ignored": []
+      }
+    },
+    {
+      "id": "attested-from-verified-claim",
+      "spec": "Evidence §2, §5 and core §7",
+      "records": [
+        {
+          "ph": "0.6",
+          "ext": "acts/0.6",
+          "id": "r:task-demo-aaaaaaaaaa",
+          "type": "raised",
+          "origin": "requester",
+          "by": "agent:demo",
+          "key": "task-demo-aaaaaaaaaa",
+          "project": "demo",
+          "ts": "2026-10-27T09:00:00Z",
+          "terms": {
+            "text": "Pay the invoice"
+          },
+          "terms_rev": 1
+        },
+        {
+          "ph": "0.6",
+          "ext": "acts/0.6",
+          "id": "c1",
+          "type": "claimed",
+          "origin": "agent",
+          "by": "agent:other",
+          "key": "task-demo-aaaaaaaaaa",
+          "project": "demo",
+          "ts": "2026-10-28T08:00:00Z",
+          "outcome": "done",
+          "terms_rev": 1,
+          "evidence": {
+            "basis": "a TLSNotary proof of the transfer",
+            "verifiable": [
+              {
+                "id": "payment",
+                "format": "tlsnotary",
+                "statement": "the bank's site showed a transfer of EUR 120 with reference task-demo-aaaaaaaaaa on 2026-10-28",
+                "proof_ref": {
+                  "uri": "https://proofs.example/p/81f2",
+                  "digest": "sha-256:1111111111111111111111111111111111111111111111111111111111111111"
+                }
+              }
+            ]
+          }
+        },
+        {
+          "ph": "0.6",
+          "ext": "acts/0.6",
+          "id": "s1",
+          "type": "settled",
+          "origin": "principal",
+          "by": "ps:assistant",
+          "key": "task-demo-aaaaaaaaaa",
+          "project": "demo",
+          "ts": "2026-10-28T09:00:00Z",
+          "outcome": "done",
+          "terms_rev": 1,
+          "terms_digest": "sha-256:d6e2c9081330e227efda1f79a58b15e98413e8b66a594d671b93f6d2ef3d0e40",
+          "authority": {
+            "kind": "attested",
+            "decider": "ps:verifier"
+          },
+          "adopts": [
+            "c1"
+          ],
+          "evidence": {
+            "basis": "claim c1, its TLSNotary proof verified",
+            "verified": [
+              {
+                "of": {
+                  "record": "c1",
+                  "entry": "payment"
+                },
+                "verifier": "ps:verifier",
+                "result": "valid",
+                "at": "2026-10-28T09:00:00Z"
+              }
+            ]
+          }
+        }
+      ],
+      "expect": {
+        "state": "settled",
+        "outcome": "done",
+        "settlement": "s1",
+        "authority": "attested",
+        "answer": null,
+        "stale": false,
+        "withdrawn": false,
+        "terms_rev": 1,
+        "conflict": false,
+        "claims": [
+          "c1"
+        ],
+        "ignored": []
+      }
+    },
+    {
+      "id": "approved-ignored-in-acts",
+      "spec": "acts §3",
+      "records": [
+        {
+          "ph": "0.6",
+          "ext": "acts/0.6",
+          "id": "r:task-demo-aaaaaaaaaa",
+          "type": "raised",
+          "origin": "requester",
+          "by": "agent:demo",
+          "key": "task-demo-aaaaaaaaaa",
+          "project": "demo",
+          "ts": "2026-10-27T09:00:00Z",
+          "terms": {
+            "text": "Pay the invoice"
+          },
+          "terms_rev": 1
+        },
+        {
+          "ph": "0.6",
+          "ext": "acts/0.6",
+          "id": "ap1",
+          "type": "approved",
+          "origin": "principal",
+          "by": "ps:assistant",
+          "key": "task-demo-aaaaaaaaaa",
+          "project": "demo",
+          "ts": "2026-10-27T09:00:00Z",
+          "terms_rev": 1,
+          "approval": {
+            "terms_digest": "sha-256:d6e2c9081330e227efda1f79a58b15e98413e8b66a594d671b93f6d2ef3d0e40",
+            "active": true
+          },
+          "authority": {
+            "kind": "principal",
+            "decider": "p:owner"
+          },
+          "evidence": {
+            "presented": "sha-256:2222222222222222222222222222222222222222222222222222222222222222"
+          }
+        }
+      ],
+      "expect": {
+        "state": "open",
+        "outcome": null,
+        "settlement": null,
+        "authority": null,
+        "answer": null,
+        "stale": false,
+        "withdrawn": false,
+        "terms_rev": 1,
+        "conflict": false,
+        "claims": [],
+        "ignored": [
+          "ap1"
+        ]
+      }
+    },
+    {
+      "id": "settlement-on-other-terms-is-stale",
+      "spec": "core §6: a settlement whose terms digest is not the current need record's at the same terms_rev is stale",
+      "records": [
+        {
+          "ph": "0.6",
+          "ext": "acts/0.6",
+          "id": "r1",
+          "type": "raised",
+          "origin": "requester",
+          "by": "agent:demo",
+          "key": "task-demo-aaaaaaaaaa",
+          "project": "demo",
+          "ts": "2026-10-27T09:00:00Z",
+          "terms": {
+            "text": "Renew the domain"
+          },
+          "terms_rev": 1
+        },
+        {
+          "ph": "0.6",
+          "ext": "acts/0.6",
+          "id": "s:other",
+          "type": "settled",
+          "origin": "principal",
+          "by": "ps:assistant",
+          "key": "task-demo-aaaaaaaaaa",
+          "project": "demo",
+          "ts": "2026-10-28T08:00:00Z",
+          "outcome": "done",
+          "terms_rev": 1,
+          "terms_digest": "sha-256:2222222222222222222222222222222222222222222222222222222222222222",
+          "authority": {
+            "kind": "principal",
+            "decider": "p:owner"
+          }
+        }
+      ],
+      "expect": {
+        "state": "settled",
+        "outcome": "done",
+        "settlement": "s:other",
+        "authority": "principal",
+        "answer": null,
+        "stale": true,
+        "withdrawn": false,
+        "terms_rev": 1,
+        "conflict": false,
+        "claims": [],
+        "ignored": []
+      }
+    },
+    {
+      "id": "ids-scoped-by-origin",
+      "spec": "core §10: ids are scoped by origin, so a claim reusing the raised id displaces nothing",
+      "records": [
+        {
+          "ph": "0.6",
+          "ext": "acts/0.6",
+          "id": "r1",
+          "type": "raised",
+          "origin": "requester",
+          "by": "agent:demo",
+          "key": "task-demo-aaaaaaaaaa",
+          "project": "demo",
+          "ts": "2026-10-27T09:00:00Z",
+          "terms": {
+            "text": "Renew the domain"
+          },
+          "terms_rev": 1
+        },
+        {
+          "ph": "0.6",
+          "ext": "acts/0.6",
+          "id": "r1",
+          "type": "claimed",
+          "origin": "agent",
+          "by": "agent:other",
+          "key": "task-demo-aaaaaaaaaa",
+          "project": "demo",
+          "ts": "2026-10-28T08:00:00Z",
+          "outcome": "done",
+          "evidence": {
+            "basis": "The principal said it was done."
+          }
+        }
+      ],
+      "expect": {
+        "state": "open",
+        "outcome": null,
+        "settlement": null,
+        "authority": null,
+        "answer": null,
+        "stale": false,
+        "withdrawn": false,
+        "terms_rev": 1,
+        "conflict": false,
+        "claims": [
+          "r1"
+        ],
+        "ignored": []
+      }
+    },
+    {
+      "id": "ts-offset-applied",
+      "spec": "core §4, §6: 10:00+08:00 is 02:00Z, earlier than 03:00Z",
+      "records": [
+        {
+          "ph": "0.6",
+          "ext": "acts/0.6",
+          "id": "r1",
+          "type": "raised",
+          "origin": "requester",
+          "by": "agent:demo",
+          "key": "task-demo-aaaaaaaaaa",
+          "project": "demo",
+          "ts": "2026-10-27T09:00:00Z",
+          "terms_rev": 1,
+          "terms": {
+            "text": "Which one?"
+          }
+        },
+        {
+          "ph": "0.6",
+          "ext": "acts/0.6",
+          "id": "s-a",
+          "type": "settled",
+          "origin": "principal",
+          "by": "ps:assistant",
+          "key": "task-demo-aaaaaaaaaa",
+          "project": "demo",
+          "ts": "2026-10-28T10:00:00+08:00",
+          "outcome": "done",
+          "terms_rev": 1,
+          "terms_digest": "sha-256:83d94fcb636f0549e42c92c90600f69e2169688d10aaa2c5fea82b4aa337b529",
+          "authority": {
+            "kind": "principal",
+            "decider": "p:owner"
+          }
+        },
+        {
+          "ph": "0.6",
+          "ext": "acts/0.6",
+          "id": "s-b",
+          "type": "settled",
+          "origin": "principal",
+          "by": "ps:assistant",
+          "key": "task-demo-aaaaaaaaaa",
+          "project": "demo",
+          "ts": "2026-10-28T03:00:00Z",
+          "outcome": "dropped",
+          "terms_rev": 1,
+          "terms_digest": "sha-256:83d94fcb636f0549e42c92c90600f69e2169688d10aaa2c5fea82b4aa337b529",
+          "authority": {
+            "kind": "principal",
+            "decider": "p:owner"
+          }
+        }
+      ],
+      "expect": {
+        "state": "settled",
+        "outcome": "dropped",
+        "settlement": "s-b",
+        "authority": "principal",
+        "answer": null,
+        "stale": false,
+        "withdrawn": false,
+        "terms_rev": 1,
+        "conflict": true,
+        "claims": [],
+        "ignored": []
+      }
+    },
+    {
+      "id": "ts-negative-offset-applied",
+      "spec": "core §4, §6: 01:00-05:00 is 06:00Z, earlier than 07:00Z",
+      "records": [
+        {
+          "ph": "0.6",
+          "ext": "acts/0.6",
+          "id": "r1",
+          "type": "raised",
+          "origin": "requester",
+          "by": "agent:demo",
+          "key": "task-demo-aaaaaaaaaa",
+          "project": "demo",
+          "ts": "2026-10-27T09:00:00Z",
+          "terms_rev": 1,
+          "terms": {
+            "text": "Which one?"
+          }
+        },
+        {
+          "ph": "0.6",
+          "ext": "acts/0.6",
+          "id": "s-a",
+          "type": "settled",
+          "origin": "principal",
+          "by": "ps:assistant",
+          "key": "task-demo-aaaaaaaaaa",
+          "project": "demo",
+          "ts": "2026-10-28T01:00:00-05:00",
+          "outcome": "done",
+          "terms_rev": 1,
+          "terms_digest": "sha-256:83d94fcb636f0549e42c92c90600f69e2169688d10aaa2c5fea82b4aa337b529",
+          "authority": {
+            "kind": "principal",
+            "decider": "p:owner"
+          }
+        },
+        {
+          "ph": "0.6",
+          "ext": "acts/0.6",
+          "id": "s-b",
+          "type": "settled",
+          "origin": "principal",
+          "by": "ps:assistant",
+          "key": "task-demo-aaaaaaaaaa",
+          "project": "demo",
+          "ts": "2026-10-28T07:00:00Z",
+          "outcome": "dropped",
+          "terms_rev": 1,
+          "terms_digest": "sha-256:83d94fcb636f0549e42c92c90600f69e2169688d10aaa2c5fea82b4aa337b529",
+          "authority": {
+            "kind": "principal",
+            "decider": "p:owner"
+          }
+        }
+      ],
+      "expect": {
+        "state": "settled",
+        "outcome": "dropped",
+        "settlement": "s-b",
+        "authority": "principal",
+        "answer": null,
+        "stale": false,
+        "withdrawn": false,
+        "terms_rev": 1,
+        "conflict": true,
+        "claims": [],
+        "ignored": []
+      }
+    },
+    {
+      "id": "ts-equal-instants-offset-and-z",
+      "spec": "core §4, §6: 10:00+02:00 and 08:00Z are one instant, so the greater id decides",
+      "records": [
+        {
+          "ph": "0.6",
+          "ext": "acts/0.6",
+          "id": "r1",
+          "type": "raised",
+          "origin": "requester",
+          "by": "agent:demo",
+          "key": "task-demo-aaaaaaaaaa",
+          "project": "demo",
+          "ts": "2026-10-27T09:00:00Z",
+          "terms_rev": 1,
+          "terms": {
+            "text": "Which one?"
+          }
+        },
+        {
+          "ph": "0.6",
+          "ext": "acts/0.6",
+          "id": "s-b",
+          "type": "settled",
+          "origin": "principal",
+          "by": "ps:assistant",
+          "key": "task-demo-aaaaaaaaaa",
+          "project": "demo",
+          "ts": "2026-10-28T08:00:00Z",
+          "outcome": "dropped",
+          "terms_rev": 1,
+          "terms_digest": "sha-256:83d94fcb636f0549e42c92c90600f69e2169688d10aaa2c5fea82b4aa337b529",
+          "authority": {
+            "kind": "principal",
+            "decider": "p:owner"
+          }
+        },
+        {
+          "ph": "0.6",
+          "ext": "acts/0.6",
+          "id": "s-a",
+          "type": "settled",
+          "origin": "principal",
+          "by": "ps:assistant",
+          "key": "task-demo-aaaaaaaaaa",
+          "project": "demo",
+          "ts": "2026-10-28T10:00:00+02:00",
+          "outcome": "done",
+          "terms_rev": 1,
+          "terms_digest": "sha-256:83d94fcb636f0549e42c92c90600f69e2169688d10aaa2c5fea82b4aa337b529",
+          "authority": {
+            "kind": "principal",
+            "decider": "p:owner"
+          }
+        }
+      ],
+      "expect": {
+        "state": "settled",
+        "outcome": "dropped",
+        "settlement": "s-b",
+        "authority": "principal",
+        "answer": null,
+        "stale": false,
+        "withdrawn": false,
+        "terms_rev": 1,
+        "conflict": true,
+        "claims": [],
+        "ignored": []
+      }
+    },
+    {
+      "id": "ts-equal-instants-negative-offset",
+      "spec": "core §4, §6: 03:00-05:00 and 08:00Z are one instant, so the greater id decides",
+      "records": [
+        {
+          "ph": "0.6",
+          "ext": "acts/0.6",
+          "id": "r1",
+          "type": "raised",
+          "origin": "requester",
+          "by": "agent:demo",
+          "key": "task-demo-aaaaaaaaaa",
+          "project": "demo",
+          "ts": "2026-10-27T09:00:00Z",
+          "terms_rev": 1,
+          "terms": {
+            "text": "Which one?"
+          }
+        },
+        {
+          "ph": "0.6",
+          "ext": "acts/0.6",
+          "id": "s-b",
+          "type": "settled",
+          "origin": "principal",
+          "by": "ps:assistant",
+          "key": "task-demo-aaaaaaaaaa",
+          "project": "demo",
+          "ts": "2026-10-28T03:00:00-05:00",
+          "outcome": "dropped",
+          "terms_rev": 1,
+          "terms_digest": "sha-256:83d94fcb636f0549e42c92c90600f69e2169688d10aaa2c5fea82b4aa337b529",
+          "authority": {
+            "kind": "principal",
+            "decider": "p:owner"
+          }
+        },
+        {
+          "ph": "0.6",
+          "ext": "acts/0.6",
+          "id": "s-a",
+          "type": "settled",
+          "origin": "principal",
+          "by": "ps:assistant",
+          "key": "task-demo-aaaaaaaaaa",
+          "project": "demo",
+          "ts": "2026-10-28T08:00:00Z",
+          "outcome": "done",
+          "terms_rev": 1,
+          "terms_digest": "sha-256:83d94fcb636f0549e42c92c90600f69e2169688d10aaa2c5fea82b4aa337b529",
+          "authority": {
+            "kind": "principal",
+            "decider": "p:owner"
+          }
+        }
+      ],
+      "expect": {
+        "state": "settled",
+        "outcome": "dropped",
+        "settlement": "s-b",
+        "authority": "principal",
+        "answer": null,
+        "stale": false,
+        "withdrawn": false,
+        "terms_rev": 1,
+        "conflict": true,
+        "claims": [],
+        "ignored": []
+      }
+    },
+    {
+      "id": "ts-equal-instants-offset-with-minutes",
+      "spec": "core §4, §6: 13:45+05:45 and 08:00Z are one instant, so the greater id decides",
+      "records": [
+        {
+          "ph": "0.6",
+          "ext": "acts/0.6",
+          "id": "r1",
+          "type": "raised",
+          "origin": "requester",
+          "by": "agent:demo",
+          "key": "task-demo-aaaaaaaaaa",
+          "project": "demo",
+          "ts": "2026-10-27T09:00:00Z",
+          "terms_rev": 1,
+          "terms": {
+            "text": "Which one?"
+          }
+        },
+        {
+          "ph": "0.6",
+          "ext": "acts/0.6",
+          "id": "s-b",
+          "type": "settled",
+          "origin": "principal",
+          "by": "ps:assistant",
+          "key": "task-demo-aaaaaaaaaa",
+          "project": "demo",
+          "ts": "2026-10-28T13:45:00+05:45",
+          "outcome": "dropped",
+          "terms_rev": 1,
+          "terms_digest": "sha-256:83d94fcb636f0549e42c92c90600f69e2169688d10aaa2c5fea82b4aa337b529",
+          "authority": {
+            "kind": "principal",
+            "decider": "p:owner"
+          }
+        },
+        {
+          "ph": "0.6",
+          "ext": "acts/0.6",
+          "id": "s-a",
+          "type": "settled",
+          "origin": "principal",
+          "by": "ps:assistant",
+          "key": "task-demo-aaaaaaaaaa",
+          "project": "demo",
+          "ts": "2026-10-28T08:00:00Z",
+          "outcome": "done",
+          "terms_rev": 1,
+          "terms_digest": "sha-256:83d94fcb636f0549e42c92c90600f69e2169688d10aaa2c5fea82b4aa337b529",
+          "authority": {
+            "kind": "principal",
+            "decider": "p:owner"
+          }
+        }
+      ],
+      "expect": {
+        "state": "settled",
+        "outcome": "dropped",
+        "settlement": "s-b",
+        "authority": "principal",
+        "answer": null,
+        "stale": false,
+        "withdrawn": false,
+        "terms_rev": 1,
+        "conflict": true,
+        "claims": [],
+        "ignored": []
+      }
+    },
+    {
+      "id": "ts-equal-instants-across-midnight",
+      "spec": "core §4, §6: 00:30+01:00 is 23:30Z of the day before, so the greater id decides",
+      "records": [
+        {
+          "ph": "0.6",
+          "ext": "acts/0.6",
+          "id": "r1",
+          "type": "raised",
+          "origin": "requester",
+          "by": "agent:demo",
+          "key": "task-demo-aaaaaaaaaa",
+          "project": "demo",
+          "ts": "2026-10-27T09:00:00Z",
+          "terms_rev": 1,
+          "terms": {
+            "text": "Which one?"
+          }
+        },
+        {
+          "ph": "0.6",
+          "ext": "acts/0.6",
+          "id": "s-b",
+          "type": "settled",
+          "origin": "principal",
+          "by": "ps:assistant",
+          "key": "task-demo-aaaaaaaaaa",
+          "project": "demo",
+          "ts": "2026-10-27T23:30:00Z",
+          "outcome": "dropped",
+          "terms_rev": 1,
+          "terms_digest": "sha-256:83d94fcb636f0549e42c92c90600f69e2169688d10aaa2c5fea82b4aa337b529",
+          "authority": {
+            "kind": "principal",
+            "decider": "p:owner"
+          }
+        },
+        {
+          "ph": "0.6",
+          "ext": "acts/0.6",
+          "id": "s-a",
+          "type": "settled",
+          "origin": "principal",
+          "by": "ps:assistant",
+          "key": "task-demo-aaaaaaaaaa",
+          "project": "demo",
+          "ts": "2026-10-28T00:30:00+01:00",
+          "outcome": "done",
+          "terms_rev": 1,
+          "terms_digest": "sha-256:83d94fcb636f0549e42c92c90600f69e2169688d10aaa2c5fea82b4aa337b529",
+          "authority": {
+            "kind": "principal",
+            "decider": "p:owner"
+          }
+        }
+      ],
+      "expect": {
+        "state": "settled",
+        "outcome": "dropped",
+        "settlement": "s-b",
+        "authority": "principal",
+        "answer": null,
+        "stale": false,
+        "withdrawn": false,
+        "terms_rev": 1,
+        "conflict": true,
+        "claims": [],
+        "ignored": []
+      }
+    },
+    {
+      "id": "ts-equal-instants-trailing-zeros",
+      "spec": "core §4, §6: .1 and .100000 are one instant, so the greater id decides",
+      "records": [
+        {
+          "ph": "0.6",
+          "ext": "acts/0.6",
+          "id": "r1",
+          "type": "raised",
+          "origin": "requester",
+          "by": "agent:demo",
+          "key": "task-demo-aaaaaaaaaa",
+          "project": "demo",
+          "ts": "2026-10-27T09:00:00Z",
+          "terms_rev": 1,
+          "terms": {
+            "text": "Which one?"
+          }
+        },
+        {
+          "ph": "0.6",
+          "ext": "acts/0.6",
+          "id": "s-b",
+          "type": "settled",
+          "origin": "principal",
+          "by": "ps:assistant",
+          "key": "task-demo-aaaaaaaaaa",
+          "project": "demo",
+          "ts": "2026-10-28T08:00:00.100000Z",
+          "outcome": "dropped",
+          "terms_rev": 1,
+          "terms_digest": "sha-256:83d94fcb636f0549e42c92c90600f69e2169688d10aaa2c5fea82b4aa337b529",
+          "authority": {
+            "kind": "principal",
+            "decider": "p:owner"
+          }
+        },
+        {
+          "ph": "0.6",
+          "ext": "acts/0.6",
+          "id": "s-a",
+          "type": "settled",
+          "origin": "principal",
+          "by": "ps:assistant",
+          "key": "task-demo-aaaaaaaaaa",
+          "project": "demo",
+          "ts": "2026-10-28T08:00:00.1Z",
+          "outcome": "done",
+          "terms_rev": 1,
+          "terms_digest": "sha-256:83d94fcb636f0549e42c92c90600f69e2169688d10aaa2c5fea82b4aa337b529",
+          "authority": {
+            "kind": "principal",
+            "decider": "p:owner"
+          }
+        }
+      ],
+      "expect": {
+        "state": "settled",
+        "outcome": "dropped",
+        "settlement": "s-b",
+        "authority": "principal",
+        "answer": null,
+        "stale": false,
+        "withdrawn": false,
+        "terms_rev": 1,
+        "conflict": true,
+        "claims": [],
+        "ignored": []
+      }
+    },
+    {
+      "id": "ts-leap-second-is-the-last-microsecond",
+      "spec": "core §4: :60 compares as the last microsecond of its minute, so a tie, and the greater id decides",
+      "records": [
+        {
+          "ph": "0.6",
+          "ext": "acts/0.6",
+          "id": "r1",
+          "type": "raised",
+          "origin": "requester",
+          "by": "agent:demo",
+          "key": "task-demo-aaaaaaaaaa",
+          "project": "demo",
+          "ts": "2026-10-27T09:00:00Z",
+          "terms_rev": 1,
+          "terms": {
+            "text": "Which one?"
+          }
+        },
+        {
+          "ph": "0.6",
+          "ext": "acts/0.6",
+          "id": "s-b",
+          "type": "settled",
+          "origin": "principal",
+          "by": "ps:assistant",
+          "key": "task-demo-aaaaaaaaaa",
+          "project": "demo",
+          "ts": "2016-12-31T23:59:59.999999Z",
+          "outcome": "dropped",
+          "terms_rev": 1,
+          "terms_digest": "sha-256:83d94fcb636f0549e42c92c90600f69e2169688d10aaa2c5fea82b4aa337b529",
+          "authority": {
+            "kind": "principal",
+            "decider": "p:owner"
+          }
+        },
+        {
+          "ph": "0.6",
+          "ext": "acts/0.6",
+          "id": "s-a",
+          "type": "settled",
+          "origin": "principal",
+          "by": "ps:assistant",
+          "key": "task-demo-aaaaaaaaaa",
+          "project": "demo",
+          "ts": "2016-12-31T23:59:60Z",
+          "outcome": "done",
+          "terms_rev": 1,
+          "terms_digest": "sha-256:83d94fcb636f0549e42c92c90600f69e2169688d10aaa2c5fea82b4aa337b529",
+          "authority": {
+            "kind": "principal",
+            "decider": "p:owner"
+          }
+        }
+      ],
+      "expect": {
+        "state": "settled",
+        "outcome": "dropped",
+        "settlement": "s-b",
+        "authority": "principal",
+        "answer": null,
+        "stale": false,
+        "withdrawn": false,
+        "terms_rev": 1,
+        "conflict": true,
+        "claims": [],
+        "ignored": []
+      }
+    },
+    {
+      "id": "ts-leap-second-with-offset",
+      "spec": "core §4: 15:59:60-08:00 is the same leap second, so a tie, and the greater id decides",
+      "records": [
+        {
+          "ph": "0.6",
+          "ext": "acts/0.6",
+          "id": "r1",
+          "type": "raised",
+          "origin": "requester",
+          "by": "agent:demo",
+          "key": "task-demo-aaaaaaaaaa",
+          "project": "demo",
+          "ts": "2026-10-27T09:00:00Z",
+          "terms_rev": 1,
+          "terms": {
+            "text": "Which one?"
+          }
+        },
+        {
+          "ph": "0.6",
+          "ext": "acts/0.6",
+          "id": "s-b",
+          "type": "settled",
+          "origin": "principal",
+          "by": "ps:assistant",
+          "key": "task-demo-aaaaaaaaaa",
+          "project": "demo",
+          "ts": "2016-12-31T15:59:60-08:00",
+          "outcome": "dropped",
+          "terms_rev": 1,
+          "terms_digest": "sha-256:83d94fcb636f0549e42c92c90600f69e2169688d10aaa2c5fea82b4aa337b529",
+          "authority": {
+            "kind": "principal",
+            "decider": "p:owner"
+          }
+        },
+        {
+          "ph": "0.6",
+          "ext": "acts/0.6",
+          "id": "s-a",
+          "type": "settled",
+          "origin": "principal",
+          "by": "ps:assistant",
+          "key": "task-demo-aaaaaaaaaa",
+          "project": "demo",
+          "ts": "2016-12-31T23:59:59.999999Z",
+          "outcome": "done",
+          "terms_rev": 1,
+          "terms_digest": "sha-256:83d94fcb636f0549e42c92c90600f69e2169688d10aaa2c5fea82b4aa337b529",
+          "authority": {
+            "kind": "principal",
+            "decider": "p:owner"
+          }
+        }
+      ],
+      "expect": {
+        "state": "settled",
+        "outcome": "dropped",
+        "settlement": "s-b",
+        "authority": "principal",
+        "answer": null,
+        "stale": false,
+        "withdrawn": false,
+        "terms_rev": 1,
+        "conflict": true,
+        "claims": [],
+        "ignored": []
+      }
+    },
+    {
+      "id": "ts-offset-with-minutes",
+      "spec": "core §4, §6: 08:45+05:45 is 03:00Z, earlier than 03:30Z",
+      "records": [
+        {
+          "ph": "0.6",
+          "ext": "acts/0.6",
+          "id": "r1",
+          "type": "raised",
+          "origin": "requester",
+          "by": "agent:demo",
+          "key": "task-demo-aaaaaaaaaa",
+          "project": "demo",
+          "ts": "2026-10-27T09:00:00Z",
+          "terms_rev": 1,
+          "terms": {
+            "text": "Which one?"
+          }
+        },
+        {
+          "ph": "0.6",
+          "ext": "acts/0.6",
+          "id": "s-a",
+          "type": "settled",
+          "origin": "principal",
+          "by": "ps:assistant",
+          "key": "task-demo-aaaaaaaaaa",
+          "project": "demo",
+          "ts": "2026-10-28T08:45:00+05:45",
+          "outcome": "done",
+          "terms_rev": 1,
+          "terms_digest": "sha-256:83d94fcb636f0549e42c92c90600f69e2169688d10aaa2c5fea82b4aa337b529",
+          "authority": {
+            "kind": "principal",
+            "decider": "p:owner"
+          }
+        },
+        {
+          "ph": "0.6",
+          "ext": "acts/0.6",
+          "id": "s-b",
+          "type": "settled",
+          "origin": "principal",
+          "by": "ps:assistant",
+          "key": "task-demo-aaaaaaaaaa",
+          "project": "demo",
+          "ts": "2026-10-28T03:30:00Z",
+          "outcome": "dropped",
+          "terms_rev": 1,
+          "terms_digest": "sha-256:83d94fcb636f0549e42c92c90600f69e2169688d10aaa2c5fea82b4aa337b529",
+          "authority": {
+            "kind": "principal",
+            "decider": "p:owner"
+          }
+        }
+      ],
+      "expect": {
+        "state": "settled",
+        "outcome": "dropped",
+        "settlement": "s-b",
+        "authority": "principal",
+        "answer": null,
+        "stale": false,
+        "withdrawn": false,
+        "terms_rev": 1,
+        "conflict": true,
+        "claims": [],
+        "ignored": []
+      }
+    },
+    {
+      "id": "ts-fraction-is-later-than-none",
+      "spec": "core §4, §6: 08:00:00.5Z is later than 08:00:00Z, though `.` sorts before `Z`",
+      "records": [
+        {
+          "ph": "0.6",
+          "ext": "acts/0.6",
+          "id": "r1",
+          "type": "raised",
+          "origin": "requester",
+          "by": "agent:demo",
+          "key": "task-demo-aaaaaaaaaa",
+          "project": "demo",
+          "ts": "2026-10-27T09:00:00Z",
+          "terms_rev": 1,
+          "terms": {
+            "text": "Which one?"
+          }
+        },
+        {
+          "ph": "0.6",
+          "ext": "acts/0.6",
+          "id": "s-a",
+          "type": "settled",
+          "origin": "principal",
+          "by": "ps:assistant",
+          "key": "task-demo-aaaaaaaaaa",
+          "project": "demo",
+          "ts": "2026-10-28T08:00:00.5Z",
+          "outcome": "done",
+          "terms_rev": 1,
+          "terms_digest": "sha-256:83d94fcb636f0549e42c92c90600f69e2169688d10aaa2c5fea82b4aa337b529",
+          "authority": {
+            "kind": "principal",
+            "decider": "p:owner"
+          }
+        },
+        {
+          "ph": "0.6",
+          "ext": "acts/0.6",
+          "id": "s-b",
+          "type": "settled",
+          "origin": "principal",
+          "by": "ps:assistant",
+          "key": "task-demo-aaaaaaaaaa",
+          "project": "demo",
+          "ts": "2026-10-28T08:00:00Z",
+          "outcome": "dropped",
+          "terms_rev": 1,
+          "terms_digest": "sha-256:83d94fcb636f0549e42c92c90600f69e2169688d10aaa2c5fea82b4aa337b529",
+          "authority": {
+            "kind": "principal",
+            "decider": "p:owner"
+          }
+        }
+      ],
+      "expect": {
+        "state": "settled",
+        "outcome": "done",
+        "settlement": "s-a",
+        "authority": "principal",
+        "answer": null,
+        "stale": false,
+        "withdrawn": false,
+        "terms_rev": 1,
+        "conflict": true,
+        "claims": [],
+        "ignored": []
+      }
+    },
+    {
+      "id": "ts-microseconds-count",
+      "spec": "core §4, §6: every fractional digit counts",
+      "records": [
+        {
+          "ph": "0.6",
+          "ext": "acts/0.6",
+          "id": "r1",
+          "type": "raised",
+          "origin": "requester",
+          "by": "agent:demo",
+          "key": "task-demo-aaaaaaaaaa",
+          "project": "demo",
+          "ts": "2026-10-27T09:00:00Z",
+          "terms_rev": 1,
+          "terms": {
+            "text": "Which one?"
+          }
+        },
+        {
+          "ph": "0.6",
+          "ext": "acts/0.6",
+          "id": "s-a",
+          "type": "settled",
+          "origin": "principal",
+          "by": "ps:assistant",
+          "key": "task-demo-aaaaaaaaaa",
+          "project": "demo",
+          "ts": "2026-10-28T08:00:00.000002Z",
+          "outcome": "done",
+          "terms_rev": 1,
+          "terms_digest": "sha-256:83d94fcb636f0549e42c92c90600f69e2169688d10aaa2c5fea82b4aa337b529",
+          "authority": {
+            "kind": "principal",
+            "decider": "p:owner"
+          }
+        },
+        {
+          "ph": "0.6",
+          "ext": "acts/0.6",
+          "id": "s-b",
+          "type": "settled",
+          "origin": "principal",
+          "by": "ps:assistant",
+          "key": "task-demo-aaaaaaaaaa",
+          "project": "demo",
+          "ts": "2026-10-28T08:00:00.000001Z",
+          "outcome": "dropped",
+          "terms_rev": 1,
+          "terms_digest": "sha-256:83d94fcb636f0549e42c92c90600f69e2169688d10aaa2c5fea82b4aa337b529",
+          "authority": {
+            "kind": "principal",
+            "decider": "p:owner"
+          }
+        }
+      ],
+      "expect": {
+        "state": "settled",
+        "outcome": "done",
+        "settlement": "s-a",
+        "authority": "principal",
+        "answer": null,
+        "stale": false,
+        "withdrawn": false,
+        "terms_rev": 1,
+        "conflict": true,
+        "claims": [],
+        "ignored": []
+      }
+    },
+    {
+      "id": "ts-fractions-compare-by-value",
+      "spec": "core §4, §6: .1 is later than .09",
+      "records": [
+        {
+          "ph": "0.6",
+          "ext": "acts/0.6",
+          "id": "r1",
+          "type": "raised",
+          "origin": "requester",
+          "by": "agent:demo",
+          "key": "task-demo-aaaaaaaaaa",
+          "project": "demo",
+          "ts": "2026-10-27T09:00:00Z",
+          "terms_rev": 1,
+          "terms": {
+            "text": "Which one?"
+          }
+        },
+        {
+          "ph": "0.6",
+          "ext": "acts/0.6",
+          "id": "s-a",
+          "type": "settled",
+          "origin": "principal",
+          "by": "ps:assistant",
+          "key": "task-demo-aaaaaaaaaa",
+          "project": "demo",
+          "ts": "2026-10-28T08:00:00.1Z",
+          "outcome": "done",
+          "terms_rev": 1,
+          "terms_digest": "sha-256:83d94fcb636f0549e42c92c90600f69e2169688d10aaa2c5fea82b4aa337b529",
+          "authority": {
+            "kind": "principal",
+            "decider": "p:owner"
+          }
+        },
+        {
+          "ph": "0.6",
+          "ext": "acts/0.6",
+          "id": "s-b",
+          "type": "settled",
+          "origin": "principal",
+          "by": "ps:assistant",
+          "key": "task-demo-aaaaaaaaaa",
+          "project": "demo",
+          "ts": "2026-10-28T08:00:00.09Z",
+          "outcome": "dropped",
+          "terms_rev": 1,
+          "terms_digest": "sha-256:83d94fcb636f0549e42c92c90600f69e2169688d10aaa2c5fea82b4aa337b529",
+          "authority": {
+            "kind": "principal",
+            "decider": "p:owner"
+          }
+        }
+      ],
+      "expect": {
+        "state": "settled",
+        "outcome": "done",
+        "settlement": "s-a",
+        "authority": "principal",
+        "answer": null,
+        "stale": false,
+        "withdrawn": false,
+        "terms_rev": 1,
+        "conflict": true,
+        "claims": [],
+        "ignored": []
+      }
+    },
+    {
+      "id": "ts-leap-second-after-the-one-before",
+      "spec": "core §4: :60 is later than the microsecond before the last",
+      "records": [
+        {
+          "ph": "0.6",
+          "ext": "acts/0.6",
+          "id": "r1",
+          "type": "raised",
+          "origin": "requester",
+          "by": "agent:demo",
+          "key": "task-demo-aaaaaaaaaa",
+          "project": "demo",
+          "ts": "2026-10-27T09:00:00Z",
+          "terms_rev": 1,
+          "terms": {
+            "text": "Which one?"
+          }
+        },
+        {
+          "ph": "0.6",
+          "ext": "acts/0.6",
+          "id": "s-a",
+          "type": "settled",
+          "origin": "principal",
+          "by": "ps:assistant",
+          "key": "task-demo-aaaaaaaaaa",
+          "project": "demo",
+          "ts": "2016-12-31T23:59:60Z",
+          "outcome": "done",
+          "terms_rev": 1,
+          "terms_digest": "sha-256:83d94fcb636f0549e42c92c90600f69e2169688d10aaa2c5fea82b4aa337b529",
+          "authority": {
+            "kind": "principal",
+            "decider": "p:owner"
+          }
+        },
+        {
+          "ph": "0.6",
+          "ext": "acts/0.6",
+          "id": "s-b",
+          "type": "settled",
+          "origin": "principal",
+          "by": "ps:assistant",
+          "key": "task-demo-aaaaaaaaaa",
+          "project": "demo",
+          "ts": "2016-12-31T23:59:59.999998Z",
+          "outcome": "dropped",
+          "terms_rev": 1,
+          "terms_digest": "sha-256:83d94fcb636f0549e42c92c90600f69e2169688d10aaa2c5fea82b4aa337b529",
+          "authority": {
+            "kind": "principal",
+            "decider": "p:owner"
+          }
+        }
+      ],
+      "expect": {
+        "state": "settled",
+        "outcome": "done",
+        "settlement": "s-a",
+        "authority": "principal",
+        "answer": null,
+        "stale": false,
+        "withdrawn": false,
+        "terms_rev": 1,
+        "conflict": true,
+        "claims": [],
+        "ignored": []
+      }
+    },
+    {
+      "id": "ts-leap-second-before-the-next-minute",
+      "spec": "core §4: :60 is earlier than the next minute",
+      "records": [
+        {
+          "ph": "0.6",
+          "ext": "acts/0.6",
+          "id": "r1",
+          "type": "raised",
+          "origin": "requester",
+          "by": "agent:demo",
+          "key": "task-demo-aaaaaaaaaa",
+          "project": "demo",
+          "ts": "2026-10-27T09:00:00Z",
+          "terms_rev": 1,
+          "terms": {
+            "text": "Which one?"
+          }
+        },
+        {
+          "ph": "0.6",
+          "ext": "acts/0.6",
+          "id": "s-a",
+          "type": "settled",
+          "origin": "principal",
+          "by": "ps:assistant",
+          "key": "task-demo-aaaaaaaaaa",
+          "project": "demo",
+          "ts": "2017-01-01T00:00:00Z",
+          "outcome": "done",
+          "terms_rev": 1,
+          "terms_digest": "sha-256:83d94fcb636f0549e42c92c90600f69e2169688d10aaa2c5fea82b4aa337b529",
+          "authority": {
+            "kind": "principal",
+            "decider": "p:owner"
+          }
+        },
+        {
+          "ph": "0.6",
+          "ext": "acts/0.6",
+          "id": "s-b",
+          "type": "settled",
+          "origin": "principal",
+          "by": "ps:assistant",
+          "key": "task-demo-aaaaaaaaaa",
+          "project": "demo",
+          "ts": "2016-12-31T23:59:60Z",
+          "outcome": "dropped",
+          "terms_rev": 1,
+          "terms_digest": "sha-256:83d94fcb636f0549e42c92c90600f69e2169688d10aaa2c5fea82b4aa337b529",
+          "authority": {
+            "kind": "principal",
+            "decider": "p:owner"
+          }
+        }
+      ],
+      "expect": {
+        "state": "settled",
+        "outcome": "done",
+        "settlement": "s-a",
+        "authority": "principal",
+        "answer": null,
+        "stale": false,
+        "withdrawn": false,
+        "terms_rev": 1,
+        "conflict": true,
+        "claims": [],
+        "ignored": []
+      }
+    },
+    {
+      "id": "ts-year-0",
+      "spec": "core §4: RFC 3339 years start at 0000",
+      "records": [
+        {
+          "ph": "0.6",
+          "ext": "acts/0.6",
+          "id": "r1",
+          "type": "raised",
+          "origin": "requester",
+          "by": "agent:demo",
+          "key": "task-demo-aaaaaaaaaa",
+          "project": "demo",
+          "ts": "2026-10-27T09:00:00Z",
+          "terms_rev": 1,
+          "terms": {
+            "text": "Which one?"
+          }
+        },
+        {
+          "ph": "0.6",
+          "ext": "acts/0.6",
+          "id": "s-a",
+          "type": "settled",
+          "origin": "principal",
+          "by": "ps:assistant",
+          "key": "task-demo-aaaaaaaaaa",
+          "project": "demo",
+          "ts": "0000-03-01T00:00:00Z",
+          "outcome": "done",
+          "terms_rev": 1,
+          "terms_digest": "sha-256:83d94fcb636f0549e42c92c90600f69e2169688d10aaa2c5fea82b4aa337b529",
+          "authority": {
+            "kind": "principal",
+            "decider": "p:owner"
+          }
+        },
+        {
+          "ph": "0.6",
+          "ext": "acts/0.6",
+          "id": "s-b",
+          "type": "settled",
+          "origin": "principal",
+          "by": "ps:assistant",
+          "key": "task-demo-aaaaaaaaaa",
+          "project": "demo",
+          "ts": "0000-02-29T00:00:00Z",
+          "outcome": "dropped",
+          "terms_rev": 1,
+          "terms_digest": "sha-256:83d94fcb636f0549e42c92c90600f69e2169688d10aaa2c5fea82b4aa337b529",
+          "authority": {
+            "kind": "principal",
+            "decider": "p:owner"
+          }
+        }
+      ],
+      "expect": {
+        "state": "settled",
+        "outcome": "done",
+        "settlement": "s-a",
+        "authority": "principal",
+        "answer": null,
+        "stale": false,
+        "withdrawn": false,
+        "terms_rev": 1,
+        "conflict": true,
+        "claims": [],
+        "ignored": []
+      }
+    },
+    {
+      "id": "ts-year-0-before-year-1",
+      "spec": "core §4: year 0 is the year before year 1",
+      "records": [
+        {
+          "ph": "0.6",
+          "ext": "acts/0.6",
+          "id": "r1",
+          "type": "raised",
+          "origin": "requester",
+          "by": "agent:demo",
+          "key": "task-demo-aaaaaaaaaa",
+          "project": "demo",
+          "ts": "2026-10-27T09:00:00Z",
+          "terms_rev": 1,
+          "terms": {
+            "text": "Which one?"
+          }
+        },
+        {
+          "ph": "0.6",
+          "ext": "acts/0.6",
+          "id": "s-a",
+          "type": "settled",
+          "origin": "principal",
+          "by": "ps:assistant",
+          "key": "task-demo-aaaaaaaaaa",
+          "project": "demo",
+          "ts": "0000-12-31T23:00:00Z",
+          "outcome": "done",
+          "terms_rev": 1,
+          "terms_digest": "sha-256:83d94fcb636f0549e42c92c90600f69e2169688d10aaa2c5fea82b4aa337b529",
+          "authority": {
+            "kind": "principal",
+            "decider": "p:owner"
+          }
+        },
+        {
+          "ph": "0.6",
+          "ext": "acts/0.6",
+          "id": "s-b",
+          "type": "settled",
+          "origin": "principal",
+          "by": "ps:assistant",
+          "key": "task-demo-aaaaaaaaaa",
+          "project": "demo",
+          "ts": "0001-01-01T00:30:00Z",
+          "outcome": "dropped",
+          "terms_rev": 1,
+          "terms_digest": "sha-256:83d94fcb636f0549e42c92c90600f69e2169688d10aaa2c5fea82b4aa337b529",
+          "authority": {
+            "kind": "principal",
+            "decider": "p:owner"
+          }
+        }
+      ],
+      "expect": {
+        "state": "settled",
+        "outcome": "dropped",
+        "settlement": "s-b",
+        "authority": "principal",
+        "answer": null,
+        "stale": false,
+        "withdrawn": false,
+        "terms_rev": 1,
+        "conflict": true,
+        "claims": [],
+        "ignored": []
+      }
+    },
+    {
+      "id": "ts-year-0-offset-crosses-into-year-1",
+      "spec": "core §4: 23:00-02:00 on the last day of year 0 is 01:00Z of year 1",
+      "records": [
+        {
+          "ph": "0.6",
+          "ext": "acts/0.6",
+          "id": "r1",
+          "type": "raised",
+          "origin": "requester",
+          "by": "agent:demo",
+          "key": "task-demo-aaaaaaaaaa",
+          "project": "demo",
+          "ts": "2026-10-27T09:00:00Z",
+          "terms_rev": 1,
+          "terms": {
+            "text": "Which one?"
+          }
+        },
+        {
+          "ph": "0.6",
+          "ext": "acts/0.6",
+          "id": "s-a",
+          "type": "settled",
+          "origin": "principal",
+          "by": "ps:assistant",
+          "key": "task-demo-aaaaaaaaaa",
+          "project": "demo",
+          "ts": "0000-12-31T23:00:00-02:00",
+          "outcome": "done",
+          "terms_rev": 1,
+          "terms_digest": "sha-256:83d94fcb636f0549e42c92c90600f69e2169688d10aaa2c5fea82b4aa337b529",
+          "authority": {
+            "kind": "principal",
+            "decider": "p:owner"
+          }
+        },
+        {
+          "ph": "0.6",
+          "ext": "acts/0.6",
+          "id": "s-b",
+          "type": "settled",
+          "origin": "principal",
+          "by": "ps:assistant",
+          "key": "task-demo-aaaaaaaaaa",
+          "project": "demo",
+          "ts": "0001-01-01T00:30:00Z",
+          "outcome": "dropped",
+          "terms_rev": 1,
+          "terms_digest": "sha-256:83d94fcb636f0549e42c92c90600f69e2169688d10aaa2c5fea82b4aa337b529",
+          "authority": {
+            "kind": "principal",
+            "decider": "p:owner"
+          }
+        }
+      ],
+      "expect": {
+        "state": "settled",
+        "outcome": "done",
+        "settlement": "s-a",
+        "authority": "principal",
+        "answer": null,
+        "stale": false,
+        "withdrawn": false,
+        "terms_rev": 1,
+        "conflict": true,
+        "claims": [],
+        "ignored": []
+      }
+    },
+    {
+      "id": "need-fork-current-by-instant",
+      "spec": "core §6: the current need record is found by instant, so a settlement on it is not stale",
+      "records": [
+        {
+          "ph": "0.6",
+          "ext": "acts/0.6",
+          "id": "r1",
+          "type": "raised",
+          "origin": "requester",
+          "by": "agent:demo",
+          "key": "task-demo-aaaaaaaaaa",
+          "project": "demo",
+          "ts": "2026-10-27T09:00:00Z",
+          "terms_rev": 1,
+          "terms": {
+            "text": "Which one?"
+          }
+        },
+        {
+          "ph": "0.6",
+          "ext": "acts/0.6",
+          "id": "a-1",
+          "type": "amended",
+          "origin": "requester",
+          "by": "agent:demo",
+          "key": "task-demo-aaaaaaaaaa",
+          "project": "demo",
+          "ts": "2026-10-27T18:00:00+08:00",
+          "terms_rev": 2,
+          "terms": {
+            "text": "First wording"
+          },
+          "supersedes": [
+            "r1"
+          ]
+        },
+        {
+          "ph": "0.6",
+          "ext": "acts/0.6",
+          "id": "a-2",
+          "type": "amended",
+          "origin": "requester",
+          "by": "agent:demo",
+          "key": "task-demo-aaaaaaaaaa",
+          "project": "demo",
+          "ts": "2026-10-27T11:00:00Z",
+          "terms_rev": 2,
+          "terms": {
+            "text": "Second wording"
+          },
+          "supersedes": [
+            "r1"
+          ]
+        },
+        {
+          "ph": "0.6",
+          "ext": "acts/0.6",
+          "id": "s1",
+          "type": "settled",
+          "origin": "principal",
+          "by": "ps:assistant",
+          "key": "task-demo-aaaaaaaaaa",
+          "project": "demo",
+          "ts": "2026-10-28T08:00:00Z",
+          "outcome": "done",
+          "terms_rev": 2,
+          "terms_digest": "sha-256:04ce18f34ea4e1c21e1b14b4b840a2dc313fc7b6a391e7b731284f1ff47c9743",
+          "authority": {
+            "kind": "principal",
+            "decider": "p:owner"
+          }
+        }
+      ],
+      "expect": {
+        "state": "settled",
+        "outcome": "done",
+        "settlement": "s1",
+        "authority": "principal",
+        "answer": null,
+        "stale": false,
+        "withdrawn": false,
+        "terms_rev": 2,
+        "conflict": true,
+        "claims": [],
+        "ignored": []
+      }
+    },
+    {
+      "id": "id-tie-beyond-the-bmp",
+      "spec": "core §6: equal ts, the greater id in code-point order, which is not UTF-16's",
+      "records": [
+        {
+          "ph": "0.6",
+          "ext": "acts/0.6",
+          "id": "r1",
+          "type": "raised",
+          "origin": "requester",
+          "by": "agent:demo",
+          "key": "task-demo-aaaaaaaaaa",
+          "project": "demo",
+          "ts": "2026-10-27T09:00:00Z",
+          "terms_rev": 1,
+          "terms": {
+            "text": "Which one?"
+          }
+        },
+        {
+          "ph": "0.6",
+          "ext": "acts/0.6",
+          "id": "s:😀",
+          "type": "settled",
+          "origin": "principal",
+          "by": "ps:assistant",
+          "key": "task-demo-aaaaaaaaaa",
+          "project": "demo",
+          "ts": "2026-10-28T08:00:00Z",
+          "outcome": "done",
+          "terms_rev": 1,
+          "terms_digest": "sha-256:83d94fcb636f0549e42c92c90600f69e2169688d10aaa2c5fea82b4aa337b529",
+          "authority": {
+            "kind": "principal",
+            "decider": "p:owner"
+          }
+        },
+        {
+          "ph": "0.6",
+          "ext": "acts/0.6",
+          "id": "s:ｚ",
+          "type": "settled",
+          "origin": "principal",
+          "by": "ps:assistant",
+          "key": "task-demo-aaaaaaaaaa",
+          "project": "demo",
+          "ts": "2026-10-28T08:00:00Z",
+          "outcome": "dropped",
+          "terms_rev": 1,
+          "terms_digest": "sha-256:83d94fcb636f0549e42c92c90600f69e2169688d10aaa2c5fea82b4aa337b529",
+          "authority": {
+            "kind": "principal",
+            "decider": "p:owner"
+          }
+        }
+      ],
+      "expect": {
+        "state": "settled",
+        "outcome": "done",
+        "settlement": "s:😀",
+        "authority": "principal",
+        "answer": null,
+        "stale": false,
+        "withdrawn": false,
+        "terms_rev": 1,
+        "conflict": true,
+        "claims": [],
+        "ignored": []
+      }
+    },
+    {
+      "id": "id-tie-is-case-sensitive",
+      "spec": "core §6: lowercase letters are greater in code-point order",
+      "records": [
+        {
+          "ph": "0.6",
+          "ext": "acts/0.6",
+          "id": "r1",
+          "type": "raised",
+          "origin": "requester",
+          "by": "agent:demo",
+          "key": "task-demo-aaaaaaaaaa",
+          "project": "demo",
+          "ts": "2026-10-27T09:00:00Z",
+          "terms_rev": 1,
+          "terms": {
+            "text": "Which one?"
+          }
+        },
+        {
+          "ph": "0.6",
+          "ext": "acts/0.6",
+          "id": "s:a",
+          "type": "settled",
+          "origin": "principal",
+          "by": "ps:assistant",
+          "key": "task-demo-aaaaaaaaaa",
+          "project": "demo",
+          "ts": "2026-10-28T08:00:00Z",
+          "outcome": "dropped",
+          "terms_rev": 1,
+          "terms_digest": "sha-256:83d94fcb636f0549e42c92c90600f69e2169688d10aaa2c5fea82b4aa337b529",
+          "authority": {
+            "kind": "principal",
+            "decider": "p:owner"
+          }
+        },
+        {
+          "ph": "0.6",
+          "ext": "acts/0.6",
+          "id": "s:Z",
+          "type": "settled",
+          "origin": "principal",
+          "by": "ps:assistant",
+          "key": "task-demo-aaaaaaaaaa",
+          "project": "demo",
+          "ts": "2026-10-28T08:00:00Z",
+          "outcome": "done",
+          "terms_rev": 1,
+          "terms_digest": "sha-256:83d94fcb636f0549e42c92c90600f69e2169688d10aaa2c5fea82b4aa337b529",
+          "authority": {
+            "kind": "principal",
+            "decider": "p:owner"
+          }
+        }
+      ],
+      "expect": {
+        "state": "settled",
+        "outcome": "dropped",
+        "settlement": "s:a",
+        "authority": "principal",
+        "answer": null,
+        "stale": false,
+        "withdrawn": false,
+        "terms_rev": 1,
+        "conflict": true,
+        "claims": [],
+        "ignored": []
+      }
+    },
+    {
+      "id": "reused-id-outcome",
+      "spec": "core §10: `outcome` sorts before `ts`, so the earlier record is the greater, and it stays though the other arrived last",
+      "records": [
+        {
+          "ph": "0.6",
+          "ext": "acts/0.6",
+          "id": "r1",
+          "type": "raised",
+          "origin": "requester",
+          "by": "agent:demo",
+          "key": "task-demo-aaaaaaaaaa",
+          "project": "demo",
+          "ts": "2026-10-27T09:00:00Z",
+          "terms_rev": 1,
+          "terms": {
+            "text": "Which one?"
+          }
+        },
+        {
+          "ph": "0.6",
+          "ext": "acts/0.6",
+          "id": "s1",
+          "type": "settled",
+          "origin": "principal",
+          "by": "ps:assistant",
+          "key": "task-demo-aaaaaaaaaa",
+          "project": "demo",
+          "ts": "2026-10-28T08:00:00Z",
+          "outcome": "dropped",
+          "terms_rev": 1,
+          "terms_digest": "sha-256:83d94fcb636f0549e42c92c90600f69e2169688d10aaa2c5fea82b4aa337b529",
+          "authority": {
+            "kind": "principal",
+            "decider": "p:owner"
+          }
+        },
+        {
+          "ph": "0.6",
+          "ext": "acts/0.6",
+          "id": "s1",
+          "type": "settled",
+          "origin": "principal",
+          "by": "ps:assistant",
+          "key": "task-demo-aaaaaaaaaa",
+          "project": "demo",
+          "ts": "2026-10-28T09:00:00Z",
+          "outcome": "done",
+          "terms_rev": 1,
+          "terms_digest": "sha-256:83d94fcb636f0549e42c92c90600f69e2169688d10aaa2c5fea82b4aa337b529",
+          "authority": {
+            "kind": "principal",
+            "decider": "p:owner"
+          }
+        }
+      ],
+      "expect": {
+        "state": "settled",
+        "outcome": "dropped",
+        "settlement": "s1",
+        "authority": "principal",
+        "answer": null,
+        "stale": false,
+        "withdrawn": false,
+        "terms_rev": 1,
+        "conflict": false,
+        "claims": [],
+        "ignored": []
+      }
+    },
+    {
+      "id": "reused-id-member-order-means-nothing",
+      "spec": "core §10: the comparison is over the RFC 8785 serialisation, not the bytes received",
+      "records": [
+        {
+          "ph": "0.6",
+          "ext": "acts/0.6",
+          "id": "r1",
+          "type": "raised",
+          "origin": "requester",
+          "by": "agent:demo",
+          "key": "task-demo-aaaaaaaaaa",
+          "project": "demo",
+          "ts": "2026-10-27T09:00:00Z",
+          "terms_rev": 1,
+          "terms": {
+            "text": "Which one?"
+          }
+        },
+        {
+          "ph": "0.6",
+          "ext": "acts/0.6",
+          "id": "s1",
+          "type": "settled",
+          "origin": "principal",
+          "by": "ps:assistant",
+          "key": "task-demo-aaaaaaaaaa",
+          "project": "demo",
+          "ts": "2026-10-28T08:00:00Z",
+          "outcome": "done",
+          "terms_rev": 1,
+          "terms_digest": "sha-256:83d94fcb636f0549e42c92c90600f69e2169688d10aaa2c5fea82b4aa337b529",
+          "authority": {
+            "kind": "principal",
+            "decider": "p:owner"
+          }
+        },
+        {
+          "authority": {
+            "kind": "principal",
+            "decider": "p:owner"
+          },
+          "terms_digest": "sha-256:83d94fcb636f0549e42c92c90600f69e2169688d10aaa2c5fea82b4aa337b529",
+          "terms_rev": 1,
+          "outcome": "dropped",
+          "ts": "2026-10-28T08:00:00Z",
+          "project": "demo",
+          "key": "task-demo-aaaaaaaaaa",
+          "by": "ps:assistant",
+          "origin": "principal",
+          "type": "settled",
+          "id": "s1",
+          "ext": "acts/0.6",
+          "ph": "0.6"
+        }
+      ],
+      "expect": {
+        "state": "settled",
+        "outcome": "dropped",
+        "settlement": "s1",
+        "authority": "principal",
+        "answer": null,
+        "stale": false,
+        "withdrawn": false,
+        "terms_rev": 1,
+        "conflict": false,
+        "claims": [],
+        "ignored": []
+      }
+    },
+    {
+      "id": "reused-id-differing-only-in-ts",
+      "spec": "core §10: the greater serialisation stays although it is the earlier instant, so s2 is the latest head",
+      "records": [
+        {
+          "ph": "0.6",
+          "ext": "acts/0.6",
+          "id": "r1",
+          "type": "raised",
+          "origin": "requester",
+          "by": "agent:demo",
+          "key": "task-demo-aaaaaaaaaa",
+          "project": "demo",
+          "ts": "2026-10-27T09:00:00Z",
+          "terms_rev": 1,
+          "terms": {
+            "text": "Which one?"
+          }
+        },
+        {
+          "ph": "0.6",
+          "ext": "acts/0.6",
+          "id": "s1",
+          "type": "settled",
+          "origin": "principal",
+          "by": "ps:assistant",
+          "key": "task-demo-aaaaaaaaaa",
+          "project": "demo",
+          "ts": "2026-10-28T03:00:00Z",
+          "outcome": "done",
+          "terms_rev": 1,
+          "terms_digest": "sha-256:83d94fcb636f0549e42c92c90600f69e2169688d10aaa2c5fea82b4aa337b529",
+          "authority": {
+            "kind": "principal",
+            "decider": "p:owner"
+          }
+        },
+        {
+          "ph": "0.6",
+          "ext": "acts/0.6",
+          "id": "s1",
+          "type": "settled",
+          "origin": "principal",
+          "by": "ps:assistant",
+          "key": "task-demo-aaaaaaaaaa",
+          "project": "demo",
+          "ts": "2026-10-28T10:00:00+08:00",
+          "outcome": "done",
+          "terms_rev": 1,
+          "terms_digest": "sha-256:83d94fcb636f0549e42c92c90600f69e2169688d10aaa2c5fea82b4aa337b529",
+          "authority": {
+            "kind": "principal",
+            "decider": "p:owner"
+          }
+        },
+        {
+          "ph": "0.6",
+          "ext": "acts/0.6",
+          "id": "s2",
+          "type": "settled",
+          "origin": "principal",
+          "by": "ps:assistant",
+          "key": "task-demo-aaaaaaaaaa",
+          "project": "demo",
+          "ts": "2026-10-28T02:30:00Z",
+          "outcome": "dropped",
+          "terms_rev": 1,
+          "terms_digest": "sha-256:83d94fcb636f0549e42c92c90600f69e2169688d10aaa2c5fea82b4aa337b529",
+          "authority": {
+            "kind": "principal",
+            "decider": "p:owner"
+          }
+        }
+      ],
+      "expect": {
+        "state": "settled",
+        "outcome": "dropped",
+        "settlement": "s2",
+        "authority": "principal",
+        "answer": null,
+        "stale": false,
+        "withdrawn": false,
+        "terms_rev": 1,
+        "conflict": true,
+        "claims": [],
+        "ignored": []
+      }
+    },
+    {
+      "id": "reused-need-id-settled-on-the-lesser-is-stale",
+      "spec": "core §10, §6: the greater need record stays, and a settlement on the other content is stale",
+      "records": [
+        {
+          "ph": "0.6",
+          "ext": "acts/0.6",
+          "id": "r1",
+          "type": "raised",
+          "origin": "requester",
+          "by": "agent:demo",
+          "key": "task-demo-aaaaaaaaaa",
+          "project": "demo",
+          "ts": "2026-10-27T09:00:00Z",
+          "terms_rev": 1,
+          "terms": {
+            "text": "A wording"
+          }
+        },
+        {
+          "ph": "0.6",
+          "ext": "acts/0.6",
+          "id": "r1",
+          "type": "raised",
+          "origin": "requester",
+          "by": "agent:demo",
+          "key": "task-demo-aaaaaaaaaa",
+          "project": "demo",
+          "ts": "2026-10-27T09:00:00Z",
+          "terms_rev": 1,
+          "terms": {
+            "text": "B wording"
+          }
+        },
+        {
+          "ph": "0.6",
+          "ext": "acts/0.6",
+          "id": "s1",
+          "type": "settled",
+          "origin": "principal",
+          "by": "ps:assistant",
+          "key": "task-demo-aaaaaaaaaa",
+          "project": "demo",
+          "ts": "2026-10-28T08:00:00Z",
+          "outcome": "done",
+          "terms_rev": 1,
+          "terms_digest": "sha-256:e5ae8a6ea673e22afd9152c121264f329a6df971f5433bf127b3b8f2c8ef15a5",
+          "authority": {
+            "kind": "principal",
+            "decider": "p:owner"
+          }
+        }
+      ],
+      "expect": {
+        "state": "settled",
+        "outcome": "done",
+        "settlement": "s1",
+        "authority": "principal",
+        "answer": null,
+        "stale": true,
+        "withdrawn": false,
+        "terms_rev": 1,
+        "conflict": false,
+        "claims": [],
+        "ignored": []
+      }
+    },
+    {
+      "id": "reused-need-id-settled-on-the-greater-is-not-stale",
+      "spec": "core §10, §6: the settlement matches the need record that stays",
+      "records": [
+        {
+          "ph": "0.6",
+          "ext": "acts/0.6",
+          "id": "r1",
+          "type": "raised",
+          "origin": "requester",
+          "by": "agent:demo",
+          "key": "task-demo-aaaaaaaaaa",
+          "project": "demo",
+          "ts": "2026-10-27T09:00:00Z",
+          "terms_rev": 1,
+          "terms": {
+            "text": "B wording"
+          }
+        },
+        {
+          "ph": "0.6",
+          "ext": "acts/0.6",
+          "id": "r1",
+          "type": "raised",
+          "origin": "requester",
+          "by": "agent:demo",
+          "key": "task-demo-aaaaaaaaaa",
+          "project": "demo",
+          "ts": "2026-10-27T09:00:00Z",
+          "terms_rev": 1,
+          "terms": {
+            "text": "A wording"
+          }
+        },
+        {
+          "ph": "0.6",
+          "ext": "acts/0.6",
+          "id": "s1",
+          "type": "settled",
+          "origin": "principal",
+          "by": "ps:assistant",
+          "key": "task-demo-aaaaaaaaaa",
+          "project": "demo",
+          "ts": "2026-10-28T08:00:00Z",
+          "outcome": "done",
+          "terms_rev": 1,
+          "terms_digest": "sha-256:203ac8ae88c9cdf1fd9e9915316a65a800adb92853ed708183ef2896c8630592",
+          "authority": {
+            "kind": "principal",
+            "decider": "p:owner"
+          }
+        }
+      ],
+      "expect": {
+        "state": "settled",
+        "outcome": "done",
+        "settlement": "s1",
+        "authority": "principal",
+        "answer": null,
+        "stale": false,
+        "withdrawn": false,
+        "terms_rev": 1,
+        "conflict": false,
+        "claims": [],
+        "ignored": []
+      }
+    },
+    {
+      "id": "reused-need-id-beyond-the-bmp",
+      "spec": "core §10: greater in code-point order, so the settlement on the other content is stale",
+      "records": [
+        {
+          "ph": "0.6",
+          "ext": "acts/0.6",
+          "id": "r1",
+          "type": "raised",
+          "origin": "requester",
+          "by": "agent:demo",
+          "key": "task-demo-aaaaaaaaaa",
+          "project": "demo",
+          "ts": "2026-10-27T09:00:00Z",
+          "terms_rev": 1,
+          "terms": {
+            "text": "😀"
+          }
+        },
+        {
+          "ph": "0.6",
+          "ext": "acts/0.6",
+          "id": "r1",
+          "type": "raised",
+          "origin": "requester",
+          "by": "agent:demo",
+          "key": "task-demo-aaaaaaaaaa",
+          "project": "demo",
+          "ts": "2026-10-27T09:00:00Z",
+          "terms_rev": 1,
+          "terms": {
+            "text": "ｚ"
+          }
+        },
+        {
+          "ph": "0.6",
+          "ext": "acts/0.6",
+          "id": "s1",
+          "type": "settled",
+          "origin": "principal",
+          "by": "ps:assistant",
+          "key": "task-demo-aaaaaaaaaa",
+          "project": "demo",
+          "ts": "2026-10-28T08:00:00Z",
+          "outcome": "done",
+          "terms_rev": 1,
+          "terms_digest": "sha-256:69b03b8c06d2cbf8f487602944ff0b80d9ee4ce1c140c5489b73b1ffe654c807",
+          "authority": {
+            "kind": "principal",
+            "decider": "p:owner"
+          }
+        }
+      ],
+      "expect": {
+        "state": "settled",
+        "outcome": "done",
+        "settlement": "s1",
+        "authority": "principal",
+        "answer": null,
+        "stale": true,
+        "withdrawn": false,
+        "terms_rev": 1,
+        "conflict": false,
+        "claims": [],
+        "ignored": []
+      }
+    },
+    {
+      "id": "same-id-settled-and-reopened-are-both-held",
+      "spec": "core §10: a record never displaces one of another type, even in one register",
+      "records": [
+        {
+          "ph": "0.6",
+          "ext": "acts/0.6",
+          "id": "r1",
+          "type": "raised",
+          "origin": "requester",
+          "by": "agent:demo",
+          "key": "task-demo-aaaaaaaaaa",
+          "project": "demo",
+          "ts": "2026-10-27T09:00:00Z",
+          "terms_rev": 1,
+          "terms": {
+            "text": "Which one?"
+          }
+        },
+        {
+          "ph": "0.6",
+          "ext": "acts/0.6",
+          "id": "s0",
+          "type": "settled",
+          "origin": "principal",
+          "by": "ps:assistant",
+          "key": "task-demo-aaaaaaaaaa",
+          "project": "demo",
+          "ts": "2026-10-28T07:00:00Z",
+          "outcome": "done",
+          "terms_rev": 1,
+          "terms_digest": "sha-256:83d94fcb636f0549e42c92c90600f69e2169688d10aaa2c5fea82b4aa337b529",
+          "authority": {
+            "kind": "principal",
+            "decider": "p:owner"
+          }
+        },
+        {
+          "ph": "0.6",
+          "ext": "acts/0.6",
+          "id": "x",
+          "type": "reopened",
+          "origin": "principal",
+          "by": "ps:assistant",
+          "key": "task-demo-aaaaaaaaaa",
+          "project": "demo",
+          "ts": "2026-10-28T09:00:00Z",
+          "supersedes": [
+            "s0"
+          ],
+          "restore_text": "Which one?"
+        },
+        {
+          "ph": "0.6",
+          "ext": "acts/0.6",
+          "id": "x",
+          "type": "settled",
+          "origin": "principal",
+          "by": "ps:assistant",
+          "key": "task-demo-aaaaaaaaaa",
+          "project": "demo",
+          "ts": "2026-10-28T10:00:00Z",
+          "outcome": "done",
+          "terms_rev": 1,
+          "terms_digest": "sha-256:83d94fcb636f0549e42c92c90600f69e2169688d10aaa2c5fea82b4aa337b529",
+          "authority": {
+            "kind": "principal",
+            "decider": "p:owner"
+          }
+        }
+      ],
+      "expect": {
+        "state": "settled",
+        "outcome": "done",
+        "settlement": "x",
+        "authority": "principal",
+        "answer": null,
+        "stale": false,
+        "withdrawn": false,
+        "terms_rev": 1,
+        "conflict": true,
+        "claims": [],
+        "ignored": []
+      }
+    },
+    {
+      "id": "same-id-claims-of-two-origins-are-both-held",
+      "spec": "core §10: ids are scoped by origin, so both claims are held",
+      "records": [
+        {
+          "ph": "0.6",
+          "ext": "acts/0.6",
+          "id": "r1",
+          "type": "raised",
+          "origin": "requester",
+          "by": "agent:demo",
+          "key": "task-demo-aaaaaaaaaa",
+          "project": "demo",
+          "ts": "2026-10-27T09:00:00Z",
+          "terms_rev": 1,
+          "terms": {
+            "text": "Which one?"
+          }
+        },
+        {
+          "ph": "0.6",
+          "ext": "acts/0.6",
+          "id": "x",
+          "type": "claimed",
+          "origin": "agent",
+          "by": "agent:other",
+          "key": "task-demo-aaaaaaaaaa",
+          "project": "demo",
+          "ts": "2026-10-28T07:00:00Z",
+          "outcome": "done",
+          "evidence": {
+            "basis": "heard it"
+          }
+        },
+        {
+          "ph": "0.6",
+          "ext": "acts/0.6",
+          "id": "x",
+          "type": "claimed",
+          "origin": "requester",
+          "by": "agent:demo",
+          "key": "task-demo-aaaaaaaaaa",
+          "project": "demo",
+          "ts": "2026-10-28T07:00:00Z",
+          "outcome": "done",
+          "evidence": {
+            "basis": "heard it"
+          }
+        }
+      ],
+      "expect": {
+        "state": "open",
+        "outcome": null,
+        "settlement": null,
+        "authority": null,
+        "answer": null,
+        "stale": false,
+        "withdrawn": false,
+        "terms_rev": 1,
+        "conflict": false,
+        "claims": [
+          "x",
+          "x"
+        ],
+        "ignored": []
+      }
+    },
+    {
+      "id": "same-id-in-both-registers",
+      "spec": "core §6, §10: a reopening names the settlement with that id, not the need record",
+      "records": [
+        {
+          "ph": "0.6",
+          "ext": "acts/0.6",
+          "id": "x",
+          "type": "raised",
+          "origin": "requester",
+          "by": "agent:demo",
+          "key": "task-demo-aaaaaaaaaa",
+          "project": "demo",
+          "ts": "2026-10-27T09:00:00Z",
+          "terms_rev": 1,
+          "terms": {
+            "text": "Which one?"
+          }
+        },
+        {
+          "ph": "0.6",
+          "ext": "acts/0.6",
+          "id": "x",
+          "type": "settled",
+          "origin": "principal",
+          "by": "ps:assistant",
+          "key": "task-demo-aaaaaaaaaa",
+          "project": "demo",
+          "ts": "2026-10-28T08:00:00Z",
+          "outcome": "done",
+          "terms_rev": 1,
+          "terms_digest": "sha-256:83d94fcb636f0549e42c92c90600f69e2169688d10aaa2c5fea82b4aa337b529",
+          "authority": {
+            "kind": "principal",
+            "decider": "p:owner"
+          }
+        },
+        {
+          "ph": "0.6",
+          "ext": "acts/0.6",
+          "id": "o1",
+          "type": "reopened",
+          "origin": "principal",
+          "by": "ps:assistant",
+          "key": "task-demo-aaaaaaaaaa",
+          "project": "demo",
+          "ts": "2026-10-28T09:00:00Z",
+          "supersedes": [
+            "x"
+          ],
+          "restore_text": "Which one?"
+        }
+      ],
+      "expect": {
+        "state": "open",
+        "outcome": null,
+        "settlement": "o1",
+        "authority": null,
+        "answer": null,
+        "stale": false,
+        "withdrawn": false,
+        "terms_rev": 1,
+        "conflict": false,
+        "claims": [],
+        "ignored": []
+      }
+    },
+    {
+      "id": "settlement-naming-a-need-record-leaves-it-current",
+      "spec": "core §6, §10: a settlement's supersedes reaches only its own register, so the withdrawal stays current and is compared by rev",
+      "records": [
+        {
+          "ph": "0.6",
+          "ext": "acts/0.6",
+          "id": "r1",
+          "type": "raised",
+          "origin": "requester",
+          "by": "agent:demo",
+          "key": "task-demo-aaaaaaaaaa",
+          "project": "demo",
+          "ts": "2026-10-27T09:00:00Z",
+          "terms_rev": 1,
+          "terms": {
+            "text": "Which one?"
+          }
+        },
+        {
+          "ph": "0.6",
+          "ext": "acts/0.6",
+          "id": "w1",
+          "type": "withdrawn",
+          "origin": "requester",
+          "by": "agent:demo",
+          "key": "task-demo-aaaaaaaaaa",
+          "project": "demo",
+          "ts": "2026-10-27T11:00:00Z",
+          "reason": "not_needed",
+          "supersedes": [
+            "r1"
+          ]
+        },
+        {
+          "ph": "0.6",
+          "ext": "acts/0.6",
+          "id": "s1",
+          "type": "settled",
+          "origin": "principal",
+          "by": "ps:assistant",
+          "key": "task-demo-aaaaaaaaaa",
+          "project": "demo",
+          "ts": "2026-10-28T08:00:00Z",
+          "outcome": "done",
+          "terms_rev": 1,
+          "terms_digest": "sha-256:0000000000000000000000000000000000000000000000000000000000000000",
+          "authority": {
+            "kind": "principal",
+            "decider": "p:owner"
+          },
+          "supersedes": [
+            "w1"
+          ]
+        }
+      ],
+      "expect": {
+        "state": "settled",
+        "outcome": "done",
+        "settlement": "s1",
+        "authority": "principal",
+        "answer": null,
+        "stale": false,
+        "withdrawn": true,
+        "terms_rev": 1,
+        "conflict": false,
+        "claims": [],
+        "ignored": []
+      }
+    },
+    {
+      "id": "need-record-naming-a-settlement-leaves-it-current",
+      "spec": "core §6, §10: a need record's supersedes reaches only its own register",
+      "records": [
+        {
+          "ph": "0.6",
+          "ext": "acts/0.6",
+          "id": "r1",
+          "type": "raised",
+          "origin": "requester",
+          "by": "agent:demo",
+          "key": "task-demo-aaaaaaaaaa",
+          "project": "demo",
+          "ts": "2026-10-27T09:00:00Z",
+          "terms_rev": 1,
+          "terms": {
+            "text": "Which one?"
+          }
+        },
+        {
+          "ph": "0.6",
+          "ext": "acts/0.6",
+          "id": "a2",
+          "type": "amended",
+          "origin": "requester",
+          "by": "agent:demo",
+          "key": "task-demo-aaaaaaaaaa",
+          "project": "demo",
+          "ts": "2026-10-27T10:00:00Z",
+          "terms_rev": 2,
+          "terms": {
+            "text": "Which one, now?"
+          },
+          "supersedes": [
+            "r1",
+            "s2"
+          ]
+        },
+        {
+          "ph": "0.6",
+          "ext": "acts/0.6",
+          "id": "s1",
+          "type": "settled",
+          "origin": "principal",
+          "by": "ps:assistant",
+          "key": "task-demo-aaaaaaaaaa",
+          "project": "demo",
+          "ts": "2026-10-28T07:00:00Z",
+          "outcome": "done",
+          "terms_rev": 1,
+          "terms_digest": "sha-256:83d94fcb636f0549e42c92c90600f69e2169688d10aaa2c5fea82b4aa337b529",
+          "authority": {
+            "kind": "principal",
+            "decider": "p:owner"
+          }
+        },
+        {
+          "ph": "0.6",
+          "ext": "acts/0.6",
+          "id": "s2",
+          "type": "settled",
+          "origin": "principal",
+          "by": "ps:assistant",
+          "key": "task-demo-aaaaaaaaaa",
+          "project": "demo",
+          "ts": "2026-10-28T08:00:00Z",
+          "outcome": "dropped",
+          "terms_rev": 1,
+          "terms_digest": "sha-256:83d94fcb636f0549e42c92c90600f69e2169688d10aaa2c5fea82b4aa337b529",
+          "authority": {
+            "kind": "principal",
+            "decider": "p:owner"
+          },
+          "supersedes": [
+            "s1"
+          ]
+        }
+      ],
+      "expect": {
+        "state": "settled",
+        "outcome": "dropped",
+        "settlement": "s2",
+        "authority": "principal",
+        "answer": null,
+        "stale": true,
+        "withdrawn": false,
+        "terms_rev": 2,
+        "conflict": false,
+        "claims": [],
+        "ignored": []
+      }
+    },
+    {
+      "id": "cycle-below-a-single-head",
+      "spec": "core §6: one head is current, and the cycle beneath it is still a conflict",
+      "records": [
+        {
+          "ph": "0.6",
+          "ext": "acts/0.6",
+          "id": "r1",
+          "type": "raised",
+          "origin": "requester",
+          "by": "agent:demo",
+          "key": "task-demo-aaaaaaaaaa",
+          "project": "demo",
+          "ts": "2026-10-27T09:00:00Z",
+          "terms_rev": 1,
+          "terms": {
+            "text": "Which one?"
+          }
+        },
+        {
+          "ph": "0.6",
+          "ext": "acts/0.6",
+          "id": "y3",
+          "type": "settled",
+          "origin": "principal",
+          "by": "ps:assistant",
+          "key": "task-demo-aaaaaaaaaa",
+          "project": "demo",
+          "ts": "2026-10-28T07:00:00Z",
+          "outcome": "dropped",
+          "terms_rev": 1,
+          "terms_digest": "sha-256:83d94fcb636f0549e42c92c90600f69e2169688d10aaa2c5fea82b4aa337b529",
+          "authority": {
+            "kind": "principal",
+            "decider": "p:owner"
+          },
+          "supersedes": [
+            "y1"
+          ]
+        },
+        {
+          "ph": "0.6",
+          "ext": "acts/0.6",
+          "id": "y1",
+          "type": "settled",
+          "origin": "principal",
+          "by": "ps:assistant",
+          "key": "task-demo-aaaaaaaaaa",
+          "project": "demo",
+          "ts": "2026-10-28T08:00:00Z",
+          "outcome": "done",
+          "terms_rev": 1,
+          "terms_digest": "sha-256:83d94fcb636f0549e42c92c90600f69e2169688d10aaa2c5fea82b4aa337b529",
+          "authority": {
+            "kind": "principal",
+            "decider": "p:owner"
+          },
+          "supersedes": [
+            "y2"
+          ]
+        },
+        {
+          "ph": "0.6",
+          "ext": "acts/0.6",
+          "id": "y2",
+          "type": "settled",
+          "origin": "principal",
+          "by": "ps:assistant",
+          "key": "task-demo-aaaaaaaaaa",
+          "project": "demo",
+          "ts": "2026-10-28T09:00:00Z",
+          "outcome": "done",
+          "terms_rev": 1,
+          "terms_digest": "sha-256:83d94fcb636f0549e42c92c90600f69e2169688d10aaa2c5fea82b4aa337b529",
+          "authority": {
+            "kind": "principal",
+            "decider": "p:owner"
+          },
+          "supersedes": [
+            "y1"
+          ]
+        }
+      ],
+      "expect": {
+        "state": "settled",
+        "outcome": "dropped",
+        "settlement": "y3",
+        "authority": "principal",
+        "answer": null,
+        "stale": false,
+        "withdrawn": false,
+        "terms_rev": 1,
+        "conflict": true,
+        "claims": [],
+        "ignored": []
+      }
+    },
+    {
+      "id": "long-cycle-below-a-single-head",
+      "spec": "core §6: a cycle of three beneath a head is a conflict",
+      "records": [
+        {
+          "ph": "0.6",
+          "ext": "acts/0.6",
+          "id": "r1",
+          "type": "raised",
+          "origin": "requester",
+          "by": "agent:demo",
+          "key": "task-demo-aaaaaaaaaa",
+          "project": "demo",
+          "ts": "2026-10-27T09:00:00Z",
+          "terms_rev": 1,
+          "terms": {
+            "text": "Which one?"
+          }
+        },
+        {
+          "ph": "0.6",
+          "ext": "acts/0.6",
+          "id": "z4",
+          "type": "settled",
+          "origin": "principal",
+          "by": "ps:assistant",
+          "key": "task-demo-aaaaaaaaaa",
+          "project": "demo",
+          "ts": "2026-10-28T07:00:00Z",
+          "outcome": "done",
+          "terms_rev": 1,
+          "terms_digest": "sha-256:83d94fcb636f0549e42c92c90600f69e2169688d10aaa2c5fea82b4aa337b529",
+          "authority": {
+            "kind": "principal",
+            "decider": "p:owner"
+          },
+          "supersedes": [
+            "z1"
+          ]
+        },
+        {
+          "ph": "0.6",
+          "ext": "acts/0.6",
+          "id": "z1",
+          "type": "settled",
+          "origin": "principal",
+          "by": "ps:assistant",
+          "key": "task-demo-aaaaaaaaaa",
+          "project": "demo",
+          "ts": "2026-10-28T08:00:00Z",
+          "outcome": "done",
+          "terms_rev": 1,
+          "terms_digest": "sha-256:83d94fcb636f0549e42c92c90600f69e2169688d10aaa2c5fea82b4aa337b529",
+          "authority": {
+            "kind": "principal",
+            "decider": "p:owner"
+          },
+          "supersedes": [
+            "z2"
+          ]
+        },
+        {
+          "ph": "0.6",
+          "ext": "acts/0.6",
+          "id": "z2",
+          "type": "settled",
+          "origin": "principal",
+          "by": "ps:assistant",
+          "key": "task-demo-aaaaaaaaaa",
+          "project": "demo",
+          "ts": "2026-10-28T09:00:00Z",
+          "outcome": "done",
+          "terms_rev": 1,
+          "terms_digest": "sha-256:83d94fcb636f0549e42c92c90600f69e2169688d10aaa2c5fea82b4aa337b529",
+          "authority": {
+            "kind": "principal",
+            "decider": "p:owner"
+          },
+          "supersedes": [
+            "z3"
+          ]
+        },
+        {
+          "ph": "0.6",
+          "ext": "acts/0.6",
+          "id": "z3",
+          "type": "settled",
+          "origin": "principal",
+          "by": "ps:assistant",
+          "key": "task-demo-aaaaaaaaaa",
+          "project": "demo",
+          "ts": "2026-10-28T10:00:00Z",
+          "outcome": "dropped",
+          "terms_rev": 1,
+          "terms_digest": "sha-256:83d94fcb636f0549e42c92c90600f69e2169688d10aaa2c5fea82b4aa337b529",
+          "authority": {
+            "kind": "principal",
+            "decider": "p:owner"
+          },
+          "supersedes": [
+            "z1"
+          ]
+        }
+      ],
+      "expect": {
+        "state": "settled",
+        "outcome": "done",
+        "settlement": "z4",
+        "authority": "principal",
+        "answer": null,
+        "stale": false,
+        "withdrawn": false,
+        "terms_rev": 1,
+        "conflict": true,
+        "claims": [],
+        "ignored": []
+      }
+    },
+    {
+      "id": "supersedes-naming-a-record-not-held",
+      "spec": "core §4, §6: a missing record is no conflict and blocks nothing",
+      "records": [
+        {
+          "ph": "0.6",
+          "ext": "acts/0.6",
+          "id": "r1",
+          "type": "raised",
+          "origin": "requester",
+          "by": "agent:demo",
+          "key": "task-demo-aaaaaaaaaa",
+          "project": "demo",
+          "ts": "2026-10-27T09:00:00Z",
+          "terms_rev": 1,
+          "terms": {
+            "text": "Which one?"
+          }
+        },
+        {
+          "ph": "0.6",
+          "ext": "acts/0.6",
+          "id": "s1",
+          "type": "settled",
+          "origin": "principal",
+          "by": "ps:assistant",
+          "key": "task-demo-aaaaaaaaaa",
+          "project": "demo",
+          "ts": "2026-10-28T08:00:00Z",
+          "outcome": "done",
+          "terms_rev": 1,
+          "terms_digest": "sha-256:83d94fcb636f0549e42c92c90600f69e2169688d10aaa2c5fea82b4aa337b529",
+          "authority": {
+            "kind": "principal",
+            "decider": "p:owner"
+          },
+          "supersedes": [
+            "missing"
+          ]
+        }
+      ],
+      "expect": {
+        "state": "settled",
+        "outcome": "done",
+        "settlement": "s1",
+        "authority": "principal",
+        "answer": null,
+        "stale": false,
+        "withdrawn": false,
+        "terms_rev": 1,
+        "conflict": false,
+        "claims": [],
+        "ignored": []
+      }
+    },
+    {
+      "id": "stale-highest-is-not-the-current-need",
+      "spec": "core §6: the highest terms_rev among the held raised and amended counts, not the current need record's",
+      "records": [
+        {
+          "ph": "0.6",
+          "ext": "acts/0.6",
+          "id": "r1",
+          "type": "raised",
+          "origin": "requester",
+          "by": "agent:demo",
+          "key": "task-demo-aaaaaaaaaa",
+          "project": "demo",
+          "ts": "2026-10-27T09:00:00Z",
+          "terms_rev": 1,
+          "terms": {
+            "text": "Which one?"
+          }
+        },
+        {
+          "ph": "0.6",
+          "ext": "acts/0.6",
+          "id": "a-3",
+          "type": "amended",
+          "origin": "requester",
+          "by": "agent:demo",
+          "key": "task-demo-aaaaaaaaaa",
+          "project": "demo",
+          "ts": "2026-10-27T10:00:00Z",
+          "terms_rev": 3,
+          "terms": {
+            "text": "Third wording"
+          },
+          "supersedes": [
+            "r1"
+          ]
+        },
+        {
+          "ph": "0.6",
+          "ext": "acts/0.6",
+          "id": "a-2",
+          "type": "amended",
+          "origin": "requester",
+          "by": "agent:demo",
+          "key": "task-demo-aaaaaaaaaa",
+          "project": "demo",
+          "ts": "2026-10-27T11:00:00Z",
+          "terms_rev": 2,
+          "terms": {
+            "text": "Second wording"
+          },
+          "supersedes": [
+            "r1"
+          ]
+        },
+        {
+          "ph": "0.6",
+          "ext": "acts/0.6",
+          "id": "s1",
+          "type": "settled",
+          "origin": "principal",
+          "by": "ps:assistant",
+          "key": "task-demo-aaaaaaaaaa",
+          "project": "demo",
+          "ts": "2026-10-28T08:00:00Z",
+          "outcome": "done",
+          "terms_rev": 2,
+          "terms_digest": "sha-256:04ce18f34ea4e1c21e1b14b4b840a2dc313fc7b6a391e7b731284f1ff47c9743",
+          "authority": {
+            "kind": "principal",
+            "decider": "p:owner"
+          }
+        }
+      ],
+      "expect": {
+        "state": "settled",
+        "outcome": "done",
+        "settlement": "s1",
+        "authority": "principal",
+        "answer": null,
+        "stale": true,
+        "withdrawn": false,
+        "terms_rev": 3,
+        "conflict": true,
+        "claims": [],
+        "ignored": []
+      }
+    },
+    {
+      "id": "stale-highest-was-superseded",
+      "spec": "core §6: a superseded amended still counts towards the highest",
+      "records": [
+        {
+          "ph": "0.6",
+          "ext": "acts/0.6",
+          "id": "r1",
+          "type": "raised",
+          "origin": "requester",
+          "by": "agent:demo",
+          "key": "task-demo-aaaaaaaaaa",
+          "project": "demo",
+          "ts": "2026-10-27T09:00:00Z",
+          "terms_rev": 1,
+          "terms": {
+            "text": "Which one?"
+          }
+        },
+        {
+          "ph": "0.6",
+          "ext": "acts/0.6",
+          "id": "a-3",
+          "type": "amended",
+          "origin": "requester",
+          "by": "agent:demo",
+          "key": "task-demo-aaaaaaaaaa",
+          "project": "demo",
+          "ts": "2026-10-27T10:00:00Z",
+          "terms_rev": 3,
+          "terms": {
+            "text": "Third wording"
+          },
+          "supersedes": [
+            "r1"
+          ]
+        },
+        {
+          "ph": "0.6",
+          "ext": "acts/0.6",
+          "id": "a-2",
+          "type": "amended",
+          "origin": "requester",
+          "by": "agent:demo",
+          "key": "task-demo-aaaaaaaaaa",
+          "project": "demo",
+          "ts": "2026-10-27T11:00:00Z",
+          "terms_rev": 2,
+          "terms": {
+            "text": "Second wording"
+          },
+          "supersedes": [
+            "a-3"
+          ]
+        },
+        {
+          "ph": "0.6",
+          "ext": "acts/0.6",
+          "id": "s1",
+          "type": "settled",
+          "origin": "principal",
+          "by": "ps:assistant",
+          "key": "task-demo-aaaaaaaaaa",
+          "project": "demo",
+          "ts": "2026-10-28T08:00:00Z",
+          "outcome": "done",
+          "terms_rev": 2,
+          "terms_digest": "sha-256:04ce18f34ea4e1c21e1b14b4b840a2dc313fc7b6a391e7b731284f1ff47c9743",
+          "authority": {
+            "kind": "principal",
+            "decider": "p:owner"
+          }
+        }
+      ],
+      "expect": {
+        "state": "settled",
+        "outcome": "done",
+        "settlement": "s1",
+        "authority": "principal",
+        "answer": null,
+        "stale": true,
+        "withdrawn": false,
+        "terms_rev": 3,
+        "conflict": false,
+        "claims": [],
+        "ignored": []
+      }
+    },
+    {
+      "id": "stale-with-a-current-withdrawn",
+      "spec": "core §6: the highest comes from the held raised and amended, whatever the current need record is",
+      "records": [
+        {
+          "ph": "0.6",
+          "ext": "acts/0.6",
+          "id": "r1",
+          "type": "raised",
+          "origin": "requester",
+          "by": "agent:demo",
+          "key": "task-demo-aaaaaaaaaa",
+          "project": "demo",
+          "ts": "2026-10-27T09:00:00Z",
+          "terms_rev": 1,
+          "terms": {
+            "text": "Which one?"
+          }
+        },
+        {
+          "ph": "0.6",
+          "ext": "acts/0.6",
+          "id": "a2",
+          "type": "amended",
+          "origin": "requester",
+          "by": "agent:demo",
+          "key": "task-demo-aaaaaaaaaa",
+          "project": "demo",
+          "ts": "2026-10-27T10:00:00Z",
+          "terms_rev": 2,
+          "terms": {
+            "text": "Which one, now?"
+          },
+          "supersedes": [
+            "r1"
+          ]
+        },
+        {
+          "ph": "0.6",
+          "ext": "acts/0.6",
+          "id": "w1",
+          "type": "withdrawn",
+          "origin": "requester",
+          "by": "agent:demo",
+          "key": "task-demo-aaaaaaaaaa",
+          "project": "demo",
+          "ts": "2026-10-27T11:00:00Z",
+          "reason": "not_needed",
+          "supersedes": [
+            "a2"
+          ]
+        },
+        {
+          "ph": "0.6",
+          "ext": "acts/0.6",
+          "id": "s1",
+          "type": "settled",
+          "origin": "principal",
+          "by": "ps:assistant",
+          "key": "task-demo-aaaaaaaaaa",
+          "project": "demo",
+          "ts": "2026-10-28T08:00:00Z",
+          "outcome": "done",
+          "terms_rev": 1,
+          "terms_digest": "sha-256:83d94fcb636f0549e42c92c90600f69e2169688d10aaa2c5fea82b4aa337b529",
+          "authority": {
+            "kind": "principal",
+            "decider": "p:owner"
+          }
+        }
+      ],
+      "expect": {
+        "state": "settled",
+        "outcome": "done",
+        "settlement": "s1",
+        "authority": "principal",
+        "answer": null,
+        "stale": true,
+        "withdrawn": true,
+        "terms_rev": 2,
+        "conflict": false,
+        "claims": [],
+        "ignored": []
+      }
+    },
+    {
+      "id": "claim-and-note-terms-rev-do-not-count",
+      "spec": "core §6: only raised and amended count towards the highest",
+      "records": [
+        {
+          "ph": "0.6",
+          "ext": "acts/0.6",
+          "id": "r1",
+          "type": "raised",
+          "origin": "requester",
+          "by": "agent:demo",
+          "key": "task-demo-aaaaaaaaaa",
+          "project": "demo",
+          "ts": "2026-10-27T09:00:00Z",
+          "terms_rev": 1,
+          "terms": {
+            "text": "Which one?"
+          }
+        },
+        {
+          "ph": "0.6",
+          "ext": "acts/0.6",
+          "id": "c1",
+          "type": "claimed",
+          "origin": "agent",
+          "by": "agent:other",
+          "key": "task-demo-aaaaaaaaaa",
+          "project": "demo",
+          "ts": "2026-10-28T07:00:00Z",
+          "outcome": "done",
+          "evidence": {
+            "basis": "heard it"
+          },
+          "terms_rev": 9
+        },
+        {
+          "ph": "0.6",
+          "ext": "acts/0.6",
+          "id": "n1",
+          "type": "note",
+          "origin": "requester",
+          "by": "agent:demo",
+          "key": "task-demo-aaaaaaaaaa",
+          "project": "demo",
+          "ts": "2026-10-27T09:00:00Z",
+          "about": {
+            "key": "task-demo-aaaaaaaaaa"
+          },
+          "note": "Progress.",
+          "terms_rev": 9
+        },
+        {
+          "ph": "0.6",
+          "ext": "acts/0.6",
+          "id": "s1",
+          "type": "settled",
+          "origin": "principal",
+          "by": "ps:assistant",
+          "key": "task-demo-aaaaaaaaaa",
+          "project": "demo",
+          "ts": "2026-10-28T08:00:00Z",
+          "outcome": "done",
+          "terms_rev": 1,
+          "terms_digest": "sha-256:83d94fcb636f0549e42c92c90600f69e2169688d10aaa2c5fea82b4aa337b529",
+          "authority": {
+            "kind": "principal",
+            "decider": "p:owner"
+          }
+        }
+      ],
+      "expect": {
+        "state": "settled",
+        "outcome": "done",
+        "settlement": "s1",
+        "authority": "principal",
+        "answer": null,
+        "stale": false,
+        "withdrawn": false,
+        "terms_rev": 1,
+        "conflict": false,
+        "claims": [
+          "c1"
+        ],
+        "ignored": []
+      }
+    },
+    {
+      "id": "settled-above-every-held-need-is-not-stale",
+      "spec": "core §6: a settlement at a higher terms_rev than any held need record is not stale",
+      "records": [
+        {
+          "ph": "0.6",
+          "ext": "acts/0.6",
+          "id": "r1",
+          "type": "raised",
+          "origin": "requester",
+          "by": "agent:demo",
+          "key": "task-demo-aaaaaaaaaa",
+          "project": "demo",
+          "ts": "2026-10-27T09:00:00Z",
+          "terms_rev": 1,
+          "terms": {
+            "text": "Which one?"
+          }
+        },
+        {
+          "ph": "0.6",
+          "ext": "acts/0.6",
+          "id": "s1",
+          "type": "settled",
+          "origin": "principal",
+          "by": "ps:assistant",
+          "key": "task-demo-aaaaaaaaaa",
+          "project": "demo",
+          "ts": "2026-10-28T08:00:00Z",
+          "outcome": "done",
+          "terms_rev": 5,
+          "terms_digest": "sha-256:0000000000000000000000000000000000000000000000000000000000000000",
+          "authority": {
+            "kind": "principal",
+            "decider": "p:owner"
+          }
+        }
+      ],
+      "expect": {
+        "state": "settled",
+        "outcome": "done",
+        "settlement": "s1",
+        "authority": "principal",
+        "answer": null,
+        "stale": false,
+        "withdrawn": false,
+        "terms_rev": 1,
+        "conflict": false,
+        "claims": [],
+        "ignored": []
+      }
+    },
+    {
+      "id": "withdrawn-compared-by-rev-only",
+      "spec": "core §6: a current withdrawn is compared by terms_rev only, so a digest mismatch is not stale",
+      "records": [
+        {
+          "ph": "0.6",
+          "ext": "acts/0.6",
+          "id": "r1",
+          "type": "raised",
+          "origin": "requester",
+          "by": "agent:demo",
+          "key": "task-demo-aaaaaaaaaa",
+          "project": "demo",
+          "ts": "2026-10-27T09:00:00Z",
+          "terms_rev": 1,
+          "terms": {
+            "text": "Which one?"
+          }
+        },
+        {
+          "ph": "0.6",
+          "ext": "acts/0.6",
+          "id": "w1",
+          "type": "withdrawn",
+          "origin": "requester",
+          "by": "agent:demo",
+          "key": "task-demo-aaaaaaaaaa",
+          "project": "demo",
+          "ts": "2026-10-27T11:00:00Z",
+          "reason": "not_needed",
+          "supersedes": [
+            "r1"
+          ]
+        },
+        {
+          "ph": "0.6",
+          "ext": "acts/0.6",
+          "id": "s1",
+          "type": "settled",
+          "origin": "principal",
+          "by": "ps:assistant",
+          "key": "task-demo-aaaaaaaaaa",
+          "project": "demo",
+          "ts": "2026-10-28T08:00:00Z",
+          "outcome": "done",
+          "terms_rev": 1,
+          "terms_digest": "sha-256:0000000000000000000000000000000000000000000000000000000000000000",
+          "authority": {
+            "kind": "principal",
+            "decider": "p:owner"
+          }
+        }
+      ],
+      "expect": {
+        "state": "settled",
+        "outcome": "done",
+        "settlement": "s1",
+        "authority": "principal",
+        "answer": null,
+        "stale": false,
+        "withdrawn": true,
+        "terms_rev": 1,
+        "conflict": false,
+        "claims": [],
+        "ignored": []
+      }
+    },
+    {
+      "id": "digest-of-the-other-fork-is-stale",
+      "spec": "core §6: the digest is compared with the current need record only",
+      "records": [
+        {
+          "ph": "0.6",
+          "ext": "acts/0.6",
+          "id": "r1",
+          "type": "raised",
+          "origin": "requester",
+          "by": "agent:demo",
+          "key": "task-demo-aaaaaaaaaa",
+          "project": "demo",
+          "ts": "2026-10-27T09:00:00Z",
+          "terms_rev": 1,
+          "terms": {
+            "text": "Which one?"
+          }
+        },
+        {
+          "ph": "0.6",
+          "ext": "acts/0.6",
+          "id": "a-x",
+          "type": "amended",
+          "origin": "requester",
+          "by": "agent:demo",
+          "key": "task-demo-aaaaaaaaaa",
+          "project": "demo",
+          "ts": "2026-10-27T10:00:00Z",
+          "terms_rev": 2,
+          "terms": {
+            "text": "Earlier wording"
+          },
+          "supersedes": [
+            "r1"
+          ]
+        },
+        {
+          "ph": "0.6",
+          "ext": "acts/0.6",
+          "id": "a-y",
+          "type": "amended",
+          "origin": "requester",
+          "by": "agent:demo",
+          "key": "task-demo-aaaaaaaaaa",
+          "project": "demo",
+          "ts": "2026-10-27T11:00:00Z",
+          "terms_rev": 2,
+          "terms": {
+            "text": "Later wording"
+          },
+          "supersedes": [
+            "r1"
+          ]
+        },
+        {
+          "ph": "0.6",
+          "ext": "acts/0.6",
+          "id": "s1",
+          "type": "settled",
+          "origin": "principal",
+          "by": "ps:assistant",
+          "key": "task-demo-aaaaaaaaaa",
+          "project": "demo",
+          "ts": "2026-10-28T08:00:00Z",
+          "outcome": "done",
+          "terms_rev": 2,
+          "terms_digest": "sha-256:0b4fa12bb9cec9b6fab5c540908bda6e398e56b605a1c0919ba16594a5928d7b",
+          "authority": {
+            "kind": "principal",
+            "decider": "p:owner"
+          }
+        }
+      ],
+      "expect": {
+        "state": "settled",
+        "outcome": "done",
+        "settlement": "s1",
+        "authority": "principal",
+        "answer": null,
+        "stale": true,
+        "withdrawn": false,
+        "terms_rev": 2,
+        "conflict": true,
+        "claims": [],
+        "ignored": []
+      }
+    },
+    {
+      "id": "digest-of-the-current-fork-is-not-stale",
+      "spec": "core §6: another need record at that terms_rev does not make it stale",
+      "records": [
+        {
+          "ph": "0.6",
+          "ext": "acts/0.6",
+          "id": "r1",
+          "type": "raised",
+          "origin": "requester",
+          "by": "agent:demo",
+          "key": "task-demo-aaaaaaaaaa",
+          "project": "demo",
+          "ts": "2026-10-27T09:00:00Z",
+          "terms_rev": 1,
+          "terms": {
+            "text": "Which one?"
+          }
+        },
+        {
+          "ph": "0.6",
+          "ext": "acts/0.6",
+          "id": "a-x",
+          "type": "amended",
+          "origin": "requester",
+          "by": "agent:demo",
+          "key": "task-demo-aaaaaaaaaa",
+          "project": "demo",
+          "ts": "2026-10-27T10:00:00Z",
+          "terms_rev": 2,
+          "terms": {
+            "text": "Earlier wording"
+          },
+          "supersedes": [
+            "r1"
+          ]
+        },
+        {
+          "ph": "0.6",
+          "ext": "acts/0.6",
+          "id": "a-y",
+          "type": "amended",
+          "origin": "requester",
+          "by": "agent:demo",
+          "key": "task-demo-aaaaaaaaaa",
+          "project": "demo",
+          "ts": "2026-10-27T11:00:00Z",
+          "terms_rev": 2,
+          "terms": {
+            "text": "Later wording"
+          },
+          "supersedes": [
+            "r1"
+          ]
+        },
+        {
+          "ph": "0.6",
+          "ext": "acts/0.6",
+          "id": "s1",
+          "type": "settled",
+          "origin": "principal",
+          "by": "ps:assistant",
+          "key": "task-demo-aaaaaaaaaa",
+          "project": "demo",
+          "ts": "2026-10-28T08:00:00Z",
+          "outcome": "done",
+          "terms_rev": 2,
+          "terms_digest": "sha-256:6e08958e20089e3d9bcaa591b3c0dbf11c95f08c1c2be85937f378fa1ce8917e",
+          "authority": {
+            "kind": "principal",
+            "decider": "p:owner"
+          }
+        }
+      ],
+      "expect": {
+        "state": "settled",
+        "outcome": "done",
+        "settlement": "s1",
+        "authority": "principal",
+        "answer": null,
+        "stale": false,
+        "withdrawn": false,
+        "terms_rev": 2,
+        "conflict": true,
+        "claims": [],
+        "ignored": []
+      }
+    },
+    {
+      "id": "reopened-is-never-stale",
+      "spec": "core §6: stale describes a settled; the current record is a reopening",
+      "records": [
+        {
+          "ph": "0.6",
+          "ext": "acts/0.6",
+          "id": "r1",
+          "type": "raised",
+          "origin": "requester",
+          "by": "agent:demo",
+          "key": "task-demo-aaaaaaaaaa",
+          "project": "demo",
+          "ts": "2026-10-27T09:00:00Z",
+          "terms_rev": 1,
+          "terms": {
+            "text": "Which one?"
+          }
+        },
+        {
+          "ph": "0.6",
+          "ext": "acts/0.6",
+          "id": "s1",
+          "type": "settled",
+          "origin": "principal",
+          "by": "ps:assistant",
+          "key": "task-demo-aaaaaaaaaa",
+          "project": "demo",
+          "ts": "2026-10-28T08:00:00Z",
+          "outcome": "done",
+          "terms_rev": 1,
+          "terms_digest": "sha-256:83d94fcb636f0549e42c92c90600f69e2169688d10aaa2c5fea82b4aa337b529",
+          "authority": {
+            "kind": "principal",
+            "decider": "p:owner"
+          }
+        },
+        {
+          "ph": "0.6",
+          "ext": "acts/0.6",
+          "id": "a2",
+          "type": "amended",
+          "origin": "requester",
+          "by": "agent:demo",
+          "key": "task-demo-aaaaaaaaaa",
+          "project": "demo",
+          "ts": "2026-10-27T10:00:00Z",
+          "terms_rev": 2,
+          "terms": {
+            "text": "Which one, now?"
+          },
+          "supersedes": [
+            "r1"
+          ]
+        },
+        {
+          "ph": "0.6",
+          "ext": "acts/0.6",
+          "id": "o1",
+          "type": "reopened",
+          "origin": "principal",
+          "by": "ps:assistant",
+          "key": "task-demo-aaaaaaaaaa",
+          "project": "demo",
+          "ts": "2026-10-28T09:00:00Z",
+          "supersedes": [
+            "s1"
+          ],
+          "restore_text": "Which one?"
+        }
+      ],
+      "expect": {
+        "state": "open",
+        "outcome": null,
+        "settlement": "o1",
+        "authority": null,
+        "answer": null,
+        "stale": false,
+        "withdrawn": false,
+        "terms_rev": 2,
+        "conflict": false,
+        "claims": [],
+        "ignored": []
+      }
+    },
+    {
+      "id": "settlement-with-an-impossible-date-is-ignored",
+      "spec": "core §4: a ts that is not a date-time makes the record invalid",
+      "records": [
+        {
+          "ph": "0.6",
+          "ext": "acts/0.6",
+          "id": "r1",
+          "type": "raised",
+          "origin": "requester",
+          "by": "agent:demo",
+          "key": "task-demo-aaaaaaaaaa",
+          "project": "demo",
+          "ts": "2026-10-27T09:00:00Z",
+          "terms_rev": 1,
+          "terms": {
+            "text": "Which one?"
+          }
+        },
+        {
+          "ph": "0.6",
+          "ext": "acts/0.6",
+          "id": "s1",
+          "type": "settled",
+          "origin": "principal",
+          "by": "ps:assistant",
+          "key": "task-demo-aaaaaaaaaa",
+          "project": "demo",
+          "ts": "2026-02-30T08:00:00Z",
+          "outcome": "done",
+          "terms_rev": 1,
+          "terms_digest": "sha-256:83d94fcb636f0549e42c92c90600f69e2169688d10aaa2c5fea82b4aa337b529",
+          "authority": {
+            "kind": "principal",
+            "decider": "p:owner"
+          }
+        }
+      ],
+      "expect": {
+        "state": "open",
+        "outcome": null,
+        "settlement": null,
+        "authority": null,
+        "answer": null,
+        "stale": false,
+        "withdrawn": false,
+        "terms_rev": 1,
+        "conflict": false,
+        "claims": [],
+        "ignored": [
+          "s1"
+        ]
+      }
+    },
+    {
+      "id": "amended-with-an-impossible-due-is-not-counted",
+      "spec": "core §4: an invalid need record does not raise the highest terms_rev",
+      "records": [
+        {
+          "ph": "0.6",
+          "ext": "acts/0.6",
+          "id": "r1",
+          "type": "raised",
+          "origin": "requester",
+          "by": "agent:demo",
+          "key": "task-demo-aaaaaaaaaa",
+          "project": "demo",
+          "ts": "2026-10-27T09:00:00Z",
+          "terms_rev": 1,
+          "terms": {
+            "text": "Which one?"
+          }
+        },
+        {
+          "ph": "0.6",
+          "ext": "acts/0.6",
+          "id": "a2",
+          "type": "amended",
+          "origin": "requester",
+          "by": "agent:demo",
+          "key": "task-demo-aaaaaaaaaa",
+          "project": "demo",
+          "ts": "2026-10-27T10:00:00Z",
+          "terms_rev": 2,
+          "terms": {
+            "text": "Later",
+            "due": "2026-02-30"
+          },
+          "supersedes": [
+            "r1"
+          ]
+        },
+        {
+          "ph": "0.6",
+          "ext": "acts/0.6",
+          "id": "s1",
+          "type": "settled",
+          "origin": "principal",
+          "by": "ps:assistant",
+          "key": "task-demo-aaaaaaaaaa",
+          "project": "demo",
+          "ts": "2026-10-28T08:00:00Z",
+          "outcome": "done",
+          "terms_rev": 1,
+          "terms_digest": "sha-256:83d94fcb636f0549e42c92c90600f69e2169688d10aaa2c5fea82b4aa337b529",
+          "authority": {
+            "kind": "principal",
+            "decider": "p:owner"
+          }
+        }
+      ],
+      "expect": {
+        "state": "settled",
+        "outcome": "done",
+        "settlement": "s1",
+        "authority": "principal",
+        "answer": null,
+        "stale": false,
+        "withdrawn": false,
+        "terms_rev": 1,
+        "conflict": false,
+        "claims": [],
+        "ignored": [
+          "a2"
+        ]
+      }
+    },
+    {
+      "id": "records-of-another-extension-are-not-acted-on",
+      "spec": "core §4, §10: records of an extension not implemented are ignored, whatever their type",
+      "records": [
+        {
+          "ph": "0.6",
+          "ext": "acts/0.6",
+          "id": "r1",
+          "type": "raised",
+          "origin": "requester",
+          "by": "agent:demo",
+          "key": "task-demo-aaaaaaaaaa",
+          "project": "demo",
+          "ts": "2026-10-27T09:00:00Z",
+          "terms_rev": 1,
+          "terms": {
+            "text": "Which one?"
+          }
+        },
+        {
+          "ph": "0.6",
+          "ext": "other/0.3",
+          "id": "x-a",
+          "type": "amended",
+          "origin": "requester",
+          "by": "agent:demo",
+          "key": "task-demo-aaaaaaaaaa",
+          "project": "demo",
+          "ts": "2026-10-27T10:00:00Z",
+          "terms_rev": 2,
+          "terms": {
+            "text": "Which one, now?"
+          },
+          "supersedes": [
+            "r1"
+          ]
+        },
+        {
+          "ph": "0.6",
+          "ext": "other/0.3",
+          "id": "x-w",
+          "type": "withdrawn",
+          "origin": "requester",
+          "by": "agent:demo",
+          "key": "task-demo-aaaaaaaaaa",
+          "project": "demo",
+          "ts": "2026-10-27T11:00:00Z",
+          "reason": "not_needed",
+          "supersedes": [
+            "r1"
+          ]
+        },
+        {
+          "ph": "0.6",
+          "ext": "other/0.3",
+          "id": "x-s",
+          "type": "settled",
+          "origin": "principal",
+          "by": "ps:assistant",
+          "key": "task-demo-aaaaaaaaaa",
+          "project": "demo",
+          "ts": "2026-10-28T08:00:00Z",
+          "outcome": "done",
+          "terms_rev": 1,
+          "terms_digest": "sha-256:83d94fcb636f0549e42c92c90600f69e2169688d10aaa2c5fea82b4aa337b529",
+          "authority": {
+            "kind": "principal",
+            "decider": "p:owner"
+          }
+        },
+        {
+          "ph": "0.6",
+          "ext": "other/0.3",
+          "id": "x-o",
+          "type": "reopened",
+          "origin": "principal",
+          "by": "ps:assistant",
+          "key": "task-demo-aaaaaaaaaa",
+          "project": "demo",
+          "ts": "2026-10-28T09:00:00Z",
+          "supersedes": [
+            "x-s"
+          ],
+          "restore_text": "Which one?"
+        },
+        {
+          "ph": "0.6",
+          "ext": "other/0.3",
+          "id": "x-c",
+          "type": "claimed",
+          "origin": "agent",
+          "by": "agent:other",
+          "key": "task-demo-aaaaaaaaaa",
+          "project": "demo",
+          "ts": "2026-10-28T07:00:00Z",
+          "outcome": "done",
+          "evidence": {
+            "basis": "heard it"
+          }
+        },
+        {
+          "ph": "0.6",
+          "ext": "other/0.3",
+          "id": "x-n",
+          "type": "note",
+          "origin": "requester",
+          "by": "agent:demo",
+          "key": "task-demo-aaaaaaaaaa",
+          "project": "demo",
+          "ts": "2026-10-27T09:00:00Z",
+          "about": {
+            "key": "task-demo-aaaaaaaaaa"
+          },
+          "note": "Progress."
+        },
+        {
+          "ph": "0.6",
+          "ext": "other/0.3",
+          "id": "x-l",
+          "type": "related",
+          "origin": "requester",
+          "by": "agent:demo",
+          "key": "task-demo-aaaaaaaaaa",
+          "project": "demo",
+          "ts": "2026-10-27T09:00:00Z",
+          "relation": {
+            "kind": "derived_from",
+            "target": {
+              "uri": "a2a:task/1"
+            },
+            "active": true
+          }
+        },
+        {
+          "ph": "0.6",
+          "ext": "other/0.3",
+          "id": "x-r",
+          "type": "raised",
+          "origin": "requester",
+          "by": "agent:demo",
+          "key": "task-demo-aaaaaaaaaa",
+          "project": "demo",
+          "ts": "2026-10-27T09:00:00Z",
+          "terms_rev": 1,
+          "terms": {
+            "text": "Which one?"
+          }
+        }
+      ],
+      "expect": {
+        "state": "open",
+        "outcome": null,
+        "settlement": null,
+        "authority": null,
+        "answer": null,
+        "stale": false,
+        "withdrawn": false,
+        "terms_rev": 1,
+        "conflict": false,
+        "claims": [],
+        "ignored": [
+          "x-a",
+          "x-c",
+          "x-l",
+          "x-n",
+          "x-o",
+          "x-r",
+          "x-s",
+          "x-w"
+        ]
+      }
+    },
+    {
+      "id": "record-without-an-id-is-not-listed",
+      "spec": "core §4: invalid and ignored; it has no id to list",
+      "records": [
+        {
+          "ph": "0.6",
+          "ext": "acts/0.6",
+          "id": "r1",
+          "type": "raised",
+          "origin": "requester",
+          "by": "agent:demo",
+          "key": "task-demo-aaaaaaaaaa",
+          "project": "demo",
+          "ts": "2026-10-27T09:00:00Z",
+          "terms_rev": 1,
+          "terms": {
+            "text": "Which one?"
+          }
+        },
+        {
+          "ph": "0.6",
+          "ext": "acts/0.6",
+          "type": "settled",
+          "origin": "principal",
+          "by": "ps:assistant",
+          "key": "task-demo-aaaaaaaaaa",
+          "project": "demo",
+          "ts": "2026-10-28T08:00:00Z",
+          "outcome": "done",
+          "terms_rev": 1,
+          "terms_digest": "sha-256:83d94fcb636f0549e42c92c90600f69e2169688d10aaa2c5fea82b4aa337b529",
+          "authority": {
+            "kind": "principal",
+            "decider": "p:owner"
+          }
+        }
+      ],
+      "expect": {
+        "state": "open",
+        "outcome": null,
+        "settlement": null,
+        "authority": null,
+        "answer": null,
+        "stale": false,
+        "withdrawn": false,
+        "terms_rev": 1,
+        "conflict": false,
+        "claims": [],
+        "ignored": []
+      }
+    },
+    {
+      "id": "record-with-a-non-string-type-is-ignored",
+      "spec": "core §4: no schema is selected, so it is invalid",
+      "records": [
+        {
+          "ph": "0.6",
+          "ext": "acts/0.6",
+          "id": "r1",
+          "type": "raised",
+          "origin": "requester",
+          "by": "agent:demo",
+          "key": "task-demo-aaaaaaaaaa",
+          "project": "demo",
+          "ts": "2026-10-27T09:00:00Z",
+          "terms_rev": 1,
+          "terms": {
+            "text": "Which one?"
+          }
+        },
+        {
+          "ph": "0.6",
+          "ext": "acts/0.6",
+          "id": "s1",
+          "type": [
+            "settled"
+          ],
+          "origin": "principal",
+          "by": "ps:assistant",
+          "key": "task-demo-aaaaaaaaaa",
+          "project": "demo",
+          "ts": "2026-10-28T08:00:00Z",
+          "outcome": "done",
+          "terms_rev": 1,
+          "terms_digest": "sha-256:83d94fcb636f0549e42c92c90600f69e2169688d10aaa2c5fea82b4aa337b529",
+          "authority": {
+            "kind": "principal",
+            "decider": "p:owner"
+          }
+        }
+      ],
+      "expect": {
+        "state": "open",
+        "outcome": null,
+        "settlement": null,
+        "authority": null,
+        "answer": null,
+        "stale": false,
+        "withdrawn": false,
+        "terms_rev": 1,
+        "conflict": false,
+        "claims": [],
+        "ignored": [
+          "s1"
+        ]
+      }
+    },
+    {
+      "id": "reopened-without-a-need-is-unknown",
+      "spec": "core §6: none or reopened, need none",
+      "records": [
+        {
+          "ph": "0.6",
+          "ext": "acts/0.6",
+          "id": "s1",
+          "type": "settled",
+          "origin": "principal",
+          "by": "ps:assistant",
+          "key": "task-demo-aaaaaaaaaa",
+          "project": "demo",
+          "ts": "2026-10-28T08:00:00Z",
+          "outcome": "done",
+          "terms_rev": 1,
+          "terms_digest": "sha-256:0000000000000000000000000000000000000000000000000000000000000000",
+          "authority": {
+            "kind": "principal",
+            "decider": "p:owner"
+          }
+        },
+        {
+          "ph": "0.6",
+          "ext": "acts/0.6",
+          "id": "o1",
+          "type": "reopened",
+          "origin": "principal",
+          "by": "ps:assistant",
+          "key": "task-demo-aaaaaaaaaa",
+          "project": "demo",
+          "ts": "2026-10-28T09:00:00Z",
+          "supersedes": [
+            "s1"
+          ],
+          "restore_text": "Which one?"
+        }
+      ],
+      "expect": {
+        "state": "unknown",
+        "outcome": null,
+        "settlement": "o1",
+        "authority": null,
+        "answer": null,
+        "stale": false,
+        "withdrawn": false,
+        "terms_rev": 0,
+        "conflict": false,
+        "claims": [],
+        "ignored": []
+      }
+    }
+  ]
+}

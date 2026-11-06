@@ -1,0 +1,358 @@
+{
+  "suite": "core/0.6",
+  "description": "The text of a record -> whether it is valid (core §4). What a parsed value can no longer show: duplicate member names, numbers written with a fraction or an exponent, unpaired surrogates. A record is validated under the extension its ext names; text that does not parse, or is not an object, is invalid whatever it names.",
+  "principal": "p:owner",
+  "principal_type": "natural",
+  "cases": [
+    {
+      "id": "decisions-plain",
+      "spec": "core §4",
+      "raw": "{\"ph\":\"0.6\",\"ext\":\"decisions/0.6\",\"id\":\"r1\",\"type\":\"raised\",\"origin\":\"requester\",\"by\":\"agent:demo\",\"key\":\"q-demo-1\",\"project\":\"demo\",\"ts\":\"2026-10-27T09:00:00Z\",\"terms_rev\":1,\"terms\":{\"text\":\"Which one?\"}}",
+      "valid": true,
+      "schema": "raised"
+    },
+    {
+      "id": "decisions-escaped-member-name",
+      "spec": "core §4",
+      "raw": "{\"ph\":\"0.6\",\"ext\":\"decisions/0.6\",\"id\":\"r1\",\"type\":\"raised\",\"origin\":\"requester\",\"by\":\"agent:demo\",\"key\":\"q-demo-1\",\"project\":\"demo\",\"ts\":\"2026-10-27T09:00:00Z\",\"terms_rev\":1,\"terms\":{\"text\":\"Which one?\"}}",
+      "valid": true,
+      "schema": "raised"
+    },
+    {
+      "id": "decisions-escaped-pair-of-surrogates",
+      "spec": "core §4",
+      "raw": "{\"ph\":\"0.6\",\"ext\":\"decisions/0.6\",\"id\":\"r1\",\"type\":\"raised\",\"origin\":\"requester\",\"by\":\"agent:demo\",\"key\":\"q-demo-1\",\"project\":\"demo\",\"ts\":\"2026-10-27T09:00:00Z\",\"terms_rev\":1,\"terms\":{\"text\":\"😀\"}}",
+      "valid": true,
+      "schema": "raised"
+    },
+    {
+      "id": "decisions-member-names-differing-in-case",
+      "spec": "core §4",
+      "raw": "{\"ph\":\"0.6\",\"ext\":\"decisions/0.6\",\"id\":\"r1\",\"type\":\"raised\",\"origin\":\"requester\",\"by\":\"agent:demo\",\"key\":\"q-demo-1\",\"project\":\"demo\",\"ts\":\"2026-10-27T09:00:00Z\",\"terms_rev\":1,\"terms\":{\"text\":\"Which one?\"},\"x_a\":1,\"X_a\":2}",
+      "valid": true,
+      "schema": "raised"
+    },
+    {
+      "id": "decisions-arrays-and-nested-values",
+      "spec": "core §4",
+      "raw": "{\"ph\":\"0.6\",\"ext\":\"decisions/0.6\",\"id\":\"r1\",\"type\":\"raised\",\"origin\":\"requester\",\"by\":\"agent:demo\",\"key\":\"q-demo-1\",\"project\":\"demo\",\"ts\":\"2026-10-27T09:00:00Z\",\"terms_rev\":1,\"terms\":{\"text\":\"Which one?\"},\"x_a\":[\"a\",1,{\"b\":[true,null]}]}",
+      "valid": true,
+      "schema": "raised"
+    },
+    {
+      "id": "decisions-integer-at-the-bound",
+      "spec": "core §4",
+      "raw": "{\"ph\":\"0.6\",\"ext\":\"decisions/0.6\",\"id\":\"r1\",\"type\":\"raised\",\"origin\":\"requester\",\"by\":\"agent:demo\",\"key\":\"q-demo-1\",\"project\":\"demo\",\"ts\":\"2026-10-27T09:00:00Z\",\"terms_rev\":1,\"terms\":{\"text\":\"Which one?\"},\"x_a\":9007199254740991}",
+      "valid": true,
+      "schema": "raised"
+    },
+    {
+      "id": "decisions-duplicate-member",
+      "spec": "core §4",
+      "raw": "{\"ph\":\"0.6\",\"ext\":\"decisions/0.6\",\"id\":\"r1\",\"type\":\"raised\",\"origin\":\"requester\",\"by\":\"agent:demo\",\"key\":\"q-demo-1\",\"project\":\"demo\",\"ts\":\"2026-10-27T09:00:00Z\",\"key\":\"q-demo-1\",\"terms_rev\":1,\"terms\":{\"text\":\"Which one?\"}}",
+      "valid": false,
+      "schema": null
+    },
+    {
+      "id": "decisions-duplicate-member-with-different-values",
+      "spec": "core §4",
+      "raw": "{\"ph\":\"0.6\",\"ext\":\"decisions/0.6\",\"id\":\"r1\",\"type\":\"raised\",\"origin\":\"requester\",\"by\":\"agent:demo\",\"key\":\"q-demo-1\",\"project\":\"demo\",\"ts\":\"2026-10-27T09:00:00Z\",\"terms_rev\":1,\"terms\":{\"text\":\"Which one?\"},\"note\":\"a\",\"note\":\"b\"}",
+      "valid": false,
+      "schema": null
+    },
+    {
+      "id": "decisions-duplicate-member-in-terms",
+      "spec": "core §4",
+      "raw": "{\"ph\":\"0.6\",\"ext\":\"decisions/0.6\",\"id\":\"r1\",\"type\":\"raised\",\"origin\":\"requester\",\"by\":\"agent:demo\",\"key\":\"q-demo-1\",\"project\":\"demo\",\"ts\":\"2026-10-27T09:00:00Z\",\"terms_rev\":1,\"terms\":{\"text\":\"Which one?\",\"text\":\"Which two?\"}}",
+      "valid": false,
+      "schema": null
+    },
+    {
+      "id": "decisions-duplicate-member-one-spelled-with-an-escape",
+      "spec": "core §4",
+      "raw": "{\"ph\":\"0.6\",\"ext\":\"decisions/0.6\",\"id\":\"r1\",\"type\":\"raised\",\"origin\":\"requester\",\"by\":\"agent:demo\",\"key\":\"q-demo-1\",\"project\":\"demo\",\"ts\":\"2026-10-27T09:00:00Z\",\"terms_rev\":1,\"terms\":{\"text\":\"Which one?\",\"text\":\"Which two?\"}}",
+      "valid": false,
+      "schema": null
+    },
+    {
+      "id": "decisions-duplicate-member-inside-an-array",
+      "spec": "core §4",
+      "raw": "{\"ph\":\"0.6\",\"ext\":\"decisions/0.6\",\"id\":\"r1\",\"type\":\"raised\",\"origin\":\"requester\",\"by\":\"agent:demo\",\"key\":\"q-demo-1\",\"project\":\"demo\",\"ts\":\"2026-10-27T09:00:00Z\",\"terms_rev\":1,\"terms\":{\"text\":\"Which one?\"},\"x_a\":[{\"b\":1,\"b\":2}]}",
+      "valid": false,
+      "schema": null
+    },
+    {
+      "id": "decisions-terms-rev-with-a-fraction",
+      "spec": "core §4",
+      "raw": "{\"ph\":\"0.6\",\"ext\":\"decisions/0.6\",\"id\":\"r1\",\"type\":\"raised\",\"origin\":\"requester\",\"by\":\"agent:demo\",\"key\":\"q-demo-1\",\"project\":\"demo\",\"ts\":\"2026-10-27T09:00:00Z\",\"terms_rev\":1.0,\"terms\":{\"text\":\"Which one?\"}}",
+      "valid": false,
+      "schema": null
+    },
+    {
+      "id": "decisions-terms-rev-with-an-exponent",
+      "spec": "core §4",
+      "raw": "{\"ph\":\"0.6\",\"ext\":\"decisions/0.6\",\"id\":\"r1\",\"type\":\"raised\",\"origin\":\"requester\",\"by\":\"agent:demo\",\"key\":\"q-demo-1\",\"project\":\"demo\",\"ts\":\"2026-10-27T09:00:00Z\",\"terms_rev\":1e0,\"terms\":{\"text\":\"Which one?\"}}",
+      "valid": false,
+      "schema": null
+    },
+    {
+      "id": "decisions-exponent-in-an-unknown-member",
+      "spec": "core §4",
+      "raw": "{\"ph\":\"0.6\",\"ext\":\"decisions/0.6\",\"id\":\"r1\",\"type\":\"raised\",\"origin\":\"requester\",\"by\":\"agent:demo\",\"key\":\"q-demo-1\",\"project\":\"demo\",\"ts\":\"2026-10-27T09:00:00Z\",\"terms_rev\":1,\"terms\":{\"text\":\"Which one?\"},\"x_a\":1e2}",
+      "valid": false,
+      "schema": null
+    },
+    {
+      "id": "decisions-over-the-bound",
+      "spec": "core §4",
+      "raw": "{\"ph\":\"0.6\",\"ext\":\"decisions/0.6\",\"id\":\"r1\",\"type\":\"raised\",\"origin\":\"requester\",\"by\":\"agent:demo\",\"key\":\"q-demo-1\",\"project\":\"demo\",\"ts\":\"2026-10-27T09:00:00Z\",\"terms_rev\":1,\"terms\":{\"text\":\"Which one?\"},\"x_a\":9007199254740992}",
+      "valid": false,
+      "schema": null
+    },
+    {
+      "id": "decisions-lone-high-surrogate",
+      "spec": "core §4",
+      "raw": "{\"ph\":\"0.6\",\"ext\":\"decisions/0.6\",\"id\":\"r1\",\"type\":\"raised\",\"origin\":\"requester\",\"by\":\"agent:demo\",\"key\":\"q-demo-1\",\"project\":\"demo\",\"ts\":\"2026-10-27T09:00:00Z\",\"terms_rev\":1,\"terms\":{\"text\":\"\\ud83d\"}}",
+      "valid": false,
+      "schema": null
+    },
+    {
+      "id": "decisions-lone-low-surrogate",
+      "spec": "core §4",
+      "raw": "{\"ph\":\"0.6\",\"ext\":\"decisions/0.6\",\"id\":\"r1\",\"type\":\"raised\",\"origin\":\"requester\",\"by\":\"agent:demo\",\"key\":\"q-demo-1\",\"project\":\"demo\",\"ts\":\"2026-10-27T09:00:00Z\",\"terms_rev\":1,\"terms\":{\"text\":\"\\ude00\"}}",
+      "valid": false,
+      "schema": null
+    },
+    {
+      "id": "decisions-surrogates-in-the-wrong-order",
+      "spec": "core §4",
+      "raw": "{\"ph\":\"0.6\",\"ext\":\"decisions/0.6\",\"id\":\"r1\",\"type\":\"raised\",\"origin\":\"requester\",\"by\":\"agent:demo\",\"key\":\"q-demo-1\",\"project\":\"demo\",\"ts\":\"2026-10-27T09:00:00Z\",\"terms_rev\":1,\"terms\":{\"text\":\"\\ude00\\ud83d\"}}",
+      "valid": false,
+      "schema": null
+    },
+    {
+      "id": "decisions-lone-surrogate-in-an-unknown-member",
+      "spec": "core §4",
+      "raw": "{\"ph\":\"0.6\",\"ext\":\"decisions/0.6\",\"id\":\"r1\",\"type\":\"raised\",\"origin\":\"requester\",\"by\":\"agent:demo\",\"key\":\"q-demo-1\",\"project\":\"demo\",\"ts\":\"2026-10-27T09:00:00Z\",\"terms_rev\":1,\"terms\":{\"text\":\"Which one?\"},\"x_a\":[\"\\ud83d\"]}",
+      "valid": false,
+      "schema": null
+    },
+    {
+      "id": "decisions-lone-surrogate-in-a-member-name",
+      "spec": "core §4",
+      "raw": "{\"ph\":\"0.6\",\"ext\":\"decisions/0.6\",\"id\":\"r1\",\"type\":\"raised\",\"origin\":\"requester\",\"by\":\"agent:demo\",\"key\":\"q-demo-1\",\"project\":\"demo\",\"ts\":\"2026-10-27T09:00:00Z\",\"terms_rev\":1,\"terms\":{\"text\":\"Which one?\"},\"x_\\ud83d\":1}",
+      "valid": false,
+      "schema": null
+    },
+    {
+      "id": "acts-plain",
+      "spec": "core §4",
+      "raw": "{\"ph\":\"0.6\",\"ext\":\"acts/0.6\",\"id\":\"r1\",\"type\":\"raised\",\"origin\":\"requester\",\"by\":\"agent:demo\",\"key\":\"task-demo-aaaaaaaaaa\",\"project\":\"demo\",\"ts\":\"2026-10-27T09:00:00Z\",\"terms_rev\":1,\"terms\":{\"text\":\"Which one?\"}}",
+      "valid": true,
+      "schema": "raised"
+    },
+    {
+      "id": "acts-escaped-member-name",
+      "spec": "core §4",
+      "raw": "{\"ph\":\"0.6\",\"ext\":\"acts/0.6\",\"id\":\"r1\",\"type\":\"raised\",\"origin\":\"requester\",\"by\":\"agent:demo\",\"key\":\"task-demo-aaaaaaaaaa\",\"project\":\"demo\",\"ts\":\"2026-10-27T09:00:00Z\",\"terms_rev\":1,\"terms\":{\"text\":\"Which one?\"}}",
+      "valid": true,
+      "schema": "raised"
+    },
+    {
+      "id": "acts-escaped-pair-of-surrogates",
+      "spec": "core §4",
+      "raw": "{\"ph\":\"0.6\",\"ext\":\"acts/0.6\",\"id\":\"r1\",\"type\":\"raised\",\"origin\":\"requester\",\"by\":\"agent:demo\",\"key\":\"task-demo-aaaaaaaaaa\",\"project\":\"demo\",\"ts\":\"2026-10-27T09:00:00Z\",\"terms_rev\":1,\"terms\":{\"text\":\"😀\"}}",
+      "valid": true,
+      "schema": "raised"
+    },
+    {
+      "id": "acts-member-names-differing-in-case",
+      "spec": "core §4",
+      "raw": "{\"ph\":\"0.6\",\"ext\":\"acts/0.6\",\"id\":\"r1\",\"type\":\"raised\",\"origin\":\"requester\",\"by\":\"agent:demo\",\"key\":\"task-demo-aaaaaaaaaa\",\"project\":\"demo\",\"ts\":\"2026-10-27T09:00:00Z\",\"terms_rev\":1,\"terms\":{\"text\":\"Which one?\"},\"x_a\":1,\"X_a\":2}",
+      "valid": true,
+      "schema": "raised"
+    },
+    {
+      "id": "acts-arrays-and-nested-values",
+      "spec": "core §4",
+      "raw": "{\"ph\":\"0.6\",\"ext\":\"acts/0.6\",\"id\":\"r1\",\"type\":\"raised\",\"origin\":\"requester\",\"by\":\"agent:demo\",\"key\":\"task-demo-aaaaaaaaaa\",\"project\":\"demo\",\"ts\":\"2026-10-27T09:00:00Z\",\"terms_rev\":1,\"terms\":{\"text\":\"Which one?\"},\"x_a\":[\"a\",1,{\"b\":[true,null]}]}",
+      "valid": true,
+      "schema": "raised"
+    },
+    {
+      "id": "acts-integer-at-the-bound",
+      "spec": "core §4",
+      "raw": "{\"ph\":\"0.6\",\"ext\":\"acts/0.6\",\"id\":\"r1\",\"type\":\"raised\",\"origin\":\"requester\",\"by\":\"agent:demo\",\"key\":\"task-demo-aaaaaaaaaa\",\"project\":\"demo\",\"ts\":\"2026-10-27T09:00:00Z\",\"terms_rev\":1,\"terms\":{\"text\":\"Which one?\"},\"x_a\":9007199254740991}",
+      "valid": true,
+      "schema": "raised"
+    },
+    {
+      "id": "acts-duplicate-member",
+      "spec": "core §4",
+      "raw": "{\"ph\":\"0.6\",\"ext\":\"acts/0.6\",\"id\":\"r1\",\"type\":\"raised\",\"origin\":\"requester\",\"by\":\"agent:demo\",\"key\":\"task-demo-aaaaaaaaaa\",\"project\":\"demo\",\"ts\":\"2026-10-27T09:00:00Z\",\"key\":\"task-demo-aaaaaaaaaa\",\"terms_rev\":1,\"terms\":{\"text\":\"Which one?\"}}",
+      "valid": false,
+      "schema": null
+    },
+    {
+      "id": "acts-duplicate-member-with-different-values",
+      "spec": "core §4",
+      "raw": "{\"ph\":\"0.6\",\"ext\":\"acts/0.6\",\"id\":\"r1\",\"type\":\"raised\",\"origin\":\"requester\",\"by\":\"agent:demo\",\"key\":\"task-demo-aaaaaaaaaa\",\"project\":\"demo\",\"ts\":\"2026-10-27T09:00:00Z\",\"terms_rev\":1,\"terms\":{\"text\":\"Which one?\"},\"note\":\"a\",\"note\":\"b\"}",
+      "valid": false,
+      "schema": null
+    },
+    {
+      "id": "acts-duplicate-member-in-terms",
+      "spec": "core §4",
+      "raw": "{\"ph\":\"0.6\",\"ext\":\"acts/0.6\",\"id\":\"r1\",\"type\":\"raised\",\"origin\":\"requester\",\"by\":\"agent:demo\",\"key\":\"task-demo-aaaaaaaaaa\",\"project\":\"demo\",\"ts\":\"2026-10-27T09:00:00Z\",\"terms_rev\":1,\"terms\":{\"text\":\"Which one?\",\"text\":\"Which two?\"}}",
+      "valid": false,
+      "schema": null
+    },
+    {
+      "id": "acts-duplicate-member-one-spelled-with-an-escape",
+      "spec": "core §4",
+      "raw": "{\"ph\":\"0.6\",\"ext\":\"acts/0.6\",\"id\":\"r1\",\"type\":\"raised\",\"origin\":\"requester\",\"by\":\"agent:demo\",\"key\":\"task-demo-aaaaaaaaaa\",\"project\":\"demo\",\"ts\":\"2026-10-27T09:00:00Z\",\"terms_rev\":1,\"terms\":{\"text\":\"Which one?\",\"text\":\"Which two?\"}}",
+      "valid": false,
+      "schema": null
+    },
+    {
+      "id": "acts-duplicate-member-inside-an-array",
+      "spec": "core §4",
+      "raw": "{\"ph\":\"0.6\",\"ext\":\"acts/0.6\",\"id\":\"r1\",\"type\":\"raised\",\"origin\":\"requester\",\"by\":\"agent:demo\",\"key\":\"task-demo-aaaaaaaaaa\",\"project\":\"demo\",\"ts\":\"2026-10-27T09:00:00Z\",\"terms_rev\":1,\"terms\":{\"text\":\"Which one?\"},\"x_a\":[{\"b\":1,\"b\":2}]}",
+      "valid": false,
+      "schema": null
+    },
+    {
+      "id": "acts-terms-rev-with-a-fraction",
+      "spec": "core §4",
+      "raw": "{\"ph\":\"0.6\",\"ext\":\"acts/0.6\",\"id\":\"r1\",\"type\":\"raised\",\"origin\":\"requester\",\"by\":\"agent:demo\",\"key\":\"task-demo-aaaaaaaaaa\",\"project\":\"demo\",\"ts\":\"2026-10-27T09:00:00Z\",\"terms_rev\":1.0,\"terms\":{\"text\":\"Which one?\"}}",
+      "valid": false,
+      "schema": null
+    },
+    {
+      "id": "acts-terms-rev-with-an-exponent",
+      "spec": "core §4",
+      "raw": "{\"ph\":\"0.6\",\"ext\":\"acts/0.6\",\"id\":\"r1\",\"type\":\"raised\",\"origin\":\"requester\",\"by\":\"agent:demo\",\"key\":\"task-demo-aaaaaaaaaa\",\"project\":\"demo\",\"ts\":\"2026-10-27T09:00:00Z\",\"terms_rev\":1e0,\"terms\":{\"text\":\"Which one?\"}}",
+      "valid": false,
+      "schema": null
+    },
+    {
+      "id": "acts-exponent-in-an-unknown-member",
+      "spec": "core §4",
+      "raw": "{\"ph\":\"0.6\",\"ext\":\"acts/0.6\",\"id\":\"r1\",\"type\":\"raised\",\"origin\":\"requester\",\"by\":\"agent:demo\",\"key\":\"task-demo-aaaaaaaaaa\",\"project\":\"demo\",\"ts\":\"2026-10-27T09:00:00Z\",\"terms_rev\":1,\"terms\":{\"text\":\"Which one?\"},\"x_a\":1e2}",
+      "valid": false,
+      "schema": null
+    },
+    {
+      "id": "acts-over-the-bound",
+      "spec": "core §4",
+      "raw": "{\"ph\":\"0.6\",\"ext\":\"acts/0.6\",\"id\":\"r1\",\"type\":\"raised\",\"origin\":\"requester\",\"by\":\"agent:demo\",\"key\":\"task-demo-aaaaaaaaaa\",\"project\":\"demo\",\"ts\":\"2026-10-27T09:00:00Z\",\"terms_rev\":1,\"terms\":{\"text\":\"Which one?\"},\"x_a\":9007199254740992}",
+      "valid": false,
+      "schema": null
+    },
+    {
+      "id": "acts-lone-high-surrogate",
+      "spec": "core §4",
+      "raw": "{\"ph\":\"0.6\",\"ext\":\"acts/0.6\",\"id\":\"r1\",\"type\":\"raised\",\"origin\":\"requester\",\"by\":\"agent:demo\",\"key\":\"task-demo-aaaaaaaaaa\",\"project\":\"demo\",\"ts\":\"2026-10-27T09:00:00Z\",\"terms_rev\":1,\"terms\":{\"text\":\"\\ud83d\"}}",
+      "valid": false,
+      "schema": null
+    },
+    {
+      "id": "acts-lone-low-surrogate",
+      "spec": "core §4",
+      "raw": "{\"ph\":\"0.6\",\"ext\":\"acts/0.6\",\"id\":\"r1\",\"type\":\"raised\",\"origin\":\"requester\",\"by\":\"agent:demo\",\"key\":\"task-demo-aaaaaaaaaa\",\"project\":\"demo\",\"ts\":\"2026-10-27T09:00:00Z\",\"terms_rev\":1,\"terms\":{\"text\":\"\\ude00\"}}",
+      "valid": false,
+      "schema": null
+    },
+    {
+      "id": "acts-surrogates-in-the-wrong-order",
+      "spec": "core §4",
+      "raw": "{\"ph\":\"0.6\",\"ext\":\"acts/0.6\",\"id\":\"r1\",\"type\":\"raised\",\"origin\":\"requester\",\"by\":\"agent:demo\",\"key\":\"task-demo-aaaaaaaaaa\",\"project\":\"demo\",\"ts\":\"2026-10-27T09:00:00Z\",\"terms_rev\":1,\"terms\":{\"text\":\"\\ude00\\ud83d\"}}",
+      "valid": false,
+      "schema": null
+    },
+    {
+      "id": "acts-lone-surrogate-in-an-unknown-member",
+      "spec": "core §4",
+      "raw": "{\"ph\":\"0.6\",\"ext\":\"acts/0.6\",\"id\":\"r1\",\"type\":\"raised\",\"origin\":\"requester\",\"by\":\"agent:demo\",\"key\":\"task-demo-aaaaaaaaaa\",\"project\":\"demo\",\"ts\":\"2026-10-27T09:00:00Z\",\"terms_rev\":1,\"terms\":{\"text\":\"Which one?\"},\"x_a\":[\"\\ud83d\"]}",
+      "valid": false,
+      "schema": null
+    },
+    {
+      "id": "acts-lone-surrogate-in-a-member-name",
+      "spec": "core §4",
+      "raw": "{\"ph\":\"0.6\",\"ext\":\"acts/0.6\",\"id\":\"r1\",\"type\":\"raised\",\"origin\":\"requester\",\"by\":\"agent:demo\",\"key\":\"task-demo-aaaaaaaaaa\",\"project\":\"demo\",\"ts\":\"2026-10-27T09:00:00Z\",\"terms_rev\":1,\"terms\":{\"text\":\"Which one?\"},\"x_\\ud83d\":1}",
+      "valid": false,
+      "schema": null
+    },
+    {
+      "id": "not-json",
+      "spec": "core §4",
+      "raw": "raised",
+      "valid": false,
+      "schema": null
+    },
+    {
+      "id": "truncated",
+      "spec": "core §4",
+      "raw": "{\"ph\":\"0.6\"",
+      "valid": false,
+      "schema": null
+    },
+    {
+      "id": "trailing-content",
+      "spec": "core §4",
+      "raw": "{} {}",
+      "valid": false,
+      "schema": null
+    },
+    {
+      "id": "nan",
+      "spec": "core §4",
+      "raw": "{\"x_a\":NaN}",
+      "valid": false,
+      "schema": null
+    },
+    {
+      "id": "infinity",
+      "spec": "core §4",
+      "raw": "{\"x_a\":Infinity}",
+      "valid": false,
+      "schema": null
+    },
+    {
+      "id": "raw-newline-in-a-string",
+      "spec": "core §4",
+      "raw": "{\"x_a\":\"a\nb\"}",
+      "valid": false,
+      "schema": null
+    },
+    {
+      "id": "an-array",
+      "spec": "core §4",
+      "raw": "[]",
+      "valid": false,
+      "schema": null
+    },
+    {
+      "id": "null",
+      "spec": "core §4",
+      "raw": "null",
+      "valid": false,
+      "schema": null
+    },
+    {
+      "id": "true",
+      "spec": "core §4",
+      "raw": "true",
+      "valid": false,
+      "schema": null
+    },
+    {
+      "id": "an-empty-object",
+      "spec": "core §4",
+      "raw": "{}",
+      "valid": false,
+      "schema": null
+    }
+  ]
+}

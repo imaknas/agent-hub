@@ -1,0 +1,335 @@
+{
+  "suite": "acts/0.6",
+  "description": "Reconciliation vectors: document + open registered keys (key -> text) -> actions.",
+  "cases": [
+    {
+      "id": "zh-present",
+      "profile": "zh-hant",
+      "document": [
+        "## 待辦",
+        "- [ ] 〔Owner〕續約網域(等 Owner:task-demo-aaaaaaaaaa)",
+        "- [ ] 〔agent〕上傳加重試"
+      ],
+      "open": {
+        "task-demo-aaaaaaaaaa": "續約網域"
+      },
+      "expect": []
+    },
+    {
+      "id": "zh-vanished",
+      "profile": "zh-hant",
+      "document": [
+        "## 待辦",
+        "- [ ] 〔Owner〕續約網域(等 Owner:task-demo-aaaaaaaaaa)",
+        "- [ ] 〔agent〕上傳加重試"
+      ],
+      "open": {
+        "task-demo-aaaaaaaaaa": "續約網域",
+        "task-demo-bbbbbbbbbb": "簽合約"
+      },
+      "expect": [
+        {
+          "key": "task-demo-bbbbbbbbbb",
+          "action": "claim"
+        }
+      ]
+    },
+    {
+      "id": "zh-vanished-same-text-warns",
+      "profile": "zh-hant",
+      "open": {
+        "task-demo-bbbbbbbbbb": "打給銀行"
+      },
+      "document": [
+        "## 待辦",
+        "- [ ] 〔Owner〕打給銀行"
+      ],
+      "expect": [
+        {
+          "key": "task-demo-bbbbbbbbbb",
+          "action": "warn"
+        }
+      ]
+    },
+    {
+      "id": "en-vanished-no-section",
+      "profile": "en",
+      "document": [
+        "# Demo"
+      ],
+      "open": {
+        "task-demo-aaaaaaaaaa": "Renew the domain"
+      },
+      "expect": [
+        {
+          "key": "task-demo-aaaaaaaaaa",
+          "action": "claim"
+        }
+      ]
+    },
+    {
+      "id": "not-raised-through-binding",
+      "profile": "en",
+      "document": [
+        "## Tasks",
+        "- [ ] [agent] Add retries"
+      ],
+      "open": {
+        "task-demo-aaaaaaaaaa": "Collect the lease handover",
+        "task-demo-bbbbbbbbbb": "Renew the domain"
+      },
+      "bound": [
+        "task-demo-bbbbbbbbbb"
+      ],
+      "expect": [
+        {
+          "key": "task-demo-bbbbbbbbbb",
+          "action": "claim"
+        }
+      ]
+    },
+    {
+      "id": "relabelled-to-agent",
+      "profile": "en",
+      "document": [
+        "## Tasks",
+        "- [ ] [agent] Renew the domain (waiting on owner: task-demo-aaaaaaaaaa)"
+      ],
+      "open": {
+        "task-demo-aaaaaaaaaa": "Renew the domain"
+      },
+      "bound": [
+        "task-demo-aaaaaaaaaa"
+      ],
+      "expect": [
+        {
+          "key": "task-demo-aaaaaaaaaa",
+          "action": "displaced"
+        }
+      ]
+    },
+    {
+      "id": "zh-relabelled-to-undecided",
+      "profile": "zh-hant",
+      "document": [
+        "## 待辦",
+        "- [ ] 〔待定〕續約網域(等 Owner:task-demo-aaaaaaaaaa)"
+      ],
+      "open": {
+        "task-demo-aaaaaaaaaa": "續約網域"
+      },
+      "bound": [
+        "task-demo-aaaaaaaaaa"
+      ],
+      "expect": [
+        {
+          "key": "task-demo-aaaaaaaaaa",
+          "action": "displaced"
+        }
+      ]
+    },
+    {
+      "id": "present-in-second-section",
+      "profile": "en",
+      "document": [
+        "## Tasks",
+        "- [ ] [agent] Add retries",
+        "## Tasks",
+        "- [ ] [owner] Renew the domain (waiting on owner: task-demo-aaaaaaaaaa)"
+      ],
+      "open": {
+        "task-demo-aaaaaaaaaa": "Renew the domain"
+      },
+      "bound": [
+        "task-demo-aaaaaaaaaa"
+      ],
+      "expect": [
+        {
+          "key": "task-demo-aaaaaaaaaa",
+          "action": "displaced"
+        }
+      ]
+    },
+    {
+      "id": "ticked",
+      "profile": "en",
+      "document": [
+        "## Tasks",
+        "- [x] [owner] Renew the domain (waiting on owner: task-demo-aaaaaaaaaa)"
+      ],
+      "open": {
+        "task-demo-aaaaaaaaaa": "Renew the domain"
+      },
+      "bound": [
+        "task-demo-aaaaaaaaaa"
+      ],
+      "expect": [
+        {
+          "key": "task-demo-aaaaaaaaaa",
+          "action": "ticked"
+        }
+      ]
+    },
+    {
+      "id": "ticked-agent-label-in-owner-group",
+      "profile": "en",
+      "document": [
+        "## Tasks",
+        "### [owner]",
+        "- [x] [agent] Renew the domain (waiting on owner: task-demo-aaaaaaaaaa)"
+      ],
+      "open": {
+        "task-demo-aaaaaaaaaa": "Renew the domain"
+      },
+      "bound": [
+        "task-demo-aaaaaaaaaa"
+      ],
+      "expect": [
+        {
+          "key": "task-demo-aaaaaaaaaa",
+          "action": "displaced"
+        }
+      ]
+    },
+    {
+      "id": "ticked-in-owner-group",
+      "profile": "en",
+      "document": [
+        "## Tasks",
+        "### [owner]",
+        "- [x] Renew the domain (waiting on owner: task-demo-aaaaaaaaaa)"
+      ],
+      "open": {
+        "task-demo-aaaaaaaaaa": "Renew the domain"
+      },
+      "bound": [
+        "task-demo-aaaaaaaaaa"
+      ],
+      "expect": [
+        {
+          "key": "task-demo-aaaaaaaaaa",
+          "action": "ticked"
+        }
+      ]
+    },
+    {
+      "id": "moved-out-of-section",
+      "profile": "en",
+      "document": [
+        "## Tasks",
+        "- (none)",
+        "## Waiting",
+        "- [ ] [owner] Renew the domain (waiting on owner: task-demo-aaaaaaaaaa)"
+      ],
+      "open": {
+        "task-demo-aaaaaaaaaa": "Renew the domain"
+      },
+      "bound": [
+        "task-demo-aaaaaaaaaa"
+      ],
+      "expect": [
+        {
+          "key": "task-demo-aaaaaaaaaa",
+          "action": "displaced"
+        }
+      ]
+    },
+    {
+      "id": "text-after-marker",
+      "profile": "en",
+      "document": [
+        "## Tasks",
+        "- [ ] [owner] Renew the domain (waiting on owner: task-demo-aaaaaaaaaa)."
+      ],
+      "open": {
+        "task-demo-aaaaaaaaaa": "Renew the domain"
+      },
+      "bound": [
+        "task-demo-aaaaaaaaaa"
+      ],
+      "expect": [
+        {
+          "key": "task-demo-aaaaaaaaaa",
+          "action": "displaced"
+        }
+      ]
+    },
+    {
+      "id": "only-in-a-fence",
+      "profile": "en",
+      "document": [
+        "## Tasks",
+        "- (none)",
+        "```",
+        "- [ ] [owner] Renew the domain (waiting on owner: task-demo-aaaaaaaaaa)",
+        "```"
+      ],
+      "open": {
+        "task-demo-aaaaaaaaaa": "Renew the domain"
+      },
+      "bound": [
+        "task-demo-aaaaaaaaaa"
+      ],
+      "expect": [
+        {
+          "key": "task-demo-aaaaaaaaaa",
+          "action": "displaced"
+        }
+      ]
+    },
+    {
+      "id": "indented-line",
+      "profile": "en",
+      "document": [
+        "## Tasks",
+        "- [ ] [agent] Other",
+        "  - [ ] [owner] Renew the domain (waiting on owner: task-demo-aaaaaaaaaa)"
+      ],
+      "open": {
+        "task-demo-aaaaaaaaaa": "Renew the domain"
+      },
+      "bound": [
+        "task-demo-aaaaaaaaaa"
+      ],
+      "expect": [
+        {
+          "key": "task-demo-aaaaaaaaaa",
+          "action": "displaced"
+        }
+      ]
+    },
+    {
+      "id": "closed-key-on-a-line",
+      "profile": "en",
+      "document": [
+        "## Tasks",
+        "- [ ] [owner] Renew the domain (waiting on owner: task-demo-aaaaaaaaaa)"
+      ],
+      "open": {},
+      "bound": [
+        "task-demo-aaaaaaaaaa"
+      ],
+      "expect": [
+        {
+          "key": "task-demo-aaaaaaaaaa",
+          "action": "closed"
+        }
+      ]
+    },
+    {
+      "id": "incomplete-nothing",
+      "profile": "en",
+      "document": [
+        "## Tasks",
+        "<!--"
+      ],
+      "open": {
+        "task-demo-aaaaaaaaaa": "Renew the domain"
+      },
+      "bound": [
+        "task-demo-aaaaaaaaaa"
+      ],
+      "expect": []
+    }
+  ]
+}
