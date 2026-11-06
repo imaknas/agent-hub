@@ -31,8 +31,10 @@ same thread. This document is what brunna did and the three reports they asked f
   read: kept, not acted on". Once brunna implements that version it is held, since it is on the bus as it came.
   Before this upgrade such a record was refused, and the pull for that project stopped at it.
 - **I-JSON at the text** (`ph_wire.loads`, `parse`): what brunna reads (`record-publish`'s stdin, the principal side's
-  HTTP bodies) marks an object that names a member twice, and that record alone is refused; NaN and Infinity are not
-  JSON; a fraction, an exponent or an unpaired surrogate makes the record invalid when it is validated.
+  HTTP bodies) marks an object that names a member twice, and that record alone is refused (the bus could not keep it
+  as it came); NaN and Infinity are not JSON; a fraction, an exponent or an unpaired surrogate makes the record invalid
+  when it is validated. From the principal side, a refused record stops that project's pull at it, logged, as every
+  refused record does (the bridge never moves past a record it did not take, so nothing is lost unseen).
 - **Sending 0.6 waits for the principal side** (below, report 3).
 
 `send_version` stays as it was: the default in code is `"0.4"` and this instance has `"0.5"`. Neither was changed.
@@ -134,7 +136,8 @@ so its first 0.6 record can only come after brunna switches; and the only probe 
 Muninn 0.9 answers `unsupported` and does not keep. So the owner, who runs both sides, states it, and brunna holds them
 to it: if the principal side still answers `unsupported` to a record in the version brunna sends, the bridge keeps the
 whole batch and sends it again (the accepted ones as duplicates) until `send_version` names a version it reads,
-instead of letting those records go.
+instead of letting those records go; the batch's other answers (an invalid record's job.failed) are acted on when it
+finally goes.
 
 brunna does not stop reading 0.5: it stays a converting party for as long as anything in 0.5 can arrive or is held.
 
@@ -181,6 +184,8 @@ registrar, 8 Acts from the principal side), 65 in 0.3 (49 sent, 16 received), 1 
    brunna keeps converting them one version at a time; 0.4 → 0.5 needs the held need record, so that step is not
    record-local.
 6. A byte order mark is read differently depending on whether the text arrives as a string or as bytes (report 2).
+   And a record from the principal side that names a member twice still stops its project's pull (it cannot be stored
+   as it came), the same hazard class as problem 1, kept deliberately: it is malformed, not merely newer.
 7. The validators of 0.4 and 0.5 raised exceptions on malformed shapes (report 1); found only by 0.6.1's new cases.
 
 ## Live read-only check

@@ -1444,15 +1444,20 @@ def forward_records(c) -> None:
                 return
             log_once("records-out", "")
             by_id = {rec["id"]: (ev, rec) for ev, rec in out}
-            unread = []
+            invalid, unread, unhandled = [], [], []
             for res in data.get("results") or []:
                 ev, rec = by_id.get(res.get("id"), (None, None))
                 if ev is not None and res.get("status") == "invalid":
-                    reject(c, ev, "; ".join(map(str, res.get("errors") or [])) or "invalid")
+                    invalid.append((ev, "; ".join(map(str, res.get("errors") or [])) or "invalid"))
                 elif ev is not None and res.get("status") == "unsupported" and rec.get("ext") in (
                         ph_wire.ext("acts"), ph_wire.ext("decisions")):
                     unread.append(rec["id"])
                 elif ev is not None and res.get("status") == "unsupported":
+                    unhandled.append((ev, rec))
+            if not unread:   # a batch kept for resending is judged again then
+                for ev, err in invalid:
+                    reject(c, ev, err)
+                for ev, rec in unhandled:
                     log(_("{ext} is not supported by {assistant}: {id} accepted but not handled", assistant=ASSISTANT,
                           ext=rec.get("ext"), id=ev["id"]))
             if unread:

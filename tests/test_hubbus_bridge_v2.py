@@ -223,18 +223,23 @@ class BridgeV2(unittest.TestCase):
         """the backstop for principal_side_reads confirmed too early: `unsupported` for a record in the version
         brunna sends lets nothing go; the batch is sent again until send_version names a version it reads"""
         self.m.publish_record(self.c, {**raised("k1"), "ph": "0.6", "ext": "acts/0.6"}, "proj", self.owner)
-        self.fake.unsupported = {"r:k1"}
+        self.m.publish_record(self.c, raised("k2"), "proj", self.owner)
+        self.fake.unsupported, self.fake.invalid = {"r:k1"}, {"r:k2"}
+        failed = lambda: self.c.execute("SELECT COUNT(*) FROM events WHERE type='job.failed'").fetchone()[0]   # noqa: E731
         with mock.patch.object(self.m.ph_wire, "send_version", return_value="0.6"):
             self.m.forward_records(self.c)
             self.m.forward_records(self.c)
-        self.assertEqual([r["id"] for r in self.fake.received], ["r:k1", "r:k1"])
+        self.assertEqual([r["id"] for r in self.fake.received], ["r:k1", "r:k2"] * 2)
         self.assertTrue(any("0.6" in l and "r:k1" in l and "send_version" in l for l in self.logs))
+        self.assertEqual(failed(), 0, "a kept batch is judged when it goes")
         self.fake.unsupported = set()
         with mock.patch.object(self.m.ph_wire, "send_version", return_value="0.5"):   # the owner set 0.5 back
             self.m.forward_records(self.c)
             self.m.forward_records(self.c)
         self.assertEqual([(r["id"], r["ext"]) for r in self.fake.received],
-                         [("r:k1", "acts/0.6")] * 2 + [("r:k1", "acts/0.5")], "sent once more, converted down")
+                         [("r:k1", "acts/0.6"), ("r:k2", "acts/0.3")] * 2 + [("r:k1", "acts/0.5"), ("r:k2", "acts/0.3")],
+                         "sent once more, converted down")
+        self.assertEqual(failed(), 1)
 
     def test_starting_point_is_only_for_the_switch_on_not_for_later_names(self):
         self.m.pull_records(self.c)   # switch on: starting point
