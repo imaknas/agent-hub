@@ -154,6 +154,23 @@ class Older(unittest.TestCase):
                     else:
                         self.assertTrue(errs, f"expected invalid, validated against {name}")
 
+    def test_malformed_records_of_any_version_are_invalid_not_an_error(self):
+        """0.6.1's malformed shapes (a type that is not a string, an authority that is not an object…), labelled 0.5
+        and 0.4: a reader never stops on them (they crashed the validator before the upgrade)"""
+        n = 0
+        for ext in ("acts", "decisions"):
+            s = suite(SPEC, ext, "records.json")
+            for c in s["cases"]:
+                if c["valid"] is not False or not c["id"].endswith(("-not-an-object", "type-not-a-word")):
+                    continue
+                for v in ("0.5", "0.4"):
+                    r = {**c["record"], "ph": v, "ext": f"{ext}/{v}"}
+                    with self.subTest(case=c["id"], version=v):
+                        self.assertTrue(ph_records.validate(r, cfg_of(s, c))[1])
+                        self.assertEqual(ph_records.received([r], cfg_of(s, c)), ([], [r]))
+                        n += 1
+        self.assertEqual(n, 34)
+
     def test_the_0_4_acts_lifecycle_on_the_settlement_view(self):
         """valid 0.4 records are kept and converted, invalid ones ignored"""
         s = json.loads((V04 / "acts" / "lifecycle.json").read_text())

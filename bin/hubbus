@@ -1471,11 +1471,12 @@ def forward_records(c) -> None:
 def outgoing(rec: dict) -> dict | None:
     """A record as the principal side reads it: one made in a version newer than the one it is sent in (made before
     hub.json principal_handoff.send_version went back, or by a project in 0.6 while it is 0.5) is converted down (core
-    §14); None when it has no form there. Requesters' records carry no terms digest, so no other record is needed to
-    convert them."""
+    §14); a 0.5 one goes up to 0.6 once 0.6 is sent (core 0.6 §14 item 2: a converting party sends N to a counterpart
+    configured for N; made before the switch, forwarded after it). None when it has no form there. Requesters' records
+    carry no terms digest, so no other record is needed to convert them; older ones (0.3, 0.4) go as they are."""
     send, version = ph_wire.send_version(), ph_wire.version_of(rec)
     newer = version in ph_wire.READ and ph_wire.READ.index(version) > ph_wire.READ.index(send)
-    return ph_wire.convert(rec, send, []) if newer else rec
+    return ph_wire.convert(rec, send, []) if newer or (version, send) == ("0.5", "0.6") else rec
 
 
 def ev_rec_id(ev) -> str:

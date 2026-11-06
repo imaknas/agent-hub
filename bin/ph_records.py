@@ -307,6 +307,8 @@ def _validate_04(r: dict, cfg: Config) -> tuple[str | None, list[str]]:
     if t not in TYPES + ("approved",) or not path.exists():
         return None, ["no schema for this type"]
     errs = schema_errors(r, _schema(path), path.parent)
+    if errs:   # the rules below read what the schema has established
+        return t, errs
     if not _bounded(r):
         errs.append("numbers are integers within 2^53 - 1")
     ev = r.get("evidence") if isinstance(r.get("evidence"), dict) else {}

@@ -147,6 +147,14 @@ class Records(unittest.TestCase):
         with mock.patch.object(self.m.ph_wire.hubconf, "get", return_value="0.5"):
             self.assertEqual(self.m.outgoing(r05), r05)
 
+    def test_outgoing_after_the_switch_to_0_6(self):
+        """core 0.6 §14 item 2: a converting party sends N to a counterpart configured for N, so a 0.5 record made
+        before the switch and forwarded after it goes as 0.6; 0.3 and 0.4 ones go as they are"""
+        r05 = {**raised("k5"), "ph": "0.5", "ext": "acts/0.5"}
+        with mock.patch.object(self.m.ph_wire, "send_version", return_value="0.6"):
+            self.assertEqual(self.m.outgoing(r05), {**r05, "ph": "0.6", "ext": "acts/0.6"})
+            self.assertEqual(self.m.outgoing(raised()), raised())
+
     def test_inbox_shows_who_decided(self):
         self.m.publish_record(self.c, settled(), self.owner, "proj")
         text = self.cli("inbox", "--project", "proj")
