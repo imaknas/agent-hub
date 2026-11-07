@@ -43,7 +43,7 @@ mkdir -p "$OUT"
 
 status() {  # status <state> [key=value...]
   "$HUB/bin/py" - "$OUT/status.json" "$@" <<'PY'
-import json, sys, datetime, pathlib
+import json, os, sys, datetime, pathlib
 path, state, *kv = sys.argv[1:]
 p = pathlib.Path(path)
 d = json.loads(p.read_text()) if p.exists() else {}
@@ -52,7 +52,10 @@ d["updated_at"] = datetime.datetime.now().isoformat(timespec="seconds")
 for item in kv:
     k, v = item.split("=", 1)
     d[k] = v
-p.write_text(json.dumps(d, ensure_ascii=False, indent=2))
+# whole or not at all: the status page, the scheduler and a waiting test read it while a run writes it
+tmp = p.with_name(f".{p.name}.{os.getpid()}")
+tmp.write_text(json.dumps(d, ensure_ascii=False, indent=2))
+os.replace(tmp, p)
 PY
 }
 
