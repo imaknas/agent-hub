@@ -54,6 +54,13 @@ class Dispatch(unittest.TestCase):
         self.tmp = pathlib.Path(tempfile.mkdtemp())
         m = self.m = load_hubbus()
         m.DB = self.tmp / "bus.db"
+        # nothing a test runs reaches the live files: the bus log, and what log_once and a fork keep in the state folder
+        m.LOG = self.tmp / "hubbus.log"
+        m.AGENT_JOBS = self.tmp / "agent-jobs"
+        state = unittest.mock.patch.object(m.hubconf, "STATE", self.tmp / "state")
+        state.start()
+        self.addCleanup(state.stop)
+        (self.tmp / "state").mkdir()
         self.ws = self.tmp / "proj"
         self.ws.mkdir()
         self.hubws = self.tmp / "hub"
@@ -66,6 +73,7 @@ class Dispatch(unittest.TestCase):
         self.handled, self.resumed, self.prompts = [], [], []
         m.sessions_port = lambda: self.rt   # hooks and status ask the same fake which sessions run
         m.real_resume = m.resume            # a test that counts the processes it starts
+        m.real_run_handler = m.run_handler
         # MCP server processes taken as running (the real check reads the process table: tests.test_mcp_server)
         self.running: set = set()
         m.mcp_process = lambda sid: sid in self.running
