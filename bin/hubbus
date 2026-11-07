@@ -1365,18 +1365,34 @@ def mail_text(event: str, session, cwd, runtime: str | None = None) -> str | Non
         return None
     c = db(timeout=HOOK_TIMEOUT_S)
     live = Live(me=session, c=c)
-    if any(actionable(r) and c.execute("SELECT 1 FROM events WHERE ref=? AND type IN ('message.routed',"
-                                       "'message.delivered') LIMIT 1", (r["id"],)).fetchone()
-           and taken_how(c, r, lambda s: True) != "good" for r in addressed_to(c, project)):
-        live.load()   # asked here, not under the write lock below; only a letter whose state can turn on it asks
+    # Everything is judged here, before the write lock (other sessions' hooks give up after HOOK_TIMEOUT_S): the letters,
+    # the process table if a letter's state turns on it, a fork's result. Under the lock only what this hook would tell
+    # is judged again, since another session's hook may have got there first
+    rows = inbox(c, project, session)
+    new = [r for r in rows if hook_shows(c, r, session, live)]
+    # Conversation replies to this session that the platform handled by resuming it in the background while it was
+    # idle: mention them in a line at its next activity, otherwise it wouldn't know.
+    # Forks still running aren't mentioned yet (what they said is brought over once done; otherwise the original
+    # session would only know "handled", not the outcome)
+    handled, merged = [], {}
+    if event != "session-start":
+        for r in c.execute("""SELECT m.* FROM events m JOIN events d ON d.ref=m.id AND d.type='message.delivered'
+            AND json_extract(d.payload,'$.via')='resume' AND json_extract(d.payload,'$.session')=?
+            WHERE m.type='message' AND NOT EXISTS(SELECT 1 FROM events s WHERE s.id = m.id || ':delivered:' || ?)""",
+                             (session, session)).fetchall():
+            finished, summary = fork_result(c, r)
+            if finished:
+                handled.append(r)
+                merged[r["id"]] = summary
     c.execute("BEGIN IMMEDIATE")
     if not os.environ.get("HUBBUS_LEASE"):  # lease sessions don't count as recipients
         record_presence(c, session, project, cwd, runtime)
+    if new:
+        current = {r["id"]: r for r in addressed_to(c, project)}
+        new = [current[r["id"]] for r in new if r["id"] in current and hook_shows(c, current[r["id"]], session, live)]
     if event == "session-start":
         # session start (including after compaction): show what this session should get, list one line for every
         # other open letter, otherwise they'd be invisible after compaction or to a session opening after a holder closed
-        rows = inbox(c, project, session)
-        new = [r for r in rows if hook_shows(c, r, session, live)]
         shown = {r["id"] for r in new}
         old = [r for r in rows if r["id"] not in shown]
         tell(c, new, session, "session-start", live)
@@ -1392,21 +1408,8 @@ def mail_text(event: str, session, cwd, runtime: str | None = None) -> str | Non
                                                   else "") for r in old)]
             return "\n".join([*parts, footer()] + ([note] if note else []))
         return note
-    rows = inbox(c, project, session, only_new=True, live=live)
+    rows = new
     tell(c, rows, session, event, live)
-    # Conversation replies to this session that the platform handled by resuming it in the background while it was
-    # idle: mention them in a line at its next activity, otherwise it wouldn't know.
-    # Forks still running aren't mentioned yet (what they said is brought over once done; otherwise the original
-    # session would only know "handled", not the outcome)
-    handled, merged = [], {}
-    for r in c.execute("""SELECT m.* FROM events m JOIN events d ON d.ref=m.id AND d.type='message.delivered'
-        AND json_extract(d.payload,'$.via')='resume' AND json_extract(d.payload,'$.session')=?
-        WHERE m.type='message' AND NOT EXISTS(SELECT 1 FROM events s WHERE s.id = m.id || ':delivered:' || ?)""",
-                         (session, session)).fetchall():
-        finished, summary = fork_result(c, r)
-        if finished:
-            handled.append(r)
-            merged[r["id"]] = summary
     mark_delivered(c, handled, session, event)
     c.execute("COMMIT")
     if rows or handled:
@@ -1474,13 +1477,24 @@ def current_name(proj: str) -> str:
     return hubconf.hub_project() if proj in names.all("project") else proj
 
 
+_OWN_NAMES: dict = {}
+
+
 def own_names(project: str, taken=None) -> list[str]:
     """This project's name, then the names it had before a rename (hubconf.former_names), but not one another project is
     registered under now. Records stay filed under the name they were sent under (their project field, the event's
-    source or recipient); a reader of this project's records reads all of these names."""
-    taken = projects() if taken is None else taken
+    source or recipient); a reader of this project's records reads all of these names. Asked for a project's names per
+    letter, and the registry is a file read: kept for the process (hooks, commands and dispatch runs are short)."""
+    if taken is None and project in _OWN_NAMES:
+        return _OWN_NAMES[project]
+    asked, keep = project, taken is None
+    if taken is None:
+        taken = _OWN_NAMES.setdefault(None, projects())
     project = now_named(project, taken)   # asked by a name it had before: the same project
-    return [project, *(o for o in hubconf.former_names(project) if o not in taken)]
+    names_ = [project, *(o for o in hubconf.former_names(project) if o not in taken)]
+    if keep:
+        _OWN_NAMES[asked] = names_
+    return names_
 
 
 def now_named(name: str, taken=None) -> str:
@@ -2381,6 +2395,7 @@ def take_outboxes(c) -> None:
     project as the sender (a sender named in the file is never read), and deleted once it is in; one that is
     malformed or refused is never applied: it is reported to the project in a letter and deleted too. A bus that is
     busy leaves the file for the next run."""
+    live = Live(c=c)   # one look for this run, taken before a told file's write lock, not under it
     for proj, ws in projects().items():
         if not outboxed(proj) or not ws.is_dir():
             continue
@@ -2397,9 +2412,11 @@ def take_outboxes(c) -> None:
                 if raw is None:
                     continue
                 entry = json.loads(raw)
+                if isinstance(entry, dict) and entry.get("op") == "told":
+                    live.load()
                 c.execute("BEGIN IMMEDIATE")
                 try:
-                    take(c, proj, entry)
+                    take(c, proj, entry, live)
                 except BaseException:
                     c.execute("ROLLBACK")
                     raise
@@ -2433,8 +2450,9 @@ def _strings(entry: dict, keys) -> None:
             refuse(_("hubbus: {key} must be text", key=k))
 
 
-def take(c, proj: str, entry) -> None:
-    """One outbox entry into the bus (inside the caller's transaction): send, ack, done or publish, as proj."""
+def take(c, proj: str, entry, live=None) -> None:
+    """One outbox entry into the bus (inside the caller's transaction): send, ack, done, told, publish or presence, as
+    proj. live: looked up by the caller, before the write lock."""
     if not isinstance(entry, dict) or entry.get("v") != 1:
         refuse(_("hubbus: not an outbox entry (an object with v 1)"))
     session = own_session(c, proj, entry.get("session"))
@@ -2477,7 +2495,7 @@ def take(c, proj: str, entry) -> None:
             if r is None or r["to_project"] != proj:
                 refuse(_("hubbus: {id} is not a letter to {project}", id=i, project=proj))
         if session:
-            live = Live(me=session, c=c)
+            live = live or Live(c=c)
             open_ones = [r for r in rows if actionable(r) and not is_done(c, r["id"])]
             tell(c, untold(c, open_ones, session, live), session, "inbox", live)
     elif op == "publish":

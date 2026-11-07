@@ -894,6 +894,102 @@ class Inbox(Harness):
         self.assertEqual(len(self.rows("1")), n)
 
 
+class HookCost(Harness):
+    """A hook runs at every prompt, and other sessions' hooks give up on the bus after 2 seconds. Counted, not timed."""
+
+    def holding(self, n):
+        self.rt.live.add("S1")
+        self.c.execute("INSERT INTO presence(session, project, cwd, seen) VALUES('S1', 'proj', '/x', ?)", (ago(45),))
+        for i in range(n):
+            self.send(f"m{i}", "proj", "request")
+            r = self.m.get_message(self.c, f"m{i}")
+            self.m.mark_delivered(self.c, [r], "S1", "prompt")
+            self.m.routed(self.c, r, "S1", "hook")
+
+    def traced(self, *calls):
+        """Run these with looks at the process table and the registry counted, and what happened under the write lock."""
+        log, locked = {"looks": 0, "looks_locked": 0, "registry": 0, "statements_locked": 0}, [False]
+        rt, real_live = self.rt, self.rt.live_sessions
+        real_projects = self.m.projects
+
+        def lookup():
+            log["looks"] += 1
+            log["looks_locked"] += locked[0]
+            return real_live()
+
+        def registry():
+            log["registry"] += 1
+            return real_projects()
+
+        def trace(q):
+            if q.startswith("BEGIN IMMEDIATE"):
+                locked[0] = True
+            elif q.startswith(("COMMIT", "ROLLBACK")):
+                locked[0] = False
+            elif locked[0] and not q.startswith("--"):
+                log["statements_locked"] += 1
+
+        rt.live_sessions = lookup
+        self.m.projects = registry
+        self.c.set_trace_callback(trace)
+        try:
+            for call in calls:
+                call()
+        finally:
+            self.c.set_trace_callback(None)
+            rt.live_sessions, self.m.projects = real_live, real_projects
+        return log
+
+    def test_a_prompt_hook_looks_once_and_outside_the_lock_however_many_are_open(self):
+        self.holding(30)
+        log = self.traced(lambda: self.hook("prompt", "S2"))
+        self.assertEqual((log["looks"], log["looks_locked"]), (1, 0))
+        self.assertLessEqual(log["registry"], 2, "names are kept for the process, not read per letter")
+
+    def test_a_prompt_hook_with_nothing_to_tell_does_little_under_the_lock(self):
+        self.holding(30)
+        self.hook("prompt", "S2")
+        log = self.traced(lambda: self.hook("prompt", "S2"))
+        self.assertLessEqual(log["statements_locked"], 3, "presence, nothing per letter")
+
+    def test_a_hook_that_loses_the_race_for_a_letter_does_not_tell_it(self):
+        self.rt.live |= {"S1", "S2"}
+        self.send("m1", "proj", "request")
+        real = self.m.record_presence
+
+        def another_hook_first(c, session, *a, **k):
+            if session == "S2":
+                self.m.record_presence = real
+                self.m.tell(c, [self.m.addressed_to(c, "proj")[0]], "S1", "prompt", self.m.Live(self.rt, {"S1", "S2"}))
+            return real(c, session, *a, **k)
+
+        self.m.record_presence = another_hook_first
+        self.assertEqual(self.hook("prompt", "S2"), "", "judged free before the lock, S1 had it by the lock")
+        self.assertEqual((self.told("m1"), self.routes("m1")), (["S1"], ["S1"]))
+
+    def test_a_told_file_looks_outside_the_lock(self):
+        self.holding(1)
+        self.send("m9", "proj", "request")
+        self.m.outboxed = lambda p: p == "proj"
+        self.m.record_presence(self.c, "S2", "proj", self.ws)
+        self.c.execute("UPDATE presence SET seen=? WHERE session='S2'", (ago(45),))
+        files = {"1.json": json.dumps({"v": 1, "op": "told", "ids": ["m0", "m9"], "session": "S2"}).encode()}
+        with mock.patch.object(self.m, "outbox_rel", lambda ws: "box"), \
+                mock.patch.object(self.m.nofollow, "entries", lambda ws, box: list(files)), \
+                mock.patch.object(self.m.nofollow, "read", lambda ws, rel, cap: files[rel.split("/")[-1]]), \
+                mock.patch.object(self.m.nofollow, "remove", lambda ws, rel: files.pop(rel.split("/")[-1])):
+            log = self.traced(lambda: self.m.take_outboxes(self.c))
+        self.assertEqual(files, {}, "taken in")
+        self.assertEqual(self.told("m9"), ["S2"])
+        self.assertEqual(log["looks_locked"], 0)
+
+    def test_the_names_of_a_project_are_kept_only_when_nobody_passed_their_own_table(self):
+        self.assertEqual(self.m.own_names("proj"), ["proj"])
+        self.assertEqual(self.m.own_names("proj", taken={"proj": 1}), ["proj"])
+        self.assertIn("proj", self.m._OWN_NAMES)
+        self.assertNotIn("other", self.m._OWN_NAMES)
+
+
 class Prune(Harness):
     def test_routes_and_wakes_go_with_the_letter(self):
         self.send("m1", "proj", "request")
