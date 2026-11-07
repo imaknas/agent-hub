@@ -177,8 +177,9 @@ def tier_tmp(run: pathlib.Path, doc: dict) -> str:
     there is a failed run, not a run in the system's.
     A sandboxed project's run (its sandbox can't reach the private folder): the run folder, in its own workspace, where no other
     project's sandbox writes. That one is inside its repo: GIT_CEILING_DIRECTORIES holds for what doesn't strip it. A project whose jobs
-    are exempt from the sandbox (service_sandbox_exempt) runs its nightly tiers as the user, where its own sessions must not reach: the
-    private folder; its sessions, sandboxed, can't have that one and take the run folder."""
+    are exempt from the sandbox (service_sandbox_exempt) runs its nightly tiers as the user: the TMPDIR goes in the private folder, but
+    its HOME and the exported tree stay in the run folder in its workspace, which its own sandboxed sessions write; being exempt is the
+    owner's call to hold it back. Its sessions, sandboxed, can't have the private folder and take the run folder."""
     import isolation
     own = run / "tmp"
     if isolation.sandboxed(doc):
@@ -205,7 +206,6 @@ def base_env(main: pathlib.Path, run: pathlib.Path, hub: bool, doc: dict) -> tup
     caches["PLAYWRIGHT_BROWSERS_PATH"] = str(names.repo_dir(main / ".git") / "cache" / "playwright")
     (run / "home").mkdir()
     tmp = tier_tmp(run, doc)
-    (run / "tmpdir").write_text(tmp)   # removed with the run (main's finally)
     env = {"PATH": path, "LANG": os.environ.get("LANG") or "en_US.UTF-8", "HOME": str(run / "home"),
            "TMPDIR": tmp, "GIT_CEILING_DIRECTORIES": str(run), "PYTHONDONTWRITEBYTECODE": "1", **caches}
     if hub:
@@ -388,6 +388,7 @@ def main(argv: list[str]) -> int:
     outdir.mkdir(parents=True, exist_ok=True)
     stamp = datetime.datetime.now().strftime("%Y%m%d-%H%M%S")
     failed = False
+    env = None   # its TMPDIR is removed with the run: kept here, never read back from a file in a folder the project writes
     try:
         tree_id = export(top, "rev" if a.rev else "index" if a.index else "worktree", a.rev, run)
         tree = run / "tree"
@@ -451,8 +452,8 @@ def main(argv: list[str]) -> int:
         print(f"{names.current('cli')} test: {e}", file=sys.stderr)
         return 2
     finally:
-        with contextlib.suppress(OSError):
-            shutil.rmtree((run / "tmpdir").read_text(), ignore_errors=True)
+        if env and env.get("TMPDIR"):
+            shutil.rmtree(env["TMPDIR"], ignore_errors=True)
         shutil.rmtree(run, ignore_errors=True)
 
 

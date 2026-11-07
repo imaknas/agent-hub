@@ -146,6 +146,17 @@ class Runner(unittest.TestCase):
         self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
         self.assertTrue(tmp.is_relative_to(names.resolve(self.ws, "product", ".{}") / "test"), tmp)
 
+    def test_the_temp_folder_removed_is_the_one_made_not_one_a_file_names(self):
+        """The run folder is in the project's workspace: a path written into it is the project's word, not the runner's."""
+        victim = self.tmp / "users-own"
+        victim.mkdir()
+        (victim / "keep").write_text("x")
+        self.declare(v=2, tests=[{"tier": "t", "when": ["merge"], "run": f"echo '{victim}' > ../tmpdir"}])
+        r = self.run_("--tier", "t", "--force")
+        self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
+        self.assertTrue((victim / "keep").exists(), "a folder named in the run folder was removed")
+        self.assertEqual(list((self.tmp / "secrets" / "tmp").iterdir()), [], "the one made is gone")
+
     def test_failure_keeps_the_complete_output(self):
         self.declare(v=2, tests=[{"tier": "full", "run": "echo first-line; i=0; while [ $i -lt 100 ]; do echo $i; "
                                                          "i=$((i+1)); done; exit 3", "when": ["merge"]}])

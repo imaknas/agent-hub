@@ -88,6 +88,21 @@ class Guard(unittest.TestCase):
                     else:
                         self.assertEqual(said, pathlib.Path(extra["TMPDIR"]))
 
+    def test_an_install_with_no_private_folder_outside_a_repo_does_not_run(self):
+        """The old layout: settings in the hub root, secrets in <hub>/.secrets, inside the hub's repo. As the test runner's tiers, no run."""
+        with tempfile.TemporaryDirectory() as d, tempfile.TemporaryDirectory(dir="/tmp") as system:
+            d = pathlib.Path(d).resolve()
+            (d / ".git").mkdir()
+            (d / "brunna.json").write_text("{}")
+            (d / "tests").mkdir()
+            (d / "tests" / "test_one.py").write_text(SAYS_TMPDIR)
+            env = {**{k: v for k, v in os.environ.items() if not k.startswith(("BRUNNA_", "AGENT_HUB_"))},
+                   "AGENT_HUB_ROOT": str(d), "AGENT_HUB_PYTHON": sys.executable, "SAY_TO": str(d / "said"), "TMPDIR": system}
+            r = subprocess.run([sys.executable, str(BIN / "run-tests"), str(d / "tests")], capture_output=True, text=True, timeout=120, env=env)
+            self.assertEqual(r.returncode, 2, r.stdout + r.stderr)
+            self.assertIn("move-instance", r.stderr)
+            self.assertFalse((d / "said").exists(), "no test ran")
+
     def test_a_call_fails_the_run_and_says_so(self):
         r = self.run_on(CALLS)
         self.assertNotEqual(r.returncode, 0)
