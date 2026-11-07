@@ -237,9 +237,9 @@ def run(a) -> int:
     model = model_for(a.point, spec, a.model)
     if a.cmd == "run" and spec.get("shape") == "completion" and not getattr(a, "dry_run", False):
         return run_completion(a, spec, prompt, model)
-    # declared permissions (unattended allow:, settings: platform) must be honoured, never dropped by a runtime that
-    # can't (docs/design/event-jobs.md section 3.2)
-    confined = spec.get("settings") or (spec.get("allow_from_env") and os.environ.get(spec["allow_from_env"]))
+    # declared permissions (unattended allow:, settings: platform, restricted) must be honoured, never dropped by a runtime
+    # that can't (docs/design/event-jobs.md section 3.2)
+    confined = spec.get("settings") or spec.get("restricted") or (spec.get("allow_from_env") and os.environ.get(spec["allow_from_env"]))
     try:
         rt = runtime_ports.load(point_runtime(a.point, spec), ports=("agent", "confine") if confined else ("agent",))
     except runtime_ports.Unsupported as e:   # no coding agent: take the declared failure path, reason spelled out

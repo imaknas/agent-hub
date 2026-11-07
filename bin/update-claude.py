@@ -72,12 +72,21 @@ def smoke() -> str | None:
                            env={**os.environ, "LLM_AUTH": "token"})
     except subprocess.TimeoutExpired:
         return _("no answer for 3 minutes")
-    if r.returncode == 0:
-        return None
+    return not_answered(r)
+
+
+def not_answered(r) -> str | None:
+    """Why this run doesn't count as an answer, or None. Exit 0 isn't one: a run can end there with is_error, and a pass must be earned."""
     try:
-        return json.loads(r.stdout.strip().splitlines()[-1]).get("llm_error") or f"exit {r.returncode}"
+        got = json.loads(r.stdout.strip().splitlines()[-1])
+        got = got if isinstance(got, dict) else None
     except (ValueError, IndexError):
+        got = None
+    if got is None:
         return (r.stderr.strip() or r.stdout.strip())[-300:] or f"exit {r.returncode}"
+    if r.returncode != 0 or got.get("is_error"):
+        return str(got.get("llm_error") or got.get("result") or r.stderr.strip())[-300:] or f"exit {r.returncode}"
+    return None
 
 
 REQUEST = "Reply with just the two letters: ok"
@@ -105,7 +114,7 @@ def agent_run(repo: pathlib.Path, guarded: bool = True) -> str | None:
             r = subprocess.run(json.loads(dry.stdout), input=REQUEST, capture_output=True, text=True, timeout=180, cwd=repo, env=run_env)
     except subprocess.TimeoutExpired:
         return _("no answer for 3 minutes")
-    return None if r.returncode == 0 else (r.stderr.strip() or r.stdout.strip())[-200:] or f"exit {r.returncode}"
+    return not_answered(r)
 
 
 def filter_probe(run=agent_run) -> str | None:
