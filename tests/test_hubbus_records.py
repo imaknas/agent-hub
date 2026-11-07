@@ -177,6 +177,19 @@ class Records(unittest.TestCase):
 PRINCIPAL = "person:owner"
 
 
+class InboxText(unittest.TestCase):
+    def test_a_settlement_is_shown_whatever_its_answer_is(self):
+        """An Acts settlement's answer has no shape of its own, so it may be a number: the inbox must still render it. A
+        record with an ext that isn't a string is rendered too."""
+        m = load()
+        for rec in ({**settled(), "answer": 1}, {**settled(), "answer": "Yes"}, {**settled(), "answer": {"text": "Yes"}},
+                    {**settled(), "ext": 1}):
+            with self.subTest(rec=rec.get("answer", rec["ext"])):
+                row = {"type": "record", "id": "e1", "ts": "2026-11-07T10:00:00+08:00", "source": "owner",
+                       "to_project": "proj", "ref": None, "payload": json.dumps({"record": rec})}
+                self.assertIsInstance(m.fmt_record(row), str)
+
+
 def question(text="Which one?", **kw):
     return {"ph": "0.5", "ext": "decisions/0.5", "id": "r:q1", "type": "raised", "origin": "requester",
             "by": "project:proj", "key": "q1", "project": "proj", "ts": TS, "terms": {"text": text}, "terms_rev": 1,

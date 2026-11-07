@@ -50,6 +50,7 @@ class Conformance(unittest.TestCase):
                     self.assertEqual((name, errs), (c["schema"], []))
                 else:
                     self.assertTrue(errs, f"expected invalid, validated against {name}")
+                    self.assertNotIn(ph_records.NOT_IMPLEMENTED, errs, "expected invalid, judged kept")
         return len(s["cases"])
 
     def test_acts_records(self):
@@ -101,7 +102,20 @@ class Conformance(unittest.TestCase):
                     self.assertEqual((name, errs), (c["schema"], []))
                 else:
                     self.assertTrue(errs, f"expected invalid, validated against {name}")
+                    self.assertNotIn(ph_records.NOT_IMPLEMENTED, errs, "expected invalid, judged kept")
         self.assertEqual(len(s["cases"]), 50)
+
+    def test_a_record_that_names_no_extension_is_invalid_not_kept(self):
+        """core §4: `ext` is required, and only what names an extension or version can be kept. A string that names one
+        brunna doesn't implement stays kept (OPEN-READINGS lists `decisions` and `decisions/0.6.1`)."""
+        cfg = ph_records.Config("owner")
+        for ext in (None, "", 1, ["acts/0.6"]):
+            with self.subTest(ext=ext):
+                self.assertEqual(ph_records.validate({"ext": ext}, cfg), (None, ["$.ext: required, a string"]))
+        self.assertEqual(ph_records.validate({}, cfg), (None, ["$.ext: required, a string"]))
+        for ext in ("decisions", "decisions/0.6.1", "acts/9.9"):
+            with self.subTest(ext=ext):
+                self.assertEqual(ph_records.validate({"ext": ext}, cfg), (None, [ph_records.NOT_IMPLEMENTED]))
 
     def test_convert_held(self):
         """core §6, §14 (convert.json `held`, Acts): what a party configured for 0.6 that also implements 0.5 holds, and

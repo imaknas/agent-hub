@@ -768,7 +768,7 @@ def records(c, project, ext=None, types=None, pending=False, direction=None) -> 
 def fmt_record(r, long=True) -> str:
     """A record as a session can read it: which item, who decided, what authority."""
     rec = payload(r).get("record") or {}
-    family, kind = rec.get("ext", "?").split("/")[0], rec.get("type", "?")
+    family, kind = str(rec.get("ext", "?")).split("/")[0], rec.get("type", "?")
     what = {"acts": _("task"), "decisions": _("question")}.get(family, family)
     head = _("[{id}] from {source} ({tags}, {ts})", id=r["id"], source=r["source"], tags=f"{family} {kind}",
              ts=r["ts"][5:16].replace("T", " "))
@@ -782,8 +782,9 @@ def fmt_record(r, long=True) -> str:
         auth = rec.get("authority") or {}
         lines.append(_("{what} {key}: {outcome} ({kind}, decided by {decider})", what=what, key=rec.get("key"),
                        outcome=rec.get("outcome"), kind=auth.get("kind", "?"), decider=auth.get("decider", "?")))
-        if (rec.get("answer") or {}).get("text"):
-            lines.append(_("Answer: {text}", text=rec["answer"]["text"]))
+        answer = rec.get("answer")   # an Acts settlement's answer has no shape of its own (core: opaque here)
+        if isinstance(answer, dict) and answer.get("text"):
+            lines.append(_("Answer: {text}", text=answer["text"]))
     elif kind == "reopened":
         lines.append(_("{what} {key} reopened: {text}", what=what, key=rec.get("key"), text=rec.get("restore_text", "")))
     elif kind == "note":

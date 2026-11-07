@@ -67,8 +67,10 @@ The binding cases run twice, in the case's own profile and in brunna's reading (
 suites keep running by their own rules, and `tests/test_ph_characterization.py` pins, from before the upgrade, what
 every 0.5 and 0.4 lifecycle case holds, ignores and folds to: unchanged.
 
-No case fails, and none is recorded as an expected failure. Cases that failed on the way, all decided as "the
-implementation changes":
+No case fails, and none is recorded as an expected failure. **Corrected 11-07:** this was first reported with the harness
+counting "kept" as "invalid", which hid `without-ext` (both extensions) and `an-empty-object`: a record with no `ext` was
+judged kept, and core §4 makes it invalid. The strict counts then were 261/262, 278/279 and 49/50. Fixed with the harness
+tightened, so these numbers now hold. Cases that failed on the way, all decided as "the implementation changes":
 
 - `type-not-a-word`, `terms-not-an-object`, `authority-not-an-object`, `evidence-not-an-object`,
   `note-about-not-an-object`, `relation-not-an-object` (both extensions' records.json) and

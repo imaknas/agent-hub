@@ -153,6 +153,8 @@ def validate(r: dict, cfg: Config) -> tuple[str | None, list[str]]:
     (None, [NOT_IMPLEMENTED])."""
     if not isinstance(r, dict):
         return None, ["not an object"]
+    if not r.get("ext") or not isinstance(r["ext"], str):
+        return None, ["$.ext: required, a string"]   # core §4: it names nothing, so it is invalid, not kept
     if not implemented(r):
         return None, [NOT_IMPLEMENTED]
     version = ph_wire.version_of(r)
