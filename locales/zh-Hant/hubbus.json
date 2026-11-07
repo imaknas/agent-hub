@@ -187,5 +187,9 @@
  "hubbus: every letter of this run has been taken by another session: nothing to ask {alias}": "hubbus:這個執行的信都已經有別的 session 接手了,不必問 {alias}",
  "hubbus: --question closes a question, it is not a reply to a letter (no --reply-to)": "hubbus:--question 是結掉問題,不是回信(不能加 --reply-to)",
  "{project}: dispatch stopped on this project: {e!r}": "{project}:分派在這個專案中斷:{e!r}",
- "Open sessions a letter can't wake: {n} of {open} ({why})": "信來了叫不醒的開著的 session:{open} 個裡有 {n} 個({why})"
+ "Open sessions a letter can't wake: {n} of {open} ({why})": "信來了叫不醒的開著的 session:{open} 個裡有 {n} 個({why})",
+ "hubbus: this run can't pass a letter: only the session it was routed to can": "hubbus:這個執行不能 pass:只有信被派給的那個 session 能 pass",
+ "hubbus: {id} is not a request or question: there is nothing to pass": "hubbus:{id} 不是 request 或 question,沒有東西可以 pass",
+ "hubbus: {id}: pass needs a session, and this command isn't in one": "hubbus:{id}:pass 要在 session 裡下,這個指令不在 session 裡",
+ "hubbus: {id} is not routed to this session": "hubbus:{id} 沒有派給這個 session"
 }

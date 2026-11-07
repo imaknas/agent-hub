@@ -75,7 +75,7 @@ schema v1 (contracts/project.v1.md has the full description):
       project and modules may name others or *. Bus events are their writers' claims: the platform's event jobs are
       never agent jobs, and a project's agent event job must declare allow: (its boundary) and run in the workspace
       (cwd: workspace); it runs under judgment point agent-job-event, which loads only the platform's settings for
-      the project (no accumulated project or user permissions). message.delivered, message.routed, message.woken and message.done are refused like record.
+      the project (no accumulated project or user permissions). message.delivered, message.routed, message.passed, message.woken and message.done are refused like record.
       max_attempts_per_day defaults to 12; an agent event job always runs as the scheduler's background job, in
       place, so the scheduler sees its outcome. legacy_name is refused
     after: [job] (same project) or [project/job]
@@ -161,7 +161,7 @@ JOB = {"name", "at", "every", "trigger", "run", "kind", "prompt", "cwd", "days",
 TRIGGER = {"events", "projects", "sources", "where", "debounce"}
 # the mailbox's own work and bookkeeping (inbox records, delivery and closing written by dispatch, which relays others'
 # letters without a chain): no event job reacts to them (event-jobs.md 3.5)
-MAILBOX_WORK = ("record", "message.delivered", "message.routed", "message.woken", "message.done")
+MAILBOX_WORK = ("record", "message.delivered", "message.routed", "message.passed", "message.woken", "message.done")
 NOTICES = ("info", "progress", "done")   # the only letter types an event job may react to (event-jobs.md 3.5)
 SERVICE = {"name", "run", "label", "keepalive", "interval_s", "throttle_s", "env", "cwd", "log", "expose"}
 DAYS = {"mon", "tue", "wed", "thu", "fri", "sat", "sun"}

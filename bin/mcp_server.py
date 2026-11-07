@@ -6,7 +6,7 @@ memory notes (docs/design/tool-agnostic.md section 4).
   brunna mcp config     print the snippet to register in the tool's MCP settings (the platform does not change the
                           tool's settings for you)
 
-Tools: inbox, show, thread, send, ack, done (same names and meanings as `brunna`'s mailbox commands) + ask_owner
+Tools: inbox, show, thread, send, ack, pass, done (same names and meanings as `brunna`'s mailbox commands) + ask_owner
 (ask the owner), note (written into this project's memory notes). Everything is handed to bin/hubbus (the same
 implementation); the server only decides which project: environment variable AGENTHUB_PROJECT > working directory
 (hubbus.project_of: worktrees and .agent-memory count as the main project). Project not recognised -> every tool
@@ -195,6 +195,9 @@ TOOLS = [
     {"name": "ack", "description": "Claim letters: you will handle them, but not now (a request/question nobody claims "
                                    "or handles is given to someone else by the platform after a while).",
      "inputSchema": {"type": "object", "required": ["ids"], "properties": {"ids": _ids()}}},
+    {"name": "pass", "description": "Give back letters the platform routed to this session that aren't yours: the next "
+                                    "session gets them. Refused for a letter routed to anyone else.",
+     "inputSchema": {"type": "object", "required": ["ids"], "properties": {"ids": _ids()}}},
     {"name": "done", "description": "Handled: close the letters.",
      "inputSchema": {"type": "object", "required": ["ids"], "properties": {
          "ids": _ids(), "note": _str("how they were handled (optional)")}}},
@@ -329,6 +332,8 @@ def call(project: str | None, why: str, name: str, args: dict, client: "Client |
                           "--text", str(args["text"]), *extra)
     if name == "ack":
         return hubbus_cli(project, "ack", *map(str, args["ids"]))
+    if name == "pass":
+        return hubbus_cli(project, "pass", *map(str, args["ids"]))
     if name == "done":
         return hubbus_cli(project, "done", *map(str, args["ids"]), *(["--note", str(args["note"])] if args.get("note") else []))
     if name == "ask_owner":

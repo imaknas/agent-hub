@@ -67,7 +67,7 @@ owner (you; not commands for project sessions):
   brunna owner list | done/drop/already-done <key> | answer <question id> "answer"
                         = bin/owner.py: the built-in owner side ({settings} owner_side: builtin; with an assistant, list only)
 for project sessions (these are what the rules files name; the permission rules allow only these, not the admin commands above):
-  brunna send | inbox | show | ack | done | thread | open-questions …   = the project mailbox (bin/hubbus subcommands of the
+  brunna send | inbox | show | ack | pass | done | thread | open-questions …   = the project mailbox (bin/hubbus subcommands of the
                         same name)
   brunna merge-branch …    = bin/merge-branch (the merge gate for parallel sessions)
   brunna test [--tier T] [--when M] [--force] [--rev R | --index]
@@ -1657,7 +1657,7 @@ def passthrough(script: str):
 
 # subcommands for project sessions (any coding agent): the same list as policy.platform_cli() (the permission rules
 # allow only these)
-SESSION_COMMANDS = {**{c: ("hubbus", c) for c in ("send", "inbox", "show", "ack", "done", "thread", "open-questions")},
+SESSION_COMMANDS = {**{c: ("hubbus", c) for c in ("send", "inbox", "show", "ack", "pass", "done", "thread", "open-questions")},
                     "merge-branch": ("merge-branch", None), "test": ("test-runner.py", None),
                     "cap-run": ("hub-run", None),
                     "complete": ("hub-run", "--complete")}

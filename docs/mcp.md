@@ -9,11 +9,12 @@ that agent opens in a project folder can:
 | `show` / `thread` | Read one letter, or a whole thread |
 | `send` | Send a letter to another project, or reply (`reply_to`) |
 | `ack` | Claim: will handle it, but not now |
+| `pass` | Give back a letter routed to this session that isn't yours: the next session gets it |
 | `done` | Close (a note may be attached) |
 | `ask_owner` | Ask the owner something they have to decide |
 | `note` | Add an entry to this project's memory note for today |
 
-It is the same implementation as the command line `brunna inbox|show|thread|send|ack|done` (`bin/hubbus`). On
+It is the same implementation as the command line `brunna inbox|show|thread|send|ack|pass|done` (`bin/hubbus`). On
 `initialize` the server puts the platform's rules and the number of letters not yet closed into `instructions`: the
 rules reach the agent without changing any file in the project.
 

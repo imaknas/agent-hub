@@ -61,7 +61,7 @@ class Server(unittest.TestCase):
         self.assertEqual(r.returncode, 0, r.stderr)
         return r.stdout
 
-    PROJECT_TOOLS = {"inbox", "show", "thread", "send", "ack", "done", "ask_owner", "note"}
+    PROJECT_TOOLS = {"inbox", "show", "thread", "send", "ack", "pass", "done", "ask_owner", "note"}
 
     def session(self, calls, cwd=None, env=None, tools=None, caps=None):
         """initialize + a series of tools/call; returns (initialize's result, [(isError, text) per call])."""

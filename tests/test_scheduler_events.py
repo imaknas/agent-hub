@@ -277,6 +277,7 @@ class RegistryTrigger(unittest.TestCase):
                 ({"events": ["record"]}, {}, "mailbox work"),
                 ({"events": ["message.delivered"]}, {}, "mailbox work"),
                 ({"events": ["message.routed"]}, {}, "mailbox work"),
+                ({"events": ["message.passed"]}, {}, "mailbox work"),
                 ({"events": ["message.woken"]}, {}, "mailbox work"),
                 ({"events": ["message.done"]}, {}, "mailbox work"),
                 ({"events": ["merge.done"]}, {"kind": "agent"}, "must declare allow"),

@@ -210,7 +210,8 @@ def policy(name: str, doc: dict, index: dict) -> dict:
 # SESSION_COMMANDS): permissions let only these subcommands through, not agenthub's admin commands (config apply,
 # onboard…)
 MAIL_SUBCOMMANDS = ("send", "inbox", "show", "ack", "done", "thread", "open-questions")
-SESSION_SUBCOMMANDS = (*MAIL_SUBCOMMANDS, "merge-branch", "test", "cap-run", "complete")
+# pass: a session's word, never a mailbox agent's (not in MAIL_SUBCOMMANDS: mail_only leaves it out)
+SESSION_SUBCOMMANDS = (*MAIL_SUBCOMMANDS, "pass", "merge-branch", "test", "cap-run", "complete")
 
 
 def platform_cli(mail_only: bool = False) -> list[str]:

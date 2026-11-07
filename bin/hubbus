@@ -24,6 +24,7 @@ Event types (to add one, have a reader first):
   message.routed     ref = the letter's id; one session holds this request/question (payload: session, by), or a
                      route ended (session null, ended). Each row has its own id, the latest by seq is the state
                      (docs/design/mailbox-session-first.md)
+  message.passed     ref = the letter's id; the session it was routed to says it isn't theirs (payload: session)
   message.done       ref = the letter's id; the receiving project has handled it (payload: note)
   job.failed         a scheduled job failed (payload: job, exit, detail; to_project = the job's project for registry
                      jobs)
@@ -67,6 +68,7 @@ Usage (in a project directory; the sender defaults to the current directory's pr
                                       question is then held for it)
   hubbus show <id>
   hubbus ack <id>...                  record delivered
+  hubbus pass <id>...                 this letter was routed to this session and isn't its: the next session gets it
   hubbus done <id>... [--note "…"]    handled; for handoffs from the personal assistant, the bridge reports back to
                                       the personal assistant to close them
 For hooks / the schedule / other scripts:
@@ -447,7 +449,7 @@ def project_of(cwd: pathlib.Path) -> str | None:
 # subcommands that change the bus: an agent in a platform-sends-for-it job (propose) may never run them (see
 # platform_mails())
 RELAYS = {"bridge", "dispatch", "reconcile-questions"}
-WRITES = {"send", "done", "ack", "publish", "record-publish", "bridge", "dispatch", "reconcile-questions"}
+WRITES = {"send", "done", "ack", "pass", "publish", "record-publish", "bridge", "dispatch", "reconcile-questions"}
 PLATFORM_MAILS_ENV = "HUB_MAIL_BY_PLATFORM"   # set by bin/propose_apply.py for the agent it starts
 # what it looks like when it's really started (this hub's absolute path + the mailbox subcommand); matching only the
 # name would also count commands that mention it in quotes (e.g. a commit message)
@@ -1099,6 +1101,12 @@ def own_letter(r, session) -> bool:
     return bool(session) and payload(r).get("from_session") == session
 
 
+def passed_by(c, mid, session) -> bool:
+    """This session said the letter isn't its: it isn't told it again, and doesn't hold it again."""
+    return bool(session) and c.execute("SELECT 1 FROM events WHERE type='message.passed' AND ref=? AND"
+                                       " json_extract(payload,'$.session')=? LIMIT 1", (mid, session)).fetchone() is not None
+
+
 def hook_shows(c, r, session, live) -> bool:
     """Whether a hook shows this letter in full to this session: a notice while nobody has seen it; a request or question
     when it is open and not taken, this session hasn't been told, and no route points at another session. A lease
@@ -1109,7 +1117,7 @@ def hook_shows(c, r, session, live) -> bool:
     if os.environ.get("HUBBUS_LEASE"):
         return not r["delivered"] and not letter_state(c, r, live).taken and c.execute(
             "SELECT 1 FROM events WHERE type='message.routed' AND ref=? LIMIT 1", (r["id"],)).fetchone() is None
-    if own_letter(r, session) or told_at(c, r["id"], session):
+    if own_letter(r, session) or told_at(c, r["id"], session) or passed_by(c, r["id"], session):
         return False
     st = letter_state(c, r, live)
     return not st.taken and (not st.held or st.holder == session)
@@ -1141,7 +1149,8 @@ def untold(c, rows, session, live) -> list:
         if not actionable(r) or not session:
             if not r["delivered"]:
                 out.append(r)
-        elif not own_letter(r, session) and not told_at(c, r["id"], session) and not letter_state(c, r, live).taken:
+        elif not own_letter(r, session) and not told_at(c, r["id"], session) and not passed_by(c, r["id"], session) \
+                and not letter_state(c, r, live).taken:
             out.append(r)
     return out
 
@@ -2198,6 +2207,8 @@ def run_refusal(c, a, letters, here, live) -> str | None:
             if taken_by_another(c, mine[i], live, run_point()):
                 return _("hubbus: {id} has been taken by another session: leave it", id=i)
         return None
+    if a.cmd == "pass":   # a fork inherits its letter too: a pass says a session has been asked, and no run has
+        return _("hubbus: this run can't pass a letter: only the session it was routed to can")
     if a.cmd != "send":
         return None if a.cmd == "inbox" else _("hubbus: a confined run can't use {cmd}", cmd=a.cmd)
     to = canon(a.to)
@@ -2249,7 +2260,7 @@ def confined_refusal(a, here) -> str | None:
                  type=a.type)
     if a.cmd in ("inbox", "open-questions") and getattr(a, "project", None) and now_named(a.project) != here:
         return _("hubbus: a confined run reads only its own project's mailbox")
-    if a.cmd in ("publish", "record-publish", "bridge", "dispatch", "reconcile-questions"):
+    if a.cmd in ("publish", "record-publish", "bridge", "dispatch", "reconcile-questions", "pass"):
         return _("hubbus: a confined run can't use {cmd}", cmd=a.cmd)
     return None
 
@@ -2730,7 +2741,7 @@ def take_file(c, proj: str, ws, rel: str, name: str, live) -> bool:
         if raw is None:
             return False
         entry = json.loads(raw)
-        if isinstance(entry, dict) and entry.get("op") == "told":
+        if isinstance(entry, dict) and entry.get("op") in ("told", "pass"):
             live.load()
         c.execute("BEGIN IMMEDIATE")
         try:
@@ -2776,7 +2787,7 @@ def _strings(entry: dict, keys) -> None:
 
 
 def take(c, proj: str, entry, live=None) -> None:
-    """One outbox entry into the bus (inside the caller's transaction): send, ack, done, told, publish or presence, as
+    """One outbox entry into the bus (inside the caller's transaction): send, ack, pass, done, told, publish or presence, as
     proj. live: looked up by the caller, before the write lock."""
     if not isinstance(entry, dict) or entry.get("v") != 1:
         refuse(_("hubbus: not an outbox entry (an object with v 1)"))
@@ -2807,6 +2818,16 @@ def take(c, proj: str, entry, live=None) -> None:
             else:
                 publish(c, f"{i}:done", "message.done", proj, proj, i,
                         {"note": entry.get("note") or _("handled"), "session": session})
+    elif op == "pass":
+        ids = entry.get("ids")
+        if not isinstance(ids, list) or not 0 < len(ids) <= 50 or not all(isinstance(i, str) for i in ids):
+            refuse(_("hubbus: ids must be a list of 1 to 50 letter ids"))
+        live = live or Live(c=c)
+        for i in ids:
+            r = get_message(c, i)
+            if r is None or r["to_project"] != proj:
+                refuse(_("hubbus: {id} is not a letter to {project}", id=i, project=proj))
+            pass_letter(c, r, session, live)
     elif op == "told":
         # a session's `brunna inbox`: told only for that session (one the hooks saw in this project), judged against the
         # bus now, since the view it read can be a minute old. Requests and questions only: a notice's or a record's flag
@@ -2861,7 +2882,7 @@ def outbox_refused(c, proj: str, name: str, why: str) -> None:
 
 VIEW_SQL = """
 SELECT * FROM events WHERE (type IN ('message','record') AND (to_project=:p OR source=:p))
-   OR (type IN ('message.delivered','message.routed','message.done') AND ref IN
+   OR (type IN ('message.delivered','message.routed','message.passed','message.done') AND ref IN
        (SELECT id FROM events WHERE type IN ('message','record') AND (to_project=:p OR source=:p)))
 ORDER BY seq"""
 
@@ -2981,7 +3002,7 @@ def prune(c) -> None:
         # only delete this letter and what happened to it; letters replying to it (ref also points at it) have their
         # own lifecycle
         c.execute("DELETE FROM events WHERE id=? OR (ref=? AND type IN ('message.delivered', 'message.routed',"
-                  " 'message.woken', 'message.done'))", (mid, mid))
+                  " 'message.passed', 'message.woken', 'message.done'))", (mid, mid))
     c.execute("DELETE FROM events WHERE type='job.failed' AND ts < ? AND seq <= ?", (cutoff, upto))
     c.execute("DELETE FROM presence WHERE session LIKE 'mcp:%' AND seen < ?",   # one row per MCP server process
               (iso(now() - datetime.timedelta(hours=MCP_PRUNE_H)),))
@@ -3258,7 +3279,7 @@ def cmd_status(as_json: bool) -> None:
 
 # ---------- the mail commands (the bus, or a sandboxed project's outbox and view) ----------
 
-MAIL_COMMANDS = ("send", "inbox", "show", "thread", "ack", "done", "open-questions", "publish")
+MAIL_COMMANDS = ("send", "inbox", "show", "thread", "ack", "pass", "done", "open-questions", "publish")
 
 
 def mail_box(a, here) -> str | None:
@@ -3348,6 +3369,27 @@ def send_letter(c, a, sender: str, session, here, boxed: bool = False, mid: str 
     return mid
 
 
+def pass_refusal(c, r, session, live) -> str | None:
+    """Why this session can't pass this letter. Only the session it is routed to, while the route holds: a letter nobody
+    holds has nothing to give back, and someone else's ack ends the matter. A sandboxed session judges this against its view
+    first, and the platform again when the file is taken in, by the session the hooks saw in that project."""
+    if not actionable(r):
+        return _("hubbus: {id} is not a request or question: there is nothing to pass", id=r["id"])
+    if not session:
+        return _("hubbus: {id}: pass needs a session, and this command isn't in one", id=r["id"])
+    st = letter_state(c, r, live)
+    return None if st.held and st.holder == session else _("hubbus: {id} is not routed to this session", id=r["id"])
+
+
+def pass_letter(c, r, session, live) -> None:
+    """This session gives the letter back (inside the caller's transaction): its own event, and the route ends with it, so the next
+    tick goes on to the next session and this one's hooks don't show it again."""
+    if (why := pass_refusal(c, r, session, live)):
+        refuse(why)
+    publish(c, f"{r['id']}:passed:{session}", "message.passed", r["to_project"], r["to_project"], r["id"], {"session": session})
+    routed(c, r, None, None, ended="passed")
+
+
 def not_the_answer(c, a) -> bool:
     """A confined run's question to the owner on a letter that carries a handoff: it goes as a question of its own, no reply
     to that letter. As a reply it would carry the handoff, and the assistant would say the question as the project's answer
@@ -3360,7 +3402,7 @@ def not_the_answer(c, a) -> bool:
 
 
 def mail_command(a) -> None:
-    """send / inbox / show / thread / ack / done / open-questions / publish. For a sandboxed project the reads come
+    """send / inbox / show / thread / ack / pass / done / open-questions / publish. For a sandboxed project the reads come
     from its view and the writes go into its outbox, after the same checks against the view that the platform makes
     against the bus when it takes them in."""
     import runtime_ports  # the sending session: ask the runtime (currently an environment variable Claude Code sets)
@@ -3372,6 +3414,8 @@ def mail_command(a) -> None:
     letters = run_letters()
     if a.cmd == "ack" and letters is not None:
         refuse(_("hubbus: this run can't ack a letter: an ack says a session has it"))
+    if a.cmd == "pass" and letters is None and platform_run():
+        refuse(_("hubbus: this run can't pass a letter: only the session it was routed to can"))
     if a.cmd == "ack" and platform_run():
         # an ack says a session has it for as long as it lives; a platform run's says nothing
         print(_("(a platform run's ack is not recorded)"), file=sys.stderr)
@@ -3453,17 +3497,30 @@ def mail_command(a) -> None:
         else:
             for q in rows:
                 print(f"[{q['id']}] {q['project']} {q['ts'][:16]} {q['text'][:100]}")
-    elif box:   # ack, done: only letters to this project
+    elif box:   # ack, pass, done: only letters to this project
         for i in a.ids:
             r = get_event(c, i) if a.cmd == "done" else get_message(c, i)
             if r is None or r["to_project"] != box:
                 refuse(_("hubbus: {id} is not a letter to {project}", id=i, project=box))
+            if a.cmd == "pass" and (why := pass_refusal(c, r, session, Live(me=session, c=c))):
+                refuse(why)
         outbox_put(box, {"op": a.cmd, "ids": a.ids, "session": session,
                          **({"note": a.note} if a.cmd == "done" and a.note else {})})
         queued(box)
         if a.cmd == "done":
             for i in a.ids:
                 print(f"{i} done")
+    elif a.cmd == "pass":
+        live = Live(me=session, c=c)
+        live.load()   # before the write lock
+        c.execute("BEGIN IMMEDIATE")
+        try:
+            for i in a.ids:
+                pass_letter(c, must_message(c, i), session, live)
+        except BaseException:
+            c.execute("ROLLBACK")
+            raise
+        c.execute("COMMIT")
     elif a.cmd == "ack":
         c.execute("BEGIN IMMEDIATE")
         # ack = "I've taken it on": recorded separately from the hook's delivery (they used to share an id, so after a
@@ -3516,6 +3573,7 @@ def cli() -> None:
     sub.add_parser("inbox").add_argument("--project")
     sub.add_parser("show").add_argument("id")
     sub.add_parser("ack").add_argument("ids", nargs="+")
+    sub.add_parser("pass").add_argument("ids", nargs="+")
     d = sub.add_parser("done")
     d.add_argument("ids", nargs="+")
     d.add_argument("--note")
