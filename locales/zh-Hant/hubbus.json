@@ -185,5 +185,6 @@
  "hubbus: this run sends only replies to its letters and questions to {alias}": "hubbus:這個執行只能回它的信、問 {alias}",
  "hubbus: this run replies only to its letter's sender, or asks {alias}": "hubbus:這個執行只能回給信的寄件人,或問 {alias}",
  "hubbus: every letter of this run has been taken by another session: nothing to ask {alias}": "hubbus:這個執行的信都已經有別的 session 接手了,不必問 {alias}",
- "hubbus: --question closes a question, it is not a reply to a letter (no --reply-to)": "hubbus:--question 是結掉問題,不是回信(不能加 --reply-to)"
+ "hubbus: --question closes a question, it is not a reply to a letter (no --reply-to)": "hubbus:--question 是結掉問題,不是回信(不能加 --reply-to)",
+ "{project}: dispatch stopped on this project: {e!r}": "{project}:分派在這個專案中斷:{e!r}"
 }

@@ -2339,7 +2339,7 @@ def start_handler(proj, ws, rows) -> str | None:
                              capture_output=True, text=True,
                              env={**chain_env(rows), "AGENT_JOB_POINT": "mailbox-escalation", "MAILBOX_PROJECT": proj,
                                   LETTERS_ENV: letters})
-    except OSError as e:
+    except Exception as e:   # a template that can't be rendered too: a start that failed, for this project alone
         return repr(e)
     return None if res.returncode == 0 else (res.stderr or res.stdout).strip()[-200:] or f"exit {res.returncode}"
 
@@ -2509,9 +2509,11 @@ def dispatch(c, rt=None) -> int:
     hold_cut = iso(now() - datetime.timedelta(minutes=MCP_HOLD_MAX_MIN))
     run_cut = iso(now() - datetime.timedelta(days=PLATFORM_RUN_DAYS))
     waiting, sizes = 0, {}
-    for proj, ws in projects().items():
+
+    def one_project(proj, ws) -> None:
+        nonlocal waiting, live, alive
         if not ws.is_dir():
-            continue
+            return
         delegate, mcp = [], None   # mcp: the project's MCP sessions, looked up once, only when a letter needs it
         for r in addressed_to(c, proj):
             p = payload(r)
@@ -2599,7 +2601,28 @@ def dispatch(c, rt=None) -> int:
         # them, m10261706)
         if delegate:
             run_handler(c, proj, ws, delegate)
+
+    for proj, ws in projects().items():
+        try:
+            one_project(proj, ws)
+            log_once(f"dispatch-{proj}", "")
+        except Exception as e:   # the later projects' mail doesn't wait on this one
+            waiting += 1
+            dispatch_failed(c, proj, e)
     return waiting
+
+
+def dispatch_failed(c, proj, e) -> None:
+    """Dispatch broke on this project. Logged while it lasts; on the status page once a day (the type only: what an exception
+    says can quote a letter)."""
+    if c.in_transaction:
+        c.execute("ROLLBACK")
+    log_once(f"dispatch-{proj}", _("{project}: dispatch stopped on this project: {e!r}", project=proj, e=e))
+    try:
+        publish(c, f"dispatch-failed:{proj}:{now():%Y%m%d}", "job.failed", "hubbus-dispatch", None, None,
+                {"job": f"mailbox-dispatch:{proj}", "detail": type(e).__name__})
+    except sqlite3.Error as err:
+        log_once(f"dispatch-{proj}-bus", _("{project}: dispatch stopped on this project: {e!r}", project=proj, e=err))
 
 
 # ---------- sandboxed projects' outboxes and views (docs/design/bus-sender.md) ----------

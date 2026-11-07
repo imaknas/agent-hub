@@ -206,15 +206,50 @@ class Detach(unittest.TestCase):
         self.assertIn("could not be started", why or "")
 
 
-class CharacterizeDispatchErrors(tmt.Base):
-    def test_a_prompt_that_cannot_be_rendered_stops_dispatch_for_later_projects(self):
+class DispatchPerProject(tmt.Base):
+    def test_a_prompt_that_cannot_be_rendered_is_a_failed_start_for_that_project_alone(self):
         self.real_handler()
         self.send("m1", "proj", "request")
         self.send("m2", self.hub, "request")
-        with mock.patch.object(self.m.prompts, "render", side_effect=ValueError("bad template")), \
-                self.assertRaises(ValueError):
+        real = self.m.prompts.render
+        self.assertTrue(callable(real))
+
+        def render(*a, **k):
+            if "proj" in str(k.get("notes")):
+                raise ValueError("bad template")
+            return "prompt"
+        self.m.notes_of = lambda p: p
+        with mock.patch.object(self.m.prompts, "render", render):
             self.dispatch()
-        self.assertEqual(self.started, [], "nothing started, the later project never reached")
+        self.assertEqual([self.letters_of(s) for s in self.started], [["m2"]], "the later project went on")
+        p = json.loads(self.rows("type='job.failed' AND ref='m1'")[0]["payload"])
+        self.assertEqual(p["job"], "mailbox-start:proj")
+        self.assertIn("bad template", p["detail"])
+        self.assertEqual(self.vias("m1"), [], "nothing spent")
+
+    def test_anything_else_a_project_breaks_on_stays_with_that_project(self):
+        self.send("m1", "proj", "request")
+        self.send("m2", self.hub, "request")
+        real = self.m.addressed_to
+
+        def addressed(c, proj):
+            if proj == "proj":
+                c.execute("BEGIN IMMEDIATE")   # broke inside a transaction, as run_handler or claim would
+                raise KeyError("boom")
+            return real(c, proj)
+        self.m.addressed_to = addressed
+        self.assertGreaterEqual(self.dispatch(), 1)
+        self.assertEqual(self.handled, [(self.hub, ["m2"])])
+        self.assertFalse(self.c.in_transaction)
+        self.assertIn("boom", "".join(self.logged))
+        self.dispatch()
+        self.assertEqual(sum("boom" in x for x in self.logged), 1, "logged once while it lasts")
+        [f] = self.rows("type='job.failed'")
+        p = json.loads(f["payload"])
+        self.assertEqual((p["job"], p["detail"]), ("mailbox-dispatch:proj", "KeyError"), "no text on the bus")
+        self.m.addressed_to = real
+        self.dispatch()
+        self.assertEqual(self.handled[-1][0], "proj", "it goes on once it can")
 
 
 class CharacterizeOwnerQuestion(tmt.Base):
