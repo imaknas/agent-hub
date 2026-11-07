@@ -256,7 +256,7 @@ class ProbeThroughTheRealPath(tbs.Fixture):
         fake.mkdir()
         seen = self.tmp / "seen.json"
         (fake / "claude").write_text(f"#!{sys.executable}\nimport json, os\n"
-                                     f"json.dump({{'var': os.environ.get({VAR!r}), 'cwd': os.getcwd()}}, open({str(seen)!r}, 'w'))\n"
+                                     f"import sys; json.dump({{'var': os.environ.get({VAR!r}), 'cwd': os.getcwd(), 'argv': sys.argv[1:]}}, open({str(seen)!r}, 'w'))\n"
                                      "print(json.dumps({'type': 'result', 'result': 'ok', 'is_error': False, 'session_id': 's', 'num_turns': 1}))\n")
         (fake / "claude").chmod(0o755)
         repo = self.tmp / "repo"
@@ -267,6 +267,20 @@ class ProbeThroughTheRealPath(tbs.Fixture):
         self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
         got = json.loads(seen.read_text())
         self.assertEqual((got["var"], got["cwd"]), ("1", str(repo)))
+        # both of the probe's runs, the same flags, with the variable and without it
+        code = ("import importlib.machinery as im, importlib.util as iu, sys\n"
+                f"le = im.SourceFileLoader('uc', {str(BIN / 'update-claude.py')!r})\n"
+                "m = iu.module_from_spec(iu.spec_from_loader('uc', le)); le.exec_module(m)\n"
+                f"import pathlib; print(repr(m.agent_run(pathlib.Path({str(repo)!r}), sys.argv[1] == 'guarded')))\n")
+        seen_argv = {}
+        for how, want in (("guarded", "1"), ("bare", None)):
+            seen.unlink()
+            r = subprocess.run([sys.executable, "-c", code, how], cwd=repo, capture_output=True, text=True, timeout=60, env=env)
+            self.assertEqual(r.stdout.strip(), "None", r.stdout + r.stderr)
+            got = json.loads(seen.read_text())
+            self.assertEqual((got["var"], got["cwd"]), (want, str(repo)), how)
+            seen_argv[how] = got["argv"]
+        self.assertEqual(seen_argv["guarded"], seen_argv["bare"], "the same flags")
 
 
 class ARuntimeThatDoesntSay(unittest.TestCase):
