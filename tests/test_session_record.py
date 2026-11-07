@@ -152,8 +152,8 @@ class CharacterizeWorktreeMail(tbs.WorktreeFixture):
         self.assertEqual(self.told("for the box"), [])
 
 
-class CharacterizeDetach(unittest.TestCase):
-    """run-agent-job.sh when its detach step can't run."""
+class Detach(unittest.TestCase):
+    """run-agent-job.sh when its detach step can't run: a failed start, which start_handler sees as one."""
 
     def setUp(self):
         self.tmp = pathlib.Path(tempfile.mkdtemp()).resolve()
@@ -175,10 +175,35 @@ class CharacterizeDetach(unittest.TestCase):
         return subprocess.run([str(self.hub / "bin" / "run-agent-job.sh"), "job", str(self.tmp)], env=self.env,
                               capture_output=True, text=True, timeout=60, stdin=subprocess.DEVNULL)
 
-    def test_a_failing_python_reads_as_started(self):
+    def test_a_failing_python_is_a_failed_start(self):
         r = self.run_job()
-        self.assertEqual(r.returncode, 0)
-        self.assertIn("started in the background", r.stdout)
+        self.assertEqual(r.returncode, 1)
+        self.assertNotIn("started in the background", r.stdout)
+        self.assertIn("could not be started", r.stderr)
+
+    def test_a_detach_that_fails_after_its_fork_is_a_failed_start(self):
+        """The log can't be opened: its folder is a file by then. The first process would have exited 0 long before."""
+        py = self.hub / "bin" / "py"
+        py.unlink()
+        py.symlink_to(BIN / "py")
+        self.env["AGENT_HUB_PYTHON"] = sys.executable
+        for f in ("i18n.py", "hubconf.py", "names.py"):
+            (self.hub / "bin" / f).symlink_to(BIN / f)
+        out = self.hub / ".state" / "agent-jobs" / "job"
+        out.mkdir(parents=True)
+        (out / "runner.log").mkdir()   # a folder: opening it for writing fails
+        r = self.run_job()
+        self.assertEqual(r.returncode, 1, r.stdout + r.stderr)
+        self.assertNotIn("started in the background", r.stdout)
+        self.assertEqual(json.loads((out / "status.json").read_text())["state"], "failed")
+
+    def test_start_handler_takes_it_as_failed(self):
+        m = tcsr.tmd.load_hubbus()
+        m.HUB = self.hub
+        m.AGENT_JOBS = self.tmp / "jobs"
+        with mock.patch.object(m.prompts, "render", lambda *a, **k: "prompt"), mock.patch.dict(os.environ, self.env):
+            why = m.start_handler("job", self.tmp, [{"id": "m1", "payload": "{}"}])
+        self.assertIn("could not be started", why or "")
 
 
 class CharacterizeDispatchErrors(tmt.Base):

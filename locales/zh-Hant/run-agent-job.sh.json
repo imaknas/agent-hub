@@ -6,5 +6,7 @@
  "run-agent-job: {name} started in the background, the result goes to {status}": "run-agent-job: {name} 已在背景開始,結果見 {status}",
  "claude printed no JSON": "claude 沒有輸出 JSON",
  "job: {name} · workdir: {cwd} · session: {session} · {turns} {turns:turn|turns} · {minutes} min": "job: {name} · 工作目錄: {cwd} · session: {session} · {turns} turns · {minutes} 分鐘",
- "(to continue the discussion: on the hub machine, cd {cwd} && claude --resume {session})": "(接著討論:在 hub 主機上 cd {cwd} && claude --resume {session})"
+ "(to continue the discussion: on the hub machine, cd {cwd} && claude --resume {session})": "(接著討論:在 hub 主機上 cd {cwd} && claude --resume {session})",
+ "the run could not be started in the background": "無法在背景啟動",
+ "run-agent-job: {name}: {error}": "run-agent-job:{name}:{error}"
 }

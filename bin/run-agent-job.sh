@@ -71,21 +71,35 @@ fi
 
 if [ -z "${RUN_AGENT_JOB_FOREGROUND:-}" ]; then
   # detach completely (double fork + setsid): when a launchd job ends, launchd kills what's left in the same process
-  # group, and a plain nohup ... & gets killed along with the scheduler's tick (hit on 2026-10-14)
-  "$HUB/bin/py" - "$OUT/runner.log" "$0" "$@" <<'PY'
+  # group, and a plain nohup ... & gets killed along with the scheduler's tick (hit on 2026-10-14). This step's exit code is
+  # whether the run started, up to its exec: the pipe closes at the exec (not inherited), or gets a byte if it can't happen
+  if ! "$HUB/bin/py" - "$OUT/runner.log" "$0" "$@" <<'PY'
 import os, sys
 log, *argv = sys.argv[1:]
+r, w = os.pipe()
 if os.fork():
-    sys.exit(0)
-os.setsid()
-if os.fork():
-    os._exit(0)
-fd = os.open(log, os.O_WRONLY | os.O_CREAT | os.O_APPEND, 0o644)
-os.dup2(fd, 1); os.dup2(fd, 2)
-os.dup2(os.open(os.devnull, os.O_RDONLY), 0)
-os.environ["RUN_AGENT_JOB_FOREGROUND"] = "1"
-os.execv("/bin/bash", ["bash", *argv])
+    os.close(w)
+    sys.exit(1 if os.read(r, 1) else 0)
+try:
+    os.setsid()
+    if os.fork():
+        os._exit(0)
+    fd = os.open(log, os.O_WRONLY | os.O_CREAT | os.O_APPEND, 0o644)
+    os.dup2(fd, 1); os.dup2(fd, 2)
+    os.dup2(os.open(os.devnull, os.O_RDONLY), 0)
+    os.environ["RUN_AGENT_JOB_FOREGROUND"] = "1"
+    os.execv("/bin/bash", ["bash", *argv])
+except OSError as e:
+    print(f"run-agent-job: {e!r}", file=sys.stderr)
+    os.write(w, b"x")
+    os._exit(1)
 PY
+  then
+    err="$(hub_msg "the run could not be started in the background")"
+    status failed "error=$err" "started_at=$(date -Iseconds)" 2>/dev/null
+    hub_say "run-agent-job: {name}: {error}" name="$NAME" error="$err" >&2
+    exit 1
+  fi
   hub_say "run-agent-job: {name} started in the background, the result goes to {status}" name="$NAME" status="$OUT/status.json"
   exit 0
 fi
