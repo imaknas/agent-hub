@@ -606,6 +606,59 @@ class ByTheFileNotTheSpelling(Fixture):
         self.assertIsNone(runtime_claude.parse_event("prompt", json.dumps({"session_id": "s"})), "not this process's own folder")
 
 
+class OneAnswer(Fixture):
+    """Which project a session is in: mail and the session's record ask one function (hubbus.project_of), so a session that gets a
+    project's letters can be counted and woken for them, and nothing else can."""
+
+    def answers(self, folder):
+        he = load_hub_event()
+        with mock.patch.object(hubconf, "projects", lambda: self.docs):
+            return tbs.load_hubbus().project_of(pathlib.Path(folder)), he._project_of_folder(str(folder))
+
+    def outside(self, project):
+        """A real linked worktree beside its project's folder, under workspace_root."""
+        self.tree(project)
+        out = self.tmp / "ws" / f"{project}-beside"
+        self.git("-C", self.ws[project], "worktree", "add", "-q", out, "-b", f"{project}-beside")
+        return out
+
+    def test_a_worktree_beside_an_open_project_counts_as_it_for_both(self):
+        self.assertEqual(self.answers(self.outside("open")), ("open", "open"))
+
+    def test_through_the_real_hook_it_goes_on_record_under_that_project(self):
+        out = self.outside("open")
+        r = self.run_hook("start", out, "SessionStart")
+        self.assertEqual(r.returncode, 0, r.stderr)
+        self.assertEqual(json.loads(self.record().read_text())["project"], "open")
+
+    def test_a_worktree_beside_a_sandboxed_project_counts_for_neither(self):
+        out = self.outside("box")
+        with mock.patch.object(hubconf, "projects", lambda: self.docs):
+            self.assertTrue(gitdirs.confirmed(gitdirs.dirs(out)), "it does confirm itself: that proves nothing")
+        self.assertEqual(self.answers(out), (None, None))
+
+    def test_a_planted_folder_claiming_a_sandboxed_repo_counts_for_neither(self):
+        box = self.ws["box"]
+        (box / ".git" / "worktrees" / "x").mkdir(parents=True)
+        folder = self.tmp / "planted"
+        folder.mkdir()
+        (box / ".git" / "worktrees" / "x" / "commondir").write_text("../..\n")
+        (box / ".git" / "worktrees" / "x" / "gitdir").write_text(str(folder / ".git") + "\n")
+        (folder / ".git").write_text(f"gitdir: {box}/.git/worktrees/x\n")
+        self.assertEqual(self.answers(folder), (None, None))
+
+    def test_a_folder_of_a_sandboxed_project_never_counts_as_the_repo_it_claims(self):
+        sub = self.ws["box"] / "sub"
+        self.plant(sub)
+        self.assertEqual(self.answers(sub), ("box", "box"))
+
+    def test_the_main_checkout_and_a_worktree_inside_it_are_as_before(self):
+        wt = self.tree("open")
+        for folder in (self.ws["open"], wt):
+            self.assertEqual(self.answers(folder), ("open", "open"), folder)
+        self.assertEqual(self.answers(self.ws["box"]), ("box", "box"))
+
+
 class EachLineOfTheRule(Fixture):
     """What the rule's other lines hold, each of which an earlier check doesn't."""
 

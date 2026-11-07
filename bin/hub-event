@@ -139,16 +139,25 @@ def nudge(ev, ws):
         return mn.nudge_text(ws, ev.command if ev.event == "tool_used" else None)
 
 
+_HUBBUS = None   # one hook, one load: the record and the mail both ask it
+
+
+def _hubbus():
+    global _HUBBUS
+    if _HUBBUS is None:
+        _HUBBUS = _load("hubbus_mod", BIN / "hubbus")
+    return _HUBBUS
+
+
 def mail(ev, ws):
-    hubbus = _load("hubbus_mod", BIN / "hubbus")
     kind = {"session_start": "session-start", "prompt": "prompt", "tool_used": "post-tool"}[ev.event]
-    return hubbus.mail_text(kind, ev.session, ev.cwd, runtime=_RT_NAME)
+    return _hubbus().mail_text(kind, ev.session, ev.cwd, runtime=_RT_NAME)
 
 
 def mail_end(ev, ws):
     """The session ended: its recent hooks no longer say it runs (hubbus.Live), so what it held is free at once."""
     if not platform_run(os.environ):
-        _load("hubbus_mod", BIN / "hubbus").session_ended(ev.session)
+        _hubbus().session_ended(ev.session)
     return None
 
 
@@ -192,19 +201,14 @@ def _hub(ws) -> bool:
         return False
 
 
-def _project_name(ws) -> str | None:
-    """The project this folder is in: the one whose workspace holds it, or the hub's own, by its path."""
-    proj = project_git.project_at(ws)
-    return proj[0] if proj else hubconf.hub_project() if _hub(ws) else None
-
-
 def _project_of_folder(cwd) -> str | None:
-    """The project a hook's cwd is in: a sandboxed one's as the cwd names it, whatever that now resolves to."""
-    cage = project_git.sandbox_of(cwd)
-    if cage:
-        return cage[0]
-    ws = _workspace(cwd)
-    return _project_name(ws) if ws else None
+    """The project a hook's cwd is in, the one answer mail gets too (hubbus.project_of): a sandboxed one's as the cwd names it,
+    whatever that now resolves to, and a confirmed worktree outside its project's folder counts for a project that isn't
+    sandboxed. The hub's own folder is asked by the main checkout as well: a linked worktree's copy of this script has
+    that worktree as the hub."""
+    project = _hubbus().project_of(pathlib.Path(cwd))
+    ws = _workspace(cwd) if not project else None
+    return project or (hubconf.hub_project() if ws and _hub(ws) else None)
 
 
 def session_record(ev, ws):

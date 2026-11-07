@@ -23,6 +23,7 @@ import subprocess
 import sys
 import tempfile
 import time
+import types
 import unittest
 from unittest import mock
 
@@ -299,9 +300,8 @@ class HookFixture(SecretsDir):
         m.LOG = self.tmp / "hub-event.log"
         m._workspace = lambda cwd: self.tmp
         self.proj = ("proj", {"name": "proj"})
-        p = mock.patch.object(m.project_git, "project_at", lambda ws: self.proj)
-        p.start()
-        self.addCleanup(p.stop)
+        # the one answer for mail and the record (hubbus.project_of), as this test wants it
+        m._hubbus = lambda: types.SimpleNamespace(project_of=lambda cwd: self.proj[0] if self.proj else None)
         # only the handlers under test: no bus, no git
         keep = {"session_record", "wake_address_drop"}
         m.HANDLERS = {k: [(n, f) for n, f in v if n in keep] for k, v in m.HANDLERS.items()}

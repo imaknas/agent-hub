@@ -14,6 +14,7 @@ import subprocess
 import sys
 import tempfile
 import time
+import types
 import unittest
 from unittest import mock
 
@@ -504,11 +505,10 @@ class LastLabel(tcsr.SecretsDir):
         self.m.LOG = self.tmp / "hub-event.log"
         self.proj, self.private = ("proj", {"name": "proj"}), set()
         self.m._workspace = lambda cwd: self.tmp
-        for target, fn in ((self.m.project_git, "project_at"), (hubconf, "reflection_private")):
-            p = mock.patch.object(target, fn, {"project_at": lambda ws: self.proj,
-                                               "reflection_private": lambda: self.private}[fn])
-            p.start()
-            self.addCleanup(p.stop)
+        self.m._hubbus = lambda: types.SimpleNamespace(project_of=lambda cwd: self.proj[0] if self.proj else None)
+        p = mock.patch.object(hubconf, "reflection_private", lambda: self.private)
+        p.start()
+        self.addCleanup(p.stop)
 
     def keep(self):
         import runtime_claude
@@ -537,8 +537,8 @@ class LastLabel(tcsr.SecretsDir):
 
     def test_a_broken_lookup_doesnt_stop_the_waiter(self):
         import runtime_claude
-        with mock.patch.object(self.m.project_git, "project_at", side_effect=OSError("no")):
-            self.assertFalse(self.keep())
+        self.m._hubbus = lambda: types.SimpleNamespace(project_of=mock.Mock(side_effect=OSError("no")))
+        self.assertFalse(self.keep())
         self.assertFalse(self.m.keep_last(runtime_claude, "not json"))
         self.assertFalse(self.m.keep_last(object(), "{}"), "a runtime with no lifecycle")
 

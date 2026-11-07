@@ -414,7 +414,10 @@ def project_of(cwd: pathlib.Path) -> str | None:
     another project's repo would make its session that project's (its mail delivered, its presence recorded). A folder there
     can also be swapped for a link after the runtime took it as the session's, so cwd as named is asked first: a hook's input
     still names it. Outside any project (a temp folder its service can write) pointers count only as far as the repo they
-    name confirms them, and the name has to be a project's below."""
+    name confirms them, and the name has to be a project's below. A confirmed linked worktree outside its project's folder
+    is its project's only when that project isn't sandboxed: a sandboxed project writes its own repo's listing, so a folder
+    claiming it proves nothing, and it could make a session outside its sandbox count as its own, to be woken for its letters.
+    This is the one answer for mail and for a session's record (hub-event's session_record)."""
     paths = {}
     for name, p in projects().items():
         try:
@@ -435,6 +438,8 @@ def project_of(cwd: pathlib.Path) -> str | None:
     for cand in candidates:
         for p in (cand, *cand.parents):
             if p in paths:
+                if cand == main and main != found.top and outboxed(paths[p]):
+                    break
                 return paths[p]
     return None
 
