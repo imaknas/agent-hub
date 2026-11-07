@@ -23,7 +23,7 @@
     "metered_models": {"type": "boolean", "description": "the owner allows metered (pay-per-use) providers for those calls; a security field only the platform sets"},
     "layout_intent": {"type": "object", "description": "what the owner said about this project's layout when connecting it, for when projects-and-repos lands: split (a monorepo into its parts) or span (several repos as one project); docs/design/newcomer-path.md B6"},
     "commits": {"enum": ["conventional"], "description": "commit titles follow Conventional Commits, checked by the merge gate; absent = not checked"},
-    "mailbox": {"type": "object", "properties": {"escalate": {"type": "boolean"}}},
+    "mailbox": {"type": "object", "properties": {"escalate": {"type": "boolean"}, "wake": {"type": "boolean", "description": "false: a letter never wakes or is routed to this project's sessions (docs/design/mailbox-session-first.md). Owner-only: manifest.update can't change it. Default on"}}},
     "publishes": {"type": "array", "items": {"type": "object", "required": ["kind", "path"]}},
     "provides": {"type": "array", "items": {"type": "object", "required": ["contract", "v", "schema"]}},
     "consumes": {"type": "array", "items": {"type": "object", "required": ["contract", "v", "copy"]}},

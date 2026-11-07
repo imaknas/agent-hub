@@ -26,7 +26,7 @@ schema v1 (contracts/project.v1.md has the full description):
   commits: conventional      commit titles use Conventional Commits: merge-branch checks before merging
                             (bin/commit_title.py), and the rules file automatically carries
                             templates/rules/conventional-commits.md. Not set = no check
-  mailbox: {escalate: true}
+  mailbox: {escalate: true}   # and wake: false: a letter never wakes or is routed to this project's sessions (owner-only, PLATFORM_OWNED_NESTED)
   publishes: [{kind, path, contract, v}]
   provides:  [{contract, v, schema}]           schema relative to workspace
   services:  [{name, run, label?, keepalive?, throttle_s?, env?, cwd?, expose?}]
@@ -289,20 +289,28 @@ def validate_models(doc: dict) -> list[str]:
                 errs.append(_("models.{name} must be {{tier: fast|standard|strong}}", name=name))
     if "metered_models" in doc and not isinstance(doc["metered_models"], bool):
         errs.append(_("metered_models must be true or false"))
+    if isinstance(doc.get("mailbox"), dict) and "wake" in doc["mailbox"] and not isinstance(doc["mailbox"]["wake"], bool):
+        errs.append(_("mailbox.wake must be true or false"))
     return errs
 
 
 # paths too: a manifest.update setting paths.workspace to ~ would make the whole home folder its sandbox's to write
 # (round 6, 11-01); onboarding, renaming and recovery write paths through their own scripts, not through a letter
 PLATFORM_OWNED = ("type", "enforce", "network", "allow_write", "privacy", "metered_models", "paths")
+# and one key inside a field a project may otherwise change: mailbox.wake: false turns off every wake of its sessions (a woken
+# session keeps its permissions, so whether a letter may start a turn isn't the project's own letter to write)
+PLATFORM_OWNED_NESTED = (("mailbox", "wake"),)
 
 
 def platform_owned_changes(new: dict, cur: dict) -> list[str]:
     """Security fields manifest.update can't change: list them when they differ from the current registry entry."""
+    def nested(doc, top, key):
+        return doc[top].get(key) if isinstance(doc.get(top), dict) else None
+
+    changed = [k for k in PLATFORM_OWNED if new.get(k) != cur.get(k)]
+    changed += [f"{top}.{key}" for top, key in PLATFORM_OWNED_NESTED if nested(new, top, key) != nested(cur, top, key)]
     return [_("{key} is a security field that only brunna can change ({owner} confirms); this letter changes it", key=k,
-              owner=hubconf.owner_tag())
-            for k in PLATFORM_OWNED
-            if new.get(k) != cur.get(k)]
+              owner=hubconf.owner_tag()) for k in changed]
 
 
 def validate(doc, stem: str) -> list[str]:
