@@ -30,8 +30,15 @@ if "--auto" in args:
         print(_("Would remove worktree: {line}", line=line) if dry else _("Removed worktree: {line}", line=line))
     for line in res["skipped"]:
         print(_("Skipped: {line}", line=line))
-    for line in hubconf.prune_private_tmp(dry_run=dry):
+    left = hubconf.prune_private_tmp(dry_run=dry)
+    for line in left["removed"]:
         print(_("Would remove a run's leftovers: {line}", line=line) if dry else _("Removed a run's leftovers: {line}", line=line))
+    for line in left["cant_tell"]:
+        print(_("Kept a run's leftovers: {line}: can't find out whether a process is working in it", line=line))
+    for line in left["not_removable"]:
+        print(_("Kept a run's leftovers: {line}: something in it can't be removed", line=line))
+    if left["unreadable"]:
+        print(_("The private temp folder could not be read, nothing pruned there: {why}", why=left["unreadable"]))
     print(_("Would free {mb} MB in total (dry-run, nothing was touched)", mb=res['freed_mb']) if dry
           else _("Freed {mb} MB in total", mb=res['freed_mb']))
     sys.exit(0)

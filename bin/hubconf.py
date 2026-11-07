@@ -200,14 +200,24 @@ def private_tmp() -> pathlib.Path:
 PRIVATE_TMP_KEEP_DAYS = 7   # far over the longest run's time limit (the longest in contracts/llm-points.yaml is an hour)
 
 
-def prune_private_tmp(dry_run: bool = False, now: float | None = None) -> list[str]:
+def prune_private_tmp(dry_run: bool = False, now: float | None = None) -> dict:
     """Leftovers of runs that didn't get to clean up (killed, or kept by a failure): what's in private_tmp with nothing written for
     PRIVATE_TMP_KEEP_DAYS and no process working in it. A running job's folder fails one or the other: a run ends at its time limit,
-    and a silent one still has its agent in the folder. Returns the names; a link is removed, never followed."""
+    and a silent one still has its agent in the folder. A link is removed, never followed. Returns {removed, cant_tell (old, and who is
+    working where can't be found out: kept), not_removable (old, with a folder in it this user can't empty: kept whole, or it would go
+    in part and come back every night), unreadable (why the folder couldn't be listed, or None)}."""
     import shutil
     import time
+    out = {"removed": [], "cant_tell": [], "not_removable": [], "unreadable": None}
     top = _private_tmp_path()
     limit = (time.time() if now is None else now) - PRIVATE_TMP_KEEP_DAYS * 86400
+    try:
+        entries = sorted(top.iterdir())
+    except FileNotFoundError:
+        return out
+    except OSError as e:
+        out["unreadable"] = str(e)
+        return out
 
     def newest(p: pathlib.Path) -> float:
         best = p.lstat().st_mtime
@@ -217,20 +227,34 @@ def prune_private_tmp(dry_run: bool = False, now: float | None = None) -> list[s
                     best = max(best, os.lstat(os.path.join(root, name)).st_mtime)
         return best
 
-    gone = []
-    for p in sorted(top.iterdir()) if top.is_dir() else []:
+    def can_empty(p: pathlib.Path) -> bool:
+        if not p.is_dir() or p.is_symlink():
+            return True
+        return all(os.access(root, os.R_OK | os.W_OK | os.X_OK) for root, _dirs, _files in os.walk(p))
+
+    procs = None
+    for p in entries:
         try:
-            if newest(p) >= limit or cwd_users(p):
+            if newest(p) >= limit:
+                continue
+            if not can_empty(p):
+                out["not_removable"].append(p.name)
+                continue
+            procs = process_cwds() if procs is None else procs
+            if not procs:   # there is always this process: empty means it can't be found out, not that nobody is there
+                out["cant_tell"].append(p.name)
+                continue
+            if cwd_users(p, procs):
                 continue
             if not dry_run:
                 if p.is_dir() and not p.is_symlink():
                     shutil.rmtree(p)
                 else:
                     p.unlink()
-            gone.append(p.name)
+            out["removed"].append(p.name)
         except OSError:
-            continue   # the next night's
-    return gone
+            out["not_removable"].append(p.name)
+    return out
 
 
 COPY_PREFIX = "hub-propose-"   # with COPY_LEAF: where propose_apply makes its throwaway copy, and how a runtime knows one
@@ -243,9 +267,12 @@ def throwaway_copy(project: str) -> pathlib.Path:
     return pathlib.Path(tempfile.mkdtemp(prefix=f"{COPY_PREFIX}{project}-", dir=private_tmp())).resolve() / COPY_LEAF
 
 
-def is_throwaway_copy(cwd) -> bool:
-    """Whether this folder is where throwaway_copy puts one (by path only: no git is run here)."""
+def is_throwaway_copy(cwd, marked: str | None = None) -> bool:
+    """Whether this folder is where throwaway_copy puts one (by path only: no git is run here). marked: what the run's mark says
+    (propose_apply sets it), which then has to be this folder too."""
     real = pathlib.Path(os.path.realpath(cwd))
+    if marked is not None and (not marked or os.path.realpath(marked) != str(real)):
+        return False
     return real.name == COPY_LEAF and real.parent.name.startswith(COPY_PREFIX) \
         and real.parent.parent == pathlib.Path(os.path.realpath(_private_tmp_path()))
 
@@ -888,10 +915,10 @@ def process_cwds() -> list[tuple[int, str, str]]:
     return out
 
 
-def cwd_users(path: str | pathlib.Path) -> list[str]:
-    """Processes whose working directory is in this folder (subfolders included): "program name(pid)"."""
+def cwd_users(path: str | pathlib.Path, procs: list | None = None) -> list[str]:
+    """Processes whose working directory is in this folder (subfolders included): "program name(pid)". procs: process_cwds(), already read."""
     root = os.path.realpath(path)
-    return sorted({f"{name}({pid})" for pid, name, cwd in process_cwds()
+    return sorted({f"{name}({pid})" for pid, name, cwd in (process_cwds() if procs is None else procs)
                    if cwd == root or cwd.startswith(root.rstrip("/") + "/")})
 
 
