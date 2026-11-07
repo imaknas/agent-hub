@@ -19,7 +19,10 @@ for a write outside the project's own job.
   project_at(dir) → (name, doc) | None                      whose workspace holds this folder (by path, no git)
   run(project, cwd, argv, …) → Result                       any argv as the project, bounded like job
   sync_memory(name, doc, memdir) → None | why not           a sandboxed project's memory sync (commit + merge + bundle
-                                                            as the project; the platform fetches the bundle)
+                                                            as the project; the platform fetches the bundle). A bundle
+                                                            refused for what it holds is an alert (once, reminded daily),
+                                                            cleared by the next clean sync
+  sync_memory_of(name, ws) → None | why not                 a platform script's sync of a project's memory, either kind
 
 CLI (git-sync-memory.sh, sync-all-memory.sh):
   project_git.py sandboxed-project <name>   exit 0 when this registered project is sandboxed, 3 when not (any
@@ -48,11 +51,14 @@ BIN = pathlib.Path(__file__).resolve().parent
 sys.path.insert(0, str(BIN))
 import gitdirs  # noqa: E402
 import hubconf  # noqa: E402
+import i18n  # noqa: E402
 import names  # noqa: E402
 import isolation  # noqa: E402
 import memory_paths  # noqa: E402
 import policy  # noqa: E402
 import registry  # noqa: E402
+
+_ = i18n.domain(__file__)
 
 JOB = BIN / "project-git-job.py"
 MAX_JSON = 8 << 20          # facts
@@ -157,6 +163,20 @@ def owned_git(repo, *args) -> subprocess.CompletedProcess:
     return subprocess.run(["git", "-C", str(repo), *args], capture_output=True, text=True)
 
 
+REFUSED = "refused:"   # how fetch_bundle's refusal for what a bundle holds begins
+
+
+def refusal_alert(name: str, why: str | None) -> None:
+    """A sync refused for what it holds stops a project's notes until someone rewrites its branch: the owner hears of it once, is reminded
+    every 24 hours, and hears when it syncs clean again. A broken alert doesn't change the outcome."""
+    try:
+        import alert
+        alert.once(f"memory-sync-refused:{name}", [_("{project}: its memory notes don't reach the platform: {why}", project=name, why=why)]
+                   if why else [], _("{project}: its memory notes sync again", project=name))
+    except Exception as e:
+        print(f"project_git: the alert was not sent: {e!r}", file=sys.stderr)
+
+
 def fetch_bundle(bare: pathlib.Path, bundle: pathlib.Path, branch: str) -> str | None:
     """Fast-forward <bare>'s refs/heads/<branch> to the bundle's HEAD. The bundle is untrusted data: objects are
     checked (fsck), anything but a fast-forward is refused (the next round merges first), and so is a new commit holding what a memory
@@ -173,7 +193,7 @@ def fetch_bundle(bare: pathlib.Path, bundle: pathlib.Path, branch: str) -> str |
         if old and owned_git(bare, "merge-base", "--is-ancestor", old, new).returncode != 0:
             return f"not a fast-forward of {branch} (the bare repo moved on; the next round merges it first)"
         if (bad := memory_paths.new_commit_problems(bare, old or None, new)):
-            return (f"refused: new commits on {branch} hold what a memory branch may not: {'; '.join(bad)}. It holds "
+            return (f"{REFUSED} new commits on {branch} hold what a memory branch may not: {'; '.join(bad)}. It holds "
                     f"{', '.join(memory_paths.TOP)} and {memory_paths.TREE}/**, plain files; those commits have to go from the branch")
         r = owned_git(bare, "update-ref", f"refs/heads/{branch}", new, old)
         return None if r.returncode == 0 else f"update-ref failed: {r.stderr.strip()[-300:]}"
@@ -282,20 +302,21 @@ def memory_dir(folder) -> pathlib.Path:
     return scope_of(folder).memdir
 
 
-def sync_memory_of(name: str, ws) -> None:
+def sync_memory_of(name: str, ws) -> str | None:
     """A platform script's sync of this project's memory: as the project when it is sandboxed (with-lock.sh's own rev-parse reads the
-    repo's config, which can hang on a FIFO), otherwise the hook's path. Failures are the next hourly sync's, and so is a name the
-    registry's index doesn't have."""
+    repo's config, which can hang on a FIFO), otherwise the hook's path. Returns why it didn't sync (the next hourly sync tries again),
+    and so for a name the registry's index doesn't have."""
     doc = hubconf.projects().get(name)
     if doc is None:
-        print(f"{name} is not in the registry's index; whether it is sandboxed can't be told, memory not synced", file=sys.stderr)
-        return
+        return f"{name} is not in the registry's index; whether it is sandboxed can't be told, memory not synced"
     mem = pathlib.Path(ws) / ".agent-memory"
     if isolation.sandboxed({**doc, "name": name}):
-        sync_memory(name, doc, mem, lock=True)
-        return
+        return sync_memory(name, doc, mem, lock=True)
     bin_dir = pathlib.Path(__file__).resolve().parent
-    subprocess.run([str(bin_dir / "with-lock.sh"), str(bin_dir / "git-sync-memory.sh")], cwd=mem, capture_output=True)
+    r = subprocess.run([str(bin_dir / "with-lock.sh"), str(bin_dir / "git-sync-memory.sh")], cwd=mem, capture_output=True, text=True)
+    if r.stderr.strip():
+        sys.stderr.write(r.stderr)
+    return None if r.returncode == 0 else f"{name}: the memory sync failed ({(r.stderr or r.stdout).strip()[-300:]})"
 
 
 def sync_memory(name: str, doc: dict, memdir, branch: str = "agent-memory", lock: bool = False) -> str | None:
@@ -310,16 +331,18 @@ def sync_memory(name: str, doc: dict, memdir, branch: str = "agent-memory", lock
     with tmp as d:
         bundle = pathlib.Path(d) / "memory.bundle"
         with bundle.open("wb") as fh:
-            r = job(name, memdir, "memory-sync", memdir, bare, branch, *(["--lock"] if lock else []), out=fh,
-                    timeout=BUNDLE_TIMEOUT_S, cap=MAX_BUNDLE)
+            r = job(name, memdir, "memory-sync", memdir, bare, branch, *(["--lock"] if lock else []),
+                    "--rules=" + ",".join(memory_paths.rules_names()), out=fh, timeout=BUNDLE_TIMEOUT_S, cap=MAX_BUNDLE)
         err = r.stderr.strip()[-300:]
         if r.returncode == EX_SANDBOX:
             return f"{name}: the sandbox refused; memory not synced ({err})"
         if r.returncode != 0:
             return f"{name}: the memory sync job failed ({err})"
-        if bundle.stat().st_size == 0:
-            return None
-        why = fetch_bundle(bare, bundle, branch)
+        if r.stderr.strip():
+            sys.stderr.write(r.stderr)   # what the job left out of the commit, said once
+        why = fetch_bundle(bare, bundle, branch) if bundle.stat().st_size else None
+        if why is None or why.startswith(REFUSED):
+            refusal_alert(name, why)
         return f"{name}: {why}" if why else None
 
 

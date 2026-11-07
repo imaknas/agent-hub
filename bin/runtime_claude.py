@@ -1114,6 +1114,7 @@ def user_cleanup(apply: bool) -> list[str]:
 # What Claude Code loads settings, hooks and code from inside a project folder (its docs: sandboxing, "protected
 # paths"; hooks, "hook locations"). The session's own sandbox already keeps its Bash off them; the platform's sandbox
 # for a project's services and jobs, and its Edit rules, use this list too (policy.py protect).
+RULES_FILE_NAMES = ("CLAUDE.md", "CLAUDE.local.md")   # at any depth: a nested one is loaded when a file beside it is read
 CONTROL = ((".claude", False), (".claude/settings.json", True), (".claude/settings.local.json", True),
            (".claude/hooks", True), (".claude/skills", True), (".claude/agents", True), (".claude/commands", True),
            (".mcp.json", True))

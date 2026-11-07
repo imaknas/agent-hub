@@ -234,5 +234,5 @@
  "put {point} on a runtime with confined runs ({settings} llm.points.<point>.runtime), or keep what its own settings allow small": "把 {point} 放到有受限執行的 runtime 上({settings} llm.points.<point>.runtime),或把它自己設定允許的範圍收小",
  "{project}'s memory branch holds what it may not: {paths}. No agent starts in a copy of it": "{project} 的 memory 分支有不該有的東西:{paths}。不會在它的副本裡啟動 agent",
  "a commit on that branch removing it is taken; notes go on syncing until then": "那條分支上移除它的 commit 會被接受;在那之前筆記照常同步",
- "the runtime {runtime} can't be told to load no settings file. {points} run there because the platform checks the folder holds only notes first; what that agent's own settings say, and any rules file above the folder, it still reads": "執行環境 {runtime} 無法被要求不載入設定檔。{points} 還是在上面跑,因為平台會先檢查資料夾裡只有筆記;但那個 agent 自己的設定,以及資料夾上層的規則檔,它還是會讀"
+ "the runtime {runtime} can't be told to load no settings file. {points} run there because the platform checks first that the folder holds only notes, under no rules-file name a runtime declares; that agent still reads its own settings, a rules file under a name no runtime declares, and one above the folder": "執行環境 {runtime} 無法被要求不載入設定檔。{points} 還是在上面跑,因為平台會先檢查資料夾裡只有筆記、沒有任何執行環境宣告的規則檔名;但那個 agent 自己的設定、沒有執行環境宣告的檔名的規則檔,以及資料夾上層的規則檔,它還是會讀"
 }

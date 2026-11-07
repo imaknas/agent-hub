@@ -20,5 +20,6 @@
  "{point} can tell which tool servers it loads again": "{point} 又判斷得出會載入哪些工具伺服器了",
  "llm.py: the alert was not sent: {error!r}": "llm.py:警報沒送出:{error!r}",
  "{point} asks that no settings file be loaded, and this runtime can't be told that: it runs only in the platform's throwaway copy, and {cwd} is not one": "{point} 要求不載入任何設定檔,這個 runtime 沒辦法這樣指定:它只能跑在平台的一次性副本裡,而 {cwd} 不是",
- "{point} works in a copy of a memory branch, and this one holds what a memory branch may not: {paths}. No agent starts there until a commit on that branch removes it": "{point} 在 memory 分支的副本裡工作,而這份副本有 memory 分支不該有的東西:{paths}。在那條分支上有 commit 移除它之前,不會在那裡啟動 agent"
+ "{point} works in a copy of a memory branch, and this one holds what a memory branch may not: {paths}. No agent starts there until a commit on that branch removes it": "{point} 在 memory 分支的副本裡工作,而這份副本有 memory 分支不該有的東西:{paths}。在那條分支上有 commit 移除它之前,不會在那裡啟動 agent",
+ "the memory copy of {project} holds only notes again": "{project} 的 memory 副本又只剩筆記了"
 }

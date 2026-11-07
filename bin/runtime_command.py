@@ -50,6 +50,7 @@ import i18n  # noqa: E402
 from runtime_ports import CompletionResult, TaskResult  # noqa: E402
 
 _ = i18n.domain(__file__)
+RULES_FILE_NAMES = ("AGENTS.md",)   # the cross-tool convention (Codex and others read it)
 
 
 def _conf() -> dict:

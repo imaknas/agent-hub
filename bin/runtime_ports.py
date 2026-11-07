@@ -40,6 +40,9 @@ The current interfaces (the other layers get added one at a time, following the 
     local_ignores() -> list[str]                         this runtime's local-only files (relative to the project
                                                          folder), to add to .git/info/exclude
                                                          (.agent-memory is the platform's own, not listed here)
+  RULES_FILE_NAMES (a module constant, any runtime)      the names its agent takes as rules from a folder it works in
+                                                         or reads (rules_file_names(): every registered runtime's, so a
+                                                         memory branch holds none, bin/memory_paths.py)
   tool_servers: which of the environment's tool servers a run would load (a judgment point declaring
   `tool_servers: allowed_only` denies every one its allow list doesn't name; policy.tool_server_denials)
     ambient_servers(task) -> list[str] | None            the servers this run would load from its environment (the
@@ -515,6 +518,14 @@ def load_completion(impl: str):
 # then is Claude Code's, so unset it means DEFAULT, whatever runtime.default says now); any other runtime's ids are
 # written <runtime>:<id>, and mcp:<pid>:<start> are the MCP server's (A3). So nothing on the bus needs migrating, and
 # changing runtime.default never reroutes an old id.
+
+def rules_file_names() -> list[str]:
+    """Every registered runtime's RULES_FILE_NAMES, whichever is installed: a memory branch is read by whichever runs tomorrow."""
+    out = []
+    for name in RUNTIMES:
+        out += [n for n in getattr(_module(name), "RULES_FILE_NAMES", ()) if n not in out]
+    return out
+
 
 def installed() -> list[str]:
     """hub.json runtime.installed: the registered runtimes the user opens sessions with, in order, no repeats."""

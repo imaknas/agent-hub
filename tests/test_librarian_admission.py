@@ -110,7 +110,7 @@ class Admission(unittest.TestCase):
     def model(self, text: str, hook: bool):
         """the stand-in for the librarian-state call: writes STATE.md (and, as the project's SessionEnd hook would,
         commits it while the call is still running)"""
-        def llm(point, prompt, cwd):
+        def llm(point, prompt, cwd, project=None):
             self.assertEqual(point, "librarian-state")
             (pathlib.Path(cwd) / "STATE.md").write_text(text)
             if hook:

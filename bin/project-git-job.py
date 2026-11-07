@@ -43,10 +43,11 @@ readable. Nothing here decides anything for the platform; the caller treats the 
   set-origin <ws> <url> <branch>          origin = url, the branch tracking it
   test-runs <repo> <since>                JSON [run log lines at or after <since> (ISO time)]: the test runner's
                                           measurements in the repo's git common dir (tiers.RunLog), newest MAX_RUNS
-  memory-sync <memdir> <bare> <branch> [--lock]
+  memory-sync <memdir> <bare> <branch> [--lock] [--rules=<name>,…]
                                           commit memory/ and STATE.md, merge what <bare>'s <branch> has, then stdout: a
                                           bundle of HEAD that <bare> lacks (empty: nothing to push); --lock takes
-                                          with-lock.sh's lock
+                                          with-lock.sh's lock; what a memory branch may not hold (memory_paths, with the
+                                          rules files' names --rules gives) stays in the folder, uncommitted, said on stderr
 """
 from __future__ import annotations
 
@@ -310,6 +311,10 @@ def op_memory_sync(memdir: str, bare: str, branch: str, *flags: str) -> int:
     if out(memdir, "rev-parse", "--show-toplevel").strip() != str(pathlib.Path(memdir).resolve()):
         sys.stderr.write(f"{memdir} is not a checkout of its own\n")
         return 1
+    import memory_paths
+    for f in flags:
+        if f.startswith("--rules="):
+            memory_paths.RULES_NAMES = tuple(n for n in f[len("--rules="):].split(",") if n)
     if "--lock" not in flags:
         return memory_sync(memdir, bare, branch)
     lock = pathlib.Path(out(memdir, "rev-parse", "--absolute-git-dir").strip()) / "agent-hub-op.lock"
@@ -332,6 +337,14 @@ def memory_sync(memdir: str, bare: str, branch: str) -> int:
     for p in MEMORY_PATHS:
         if os.path.lexists(pathlib.Path(memdir) / p) or git(memdir, "ls-files", "--error-unmatch", "--", p).returncode == 0:
             git(memdir, "add", "-A", "--", p, env=NO_HOOKS)
+    import memory_paths
+    try:
+        left = memory_paths.unstage_refused(memdir)
+    except memory_paths.Unreadable as e:
+        sys.stderr.write(f"what was staged can't be checked, nothing committed ({e})\n")
+        return 1
+    if left:
+        sys.stderr.write("left in the folder, not committed (a memory branch holds only plain notes): " + "; ".join(left) + "\n")
     files = out(memdir, "diff", "--cached", "--name-only", "--", "memory/", "STATE.md").split("\n")
     files = [f for f in files if f]
     if files:

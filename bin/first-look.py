@@ -105,7 +105,8 @@ def main(argv: list[str]) -> int:
                 project=name, problems="; ".join(problems)[:300]))
         return 1
     nofollow.replace(ws, ".agent-memory/STATE.md", (state.rstrip() + "\n").encode())
-    project_git.sync_memory_of(name, ws)
+    if (why := project_git.sync_memory_of(name, ws)):
+        print(_("{project}: the summary is written but not synced yet; the hourly sync tries again: {why}", project=name, why=why))
     print(_("✓ {project}: {summary}", project=name, summary=str(got.get("summary") or "").strip()))
     heads = {todo_tokens.tokens(lang)["todo_heading"] for lang in todo_tokens.SETS}
     lines = state.splitlines()

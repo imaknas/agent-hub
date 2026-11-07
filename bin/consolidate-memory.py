@@ -232,11 +232,11 @@ def build_prompt(s: dict, repo: pathlib.Path, *, owner: str | None = None, lang:
                           hedges="/".join(TEXT[lang or hubconf.lang_content()]["prompt_hedges"]))
 
 
-def run_model(prompt: str, repo: pathlib.Path, model: str) -> tuple[dict | None, str]:
+def run_model(prompt: str, repo: pathlib.Path, model: str, project: str = "") -> tuple[dict | None, str]:
     # judgment point consolidate (permission dontAsk, only Edit memory/reference/** and STATE.md, schema:
     # contracts/llm-points.yaml)
     cmd = [sys.executable, str(HUB / "bin" / "llm.py"), "run", "consolidate", *(["--model", model] if model else [])]
-    env = dict(GIT_ENV)  # llm.py decides claude's credentials (headless token by default)
+    env = {**GIT_ENV, "HUB_MEMORY_OF": project}  # whose copy, for llm.py's alert; llm.py decides claude's credentials
     try:
         r = subprocess.run(cmd, input=prompt, cwd=repo, env=env, capture_output=True, text=True, timeout=CALL_TIMEOUT + 60)
     except subprocess.TimeoutExpired:
@@ -383,7 +383,7 @@ def consolidate(s: dict, model: str, dry_run: bool, keep: bool) -> dict:
               "model {model}", project=name, n=len(s["batch"]), bytes=s["batch_bytes"], first=s["batch"][0],
               last=s["batch"][-1], left=len(s["old"]) - len(s["batch"]), model=model))
 
-        out, err = run_model(build_prompt(s, repo), repo, model)
+        out, err = run_model(build_prompt(s, repo), repo, model, name)
         if out is None:
             log(_("{project}: the model call failed ({error}); giving up, the copy is untouched", project=name,
                   error=err))

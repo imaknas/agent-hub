@@ -58,6 +58,7 @@ METHOD_NOT_FOUND = -32601
 LOGIN_PREFIX = "auth_required:"  # how this adapter marks a login error (is_login_error looks only for this)
 CANCEL_GRACE_S = 2.0
 STOP_REASONS = ("end_turn", "max_tokens", "max_turn_requests", "refusal", "cancelled")
+RULES_FILE_NAMES = ("AGENTS.md", "GEMINI.md")   # the convention most ACP agents read, and Gemini CLI's own
 THROWAWAY_ONLY = True   # runs only where the platform confines them (runtime_ports.THROWAWAY_POINTS)
 COPY_VAR = "HUB_THROWAWAY_COPY"   # set by propose_apply: this working directory is its throwaway worktree
 # ACP tool kind → the platform's action kind (runtime_ports.KINDS)

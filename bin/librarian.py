@@ -33,6 +33,7 @@ import datetime
 import difflib
 import glob
 import json
+import os
 import pathlib
 import re
 import shutil
@@ -132,12 +133,13 @@ def git(repo, *args) -> str:
     return out(["git", "-C", str(repo), *args])
 
 
-def llm(point: str, prompt: str, cwd) -> tuple[int, dict | None, str]:
+def llm(point: str, prompt: str, cwd, project: str | None = None) -> tuple[int, dict | None, str]:
     """Run a judgment point (bin/llm.py run <point>, prompt on stdin); stderr is appended to LOG. Returns
-    (exit, parsed JSON, raw text)."""
+    (exit, parsed JSON, raw text). project: whose memory copy cwd is (llm.py's alert names it)."""
+    env = {**os.environ, "HUB_MEMORY_OF": project} if project else None
     with LOG.open("a") as f:
         r = subprocess.run([PY, str(HUB / "bin" / "llm.py"), "run", point], cwd=cwd, input=prompt, text=True,
-                           stdout=subprocess.PIPE, stderr=f)
+                           stdout=subprocess.PIPE, stderr=f, env=env)
     text = r.stdout.rstrip("\n")
     try:
         obj = json.loads(text) if text else None
@@ -660,7 +662,7 @@ def repair_state_todo(proj: str, d: pathlib.Path) -> None:
         todo_by_edits(proj, d, problems)
     else:
         malformed = (d / "STATE.md").read_text(errors="replace")
-        _rc, obj, _text = llm("librarian-todo-format", todo_fix_prompt(problems), d)
+        _rc, obj, _text = llm("librarian-todo-format", todo_fix_prompt(problems), d, proj)
         add_cost(obj)
         shadow_todo(proj, malformed, (d / "STATE.md").read_text(errors="replace"), problems)
     r = run(check)
@@ -828,7 +830,7 @@ def process(proj: str, d: pathlib.Path, handoffs: list[dict], digest: list[str])
     if COMPLETION["state"]:
         rc, obj, text = state_by_edits(proj, d, before, memory_section, h_note, d_note)
     else:
-        rc, obj, text = llm("librarian-state", state_prompt(proj, memory_section, h_note, d_note), d)
+        rc, obj, text = llm("librarian-state", state_prompt(proj, memory_section, h_note, d_note), d, proj)
     if rc != 0 or not text:
         # The call itself failed: it may have stopped halfway, so nothing is kept. Restore the copy to a clean state
         # rather than leave it for the next night

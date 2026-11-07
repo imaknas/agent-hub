@@ -28,6 +28,10 @@ for p in memory STATE.md; do
   if [ -e "$p" ] || git ls-files --error-unmatch -- "$p" >/dev/null 2>&1; then git add -A -- "$p" 2>/dev/null; fi
 done
 
+# what a memory branch may not hold (a hidden name under memory/, an executable, a link, a rules file's name: bin/memory_paths.py) goes back
+# out of the index and stays in the folder, so a Finder .DS_Store never commits; it's said once, on stderr. Can't check: nothing commits
+"$SCRIPT_DIR/py" "$SCRIPT_DIR/memory_paths.py" unstage || exit 1
+
 # commit only these two paths, whatever else is staged (bash 3.2: no mapfile)
 files=()
 while IFS= read -r f; do files+=("$f"); done < <(git diff --cached --name-only -- memory/ STATE.md)

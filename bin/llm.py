@@ -222,6 +222,17 @@ def tool_servers_alert(point: str, why: str | None) -> None:
         print(_("llm.py: the alert was not sent: {error!r}", error=e), file=sys.stderr)
 
 
+def memory_copy_alert(of: str, why: str | None) -> None:
+    """A copy of a project's memory branch an agent won't start in: that project's notes stop being read every night until a commit
+    removes what's there, so the owner hears of it (once, reminded every 24 hours) and hears when it runs clean again. of: the project
+    (HUB_MEMORY_OF, its callers set it), or the folder. A broken alert doesn't change the outcome."""
+    try:
+        import alert
+        alert.once(f"memory-copy-refused:{of}", [why] if why else [], _("the memory copy of {project} holds only notes again", project=of))
+    except Exception as e:
+        print(_("llm.py: the alert was not sent: {error!r}", error=e), file=sys.stderr)
+
+
 def run(a) -> int:
     """The judgment-point layer: read the declaration, build the Task, decide the login, hand over to the runtime
     (runtime_ports' agent interface; Claude Code is just one implementation).
@@ -249,9 +260,12 @@ def run(a) -> int:
     in_memory = spec.get("works_in") == "memory"
     if in_memory and not getattr(a, "dry_run", False):
         import memory_paths
-        if (bad := memory_paths.folder_problems(a.cwd or os.getcwd())):
-            return fail(a.point, spec, _("{point} works in a copy of a memory branch, and this one holds what a memory branch may not: {paths}. No "
-                                         "agent starts there until a commit on that branch removes it", point=a.point, paths="; ".join(bad)))
+        bad = memory_paths.folder_problems(a.cwd or os.getcwd())
+        why = _("{point} works in a copy of a memory branch, and this one holds what a memory branch may not: {paths}. No agent starts there "
+                "until a commit on that branch removes it", point=a.point, paths="; ".join(bad)) if bad else None
+        memory_copy_alert(os.environ.get("HUB_MEMORY_OF") or os.path.realpath(a.cwd or os.getcwd()), why)
+        if why:
+            return fail(a.point, spec, why)
     # restricted: a runtime that can't be told to load no settings file runs it only in the platform's throwaway copy (doctor says what
     # that leaves), never anywhere else with the ask dropped. A memory copy just checked is fine too: there the flag only reinforces
     if spec.get("restricted") and not in_memory and "confine" not in runtime_ports.capabilities(point_runtime(a.point, spec)) \

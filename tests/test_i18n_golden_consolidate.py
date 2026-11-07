@@ -115,7 +115,7 @@ class Consolidate(unittest.TestCase):
 
     # ---- fake models ----
 
-    def rich_model(self, prompt, repo, model):
+    def rich_model(self, prompt, repo, model, *_project):
         """every mechanical check fires once"""
         self.prompts.append(prompt)
         ref = repo / "memory" / "reference"
@@ -135,7 +135,7 @@ class Consolidate(unittest.TestCase):
                             {"file": "STATE.md", "before": "nothing", "after": "Now done.",
                              "evidence_file": "memory/2026-10-29.md", "evidence_quote": "a quote that is not there"}]}}, ""
 
-    def push_model(self, prompt, repo, model):
+    def push_model(self, prompt, repo, model, *_project):
         (repo / "memory" / "reference" / "notes.md").write_text("# notes\n- Deploy: https://example.com/doc `make deploy`\n")
         (repo / "memory" / "reference" / "README.md").write_text("# reference\n- infra.md\n- notes.md\n")
         (repo / "STATE.md").write_text("# STATE\n\nbroken to-do\n")
@@ -171,24 +171,24 @@ class Consolidate(unittest.TestCase):
                 r, printed = self.capture(m.consolidate, self.survey("alpha"), "test-model", dry_run, keep)
             out.append((label, f"status {r['status']}\n{printed}" + (f"--- entry\n{r['entry']}" if r["entry"] else "")))
 
-        run("model failed", lambda p, repo, mdl: (None, "exit 1:boom"))
-        run("no structured output", lambda p, repo, mdl: ({"result": "gave up", "num_turns": 2}, ""))
+        run("model failed", lambda p, repo, mdl, *_project: (None, "exit 1:boom"))
+        run("no structured output", lambda p, repo, mdl, *_project: ({"result": "gave up", "num_turns": 2}, ""))
 
-        def commits(p, repo, mdl):
+        def commits(p, repo, mdl, *_project):
             (repo / "STATE.md").write_text("x\n")
             sh("git", "commit", "-qam", "model commit", cwd=repo)
             return {"structured_output": {"folded": []}}, ""
         run("HEAD moved", commits)
 
-        def stray(p, repo, mdl):
+        def stray(p, repo, mdl, *_project):
             (repo / "memory" / "2026-10-29.md").write_text("rewritten\n")
             (repo / "AGENT.md").unlink()
             return {"structured_output": {"folded": []}}, ""
         run("stray files", stray)
-        run("nothing to commit", lambda p, repo, mdl: ({"structured_output": {
+        run("nothing to commit", lambda p, repo, mdl, *_project: ({"structured_output": {
             "folded": [{"file": "memory/2099-01-01.md", "destinations": []}]}}, ""))
 
-        def boom(p, repo, mdl):
+        def boom(p, repo, mdl, *_project):
             raise ValueError("model exploded")
         run("unexpected error", boom)
         run("dry run, every warning", self.rich_model, dry_run=True, keep=True)
@@ -239,7 +239,7 @@ class Consolidate(unittest.TestCase):
         # --- main without a coding agent (runtime.default none): what run_model returns when llm.py cannot call one
         with mock.patch.dict(sys.modules, {"llm": llm}), \
                 mock.patch.object(m.hubconf, "_cfg", {**m.hubconf._cfg, "runtime": {"default": "none"}}), \
-                mock.patch.object(m, "run_model", side_effect=lambda p, repo, mdl: (None, "exit 1: ")), \
+                mock.patch.object(m, "run_model", side_effect=lambda p, repo, mdl, *_project: (None, "exit 1: ")), \
                 mock.patch.object(sys, "argv", ["consolidate-memory.py", "--project", "alpha"]):
             ret, printed = self.capture(m.main)
         out.append(("no coding agent", f"exit {ret}\n{printed}"))

@@ -1376,8 +1376,9 @@ def doctor_memory_branches(add) -> None:
     place = sorted(p for p, spec in llm.points()["points"].items() if spec.get("works_in") == "memory")
     runtimes = {((hubconf.get("llm") or {}).get("points") or {}).get(p, {}).get("runtime") or runtime_ports.default_name() for p in place}
     for runtime in sorted(r for r in runtimes if r != "none" and "confine" not in runtime_ports.capabilities(r) and not runtime_ports.throwaway_only(r)):
-        add("info", _("the runtime {runtime} can't be told to load no settings file. {points} run there because the platform checks the folder holds "
-                      "only notes first; what that agent's own settings say, and any rules file above the folder, it still reads",
+        add("info", _("the runtime {runtime} can't be told to load no settings file. {points} run there because the platform checks first that the folder "
+                      "holds only notes, under no rules-file name a runtime declares; that agent still reads its own settings, a rules file under a name "
+                      "no runtime declares, and one above the folder",
                       runtime=runtime, points=", ".join(place)))
 
 

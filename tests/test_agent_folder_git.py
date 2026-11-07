@@ -552,6 +552,43 @@ class ProbeThroughTheRealPath(tbs.Fixture):
                 self.assertFalse(self.ran.exists(), "the agent never started")
                 self.assertIn(".claude/settings.json", r.stdout + r.stderr, "what, and why")
 
+    def test_a_refusal_is_an_alert_and_a_clean_run_clears_it(self):
+        """In this process: llm.py's alert, keyed by whose copy it is (HUB_MEMORY_OF), or by the folder."""
+        import contextlib
+        import io
+        import alert
+        import llm
+        import runtime_fake
+        from runtime_ports import TaskResult
+        d = self.memory_copy()
+        (d / ".claude").mkdir()
+        (d / ".claude" / "settings.json").write_text("{}")
+        said = []
+
+        def run(of=None):
+            runtime_fake.set_reply("consolidate", TaskResult(True, text="", structured_output={"folded": [], "kept": [], "corrections": []}))
+            env = {"HUB_MEMORY_OF": of} if of else {}
+            with mock.patch.object(sys, "argv", ["llm.py", "run", "consolidate", "--cwd", str(d)]), mock.patch.dict(os.environ, env), \
+                    mock.patch.object(hubconf, "_cfg", {"runtime": {"default": "fake"}}), mock.patch.object(llm, "job_failed", lambda p, r: None), \
+                    mock.patch.object(sys, "stdin", io.StringIO("prompt")), mock.patch.object(alert, "once", lambda k, p, ok: said.append((k, p))), \
+                    contextlib.redirect_stdout(io.StringIO()):
+                try:
+                    return llm.main()
+                except SystemExit as e:
+                    return e.code
+        self.addCleanup(runtime_fake.reset)
+        self.assertNotEqual(run("box"), 0)
+        self.assertEqual([k for k, _p in said], ["memory-copy-refused:box"])
+        self.assertIn(".claude/settings.json", said[0][1][0])
+        (d / ".claude" / "settings.json").unlink()
+        (d / ".claude").rmdir()
+        said.clear()
+        run("box")
+        self.assertEqual(said, [("memory-copy-refused:box", [])], "cleared by a clean run")
+        said.clear()
+        run()
+        self.assertEqual(said, [(f"memory-copy-refused:{os.path.realpath(d)}", [])], "no name given: the folder")
+
     def test_those_points_ask_for_the_flag_and_the_look(self):
         import yaml
         points = yaml.safe_load((ROOT / "contracts" / "llm-points.yaml").read_text())["points"]
@@ -560,11 +597,23 @@ class ProbeThroughTheRealPath(tbs.Fixture):
             self.assertIs(points[p].get("restricted"), True, p)
             self.assertIn("--restricted", runtime_claude.describe(runtime_ports.Task(point=p, prompt="p", spec=points[p], env={"PATH": ""})), p)
 
+    def test_the_rules_files_names_are_the_adapters(self):
+        """Declared by each adapter, collected over every registered runtime, whichever is installed."""
+        import importlib
+        got = runtime_ports.rules_file_names()
+        for name, mod in runtime_ports.RUNTIMES.items():
+            self.assertLessEqual(set(getattr(importlib.import_module(mod), "RULES_FILE_NAMES", ())), set(got), name)
+        self.assertEqual(runtime_claude.RULES_FILE_NAMES, ("CLAUDE.md", "CLAUDE.local.md"))
+        self.assertIn("AGENTS.md", got)
+
     def test_the_look_at_a_memory_copy(self):
         import memory_paths
         import shutil
         d = self.memory_copy()
         self.assertEqual(memory_paths.folder_problems(d), [])
+        (d / "memory" / ".DS_Store").write_text("x")
+        (d / "memory" / "reference" / ".DS_Store").write_text("x")
+        self.assertEqual(memory_paths.folder_problems(d), [], "Finder's file is in no agent's way")
         for label, make, says in (
                 ("settings", lambda: ((d / ".claude").mkdir(), (d / ".claude" / "settings.json").write_text("{}")), ".claude/settings.json"),
                 ("a hidden folder alone", lambda: (d / ".claude").mkdir(), ".claude"),
@@ -573,7 +622,9 @@ class ProbeThroughTheRealPath(tbs.Fixture):
                 ("a link", lambda: (d / "memory" / "l.md").symlink_to("/etc/hosts"), "memory/l.md"),
                 ("a folder link", lambda: (d / "memory" / "ld").symlink_to("/etc"), "memory/ld"),
                 ("executable", lambda: ((d / "memory" / "x.md").write_text("x"), (d / "memory" / "x.md").chmod(0o755)), "memory/x.md"),
-                ("a FIFO", lambda: os.mkfifo(d / "memory" / "f"), "memory/f")):
+                ("a FIFO", lambda: os.mkfifo(d / "memory" / "f"), "memory/f"),
+                ("a nested rules file", lambda: ((d / "memory" / "x").mkdir(), (d / "memory" / "x" / "CLAUDE.md").write_text("x")), "memory/x/CLAUDE.md"),
+                ("another runtime's, lower case", lambda: (d / "memory" / "agents.md").write_text("x"), "memory/agents.md")):
             with self.subTest(label):
                 shutil.rmtree(d)
                 d = self.memory_copy()
@@ -911,9 +962,16 @@ class ThePlatformsOwnSync(twp.Fixture):
 
     def test_an_open_projects_goes_the_hooks_way(self):
         import project_git
-        with mock.patch.object(hubconf, "projects", lambda: self.docs), mock.patch.object(project_git.subprocess, "run") as run:
-            project_git.sync_memory_of("open", self.ws["open"])
+        done = subprocess.CompletedProcess([], 0, "", "")
+        with mock.patch.object(hubconf, "projects", lambda: self.docs), mock.patch.object(project_git.subprocess, "run", return_value=done) as run:
+            self.assertIsNone(project_git.sync_memory_of("open", self.ws["open"]))
         self.assertTrue(str(run.call_args[0][0][0]).endswith("with-lock.sh"))
+        failed = subprocess.CompletedProcess([], 1, "", "a reason\n")
+        with mock.patch.object(hubconf, "projects", lambda: self.docs), mock.patch.object(project_git.subprocess, "run", return_value=failed), \
+                mock.patch("sys.stderr"):
+            self.assertIn("a reason", project_git.sync_memory_of("open", self.ws["open"]), "the reason comes back to the caller")
+        with mock.patch.object(hubconf, "projects", lambda: self.docs), mock.patch.object(project_git, "sync_memory", return_value="box: refused"):
+            self.assertEqual(project_git.sync_memory_of("box", self.ws["box"]), "box: refused")
 
 
 if __name__ == "__main__":

@@ -447,6 +447,13 @@ class MemoryBranchPaths(Base):
                 self.odd_commit(path, mode)
                 self.assert_refused(says)
 
+    def test_a_finder_file_or_a_rules_file_is_refused_where_it_enters(self):
+        """The syncs never commit them; a bundle that does is refused (inert or not: only the agent's folder lets an inert one by)."""
+        for path in ("memory/.DS_Store", "memory/CLAUDE.md", "memory/x/CLAUDE.md", "memory/agents.md", "memory/GEMINI.md", "memory/CLAUDE.local.md"):
+            with self.subTest(path):
+                self.odd_commit(path, "100644")
+                self.assert_refused(path)
+
     def test_a_gitlink_is_refused(self):
         sub = git(self.work, "rev-parse", "HEAD").strip()
         git(self.work, "update-index", "--add", "--cacheinfo", f"160000,{sub},memory/sub")
@@ -518,6 +525,93 @@ class MemoryBranchPaths(Base):
         self.assertIn(".claude/settings.json", why or "")
         self.assertEqual(self.bare_tip(), self.tip)
         self.assertNotIn(".claude/settings.json", git(self.bare, "ls-tree", "-r", "--name-only", "refs/heads/agent-memory").split())
+
+
+STRAYS = {"memory/.DS_Store": "finder", "memory/CLAUDE.md": "rules", "memory/x/agents.md": "rules, lower case"}
+
+
+def strays(mem):
+    """What a healthy project's memory folder can come to hold by accident: Finder's file, a rules file, an executable, a link."""
+    for path, text in STRAYS.items():
+        (mem / path).parent.mkdir(parents=True, exist_ok=True)
+        (mem / path).write_text(text)
+    (mem / "memory" / "copied.md").write_text("a note copied with its x bit\n")
+    (mem / "memory" / "copied.md").chmod(0o755)
+    (mem / "memory" / "link.md").symlink_to(mem / "memory" / "copied.md")
+    (mem / "memory" / "2026-11-08.md").write_text("today's note\n")
+    return {*STRAYS, "memory/copied.md", "memory/link.md"}
+
+
+class TheSyncLeavesOut(Base):
+    """A stray file in memory/ must not stop a project's notes: the syncs leave it in the folder, uncommitted, and say so once."""
+
+    def check(self, mem, branch_tree, said, left):
+        self.assertIn("memory/2026-11-08.md", branch_tree, "the note itself goes")
+        self.assertEqual(left & set(branch_tree), set(), "none of the strays is committed")
+        for p in left:
+            self.assertTrue(os.path.lexists(mem / p), f"{p} stays in the folder")
+        self.assertIn("left in the folder", said)
+        self.assertEqual(said.count("left in the folder"), 1, "said once")
+
+    def test_an_open_projects_sync(self):
+        r, bare = self.project_with_memory("open", sandbox=False)
+        mem = r / ".agent-memory"
+        left = strays(mem)
+        p = subprocess.run(["bash", str(BIN / "git-sync-memory.sh")], cwd=mem, capture_output=True, text=True, timeout=120,
+                           env={**ENV, "AGENT_HUB_OFFLINE": "1", "AGENT_HUB_PYTHON": sys.executable})
+        self.assertEqual(p.returncode, 0, p.stderr)
+        self.check(mem, git(mem, "ls-tree", "-r", "--name-only", "HEAD").split(), p.stderr, left)
+        self.assertEqual(git(mem, "status", "--porcelain", "--", "memory/2026-11-08.md"), "")
+
+    def test_a_sandboxed_projects_job_and_its_bundle(self):
+        import project_git
+        r, bare = self.project_with_memory("proj")
+        mem = r / ".agent-memory"
+        left = strays(mem)
+        b = self.tmp / "job.bundle"
+        with b.open("wb") as fh:
+            p = subprocess.run([sys.executable, str(BIN / "project-git-job.py"), "memory-sync", str(mem), str(bare), "agent-memory",
+                                "--rules=CLAUDE.md,CLAUDE.local.md,AGENTS.md"], stdout=fh, stderr=subprocess.PIPE, text=True, env=ENV, timeout=120)
+        self.assertEqual(p.returncode, 0, p.stderr)
+        self.assertIsNone(project_git.fetch_bundle(bare, b, "agent-memory"), "the bundle is taken")
+        self.check(mem, git(bare, "ls-tree", "-r", "--name-only", "agent-memory").split(), p.stderr, left)
+
+
+class TheRefusalIsSeen(MemoryBranchPaths):
+    """The owner hears of a refused sync once, and again when it syncs clean."""
+
+    def sync(self, bundle_from):
+        import alert
+        import project_git
+        bundle = self.tmp / "job.bundle"
+        bundle.unlink(missing_ok=True)
+        if bundle_from:
+            git(self.work, "bundle", "create", "-q", str(bundle), "HEAD", f"^{self.bare_tip()}")
+        else:
+            bundle.write_bytes(b"")
+
+        def job(project, cwd, op, *args, out=None, **kw):
+            out.write(bundle.read_bytes())
+            return project_git.Result(0, b"", "")
+        said = []
+        with mock.patch.object(project_git, "job", job), mock.patch.object(hubconf, "private_tmp", lambda: self.tmp), \
+                mock.patch.object(alert, "once", lambda key, problems, ok: said.append((key, problems))):
+            why = project_git.sync_memory("proj", self.docs["proj"], self.tmp / "ws" / "proj" / ".agent-memory")
+        return why, said
+
+    def test_refused_then_clean(self):
+        plant(self.work, ".claude/settings.json")
+        why, said = self.sync(True)
+        self.assertEqual([k for k, _p in said], ["memory-sync-refused:proj"])
+        self.assertIn(".claude/settings.json", said[0][1][0])
+        self.assertIn("refused", why)
+        git(self.work, "reset", "-q", "--hard", self.tip)
+        commit(self.work, "memory/n.md", "note\n", "a note")
+        why, said = self.sync(True)
+        self.assertIsNone(why)
+        self.assertEqual(said, [("memory-sync-refused:proj", [])], "cleared by the clean sync")
+        why, said = self.sync(False)
+        self.assertEqual(said, [("memory-sync-refused:proj", [])], "nothing to send is clean too")
 
 
 class WritesThroughLinks(Base):
