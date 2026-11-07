@@ -306,9 +306,13 @@ The separate work on sandboxed reads (`denyRead`) is independent and goes on its
   telling it: the tick's one look can predate a session's first hook.
 - **A lease sees only what no session has seen and no route has had.** It is never told, so per-session state can't quiet a
   letter for it; a letter free again for sessions stays quiet for it, as on main.
-- **What a platform run sends carries its `point`**, in a letter's payload and a done's (through the outbox too), so
-  `fork_result` credits a fork only with its own reply or close. A fork from before this step has no mark: its session isn't
-  told the "handled" text. The letter is closed or answered all the same.
+- **What a platform run sends carries its `point`**, in a letter's payload and a done's, so `fork_result` credits a fork only
+  with its own reply or close, from the receiving project. Never from an outbox: anything in the sandbox writes those files.
+  So a sandboxed project's fork, and a fork from before this step, get no credit: the session isn't told the "handled" text.
+  The letter is closed or answered all the same.
+- **A session in a linked worktree goes through `hub-event worktree`** from `worktree-memory.sh`, outside any sandbox, for its
+  process record and its end. That script's `end` hangs off both SessionEnd and PreCompact and the installed user-level
+  settings change only with the owner, so the runtime's `session_ending` reads which it was.
 - **The outbox op is `told`.** It carries requests and questions only (a notice's flag stays its hooks', as before), re-judges
   against the bus when taken in, since the view can be a minute old, and does nothing for a session the hooks haven't seen in
   this project.

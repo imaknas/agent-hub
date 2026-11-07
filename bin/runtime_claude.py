@@ -870,6 +870,15 @@ def parse_event(event: str, raw: str):
     return HubEvent(event, session, cwd)
 
 
+def session_ending(raw: str) -> bool:
+    """Whether this hook input is the session's end. Worktrees' user-level hooks hang one command off both SessionEnd and
+    PreCompact (worktree-memory.sh end), and installed settings change only with the owner."""
+    try:
+        return json.loads(raw or "{}").get("hook_event_name") == "SessionEnd"
+    except (ValueError, AttributeError):
+        return False
+
+
 def inject(event: str, text: str) -> str:
     if not text:
         return ""

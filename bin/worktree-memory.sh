@@ -13,7 +13,8 @@
 #          (`hub-runtime local-ignores`), pull memory, the first time it links print the rules file
 #          (`hub-runtime instructions-file`) into the context (it didn't exist yet when the session started),
 #          remind when memory is behind
-#   end    (SessionEnd / PreCompact) sync the memory notes, same script as the main checkout's hook
+#   end    (SessionEnd / PreCompact) sync the memory notes, same script as the main checkout's hook; at SessionEnd the
+#          session's letters are free again (hub-event worktree, which every event here goes through first, for its record)
 #   nudge  (PostToolUse) remind when notes are behind after a git commit/push; deliver new letters from the project
 #          mailbox (hubbus, rate-limited)
 #   start also delivers the project mailbox's letters that aren't closed yet into the context
@@ -43,6 +44,12 @@ cd "$top" || exit 0
 # the hook JSON (stdin) can be read only once, and both memory-nudge and hubbus need it
 hook_json=""
 [ -t 0 ] || IFS= read -r -t 1 hook_json || true
+
+# The session's process record and its end, before its mail and outside any sandbox (the secrets folder and the bus are in
+# none): a session here is judged like any other (hubbus Live), and one that exits frees what it holds
+if [ -z "${HUB_AS_PROJECT:-}" ] && [ -n "$hook_json" ]; then
+  printf '%s' "$hook_json" | "$HUB/bin/py" "$HUB/bin/hub-event" worktree "$event" >/dev/null 2>&1
+fi
 
 # Hooks run outside the agent's sandbox, with the user's authority. For a sandboxed project, everything below (git in
 # its repo, files it can plant, such as the marker or the rules file that get printed into the session) runs as the

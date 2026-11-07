@@ -278,7 +278,7 @@ def iso(t: datetime.datetime | None = None) -> str:
 
 def log(msg: str) -> None:
     LOG.parent.mkdir(parents=True, exist_ok=True)
-    with open(LOG, "a") as f:
+    with open(LOG, "a", encoding="utf-8", errors="backslashreplace") as f:   # what a project's file says can't stop it
         f.write(f"[{now():%Y-%m-%d %H:%M:%S}] {msg}\n")
 
 
@@ -1504,19 +1504,27 @@ def now_named(name: str, taken=None) -> str:
     return name if name in taken else current_name(name)
 
 
+def storable(text: str) -> str:
+    """Text as UTF-8 can hold it: a lone surrogate, from a JSON escape or a file name that isn't UTF-8, spelled out."""
+    return text.encode("utf-8", "backslashreplace").decode("utf-8")
+
+
 def log_once(key: str, msg: str) -> None:
     """Log the same thing only once, until its content changes (the every-minute dispatch mustn't flood the log
     with the same line)."""
-    f = hubconf.STATE / f"hubbus-logged-{key}.txt"
+    f, msg = hubconf.STATE / f"hubbus-logged-{storable(key)}.txt", storable(msg)
     try:
-        if f.read_text() == msg:
+        if f.read_text(encoding="utf-8") == msg:
             return
-    except OSError:
+    except FileNotFoundError:
+        if not msg:   # nothing was said, so nothing to reset
+            return
+    except (OSError, ValueError):
         pass
     if msg:  # empty = the issue is gone: just reset the record, don't log an empty line
         log(msg)
     try:
-        f.write_text(msg)
+        f.write_text(msg, encoding="utf-8")
     except OSError:
         pass
 
@@ -2050,9 +2058,10 @@ def recent_session(c, proj, live, rt=None) -> str | None:
 
 def fork_result(c, r) -> tuple[bool, str]:
     """The outcome of a background fork handling this letter: (handled or not, the fork's last reply + the letters it
-    sent for this one). Handled = the fork itself replied or closed it (what a platform run sends carries its point);
-    someone else's answer is no credit to the fork, and a fork that ended without either hasn't handled it: the letter
-    is open again once its time is up."""
+    sent for this one). Handled = the fork itself replied or closed it: from the receiving project, with the fork's point
+    (a point only comes from the process that sent it; another project could set the variable, an outbox file could say
+    anything, so a sandboxed project's fork gets no credit). Someone else's answer is no credit to the fork, and a fork
+    that ended without either hasn't handled it: the letter is open again once its time is up."""
     out = hubconf.STATE / "mailbox" / f"resume-{r['id']}.log"
     text = ""
     try:
@@ -2062,15 +2071,16 @@ def fork_result(c, r) -> tuple[bool, str]:
                 break
     except (OSError, ValueError):
         pass
+    mine = [r["to_project"], *own_names(r["to_project"])]
     replies = [m for m in c.execute("SELECT * FROM events WHERE type='message' AND ref=? ORDER BY seq", (r["id"],))
-               if payload(m).get("reply_to") == r["id"] and payload(m).get("point") == FORK_POINT]
-    closed = c.execute("SELECT payload FROM events WHERE type='message.done' AND ref=?", (r["id"],)).fetchone()
+               if payload(m).get("reply_to") == r["id"] and payload(m).get("point") == FORK_POINT and m["source"] in mine]
+    closed = c.execute("SELECT source, payload FROM events WHERE type='message.done' AND ref=?", (r["id"],)).fetchone()
     parts = []
     if text:
         parts.append(_("The branch's reply: {text}", text=text[:800]))
     parts += [_("Letter the branch sent [{id}] → {to}: {text}", id=m["id"], to=m["to_project"],
                 text=payload(m).get("text", "")[:300]) for m in replies]
-    handled = (closed is not None and payload(closed).get("point") == FORK_POINT) \
+    handled = (closed is not None and payload(closed).get("point") == FORK_POINT and closed["source"] in mine) \
         or any(payload(m).get("point") == FORK_POINT for m in answers(c, r))
     return handled, "\n  ".join(parts)
 
@@ -2394,7 +2404,9 @@ def take_outboxes(c) -> None:
     waiting on a FIFO, at most OUTBOX_CAP, oldest name first, checked like the command it stands for with the outbox's
     project as the sender (a sender named in the file is never read), and deleted once it is in; one that is
     malformed or refused is never applied: it is reported to the project in a letter and deleted too. A bus that is
-    busy leaves the file for the next run."""
+    busy leaves the file for the next run; nothing else one file does stops the next file or project. A folder there isn't
+    a file: an empty one goes, the others are ignored and said once. OUTBOX_RUN counts what left the outbox, so what
+    can't leave uses none of it."""
     live = Live(c=c)   # one look for this run, taken before a told file's write lock, not under it
     for proj, ws in projects().items():
         if not outboxed(proj) or not ws.is_dir():
@@ -2405,33 +2417,72 @@ def take_outboxes(c) -> None:
         except OSError as e:
             log_once(f"outbox-{proj}", _("{project}: cannot read its outbox: {e}", project=proj, e=e))
             continue
-        for name in sorted(n for n in files if not n.startswith("."))[:OUTBOX_RUN]:
+        left, folders = OUTBOX_RUN, []
+        for name in sorted(n for n in files if not n.startswith(".")):
+            if left <= 0:
+                break
             rel = f"{box}/{name}"
             try:
-                raw = nofollow.read(ws, rel, OUTBOX_CAP)
-                if raw is None:
+                if nofollow.is_dir(ws, rel):
+                    try:
+                        nofollow.remove_dir(ws, rel)
+                    except OSError:
+                        folders.append(name)
                     continue
-                entry = json.loads(raw)
-                if isinstance(entry, dict) and entry.get("op") == "told":
-                    live.load()
-                c.execute("BEGIN IMMEDIATE")
-                try:
-                    take(c, proj, entry, live)
-                except BaseException:
-                    c.execute("ROLLBACK")
-                    raise
-                c.execute("COMMIT")
+                left -= take_file(c, proj, ws, rel, name, live)
             except sqlite3.OperationalError:   # the bus is busy: this file, and every other, waits for the next run
                 raise
-            except Exception as e:   # whatever one file does stops neither its outbox nor the next project
+            except Exception as e:             # whatever one file does stops neither its outbox nor the next project
                 if c.in_transaction:
                     c.execute("ROLLBACK")
-                outbox_refused(c, proj, name, str(e) or type(e).__name__)
-            try:
-                nofollow.remove(ws, rel)
-            except OSError as e:
-                log_once(f"outbox-{proj}-{name}", _("{project}: cannot delete {name} from its outbox: {e}",
-                                                      project=proj, name=name, e=e))
+                log_safely(_("{project}: {name} in its outbox: {e!r}", project=proj, name=name, e=e))
+        if folders:
+            log_once(f"outbox-folders-{proj}", _("{project}: ignoring {n} {n:folder|folders} in its outbox: {names}", project=proj,
+                                                 n=len(folders), names=", ".join(folders[:5])))
+
+
+def log_safely(msg: str) -> None:
+    try:
+        log(msg)
+    except OSError:
+        pass
+
+
+def take_file(c, proj: str, ws, rel: str, name: str, live) -> bool:
+    """One outbox file: taken in, or refused and reported, then removed whatever the report did (only a busy bus stops
+    that). Whether it left the outbox."""
+    try:
+        raw = nofollow.read(ws, rel, OUTBOX_CAP)
+        if raw is None:
+            return False
+        entry = json.loads(raw)
+        if isinstance(entry, dict) and entry.get("op") == "told":
+            live.load()
+        c.execute("BEGIN IMMEDIATE")
+        try:
+            take(c, proj, entry, live)
+        except BaseException:
+            c.execute("ROLLBACK")
+            raise
+        c.execute("COMMIT")
+    except sqlite3.OperationalError:
+        raise
+    except Exception as e:
+        if c.in_transaction:
+            c.execute("ROLLBACK")
+        try:
+            outbox_refused(c, proj, name, str(e) or type(e).__name__)
+        except sqlite3.OperationalError:
+            raise
+        except Exception as report:
+            log_safely(_("{project}: cannot report {name} from its outbox: {e!r}", project=proj, name=name, e=report))
+    try:
+        nofollow.remove(ws, rel)
+    except OSError as e:
+        log_once(f"outbox-{proj}-{hashlib.sha1(storable(name).encode()).hexdigest()[:12]}",
+                 _("{project}: cannot delete {name} from its outbox: {e}", project=proj, name=name, e=e))
+        return False
+    return True
 
 
 def own_session(c, project: str, session) -> str | None:
@@ -2458,7 +2509,7 @@ def take(c, proj: str, entry, live=None) -> None:
     session = own_session(c, proj, entry.get("session"))
     op = entry.get("op")
     if op == "send":
-        _strings(entry, ("id", "point", *(k for k in SEND_FIELDS if k != "inferred")))
+        _strings(entry, ("id", *(k for k in SEND_FIELDS if k != "inferred")))
         if not OUTBOX_ID.match(entry.get("id") or ""):
             refuse(_("hubbus: a letter id from an outbox has the form m<MMDDhhmm>-<12 hex digits>"))
         if entry.get("type") not in TYPES or not entry.get("to") or not entry.get("text"):
@@ -2466,12 +2517,12 @@ def take(c, proj: str, entry, live=None) -> None:
         a = argparse.Namespace(cmd="send", sender=proj, id=None,
                                **{k: entry.get(k) for k in SEND_FIELDS if k != "inferred"},
                                inferred=entry.get("inferred") is True)
-        send_letter(c, a, proj, session, proj, boxed=True, mid=entry["id"], point=entry.get("point"))
+        send_letter(c, a, proj, session, proj, boxed=True, mid=entry["id"])
     elif op in ("ack", "done"):
         ids = entry.get("ids")
         if not isinstance(ids, list) or not 0 < len(ids) <= 50 or not all(isinstance(i, str) for i in ids):
             refuse(_("hubbus: ids must be a list of 1 to 50 letter ids"))
-        _strings(entry, ("note", "point"))
+        _strings(entry, ("note",))
         for i in ids:
             r = get_event(c, i) if op == "done" else get_message(c, i)
             if r is None or r["to_project"] != proj:
@@ -2481,8 +2532,7 @@ def take(c, proj: str, entry, live=None) -> None:
                         {"session": session, "via": "ack"})
             else:
                 publish(c, f"{i}:done", "message.done", proj, proj, i,
-                        {"note": entry.get("note") or _("handled"), "session": session,
-                         **({"point": entry["point"]} if entry.get("point") else {})})
+                        {"note": entry.get("note") or _("handled"), "session": session})
     elif op == "told":
         # a session's `brunna inbox`: told only for that session (one the hooks saw in this project), judged against the
         # bus now, since the view it read can be a minute old. Requests and questions only: a notice's or a record's flag
@@ -2524,8 +2574,9 @@ def take(c, proj: str, entry, live=None) -> None:
 
 
 def outbox_refused(c, proj: str, name: str, why: str) -> None:
-    """Tell the project a file in its outbox was not sent (a letter its sessions get through the hooks), once."""
-    why = why[:300]
+    """Tell the project a file in its outbox was not sent (a letter its sessions get through the hooks), once. The name
+    and the reason are the file's own words: only what UTF-8 can hold goes on."""
+    name, why = storable(name), storable(why)[:300]
     log(_("{project}: refused {name} from its outbox: {why}", project=proj, name=name, why=why))
     publish(c, f"outbox-refused-{proj}-{hashlib.sha1(name.encode()).hexdigest()[:12]}", "message",
             hubconf.hub_project(), proj, None,
@@ -2933,7 +2984,7 @@ def queued(project: str) -> None:
     print(_("(in {project}'s outbox: the platform sends it within a minute)", project=project), file=sys.stderr)
 
 
-def send_letter(c, a, sender: str, session, here, boxed: bool = False, mid: str | None = None, point: str | None = None) -> str:
+def send_letter(c, a, sender: str, session, here, boxed: bool = False, mid: str | None = None) -> str:
     """send's checks and write, for the CLI and for a letter taken from a sandboxed project's outbox (boxed: sender =
     that project, never a name in the file; a reply only in its own threads). mid: the letter id (else --id, else a
     new one); --id stays what it is to a task, its key. Returns the id to print."""
@@ -2948,7 +2999,7 @@ def send_letter(c, a, sender: str, session, here, boxed: bool = False, mid: str 
     if isinstance(session, str) and session.startswith("mcp:"):
         session = None   # an MCP server's id is no session to reply to
     p = {"type": a.type, "text": a.text, "from_session": session}
-    if (point := point or run_point()):
+    if not boxed and (point := run_point()):   # never from an outbox: anything in the sandbox writes those files
         p["point"] = point
     if a.type in OWNER_ONLY and a.to != OWNER_ADDRESS:
         refuse(_("hubbus: {type} can only be sent to {alias}", type=a.type, alias=OWNER_ALIAS))
@@ -3021,8 +3072,7 @@ def mail_command(a) -> None:
             mid, a.id = a.id or outbox_id(), None
         out = send_letter(c, a, a.sender or here, session, here, boxed=bool(box), mid=mid)
         if box:
-            outbox_put(box, {"op": "send", "id": mid, "session": session, **{k: getattr(a, k) for k in SEND_FIELDS},
-                             **({"point": run_point()} if run_point() else {})})
+            outbox_put(box, {"op": "send", "id": mid, "session": session, **{k: getattr(a, k) for k in SEND_FIELDS}})
             queued(box)
             out = mid
         print(out)
@@ -3076,8 +3126,7 @@ def mail_command(a) -> None:
             if r is None or r["to_project"] != box:
                 refuse(_("hubbus: {id} is not a letter to {project}", id=i, project=box))
         outbox_put(box, {"op": a.cmd, "ids": a.ids, "session": session,
-                         **({"note": a.note} if a.cmd == "done" and a.note else {}),
-                         **({"point": run_point()} if a.cmd == "done" and run_point() else {})})
+                         **({"note": a.note} if a.cmd == "done" and a.note else {})})
         queued(box)
         if a.cmd == "done":
             for i in a.ids:

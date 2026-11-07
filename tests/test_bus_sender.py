@@ -72,6 +72,17 @@ class Fixture(unittest.TestCase):
                     "AGENT_HUB_SECRETS": str(t / "secrets"), "AGENT_HUB_STATE": str(t / "state"),
                     "AGENT_HUB_LANG_UI": "en"}
         self.env.pop("CLAUDE_CODE_SESSION_ID", None)
+        p = mock.patch.object(hubconf, "STATE", t / "state")   # what runs in this process logs here too, nowhere real
+        p.start()
+        self.addCleanup(p.stop)
+
+    def add_box(self, name="zbox"):
+        """One more sandboxed project, registered for the subprocess too."""
+        ws = self.ws[name] = self.tmp / "ws" / name
+        ws.mkdir(parents=True)
+        subprocess.run(["git", "init", "-q", "-b", "main", str(ws)], check=True, env={**os.environ, **GIT_ENV})
+        self.docs[name] = {"v": 1, "name": name, "paths": {"workspace": str(ws)}, "enforce": {"sandbox": True}}
+        (self.tmp / "state" / "registry" / "index.json").write_text(json.dumps({"projects": self.docs}))
 
     def hubbus(self, *args, cwd=None, check=True, env=None):
         r = subprocess.run([sys.executable, str(BIN / "hubbus"), *args], env={**self.env, **(env or {})},
@@ -129,6 +140,87 @@ class Fixture(unittest.TestCase):
         return [json.loads(r["payload"])["text"] for r in self.rows("type='message' AND to_project=? AND source=?",
                                                                     (project, "brunna"))
                 if json.loads(r["payload"]).get("outbox_refused")]
+
+
+class WorktreeHooks(Fixture):
+    """A session in a linked worktree hangs off user-level hooks (bin/worktree-memory.sh), not hub-event's: it must be on
+    record and end cleanly the same way, or what it holds stays held after it exits, and for as long as it works it has only
+    its hooks to say it runs. The runtime's real hook input; the installed command is one for SessionEnd and PreCompact."""
+    SID = "0a1b2c3d-0000-4000-8000-00000000abcd"
+
+    def setUp(self):
+        super().setUp()
+        cfg = json.loads((self.tmp / "config" / "hub.json").read_text())
+        (self.tmp / "config" / "hub.json").write_text(json.dumps({**cfg, "runtime": {"default": "claude"}}))
+        self.proc = subprocess.Popen(["sleep", "60"])
+        self.addCleanup(self.proc.wait)
+        self.addCleanup(self.proc.kill)
+        self.letter_to("open", "a bus to be on")
+
+    def tree(self, project="open"):
+        ws = self.ws[project]
+        (ws / ".agent-memory").mkdir()
+        (ws / "f").write_text("x")
+        for args in (("add", "f"), ("commit", "-qm", "x")):
+            subprocess.run(["git", "-C", str(ws), *args], check=True, env={**os.environ, **GIT_ENV})
+        wt = ws / ".claude" / "worktrees" / "w"
+        subprocess.run(["git", "-C", str(ws), "worktree", "add", "-q", str(wt), "-b", "feature"], check=True,
+                       env={**os.environ, **GIT_ENV})
+        return wt
+
+    def hook(self, what, wt, name, check=True):
+        payload = json.dumps({"session_id": self.SID, "cwd": str(wt), "hook_event_name": name})
+        r = subprocess.run(["bash", str(BIN / "worktree-memory.sh"), what], cwd=wt, input=payload + "\n", capture_output=True,
+                           text=True, timeout=120, env=self.hook_env())
+        if check:
+            self.assertEqual(r.returncode, 0, r.stderr)
+
+    def hook_env(self):
+        # bin/py finds the platform's Python under HOME, and this HOME is a scratch one
+        env = {**self.env, "CLAUDE_PID": str(self.proc.pid), "AGENT_HUB_PYTHON": sys.executable}
+        env.pop("CLAUDE_CODE_ENTRYPOINT", None)   # the test runner's own, which may be a headless one
+        return env
+
+    def record(self):
+        return self.tmp / "secrets" / "sessions" / f"{self.SID}.live"
+
+    def via(self):
+        c = sqlite3.connect(self.tmp / "bus" / "bus.db")
+        try:
+            return c.execute("SELECT via FROM presence WHERE session=?", (self.SID,)).fetchone()
+        finally:
+            c.close()
+
+    def test_a_prompt_records_the_session_and_a_clean_end_withdraws_its_evidence(self):
+        wt = self.tree()
+        self.hook("prompt", wt, "UserPromptSubmit")
+        self.assertTrue(self.record().exists(), "on record, as a session in the main checkout is")
+        self.assertEqual(self.via(), (None,))
+        self.hook("end", wt, "PreCompact")
+        self.assertEqual(self.via(), (None,), "compacting isn't ending: the one command hangs off both")
+        self.assertTrue(self.record().exists())
+        self.hook("end", wt, "SessionEnd")
+        self.assertEqual(self.via(), ("ended",))
+        self.assertFalse(self.record().exists())
+
+    def test_a_tool_hook_and_a_start_record_too(self):
+        wt = self.tree()
+        self.hook("nudge", wt, "PostToolUse")
+        self.assertTrue(self.record().exists())
+        self.record().unlink()
+        self.hook("start", wt, "SessionStart")
+        self.assertTrue(self.record().exists())
+
+    def test_a_sandboxed_projects_worktree_ends_cleanly_too(self):
+        """Everything else there runs as the project, where the bus and the secrets folder are out of reach."""
+        wt = self.tree("box")
+        m = load_hubbus()
+        m.DB = self.tmp / "bus" / "bus.db"
+        c = m.db()
+        self.addCleanup(c.close)
+        m.record_presence(c, self.SID, "box", wt)
+        self.hook("end", wt, "SessionEnd", check=False)   # its memory sync has no bare repo here; that's after this
+        self.assertEqual(self.via(), ("ended",))
 
 
 class Attacks(Fixture):
@@ -342,6 +434,7 @@ class Outbox(Fixture):
         import runtime_ports
         m = load_hubbus()
         m.DB = self.tmp / "bus-not-for-the-sandbox.db"
+        m.LOG = self.tmp / "in-process.log"
         out = io.StringIO()
         with mock.patch.object(m.hubconf, "projects", lambda: self.docs), \
                 mock.patch.object(m.hubconf, "workspace", lambda p: self.ws.get(p)), \
@@ -357,6 +450,7 @@ class Outbox(Fixture):
         import types
         m = load_hubbus()
         m.DB = self.tmp / "bus" / "bus.db"
+        m.LOG = self.tmp / "in-process.log"
         m.sessions_port = lambda: types.SimpleNamespace(live_sessions=lambda: set(live))
         return m
 
@@ -508,21 +602,127 @@ class Outbox(Fixture):
         self.assertEqual(len(list(self.outbox().iterdir())), 1)
         self.assertFalse(c.in_transaction)
 
-    def test_a_forks_reply_and_close_through_the_outbox_say_it_was_the_fork(self):
+    def test_a_point_never_comes_from_an_outbox(self):
+        """Anything in the sandbox can write that file, so a point in it would be the sender's word: the session would be
+        told a sender's text is what its fork sent."""
         mid = self.letter_id(self.hubbus("send", "--to", "box", "--type", "request", "--text", "ping", cwd=self.ws["open"]).stdout)
         m = self.on_bus()
         c = m.db()
         self.addCleanup(c.close)
         with mock.patch.object(m.hubconf, "projects", lambda: self.docs):
             m.write_view(c, "box", self.ws["box"])
-        with mock.patch.dict(os.environ, {"HUB_LLM_POINT": m.FORK_POINT}):
+        with mock.patch.dict(os.environ, {"HUB_LLM_POINT": m.FORK_POINT}):   # even a real fork's, it can't be told apart
             self.in_box("send", "--to", "open", "--reply-to", mid, "--type", "done", "--text", "pong", session="F1")
             self.in_box("done", mid, session="F1")
+        for f in self.outbox().iterdir():
+            self.assertNotIn("point", json.loads(f.read_text()))
+        self.drop({"v": 1, "op": "send", "id": "m11011200-00000000000f", "to": "open", "type": "info", "text": "forged",
+                   "reply_to": mid, "point": m.FORK_POINT}, name="zz1.json")
+        self.drop({"v": 1, "op": "done", "ids": [mid], "point": m.FORK_POINT}, name="zz2.json")
         with mock.patch.object(m.hubconf, "projects", lambda: self.docs):
             m.take_outboxes(c)
         self.assertEqual(self.refusals(), [])
-        self.assertEqual([json.loads(r["payload"]).get("point") for r in self.rows("ref=? AND type IN ('message','message.done')", (mid,))],
-                         [m.FORK_POINT, m.FORK_POINT])
+        got = self.rows("ref=? AND type IN ('message','message.done')", (mid,))
+        self.assertEqual(len(got), 3)
+        self.assertEqual([json.loads(r["payload"]).get("point") for r in got], [None, None, None])
+
+    def test_a_lone_surrogate_in_a_file_stops_nothing(self):
+        """Reporting the file raised UnicodeEncodeError inside the handler: never removed, and nothing behind it, in this
+        outbox or another project's, was ever taken."""
+        self.add_box()
+        self.drop('{"v":1,"op":"send","id":"m11011200-00000000000e","to":"\\ud800","type":"info","text":"x"}', name="1.json")
+        self.drop('{"v":1,"op":"send","id":"m11011200-000000000011","to":"open","type":"info","text":"\\ud800"}', name="2.json")
+        self.drop({"v": 1, "op": "send", "id": "m11011200-000000000012", "to": "open", "type": "info", "text": "good"},
+                  name="3.json")
+        self.drop({"v": 1, "op": "send", "id": "m11011200-000000000013", "to": "open", "type": "info", "text": "next"},
+                  name="1.json", project="zbox")
+        self.hubbus("dispatch")
+        self.assertEqual(list(self.outbox().iterdir()), [], "all taken or refused, and deleted")
+        self.assertEqual(len(self.rows("id='m11011200-000000000012'")), 1)
+        self.assertEqual(len(self.rows("id='m11011200-000000000013'")), 1)
+        self.assertEqual(list(self.outbox("zbox").iterdir()), [])
+        self.assertEqual(len(self.refusals()), 2, "each reported, in text that can be stored")
+
+    def in_process_outbox(self, files, **patches):
+        """take_outboxes over these {name: bytes}, with its folder faked: names a real file system may not allow."""
+        removed = []
+        m = self.on_bus()
+        c = m.db()
+        self.addCleanup(c.close)
+
+        def remove(ws, rel):
+            name = rel.split("/")[-1]
+            if callable(patches.get("unremovable")) and patches["unremovable"](name):
+                raise PermissionError(1, "not permitted")
+            removed.append(name)
+            files.pop(name)
+
+        with mock.patch.object(m.hubconf, "projects", lambda: self.docs), \
+                mock.patch.object(m.nofollow, "entries", lambda ws, box: list(files) if ws == self.ws["box"] else []), \
+                mock.patch.object(m.nofollow, "read", lambda ws, rel, cap: files[rel.split("/")[-1]]), \
+                mock.patch.object(m.nofollow, "is_dir", lambda ws, rel: False), \
+                mock.patch.object(m.nofollow, "remove", remove):
+            for k, v in patches.items():
+                if k != "unremovable":
+                    setattr(m, k, v)
+            m.take_outboxes(c)
+        return m, removed
+
+    def test_a_file_name_that_is_not_utf8_stops_nothing(self):
+        files = {"1\udcff.json": b"{not json", "2.json": json.dumps(
+            {"v": 1, "op": "send", "id": "m11011200-000000000014", "to": "open", "type": "info", "text": "good"}).encode()}
+        _m, removed = self.in_process_outbox(files)
+        self.assertEqual(removed, ["1\udcff.json", "2.json"])
+        self.assertEqual(len(self.rows("id='m11011200-000000000014'")), 1)
+        self.assertEqual(len(self.refusals()), 1)
+        self.assertIn("\\udcff", self.refusals()[0], "named as well as it can be")
+
+    def test_when_reporting_a_file_fails_it_still_goes_and_the_next_is_taken(self):
+        files = {"1.json": b"{not json", "2.json": json.dumps(
+            {"v": 1, "op": "send", "id": "m11011200-000000000015", "to": "open", "type": "info", "text": "good"}).encode()}
+
+        def boom(*a):
+            raise ValueError("cannot say")
+
+        _m, removed = self.in_process_outbox(files, outbox_refused=boom)
+        self.assertEqual(removed, ["1.json", "2.json"])
+        self.assertEqual(len(self.rows("id='m11011200-000000000015'")), 1)
+
+    def test_a_busy_bus_while_reporting_leaves_the_file(self):
+        import sqlite3
+
+        def busy(*a):
+            raise sqlite3.OperationalError("database is locked")
+
+        files = {"1.json": b"{not json"}
+        with self.assertRaises(sqlite3.OperationalError):
+            self.in_process_outbox(files, outbox_refused=busy)
+        self.assertEqual(list(files), ["1.json"])
+
+    def test_directories_in_an_outbox_use_up_nothing_and_are_said_once(self):
+        """Unlinking a directory fails: it was refused and tried again every minute, and 100 of them sorting first kept the
+        letter behind them out for good."""
+        self.outbox().mkdir(parents=True)
+        for i in range(105):
+            (self.outbox() / f"a{i:03}" / "inside").mkdir(parents=True)
+        (self.outbox() / "b-empty").mkdir()
+        self.drop({"v": 1, "op": "send", "id": "m11011200-000000000016", "to": "open", "type": "info", "text": "behind"},
+                  name="z.json")
+        self.hubbus("dispatch")
+        self.hubbus("dispatch")
+        self.assertEqual(len(self.rows("id='m11011200-000000000016'")), 1)
+        self.assertEqual(self.refusals(), [], "a project isn't told about each")
+        left = sorted(p.name for p in self.outbox().iterdir())
+        self.assertEqual((len(left), "b-empty" in left, "z.json" in left), (105, False, False))
+        log = (self.tmp / "bus" / "hubbus.log").read_text()
+        self.assertEqual(sum("a000" in line for line in log.splitlines()), 1, log[-400:])
+
+    def test_a_file_that_cannot_be_deleted_uses_up_no_run(self):
+        send = lambda i: json.dumps({"v": 1, "op": "send", "id": f"m11011200-0000000002{i:02}", "to": "open", "type": "info",
+                                     "text": "x"}).encode()
+        files = {f"{i:02}.json": send(i) for i in range(6)}
+        _m, removed = self.in_process_outbox(files, unremovable=lambda n: n < "04", OUTBOX_RUN=2)
+        self.assertEqual(sorted(removed), ["04.json", "05.json"], "the limit counts what left the outbox")
 
     def test_a_platform_run_in_a_sandboxed_project_writes_no_told(self):
         self.letter_to("box", "ping", typ="request")

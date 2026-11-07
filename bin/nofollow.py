@@ -12,6 +12,8 @@ workspace) is opened normally: its parent is not the project's to change. Standa
   entries(base, rel) → [name] | None         the names in a folder (None: missing); what each is isn't looked at
   remove(base, rel)                          unlink one entry (a link is removed, never what it points to); missing
                                              is fine
+  is_dir(base, rel) → bool                   this entry itself is a folder (a link to one isn't); missing: False
+  remove_dir(base, rel)                      remove one empty folder; OSError if it isn't empty
 All raise OSError for a link, a FIFO or anything else that isn't a regular file / folder on the way (read: the file
 itself too), and read for a file over cap.
 """
@@ -109,6 +111,29 @@ def entries(base, rel) -> list[str] | None:
         return None
     try:
         return os.listdir(d)
+    finally:
+        os.close(d)
+
+
+def is_dir(base, rel) -> bool:
+    parts = _parts(rel)
+    try:
+        d = _folder(base, parts[:-1], create=False)
+    except FileNotFoundError:
+        return False
+    try:
+        return stat.S_ISDIR(os.stat(parts[-1], dir_fd=d, follow_symlinks=False).st_mode)
+    except FileNotFoundError:
+        return False
+    finally:
+        os.close(d)
+
+
+def remove_dir(base, rel) -> None:
+    parts = _parts(rel)
+    d = _folder(base, parts[:-1], create=False)
+    try:
+        os.rmdir(parts[-1], dir_fd=d)
     finally:
         os.close(d)
 

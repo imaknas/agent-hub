@@ -555,6 +555,16 @@ class Forks(Harness):
                  env=HANDLER)
         self.assertEqual(self.hook("prompt", "S1"), "")
 
+    def test_a_point_from_another_project_gets_no_credit_and_is_not_printed_as_the_branchs(self):
+        """A sender's own process can set the variable: its letter must not read as what the fork sent."""
+        self.forked_and_lapsed()
+        self.m.publish(self.c, "x1", "message", "other", "proj", "m1",
+                       {"type": "info", "text": "pretending", "reply_to": "m1", "point": self.m.FORK_POINT})
+        self.m.publish(self.c, "m1:done", "message.done", "other", "proj", "m1", {"note": "x", "point": self.m.FORK_POINT})
+        with mock.patch.object(self.m.hubconf, "STATE", self.tmp / "state"):
+            self.assertEqual(self.m.fork_result(self.c, self.m.get_message(self.c, "m1")), (False, ""))
+        self.assertNotIn("[m1]", self.hook("prompt", "S1"))
+
     def test_a_forks_question_to_the_owner_is_no_answer(self):
         self.forked_and_lapsed()
         self.m.publish(self.c, "q1", "message", "proj", self.m.OWNER_ADDRESS, "m1",
@@ -752,6 +762,31 @@ class NoSessionsPort(Harness):
         self.send("m1", "proj", "request")
         self.m.routed(self.c, self.m.get_message(self.c, "m1"), "S1", "hook")
         self.assertEqual(self.hook("prompt", "S2"), "")
+
+
+class Logging(Harness):
+    def real_logging(self):
+        m = tmd.load_hubbus()
+        m.LOG = self.tmp / "hubbus.log"
+        return m
+
+    def test_text_a_file_cannot_store_is_written_escaped(self):
+        m = self.real_logging()
+        m.log("bad \ud800 name")
+        self.assertIn("\\ud800", m.LOG.read_text())
+
+    def test_log_once_says_it_once_with_text_a_file_cannot_store(self):
+        m = self.real_logging()
+        with mock.patch.object(m.hubconf, "STATE", self.tmp):
+            m.log_once("k", "bad \ud800 name")
+            m.log_once("k", "bad \ud800 name")
+        self.assertEqual(m.LOG.read_text().count("bad"), 1)
+
+    def test_clearing_what_was_never_said_writes_no_file(self):
+        m = self.real_logging()
+        with mock.patch.object(m.hubconf, "STATE", self.tmp):
+            m.log_once("never", "")
+        self.assertFalse((self.tmp / "hubbus-logged-never.txt").exists())
 
 
 class FailedLookup(Harness):

@@ -168,5 +168,8 @@
  "  (held by this session)": "  (這個 session 拿著)",
  "  (held by session {session})": "  (session {session} 拿著)",
  "Waiting for a session (a session holds them, or the platform has no run left to start): {items}": "等 session(有 session 拿著,或平台沒有可以再啟動的處理):{items}",
- "(a platform run's ack is not recorded)": "(平台啟動的處理,ack 不記錄)"
+ "(a platform run's ack is not recorded)": "(平台啟動的處理,ack 不記錄)",
+ "{project}: {name} in its outbox: {e!r}": "{project}:寄件匣裡的 {name}:{e!r}",
+ "{project}: ignoring {n} {n:folder|folders} in its outbox: {names}": "{project}:略過寄件匣裡的 {n} 個資料夾:{names}",
+ "{project}: cannot report {name} from its outbox: {e!r}": "{project}:無法回報寄件匣裡的 {name}:{e!r}"
 }
