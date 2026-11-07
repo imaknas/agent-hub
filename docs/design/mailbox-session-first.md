@@ -726,13 +726,16 @@ What step 5 must know: `pick(c, r, cands)` is the only caller to change, and `Ti
   failure: the log says so, and recency picks. No "fixed-text failure" field in `llm-points` was needed.
 - **`max_attempts`** (new in `contracts/llm-points.v1`, so the other side syncs its copy) counts every request, the 429 back-off and the
   invalid answer asked again alike: the point declares 1, one request a call.
-- **Where things are kept.** The answer: `<hash>.route` in the secrets sessions folder (`hubconf.session_file`, the suffix added), mode
-  600, the hash being the first 32 hex of the letter id's sha256, since `--id` is free text for an unsandboxed sender. The folder's own
-  prune takes it ten minutes on. What has to outlive that (one call per letter, the day's count) is `.state/mailbox/route-calls.json`:
-  the hash, the project, when the call started, and whether it's spent. No text. Only dispatch writes it, under its lock, and drops
-  entries 8 days old whenever it marks a new call: the bridge's prune doesn't hold that lock, so it doesn't touch the file. A letter
-  is marked before its call starts, so a dispatch killed in between leaves it asked with no answer (recency after `WAIT_S`), never
-  asked twice.
+- **Where things are kept: `hubconf.mailbox_route_dir()`, `<secrets>/mailbox-route/`, mode 700**, beside the sessions folder and
+  `tmp`, so under what every sandbox is denied both ways. The design said the sessions folder; the first version put the answer there
+  (`<hash>.route`, a suffix added) and the calls in `.state/mailbox/`. The cold review: that name read as a session's to the sessions
+  folder's prune, and `.state` is readable by sandboxed sessions, which would learn when a project's sessions were asked about. Now
+  both are here: the answer, `<hash>.answer`, mode 600, the hash being the first 32 hex of the letter id's sha256, since `--id` is free
+  text for an unsandboxed sender; and `calls.json` (one call per letter, the day's count): the hash, the project, when the call
+  started, and whether it's spent. No text. Only dispatch writes the calls, under its lock, and drops entries 8 days old, and answers
+  nobody read a day old, whenever it marks a new call: the bridge's prune doesn't hold that lock, so it doesn't touch the folder. A
+  letter is marked before its call starts, so a dispatch killed in between leaves it asked with no answer (recency after `WAIT_S`),
+  never asked twice. The secrets folder is in the nightly backup, so these are too; nothing in them is worth leaving out.
 - **While the model is asked the letter isn't routed**: it counts as waiting, and a hook may show it as before, holding it by its own
   route; the answer then goes unused. The tick reads the answer next time; none after `WAIT_S` (90 s, two ticks a minute apart) and
   recency picks. The call's process ends itself and its process group at 75 s (the runtime's own process with it), and the point's

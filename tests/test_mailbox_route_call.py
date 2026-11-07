@@ -253,10 +253,27 @@ class Pick(Harness):
         self.two()
         self.dispatch()
         self.answer("m1", "S1")
-        f = mr.answer_file("m1")
-        self.assertEqual(f.parent, mr.hubconf.session_addresses_dir())
-        self.assertEqual(f.stat().st_mode & 0o777, 0o600)
+        f, d = mr.answer_file("m1"), mr.hubconf.mailbox_route_dir()
+        self.assertEqual((f.parent, mr.calls_file().parent), (d, d))
+        self.assertTrue(d.is_relative_to(mr.hubconf.secrets_dir()), "under what every sandbox is denied")
+        self.assertFalse(any(p.is_relative_to(self.tmp / "state") for p in (f, mr.calls_file())),
+                         "not in .state, which sandboxed sessions read")
+        self.assertEqual((d.stat().st_mode & 0o777, f.stat().st_mode & 0o777, mr.calls_file().stat().st_mode & 0o777),
+                         (0o700, 0o600, 0o600))
         self.assertEqual(f.read_text(), "S1")
+        self.assertIsNone(mr.hubconf.session_of_file(f.name))
+        os.utime(f, (time.time() - 3600, time.time() - 3600))
+        self.assertEqual(self.m.prune_wake_addresses(live=set()), [], "no session of the sessions folder's prune")
+        self.assertTrue(f.exists())
+
+    def test_an_answer_nobody_read_goes_a_day_on(self):
+        self.two()
+        self.dispatch()
+        self.answer("m1", "S1")
+        self.hook("prompt", "S2")   # held by the hook: the answer is never read
+        os.utime(mr.answer_file("m1"), (time.time() - mr.ANSWER_KEEP_S - 1,) * 2)
+        mr.mark("m9", "proj")
+        self.assertFalse(mr.answer_file("m1").exists())
 
     def test_an_old_call_goes_at_the_next_one(self):
         """Pruned only by dispatch, under its lock, when it marks another: the bridge's prune doesn't hold that lock."""

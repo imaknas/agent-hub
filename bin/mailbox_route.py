@@ -13,12 +13,13 @@ most MAX_CANDIDATES) its id, its folder under the project, how long since its la
 reply (session_summary) only where text_allowed says so. All of it goes in as one JSON block marked as data: a letter
 anyone can send, and a reply a session wrote, are never instructions.
 
-What comes back: only an id in the list it was given, written by the call's process to a mode-600 file in the secrets
-sessions folder (hubconf.session_file, suffix ANSWER), which dispatch checks against the candidates again. Nothing the
-model wrote is kept elsewhere: the process's output goes nowhere, llm.answer prints and publishes nothing (a reason can
-quote the model). For a call that gave no answer dispatch says so itself, in fixed words: in its log, and as a job.failed
-once a day per project (hubbus route_failed). Nothing is recorded for evals. The calls file (CALLS, in the state folder) holds a hash of each letter's id, its
-project and when the call started; no text.
+What comes back: only an id in the list it was given, written by the call's process to a mode-600 file
+(<hash>.answer in hubconf.mailbox_route_dir, under the secrets directory), which dispatch checks against the candidates
+again. Nothing the model wrote is kept elsewhere: the process's output goes nowhere, llm.answer prints and publishes
+nothing (a reason can quote the model). For a call that gave no answer dispatch says so itself, in fixed words: in its
+log, and as a job.failed once a day per project (hubbus route_failed). Nothing is recorded for evals. The calls file
+(calls.json beside the answers) holds a hash of each letter's id, its project, when the call started and whether it is
+spent; no text.
 
     mailbox_route.py      the call's process: reads {"key", "prompt", "cands"} on stdin (start writes it)
 """
@@ -45,7 +46,7 @@ LETTER_CHARS = 1000     # of the letter's text
 LAST_CHARS = 500        # of a candidate's last reply (what wait() keeps is at most this)
 MAX_CANDIDATES = 8      # the most recently active, when there are more
 KEEP_DAYS = 8           # a letter is routed until it is 7 days old; what its call left goes a day after
-ANSWER = "route"        # the answer's suffix in hubconf.session_addresses_dir
+ANSWER_KEEP_S = 86400   # an answer nobody read (a hook held the letter meanwhile) goes a day after it was written
 
 
 def key(letter_id: str) -> str:
@@ -53,8 +54,17 @@ def key(letter_id: str) -> str:
     return hashlib.sha256(letter_id.encode("utf-8", "surrogatepass")).hexdigest()[:32]
 
 
+def _dir(make: bool = False) -> pathlib.Path:
+    """hubconf.mailbox_route_dir(), made mode 700 one folder at a time when asked (a mode applies to the last folder made)."""
+    d = hubconf.mailbox_route_dir()
+    if make:
+        d.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
+        d.mkdir(mode=0o700, exist_ok=True)
+    return d
+
+
 def calls_file() -> pathlib.Path:
-    return hubconf.STATE / "mailbox" / "route-calls.json"
+    return _dir() / "calls.json"
 
 
 def _calls() -> dict:
@@ -65,12 +75,18 @@ def _calls() -> dict:
     return d if isinstance(d, dict) else {}
 
 
-def _save(calls: dict) -> None:
-    f = calls_file()
-    f.parent.mkdir(parents=True, exist_ok=True)
+def _write(f: pathlib.Path, text: str) -> None:
+    """Whole or not at all, mode 600, never through a link."""
     tmp = f.with_name(f".{f.name}.{os.getpid()}.tmp")
-    tmp.write_text(json.dumps(calls, sort_keys=True))
+    fd = os.open(tmp, os.O_WRONLY | os.O_CREAT | os.O_TRUNC | getattr(os, "O_NOFOLLOW", 0), 0o600)
+    with os.fdopen(fd, "w", encoding="utf-8") as fh:
+        fh.write(text)
     os.replace(tmp, f)
+
+
+def _save(calls: dict) -> None:
+    _dir(make=True)
+    _write(calls_file(), json.dumps(calls, sort_keys=True))
 
 
 def call_of(letter_id: str) -> dict | None:
@@ -89,13 +105,20 @@ def calls_today(names) -> int:
 
 
 def mark(letter_id: str, project: str, done: bool = False) -> None:
-    """The call for this letter has started (or couldn't: done). Old entries go here, KEEP_DAYS after their start: the file is
-    written only by dispatch, under its lock, so nothing else prunes it. An answer file goes with the sessions folder's own
-    prune, ten minutes after it was written."""
-    cut = time.time() - KEEP_DAYS * 86400
-    calls = {k: v for k, v in _calls().items() if isinstance(v, dict) and isinstance(v.get("ts"), (int, float)) and v["ts"] > cut}
-    calls[key(letter_id)] = {"project": project, "ts": time.time(), "done": done}
+    """The call for this letter has started (or couldn't: done). Old entries go here, KEEP_DAYS after their start, and
+    answers nobody read, ANSWER_KEEP_S after they were written: the folder is written only by dispatch, under its lock, and by
+    a call's process (its one answer), so nothing else prunes it."""
+    now = time.time()
+    calls = {k: v for k, v in _calls().items()
+             if isinstance(v, dict) and isinstance(v.get("ts"), (int, float)) and v["ts"] > now - KEEP_DAYS * 86400}
+    calls[key(letter_id)] = {"project": project, "ts": now, "done": done}
     _save(calls)
+    for f in _dir().glob("*.answer"):
+        try:
+            if now - f.lstat().st_mtime > ANSWER_KEEP_S:
+                f.unlink()
+        except OSError:
+            pass
 
 
 def consume(letter_id: str) -> None:
@@ -105,40 +128,34 @@ def consume(letter_id: str) -> None:
     if isinstance(calls.get(k), dict):
         calls[k]["done"] = True
         _save(calls)
-    f = answer_file(letter_id)
-    if f:
-        f.unlink(missing_ok=True)
+    answer_file(letter_id).unlink(missing_ok=True)
 
 
-def answer_file(letter_id: str) -> pathlib.Path | None:
-    return hubconf.session_file(key(letter_id), ANSWER)
+def _answer(k: str) -> pathlib.Path:
+    return _dir() / f"{k}.answer"
+
+
+def answer_file(letter_id: str) -> pathlib.Path:
+    return _answer(key(letter_id))
 
 
 def read_answer(letter_id: str) -> tuple[str, str | None]:
     """("pending", None): nothing yet; ("none", None): the call ended with no usable answer; ("answer", id)."""
-    f = answer_file(letter_id)
     try:
-        text = f.read_text(encoding="utf-8").strip() if f else None
+        text = answer_file(letter_id).read_text(encoding="utf-8").strip()
     except FileNotFoundError:
         return "pending", None
     except (OSError, ValueError):
-        return "none", None
-    if text is None:
         return "none", None
     return ("answer", text) if text else ("none", None)
 
 
 def write_answer(k: str, sid: str) -> None:
-    """The call's one output: an id from its list, or nothing (empty: no usable answer). Mode 600, never through a link."""
-    f = hubconf.session_file(k, ANSWER)
-    if not f:
+    """The call's one output: an id from its list, or nothing (empty: no usable answer)."""
+    if len(k) != 32 or not all(ch in "0123456789abcdef" for ch in k):
         return
-    f.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
-    tmp = f.with_name(f".{f.name}.{os.getpid()}.tmp")
-    fd = os.open(tmp, os.O_WRONLY | os.O_CREAT | os.O_TRUNC | getattr(os, "O_NOFOLLOW", 0), 0o600)
-    with os.fdopen(fd, "w", encoding="utf-8") as fh:
-        fh.write(sid)
-    os.replace(tmp, f)
+    _dir(make=True)
+    _write(_answer(k), sid)
 
 
 # ---------- where it runs, and what it may read ----------
@@ -187,8 +204,6 @@ def start(letter_id: str, project: str, text: str, cands: list[str]) -> bool:
     is marked before the start, so a dispatch killed in between leaves a letter asked with no answer (recency after WAIT_S),
     never a second call; a start that failed is done at once, and recency picks."""
     k = key(letter_id)
-    if not hubconf.session_file(k, ANSWER):
-        return False
     answer_file(letter_id).unlink(missing_ok=True)
     mark(letter_id, project)
     try:
