@@ -122,7 +122,49 @@ class Pick(Harness):
         bus = json.dumps([dict(r) for r in self.rows("1=1")])
         self.assertNotIn(SECRET, bus)
         self.assertNotIn(SECRET, " ".join(self.logged))
-        self.assertEqual(self.rows("type='job.failed'"), [], "no job.failed for a call with no answer")
+
+    def failures(self):
+        return [(r["id"], json.loads(r["payload"])) for r in self.rows("type='job.failed'")]
+
+    def test_a_broken_router_shows_once_a_day_per_project_in_fixed_words(self):
+        for mid in ("m1", "m2"):
+            self.rt.live.clear()
+            self.two(mid)
+            self.dispatch()
+            mr.write_answer(mr.key(mid), "")   # the call ended with nothing usable (or was killed at its time)
+            self.dispatch()
+            self.assertEqual(self.by(mid), [("S2", "recent")])
+        got = self.failures()
+        self.assertEqual(len(got), 1, "once a day per project")
+        fid, p = got[0]
+        self.assertTrue(fid.startswith("route-failed:proj:"))
+        self.assertEqual((p["job"], p["detail"]), ("mailbox-route:proj", self.m._(
+            "mailbox-route gave no usable answer; the most recently active session got the letter")))
+        import importlib.machinery
+        import importlib.util
+        loader = importlib.machinery.SourceFileLoader("gsp_route", str(BIN / "gen-status-page.py"))
+        gsp = importlib.util.module_from_spec(importlib.util.spec_from_loader("gsp_route", loader))
+        loader.exec_module(gsp)
+        self.assertTrue(gsp.mail_failure(p), "the status page shows it")
+
+    def test_a_start_that_failed_shows_too(self):
+        self.start_ok = False
+        self.two()
+        self.dispatch()
+        self.assertEqual([p["job"] for _i, p in self.failures()], ["mailbox-route:proj"])
+
+    def test_a_pick_no_longer_free_is_said_so_and_isnt_a_failure(self):
+        self.open("S3", seen=50)
+        self.two()
+        self.dispatch()
+        self.answer("m1", "S1")
+        self.rt.statuses["S1"] = "waiting"   # a dialog opened since the call started
+        self.dispatch()
+        self.assertEqual(self.by("m1"), [("S2", "recent")])
+        self.assertIn(self.m._("{project}: the session mailbox-route picked for a letter has closed or opened a dialog since; "
+                               "the most recently active session was picked", project="proj"), self.logged)
+        self.assertFalse(any("no usable answer" in m for m in self.logged))
+        self.assertEqual(self.failures(), [])
 
     def test_a_miss_is_said_in_fixed_words_once_until_one_answers(self):
         miss = self.m._("{project}: mailbox-route gave no usable answer for a letter; the most recently active session was picked",

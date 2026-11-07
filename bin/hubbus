@@ -2715,10 +2715,11 @@ def route_target():
 
 def model_pick(c, t, r, cands: list[str], ws=None, proj=None):
     """mailbox-route (bin/mailbox_route.py): the session its call picked, if that is still a candidate; ASKING while the call
-    runs (at most WAIT_S); None for recency: off, the call gave no answer or one outside the list, the letter's one call
-    spent, this tick's call for the project already started, or its day's calls used up. A call is started here, in the
-    background, and never waited on. What the model wrote reaches the bus only as an id checked against these candidates;
-    a miss is logged in fixed words, once until a call answers again (no job.failed: a reason can quote the model)."""
+    runs (at most WAIT_S); None for recency: off, the call gave no answer, the session it picked no longer free, the letter's
+    one call spent, this tick's call for the project already started, or its day's calls used up. A call is started here, in
+    the background, and never waited on. What the model wrote reaches the bus only as an id checked against these candidates.
+    A call that gave no answer, or one that couldn't start, is logged in fixed words once until a call answers again, and is a
+    job.failed once a day per project with a fixed detail (route_failed): a broken router shows, without its text."""
     import mailbox_route as mr
     proj = proj or now_named(r["to_project"])
     done = mr.call_of(r["id"])
@@ -2732,13 +2733,31 @@ def model_pick(c, t, r, cands: list[str], ws=None, proj=None):
         if state == "answer" and sid in cands:
             log_once(f"route-{proj}", "")
             return sid
+        if state == "answer":   # an id from the call's own list whose session has left these since: not a broken router
+            log(_("{project}: the session mailbox-route picked for a letter has closed or opened a dialog since; the most "
+                  "recently active session was picked", project=proj))
+            return None
         log_once(f"route-{proj}", _("{project}: mailbox-route gave no usable answer for a letter; the most recently active "
                                     "session was picked", project=proj))
+        route_failed(c, proj)
         return None
     if proj in t.asked or t.route_target() is None or mr.calls_today(own_names(proj)) >= mr.DAILY_CALLS:
         return None
     t.asked.add(proj)
-    return ASKING if mr.start(r["id"], proj, route_prompt(c, t, r, cands, ws, proj), cands) else None
+    if mr.start(r["id"], proj, route_prompt(c, t, r, cands, ws, proj), cands):
+        return ASKING
+    route_failed(c, proj)
+    return None
+
+
+def route_failed(c, proj: str, kind: str | None = None) -> None:
+    """mailbox-route is broken for this project: on the status page (job.failed, mail_failure) once a day per project, as
+    dispatch_failed is, in fixed words: never a reason, which can quote the model, nor what an exception says (kind: its type,
+    for a record that couldn't be kept)."""
+    detail = _("mailbox-route could not keep its record ({kind}); the most recently active session got the letter", kind=kind) \
+        if kind else _("mailbox-route gave no usable answer; the most recently active session got the letter")
+    publish(c, f"route-failed:{proj}:{now():%Y%m%d}", "job.failed", "hubbus-dispatch", None, None,
+            {"job": f"mailbox-route:{proj}", "detail": detail})
 
 
 def route_prompt(c, t, r, cands: list[str], ws=None, proj=None) -> str:

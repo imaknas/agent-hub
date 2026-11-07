@@ -266,7 +266,8 @@ points:
     purpose: "a request or question with several live sessions of its project to go to and nothing in its thread to pick one: which session gets it (docs/design/mailbox-session-first.md, Picking one)"
     # Its input is a letter any project can send, a sandboxed one included: one request a call (max_attempts), a short
     # answer, and a schema with no enum or pattern, so an error can't echo a value. llm.answer prints and publishes
-    # nothing, since a reason can quote the model: no job.failed, dispatch logs the miss in fixed words
+    # nothing, since a reason can quote the model: dispatch publishes the job.failed itself, with a fixed detail, once a day
+    # per project
     tools: ""
     output: {format: json, schema: llm/mailbox-route.schema.json}
     max_tokens: 200

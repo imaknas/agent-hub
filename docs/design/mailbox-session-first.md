@@ -713,12 +713,17 @@ What step 5 must know: `pick(c, r, cands)` is the only caller to change, and `Ti
 
 ### Step 5: where it differs from the text above, and why
 
-- **A call that gives no answer publishes no `job.failed`.** The text says both: "Picking one" has a `job.failed` with a fixed sentence,
-  "Tests" has a failed call publishing none. The owner's brief for this step says none, so none. A broken router still shows, without its
-  text: dispatch logs a miss in fixed words, once per project until a call answers again, and a point that can't run anywhere once, with
-  its reason (a settings text, never the model's). The `by: recent` rows on the bus say the rest. So the call doesn't go through
-  `llm.py run`, whose `fail()` publishes the reason: `llm.answer` runs the point to the same target (`completion_target`, which
-  `run_completion` uses too), with its schema and limits, and prints and publishes nothing. No "fixed-text failure" field was needed.
+- **A call that gives no answer is a `job.failed` with a fixed detail, once a day per project** (`route-failed:<project>:<date>`, job
+  `mailbox-route:<project>`, as `dispatch_failed` does), so a broken router shows on the status page (`job_failed_24h`, `mail_failure`)
+  without its text. The first version of this step published none: the brief for the step said so, as the coordinator's reading of the
+  two sections, not the owner's. Read again, they agree: "Picking one" asks for a `job.failed` with a fixed sentence, and "Tests" for no
+  `job.failed` from the failed call itself, the one `fail()` would publish with a reason that can quote the model. So the call doesn't go
+  through `llm.py run`: `llm.answer` runs the point to the same target (`completion_target`, which `run_completion` uses too), with its
+  schema and limits, and prints and publishes nothing; dispatch, which only sees that no usable id came back, publishes the fixed one. A
+  start that failed counts the same. The log says a miss in fixed words too, once per project until a call answers again, and a point
+  that can't run anywhere once, with its reason (a settings text, never the model's); that is the feature off, not a failure, and doctor's
+  row covers it. **A pick that is no longer free** (the session closed, or opened a dialog, between the start and the answer) isn't a
+  failure: the log says so, and recency picks. No "fixed-text failure" field in `llm-points` was needed.
 - **`max_attempts`** (new in `contracts/llm-points.v1`, so the other side syncs its copy) counts every request, the 429 back-off and the
   invalid answer asked again alike: the point declares 1, one request a call.
 - **Where things are kept.** The answer: `<hash>.route` in the secrets sessions folder (`hubconf.session_file`, the suffix added), mode

@@ -16,8 +16,8 @@ anyone can send, and a reply a session wrote, are never instructions.
 What comes back: only an id in the list it was given, written by the call's process to a mode-600 file in the secrets
 sessions folder (hubconf.session_file, suffix ANSWER), which dispatch checks against the candidates again. Nothing the
 model wrote is kept elsewhere: the process's output goes nowhere, llm.answer prints and publishes nothing (a reason can
-quote the model), and no job.failed is published for a call that gave no answer: dispatch says so in its log, in fixed
-words. Nothing is recorded for evals. The calls file (CALLS, in the state folder) holds a hash of each letter's id, its
+quote the model). For a call that gave no answer dispatch says so itself, in fixed words: in its log, and as a job.failed
+once a day per project (hubbus route_failed). Nothing is recorded for evals. The calls file (CALLS, in the state folder) holds a hash of each letter's id, its
 project and when the call started; no text.
 
     mailbox_route.py      the call's process: reads {"key", "prompt", "cands"} on stdin (start writes it)
