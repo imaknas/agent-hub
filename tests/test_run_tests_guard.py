@@ -40,7 +40,9 @@ class Guard(unittest.TestCase):
     def run_on(self, body):
         with tempfile.TemporaryDirectory() as d:
             (pathlib.Path(d) / "test_one.py").write_text(body)
-            env = {**os.environ, "AGENT_HUB_ROOT": d, "REAL_BIN": str(BIN)}   # the tree under test: what it leaves is checked there
+            (pathlib.Path(d) / ".secrets" / "tmp").mkdir(parents=True)
+            (pathlib.Path(d) / ".secrets" / "tmp" / "another-runs").write_text("x")   # another run's, or a live job's: not this run's leak
+            env = {**os.environ, "AGENT_HUB_ROOT": d, "REAL_BIN": str(BIN)}
             env.pop("BRUNNA_ROOT", None)
             return subprocess.run([sys.executable, str(BIN / "run-tests"), d], capture_output=True, text=True, timeout=120, env=env)
 

@@ -31,7 +31,7 @@ tests:
   run: bin/py -m unittest tests.test_personal_boundary tests.test_i18n_static tests.test_hub_location tests.test_runtime_boundary
   when: [commit, merge, nightly]
 # every test, under the runner's fresh HOME; a test that wrote into it fails the tier (a real run would write real files), and
-# bin/run-tests fails on what a test leaves in the HOME it gives them or in the tree's private temp folder.
+# bin/run-tests fails on what a test leaves in the HOME and the private temp folder it gives them.
 # run-tests keeps each module's duration in the tier's cache folder, to start the slow ones first and split them
 - tier: full
   run: >-
