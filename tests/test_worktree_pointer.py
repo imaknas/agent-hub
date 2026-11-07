@@ -14,6 +14,7 @@ the runtime's real hook input; a scratch instance and repos only. The planted sc
 import json
 import os
 import pathlib
+import shutil
 import subprocess
 import sys
 import unittest
@@ -279,6 +280,18 @@ class ForgedAtBothEnds(Fixture):
             self.run_hook(what, self.out, name, source="startup")
             self.assertEqual(self.ran_as_the_user(), [], f"{what} {name}")
 
+    def test_with_its_memory_linked_as_a_real_worktrees_is(self):
+        """What a worktree of a registered repo may have: the same shape, in a repo of its own, is still a stranger's."""
+        fake = self.forged(self.out)
+        shutil.rmtree(self.out / ".agent-memory")
+        shutil.rmtree(fake / ".agent-memory")
+        self.plant_memory(fake)
+        (self.out / ".agent-memory").symlink_to(fake / ".agent-memory")
+        self.assertEqual(self.scope(self.out, fake), (1, ""))
+        for what, name in (("start", "SessionStart"), ("end", "SessionEnd")):
+            self.run_hook(what, self.out, name, source="startup")
+            self.assertEqual(self.ran_as_the_user(), [], what)
+
     def test_no_forging_needed_a_real_worktree_of_a_repo_nested_in_the_sandboxed_project(self):
         nested = self.ws["box"] / "nested"
         nested.mkdir()
@@ -374,6 +387,13 @@ class SwappedFolder(Fixture):
                                    ("tool_used", "PostToolUse", {"tool_input": {"command": "git commit -m x"}})):
             self.handle(event, self.sub, name, **extra)
             self.assertEqual(self.ran_as_the_user(), [], event)
+
+    def test_a_folder_its_workspace_doesnt_hold_gets_no_work_at_all(self):
+        """Not as the user, and not as the project either: nothing of that folder is its project's."""
+        self.link(self.plain())
+        for event, name, extra in (("session_start", "SessionStart", {"source": "compact"}), ("pre_compact", "PreCompact", {})):
+            self.handle(event, self.sub, name, **extra)
+        self.assertFalse(self.marker.exists())
 
     def test_a_plain_repo_in_no_project_runs_nothing_as_the_user_either(self):
         out = self.plain()
