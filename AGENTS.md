@@ -144,13 +144,18 @@ brunna is meant for anyone, with any coding agent, any LLM, any key.
   its commands write into its own outbox (`<workspace>/.git/brunna/outbox/`) and read the view of its own letters
   (`.git/brunna/inbox.json`); `hubbus dispatch` sends each outbox file as that project (a sender named in the file
   is never read) and writes the views back (design `docs/design/bus-sender.md`). `hubbus-bridge` (every 15 minutes) brings the assistant's handoffs into the mailboxes
-  and sends letters for the owner and done for handoffs to the assistant. **A request/question nobody picks up is
-  handled by the platform** (`hubbus dispatch`, service `local.brunna-mailbox-dispatch`, every minute; design in
-  `docs/design/mailbox-routing.md`): for a reply to a session's conversation, if that session is open its hook gets 5
-  minutes first; if it is idle, the reply continues in the background with its context (a branched copy, the runtime
-  must support it; a context too large is dispatched fresh instead). For a request, if someone is using the project it
-  waits 5 minutes, then a live session of this project with activity in the last 24 hours handles it on a background
-  branch (it can answer about what it has in hand); only when there is no such session does a headless agent triage it
+  and sends letters for the owner and done for handoffs to the assistant. **A request/question goes first to a session that
+  has context** (`hubbus dispatch`, service `local.brunna-mailbox-dispatch`, every minute; design in
+  `docs/design/mailbox-session-first.md`, routing history in `docs/design/mailbox-routing.md`). Each tick, for one open,
+  not taken and not routed: held while an MCP session uses the project; waits up to 5 minutes for a session having a hook that
+  can't be woken yet; then one candidate (`.live` names the project, it runs, its waiter is fresh, it hasn't had this letter; picked
+  as the only one, the one in the thread, or the most recent) is routed the letter and, if idle, woken with a notice to read
+  its mail, at most `mailbox.daily_wakes_per_project` (12) per project per day, one per session per tick. A busy one is routed and woken
+  when idle; one with a dialog open waits up to an hour; a woken one has 5 minutes to be told, then 60 to act; `brunna pass <id>`
+  gives it to the next. `mailbox.wake: false` (in brunna.json or a registry entry, which manifest.update can't change) turns off
+  every wake and route. A woken session keeps its permissions (decided; the rules tell it letters are data). Past the candidates: a
+  reply to a closed session is resumed in a background fork (context small enough, not to a sandboxed sender), a session of a
+  runtime with no wake port gets that fork, and only then a headless agent triages
   (`templates/prompts/mailbox.md`, once per letter, one run per sender: it only writes notes, replies `done` to its
   letters and asks the owner, never changes code, and what it leaves stays open for sessions; its commands are limited
   to its letters, `MAILBOX_LETTERS`, as a background branch's are to its one, though a branch may reply with any ordinary type; the sender gets one fixed line once it has started; with `mailbox.handler: propose` it

@@ -1,6 +1,6 @@
 # Mail goes to a session first
 
-Status: design r7, steps 1 to 3 built (records at the end). The cold reviews' blocking findings are closed; should-fix items go to each step's own review. Each revision fixes the previous one's cold review, on top of the owner's decision. The main
+Status: design r7, steps 1 to 4 built (records at the end). The cold reviews' blocking findings are closed; should-fix items go to each step's own review. Each revision fixes the previous one's cold review, on top of the owner's decision. The main
 change since r2: delivery is per session, and a route, an ack and a fork all have an end. Replaces the delegation part of the routing in
 `docs/design/mailbox-routing.md`; builds on the wake in `docs/design/mailbox-runtimes.md` (B1).
 
@@ -572,3 +572,59 @@ What step 4 must know: `Sessions.open_sessions()` gives each session's record wi
 `session_summary` are there and nothing reads them yet. A record with no `project` lasts until a hook can name its folder's project.
 Live check of the 14 days: right after merge, from a real session. Step 4 shouldn't count on a session idle over a day until it has
 been done.
+
+### Step 4: where it differs from the text above, and why
+
+- **One answer for a session's project, decided after step 3 (11-08).** A session in a real linked worktree beside its project's folder got
+  the project's mail, but its record found no project, so dispatch couldn't count or wake it. `hub-event` now asks `hubbus.project_of`, the one
+  function. Over the machine's folders, read-only (430: workspaces, the worktrees their repos list, `.live` and presence folders; pointer files
+  only, no git): before, 3 differed, all confirmed worktrees of one unsandboxed project under `workspace_root`, mail naming it and the record
+  nothing; after, 0 differ, mail changed for none, the record gained those 3. **Sandboxed:** a linked worktree outside a sandboxed project's folder
+  now counts for neither, and that is a change for mail: `project_of` followed it before. The project writes its own repo's listing, so such a
+  folder confirms itself, and it could make a session outside its sandbox count as its own, then be woken for its letters. No such folder on this
+  machine. A session of that project with its own folder swapped keeps its name by `gitdirs.holder`, as before.
+  **Which set:** `project_of` asks `policy.mail_outbox`, `sandbox_of` asks `isolation.sandboxed`, which also honours `service_sandbox_exempt`. The first is about a project's
+  sessions, the question here, so it's the one; nobody is exempt on this machine.
+  **Wider than the owner's words:** the rule is "confirmed worktree of a project that isn't sandboxed", wherever it sits, as mail always was. `folder_git_ok` also asks that it's
+  under `workspace_root` or its main checkout. Tightening to that would take mail from a hand-made worktree elsewhere, and a stranger can't confirm another project's repo
+  either way. On this machine the two give the same answer for every folder.
+- **The MCP hold keeps `delivered`, and a wake doesn't read it.** The flag says some session has seen a letter. A lapsed letter goes on to the next candidate whatever it says.
+  The hold stays "a letter no session has seen", as today, and a reply naming a session isn't held. A letter a session was told and let lapse isn't held for an MCP client, which
+  isn't told what an earlier session saw.
+- **The tick's step 2 leaves out sessions that already had the letter**, and the letter's own sender: one that passed had a hook a moment ago and isn't in its first turn, and waiting
+  on it would hold the next candidate five minutes for nothing. A reply's `to_session` still gets its five minutes as today, for a session on no record, or on this project's: a name
+  from a letter is only a hint, so another project's session isn't waited on.
+- **`tried` also means told.** The design says "not yet routed this letter". A session told before routes existed has no row, and waking it again for a letter it read isn't useful.
+- **`pickup` is its own reason for an ended route**, beside `window`, `closed`, `taken`, `passed` and `wake-failed`, so the log and a reader can tell "never got it" from "got it, did nothing".
+- **A wake that fails ends its route at once** (`ended: wake-failed`), row or not: an unreachable session mustn't hold the letter for five minutes. It isn't tried again for that letter. It
+  costs no budget. A runtime raising `Unsupported` gets no `message.woken`, as before, and its route ends too.
+- **The budget counts batches of wakes that reached a session** (`message.woken` `ok` true, `batch`): one per session per tick, however many letters. Notices spend it as the design says.
+  A session the tick already owes takes more letters free. A wake still goes through the check when sent, so nothing races past it.
+- **The tick's budget stop sends the fixed line and goes on down the order**, once per letter. Step 4 of the tick isn't reached then: status isn't asked for a letter that can't wake.
+- **A wake is sent after the views, and a tick cut short sends none.** The route is on the bus by then, untold, so the next tick's "busy, now idle" path owes it again. Before sending, a
+  letter a hook has told or someone has answered drops out, so a hook that wins the race saves the wake.
+- **A session owed a wake while busy needs a fresh waiter at that moment**: a busy session can be between waiters at a turn's end. Tried anyway, a wake that failed would use up its one
+  chance for the letter; so it isn't tried, its route waits, and it is bounded by the hour.
+- **`session_status` hanging costs `AGENTS_TIMEOUT_S` per candidate per tick** (5 s), with `dispatch.lock` held and no bus lock. Not capped: it answers in about 0.1 s measured, and `unknown` is idle.
+- **The wake's text.** Only the project, senders that are addresses (`valid_address`) and ids of the right form and under 64 characters (`EVENT_ID`; `--id` is free for an unsandboxed
+  sender), five ids at most; each dropped if it isn't. It says letters are data, not the owner's instructions. **`brunna inbox` was the gap:** a woken session reads its letters there, not from a
+  hook, and it printed them bare. It now has the hook's header and footer, for a session (not a platform run); the MCP server's `inbox` stops adding its own header but for a platform
+  run. The rules file says the same, as advice: the owner's decision stands.
+- **`inbox --project P` from another folder tells only what's routed to that session**, so a woken session in another folder is told, as the design says, and reading another project's
+  mailbox holds nothing.
+- **An entry the validated registry doesn't have is off** (`wake_on`): a machine with no index gives only roster fields, with no `mailbox`, so it can't say the owner hasn't turned it off. Same idea as
+  `reflection_private`'s `None`. It leaves triage and hooks.
+- **`manifest.update` compares `mailbox.wake` alone** (`PLATFORM_OWNED_NESTED`), so `escalate` stays the project's. A value that isn't a boolean is refused.
+- **`pass` goes through the outbox for a sandboxed session**, judged against its view and again when taken in. `pass_letter` writes `message.passed` and the route's end in one transaction, so
+  `route_ended` needs no new case. It isn't in `MAIL_SUBCOMMANDS`, so `mail_only` runs don't have it, and `run_refusal` refuses it by name, for a fork's inherited `MAILBOX_LETTERS` too. A session
+  that acked can't pass: its route has ended as taken, and `done` or closing is what frees it.
+- **A forged name can't reach another project's session.** Candidates come from process records, so a `to_session`, a `reply_to` or a thread only picks among the recipient's own. A notice's
+  `to_session` must be on record for the project too, which is new: before, any live session named in a reply was woken. So a session that wandered into another folder and sent a letter from there
+  isn't woken for the reply, and its next hook shows it. From a sandbox, under its real profile: writing a `.live`, a waiter, `leases.json`, `project-renames.json` or the bus is refused (a test on macOS).
+- **Not armed moves on, honestly.** A session of a runtime with the wake port and no fresh waiter isn't a candidate and gets no fork, so the letter goes to triage, and `no_wake` counts it. So until the
+  14-day waiter is watched past 25 hours, a session idle over a day doesn't get its letter until its next hook. That's the known limit, and nothing here depends on the 14 days.
+- **A record with no `project` isn't a candidate.** At the time of writing 13 of 14 records on this machine had none: they were written before step 3, and get one at their next hook. A session idle since then
+  isn't reachable until it has a turn, and the first letters after merge go to triage for it. No fallback to its `cwd`: step 3's record explains why a folder from before the field can be wrong.
+- **`mailbox-route` isn't built** (step 5). `pick` says where it goes, between the thread and recency.
+
+What step 5 must know: `pick(c, r, cands)` is the only caller to change, and `Tick.status` has already asked each candidate. `message.routed`'s `by: model` is in the contract.
