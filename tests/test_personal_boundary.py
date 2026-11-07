@@ -19,7 +19,9 @@ import pathlib
 import re
 import subprocess
 import sys
+import tempfile
 import unittest
+from unittest import mock
 
 ROOT = pathlib.Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "bin"))
@@ -101,7 +103,9 @@ def private_name_hits(names_text: str) -> list[str]:
     """Places in the platform repo (every versioned file) that mention a private project name: `file:line:name`."""
     pats = private_name_patterns(names_text)
     out = subprocess.run(["git", "-C", str(ROOT), "ls-files", "-z"], capture_output=True, text=True).stdout
-    paths = [ROOT / q for q in out.split("\0") if q] or [p for p in ROOT.rglob("*") if p.is_file() and ".git" not in p.parts]
+    # no git (the gate's exported tree): what git would have left out is left out too, .state holding what a running test made
+    paths = [ROOT / q for q in out.split("\0") if q] or [p for p in ROOT.rglob("*") if p.is_file()
+                                                          and not {".git", ".state", ".logs"} & set(p.relative_to(ROOT).parts)]
     hits = []
     for f in sorted(paths):
         try:
@@ -139,6 +143,16 @@ class PersonalBoundary(unittest.TestCase):
             self.skipTest("this machine has no list of private project names (private-names.txt in config)")
         self.assertEqual(private_name_hits(f.read_text()), [],
                          "a private project name appears in the platform repo: replace it with a generic example name")
+
+    def test_an_exported_tree_is_scanned_without_what_runs_leave_in_it(self):
+        """the commit gate runs in an export, with no git: run-tests' guard, under .state, holds this machine's paths"""
+        with tempfile.TemporaryDirectory() as d:
+            root = pathlib.Path(d)
+            for rel in ("bin/tool.py", ".state/guard/bin/claude", ".logs/x.log", ".git/config"):
+                (root / rel).parent.mkdir(parents=True, exist_ok=True)
+                (root / rel).write_text("secret-app\n")
+            with mock.patch.object(sys.modules[__name__], "ROOT", root):
+                self.assertEqual(private_name_hits("secret-app\n"), ["bin/tool.py:1:secret-app"])
 
     def test_private_name_patterns(self):
         pats = dict(private_name_patterns("secret-app\nnotes ~\n"))
