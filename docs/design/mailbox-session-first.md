@@ -512,10 +512,13 @@ project, where the bus isn't reachable, so its `hubbus hook` told nothing, silen
     the private folder: its `TMPDIR` is its run folder, in its own workspace, where no other project's sandbox writes (the system's would let one project's process into
     another's sandbox); that folder is inside its repo, so a test that strips `GIT_CEILING_DIRECTORIES` there finds it. No project with a sandbox declares tests yet,
     so that branch is tested only by the unit tests. A project whose jobs are exempt (`service_sandbox_exempt`) runs its nightly tiers as the user: those get the
-    private folder, not one its own sessions write; its sessions, sandboxed, get the run folder. With `~` itself a repo every run as the user is refused, and the
-    hint names `move-instance`, which doesn't apply there.
-    `bin/run-tests` run by hand moves off the system's folder the same way; a clone with no instance keeps what it was given. The runner's version went to 2, so a tree
-    that passed in the old folder isn't a hit. Rerun with this branch's runner, `full` tier, the racer aimed at the private folder itself: 0 scripts changed, 20,538
+    private folder; its HOME and the exported tree stay in the run folder in its workspace, which its own sessions write (exempt is the owner's word to hold it
+    back); its sessions, sandboxed, get the run folder for all of it. With `~` itself a repo every run as the user is refused, and the hint names `move-instance`,
+    which doesn't apply there (left so).
+    `bin/run-tests` run by hand moves off the system's folder the same way, and on an install with no private folder outside every repo (the old layout) it doesn't run
+    either (exit 2, the same hint); a clone that isn't an install (no instance, no settings file) keeps what it was given. The runner's version went to 2, so a tree
+    that passed in the old folder isn't a hit. The runner removes the `TMPDIR` it made, kept in memory: it used to read the path back from a file in the run
+    folder, which is in the project's workspace (a tier wrote another path there and the runner removed that folder, in the test that pins it). Rerun with this branch's runner, `full` tier, the racer aimed at the private folder itself: 0 scripts changed, 20,538
     writes refused, 0 runs. No Seatbelt test needed the profile's temp area: the twelve modules that use a profile give the same results with `TMPDIR` in the
     system's folder or a private one, since a process inside a sandbox whose `TMPDIR` it can't write falls back to the system's on its own (`mktemp`, Python's
     `tempfile`, measured). What is still in the system's folder: those fallbacks, inside the sandbox they ran in; `test_cap_profile`'s socket in `/private/tmp`, which the
@@ -539,15 +542,31 @@ project, where the bus isn't reachable, so its `hubbus hook` told nothing, silen
     **What the platform does with a repo already holding such a path:** keeps it (nothing is taken out for the project), takes no new commit adding to it or changing
     it, takes the project's notes and the commit removing it (what the old tip holds is not new), starts no agent in its copies, and doctor names it.
     **Another runtime:** under the tool-neutrality rule the flag is reinforcement, so a folder that passes the look doesn't need the throwaway copy that `restricted`
-    otherwise asks of a runtime with no confined runs: those core points keep running there. What's left there, and doctor says so: that agent's own settings, and a
-    rules file above the folder (none above the copies or the clones here). ACP is as before: it refuses every point but the throwaway one. The flag's own goldens:
+    otherwise asks of a runtime with no confined runs: those core points keep running there. What's left there, and doctor says so: that agent's own settings, a
+    rules file under a name no runtime declares, and one above the folder (none above the copies or the clones here). ACP is as before: it refuses every point but the throwaway one. The flag's own goldens:
     three points, four variants, `--restricted` and nothing else.
-    **Left:** a refused project is refused again every hour, and says so only in the hourly sync's log and the hook's error, and after 72 hours in `memory-gaps`
-    (no alert, no status row); getting out means rewriting the commits on its `.agent-memory` branch that the bare repo lacks (reset to the bare repo's tip, add the
-    notes again), which only the project's session or the owner does. A project that isn't sandboxed pushes to its bare repo itself, so nothing checks what enters
-    there: it has the user's authority anyway, and the look before an agent and doctor's row cover its copies. Over 5,000 new trees in one bundle is refused (a
-    bound on the work; this machine's longest history is far below it). The look reads the files, so a dotfile no commit holds (a `.DS_Store`) stops that night's
-    run of the point in that copy; the librarian's failure path cleans untracked files, but `git clean` leaves what a global ignore names.
+    **After the cold review (11-08): the healthy path.** The first version stopped a project's notes for good over a stray file: Finder leaves a `.DS_Store` in
+    `.agent-memory/memory/`, the sync's `git add -A -- memory` committed it (this machine has no global excludes), and then a sandboxed project's every sync was
+    refused, and an open project's pushed file made `llm.py` refuse all three points every night; a copied note's executable bit or a link did the same. Now:
+    - Both syncs (`git-sync-memory.sh` for an open project, the `memory-sync` job for a sandboxed one) take back out of the index what the allow list refuses,
+      after their `git add` of `memory/` and `STATE.md` (`memory_paths.unstage_refused`, back to what `HEAD` has; deletions kept), leave it in the folder, and say so
+      once on stderr. They still add nothing outside those two paths. If what was staged can't be checked, nothing commits.
+    - A refusal is seen: `alert.once("memory-sync-refused:<project>")` from the platform's half of the sandboxed sync, cleared by its next clean sync, and
+      `alert.once("memory-copy-refused:<project>")` from `llm.py`'s look (the librarian and consolidate say whose copy in `HUB_MEMORY_OF`; otherwise the folder),
+      cleared by the next clean look. `project_git.sync_memory_of` returns its reason (`propose_apply` puts it in its run's line, `first-look` says it).
+    - An open project's `.DS_Store` already on its bare repo: the look lets it by, and only it (`INERT`): Finder's view settings are read by no runtime, tool or git as
+      settings, rules or hooks, so refusing a project's notes over one keeps nothing out. Every other hidden name still stops the point. Where something enters a
+      branch (the bundle check, the syncs' filter) nothing is let by: a name that is inert only to what runs today is not let onto a branch.
+    - Rules files: `memory/CLAUDE.md`, `memory/AGENTS.md` and `memory/x/CLAUDE.md` all went through the normal sync. Each adapter now declares the names its agent
+      takes as rules (`RULES_FILE_NAMES`; Claude Code's `CLAUDE.md` and `CLAUDE.local.md`, ACP's `AGENTS.md` and `GEMINI.md`, the command runtime's `AGENTS.md`),
+      `runtime_ports.rules_file_names()` collects every registered runtime's, and `memory_paths` refuses them at any depth, case-insensitively (the syncs leave them
+      out, the bundle check refuses them, the look stops for them). Real runs (claude 2.1.319, consolidate's flags, `--setting-sources project`): a nested
+      `memory/sub/CLAUDE.md` asking for a marker word in every answer about its folder got it into the answer twice of two without `--restricted`, and never with it.
+    **Left:** getting a refused sandboxed sync out still means rewriting the commits on its `.agent-memory` branch that the bare repo lacks (now only for what
+    plumbing put there, since the sync no longer commits a stray). A project that isn't sandboxed pushes to its bare repo itself, so nothing checks what enters
+    there: it has the user's authority anyway, and the look and doctor's row cover its copies. Over 5,000 new trees in one bundle is refused (a bound on the work;
+    this machine's longest history is far below it). A runtime that reads rules under a name no adapter declares (a command template's tool) still reads them in
+    a copy. The `mktemp` data files of `sync-local-setup.sh` and `gen-index-roster.sh` stay in the system's folder: data, never executed.
 - **Older and open, not fixed here:**
   - Seatbelt denies don't resolve links, and `bin/evals/` is exposed while it runs.
 - **Asked by the name, not the folder.** The hourly sync asked `sandboxed "$(pwd -P)"` and `git-sync-memory.sh` asked again, each re-reading the `.agent-memory` link: a flipper got "not sandboxed" and git ran its config as the

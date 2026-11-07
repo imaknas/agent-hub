@@ -481,7 +481,8 @@ memory tracking and runs nothing long-lived (most projects) needs nothing under 
 
 - In every project, the session-end / pre-compaction hooks are scoped to `memory/`/`STATE.md` only; don't change them
   to `git add -A`: that would accidentally commit the user's real work that is not ready yet
-- A memory branch holds AGENT.md, RULES, STATE.md and `memory/**`, plain files (`bin/memory_paths.py`): `project_git.fetch_bundle` refuses a
+- A memory branch holds AGENT.md, RULES, STATE.md and `memory/**`, plain files under no runtime's rules-file name (`bin/memory_paths.py`;
+  adapters declare `RULES_FILE_NAMES`): the syncs leave anything else in the folder, uncommitted; `project_git.fetch_bundle` refuses a
   sandboxed project's new commits holding more, and `llm.py` starts no agent in a copy holding more (`works_in: memory`), whatever the runtime
 - The hub machine is never the origin of any project's main branch; memory tracking goes only through the separate
   `.agent-memory` worktree. This safety property must not be relaxed because "this project happens to have no external
