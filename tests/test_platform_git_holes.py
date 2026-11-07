@@ -279,7 +279,7 @@ class MemorySync(Base):
                          [("proj", "memory-sync")])
 
     def test_git_sync_memory_delegates_for_a_sandboxed_project(self):
-        """The hourly sync and the session hooks both go through git-sync-memory.sh. What runs there can't read
+        """A sandboxed project's memory goes through its job, by its name, from the hourly sync and the session hooks alike. What runs there can't read
         another project (the fixture is in the temp area, which the sandbox may write, so reading is what's checked)."""
         r, bare = self.project_with_memory("proj")
         other = self.repo("other", sandbox=False)
@@ -290,7 +290,7 @@ class MemorySync(Base):
         (state / "registry").mkdir(parents=True)
         (state / "registry" / "index.json").write_text(json.dumps({"projects": self.docs}))
         env = {**ENV, "AGENT_HUB_STATE": str(state), "AGENT_HUB_OFFLINE": "1"}
-        p = subprocess.run(["bash", str(BIN / "git-sync-memory.sh")], cwd=r / ".agent-memory", env=env,
+        p = subprocess.run([sys.executable, str(BIN / "project_git.py"), "sync-memory", "proj"], cwd=self.tmp, env=env,
                            capture_output=True, text=True, timeout=120)
         leaked = self.marker.exists() and "secret" in self.marker.read_text()
         if isolation.can_sandbox() is not None:   # refused: nothing ran at all

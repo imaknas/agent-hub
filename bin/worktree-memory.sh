@@ -59,16 +59,17 @@ fi
 # here first, finding the repo above, starts no git. $top and $main are read from the folder and from pointer files the
 # project can write: whose this is is project_git.worktree_scope's call, from the folder the hook's input names first.
 if [ -z "${HUB_AS_PROJECT:-}" ]; then
-  memdir=$(printf '%s' "$hook_json" | "$HUB/bin/py" "$HUB/bin/hub-event" worktree-scope "$top" "$main")
+  scope=$(printf '%s' "$hook_json" | "$HUB/bin/py" "$HUB/bin/hub-event" worktree-scope "$top" "$main")
   case $? in
-    0) [ "$event" = end ] && exec "$HUB/bin/py" "$HUB/bin/project_git.py" sync-memory --lock "$memdir"
+    0) project="${scope%%$'\t'*}"; owner="${scope#*$'\t'}"   # by its name from here: the folder can change after this look
+       [ "$event" = end ] && exec "$HUB/bin/py" "$HUB/bin/project_git.py" sync-memory --lock "$project"
        # the worktree's settings (its sandbox, the platform's hooks) are the platform's to write: the project can't
        # write them there itself (the sandbox's protect list), so they are a plain file written here, not a link
        [ "$event" = start ] || exit 0   # a prompt or a tool call has nothing left to do as the project
        # a folder swapped for a link elsewhere isn't this project's to run in, nor another's to print from into this session
-       case "$top/" in "$(dirname "$memdir")/"*) ;; *) exit 0 ;; esac
+       case "$top/" in "$owner/"*) ;; *) exit 0 ;; esac
        "$HUB/bin/py" "$HUB/bin/render-project-settings.py" --worktree "$top" 2>/dev/null
-       AGENT_HUB_OFFLINE=1 "$HUB/bin/py" "$HUB/bin/project_git.py" run-as "$top" -- \
+       AGENT_HUB_OFFLINE=1 "$HUB/bin/py" "$HUB/bin/project_git.py" run-as "$project" "$top" -- \
          bash "$HUB/bin/worktree-memory.sh" "$event" </dev/null
        exit 0 ;;
     3) ;;

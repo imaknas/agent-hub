@@ -113,14 +113,14 @@ def undeclared(project: str, doc: dict, declared: set[pathlib.Path]) -> list[pat
     d = registry.dirs(doc)
     roots = [hubconf.secrets_dir()] if project == hubconf.hub_project() else \
         [r for r in (d["runtime"], d["workspace"]) if r]
-    found, skip = [], hubconf.session_addresses_dir()
+    found, skip, skip_tmp = [], hubconf.session_addresses_dir(), hubconf.secrets_dir() / "tmp"
     for root in roots:
         if not root.is_dir():
             continue
         for dirpath, dirnames, filenames in os.walk(root):
             depth = len(pathlib.Path(dirpath).relative_to(root).parts)
             dirnames[:] = [] if depth >= 3 else [x for x in dirnames if x not in SKIP_DIRS
-                                                 and pathlib.Path(dirpath, x) != skip]
+                                                 and pathlib.Path(dirpath, x) not in (skip, skip_tmp)]
             for fn in filenames:
                 path = pathlib.Path(dirpath) / fn
                 if LOOKS_SECRET.search(fn) and not NOT_SECRET.search(fn) and path.resolve() not in declared:

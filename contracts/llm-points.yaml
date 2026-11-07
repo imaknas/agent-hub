@@ -239,6 +239,8 @@ points:
     # the tool's permissions; no tool that runs commands is given: sending letters doesn't need it to run anything
     permission_mode: acceptEdits
     tools: Read,Edit,Write,Glob,Grep
+    # it starts in a checkout of the project's repo: a settings file there, committed or planted, would run hooks as the user
+    restricted: true
     extra_args: ["--strict-mcp-config"]
     output: {format: json, schema: llm/mailbox-propose.schema.json}
     timeout_s: 1800

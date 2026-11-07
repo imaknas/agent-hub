@@ -725,6 +725,8 @@ def _flags(task) -> list:
             cmd += ["--add-dir", d]
     elif "tools" in spec:
         cmd += ["--tools", spec["tools"]]
+    if spec.get("restricted") and spec.get("settings") != "platform":
+        cmd += ["--restricted"]   # no settings file of the folder it runs in: its hooks would run as the user
     if allowed:
         cmd += ["--allowedTools", *allowed]
     if task.deny_servers:
@@ -1436,7 +1438,8 @@ def _exe() -> str:
 
 def complete(req, conf) -> CompletionResult:
     import tempfile
-    cmd = [_exe(), "-p", "--tools", "", "--strict-mcp-config", "--no-session-persistence", "--output-format", "json"]
+    # --restricted: no settings file or rules file of any folder (real run: docs/design/mailbox-session-first.md, step 3's record)
+    cmd = [_exe(), "-p", "--restricted", "--tools", "", "--strict-mcp-config", "--no-session-persistence", "--output-format", "json"]
     if req.model:
         cmd += ["--model", req.model]
     if req.system:
@@ -1448,7 +1451,8 @@ def complete(req, conf) -> CompletionResult:
         return CompletionResult(False, stop="error", error=why)
     env["HUB_LLM_POINT"] = req.point   # the process started (hooks included) knows it's a platform headless call
     env = _env(type("T", (), {"env": env})())
-    with tempfile.TemporaryDirectory(prefix="hub-completion-") as cwd:
+    import hubconf
+    with tempfile.TemporaryDirectory(prefix="hub-completion-", dir=hubconf.private_tmp()) as cwd:
         try:
             r = subprocess.run(cmd, input=req.prompt, cwd=cwd, capture_output=True, text=True, timeout=req.timeout_s, env=env)
         except subprocess.TimeoutExpired:

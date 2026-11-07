@@ -875,7 +875,7 @@ class WorktreeMail(tbs.WorktreeFixture):
                 out = self.hook_out("nudge", wt, "PostToolUse", tool_input={"command": "git commit -m x"})
                 self.assertIn(f"for {project}", self.context(out))
                 self.assertIn(".agent-memory/memory/", self.context(out))
-                (pathlib.Path(self.tmp) / f"hubbus-post-tool-{self.SID}").unlink()
+                (pathlib.Path(self.tmp) / "state" / "hubbus-post-tool" / self.SID).unlink()
 
     def test_a_tool_that_commits_nothing_gets_no_reminder(self):
         wt = self.behind("box")

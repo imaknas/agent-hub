@@ -131,7 +131,7 @@ def covers(path: pathlib.Path) -> bool:
     workspace_env_files)."""
     import fnmatch
     path = path.expanduser().resolve()
-    if hubconf.session_addresses_dir().resolve() in (path, *path.parents):   # never backed up (module header)
+    if {hubconf.session_addresses_dir().resolve(), (hubconf.secrets_dir() / "tmp").resolve()} & {path, *path.parents}:   # never backed up (module header)
         return False
     dbs = [hubconf.bus_db(), *(hubconf.path(d["path"]) for d in CFG.get("sqlite") or [])]
     if any(db and path == db.resolve() for db in dbs):  # SQLite is copied separately with the backup API
@@ -232,7 +232,8 @@ def cmd_run() -> int:
         paths = [str(p) for p in (hubconf.path(x) for x in CFG.get("include") or []) if p and p.exists()]
         if not any(STAGE.is_relative_to(pathlib.Path(x)) for x in paths):
             paths.insert(0, str(STAGE))
-        args = ["backup", "--tag", "nightly", "--json", "--exclude", str(hubconf.session_addresses_dir())]
+        args = ["backup", "--tag", "nightly", "--json", "--exclude", str(hubconf.session_addresses_dir()),
+                "--exclude", str(hubconf.secrets_dir() / "tmp")]
         for x in CFG.get("exclude") or []:
             args += ["--exclude", str(hubconf.path(x)) if x.startswith("~") else x]
         r = restic(*args, *paths, capture=True)

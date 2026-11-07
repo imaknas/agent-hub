@@ -232,7 +232,7 @@ def main(argv: list[str]) -> int:
                  if hit]
         if taken:
             fail(_("{name} is already taken: {paths}", name=new, paths=', '.join(taken)), "name_taken")
-    tmp = pathlib.Path(tempfile.mkdtemp(prefix="hub-upgrade-"))
+    tmp = pathlib.Path(tempfile.mkdtemp(prefix="hub-upgrade-", dir=hubconf.private_tmp()))
     atexit.register(shutil.rmtree, tmp, True)
     repo_exists = subprocess.run(["gh", "repo", "view", f"{owner}/{final}"], capture_output=True).returncode == 0
     if repo_exists and not remote_is_ours(own_copy(proj, ws, branch, tmp), branch, url):

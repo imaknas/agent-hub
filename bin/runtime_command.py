@@ -87,7 +87,8 @@ def _schema_note(schema: dict | None) -> str:
 
 def _run(prompt: str, model: str | None, cwd: str | None, env: dict | None, timeout_s: int) -> tuple[int | None, str, str]:
     conf = _conf()
-    with tempfile.TemporaryDirectory(prefix="hub-command-") as d:
+    import hubconf
+    with tempfile.TemporaryDirectory(prefix="hub-command-", dir=hubconf.private_tmp()) as d:   # its output is taken as the answer
         pf, of = pathlib.Path(d) / "prompt.md", pathlib.Path(d) / "output.txt"
         pf.write_text(prompt)
         argv = _argv(list(conf["run"]), model, str(pf), str(of), prompt, str(pathlib.Path(cwd or os.getcwd()).resolve()))
@@ -137,7 +138,7 @@ def run(task) -> TaskResult:
 # ---------- completion ----------
 
 def complete(req, conf) -> CompletionResult:
-    code, out, err = _run(req.prompt + _schema_note(req.schema), req.model, tempfile.gettempdir(), None, req.timeout_s)
+    code, out, err = _run(req.prompt + _schema_note(req.schema), req.model, str(__import__("hubconf").private_tmp()), None, req.timeout_s)
     if code is None or code != 0:
         return CompletionResult(False, stop="error", error=err or f"exit {code}")
     if not out.strip():

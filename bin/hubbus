@@ -1383,9 +1383,10 @@ def mail_text(event: str, session, cwd, runtime: str | None = None) -> str | Non
     if os.environ.get("HUB_LLM_POINT") and not os.environ.get("HUBBUS_LEASE"):
         return None
     if event == "post-tool":
-        # rate limit: each session checks at most once per POST_TOOL_EVERY_S (the stamp lives in /tmp, not the bus;
-        # stopped before querying git)
-        stamp = pathlib.Path(os.environ.get("TMPDIR", "/tmp")) / f"hubbus-post-tool-{session}"
+        # rate limit: each session checks at most once per POST_TOOL_EVERY_S (the stamp isn't on the bus, and not in the
+        # system's temp folder, where a sandboxed project could hold back its own or another session's mail by touching it)
+        stamp = hubconf.STATE / "hubbus-post-tool" / storable(session).replace("/", "_")
+        stamp.parent.mkdir(parents=True, exist_ok=True)
         try:
             if time.time() - stamp.stat().st_mtime < POST_TOOL_EVERY_S:
                 return None
@@ -2960,6 +2961,9 @@ def prune(c) -> None:
               (iso(now() - datetime.timedelta(hours=MCP_PRUNE_H)),))
     c.execute("COMMIT")
     prune_wake_addresses()
+    for f in (hubconf.STATE / "hubbus-post-tool").glob("*"):   # one per session, of use for seconds
+        if time.time() - f.lstat().st_mtime > 86400:
+            f.unlink(missing_ok=True)
 
 
 ADDRESS_GRACE_S = 600   # a wake address younger than this is kept even if its session isn't seen live yet

@@ -30,6 +30,15 @@ import test_mailbox_dispatch as tmd  # noqa: E402
 import test_worktree_pointer as twp  # noqa: E402
 
 VAR = "CLAUDE_CODE_DISABLE_GIT_INSTRUCTIONS"
+_LANG = mock.patch.dict(os.environ, {"AGENT_HUB_LANG_UI": "en", "AGENT_HUB_LANG_CONTENT": "en"})   # the assertions read the English texts
+
+
+def setUpModule():
+    _LANG.start()
+
+
+def tearDownModule():
+    _LANG.stop()
 
 
 def load(name, path):
@@ -94,6 +103,26 @@ class StandIn(unittest.TestCase):
             runtime_claude.complete(runtime_ports.CompletionRequest(point="x", prompt="p"), {})
         self.assertEqual(self.var(), "1", "the completion path")
 
+    def test_the_completion_path_starts_where_no_sandbox_writes_and_reads_no_settings_file(self):
+        seen = self.tmp / "complete.json"
+        exe = pathlib.Path(hubconf.tool("claude"))
+        exe.write_text(f"#!{sys.executable}\nimport json, os, sys\njson.dump({{'cwd': os.getcwd(), 'argv': sys.argv}}, open({str(seen)!r}, 'w'))\n"
+                       "print(json.dumps({'type': 'result', 'result': 'ok', 'is_error': False, 'session_id': 's', 'num_turns': 1}))\n")
+        private = self.tmp / "private"
+        private.mkdir()
+        with mock.patch.object(hubconf, "private_tmp", lambda: private), mock.patch.object(runtime_claude, "auth_env", lambda mode, env: (dict(env), "")):
+            runtime_claude.complete(runtime_ports.CompletionRequest(point="x", prompt="p"), {})
+        got = json.loads(seen.read_text())
+        self.assertTrue(pathlib.Path(got["cwd"]).resolve().is_relative_to(private.resolve()))
+        self.assertIn("--restricted", got["argv"])
+
+    def test_a_point_that_says_restricted_gets_it(self):
+        import yaml
+        spec = yaml.safe_load((ROOT / "contracts" / "llm-points.yaml").read_text())["points"]["mailbox-propose"]
+        self.assertIs(spec.get("restricted"), True)
+        cmd = runtime_claude.describe(runtime_ports.Task(point="mailbox-propose", prompt="p", spec=spec, env={"PATH": ""}))
+        self.assertIn("--restricted", cmd)
+
     def test_it_overrides_what_a_caller_set(self):
         task = runtime_ports.Task(point="x", prompt="p", spec={}, env={VAR: "0", "PATH": ""})
         self.assertEqual(runtime_claude._env(task)[VAR], "1")
@@ -106,18 +135,37 @@ class StandIn(unittest.TestCase):
 class Probe(unittest.TestCase):
     def setUp(self):
         self.m = load("update_claude_probe", BIN / "update-claude.py")
+        self.tmp = pathlib.Path(tempfile.mkdtemp()).resolve()
+        self.addCleanup(__import__("shutil").rmtree, self.tmp, True)
+        self.private = self.tmp / "private"
+        self.private.mkdir()
+        p = mock.patch.object(hubconf, "private_tmp", lambda: self.private)
+        p.start()
+        self.addCleanup(p.stop)
 
-    def test_a_run_that_leaves_the_filter_alone(self):
-        self.assertIsNone(self.m.filter_probe(run=lambda repo: None))
+    @staticmethod
+    def status(repo):
+        subprocess.run(["git", "-C", str(repo), "--no-optional-locks", "status", "--short"], capture_output=True,
+                       env={**os.environ, "GIT_CONFIG_GLOBAL": os.devnull})
 
-    def test_a_run_that_runs_git_status_is_said(self):
-        def run(repo):
-            subprocess.run(["git", "-C", str(repo), "--no-optional-locks", "status", "--short"], capture_output=True,
-                           env={**os.environ, "GIT_CONFIG_GLOBAL": os.devnull})
-        self.assertIn("NO_FOLDER_GIT", self.m.filter_probe(run=run))
+    def as_claude_is(self, repo, guarded):
+        """Runs its git without the variable, none with it."""
+        if not guarded:
+            self.status(repo)
+
+    def test_a_run_that_leaves_the_filter_alone_only_with_the_variable(self):
+        self.assertIsNone(self.m.filter_probe(run=self.as_claude_is))
+
+    def test_a_run_that_runs_git_status_with_the_variable_is_said(self):
+        self.assertIn("NO_FOLDER_GIT", self.m.filter_probe(run=lambda repo, guarded: self.status(repo)))
+
+    def test_a_version_that_doesnt_run_it_without_the_variable_either_is_said(self):
+        """Or the probe passes forever, telling nothing."""
+        self.assertIn("no longer tests", self.m.filter_probe(run=lambda repo, guarded: None))
 
     def test_a_run_that_couldnt_be_made_is_said(self):
-        self.assertIn("no login", self.m.filter_probe(run=lambda repo: "no login"))
+        self.assertIn("no login", self.m.filter_probe(run=lambda repo, guarded: "no login"))
+        self.assertIn("no login", self.m.filter_probe(run=lambda repo, guarded: "no login" if guarded else self.status(repo)))
 
     def test_a_probe_whose_control_shows_nothing_is_said(self):
         real = pathlib.Path.write_text
@@ -125,8 +173,44 @@ class Probe(unittest.TestCase):
         def no_attributes(path, *a, **k):
             return 0 if path.name == "attributes" else real(path, *a, **k)
         with mock.patch.object(pathlib.Path, "write_text", no_attributes):
-            why = self.m.filter_probe(run=lambda repo: self.fail("never got this far"))
+            why = self.m.filter_probe(run=lambda repo, guarded: self.fail("never got this far"))
         self.assertIn("git status", why)
+
+    def test_it_is_built_where_no_sandbox_writes(self):
+        seen = []
+
+        def run(repo, guarded):
+            seen.append(repo)
+            self.as_claude_is(repo, guarded)
+        self.m.filter_probe(run=run)
+        self.assertTrue(seen)
+        self.assertTrue(all(r.is_relative_to(self.private) for r in seen))
+        self.assertEqual(list(self.private.iterdir()), [], "and gone")
+
+    def test_the_folder_is_denied_to_every_sandbox_both_ways(self):
+        import policy
+        mock.patch.stopall()
+        with mock.patch.object(hubconf, "secrets_dir", lambda: self.tmp / "secrets"):
+            d = hubconf.private_tmp()
+            self.assertEqual(d.stat().st_mode & 0o777, 0o700)
+            self.assertTrue(any(d.is_relative_to(x) for x in policy.secret_dirs()), "every sandbox's deny_read; no write list has it")
+
+    def test_a_file_left_in_the_folder_isnt_a_crash(self):
+        def run(repo, guarded):
+            self.as_claude_is(repo, guarded)
+            (repo.parent / "sub").mkdir(exist_ok=True)
+            (repo.parent / "sub" / "left").write_text("x")
+        self.assertIsNone(self.m.filter_probe(run=run))
+
+    def test_anything_that_breaks_alerts_and_nothing_is_recorded(self):
+        for boom in (OSError(66, "not empty"), subprocess.CalledProcessError(1, "git"), ValueError("x")):
+            with self.subTest(boom=boom), self.state(self.tmp), mock.patch.object(self.m.hubconf, "nvm_bin", lambda: self.tmp), \
+                    mock.patch.object(self.m.alert, "once") as once, mock.patch.object(self.m, "version", lambda c: "9.9.9"), \
+                    mock.patch.object(self.m, "filter_probe", side_effect=boom):
+                self.m.probe_new_version()
+                self.assertEqual(once.call_args[0][0], "claude-git-filter")
+                self.assertTrue(once.call_args[0][1], "a problem, not a recovery")
+                self.assertFalse((self.tmp / "probed.json").exists())
 
     def state(self, tmp):
         return mock.patch.object(self.m, "PROBED", pathlib.Path(tmp) / "probed.json")
@@ -242,6 +326,16 @@ class AForksFolder(tmd.Dispatch):
         self.git("-C", self.ws, "worktree", "add", "-q", wt, "-b", "w")
         self.assertEqual(self.at(wt), wt)
 
+    def test_another_projects_real_worktree_isnt_one(self):
+        other = (self.tmp / "other-repo").resolve()
+        self.git("init", "-q", "-b", "main", other)
+        (other / "f").write_text("x")
+        self.git("-C", other, "add", "f")
+        self.git("-C", other, "commit", "-qm", "x")
+        wt = (self.tmp / "other-out").resolve()
+        self.git("-C", other, "worktree", "add", "-q", wt, "-b", "w")
+        self.assertIsNone(self.at(wt))
+
     def test_a_pointer_naming_it_from_elsewhere_isnt_one(self):
         self.git("init", "-q", "-b", "main", self.ws)
         planted = (self.tmp / "planted").resolve()
@@ -320,15 +414,113 @@ class SettingsThroughASwap(twp.Fixture):
 
 
 class TheHourlySync(twp.Fixture):
+    def setUp(self):
+        super().setUp()
+        for name, extra in (("box", "enforce:\n  sandbox: true\n"), ("open", "")):   # the roster reads these
+            (self.tmp / "config" / "projects" / f"{name}.yaml").write_text(f"v: 1\nname: {name}\npaths:\n  workspace: {self.ws[name]}\n{extra}")
+        roster = subprocess.run([sys.executable, str(BIN / "hubconf.py"), "roster"], capture_output=True, text=True, env=self.hook_env()).stdout
+        self.assertIn(str(self.ws["box"]), roster)
+        self.assertIn(str(self.ws["open"]), roster)
+
+    def sync(self):
+        return subprocess.run(["bash", str(BIN / "sync-all-memory.sh")], capture_output=True, text=True, timeout=180,
+                              env=self.hook_env(), cwd=self.tmp)
+
     def test_a_folder_the_registry_doesnt_name_runs_nothing(self):
         left = self.tmp / "home" / "workspace" / "left-behind"
         left.mkdir(parents=True)
         self.plant_memory(left)
-        env = {**self.hook_env(), "AGENT_HUB_LOG": str(self.tmp / "sync.log")}
-        r = subprocess.run(["bash", str(BIN / "sync-all-memory.sh")], capture_output=True, text=True, timeout=120, env=env, cwd=self.tmp)
-        self.assertEqual(r.returncode, 0, r.stderr)
+        self.assertEqual(self.sync().returncode, 0)
         self.assertEqual(self.ran_as_the_user(), [])
         self.assertFalse(self.marker.exists())
+
+    def test_a_sandboxed_projects_link_at_a_planted_repo_runs_nothing_as_the_user(self):
+        ws = self.ws["box"]
+        planted = ws / "planted"
+        planted.mkdir()
+        (ws / ".agent-memory").symlink_to(self.plant_memory(planted))
+        self.sync()
+        self.assertEqual(self.ran_as_the_user(), [])
+
+    def test_an_open_projects_memory_that_is_a_link_is_skipped(self):
+        ws = self.ws["open"]
+        planted = self.tmp / "planted"
+        planted.mkdir()
+        (ws / ".agent-memory").symlink_to(self.plant_memory(planted))
+        self.sync()
+        self.assertFalse(self.marker.exists(), "nothing ran, as the project or the user")
+        self.assertIn("link", "".join(p.read_text() for p in self.log_files()))
+
+    def log_files(self):
+        return list((BIN.parent / ".logs").glob("sync-all-memory-*.log")) + list((self.tmp / "state").rglob("sync-all-memory-*.log"))
+
+    def test_the_cli_goes_by_name(self):
+        def cli(*a):
+            return subprocess.run([sys.executable, str(BIN / "project_git.py"), *a], capture_output=True, text=True, env=self.hook_env(), timeout=60).returncode
+        self.assertEqual(cli("sandboxed-project", "box"), 0)
+        self.assertEqual(cli("sandboxed-project", "open"), 3)
+        self.assertEqual(cli("sandboxed-project", "nobody"), 3)
+        self.assertEqual(cli("sync-memory", "open"), 3, "that path is a sandboxed project's job")
+
+    def test_git_sync_memory_doesnt_ask_by_folder(self):
+        self.assertNotIn("project_git.py", (BIN / "git-sync-memory.sh").read_text().replace("project_git.py sync-memory <name>", ""))
+
+    FLIP = """
+import os, sys, time
+ws, mem, other = sys.argv[1:4]
+link, tmp = ws + "/.agent-memory", ws + "/.am.tmp"
+end, a = time.time() + float(sys.argv[4]), True
+open(ws + "/flip.ok", "w").write("started")
+while time.time() < end:
+    os.symlink(other if a else mem, tmp)
+    os.replace(tmp, link)
+    a = not a
+    time.sleep(0.004)
+"""
+
+    @unittest.skipUnless(tbs.seatbelt.can_sandbox() is None, "needs Seatbelt")
+    def test_a_flipper_under_its_real_profile_gets_nothing(self):
+        ws = self.ws["box"]
+        (ws / "planted").mkdir()
+        mem = self.plant_memory(ws / "planted")
+        (ws / "other").mkdir()
+        (self.tmp / "f.py").write_text(self.FLIP)
+        flip = subprocess.Popen([tbs.seatbelt.SANDBOX_EXEC, "-p", self.profile("box"), sys.executable, "-I", str(self.tmp / "f.py"),
+                                 str(ws), str(mem), str(ws / "other"), "40"], cwd=ws, stderr=subprocess.DEVNULL)
+        self.addCleanup(flip.wait)
+        self.addCleanup(flip.kill)
+        for _i in range(100):
+            if (ws / "flip.ok").exists():
+                break
+            __import__("time").sleep(0.05)
+        self.assertTrue((ws / "flip.ok").exists(), "it runs under the profile")
+        for _i in range(int(os.environ.get("FLIP_ROUNDS", "3"))):
+            self.sync()
+            self.assertEqual(self.ran_as_the_user(), [])
+
+
+class SystemTempIsNoPlaceForIt(unittest.TestCase):
+    """The system's temp folder is every sandboxed project's to write. What the platform runs, loads or trusts as the user goes in
+    hubconf.private_tmp; these are the uses left, each with its reason in docs/design/mailbox-session-first.md. A new one has to say why."""
+    LEFT = {"bin/gen-index-roster.sh", "bin/config-check", "bin/run-tests", "bin/test-runner.py", "bin/sync-local-setup.sh", "bin/runtime_acp.py", "bin/seatbelt.py", "bin/landlock.py",
+            "bin/cap-runner.py", "bin/linux-test", "bin/lint"}
+    USE = __import__("re").compile(r"tempfile[.](?:mkdtemp|TemporaryDirectory|NamedTemporaryFile|mkstemp|gettempdir|TemporaryFile)[(]"
+                                   r"|[$][(]mktemp|[\"' ]/tmp[/\"' ]|/private/tmp|/var/folders")
+
+    def test_no_new_one(self):
+        found = set()
+        for f in sorted((ROOT / "bin").rglob("*")):
+            rel = str(f.relative_to(ROOT))
+            if not f.is_file() or rel.startswith("bin/evals/") or "__pycache__" in rel:
+                continue
+            try:
+                text = f.read_text()
+            except UnicodeDecodeError:
+                continue
+            for line in text.splitlines():
+                if self.USE.search(line) and "dir=" not in line and not line.lstrip().startswith("#"):
+                    found.add(rel)
+        self.assertEqual(sorted(found - self.LEFT), [])
 
 
 class ThePlatformsOwnSync(twp.Fixture):

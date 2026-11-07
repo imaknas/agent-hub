@@ -17,5 +17,7 @@
  "the probe could not run: {why}": "探測跑不起來:{why}",
  "claude ran a repo's git filter as you, in a platform run: a sandboxed project can run code outside its sandbox this way, until the variable that stops it is put right (runtime_claude.py NO_FOLDER_GIT)": "平台執行時 claude 以你的身分跑了 repo 的 git filter:沙箱專案可以這樣在沙箱外執行程式,要修好阻止它的變數才會停(runtime_claude.py NO_FOLDER_GIT)",
  "claude {version}: {why}": "claude {version}:{why}",
- "claude {version} leaves a repo's git filter alone again": "claude {version} 不再跑 repo 的 git filter 了"
+ "claude {version} leaves a repo's git filter alone again": "claude {version} 不再跑 repo 的 git filter 了",
+ "the probe no longer tests anything: without the variable claude didn't run the filter either, so its git status has moved or gone; look again at what stops it (runtime_claude.py NO_FOLDER_GIT)": "這個探測已經測不到東西:沒有那個變數時 claude 也沒跑 filter,表示它的 git status 改了或沒了;要重新看什麼在擋它(runtime_claude.py NO_FOLDER_GIT)",
+ "the probe broke: {error!r}": "探測壞了:{error!r}"
 }

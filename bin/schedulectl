@@ -295,7 +295,7 @@ def start(name, job, env):
                         *[f"--setenv={k}={v}" for k, v in env.items()], "/bin/sh", "-lc", job["command"]], check=True)
         print(_("Started {name}; its output goes to {log} (today's schedule won't run it again)", name=name, log=log))
         return
-    plist = Path("/tmp") / f"{label}.plist"
+    plist = hubconf.private_tmp() / f"{label}.plist"   # launchd runs what it says, as the user
     import plistlib
     plist.write_bytes(plistlib.dumps({
         "Label": label,

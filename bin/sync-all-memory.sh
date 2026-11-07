@@ -50,18 +50,20 @@ export AGENT_HUB_OFFLINE="$OFFLINE"
   mem="$path/.agent-memory"
   [ -d "$mem" ] || continue
   (
-    cd "$mem" || exit 1
-    # a sandboxed project's .git is its own to write: no git runs here at all (not even with-lock's rev-parse, which a
-    # FIFO named by its config can hang). Its job commits, merges and bundles everything the bare repo lacks, taking
-    # the lock itself; the platform fetches the bundle (project_git.py)
-    "$HUB/bin/py" "$HUB/bin/project_git.py" sandboxed "$(pwd -P)"
+    # by the name, before going anywhere: a sandboxed project's .git is its own to write, and so is the link at .agent-memory, so no git
+    # runs here at all (not even with-lock's rev-parse, which a FIFO named by its config can hang). Its job commits, merges and
+    # bundles everything the bare repo lacks, taking the lock itself; the platform fetches the bundle (project_git.py)
+    "$HUB/bin/py" "$HUB/bin/project_git.py" sandboxed-project "$name"
     case $? in
-      0) "$HUB/bin/py" "$HUB/bin/project_git.py" sync-memory --lock "$(pwd -P)" >>"$LOG" 2>&1 \
+      0) "$HUB/bin/py" "$HUB/bin/project_git.py" sync-memory --lock "$name" >>"$LOG" 2>&1 \
            || log "$(hub_msg "{name}: git-sync-memory failed" name="$name")"
          exit 0 ;;
       3) ;;
       *) log "$(hub_msg "{name}: could not tell whether it is sandboxed; skipped" name="$name")"; exit 0 ;;
     esac
+    # never through a link: what runs below is that folder's config, as the user
+    if [ -L "$mem" ]; then log "$(hub_msg "{name}: its memory folder is a link; skipped" name="$name")"; exit 0; fi
+    cd "$mem" || exit 1
     before=$(git rev-parse HEAD)
     "$HUB/bin/with-lock.sh" "$HUB/bin/git-sync-memory.sh" >>"$LOG" 2>&1 \
       || log "$(hub_msg "{name}: git-sync-memory failed" name="$name")"

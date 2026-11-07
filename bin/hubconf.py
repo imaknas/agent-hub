@@ -180,6 +180,15 @@ def session_addresses_dir() -> pathlib.Path:
     return secrets_dir() / "sessions"
 
 
+def private_tmp() -> pathlib.Path:
+    """A temp folder for what the platform runs, loads or trusts as the user. The system's isn't one: every sandboxed project's own
+    processes can write it (the same uid, whatever its mode). This is under the secrets directory, which every sandbox is denied
+    both ways, and it holds no repo or rules file above it (.state is under the hub's own). Not backed up, not scanned."""
+    d = secrets_dir() / "tmp"
+    d.mkdir(mode=0o700, parents=True, exist_ok=True)
+    return d
+
+
 def session_address_file(session: str) -> pathlib.Path | None:
     """<session_addresses_dir>/<session>.json, or None when the id isn't a plain file name."""
     return session_file(session, "json")

@@ -1109,7 +1109,8 @@ def cmd_move_instance(argv: list[str]) -> int:
     names.env_set(env, "HOME", str(home))
     # verify the new layout (the pointer file isn't written yet: point there with AGENT_HUB_HOME)
     # in a state of its own: the real registry index is rebuilt from the new place once the pointer is written
-    check_state = tempfile.mkdtemp()
+    hubconf.STATE.mkdir(parents=True, exist_ok=True)
+    check_state = tempfile.mkdtemp(prefix="move-check-", dir=hubconf.STATE)   # not the secrets folder: that is being moved
     check_env = dict(env)
     names.env_set(check_env, "STATE", check_state)
     r = subprocess.run(hubconf.launch(BIN / "config-check"), env=check_env,

@@ -21,8 +21,8 @@ when back on the latest), not just a red status page.
 
 A platform run starts claude in a project's folder, and claude runs git of its own there unless told not to (runtime_claude.py
 NO_FOLDER_GIT): what stops a sandboxed project's repo config from running as the user rests on that one variable of the tool's. So
-each version this script finds gets a real probe (one small request, in a throwaway repo with a clean filter, through llm.py): the
-filter ran, or the probe couldn't tell, goes to the alerts and is tried again next night. Claude's own auto-update can change the
+each version this script finds gets a real probe (two small requests in a throwaway repo with a clean filter, with the variable and
+without it, the same flags): the filter ran, or the probe couldn't tell, goes to the alerts and is tried again next night. Claude's own auto-update can change the
 version between runs, so it goes by the version last probed, not by whether this script updated it.
 
 Usage: update-claude.py [--dry-run]
@@ -41,6 +41,7 @@ sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
 import alert  # noqa: E402
 import hubconf  # noqa: E402
 import i18n  # noqa: E402
+import runtime_ports  # noqa: E402
 
 _ = i18n.domain(__file__)
 
@@ -79,24 +80,42 @@ def smoke() -> str | None:
         return (r.stderr.strip() or r.stdout.strip())[-300:] or f"exit {r.returncode}"
 
 
-def agent_run(repo: pathlib.Path) -> str | None:
-    """One minimal request in this folder, on the platform's own path (llm.py, so the environment it really gives). Why not, or None."""
+REQUEST = "Reply with just the two letters: ok"
+
+
+def agent_run(repo: pathlib.Path, guarded: bool = True) -> str | None:
+    """One minimal request in this folder. Why not, or None. Guarded: on the platform's own path (llm.py, so the environment it really
+    gives). Not guarded: that same run's flags (llm.py --dry-run), with the variable taken out, to show the probe still tests something."""
+    llm = [sys.executable, str(hubconf.ROOT / "bin" / "llm.py"), "run", "login-check", "--cwd", str(repo)]
+    env = {**os.environ, "LLM_AUTH": "token"}
     try:
-        r = subprocess.run([sys.executable, str(hubconf.ROOT / "bin" / "llm.py"), "run", "login-check", "--cwd", str(repo)],
-                           input="Reply with just the two letters: ok", capture_output=True, text=True, timeout=180, cwd=repo,
-                           env={**os.environ, "LLM_AUTH": "token"})
+        if guarded:
+            r = subprocess.run(llm, input=REQUEST, capture_output=True, text=True, timeout=180, cwd=repo, env=env)
+        else:
+            dry = subprocess.run([*llm, "--dry-run"], input=REQUEST, capture_output=True, text=True, timeout=60, cwd=repo, env=env)
+            if dry.returncode != 0:
+                return (dry.stderr or dry.stdout).strip()[-200:] or f"exit {dry.returncode}"
+            rt = runtime_ports.load(ports=("auth",))
+            run_env, why = rt.auth_env("token", dict(os.environ))
+            if run_env is None:
+                return why
+            for k in getattr(rt, "NO_FOLDER_GIT", ()):
+                run_env.pop(k, None)
+            run_env["HUB_LLM_POINT"] = "login-check"
+            r = subprocess.run(json.loads(dry.stdout), input=REQUEST, capture_output=True, text=True, timeout=180, cwd=repo, env=run_env)
     except subprocess.TimeoutExpired:
         return _("no answer for 3 minutes")
     return None if r.returncode == 0 else (r.stderr.strip() or r.stdout.strip())[-200:] or f"exit {r.returncode}"
 
 
 def filter_probe(run=agent_run) -> str | None:
-    """Whether a platform run still leaves a repo's git filter alone: None, or what is wrong. A plain `git status` is the control:
-    with no run of the filter there, this probe would say nothing."""
+    """Whether a platform run still leaves a repo's git filter alone: None, or what is wrong. All of it in hubconf.private_tmp: the
+    system's temp folder is every sandboxed project's to write, and this runs the filter as the user. A plain `git status` shows git
+    fires the filter, and the same run without the variable shows claude still would: with either silent, a pass would say nothing."""
     env = {k: v for k, v in os.environ.items() if not k.startswith("GIT_")}
     env.update(GIT_CONFIG_GLOBAL=os.devnull, GIT_CONFIG_NOSYSTEM="1", GIT_AUTHOR_NAME="t", GIT_AUTHOR_EMAIL="t@t",
                GIT_COMMITTER_NAME="t", GIT_COMMITTER_EMAIL="t@t")
-    with tempfile.TemporaryDirectory(prefix="hub-filter-probe-") as tmp:
+    with tempfile.TemporaryDirectory(prefix="filter-probe-", dir=hubconf.private_tmp(), ignore_cleanup_errors=True) as tmp:
         repo, marker, script = pathlib.Path(tmp) / "repo", pathlib.Path(tmp) / "ran", pathlib.Path(tmp) / "filter.sh"
         repo.mkdir()
         script.write_text(f'#!/bin/sh\necho x >> "{marker}"\ncat\n')
@@ -106,6 +125,7 @@ def filter_probe(run=agent_run) -> str | None:
             subprocess.run(["git", "-C", str(repo), *args], check=True, capture_output=True, env=env, timeout=60)
 
         def stat_dirty():
+            marker.unlink(missing_ok=True)
             t = (repo / "a.txt").stat().st_mtime + 5
             os.utime(repo / "a.txt", (t, t))
         (repo / "a.txt").write_text("a\n")
@@ -118,9 +138,14 @@ def filter_probe(run=agent_run) -> str | None:
         git("--no-optional-locks", "status", "--short")
         if not marker.exists():
             return _("the probe says nothing: a plain git status didn't run the filter either")
-        marker.unlink()
         stat_dirty()
-        if (why := run(repo)):
+        if (why := run(repo, False)):
+            return _("the probe could not run: {why}", why=why)
+        if not marker.exists():
+            return _("the probe no longer tests anything: without the variable claude didn't run the filter either, so its git "
+                     "status has moved or gone; look again at what stops it (runtime_claude.py NO_FOLDER_GIT)")
+        stat_dirty()
+        if (why := run(repo, True)):
             return _("the probe could not run: {why}", why=why)
         if marker.exists():
             return _("claude ran a repo's git filter as you, in a platform run: a sandboxed project can run code outside its "
@@ -142,7 +167,10 @@ def probe_new_version() -> None:
             return
     except (OSError, ValueError):
         pass
-    why = filter_probe()
+    try:
+        why = filter_probe()
+    except Exception as e:   # what can't be told is said too: a pass must be earned
+        why = _("the probe broke: {error!r}", error=e)
     if not why:
         PROBED.parent.mkdir(parents=True, exist_ok=True)
         PROBED.write_text(json.dumps({"version": now}))

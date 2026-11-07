@@ -88,7 +88,8 @@ class Fixture(tbs.WorktreeFixture):
         payload = json.dumps({"session_id": self.SID, "cwd": str(cwd or top)})
         r = subprocess.run([sys.executable, str(BIN / "hub-event"), "worktree-scope", str(top), str(main)], input=payload,
                            capture_output=True, text=True, env=self.hook_env(), timeout=60)
-        return r.returncode, r.stdout.strip()
+        out = r.stdout.strip()
+        return r.returncode, f"{out.split(chr(9))[1]}/.agent-memory" if chr(9) in out else out
 
     def handle(self, event, cwd, name, **extra):
         """A project's own hook, as the runtime fires it."""
@@ -665,7 +666,7 @@ class EachLineOfTheRule(Fixture):
         return ".agent-memory/memory/" in self.run_hook("nudge", cwd, "PostToolUse", **extra).stdout
 
     def clear_rate_limit(self):
-        (self.tmp / f"hubbus-post-tool-{self.SID}").unlink(missing_ok=True)
+        (self.tmp / "state" / "hubbus-post-tool" / self.SID).unlink(missing_ok=True)
 
     def last_log(self):
         return (BIN.parent / ".logs" / "hub-event.log").read_text().splitlines()[-1]
@@ -722,8 +723,7 @@ class EachLineOfTheRule(Fixture):
         """A confirmed worktree in no project's workspace, under its main: the hub's are, whose entry has no workspace."""
         wt = self.tree("open")
         docs = {n: d for n, d in self.docs.items() if n != "open"}
-        with mock.patch.object(hubconf, "projects", lambda: docs), \
-                mock.patch.object(project_git, "user_git_ok", lambda f: True):
+        with mock.patch.object(hubconf, "projects", lambda: docs), mock.patch.object(hubconf, "MAIN", self.ws["open"]):
             self.assertTrue(project_git.folder_git_ok(wt))
 
     def test_a_memory_link_flipped_beside_a_real_worktree_isnt_followed(self):
@@ -793,6 +793,73 @@ class EachLineOfTheRule(Fixture):
         self.sub.symlink_to(old)
         r = self.handle("session_start", self.sub, "SessionStart", source="compact")
         self.assertNotIn("mini:/x", r.stdout)
+
+
+class OneLook(Fixture):
+    """What a hook does in a real worktree out in the temp folder comes from one look at its pointers."""
+
+    def setUp(self):
+        super().setUp()
+        self.tree("open")
+        self.out = self.tmp / "out"
+        self.git("-C", self.ws["open"], "worktree", "add", "-q", self.out, "-b", "o")
+        self.planted = self.tmp / "planted"
+        self.planted.mkdir()
+        self.plant_memory(self.planted)
+        (self.out / ".agent-memory").symlink_to(self.planted / ".agent-memory")
+        p = mock.patch.object(hubconf, "projects", lambda: self.docs)
+        p.start()
+        self.addCleanup(p.stop)
+
+    def test_scope_of_reads_the_pointers_once(self):
+        with mock.patch.object(project_git.gitdirs, "dirs", wraps=gitdirs.dirs) as look:
+            scope = project_git.scope_of(self.out)
+        self.assertEqual(look.call_count, 1)
+        self.assertEqual(scope.memdir, self.ws["open"].resolve() / ".agent-memory")
+
+    def test_a_git_file_rewritten_after_the_look_doesnt_move_the_memory(self):
+        m = load_hub_event()
+        m.LOG = self.tmp / "hub-event.log"
+        real, pointer = project_git.scope_of, (self.out / ".git")
+
+        def look_then_rewrite(folder):
+            scope = real(folder)
+            pointer.write_text("gitdir: /nowhere\n")
+            return scope
+        ran = []
+        import runtime_claude
+        raw = json.dumps({"session_id": self.SID, "cwd": str(self.out), "hook_event_name": "PreCompact"})
+        with mock.patch.object(project_git, "scope_of", look_then_rewrite), \
+                mock.patch.object(m.subprocess, "run", lambda argv, **k: ran.append(k.get("cwd")) or subprocess.CompletedProcess(argv, 0, "", "")):
+            (self.ws["open"] / ".agent-memory" / ".git").mkdir(exist_ok=True)
+            m.handle("pre_compact", raw, runtime_claude, "claude")
+        self.assertEqual(ran, [self.ws["open"].resolve() / ".agent-memory"])
+
+    def test_a_main_read_from_a_pointer_since_rewritten_isnt_believed(self):
+        """The script read main a moment ago; by the time it asks, the pointer is real again and the top passes."""
+        self.assertEqual(self.scope(self.out, self.planted)[0], 1)
+        self.assertEqual(self.scope(self.out, self.ws["open"])[0], project_git.NOT_SANDBOXED)
+
+    def test_allow_write_counts_before_the_project_does(self):
+        """A sandboxed project's allow_write naming a folder in an open project: that folder isn't only its owner's."""
+        shared = self.ws["open"] / "shared"
+        shared.mkdir()
+        self.assertTrue(project_git.folder_git_ok(shared))
+        self.docs["box"]["allow_write"] = [str(shared)]
+        self.assertFalse(project_git.folder_git_ok(shared))
+
+    def test_what_its_runtime_folder_holds_doesnt_count_either(self):
+        """~/services/<project>: a sandboxed project writes it, wherever services_root is."""
+        services = self.ws["open"].parent / "svc"
+        wt = services / "box" / "side"
+        wt.parent.mkdir(parents=True)
+        self.git("-C", self.ws["open"], "worktree", "add", "-q", wt, "-b", "under-services")
+        self.docs["box"]["runtime"] = {"test": "x"}
+        real = hubconf.p
+        with mock.patch.object(hubconf, "p", lambda k, d=None: services if k == "services_root" else self.ws["open"].parent if k == "workspace_root" else real(k, d)):
+            self.assertFalse(project_git.folder_git_ok(wt))
+            del self.docs["box"]["runtime"]
+            self.assertTrue(project_git.folder_git_ok(wt), "with no runtime nothing sandboxed writes there")
 
 
 class Guard(Fixture):

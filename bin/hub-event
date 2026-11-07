@@ -82,14 +82,21 @@ def _workspace(cwd: str) -> pathlib.Path | None:
 def _memory(ws) -> bool:
     """Whether this project's memory is connected: .agent-memory is its own checkout (a worktree has a .git file). A
     plain folder of that name (agent-hub itself, memory: false) is not: git commands there act on the enclosing repo."""
-    return bool(ws) and (project_git.memory_dir(ws) / ".git").exists()
+    return bool(ws) and (_memdir(ws) / ".git").exists()
+
+
+_LOOKED = {}   # {folder: memory} from handle's one look at it (project_git.scope_of): pointers can change after it
+
+
+def _memdir(ws):
+    return _LOOKED.get(ws) or project_git.memory_dir(ws)
 
 
 # ---------- handlers: the platform's logic, returning only neutral results (text / None / reason to block) ----------
 
 def memory_pull(ev, ws):
     if _memory(ws):
-        subprocess.run([str(BIN / "with-lock.sh"), "git", "pull", "-q"], cwd=project_git.memory_dir(ws),
+        subprocess.run([str(BIN / "with-lock.sh"), "git", "pull", "-q"], cwd=_memdir(ws),
                        capture_output=True, timeout=60)
 
 
@@ -104,7 +111,7 @@ def hub_pull(ev, ws):
 
 def memory_sync(ev, ws):
     if _memory(ws):
-        subprocess.run([str(BIN / "with-lock.sh"), str(BIN / "git-sync-memory.sh")], cwd=project_git.memory_dir(ws),
+        subprocess.run([str(BIN / "with-lock.sh"), str(BIN / "git-sync-memory.sh")], cwd=_memdir(ws),
                        capture_output=True, timeout=120)
 
 
@@ -335,8 +342,11 @@ def handle(event: str, raw: str, rt=None, name: str | None = None) -> str:
     # as the project only in a folder its workspace really holds: one swapped for a link elsewhere gets no work at all
     inside = bool(cage) and bool(ws) and project_git.holds(cage[1], ws)
     as_project = bool(os.environ.get("HUB_AS_PROJECT"))
-    memory_ok = not cage and bool(ws) and (as_project or project_git.user_git_ok(ws))
-    folder_ok = memory_ok and (as_project or project_git.folder_git_ok(ws))
+    scope = project_git.scope_of(ws) if ws and not cage and not as_project else None
+    if scope:
+        _LOOKED[ws] = scope.memdir
+    memory_ok = not cage and bool(ws) and (as_project or scope.memory_ok)
+    folder_ok = memory_ok and (as_project or scope.folder_ok)
     inner = _as_project(cage[0], ws, ev) if inside and _needs_project(ev) else {}
     texts, reasons, ran, failed = [], [], [], []
     for name, fn in HANDLERS[event]:

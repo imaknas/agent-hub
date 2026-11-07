@@ -361,7 +361,7 @@ def state_todo_broken(repo: pathlib.Path, base: str) -> bool:
     """The to-do section was broken by this run (already broken before does not count; that is the librarian's business)."""
     if state_todo_ok(repo / "STATE.md"):
         return False
-    with tempfile.NamedTemporaryFile("w", suffix=".md") as f:
+    with tempfile.NamedTemporaryFile("w", suffix=".md", dir=hubconf.private_tmp()) as f:
         f.write(at_base(repo, base, "STATE.md") or "")
         f.flush()
         return state_todo_ok(pathlib.Path(f.name))
@@ -372,7 +372,7 @@ def state_todo_broken(repo: pathlib.Path, base: str) -> bool:
 def consolidate(s: dict, model: str, dry_run: bool, keep: bool) -> dict:
     """Returns {"status": ok|noop|failed, "entry": the review-log entry or None, ...}"""
     name = s["name"]
-    tmp = pathlib.Path(tempfile.mkdtemp(prefix=f"consolidate-{name}-"))
+    tmp = pathlib.Path(tempfile.mkdtemp(prefix=f"consolidate-{name}-", dir=hubconf.private_tmp()))   # git and an agent run there, as the user
     repo = tmp / "repo"
     result = {"status": "failed", "entry": None, "tmp": tmp}
     try:

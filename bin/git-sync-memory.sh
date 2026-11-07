@@ -13,16 +13,9 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # are not project code and should not go through the project's lint/formatting.
 export GIT_CONFIG_COUNT=1 GIT_CONFIG_KEY_0=core.hooksPath GIT_CONFIG_VALUE_0=/dev/null
 
-# A sandboxed project's .git is its own to write (config, hooks, alternates), so its memory is synced as the project:
-# its job commits, merges the bare repo's branch and hands back a bundle, which the platform fetches into the bare repo
-# (project_git.py; docs/design/projects-and-repos.md section 4). Exit 3 = not a sandboxed project's memory; anything
-# else that isn't 0 means it couldn't tell, and then nothing is run here.
-"$SCRIPT_DIR/py" "$SCRIPT_DIR/project_git.py" sandboxed "$(pwd -P)"
-case $? in
-  0) exec "$SCRIPT_DIR/py" "$SCRIPT_DIR/project_git.py" sync-memory "$(pwd -P)" ;;
-  3) ;;
-  *) echo "git-sync-memory: could not tell whether $(pwd -P) belongs to a sandboxed project; not synced" >&2; exit 1 ;;
-esac
+# This runs git as the user, so its caller has decided, by a project's name, that that's right here: a sandboxed project's .git is
+# its own to write, and its memory is synced as the project (project_git.py sync-memory <name>; docs/design/projects-and-repos.md
+# section 4). It doesn't ask again by folder: the answer can be changed by flipping a link, and "not sandboxed" is what a flip gets.
 
 # Only in a checkout of its own (a project's .agent-memory worktree, or a native project's root). A plain folder inside
 # another repo (agent-hub's own, memory: false) would make every git command below act on that repo: on 10-31 a bare

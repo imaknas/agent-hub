@@ -87,7 +87,7 @@ def run(project: str, ws: pathlib.Path, point: str, prompt: str, allow: list[str
     All or nothing: a run that failed (or that the runtime cancelled or left incomplete, or that ended without the
     structured answer the platform acts on) gets nothing copied back and hands back no output (no replies, no
     closes); the mailbox caller then holds the letters and asks the owner (hold_and_ask)."""
-    tmp = pathlib.Path(tempfile.mkdtemp(prefix=f"hub-propose-{project}-"))
+    tmp = pathlib.Path(tempfile.mkdtemp(prefix=f"hub-propose-{project}-", dir=project_git.scratch_dir(project, ws)))
     wt, mem = tmp / "ws", ws / ".agent-memory"
     added, bases, sigs = [], {}, {}
     def failed(why: str) -> dict:
