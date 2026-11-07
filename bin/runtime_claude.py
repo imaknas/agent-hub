@@ -24,7 +24,8 @@ this doesn't import registry/policy and only takes the dict policy.policy() comp
                          (docs/design/mailbox-runtimes.md B1)
   can_wake(sid)          whether wake would be handed over now: the waiter's heartbeat is fresh; wake_gap(sid) why not
   session_status(sid)    busy, idle, waiting or unknown, from `claude agents --json` (it lists Desktop's sessions too, and
-                         only the listing: without --json the command is the agent view, which can start things)
+                         only the listing: without --json the command is the agent view, which can start things);
+                         session_statuses(sids) the same for many from one listing
   session_summary(sid)   how its last reply ended (<session>.last): what wait() kept, for a project whose label lets it
 
 Settings (neutral policy → Claude Code's settings; the policy's fields are in policy.py):
@@ -353,18 +354,24 @@ def wake_gap(sid: str, now=None) -> str | None:
 def session_status(sid: str) -> str:
     """From the CLI's listing of active sessions. Only with --json: bare, the command is the agent view. Anything that goes
     wrong, or a session it doesn't list, is unknown (runtime_ports.SESSION_STATUSES)."""
+    return session_statuses([sid])[sid]
+
+
+def session_statuses(sids) -> dict:
+    """session_status for many sessions from one listing: the listing has them all, and each call starts a process."""
     from types import SimpleNamespace
+    out = {s: "unknown" for s in sids}
     try:
         r = subprocess.run([_exe(), "agents", "--json"], capture_output=True, text=True, timeout=AGENTS_TIMEOUT_S,
                            stdin=subprocess.DEVNULL, env=_env(SimpleNamespace(env=None)))
         rows = json.loads(r.stdout) if r.returncode == 0 else None
     except (OSError, subprocess.SubprocessError, ValueError):
-        return "unknown"
+        return out
     for row in rows if isinstance(rows, list) else ():
-        if isinstance(row, dict) and row.get("sessionId") == sid:
+        if isinstance(row, dict) and row.get("sessionId") in out:
             status = row.get("status")
-            return status if status in ("busy", "idle", "waiting") else "unknown"
-    return "unknown"
+            out[row["sessionId"]] = status if status in ("busy", "idle", "waiting") else "unknown"
+    return out
 
 
 def _keep_last(key: str, text) -> None:

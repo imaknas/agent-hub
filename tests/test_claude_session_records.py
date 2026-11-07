@@ -390,7 +390,8 @@ class Dispatch(tmw.Harness):
     def setUp(self):
         super().setUp()
         for target, name, value in ((hubconf, "secrets_dir", lambda: self.tmp / "secrets"),
-                                    (runtime_claude, "session_status", lambda sid: "idle")):
+                                    (runtime_claude, "session_status", lambda sid: "idle"),
+                                    (runtime_claude, "session_statuses", lambda sids: {s: "idle" for s in sids})):
             p = mock.patch.object(target, name, value)
             p.start()
             self.addCleanup(p.stop)

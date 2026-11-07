@@ -76,6 +76,8 @@ The current interfaces (the other layers get added one at a time, following the 
   session_status (optional; docs/design/mailbox-session-first.md): what a session is doing, for routing a letter
     session_status(sid) -> str                           one of SESSION_STATUSES. Cheap, and it fails safe: anything it
                                                          can't read or find is "unknown", which counts as idle
+    session_statuses(sids) -> {sid: str}                 optional: the same for many sessions in one look, for a runtime
+                                                         whose look returns them all anyway (a tick asks it once)
   session_summary (optional; same design, "The last reply"): how a session's last reply ended
     session_summary(sid) -> str | None                   what wait kept (below); None: nothing is kept
     Outside the port, a runtime may also provide wake_address(env) -> dict | None: what a session's hook environment
@@ -633,6 +635,21 @@ class Sessions:
         fn = getattr(m, "session_status", None) if m else None
         status = fn(native) if callable(fn) else "unknown"
         return status if status in SESSION_STATUSES else "unknown"
+
+    def session_statuses(self, sids) -> dict:
+        """session_status for the sessions whose runtime answers for many in one look (session_statuses), one look per
+        runtime; the others are left out, for the caller to ask one at a time if it will."""
+        out, groups = {}, {}
+        for sid in sids:
+            m, native = self._mod(sid)
+            if m is not None and callable(getattr(m, "session_statuses", None)):
+                groups.setdefault(id(m), (m, {}))[1][native] = sid
+        for m, names in groups.values():
+            got = m.session_statuses(list(names))
+            for native, sid in names.items():
+                status = got.get(native) if isinstance(got, dict) else None
+                out[sid] = status if status in SESSION_STATUSES else "unknown"
+        return out
 
     def session_summary(self, sid) -> str | None:
         m, native = self._mod(sid)

@@ -2544,14 +2544,21 @@ def wake(c, rt, proj: str, sid: str, rows: list) -> bool:
     return ok if attempted else None
 
 
+STATUS_TICK_S = 10   # what a tick spends at most asking what sessions are doing; past it each is "unknown" (idle)
+
+
 class Tick:
-    """What one dispatch knows, looked up at most once: the sessions on record, what each is doing (session_status starts a
-    process per call, so it is asked once per session and only for a letter that may wake it), which projects may wake, and
-    the wakes this tick owes, sent after the views are written (a sandboxed session's `brunna inbox` reads its view)."""
+    """What one dispatch knows, looked up at most once: the sessions on record, what each is doing, which projects may wake, and
+    the wakes this tick owes, sent after the views are written (a sandboxed session's `brunna inbox` reads its view).
+    What sessions are doing is asked only once a letter may wake one: of a runtime that answers for many in one look
+    (session_statuses), all its wakeable sessions at once; of another, one at a time. Either way a tick spends at most
+    STATUS_TICK_S on it (dispatch runs every minute, holding its lock): a slow tick would also let a woken session's pickup
+    pass before its outbox is taken in."""
 
     def __init__(self, c, rt, live, opened, leases):
         self.c, self.rt, self.live, self.opened, self.leases = c, rt, live, opened, leases
         self.statuses, self.owed, self.on, self.wakeable = {}, {}, {}, {}
+        self.listed, self.spent = False, 0.0
 
     def wake_on(self, proj) -> bool:
         if proj not in self.on:
@@ -2564,10 +2571,28 @@ class Tick:
             self.wakeable[sid] = bool(fn(sid)) if callable(fn) else False
         return self.wakeable[sid]
 
+    def timed(self, fn, *args):
+        if self.spent >= STATUS_TICK_S:
+            return None
+        start = time.monotonic()
+        try:
+            return fn(*args)
+        finally:
+            self.spent += time.monotonic() - start
+
     def status(self, sid) -> str:
+        if sid not in self.statuses and not self.listed:
+            self.listed = True
+            many = getattr(self.rt, "session_statuses", None)
+            if callable(many):
+                ask = sorted({s for s in self.opened if s in self.live and self.can_wake(s)} | {sid})
+                got = self.timed(many, ask)
+                self.statuses.update(got if isinstance(got, dict) else {})
         if sid not in self.statuses:
             fn = getattr(self.rt, "session_status", None)
-            self.statuses[sid] = fn(sid) if callable(fn) else "unknown"
+            got = self.timed(fn, sid) if callable(fn) else None
+            import runtime_ports
+            self.statuses[sid] = got if got in runtime_ports.SESSION_STATUSES else "unknown"
         return self.statuses[sid]
 
     def of_project(self, sid, proj) -> bool:

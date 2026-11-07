@@ -1199,5 +1199,74 @@ class ThroughTheService(tbs.WorktreeFixture):
         self.assertFalse(self.calls.exists(), "not even asked what it's doing")
 
 
+class ListingRuntime(tmw.WakingRuntime):
+    """A runtime whose look at what sessions are doing returns them all, as Claude's listing does."""
+
+    def __init__(self, *a, **k):
+        super().__init__(*a, **k)
+        self.listings = []
+
+    def session_statuses(self, sids):
+        self.listings.append(list(sids))
+        return {s: self.statuses.get(s, "idle") for s in sids}
+
+
+class StatusOncePerTick(Harness):
+    """What sessions are doing is a process per look: one look a tick, and a bound on the time a tick spends on it."""
+
+    def test_a_runtime_that_lists_them_all_is_asked_once_a_tick(self):
+        self.rt = ListingRuntime()
+        sids = [f"S{i:02}" for i in range(20)]
+        self.open(*sids)
+        for i in range(4):
+            self.send(f"m{i}", "proj", "request", src="third")
+            self.send(f"n{i}", "proj", "info", to_session=sids[i])
+        self.dispatch()
+        self.assertEqual(len(self.rt.listings), 1)
+        self.assertEqual(self.rt.asked, [], "none one at a time")
+        self.assertEqual(sorted(self.rt.listings[0]), sids)
+        self.send("m9", "proj", "request", src="third")
+        self.dispatch()
+        self.assertEqual(len(self.rt.listings), 2, "once each tick")
+
+    def test_one_at_a_time_the_tick_stops_asking_at_its_bound(self):
+        import time
+        self.m.STATUS_TICK_S = 0.25
+        slow = self.rt.session_status
+
+        def status(sid):
+            time.sleep(0.1)
+            return slow(sid)
+        self.rt.session_status = status
+        sids = [f"S{i:02}" for i in range(10)]
+        for i, sid in enumerate(sids):
+            self.open(sid)
+            self.send(f"m{i}", "proj", "question", to_session=sid)
+            self.rt.statuses[sid] = "waiting"
+        start = time.monotonic()
+        self.dispatch()
+        self.assertLessEqual(len(self.rt.asked), 4)
+        self.assertLess(time.monotonic() - start, 2)
+        self.assertTrue(self.woken(), "past the bound a session is unknown, which counts as idle")
+
+    def test_through_the_router_one_look_for_many_sessions(self):
+        import runtime_ports
+        exe = self.tmp / "claude"
+        calls = self.tmp / "calls"
+        rows = [{"sessionId": "a", "status": "busy"}, {"sessionId": "b", "status": "waiting"}]
+        exe.write_text(f"#!/bin/sh\necho x >> '{calls}'\ncat <<'E'\n{json.dumps(rows)}\nE\n")
+        exe.chmod(0o755)
+        with mock.patch.object(self.m.hubconf, "tool", lambda name: str(exe)):
+            got = runtime_ports.Sessions(["claude"]).session_statuses(["a", "b", "c"])
+        self.assertEqual(got, {"a": "busy", "b": "waiting", "c": "unknown"})
+        self.assertEqual(calls.read_text().count("x"), 1)
+
+    def test_a_runtime_that_cant_list_is_left_out_of_the_routers_answer(self):
+        import runtime_fake
+        import runtime_ports
+        self.assertFalse(hasattr(runtime_fake, "session_statuses"))
+        self.assertEqual(runtime_ports.Sessions(["fake"]).session_statuses(["fake:x"]), {})
+
+
 if __name__ == "__main__":
     unittest.main()
