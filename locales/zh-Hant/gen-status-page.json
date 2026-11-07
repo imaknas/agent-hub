@@ -196,5 +196,6 @@
  "the loop guard asked the owner": "循環防護已問過本人",
  "too old for a platform run": "太舊,平台不再派人處理",
  "today's runs are used up": "今天的處理次數用完了",
- "agent triaged it": "agent 看過了"
+ "agent triaged it": "agent 看過了",
+ "A mailbox run failed ({job}): {detail}": "信箱的執行失敗了({job}):{detail}"
 }

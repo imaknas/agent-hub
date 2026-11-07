@@ -282,6 +282,12 @@ MARK = ('<svg class=mark viewBox="0 0 256 256" aria-hidden="true"><g stroke="cur
         '</svg>')
 
 
+def mail_failure(f: dict) -> bool:
+    """A job.failed from a run the mailbox started, or one it couldn't start: its letters wait for a session, and this is
+    the only word of why."""
+    return str(f.get("job") or "").startswith(("mailbox-", "llm:mailbox-"))
+
+
 def path_labels() -> dict[str, str]:
     """hubbus delivery_paths' steps, for people."""
     return {"woken": _("woken"), "woken-missed": _("woken, not picked up"), "wake-failed": _("wake failed"),
@@ -576,6 +582,8 @@ def main() -> None:
         for f in bus["job_failed_24h"]:
             if f.get("job") == "hubbus-bridge":
                 alerts.append(("bad", _("hubbus: {detail}", detail=f.get('detail', ''))))
+            elif mail_failure(f):
+                alerts.append(("bad", _("A mailbox run failed ({job}): {detail}", job=f.get("job"), detail=f.get("detail", ""))))
         if bus["corrupt"]:
             alerts.append(("bad", _("bus.db was corrupt; the old file was moved to {files} (letters in it that "
                                     "had not been received are lost)", files=', '.join(bus['corrupt']))))

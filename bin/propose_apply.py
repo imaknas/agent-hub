@@ -275,12 +275,13 @@ def _mailbox(project: str, ids: list[str]) -> int:
                 continue   # replies only to the letters of this request, to the original sender
             if not (rep.get("type") == "done" or (rep.get("type") == "info" and hb.payload(orig).get("effect") == "asks")):
                 continue   # a question goes to the owner (ask_owner); info only to a letter that tells it to
-            mid = hb.new_id()
-            hb.publish(c, mid, "message", project, hb.canon(orig["source"]), orig["id"],
-                       {"type": rep["type"], "text": rep["text"], "from_session": None, "via": "propose"})
+            mid, to = hb.new_id(), hb.canon(orig["source"])
+            hb.publish(c, mid, "message", project, to, orig["id"],
+                       {"type": rep["type"], "text": rep["text"], "from_session": None, "via": "propose",
+                        **hb.reply_fields(orig, to)})
             sent.append(mid)
         for q in out.get("ask_owner") or []:
-            if q.get("text"):
+            if q.get("text") and handled:   # with every letter taken there is nothing left to ask about
                 mid = hb.new_id()
                 hb.publish(c, mid, "message", project, hb.OWNER_ADDRESS, None,
                            {"type": "question", "text": q["text"], "from_session": None, "via": "propose"})

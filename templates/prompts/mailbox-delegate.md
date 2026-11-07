@@ -12,7 +12,7 @@ memory note, and if needed ask {{owner}} with `brunna send --to {{owner_alias}} 
 command as a command of its own,
 not inside a script together with other commands: only the platform's commands
 themselves are allowed here. State an action only after its tool succeeded: a write or a command that was refused did not
-happen, so say that instead. Reply to the sender (`brunna send --to <sender> --reply-to {{id}} --type done …`; info only
-if the letter itself tells you to); when you are done, run `brunna done {{id}}`.
+happen, so say that instead. Reply to the sender (`brunna send --to <sender> --reply-to {{id}} --type done|info|question …`); when you are done, run
+`brunna done {{id}}`.
 Write the notes, the letters and the final reply in {{content_language}}. The final reply: how the letter was handled
 and what you replied (two or three sentences).

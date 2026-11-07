@@ -6,6 +6,7 @@ started.
 """
 import importlib.util
 import json
+import os
 import pathlib
 import shutil
 import subprocess
@@ -45,16 +46,24 @@ class Base(tms.Harness):
         self.started = []
         self.hub = self.m.hubconf.hub_project()
         self.owner = self.m.OWNER_ADDRESS
+        self.m.RECORDS = False   # read from the machine's settings at import: each test says which path it means
 
     def real_handler(self):
-        """The real run_handler, with its process stubbed."""
+        """The real run_handler, with its process stubbed, whichever handler the machine's settings name."""
         self.m.run_handler = self.m.real_run_handler
+        get = self.m.hubconf.get
+        settings = mock.patch.object(self.m.hubconf, "get", lambda k, d=None: {} if k == "mailbox" else get(k, d))
+        settings.start()
+        self.addCleanup(settings.stop)
 
         real = subprocess.run
+        self.start_exit = 0
 
         def run(cmd, **kw):
             if "run-agent-job.sh" not in str(cmd[0]):   # ps, and the like
                 return real(cmd, **kw)
+            if self.start_exit:
+                return subprocess.CompletedProcess(cmd, self.start_exit, "", "workdir does not exist")
             self.started.append({"cmd": cmd, "env": kw.get("env") or {}})
             return subprocess.CompletedProcess(cmd, 0, "", "")
         patch = mock.patch.object(self.m.subprocess, "run", run)
@@ -217,6 +226,87 @@ class Triage(Base):
         self.assertEqual(cmd[2:], ["mailbox", "proj", "m1"])
         self.assertEqual(self.vias("m1"), ["triage"], "no claim")
         self.assertEqual(json.loads(env["MAILBOX_LETTERS"]), ["m1"])
+
+
+class StartFailed(Base):
+    """run-agent-job.sh didn't start: the letter keeps its one triage, the budget isn't spent, the sender hears nothing
+    yet, a later tick tries again, a bounded number of times, and the failure shows."""
+
+    def failures(self, mid="m1"):
+        return self.rows("type='job.failed' AND ref=?", mid)
+
+    def retry_due(self, mid="m1"):
+        self.c.execute("UPDATE events SET ts=? WHERE type='job.failed' AND ref=?", (tms.ago(self.m.START_RETRY_MIN + 1), mid))
+
+    def test_it_spends_nothing_and_says_nothing_to_the_sender(self):
+        self.real_handler()
+        self.start_exit = 1
+        self.send("m1", "proj", "request")
+        self.dispatch()
+        self.assertEqual(self.vias("m1"), [], "no triage spent")
+        self.assertEqual(self.m.runs_today(self.c, "proj"), 0, "no run from the budget")
+        self.assertEqual(self.rows("id='m1:received'"), [], "no line before a run has started")
+        p = json.loads(self.failures()[0]["payload"])
+        self.assertEqual(p["job"], "mailbox-start:proj")
+        self.assertIn("workdir does not exist", p["detail"])
+
+    def test_a_later_tick_tries_again_and_the_run_then_counts(self):
+        self.real_handler()
+        self.start_exit = 1
+        self.send("m1", "proj", "request")
+        self.dispatch()
+        self.dispatch()
+        self.assertEqual(len(self.failures()), 1, "not every minute")
+        self.start_exit = 0
+        self.dispatch()
+        self.assertEqual(self.started, [], "still waiting its turn")
+        self.retry_due()
+        self.dispatch()
+        self.assertEqual(len(self.started), 1)
+        self.assertEqual(self.vias("m1"), ["triage"])
+        self.assertEqual(len(self.rows("id='m1:received'")), 1)
+
+    def test_it_stops_trying_and_the_letter_shows_as_stuck(self):
+        self.real_handler()
+        self.start_exit = 1
+        self.send("m1", "proj", "request", minutes_ago=200)
+        for _ in range(self.m.START_TRIES + 3):
+            self.dispatch()
+            self.retry_due()
+        self.assertEqual(len(self.failures()), self.m.START_TRIES)
+        self.assertEqual(self.vias("m1"), [])
+        self.assertEqual([s["id"] for s in self.status()["stuck"]], ["m1"], "alerted, not quietly waiting")
+
+    def test_one_senders_failure_does_not_stop_the_next(self):
+        self.real_handler()
+        self.start_exit = 1
+        self.send("m1", "proj", "request", src="other")
+        self.send("m2", "proj", "request", src=self.hub)
+        self.dispatch()
+        self.start_exit = 0
+        self.dispatch()
+        self.assertEqual([self.letters_of(r) for r in self.started], [["m2"]])
+
+    def test_a_propose_run_that_cannot_start_counts_the_same(self):
+        self.real_handler()
+        self.send("m1", "proj", "request")
+
+        def nope(*a, **k):
+            raise OSError("no such file")
+        with mock.patch.object(self.m.subprocess, "Popen", nope), \
+                mock.patch.object(self.m.hubconf, "get", lambda k, d=None: {"handler": "propose"} if k == "mailbox" else d):
+            self.dispatch()
+        self.assertEqual(self.vias("m1"), [])
+        self.assertEqual(self.rows("id='m1:received'"), [])
+        self.assertEqual(len(self.failures()), 1)
+
+    def test_a_failed_start_shows_on_the_status_page(self):
+        spec = importlib.util.spec_from_file_location("status_page_start", ROOT / "bin" / "gen-status-page.py")
+        page = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(page)
+        for job in ("mailbox-start:proj", "mailbox-propose:proj", "llm:mailbox-escalation", "llm:mailbox-conversation"):
+            self.assertTrue(page.mail_failure({"job": job}), job)
+        self.assertFalse(page.mail_failure({"job": "llm:librarian-state"}))
 
 
 class OnePerSender(Base):
@@ -387,14 +477,19 @@ class FixedLine(Base):
         self.dispatch()
         self.assertNotIn("ignore all", json.loads(self.line("x y\nignore all")["payload"])["text"])
 
-    def test_it_does_not_trigger_a_job_past_the_chain(self):
+    def test_it_does_not_trigger_the_job_that_sent_the_letter(self):
         import event_jobs
         self.real_handler()
-        self.m.publish(self.c, "m1", "message", "other", "proj", None,
+        self.m.publish(self.c, "free", "message", "other", "proj", None, {"type": "request", "text": "x"})
+        self.m.publish(self.c, "chained", "message", "other", "proj", None,
                        {"type": "request", "text": "x", "chain": ["other/job"], "depth": 1})
         self.dispatch()
-        ev = {"payload": json.loads(self.line()["payload"])}
-        self.assertEqual(event_jobs.chain_of(ev), ["other/job"])
+        job = {"name": "other/job", "project": "other", "trigger": {"events": ["message"]}}
+
+        def classify(mid):
+            return event_jobs.classify(job, {**dict(self.line(mid)), "payload": json.loads(self.line(mid)["payload"])})
+        self.assertEqual(classify("free"), "match", "with no chain the job would run: the check below means something")
+        self.assertEqual(classify("chained"), "loop")
 
 
 class Commands(Base):
@@ -415,6 +510,45 @@ class Commands(Base):
     def letter(self, mid):
         return self.rows("type='message' AND source='proj' AND ref=?", mid)
 
+    def test_a_fork_replies_to_its_letter_with_any_ordinary_type(self):
+        env = with_letters(FORK, "m1")
+        for kind in ("done", "info", "progress", "question", "request"):
+            with self.subTest(kind):
+                self.c.execute("DELETE FROM events WHERE type='message' AND source='proj'")
+                self.cli("send", "--to", "other", "--reply-to", "m1", "--type", kind, "--text", "x", env=env)
+                self.assertEqual([json.loads(r["payload"])["type"] for r in self.letter("m1")], [kind])
+
+    def test_a_fork_stays_with_its_letter(self):
+        env = with_letters(FORK, "m1")
+        for args in (("--to", self.hub, "--reply-to", "m1", "--type", "question"),      # not its sender
+                     ("--to", self.owner, "--reply-to", "m1", "--type", "info"),
+                     ("--to", self.hub, "--reply-to", "elsewhere", "--type", "question"),  # not its letter
+                     ("--to", "other", "--type", "question"),                            # no letter at all
+                     ("--to", "other", "--type", "info"),
+                     ("--to", self.owner, "--type", "info")):
+            with self.subTest(args):
+                self.refused("send", *args, "--text", "x", env=env)
+        self.assertEqual(self.rows("type='message' AND source='proj'"), [])
+        self.refused("done", "elsewhere", env=env)
+        self.refused("show", "elsewhere", env=env)
+        self.assertNotIn("[elsewhere]", self.cli("inbox", env=env))
+
+    def test_a_handler_replies_done_only(self):
+        env = with_letters(ESCALATION, "m1")
+        for kind in ("info", "progress", "question", "request"):
+            with self.subTest(kind):
+                self.refused("send", "--to", "other", "--reply-to", "m1", "--type", kind, "--text", "x", env=env)
+        self.assertEqual(self.letter("m1"), [])
+
+    def test_a_platform_process_around_the_run_is_not_the_run(self):
+        """What llm.py and run-agent-job.sh do around the agent inherits the list and has no point: only the agent has it."""
+        around = {"MAILBOX_LETTERS": json.dumps(["m1"]), "AGENT_JOB_POINT": "mailbox-escalation", "MAILBOX_PROJECT": "proj"}
+        self.cli("publish", "job.failed", "--source", "llm", "--payload", json.dumps({"job": "llm:x", "detail": "y"}), env=around)
+        self.assertEqual(len(self.rows("type='job.failed'")), 1)
+        for point in (ESCALATION, FORK, {"HUB_LLM_POINT": "mailbox-propose"}):
+            with self.subTest(point["HUB_LLM_POINT"]):
+                self.refused("publish", "job.failed", "--source", "llm", "--payload", "{}", env=with_letters(point, "m1"))
+
     def test_reply_done_to_its_letter(self):
         for env in self.each():
             self.c.execute("DELETE FROM events WHERE type='message' AND source='proj'")
@@ -422,8 +556,9 @@ class Commands(Base):
             self.assertEqual(len(self.letter("m1")), 1)
 
     def test_info_only_to_an_asks_letter(self):
+        self.refused("send", "--to", "other", "--reply-to", "m1", "--type", "info", "--text", "x",
+                     env=with_letters(ESCALATION, "m1"))
         for i, env in enumerate(self.each()):
-            self.refused("send", "--to", "other", "--reply-to", "m1", "--type", "info", "--text", "x", env=env)
             asks = f"asks{i}"
             self.m.publish(self.c, asks, "message", self.owner, "proj", None,
                            {"type": "question", "text": "x", "effect": "asks", "handoff_id": i})
@@ -436,6 +571,14 @@ class Commands(Base):
             before = len(self.rows("type='message' AND to_project=?", self.owner))
             self.cli("send", "--to", self.owner, "--type", "question", "--text", "which?", env=env)
             self.assertEqual(len(self.rows("type='message' AND to_project=?", self.owner)), before + 1)
+
+    def test_a_question_to_the_owner_as_a_record(self):
+        self.m.RECORDS = True
+        for env in self.each():
+            before = len(self.rows("type='record'"))
+            self.cli("send", "--to", self.owner, "--type", "question", "--text", "which?", env=env)
+            self.assertEqual(len(self.rows("type='record'")), before + 1)
+        self.assertEqual(self.rows("type='message' AND to_project=?", self.owner), [], "no v1 letter beside it")
 
     def test_close_its_letter_and_no_other(self):
         for env in self.each():
@@ -451,8 +594,6 @@ class Commands(Base):
                          ("--to", "other", "--type", "request"),
                          ("--to", "other", "--type", "done"),                        # a done with no letter
                          ("--to", self.hub, "--reply-to", "m1", "--type", "done"),   # not its sender
-                         ("--to", "other", "--reply-to", "m1", "--type", "question"),
-                         ("--to", "other", "--reply-to", "m1", "--type", "request"),
                          ("--to", self.hub, "--reply-to", "elsewhere", "--type", "done"),
                          ("--to", self.owner, "--type", "info"),
                          ("--to", self.owner, "--type", "progress")):
@@ -575,6 +716,48 @@ class Taken(Base):
         self.refused(*self.reply, env=self.env)
 
 
+class OwnerQuestionWhenTaken(Base):
+    """A question has no --reply-to (on an asks letter one would count as the answer), so it is judged by the run's letters."""
+
+    def setUp(self):
+        super().setUp()
+        self.send("m1", "proj", "request")
+        self.send("m2", "proj", "request")
+        self.ask = ("send", "--to", self.owner, "--type", "question", "--text", "which?")
+        self.rt.live.add("S1")
+
+    def owner_letters(self):
+        return self.rows("type='message' AND to_project=?", self.owner)
+
+    def test_refused_when_all_its_letters_are_taken(self):
+        self.ack("m1", "S1")
+        self.ack("m2", "S1")
+        self.refused(*self.ask, env=with_letters(ESCALATION, "m1", "m2"))
+        self.assertEqual(self.owner_letters(), [])
+
+    def test_allowed_while_one_is_free(self):
+        self.ack("m1", "S1")
+        self.cli(*self.ask, env=with_letters(ESCALATION, "m1", "m2"))
+        self.assertEqual(len(self.owner_letters()), 1)
+
+    def test_its_own_reply_does_not_stop_it(self):
+        env = with_letters(ESCALATION, "m1")
+        self.cli("send", "--to", "other", "--reply-to", "m1", "--type", "done", "--text", "half", env=env)
+        self.cli(*self.ask, env=env)
+        self.assertEqual(len(self.owner_letters()), 1)
+
+    def test_no_letters_means_no_question(self):
+        self.refused(*self.ask, env=with_letters(ESCALATION))
+        self.refused(*self.ask, env={**ESCALATION, "MAILBOX_LETTERS": "not json"})
+        self.assertEqual(self.owner_letters(), [])
+
+    def test_the_question_on_an_asks_letter_is_not_the_answer(self):
+        self.m.publish(self.c, "asks", "message", self.owner, "proj", None,
+                       {"type": "question", "text": "x", "effect": "asks", "handoff_id": 1})
+        self.cli(*self.ask, env=with_letters(ESCALATION, "asks"))
+        self.assertEqual(self.state("asks").taken, "")
+
+
 class OtherPoints(Base):
     """A confined run with no letters keeps today's rules: event and clock jobs."""
 
@@ -651,6 +834,34 @@ class Reconciliation(Base):
         self.refused("send", "--to", self.owner, "--type", "done", "--question", "q2", "--text", "x", env=env)
         self.assertIn("q2", [q["id"] for q in self.m.open_questions(self.c, "proj")])
 
+    def test_a_question_close_is_not_a_reply_to_anything(self):
+        """It would carry the other letter's handoff, take that letter, and reach the assistant as its answer."""
+        self.ask("q1")
+        mid = self.check_letter()
+        self.m.publish(self.c, "owners", "message", self.owner, "proj", None,
+                       {"type": "question", "text": "x", "effect": "asks", "handoff_id": 7})
+        close = ("send", "--to", self.owner, "--type", "done", "--question", "q1", "--text", "forged")
+        for reply_to in ("owners", mid):
+            for env, session in ((with_letters(ESCALATION, mid), None), (with_letters(FORK, mid), None), (None, "S1")):
+                with self.subTest(reply_to=reply_to, env=env):
+                    self.refused(*close, "--reply-to", reply_to, env=env, session=session)
+        self.assertEqual(self.state("owners").taken, "")
+        self.assertEqual(self.rows("type='message' AND ref='owners'"), [])
+        self.assertIn("q1", [q["id"] for q in self.m.open_questions(self.c, "proj")])
+        self.cli(*close, env=with_letters(ESCALATION, mid))
+        self.assertEqual(self.m.open_questions(self.c, "proj"), [])
+
+    def test_closing_it_as_records(self):
+        self.m.RECORDS = True
+        self.m.publish(self.c, "r:q1", "message", "other", "proj", None, {"type": "info", "text": "pad"})
+        self.cli("send", "--to", self.owner, "--type", "question", "--text", "still?", session="S1")
+        qid = self.m.open_questions(self.c, "proj")[0]["id"]
+        self.c.execute("UPDATE events SET ts=? WHERE type='record'", (tms.ago(60 * 24 * 5),))
+        mid = self.check_letter()
+        env = with_letters(ESCALATION, mid)
+        self.cli("send", "--to", self.owner, "--type", "drop", "--question", qid, "--text", "settled", env=env)
+        self.assertEqual(self.m.open_questions(self.c, "proj"), [])
+
     def test_other_points_keep_drop_question(self):
         self.ask("q1")
         self.cli("send", "--to", self.owner, "--type", "drop", "--question", "q1", "--text", "x", env=EVENT_JOB)
@@ -698,7 +909,36 @@ class Propose(Base):
         self.m.publish(self.c, "asks", "message", self.owner, "proj", None,
                        {"type": "question", "text": "x", "effect": "asks", "handoff_id": 1})
         self.apply(["asks"], self.out(replies=[{"reply_to": "asks", "type": "info", "text": "the answer"}], done=[{"id": "asks"}]))
-        self.assertEqual([p["type"] for p in self.sent(self.owner)], ["info"])
+        reply = self.rows("type='message' AND source='proj' AND ref='asks'")
+        self.assertEqual(len(reply), 1)
+        p = json.loads(reply[0]["payload"])
+        self.assertEqual((p["type"], p["reply_to"], p["handoff_id"]), ("info", "asks", 1))
+        item = self.m.to_assistant(self.c, reply[0])
+        self.assertEqual((item["handoff_id"], item["text"]), (1, "the answer"), "reaches the owner as the answer")
+        closed = self.rows("type='message.done' AND ref='asks'")[0]
+        self.assertIsNone(self.m.to_assistant(self.c, closed), "and the close doesn't replace it")
+
+    def test_a_reply_goes_as_a_sessions_reply_does(self):
+        self.m.publish(self.c, "m1", "message", "other", "proj", None, {"type": "question", "text": "x", "from_session": "SO"})
+        self.apply(["m1"], self.out(replies=[{"reply_to": "m1", "type": "done", "text": "answer"}]))
+        p = self.sent()[0]
+        self.assertEqual((p["reply_to"], p["to_session"]), ("m1", "SO"))
+        self.assertEqual(self.m.thread_chain(self.c, self.rows("type='message' AND source='proj'")[0])[0]["id"], "m1")
+
+    def test_no_owner_question_when_all_its_letters_are_taken(self):
+        self.send("m1", "proj", "request")
+        self.rt.live.add("S1")
+        self.ack("m1", "S1")
+        self.apply(["m1"], self.out(ask=[{"text": "owner?"}], deferred=[{"id": "m1", "why": "x"}]))
+        self.assertEqual(self.sent(self.owner), [])
+
+    def test_an_owner_question_while_one_is_free(self):
+        self.send("m1", "proj", "request")
+        self.send("m2", "proj", "request")
+        self.rt.live.add("S1")
+        self.ack("m1", "S1")
+        self.apply(["m1", "m2"], self.out(ask=[{"text": "owner?"}], deferred=[{"id": "m2", "why": "x"}]))
+        self.assertEqual(len(self.sent(self.owner)), 1)
 
     def test_a_letter_a_session_took_meanwhile_is_rechecked_at_apply_time(self):
         self.send("m1", "proj", "request")
@@ -897,11 +1137,63 @@ class Settings(unittest.TestCase):
 
 
 class Eval(unittest.TestCase):
-    def test_e3_runs_the_handler_with_its_letters(self):
-        src = (ROOT / "bin" / "evals" / "e3.py").read_text()
-        self.assertIn('"MAILBOX_LETTERS": json.dumps(list(letters.values()))', src)
-        self.assertIn('"MAILBOX_LETTERS": json.dumps([letters["letter"]])', src)
-        self.assertIn('via: str = "triage"', src)
+    """e3's mailbox scenarios all the way to the process it would start: the real build, config, bus and letters of a run
+    in a temporary folder, and the agent's process stubbed."""
+
+    def setUp(self):
+        self.tmp = pathlib.Path(tempfile.mkdtemp()).resolve()
+        self.addCleanup(shutil.rmtree, self.tmp, True)
+        cfg = self.tmp / "config"
+        (cfg / "projects").mkdir(parents=True)
+        (self.tmp / "workspace").mkdir()
+        sys.path.insert(0, str(ROOT / "bin" / "evals"))
+        import e2
+        (cfg / e2.HUB_JSON).write_text(json.dumps(
+            {"owner": {"name": "alex", "tag": "Alex"}, "owner_side": "builtin", "registry_dir": "projects",
+             "workspace_root": str(self.tmp / "workspace"), "runtime": {"default": "claude"},
+             "language": {"ui": "en", "content": "en"}}))
+        self.env = {k: v for k, v in os.environ.items() if not k.startswith(("BRUNNA_", "AGENT_HUB_", "AGENTHUB_", "HUB_"))}
+        self.env.update({"HOME": str(self.tmp), "AGENT_HUB_CONFIG": str(cfg), "AGENT_HUB_DATA": str(self.tmp / "data"),
+                         "AGENT_HUB_SECRETS": str(self.tmp / "secrets"), "AGENT_HUB_PYTHON": sys.executable,
+                         "GIT_CONFIG_GLOBAL": os.devnull, "GIT_CONFIG_NOSYSTEM": "1"})
+
+    def run_scenario(self, scenario):
+        sys.path.insert(0, str(ROOT / "bin" / "evals"))
+        import e3
+        real, seen = subprocess.run, {}
+
+        def run(cmd, *a, **kw):
+            if "llm.py" not in " ".join(map(str, cmd)):
+                return real(cmd, *a, **kw)
+            seen.update(cmd=cmd, env=kw["env"])
+            return subprocess.CompletedProcess(cmd, 0, "{}", "")
+        with mock.patch.object(e3.subprocess, "run", run):
+            e3.one(scenario, "new-en", 0, self.tmp / "run", self.env)
+        out = self.tmp / "run" / scenario / "new-en-0"
+        return e3, seen, json.loads((out / "files.json").read_text()), out
+
+    def letters_seen(self, seen, point):
+        """What the agent's own commands would read as their letters, in the environment e3 gives it."""
+        hb = thc.load_hubbus()
+        with mock.patch.dict(os.environ, {**seen["env"], "HUB_LLM_POINT": point}, clear=True):
+            return hb.run_letters()
+
+    def test_the_handler_runs_with_all_its_letters(self):
+        e3, seen, files, out = self.run_scenario("mailbox")
+        self.assertIn("mailbox-escalation", seen["cmd"])
+        self.assertEqual(seen["env"]["MAILBOX_PROJECT"], e3.PROJECT)
+        self.assertEqual(sorted(self.letters_seen(seen, "mailbox-escalation")), sorted(files["letters"].values()))
+        rows = e3.bus(out)
+        delivered = [e["payload"].get("via") for e in rows if e["type"] == "message.delivered"]
+        self.assertEqual(set(delivered), {"triage"})
+        self.assertNotIn("{{", (out / "prompt.txt").read_text())
+        self.assertIn(".agent-memory/memory/", (out / "prompt.txt").read_text())
+        self.assertIn("/" + e3.PROJECT + "/", (out / "prompt.txt").read_text(), "by absolute path")
+
+    def test_a_fork_runs_with_its_own_letter(self):
+        e3, seen, files, _out = self.run_scenario("delegate_question")
+        self.assertIn("mailbox-conversation", seen["cmd"])
+        self.assertEqual(self.letters_seen(seen, "mailbox-conversation"), [files["letter"]])
 
 
 if __name__ == "__main__":

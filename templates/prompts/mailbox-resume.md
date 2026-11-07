@@ -6,7 +6,7 @@ this session now, so the platform is continuing it in the background with your c
 
 Handle the letter in the context of the work you were doing. This background copy may only read this letter and its
 thread, write memory notes (under {{notes}}/, that exact folder) and use `brunna` to reply to the sender
-(`brunna send --to <sender> --reply-to {{id}} --type done …`; info only if the letter itself tells you to), ask {{owner}}
+(`brunna send --to <sender> --reply-to {{id}} --type done|info|question …`), ask {{owner}}
 or close this letter. Anything that changes the code or settings, needs {{owner}}'s judgment, or is irreversible or
 external: don't do it. Write it in a memory note, and if needed ask {{owner}} with
 `brunna send --to {{owner_alias}} --type question`. Run each `brunna` command as a command of its own,

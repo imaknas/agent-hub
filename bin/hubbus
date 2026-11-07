@@ -223,6 +223,7 @@ CONFLICT_DAYS = 14       # status: a record id sent with other content is listed
 RESUME_TIMEOUT_MIN = 35
 SEEN_ALIVE_MIN = 30      # a hook this recent says a session runs (Live): a headless one is on no list, and a long tool call goes
 #                          quiet for a while. The price: a session gone without its end hook keeps what it holds this long
+START_TRIES, START_RETRY_MIN = 3, 15   # a handler that couldn't start is tried again this often, this long apart
 PLATFORM_RUN_DAYS = 7    # the platform starts nothing (a fork, a handler) for a letter older than this: it waits for a hook
 # delegation: a live session with activity within this window handles it in a fork with its context
 FORK_RECENT_H = int(_MB.get("fork_recent_hours", 24))
@@ -2122,13 +2123,16 @@ def fork_result(c, r) -> tuple[bool, str]:
 CONFINED_TYPES = ("manifest.update", "task", "drop")
 # The letters a mailbox run was started for, a JSON list (an id is free text for an unsandboxed sender, a comma included)
 LETTERS_ENV = "MAILBOX_LETTERS"
+FORK_REPLIES = ("request", "question", "info", "progress", "done")
 
 
 def run_letters() -> list[str] | None:
-    """The letters this run was started for; None: not such a run. A value that can't be read is no letters: refused,
-    never unlimited."""
+    """The letters this run was started for; None: not such a run. Only the agent has a point (llm.py sets it for what it
+    starts): llm.py and run-agent-job.sh around it inherit the list and aren't under its rules, or a run's failure couldn't
+    be recorded; the agent's own Bash reaches no publish whatever this says. A value that can't be read is no letters:
+    refused, never unlimited."""
     raw = os.environ.get(LETTERS_ENV)
-    if raw is None:
+    if raw is None or not run_point():
         return None
     try:
         ids = json.loads(raw)
@@ -2150,10 +2154,11 @@ def letter_scope(c, letters, here) -> set[str]:
 
 
 def run_refusal(c, a, letters, here, live) -> str | None:
-    """A run started for these letters (the mailbox handlers, propose's agent, a fork for its one; design
-    mailbox-session-first.md, "Its own rules"): it reads them and their threads, replies done to them (info too to an asks
-    letter, which tells it to), closes them, asks the owner, and closes with the owner a question one of them names
-    (reconciliation). No other notice, no other recipient, no ack. What another session has taken it leaves."""
+    """A run started for these letters (a mailbox handler, propose's agent, a fork for its one; design
+    mailbox-session-first.md, "Its own rules"): it reads them and their threads, replies to their senders, closes them,
+    asks the owner, and closes with the owner a question one of them names (reconciliation). A handler's reply is done
+    (info too to an asks letter, which tells it to); a fork has the session's context, so its reply is any ordinary type.
+    No other recipient, no ack. What another session has taken it leaves."""
     if a.cmd == "open-questions":
         return _("hubbus: this run reads only the letters it was started for ({cmd} is not one of them)", cmd=a.cmd)
     if a.cmd in ("show", "thread"):
@@ -2182,13 +2187,19 @@ def run_refusal(c, a, letters, here, live) -> str | None:
         if target is None:
             return _("hubbus: this run replies only to the letters it was started for ({id} is not one)", id=a.reply_to)
         to_owner = to == OWNER_ADDRESS and a.type == "question"
-        reply = to in party_names(sender_of(target)) and (
-            a.type == "done" or (a.type == "info" and payload(target).get("effect") == "asks"))
-        if not to_owner and not reply:
+        to_sender = to in party_names(sender_of(target))
+        if run_point() == FORK_POINT:
+            if not to_owner and not (to_sender and a.type in FORK_REPLIES):
+                return _("hubbus: this run replies only to its letter's sender, or asks {alias}", alias=OWNER_ALIAS)
+        elif not to_owner and not (to_sender and (
+                a.type == "done" or (a.type == "info" and payload(target).get("effect") == "asks"))):
             return _("hubbus: this run sends a reply to the letter's sender with --type done (--type info only when the "
                      "letter asks for it), or a question to {alias}", alias=OWNER_ALIAS)
     elif to != OWNER_ADDRESS or a.type != "question":
         return _("hubbus: this run sends only replies to its letters and questions to {alias}", alias=OWNER_ALIAS)
+    elif all(r is None or taken_by_another(c, r, live, run_point()) for r in mine.values()):
+        # no --reply-to to judge by: on an asks letter one would make the question count as the answer
+        return _("hubbus: every letter of this run has been taken by another session: nothing to ask {alias}", alias=OWNER_ALIAS)
     if target is not None and taken_by_another(c, target, live, run_point()):
         return _("hubbus: {id} has been taken by another session: leave it", id=target["id"])
     return None
@@ -2268,7 +2279,7 @@ def run_handler(c, proj, ws, rows) -> None:
     per letter, and what it leaves stays open for sessions. One run per sender, so a crafted letter can't close another
     sender's in the same run; the other senders' letters go next tick. Its commands are limited to its letters
     (MAILBOX_LETTERS: run_refusal). The budget stops the run, not the word to the sender."""
-    rows = [r for r in rows if not has_via(c, r["id"], "triage")]
+    rows = [r for r in rows if not has_via(c, r["id"], "triage") and may_start(c, r)]
     if not rows:
         return
     # one at a time per project, whichever of its names a handler still running was started under
@@ -2290,36 +2301,69 @@ def run_handler(c, proj, ws, rows) -> None:
     sender = sender_of(rows[0])
     rows = [r for r in rows if sender_of(r) == sender]
     run = f"h{now():%m%d%H%M%S}-{secrets.token_hex(2)}"
+    # the letter's one triage, a run from the budget and the word to the sender are spent once the run has started
+    why = start_handler(proj, ws, rows)
+    if why:
+        start_failed(c, proj, rows, why)
+        return
     c.execute("BEGIN IMMEDIATE")
     claim(c, rows, "triage", run=run)
     for r in rows:
         received_line(c, r)
     c.execute("COMMIT")
+    said = {"project": proj, "n": len(rows), "ids": ", ".join(r["id"] for r in rows), "run": run}
+    log(_("{project}: dispatched an agent (propose) for {n} {n:letter|letters} ({ids}, {run})", **said)
+        if (hubconf.get("mailbox") or {}).get("handler") == "propose" else
+        _("{project}: dispatched a headless agent for {n} {n:letter|letters} ({ids}, {run})", **said))
+
+
+def start_handler(proj, ws, rows) -> str | None:
+    """Start the run for these letters. Why it couldn't, or None."""
     letters = json.dumps([r["id"] for r in rows], ensure_ascii=False)
-    if (hubconf.get("mailbox") or {}).get("handler") == "propose":
-        # agent proposes, platform applies (bin/propose_apply.py; docs/design/tool-agnostic.md): any agent can run it,
-        # in a throwaway worktree; the platform only takes the memory notes and sends the letters on its behalf. Runs
-        # in the background; it writes status.json itself (running → done), one at a time per project
-        log_f = AGENT_JOBS / f"mailbox-{proj}" / "propose.log"
-        log_f.parent.mkdir(parents=True, exist_ok=True)
-        with log_f.open("a") as f:
-            subprocess.Popen([sys.executable, str(HUB / "bin" / "propose_apply.py"), "mailbox", proj, *[r["id"] for r in rows]],
-                             stdout=f, stderr=f, start_new_session=True, env={**chain_env(rows), LETTERS_ENV: letters})
-        log(_("{project}: dispatched an agent (propose) for {n} {n:letter|letters} ({ids}, {run})", project=proj, n=len(rows),
-              ids=", ".join(r["id"] for r in rows), run=run))
-        return
-    # the platform's template (no personal names) with this machine's names and content language filled in
-    prompt = AGENT_JOBS / f"mailbox-{proj}" / "prompt.md"
-    prompt.parent.mkdir(parents=True, exist_ok=True)
-    prompt.write_text(prompts.render("mailbox", notes=notes_of(proj)) + "\n")
-    res = subprocess.run([str(HUB / "bin" / "run-agent-job.sh"), f"mailbox-{proj}", str(ws), str(prompt)],
-                         capture_output=True, text=True,
-                         env={**chain_env(rows), "AGENT_JOB_POINT": "mailbox-escalation", "MAILBOX_PROJECT": proj,
-                              LETTERS_ENV: letters})
-    log(_("{project}: dispatched a headless agent for {n} {n:letter|letters} ({ids}, {run})", project=proj, n=len(rows),
-          ids=", ".join(r["id"] for r in rows), run=run)
-        if res.returncode == 0 else
-        _("{project}: could not dispatch: {err}", project=proj, err=(res.stderr or res.stdout).strip()[-200:]))
+    try:
+        if (hubconf.get("mailbox") or {}).get("handler") == "propose":
+            # agent proposes, platform applies (bin/propose_apply.py; docs/design/tool-agnostic.md): any agent can run it,
+            # in a throwaway worktree; the platform only takes the memory notes and sends the letters on its behalf. Runs
+            # in the background; it writes status.json itself (running → done), one at a time per project
+            log_f = AGENT_JOBS / f"mailbox-{proj}" / "propose.log"
+            log_f.parent.mkdir(parents=True, exist_ok=True)
+            with log_f.open("a") as f:
+                subprocess.Popen([sys.executable, str(HUB / "bin" / "propose_apply.py"), "mailbox", proj, *[r["id"] for r in rows]],
+                                 stdout=f, stderr=f, start_new_session=True, env={**chain_env(rows), LETTERS_ENV: letters})
+            return None
+        # the platform's template (no personal names) with this machine's names and content language filled in
+        prompt = AGENT_JOBS / f"mailbox-{proj}" / "prompt.md"
+        prompt.parent.mkdir(parents=True, exist_ok=True)
+        prompt.write_text(prompts.render("mailbox", notes=notes_of(proj)) + "\n")
+        res = subprocess.run([str(HUB / "bin" / "run-agent-job.sh"), f"mailbox-{proj}", str(ws), str(prompt)],
+                             capture_output=True, text=True,
+                             env={**chain_env(rows), "AGENT_JOB_POINT": "mailbox-escalation", "MAILBOX_PROJECT": proj,
+                                  LETTERS_ENV: letters})
+    except OSError as e:
+        return repr(e)
+    return None if res.returncode == 0 else (res.stderr or res.stdout).strip()[-200:] or f"exit {res.returncode}"
+
+
+def start_attempts(c, r) -> list:
+    return c.execute("SELECT ts FROM events WHERE type='job.failed' AND ref=? AND id LIKE ? ORDER BY seq",
+                     (r["id"], "%:start-failed:%")).fetchall()
+
+
+def may_start(c, r) -> bool:
+    """A start that failed may have a passing reason: tried again START_RETRY_MIN later, START_TRIES times in all. After
+    that the letter has no triage and shows as stuck, and a session's hook still gets it."""
+    tries = start_attempts(c, r)
+    return not tries or (len(tries) < START_TRIES and tries[-1]["ts"] < iso(now() - datetime.timedelta(minutes=START_RETRY_MIN)))
+
+
+def start_failed(c, proj, rows, why: str) -> None:
+    """On the status page (job.failed) and in the log. Nothing else is spent."""
+    log(_("{project}: could not dispatch: {err}", project=proj, err=why))
+    c.execute("BEGIN IMMEDIATE")
+    for r in rows:
+        publish(c, f"{r['id']}:start-failed:{len(start_attempts(c, r)) + 1}", "job.failed", "hubbus-dispatch", None, r["id"],
+                {"job": f"mailbox-start:{proj}", "detail": storable(why)})
+    c.execute("COMMIT")
 
 
 def resume(c, r, sid, cwd, rt, ws=None, prompt=None) -> None:
@@ -3149,6 +3193,14 @@ def queued(project: str) -> None:
     print(_("(in {project}'s outbox: the platform sends it within a minute)", project=project), file=sys.stderr)
 
 
+def reply_fields(orig, to: str) -> dict:
+    """What a reply to this letter carries, whoever sends it: the thread, the session that asked, the assistant's handoff
+    (without which an answer to an asks letter doesn't reach the owner as the answer)."""
+    p = payload(orig)
+    return {"reply_to": orig["id"], **({"to_session": p["from_session"]} if canon(orig["source"]) == to and p.get("from_session") else {}),
+            **({"handoff_id": p["handoff_id"]} if p.get("handoff_id") is not None else {})}
+
+
 def send_letter(c, a, sender: str, session, here, boxed: bool = False, mid: str | None = None) -> str:
     """send's checks and write, for the CLI and for a letter taken from a sandboxed project's outbox (boxed: sender =
     that project, never a name in the file; a reply only in its own threads). mid: the letter id (else --id, else a
@@ -3174,6 +3226,8 @@ def send_letter(c, a, sender: str, session, here, boxed: bool = False, mid: str 
         if a.task or a.to != OWNER_ADDRESS or a.type not in ("done", "drop"):
             refuse(_("hubbus: --question is only for a done/drop sent to {alias} (not together with --task)",
                      alias=OWNER_ALIAS))
+        if a.reply_to:   # it would carry that letter's handoff and take it: a forged answer to it
+            refuse(_("hubbus: --question closes a question, it is not a reply to a letter (no --reply-to)"))
         q = question_asked(c, a.question)
         if q is None or q["project"] != sender:
             refuse(_("hubbus: {question} is not a question {sender} asked {owner}", question=a.question,
@@ -3186,11 +3240,7 @@ def send_letter(c, a, sender: str, session, here, boxed: bool = False, mid: str 
     if a.reply_to:
         orig = must_message(c, a.reply_to)
         confined_letter(orig, here, boxed)   # a reply carries the original's handoff and session
-        p["reply_to"] = a.reply_to
-        if canon(orig["source"]) == a.to and payload(orig).get("from_session"):
-            p["to_session"] = payload(orig)["from_session"]
-        if payload(orig).get("handoff_id") is not None:
-            p["handoff_id"] = payload(orig)["handoff_id"]
+        p |= reply_fields(orig, a.to)
     mid = mid or a.id or new_id()
     if RECORDS and a.to == OWNER_ADDRESS:
         if a.inferred:

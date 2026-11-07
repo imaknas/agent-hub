@@ -153,7 +153,7 @@ brunna is meant for anyone, with any coding agent, any LLM, any key.
   branch (it can answer about what it has in hand); only when there is no such session does a headless agent triage it
   (`templates/prompts/mailbox.md`, once per letter, one run per sender: it only writes notes, replies `done` to its
   letters and asks the owner, never changes code, and what it leaves stays open for sessions; its commands are limited
-  to its letters, `MAILBOX_LETTERS`; the sender gets one fixed line that it arrived; with `mailbox.handler: propose` it
+  to its letters, `MAILBOX_LETTERS`, as a background branch's are to its one, though a branch may reply with any ordinary type; the sender gets one fixed line once it has started; with `mailbox.handler: propose` it
   runs in a throwaway worktree instead and the platform sends for it, `bin/propose_apply.py`). brunna's own letters work
   the same way. Anyone who can write the bus can start these
   handlers, so the background branch and the headless agent load only the platform's settings for the project, never

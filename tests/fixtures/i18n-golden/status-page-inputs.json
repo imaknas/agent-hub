@@ -2,7 +2,7 @@
  "bus_busy": {
   "stuck": [{"id": "m20261030-ab12", "to": "alpha"}],
   "to_muninn": {"n": 2, "oldest": "2026-10-30T07:00:00"},
-  "job_failed_24h": [{"job": "hubbus-bridge", "detail": "bridge timed out"}, {"job": "other", "detail": "ignored"}],
+  "job_failed_24h": [{"job": "hubbus-bridge", "detail": "bridge timed out"}, {"job": "other", "detail": "ignored"}, {"job": "mailbox-start:beta", "detail": "workdir missing"}],
   "corrupt": ["bus.db.corrupt-20261029"],
   "record_conflicts": [{"project": "alpha", "ext": "acts", "origin": "principal", "type": "settled", "id": "s:task-alpha-1:1",
                         "events": ["rec:acts/0.5:alpha:s:task-alpha-1:1", "rec:acts/0.5:alpha:s:task-alpha-1:1~0123456789abcdef"],

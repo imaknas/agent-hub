@@ -791,6 +791,16 @@ class Outbox(Fixture):
             self.as_run("done", mid, letters=[mid])
         self.as_run("done", mid, point="mailbox-conversation", letters=[mid])
 
+    def test_a_question_close_with_a_reply_to_is_refused_from_an_outbox_too(self):
+        mid = self.a_request()
+        qid = self.letter_id(self.hubbus("send", "--to", "owner", "--type", "question", "--text", "still?", cwd=self.ws["box"]).stdout)
+        self.dispatch()
+        self.drop({"v": 1, "op": "send", "id": "m11071200-0123456789ab", "to": "owner", "type": "done", "question": qid,
+                   "reply_to": mid, "text": "forged"})
+        self.dispatch()
+        self.assertEqual(self.rows("id='m11071200-0123456789ab'"), [])
+        self.assertEqual(len(self.refusals()), 1)
+
     def test_a_told_entry_is_checked_like_the_command(self):
         mine = self.letter_id(self.hubbus("send", "--to", "box", "--type", "request", "--text", "a", cwd=self.ws["open"]).stdout)
         theirs = self.letter_id(self.hubbus("send", "--to", "open", "--type", "request", "--text", "b", cwd=self.ws["open"]).stdout)
@@ -826,6 +836,37 @@ class Outbox(Fixture):
         shutil.move(self.tmp / "bus-away", self.tmp / "bus")
         self.dispatch()
         self.assertEqual([r["source"] for r in self.rows("type='message' AND to_project='open'")], ["box"])
+
+
+class RunFailure(Fixture):
+    """A mailbox run that fails records it: llm.py's own job_failed inherits the run's list of letters, and only the agent
+    it starts is under the list's rules. The real llm.py and hubbus; the fixture's runtime has no agent, so the run fails."""
+
+    def run_llm(self, point, cwd, **env):
+        prompt = self.tmp / "prompt.txt"
+        prompt.write_text("x")
+        return subprocess.run([sys.executable, str(BIN / "llm.py"), "run", point, "--prompt-file", str(prompt)],
+                              env={**self.env, **env}, cwd=cwd, capture_output=True, text=True, timeout=60)
+
+    def failures(self):
+        return [json.loads(r["payload"])["job"] for r in self.rows("type='job.failed'")]
+
+    def test_a_handler_or_a_forks_failure_reaches_the_bus(self):
+        self.letter_to("open", "a bus to be on")
+        for point in ("mailbox-escalation", "mailbox-conversation"):
+            for project in ("open", "box"):
+                with self.subTest(point=point, project=project):
+                    before = len(self.failures())
+                    r = self.run_llm(point, self.ws[project], MAILBOX_PROJECT=project, MAILBOX_LETTERS='["m1"]')
+                    self.assertEqual(r.returncode, 1, r.stdout + r.stderr)
+                    self.assertEqual(self.failures()[before:], [f"llm:{point}"])
+
+    def test_the_agent_it_starts_still_cannot_publish(self):
+        self.letter_to("open", "a bus to be on")
+        r = self.hubbus("publish", "job.failed", "--source", "llm", "--payload", "{}", cwd=self.ws["open"], check=False,
+                        env={"HUB_LLM_POINT": "mailbox-escalation", "MAILBOX_LETTERS": '["m1"]'})
+        self.assertNotEqual(r.returncode, 0)
+        self.assertEqual(self.failures(), [])
 
 
 class McpPresence(Fixture):
