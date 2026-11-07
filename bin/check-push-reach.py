@@ -7,8 +7,10 @@ the platform alerts contract in the assistant module's `consumes`) and says so o
 sends on every channel set up, so the assistant gets a copy, for when the phone comes back.
 
 What counts:
-  - the assistant answers `reaching: false`: a problem at once;
-  - an answer that breaks the contract (401, 404, no `reaching`): a problem at once, sending it again will not help;
+  - the assistant answers `reaching: false`: a problem at once. It can't tell a phone switched off all day from pushes
+    that don't arrive, so the alert leaves room for that;
+  - `subscriptions: 0`: a problem at once. `reaching` stays true then, since nothing is being sent, and nothing can arrive;
+  - an answer that breaks the contract (401, 404, no `reaching`): a problem at once, asking again will not help;
   - no answer, or a 5xx: only 3 hours in a row. A restart is not worth an alert, and other jobs watch the service.
 The problem's text holds nothing that changes from hour to hour, because a change of text is a new alert.
 
@@ -67,6 +69,8 @@ def ask() -> dict:
         raise BadAnswer(_("the answer is not JSON")) from e
     if not isinstance(health, dict) or not isinstance(health.get("reaching"), bool):
         raise BadAnswer(_("the answer has no reaching"))
+    if type(health.get("subscriptions")) is not int:
+        raise BadAnswer(_("the answer has no subscriptions"))
     return health
 
 
@@ -101,8 +105,11 @@ def main() -> int:
         streak(False)
         print(json.dumps(health, ensure_ascii=False))
         if not health["reaching"]:
-            problems.append(_("The assistant's pushes have not been shown on the phone since {since}: open the "
-                              "assistant's app and check its notifications", since=health.get("unshown_since") or "?"))
+            problems.append(_("The assistant's pushes have not been shown on any phone since {since}: unless the phone "
+                              "has been off, open the assistant's app and check its notifications",
+                              since=health.get("unshown_since") or "?"))
+        if health["subscriptions"] == 0:
+            problems.append(_("No phone is subscribed to the assistant's pushes: open its app and turn on notifications"))
     alert.once("push-reach", problems, _("The assistant's pushes reach the phone again"))
     for x in problems:
         print(f"⚠️ {x}")

@@ -50,3 +50,28 @@ Only a 200 means Muninn has the notice. A platform tries again after anything el
 | 400 | `{"error": "..."}` | the body does not keep to this contract: sending it again will not help |
 | 401 | `{"error": "unauthorized"}` | not the ingest token |
 | 5xx, or no answer | | not had: try again |
+
+## Asking whether pushes reach a phone
+
+A push about pushes not arriving would not arrive either, so a platform that wants to tell the user so asks, and tells
+them another way.
+
+`GET /api/push/health`, the ingest token as a Bearer token (401 otherwise). A 200 answers:
+
+| Member | Type | |
+|---|---|---|
+| `reaching` | boolean | `false`: pushes were sent that no phone has shown for too long. `true`: nothing says they do not arrive |
+| `unshown_since` | string (RFC 3339) or null | when the first push no phone has shown yet was sent; null when a phone has shown the latest |
+| `subscriptions` | integer | the phones and browsers Muninn pushes to, including an app since removed, until the push service says it is gone |
+
+- **Counted from** the first push the push service accepted after the last one a phone showed. A phone showing any push
+  clears it, whichever phone.
+- **`false` after** more than 6 hours of that, **leaving out the user's quiet hours** (a phone may well be off at night).
+  A push sent just before they begin and never shown turns it `false` only well into the next day, and any push shown
+  before then clears it. So an answer during quiet hours can only turn `false` for time that went by before they began.
+- **A phone off or out of reach for that long during the day** is not told apart from pushes not arriving: both are `false`.
+- **Pushes held through quiet hours** have not been sent, so they count for nothing until they are.
+- **No push to send:** `true`, on a quiet day as any other. It says nothing is known to be wrong, not that a push was seen
+  arriving lately.
+- **No subscriptions:** nothing is being sent, so `reaching` stays `true` unless pushes were already overdue when the last
+  one went. Nothing can arrive with `subscriptions` at 0: look at it separately.

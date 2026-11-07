@@ -2,10 +2,12 @@
   "the ingest token can't be read: {err}": "讀不到 ingest token:{err}",
   "the answer is not JSON": "回傳的不是 JSON",
   "the answer has no reaching": "回傳裡沒有 reaching",
+  "the answer has no subscriptions": "回傳裡沒有 subscriptions",
   "not checked: the assistant channel is off": "沒有檢查:{assistant} 通道沒開",
   "no answer ({n} {n:time|times} in a row): {err}": "沒有回應(連續 {n} 次):{err}",
   "The assistant hasn't answered for {limit} hours, so whether its pushes reach the phone is unknown": "{assistant} {limit} 小時沒有回應,不知道推播還到不到手機",
   "Whether the assistant's pushes reach the phone can't be checked: {err}": "無法確認 {assistant} 的推播到不到手機:{err}",
-  "The assistant's pushes have not been shown on the phone since {since}: open the assistant's app and check its notifications": "{assistant} 的推播從 {since} 起都沒有在手機上顯示:請打開 {assistant} 的 App 檢查通知",
+  "The assistant's pushes have not been shown on any phone since {since}: unless the phone has been off, open the assistant's app and check its notifications": "{assistant} 的推播從 {since} 起都沒有在手機上顯示:如果手機沒有關機,請打開 {assistant} 的 App 檢查通知",
+  "No phone is subscribed to the assistant's pushes: open its app and turn on notifications": "沒有手機訂閱 {assistant} 的推播:請打開 App 開啟通知",
   "The assistant's pushes reach the phone again": "{assistant} 的推播又能送到手機了"
 }
