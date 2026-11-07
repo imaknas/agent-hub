@@ -616,7 +616,10 @@ def process_starts(pids, strict: bool = False) -> dict:
     """When each of these processes started, in whole seconds since the epoch: {pid: "<seconds>"}, a process that
     doesn't exist (or can't be read) left out. With the pid it names one process: a pid reused later has another start
     time. One ps for all of them (macOS), or /proc (Linux). strict: a lookup that failed raises SessionsUnknown instead
-    of reading as "none of them runs" (ps -p exits 1 with nothing to say when no such pid exists: that's an answer)."""
+    of reading as "none of them runs" (ps -p exits 1 with nothing to say when no such pid exists: that's an answer).
+    ps refuses a whole lookup over one pid it won't take (macOS: "process id too large"), so a refusal is looked into:
+    if ps can read this very process it is the pid's fault, each is asked alone, and a pid it refuses is gone. If it
+    can't, the lookup failed."""
     import subprocess
     import time
     pids = sorted({p for p in pids if isinstance(p, int) and not isinstance(p, bool) and p > 0})
@@ -637,11 +640,19 @@ def process_starts(pids, strict: bool = False) -> dict:
                     pass
             return out
         import calendar
-        r = subprocess.run(["ps", "-o", "pid=,lstart=", "-p", ",".join(map(str, pids))], capture_output=True,
-                           text=True, timeout=10, env={**os.environ, "LC_ALL": "C", "TZ": "UTC"})
-        if strict and r.returncode != 0 and r.stderr.strip():
-            raise SessionsUnknown(r.stderr.strip()[:200])
-        for line in r.stdout.splitlines():
+        def ask(some):
+            return subprocess.run(["ps", "-o", "pid=,lstart=", "-p", ",".join(map(str, some))], capture_output=True,
+                                  text=True, timeout=10, env={**os.environ, "LC_ALL": "C", "TZ": "UTC"})
+
+        r = ask(pids)
+        lines = r.stdout.splitlines()
+        if r.returncode != 0 and r.stderr.strip():
+            if ask([os.getpid()]).returncode != 0:
+                if strict:
+                    raise SessionsUnknown(r.stderr.strip()[:200])
+                return out
+            lines = [line for pid in pids if (one := ask([pid])).returncode == 0 for line in one.stdout.splitlines()]
+        for line in lines:
             pid, _sp, when = line.strip().partition(" ")
             try:
                 out[int(pid)] = str(calendar.timegm(time.strptime(" ".join(when.split()), "%a %b %d %H:%M:%S %Y")))

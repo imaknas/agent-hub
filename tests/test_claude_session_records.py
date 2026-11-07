@@ -15,6 +15,7 @@ starts as the "session" process. No Claude session is started, nothing is sent.
 
     bin/py -m unittest tests.test_claude_session_records
 """
+import calendar
 import json
 import os
 import pathlib
@@ -38,6 +39,12 @@ A = "11111111-2222-4333-8444-555555555555"
 B = "22222222-3333-4444-8555-666666666666"
 C = "33333333-4444-4555-8666-777777777777"
 DESKTOP = "/Users/u/.claude/remote/ccd-cli/2.1.309-40c3beb4ef2f --output-format stream-json --verbose"
+
+
+def tmd_load_hubbus():
+    sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
+    import test_mailbox_dispatch
+    return test_mailbox_dispatch.load_hubbus()
 
 
 def ps(*lines):
@@ -116,6 +123,57 @@ class CharacterizeArgv(SecretsDir):
         with mock.patch("subprocess.run", lambda argv, **kw: subprocess.CompletedProcess(argv, 1, "", "")):
             self.assertEqual(runtime_ports.process_starts([999999]), {} if not os.path.exists("/proc/self/stat") else {},
                              "ps -p with no such pid exits 1 and says nothing: that isn't a failure")
+
+    def ps_rejecting(self, *rejected):
+        """ps -p as macOS answers: a pid it won't take stops the whole lookup, with no output."""
+        when = "Sat Nov  7 12:00:00 2026"
+
+        def run(argv, **kw):
+            if "command" in argv:
+                return subprocess.CompletedProcess(argv, 0, "", "")
+            pids = argv[argv.index("-p") + 1].split(",")
+            if set(pids) & set(rejected):
+                return subprocess.CompletedProcess(argv, 1, "", "ps: process id too large: 999999\n")
+            return subprocess.CompletedProcess(argv, 0, "".join(f"{p} {when}\n" for p in pids), "")
+        return run
+
+    def records(self, **pids):
+        d = hubconf.session_addresses_dir()
+        d.mkdir(parents=True, exist_ok=True)
+        for sid, pid in pids.items():
+            (d / f"{sid}.live").write_text(json.dumps({"runtime": "claude", "pid": pid, "cwd": "/x", "start": str(
+                calendar.timegm(time.strptime("Sat Nov 7 12:00:00 2026", "%a %b %d %H:%M:%S %Y")))}))
+
+    def on_the_ps_path(self):
+        """Linux reads /proc: the same path as macOS's, wherever this runs."""
+        return mock.patch.object(runtime_ports.os.path, "exists", lambda p: p != "/proc/self/stat")
+
+    def test_a_pid_ps_rejects_is_gone_and_the_others_are_still_read(self):
+        self.records(**{A: os.getpid(), B: 999999})
+        with self.on_the_ps_path(), mock.patch("subprocess.run", self.ps_rejecting("999999")):
+            self.assertEqual(runtime_claude.live_sessions(), {A})
+
+    def test_a_lone_record_ps_rejects_is_gone_not_a_failed_lookup(self):
+        self.records(**{B: 999999})
+        with self.on_the_ps_path(), mock.patch("subprocess.run", self.ps_rejecting("999999")):
+            self.assertEqual(runtime_claude.live_sessions(), set())
+
+    def test_the_prune_clears_a_record_ps_rejects(self):
+        hb = tmd_load_hubbus()
+        self.records(**{A: os.getpid(), B: 999999})
+        with self.on_the_ps_path(), mock.patch("subprocess.run", self.ps_rejecting("999999")):
+            self.assertEqual(hb.prune_wake_addresses(live=set()), [B])
+        self.assertEqual([p.name for p in hubconf.session_addresses_dir().iterdir()], [f"{A}.live"])
+
+    def test_ps_failing_for_every_pid_stays_unknown(self):
+        self.records(**{A: os.getpid(), B: 999999})
+
+        def broken(argv, **kw):
+            if "command" in argv:
+                return subprocess.CompletedProcess(argv, 0, "", "")
+            return subprocess.CompletedProcess(argv, 1, "", "ps: cannot run\n")
+        with self.on_the_ps_path(), mock.patch("subprocess.run", broken), self.assertRaises(runtime_ports.SessionsUnknown):
+            runtime_claude.live_sessions()
 
     def test_alive_asks_the_same_set(self):
         with mock.patch.object(runtime_claude.subprocess, "run", ps(f"claude --resume {A}")):
