@@ -1501,6 +1501,10 @@ def pull_names() -> dict[str, str]:
     for old in renames:
         if old not in names and current_name(old) in current:
             names[old] = current_name(old)
+    # the platform's own other spelling isn't in that file: the assistant answers an item under the name it was sent with
+    hub = hubconf.hub_project()
+    for old in hubconf.former_names(hub):
+        names.setdefault(old, hub)
     return names
 
 

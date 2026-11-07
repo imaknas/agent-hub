@@ -256,6 +256,20 @@ class BridgeV2(unittest.TestCase):
         self.m.pull_records(self.c)
         self.assertEqual(self.incoming(), ["s:k1"])
 
+    def test_the_platforms_former_name_is_pulled_into_its_own(self):
+        """The assistant answers an item under the name it was sent with, with no alias, so the platform's own other
+        spelling goes on being read after the rename, from its own cursor."""
+        hub = self.m.hubconf.hub_project()
+        old = self.m.hubconf.former_names(hub)[0]
+        self.m.projects = lambda: {"proj": self.tmp, hub: self.tmp}
+        self.assertEqual(self.m.pull_names()[old], hub)
+        self.m.pull_records(self.c)   # switch on: starting point
+        self.fake.out[old] = [settled("k1", project=old)]
+        self.m.pull_records(self.c)
+        self.assertEqual(self.incoming(hub), ["s:k1"])
+        self.assertEqual(self.m.cursor(self.c, f"records-in:{old}"), 1)
+        self.assertEqual(self.m.cursor(self.c, f"records-in:{hub}"), 0)
+
     def test_off_does_not_touch_v2(self):
         # only a deployment with the assistant pulls from the assistant
         side = mock.patch.object(self.m.hubconf, "owner_side", lambda: "assistant")
