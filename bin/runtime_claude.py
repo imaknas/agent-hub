@@ -59,9 +59,15 @@ _ID = re.compile(r"--(?:resume|session-id)[= ]([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{
 
 
 def live_sessions() -> set[str]:
+    """Raises runtime_ports.SessionsUnknown when the process table can't be read: that says nothing about any session."""
     import runtime_ports
-    r = subprocess.run(["ps", "-axo", "command"], capture_output=True, text=True)
-    return (set(_ID.findall(r.stdout)) if r.returncode == 0 else set()) | runtime_ports.recorded_sessions(NAME)
+    try:
+        r = subprocess.run(["ps", "-axo", "command"], capture_output=True, text=True, timeout=10)
+    except (OSError, subprocess.SubprocessError) as e:
+        raise runtime_ports.SessionsUnknown(repr(e)) from e
+    if r.returncode != 0:
+        raise runtime_ports.SessionsUnknown(r.stderr.strip()[:200] or str(r.returncode))
+    return set(_ID.findall(r.stdout)) | runtime_ports.recorded_sessions(NAME)
 
 
 def session_pid(env) -> int | None:
@@ -74,7 +80,11 @@ def session_pid(env) -> int | None:
 
 
 def alive(sid: str | None) -> bool:
-    return bool(sid) and sid in live_sessions()
+    import runtime_ports
+    try:
+        return bool(sid) and sid in live_sessions()
+    except runtime_ports.SessionsUnknown:
+        return bool(sid)   # can't tell: not gone
 
 
 def transcript(sid: str) -> pathlib.Path | None:

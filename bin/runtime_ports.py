@@ -61,7 +61,8 @@ The current interfaces (the other layers get added one at a time, following the 
     foreign_controls(workspace) -> list[str]             what in the folder would make its sessions run something the
                                                          platform didn't put there (committed hooks, tool servers)
   sessions (part of layer 1):
-    alive(sid) -> bool, live_sessions() -> set[str], context_size(sid) -> int | None (how many tokens resuming would
+    alive(sid) -> bool, live_sessions() -> set[str] (raises SessionsUnknown when the lookup fails: never an empty set for
+    "couldn't look"), context_size(sid) -> int | None (how many tokens resuming would
     load)
     current_session(env) -> str | None                   which session the current process belongs to (for hubbus
                                                          send to record the sender)
@@ -398,6 +399,11 @@ class MissingFunctions(Exception):
     """Part of an interface's functions implemented: that's a bug, refused at load time."""
 
 
+class SessionsUnknown(Exception):
+    """Looking up which sessions run failed. It says nothing about any session; read as "none run" it would end every
+    route and send an agent for each letter."""
+
+
 class Unsupported(Exception):
     """This runtime has no such interface at all (e.g. runtime_none, a completion-only adapter): not an error, a lack of
     capability. Callers treat it as "unsupported": switch that feature off explicitly and say why (str(e)), **never run
@@ -606,10 +612,11 @@ def ancestors(pid: int | None = None, limit: int = 64):
         pid = ppid
 
 
-def process_starts(pids) -> dict:
+def process_starts(pids, strict: bool = False) -> dict:
     """When each of these processes started, in whole seconds since the epoch: {pid: "<seconds>"}, a process that
     doesn't exist (or can't be read) left out. With the pid it names one process: a pid reused later has another start
-    time. One ps for all of them (macOS), or /proc (Linux)."""
+    time. One ps for all of them (macOS), or /proc (Linux). strict: a lookup that failed raises SessionsUnknown instead
+    of reading as "none of them runs" (ps -p exits 1 with nothing to say when no such pid exists: that's an answer)."""
     import subprocess
     import time
     pids = sorted({p for p in pids if isinstance(p, int) and not isinstance(p, bool) and p > 0})
@@ -632,14 +639,17 @@ def process_starts(pids) -> dict:
         import calendar
         r = subprocess.run(["ps", "-o", "pid=,lstart=", "-p", ",".join(map(str, pids))], capture_output=True,
                            text=True, timeout=10, env={**os.environ, "LC_ALL": "C", "TZ": "UTC"})
+        if strict and r.returncode != 0 and r.stderr.strip():
+            raise SessionsUnknown(r.stderr.strip()[:200])
         for line in r.stdout.splitlines():
             pid, _sp, when = line.strip().partition(" ")
             try:
                 out[int(pid)] = str(calendar.timegm(time.strptime(" ".join(when.split()), "%a %b %d %H:%M:%S %Y")))
             except ValueError:
                 pass
-    except (OSError, ValueError, StopIteration, subprocess.SubprocessError):
-        pass
+    except (OSError, ValueError, StopIteration, subprocess.SubprocessError) as e:
+        if strict:
+            raise SessionsUnknown(repr(e)) from e
     return out
 
 
@@ -702,23 +712,24 @@ def record_session(session: str, runtime: str, pid, cwd: str, *, refresh: bool =
     return True
 
 
-def running_records(paths) -> dict:
+def running_records(paths, strict: bool = False) -> dict:
     """Of these session records, the ones whose process still runs with the start time recorded: {path: record}. One
-    process lookup for all of them."""
+    process lookup for all of them. strict: see process_starts."""
     recs = {p: r for p in paths if (r := _read_record(p))}
-    starts = process_starts([r["pid"] for r in recs.values()])
+    starts = process_starts([r["pid"] for r in recs.values()], strict=strict)
     return {p: r for p, r in recs.items() if starts.get(r["pid"]) == r["start"]}
 
 
 def recorded_sessions(runtime: str) -> set[str]:
-    """This runtime's sessions (its own ids) whose recorded process still runs."""
+    """This runtime's sessions (its own ids) whose recorded process still runs. Raises SessionsUnknown when that can't
+    be looked up."""
     import hubconf
     try:
         files = list(hubconf.session_addresses_dir().glob(f"*.{SESSION_RECORD}"))
     except OSError:
         return set()
     out = set()
-    for f, rec in running_records(files).items():
+    for f, rec in running_records(files, strict=True).items():
         session = hubconf.session_of_file(f.name)
         name, native = runtime_of(session) if session else (None, None)
         if rec["runtime"] == runtime and name == runtime:

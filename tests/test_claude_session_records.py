@@ -74,11 +74,48 @@ class CharacterizeArgv(SecretsDir):
     def test_no_session_without_an_id_on_the_command_line(self):
         self.assertEqual(self.live(f"{DESKTOP}", "claude", "claude -p hello"), set())
 
-    def test_an_unreadable_process_table_is_no_session(self):
+    def test_an_unreadable_process_table_is_a_failed_lookup_not_no_sessions(self):
         def fail(argv, **kw):
             return subprocess.CompletedProcess(argv, 1, "", "ps: denied")
         with mock.patch.object(runtime_claude.subprocess, "run", fail):
-            self.assertEqual(runtime_claude.live_sessions(), set())
+            with self.assertRaises(runtime_ports.SessionsUnknown):
+                runtime_claude.live_sessions()
+            self.assertTrue(runtime_claude.alive(A), "can't tell: not gone")
+
+    def test_a_process_table_that_hangs_is_a_failed_lookup(self):
+        seen = {}
+
+        def hang(argv, **kw):
+            seen.update(kw)
+            raise subprocess.TimeoutExpired(argv, kw.get("timeout"))
+        with mock.patch.object(runtime_claude.subprocess, "run", hang):
+            with self.assertRaises(runtime_ports.SessionsUnknown):
+                runtime_claude.live_sessions()
+        self.assertTrue(seen.get("timeout"), "it has a timeout")
+
+    def test_process_records_that_cannot_be_looked_up_are_a_failed_lookup(self):
+        d = hubconf.session_addresses_dir()
+        d.mkdir(parents=True)
+        (d / f"{A}.live").write_text(json.dumps({"runtime": "claude", "pid": os.getpid(),
+                                                 "start": runtime_ports.process_start(os.getpid()), "cwd": "/x"}))
+        real = subprocess.run
+
+        def only_table(argv, **kw):
+            if "command" in argv:
+                return subprocess.CompletedProcess(argv, 0, "", "")
+            return subprocess.CompletedProcess(argv, 1, "", "ps: denied")
+
+        if os.path.exists("/proc/self/stat"):
+            with mock.patch.object(runtime_ports.os.path, "exists", lambda p: p != "/proc/self/stat"), \
+                    mock.patch("subprocess.run", only_table), self.assertRaises(runtime_ports.SessionsUnknown):
+                runtime_claude.live_sessions()
+        else:
+            with mock.patch("subprocess.run", only_table), self.assertRaises(runtime_ports.SessionsUnknown):
+                runtime_claude.live_sessions()
+        self.assertIs(subprocess.run, real)
+        with mock.patch("subprocess.run", lambda argv, **kw: subprocess.CompletedProcess(argv, 1, "", "")):
+            self.assertEqual(runtime_ports.process_starts([999999]), {} if not os.path.exists("/proc/self/stat") else {},
+                             "ps -p with no such pid exits 1 and says nothing: that isn't a failure")
 
     def test_alive_asks_the_same_set(self):
         with mock.patch.object(runtime_claude.subprocess, "run", ps(f"claude --resume {A}")):

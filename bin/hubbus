@@ -216,6 +216,8 @@ CONFLICT_DAYS = 14       # status: a record id sent with other content is listed
 # a background resume not closed after this long (mailbox-conversation's timeout is 30 minutes) → dispatch as a
 # delegation
 RESUME_TIMEOUT_MIN = 35
+SEEN_ALIVE_MIN = 30      # a hook this recent says a session runs (Live): a headless one is on no list, and a long tool call goes
+#                          quiet for a while. The price: a session gone without its end hook keeps what it holds this long
 PLATFORM_RUN_DAYS = 7    # the platform starts nothing (a fork, a handler) for a letter older than this: it waits for a hook
 # delegation: a live session with activity within this window handles it in a fork with its context
 FORK_RECENT_H = int(_MB.get("fork_recent_hours", 24))
@@ -341,7 +343,7 @@ SCHEMA = """
     CREATE TABLE IF NOT EXISTS cursors(consumer TEXT PRIMARY KEY, seq INTEGER NOT NULL, updated TEXT);
     -- presence (not events: updated on every hook, not in the log): which session is in which project, cwd, last
     -- activity; an MCP server's row (session mcp:<pid>:<start>) also has runtime (mcp:<client name>) and via
-    -- (initialize | tool: what wrote seen); NULL in rows the hooks write
+    -- (initialize | tool: what wrote seen); in rows the hooks write, NULL, or ended once its end hook has run
     CREATE TABLE IF NOT EXISTS presence(session TEXT PRIMARY KEY, project TEXT NOT NULL, cwd TEXT, seen TEXT NOT NULL,
                                         runtime TEXT, via TEXT);
     -- meta.generation: a random id fixed when this file is created; a reader's cursor (event jobs) is only valid for
@@ -859,7 +861,7 @@ def inbox(c, project, session=None, only_new=False, live=None):
     """Letters to this project not done yet. A reply addressed to a particular session waits for that session a
     while first. only_new: only what a hook shows this session (hook_shows)."""
     cutoff = iso(now() - datetime.timedelta(minutes=REPLY_WAIT_MIN))
-    rows, found, live = [], addressed_to(c, project), live or Live(me=session)
+    rows, found, live = [], addressed_to(c, project), live or Live(me=session, c=c)
     losers = record_losers(c, found)   # one record id sent with other content: only the one that prevails (core §10)
     for r in found:
         if r["id"] in losers:
@@ -901,12 +903,13 @@ def sessions_port():
 
 class Live:
     """Which sessions run now, looked up at most once (live_sessions: one ps), and not at all if nobody asks. me: the
-    session asking, running by definition (a session can run with no process record until its next hook). A session
-    whose runtime has no sessions port can't be judged: the feature is off, not the session gone, so it counts as live
-    and its route ends by the window alone. A failed lookup is the same."""
+    session asking, running by definition. c: the bus, for its evidence: a hook within SEEN_ALIVE_MIN says a session runs
+    (a headless session a person started has no process record and its id is on no command line) unless its end hook has run. A
+    session whose runtime has no sessions port can't be judged: the feature is off, not the session gone, so it counts
+    as live and its route ends by the window alone. A failed lookup is the same."""
 
-    def __init__(self, rt=None, live=None, me=None):
-        self.rt, self.live, self.me, self.failed = rt, live, me, False
+    def __init__(self, rt=None, live=None, me=None, c=None):
+        self.rt, self.live, self.me, self.c, self.failed = rt, live, me, c, False
 
     def load(self) -> None:
         if self.live is not None or self.failed:
@@ -918,8 +921,14 @@ class Live:
             self.failed = True
             log_once("live-sessions", _("cannot tell which sessions run: {e!r}", e=e))
 
+    def seen_lately(self, sid) -> bool:
+        if self.c is None:
+            return False
+        r = self.c.execute("SELECT seen, via FROM presence WHERE session=?", (sid,)).fetchone()
+        return r is not None and r["via"] != "ended" and r["seen"] >= iso(now() - datetime.timedelta(minutes=SEEN_ALIVE_MIN))
+
     def __call__(self, sid) -> bool:
-        if sid == self.me:
+        if sid == self.me or self.seen_lately(sid):
             return True
         self.load()
         if self.failed:
@@ -1268,12 +1277,23 @@ def record_presence(c, session: str, project: str, cwd, runtime: str | None = No
     (mcp:<pid>:<start>) also what wrote seen (via)."""
     if via is None:
         c.execute("INSERT INTO presence(session, project, cwd, seen, runtime) VALUES(?,?,?,?,?) ON CONFLICT(session)"
-                  " DO UPDATE SET project=excluded.project, cwd=excluded.cwd, seen=excluded.seen,"
+                  " DO UPDATE SET project=excluded.project, cwd=excluded.cwd, seen=excluded.seen, via=NULL,"
                   " runtime=COALESCE(excluded.runtime, presence.runtime)", (session, project, str(cwd), iso(), runtime))
         return
     c.execute("INSERT INTO presence(session, project, cwd, seen, runtime, via) VALUES(?,?,?,?,?,?) ON CONFLICT(session)"
               " DO UPDATE SET project=excluded.project, cwd=excluded.cwd, seen=excluded.seen,"
               " runtime=excluded.runtime, via=excluded.via", (session, project, str(cwd), iso(), runtime, via))
+
+
+def session_ended(session) -> None:
+    """A session's end hook: its recent hooks no longer say it runs (Live). A later hook of that session says so again."""
+    if not session or not DB.exists():
+        return
+    c = db(timeout=HOOK_TIMEOUT_S)
+    try:
+        c.execute("UPDATE presence SET via='ended' WHERE session=? AND session NOT LIKE 'mcp:%'", (session,))
+    finally:
+        c.close()
 
 
 def mcp_runtime(client) -> str:
@@ -1334,7 +1354,7 @@ def mail_text(event: str, session, cwd, runtime: str | None = None) -> str | Non
     if not project:
         return None
     c = db(timeout=HOOK_TIMEOUT_S)
-    live = Live(me=session)
+    live = Live(me=session, c=c)
     if any(actionable(r) and c.execute("SELECT 1 FROM events WHERE ref=? AND type IN ('message.routed',"
                                        "'message.delivered') LIMIT 1", (r["id"],)).fetchone()
            and taken_how(c, r, lambda s: True) != "good" for r in addressed_to(c, project)):
@@ -2222,6 +2242,7 @@ def end_route(c, r, st, proj) -> bool:
 def dispatch(c, rt=None) -> int:
     """The platform handles requests/questions nobody took (see the file header). Returns the number of letters still
     waiting for a hook."""
+    ours = rt is None
     if rt is None:
         import runtime_ports  # the runtime is only reached through the interface (Claude Code is one implementation)
         try:
@@ -2233,8 +2254,15 @@ def dispatch(c, rt=None) -> int:
             log_once("dispatch-unsupported", _("mailbox delegation dispatches no agent: {e}", e=e))
             return 0
         log_once("dispatch-unsupported", "")
-    live, leases = rt.live_sessions(), lease_ids()
-    alive = Live(rt, live)
+    try:
+        live = rt.live_sessions()
+    except Exception as e:
+        # it says nothing about any session: nothing is judged, ended or started until it can be read again
+        log_once("live-sessions", _("cannot tell which sessions run: {e!r}", e=e))
+        return 0
+    if ours:
+        log_once("live-sessions", "")
+    leases, alive = lease_ids(), Live(rt, live, c=c)
     wait_cut = iso(now() - datetime.timedelta(minutes=CONVERSATION_WAIT_MIN))
     hold_cut = iso(now() - datetime.timedelta(minutes=MCP_HOLD_MAX_MIN))
     run_cut = iso(now() - datetime.timedelta(days=PLATFORM_RUN_DAYS))
@@ -2253,6 +2281,16 @@ def dispatch(c, rt=None) -> int:
                     wake(c, rt, r, to_s)
                 continue
             st = letter_state(c, r, alive)
+            if st.ended == "closed":
+                # that look was taken at the start of the tick, and a session's first hook may have come since: an end
+                # is for good, so look again before recording one (once: after that the route has ended or holds)
+                try:
+                    live = rt.live_sessions()
+                except Exception:
+                    waiting += 1
+                    continue
+                alive = Live(rt, live, c=c)
+                st = letter_state(c, r, alive)
             # taken for good needs no end recorded: it can't come back. Taken for now can (an ack's session closing, a
             # fork's time running out), and the route it ended mustn't revive then
             if st.route and st.ended and st.taken != "good" and not end_route(c, r, st, proj):
@@ -2423,7 +2461,7 @@ def take(c, proj: str, entry) -> None:
             if r is None or r["to_project"] != proj:
                 refuse(_("hubbus: {id} is not a letter to {project}", id=i, project=proj))
         if session:
-            live = Live(me=session)
+            live = Live(me=session, c=c)
             open_ones = [r for r in rows if actionable(r) and not is_done(c, r["id"])]
             tell(c, untold(c, open_ones, session, live), session, "inbox", live)
     elif op == "publish":
@@ -2473,7 +2511,7 @@ def view(c, proj: str, live=None) -> dict:
     """A sandboxed project's mailbox: the letters and records to or from it, with what happened to them. Other
     projects' session ids are left out (only a hint to them, and a way in to anyone who could name one). state: each
     open request or question someone has, taken and who holds it, derived here since a sandbox can't judge liveness."""
-    events, state, live = [], {}, live or Live()
+    events, state, live = [], {}, live or Live(c=c)
     for r in c.execute(VIEW_SQL, {"p": proj}):
         p = payload(r)
         if r["source"] != proj:
@@ -2491,7 +2529,7 @@ def view(c, proj: str, live=None) -> dict:
 
 
 def write_views(c) -> None:
-    live = Live()
+    live = Live(c=c)
     for proj, ws in projects().items():
         if outboxed(proj) and ws.is_dir():
             write_view(c, proj, ws, live)
@@ -2604,11 +2642,15 @@ def prune_wake_addresses(live=None) -> list[str]:
     if not d.is_dir():
         return []
     import runtime_ports
-    if live is None and any(d.glob("*.json")):
-        live = runtime_ports.Sessions().live_sessions()   # every installed runtime's, in the platform's ids
     # one listing: a record a hook writes after it is never judged without its process looked up
     files = list(d.iterdir())
-    running = runtime_ports.running_records([f for f in files if f.name.endswith(f".{runtime_ports.SESSION_RECORD}")])
+    try:
+        if live is None and any(d.glob("*.json")):
+            live = runtime_ports.Sessions().live_sessions()   # every installed runtime's, in the platform's ids
+        running = runtime_ports.running_records([f for f in files if f.name.endswith(f".{runtime_ports.SESSION_RECORD}")],
+                                                strict=True)
+    except runtime_ports.SessionsUnknown:   # can't tell what has gone: nothing goes
+        return []
     gone = []
     for f in files:
         try:
@@ -2757,7 +2799,7 @@ def cmd_status(as_json: bool) -> None:
     cutoff = iso(now() - datetime.timedelta(hours=STUCK_HOURS))
     hold_cut = iso(now() - datetime.timedelta(minutes=MCP_HOLD_MAX_MIN))
     run_cut = iso(now() - datetime.timedelta(days=PLATFORM_RUN_DAYS))
-    stuck, held, waiting, live = [], [], [], Live()
+    stuck, held, waiting, live = [], [], [], Live(c=c)
     for proj in sorted(projects()):
         rows = inbox(c, proj)
         if rows:
@@ -2949,7 +2991,7 @@ def mail_command(a) -> None:
         project = now_named(a.project) if a.project else here
         if not project:
             refuse(_("hubbus: not in a project folder, add --project <name>"))
-        rows, live = inbox(c, project, session), Live(me=session)
+        rows, live = inbox(c, project, session), Live(me=session, c=c)
         for r in rows:
             print(fmt(r))
             if (mark := state_mark(c, r, session, live)):

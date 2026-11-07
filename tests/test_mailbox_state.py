@@ -10,6 +10,7 @@ import io
 import json
 import os
 import pathlib
+import sqlite3
 import sys
 import unittest
 from unittest import mock
@@ -80,7 +81,18 @@ class Harness(unittest.TestCase):
             "('session-start','prompt','post-tool','inbox')", mid)]
 
     def state(self, mid):
-        return self.m.letter_state(self.c, self.m.get_message(self.c, mid), self.m.Live(self.rt, self.rt.live_sessions()))
+        return self.m.letter_state(self.c, self.m.get_message(self.c, mid),
+                                   self.m.Live(self.rt, self.rt.live_sessions(), c=self.c))
+
+    def close(self, sid):
+        """Session sid is gone: off the process table, and its last hook is too old to say it lives."""
+        self.rt.live.discard(sid)
+        self.c.execute("UPDATE presence SET seen=? WHERE session=?", (ago(self.m.SEEN_ALIVE_MIN + 1), sid))
+
+    def ended(self, sid):
+        """Session sid's end hook, on a connection of its own as it has in life."""
+        self.m.db = lambda *a, **k: sqlite3.connect(self.tmp / "bus.db", isolation_level=None)
+        self.m.session_ended(sid)
 
     def ack(self, mid, session, minutes=0):
         self.m.publish(self.c, f"{mid}:ack:{session}", "message.delivered", "proj", "proj", mid,
@@ -148,11 +160,12 @@ class Told(Harness):
         self.rt.tokens = {}
         self.send("m1", "proj", "request", minutes_ago=2)
         self.hook("prompt", "S1")
-        self.rt.live.discard("S1")
+        self.close("S1")
         self.m.DAILY_RUNS = 0                                       # no run to start: the letter stays open
         self.m.run_handler = lambda *a: None
         self.dispatch()
         self.assertEqual(self.routes("m1"), ["S1", None])
+        self.seen("S1")
         self.rt.live.add("S1")                                      # that session runs again
         self.assertFalse(self.state("m1").held)
         self.dispatch()
@@ -181,16 +194,70 @@ class Told(Harness):
         self.send("m1", "proj", "request")
         self.hook("prompt", "S1")
         self.assertEqual(self.hook("prompt", "S2"), "")
-        self.rt.live.discard("S1")
+        self.close("S1")
         self.assertIn("[m1]", self.hook("prompt", "S2"))
         self.assertEqual(self.routes("m1"), ["S1", "S2"])
+
+    def test_a_holder_closing_cleanly_ends_its_route_at_once(self):
+        self.rt.live |= {"S1", "S2"}
+        self.send("m1", "proj", "request")
+        self.hook("prompt", "S1")
+        self.rt.live.discard("S1")
+        self.assertEqual(self.hook("prompt", "S2"), "", "its hook is recent: it may be a headless session at work")
+        self.ended("S1")
+        self.assertIn("[m1]", self.hook("prompt", "S2"), "SessionEnd says otherwise")
+
+    def test_a_session_ended_and_back_counts_again(self):
+        self.rt.live.add("S1")
+        self.send("m1", "proj", "request")
+        self.hook("prompt", "S1")
+        self.rt.live.discard("S1")
+        self.ended("S1")
+        self.assertFalse(self.state("m1").held)
+        self.seen_by_hook("S1")
+        self.assertTrue(self.m.Live(self.rt, set(), c=self.c)("S1"), "its next hook says it runs")
+
+    def seen_by_hook(self, sid):
+        self.m.record_presence(self.c, sid, "proj", self.ws)
+
+    def test_a_session_told_just_after_the_snapshot_is_not_judged_closed(self):
+        """Dispatch reads the process table once, then a session's first hook tells it a letter: on the next line of the
+        tick that session is on no list, and the letter would go to a handler too."""
+        hook = self.hook
+        self.send("m1", "proj", "request", minutes_ago=2)
+
+        class Racing(tmd.FakeRuntime):
+            def live_sessions(self):
+                snapshot = set(self.live)
+                hook("prompt", "S1")
+                return snapshot
+
+        self.rt = Racing()
+        self.assertEqual(self.dispatch(), 1)
+        self.assertEqual(self.handled + self.resumed, [])
+        self.assertEqual(self.routes("m1"), ["S1"])
+
+    def test_ending_a_route_as_closed_looks_again(self):
+        """No hook to go by: the first look missed it, and the route ends only if a second look does too."""
+        self.send("m1", "proj", "request", minutes_ago=2)
+        self.m.routed(self.c, self.m.get_message(self.c, "m1"), "S1", "hook")
+        looks = []
+
+        class Second(tmd.FakeRuntime):
+            def live_sessions(self):
+                looks.append(1)
+                return {"S1"} if len(looks) > 1 else set()
+
+        self.rt = Second()
+        self.assertEqual(self.dispatch(), 1)
+        self.assertEqual((self.handled, self.routes("m1"), len(looks)), ([], ["S1"], 2))
 
     def test_a_holder_closing_with_no_other_session_goes_on_to_todays_routing_and_says_so_once(self):
         self.rt.live.add("S1")
         self.send("m1", "proj", "request", minutes_ago=2)
         self.hook("prompt", "S1")
         self.assertEqual(self.dispatch(), 1)
-        self.rt.live.discard("S1")
+        self.close("S1")
         self.logged.clear()
         self.dispatch()
         self.dispatch()
@@ -234,7 +301,7 @@ class Told(Harness):
         self.rt.live.add("S1")
         self.send("m1", "proj", "request")
         self.hook("session-start", "S1")
-        self.rt.live.discard("S1")
+        self.close("S1")
         self.rt.live.add("S2")
         self.assertIn("  text m1", self.hook("session-start", "S2"))
 
@@ -268,9 +335,23 @@ class Taken(Harness):
         self.assertEqual(self.state("m1").taken, "now")
         self.assertEqual((self.dispatch(), self.handled), (0, []), "taken while S1 lives")
         self.assertEqual(self.hook("prompt", "S2"), "")
-        self.rt.live.discard("S1")
+        self.close("S1")
         self.assertEqual(self.state("m1").taken, "")
         self.assertIn("[m1]", self.hook("prompt", "S2"))
+
+    def test_a_headless_session_a_person_started_holds_while_its_hooks_are_recent(self):
+        """A `claude -p` or SDK run: no process record, its id on no command line. On main its ack was taken for good."""
+        self.send("m1", "proj", "request", minutes_ago=30)
+        self.send("m2", "proj", "request", minutes_ago=30)
+        self.assertIn("[m1]", self.hook("prompt", "H1"))             # never in rt.live
+        self.ack("m1", "H1")
+        for _ in range(2):
+            self.assertEqual(self.dispatch(), 1, "m2 is held by H1's telling")
+        self.assertEqual(self.handled + self.resumed, [])
+        self.assertEqual(self.state("m1").taken, "now")
+        self.assertEqual(self.routes("m2"), ["H1"])
+        self.close("H1")
+        self.assertEqual(self.state("m1").taken, "", "its hooks stopped: nothing says it lives")
 
     def test_someone_elses_ack_ends_a_route_and_it_does_not_revive(self):
         self.rt.live |= {"S1", "S2"}
@@ -279,7 +360,7 @@ class Taken(Harness):
         self.ack("m1", "S2")
         self.assertEqual(self.dispatch(), 0)
         self.assertEqual(self.routes("m1"), ["S1", None])
-        self.rt.live.discard("S2")
+        self.close("S2")
         self.assertFalse(self.state("m1").held, "S1's route ended when S2 took it")
 
     def test_an_ack_with_no_session_holds_as_today(self):
@@ -611,6 +692,59 @@ class NoSessionsPort(Harness):
         self.send("m1", "proj", "request")
         self.m.routed(self.c, self.m.get_message(self.c, "m1"), "S1", "hook")
         self.assertEqual(self.hook("prompt", "S2"), "")
+
+
+class FailedLookup(Harness):
+    """A process table that can't be read says nothing about any session. Read as "no sessions" it would end every
+    route for good and send a handler for each."""
+
+    def setUp(self):
+        super().setUp()
+        self.broken = False
+        real = self.rt.live_sessions
+
+        def lookup():
+            if self.broken:
+                raise runtime_ports.SessionsUnknown("ps failed")
+            return real()
+
+        self.rt.live_sessions = lookup
+        self.once = []
+        self.m.log_once = lambda key, msg: self.once.append((key, msg))
+
+    def holding(self):
+        self.rt.live.add("S1")
+        self.send("m1", "proj", "request", minutes_ago=2)
+        self.hook("prompt", "S1")
+        self.c.execute("UPDATE presence SET seen=? WHERE session='S1'", (ago(self.m.SEEN_ALIVE_MIN + 1),))
+        self.rt.live.clear()
+
+    def test_dispatch_starts_nothing_ends_nothing_and_says_so_once(self):
+        self.holding()
+        self.send("m2", "proj", "request", minutes_ago=30)
+        self.broken = True
+        self.assertEqual(self.dispatch(), 0)
+        self.assertEqual(self.handled + self.resumed, [])
+        self.assertEqual(self.routes("m1"), ["S1"])
+        self.assertEqual([k for k, msg in self.once if msg], ["live-sessions"])
+
+    def test_a_hook_reads_it_as_can_not_tell(self):
+        self.holding()
+        self.broken = True
+        self.assertEqual(self.hook("prompt", "S2"), "", "S1 isn't gone, it can't be judged")
+
+    def test_the_prune_keeps_every_record(self):
+        d = self.tmp / "secrets" / "sessions"
+        d.mkdir(parents=True)
+        (d / "S1.live").write_text(json.dumps({"runtime": "claude", "pid": 1, "start": "1", "cwd": "/x"}))
+        (d / "S1.json").write_text("{}")
+        with mock.patch.object(self.m.hubconf, "session_addresses_dir", lambda: d), \
+                mock.patch.object(runtime_ports, "Sessions", lambda: mock.Mock(
+                    live_sessions=mock.Mock(side_effect=runtime_ports.SessionsUnknown("ps failed")))), \
+                mock.patch.object(runtime_ports, "running_records", mock.Mock(
+                    side_effect=runtime_ports.SessionsUnknown("ps failed"))):
+            self.assertEqual(self.m.prune_wake_addresses(), [])
+        self.assertEqual(sorted(p.name for p in d.iterdir()), ["S1.json", "S1.live"])
 
 
 class Status(Harness):

@@ -383,6 +383,7 @@ class Outbox(Fixture):
         self.assertEqual(self.view()["state"][mid]["taken"], True)
         self.assertIn(m._("  (taken)"), self.in_box("inbox"))
         m = self.on_bus(live=())
+        c.execute("UPDATE presence SET seen='2026-01-01T00:00:00+08:00' WHERE session='s-box'")
         with mock.patch.object(m.hubconf, "projects", lambda: self.docs):
             m.write_view(c, "box", self.ws["box"])
         self.assertEqual(self.view()["state"], {}, "the holder closed: its ack and its route ended, derived on the bus")

@@ -121,6 +121,13 @@ def mail(ev, ws):
     return hubbus.mail_text(kind, ev.session, ev.cwd, runtime=_RT_NAME)
 
 
+def mail_end(ev, ws):
+    """The session ended: its recent hooks no longer say it runs (hubbus.Live), so what it held is free at once."""
+    if not platform_run(os.environ):
+        _load("hubbus_mod", BIN / "hubbus").session_ended(ev.session)
+    return None
+
+
 def guard(ev, ws):
     g = _load("guard_mod", BIN / "guard.py")
     return g.decide(ev.target or {}, ev.cwd)
@@ -214,13 +221,13 @@ def wait(name: str | None, raw: str) -> int:
 
 # which handlers run for each event, in order; for the "deny" kind the return value is the reason to block
 HANDLERS = {
+    # session_record before mail: a session told a letter is on record by then, or the tick in between could judge it closed
     "session_start": [("hub_pull", hub_pull), ("memory_pull", memory_pull), ("local_setup", local_setup),
-                      ("nudge", nudge), ("mail", mail), ("wake_address", wake_address),
-                      ("session_record", session_record)],
-    "session_end": [("wake_address_drop", wake_address_drop), ("memory_sync", memory_sync)],
+                      ("nudge", nudge), ("session_record", session_record), ("mail", mail), ("wake_address", wake_address)],
+    "session_end": [("mail_end", mail_end), ("wake_address_drop", wake_address_drop), ("memory_sync", memory_sync)],
     "pre_compact": [("memory_sync", memory_sync)],
-    "prompt": [("mail", mail), ("session_record", session_record)],
-    "tool_used": [("nudge", nudge), ("mail", mail), ("session_record", session_record)],
+    "prompt": [("session_record", session_record), ("mail", mail)],
+    "tool_used": [("nudge", nudge), ("session_record", session_record), ("mail", mail)],
     "open_session_attempt": [("guard", guard)],
 }
 DENY_HANDLERS = {"guard"}

@@ -32,6 +32,15 @@ class HubEvent(unittest.TestCase):
         self.m._workspace = lambda cwd: self.tmp
         self.calls = []
 
+    def test_a_session_is_on_record_before_its_mail_is_told(self):
+        """Told before it is recorded, a session with no process record could be judged closed by the tick in between."""
+        for event in ("session_start", "prompt", "tool_used"):
+            order = [n for n, _f in self.m.HANDLERS[event]]
+            self.assertLess(order.index("session_record"), order.index("mail"), event)
+
+    def test_a_session_ending_tells_the_bus(self):
+        self.assertIn("mail_end", [n for n, _f in self.m.HANDLERS["session_end"]])
+
     def raw(self, **extra):
         return json.dumps({"sid": "S1", "dir": str(self.tmp), **extra})
 
