@@ -52,6 +52,98 @@ class Channels(unittest.TestCase):
 CURL = ["/usr/bin/curl", "-sS", "-m", "20", "-o", "/dev/null", "-w", "%{http_code}"]
 
 
+class AssistantChannel(unittest.TestCase):
+    """alerts.assistant: keyed notices to the personal assistant, beside the other channels
+    (its platform-alerts contract, modules/assistant.yaml)."""
+
+    def setUp(self):
+        self.m = load()
+        self.tmp = pathlib.Path(tempfile.mkdtemp())
+        for name in ("SENT", "FAILED"):
+            p = mock.patch.object(self.m, name, self.tmp / f"{name}.json")
+            p.start()
+            self.addCleanup(p.stop)
+        self.token = self.tmp / "token"
+        self.token.write_text("tok\n")
+        conf = {"alerts.assistant": True, "assistant.api": "http://127.0.0.1:18795/api/messages"}
+        for p in (mock.patch.object(self.m.hubconf, "get", lambda k, d=None: conf.get(k, d)),
+                  mock.patch.object(self.m.hubconf, "p", lambda k: self.token),
+                  mock.patch.dict(self.m.CHANNELS, {"ntfy": (self.other, lambda: True)}, clear=True),
+                  mock.patch.object(self.m, "_curl", self.curl)):
+            p.start()
+            self.addCleanup(p.stop)
+        self.status, self.posts, self.texts = "200", [], []
+
+    def other(self, text):
+        self.texts.append(text)
+        return True
+
+    def curl(self, *args, data=None):
+        self.posts.append((args, json.loads(data)))
+        return self.status
+
+    def test_a_problem_its_retry_its_reminder_and_its_end(self):
+        self.status = "500"
+        self.m.once("k", ["one", "two"], "fine again")
+        self.assertIn("k", json.loads((self.tmp / "FAILED.json").read_text()))
+        first = self.posts[-1][1]
+        self.assertEqual({x: first[x] for x in ("v", "source", "key", "state", "detail")},
+                         {"v": 1, "source": self.m.hubconf.hub_project(), "key": "k", "state": "open", "detail": "one\ntwo"})
+        self.assertTrue(first["text"].startswith("one"))
+        self.assertIn("/api/alerts", self.posts[-1][0][-1])
+        self.assertIn("Authorization: Bearer tok", self.posts[-1][0])
+
+        self.status = "200"
+        self.m.once("k", ["two", "one"], "fine again")     # a retry: the same notice, whatever the order
+        self.assertEqual(self.posts[-1][1]["at"], first["at"])
+        self.assertEqual(json.loads((self.tmp / "FAILED.json").read_text()), {})
+        before = len(self.posts)
+        self.m.once("k", ["one", "two"], "fine again")     # went out, nothing changed: nothing to say
+        self.assertEqual(len(self.posts), before)
+
+        sent = json.loads((self.tmp / "SENT.json").read_text())
+        sent["k"]["at"] = "2020-01-01T00:00:00"
+        (self.tmp / "SENT.json").write_text(json.dumps(sent))
+        with mock.patch.object(self.m, "datetime", wraps=self.m.datetime) as dt:
+            dt.datetime.now.return_value = self.m.datetime.datetime(2030, 1, 1, 12, 0)
+            dt.datetime.fromisoformat = self.m.datetime.datetime.fromisoformat
+            self.m.once("k", ["one", "two"], "fine again")   # a day on, unresolved: a new notice
+        self.assertNotEqual(self.posts[-1][1]["at"], first["at"])
+        self.assertEqual(self.posts[-1][1]["state"], "open")
+
+        self.m.once("k", [], "fine again")
+        last = self.posts[-1][1]
+        self.assertEqual((last["state"], last["text"]), ("resolved", "fine again"))
+        self.assertNotIn("detail", last)
+        self.assertEqual(len(self.texts), len(self.posts), "the other channels went out each time too")
+
+    def test_one_problem_is_said_as_it_is(self):
+        self.m.once("k", ["one"], "fine again")
+        self.assertEqual(self.posts[-1][1]["text"], "one")
+        self.assertNotIn("detail", self.posts[-1][1])
+
+    def test_a_notice_is_for_keyed_problems_only(self):
+        self.assertTrue(self.m.send("free text"))
+        self.assertEqual(self.posts, [])
+        self.assertEqual(self.texts, ["free text"])
+
+    def test_alone_free_text_has_nowhere_to_go(self):
+        with mock.patch.dict(self.m.CHANNELS, {}, clear=True):
+            self.assertEqual(self.m.configured(), ["assistant"])
+            self.assertFalse(self.m.send("free text"))
+
+    def test_off_or_no_address_is_not_set_up(self):
+        for conf in ({"assistant.api": "http://x/"}, {"alerts.assistant": True}):
+            with mock.patch.object(self.m.hubconf, "get", lambda k, d=None, c=conf: c.get(k, d)):
+                self.assertEqual(self.m.configured(), ["ntfy"])
+
+    def test_no_token_is_a_failure(self):
+        self.token.unlink()
+        self.m.once("k", ["one"], "fine again")
+        self.assertEqual(self.posts, [])
+        self.assertIn("k", json.loads((self.tmp / "FAILED.json").read_text()))
+
+
 class Adapters(unittest.TestCase):
     """Each channel's adapter with the network mocked: curl (subprocess.run) for Discord/ntfy/macOS, smtplib for email.
     hub.json is a dict handed to hubconf.config(); the credential files are real files in a temp folder."""

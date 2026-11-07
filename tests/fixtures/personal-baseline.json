@@ -13,7 +13,7 @@
   "bin/worktrees.py": 1,
   "integrations/herdr/RECIPE.md": 1,
   "integrations/herdr/mods/brunna/main.js": 3,
-  "modules/assistant.yaml": 12,
+  "modules/assistant.yaml": 15,
   "tests/fixtures/i18n-golden/backup.txt": 2,
   "tests/fixtures/i18n-golden/create-idea-sandbox.txt": 2,
   "tests/fixtures/i18n-golden/guard.txt": 4,

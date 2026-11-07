@@ -6,6 +6,9 @@
             no account needed)
   email     {"host", "port": default 587, "user", "from", "to", "password_file", "ssl": false = STARTTLS}
   macos     true (this machine's system notifications; seen only by someone sitting at this machine)
+  assistant true (the personal assistant's own reminders and push, its platform-alerts contract (modules/assistant.yaml), at the
+            address and with the token of hub.json assistant. Only for alert.once: it needs the problem's key. It is
+            never the only way out: when the assistant is down, nothing sent to it arrives)
 
 Standard library + the system's curl only (no Homebrew). The scheduler watchdog deliberately has its own copy and
 does not import this (it must still be able to send when the scheduler and the platform code are both broken).
@@ -26,6 +29,7 @@ from __future__ import annotations
 import datetime
 import json
 import subprocess
+import urllib.parse
 
 import hubconf
 import names  # noqa: E402
@@ -112,16 +116,43 @@ CHANNELS = {"discord": (_discord, lambda: _creds() is not None), "ntfy": (_ntfy,
             "email": (_email, lambda: bool(hubconf.get("alerts.email"))), "macos": (_macos, lambda: bool(hubconf.get("alerts.macos")))}
 
 
+def _assistant_on() -> bool:
+    return bool(hubconf.get("alerts.assistant") and hubconf.get("assistant.api"))
+
+
+def _assistant(notice: dict) -> bool:
+    """One notice about a keyed problem to the assistant. Only a 200 means it has it; anything else is tried again, with
+    the same `at`, which the assistant takes as the same notice."""
+    try:
+        token = hubconf.p("assistant.ingest_token").read_text().strip()
+    except (OSError, AttributeError):
+        return False
+    u = urllib.parse.urlsplit(hubconf.get("assistant.api"))
+    body = json.dumps({"v": 1, "source": hubconf.hub_project(), **notice}, ensure_ascii=False)
+    return _curl("-X", "POST", "-H", f"Authorization: Bearer {token}", "-H", "Content-Type: application/json",
+                 "--data-binary", "@-", f"{u.scheme}://{u.netloc}/api/alerts", data=body) == "200"
+
+
+# channels that take a notice with a key (once), not free text (send)
+KEYED = {"assistant": (_assistant, _assistant_on)}
+
+
 def configured() -> list[str]:
-    return [n for n, (_send, on) in CHANNELS.items() if on()]
+    return [n for n, (_send, on) in (*CHANNELS.items(), *KEYED.items()) if on()]
 
 
-def send(text: str) -> bool:
+def send(text: str, notice: dict | None = None) -> bool:
     """Send on every channel set up; success only when all of them went out (one failing is recorded as a failure, and
-    the status page turns red). None set up = False."""
-    chans = configured()
-    results = [CHANNELS[n][0](text) for n in chans]   # every channel is tried: a broken one must not silence the rest
-    return bool(chans) and all(results)
+    the status page turns red). None set up = False. notice: for the channels that need a key; without one they are
+    skipped."""
+    results = []
+    for n in configured():   # every channel is tried: a broken one must not silence the rest
+        if n in KEYED:
+            if notice:
+                results.append(KEYED[n][0](notice))
+        else:
+            results.append(CHANNELS[n][0](text))
+    return bool(results) and all(results)
 
 
 def probe() -> bool:
@@ -147,11 +178,12 @@ def _save(path, data: dict) -> None:
     path.write_text(json.dumps(data, ensure_ascii=False, indent=1))
 
 
-def record_failure(key: str, text: str) -> None:
+def record_failure(key: str, text: str, notice: dict | None = None) -> None:
     if not configured():   # no channel: not a failed send (the setup reminder covers it)
         return
     failed = _load(FAILED)
-    failed[key] = {"at": datetime.datetime.now().isoformat(timespec="seconds"), "text": text.splitlines()[0][:200]}
+    failed[key] = {"at": datetime.datetime.now().isoformat(timespec="seconds"), "text": text.splitlines()[0][:200],
+                   **({"notice": notice} if notice else {})}
     _save(FAILED, failed)
 
 
@@ -187,9 +219,21 @@ def once(key: str, problems: list[str], ok_text: str) -> None:
         text = "⚠️ " + "\n".join(problems)
     else:
         text = "✅ " + ok_text
-    if send(text):
-        sent[key] = {"problems": sorted(problems), "at": now.isoformat(timespec="seconds")}
+    # a retry is the same notice, to a channel that can tell (`at`): its time stays with the failure until it has gone out
+    wanted = sorted(problems)
+    unsent = _load(FAILED).get(key, {}).get("notice") or {}
+    notice_at = unsent["at"] if unsent.get("problems") == wanted else now.astimezone().isoformat(timespec="seconds")
+    notice = {"key": key, "at": notice_at, "state": "open" if problems else "resolved"}
+    if problems:
+        more = len(problems) - 1
+        notice["text"] = _("{first} (and {n} more)", first=problems[0], n=more) if more else problems[0]
+        if more:
+            notice["detail"] = "\n".join(problems)
+    else:
+        notice["text"] = ok_text
+    if send(text, notice):
+        sent[key] = {"problems": wanted, "at": now.isoformat(timespec="seconds")}
         _save(SENT, sent)
         clear_failure(key)
     else:
-        record_failure(key, text)
+        record_failure(key, text, {"problems": wanted, "at": notice_at})

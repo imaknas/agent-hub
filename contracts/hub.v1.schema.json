@@ -129,7 +129,8 @@
         },
         "ntfy": {"type": "object", "required": ["topic"], "properties": {"topic": {"type": "string"}, "base_url": {"type": "string"}, "token_file": {"type": "string"}}},
         "email": {"type": "object", "required": ["host", "to"], "properties": {"host": {"type": "string"}, "port": {"type": "integer"}, "user": {"type": "string"}, "from": {"type": "string"}, "to": {"type": "string"}, "password_file": {"type": "string"}, "ssl": {"type": "boolean"}}},
-        "macos": {"type": "boolean"}
+        "macos": {"type": "boolean"},
+        "assistant": {"type": "boolean", "description": "also tell the personal assistant (its platform-alerts contract, modules/assistant.yaml); keep another channel, since nothing arrives while it is down"}
       }
     },
     "owner_side": {

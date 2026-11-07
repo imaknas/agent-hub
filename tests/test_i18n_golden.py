@@ -197,7 +197,7 @@ class Golden(unittest.TestCase):
         sent = []
         with mock.patch.object(alert, "SENT", self.tmp / "state" / "alerts-sent.json"), \
              mock.patch.object(alert, "FAILED", self.tmp / "state" / "alerts-failed.json", create=True), \
-             mock.patch.object(alert, "send", side_effect=lambda t: sent.append(t) or True), \
+             mock.patch.object(alert, "send", side_effect=lambda t, notice=None: sent.append(t) or True), \
              mock.patch.dict(os.environ, {"AGENT_HUB_LANG_UI": LANGUAGE["ui"]}):
             alert.once("k", [IN["problem"]], IN["recovered"])
             data = json.loads((self.tmp / "state" / "alerts-sent.json").read_text())
