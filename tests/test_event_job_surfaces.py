@@ -352,6 +352,9 @@ class RunHere(unittest.TestCase):
         import gc
         import warnings
         m = load("schedulectl_run_here", ROOT / "bin" / "schedulectl")
+        # under plain unittest discover every module shares this process: what earlier tests left unclosed (an sqlite
+        # connection is only freed by the collector) is collected first, or its warning lands here by timing
+        gc.collect()
         with tempfile.TemporaryDirectory() as d:
             log = pathlib.Path(d) / "job.log"
             out = io.StringIO()
