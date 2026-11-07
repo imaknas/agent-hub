@@ -1,6 +1,6 @@
 # Mail goes to a session first
 
-Status: design r5, not built. Each revision fixes the previous one's cold review, on top of the owner's decision. The main
+Status: design r6, not built. The cold reviews' blocking findings are closed; should-fix items go to each step's own review. Each revision fixes the previous one's cold review, on top of the owner's decision. The main
 change since r2: delivery is per session, and a route, an ack and a fork all have an end. Replaces the delegation part of the routing in
 `docs/design/mailbox-routing.md`; builds on the wake in `docs/design/mailbox-runtimes.md` (B1).
 
@@ -51,7 +51,7 @@ and tool hooks don't show it, and session-start lists it in one line. That can't
 for requests and questions state becomes:
 
 - **Taken**, while any of these holds:
-  - a reply from the receiving project to the sender, or done, by anyone: for good. A question to the owner with `ref` to the
+  - a reply from the receiving project to the sender (any of its names, as `own_names` and `canon` see them), or done, by anyone: for good. A question to the owner with `ref` to the
     letter (`<id>:loop`, `<id>:propose-failed`, or a handler's question) doesn't count, even for the hub's own letters;
   - an ack, while the session that acked is live: **an ack has an end.** A closed session's ack no longer holds. An ack with no
     session (an MCP client, a runtime with no record) holds as today;
@@ -72,8 +72,8 @@ judges this, for dispatch and for hooks alike, from the bus and the process reco
 (`runtime.default` with no `sessions` port). Dispatch records the end as a `message.routed` with no session, and a route
 judged ended never revives, even if the session is told later.
 
-**The window** is derived, not stored: from the wake, or from the route if no wake was needed, 5 minutes (`WAKE_PICKUP_MIN`)
-until the session is told, then 60 from the telling (`TAKE_TIMEOUT_MIN`). A session working for 20 minutes isn't pre-empted, and
+**The window** is derived, not stored: 5 minutes from the wake (`WAKE_PICKUP_MIN`) until the session is told, then 60 from the
+telling (`TAKE_TIMEOUT_MIN`), including a `by: hook` route, which starts told. A session working for 20 minutes isn't pre-empted, and
 one that never got it isn't waited on. **A busy routed session** isn't woken and its window hasn't started: on each tick, once it
 is idle and still untold, dispatch wakes it (a hook skipped by `POST_TOOL_EVERY_S`, or a tool running for minutes, can't lose
 the letter). A busy session's route is bounded by 60 minutes from the route.
@@ -102,7 +102,7 @@ Notices (info, done, progress) keep today's one-flag behaviour: nothing routes t
    background resume. It's the only way to reach a closed session, and a fork's whole context mustn't answer a sandboxed sender.
 6. **A live session of a runtime with no wake port** (`runtime_ports.Sessions` routes by each session's runtime), context small,
    sender not sandboxed, not forked before: today's delegation fork, that session only.
-7. **Not yet triaged**: triage.
+7. **Not yet triaged and under 7 days old**: triage. So an old `held` row or an old ack by a closed session doesn't come back as work.
 8. **Otherwise**: nothing. It waits for a hook or a new candidate.
 
 Off, budget used up, or too old: step 3 doesn't apply and the rest do, so a project whose budget another project burned still
@@ -196,7 +196,7 @@ its own project are already there), so the routed session can tell it's itself.
   and it logs once) and the letter stays open for sessions. `held` is no longer taken; `claimed()` drops it. Routing goes on.
 - **Its own rules, not all confined runs'.** `run_handler` passes `MAILBOX_LETTERS=<ids>`. When that's set, `confined_refusal`
   allows only: `done` replying to one of those letters (`info` too for an `asks` letter, which tells it to), `done <id>` for them, a
-  question to the owner with `--reply-to` one of them, and `done|drop --question` to the owner (reconciliation needs it). No other `info`, no other recipient, no
+  question to the owner, and `done|drop --question` to the owner (reconciliation needs it). No other `info`, no other recipient, no
   `ack`, no `pass`. A confined run could otherwise send
   to any project and wake a session. The other `settings: platform` points (fork, event and clock jobs) keep today's rules.
 - **A session and a handler don't both answer.** Refused too, if another session has taken the letter. The inbox and `show` of
@@ -206,13 +206,12 @@ its own project are already there), so the routed session can tell it's itself.
 - **The sender gets one fixed line from the platform, once**: received, waiting for a session. No `ref`, no `to_session`, so it
   neither takes the letter nor wakes anyone. It carries the letter's chain, so an event job can't loop on it. None for the owner
   side, the hub's own letters or reconciliation letters. When the budget stops routing, the same line goes out.
-- **Its question closes with the letter.** When a letter is taken, the platform closes a question a handler asked about it, so the
-  owner isn't asked what a session has answered. That needs a link that doesn't exist today: with records on, `send_decision` drops
-  `ref`, so it's passed through to `publish_record`. Propose's `ask_owner` schema gains the letter id. `<id>:loop` and `propose-failed`
-  are v1 with `ref` already and close as v1 (their key doesn't fit the record schema).
+- **Its question to the owner stays as today.** A session answering the letter doesn't close it; the nightly reconcile-questions job
+  asks about open questions, as it does now. Linking the two was tried in r5 and dropped: a question isn't an answer, a temporary
+  take must not withdraw it, and a session's own question looks the same on the bus.
 - **It can write its notes, and so can a fork.** Today the confined run's `deny_write` covers the hub's own project, and
-  `own_state_dir` only carves out `<state>/agent-jobs/<job>`. Both gain the project's `.agent-memory/memory/`, by absolute path, since
-  a fork of a hub session may run in a linked worktree. The hub's notes aren't committed (`memory: false`),
+  `own_state_dir` only carves out `<state>/agent-jobs/<job>`. Both gain the project's `.agent-memory/memory/` by absolute path, with its
+  allow rule and `--add-dir`, since a fork of a hub session may run in a linked worktree with no link to it. The hub's notes aren't committed (`memory: false`),
   so the prompt stops saying the platform commits them there. The prompt also says: state an action only after its tool succeeded.
 - **No repeats and no noise.** `dispatch`'s "treating it as not taken" log fires once per letter.
 
