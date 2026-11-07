@@ -2342,6 +2342,9 @@ def start_handler(proj, ws, rows) -> str | None:
     letters = json.dumps([r["id"] for r in rows], ensure_ascii=False)
     try:
         if (hubconf.get("mailbox") or {}).get("handler") == "propose":
+            import propose_apply
+            if (why := propose_apply.unsupported(proj)):
+                return why   # nothing started, nothing spent: the letter stays open for sessions, and this shows
             # agent proposes, platform applies (bin/propose_apply.py; docs/design/tool-agnostic.md): any agent can run it,
             # in a throwaway worktree; the platform only takes the memory notes and sends the letters on its behalf. Runs
             # in the background; it writes status.json itself (running → done), one at a time per project

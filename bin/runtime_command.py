@@ -118,7 +118,10 @@ def describe(task) -> list:
 
 
 def run(task) -> TaskResult:
-    code, out, err = _run(task.prompt + _schema_note(task.output_schema), task.model, task.cwd, task.env, task.timeout_s)
+    try:
+        code, out, err = _run(task.prompt + _schema_note(task.output_schema), task.model, task.cwd, task.env, task.timeout_s)
+    except OSError as e:
+        return TaskResult(False, error=_("could not make a folder for the run: {e}", e=e))
     if code is None:
         return TaskResult(False, error=err)
     if code != 0:
@@ -138,7 +141,13 @@ def run(task) -> TaskResult:
 # ---------- completion ----------
 
 def complete(req, conf) -> CompletionResult:
-    code, out, err = _run(req.prompt + _schema_note(req.schema), req.model, str(__import__("hubconf").private_tmp()), None, req.timeout_s)
+    import hubconf
+    try:
+        # an empty folder of its own: a template's {cwd} may grant the tool all of it
+        with tempfile.TemporaryDirectory(prefix="hub-command-cwd-", dir=hubconf.private_tmp(), ignore_cleanup_errors=True) as cwd:
+            code, out, err = _run(req.prompt + _schema_note(req.schema), req.model, cwd, None, req.timeout_s)
+    except OSError as e:
+        return CompletionResult(False, stop="error", error=_("could not make a folder for the run: {e}", e=e))
     if code is None or code != 0:
         return CompletionResult(False, stop="error", error=err or f"exit {code}")
     if not out.strip():

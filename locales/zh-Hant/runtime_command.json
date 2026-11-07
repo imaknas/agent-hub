@@ -4,5 +4,6 @@
  "took longer than {secs} s": "超過 {secs} 秒",
  "no output: {detail}": "沒有輸出:{detail}",
  "(stderr is empty too)": "(stderr 也是空的)",
- "exit {code}: {detail}": "exit {code}:{detail}"
+ "exit {code}: {detail}": "exit {code}:{detail}",
+ "could not make a folder for the run: {e}": "沒辦法替這次執行建資料夾:{e}"
 }

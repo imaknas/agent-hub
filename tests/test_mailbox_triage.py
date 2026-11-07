@@ -219,6 +219,7 @@ class Triage(Base):
             def __init__(self, cmd, **kw):
                 started.append((cmd, kw["env"]))
         with mock.patch.object(self.m.subprocess, "Popen", P), \
+                mock.patch.object(self.m.hubconf, "projects", lambda: {"proj": {}}), \
                 mock.patch.object(self.m.hubconf, "get", lambda k, d=None: {"handler": "propose"} if k == "mailbox" else d):
             self.dispatch()
         cmd, env = started[0]
@@ -226,6 +227,34 @@ class Triage(Base):
         self.assertEqual(cmd[2:], ["mailbox", "proj", "m1"])
         self.assertEqual(self.vias("m1"), ["triage"], "no claim")
         self.assertEqual(json.loads(env["MAILBOX_LETTERS"]), ["m1"])
+
+
+class ProposeRefused(Base):
+    """mailbox.handler: propose for a sandboxed project, or one the index lacks: nothing starts, nothing is spent, the letter stays open
+    for sessions and the reason shows."""
+
+    def refused_with(self, docs):
+        self.real_handler()
+        self.send("m1", "proj", "request")
+        started = []
+        with mock.patch.object(self.m.subprocess, "Popen", lambda cmd, **kw: started.append(cmd)), \
+                mock.patch.object(self.m.hubconf, "projects", lambda: docs), \
+                mock.patch.object(self.m.hubconf, "get", lambda k, d=None: {"handler": "propose"} if k == "mailbox" else d):
+            self.dispatch()
+            why = load_propose().unsupported("proj")
+        self.assertEqual(started, [], "no run")
+        self.assertEqual(self.vias("m1"), [], "no triage spent, and nobody holds it")
+        self.assertEqual(self.m.runs_today(self.c, "proj"), 0)
+        self.assertEqual(self.rows("id='m1:received'"), [], "no word to the sender about a run that isn't")
+        self.assertEqual(self.rows("type='message.done' AND ref=?", "m1"), [], "never closed as handled")
+        self.assertEqual(json.loads(self.rows("type='job.failed' AND ref=?", "m1")[0]["payload"])["detail"], why)
+        return why
+
+    def test_sandboxed(self):
+        self.assertIn("proj", self.refused_with({"proj": {"enforce": {"sandbox": True}}}))
+
+    def test_not_in_the_index(self):
+        self.assertIn("proj", self.refused_with({}))
 
 
 class StartFailed(Base):

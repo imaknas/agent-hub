@@ -1241,6 +1241,7 @@ def cmd_doctor(argv: list[str]) -> int:
             add("info", _("the runtime {runtime} runs in a project's folder, and whether it runs git of its own there, outside any "
                           "sandbox, isn't known: a sandboxed project's repo config could then run as you", runtime=name))
     doctor_wake_misses(add)
+    doctor_propose(add)
     if runtime_ports.throwaway_only(rname):
         add("warn", _("the runtime {runtime} runs only in the platform's throwaway worktree: agent-shaped judgment points "
                       "other than {points} are refused with that reason", runtime=rname,
@@ -1354,6 +1355,18 @@ def cmd_doctor(argv: list[str]) -> int:
 
 
 WAKE_MISS_REMIND = 2   # letters in hubbus' window (WAKE_MISS_DAYS) whose wake reached a session that didn't take them
+
+
+def doctor_propose(add) -> None:
+    if (hubconf.get("mailbox") or {}).get("handler") != "propose":
+        return
+    import isolation
+    off = sorted(n for n, d in hubconf.projects().items() if isolation.sandboxed({**d, "name": n}))
+    if off:
+        add("warn", _("{settings} mailbox.handler is propose, and that is off for sandboxed projects ({projects}): an agent running as "
+                      "you in a folder the project can write can be sent elsewhere by it. Their letters stay open for their sessions, "
+                      "and each start that was refused shows on the status page", projects=", ".join(off)),
+            _("until the agent process itself runs under the sandbox, sessions handle those letters"))
 
 
 def doctor_wake_misses(add) -> None:

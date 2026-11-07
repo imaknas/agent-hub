@@ -35,9 +35,12 @@ def tearDownModule():
 
 class AcpCase(unittest.TestCase):
     def setUp(self):
-        self.tmp = pathlib.Path(tempfile.mkdtemp(prefix="hub-propose-test-"))   # where propose_apply makes its copy
-        self.ws = self.tmp / "ws"
+        self._secrets = hubconf.secrets_dir
+        secrets = pathlib.Path(tempfile.mkdtemp()).resolve()
+        hubconf.secrets_dir = lambda: secrets
+        self.ws = hubconf.throwaway_copy("test")   # where propose_apply makes its copy
         self.ws.mkdir()
+        self.tmp = self.ws.parent
         self.log = self.tmp / "agent.log"
         self.conf = {"agent": "fake", "agents": {"fake": {"command": [sys.executable, str(FAKE)]}}}
         self._get = hubconf.get
@@ -47,6 +50,7 @@ class AcpCase(unittest.TestCase):
 
     def tearDown(self):
         hubconf.get = self._get
+        hubconf.secrets_dir = self._secrets
 
     def run_mode(self, mode, **kw):
         env = {**os.environ, "FAKE_ACP_MODE": mode, "FAKE_ACP_LOG": str(self.log),
@@ -259,6 +263,15 @@ class Confinement(AcpCase):
         res = self.run_mode("ok", point="librarian-state")
         self.assertFalse(res.ok)
         self.assertEqual(self.received(), [])
+
+    def test_refuses_the_same_shape_in_the_system_temp_folder(self):
+        """It's every sandboxed project's to write: a copy there would be one a project made."""
+        other = pathlib.Path(tempfile.mkdtemp(prefix="hub-propose-test-")) / "ws"
+        other.mkdir()
+        res = self.m.run(runtime_ports.Task(point="mailbox-propose", prompt="hi", spec={}, cwd=str(other), timeout_s=30,
+                                            env={**os.environ, "HUB_THROWAWAY_COPY": str(other)}))
+        self.assertFalse(res.ok)
+        self.assertIn(str(other.resolve()), res.error)
 
     def test_refuses_a_marked_directory_that_is_not_the_platforms_copy(self):
         other = pathlib.Path(tempfile.mkdtemp()) / "ws"
@@ -529,11 +542,13 @@ class Live(unittest.TestCase):
     def test_read_and_answer(self):
         cmd = json.loads(os.environ["ACP_LIVE_COMMAND"])
         conf = {"agent": "live", "agents": {"live": {"command": cmd}}}
-        saved = hubconf.get
+        saved, saved_secrets = hubconf.get, hubconf.secrets_dir
         hubconf.get = lambda k, default=None: conf if k == "runtime.acp" else saved(k, default)
+        secrets = pathlib.Path(tempfile.mkdtemp()).resolve()
+        hubconf.secrets_dir = lambda: secrets
         try:
             import runtime_acp
-            ws = pathlib.Path(tempfile.mkdtemp(prefix="hub-propose-live-")) / "ws"   # where propose_apply makes its copy
+            ws = hubconf.throwaway_copy("live")   # where propose_apply makes its copy
             ws.mkdir()
             (ws / "secret-word.txt").write_text("periwinkle\n")
             res = runtime_acp.run(runtime_ports.Task(
@@ -542,7 +557,7 @@ class Live(unittest.TestCase):
                 env={**os.environ, "HUB_THROWAWAY_COPY": str(ws)},
                 output_schema={"type": "object", "properties": {"word": {"type": "string"}}, "required": ["word"]}))
         finally:
-            hubconf.get = saved
+            hubconf.get, hubconf.secrets_dir = saved, saved_secrets
         print(json.dumps(res._asdict(), ensure_ascii=False, default=str), file=sys.stderr)
         self.assertTrue(res.ok, res.error)
         self.assertEqual((res.structured_output or {}).get("word"), "periwinkle")

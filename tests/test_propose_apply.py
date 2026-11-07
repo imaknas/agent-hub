@@ -50,6 +50,19 @@ print(json.dumps({"replies": [{"reply_to": mid, "type": "done", "text": "use SQL
 '''
 
 
+# a stand-in agent that asks what a runtime that runs only in the throwaway copy asks, from inside the copy the platform really made
+ASKS_ACP = r'''
+import json, os, pathlib, re, sys
+sys.path.insert(0, "@BIN@")
+import runtime_acp, runtime_ports
+here = os.getcwd()
+cwd, why = runtime_acp._in_copy(runtime_ports.Task(point="mailbox-propose", prompt="", spec={}, cwd=here, env=dict(os.environ)))
+pathlib.Path(os.environ["PROPOSE_TEST_TRIES"]).write_text(json.dumps({"here": here, "copy": cwd, "why": why}))
+mid = re.search(r"- id ([^\s,]+),", open(sys.argv[1]).read()).group(1)
+print(json.dumps({"replies": [], "done": [{"id": mid, "note": "seen"}], "ask_owner": [], "summary": "seen"}))
+'''
+
+
 def sh(*cmd, cwd=None):
     return subprocess.run(cmd, cwd=cwd, check=True, capture_output=True, text=True).stdout.strip()
 
@@ -130,6 +143,40 @@ class ProposeApply(unittest.TestCase):
         self.assertIn("use SQLite (décidé)", inbox)
         status = json.loads((self.tmp / "state" / "agent-jobs" / "mailbox-demo" / "status.json").read_text())
         self.assertEqual(status["state"], "done", "dispatch reads status to decide whether to re-dispatch")
+
+    def letter(self):
+        r = self.run_("hubbus", "send", "--from", "agent-hub", "--to", "demo", "--type", "question", "--text", "which cache?")
+        self.assertEqual(r.returncode, 0, r.stderr)
+        return r.stdout.strip().split()[-1]
+
+    def test_the_copy_is_in_the_private_temp_folder_and_a_runtime_there_takes_it(self):
+        (self.tmp / "agent.py").write_text(ASKS_ACP.replace("@BIN@", str(BIN)))
+        mid = self.letter()
+        r = self.run_("propose_apply.py", "mailbox", "demo", mid)
+        self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
+        got = json.loads((self.tmp / "tries.json").read_text())
+        here = pathlib.Path(got["here"])
+        self.assertEqual(here.parent.parent, (self.tmp / "secrets" / "tmp").resolve())
+        self.assertTrue(here.parent.name.startswith("hub-propose-demo-"))
+        self.assertEqual((got["copy"], got["why"]), (got["here"], ""))
+        self.assertEqual(list((self.tmp / "secrets" / "tmp").iterdir()), [], "and gone")
+        self.assertEqual(sh("git", "worktree", "list", "--porcelain", cwd=self.ws).count("worktree "), 1)
+
+    def test_a_sandboxed_project_gets_no_copy_no_agent_and_its_letter_stays_open(self):
+        path = self.tmp / "config" / "projects" / "demo.yaml"
+        path.write_text(yaml.safe_dump({**yaml.safe_load(path.read_text()), "enforce": {"sandbox": True}}, allow_unicode=True))
+        mid = self.letter()
+        r = self.run_("propose_apply.py", "mailbox", "demo", mid)
+        self.assertEqual(r.returncode, 1, r.stdout + r.stderr)
+        out = json.loads(r.stdout.strip().splitlines()[-1])
+        self.assertEqual((out["ok"], out["applied"], out["done"]), (False, [], []))
+        self.assertIn("demo", out["error"])
+        self.assertFalse((self.tmp / "tries.json").exists(), "the agent never ran")
+        self.assertFalse(list((self.tmp / "secrets").rglob("hub-propose-*")))
+        self.assertEqual(sh("git", "worktree", "list", "--porcelain", cwd=self.ws).count("worktree "), 1)
+        import sqlite3
+        c = sqlite3.connect(next((self.tmp / "bus").rglob("*.db")))
+        self.assertEqual(c.execute("SELECT count(*) FROM events WHERE type='message.done' AND ref=?", (mid,)).fetchone()[0], 0, "never closed as handled")
 
     def test_note_a_hook_committed_is_still_adopted(self):
         """a session-end hook of the agent's runtime commits the memory notes inside the throwaway worktree (10-31): the

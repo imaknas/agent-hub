@@ -31,12 +31,12 @@ import pathlib
 import shutil
 import subprocess
 import sys
-import tempfile
 
 BIN = pathlib.Path(__file__).resolve().parent
 sys.path.insert(0, str(BIN))
 import hubconf  # noqa: E402
 import i18n  # noqa: E402
+import isolation  # noqa: E402
 import project_git  # noqa: E402
 
 _ = i18n.domain(__file__)
@@ -79,6 +79,21 @@ def changed(project: str, repo: pathlib.Path, base: str, sigs: dict) -> list[tup
         if isinstance(rows, list) else []
 
 
+def unsupported(project: str) -> str | None:
+    """Why this project can't have a propose run, or None. The agent runs as the user in the copy, and a sandboxed project's own job
+    has to make that copy, so it is in a folder the project can write: it can then swap it for a link wherever that folder is, and the
+    agent follows. Off, and said, until the agent process itself runs under the sandbox (AGENTS.md, "Tool neutrality"). A project the
+    registry's index doesn't have can't be told apart from one, so that is off too."""
+    doc = hubconf.projects().get(project)
+    if doc is None:
+        return _("{project} is not in the registry's index, so whether it is sandboxed can't be told: no propose run for it",
+                 project=project)
+    if isolation.sandboxed({**doc, "name": project}):
+        return _("mailbox.handler: propose is off for {project}: it is sandboxed, and an agent running as you in a folder it can write "
+                 "can be sent elsewhere by it. Its letters stay open for its sessions", project=project)
+    return None
+
+
 def run(project: str, ws: pathlib.Path, point: str, prompt: str, allow: list[str], timeout_s: int = 1800) -> dict:
     """allow: globs relative to ws (e.g. `.agent-memory/memory/**`). Every git command in the project's repo, and the
     copy back into its folder, run as the project (project_git.py); a symlink the agent leaves is refused, never
@@ -87,11 +102,16 @@ def run(project: str, ws: pathlib.Path, point: str, prompt: str, allow: list[str
     All or nothing: a run that failed (or that the runtime cancelled or left incomplete, or that ended without the
     structured answer the platform acts on) gets nothing copied back and hands back no output (no replies, no
     closes); the mailbox caller then holds the letters and asks the owner (hold_and_ask)."""
-    tmp = pathlib.Path(tempfile.mkdtemp(prefix=f"hub-propose-{project}-", dir=project_git.scratch_dir(project, ws)))
-    wt, mem = tmp / "ws", ws / ".agent-memory"
-    added, bases, sigs = [], {}, {}
     def failed(why: str) -> dict:
         return {"ok": False, "output": None, "text": None, "applied": [], "refused": [], "error": why}
+    if (why := unsupported(project)):
+        return failed(why)
+    try:
+        wt = hubconf.throwaway_copy(project)   # the agent runs in it as the user: nothing a sandbox can write
+    except OSError as e:
+        return failed(_("could not make the throwaway copy: {e}", e=e))
+    tmp, mem = wt.parent, ws / ".agent-memory"
+    added, bases, sigs = [], {}, {}
     try:
         try:
             bases[wt] = add_worktree(project, ws, wt)   # what the agent started from

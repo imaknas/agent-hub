@@ -21,6 +21,7 @@ from unittest import mock
 ROOT = pathlib.Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "bin"))
 import runtime_ports  # noqa: E402
+import hubconf as _hubconf  # noqa: E402
 from sessions import Turn  # noqa: E402  the scenario's entries (Claude's fixture writes them as transcripts)
 
 UTC = datetime.timezone.utc
@@ -56,6 +57,14 @@ RUN_OK = {"text": "done", "structured_output": {"x": 1}, "cost": 0.5, "session":
 
 def _iso(t):
     return t.isoformat().replace("+00:00", "Z")
+
+
+def setUpModule():
+    """The runtimes' temp folders, away from the tree's own."""
+    d = pathlib.Path(tempfile.mkdtemp()).resolve()
+    p = mock.patch.object(_hubconf, "secrets_dir", lambda: d)
+    p.start()
+    unittest.addModuleCleanup(p.stop)
 
 
 class ClaudeFixture:
@@ -263,7 +272,8 @@ class AcpFixture:
     def configure_run(self, tmp: pathlib.Path, mode: str) -> dict:
         # the Task has no cwd = the process's own directory: made where propose_apply makes its copy, and marked as
         # it marks it
-        copy = pathlib.Path(tempfile.mkdtemp(prefix="hub-propose-contract-")) / "ws"
+        import hubconf
+        copy = hubconf.throwaway_copy("contract")
         copy.mkdir()
         self._cwd = os.getcwd()
         os.chdir(copy)

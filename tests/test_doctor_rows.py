@@ -53,6 +53,27 @@ def T(msgid: str, **kw) -> str:
     return i18n.translate("agenthub", msgid, kw)
 
 
+class ProposeOff(unittest.TestCase):
+    """mailbox.handler: propose, with sandboxed projects: the doctor says which are off, and why."""
+
+    def rows(self, handler, docs):
+        rows = []
+        with mock.patch.object(hubconf, "get", lambda k, d=None: {"handler": handler} if k == "mailbox" else (d if d is not None else {})), \
+                mock.patch.object(hubconf, "projects", lambda: docs):
+            load_agenthub().doctor_propose(lambda *a: rows.append(a))
+        return rows
+
+    def test_named(self):
+        got = self.rows("propose", {"box": {"enforce": {"sandbox": True}}, "open": {}})
+        self.assertEqual(len(got), 1)
+        self.assertEqual(got[0][0], "warn")
+        self.assertIn("(box)", got[0][1], "the sandboxed one, and only it")
+
+    def test_nothing_without_a_sandboxed_project_or_the_handler(self):
+        self.assertEqual(self.rows("propose", {"open": {}}), [])
+        self.assertEqual(self.rows("headless", {"box": {"enforce": {"sandbox": True}}}), [])
+
+
 class Doctor(unittest.TestCase):
     PORTS = "the runtime {runtime} has no {missing}: routing a letter takes its sessions as idle, and reads nothing they said"
 

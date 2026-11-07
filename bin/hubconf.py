@@ -180,13 +180,74 @@ def session_addresses_dir() -> pathlib.Path:
     return secrets_dir() / "sessions"
 
 
+def _private_tmp_path() -> pathlib.Path:
+    return secrets_dir() / "tmp"
+
+
 def private_tmp() -> pathlib.Path:
     """A temp folder for what the platform runs, loads or trusts as the user. The system's isn't one: every sandboxed project's own
     processes can write it (the same uid, whatever its mode). This is under the secrets directory, which every sandbox is denied
-    both ways, and it holds no repo or rules file above it (.state is under the hub's own). Not backed up, not scanned."""
-    d = secrets_dir() / "tmp"
-    d.mkdir(mode=0o700, parents=True, exist_ok=True)
+    both ways. An instance directory has no repo or rules file above it (.state is under the hub's own); the old layout
+    (<hub>/.secrets) does, so a run that must not read one says so itself, as `complete` does. Not backed up, not scanned.
+    Take a folder of your own in it for a run, never this one as a working directory: what a run may reach, others' files are in reach of."""
+    top = secrets_dir()
+    top.mkdir(mode=0o700, parents=True, exist_ok=True)   # a mode applies to the last folder made, so one at a time
+    d = _private_tmp_path()
+    d.mkdir(mode=0o700, exist_ok=True)
     return d
+
+
+PRIVATE_TMP_KEEP_DAYS = 7   # far over the longest run's time limit (the longest in contracts/llm-points.yaml is an hour)
+
+
+def prune_private_tmp(dry_run: bool = False, now: float | None = None) -> list[str]:
+    """Leftovers of runs that didn't get to clean up (killed, or kept by a failure): what's in private_tmp with nothing written for
+    PRIVATE_TMP_KEEP_DAYS and no process working in it. A running job's folder fails one or the other: a run ends at its time limit,
+    and a silent one still has its agent in the folder. Returns the names; a link is removed, never followed."""
+    import shutil
+    import time
+    top = _private_tmp_path()
+    limit = (time.time() if now is None else now) - PRIVATE_TMP_KEEP_DAYS * 86400
+
+    def newest(p: pathlib.Path) -> float:
+        best = p.lstat().st_mtime
+        if p.is_dir() and not p.is_symlink():
+            for root, dirs, files in os.walk(p):
+                for name in [*dirs, *files]:
+                    best = max(best, os.lstat(os.path.join(root, name)).st_mtime)
+        return best
+
+    gone = []
+    for p in sorted(top.iterdir()) if top.is_dir() else []:
+        try:
+            if newest(p) >= limit or cwd_users(p):
+                continue
+            if not dry_run:
+                if p.is_dir() and not p.is_symlink():
+                    shutil.rmtree(p)
+                else:
+                    p.unlink()
+            gone.append(p.name)
+        except OSError:
+            continue   # the next night's
+    return gone
+
+
+COPY_PREFIX = "hub-propose-"   # with COPY_LEAF: where propose_apply makes its throwaway copy, and how a runtime knows one
+COPY_LEAF = "ws"
+
+
+def throwaway_copy(project: str) -> pathlib.Path:
+    """A path for a throwaway copy of this project's repo, not made yet, in a run's folder of its own."""
+    import tempfile
+    return pathlib.Path(tempfile.mkdtemp(prefix=f"{COPY_PREFIX}{project}-", dir=private_tmp())).resolve() / COPY_LEAF
+
+
+def is_throwaway_copy(cwd) -> bool:
+    """Whether this folder is where throwaway_copy puts one (by path only: no git is run here)."""
+    real = pathlib.Path(os.path.realpath(cwd))
+    return real.name == COPY_LEAF and real.parent.name.startswith(COPY_PREFIX) \
+        and real.parent.parent == pathlib.Path(os.path.realpath(_private_tmp_path()))
 
 
 def session_address_file(session: str) -> pathlib.Path | None:

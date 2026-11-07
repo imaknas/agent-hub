@@ -228,7 +228,7 @@ class Backup(Base):
 
 
 class Propose(Base):
-    def test_worktree_add_runs_as_the_project(self):
+    def test_a_sandboxed_project_gets_no_copy_and_no_agent(self):
         pa = load("propose_apply_holes", BIN / "propose_apply.py")
         r = self.repo("proj")
         hostile(r, self.marker)
@@ -242,9 +242,10 @@ class Propose(Base):
         real = subprocess.run
         with mock.patch.object(pa.subprocess, "run", no_agent):
             res = pa.run("proj", r, "mailbox", "prompt", ["memory/**"])
-        self.assertFalse(res["ok"], "the copy could not be made: a failed run (its letters are held, the owner asked)")
+        self.assertFalse(res["ok"], "off, and said: its letters are held, the owner asked")
+        self.assertEqual(res["error"], pa.unsupported("proj"))
         self.assertNotRun()
-        self.assertTrue(self.wrapped)
+        self.assertEqual(self.wrapped, [], "not even the project's own job: there's no copy to make")
         self.assertEqual(agents, [], "the agent never started")
 
     def test_copy_back_does_not_follow_a_symlink_the_agent_made(self):
