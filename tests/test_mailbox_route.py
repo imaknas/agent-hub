@@ -289,14 +289,28 @@ class Tick(Harness):
         self.assertEqual(self.ended_why("m1"), [], "told: no pre-empting a session working on it")
         self.assertEqual(self.state("m1").holder, "S1")
 
-    def test_a_telling_after_the_pickup_doesnt_bring_it_back(self):
+    def test_a_telling_after_the_pickup_doesnt_bring_that_route_back(self):
         self.open("S1")
         self.send("m1", "proj", "request")
         self.dispatch()
         self.age_wake("m1", self.m.WAKE_PICKUP_MIN + 1)
-        self.hook("prompt", "S1")
         st = self.state("m1")
         self.assertEqual((st.held, st.ended), (False, "pickup"))
+
+    def test_a_session_back_after_its_pickup_holds_it_by_its_own_hook(self):
+        """Someone comes back to the session ten minutes after the wake and starts on it: its hook's route is a new one, and the
+        old wake's five minutes aren't its."""
+        self.open("S1", "S2")
+        self.seen("S1", minutes_ago=1)
+        self.send("m1", "proj", "request")
+        self.dispatch()
+        self.age_wake("m1", self.m.WAKE_PICKUP_MIN + 5)
+        self.assertIn("[m1]", self.hook("prompt", "S1"))
+        st = self.state("m1")
+        self.assertEqual((st.held, st.holder, st.ended), (True, "S1", None))
+        self.dispatch()
+        self.assertEqual(self.woken(), ["S1"], "nobody else is asked")
+        self.assertEqual(self.hook("prompt", "S2"), "")
 
     def test_a_route_lapsing_with_no_next_candidate_any_hook_shows_it(self):
         self.open("S1")

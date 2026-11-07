@@ -1090,7 +1090,7 @@ def route_ended(c, r, route, taken, live) -> str | None:
         return "closed"
     told = told_at(c, r["id"], route.session) if route.session else None
     woken = woken_at(c, r["id"], route.session) if route.session else None
-    if woken:
+    if woken and woken >= route.ts:   # this route's wake: a session told later by its own hook starts a route of its own
         pickup = datetime.datetime.fromisoformat(woken) + datetime.timedelta(minutes=WAKE_PICKUP_MIN)
         if now() >= pickup and (not told or datetime.datetime.fromisoformat(told) > pickup):
             return "pickup"

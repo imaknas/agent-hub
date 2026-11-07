@@ -598,7 +598,10 @@ been done.
 - **`pickup` is its own reason for an ended route**, beside `window`, `closed`, `taken`, `passed` and `wake-failed`, so the log and a reader can tell "never got it" from "got it, did nothing".
 - **A wake that fails ends its route at once** (`ended: wake-failed`), row or not: an unreachable session mustn't hold the letter for five minutes. It isn't tried again for that letter. It
   costs no budget. A runtime raising `Unsupported` gets no `message.woken`, as before, and its route ends too.
+- **A wake's five minutes are its own route's.** A session told after them by its own hook gets a route of its own (`by: hook`), which the old wake doesn't end: someone coming back to
+  the session ten minutes later and starting on the letter isn't pre-empted. The ended route itself never revives.
 - **The budget counts batches of wakes that reached a session** (`message.woken` `ok` true, `batch`): one per session per tick, however many letters. Notices spend it as the design says.
+  Rows from before this step have no `batch` and count nothing, so the day of the upgrade starts at zero.
   A session the tick already owes takes more letters free. A wake still goes through the check when sent, so nothing races past it.
 - **The tick's budget stop sends the fixed line and goes on down the order**, once per letter. Step 4 of the tick isn't reached then: status isn't asked for a letter that can't wake.
 - **A wake is sent after the views, and a tick cut short sends none.** The route is on the bus by then, untold, so the next tick's "busy, now idle" path owes it again. Before sending, a
