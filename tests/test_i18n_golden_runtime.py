@@ -289,6 +289,11 @@ _unpin = None
 def setUpModule():
     global _unpin
     _unpin = golden_lang.pin_names()
+    # the runtimes' temp folders, away from the tree's own
+    d = pathlib.Path(tempfile.mkdtemp()).resolve()
+    p = mock.patch.object(hubconf, "secrets_dir", lambda: d)
+    p.start()
+    unittest.addModuleCleanup(p.stop)
 
 
 def tearDownModule():

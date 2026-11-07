@@ -55,8 +55,13 @@ class Consolidate(unittest.TestCase):
 
     def setUp(self):
         self.tmp = pathlib.Path(tempfile.mkdtemp()).resolve()
-        for d in ("bare", "copies", "hub/.state", "hub/.logs", "bin", "data"):
+        for d in ("bare", "copies", "hub/.state", "hub/.logs", "bin", "data", "private"):
             (self.tmp / d).mkdir(parents=True)
+        sys.path.insert(0, str(ROOT / "bin"))
+        import hubconf
+        private = mock.patch.object(hubconf, "private_tmp", lambda: self.tmp / "private")   # a run it keeps stays there, not in the tree's
+        private.start()
+        self.addCleanup(private.stop)
         for f in ("git-safe-push.sh", "with-lock.sh", "check-state-todo.py"):
             (self.tmp / "bin" / f).symlink_to(ROOT / "bin" / f)
         self.commit_ok(True)
@@ -244,7 +249,7 @@ class Consolidate(unittest.TestCase):
 
         text = "\n".join(f"=== {k}\n{v}" for k, v in out) + "\n"
         text = text.replace(str(self.tmp), "<TMP>").replace(datetime.date.today().isoformat(), "<REAL-TODAY>")
-        text = re.sub(r"(?<![\w>])/\S*?/consolidate-(\w+)-\w{8}(?:/repo)?", r"<CLONE-\1>", text)
+        text = re.sub(r"(?:<TMP>|(?<![\w>]))/\S*?/consolidate-(\w+)-\w{8}(?:/repo)?", r"<CLONE-\1>", text)
         text = re.sub(r"fatal: [^\n']*", "fatal: <git error>", text)
         text = re.sub(r"\[\d\d:\d\d:\d\d\]", "[<T>]", text)
         return re.sub(r"\b[0-9a-f]{7,40}\b", "<sha>", text)

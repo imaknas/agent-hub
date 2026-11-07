@@ -5,5 +5,7 @@
  "Removed worktree: {line}": "已移除 worktree:{line}",
  "Skipped: {line}": "跳過:{line}",
  "Would free {mb} MB in total (dry-run, nothing was touched)": "共會釋放 {mb} MB(dry-run,沒有動任何東西)",
- "Freed {mb} MB in total": "共已釋放 {mb} MB"
+ "Freed {mb} MB in total": "共已釋放 {mb} MB",
+ "Would remove a run's leftovers: {line}": "會移除某次執行的殘留:{line}",
+ "Removed a run's leftovers: {line}": "移除了某次執行的殘留:{line}"
 }

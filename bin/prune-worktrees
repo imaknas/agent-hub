@@ -14,6 +14,7 @@ import pathlib
 import sys
 
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
+import hubconf  # noqa: E402
 import i18n  # noqa: E402
 import worktrees  # noqa: E402
 
@@ -29,6 +30,8 @@ if "--auto" in args:
         print(_("Would remove worktree: {line}", line=line) if dry else _("Removed worktree: {line}", line=line))
     for line in res["skipped"]:
         print(_("Skipped: {line}", line=line))
+    for line in hubconf.prune_private_tmp(dry_run=dry):
+        print(_("Would remove a run's leftovers: {line}", line=line) if dry else _("Removed a run's leftovers: {line}", line=line))
     print(_("Would free {mb} MB in total (dry-run, nothing was touched)", mb=res['freed_mb']) if dry
           else _("Freed {mb} MB in total", mb=res['freed_mb']))
     sys.exit(0)

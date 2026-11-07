@@ -61,7 +61,7 @@ def key(item: tuple[str, str | None]) -> str:
 _state = pathlib.Path(__file__).resolve().parents[1] / ".state"
 _state.mkdir(parents=True, exist_ok=True)
 GUARD = pathlib.Path(tempfile.mkdtemp(prefix="run-tests-guard-", dir=_state))
-(GUARD / "home").mkdir()
+(GUARD / "home" / "workspace").mkdir(parents=True)
 (GUARD / "bin").mkdir()
 CALLS = GUARD / "calls.log"
 (GUARD / "bin" / "claude").write_text(f'#!/bin/sh\necho "$PWD :: $*" >> "{CALLS}"\necho "run-tests: no test may start a real claude" >&2\nexit 97\n')
@@ -85,6 +85,14 @@ def env_for(tests: pathlib.Path, lang: str | None) -> dict[str, str]:
     if lang:
         env["I18N_GOLDEN_LANG"] = lang
     return env
+
+
+def private_tmp_entries(tests: pathlib.Path) -> set[str]:
+    """What is in hubconf.private_tmp, as the tests see it."""
+    r = subprocess.run([sys.executable, str(pathlib.Path(__file__).resolve().parent / "hubconf.py"), "dir", "secrets"], capture_output=True,
+                       text=True, env=env_for(tests, None))
+    d = pathlib.Path(r.stdout.strip()) / "tmp"
+    return {p.name for p in d.iterdir()} if r.returncode == 0 and d.is_dir() else set()
 
 
 def test_ids(item: tuple[str, str | None], tests: pathlib.Path) -> list[str]:
@@ -187,6 +195,7 @@ def main(argv: list[str]) -> int:
             with lock:
                 results[key(it)] = res
 
+    private_before = private_tmp_entries(tests)
     t0 = time.monotonic()
     threads = [threading.Thread(target=worker, daemon=True) for _ in range(min(jobs, len(work)))]
     for t in threads:
@@ -221,7 +230,14 @@ def main(argv: list[str]) -> int:
         except OSError:
             pass
     calls = CALLS.read_text().splitlines() if CALLS.exists() else []
+    # what a test left where a real run would write real files: the tests' HOME, and this tree's private temp folder
+    leaks = [f"HOME: {p.relative_to(GUARD / 'home')}" for p in (GUARD / "home").rglob("*") if not p.is_dir()]
+    leaks += [f"private temp: {name}" for name in sorted(private_tmp_entries(tests) - private_before)]
     shutil.rmtree(GUARD, ignore_errors=True)
+    if leaks:
+        failed.append("leaks")
+        total["errors"] += 1
+        print("======== tests left files behind\n" + "\n".join(leaks[:20]) + "\n", flush=True)
     if calls:
         failed.append("real-agent-guard")
         total["errors"] += 1

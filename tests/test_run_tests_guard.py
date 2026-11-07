@@ -22,11 +22,34 @@ class T(unittest.TestCase):
 """
 
 
+WRITES_HOME = """import os, pathlib, unittest
+class T(unittest.TestCase):
+    def test_x(self):
+        (pathlib.Path(os.environ["HOME"]) / "left").write_text("x")
+"""
+LEAVES_TEMP = """import os, pathlib, unittest, sys
+class T(unittest.TestCase):
+    def test_x(self):
+        sys.path.insert(0, os.environ["REAL_BIN"])
+        import hubconf
+        (hubconf.private_tmp() / "consolidate-left").mkdir()
+"""
+
+
 class Guard(unittest.TestCase):
     def run_on(self, body):
         with tempfile.TemporaryDirectory() as d:
             (pathlib.Path(d) / "test_one.py").write_text(body)
-            return subprocess.run([sys.executable, str(BIN / "run-tests"), d], capture_output=True, text=True, timeout=120, env={**os.environ})
+            env = {**os.environ, "AGENT_HUB_ROOT": d, "REAL_BIN": str(BIN)}   # the tree under test: what it leaves is checked there
+            env.pop("BRUNNA_ROOT", None)
+            return subprocess.run([sys.executable, str(BIN / "run-tests"), d], capture_output=True, text=True, timeout=120, env=env)
+
+    def test_what_a_test_leaves_in_its_home_or_the_private_temp_folder_fails_the_run(self):
+        for body, says in ((WRITES_HOME, "HOME: left"), (LEAVES_TEMP, "private temp: consolidate-left")):
+            with self.subTest(says=says):
+                r = self.run_on(body)
+                self.assertNotEqual(r.returncode, 0, r.stdout)
+                self.assertIn(says, r.stdout)
 
     def test_a_call_fails_the_run_and_says_so(self):
         r = self.run_on(CALLS)

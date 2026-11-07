@@ -43,6 +43,15 @@ def req(**kw):
     return types.SimpleNamespace(**r)
 
 
+def setUpModule():
+    """The runtimes' temp folders, away from the tree's own."""
+    import tempfile
+    d = pathlib.Path(tempfile.mkdtemp()).resolve()
+    p = mock.patch.object(hubconf, "secrets_dir", lambda: d)
+    p.start()
+    unittest.addModuleCleanup(p.stop)
+
+
 class Golden(unittest.TestCase):
     maxDiff = None
 

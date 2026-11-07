@@ -43,5 +43,6 @@
  "a Claude Pro, Max, Ultra, Team or Enterprise plan": "Claude Pro、Max、Ultra、Team 或 Enterprise 方案",
  "everything: letters and note reminders inside your chats, and work in the background": "全部:對話中直接收到信和寫筆記的提醒,還有背景工作",
  "the worktree hooks in {file}": "{file} 裡的 worktree hook",
- "a session can be woken once its first turn has ended, while it has been idle under {days} days; a background session from the agent view can stop after about an hour unless pinned, and then can't be": "session 跑完第一輪之後才叫得醒,閒置超過 {days} 天就叫不醒;agent view 的背景 session 沒釘選的話大約一小時後可能就停了,停了就叫不醒"
+ "a session can be woken once its first turn has ended, while it has been idle under {days} days; a background session from the agent view can stop after about an hour unless pinned, and then can't be": "session 跑完第一輪之後才叫得醒,閒置超過 {days} 天就叫不醒;agent view 的背景 session 沒釘選的話大約一小時後可能就停了,停了就叫不醒",
+ "could not make a folder for the run: {e}": "沒辦法替這次執行建資料夾:{e}"
 }
