@@ -1,161 +1,201 @@
 # Mail goes to a session first
 
-Status: design, not built. Replaces the delegation part of the routing in `docs/design/mailbox-routing.md`; builds on
-the wake of `docs/design/mailbox-runtimes.md` (B1) and the confinement of its "11-02" section.
+Status: design r2, not built. r2 follows two cold reviews of r1 (one against the code, one on safety and on what the tool
+documents) and the owner's decision on permissions. Replaces the delegation part of the routing in
+`docs/design/mailbox-routing.md`; builds on the wake in `docs/design/mailbox-runtimes.md` (B1).
 
 ## The problem
 
-The owner's rule: a request or question goes first to a session that already exists and has context. If that session
-is idle, it is woken. A headless agent is the last resort, and it must not take a letter away quietly.
+The owner's rule: a request or question goes first to a session that already exists and has context. If that session is
+idle, it is woken. A headless agent is the last resort, and it must not take a letter away quietly.
 
-What happens today, from one real case. A request arrived at 16:56:42. Two sessions of the project were open, one of them
-used 12 minutes earlier. At 16:56:59 a headless handler was dispatched and no session was woken. The handler can't change
-code or read other projects, so it could only ask the owner and write status letters. The letter was recorded as
-"the platform is handling it" (`claimed`, `take_state` = taken), so hooks stopped treating it as work. The sender got four
-status letters over the next hours, two of them corrections: the handler said it had written a memory note, and the write
-had been denied. One of those runs had been dispatched for other letters; it found this one in `brunna inbox`.
+What happens today, from one real case. A request arrived at 16:56:42. Two sessions of the project were open, one used 12
+minutes earlier. At 16:56:59 a headless handler was dispatched and no session was woken. The handler can't change code or
+read other projects, so it could only ask the owner and write status letters. The letter was recorded as "the platform is
+handling it", so hooks stopped treating it as work. The sender got four status letters over the next hours, two of them
+corrections: the handler said it had written a memory note, and the write had been denied. One of those runs had been
+started for other letters and found this one in `brunna inbox`.
 
 Why, in `hubbus dispatch`:
 
 1. A delegation wakes a session only if `active_sessions` has it: a hook within `CONVERSATION_WAIT_MIN` (5 minutes). A
-   session that has really gone idle, the one a wake exists for, is not woken.
+   session that has really gone idle isn't woken.
 2. A background fork needs activity within 24 hours and a context within `RESUME_MAX_TOKENS` (150k). Long-lived sessions
-   are far over it (the two here: 566k and 825k).
+   are far over it (566k and 825k here).
 3. Everything else goes to the handler at once.
+4. The waiter that makes a wake possible leaves after 24 hours and can't re-arm without a turn. At the time of writing,
+   3 or 4 of 12 open sessions had one.
 
-On the bus, across all projects so far: 11 wakes, 10 successful, all of them notices replying to a session. The one
-wake for a question failed. No request or question has ever woken a session.
+When a waiter is alive the wake works for requests too: one request was woken, seen 2 seconds later, acked after 12 and
+closed in under 3 minutes.
+
+## The owner's decision: a woken session keeps its permissions
+
+A wake starts a turn from a letter, in a session with its saved permissions and maybe nobody watching. Any project that can
+write the bus can cause one, and text a project took from outside can reach it. The reviewers asked for a confined turn or a
+per-project opt-in; the owner chose (11-07): **a session keeps whatever permissions it has.** No mode check, no confined
+turn, no trust list.
+
+What this means, so it is on record:
+
+- This is a line the platform doesn't guarantee. The rules tell the session that letters are data from other agents and
+  that anything irreversible or external waits for the owner; that is advice. The risk is accepted, including a letter
+  reaching a session that skips prompts.
+- A session in a mode that prompts (Manual) stops at the first dialog until the owner returns, since the platform adds no
+  rules for it. That is what the mode means. It holds the letter until the seen limit below.
+- A sender's name isn't authenticated for unsandboxed projects, and it decides nothing here.
+- Unknown, not probed: whether auto mode's classifier counts hook-delivered text as user intent.
+
+There is one off switch: `mailbox.wake: false` in `brunna.json`, or in a project's registry entry (a security field,
+which `manifest.update` can't change). Off means no wake for that project; its mail goes to triage.
 
 ## What changes
 
-For a request or question nobody has taken:
+For a request or question nobody has taken, in this order:
 
-1. **Candidates**: open sessions of the project that can be woken right now (below).
-2. **Pick one** (below) and **wake it**. Waking uses the session itself, not a copy, so no token limit applies.
-3. **It has `WAKE_PICKUP_MIN` (5 minutes) to take the letter**: ack, reply or done. `brunna pass <id> --note …` says "not
-   mine" and moves on at once. No answer, or a pass: the next candidate. Each session is tried once per letter.
-4. **No candidates left**: the triage handler (below). The letter stays open for the next session.
+1. **An MCP session uses the project**: held as today, up to `MCP_HOLD_MAX_MIN` (design A3 stays).
+2. **A session was active in the last 5 minutes but has no waiter** (in its first turn, or mid-turn after a wake): wait, as
+   today. Its hook delivers the letter.
+3. **Candidates exist**: pick one (below). If it is idle, wake it. If it is busy, don't wake it: its hook delivers.
+4. **The picked session has its window** (below). `brunna pass <id>` or no answer moves to the next candidate. Each session
+   is tried once per letter.
+5. **None left**: triage. A project with the wake port never uses the delegation fork. Runtimes without the port keep the
+   fork, then triage. `runtime.default: none` has neither: letters stay in the mailbox, as today.
 
-A letter already seen by a session but not taken within `TAKE_TIMEOUT_MIN` goes to the next candidate, not to a handler.
-
-A reply to a session (`to_session`) keeps its priority: that session is the first candidate if it can be woken. If it
-isn't running at all and its context is small, today's background resume still applies; it is the only way to reach a
-closed session. The delegation fork goes away for runtimes with the wake port and stays for runtimes without it.
+A reply to a session (`to_session`) follows the same order, with that session first if it is among the recipient project's
+candidates; a `to_session` outside them is ignored. If that session isn't running and its context is small, today's
+background resume applies: it is the only way to reach a closed session.
 
 ### Candidates
 
-Presence rows of the project ∩ `live_sessions()` ∩ a new optional sessions port `can_wake(sid)` (Claude: the waiter's
-heartbeat is fresh). Never: MCP rows, lease sessions, the platform's own runs (they have no presence), and sessions whose
-recorded permission mode skips prompts (see "Waking is a trust decision"). No limit on how long a session has been idle.
+Presence rows of the project ∩ `live_sessions()` ∩ `can_wake(sid)` (optional sessions port; Claude: the waiter's heartbeat
+is fresh). Never MCP rows, lease sessions or the platform's own runs. A session belongs to a project by where its process
+record says it is (`.live` cwd), so a session that wandered into another project's folder isn't that project's candidate.
 
-A brand-new session has no waiter until its first turn ends, so it is no candidate. Its hook still delivers mail.
+### How long a session can wait
 
-### Picking one, in order
+The waiter's hook timeout goes from 1 day to 14 days (`WAIT_TIMEOUT_S`). That needs a live check: a timer that overflows
+could fire at once, so 14 days stays well under Node's 24.8-day timer limit, and the first armed waiter is watched before
+this ships. A session idle longer isn't a candidate; the status page counts open sessions with no waiter and says why, so
+this is never silent. Doctor gets a row for the ports a runtime lacks.
+
+### Picking one
 
 1. One candidate: that one.
-2. The session a reply is addressed to, or the one that last acted in this thread.
-3. Otherwise judgment point `mailbox-route`: `shape: completion`, `model_group: fast`, a JSON schema, a short timeout.
-   Input, all marked as data: the letter's sender, type and first 1000 characters; for each candidate its id, branch or
-   worktree name, idle time, letters it sent, its merge reports, and its last reply (below).
-   Output: `{session, reason}`. The platform checks that `session` is in the list, so the worst a crafted letter can do
-   is pick a wrong candidate.
-4. The model fails, times out, answers outside the list, or no model is set up: the most recently active candidate.
-   Routing never waits on a model and never fails because of one.
+2. The `to_session`, or the session that last acted in this thread.
+3. Otherwise judgment point `mailbox-route`: `shape: completion`, `model_group: fast`, a JSON schema with one field,
+   `session`. The platform checks that it is in the list. **No free text from the model is kept anywhere:** there is no
+   reason field, because a crafted letter could have the model copy a last reply into it and read it back with `brunna show`.
+4. The model fails, times out, answers outside the list, or none is set up: the most recently active candidate.
 
-The call runs outside any bus transaction, once per letter per round. Several letters from one sender in one round reuse
-the answer. The choice, `by` (`only|thread|model|recent`) and the reason go on the bus (`message.routed`), so a wrong pick
-can be seen and the point can be evaluated later through `bin/evals`.
+The call has a 15-second timeout and the dispatch tick spends at most 30 seconds on them, then falls back to step 4: the
+dispatch loop is serial and also carries every project's mail and the sandboxed outboxes. It is not recorded for evals.
+What goes on the bus is `message.routed`: `{session, by: only|thread|model|recent, round}`.
+
+What the model reads, all marked as data: the letter's sender, type and first 1000 characters, and for each candidate its
+id, branch or worktree name, idle time, plus the gated text below.
 
 ### The last reply
 
-The owner's decision: the model may read each candidate's last reply, because metadata alone says almost nothing about a
-session in the main checkout that has merged nothing.
+The owner's decision: the model may read each candidate's last reply, since metadata says little about a session in the
+main checkout. The text (the last reply, and the first lines of letters it sent and its merge reports) goes only when:
 
-The waiter's Stop hook input carries the final assistant text (`last_assistant_message`). `runtime_claude` keeps its last
-500 characters in `secrets_dir()/sessions/<sid>.last` (mode 600), next to the other per-session files: no sandbox reads it,
-it isn't backed up, and SessionEnd and the prune remove it. A runtime without it gives none. The neutral port is
-`session_summary(sid) -> str | None`.
+- the project's `privacy.reflection` is `include` (the owner's choice of gate, 11-07; that label was not written with this
+  in mind), and
+- the point resolves to the runtime that session already uses, with no `llm.points` override to another provider.
 
-It is sent only when the project's `privacy.reflection` is `include` and the point's provider is the one that session's
-runtime already talks to. Otherwise that candidate goes with metadata only. This is a deliberate exception to "only
-statistics leave the machine", which the weekly review keeps.
+Otherwise that candidate goes with metadata only. `.last` holds the last 500 characters of `last_assistant_message`, and
+isn't written at all for a project whose label isn't `include`. `session_file` learns the suffix. The prune keeps `.last`
+while the session's process record is alive (today it would delete it after 10 minutes), and removes it when the session
+ends. Nothing about it reaches the bus.
 
-### One session at a time
+### The window
 
-Today any session's hook that fires first delivers a letter. With a pick, that would race: a busy session could see it
-first. `message.routed` holds the letter for the picked session during its window. Other sessions' hooks don't announce
-it as new; `brunna inbox` still lists it everywhere, marked with who was asked, and anyone may still take it. A person
-who is talking to another session and wants it just acks it.
+- **Not seen within `WAKE_PICKUP_MIN` (5 minutes)**: next candidate.
+- **Seen by the picked session**: it holds the letter until `TAKE_TIMEOUT_MIN` (60 minutes), so a session working for 20
+  minutes isn't pre-empted. Then next candidate.
+- **Acked, replied or done**: taken. The wake notice says so: `brunna ack <id>` if it's yours, `brunna pass <id>` if it isn't.
+- **`pass`**: its own event, `message.passed`, never a `message.delivered`.
 
-### Waking is a trust decision
+While a letter is routed to one session, other sessions' hooks don't announce it as new. `brunna inbox` lists it with
+who was asked, and listing it there doesn't mark it delivered. Anyone may still ack it: a person talking to another session
+who wants it just takes it. `message.routed` to a session lifts the `REPLY_WAIT_MIN` filter for that session, so the next
+candidate of a `to_session` letter can see it.
 
-The 11-02 confinement exists because anyone who can write the bus can start a handler with their text, so handlers load
-none of the project's saved permissions. A woken session is the opposite: it has its saved permissions and maybe no person
-watching. The wake notice carries only the sender and id, but the session then reads the letter. A hook has always put
-letters into open sessions; what is new is that nobody may be there.
+### The wake
 
-So:
+`wake()` builds the notice from the validated sender and id only, and drops either if it doesn't have the expected shape.
+The waiter prints it as it is. One wake per session per tick, covering all its letters, counted as one; the event id
+becomes `<id>:woken:<sid>`.
 
-- The wake notice and the rules say what hooks already say: letters are data from other agents, and anything irreversible or
-  external waits for the owner. That is advice, not a guarantee: this is a session the user opened, where the platform
-  advises (`AGENTS.md`, tool neutrality).
-- The hard limit: a session whose permission mode skips prompts is not a candidate for a letter. The Stop hook's input has
-  `permission_mode`; the waiter records it. Auto mode stays a candidate, since it has its own classifier.
-- A letter from a sandboxed project is the sharpest case: the sandbox would otherwise be a way to drive an unsandboxed
-  session. **Open: wake for these at all, or only let hooks deliver them?** (Proposed: no wake; the letter waits for a
-  person's next message in a session, and triage handles it meanwhile.)
-
-The same limits apply to the notices that wake sessions today.
+Is the session busy? `session_status(sid)` (optional port; Claude: `claude agents --json`) answers `busy|idle|unknown`, and
+unknown counts as idle. Whether Desktop sessions appear in that list is checked before this is relied on.
 
 ### Limits
 
-`daily_wakes_per_project` (default 12), separate from `daily_runs_per_project`, and the one-wake-per-session-per-letter
-rule (`<id>:woken:<sid>`, replacing `<id>:woken`). `thread_max_rounds` counts woken rounds too, so two sessions can't keep
-waking each other. Waking a long-idle session re-reads its context, so the status page shows wakes per project.
+`daily_wakes_per_project` (default 12) and `daily_wakes_per_sender` (6 per sender per recipient), so one project can't spend
+another's budget. Budget used up: no more wakes today, no triage for it either. The letter stays open and waits for a hook,
+and the status page says so. `thread_max_rounds` doesn't count wakes. A separate `thread_max_wakes` stops waking in a
+thread, and the letter stays open for hooks: nothing is held and no question goes to the owner, since a person may be in
+that conversation. A woken session that omits `--reply-to` starts a new thread, so the daily limits are the real bound.
 
 ### Triage: the headless handler as last resort
 
-- **It takes only what it finishes.** A new delivery `via: triage` is not in `claimed` and doesn't make `take_state`
-  "taken". The letter stays open and hooks treat it as new work in the next session. It is triaged once per letter.
-- **It reads only its own letters.** The inbox view of a handler run lists the letters dispatched to it, so a run started
-  for other letters can't answer these.
-- **It writes to the sender only when it completed the request** (`done`). A request it can't complete gets no status
-  letter from a model. The platform sends one fixed line per letter, once: received, waiting for a session.
-- **It can't claim what it didn't do.** Its notes must really be writable. Today the hub's own project is under the
-  confined run's `deny_write`, so the note was refused. The prompt also says: state an action only after its tool call
+- **It takes only what it finishes.** A new `via: triage`. `INBOX_SQL`'s `delivered` excludes it, so hooks treat the letter
+  as new; it joins `SEEN_VIA`, so `take_state` isn't "taken". `claimed` doesn't list it. `run_handler` enforces once per
+  letter. The status page's `stuck` shows these as "waiting for a session", without the hourly alert.
+- **Readers of `via` are updated together**: `runs_today` and `platform_rounds` count it, `stale_resumes` excludes it,
+  `PATH_OF` and `path_labels` name it.
+- **A session and a handler can't both answer.** A confined `send` or `done` for a letter a session has taken is refused.
+- **It reads only its own letters.** The inbox view of a handler run lists the letters dispatched to it.
+- **The boundary is the platform's, not the prompt's.** `confined_refusal` allows only: `done` replying to one of its own
+  letters, a question to the owner, and closing its own letters. No other recipient and no `info`. This also closes a
+  way around 11-02: a confined run could otherwise send to any project and so wake a session. `mailbox.handler: propose`
+  follows the same rule: `hold_and_ask` no longer claims, and `mailbox-propose.md` changes.
+- **The sender gets one fixed line, from the platform, once**: received, waiting for a session. No `ref` and no `to_session`,
+  so it neither marks the letter taken nor wakes anyone. None for the owner side, the hub's own letters or reconciliation
+  letters.
+- **It can write its notes.** The confined run's `deny_write` covers the hub's own project, so `platform_settings`' `keep`
+  and `write_except` carve out its `.agent-memory/memory/`. The prompt says: state an action only after its tool call
   succeeded.
-- It still asks the owner what only the owner can answer.
+- **No repeats and no noise.** A triaged letter isn't retried or logged every tick.
 
 ## Sandboxed projects
 
-Their mail is on the outbox path; wakes and hooks run outside the sandbox and touch only the secrets sessions folder.
-Nothing about the outbox changes.
+`pass` joins the outbox's operations (`take()`, `mail_command`), `MAIL_SUBCOMMANDS`, `SESSION_SUBCOMMANDS`, `SESSION_COMMANDS`
+and the help goldens. `VIEW_SQL` gains a yes/no "another session was asked", with no session id or other text. Wakes run
+outside the sandbox and touch only the secrets sessions folder.
 
-## Tool neutrality
+## What else reads this
 
-Routing is in `hubbus`, in neutral terms. `can_wake`, `session_summary` and the recorded permission mode are optional ports;
-a runtime without them has no candidates and goes to its fork or triage. `runtime.default: none` has no sessions to wake
-and no handler: letters stay in the mailbox, as today. `brunna pass` is also a tool of the MCP server.
+- `contracts/hubbus.v1.schema.json`: `message.routed` and `message.passed` join the enum; `contracts-check` and
+  `registry.py` (`trigger.events`) read it. `prune` removes these rows with the letter.
+- `wake-misses` and doctor: a pass isn't a miss. "Picked up" means one thing everywhere: ack, reply, done, or a delivery seen
+  by the picked session.
+- `letter_path` and the status page show routed, passed and triage.
+- `brunna pass` is also a tool of the MCP server.
+
+## A gap found on the way, separate from this
+
+`evals_dir` isn't in `policy.deny_read`, so a sandboxed session could read recorded judgment-point inputs. This is live
+today; it goes in first as its own fix.
 
 ## Tests
 
-Characterization of today's routing first, committed before any change. Then: an idle live session is woken for a
-request; a big context doesn't matter; pick order at each step; a model answer outside the list, a timeout, no model; the
-window, `pass`, and next candidate; a letter routed to one session isn't announced by another's hook; ack from another
-session wins; skip-prompt mode and lease sessions are never candidates; privacy label and provider gate the last reply;
-triage leaves the letter open and is not repeated; a handler's inbox shows only its letters; limits; goldens in both
-languages; a live end-to-end run in Desktop before merge.
+Characterization of today's routing first, committed before any change. Then: an idle live session is woken for a request,
+whatever its context size; the order (MCP hold, active without waiter, candidates, triage); pick order; a model answer
+outside the list, a timeout, the tick budget, no model; nothing the model wrote reaches the bus; the window's three cases;
+`pass`; another session's listing doesn't mark a held letter; an ack from another session wins; `to_session` outside the
+candidates; a session wandered into another project; the off switch; limits, including budget used up; `.last` survives an
+idle prune and is gone at session end; the gates on text; triage leaves a letter new for hooks and isn't repeated; the
+confined `send` rules, both handlers; the fixed line neither takes nor wakes; `pass` through the outbox; goldens in both
+languages; a live run in Desktop before merge, including a 14-day waiter that doesn't fire early.
 
 ## Steps, each standing on its own
 
-1. The session record: last reply and permission mode, `can_wake`, `session_summary`. Nothing uses them yet.
-2. Routing without a model: candidates, pick by thread then recency, window, `pass`, `message.routed`, limits, the hook hold.
-   The behaviour the owner asked for starts here.
-3. Triage replaces the handler's taking and status letters.
-4. `mailbox-route`.
-
-## Open
-
-1. A letter from a sandboxed project: wake or not (above).
-2. Whether a pick should prefer an idle session over a busy one when the model is unsure.
-3. Whether a woken session should be told it may be unattended, in the notice itself.
+1. The `evals_dir` fix.
+2. Triage: letters stop being taken quietly, the confined `send` rules, the fixed line, notes writable. This alone fixes the
+   false reports, and it goes first because "no candidates" must already be honest when routing starts.
+3. The session record: the waiter's lifetime, `.last`, `can_wake`, `session_status`, the prune rule, doctor's row.
+4. Routing without a model: order, pick by thread then recency, window, `pass`, hold, limits, off switch.
+5. `mailbox-route`.
