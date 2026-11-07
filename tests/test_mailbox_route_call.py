@@ -487,6 +487,15 @@ class TheCall(Files):
         self.assertEqual(self.published, [])
         self.assertNotIn(SECRET, mr.answer_file("m1").read_text())
 
+    def test_an_in_process_caller_gets_its_alarm_handler_back(self):
+        import signal
+        mine = lambda *_a: None  # noqa: E731
+        before = signal.signal(signal.SIGALRM, mine)
+        self.addCleanup(signal.signal, signal.SIGALRM, before)
+        self.call('{"session": "S1"}')
+        self.assertIs(signal.getsignal(signal.SIGALRM), mine)
+        self.assertEqual(signal.alarm(0), 0, "no alarm left set")
+
     def test_the_declared_point(self):
         spec = self.llm.points()["points"][mr.POINT]
         self.assertEqual((spec["shape"], spec["model_group"], spec["max_attempts"]), ("completion", "fast", 1))
@@ -537,6 +546,32 @@ class Background(Files):
         with mock.patch.object(mr.subprocess, "Popen", mock.Mock(side_effect=OSError("no"))):
             self.assertFalse(mr.start("m1", "proj", "p", ["S1", "S2"]))
         self.assertTrue(mr.call_of("m1")["done"])
+
+    def run_inside_a_group(self, how: str) -> str:
+        """The call run by hand: inside a process group someone else leads (a stand-in for a shell script, made its own group
+        leader here so nothing but it can be hit). What the leader printed after the call: "survived" unless it was killed."""
+        env = {**os.environ, "AGENT_HUB_SECRETS": str(self.tmp / "secrets"), "AGENT_HUB_STATE": str(self.tmp / "state")}
+        child = ("import sys, subprocess; sys.path.insert(0, sys.argv[1]); import mailbox_route as mr, llm\n"
+                 "mr.CALL_TIMEOUT_S = 1\n"
+                 "mr.target = lambda: (None, 'off')\n"
+                 "llm.answer = lambda point, prompt: subprocess.run(['sleep', '5'])\n"
+                 + ("sys.exit(mr.main())\n" if how == "main" else
+                    "import json; mr.call(json.loads(sys.stdin.read()))\n"))
+        leader = ("import sys, subprocess\n"
+                  "subprocess.run([sys.executable, '-c', sys.argv[1], sys.argv[2]], input=sys.argv[3], text=True)\n"
+                  "print('survived', flush=True)\n")
+        p = subprocess.run([sys.executable, "-c", leader, child, str(BIN),
+                            json.dumps({"key": mr.key("m1"), "prompt": "x", "cands": ["S1"]})],
+                           env=env, start_new_session=True, timeout=30, capture_output=True, text=True)
+        return p.stdout.strip()
+
+    def test_run_by_hand_its_kill_takes_its_own_group_not_the_callers(self):
+        self.assertEqual(self.run_inside_a_group("main"), "survived")
+        self.assertEqual(mr.read_answer("m1"), ("none", None))
+
+    def test_called_inside_another_group_it_ends_only_itself(self):
+        self.assertEqual(self.run_inside_a_group("call"), "survived")
+        self.assertEqual(mr.read_answer("m1"), ("none", None))
 
     def test_the_timeout_ends_the_call_and_what_it_started(self):
         """A real process, its model call replaced by one that hangs in a child of its own: it writes no answer and ends both."""

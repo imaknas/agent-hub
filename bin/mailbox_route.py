@@ -223,7 +223,9 @@ def start(letter_id: str, project: str, text: str, cands: list[str]) -> bool:
 
 def call(data: dict) -> None:
     """The call's process: ask, check, write an id from the list or nothing. Bounded by CALL_TIMEOUT_S whatever the
-    runtime does: then it writes nothing usable and ends its process group (the runtime's process with it)."""
+    runtime does: then it writes nothing usable and ends its process group (the runtime's process with it), only when it
+    leads that group (main makes it so): run inside someone else's group it ends itself alone, and the runtime's process ends
+    at its own timeout. An in-process caller gets its SIGALRM handler back."""
     k, cands = data.get("key"), data.get("cands")
     if not isinstance(k, str) or not isinstance(cands, list):
         return
@@ -232,17 +234,29 @@ def call(data: dict) -> None:
         try:
             write_answer(k, "")
         finally:
-            os.killpg(os.getpgid(0), signal.SIGKILL)
-    signal.signal(signal.SIGALRM, out_of_time)
+            if os.getpgid(0) == os.getpid():
+                os.killpg(os.getpid(), signal.SIGKILL)
+            os.kill(os.getpid(), signal.SIGKILL)
+    before = signal.signal(signal.SIGALRM, out_of_time)
     signal.alarm(CALL_TIMEOUT_S)
-    import llm
-    got = llm.answer(POINT, str(data.get("prompt") or ""))
+    try:
+        import llm
+        got = llm.answer(POINT, str(data.get("prompt") or ""))
+    finally:
+        signal.alarm(0)
+        signal.signal(signal.SIGALRM, before)
     sid = got.get("session") if isinstance(got, dict) else None
-    signal.alarm(0)
     write_answer(k, sid if isinstance(sid, str) and sid in [c for c in cands if isinstance(c, str)] else "")
 
 
 def main() -> int:
+    # its own process group, whoever started it (dispatch does with a new session; by hand or from a script it may not be):
+    # the kill at CALL_TIMEOUT_S takes this group, never the caller's
+    if os.getpgid(0) != os.getpid():
+        try:
+            os.setsid()
+        except OSError:   # can't lead one: the kill takes only this process
+            pass
     try:
         data = json.loads(sys.stdin.read())
     except ValueError:
