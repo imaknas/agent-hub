@@ -1453,15 +1453,16 @@ def complete(req, conf) -> CompletionResult:
     env = _env(type("T", (), {"env": env})())
     import hubconf
     try:
-        with tempfile.TemporaryDirectory(prefix="hub-completion-", dir=hubconf.private_tmp(), ignore_cleanup_errors=True) as cwd:
-            try:
-                r = subprocess.run(cmd, input=req.prompt, cwd=cwd, capture_output=True, text=True, timeout=req.timeout_s, env=env)
-            except subprocess.TimeoutExpired:
-                return CompletionResult(False, stop="error", error=_("over {seconds} {seconds:second|seconds}", seconds=req.timeout_s))
-            except FileNotFoundError:
-                return CompletionResult(False, stop="error", error=_(NOT_FOUND))
+        tmp = tempfile.TemporaryDirectory(prefix="hub-completion-", dir=hubconf.private_tmp(), ignore_cleanup_errors=True)
     except OSError as e:   # the secrets folder read-only, the disk full: no folder for it, not a crash
         return CompletionResult(False, stop="error", error=_("could not make a folder for the run: {e}", e=e))
+    with tmp as cwd:
+        try:
+            r = subprocess.run(cmd, input=req.prompt, cwd=cwd, capture_output=True, text=True, timeout=req.timeout_s, env=env)
+        except subprocess.TimeoutExpired:
+            return CompletionResult(False, stop="error", error=_("over {seconds} {seconds:second|seconds}", seconds=req.timeout_s))
+        except FileNotFoundError:
+            return CompletionResult(False, stop="error", error=_(NOT_FOUND))
     try:
         out = json.loads(r.stdout)
     except ValueError:

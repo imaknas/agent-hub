@@ -88,7 +88,11 @@ def _schema_note(schema: dict | None) -> str:
 def _run(prompt: str, model: str | None, cwd: str | None, env: dict | None, timeout_s: int) -> tuple[int | None, str, str]:
     conf = _conf()
     import hubconf
-    with tempfile.TemporaryDirectory(prefix="hub-command-", dir=hubconf.private_tmp()) as d:   # its output is taken as the answer
+    try:
+        tmp = tempfile.TemporaryDirectory(prefix="hub-command-", dir=hubconf.private_tmp(), ignore_cleanup_errors=True)   # its output is taken as the answer
+    except OSError as e:
+        return None, "", _("could not make a folder for the run: {e}", e=e)
+    with tmp as d:
         pf, of = pathlib.Path(d) / "prompt.md", pathlib.Path(d) / "output.txt"
         pf.write_text(prompt)
         argv = _argv(list(conf["run"]), model, str(pf), str(of), prompt, str(pathlib.Path(cwd or os.getcwd()).resolve()))
@@ -118,10 +122,7 @@ def describe(task) -> list:
 
 
 def run(task) -> TaskResult:
-    try:
-        code, out, err = _run(task.prompt + _schema_note(task.output_schema), task.model, task.cwd, task.env, task.timeout_s)
-    except OSError as e:
-        return TaskResult(False, error=_("could not make a folder for the run: {e}", e=e))
+    code, out, err = _run(task.prompt + _schema_note(task.output_schema), task.model, task.cwd, task.env, task.timeout_s)
     if code is None:
         return TaskResult(False, error=err)
     if code != 0:
@@ -144,10 +145,11 @@ def complete(req, conf) -> CompletionResult:
     import hubconf
     try:
         # an empty folder of its own: a template's {cwd} may grant the tool all of it
-        with tempfile.TemporaryDirectory(prefix="hub-command-cwd-", dir=hubconf.private_tmp(), ignore_cleanup_errors=True) as cwd:
-            code, out, err = _run(req.prompt + _schema_note(req.schema), req.model, cwd, None, req.timeout_s)
+        tmp = tempfile.TemporaryDirectory(prefix="hub-command-cwd-", dir=hubconf.private_tmp(), ignore_cleanup_errors=True)
     except OSError as e:
         return CompletionResult(False, stop="error", error=_("could not make a folder for the run: {e}", e=e))
+    with tmp as cwd:
+        code, out, err = _run(req.prompt + _schema_note(req.schema), req.model, cwd, None, req.timeout_s)
     if code is None or code != 0:
         return CompletionResult(False, stop="error", error=err or f"exit {code}")
     if not out.strip():
