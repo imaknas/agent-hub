@@ -335,9 +335,10 @@ The separate work on sandboxed reads (`denyRead`) is independent and goes on its
   wherever the variable is set, with or without `CONFINED`.
 - **"Taken by another" leaves out the run's own acts** (`taken_by_another`), or `send` then `done` would refuse the second. A
   letter is triaged once and forked once, so a reply or close with this run's point is its own. From an outbox there is no
-  point: there, one with no session is its own. A sandboxed run's view can be a minute old, so it can miss a take; the
-  worst case is the double answer this rule cuts down, not a wrong sender. The check isn't made again when an outbox file is
-  taken in: a file can't prove it came from a confined run.
+  point: there, one with no session is its own, so a close by a person at a terminal or an MCP client in a sandboxed project
+  looks like the run's own. A sandboxed run's view can also be a minute old, so it can miss a take. The worst case of both is
+  the double answer this rule cuts down, not a wrong sender. The check isn't made again when an outbox file is taken in: a file
+  can't prove it came from a confined run.
 - **The view gains `fork_only`**, so a sandboxed project's fork isn't refused for its own `resume` row.
 - **The `delivered` flag leaves out `triage` and `held` rows** (`INBOX_SQL`): it says a session has seen the letter, which they
   don't. So today's wake and MCP hold apply to a triaged letter too, the status page's "not yet in a session" counts it, and a
@@ -352,7 +353,8 @@ The separate work on sandboxed reads (`denyRead`) is independent and goes on its
   in the same tick would race it. `run_handler` takes the first sender's letters; the next goes next tick. This spends more of
   `daily_runs_per_project` than one batch did (live replay below).
 - **The budget line goes out now**: when `run_handler` is stopped by `daily_runs_per_project` the sender gets the fixed line, and
-  the log goes through `log_once` (it fired every minute). Step 4's wake budget should reuse `received_line`.
+  the log goes through `log_once` (it fired every minute; it says it again when the number of letters waiting changes). Step 4's
+  wake budget should reuse `received_line`.
 - **The fixed line is an `info` from the hub.** "The hub's own letters" reads as sent by the hub; a letter *to* the hub from
   a project gets the line. A project's letter to itself gets none. A malformed id shows as `?`. It stays open in the sender's
   inbox like any notice until someone closes it.
