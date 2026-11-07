@@ -1,6 +1,6 @@
 # Mail goes to a session first
 
-Status: design r6, not built. The cold reviews' blocking findings are closed; should-fix items go to each step's own review. Each revision fixes the previous one's cold review, on top of the owner's decision. The main
+Status: design r7, not built. The cold reviews' blocking findings are closed; should-fix items go to each step's own review. Each revision fixes the previous one's cold review, on top of the owner's decision. The main
 change since r2: delivery is per session, and a route, an ack and a fork all have an end. Replaces the delegation part of the routing in
 `docs/design/mailbox-routing.md`; builds on the wake in `docs/design/mailbox-runtimes.md` (B1).
 
@@ -53,8 +53,9 @@ for requests and questions state becomes:
 - **Taken**, while any of these holds:
   - a reply from the receiving project to the sender (any of its names, as `own_names` and `canon` see them), or done, by anyone: for good. A question to the owner with `ref` to the
     letter (`<id>:loop`, `<id>:propose-failed`, or a handler's question) doesn't count, even for the hub's own letters;
-  - an ack, while the session that acked is live: **an ack has an end.** A closed session's ack no longer holds. An ack with no
-    session (an MCP client, a runtime with no record) holds as today;
+  - an ack, while the session that acked is live: **an ack has an end.** Live means `Sessions.live_sessions()`, one `ps`, not the
+    records alone (a session can run with no `.live` until its next hook). A closed session's ack no longer holds. An ack with no
+    session from an MCP client holds as today; a platform run's ack isn't recorded;
   - a `resume` row, for `RESUME_TIMEOUT_MIN`: **a fork has an end.** After that the letter is open again, whether or not it was
     triaged, and `stale_resumes` goes away. A letter is forked once, so a fork that ends without closing it can't re-fire;
   - an old `handler` row: for good, so letters from before this change don't come back.
@@ -67,13 +68,17 @@ for requests and questions state becomes:
   a session told with no route, in the hook itself (`by: hook`): the first session to see a letter holds it, as today's 60
   minutes do, and nobody pre-empts it.
 
+A route's event id is unique per row and state is the latest row by `seq`, because `publish` silently drops a repeated id.
+`brunna inbox` writes a `by: hook` route too (a sandboxed session through the outbox op), so reading a letter holds it, as today.
+Lease sessions are never told, never hold and are never candidates: today's guards for them stay.
+
 **A route always ends:** by its window, by pass, by the letter being taken, or when its session is no longer live. One helper
 judges this, for dispatch and for hooks alike, from the bus and the process records, so it holds where dispatch doesn't run
 (`runtime.default` with no `sessions` port). Dispatch records the end as a `message.routed` with no session, and a route
 judged ended never revives, even if the session is told later.
 
 **The window** is derived, not stored: 5 minutes from the wake (`WAKE_PICKUP_MIN`) until the session is told, then 60 from the
-telling (`TAKE_TIMEOUT_MIN`), including a `by: hook` route, which starts told. A session working for 20 minutes isn't pre-empted, and
+later of the telling and the route (`TAKE_TIMEOUT_MIN`), including a `by: hook` route, which starts told. A session working for 20 minutes isn't pre-empted, and
 one that never got it isn't waited on. **A busy routed session** isn't woken and its window hasn't started: on each tick, once it
 is idle and still untold, dispatch wakes it (a hook skipped by `POST_TOOL_EVERY_S`, or a tool running for minutes, can't lose
 the letter). A busy session's route is bounded by 60 minutes from the route.
@@ -95,15 +100,18 @@ Notices (info, done, progress) keep today's one-flag behaviour: nothing routes t
 2. **The letter is under 5 minutes old and a session had a hook in that time but isn't a candidate** (first turn, or mid-turn
    after a wake): wait, as today. Bounded by the letter's age, so a wandered session can't hold it.
 3. **A candidate not yet tried exists**, wake is on, the budget has room and the letter is under 7 days old: pick one and route it;
-   wake it if `idle` or `unknown`.
+   wake it if `idle` or `unknown`. Reconciliation letters (`question_check`) are never routed: they'd wake sessions at 03:00.
 4. **The only candidates left are `waiting`** (a dialog is open) and the letter is under 60 minutes old: wait. Older, go on as if
    they weren't there.
-5. **A reply to a closed session** whose context is small, from a sender that isn't sandboxed, not forked before: today's
+5. **A reply to a closed session** whose context is small, from a sender that isn't sandboxed, under 7 days old, not forked before: today's
    background resume. It's the only way to reach a closed session, and a fork's whole context mustn't answer a sandboxed sender.
 6. **A live session of a runtime with no wake port** (`runtime_ports.Sessions` routes by each session's runtime), context small,
-   sender not sandboxed, not forked before: today's delegation fork, that session only.
+   sender not sandboxed, under 7 days old, not forked before: today's delegation fork, that session only.
 7. **Not yet triaged and under 7 days old**: triage. So an old `held` row or an old ack by a closed session doesn't come back as work.
 8. **Otherwise**: nothing. It waits for a hook or a new candidate.
+
+`hold()` applies to steps 5-7 only: it stops platform runs, not sessions. "Not forked before" is a rule from step 1 of the work on,
+on both fork paths, or a dead fork re-fires every tick: `claim`'s fixed id means neither `runs_today` nor `platform_rounds` rises.
 
 Off, budget used up, or too old: step 3 doesn't apply and the rest do, so a project whose budget another project burned still
 gets triage. A `to_session` is picked first if it's a candidate of the recipient project; any other `to_session` is ignored for
@@ -121,7 +129,8 @@ heartbeat is fresh), not yet routed this letter. Never MCP rows, lease sessions 
 process, so a compaction after wandering into another folder doesn't move it. A record with no `project` (a session running at
 the upgrade) gets it at its next hook, even with `refresh=False`. The hub's own sessions get `hub_project()`: `project_at` returns
 nothing for them. Mail shown by cwd stays as it is. The wake notice names the
-project (`brunna inbox --project P`), so a session in another folder can read it.
+project (`brunna inbox --project P`, `--from P` on the reply), so a session in another folder can read it and answer as P, and
+`inbox` tells it wherever it runs.
 
 `session_status(sid)` (optional port) answers `busy|idle|waiting|unknown`; Claude: `claude agents --json`, checked live: it lists
 Desktop sessions and starts no daemon (`waiting` hasn't been seen live, the docs list it). `waiting` means a dialog is open: not
@@ -132,7 +141,8 @@ woken, not counted as tried. `unknown` counts as idle. A runtime with `wake` mus
 The waiter's hook timeout goes from 1 day to 14 days (`WAIT_TIMEOUT_S`). The docs state no maximum, and the CLI's timer limit
 is unverified, so the first armed waiter is watched before this ships: that shows it doesn't fire early, not that it holds
 14 days. A session idle longer isn't a candidate. The status page counts open sessions with no waiter, with the reason, and
-doctor gets a row for ports a runtime lacks.
+doctor gets a row for ports a runtime lacks. Agent-view background sessions can stop after about an hour unpinned (docs), so this
+doesn't reach them; doctor says so.
 
 ## Picking one
 
@@ -142,12 +152,14 @@ doctor gets a row for ports a runtime lacks.
 4. No answer from it: the most recently active.
 
 **`mailbox-route` never runs inside the dispatch loop**, which is serial and carries every project's mail. Dispatch starts it
-in the background (like `run_handler`'s propose path, in its own process group) and writes nothing to the bus. The next tick
+in the background (like `run_handler`'s propose path, in its own process group), at most one per project per tick and a daily cap
+per project, with a pending marker file; past the cap it picks by recency. It writes nothing to the bus. The next tick
 reads the answer, or falls to recent if there is none after 2 ticks. Rereading on the next tick also closes the race with a
 hook that showed the letter meanwhile.
 
-`shape: completion`, `model_group: fast`, and two things that need code: `on_failure: silent` (`contracts/llm-points.v1`; `fail()`
-today always publishes `job.failed`, and failure text can echo model output) and `max_attempts: 1` (`completion.run` retries
+`shape: completion`, `model_group: fast`, and two things that need code: a fixed-text failure (`contracts/llm-points.v1`, synced to the
+other side the same day; `fail()` today publishes the reason, and that can echo model output, so this point publishes `job.failed`
+with a fixed sentence: a broken router must show, without the text) and `max_attempts: 1` (`completion.run` retries
 invalid output and rate limits today). The process's stdout isn't kept, since `llm_error` can carry model text. Its schema is one string, `session`, with no `enum` or `pattern`, so a validation error can't echo a value. The
 platform checks the answer against the list and writes only a matching id, to a mode-600 file in the secrets sessions folder.
 Not recorded for evals. **No text from the model is kept:** a crafted letter could otherwise have it copy a last reply and read
@@ -163,8 +175,9 @@ hook's `last_assistant_message`, when present. It lives in the adapter: `hub-eve
 `keep_last` flag, computed from the project's label, and `session_summary(sid)` is the port. `session_file` learns the suffix. The
 prune keeps it while the session's process record is alive and removes it at the end.
 
-Text (the last reply, and the first lines of letters that session sent) goes only when the project's `privacy.reflection` is
-`include` (the owner's choice of gate, 11-07; that label wasn't written with this in mind) and the point resolves to the runtime
+Text (the last reply, and the first lines of letters that session sent) goes only when `privacy.reflection` is `include` for both
+the project at the session's cwd when it was written and the `.live` project at send time (the owner's choice of gate, 11-07; that
+label wasn't written with this in mind) and the point resolves to the runtime
 that session uses, with no `llm.points` override. Otherwise metadata only.
 
 ## The wake
@@ -199,8 +212,14 @@ its own project are already there), so the routed session can tell it's itself.
   question to the owner, and `done|drop --question` to the owner (reconciliation needs it). No other `info`, no other recipient, no
   `ack`, no `pass`. A confined run could otherwise send
   to any project and wake a session. The other `settings: platform` points (fork, event and clock jobs) keep today's rules.
-- **A session and a handler don't both answer.** Refused too, if another session has taken the letter. The inbox and `show` of
-  a run with `MAILBOX_LETTERS` are limited to those letters.
+- **A session and a handler don't both answer.** Refused too, if another session has taken the letter.
+- **It reads only its letters.** With `MAILBOX_LETTERS` set, `inbox`, `show` and `thread` are limited to those letters and their
+  threads, and bypass the `REPLY_WAIT_MIN` filter (or it gets an empty mailbox for a reply); `open-questions` is refused.
+  A `--question` close needs one of its letters to name that question (`question_check`). One run per sender, so a crafted letter
+  can't close another sender's letter in the same batch. A fork gets its own letter in `MAILBOX_LETTERS`.
+- **It can't read what other projects' runs left.** Confined runs of the hub get `.state` and `.logs` denied, except the run's own job
+  folder: a handler's cwd is the hub root, where fork logs and other projects' reports sit, and it could quote them to a sandboxed
+  sender.
 - **`mailbox.handler: propose` follows the same rules**: no claim, `_mailbox` accepts `done` and owner questions only, rechecks
   taken at apply time, and a `propose-failed` question closes with its letter. `mailbox.md` and `mailbox-propose.md` change.
 - **The sender gets one fixed line from the platform, once**: received, waiting for a session. No `ref`, no `to_session`, so it
@@ -223,7 +242,8 @@ its own project are already there), so the routed session can tell it's itself.
 - `cmd_status` and `gen-status-page.py`: a "waiting" category for routed, triaged and budget-stopped letters, apart from `stuck`.
 - `letter_path` shows routed, passed and triage. `VIEW_SQL` carries routed and passed rows.
 - `bin/evals/e3.py` runs `mailbox-escalation` with `MAILBOX_LETTERS`, or it stops testing the rules that matter.
-- Stale text: `templates/agent-instructions.md` ("an agent handles it right away"), `bin/mcp_server.py` (inbox "marks them as seen"),
+- Stale text: the mailbox paragraph in `AGENTS.md`, the `hubbus` header, `contracts/llm-points.yaml` (`stale_resumes`),
+  `templates/agent-instructions.md` ("an agent handles it right away"), `bin/mcp_server.py` (inbox "marks them as seen"),
   `mailbox-resume.md` and `mailbox-delegate.md`.
 
 ## Tests
@@ -240,7 +260,9 @@ surviving an idle prune; gates on text; views before wakes; goldens in both lang
 
 ## Steps, each standing on its own
 
-1. **State**: per-session telling, the taken rules, `by: hook` routes, platform runs marking nothing, the status category, `claimed()`.
+1. **State**: per-session telling, the taken rules, `by: hook` routes, platform runs marking nothing, the status category, `claimed()`,
+   one fork per letter and the 7-day limit on today's routing, so a dead fork can't re-fire and an old closed-session ack doesn't
+   come back as a headless run.
    Today's routing on top, reading the new state: the first session to see a letter holds it as today, and the window replaces the
    restart of 60 minutes at each sight. A letter a route no longer holds reaches other sessions' hooks.
 2. **Triage**: handler rules, fixed line, notes writable, `hold()`. Fixes the false reports. Letters it leaves are now really open.
