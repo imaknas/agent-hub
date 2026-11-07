@@ -11,6 +11,8 @@ its tests (the floor becomes the slowest single test). The E1 goldens' second pa
 (tests/test_i18n_golden_en.py) becomes one more item per golden module (I18N_GOLDEN_LANG=en), so it is spread over the
 pool too instead of being one long item.
 
+A run that finds the system's temp folder takes a private one for its tests (private_temp below).
+
 The output ends like unittest's own (people and agents read it): `Ran <n> tests in <s>s`, then `OK` / `OK (skipped=k)` or
 `FAILED (failures=…, errors=…, skipped=…)`; before it, the full output of every module that failed (its `FAIL:` /
 `ERROR:` blocks at the start of a line). Exit 1 when any module failed.

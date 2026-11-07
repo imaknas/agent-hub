@@ -122,7 +122,7 @@ class Elsewhere(unittest.TestCase):
     def test_everything_written_names_this_hub(self):
         for text in self.written():
             with self.subTest(text=text):
-                self.assertNotIn("agent-hub/", text)
+                self.assertNotIn("agent-hub/", text.replace(str(self.tmp), "<TMP>"))   # the temp folder may be under an instance of that name
                 self.assertIn(str(self.hub / "bin"), text)
 
     def test_the_hook_reaches_the_hub(self):
@@ -163,7 +163,7 @@ class Elsewhere(unittest.TestCase):
         cmds = [h["command"] for es in d["hooks"].values() for e in es for h in e["hooks"]]
         self.assertEqual(d["model"], "x")
         self.assertIn("echo mine", cmds)
-        self.assertFalse([c for c in cmds if "agent-hub/" in c], cmds)
+        self.assertFalse([c for c in cmds if "agent-hub/" in c.replace(str(self.tmp), "<TMP>")], cmds)
         self.assertEqual(len([c for c in cmds if "worktree-memory.sh" in c]), 6, cmds)
         [stop] = [h for e in d["hooks"]["Stop"] for h in e["hooks"]]
         self.assertEqual((stop["asyncRewake"], stop["timeout"]), (True, runtime_claude.WAIT_TIMEOUT_S))

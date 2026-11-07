@@ -10,6 +10,8 @@ import tempfile
 import unittest
 
 BIN = pathlib.Path(__file__).resolve().parents[1] / "bin"
+sys.path.insert(0, str(BIN))
+import isolation  # noqa: E402
 CALLS = """import subprocess, unittest
 class T(unittest.TestCase):
     def test_x(self):
@@ -74,6 +76,8 @@ class Guard(unittest.TestCase):
                                                ("a clone with no instance", {"TMPDIR": system}, False),
                                                ("given a private one", {"AGENT_HUB_HOME": str(d / "instance"), "TMPDIR": private}, False)):
                 with self.subTest(label):
+                    if label == "given a private one" and isolation.in_system_tmp(private):   # bin/linux-test copies the tree into /tmp
+                        self.skipTest("this tree is in the system's temp folder")
                     r = subprocess.run([sys.executable, str(BIN / "run-tests"), str(d / "tests")], capture_output=True, text=True, timeout=120,
                                        env={**base, **extra})
                     self.assertEqual(r.returncode, 0, r.stdout + r.stderr)

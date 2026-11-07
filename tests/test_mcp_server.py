@@ -51,6 +51,8 @@ class Server(unittest.TestCase):
                        or k in ("AGENT_HUB_PYTHON", "BRUNNA_PYTHON")},
                     "HOME": str(t / "home"), "AGENT_HUB_CONFIG": str(t / "config"), "AGENT_HUB_DATA": str(t / "data"),
                     "AGENT_HUB_SECRETS": str(t / "secrets"), "AGENT_HUB_STATE": str(t / "state"),
+                    # its own instance: in a linked worktree hubconf would otherwise find the machine's, which holds the temp folder
+                    "AGENT_HUB_HOME": str(t / "instance"),
                     "AGENT_HUB_LANG_UI": "zh-Hant",   # the assertions below are the zh-Hant texts (docs/design/i18n.md)
                     "GIT_AUTHOR_NAME": "t", "GIT_AUTHOR_EMAIL": "t@t", "GIT_COMMITTER_NAME": "t", "GIT_COMMITTER_EMAIL": "t@t"}
         self.env.pop("CLAUDE_CODE_SESSION_ID", None)   # the session running these tests is not the server's client
