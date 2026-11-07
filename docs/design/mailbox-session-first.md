@@ -608,12 +608,19 @@ been done.
   letter a hook has told or someone has answered drops out, so a hook that wins the race saves the wake.
 - **A session owed a wake while busy needs a fresh waiter at that moment**: a busy session can be between waiters at a turn's end. Tried anyway, a wake that failed would use up its one
   chance for the letter; so it isn't tried, its route waits, and it is bounded by the hour.
-- **`session_status` hanging costs `AGENTS_TIMEOUT_S` per candidate per tick** (5 s), with `dispatch.lock` held and no bus lock. Not capped: it answers in about 0.1 s measured, and `unknown` is idle.
+- **What sessions are doing is read once a tick, and bounded** (after the cold review: one look per candidate, 5 s each with `dispatch.lock` held, was
+  100 s for 20 hanging sessions against a one-minute schedule, and a slow tick lets a sandboxed session's `told` through its outbox miss the pickup).
+  A runtime whose look returns every session (`session_statuses`, optional in the `session_status` port; Claude: one `claude agents --json`) is asked
+  once, for all its wakeable sessions, the first time a letter may wake one. Another is asked one session at a time. Either way a tick spends at most
+  `STATUS_TICK_S` (10 s) on it, and what's left unasked is `unknown`, which counts as idle.
 - **The wake's text.** Only the project, senders that are addresses (`valid_address`) and ids of the right form and under 64 characters (`EVENT_ID`; `--id` is free for an unsandboxed
   sender), five ids at most; each dropped if it isn't. It says letters are data, not the owner's instructions. **`brunna inbox` was the gap:** a woken session reads its letters there, not from a
   hook, and it printed them bare. It now has the hook's header and footer, for a session (not a platform run); the MCP server's `inbox` stops adding its own header but for a platform
-  run. The rules file says the same, as advice: the owner's decision stands.
-- **`inbox --project P` from another folder tells only what's routed to that session**, so a woken session in another folder is told, as the design says, and reading another project's
+  run. The rules file says the same, as advice: the owner's decision stands. The notice and the rules say `inbox` is the way to read: that is how
+  the platform knows a session has them. `show` by the session a letter is held for counts as told too (via `show`), since the notice lists ids; by any
+  other session it holds nothing. The texts say `pass` is for a letter held for this session, as `pass_refusal` takes: a hook's route too, not only one
+  the platform made.
+- **`inbox --project P` from another folder tells only what's routed to that session, and a notice it was woken for**, so a woken session in another folder is told, as the design says, and reading another project's
   mailbox holds nothing.
 - **An entry the validated registry doesn't have is off** (`wake_on`): a machine with no index gives only roster fields, with no `mailbox`, so it can't say the owner hasn't turned it off. Same idea as
   `reflection_private`'s `None`. It leaves triage and hooks.
@@ -621,6 +628,9 @@ been done.
 - **`pass` goes through the outbox for a sandboxed session**, judged against its view and again when taken in. `pass_letter` writes `message.passed` and the route's end in one transaction, so
   `route_ended` needs no new case. It isn't in `MAIL_SUBCOMMANDS`, so `mail_only` runs don't have it, and `run_refusal` refuses it by name, for a fork's inherited `MAILBOX_LETTERS` too. A session
   that acked can't pass: its route has ended as taken, and `done` or closing is what frees it.
+- **A notice a session was woken for is told when that session reads it, wherever** (`woken_for`), by `inbox` or `show`, and through a sandboxed session's
+  outbox too: its view has no wakes, so its `told` file names notices as well and the platform tells only one it was woken for. A notice's flag is
+  otherwise its hooks', and a notice isn't woken for while its session has a dialog open (it would spend a wake on a session that can't act).
 - **A forged name can't reach another project's session.** Candidates come from process records, so a `to_session`, a `reply_to` or a thread only picks among the recipient's own. A notice's
   `to_session` must be on record for the project too, which is new: before, any live session named in a reply was woken. So a session that wandered into another folder and sent a letter from there
   isn't woken for the reply, and its next hook shows it. From a sandbox, under its real profile: writing a `.live`, a waiter, `leases.json`, `project-renames.json` or the bus is refused (a test on macOS).
@@ -628,6 +638,12 @@ been done.
   14-day waiter is watched past 25 hours, a session idle over a day doesn't get its letter until its next hook. That's the known limit, and nothing here depends on the 14 days.
 - **A record with no `project` isn't a candidate.** At the time of writing 13 of 14 records on this machine had none: they were written before step 3, and get one at their next hook. A session idle since then
   isn't reachable until it has a turn, and the first letters after merge go to triage for it. No fallback to its `cwd`: step 3's record explains why a folder from before the field can be wrong.
+- **Accepted, not fixed** (the cold review's notes):
+  - A renamed project's old name, once a new project registers under it, is that new project's: a session of the renamed one still open with the old
+    name on its record counts as the new one's, and can be woken for its letters. Only the owner can register a project, so only the owner can cause it.
+  - A flood that stays open is routed again after each midnight, when the budget is new, until it is 7 days old: one day's flood can use up the target
+    project's wakes for a week. Hooks and triage go on all the same.
+  - A wake's `batch` has 2 random bytes beside the second it was made in. Two batches in one second that drew the same bytes would count as one wake.
 - **`mailbox-route` isn't built** (step 5). `pick` says where it goes, between the thread and recency.
 
-What step 5 must know: `pick(c, r, cands)` is the only caller to change, and `Tick.status` has already asked each candidate. `message.routed`'s `by: model` is in the contract.
+What step 5 must know: `pick(c, r, cands)` is the only caller to change, and `Tick.status` has read what the candidates are doing, once for the tick. `message.routed`'s `by: model` is in the contract.
