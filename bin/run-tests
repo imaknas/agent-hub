@@ -27,8 +27,10 @@ import os
 import pathlib
 import queue
 import re
+import shutil
 import subprocess
 import sys
+import tempfile
 import threading
 import time
 
@@ -53,11 +55,27 @@ def key(item: tuple[str, str | None]) -> str:
     return item[0] + (f"@{item[1]}" if item[1] else "")
 
 
+# No test reaches the real coding agent: a fresh HOME (no nvm there, so hubconf.tool and nvm_bin find none) and a recording `claude`
+# first on PATH. A test that means to run one has its own stand-in; any call that lands here fails the run.
+# In the tree's .state, not the temp area: the sandbox tests need a HOME the sandbox can't write (test_cap_profile skips otherwise)
+_state = pathlib.Path(__file__).resolve().parents[1] / ".state"
+_state.mkdir(parents=True, exist_ok=True)
+GUARD = pathlib.Path(tempfile.mkdtemp(prefix="run-tests-guard-", dir=_state))
+(GUARD / "home").mkdir()
+(GUARD / "bin").mkdir()
+CALLS = GUARD / "calls.log"
+(GUARD / "bin" / "claude").write_text(f'#!/bin/sh\necho "$PWD :: $*" >> "{CALLS}"\necho "run-tests: no test may start a real claude" >&2\nexit 97\n')
+(GUARD / "bin" / "claude").chmod(0o755)
+
+
 def env_for(tests: pathlib.Path, lang: str | None) -> dict[str, str]:
     # the tree under test is the platform the tests see (as the test runner's export is): an explicit root skips hubconf's
     # lookup of the main checkout, so a run in a linked worktree never reaches the machine's live instance. Only the
     # root: HOME and STATE would leak into the fake hubs the tests build (docs/design/test-waiting.md A1)
-    env = {**os.environ, "PYTHONPATH": os.pathsep.join(filter(None, [str(tests), os.environ.get("PYTHONPATH")]))}
+    env = {**os.environ, "PYTHONPATH": os.pathsep.join(filter(None, [str(tests), os.environ.get("PYTHONPATH")])),
+           "HOME": str(GUARD / "home"), "PATH": f"{GUARD / 'bin'}{os.pathsep}{os.environ.get('PATH', '')}"}
+    if not names.env("PYTHON", environ=env):
+        names.env_set(env, "PYTHON", sys.executable)   # bin/py looks for it under HOME
     names.env_set(env, "TEST_RUNNER", "1")
     names.env_set(env, "ROOT", names.env("ROOT") or str(tests.resolve().parent))
     # the gate runs as a zh-Hant instance and CI (bin/linux-test: plain unittest, a bare HOME) as an English one, so a
@@ -202,6 +220,12 @@ def main(argv: list[str]) -> int:
             cache.write_text(json.dumps({k: round(v, 2) for k, v in secs.items()}, indent=1, sort_keys=True))
         except OSError:
             pass
+    calls = CALLS.read_text().splitlines() if CALLS.exists() else []
+    shutil.rmtree(GUARD, ignore_errors=True)
+    if calls:
+        failed.append("real-agent-guard")
+        total["errors"] += 1
+        print("======== a test reached for the real coding agent; give it a stand-in\n" + "\n".join(calls[:20]) + "\n", flush=True)
     print(f"({len(modules)} modules, {len(results)} items, {len(threads)} workers)")
     print("-" * 70)
     print(f"Ran {total['tests']} test{'' if total['tests'] == 1 else 's'} in {wall:.3f}s")   # as unittest writes it
