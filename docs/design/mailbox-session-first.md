@@ -447,22 +447,24 @@ project, where the bus isn't reachable, so its `hubbus hook` told nothing, silen
 
 - **What a hook may run, and as whom** (two cold reviews; the first fix was wrong). What sits under a session's folder is a claim, and a
   back pointer proves nothing when the same writer owns both ends. The rule, in `project_git.py`:
-  - **A folder is a sandboxed project's as the hook's `cwd` names it, unresolved, or as it resolves** (`sandbox_of`): `handle`, `worktree`,
-    `worktree_scope`, `guard.own_project`, `hubbus.project_of`, and through them the record's `project` and the label for `.last`.
+  - **A folder is a sandboxed project's as the hook's `cwd` names it, unresolved, or as it resolves, by the file and not the spelling, the
+    nearest of several** (`gitdirs.holder`, under `sandbox_of` and `project_of`): `handle`, `worktree`, `worktree_scope`, `guard.own_project`,
+    `hubbus.project_of`, and through them the record's `project` and the label for `.last`.
     There it runs as the project, and only in a folder its workspace really holds (`holds`); a folder swapped for a link elsewhere gets no
     work at all, so nothing of another sandboxed project is printed into this session.
   - **Git, or a script that runs it, goes as the user only in a registered project that isn't sandboxed, the hub's checkout, or a confirmed
     worktree of one of those** (`user_git_ok`). Everything else is no, not a list of bad cases: `hub-event`'s `NOT_IN_FOLDER` names what
-    runs no git, and any other handler, a new one too, doesn't run elsewhere. `memory-nudge.py` asks the same, for hooks installed before
-    `hub-event`.
+    runs no git, and any other handler, a new one too, doesn't run elsewhere. A worktree out in a folder others can write gets git only in its
+    main checkout's memory, by name (`memory_dir`, `MEMORY_ONLY`, `$main/.agent-memory`), never in the folder (`folder_git_ok`): what sits there
+    can change between a look and the git. `memory-nudge.py` asks the same, for hooks installed before `hub-event`.
   - `gitdirs.confirmed` alone is worth nothing: a repo a stranger made confirms itself, and `git init box/nested; git worktree add <outside>`
     needs no forging. Being registered is what counts. What it still gives: a pointer naming a registered repo, which a stranger can't
-    write, is believed only if that repo lists the folder. And a real worktree in a folder others can write (the temp folder) runs a
-    memory only if it is its main checkout's: a service could plant one beside it.
+    write, is believed only if that repo lists the folder.
 - **How the swap reaches a hook.** Read by the cold review from the 2.1.319 CLI, not watched live: a plain `cd` out of the project is reset
   after each Bash call, but `cd box/sub` stores that string, a background process can then `mv sub sub2; ln -s <target> sub`, only Bash
   re-checks, and a hook's input still says that `cwd`. `UserPromptSubmit`, `PreCompact`, `SessionEnd` and `SessionStart` on compact or resume fire
-  so. The target needs no temp folder: a sandboxed project's settings allow writes to its `~/services/<project>`. The tests build the
+  so. The target needs no temp folder: a sandboxed project's settings allow writes to its `~/services/<project>`. Sessions on this machine run
+  2.1.308, 2.1.309 and 2.1.317; the third review found the key strings in all three, and read the route from 2.1.319. The tests build the
   swapped folder and fire the real hooks; they don't prove a real session gets there. **Assumed, not checked:** a session's `cwd` string stays
   under its workspace (or a folder it was given). A string outside it would still get no git as the user, by the second rule, but one that
   resolves into an open project would be that project's for mail, since no name says otherwise.
@@ -474,16 +476,49 @@ project, where the bus isn't reachable, so its `hubbus hook` told nothing, silen
 - **The guard from a planted folder outside every project** refuses everything: its pointer can't say whose folder this is. Before, it denied
   all but the project named, and doubting the pointer without refusing allowed everything. A folder with no repo at all, in no project, is
   as before.
-- **Checked past the reported paths.** Every hook entry (`HOOK_TABLE`, `WORKTREE_HOOKS`) and what it starts: `hub-event`, `worktree-memory.sh`,
-  `sync-local-setup.sh`, `memory-nudge.py`, `git-sync-memory.sh`, `with-lock.sh`, `hub-runtime`, `render-project-settings --worktree` (by path, and
-  `nofollow`), `hubbus hook` (mail only), `project_git run-as` (by path). Found so: `hub_json_get`'s `py -c` put the current folder on the import path, so a
-  `json.py` there ran as the user wherever there's no `plutil` (now `-I`; the prototype's inline `py -c` for the `cwd` would have added
-  another, so the script asks `hub-event`, whose runtime reads the input); `hub_pull` under a link to the hub's checkout (now not run in a
-  sandboxed project's folder); the reminder printing what its marker links to. `git-sync-memory.sh` isn't gated itself: its callers are `memory_sync`,
-  the worktree's `end` and the hourly sync over the registry.
-  **Left open, not a hook:** a platform fork's working folder is the session's last `cwd` (`session_cwd`), so `claude` itself starts there, and a
-  coding agent's own git status runs outside its tool sandbox. That holds for any platform run in a sandboxed project's own folder too, with
-  no swap needed: the agent's process isn't under the sandbox its Bash is. Not changed, not measured; it wants its own look.
+- **Checked past the reported paths.** Every hook entry (`HOOK_TABLE`, `WORKTREE_HOOKS`) and what it starts. Found so: `hub_json_get`'s `py -c` put the
+  current folder on the import path, so a `json.py` there ran as the user wherever there's no `plutil` (now `-I`); `hub_pull` under a link to the
+  hub's checkout (not run in a sandboxed project's folder now); the reminder printing what its marker links to.
+- **`git-sync-memory.sh` has five callers.** `memory_sync` and the worktree's `end` go through the rule. The hourly sync isn't under it: it goes by
+  the registry now, no longer scanning `~/workspace`, where a project that left the registry would have left a folder to run git in as the
+  user. `propose_apply.py` and `first-look.py` took a registered name but ran `with-lock.sh`, whose `git rev-parse` reads a sandboxed repo's config as
+  the user and can hang on a FIFO there, with no timeout; they use `project_git.sync_memory_of` now. A sandboxed project's memory goes as the project.
+- **The guard's target is a race a hook can't close** (`guard.py`): it resolves the folder a new session would open in, and that folder can be
+  swapped for a link before the session starts. So the guard stops an agent asking for another project, and it isn't a boundary: a sandboxed
+  project that wins the race can get a session opened in another project, outside its sandbox, by the tool. Only the tool could close it.
+- **The MCP server's identity:** `AGENTHUB_PROJECT` comes first (`mcp_server.py`), then `project_of`. Only the MCP settings can set it, and for a
+  sandboxed project those are `.mcp.json` in `CONTROL`, which it can't write. An unsandboxed project can, and it can do anything anyway. No change.
+- **What the agent runs of its own in a project's folder.** `claude -p` runs `git --no-optional-locks status --short --ignore-submodules=dirty`, `log` and `config
+  user.name` at its start, outside any sandbox. The CLI forces off fsmonitor, hooks and signatures (the review, from its code), not filters, and a sandboxed
+  project writes its own repo's config, `info/attributes` and a stat-dirty file through its own jobs. So a platform run executed the project's clean filter
+  as the user, no swap needed. Real runs, `claude` 2.1.319, each in a throwaway repo, argv `claude -p --setting-sources project --strict-mcp-config --model haiku
+  --output-format json` (with tools: `--allowedTools Bash,Read,Write,Edit,Glob,Grep --permission-mode acceptEdits`, prompt: read a file, `true`, write a file,
+  `git --version`), `filter.x.clean` or `.process` and a stat-dirty `a.txt`; a plain `git status` ran it once as the control in each:
+
+  | Run | Without the variable | With `CLAUDE_CODE_DISABLE_GIT_INSTRUCTIONS=1` |
+  |---|---|---|
+  | one prompt, no tool | 1 | 0 |
+  | five turns with those tools | 1 | 0 |
+  | `filter.x.process`, one prompt | 1 | 0 |
+  | `--resume <id> --fork-session`, one prompt | 1 | 0 |
+  | the same with a tool call | not run | 0 |
+
+  Also once by accident, through the platform's whole path (`llm.py run login-check --cwd <throwaway repo>`, the probe below): filter not run.
+  `_env` sets the variable for every way the platform starts it (`run`, `exec_stream`, `complete`, `mcp list`, the agents listing). `propose_apply`'s
+  throwaway worktree shares the repo's config and `info/attributes` (a linked worktree's common dir), so it had the same hole and has the same answer.
+  **What this rests on, plainly: one environment variable of one tool.** It isn't a platform guarantee, and AGENTS.md's rule says that's what's owed. The review lists
+  other callers of that status in the CLI (`Ddn`, `Lbt`, `Dke`, what triggers them unknown) and 41 git call sites nobody traced; the runs above cover the start and those
+  tools, nothing more. An update could drop the variable silently, so `update-claude.py` runs a real probe for each version it finds, whoever installed it (one
+  small request; `filter_probe`), and what's wrong goes to the alerts and is tried again next night. Desktop's and terminal sessions have the tool's own protection: the
+  rendered settings carry the variable for sandboxed projects' sessions, as reinforcement only, and whether the setting's `env` reaches that git in time wasn't run.
+  **A neutral guarantee would take the whole agent process under the platform's sandbox**, not just the commands it runs. Not built here.
+  **Other runtimes:** `command` and `acp` also start in the folder, and what they run there isn't known; doctor says so per runtime (`folder_git_unknown`).
+- **A fork starts only in a folder that is really its project's** (`session_cwd`): under the project's folder as it resolves, or a linked worktree its repo lists; otherwise
+  the project's own folder, for every project. It starts in the resolved path. Before, a swapped folder started a fork physically in another project. Lease and job
+  folders come from the registry, not from a hook.
+- **The settings pass writes down from the workspace** (`write_settings`), link by link refused: `--worktree` checked its folder earlier in another process, and through a
+  swap it wrote the box's sandbox, hooks and an `env` pointing tool caches at a folder the box can write into the open project's control file. One that resolves
+  elsewhere raises. The other nofollow writers (`write_view`, an outbox, `first-look`) already start at a registered workspace.
 - **How far to trust `project`.** The record can say where a process began as far as its hooks showed. It can't settle more, and the
   send-time gate should read it that way:
   - It says nothing about what the session has read: one that wandered through a private project holds that text whatever the field says.
@@ -503,5 +538,6 @@ project, where the bus isn't reachable, so its `hubbus hook` told nothing, silen
 
 What step 4 must know: `Sessions.open_sessions()` gives each session's record with `project`, `can_wake`, `session_status` and
 `session_summary` are there and nothing reads them yet. A record with no `project` lasts until a hook can name its folder's project.
+A real worktree out in the temp folder gets its main checkout's memory and no reminder or local setup.
 Live check of the 14 days: right after merge, from a real session. Step 4 shouldn't count on a session idle over a day until it has
 been done.
