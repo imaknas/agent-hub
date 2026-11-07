@@ -309,6 +309,37 @@ class Prompt(Harness):
             d = self.data(self.prompt())
         return [s.get("last_reply") for s in d["sessions"]]
 
+    def renamed(self):
+        """proj was called old; reflection_private and the rest go by the name it has now."""
+        (self.tmp / "state" / "project-renames.json").write_text(json.dumps({"old": {"new": "proj", "stage": "done"}}))
+        self.m._OWN_NAMES.clear()
+        p = mock.patch.object(self.m.hubconf, "former_names", lambda p: ["old"] if p == "proj" else [])
+        p.start()
+        self.addCleanup(p.stop)
+
+    def test_a_letter_to_the_former_name_is_gated_by_the_name_now(self):
+        self.renamed()
+        self.rt.summaries = {"S1": "said this", "S2": "said that"}
+        self.open("S1", "S2")
+        self.seen("S2", minutes_ago=1)
+        self.send("m1", "old", "request")
+        with mock.patch.object(mr.hubconf, "reflection_private", lambda: {"proj"}):   # proj is stats_only
+            text = self.prompt()
+        self.assertEqual([s.get("last_reply") for s in self.data(text)["sessions"]], [None, None])
+        self.assertIn('"proj"', text)
+        self.assertNotIn('"old"', text)
+        self.assertEqual(self.starts[0]["project"], "proj")
+
+    def test_a_letter_to_the_former_name_shares_the_ticks_one_call(self):
+        self.renamed()
+        self.open("S1", "S2")
+        self.seen("S2", minutes_ago=1)
+        self.send("m1", "old", "request")
+        self.send("m2", "proj", "request")
+        self.dispatch()
+        self.assertEqual([s["id"] for s in self.starts], ["m1"])
+        self.assertEqual(self.by("m2"), [("S2", "recent")])
+
     def test_metadata_only_when_the_gate_says_no(self):
         self.assertEqual(self.gated(), ["said that", "said this"], "the control: include, same runtime, no pin")
         cases = {"a private label": {"private": {"proj"}},

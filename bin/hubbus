@@ -2687,17 +2687,18 @@ def most_recent(c, cands: list[str]) -> str:
     return max(sorted(cands), key=lambda s: seen.get(s) or "")
 
 
-def pick(c, t, r, cands: list[str], ws=None) -> tuple[str, str] | None:
+def pick(c, t, r, cands: list[str], ws=None, proj=None) -> tuple[str, str] | None:
     """Which one, and how it was picked (message.routed's by), design "Picking one": the only one; the to_session or the last to
     act in the thread; the mailbox-route model's pick, read on a later tick; the most recently active. None: the model is
-    being asked, and the letter waits for its answer this tick."""
+    being asked, and the letter waits for its answer this tick. proj: the project's name now (one_project's), whatever name
+    the letter was sent to: the privacy labels, the tick's one call and the day's count are keyed by it."""
     if len(cands) == 1:
         return cands[0], "only"
     to_s = payload(r).get("to_session")
     thread = to_s if to_s in cands else last_in_thread(c, r, cands)
     if thread:
         return thread, "thread"
-    got = model_pick(c, t, r, cands, ws)
+    got = model_pick(c, t, r, cands, ws, proj or now_named(r["to_project"]))
     if got is ASKING:
         return None
     return (got, "model") if got else (most_recent(c, cands), "recent")
@@ -2712,14 +2713,14 @@ def route_target():
     return mailbox_route.target()
 
 
-def model_pick(c, t, r, cands: list[str], ws=None):
+def model_pick(c, t, r, cands: list[str], ws=None, proj=None):
     """mailbox-route (bin/mailbox_route.py): the session its call picked, if that is still a candidate; ASKING while the call
     runs (at most WAIT_S); None for recency: off, the call gave no answer or one outside the list, the letter's one call
     spent, this tick's call for the project already started, or its day's calls used up. A call is started here, in the
     background, and never waited on. What the model wrote reaches the bus only as an id checked against these candidates;
     a miss is logged in fixed words, once until a call answers again (no job.failed: a reason can quote the model)."""
     import mailbox_route as mr
-    proj = r["to_project"]
+    proj = proj or now_named(r["to_project"])
     done = mr.call_of(r["id"])
     if done is not None:
         if done.get("done"):
@@ -2737,16 +2738,16 @@ def model_pick(c, t, r, cands: list[str], ws=None):
     if proj in t.asked or t.route_target() is None or mr.calls_today(own_names(proj)) >= mr.DAILY_CALLS:
         return None
     t.asked.add(proj)
-    return ASKING if mr.start(r["id"], proj, route_prompt(c, t, r, cands, ws), cands) else None
+    return ASKING if mr.start(r["id"], proj, route_prompt(c, t, r, cands, ws, proj), cands) else None
 
 
-def route_prompt(c, t, r, cands: list[str], ws=None) -> str:
+def route_prompt(c, t, r, cands: list[str], ws=None, proj=None) -> str:
     """What mailbox-route reads (design "Picking one", "The last reply"): the letter's sender (an address, or ?), type and the
     start of its text; for each candidate, the most recently active first and at most MAX_CANDIDATES, its id, its folder under
     the project, minutes since its last hook, what it is doing, and its last reply where mailbox_route.text_allowed lets it.
     No branch, nothing read from the session's folder, and from a session nothing else it wrote."""
     import mailbox_route as mr
-    proj, p = r["to_project"], payload(r)
+    proj, p = proj or now_named(r["to_project"]), payload(r)
     q = ",".join("?" * len(cands))
     seen = {e["session"]: e["seen"] for e in c.execute(f"SELECT session, seen FROM presence WHERE session IN ({q})", cands)}
     order = sorted(sorted(cands), key=lambda s: seen.get(s) or "", reverse=True)[:mr.MAX_CANDIDATES]
@@ -2967,7 +2968,7 @@ def dispatch(c, rt=None, wakes: list | None = None) -> int:
             free = [s for s in ready if t.status(s) != "waiting"]
             if free:
                 # None: mailbox-route is being asked; the letter isn't routed yet, so a hook can still show it meanwhile
-                if (picked := pick(c, t, r, free, ws)) and route_to(c, r, *picked, alive) \
+                if (picked := pick(c, t, r, free, ws, proj)) and route_to(c, r, *picked, alive) \
                         and t.status(picked[0]) in ("idle", "unknown"):
                     t.owe(proj, picked[0], r)
                 waiting += 1
