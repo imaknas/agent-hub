@@ -22,6 +22,7 @@ In every other case, no output and exit code 0; nothing is ever blocked.
 from __future__ import annotations  # the system python3 (3.9, the one hooks use) must be able to import this too
 
 import datetime
+import os
 import pathlib
 import re
 import subprocess
@@ -90,6 +91,15 @@ def nudge_text(root, command: str | None = None) -> str | None:
     return message(times) if times and should_nudge(times) else None
 
 
+def _git_may_run() -> bool:
+    """This entry point runs git in the folder it is started in, and a repo's config runs what it names: as the project under its
+    sandbox (a hook there), or as the user where the platform says so."""
+    if os.environ.get("HUB_AS_PROJECT"):
+        return True
+    import project_git
+    return project_git.user_git_ok(pathlib.Path.cwd())
+
+
 def main() -> None:
     """The old entry point. --session-start: worktree-memory.sh's start. --post-tool: only a project whose hooks were installed
     before hub-event (worktree-memory.sh's reminder now goes through `hub-event worktree`).
@@ -97,6 +107,8 @@ def main() -> None:
     prints text directly."""
     import runtime_ports
     mode = sys.argv[1] if len(sys.argv) > 1 else ""
+    if not _git_may_run():
+        return
     if mode == "--post-tool":
         try:
             rt = runtime_ports.load(ports=("lifecycle",))

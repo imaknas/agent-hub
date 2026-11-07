@@ -21,10 +21,6 @@ for a write outside the project's own job.
                                                             as the project; the platform fetches the bundle)
 
 CLI (git-sync-memory.sh, sync-all-memory.sh):
-  project_git.py worktree-scope <top> <main>
-                                      a linked worktree's hook (worktree-memory.sh), <main> read from pointers under <top>:
-                                      exit 0 with the memory folder to sync when either is a sandboxed project's, 3 when the
-                                      hook may go on as the user, 1 when <top> is in no project and <main> doesn't confirm it
   project_git.py sandboxed <dir>      exit 0 when <dir> is the .agent-memory of a sandboxed project, 3 when not (any
                                       other exit: it couldn't tell)
   project_git.py run-as <dir> -- <argv…>
@@ -196,6 +192,52 @@ def project_at(d) -> tuple[str, dict] | None:
     return best[:2] if best else None
 
 
+def sandbox_of(cwd) -> tuple[str, dict] | None:
+    """The sandboxed project this folder is under, as a hook's cwd names it or as it resolves. As named comes first: a folder a
+    sandboxed project owns can be swapped for a link after the runtime took it as the session's folder, and a hook's input
+    still names it, so what it resolves to says nothing about whose session this is."""
+    raw = pathlib.Path(cwd)
+    for name, doc in hubconf.projects().items():
+        ws = hubconf.path((doc.get("paths") or {}).get("workspace"))
+        if ws and (raw.is_relative_to(ws) or raw.is_relative_to(ws.resolve())) and isolation.sandboxed({**doc, "name": name}):
+            return name, {**doc, "name": name}
+    try:
+        at = project_at(cwd)
+    except (OSError, RuntimeError):
+        return None
+    return at if at and isolation.sandboxed(at[1]) else None
+
+
+def holds(doc: dict, folder) -> bool:
+    """Whether this project's workspace really holds the folder, resolved (a sandbox_of by name may not)."""
+    ws = hubconf.path((doc.get("paths") or {}).get("workspace"))
+    return ws is None or pathlib.Path(folder).resolve().is_relative_to(ws.resolve())
+
+
+def registered_main(main) -> bool:
+    """Whether this folder is the checkout of the hub or of a registered project that isn't sandboxed."""
+    m = pathlib.Path(main).resolve()
+    return m == hubconf.MAIN.resolve() or any(
+        (ws := hubconf.path((d.get("paths") or {}).get("workspace"))) and ws.resolve() == m and not isolation.sandboxed({**d, "name": n})
+        for n, d in hubconf.projects().items())
+
+
+def user_git_ok(folder) -> bool:
+    """Whether a hook may run git, or a script that does, as the user in this folder. Git reads the repo's config and runs what it
+    names, so the answer is yes only for what isn't a stranger's: a registered project that isn't sandboxed, the hub, or a
+    linked worktree of one of those that it confirms (a repo a stranger made confirms itself, so its being registered is what
+    counts). Everything else is no, not a list of bad cases."""
+    at = project_at(folder)
+    if at:
+        return not isolation.sandboxed(at[1])
+    found = gitdirs.dirs(folder)
+    if not found:
+        return False
+    if found.top == hubconf.MAIN.resolve():
+        return True
+    return gitdirs.confirmed(found) and registered_main(found.common.parent)
+
+
 def sync_memory(name: str, doc: dict, memdir, branch: str = "agent-memory", lock: bool = False) -> str | None:
     """lock: the job takes with-lock's lock itself (the hourly sync; a hook's call already holds it)."""
     bare = policy.memory_bare(name, doc)
@@ -230,31 +272,32 @@ def run_as_cli(d: str, argv: list[str]) -> int:
     return r.returncode
 
 
-def worktree_scope_cli(top: str, main: str) -> int:
-    """Whether a linked worktree's hook goes on as the user. <main> comes from pointer files under <top>, so a sandboxed project
-    can name any repo there: its own folder decides first, by path (project_at), and the memory is the one its registry entry
-    says. <main> counts too: a repo a sandboxed project writes is never run as the user, whoever names it. A <top> in no
-    project has no path to go by (a sandboxed project's service can write the temp folder), so <main> must confirm it."""
-    at_top = project_at(top)
-    if at_top and isolation.sandboxed(at_top[1]):
-        print(hubconf.path((at_top[1].get("paths") or {}).get("workspace")) / ".agent-memory")
+UNCONFIRMED = 4   # worktree_scope: its .git names a registered repo that doesn't list it (moved by hand)
+
+
+def worktree_scope(top: str, main: str, cwd: str | None = None) -> int:
+    """Whether a linked worktree's hook goes on as the user (worktree-memory.sh, through `hub-event worktree-scope`). cwd: what the
+    hook's input names; top and main are read from the folder, and pointer files under top say main, so neither decides alone.
+    0: a sandboxed project's, as the session's folder names it, or as top or main is (a repo it writes is never run as the
+    user, whoever names it); the memory folder to sync is printed, resolved, and it is the one the registry entry says.
+    NOT_SANDBOXED: user_git_ok, the hook goes on. UNCONFIRMED, or 1: nothing runs."""
+    cage = (sandbox_of(cwd) if cwd else None) or sandbox_of(top)
+    if cage:
+        print(hubconf.path((cage[1].get("paths") or {}).get("workspace")).resolve() / ".agent-memory")
         return 0
-    memdir = pathlib.Path(main) / ".agent-memory"
-    at_main = memory_project(memdir)
+    at_main = memory_project(pathlib.Path(main) / ".agent-memory")
     if at_main and isolation.sandboxed(at_main[1]):
-        print(memdir)
+        print(hubconf.path((at_main[1].get("paths") or {}).get("workspace")).resolve() / ".agent-memory")
         return 0
-    if at_top:
+    if user_git_ok(top):
         return NOT_SANDBOXED
     found = gitdirs.dirs(top)
-    return NOT_SANDBOXED if found and gitdirs.confirmed(found) else 1
+    return UNCONFIRMED if found and registered_main(found.common.parent) else 1
 
 
 def main(argv: list[str]) -> int:
     if argv[:1] == ["run-as"] and len(argv) >= 4 and argv[2] == "--":
         return run_as_cli(argv[1], argv[3:])
-    if argv[:1] == ["worktree-scope"] and len(argv) == 3:
-        return worktree_scope_cli(argv[1], argv[2])
     lock = "--lock" in argv
     argv = [a for a in argv if a != "--lock"]
     if len(argv) != 2 or argv[0] not in ("sandboxed", "sync-memory"):

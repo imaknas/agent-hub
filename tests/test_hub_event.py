@@ -30,6 +30,7 @@ class HubEvent(unittest.TestCase):
         self.tmp = pathlib.Path(tempfile.mkdtemp())
         self.m.LOG = self.tmp / "hub-event.log"
         self.m._workspace = lambda cwd: self.tmp
+        self.m.project_git.user_git_ok = lambda folder: True   # these handlers are stand-ins: the rule has tests/test_worktree_pointer.py
         self.calls = []
 
     def test_a_session_is_on_record_before_its_mail_is_told(self):

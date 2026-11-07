@@ -71,7 +71,8 @@ hub_json_get() {
     return
   fi
   local out rc
-  out=$("$_hp_bin/py" -c "$_HP_JSON_GET" "$HUB_JSON" "$1" 2>/dev/null); rc=$?
+  # -I: -c puts the current folder first on the import path, and a hook's is whatever the session is in
+  out=$("$_hp_bin/py" -I -c "$_HP_JSON_GET" "$HUB_JSON" "$1" 2>/dev/null); rc=$?
   case $rc in
     0) printf '%s\n' "$out"; return 0 ;;
     3) return 1 ;;   # read fine, no such single value

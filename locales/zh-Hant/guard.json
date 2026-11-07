@@ -4,5 +4,6 @@
  "A {project} session cannot open a session in another repository ({name}). {how}": "{project} 的 session 不能在別的 repository({name})開 session。{how}",
  "A {project} session cannot open a session on another machine. {how}": "{project} 的 session 不能到別台機器開 session。{how}",
  "When a {project} session opens a session with a preset, there is no way to tell whether it is the same project; for the same project, give no preset or cwd. {how}": "{project} 的 session 用 preset 開 session 時看不出是不是同一個專案;同一個專案就不要給 preset/cwd。{how}",
- "A {project} session cannot open a session in {cwd} (that is not this project). {how}": "{project} 的 session 不能在 {cwd} 開 session(那不是這個專案)。{how}"
+ "A {project} session cannot open a session in {cwd} (that is not this project). {how}": "{project} 的 session 不能在 {cwd} 開 session(那不是這個專案)。{how}",
+ "This session's folder can't say whose it is: its .git names a repo that doesn't list it, so it can't open a session (if it was moved by hand, git worktree repair in that repo). {how}": "這個 session 的資料夾說不出是誰的:它的 .git 指向一個沒有列它的 repo,所以不能開 session(如果是手動搬過,在那個 repo 跑 git worktree repair)。{how}"
 }

@@ -1,5 +1,6 @@
 {
  "(this session is in a git worktree of {main}. Memory is linked to the main checkout's .agent-memory;\n {file} did not exist yet when the session started, so here it is; follow it:)": "(這個 session 在 {main} 的 git worktree 裡。memory 已經接上主 checkout 的 .agent-memory;\n {file} 在 session 開始時還不存在,內容如下,照它做:)",
  "(while this worktree sat idle, the nightly cleanup removed dependencies that can be rebuilt, to save space; rebuild them before running code or tests:)": "(這個 worktree 閒置期間,每晚的清理刪掉了重建得回來的依賴以節省空間;要跑程式或測試前先重建:)",
- "  once rebuilt, remove the marker: rm \"{marker}\"": "  重建好之後刪掉標記:rm \"{marker}\""
+ "  once rebuilt, remove the marker: rm \"{marker}\"": "  重建好之後刪掉標記:rm \"{marker}\"",
+ "(this folder's .git says it is a worktree of {main}, but {main} doesn't list it, so this session gets no mail or memory here. If it was moved by hand, run git worktree repair in {main}.)": "(這個資料夾的 .git 說它是 {main} 的 worktree,但 {main} 沒有列它,所以這個 session 在這裡收不到信也沒有 memory。如果是手動搬過,在 {main} 跑 git worktree repair。)"
 }

@@ -253,6 +253,7 @@ class ShellGolden(unittest.TestCase):
 
     def test_worktree_memory(self):
         s, out = BIN / "worktree-memory.sh", []
+        self.register("wt-main")   # git runs as the user only in a registered project's worktree
         main = self.repo(self.tmp / "ws" / "wt-main")
         (main / ".agent-memory").mkdir()
         (main / "CLAUDE.local.md").write_text("project rules\n")

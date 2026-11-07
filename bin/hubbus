@@ -411,14 +411,20 @@ def project_of(cwd: pathlib.Path) -> str | None:
     (worktrees and .agent-memory count as the main project), then path-prefix matching. The main checkout is read from
     the .git pointer files (gitdirs), not asked of git: a hook runs this as the user, and the repo's config can hang
     even rev-parse. In a sandboxed project's folder those pointer files are the project's to write: a `gitdir:` naming
-    another project's repo would make its session that project's (its mail delivered, its presence recorded). Outside any
-    project (a temp folder its service can write) the same, so they count only as far as the repo they name confirms them."""
+    another project's repo would make its session that project's (its mail delivered, its presence recorded). A folder there
+    can also be swapped for a link after the runtime took it as the session's, so cwd as named is asked first: a hook's input
+    still names it. Outside any project (a temp folder its service can write) pointers count only as far as the repo they
+    name confirms them, and the name has to be a project's below."""
     paths = {}
     for name, p in projects().items():
         try:
-            paths[p.resolve()] = name
+            paths[p] = paths[p.resolve()] = name
         except OSError:
             pass
+    raw = pathlib.Path(cwd)
+    for p in (raw, *raw.parents):
+        if p in paths and outboxed(paths[p]):
+            return paths[p]
     try:
         here = cwd.resolve()
     except OSError:

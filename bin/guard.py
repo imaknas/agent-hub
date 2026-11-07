@@ -20,7 +20,6 @@ sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
 import gitdirs  # noqa: E402
 import hubconf  # noqa: E402
 import i18n  # noqa: E402
-import isolation  # noqa: E402
 import project_git  # noqa: E402
 
 _ = i18n.domain(__file__)
@@ -34,28 +33,40 @@ def main_checkout(cwd: pathlib.Path) -> pathlib.Path | None:
 
 
 def own_project(cwd: pathlib.Path) -> tuple[str | None, pathlib.Path | None]:
-    """A sandboxed project's folder is its own by path: its pointer files are its to write, and naming another project's repo
-    there would let it open a session in that project, outside its sandbox."""
-    at = project_git.project_at(cwd)
-    if at and isolation.sandboxed(at[1]):
+    """A sandboxed project's folder is its own as the hook's cwd names it (project_git.sandbox_of): its pointer files are its
+    to write, and it can swap the folder for a link, and either would let it open a session in that project, outside its
+    sandbox. Otherwise the main checkout, then the project whose workspace holds the folder (a worktree moved inside it)."""
+    at = project_git.sandbox_of(cwd)
+    if at:
         return at[0], hubconf.workspace(at[0]).resolve()
     main = main_checkout(cwd)
     for name in hubconf.projects():
         ws = hubconf.workspace(name)
         if ws and main and ws.resolve() == main and name != hubconf.hub_project():
             return name, main
-    return None, None
+    at = None if main else project_git.project_at(cwd)
+    return (at[0], hubconf.workspace(at[0]).resolve()) if at else (None, None)
+
+
+def unconfirmed(cwd: pathlib.Path) -> bool:
+    """A .git here that names another repo, which doesn't confirm it: it can't say whose folder this is."""
+    found = gitdirs.dirs(cwd)
+    return bool(found) and gitdirs.main_checkout(found) is None
 
 
 def decide(target: dict, cwd) -> str | None:
     """The platform's logic: if the new session this session wants to open is in another project (or somewhere else),
     return the reason for blocking it, otherwise None. target is the neutral {"cwd": path or None, "elsewhere":
     description or None} (the runtime's binding translates it from the native arguments)."""
-    proj, root = own_project(pathlib.Path(cwd or os.getcwd()))
-    if not proj:
-        return None
+    here = pathlib.Path(cwd or os.getcwd())
+    proj, root = own_project(here)
     how = _("To ask another project for something, send a letter: brunna send --to <project> --type request "
             "--text \"…\"; or ask the owner to open a session in that project themselves.")
+    if not proj:
+        if unconfirmed(here):
+            return _("This session's folder can't say whose it is: its .git names a repo that doesn't list it, so it can't open a "
+                     "session (if it was moved by hand, git worktree repair in that repo). {how}", how=how)
+        return None
     where = target.get("elsewhere") or {}
     if where.get("kind") == "repository":
         return _("A {project} session cannot open a session in another repository ({name}). {how}", project=proj,

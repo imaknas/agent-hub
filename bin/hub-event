@@ -20,6 +20,9 @@ wires its native hooks to this.
                               sandbox, so it has to be from here) and its after-commit reminder in one output, and its
                               end (the runtime's session_ending: that command also runs at compaction) counts as any
                               session's
+  hub-event worktree-scope <top> <main>
+                              worktree-memory.sh's question, with the hook's input on stdin: whether what's left of that hook
+                              runs as the user (project_git.worktree_scope; its exit code, and the memory folder printed)
   hub-event as-project <event> <workspace> <command>
                               inside a sandboxed project's sandbox: its handlers that touch its repo (AS_PROJECT),
                               JSON out (called by hub-event itself)
@@ -51,7 +54,6 @@ BIN = pathlib.Path(__file__).resolve().parent
 sys.path.insert(0, str(BIN))
 import hubconf  # noqa: E402
 import names  # noqa: E402
-import isolation  # noqa: E402
 import project_git  # noqa: E402
 import runtime_ports  # noqa: E402
 
@@ -104,6 +106,15 @@ def memory_sync(ev, ws):
     if _memory(ws):
         subprocess.run([str(BIN / "with-lock.sh"), str(BIN / "git-sync-memory.sh")], cwd=ws / ".agent-memory",
                        capture_output=True, timeout=120)
+
+
+def moved_notice(ws):
+    """Only the moved-folder reminder (sync-local-setup.sh --moved-only): a marker file read, no git. What's left of local_setup
+    in a folder where git may not run as the user: a laptop's old copy says "do not work here" with or without memory."""
+    if _memory(ws):
+        r = subprocess.run([str(BIN / "sync-local-setup.sh"), "--quiet", "--moved-only", str(ws)], capture_output=True, text=True,
+                           timeout=30, stdin=subprocess.DEVNULL)
+        return r.stdout.strip() or None
 
 
 def local_setup(ev, ws):
@@ -181,6 +192,10 @@ def _project_name(ws) -> str | None:
 
 
 def _project_of_folder(cwd) -> str | None:
+    """The project a hook's cwd is in: a sandboxed one's as the cwd names it, whatever that now resolves to."""
+    cage = project_git.sandbox_of(cwd)
+    if cage:
+        return cage[0]
     ws = _workspace(cwd)
     return _project_name(ws) if ws else None
 
@@ -194,7 +209,7 @@ def session_record(ev, ws):
     nor for a headless one the runtime tells apart (person_session: a -p or SDK run, which a person isn't in).
     Not run as the project: it writes only the secrets directory, which no sandbox can reach."""
     fn = getattr(_RT, "session_pid", None)
-    if not callable(fn) or not ws or platform_run(os.environ) or not _project_name(ws):
+    if not callable(fn) or platform_run(os.environ) or not _project_of_folder(ev.cwd):
         return None
     pid, person = fn(os.environ), getattr(_RT, "person_session", None)
     if pid:
@@ -223,8 +238,7 @@ def keep_last(rt, raw: str) -> bool:
     try:
         parse = getattr(rt, "parse_event", None)
         ev = parse("prompt", raw) if callable(parse) else None   # any plain event: only its folder is read
-        ws = _workspace(ev.cwd) if ev else None
-        project = _project_name(ws) if ws else None
+        project = _project_of_folder(ev.cwd) if ev else None
         private = hubconf.reflection_private()
         return bool(project) and private is not None and project not in private
     except Exception:
@@ -272,6 +286,9 @@ DENY_HANDLERS = {"guard"}
 # mail is not one of them: it reads and writes only the bus (presence, delivery), which no sandbox can reach, and
 # reads nothing from the project's folder (a sandboxed project's folder is its by path: hubbus.project_of).
 AS_PROJECT = {"memory_pull", "local_setup", "nudge"}
+# What runs no git and no script of the folder's. Any other handler, a new one included, runs only where the folder lets it: as
+# the project, or as the user where project_git.user_git_ok says so. The default is no.
+NOT_IN_FOLDER = {"session_record", "mail", "mail_end", "wake_address", "wake_address_drop", "guard"}
 
 
 def _read_stdin() -> str:
@@ -307,25 +324,31 @@ def handle(event: str, raw: str, rt=None, name: str | None = None) -> str:
         return ""
     ev = ev._replace(session=runtime_ports.qualify(name, ev.session))
     ws = _workspace(ev.cwd)
-    proj = project_git.project_at(ws) if ws else None
-    caged = bool(proj) and isolation.sandboxed(proj[1]) and not os.environ.get("HUB_AS_PROJECT")
-    if caged and not CAGED_NEEDS <= runtime_ports.capabilities(name):
+    cage = None if os.environ.get("HUB_AS_PROJECT") else project_git.sandbox_of(ev.cwd)
+    if cage and not CAGED_NEEDS <= runtime_ports.capabilities(name):
         # a sandboxed project's sessions run only under a runtime whose control files the platform protects and whose
         # runs it can confine: its hooks are never installed there, and one found anyway does nothing (fail closed)
-        _log(event, ws.name, [], [f"refused:{name}"])
+        _log(event, ws.name if ws else None, [], [f"refused:{name}"])
         return ""
-    inner = _as_project(proj[0], ws, ev) if caged and _needs_project(ev) else {}
+    # as the project only in a folder its workspace really holds: one swapped for a link elsewhere gets no work at all
+    inside = bool(cage) and bool(ws) and project_git.holds(cage[1], ws)
+    user_ok = not cage and bool(ws) and (bool(os.environ.get("HUB_AS_PROJECT")) or project_git.user_git_ok(ws))
+    inner = _as_project(cage[0], ws, ev) if inside and _needs_project(ev) else {}
     texts, reasons, ran, failed = [], [], [], []
     for name, fn in HANDLERS[event]:
         try:
-            if caged and name in AS_PROJECT:
+            if name in NOT_IN_FOLDER or (user_ok and not cage):
+                out = fn(ev, ws)
+            elif inside and name in AS_PROJECT:
                 if not isinstance(inner.get(name), dict) or not inner[name].get("ok"):
                     raise RuntimeError(f"as the project: {(inner.get('') or {}).get('error', 'failed')}")
                 out = inner[name].get("text") if isinstance(inner[name].get("text"), str) else None
-            elif caged and name == "memory_sync":
-                out = _memory_sync_as_project(proj, ws)
+            elif inside and name == "memory_sync":
+                out = _memory_sync_as_project(cage, ws)
+            elif not cage and name == "local_setup":
+                out = moved_notice(ws)
             else:
-                out = fn(ev, ws)
+                continue
             ran.append(name)
         except Exception as e:  # one handler broke; the others still run
             failed.append(f"{name}:{type(e).__name__}")
@@ -341,17 +364,18 @@ def handle(event: str, raw: str, rt=None, name: str | None = None) -> str:
 WORKTREE_EVENTS = {"start": "session_start", "prompt": "prompt", "nudge": "tool_used", "end": "session_end"}
 
 
-def _worktree_nudge(ev, ws, proj, caged):
-    """The after-commit reminder, as handle gives it (as the project when it is sandboxed). Here because a hook's output is
-    one JSON or none: this and a letter printed apart would both be lost, and the letter counted as told."""
-    if caged:
-        if not _needs_project(ev):
+def _worktree_nudge(ev, ws, cage):
+    """The after-commit reminder, as handle gives it: as the project when it is sandboxed, as the user only where git may run
+    so. Here because a hook's output is one JSON or none: this and a letter printed apart would both be lost, and the letter
+    counted as told."""
+    if cage:
+        if not ws or not project_git.holds(cage[1], ws) or not _needs_project(ev):
             return None
-        inner = _as_project(proj[0], ws, ev).get("nudge")
+        inner = _as_project(cage[0], ws, ev).get("nudge")
         if not isinstance(inner, dict) or not inner.get("ok"):
             raise RuntimeError("as the project")
         return inner.get("text") if isinstance(inner.get("text"), str) else None
-    return nudge(ev, ws)
+    return nudge(ev, ws) if ws and project_git.user_git_ok(ws) else None
 
 
 def worktree(what: str, raw: str) -> int:
@@ -372,12 +396,11 @@ def worktree(what: str, raw: str) -> int:
             mail_end(ev, ws)
             wake_address_drop(ev, ws)
         return 0
-    proj = project_git.project_at(ws) if ws else None
-    caged = bool(proj) and isolation.sandboxed(proj[1])
-    refused = caged and not CAGED_NEEDS <= runtime_ports.capabilities(_RT_NAME)
+    cage = project_git.sandbox_of(ev.cwd)
+    refused = cage and not CAGED_NEEDS <= runtime_ports.capabilities(_RT_NAME)
     steps = [("session_record", lambda: session_record(ev, ws))]
     if not refused:
-        steps += [("nudge", lambda: _worktree_nudge(ev, ws, proj, caged))] if what == "nudge" else []
+        steps += [("nudge", lambda: _worktree_nudge(ev, ws, cage))] if what == "nudge" else []
         steps += [("mail", lambda: mail(ev, ws))]
     texts, ran, failed = [], [], []
     for name, fn in steps:
@@ -392,6 +415,15 @@ def worktree(what: str, raw: str) -> int:
     if texts and (out := rt.inject(ev.event, "\n\n".join(texts))):
         print(out)
     return 0
+
+
+def worktree_scope(top: str, main: str, raw: str) -> int:
+    """`hub-event worktree-scope`: the folder the hook's input names (the runtime's to read) goes with what the script found."""
+    try:
+        ev = runtime_ports.load(runtime_ports.default_name(), ports=("lifecycle",)).parse_event("prompt", raw)
+    except runtime_ports.Unsupported:
+        ev = None
+    return project_git.worktree_scope(top, main, ev.cwd if ev else None)
 
 
 def _needs_project(ev) -> bool:
@@ -465,6 +497,12 @@ def main(argv) -> int:
         except Exception as e:   # a broken waiter ends quietly: the session never sees an error from it
             _log("wait", None, [], [f"hub-event:{type(e).__name__}"])
             return 0
+    if argv[:1] == ["worktree-scope"] and len(argv) == 3:
+        try:
+            return worktree_scope(argv[1], argv[2], _read_stdin())
+        except Exception as e:   # can't tell: nothing runs (never the 0 or the 3 the script goes on from)
+            _log("worktree-scope", None, [], [f"hub-event:{type(e).__name__}"])
+            return 1
     try:
         if argv[:1] == ["install"] and len(argv) == 2:
             return install(pathlib.Path(argv[1]).resolve())

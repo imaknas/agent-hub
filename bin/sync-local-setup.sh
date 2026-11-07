@@ -31,6 +31,9 @@ AGENT_HUB="${AGENT_HUB_ROOT:-${BRUNNA_ROOT:-$(cd "$(dirname "$0")/.." && pwd)}}"
 source "$(dirname "${BASH_SOURCE[0]}")/hubpaths.sh"
 QUIET=false
 [ "${1:-}" = "--quiet" ] && { QUIET=true; shift; }
+# --moved-only: only the reminder below, with no git, for a folder where git may not run as the user (hub-event)
+MOVED_ONLY=false
+[ "${1:-}" = "--moved-only" ] && { MOVED_ONLY=true; shift; }
 # Progress lines print only without --quiet ($QUIET || …): the SessionStart hook's stdout goes into the session, and the
 # quiet path must not spawn anything. Warnings meant for that session print either way.
 
@@ -45,12 +48,13 @@ cd "${1:-.}" || exit 1
 # The common git dir is read from the .git pointer files (bin/gitdirs.py), not asked of git.
 moved=$("$AGENT_HUB/bin/py" "$AGENT_HUB/bin/gitdirs.py" "$PWD" 2>/dev/null | cut -f3)
 moved=${moved:+$moved/agent-hub-migrated-to-mini}
-if [ -n "$moved" ] && [ -f "$moved" ]; then
+if [ -n "$moved" ] && [ -f "$moved" ] && [ ! -L "$moved" ]; then   # printed into the session: never a file it links to
   hub_say "⚠️ This project has moved to the hub machine ({target}, moved from the laptop on {date}). This is the old copy kept on the laptop as a backup;
 do not work here: ask the user to close this session and open the folder on the hub machine over SSH ({server}) from their coding agent instead." \
     target="$(cut -f1 "$moved")" date="$(cut -f2 "$moved")" server="$(hub_server)"
   exit 0
 fi
+$MOVED_ONLY && exit 0
 
 # --- 0b. the memory remote's name: older checkouts called it mini (the hub machine's nickname) ---
 # Renamed only when it is unmistakably the memory bare repo (URL ends in -memory.git) and the new name is free; git

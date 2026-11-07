@@ -56,20 +56,24 @@ fi
 # Hooks run outside the agent's sandbox, with the user's authority. For a sandboxed project, everything below (git in
 # its repo, files it can plant, such as the marker or the rules file that get printed into the session) runs as the
 # project instead (project_git.py run-as → sandboxed-run); its memory sync is the platform's bundle path. What runs
-# here first, finding the repo above, starts no git. $main comes from pointer files under $top, which the project can
-# write: whose this is is project_git.py's call, from $top's path first.
+# here first, finding the repo above, starts no git. $top and $main are read from the folder and from pointer files the
+# project can write: whose this is is project_git.worktree_scope's call, from the folder the hook's input names first.
 if [ -z "${HUB_AS_PROJECT:-}" ]; then
-  memdir=$("$HUB/bin/py" "$HUB/bin/project_git.py" worktree-scope "$top" "$main")
+  memdir=$(printf '%s' "$hook_json" | "$HUB/bin/py" "$HUB/bin/hub-event" worktree-scope "$top" "$main")
   case $? in
     0) [ "$event" = end ] && exec "$HUB/bin/py" "$HUB/bin/project_git.py" sync-memory --lock "$memdir"
        # the worktree's settings (its sandbox, the platform's hooks) are the platform's to write: the project can't
        # write them there itself (the sandbox's protect list), so they are a plain file written here, not a link
        [ "$event" = start ] || exit 0   # a prompt or a tool call has nothing left to do as the project
+       # a folder swapped for a link elsewhere isn't this project's to run in, nor another's to print from into this session
+       case "$top/" in "$(dirname "$memdir")/"*) ;; *) exit 0 ;; esac
        "$HUB/bin/py" "$HUB/bin/render-project-settings.py" --worktree "$top" 2>/dev/null
        AGENT_HUB_OFFLINE=1 "$HUB/bin/py" "$HUB/bin/project_git.py" run-as "$top" -- \
          bash "$HUB/bin/worktree-memory.sh" "$event" </dev/null
        exit 0 ;;
     3) ;;
+    4) [ "$event" = start ] && hub_say "(this folder's .git says it is a worktree of {main}, but {main} doesn't list it, so this session gets no mail or memory here. If it was moved by hand, run git worktree repair in {main}.)" main="$main"
+       exit 0 ;;
     *) exit 0 ;;
   esac
 fi

@@ -373,7 +373,7 @@ class HookPath(HookFixture):
     def test_a_sandboxed_projects_session_is_recorded_by_its_hook_outside_the_sandbox(self):
         self.assertLessEqual(self.m.CAGED_NEEDS, runtime_ports.capabilities("claude"))
         self.assertNotIn("session_record", self.m.AS_PROJECT, "it writes the secrets directory, never as the project")
-        with mock.patch.object(self.m.isolation, "sandboxed", lambda proj: True), \
+        with mock.patch.object(self.m.project_git.isolation, "sandboxed", lambda proj: True), \
                 mock.patch.object(self.m, "_as_project", side_effect=AssertionError("ran as the project")):
             for event in ("session_start", "prompt", "tool_used"):
                 self.hook(event, B)

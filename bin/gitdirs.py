@@ -15,12 +15,13 @@ project's to set, not the platform's to follow.
   All three resolved. A pointer file is opened non-blocking and read only when it is a regular file (a FIFO there
   reads as nothing).
   confirmed(found) → bool
-    Whether the repo itself says top is its linked worktree: git_dir is in common's worktrees/, and its "gitdir" names
-    top's .git. What sits under top is top's to write, so all of the above is only a claim about whose repo this is; this
-    much is written in the repo it names, which only that repo's owner can write.
+    Whether the repo it names says top is its linked worktree: git_dir is in common's worktrees/, and its "gitdir" names
+    top's .git. What sits under top is top's to write, so all of the above is only a claim about whose repo this is. This
+    much is written in the repo it names, so it proves something only about a repo the writer can't write: one that is itself
+    planted confirms itself. Worth nothing without knowing whose common is (project_git.user_git_ok).
   main_checkout(found) → Path | None
-    The main checkout, when that can be believed: top itself, or a confirmed linked worktree's. A .git file naming another
-    repo's .git, or a worktree that repo doesn't know, says nothing about whose folder this is.
+    The main checkout, as far as the pointers agree: top itself, or a confirmed linked worktree's. A .git file naming another
+    repo's .git, or a worktree that repo doesn't know, says nothing about whose folder this is. Same limit as confirmed.
 
 CLI: gitdirs.py <dir> → "<top>\t<git_dir>\t<common>"; exit 1 when <dir> is in no repo.
 
