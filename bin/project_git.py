@@ -60,6 +60,7 @@ BUNDLE_TIMEOUT_S = 1800
 TIMED_OUT, TOO_BIG = 124, 125
 INCOMING = names.repo_ref("incoming")
 NOT_SANDBOXED = 3
+COULD_NOT_TELL = 5   # the name isn't in the registry's index (a stale one, say): it may be sandboxed, so nothing runs as the user
 EX_SANDBOX = 78   # sandboxed-run refused (no sandbox on this machine): the work is not done, never done unsandboxed
 
 
@@ -273,21 +274,14 @@ def memory_dir(folder) -> pathlib.Path:
     return scope_of(folder).memdir
 
 
-def scratch_dir(project: str, ws) -> pathlib.Path:
-    """Where a platform run in this project's repo keeps a throwaway checkout: hubconf.private_tmp, but a sandboxed project's own job has
-    to write it, so its own .git for that one, which no other project can write."""
-    doc = hubconf.projects().get(project) or {}
-    if isolation.sandboxed({**doc, "name": project}):
-        d = names.repo_dir(pathlib.Path(ws) / ".git")
-        d.mkdir(parents=True, exist_ok=True)
-        return d
-    return hubconf.private_tmp()
-
-
 def sync_memory_of(name: str, ws) -> None:
     """A platform script's sync of this project's memory: as the project when it is sandboxed (with-lock.sh's own rev-parse reads the
-    repo's config, which can hang on a FIFO), otherwise the hook's path. Failures are the next hourly sync's."""
-    doc = hubconf.projects().get(name) or {}
+    repo's config, which can hang on a FIFO), otherwise the hook's path. Failures are the next hourly sync's, and so is a name the
+    registry's index doesn't have."""
+    doc = hubconf.projects().get(name)
+    if doc is None:
+        print(f"{name} is not in the registry's index; whether it is sandboxed can't be told, memory not synced", file=sys.stderr)
+        return
     mem = pathlib.Path(ws) / ".agent-memory"
     if isolation.sandboxed({**doc, "name": name}):
         sync_memory(name, doc, mem, lock=True)
@@ -301,8 +295,12 @@ def sync_memory(name: str, doc: dict, memdir, branch: str = "agent-memory", lock
     bare = policy.memory_bare(name, doc)
     if not (bare / "objects").is_dir():
         return f"{name}: no local memory bare repo at {bare}"
-    with tempfile.TemporaryDirectory(prefix="hub-memory-", dir=hubconf.private_tmp()) as tmp:
-        bundle = pathlib.Path(tmp) / "memory.bundle"
+    try:
+        tmp = tempfile.TemporaryDirectory(prefix="hub-memory-", dir=hubconf.private_tmp(), ignore_cleanup_errors=True)
+    except OSError as e:
+        return f"{name}: no folder for the bundle ({e})"
+    with tmp as d:
+        bundle = pathlib.Path(d) / "memory.bundle"
         with bundle.open("wb") as fh:
             r = job(name, memdir, "memory-sync", memdir, bare, branch, *(["--lock"] if lock else []), out=fh,
                     timeout=BUNDLE_TIMEOUT_S, cap=MAX_BUNDLE)
@@ -324,9 +322,12 @@ def by_name(project: str) -> tuple[str, dict] | None:
 
 def run_as_cli(project: str, d: str, argv: list[str]) -> int:
     """A shell hook's work as this project in the folder d, by the name the hook already has, never asked again of a folder that can
-    have changed: stdin passed in, its stdout and stderr passed out. Exit 3 when it isn't sandboxed (the caller goes on itself)."""
+    have changed: stdin passed in, its stdout and stderr passed out. Exit 3 when it isn't sandboxed (the caller goes on itself), and
+    COULD_NOT_TELL for a name the index doesn't have (the caller goes no further)."""
     found = by_name(project)
-    if not (found and isolation.sandboxed(found[1])):
+    if not found:
+        return _not_in_index(project)
+    if not isolation.sandboxed(found[1]):
         return NOT_SANDBOXED
     stdin = "" if sys.stdin.isatty() else sys.stdin.read()
     r = run(found[0], d, argv, input=stdin, env={"HUB_AS_PROJECT": "1"})
@@ -359,6 +360,11 @@ def worktree_scope(top: str, main: str, cwd: str | None = None) -> int:
     return UNCONFIRMED if found and registered_main(found.common.parent) and not gitdirs.confirmed(found) else 1
 
 
+def _not_in_index(name: str) -> int:
+    print(f"{name} is not in the registry's index, so whether it is sandboxed can't be told", file=sys.stderr)
+    return COULD_NOT_TELL
+
+
 def main(argv: list[str]) -> int:
     if argv[:1] == ["run-as"] and len(argv) >= 5 and argv[3] == "--":
         return run_as_cli(argv[1], argv[2], argv[4:])
@@ -368,9 +374,11 @@ def main(argv: list[str]) -> int:
         print("usage: project_git.py sandboxed-project <name> | sync-memory [--lock] <name>", file=sys.stderr)
         return 2
     found = by_name(argv[1])
+    if not found:
+        return _not_in_index(argv[1])
     if argv[0] == "sandboxed-project":
-        return 0 if found and isolation.sandboxed(found[1]) else NOT_SANDBOXED
-    if not (found and isolation.sandboxed(found[1])):   # this path is a sandboxed project's job: anything else, the caller's
+        return 0 if isolation.sandboxed(found[1]) else NOT_SANDBOXED
+    if not isolation.sandboxed(found[1]):   # this path is a sandboxed project's job: anything else, the caller's
         print(f"{argv[1]} is no sandboxed registered project", file=sys.stderr)
         return NOT_SANDBOXED
     why = sync_memory(*found, hubconf.path((found[1].get("paths") or {}).get("workspace")) / ".agent-memory", lock=lock)

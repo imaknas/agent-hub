@@ -171,4 +171,4 @@ exit 1
   3. registry projects/garden.yaml: type: project, paths.origin: <TMP>/d/remotes/o/garden.git (purpose/enforce/privacy kept)
   4. add origin to mirror-list.txt, regenerate index.md, commit brunna
 --- stderr
-upgrade-idea: the registry entry is not valid: unknown field bogus (the GitHub repo is already created; fix the registry entry and run this again to continue)
+upgrade-idea: <TMP>/d/home/workspace/garden: its history could not be bundled (sandboxed-run: garden is not in the registry; not run (a sandboxed project's service or job never runs unsandboxed))

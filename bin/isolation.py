@@ -97,8 +97,11 @@ def wrap(project: str, cwd, argv: list[str], port: int | None = None) -> list[st
 def as_project(project: str | None, cwd, argv: list[str]) -> list[str]:
     """argv with the project's authority: through bin/sandboxed-run when the project is sandboxed (which refuses, exit
     78, where this machine can't sandbox), unchanged otherwise (an unsandboxed project, an unregistered folder or the
-    platform itself (None) has the user's authority already)."""
+    platform itself (None) has the user's authority already). A name the registry has and its index doesn't (a stale index) may be
+    sandboxed: it goes through bin/sandboxed-run too, which refuses a project it doesn't know."""
     doc = hubconf.projects().get(project) if project else None
+    if project and doc is None and project in hubconf.roster():
+        return wrap(project, cwd, argv)
     return wrap(project, cwd, argv) if doc and sandboxed({**doc, "name": project}) else argv
 
 

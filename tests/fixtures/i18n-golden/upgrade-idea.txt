@@ -171,4 +171,4 @@ exit 1
   3. 登錄 projects/garden.yaml:type: project、paths.origin: <TMP>/d/remotes/o/garden.git(purpose/enforce/privacy 留著)
   4. mirror-list.txt 加上 origin、重生 index.md、commit brunna
 --- stderr
-upgrade-idea: 登錄不合格:未知的欄位 bogus(GitHub repo 已經建好;修好登錄再叫一次會接著做)
+upgrade-idea: <TMP>/d/home/workspace/garden:它的歷史打不成 bundle(sandboxed-run: garden is not in the registry; not run (a sandboxed project's service or job never runs unsandboxed))
