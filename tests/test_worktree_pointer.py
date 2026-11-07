@@ -640,6 +640,92 @@ class EachLineOfTheRule(Fixture):
             self.assertEqual(project_git.memory_dir(out), self.ws["open"].resolve() / ".agent-memory")
             self.assertEqual(project_git.memory_dir(self.ws["open"]), self.ws["open"] / ".agent-memory")
 
+    def behind_at(self, wt):
+        """A real worktree of the open project at wt, its memory notes behind, linked as `start` links it."""
+        self.tree("open")
+        ws, env = self.ws["open"], {**os.environ, **tbs.GIT_ENV}
+        mem = ws / ".agent-memory"
+        (mem / "memory").mkdir()
+        (mem / "AGENT.md").write_text("x")
+        old = {**env, "GIT_AUTHOR_DATE": "2020-01-01T00:00:00", "GIT_COMMITTER_DATE": "2020-01-01T00:00:00"}
+        for args, e in ((("init", "-q", "-b", "agent-memory"), env), (("add", "AGENT.md"), env), (("commit", "-qm", "x"), old)):
+            subprocess.run(["git", "-C", str(mem), *args], check=True, env=e)
+        (ws / "g").write_text("y")
+        self.git("-C", ws, "add", "g")
+        self.git("-C", ws, "commit", "-qm", "feat: more")
+        wt.parent.mkdir(parents=True, exist_ok=True)
+        self.git("-C", ws, "worktree", "add", "-q", wt, "-b", "out", "main")
+        (wt / ".agent-memory").symlink_to(mem)
+        return wt
+
+    def reminder(self, cwd, how="hook"):
+        extra = {"tool_input": {"command": "git commit -m x"}}
+        if how == "hook":
+            return ".agent-memory/memory/" in self.handle("tool_used", cwd, "PostToolUse", **extra).stdout
+        return ".agent-memory/memory/" in self.run_hook("nudge", cwd, "PostToolUse", **extra).stdout
+
+    def clear_rate_limit(self):
+        (self.tmp / f"hubbus-post-tool-{self.SID}").unlink(missing_ok=True)
+
+    def last_log(self):
+        return (BIN.parent / ".logs" / "hub-event.log").read_text().splitlines()[-1]
+
+    def test_a_worktree_under_workspace_root_gets_the_reminder_and_local_setup(self):
+        wt = self.behind_at(self.ws["open"].parent / "open-side")
+        self.assertTrue(self.reminder(wt))
+        self.clear_rate_limit()
+        self.assertTrue(self.reminder(wt, "script"))
+        self.handle("session_start", wt, "SessionStart", source="startup")
+        self.assertIn("local_setup", self.last_log())
+        self.assertIn("nudge", self.last_log())
+
+    def test_the_same_worktree_in_the_temp_folder_doesnt(self):
+        wt = self.behind_at(self.tmp / "elsewhere" / "open-side")
+        self.assertFalse(self.reminder(wt))
+        self.clear_rate_limit()
+        self.assertFalse(self.reminder(wt, "script"))
+        self.handle("session_start", wt, "SessionStart", source="startup")
+        self.assertNotIn("local_setup", self.last_log())
+        self.assertIn("memory_pull", self.last_log(), "its main checkout's memory still goes")
+
+    def test_a_link_in_a_sandboxed_workspace_pointing_at_one_doesnt(self):
+        wt = self.behind_at(self.ws["open"].parent / "open-side")
+        self.sub.symlink_to(wt)
+        self.assertFalse(self.reminder(self.sub))
+        self.clear_rate_limit()
+        self.assertFalse(self.reminder(self.sub, "script"))
+        with mock.patch.object(hubconf, "projects", lambda: self.docs):
+            self.assertFalse(project_git.folder_git_ok(self.sub))
+
+    def under_root(self, wt):
+        """folder_git_ok in this process, with this instance's registry and workspace_root."""
+        real = hubconf.p
+        return (mock.patch.object(hubconf, "projects", lambda: self.docs),
+                mock.patch.object(hubconf, "p", lambda k, d=None: self.ws["open"].parent if k == "workspace_root" else real(k, d)))
+
+    def test_a_worktree_in_a_sandboxed_workspace_or_what_it_may_write_doesnt(self):
+        self.tree("open")
+        inside = self.ws["box"] / "open-side"
+        self.git("-C", self.ws["open"], "worktree", "add", "-q", inside, "-b", "in-box")
+        allowed = self.ws["open"].parent / "shared"
+        allowed.mkdir()
+        beside = allowed / "open-side"
+        self.git("-C", self.ws["open"], "worktree", "add", "-q", beside, "-b", "beside")
+        a, b = self.under_root(inside)
+        with a, b:
+            self.assertFalse(project_git.folder_git_ok(inside))
+            self.assertTrue(project_git.folder_git_ok(beside), "nothing sandboxed writes there yet")
+            self.docs["box"]["allow_write"] = [str(allowed)]
+            self.assertFalse(project_git.folder_git_ok(beside), "the owner let a sandbox write there")
+
+    def test_under_its_main_checkouts_folder_is_the_hubs_case_too(self):
+        """A confirmed worktree in no project's workspace, under its main: the hub's are, whose entry has no workspace."""
+        wt = self.tree("open")
+        docs = {n: d for n, d in self.docs.items() if n != "open"}
+        with mock.patch.object(hubconf, "projects", lambda: docs), \
+                mock.patch.object(project_git, "user_git_ok", lambda f: True):
+            self.assertTrue(project_git.folder_git_ok(wt))
+
     def test_a_memory_link_flipped_beside_a_real_worktree_isnt_followed(self):
         """Planted after any look: what runs is the main checkout's, by name."""
         self.tree("open")

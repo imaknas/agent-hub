@@ -50,6 +50,7 @@ import hubconf  # noqa: E402
 import names  # noqa: E402
 import isolation  # noqa: E402
 import policy  # noqa: E402
+import registry  # noqa: E402
 
 JOB = BIN / "project-git-job.py"
 MAX_JSON = 8 << 20          # facts
@@ -231,15 +232,31 @@ def user_git_ok(folder) -> bool:
     return found.top == hubconf.MAIN.resolve() or (gitdirs.confirmed(found) and registered_main(found.common.parent))
 
 
+def sandbox_writes() -> dict:
+    """What the sandboxed projects' own processes can write besides the temp folder: {path: path}, for gitdirs.holder."""
+    out = {}
+    for name, doc in hubconf.projects().items():
+        doc = {**doc, "name": name}
+        if isolation.sandboxed(doc):
+            paths = doc.get("paths") or {}
+            d = registry.dirs(doc) if paths.get("workspace") else {}
+            out.update({str(p): p for p in (d.get("workspace"), d.get("runtime"), *map(hubconf.path, doc.get("allow_write") or [])) if p})
+    return out
+
+
 def folder_git_ok(folder) -> bool:
-    """Whether a hook may run git in this very folder as the user: user_git_ok, and not a worktree out in a folder others can write
-    (the temp folder), where its .git file and all beside it can change between a look and the git."""
-    if not user_git_ok(folder):
+    """Whether a hook may run git in this very folder as the user: user_git_ok, and a folder only its owner can write, since a .git
+    file and all beside it can change between a look and the git. A registered project's is. A linked worktree's is under its main
+    checkout's folder or under workspace_root (no sandbox writes there but its own folder, policy.py), and in nothing a sandboxed
+    project can write. Anywhere else, the temp folder included, it is no."""
+    if not user_git_ok(folder) or sandbox_of(folder):
         return False
     if project_at(folder):
         return True
     found = gitdirs.dirs(folder)
-    return bool(found) and found.top.is_relative_to(hubconf.MAIN.resolve())
+    if not found or gitdirs.holder(found.top, sandbox_writes()):
+        return False
+    return gitdirs.holder(found.top, {"main": found.common.parent, "root": hubconf.p("workspace_root", "~/workspace")}) is not None
 
 
 def memory_dir(folder) -> pathlib.Path:

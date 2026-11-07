@@ -350,6 +350,7 @@ def handle(event: str, raw: str, rt=None, name: str | None = None) -> str:
             elif inside and name == "memory_sync":
                 out = _memory_sync_as_project(cage, ws)
             elif not cage and name == "local_setup":
+                name = "moved_notice"   # the log says what ran
                 out = moved_notice(ws)
             else:
                 continue
